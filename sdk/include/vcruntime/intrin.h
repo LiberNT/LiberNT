@@ -1034,7 +1034,7 @@ char _InterlockedXor8_rel(char volatile * _Value, char _Mask);
 long _InterlockedXor_acq(long volatile * _Value, long _Mask);
 long _InterlockedXor_nf(long volatile * _Value, long _Mask);
 long _InterlockedXor_rel(long volatile * _Value, long _Mask);
-#if _MSC_FULL_VER >= 170040825
+#if _MSC_FULL_VER >= 170040825 || defined(__clang__)
 unsigned int _MoveFromCoprocessor(unsigned int, unsigned int, unsigned int, unsigned int, unsigned int);
 unsigned int _MoveFromCoprocessor2(unsigned int, unsigned int, unsigned int, unsigned int, unsigned int);
 #else
@@ -1051,7 +1051,7 @@ int _ReadStatusReg(int);
 int _SubSatInt(int, int);
 void _WriteStatusReg(int, int, int);
 void __emit(unsigned __int32);
-__int64 __ldrexd(__int64 volatile *);
+__int64 __ldrexd(const __int64 volatile *);
 void __cdecl __prefetch(const void *);
 unsigned __int64 __rdpmccntr64(void);
 void __sev(void);

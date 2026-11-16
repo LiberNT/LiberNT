@@ -19,6 +19,9 @@ file(GLOB NVS_CORE_SOURCES
 
 file(GLOB NVS_NT_SOURCES nt/*.c pool/backing/mmbacking.c)
 file(GLOB NVS_ARCH_SOURCES ${NVS_ARCH_DIR}/*.c)
+if(ARCH STREQUAL "arm")
+    list(APPEND NVS_ARCH_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/arch/arm64/pte.c)
+endif()
 
 add_library(nvs_neutral STATIC ${NVS_CORE_SOURCES} ${NVS_NT_SOURCES} ${NVS_ARCH_SOURCES})
 

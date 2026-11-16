@@ -17,6 +17,8 @@
  * https://github.com/jmonesti/qemu-4.1.1/blob/55fb6a81039a62174c2763759324c43a67d752a1/roms/ipxe/src/arch/arm32/libgcc/lldivmod.S
  */
 
+#include <intrin.h>
+
 #ifdef _USE_64_BITS_
 typedef unsigned long long UINT3264;
 typedef long long INT3264;

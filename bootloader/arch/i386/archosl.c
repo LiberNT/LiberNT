@@ -76,7 +76,7 @@ I386EnterKernel(
     _In_ PVOID EntryPoint,
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock);
 
-const PFN_NUMBER MmArchMaxLoaderPage = I386_LOADER_PAGES;
+PFN_NUMBER MmArchMaxLoaderPage = I386_LOADER_PAGES;
 const PFN_NUMBER MmArchMaxRamdiskPage = I386_LOADER_PAGES;
 const PCSTR OslArchSystemIdentifier = "AT/AT COMPATIBLE";
 

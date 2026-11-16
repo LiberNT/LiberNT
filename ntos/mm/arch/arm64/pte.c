@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT NT Virtual Memory Subsystem
  * FILE:        ntoskrnl/nvs/arch/arm64/pte.c
- * PURPOSE:     ARM64 page-table entry operations
+ * PURPOSE:     VMSA long-descriptor page-table entry operations (ARM64, ARMv7 LPAE)
  *
  * SPDX-FileCopyrightText: 2026 Ahmed ARIF
  * SPDX-License-Identifier: GPL-3.0-only
@@ -29,8 +29,6 @@
 #define A64_FRAME_MASK     0x0000FFFFFFFFF000ULL
 #define A64_TABLE_ATTRIBUTES (A64_VALID | A64_TYPE_PAGE | A64_SH_INNER | A64_AF | A64_NG | A64_PXN | A64_UXN | \
                               A64_SW_WRITE)
-#define A64_SELF_MAP_INDEX   493
-#define A64_HYPERSPACE_INDEX 494
 
 C_ASSERT(A64_TABLE_ATTRIBUTES == 0x00E0000000000F03ULL);
 
@@ -180,24 +178,6 @@ MiArchPteIsLeafDescriptor(_In_ MI_PTE Pte)
 }
 
 BOOLEAN
-MiArchIsSelfMapAddress(_In_ ULONG64 VirtualAddress)
-{
-    return VirtualAddress >= 0xFFFFF68000000000ULL && VirtualAddress <= 0xFFFFF6FFFFFFFFFFULL;
-}
-
-BOOLEAN
-MiArchTranslateWindow(
-    _In_ ULONG64 VirtualAddress,
-    _Out_ PULONG64 PhysicalAddress,
-    _Out_opt_ PMI_PTE LeafPte)
-{
-    UNREFERENCED_PARAMETER(VirtualAddress);
-    UNREFERENCED_PARAMETER(PhysicalAddress);
-    UNREFERENCED_PARAMETER(LeafPte);
-    return FALSE;
-}
-
-BOOLEAN
 MiArchPteIsUser(_In_ MI_PTE Pte)
 {
     return (Pte & A64_AP_USER) != 0;
@@ -245,24 +225,4 @@ MiArchPteNeedsBreak(_In_ MI_PTE Old, _In_ MI_PTE New)
         return FALSE;
 
     return ((Old ^ New) & Sensitive) != 0;
-}
-
-VOID
-MiArchInitializeProcessRoot(_In_ ULONG64 SystemRootFrame, _In_ ULONG64 ProcessRootFrame)
-{
-    PMI_PTE System = MiArchMapFrame(SystemRootFrame);
-    PMI_PTE Process = MiArchMapFrame(ProcessRootFrame);
-    ULONG Index;
-
-    MI_ASSERT(SystemRootFrame != ProcessRootFrame);
-    for (Index = 256; Index < 512; Index++)
-    {
-        if (Index != A64_SELF_MAP_INDEX && Index != A64_HYPERSPACE_INDEX)
-            Process[Index] = System[Index];
-    }
-
-    Process[A64_SELF_MAP_INDEX] = MiArchPteMakeTable(ProcessRootFrame, 0);
-
-    MiArchUnmapFrame(Process);
-    MiArchUnmapFrame(System);
 }

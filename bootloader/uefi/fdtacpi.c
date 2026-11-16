@@ -1,12 +1,12 @@
 /*
  * PROJECT:     LiberNT Boot Loader
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Describe a device-tree-only ARM64 platform to the OS with ACPI tables
+ * PURPOSE:     Describe a device-tree-only ARM platform to the OS with ACPI tables
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <bl.h>
-#include <arm64.h>
+#include <fdtacpi.h>
 #include <blefi.h>
 #include <Fdt.h>
 #include <drivers/acpi/acpi.h>
@@ -391,7 +391,7 @@ FdtAcpiDescribeGic(
         !FdtAcpiParentMapsOneToOne(Platform, Parent) ||
         !FdtReadReg(&Platform->Fdt, Platform->Gic, Parent, 0, &Platform->GicdBase, &Size))
     {
-        ERR("ARM64: the device tree has no usable GIC\n");
+        ERR("The device tree has no usable GIC\n");
         return FALSE;
     }
 
@@ -453,7 +453,7 @@ FdtAcpiDescribeCpus(
 
     if (!FdtFindNode(&Platform->Fdt, "/cpus", &Platform->Cpus, NULL))
     {
-        ERR("ARM64: the device tree has no /cpus node\n");
+        ERR("The device tree has no /cpus node\n");
         return FALSE;
     }
 
@@ -469,7 +469,7 @@ FdtAcpiDescribeCpus(
 
     if (Platform->CpuCount == 0)
     {
-        ERR("ARM64: the device tree lists no enabled CPU\n");
+        ERR("The device tree lists no enabled CPU\n");
         return FALSE;
     }
 
@@ -1041,7 +1041,7 @@ FdtAcpiInstallTables(
                                                             &Memory);
     if (EFI_ERROR(Status))
     {
-        ERR("ARM64: no memory for ACPI tables (0x%llx)\n", (ULONGLONG)Status);
+        ERR("No memory for ACPI tables (0x%llx)\n", (ULONGLONG)Status);
         return FALSE;
     }
 
@@ -1092,7 +1092,7 @@ FdtAcpiInstallTables(
     Status = GlobalSystemTable->BootServices->InstallConfigurationTable(&Acpi20Guid, Rsdp);
     if (EFI_ERROR(Status))
     {
-        ERR("ARM64: the ACPI tables could not be installed (0x%llx)\n", (ULONGLONG)Status);
+        ERR("The ACPI tables could not be installed (0x%llx)\n", (ULONGLONG)Status);
         GlobalSystemTable->BootServices->FreePages(Memory, EFI_SIZE_TO_PAGES(Total));
         return FALSE;
     }
@@ -1128,7 +1128,7 @@ FdtAcpiFindFirmwareDeviceTree(VOID)
 }
 
 VOID
-Arm64DescribeDeviceTreePlatform(VOID)
+FwDescribeDeviceTreePlatform(VOID)
 {
     FDTACPI_PLATFORM Platform;
     const VOID *DeviceTree;
@@ -1143,7 +1143,7 @@ Arm64DescribeDeviceTreePlatform(VOID)
     RtlZeroMemory(&Platform, sizeof(Platform));
     if (!FdtOpen(DeviceTree, FDT_MAXIMUM_SIZE, &Platform.Fdt))
     {
-        ERR("ARM64: the firmware device tree is not valid\n");
+        ERR("The firmware device tree is not valid\n");
         return;
     }
 
@@ -1162,7 +1162,7 @@ Arm64DescribeDeviceTreePlatform(VOID)
     if (!FdtAcpiInstallTables(&Platform))
         return;
 
-    TRACE("ARM64: ACPI tables built from the device tree: %lu CPUs, GICv%lu, PSCI %s, timer %s, UART %s\n",
+    TRACE("ACPI tables built from the device tree: %lu CPUs, GICv%lu, PSCI %s, timer %s, UART %s\n",
           Platform.CpuCount,
           Platform.GicVersion,
           Platform.PsciCompliant ? (Platform.PsciUseHvc ? "hvc" : "smc") : "none",

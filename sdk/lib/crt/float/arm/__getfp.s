@@ -1,25 +1,18 @@
 /*
  * PROJECT:     ReactOS CRT library
- * LICENSE:     MIT (https://spdx.org/licenses/MIT)
- * PURPOSE:     ARM fpscr getter
- * COPYRIGHT:   Copyright 2021 Roman Masanin <36927roma@gmail.com>
+ * LICENSE:     BSD - See COPYING.ARM in the top level directory
+ * PURPOSE:     Implementation of __getfp
+ * COPYRIGHT:   Copyright Timo Kreuzer (timo.kreuzer@reactos.org)
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
-/* INCLUDES ******************************************************************/
+    .syntax unified
+    .thumb
+    .text
+    .align 2
 
-#include <kxarm.h>
-
-/* CODE **********************************************************************/
-
-    TEXTAREA
-
-    LEAF_ENTRY __getfp
-
-    VMRS R0,FPSCR
-
-    BX LR
-
-    LEAF_END __getfp
-
-    END
-/* EOF */
+    .global __getfp
+    .thumb_func
+__getfp:
+    vmrs    r0, fpscr
+    bx      lr

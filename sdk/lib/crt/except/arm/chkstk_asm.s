@@ -1,30 +1,40 @@
 /*
  * PROJECT:     ReactOS CRT library
  * LICENSE:     BSD - See COPYING.ARM in the top level directory
- * PURPOSE:     Implementation of _chkstk and _alloca_probe
+ * PURPOSE:     Implementation of __chkstk
  * COPYRIGHT:   Copyright 2014 Timo Kreuzer (timo.kreuzer@reactos.org)
  *              Copyright 2014 Yuntian Zhang (yuntian.zh@gmail.com)
  *              Copyright 2019 Mohamed Mediouni (mmediouni@gmx.fr)
- *
- * REFERENCES:  https://github.com/wine-mirror/wine/commit/2b095beace7b457586bd33b3b1c81df116215193
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
-/* INCLUDES ******************************************************************/
+    .syntax unified
+    .thumb
+    .text
+    .align 2
 
-#include <kxarm.h>
-
-/* CODE **********************************************************************/
-    TEXTAREA
-
-    LEAF_ENTRY __chkstk
-    lsl r4, r4, #2
-    bx lr
-    LEAF_END __chkstk
-
-    LEAF_ENTRY __alloca_probe
-    __assertfail
-    bx lr
-    LEAF_END __alloca_probe
-
-    END
-/* EOF */
+    .global __chkstk
+    .thumb_func
+    .seh_proc __chkstk
+__chkstk:
+    push    {r4, r5}
+    .seh_save_regs {r4, r5}
+    .seh_endprologue
+    lsl     r4, r4, #2
+    add     r5, sp, #8
+    sub     r4, r5, r4
+1:
+    sub     r5, r5, #4096
+    cmp     r5, r4
+    bls     2f
+    ldr     r12, [r5]
+    b       1b
+2:
+    ldr     r12, [r4]
+    .seh_startepilogue
+    pop     {r4, r5}
+    .seh_save_regs {r4, r5}
+    .seh_endepilogue
+    lsl     r4, r4, #2
+    bx      lr
+    .seh_endproc

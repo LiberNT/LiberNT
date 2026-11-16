@@ -67,7 +67,7 @@ Amd64LoadDescriptorTables(
     _In_ PVOID Gdtr,
     _In_ PVOID Idtr);
 
-const PFN_NUMBER MmArchMaxLoaderPage = AMD64_LOADER_PAGES;
+PFN_NUMBER MmArchMaxLoaderPage = AMD64_LOADER_PAGES;
 const PFN_NUMBER MmArchMaxRamdiskPage = AMD64_RAMDISK_PAGES;
 const PCSTR OslArchSystemIdentifier = "AT/AT COMPATIBLE";
 

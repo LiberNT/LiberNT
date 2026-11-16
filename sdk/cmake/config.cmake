@@ -6,11 +6,7 @@ if(ARCH STREQUAL "i386")
 elseif(ARCH STREQUAL "amd64")
     set(SARCH "" CACHE STRING
     "Sub-architecture to build for.")
-elseif(ARCH STREQUAL "arm")
-    set(SARCH "omap3-zoom2" CACHE STRING
-    "Sub-architecture (board) to build for. Specify one of:
-     kurobox versatile omap3-zoom2 omap3-beagle")
-elseif(ARCH STREQUAL "arm64")
+elseif(ARCH STREQUAL "arm" OR ARCH STREQUAL "arm64")
     # By design, arm64 kernels and OSes should be intercompatible, but
     # due to SoC vendors seemingly not being able to follow ARM design guidelines
     # properly, there might be a need for board-specific builds later on...

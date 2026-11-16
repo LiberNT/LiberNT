@@ -460,7 +460,38 @@ LdrProcessRelocationBlockLongLong(
             *ShortPtr = HIWORD((LONG)((ULONG)SWAPW(*ShortPtr) << 16) + (SHORT)SWAPW(*TypeOffset) + (LONG)(Delta & 0xFFFFFFFF) + 0x8000);
             break;
 
-        case IMAGE_REL_BASED_MIPS_JMPADDR:
+        case IMAGE_REL_BASED_ARM_MOV32:
+            LongPtr = (PULONG)RVA(Address, Offset);
+            {
+                ULONG Movw = LongPtr[0], Movt = LongPtr[1];
+                ULONG Value = ((Movw >> 4) & 0xF000) | (Movw & 0x0FFF) |
+                              (((Movt >> 4) & 0xF000) << 16) | ((Movt & 0x0FFF) << 16);
+
+                Value += (ULONG)(Delta & 0xFFFFFFFF);
+                LongPtr[0] = (Movw & 0xFFF0F000) | ((Value & 0xF000) << 4) | (Value & 0x0FFF);
+                LongPtr[1] = (Movt & 0xFFF0F000) | ((Value >> 12) & 0xF0000) | ((Value >> 16) & 0x0FFF);
+            }
+            break;
+
+        case IMAGE_REL_BASED_THUMB_MOV32:
+            {
+                USHORT MovwHigh = ShortPtr[0], MovwLow = ShortPtr[1];
+                USHORT MovtHigh = ShortPtr[2], MovtLow = ShortPtr[3];
+                ULONG Low = ((MovwHigh & 0x000F) << 12) | ((MovwHigh & 0x0400) << 1) |
+                            ((MovwLow & 0x7000) >> 4) | (MovwLow & 0x00FF);
+                ULONG High = ((MovtHigh & 0x000F) << 12) | ((MovtHigh & 0x0400) << 1) |
+                             ((MovtLow & 0x7000) >> 4) | (MovtLow & 0x00FF);
+                ULONG Value = ((High << 16) | Low) + (ULONG)(Delta & 0xFFFFFFFF);
+
+                Low = Value & 0xFFFF;
+                High = Value >> 16;
+                ShortPtr[0] = (USHORT)((MovwHigh & 0xFBF0) | ((Low >> 12) & 0x000F) | (((Low >> 11) & 1) << 10));
+                ShortPtr[1] = (USHORT)((MovwLow & 0x8F00) | (((Low >> 8) & 7) << 12) | (Low & 0x00FF));
+                ShortPtr[2] = (USHORT)((MovtHigh & 0xFBF0) | ((High >> 12) & 0x000F) | (((High >> 11) & 1) << 10));
+                ShortPtr[3] = (USHORT)((MovtLow & 0x8F00) | (((High >> 8) & 7) << 12) | (High & 0x00FF));
+            }
+            break;
+
         default:
             DPRINT1("Unknown/unsupported fixup type %hu.\n", Type);
             DPRINT1("Address %p, Current %u, Count %u, *TypeOffset %x\n",

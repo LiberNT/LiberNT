@@ -6,6 +6,7 @@
  */
 
 #include <blefi.h>
+#include <fdtacpi.h>
 #include <arm64.h>
 #include <reactos/arm64/early_uart.h>
 #include "../../winload/winload.h"
@@ -158,7 +159,7 @@ OslFbPrepare(VOID)
     Arm64TrapScreenRoutine = OslFbPuts;
 }
 
-const PFN_NUMBER MmArchMaxLoaderPage = MM_MAX_PAGE_LOADER;
+PFN_NUMBER MmArchMaxLoaderPage = MM_MAX_PAGE_LOADER;
 const PFN_NUMBER MmArchMaxRamdiskPage = MM_MAX_PAGE_LOADER;
 
 void _exituefi(VOID);
@@ -218,7 +219,7 @@ OslArchMapFirmwareRuntime(
 VOID
 OslArchInitialize(VOID)
 {
-    Arm64DescribeDeviceTreePlatform();
+    FwDescribeDeviceTreePlatform();
     EarlyUartInitialize(0);
     FwLateDebugPutChar = Arm64LateDebugPutChar;
     Arm64InstallAppleSmbios();

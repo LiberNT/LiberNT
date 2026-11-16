@@ -31,7 +31,7 @@ extern PVOID PageLookupTableAddress;
 extern PFN_NUMBER MmLowestPhysicalPage;
 extern PFN_NUMBER MmHighestPhysicalPage;
 
-extern const PFN_NUMBER MmArchMaxLoaderPage;
+extern PFN_NUMBER MmArchMaxLoaderPage;
 extern const PFN_NUMBER MmArchMaxRamdiskPage;
 
 BOOLEAN
