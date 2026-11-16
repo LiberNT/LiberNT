@@ -427,6 +427,8 @@ co_WinPosActivatePreviousForeground(PWND Wnd, BOOL bDestroy)
 
    UserRefObjectCo(WndPrev, &Ref);
    Ret = co_WinPosSetOtherForegroundWindow(WndPrev);
+   if (Ret && !bDestroy && WndPrev->head.pti->ppi != Wnd->head.pti->ppi)
+      Wnd->head.pti->ppi->W32PF_flags |= W32PF_ALLOWFOREGROUNDACTIVATE;
    UserDerefObjectCo(WndPrev);
    return Ret;
 }

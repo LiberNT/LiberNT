@@ -46,6 +46,7 @@ list(APPEND SOURCE
     EnableScrollBar.c
     EnumDisplaySettings.c
     ForegroundAfterHide.c
+    ForegroundHideLaunch.c
     ForegroundRetake.c
     ForegroundRight.c
     ForegroundStartup.c

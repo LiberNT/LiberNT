@@ -46,6 +46,7 @@ extern void func_EnableScrollBar(void);
 extern void func_DisplayConfigTarget(void);
 extern void func_EnumDisplaySettings(void);
 extern void func_ForegroundAfterHide(void);
+extern void func_ForegroundHideLaunch(void);
 extern void func_ForegroundRetake(void);
 extern void func_ForegroundRight(void);
 extern void func_ForegroundStartup(void);
@@ -196,6 +197,7 @@ const struct test winetest_testlist[] =
     { "DisplayConfigTarget", func_DisplayConfigTarget },
     { "EnumDisplaySettings", func_EnumDisplaySettings },
     { "ForegroundAfterHide", func_ForegroundAfterHide },
+    { "ForegroundHideLaunch", func_ForegroundHideLaunch },
     { "ForegroundRetake", func_ForegroundRetake },
     { "ForegroundRight", func_ForegroundRight },
     { "ForegroundStartup", func_ForegroundStartup },
