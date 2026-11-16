@@ -996,6 +996,7 @@ GetProcessAffinityMask(IN HANDLE hProcess,
                        OUT PDWORD_PTR lpSystemAffinityMask)
 {
     PROCESS_BASIC_INFORMATION ProcessInfo;
+    SYSTEM_BASIC_INFORMATION SystemInfo;
     NTSTATUS Status;
 
     /* Query information on the process from the kernel */
@@ -1011,9 +1012,16 @@ GetProcessAffinityMask(IN HANDLE hProcess,
         return FALSE;
     }
 
-    /* Copy the affinity mask, and get the system one from our shared data */
-    *lpProcessAffinityMask = (DWORD)ProcessInfo.AffinityMask;
-    *lpSystemAffinityMask = (DWORD)BaseStaticServerData->SysInfo.ActiveProcessorsAffinityMask;
+    /* FIXME: the system mask is the one of the caller's processor group, not of the group the queried process is in */
+    Status = NtQuerySystemInformation(SystemBasicInformation, &SystemInfo, sizeof(SystemInfo), NULL);
+    if (!NT_SUCCESS(Status))
+    {
+        BaseSetLastNTError(Status);
+        return FALSE;
+    }
+
+    *lpProcessAffinityMask = ProcessInfo.AffinityMask;
+    *lpSystemAffinityMask = SystemInfo.ActiveProcessorsAffinityMask;
     return TRUE;
 }
 
