@@ -1,5 +1,40 @@
 
-add_subdirectory(modern)
+set(KERNEL32_API_SOURCE
+    client/ApplicationRecovery.c
+    client/ApplicationRestart.c
+    client/CompareObjectHandles.c
+    client/DepPolicy.c
+    client/DiscardVirtualMemory.c
+    client/DllDirectory.c
+    client/DynamicTimeZone.c
+    client/FirefoxCompat.c
+    client/firmware.c
+    client/GetActiveProcessorCount.c
+    client/GetEnabledXStateFeatures.c
+    client/GetOverlappedResultEx.c
+    client/GetFileInformationByHandleEx.c
+    client/GetFinalPathNameByHandle.c
+    client/GetLogicalProcessorInformationEx.c
+    client/GetNamedPipeClientProcessId.c
+    client/GetProcessGroupAffinity.c
+    client/GetTickCount64.c
+    client/InitOnce.c
+    client/Packages.c
+    client/ProcThreadAttributeList.c
+    client/PrefetchVirtualMemory.c
+    client/ProcessInformation.c
+    client/ProcessMitigationPolicy.c
+    client/SetDefaultDllDirectories.c
+    client/SetFileInformationByHandle.c
+    client/SetProcessValidCallTargets.c
+    client/sync.c
+    client/ThreadDescription.c
+    client/ThreadGroupAffinity.c
+    client/threadpool.c
+    client/api.c)
+
+set_source_files_properties(${KERNEL32_API_SOURCE} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+set_source_files_properties(client/firmware.c PROPERTIES COMPILE_DEFINITIONS NTDDI_VERSION=${REACTOS_TARGET_NTDDI})
 
 add_definitions(-D_KERNEL32_)
 include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/subsys)
@@ -171,6 +206,7 @@ endif()
 add_asm_files(kernel32_asm ${ASM_SOURCE})
 add_library(kernel32 MODULE
     ${SOURCE}
+    ${KERNEL32_API_SOURCE}
     ${kernel32_asm}
     kernel32.rc
     ${CMAKE_CURRENT_BINARY_DIR}/kernel32_stubs.c
@@ -186,7 +222,7 @@ set_module_type(kernel32 win32dll ENTRYPOINT DllMain 12)
 set_subsystem(kernel32 console)
 ################# END  HACK #################
 
-target_link_libraries(kernel32 psapi_static kernel32_modern kernel32_shared wine chkstk symz ${PSEH_LIB})
+target_link_libraries(kernel32 psapi_static kernel32_shared wine chkstk symz ${PSEH_LIB})
 add_importlibs(kernel32 kernelbase ntdll)
 add_pch(kernel32 k32.h SOURCE)
 if(CLANG_NATIVE_SEH AND CMAKE_C_COMPILER_ID STREQUAL "Clang" AND NOT USE_DUMMY_PSEH)

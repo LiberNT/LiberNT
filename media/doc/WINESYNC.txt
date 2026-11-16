@@ -469,9 +469,9 @@ user32 -
   win32ss/user/user32/windows/text.c       # Forked (lstr.c)
   win32ss/user/user32/windows/winpos.c     # Forked
 
-  subsystems/win/win32k/user/user32/modern/wine/input.c        # Synced to Wine-10.0
-  subsystems/win/win32k/user/user32/modern/wine/misc.c         # Synced to Wine-10.0
-  subsystems/win/win32k/user/user32/modern/wine/win.c          # Synced to Wine-10.0
+  subsystems/win/win32k/user/user32/wine/input.c        # Synced to Wine-10.0
+  subsystems/win/win32k/user/user32/wine/misc.c         # Synced to Wine-10.0
+  subsystems/win/win32k/user/user32/wine/win.c          # Synced to Wine-10.0
 schannel -
   dll/win32/schannel                    # Synced to Wine-11.14
   dll/win32/secur32/schannel.c          # Synced to Wine-11.14

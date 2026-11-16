@@ -1,4 +1,15 @@
-add_subdirectory(modern)
+set(USER32_API_SOURCE
+    misc/dpi.c
+    windows/pointer.c
+    wine/input.c
+    wine/misc.c
+    wine/sysparams.c
+    wine/win.c)
+
+set_source_files_properties(${USER32_API_SOURCE} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+if(MSVC)
+    set_source_files_properties(wine/input.c wine/misc.c wine/sysparams.c wine/win.c PROPERTIES COMPILE_OPTIONS "/wd4312")
+endif()
 
 
 spec2def(user32.dll user32.spec ADD_IMPORTLIB)
@@ -80,6 +91,7 @@ add_asm_files(user32_asm ${ASM_SOURCE})
 
 add_library(user32 MODULE
     ${SOURCE}
+    ${USER32_API_SOURCE}
     ${user32_asm}
     user32.rc
     ${CMAKE_CURRENT_BINARY_DIR}/user32.def)
@@ -122,10 +134,10 @@ if((ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64") AND CMAKE_C_COMPILER_ID STRE
     target_compile_options(user32 PRIVATE -Xclang -fasync-exceptions)
 endif()
 if(NOT ARM64EC_RUNTIME)
-    target_link_libraries(user32 user32_modern user32_wine_modern user32_wsprintf wine ${PSEH_LIB})
+    target_link_libraries(user32 user32_wsprintf wine ${PSEH_LIB})
     add_importlibs(user32 win32u)
 else()
-    target_link_libraries(user32 user32_modern user32_wine_modern user32_wsprintf wine win32ksys ${PSEH_LIB})
+    target_link_libraries(user32 user32_wsprintf wine win32ksys ${PSEH_LIB})
 endif()
 add_dependencies(user32 asm)
 
