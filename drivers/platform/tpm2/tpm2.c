@@ -23,6 +23,9 @@
 #define TPM2_START_METHOD_TIS 6
 #define TPM2_START_METHOD_CRB 7
 #define TPM2_START_METHOD_CRB_ACPI 8
+#define TPM2_START_METHOD_CRB_PLUTON 13
+#define TPM2_PLUTON_PARAMETERS_OFFSET 52
+#define TPM2_PLUTON_TABLE_LENGTH 68
 #define TPM2_RC_INITIALIZE 0x00000100
 #define TPM2_CC_STARTUP 0x00000144
 #define TPM2_CC_GET_CAPABILITY 0x0000017A
@@ -93,6 +96,8 @@ typedef struct _TPM2_DEVICE_EXTENSION
     PVOID CommandBuffer;
     PVOID ResponseBuffer;
     PVOID TisRegisters;
+    PULONG PlutonStart;
+    PULONG PlutonReply;
     ULONG CommandSize;
     ULONG ResponseSize;
     ULONG StartMethod;
@@ -232,6 +237,12 @@ Tpm2UnmapHardware(
         MmUnmapIoSpace(DeviceExtension->LocalityArea, CRB_HEAD_SIZE);
     if (DeviceExtension->ControlArea)
         MmUnmapIoSpace(DeviceExtension->ControlArea, CRB_CONTROL_AREA_SIZE);
+    if (DeviceExtension->PlutonStart)
+        MmUnmapIoSpace(DeviceExtension->PlutonStart, sizeof(ULONG));
+    if (DeviceExtension->PlutonReply)
+        MmUnmapIoSpace(DeviceExtension->PlutonReply, sizeof(ULONG));
+    DeviceExtension->PlutonStart = NULL;
+    DeviceExtension->PlutonReply = NULL;
     DeviceExtension->TisRegisters = NULL;
     DeviceExtension->ResponseBuffer = NULL;
     DeviceExtension->CommandBuffer = NULL;
@@ -440,6 +451,35 @@ Tpm2EvaluateAcpiStart(
     return Status;
 }
 
+/* CRB with Pluton keeps the CRB idle and ready handshake of a plain CRB */
+static
+BOOLEAN
+Tpm2CrbHasIdleStates(
+    _In_ PTPM2_DEVICE_EXTENSION DeviceExtension)
+{
+    return DeviceExtension->StartMethod == TPM2_START_METHOD_CRB ||
+           DeviceExtension->StartMethod == TPM2_START_METHOD_CRB_PLUTON;
+}
+
+/* Pluton reads a CRB register write only after its doorbell: wait until it can take one, ring it, and optionally wait for the acknowledgement. */
+static
+NTSTATUS
+Tpm2PlutonDoorbell(
+    _In_ PTPM2_DEVICE_EXTENSION DeviceExtension,
+    _In_ BOOLEAN WaitForAcknowledgement)
+{
+    if (DeviceExtension->StartMethod != TPM2_START_METHOD_CRB_PLUTON)
+        return STATUS_SUCCESS;
+    ASSERT(DeviceExtension->PlutonStart != NULL);
+    ASSERT(DeviceExtension->PlutonReply != NULL);
+    if (!Tpm2WaitRegister32(DeviceExtension->PlutonReply, MAXULONG, 1, TPM2_READY_TIMEOUT_MS))
+        return STATUS_IO_TIMEOUT;
+    WRITE_REGISTER_ULONG(DeviceExtension->PlutonStart, 1);
+    if (WaitForAcknowledgement && !Tpm2WaitRegister32(DeviceExtension->PlutonStart, MAXULONG, 0, TPM2_READY_TIMEOUT_MS))
+        return STATUS_IO_TIMEOUT;
+    return STATUS_SUCCESS;
+}
+
 static
 NTSTATUS
 Tpm2CrbRequestLocality(
@@ -485,11 +525,15 @@ Tpm2CrbCommandReady(
     _In_ PTPM2_DEVICE_EXTENSION DeviceExtension)
 {
     PULONG Request;
+    NTSTATUS Status;
 
-    if (DeviceExtension->StartMethod != TPM2_START_METHOD_CRB)
+    if (!Tpm2CrbHasIdleStates(DeviceExtension))
         return STATUS_SUCCESS;
     Request = (PULONG)((PUCHAR)DeviceExtension->ControlArea + CRB_CTRL_REQ);
     WRITE_REGISTER_ULONG(Request, CRB_CTRL_REQ_COMMAND_READY);
+    Status = Tpm2PlutonDoorbell(DeviceExtension, TRUE);
+    if (!NT_SUCCESS(Status))
+        return Status;
     return Tpm2WaitRegister32(Request, CRB_CTRL_REQ_COMMAND_READY, 0, TPM2_READY_TIMEOUT_MS) ? STATUS_SUCCESS : STATUS_IO_TIMEOUT;
 }
 
@@ -500,10 +544,12 @@ Tpm2CrbGoIdle(
 {
     PULONG Request;
 
-    if (DeviceExtension->StartMethod != TPM2_START_METHOD_CRB)
+    if (!Tpm2CrbHasIdleStates(DeviceExtension))
         return;
     Request = (PULONG)((PUCHAR)DeviceExtension->ControlArea + CRB_CTRL_REQ);
     WRITE_REGISTER_ULONG(Request, CRB_CTRL_REQ_GO_IDLE);
+    if (!NT_SUCCESS(Tpm2PlutonDoorbell(DeviceExtension, TRUE)))
+        DPRINT1("TPM2: Pluton doorbell for go-idle timed out\n");
     if (!Tpm2WaitRegister32(Request, CRB_CTRL_REQ_GO_IDLE, 0, TPM2_READY_TIMEOUT_MS))
         DPRINT1("TPM2: CRB go-idle timed out\n");
 }
@@ -572,7 +618,10 @@ Tpm2CrbSubmit(
     KeMemoryBarrier();
     InterlockedExchange(&DeviceExtension->CommandActive, 1);
     WRITE_REGISTER_ULONG(Start, CRB_CTRL_START_INVOKE);
-    if (DeviceExtension->StartMethod == TPM2_START_METHOD_ACPI || DeviceExtension->StartMethod == TPM2_START_METHOD_CRB_ACPI)
+    Status = Tpm2PlutonDoorbell(DeviceExtension, FALSE);
+    if (!NT_SUCCESS(Status))
+        WRITE_REGISTER_ULONG(Start, 0);
+    else if (DeviceExtension->StartMethod == TPM2_START_METHOD_ACPI || DeviceExtension->StartMethod == TPM2_START_METHOD_CRB_ACPI)
     {
         Status = Tpm2EvaluateAcpiStart(DeviceExtension);
         if (!NT_SUCCESS(Status))
@@ -581,10 +630,13 @@ Tpm2CrbSubmit(
             goto Finished;
         }
     }
-    if (!Tpm2WaitRegister32(Start, CRB_CTRL_START_INVOKE, 0, TPM2_COMMAND_TIMEOUT_MS))
+    if (!NT_SUCCESS(Status) || !Tpm2WaitRegister32(Start, CRB_CTRL_START_INVOKE, 0, TPM2_COMMAND_TIMEOUT_MS))
     {
-        WRITE_REGISTER_ULONG(Cancel, CRB_CTRL_CANCEL_INVOKE);
-        Status = STATUS_IO_TIMEOUT;
+        if (NT_SUCCESS(Status))
+        {
+            WRITE_REGISTER_ULONG(Cancel, CRB_CTRL_CANCEL_INVOKE);
+            Status = STATUS_IO_TIMEOUT;
+        }
         goto Finished;
     }
     if (READ_REGISTER_ULONG(StatusRegister) & CRB_CTRL_STS_ERROR)
@@ -1042,6 +1094,31 @@ Tpm2StartCrb(
     return STATUS_SUCCESS;
 }
 
+/* The Pluton start and reply registers are the two quadwords of the start method parameters. */
+static
+NTSTATUS
+Tpm2StartPluton(
+    _Inout_ PTPM2_DEVICE_EXTENSION DeviceExtension,
+    _In_reads_bytes_(TableLength) const UCHAR *Table,
+    _In_ ULONG TableLength,
+    _In_ ULONGLONG ControlAddress)
+{
+    ULONGLONG StartAddress;
+    ULONGLONG ReplyAddress;
+
+    if (TableLength < TPM2_PLUTON_TABLE_LENGTH)
+        return STATUS_ACPI_INVALID_DATA;
+    RtlCopyMemory(&StartAddress, Table + TPM2_PLUTON_PARAMETERS_OFFSET, sizeof(StartAddress));
+    RtlCopyMemory(&ReplyAddress, Table + TPM2_PLUTON_PARAMETERS_OFFSET + sizeof(StartAddress), sizeof(ReplyAddress));
+    if (StartAddress == 0 || ReplyAddress == 0 || (StartAddress & 3) != 0 || (ReplyAddress & 3) != 0)
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    DeviceExtension->PlutonStart = Tpm2MapPhysicalRegion(StartAddress, sizeof(ULONG));
+    DeviceExtension->PlutonReply = Tpm2MapPhysicalRegion(ReplyAddress, sizeof(ULONG));
+    if (DeviceExtension->PlutonStart == NULL || DeviceExtension->PlutonReply == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    return Tpm2StartCrb(DeviceExtension, ControlAddress);
+}
+
 static
 NTSTATUS
 Tpm2StartTis(
@@ -1103,6 +1180,8 @@ Tpm2StartHardware(
     RtlCopyMemory(&DeviceExtension->StartMethod, Table + 48, sizeof(DeviceExtension->StartMethod));
     if (DeviceExtension->StartMethod == TPM2_START_METHOD_TIS)
         Status = Tpm2StartTis(DeviceExtension);
+    else if (DeviceExtension->StartMethod == TPM2_START_METHOD_CRB_PLUTON)
+        Status = Tpm2StartPluton(DeviceExtension, Table, DeclaredLength, ControlAddress);
     else if (DeviceExtension->StartMethod == TPM2_START_METHOD_ACPI || DeviceExtension->StartMethod == TPM2_START_METHOD_CRB || DeviceExtension->StartMethod == TPM2_START_METHOD_CRB_ACPI)
         Status = Tpm2StartCrb(DeviceExtension, ControlAddress);
     else
