@@ -98,6 +98,8 @@ static void TestDialog(HWND hwndDlg, HWND hwndOwner)
     ok(iCreated >= 0, "no HSHELL_WINDOWCREATED for the dialog\n");
     ok(iActivated >= 0, "no HSHELL_WINDOWACTIVATED for the dialog\n");
     ok(iCreated < iActivated, "HSHELL_WINDOWCREATED %d, HSHELL_WINDOWACTIVATED %d\n", iCreated, iActivated);
+    ok(SendMessageW(hwndDlg, WM_GETICON, ICON_SMALL, 0) != 0, "the dialog has no small icon\n");
+    ok(SendMessageW(hwndDlg, WM_GETICON, ICON_BIG, 0) == 0, "the dialog has a big icon\n");
 }
 
 START_TEST(RunFileDlg)

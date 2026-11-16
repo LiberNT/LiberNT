@@ -521,15 +521,9 @@ static INT_PTR CALLBACK RunDlgProc(HWND hwnd, UINT message, WPARAM wParam, LPARA
             /* Use the default Shell Run icon if no one is specified */
             if (prfdp->hIcon == NULL)
                 prfdp->hIcon = LoadIconW(shell32_hInstance, MAKEINTRESOURCEW(IDI_SHELL_RUN));
-            /*
-             * NOTE: Starting Windows Vista, the "Run File" dialog gets a
-             * title icon that remains the same as the default one, even if
-             * the user specifies a custom icon.
-             * Since we currently imitate Windows 2003, therefore do not show
-             * any title icon.
-             */
-            // SendMessageW(hwnd, WM_SETICON, ICON_BIG, (LPARAM)prfdp->hIcon);
-            // SendMessageW(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)prfdp->hIcon);
+            SendMessageW(hwnd, WM_SETICON, ICON_SMALL,
+                         (LPARAM)LoadImageW(shell32_hInstance, MAKEINTRESOURCEW(IDI_SHELL_RUN), IMAGE_ICON,
+                                            GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_SHARED));
             SendMessageW(GetDlgItem(hwnd, IDC_RUNDLG_ICON), STM_SETICON, (WPARAM)prfdp->hIcon, 0);
 
             hwndCombo = GetDlgItem(hwnd, IDC_RUNDLG_EDITPATH);
