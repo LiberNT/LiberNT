@@ -468,6 +468,9 @@ typedef struct tagMSIPACKAGE
 
     INSTALLUILEVEL ui_level;
     msi_dialog *dialog;
+#ifdef __REACTOS__
+    struct basic_ui *basic_ui;
+#endif
     LPWSTR next_dialog;
     float center_x;
     float center_y;
@@ -1006,6 +1009,9 @@ extern void msi_dialog_check_messages( HANDLE );
 extern void msi_dialog_destroy( msi_dialog* );
 #ifdef __REACTOS__
 extern void msi_dialog_show_cancel( MSIPACKAGE *, BOOL );
+extern void msi_basic_ui_start( MSIPACKAGE * );
+extern void msi_basic_ui_end( MSIPACKAGE * );
+extern INT msi_basic_ui_message( MSIPACKAGE *, INSTALLMESSAGE, MSIRECORD * );
 #endif
 extern void msi_dialog_unregister_class( void );
 

@@ -175,3 +175,16 @@
 #define IDS_TEMP_WRITEENVIRONMENTSTRINGS 1247
 #define IDS_TEMP_WRITEINIVALUES 1248
 #define IDS_TEMP_WRITEREGISTRYVALUES 1249
+
+#ifdef __REACTOS__
+#define IDD_BASIC_UI                    200
+#define IDC_BASIC_UI_TEXT               8
+#define IDC_BASIC_UI_PROGRESS           10
+#define IDC_BASIC_UI_ACTION             11
+#define IDC_BASIC_UI_ICON               12
+#define IDS_BASIC_UI_TITLE              20000
+#define IDS_BASIC_UI_PREPARE            20001
+#define IDS_BASIC_UI_PREPARE_REMOVE     20002
+#define IDS_BASIC_UI_CONFIGURE          20003
+#define IDS_BASIC_UI_CANCEL             20004
+#endif

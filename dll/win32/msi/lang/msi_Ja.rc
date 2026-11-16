@@ -164,3 +164,14 @@ STRINGTABLE
     IDS_TEMP_WRITEINIVALUES "File: [1],  Section: [2],  Key: [3], Value: [4]"
     IDS_TEMP_WRITEREGISTRYVALUES "Key: [1], Name: [2], Value: [3]"
 }
+
+#ifdef __REACTOS__
+STRINGTABLE
+{
+    IDS_BASIC_UI_TITLE "Windows インストーラー"
+    IDS_BASIC_UI_PREPARE "インストールの準備中..."
+    IDS_BASIC_UI_PREPARE_REMOVE "削除の準備中..."
+    IDS_BASIC_UI_CONFIGURE "Windows に %s を設定しています。しばらくお待ちください。"
+    IDS_BASIC_UI_CANCEL "キャンセル"
+}
+#endif

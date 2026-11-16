@@ -19,6 +19,10 @@
  */
 
 #include "windef.h"
+#ifdef __REACTOS__
+#include "winuser.h"
+#include "commctrl.h"
+#endif
 #include "resource.h"
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
@@ -41,6 +45,19 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 
 /* @makedep: instlocal.bmp */
 0x1003 BITMAP instlocal.bmp
+
+#ifdef __REACTOS__
+IDD_BASIC_UI DIALOGEX 0, 0, 305, 73
+STYLE DS_MODALFRAME | DS_SETFONT | DS_3DLOOK | DS_NOIDLEMSG | DS_CENTER | WS_POPUP | WS_CAPTION | WS_CLIPSIBLINGS
+FONT 8, "MS Shell Dlg"
+BEGIN
+    CONTROL "", IDC_BASIC_UI_ICON, "Static", SS_ICON | WS_CHILD | WS_VISIBLE, 8, 7, 21, 20
+    LTEXT "", IDC_BASIC_UI_TEXT, 36, 7, 260, 26
+    LTEXT "", IDC_BASIC_UI_ACTION, 8, 39, 288, 11
+    CONTROL "", IDC_BASIC_UI_PROGRESS, "msctls_progress32", WS_CHILD, 8, 55, 213, 9
+    DEFPUSHBUTTON "", IDCANCEL, 227, 52, 70, 14
+END
+#endif
 
 #define WINE_FILEDESCRIPTION_STR "Wine MSI dll"
 #define WINE_FILENAME_STR "msi.dll"
