@@ -172,6 +172,7 @@ typedef struct _TOUCH_CONTACT
     ULONG Y;
     BOOLEAN InContact;
     BOOLEAN Confidence;
+    BOOLEAN Screen;
 } TOUCH_CONTACT, *PTOUCH_CONTACT;
 struct _POINTER_TOUCH_SOURCE;
 NTSTATUS NTAPI InitTouchInputImpl(PDRIVER_OBJECT DriverObject);
@@ -187,6 +188,9 @@ VOID FASTCALL co_PointerRouteMessage(PTHREADINFO pti, MSG *Msg, LONG_PTR ExtraIn
 VOID FASTCALL PointerDefWindowProc(PWND Wnd, UINT Msg, WPARAM wParam);
 BOOL FASTCALL PointerGetTouchInfoList(UINT32 PointerId, ULONG PointerType, SIZE_T EntrySize, PULONG EntriesCount,
                                       PULONG PointerCount, PVOID PointerInfo);
+BOOL FASTCALL PointerInitializeTouchInjection(PPROCESSINFO ppi, UINT32 MaxCount, DWORD Mode);
+BOOL FASTCALL PointerInjectTouchInput(PPROCESSINFO ppi, UINT32 Count, const POINTER_TOUCH_INFO *Contacts);
+VOID FASTCALL PointerCleanupProcess(PPROCESSINFO ppi);
 BOOL NTAPI UserSendTouchMouseInput(MOUSEINPUT *pmi);
 
 /* IMM */

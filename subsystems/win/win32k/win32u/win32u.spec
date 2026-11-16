@@ -612,6 +612,8 @@
 @ stdcall NtUserImpersonateDdeClientWindow(ptr ptr)
 @ stdcall NtUserInitialize(long ptr ptr)
 @ stdcall NtUserInitializeClientPfnArrays(ptr ptr ptr ptr)
+@ stdcall NtUserInitializeTouchInjection(long long)
+@ stdcall NtUserInjectTouchInput(long ptr)
 ; @ stdcall NtUserInitTask(long long long long long long long long long long long long)
 @ stdcall NtUserInternalGetWindowText(ptr wstr ptr)
 @ stdcall NtUserInvalidateRect(ptr ptr long)

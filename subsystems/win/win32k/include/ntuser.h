@@ -2886,6 +2886,18 @@ BOOL
 NTAPI
 NtUserIsMouseInPointerEnabled(VOID);
 
+BOOL
+NTAPI
+NtUserInitializeTouchInjection(
+    _In_ UINT32 MaxCount,
+    _In_ DWORD Mode);
+
+BOOL
+NTAPI
+NtUserInjectTouchInput(
+    _In_ UINT32 Count,
+    _In_reads_(Count) const POINTER_TOUCH_INFO *Contacts);
+
 ULONG
 NTAPI
 NtUserSetProcessDpiAwarenessContext(

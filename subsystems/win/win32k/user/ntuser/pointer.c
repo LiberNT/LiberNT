@@ -21,6 +21,7 @@ enum
     PointerPromotionPending,
     PointerPromotionLeftDrag,
     PointerPromotionRightDrag,
+    PointerPromotionPan,
     PointerPromotionDone,
 };
 #define POINTER_COORDINATE_MAX 0xFFFF
@@ -68,7 +69,16 @@ typedef struct _POINTER_ROUTE
     UCHAR PromotionState;
     POINT DownPoint;
     DWORD DownTime;
+    POINT PanLast;
+    LONG PanRemainder;
+    BOOLEAN PanVertical;
 } POINTER_ROUTE, *PPOINTER_ROUTE;
+
+typedef struct _POINTER_INJECTION
+{
+    struct _POINTER_TOUCH_SOURCE *Source;
+    UINT32 MaxCount;
+} POINTER_INJECTION, *PPOINTER_INJECTION;
 
 PWND FASTCALL IntTopLevelWindowFromPoint(INT x, INT y);
 
@@ -145,9 +155,17 @@ PointerMapToScreen(
     _In_ const TOUCH_CONTACT *Contact,
     _Out_ PPOINT Pt)
 {
-    PMONITOR Monitor = UserGetPrimaryMonitor();
+    PMONITOR Monitor;
     LONG Width = 1, Height = 1, Left = 0, Top = 0;
 
+    if (Contact->Screen)
+    {
+        Pt->x = (LONG)Contact->X;
+        Pt->y = (LONG)Contact->Y;
+        return;
+    }
+
+    Monitor = UserGetPrimaryMonitor();
     if (Monitor)
     {
         Left = Monitor->rcMonitor.left;
@@ -508,6 +526,7 @@ VOID
 PointerSendMouse(
     _In_ POINT Pt,
     _In_ DWORD Flags,
+    _In_ DWORD Data,
     _In_ UINT32 PointerId)
 {
     LONG Width = max(UserGetSystemMetrics(SM_CXSCREEN), 1);
@@ -519,9 +538,79 @@ PointerSendMouse(
     RtlZeroMemory(&Input, sizeof(Input));
     Input.dx = (LONG)((((LONGLONG)Pt.x << 16) + Width - 1) / Width);
     Input.dy = (LONG)((((LONGLONG)Pt.y << 16) + Height - 1) / Height);
+    Input.mouseData = Data;
     Input.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | Flags;
     Input.dwExtraInfo = POINTER_TOUCH_EXTRA_INFO | (PointerId & POINTER_TOUCH_EXTRA_ID_MASK);
     UserSendTouchMouseInput(&Input);
+}
+
+static
+BOOLEAN
+PointerCanScroll(
+    _In_ PWND Wnd,
+    _In_ BOOLEAN Vertical)
+{
+    PSBDATA Data;
+
+    if (!(Wnd->style & (Vertical ? WS_VSCROLL : WS_HSCROLL)) || !Wnd->pSBInfo)
+        return FALSE;
+    Data = Vertical ? &Wnd->pSBInfo->Vert : &Wnd->pSBInfo->Horz;
+    return (LONGLONG)Data->posMax - Data->posMin + 1 > max(Data->page, 1);
+}
+
+static
+BOOLEAN
+PointerStartPan(
+    _In_ PWND Wnd,
+    _Inout_ PPOINTER_ROUTE Route,
+    _In_ POINT Pt)
+{
+    BOOLEAN Vertical = abs(Pt.y - Route->DownPoint.y) >= abs(Pt.x - Route->DownPoint.x);
+
+    ASSERT(Route->PromotionState == PointerPromotionPending);
+
+    for (; Wnd; Wnd = Wnd->spwndParent)
+    {
+        if (PointerCanScroll(Wnd, Vertical))
+        {
+            Route->PromotionState = PointerPromotionPan;
+            Route->PanVertical = Vertical;
+            Route->PanLast = Route->DownPoint;
+            Route->PanRemainder = 0;
+            return TRUE;
+        }
+        if (!(Wnd->style & WS_CHILD))
+            break;
+    }
+    return FALSE;
+}
+
+static
+VOID
+PointerPan(
+    _Inout_ PPOINTER_ROUTE Route,
+    _In_ POINT Pt,
+    _In_ UINT32 PointerId)
+{
+    LONG Lines = (gspv.iWheelScrollLines > 0 && gspv.iWheelScrollLines <= 100) ? gspv.iWheelScrollLines : 3;
+    LONG Step = Lines * ((gpsi && gpsi->cySysFontChar > 0) ? gpsi->cySysFontChar : 16);
+
+    ASSERT(Route->PromotionState == PointerPromotionPan);
+    ASSERT(Step > 0);
+
+    /* A finger moving up or left brings what lies below or to the right into view, like the wheel turned toward the user */
+    Route->PanRemainder += Route->PanVertical ? Route->PanLast.y - Pt.y : Route->PanLast.x - Pt.x;
+    Route->PanLast = Pt;
+    while (Route->PanRemainder >= Step || Route->PanRemainder <= -Step)
+    {
+        LONG Sign = Route->PanRemainder > 0 ? 1 : -1;
+
+        if (Route->PanVertical)
+            PointerSendMouse(Pt, MOUSEEVENTF_WHEEL, (DWORD)(-Sign * WHEEL_DELTA), PointerId);
+        else
+            PointerSendMouse(Pt, MOUSEEVENTF_HWHEEL, (DWORD)(Sign * WHEEL_DELTA), PointerId);
+        Route->PanRemainder -= Sign * Step;
+    }
 }
 
 VOID
@@ -538,8 +627,6 @@ PointerDefWindowProc(
     UINT32 PointerId = GET_POINTERID_WPARAM(wParam);
     BOOLEAN Held, Moved;
     POINT Pt;
-
-    UNREFERENCED_PARAMETER(Wnd);
 
     Route = PointerTouchRoute(PointerId);
     if (!Route || !pti || !pti->MessageQueue)
@@ -570,13 +657,16 @@ PointerDefWindowProc(
 
     if (Msg == WM_POINTERUPDATE || Msg == WM_NCPOINTERUPDATE)
     {
-        if (Route->PromotionState == PointerPromotionPending && Moved)
+        if (Route->PromotionState == PointerPromotionPending && Moved &&
+            (Held || Msg != WM_POINTERUPDATE || !PointerStartPan(Wnd, Route, Pt)))
         {
             Route->PromotionState = Held ? PointerPromotionRightDrag : PointerPromotionLeftDrag;
-            PointerSendMouse(Route->DownPoint, Held ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_LEFTDOWN, PointerId);
+            PointerSendMouse(Route->DownPoint, Held ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_LEFTDOWN, 0, PointerId);
         }
-        if (Route->PromotionState == PointerPromotionLeftDrag || Route->PromotionState == PointerPromotionRightDrag)
-            PointerSendMouse(Pt, 0, PointerId);
+        if (Route->PromotionState == PointerPromotionPan)
+            PointerPan(Route, Pt, PointerId);
+        else if (Route->PromotionState == PointerPromotionLeftDrag || Route->PromotionState == PointerPromotionRightDrag)
+            PointerSendMouse(Pt, 0, 0, PointerId);
         return;
     }
 
@@ -585,14 +675,17 @@ PointerDefWindowProc(
     switch (Route->PromotionState)
     {
         case PointerPromotionPending:
-            PointerSendMouse(Route->DownPoint, Held ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_LEFTDOWN, PointerId);
-            PointerSendMouse(Route->DownPoint, Held ? MOUSEEVENTF_RIGHTUP : MOUSEEVENTF_LEFTUP, PointerId);
+            PointerSendMouse(Route->DownPoint, Held ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_LEFTDOWN, 0, PointerId);
+            PointerSendMouse(Route->DownPoint, Held ? MOUSEEVENTF_RIGHTUP : MOUSEEVENTF_LEFTUP, 0, PointerId);
             break;
         case PointerPromotionLeftDrag:
-            PointerSendMouse(Pt, MOUSEEVENTF_LEFTUP, PointerId);
+            PointerSendMouse(Pt, MOUSEEVENTF_LEFTUP, 0, PointerId);
             break;
         case PointerPromotionRightDrag:
-            PointerSendMouse(Pt, MOUSEEVENTF_RIGHTUP, PointerId);
+            PointerSendMouse(Pt, MOUSEEVENTF_RIGHTUP, 0, PointerId);
+            break;
+        case PointerPromotionPan:
+            PointerPan(Route, Pt, PointerId);
             break;
     }
     Route->PromotionState = PointerPromotionDone;
@@ -683,5 +776,142 @@ PointerGetTouchInfoList(
     }
     _SEH2_END;
 
+    return TRUE;
+}
+
+VOID
+FASTCALL
+PointerCleanupProcess(
+    _In_ PPROCESSINFO ppi)
+{
+    PPOINTER_INJECTION Injection = ppi->TouchInjection;
+
+    if (!Injection)
+        return;
+    ASSERT(UserIsEnteredExclusive());
+    ppi->TouchInjection = NULL;
+    ASSERT(Injection->Source != NULL);
+    PointerDestroyTouchSource(Injection->Source);
+    ExFreePoolWithTag(Injection, USERTAG_HIDDATA);
+}
+
+BOOL
+FASTCALL
+PointerInitializeTouchInjection(
+    _In_ PPROCESSINFO ppi,
+    _In_ UINT32 MaxCount,
+    _In_ DWORD Mode)
+{
+    PPOINTER_INJECTION Injection;
+
+    ASSERT(UserIsEnteredExclusive());
+    if (MaxCount == 0 || MaxCount > MAX_TOUCH_COUNT ||
+        (Mode != TOUCH_FEEDBACK_DEFAULT && Mode != TOUCH_FEEDBACK_INDIRECT && Mode != TOUCH_FEEDBACK_NONE))
+    {
+        EngSetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    Injection = ExAllocatePoolZero(PagedPool, sizeof(*Injection), USERTAG_HIDDATA);
+    if (!Injection)
+    {
+        EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return FALSE;
+    }
+    Injection->Source = PointerCreateTouchSource(MaxCount);
+    if (!Injection->Source)
+    {
+        ExFreePoolWithTag(Injection, USERTAG_HIDDATA);
+        EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return FALSE;
+    }
+    Injection->MaxCount = MaxCount;
+
+    PointerCleanupProcess(ppi);
+    ppi->TouchInjection = Injection;
+    return TRUE;
+}
+
+static
+BOOLEAN
+PointerValidInjectedFlags(
+    _In_ POINTER_FLAGS Flags)
+{
+    Flags &= ~(POINTER_FLAG_PRIMARY | POINTER_FLAG_CONFIDENCE);
+    switch (Flags & ~POINTER_FLAG_CANCELED)
+    {
+        case POINTER_FLAG_DOWN | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT:
+        case POINTER_FLAG_UPDATE | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT:
+        case POINTER_FLAG_UPDATE | POINTER_FLAG_INRANGE:
+        case POINTER_FLAG_UPDATE:
+        case POINTER_FLAG_UP | POINTER_FLAG_INRANGE:
+        case POINTER_FLAG_UP:
+            return !(Flags & POINTER_FLAG_CANCELED) || (Flags & (POINTER_FLAG_UP | POINTER_FLAG_UPDATE));
+        default:
+            return FALSE;
+    }
+}
+
+BOOL
+FASTCALL
+PointerInjectTouchInput(
+    _In_ PPROCESSINFO ppi,
+    _In_ UINT32 Count,
+    _In_reads_(Count) const POINTER_TOUCH_INFO *Contacts)
+{
+    PPOINTER_INJECTION Injection = ppi->TouchInjection;
+    PTOUCH_CONTACT Frame;
+    UINT32 Index, Other;
+
+    ASSERT(UserIsEnteredExclusive());
+    if (!Injection)
+    {
+        EngSetLastError(ERROR_ACCESS_DENIED);
+        return FALSE;
+    }
+    ASSERT(Injection->Source != NULL && Injection->MaxCount != 0);
+    if (Count == 0 || Count > Injection->MaxCount)
+    {
+        EngSetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        if (Contacts[Index].pointerInfo.pointerType != PT_TOUCH ||
+            !PointerValidInjectedFlags(Contacts[Index].pointerInfo.pointerFlags))
+        {
+            EngSetLastError(ERROR_INVALID_PARAMETER);
+            return FALSE;
+        }
+        for (Other = 0; Other < Index; Other++)
+        {
+            if (Contacts[Other].pointerInfo.pointerId == Contacts[Index].pointerInfo.pointerId)
+            {
+                EngSetLastError(ERROR_INVALID_PARAMETER);
+                return FALSE;
+            }
+        }
+    }
+
+    Frame = ExAllocatePoolZero(PagedPool, Count * sizeof(*Frame), USERTAG_HIDDATA);
+    if (!Frame)
+    {
+        EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return FALSE;
+    }
+    for (Index = 0; Index < Count; Index++)
+    {
+        POINTER_FLAGS Flags = Contacts[Index].pointerInfo.pointerFlags;
+
+        Frame[Index].ContactId = Contacts[Index].pointerInfo.pointerId;
+        Frame[Index].X = (ULONG)Contacts[Index].pointerInfo.ptPixelLocation.x;
+        Frame[Index].Y = (ULONG)Contacts[Index].pointerInfo.ptPixelLocation.y;
+        Frame[Index].InContact = (Flags & POINTER_FLAG_INCONTACT) && !(Flags & (POINTER_FLAG_UP | POINTER_FLAG_CANCELED));
+        Frame[Index].Confidence = TRUE;
+        Frame[Index].Screen = TRUE;
+    }
+    PointerProcessTouchFrame(Injection->Source, Frame, Count);
+    ExFreePoolWithTag(Frame, USERTAG_HIDDATA);
     return TRUE;
 }
