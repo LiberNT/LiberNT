@@ -69,7 +69,6 @@ _tsplitpath_x(
     if (fname) fname[0] = '\0';
     if (ext) ext[0] = '\0';
 
-#if WINVER >= 0x600
     /* Check parameter */
     if (!path)
     {
@@ -78,15 +77,9 @@ _tsplitpath_x(
 #endif
         return _FAILURE;
     }
-#endif
 
     _Analysis_assume_(path != 0);
 
-#if WINVER == 0x600
-    /* Skip '\\?\' prefix */
-    if ((path[0] == '\\') && (path[1] == '\\') &&
-        (path[2] == '?') && (path[3] == '\\')) path += 4;
-#endif
 
     if (path[0] == '\0') return _FAILURE;
 
@@ -156,4 +149,3 @@ _tsplitpath_x(
 
     return _SUCCESS;
 }
-

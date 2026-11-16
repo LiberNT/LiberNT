@@ -353,11 +353,9 @@ WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
       else if (wParam == 'A')
          animate = !animate;
       return 0;
-#if WINVER >= 0x0605
    case WM_NCCREATE:
        EnableNonClientDpiScaling(hWnd);
        break;
-#endif
    }
 
    return DefWindowProc(hWnd, uMsg, wParam, lParam);
@@ -710,9 +708,7 @@ main(int argc, char *argv[])
       }
    }
 
-#if WINVER >= 0x0605
    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE);
-#endif
 
    if (fullscreen) {
        x = 0; y = 0;

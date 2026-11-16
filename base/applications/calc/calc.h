@@ -65,12 +65,8 @@ void HtmlHelp_Start(HINSTANCE hInstance);
 void HtmlHelp_Stop(void);
 
 /* THEMING SUPPORT */
-#if (_WIN32_WINNT >= 0x0600)
 #include <vssym32.h>
 #include <vsstyle.h>
-#else
-#include <tmschema.h>
-#endif
 #include <uxtheme.h>
 
 void Theme_Start(HINSTANCE hInstance);
