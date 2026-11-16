@@ -1284,11 +1284,19 @@ static UINT HANDLE_CustomType19( MSIPACKAGE *package, const WCHAR *source, const
     {
         LPCWSTR error = MSI_RecordGetString( row, 1 );
         if ((package->ui_level & INSTALLUILEVEL_MASK) != INSTALLUILEVEL_NONE)
+#ifdef __REACTOS__
+            msi_basic_ui_message_box( package, error, MB_OK );
+#else
             MessageBoxW( NULL, error, NULL, MB_OK );
+#endif
         msiobj_release( &row->hdr );
     }
     else if ((package->ui_level & INSTALLUILEVEL_MASK) != INSTALLUILEVEL_NONE)
+#ifdef __REACTOS__
+        msi_basic_ui_message_box( package, deformated, MB_OK );
+#else
         MessageBoxW( NULL, deformated, NULL, MB_OK );
+#endif
 
     free( deformated );
 

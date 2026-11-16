@@ -4571,6 +4571,17 @@ static void basic_ui_progress( struct basic_ui *ui, MSIRECORD *record )
         SendMessageW( bar, PBM_SETPOS, (WPARAM)(ui->current * 100 / ui->max), 0 );
 }
 
+INT msi_basic_ui_message_box( MSIPACKAGE *package, const WCHAR *text, UINT type )
+{
+    WCHAR *title = msi_dup_property( package->db, L"ProductName" );
+    INT rc;
+
+    rc = MessageBoxW( package->basic_ui ? package->basic_ui->hwnd : gUIhwnd, text,
+                      title ? title : L"Windows Installer", type | MB_TOPMOST );
+    free( title );
+    return rc;
+}
+
 INT msi_basic_ui_message( MSIPACKAGE *package, INSTALLMESSAGE type, MSIRECORD *record )
 {
     struct basic_ui *ui = package->basic_ui;

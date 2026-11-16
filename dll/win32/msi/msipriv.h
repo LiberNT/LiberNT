@@ -1012,6 +1012,7 @@ extern void msi_dialog_show_cancel( MSIPACKAGE *, BOOL );
 extern void msi_basic_ui_start( MSIPACKAGE * );
 extern void msi_basic_ui_end( MSIPACKAGE * );
 extern INT msi_basic_ui_message( MSIPACKAGE *, INSTALLMESSAGE, MSIRECORD * );
+extern INT msi_basic_ui_message_box( MSIPACKAGE *, const WCHAR *, UINT );
 #endif
 extern void msi_dialog_unregister_class( void );
 

@@ -1846,17 +1846,29 @@ static INT internal_ui_handler(MSIPACKAGE *package, INSTALLMESSAGE eMessageType,
         if (package->ui_level & INSTALLUILEVEL_PROGRESSONLY) return 0;
         if (!(eMessageType & MB_ICONMASK))
             eMessageType |= MB_ICONEXCLAMATION;
+#ifdef __REACTOS__
+        return msi_basic_ui_message_box(package, message, eMessageType & 0x00ffffff);
+#else
         return MessageBoxW(gUIhwnd, message, L"Windows Installer", eMessageType & 0x00ffffff);
+#endif
     case INSTALLMESSAGE_WARNING:
         if (package->ui_level & INSTALLUILEVEL_PROGRESSONLY) return 0;
         if (!(eMessageType & MB_ICONMASK))
             eMessageType |= MB_ICONASTERISK;
+#ifdef __REACTOS__
+        return msi_basic_ui_message_box(package, message, eMessageType & 0x00ffffff);
+#else
         return MessageBoxW(gUIhwnd, message, L"Windows Installer", eMessageType & 0x00ffffff);
+#endif
     case INSTALLMESSAGE_USER:
         if (package->ui_level & INSTALLUILEVEL_PROGRESSONLY) return 0;
         if (!(eMessageType & MB_ICONMASK))
             eMessageType |= MB_USERICON;
+#ifdef __REACTOS__
+        return msi_basic_ui_message_box(package, message, eMessageType & 0x00ffffff);
+#else
         return MessageBoxW(gUIhwnd, message, L"Windows Installer", eMessageType & 0x00ffffff);
+#endif
     case INSTALLMESSAGE_INFO:
     case INSTALLMESSAGE_INITIALIZE:
     case INSTALLMESSAGE_TERMINATE:
