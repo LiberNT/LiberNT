@@ -71,9 +71,7 @@ static const WCHAR* VAL_CLICKLOCKTIME = L"ClickLockTime";
 static const WCHAR* VAL_PAINTDESKVER = L"PaintDesktopVersion";
 static const WCHAR* VAL_CARETRATE = L"CursorBlinkRate";
 static const WCHAR* VAL_CARETWIDTH = L"CaretWidth";
-#if (_WIN32_WINNT >= 0x0600)
 static const WCHAR* VAL_SCRLLCHARS = L"WheelScrollChars";
-#endif
 static const WCHAR* VAL_USERPREFMASK = L"UserPreferencesMask";
 static const WCHAR* VAL_SNAP_ENABLED = L"WindowArrangementActive";
 static const WCHAR* VAL_SNAP_DOCKMOVING = L"DockMoving";
@@ -568,9 +566,7 @@ SpiUpdatePerUserSystemParameters(VOID)
     gspv.ncm.iSmCaptionHeight = SpiLoadMetric(L"SmCaptionHeight", 15);
     gspv.ncm.iMenuWidth = SpiLoadMetric(L"MenuWidth", 18);
     gspv.ncm.iMenuHeight = SpiLoadMetric(L"MenuHeight", 18);
-#if (WINVER >= 0x0600)
     gspv.ncm.iPaddedBorderWidth = SpiLoadMetric(L"PaddedBorderWidth", 4);
-#endif
     SpiLoadFont(&gspv.ncm.lfCaptionFont, L"CaptionFont", &lf1);
     SpiLoadFont(&gspv.ncm.lfSmCaptionFont, L"SmCaptionFont", &lf1);
     SpiLoadFont(&gspv.ncm.lfMenuFont, L"MenuFont", &lf1);
@@ -611,9 +607,7 @@ SpiUpdatePerUserSystemParameters(VOID)
     gspv.uiFontSmoothingType = SpiLoadDWord(KEY_DESKTOP, VAL_FONTSMOOTHINGTYPE, 1);
     gspv.uiFontSmoothingContrast = SpiLoadDWord(KEY_DESKTOP, VAL_FONTSMOOTHINGCONTRAST, 1400);
     gspv.uiFontSmoothingOrientation = SpiLoadDWord(KEY_DESKTOP, VAL_FONTSMOOTHINGORIENTATION, 1);
-#if (_WIN32_WINNT >= 0x0600)
     gspv.uiWheelScrollChars = SpiLoadInt(KEY_DESKTOP, VAL_SCRLLCHARS, 3);
-#endif
 
     /* Some hardcoded values for now */
 
@@ -628,9 +622,7 @@ SpiUpdatePerUserSystemParameters(VOID)
     gspv.iScrSaverTimeout = SpiLoadInt(KEY_DESKTOP, VAL_SCRTO, 600);
     gspv.bScrSaverActive = SpiLoadScreenSaverActive();
     gspv.bScrSaverRunning = FALSE;
-#if(WINVER >= 0x0600)
     gspv.bScrSaverSecure = SpiLoadInt(KEY_DESKTOP, L"ScreenSaverIsSecure", 0) != 0;
-#endif
 
     gspv.bFastTaskSwitch = TRUE;
 
@@ -1505,9 +1497,7 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
                 SpiStoreMetric(L"SmCaptionHeight", gspv.ncm.iSmCaptionHeight);
                 SpiStoreMetric(L"MenuWidth", gspv.ncm.iMenuWidth);
                 SpiStoreMetric(L"MenuHeight", gspv.ncm.iMenuHeight);
-#if (WINVER >= 0x0600)
                 SpiStoreMetric(L"PaddedBorderWidth", gspv.ncm.iPaddedBorderWidth);
-#endif
                 SpiStoreFont(L"CaptionFont", &gspv.ncm.lfCaptionFont);
                 SpiStoreFont(L"SmCaptionFont", &gspv.ncm.lfSmCaptionFont);
                 SpiStoreFont(L"MenuFont", &gspv.ncm.lfMenuFont);
@@ -2098,13 +2088,11 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
         case SPI_SETMENUSHOWDELAY:
             return SpiSetInt(&gspv.dwMenuShowDelay, uiParam, KEY_DESKTOP, L"MenuShowDelay", fl);
 
-#if (_WIN32_WINNT >= 0x0600)
         case SPI_GETWHEELSCROLLCHARS:
             return SpiGetInt(pvParam, &gspv.uiWheelScrollChars, fl);
 
         case SPI_SETWHEELSCROLLCHARS:
             return SpiSetInt(&gspv.uiWheelScrollChars, uiParam, KEY_DESKTOP, VAL_SCRLLCHARS, fl);
-#endif
         case SPI_GETSHOWIMEUI:
             return SpiGetInt(pvParam, &gspv.bShowImeUi, fl);
 
@@ -2130,7 +2118,6 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
             // FIXME: also return value?
             return SpiSetBool(&gspv.bScrSaverRunning, uiParam, KEY_MOUSE, L"", fl);
 
-#if(WINVER >= 0x0600)
         case SPI_GETAUDIODESCRIPTION:
             return SpiGet(pvParam, &gspv.audiodescription, sizeof(AUDIODESCRIPTION), fl);
 
@@ -2143,7 +2130,6 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
 
         case SPI_SETSCREENSAVESECURE:
             return SpiSetBool(&gspv.bScrSaverSecure, uiParam, KEY_DESKTOP, L"ScreenSaverIsSecure", fl);
-#endif
 
         case SPI_GETACTIVEWINDOWTRACKING:
             return SpiGetUserPref(UPM_ACTIVEWINDOWTRACKING, pvParam, fl);
@@ -2277,7 +2263,6 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
         case SPI_SETBLOCKSENDINPUTRESETS:
             return SpiSetBool(&gspv.bBlockSendInputResets, uiParam, KEY_MOUSE, L"", fl);
 
-#if(_WIN32_WINNT >= 0x0600)
         case SPI_GETDISABLEOVERLAPPEDCONTENT:
             return SpiGetInt(pvParam, &gspv.bDisableOverlappedContent, fl);
 
@@ -2301,7 +2286,6 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
 
         case SPI_SETSPEECHRECOGNITION:
             return SpiSetBool(&gspv.bSpeechRecognition, uiParam, KEY_MOUSE, L"", fl);
-#endif
 
         case SPI_GETFOREGROUNDLOCKTIMEOUT:
             return SpiGetInt(pvParam, &gspv.dwForegroundLockTimeout, fl);
@@ -2457,15 +2441,11 @@ SpiGetSetProbeBuffer(UINT uiAction, UINT uiParam, PVOID pvParam)
         case SPI_GETMOUSEHOVERTIME:
         case SPI_GETWHEELSCROLLLINES:
         case SPI_GETMENUSHOWDELAY:
-#if (_WIN32_WINNT >= 0x0600)
         case SPI_GETWHEELSCROLLCHARS:
-#endif
         case SPI_GETSHOWIMEUI:
         case SPI_GETMOUSESPEED:
         case SPI_GETSCREENSAVERRUNNING:
-#if(WINVER >= 0x0600)
         case SPI_GETSCREENSAVESECURE:
-#endif
         case SPI_GETACTIVEWINDOWTRACKING:
         case SPI_GETMENUANIMATION:
         case SPI_GETCOMBOBOXANIMATION:
@@ -2486,12 +2466,10 @@ SpiGetSetProbeBuffer(UINT uiAction, UINT uiParam, PVOID pvParam)
         case SPI_GETFLATMENU:
         case SPI_GETDROPSHADOW:
         case SPI_GETBLOCKSENDINPUTRESETS:
-#if(_WIN32_WINNT >= 0x0600)
         case SPI_GETDISABLEOVERLAPPEDCONTENT:
         case SPI_GETCLIENTAREAANIMATION:
         case SPI_GETCLEARTYPE:
         case SPI_GETSPEECHRECOGNITION:
-#endif
         case SPI_GETFOREGROUNDLOCKTIMEOUT:
         case SPI_GETACTIVEWNDTRKTIMEOUT:
         case SPI_GETFOREGROUNDFLASHCOUNT:
@@ -2601,11 +2579,9 @@ SpiGetSetProbeBuffer(UINT uiAction, UINT uiParam, PVOID pvParam)
             cbSize = sizeof(HKL);
             break;
 
-#if(WINVER >= 0x0600)
         case SPI_GETAUDIODESCRIPTION:
             cbSize = sizeof(AUDIODESCRIPTION);
             break;
-#endif
 
         case SPI_SETMOUSE:
             cbSize = 3 * sizeof(INT);

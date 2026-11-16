@@ -59,9 +59,7 @@ GetPredefinedClipboardFormatName(HINSTANCE hInstance,
         {CF_HDROP       , STRING_CF_HDROP       },          // 15
         {CF_LOCALE      , STRING_CF_LOCALE      },          // 16
 #endif
-#if(WINVER >= 0x0500)
         {CF_DIBV5       , STRING_CF_DIBV5       },          // 17
-#endif
     };
 
     switch (uFormat)
@@ -74,9 +72,7 @@ GetPredefinedClipboardFormatName(HINSTANCE hInstance,
 #if(WINVER >= 0x0400)
         case CF_HDROP: case CF_LOCALE:
 #endif
-#if(WINVER >= 0x0500)
         case CF_DIBV5:
-#endif
         {
             if (Unicode)
                 return LoadStringW(hInstance, uFormatList[uFormat-1].uResID, (LPWSTR)lpszFormat, cch);

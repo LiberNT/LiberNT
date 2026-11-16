@@ -1007,14 +1007,9 @@ typedef LONG_PTR
 #define ICLS_SWITCH       20
 #define ICLS_ICONTITLE    21
 #define ICLS_TOOLTIPS     22
-#if (_WIN32_WINNT <= 0x0501)
-#define ICLS_UNKNOWN      22
-#define ICLS_NOTUSED      23
-#else
 #define ICLS_SYSSHADOW    23
 #define ICLS_HWNDMESSAGE  24
 #define ICLS_NOTUSED      25
-#endif
 #define ICLS_END          31
 
 #define COLOR_LAST COLOR_MENUBAR

@@ -3625,10 +3625,8 @@ Return Value:
         // This command is at low importance, failure of this command has very small impact.
         ULONG secondsRemaining = 0;
 
-#if (WINVER >= 0x0601)
         // this API is introduced in Windows7
         PoQueryWatchdogTime(DeviceExtension->LowerPdo, &secondsRemaining);
-#endif
 
         if (secondsRemaining == 0)
         {
@@ -3875,4 +3873,3 @@ Return Value:
 
     return status;
 }
-

@@ -36,7 +36,7 @@ SHELL_GetPropertyKeyFromLegacyName(_In_ PCWSTR pszString)
     return NULL;
 }
 
-#if /*TODO*/0 && (NTDDI_VERSION >= NTDDI_VISTA)
+#if /*TODO*/0
 #define SHELL_PropertyKeyFromPropertyKeyString PSPropertyKeyFromString
 #else
 static HRESULT

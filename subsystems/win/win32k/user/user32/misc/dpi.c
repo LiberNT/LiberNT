@@ -683,9 +683,7 @@ SystemParametersInfoForDpi(_In_ UINT Action, _In_ UINT Param, _Inout_opt_ PVOID 
             LocalMetrics.iSmCaptionHeight = ScaleDpiValue(LocalMetrics.iSmCaptionHeight, SystemDpi, Dpi);
             LocalMetrics.iMenuWidth = ScaleDpiValue(LocalMetrics.iMenuWidth, SystemDpi, Dpi);
             LocalMetrics.iMenuHeight = ScaleDpiValue(LocalMetrics.iMenuHeight, SystemDpi, Dpi);
-#if (WINVER >= 0x0600)
             LocalMetrics.iPaddedBorderWidth = ScaleDpiValue(LocalMetrics.iPaddedBorderWidth, SystemDpi, Dpi);
-#endif
             ScaleLogFontForDpi(&LocalMetrics.lfCaptionFont, SystemDpi, Dpi);
             ScaleLogFontForDpi(&LocalMetrics.lfSmCaptionFont, SystemDpi, Dpi);
             ScaleLogFontForDpi(&LocalMetrics.lfMenuFont, SystemDpi, Dpi);

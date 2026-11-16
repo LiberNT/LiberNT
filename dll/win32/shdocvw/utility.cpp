@@ -35,7 +35,7 @@ IsMenuSeparator(HMENU hMenu, UINT Pos)
 EXTERN_C HRESULT
 SHELL_GetIDListFromObject(IUnknown *punk, PIDLIST_ABSOLUTE *ppidl)
 {
-#if DLL_EXPORT_VERSION >= _WIN32_WINNT_VISTA && 0 // FIXME: SHELL32 not ready yet
+#if 0 // FIXME: SHELL32 not ready yet
     return SHGetIDListFromObject(punk, ppidl);
 #else
     HRESULT hr;

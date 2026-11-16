@@ -3,7 +3,6 @@
 #define NDEBUG
 #include <debug.h>
 
-#if (DLL_EXPORT_VERSION >= 0x602)
 NTSYSAPI
 NTSTATUS
 NTAPI
@@ -12,7 +11,6 @@ RtlWaitOnAddress(
     _In_ const VOID *CompareAddress,
     _In_ SIZE_T AddressSize,
     _In_opt_ const LARGE_INTEGER *Timeout);
-#endif
 
 VOID
 WINAPI
@@ -97,7 +95,6 @@ SleepConditionVariableSRW(PCONDITION_VARIABLE ConditionVariable, PSRWLOCK Lock, 
     return TRUE;
 }
 
-#if (DLL_EXPORT_VERSION >= 0x602)
 BOOL
 WINAPI
 WaitOnAddress(volatile VOID *Address, PVOID CompareAddress, SIZE_T AddressSize, DWORD Timeout)
@@ -114,7 +111,6 @@ WaitOnAddress(volatile VOID *Address, PVOID CompareAddress, SIZE_T AddressSize, 
 
     return TRUE;
 }
-#endif
 
 BOOL
 WINAPI

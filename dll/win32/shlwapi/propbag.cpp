@@ -28,7 +28,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(shell);
 
 class CBasePropertyBag
     : public IPropertyBag
-#if (_WIN32_WINNT < _WIN32_WINNT_VISTA) || defined(__REACTOS__)
+#ifdef __REACTOS__
     , public IPropertyBag2
 #endif
 {
@@ -85,7 +85,7 @@ public:
         return m_cRefs;
     }
 
-#if (_WIN32_WINNT < _WIN32_WINNT_VISTA) || defined(__REACTOS__)
+#ifdef __REACTOS__
     // IPropertyBag2 interface (stubs).
     // Keep the IPropertyBag Read/Write overloads in scope (the IPropertyBag2 ones below hide them).
     using IPropertyBag::Read;

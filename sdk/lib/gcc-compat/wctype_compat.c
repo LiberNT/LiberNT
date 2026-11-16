@@ -10,7 +10,6 @@
 #include <wctype.h>
 #include <string.h>
 
-#if DLL_EXPORT_VERSION >= 0x600
 
 wctype_t wctype(const char *property)
 {
@@ -41,6 +40,4 @@ wctype_t wctype(const char *property)
 void *_imp__wctype = wctype;
 #else
 void *__imp_wctype = wctype;
-#endif
-
 #endif

@@ -124,9 +124,7 @@ LoadCurrentScheme(OUT COLOR_SCHEME *scheme)
     INT i, Result;
     HKEY hKey;
     BOOL ret;
-#if (WINVER >= 0x0600)
     OSVERSIONINFO osvi;
-#endif
 
     /* Load colors */
     for (i = 0; i < NUM_COLORS; i++)
@@ -137,7 +135,6 @@ LoadCurrentScheme(OUT COLOR_SCHEME *scheme)
     /* Load non client metrics */
     scheme->ncMetrics.cbSize = sizeof(NONCLIENTMETRICSW);
 
-#if (WINVER >= 0x0600)
     /* Size of NONCLIENTMETRICSA/W depends on current version of the OS.
      * see:
      *  https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-nonclientmetricsa
@@ -148,7 +145,6 @@ LoadCurrentScheme(OUT COLOR_SCHEME *scheme)
         if (osvi.dwMajorVersion <= 5)
             scheme->ncMetrics.cbSize -= sizeof(scheme->ncMetrics.iPaddedBorderWidth);
     }
-#endif
 
     ret = SystemParametersInfoW(SPI_GETNONCLIENTMETRICS,
                                 sizeof(NONCLIENTMETRICSW),

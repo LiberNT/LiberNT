@@ -63,13 +63,11 @@ typedef struct _SPIVALUES
     ACCESSTIMEOUT accesstimeout;
     HIGHCONTRASTW highcontrast;
     BOOL bScreenReader;
-#if(WINVER >= 0x0600)
     AUDIODESCRIPTION audiodescription;
     BOOL bClientAreaAnimation;
     BOOL bDisableOverlappedContent;
     ULONG ulMsgDuration;
     BOOL bSpeechRecognition;
-#endif
 
     /* Sound */
     SOUNDSENTRYW soundsentry;
@@ -97,9 +95,7 @@ typedef struct _SPIVALUES
     INT iDragHeight;
     INT iMouseTrails;
     INT iWheelScrollLines;
-#if (_WIN32_WINNT >= 0x0600)
     UINT uiWheelScrollChars;
-#endif
 
     /* Keyboard */
     FILTERKEYS filterkeys;
@@ -115,9 +111,7 @@ typedef struct _SPIVALUES
     INT iScrSaverTimeout;
     BOOL bScrSaverActive;
     BOOL bScrSaverRunning;
-#if(WINVER >= 0x0600)
     BOOL bScrSaverSecure;
-#endif
 
     /* Power */
     INT iLowPwrTimeout;
@@ -135,9 +129,7 @@ typedef struct _SPIVALUES
     BOOL bMenuDropAlign;
     DWORD dwMenuShowDelay;
     BOOL bBlockSendInputResets;
-#if(_WIN32_WINNT >= 0x0600)
     BOOL bClearType;
-#endif
 
     /* Text metrics */
     TEXTMETRICW tmMenuFont;
@@ -197,9 +189,7 @@ typedef union _SPIBUFFER
     ICONMETRICSW iconmetrics;
     HIGHCONTRASTW highcontrast;
     ANIMATIONINFO animationinfo;
-#if(WINVER >= 0x0600)
     AUDIODESCRIPTION audiodescription;
-#endif
 } SPIBUFFER;
 
 extern SPIVALUES gspv;

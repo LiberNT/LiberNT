@@ -197,15 +197,5 @@ SaveDesktopSettings(PDESKTOP_DATA pData);
 VOID
 SetDesktopSettings(PDESKTOP_DATA pData);
 
-#if DLL_EXPORT_VERSION < 0x600
-LONG
-RegLoadMUIStringW(IN HKEY hKey,
-                  IN LPCWSTR pszValue  OPTIONAL,
-                  OUT LPWSTR pszOutBuf,
-                  IN DWORD cbOutBuf,
-                  OUT LPDWORD pcbData OPTIONAL,
-                  IN DWORD Flags,
-                  IN LPCWSTR pszDirectory  OPTIONAL);
-#endif
 
 #endif /* _DESK_H */

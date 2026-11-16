@@ -71,9 +71,7 @@ IntInitMetricValues(_Out_writes_(SM_CMETRICS) INT *piSysMet, _In_ ULONG Width, _
     piSysMet[SM_CYEDGE] = 2;
     piSysMet[SM_CXFRAME] = piSysMet[SM_CXDLGFRAME] + V(gspv.ncm.iBorderWidth); // 4
     piSysMet[SM_CYFRAME] = piSysMet[SM_CYDLGFRAME] + V(gspv.ncm.iBorderWidth); // 4
-#if (_WIN32_WINNT >= 0x0600)
     piSysMet[SM_CXPADDEDBORDER] = V(gspv.ncm.iPaddedBorderWidth);
-#endif
 
     /* Window sizes */
     TRACE("ncm.iCaptionWidth=%d,GetSystemMetrics(SM_CYSIZE)=%d,GetSystemMetrics(SM_CXFRAME)=%d,avcwCaption=%d \n",
@@ -154,9 +152,7 @@ IntInitMetricValues(_Out_writes_(SM_CMETRICS) INT *piSysMet, _In_ ULONG Width, _
     piSysMet[SM_SWAPBUTTON] = gspv.bMouseBtnSwap ? 1 : 0;
     piSysMet[SM_CXDOUBLECLK] = gspv.iDblClickWidth;
     piSysMet[SM_CYDOUBLECLK] = gspv.iDblClickHeight;
-#if (_WIN32_WINNT >= 0x0600)
     piSysMet[SM_MOUSEHORIZONTALWHEELPRESENT] = 0;
-#endif
 
     /* Version info */
     piSysMet[SM_TABLETPC] = 0;
@@ -185,9 +181,7 @@ IntInitMetricValues(_Out_writes_(SM_CMETRICS) INT *piSysMet, _In_ ULONG Width, _
     piSysMet[64] = 0;
     piSysMet[65] = 0;
     piSysMet[66] = 0;
-#if (_WIN32_WINNT >= 0x0600)
     piSysMet[90] = 0;
-#endif
 #undef D
 #undef V
 }

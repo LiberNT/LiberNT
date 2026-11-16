@@ -1414,9 +1414,7 @@ BOOL SeiGetShimData(PUNICODE_STRING ProcessImage, PVOID pShimData, HSDB* pHsdb, 
     static const UNICODE_STRING ForbiddenShimmingApps[] = {
         RTL_CONSTANT_STRING(L"ntsd.exe"),
         RTL_CONSTANT_STRING(L"windbg.exe"),
-#if WINVER >= 0x600
         RTL_CONSTANT_STRING(L"slsvc.exe"),
-#endif
     };
     static const UNICODE_STRING PathDividerFind = RTL_CONSTANT_STRING(L"\\/");
     UNICODE_STRING ProcessName;
@@ -1545,4 +1543,3 @@ BOOL WINAPI SE_DynamicShim(LPCWSTR ProcessImage, HSDB hsdb, PVOID pQueryResult, 
 
     return TRUE;
 }
-

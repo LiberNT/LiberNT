@@ -39,7 +39,6 @@ typedef struct _LSAP_LOGON_SESSION_DATA32
     UNICODE_STRING32 LogonServer;
     UNICODE_STRING32 DnsDomainName;
     UNICODE_STRING32 Upn;
-#if (_WIN32_WINNT >= 0x0600)
     ULONG UserFlags;
     LSA_LAST_INTER_LOGON_INFO LastLogonInfo;
     UNICODE_STRING32 LogonScript;
@@ -51,7 +50,6 @@ typedef struct _LSAP_LOGON_SESSION_DATA32
     LARGE_INTEGER PasswordLastSet;
     LARGE_INTEGER PasswordCanChange;
     LARGE_INTEGER PasswordMustChange;
-#endif
 } LSAP_LOGON_SESSION_DATA32;
 
 static VOID

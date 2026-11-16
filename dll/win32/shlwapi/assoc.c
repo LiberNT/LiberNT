@@ -172,9 +172,7 @@ static const WCHAR audio_exts[] = {
     '.','m','3','u',0,
     '.','m','i','d',0,
     '.','m','i','d','i',0,
-#if _WIN32_WINNT > 0x602
     '.','m','p','2',0,
-#endif
     '.','m','p','3',0,
     '.','r','m','i',0,
     '.','s','n','d',0,
@@ -191,9 +189,6 @@ static const WCHAR video_exts[] = {
     '.','d','v','r','-','m','s',0,
     '.','I','V','F',0,
     '.','m','1','v',0,
-#if _WIN32_WINNT <= 0x602
-    '.','m','p','2',0,
-#endif
     '.','m','p','2','v',0,
     '.','m','p','a',0,
     '.','m','p','e',0,
@@ -213,10 +208,8 @@ static const WCHAR compressed_exts[] = {
 };
 
 static const WCHAR document_exts[] = {
-#if _WIN32_WINNT >= 0x600
     '.','h','t','m',0,
     '.','h','t','m','l',0,
-#endif
     '.','m','h','t',0,
     0
 };

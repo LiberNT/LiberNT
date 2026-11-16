@@ -5410,9 +5410,6 @@ static BOOL PathMakeUniqueNameW(
 
     if (   !pszTitle
         || !IsLFNDriveW(pszDir)
-#if (NTDDI_VERSION < NTDDI_VISTA)
-        || pszDir
-#endif
     )
     {
         if (!pszTemplate)
