@@ -10,6 +10,7 @@ extern void func_RedistributableFileOwner(void);
 extern void func_CreateProcessWithToken(void);
 extern void func_CreateService(void);
 extern void func_CryptCreateHash(void);
+extern void func_DeviceClassKeys(void);
 extern void func_DuplicateTokenEx(void);
 extern void func_EnableTraceEx(void);
 extern void func_EnumerateTraceGuidsEx(void);
@@ -76,6 +77,7 @@ const struct test winetest_testlist[] =
     { "CreateProcessWithToken", func_CreateProcessWithToken },
     { "CreateService", func_CreateService },
     { "CryptCreateHash", func_CryptCreateHash },
+    { "DeviceClassKeys", func_DeviceClassKeys },
     { "DuplicateTokenEx", func_DuplicateTokenEx },
     { "EnableTraceEx", func_EnableTraceEx },
     { "EnumerateTraceGuidsEx", func_EnumerateTraceGuidsEx },

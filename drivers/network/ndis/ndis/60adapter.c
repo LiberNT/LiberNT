@@ -360,6 +360,7 @@ Ndis6ReadExportName(
     WCHAR* LinkageKeyBuffer;
     ULONG  DriverKeyLength = 0;
     RTL_QUERY_REGISTRY_TABLE QueryTable[2];
+    size_t ExportChars;
     NTSTATUS Status;
 
     RtlInitUnicodeString(ExportName, NULL);
@@ -407,6 +408,12 @@ Ndis6ReadExportName(
     Status = RtlQueryRegistryValues(RTL_REGISTRY_CONTROL, LinkageKeyBuffer,
                                     QueryTable, NULL, NULL);
     ExFreePoolWithTag(LinkageKeyBuffer, NDIS6_ADAPTER_TAG);
+    /* Export is a REG_MULTI_SZ that a direct query returns whole; the name is its first string */
+    if (NT_SUCCESS(Status) &&
+        NT_SUCCESS(RtlStringCchLengthW(ExportName->Buffer, ExportName->Length / sizeof(WCHAR), &ExportChars)))
+    {
+        ExportName->Length = (USHORT)(ExportChars * sizeof(WCHAR));
+    }
     return Status;
 }
 

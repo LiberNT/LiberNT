@@ -11,6 +11,7 @@ list(APPEND SOURCE
     CreateProcessWithToken.c
     CreateService.c
     CryptCreateHash.c
+    DeviceClassKeys.c
     DuplicateTokenEx.c
     EnableTraceEx.c
     EnumerateTraceGuidsEx.c

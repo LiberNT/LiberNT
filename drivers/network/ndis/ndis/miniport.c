@@ -14,6 +14,7 @@
 #include "ndissys.h"
 
 #include <ndisguid.h>
+#include <ntstrsafe.h>
 
 /*
  * Define to 1 to get a debugger breakpoint at the end of NdisInitializeWrapper
@@ -3006,6 +3007,7 @@ NdisIAddDevice(
   ULONG DriverKeyLength;
   RTL_QUERY_REGISTRY_TABLE QueryTable[2];
   UNICODE_STRING ExportName;
+  size_t ExportChars;
   PDEVICE_OBJECT DeviceObject;
   PLOGICAL_ADAPTER Adapter;
   NTSTATUS Status;
@@ -3083,6 +3085,8 @@ NdisIAddDevice(
       NDIS_DbgPrint(MIN_TRACE, ("Can't get miniport device name. (%x)\n", Status));
       return Status;
     }
+  if (NT_SUCCESS(RtlStringCchLengthW(ExportName.Buffer, ExportName.Length / sizeof(WCHAR), &ExportChars)))
+    ExportName.Length = (USHORT)(ExportChars * sizeof(WCHAR));
 
   /*
    * Create the device object.
