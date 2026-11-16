@@ -52,6 +52,8 @@ ULONG KiTimeLimitIsrMicroseconds;
 /* Serialises the one-at-a-time broadcast in KeGenericCallDpc. */
 FAST_MUTEX KiGenericCallDpcMutex;
 
+#define KI_REVERSE_BARRIER_SENSE 0x80000000UL
+
 /* PRIVATE DATA ***************************************************************/
 
 /* The thread that runs threaded DPCs for each processor. Windows 11 has no
@@ -858,6 +860,7 @@ KeGenericCallDpc(
     while (Count != 0)
         YieldProcessor();
 
+    KeMemoryBarrier();
     ExReleaseFastMutex(&KiGenericCallDpcMutex);
 }
 
@@ -886,20 +889,27 @@ KeSignalCallDpcSynchronize(
     PDEFERRED_REVERSE_BARRIER Barrier =
         (PDEFERRED_REVERSE_BARRIER)SystemArgument2;
     ULONG Total = Barrier->TotalProcessors;
+    ULONG Sense;
 
     if (Total <= 1)
         return TRUE;
 
-    if (InterlockedDecrement((PLONG)&Barrier->Barrier) == 0)
+    ASSERT(Total < KI_REVERSE_BARRIER_SENSE);
+
+    /* The top bit flips on every release, so a processor that is slow to see one release cannot mistake the next arrival count for it */
+    Sense = *(volatile ULONG *)&Barrier->Barrier & KI_REVERSE_BARRIER_SENSE;
+
+    if (((ULONG)InterlockedDecrement((PLONG)&Barrier->Barrier) & ~KI_REVERSE_BARRIER_SENSE) == 0)
     {
         /* Last one in releases the rest and takes the single-processor work */
-        InterlockedExchange((PLONG)&Barrier->Barrier, (LONG)Total);
+        InterlockedExchange((PLONG)&Barrier->Barrier, (LONG)((Sense ^ KI_REVERSE_BARRIER_SENSE) | Total));
         return TRUE;
     }
 
-    while ((ULONG)Barrier->Barrier != Total)
+    while ((*(volatile ULONG *)&Barrier->Barrier & KI_REVERSE_BARRIER_SENSE) == Sense)
         YieldProcessor();
 
+    KeMemoryBarrier();
     return FALSE;
 }
 
