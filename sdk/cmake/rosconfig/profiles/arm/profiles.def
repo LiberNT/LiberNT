@@ -1,0 +1,9 @@
+config PROFILE_ARM
+    prompt "Target profile"
+    type choice
+    var ROSCONFIG_PROFILE
+    value generic "Generic ARMv7"
+    default generic
+    depends ARCH=arm
+    help
+      Select the generic ARMv7-A target without board-specific packages.

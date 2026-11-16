@@ -48,7 +48,7 @@ if(USE_DUMMY_PSEH)
 endif()
 
 # Clang implements native SEH for these targets.
-if(ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64" OR ARCH STREQUAL "riscv64" OR ARCH STREQUAL "ppc")
+if(NOT ARCH STREQUAL "i386")
     set(CLANG_NATIVE_SEH TRUE)
 endif()
 

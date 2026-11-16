@@ -1,25 +1,18 @@
 /*
  * PROJECT:     ReactOS CRT library
- * LICENSE:     MIT (https://spdx.org/licenses/MIT)
- * PURPOSE:     ARM fpscr setter
- * COPYRIGHT:   Copyright 2021 Roman Masanin <36927roma@gmail.com>
+ * LICENSE:     BSD - See COPYING.ARM in the top level directory
+ * PURPOSE:     Implementation of __setfp
+ * COPYRIGHT:   Copyright Timo Kreuzer (timo.kreuzer@reactos.org)
+ *              Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
-/* INCLUDES ******************************************************************/
+    .syntax unified
+    .thumb
+    .text
+    .align 2
 
-#include <kxarm.h>
-
-/* CODE **********************************************************************/
-
-    TEXTAREA
-
-    LEAF_ENTRY __setfp
-
-    VMSR FPSCR,R0
-
-    BX LR
-
-    LEAF_END __setfp
-
-    END
-/* EOF */
+    .global __setfp
+    .thumb_func
+__setfp:
+    vmsr    fpscr, r0
+    bx      lr

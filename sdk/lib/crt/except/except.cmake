@@ -17,16 +17,7 @@ elseif(ARCH STREQUAL "amd64")
         )
     endif()
 elseif(ARCH STREQUAL "arm")
-    list(APPEND LIBCNTPR_EXCEPT_SOURCE
-        except/arm/ehandler.c
-    )
     list(APPEND LIBCNTPR_EXCEPT_ASM_SOURCE
-        except/arm/__jump_unwind.s
-        except/arm/_abnormal_termination.s
-        except/arm/_except_handler2.s
-        except/arm/_except_handler3.s
-        except/arm/_global_unwind2.s
-        except/arm/_local_unwind2.s
         except/arm/chkstk_asm.s
     )
 endif()
