@@ -51,4 +51,13 @@ DxgkPostDisplayCoreComplete(
     return DxgkPostDisplayCompletionCommit;
 }
 
+FORCEINLINE
+BOOLEAN
+DxgkPostDisplayCoreFirmwareScanout(
+    _In_ BOOLEAN DisplayOnlyDriver,
+    _In_ BOOLEAN VidPnCommitted)
+{
+    return DisplayOnlyDriver || !VidPnCommitted;
+}
+
 #endif /* _DXGK_POSTDISPLAY_CORE_H_ */

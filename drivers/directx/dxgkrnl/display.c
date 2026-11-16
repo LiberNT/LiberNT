@@ -3661,7 +3661,10 @@ DxgkpPresentSourceRects(
     {
         /* A full miniport without the private extension (or a DOD without
          * PresentDisplayOnly) retains the generic firmware-GOP fallback. */
-        for (i = 0; i < DirtyCount; i++)
+        for (i = 0;
+             DxgkPostDisplayCoreFirmwareScanout(Adapter->MiniportContext->IsDisplayOnlyDriver, SharedSurface.VidPnCommitted) &&
+             i < DirtyCount;
+             i++)
         {
             Status = DxgkpBlitShadowToGop(Adapter,
                                           &SharedSurface,

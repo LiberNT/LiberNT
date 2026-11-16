@@ -123,10 +123,21 @@ DxgkPostDisplayTestNonRestartableFailure(VOID)
     ok_eq_long(Completion, DxgkPostDisplayCompletionNone);
 }
 
+static
+VOID
+DxgkPostDisplayTestFirmwareScanout(VOID)
+{
+    ok_bool_true(DxgkPostDisplayCoreFirmwareScanout(TRUE, FALSE), "a display-only driver presents through the firmware framebuffer");
+    ok_bool_true(DxgkPostDisplayCoreFirmwareScanout(TRUE, TRUE), "a committed display-only driver still scans out the firmware framebuffer");
+    ok_bool_true(DxgkPostDisplayCoreFirmwareScanout(FALSE, FALSE), "a full miniport without a committed path leaves the firmware image on screen");
+    ok_bool_false(DxgkPostDisplayCoreFirmwareScanout(FALSE, TRUE), "a full miniport with a committed path scans out its own primary");
+}
+
 START_TEST(DxgkPostDisplayHandoff)
 {
     DxgkPostDisplayTestRestartableFailure();
     DxgkPostDisplayTestSuccessfulClaimant();
     DxgkPostDisplayTestNonRestartableFailure();
     DxgkPostDisplayTestPostDevice();
+    DxgkPostDisplayTestFirmwareScanout();
 }
