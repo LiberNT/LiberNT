@@ -36,6 +36,7 @@ fixture = r'''
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #define VOID void
 #define NTAPI
 #define _In_
@@ -52,6 +53,7 @@ fixture = r'''
 #define UNREFERENCED_PARAMETER(x) ((void)(x))
 #define CHECK(x) do { if (!(x)) { printf("%s:%d: %s failed\n", Scenario, __LINE__, #x); exit(1); } } while (0)
 #define ASSERT(x) CHECK(x)
+#define RtlZeroMemory(d, n) memset((d), 0, (n))
 #define Int32x32To64(a, b) ((int64_t)(int32_t)(a) * (int64_t)(int32_t)(b))
 typedef unsigned char BOOLEAN;
 typedef void *PVOID;

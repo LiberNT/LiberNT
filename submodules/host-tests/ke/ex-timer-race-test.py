@@ -64,6 +64,9 @@ fixture = r'''
 #define CONTAINING_RECORD(a, t, f) ((t *)((char *)(a) - offsetof(t, f)))
 #define CHECK(x) do { if (!(x)) { printf("%s:%d: %s failed\n", Scenario, __LINE__, #x); exit(1); } } while (0)
 #define ASSERT(x) CHECK(x)
+#define PASSIVE_LEVEL 0
+#define APC_LEVEL 1
+#define DISPATCH_LEVEL 2
 #define PAGED_CODE()
 #define _SEH2_TRY
 #define _SEH2_EXCEPT(x) if (0)
@@ -182,6 +185,8 @@ static void KiDisarmHighResolutionDeadline(PKI_HIGH_RESOLUTION_DEADLINE Deadline
 static void KeFlushQueuedDpcs(void) {}
 static void KeInitializeTimerEx(PKTIMER Timer, TIMER_TYPE Type) { (void)Type; memset(Timer, 0, sizeof(*Timer)); }
 static void KeInitializeDpc(PKDPC Dpc, PKDEFERRED_ROUTINE Routine, PVOID Context) { Dpc->DeferredRoutine = Routine; Dpc->DeferredContext = Context; }
+static KIRQL TestIrql = PASSIVE_LEVEL;
+static KIRQL KeGetCurrentIrql(void) { return TestIrql; }
 static BOOLEAN KeRemoveQueueDpc(PKDPC Dpc) { (void)Dpc; return FALSE; }
 static LONG KeReadStateTimer(PKTIMER Timer) { return Timer->Header.SignalState; }
 static BOOLEAN KeCancelTimer(PKTIMER Timer) {
@@ -267,11 +272,15 @@ static void SetAgainBeforeExpiry(void) {
     CHECK(NtSetTimer(TheHandle, &Soon, FirstRoutine, NULL, FALSE, 0, NULL) == STATUS_SUCCESS);
     Expire(&Routine, &Context);
     CHECK(NtSetTimer(TheHandle, &Later, SecondRoutine, NULL, FALSE, 0, NULL) == STATUS_SUCCESS);
+    TestIrql = DISPATCH_LEVEL;
     Routine(TheTimer.KeTimer.Dpc, Context, NULL, NULL);
+    TestIrql = PASSIVE_LEVEL;
     /* The first expiry belongs to a setting that is gone: the new routine is not due yet */
     CHECK(Queued == NULL);
     Expire(&Routine, &Context);
+    TestIrql = DISPATCH_LEVEL;
     Routine(TheTimer.KeTimer.Dpc, Context, NULL, NULL);
+    TestIrql = PASSIVE_LEVEL;
     CHECK(Queued == SecondRoutine);
 }
 /* Whichever of a set and a cancel takes the timer last decides whether it can wake the system */
@@ -305,11 +314,15 @@ static void SetEightTimesBeforeExpiry(void) {
     Expire(&Routine, &Context);
     for (Setting = 0; Setting < 8; Setting++)
         CHECK(NtSetTimer(TheHandle, &Later, SecondRoutine, NULL, FALSE, 0, NULL) == STATUS_SUCCESS);
+    TestIrql = DISPATCH_LEVEL;
     Routine(TheTimer.KeTimer.Dpc, Context, NULL, NULL);
+    TestIrql = PASSIVE_LEVEL;
     /* The one-shot setting that stands is still armed, so the expiry cannot be its own */
     CHECK(Queued == NULL);
     Expire(&Routine, &Context);
+    TestIrql = DISPATCH_LEVEL;
     Routine(TheTimer.KeTimer.Dpc, Context, NULL, NULL);
+    TestIrql = PASSIVE_LEVEL;
     CHECK(Queued == SecondRoutine);
 }
 int main(void) {

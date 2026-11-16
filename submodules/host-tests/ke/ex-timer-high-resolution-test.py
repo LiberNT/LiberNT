@@ -117,6 +117,8 @@ typedef struct { PWORKER_THREAD_ROUTINE WorkerRoutine; PVOID Parameter; } WORK_Q
 #define NonPagedPool 0
 #define DelayedWorkQueue 0
 #define PASSIVE_LEVEL 0
+#define APC_LEVEL 1
+#define DISPATCH_LEVEL 2
 #define UserMode 1
 static const char *Scenario = "setup";
 static ETHREAD TheThread;
@@ -181,7 +183,8 @@ static ULONGLONG KiRoundToDefaultTimerResolution(ULONGLONG DueTime) { return (Du
 static void KiArmHighResolutionDeadline(PKI_HIGH_RESOLUTION_DEADLINE Deadline, ULONGLONG DueTime) { Deadline->Armed = TRUE; Deadline->DueTime = DueTime; }
 static void KiDisarmHighResolutionDeadline(PKI_HIGH_RESOLUTION_DEADLINE Deadline) { Deadline->Armed = FALSE; }
 static void KeFlushQueuedDpcs(void) {}
-static KIRQL KeGetCurrentIrql(void) { return PASSIVE_LEVEL; }
+static KIRQL TestIrql = PASSIVE_LEVEL;
+static KIRQL KeGetCurrentIrql(void) { return TestIrql; }
 static void ExInitializeWorkItem(PWORK_QUEUE_ITEM Item, PWORKER_THREAD_ROUTINE Routine, PVOID Parameter) { Item->WorkerRoutine = Routine; Item->Parameter = Parameter; }
 static void ExQueueWorkItem(PWORK_QUEUE_ITEM Item, int Queue) { (void)Item; (void)Queue; CHECK(!"a timer nobody deleted was queued for deletion"); }
 static void ExFreePoolWithTag(PVOID P, ULONG Tag) { (void)Tag; free(P); }
@@ -247,7 +250,7 @@ static void Expire(PKTIMER Timer) {
     Timer->Header.Inserted = FALSE;
     Timer->Header.SignalState = 1;
 }
-static void RunDpc(PKDPC Dpc) { Dpc->DeferredRoutine(Dpc, Dpc->DeferredContext, NULL, NULL); }
+static void RunDpc(PKDPC Dpc) { TestIrql = DISPATCH_LEVEL; Dpc->DeferredRoutine(Dpc, Dpc->DeferredContext, NULL, NULL); TestIrql = PASSIVE_LEVEL; }
 static void DriverTimers(void) {
     PEX_TIMER Timer;
     int Before;
