@@ -60,3 +60,4 @@
 @ stdcall BCryptSecretAgreement(ptr ptr ptr long)
 @ stdcall BCryptDeriveKey(ptr wstr ptr ptr long ptr long)
 @ stdcall BCryptDestroySecret(ptr)
+@ cdecl SystemPrng(ptr long)

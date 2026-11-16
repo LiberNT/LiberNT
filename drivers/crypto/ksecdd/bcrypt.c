@@ -928,6 +928,8 @@ BCryptGenRandom(
 {
     KSEC_BCRYPT_ALGORITHM *Algorithm;
 
+    if (KeGetCurrentIrql() > APC_LEVEL)
+        return STATUS_NOT_SUPPORTED;
     if (Buffer == NULL && BufferSize != 0)
         return STATUS_INVALID_PARAMETER;
     if (Flags & ~(BCRYPT_RNG_USE_ENTROPY_IN_BUFFER |
@@ -947,6 +949,23 @@ BCryptGenRandom(
     }
 
     return KsecGenRandom(Buffer, BufferSize);
+}
+
+/* FIXME: the i386 calling convention of SystemPrng is undocumented; the documented prototype names none, so cdecl is assumed */
+BOOL
+__cdecl
+SystemPrng(
+    _Out_writes_bytes_(RandomDataLength) PUCHAR RandomData,
+    _In_ SIZE_T RandomDataLength)
+{
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
+    ASSERT(RandomData != NULL || RandomDataLength == 0);
+
+    Status = KsecGenRandom(RandomData, RandomDataLength);
+    ASSERT(NT_SUCCESS(Status));
+    return TRUE;
 }
 
 static VOID

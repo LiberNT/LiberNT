@@ -338,6 +338,53 @@ TestRandom(VOID)
        "two RNG calls returned identical output\n");
 }
 
+static VOID
+TestRandomAtDispatch(VOID)
+{
+    UCHAR Buffer[32], Filler[32];
+    NTSTATUS Status;
+    KIRQL OldIrql;
+
+    RtlFillMemory(Buffer, sizeof(Buffer), 0xCC);
+    RtlFillMemory(Filler, sizeof(Filler), 0xCC);
+    KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
+    Status = BCryptGenRandom(NULL, Buffer, sizeof(Buffer), BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+    KeLowerIrql(OldIrql);
+    ok_eq_hex(Status, STATUS_NOT_SUPPORTED);
+    ok(RtlCompareMemory(Buffer, Filler, sizeof(Buffer)) == sizeof(Buffer), "BCryptGenRandom at DISPATCH_LEVEL wrote the buffer\n");
+}
+
+int __cdecl SystemPrng(PUCHAR RandomData, SIZE_T RandomDataLength);
+
+static VOID
+TestSystemPrng(VOID)
+{
+    UCHAR First[33], Second[32], Filler[32];
+    KIRQL OldIrql;
+
+    RtlFillMemory(First, sizeof(First), 0xCC);
+    RtlFillMemory(Filler, sizeof(Filler), 0xCC);
+    ok_eq_int(SystemPrng(First, 32), TRUE);
+    ok(RtlCompareMemory(First, Filler, 32) != 32, "SystemPrng left the buffer untouched\n");
+    ok_eq_hex(First[32], 0xCC);
+    ok_eq_int(SystemPrng(Second, sizeof(Second)), TRUE);
+    ok(RtlCompareMemory(First, Second, sizeof(Second)) != sizeof(Second), "two SystemPrng calls returned identical output\n");
+    ok_eq_int(SystemPrng(Second, 0), TRUE);
+    ok_eq_int(SystemPrng(NULL, 0), TRUE);
+
+    KeRaiseIrql(APC_LEVEL, &OldIrql);
+    RtlFillMemory(Second, sizeof(Second), 0xCC);
+    ok_eq_int(SystemPrng(Second, sizeof(Second)), TRUE);
+    KeLowerIrql(OldIrql);
+    ok(RtlCompareMemory(Second, Filler, sizeof(Second)) != sizeof(Second), "SystemPrng at APC_LEVEL left the buffer untouched\n");
+
+    KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
+    RtlFillMemory(Second, sizeof(Second), 0xCC);
+    ok_eq_int(SystemPrng(Second, sizeof(Second)), TRUE);
+    KeLowerIrql(OldIrql);
+    ok(RtlCompareMemory(Second, Filler, sizeof(Second)) != sizeof(Second), "SystemPrng at DISPATCH_LEVEL left the buffer untouched\n");
+}
+
 START_TEST(KsecBcrypt)
 {
     LONG SuccessesBefore = ResultBuffer->Successes;
@@ -350,6 +397,8 @@ START_TEST(KsecBcrypt)
     TestKdf(BCRYPT_PBKDF2_ALGORITHM, FALSE);
     TestKdf(Sp800108Algorithm, TRUE);
     TestRandom();
+    TestRandomAtDispatch();
+    TestSystemPrng();
 
     if (ResultBuffer->Failures == FailuresBefore)
     {

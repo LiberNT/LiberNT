@@ -21,3 +21,4 @@
 @ stdcall BCryptSecretAgreement(ptr ptr ptr long) ksecdd.BCryptSecretAgreement
 @ stdcall BCryptDeriveKey(ptr wstr ptr ptr long ptr long) ksecdd.BCryptDeriveKey
 @ stdcall BCryptDestroySecret(ptr) ksecdd.BCryptDestroySecret
+@ cdecl SystemPrng(ptr long) ksecdd.SystemPrng
