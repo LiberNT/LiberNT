@@ -313,6 +313,7 @@ KiInitializeKernelMachineDependent(
 {
     ULONG64 FeatureBits = KeFeatureBits;
     ULONG HvPrivileges, HvRecommendations;
+    ULONG NxFeatureBits;
 
     HvRecommendations = KiQueryHypervisorRecommendations(&HvPrivileges);
     KiHvApicMsrs = (HvPrivileges & HV_ACCESS_INTR_CTRL_REGS) &&
@@ -374,29 +375,8 @@ KiInitializeKernelMachineDependent(
     SharedUserData->ProcessorFeatures[PF_AVX512F_INSTRUCTIONS_AVAILABLE] =
         (FeatureBits & KF_AVX512F) ? TRUE : FALSE;
 
-    SharedUserData->NXSupportPolicy = NX_SUPPORT_POLICY_OPTIN;
-
-    if (strstr(KeLoaderBlock->LoadOptions, "NOEXECUTE=ALWAYSON"))
-    {
-        SharedUserData->NXSupportPolicy = NX_SUPPORT_POLICY_ALWAYSON;
-        Prcb->FeatureBits |= KF_NX_ENABLED;
-    }
-    else if (strstr(KeLoaderBlock->LoadOptions, "NOEXECUTE=OPTOUT"))
-    {
-        SharedUserData->NXSupportPolicy = NX_SUPPORT_POLICY_OPTOUT;
-        Prcb->FeatureBits |= KF_NX_ENABLED;
-    }
-    else if ((strstr(KeLoaderBlock->LoadOptions, "NOEXECUTE=OPTIN")) ||
-             (strstr(KeLoaderBlock->LoadOptions, "NOEXECUTE")))
-    {
-        Prcb->FeatureBits |= KF_NX_ENABLED;
-    }
-    else if ((strstr(KeLoaderBlock->LoadOptions, "NOEXECUTE=ALWAYSOFF")) ||
-             (strstr(KeLoaderBlock->LoadOptions, "EXECUTE")))
-    {
-        SharedUserData->NXSupportPolicy = NX_SUPPORT_POLICY_ALWAYSOFF;
-        Prcb->FeatureBits |= KF_NX_DISABLED;
-    }
+    SharedUserData->NXSupportPolicy = KiNxPolicyFromLoadOptions(KeLoaderBlock->LoadOptions, &NxFeatureBits);
+    Prcb->FeatureBits |= NxFeatureBits;
 
 #if DBG
 

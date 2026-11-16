@@ -1191,6 +1191,12 @@ VOID
 NTAPI
 KiInitSystem(VOID);
 
+UCHAR
+NTAPI
+KiNxPolicyFromLoadOptions(
+    _In_opt_ PCSTR LoadOptions,
+    _Out_ PULONG NxFeatureBits);
+
 VOID
 NTAPI
 KiInitializeStartupThread(

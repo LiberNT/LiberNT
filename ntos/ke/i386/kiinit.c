@@ -376,35 +376,15 @@ KiInitializeKernel(IN PKPROCESS InitProcess,
     ULONG PageDirectory[2];
     PVOID DpcStack;
     KIRQL DummyIrql;
+    ULONG NxFeatureBits;
 
     PoInitializePrcb(Prcb);
 
     if (Number == 0)
         KeFeatureBits = Prcb->FeatureBits | (ULONG64)Prcb->FeatureBitsHigh << 32;
 
-    SharedUserData->NXSupportPolicy = NX_SUPPORT_POLICY_OPTIN;
-
-    if (strstr(KeLoaderBlock->LoadOptions, "NOEXECUTE=ALWAYSON"))
-    {
-        SharedUserData->NXSupportPolicy = NX_SUPPORT_POLICY_ALWAYSON;
-        KeFeatureBits |= KF_NX_ENABLED;
-    }
-    else if (strstr(KeLoaderBlock->LoadOptions, "NOEXECUTE=OPTOUT"))
-    {
-        SharedUserData->NXSupportPolicy = NX_SUPPORT_POLICY_OPTOUT;
-        KeFeatureBits |= KF_NX_ENABLED;
-    }
-    else if ((strstr(KeLoaderBlock->LoadOptions, "NOEXECUTE=OPTIN")) ||
-             (strstr(KeLoaderBlock->LoadOptions, "NOEXECUTE")))
-    {
-        KeFeatureBits |= KF_NX_ENABLED;
-    }
-    else if ((strstr(KeLoaderBlock->LoadOptions, "NOEXECUTE=ALWAYSOFF")) ||
-             (strstr(KeLoaderBlock->LoadOptions, "EXECUTE")))
-    {
-        SharedUserData->NXSupportPolicy = NX_SUPPORT_POLICY_ALWAYSOFF;
-        KeFeatureBits |= KF_NX_DISABLED;
-    }
+    SharedUserData->NXSupportPolicy = KiNxPolicyFromLoadOptions(KeLoaderBlock->LoadOptions, &NxFeatureBits);
+    KeFeatureBits |= NxFeatureBits;
 
     KiSaveProcessorControlState(&Prcb->ProcessorState);
 
