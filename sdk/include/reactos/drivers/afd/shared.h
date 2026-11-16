@@ -18,13 +18,6 @@ typedef struct _AFD_WSABUF {
     PCHAR buf;
 } AFD_WSABUF, *PAFD_WSABUF;
 
-typedef struct _AFD_CREATE_PACKET_LEGACY {
-    DWORD				EndpointFlags;
-    DWORD				GroupID;
-    DWORD				SizeOfTransportName;
-    WCHAR				TransportName[1];
-} AFD_CREATE_PACKET_LEGACY, *PAFD_CREATE_PACKET_LEGACY;
-
 typedef struct _AFD_CREATE_PACKET {
     DWORD				EndpointFlags;
     DWORD				GroupID;

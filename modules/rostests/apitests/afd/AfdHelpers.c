@@ -468,3 +468,77 @@ AfdGetInformation(
 
     return Status;
 }
+
+static
+NTSTATUS
+AfdOpenPacketForTest(
+    _In_ PFILE_FULL_EA_INFORMATION EaBuffer)
+{
+    UNICODE_STRING DeviceName = RTL_CONSTANT_STRING(L"\\Device\\Afd\\Endpoint");
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatus;
+    HANDLE SocketHandle = NULL;
+    ULONG EaLength;
+    NTSTATUS Status;
+
+    InitializeObjectAttributes(&ObjectAttributes, &DeviceName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    EaLength = FIELD_OFFSET(FILE_FULL_EA_INFORMATION, EaName) + EaBuffer->EaNameLength + 1 + EaBuffer->EaValueLength;
+    Status = NtCreateFile(&SocketHandle, GENERIC_READ | GENERIC_WRITE | SYNCHRONIZE,
+                          &ObjectAttributes, &IoStatus, NULL, 0,
+                          FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_OPEN_IF, 0,
+                          EaBuffer, EaLength);
+    if (NT_SUCCESS(Status))
+        NtClose(SocketHandle);
+    return Status;
+}
+
+START_TEST(AfdCreatePacket)
+{
+    DECLSPEC_ALIGN(4) UCHAR Buffer[128];
+    PFILE_FULL_EA_INFORMATION EaBuffer = (PFILE_FULL_EA_INFORMATION)Buffer;
+    PAFD_CREATE_PACKET Packet;
+    UNICODE_STRING TransportName = RTL_CONSTANT_STRING(L"\\Device\\Tcp");
+    ULONG *OldPacket;
+    ULONG PacketLength;
+    NTSTATUS Status;
+
+    RtlZeroMemory(Buffer, sizeof(Buffer));
+    EaBuffer->EaNameLength = AFD_PACKET_COMMAND_LENGTH;
+    RtlCopyMemory(EaBuffer->EaName, AfdCommand, AFD_PACKET_COMMAND_LENGTH + 1);
+    Packet = (PAFD_CREATE_PACKET)(EaBuffer->EaName + EaBuffer->EaNameLength + 1);
+    PacketLength = FIELD_OFFSET(AFD_CREATE_PACKET, TransportName) + TransportName.Length + sizeof(WCHAR);
+    EaBuffer->EaValueLength = (USHORT)PacketLength;
+    Packet->AddressFamily = AF_INET;
+    Packet->SocketType = SOCK_STREAM;
+    Packet->Protocol = IPPROTO_TCP;
+    Packet->SizeOfTransportName = TransportName.Length;
+    RtlCopyMemory(Packet->TransportName, TransportName.Buffer, TransportName.Length);
+
+    Status = AfdOpenPacketForTest(EaBuffer);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+
+    EaBuffer->EaValueLength = (USHORT)(PacketLength + sizeof(WCHAR));
+    Status = AfdOpenPacketForTest(EaBuffer);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    EaBuffer->EaValueLength = (USHORT)PacketLength;
+
+    Packet->SizeOfTransportName = TransportName.Length - 1;
+    Status = AfdOpenPacketForTest(EaBuffer);
+    ok_eq_hex(Status, STATUS_INVALID_PARAMETER);
+
+    Packet->SizeOfTransportName = TransportName.Length + 20;
+    Status = AfdOpenPacketForTest(EaBuffer);
+    ok_eq_hex(Status, STATUS_ACCESS_VIOLATION);
+
+    EaBuffer->EaValueLength = 8;
+    Status = AfdOpenPacketForTest(EaBuffer);
+    ok_eq_hex(Status, STATUS_ACCESS_VIOLATION);
+
+    RtlZeroMemory(Packet, PacketLength);
+    OldPacket = (ULONG *)Packet;
+    OldPacket[2] = TransportName.Length;
+    RtlCopyMemory(&OldPacket[3], TransportName.Buffer, TransportName.Length);
+    EaBuffer->EaValueLength = (USHORT)(3 * sizeof(ULONG) + TransportName.Length + sizeof(WCHAR));
+    Status = AfdOpenPacketForTest(EaBuffer);
+    ok_eq_hex(Status, STATUS_ACCESS_VIOLATION);
+}

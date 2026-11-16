@@ -1,12 +1,14 @@
 #define STANDALONE
 #include <apitest.h>
 
+extern void func_AfdCreatePacket(void);
 extern void func_poll(void);
 extern void func_send(void);
 extern void func_windowsize(void);
 
 const struct test winetest_testlist[] =
 {
+    { "AfdCreatePacket", func_AfdCreatePacket },
     { "poll", func_poll },
     { "send", func_send },
     { "windowsize", func_windowsize },
