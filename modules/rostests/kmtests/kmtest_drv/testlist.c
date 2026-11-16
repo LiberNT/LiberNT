@@ -175,6 +175,7 @@ KMT_TESTFUNC Test_HalPortIo;
 #endif
 KMT_TESTFUNC Test_HalDmaAlignment;
 KMT_TESTFUNC Test_HdAudBusInterface;
+KMT_TESTFUNC Test_KsCreateItemSlot;
 KMT_TESTFUNC Test_HalRealTimeClock;
 KMT_TESTFUNC Test_HalSystemInfo;
 KMT_TESTFUNC Test_IoContainerId;
@@ -607,6 +608,7 @@ const KMT_TEST TestList[] =
 #endif
     { "HalDmaAlignment",                    Test_HalDmaAlignment },
     { "HdAudBusInterface",                  Test_HdAudBusInterface },
+    { "KsCreateItemSlot",                   Test_KsCreateItemSlot },
     { "HalRealTimeClock",                   Test_HalRealTimeClock },
     { "HalSystemInfo",                      Test_HalSystemInfo },
     { "IoContainerId",                      Test_IoContainerId },

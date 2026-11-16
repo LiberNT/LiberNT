@@ -477,7 +477,6 @@ KspAddCreateItemToList(
         /* initialize entry */
         InitializeListHead(&Entry->ObjectItemList);
         Entry->CreateItem = &ItemsList[Index];
-        Entry->ReferenceCount = 0;
         Entry->ItemFreeCallback = NULL;
 
         InsertTailList(ListHead, &Entry->Entry);
@@ -497,7 +496,6 @@ KspFreeCreateItems(
         Entry = (PCREATE_ITEM_ENTRY)CONTAINING_RECORD(RemoveHeadList(ListHead), CREATE_ITEM_ENTRY, Entry);
 
         /* caller shouldnt have any references */
-        //ASSERT(Entry->ReferenceCount == 0);
         //ASSERT(IsListEmpty(&Entry->ObjectItemList));
 
         /* does the creator wish notification */
@@ -767,7 +765,6 @@ KspAddObjectCreateItemToList(
         {
             /* sanity check */
             ASSERT(IsListEmpty(&CreateEntry->ObjectItemList));
-            ASSERT(CreateEntry->ReferenceCount == 0);
             /* use free entry */
             CreateEntry->CreateItem->Context = Context;
             CreateEntry->CreateItem->Create = Create;
@@ -958,7 +955,6 @@ KsAllocateObjectCreateItem(
     InitializeListHead(&CreateEntry->ObjectItemList);
     CreateEntry->ItemFreeCallback = ItemFreeCallback;
     CreateEntry->CreateItem = Item;
-    CreateEntry->ReferenceCount = 0;
 
     /* now insert the create item entry */
     InsertTailList(&Header->ItemList, &CreateEntry->Entry);

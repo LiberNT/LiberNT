@@ -47,7 +47,6 @@ typedef struct
     LIST_ENTRY Entry;
     PKSOBJECT_CREATE_ITEM CreateItem;
     PFNKSITEMFREECALLBACK ItemFreeCallback;
-    LONG ReferenceCount;
     LIST_ENTRY ObjectItemList;
 }CREATE_ITEM_ENTRY, *PCREATE_ITEM_ENTRY;
 

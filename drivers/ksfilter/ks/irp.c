@@ -1939,12 +1939,6 @@ KspCreate(
 
         /* call create function */
         Status = CreateItemEntry->CreateItem->Create(DeviceObject, Irp);
-
-        if (NT_SUCCESS(Status))
-        {
-            /* increment create item reference count */
-            InterlockedIncrement(&CreateItemEntry->ReferenceCount);
-        }
         return Status;
     }
 
