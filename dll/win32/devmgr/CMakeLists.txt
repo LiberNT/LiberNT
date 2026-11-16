@@ -11,6 +11,7 @@ list(APPEND SOURCE
     api.cpp
     properties/advprop.cpp
     properties/devprblm.cpp
+    properties/devstatus.cpp
     properties/hwpage.cpp
     properties/hwresource.cpp
     properties/misc.cpp

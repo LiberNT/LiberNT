@@ -97,6 +97,7 @@ BEGIN
     IDS_DEV_FAILED_POST_START "LiberNT 已停止這個裝置，因為它發生了問題。"
     IDS_DEV_HALTED "有應用程式或服務關閉了這個硬體裝置。"
     IDS_DEV_PHANTOM "這個硬體裝置目前未連接到電腦。"
+    IDS_DEV_PHANTOM_RESOLUTION "To fix this problem, reconnect this hardware device to the computer."
     IDS_DEV_SYSTEM_SHUTDOWN "LiberNT 無法存取這個硬體裝置，因為作業系統正在關閉。"
     IDS_DEV_HELD_FOR_EJECT "LiberNT 無法使用這個硬體裝置，因為它已準備安全移除，但尚未從電腦拔除。"
     IDS_DEV_DRIVER_BLOCKED "這個裝置的軟體已經被阻止啟動，因為它已知會在 LiberNT 出現問題。 請與硬體供應商聯繫並取得新的驅動程式。"

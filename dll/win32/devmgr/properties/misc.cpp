@@ -440,67 +440,6 @@ GetDeviceLocationString(IN HDEVINFO DeviceInfoSet,
 
 
 BOOL
-GetDeviceStatusString(IN DEVINST DevInst,
-                      IN HMACHINE hMachine,
-                      OUT LPWSTR szBuffer,
-                      IN DWORD BufferSize)
-{
-    CONFIGRET cr;
-    ULONG Status, ProblemNumber;
-    UINT MessageId = IDS_UNKNOWN;
-    BOOL Ret = FALSE;
-
-    szBuffer[0] = L'\0';
-    cr = CM_Get_DevNode_Status_Ex(&Status,
-                                  &ProblemNumber,
-                                  DevInst,
-                                  0,
-                                  hMachine);
-    if (cr == CR_SUCCESS)
-    {
-        if (Status & DN_HAS_PROBLEM)
-        {
-            UINT uRet;
-
-            uRet = DeviceProblemTextW(hMachine,
-                                     DevInst,
-                                     ProblemNumber,
-                                     szBuffer,
-                                     (BufferSize != 0 ? BufferSize : BufferSize - 1));
-
-            Ret = (uRet != 0 && uRet < BufferSize);
-        }
-        else
-        {
-            if (!(Status & (DN_DRIVER_LOADED | DN_STARTED)))
-            {
-                MessageId = IDS_NODRIVERLOADED;
-            }
-            else
-            {
-                MessageId = IDS_DEV_NO_PROBLEM;
-            }
-
-            goto GeneralMessage;
-        }
-    }
-    else
-    {
-GeneralMessage:
-        if (LoadString(hDllInstance,
-                        MessageId,
-                        szBuffer,
-                        (int)BufferSize))
-        {
-            Ret = TRUE;
-        }
-    }
-
-    return Ret;
-}
-
-
-BOOL
 GetDriverProviderString(IN HDEVINFO DeviceInfoSet,
                         IN PSP_DEVINFO_DATA DeviceInfoData,
                         OUT LPWSTR szBuffer,

@@ -98,6 +98,7 @@ BEGIN
     IDS_DEV_FAILED_POST_START "LiberNT ha deshabilitado este dispositivo tras informar de problemas en su inicio."
     IDS_DEV_HALTED "Una aplicación o un servicio han detenido este dispositivo de hardware."
     IDS_DEV_PHANTOM "El dispositivo no está conectado al equipo."
+    IDS_DEV_PHANTOM_RESOLUTION "To fix this problem, reconnect this hardware device to the computer."
     IDS_DEV_SYSTEM_SHUTDOWN "LiberNT no puede acceder a este dispositivo de hardware porque el sistema operativo está apagándose."
     IDS_DEV_HELD_FOR_EJECT "LiberNT no puede usar este dispositivo de hardware porque se ha preparado para quitarse de forma segura pero todavía está conectado al equipo."
     IDS_DEV_DRIVER_BLOCKED "El software para este dispositivo se ha bloqueado al arrancar por dar problemas en LiberNT. Contacte con su fabricante de hardware para obtener un controlador nuevo."

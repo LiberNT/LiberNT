@@ -96,6 +96,7 @@ BEGIN
     IDS_DEV_FAILED_POST_START "LiberNT seiskas selle seadme kuna see teavitas probleemist."
     IDS_DEV_HALTED "Rakendus või teenus on selle seadme välja lülitanud."
     IDS_DEV_PHANTOM "See seade ei ole hetkel arvutiga ühendatud."
+    IDS_DEV_PHANTOM_RESOLUTION "To fix this problem, reconnect this hardware device to the computer."
     IDS_DEV_SYSTEM_SHUTDOWN "LiberNT ei saa ligi sellele seadmele, sest operatsiooni süsteem on sulgemas."
     IDS_DEV_HELD_FOR_EJECT "LiberNT ei saa seda riistvaraseadet eemaldada, sest see on valmistatud turvaliseks eemalduseks, kuid pole veel eemaldatud arvutist."
     IDS_DEV_DRIVER_BLOCKED "Tarkvara selle seadme draiveri jaoks on blokeeritud, sest see on teatud LiberNT'iga mitte töötama. Võta ühendust riistvara tootjaga uue draiveri jaoks."

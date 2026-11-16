@@ -93,6 +93,7 @@ BEGIN
     IDS_DEV_FAILED_POST_START "LiberNT ka ndaluar këtë pajisje për shkak se ajo e ka raportuar probleme."
     IDS_DEV_HALTED "Një program apo shërbim e ka mbyllur këtë pajisje elektronike."
     IDS_DEV_PHANTOM "Aktualisht, kjo pajisje pajisje nuk është e lidhur tek kompjuteri."
+    IDS_DEV_PHANTOM_RESOLUTION "To fix this problem, reconnect this hardware device to the computer."
     IDS_DEV_SYSTEM_SHUTDOWN "LiberNT nuk mund të kenë akses në këtë pajisje elektronike për shkak se sistemi operativ është në proces mbyllje."
     IDS_DEV_HELD_FOR_EJECT "LiberNT nuk mund të përdorë këtë pajisje elektronike për shkak se ajo është përgatitur për heqje të sigurt, por ajo nuk është hequr nga kompjuteri"
     IDS_DEV_DRIVER_BLOCKED "Programi për këtë pajisje është bllokuar nga fillimi për shkak se ajo është e njohur që të ketë probleme me LiberNT. Kontaktoni shitësin e pjesës elektronike për komandues të ri."

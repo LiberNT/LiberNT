@@ -91,6 +91,7 @@ BEGIN
     IDS_DEV_FAILED_POST_START "LiberNT, bu aygıtı, sorunlar bildirdiğinden dolayı durdurdu."
     IDS_DEV_HALTED "Bir uygulama ya da bir hizmet bu donanım aygıtını kapattı."
     IDS_DEV_PHANTOM "Şimdi bu donanım aygıtı bilgisayara bağlı değil."
+    IDS_DEV_PHANTOM_RESOLUTION "To fix this problem, reconnect this hardware device to the computer."
     IDS_DEV_SYSTEM_SHUTDOWN "LiberNT, işletim sisteminin kapatılmakta olmasından dolayı bu donanım aygıtı için erişim sağlayamıyor."
     IDS_DEV_HELD_FOR_EJECT "LiberNT, bu donanım aygıtının, güvenli kaldırmaya hazır olup, bilgisayardan kaldırılmamasından dolayı bu donanım aygıtını kullanamıyor."
     IDS_DEV_DRIVER_BLOCKED "Bu aygıt için yazılımın, LiberNT'la sorunları olduğu biliniyor olmasından dolayı, başlatılması engellendi. Yeni bir donanım için donanımın satıcısıyla iletişime geçiniz."

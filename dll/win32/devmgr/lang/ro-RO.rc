@@ -98,6 +98,7 @@ BEGIN
     IDS_DEV_FAILED_POST_START "LiberNT a oprit acest dispozitiv deoarece au fost depistate probleme cu el."
     IDS_DEV_HALTED "O aplicație sau un serviciu a oprit acest dispozitiv."
     IDS_DEV_PHANTOM "La moment, acest dispozitiv nu este conectat la calculator."
+    IDS_DEV_PHANTOM_RESOLUTION "To fix this problem, reconnect this hardware device to the computer."
     IDS_DEV_SYSTEM_SHUTDOWN "LiberNT nu poate obține acces la acest dispozitiv deoarece sistemul de operare este în curs de închidere."
     IDS_DEV_HELD_FOR_EJECT "LiberNT nu poate folosi acest dispozitiv deoarece acesta a fost deja pregătit pentru a fi deconectat."
     IDS_DEV_DRIVER_BLOCKED "Driverul al acestui dispozitiv a fost oprit din cauza unor probleme de compatibilitate. Contactați furnizorul dispozitivului pentru o versiune compatibilă."

@@ -90,6 +90,7 @@ BEGIN
     IDS_DEV_FAILED_POST_START "A LiberNT leállította ezt az eszközt mert problémákat jelzett."
     IDS_DEV_HALTED "Egy alkalmazás vagy szolgáltatás leállította ezt az eszközt."
     IDS_DEV_PHANTOM "Jelenleg ez az eszköz nincs a számítógéphez csatlakoztatva."
+    IDS_DEV_PHANTOM_RESOLUTION "To fix this problem, reconnect this hardware device to the computer."
     IDS_DEV_SYSTEM_SHUTDOWN "A LiberNT nem tud hozzáférni ehhez az eszközhöz, mivel az operációs rendszer a leállítás folyamatában van."
     IDS_DEV_HELD_FOR_EJECT "A LiberNT nem tudja használni ezt az eszközt, mivel biztonságos eltávolítás fázisba került de még nem lett eltávolítva."
     IDS_DEV_DRIVER_BLOCKED "Az eszközhöz tartozó szoftver nem lett elindítva mivel ismert problémákat okoz a LiberNT-sel. Igényeljen egy friss illesztőprogramot a gyártójától."

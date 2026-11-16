@@ -91,6 +91,7 @@ BEGIN
     IDS_DEV_FAILED_POST_START "LiberNT har stoppet denne enheten fordi det har rapportert problemer."
     IDS_DEV_HALTED "Et program eller tjeneste har slått av denne maskinvare enheten."
     IDS_DEV_PHANTOM "Nåværende, denne maskinvare enheten er ikke koblet til datamaskinen."
+    IDS_DEV_PHANTOM_RESOLUTION "To fix this problem, reconnect this hardware device to the computer."
     IDS_DEV_SYSTEM_SHUTDOWN "LiberNT kan ikke få tilgang til denne maskinvare enheten fordi operativssystemet er i prosessen for å slås av."
     IDS_DEV_HELD_FOR_EJECT "LiberNT kan ikke bruke denne maskinvare enheten fordi den har blitt forbredt på sikker fjerning, men har ikke blitt fjernet fra datamaskinen"
     IDS_DEV_DRIVER_BLOCKED "Programvaren for denne enheten har blitt blokket fra å starte fordi det et kjent for å ha problemer med LiberNT. Kontact maskinvare produsenten for nye drivere."

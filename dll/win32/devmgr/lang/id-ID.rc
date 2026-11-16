@@ -91,6 +91,7 @@ BEGIN
     IDS_DEV_FAILED_POST_START "LiberNT telah menghentikan perangkat ini karena dilaporkan bermasalah."
     IDS_DEV_HALTED "Aplikasi atau layanan telah mematikan perangkat keras ini."
     IDS_DEV_PHANTOM "Saat ini, perangkat keras ini tidak disambungkan ke komputer."
+    IDS_DEV_PHANTOM_RESOLUTION "To fix this problem, reconnect this hardware device to the computer."
     IDS_DEV_SYSTEM_SHUTDOWN "LiberNT tidak mendapatkan akses terhadap perangkat keras ini karena sistem operasi masih dalam proses penonaktifan."
     IDS_DEV_HELD_FOR_EJECT "LiberNT tidak bisa memakai perangkat keras ini karena telah disiapkan untuk pencabutan secara aman, tapi masih terpasang di komputer"
     IDS_DEV_DRIVER_BLOCKED "Perangkat lunak untuk perangkat ini telah diblokir dari awal karena ia diketahui mempunyai masalah dengan LiberNT. Hubungi vendor perangkat keras untuk meminta driver baru."

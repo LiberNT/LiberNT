@@ -90,6 +90,7 @@ BEGIN
     IDS_DEV_FAILED_POST_START "LiberNT a arrêté ce périphérique car il a signalé des problèmes."
     IDS_DEV_HALTED "Une application ou un service a arrêté ce périphérique matériel."
     IDS_DEV_PHANTOM "Ce périphérique matériel n'est pas connecté à l'ordinateur actuellement."
+    IDS_DEV_PHANTOM_RESOLUTION "Pour résoudre ce problème, reconnectez ce périphérique matériel à l'ordinateur."
     IDS_DEV_SYSTEM_SHUTDOWN "LiberNT ne peut pas accéder à ce matériel parce que le système est en train de s'arrêter."
     IDS_DEV_HELD_FOR_EJECT "LiberNT ne peut pas utiliser ce matériel parce qu'il a été préparé pour être enlevé, mais n'a pas encore été enlevé de l'ordinateur."
     IDS_DEV_DRIVER_BLOCKED "Le logiciel de ce périphérique a été empéché de démarrer car il est connu pour avoir des problèmes avec LiberNT. Contactez votre vendeur pour obtenir un pilote adéquat."

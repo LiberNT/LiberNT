@@ -89,6 +89,7 @@ BEGIN
     IDS_DEV_FAILED_POST_START "LiberNT は、デバイスが問題を報告したため、このデバイスを停止しました。"
     IDS_DEV_HALTED "アプリケーションかサービスは、このハードウェア デバイスをシャットダウンしました。"
     IDS_DEV_PHANTOM "現在、このハードウェア デバイスは、コンピューターに接続されていません。"
+    IDS_DEV_PHANTOM_RESOLUTION "To fix this problem, reconnect this hardware device to the computer."
     IDS_DEV_SYSTEM_SHUTDOWN "OS がシャットダウン中のため、LiberNT は、このハードウェア デバイスへのアクセスを取得できません。"
     IDS_DEV_HELD_FOR_EJECT "このハードウェアデバイスは安全に取り外せるように準備されていますが、コンピューターから取り外されていないため、LiberNT はこのデバイスを使用できません。"
     IDS_DEV_DRIVER_BLOCKED "このデバイスに対するソフトウェアは、LiberNT との問題があることが分かっているため、起動がブロックされています。新しいドライバーのハードウェアのベンダーに連絡して下さい。"

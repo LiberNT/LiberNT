@@ -91,6 +91,7 @@ BEGIN
     IDS_DEV_FAILED_POST_START "LiberNT hat dieses Gerät angehalten, weil es Probleme berichtet hat."
     IDS_DEV_HALTED "Eine Anwendung oder ein Dienst hat dieses Gerät heruntergefahren."
     IDS_DEV_PHANTOM "Dieses Gerät ist momentan nicht mit dem Computer verbunden."
+    IDS_DEV_PHANTOM_RESOLUTION "Um dieses Problem zu beheben, schließen Sie dieses Gerät wieder an den Computer an."
     IDS_DEV_SYSTEM_SHUTDOWN "LiberNT kann auf dieses Gerät nicht zugreifen, weil das Betriebssystem heruntergefahren wird."
     IDS_DEV_HELD_FOR_EJECT "LiberNT kann dieses Gerät nicht benutzen, weil es für ""Sicheres Entfernen"" vorbereitet, aber bisher nicht vom Computer entfernt wurde."
     IDS_DEV_DRIVER_BLOCKED "Die Ausführung der Software für dieses Gerät wurde blockiert, weil bekannt ist, dass sie Probleme mit LiberNT hat. Kontaktieren Sie den Hersteller für einen neuen Treiber."

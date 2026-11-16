@@ -94,6 +94,7 @@ BEGIN
     IDS_DEV_FAILED_POST_START "LiberNT zastavil toto zařízení, protože způsobovalo problémy."
     IDS_DEV_HALTED "Aplikace nebo služba zastavila toto zařízení."
     IDS_DEV_PHANTOM "Toto zařízení nyní není připojeno k počítači."
+    IDS_DEV_PHANTOM_RESOLUTION "To fix this problem, reconnect this hardware device to the computer."
     IDS_DEV_SYSTEM_SHUTDOWN "LiberNT nemohl získat přístup k tomuto zařízení, protože operační systém se právě vypíná."
     IDS_DEV_HELD_FOR_EJECT "LiberNT nemůže používat toto zařízení, protože bylo připraveno pro bezpečné odebrání a ještě nebylo odebráno."
     IDS_DEV_DRIVER_BLOCKED "Softwaru tohoto zařízení nebylo dovoleno spuštění, protože způsobuje v systému LiberNT problémy. Kontaktujte prodejce pro nový ovladač."

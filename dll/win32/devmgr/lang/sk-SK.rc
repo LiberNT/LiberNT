@@ -94,6 +94,7 @@ BEGIN
     IDS_DEV_FAILED_POST_START "Systém LiberNT zastavil toto zariadenie lebo ohlásilo problémy."
     IDS_DEV_HALTED "Aplikácia alebo služba vypla toto hardvérové zariadenie."
     IDS_DEV_PHANTOM "Currently, this hardware device is not connected to the computer."
+    IDS_DEV_PHANTOM_RESOLUTION "To fix this problem, reconnect this hardware device to the computer."
     IDS_DEV_SYSTEM_SHUTDOWN "LiberNT cannot gain access to this hardware device because the operating system is in the process of shutting down."
     IDS_DEV_HELD_FOR_EJECT "LiberNT cannot use this hardware device because it has been prepared for safe removal, but it has not been removed from the computer"
     IDS_DEV_DRIVER_BLOCKED "The software for this device has been blocked from starting because it is known to have problems with LiberNT. Contact the hardware vendor for a new driver."

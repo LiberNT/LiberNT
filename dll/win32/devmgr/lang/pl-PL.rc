@@ -102,6 +102,7 @@ BEGIN
     IDS_DEV_FAILED_POST_START "LiberNT przerwał pracę urządzenia, ponieważ zostały zgłoszone problemy."
     IDS_DEV_HALTED "Program lub usługa przerwała działanie urządzenia."
     IDS_DEV_PHANTOM "Obecnie urządzenie nie jest podłączone do komputera."
+    IDS_DEV_PHANTOM_RESOLUTION "To fix this problem, reconnect this hardware device to the computer."
     IDS_DEV_SYSTEM_SHUTDOWN "LiberNT nie może uzyskać dostępu do urządzenia, ponieważ trwa zamykanie systemu."
     IDS_DEV_HELD_FOR_EJECT "LiberNT nie może uzyskać dostępu do urządzenia, ponieważ urządzenie to było przygotowane do ""bezpiecznego usunięcia"", ale nie zostało odłączone."
     IDS_DEV_DRIVER_BLOCKED "Oprogramowanie urządzenia zostało zablokowane przy starcie, ponieważ nie współpracuje poprawnie z systemem LiberNT. Spróbuj zainstalować nowszy sterownik."
