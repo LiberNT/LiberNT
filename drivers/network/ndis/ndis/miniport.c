@@ -3093,7 +3093,9 @@ NdisIAddDevice(
 
   NDIS_DbgPrint(MAX_TRACE, ("creating device %wZ\n", &ExportName));
 
-  Status = IoCreateDevice(Miniport->DriverObject, sizeof(LOGICAL_ADAPTER),
+  Status = IoCreateDevice(Miniport->DriverObject,
+    FIELD_OFFSET(LOGICAL_ADAPTER, IndicatedPackets) +
+      KeQueryMaximumProcessorCountEx(ALL_PROCESSOR_GROUPS) * sizeof(PNDIS_PACKET),
     &ExportName, FILE_DEVICE_PHYSICAL_NETCARD,
     0, FALSE, &DeviceObject);
   if (!NT_SUCCESS(Status))
@@ -3108,6 +3110,7 @@ NdisIAddDevice(
    */
 
   Adapter = (PLOGICAL_ADAPTER)DeviceObject->DeviceExtension;
+  Adapter->IndicatedPacketSlots = KeQueryMaximumProcessorCountEx(ALL_PROCESSOR_GROUPS);
   KeInitializeSpinLock(&Adapter->NdisMiniportBlock.Lock);
   InitializeListHead(&Adapter->ProtocolListHead);
 

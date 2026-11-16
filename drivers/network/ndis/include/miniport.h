@@ -118,6 +118,10 @@ typedef struct _LOGICAL_ADAPTER
      * holding NdisMiniportBlock.Lock. Guarded by that same lock. */
     PVOID                       LookaheadCache;
     UINT                        LookaheadCacheSize;
+
+    /* One slot for every processor: NDIS_MINIPORT_BLOCK only has room for the first MAXIMUM_PROCESSORS */
+    ULONG                       IndicatedPacketSlots;
+    PNDIS_PACKET                IndicatedPackets[ANYSIZE_ARRAY];
 } LOGICAL_ADAPTER, *PLOGICAL_ADAPTER;
 
 #define GET_LOGICAL_ADAPTER(Handle)((PLOGICAL_ADAPTER)Handle)
