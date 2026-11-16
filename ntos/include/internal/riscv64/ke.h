@@ -7,6 +7,7 @@
 #pragma once
 
 #define KI_EMULATED_USER_MACHINE IMAGE_FILE_MACHINE_AMD64
+#define KI_EMPTY_YIELD_STALL_NS 700
 #define KI_EMULATED_USER_SYSTEM_DLL L"\\SystemRoot\\SystemAMD64\\ntdll.dll"
 #define KiEmulationProcessorArchitecture(Process) PROCESSOR_ARCHITECTURE_INTEL
 

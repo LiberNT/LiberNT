@@ -7,6 +7,7 @@
 #pragma once
 
 #define KI_EMULATED_USER_MACHINE 0
+#define KI_EMPTY_YIELD_STALL_NS 700
 #define KI_EMULATED_USER_SYSTEM_DLL NULL
 #define KiEmulationProcessorArchitecture(Process) KeProcessorArchitecture
 

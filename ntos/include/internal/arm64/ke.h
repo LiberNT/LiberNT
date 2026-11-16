@@ -10,6 +10,8 @@
 #define KI_DPC_TARGET_PROCESSOR_OFFSET 0x800
 
 #define KI_EMULATED_USER_MACHINE IMAGE_FILE_MACHINE_AMD64
+/* Windows 11 ARM64 spends about 960 ns on a yield with nothing to run, and spin loops are sized on it */
+#define KI_EMPTY_YIELD_STALL_NS 700
 #define KI_EMULATED_USER_SYSTEM_DLL NULL
 #define KiEmulationProcessorArchitecture(Process) \
     ((PsWow64GetProcessMachine(Process) == IMAGE_FILE_MACHINE_I386) ? PROCESSOR_ARCHITECTURE_INTEL : PROCESSOR_ARCHITECTURE_ARM)

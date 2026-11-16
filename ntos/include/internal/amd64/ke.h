@@ -8,6 +8,8 @@
 #pragma once
 
 #define KI_EMULATED_USER_MACHINE 0
+/* Windows 11 x64 spends 65-79 ns on a yield with nothing to run, no more than the system call */
+#define KI_EMPTY_YIELD_STALL_NS 0
 #define KiEmulationProcessorArchitecture(Process) PROCESSOR_ARCHITECTURE_INTEL
 #define KI_ARCH_THREAD_HANDOFF_USES_RUNNING 1
 

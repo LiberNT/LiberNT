@@ -8,7 +8,12 @@
 #include "precomp.h"
 
 #define YIELD_COUNT 200000
+/* Windows 11 ARM64 spends about 960 ns on an empty yield, Windows 11 x64 65-79 ns */
+#if defined(_M_ARM64)
 #define MINIMUM_YIELD_NS 500
+#else
+#define MINIMUM_YIELD_NS 0
+#endif
 
 typedef NTSTATUS (NTAPI *PFN_NT_YIELD_EXECUTION)(VOID);
 

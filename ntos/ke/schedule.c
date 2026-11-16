@@ -11,9 +11,6 @@
 #define NDEBUG
 #include <debug.h>
 
-/* Spin loops count yields, and drivers size them on Windows 11, where a yield with nothing to run takes about 830 ns */
-#define KI_EMPTY_YIELD_STALL_NS 700
-
 static
 VOID
 KiStallEmptyYield(VOID)
@@ -22,6 +19,8 @@ KiStallEmptyYield(VOID)
     LARGE_INTEGER Start;
     ULONGLONG Ticks;
 
+    if (KI_EMPTY_YIELD_STALL_NS == 0)
+        return;
     Start = KeQueryPerformanceCounter(&Frequency);
     ASSERT(Frequency.QuadPart > 0);
     Ticks = ((ULONGLONG)Frequency.QuadPart * KI_EMPTY_YIELD_STALL_NS + 999999999ULL) / 1000000000ULL;
