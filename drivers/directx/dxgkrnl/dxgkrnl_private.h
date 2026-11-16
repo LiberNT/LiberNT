@@ -3172,6 +3172,10 @@ NTSTATUS
 DxgkGpuVaInitializePageTablePool(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
+NTSTATUS
+DxgkGpuVaRestorePagingProcess(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
 VOID
 DxgkGpuVaReleasePageTablePool(
     _In_ PDXGKRNL_ADAPTER Adapter);

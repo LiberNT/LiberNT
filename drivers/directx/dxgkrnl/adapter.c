@@ -1452,6 +1452,9 @@ DxgkpTdrWorker(
         goto Exit;
     }
     DxgkVidMmResumeAdapter(Adapter);
+    Status = DxgkGpuVaRestorePagingProcess(Adapter);
+    if (!NT_SUCCESS(Status))
+        DXGKRNL_ERR("DxgkpTdrWorker: paging address space restore after reset failed 0x%08lX\n", Status);
     if (SchedulerPrepared)
     {
         Status = VidSchResumeScheduler(Adapter);

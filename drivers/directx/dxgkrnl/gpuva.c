@@ -4239,6 +4239,52 @@ DxgkGpuVaInitializePageTablePool(
     return STATUS_SUCCESS;
 }
 
+/* An adapter reset loses the paging process's page tables and its root binding: rewrite them from the shadow with the CPU, as at initialization, and hand the root back. */
+NTSTATUS
+DxgkGpuVaRestorePagingProcess(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    PDXGKRNL_PROCESS Process;
+    PLIST_ENTRY Entry;
+    ULONG RootShift;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    ASSERT(Adapter != NULL);
+    ASSERT(Adapter->KmdExclusiveOwnerThread == PsGetCurrentThread());
+    if (InterlockedCompareExchange(&Adapter->PagingVirtualReady, 0, 0) == 0 ||
+        Adapter->PagingSystemDevice == NULL || Adapter->PagingSystemContext == NULL)
+    {
+        return STATUS_SUCCESS;
+    }
+    Process = Adapter->PagingSystemDevice->ProcessRecord;
+    if (Process == NULL)
+        return STATUS_SUCCESS;
+    RootShift = GpuVaLevelShift(Adapter, GpuVaLevelCount(Adapter) - 1);
+    ASSERT(RootShift < 64);
+
+    ExAcquireFastMutex(&Process->GpuVaLock);
+    ASSERT(Process->RootPageTableEntries != 0);
+    for (Entry = Process->GpuVaPageTableList.Flink;
+         Entry != &Process->GpuVaPageTableList;
+         Entry = Entry->Flink)
+    {
+        CONTAINING_RECORD(Entry, DXGKRNL_GPUVA_PAGE_TABLE, PageTableListEntry)->InitialUpdatePending = TRUE;
+    }
+    Process->PageTableUpdatePending = TRUE;
+    Process->PageTableUpdateStart = 0;
+    Process->PageTableUpdateEnd = (ULONGLONG)Process->RootPageTableEntries << RootShift;
+    ExReleaseFastMutex(&Process->GpuVaLock);
+
+    ASSERT(!Adapter->PagingProcessInitializing);
+    Adapter->PagingProcessInitializing = TRUE;
+    Status = DxgkGpuVaFlushPageTableUpdatesForDevice(Process, Adapter->PagingSystemDevice);
+    Adapter->PagingProcessInitializing = FALSE;
+    if (NT_SUCCESS(Status))
+        Status = DxgkGpuVaSetRootPageTable(Adapter, Process, Adapter->PagingSystemContext);
+    return Status;
+}
+
 VOID
 DxgkGpuVaReleasePageTablePool(
     _In_ PDXGKRNL_ADAPTER Adapter)
