@@ -2060,6 +2060,8 @@ struct _DXGKRNL_PROCESS
     /* Referenced owning process object and immutable adapter identity. */
     PEPROCESS                   Process;
     PDXGKRNL_ADAPTER            Adapter;
+    /* The adapter's paging process: same EPROCESS as the System record, own GPU VA space. */
+    BOOLEAN                     PagingProcess;
 
     /*
      * Shared adapter-handle/device ownership and serialized KMD process DDI
@@ -3312,6 +3314,11 @@ NTSTATUS
 DxgkAcquireProcessRecord(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ PEPROCESS Process,
+    _Out_ PDXGKRNL_PROCESS *OutProcessRecord);
+
+NTSTATUS
+DxgkAcquirePagingProcessRecord(
+    _In_ PDXGKRNL_ADAPTER Adapter,
     _Out_ PDXGKRNL_PROCESS *OutProcessRecord);
 
 NTSTATUS

@@ -226,6 +226,22 @@ static VOID TestAllocationRepeatMapping(VOID)
     }
 }
 
+static VOID TestProcessKind(VOID)
+{
+    BOOLEAN SystemProcess;
+    BOOLEAN GdiProcess;
+
+    DxgkGpuVaCoreProcessKind(TRUE, TRUE, &SystemProcess, &GdiProcess);
+    ok_bool_true(SystemProcess, "the paging process is the system process");
+    ok_bool_false(GdiProcess, "the paging process is not the GDI process");
+    DxgkGpuVaCoreProcessKind(FALSE, TRUE, &SystemProcess, &GdiProcess);
+    ok_bool_false(SystemProcess, "the System record that CDD renders in is not the paging process");
+    ok_bool_true(GdiProcess, "the System record that CDD renders in is the GDI process");
+    DxgkGpuVaCoreProcessKind(FALSE, FALSE, &SystemProcess, &GdiProcess);
+    ok_bool_false(SystemProcess, "an application process is not the system process");
+    ok_bool_false(GdiProcess, "an application process is not the GDI process");
+}
+
 START_TEST(DxgkGpuVaAddress)
 {
     TestAlignUp();
@@ -235,6 +251,7 @@ START_TEST(DxgkGpuVaAddress)
     TestMapPieces();
     TestFencePagePieces();
     TestAllocationRepeatMapping();
+    TestProcessKind();
 }
 
 /* EOF */

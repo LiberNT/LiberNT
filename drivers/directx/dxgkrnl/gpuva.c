@@ -3271,6 +3271,8 @@ DxgkGpuVaCreateProcess(
         DXGK_CB_FULL(Adapter, DxgkDdiCreateProcess) != NULL)
     {
         DXGKARG_CREATEPROCESS CreateArgs;
+        BOOLEAN SystemProcess;
+        BOOLEAN GdiProcess;
 
         if (DXGK_CB_FULL(Adapter, DxgkDdiDestroyProcess) == NULL)
             return STATUS_NOT_SUPPORTED;
@@ -3278,8 +3280,13 @@ DxgkGpuVaCreateProcess(
         RtlZeroMemory(&CreateArgs, sizeof(CreateArgs));
         CreateArgs.hDxgkProcess = (HANDLE)Process;
         CreateArgs.Flags.Value  = 0;
-        CreateArgs.Flags.SystemProcess =
-            PsIsSystemProcess(Process->Process) ? 1 : 0;
+        /* CDD renders from the System process here; Windows runs it in the GDI process */
+        DxgkGpuVaCoreProcessKind(Process->PagingProcess,
+                                 PsIsSystemProcess(Process->Process),
+                                 &SystemProcess,
+                                 &GdiProcess);
+        CreateArgs.Flags.SystemProcess = SystemProcess ? 1 : 0;
+        CreateArgs.Flags.GdiProcess = GdiProcess ? 1 : 0;
         CreateArgs.NumPasid     = 0;
         CreateArgs.pPasid       = NULL;
 

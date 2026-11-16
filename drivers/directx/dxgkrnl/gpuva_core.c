@@ -506,4 +506,16 @@ DxgkGpuVaCoreTableSnapshot(
     return DxgkGpuVaTableSnapshotNone;
 }
 
+VOID
+DxgkGpuVaCoreProcessKind(
+    _In_ BOOLEAN PagingProcess,
+    _In_ BOOLEAN SystemEprocess,
+    _Out_ PBOOLEAN SystemProcess,
+    _Out_ PBOOLEAN GdiProcess)
+{
+    ASSERT(!PagingProcess || SystemEprocess);
+    *SystemProcess = PagingProcess;
+    *GdiProcess = !PagingProcess && SystemEprocess;
+}
+
 /* EOF */

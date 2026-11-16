@@ -130,6 +130,13 @@ BOOLEAN
 DxgkGpuVaCoreUsesPagingProcessVa(
     _In_ ULONG AdapterUpdateMode);
 
+VOID
+DxgkGpuVaCoreProcessKind(
+    _In_ BOOLEAN PagingProcess,
+    _In_ BOOLEAN SystemEprocess,
+    _Out_ PBOOLEAN SystemProcess,
+    _Out_ PBOOLEAN GdiProcess);
+
 typedef enum _DXGK_GPUVA_TABLE_SNAPSHOT
 {
     DxgkGpuVaTableSnapshotNone = 0,

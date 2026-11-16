@@ -718,11 +718,13 @@ DxgkpWaitForContextReferences(
 static PDXGKRNL_PROCESS
 DxgkpFindProcessRecordLocked(
     _In_ PDXGKRNL_ADAPTER Adapter,
-    _In_ PEPROCESS Process)
+    _In_ PEPROCESS Process,
+    _In_ BOOLEAN PagingProcess)
 {
     PLIST_ENTRY Entry;
 
     ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+    ASSERT(!PagingProcess || Process == PsInitialSystemProcess);
 
     for (Entry = DxgkProcessListHead.Flink;
          Entry != &DxgkProcessListHead;
@@ -734,7 +736,8 @@ DxgkpFindProcessRecordLocked(
                               GlobalProcessListEntry);
 
         if (ProcessRecord->Process == Process &&
-            ProcessRecord->Adapter == Adapter)
+            ProcessRecord->Adapter == Adapter &&
+            ProcessRecord->PagingProcess == PagingProcess)
         {
             return ProcessRecord;
         }
@@ -811,10 +814,11 @@ DxgkpFreeProcessRecordStorage(
     ExFreePoolWithTag(ProcessRecord, TAG_DXGK_PROCESS);
 }
 
-NTSTATUS
-DxgkAcquireProcessRecord(
+static NTSTATUS
+DxgkpAcquireProcessRecordKind(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ PEPROCESS Process,
+    _In_ BOOLEAN PagingProcess,
     _Out_ PDXGKRNL_PROCESS *OutProcessRecord)
 {
     PDXGKRNL_PROCESS Candidate;
@@ -838,7 +842,7 @@ DxgkAcquireProcessRecord(
             return STATUS_PROCESS_IS_TERMINATING;
 
         ExAcquireFastMutex(&DxgkProcessListLock);
-        Existing = DxgkpFindProcessRecordLocked(Adapter, Process);
+        Existing = DxgkpFindProcessRecordLocked(Adapter, Process, PagingProcess);
         if (Existing != NULL)
         {
             AcquireResult =
@@ -913,6 +917,7 @@ DxgkAcquireProcessRecord(
         RtlZeroMemory(Candidate, sizeof(*Candidate));
         Candidate->Process = Process;
         Candidate->Adapter = Adapter;
+        Candidate->PagingProcess = PagingProcess;
         DxgkProcessLifetimeInitialize(&Candidate->Lifetime,
                                       CurrentThread);
         KeInitializeEvent(&Candidate->LifetimeEvent,
@@ -937,7 +942,7 @@ DxgkAcquireProcessRecord(
             ExFreePoolWithTag(Candidate, TAG_DXGK_PROCESS);
             return STATUS_PROCESS_IS_TERMINATING;
         }
-        Existing = DxgkpFindProcessRecordLocked(Adapter, Process);
+        Existing = DxgkpFindProcessRecordLocked(Adapter, Process, PagingProcess);
         if (Existing != NULL)
         {
             ExReleaseFastMutex(&DxgkProcessListLock);
@@ -995,6 +1000,23 @@ DxgkAcquireProcessRecord(
 }
 
 NTSTATUS
+DxgkAcquireProcessRecord(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PEPROCESS Process,
+    _Out_ PDXGKRNL_PROCESS *OutProcessRecord)
+{
+    return DxgkpAcquireProcessRecordKind(Adapter, Process, FALSE, OutProcessRecord);
+}
+
+NTSTATUS
+DxgkAcquirePagingProcessRecord(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _Out_ PDXGKRNL_PROCESS *OutProcessRecord)
+{
+    return DxgkpAcquireProcessRecordKind(Adapter, PsInitialSystemProcess, TRUE, OutProcessRecord);
+}
+
+NTSTATUS
 DxgkReferenceProcessRecordByAdapter(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ PEPROCESS Process,
@@ -1008,7 +1030,7 @@ DxgkReferenceProcessRecordByAdapter(
 
     *OutProcessRecord = NULL;
     ExAcquireFastMutex(&DxgkProcessListLock);
-    ProcessRecord = DxgkpFindProcessRecordLocked(Adapter, Process);
+    ProcessRecord = DxgkpFindProcessRecordLocked(Adapter, Process, FALSE);
     if (ProcessRecord != NULL &&
         ProcessRecord->Lifetime.State == DxgkProcessLifetimeReady)
     {
@@ -1508,11 +1530,10 @@ DxgkCreatePagingSystemContext(
         return Status;
     }
 
-    Status = DxgkAcquireProcessRecord(Adapter,
-                                      PsInitialSystemProcess,
-                                      &ProcessRecord);
+    Status = DxgkAcquirePagingProcessRecord(Adapter, &ProcessRecord);
     if (!NT_SUCCESS(Status))
         return Status;
+    ASSERT(ProcessRecord->PagingProcess);
 
     Device = ExAllocatePoolWithTag(NonPagedPool,
                                    sizeof(*Device),
