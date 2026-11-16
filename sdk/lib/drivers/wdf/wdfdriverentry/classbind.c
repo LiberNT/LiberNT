@@ -28,7 +28,15 @@ DATA_SEG(WDF_CLASS_BIND_STATE_SECTION_NAME)
 static PWDF_CLASS_BIND_INFO __KMDF_CLASS_BIND_LAST_BOUND =
     (PWDF_CLASS_BIND_INFO)&__KMDF_CLASS_BIND_START;
 
+/* The walk starts past the start marker, into the entries the linker merges after it */
+#if defined(__clang__)
+#define FX_CLASS_BIND_WALK __attribute__((no_sanitize("bounds")))
+#else
+#define FX_CLASS_BIND_WALK
+#endif
+
 static
+FX_CLASS_BIND_WALK
 PWDF_CLASS_BIND_INFO
 FxGetNextClassBindInfo(
     _In_reads_bytes_((const BYTE *)End - Current) const BYTE *Current,
@@ -67,6 +75,7 @@ FxGetNextClassBindInfo(
     return NULL;
 }
 
+FX_CLASS_BIND_WALK
 NTSTATUS
 FxStubBindClasses(
     _In_ PWDF_BIND_INFO BindInfo)
@@ -119,6 +128,7 @@ FxStubIsClassBound(VOID)
            (PWDF_CLASS_BIND_INFO)&__KMDF_CLASS_BIND_START;
 }
 
+FX_CLASS_BIND_WALK
 VOID
 FxStubUnbindClasses(
     _In_ PWDF_BIND_INFO BindInfo)
