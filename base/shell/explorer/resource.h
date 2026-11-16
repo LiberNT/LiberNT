@@ -216,6 +216,28 @@
 #define IDS_TRAYCLOCK_NEWNOTIFICATION      816
 #define IDS_TRAYCLOCK_NEWNOTIFICATIONS     817
 #define IDS_TRAYQUICKSETTINGS_TOOLTIP      818
+#define IDS_SM2_SHUTDOWN                   832
+#define IDS_SM2_RESTART                    833
+#define IDS_SM2_LOGOFF                     834
+#define IDS_SM2_LOCK                       835
+#define IDS_SM2_SLEEP                      836
+#define IDS_SM2_HIBERNATE                  837
+#define IDS_SM2_ERROR                      838
+#define IDS_SM2_DOCUMENTS                  839
+#define IDS_SM2_PICTURES                   840
+#define IDS_SM2_MUSIC                      841
+#define IDS_SM2_GAMES                      842
+#define IDS_SM2_COMPUTER                   843
+#define IDS_SM2_SETTINGS                   844
+#define IDS_SM2_DEVICES                    845
+#define IDS_SM2_ASSIST                     846
+#define IDS_SM2_ALLPROGRAMS                847
+#define IDS_SM2_BACK                       848
+#define IDS_SM2_NOMATCH                    849
+#define IDS_SM2_RENAME                     850
+#define IDS_SM2_RENAME_FAILED              851
+#define IDS_SM2_REMOVE                     852
+#define IDS_SM2_SEARCH                     853
 
 /* These values must be synchronized with shell32 */
 #define IDS_ADVANCED_DISPLAY_FAVORITES              30466

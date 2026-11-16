@@ -221,3 +221,29 @@ BEGIN
     IDS_TRAYCLOCK_NEWNOTIFICATIONS "%u new notifications"
     IDS_TRAYQUICKSETTINGS_TOOLTIP "Quick settings"
 END
+
+STRINGTABLE
+BEGIN
+    IDS_SM2_SHUTDOWN "Shut down"
+    IDS_SM2_RESTART "Restart"
+    IDS_SM2_LOGOFF "Log off"
+    IDS_SM2_LOCK "Lock"
+    IDS_SM2_SLEEP "Sleep"
+    IDS_SM2_HIBERNATE "Hibernate"
+    IDS_SM2_ERROR "The operation could not be completed (error %lu)."
+    IDS_SM2_DOCUMENTS "Documents"
+    IDS_SM2_PICTURES "Pictures"
+    IDS_SM2_MUSIC "Music"
+    IDS_SM2_GAMES "Games"
+    IDS_SM2_COMPUTER "Computer"
+    IDS_SM2_SETTINGS "Settings"
+    IDS_SM2_DEVICES "Devices"
+    IDS_SM2_ASSIST "Network Assistance"
+    IDS_SM2_ALLPROGRAMS "All Programs"
+    IDS_SM2_BACK "Back"
+    IDS_SM2_NOMATCH "No items match your search."
+    IDS_SM2_RENAME "Rename"
+    IDS_SM2_RENAME_FAILED "The item could not be renamed."
+    IDS_SM2_REMOVE "Remove from this list"
+    IDS_SM2_SEARCH "Search programs and files"
+END
