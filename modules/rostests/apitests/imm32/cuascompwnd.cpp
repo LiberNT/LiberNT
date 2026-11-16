@@ -56,9 +56,18 @@ static void TestComposition(HWND hwndParent, HWND hwndEdit)
 {
     COMPWND_SEARCH search = { hwndParent, hwndEdit };
     WCHAR szText[16];
+    TEXTMETRICW tm;
+    HDC hdc;
+    LONG lLineHeight;
     POINT ptCaret;
     RECT rc;
     HRESULT hr;
+
+    hdc = GetDC(hwndEdit);
+    SelectObject(hdc, (HFONT)SendMessageW(hwndEdit, WM_GETFONT, 0, 0));
+    GetTextMetricsW(hdc, &tm);
+    ReleaseDC(hwndEdit, hdc);
+    lLineHeight = tm.tmHeight;
 
     hr = g_pfnCompose(L"\x3042\x3044", TESTTIP_START);
     Pump();
@@ -77,7 +86,8 @@ static void TestComposition(HWND hwndParent, HWND hwndEdit)
         GetWindowRect(search.hwndFound, &rc);
         ok_long(rc.left, ptCaret.x);
         ok_long(rc.top, ptCaret.y);
-        ok(rc.bottom - rc.top >= 32, "the composition window is %ld high for a 32 pixel font\n", rc.bottom - rc.top);
+        ok(rc.bottom - rc.top == lLineHeight + 2, "the composition window is %ld high, expected %ld\n",
+           rc.bottom - rc.top, lLineHeight + 2);
         ok(!(GetWindowLongPtrW(search.hwndFound, GWL_STYLE) & WS_BORDER), "the composition window has a border\n");
     }
 
