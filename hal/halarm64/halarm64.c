@@ -6229,7 +6229,7 @@ HalProcessorIdle(VOID)
 {
     const HAL_ARM64_PROCESSOR_IDLE *Idle = HalpArm64ProcessorIdle;
 
-    HalpArm64SetPmrExact(KeGetCurrentIrql());
+    HalSetGicPriorityMask(KeGetCurrentIrql());
     if (Idle)
     {
         Idle->Idle();
