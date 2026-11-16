@@ -703,6 +703,7 @@ struct PerformancePage : Page
             GpuSnapshot* gpu = SelectedGpu();
             if (!gpu)
                 break;
+            Data::GpuWantDirectX();
 
             if (gpu->hasUtilization)
                 FmtPct(gpu->utilPct, st[n].value, 64);

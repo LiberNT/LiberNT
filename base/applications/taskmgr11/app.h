@@ -742,6 +742,7 @@ namespace Data
     void GpuInit(void);
     void GpuShutdown(void);
     void GpuTick(void);
+    void GpuWantDirectX(void);
 
     const WCHAR* SvchostServices(ULONG pid);   /* comma list or NULL */
     const WCHAR* SvchostGroup(ULONG pid);
