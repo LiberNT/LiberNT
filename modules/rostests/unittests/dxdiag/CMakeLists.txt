@@ -5,6 +5,7 @@ include_directories(
 
 list(APPEND SOURCE
     D3DMark.c
+    ${REACTOS_SOURCE_DIR}/base/applications/dxdiag/d3dhud.c
     ${REACTOS_SOURCE_DIR}/base/applications/dxdiag/d3dmark.c
     testlist.c)
 

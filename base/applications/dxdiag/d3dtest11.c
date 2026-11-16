@@ -146,7 +146,7 @@ static BOOL D3D11Render(D3D11_TEST *Test, PD3DTEST_RESULT Result)
     Start = GetTickCount();
     while (D3DTestContinue(Result, Start, &Elapsed))
     {
-        Count = D3DTestBuildMark(Vertices, Elapsed, Test->Width, Test->Height);
+        Count = D3DTestBuildScene(Vertices, Elapsed, Test->Width, Test->Height, Result);
         hr = ID3D11DeviceContext_Map(Test->Context, (ID3D11Resource *)Test->Buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &Mapped);
         if (FAILED(hr))
             return D3D11Fail(Result, "map-vertex-buffer", hr);

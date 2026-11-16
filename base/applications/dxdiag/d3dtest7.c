@@ -89,7 +89,7 @@ BOOL D3D7Test(GUID *lpDevice, HWND hWnd, BOOL BootMode, PD3DTEST_RESULT Result)
     Start = GetTickCount();
     while (D3DTestContinue(Result, Start, &Elapsed))
     {
-        Count = D3DTestBuildMark(Vertices, Elapsed, Width, Height);
+        Count = D3DTestBuildScene(Vertices, Elapsed, Width, Height, Result);
         D3D7_CHECK("clear", IDirect3DDevice7_Clear(Device, 0, NULL, D3DCLEAR_TARGET, 0xff000000, 1.0f, 0));
         D3D7_CHECK("begin-scene", IDirect3DDevice7_BeginScene(Device));
         hr = IDirect3DDevice7_DrawPrimitive(Device, D3DPT_TRIANGLELIST, D3DFVF_XYZRHW | D3DFVF_DIFFUSE, Vertices, Count, 0);

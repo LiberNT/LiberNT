@@ -400,7 +400,10 @@ DisplayPageWndProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
                     GetWindowRect(hMainDialog, &rect);
                     /* FIXME log result errors */
                     if (IDC_BUTTON_TESTDD == LOWORD(wParam))
-                        DDTests(&pDisplay->guid);
+                    {
+                        D3DTestButton(hDlg, &pDisplay->guid, D3DTEST_API_DDRAW, LOWORD(wParam));
+                        D3DTestButton(hDlg, &pDisplay->guid, D3DTEST_API_DDRAW_FULLSCREEN, LOWORD(wParam));
+                    }
                     else
                         D3DTestButton(hDlg, &pDisplay->guid, LOWORD(wParam) - IDC_BUTTON_TEST_D3D7, LOWORD(wParam));
                     SetWindowPos(hMainDialog, NULL, rect.left, rect.top, rect.right, rect.bottom, SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOSIZE | SWP_NOZORDER);

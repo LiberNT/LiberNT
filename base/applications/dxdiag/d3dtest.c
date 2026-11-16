@@ -17,16 +17,19 @@ static const struct
 {
     PCSTR Name;
     PD3DTEST_ROUTINE Run;
+    UINT DisplayName;
 } D3DTestApis[D3DTEST_API_COUNT] =
 {
-    { "D3D7", D3D7Test },
-    { "D3D8", D3D8Test },
-    { "D3D9", D3D9Test },
-    { "D3D10", D3D10Test },
-    { "D3D11", D3D11Test },
-    { "D3D12", D3D12Test },
-    { "GL1", GL1Test },
-    { "GL3", GL3Test },
+    { "D3D7", D3D7Test, 0 },
+    { "D3D8", D3D8Test, 0 },
+    { "D3D9", D3D9Test, 0 },
+    { "D3D10", D3D10Test, 0 },
+    { "D3D11", D3D11Test, 0 },
+    { "D3D12", D3D12Test, 0 },
+    { "GL1", GL1Test, 0 },
+    { "GL3", GL3Test, 0 },
+    { "DDRAW", DDWindowedTest, IDS_DDTEST_WINDOWED },
+    { "DDRAW_FULLSCREEN", DDFullscreenTest, IDS_DDTEST_FULLSCREEN },
 };
 
 const CHAR D3DTestShaderSource[] =
@@ -54,6 +57,7 @@ BOOL D3DTestContinue(PD3DTEST_RESULT Result, DWORD Start, DWORD *Elapsed)
 {
     *Elapsed = GetTickCount() - Start;
     Result->Elapsed = *Elapsed;
+    D3DTestStatsSample(&Result->Stats, *Elapsed, Result->Frames);
     if (*Elapsed >= D3DTEST_DURATION_MS)
         return FALSE;
     if (D3DTestPumpMessages())
@@ -119,6 +123,7 @@ static BOOL D3DRunTest(GUID *lpDevice, D3DTEST_API Api, BOOL BootMode, PD3DTEST_
     ShowWindow(hWnd, SW_SHOW);
     SetForegroundWindow(hWnd);
     UpdateWindow(hWnd);
+    D3DTestStatsBegin(&Result->Stats, hWnd);
     if (BootMode)
         D3DTestMarker(Api, "RENDER_BEGIN");
 
@@ -169,7 +174,9 @@ VOID D3DTestButton(HWND hPage, GUID *lpDevice, D3DTEST_API Api, UINT ButtonId)
     ULONG Tenths;
     HRESULT hr;
 
-    if (!GetDlgItemTextW(hPage, ButtonId, Name, ARRAYSIZE(Name)))
+    if (D3DTestApis[Api].DisplayName)
+        LoadStringW(hInstance, D3DTestApis[Api].DisplayName, Name, ARRAYSIZE(Name));
+    else if (!GetDlgItemTextW(hPage, ButtonId, Name, ARRAYSIZE(Name)))
         StringCchCopyW(Name, ARRAYSIZE(Name), L"?");
 
     EnableWindow(hMainDialog, FALSE);

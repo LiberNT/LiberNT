@@ -267,7 +267,7 @@ static BOOL D3D12Frame(D3D12_TEST *Test, DWORD Elapsed, PD3DTEST_RESULT Result)
     if (!D3D12Wait(Test, Test->FrameFence[Index], Result))
         return FALSE;
 
-    Count = D3DTestBuildMark(Vertices, Elapsed, Test->Width, Test->Height);
+    Count = D3DTestBuildScene(Vertices, Elapsed, Test->Width, Test->Height, Result);
     D3DTestToClipSpace(Test->Mapped + Index * D3DTEST_MAX_VERTEX_COUNT, Vertices, Count, Test->Width, Test->Height);
 
     hr = ID3D12CommandAllocator_Reset(Test->Allocators[Index]);

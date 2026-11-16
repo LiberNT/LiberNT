@@ -144,7 +144,7 @@ static BOOL D3D10Render(D3D10_TEST *Test, PD3DTEST_RESULT Result)
     Start = GetTickCount();
     while (D3DTestContinue(Result, Start, &Elapsed))
     {
-        Count = D3DTestBuildMark(Vertices, Elapsed, Test->Width, Test->Height);
+        Count = D3DTestBuildScene(Vertices, Elapsed, Test->Width, Test->Height, Result);
         hr = ID3D10Buffer_Map(Test->Buffer, D3D10_MAP_WRITE_DISCARD, 0, (void **)&Mapped);
         if (FAILED(hr))
             return D3D10Fail(Result, "map-vertex-buffer", hr);
