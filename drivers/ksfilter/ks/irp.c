@@ -1970,7 +1970,9 @@ KspDispatchIrp(
     /* get device header */
     //DeviceHeader = DeviceExtension->DeviceHeader;
 
-    ASSERT(IoStack->FileObject);
+    /* FIXME: the status Windows gives a request that carries no file object is not measured; it is refused as an invalid device request */
+    if (IoStack->FileObject == NULL)
+        return KsDispatchInvalidDeviceRequest(DeviceObject, Irp);
 
     /* get object header */
     ObjectHeader = (PKSIOBJECT_HEADER) IoStack->FileObject->FsContext2;

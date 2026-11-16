@@ -132,6 +132,7 @@ list(APPEND KMTEST_DRV_SOURCE
     hal/HalSystemInfo.c
     hdaudbus/HdAudBusInterface.c
     ks/KsCreateItemSlot.c
+    ks/KsDispatchFileObject.c
     ndis/NdisIfProvider.c
     ndis/NdisRwLock.c
     ndis/NdisWdiStationCaps.c
