@@ -4556,6 +4556,10 @@ static void basic_ui_progress( struct basic_ui *ui, MSIRECORD *record )
         ui->backwards = MSI_RecordGetInteger( record, 3 ) == 1;
         ui->current = ui->backwards ? ui->max : 0;
         ShowWindow( bar, SW_SHOW );
+        if (MSI_RecordGetInteger( record, 4 ) == 1)
+            basic_ui_set_string( ui->hwnd, IDC_BASIC_UI_ACTION, IDS_BASIC_UI_GATHER );
+        else if (value)
+            SetDlgItemTextW( ui->hwnd, IDC_BASIC_UI_ACTION, L"" );
         break;
     case 2:
         if (ui->backwards) ui->current = value < ui->current ? ui->current - value : 0;
@@ -4585,7 +4589,6 @@ INT msi_basic_ui_message_box( MSIPACKAGE *package, const WCHAR *text, UINT type 
 INT msi_basic_ui_message( MSIPACKAGE *package, INSTALLMESSAGE type, MSIRECORD *record )
 {
     struct basic_ui *ui = package->basic_ui;
-    WCHAR *text;
 
     if (!ui)
         return 0;
@@ -4594,11 +4597,6 @@ INT msi_basic_ui_message( MSIPACKAGE *package, INSTALLMESSAGE type, MSIRECORD *r
     case INSTALLMESSAGE_ACTIONSTART:
         if (!ui->named)
             basic_ui_set_product( package, ui );
-        text = NULL;
-        if (record && !MSI_RecordIsNull( record, 2 ))
-            deformat_string( package, MSI_RecordGetString( record, 2 ), &text );
-        SetDlgItemTextW( ui->hwnd, IDC_BASIC_UI_ACTION, text ? text : L"" );
-        free( text );
         break;
     case INSTALLMESSAGE_PROGRESS:
         if (record)

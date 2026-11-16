@@ -3221,7 +3221,12 @@ static UINT ACTION_InstallValidate(MSIPACKAGE *package)
     LIST_FOR_EACH_ENTRY( file, &package->files, MSIFILE, entry )
         total += file->FileSize;
 
+#ifdef __REACTOS__
+    /* FIXME: Windows sends a second reset with the total of the script when it starts running it */
+    msi_ui_progress( package, 0, total, 0, 1 );
+#else
     msi_ui_progress( package, 0, total, 0, 0 );
+#endif
 
     LIST_FOR_EACH_ENTRY( feature, &package->features, MSIFEATURE, entry )
     {

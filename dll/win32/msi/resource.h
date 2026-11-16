@@ -187,4 +187,5 @@
 #define IDS_BASIC_UI_PREPARE_REMOVE     20002
 #define IDS_BASIC_UI_CONFIGURE          20003
 #define IDS_BASIC_UI_CANCEL             20004
+#define IDS_BASIC_UI_GATHER             20005
 #endif
