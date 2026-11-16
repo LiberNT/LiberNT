@@ -3,6 +3,7 @@ list(APPEND SOURCE
     ContextMenu.c
     EditStyle.c
     ExtendedClasses.c
+    Zoom.c
     testlist.c)
 
 add_executable(riched20_apitest ${SOURCE})

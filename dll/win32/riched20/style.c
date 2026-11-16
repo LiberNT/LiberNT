@@ -382,6 +382,9 @@ void select_style( ME_Context *c, ME_Style *s )
     if (s)
     {
         ME_LogFontFromStyle( c, &lf, s );
+        if (s->script_cache && !ME_IsFontEqual( &s->script_cache_font, &lf ))
+            ScriptFreeCache( &s->script_cache );
+        s->script_cache_font = lf;
 
         for (i = 0; i < HFONT_CACHE_SIZE; i++)
             c->editor->pFontCache[i].nAge++;

@@ -11,12 +11,14 @@
 extern void func_ContextMenu(void);
 extern void func_EditStyle(void);
 extern void func_ExtendedClasses(void);
+extern void func_Zoom(void);
 
 const struct test winetest_testlist[] =
 {
     { "ContextMenu", func_ContextMenu },
     { "EditStyle", func_EditStyle },
     { "ExtendedClasses", func_ExtendedClasses },
+    { "Zoom", func_Zoom },
 
     { 0, 0 }
 };

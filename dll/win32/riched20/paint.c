@@ -1314,6 +1314,7 @@ ME_SetZoom(ME_TextEditor *editor, int numerator, int denominator)
   if (numerator == 0 && denominator == 0)
   {
     editor->nZoomNumerator = editor->nZoomDenominator = 0;
+    ME_RewrapRepaint(editor);
     return TRUE;
   }
   if (numerator <= 0 || denominator <= 0)

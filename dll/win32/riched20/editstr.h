@@ -74,6 +74,7 @@ typedef struct tagME_Style
   TEXTMETRICW tm; /* cached font metrics for the style */
   int nRefs; /* reference count */
   SCRIPT_CACHE script_cache;
+  LOGFONTW script_cache_font;
   struct list entry;
 } ME_Style;
 
