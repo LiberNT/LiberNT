@@ -262,6 +262,7 @@ void App_SmpDiagGraphPaint(void);
 #define WM_APP_SELCHANGED  (WM_APP + 2)   /* page selection changed; frame updates command enables */
 #define WM_APP_TRAYICON    (WM_APP + 3)
 #define WM_APP_THEMECHG    (WM_APP + 4)   /* broadcast after Theme_Apply  */
+#define WM_APP_INITDATA    (WM_APP + 5)
 
 /* dpi scale */
 int S(int px);
@@ -733,6 +734,7 @@ namespace Data
     extern SysSnapshot g;
 
     void Init(void);
+    void InitDeferred(void);
     void Shutdown(void);
     void Tick(void);                       /* collect a full sample */
 
@@ -920,6 +922,7 @@ void DrawToggle(HDC dc, const RECT& r, BOOL on, BOOL hot, BOOL enabled);
 HWND Search_Create(HWND parent, const WCHAR* placeholder);
 void Search_GetText(HWND h, WCHAR* buf, int cch);
 void Search_Clear(HWND h);
+void Search_CreateEdit(HWND h);
 void Search_SetPlaceholder(HWND h, const WCHAR* placeholder);
 void Search_Focus(HWND h);
 void Search_Register(void);

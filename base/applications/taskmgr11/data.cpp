@@ -2717,14 +2717,10 @@ void Init(void)
 
     s_currentPid = GetCurrentProcessId();
     ProcessIdToSessionId(s_currentPid, &s_currentSession);
-    LoadAppHistory();
 
     LARGE_INTEGER f;
     QueryPerformanceFrequency(&f);
     s_qpcFreq = (double)f.QuadPart;
-
-    WSADATA wsaData;
-    s_wsaStarted = WSAStartup(MAKEWORD(2, 2), &wsaData) == 0;
 
     GetWindowsDirectoryW(s_winDir, _countof(s_winDir));
 
@@ -2756,17 +2752,24 @@ void Init(void)
     if (!g.cpuName[0])
         StringCchCopyW(g.cpuName, _countof(g.cpuName), L"Processor");
 
+    GpuInit();
+}
+
+void InitDeferred(void)
+{
+    LoadAppHistory();
+
+    WSADATA wsaData;
+    s_wsaStarted = WSAStartup(MAKEWORD(2, 2), &wsaData) == 0;
+
     DWORD cch = _countof(g.hostName);
     GetComputerNameW(g.hostName, &cch);
 
     DetectCpuTopology();
     DetectMemoryDevices();
     DetectDisks();
-    GpuInit();
 
     RefreshServices();
-    RefreshStartup();
-    RefreshUsers();
     Tick();          /* prime deltas; the frame collects the first live sample */
 }
 
