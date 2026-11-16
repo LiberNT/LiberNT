@@ -158,9 +158,16 @@ CreateProcessWithTokenW(
           debugstr_w(lpCommandLine), dwCreationFlags, lpEnvironment, debugstr_w(lpCurrentDirectory),
           lpStartupInfo, lpProcessInformation);
 
-    if (hToken == NULL || lpStartupInfo == NULL || lpProcessInformation == NULL)
+    if (lpStartupInfo == NULL || lpProcessInformation == NULL ||
+        (dwCreationFlags & (DEBUG_PROCESS | DEBUG_ONLY_THIS_PROCESS | DETACHED_PROCESS)))
     {
         SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+
+    if (hToken == NULL)
+    {
+        SetLastError(ERROR_LOGON_FAILURE);
         return FALSE;
     }
 
@@ -173,10 +180,10 @@ CreateProcessWithTokenW(
     else if (SeclCallerDesktop(Desktop, ARRAYSIZE(Desktop)))
         Request.Desktop = Desktop;
 
-    /* Without a directory of its own, the process starts where the caller is */
+    /* Without a directory of its own, the process starts in the system directory */
     if (lpCurrentDirectory == NULL)
     {
-        DWORD Length = GetCurrentDirectoryW(ARRAYSIZE(Directory), Directory);
+        DWORD Length = GetSystemDirectoryW(Directory, ARRAYSIZE(Directory));
 
         if (Length != 0 && Length < ARRAYSIZE(Directory))
             lpCurrentDirectory = Directory;
@@ -190,9 +197,15 @@ CreateProcessWithTokenW(
     }
 
     /* These three are on whatever the caller asks for (CreateProcessWithTokenW) */
-    dwCreationFlags |= CREATE_DEFAULT_ERROR_MODE | CREATE_NEW_PROCESS_GROUP;
-    if (!(dwCreationFlags & DETACHED_PROCESS))
-        dwCreationFlags |= CREATE_NEW_CONSOLE;
+    dwCreationFlags |= CREATE_DEFAULT_ERROR_MODE | CREATE_NEW_PROCESS_GROUP | CREATE_NEW_CONSOLE;
+
+    if (lpStartupInfo->dwFlags & STARTF_USESTDHANDLES)
+    {
+        Request.dwStartupFlags = STARTF_USESTDHANDLES;
+        Request.hStdInput = (DWORD_PTR)lpStartupInfo->hStdInput;
+        Request.hStdOutput = (DWORD_PTR)lpStartupInfo->hStdOutput;
+        Request.hStdError = (DWORD_PTR)lpStartupInfo->hStdError;
+    }
 
     Request.ApplicationName = (LPWSTR)lpApplicationName;
     Request.CommandLine = lpCommandLine;

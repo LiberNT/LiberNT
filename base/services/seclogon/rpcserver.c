@@ -52,6 +52,9 @@ StopRpcServer(VOID)
 }
 
 
+#define SECL_TOKEN_ACCESS (TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY | \
+                           TOKEN_ADJUST_DEFAULT | TOKEN_ADJUST_SESSIONID)
+
 /* A token handed over by the caller is used only for a caller that may impersonate (CreateProcessWithTokenW) */
 static
 BOOL
@@ -64,6 +67,10 @@ SeclTakeCallerToken(
     HANDLE hClientToken = NULL;
     HANDLE hCallerProcess = NULL;
     HANDLE hCallerToken = NULL;
+    OBJECT_BASIC_INFORMATION BasicInfo;
+    TOKEN_TYPE Type;
+    DWORD dwLength;
+    NTSTATUS Status;
     BOOL bHeld = FALSE;
     BOOL bTaken = FALSE;
     DWORD dwError = ERROR_PRIVILEGE_NOT_HELD;
@@ -115,6 +122,23 @@ SeclTakeCallerToken(
         return FALSE;
     }
 
+    Status = NtQueryObject(hCallerToken, ObjectBasicInformation, &BasicInfo, sizeof(BasicInfo), NULL);
+    if (!NT_SUCCESS(Status) ||
+        (BasicInfo.GrantedAccess & SECL_TOKEN_ACCESS) != SECL_TOKEN_ACCESS ||
+        !GetTokenInformation(hCallerToken, TokenType, &Type, sizeof(Type), &dwLength))
+    {
+        CloseHandle(hCallerToken);
+        SetLastError(NT_SUCCESS(Status) ? ERROR_ACCESS_DENIED : RtlNtStatusToDosError(Status));
+        return FALSE;
+    }
+
+    /* A primary token is used as it is, so one that a process already uses is refused when its session is set */
+    if (Type == TokenPrimary)
+    {
+        *phToken = hCallerToken;
+        return TRUE;
+    }
+
     bResult = DuplicateTokenEx(hCallerToken,
                                MAXIMUM_ALLOWED,
                                NULL,
@@ -133,6 +157,7 @@ BOOL
 SeclOpenCaller(
     _In_ handle_t hBinding,
     _In_ DWORD dwProcessId,
+    _In_ DWORD dwAccess,
     _Out_ PHANDLE phProcess,
     _Out_ PDWORD pdwSessionId)
 {
@@ -152,7 +177,7 @@ SeclOpenCaller(
     if (OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &hClientToken) &&
         GetTokenInformation(hClientToken, TokenSessionId, pdwSessionId, sizeof(*pdwSessionId), &dwLength))
     {
-        *phProcess = OpenProcess(PROCESS_DUP_HANDLE, FALSE, dwProcessId);
+        *phProcess = OpenProcess(dwAccess, FALSE, dwProcessId);
     }
     dwError = GetLastError();
 
@@ -163,6 +188,106 @@ SeclOpenCaller(
 
     SetLastError(dwError);
     return *phProcess != NULL;
+}
+
+
+/* The process of CreateProcessWithTokenW is the caller's child and inherits only the standard handles the caller passes */
+static
+BOOL
+SeclCreateTokenProcess(
+    _In_ HANDLE hToken,
+    _In_ SECL_REQUEST *pRequest,
+    _In_ HANDLE hCallerProcess,
+    _In_ DWORD dwCreationFlags,
+    _In_opt_ PVOID pEnvironment,
+    _In_ LPSTARTUPINFOW pStartupInfo,
+    _Out_ LPPROCESS_INFORMATION pProcessInfo)
+{
+    STARTUPINFOEXW StartupInfo;
+    HANDLE ahInherit[3];
+    ULONG cInherit = 0;
+    SIZE_T cbAttributes = 0;
+    DWORD dwError;
+    BOOL bResult;
+    ULONG i, j;
+
+    ZeroMemory(&StartupInfo, sizeof(StartupInfo));
+    StartupInfo.StartupInfo = *pStartupInfo;
+    StartupInfo.StartupInfo.cb = sizeof(StartupInfo);
+
+    if (pRequest->dwStartupFlags & STARTF_USESTDHANDLES)
+    {
+        StartupInfo.StartupInfo.dwFlags |= STARTF_USESTDHANDLES;
+        StartupInfo.StartupInfo.hStdInput = (HANDLE)pRequest->hStdInput;
+        StartupInfo.StartupInfo.hStdOutput = (HANDLE)pRequest->hStdOutput;
+        StartupInfo.StartupInfo.hStdError = (HANDLE)pRequest->hStdError;
+        ahInherit[0] = StartupInfo.StartupInfo.hStdInput;
+        ahInherit[1] = StartupInfo.StartupInfo.hStdOutput;
+        ahInherit[2] = StartupInfo.StartupInfo.hStdError;
+        for (i = 0; i < ARRAYSIZE(ahInherit); i++)
+        {
+            if (ahInherit[i] == NULL || ahInherit[i] == INVALID_HANDLE_VALUE)
+                continue;
+            for (j = 0; j < cInherit && ahInherit[j] != ahInherit[i]; j++)
+                ;
+            if (j == cInherit)
+                ahInherit[cInherit++] = ahInherit[i];
+        }
+    }
+    ASSERT(cInherit <= ARRAYSIZE(ahInherit));
+
+    InitializeProcThreadAttributeList(NULL, 2, 0, &cbAttributes);
+    StartupInfo.lpAttributeList = HeapAlloc(GetProcessHeap(), 0, cbAttributes);
+    if (StartupInfo.lpAttributeList == NULL)
+    {
+        SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return FALSE;
+    }
+
+    bResult = InitializeProcThreadAttributeList(StartupInfo.lpAttributeList, cInherit ? 2 : 1, 0, &cbAttributes);
+    if (!bResult)
+    {
+        dwError = GetLastError();
+        HeapFree(GetProcessHeap(), 0, StartupInfo.lpAttributeList);
+        SetLastError(dwError);
+        return FALSE;
+    }
+
+    bResult = UpdateProcThreadAttribute(StartupInfo.lpAttributeList,
+                                        0,
+                                        PROC_THREAD_ATTRIBUTE_PARENT_PROCESS,
+                                        &hCallerProcess,
+                                        sizeof(hCallerProcess),
+                                        NULL,
+                                        NULL) &&
+              (cInherit == 0 ||
+               UpdateProcThreadAttribute(StartupInfo.lpAttributeList,
+                                         0,
+                                         PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+                                         ahInherit,
+                                         cInherit * sizeof(HANDLE),
+                                         NULL,
+                                         NULL));
+    if (bResult)
+    {
+        bResult = CreateProcessAsUserW(hToken,
+                                       pRequest->ApplicationName,
+                                       pRequest->CommandLine,
+                                       NULL,
+                                       NULL,
+                                       cInherit != 0,
+                                       dwCreationFlags | EXTENDED_STARTUPINFO_PRESENT,
+                                       pEnvironment,
+                                       pRequest->CurrentDirectory,
+                                       &StartupInfo.StartupInfo,
+                                       pProcessInfo);
+    }
+
+    dwError = GetLastError();
+    DeleteProcThreadAttributeList(StartupInfo.lpAttributeList);
+    HeapFree(GetProcessHeap(), 0, StartupInfo.lpAttributeList);
+    SetLastError(dwError);
+    return bResult;
 }
 
 
@@ -201,7 +326,11 @@ SeclCreateProcessWithLogonW(
         TRACE("ProcessId: %lu\n", pRequest->dwProcessId);
     }
 
-    if (!SeclOpenCaller(hBinding, pRequest->dwProcessId, &hTargetProcessHandle, &SessionId))
+    if (!SeclOpenCaller(hBinding,
+                        pRequest->dwProcessId,
+                        pRequest->hToken != 0 ? PROCESS_DUP_HANDLE | PROCESS_CREATE_PROCESS : PROCESS_DUP_HANDLE,
+                        &hTargetProcessHandle,
+                        &SessionId))
     {
         dwError = GetLastError();
         WARN("Opening the caller failed with Error %lu\n", dwError);
@@ -274,7 +403,17 @@ SeclCreateProcessWithLogonW(
     }
 
     /* Create Process */
-    if (rc)
+    if (rc && pRequest->hToken != 0)
+    {
+        rc = SeclCreateTokenProcess(hToken,
+                                    pRequest,
+                                    hTargetProcessHandle,
+                                    dwCreationFlags,
+                                    pEnvironment ? pEnvironment : pRequest->Environment,
+                                    &StartupInfo,
+                                    &ProcessInfo);
+    }
+    else if (rc)
     {
         rc = CreateProcessAsUserW(hToken,
                                   pRequest->ApplicationName,
