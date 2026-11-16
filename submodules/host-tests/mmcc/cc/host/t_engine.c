@@ -268,8 +268,8 @@ TestBcb(void)
     CHECK(CcBcbAcquire(&Map, 4096, 512, FALSE, FALSE, &First, &Created) == STATUS_SUCCESS && Created);
     CHECK(CcBcbMakeResident(First, FALSE) == STATUS_SUCCESS);
     CHECK(*(PUCHAR)CcBcbAddress(First, 4100) == FilePattern(4100));
-    CHECK(CcBcbAcquire(&Map, 4200, 100, FALSE, FALSE, &Second, &Created) == STATUS_SUCCESS && Created);
-    CHECK(Second != First && First->ReferenceCount == 1 && Second->ReferenceCount == 1);
+    CHECK(CcBcbAcquire(&Map, 4200, 100, FALSE, FALSE, &Second, &Created) == STATUS_SUCCESS && !Created);
+    CHECK(Second == First && First->ReferenceCount == 2);
     CcBcbDereference(Second);
     CHECK(CcBcbAcquire(&Map, 4200, 100, TRUE, FALSE, &Pinned, &Created) == STATUS_SUCCESS && Created);
     CHECK(Pinned != First);
@@ -281,9 +281,8 @@ TestBcb(void)
     CcBcbUnpin(Second);
     CcBcbDereference(Second);
     CHECK(Pinned->PinCount == 1 && Pinned->ReferenceCount == 1);
-    CHECK(CcBcbAcquire(&Map, 4200, 100, FALSE, TRUE, &Second, &Created) == STATUS_CANT_WAIT);
-    CcBcbReference(First);
-    Second = First;
+    CHECK(CcBcbAcquire(&Map, 4200, 100, FALSE, TRUE, &Second, &Created) == STATUS_SUCCESS && !Created);
+    CHECK(Second == First && First->ReferenceCount == 2);
 
     CHECK(CcBcbAcquire(&Map, CC_VIEW_SIZE - 3000, 9000, FALSE, FALSE, &Spanning, &Created) == STATUS_SUCCESS);
     CHECK(Created && Spanning->OwnBase != NULL && Spanning->View == NULL);

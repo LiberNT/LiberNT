@@ -19,10 +19,6 @@ CcBcbFind(
 {
     PLIST_ENTRY Entry;
 
-    /* Mapped views are never shared, so only pinned ranges are looked up. */
-    if (!Pinned)
-        return NULL;
-
     for (Entry = Map->BcbList.Flink; Entry != &Map->BcbList; Entry = Entry->Flink)
     {
         PCC_BCB Bcb = CONTAINING_RECORD(Entry, CC_BCB, Link);
@@ -35,7 +31,7 @@ CcBcbFind(
         CC_ASSERT(Bcb->PinCount <= (ULONG)Bcb->ReferenceCount);
         CC_ASSERT(Bcb->PinCount == 0 || Bcb->Pinned);
 
-        if (Bcb->Pinned && Bcb->FileOffset <= FileOffset &&
+        if (Bcb->Pinned == Pinned && Bcb->FileOffset <= FileOffset &&
             Bcb->BeyondLastByte >= FileOffset + Length)
         {
             return Bcb;
