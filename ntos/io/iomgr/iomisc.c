@@ -117,9 +117,9 @@ IoIs32bitProcess(
 {
     PEPROCESS Process;
 
-    if (Irp == NULL) return FALSE;
+    ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
 
-    Process = IoGetRequestorProcess(Irp);
+    Process = (Irp != NULL) ? IoGetRequestorProcess(Irp) : PsGetCurrentProcess();
     if (Process == NULL) return FALSE;
 
     return PsGetProcessWow64Process(Process) != NULL;

@@ -10,6 +10,7 @@ add_subdirectory(example)
 add_subdirectory(fltmgr)
 add_subdirectory(hidparse)
 add_subdirectory(kernel32)
+add_subdirectory(kmtwow64)
 add_subdirectory(ndis)
 add_subdirectory(ntfs)
 add_subdirectory(ntos_cc)
@@ -665,6 +666,7 @@ list(APPEND KMTEST_SOURCE
     ntos_io/IoCreateFile_user.c
     ntos_io/IoDeviceObject_user.c
     ntos_io/IoHandleAccess_user.c
+    ntos_io/IoIs32bitProcess_user.c
     ntos_io/IoCustomTargetEvent_user.c
     ntos_io/IoDeviceTree_user.c
     ntos_io/IoDriverKey_user.c

@@ -124,6 +124,7 @@ set(WOW64_I386_EXECUTABLES
 
 if(ENABLE_ROSTESTS)
     list(APPEND WOW64_I386_EXECUTABLES
+        kmtwow64
         user32_winetest
         win32u_apitest
         win32u_winetest)

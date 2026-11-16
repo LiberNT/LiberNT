@@ -36,6 +36,7 @@ KMT_TESTFUNC Test_IoFilterRequirements;
 KMT_TESTFUNC Test_IoCreateFile;
 KMT_TESTFUNC Test_IoDeviceObject;
 KMT_TESTFUNC Test_IoHandleAccess;
+KMT_TESTFUNC Test_IoIs32bitProcess;
 KMT_TESTFUNC Test_IoCustomTargetEvent;
 KMT_TESTFUNC Test_IoDeviceTree;
 KMT_TESTFUNC Test_IoDriverKey;
@@ -134,6 +135,7 @@ const KMT_TEST TestList[] =
     { "IoCreateFile",                 Test_IoCreateFile },
     { "IoDeviceObject",               Test_IoDeviceObject },
     { "IoHandleAccess",               Test_IoHandleAccess },
+    { "IoIs32bitProcess",             Test_IoIs32bitProcess },
     { "-IoCustomTargetEvent",         Test_IoCustomTargetEvent },
     { "-IoDeviceTree",                Test_IoDeviceTree },
     { "-IoDriverKey",                 Test_IoDriverKey },
