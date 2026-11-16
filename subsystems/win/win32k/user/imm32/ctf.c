@@ -117,6 +117,23 @@ Imm32GetFn(
     Imm32GetFn((FARPROC*)(ppfn), (phinstDLL), (dll_name), #func_name)
 
 /***********************************************************************
+ * OLE32.DLL
+ */
+
+HINSTANCE g_hOle32 = NULL;
+
+#define OLE32_FN(name) g_pfnOLE32_##name
+
+typedef HRESULT (WINAPI *FN_CoInitializeEx)(LPVOID, DWORD);
+typedef VOID    (WINAPI *FN_CoUninitialize)(VOID);
+
+FN_CoInitializeEx OLE32_FN(CoInitializeEx) = NULL;
+FN_CoUninitialize OLE32_FN(CoUninitialize) = NULL;
+
+#define Imm32GetOle32Fn(func_name) \
+    IMM32_GET_FN(&OLE32_FN(func_name), &g_hOle32, L"ole32.dll", func_name)
+
+/***********************************************************************
  * MSCTF.DLL
  */
 
@@ -320,8 +337,18 @@ BOOL WINAPI CtfImmLeaveCoInitCountSkipMode(VOID)
 HRESULT
 CtfImmCoInitialize(VOID)
 {
+    HRESULT hr;
+
     if (GetWin32ClientInfo()->CI_flags & CI_CTFCOINIT)
         return S_OK; /* Already initialized */
+
+    if (!Imm32GetOle32Fn(CoInitializeEx))
+        return E_FAIL;
+
+    /* Text services run in a single-threaded apartment; a thread without COM becomes one */
+    hr = OLE32_FN(CoInitializeEx)(NULL, COINIT_APARTMENTTHREADED);
+    if (FAILED(hr))
+        return hr;
 
     GetWin32ClientInfo()->CI_flags |= CI_CTFCOINIT;
     Imm32InitTLS();
@@ -336,7 +363,12 @@ CtfImmCoInitialize(VOID)
 VOID WINAPI
 CtfImmCoUninitialize(VOID)
 {
+    if (!(GetWin32ClientInfo()->CI_flags & CI_CTFCOINIT))
+        return;
+
     GetWin32ClientInfo()->CI_flags &= ~CI_CTFCOINIT;
+    if (Imm32GetOle32Fn(CoUninitialize))
+        OLE32_FN(CoUninitialize)();
 }
 
 /***********************************************************************
