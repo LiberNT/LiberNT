@@ -2500,6 +2500,30 @@ MmForceSectionClosed(
 
 BOOLEAN
 NTAPI
+MmForceSectionClosedEx(
+    _In_ PSECTION_OBJECT_POINTERS SectionObjectPointer,
+    _In_ ULONG ForceCloseFlags)
+{
+    BOOLEAN DelayClose = (ForceCloseFlags & MM_FORCE_CLOSED_LATER_OK) != 0;
+    BOOLEAN Closed = TRUE;
+
+    PAGED_CODE();
+
+    if ((ForceCloseFlags & MM_FORCE_CLOSED_IMAGE) &&
+        !MiCloseUnusedControlArea(SectionObjectPointer, TRUE, DelayClose))
+    {
+        Closed = FALSE;
+    }
+    if ((ForceCloseFlags & MM_FORCE_CLOSED_DATA) &&
+        !MiCloseUnusedControlArea(SectionObjectPointer, FALSE, DelayClose))
+    {
+        Closed = FALSE;
+    }
+    return Closed;
+}
+
+BOOLEAN
+NTAPI
 MmDisableModifiedWriteOfSection(
     _In_ PSECTION_OBJECT_POINTERS SectionObjectPointer)
 {

@@ -1,0 +1,68 @@
+/*
+ * PROJECT:     LiberNT host-native tests
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     MmForceSectionClosedEx closes the section kinds its flags name
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#include <assert.h>
+#include <stdint.h>
+#include <stdio.h>
+
+typedef uint32_t ULONG;
+typedef unsigned char BOOLEAN;
+typedef struct { void *DataSectionObject, *SharedCacheMap, *ImageSectionObject; } SECTION_OBJECT_POINTERS, *PSECTION_OBJECT_POINTERS;
+
+#define TRUE 1
+#define FALSE 0
+#define NTAPI
+#define _In_
+#define PAGED_CODE()
+#define MM_FORCE_CLOSED_DATA 0x1
+#define MM_FORCE_CLOSED_IMAGE 0x2
+#define MM_FORCE_CLOSED_LATER_OK 0x4
+
+static SECTION_OBJECT_POINTERS Pointers;
+static int ImageCalls, DataCalls;
+static BOOLEAN ImageResult, DataResult, LastDelay[2];
+
+static BOOLEAN
+MiCloseUnusedControlArea(PSECTION_OBJECT_POINTERS SectionObjectPointer, BOOLEAN Image, BOOLEAN DelayClose)
+{
+    assert(SectionObjectPointer == &Pointers);
+    LastDelay[Image ? 1 : 0] = DelayClose;
+    if (Image)
+    {
+        ImageCalls++;
+        return ImageResult;
+    }
+    DataCalls++;
+    return DataResult;
+}
+
+@NTSECTION_FUNCTION@
+
+static BOOLEAN
+Run(ULONG Flags, BOOLEAN Image, BOOLEAN Data)
+{
+    ImageCalls = DataCalls = 0;
+    LastDelay[0] = LastDelay[1] = 2;
+    ImageResult = Image;
+    DataResult = Data;
+    return MmForceSectionClosedEx(&Pointers, Flags);
+}
+
+int main(void)
+{
+    assert(Run(MM_FORCE_CLOSED_DATA, FALSE, TRUE) == TRUE && DataCalls == 1 && ImageCalls == 0 && LastDelay[0] == FALSE);
+    assert(Run(MM_FORCE_CLOSED_DATA, TRUE, FALSE) == FALSE && DataCalls == 1 && ImageCalls == 0);
+    assert(Run(MM_FORCE_CLOSED_IMAGE, TRUE, FALSE) == TRUE && ImageCalls == 1 && DataCalls == 0 && LastDelay[1] == FALSE);
+    assert(Run(MM_FORCE_CLOSED_IMAGE, FALSE, TRUE) == FALSE && ImageCalls == 1 && DataCalls == 0);
+    assert(Run(MM_FORCE_CLOSED_DATA | MM_FORCE_CLOSED_IMAGE, TRUE, TRUE) == TRUE && ImageCalls == 1 && DataCalls == 1);
+    assert(Run(MM_FORCE_CLOSED_DATA | MM_FORCE_CLOSED_IMAGE, TRUE, FALSE) == FALSE && ImageCalls == 1 && DataCalls == 1);
+    assert(Run(MM_FORCE_CLOSED_DATA | MM_FORCE_CLOSED_IMAGE, FALSE, TRUE) == FALSE && ImageCalls == 1 && DataCalls == 1);
+    assert(Run(MM_FORCE_CLOSED_DATA | MM_FORCE_CLOSED_LATER_OK, FALSE, TRUE) == TRUE && LastDelay[0] == TRUE);
+    assert(Run(MM_FORCE_CLOSED_IMAGE | MM_FORCE_CLOSED_LATER_OK, TRUE, FALSE) == TRUE && LastDelay[1] == TRUE);
+    puts("PASS");
+    return 0;
+}

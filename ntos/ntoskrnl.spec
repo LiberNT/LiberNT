@@ -2726,7 +2726,7 @@
 @ stub -arch=win64 MmConfigureGraphicsPtes
 @ stdcall -arch=win32 MmCopyMemory(ptr int64 long long ptr)
 @ stdcall -arch=win64 MmCopyMemory(ptr int64 int64 long ptr)
-@ stub -arch=win64 MmForceSectionClosedEx
+@ stdcall -arch=win64 MmForceSectionClosedEx(ptr long)
 @ stub -arch=win64 MmFreeMemoryRanges
 @ stub -arch=win64 MmFreePagesFromMdlEx
 @ stub -arch=win64 MmGetCacheAttribute

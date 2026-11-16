@@ -712,6 +712,20 @@ NTAPI
 MmSetAddressRangeModified(
   _In_reads_bytes_ (Length) PVOID Address,
   _In_ SIZE_T Length);
+
+#if (NTDDI_VERSION >= NTDDI_WIN10_RS4)
+#define MM_FORCE_CLOSED_DATA                0x1
+#define MM_FORCE_CLOSED_IMAGE               0x2
+#define MM_FORCE_CLOSED_LATER_OK            0x4
+
+_IRQL_requires_max_(APC_LEVEL)
+NTKERNELAPI
+BOOLEAN
+NTAPI
+MmForceSectionClosedEx(
+  _In_ PSECTION_OBJECT_POINTERS SectionObjectPointer,
+  _In_ ULONG ForceCloseFlags);
+#endif
 $endif (_NTIFS_)
 
 #endif /* (NTDDI_VERSION >= NTDDI_WIN2K) */
