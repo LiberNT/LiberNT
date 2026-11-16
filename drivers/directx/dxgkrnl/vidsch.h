@@ -696,7 +696,8 @@ NTSTATUS
 VidSchResetEngine(
     _In_ struct _DXGKRNL_ADAPTER *Adapter,
     _In_ ULONG                    EngineOrdinal,
-    _In_ BOOLEAN                  EndTdrDdiDeadline);
+    _In_ BOOLEAN                  EndTdrDdiDeadline,
+    _Out_opt_ PBOOLEAN            PagingAborted);
 
 NTSTATUS
 VidSchSetEngineState(

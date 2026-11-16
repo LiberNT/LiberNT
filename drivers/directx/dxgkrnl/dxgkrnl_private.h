@@ -84,6 +84,7 @@
 #include "node_stats_core.h"
 #include "postdisplay_core.h"
 #include "vsync_power_core.h"
+#include "vidsch_policy_core.h"
 
 /* ---- WDDM DDI interface version selection ------------------------------ */
 /*
@@ -2708,6 +2709,18 @@ DxgkAcquireKmdCallForDispatch(
 VOID
 DxgkReleaseKmdCall(
     _In_ PDXGKRNL_ADAPTER Adapter);
+
+FORCEINLINE
+BOOLEAN
+DxgkResetHoldsMiniport(
+    _In_ PDXGKRNL_ADAPTER Adapter)
+{
+    PVOID Owner = InterlockedCompareExchangePointer((PVOID volatile *)&Adapter->KmdExclusiveOwnerThread, NULL, NULL);
+
+    return VidSchPolicyResetHoldsMiniport(InterlockedCompareExchange(&Adapter->TdrWorkQueued, 0, 0) != 0,
+                                          Owner,
+                                          (PVOID)PsGetCurrentThread());
+}
 
 VOID
 DxgkBeginKmdExclusive(

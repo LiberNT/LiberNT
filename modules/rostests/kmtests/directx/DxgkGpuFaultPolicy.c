@@ -71,6 +71,19 @@ START_TEST(DxgkGpuFaultPolicy)
         VidSchPolicyIgnoreEngineInterrupt(0, 6),
         "an idle engine's interrupts are processed");
 
+    ok_bool_true(VidSchPolicyResetAbortedFence(5, 4, 6), "a fence after the last completed one is aborted");
+    ok_bool_true(VidSchPolicyResetAbortedFence(6, 4, 6), "the last aborted fence itself is aborted");
+    ok_bool_false(VidSchPolicyResetAbortedFence(4, 4, 6), "the last completed fence is not aborted");
+    ok_bool_false(VidSchPolicyResetAbortedFence(7, 4, 6), "a fence after the last aborted one survives the reset");
+    ok_bool_false(VidSchPolicyResetAbortedFence(4, 4, 4), "nothing is aborted when the hardware queue was empty");
+    ok_bool_true(VidSchPolicyResetAbortedFence(1, 0xFFFFFFFEu, 2), "the aborted range crosses the 32-bit wrap");
+
+    ok_bool_true(VidSchPolicyResetHoldsMiniport(TRUE, Device, Context), "a recovery on another thread holds the miniport");
+    ok_bool_true(VidSchPolicyResetHoldsMiniport(TRUE, NULL, Context), "a recovery still draining calls holds the miniport");
+    ok_bool_false(VidSchPolicyResetHoldsMiniport(TRUE, Context, Context), "the recovering thread itself is not held off");
+    ok_bool_false(VidSchPolicyResetHoldsMiniport(FALSE, Device, Context), "an exclusive owner outside a recovery holds nothing");
+    ok_bool_false(VidSchPolicyResetHoldsMiniport(FALSE, NULL, Context), "nothing holds the miniport outside a recovery");
+
     ok_bool_true(
         VidSchPolicyResubmissionAllowed(0, 0, 1),
         "an idle engine accepts a handed-back packet");

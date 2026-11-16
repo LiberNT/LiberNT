@@ -1353,7 +1353,10 @@ DxgkpQueryChildConnectionForEnumeration(
     ChildStatus.Type = StatusConnection;
     ChildStatus.ChildUid = Descriptor->ChildUid;
     if (!DxgkAcquireKmdCall(Adapter))
-        return STATUS_DELETE_PENDING;
+    {
+        /* A child keeps its last known connection while a GPU reset holds the miniport */
+        return DxgkResetHoldsMiniport(Adapter) ? STATUS_SUCCESS : STATUS_DELETE_PENDING;
+    }
     _SEH2_TRY
     {
         Status = QueryChildStatus(Adapter->MiniportDeviceContext, &ChildStatus, TRUE);

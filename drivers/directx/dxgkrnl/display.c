@@ -4444,7 +4444,8 @@ DxgkpDisplayDispatch(
                 {
                     DxgkVidPnDestroyDisplayModeCache(g_DisplayAdapter);
                     Status = DxgkVidPnQueryVideoModes(g_DisplayAdapter, NULL, 0, &NumModes->NumModes, FALSE);
-                    if (!NT_SUCCESS(Status) && !g_DisplayAdapter->MiniportContext->IsDisplayOnlyDriver)
+                    if (!NT_SUCCESS(Status) && !g_DisplayAdapter->MiniportContext->IsDisplayOnlyDriver &&
+                        !DxgkResetHoldsMiniport(g_DisplayAdapter))
                         break;
                 }
                 if (!NT_SUCCESS(Status))
@@ -4487,7 +4488,8 @@ DxgkpDisplayDispatch(
                                 &ModeCount, Stack->Parameters.DeviceIoControl.IoControlCode == IOCTL_VIDEO_QUERY_CURRENT_MODE);
                     if (NT_SUCCESS(Status))
                         BytesReturned = ModeCount * sizeof(*ModeInfo);
-                    if (NT_SUCCESS(Status) || !g_DisplayAdapter->MiniportContext->IsDisplayOnlyDriver)
+                    if (NT_SUCCESS(Status) ||
+                        (!g_DisplayAdapter->MiniportContext->IsDisplayOnlyDriver && !DxgkResetHoldsMiniport(g_DisplayAdapter)))
                         break;
                 }
                 DxgkpSnapshotCommittedDisplayState(g_DisplayAdapter, &CommittedWidth, &CommittedHeight, NULL);

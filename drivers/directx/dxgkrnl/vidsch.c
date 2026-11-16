@@ -1936,10 +1936,12 @@ Recover:
 
     if ((FaultFlags & DXGK_PAGE_FAULT_ENGINE_RESET_REQUIRED) != 0)
     {
+        /* TODO: an engine reset that aborted a paging packet must be followed by an adapter reset here too */
         NTSTATUS ResetStatus =
             VidSchResetEngine(Engine->Adapter,
                               Engine->SchedulerOrdinal,
-                              FALSE);
+                              FALSE,
+                              NULL);
 
         DXGKRNL_ERR("VidSch: engine %lu reset after page fault -> 0x%08lX\n",
                     Engine->SchedulerOrdinal, ResetStatus);
@@ -5061,7 +5063,8 @@ NTSTATUS
 VidSchResetEngine(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ ULONG            EngineOrdinal,
-    _In_ BOOLEAN          EndTdrDdiDeadline)
+    _In_ BOOLEAN          EndTdrDdiDeadline,
+    _Out_opt_ PBOOLEAN    PagingAborted)
 {
     PVIDSCH_CONTEXT Ctx;
     PVIDSCH_ENGINE Engine;
@@ -5078,6 +5081,8 @@ VidSchResetEngine(
 
     PAGED_CODE();
 
+    if (PagingAborted != NULL)
+        *PagingAborted = FALSE;
     if (Adapter == NULL)
         return STATUS_INVALID_PARAMETER;
     if (!VidSchpAcquireCall(Adapter))
@@ -5182,6 +5187,28 @@ VidSchResetEngine(
         {
             Status = STATUS_DEVICE_PROTOCOL_ERROR;
         }
+    }
+
+    if (NT_SUCCESS(Status) && PagingAborted != NULL)
+    {
+        PLIST_ENTRY Entry;
+
+        /* A paging packet among the aborted ones leaves memory in an unknown state: the caller follows with an adapter reset. */
+        KeAcquireSpinLock(&Engine->QueueLock, &OldIrql);
+        for (Entry = Engine->ActivePacketList.Flink; Entry != &Engine->ActivePacketList; Entry = Entry->Flink)
+        {
+            PVIDSCH_DMA_PACKET Packet = CONTAINING_RECORD(Entry, VIDSCH_DMA_PACKET, ActiveEngineEntry);
+
+            if ((Packet->SubmitFlags & VIDSCH_SUBMITFLAG_PAGING) != 0 &&
+                VidSchPolicyResetAbortedFence(Packet->SubmissionFenceId,
+                                              EngineStatus.LastCompletedFenceId,
+                                              ResetArgs.LastAbortedFenceId))
+            {
+                *PagingAborted = TRUE;
+                break;
+            }
+        }
+        KeReleaseSpinLock(&Engine->QueueLock, OldIrql);
     }
 
     if (NT_SUCCESS(Status))

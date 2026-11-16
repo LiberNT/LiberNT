@@ -1309,9 +1309,16 @@ DxgkpTdrWorker(
         TimedOutDevice = DxgkpReferenceTimedOutDevice(Adapter, WorkNode, WorkFence);
         if (Adapter->SupportPerEngineTdr)
         {
-            Status = VidSchResetEngine(Adapter, WorkNode, TRUE);
+            BOOLEAN PagingAborted = FALSE;
+
+            Status = VidSchResetEngine(Adapter, WorkNode, TRUE, &PagingAborted);
             DdiDeadlineArmed = FALSE;
-            if (NT_SUCCESS(Status))
+            if (NT_SUCCESS(Status) && PagingAborted)
+            {
+                DXGKRNL_ERR("DxgkpTdrWorker: engine reset of node %lu aborted a paging packet, following with an adapter reset\n", WorkNode);
+                Status = STATUS_UNSUCCESSFUL;
+            }
+            else if (NT_SUCCESS(Status))
             {
                 DXGKRNL_ERR("DxgkpTdrWorker: engine reset recovered node %lu on adapter %p\n", WorkNode, Adapter);
                 if (TimedOutDevice != NULL)
@@ -1320,7 +1327,8 @@ DxgkpTdrWorker(
                 DxgkpRecordTdrRecovery(Adapter, KeQueryInterruptTime());
                 goto Exit;
             }
-            DXGKRNL_ERR("DxgkpTdrWorker: engine reset of node %lu failed 0x%08lX, promoting to an adapter reset\n", WorkNode, Status);
+            if (!PagingAborted)
+                DXGKRNL_ERR("DxgkpTdrWorker: engine reset of node %lu failed 0x%08lX, promoting to an adapter reset\n", WorkNode, Status);
             DxgkpArmTdrDdiDeadline(Adapter);
             DdiDeadlineArmed = TRUE;
         }
