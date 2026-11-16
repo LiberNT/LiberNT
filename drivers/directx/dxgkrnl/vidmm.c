@@ -1701,7 +1701,9 @@ DxgkVidMmMapVirtualPresentAllocation(
     D3DDDIGPUVIRTUALADDRESS_PROTECTION_TYPE Protection;
     PDXGKRNL_DEVICE Device = Backing->Device;
     D3DGPU_VIRTUAL_ADDRESS UserAddress = 0;
+    D3DGPU_VIRTUAL_ADDRESS Reserved = 0;
     BOOLEAN Borrowed;
+    NTSTATUS FreeStatus;
     NTSTATUS Status;
     ULONG Index;
 
@@ -1768,11 +1770,21 @@ DxgkVidMmMapVirtualPresentAllocation(
         return STATUS_SUCCESS;
     }
 
-    Protection.Value = 0;
-    Protection.Write = Write;
-    Status = DxgkGpuVaMap(Device->Adapter, Device->ProcessRecord, Allocation, Binding->Handle, 0, 0, 0, 0, Allocation->Size, Protection, 0, 0, OutAddress);
+    Status = DxgkGpuVaReserve(Device->ProcessRecord, 0, 0, 0, Allocation->Size, D3DDDIGPUVIRTUALADDRESS_RESERVE_NO_ACCESS, 0, &Reserved);
     if (!NT_SUCCESS(Status))
         return Status;
+    ASSERT(Reserved != 0);
+    Protection.Value = 0;
+    Protection.Write = Write;
+    Status = DxgkGpuVaMap(Device->Adapter, Device->ProcessRecord, Allocation, Binding->Handle, 0, Reserved, 0, 0, Allocation->Size, Protection, 0, 0, OutAddress);
+    if (!NT_SUCCESS(Status))
+    {
+        FreeStatus = DxgkGpuVaFree(Device->ProcessRecord, Reserved, Allocation->Size);
+        ASSERT(NT_SUCCESS(FreeStatus));
+        (VOID)FreeStatus;
+        return Status;
+    }
+    ASSERT(*OutAddress == Reserved);
     /* Own the reservation as soon as Map succeeds, including when flushing
      * or pinning subsequently fails and no submission is accepted. */
     Index = Backing->DataMappingCount++;

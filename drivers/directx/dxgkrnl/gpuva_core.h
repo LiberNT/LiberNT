@@ -73,6 +73,23 @@ DxgkGpuVaCoreOrphanOwner(
         return Allocation;
     return Device != NULL ? Device : Process;
 }
+
+#define DXGK_GPUVA_ORPHAN_GRACE (10ULL * 1000 * 1000)
+
+FORCEINLINE
+BOOLEAN
+DxgkGpuVaCoreOrphanReleasable(
+    _In_ BOOLEAN MapAllocated,
+    _In_ BOOLEAN Mapped,
+    _In_ BOOLEAN SystemUseOnly,
+    _In_opt_ PVOID OrphanOwner,
+    _In_opt_ PVOID SweepOwner,
+    _In_ ULONGLONG OrphanAge)
+{
+    if (!MapAllocated || Mapped || SystemUseOnly || OrphanOwner == NULL)
+        return FALSE;
+    return OrphanOwner == SweepOwner || OrphanAge >= DXGK_GPUVA_ORPHAN_GRACE;
+}
 BOOLEAN DxgkGpuVaCorePageCount(_In_ ULONGLONG Address, _In_ ULONGLONG Size, _Out_ PULONGLONG PageCount);
 
 BOOLEAN DxgkGpuVaCoreAllocationMapChunk(

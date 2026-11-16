@@ -5011,8 +5011,6 @@ DxgkGpuVaUnmapFencePage(
     return DxgkGpuVaFlushPageTableUpdates(Process);
 }
 
-#define GPUVA_ORPHAN_GRACE (10ULL * 1000 * 1000)
-
 static VOID
 GpuVaReleaseMapReservations(
     _Inout_ PDXGKRNL_PROCESS Process,
@@ -5036,8 +5034,9 @@ GpuVaReleaseMapReservations(
 
             if (Range->ReservationBase != Base || Range->ReservationSize != Size || Range->MapAllocated != First->MapAllocated)
                 break;
-            if (Range->GpuVirtualAddress != Cursor || Range->State == GpuVaStateMapped || Range->Protection.SystemUseOnly
-                || Range->OrphanOwner == NULL || (Range->OrphanOwner != Owner && Now - Range->OrphanTime < GPUVA_ORPHAN_GRACE))
+            if (Range->GpuVirtualAddress != Cursor ||
+                !DxgkGpuVaCoreOrphanReleasable(Range->MapAllocated, Range->State == GpuVaStateMapped, (BOOLEAN)Range->Protection.SystemUseOnly,
+                                               Range->OrphanOwner, Owner, Now - Range->OrphanTime))
                 Releasable = FALSE;
             Cursor = Range->GpuVirtualAddress + Range->SizeInBytes;
             End = End->Flink;
