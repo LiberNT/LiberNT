@@ -37,6 +37,7 @@
 #include "present.h"
 #include "presenttrace.h"
 #include "vidpn.h"
+#include "display_core.h"
 #include "pnp.h"
 #include "d3dkmt.h"
 #include <ntddvdeo.h>
@@ -4205,7 +4206,7 @@ DxgkpPointerBridgeSetShape(
     ShapeArgs.Flags.Color = 1;
     ShapeArgs.Width = Attributes->Width;
     ShapeArgs.Height = Attributes->Height;
-    ShapeArgs.Pitch = Attributes->WidthInBytes;
+    ShapeArgs.Pitch = DxgkDisplayCorePackPointerRows(Attributes->Pixels, Attributes->Width, Attributes->Height, Attributes->WidthInBytes);
     ShapeArgs.VidPnSourceId = 0;
     ShapeArgs.pPixels = Attributes->Pixels;
     /* The display driver already offset Column/Row by the hot spot. */

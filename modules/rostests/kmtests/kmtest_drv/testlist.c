@@ -32,6 +32,7 @@ KMT_TESTFUNC Test_DxgkDmaRing;
 KMT_TESTFUNC Test_DxgkVidPnTopology;
 KMT_TESTFUNC Test_DxgkVidPnModeSet;
 KMT_TESTFUNC Test_DxgkFlipQueue;
+KMT_TESTFUNC Test_DxgkPointerShape;
 KMT_TESTFUNC Test_DxgkHandleTable;
 KMT_TESTFUNC Test_DxgkAdapterCaps;
 KMT_TESTFUNC Test_DxgkNodeAffinity;
@@ -511,6 +512,7 @@ const KMT_TEST TestList[] =
     { "DxgkVidPnTopology",                  Test_DxgkVidPnTopology },
     { "DxgkVidPnModeSet",                   Test_DxgkVidPnModeSet },
     { "DxgkFlipQueue",                      Test_DxgkFlipQueue },
+    { "DxgkPointerShape",                   Test_DxgkPointerShape },
     { "DxgkHandleTable",                    Test_DxgkHandleTable },
     { "DxgkAdapterCaps",                    Test_DxgkAdapterCaps },
     { "DxgkNodeAffinity",                   Test_DxgkNodeAffinity },

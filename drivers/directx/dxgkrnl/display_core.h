@@ -112,4 +112,28 @@ ULONG DxgkFlipCoreQueuedCount(_In_ const DXGK_FLIP_QUEUE *Queue);
 
 D3DDDIFORMAT DxgkVidPnCoreDesktopSurfaceFormat(_In_ D3DDDIFORMAT PinnedFormat);
 
+/* A color pointer reaches DxgkDdiSetPointerShape as a Width x Height 32 bpp DIB whose pitch is its width in bytes. */
+FORCEINLINE
+ULONG
+DxgkDisplayCorePackPointerRows(
+    _Inout_updates_bytes_(SourcePitch * Height) PUCHAR Pixels,
+    _In_ ULONG Width,
+    _In_ ULONG Height,
+    _In_ ULONG SourcePitch)
+{
+    ULONG Pitch;
+    ULONG Row;
+
+    ASSERT(Pixels != NULL);
+    ASSERT(Width != 0);
+    ASSERT(Height != 0);
+    ASSERT(Width <= MAXULONG / sizeof(ULONG));
+    Pitch = Width * sizeof(ULONG);
+    ASSERT(SourcePitch >= Pitch);
+    ASSERT(Height <= MAXULONG / SourcePitch);
+    for (Row = 1; Row < Height && SourcePitch != Pitch; Row++)
+        RtlMoveMemory(Pixels + Row * Pitch, Pixels + Row * SourcePitch, Pitch);
+    return Pitch;
+}
+
 #endif /* _DXGK_DISPLAY_CORE_H_ */
