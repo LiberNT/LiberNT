@@ -20,6 +20,7 @@ typedef struct
     ID3D10PixelShader *PixelShader;
     ID3D10InputLayout *Layout;
     ID3D10Buffer *Buffer;
+    ID3D10RasterizerState *Rasterizer;
     UINT Width;
     UINT Height;
 } D3D10_TEST;
@@ -67,6 +68,7 @@ static BOOL D3D10Setup(D3D10_TEST *Test, HWND hWnd, PD3DTEST_RESULT Result)
 {
     DXGI_SWAP_CHAIN_DESC SwapChainDesc = {{0}};
     D3D10_BUFFER_DESC BufferDesc = {0};
+    D3D10_RASTERIZER_DESC RasterizerDesc = {0};
     D3D10_VIEWPORT Viewport = {0};
     ID3D10Texture2D *BackBuffer;
     RECT ClientRect;
@@ -108,6 +110,14 @@ static BOOL D3D10Setup(D3D10_TEST *Test, HWND hWnd, PD3DTEST_RESULT Result)
     hr = ID3D10Device_CreateBuffer(Test->Device, &BufferDesc, NULL, &Test->Buffer);
     if (FAILED(hr))
         return D3D10Fail(Result, "create-vertex-buffer", hr);
+
+    RasterizerDesc.FillMode = D3D10_FILL_SOLID;
+    RasterizerDesc.CullMode = D3D10_CULL_NONE;
+    RasterizerDesc.DepthClipEnable = TRUE;
+    hr = ID3D10Device_CreateRasterizerState(Test->Device, &RasterizerDesc, &Test->Rasterizer);
+    if (FAILED(hr))
+        return D3D10Fail(Result, "create-rasterizer-state", hr);
+    ID3D10Device_RSSetState(Test->Device, Test->Rasterizer);
 
     Viewport.Width = Test->Width;
     Viewport.Height = Test->Height;
@@ -155,6 +165,8 @@ static VOID D3D10Release(D3D10_TEST *Test)
 {
     if (Test->Device)
         ID3D10Device_ClearState(Test->Device);
+    if (Test->Rasterizer)
+        ID3D10RasterizerState_Release(Test->Rasterizer);
     if (Test->Buffer)
         ID3D10Buffer_Release(Test->Buffer);
     if (Test->Layout)
