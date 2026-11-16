@@ -290,7 +290,7 @@ EXIT\t\tCMD を終了\n\
     WCMD_CONSTITLE, "Wine コマンド プロンプト"
     WCMD_VERSION, "Microsoft Windows [Version %1!S!]\n"
     WCMD_BANNER, "LiberNT [Version %1!S! %2!S!]\n\
-(C) Copyright %3!S! LiberNT チーム。\n"
+(C) Copyright %3!S! LiberNT Team.\n"
     WCMD_MOREPROMPT, "続行? "
     WCMD_LINETOOLONG, "入力行が長すぎます。\n"
     WCMD_VOLUMELABEL, "ドライブ %1!c! のボリューム ラベルは %2 です\n"
