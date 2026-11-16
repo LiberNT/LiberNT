@@ -78,48 +78,6 @@ KdpSetContextState(
 
 NTSTATUS
 NTAPI
-KdpSysReadBusData(
-    _In_ BUS_DATA_TYPE BusDataType,
-    _In_ ULONG BusNumber,
-    _In_ ULONG SlotNumber,
-    _In_ ULONG Offset,
-    _Out_writes_bytes_(Length) PVOID Buffer,
-    _In_ ULONG Length,
-    _Out_ PULONG ActualLength)
-{
-    *ActualLength = HalGetBusDataByOffset(BusDataType,
-                                          BusNumber,
-                                          SlotNumber,
-                                          Buffer,
-                                          Offset,
-                                          Length);
-
-    return (*ActualLength != 0 ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL);
-}
-
-NTSTATUS
-NTAPI
-KdpSysWriteBusData(
-    _In_ BUS_DATA_TYPE BusDataType,
-    _In_ ULONG BusNumber,
-    _In_ ULONG SlotNumber,
-    _In_ ULONG Offset,
-    _In_reads_bytes_(Length) PVOID Buffer,
-    _In_ ULONG Length,
-    _Out_ PULONG ActualLength)
-{
-    *ActualLength = HalSetBusDataByOffset(BusDataType,
-                                          BusNumber,
-                                          SlotNumber,
-                                          Buffer,
-                                          Offset,
-                                          Length);
-
-    return (*ActualLength != 0 ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL);
-}
-
-NTSTATUS
-NTAPI
 KdpSysReadControlSpace(
     _In_ ULONG Processor,
     _In_ ULONG64 BaseAddress,

@@ -568,6 +568,10 @@ if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64")
         ${REACTOS_SOURCE_DIR}/ntos/ke/intobj.c)
 endif()
 
+if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64")
+    list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kd64/kdbus.c)
+endif()
+
 if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")
     list(APPEND SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/config/i386/cmhardwr.c

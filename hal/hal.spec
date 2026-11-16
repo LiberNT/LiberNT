@@ -98,7 +98,7 @@
 @ stdcall HalpRegisterPciRouteQuery(ptr)
 @ stdcall HalpSetPciRoutingMap(ptr long)
 @ stdcall HalpRecordPciMaxGsi(ptr)
-@ stdcall -arch=win64 HalpKdReadPciConfig(long long ptr long long)
+@ stdcall -arch=i386,win64 HalpKdReadPciConfig(long long ptr long long)
 @ stdcall -arch=win64 HalpGetInterruptTargetInformation(ptr)
 @ stdcall HalpGetMessageRoutingInfo(ptr)
 @ stdcall -arch=i386,x86_64 IoAssignDriveLetters(ptr str ptr ptr) HalpAssignDriveLetters
