@@ -53,6 +53,42 @@ PspCaptureAttributeValue(
 
 static
 NTSTATUS
+PspCaptureHandleList(
+    _In_reads_(HandleCount) const HANDLE *HandleList,
+    _In_ SIZE_T HandleCount,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _Outptr_ PHANDLE *Captured)
+{
+    PHANDLE Copy;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    *Captured = NULL;
+    Copy = ExAllocatePoolWithTag(PagedPool,
+                                 max(HandleCount, 1) * sizeof(HANDLE),
+                                 TAG_PS_HANDLE_LIST);
+    if (Copy == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    if (HandleCount != 0)
+    {
+        Status = PspCaptureAttributeValue((PVOID)HandleList,
+                                          HandleCount * sizeof(HANDLE),
+                                          PreviousMode,
+                                          Copy);
+        if (!NT_SUCCESS(Status))
+        {
+            ExFreePoolWithTag(Copy, TAG_PS_HANDLE_LIST);
+            return Status;
+        }
+    }
+
+    *Captured = Copy;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
 PspCaptureBnoIsolation(
     _In_ PPS_ATTRIBUTE Attribute,
     _In_ KPROCESSOR_MODE PreviousMode,
@@ -1426,6 +1462,7 @@ NtCreateUserProcess(
     HANDLE SectionHandle = NULL;
     PVOID Section = NULL;
     PVOID RemoteParameters = NULL;
+    PHANDLE CapturedHandleList = NULL;
     ULONG RemoteParameters32 = 0;
     PEPROCESS Process = NULL;
     SECTION_IMAGE_INFORMATION ImageInformation;
@@ -1511,6 +1548,20 @@ NtCreateUserProcess(
         return Status;
     }
 
+    if (Attributes.HandleList != NULL)
+    {
+        Status = PspCaptureHandleList(Attributes.HandleList,
+                                      Attributes.HandleCount,
+                                      PreviousMode,
+                                      &CapturedHandleList);
+        if (!NT_SUCCESS(Status))
+        {
+            ObDereferenceObject(Section);
+            ZwClose(FileHandle);
+            return Status;
+        }
+    }
+
     Status = PspCreateImageProcess(&NewProcess,
                                    ProcessDesiredAccess,
                                    ProcessObjectAttributes,
@@ -1520,8 +1571,10 @@ NtCreateUserProcess(
                                    ProcessFlags,
                                    Section,
                                    Attributes.DebugPort,
-                                   Attributes.HandleList,
+                                   CapturedHandleList,
                                    Attributes.HandleCount);
+    if (CapturedHandleList != NULL)
+        ExFreePoolWithTag(CapturedHandleList, TAG_PS_HANDLE_LIST);
     if (!NT_SUCCESS(Status))
     {
         ObDereferenceObject(Section);

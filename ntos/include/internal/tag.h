@@ -125,6 +125,7 @@
 #define TAG_PS_TLS              'slTP'
 
 #define TAG_PS_PROCESS_PARAMETERS 'pPsP'
+#define TAG_PS_HANDLE_LIST      'lHsP'
 
 #define TAG_PS_API_SET          'sApP'
 
