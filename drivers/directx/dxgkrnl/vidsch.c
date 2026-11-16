@@ -785,6 +785,20 @@ VidSchpEngineState(_In_ PDXGKRNL_ADAPTER Adapter, _In_ ULONG EngineOrdinal)
     }
 }
 
+static
+_IRQL_requires_max_(HIGH_LEVEL)
+VIDSCH_ENGINE_STATE
+VidSchpEngineStateAtInterrupt(
+    _In_ PVIDSCH_ENGINE Engine)
+{
+    PDXGMMS2_SCHEDULER_INTERFACE_V1 Sched = VidSchpScheduler(Engine->Adapter);
+
+    if (Sched == NULL)
+        return VidSchEngineError;
+    ASSERT(Sched->ReadEngineState != NULL);
+    return (VIDSCH_ENGINE_STATE)Sched->ReadEngineState(Sched->SchedulerHandle, Engine->SchedulerOrdinal);
+}
+
 /* VIDSCH_ENGINE_STATE and DXGMMS2_ENGINE_STATE share one numbering; the
  * assertions below keep them from drifting apart silently. */
 C_ASSERT((ULONG)VidSchEngineIdle == Dxgmms2EngineIdle);
@@ -4172,6 +4186,7 @@ VidSchNotifyInterrupt(
 {
     PVIDSCH_CONTEXT Ctx;
     PVIDSCH_ENGINE Engine = NULL;
+    VIDSCH_ENGINE_STATE EngineState = VidSchEngineError;
     DXGMMS2_FENCE_SNAPSHOT_V1 FenceSnapshot;
     ULONG CurrentCompletedFence;
     ULONG FenceId = 0;
@@ -4274,11 +4289,10 @@ VidSchNotifyInterrupt(
             Adapter->NodeCount) ||
         NodeOrdinal >= DXGK_MAX_TRACKED_NODES)
         VidSchpBugCheckInvalidFence(Adapter, FenceId, 0);
-    if (Ctx != NULL && Ctx->Initialized && NodeOrdinal < Ctx->EngineCount &&
-        VidSchPolicyIgnoreEngineInterrupt(VidSchpReadState(&Ctx->Engines[NodeOrdinal]), VidSchEngineResetting))
-    {
+    if (Ctx != NULL && Ctx->Initialized && NodeOrdinal < Ctx->EngineCount)
+        EngineState = VidSchpEngineStateAtInterrupt(&Ctx->Engines[NodeOrdinal]);
+    if (VidSchPolicyIgnoreEngineInterrupt(EngineState, VidSchEngineResetting))
         return;
-    }
     LastSubmittedFence = (ULONG)InterlockedCompareExchange((volatile LONG *)&Adapter->NodeLastSubmittedFenceId[NodeOrdinal], 0, 0);
     if ((!PreemptionNotification && FenceId == 0) || LastSubmittedFence == 0 || (FenceId != 0 && !VidSchpFenceReached(LastSubmittedFence, FenceId)))
         VidSchpBugCheckInvalidFence(Adapter, FenceId, LastSubmittedFence);
@@ -4294,7 +4308,7 @@ VidSchNotifyInterrupt(
         ULONG PendingFence = Engine != NULL ? (ULONG)InterlockedCompareExchange(&Engine->PendingPreemptionFenceId, 0, 0) : 0;
 
         KeMemoryBarrier();
-        if (Engine == NULL || PendingFence == 0 || PendingFence != NotifyData->DmaPreempted.PreemptionFenceId || Engine->PendingPreemptionEngineOrdinal != NotifyData->DmaPreempted.EngineOrdinal || (VidSchpReadState(Engine) != VidSchEnginePreempting && VidSchpReadState(Engine) != VidSchEngineResetting) || InterlockedCompareExchange(&Engine->PreemptionInterruptPending, 1, 0) != 0)
+        if (Engine == NULL || PendingFence == 0 || PendingFence != NotifyData->DmaPreempted.PreemptionFenceId || Engine->PendingPreemptionEngineOrdinal != NotifyData->DmaPreempted.EngineOrdinal || EngineState != VidSchEnginePreempting || InterlockedCompareExchange(&Engine->PreemptionInterruptPending, 1, 0) != 0)
             VidSchpBugCheckInvalidFence(Adapter, FenceId, LastSubmittedFence);
     }
 

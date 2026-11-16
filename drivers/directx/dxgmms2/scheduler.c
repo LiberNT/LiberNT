@@ -370,6 +370,21 @@ Dxgmms2SchedulerQueryEngineStatus(
     return QueryStatus;
 }
 
+static
+_IRQL_requires_max_(HIGH_LEVEL)
+ULONG
+NTAPI
+Dxgmms2SchedulerReadEngineState(
+    _In_ DXGMMS2_SCHEDULER_HANDLE Scheduler,
+    _In_ ULONG EngineOrdinal)
+{
+    PDXGMMS2_ADAPTER_CONTEXT Context = Dxgmms2SchedulerContext(Scheduler);
+
+    if (Context == NULL)
+        return Dxgmms2EngineError;
+    return Dxgmms2SchedCoreReadEngineState(&Context->SchedulerCore, EngineOrdinal);
+}
+
 static NTSTATUS
 NTAPI
 Dxgmms2SchedulerSetEngineState(
@@ -698,8 +713,10 @@ Dxgmms2QuerySchedulerInterface(
         SchedulerInterface->GetOldestDispatchedOnEngine =
             Dxgmms2SchedulerGetOldestDispatchedOnEngine;
     }
-    if (Capacity >= DXGMMS2_SCHEDULER_INTERFACE_V1_SIZE)
+    if (Capacity >= FIELD_OFFSET(DXGMMS2_SCHEDULER_INTERFACE_V1, ReadEngineState))
         SchedulerInterface->MarkPacketReady = Dxgmms2SchedulerMarkPacketReady;
+    if (Capacity >= DXGMMS2_SCHEDULER_INTERFACE_V1_SIZE)
+        SchedulerInterface->ReadEngineState = Dxgmms2SchedulerReadEngineState;
 
     Dxgmms2DereferenceAdapterContext(Context);
     return STATUS_SUCCESS;

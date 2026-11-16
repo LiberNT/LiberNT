@@ -82,6 +82,7 @@ ULONG Dxgmms2SchedCoreCancelOwner(_Inout_ PDXGMMS2_SCHED_CORE Core, _In_ ULONGLO
 ULONG Dxgmms2SchedCoreAbortAll(_Inout_ PDXGMMS2_SCHED_CORE Core, _In_ BOOLEAN IncludeDispatched, _Out_writes_to_(Capacity, return) PDXGMMS2_SCHED_PACKET *Aborted, _In_ ULONG Capacity);
 BOOLEAN Dxgmms2SchedCoreIsIdle(_In_ PDXGMMS2_SCHED_CORE Core);
 NTSTATUS Dxgmms2SchedCoreQueryEngine(_In_ PDXGMMS2_SCHED_CORE Core, _In_ ULONG EngineOrdinal, _Inout_ DXGMMS2_SCHEDULER_ENGINE_STATUS_V1 *Status);
+_IRQL_requires_max_(HIGH_LEVEL) ULONG Dxgmms2SchedCoreReadEngineState(_In_ PDXGMMS2_SCHED_CORE Core, _In_ ULONG EngineOrdinal);
 BOOLEAN Dxgmms2SchedCoreIsValidTransition(_In_ ULONG OldState, _In_ ULONG NewState);
 NTSTATUS Dxgmms2SchedCoreSetEngineState(_Inout_ PDXGMMS2_SCHED_CORE Core, _In_ ULONG EngineOrdinal, _In_ ULONG ExpectedState, _In_ ULONG NewState, _Out_opt_ PULONG OutPreviousState);
 NTSTATUS Dxgmms2SchedCoreReserve(_Inout_ PDXGMMS2_SCHED_CORE Core, _In_ ULONG EngineOrdinal);

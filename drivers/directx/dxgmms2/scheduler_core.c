@@ -608,6 +608,22 @@ Dxgmms2SchedCoreQueryEngine(
     return STATUS_SUCCESS;
 }
 
+_IRQL_requires_max_(HIGH_LEVEL)
+ULONG
+Dxgmms2SchedCoreReadEngineState(
+    _In_ PDXGMMS2_SCHED_CORE Core,
+    _In_ ULONG EngineOrdinal)
+{
+    ASSERT(Core != NULL);
+    if (EngineOrdinal >= RTL_NUMBER_OF(Core->Engines) ||
+        !ReadBooleanAcquire(&Core->Started) ||
+        EngineOrdinal >= ReadULongAcquire(&Core->EngineCount))
+    {
+        return Dxgmms2EngineError;
+    }
+    return ReadULongAcquire(&Core->Engines[EngineOrdinal].State);
+}
+
 /*
  * Dxgmms2SchedCoreReserve / Unreserve
  *

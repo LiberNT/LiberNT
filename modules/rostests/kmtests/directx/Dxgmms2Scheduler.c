@@ -965,6 +965,40 @@ TestEngineStateMachine(
     (VOID)Dxgmms2SchedCoreSetEngineState(&State->Core, 0, Dxgmms2EngineResetComplete, Dxgmms2EngineIdle, NULL);
 }
 
+static VOID
+TestEngineStateReadAtInterrupt(
+    _Inout_ PDXGMMS2_SCHED_TEST_STATE State)
+{
+    DXGMMS2_SCHEDULER_ENGINE_STATUS_V1 EngineStatus;
+    KIRQL OldIrql;
+    ULONG Current;
+    ULONG BeyondCount;
+    ULONG BeyondArray;
+    NTSTATUS Status;
+
+    InitEngineStatus(&EngineStatus);
+    Status = Dxgmms2SchedCoreQueryEngine(&State->Core, 0, &EngineStatus);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(Dxgmms2SchedCoreReadEngineState(&State->Core, 0), EngineStatus.State);
+
+    Status = Dxgmms2SchedCoreSetEngineState(&State->Core, 0, DXGMMS2_ENGINE_STATE_ANY, Dxgmms2EngineResetting, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    KeRaiseIrql(HIGH_LEVEL, &OldIrql);
+    Current = Dxgmms2SchedCoreReadEngineState(&State->Core, 0);
+    BeyondCount = Dxgmms2SchedCoreReadEngineState(&State->Core, DXGMMS2_SCHED_TEST_ENGINES);
+    BeyondArray = Dxgmms2SchedCoreReadEngineState(&State->Core, DXGMMS2_SCHEDULER_MAX_ENGINES);
+    KeLowerIrql(OldIrql);
+    ok_eq_ulong(Current, (ULONG)Dxgmms2EngineResetting);
+    ok_eq_ulong(BeyondCount, (ULONG)Dxgmms2EngineError);
+    ok_eq_ulong(BeyondArray, (ULONG)Dxgmms2EngineError);
+
+    Status = Dxgmms2SchedCoreSetEngineState(&State->Core, 0, Dxgmms2EngineResetting, Dxgmms2EngineResetComplete, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    Status = Dxgmms2SchedCoreSetEngineState(&State->Core, 0, Dxgmms2EngineResetComplete, Dxgmms2EngineIdle, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(Dxgmms2SchedCoreReadEngineState(&State->Core, 0), (ULONG)Dxgmms2EngineIdle);
+}
+
 /* A stopped core returns to its pre-start state so the adapter can restart. */
 static VOID
 TestStopAndRestart(
@@ -988,6 +1022,7 @@ TestStopAndRestart(
     (VOID)Dxgmms2SchedCoreAbortAll(&State->Core, TRUE, Batch, RTL_NUMBER_OF(Batch));
     Status = Dxgmms2SchedCoreStop(&State->Core);
     ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(Dxgmms2SchedCoreReadEngineState(&State->Core, 0), (ULONG)Dxgmms2EngineError);
     /* Idempotent. */
     Status = Dxgmms2SchedCoreStop(&State->Core);
     ok_eq_hex(Status, STATUS_SUCCESS);
@@ -1553,6 +1588,7 @@ START_TEST(Dxgmms2Scheduler)
     TestReservationAccounting(State);
     TestReservationProtectsGlobalCapacity(State);
     TestEngineStateMachine(State);
+    TestEngineStateReadAtInterrupt(State);
     TestEnginesAreIndependent(State);
     TestStopAndRestart(State);
     TestReadyContextScheduling(State);
