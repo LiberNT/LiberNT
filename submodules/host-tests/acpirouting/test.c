@@ -205,8 +205,33 @@ ACPI_STATUS AcpiOsReadPciConfiguration(ACPI_PCI_ID *PciId, UINT32 Reg, UINT64 *V
 
 ACPI_STATUS AcpiGetDevices(char *Hid, ACPI_WALK_CALLBACK UserFunction, void *Context, void **ReturnValue)
 {
-    UNREFERENCED_PARAMETER(Hid);
+    if (strcmp(Hid, "PNP0C0F") == 0)
+        return AE_OK;
     return UserFunction((ACPI_HANDLE)&Nodes[0], 1, Context, ReturnValue);
+}
+
+ACPI_STATUS AcpiWalkNamespace(ACPI_OBJECT_TYPE Type, ACPI_HANDLE StartObject, UINT32 MaxDepth,
+                              ACPI_WALK_CALLBACK DescendingCallback, ACPI_WALK_CALLBACK AscendingCallback,
+                              void *Context, void **ReturnValue)
+{
+    UNREFERENCED_PARAMETER(Type);
+    UNREFERENCED_PARAMETER(StartObject);
+    UNREFERENCED_PARAMETER(MaxDepth);
+    UNREFERENCED_PARAMETER(DescendingCallback);
+    UNREFERENCED_PARAMETER(AscendingCallback);
+    UNREFERENCED_PARAMETER(Context);
+    UNREFERENCED_PARAMETER(ReturnValue);
+    return AE_OK;
+}
+
+ACPI_STATUS AcpiEvaluateObject(ACPI_HANDLE Object, ACPI_STRING Pathname, ACPI_OBJECT_LIST *ParameterObjects,
+                               ACPI_BUFFER *ReturnObjectBuffer)
+{
+    UNREFERENCED_PARAMETER(Object);
+    UNREFERENCED_PARAMETER(Pathname);
+    UNREFERENCED_PARAMETER(ParameterObjects);
+    UNREFERENCED_PARAMETER(ReturnObjectBuffer);
+    return AE_NOT_FOUND;
 }
 
 static void CheckRoute(UCHAR Bus, UCHAR Device, UCHAR Function, UCHAR Pin, ULONG Expected)

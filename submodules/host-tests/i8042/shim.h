@@ -56,6 +56,9 @@ typedef struct { PUCHAR DataPort, ControlPort; I8042_SETTINGS Settings; PKINTERR
 UCHAR TestReadPort(PUCHAR Port);
 VOID TestWritePort(PUCHAR Port, UCHAR Value);
 VOID KeStallExecutionProcessor(ULONG Time);
+#define PASSIVE_LEVEL 0
+#define DISPATCH_LEVEL 2
+KIRQL KeGetCurrentIrql(VOID);
 KIRQL KeAcquireInterruptSpinLock(PKINTERRUPT Interrupt);
 VOID KeReleaseInterruptSpinLock(PKINTERRUPT Interrupt, KIRQL OldIrql);
 #define READ_PORT_UCHAR(p) TestReadPort(p)

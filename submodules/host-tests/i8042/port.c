@@ -71,6 +71,20 @@ VOID KeStallExecutionProcessor(ULONG Time)
     Stalls++;
 }
 
+static KIRQL TestIrql = PASSIVE_LEVEL;
+
+KIRQL KeGetCurrentIrql(VOID)
+{
+    return TestIrql;
+}
+
+static VOID RunTimeoutDpc(PPORT_DEVICE_EXTENSION Extension)
+{
+    TestIrql = DISPATCH_LEVEL;
+    i8042PacketTimeoutDpc(&Extension->PacketTimeoutDpc, Extension, NULL, NULL);
+    TestIrql = PASSIVE_LEVEL;
+}
+
 KIRQL KeAcquireInterruptSpinLock(PKINTERRUPT Interrupt)
 {
     assert(Interrupt && LockDepth == 0);
@@ -174,7 +188,7 @@ int main(void)
     Device.PacketTimer.SignalState = 1;
     FirstIrp.IoStatus.Status = STATUS_SUCCESS;
     ExpectedStatus = STATUS_IO_TIMEOUT;
-    i8042PacketTimeoutDpc(&Device.PacketTimeoutDpc, &Device, NULL, NULL);
+    RunTimeoutDpc(&Device);
     assert(Device.Packet.State == Idle && Device.PacketResends == 0);
     assert(Completions == 1 && Starts == 1 && CancelCalls == 1);
     assert(TestErrors == 1 && TestErrorValue == 0xf3);
@@ -189,14 +203,14 @@ int main(void)
     Device.Packet.Bytes = Typematic;
     Device.Packet.State = SendingBytes;
     Device.PacketTimer.Inserted = TRUE;
-    i8042PacketTimeoutDpc(&Device.PacketTimeoutDpc, &Device, NULL, NULL);
+    RunTimeoutDpc(&Device);
     assert(Device.Packet.State == SendingBytes && Device.PacketTimer.Inserted);
     assert(Completions == 0 && CancelCalls == 0 && LockCalls == 1 && UnlockCalls == 1 && TestErrors == 0);
 
     /* Nor does an expiry after the packet already finished */
     Device = NewController();
     Device.PacketTimer.SignalState = 1;
-    i8042PacketTimeoutDpc(&Device.PacketTimeoutDpc, &Device, NULL, NULL);
+    RunTimeoutDpc(&Device);
     assert(Device.Packet.State == Idle && Completions == 0 && CancelCalls == 0);
 
     /* Without a connected interrupt there is nothing to time out */
@@ -204,7 +218,7 @@ int main(void)
     Device.HighestDIRQLInterrupt = NULL;
     Device.Packet.State = SendingBytes;
     Device.PacketTimer.SignalState = 1;
-    i8042PacketTimeoutDpc(&Device.PacketTimeoutDpc, &Device, NULL, NULL);
+    RunTimeoutDpc(&Device);
     assert(Device.Packet.State == SendingBytes && Completions == 0 && LockCalls == 0);
 
     /* A packet is refused unless its device's interrupt is initialized and a synchronizing interrupt is connected */

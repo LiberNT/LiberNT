@@ -33,7 +33,11 @@ typedef unsigned int ULONG, *PULONG;
 #define DPRINT1(...) ((void)0)
 #define PASSIVE_LEVEL 0
 #define NonPagedPool 0
+#define PagedPool 1
+#define PAGED_CODE() ((void)0)
+#define RTL_NUMBER_OF(a) (sizeof(a) / sizeof((a)[0]))
 #define RtlCopyMemory memcpy
+#define RtlZeroMemory(d, n) memset((d), 0, (n))
 
 extern int HostTestFailures;
 #define ASSERT(x) do { if (!(x)) { printf("assertion failed: %s\n", #x); HostTestFailures++; } } while (0)
