@@ -391,6 +391,7 @@ if(ARCH STREQUAL "i386")
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/cpu.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/context.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/i386/exp.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/idleloop.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/intobj.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/callout.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/excdispatch.c
@@ -429,6 +430,7 @@ elseif(ARCH STREQUAL "amd64")
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/context.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/cpu.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/except.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/idleloop.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/intobj.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/callout.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/excdispatch.c
