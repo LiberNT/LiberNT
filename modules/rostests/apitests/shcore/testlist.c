@@ -7,6 +7,7 @@ extern void func_ForwardedOrdinals(void);
 extern void func_IsOSDomainMember(void);
 
 extern void func_RegistryHelpers(void);
+extern void func_StreamWinRtContract(void);
 
 extern void func_Win81ExportSurface(void);
 
@@ -16,6 +17,7 @@ const struct test winetest_testlist[] =
     { "ForwardedOrdinals", func_ForwardedOrdinals },
     { "IsOSDomainMember", func_IsOSDomainMember },
     { "RegistryHelpers", func_RegistryHelpers },
+    { "StreamWinRtContract", func_StreamWinRtContract },
     { "Win81ExportSurface", func_Win81ExportSurface },
     { 0, 0 }
 };

@@ -69,6 +69,7 @@ CONTRACT_HOST_OVERRIDES = {
     'api-ms-win-shcore-scaling-l1-1-1.dll': 'shcore.dll',
     'api-ms-win-shcore-scaling-l1-1-2.dll': 'shcore.dll',
     'api-ms-win-shcore-stream-l1-1-0.dll': 'shcore.dll',
+    'api-ms-win-shcore-stream-winrt-l1-1-0.dll': 'shcore.dll',
     'api-ms-win-shell-shellfolders-l1-1-0.dll': 'shell32.dll',
 }
 

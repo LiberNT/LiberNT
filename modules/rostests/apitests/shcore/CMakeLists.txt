@@ -3,6 +3,7 @@ list(APPEND SOURCE
     ForwardedOrdinals.c
     IsOSDomainMember.c
     RegistryHelpers.c
+    StreamWinRtContract.c
     Win81ExportSurface.c
     testlist.c)
 
