@@ -100,6 +100,14 @@ BOOL MSSTYLES_IsActiveTheme(LPCWSTR pszThemeFile, LPCWSTR pszColorName, LPCWSTR 
     MSSTYLES_CloseThemeFile(tf);
     return bActive;
 }
+
+static int MSSTYLES_NameCompare(LPCWSTR pszFirst, LPCWSTR pszSecond)
+{
+    return CompareStringOrdinal(pszFirst, -1, pszSecond, -1, TRUE) - CSTR_EQUAL;
+}
+#define MSSTYLES_CLASS_NAME_COMPARE MSSTYLES_NameCompare
+#else
+#define MSSTYLES_CLASS_NAME_COMPARE lstrcmpiW
 #endif
 
 /***********************************************************************/
@@ -493,11 +501,11 @@ static PTHEME_CLASS MSSTYLES_FindClass(PTHEME_FILE tf, LPCWSTR pszAppName, LPCWS
     PTHEME_CLASS cur = tf->classes;
     while(cur) {
         if(!pszAppName) {
-            if(!*cur->szAppName && !lstrcmpiW(pszClassName, cur->szClassName))
+            if(!*cur->szAppName && !MSSTYLES_CLASS_NAME_COMPARE(pszClassName, cur->szClassName))
                 return cur;
         }
         else {
-            if(!lstrcmpiW(pszAppName, cur->szAppName) && !lstrcmpiW(pszClassName, cur->szClassName))
+            if(!MSSTYLES_CLASS_NAME_COMPARE(pszAppName, cur->szAppName) && !MSSTYLES_CLASS_NAME_COMPARE(pszClassName, cur->szClassName))
                 return cur;
         }
         cur = cur->next;
@@ -1153,7 +1161,7 @@ static void MSSTYLES_ParseThemeIni(PTHEME_FILE tf, BOOL setMetrics)
         }
         if(MSSTYLES_ParseIniSectionName(lpName, dwLen, szAppName, szClassName, &iPartId, &iStateId)) {
             BOOL isGlobal = FALSE;
-            if(!lstrcmpiW(szClassName, L"globals")) {
+            if(!MSSTYLES_CLASS_NAME_COMPARE(szClassName, L"globals")) {
                 isGlobal = TRUE;
             }
             cls = MSSTYLES_AddClass(tf, szAppName, szClassName);
