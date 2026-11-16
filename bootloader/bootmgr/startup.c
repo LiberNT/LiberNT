@@ -8,19 +8,18 @@
 #include <bl.h>
 #include <gui.h>
 
-#define BM_PROFILE_DEBUGGING          1
-#define BM_PROFILE_REMOTE_DEBUGGING   2
-
 static PCSTR BmStartupNames[] =
 {
     "Debugging",
-    "Remote debugging"
+    "Remote debugging",
+    "EEVDF scheduler (experimental)"
 };
 
 static const ULONG BmStartupProfiles[] =
 {
     BM_PROFILE_DEBUGGING,
-    BM_PROFILE_REMOTE_DEBUGGING
+    BM_PROFILE_REMOTE_DEBUGGING,
+    BM_PROFILE_EEVDF_SCHEDULER
 };
 
 BOOLEAN

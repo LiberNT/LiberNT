@@ -560,7 +560,8 @@ BmStartSelectedApplication(
     BOOLEAN Cancelled;
     ULONG Starts;
 
-    if (Startup->Profile != 0 && !FwDebugEnabled)
+    if ((Startup->Profile == BM_PROFILE_DEBUGGING || Startup->Profile == BM_PROFILE_REMOTE_DEBUGGING) &&
+        !FwDebugEnabled)
     {
         FwDebugEnable();
         FwDebugAnnounce("LiberNT Boot Manager", TRUE);

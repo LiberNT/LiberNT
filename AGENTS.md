@@ -22,6 +22,7 @@ Most of the tree is still shared with ReactOS, and the components synchronised w
 | RISC-V64 | The HAL of the port in progress. | `hal/halriscv64` |
 | 32-bit applications | WoW64 on every 64-bit target. On ARM64, FEX runs the x86 code, and ARM64EC/CHPE is supported. | `dll/win32/wow64`, `dll/win32/wow64cpu`, `dll/win32/wow64win` |
 | Graphics | A WDDM graphics kernel and DWM desktop composition. | `drivers/directx/dxgkrnl`, `base/system/dwm` |
+| Scheduling | An experimental EEVDF scheduler for the dynamic priorities, off unless chosen at boot. | `ntos/ke/eevdf.c`, `ntos/include/internal/eevdf.h` |
 | File systems | A new NTFS driver and library. The original driver is still in the tree. | `drivers/filesystems/ntfs_new`, `sdk/lib/fslib/ntfslib_new` |
 | Buses | USB xHCI and SD bus drivers. | `drivers/usb/usbxhci`, `drivers/bus/sd` |
 | Boards | Raspberry Pi drivers, including VideoCore graphics, RP1 Ethernet and CYW43455 Wi-Fi. | `drivers/directx/rpi3vc4`, `drivers/directx/rpi5vc4`, `drivers/network/dd/rp1gem`, `drivers/network/dd/cyw43455` |
@@ -63,6 +64,14 @@ Most of the tree is still shared with ReactOS, and the components synchronised w
 - Implement NT10/Windows 11 semantics unconditionally. Do not add version-gated NT5 paths or keep NT5 defaults for compatibility.
 - Judge behavior, performance and timing against Windows 11 and Linux, not against an ideal. A delay or retry is a bug only when Windows 11 and Linux avoid it and no specification requires it. Classify each finding as required by the specification, matching parity, or excess to fix.
 - Where the documentation is silent, pick the documented-safe behavior or report `INFO_NEEDED`. Validation checks observed on Windows 11 may be kept when the documentation gives nothing.
+
+## Experimental features
+
+- An experimental feature is off by default and changes nothing until it is switched on. Windows 11 behavior stays the default path.
+- Keep it in its own source and header pair. The existing code calls into it only behind the feature's one enable flag.
+- It is switched on at boot by a kernel load option, and the boot manager's "Startup options" menu offers that option as an entry.
+- Its state never goes into a Windows structure. Keep it in the feature's own data, or in storage allocated beside the Windows object.
+- EEVDF scheduling is the load option `SCHEDULER=EEVDF`, "EEVDF scheduler (experimental)" in the menu. It schedules priorities 1 to 15 by weight; the real-time priorities keep strict priority.
 
 ## Kernel structures and ABI
 
