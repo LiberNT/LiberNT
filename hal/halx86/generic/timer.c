@@ -96,9 +96,6 @@ HalpInitializeClock(VOID)
 
     DPRINT("HalpInitializeClock()\n");
 
-#if defined(SARCH_PC98)
-    HalpInitializeClockPc98();
-#endif
 
     /* Get increment and rollover for the largest time clock ms possible */
     Increment = HalpRolloverTable[HalpLargestClockMS - 1].Increment;
@@ -177,18 +174,11 @@ HalpProfileInterruptHandler(IN PKTRAP_FRAME TrapFrame)
     /* Start the interrupt */
     if (HalBeginSystemInterrupt(PROFILE_LEVEL, PRIMARY_VECTOR_BASE + PIC_RTC_IRQ, &Irql))
     {
-#if defined(SARCH_PC98)
-        /* Clear the interrupt flag */
-        HalpAcquireCmosSpinLock();
-        (VOID)__inbyte(RTC_IO_i_INTERRUPT_RESET);
-        HalpReleaseCmosSpinLock();
-#else
         /* Spin until the interrupt pending bit is clear */
         HalpAcquireCmosSpinLock();
         while (HalpReadCmos(RTC_REGISTER_C) & RTC_REG_C_IRQ)
             NOTHING;
         HalpReleaseCmosSpinLock();
-#endif
 
         /* If profiling is enabled, call the kernel function */
         if (!HalpProfilingStopped)

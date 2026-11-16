@@ -641,10 +641,6 @@ BOOLEAN
 NTAPI
 HalpBiosDisplayReset(VOID)
 {
-#if defined(SARCH_XBOX) || defined(SARCH_PC98)
-    /* There is no VGA BIOS on these machine types */
-    return FALSE;
-#else
     ULONG Flags;
     PHARDWARE_PTE IdtPte;
     BOOLEAN RestoreWriteProtection = FALSE;
@@ -709,7 +705,6 @@ HalpBiosDisplayReset(VOID)
     //
     __writeeflags(Flags);
     return TRUE;
-#endif
 }
 
 /* EOF */

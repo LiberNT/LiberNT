@@ -712,29 +712,6 @@ HalpInitProcessor(
     IN PLOADER_PARAMETER_BLOCK LoaderBlock
 );
 
-#if defined(SARCH_PC98)
-BOOLEAN
-NTAPI
-HalpDismissIrq08(
-    _In_ KIRQL Irql,
-    _In_ ULONG Irq,
-    _Out_ PKIRQL OldIrql
-);
-
-BOOLEAN
-NTAPI
-HalpDismissIrq08Level(
-    _In_ KIRQL Irql,
-    _In_ ULONG Irq,
-    _Out_ PKIRQL OldIrql
-);
-
-VOID
-NTAPI
-HalpInitializeClockPc98(VOID);
-
-extern ULONG PIT_FREQUENCY;
-#endif /* SARCH_PC98 */
 
 VOID
 NTAPI

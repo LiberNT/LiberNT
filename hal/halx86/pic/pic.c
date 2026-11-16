@@ -63,20 +63,12 @@ PHAL_DISMISS_INTERRUPT HalpSpecialDismissTable[16] =
     HalpDismissIrqGeneric,
     HalpDismissIrqGeneric,
     HalpDismissIrq07,
-#if defined(SARCH_PC98)
-    HalpDismissIrq08,
-#else
-    HalpDismissIrqGeneric,
-#endif
     HalpDismissIrqGeneric,
     HalpDismissIrqGeneric,
     HalpDismissIrqGeneric,
     HalpDismissIrqGeneric,
-#if defined(SARCH_PC98)
     HalpDismissIrqGeneric,
-#else
     HalpDismissIrq13,
-#endif
     HalpDismissIrqGeneric,
     HalpDismissIrq15
 };
@@ -95,20 +87,12 @@ PHAL_DISMISS_INTERRUPT HalpSpecialDismissLevelTable[16] =
     HalpDismissIrqLevel,
     HalpDismissIrqLevel,
     HalpDismissIrq07Level,
-#if defined(SARCH_PC98)
-    HalpDismissIrq08Level,
-#else
-    HalpDismissIrqLevel,
-#endif
     HalpDismissIrqLevel,
     HalpDismissIrqLevel,
     HalpDismissIrqLevel,
     HalpDismissIrqLevel,
-#if defined(SARCH_PC98)
     HalpDismissIrqLevel,
-#else
     HalpDismissIrq13Level,
-#endif
     HalpDismissIrqLevel,
     HalpDismissIrq15Level
 };
@@ -235,21 +219,9 @@ HalpInitializePICs(IN BOOLEAN EnableInterrupts)
     /* Read EISA Edge/Level Register for master and slave */
     Elcr.Bits = (__inbyte(EISA_ELCR_SLAVE) << 8) | __inbyte(EISA_ELCR_MASTER);
 
-#if defined(SARCH_PC98)
-    /* Force defaults when ELCR is not supported */
-    if (Elcr.Bits == 0xFFFF)
-    {
-        Elcr.Master.Irq0Level = 0;
-        Elcr.Master.Irq1Level = 0;
-        Elcr.Master.Irq7Level = 0;
-        Elcr.Slave.Irq8Level = 0;
-    }
-    ElcrFound = TRUE;
-#else
     /* IRQs 0, 1, 2, 8, and 13 are system-reserved and must be edge */
     ElcrFound = (!(Elcr.Master.Irq0Level) && !(Elcr.Master.Irq1Level) && !(Elcr.Master.Irq2Level) &&
                  !(Elcr.Slave.Irq8Level) && !(Elcr.Slave.Irq13Level));
-#endif
 
     if (ElcrFound)
     {
@@ -616,35 +588,11 @@ _HalpDismissIrqGeneric(IN KIRQL Irql,
         /* Check which PIC needs the EOI */
         if (Irq >= 8)
         {
-#if defined(SARCH_PC98)
-            I8259_OCW3 Ocw3;
-            I8259_ISR Isr;
-
-            /* Send the EOI for the IRQ */
-            __outbyte(PIC2_CONTROL_PORT, Ocw2.Bits | ((Irq - 8) & 0xFF));
-
-            /* Request the ISR */
-            Ocw3.Bits = 0;
-            Ocw3.Sbo = 1;
-            Ocw3.ReadRequest = ReadIsr;
-            __outbyte(PIC2_CONTROL_PORT, Ocw3.Bits);
-
-            /* Read the ISR */
-            Isr.Bits = __inbyte(PIC2_CONTROL_PORT);
-
-            /* Check if the interrupt serviced was the only one from the slave PIC */
-            if (Isr.Bits == 0)
-            {
-                /* If ISR is empty, send the EOI for cascade IRQ on the master PIC */
-                __outbyte(PIC1_CONTROL_PORT, Ocw2.Bits | PIC_CASCADE_IRQ);
-            }
-#else
             /* Send the EOI for the IRQ */
             __outbyte(PIC2_CONTROL_PORT, Ocw2.Bits | ((Irq - 8) & 0xFF));
 
             /* Send the EOI for cascade IRQ on the master PIC */
             __outbyte(PIC1_CONTROL_PORT, Ocw2.Bits | PIC_CASCADE_IRQ);
-#endif
         }
         else
         {
@@ -727,21 +675,6 @@ HalpDismissIrq13(IN KIRQL Irql,
     return _HalpDismissIrqGeneric(Irql, Irq, OldIrql);
 }
 
-#if defined(SARCH_PC98)
-BOOLEAN
-NTAPI
-HalpDismissIrq08(
-    _In_ KIRQL Irql,
-    _In_ ULONG Irq,
-    _Out_ PKIRQL OldIrql)
-{
-    /* Clear the FPU busy latch */
-    __outbyte(CPU_IO_o_FPU_BUSY_LATCH, 0);
-
-    /* Do normal interrupt dismiss */
-    return _HalpDismissIrqGeneric(Irql, Irq, OldIrql);
-}
-#endif
 
 BOOLEAN
 NTAPI
@@ -799,35 +732,11 @@ _HalpDismissIrqLevel(IN KIRQL Irql,
     /* Check which PIC needs the EOI */
     if (Irq >= 8)
     {
-#if defined(SARCH_PC98)
-        I8259_OCW3 Ocw3;
-        I8259_ISR Isr;
-
-        /* Send the EOI for the IRQ */
-        __outbyte(PIC2_CONTROL_PORT, Ocw2.Bits | ((Irq - 8) & 0xFF));
-
-        /* Request the ISR */
-        Ocw3.Bits = 0;
-        Ocw3.Sbo = 1;
-        Ocw3.ReadRequest = ReadIsr;
-        __outbyte(PIC2_CONTROL_PORT, Ocw3.Bits);
-
-        /* Read the ISR */
-        Isr.Bits = __inbyte(PIC2_CONTROL_PORT);
-
-        /* Check if the interrupt serviced was the only one from the slave PIC */
-        if (Isr.Bits == 0)
-        {
-            /* If ISR is empty, send the EOI for cascade IRQ on the master PIC */
-            __outbyte(PIC1_CONTROL_PORT, Ocw2.Bits | PIC_CASCADE_IRQ);
-        }
-#else
         /* Send the EOI for the IRQ */
         __outbyte(PIC2_CONTROL_PORT, Ocw2.Bits | ((Irq - 8) & 0xFF));
 
         /* Send the EOI for cascade IRQ on the master PIC */
         __outbyte(PIC1_CONTROL_PORT, Ocw2.Bits | PIC_CASCADE_IRQ);
-#endif
     }
     else
     {
@@ -909,21 +818,6 @@ HalpDismissIrq13Level(IN KIRQL Irql,
     return _HalpDismissIrqLevel(Irql, Irq, OldIrql);
 }
 
-#if defined(SARCH_PC98)
-BOOLEAN
-NTAPI
-HalpDismissIrq08Level(
-    _In_ KIRQL Irql,
-    _In_ ULONG Irq,
-    _Out_ PKIRQL OldIrql)
-{
-    /* Clear the FPU busy latch */
-    __outbyte(CPU_IO_o_FPU_BUSY_LATCH, 0);
-
-    /* Do normal interrupt dismiss */
-    return _HalpDismissIrqLevel(Irql, Irq, OldIrql);
-}
-#endif
 
 BOOLEAN
 NTAPI

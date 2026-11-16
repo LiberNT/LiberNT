@@ -36,11 +36,7 @@ HalHandleNMI(
         ERROR_DBGBREAK();
 
     /* Get NMI reason from hardware */
-#if defined(SARCH_PC98)
-    SystemControl.Bits = __inbyte(PPI_IO_i_PORT_B);
-#else
     SystemControl.Bits = __inbyte(SYSTEM_CONTROL_PORT_B);
-#endif
 
     /* Switch to boot video */
     if (InbvIsBootDriverInstalled())
@@ -63,17 +59,6 @@ HalHandleNMI(
     InbvDisplayString("\r\n*** Hardware Malfunction\r\n\r\n");
     InbvDisplayString("Call your hardware vendor for support\r\n\r\n");
 
-#if defined(SARCH_PC98)
-    /* Check for parity error */
-    if (SystemControl.MemoryParityCheck)
-    {
-        InbvDisplayString("NMI: Parity Check / Memory Parity Error\r\n");
-    }
-    if (SystemControl.ExtendedMemoryParityCheck)
-    {
-        InbvDisplayString("NMI: Parity Check / Extended Memory Parity Error\r\n");
-    }
-#else
     /* Check for parity error */
     if (SystemControl.ParityCheck)
     {
@@ -85,7 +70,6 @@ HalHandleNMI(
     {
         InbvDisplayString("NMI: Channel Check / IOCHK\r\n");
     }
-#endif
 
     /* Check for EISA systems */
     if (HalpBusType == MACHINE_TYPE_EISA)

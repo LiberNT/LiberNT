@@ -34,13 +34,6 @@
 //
 #define GRAPHICS_MODE_12 0x12           /* 80x30  8x16  640x480  16/256K */
 
-#if defined(SARCH_XBOX)
-//
-// For some unknown reason the PIT of the Xbox is fixed at 1.125000 MHz,
-// which is ~5.7% lower than on the PC.
-//
-#define PIT_FREQUENCY 1125000
-#else
 //
 // Commonly stated as being 1.19318MHz
 //
@@ -59,7 +52,6 @@
 // number is quite long.
 //
 #define PIT_FREQUENCY 1193182
-#endif
 
 //
 // These ports are controlled by the i8254 Programmable Interrupt Timer (PIT)
