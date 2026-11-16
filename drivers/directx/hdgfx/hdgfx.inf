@@ -45,7 +45,7 @@ AddService=hdgfx,0x00000002,HdGfx_Service
 [HdGfx_Service]
 DisplayName=%HdGfx.ServiceDesc%
 ServiceType=1
-StartType=1
+StartType=3
 ErrorControl=0
 ServiceBinary=%12%\hdgfx.sys
 LoadOrderGroup=Video
