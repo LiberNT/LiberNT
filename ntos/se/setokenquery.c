@@ -1357,6 +1357,12 @@ NtSetInformationToken(
                 break;
             }
 
+            if (Token->TokenInUse)
+            {
+                Status = STATUS_TOKEN_ALREADY_IN_USE;
+                break;
+            }
+
             Token->SessionId = *(PULONG)Given;
             break;
 
