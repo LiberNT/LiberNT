@@ -72,7 +72,7 @@ RtlWalkFrameChain(
     _In_ ULONG Count,
     _In_ ULONG Flags)
 {
-    ULONG_PTR Frame = (ULONG_PTR)__builtin_frame_address(0);
+    ULONG_PTR Frame = (ULONG_PTR)_AddressOfReturnAddress() - sizeof(ULONG_PTR);
     ULONG_PTR Low = 0, High = 0, Next, Return;
     ULONG Found = 0;
 
