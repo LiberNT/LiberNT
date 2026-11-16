@@ -190,6 +190,7 @@ list(APPEND SOURCE
     ExitedProcessImage.c
     ThreadKernelStack.c
     SleepTickRounding.c
+    SleepZeroPriority.c
     SwitchToThreadPriority.c
     QueryInterruptTimePrecise.c
     ProcessAffinityQueued.c

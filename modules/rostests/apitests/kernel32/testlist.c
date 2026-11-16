@@ -182,6 +182,7 @@ extern void func_ExitedClientId(void);
 extern void func_ExitedProcessImage(void);
 extern void func_ThreadKernelStack(void);
 extern void func_SleepTickRounding(void);
+extern void func_SleepZeroPriority(void);
 extern void func_SwitchToThreadPriority(void);
 extern void func_QueryInterruptTimePrecise(void);
 extern void func_ProcessAffinityQueued(void);
@@ -400,6 +401,7 @@ const struct test winetest_testlist[] =
     { "ExitedProcessImage",          func_ExitedProcessImage },
     { "ThreadKernelStack",           func_ThreadKernelStack },
     { "SleepTickRounding",           func_SleepTickRounding },
+    { "SleepZeroPriority",           func_SleepZeroPriority },
     { "SwitchToThreadPriority",      func_SwitchToThreadPriority },
     { "QueryInterruptTimePrecise",   func_QueryInterruptTimePrecise },
     { "ProcessAffinityQueued",       func_ProcessAffinityQueued },

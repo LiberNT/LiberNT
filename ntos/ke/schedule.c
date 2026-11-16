@@ -683,7 +683,8 @@ KiYieldDelayExecution(VOID)
 
     if (Prcb->NextThread == NULL)
     {
-        Next = KiSelectReadyThread(Thread->Priority, Prcb);
+        /* FIXME: Windows 11 gives the processor back to a higher-priority yielder after about 2.5 ms; here the thread it yielded to keeps its whole turn */
+        Next = KiSelectReadyThread(0, Prcb);
         if (Next == NULL)
             Next = KiStealReadyThread(Prcb, Thread->Priority);
 
