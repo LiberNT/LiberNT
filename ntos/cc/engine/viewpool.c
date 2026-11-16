@@ -264,7 +264,10 @@ CcViewReclaimShard(
     }
 
     if (Claimed != NULL)
+    {
+        CC_RESOURCE_REUSE(&Claimed->IoResource);
         Claimed->ReferenceCount = 1;
+    }
 
     CC_LOCK_RELEASE(&Shard->Lock, ShardIrql);
     return Claimed;
@@ -317,6 +320,7 @@ CcViewDetachIdleShard(
         RemoveEntryList(&Claimed->LruLink);
         Claimed->OnLru = FALSE;
         Shard->Count--;
+        CC_RESOURCE_REUSE(&Claimed->IoResource);
         Claimed->ReferenceCount = 1;
     }
 

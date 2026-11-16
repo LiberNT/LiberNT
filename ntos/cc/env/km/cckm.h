@@ -54,6 +54,16 @@ CcResourceRelease(_Inout_ CC_RESOURCE *Resource)
     KeLeaveCriticalRegion();
 }
 
+FORCEINLINE
+VOID
+CcResourceReuse(_Inout_ CC_RESOURCE *Resource)
+{
+    ASSERT(ExGetExclusiveWaiterCount(Resource) == 0);
+    ASSERT(ExGetSharedWaiterCount(Resource) == 0);
+    ASSERT(ReadNoFence16(&Resource->ActiveCount) == 0);
+    UNREFERENCED_PARAMETER(Resource);
+}
+
 #define CC_CACHE_ALIGNED                DECLSPEC_CACHEALIGN
 #define CC_CURRENT_PROCESSOR()          KeGetCurrentProcessorNumber()
 #define CC_LOCK_INIT(l)                 KeInitializeSpinLock(l)
@@ -64,6 +74,7 @@ CcResourceRelease(_Inout_ CC_RESOURCE *Resource)
 #define CC_RESOURCE_ACQUIRE_SHARED(r)   CcResourceAcquireShared(r)
 #define CC_RESOURCE_ACQUIRE_EXCLUSIVE(r) CcResourceAcquireExclusive(r)
 #define CC_RESOURCE_RELEASE(r)          CcResourceRelease(r)
+#define CC_RESOURCE_REUSE(r)            CcResourceReuse(r)
 #define CC_ALLOCATE(b)                  ExAllocatePoolWithTag(NonPagedPool, (b), CC_ENGINE_TAG)
 #define CC_FREE(p)                      ExFreePoolWithTag((p), CC_ENGINE_TAG)
 #define CC_ATOMIC_ADD32(v, d)           InterlockedExchangeAdd((v), (d))
