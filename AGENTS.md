@@ -164,18 +164,22 @@ To develop this without a second machine, `~/reactos-scripts/kdnet_bench.sh` (se
 
 ## Fixing bugs
 
+These rules apply to bugs in new code and existing code alike.
+
 - Fix bugs recursively. A bug found while working toward a goal becomes the goal: never step past it to stay on the main task. Fix that exact bug, then return to the parent bug or goal, and treat every bug found beneath it the same way. A `TODO:` or `FIXME:` marker never replaces that fix: markers are for gaps outside the current work, not for bugs met on the way.
 - Start from the code, not from reruns. Read and analyze the code around the failure to find the cause before trying to reproduce it.
 - Catch the bug in a test: write one that reproduces it, make the fix, and confirm the fix in a separate run of that test.
 - A bug seen once, such as a race, is real. Do not shut down the harness that caught it: keep the machine stopped in the debugger and find the cause live. The harness always accepts a debugger, gdb through kdgdb on a Linux host or the kernel debugger on a Windows host, to debug it end to end.
 
-## Verifying a fix
+## Verifying new code and fixes
+
+Apply these rules equally to new code, features and bug fixes.
 
 - Before declaring code ready, trace concurrent readers, writers, hardware updates, callbacks and teardown across the whole affected state machine. Identify the locks, atomic operations, memory ordering and object lifetime that make each interleaving safe; verify that snapshots remain valid until they are used.
 - Review boundary and failure cases explicitly: empty and sparse ranges, arithmetic limits, allocation and I/O failures, partial progress, retries, rollback and cleanup. Add focused tests for reachable failures and adverse interleavings, including deterministic race orchestration where practical. A passing happy-path test or build does not establish race freedom or error-path correctness.
-- A fix counts only after a real boot or test run shows it working. A clean build proves nothing about behavior.
+- A change counts only after a real boot or test run shows it working. A clean build proves nothing about behavior.
 - Fix a broken change in place. Never build on a change that does not work, and never set it aside to test something else.
-- When a run shows that an attempt does not fix the bug, revert it before the next attempt; never stack changes that fix nothing. A session's diff holds only targeted changes, each justified by a run.
+- When a run shows that an attempt does not work or does not fix the bug, revert it before the next attempt; never stack changes that do not work. A session's diff holds only targeted changes, each justified by a run.
 - For races, lost wakeups, deadlocks, lock ordering and hot paths: hold the first hypothesis loosely, get an independent adversarial review, accept only facts verified in the source, and confirm them with a real boot. Treat every second opinion, and your own conclusion, as claims to verify.
 - Before committing, harden the C and C++ files in the diff with cppcheck, run with the build's own include paths and defines. Write the compile database outside the build directory, pass one `--file-filter` per changed file, and use the target defines of the build directory (the amd64 ones are shown):
 
