@@ -167,7 +167,8 @@ IopCheckPropertyArguments(
     _In_ BOOLEAN SetOperation)
 {
     if (PropertyKey == NULL) return STATUS_INVALID_PARAMETER;
-    if (PropertyKey->pid < DEVPROPID_FIRST_USABLE)
+    /* pid 1 is in use: DEVPKEY_Device_Numa_Proximity_Domain, the monitor GPU LUID */
+    if (PropertyKey->pid == 0)
     {
         return STATUS_INVALID_PARAMETER;
     }

@@ -195,6 +195,30 @@ TestCheckDiskPdo(
     ok(Status == STATUS_SUCCESS || Status == STATUS_BUFFER_TOO_SMALL, "AllocatedResources: status %lx\n", Status);
 }
 
+DEFINE_DEVPROPKEY(TestPidOneKey, 0x7d1b3c58, 0x2f4e, 0x4a61, 0x9b, 0x0d, 0x5e, 0x83, 0x1c, 0x6a, 0x42, 0xf7, 1);
+
+static
+VOID
+TestPidOne(
+    _In_ PDEVICE_OBJECT Pdo)
+{
+    ULONG Value = 0x13572468, Read = 0, Required = 0;
+    DEVPROPTYPE Type = DEVPROP_TYPE_EMPTY;
+    NTSTATUS Status;
+
+    Status = IoSetDevicePropertyData(Pdo, &TestPidOneKey, LOCALE_NEUTRAL, 0, DEVPROP_TYPE_UINT32, sizeof(Value), &Value);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    Status = IoGetDevicePropertyData(Pdo, &TestPidOneKey, LOCALE_NEUTRAL, 0, sizeof(Read), &Read, &Required, &Type);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(Read, Value);
+    ok_eq_ulong(Required, (ULONG)sizeof(Value));
+    ok_eq_hex(Type, DEVPROP_TYPE_UINT32);
+    Status = IoSetDevicePropertyData(Pdo, &TestPidOneKey, LOCALE_NEUTRAL, 0, DEVPROP_TYPE_EMPTY, 0, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    Status = IoGetDevicePropertyData(Pdo, &TestPidOneKey, LOCALE_NEUTRAL, 0, sizeof(Read), &Read, &Required, &Type);
+    ok_eq_hex(Status, STATUS_OBJECT_NAME_NOT_FOUND);
+}
+
 START_TEST(IoDevicePropertyData)
 {
     PDEVICE_OBJECT Pdo;
@@ -204,6 +228,7 @@ START_TEST(IoDevicePropertyData)
     if (Pdo)
     {
         TestCheckDiskPdo(Pdo);
+        TestPidOne(Pdo);
         TestQueryPdo("disk", Pdo);
         ObDereferenceObject(Pdo);
     }
