@@ -77,6 +77,29 @@ static PTHEME_FILE MSSTYLES_ReferenceActiveTheme(void)
     LeaveCriticalSection(&handles_cs);
     return tf;
 }
+
+BOOL MSSTYLES_IsActiveTheme(LPCWSTR pszThemeFile, LPCWSTR pszColorName, LPCWSTR pszSizeName,
+                            LPWSTR pszSelectedColor, int cchColor, LPWSTR pszSelectedSize, int cchSize)
+{
+    WCHAR szFullPath[MAX_PATH];
+    PTHEME_FILE tf = MSSTYLES_ReferenceActiveTheme();
+    BOOL bActive;
+
+    if (!tf)
+        return FALSE;
+    bActive = tf->classes &&
+              GetFullPathNameW(pszThemeFile, ARRAY_SIZE(szFullPath), szFullPath, NULL) &&
+              !lstrcmpiW(szFullPath, tf->szThemeFile) &&
+              !lstrcmpiW(pszColorName ? pszColorName : tf->pszAvailColors, tf->pszSelectedColor) &&
+              !lstrcmpiW(pszSizeName ? pszSizeName : tf->pszAvailSizes, tf->pszSelectedSize);
+    if (bActive)
+    {
+        lstrcpynW(pszSelectedColor, tf->pszSelectedColor, cchColor);
+        lstrcpynW(pszSelectedSize, tf->pszSelectedSize, cchSize);
+    }
+    MSSTYLES_CloseThemeFile(tf);
+    return bActive;
+}
 #endif
 
 /***********************************************************************/

@@ -1067,7 +1067,7 @@ ThemeInitApiHook(UAPIHK State, PUSERAPIHOOK puah)
     UAH_HOOK_MESSAGE(puah->DlgProcArray, WM_ERASEBKGND);
     UAH_HOOK_MESSAGE(puah->DlgProcArray, WM_PRINTCLIENT);
 
-    UXTHEME_ReloadTheme(TRUE);
+    UXTHEME_LoadThemeIfChanged();
 
     return TRUE;
 }
