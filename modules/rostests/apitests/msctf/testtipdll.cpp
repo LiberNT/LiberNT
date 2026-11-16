@@ -383,6 +383,7 @@ public:
     STDMETHODIMP Activate(ITfThreadMgr *ptim, TfClientId tid) override
     {
         ++g_tip.cActivate;
+        g_tip.dwActivateThreadId = GetCurrentThreadId();
         g_tip.pTip = static_cast<ITfTextInputProcessor *>(this);
         g_tip.pThreadMgr = ptim;
         ITfSourceSingle *pSource = NULL;

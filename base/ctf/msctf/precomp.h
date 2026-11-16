@@ -73,6 +73,7 @@ HRESULT Context_ReplaceText(ITfContext *context, DWORD dwFlags, LONG start, LONG
                             const WCHAR *text, LONG cch, TS_TEXTCHANGE *change);
 void ThreadMgr_OnDocumentMgrDestruction(ITfThreadMgr *tm, ITfDocumentMgr *mgr);
 void ThreadMgr_CleanupContextSinks(ITfThreadMgrEx *tm, TfClientId tid);
+struct list *ThreadMgr_GetTextServices(ITfThreadMgrEx *tm, UINT **ppActivated);
 HRESULT TF_SELECTION_to_TS_SELECTION_ACP(const TF_SELECTION *tf, TS_SELECTION_ACP *tsAcp);
 
 /* cookie function */
@@ -89,7 +90,8 @@ BOOL get_active_textservice_by_category(REFGUID catid, TF_LANGUAGEPROFILE *profi
 HRESULT activate_textservices(ITfThreadMgrEx *tm);
 HRESULT activate_default_textservice(LANGID langid);
 void deactivate_textservice_by_category(REFGUID catid);
-HRESULT deactivate_textservices(void);
+HRESULT deactivate_textservices(ITfThreadMgrEx *tm);
+void free_textservices(struct list *list);
 
 CLSID get_textservice_clsid(TfClientId tid);
 BOOL is_textservice_in_transition(TfClientId tid);

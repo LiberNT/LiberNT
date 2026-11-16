@@ -27,6 +27,7 @@ struct TEST_TIP_STATE
     HRESULT hrUnadviseKeySink;
     HRESULT hrPreserveKey;
     HRESULT hrUnpreserveKey;
+    DWORD dwActivateThreadId;
 };
 
 extern const GUID GUID_TestDisplayAttribute;
