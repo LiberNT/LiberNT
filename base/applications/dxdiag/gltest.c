@@ -308,9 +308,9 @@ static BOOL GL3Setup(GL3_STATE *State, PD3DTEST_RESULT Result)
     Functions->GenBuffers(1, &State->Buffer);
     Functions->BindBuffer(GL_ARRAY_BUFFER, State->Buffer);
     Functions->BufferData(GL_ARRAY_BUFFER, D3DTEST_MAX_VERTEX_COUNT * sizeof(D3DTEST_CLIP_VERTEX), NULL, GL_STREAM_DRAW);
-    Functions->VertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(D3DTEST_CLIP_VERTEX), (const GLvoid *)(ULONG_PTR)FIELD_OFFSET(D3DTEST_CLIP_VERTEX, Position));
+    Functions->VertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(D3DTEST_CLIP_VERTEX), (const GLvoid *)FIELD_OFFSET(D3DTEST_CLIP_VERTEX, Position));
     Functions->EnableVertexAttribArray(0);
-    Functions->VertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(D3DTEST_CLIP_VERTEX), (const GLvoid *)(ULONG_PTR)FIELD_OFFSET(D3DTEST_CLIP_VERTEX, Color));
+    Functions->VertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(D3DTEST_CLIP_VERTEX), (const GLvoid *)FIELD_OFFSET(D3DTEST_CLIP_VERTEX, Color));
     Functions->EnableVertexAttribArray(1);
     Functions->UseProgram(State->Program);
     return GLCheck(Result, "GL3", "setup");
