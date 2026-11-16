@@ -424,7 +424,7 @@ KiEevdfAssertQueue(
 
 BOOLEAN KiEevdfEnabled;
 
-static KI_EEVDF_QUEUE KiEevdfQueue[MAXIMUM_PROCESSORS];
+KI_EEVDF_QUEUE KiEevdfQueue[MAXIMUM_PROCESSORS];
 
 extern ULONG KiCyclesPerClockQuantum;
 
