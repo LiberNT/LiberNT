@@ -17,10 +17,15 @@
 typedef int (__cdecl *PFN_WCSNSET_S)(wchar_t *, size_t, wchar_t, size_t);
 typedef int (__cdecl *PFN_WCSLWR_S)(wchar_t *, size_t);
 typedef int (__cdecl *PFN_ULTOW_S)(unsigned long, wchar_t *, size_t, int);
+typedef void *(__cdecl *PFN_BSEARCH_S)(const void *, const void *, size_t, size_t, int (__cdecl *)(void *, const void *, const void *), void *);
 
 static PFN_WCSNSET_S pWcsnsetS;
 static PFN_WCSLWR_S pWcslwrS;
 static PFN_ULTOW_S pUltowS;
+static PFN_BSEARCH_S pBsearchS;
+static int SearchCalls;
+static const void *SearchKey;
+static void *SearchContext;
 static WCHAR Buffer[16];
 
 static
@@ -114,18 +119,71 @@ TestUltow(VOID)
     Fill(NULL); check(pUltowS(123, Buffer, 3, 10), TEST_ERANGE, 0, '2', '1', FILL);
 }
 
+static
+int
+__cdecl
+CompareInt(
+    _In_ void *Context,
+    _In_ const void *Key,
+    _In_ const void *Element)
+{
+    SearchCalls++;
+    SearchContext = Context;
+    SearchKey = Key;
+    return *(const int *)Key - *(const int *)Element;
+}
+
+static
+VOID
+CheckSearch(
+    _In_ int Key,
+    _In_ size_t Count,
+    _In_ int ExpectedIndex,
+    _In_ int ExpectedCalls,
+    _In_ ULONG Line)
+{
+    static const int Sorted[] = { 1, 3, 5, 7, 9, 11, 13 };
+    const int *Found;
+
+    SearchCalls = 0;
+    SearchKey = NULL;
+    SearchContext = NULL;
+    Found = pBsearchS(&Key, Sorted, Count, sizeof(int), CompareInt, (void *)(ULONG_PTR)0x1234);
+    KmtOk((Found ? (int)(Found - Sorted) : -1) == ExpectedIndex, __FILE__, "line %lu: index %d, expected %d\n", Line,
+          Found ? (int)(Found - Sorted) : -1, ExpectedIndex);
+    KmtOk(SearchCalls == ExpectedCalls, __FILE__, "line %lu: %d comparisons, expected %d\n", Line, SearchCalls, ExpectedCalls);
+    if (ExpectedCalls != 0)
+    {
+        KmtOk(SearchContext == (void *)(ULONG_PTR)0x1234, __FILE__, "line %lu: context %p\n", Line, SearchContext);
+        KmtOk(SearchKey == &Key, __FILE__, "line %lu: the key is not the second argument\n", Line);
+    }
+}
+
+static
+VOID
+TestBsearch(VOID)
+{
+    CheckSearch(7, 7, 3, 1, __LINE__);
+    CheckSearch(4, 7, -1, 3, __LINE__);
+    CheckSearch(13, 7, 6, 3, __LINE__);
+    CheckSearch(1, 0, -1, 0, __LINE__);
+}
+
 START_TEST(CrtSecureKM)
 {
     UNICODE_STRING Wcsnset = RTL_CONSTANT_STRING(L"_wcsnset_s");
     UNICODE_STRING Wcslwr = RTL_CONSTANT_STRING(L"_wcslwr_s");
     UNICODE_STRING Ultow = RTL_CONSTANT_STRING(L"_ultow_s");
+    UNICODE_STRING Bsearch = RTL_CONSTANT_STRING(L"bsearch_s");
 
     pWcsnsetS = (PFN_WCSNSET_S)MmGetSystemRoutineAddress(&Wcsnset);
     pWcslwrS = (PFN_WCSLWR_S)MmGetSystemRoutineAddress(&Wcslwr);
     pUltowS = (PFN_ULTOW_S)MmGetSystemRoutineAddress(&Ultow);
+    pBsearchS = (PFN_BSEARCH_S)MmGetSystemRoutineAddress(&Bsearch);
     ok(pWcsnsetS != NULL, "_wcsnset_s is not exported\n");
     ok(pWcslwrS != NULL, "_wcslwr_s is not exported\n");
     ok(pUltowS != NULL, "_ultow_s is not exported\n");
+    ok(pBsearchS != NULL, "bsearch_s is not exported\n");
 
     if (pWcsnsetS)
         TestWcsnset();
@@ -133,4 +191,6 @@ START_TEST(CrtSecureKM)
         TestWcslwr();
     if (pUltowS)
         TestUltow();
+    if (pBsearchS)
+        TestBsearch();
 }

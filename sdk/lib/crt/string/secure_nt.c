@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Kernel CRT
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     The secure wide string routines the kernel exports: _wcsnset_s, _wcslwr_s and _ultow_s
+ * PURPOSE:     The secure routines the kernel exports: _wcsnset_s, _wcslwr_s, _ultow_s and bsearch_s
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -115,4 +115,43 @@ _ultow_s(
         Buffer[Length - 1 - Index] = Swap;
     }
     return 0;
+}
+
+void *
+__cdecl
+bsearch_s(
+    const void *Key,
+    const void *Base,
+    size_t Count,
+    size_t Width,
+    int (__cdecl *Compare)(void *, const void *, const void *),
+    void *Context)
+{
+    const unsigned char *Low = Base;
+    size_t Remaining = Count, Half;
+    int Result;
+
+    if (Count == 0)
+        return NULL;
+    /* FIXME: on Windows 11 a call with an invalid parameter never returns; LiberNT returns NULL */
+    if (Key == NULL || Base == NULL || Width == 0 || Compare == NULL)
+        return NULL;
+
+    while (Remaining != 0)
+    {
+        Half = Remaining / 2;
+        Result = Compare(Context, Key, Low + Half * Width);
+        if (Result == 0)
+            return (void *)(Low + Half * Width);
+        if (Result > 0)
+        {
+            Low += (Half + 1) * Width;
+            Remaining -= Half + 1;
+        }
+        else
+        {
+            Remaining = Half;
+        }
+    }
+    return NULL;
 }

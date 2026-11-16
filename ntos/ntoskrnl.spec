@@ -3475,7 +3475,7 @@
 @ stub -arch=win64 _wcsset_s
 @ stub -arch=win64 _wmakepath_s
 @ cdecl _wsplitpath_s()
-@ stub -arch=win64 bsearch_s
+@ cdecl bsearch_s()
 @ cdecl memcpy_s()
 @ cdecl memmove_s()
 @ stub -arch=win64 qsort_s
