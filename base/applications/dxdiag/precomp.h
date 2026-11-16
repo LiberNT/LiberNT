@@ -25,30 +25,21 @@
 #include <udmihelp.h>
 
 #include "resource.h"
-#include "d3dmark.h"
 
+#define D3DTEST_VERTEX_COUNT 36
 #define D3DTEST_DURATION_MS 4000
-
-typedef enum
-{
-    D3DTEST_API_D3D7,
-    D3DTEST_API_D3D8,
-    D3DTEST_API_D3D9,
-    D3DTEST_API_D3D10,
-    D3DTEST_API_D3D11,
-    D3DTEST_API_D3D12,
-    D3DTEST_API_GL1,
-    D3DTEST_API_GL3,
-    D3DTEST_API_COUNT
-} D3DTEST_API;
+#define D3DTEST_TEXTURE_SIZE 512
 
 typedef struct
 {
-    UINT Frames;
-    DWORD Elapsed;
-    PCSTR Stage;
-    HRESULT Status;
-} D3DTEST_RESULT, *PD3DTEST_RESULT;
+    FLOAT x;
+    FLOAT y;
+    FLOAT z;
+    FLOAT rhw;
+    DWORD color;
+    FLOAT u;
+    FLOAT v;
+} D3DTEST_VERTEX, *PD3DTEST_VERTEX;
 
 typedef struct
 {
@@ -85,20 +76,13 @@ INT_PTR CALLBACK HelpPageWndProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM 
 /* DirectDraw tests */
 VOID DDTests(GUID *lpDevice);
 
-/* Direct3D and OpenGL tests */
-extern const CHAR D3DTestShaderSource[];
-VOID D3DTestButton(HWND hPage, GUID *lpDevice, D3DTEST_API Api, UINT ButtonId);
+/* Direct3D tests */
+VOID D3DTests(GUID *lpDevice);
 BOOL D3D78BootTests(VOID);
-BOOL D3DTestContinue(PD3DTEST_RESULT Result, DWORD Start, DWORD *Elapsed);
-BOOL D3DTestFail(PD3DTEST_RESULT Result, PCSTR Api, PCSTR Stage, HRESULT Status);
-BOOL D3D7Test(GUID *lpDevice, HWND hWnd, BOOL BootMode, PD3DTEST_RESULT Result);
-BOOL D3D8Test(GUID *lpDevice, HWND hWnd, BOOL BootMode, PD3DTEST_RESULT Result);
-BOOL D3D9Test(GUID *lpDevice, HWND hWnd, BOOL BootMode, PD3DTEST_RESULT Result);
-BOOL D3D10Test(GUID *lpDevice, HWND hWnd, BOOL BootMode, PD3DTEST_RESULT Result);
-BOOL D3D11Test(GUID *lpDevice, HWND hWnd, BOOL BootMode, PD3DTEST_RESULT Result);
-BOOL D3D12Test(GUID *lpDevice, HWND hWnd, BOOL BootMode, PD3DTEST_RESULT Result);
-BOOL GL1Test(GUID *lpDevice, HWND hWnd, BOOL BootMode, PD3DTEST_RESULT Result);
-BOOL GL3Test(GUID *lpDevice, HWND hWnd, BOOL BootMode, PD3DTEST_RESULT Result);
+VOID D3DTestBuildCube(PD3DTEST_VERTEX Vertices, DWORD Elapsed, UINT Width, UINT Height);
+BOOL D3DTestLoadTexture(PVOID Bits, LONG Pitch);
+BOOL D3DTestPumpMessages(VOID);
+VOID D3DTestTraceFailure(INT TestNr, PCSTR Stage, HRESULT Result);
 
 /* DirectSound initialization */
 void InitializeDirectSoundPage(PDXDIAG_CONTEXT pContext);

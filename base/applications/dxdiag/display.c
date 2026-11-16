@@ -388,21 +388,14 @@ DisplayPageWndProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
             switch(LOWORD(wParam))
             {
                 case IDC_BUTTON_TESTDD:
-                case IDC_BUTTON_TEST_D3D7:
-                case IDC_BUTTON_TEST_D3D8:
-                case IDC_BUTTON_TEST_D3D9:
-                case IDC_BUTTON_TEST_D3D10:
-                case IDC_BUTTON_TEST_D3D11:
-                case IDC_BUTTON_TEST_D3D12:
-                case IDC_BUTTON_TEST_GL1:
-                case IDC_BUTTON_TEST_GL3:
+                case IDC_BUTTON_TEST3D:
                     hMainDialog = GetAncestor(hDlg, GA_ROOT);
                     GetWindowRect(hMainDialog, &rect);
                     /* FIXME log result errors */
                     if (IDC_BUTTON_TESTDD == LOWORD(wParam))
                         DDTests(&pDisplay->guid);
-                    else
-                        D3DTestButton(hDlg, &pDisplay->guid, LOWORD(wParam) - IDC_BUTTON_TEST_D3D7, LOWORD(wParam));
+                    else if (IDC_BUTTON_TEST3D == LOWORD(wParam))
+                        D3DTests(&pDisplay->guid);
                     SetWindowPos(hMainDialog, NULL, rect.left, rect.top, rect.right, rect.bottom, SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOSIZE | SWP_NOZORDER);
                     break;
             }

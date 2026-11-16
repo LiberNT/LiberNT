@@ -8,34 +8,239 @@
 
 #include "precomp.h"
 
+#include <math.h>
+#include <png.h>
+#include <setjmp.h>
+#include <stdio.h>
+
 #define WIDTH   800
 #define HEIGHT  600
 
-typedef BOOL (*PD3DTEST_ROUTINE)(GUID *lpDevice, HWND hWnd, BOOL BootMode, PD3DTEST_RESULT Result);
+BOOL D3D7Test(GUID *lpDevice, HWND hWnd, BOOL HardwareOnly);
+BOOL D3D8Test(GUID *lpDevice, HWND hWnd);
+BOOL D3D9Test(GUID *lpDevice, HWND hWnd);
 
-static const struct
+typedef struct
 {
-    PCSTR Name;
-    PD3DTEST_ROUTINE Run;
-} D3DTestApis[D3DTEST_API_COUNT] =
+    FLOAT x;
+    FLOAT y;
+    FLOAT z;
+} D3DTEST_POINT;
+
+typedef struct
 {
-    { "D3D7", D3D7Test },
-    { "D3D8", D3D8Test },
-    { "D3D9", D3D9Test },
-    { "D3D10", D3D10Test },
-    { "D3D11", D3D11Test },
-    { "D3D12", D3D12Test },
-    { "GL1", GL1Test },
-    { "GL3", GL3Test },
-};
+    UINT Index;
+    FLOAT Depth;
+} D3DTEST_FACE_ORDER;
 
-const CHAR D3DTestShaderSource[] =
-    "struct VertexIn { float4 Position : POSITION; float4 Color : COLOR; };\n"
-    "struct VertexOut { float4 Position : SV_Position; float4 Color : COLOR; };\n"
-    "VertexOut VSMain(VertexIn Input) { VertexOut Output; Output.Position = Input.Position; Output.Color = Input.Color; return Output; }\n"
-    "float4 PSMain(VertexOut Input) : SV_Target { return Input.Color; }\n";
+VOID D3DTestBuildCube(PD3DTEST_VERTEX Vertices, DWORD Elapsed, UINT Width, UINT Height)
+{
+    static const D3DTEST_POINT Cube[8] =
+    {
+        {-1.0f, -1.0f, -1.0f}, { 1.0f, -1.0f, -1.0f},
+        { 1.0f,  1.0f, -1.0f}, {-1.0f,  1.0f, -1.0f},
+        {-1.0f, -1.0f,  1.0f}, { 1.0f, -1.0f,  1.0f},
+        { 1.0f,  1.0f,  1.0f}, {-1.0f,  1.0f,  1.0f}
+    };
+    static const UINT Faces[6][4] =
+    {
+        {0, 1, 2, 3}, {5, 4, 7, 6}, {4, 0, 3, 7},
+        {1, 5, 6, 2}, {3, 2, 6, 7}, {4, 5, 1, 0}
+    };
+    static const DWORD Shades[6] =
+    {
+        0xffffffff, 0xffe8e8e8, 0xffd8d8d8,
+        0xfff0f0f0, 0xffc8c8c8, 0xffe0e0e0
+    };
+    static const UINT Triangles[6] = {0, 1, 2, 0, 2, 3};
+    static const FLOAT TexCoords[4][2] =
+    {
+        {0.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, 0.0f}, {0.0f, 0.0f}
+    };
+    D3DTEST_POINT Rotated[8];
+    D3DTEST_FACE_ORDER Order[6];
+    FLOAT ProjectedX[8];
+    FLOAT ProjectedY[8];
+    FLOAT ProjectedZ[8];
+    FLOAT angle, cx, cy, focal, cos_x, sin_x, cos_y, sin_y;
+    UINT i, j, k, out = 0;
 
-static BOOL D3DTestPumpMessages(VOID)
+    angle = (FLOAT)Elapsed * 0.0015f;
+    cos_x = (FLOAT)cos(angle * 0.7f);
+    sin_x = (FLOAT)sin(angle * 0.7f);
+    cos_y = (FLOAT)cos(angle);
+    sin_y = (FLOAT)sin(angle);
+    cx = (FLOAT)Width * 0.5f;
+    cy = (FLOAT)Height * 0.5f;
+    focal = (FLOAT)(Width < Height ? Width : Height) * 1.2f;
+
+    for (i = 0; i < 8; ++i)
+    {
+        FLOAT x = Cube[i].x * cos_y + Cube[i].z * sin_y;
+        FLOAT z = -Cube[i].x * sin_y + Cube[i].z * cos_y;
+        FLOAT y = Cube[i].y * cos_x - z * sin_x;
+
+        Rotated[i].x = x;
+        Rotated[i].y = y;
+        Rotated[i].z = Cube[i].y * sin_x + z * cos_x + 4.0f;
+        ProjectedX[i] = cx + x * focal / Rotated[i].z;
+        ProjectedY[i] = cy - y * focal / Rotated[i].z;
+        ProjectedZ[i] = (Rotated[i].z - 2.0f) * 0.25f;
+    }
+
+    for (i = 0; i < 6; ++i)
+    {
+        Order[i].Index = i;
+        Order[i].Depth = 0.0f;
+        for (j = 0; j < 4; ++j)
+            Order[i].Depth += Rotated[Faces[i][j]].z;
+    }
+
+    for (i = 0; i < 5; ++i)
+    {
+        UINT farthest = i;
+
+        for (j = i + 1; j < 6; ++j)
+        {
+            if (Order[j].Depth > Order[farthest].Depth)
+                farthest = j;
+        }
+
+        if (farthest != i)
+        {
+            D3DTEST_FACE_ORDER tmp = Order[i];
+            Order[i] = Order[farthest];
+            Order[farthest] = tmp;
+        }
+    }
+
+    for (i = 0; i < 6; ++i)
+    {
+        UINT face = Order[i].Index;
+
+        for (j = 0; j < 6; ++j)
+        {
+            UINT corner = Triangles[j];
+
+            k = Faces[face][corner];
+            Vertices[out].x = ProjectedX[k];
+            Vertices[out].y = ProjectedY[k];
+            Vertices[out].z = ProjectedZ[k];
+            Vertices[out].rhw = 1.0f / Rotated[k].z;
+            Vertices[out].color = Shades[face];
+            Vertices[out].u = TexCoords[corner][0];
+            Vertices[out].v = TexCoords[corner][1];
+            ++out;
+        }
+    }
+}
+
+typedef struct
+{
+    const BYTE *Data;
+    SIZE_T Size;
+    SIZE_T Offset;
+} D3DTEST_PNG_READER, *PD3DTEST_PNG_READER;
+
+static VOID PNGAPI D3DTestReadPng(png_structp Png, png_bytep Output, png_size_t Size)
+{
+    PD3DTEST_PNG_READER Reader = png_get_io_ptr(Png);
+
+    if (!Reader || Reader->Offset > Reader->Size || Size > Reader->Size - Reader->Offset)
+        png_error(Png, "Unexpected end of DxDiag texture data");
+
+    CopyMemory(Output, Reader->Data + Reader->Offset, Size);
+    Reader->Offset += Size;
+}
+
+BOOL D3DTestLoadTexture(PVOID Bits, LONG Pitch)
+{
+    HINSTANCE Instance = GetModuleHandleW(NULL);
+    HRSRC ResourceInfo;
+    HGLOBAL Resource;
+    const BYTE *ResourceData;
+    DWORD ResourceSize;
+    D3DTEST_PNG_READER Reader;
+    png_structp Png = NULL;
+    png_infop Info = NULL;
+    png_bytep ImageBits = NULL;
+    png_bytepp Rows = NULL;
+    png_uint_32 Width, Height;
+    png_size_t RowBytes;
+    int BitDepth, ColorType, InterlaceMethod;
+    BYTE *Destination = Bits;
+    UINT x, y;
+    BOOL Result = FALSE;
+
+    if (!Bits || !Pitch)
+        return FALSE;
+
+    if (!(ResourceInfo = FindResourceW(Instance, MAKEINTRESOURCEW(IDR_D3DTEST_TEXTURE), RT_RCDATA)))
+        goto cleanup;
+    if (!(Resource = LoadResource(Instance, ResourceInfo)))
+        goto cleanup;
+    ResourceData = LockResource(Resource);
+    ResourceSize = SizeofResource(Instance, ResourceInfo);
+    if (!ResourceData || ResourceSize < 8 || png_sig_cmp(ResourceData, 0, 8))
+        goto cleanup;
+
+    if (!(Png = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL)))
+        goto cleanup;
+    if (!(Info = png_create_info_struct(Png)))
+        goto cleanup;
+    if (setjmp(png_jmpbuf(Png)))
+        goto cleanup;
+
+    Reader.Data = ResourceData;
+    Reader.Size = ResourceSize;
+    Reader.Offset = 0;
+    png_set_read_fn(Png, &Reader, D3DTestReadPng);
+    png_read_info(Png, Info);
+    if (!png_get_IHDR(Png, Info, &Width, &Height, &BitDepth, &ColorType, &InterlaceMethod, NULL, NULL))
+        goto cleanup;
+    if (Width != D3DTEST_TEXTURE_SIZE || Height != D3DTEST_TEXTURE_SIZE || BitDepth != 8 || ColorType != PNG_COLOR_TYPE_RGBA || InterlaceMethod != PNG_INTERLACE_NONE)
+        goto cleanup;
+    RowBytes = png_get_rowbytes(Png, Info);
+    if (RowBytes != Width * 4)
+        goto cleanup;
+
+    if (!(ImageBits = HeapAlloc(GetProcessHeap(), 0, RowBytes * Height)))
+        goto cleanup;
+    if (!(Rows = HeapAlloc(GetProcessHeap(), 0, Height * sizeof(*Rows))))
+        goto cleanup;
+    for (y = 0; y < Height; ++y)
+        Rows[y] = ImageBits + y * RowBytes;
+    png_read_image(Png, Rows);
+    png_read_end(Png, Info);
+
+    if (Pitch < 0)
+        Destination += (D3DTEST_TEXTURE_SIZE - 1) * (size_t)-Pitch;
+    for (y = 0; y < D3DTEST_TEXTURE_SIZE; ++y)
+    {
+        const BYTE *SourceRow = ImageBits + y * RowBytes;
+        DWORD *DestinationRow = (DWORD *)(Destination + (LONG_PTR)y * Pitch);
+
+        for (x = 0; x < D3DTEST_TEXTURE_SIZE; ++x)
+        {
+            const BYTE *Source = SourceRow + x * 4;
+            DWORD Alpha = Source[3];
+
+            DestinationRow[x] = 0xff000000 | (((Source[0] * Alpha + 127) / 255) << 16) | (((Source[1] * Alpha + 127) / 255) << 8) | ((Source[2] * Alpha + 127) / 255);
+        }
+    }
+    Result = TRUE;
+
+cleanup:
+    if (Rows)
+        HeapFree(GetProcessHeap(), 0, Rows);
+    if (ImageBits)
+        HeapFree(GetProcessHeap(), 0, ImageBits);
+    if (Png)
+        png_destroy_read_struct(&Png, Info ? &Info : NULL, NULL);
+    return Result;
+}
+
+BOOL D3DTestPumpMessages(VOID)
 {
     MSG msg;
 
@@ -50,152 +255,167 @@ static BOOL D3DTestPumpMessages(VOID)
     return TRUE;
 }
 
-BOOL D3DTestContinue(PD3DTEST_RESULT Result, DWORD Start, DWORD *Elapsed)
-{
-    *Elapsed = GetTickCount() - Start;
-    Result->Elapsed = *Elapsed;
-    if (*Elapsed >= D3DTEST_DURATION_MS)
-        return FALSE;
-    if (D3DTestPumpMessages())
-        return TRUE;
-    Result->Stage = "message-pump";
-    Result->Status = E_ABORT;
-    return FALSE;
-}
-
-BOOL D3DTestFail(PD3DTEST_RESULT Result, PCSTR Api, PCSTR Stage, HRESULT Status)
+VOID D3DTestTraceFailure(INT TestNr, PCSTR Stage, HRESULT Result)
 {
     CHAR Message[160];
 
-    Result->Stage = Stage;
-    Result->Status = Status;
-    if (SUCCEEDED(StringCchPrintfA(Message, ARRAYSIZE(Message), "DXDIAG_%s_FAIL stage=%s hr=0x%08lx\n", Api, Stage, (ULONG)Status)))
+    if (SUCCEEDED(StringCchPrintfA(Message, ARRAYSIZE(Message), "DXDIAG_D3D%d_FAIL stage=%s hr=0x%08lx\n", TestNr, Stage, (ULONG)Result)))
         OutputDebugStringA(Message);
-    return FALSE;
 }
 
-static VOID D3DTestMarker(D3DTEST_API Api, PCSTR Phase)
+static VOID D3DBootMarker(INT TestNr, PCSTR Phase)
 {
     CHAR Marker[64];
 
-    if (SUCCEEDED(StringCchPrintfA(Marker, ARRAYSIZE(Marker), "DXDIAG_%sBOOT_%s\n", D3DTestApis[Api].Name, Phase)))
+    if (SUCCEEDED(StringCchPrintfA(Marker, ARRAYSIZE(Marker), "DXDIAG_D3D%dBOOT_%s\n", TestNr, Phase)))
         OutputDebugStringA(Marker);
 }
 
-static LRESULT CALLBACK D3DTestWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+BOOL StartD3DTest(GUID *lpDevice, HWND hWnd, HINSTANCE hInstance, WCHAR* pszCaption, INT TestNr, BOOL BootMode)
 {
-    return DefWindowProcW(hWnd, msg, wParam, lParam);
-}
+    WCHAR szTestDescriptionRaw[256];
+    WCHAR szTestDescription[256];
+    WCHAR szResultRaw[256];
+    WCHAR szResult[256];
+    WCHAR szError[256];
+    BOOL Result;
+    INT Response;
 
-static HWND D3DTestCreateWindow(BOOL BootMode)
-{
-    WNDCLASSEXW Class = { sizeof(Class) };
-    HINSTANCE hInstance = GetModuleHandleW(NULL);
+    LoadStringW(hInstance, IDS_DDTEST_ERROR, szError, sizeof(szError) / sizeof(WCHAR));
+    LoadStringW(hInstance, IDS_D3DTEST_D3Dx, szTestDescriptionRaw, sizeof(szTestDescriptionRaw) / sizeof(WCHAR));
+    LoadStringW(hInstance, IDS_D3DTEST_RESULT, szResultRaw, sizeof(szResultRaw) / sizeof(WCHAR));
+    StringCchPrintfW(szResult, ARRAYSIZE(szResult), szResultRaw, TestNr);
 
-    Class.style = CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
-    Class.lpfnWndProc = D3DTestWindowProc;
-    Class.hInstance = hInstance;
-    Class.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
-    Class.lpszClassName = L"d3dtest";
-    if (!RegisterClassExW(&Class) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
-        return NULL;
-
-    return CreateWindowExW(BootMode ? WS_EX_TOPMOST : 0, Class.lpszClassName, NULL, WS_POPUP,
-                           (GetSystemMetrics(SM_CXSCREEN) - WIDTH) / 2, (GetSystemMetrics(SM_CYSCREEN) - HEIGHT) / 2,
-                           WIDTH, HEIGHT, NULL, NULL, hInstance, NULL);
-}
-
-static BOOL D3DRunTest(GUID *lpDevice, D3DTEST_API Api, BOOL BootMode, PD3DTEST_RESULT Result)
-{
-    CHAR Message[96];
-    HWND hWnd;
-    BOOL Passed;
-
-    ZeroMemory(Result, sizeof(*Result));
-    hWnd = D3DTestCreateWindow(BootMode);
-    if (!hWnd)
-        return D3DTestFail(Result, D3DTestApis[Api].Name, "create-window", HRESULT_FROM_WIN32(GetLastError()));
+    _swprintf(szTestDescription, szTestDescriptionRaw, TestNr);
+    if (!BootMode && MessageBox(NULL, szTestDescription, pszCaption, MB_YESNO | MB_ICONQUESTION) == IDNO)
+        return FALSE;
 
     ShowWindow(hWnd, SW_SHOW);
-    SetForegroundWindow(hWnd);
-    UpdateWindow(hWnd);
     if (BootMode)
-        D3DTestMarker(Api, "RENDER_BEGIN");
-
-    Passed = D3DTestApis[Api].Run(lpDevice, hWnd, BootMode, Result);
-    if (Passed && SUCCEEDED(StringCchPrintfA(Message, ARRAYSIZE(Message), "DXDIAG_%s_RESULT frames=%u ms=%lu\n",
-                                             D3DTestApis[Api].Name, Result->Frames, Result->Elapsed)))
-        OutputDebugStringA(Message);
-
-    if (BootMode && Passed)
     {
-        D3DTestMarker(Api, "RENDER_END");
-        D3DTestMarker(Api, "CAPTURE_READY");
-    }
-    else if (BootMode)
-    {
-        WCHAR szCaption[256];
-        WCHAR szError[256];
-
-        D3DTestMarker(Api, "RENDER_FAILED");
-        LoadStringW(GetModuleHandleW(NULL), IDS_MAIN_DIALOG, szCaption, ARRAYSIZE(szCaption));
-        LoadStringW(GetModuleHandleW(NULL), IDS_DDTEST_ERROR, szError, ARRAYSIZE(szError));
-        MessageBoxW(hWnd, szError, szCaption, MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
+        SetForegroundWindow(hWnd);
+        UpdateWindow(hWnd);
+        D3DBootMarker(TestNr, "RENDER_BEGIN");
     }
 
+    switch (TestNr)
+    {
+        case 7:
+            Result = D3D7Test(lpDevice, hWnd, BootMode);
+            break;
+
+        case 8:
+            Result = D3D8Test(lpDevice, hWnd);
+            break;
+
+        case 9:
+            Result = D3D9Test(lpDevice, hWnd);
+            break;
+
+        default:
+            Result = FALSE;
+    }
+
+    if (!BootMode)
+        ShowWindow(hWnd, SW_HIDE);
+
+    if (!Result)
+    {
+        if (BootMode)
+            D3DBootMarker(TestNr, "RENDER_FAILED");
+        MessageBox(BootMode ? hWnd : NULL, szError, pszCaption, MB_OK | MB_ICONERROR | (BootMode ? MB_SETFOREGROUND : 0));
+        return FALSE;
+    }
+
+    if (BootMode)
+    {
+        D3DBootMarker(TestNr, "RENDER_END");
+        D3DBootMarker(TestNr, "CAPTURE_READY");
+        return TRUE;
+    }
+
+    Response = MessageBox(NULL, szResult, pszCaption, MB_YESNO | MB_ICONQUESTION);
+    if (Response == IDYES)
+        return TRUE;
+
+    return FALSE;
+}
+
+static LRESULT CALLBACK WindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    return DefWindowProc(hWnd, msg, wParam, lParam);
+}
+
+static BOOL D3DTestsInternal(GUID *lpDevice, BOOL BootMode)
+{
+    WNDCLASSEX winClass;
+    HWND hWnd;
+    HINSTANCE hInstance = GetModuleHandle(NULL);
+    WCHAR szDescription[256];
+    WCHAR szCaption[256];
+    BOOL D3D7Result = FALSE;
+    BOOL D3D8Result = FALSE;
+
+    winClass.cbSize = sizeof(WNDCLASSEX);
+    winClass.style = CS_DBLCLKS | CS_OWNDC | CS_HREDRAW | CS_VREDRAW;
+    winClass.lpfnWndProc = WindowProc;
+    winClass.cbClsExtra = 0;
+    winClass.cbWndExtra = 0;
+    winClass.hInstance = hInstance;
+    winClass.hIcon = 0;
+    winClass.hCursor = 0;
+    winClass.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
+    winClass.lpszMenuName = NULL;
+    winClass.lpszClassName = L"d3dtest";
+    winClass.hIconSm = LoadIcon(NULL, IDI_APPLICATION);
+
+    if (!RegisterClassEx(&winClass))
+        return FALSE;
+
+    hWnd = CreateWindowEx(
+        BootMode ? WS_EX_TOPMOST : 0,
+        winClass.lpszClassName,
+        NULL,
+        WS_POPUP,
+        (GetSystemMetrics(SM_CXSCREEN) - WIDTH)/2,
+        (GetSystemMetrics(SM_CYSCREEN) - HEIGHT)/2,
+        WIDTH,
+        HEIGHT,
+        NULL,
+        NULL,
+        hInstance,
+        NULL);
+
+    if (!hWnd)
+        goto cleanup;
+
+    LoadStringW(hInstance, IDS_MAIN_DIALOG, szCaption, sizeof(szCaption) / sizeof(WCHAR));
+    if (!BootMode)
+    {
+        LoadStringW(hInstance, IDS_D3DTEST_DESCRIPTION, szDescription, sizeof(szDescription) / sizeof(WCHAR));
+        if (MessageBox(NULL, szDescription, szCaption, MB_YESNO | MB_ICONQUESTION) == IDNO)
+            goto cleanup;
+    }
+
+    D3D7Result = StartD3DTest(lpDevice, hWnd, hInstance, szCaption, 7, BootMode);
+    D3D8Result = StartD3DTest(lpDevice, hWnd, hInstance, szCaption, 8, BootMode);
+    if (!BootMode)
+    {
+        StartD3DTest(lpDevice, hWnd, hInstance, szCaption, 9, FALSE);
+    }
+
+cleanup:
     DestroyWindow(hWnd);
-    return Passed;
+    UnregisterClass(winClass.lpszClassName, hInstance);
+    return D3D7Result && D3D8Result;
 }
 
-static VOID D3DTestAppendNote(HWND hPage, PCWSTR Line)
+VOID D3DTests(GUID *lpDevice)
 {
-    HWND hNotes = GetDlgItem(hPage, IDC_TEXT_INFO);
-    LRESULT Length = GetWindowTextLengthW(hNotes);
-
-    SendMessageW(hNotes, EM_SETSEL, Length, Length);
-    if (Length)
-        SendMessageW(hNotes, EM_REPLACESEL, FALSE, (LPARAM)L"\r\n");
-    SendMessageW(hNotes, EM_REPLACESEL, FALSE, (LPARAM)Line);
-}
-
-VOID D3DTestButton(HWND hPage, GUID *lpDevice, D3DTEST_API Api, UINT ButtonId)
-{
-    HINSTANCE hInstance = GetModuleHandleW(NULL);
-    HWND hMainDialog = GetAncestor(hPage, GA_ROOT);
-    D3DTEST_RESULT Result;
-    WCHAR Name[64];
-    WCHAR Format[256];
-    WCHAR Line[384];
-    ULONG Tenths;
-    HRESULT hr;
-
-    if (!GetDlgItemTextW(hPage, ButtonId, Name, ARRAYSIZE(Name)))
-        StringCchCopyW(Name, ARRAYSIZE(Name), L"?");
-
-    EnableWindow(hMainDialog, FALSE);
-    /* TODO: run on the adapter shown by this page, not on the default adapter, for Direct3D 8 and later and OpenGL */
-    if (D3DRunTest(lpDevice, Api, FALSE, &Result))
-    {
-        Tenths = (ULONG)((ULONGLONG)Result.Frames * 10000 / max(Result.Elapsed, 1));
-        LoadStringW(hInstance, IDS_D3DTEST_BENCHMARK, Format, ARRAYSIZE(Format));
-        hr = StringCchPrintfW(Line, ARRAYSIZE(Line), Format, Name, Tenths / 10, Tenths % 10, Result.Frames, Result.Elapsed);
-    }
-    else
-    {
-        LoadStringW(hInstance, IDS_D3DTEST_FAILED, Format, ARRAYSIZE(Format));
-        hr = StringCchPrintfW(Line, ARRAYSIZE(Line), Format, Name, Result.Stage ? Result.Stage : "?", (ULONG)Result.Status);
-    }
-    EnableWindow(hMainDialog, TRUE);
-    SetForegroundWindow(hMainDialog);
-    if (SUCCEEDED(hr))
-        D3DTestAppendNote(hPage, Line);
+    (VOID)D3DTestsInternal(lpDevice, FALSE);
 }
 
 BOOL D3D78BootTests(VOID)
 {
-    D3DTEST_RESULT Result;
-    BOOL D3D7Passed = D3DRunTest(NULL, D3DTEST_API_D3D7, TRUE, &Result);
-    BOOL D3D8Passed = D3DRunTest(NULL, D3DTEST_API_D3D8, TRUE, &Result);
-
-    return D3D7Passed && D3D8Passed;
+    return D3DTestsInternal(NULL, TRUE);
 }
