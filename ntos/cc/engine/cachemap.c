@@ -73,6 +73,9 @@ CcMapUninitialize(
 
     CcDirtyDiscard(Map, 0, (ULONG64)-1);
 
+    for (i = 0; i < CC_PINNED_BCB_HASH_SIZE; i++)
+        CC_ASSERT(!IsListEmpty(&Map->BcbList) || Map->PinnedBcbHash[i] == NULL);
+
     for (i = 0; i < Map->LeafCount; i++)
     {
         if (Map->Leaf[i] != NULL)

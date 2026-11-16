@@ -9,9 +9,78 @@
 
 #include "../include/ccengine.h"
 
+C_ASSERT((CC_PINNED_BCB_HASH_SIZE & (CC_PINNED_BCB_HASH_SIZE - 1)) == 0);
+
+static
+ULONG
+CcBcbPinnedHashIndex(
+    _In_ ULONG64 FileOffset,
+    _In_ ULONG Length)
+{
+    ULONG64 Key = (FileOffset ^ ((ULONG64)Length << 44)) * 0x9E3779B97F4A7C15ULL;
+
+    return (ULONG)(Key >> 32) & (CC_PINNED_BCB_HASH_SIZE - 1);
+}
+
 static
 PCC_BCB
-CcBcbFind(
+CcBcbPinnedHashFind(
+    _In_ PCC_MAP Map,
+    _In_ ULONG64 FileOffset,
+    _In_ ULONG Length)
+{
+    PCC_BCB Bcb;
+
+    for (Bcb = Map->PinnedBcbHash[CcBcbPinnedHashIndex(FileOffset, Length)]; Bcb != NULL; Bcb = Bcb->PinnedHashNext)
+    {
+        CC_ASSERT(Bcb->Map == Map && Bcb->Pinned);
+        if (Bcb->FileOffset == FileOffset && Bcb->Length == Length)
+            return Bcb;
+    }
+
+    return NULL;
+}
+
+static
+VOID
+CcBcbPinnedHashInsert(
+    _Inout_ PCC_MAP Map,
+    _Inout_ PCC_BCB Bcb)
+{
+    PCC_BCB *Head = &Map->PinnedBcbHash[CcBcbPinnedHashIndex(Bcb->FileOffset, Bcb->Length)];
+
+    CC_ASSERT(Bcb->Pinned && Bcb->PinnedHashNext == NULL);
+    CC_ASSERT(CcBcbPinnedHashFind(Map, Bcb->FileOffset, Bcb->Length) == NULL);
+    Bcb->PinnedHashNext = *Head;
+    *Head = Bcb;
+}
+
+static
+VOID
+CcBcbUnlink(
+    _Inout_ PCC_MAP Map,
+    _Inout_ PCC_BCB Bcb)
+{
+    PCC_BCB *Link;
+
+    CC_ASSERT(Bcb->Map == Map);
+    RemoveEntryList(&Bcb->Link);
+    if (!Bcb->Pinned)
+        return;
+
+    for (Link = &Map->PinnedBcbHash[CcBcbPinnedHashIndex(Bcb->FileOffset, Bcb->Length)]; *Link != Bcb;
+         Link = &(*Link)->PinnedHashNext)
+    {
+        CC_ASSERT(*Link != NULL);
+    }
+
+    *Link = Bcb->PinnedHashNext;
+    Bcb->PinnedHashNext = NULL;
+}
+
+static
+PCC_BCB
+CcBcbFindInList(
     _In_ PCC_MAP Map,
     _In_ ULONG64 FileOffset,
     _In_ ULONG Length,
@@ -45,6 +114,30 @@ CcBcbFind(
     }
 
     return NULL;
+}
+
+static
+PCC_BCB
+CcBcbFind(
+    _In_ PCC_MAP Map,
+    _In_ ULONG64 FileOffset,
+    _In_ ULONG Length,
+    _In_ BOOLEAN Pinned)
+{
+    PCC_BCB Bcb;
+
+    if (Pinned)
+    {
+        /* A pinned BCB is created only when no older pinned BCB contains its range, so an exact match is the first container in list order */
+        Bcb = CcBcbPinnedHashFind(Map, FileOffset, Length);
+        if (Bcb != NULL)
+        {
+            CC_ASSERT(Bcb == CcBcbFindInList(Map, FileOffset, Length, TRUE));
+            return Bcb;
+        }
+    }
+
+    return CcBcbFindInList(Map, FileOffset, Length, Pinned);
 }
 
 static
@@ -173,7 +266,10 @@ CcBcbAcquire(
         Existing->ReferenceCount++;
     }
     else if (Pinned)
+    {
         InsertTailList(&Map->BcbList, &Bcb->Link);
+        CcBcbPinnedHashInsert(Map, Bcb);
+    }
     else
         InsertHeadList(&Map->BcbList, &Bcb->Link);
     CC_LOCK_RELEASE(&Map->BcbLock, OldIrql);
@@ -227,7 +323,7 @@ CcBcbDereference(
     CC_ASSERT(Bcb->PinCount <= (ULONG)Bcb->ReferenceCount);
     if (Bcb->ReferenceCount == 0 && !Bcb->Dirty)
     {
-        RemoveEntryList(&Bcb->Link);
+        CcBcbUnlink(Map, Bcb);
         Destroy = TRUE;
     }
     CC_LOCK_RELEASE(&Map->BcbLock, OldIrql);
@@ -374,7 +470,7 @@ CcBcbCompleteFlush(
 
             if (Bcb->ReferenceCount == 0)
             {
-                RemoveEntryList(Entry);
+                CcBcbUnlink(Map, Bcb);
                 InsertTailList(&Retired, Entry);
             }
         }
@@ -435,7 +531,7 @@ CcBcbRetireWritten(
 
         if (Bcb->ReferenceCount == 0)
         {
-            RemoveEntryList(Entry);
+            CcBcbUnlink(Map, Bcb);
             InsertTailList(&Retired, Entry);
         }
     }
