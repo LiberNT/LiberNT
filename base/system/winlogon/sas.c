@@ -672,6 +672,33 @@ PlayLogonSound(
     CloseHandle(hThread);
 }
 
+/* A logon accepts the boot unless Winlogon\ReportBootOk is "0" (a boot verification program reports it instead). */
+static
+VOID
+ReportBootOk(VOID)
+{
+    WCHAR Value[8];
+    DWORD Size = sizeof(Value) - sizeof(WCHAR);
+    DWORD Type;
+    HKEY Key;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon",
+                      0, KEY_QUERY_VALUE, &Key) == ERROR_SUCCESS)
+    {
+        ZeroMemory(Value, sizeof(Value));
+        if (RegQueryValueExW(Key, L"ReportBootOk", NULL, &Type, (LPBYTE)Value, &Size) == ERROR_SUCCESS &&
+            Type == REG_SZ && Value[0] == L'0')
+        {
+            RegCloseKey(Key);
+            return;
+        }
+        RegCloseKey(Key);
+    }
+
+    if (!NotifyBootConfigStatus(TRUE) && GetLastError() != ERROR_BOOT_ALREADY_ACCEPTED)
+        WARN("WL: NotifyBootConfigStatus() failed with error %lu\n", GetLastError());
+}
+
 static
 VOID
 PlayLogoffShutdownSound(
@@ -972,6 +999,7 @@ HandleLogon(
     /* NOTE: The logon timestamp has to be set after calling PlayLogonSound
      * to correctly detect the startup event (first logon) */
     SetLogonTimestamp(Session);
+    ReportBootOk();
     ret = TRUE;
 
 cleanup:

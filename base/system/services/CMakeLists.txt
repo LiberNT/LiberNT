@@ -7,8 +7,8 @@ include_directories(
 add_rpc_files(server ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/svcctl.idl)
 
 list(APPEND SOURCE
+    bootconfig.c
     config.c
-    controlset.c
     database.c
     driver.c
     failure.c

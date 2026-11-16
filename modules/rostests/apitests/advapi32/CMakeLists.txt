@@ -28,6 +28,7 @@ list(APPEND SOURCE
     LookupAccountName.c
     LookupAccountSid.c
     MachineGuid.c
+    NotifyBootConfigStatus.c
     WindowsVersionValues.c
     OpenTrace.c
     PrivilegeNames.c

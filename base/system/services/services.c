@@ -309,13 +309,7 @@ wWinMain(HINSTANCE hInstance,
 
     /* FIXME: more initialization */
 
-    /* Create the 'Last Known Good' control set */
-    dwError = ScmCreateLastKnownGoodControlSet();
-    if (dwError != ERROR_SUCCESS)
-    {
-        DPRINT1("SERVICES: Failed to create the 'Last Known Good' control set (Error %lu)\n", dwError);
-        goto done;
-    }
+    ScmReadBootConfigPolicy();
 
     /* Create the services database */
     dwError = ScmCreateServiceDatabase();
