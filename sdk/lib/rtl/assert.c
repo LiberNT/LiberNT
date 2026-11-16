@@ -1,91 +1,117 @@
 /*
- * COPYRIGHT:         See COPYING in the top level directory
- * PROJECT:           ReactOS Run-Time Library
- * PURPOSE:           Implements RtlAssert used by the ASSERT
- *                    and ASSERTMSG debugging macros
- * FILE:              lib/rtl/assert.c
- * PROGRAMERS:        Stefan Ginsberg (stefan.ginsberg@reactos.org)
+ * PROJECT:     LiberNT Run-Time Library
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     What a failed assertion does
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
-
-/* INCLUDES *****************************************************************/
 
 #include <rtl.h>
 #define NDEBUG
 #include <debug.h>
 
-/* PUBLIC FUNCTIONS **********************************************************/
+typedef enum _RTLP_ASSERT_ANSWER
+{
+    RtlpAssertUnanswered,
+    RtlpAssertAskAgain,
+    RtlpAssertBreakAndAsk,
+    RtlpAssertBreakOnce,
+    RtlpAssertIgnore,
+    RtlpAssertEndProcess,
+    RtlpAssertEndThread
+} RTLP_ASSERT_ANSWER;
 
-/*
- * @implemented
- */
+static
+RTLP_ASSERT_ANSWER
+RtlpAskAboutAssertion(VOID)
+{
+    CHAR Response[2];
+    ULONG Received;
+
+    Received = DbgPrompt("Break repeatedly, break Once, Ignore, "
+                         "terminate Process or terminate Thread (boipt)? ",
+                         Response,
+                         sizeof(Response));
+    if (Received == 0)
+        return RtlpAssertUnanswered;
+
+    switch (Response[0])
+    {
+        case 'B':
+        case 'b':
+            return RtlpAssertBreakAndAsk;
+
+        case 'O':
+        case 'o':
+            return RtlpAssertBreakOnce;
+
+        case 'I':
+        case 'i':
+            return RtlpAssertIgnore;
+
+        case 'P':
+        case 'p':
+            return RtlpAssertEndProcess;
+
+        case 'T':
+        case 't':
+            return RtlpAssertEndThread;
+
+        default:
+            return RtlpAssertAskAgain;
+    }
+}
+
 VOID
 NTAPI
-RtlAssert(IN PVOID FailedAssertion,
-          IN PVOID FileName,
-          IN ULONG LineNumber,
-          IN PCHAR Message OPTIONAL)
+RtlAssert(
+    _In_ PVOID FailedAssertion,
+    _In_ PVOID FileName,
+    _In_ ULONG LineNumber,
+    _In_opt_ PCHAR Message)
 {
-    CHAR Action[2];
     CONTEXT Context;
+    RTLP_ASSERT_ANSWER Answer;
 
-    /* Capture caller's context for the debugger */
     RtlCaptureContext(&Context);
 
-    /* Enter prompt loop */
-    for (;;)
+    do
     {
-        /* Print the assertion */
         DbgPrint("\n*** Assertion failed: %s%s\n"
                  "***   Source File: %s, line %lu\n\n",
-                 Message != NULL ? Message : "",
+                 (Message != NULL) ? Message : "",
                  (PSTR)FailedAssertion,
                  (PSTR)FileName,
                  LineNumber);
 
-        /* Check for reactos specific flag (set by rosautotest) */
         if (RtlGetNtGlobalFlags() & FLG_DISABLE_DEBUG_PROMPTS)
-        {
             RtlRaiseStatus(STATUS_ASSERTION_FAILURE);
-        }
 
-        /* Prompt for action */
-        DbgPrompt("Break repeatedly, break Once, Ignore, "
-                  "terminate Process or terminate Thread (boipt)? ",
-                  Action,
-                  sizeof(Action));
-        switch (Action[0])
+        Answer = RtlpAskAboutAssertion();
+        switch (Answer)
         {
-            /* Break repeatedly / Break once */
-            case 'B': case 'b':
-            case 'O': case 'o':
-                DbgPrint("Execute '.cxr %p' to dump context\n", &Context);
-                /* Do a breakpoint, then prompt again or return */
+            case RtlpAssertUnanswered:
+                /* Nobody can answer: with no debugger this breakpoint is the stop documented for an assertion (bug check 0x1E, STATUS_BREAKPOINT) */
                 DbgBreakPoint();
-                if ((Action[0] == 'B') || (Action[0] == 'b'))
-                    break;
-                /* else ('O','o'): fall through */
+                break;
 
-            /* Ignore: Return to caller */
-            case 'I': case 'i':
-                return;
+            case RtlpAssertBreakAndAsk:
+            case RtlpAssertBreakOnce:
+                DbgPrint("Execute '.cxr %p' to dump context\n", &Context);
+                DbgBreakPoint();
+                break;
 
-            /* Terminate current process */
-            case 'P': case 'p':
+            case RtlpAssertEndProcess:
                 ZwTerminateProcess(ZwCurrentProcess(), STATUS_UNSUCCESSFUL);
                 break;
 
-            /* Terminate current thread */
-            case 'T': case 't':
+            case RtlpAssertEndThread:
                 ZwTerminateThread(ZwCurrentThread(), STATUS_UNSUCCESSFUL);
                 break;
 
-            /* Unrecognized: Prompt again */
             default:
                 break;
         }
-    }
-
-    /* Shouldn't get here */
-    DbgBreakPoint();
-    ZwTerminateProcess(ZwCurrentProcess(), STATUS_UNSUCCESSFUL);
+    } while ((Answer != RtlpAssertUnanswered) &&
+             (Answer != RtlpAssertBreakOnce) &&
+             (Answer != RtlpAssertIgnore));
 }

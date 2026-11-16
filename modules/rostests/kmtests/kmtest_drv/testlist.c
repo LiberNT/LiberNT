@@ -424,6 +424,7 @@ KMT_TESTFUNC Test_SePrimaryTokenRelease;
 KMT_TESTFUNC Test_SeAccessState;
 KMT_TESTFUNC Test_RtlAvlTree;
 KMT_TESTFUNC Test_RtlAtomEx;
+KMT_TESTFUNC Test_RtlAssertUnanswered;
 KMT_TESTFUNC Test_RtlCaptureContext;
 KMT_TESTFUNC Test_RtlException;
 KMT_TESTFUNC Test_RtlGetVersion;
@@ -892,6 +893,7 @@ const KMT_TEST TestList[] =
     { "SeAccessCheckKM",                    Test_SeAccessCheckKM },
     { "RtlAvlTreeKM",                       Test_RtlAvlTree },
     { "RtlAtomEx",                          Test_RtlAtomEx },
+    { "RtlAssertUnanswered",                Test_RtlAssertUnanswered },
     { "RtlExceptionKM",                     Test_RtlException },
     { "RtlGetVersion",                      Test_RtlGetVersion },
     { "RtlIntSafeKM",                       Test_RtlIntSafe },
