@@ -6327,14 +6327,14 @@ XHCI_ServiceEventRing(
 
     if (!Extension || !Extension->RuntimeRegisters ||
         !Extension->EventRing || Extension->EventRingTrbCount == 0 ||
-        Extension->FatalError)
+        !Extension->EventTicketOnCpu || Extension->FatalError)
         return;
 
     PassiveResets.Count = 0;
     KeAcquireSpinLock(&Extension->EventRingLock, &OldIrql);
     Frozen = (OldIrql == HIGH_LEVEL);
     Cpu = KeGetCurrentProcessorNumberEx(NULL);
-    ASSERT(Cpu < MAXIMUM_PROCESSORS);
+    ASSERT(Cpu < Extension->EventTicketCpuCount);
 
     /*
      * Clear IMAN.IP before consuming events. If it is cleared after ERDP.EHB,
@@ -6577,19 +6577,19 @@ XHCI_WaitForClaimedEvents(
     ULONG Self;
     ULONG Count;
 
-    if (KeGetCurrentIrql() == HIGH_LEVEL)
+    if (KeGetCurrentIrql() == HIGH_LEVEL || !Extension->EventTicketOnCpu)
         return;
 
     KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
     Self = KeGetCurrentProcessorNumberEx(NULL);
-    ASSERT(Self < MAXIMUM_PROCESSORS);
+    ASSERT(Self < Extension->EventTicketCpuCount);
     ASSERT(Extension->EventTicketOnCpu[Self] == 0);
 
     KeAcquireSpinLockAtDpcLevel(&Extension->EventRingLock);
     Snapshot = (ULONG)Extension->EventClaimTicket;
     KeReleaseSpinLockFromDpcLevel(&Extension->EventRingLock);
 
-    Count = min((ULONG)KeNumberProcessors, (ULONG)MAXIMUM_PROCESSORS);
+    Count = Extension->EventTicketCpuCount;
     for (Cpu = 0; Cpu < Count; Cpu++)
     {
         if (Cpu == Self)
@@ -14421,6 +14421,16 @@ XHCI_StartController(PVOID MiniPortExtension,
         return MP_STATUS_NO_RESOURCES;
     }
 
+    if (!Extension->EventTicketOnCpu)
+    {
+        Extension->EventTicketCpuCount = KeQueryMaximumProcessorCountEx(ALL_PROCESSOR_GROUPS);
+        Extension->EventTicketOnCpu = ExAllocatePoolZero(NonPagedPool,
+                                                         Extension->EventTicketCpuCount * sizeof(LONG),
+                                                         XHCI_TAG);
+        if (!Extension->EventTicketOnCpu)
+            return MP_STATUS_NO_RESOURCES;
+    }
+
     KeInitializeSpinLock(&Extension->CommandLock);
     KeInitializeSpinLock(&Extension->EventRingLock);
     InitializeListHead(&Extension->CommandContextList);
@@ -14958,6 +14968,14 @@ XHCI_StopController(PVOID MiniPortExtension,
     Extension->EventRingDequeueIndex = 0;
     Extension->EventRingCycleState = 0;
     Extension->EventRingDequeuePointer = 0;
+    if (Extension->EventTicketOnCpu)
+    {
+        volatile LONG *Tickets = Extension->EventTicketOnCpu;
+
+        XHCI_WaitForClaimedEvents(Extension);
+        Extension->EventTicketOnCpu = NULL;
+        ExFreePoolWithTag((PVOID)Tickets, XHCI_TAG);
+    }
     Extension->ErstTable = NULL;
     Extension->ErstTablePhysical.QuadPart = 0;
     Extension->ErstEntryCount = 0;
