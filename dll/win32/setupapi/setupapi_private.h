@@ -313,6 +313,7 @@ struct inf_file;
 extern const WCHAR *DIRID_get_string( int dirid );
 extern HINF PARSER_clone_inf( HINF hinf ) DECLSPEC_HIDDEN;
 extern const WCHAR *PARSER_get_inf_filename( HINF hinf ) DECLSPEC_HIDDEN;
+extern const WCHAR *PARSER_get_driver_store_dir( HINF hinf ) DECLSPEC_HIDDEN;
 extern WCHAR *PARSER_get_src_root( HINF hinf ) DECLSPEC_HIDDEN;
 extern WCHAR *PARSER_get_dest_dir( INFCONTEXT *context ) DECLSPEC_HIDDEN;
 

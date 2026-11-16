@@ -1284,6 +1284,12 @@ const WCHAR *PARSER_get_inf_filename( HINF hinf )
     return file->filename;
 }
 
+const WCHAR *PARSER_get_driver_store_dir( HINF hinf )
+{
+    unsigned int len;
+    return get_driver_store_dir( hinf, &len );
+}
+
 
 /***********************************************************************
  *            PARSER_get_src_root

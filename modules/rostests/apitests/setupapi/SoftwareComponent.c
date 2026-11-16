@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Test that an INF AddComponent makes a software device under its device, whose package CopyINF imported
+ * PURPOSE:     Test that an INF AddComponent makes a software device under its device, whose package CopyINF imported and whose AddSoftware runs from the driver store
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -13,6 +13,7 @@
 #include <devguid.h>
 
 #define PARENT_HWID L"LNT_SWC_TEST_PARENT"
+#define SOFTWARE_RESULT_KEY L"SOFTWARE\\LiberNTApiTest\\SoftwareComponent"
 
 static const char ParentInf[] =
     "[Version]\r\n"
@@ -21,6 +22,7 @@ static const char ParentInf[] =
     "ClassGuid={4d36e97d-e325-11ce-bfc1-08002be10318}\r\n"
     "Provider=%Lnt%\r\n"
     "DriverVer=11/15/2026,1.0.0.0\r\n"
+    "CatalogFile=lntswparent.cat\r\n"
     "\r\n"
     "[Manufacturer]\r\n"
     "%Lnt%=Lnt,NTamd64,NTarm64,NTx86\r\n"
@@ -68,6 +70,7 @@ static const char ComponentInf[] =
     "ClassGuid={5c4c3332-344d-483c-8739-259e934c9cc8}\r\n"
     "Provider=%Lnt%\r\n"
     "DriverVer=11/15/2026,1.0.0.0\r\n"
+    "CatalogFile=lntswcomp.cat\r\n"
     "\r\n"
     "[Manufacturer]\r\n"
     "%Lnt%=Lnt,NTamd64,NTarm64,NTx86\r\n"
@@ -80,13 +83,36 @@ static const char ComponentInf[] =
     "%Comp%=CompInstall,SWC\\LNT_SWC_TEST_COMPONENT\r\n"
     "\r\n"
     "[CompInstall.NT]\r\n"
+    "CopyFiles=CompFiles\r\n"
     "\r\n"
     "[CompInstall.NT.Services]\r\n"
     "AddService=,2\r\n"
     "\r\n"
+    "[CompInstall.NT.Software]\r\n"
+    "AddSoftware=LntTestSoftware,,CompSoftware\r\n"
+    "\r\n"
+    "[CompSoftware]\r\n"
+    "SoftwareType=1\r\n"
+    "SoftwareBinary=lntswreg.exe\r\n"
+    "SoftwareArguments=add,HKLM\\SOFTWARE\\LiberNTApiTest\\SoftwareComponent,/v,Instance,/d,<<DeviceInstanceID>>,/f\r\n"
+    "SoftwareVersion=1.0.0.0\r\n"
+    "\r\n"
+    "[CompFiles]\r\n"
+    "lntswreg.exe\r\n"
+    "\r\n"
+    "[DestinationDirs]\r\n"
+    "CompFiles=13\r\n"
+    "\r\n"
+    "[SourceDisksNames]\r\n"
+    "1=%Disk%\r\n"
+    "\r\n"
+    "[SourceDisksFiles]\r\n"
+    "lntswreg.exe=1\r\n"
+    "\r\n"
     "[Strings]\r\n"
     "Lnt=\"LiberNT tests\"\r\n"
-    "Comp=\"LiberNT test component driver\"\r\n";
+    "Comp=\"LiberNT test component driver\"\r\n"
+    "Disk=\"LiberNT test disk\"\r\n";
 
 static BOOL
 WriteTextFile(PCWSTR Path, const char *Text)
@@ -228,6 +254,37 @@ CheckComponentDevice(DEVINST Parent, PCWSTR ParentId, DEVINST *Component)
     ok(Status & DN_STARTED, "The component device is not started: status 0x%lx problem %lu\n", Status, Problem);
 }
 
+/* The bare SoftwareBinary ran from the component's driver store directory with the component's instance ID */
+static VOID
+CheckComponentSoftware(DEVINST Component, PCWSTR ComponentId)
+{
+    WCHAR Buffer[MAX_DEVICE_ID_LEN];
+    DWORD Size, Type, Waited;
+    LONG Error = ERROR_FILE_NOT_FOUND;
+    HKEY Key;
+
+    for (Waited = 0; Waited <= 3000; Waited += 50)
+    {
+        Size = sizeof(Buffer);
+        ZeroMemory(Buffer, sizeof(Buffer));
+        Error = RegGetValueW(HKEY_LOCAL_MACHINE, SOFTWARE_RESULT_KEY, L"Instance", RRF_RT_REG_SZ, &Type, Buffer, &Size);
+        if (Error == ERROR_SUCCESS)
+            break;
+        Sleep(50);
+    }
+    ok(Error == ERROR_SUCCESS, "The AddSoftware binary did not run: error %ld\n", Error);
+    ok(!_wcsicmp(Buffer, ComponentId), "The AddSoftware binary got '%ls' for the component '%ls'\n", Buffer, ComponentId);
+
+    ok(CM_Open_DevNode_Key(Component, KEY_READ, 0, RegDisposition_OpenExisting, &Key, CM_REGISTRY_SOFTWARE) == CR_SUCCESS,
+       "The component has no driver key\n");
+    Size = sizeof(Buffer);
+    ZeroMemory(Buffer, sizeof(Buffer));
+    Error = RegGetValueW(Key, L"Software", L"LntTestSoftware", RRF_RT_REG_SZ, &Type, Buffer, &Size);
+    ok(Error == ERROR_SUCCESS, "The software version is not recorded: error %ld\n", Error);
+    ok(!wcscmp(Buffer, L"1.0.0.0"), "The recorded software version is '%ls'\n", Buffer);
+    RegCloseKey(Key);
+}
+
 /* CopyINF put the component's package in the driver store: importing it again finds it there */
 static BOOL
 FindImportedInf(PCWSTR Inf, WCHAR *Published, DWORD Size)
@@ -261,7 +318,7 @@ RemoveDevice(PCWSTR InstanceId)
 
 START_TEST(SoftwareComponent)
 {
-    WCHAR Dir[MAX_PATH], CompDir[MAX_PATH], ParentPath[MAX_PATH], CompPath[MAX_PATH];
+    WCHAR Dir[MAX_PATH], CompDir[MAX_PATH], ParentPath[MAX_PATH], CompPath[MAX_PATH], RegPath[MAX_PATH], SoftwarePath[MAX_PATH];
     WCHAR ParentId[MAX_DEVICE_ID_LEN], ComponentId[MAX_DEVICE_ID_LEN] = L"";
     WCHAR Published[MAX_PATH], ParentPublished[MAX_PATH];
     ULONG Status = 0, Problem = 0;
@@ -281,6 +338,11 @@ START_TEST(SoftwareComponent)
     wsprintfW(CompPath, L"%s\\lntswcomp.inf", CompDir);
     ok(WriteTextFile(ParentPath, ParentInf), "Writing %ls failed: %lu\n", ParentPath, GetLastError());
     ok(WriteTextFile(CompPath, ComponentInf), "Writing %ls failed: %lu\n", CompPath, GetLastError());
+    GetSystemDirectoryW(RegPath, ARRAYSIZE(RegPath));
+    lstrcatW(RegPath, L"\\reg.exe");
+    wsprintfW(SoftwarePath, L"%s\\lntswreg.exe", CompDir);
+    ok(CopyFileW(RegPath, SoftwarePath, FALSE), "Copying %ls failed: %lu\n", RegPath, GetLastError());
+    RegDeleteKeyW(HKEY_LOCAL_MACHINE, SOFTWARE_RESULT_KEY);
 
     Set = SetupDiCreateDeviceInfoList(&GUID_DEVCLASS_SYSTEM, NULL);
     ok(Set != INVALID_HANDLE_VALUE, "SetupDiCreateDeviceInfoList failed: %lu\n", GetLastError());
@@ -311,7 +373,10 @@ START_TEST(SoftwareComponent)
     CheckComponentRecord(ParentId);
     CheckComponentDevice(Parent, ParentId, &Component);
     if (Component)
+    {
         CM_Get_Device_IDW(Component, ComponentId, ARRAYSIZE(ComponentId), 0);
+        CheckComponentSoftware(Component, ComponentId);
+    }
 
     Imported = FindImportedInf(CompPath, Published, ARRAYSIZE(Published));
     ok(Imported, "CopyINF did not import the component package: %lu\n", GetLastError());
@@ -343,6 +408,8 @@ START_TEST(SoftwareComponent)
     if (Imported && (Name = wcsrchr(Published, L'\\')) != NULL)
         ok(SetupUninstallOEMInfW(Name + 1, SUOI_FORCEDELETE, NULL), "Uninstalling %ls failed: %lu\n", Name + 1, GetLastError());
 
+    RegDeleteKeyW(HKEY_LOCAL_MACHINE, SOFTWARE_RESULT_KEY);
+    DeleteFileW(SoftwarePath);
     DeleteFileW(CompPath);
     DeleteFileW(ParentPath);
     RemoveDirectoryW(CompDir);

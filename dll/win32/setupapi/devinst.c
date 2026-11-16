@@ -7176,6 +7176,26 @@ GetSoftwareValue(
     return TRUE;
 }
 
+/* A SoftwareBinary without a path is the file the package copied to its driver store directory (DIRID 13) */
+static BOOL
+ResolveSoftwareBinary(
+    IN HINF hInf,
+    IN OUT PWSTR Binary,
+    IN DWORD Size)
+{
+    WCHAR Name[MAX_PATH];
+    PCWSTR StoreDir;
+
+    if (Binary[0] == L'\\' || (Binary[0] && Binary[1] == L':'))
+        return TRUE;
+    StoreDir = PARSER_get_driver_store_dir(hInf);
+    if (StoreDir == NULL || strlenW(Binary) >= ARRAYSIZE(Name) || strlenW(StoreDir) + 1 + strlenW(Binary) >= Size)
+        return FALSE;
+    strcpyW(Name, Binary);
+    sprintfW(Binary, L"%s\\%s", StoreDir, Name);
+    return TRUE;
+}
+
 static VOID
 InstallDeviceSoftware(
     IN HINF hInf,
@@ -7221,6 +7241,11 @@ InstallDeviceSoftware(
         }
         if (!GetSoftwareValue(hInf, InstallSection, L"SoftwareBinary", Binary, ARRAYSIZE(Binary)))
             continue;
+        if (!ResolveSoftwareBinary(hInf, Binary, ARRAYSIZE(Binary)))
+        {
+            WARN("AddSoftware %s: %s is not in a driver store package\n", debugstr_w(SoftwareName), debugstr_w(Binary));
+            continue;
+        }
         GetSoftwareValue(hInf, InstallSection, L"SoftwareArguments", Arguments, ARRAYSIZE(Arguments));
         GetSoftwareValue(hInf, InstallSection, L"SoftwareVersion", Version, ARRAYSIZE(Version));
 
