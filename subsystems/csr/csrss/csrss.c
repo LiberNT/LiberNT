@@ -43,9 +43,6 @@ _main(int argc,
 {
     KPRIORITY BasePriority = PROCESS_PRIORITY_NORMAL_FOREGROUND + 4;
     NTSTATUS Status;
-#if defined (_X86_)
-    ULONG Response;
-#endif
     UNREFERENCED_PARAMETER(envp);
     UNREFERENCED_PARAMETER(DebugFlag);
 
@@ -54,25 +51,6 @@ _main(int argc,
                             ProcessBasePriority,
                             &BasePriority,
                             sizeof(BasePriority));
-
-#if defined (_X86_)
-    /* Give us IOPL so that we can access the VGA registers */
-    Status = NtSetInformationProcess(NtCurrentProcess(),
-                                     ProcessUserModeIOPL,
-                                     NULL,
-                                     0);
-    if (!NT_SUCCESS(Status))
-    {
-        /* Raise a hard error */
-        DPRINT1("CSRSS: Could not raise IOPL, Status: 0x%08lx\n", Status);
-        Status = NtRaiseHardError(STATUS_IO_PRIVILEGE_FAILED,
-                                  0,
-                                  0,
-                                  NULL,
-                                  OptionOk,
-                                  &Response);
-    }
-#endif
 
     /* Initialize CSR through CSRSRV */
     Status = CsrServerInitialization(argc, argv);
