@@ -1613,6 +1613,7 @@ Ndis6WdiSendPrivacyExemptions(
 
     KeAcquireSpinLock(&Wdi->StateLock, &OldIrql);
     Count = Wdi->Dot11.ExemptionCount;
+    ASSERT(Count <= RTL_NUMBER_OF(Exemptions));
     RtlCopyMemory(Exemptions, Wdi->Dot11.Exemptions, Count * sizeof(DOT11_PRIVACY_EXEMPTION));
     KeReleaseSpinLock(&Wdi->StateLock, OldIrql);
 
@@ -2969,6 +2970,7 @@ Ndis6WdiBssTransition(
     Token = Wdi->Dot11.BtmToken;
     Mode = Wdi->Dot11.BtmMode;
     ListedCount = Wdi->Dot11.BtmCandidateCount;
+    ASSERT(ListedCount <= RTL_NUMBER_OF(Listed));
     RtlCopyMemory(Listed, Wdi->Dot11.BtmCandidates, ListedCount * sizeof(DOT11_MAC_ADDRESS));
     KeReleaseSpinLock(&Wdi->StateLock, OldIrql);
 
