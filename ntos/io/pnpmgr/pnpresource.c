@@ -587,6 +587,14 @@ IopReportNoSetting(
     DPRINT1("PnP: no free setting for a type %u requirement of %wZ\n",
             Requirement->Type,
             DeviceNode != NULL ? &DeviceNode->InstancePath : NULL);
+    if (Requirement->Type == CmResourceTypeMemory || Requirement->Type == CmResourceTypeMemoryLarge)
+    {
+        ULONGLONG Alignment, Minimum, Maximum;
+        ULONGLONG Length = RtlIoDecodeMemIoResource(Requirement, &Alignment, &Minimum, &Maximum);
+
+        DPRINT1("PnP: rejected memory requirement min=0x%I64x max=0x%I64x length=0x%I64x alignment=0x%I64x flags=0x%x boot=%p\n",
+                Minimum, Maximum, Length, Alignment, Requirement->Flags, DeviceNode != NULL ? DeviceNode->BootResources : NULL);
+    }
 }
 
 /* A bridge window the processor cannot address holds no device on this system */

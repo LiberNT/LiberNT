@@ -237,6 +237,7 @@ IopResDbReserveList(_In_opt_ PDEVICE_NODE DeviceNode, _In_opt_ PVOID Claimant, _
             PPI_RES_ENTRY entry, existing;
             PLIST_ENTRY le;
             KIRQL irql;
+            BOOLEAN Conflicted = FALSE;
 
             if (!IopResClassFromType(desc->Type, &cls))
                 continue;
@@ -260,13 +261,15 @@ IopResDbReserveList(_In_opt_ PDEVICE_NODE DeviceNode, _In_opt_ PVOID Claimant, _
                 {
                     if (Conflict)
                         *Conflict = TRUE;
-                    if (DeviceNode)
-                        DPRINT("PnP: resource conflict (type %u) involving %wZ\n", desc->Type, &DeviceNode->InstancePath);
+                    Conflicted = TRUE;
                     break;
                 }
             }
             InsertTailList(&IopResBuckets[cls].List, &entry->ListEntry);
             KeReleaseSpinLock(&IopResBuckets[cls].Lock, irql);
+
+            if (Conflicted && DeviceNode)
+                DPRINT("PnP: resource conflict (type %u) involving %wZ\n", desc->Type, &DeviceNode->InstancePath);
         }
 
         full = CmiGetNextResourceDescriptor(full);
@@ -293,6 +296,10 @@ IopResDbCheck(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate, _In_opt_ PDEVICE_N
     KIRQL irql;
     BOOLEAN found = FALSE;
     UINT64 Start, Length;
+    BOOLEAN Report = FALSE;
+    CM_PARTIAL_RESOURCE_DESCRIPTOR Other;
+    PDEVICE_OBJECT OtherPdo = NULL;
+    PVOID OtherClaimant = NULL;
 
     if (Candidate->Type == CmResourceTypeMemory || Candidate->Type == CmResourceTypeMemoryLarge)
     {
@@ -320,6 +327,20 @@ IopResDbCheck(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate, _In_opt_ PDEVICE_N
             continue;
         if (IopResDbConflict(Candidate, CandidateOwner, &entry->Desc, entry->Owner))
         {
+            if (IgnoreHalReport && (Candidate->Type == CmResourceTypeMemory || Candidate->Type == CmResourceTypeMemoryLarge))
+            {
+                Report = TRUE;
+                Other = entry->Desc;
+                OtherClaimant = entry->Claimant;
+
+                /* The owner's path is paged and outlives the lock only while its device object does */
+                if (entry->Owner != NULL &&
+                    entry->Owner->PhysicalDeviceObject != NULL &&
+                    ObReferenceObjectSafe(entry->Owner->PhysicalDeviceObject))
+                {
+                    OtherPdo = entry->Owner->PhysicalDeviceObject;
+                }
+            }
             if (Conflicting)
                 *Conflicting = entry->Desc;
             found = TRUE;
@@ -327,6 +348,20 @@ IopResDbCheck(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate, _In_opt_ PDEVICE_N
         }
     }
     KeReleaseSpinLock(&IopResBuckets[cls].Lock, irql);
+
+    if (Report)
+    {
+        UINT64 OtherStart;
+        UINT64 OtherLength = RtlCmDecodeMemIoResource(&Other, &OtherStart);
+        PDEVICE_NODE OtherOwner = OtherPdo != NULL ? IopGetDeviceNode(OtherPdo) : NULL;
+
+        DPRINT1("PnP: boot memory 0x%I64x length 0x%I64x of %wZ conflicts with 0x%I64x length 0x%I64x flags=0x%x owner=%wZ claimant=%p\n",
+                Start, Length, CandidateOwner != NULL ? &CandidateOwner->InstancePath : NULL,
+                OtherStart, OtherLength, Other.Flags, OtherOwner != NULL ? &OtherOwner->InstancePath : NULL, OtherClaimant);
+
+        if (OtherPdo != NULL)
+            ObDereferenceObjectDeferDelete(OtherPdo);
+    }
     return found;
 }
 
