@@ -21,7 +21,6 @@ Windows = "\"
 "Windows\system.ini" = 1
 "Windows\win.ini" = 1
 "Windows\system32\drivers\etc\hosts" = 1
-"Windows\system32\drivers\etc\KDBinit" = 1
 "Windows\system32\drivers\etc\networks" = 1
 "Windows\system32\drivers\etc\protocol" = 1
 "Windows\system32\drivers\etc\services" = 1
