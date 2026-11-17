@@ -195,7 +195,7 @@ PortAcquireSpinLock(
         return STOR_STATUS_INVALID_PARAMETER;
     }
 
-    LockHandle->Lock = SpinLock;
+    LockHandle->Lock = InvalidLock;
     if ((SpinLock == DpcLevelLock) && (KeGetCurrentIrql() < DISPATCH_LEVEL))
         return STOR_STATUS_INVALID_IRQL;
     if ((Dpc == NULL) && (SpinLock != StartIoLock) && (SpinLock != InterruptLock))
@@ -207,6 +207,7 @@ PortAcquireSpinLock(
         return STOR_STATUS_SUCCESS;
     }
 
+    LockHandle->Lock = SpinLock;
     switch (SpinLock)
     {
         case DpcLock: /* 1, */
@@ -251,9 +252,6 @@ PortReleaseSpinLock(
 {
     DPRINT("PortReleaseSpinLock(%p %p)\n",
            DeviceExtension, LockHandle);
-
-    if (DeviceExtension->DumpMode)
-        return;
 
     switch (LockHandle->Lock)
     {
