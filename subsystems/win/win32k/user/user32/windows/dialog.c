@@ -535,22 +535,34 @@ static BOOL DIALOG_IsAccelerator( HWND hwnd, HWND hwndDlg, WPARAM wParam )
   *
   * The messages that IsDialogMessage sends may not go to the dialog
   * calling IsDialogMessage if that dialog is a child, and it has the
-  * DS_CONTROL style set.
-  * We propagate up until we hit one that does not have DS_CONTROL, or
+  * WS_EX_CONTROLPARENT style set.
+  * We propagate up until we hit one that does not have WS_EX_CONTROLPARENT, or
   * whose parent is not a dialog.
   *
   * This is undocumented behaviour.
   */
 static HWND DIALOG_FindMsgDestination( HWND hwndDlg )
 {
-    while (GetWindowLongA(hwndDlg, GWL_STYLE) & DS_CONTROL)
+    while (GetWindowLongA(hwndDlg, GWL_EXSTYLE) & WS_EX_CONTROLPARENT)
     {
+#ifndef WOW64_I386_RUNTIME
         PWND pWnd;
+#endif
         HWND hParent = GetParent(hwndDlg);
         if (!hParent) break;
 // ReactOS
         if (!IsWindow(hParent)) break;
 
+#ifdef WOW64_I386_RUNTIME
+        if (NtUserQueryWindow(hParent, QUERY_WINDOW_UNIQUE_PROCESS_ID) != HandleToUlong(NtCurrentTeb()->ClientId.UniqueProcess) ||
+            hParent == GetDesktopWindow())
+            break;
+
+        if (!(NtUserCallHwnd(hParent, HWND_ROUTINE_ROS_GETWINDOWSTATE) & WNDS_DIALOGWINDOW))
+        {
+            break;
+        }
+#else
         pWnd = ValidateHwnd(hParent);
         // FIXME: Use pWnd->fnid == FNID_DESKTOP
         if (!pWnd || !TestWindowProcess(pWnd) || hParent == GetDesktopWindow()) break;
@@ -559,6 +571,7 @@ static HWND DIALOG_FindMsgDestination( HWND hwndDlg )
         {
             break;
         }
+#endif
 
         hwndDlg = hParent;
     }

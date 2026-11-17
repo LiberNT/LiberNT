@@ -92,6 +92,7 @@ list(APPEND SOURCE
     NestedActivation.c
     NestedWindowPos.c
     NcPaintRgn.c
+    NestedDialogKeys.c
     NextDlgItem.c
     NonClientPaint.c
     NonClientUpdate.c
