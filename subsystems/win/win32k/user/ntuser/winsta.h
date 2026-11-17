@@ -125,6 +125,6 @@ BOOL FASTCALL UserSetProcessWindowStation(HWINSTA hWindowStation);
 
 BOOL FASTCALL co_IntInitializeDesktopGraphics(VOID);
 VOID FASTCALL IntEndDesktopGraphics(VOID);
-BOOL FASTCALL CheckWinstaAttributeAccess(ACCESS_MASK);
+BOOL FASTCALL CheckWinstaAttributeAccess(ACCESS_MASK DesiredAccess, DWORD NonInteractiveError);
 
 /* EOF */

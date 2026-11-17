@@ -147,6 +147,7 @@ extern void func_VirtualKey(void);
 extern void func_WaitForInputIdle(void);
 extern void func_WindowBand(void);
 extern void func_WindowStationErrors(void);
+extern void func_WindowStationAttributes(void);
 extern void func_WindowStationSecurity(void);
 extern void func_WindowPosInsertAfter(void);
 extern void func_CallWindowProc(void);
@@ -300,6 +301,7 @@ const struct test winetest_testlist[] =
     { "WaitForInputIdle", func_WaitForInputIdle },
     { "WindowBand", func_WindowBand },
     { "WindowStationErrors", func_WindowStationErrors },
+    { "WindowStationAttributes", func_WindowStationAttributes },
     { "WindowStationSecurity", func_WindowStationSecurity },
     { "WindowPosInsertAfter", func_WindowPosInsertAfter },
     { "CallWindowProc", func_CallWindowProc },
