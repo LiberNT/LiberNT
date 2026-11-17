@@ -738,12 +738,13 @@ static VOID *load_gdef_table(HDC hdc)
 
 static VOID load_ot_tables(HDC hdc, ScriptCache *psc)
 {
-    if (!psc->GSUB_Table)
-        psc->GSUB_Table = load_gsub_table(hdc);
-    if (!psc->GPOS_Table)
-        psc->GPOS_Table = load_gpos_table(hdc);
-    if (!psc->GDEF_Table)
-        psc->GDEF_Table = load_gdef_table(hdc);
+    /* A font's tables do not change, so a table it lacks is not asked for again. */
+    if (psc->ot_tables_loaded || !hdc)
+        return;
+    psc->GSUB_Table = load_gsub_table(hdc);
+    psc->GPOS_Table = load_gpos_table(hdc);
+    psc->GDEF_Table = load_gdef_table(hdc);
+    psc->ot_tables_loaded = TRUE;
 }
 
 int SHAPE_does_GSUB_feature_apply_to_chars(HDC hdc, SCRIPT_ANALYSIS *psa, ScriptCache *psc,

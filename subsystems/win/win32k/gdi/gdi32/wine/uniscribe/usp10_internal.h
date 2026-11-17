@@ -208,6 +208,7 @@ typedef struct {
     void *CMAP_Table;
     void *CMAP_format12_Table;
     void *GPOS_Table;
+    BOOL ot_tables_loaded;
     BOOL scripts_initialized;
     LoadedScript *scripts;
     SIZE_T scripts_size;
