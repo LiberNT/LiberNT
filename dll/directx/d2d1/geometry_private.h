@@ -77,6 +77,12 @@ void d2d_figure_simplify(const struct d2d_figure *figure, D2D1_GEOMETRY_SIMPLIFI
         const D2D1_MATRIX_3X2_F *transform, float tolerance, ID2D1SimplifiedGeometrySink *sink);
 HRESULT d2d_geometry_tessellate(ID2D1Geometry *geometry, const D2D1_MATRIX_3X2_F *transform,
         float tolerance, ID2D1TessellationSink *sink);
+HRESULT d2d_geometry_get_widened_bounds(ID2D1Geometry *geometry, float stroke_width, ID2D1StrokeStyle *stroke_style,
+        const D2D1_MATRIX_3X2_F *transform, float tolerance, D2D1_RECT_F *bounds);
+HRESULT d2d_geometry_widen(ID2D1Geometry *geometry, float stroke_width, ID2D1StrokeStyle *stroke_style,
+        const D2D1_MATRIX_3X2_F *transform, float tolerance, ID2D1SimplifiedGeometrySink *sink);
+HRESULT d2d_geometry_combine(ID2D1Geometry *geometry, ID2D1Geometry *other, D2D1_COMBINE_MODE mode,
+        const D2D1_MATRIX_3X2_F *transform, float tolerance, ID2D1SimplifiedGeometrySink *sink);
 HRESULT d2d_geometry_compute_area(ID2D1Geometry *geometry, const D2D1_MATRIX_3X2_F *transform,
         float tolerance, float *area);
 extern const struct ID2D1EllipseGeometryVtbl d2d_ellipse_geometry_vtbl;

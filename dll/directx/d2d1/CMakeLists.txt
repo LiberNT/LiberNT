@@ -20,6 +20,7 @@ list(APPEND SOURCE
     factory_effects.c
     geometry.c
     geometry_cache.c
+    geometry_ops.c
     geometry_shapes.c
     hwnd_render_target.c
     layer.c
