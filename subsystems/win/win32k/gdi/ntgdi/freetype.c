@@ -984,8 +984,9 @@ static void FontLink_DeleteEntries(VOID)
     PLIST_ENTRY Entry;
     PFONTLINK_ENTRY pEntry;
 
-    for (Entry = g_FontLinkEntries.Flink; Entry != &g_FontLinkEntries; Entry = Entry->Flink)
+    while (!IsListEmpty(&g_FontLinkEntries))
     {
+        Entry = RemoveHeadList(&g_FontLinkEntries);
         pEntry = CONTAINING_RECORD(Entry, FONTLINK_ENTRY, ListEntry);
         ExFreePoolWithTag(pEntry->pszzFontLink, TAG_FONT);
         ExFreePoolWithTag(pEntry, TAG_FONT);
