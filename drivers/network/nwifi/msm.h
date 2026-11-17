@@ -249,6 +249,8 @@ VOID NwifiSupplicantSetAssociation(
     _In_reads_bytes_opt_(RequestIeLength) PUCHAR RequestIes,
     _In_ ULONG RequestIeLength);
 
+VOID NwifiSupplicantReplayEapol(_In_ PNWIFI_MSM Msm);
+
 /* Feed an EAPOL-Key frame to the supplicant; transmits any reply and, on
  * COMPLETED, installs the derived PTK/GTK.  Returns TRUE if consumed. */
 BOOLEAN NwifiSupplicantRxEapol(
