@@ -2613,6 +2613,7 @@ DxgkReleaseCddGdiBltBindings(
 }
 
 /* Copies a window's GDI blt texture rects into its CDD redirection surface on the CDD context and publishes the copy. */
+/* FIXME: drivers that require the GDI device to own a STAGING_CPUVISIBLE surface refuse this copy into the device-less shared redirection surface */
 NTSTATUS
 DxgkExecuteCddGdiBitBlt(
     _In_ PDXGKRNL_GDI_BLT_TEXTURE Texture,
@@ -3723,7 +3724,43 @@ typedef struct _DXGKP_RENDERKM_BITBLT
     RECT SubRects[DXGK_PRESENT_CORE_MAX_SUBRECTS];
 } DXGKP_RENDERKM_BITBLT;
 
-/* A GDI copy-only bitblt through DxgkDdiRenderKm into this pass's DMA buffer; outputs fold back into PresentArgs. */
+static NTSTATUS
+DxgkpRenderGdiBitBlt(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ HANDLE MiniportContext,
+    _In_ const DXGKP_RENDERKM_BITBLT *Buffer,
+    _In_reads_(DXGK_PRESENT_MAX_INDEX + 1) DXGK_ALLOCATIONLIST *Allocations,
+    _Inout_ DXGKARG_PRESENT *PresentArgs)
+{
+    DXGKARG_RENDERGDI RenderGdi = { Buffer, Buffer->Command.CommandSize };
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    ASSERT(DXGK_CB_FULL(Adapter, DxgkDdiRenderGdi) != NULL);
+    ASSERT(Buffer->Command.CommandSize <= sizeof(*Buffer));
+    ASSERT(PresentArgs->DmaBufferGpuVirtualAddress != 0);
+    ASSERT(PresentArgs->pPatchLocationListOut == NULL || PresentArgs->PatchLocationListOutSize == 0);
+
+    RenderGdi.pDmaBuffer = PresentArgs->pDmaBuffer;
+    RenderGdi.DmaBufferGpuVirtualAddress = PresentArgs->DmaBufferGpuVirtualAddress;
+    RenderGdi.DmaSize = PresentArgs->DmaSize;
+    RenderGdi.pDmaBufferPrivateData = PresentArgs->pDmaBufferPrivateData;
+    RenderGdi.DmaBufferPrivateDataSize = PresentArgs->DmaBufferPrivateDataSize;
+    RenderGdi.pAllocationList = Allocations;
+    RenderGdi.AllocationListSize = DXGK_PRESENT_MAX_INDEX + 1;
+    RenderGdi.MultipassOffset = PresentArgs->MultipassOffset;
+
+    Status = DXGK_CB_FULL(Adapter, DxgkDdiRenderGdi)(MiniportContext, &RenderGdi);
+
+    PresentArgs->pDmaBuffer = RenderGdi.pDmaBuffer;
+    PresentArgs->pDmaBufferPrivateData = RenderGdi.pDmaBufferPrivateData;
+    PresentArgs->DmaBufferPrivateDataSize = RenderGdi.DmaBufferPrivateDataSize;
+    PresentArgs->MultipassOffset = RenderGdi.MultipassOffset;
+    return Status;
+}
+
+/* A GDI copy-only bitblt into this pass's DMA buffer, through DxgkDdiRenderGdi on a virtual-addressing context and
+ * DxgkDdiRenderKm otherwise; outputs fold back into PresentArgs. */
 static NTSTATUS
 DxgkpRenderKmBitBlt(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -3737,12 +3774,16 @@ DxgkpRenderKmBitBlt(
     DXGK_ALLOCATIONLIST RenderAllocations[DXGK_PRESENT_MAX_INDEX + 1];
     DXGKP_RENDERKM_BITBLT Buffer;
     DXGKARG_RENDER Render;
+    DXGK_PRESENT_GDI_COMMAND_DDI Ddi;
     UINT SubRectCount = PresentArgs->SubRectCnt;
     UINT Index;
     NTSTATUS Status;
 
     PAGED_CODE();
-    if (DXGK_CB_FULL(Adapter, DxgkDdiRenderKm) == NULL)
+    Ddi = DxgkPresentCoreGdiCommandDdi(VirtualPresent,
+                                       DXGK_CB_FULL(Adapter, DxgkDdiRenderKm) != NULL,
+                                       DXGK_CB_FULL(Adapter, DxgkDdiRenderGdi) != NULL);
+    if (Ddi == DxgkPresentGdiCommandDdiNone)
         return STATUS_NOT_SUPPORTED;
     if (SubRectCount == 0 || SubRectCount > RTL_NUMBER_OF(Buffer.SubRects) || PresentArgs->pDstSubRects == NULL)
         return STATUS_INVALID_PARAMETER;
@@ -3773,6 +3814,10 @@ DxgkpRenderKmBitBlt(
     Buffer.Command.Command.BitBlt.DstPitch = Entry->GdiDestinationPitch;
     RtlCopyMemory(Buffer.SubRects, PresentArgs->pDstSubRects, SubRectCount * sizeof(RECT));
 
+    if (Ddi == DxgkPresentGdiCommandDdiRenderGdi)
+        return DxgkpRenderGdiBitBlt(Adapter, MiniportContext, &Buffer, RenderAllocations, PresentArgs);
+    ASSERT(Ddi == DxgkPresentGdiCommandDdiRenderKm);
+
     RtlZeroMemory(&Render, sizeof(Render));
     Render.pCommand = &Buffer;
     Render.CommandLength = Buffer.Command.CommandSize;
@@ -3788,7 +3833,6 @@ DxgkpRenderKmBitBlt(
     Render.DmaBufferSegmentId = PresentArgs->DmaBufferSegmentId;
     Render.DmaBufferPhysicalAddress = PresentArgs->DmaBufferPhysicalAddress;
 
-    /* FIXME: a virtual-addressing context takes GDI commands through DxgkDdiRenderGdi, not DxgkDdiRenderKm */
     Status = DXGK_CB_FULL(Adapter, DxgkDdiRenderKm)(MiniportContext, &Render);
 
     PresentArgs->pDmaBuffer = Render.pDmaBuffer;

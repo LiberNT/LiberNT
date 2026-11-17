@@ -20,6 +20,27 @@ typedef struct _DXGK_PRESENT_SCANOUT_RETIRE_POLICY
 } DXGK_PRESENT_SCANOUT_RETIRE_POLICY,
   *PDXGK_PRESENT_SCANOUT_RETIRE_POLICY;
 
+typedef enum _DXGK_PRESENT_GDI_COMMAND_DDI
+{
+    DxgkPresentGdiCommandDdiNone,
+    DxgkPresentGdiCommandDdiRenderKm,
+    DxgkPresentGdiCommandDdiRenderGdi,
+} DXGK_PRESENT_GDI_COMMAND_DDI;
+
+/* GDI command buffers go to DxgkDdiRenderGdi on a context that supports virtual addressing, to DxgkDdiRenderKm on
+ * any other context, and nowhere when the driver lacks that DDI. */
+FORCEINLINE
+DXGK_PRESENT_GDI_COMMAND_DDI
+DxgkPresentCoreGdiCommandDdi(
+    _In_ BOOLEAN VirtualAddressing,
+    _In_ BOOLEAN HasRenderKm,
+    _In_ BOOLEAN HasRenderGdi)
+{
+    if (VirtualAddressing)
+        return HasRenderGdi ? DxgkPresentGdiCommandDdiRenderGdi : DxgkPresentGdiCommandDdiNone;
+    return HasRenderKm ? DxgkPresentGdiCommandDdiRenderKm : DxgkPresentGdiCommandDdiNone;
+}
+
 #if (REACTOS_WDDM_TARGET_LEVEL >= 1200)
 /*
  * Sync refresh counts are public 32-bit serial numbers.  Targets are expected
