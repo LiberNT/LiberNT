@@ -135,6 +135,30 @@ DxgkPostDisplayTestFirmwareScanout(VOID)
 
 static
 VOID
+DxgkPostDisplayTestApertureRunTakesBootWindow(VOID)
+{
+    const ULONGLONG Window = 0x70000000ULL;
+    const ULONGLONG WindowBytes = 0x870000ULL;
+    const ULONG Page = 0x10000;
+
+    ok_bool_true(DxgkPostDisplayCoreApertureRunTakesBootWindow(Window, Page, 0, 1, Window, WindowBytes), "the first aperture page is the top of the boot screen");
+    ok_bool_true(DxgkPostDisplayCoreApertureRunTakesBootWindow(Window, Page, 0, 9, Window, WindowBytes), "nine aperture pages cover the first rows of the boot screen");
+    ok_bool_true(DxgkPostDisplayCoreApertureRunTakesBootWindow(Window, Page, 0x86, 1, Window, WindowBytes), "the last page that holds boot screen rows");
+    ok_bool_false(DxgkPostDisplayCoreApertureRunTakesBootWindow(Window, Page, 0x87, 1, Window, WindowBytes), "the page after the boot screen");
+    ok_bool_true(DxgkPostDisplayCoreApertureRunTakesBootWindow(Window, Page, 0x80, 0x100, Window, WindowBytes), "a run that starts inside the boot screen and ends after it");
+    ok_bool_true(DxgkPostDisplayCoreApertureRunTakesBootWindow(Window - 0x100000, Page, 0, 0x200, Window, WindowBytes), "a run that covers the whole boot screen");
+    ok_bool_false(DxgkPostDisplayCoreApertureRunTakesBootWindow(Window - 0x100000, Page, 0, 0x10, Window, WindowBytes), "a run that ends where the boot screen starts");
+    ok_bool_true(DxgkPostDisplayCoreApertureRunTakesBootWindow(Window - 0x100000, Page, 0, 0x11, Window, WindowBytes), "a run whose last page is the top of the boot screen");
+    ok_bool_false(DxgkPostDisplayCoreApertureRunTakesBootWindow(0xC0000000ULL, Page, 0, 0xE00, Window, WindowBytes), "an aperture on another address range");
+    ok_bool_true(DxgkPostDisplayCoreApertureRunTakesBootWindow(Window, 0x1000, 0x86F, 1, Window, WindowBytes), "the last 4 KB page of the boot screen");
+    ok_bool_false(DxgkPostDisplayCoreApertureRunTakesBootWindow(Window, 0x1000, 0x870, 1, Window, WindowBytes), "the 4 KB page after the boot screen");
+    ok_bool_false(DxgkPostDisplayCoreApertureRunTakesBootWindow(Window, Page, 0, 0, Window, WindowBytes), "an empty run");
+    ok_bool_false(DxgkPostDisplayCoreApertureRunTakesBootWindow(Window, Page, 0, 1, Window, 0), "no boot screen");
+    ok_bool_false(DxgkPostDisplayCoreApertureRunTakesBootWindow(Window, 0, 0, 1, Window, WindowBytes), "an aperture without a page size");
+}
+
+static
+VOID
 DxgkPostDisplayTestUefiRangeSegment(VOID)
 {
     ULONG Index = MAXULONG;
@@ -160,5 +184,6 @@ START_TEST(DxgkPostDisplayHandoff)
     DxgkPostDisplayTestNonRestartableFailure();
     DxgkPostDisplayTestPostDevice();
     DxgkPostDisplayTestFirmwareScanout();
+    DxgkPostDisplayTestApertureRunTakesBootWindow();
     DxgkPostDisplayTestUefiRangeSegment();
 }

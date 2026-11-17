@@ -566,6 +566,13 @@ extern TDR_CONFIG g_TdrConfig;
 BOOLEAN DxgkpBootLogHoldsDisplay(VOID);
 BOOLEAN DxgkpScreenLogRequested(VOID);
 
+NTSTATUS
+DxgkDetachBootScreen(
+    _In_ PHYSICAL_ADDRESS ApertureBase,
+    _In_ ULONG AperturePageSize,
+    _In_ ULONG FirstPage,
+    _In_ ULONG PageCount);
+
 /* Direct counters include every committed tracked submission.  The public
  * virtgpu escape path also precharges queued PREPARED work against these
  * initial admission limits; other producers are not quota-gated yet. */

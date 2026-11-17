@@ -666,9 +666,16 @@ NTAPI
 InbvSetVirtualFrameBuffer(
     _In_opt_ PVOID VirtualFrameBuffer)
 {
+    NTSTATUS Status;
+
     if (!InbvBootDriverInstalled) return STATUS_DEVICE_NOT_READY;
 
-    return VidSetVirtualFrameBuffer(VirtualFrameBuffer);
+    /* Drawing holds this lock, so none is still going to the previous frame buffer once this returns */
+    InbvAcquireLock();
+    Status = VidSetVirtualFrameBuffer(VirtualFrameBuffer);
+    InbvReleaseLock();
+
+    return Status;
 }
 
 NTSTATUS

@@ -60,6 +60,30 @@ DxgkPostDisplayCoreFirmwareScanout(
     return DisplayOnlyDriver || !VidPnCommitted;
 }
 
+/* A CPU host aperture run inside the window the firmware framebuffer is seen through makes that window show other memory. */
+FORCEINLINE
+BOOLEAN
+DxgkPostDisplayCoreApertureRunTakesBootWindow(
+    _In_ ULONGLONG ApertureBase,
+    _In_ ULONG AperturePageSize,
+    _In_ ULONG FirstPage,
+    _In_ ULONG PageCount,
+    _In_ ULONGLONG BootWindowBase,
+    _In_ ULONGLONG BootWindowBytes)
+{
+    ULONGLONG RunBase;
+    ULONGLONG RunBytes;
+
+    if (AperturePageSize == 0 || PageCount == 0 || BootWindowBytes == 0)
+        return FALSE;
+    RunBytes = (ULONGLONG)PageCount * AperturePageSize;
+    ASSERT((ULONGLONG)FirstPage * AperturePageSize <= MAXULONGLONG - ApertureBase);
+    RunBase = ApertureBase + (ULONGLONG)FirstPage * AperturePageSize;
+    ASSERT(RunBytes <= MAXULONGLONG - RunBase);
+    ASSERT(BootWindowBytes <= MAXULONGLONG - BootWindowBase);
+    return RunBase < BootWindowBase + BootWindowBytes && BootWindowBase < RunBase + RunBytes;
+}
+
 /* The firmware framebuffer ranges name a segment by its zero-based position, not by the segment id the other DDIs use. */
 FORCEINLINE
 USHORT

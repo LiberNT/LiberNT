@@ -5090,6 +5090,10 @@ DxgkpVidMmMapHostApertureRun(
             AperturePages[Index] = First + Index;
             SegmentPages[Index] = FirstSegmentPage + Index;
         }
+        Status = DxgkDetachBootScreen(Segment->HostApertureBase, PageSize, First, Count);
+    }
+    if (NT_SUCCESS(Status))
+    {
         Status = DxgkGpuVaMapCpuHostAperture(Adapter, hAllocation, (WORD)Segment->SegmentId, Count,
                                              AperturePages, SegmentPages);
     }

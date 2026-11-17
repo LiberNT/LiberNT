@@ -107,6 +107,11 @@ NTAPI
 InbvGetGopFrameBufferInfo(
     _Out_ PLOADER_PARAMETER_FRAMEBUFFER FrameBufferInfo);
 
+NTSTATUS
+NTAPI
+InbvSetVirtualFrameBuffer(
+    _In_opt_ PVOID VirtualFrameBuffer);
+
 /* ========================================================================
  * POST (boot) display ownership
  *
@@ -124,6 +129,68 @@ static KMUTEX g_PostDisplayOwnershipMutex;
 static KMUTEX g_MiniportRegistrationMutex;
 static UCHAR g_MiniportContextClientId;
 static PDXGKRNL_ADAPTER g_PostDisplayOwnerAdapter = NULL;
+
+static PVOID g_BootScreenCopy;
+static volatile LONG g_BootScreenDetached;
+
+/* The boot video driver keeps drawing at the firmware framebuffer's address, for the boot log and at a debugger stop; once the miniport shows other memory there it draws to a copy. */
+NTSTATUS
+DxgkDetachBootScreen(
+    _In_ PHYSICAL_ADDRESS ApertureBase,
+    _In_ ULONG AperturePageSize,
+    _In_ ULONG FirstPage,
+    _In_ ULONG PageCount)
+{
+    LOADER_PARAMETER_FRAMEBUFFER Fb;
+    PVOID Copy;
+    PVOID Installed;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    ASSERT(ApertureBase.QuadPart >= 0);
+
+    /* TODO: a swizzling range or a CPU-visible segment placed in that window is not covered */
+    if (InterlockedCompareExchange(&g_BootScreenDetached, 0, 0) != 0 ||
+        !InbvIsBootDriverInstalled() ||
+        !InbvHasValidGopFrameBuffer() ||
+        !InbvGetGopFrameBufferInfo(&Fb) ||
+        Fb.FrameBufferBase.QuadPart <= 0 ||
+        !DxgkPostDisplayCoreApertureRunTakesBootWindow((ULONGLONG)ApertureBase.QuadPart,
+                                                       AperturePageSize,
+                                                       FirstPage,
+                                                       PageCount,
+                                                       (ULONGLONG)Fb.FrameBufferBase.QuadPart,
+                                                       Fb.FrameBufferSize))
+    {
+        return STATUS_SUCCESS;
+    }
+
+    ASSERT(Fb.FrameBufferSize != 0);
+    Copy = ExAllocatePoolWithTag(NonPagedPool, Fb.FrameBufferSize, TAG_DXGK_DISPLAY);
+    if (Copy == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlZeroMemory(Copy, Fb.FrameBufferSize);
+    Installed = InterlockedCompareExchangePointer(&g_BootScreenCopy, Copy, NULL);
+    if (Installed != NULL)
+    {
+        ExFreePoolWithTag(Copy, TAG_DXGK_DISPLAY);
+        Copy = Installed;
+    }
+
+    Status = InbvSetVirtualFrameBuffer(Copy);
+    if (!NT_SUCCESS(Status))
+    {
+        DXGKRNL_ERR("DxgkDetachBootScreen: the boot video driver keeps the window at 0x%I64x, status 0x%08lX\n",
+                    Fb.FrameBufferBase.QuadPart, Status);
+        return Status;
+    }
+    if (InterlockedExchange(&g_BootScreenDetached, 1) == 0)
+    {
+        DXGKRNL_INFO("DISPLAY_BRIDGE: the boot screen left its window at 0x%I64x for a %lu-byte copy\n",
+                     Fb.FrameBufferBase.QuadPart, Fb.FrameBufferSize);
+    }
+    return STATUS_SUCCESS;
+}
 
 static NTSTATUS
 DxgkpAdapterStopInternal(
@@ -982,6 +1049,7 @@ DxgkpBugCheckCallback(
 
     RtlZeroMemory(&Flags, sizeof(Flags));
     (VOID)PfnEnable(Owner->MiniportDeviceContext, 0, &Flags, &Width, &Height, &ColorFormat);
+    /* TODO: write the stop screen with DxgkDdiSystemDisplayWrite; a detached boot screen draws to its copy and shows nothing */
 
 ReleaseLock:
     if (LockAtDpcLevel)
