@@ -1164,10 +1164,13 @@ MiniCheckForHang( PLOGICAL_ADAPTER Adapter )
    return Ret;
 }
 
+static
 VOID
-MiniDoAddressingReset(PLOGICAL_ADAPTER Adapter)
+MiniRestoreAddressing(PLOGICAL_ADAPTER Adapter)
 {
    ULONG BytesRead;
+
+   ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
 
    MiniSetInformation(Adapter,
                       OID_GEN_CURRENT_LOOKAHEAD,
@@ -1176,6 +1179,44 @@ MiniDoAddressingReset(PLOGICAL_ADAPTER Adapter)
                       &BytesRead);
 
    /* FIXME: Set more stuff */
+}
+
+static
+VOID
+NTAPI
+MiniAddressingResetWorker(PDEVICE_OBJECT DeviceObject, PVOID Context)
+{
+   PLOGICAL_ADAPTER Adapter = DeviceObject->DeviceExtension;
+
+   IoFreeWorkItem((PIO_WORKITEM)Context);
+   MiniRestoreAddressing(Adapter);
+   ExReleaseRundownProtection(&Adapter->AddressingResetRundown);
+}
+
+VOID
+MiniDoAddressingReset(PLOGICAL_ADAPTER Adapter)
+{
+   PIO_WORKITEM IoWorkItem;
+
+   if (KeGetCurrentIrql() <= APC_LEVEL)
+   {
+       MiniRestoreAddressing(Adapter);
+       return;
+   }
+
+   /* The set waits for the miniport to complete it, which the hang timer DPC and a reset completed at DISPATCH_LEVEL cannot */
+   if (!ExAcquireRundownProtection(&Adapter->AddressingResetRundown))
+       return;
+
+   IoWorkItem = IoAllocateWorkItem(Adapter->NdisMiniportBlock.DeviceObject);
+   if (IoWorkItem == NULL)
+   {
+       /* FIXME: the lookahead is not restored after this reset */
+       ExReleaseRundownProtection(&Adapter->AddressingResetRundown);
+       return;
+   }
+
+   IoQueueWorkItem(IoWorkItem, MiniAddressingResetWorker, DelayedWorkQueue, IoWorkItem);
 }
 
 NDIS_STATUS
@@ -1806,6 +1847,7 @@ MiniportWorker(IN PDEVICE_OBJECT DeviceObject, IN PVOID Context)
 
             KeLowerIrql(OldIrql);
 
+            /* FIXME: MiniResetComplete bugchecks unless ResetStatus is NDIS_STATUS_PENDING, which the store above just replaced */
             if (NdisStatus != NDIS_STATUS_PENDING)
                MiniResetComplete(Adapter, NdisStatus, AddressingReset);
             break;
@@ -2566,6 +2608,8 @@ NdisIPnPStartDevice(
    * Call MiniportInitialize.
    */
 
+  ExInitializeRundownProtection(&Adapter->AddressingResetRundown);
+
   NDIS_DbgPrint(MID_TRACE, ("calling MiniportInitialize\n"));
   NdisStatus = (*Adapter->NdisMiniportBlock.DriverHandle->MiniportCharacteristics.InitializeHandler)(
     &OpenErrorStatus, &SelectedMediumIndex, &MediaArray[0],
@@ -2706,6 +2750,8 @@ NdisIPnPStopDevice(
   MiniStopHangTimer(Adapter);
 
   ndisUnbindProtocolsFromAdapter(Adapter);
+
+  ExWaitForRundownProtectionRelease(&Adapter->AddressingResetRundown);
 
   /* Set this here so MiniportISR will be forced to run for interrupts generated in MiniportHalt */
   Adapter->NdisMiniportBlock.OldPnPDeviceState = Adapter->NdisMiniportBlock.PnPDeviceState;
