@@ -346,6 +346,7 @@ KMT_TESTFUNC Test_ZwSystemInfoKM;
 KMT_TESTFUNC Test_KeQueue;
 KMT_TESTFUNC Test_KeSemaphore;
 KMT_TESTFUNC Test_KeProcessStackCount;
+KMT_TESTFUNC Test_KeCycleTime;
 KMT_TESTFUNC Test_KeQueryBasePriority;
 KMT_TESTFUNC Test_KeProcessor;
 KMT_TESTFUNC Test_KePriorityRaise;
@@ -745,6 +746,7 @@ const KMT_TEST TestList[] =
     { "KeIdleSteal",                        Test_KeIdleSteal },
     { "KeCacheInvalidation",                Test_KeCacheInvalidation },
     { "KeClockKeepAlive",                   Test_KeClockKeepAlive },
+    { "KeCycleTime",                        Test_KeCycleTime },
     { "-KeClockWatchdog",                   Test_KeClockWatchdog },
     { "KeModern",                           Test_KeModern },
 #ifdef _M_ARM64
