@@ -123,6 +123,8 @@ USBSTOR_FdoHandleRemoveDevice(
 
     KeCancelTimer(&DeviceExtension->RequestTimer);
     KeRemoveQueueDpc(&DeviceExtension->RequestTimerDpc);
+    /* A timeout DPC that was already taken off its queue still takes the timer lock of this extension */
+    KeFlushQueuedDpcs();
     ASSERT(DeviceExtension->RequestTimerIrp == NULL);
     ASSERT(DeviceExtension->DeferredCompletionIrp == NULL);
     ASSERT(DeviceExtension->RequestTimerDpcRunning == FALSE);
