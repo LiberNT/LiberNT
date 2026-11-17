@@ -124,8 +124,9 @@ static void ExpectedLine(const TF_DISPLAYATTRIBUTE *pda, LONG x, LONG cxLine, LO
     if (pda->lsStyle == TF_LS_SQUIGGLE)
     {
         static const LONG Wave[4] = { 0, 1, 2, 1 };
-        LONG p = px - (x + 2), yWave;
-        if (p < 0)
+        static const LONG Trim[4] = { 2, 0, 0, 1 };
+        LONG p = px - (x + 2), pLast = cxLine - 3, yWave;
+        if (p < 0 || pLast < 0 || p > pLast - Trim[pLast % 4])
             return;
         yWave = yLine - 2 + Wave[p % 4];
         if (pda->fBoldLine)
@@ -261,6 +262,9 @@ static void TestDisplayAttributes(HWND hwndParent, HWND hwndEdit)
     {
         { L"\x3042\x3044", -32 },
         { L"abc", -20 },
+        { L"ar", -64 },
+        { L"arr", -64 },
+        { L"arrr", -64 },
     };
     COMPWND_SEARCH search = { hwndParent, hwndEdit };
     ITfCategoryMgr *pCategoryMgr = NULL;

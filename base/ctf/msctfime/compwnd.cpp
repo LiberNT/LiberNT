@@ -234,6 +234,10 @@ DrawDisplayAttributeLine(_In_ HDC hDC, _In_ const TF_DISPLAYATTRIBUTE *pda, _In_
     if (pda->lsStyle == TF_LS_SQUIGGLE)
     {
         static const INT Wave[4] = { 0, 1, 2, 1 };
+        static const INT Trim[4] = { 2, 0, 0, 1 };
+        INT pLast = xEnd - (x + 2);
+        if (pLast >= 0)
+            xEnd -= Trim[pLast % 4];
         for (INT px = x + 2; px <= xEnd; ++px)
         {
             INT p = px - (x + 2);
