@@ -696,6 +696,37 @@ DxgkPresentQueueTestContextless(VOID)
     ok_bool_false(DxgkPresentCoreContextless(FALSE, TRUE), "a miniport without the cap blts through its context");
 }
 
+static VOID
+TestGdiCommandDdi(VOID)
+{
+    static const struct
+    {
+        BOOLEAN VirtualAddressing;
+        BOOLEAN HasRenderKm;
+        BOOLEAN HasRenderGdi;
+        DXGK_PRESENT_GDI_COMMAND_DDI Expected;
+    } Cases[] =
+    {
+        { FALSE, FALSE, FALSE, DxgkPresentGdiCommandDdiNone },
+        { FALSE, TRUE, FALSE, DxgkPresentGdiCommandDdiRenderKm },
+        { FALSE, FALSE, TRUE, DxgkPresentGdiCommandDdiNone },
+        { FALSE, TRUE, TRUE, DxgkPresentGdiCommandDdiRenderKm },
+        { TRUE, FALSE, FALSE, DxgkPresentGdiCommandDdiNone },
+        { TRUE, TRUE, FALSE, DxgkPresentGdiCommandDdiNone },
+        { TRUE, FALSE, TRUE, DxgkPresentGdiCommandDdiRenderGdi },
+        { TRUE, TRUE, TRUE, DxgkPresentGdiCommandDdiRenderGdi },
+    };
+    ULONG Index;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(Cases); ++Index)
+    {
+        DXGK_PRESENT_GDI_COMMAND_DDI Observed = DxgkPresentCoreGdiCommandDdi(Cases[Index].VirtualAddressing,
+                                                                             Cases[Index].HasRenderKm,
+                                                                             Cases[Index].HasRenderGdi);
+        ok_eq_int(Observed, Cases[Index].Expected);
+    }
+}
+
 START_TEST(DxgkPresentQueue)
 {
     PVOID DeviceA = (PVOID)(ULONG_PTR)0x1000;
@@ -709,6 +740,7 @@ START_TEST(DxgkPresentQueue)
     DXGK_PRESENT_QUEUE_TEST_ENTRY Entry;
     ULONG Index;
 
+    TestGdiCommandDdi();
     TestVBlankWaitResult();
     TestAdapterStartDeferral();
     TestSeededPathCount();
