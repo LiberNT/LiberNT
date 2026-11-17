@@ -2215,7 +2215,8 @@ UserForEachSessionDesktop(
     PWINSTATION_OBJECT WindowStation;
     PLIST_ENTRY DesktopEntry;
     PDESKTOP *Desktops;
-    HANDLE DirectoryHandle, WindowStationHandle;
+    HANDLE DirectoryHandle;
+    UNICODE_STRING Path;
     PVOID Buffer;
     NTSTATUS Status;
     ULONG Count, Index;
@@ -2242,27 +2243,24 @@ UserForEachSessionDesktop(
 
     for (DirEntry = Buffer; DirEntry->Name.Length; ++DirEntry)
     {
-        InitializeObjectAttributes(&ObjectAttributes,
-                                   &DirEntry->Name,
-                                   OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
-                                   DirectoryHandle,
-                                   NULL);
-        Status = ObOpenObjectByName(&ObjectAttributes,
-                                    ExWindowStationObjectType,
-                                    KernelMode,
-                                    NULL,
-                                    0,
-                                    NULL,
-                                    &WindowStationHandle);
-        if (!NT_SUCCESS(Status))
+        /* A kernel handle to a window station is closed in the System process, which has no session to run win32k's close check */
+        Path.MaximumLength = Session->WinStaDirName.Length + sizeof(WCHAR) + DirEntry->Name.Length;
+        Path.Length = 0;
+        Path.Buffer = ExAllocatePoolWithTag(PagedPool, Path.MaximumLength, TAG_WINSTA);
+        if (Path.Buffer == NULL)
             continue;
-        Status = ObReferenceObjectByHandle(WindowStationHandle,
-                                           0,
-                                           ExWindowStationObjectType,
-                                           KernelMode,
-                                           (PVOID*)&WindowStation,
-                                           NULL);
-        ObCloseHandle(WindowStationHandle, KernelMode);
+        RtlAppendUnicodeStringToString(&Path, &Session->WinStaDirName);
+        RtlAppendUnicodeToString(&Path, L"\\");
+        RtlAppendUnicodeStringToString(&Path, &DirEntry->Name);
+        Status = ObReferenceObjectByName(&Path,
+                                         OBJ_CASE_INSENSITIVE,
+                                         NULL,
+                                         0,
+                                         ExWindowStationObjectType,
+                                         KernelMode,
+                                         NULL,
+                                         (PVOID*)&WindowStation);
+        ExFreePoolWithTag(Path.Buffer, TAG_WINSTA);
         if (!NT_SUCCESS(Status))
             continue;
 
