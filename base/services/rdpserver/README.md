@@ -99,3 +99,44 @@ not keep ACLs or timestamps.
 FreeRDP 3.32.0's client `channels/drive/client/drive_file.c` passes the wrong
 handle to `GetFileSize`: reads run past the end of the file and the server
 rejects the request. Use a client with that call fixed.
+
+## Test controller
+
+A private `rdpserver.ini` with `enabled=1` replaces the Remote Desktop server
+with a console server for one test controller on an explicitly configured
+LAN, for example an automated client that drives real hardware. Keep it with
+its TLS certificate and key in a directory outside the source tree and point
+the build at it with `-DRDPSERVER_CONFIG_DIR`; its `rdpserver.ini`, `*.crt`,
+`*.key` and `*.pem` files replace the in-tree configuration:
+
+```ini
+[server]
+enabled=1
+bind=10.42.0.2
+allow=10.42.0.1
+username=ros-test
+password=REPLACE_WITH_A_RANDOM_TEST_PASSWORD
+certificate=server.crt
+privatekey=server.key
+interface_mac=02:de:ad:10:ec:68,20:46:a1:08:d0:53
+netmask=255.255.255.0
+transfer_root=C:\
+```
+
+- The service starts it whatever `fDenyTSConnections` says. It listens on
+  port 3389 of `bind` only, accepts one client at a time and only from the
+  `allow` address, over TLS with these credentials; NLA is not enabled. Use a
+  random password of at least 16 characters and pin the certificate
+  fingerprint in the client.
+- It shows the console as it is: no remote display, no lock of the physical
+  console, and the display control channel is not used.
+- A relative `certificate` or `privatekey` path names a file next to the
+  configuration, so the same configuration works on the live image (`X:`)
+  and on an installed disk.
+- `interface_mac` (a comma-separated list of up to eight addresses) and
+  `netmask` are optional. With them, the server waits for a network adapter
+  with one of these MAC addresses, adds `bind` to it with `AddIPAddress`,
+  keeping its other addresses, and removes that address again on a clean
+  exit. Without them, an adapter must already have the `bind` address.
+- An invalid configuration makes the server exit with code 2, and the
+  service does not start it again until the service restarts.
