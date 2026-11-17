@@ -185,6 +185,15 @@ static HRESULT dxgi_adapter_get_desc(struct dxgi_adapter *adapter, DXGI_ADAPTER_
     struct wined3d_adapter_identifier adapter_id;
     HRESULT hr;
 
+#if defined(__REACTOS__) && defined(REACTOS_DXGI_D3DKMT_ADAPTER_ORDER)
+    if (adapter->factory->driver_call && adapter->wddm_foreign)
+    {
+        memset(desc, 0, sizeof(*desc));
+        desc->AdapterLuid = adapter->wddm_luid;
+        return dxgi_get_wddm_adapter_desc(desc->AdapterLuid, desc);
+    }
+#endif
+
     adapter_id.driver_size = 0;
     adapter_id.description = description;
     adapter_id.description_size = sizeof(description);
@@ -278,9 +287,9 @@ static HRESULT STDMETHODCALLTYPE dxgi_adapter_CheckInterfaceSupport(IWineDXGIAda
     adapter_id.description_size = 0;
 
 #if defined(__REACTOS__) && defined(REACTOS_DXGI_D3DKMT_ADAPTER_ORDER)
-    wined3d_mutex_lock();
+    dxgi_factory_lock(adapter->factory);
     hr = wined3d_adapter_get_identifier(adapter->wined3d_adapter, 0, &adapter_id);
-    wined3d_mutex_unlock();
+    dxgi_factory_unlock(adapter->factory);
     if (SUCCEEDED(hr) && !adapter->factory->software && dxgi_wddm_adapter_has_d3d11_umd(
             adapter->wddm_foreign ? adapter->wddm_luid : adapter_id.adapter_luid))
     {
@@ -290,11 +299,11 @@ static HRESULT STDMETHODCALLTYPE dxgi_adapter_CheckInterfaceSupport(IWineDXGIAda
     }
 #endif
 
-    wined3d_mutex_lock();
+    dxgi_factory_lock(adapter->factory);
     hr = wined3d_get_device_caps(adapter->wined3d_adapter, WINED3D_DEVICE_TYPE_HAL, &caps);
     if (SUCCEEDED(hr))
         hr = wined3d_adapter_get_identifier(adapter->wined3d_adapter, 0, &adapter_id);
-    wined3d_mutex_unlock();
+    dxgi_factory_unlock(adapter->factory);
 
     if (FAILED(hr))
         return hr;
@@ -374,9 +383,13 @@ static HRESULT STDMETHODCALLTYPE dxgi_adapter_QueryVideoMemoryInfo(IWineDXGIAdap
         {
             struct wined3d_adapter_identifier adapter_id = {0};
 
-            wined3d_mutex_lock();
-            hr = wined3d_adapter_get_identifier(adapter->wined3d_adapter, 0, &adapter_id);
-            wined3d_mutex_unlock();
+            hr = S_OK;
+            if (!adapter->wddm_foreign)
+            {
+                dxgi_factory_lock(adapter->factory);
+                hr = wined3d_adapter_get_identifier(adapter->wined3d_adapter, 0, &adapter_id);
+                dxgi_factory_unlock(adapter->factory);
+            }
             if (SUCCEEDED(hr) && (kmt_adapter = dxgi_open_wddm_adapter(
                     adapter->wddm_foreign ? adapter->wddm_luid : adapter_id.adapter_luid)))
             {

@@ -136,9 +136,13 @@ struct dxgi_factory
     SIZE_T association_count, association_size;
     LUID first_adapter_luid;
     BOOL first_adapter_known;
+    BOOL driver_call;
 #endif
     HWND device_window;
 };
+
+void dxgi_factory_lock(const struct dxgi_factory *factory);
+void dxgi_factory_unlock(const struct dxgi_factory *factory);
 
 HRESULT dxgi_factory_create(REFIID riid, void **factory, BOOL extended);
 HWND dxgi_factory_get_device_window(struct dxgi_factory *factory);
@@ -245,7 +249,7 @@ HRESULT dxgi_query_wddm_video_memory_info(LONG kmt_adapter, UINT node_index, DXG
 BOOL dxgi_wddm_adapter_has_d3d11_umd(LUID luid);
 BOOL dxgi_wddm_adapters_have_d3d11_umd(void);
 BOOL dxgi_wddm_adapter_supports_mpo(LUID luid);
-HRESULT dxgi_get_wddm_adapter(struct wined3d *wined3d, UINT wddm_adapter_idx, DXGI_GPU_PREFERENCE preference,
+HRESULT dxgi_get_wddm_adapter(struct dxgi_factory *factory, UINT wddm_adapter_idx, DXGI_GPU_PREFERENCE preference,
         UINT *wined3d_adapter_idx, LUID *luid, BOOL *foreign);
 DXGI_GPU_PREFERENCE dxgi_get_user_gpu_preference(void);
 HRESULT dxgi_get_wddm_output_index(struct dxgi_factory *factory, struct wined3d_adapter *adapter, const LUID *luid, UINT output_idx,

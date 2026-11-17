@@ -65,14 +65,14 @@ static HRESULT dxgi_output_find_closest_matching_mode(struct dxgi_output *output
         return DXGI_ERROR_INVALID_CALL;
 
 #ifdef __REACTOS__
-    wined3d_mutex_lock();
+    dxgi_factory_lock(output->adapter->factory);
     if (mode->format_id == WINED3DFMT_UNKNOWN)
     {
         struct wined3d_display_mode current_mode;
 
         if (FAILED(hr = wined3d_output_get_display_mode(output->wined3d_output, &current_mode, NULL)))
         {
-            wined3d_mutex_unlock();
+            dxgi_factory_unlock(output->adapter->factory);
             return hr;
         }
         mode->format_id = current_mode.format_id;
@@ -84,10 +84,10 @@ static HRESULT dxgi_output_find_closest_matching_mode(struct dxgi_output *output
         return E_NOTIMPL;
     }
 
-    wined3d_mutex_lock();
+    dxgi_factory_lock(output->adapter->factory);
 #endif
     hr = wined3d_output_find_closest_matching_mode(output->wined3d_output, mode);
-    wined3d_mutex_unlock();
+    dxgi_factory_unlock(output->adapter->factory);
 
     return hr;
 }
@@ -137,20 +137,20 @@ static HRESULT dxgi_output_get_display_mode_list(struct dxgi_output *output,
 
     wined3d_format = wined3dformat_from_dxgi_format(format);
 
-    wined3d_mutex_lock();
+    dxgi_factory_lock(output->adapter->factory);
     max_count = wined3d_output_get_mode_count(output->wined3d_output,
             wined3d_format, WINED3D_SCANLINE_ORDERING_UNKNOWN, false);
 
     if (!modes)
     {
-        wined3d_mutex_unlock();
+        dxgi_factory_unlock(output->adapter->factory);
         *mode_count = max_count;
         return S_OK;
     }
 
     if (max_count > *mode_count)
     {
-        wined3d_mutex_unlock();
+        dxgi_factory_unlock(output->adapter->factory);
         return DXGI_ERROR_MORE_DATA;
     }
 
@@ -162,7 +162,7 @@ static HRESULT dxgi_output_get_display_mode_list(struct dxgi_output *output,
                 WINED3D_SCANLINE_ORDERING_UNKNOWN, i, &mode, true)))
         {
             WARN("Failed to get output mode %u, hr %#lx.\n", i, hr);
-            wined3d_mutex_unlock();
+            dxgi_factory_unlock(output->adapter->factory);
             return hr;
         }
 
@@ -183,7 +183,7 @@ static HRESULT dxgi_output_get_display_mode_list(struct dxgi_output *output,
             }
         }
     }
-    wined3d_mutex_unlock();
+    dxgi_factory_unlock(output->adapter->factory);
 
     switch (struct_version)
     {
@@ -314,12 +314,12 @@ static HRESULT STDMETHODCALLTYPE dxgi_output_GetDesc(IDXGIOutput6 *iface, DXGI_O
     if (!desc)
         return E_INVALIDARG;
 
-    wined3d_mutex_lock();
+    dxgi_factory_lock(output->adapter->factory);
     hr = wined3d_output_get_desc(output->wined3d_output, &wined3d_desc);
     if (FAILED(hr))
     {
         WARN("Failed to get output desc, hr %#lx.\n", hr);
-        wined3d_mutex_unlock();
+        dxgi_factory_unlock(output->adapter->factory);
         return hr;
     }
 
@@ -327,10 +327,10 @@ static HRESULT STDMETHODCALLTYPE dxgi_output_GetDesc(IDXGIOutput6 *iface, DXGI_O
     if (FAILED(hr))
     {
         WARN("Failed to get output display mode, hr %#lx.\n", hr);
-        wined3d_mutex_unlock();
+        dxgi_factory_unlock(output->adapter->factory);
         return hr;
     }
-    wined3d_mutex_unlock();
+    dxgi_factory_unlock(output->adapter->factory);
 
     memcpy(desc->DeviceName, wined3d_desc.device_name, sizeof(desc->DeviceName));
     desc->DesktopCoordinates = wined3d_desc.desktop_rect;
@@ -415,9 +415,9 @@ static HRESULT STDMETHODCALLTYPE dxgi_output_TakeOwnership(IDXGIOutput6 *iface, 
     }
 #endif
 
-    wined3d_mutex_lock();
+    dxgi_factory_lock(output->adapter->factory);
     hr = wined3d_output_take_ownership(output->wined3d_output, exclusive);
-    wined3d_mutex_unlock();
+    dxgi_factory_unlock(output->adapter->factory);
 
     return hr;
 }
@@ -428,9 +428,9 @@ static void STDMETHODCALLTYPE dxgi_output_ReleaseOwnership(IDXGIOutput6 *iface)
 
     TRACE("iface %p.\n", iface);
 
-    wined3d_mutex_lock();
+    dxgi_factory_lock(output->adapter->factory);
     wined3d_output_release_ownership(output->wined3d_output);
-    wined3d_mutex_unlock();
+    dxgi_factory_unlock(output->adapter->factory);
 }
 
 static HRESULT STDMETHODCALLTYPE dxgi_output_GetGammaControlCapabilities(IDXGIOutput6 *iface,
@@ -501,9 +501,9 @@ static HRESULT STDMETHODCALLTYPE dxgi_output_SetGammaControl(IDXGIOutput6 *iface
         ramp.blue[i] = uint16_from_float(p->Blue);
     }
 
-    wined3d_mutex_lock();
+    dxgi_factory_lock(output->adapter->factory);
     wined3d_output_set_gamma_ramp(output->wined3d_output, &ramp);
-    wined3d_mutex_unlock();
+    dxgi_factory_unlock(output->adapter->factory);
 
     return S_OK;
 }
@@ -523,9 +523,9 @@ static HRESULT STDMETHODCALLTYPE dxgi_output_GetGammaControl(IDXGIOutput6 *iface
     if (!wined3d_output_is_exclusively_owned(output->wined3d_output))
         return DXGI_ERROR_INVALID_CALL;
 
-    wined3d_mutex_lock();
+    dxgi_factory_lock(output->adapter->factory);
     wined3d_output_query_gamma_ramp(output->wined3d_output, &ramp);
-    wined3d_mutex_unlock();
+    dxgi_factory_unlock(output->adapter->factory);
 
     memset(gamma_control, 0, sizeof(*gamma_control));
     gamma_control->Scale.Red = gamma_control->Scale.Green = gamma_control->Scale.Blue = 1.0f;
@@ -722,12 +722,12 @@ static HRESULT STDMETHODCALLTYPE dxgi_output_GetDesc1(IDXGIOutput6 *iface,
     if (!desc)
         return E_INVALIDARG;
 
-    wined3d_mutex_lock();
+    dxgi_factory_lock(output->adapter->factory);
     hr = wined3d_output_get_desc(output->wined3d_output, &wined3d_desc);
     if (FAILED(hr))
     {
         WARN("Failed to get output desc, hr %#lx.\n", hr);
-        wined3d_mutex_unlock();
+        dxgi_factory_unlock(output->adapter->factory);
         return hr;
     }
 
@@ -735,10 +735,10 @@ static HRESULT STDMETHODCALLTYPE dxgi_output_GetDesc1(IDXGIOutput6 *iface,
     if (FAILED(hr))
     {
         WARN("Failed to get output display mode, hr %#lx.\n", hr);
-        wined3d_mutex_unlock();
+        dxgi_factory_unlock(output->adapter->factory);
         return hr;
     }
-    wined3d_mutex_unlock();
+    dxgi_factory_unlock(output->adapter->factory);
 
     if (FAILED(hr))
     {
