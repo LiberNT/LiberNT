@@ -73,7 +73,6 @@ dll/win32/atl                 # Synced to Wine-11.14
 dll/win32/atl80               # Synced to Wine-11.14
 dll/win32/atl100              # Synced to Wine-11.14
 dll/win32/avifil32            # Synced to Wine-11.14
-dll/win32/avrt                # Synced to Wine-11.14
 dll/win32/iyuv_32             # Synced to Wine-11.14 (ReactOS native colorspace backend)
 dll/win32/bcrypt              # Synced to Wine-11.14
 dll/win32/bcryptprimitives    # Synced to Wine-11.14

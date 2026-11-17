@@ -1,0 +1,41 @@
+/*
+ * PROJECT:     LiberNT Multimedia Class Scheduler
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Private interface between avrt and mmcss.sys
+ * COPYRIGHT:   Copyright 2026 Ostap Brehin <osbre@protonmail.com>
+ */
+
+#pragma once
+
+#define MMCSS_DEVICE_NAME L"\\Device\\MMCSS"
+
+#define MMCSS_MAX_TASK_NAME 64
+
+#define IOCTL_MMCSS_REGISTER \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, 0x800, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_MMCSS_SET_PRIORITY \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#define IOCTL_MMCSS_QUERY_RESPONSIVENESS \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, 0x802, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+typedef struct _MMCSS_REGISTER_INPUT
+{
+    ULONG TaskIndex;
+    WCHAR FirstTask[MMCSS_MAX_TASK_NAME];
+    WCHAR SecondTask[MMCSS_MAX_TASK_NAME];
+} MMCSS_REGISTER_INPUT, *PMMCSS_REGISTER_INPUT;
+
+typedef struct _MMCSS_REGISTER_OUTPUT
+{
+    ULONG TaskIndex;
+} MMCSS_REGISTER_OUTPUT, *PMMCSS_REGISTER_OUTPUT;
+
+typedef struct _MMCSS_SET_PRIORITY_INPUT
+{
+    LONG Priority;
+} MMCSS_SET_PRIORITY_INPUT, *PMMCSS_SET_PRIORITY_INPUT;
+
+typedef struct _MMCSS_RESPONSIVENESS_OUTPUT
+{
+    ULONG SystemResponsiveness;
+} MMCSS_RESPONSIVENESS_OUTPUT, *PMMCSS_RESPONSIVENESS_OUTPUT;
