@@ -1695,7 +1695,7 @@ MountMgrMountedDeviceRemoval(IN PDEVICE_EXTENSION DeviceExtension,
                 DeviceEntry = CurrentDevice->AssociatedDevicesHead.Flink;
                 while (DeviceEntry != &(CurrentDevice->AssociatedDevicesHead))
                 {
-                    AssociatedDevice = CONTAINING_RECORD(NextEntry, ASSOCIATED_DEVICE_ENTRY, AssociatedDevicesEntry);
+                    AssociatedDevice = CONTAINING_RECORD(DeviceEntry, ASSOCIATED_DEVICE_ENTRY, AssociatedDevicesEntry);
                     DeviceEntry = DeviceEntry->Flink;
 
                     if (AssociatedDevice->DeviceInformation != DeviceInformation)
