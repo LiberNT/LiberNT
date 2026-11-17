@@ -634,6 +634,134 @@ IopChoicesBeyondReach(
     return TRUE;
 }
 
+/* Walks down from the setting the descriptor holds to the first one nobody holds */
+static
+BOOLEAN
+IopSearchDownward(
+    _In_ PIO_RESOURCE_DESCRIPTOR Requirement,
+    _In_opt_ PDEVICE_NODE DeviceNode,
+    _In_opt_ PVOID Claimant,
+    _In_reads_opt_(ChosenCount) PCM_PARTIAL_RESOURCE_DESCRIPTOR Chosen,
+    _In_ ULONG ChosenCount,
+    _Inout_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor)
+{
+    ULONG Attempts;
+
+    for (Attempts = 0; Attempts < 0x10000; Attempts++)
+    {
+        if (!IopResDbCheckDescriptor(Descriptor, DeviceNode, Claimant, NULL) &&
+            !IopResDbConflictsWithChosen(Descriptor, DeviceNode, Chosen, ChosenCount))
+        {
+            return TRUE;
+        }
+
+        if (!IopAdvanceCandidate(Requirement, Descriptor)) break;
+    }
+
+    return FALSE;
+}
+
+/* The first and last address a window forwards; FALSE for an empty one */
+static
+BOOLEAN
+IopWindowBounds(
+    _In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Window,
+    _Out_ PULONGLONG First,
+    _Out_ PULONGLONG Last)
+{
+    ULONGLONG Length;
+
+    if (Window->Type == CmResourceTypePort)
+    {
+        *First = (ULONGLONG)Window->u.Port.Start.QuadPart;
+        Length = Window->u.Port.Length;
+    }
+    else
+    {
+        Length = RtlCmDecodeMemIoResource(Window, First);
+    }
+
+    if (Length == 0)
+        return FALSE;
+
+    *Last = (Length - 1 > MAXULONGLONG - *First) ? MAXULONGLONG : *First + (Length - 1);
+    return TRUE;
+}
+
+/*
+ * A device below a bridge or a root bus can only be reached through the
+ * windows that bus forwards, so the search stays inside them. A range that is
+ * not prefetchable never goes in a prefetchable window; a prefetchable one
+ * tries the prefetchable windows first.
+ */
+static
+NTSTATUS
+IopSearchInsideWindows(
+    _In_ PIO_RESOURCE_DESCRIPTOR Requirement,
+    _In_ PDEVICE_NODE DeviceNode,
+    _In_opt_ PVOID Claimant,
+    _In_reads_opt_(ChosenCount) PCM_PARTIAL_RESOURCE_DESCRIPTOR Chosen,
+    _In_ ULONG ChosenCount,
+    _In_reads_(WindowCount) PCM_PARTIAL_RESOURCE_DESCRIPTOR Windows,
+    _In_ ULONG WindowCount,
+    _Out_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor)
+{
+    BOOLEAN Prefetchable;
+    ULONGLONG Minimum;
+    ULONGLONG Maximum;
+    ULONG Pass;
+    ULONG Index;
+
+    ASSERT(Requirement->Type == CmResourceTypeMemory ||
+           Requirement->Type == CmResourceTypeMemoryLarge ||
+           Requirement->Type == CmResourceTypePort);
+    ASSERT(WindowCount == 0 || Windows != NULL);
+
+    Prefetchable = (BOOLEAN)(Requirement->Type != CmResourceTypePort &&
+                             (Requirement->Flags & CM_RESOURCE_MEMORY_PREFETCHABLE));
+    Minimum = (ULONGLONG)Requirement->u.Generic.MinimumAddress.QuadPart;
+    Maximum = (ULONGLONG)Requirement->u.Generic.MaximumAddress.QuadPart;
+
+    for (Pass = 0; Pass < 2; Pass++)
+    {
+        for (Index = 0; Index < WindowCount; Index++)
+        {
+            PCM_PARTIAL_RESOURCE_DESCRIPTOR Window = &Windows[Index];
+            IO_RESOURCE_DESCRIPTOR Clamped;
+            ULONGLONG First, Last;
+            BOOLEAN WindowPrefetchable;
+
+            ASSERT((Window->Type == CmResourceTypePort) == (Requirement->Type == CmResourceTypePort));
+
+            WindowPrefetchable = (BOOLEAN)(Window->Type != CmResourceTypePort &&
+                                           (Window->Flags & CM_RESOURCE_MEMORY_PREFETCHABLE));
+            if (WindowPrefetchable && !Prefetchable)
+                continue;
+            if ((Pass == 0) != (WindowPrefetchable == Prefetchable))
+                continue;
+            if (!IopWindowBounds(Window, &First, &Last))
+                continue;
+
+            First = max(First, Minimum);
+            Last = min(Last, Maximum);
+            if (First > Last)
+                continue;
+
+            Clamped = *Requirement;
+            Clamped.u.Generic.MinimumAddress.QuadPart = (LONGLONG)First;
+            Clamped.u.Generic.MaximumAddress.QuadPart = (LONGLONG)Last;
+
+            if (!NT_SUCCESS(IopDescribeFromRequirement(&Clamped, Descriptor)))
+                continue;
+
+            if (IopSearchDownward(&Clamped, DeviceNode, Claimant, Chosen, ChosenCount, Descriptor))
+                return STATUS_SUCCESS;
+        }
+    }
+
+    return STATUS_CONFLICTING_ADDRESSES;
+}
+
 static
 NTSTATUS
 IopPickOneDescriptor(
@@ -645,7 +773,6 @@ IopPickOneDescriptor(
     _Out_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor)
 {
     KAFFINITY LineAffinity = 0;
-    ULONG Attempts = 0;
     NTSTATUS Status;
 
     if (Requirement->Type == CmResourceTypeInterrupt &&
@@ -682,24 +809,32 @@ IopPickOneDescriptor(
         return STATUS_SUCCESS;
     }
 
+    /* TODO: a boot setting outside the windows of the bus above the device is still taken when it is free */
     if (DeviceNode != NULL &&
         IopPickBootSetting(Requirement, DeviceNode, Claimant, Chosen, ChosenCount, Descriptor))
     {
         return STATUS_SUCCESS;
     }
 
-    while (Attempts < 0x10000)
+    if (DeviceNode != NULL &&
+        (Requirement->Type == CmResourceTypeMemory ||
+         Requirement->Type == CmResourceTypeMemoryLarge ||
+         Requirement->Type == CmResourceTypePort))
     {
-        if (!IopResDbCheckDescriptor(Descriptor, DeviceNode, Claimant, NULL) &&
-            !IopResDbConflictsWithChosen(Descriptor, DeviceNode, Chosen, ChosenCount))
+        CM_PARTIAL_RESOURCE_DESCRIPTOR Windows[16];
+        ULONG WindowCount;
+
+        if (IopResDbGetDecodingWindows(DeviceNode, Requirement->Type, Windows, RTL_NUMBER_OF(Windows), &WindowCount))
         {
-            return STATUS_SUCCESS;
+            Status = IopSearchInsideWindows(Requirement, DeviceNode, Claimant, Chosen, ChosenCount, Windows, WindowCount, Descriptor);
+            if (!NT_SUCCESS(Status))
+                IopReportNoSetting(Requirement, DeviceNode);
+            return Status;
         }
-
-        if (!IopAdvanceCandidate(Requirement, Descriptor)) break;
-
-        Attempts++;
     }
+
+    if (IopSearchDownward(Requirement, DeviceNode, Claimant, Chosen, ChosenCount, Descriptor))
+        return STATUS_SUCCESS;
 
     IopReportNoSetting(Requirement, DeviceNode);
     return STATUS_CONFLICTING_ADDRESSES;
@@ -1124,6 +1259,7 @@ IopAssignDeviceResources(
         {
             DeviceNode->BootResources = Boot;
             PiSetDevNodeFlag(DeviceNode, DNF_HAS_BOOT_CONFIG);
+            IopResDbReserveBoot(DeviceNode, Boot);
         }
     }
 

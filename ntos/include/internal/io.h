@@ -1419,6 +1419,19 @@ IopResDbCheckBootDescriptor(
     _In_opt_ PVOID Claimant);
 
 BOOLEAN
+IopResDbGetDecodingWindows(
+    _In_ PDEVICE_NODE DeviceNode,
+    _In_ UCHAR Type,
+    _Out_writes_to_(MaxWindows, *WindowCount) PCM_PARTIAL_RESOURCE_DESCRIPTOR Windows,
+    _In_ ULONG MaxWindows,
+    _Out_ PULONG WindowCount);
+
+NTSTATUS
+IopResDbReserveBoot(
+    _In_ PDEVICE_NODE DeviceNode,
+    _In_opt_ PCM_RESOURCE_LIST BootResources);
+
+BOOLEAN
 IopResDbCheckList(
     _In_opt_ PCM_RESOURCE_LIST ResourceList);
 
