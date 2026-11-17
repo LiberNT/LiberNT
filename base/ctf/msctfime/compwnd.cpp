@@ -16,7 +16,8 @@ CCompositionWindow::CCompositionWindow(HWND hwndUI)
     , m_hWnd(NULL)
     , m_hFont(NULL)
     , m_pszText(NULL)
-    , m_pAttr(NULL)
+    , m_pDispAttr(NULL)
+    , m_pClauseStart(NULL)
     , m_cchText(0)
     , m_dwCursor(0)
     , m_bAllowed(TRUE)
@@ -30,7 +31,8 @@ CCompositionWindow::~CCompositionWindow()
     if (m_hFont)
         ::DeleteObject(m_hFont);
     cicMemFree(m_pszText);
-    cicMemFree(m_pAttr);
+    cicMemFree(m_pDispAttr);
+    cicMemFree(m_pClauseStart);
 }
 
 BOOL CCompositionWindow::EnsureWindow()
@@ -119,26 +121,43 @@ void CCompositionWindow::Update(HIMC hIMC)
         dwCursor = pCS->dwCursorPos;
 
         cicMemFree(m_pszText);
-        cicMemFree(m_pAttr);
+        cicMemFree(m_pDispAttr);
+        cicMemFree(m_pClauseStart);
         m_pszText = NULL;
-        m_pAttr = NULL;
+        m_pDispAttr = NULL;
+        m_pClauseStart = NULL;
         m_cchText = 0;
         if (cchText)
         {
             m_pszText = (LPWSTR)cicMemAlloc(cchText * sizeof(WCHAR));
-            m_pAttr = (LPBYTE)cicMemAllocClear(cchText);
-            if (!m_pszText || !m_pAttr)
+            m_pDispAttr = (TF_DISPLAYATTRIBUTE *)cicMemAllocClear(cchText * sizeof(TF_DISPLAYATTRIBUTE));
+            m_pClauseStart = (LPBYTE)cicMemAllocClear(cchText + 1);
+            if (!m_pszText || !m_pDispAttr || !m_pClauseStart)
             {
                 Hide();
                 return;
             }
             CopyMemory(m_pszText, (const BYTE *)pCS + pCS->dwCompStrOffset, cchText * sizeof(WCHAR));
-            if (pCS->dwCompAttrLen == cchText)
-                CopyMemory(m_pAttr, (const BYTE *)pCS + pCS->dwCompAttrOffset, cchText);
+            const DWORD *pClause = (const DWORD *)((const BYTE *)pCS + pCS->dwCompClauseOffset);
+            for (DWORD i = 0; i < pCS->dwCompClauseLen / sizeof(DWORD); ++i)
+            {
+                if (pClause[i] < cchText)
+                    m_pClauseStart[pClause[i]] = TRUE;
+            }
             m_cchText = cchText;
         }
     }
     m_dwCursor = min(dwCursor, cchText);
+
+    if (m_cchText)
+    {
+        CicIMCCLock<CTFIMECONTEXT> imeContext(imcLock.get().hCtfImeContext);
+        CicInputContext *pCicIC = SUCCEEDED(imeContext.m_hr) ? imeContext.get().m_pCicIC : NULL;
+        DWORD cchDispAttr = 0;
+        const TF_DISPLAYATTRIBUTE *pDispAttr = pCicIC ? pCicIC->GetCompositionDisplayAttributes(&cchDispAttr) : NULL;
+        if (pDispAttr && cchDispAttr == m_cchText)
+            CopyMemory(m_pDispAttr, pDispAttr, m_cchText * sizeof(TF_DISPLAYATTRIBUTE));
+    }
 
     if (!m_cchText || !hwndTarget || !EnsureWindow())
     {
@@ -179,6 +198,70 @@ void CCompositionWindow::Update(HIMC hIMC)
     ::InvalidateRect(m_hWnd, NULL, TRUE);
 }
 
+static COLORREF
+DisplayAttributeColor(_In_ const TF_DA_COLOR *pColor, _In_ COLORREF crDefault)
+{
+    switch (pColor->type)
+    {
+        case TF_CT_SYSCOLOR:
+            return ::GetSysColor(pColor->nIndex);
+        case TF_CT_COLORREF:
+            return pColor->cr;
+        default:
+            return crDefault;
+    }
+}
+
+static void
+FillPixels(_In_ HDC hDC, _In_ INT x0, _In_ INT x1, _In_ INT y, _In_ HBRUSH hbr)
+{
+    if (x0 > x1)
+        return;
+    RECT rc = { x0, y, x1 + 1, y + 1 };
+    ::FillRect(hDC, &rc, hbr);
+}
+
+static void
+DrawDisplayAttributeLine(_In_ HDC hDC, _In_ const TF_DISPLAYATTRIBUTE *pda, _In_ INT x, _In_ INT cx, _In_ INT cy,
+                         _In_ COLORREF crLine)
+{
+    if (pda->lsStyle == TF_LS_NONE || cx <= 0)
+        return;
+
+    HBRUSH hbr = ::CreateSolidBrush(crLine);
+    INT yLine = cy - 2;
+    INT xEnd = x + cx - 1;
+    if (pda->lsStyle == TF_LS_SQUIGGLE)
+    {
+        static const INT Wave[4] = { 0, 1, 2, 1 };
+        for (INT px = x + 2; px <= xEnd; ++px)
+        {
+            INT p = px - (x + 2);
+            INT y = yLine - 2 + Wave[p % 4];
+            INT yTop = (pda->fBoldLine && p) ? y - 1 : y;
+            INT yBottom = pda->fBoldLine ? min(y + 1, yLine) : y;
+            RECT rc = { px, yTop, px + 1, yBottom + 1 };
+            ::FillRect(hDC, &rc, hbr);
+        }
+    }
+    else
+    {
+        INT cOn = cx, cOff = 0;
+        if (pda->lsStyle == TF_LS_DOT)
+            cOn = 2, cOff = 1;
+        else if (pda->lsStyle == TF_LS_DASH)
+            cOn = 4, cOff = 1;
+        for (INT x0 = x; x0 <= xEnd; x0 += cOn + cOff)
+        {
+            INT x1 = min(x0 + cOn - 1, xEnd);
+            FillPixels(hDC, x0, x1, yLine, hbr);
+            if (pda->fBoldLine)
+                FillPixels(hDC, x0 + 1, x1, yLine - 1, hbr);
+        }
+    }
+    ::DeleteObject(hbr);
+}
+
 void CCompositionWindow::Paint(HDC hDC)
 {
     RECT rcClient;
@@ -189,37 +272,37 @@ void CCompositionWindow::Paint(HDC hDC)
 
     HGDIOBJ hOldFont = ::SelectObject(hDC, m_hFont ? (HGDIOBJ)m_hFont : ::GetStockObject(DEFAULT_GUI_FONT));
     ::SetBkMode(hDC, TRANSPARENT);
-    ::SetTextColor(hDC, ::GetSysColor(COLOR_WINDOWTEXT));
 
     TEXTMETRICW tm;
     ::GetTextMetricsW(hDC, &tm);
     INT y = 0;
     INT baseline = y + tm.tmHeight;
+    INT cy = rcClient.bottom - rcClient.top;
 
     DWORD start = 0;
     INT x = 0;
     while (start < m_cchText)
     {
         DWORD end = start + 1;
-        while (end < m_cchText && m_pAttr[end] == m_pAttr[start])
+        while (end < m_cchText && !m_pClauseStart[end] &&
+               !memcmp(&m_pDispAttr[end], &m_pDispAttr[start], sizeof(TF_DISPLAYATTRIBUTE)))
             ++end;
 
+        const TF_DISPLAYATTRIBUTE *pda = &m_pDispAttr[start];
         SIZE size;
         ::GetTextExtentPoint32W(hDC, m_pszText + start, end - start, &size);
-        BYTE bAttr = m_pAttr[start];
-        BOOL bTarget = (bAttr == ATTR_TARGET_CONVERTED || bAttr == ATTR_TARGET_NOTCONVERTED);
-        ::ExtTextOutW(hDC, x, y, 0, NULL, m_pszText + start, end - start, NULL);
-
-        /* FIXME: The line style and colors of the text service's display attributes are not used */
-        HPEN hPen = ::CreatePen(bTarget ? PS_SOLID : PS_DOT, 1, ::GetSysColor(COLOR_WINDOWTEXT));
-        HGDIOBJ hOldPen = ::SelectObject(hDC, hPen);
-        for (INT yLine = bTarget ? baseline - 1 : baseline; yLine <= baseline; ++yLine)
+        if (pda->crBk.type != TF_CT_NONE)
         {
-            ::MoveToEx(hDC, x + 1, yLine, NULL);
-            ::LineTo(hDC, x + size.cx - 1, yLine);
+            HBRUSH hbrBk = ::CreateSolidBrush(DisplayAttributeColor(&pda->crBk, ::GetSysColor(COLOR_WINDOW)));
+            RECT rcBk = { x, 0, x + size.cx, cy };
+            ::FillRect(hDC, &rcBk, hbrBk);
+            ::DeleteObject(hbrBk);
         }
-        ::SelectObject(hDC, hOldPen);
-        ::DeleteObject(hPen);
+        COLORREF crText = DisplayAttributeColor(&pda->crText, ::GetSysColor(COLOR_WINDOWTEXT));
+        ::SetTextColor(hDC, crText);
+        ::ExtTextOutW(hDC, x, y, 0, NULL, m_pszText + start, end - start, NULL);
+        INT cxLine = (end < m_cchText) ? size.cx - (tm.tmHeight - 4) / 4 : size.cx;
+        DrawDisplayAttributeLine(hDC, pda, x, cxLine, cy, DisplayAttributeColor(&pda->crLine, crText));
 
         x += size.cx;
         start = end;

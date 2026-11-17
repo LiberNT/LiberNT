@@ -103,6 +103,8 @@ public:
             m_hr = g_pComposition->GetRange(&pRange);
             if (SUCCEEDED(m_hr))
                 m_hr = pRange->SetText(ec, 0, m_pszText, lstrlenW(m_pszText));
+            if (SUCCEEDED(m_hr) && g_tip.fSetAttribute)
+                m_hr = SetAttribute(ec, pRange);
             if (SUCCEEDED(m_hr))
             {
                 TF_SELECTION sel;
@@ -130,6 +132,50 @@ public:
             g_pComposition = NULL;
         }
         return S_OK;
+    }
+
+    HRESULT SetAttribute(TfEditCookie ec, ITfRange *pRange)
+    {
+        ITfRange *pSecond = NULL;
+        LONG cch = 0;
+        HRESULT hr = SetAttributeOn(ec, pRange, g_tip.guidAttribute);
+
+        if (FAILED(hr) || !g_tip.cchFirstClause)
+            return hr;
+        hr = pRange->Clone(&pSecond);
+        if (SUCCEEDED(hr))
+            hr = pSecond->ShiftStart(ec, g_tip.cchFirstClause, &cch, NULL);
+        if (SUCCEEDED(hr) && cch != (LONG)g_tip.cchFirstClause)
+            hr = E_FAIL;
+        if (SUCCEEDED(hr))
+            hr = SetAttributeOn(ec, pSecond, g_tip.guidAttribute2);
+        if (pSecond)
+            pSecond->Release();
+        return hr;
+    }
+
+    HRESULT SetAttributeOn(TfEditCookie ec, ITfRange *pRange, REFGUID guid)
+    {
+        ITfCategoryMgr *pCategoryMgr = NULL;
+        ITfProperty *pProperty = NULL;
+        TfGuidAtom atom = 0;
+        VARIANT var;
+        HRESULT hr = CoCreateInstance(CLSID_TF_CategoryMgr, NULL, CLSCTX_INPROC_SERVER, IID_ITfCategoryMgr,
+                                      (void **)&pCategoryMgr);
+        if (SUCCEEDED(hr))
+            hr = pCategoryMgr->RegisterGUID(guid, &atom);
+        if (pCategoryMgr)
+            pCategoryMgr->Release();
+        if (SUCCEEDED(hr))
+            hr = m_pContext->GetProperty(GUID_PROP_ATTRIBUTE, &pProperty);
+        if (SUCCEEDED(hr))
+        {
+            V_VT(&var) = VT_I4;
+            V_I4(&var) = atom;
+            hr = pProperty->SetValue(ec, pRange, &var);
+            pProperty->Release();
+        }
+        return hr;
     }
 
     ITfContext *m_pContext;
@@ -169,7 +215,8 @@ const GUID GUID_TestDisplayAttribute = {0x6b3a3f50, 0x51d2, 0x4c1e, {0x9a, 0x37,
 class CTestDisplayAttributeInfo : public ITfDisplayAttributeInfo
 {
 public:
-    CTestDisplayAttributeInfo() : m_cRefs(1) { Reset(); }
+    CTestDisplayAttributeInfo() : m_cRefs(1), m_guid(GUID_TestDisplayAttribute) { Reset(); }
+    CTestDisplayAttributeInfo(REFGUID guid) : m_cRefs(1), m_guid(guid) { Reset(); }
     virtual ~CTestDisplayAttributeInfo() { }
     STDMETHODIMP QueryInterface(REFIID riid, void **ppv) override
     {
@@ -192,7 +239,7 @@ public:
     }
     STDMETHODIMP GetGUID(GUID *pguid) override
     {
-        *pguid = GUID_TestDisplayAttribute;
+        *pguid = m_guid;
         return S_OK;
     }
     STDMETHODIMP GetDescription(BSTR *pbstrDesc) override
@@ -202,7 +249,12 @@ public:
     }
     STDMETHODIMP GetAttributeInfo(TF_DISPLAYATTRIBUTE *pda) override
     {
-        *pda = m_da;
+        if (g_tip.fSetAttribute && IsEqualGUID(m_guid, g_tip.guidAttribute))
+            *pda = g_tip.da;
+        else if (g_tip.fSetAttribute && g_tip.cchFirstClause && IsEqualGUID(m_guid, g_tip.guidAttribute2))
+            *pda = g_tip.da2;
+        else
+            *pda = m_da;
         return S_OK;
     }
     STDMETHODIMP SetAttributeInfo(const TF_DISPLAYATTRIBUTE *pda) override
@@ -219,6 +271,7 @@ public:
     }
 
     LONG m_cRefs;
+    GUID m_guid;
     TF_DISPLAYATTRIBUTE m_da;
 };
 
@@ -256,11 +309,15 @@ public:
     STDMETHODIMP Next(ULONG ulCount, ITfDisplayAttributeInfo **rgInfo, ULONG *pcFetched) override
     {
         ULONG cFetched = 0;
-        if (ulCount && m_index == 0)
+        ULONG cInfos = (g_tip.fSetAttribute && g_tip.cchFirstClause) ? 2 : 1;
+        while (cFetched < ulCount && m_index < cInfos)
         {
-            rgInfo[0] = new CTestDisplayAttributeInfo();
-            m_index = 1;
-            cFetched = 1;
+            if (m_index == 0)
+                rgInfo[cFetched] = new CTestDisplayAttributeInfo(g_tip.fSetAttribute ? g_tip.guidAttribute : GUID_TestDisplayAttribute);
+            else
+                rgInfo[cFetched] = new CTestDisplayAttributeInfo(g_tip.guidAttribute2);
+            ++m_index;
+            ++cFetched;
         }
         if (pcFetched)
             *pcFetched = cFetched;
@@ -437,12 +494,15 @@ public:
     STDMETHODIMP GetDisplayAttributeInfo(REFGUID guid, ITfDisplayAttributeInfo **ppInfo) override
     {
         ++g_tip.cGetDisplayAttribute;
-        if (!IsEqualGUID(guid, GUID_TestDisplayAttribute))
+        BOOL fKnown = g_tip.fSetAttribute ? (IsEqualGUID(guid, g_tip.guidAttribute) ||
+                                             (g_tip.cchFirstClause && IsEqualGUID(guid, g_tip.guidAttribute2)))
+                                          : IsEqualGUID(guid, GUID_TestDisplayAttribute);
+        if (!fKnown)
         {
             *ppInfo = NULL;
             return E_INVALIDARG;
         }
-        *ppInfo = new CTestDisplayAttributeInfo();
+        *ppInfo = new CTestDisplayAttributeInfo(guid);
         return S_OK;
     }
 

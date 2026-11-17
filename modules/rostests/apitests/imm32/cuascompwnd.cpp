@@ -98,6 +98,225 @@ static void TestComposition(HWND hwndParent, HWND hwndEdit)
     ok(!lstrcmpW(szText, L"ab\x3042\x3044"), "text after the composition is %ls\n", szText);
 }
 
+struct ATTR_CASE
+{
+    TF_DISPLAYATTRIBUTE da;
+    ULONG cchFirstClause;
+    TF_DISPLAYATTRIBUTE da2;
+    BOOL fNoAttribute;
+};
+
+static COLORREF CaseColor(const TF_DA_COLOR *pColor, COLORREF crDefault)
+{
+    if (pColor->type == TF_CT_SYSCOLOR)
+        return GetSysColor(pColor->nIndex);
+    if (pColor->type == TF_CT_COLORREF)
+        return pColor->cr;
+    return crDefault;
+}
+
+static void ExpectedLine(const TF_DISPLAYATTRIBUTE *pda, LONG x, LONG cxLine, LONG cy, LONG y, LONG px, BOOL *pfLine)
+{
+    LONG yLine = cy - 2;
+    *pfLine = FALSE;
+    if (pda->lsStyle == TF_LS_NONE || px < x || px >= x + cxLine)
+        return;
+    if (pda->lsStyle == TF_LS_SQUIGGLE)
+    {
+        static const LONG Wave[4] = { 0, 1, 2, 1 };
+        LONG p = px - (x + 2), yWave;
+        if (p < 0)
+            return;
+        yWave = yLine - 2 + Wave[p % 4];
+        if (pda->fBoldLine)
+            *pfLine = (y >= ((p ? yWave - 1 : yWave)) && y <= min(yWave + 1, yLine));
+        else
+            *pfLine = (y == yWave);
+        return;
+    }
+    LONG cOn = 1, cOff = 0;
+    if (pda->lsStyle == TF_LS_DOT)
+        cOn = 2, cOff = 1;
+    else if (pda->lsStyle == TF_LS_DASH)
+        cOn = 4, cOff = 1;
+    LONG offset = px - x;
+    BOOL fOn = (pda->lsStyle == TF_LS_SOLID) || (offset % (cOn + cOff) < cOn);
+    if (y == yLine)
+        *pfLine = fOn;
+    else if (y == yLine - 1 && pda->fBoldLine)
+        *pfLine = fOn && (pda->lsStyle == TF_LS_SOLID ? offset >= 1 : offset % (cOn + cOff) >= 1);
+}
+
+static void CheckCompWnd(HWND hwnd, HWND hwndEdit, LPCWSTR pszText, const ATTR_CASE *pCase, UINT iCase)
+{
+    RECT rc;
+    HDC hdcScreen, hdcMem, hdcEdit;
+    BITMAPINFO bmi = { { sizeof(BITMAPINFOHEADER) } };
+    DWORD *pBits = NULL;
+    HBITMAP hbm;
+    SIZE sizeFirst = { 0, 0 }, sizeAll;
+    TEXTMETRICW tm;
+    LONG cx, cy, cchText = lstrlenW(pszText);
+    ULONG cBad = 0;
+    LONG xBad = -1, yBad = -1;
+
+    hdcEdit = GetDC(hwndEdit);
+    SelectObject(hdcEdit, (HFONT)SendMessageW(hwndEdit, WM_GETFONT, 0, 0));
+    GetTextExtentPoint32W(hdcEdit, pszText, cchText, &sizeAll);
+    if (pCase->cchFirstClause)
+        GetTextExtentPoint32W(hdcEdit, pszText, pCase->cchFirstClause, &sizeFirst);
+    GetTextMetricsW(hdcEdit, &tm);
+    ReleaseDC(hwndEdit, hdcEdit);
+
+    GetWindowRect(hwnd, &rc);
+    cx = rc.right - rc.left;
+    cy = rc.bottom - rc.top;
+    ok(cy == tm.tmHeight + 2, "case %u: window height %ld\n", iCase, cy);
+    ok(cx >= sizeAll.cx, "case %u: window width %ld, text %ld\n", iCase, cx, sizeAll.cx);
+
+    bmi.bmiHeader.biWidth = cx;
+    bmi.bmiHeader.biHeight = -cy;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    hdcScreen = GetDC(NULL);
+    hdcMem = CreateCompatibleDC(hdcScreen);
+    hbm = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, (void **)&pBits, NULL, 0);
+    SelectObject(hdcMem, hbm);
+    BitBlt(hdcMem, 0, 0, cx, cy, hdcScreen, rc.left, rc.top, SRCCOPY);
+    GdiFlush();
+
+    BOOL fTextColorSeen = FALSE;
+    for (LONG y = 0; y < cy; ++y)
+    {
+        for (LONG x = 0; x < sizeAll.cx && x < cx; ++x)
+        {
+            DWORD px = pBits[y * cx + x];
+            COLORREF cr = RGB((px >> 16) & 0xff, (px >> 8) & 0xff, px & 0xff);
+            BOOL fSecond = pCase->cchFirstClause && x >= sizeFirst.cx;
+            const TF_DISPLAYATTRIBUTE *pda = fSecond ? &pCase->da2 : &pCase->da;
+            COLORREF crText = CaseColor(&pda->crText, GetSysColor(COLOR_WINDOWTEXT));
+            COLORREF crBk = CaseColor(&pda->crBk, GetSysColor(COLOR_WINDOW));
+            COLORREF crLine = CaseColor(&pda->crLine, crText);
+            LONG xRun = fSecond ? sizeFirst.cx : 0;
+            LONG cxRun = pCase->cchFirstClause ? (fSecond ? sizeAll.cx - sizeFirst.cx : sizeFirst.cx) : sizeAll.cx;
+            LONG cxLine = (pCase->cchFirstClause && !fSecond) ? cxRun - (tm.tmHeight - 4) / 4 : cxRun;
+            BOOL fLine = FALSE;
+
+            if (cr == crText)
+                fTextColorSeen = TRUE;
+            if (y < cy - 5 && y > 0)
+                continue;
+            if (pCase->fNoAttribute)
+                fLine = FALSE;
+            else
+                ExpectedLine(pda, xRun, cxLine, cy, y, x, &fLine);
+            if (cr != (fLine ? crLine : crBk))
+            {
+                if (!cBad++)
+                {
+                    xBad = x;
+                    yBad = y;
+                }
+            }
+        }
+    }
+    ok(cBad == 0, "case %u: %lu pixels differ, first at %ld,%ld\n", iCase, cBad, xBad, yBad);
+    if (!pCase->fNoAttribute && pCase->da.crText.type != TF_CT_NONE)
+        ok(fTextColorSeen, "case %u: no pixel in the text color\n", iCase);
+
+    DeleteDC(hdcMem);
+    DeleteObject(hbm);
+    ReleaseDC(NULL, hdcScreen);
+}
+
+#define RED { TF_CT_COLORREF, { RGB(255, 0, 0) } }
+#define BLUE { TF_CT_COLORREF, { RGB(0, 0, 255) } }
+#define GREEN { TF_CT_COLORREF, { RGB(0, 255, 0) } }
+#define MAGENTA { TF_CT_COLORREF, { RGB(255, 0, 255) } }
+#define NOCOLOR { TF_CT_NONE, { 0 } }
+
+static void TestDisplayAttributes(HWND hwndParent, HWND hwndEdit)
+{
+    static const ATTR_CASE Cases[] =
+    {
+        { { RED, BLUE, TF_LS_SOLID, FALSE, GREEN, TF_ATTR_INPUT } },
+        { { RED, BLUE, TF_LS_SOLID, TRUE, GREEN, TF_ATTR_INPUT } },
+        { { RED, BLUE, TF_LS_DOT, FALSE, GREEN, TF_ATTR_INPUT } },
+        { { RED, BLUE, TF_LS_DASH, FALSE, GREEN, TF_ATTR_INPUT } },
+        { { RED, BLUE, TF_LS_SQUIGGLE, FALSE, GREEN, TF_ATTR_INPUT } },
+        { { RED, BLUE, TF_LS_NONE, FALSE, GREEN, TF_ATTR_INPUT } },
+        { { NOCOLOR, NOCOLOR, TF_LS_SOLID, FALSE, NOCOLOR, TF_ATTR_TARGET_CONVERTED } },
+        { { NOCOLOR, NOCOLOR, TF_LS_DOT, TRUE, NOCOLOR, TF_ATTR_INPUT } },
+        { { { TF_CT_SYSCOLOR, { COLOR_HIGHLIGHTTEXT } }, { TF_CT_SYSCOLOR, { COLOR_HIGHLIGHT } }, TF_LS_SOLID, FALSE,
+            GREEN, TF_ATTR_INPUT } },
+        { { RED, BLUE, TF_LS_SQUIGGLE, TRUE, GREEN, TF_ATTR_INPUT } },
+        { { RED, BLUE, TF_LS_SOLID, FALSE, NOCOLOR, TF_ATTR_INPUT } },
+        { { RED, BLUE, TF_LS_SOLID, TRUE, GREEN, TF_ATTR_TARGET_CONVERTED }, 1,
+          { RED, BLUE, TF_LS_SOLID, FALSE, MAGENTA, TF_ATTR_CONVERTED } },
+        { { RED, BLUE, TF_LS_SOLID, FALSE, GREEN, TF_ATTR_CONVERTED }, 1,
+          { RED, BLUE, TF_LS_DOT, FALSE, MAGENTA, TF_ATTR_CONVERTED } },
+        { { }, 0, { }, TRUE },
+    };
+    static const struct { LPCWSTR pszText; INT nHeight; } Texts[] =
+    {
+        { L"\x3042\x3044", -32 },
+        { L"abc", -20 },
+    };
+    COMPWND_SEARCH search = { hwndParent, hwndEdit };
+    ITfCategoryMgr *pCategoryMgr = NULL;
+    POINT ptCaret;
+    HRESULT hr;
+    UINT iCase = 0;
+
+    hr = CoCreateInstance(CLSID_TF_CategoryMgr, NULL, CLSCTX_INPROC_SERVER, IID_ITfCategoryMgr, (void **)&pCategoryMgr);
+    ok_hr(hr, S_OK);
+    if (pCategoryMgr)
+        ok_hr(pCategoryMgr->RegisterCategory(CLSID_TestTip, GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER, CLSID_TestTip), S_OK);
+
+    for (UINT t = 0; t < _countof(Texts); ++t)
+    {
+        HFONT hFont = CreateFontW(Texts[t].nHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, 0, 0, 0,
+                                  0, L"Arial");
+        HFONT hOldFont = (HFONT)SendMessageW(hwndEdit, WM_GETFONT, 0, 0);
+        SendMessageW(hwndEdit, WM_SETFONT, (WPARAM)hFont, TRUE);
+        for (UINT i = 0; i < _countof(Cases); ++i, ++iCase)
+        {
+            g_pTip->fSetAttribute = !Cases[i].fNoAttribute;
+            g_pTip->da = Cases[i].da;
+            g_pTip->da2 = Cases[i].da2;
+            g_pTip->cchFirstClause = Cases[i].cchFirstClause;
+            g_pTip->guidAttribute = GUID_TestDisplayAttribute;
+            g_pTip->guidAttribute.Data1 += 0x100 + iCase;
+            g_pTip->guidAttribute2 = GUID_TestDisplayAttribute;
+            g_pTip->guidAttribute2.Data1 += 0x200 + iCase;
+            SetWindowTextW(hwndEdit, L"ab");
+            SendMessageW(hwndEdit, EM_SETSEL, 2, 2);
+            hr = g_pfnCompose(Texts[t].pszText, TESTTIP_START);
+            Pump();
+            ok_hr(hr, S_OK);
+            GetCaretPos(&ptCaret);
+            ClientToScreen(hwndEdit, &ptCaret);
+            search.pt = ptCaret;
+            search.hwndFound = NULL;
+            EnumThreadWindows(GetCurrentThreadId(), FindCompWnd, (LPARAM)&search);
+            ok(search.hwndFound != NULL, "case %u: no composition window\n", iCase);
+            if (search.hwndFound)
+                CheckCompWnd(search.hwndFound, hwndEdit, Texts[t].pszText, &Cases[i], iCase);
+            g_pfnCompose(NULL, TESTTIP_END);
+            Pump();
+        }
+        SendMessageW(hwndEdit, WM_SETFONT, (WPARAM)hOldFont, TRUE);
+        DeleteObject(hFont);
+    }
+    g_pTip->fSetAttribute = FALSE;
+    g_pTip->cchFirstClause = 0;
+    if (pCategoryMgr)
+    {
+        pCategoryMgr->UnregisterCategory(CLSID_TestTip, GUID_TFCAT_DISPLAYATTRIBUTEPROVIDER, CLSID_TestTip);
+        pCategoryMgr->Release();
+    }
+}
+
 START_TEST(cuascompwnd)
 {
     ITfThreadMgr *pThreadMgr = NULL;
@@ -143,7 +362,10 @@ START_TEST(cuascompwnd)
     Pump();
 
     if (g_pTip->tid && g_pfnCompose)
+    {
         TestComposition(hwndParent, hwndEdit);
+        TestDisplayAttributes(hwndParent, hwndEdit);
+    }
     else
         skip("The test text service did not activate\n");
 

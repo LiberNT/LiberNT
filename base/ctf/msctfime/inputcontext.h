@@ -124,6 +124,7 @@ public:
     BOOL m_fCancelComposition;
     LPWSTR m_pszLastComp;
     LPBYTE m_pLastAttr;
+    TF_DISPLAYATTRIBUTE *m_pLastDispAttr;
     DWORD m_cchLastComp;
     DWORD m_dwLastCursor;
     LONG m_lCommitted;
@@ -134,6 +135,12 @@ public:
         _Inout_ PCIC_LIBTHREAD pLibThread,
         _In_ HIMC hIMC);
     virtual ~CicInputContext();
+
+    const TF_DISPLAYATTRIBUTE *GetCompositionDisplayAttributes(_Out_ DWORD *pcch) const
+    {
+        *pcch = m_pLastDispAttr ? m_cchLastComp : 0;
+        return m_pLastDispAttr;
+    }
 
     // IUnknown interface
     STDMETHODIMP QueryInterface(REFIID riid, LPVOID* ppvObj) override;

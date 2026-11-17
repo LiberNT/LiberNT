@@ -256,6 +256,7 @@ CicInputContext::~CicInputContext()
     DetachSinks();
     cicMemFree(m_pszLastComp);
     cicMemFree(m_pLastAttr);
+    cicMemFree(m_pLastDispAttr);
 }
 
 HRESULT CicInputContext::AttachSinks()
@@ -325,25 +326,25 @@ void CicInputContext::DetachSinks()
     }
 }
 
-static BYTE
-LookupImmAttr(_In_opt_ ITfCategoryMgr *pCategoryMgr, _In_opt_ ITfDisplayAttributeMgr *pDisplayAttributeMgr,
-              _In_ TfGuidAtom atom)
+static BOOL
+LookupDisplayAttribute(_In_opt_ ITfCategoryMgr *pCategoryMgr, _In_opt_ ITfDisplayAttributeMgr *pDisplayAttributeMgr,
+                       _In_ TfGuidAtom atom, _Out_ TF_DISPLAYATTRIBUTE *pda)
 {
+    ZeroMemory(pda, sizeof(*pda));
     GUID guid;
     if (!pCategoryMgr || !pDisplayAttributeMgr || FAILED(pCategoryMgr->GetGUID(atom, &guid)))
-        return ATTR_INPUT;
+        return FALSE;
 
     ITfDisplayAttributeInfo *pInfo = NULL;
     CLSID clsidOwner;
     if (FAILED(pDisplayAttributeMgr->GetDisplayAttributeInfo(guid, &pInfo, &clsidOwner)) || !pInfo)
-        return ATTR_INPUT;
+        return FALSE;
 
-    TF_DISPLAYATTRIBUTE da;
-    BYTE bAttr = ATTR_INPUT;
-    if (SUCCEEDED(pInfo->GetAttributeInfo(&da)))
-        bAttr = ImmAttrFromDisplayAttribute(da.bAttr);
+    BOOL fFound = SUCCEEDED(pInfo->GetAttributeInfo(pda));
+    if (!fFound)
+        ZeroMemory(pda, sizeof(*pda));
     pInfo->Release();
-    return bAttr;
+    return fFound;
 }
 
 HRESULT CicInputContext::OnEndEdit(_In_ TfEditCookie ec)
@@ -425,12 +426,14 @@ HRESULT CicInputContext::OnEndEdit(_In_ TfEditCookie ec)
     LPBYTE pAttr = (LPBYTE)cicMemAlloc(cchComp + 1);
     DWORD *pClause = (DWORD *)cicMemAlloc((cchComp + 2) * sizeof(DWORD));
     LPBYTE pBoundary = (LPBYTE)cicMemAllocClear(cchComp + 1);
-    if (!pAttr || !pClause || !pBoundary)
+    TF_DISPLAYATTRIBUTE *pDispAttr = (TF_DISPLAYATTRIBUTE *)cicMemAllocClear((cchComp + 1) * sizeof(TF_DISPLAYATTRIBUTE));
+    if (!pAttr || !pClause || !pBoundary || !pDispAttr)
     {
         cicMemFree(pszText);
         cicMemFree(pAttr);
         cicMemFree(pClause);
         cicMemFree(pBoundary);
+        cicMemFree(pDispAttr);
         return E_OUTOFMEMORY;
     }
     FillMemory(pAttr, cchComp, ATTR_INPUT);
@@ -457,8 +460,13 @@ HRESULT CicInputContext::OnEndEdit(_In_ TfEditCookie ec)
                         end = min(end, compEnd) - compStart;
                         if (start < end)
                         {
-                            BYTE bAttr = LookupImmAttr(m_pCategoryMgr, m_pDisplayAttributeMgr, V_I4(&var));
+                            TF_DISPLAYATTRIBUTE da;
+                            BYTE bAttr = ATTR_INPUT;
+                            if (LookupDisplayAttribute(m_pCategoryMgr, m_pDisplayAttributeMgr, V_I4(&var), &da))
+                                bAttr = ImmAttrFromDisplayAttribute(da.bAttr);
                             FillMemory(pAttr + start, end - start, bAttr);
+                            for (LONG i = start; i < end; ++i)
+                                pDispAttr[i] = da;
                             pBoundary[start] = pBoundary[end] = TRUE;
                         }
                     }
@@ -496,7 +504,9 @@ HRESULT CicInputContext::OnEndEdit(_In_ TfEditCookie ec)
 
     BOOL bChanged = (cchResult != 0) || (cchComp != m_cchLastComp) || (dwCursor != m_dwLastCursor) ||
                     (cchComp && (memcmp(m_pszLastComp, pszText + compStart, cchComp * sizeof(WCHAR)) ||
-                                 memcmp(m_pLastAttr, pAttr, cchComp)));
+                                 memcmp(m_pLastAttr, pAttr, cchComp) ||
+                                 !m_pLastDispAttr ||
+                                 memcmp(m_pLastDispAttr, pDispAttr, cchComp * sizeof(TF_DISPLAYATTRIBUTE))));
     BOOL bHadComp = m_fInComposition;
 
     if (bChanged)
@@ -546,8 +556,10 @@ HRESULT CicInputContext::OnEndEdit(_In_ TfEditCookie ec)
         m_fInComposition = (cchComp != 0);
         cicMemFree(m_pszLastComp);
         cicMemFree(m_pLastAttr);
+        cicMemFree(m_pLastDispAttr);
         m_pszLastComp = NULL;
         m_pLastAttr = NULL;
+        m_pLastDispAttr = NULL;
         m_cchLastComp = 0;
         if (cchComp)
         {
@@ -557,6 +569,8 @@ HRESULT CicInputContext::OnEndEdit(_In_ TfEditCookie ec)
             {
                 CopyMemory(m_pszLastComp, pszText + compStart, cchComp * sizeof(WCHAR));
                 CopyMemory(m_pLastAttr, pAttr, cchComp);
+                m_pLastDispAttr = pDispAttr;
+                pDispAttr = NULL;
                 m_cchLastComp = cchComp;
             }
         }
@@ -567,6 +581,7 @@ HRESULT CicInputContext::OnEndEdit(_In_ TfEditCookie ec)
 
     cicMemFree(pszText);
     cicMemFree(pAttr);
+    cicMemFree(pDispAttr);
     cicMemFree(pClause);
     cicMemFree(pBoundary);
 
