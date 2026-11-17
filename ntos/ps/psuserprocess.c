@@ -745,6 +745,7 @@ PspApplyCreateAttributes(
     }
 
     if (Attributes->JobCount == 0) return STATUS_SUCCESS;
+    ASSERT(Attributes->JobCount <= RTL_NUMBER_OF(Jobs));
 
     /*
      * The jobs are read out of the caller's memory once, because a caller
