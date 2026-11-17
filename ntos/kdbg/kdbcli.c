@@ -33,9 +33,6 @@ BOOLEAN ExpKdbgExtPoolFind(ULONG Argc, PCHAR Argv[]);
 
 /* GLOBALS ********************************************************************/
 
-/* The commands to run the first time the machine stops, if any were found */
-volatile PCHAR KdbInitFileBuffer = NULL;
-
 /* PRIVATE DATA ***************************************************************/
 
 #define KDB_COMMAND_MAX         1024
@@ -77,10 +74,6 @@ static BOOLEAN KdbpOutputAborted = FALSE;
 
 /* Whether the last command asked for the machine to run again */
 static BOOLEAN KdbpLeaveLoop = FALSE;
-
-/* Set once the init file has been run, so it only runs once */
-static BOOLEAN KdbpInitFileInterpreted = FALSE;
-static BOOLEAN KdbpInitFileRunning = FALSE;
 
 /* Whether a bug check was asked for at the prompt */
 
@@ -184,7 +177,7 @@ KdbpPager(
         KdbpLinesPrinted++;
 
         /* Only worth pausing while somebody is there to press a key */
-        if (!KdbActive || KdbpInitFileRunning || !KdbpPagerCanWaitForKey() ||
+        if (!KdbActive || !KdbpPagerCanWaitForKey() ||
             (KdbpLinesPrinted + 1 < Rows))
             continue;
 
@@ -3574,8 +3567,7 @@ KdbpCliInterpretCommand(
         return FALSE;
     }
 
-    if (!KdbpInitFileRunning || (KdbpCommandDepth != 0))
-        KdbpTranscriptCommand(Command);
+    KdbpTranscriptCommand(Command);
 
     KdbpCommandDepth++;
     Leave = KdbpRunCommand(Command,
@@ -3584,44 +3576,6 @@ KdbpCliInterpretCommand(
     KdbpCommandDepth--;
 
     return Leave;
-}
-
-/*
- * Runs the commands that were found in the start-up file. They run once, the
- * first time the machine stops.
- */
-VOID
-KdbpCliInterpretInitFile(VOID)
-{
-    PCHAR Current = (PCHAR)KdbInitFileBuffer;
-
-    if ((Current == NULL) || KdbpInitFileInterpreted)
-        return;
-
-    KdbpInitFileInterpreted = TRUE;
-    KdbpInitFileRunning = TRUE;
-
-    while (*Current != ANSI_NULL)
-    {
-        PCHAR Line = Current;
-
-        while ((*Current != ANSI_NULL) && (*Current != '\n') && (*Current != '\r'))
-            Current++;
-
-        while ((*Current == '\n') || (*Current == '\r'))
-            *Current++ = ANSI_NULL;
-
-        /* A blank line or a remark says nothing */
-        if ((*Line == ANSI_NULL) || (*Line == '#'))
-            continue;
-
-        KdbpPagerReset();
-        KdbpPrint("kdb:> %s\n", Line);
-        if (KdbpCliInterpretCommand(Line))
-            break;
-    }
-
-    KdbpInitFileRunning = FALSE;
 }
 
 static
@@ -3805,12 +3759,7 @@ KdbpCliMainLoop(
     if (KdbpRunDisplays())
         return;
 
-    /* Whatever the machine was told to do at the first stop is done here */
-    KdbpLeaveLoop = FALSE;
-    KdbpCliInterpretInitFile();
     KdbpPersistSessionLog();
-    if (KdbpLeaveLoop)
-        return;
 
     for (;;)
     {
@@ -3856,86 +3805,6 @@ KdbpCliInit(VOID)
 }
 
 /*
- * Reads the start-up file, if there is one. It is read once the system root
- * is mounted, because that is the first moment there is a file to read.
- */
-static
-VOID
-KdbpReadInitFile(VOID)
-{
-    UNICODE_STRING FileName = RTL_CONSTANT_STRING(
-        L"\\SystemRoot\\system32\\drivers\\etc\\kdbinit");
-    OBJECT_ATTRIBUTES ObjectAttributes;
-    IO_STATUS_BLOCK IoStatusBlock;
-    FILE_STANDARD_INFORMATION Information;
-    HANDLE Handle = NULL;
-    PCHAR Buffer;
-    ULONG Size;
-    NTSTATUS Status;
-
-    if (KdbInitFileBuffer != NULL)
-        return;
-
-    InitializeObjectAttributes(&ObjectAttributes,
-                               &FileName,
-                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
-                               NULL,
-                               NULL);
-
-    Status = ZwOpenFile(&Handle,
-                        GENERIC_READ | SYNCHRONIZE,
-                        &ObjectAttributes,
-                        &IoStatusBlock,
-                        FILE_SHARE_READ,
-                        FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE);
-    if (!NT_SUCCESS(Status))
-        return;
-
-    Status = ZwQueryInformationFile(Handle,
-                                    &IoStatusBlock,
-                                    &Information,
-                                    sizeof(Information),
-                                    FileStandardInformation);
-    if (!NT_SUCCESS(Status) ||
-        (Information.EndOfFile.HighPart != 0) ||
-        (Information.EndOfFile.LowPart == 0) ||
-        (Information.EndOfFile.LowPart > 0x10000))
-    {
-        ZwClose(Handle);
-        return;
-    }
-
-    Size = Information.EndOfFile.LowPart;
-
-    Buffer = ExAllocatePoolWithTag(NonPagedPool, Size + 1, 'IBdK');
-    if (Buffer == NULL)
-    {
-        ZwClose(Handle);
-        return;
-    }
-
-    Status = ZwReadFile(Handle,
-                        NULL,
-                        NULL,
-                        NULL,
-                        &IoStatusBlock,
-                        Buffer,
-                        Size,
-                        NULL,
-                        NULL);
-    ZwClose(Handle);
-
-    if (!NT_SUCCESS(Status))
-    {
-        ExFreePoolWithTag(Buffer, 'IBdK');
-        return;
-    }
-
-    Buffer[IoStatusBlock.Information] = ANSI_NULL;
-    KdbInitFileBuffer = Buffer;
-}
-
-/*
  * The interactive debugger as one of the things the debug output can be sent
  * to. It is not a way out for output of its own, so it never joins the list
  * of providers; it only needs to know how far the boot has got.
@@ -3958,9 +3827,6 @@ KdbInitialize(
 
         return Status;
     }
-
-    if (BootPhase == KDP_BOOT_PHASE_SYSTEM_ROOT)
-        KdbpReadInitFile();
 
     return STATUS_SUCCESS;
 }
