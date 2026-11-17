@@ -252,6 +252,8 @@ EngpFreeGraphicsDevice(
     if (pGraphicsDevice->pvMonDev)
         ExFreePoolWithTag(pGraphicsDevice->pvMonDev, GDITAG_GDEVICE);
 
+    if (pGraphicsDevice->PhysDeviceHandle)
+        ObDereferenceObject(pGraphicsDevice->PhysDeviceHandle);
     ObDereferenceObject(pGraphicsDevice->FileObject);
     ExFreePoolWithTag(pGraphicsDevice->pDiplayDrivers, GDITAG_DRVSUP);
     ExFreePoolWithTag(pGraphicsDevice, GDITAG_GDEVICE);
@@ -1066,6 +1068,8 @@ EngpRegisterGraphicsDevice(
     // if (Win32kCallbacks.bACPI)
     // if (Win32kCallbacks.DualviewFlags & ???)
     pGraphicsDevice->PhysDeviceHandle = Win32kCallbacks.pPhysDeviceObject;
+    if (pGraphicsDevice->PhysDeviceHandle)
+        ObReferenceObject(pGraphicsDevice->PhysDeviceHandle);
 
     /* Copy the device name */
     RtlStringCbCopyNW(pGraphicsDevice->szNtDeviceName,
@@ -1086,6 +1090,8 @@ EngpRegisterGraphicsDevice(
     {
         ERR("Could not allocate string buffer\n");
         ASSERT(FALSE); // FIXME
+        if (pGraphicsDevice->PhysDeviceHandle)
+            ObDereferenceObject(pGraphicsDevice->PhysDeviceHandle);
         ExFreePoolWithTag(pGraphicsDevice, GDITAG_GDEVICE);
         return NULL;
     }
