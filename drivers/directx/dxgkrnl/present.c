@@ -3788,6 +3788,7 @@ DxgkpRenderKmBitBlt(
     Render.DmaBufferSegmentId = PresentArgs->DmaBufferSegmentId;
     Render.DmaBufferPhysicalAddress = PresentArgs->DmaBufferPhysicalAddress;
 
+    /* FIXME: a virtual-addressing context takes GDI commands through DxgkDdiRenderGdi, not DxgkDdiRenderKm */
     Status = DXGK_CB_FULL(Adapter, DxgkDdiRenderKm)(MiniportContext, &Render);
 
     PresentArgs->pDmaBuffer = Render.pDmaBuffer;
