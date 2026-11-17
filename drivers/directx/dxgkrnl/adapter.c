@@ -6807,8 +6807,9 @@ DxgkCbMapContextAllocation(
                                            &Address);
     Count = InterlockedIncrement(&Adapter->ContextAllocationMapCount);
     if (!NT_SUCCESS(Status))
-        DXGKRNL_WARN("DxgkCbMapContextAllocation: allocation=%p pages=%I64u failed 0x%08lx\n",
-                     Args->hAllocation, (ULONGLONG)Args->SizeInPages, Status);
+        DXGKRNL_WARN("DxgkCbMapContextAllocation: allocation=%p base=0x%I64x min=0x%I64x max=0x%I64x offset=%I64u pages=%I64u failed 0x%08lx\n",
+                     Args->hAllocation, Args->BaseAddress, Args->MinimumAddress, Args->MaximumAddress,
+                     (ULONGLONG)Args->OffsetInPages, (ULONGLONG)Args->SizeInPages, Status);
     {
         DXGKRNL_VERBOSE("DxgkCbMapContextAllocation #%ld seq=#%I64d: alloc=%p base=0x%I64x min=0x%I64x max=0x%I64x offset=%I64u pages=%I64u prot=0x%I64x -> status=0x%08lx va=0x%I64x\n",
                     Count, DxgkDiagSequence(), Args->hAllocation, Args->BaseAddress, Args->MinimumAddress, Args->MaximumAddress,
