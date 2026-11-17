@@ -214,10 +214,9 @@ KeIpiGenericCall(
 
     KiX86IpiCall.Function = Function;
     KiX86IpiCall.Argument = Argument;
-    KiX86IpiCall.Arriving = Count;
-    KiX86IpiCall.Remaining = Count;
-    KiX86IpiCall.Release = 0;
-    KeMemoryBarrier();
+    InterlockedExchange(&KiX86IpiCall.Arriving, Count);
+    InterlockedExchange(&KiX86IpiCall.Remaining, Count);
+    InterlockedExchange(&KiX86IpiCall.Release, 0);
     if (Targets != 0)
         KiIpiSend(Targets, IPI_SYNCH_REQUEST);
 
@@ -263,8 +262,7 @@ KiIpiSendPacket(
     KiX86IpiCall.BroadcastFunction = BroadcastFunction;
     KiX86IpiCall.Context = Context;
     KiX86IpiCall.Count = Count;
-    KiX86IpiCall.Remaining = KiX86CountTargets(Targets);
-    KeMemoryBarrier();
+    InterlockedExchange(&KiX86IpiCall.Remaining, KiX86CountTargets(Targets));
     if (Targets != 0)
         KiIpiSend(Targets, IPI_PACKET_READY);
 
