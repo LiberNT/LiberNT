@@ -1133,8 +1133,12 @@ CsrApiRequestThread(IN PVOID Parameter)
                                                     NULL,
                                                     NULL,
                                                     NULL);
-                if (!NT_SUCCESS(Status2))
+                /* A client that another process ended while it waited for this reply had its request canceled */
+                if (!NT_SUCCESS(Status2) && Status2 != STATUS_REQUEST_CANCELED)
+                {
                     DPRINT1("CSRSS: Error while replying to the death message, Status 0x%lx\n", Status2);
+                    ASSERT(Status2 == STATUS_NO_MEMORY || Status2 == STATUS_INSUFFICIENT_RESOURCES);
+                }
 
                 /* Reply back to the API port now */
                 ReplyMsg = NULL;
