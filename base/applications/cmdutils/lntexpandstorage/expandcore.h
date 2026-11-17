@@ -38,6 +38,8 @@ struct _EXPAND_DEVICE
 #define EXPAND_TABLE_MBR        0
 #define EXPAND_TABLE_GPT        1
 
+#define EXPAND_STALE_GPT_HEADERS 2
+
 typedef struct _EXPAND_PLAN
 {
     uint32_t TableStyle;
@@ -58,6 +60,8 @@ typedef struct _EXPAND_PLAN
     uint32_t BitmapExtraClusters;
     int RewritePartitionTable;
     int RewriteVolume;
+    uint32_t StaleGptCount;
+    uint64_t StaleGptLba[EXPAND_STALE_GPT_HEADERS];
 } EXPAND_PLAN;
 
 int ExpandBuildPlan(EXPAND_DEVICE* Device,
@@ -67,6 +71,8 @@ int ExpandBuildPlan(EXPAND_DEVICE* Device,
                     EXPAND_PLAN* Plan);
 
 int ExpandApplyPlan(EXPAND_DEVICE* Device, const EXPAND_PLAN* Plan);
+
+int ExpandEraseStaleGpt(EXPAND_DEVICE* Device, const EXPAND_PLAN* Plan);
 
 #define EXPAND_WORKSPACE_BYTES  (128 * 1024)
 

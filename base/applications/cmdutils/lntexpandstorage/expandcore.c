@@ -219,9 +219,8 @@ ExpandStatusText(int Status)
         case EXPAND_BAD_PARAMETER: return "invalid parameter";
         case EXPAND_TOO_LARGE: return "the requested size does not fit an MBR partition entry";
         case EXPAND_STALE_GPT:
-            return "the disk still carries GPT metadata (a leftover header in "
-                   "LBA 1 or the last sector); erase it before expanding, or "
-                   "firmware will keep reading the stale table";
+            return "a leftover GPT header lies inside an MBR partition, so it "
+                   "cannot be erased without touching the partition's data";
         default: return "unknown error";
     }
 }
@@ -1007,58 +1006,40 @@ GptApplyPlan(EXPAND_DEVICE* Device, const EXPAND_PLAN* Plan)
  * a disk replaces LBA 0 and LBA 1 but leaves the backup header at the far end
  * untouched, because the image is far shorter than the disk.  What remains is
  * a disk whose partition table says MBR and whose trailing metadata still
- * says GPT.
- *
- * Firmware resolves that disagreement in favour of the GPT -- a valid backup
- * with a missing primary reads as a GPT whose primary needs recovering -- so
- * it looks for the EFI system partition where the stale table says it is,
- * finds nothing there, and reports that the disk holds no bootable device.
- * Growing the MBR partition over such a disk is what turns a merely stale
- * backup into that contradiction, so refuse before writing anything and name
- * the leftover, which the caller can erase.
+ * says GPT.  Report every sector that still carries a GPT header signature.
  */
 static int
-ProbeStaleGpt(EXPAND_DEVICE* Device, int* Stale)
+ProbeStaleGpt(EXPAND_DEVICE* Device, uint64_t Lbas[EXPAND_STALE_GPT_HEADERS], uint32_t* Count)
 {
     uint8_t Sector[MAX_SECTOR_SIZE];
-    uint64_t LastSector;
+    uint64_t Candidates[EXPAND_STALE_GPT_HEADERS];
+    uint32_t Index;
     uint32_t Low;
     uint32_t High;
 
-    *Stale = 0;
+    *Count = 0;
 
     if (Device->SectorSize == 0 || Device->DiskSize < 2 * Device->SectorSize)
         return EXPAND_OK;
 
-    /* Primary header, immediately after the MBR. */
-    if (!Device->Read(Device->Context, Device->SectorSize, Device->SectorSize,
-                      Sector))
-    {
-        return EXPAND_IO_ERROR;
-    }
-    Low = *(uint32_t*)Sector;
-    High = *(uint32_t*)(Sector + 4);
-    if (Low == GPT_SIGNATURE_LOW && High == GPT_SIGNATURE_HIGH)
-    {
-        *Stale = 1;
-        return EXPAND_OK;
-    }
+    Candidates[0] = 1;
+    Candidates[1] = Device->DiskSize / Device->SectorSize - 1;
 
-    /* Backup header, in the last sector of the disk. */
-    LastSector = Device->DiskSize / Device->SectorSize;
-    if (LastSector == 0)
-        return EXPAND_OK;
-    LastSector--;
-
-    if (!Device->Read(Device->Context, LastSector * Device->SectorSize,
-                      Device->SectorSize, Sector))
+    for (Index = 0; Index < EXPAND_STALE_GPT_HEADERS; Index++)
     {
-        return EXPAND_IO_ERROR;
+        if (Index != 0 && Candidates[Index] == Candidates[0])
+            break;
+
+        if (!Device->Read(Device->Context, Candidates[Index] * Device->SectorSize,
+                          Device->SectorSize, Sector))
+        {
+            return EXPAND_IO_ERROR;
+        }
+        Low = *(uint32_t*)Sector;
+        High = *(uint32_t*)(Sector + 4);
+        if (Low == GPT_SIGNATURE_LOW && High == GPT_SIGNATURE_HIGH)
+            Lbas[(*Count)++] = Candidates[Index];
     }
-    Low = *(uint32_t*)Sector;
-    High = *(uint32_t*)(Sector + 4);
-    if (Low == GPT_SIGNATURE_LOW && High == GPT_SIGNATURE_HIGH)
-        *Stale = 1;
 
     return EXPAND_OK;
 }
@@ -1079,10 +1060,12 @@ ExpandBuildPlan(EXPAND_DEVICE* Device,
     uint64_t NewSectors;
     uint64_t FinalSectors;
     uint32_t SectorSize = Device->SectorSize;
+    uint64_t StaleLba[EXPAND_STALE_GPT_HEADERS];
+    uint32_t StaleCount = 0;
+    uint32_t Index;
     uint32_t Slot;
     uint32_t Ordinal = 0;
     int Target = -1;
-    int StaleGpt = 0;
     int Protective = 0;
     int Status;
 
@@ -1108,7 +1091,7 @@ ExpandBuildPlan(EXPAND_DEVICE* Device,
             Protective = 1;
     }
 
-    Status = ProbeStaleGpt(Device, &StaleGpt);
+    Status = ProbeStaleGpt(Device, StaleLba, &StaleCount);
     if (Status != EXPAND_OK)
         return Status;
 
@@ -1116,7 +1099,7 @@ ExpandBuildPlan(EXPAND_DEVICE* Device,
     {
         uint64_t GptSectors = 0;
 
-        if (!StaleGpt)
+        if (StaleCount == 0)
             return EXPAND_CORRUPT;
         Status = GptBuildPlan(Device, PartitionNumber,
                               (PadBytes + SectorSize - 1) / SectorSize,
@@ -1127,17 +1110,28 @@ ExpandBuildPlan(EXPAND_DEVICE* Device,
     }
 
     /*
-     * No protective entry, yet a GPT header survives somewhere.  Writing an
-     * MBR image over the front of a formerly-GPT disk leaves exactly that:
-     * the backup header at the far end outlives the image, which is far
-     * shorter than the disk.  Firmware then resolves the disagreement in
-     * favour of the GPT, looks for the EFI system partition where the stale
-     * table says it is, and reports the disk as holding nothing bootable.
-     * Growing the MBR partition here would cement that contradiction, so
-     * stop and name the leftover instead.
+     * No protective entry, yet a GPT header survives somewhere.  Behind a
+     * legacy MBR such a header describes nothing (UEFI 2.10 section 5.2.3),
+     * but readers that ignore that rule take it for the disk's table.  Erase
+     * every leftover header outside the partitions; one inside a partition
+     * cannot be told apart from its data, so refuse instead.
      */
-    if (StaleGpt)
-        return EXPAND_STALE_GPT;
+    for (Index = 0; Index < StaleCount; Index++)
+    {
+        for (Slot = 0; Slot < MBR_ENTRY_COUNT; Slot++)
+        {
+            if (Table[Slot].Type == MBR_TYPE_EMPTY || Table[Slot].SectorCount == 0)
+                continue;
+
+            if (StaleLba[Index] >= Table[Slot].StartLba &&
+                StaleLba[Index] < (uint64_t)Table[Slot].StartLba + Table[Slot].SectorCount)
+            {
+                return EXPAND_STALE_GPT;
+            }
+        }
+
+        Plan->StaleGptLba[Plan->StaleGptCount++] = StaleLba[Index];
+    }
 
     Plan->TableStyle = EXPAND_TABLE_MBR;
 
@@ -1903,6 +1897,31 @@ ExpandShrinkVolume(EXPAND_DEVICE* Device,
 
 #ifndef EXPAND_VOLUME_ONLY
 int
+ExpandEraseStaleGpt(EXPAND_DEVICE* Device, const EXPAND_PLAN* Plan)
+{
+    uint8_t Zero[MAX_SECTOR_SIZE];
+    uint32_t Index;
+
+    if (Plan->StaleGptCount > EXPAND_STALE_GPT_HEADERS)
+        return EXPAND_BAD_PARAMETER;
+
+    memset(Zero, 0, sizeof(Zero));
+    for (Index = 0; Index < Plan->StaleGptCount; Index++)
+    {
+        if (!Device->Write(Device->Context, Plan->StaleGptLba[Index] * Device->SectorSize,
+                           Device->SectorSize, Zero))
+        {
+            return EXPAND_IO_ERROR;
+        }
+
+        Report(Device, "erased the leftover GPT header in sector %llu\n",
+               (unsigned long long)Plan->StaleGptLba[Index]);
+    }
+
+    return EXPAND_OK;
+}
+
+int
 ExpandApplyPlan(EXPAND_DEVICE* Device, const EXPAND_PLAN* Plan)
 {
     static NTFS_WORKSPACE Work;
@@ -1911,6 +1930,10 @@ ExpandApplyPlan(EXPAND_DEVICE* Device, const EXPAND_PLAN* Plan)
     MBR_ENTRY* Table;
     uint32_t Extra = 0;
     int Status;
+
+    Status = ExpandEraseStaleGpt(Device, Plan);
+    if (Status != EXPAND_OK)
+        return Status;
 
     memset(&Context, 0, sizeof(Context));
     Context.Device = Device;
