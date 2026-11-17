@@ -388,11 +388,12 @@ KiEevdfForfeit(
     ASSERT(!Entity->Listed);
 
     /* Turns given up one after the other count once: a deadline pushed further would never end the turn on the clock */
+    if ((LONG64)(Entity->Deadline - Latest) >= 0)
+        return;
+
     Entity->Deadline += Request;
     if ((LONG64)(Entity->Deadline - Latest) > 0)
         Entity->Deadline = Latest;
-
-    ASSERT((LONG64)(Entity->Deadline - Entity->Vruntime) <= (LONG64)(2 * Request));
 }
 
 static

@@ -372,6 +372,13 @@ static void TestForfeit(void)
     CHECK(Yielder.Vruntime == ORIGIN);
     CHECK(Yielder.Deadline == ORIGIN + 2 * Request);
 
+    /* A deadline already further away than that, as after a shorter slice came in, is not brought nearer */
+    Make(&Yielder, 8, 0, 0);
+    Yielder.Deadline = Yielder.Vruntime + 5 * Request;
+    KiEevdfForfeit(&Yielder, SLICE);
+    CHECK(Yielder.Deadline == ORIGIN + 5 * Request);
+    Yielder.Deadline = Yielder.Vruntime + 2 * Request;
+
     /* So the turn of a thread that offered it many times still ends, and the one waiting behind it is picked */
     Start(&Queue);
     Make(&Other, 8, 0, 0);
