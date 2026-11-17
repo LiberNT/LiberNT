@@ -541,8 +541,9 @@ PspMoveToTokenSession(
     ObDereferenceObject(Token);
     if (!NT_SUCCESS(Status) || SessionId == MmGetSessionId(Process)) return Status;
 
-    Status = MmSetProcessSession(Process, SessionId);
+    Status = MmMoveProcessToSession(Process, SessionId);
     if (!NT_SUCCESS(Status)) return Status;
+    ASSERT(MmGetSessionId(Process) == SessionId);
 
     KeStackAttachProcess(&Process->Pcb, &ApcState);
     _SEH2_TRY

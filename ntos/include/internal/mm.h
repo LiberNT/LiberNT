@@ -670,6 +670,12 @@ NTAPI
 MmIsSessionAddress(
     _In_ PVOID Address);
 
+NTSTATUS
+NTAPI
+MmMoveProcessToSession(
+    _Inout_ PEPROCESS Process,
+    _In_ ULONG SessionId);
+
 VOID
 NTAPI
 MmQuitNextSession(
