@@ -2086,6 +2086,13 @@ HKLM,"SYSTEM\CurrentControlSet\Services\usbhub","ImagePath",0x00020000,"system32
 HKLM,"SYSTEM\CurrentControlSet\Services\usbhub","Start",0x00010001,0x00000000
 HKLM,"SYSTEM\CurrentControlSet\Services\usbhub","Type",0x00010001,0x00000001
 
+; OHCI controller driver
+HKLM,"SYSTEM\CurrentControlSet\Services\usbohci","ErrorControl",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\usbohci","Group",0x00000000,"Boot Bus Extender"
+HKLM,"SYSTEM\CurrentControlSet\Services\usbohci","ImagePath",0x00020000,"system32\drivers\usbohci.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\usbohci","Start",0x00010001,0x00000000
+HKLM,"SYSTEM\CurrentControlSet\Services\usbohci","Type",0x00010001,0x00000001
+
 ; XHCI controller driver
 HKLM,"SYSTEM\CurrentControlSet\Services\usbxhci","BootFlags",0x00010001,0x00000010
 HKLM,"SYSTEM\CurrentControlSet\Services\usbxhci","ErrorControl",0x00010001,0x00000001
@@ -2097,6 +2104,7 @@ HKLM,"SYSTEM\CurrentControlSet\Services\usbxhci\Interrupt Management\MessageSign
 HKLM,"SYSTEM\CurrentControlSet\Services\usbxhci","Start",0x00010001,0x00000000
 HKLM,"SYSTEM\CurrentControlSet\Services\usbxhci","Type",0x00010001,0x00000001
 
+; EHCI controller driver
 HKLM,"SYSTEM\CurrentControlSet\Services\usbehci","BootFlags",0x00010001,0x00000004
 HKLM,"SYSTEM\CurrentControlSet\Services\usbehci","ErrorControl",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\usbehci","Group",0x00000000,"Base"
