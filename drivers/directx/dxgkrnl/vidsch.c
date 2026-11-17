@@ -4299,6 +4299,8 @@ VidSchNotifyInterrupt(
     if ((!PreemptionNotification && FenceId == 0) || LastSubmittedFence == 0 || (FenceId != 0 && !VidSchpFenceReached(LastSubmittedFence, FenceId)))
         VidSchpBugCheckInvalidFence(Adapter, FenceId, LastSubmittedFence);
     CurrentCompletedFence = (ULONG)InterlockedCompareExchange((volatile LONG *)&Adapter->NodeLastCompletedFenceId[NodeOrdinal], 0, 0);
+    if (VidSchPolicyCompletionAlreadyRetired(PreemptionNotification, FenceId, CurrentCompletedFence))
+        return;
     if ((!PreemptionNotification && !DxgkIsSubmittedFenceIdentity(Adapter, NodeOrdinal, FenceId)) || (PreemptionNotification && FenceId != 0 && !VidSchpFenceReached(CurrentCompletedFence, FenceId) && !DxgkIsSubmittedFenceIdentity(Adapter, NodeOrdinal, FenceId)))
         VidSchpBugCheckInvalidFence(Adapter, FenceId, LastSubmittedFence);
 
