@@ -53,6 +53,8 @@ DxgkpContextSyncInitializeCoreObject(
     CoreObject->NotificationEvent = SyncObject->CpuNotificationEvent;
     CoreObject->MutexQueuedOwner = &SyncObject->MutexQueuedOwner;
     CoreObject->SemaphoreQueuedCount = &SyncObject->SemaphoreQueuedCount;
+    CoreObject->SemaphoreWaitLock = &SyncObject->SemaphoreWaitLock;
+    CoreObject->SemaphoreWaitQueue = &SyncObject->SemaphoreWaitQueue;
 }
 
 static NTSTATUS
@@ -279,6 +281,8 @@ DxgkContextSyncExecute(
         Status = DxgkContextSyncCoreExecuteWait(Capture->CoreObjects, Capture->ObjectCount, Capture->PayloadValue, Capture->PerObjectValues ? Capture->PayloadValues : NULL);
     else
         Status = DxgkContextSyncCoreExecuteSignal(Capture->CoreObjects, Capture->ObjectCount, Capture->SignalFlags, Capture->PayloadValue, Capture->PerObjectValues ? Capture->PayloadValues : NULL, Capture->EnqueueEvent);
+    if (Status == STATUS_SUCCESS && Capture->WaitAdmitted)
+        Capture->WaitAdmitted = FALSE;
     if (Status != STATUS_PENDING && Status != STATUS_ALREADY_COMPLETE)
         Capture->Executed = 1;
     KeReleaseSpinLock(&Device->SyncWaitRegistry.Lock, OldIrql);
@@ -290,17 +294,24 @@ NTSTATUS
 DxgkContextSyncAdmitWaitState(
     _Inout_ PDXGKRNL_CONTEXT_SYNC_CAPTURE Capture)
 {
+    NTSTATUS Status;
+
+    ASSERT(!Capture->WaitAdmitted);
     if (Capture->ObjectCount == 0)
         return STATUS_SUCCESS;
-    return DxgkContextSyncCoreAdmitWait(Capture->CoreObjects, Capture->ObjectCount, Capture);
+    Status = DxgkContextSyncCoreAdmitWait(Capture->CoreObjects, Capture->ObjectCount, Capture);
+    if (NT_SUCCESS(Status))
+        Capture->WaitAdmitted = TRUE;
+    return Status;
 }
 
 VOID
 DxgkContextSyncCancelWaitState(
     _Inout_ PDXGKRNL_CONTEXT_SYNC_CAPTURE Capture)
 {
-    if (Capture->ObjectCount != 0)
+    if (Capture->ObjectCount != 0 && Capture->WaitAdmitted)
         DxgkContextSyncCoreCancelWait(Capture->CoreObjects, Capture->ObjectCount, Capture);
+    Capture->WaitAdmitted = FALSE;
 }
 
 VOID
@@ -321,6 +332,11 @@ DxgkContextSyncRelease(
     if (Capture == NULL)
         return;
     KeAcquireSpinLock(&Capture->Lock, &OldIrql);
+    if (Capture->WaitAdmitted)
+    {
+        DxgkContextSyncCoreCancelWait(Capture->CoreObjects, Capture->ObjectCount, Capture);
+        Capture->WaitAdmitted = FALSE;
+    }
     Claimed = DxgkContextSyncCoreClaimRelease(&Capture->Retention);
     if (Claimed)
     {

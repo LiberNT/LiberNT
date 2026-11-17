@@ -276,6 +276,58 @@ DxgkpContextSyncReturnQueued(
         (VOID)DxgkpContextSyncReturnSemaphoreToken(Object);
 }
 
+static VOID
+DxgkpContextSyncQueueSemaphoreWait(
+    _Inout_ PDXGK_CONTEXT_SYNC_CORE_OBJECT Object)
+{
+    KIRQL OldIrql;
+
+    if (Object->SemaphoreWaitQueue == NULL)
+        return;
+    ASSERT(Object->SemaphoreWaitLock != NULL);
+    ASSERT(Object->SemaphoreWaitLink.Flink == NULL);
+    KeAcquireSpinLock(Object->SemaphoreWaitLock, &OldIrql);
+    InsertTailList(Object->SemaphoreWaitQueue, &Object->SemaphoreWaitLink);
+    KeReleaseSpinLock(Object->SemaphoreWaitLock, OldIrql);
+}
+
+/* Leaves the queue; the next waiter may take a count that is already there. */
+static VOID
+DxgkpContextSyncDequeueSemaphoreWait(
+    _Inout_ PDXGK_CONTEXT_SYNC_CORE_OBJECT Object)
+{
+    BOOLEAN WakeNext = FALSE;
+    KIRQL OldIrql;
+
+    if (Object->SemaphoreWaitQueue == NULL || Object->SemaphoreWaitLink.Flink == NULL)
+        return;
+    KeAcquireSpinLock(Object->SemaphoreWaitLock, &OldIrql);
+    ASSERT(!IsListEmpty(Object->SemaphoreWaitQueue));
+    RemoveEntryList(&Object->SemaphoreWaitLink);
+    Object->SemaphoreWaitLink.Flink = NULL;
+    Object->SemaphoreWaitLink.Blink = NULL;
+    WakeNext = !IsListEmpty(Object->SemaphoreWaitQueue) && InterlockedCompareExchange64(Object->SemaphoreCount, 0, 0) > 0;
+    KeReleaseSpinLock(Object->SemaphoreWaitLock, OldIrql);
+    if (WakeNext)
+        KeSetEvent(Object->StateEvent, IO_NO_INCREMENT, FALSE);
+}
+
+/* Windows binds each semaphore wait to the queued release it claimed at admission: waits take the count in admission order. */
+static BOOLEAN
+DxgkpContextSyncSemaphoreWaitIsOldest(
+    _In_ PDXGK_CONTEXT_SYNC_CORE_OBJECT Object)
+{
+    BOOLEAN Oldest;
+    KIRQL OldIrql;
+
+    if (Object->SemaphoreWaitQueue == NULL || Object->SemaphoreWaitLink.Flink == NULL)
+        return TRUE;
+    KeAcquireSpinLock(Object->SemaphoreWaitLock, &OldIrql);
+    Oldest = Object->SemaphoreWaitQueue->Flink == &Object->SemaphoreWaitLink;
+    KeReleaseSpinLock(Object->SemaphoreWaitLock, OldIrql);
+    return Oldest;
+}
+
 NTSTATUS
 DxgkContextSyncCoreAdmitWait(
     _In_reads_(ObjectCount) PDXGK_CONTEXT_SYNC_CORE_OBJECT Objects,
@@ -296,6 +348,11 @@ DxgkContextSyncCoreAdmitWait(
             return STATUS_UNSUCCESSFUL;
         }
     }
+    for (Index = 0; Index < ObjectCount; ++Index)
+    {
+        if (Objects[Index].Type == D3DDDI_SEMAPHORE && DxgkpContextSyncIsFirstOccurrence(Objects, Index))
+            DxgkpContextSyncQueueSemaphoreWait(&Objects[Index]);
+    }
     return STATUS_SUCCESS;
 }
 
@@ -309,6 +366,11 @@ DxgkContextSyncCoreCancelWait(
 
     if (Objects == NULL)
         return;
+    for (Index = 0; Index < ObjectCount; ++Index)
+    {
+        if (Objects[Index].Type == D3DDDI_SEMAPHORE)
+            DxgkpContextSyncDequeueSemaphoreWait(&Objects[Index]);
+    }
     for (Index = ObjectCount; Index != 0; --Index)
         DxgkpContextSyncReturnQueued(&Objects[Index - 1], Waiter);
 }
@@ -352,7 +414,9 @@ DxgkContextSyncCoreExecuteWait(
         Demand = DxgkpContextSyncDuplicateCount(Objects, ObjectCount, Index);
         if (Object->Type == D3DDDI_SYNCHRONIZATION_MUTEX && (InterlockedCompareExchange(Object->MutexOwned, 0, 0) != 0 || Demand != 1))
             return STATUS_PENDING;
-        if (Object->Type == D3DDDI_SEMAPHORE && (UINT64)InterlockedCompareExchange64(Object->SemaphoreCount, 0, 0) < Demand)
+        if (Object->Type == D3DDDI_SEMAPHORE &&
+            ((UINT64)InterlockedCompareExchange64(Object->SemaphoreCount, 0, 0) < Demand ||
+             !DxgkpContextSyncSemaphoreWaitIsOldest(Object)))
             return STATUS_PENDING;
         if ((Object->Type == D3DDDI_FENCE || Object->Type == DXGK_CONTEXT_SYNC_TYPE_MONITORED_FENCE) &&
             (UINT64)InterlockedCompareExchange64(Object->FenceValue, 0, 0) <
@@ -375,12 +439,17 @@ DxgkContextSyncCoreExecuteWait(
         }
         else if (Object->Type == D3DDDI_SEMAPHORE)
         {
-            LONG64 NewCount = InterlockedCompareExchange64(Object->SemaphoreCount, 0, 0) - Demand;
+            LONG64 NewCount = InterlockedAdd64(Object->SemaphoreCount, -(LONG64)Demand);
 
-            InterlockedExchange64(Object->SemaphoreCount, NewCount);
+            ASSERT(NewCount >= 0);
             InterlockedExchange64(Object->FenceValue, NewCount);
+            DxgkpContextSyncDequeueSemaphoreWait(Object);
             if (NewCount == 0)
+            {
                 KeClearEvent(Object->StateEvent);
+                if (InterlockedCompareExchange64(Object->SemaphoreCount, 0, 0) != 0)
+                    KeSetEvent(Object->StateEvent, IO_NO_INCREMENT, FALSE);
+            }
         }
     }
     KeMemoryBarrier();
@@ -436,9 +505,9 @@ DxgkContextSyncCoreExecuteSignal(
         }
         else if (Object->Type == D3DDDI_SEMAPHORE)
         {
-            LONG64 NewCount = InterlockedCompareExchange64(Object->SemaphoreCount, 0, 0) + Demand;
+            LONG64 NewCount = InterlockedAdd64(Object->SemaphoreCount, (LONG64)Demand);
 
-            InterlockedExchange64(Object->SemaphoreCount, NewCount);
+            ASSERT(NewCount > 0);
             InterlockedExchange64(Object->FenceValue, NewCount);
             KeSetEvent(Object->StateEvent, IO_NO_INCREMENT, FALSE);
         }
