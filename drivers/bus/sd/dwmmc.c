@@ -151,7 +151,8 @@ DwMmcInitializeController(_In_ PFDO_EXTENSION FdoExtension)
         return STATUS_DEVICE_CONFIGURATION_ERROR;
 
     FdoExtension->SpecVersion = SDHCI_SPEC_300;
-    FdoExtension->HostCapabilities = SDHCI_CAP_HIGH_SPEED | SDHCI_CAP_VOLTAGE_330 |
+    /* FIXME: no high-speed while reads are polled: a full FIFO stops the card clock mid-block, which corrupts high-speed blocks */
+    FdoExtension->HostCapabilities = SDHCI_CAP_VOLTAGE_330 |
                                      ((FdoExtension->DwMmcBusHz / 1000000) << SDHCI_CAP_BASE_CLK_SHIFT);
     if (FdoExtension->DwMmcBusWidth == 8)
         FdoExtension->HostCapabilities |= SDHCI_CAP_8BIT_SUPPORT;
