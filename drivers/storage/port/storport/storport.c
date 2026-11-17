@@ -1546,6 +1546,7 @@ typedef struct _STORPORT_MINIPORT_TIMER
     PHW_TIMER_EX Callback;
     PVOID HwDeviceExtension;
     PVOID CallbackContext;
+    BOOLEAN Retired;
 } STORPORT_MINIPORT_TIMER, *PSTORPORT_MINIPORT_TIMER;
 
 typedef struct _STORPORT_STARTIO_PERFORMANCE_PARAMETERS_V2
@@ -1595,6 +1596,56 @@ PortFreeMiniportTimers(
                                           STORPORT_MINIPORT_TIMER, ListEntry);
         KeCancelTimer(&MiniportTimer->Timer);
         ExFreePoolWithTag(MiniportTimer, TAG_MINIPORT_DATA);
+    }
+}
+
+static
+VOID
+PortFreeMiniportTimer(
+    _In_ PSTORPORT_MINIPORT_TIMER MiniportTimer)
+{
+    PFDO_DEVICE_EXTENSION DeviceExtension = MiniportTimer->DeviceExtension;
+    PSTORPORT_MINIPORT_TIMER Retired;
+    PLIST_ENTRY Entry, Next;
+    LIST_ENTRY Waited;
+    KIRQL OldIrql;
+
+    ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
+
+    KeCancelTimer(&MiniportTimer->Timer);
+    KeRemoveQueueDpc(&MiniportTimer->Dpc);
+
+    InitializeListHead(&Waited);
+    KeAcquireSpinLock(&DeviceExtension->MiniportTimerListLock, &OldIrql);
+    ASSERT(!MiniportTimer->Retired);
+    MiniportTimer->Retired = TRUE;
+    if (OldIrql <= APC_LEVEL)
+    {
+        for (Entry = DeviceExtension->MiniportTimerList.Flink;
+             Entry != &DeviceExtension->MiniportTimerList;
+             Entry = Next)
+        {
+            Next = Entry->Flink;
+            Retired = CONTAINING_RECORD(Entry, STORPORT_MINIPORT_TIMER, ListEntry);
+            if (Retired->Retired)
+            {
+                RemoveEntryList(Entry);
+                InsertTailList(&Waited, Entry);
+            }
+        }
+    }
+    KeReleaseSpinLock(&DeviceExtension->MiniportTimerListLock, OldIrql);
+
+    /* FIXME: a timer freed at DISPATCH_LEVEL stays allocated until a later free below it or the adapter's teardown */
+    if (IsListEmpty(&Waited))
+        return;
+
+    /* The DPC of a timer that already fired may be running on another processor, and it reads the timer */
+    KeFlushQueuedDpcs();
+    while (!IsListEmpty(&Waited))
+    {
+        Retired = CONTAINING_RECORD(RemoveHeadList(&Waited), STORPORT_MINIPORT_TIMER, ListEntry);
+        ExFreePoolWithTag(Retired, TAG_MINIPORT_DATA);
     }
 }
 
@@ -2085,19 +2136,13 @@ StorPortExtendedFunction(
         case ExtFunctionFreeTimer:
         {
             PSTORPORT_MINIPORT_TIMER MiniportTimer = va_arg(Args, PVOID);
-            KIRQL OldIrql;
 
             if (!MiniportTimer)
             {
                 Status = STOR_STATUS_INVALID_PARAMETER;
                 break;
             }
-            KeAcquireSpinLock(&MiniportTimer->DeviceExtension->MiniportTimerListLock, &OldIrql);
-            RemoveEntryList(&MiniportTimer->ListEntry);
-            KeReleaseSpinLock(&MiniportTimer->DeviceExtension->MiniportTimerListLock, OldIrql);
-            KeCancelTimer(&MiniportTimer->Timer);
-            KeRemoveQueueDpc(&MiniportTimer->Dpc);
-            ExFreePoolWithTag(MiniportTimer, TAG_MINIPORT_DATA);
+            PortFreeMiniportTimer(MiniportTimer);
             Status = STOR_STATUS_SUCCESS;
             break;
         }
