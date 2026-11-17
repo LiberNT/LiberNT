@@ -12,6 +12,7 @@
 
 #include <commctrl.h>
 #include <psapi.h>
+#include <ntstrsafe.h>
 
 #include "resource.h"
 
@@ -46,6 +47,7 @@ typedef struct tagNOTIFY_CONTEXT
     BOOL ShowUI;
     HANDLE UIThread;
     HWND WndClient;
+    HWND BlockingWnd;
     PSHUTDOWN_SETTINGS ShutdownSettings;
 } NOTIFY_CONTEXT, *PNOTIFY_CONTEXT;
 
@@ -54,6 +56,30 @@ typedef struct tagNOTIFY_CONTEXT
 #define QUERY_RESULT_TIMEOUT  2
 #define QUERY_RESULT_ERROR    3
 #define QUERY_RESULT_FORCE    4
+
+#define BLOCK_SCREEN_TIMEOUT    60000
+#define BLOCK_SCREEN_MAX_APPS   16
+
+typedef struct tagBLOCK_SCREEN_APP
+{
+    HWND Wnd;
+    HICON Icon;
+} BLOCK_SCREEN_APP, *PBLOCK_SCREEN_APP;
+
+typedef struct tagBLOCK_SCREEN
+{
+    HWND BlockingWnd;
+    UINT StringBase;
+    HANDLE CloseEvent;
+    DWORD Result;
+    HFONT TitleFont;
+    HFONT TextFont;
+    ULONG AppCount;
+    BLOCK_SCREEN_APP Apps[BLOCK_SCREEN_MAX_APPS];
+} BLOCK_SCREEN, *PBLOCK_SCREEN;
+
+static LONG PendingExitFlags;
+static ULONG BlockScreenFlags;
 
 typedef void (WINAPI *INITCOMMONCONTROLS_PROC)(void);
 
@@ -394,6 +420,323 @@ IsConsoleMode(VOID)
     return (BOOLEAN)NtUserCallNoParam(NOPARAM_ROUTINE_ISCONSOLEMODE);
 }
 
+static INT
+BlockScreenScale(HWND Wnd, INT Value)
+{
+    HDC hdc = GetDC(Wnd);
+    INT Dpi = hdc ? GetDeviceCaps(hdc, LOGPIXELSY) : 96;
+
+    if (hdc)
+        ReleaseDC(Wnd, hdc);
+    return MulDiv(Value, Dpi, 96);
+}
+
+static VOID
+BlockScreenAddApp(PBLOCK_SCREEN Screen, HWND Wnd)
+{
+    PBLOCK_SCREEN_APP App;
+    DWORD_PTR Icon = 0;
+
+    ASSERT(Screen->AppCount < ARRAYSIZE(Screen->Apps));
+    App = &Screen->Apps[Screen->AppCount++];
+    App->Wnd = Wnd;
+    if (!SendMessageTimeoutW(Wnd, WM_GETICON, ICON_BIG, 0, SMTO_ABORTIFHUNG | SMTO_BLOCK, 200, &Icon) || !Icon)
+        Icon = GetClassLongPtrW(Wnd, GCLP_HICON);
+    App->Icon = Icon ? (HICON)Icon : LoadIconW(NULL, IDI_APPLICATION);
+}
+
+static BOOL CALLBACK
+BlockScreenFindApps(HWND Wnd, LPARAM lParam)
+{
+    PBLOCK_SCREEN Screen = (PBLOCK_SCREEN)lParam;
+    DWORD ProcessId, ShellProcessId = 0;
+    HWND ShellWnd = GetShellWindow();
+
+    if (Screen->AppCount >= ARRAYSIZE(Screen->Apps))
+        return FALSE;
+    if (Wnd == Screen->BlockingWnd || !IsWindowVisible(Wnd) || GetWindow(Wnd, GW_OWNER) ||
+        (GetWindowLongPtrW(Wnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) || !GetWindowTextLengthW(Wnd))
+    {
+        return TRUE;
+    }
+    GetWindowThreadProcessId(Wnd, &ProcessId);
+    if (ShellWnd)
+        GetWindowThreadProcessId(ShellWnd, &ShellProcessId);
+    if (ProcessId == GetCurrentProcessId() || ProcessId == ShellProcessId)
+        return TRUE;
+    BlockScreenAddApp(Screen, Wnd);
+    return TRUE;
+}
+
+static VOID
+BlockScreenPaint(HWND Wnd, PBLOCK_SCREEN Screen)
+{
+    PAINTSTRUCT ps;
+    RECT Client, Rect;
+    WCHAR Format[128], Text[256];
+    INT Left, Top, Item;
+    ULONG Index;
+    HDC hdc = BeginPaint(Wnd, &ps);
+
+    GetClientRect(Wnd, &Client);
+    FillRect(hdc, &Client, GetStockObject(BLACK_BRUSH));
+    Left = (Client.right - BlockScreenScale(Wnd, 548)) / 2;
+    Top = (Client.bottom - BlockScreenScale(Wnd, 452)) / 2;
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, RGB(255, 255, 255));
+
+    LoadStringW(UserServerDllInstance,
+                Screen->StringBase + (Screen->AppCount == 1 ? IDS_BLOCK_TITLE_ONE : IDS_BLOCK_TITLE),
+                Format, ARRAYSIZE(Format));
+    RtlStringCchPrintfW(Text, ARRAYSIZE(Text), Format, Screen->AppCount);
+    SelectObject(hdc, Screen->TitleFont);
+    SetRect(&Rect, Left, Top, Client.right, Top + BlockScreenScale(Wnd, 30));
+    DrawTextW(hdc, Text, -1, &Rect, DT_SINGLELINE | DT_NOPREFIX);
+
+    SelectObject(hdc, Screen->TextFont);
+    LoadStringW(UserServerDllInstance, IDS_BLOCK_HINT, Text, ARRAYSIZE(Text));
+    SetRect(&Rect, Left, Top + BlockScreenScale(Wnd, 29), Client.right, Top + BlockScreenScale(Wnd, 50));
+    DrawTextW(hdc, Text, -1, &Rect, DT_SINGLELINE | DT_NOPREFIX);
+
+    for (Index = 0; Index < Screen->AppCount; ++Index)
+    {
+        Item = Top + BlockScreenScale(Wnd, 98 + 64 * Index);
+        if (Item + BlockScreenScale(Wnd, 64) > Top + BlockScreenScale(Wnd, 410))
+            break;
+        DrawIconEx(hdc, Left + BlockScreenScale(Wnd, 18), Item + BlockScreenScale(Wnd, 6), Screen->Apps[Index].Icon,
+                   BlockScreenScale(Wnd, 32), BlockScreenScale(Wnd, 32), 0, NULL, DI_NORMAL);
+        if (!InternalGetWindowText(Screen->Apps[Index].Wnd, Text, ARRAYSIZE(Text)))
+            Text[0] = UNICODE_NULL;
+        SetTextColor(hdc, RGB(255, 255, 255));
+        SetRect(&Rect, Left + BlockScreenScale(Wnd, 62), Item, Client.right, Item + BlockScreenScale(Wnd, 20));
+        DrawTextW(hdc, Text, -1, &Rect, DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+        if (Screen->Apps[Index].Wnd != Screen->BlockingWnd)
+            continue;
+        /* TODO: show the reason the application registered with ShutdownBlockReasonCreate */
+        LoadStringW(UserServerDllInstance, Screen->StringBase + IDS_BLOCK_REASON, Text, ARRAYSIZE(Text));
+        SetTextColor(hdc, RGB(160, 160, 160));
+        OffsetRect(&Rect, 0, BlockScreenScale(Wnd, 20));
+        DrawTextW(hdc, Text, -1, &Rect, DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+    }
+
+    EndPaint(Wnd, &ps);
+}
+
+static HWND
+BlockScreenCreateButton(HWND Wnd, PBLOCK_SCREEN Screen, UINT Id, UINT StringId, DWORD Style, INT x)
+{
+    WCHAR Text[64];
+    SIZE Size = { 0 };
+    INT Width;
+    HWND Button;
+    HDC hdc;
+
+    LoadStringW(UserServerDllInstance, StringId, Text, ARRAYSIZE(Text));
+    hdc = GetDC(Wnd);
+    if (hdc)
+    {
+        SelectObject(hdc, Screen->TextFont);
+        GetTextExtentPoint32W(hdc, Text, (INT)wcslen(Text), &Size);
+        ReleaseDC(Wnd, hdc);
+    }
+    Width = max(Size.cx + BlockScreenScale(Wnd, 8), BlockScreenScale(Wnd, 120));
+    Button = CreateWindowExW(0, L"BUTTON", Text, WS_CHILD | WS_VISIBLE | WS_TABSTOP | Style,
+                             x, 0, Width, BlockScreenScale(Wnd, 34), Wnd, (HMENU)UlongToHandle(Id),
+                             UserServerDllInstance, NULL);
+    if (Button)
+        SendMessageW(Button, WM_SETFONT, (WPARAM)Screen->TextFont, FALSE);
+    return Button;
+}
+
+static LRESULT CALLBACK
+BlockScreenWndProc(HWND Wnd, UINT Msg, WPARAM wParam, LPARAM lParam)
+{
+    PBLOCK_SCREEN Screen = (PBLOCK_SCREEN)GetWindowLongPtrW(Wnd, GWLP_USERDATA);
+    NONCLIENTMETRICSW Metrics;
+    HWND Force, Cancel;
+    RECT Rect;
+    INT Left, Top;
+
+    switch (Msg)
+    {
+    case WM_CREATE:
+        Screen = (PBLOCK_SCREEN)((LPCREATESTRUCTW)lParam)->lpCreateParams;
+        SetWindowLongPtrW(Wnd, GWLP_USERDATA, (LONG_PTR)Screen);
+        Metrics.cbSize = sizeof(Metrics);
+        if (!SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(Metrics), &Metrics, 0))
+            GetObjectW(GetStockObject(DEFAULT_GUI_FONT), sizeof(Metrics.lfMessageFont), &Metrics.lfMessageFont);
+        Metrics.lfMessageFont.lfHeight = -BlockScreenScale(Wnd, 20);
+        Metrics.lfMessageFont.lfWeight = FW_NORMAL;
+        Screen->TitleFont = CreateFontIndirectW(&Metrics.lfMessageFont);
+        Metrics.lfMessageFont.lfHeight = -BlockScreenScale(Wnd, 12);
+        Screen->TextFont = CreateFontIndirectW(&Metrics.lfMessageFont);
+
+        BlockScreenAddApp(Screen, Screen->BlockingWnd);
+        EnumWindows(BlockScreenFindApps, (LPARAM)Screen);
+
+        GetClientRect(Wnd, &Rect);
+        Left = (Rect.right - BlockScreenScale(Wnd, 548)) / 2;
+        Top = (Rect.bottom - BlockScreenScale(Wnd, 452)) / 2 + BlockScreenScale(Wnd, 418);
+        Force = BlockScreenCreateButton(Wnd, Screen, IDC_BLOCK_FORCE, Screen->StringBase + IDS_BLOCK_FORCE,
+                                        BS_PUSHBUTTON, Left);
+        if (!Force)
+            return -1;
+        GetWindowRect(Force, &Rect);
+        Cancel = BlockScreenCreateButton(Wnd, Screen, IDCANCEL, IDS_BLOCK_CANCEL, BS_DEFPUSHBUTTON,
+                                         Left + (Rect.right - Rect.left) + BlockScreenScale(Wnd, 7));
+        if (!Cancel)
+            return -1;
+        SetWindowPos(Force, NULL, Left, Top, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+        GetWindowRect(Cancel, &Rect);
+        MapWindowPoints(NULL, Wnd, (LPPOINT)&Rect, 2);
+        SetWindowPos(Cancel, NULL, Rect.left, Top, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+        SetFocus(Cancel);
+        return 0;
+
+    case WM_PAINT:
+        BlockScreenPaint(Wnd, Screen);
+        return 0;
+
+    case WM_ERASEBKGND:
+        return TRUE;
+
+    case WM_CTLCOLORBTN:
+        return (LRESULT)GetStockObject(BLACK_BRUSH);
+
+    case WM_COMMAND:
+        if (HIWORD(wParam) != BN_CLICKED)
+            break;
+        if (LOWORD(wParam) == IDC_BLOCK_FORCE)
+            Screen->Result = QUERY_RESULT_FORCE;
+        else if (LOWORD(wParam) == IDCANCEL)
+            Screen->Result = QUERY_RESULT_ABORT;
+        else
+            break;
+        DestroyWindow(Wnd);
+        return 0;
+
+    case WM_CLOSE:
+        DestroyWindow(Wnd);
+        return 0;
+
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        return 0;
+
+    case WM_NCDESTROY:
+        if (Screen)
+        {
+            if (Screen->TitleFont)
+                DeleteObject(Screen->TitleFont);
+            if (Screen->TextFont)
+                DeleteObject(Screen->TextFont);
+            Screen->TitleFont = Screen->TextFont = NULL;
+        }
+        break;
+    }
+
+    return DefWindowProcW(Wnd, Msg, wParam, lParam);
+}
+
+static DWORD WINAPI
+BlockScreenThreadProc(LPVOID Parameter)
+{
+    PBLOCK_SCREEN Screen = (PBLOCK_SCREEN)Parameter;
+    WNDCLASSW WndClass = { 0 };
+    HWND Wnd;
+    MSG Msg;
+
+    NtUserSetInformationThread(NtCurrentThread(), UserThreadUseActiveDesktop, NULL, 0);
+
+    WndClass.lpfnWndProc = BlockScreenWndProc;
+    WndClass.hInstance = UserServerDllInstance;
+    WndClass.hCursor = LoadCursorW(NULL, IDC_ARROW);
+    WndClass.lpszClassName = L"ShutdownBlockScreen";
+    if (!RegisterClassW(&WndClass) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
+        return 0;
+
+    Wnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_CONTROLPARENT, WndClass.lpszClassName, NULL, WS_POPUP,
+                          0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN),
+                          NULL, NULL, UserServerDllInstance, Screen);
+    if (!Wnd)
+        return 0;
+    ShowWindow(Wnd, SW_SHOWNORMAL);
+    SetForegroundWindow(Wnd);
+
+    for (;;)
+    {
+        if (MsgWaitForMultipleObjects(1, &Screen->CloseEvent, FALSE, INFINITE, QS_ALLINPUT) == WAIT_OBJECT_0 &&
+            IsWindow(Wnd))
+        {
+            DestroyWindow(Wnd);
+        }
+        while (PeekMessageW(&Msg, NULL, 0, 0, PM_REMOVE))
+        {
+            if (Msg.message == WM_QUIT)
+                return 0;
+            if (!IsDialogMessageW(Wnd, &Msg))
+            {
+                TranslateMessage(&Msg);
+                DispatchMessageW(&Msg);
+            }
+        }
+    }
+}
+
+static DWORD
+AskUserAboutBlockingApp(PCSR_PROCESS CsrProcess, PNOTIFY_CONTEXT Context)
+{
+    BLOCK_SCREEN Screen;
+    HANDLE Handles[2];
+    DWORD Wait;
+
+    ASSERT(Context->BlockingWnd != NULL);
+
+    if (IsConsoleMode())
+    {
+        return WaitForSingleObject(CsrProcess->ProcessHandle, Context->ShutdownSettings->WaitToKillAppTimeout) ==
+               WAIT_OBJECT_0 ? QUERY_RESULT_CONTINUE : QUERY_RESULT_ABORT;
+    }
+
+    RtlZeroMemory(&Screen, sizeof(Screen));
+    Screen.BlockingWnd = Context->BlockingWnd;
+    if (BlockScreenFlags & EWX_REBOOT)
+        Screen.StringBase = IDS_BLOCK_RESTART_TITLE_ONE;
+    else if (BlockScreenFlags & EWX_SHUTDOWN)
+        Screen.StringBase = IDS_BLOCK_SHUTDOWN_TITLE_ONE;
+    else
+        Screen.StringBase = IDS_BLOCK_SIGNOUT_TITLE_ONE;
+    Screen.Result = QUERY_RESULT_ABORT;
+    Screen.CloseEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!Screen.CloseEvent)
+        return QUERY_RESULT_ABORT;
+
+    Handles[0] = CreateThread(NULL, 0, BlockScreenThreadProc, &Screen, 0, NULL);
+    if (!Handles[0])
+    {
+        CloseHandle(Screen.CloseEvent);
+        return QUERY_RESULT_ABORT;
+    }
+    Handles[1] = CsrProcess->ProcessHandle;
+
+    Wait = WaitForMultipleObjects(ARRAYSIZE(Handles), Handles, FALSE, BLOCK_SCREEN_TIMEOUT);
+    if (Wait != WAIT_OBJECT_0)
+    {
+        SetEvent(Screen.CloseEvent);
+        WaitForSingleObject(Handles[0], INFINITE);
+    }
+    CloseHandle(Handles[0]);
+    CloseHandle(Screen.CloseEvent);
+    ASSERT(Screen.TitleFont == NULL && Screen.TextFont == NULL);
+
+    if (Wait == WAIT_OBJECT_0 + 1)
+        return QUERY_RESULT_CONTINUE;
+    if (Wait == WAIT_OBJECT_0 && Screen.Result == QUERY_RESULT_FORCE)
+        return QUERY_RESULT_CONTINUE;
+    /* TODO: Windows 11 locks the workstation when the screen times out */
+    return QUERY_RESULT_ABORT;
+}
+
 /************************************************/
 
 
@@ -451,6 +794,8 @@ ThreadShutdownNotify(IN PCSR_THREAD CsrThread,
 #endif
 
     NotifyTopLevelWindow(TopWnd, Context);
+    if (Context->QueryResult == QUERY_RESULT_ABORT)
+        Context->BlockingWnd = TopWnd;
 
 /******************************************************************************/
 #if 1
@@ -504,6 +849,7 @@ NotifyUserProcessForShutdown(PCSR_PROCESS CsrProcess,
 
     Context.ShutdownSettings = ShutdownSettings;
     Context.QueryResult = QUERY_RESULT_CONTINUE; // We continue shutdown by default.
+    Context.BlockingWnd = NULL;
 
     /* Keep a referenced snapshot: notification handlers can exit threads. */
     if (!NT_SUCCESS(CsrLockProcessByClientId(CsrProcess->ClientId.UniqueProcess, &Process)))
@@ -562,6 +908,8 @@ NotifyUserProcessForShutdown(PCSR_PROCESS CsrProcess,
     }
 
     QueryResult = Context.QueryResult;
+    if (QueryResult == QUERY_RESULT_ABORT)
+        QueryResult = AskUserAboutBlockingApp(CsrProcess, &Context);
     MY_DPRINT2("QueryResult = %s\n",
                QueryResult == QUERY_RESULT_ABORT ? "Abort" : "Continue");
 
@@ -594,13 +942,6 @@ NotifyUserProcessForShutdown(PCSR_PROCESS CsrProcess,
     }
 #endif
 
-    if (QueryResult == QUERY_RESULT_ABORT &&
-        WaitForSingleObject(CsrProcess->ProcessHandle, ShutdownSettings->WaitToKillAppTimeout) == WAIT_OBJECT_0)
-    {
-        QueryResult = QUERY_RESULT_CONTINUE;
-    }
-
-    /* FIXME: a process that refuses the end of the session and stays alive cancels the shutdown; Windows 11 asks the user whether to end it */
     Result = (QueryResult == QUERY_RESULT_ABORT) ? CsrShutdownCancelled : CsrShutdownCsrProcess;
 
 Cleanup:
@@ -674,6 +1015,7 @@ UserExitReactOS(PCSR_THREAD CsrThread, UINT Flags)
             /* Shutdown is in progress */
             case STATUS_PENDING:
                 DPRINT("NtUserSetInformationThread returned STATUS_PENDING\n");
+                InterlockedExchange(&PendingExitFlags, (LONG)Flags);
                 goto Quit;
 
             /* Abort */
@@ -711,6 +1053,9 @@ UserExitReactOS(PCSR_THREAD CsrThread, UINT Flags)
      * This function calls the ShutdownProcessCallback callback of
      * each CSR server for each Win32 process.
      */
+    BlockScreenFlags = (ULONG)InterlockedExchange(&PendingExitFlags, 0);
+    if (Flags & EWX_SHUTDOWN)
+        BlockScreenFlags = Flags;
     Status = CsrShutdownProcesses(&CallerLuid, Flags);
     if (!NT_SUCCESS(Status))
     {

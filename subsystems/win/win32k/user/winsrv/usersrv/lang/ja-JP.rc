@@ -39,3 +39,21 @@ BEGIN
     IDS_OK_TERMINATE_PROGRAM    "プログラムを終了するには OK をクリックしてください。"
     IDS_CANCEL_DEBUG_PROGRAM    "プログラムをデバッグするにはキャンセルをクリックしてください。"
 END
+
+STRINGTABLE
+BEGIN
+    IDS_BLOCK_RESTART_TITLE_ONE               "1 個のアプリを閉じて、再起動します"
+    IDS_BLOCK_RESTART_TITLE                   "%u 個のアプリを閉じて、再起動します"
+    IDS_BLOCK_RESTART_REASON                  "このアプリが再起動を妨げています。"
+    IDS_BLOCK_RESTART_FORCE                   "強制的に再起動"
+    IDS_BLOCK_SHUTDOWN_TITLE_ONE              "1 個のアプリを閉じて、シャットダウンします"
+    IDS_BLOCK_SHUTDOWN_TITLE                  "%u 個のアプリを閉じて、シャットダウンします"
+    IDS_BLOCK_SHUTDOWN_REASON                 "このアプリがシャットダウンを妨げています。"
+    IDS_BLOCK_SHUTDOWN_FORCE                  "強制的にシャットダウン"
+    IDS_BLOCK_SIGNOUT_TITLE_ONE               "1 個のアプリを閉じて、サインアウトします"
+    IDS_BLOCK_SIGNOUT_TITLE                   "%u 個のアプリを閉じて、サインアウトします"
+    IDS_BLOCK_SIGNOUT_REASON                  "このアプリがサインアウトを妨げています。"
+    IDS_BLOCK_SIGNOUT_FORCE                   "強制的にサインアウト"
+    IDS_BLOCK_HINT                            "戻って作業を保存するには、[キャンセル] をクリックして、必要な操作を行います。"
+    IDS_BLOCK_CANCEL                          "キャンセル"
+END
