@@ -64,6 +64,7 @@ typedef struct _NDIS6_TIMER_OBJECT
     PVOID                    DefaultFunctionContext;
     PVOID                    FunctionContext;
     LONG                     PeriodMs;
+    WORK_QUEUE_ITEM          FreeItem;
 } NDIS6_TIMER_OBJECT, *PNDIS6_TIMER_OBJECT;
 
 #define NDIS6_TIMER_MAGIC   0xB16CB16D
@@ -136,6 +137,19 @@ NdisAllocateTimerObject(
     return NDIS_STATUS_SUCCESS;
 }
 
+static VOID NTAPI
+Ndis6FreeTimerWorker(
+    _In_ PVOID Context)
+{
+    PNDIS6_TIMER_OBJECT t = (PNDIS6_TIMER_OBJECT)Context;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(t->Magic == 0);
+
+    KeFlushQueuedDpcs();
+    ExFreePoolWithTag(t, NDIS6_TIMER_TAG);
+}
+
 VOID
 NTAPI
 NdisFreeTimerObject(
@@ -143,16 +157,24 @@ NdisFreeTimerObject(
 {
     PNDIS6_TIMER_OBJECT t = (PNDIS6_TIMER_OBJECT)TimerObject;
 
+    ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
     if (t == NULL || t->Magic != NDIS6_TIMER_MAGIC)
         return;
 
     /* Cancel any pending fire and flush queued DPCs. */
     KeCancelTimer(&t->Timer);
     KeRemoveQueueDpc(&t->Dpc);
-    KeFlushQueuedDpcs();
+    InterlockedExchange((volatile LONG *)&t->Magic, 0);
 
-    t->Magic = 0;
-    ExFreePoolWithTag(t, NDIS6_TIMER_TAG);
+    if (KeGetCurrentIrql() < DISPATCH_LEVEL)
+    {
+        KeFlushQueuedDpcs();
+        ExFreePoolWithTag(t, NDIS6_TIMER_TAG);
+        return;
+    }
+
+    ExInitializeWorkItem(&t->FreeItem, Ndis6FreeTimerWorker, t);
+    ExQueueWorkItem(&t->FreeItem, DelayedWorkQueue);
 }
 
 BOOLEAN
