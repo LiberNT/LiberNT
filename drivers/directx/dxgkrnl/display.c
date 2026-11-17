@@ -275,6 +275,48 @@ DxgkpDisplayRefreshWin32k(VOID)
     ObDereferenceObject(Process);
 }
 
+BOOLEAN
+DxgkDisplayAttachWin32kSession(
+    _Out_ PRKAPC_STATE ApcState,
+    _Out_ PEPROCESS *AttachedProcess)
+{
+    PEPROCESS Process;
+    KIRQL OldIrql;
+
+    PAGED_CODE();
+
+    *AttachedProcess = NULL;
+    KeAcquireSpinLock(&g_DisplayWin32kProcessLock, &OldIrql);
+    Process = g_DisplayWin32kProcess;
+    if (Process != NULL)
+        ObReferenceObject(Process);
+    KeReleaseSpinLock(&g_DisplayWin32kProcessLock, OldIrql);
+    if (Process == NULL)
+        return FALSE;
+    if (Process == PsGetCurrentProcess())
+    {
+        ObDereferenceObject(Process);
+        return TRUE;
+    }
+    KeStackAttachProcess((PRKPROCESS)Process, ApcState);
+    *AttachedProcess = Process;
+    return TRUE;
+}
+
+VOID
+DxgkDisplayDetachWin32kSession(
+    _In_ PRKAPC_STATE ApcState,
+    _In_opt_ PEPROCESS AttachedProcess)
+{
+    PAGED_CODE();
+
+    if (AttachedProcess == NULL)
+        return;
+    ASSERT(PsGetCurrentProcess() == AttachedProcess);
+    KeUnstackDetachProcess(ApcState);
+    ObDereferenceObject(AttachedProcess);
+}
+
 VOID
 DxgkDisplayNotifyMonitorEvent(
     _In_ PDXGKRNL_ADAPTER Adapter)
