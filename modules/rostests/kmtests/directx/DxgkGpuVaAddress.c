@@ -295,8 +295,29 @@ TestOrphanReleasable(VOID)
                   "a range never orphaned is never swept");
 }
 
+static VOID
+TestUnboundedFloor(VOID)
+{
+    const ULONGLONG Start = 0x10000ULL;
+    const ULONGLONG End = 1ULL << 48;
+    ULONGLONG Floor = 0;
+
+    ok_bool_true(DxgkGpuVaCoreUnboundedFloor(Start, End, Start, End, &Floor), "whole space");
+    ok_eq_ulonglong(Floor, DXGK_GPUVA_CORE_UNBOUNDED_FLOOR);
+    ok_eq_ulonglong(DXGK_GPUVA_CORE_UNBOUNDED_FLOOR, 0x100000000ULL);
+    ok_bool_false(DxgkGpuVaCoreUnboundedFloor(Start, 0x2000001ULL, Start, End, &Floor), "bounded maximum");
+    ok_eq_ulonglong(Floor, Start);
+    ok_bool_false(DxgkGpuVaCoreUnboundedFloor(0x200000ULL, End, Start, End, &Floor), "raised minimum");
+    ok_eq_ulonglong(Floor, 0x200000ULL);
+    ok_bool_false(DxgkGpuVaCoreUnboundedFloor(Start, 0x100000000ULL, Start, 0x100000000ULL, &Floor), "4 GB space");
+    ok_eq_ulonglong(Floor, Start);
+    ok_bool_true(DxgkGpuVaCoreUnboundedFloor(Start, 0x100001000ULL, Start, 0x100001000ULL, &Floor), "space just above 4 GB");
+    ok_eq_ulonglong(Floor, DXGK_GPUVA_CORE_UNBOUNDED_FLOOR);
+}
+
 START_TEST(DxgkGpuVaAddress)
 {
+    TestUnboundedFloor();
     TestAlignUp();
     TestRangeEnd();
     TestOverlapAndContainment();

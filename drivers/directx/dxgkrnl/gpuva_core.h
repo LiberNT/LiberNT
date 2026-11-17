@@ -58,6 +58,12 @@ BOOLEAN DxgkGpuVaCoreRangesOverlap(_In_ ULONGLONG StartA, _In_ ULONGLONG SizeA, 
 BOOLEAN DxgkGpuVaCoreRangeContains(_In_ ULONGLONG OuterStart, _In_ ULONGLONG OuterSize, _In_ ULONGLONG InnerStart, _In_ ULONGLONG InnerSize);
 BOOLEAN DxgkGpuVaCoreIsPageAligned(_In_ ULONGLONG Value);
 
+/* Lowest address a user placement without an address bound tries first */
+#define DXGK_GPUVA_CORE_UNBOUNDED_FLOOR (4ULL * 1024ULL * 1024ULL * 1024ULL)
+
+BOOLEAN DxgkGpuVaCoreUnboundedFloor(_In_ ULONGLONG MinAddress, _In_ ULONGLONG MaxAddress, _In_ ULONGLONG SpaceStart,
+                                    _In_ ULONGLONG SpaceEnd, _Out_ PULONGLONG Floor);
+
 FORCEINLINE
 PVOID
 DxgkGpuVaCoreOrphanOwner(

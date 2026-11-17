@@ -81,6 +81,24 @@ DxgkGpuVaCoreIsPageAligned(
     return (Value & (DXGK_GPUVA_CORE_PAGE_SIZE - 1)) == 0;
 }
 
+/* A user placement whose window is the whole address space starts above 4 GB, so the low range stays free for
+ * requests bounded to it, such as a driver's context allocations. */
+BOOLEAN
+DxgkGpuVaCoreUnboundedFloor(
+    _In_ ULONGLONG MinAddress,
+    _In_ ULONGLONG MaxAddress,
+    _In_ ULONGLONG SpaceStart,
+    _In_ ULONGLONG SpaceEnd,
+    _Out_ PULONGLONG Floor)
+{
+    *Floor = MinAddress;
+    if (MinAddress > SpaceStart || MaxAddress < SpaceEnd || SpaceEnd <= DXGK_GPUVA_CORE_UNBOUNDED_FLOOR)
+        return FALSE;
+    /* TODO: INFO_NEEDED: the base Windows 11 uses for unbounded user placements */
+    *Floor = DXGK_GPUVA_CORE_UNBOUNDED_FLOOR;
+    return TRUE;
+}
+
 BOOLEAN
 DxgkGpuVaCorePageCount(
     _In_ ULONGLONG Address,

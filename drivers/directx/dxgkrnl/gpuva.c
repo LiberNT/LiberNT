@@ -3421,6 +3421,28 @@ GpuVaAddressSpaceEnd(
     return GPUVA_DEFAULT_SPACE_SIZE;
 }
 
+static D3DGPU_VIRTUAL_ADDRESS
+GpuVaFindUserRegion(
+    _In_ PDXGKRNL_PROCESS       Process,
+    _In_ D3DGPU_VIRTUAL_ADDRESS MinAddress,
+    _In_ D3DGPU_VIRTUAL_ADDRESS MaxAddress,
+    _In_ ULONGLONG              Size,
+    _In_ ULONGLONG              Alignment)
+{
+    D3DGPU_VIRTUAL_ADDRESS Address;
+    ULONGLONG Floor;
+
+    if (DxgkGpuVaCoreUnboundedFloor(MinAddress, MaxAddress, GPUVA_START_ADDRESS, GpuVaAddressSpaceEnd(Process), &Floor))
+    {
+        ASSERT(Floor > MinAddress);
+        ASSERT(Floor < MaxAddress);
+        Address = GpuVaFindFreeRegion(Process, Floor, MaxAddress, Size, Alignment);
+        if (Address != 0)
+            return Address;
+    }
+    return GpuVaFindFreeRegion(Process, MinAddress, MaxAddress, Size, Alignment);
+}
+
 NTSTATUS
 DxgkGpuVaPlanReserve(_In_ PDXGKRNL_PROCESS Process, _In_ D3DGPU_VIRTUAL_ADDRESS BaseAddress, _In_ D3DGPU_VIRTUAL_ADDRESS MinAddress, _In_ D3DGPU_VIRTUAL_ADDRESS MaxAddress, _In_ ULONGLONG SizeInBytes, _In_ D3DDDIGPUVIRTUALADDRESS_RESERVATION_TYPE ReservationType, _Out_ D3DGPU_VIRTUAL_ADDRESS *OutAddress)
 {
@@ -3479,7 +3501,7 @@ DxgkGpuVaPlanReserve(_In_ PDXGKRNL_PROCESS Process, _In_ D3DGPU_VIRTUAL_ADDRESS 
     }
     else
     {
-        ActualAddress = GpuVaFindFreeRegion(Process, MinAddress, MaxAddress, SizeInBytes, GPUVA_RESERVATION_ALIGNMENT);
+        ActualAddress = GpuVaFindUserRegion(Process, MinAddress, MaxAddress, SizeInBytes, GPUVA_RESERVATION_ALIGNMENT);
         if (ActualAddress == 0)
         {
             ExReleaseFastMutex(&Process->GpuVaLock);
@@ -3590,7 +3612,7 @@ DxgkGpuVaPlanMap(_In_ PDXGKRNL_ADAPTER Adapter, _In_ PDXGKRNL_PROCESS Process, _
             ExReleaseFastMutex(&Process->GpuVaLock);
             return STATUS_QUOTA_EXCEEDED;
         }
-        ActualAddress = GpuVaFindFreeRegion(Process, MinAddress, MaxAddress, SizeInBytes, GPUVA_RESERVATION_ALIGNMENT);
+        ActualAddress = GpuVaFindUserRegion(Process, MinAddress, MaxAddress, SizeInBytes, GPUVA_RESERVATION_ALIGNMENT);
         if (ActualAddress == 0)
         {
             ExReleaseFastMutex(&Process->GpuVaLock);
@@ -3696,7 +3718,7 @@ DxgkGpuVaReserve(
     else
     {
         /* Find a free region. */
-        ActualAddress = GpuVaFindFreeRegion(Process, MinAddress, MaxAddress, SizeInBytes, GPUVA_RESERVATION_ALIGNMENT);
+        ActualAddress = GpuVaFindUserRegion(Process, MinAddress, MaxAddress, SizeInBytes, GPUVA_RESERVATION_ALIGNMENT);
         if (ActualAddress == 0)
         {
             ExReleaseFastMutex(&Process->GpuVaLock);
@@ -4746,7 +4768,7 @@ DxgkGpuVaMap(
     }
     else
     {
-        ActualAddress = GpuVaFindFreeRegion(Process, MinAddress, MaxAddress, SizeInBytes, GPUVA_RESERVATION_ALIGNMENT);
+        ActualAddress = GpuVaFindUserRegion(Process, MinAddress, MaxAddress, SizeInBytes, GPUVA_RESERVATION_ALIGNMENT);
         if (ActualAddress == 0)
         {
             ExReleaseFastMutex(&Process->GpuVaLock);
