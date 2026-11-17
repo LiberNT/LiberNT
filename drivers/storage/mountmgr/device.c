@@ -898,7 +898,7 @@ MountMgrQueryDosVolumePath(IN PDEVICE_EXTENSION DeviceExtension,
             goto TryWithVolumeName;
 
         /* Create a string with the information about the device */
-        AssociatedDevice = CONTAINING_RECORD(&(DeviceInformation->AssociatedDevicesHead), ASSOCIATED_DEVICE_ENTRY, AssociatedDevicesEntry);
+        AssociatedDevice = CONTAINING_RECORD(DeviceInformation->AssociatedDevicesHead.Flink, ASSOCIATED_DEVICE_ENTRY, AssociatedDevicesEntry);
         OldLength = DeviceLength;
         OldBuffer = DeviceString;
         DeviceLength += AssociatedDevice->String.Length;
