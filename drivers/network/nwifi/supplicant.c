@@ -19,6 +19,7 @@
 #define EAPOL_ETHERTYPE     0x888E
 #define NWIFI_CREDENTIAL_MAX 128
 #define NWIFI_RANDOM_POOL    128
+#define NWIFI_PENDING_EAPOL  512
 
 /* Per-interface supplicant session.  Keeps a copy of the seeded passphrase
  * so a session can be re-initialised per SSID (the PMK is SSID-dependent). */
@@ -42,6 +43,11 @@ typedef struct _NWIFI_SUPPLICANT
     UCHAR     SaeBssid[IEEE80211_ADDR_LEN];
     USHORT    SaeSendConfirm;
     RSNA_SAE  Sae;
+    BOOLEAN   AssociationKnown;
+    ULONG     PendingEapolLength;
+    UCHAR     PendingEapolSource[IEEE80211_ADDR_LEN];
+    UCHAR     PendingEapolDestination[IEEE80211_ADDR_LEN];
+    UCHAR     PendingEapol[NWIFI_PENDING_EAPOL];
 } NWIFI_SUPPLICANT;
 
 typedef struct _NWIFI_INSTALL_KEYS_CONTEXT
@@ -635,6 +641,8 @@ NwifiSupplicantStart(
     RtlCopyMemory(Sup->RandomPool, RandomPool, sizeof(RandomPool));
     Sup->RandomAvailable = sizeof(RandomPool);
     Sup->Generation++;
+    Sup->AssociationKnown = FALSE;
+    Sup->PendingEapolLength = 0;
     Sup->Initialised = AuthAlgorithm != DOT11_AUTH_ALGO_WPA3_SAE;
     Sup->SaePending = AuthAlgorithm == DOT11_AUTH_ALGO_WPA3_SAE;
     Sup->SaeH2e = FALSE;
@@ -1076,6 +1084,8 @@ NwifiSupplicantSetAssociation(
 
     NdisAcquireSpinLock(&Msm->Lock);
     Sup = Msm->Supplicant;
+    if (Sup != NULL)
+        Sup->AssociationKnown = TRUE;
     if (Sup != NULL && Sup->Initialised)
     {
         RsnaSetApAddr(&Sup->Ctx, ApMac);
@@ -1133,6 +1143,11 @@ NwifiSupplicantResetSession(
 
     NdisAcquireSpinLock(&Msm->Lock);
     Sup = Msm->Supplicant;
+    if (Sup != NULL)
+    {
+        Sup->AssociationKnown = FALSE;
+        Sup->PendingEapolLength = 0;
+    }
     if (Sup != NULL && Sup->Initialised)
     {
         RsnaReset(&Sup->Ctx);
@@ -1372,6 +1387,33 @@ Exit:
     NwifiMsmCompleteWorkItem(Msm, NdisIoWorkItemHandle);
 }
 
+VOID
+NwifiSupplicantReplayEapol(
+    _In_ PNWIFI_MSM Msm)
+{
+    PNWIFI_SUPPLICANT Sup;
+    UCHAR Eapol[NWIFI_PENDING_EAPOL];
+    UCHAR Source[IEEE80211_ADDR_LEN];
+    UCHAR Destination[IEEE80211_ADDR_LEN];
+    ULONG Length = 0;
+
+    NdisAcquireSpinLock(&Msm->Lock);
+    Sup = Msm->Supplicant;
+    if (Sup != NULL && Sup->AssociationKnown && Sup->PendingEapolLength != 0)
+    {
+        ASSERT(Sup->PendingEapolLength <= sizeof(Eapol));
+        Length = Sup->PendingEapolLength;
+        RtlCopyMemory(Eapol, Sup->PendingEapol, Length);
+        RtlCopyMemory(Source, Sup->PendingEapolSource, sizeof(Source));
+        RtlCopyMemory(Destination, Sup->PendingEapolDestination, sizeof(Destination));
+        Sup->PendingEapolLength = 0;
+    }
+    NdisReleaseSpinLock(&Msm->Lock);
+
+    if (Length != 0)
+        (VOID)NwifiSupplicantRxEapol(Msm, Eapol, Length, Source, Destination);
+}
+
 /* ===========================================================================
  *  EAPOL-Key RX feed
  * ===========================================================================
@@ -1407,6 +1449,19 @@ NwifiSupplicantRxEapol(
     Sup = Msm->Supplicant;
     if (Sup == NULL || !Sup->Initialised)
     {
+        NdisReleaseSpinLock(&Msm->Lock);
+        return TRUE;
+    }
+
+    if (!Sup->AssociationKnown)
+    {
+        if (Length <= sizeof(Sup->PendingEapol))
+        {
+            RtlCopyMemory(Sup->PendingEapol, Eapol, Length);
+            RtlCopyMemory(Sup->PendingEapolSource, SrcMac, IEEE80211_ADDR_LEN);
+            RtlCopyMemory(Sup->PendingEapolDestination, DstMac, IEEE80211_ADDR_LEN);
+            Sup->PendingEapolLength = Length;
+        }
         NdisReleaseSpinLock(&Msm->Lock);
         return TRUE;
     }
