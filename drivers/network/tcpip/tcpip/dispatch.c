@@ -393,10 +393,10 @@ NTSTATUS DispTdiAssociateAddress(
   }
 
   if (FileObject->FsContext2 != (PVOID)TDI_TRANSPORT_ADDRESS_FILE) {
-    ObDereferenceObject(FileObject);
-    UnlockObject(Connection);
     TI_DbgPrint(MID_TRACE, ("Bad address file object. Magic (0x%X).\n",
       FileObject->FsContext2));
+    ObDereferenceObject(FileObject);
+    UnlockObject(Connection);
     return STATUS_INVALID_PARAMETER;
   }
 
