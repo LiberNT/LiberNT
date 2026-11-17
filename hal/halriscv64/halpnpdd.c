@@ -1111,55 +1111,173 @@ HalpRiscvFdtPnp(_In_ PDEVICE_OBJECT DeviceObject, _In_ PIO_STACK_LOCATION Stack,
     return Status;
 }
 
+static ULONGLONG
+HalpRiscvPciWindowChunk(ULONGLONG Length, BOOLEAN IsIo)
+{
+    ULONGLONG Best = min(Length, (ULONGLONG)MAXULONG);
+    ULONG Shift;
+
+    if (IsIo)
+        return Best;
+
+    for (Shift = 8; Shift <= 32; Shift *= 2)
+    {
+        ULONGLONG Limit = (ULONGLONG)MAXULONG << Shift;
+        ULONGLONG Candidate = min(Length, Limit) & ~((1ULL << Shift) - 1);
+        Best = max(Best, Candidate);
+    }
+    return Best;
+}
+
+static ULONG
+HalpRiscvPciResourceCount(VOID)
+{
+    ULONGLONG Base, Length, Chunk;
+    BOOLEAN IsIo, Prefetchable;
+    ULONG Count = 1, Index;
+
+    for (Index = 0; Index < HalpRiscvPciWindowCount(); ++Index)
+    {
+        if (!HalpRiscvGetPciWindow(Index, &Base, &Length, &IsIo, &Prefetchable))
+            return 0;
+        while (Length)
+        {
+            Chunk = HalpRiscvPciWindowChunk(Length, IsIo);
+            if (!Chunk || Count == MAXULONG)
+                return 0;
+            Length -= Chunk;
+            ++Count;
+        }
+    }
+    return Count;
+}
+
 static NTSTATUS
 HalpRiscvPciResources(_In_ RISCV_PLATFORM_EXTENSION *Extension,
-                     _Out_ PULONG_PTR Information)
+                      _Out_ PULONG_PTR Information)
 {
-    PCM_RESOURCE_LIST List = ExAllocatePoolWithTag(PagedPool, sizeof(*List), RISCV_PLATFORM_TAG);
+    PCM_RESOURCE_LIST List;
     PCM_PARTIAL_RESOURCE_DESCRIPTOR Resource;
+    ULONGLONG Base, Length, Chunk;
+    BOOLEAN IsIo, Prefetchable;
+    ULONG Count = HalpRiscvPciResourceCount(), Index;
+    SIZE_T Size;
+    NTSTATUS Status;
 
+    if (!Count)
+        return STATUS_INVALID_PARAMETER;
+    Size = sizeof(*List) + (Count - 1) * sizeof(*Resource);
+    List = ExAllocatePoolWithTag(PagedPool, Size, RISCV_PLATFORM_TAG);
     if (!List)
         return STATUS_INSUFFICIENT_RESOURCES;
-    RtlZeroMemory(List, sizeof(*List));
+    RtlZeroMemory(List, Size);
     List->Count = 1;
     List->List[0].InterfaceType = PCIBus;
     List->List[0].BusNumber = Extension->FirstBus;
     List->List[0].PartialResourceList.Version = 1;
     List->List[0].PartialResourceList.Revision = 1;
-    List->List[0].PartialResourceList.Count = 1;
+    List->List[0].PartialResourceList.Count = Count;
     Resource = &List->List[0].PartialResourceList.PartialDescriptors[0];
     Resource->Type = CmResourceTypeBusNumber;
     Resource->ShareDisposition = CmResourceShareDeviceExclusive;
     Resource->u.BusNumber.Start = Extension->FirstBus;
     Resource->u.BusNumber.Length = Extension->LastBus - Extension->FirstBus + 1;
+    ++Resource;
+
+    for (Index = 0; Index < HalpRiscvPciWindowCount(); ++Index)
+    {
+        if (!HalpRiscvGetPciWindow(Index, &Base, &Length, &IsIo, &Prefetchable))
+        {
+            ExFreePoolWithTag(List, RISCV_PLATFORM_TAG);
+            return STATUS_INVALID_PARAMETER;
+        }
+        while (Length)
+        {
+            Chunk = HalpRiscvPciWindowChunk(Length, IsIo);
+            Resource->ShareDisposition = CmResourceShareDeviceExclusive;
+            Resource->Flags = IsIo ? (CM_RESOURCE_PORT_IO | CM_RESOURCE_PORT_POSITIVE_DECODE |
+                                      CM_RESOURCE_PORT_WINDOW_DECODE) :
+                                     (CM_RESOURCE_MEMORY_READ_WRITE | CM_RESOURCE_MEMORY_WINDOW_DECODE |
+                                      (Prefetchable ? CM_RESOURCE_MEMORY_PREFETCHABLE : 0));
+            Status = RtlCmEncodeMemIoResource(Resource, IsIo ? CmResourceTypePort : CmResourceTypeMemory,
+                                              Chunk, Base);
+            if (!NT_SUCCESS(Status))
+            {
+                ExFreePoolWithTag(List, RISCV_PLATFORM_TAG);
+                return Status;
+            }
+            Base += Chunk;
+            Length -= Chunk;
+            ++Resource;
+        }
+    }
+    ASSERT(Resource == &List->List[0].PartialResourceList.PartialDescriptors[Count]);
     *Information = (ULONG_PTR)List;
     return STATUS_SUCCESS;
 }
 
 static NTSTATUS
 HalpRiscvPciRequirements(_In_ RISCV_PLATFORM_EXTENSION *Extension,
-                        _Out_ PULONG_PTR Information)
+                         _Out_ PULONG_PTR Information)
 {
     PIO_RESOURCE_REQUIREMENTS_LIST List;
     PIO_RESOURCE_DESCRIPTOR Resource;
+    ULONGLONG Base, Length, Chunk;
+    BOOLEAN IsIo, Prefetchable;
+    ULONG Count = HalpRiscvPciResourceCount(), Index;
+    SIZE_T Size;
+    NTSTATUS Status;
 
-    List = ExAllocatePoolWithTag(PagedPool, sizeof(*List), RISCV_PLATFORM_TAG);
+    if (!Count)
+        return STATUS_INVALID_PARAMETER;
+    Size = sizeof(*List) + (Count - 1) * sizeof(*Resource);
+    List = ExAllocatePoolWithTag(PagedPool, Size, RISCV_PLATFORM_TAG);
     if (!List)
         return STATUS_INSUFFICIENT_RESOURCES;
-    RtlZeroMemory(List, sizeof(*List));
-    List->ListSize = sizeof(*List);
+    RtlZeroMemory(List, Size);
+    List->ListSize = (ULONG)Size;
     List->InterfaceType = PCIBus;
     List->BusNumber = Extension->FirstBus;
     List->AlternativeLists = 1;
     List->List[0].Version = 1;
     List->List[0].Revision = 1;
-    List->List[0].Count = 1;
+    List->List[0].Count = Count;
     Resource = &List->List[0].Descriptors[0];
     Resource->Type = CmResourceTypeBusNumber;
     Resource->ShareDisposition = CmResourceShareDeviceExclusive;
     Resource->u.BusNumber.Length = Extension->LastBus - Extension->FirstBus + 1;
     Resource->u.BusNumber.MinBusNumber = Extension->FirstBus;
     Resource->u.BusNumber.MaxBusNumber = Extension->LastBus;
+    ++Resource;
+
+    for (Index = 0; Index < HalpRiscvPciWindowCount(); ++Index)
+    {
+        if (!HalpRiscvGetPciWindow(Index, &Base, &Length, &IsIo, &Prefetchable))
+        {
+            ExFreePoolWithTag(List, RISCV_PLATFORM_TAG);
+            return STATUS_INVALID_PARAMETER;
+        }
+        while (Length)
+        {
+            Chunk = HalpRiscvPciWindowChunk(Length, IsIo);
+            Resource->ShareDisposition = CmResourceShareDeviceExclusive;
+            Resource->Flags = IsIo ? (CM_RESOURCE_PORT_IO | CM_RESOURCE_PORT_POSITIVE_DECODE |
+                                      CM_RESOURCE_PORT_WINDOW_DECODE) :
+                                     (CM_RESOURCE_MEMORY_READ_WRITE | CM_RESOURCE_MEMORY_WINDOW_DECODE |
+                                      (Prefetchable ? CM_RESOURCE_MEMORY_PREFETCHABLE : 0));
+            Status = RtlIoEncodeMemIoResource(Resource, IsIo ? CmResourceTypePort : CmResourceTypeMemory,
+                                              Chunk, 0, Base, Base + Chunk - 1);
+            if (!NT_SUCCESS(Status))
+            {
+                ExFreePoolWithTag(List, RISCV_PLATFORM_TAG);
+                return Status;
+            }
+            Base += Chunk;
+            Length -= Chunk;
+            ++Resource;
+        }
+    }
+    ASSERT(Resource == &List->List[0].Descriptors[Count]);
     *Information = (ULONG_PTR)List;
     return STATUS_SUCCESS;
 }

@@ -112,6 +112,10 @@ ULONG NTAPI HalpRiscvClaimPlicInterrupt(VOID);
 VOID NTAPI HalpRiscvCompletePlicInterrupt(_In_ ULONG Source);
 BOOLEAN HalpRiscvGetPciResource(_Out_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Resource);
 BOOLEAN NTAPI HalpRiscvGetPciBusRange(_Out_ PULONG FirstBus, _Out_ PULONG LastBus);
+ULONG HalpRiscvPciWindowCount(VOID);
+BOOLEAN HalpRiscvGetPciWindow(_In_ ULONG Index, _Out_ PULONGLONG Base,
+                               _Out_ PULONGLONG Length, _Out_ PBOOLEAN IsIo,
+                               _Out_ PBOOLEAN Prefetchable);
 BOOLEAN HalpRiscvPciDmaCoherent(VOID);
 NTSTATUS NTAPI HaliInitPnpDriver(VOID);
 VOID HalpRiscvInitializeDma(_In_ struct _LOADER_PARAMETER_BLOCK *LoaderBlock);

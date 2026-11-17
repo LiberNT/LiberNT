@@ -25,6 +25,7 @@ typedef struct _RISCV_PCI_RANGE
     ULONG64 PhysicalAddress;
     ULONG64 Size;
     ULONG AddressSpace;
+    BOOLEAN Prefetchable;
 } RISCV_PCI_RANGE;
 
 typedef struct _RISCV_PCI_INTX_ROUTE
@@ -287,6 +288,7 @@ HalpRiscvInitializePci(const VOID *DeviceTree, SIZE_T DeviceTreeSize)
                 HalpRiscvRangesOverlap(Range->PhysicalAddress, Range->Size, Host->ConfigAddress, Host->ConfigSize))
                 return FALSE;
             Range->AddressSpace = (Space == 1);
+            Range->Prefetchable = (Flags & 0x40000000UL) != 0;
             for (Other = 0; Other < Index; ++Other)
             {
                 RISCV_PCI_RANGE *Previous = &Host->Ranges[Other];
@@ -435,6 +437,30 @@ HalpRiscvGetPciBusRange(PULONG FirstBus, PULONG LastBus)
         return FALSE;
     *FirstBus = HalpRiscvPciHost.FirstBus;
     *LastBus = HalpRiscvPciHost.LastBus;
+    return TRUE;
+}
+
+ULONG
+HalpRiscvPciWindowCount(VOID)
+{
+    return HalpRiscvPciHostPresent ? HalpRiscvPciHost.RangeCount : 0;
+}
+
+BOOLEAN
+HalpRiscvGetPciWindow(ULONG Index, PULONGLONG Base, PULONGLONG Length,
+                       PBOOLEAN IsIo, PBOOLEAN Prefetchable)
+{
+    RISCV_PCI_RANGE *Range;
+
+    if (!HalpRiscvPciHostPresent || Index >= HalpRiscvPciHost.RangeCount ||
+        !Base || !Length || !IsIo || !Prefetchable)
+        return FALSE;
+
+    Range = &HalpRiscvPciHost.Ranges[Index];
+    *Base = Range->BusAddress;
+    *Length = Range->Size;
+    *IsIo = (BOOLEAN)(Range->AddressSpace != 0);
+    *Prefetchable = Range->Prefetchable;
     return TRUE;
 }
 
