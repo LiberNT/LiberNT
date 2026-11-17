@@ -37,6 +37,10 @@
 #define KiArchPublishSystemCallStubs(DllBase) ((VOID)(DllBase), STATUS_SUCCESS)
 #endif
 
+#ifndef KiArchUserSListPopRollsBack
+#define KiArchUserSListPopRollsBack() TRUE
+#endif
+
 #ifndef KiArchExceptionContextFlags
 #define KiArchExceptionContextFlags(PreviousMode) ((VOID)(PreviousMode), CONTEXT_ALL)
 #endif

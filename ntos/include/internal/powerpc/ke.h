@@ -272,7 +272,7 @@ BOOLEAN NTAPI KiUserTrap(_In_ PKTRAP_FRAME TrapFrame);
 
 /* User-mode SList pops recover through SEH: ntdll has no pop sequence for the
  * fault handler to roll back. */
-#define KI_USER_SLIST_POP_NO_ROLLBACK
+#define KiArchUserSListPopRollsBack() FALSE
 
 /* Native assembly entry used by KD to recognize user callback transitions. */
 #define KI_USER_MODE_CALLBACK_ENTRY KiPpcCallUserMode
