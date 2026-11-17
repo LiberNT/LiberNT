@@ -948,6 +948,15 @@ Return Value:
     (VOID)KeRemoveQueueDpc( &Vcb->CleanVolumeDpc );
 
     //
+    //  A Dpc that was already taken off its queue still reads the Vcb, and
+    //  sets the timer again when it finds dirty data.
+    //
+
+    KeFlushQueuedDpcs();
+
+    (VOID)KeCancelTimer( &Vcb->CleanVolumeTimer );
+
+    //
     //  Free the performance counters memory
     //
 
