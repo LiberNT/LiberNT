@@ -114,7 +114,7 @@ LocalmonShutdown(HANDLE hMonitor)
     PLOCALMON_HANDLE pLocalmon;
     PLOCALMON_PORT pPort;
     PLOCALMON_XCV pXcv;
-    PLIST_ENTRY pEntry;
+    PLIST_ENTRY pEntry, pNext;
 
     TRACE("LocalmonShutdown(%p)\n", hMonitor);
 
@@ -129,9 +129,11 @@ LocalmonShutdown(HANDLE hMonitor)
     // Close all virtual file ports.
     if (!IsListEmpty(&pLocalmon->FilePorts))
     {
-        for (pEntry = pLocalmon->FilePorts.Flink; pEntry != &pLocalmon->FilePorts; pEntry = pEntry->Flink)
+        for (pEntry = pLocalmon->FilePorts.Flink; pEntry != &pLocalmon->FilePorts; pEntry = pNext)
         {
-           pPort = CONTAINING_RECORD(&pLocalmon->FilePorts.Flink, LOCALMON_PORT, Entry);
+           /* Closing a FILE: port unlinks and frees it */
+           pNext = pEntry->Flink;
+           pPort = CONTAINING_RECORD(pEntry, LOCALMON_PORT, Entry);
            LocalmonClosePort((HANDLE)pPort);
         }
     }
@@ -139,8 +141,9 @@ LocalmonShutdown(HANDLE hMonitor)
     // Do the same for the open Xcv ports.
     if (!IsListEmpty(&pLocalmon->XcvHandles))
     {
-        for (pEntry = pLocalmon->XcvHandles.Flink; pEntry != &pLocalmon->XcvHandles; pEntry = pEntry->Flink)
+        for (pEntry = pLocalmon->XcvHandles.Flink; pEntry != &pLocalmon->XcvHandles; pEntry = pNext)
         {
+            pNext = pEntry->Flink;
             pXcv = CONTAINING_RECORD(pEntry, LOCALMON_XCV, Entry);
             LocalmonXcvClosePort((HANDLE)pXcv);
         }
@@ -152,6 +155,7 @@ LocalmonShutdown(HANDLE hMonitor)
         for (pEntry = pLocalmon->RegistryPorts.Flink; pEntry != &pLocalmon->RegistryPorts; pEntry = pEntry->Flink)
         {
             pPort = CONTAINING_RECORD(pEntry, LOCALMON_PORT, Entry);
+            /* FIXME: a port that closed is skipped, so no registry port is removed or freed here */
             if ( LocalmonClosePort((HANDLE)pPort) ) continue;
             RemoveEntryList(&pPort->Entry);
             DllFreeSplMem(pPort);
