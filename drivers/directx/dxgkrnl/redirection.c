@@ -441,20 +441,29 @@ DxgkpRedirectedBltWorker(
 {
     PDXGKP_REDIRECTED_BLT_WORK Work = Parameter;
     NTSTATUS Status = Work->Complete ? STATUS_SUCCESS : STATUS_CANCELLED;
+    KAPC_STATE ApcState;
+    PEPROCESS SessionProcess;
 
-    if (NT_SUCCESS(Status) && Work->GdiBltTexture != NULL)
+    PAGED_CODE();
+
+    /* The win32k callouts below are session-space code; a system worker runs outside every session */
+    if (DxgkDisplayAttachWin32kSession(&ApcState, &SessionProcess))
     {
-        Status = Work->DirtyRectCount != 0 ?
-            DxgkExecuteCddGdiBitBlt(Work->GdiBltTexture, Work->DirtyRects, Work->DirtyRectCount) :
-            DxgkExecuteCddGdiBitBlt(Work->GdiBltTexture, &Work->Present.DestinationRect, 1);
+        if (NT_SUCCESS(Status) && Work->GdiBltTexture != NULL)
+        {
+            Status = Work->DirtyRectCount != 0 ?
+                DxgkExecuteCddGdiBitBlt(Work->GdiBltTexture, Work->DirtyRects, Work->DirtyRectCount) :
+                DxgkExecuteCddGdiBitBlt(Work->GdiBltTexture, &Work->Present.DestinationRect, 1);
+        }
+        if (NT_SUCCESS(Status))
+            Status = DxgkpCompleteRedirectedBltPresentWithHandle(&Work->Present,
+                                                                 Work->DirtyRects,
+                                                                 Work->DirtyRectCount,
+                                                                 Work->Context);
+        if (!NT_SUCCESS(Status))
+            DxgkCancelRedirectedBltPresent(&Work->Present);
+        DxgkDisplayDetachWin32kSession(&ApcState, SessionProcess);
     }
-    if (NT_SUCCESS(Status))
-        Status = DxgkpCompleteRedirectedBltPresentWithHandle(&Work->Present,
-                                                             Work->DirtyRects,
-                                                             Work->DirtyRectCount,
-                                                             Work->Context);
-    if (!NT_SUCCESS(Status))
-        DxgkCancelRedirectedBltPresent(&Work->Present);
     KeSetEvent(&DxgkpWindowBltRetiredEvent, IO_NO_INCREMENT, FALSE);
     if (Work->GdiBltTexture != NULL)
         DxgkDereferenceGdiBltTexture(Work->GdiBltTexture);
