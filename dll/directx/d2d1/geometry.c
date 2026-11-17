@@ -4689,10 +4689,13 @@ static HRESULT STDMETHODCALLTYPE d2d_path_geometry_GetBounds(ID2D1PathGeometry1 
 static HRESULT STDMETHODCALLTYPE d2d_path_geometry_GetWidenedBounds(ID2D1PathGeometry1 *iface, float stroke_width,
         ID2D1StrokeStyle *stroke_style, const D2D1_MATRIX_3X2_F *transform, float tolerance, D2D1_RECT_F *bounds)
 {
-    FIXME("iface %p, stroke_width %.8e, stroke_style %p, transform %p, tolerance %.8e, bounds %p stub!\n",
+    struct d2d_geometry *geometry = impl_from_ID2D1PathGeometry1(iface);
+
+    TRACE("iface %p, stroke_width %.8e, stroke_style %p, transform %p, tolerance %.8e, bounds %p.\n",
             iface, stroke_width, stroke_style, transform, tolerance, bounds);
 
-    return E_NOTIMPL;
+    return d2d_geometry_get_widened_bounds(&geometry->ID2D1Geometry_iface, stroke_width, stroke_style, transform,
+            tolerance, bounds);
 }
 
 static HRESULT STDMETHODCALLTYPE d2d_path_geometry_StrokeContainsPoint(ID2D1PathGeometry1 *iface,
@@ -5076,10 +5079,12 @@ static HRESULT STDMETHODCALLTYPE d2d_path_geometry_CombineWithGeometry(ID2D1Path
         ID2D1Geometry *geometry, D2D1_COMBINE_MODE combine_mode, const D2D1_MATRIX_3X2_F *transform,
         float tolerance, ID2D1SimplifiedGeometrySink *sink)
 {
-    FIXME("iface %p, geometry %p, combine_mode %#x, transform %p, tolerance %.8e, sink %p stub!\n",
+    struct d2d_geometry *self = impl_from_ID2D1PathGeometry1(iface);
+
+    TRACE("iface %p, geometry %p, combine_mode %#x, transform %p, tolerance %.8e, sink %p.\n",
             iface, geometry, combine_mode, transform, tolerance, sink);
 
-    return E_NOTIMPL;
+    return d2d_geometry_combine(&self->ID2D1Geometry_iface, geometry, combine_mode, transform, tolerance, sink);
 }
 
 static HRESULT STDMETHODCALLTYPE d2d_path_geometry_Outline(ID2D1PathGeometry1 *iface,
@@ -5121,10 +5126,12 @@ static HRESULT STDMETHODCALLTYPE d2d_path_geometry_Widen(ID2D1PathGeometry1 *ifa
         ID2D1StrokeStyle *stroke_style, const D2D1_MATRIX_3X2_F *transform, float tolerance,
         ID2D1SimplifiedGeometrySink *sink)
 {
-    FIXME("iface %p, stroke_width %.8e, stroke_style %p, transform %p, tolerance %.8e, sink %p stub!\n",
+    struct d2d_geometry *geometry = impl_from_ID2D1PathGeometry1(iface);
+
+    TRACE("iface %p, stroke_width %.8e, stroke_style %p, transform %p, tolerance %.8e, sink %p.\n",
             iface, stroke_width, stroke_style, transform, tolerance, sink);
 
-    return E_NOTIMPL;
+    return d2d_geometry_widen(&geometry->ID2D1Geometry_iface, stroke_width, stroke_style, transform, tolerance, sink);
 }
 
 static HRESULT STDMETHODCALLTYPE d2d_path_geometry_Open(ID2D1PathGeometry1 *iface, ID2D1GeometrySink **sink)
