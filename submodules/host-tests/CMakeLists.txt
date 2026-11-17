@@ -14,6 +14,7 @@ option(HOST_TEST_MMCC "Build native memory-manager and cache-manager tests" ON)
 option(HOST_TEST_KE "Build native kernel executive tests" ON)
 option(HOST_TEST_NTDLL "Build native NT loader and runtime tests" ON)
 option(HOST_TEST_RTL "Build native kernel runtime library tests" ON)
+option(HOST_TEST_NPFS "Build native named pipe file system tests" ON)
 option(HOST_TEST_FSRTL "Build native file system runtime library tests" ON)
 option(HOST_TEST_I8042 "Build native PS/2 controller tests" ON)
 option(HOST_TEST_ACPI "Build native firmware table tests" ON)
@@ -81,6 +82,10 @@ endif()
 
 if(BUILD_TESTING AND HOST_TEST_RTL)
     add_subdirectory(rtl)
+endif()
+
+if(BUILD_TESTING AND HOST_TEST_NPFS)
+    add_subdirectory(npfs)
 endif()
 
 if(BUILD_TESTING AND HOST_TEST_FSRTL)

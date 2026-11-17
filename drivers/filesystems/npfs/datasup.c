@@ -409,6 +409,7 @@ NpAddDataQueueEntry(IN ULONG NamedPipeEnd,
                 }
                 _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
                 {
+                    ExFreePoolWithTag(DataEntry, NPFS_DATA_ENTRY_TAG);
                     NpFreeClientSecurityContext(ClientContext);
                     _SEH2_YIELD(return _SEH2_GetExceptionCode());
                 }
