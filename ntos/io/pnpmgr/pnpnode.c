@@ -769,7 +769,11 @@ IopGetRelatedTargetDevice(
     OUT PDEVICE_NODE *DeviceNode)
 {
     PDEVICE_OBJECT DeviceObject;
+    PDEVICE_RELATIONS Relations = NULL;
+    IO_STACK_LOCATION Stack;
     PDEVICE_NODE Node;
+    NTSTATUS Status;
+    ULONG Index;
 
     PAGED_CODE();
 
@@ -778,10 +782,22 @@ IopGetRelatedTargetDevice(
     DeviceObject = IoGetRelatedDeviceObject(FileObject);
     if (DeviceObject == NULL) return STATUS_NO_SUCH_DEVICE;
 
-    DeviceObject = IopGetLowestDevice(DeviceObject);
+    Node = IopGetDeviceNode(IopGetLowestDevice(DeviceObject));
+    if (Node == NULL)
+    {
+        /* A device outside a PnP stack names its PDO through TargetDeviceRelation (IoGetRelatedTargetDevice documentation) */
+        RtlZeroMemory(&Stack, sizeof(Stack));
+        Stack.MinorFunction = IRP_MN_QUERY_DEVICE_RELATIONS;
+        Stack.Parameters.QueryDeviceRelations.Type = TargetDeviceRelation;
+        Status = IopSynchronousCall(DeviceObject, &Stack, (PVOID *)&Relations);
+        if (!NT_SUCCESS(Status) || Relations == NULL) return STATUS_NO_SUCH_DEVICE;
 
-    Node = IopGetDeviceNode(DeviceObject);
-    if (Node == NULL) return STATUS_NO_SUCH_DEVICE;
+        if (Relations->Count == 1) Node = IopGetDeviceNode(Relations->Objects[0]);
+        for (Index = 0; Index < Relations->Count; Index++)
+            ObDereferenceObject(Relations->Objects[Index]);
+        ExFreePool(Relations);
+        if (Node == NULL) return STATUS_NO_SUCH_DEVICE;
+    }
 
     *DeviceNode = Node;
 
