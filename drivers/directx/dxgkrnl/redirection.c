@@ -423,6 +423,8 @@ typedef struct _DXGKP_REDIRECTED_BLT_WORK
     HANDLE Context;
     BOOLEAN Complete;
     PDXGKRNL_GDI_BLT_TEXTURE GdiBltTexture;
+    ULONG ProducerNodeOrdinal;
+    ULONG ProducerFenceId;
     UINT DirtyRectCount;
     RECT DirtyRects[DXGK_PRESENT_CORE_MAX_SUBRECTS];
 } DXGKP_REDIRECTED_BLT_WORK, *PDXGKP_REDIRECTED_BLT_WORK;
@@ -433,6 +435,12 @@ DxgkpCompleteRedirectedBltPresentWithHandle(
     _In_reads_(DirtyRectCount) const RECT *DirtyRects,
     _In_ UINT DirtyRectCount,
     _In_opt_ HANDLE ContextHandle);
+
+static NTSTATUS
+DxgkpWaitForRedirectionFence(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ ULONG NodeOrdinal,
+    _In_ ULONG SubmissionFenceId);
 
 static VOID
 NTAPI
@@ -449,6 +457,10 @@ DxgkpRedirectedBltWorker(
     /* The win32k callouts below are session-space code; a system worker runs outside every session */
     if (DxgkDisplayAttachWin32kSession(&ApcState, &SessionProcess))
     {
+        /* The CDD copy reads the GDI blt texture on its own context: the producer's present must retire first */
+        if (NT_SUCCESS(Status) && Work->GdiBltTexture != NULL)
+            Status = DxgkpWaitForRedirectionFence(Work->GdiBltTexture->Adapter, Work->ProducerNodeOrdinal,
+                                                  Work->ProducerFenceId);
         if (NT_SUCCESS(Status) && Work->GdiBltTexture != NULL)
         {
             Status = Work->DirtyRectCount != 0 ?
@@ -492,7 +504,9 @@ DxgkQueueRedirectedBltPresent(
     _In_reads_opt_(DirtyRectCount) const RECT *DirtyRects,
     _In_ UINT DirtyRectCount,
     _In_opt_ struct _DXGKRNL_CONTEXT *Context,
-    _In_opt_ PDXGKRNL_GDI_BLT_TEXTURE GdiBltTexture)
+    _In_opt_ PDXGKRNL_GDI_BLT_TEXTURE GdiBltTexture,
+    _In_ ULONG ProducerNodeOrdinal,
+    _In_ ULONG ProducerFenceId)
 {
     PDXGKP_REDIRECTED_BLT_WORK Item = Work;
 
@@ -503,6 +517,8 @@ DxgkQueueRedirectedBltPresent(
     Item->Context = Context != NULL ? (HANDLE)(ULONG_PTR)Context->Handle : NULL;
     Item->Complete = Complete;
     Item->GdiBltTexture = GdiBltTexture;
+    Item->ProducerNodeOrdinal = ProducerNodeOrdinal;
+    Item->ProducerFenceId = ProducerFenceId;
     Item->DirtyRectCount = DirtyRectCount;
     if (DirtyRectCount != 0)
         RtlCopyMemory(Item->DirtyRects, DirtyRects, DirtyRectCount * sizeof(RECT));

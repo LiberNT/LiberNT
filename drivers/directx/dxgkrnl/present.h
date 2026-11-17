@@ -660,7 +660,9 @@ DxgkQueueRedirectedBltPresent(
     _In_reads_opt_(DirtyRectCount) const RECT *DirtyRects,
     _In_ UINT DirtyRectCount,
     _In_opt_ struct _DXGKRNL_CONTEXT *Context,
-    _In_opt_ PDXGKRNL_GDI_BLT_TEXTURE GdiBltTexture);
+    _In_opt_ PDXGKRNL_GDI_BLT_TEXTURE GdiBltTexture,
+    _In_ ULONG ProducerNodeOrdinal,
+    _In_ ULONG ProducerFenceId);
 
 NTSTATUS
 DxgkReferenceGdiBltTexture(

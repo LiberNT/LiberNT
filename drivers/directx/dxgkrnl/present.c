@@ -920,7 +920,7 @@ DxgkpReleasePresentEntry(
         return;
     if (Entry->RedirectedBltPresentAdmitted)
     {
-        DxgkQueueRedirectedBltPresent(Entry->RedirectedBltWork, &Entry->RedirectedBltPresent, FALSE, NULL, 0, NULL, NULL);
+        DxgkQueueRedirectedBltPresent(Entry->RedirectedBltWork, &Entry->RedirectedBltPresent, FALSE, NULL, 0, NULL, NULL, 0, 0);
         Entry->RedirectedBltWork = NULL;
         Entry->RedirectedBltPresentAdmitted = FALSE;
     }
@@ -1027,7 +1027,9 @@ DxgkpCompleteRedirectedBltPresent(
                                   DirtyRects,
                                   DirtyRectCount,
                                   Entry->Context,
-                                  Entry->GdiBltTexture);
+                                  Entry->GdiBltTexture,
+                                  Entry->SubmissionNodeOrdinal,
+                                  Entry->SubmissionFenceId);
     Entry->GdiBltTexture = NULL;
     Entry->RedirectedBltWork = NULL;
     Entry->RedirectedBltPresentAdmitted = FALSE;
