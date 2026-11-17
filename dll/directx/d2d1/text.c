@@ -236,7 +236,7 @@ static HRESULT d2d_device_context_get_glyph_run_analysis(struct d2d_device_conte
 
 #define D2D_GLYPH_PAD 3
 #define D2D_GLYPH_ENTRIES 2048
-#define D2D_GLYPH_KEY_MAX 1024
+#define D2D_GLYPH_KEY_MAX 8192
 
 struct d2d_glyph_entry
 {
@@ -309,8 +309,8 @@ static struct d2d_glyph_atlas *d2d_device_context_get_glyph_atlas(struct d2d_dev
 
     atlas->dpi_x = context->desc.dpiX;
     atlas->dpi_y = context->desc.dpiY;
-    atlas->width = cleartype ? 3072 : 2048;
-    atlas->height = 1024;
+    atlas->width = cleartype ? 3 * 2048 : 2048;
+    atlas->height = 2048;
     size.width = atlas->width;
     size.height = atlas->height;
     bitmap_desc.pixelFormat.format = DXGI_FORMAT_A8_UNORM;
@@ -563,6 +563,7 @@ static void d2d_device_context_draw_glyph_run_bitmap(struct d2d_device_context *
     D2D1_SIZE_U bitmap_size;
     float scale_x, scale_y;
     D2D1_RECT_F run_rect;
+    UINT32 max_dimension;
     RECT bounds;
     HRESULT hr;
 
@@ -593,6 +594,14 @@ static void d2d_device_context_draw_glyph_run_bitmap(struct d2d_device_context *
 
     if (texture_type == DWRITE_TEXTURE_CLEARTYPE_3x1)
         bitmap_size.width *= 3;
+    max_dimension = ID3D11Device1_GetFeatureLevel(context->d3d_device) >= D3D_FEATURE_LEVEL_11_0 ?
+            D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION : D3D10_REQ_TEXTURE2D_U_OR_V_DIMENSION;
+    if (bitmap_size.width > max_dimension || bitmap_size.height > max_dimension)
+    {
+        /* FIXME: a run wider than a texture is drawn as outlines, not as bitmap pieces */
+        d2d_device_context_draw_glyph_run_outline(context, baseline_origin, glyph_run, brush);
+        goto done;
+    }
     if (!(opacity_values = calloc(bitmap_size.height, bitmap_size.width)))
     {
         ERR("Failed to allocate opacity values.\n");
