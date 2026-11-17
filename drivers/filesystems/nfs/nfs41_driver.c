@@ -2018,6 +2018,8 @@ NTSTATUS SharedMemoryInit(
         &SectionAttrs, &nSectionSize, PAGE_READWRITE, SEC_COMMIT, NULL);
     switch (status) {
     case STATUS_SUCCESS:
+        /* FIXME: the handle is in the table of whichever process started the redirector, not a kernel handle */
+        *phSection = hSection;
         break;
     case STATUS_OBJECT_NAME_COLLISION:
         DbgP("section already created; returning success\n");
