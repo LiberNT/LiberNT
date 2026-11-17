@@ -127,12 +127,11 @@ KiIpiParticipateInGenericCall(
     Remaining = InterlockedDecrement(&KiGenericCallPacket.TargetsRemaining);
     UNREFERENCED_PARAMETER(Remaining);
     ASSERT(Remaining >= 0);
-    while (!KiGenericCallPacket.Release)
+    while (ReadAcquire(&KiGenericCallPacket.Release) == 0)
     {
         YieldProcessor();
     }
 
-    ASSERT(KiGenericCallPacket.Release != 0);
     OldIrql = KfRaiseIrql(IPI_LEVEL);
     Function(Argument);
     KeLowerIrql(OldIrql);
@@ -251,17 +250,16 @@ KeIpiGenericCall(
         ASSERT((Targets & Prcb->SetMember) == 0);
         KiGenericCallPacket.Function = Function;
         KiGenericCallPacket.Argument = Argument;
-        KiGenericCallPacket.Release = 0;
+        WriteRelease(&KiGenericCallPacket.Release, 0);
         KiGenericCallPacket.OutstandingDone = Targets;
-        KiGenericCallPacket.TargetsRemaining = TargetCount;
-        KeMemoryBarrier();
+        InterlockedExchange(&KiGenericCallPacket.TargetsRemaining, TargetCount);
 
         IpiTargets = KiIpiQueueRequest(Targets, KI_IPI_GENERIC_CALL);
         ASSERT(IpiTargets == Targets);
         if (IpiTargets != 0)
             HalRequestIpi(IpiTargets);
 
-        while (KiGenericCallPacket.TargetsRemaining != 0)
+        while (ReadAcquire(&KiGenericCallPacket.TargetsRemaining) != 0)
         {
             if (!InterruptsEnabled)
                 KiIpiProcessRequests();
@@ -273,7 +271,7 @@ KeIpiGenericCall(
     ASSERT(Targets == 0 || KiGenericCallPacket.OutstandingDone == Targets);
     KeRaiseIrql(IPI_LEVEL, &ExecuteIrql);
     if (Targets != 0)
-        KiGenericCallPacket.Release = 1;
+        WriteRelease(&KiGenericCallPacket.Release, 1);
 
     Status = Function(Argument);
 
