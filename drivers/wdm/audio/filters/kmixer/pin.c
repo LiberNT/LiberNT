@@ -362,7 +362,9 @@ Pin_fnDeviceIoControl(
 
     IoStack = IoGetCurrentIrpStackLocation(Irp);
 
-    if (IoStack->Parameters.DeviceIoControl.InputBufferLength == sizeof(KSP_PIN) && IoStack->Parameters.DeviceIoControl.OutputBufferLength == sizeof(KSDATAFORMAT_WAVEFORMATEX))
+    /* The request and its buffer are read where the caller says they are, which only a kernel-mode caller may say */
+    if (Irp->RequestorMode == KernelMode &&
+        IoStack->Parameters.DeviceIoControl.InputBufferLength == sizeof(KSP_PIN) && IoStack->Parameters.DeviceIoControl.OutputBufferLength == sizeof(KSDATAFORMAT_WAVEFORMATEX))
     {
         Property = (PKSP_PIN)IoStack->Parameters.DeviceIoControl.Type3InputBuffer;
 
@@ -376,9 +378,13 @@ Pin_fnDeviceIoControl(
                 Formats = (PKSDATAFORMAT_WAVEFORMATEX)IoStack->FileObject->FsContext2;
                 WaveFormat = (PKSDATAFORMAT_WAVEFORMATEX)Irp->UserBuffer;
 
-                ASSERT(Property->PinId == 0 || Property->PinId == 1);
-                ASSERT(Formats);
-                ASSERT(WaveFormat);
+                if (Property->PinId > 1 || Formats == NULL || WaveFormat == NULL)
+                {
+                    Irp->IoStatus.Information = 0;
+                    Irp->IoStatus.Status = STATUS_INVALID_PARAMETER;
+                    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+                    return STATUS_INVALID_PARAMETER;
+                }
 
                 Formats[Property->PinId].WaveFormatEx.nChannels = WaveFormat->WaveFormatEx.nChannels;
                 Formats[Property->PinId].WaveFormatEx.wBitsPerSample = WaveFormat->WaveFormatEx.wBitsPerSample;
