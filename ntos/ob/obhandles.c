@@ -409,30 +409,30 @@ ObpChargeHandleCachedReferencesLocked(IN PHANDLE_TABLE HandleTable,
 }
 
 static
-VOID
+HANDLE
 NTAPI
-ObpChargeHandleCachedReferences(IN PHANDLE_TABLE HandleTable,
-                                IN HANDLE Handle,
-                                IN POBJECT_HEADER ObjectHeader)
+ObpInsertHandleEntry(IN PHANDLE_TABLE HandleTable,
+                     IN PHANDLE_TABLE_ENTRY NewEntry,
+                     IN POBJECT_HEADER ObjectHeader)
 {
-#if (NTDDI_VERSION >= NTDDI_WIN8)
     PHANDLE_TABLE_ENTRY HandleEntry;
+    HANDLE Handle;
 
     PAGED_CODE();
+    ASSERT(ObpGetHandleObject(NewEntry) == ObjectHeader);
+
+    /* The entry stays locked until its references are charged, or a close of the new value finds it uncharged */
     KeEnterCriticalRegion();
-    HandleEntry = ExMapHandleToPointer(HandleTable, Handle);
-    ASSERT(HandleEntry != NULL);
-    if (HandleEntry)
+    Handle = ExCreateLockedHandle(HandleTable, NewEntry, &HandleEntry);
+    if (Handle != NULL)
     {
+        ASSERT(HandleEntry != NULL);
         ObpChargeHandleCachedReferencesLocked(HandleTable, Handle, HandleEntry, ObjectHeader);
         ExUnlockHandleTableEntry(HandleTable, HandleEntry);
     }
     KeLeaveCriticalRegion();
-#else
-    UNREFERENCED_PARAMETER(HandleTable);
-    UNREFERENCED_PARAMETER(Handle);
-    UNREFERENCED_PARAMETER(ObjectHeader);
-#endif
+
+    return Handle;
 }
 
 VOID
@@ -1036,7 +1036,7 @@ ObpCreateHandleWorker(
         return STATUS_PROCESS_IS_TERMINATING;
     }
 
-    Handle = ExCreateHandle(Table, &NewEntry);
+    Handle = ObpInsertHandleEntry(Table, &NewEntry, Header);
     if (Handle == NULL)
     {
         InterlockedExchangeAddSizeT(&Header->PointerCount,
@@ -1044,8 +1044,6 @@ ObpCreateHandleWorker(
         ObpRollbackHandleCount(Header, FoundType, PsGetCurrentProcess());
         return STATUS_INSUFFICIENT_RESOURCES;
     }
-
-    ObpChargeHandleCachedReferences(Table, Handle, Header);
 
     if (KernelHandle) Handle = ObMarkHandleAsKernelHandle(Handle);
 
@@ -1170,7 +1168,7 @@ ObpCreateUnnamedHandleWorker(
     }
 
     Table = ObpTableForNewHandle(HandleAttributes, AccessMode, &KernelHandle);
-    Handle = (Table != NULL) ? ExCreateHandle(Table, &NewEntry) : NULL;
+    Handle = (Table != NULL) ? ObpInsertHandleEntry(Table, &NewEntry, Header) : NULL;
 
     if (Handle == NULL)
     {
@@ -1182,8 +1180,6 @@ ObpCreateUnnamedHandleWorker(
         return (Table != NULL) ? STATUS_INSUFFICIENT_RESOURCES :
                                  STATUS_PROCESS_IS_TERMINATING;
     }
-
-    ObpChargeHandleCachedReferences(Table, Handle, Header);
 
     if (KernelHandle) Handle = ObMarkHandleAsKernelHandle(Handle);
 
@@ -2590,14 +2586,12 @@ ObDuplicateObject(
             Attached = TRUE;
         }
 
-        NewHandle = ExCreateHandle(TargetTable, &NewEntry);
+        NewHandle = ObpInsertHandleEntry(TargetTable, &NewEntry, Header);
 
         if (Attached) KeUnstackDetachProcess(&ApcState);
 
         if (NewHandle != NULL)
         {
-            ObpChargeHandleCachedReferences(TargetTable, NewHandle, Header);
-
             if ((HandleAttributes & OBJ_KERNEL_HANDLE) &&
                 TargetTable == ObpKernelHandleTable)
             {

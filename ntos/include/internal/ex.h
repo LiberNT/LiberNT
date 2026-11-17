@@ -372,6 +372,13 @@ ExCreateHandle(
     _In_ PHANDLE_TABLE HandleTable,
     _In_ PHANDLE_TABLE_ENTRY HandleTableEntry);
 
+HANDLE
+NTAPI
+ExCreateLockedHandle(
+    _In_ PHANDLE_TABLE HandleTable,
+    _In_ PHANDLE_TABLE_ENTRY HandleTableEntry,
+    _Outptr_ PHANDLE_TABLE_ENTRY *LockedEntry);
+
 PHANDLE_TABLE
 NTAPI
 ExCreateHandleTable(
