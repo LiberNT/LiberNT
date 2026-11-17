@@ -290,6 +290,9 @@ NTSTATUS IopQueryDeviceInformation(_In_ PFILE_OBJECT FileObject,
 NTSTATUS IopGetBasicInformationFile(_In_ PFILE_OBJECT FileObject,
                                     _Out_ PFILE_BASIC_INFORMATION BasicInfo);
 VOID IopCloseLocalFileObject(_Inout_ PDUMMY_FILE_OBJECT LocalFileObject);
+NTSTATUS IopOpenByNameWithoutHandle(_In_ POBJECT_ATTRIBUTES ObjectAttributes,
+                                    _In_ ACCESS_MASK DesiredAccess,
+                                    _Inout_ POPEN_PACKET OpenPacket);
 NTSTATUS IopQueryAttributesFile(_In_ POBJECT_ATTRIBUTES ObjectAttributes,
                                 _In_ FILE_INFORMATION_CLASS FileInformationClass,
                                 _In_ ULONG FileInformationSize,

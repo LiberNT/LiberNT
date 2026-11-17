@@ -471,10 +471,6 @@ IopQueryAttributesFile(
 {
     DUMMY_FILE_OBJECT LocalFileObject;
     OPEN_PACKET OpenPacket;
-    ACCESS_STATE AccessState;
-    AUX_ACCESS_DATA AuxData;
-    NTSTATUS Status;
-    HANDLE Handle;
 
     PAGED_CODE();
 
@@ -504,33 +500,7 @@ IopQueryAttributesFile(
         OpenPacket.NetworkInformation = FileInformation;
     }
 
-    Status = SeCreateAccessState(&AccessState,
-                                 &AuxData,
-                                 FILE_READ_ATTRIBUTES,
-                                 &IoFileObjectType->TypeInfo.GenericMapping);
-    if (!NT_SUCCESS(Status)) return Status;
-
-    Status = ObOpenObjectByName(ObjectAttributes,
-                                NULL,
-                                AccessMode,
-                                &AccessState,
-                                FILE_READ_ATTRIBUTES,
-                                &OpenPacket,
-                                &Handle);
-
-    SeDeleteAccessState(&AccessState);
-
-    if (OpenPacket.ParseCheck == 0)
-    {
-        if (!NT_SUCCESS(Status)) return Status;
-
-        /* The name is some other kind of object, and the open by name made a handle to it that the caller never sees */
-        ObCloseHandle(Handle, AccessMode);
-        return STATUS_OBJECT_TYPE_MISMATCH;
-    }
-
-    ASSERT(!NT_SUCCESS(Status));
-    return OpenPacket.FinalStatus;
+    return IopOpenByNameWithoutHandle(ObjectAttributes, FILE_READ_ATTRIBUTES, &OpenPacket);
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/

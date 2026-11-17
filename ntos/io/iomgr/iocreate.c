@@ -762,17 +762,55 @@ NtCreateMailslotFile(
 }
 
 NTSTATUS
-NTAPI
-NtDeleteFile(
-    _In_ POBJECT_ATTRIBUTES ObjectAttributes)
+IopOpenByNameWithoutHandle(
+    _In_ POBJECT_ATTRIBUTES ObjectAttributes,
+    _In_ ACCESS_MASK DesiredAccess,
+    _Inout_ POPEN_PACKET OpenPacket)
 {
-    KPROCESSOR_MODE AccessMode = ExGetPreviousMode();
-    DUMMY_FILE_OBJECT LocalFileObject;
-    OPEN_PACKET OpenPacket;
     ACCESS_STATE AccessState;
     AUX_ACCESS_DATA AuxData;
     NTSTATUS Status;
     HANDLE Handle;
+
+    PAGED_CODE();
+    ASSERT(OpenPacket->DeleteOnly || OpenPacket->QueryOnly);
+
+    Status = SeCreateAccessState(&AccessState,
+                                 &AuxData,
+                                 DesiredAccess,
+                                 &IoFileObjectType->TypeInfo.GenericMapping);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    Status = ObOpenObjectByName(ObjectAttributes,
+                                NULL,
+                                OpenPacket->AccessMode,
+                                &AccessState,
+                                DesiredAccess,
+                                OpenPacket,
+                                &Handle);
+
+    SeDeleteAccessState(&AccessState);
+
+    if (OpenPacket->ParseCheck != 0)
+    {
+        ASSERT(!NT_SUCCESS(Status));
+        return OpenPacket->FinalStatus;
+    }
+
+    if (!NT_SUCCESS(Status)) return Status;
+
+    /* The name is some other kind of object, and the open by name made a handle to it that the caller never sees */
+    ObCloseHandle(Handle, OpenPacket->AccessMode);
+    return STATUS_OBJECT_TYPE_MISMATCH;
+}
+
+NTSTATUS
+NTAPI
+NtDeleteFile(
+    _In_ POBJECT_ATTRIBUTES ObjectAttributes)
+{
+    DUMMY_FILE_OBJECT LocalFileObject;
+    OPEN_PACKET OpenPacket;
 
     PAGED_CODE();
 
@@ -786,35 +824,9 @@ NtDeleteFile(
     OpenPacket.Disposition = FILE_OPEN;
     OpenPacket.DeleteOnly = TRUE;
     OpenPacket.LocalFileObject = &LocalFileObject;
-    OpenPacket.AccessMode = AccessMode;
+    OpenPacket.AccessMode = ExGetPreviousMode();
 
-    Status = SeCreateAccessState(&AccessState,
-                                 &AuxData,
-                                 DELETE,
-                                 &IoFileObjectType->TypeInfo.GenericMapping);
-    if (!NT_SUCCESS(Status)) return Status;
-
-    Status = ObOpenObjectByName(ObjectAttributes,
-                                NULL,
-                                AccessMode,
-                                &AccessState,
-                                DELETE,
-                                &OpenPacket,
-                                &Handle);
-
-    SeDeleteAccessState(&AccessState);
-
-    if (OpenPacket.ParseCheck == 0)
-    {
-        if (!NT_SUCCESS(Status)) return Status;
-
-        /* The name is some other kind of object, and the open by name made a handle to it that the caller never sees */
-        ObCloseHandle(Handle, AccessMode);
-        return STATUS_OBJECT_TYPE_MISMATCH;
-    }
-
-    ASSERT(!NT_SUCCESS(Status));
-    return OpenPacket.FinalStatus;
+    return IopOpenByNameWithoutHandle(ObjectAttributes, DELETE, &OpenPacket);
 }
 
 NTSTATUS
