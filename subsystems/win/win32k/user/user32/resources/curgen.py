@@ -163,11 +163,11 @@ QUESTION = union(arc(22.0, 9.6, 3.0, 2.0, 270.0, 240.0), capsule(22.0 + 3.0 * ma
                                                                    9.6 - 3.0 * math.cos(math.radians(150.0)),
                                                                    22.0, 15.0, 1.0),
                  circle(22.0, 18.4, 1.25))
-HAND = union(capsule(9.5, 3.5, 9.5, 13.0, 1.5), capsule(12.5, 10.5, 12.5, 14.0, 1.5),
-             capsule(15.45, 11.3, 15.45, 14.5, 1.45), capsule(17.8, 12.5, 17.8, 15.5, 1.2),
-             box(8.0, 13.0, 19.0, 22.0, 2.8), capsule(9.0, 18.6, 5.5, 14.4, 1.5))
-HAND_LINES = union(capsule(11.0, 11.7, 11.0, 13.6, 0.3), capsule(14.0, 12.2, 14.0, 14.0, 0.3),
-                   capsule(16.6, 13.2, 16.6, 14.9, 0.3))
+HAND = union(capsule(10.0, 3.0, 10.0, 11.0, 1.0), capsule(12.5, 8.5, 12.5, 12.0, 1.5),
+             capsule(15.45, 9.3, 15.45, 12.5, 1.45), capsule(17.8, 10.5, 17.8, 13.5, 1.2),
+             box(8.0, 11.0, 19.0, 20.0, 2.8), capsule(9.0, 16.6, 5.5, 12.4, 1.5))
+HAND_LINES = union(capsule(11.0, 9.7, 11.0, 11.6, 0.3), capsule(14.0, 10.2, 14.0, 12.0, 0.3),
+                   capsule(16.6, 11.2, 16.6, 12.9, 0.3))
 PEN_TIP = (3.6, 28.4)
 
 
@@ -220,7 +220,7 @@ CURSORS = (
     ("ocr_appstarting.ani", working_layers, (1.5, 1.5)),
     ("ocr_help.cur", [(ARROW, WHITE, BLACK), (QUESTION, BLACK, WHITE)], (1.5, 1.5)),
     ("ocr_pen.cur", [(PEN, WHITE, BLACK), (PEN_LINES, BLACK, None)], (3.2, 28.8)),
-    ("ocr_hand.cur", [(HAND, WHITE, BLACK), (HAND_LINES, BLACK, None)], (9.5, 2.0)),
+    ("ocr_hand.cur", [(HAND, WHITE, BLACK), (HAND_LINES, BLACK, None)], (10.0, 2.0)),
     ("ocr_icon.cur", [(ARROW, WHITE, BLACK)], (1.5, 1.5)),
     ("ocr_cdautostart.cur", [(ARROW, WHITE, BLACK)], (1.5, 1.5)),
 )
