@@ -21,24 +21,6 @@ BOOL gbSpiInitialized = FALSE;
 BOOL g_PaintDesktopVersion = FALSE;
 BOOL g_bWindowSnapEnabled = TRUE;
 
-#define REQ_INTERACTIVE_WINSTA(err) \
-do { \
-    if (GetW32ProcessInfo()->prpwinsta != UserGetInputWindowStation(PsGetCurrentProcess())) \
-    { \
-        if (GetW32ProcessInfo()->prpwinsta == NULL) \
-        { \
-            ERR("NtUserSystemParametersInfo called without active window station, and it requires an interactive one\n"); \
-        } \
-        else \
-        { \
-            ERR("NtUserSystemParametersInfo requires interactive window station (current is '%wZ')\n", \
-                &(OBJECT_HEADER_TO_NAME_INFO(OBJECT_TO_OBJECT_HEADER(GetW32ProcessInfo()->prpwinsta))->Name)); \
-        } \
-        EngSetLastError(err); \
-        return 0; \
-    } \
-} while (0)
-
 static const WCHAR* KEY_MOUSE = L"Control Panel\\Mouse";
 static const WCHAR* VAL_MOUSE1 = L"MouseThreshold1";
 static const WCHAR* VAL_MOUSE2 = L"MouseThreshold2";
@@ -806,11 +788,28 @@ SpiMemCopy(PVOID pvDst, PVOID pvSrc, ULONG cbSize, BOOL bProtect)
     return NT_SUCCESS(Status);
 }
 
+/* A call that came through the system service is held to its window station access; win32k's own calls are not */
+static inline
+BOOL
+SpiCallerMayRead(FLONG fl)
+{
+    return !(fl & SPIF_PROTECT) || CheckWinstaAttributeAccess(WINSTA_READATTRIBUTES, ERROR_SUCCESS);
+}
+
+static inline
+BOOL
+SpiCallerMayWrite(FLONG fl)
+{
+    return !(fl & SPIF_PROTECT) ||
+           CheckWinstaAttributeAccess(WINSTA_WRITEATTRIBUTES, ERROR_REQUIRES_INTERACTIVE_WINDOWSTATION);
+}
+
 static inline
 UINT_PTR
 SpiGet(PVOID pvParam, PVOID pvData, ULONG cbSize, FLONG fl)
 {
-    REQ_INTERACTIVE_WINSTA(ERROR_ACCESS_DENIED);
+    if (!SpiCallerMayRead(fl))
+        return 0;
     return SpiMemCopy(pvParam, pvData, cbSize, fl & SPIF_PROTECT);
 }
 
@@ -842,7 +841,8 @@ static inline
 UINT_PTR
 SpiSet(PVOID pvData, PVOID pvParam, ULONG cbSize, FLONG fl)
 {
-    REQ_INTERACTIVE_WINSTA(ERROR_REQUIRES_INTERACTIVE_WINDOWSTATION);
+    if (!SpiCallerMayWrite(fl))
+        return 0;
     return SpiMemCopy(pvData, pvParam, cbSize, fl & SPIF_PROTECT);
 }
 
@@ -925,8 +925,11 @@ SpiGetNonClientMetrics(PVOID pvParam, FLONG fl)
      * against older headers still pass the structure size that ends before
      * that member, and Windows continues to accept that form.
      */
-    if (!SpiSet(&cbSize, pvParam, sizeof(cbSize), fl))
+    if (!SpiCallerMayRead(fl) ||
+        !SpiMemCopy(&cbSize, pvParam, sizeof(cbSize), fl & SPIF_PROTECT))
+    {
         return 0;
+    }
 
     if (cbSize != sizeof(Metrics) &&
         cbSize != FIELD_OFFSET(NONCLIENTMETRICSW, iPaddedBorderWidth))
@@ -957,7 +960,8 @@ static inline
 UINT_PTR
 SpiSetYesNo(BOOL *pbData, BOOL bValue, PCWSTR pwszKey, PCWSTR pwszValue, FLONG fl)
 {
-    REQ_INTERACTIVE_WINSTA(ERROR_REQUIRES_INTERACTIVE_WINDOWSTATION);
+    if (!SpiCallerMayWrite(fl))
+        return 0;
     *pbData = bValue ? TRUE : FALSE;
     if (fl & SPIF_UPDATEINIFILE)
     {
@@ -970,7 +974,8 @@ static inline
 UINT_PTR
 SpiSetBool(BOOL *pbData, INT iValue, PCWSTR pwszKey, PCWSTR pwszValue, FLONG fl)
 {
-    REQ_INTERACTIVE_WINSTA(ERROR_REQUIRES_INTERACTIVE_WINDOWSTATION);
+    if (!SpiCallerMayWrite(fl))
+        return 0;
     *pbData = iValue ? TRUE : FALSE;
     if (fl & SPIF_UPDATEINIFILE)
     {
@@ -983,7 +988,8 @@ static inline
 UINT_PTR
 SpiSetDWord(PVOID pvData, INT iValue, PCWSTR pwszKey, PCWSTR pwszValue, FLONG fl)
 {
-    REQ_INTERACTIVE_WINSTA(ERROR_REQUIRES_INTERACTIVE_WINDOWSTATION);
+    if (!SpiCallerMayWrite(fl))
+        return 0;
     *(INT*)pvData = iValue;
     if (fl & SPIF_UPDATEINIFILE)
     {
@@ -996,7 +1002,8 @@ static inline
 UINT_PTR
 SpiSetInt(PVOID pvData, INT iValue, PCWSTR pwszKey, PCWSTR pwszValue, FLONG fl)
 {
-    REQ_INTERACTIVE_WINSTA(ERROR_REQUIRES_INTERACTIVE_WINDOWSTATION);
+    if (!SpiCallerMayWrite(fl))
+        return 0;
     *(INT*)pvData = iValue;
     if (fl & SPIF_UPDATEINIFILE)
     {
@@ -1009,7 +1016,8 @@ static inline
 UINT_PTR
 SpiSetMetric(PVOID pvData, INT iValue, PCWSTR pwszValue, FLONG fl)
 {
-    REQ_INTERACTIVE_WINSTA(ERROR_REQUIRES_INTERACTIVE_WINDOWSTATION);
+    if (!SpiCallerMayWrite(fl))
+        return 0;
     *(INT*)pvData = iValue;
     if (fl & SPIF_UPDATEINIFILE)
     {
@@ -1025,7 +1033,8 @@ SpiSetUserPref(DWORD dwMask, PVOID pvValue, FLONG fl)
     DWORD dwRegMask;
     BOOL bValue = PtrToUlong(pvValue);
 
-    REQ_INTERACTIVE_WINSTA(ERROR_REQUIRES_INTERACTIVE_WINDOWSTATION);
+    if (!SpiCallerMayWrite(fl))
+        return 0;
 
     /* Set or clear bit according to bValue */
     gspv.dwUserPrefMask = bValue ? gspv.dwUserPrefMask | dwMask :
@@ -1096,7 +1105,8 @@ SpiSetWallpaper(PVOID pvParam, FLONG fl, HBITMAP hbmSupplied)
     HBITMAP hbmp, hOldBitmap;
     SURFACE *psurfBmp;
 
-    REQ_INTERACTIVE_WINSTA(ERROR_REQUIRES_INTERACTIVE_WINDOWSTATION);
+    if (!SpiCallerMayWrite(fl))
+        return 0;
 
     if (!pvParam)
     {
@@ -2107,8 +2117,15 @@ SpiGetSet(UINT uiAction, UINT uiParam, PVOID pvParam, FLONG fl)
             /* Allowed range is [1:20] */
             if ((INT_PTR)pvParam < 1 || (INT_PTR)pvParam > 20)
                 return 0;
-            else
-                return SpiSetInt(&gspv.iMouseSpeed, (INT_PTR)pvParam, KEY_MOUSE, VAL_SENSITIVITY, fl);
+
+            /* Windows 11 serves this set like a read: read access is enough, on any window station */
+            if (!SpiCallerMayRead(fl))
+                return 0;
+
+            gspv.iMouseSpeed = (INT)(INT_PTR)pvParam;
+            if (fl & SPIF_UPDATEINIFILE)
+                SpiStoreSzInt(KEY_MOUSE, VAL_SENSITIVITY, (INT)(INT_PTR)pvParam);
+            return (UINT_PTR)KEY_MOUSE;
         }
 
         case SPI_GETSCREENSAVERRUNNING:

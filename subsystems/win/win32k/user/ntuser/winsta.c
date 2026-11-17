@@ -561,24 +561,31 @@ IntGetScreenDC(VOID)
     return ScreenDeviceContext;
 }
 
+/* NonInteractiveError is what a window station without input gets, or ERROR_SUCCESS where Windows 11 serves it like the interactive one */
 BOOL FASTCALL
-CheckWinstaAttributeAccess(ACCESS_MASK DesiredAccess)
+CheckWinstaAttributeAccess(ACCESS_MASK DesiredAccess, DWORD NonInteractiveError)
 {
     PPROCESSINFO ppi = PsGetCurrentProcessWin32Process();
-    if (!UserIsLogonProcess(PsGetCurrentProcessId()))
+
+    ASSERT(ppi != NULL);
+    ASSERT(NonInteractiveError == ERROR_SUCCESS ||
+           NonInteractiveError == ERROR_ACCESS_DENIED ||
+           NonInteractiveError == ERROR_REQUIRES_INTERACTIVE_WINDOWSTATION);
+
+    if (UserIsLogonProcess(PsGetCurrentProcessId()))
+        return TRUE;
+
+    if (NonInteractiveError != ERROR_SUCCESS && !(ppi->W32PF_flags & W32PF_IOWINSTA))
     {
-        if (!(ppi->W32PF_flags & W32PF_IOWINSTA))
-        {
-            ERR("Requires Interactive Window Station\n");
-            EngSetLastError(ERROR_REQUIRES_INTERACTIVE_WINDOWSTATION);
-            return FALSE;
-        }
-        if (!RtlAreAllAccessesGranted(ppi->amwinsta, DesiredAccess))
-        {
-            ERR("Access Denied\n");
-            EngSetLastError(ERROR_ACCESS_DENIED);
-            return FALSE;
-        }
+        TRACE("Refused on a window station without input, error %lu\n", NonInteractiveError);
+        EngSetLastError(NonInteractiveError);
+        return FALSE;
+    }
+    if (!RtlAreAllAccessesGranted(ppi->amwinsta, DesiredAccess))
+    {
+        TRACE("Window station access 0x%lx not granted in 0x%lx\n", DesiredAccess, ppi->amwinsta);
+        EngSetLastError(ERROR_ACCESS_DENIED);
+        return FALSE;
     }
     return TRUE;
 }
