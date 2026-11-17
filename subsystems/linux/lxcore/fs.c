@@ -3198,6 +3198,7 @@ LxXattrCapsStore(
 
     if ((*Length == LX_XATTR_CAPS_SZ_2) && LxCapable(Process, LX_CAP_SETFCAP))
         return 0;
+    ASSERT(*Length <= sizeof(Words));
     RtlCopyMemory(Words, Value, *Length);
     Root = LxCredMakeId(Process, FALSE, (*Length == LX_XATTR_CAPS_SZ_3) ? Words[5] : 0);
     if (Root == MAXULONG)

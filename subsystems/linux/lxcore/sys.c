@@ -2178,6 +2178,7 @@ LX_SYSCALL(LxSysGetgroups)
 
     ExAcquireFastMutex(&Process->Lock);
     Count = Cred->GroupCount;
+    ASSERT(Count <= RTL_NUMBER_OF(Groups));
     RtlCopyMemory(Groups, Cred->Groups, Count * sizeof(ULONG));
     ExReleaseFastMutex(&Process->Lock);
     for (Index = 0; Index < Count; Index++)
