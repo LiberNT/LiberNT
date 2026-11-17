@@ -183,6 +183,7 @@ list(APPEND SOURCE
     ProcessPoolQuota.c
     ProcessUserModeIopl.c
     ObjectQuotaLimit.c
+    ObHandleRace.c
     LinkReparseLimit.c
     RtlWnfAndSqm.c
     WinSqmSession.c
