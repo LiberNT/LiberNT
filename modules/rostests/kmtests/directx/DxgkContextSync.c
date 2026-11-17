@@ -16,6 +16,8 @@ typedef struct _DXGK_CONTEXT_SYNC_TEST_OBJECT
     volatile LONG64 SemaphoreCount;
     PVOID volatile MutexQueuedOwner;
     volatile LONG64 SemaphoreQueuedCount;
+    KSPIN_LOCK SemaphoreWaitLock;
+    LIST_ENTRY SemaphoreWaitQueue;
     KEVENT StateEvent;
     KEVENT NotificationEvent;
 } DXGK_CONTEXT_SYNC_TEST_OBJECT, *PDXGK_CONTEXT_SYNC_TEST_OBJECT;
@@ -52,6 +54,76 @@ DxgkContextSyncTestInitializeObject(
     Object->Core.NotificationEvent = Type == D3DDDI_CPU_NOTIFICATION ? &Object->NotificationEvent : NULL;
     Object->Core.MutexQueuedOwner = &Object->MutexQueuedOwner;
     Object->Core.SemaphoreQueuedCount = &Object->SemaphoreQueuedCount;
+    KeInitializeSpinLock(&Object->SemaphoreWaitLock);
+    InitializeListHead(&Object->SemaphoreWaitQueue);
+    Object->Core.SemaphoreWaitLock = &Object->SemaphoreWaitLock;
+    Object->Core.SemaphoreWaitQueue = &Object->SemaphoreWaitQueue;
+}
+
+/* Two contexts wait on one semaphore: each wait takes the release it claimed at admission, not the first one to run. */
+static VOID
+DxgkContextSyncTestSemaphoreAdmissionOrder(VOID)
+{
+    DXGK_CONTEXT_SYNC_TEST_OBJECT Semaphore;
+    DXGK_CONTEXT_SYNC_CORE_OBJECT First;
+    DXGK_CONTEXT_SYNC_CORE_OBJECT Second;
+    DXGK_CONTEXT_SYNC_CORE_OBJECT Third;
+    ULONG Waiters[3];
+    NTSTATUS Status;
+
+    DxgkContextSyncTestInitializeObject(&Semaphore, D3DDDI_SEMAPHORE, 0, 4);
+    First = Semaphore.Core;
+    Second = Semaphore.Core;
+    DxgkContextSyncCoreAdmitSignal(&Semaphore.Core, 1);
+    Status = DxgkContextSyncCoreAdmitWait(&First, 1, &Waiters[0]);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    DxgkContextSyncCoreAdmitSignal(&Semaphore.Core, 1);
+    Status = DxgkContextSyncCoreAdmitWait(&Second, 1, &Waiters[1]);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok(Semaphore.SemaphoreQueuedCount == 0, "two waits left queued releases\n");
+
+    Status = DxgkContextSyncCoreExecuteWait(&First, 1, 0, NULL);
+    ok_eq_hex(Status, STATUS_PENDING);
+    Status = DxgkContextSyncCoreExecuteWait(&Second, 1, 0, NULL);
+    ok_eq_hex(Status, STATUS_PENDING);
+    Status = DxgkContextSyncCoreExecuteSignal(&Semaphore.Core, 1, 0, 0, NULL, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok(Semaphore.SemaphoreCount == 1, "release did not raise the count\n");
+    Status = DxgkContextSyncCoreExecuteWait(&Second, 1, 0, NULL);
+    ok_eq_hex(Status, STATUS_PENDING);
+    ok(Semaphore.SemaphoreCount == 1, "a later wait took the count of an earlier one\n");
+    Status = DxgkContextSyncCoreExecuteWait(&First, 1, 0, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok(Semaphore.SemaphoreCount == 0, "the first wait did not take the count\n");
+    Status = DxgkContextSyncCoreExecuteWait(&Second, 1, 0, NULL);
+    ok_eq_hex(Status, STATUS_PENDING);
+    Status = DxgkContextSyncCoreExecuteSignal(&Semaphore.Core, 1, 0, 0, NULL, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    Status = DxgkContextSyncCoreExecuteWait(&Second, 1, 0, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok(Semaphore.SemaphoreCount == 0, "the second wait did not take its release\n");
+    ok(IsListEmpty(&Semaphore.SemaphoreWaitQueue), "completed waits stayed queued\n");
+
+    /* A cancelled wait leaves the queue and returns its claim, so the next wait can run. */
+    DxgkContextSyncCoreAdmitSignal(&Semaphore.Core, 1);
+    DxgkContextSyncCoreAdmitSignal(&Semaphore.Core, 1);
+    First = Semaphore.Core;
+    Third = Semaphore.Core;
+    Status = DxgkContextSyncCoreAdmitWait(&First, 1, &Waiters[0]);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    Status = DxgkContextSyncCoreAdmitWait(&Third, 1, &Waiters[2]);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    Status = DxgkContextSyncCoreExecuteSignal(&Semaphore.Core, 1, 0, 0, NULL, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    Status = DxgkContextSyncCoreExecuteWait(&Third, 1, 0, NULL);
+    ok_eq_hex(Status, STATUS_PENDING);
+    DxgkContextSyncCoreCancelWait(&First, 1, &Waiters[0]);
+    ok(Semaphore.SemaphoreQueuedCount == 1, "cancelled wait kept its claim\n");
+    ok(First.SemaphoreWaitLink.Flink == NULL, "cancelled wait stayed queued\n");
+    Status = DxgkContextSyncCoreExecuteWait(&Third, 1, 0, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok(Semaphore.SemaphoreCount == 0, "the wait after a cancelled one did not run\n");
+    ok(IsListEmpty(&Semaphore.SemaphoreWaitQueue), "queue not empty after the last wait\n");
 }
 
 static VOID
@@ -325,6 +397,7 @@ DxgkContextSyncTestDestroyAndRelease(VOID)
 
 START_TEST(DxgkContextSync)
 {
+    DxgkContextSyncTestSemaphoreAdmissionOrder();
     DxgkContextSyncTestValidation();
     DxgkContextSyncTestWaitAtomicity();
     DxgkContextSyncTestSignalAtomicity();

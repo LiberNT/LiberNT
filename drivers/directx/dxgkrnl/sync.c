@@ -1773,6 +1773,8 @@ DxgkpCreateSynchronizationObjectInternal(
     }
 
     RtlZeroMemory(SyncObj, sizeof(*SyncObj));
+    KeInitializeSpinLock(&SyncObj->SemaphoreWaitLock);
+    InitializeListHead(&SyncObj->SemaphoreWaitQueue);
     SyncObj->hDevice = Device->Handle;
     SyncObj->Device = Device;
     SyncObj->OwnerProcess = PsGetCurrentProcess();

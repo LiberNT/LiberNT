@@ -2268,6 +2268,9 @@ typedef struct _DXGKRNL_SYNC_OBJECT
     ULONG                       SemaphoreLimit;
     PVOID volatile              MutexQueuedOwner;
     volatile LONG64             SemaphoreQueuedCount;
+    /* Admitted semaphore waits in admission order; only the oldest may take the count. */
+    KSPIN_LOCK                  SemaphoreWaitLock;
+    LIST_ENTRY                  SemaphoreWaitQueue;
     PKEVENT                     CpuNotificationEvent;
     BOOLEAN                     CpuNotificationEventReferenced;
 #if (REACTOS_WDDM_TARGET_LEVEL >= 3000)

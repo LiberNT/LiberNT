@@ -55,6 +55,10 @@ typedef struct _DXGK_CONTEXT_SYNC_CORE_OBJECT
     PKEVENT NotificationEvent;
     PVOID volatile *MutexQueuedOwner;
     volatile LONG64 *SemaphoreQueuedCount;
+    PKSPIN_LOCK SemaphoreWaitLock;
+    PLIST_ENTRY SemaphoreWaitQueue;
+    /* This batch's place in SemaphoreWaitQueue; Flink is NULL while unqueued. */
+    LIST_ENTRY SemaphoreWaitLink;
 } DXGK_CONTEXT_SYNC_CORE_OBJECT, *PDXGK_CONTEXT_SYNC_CORE_OBJECT;
 
 #define DXGK_CONTEXT_SYNC_MUTEX_CREATOR_OWNER ((PVOID)(LONG_PTR)-1)

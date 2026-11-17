@@ -14,6 +14,8 @@ typedef struct _DXGKRNL_CONTEXT_SYNC_CAPTURE
     DXGK_CONTEXT_SYNC_CORE_RETENTION Retention;
     DXGK_CONTEXT_SYNC_OPERATION Operation;
     volatile LONG Executed;
+    /* The wait holds its admission claims and its semaphore queue places until it runs or is cancelled. */
+    BOOLEAN WaitAdmitted;
     PDXGKRNL_DEVICE Device;
     PEPROCESS OwnerProcess;
     ULONG ObjectCount;
