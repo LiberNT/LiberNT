@@ -562,6 +562,52 @@ MmSetProcessSession(
 
 NTSTATUS
 NTAPI
+MmMoveProcessToSession(
+    _Inout_ PEPROCESS Process,
+    _In_ ULONG SessionId)
+{
+    PMI_SESSION Current, Target = NULL;
+    PLIST_ENTRY Entry;
+    BOOLEAN Free = FALSE;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    MiSessionLockAcquire();
+    Current = MiSessionOfProcess(Process);
+    if (Current == NULL || Current->SessionId != SessionId)
+    {
+        for (Entry = MiSessionList.Flink; Entry != &MiSessionList; Entry = Entry->Flink)
+        {
+            PMI_SESSION Session = CONTAINING_RECORD(Entry, MI_SESSION, Link);
+
+            MiSessionAssertLocked(Session);
+            ASSERT(Session->ReferenceCount > 0);
+            if (Session->SessionId == SessionId && Session->ProcessCount != 0)
+            {
+                Target = Session;
+                break;
+            }
+        }
+        if (Target == NULL || MI_PROCESS_OF(Process) == NULL || MiIsSessionLeader(Process))
+            Status = STATUS_INVALID_PARAMETER;
+        else
+        {
+            if (Current != NULL)
+                Free = MiSessionLeaveLocked(Process);
+            MiSessionJoinLocked(Target, Process);
+            ASSERT(MiSessionOfProcess(Process) == Target && Target->SessionId == SessionId);
+        }
+    }
+    KeReleaseGuardedMutex(&MiSessionLock);
+
+    if (Free)
+        MiSessionFree(Current);
+    return Status;
+}
+
+NTSTATUS
+NTAPI
 MmAttachSession(
     _Inout_ PVOID SessionEntry,
     _Out_ PKAPC_STATE ApcState)
