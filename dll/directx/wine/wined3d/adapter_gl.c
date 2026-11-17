@@ -546,6 +546,49 @@ static void test_pbo_functionality(struct wined3d_gl_info *gl_info)
     }
 }
 
+#ifdef __REACTOS__
+static void test_buffer_storage_functionality(struct wined3d_gl_info *gl_info)
+{
+    /* VirtualBox's SVGA3D driver advertises the extension but never sends what is written through a persistent mapping to the GPU. */
+    static const unsigned int pattern = 0x11223344;
+    unsigned int *map, check = 0;
+    GLuint buffers[2];
+
+    if (!gl_info->supported[ARB_BUFFER_STORAGE] || !gl_info->supported[ARB_COPY_BUFFER])
+        return;
+
+    while (gl_info->gl_ops.gl.p_glGetError());
+    GL_EXTCALL(glGenBuffers(ARRAY_SIZE(buffers), buffers));
+    GL_EXTCALL(glBindBuffer(GL_COPY_READ_BUFFER, buffers[0]));
+    GL_EXTCALL(glBufferStorage(GL_COPY_READ_BUFFER, sizeof(pattern), NULL,
+            GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT));
+    map = GL_EXTCALL(glMapBufferRange(GL_COPY_READ_BUFFER, 0, sizeof(pattern),
+            GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT));
+    if (map)
+        *map = pattern;
+    GL_EXTCALL(glBindBuffer(GL_COPY_WRITE_BUFFER, buffers[1]));
+    GL_EXTCALL(glBufferData(GL_COPY_WRITE_BUFFER, sizeof(check), &check, GL_STREAM_COPY));
+    GL_EXTCALL(glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 0, 0, sizeof(pattern)));
+    GL_EXTCALL(glGetBufferSubData(GL_COPY_WRITE_BUFFER, 0, sizeof(check), &check));
+    if (map)
+        GL_EXTCALL(glUnmapBuffer(GL_COPY_READ_BUFFER));
+    GL_EXTCALL(glBindBuffer(GL_COPY_WRITE_BUFFER, 0));
+    GL_EXTCALL(glBindBuffer(GL_COPY_READ_BUFFER, 0));
+    GL_EXTCALL(glDeleteBuffers(ARRAY_SIZE(buffers), buffers));
+    checkGLcall("Buffer storage test");
+
+    if (map && check == pattern)
+    {
+        TRACE("Buffer storage test passed.\n");
+        return;
+    }
+
+    WARN_(d3d_perf)("Data written through a persistent mapping does not reach the GPU (read %#x).\n"
+            "Disabling GL_ARB_buffer_storage.\n", check);
+    gl_info->supported[ARB_BUFFER_STORAGE] = FALSE;
+}
+#endif
+
 static BOOL match_dx10_capable(const struct wined3d_gl_info *gl_info, struct wined3d_caps_gl_ctx *ctx,
         const char *gl_renderer, enum wined3d_gl_vendor gl_vendor,
         enum wined3d_pci_vendor card_vendor, enum wined3d_pci_device device)
@@ -1317,6 +1360,9 @@ static void fixup_extensions(struct wined3d_gl_info *gl_info, struct wined3d_cap
 
     /* Find out if PBOs work as they are supposed to. */
     test_pbo_functionality(gl_info);
+#ifdef __REACTOS__
+    test_buffer_storage_functionality(gl_info);
+#endif
 }
 
 static unsigned int wined3d_parse_gl_version(const char *gl_version)
