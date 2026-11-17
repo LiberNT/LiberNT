@@ -746,6 +746,8 @@ NtUserGetIconInfo(
 
     TRACE("Enter NtUserGetIconInfo\n");
 
+    RtlZeroMemory(&ii, sizeof(ii));
+
     /* Check if something was actually asked */
     if (!IconInfo && !lpModule && !lpResName)
     {
