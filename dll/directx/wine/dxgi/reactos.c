@@ -53,7 +53,7 @@ static BOOL dxgi_get_wddm_primary_move(struct dxgi_factory *factory, LUID *owner
         return FALSE;
     if (!factory->first_adapter_known)
     {
-        if (FAILED(dxgi_get_wddm_adapter(factory->wined3d, 0, dxgi_get_user_gpu_preference(), &wined3d_idx,
+        if (FAILED(dxgi_get_wddm_adapter(factory, 0, dxgi_get_user_gpu_preference(), &wined3d_idx,
                 &factory->first_adapter_luid, &foreign)))
             return FALSE;
         factory->first_adapter_known = TRUE;
@@ -72,10 +72,10 @@ HRESULT dxgi_get_wddm_output_index(struct dxgi_factory *factory, struct wined3d_
     UINT i, count;
     HRESULT hr;
 
-    wined3d_mutex_lock();
+    dxgi_factory_lock(factory);
     hr = wined3d_adapter_get_identifier(adapter, 0, &identifier);
     count = wined3d_adapter_get_output_count(adapter);
-    wined3d_mutex_unlock();
+    dxgi_factory_unlock(factory);
     if (FAILED(hr))
         return hr;
     if (luid)
@@ -88,9 +88,9 @@ HRESULT dxgi_get_wddm_output_index(struct dxgi_factory *factory, struct wined3d_
      * into the wrong device. Keep the underlying WineD3D ordinal for creation. */
     for (i = 0; i < count; ++i)
     {
-        wined3d_mutex_lock();
+        dxgi_factory_lock(factory);
         hr = wined3d_output_get_desc(wined3d_adapter_get_output(adapter, i), &desc);
-        wined3d_mutex_unlock();
+        dxgi_factory_unlock(factory);
         if (FAILED(hr) || !dxgi_get_wddm_display_owner(desc.device_name, &owner))
             continue;
         if (move && dxgi_luid_equal(&owner, &primary_owner))
@@ -386,7 +386,7 @@ static BOOL dxgi_wddm_candidate_precedes(const struct dxgi_wddm_candidate *a, co
 /* Keep D3DKMT as the authoritative adapter set while returning complete Wine
  * DXGI adapter objects.  Preserve order within capability classes, with
  * hardware render adapters before display-only and software fallbacks. */
-HRESULT dxgi_get_wddm_adapter(struct wined3d *wined3d, UINT wddm_adapter_idx, DXGI_GPU_PREFERENCE preference,
+HRESULT dxgi_get_wddm_adapter(struct dxgi_factory *factory, UINT wddm_adapter_idx, DXGI_GPU_PREFERENCE preference,
         UINT *wined3d_adapter_idx, LUID *luid, BOOL *foreign)
 {
     struct wined3d_adapter_identifier identifier = {0};
@@ -446,17 +446,18 @@ HRESULT dxgi_get_wddm_adapter(struct wined3d *wined3d, UINT wddm_adapter_idx, DX
     }
     selected_idx = candidates[wddm_adapter_idx].index;
 
-    wined3d_mutex_lock();
-    adapter_count = wined3d_get_adapter_count(wined3d);
-    wined3d_mutex_unlock();
+    dxgi_factory_lock(factory);
+    adapter_count = wined3d_get_adapter_count(factory->wined3d);
+    dxgi_factory_unlock(factory);
 
     *luid = adapters[selected_idx].AdapterLuid;
     *foreign = TRUE;
     *wined3d_adapter_idx = 0;
     hr = adapter_count ? S_OK : DXGI_ERROR_NOT_FOUND;
-    for (i = 0; i < adapter_count; ++i)
+    /* A driver-call factory describes its adapters through D3DKMT alone: WineD3D adapter queries take the WineD3D lock. */
+    for (i = 0; i < adapter_count && !factory->driver_call; ++i)
     {
-        if (FAILED(wined3d_adapter_get_identifier(wined3d_get_adapter(wined3d, i), 0, &identifier)))
+        if (FAILED(wined3d_adapter_get_identifier(wined3d_get_adapter(factory->wined3d, i), 0, &identifier)))
             continue;
 
         if (identifier.adapter_luid.LowPart == adapters[selected_idx].AdapterLuid.LowPart && identifier.adapter_luid.HighPart == adapters[selected_idx].AdapterLuid.HighPart)

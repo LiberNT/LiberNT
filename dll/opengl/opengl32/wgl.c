@@ -982,7 +982,12 @@ BOOL WINAPI wglMakeCurrent(HDC hdc, HGLRC hglrc)
         /* Call the ICD or SW implementation */
         if(ctx->icd_data)
         {
+            PVOID previous_driver_call = TlsGetValue(PixelFormatInitTlsIndex);
+
+            /* Drivers enumerate DXGI adapters while they bind a context */
+            TlsSetValue(PixelFormatInitTlsIndex, (PVOID)1);
             apiTable = ctx->icd_data->DrvSetContext(hdc, ctx->dhglrc, set_api_table);
+            TlsSetValue(PixelFormatInitTlsIndex, previous_driver_call);
             if(!apiTable)
             {
                 ERR("DrvSetContext failed!\n");

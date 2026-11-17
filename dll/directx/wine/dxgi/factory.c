@@ -158,11 +158,11 @@ static HRESULT STDMETHODCALLTYPE dxgi_factory_EnumAdapters1(IWineDXGIFactory *if
 #if defined(__REACTOS__) && defined(REACTOS_DXGI_D3DKMT_ADAPTER_ORDER)
     if (user_preference != DXGI_GPU_PREFERENCE_UNSPECIFIED)
         preference = user_preference;
-    if (FAILED(hr = dxgi_get_wddm_adapter(factory->wined3d, adapter_idx, preference, &adapter_idx, &luid, &foreign)))
+    if (FAILED(hr = dxgi_get_wddm_adapter(factory, adapter_idx, preference, &adapter_idx, &luid, &foreign)))
 #else
-    wined3d_mutex_lock();
+    dxgi_factory_lock(factory);
     adapter_count = wined3d_get_adapter_count(factory->wined3d);
-    wined3d_mutex_unlock();
+    dxgi_factory_unlock(factory);
     if (adapter_idx >= adapter_count)
 #endif
     {
@@ -213,11 +213,11 @@ static void dxgi_factory_set_association(struct dxgi_factory *factory, HWND wind
     struct dxgi_window_association *associations;
     SIZE_T i, size;
 
-    wined3d_mutex_lock();
+    dxgi_factory_lock(factory);
     if (!window)
     {
         factory->association_count = 0;
-        wined3d_mutex_unlock();
+        dxgi_factory_unlock(factory);
         return;
     }
     for (i = 0; i < factory->association_count; ++i)
@@ -230,7 +230,7 @@ static void dxgi_factory_set_association(struct dxgi_factory *factory, HWND wind
         size = max(4, factory->association_size * 2);
         if (!(associations = realloc(factory->associations, size * sizeof(*associations))))
         {
-            wined3d_mutex_unlock();
+            dxgi_factory_unlock(factory);
             return;
         }
         factory->associations = associations;
@@ -240,7 +240,7 @@ static void dxgi_factory_set_association(struct dxgi_factory *factory, HWND wind
         ++factory->association_count;
     factory->associations[i].window = window;
     factory->associations[i].flags = flags;
-    wined3d_mutex_unlock();
+    dxgi_factory_unlock(factory);
 }
 
 BOOL WINAPI RosDxgiGetWindowAssociation(IDXGIFactory *iface, HWND window, UINT *flags)
@@ -251,7 +251,7 @@ BOOL WINAPI RosDxgiGetWindowAssociation(IDXGIFactory *iface, HWND window, UINT *
 
     if (!flags || !(factory = unsafe_impl_from_IDXGIFactory(iface)))
         return FALSE;
-    wined3d_mutex_lock();
+    dxgi_factory_lock(factory);
     for (i = 0; i < factory->association_count; ++i)
     {
         if (factory->associations[i].window == window)
@@ -261,7 +261,7 @@ BOOL WINAPI RosDxgiGetWindowAssociation(IDXGIFactory *iface, HWND window, UINT *
             break;
         }
     }
-    wined3d_mutex_unlock();
+    dxgi_factory_unlock(factory);
     return found;
 }
 #endif
@@ -731,6 +731,44 @@ struct dxgi_factory *unsafe_impl_from_IDXGIFactory(IDXGIFactory *iface)
 }
 
 #ifdef __REACTOS__
+static CRITICAL_SECTION dxgi_driver_call_cs;
+static CRITICAL_SECTION_DEBUG dxgi_driver_call_cs_debug =
+{
+    0, 0, &dxgi_driver_call_cs,
+    { &dxgi_driver_call_cs_debug.ProcessLocksList, &dxgi_driver_call_cs_debug.ProcessLocksList },
+    0, 0, { (DWORD_PTR)(__FILE__ ": dxgi_driver_call_cs") }
+};
+static CRITICAL_SECTION dxgi_driver_call_cs = { &dxgi_driver_call_cs_debug, -1, 0, 0, 0, 0 };
+#endif
+
+/* A factory a driver creates from inside its own entry points owns a WineD3D
+ * object nobody else uses; it serializes on a lock of its own, because another
+ * thread may hold the WineD3D lock while it waits on that driver. */
+void dxgi_factory_lock(const struct dxgi_factory *factory)
+{
+#ifdef __REACTOS__
+    if (factory->driver_call)
+    {
+        EnterCriticalSection(&dxgi_driver_call_cs);
+        return;
+    }
+#endif
+    wined3d_mutex_lock();
+}
+
+void dxgi_factory_unlock(const struct dxgi_factory *factory)
+{
+#ifdef __REACTOS__
+    if (factory->driver_call)
+    {
+        LeaveCriticalSection(&dxgi_driver_call_cs);
+        return;
+    }
+#endif
+    wined3d_mutex_unlock();
+}
+
+#ifdef __REACTOS__
 static struct wined3d *dxgi_cached_wined3d;
 static BOOL dxgi_wined3d_initialized;
 /* Protected by the recursive WineD3D mutex. ICD pixel-format initialization
@@ -755,10 +793,25 @@ static HRESULT dxgi_factory_init(struct dxgi_factory *factory, BOOL extended)
     factory->refcount = 1;
     wined3d_private_store_init(&factory->private_store);
 
-    wined3d_mutex_lock();
 #ifdef __REACTOS__
-    if (dxgi_is_icd_initializing() ||
-            dxgi_wined3d_initializing_thread == GetCurrentThreadId())
+    /* A driver queries DXGI from inside its own entry points, possibly while
+     * another thread holds the WineD3D lock and waits on this one, so its
+     * uncached enumeration object is built without that lock. */
+    if (dxgi_is_icd_initializing())
+    {
+        if (!(factory->wined3d = wined3d_create(WINED3D_NO3D)))
+        {
+            wined3d_private_store_cleanup(&factory->private_store);
+            return DXGI_ERROR_UNSUPPORTED;
+        }
+        factory->driver_call = TRUE;
+        factory->extended = extended;
+        return S_OK;
+    }
+#endif
+    dxgi_factory_lock(factory);
+#ifdef __REACTOS__
+    if (dxgi_wined3d_initializing_thread == GetCurrentThreadId())
     {
         /* The ICD needs adapter metadata to finish loading. WGL cannot
          * create a hardware context yet. Build an uncached enumeration
@@ -786,7 +839,7 @@ static HRESULT dxgi_factory_init(struct dxgi_factory *factory, BOOL extended)
 #else
     factory->wined3d = wined3d_create(0);
 #endif
-    wined3d_mutex_unlock();
+    dxgi_factory_unlock(factory);
     if (!factory->wined3d)
     {
         wined3d_private_store_cleanup(&factory->private_store);
@@ -805,9 +858,9 @@ static HRESULT dxgi_factory_init_software(struct dxgi_factory *factory, unsigned
     factory->refcount = 1;
     wined3d_private_store_init(&factory->private_store);
 
-    wined3d_mutex_lock();
+    dxgi_factory_lock(factory);
     factory->wined3d = wined3d_create(WINED3D_NO3D | flags);
-    wined3d_mutex_unlock();
+    dxgi_factory_unlock(factory);
     if (!factory->wined3d)
     {
         wined3d_private_store_cleanup(&factory->private_store);
@@ -884,14 +937,14 @@ HRESULT dxgi_factory_create(REFIID riid, void **factory, BOOL extended)
 
 HWND dxgi_factory_get_device_window(struct dxgi_factory *factory)
 {
-    wined3d_mutex_lock();
+    dxgi_factory_lock(factory);
 
     if (!factory->device_window)
     {
         if (!(factory->device_window = CreateWindowA("static", "DXGI device window",
                 WS_DISABLED, 0, 0, 0, 0, NULL, NULL, NULL, NULL)))
         {
-            wined3d_mutex_unlock();
+            dxgi_factory_unlock(factory);
             ERR("Failed to create a window.\n");
             return NULL;
         }
@@ -899,7 +952,7 @@ HWND dxgi_factory_get_device_window(struct dxgi_factory *factory)
         TRACE("Created device window %p for factory %p.\n", factory->device_window, factory);
     }
 
-    wined3d_mutex_unlock();
+    dxgi_factory_unlock(factory);
 
     return factory->device_window;
 }
