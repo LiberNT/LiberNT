@@ -1,0 +1,17 @@
+/*
+ * PROJECT:     LiberNT Text Services Framework proxies
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     IID of the msctf.idl interface that ctfutb.idl passes, for its proxies
+ * COPYRIGHT:   Copyright 2026 mikuta0407 <mikuta0407@mikuta0407.net>
+ */
+
+import "unknwn.idl";
+
+[
+    object,
+    uuid(1f02b6c5-7842-4ee6-8a0b-9a24183a95ca),
+    pointer_default(unique)
+]
+interface ITfInputProcessorProfiles : IUnknown
+{
+}
