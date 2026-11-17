@@ -745,23 +745,23 @@ typedef struct _KPRCB
     GENERAL_LOOKASIDE_POOL PPPagedLookasideList[NUMBER_POOL_LOOKASIDE_LISTS];
     UINT64 PacketBarrier;
     SINGLE_LIST_ENTRY DeferredReadyListHead;
-    LONG MmPageFaultCount;
-    LONG MmCopyOnWriteCount;
-    LONG MmTransitionCount;
+    volatile LONG MmPageFaultCount;
+    volatile LONG MmCopyOnWriteCount;
+    volatile LONG MmTransitionCount;
 #if (NTDDI_VERSION < NTDDI_LONGHORN)
-    LONG MmCacheTransitionCount;
+    volatile LONG MmCacheTransitionCount;
 #endif
-    LONG MmDemandZeroCount;
-    LONG MmPageReadCount;
-    LONG MmPageReadIoCount;
+    volatile LONG MmDemandZeroCount;
+    volatile LONG MmPageReadCount;
+    volatile LONG MmPageReadIoCount;
 #if (NTDDI_VERSION < NTDDI_LONGHORN)
-    LONG MmCacheReadCount;
-    LONG MmCacheIoCount;
+    volatile LONG MmCacheReadCount;
+    volatile LONG MmCacheIoCount;
 #endif
-    LONG MmDirtyPagesWriteCount;
-    LONG MmDirtyWriteIoCount;
-    LONG MmMappedPagesWriteCount;
-    LONG MmMappedWriteIoCount;
+    volatile LONG MmDirtyPagesWriteCount;
+    volatile LONG MmDirtyWriteIoCount;
+    volatile LONG MmMappedPagesWriteCount;
+    volatile LONG MmMappedWriteIoCount;
 #if (NTDDI_VERSION >= NTDDI_LONGHORN)
     ULONG KeSystemCalls;
     ULONG KeContextSwitches;
@@ -776,9 +776,9 @@ typedef struct _KPRCB
     LONG LookasideIrpFloat;
     ULONG KeSystemCalls;
 #endif
-    LONG IoReadOperationCount;
-    LONG IoWriteOperationCount;
-    LONG IoOtherOperationCount;
+    volatile LONG IoReadOperationCount;
+    volatile LONG IoWriteOperationCount;
+    volatile LONG IoOtherOperationCount;
     LARGE_INTEGER IoReadTransferCount;
     LARGE_INTEGER IoWriteTransferCount;
     LARGE_INTEGER IoOtherTransferCount;
@@ -786,7 +786,7 @@ typedef struct _KPRCB
     ULONG KeContextSwitches;
     UCHAR PrcbPad2[12];
 #endif
-    UINT64 TargetSet;
+    volatile UINT64 TargetSet;
     volatile ULONG IpiFrozen;
     UCHAR PrcbPad3[116];
     REQUEST_MAILBOX RequestMailbox[64];
@@ -907,9 +907,9 @@ typedef struct _KPRCB
     ULONG CcMdlReadNoWaitMiss;
     ULONG CcMdlReadWaitMiss;
     ULONG CcReadAheadIos;
-    LONG MmCacheTransitionCount;
-    LONG MmCacheReadCount;
-    LONG MmCacheIoCount;
+    volatile LONG MmCacheTransitionCount;
+    volatile LONG MmCacheReadCount;
+    volatile LONG MmCacheIoCount;
     ULONG PrcbPad91[3];
     PROCESSOR_POWER_STATE PowerState;
     ULONG KeAlignmentFixupCount;
