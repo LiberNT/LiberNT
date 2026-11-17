@@ -41,10 +41,10 @@ HalInitSystem(
 {
     PRISCV64_LOADER_BLOCK RiscvBlock;
 
+    if (KeGetCurrentProcessorNumber() != 0)
+        return HalpRiscvInitializationPhase == 2;
     if (BootPhase == 1)
     {
-        if (KeGetCurrentProcessorNumber() != 0)
-            return HalpRiscvInitializationPhase == 2;
         if (HalpRiscvInitializationPhase != 1)
         {
             HalpRiscvInitializationFailure = RiscvHalInvalidBootPhase;
