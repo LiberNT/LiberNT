@@ -1,5 +1,13 @@
 
 set(REALTEK_BT_FIRMWARE_DIR "" CACHE PATH "Directory holding Realtek Bluetooth rtl*_fw.bin and rtl*_config.bin files")
+set(INTEL_BT_FIRMWARE_DIR "" CACHE PATH "Directory holding Intel Bluetooth ibt-*.sfi and ibt-*.ddc files")
+
+if(INTEL_BT_FIRMWARE_DIR)
+    file(GLOB _intel_bt_firmware ${INTEL_BT_FIRMWARE_DIR}/ibt-*.sfi ${INTEL_BT_FIRMWARE_DIR}/ibt-*.ddc ${INTEL_BT_FIRMWARE_DIR}/LICENCE.ibt_firmware)
+    foreach(_intel_bt_file ${_intel_bt_firmware})
+        add_cd_file(FILE ${_intel_bt_file} DESTINATION reactos/system32/drivers/intel NO_CAB FOR all)
+    endforeach()
+endif()
 
 if(REALTEK_BT_FIRMWARE_DIR)
     file(GLOB _realtek_bt_firmware ${REALTEK_BT_FIRMWARE_DIR}/rtl*_fw.bin ${REALTEK_BT_FIRMWARE_DIR}/rtl*_config.bin)
