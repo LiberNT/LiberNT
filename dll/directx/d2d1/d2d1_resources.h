@@ -223,6 +223,7 @@ struct d2d_mesh
 };
 
 HRESULT d2d_mesh_create(ID2D1Factory *factory, struct d2d_mesh **mesh);
+struct d2d_mesh *unsafe_impl_from_ID2D1Mesh(ID2D1Mesh *iface);
 
 struct d2d_bitmap
 {
