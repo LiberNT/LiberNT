@@ -1288,7 +1288,10 @@ LxNlRoute(
             for (Index = 0; Index < State->RouteCount; Index++)
                 LxNlEmitRoute(Builder, Request, &State->Routes[Index]);
         }
+        /* Linux sends the route dump terminator in a separate datagram. */
+        LxNlFlush(Builder);
         LxNlDone(Builder, Request);
+        LxNlFlush(Builder);
         *Replied = TRUE;
     }
 
