@@ -777,9 +777,9 @@ PspInitializeSystemDll(VOID)
         KeUserCallbackDispatcher == NULL ||
         KeRaiseUserExceptionDispatcher == NULL ||
         PspRtlUserThreadStart == NULL ||
-        KeUserPopEntrySListEnd == NULL ||
-        KeUserPopEntrySListFault == NULL ||
-        KeUserPopEntrySListResume == NULL)
+        !KiArchSystemDllSListMarkersPresent(KeUserPopEntrySListEnd,
+                                            KeUserPopEntrySListFault,
+                                            KeUserPopEntrySListResume))
     {
         return STATUS_PROCEDURE_NOT_FOUND;
     }

@@ -37,6 +37,11 @@
 #define KiArchPublishSystemCallStubs(DllBase) ((VOID)(DllBase), STATUS_SUCCESS)
 #endif
 
+#ifndef KiArchSystemDllSListMarkersPresent
+#define KiArchSystemDllSListMarkersPresent(End, Fault, Resume) \
+    ((End) != NULL && (Fault) != NULL && (Resume) != NULL)
+#endif
+
 #ifndef KiArchExceptionContextFlags
 #define KiArchExceptionContextFlags(PreviousMode) ((VOID)(PreviousMode), CONTEXT_ALL)
 #endif
