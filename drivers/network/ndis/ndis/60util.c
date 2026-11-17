@@ -1294,8 +1294,10 @@ NdisDeregisterPoll(
     if (KeRemoveQueueDpc(&Poll->Dpc))
         InterlockedExchange(&Poll->State, NDIS6_POLL_IDLE);
     KeFlushQueuedDpcs();
+    /* A request that read the flag before it was set may have queued the DPC behind that flush, where it may now be running */
+    if (!KeRemoveQueueDpc(&Poll->Dpc) && Poll->State != NDIS6_POLL_IDLE)
+        KeFlushQueuedDpcs();
     ASSERT(Poll->State == NDIS6_POLL_IDLE || Poll->State == NDIS6_POLL_QUEUED);
-    KeRemoveQueueDpc(&Poll->Dpc);
 
     Poll->Signature = 0;
     ExFreePoolWithTag(Poll, NDIS6_POLL_TAG);
