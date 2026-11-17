@@ -215,6 +215,7 @@ CicInputContext::CicInputContext(
     , m_fCancelComposition(FALSE)
     , m_pszLastComp(NULL)
     , m_pLastAttr(NULL)
+    , m_pLastDispAttr(NULL)
     , m_cchLastComp(0)
     , m_dwLastCursor(0)
     , m_lCommitted(0)

@@ -217,7 +217,8 @@ private:
     HWND m_hWnd;
     HFONT m_hFont;
     LPWSTR m_pszText;
-    LPBYTE m_pAttr;
+    TF_DISPLAYATTRIBUTE *m_pDispAttr;
+    LPBYTE m_pClauseStart;
     DWORD m_cchText;
     DWORD m_dwCursor;
     BOOL m_bAllowed;
