@@ -27,6 +27,9 @@ BOOLEAN KdbCurrentExceptionRecordValid = FALSE;
 /* Whether the machine is stopped inside the debugger */
 BOOLEAN KdbActive = FALSE;
 
+/* The bugcheck command's crash, raised once the debugger has let go of the machine */
+BOOLEAN KdbBugCheckRequested = FALSE;
+
 /* The breakpoint the machine last stopped at, or -1 */
 LONG KdbLastBreakPointNr = -1;
 PKTHREAD KdbBreakRequestThread = NULL;
@@ -1364,6 +1367,12 @@ KdbEnterDebuggerException(
     KbdEnableMouse();
 
     KdbActive = FALSE;
+
+    if (KdbBugCheckRequested)
+    {
+        KdbBugCheckRequested = FALSE;
+        KeBugCheckEx(MANUALLY_INITIATED_CRASH, 0, 0, 0, 0);
+    }
 
     /*
      * A breakpoint the machine is standing on has to be taken out of memory

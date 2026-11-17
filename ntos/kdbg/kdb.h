@@ -81,6 +81,8 @@ extern BOOLEAN KdbCurrentExceptionRecordValid;
 
 extern BOOLEAN KdbActive;
 
+extern BOOLEAN KdbBugCheckRequested;
+
 extern LONG KdbLastBreakPointNr;
 
 extern ULONG KdbNumSingleSteps;

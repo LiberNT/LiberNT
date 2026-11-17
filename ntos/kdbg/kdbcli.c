@@ -2699,11 +2699,14 @@ KdbpCmdBugCheck(
     UNREFERENCED_PARAMETER(Argc);
     UNREFERENCED_PARAMETER(Argv);
 
+    ASSERT(KdbActive);
+    ASSERT(!KdbBugCheckRequested);
+
     KdbpSetContinueType(kdHandleException);
     KdbpLeaveLoop = TRUE;
+    KdbBugCheckRequested = TRUE;
 
     KdbPuts("Crashing on request\n");
-    KeBugCheckEx(MANUALLY_INITIATED_CRASH, 0, 0, 0, 0);
 
     return TRUE;
 }
