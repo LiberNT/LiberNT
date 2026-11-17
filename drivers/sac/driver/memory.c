@@ -95,7 +95,8 @@ MyAllocatePool(IN SIZE_T PoolSize,
 {
     PVOID p;
     p = ExAllocatePoolWithTag(NonPagedPool, PoolSize, 'HACK');
-    RtlZeroMemory(p, PoolSize);
+    if (p != NULL)
+        RtlZeroMemory(p, PoolSize);
     SAC_DBG(SAC_DBG_MM, "Returning block 0x%X.\n", p);
     return p;
 #if 0
