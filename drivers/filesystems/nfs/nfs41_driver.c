@@ -5999,7 +5999,10 @@ void enable_caching(
 #endif
         oentry = RxAllocatePoolWithTag(NonPagedPool,
             sizeof(nfs41_fcb_list_entry), NFS41_MM_POOLTAG_OPEN);
-        if (oentry == NULL) return;
+        if (oentry == NULL) {
+            ExReleaseFastMutex(&fcblistLock);
+            return;
+        }
         oentry->fcb = SrvOpen->pFcb;
         oentry->session = session;
         oentry->nfs41_fobx = nfs41_fobx;
