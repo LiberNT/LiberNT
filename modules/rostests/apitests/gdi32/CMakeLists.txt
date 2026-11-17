@@ -91,6 +91,7 @@ list(APPEND SOURCE
 list(APPEND PCH_SKIP_SOURCE
     ScriptGetFontTags.c
     ScriptGetLogicalWidths.c
+    ScriptShapeCache.c
     testlist.c)
 
 add_executable(gdi32_apitest

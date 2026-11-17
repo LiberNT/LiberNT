@@ -747,44 +747,48 @@ static inline BYTE get_cache_pitch_family(SCRIPT_CACHE *psc)
     return ((ScriptCache *)*psc)->tm.tmPitchAndFamily;
 }
 
-static inline WORD get_cache_glyph(SCRIPT_CACHE *psc, DWORD c)
+static inline BOOL get_cache_glyph(SCRIPT_CACHE *psc, DWORD c, WORD *glyph)
 {
     CacheGlyphPage *page = ((ScriptCache *)*psc)->page[c / 0x10000];
-    WORD *block;
+    DWORD *block, entry;
 
-    if (!page) return 0;
+    *glyph = 0;
+    if (!page) return FALSE;
     block = page->glyphs[(c % 0x10000) >> GLYPH_BLOCK_SHIFT];
-    if (!block) return 0;
-    return block[(c % 0x10000) & GLYPH_BLOCK_MASK];
+    if (!block) return FALSE;
+    entry = block[(c % 0x10000) & GLYPH_BLOCK_MASK];
+    *glyph = LOWORD(entry);
+    return (entry & CACHE_GLYPH_KNOWN) != 0;
 }
 
 static inline WORD set_cache_glyph(SCRIPT_CACHE *psc, WCHAR c, WORD glyph)
 {
     CacheGlyphPage **page = &((ScriptCache *)*psc)->page[c / 0x10000];
-    WORD **block;
+    DWORD **block;
     if (!*page && !(*page = calloc(1, sizeof(CacheGlyphPage)))) return 0;
 
     block = &(*page)->glyphs[(c % 0x10000) >> GLYPH_BLOCK_SHIFT];
-    if (!*block && !(*block = calloc(GLYPH_BLOCK_SIZE, sizeof(WORD)))) return 0;
-    return ((*block)[(c % 0x10000) & GLYPH_BLOCK_MASK] = glyph);
+    if (!*block && !(*block = calloc(GLYPH_BLOCK_SIZE, sizeof(DWORD)))) return 0;
+    (*block)[(c % 0x10000) & GLYPH_BLOCK_MASK] = glyph | CACHE_GLYPH_KNOWN;
+    return glyph;
 }
 
 static inline BOOL get_cache_glyph_widths(SCRIPT_CACHE *psc, WORD glyph, ABC *abc)
 {
-    static const ABC nil;
-    ABC *block = ((ScriptCache *)*psc)->widths[glyph >> GLYPH_BLOCK_SHIFT];
+    CacheGlyphWidth *block = ((ScriptCache *)*psc)->widths[glyph >> GLYPH_BLOCK_SHIFT];
 
-    if (!block || !memcmp(&block[glyph & GLYPH_BLOCK_MASK], &nil, sizeof(ABC))) return FALSE;
-    memcpy(abc, &block[glyph & GLYPH_BLOCK_MASK], sizeof(ABC));
+    if (!block || !block[glyph & GLYPH_BLOCK_MASK].known) return FALSE;
+    *abc = block[glyph & GLYPH_BLOCK_MASK].abc;
     return TRUE;
 }
 
 static inline BOOL set_cache_glyph_widths(SCRIPT_CACHE *psc, WORD glyph, ABC *abc)
 {
-    ABC **block = &((ScriptCache *)*psc)->widths[glyph >> GLYPH_BLOCK_SHIFT];
+    CacheGlyphWidth **block = &((ScriptCache *)*psc)->widths[glyph >> GLYPH_BLOCK_SHIFT];
 
-    if (!*block && !(*block = calloc(GLYPH_BLOCK_SIZE, sizeof(ABC)))) return FALSE;
-    memcpy(&(*block)[glyph & GLYPH_BLOCK_MASK], abc, sizeof(ABC));
+    if (!*block && !(*block = calloc(GLYPH_BLOCK_SIZE, sizeof(CacheGlyphWidth)))) return FALSE;
+    (*block)[glyph & GLYPH_BLOCK_MASK].abc = *abc;
+    (*block)[glyph & GLYPH_BLOCK_MASK].known = TRUE;
     return TRUE;
 }
 
@@ -3237,7 +3241,7 @@ HRESULT WINAPI ScriptShapeOpenType( HDC hdc, SCRIPT_CACHE *psc,
                     rChars[i+1] = pwcChars[(rtl)?idx-1:idx+1];
                     cluster = 1;
                 }
-                if (!(pwOutGlyphs[g] = get_cache_glyph(psc, chInput)))
+                if (!get_cache_glyph(psc, chInput, &pwOutGlyphs[g]))
                 {
                     WORD glyph;
                     if (!hdc)
@@ -3611,7 +3615,7 @@ HRESULT WINAPI ScriptGetCMap(HDC hdc, SCRIPT_CACHE *psc, const WCHAR *pwcInChars
             inChar = mirror_char(pwcInChars[i]);
         else
             inChar = pwcInChars[i];
-        if (!(pwOutGlyphs[i] = get_cache_glyph(psc, inChar)))
+        if (!get_cache_glyph(psc, inChar, &pwOutGlyphs[i]) || !pwOutGlyphs[i])
         {
             WORD glyph;
             if (!hdc) return E_PENDING;

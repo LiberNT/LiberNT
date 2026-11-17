@@ -181,9 +181,17 @@ typedef struct {
     SIZE_T language_count;
 } LoadedScript;
 
+/* A cached glyph carries this bit, so a character that maps to glyph 0 is cached too. */
+#define CACHE_GLYPH_KNOWN 0x10000
+
 typedef struct {
-    WORD *glyphs[GLYPH_MAX / GLYPH_BLOCK_SIZE];
+    DWORD *glyphs[GLYPH_MAX / GLYPH_BLOCK_SIZE];
 } CacheGlyphPage;
+
+typedef struct {
+    ABC abc;
+    BOOL known;
+} CacheGlyphWidth;
 
 typedef struct {
     struct list entry;
@@ -194,7 +202,7 @@ typedef struct {
     SCRIPT_FONTPROPERTIES sfp;
     BOOL sfnt;
     CacheGlyphPage *page[NUM_PAGES];
-    ABC *widths[GLYPH_MAX / GLYPH_BLOCK_SIZE];
+    CacheGlyphWidth *widths[GLYPH_MAX / GLYPH_BLOCK_SIZE];
     void *GSUB_Table;
     void *GDEF_Table;
     void *CMAP_Table;
