@@ -965,6 +965,15 @@ Ndis6AttachFilterDriverToAllAdapters(
         {
             /* Protocols that refused the miniport's own medium may take the converted one */
             Ndis6BindAllProtocolsToAdapter(Adapter);
+
+            (VOID)KeWaitForSingleObject(&Ext->StackTransitionMutex, Executive, KernelMode, FALSE, NULL);
+            if (InterlockedCompareExchange(&Ext->ProtocolBindingsClosing, 0, 0) == 0 &&
+                InterlockedCompareExchange((volatile LONG *)&Ext->PauseState, NDIS6_PAUSE_STATE_RUNNING, NDIS6_PAUSE_STATE_RUNNING) ==
+                NDIS6_PAUSE_STATE_RUNNING)
+            {
+                Ndis6RestartProtocolBindings(Adapter);
+            }
+            KeReleaseMutex(&Ext->StackTransitionMutex, FALSE);
         }
 
         Ndis6DereferenceAdapterLifecycle(Adapter);
