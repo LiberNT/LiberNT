@@ -78,11 +78,14 @@ LibTCPEmptyQueue(PCONNECTION_ENDPOINT Connection)
     DereferenceObject(Connection);
 }
 
-void LibTCPEnqueuePacket(PCONNECTION_ENDPOINT Connection, PTCP_PCB pcb, struct pbuf *p)
+BOOLEAN LibTCPEnqueuePacket(PCONNECTION_ENDPOINT Connection, PTCP_PCB pcb, struct pbuf *p)
 {
     PQUEUE_ENTRY qp;
 
     qp = (PQUEUE_ENTRY)ExAllocateFromNPagedLookasideList(&QueueEntryLookasideList);
+    if (qp == NULL)
+        return FALSE;
+
     qp->p = p;
     qp->Offset = 0;
     qp->Urgent = pcb->urg_in_data;
@@ -92,6 +95,7 @@ void LibTCPEnqueuePacket(PCONNECTION_ENDPOINT Connection, PTCP_PCB pcb, struct p
     LockObject(Connection);
     InsertTailList(&Connection->PacketQueue, &qp->ListEntry);
     UnlockObject(Connection);
+    return TRUE;
 }
 
 PQUEUE_ENTRY LibTCPDequeuePacket(PCONNECTION_ENDPOINT Connection)
@@ -405,7 +409,9 @@ InternalRecvEventHandler(void *arg, PTCP_PCB pcb, struct pbuf *p, const err_t er
             return ERR_OK;
         }
 
-        LibTCPEnqueuePacket(Connection, pcb, p);
+        /* A segment that is refused stays with the stack, which offers it again */
+        if (!LibTCPEnqueuePacket(Connection, pcb, p))
+            return ERR_MEM;
 
         TCPRecvEventHandler(arg);
     }
