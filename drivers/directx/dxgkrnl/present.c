@@ -52,6 +52,7 @@
 #include "vidsch.h"
 #include "present.h"
 #include "present_queue_core.h"
+#include "display_core.h"
 #include <reactos/dwmframe.h>
 
 #define DXGK_PRESENT_EXEC_LOG_LIMIT  32
@@ -5557,6 +5558,7 @@ DxgkpBuildMmioFlip(
 
     Status = DxgkVidPnAcquireScanoutLease(Adapter, Entry->Device, Entry->VidPnSourceId,
                  Entry->Window, Entry->CompositorGeneration, &ScanoutLease);
+    Status = DxgkFlipCoreScanoutStatus(Status);
     if (!NT_SUCCESS(Status))
         return Status;
     ASSERT(ScanoutLease);
@@ -5696,6 +5698,7 @@ DxgkpExecuteMmioFlip(
     ASSERT(Queue->MmioPendingAllocation == NULL);
     Status = DxgkVidPnAcquireScanoutLease(Adapter, Entry->Device, Entry->VidPnSourceId,
                  Entry->Window, Entry->CompositorGeneration, &ScanoutLease);
+    Status = DxgkFlipCoreScanoutStatus(Status);
     if (!NT_SUCCESS(Status))
         goto Cleanup;
     ASSERT(ScanoutLease);
