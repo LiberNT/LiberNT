@@ -5328,49 +5328,212 @@ PciPdoProgramType0Bars(
 }
 
 static
-VOID
-PciPdoProgramBridgeMemoryWindow(
+BOOLEAN
+PciPdoWindowBounds(
+    _In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Window,
+    _In_ ULONGLONG Granularity,
+    _In_ ULONGLONG Highest,
+    _Out_ PULONGLONG Start,
+    _Out_ PULONGLONG End)
+{
+    ULONGLONG Length;
+
+    ASSERT(Granularity != 0 && (Granularity & (Granularity - 1)) == 0);
+
+    if (Window->Type == CmResourceTypePort)
+    {
+        *Start = (ULONGLONG)Window->u.Port.Start.QuadPart;
+        Length = Window->u.Port.Length;
+    }
+    else
+    {
+        Length = PciMemoryDescriptorLength(Window);
+        *Start = (ULONGLONG)Window->u.Memory.Start.QuadPart;
+    }
+
+    if (Length == 0 || Length - 1 > Highest || *Start > Highest - (Length - 1))
+        return FALSE;
+
+    *End = *Start + (Length - 1);
+    return ((*Start & (Granularity - 1)) == 0) && (((*End + 1) & (Granularity - 1)) == 0);
+}
+
+/* A bridge forwards exactly the windows it was given: a window that differs from the registers is written with decoding off */
+static
+NTSTATUS
+PciPdoProgramBridgeWindows(
     _Inout_ PPDO_DEVICE_EXTENSION DeviceExtension,
     _In_ PCM_RESOURCE_LIST ResourceList)
 {
     PCI_COMMON_CONFIG *PciConfig = &DeviceExtension->PciDevice->PciConfig;
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Memory = NULL;
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Prefetch = NULL;
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR Io = NULL;
     PCM_FULL_RESOURCE_DESCRIPTOR FullDescriptor;
-    PCM_PARTIAL_RESOURCE_DESCRIPTOR Partial;
-    ULONGLONG Start, End;
-    USHORT Base, Limit;
+    ULONGLONG MemStart = 0, MemEnd = 0, PrefStart = 0, PrefEnd = 0, IoStart = 0, IoEnd = 0;
+    ULONGLONG CurrentStart, CurrentEnd;
+    BOOLEAN WriteMem = FALSE, WritePref = FALSE, WriteIo = FALSE;
+    USHORT OriginalCommand, DisabledCommand;
+    BOOLEAN Prefetch64, Io32;
     ULONG FullIndex, PartialIndex;
 
-    if (PCI_CONFIGURATION_TYPE(PciConfig) != PCI_BRIDGE_TYPE ||
-        (((ULONG)PciConfig->u.type1.MemoryBase << 16) & 0xFFF00000) <= (((ULONG)PciConfig->u.type1.MemoryLimit << 16) | 0x000FFFFF))
-        return;
+    if (PCI_CONFIGURATION_TYPE(PciConfig) != PCI_BRIDGE_TYPE)
+        return STATUS_SUCCESS;
+
     FullDescriptor = &ResourceList->List[0];
     for (FullIndex = 0; FullIndex < ResourceList->Count; FullIndex++)
     {
         for (PartialIndex = 0; PartialIndex < FullDescriptor->PartialResourceList.Count; PartialIndex++)
         {
-            Partial = &FullDescriptor->PartialResourceList.PartialDescriptors[PartialIndex];
-            if (Partial->Type != CmResourceTypeMemory || !(Partial->Flags & CM_RESOURCE_MEMORY_WINDOW_DECODE) ||
-                (Partial->Flags & CM_RESOURCE_MEMORY_PREFETCHABLE) || Partial->u.Memory.Length == 0)
-                continue;
-            Start = (ULONGLONG)Partial->u.Memory.Start.QuadPart;
-            End = Start + Partial->u.Memory.Length - 1;
-            if (End > 0xFFFFFFFFULL || (Start & 0xFFFFF) || ((End + 1) & 0xFFFFF))
-                continue;
-            Base = (USHORT)((Start >> 16) & 0xFFF0);
-            Limit = (USHORT)((End >> 16) & 0xFFF0);
-            PciPdoSetBusDataByOffset(DeviceExtension, &Base, FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.MemoryBase), sizeof(Base));
-            PciPdoSetBusDataByOffset(DeviceExtension, &Limit, FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.MemoryLimit), sizeof(Limit));
-            PciConfig->u.type1.MemoryBase = Base;
-            PciConfig->u.type1.MemoryLimit = Limit;
-            DPRINT1("PCI: bridge %02lx:%02x.%u memory window [0x%I64x-0x%I64x] for bus %u\n",
-                    DeviceExtension->PciDevice->BusNumber, DeviceExtension->PciDevice->SlotNumber.u.bits.DeviceNumber,
-                    DeviceExtension->PciDevice->SlotNumber.u.bits.FunctionNumber, Start, End,
-                    PciConfig->u.type1.SecondaryBus);
-            return;
+            PCM_PARTIAL_RESOURCE_DESCRIPTOR Partial = &FullDescriptor->PartialResourceList.PartialDescriptors[PartialIndex];
+
+            if ((Partial->Type == CmResourceTypeMemory || Partial->Type == CmResourceTypeMemoryLarge) &&
+                (Partial->Flags & CM_RESOURCE_MEMORY_WINDOW_DECODE))
+            {
+                if (Partial->Flags & CM_RESOURCE_MEMORY_PREFETCHABLE)
+                {
+                    if (Prefetch == NULL)
+                        Prefetch = Partial;
+                }
+                else if (Memory == NULL)
+                {
+                    Memory = Partial;
+                }
+            }
+            else if (Partial->Type == CmResourceTypePort && (Partial->Flags & CM_RESOURCE_PORT_WINDOW_DECODE) && Io == NULL)
+            {
+                Io = Partial;
+            }
         }
-        FullDescriptor = (PCM_FULL_RESOURCE_DESCRIPTOR)(FullDescriptor->PartialResourceList.PartialDescriptors +
-                                                         FullDescriptor->PartialResourceList.Count);
+        FullDescriptor = CmiGetNextResourceDescriptor(FullDescriptor);
     }
+
+    Prefetch64 = (PciConfig->u.type1.PrefetchBase & PCI_PREF_RANGE_TYPE_MASK) == PCI_PREF_RANGE_TYPE_64;
+    Io32 = (PciConfig->u.type1.IOBase & PCI_IO_RANGE_TYPE_MASK) == PCI_IO_RANGE_TYPE_32;
+
+    if ((Memory != NULL && !PciPdoWindowBounds(Memory, 0x100000, 0xFFFFFFFFULL, &MemStart, &MemEnd)) ||
+        (Prefetch != NULL && !PciPdoWindowBounds(Prefetch, 0x100000, Prefetch64 ? MAXULONGLONG : 0xFFFFFFFFULL, &PrefStart, &PrefEnd)) ||
+        (Io != NULL && !PciPdoWindowBounds(Io, 0x1000, Io32 ? 0xFFFFFFFFULL : 0xFFFFULL, &IoStart, &IoEnd)))
+    {
+        DPRINT1("PCI: bridge %02lx:%02x.%u was given a window its registers cannot hold\n",
+                DeviceExtension->PciDevice->BusNumber, DeviceExtension->PciDevice->SlotNumber.u.bits.DeviceNumber,
+                DeviceExtension->PciDevice->SlotNumber.u.bits.FunctionNumber);
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    }
+
+    if (Memory != NULL)
+    {
+        CurrentStart = ((ULONG)PciConfig->u.type1.MemoryBase << 16) & 0xFFF00000;
+        CurrentEnd = ((ULONG)PciConfig->u.type1.MemoryLimit << 16) | 0x000FFFFF;
+        WriteMem = (CurrentStart != MemStart || CurrentEnd != MemEnd);
+    }
+    if (Prefetch != NULL)
+    {
+        CurrentStart = ((ULONGLONG)PciConfig->u.type1.PrefetchBase << 16) & 0xFFF00000ULL;
+        CurrentEnd = ((ULONGLONG)PciConfig->u.type1.PrefetchLimit << 16) | 0x000FFFFFULL;
+        if (Prefetch64)
+        {
+            CurrentStart |= (ULONGLONG)PciConfig->u.type1.PrefetchBaseUpper32 << 32;
+            CurrentEnd |= (ULONGLONG)PciConfig->u.type1.PrefetchLimitUpper32 << 32;
+        }
+        WritePref = (CurrentStart != PrefStart || CurrentEnd != PrefEnd);
+    }
+    if (Io != NULL)
+    {
+        CurrentStart = ((ULONG)PciConfig->u.type1.IOBase & 0xF0) << 8;
+        CurrentEnd = (((ULONG)PciConfig->u.type1.IOLimit & 0xF0) << 8) | 0xFFF;
+        if (Io32)
+        {
+            CurrentStart |= (ULONG)PciConfig->u.type1.IOBaseUpper16 << 16;
+            CurrentEnd |= (ULONG)PciConfig->u.type1.IOLimitUpper16 << 16;
+        }
+        WriteIo = (CurrentStart != IoStart || CurrentEnd != IoEnd);
+    }
+
+    if (!WriteMem && !WritePref && !WriteIo)
+        return STATUS_SUCCESS;
+
+    OriginalCommand = PciConfig->Command;
+    DisabledCommand = OriginalCommand & ~(PCI_ENABLE_MEMORY_SPACE | PCI_ENABLE_IO_SPACE);
+    if (DisabledCommand != OriginalCommand &&
+        PciPdoSetBusDataByOffset(DeviceExtension, &DisabledCommand, FIELD_OFFSET(PCI_COMMON_CONFIG, Command), sizeof(DisabledCommand)) != sizeof(DisabledCommand))
+    {
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    }
+
+    if (WriteMem)
+    {
+        USHORT Base = (USHORT)((MemStart >> 16) & 0xFFF0);
+        USHORT Limit = (USHORT)((MemEnd >> 16) & 0xFFF0);
+
+        PciPdoSetBusDataByOffset(DeviceExtension, &Base, FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.MemoryBase), sizeof(Base));
+        PciPdoSetBusDataByOffset(DeviceExtension, &Limit, FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.MemoryLimit), sizeof(Limit));
+        PciConfig->u.type1.MemoryBase = Base;
+        PciConfig->u.type1.MemoryLimit = Limit;
+        DPRINT1("PCI: bridge %02lx:%02x.%u memory window [0x%I64x-0x%I64x] for bus %u\n",
+                DeviceExtension->PciDevice->BusNumber, DeviceExtension->PciDevice->SlotNumber.u.bits.DeviceNumber,
+                DeviceExtension->PciDevice->SlotNumber.u.bits.FunctionNumber, MemStart, MemEnd, PciConfig->u.type1.SecondaryBus);
+    }
+
+    if (WritePref)
+    {
+        USHORT Base = (USHORT)(((PrefStart >> 16) & 0xFFF0) | (PciConfig->u.type1.PrefetchBase & PCI_PREF_RANGE_TYPE_MASK));
+        USHORT Limit = (USHORT)(((PrefEnd >> 16) & 0xFFF0) | (PciConfig->u.type1.PrefetchLimit & PCI_PREF_RANGE_TYPE_MASK));
+        ULONG BaseUpper = (ULONG)(PrefStart >> 32);
+        ULONG LimitUpper = (ULONG)(PrefEnd >> 32);
+        ULONG Zero = 0;
+
+        if (Prefetch64)
+            PciPdoSetBusDataByOffset(DeviceExtension, &Zero, FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.PrefetchLimitUpper32), sizeof(Zero));
+        PciPdoSetBusDataByOffset(DeviceExtension, &Base, FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.PrefetchBase), sizeof(Base));
+        PciPdoSetBusDataByOffset(DeviceExtension, &Limit, FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.PrefetchLimit), sizeof(Limit));
+        if (Prefetch64)
+        {
+            PciPdoSetBusDataByOffset(DeviceExtension, &BaseUpper, FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.PrefetchBaseUpper32), sizeof(BaseUpper));
+            PciPdoSetBusDataByOffset(DeviceExtension, &LimitUpper, FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.PrefetchLimitUpper32), sizeof(LimitUpper));
+            PciConfig->u.type1.PrefetchBaseUpper32 = BaseUpper;
+            PciConfig->u.type1.PrefetchLimitUpper32 = LimitUpper;
+        }
+        PciConfig->u.type1.PrefetchBase = Base;
+        PciConfig->u.type1.PrefetchLimit = Limit;
+        DPRINT1("PCI: bridge %02lx:%02x.%u prefetchable window [0x%I64x-0x%I64x] for bus %u\n",
+                DeviceExtension->PciDevice->BusNumber, DeviceExtension->PciDevice->SlotNumber.u.bits.DeviceNumber,
+                DeviceExtension->PciDevice->SlotNumber.u.bits.FunctionNumber, PrefStart, PrefEnd, PciConfig->u.type1.SecondaryBus);
+    }
+
+    if (WriteIo)
+    {
+        UCHAR Base = (UCHAR)(((IoStart >> 8) & 0xF0) | (PciConfig->u.type1.IOBase & PCI_IO_RANGE_TYPE_MASK));
+        UCHAR Limit = (UCHAR)(((IoEnd >> 8) & 0xF0) | (PciConfig->u.type1.IOLimit & PCI_IO_RANGE_TYPE_MASK));
+        USHORT BaseUpper = (USHORT)(IoStart >> 16);
+        USHORT LimitUpper = (USHORT)(IoEnd >> 16);
+        ULONG Closed = 0x0000FFFF;
+
+        if (Io32)
+            PciPdoSetBusDataByOffset(DeviceExtension, &Closed, FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.IOBaseUpper16), sizeof(Closed));
+        PciPdoSetBusDataByOffset(DeviceExtension, &Base, FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.IOBase), sizeof(Base));
+        PciPdoSetBusDataByOffset(DeviceExtension, &Limit, FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.IOLimit), sizeof(Limit));
+        if (Io32)
+        {
+            PciPdoSetBusDataByOffset(DeviceExtension, &BaseUpper, FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.IOBaseUpper16), sizeof(BaseUpper));
+            PciPdoSetBusDataByOffset(DeviceExtension, &LimitUpper, FIELD_OFFSET(PCI_COMMON_CONFIG, u.type1.IOLimitUpper16), sizeof(LimitUpper));
+            PciConfig->u.type1.IOBaseUpper16 = BaseUpper;
+            PciConfig->u.type1.IOLimitUpper16 = LimitUpper;
+        }
+        PciConfig->u.type1.IOBase = Base;
+        PciConfig->u.type1.IOLimit = Limit;
+        DPRINT1("PCI: bridge %02lx:%02x.%u I/O window [0x%I64x-0x%I64x] for bus %u\n",
+                DeviceExtension->PciDevice->BusNumber, DeviceExtension->PciDevice->SlotNumber.u.bits.DeviceNumber,
+                DeviceExtension->PciDevice->SlotNumber.u.bits.FunctionNumber, IoStart, IoEnd, PciConfig->u.type1.SecondaryBus);
+    }
+
+    if (DisabledCommand != OriginalCommand &&
+        PciPdoSetBusDataByOffset(DeviceExtension, &OriginalCommand, FIELD_OFFSET(PCI_COMMON_CONFIG, Command), sizeof(OriginalCommand)) != sizeof(OriginalCommand))
+    {
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
+    }
+
+    return STATUS_SUCCESS;
 }
 
 static NTSTATUS
@@ -5469,7 +5632,9 @@ PdoStartDevice(
     Status = PciPdoProgramType0Bars(DeviceExtension, RawResList);
     if (!NT_SUCCESS(Status))
         return Status;
-    PciPdoProgramBridgeMemoryWindow(DeviceExtension, RawResList);
+    Status = PciPdoProgramBridgeWindows(DeviceExtension, RawResList);
+    if (!NT_SUCCESS(Status))
+        return Status;
 
     PciPdoCacheMsiInfo(DeviceExtension);
     PciPdoPublishDeviceProperties(DeviceExtension);
