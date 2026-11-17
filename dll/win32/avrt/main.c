@@ -1,138 +1,268 @@
-/* Avrt dll implementation
- *
- * Copyright (C) 2009 Maarten Lankhorst
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
+/*
+ * PROJECT:     LiberNT Multimedia Class Scheduler
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Registers threads for multimedia tasks with mmcss.sys
+ * COPYRIGHT:   Copyright 2026 Ostap Brehin <osbre@protonmail.com>
  */
 
 #include <stdarg.h>
-#ifdef __REACTOS__
-#include <stdlib.h>
-#endif
 
-#include "windef.h"
-#include "winbase.h"
-#include "winnls.h"
-#include "wine/debug.h"
-#include "avrt.h"
+#define WIN32_NO_STATUS
+#define _INC_WINDOWS
+#define COM_NO_WINDOWS_H
+#include <windef.h>
+#include <winbase.h>
+#include <winnls.h>
+#define NTOS_MODE_USER
+#include <ndk/iofuncs.h>
+#include <ndk/obfuncs.h>
+#include <ndk/rtlfuncs.h>
+#include <ntstatus.h>
+#include <winioctl.h>
+#include <avrt.h>
+#include <drivers/mmcssio.h>
 
-WINE_DEFAULT_DEBUG_CHANNEL(avrt);
-
-static inline WCHAR *strdupAW(const char *src)
+static
+VOID
+AvrtSetStatus(
+    _In_ NTSTATUS Status)
 {
-    int len;
-    WCHAR *dst;
-    if (!src) return NULL;
-    len = MultiByteToWideChar(CP_ACP, 0, src, -1, NULL, 0);
-    if ((dst = malloc(len * sizeof(*dst)))) MultiByteToWideChar(CP_ACP, 0, src, -1, dst, len);
-    return dst;
-}
-
-HANDLE WINAPI AvSetMmThreadCharacteristicsA(const char *name, DWORD *index)
-{
-    WCHAR *nameW = NULL;
-    HANDLE ret;
-
-    if (name && !(nameW = strdupAW(name)))
+    switch (Status)
     {
-        SetLastError(ERROR_OUTOFMEMORY);
-        return NULL;
+        case STATUS_OBJECT_NAME_NOT_FOUND:
+            SetLastError(ERROR_INVALID_TASK_NAME);
+            break;
+        case STATUS_INVALID_PARAMETER_1:
+            SetLastError(ERROR_INVALID_TASK_INDEX);
+            break;
+        case STATUS_ALREADY_REGISTERED:
+            SetLastError(ERROR_THREAD_ALREADY_IN_TASK);
+            break;
+        default:
+            SetLastError(RtlNtStatusToDosError(Status));
+            break;
     }
-
-    ret = AvSetMmThreadCharacteristicsW(nameW, index);
-
-    free(nameW);
-    return ret;
 }
 
-HANDLE WINAPI AvSetMmThreadCharacteristicsW(const WCHAR *name, DWORD *index)
+static
+NTSTATUS
+AvrtControl(
+    _In_ HANDLE Handle,
+    _In_ ULONG Code,
+    _In_reads_bytes_opt_(InputLength) PVOID Input,
+    _In_ ULONG InputLength,
+    _Out_writes_bytes_opt_(OutputLength) PVOID Output,
+    _In_ ULONG OutputLength)
 {
-    FIXME("(%s,%p): stub\n", debugstr_w(name), index);
+    IO_STATUS_BLOCK IoStatus;
 
-    if (!name)
+    return NtDeviceIoControlFile(Handle, NULL, NULL, NULL, &IoStatus, Code,
+                                 Input, InputLength, Output, OutputLength);
+}
+
+static
+BOOL
+AvrtCopyTaskName(
+    _Out_writes_(MMCSS_MAX_TASK_NAME) PWCHAR Destination,
+    _In_ PCWSTR Name)
+{
+    SIZE_T Length = wcslen(Name);
+
+    if (Length == 0 || Length >= MMCSS_MAX_TASK_NAME)
+        return FALSE;
+
+    RtlCopyMemory(Destination, Name, Length * sizeof(WCHAR));
+    Destination[Length] = UNICODE_NULL;
+    return TRUE;
+}
+
+static
+HANDLE
+AvrtRegister(
+    _In_ PCWSTR FirstTask,
+    _In_opt_ PCWSTR SecondTask,
+    _Inout_ LPDWORD TaskIndex)
+{
+    UNICODE_STRING DeviceName = RTL_CONSTANT_STRING(MMCSS_DEVICE_NAME);
+    MMCSS_REGISTER_INPUT Input = {0};
+    MMCSS_REGISTER_OUTPUT Output = {0};
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK IoStatus;
+    HANDLE Handle;
+    NTSTATUS Status;
+
+    Input.TaskIndex = *TaskIndex;
+    if (!AvrtCopyTaskName(Input.FirstTask, FirstTask) ||
+        (SecondTask != NULL && !AvrtCopyTaskName(Input.SecondTask, SecondTask)))
     {
         SetLastError(ERROR_INVALID_TASK_NAME);
         return NULL;
     }
 
-    if (!index)
+    InitializeObjectAttributes(&ObjectAttributes, &DeviceName, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = NtCreateFile(&Handle,
+                          FILE_GENERIC_READ,
+                          &ObjectAttributes,
+                          &IoStatus,
+                          NULL,
+                          0,
+                          FILE_SHARE_READ | FILE_SHARE_WRITE,
+                          FILE_OPEN,
+                          FILE_SYNCHRONOUS_IO_NONALERT,
+                          NULL,
+                          0);
+    if (!NT_SUCCESS(Status))
     {
-        SetLastError(ERROR_INVALID_HANDLE);
+        AvrtSetStatus(Status);
         return NULL;
     }
 
-    return (HANDLE)0x12345678;
+    Status = AvrtControl(Handle, IOCTL_MMCSS_REGISTER, &Input, sizeof(Input), &Output, sizeof(Output));
+    if (!NT_SUCCESS(Status))
+    {
+        NtClose(Handle);
+        AvrtSetStatus(Status);
+        return NULL;
+    }
+
+    *TaskIndex = Output.TaskIndex;
+    return Handle;
 }
 
-BOOL WINAPI AvQuerySystemResponsiveness(HANDLE AvrtHandle, ULONG *value)
+static
+PWSTR
+AvrtStrDupAW(
+    _In_ PCSTR Source)
 {
-    FIXME("(%p, %p): stub\n", AvrtHandle, value);
-    return FALSE;
+    PWSTR Destination;
+    INT Length;
+
+    Length = MultiByteToWideChar(CP_ACP, 0, Source, (INT)strlen(Source) + 1, NULL, 0);
+    if (Length == 0)
+        return NULL;
+    Destination = HeapAlloc(GetProcessHeap(), 0, Length * sizeof(WCHAR));
+    if (Destination != NULL)
+        MultiByteToWideChar(CP_ACP, 0, Source, -1, Destination, Length);
+    return Destination;
 }
 
-BOOL WINAPI AvRevertMmThreadCharacteristics(HANDLE AvrtHandle)
+HANDLE
+WINAPI
+AvSetMmThreadCharacteristicsW(
+    _In_ LPCWSTR TaskName,
+    _Inout_ LPDWORD TaskIndex)
 {
-    FIXME("(%p): stub\n", AvrtHandle);
-    return TRUE;
+    return AvrtRegister(TaskName, NULL, TaskIndex);
 }
 
-BOOL WINAPI AvSetMmThreadPriority(HANDLE AvrtHandle, AVRT_PRIORITY prio)
+HANDLE
+WINAPI
+AvSetMmThreadCharacteristicsA(
+    _In_ LPCSTR TaskName,
+    _Inout_ LPDWORD TaskIndex)
 {
-    FIXME("(%p)->(%u) stub\n", AvrtHandle, prio);
-    return TRUE;
-}
+    PWSTR TaskNameW;
+    HANDLE Handle;
 
-HANDLE WINAPI AvSetMmMaxThreadCharacteristicsA(const char *task1, const char *task2, DWORD *index)
-{
-    WCHAR *task1W = NULL, *task2W = NULL;
-    HANDLE ret;
-
-    if (task1 && !(task1W = strdupAW(task1)))
+    TaskNameW = AvrtStrDupAW(TaskName);
+    if (TaskNameW == NULL)
     {
         SetLastError(ERROR_OUTOFMEMORY);
         return NULL;
     }
 
-    if (task2 && !(task2W = strdupAW(task2)))
-    {
-        SetLastError(ERROR_OUTOFMEMORY);
-        return NULL;
-    }
-
-    ret = AvSetMmMaxThreadCharacteristicsW(task1W, task2W, index);
-
-    free(task2W);
-    free(task1W);
-    return ret;
+    Handle = AvSetMmThreadCharacteristicsW(TaskNameW, TaskIndex);
+    HeapFree(GetProcessHeap(), 0, TaskNameW);
+    return Handle;
 }
 
-HANDLE WINAPI AvSetMmMaxThreadCharacteristicsW(const WCHAR *task1, const WCHAR *task2, DWORD *index)
+HANDLE
+WINAPI
+AvSetMmMaxThreadCharacteristicsW(
+    _In_ LPCWSTR FirstTask,
+    _In_opt_ LPCWSTR SecondTask,
+    _Inout_ LPDWORD TaskIndex)
 {
-    FIXME("(%s,%s,%p): stub\n", debugstr_w(task1), debugstr_w(task2), index);
+    return AvrtRegister(FirstTask, SecondTask, TaskIndex);
+}
 
-    if (!task1 || task2)
+HANDLE
+WINAPI
+AvSetMmMaxThreadCharacteristicsA(
+    _In_ LPCSTR FirstTask,
+    _In_opt_ LPCSTR SecondTask,
+    _Inout_ LPDWORD TaskIndex)
+{
+    PWSTR FirstTaskW, SecondTaskW = NULL;
+    HANDLE Handle = NULL;
+
+    FirstTaskW = AvrtStrDupAW(FirstTask);
+    if (SecondTask != NULL)
+        SecondTaskW = AvrtStrDupAW(SecondTask);
+
+    if (FirstTaskW == NULL || (SecondTask != NULL && SecondTaskW == NULL))
+        SetLastError(ERROR_OUTOFMEMORY);
+    else
+        Handle = AvSetMmMaxThreadCharacteristicsW(FirstTaskW, SecondTaskW, TaskIndex);
+
+    if (SecondTaskW != NULL)
+        HeapFree(GetProcessHeap(), 0, SecondTaskW);
+    if (FirstTaskW != NULL)
+        HeapFree(GetProcessHeap(), 0, FirstTaskW);
+    return Handle;
+}
+
+BOOL
+WINAPI
+AvRevertMmThreadCharacteristics(
+    _In_ HANDLE AvrtHandle)
+{
+    NTSTATUS Status;
+
+    Status = NtClose(AvrtHandle);
+    if (!NT_SUCCESS(Status))
     {
-        SetLastError(ERROR_INVALID_TASK_NAME);
-        return NULL;
+        AvrtSetStatus(Status);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+BOOL
+WINAPI
+AvSetMmThreadPriority(
+    _In_ HANDLE AvrtHandle,
+    _In_ AVRT_PRIORITY Priority)
+{
+    MMCSS_SET_PRIORITY_INPUT Input;
+    NTSTATUS Status;
+
+    Input.Priority = Priority;
+    Status = AvrtControl(AvrtHandle, IOCTL_MMCSS_SET_PRIORITY, &Input, sizeof(Input), NULL, 0);
+    if (!NT_SUCCESS(Status))
+    {
+        AvrtSetStatus(Status);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+BOOL
+WINAPI
+AvQuerySystemResponsiveness(
+    _In_ HANDLE AvrtHandle,
+    _Out_ PULONG SystemResponsivenessValue)
+{
+    MMCSS_RESPONSIVENESS_OUTPUT Output;
+    NTSTATUS Status;
+
+    Status = AvrtControl(AvrtHandle, IOCTL_MMCSS_QUERY_RESPONSIVENESS, NULL, 0, &Output, sizeof(Output));
+    if (!NT_SUCCESS(Status))
+    {
+        AvrtSetStatus(Status);
+        return FALSE;
     }
 
-    if (!index)
-    {
-        SetLastError(ERROR_INVALID_HANDLE);
-        return NULL;
-    }
-
-    return (HANDLE)0x12345678;
+    *SystemResponsivenessValue = Output.SystemResponsiveness;
+    return TRUE;
 }

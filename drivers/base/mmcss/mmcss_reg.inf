@@ -1,0 +1,66 @@
+; Multimedia Class Scheduler driver and the task profiles it reads
+[AddReg]
+HKLM,"SYSTEM\CurrentControlSet\Services\MMCSS","ErrorControl",0x00010001,0x00000000
+HKLM,"SYSTEM\CurrentControlSet\Services\MMCSS","ImagePath",0x00020000,"system32\drivers\mmcss.sys"
+HKLM,"SYSTEM\CurrentControlSet\Services\MMCSS","Start",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\MMCSS","Type",0x00010001,0x00000001
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile","NetworkThrottlingIndex",0x00010001,0x0000000a
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile","SystemResponsiveness",0x00010001,0x00000014
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Audio","Affinity",0x00010001,0x00000000
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Audio","Background Only",0x00000000,"True"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Audio","Clock Rate",0x00010001,0x00002710
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Audio","GPU Priority",0x00010001,0x00000008
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Audio","Priority",0x00010001,0x00000006
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Audio","Scheduling Category",0x00000000,"Medium"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Audio","SFIO Priority",0x00000000,"Normal"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Capture","Affinity",0x00010001,0x00000000
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Capture","Background Only",0x00000000,"True"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Capture","Clock Rate",0x00010001,0x00002710
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Capture","GPU Priority",0x00010001,0x00000008
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Capture","Priority",0x00010001,0x00000005
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Capture","Scheduling Category",0x00000000,"Medium"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Capture","SFIO Priority",0x00000000,"Normal"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\DisplayPostProcessing","Affinity",0x00010001,0x00000000
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\DisplayPostProcessing","Background Only",0x00000000,"True"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\DisplayPostProcessing","BackgroundPriority",0x00010001,0x00000008
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\DisplayPostProcessing","Clock Rate",0x00010001,0x00002710
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\DisplayPostProcessing","GPU Priority",0x00010001,0x00000008
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\DisplayPostProcessing","Priority",0x00010001,0x00000008
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\DisplayPostProcessing","Scheduling Category",0x00000000,"High"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\DisplayPostProcessing","SFIO Priority",0x00000000,"Normal"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Distribution","Affinity",0x00010001,0x00000000
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Distribution","Background Only",0x00000000,"True"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Distribution","Clock Rate",0x00010001,0x00002710
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Distribution","GPU Priority",0x00010001,0x00000008
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Distribution","Priority",0x00010001,0x00000004
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Distribution","Scheduling Category",0x00000000,"Medium"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Distribution","SFIO Priority",0x00000000,"Normal"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games","Affinity",0x00010001,0x00000000
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games","Background Only",0x00000000,"False"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games","Clock Rate",0x00010001,0x00002710
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games","GPU Priority",0x00010001,0x00000008
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games","Priority",0x00010001,0x00000002
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games","Scheduling Category",0x00000000,"Medium"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games","SFIO Priority",0x00000000,"Normal"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Playback","Affinity",0x00010001,0x00000000
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Playback","Background Only",0x00000000,"False"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Playback","BackgroundPriority",0x00010001,0x00000004
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Playback","Clock Rate",0x00010001,0x00002710
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Playback","GPU Priority",0x00010001,0x00000008
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Playback","Priority",0x00010001,0x00000003
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Playback","Scheduling Category",0x00000000,"Medium"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Playback","SFIO Priority",0x00000000,"Normal"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Pro Audio","Affinity",0x00010001,0x00000000
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Pro Audio","Background Only",0x00000000,"False"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Pro Audio","Clock Rate",0x00010001,0x00002710
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Pro Audio","GPU Priority",0x00010001,0x00000008
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Pro Audio","Priority",0x00010001,0x00000001
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Pro Audio","Scheduling Category",0x00000000,"High"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Pro Audio","SFIO Priority",0x00000000,"Normal"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Window Manager","Affinity",0x00010001,0x00000000
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Window Manager","Background Only",0x00000000,"True"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Window Manager","Clock Rate",0x00010001,0x00002710
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Window Manager","GPU Priority",0x00010001,0x00000008
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Window Manager","Priority",0x00010001,0x00000005
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Window Manager","Scheduling Category",0x00000000,"Medium"
+HKLM,"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Window Manager","SFIO Priority",0x00000000,"Normal"

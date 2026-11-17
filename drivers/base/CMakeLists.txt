@@ -17,6 +17,7 @@ else()
 endif()
 add_subdirectory(kdstub)
 add_subdirectory(kdnet)
+add_subdirectory(mmcss)
 add_subdirectory(monitor)
 
 if(NOT ARCH STREQUAL "arm")
