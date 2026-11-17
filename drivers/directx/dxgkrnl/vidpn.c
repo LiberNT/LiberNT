@@ -3883,9 +3883,11 @@ DxgkpVidPnRebuildForHotPlugGeneration(
     KeReleaseMutex(&Adapter->VidPnMutex, FALSE);
     DxgkpDisplayPublishInitialMode(Adapter);
     DxgkVidPnDestroyDisplayModeCache(Adapter);
+    /* Windows keeps the desktop mode while the adapter has no output left */
     NotifyMonitorEvent = CommitResult.VidPnCommitted &&
                          (Snapshot->Connected ||
-                          CommitResult.CommittedWidth != OldCommittedWidth || CommitResult.CommittedHeight != OldCommittedHeight);
+                          (CommitResult.CommittedWidth != 0 && CommitResult.CommittedHeight != 0 &&
+                           (CommitResult.CommittedWidth != OldCommittedWidth || CommitResult.CommittedHeight != OldCommittedHeight)));
     if (CommitResult.CommittedWidth != OldCommittedWidth || CommitResult.CommittedHeight != OldCommittedHeight ||
         (!Snapshot->Connected && !CommitResult.HeadlessDesktop))
         DxgkpDestroySharedPrimaryLocked(Adapter);
