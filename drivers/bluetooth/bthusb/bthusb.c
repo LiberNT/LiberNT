@@ -6,6 +6,7 @@
  */
 
 #include "bthusb.h"
+#include "intel.h"
 
 #define NDEBUG
 #include <debug.h>
@@ -17,7 +18,6 @@ static EVT_WDF_DEVICE_RELEASE_HARDWARE BthUsbEvtReleaseHardware;
 static EVT_WDF_DEVICE_D0_ENTRY BthUsbEvtD0Entry;
 static EVT_WDF_DEVICE_D0_EXIT BthUsbEvtD0Exit;
 static EVT_WDF_IO_QUEUE_IO_DEVICE_CONTROL BthUsbEvtPdoIoctl;
-static RTKBT_HCI_COMMAND BthUsbHciCommand;
 
 static
 ULONGLONG
@@ -26,7 +26,6 @@ BthUsbNowMs(VOID)
     return KeQueryInterruptTime() / 10000;
 }
 
-static
 NTSTATUS
 NTAPI
 BthUsbHciCommand(
@@ -52,7 +51,7 @@ BthUsbHciCommand(
         RtlCopyMemory(Command + 3, Parameters, ParameterLength);
 
     KeClearEvent(&Dev->EventArrived);
-    Status = BthUsbWrite(Dev, HciPacketCommand, Command, 3 + ParameterLength, NULL);
+    Status = BthUsbWrite(Dev, Dev->IntelBootloader && Opcode == 0xfc09 ? HciPacketAclData : HciPacketCommand, Command, 3 + ParameterLength, NULL);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -63,10 +62,16 @@ BthUsbHciCommand(
         LARGE_INTEGER Timeout;
         ULONGLONG Now;
 
+        KeClearEvent(&Dev->EventArrived);
         while ((Packet = BthUsbTakePacket(Dev, BthUsbRxEvent)) != NULL)
         {
             const UCHAR *Event = Packet->Data;
 
+            if (BthUsbIntelEvent(Dev, Event, Packet->Length))
+            {
+                ExFreePoolWithTag(Packet, BTHUSB_TAG);
+                continue;
+            }
             if (Packet->Length >= 6 && Event[0] == HCI_EVENT_COMMAND_COMPLETE &&
                 (Event[3] | (Event[4] << 8)) == Opcode)
             {
@@ -178,6 +183,16 @@ BthUsbThread(
     PBTHUSB_DEVICE Dev = Context;
     NTSTATUS Status;
 
+    if (Dev->IntelBootloader)
+    {
+        Status = BthUsbIntelInitialize(Dev);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("BTHUSB: %04x:%04x Intel initialization failed 0x%08lx\n", Dev->VendorId, Dev->ProductId, Status);
+            PsTerminateSystemThread(Status);
+            return;
+        }
+    }
     Status = BthUsbHciCommand(Dev, HCI_COMMAND_RESET, NULL, 0, NULL, 0, NULL);
     if (!NT_SUCCESS(Status))
         DPRINT1("BTHUSB: %04x:%04x HCI reset failed 0x%08lx\n", Dev->VendorId, Dev->ProductId, Status);
@@ -241,6 +256,10 @@ BthUsbEvtD0Entry(
     NTSTATUS Status;
 
     UNREFERENCED_PARAMETER(PreviousState);
+    Dev->IntelBootloader = Dev->VendorId == 0x8087 && Dev->ProductId == 0x0033;
+    Dev->IntelDownloadComplete = FALSE;
+    Dev->IntelBootComplete = FALSE;
+    Dev->IntelDownloadStatus = STATUS_DEVICE_NOT_READY;
     Status = BthUsbStartReads(Dev);
     if (!NT_SUCCESS(Status))
         return Status;

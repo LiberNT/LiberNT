@@ -95,6 +95,11 @@ typedef struct _BTHUSB_DEVICE
     KEVENT EventArrived;
     BOOLEAN Ready;
 
+    BOOLEAN IntelBootloader;
+    BOOLEAN IntelDownloadComplete;
+    BOOLEAN IntelBootComplete;
+    NTSTATUS IntelDownloadStatus;
+
     PKTHREAD Thread;
     WDFDEVICE Child;
     RTKBT_VERSION Version;

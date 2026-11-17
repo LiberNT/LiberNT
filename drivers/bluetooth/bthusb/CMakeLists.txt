@@ -9,6 +9,7 @@ include_directories(${REACTOS_SOURCE_DIR}/sdk/lib/drivers/rtkbtfw)
 
 list(APPEND SOURCE
     bthusb.c
+    intel.c
     usb.c
     bthusb.h)
 

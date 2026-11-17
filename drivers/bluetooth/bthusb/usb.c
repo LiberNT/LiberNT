@@ -257,12 +257,15 @@ BthUsbReceive(
     _In_ ULONG Length)
 {
     PBTHUSB_RX_STREAM Stream = &Dev->Rx[Kind];
-    ULONG HeaderLength = Kind == BthUsbRxEvent ? 2 : 4;
+    BTHUSB_RX_KIND PacketKind;
+    ULONG HeaderLength;
     ULONG Received = Length;
     BOOLEAN Queued = FALSE;
     KIRQL OldIrql;
 
     KeAcquireSpinLock(&Dev->Lock, &OldIrql);
+    PacketKind = Dev->IntelBootloader ? BthUsbRxEvent : Kind;
+    HeaderLength = PacketKind == BthUsbRxEvent ? 2 : 4;
     while (Length)
     {
         ULONG Total, Take;
@@ -276,13 +279,13 @@ BthUsbReceive(
             Length -= Take;
             if (Stream->Length < HeaderLength)
                 break;
-            Total = Kind == BthUsbRxEvent ? 2 + (ULONG)Stream->Data[1] :
+            Total = PacketKind == BthUsbRxEvent ? 2 + (ULONG)Stream->Data[1] :
                                             4 + (ULONG)(Stream->Data[2] | (Stream->Data[3] << 8));
             Stream->Discard = Total > sizeof(Stream->Data);
             if (Stream->Discard)
                 DPRINT1("BTHUSB: oversized ACL packet of %lu bytes dropped\n", Total);
         }
-        Total = Kind == BthUsbRxEvent ? 2 + (ULONG)Stream->Data[1] :
+        Total = PacketKind == BthUsbRxEvent ? 2 + (ULONG)Stream->Data[1] :
                                         4 + (ULONG)(Stream->Data[2] | (Stream->Data[3] << 8));
         Take = min(Length, Total - Stream->Length);
         if (!Stream->Discard)
@@ -294,7 +297,7 @@ BthUsbReceive(
         {
             if (!Stream->Discard)
             {
-                BthUsbQueuePacket(Dev, Kind, Stream->Data, Total);
+                BthUsbQueuePacket(Dev, PacketKind, Stream->Data, Total);
                 Queued = TRUE;
             }
             Stream->Length = 0;
@@ -312,9 +315,9 @@ BthUsbReceive(
 
     if (Queued)
     {
-        if (Kind == BthUsbRxEvent)
+        if (PacketKind == BthUsbRxEvent)
             KeSetEvent(&Dev->EventArrived, IO_NO_INCREMENT, FALSE);
-        BthUsbDeliverPackets(Dev, Kind);
+        BthUsbDeliverPackets(Dev, PacketKind);
     }
 }
 
