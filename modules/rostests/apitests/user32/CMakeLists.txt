@@ -122,6 +122,7 @@ list(APPEND SOURCE
     SetProp.c
     SetScrollInfo.c
     SetScrollRange.c
+    StructPadding.c
     SetWindowPlacement.c
     SharedInputLanguage.c
     ShellHookShowActive.c

@@ -6555,6 +6555,7 @@ NtUserGetMenuBarInfo(
    PMENU Menu = NULL;
 
    TRACE("Enter NtUserGetMenuBarInfo\n");
+   RtlZeroMemory(&kmbi, sizeof(kmbi));
    UserEnterShared();
 
    if (!(pWnd = UserGetWindowObject(hwnd)))

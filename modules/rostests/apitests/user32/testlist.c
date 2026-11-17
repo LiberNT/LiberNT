@@ -121,6 +121,7 @@ extern void func_SetCursorPos(void);
 extern void func_SetFocus(void);
 extern void func_SetParent(void);
 extern void func_SetProp(void);
+extern void func_StructPadding(void);
 extern void func_SetScrollInfo(void);
 extern void func_SetScrollRange(void);
 extern void func_SetWindowPlacement(void);
@@ -273,6 +274,7 @@ const struct test winetest_testlist[] =
     { "SetFocus", func_SetFocus },
     { "SetParent", func_SetParent },
     { "SetProp", func_SetProp },
+    { "StructPadding", func_StructPadding },
     { "SetScrollInfo", func_SetScrollInfo },
     { "SetScrollRange", func_SetScrollRange },
     { "SetWindowPlacement", func_SetWindowPlacement },
