@@ -389,7 +389,7 @@ IopResDbCheck(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate, _In_opt_ PDEVICE_N
             continue;
         if (IopResDbConflict(Candidate, CandidateOwner, &entry->Desc, entry->Owner))
         {
-            if (IgnoreHalReport && (Candidate->Type == CmResourceTypeMemory || Candidate->Type == CmResourceTypeMemoryLarge))
+            if (BootSetting && (Candidate->Type == CmResourceTypeMemory || Candidate->Type == CmResourceTypeMemoryLarge))
             {
                 Report = TRUE;
                 Other = entry->Desc;
