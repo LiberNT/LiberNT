@@ -109,6 +109,8 @@ NTSTATUS DxgkFlipCoreQueue(_Inout_ PDXGK_FLIP_QUEUE Queue, _In_ ULONGLONG Alloca
  * became visible on this vsync. */
 BOOLEAN DxgkFlipCoreNotifyVSync(_Inout_ PDXGK_FLIP_QUEUE Queue, _Out_ PULONGLONG PresentedCookie);
 ULONG DxgkFlipCoreQueuedCount(_In_ const DXGK_FLIP_QUEUE *Queue);
+/* A flip whose source another client owns at scanout is occluded; only DMA faults put a device in error */
+NTSTATUS DxgkFlipCoreScanoutStatus(_In_ NTSTATUS LeaseStatus);
 
 D3DDDIFORMAT DxgkVidPnCoreDesktopSurfaceFormat(_In_ D3DDDIFORMAT PinnedFormat);
 

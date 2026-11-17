@@ -312,3 +312,10 @@ DxgkVidPnCoreDesktopSurfaceFormat(
 }
 
 /* EOF */
+
+NTSTATUS
+DxgkFlipCoreScanoutStatus(
+    _In_ NTSTATUS LeaseStatus)
+{
+    return LeaseStatus == STATUS_GRAPHICS_VIDPN_SOURCE_IN_USE ? STATUS_GRAPHICS_PRESENT_OCCLUDED : LeaseStatus;
+}

@@ -104,8 +104,17 @@ static VOID TestQueueOrderAndDepth(VOID)
     { ULONG Observed = DxgkFlipCoreQueuedCount(&Queue); ok_eq_ulong(Observed, 0UL); }
 }
 
+static VOID TestScanoutStatus(VOID)
+{
+    { NTSTATUS Observed = DxgkFlipCoreScanoutStatus(STATUS_GRAPHICS_VIDPN_SOURCE_IN_USE); ok_eq_hex(Observed, STATUS_GRAPHICS_PRESENT_OCCLUDED); }
+    { NTSTATUS Observed = DxgkFlipCoreScanoutStatus(STATUS_GRAPHICS_PRESENT_OCCLUDED); ok_eq_hex(Observed, STATUS_GRAPHICS_PRESENT_OCCLUDED); }
+    { NTSTATUS Observed = DxgkFlipCoreScanoutStatus(STATUS_SUCCESS); ok_eq_hex(Observed, STATUS_SUCCESS); }
+    { NTSTATUS Observed = DxgkFlipCoreScanoutStatus(STATUS_DEVICE_REMOVED); ok_eq_hex(Observed, STATUS_DEVICE_REMOVED); }
+}
+
 START_TEST(DxgkFlipQueue)
 {
+    TestScanoutStatus();
     TestSourceOwnership();
     TestImmediateFlip();
     TestIntervalPacing();
