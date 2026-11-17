@@ -562,6 +562,11 @@ HidClassPDO_PnP(
             //
             //
             BusInformation = ExAllocatePoolWithTag(NonPagedPool, sizeof(PNP_BUS_INFORMATION), HIDCLASS_TAG);
+            if (BusInformation == NULL)
+            {
+                Status = STATUS_INSUFFICIENT_RESOURCES;
+                break;
+            }
 
             //
             // fill in result
