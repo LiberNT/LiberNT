@@ -806,9 +806,14 @@ NtDeleteFile(
 
     if (OpenPacket.ParseCheck == 0)
     {
-        return NT_SUCCESS(Status) ? STATUS_OBJECT_TYPE_MISMATCH : Status;
+        if (!NT_SUCCESS(Status)) return Status;
+
+        /* The name is some other kind of object, and the open by name made a handle to it that the caller never sees */
+        ObCloseHandle(Handle, AccessMode);
+        return STATUS_OBJECT_TYPE_MISMATCH;
     }
 
+    ASSERT(!NT_SUCCESS(Status));
     return OpenPacket.FinalStatus;
 }
 

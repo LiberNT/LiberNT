@@ -99,6 +99,7 @@ list(APPEND SOURCE
     NtCreateSection_ConcurrentImage.c
     NtCreateThread.c
     NtDeleteKey.c
+    NtDeleteFile.c
     NtDuplicateObject.c
     NtDuplicateToken.c
     NtFilterToken.c
