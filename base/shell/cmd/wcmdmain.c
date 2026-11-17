@@ -331,6 +331,214 @@ static void update_input_buffer(WCHAR *inputBuffer, const DWORD inputBufferLengt
     }
 }
 
+#ifdef __REACTOS__
+static int __cdecl compare_entries(const void *first, const void *second)
+{
+    return _wcsicmp(((const WIN32_FIND_DATAW *)first)->cFileName, ((const WIN32_FIND_DATAW *)second)->cFileName);
+}
+
+static BOOL is_command_position(const WCHAR *inputBuffer, int pos)
+{
+    while (pos > 0 && (inputBuffer[pos - 1] == L' ' || inputBuffer[pos - 1] == L'\t' || inputBuffer[pos - 1] == L'@'))
+        pos--;
+    return pos == 0 || wcschr(L"&|(", inputBuffer[pos - 1]) != NULL;
+}
+
+static void add_entry(SEARCH_CONTEXT *sc, const WCHAR *name, DWORD attributes)
+{
+    int i;
+
+    for (i = 0; i < sc->entry_count; i++) {
+        if (!_wcsicmp(sc->fd[i].cFileName, name))
+            return;
+    }
+
+    memset(&sc->fd[sc->entry_count], 0, sizeof(sc->fd[0]));
+    wcsncpy_s(sc->fd[sc->entry_count].cFileName, ARRAY_SIZE(sc->fd[0].cFileName), name, _TRUNCATE);
+    sc->fd[sc->entry_count].dwFileAttributes = attributes;
+    sc->entry_count++;
+    sc->fd = xrealloc(sc->fd, (sc->entry_count + 1) * sizeof(WIN32_FIND_DATAW));
+}
+
+static BOOL has_path_extension(const WCHAR *name, const WCHAR *pathext)
+{
+    const WCHAR *ext = wcsrchr(name, L'.');
+    const WCHAR *item = pathext;
+    size_t len;
+
+    if (!ext)
+        return FALSE;
+
+    len = wcslen(ext);
+    while (*item) {
+        const WCHAR *end = wcschr(item, L';');
+        size_t itemLen = end ? (size_t)(end - item) : wcslen(item);
+
+        if (itemLen == len && !_wcsnicmp(item, ext, len))
+            return TRUE;
+        if (!end)
+            break;
+        item = end + 1;
+    }
+    return FALSE;
+}
+
+static void add_command_entries(SEARCH_CONTEXT *sc)
+{
+    WCHAR prefix[MAX_PATH], path[MAXSTRING], pathext[MAX_PATH], pattern[MAX_PATH], name[10];
+    WIN32_FIND_DATAW fd;
+    WCHAR *dir, *next;
+    HANDLE hff;
+    size_t len;
+    int i, j;
+
+    wcsncpy_s(prefix, ARRAY_SIZE(prefix), sc->searchstr, _TRUNCATE);
+    len = wcslen(prefix);
+    if (len && prefix[len - 1] == L'*')
+        prefix[--len] = L'\0';
+    if (!len || wcspbrk(prefix, L"\\/:*?\""))
+        return;
+
+    for (i = 0; i <= WCMD_EXIT; i++) {
+        if (inbuilt[i][0] && !_wcsnicmp(inbuilt[i], prefix, len)) {
+            for (j = 0; inbuilt[i][j]; j++)
+                name[j] = towlower(inbuilt[i][j]);
+            name[j] = L'\0';
+            add_entry(sc, name, 0);
+        }
+    }
+
+    if (!GetEnvironmentVariableW(L"PATHEXT", pathext, ARRAY_SIZE(pathext)))
+        wcscpy(pathext, L".COM;.EXE;.BAT;.CMD");
+    if (!GetEnvironmentVariableW(L"PATH", path, ARRAY_SIZE(path)))
+        return;
+
+    for (dir = path; dir && *dir; dir = next) {
+        next = wcschr(dir, L';');
+        if (next)
+            *next++ = L'\0';
+        if (!*dir)
+            continue;
+
+        wcsncpy_s(pattern, ARRAY_SIZE(pattern), dir, _TRUNCATE);
+        if (pattern[wcslen(pattern) - 1] != L'\\')
+            wcsncat_s(pattern, ARRAY_SIZE(pattern), L"\\", _TRUNCATE);
+        wcsncat_s(pattern, ARRAY_SIZE(pattern), prefix, _TRUNCATE);
+        wcsncat_s(pattern, ARRAY_SIZE(pattern), L"*", _TRUNCATE);
+
+        hff = FindFirstFileW(pattern, &fd);
+        if (hff == INVALID_HANDLE_VALUE)
+            continue;
+        do {
+            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && has_path_extension(fd.cFileName, pathext))
+                add_entry(sc, fd.cFileName, fd.dwFileAttributes);
+        } while (FindNextFileW(hff, &fd));
+        FindClose(hff);
+    }
+}
+
+static int common_prefix_length(const SEARCH_CONTEXT *sc)
+{
+    int i, len = lstrlenW(sc->fd[0].cFileName);
+
+    for (i = 1; i < sc->entry_count; i++) {
+        int j = 0;
+
+        while (j < len && towlower(sc->fd[i].cFileName[j]) == towlower(sc->fd[0].cFileName[j]))
+            j++;
+        len = j;
+    }
+    return len;
+}
+
+static WCHAR read_key(const HANDLE hInput)
+{
+    INPUT_RECORD record;
+    DWORD count;
+
+    while (ReadConsoleInputW(hInput, &record, 1, &count) && count) {
+        if (record.EventType == KEY_EVENT && record.Event.KeyEvent.bKeyDown &&
+            record.Event.KeyEvent.uChar.UnicodeChar) {
+            return record.Event.KeyEvent.uChar.UnicodeChar;
+        }
+    }
+    return 0;
+}
+
+static void list_entries(const HANDLE hInput, const HANDLE hOutput, const SEARCH_CONTEXT *sc,
+                         CONSOLE_SCREEN_BUFFER_INFO *start)
+{
+    CONSOLE_SCREEN_BUFFER_INFO info;
+    WCHAR prefix[MAXSTRING], line[MAXSTRING], question[96];
+    DWORD written, saved = 0;
+    COORD origin;
+    int width, height, columnWidth = 0, columns, rows, row, column, i;
+
+    origin.X = 0;
+    origin.Y = start->dwCursorPosition.Y;
+    if (start->dwCursorPosition.X > 0) {
+        ReadConsoleOutputCharacterW(hOutput, prefix, min((DWORD)start->dwCursorPosition.X, ARRAY_SIZE(prefix) - 1),
+                                    origin, &saved);
+    }
+
+    GetConsoleScreenBufferInfo(hOutput, &info);
+    width = max(info.dwSize.X, 1);
+    height = info.srWindow.Bottom - info.srWindow.Top + 1;
+
+    for (i = 0; i < sc->entry_count; i++) {
+        int len = lstrlenW(sc->fd[i].cFileName) + ((sc->fd[i].dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? 1 : 0);
+
+        columnWidth = max(columnWidth, len + 2);
+    }
+    columnWidth = min(columnWidth, width);
+    columns = max(width / columnWidth, 1);
+    rows = (sc->entry_count + columns - 1) / columns;
+
+    WriteConsoleW(hOutput, L"\r\n", 2, &written, NULL);
+    if (rows > height - 2) {
+        WCHAR answer;
+
+        _snwprintf(question, ARRAY_SIZE(question) - 1, L"Display all %d possibilities? (y or n) ", sc->entry_count);
+        question[ARRAY_SIZE(question) - 1] = L'\0';
+        WriteConsoleW(hOutput, question, lstrlenW(question), &written, NULL);
+        answer = read_key(hInput);
+        WriteConsoleW(hOutput, L"\r\n", 2, &written, NULL);
+        if (answer != L'y' && answer != L'Y')
+            rows = 0;
+    }
+
+    for (row = 0; row < rows; row++) {
+        int used = 0;
+
+        for (column = 0; column < columns; column++) {
+            const WIN32_FIND_DATAW *entry;
+            int len;
+
+            i = column * rows + row;
+            if (i >= sc->entry_count)
+                break;
+
+            entry = &sc->fd[i];
+            len = _snwprintf(&line[used], ARRAY_SIZE(line) - used - 1, L"%s%s", entry->cFileName,
+                             (entry->dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ? L"\\" : L"");
+            if (len < 0)
+                break;
+            used += len;
+            while (column + 1 < columns && (column + 1) * rows + row < sc->entry_count &&
+                   len < columnWidth && used < (int)ARRAY_SIZE(line) - 1) {
+                line[used++] = L' ';
+                len++;
+            }
+        }
+        WriteConsoleW(hOutput, line, used, &written, NULL);
+        WriteConsoleW(hOutput, L"\r\n", 2, &written, NULL);
+    }
+
+    WriteConsoleW(hOutput, prefix, saved, &written, NULL);
+    GetConsoleScreenBufferInfo(hOutput, start);
+}
+#endif
+
 /* Intended as a mostly drop-in replacement for ReadConsole, but with tab-completion support.
  */
 BOOL WCMD_read_console(const HANDLE hInput, WCHAR *inputBuffer, const DWORD inputBufferLength, LPDWORD numRead)
@@ -344,6 +552,9 @@ BOOL WCMD_read_console(const HANDLE hInput, WCHAR *inputBuffer, const DWORD inpu
     BOOL done = FALSE;
     BOOL ret = FALSE;
     int maxLen = 0;  /* Track maximum length in case user fetches a long string from a previous iteration in history. */
+#ifdef __REACTOS__
+    BOOL listed = FALSE;
+#endif
 
     if (!VerifyConsoleIoHandle(hInput) || !inputBuffer || !inputBufferLength) {
         return FALSE;
@@ -426,7 +637,58 @@ BOOL WCMD_read_console(const HANDLE hInput, WCHAR *inputBuffer, const DWORD inpu
 
                 free_directory_entry_list(&sc);
                 build_directory_entry_list(&sc);
+#ifdef __REACTOS__
+                if (!sc.is_dir_search && is_command_position(inputBuffer, sc.search_pos))
+                    add_command_entries(&sc);
+                if (sc.entry_count > 1)
+                    qsort(sc.fd, sc.entry_count, sizeof(sc.fd[0]), compare_entries);
+                listed = FALSE;
+#endif
             }
+
+#ifdef __REACTOS__
+            if (sc.entry_count > 1 && !listed) {
+                WCHAR *before = xstrdupW(inputBuffer);
+                int typed, prefix;
+
+                if (!sc.insert_pos) {
+                    wcsncpy_s(&inputBuffer[sc.search_pos], inputBufferLength - sc.search_pos, sc.searchstr, _TRUNCATE);
+                    find_insert_pos(inputBuffer, lstrlenW(inputBuffer), &sc);
+                }
+
+                typed = lstrlenW(&inputBuffer[sc.insert_pos]);
+                while (typed && (inputBuffer[sc.insert_pos + typed - 1] == L'*' ||
+                                 inputBuffer[sc.insert_pos + typed - 1] == L'\"')) {
+                    typed--;
+                }
+
+                prefix = common_prefix_length(&sc);
+                if (prefix > typed) {
+                    memset(&sc.fd[sc.entry_count], 0, sizeof(sc.fd[0]));
+                    wcsncpy_s(sc.fd[sc.entry_count].cFileName, ARRAY_SIZE(sc.fd[0].cFileName),
+                              sc.fd[0].cFileName, prefix);
+                    sc.current_entry = sc.entry_count;
+                    update_input_buffer(inputBuffer, inputBufferLength, &sc);
+                    sc.current_entry = -1;
+                } else {
+                    wcsncpy_s(inputBuffer, inputBufferLength, before, _TRUNCATE);
+                    sc.insert_pos = 0;
+                    list_entries(hInput, hOutput, &sc, &startConsoleInfo);
+                    lastConsoleInfo = startConsoleInfo;
+                    maxLen = 0;
+                    listed = TRUE;
+                }
+                free(before);
+
+                free(lastResult);
+                lastResult = xstrdupW(inputBuffer);
+                curPos = lstrlenW(inputBuffer);
+                if (curPos > maxLen) {
+                    maxLen = curPos;
+                }
+                break;
+            }
+#endif
 
             if (sc.entry_count) {
                 get_next_matching_directory_entry(&sc, (inputControl.dwControlKeyState & SHIFT_PRESSED) ? TRUE : FALSE);
