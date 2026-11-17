@@ -36,6 +36,7 @@ KiAmd64PrepareInterruptDispatch(
     _Inout_ PKINTERRUPT Interrupt)
 {
     RtlCopyMemory(Interrupt->DispatchCode, KiInterruptDispatchTemplate, sizeof(Interrupt->DispatchCode));
+    Interrupt->DispatchAddress = KiInterruptDispatch;
 }
 
 /* The IDT is per processor: run on the target and hold the dispatcher lock while its vector changes */
@@ -75,6 +76,7 @@ KiChainHeadOf(
     PKINTERRUPT Head = CONTAINING_RECORD(Handler, KINTERRUPT, DispatchCode);
 
     ASSERT(Head->Connected);
+    ASSERT(Head->DispatchAddress == KiInterruptDispatch);
     ASSERT(Head->Vector == Interrupt->Vector);
     ASSERT(Head->Number == Interrupt->Number);
     return Head;
@@ -86,8 +88,9 @@ KiClaimFreeVector(
     _Inout_ PKINTERRUPT Interrupt,
     _In_ PVOID UnexpectedHandler)
 {
+    ASSERT(Interrupt->DispatchAddress == KiInterruptDispatch);
+
     InitializeListHead(&Interrupt->InterruptListEntry);
-    Interrupt->DispatchAddress = KiInterruptDispatch;
     KeRegisterInterruptHandler(Interrupt->Vector, Interrupt->DispatchCode);
 
     if (HalEnableSystemInterrupt(Interrupt->Vector, Interrupt->Irql, Interrupt->Mode))
@@ -178,6 +181,9 @@ KiLeaveChain(
         /* The next interrupt becomes the head: the list moves to it and the IDT points at its stub */
         PLIST_ENTRY NextEntry = Others->Flink;
         PKINTERRUPT Next = CONTAINING_RECORD(NextEntry, KINTERRUPT, InterruptListEntry);
+
+        ASSERT(Next->Connected);
+        ASSERT(Next->DispatchAddress == KiInterruptDispatch);
 
         RemoveTailList(NextEntry);
         KeRegisterInterruptHandler(Interrupt->Vector, Next->DispatchCode);
