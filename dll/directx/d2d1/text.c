@@ -727,9 +727,27 @@ static HRESULT d2d_device_context_get_text_rendering_mode(struct d2d_device_cont
 
     if (*rendering_mode == DWRITE_RENDERING_MODE_DEFAULT)
     {
-        if (FAILED(hr = IDWriteFontFace_GetRecommendedRenderingMode(glyph_run->fontFace, glyph_run->fontEmSize,
-                max(context->desc.dpiX, context->desc.dpiY) / 96.0f,
-                measuring_mode, rendering_params, rendering_mode)))
+        const D2D1_MATRIX_3X2_F *world = &context->drawing_state.transform;
+        DWRITE_MATRIX transform = { world->_11, world->_12, world->_21, world->_22, world->_31, world->_32 };
+        DWRITE_GRID_FIT_MODE grid_fit_mode;
+        IDWriteFontFace2 *face2;
+
+        /* The world transform scales the em size the outline threshold is measured against. */
+        if (SUCCEEDED(IDWriteFontFace_QueryInterface(glyph_run->fontFace, &IID_IDWriteFontFace2, (void **)&face2)))
+        {
+            hr = IDWriteFontFace2_GetRecommendedRenderingMode(face2, glyph_run->fontEmSize,
+                    context->desc.dpiX, context->desc.dpiY, &transform, glyph_run->isSideways,
+                    DWRITE_OUTLINE_THRESHOLD_ANTIALIASED, measuring_mode, rendering_params, rendering_mode,
+                    &grid_fit_mode);
+            IDWriteFontFace2_Release(face2);
+        }
+        else
+        {
+            hr = IDWriteFontFace_GetRecommendedRenderingMode(glyph_run->fontFace, glyph_run->fontEmSize,
+                    max(context->desc.dpiX, context->desc.dpiY) / 96.0f,
+                    measuring_mode, rendering_params, rendering_mode);
+        }
+        if (FAILED(hr))
         {
             ERR("Failed to get recommended rendering mode, hr %#lx.\n", hr);
             *rendering_mode = DWRITE_RENDERING_MODE_OUTLINE;
