@@ -357,6 +357,32 @@ static void TestAdvance(void)
     CHECK(Entity.Deadline == ORIGIN + 500 + (SLICE << KiEevdfShift(8)));
 }
 
+static void TestForfeit(void)
+{
+    KI_EEVDF_QUEUE Queue;
+    KI_EEVDF_ENTITY Yielder, Other;
+    ULONG64 Request = SLICE << KiEevdfShift(8);
+    ULONG i;
+
+    /* Turns offered one after the other do not add up: the deadline stays within two requests of what was served */
+    Make(&Yielder, 8, 0, 0);
+    Yielder.Deadline = Yielder.Vruntime + Request;
+    for (i = 0; i < 100000; i++)
+        KiEevdfForfeit(&Yielder, SLICE);
+    CHECK(Yielder.Vruntime == ORIGIN);
+    CHECK(Yielder.Deadline == ORIGIN + 2 * Request);
+
+    /* So the turn of a thread that offered it many times still ends, and the one waiting behind it is picked */
+    Start(&Queue);
+    Make(&Other, 8, 0, 0);
+    Other.Deadline = Other.Vruntime + Request;
+    KiEevdfInsert(&Queue, &Other);
+
+    KiEevdfAdvance(&Yielder, 2 * SLICE, SLICE);
+    CHECK(Yielder.SliceEnded);
+    CHECK(KiEevdfPick(&Queue, &Yielder, &Yielder) == &Other);
+}
+
 static void TestReweight(void)
 {
     static const UCHAR To[] = {1, 4, 9, 12, 15};
@@ -550,6 +576,7 @@ int main(void)
     TestPlacement();
     TestRepayment();
     TestAdvance();
+    TestForfeit();
     TestReweight();
     TestShares();
     TestBookkeeping();

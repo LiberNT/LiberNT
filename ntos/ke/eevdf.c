@@ -382,8 +382,17 @@ KiEevdfForfeit(
     _Inout_ PKI_EEVDF_ENTITY Entity,
     _In_ ULONG64 Slice)
 {
+    ULONG64 Request = Slice << KiEevdfShift(Entity->Priority);
+    ULONG64 Latest = Entity->Vruntime + 2 * Request;
+
     ASSERT(!Entity->Listed);
-    Entity->Deadline += Slice << KiEevdfShift(Entity->Priority);
+
+    /* Turns given up one after the other count once: a deadline pushed further would never end the turn on the clock */
+    Entity->Deadline += Request;
+    if ((LONG64)(Entity->Deadline - Latest) > 0)
+        Entity->Deadline = Latest;
+
+    ASSERT((LONG64)(Entity->Deadline - Entity->Vruntime) <= (LONG64)(2 * Request));
 }
 
 static
