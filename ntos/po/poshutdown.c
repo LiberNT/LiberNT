@@ -252,6 +252,29 @@ PoRequestShutdownWait(
     return Status;
 }
 
+static
+VOID
+PopHoldUserThreads(VOID)
+{
+    PETHREAD CurrentThread = PsGetCurrentThread();
+    PEPROCESS Process;
+    PETHREAD Thread;
+
+    PAGED_CODE();
+    ASSERT(PopShutdownStarted != FALSE);
+
+    for (Process = PsGetNextProcess(NULL); Process != NULL; Process = PsGetNextProcess(Process))
+    {
+        for (Thread = PsGetNextProcessThread(Process, NULL);
+             Thread != NULL;
+             Thread = PsGetNextProcessThread(Process, Thread))
+        {
+            if (Thread != CurrentThread && !Thread->SystemThread)
+                (VOID)PsSuspendThread(Thread, NULL);
+        }
+    }
+}
+
 /*
  * Stops the machine with everything in order: what asked to run runs, the
  * volumes are written out, the devices are told, and then it is over.
@@ -276,6 +299,8 @@ PopGracefulShutdown(
 
     DPRINT1("Shutdown: notifying the drivers registered for shutdown\n");
     IoShutdownSystem(0);
+    DPRINT1("Shutdown: holding the user-mode threads\n");
+    PopHoldUserThreads();
     DPRINT1("Shutdown: flushing the registry\n");
     PopRecordShutdownTime();
     CmShutdownSystem();
