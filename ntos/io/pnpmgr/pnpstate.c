@@ -351,6 +351,27 @@ PiTakeInstanceName(
     KeLeaveCriticalRegion();
 }
 
+/* Every new child's firmware setting is held before any of its siblings is given resources */
+static
+VOID
+PiReserveBootConfiguration(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    PCM_RESOURCE_LIST BootResources;
+
+    PAGED_CODE();
+
+    if (DeviceNode->BootResources != NULL)
+        return;
+
+    if (NT_SUCCESS(PiIrpQueryResources(DeviceNode, &BootResources)) && BootResources != NULL)
+    {
+        DeviceNode->BootResources = BootResources;
+        PiSetDevNodeFlag(DeviceNode, DNF_HAS_BOOT_CONFIG);
+        IopResDbReserveBoot(DeviceNode, BootResources);
+    }
+}
+
 static
 NTSTATUS
 PiQueryAndSaveIds(
@@ -453,17 +474,8 @@ PiQueryAndSaveIds(
 
     PiQueryBusInformation(DeviceNode);
 
-    if (DeviceNode->BootResources == NULL)
-    {
-        PCM_RESOURCE_LIST BootResources;
-
-        /* TODO: publish the boot configuration as LogConf\BootConfig under the instance key */
-        if (NT_SUCCESS(PiIrpQueryResources(DeviceNode, &BootResources)) && BootResources != NULL)
-        {
-            DeviceNode->BootResources = BootResources;
-            PiSetDevNodeFlag(DeviceNode, DNF_HAS_BOOT_CONFIG);
-        }
-    }
+    /* TODO: publish the boot configuration as LogConf\BootConfig under the instance key */
+    PiReserveBootConfiguration(DeviceNode);
 
     /* The capability query came before the bus was known */
     if (HaveCapabilities) PiUpdateRemovalPolicy(DeviceNode, (BOOLEAN)Capabilities.Removable);
@@ -1488,6 +1500,8 @@ PiProcessNewChildren(
         PiInsertDevNode(ChildNode, DeviceNode);
 
         Child->Flags |= DO_BUS_ENUMERATED_DEVICE;
+
+        PiReserveBootConfiguration(ChildNode);
 
         ObDereferenceObject(Child);
     }

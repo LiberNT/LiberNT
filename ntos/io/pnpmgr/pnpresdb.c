@@ -39,6 +39,7 @@ KMUTEX IopResourceAssignmentLock;
 
 static PI_RES_BUCKET IopResBuckets[PiResClassMax];
 static UCHAR IopResDbHalReport;
+static UCHAR IopResDbBootClaim;
 static BOOLEAN IopResDbReady = FALSE;
 static volatile LONG IopResDbSeedState = 0;
 static KEVENT IopResDbSeededEvent;
@@ -214,7 +215,7 @@ IopResDbConflict(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR a, _In_opt_ PDEVICE_NODE a
 /* Conflicts are logged but still recorded (non-enforcing). */
 static
 NTSTATUS
-IopResDbReserveList(_In_opt_ PDEVICE_NODE DeviceNode, _In_opt_ PVOID Claimant, _In_opt_ PCM_RESOURCE_LIST ResourceList, _In_ BOOLEAN SkipInternalInterrupts, _Out_opt_ PBOOLEAN Conflict)
+IopResDbReserveList(_In_opt_ PDEVICE_NODE DeviceNode, _In_opt_ PVOID Claimant, _In_opt_ PCM_RESOURCE_LIST ResourceList, _In_ BOOLEAN SkipInternalInterrupts, _In_ BOOLEAN AddressesOnly, _Out_opt_ PBOOLEAN Conflict)
 {
     PCM_FULL_RESOURCE_DESCRIPTOR full;
     ULONG i, j;
@@ -240,6 +241,8 @@ IopResDbReserveList(_In_opt_ PDEVICE_NODE DeviceNode, _In_opt_ PVOID Claimant, _
             BOOLEAN Conflicted = FALSE;
 
             if (!IopResClassFromType(desc->Type, &cls))
+                continue;
+            if (AddressesOnly && cls != PiResClassMemory && cls != PiResClassPort)
                 continue;
             if (SkipInternalInterrupts && full->InterfaceType == Internal && desc->Type == CmResourceTypeInterrupt)
                 continue;
@@ -279,17 +282,75 @@ IopResDbReserveList(_In_opt_ PDEVICE_NODE DeviceNode, _In_opt_ PVOID Claimant, _
     return STATUS_SUCCESS;
 }
 
+static
+VOID
+IopResDbReleaseOwnerClaim(_In_ PDEVICE_NODE DeviceNode, _In_ PVOID Claimant)
+{
+    ULONG cls;
+
+    ASSERT(DeviceNode != NULL);
+    ASSERT(Claimant != NULL);
+    ASSERT(IopResourceAssignmentLock.OwnerThread == KeGetCurrentThread());
+
+    for (cls = 0; cls < PiResClassMax; cls++)
+    {
+        PLIST_ENTRY le;
+        KIRQL irql;
+
+        KeAcquireSpinLock(&IopResBuckets[cls].Lock, &irql);
+        le = IopResBuckets[cls].List.Flink;
+        while (le != &IopResBuckets[cls].List)
+        {
+            PPI_RES_ENTRY entry = CONTAINING_RECORD(le, PI_RES_ENTRY, ListEntry);
+            le = le->Flink;
+            if (entry->Owner == DeviceNode && entry->Claimant == Claimant)
+            {
+                RemoveEntryList(&entry->ListEntry);
+                ExFreePoolWithTag(entry, TAG_IO);
+            }
+        }
+        KeReleaseSpinLock(&IopResBuckets[cls].Lock, irql);
+    }
+}
+
 NTSTATUS
 IopResDbReserve(_In_ PDEVICE_NODE DeviceNode, _In_opt_ PCM_RESOURCE_LIST ResourceList, _Out_opt_ PBOOLEAN Conflict)
 {
-    return IopResDbReserveList(DeviceNode, NULL, ResourceList, FALSE, Conflict);
+    NTSTATUS Status;
+
+    ASSERT(DeviceNode != NULL);
+    if (!IopResDbReady)
+        return IopResDbReserveList(DeviceNode, NULL, ResourceList, FALSE, FALSE, Conflict);
+
+    KeWaitForSingleObject(&IopResourceAssignmentLock, Executive, KernelMode, FALSE, NULL);
+    IopResDbReleaseOwnerClaim(DeviceNode, &IopResDbBootClaim);
+    Status = IopResDbReserveList(DeviceNode, NULL, ResourceList, FALSE, FALSE, Conflict);
+    KeReleaseMutex(&IopResourceAssignmentLock, FALSE);
+    return Status;
+}
+
+/* The firmware's addresses for a device are held from its enumeration until it gets its own, so a sibling started first cannot take them */
+NTSTATUS
+IopResDbReserveBoot(_In_ PDEVICE_NODE DeviceNode, _In_opt_ PCM_RESOURCE_LIST BootResources)
+{
+    NTSTATUS Status;
+
+    ASSERT(DeviceNode != NULL);
+    if (!IopResDbReady || BootResources == NULL)
+        return STATUS_SUCCESS;
+
+    KeWaitForSingleObject(&IopResourceAssignmentLock, Executive, KernelMode, FALSE, NULL);
+    IopResDbReleaseOwnerClaim(DeviceNode, &IopResDbBootClaim);
+    Status = IopResDbReserveList(DeviceNode, &IopResDbBootClaim, BootResources, FALSE, TRUE, NULL);
+    KeReleaseMutex(&IopResourceAssignmentLock, FALSE);
+    return Status;
 }
 
 /* Check one candidate descriptor against the database; returns the conflicting entry. */
 static
 BOOLEAN
 IopResDbCheck(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate, _In_opt_ PDEVICE_NODE CandidateOwner, _In_opt_ PVOID Claimant,
-              _In_ BOOLEAN IgnoreHalReport, _Out_opt_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Conflicting)
+              _In_ BOOLEAN BootSetting, _Out_opt_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Conflicting)
 {
     PI_RES_CLASS cls;
     PLIST_ENTRY le;
@@ -323,7 +384,8 @@ IopResDbCheck(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate, _In_opt_ PDEVICE_N
             continue;
         if (Claimant != NULL && entry->Claimant == Claimant)
             continue;
-        if (IgnoreHalReport && entry->Claimant == &IopResDbHalReport)
+        /* A firmware setting is not refused for what the HAL reports or another device's firmware setting holds */
+        if (BootSetting && (entry->Claimant == &IopResDbHalReport || entry->Claimant == &IopResDbBootClaim))
             continue;
         if (IopResDbConflict(Candidate, CandidateOwner, &entry->Desc, entry->Owner))
         {
@@ -376,6 +438,89 @@ BOOLEAN
 IopResDbCheckBootDescriptor(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Candidate, _In_opt_ PDEVICE_NODE CandidateOwner, _In_opt_ PVOID Claimant)
 {
     return IopResDbCheck(Candidate, CandidateOwner, Claimant, TRUE, NULL);
+}
+
+static
+BOOLEAN
+IopResDbIsWindow(_In_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Desc)
+{
+    switch (Desc->Type)
+    {
+        case CmResourceTypeMemory:
+        case CmResourceTypeMemoryLarge:
+            return (Desc->Flags & CM_RESOURCE_MEMORY_WINDOW_DECODE) != 0;
+        case CmResourceTypePort:
+            return (Desc->Flags & CM_RESOURCE_PORT_WINDOW_DECODE) != 0;
+        default:
+            return FALSE;
+    }
+}
+
+/*
+ * The windows of the nearest ancestor that decodes any, the way a bridge or
+ * a root bus forwards addresses to the devices below it. Returns FALSE when
+ * no ancestor decodes windows.
+ */
+BOOLEAN
+IopResDbGetDecodingWindows(
+    _In_ PDEVICE_NODE DeviceNode,
+    _In_ UCHAR Type,
+    _Out_writes_to_(MaxWindows, *WindowCount) PCM_PARTIAL_RESOURCE_DESCRIPTOR Windows,
+    _In_ ULONG MaxWindows,
+    _Out_ PULONG WindowCount)
+{
+    static const PI_RES_CLASS Classes[] = { PiResClassMemory, PiResClassPort };
+    PDEVICE_NODE Ancestor;
+    PI_RES_CLASS Wanted;
+    BOOLEAN Decodes = FALSE;
+    BOOLEAN Truncated = FALSE;
+    ULONG Index;
+
+    ASSERT(DeviceNode != NULL);
+    ASSERT(Windows != NULL && MaxWindows != 0);
+    ASSERT(KeGetCurrentIrql() < DISPATCH_LEVEL);
+
+    *WindowCount = 0;
+    if (!IopResDbReady || !IopResClassFromType(Type, &Wanted) ||
+        (Wanted != PiResClassMemory && Wanted != PiResClassPort))
+    {
+        return FALSE;
+    }
+
+    for (Ancestor = DeviceNode->Parent; Ancestor != NULL && !Decodes; Ancestor = Ancestor->Parent)
+    {
+        for (Index = 0; Index < RTL_NUMBER_OF(Classes); Index++)
+        {
+            PI_RES_CLASS cls = Classes[Index];
+            PLIST_ENTRY le;
+            KIRQL irql;
+
+            KeAcquireSpinLock(&IopResBuckets[cls].Lock, &irql);
+            for (le = IopResBuckets[cls].List.Flink; le != &IopResBuckets[cls].List; le = le->Flink)
+            {
+                PPI_RES_ENTRY entry = CONTAINING_RECORD(le, PI_RES_ENTRY, ListEntry);
+
+                if (entry->Owner != Ancestor || entry->Claimant == &IopResDbBootClaim || !IopResDbIsWindow(&entry->Desc))
+                    continue;
+
+                Decodes = TRUE;
+                if (cls != Wanted)
+                    continue;
+                if (*WindowCount < MaxWindows)
+                    Windows[(*WindowCount)++] = entry->Desc;
+                else
+                    Truncated = TRUE;
+            }
+            KeReleaseSpinLock(&IopResBuckets[cls].Lock, irql);
+        }
+    }
+
+    if (Truncated)
+        DPRINT1("PnP: more than %lu windows above %wZ, the rest are not searched\n", MaxWindows, &DeviceNode->InstancePath);
+
+    ASSERT(*WindowCount <= MaxWindows);
+    ASSERT(Decodes || *WindowCount == 0);
+    return Decodes;
 }
 
 BOOLEAN
@@ -464,7 +609,7 @@ IopResDbReplaceClaim(_In_opt_ PDEVICE_NODE DeviceNode, _In_ PVOID Claimant, _In_
         return STATUS_SUCCESS;
     KeWaitForSingleObject(&IopResourceAssignmentLock, Executive, KernelMode, FALSE, NULL);
     IopResDbReleaseClaim(Claimant);
-    IopResDbReserveList(DeviceNode, Claimant, ResourceList, FALSE, NULL);
+    IopResDbReserveList(DeviceNode, Claimant, ResourceList, FALSE, FALSE, NULL);
     KeReleaseMutex(&IopResourceAssignmentLock, FALSE);
     return STATUS_SUCCESS;
 }
@@ -620,7 +765,7 @@ IopResDbSeedFromRegistry(VOID)
                 /* Only raw lists; skip translated copies */
                 list = (PCM_RESOURCE_LIST)value->Data;
                 if (wcsstr(valueName->Name, L".Translated") == NULL && value->Type == REG_RESOURCE_LIST && IopIsResourceListValid(list, value->DataLength) && list->Count != 0)
-                    IopResDbReserveList(NULL, halKey ? &IopResDbHalReport : NULL, list, halKey, NULL);
+                    IopResDbReserveList(NULL, halKey ? &IopResDbHalReport : NULL, list, halKey, FALSE, NULL);
 
                 ExFreePoolWithTag(valueName, TAG_IO);
                 ExFreePoolWithTag(value, TAG_IO);
