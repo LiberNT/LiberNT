@@ -578,7 +578,9 @@ MmSetProcessSession(
                 break;
             }
         }
-        if (Target == NULL || MI_PROCESS_OF(Process) == NULL || MiIsSessionLeader(Process))
+        if (Target == NULL && Current == NULL && SessionId == 0)
+            Status = STATUS_SUCCESS;
+        else if (Target == NULL || MI_PROCESS_OF(Process) == NULL || MiIsSessionLeader(Process))
             Status = STATUS_INVALID_PARAMETER;
         else
         {
