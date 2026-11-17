@@ -99,6 +99,19 @@ VidSchPolicyIgnoreEngineInterrupt(
     return EngineState == ResettingState;
 }
 
+/* A DMA completion naming a fence the node already completed carries no new completion: the miniport reports the
+ * latest completed fence, which it may repeat. */
+FORCEINLINE
+BOOLEAN
+VidSchPolicyCompletionAlreadyRetired(
+    _In_ BOOLEAN PreemptionNotification,
+    _In_ ULONG FenceId,
+    _In_ ULONG LastCompletedFenceId)
+{
+    return !PreemptionNotification && FenceId != 0 && LastCompletedFenceId != 0 &&
+           (LONG)(LastCompletedFenceId - FenceId) >= 0;
+}
+
 /* A packet an engine reset aborted: after the last completed fence and up to the last aborted one, in signed 32-bit fence distance. */
 FORCEINLINE
 BOOLEAN

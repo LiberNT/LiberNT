@@ -8,12 +8,26 @@
 #include "vidsch_policy_core.h"
 #include "fault_policy_core.h"
 
+static VOID
+TestCompletionAlreadyRetired(VOID)
+{
+    ok_bool_true(VidSchPolicyCompletionAlreadyRetired(FALSE, 40542, 40542), "repeated latest fence");
+    ok_bool_true(VidSchPolicyCompletionAlreadyRetired(FALSE, 40500, 40542), "older fence");
+    ok_bool_false(VidSchPolicyCompletionAlreadyRetired(FALSE, 40543, 40542), "next fence");
+    ok_bool_false(VidSchPolicyCompletionAlreadyRetired(TRUE, 40542, 40542), "preemption");
+    ok_bool_false(VidSchPolicyCompletionAlreadyRetired(FALSE, 0, 40542), "fence zero");
+    ok_bool_false(VidSchPolicyCompletionAlreadyRetired(FALSE, 5, 0), "nothing completed");
+    ok_bool_true(VidSchPolicyCompletionAlreadyRetired(FALSE, 0xFFFFFFF0, 0x10), "wrapped completion");
+    ok_bool_false(VidSchPolicyCompletionAlreadyRetired(FALSE, 0x10, 0xFFFFFFF0), "wrapped next fence");
+}
+
 START_TEST(DxgkGpuFaultPolicy)
 {
     PVOID Context = (PVOID)(ULONG_PTR)0x1111;
     PVOID Device = (PVOID)(ULONG_PTR)0x2222;
     SOFTGPU_FAULT_RETIREMENT Retirement;
 
+    TestCompletionAlreadyRetired();
     ok(VidSchPolicyDependentNodes(0, 0, 4) == 0, "no dependents\n");
     ok(VidSchPolicyDependentNodes(0x1, 0, 4) == 0, "the reset node is not its own dependent\n");
     ok(VidSchPolicyDependentNodes(0x7, 1, 4) == 0x5, "dependents without the reset node\n");
