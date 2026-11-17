@@ -2556,7 +2556,7 @@ UDFInvalidateVolumes(
                 if(!Buf) {
                     UDFPrintErr(("UDFInvalidateVolumes: STATUS_INSUFFICIENT_RESOURCES (2)\n"));
                     UDFReleaseResource(&(Vcb->VCBResource));
-                    MyFreePool__(NewVpb);
+                    UDFReleaseResource(&(UDFGlobalData.GlobalDataResource));
                     Irp->IoStatus.Status = STATUS_INSUFFICIENT_RESOURCES;
                     return STATUS_INSUFFICIENT_RESOURCES;
                 }
