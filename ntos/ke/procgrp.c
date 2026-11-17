@@ -1891,6 +1891,34 @@ KeQueryTotalCycleTimeProcess(
     return (ULONG64)InterlockedCompareExchange64((PLONG64)&Process->CycleTime, 0, 0);
 }
 
+static
+VOID
+NTAPI
+KiChargeRunningThreadDpc(
+    _In_ PKDPC Dpc,
+    _In_opt_ PVOID DeferredContext,
+    _In_opt_ PVOID SystemArgument1,
+    _In_opt_ PVOID SystemArgument2)
+{
+    PKTHREAD Thread = SystemArgument1;
+    PKPRCB Prcb;
+    BOOLEAN Enabled;
+
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    ASSERT(DeferredContext != NULL);
+    ASSERT(Thread != NULL);
+
+    Enabled = KeDisableInterrupts();
+    Prcb = KeGetCurrentPrcb();
+    if (Prcb->CurrentThread == Thread)
+        KiChargeThreadCycleTime(Prcb, Thread);
+    KeRestoreInterrupts(Enabled);
+
+    KeSetEvent(DeferredContext, IO_NO_INCREMENT, FALSE);
+}
+
 /*
  * @implemented
  */
@@ -1900,10 +1928,37 @@ KeQueryTotalCycleTimeThread(
     _Inout_ PKTHREAD Thread,
     _Out_ PULONG64 CycleTimeStamp)
 {
-    if (CycleTimeStamp != NULL)
-        *CycleTimeStamp = (ULONG64)KeQueryPerformanceCounter(NULL).QuadPart;
+    KEVENT Done;
+    KDPC Dpc;
+    BOOLEAN Enabled;
+    ULONG Processor;
 
-    return Thread->CycleTime;
+    ASSERT(CycleTimeStamp != NULL);
+
+    /* FIXME: above APC_LEVEL the turn another processor is running is not counted */
+    if (Thread == KeGetCurrentThread())
+    {
+        Enabled = KeDisableInterrupts();
+        KiChargeThreadCycleTime(KeGetCurrentPrcb(), Thread);
+        KeRestoreInterrupts(Enabled);
+    }
+    else if (KeGetCurrentIrql() <= APC_LEVEL &&
+             ReadUCharAcquire(&Thread->State) == Running)
+    {
+        /* The turn in progress is only charged on the thread's own processor */
+        Processor = Thread->NextProcessor;
+        ASSERT(Processor < (ULONG)KeNumberProcessors);
+        KeInitializeEvent(&Done, NotificationEvent, FALSE);
+        KeInitializeDpc(&Dpc, KiChargeRunningThreadDpc, &Done);
+        KeSetTargetProcessorDpc(&Dpc, (CCHAR)Processor);
+        KeSetImportanceDpc(&Dpc, HighImportance);
+        KeInsertQueueDpc(&Dpc, Thread, NULL);
+        KeWaitForSingleObject(&Done, Executive, KernelMode, FALSE, NULL);
+    }
+
+    *CycleTimeStamp = KiReadCycleCounter();
+
+    return (ULONG64)InterlockedCompareExchange64((PLONG64)&Thread->CycleTime, 0, 0);
 }
 
 /*

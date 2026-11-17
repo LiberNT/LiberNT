@@ -309,6 +309,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_ke/KeCacheInvalidation.c
     ntos_ke/KeClockKeepAlive.c
     ntos_ke/KeClockWatchdog.c
+    ntos_ke/KeCycleTime.c
     ntos_ke/KeModern.c
     ntos_ke/KeMutex.c
     ntos_ke/KePcr.c

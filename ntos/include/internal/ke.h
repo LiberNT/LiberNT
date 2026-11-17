@@ -523,6 +523,9 @@ KiDisplayBugCheckRegisterState(
     _In_ PCONTEXT Context);
 #endif
 
+ULONG64
+KiReadCycleCounter(VOID);
+
 #if (NTDDI_VERSION >= NTDDI_LONGHORN)
 VOID
 NTAPI

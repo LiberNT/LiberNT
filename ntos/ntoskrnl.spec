@@ -2658,7 +2658,7 @@
 @ stdcall -arch=win64 KeQueryPrcbAddress(long)
 @ stub -arch=win64 KeQuerySystemCpuPartitionAffinity
 @ stdcall -arch=arm64 KeQueryTotalCycleTimeProcess(ptr ptr)
-@ stdcall -arch=win64 KeQueryTotalCycleTimeThread(ptr ptr)
+@ stdcall KeQueryTotalCycleTimeThread(ptr ptr)
 @ stdcall -arch=win64 KeQueryTypeEvent(ptr)
 @ stdcall -arch=win64 KeQueryUnbiasedInterruptTime()
 @ stdcall KeQueryUnbiasedInterruptTimePrecise(ptr)
