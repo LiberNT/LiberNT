@@ -1198,15 +1198,51 @@ void STDMETHODCALLTYPE d2d_device_context_FillGeometry(ID2D1DeviceContext6 *ifac
         d2d_device_context_fill_geometry(context, geometry_impl, brush_impl, opacity_brush_impl);
 }
 
+static void d2d_device_context_fill_mesh(struct d2d_device_context *context, const struct d2d_mesh *mesh,
+        struct d2d_brush *brush)
+{
+    static const D2D1_MATRIX_3X2_F identity = {{{1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f}}};
+    HRESULT hr;
+
+    if (!mesh->count)
+        return;
+    if (FAILED(hr = d2d_device_context_update_vs_cb(context, &identity, 0.0f)))
+    {
+        WARN("Failed to update vs constant buffer, hr %#lx.\n", hr);
+        return;
+    }
+    if (FAILED(hr = d2d_device_context_update_ps_cb(context, brush, NULL, FALSE, FALSE)))
+    {
+        WARN("Failed to update ps constant buffer, hr %#lx.\n", hr);
+        return;
+    }
+    if (!d2d_device_context_stream_vertices(context, mesh->triangles, mesh->count * sizeof(*mesh->triangles)))
+        return;
+    /* TODO: INFO_NEEDED: what Windows does with a mesh filled outside D2D1_ANTIALIAS_MODE_ALIASED; it is filled aliased */
+    d2d_device_context_draw(context, D2D_SHAPE_TYPE_TRIANGLE, NULL, 3 * mesh->count, context->vb_stream.buffer,
+            sizeof(D2D1_POINT_2F), brush, NULL);
+}
+
 void STDMETHODCALLTYPE d2d_device_context_FillMesh(ID2D1DeviceContext6 *iface,
         ID2D1Mesh *mesh, ID2D1Brush *brush)
 {
     struct d2d_device_context *context = impl_from_ID2D1DeviceContext(iface);
 
-    FIXME("iface %p, mesh %p, brush %p stub!\n", iface, mesh, brush);
+    TRACE("iface %p, mesh %p, brush %p.\n", iface, mesh, brush);
+
+    if (FAILED(context->error.code))
+        return;
+
+    if (context->target.type == D2D_TARGET_UNKNOWN)
+    {
+        d2d_device_context_set_error(context, D2DERR_WRONG_STATE);
+        return;
+    }
 
     if (context->target.type == D2D_TARGET_COMMAND_LIST)
         d2d_command_list_fill_mesh(context->target.command_list, context, mesh, brush);
+    else
+        d2d_device_context_fill_mesh(context, unsafe_impl_from_ID2D1Mesh(mesh), unsafe_impl_from_ID2D1Brush(brush));
 }
 
 void STDMETHODCALLTYPE d2d_device_context_FillOpacityMask(ID2D1DeviceContext6 *iface,

@@ -204,3 +204,11 @@ HRESULT d2d_mesh_create(ID2D1Factory *factory, struct d2d_mesh **mesh)
     TRACE("Created mesh %p.\n", *mesh);
     return S_OK;
 }
+
+struct d2d_mesh *unsafe_impl_from_ID2D1Mesh(ID2D1Mesh *iface)
+{
+    if (!iface)
+        return NULL;
+    assert(iface->lpVtbl == &d2d_mesh_vtbl);
+    return CONTAINING_RECORD(iface, struct d2d_mesh, ID2D1Mesh_iface);
+}
