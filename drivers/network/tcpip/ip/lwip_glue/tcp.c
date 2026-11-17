@@ -410,6 +410,7 @@ InternalRecvEventHandler(void *arg, PTCP_PCB pcb, struct pbuf *p, const err_t er
         }
 
         /* A segment that is refused stays with the stack, which offers it again */
+        /* FIXME: the stream filter above then classifies the same segment a second time */
         if (!LibTCPEnqueuePacket(Connection, pcb, p))
             return ERR_MEM;
 
