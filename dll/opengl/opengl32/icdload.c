@@ -703,14 +703,22 @@ static BOOL
 IntPresentGpuSurface(HDC hdc,
                      HWND Window,
                      struct ICD_Data *IcdData,
-                     const WGL_PRESENTBUFFERS_CB *CallbackData)
+                     const WGL_PRESENTBUFFERS_CB *CallbackData,
+                     BOOL *Unavailable)
 {
     WGL_PRESENTBUFFERS PresentData;
     HANDLE SharedSurface = NULL;
     HRESULT Result;
 
+    if (Unavailable != NULL)
+        *Unavailable = FALSE;
     if (DwmDxGetWindowGpuSurface == NULL || DwmDxPublishWindowGpuSurface == NULL)
     {
+        if (Unavailable != NULL)
+        {
+            *Unavailable = TRUE;
+            return FALSE;
+        }
         IntReportDwmDxPresentFailure("gpu_callbacks", E_NOINTERFACE);
         return FALSE;
     }
@@ -720,6 +728,11 @@ IntPresentGpuSurface(HDC hdc,
         return TRUE;
     if (FAILED(Result) || SharedSurface == NULL)
     {
+        if (Unavailable != NULL)
+        {
+            *Unavailable = TRUE;
+            return FALSE;
+        }
         IntReportDwmDxPresentFailure("gpu_surface", Result);
         return FALSE;
     }
@@ -820,6 +833,16 @@ wglPresentBuffers(HDC hdc, WGL_PRESENTBUFFERS_CB *CallbackData)
         return wglPresentBuffersDirect(hdc, IcdData, CallbackData);
     }
 
+    /* The compositor takes a redirected window's frames from a texture the adapter's D3D driver shares with it;
+     * an OS-created surface only serves an adapter without one. */
+    {
+        BOOL GpuSurfaceUnavailable;
+        BOOL Presented = IntPresentGpuSurface(hdc, Window, IcdData, CallbackData, &GpuSurfaceUnavailable);
+
+        if (!GpuSurfaceUnavailable)
+            return Presented;
+    }
+
     SurfaceFlags = CallbackData->SyncType;
     if (ClientOrigin.x != WindowRect.left || ClientOrigin.y != WindowRect.top ||
         ClientRect.right != WindowRect.right - WindowRect.left ||
@@ -852,7 +875,7 @@ wglPresentBuffers(HDC hdc, WGL_PRESENTBUFFERS_CB *CallbackData)
     if (FAILED(Result))
     {
         if (Result == HRESULT_FROM_WIN32(ERROR_NOT_SUPPORTED))
-            return IntPresentGpuSurface(hdc, Window, IcdData, CallbackData);
+            return IntPresentGpuSurface(hdc, Window, IcdData, CallbackData, NULL);
         IntReportDwmDxPresentFailure("get_surface", Result);
         if (Result == HRESULT_FROM_WIN32(ERROR_NOT_READY) ||
             Result == DWM_E_COMPOSITIONDISABLED)
