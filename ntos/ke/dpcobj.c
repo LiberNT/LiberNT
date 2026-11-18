@@ -812,7 +812,6 @@ KeGenericCallDpc(
     OldIrql = KeRaiseIrqlToDpcLevel();
     CurrentPrcb = KeGetCurrentPrcb();
     Targets = KeActiveProcessors;
-    KeLowerIrql(OldIrql);
 
     Total = 0;
     for (Processor = 0; Processor < MAXIMUM_PROCESSORS; Processor++)
@@ -849,10 +848,10 @@ KeGenericCallDpc(
         KeInitializeDpc(Dpc, Routine, Context);
         KeSetTargetProcessorDpc(Dpc, (CCHAR)CurrentPrcb->Number);
 
-        OldIrql = KeRaiseIrqlToDpcLevel();
+        ASSERT(CurrentPrcb == KeGetCurrentPrcb());
         Routine(Dpc, Context, (PVOID)&Count, &ReverseBarrier);
-        KeLowerIrql(OldIrql);
     }
+    KeLowerIrql(OldIrql);
 
     /* Spun below DISPATCH_LEVEL so the other processors can make progress */
     while (Count != 0)
