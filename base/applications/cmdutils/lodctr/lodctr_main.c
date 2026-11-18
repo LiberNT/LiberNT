@@ -20,8 +20,11 @@
 #include <windef.h>
 #include <winbase.h>
 #include <loadperf.h>
+#include "manifest.h"
 
 int wmain(int argc, WCHAR *argv[])
 {
+    if (argc > 1 && !_wcsnicmp(argv[1], L"/m:", 3))
+        return LodctrInstallManifest(argv[1] + 3, argc > 2 ? argv[2] : NULL);
     return LoadPerfCounterTextStringsW(GetCommandLineW(), FALSE);
 }
