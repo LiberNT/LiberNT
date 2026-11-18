@@ -131,8 +131,6 @@ ServiceMain(DWORD argc, LPWSTR argv)
         return;
 */
     }
-    /* start system audio services */
-    StartSystemAudioServices();
 
     InitializeFakeDevice();
 
@@ -155,6 +153,10 @@ ServiceMain(DWORD argc, LPWSTR argv)
     service_status.dwCurrentState = SERVICE_RUNNING;
     service_status.dwControlsAccepted = SERVICE_ACCEPT_STOP;
     SetServiceStatus(service_status_handle, &service_status);
+
+    /* The service manager holds its start lock until this service reports running: a start requested before that blocks */
+    /* start system audio services */
+    StartSystemAudioServices();
 }
 
 int wmain(VOID)
