@@ -15,6 +15,7 @@
 #include <reactos/drivers/appleatcphy.h>
 #include <reactos/drivers/appleacepd.h>
 #include <reactos/drivers/appledwc3host.h>
+#include <reactos/drivers/kdusbshare.h>
 
 #define APPLE_DWC3_TAG              '3wDA'
 
@@ -39,6 +40,7 @@ typedef struct _APPLE_DWC3_EXTENSION
     volatile LONG WantHost;
     volatile LONG Detach;
     BOOLEAN HostRunning;
+    BOOLEAN DebugShared;
     BOOLEAN RoleSwitch;
     PCALLBACK_OBJECT RoleCallback;
     PVOID RoleRegistration;
@@ -128,6 +130,8 @@ AppleDwc3PowerDown(
     NTSTATUS Status;
 
     ASSERT(!Extension->HostRunning);
+    if (Extension->DebugShared)
+        return;
     if (!NT_SUCCESS(FdtDriverOpen(Extension->PhysicalDevice, &Tree)))
         return;
     Status = AppleAtcphyOpen(&Tree, Tree.Node, &Phy);
@@ -151,12 +155,24 @@ AppleDwc3PowerUp(
     FDT_DRIVER_TREE Tree;
     NTSTATUS Status;
 
+    if (Extension->DebugShared)
+        return STATUS_SUCCESS;
     Status = FdtDriverOpen(Extension->PhysicalDevice, &Tree);
     if (!NT_SUCCESS(Status))
         return Status;
     Status = AppleDwc3StartHost(&Tree, Tree.Node, Extension->CoreBase, "appledwc3");
     FdtDriverClose(&Tree);
     return Status;
+}
+
+static
+BOOLEAN
+AppleDwc3DebuggerShares(
+    _In_ PAPPLE_DWC3_EXTENSION Extension)
+{
+    KD_USB_SHARE Share;
+
+    return NT_SUCCESS(KdUsbShareRead(&Share)) && Share.Registers == Extension->CoreBase;
 }
 
 static
@@ -430,7 +446,7 @@ AppleDwc3RoleWork(
         Want = InterlockedCompareExchange(&Extension->WantHost, 0, 0);
         Detach = InterlockedExchange(&Extension->Detach, 0);
         ExAcquireFastMutex(&Extension->StateLock);
-        if ((!Want || Detach) && Extension->HostRunning)
+        if ((!Want || Detach) && Extension->HostRunning && !Extension->DebugShared)
         {
             DbgPrint("appledwc3: %I64x cable detached, removing the xHCI controller\n", Extension->CoreBase);
             Extension->HostRunning = FALSE;
@@ -546,7 +562,10 @@ AppleDwc3FdoPnp(
                 Status = AppleDwc3Prepare(Extension, Stack->Parameters.StartDevice.AllocatedResources);
             if (NT_SUCCESS(Status))
             {
-                if (Extension->RoleSwitch)
+                Extension->DebugShared = AppleDwc3DebuggerShares(Extension);
+                if (Extension->DebugShared)
+                    DbgPrint("appledwc3: %I64x stays with the kernel debugger and runs as host\n", Extension->CoreBase);
+                if (Extension->RoleSwitch && !Extension->DebugShared)
                 {
                     ExAcquireFastMutex(&Extension->StateLock);
                     AppleDwc3PowerDown(Extension);
