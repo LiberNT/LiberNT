@@ -52,3 +52,5 @@ Fixes
 - The block cache no longer rejects block 0, which holds the superblock when blocks are larger than 1024 bytes
   and has to go through the journal with the orphan list.
 - `jbd_journal_stop()` cleared the recovery flag of the file system before it marked the journal empty.
+- `jbd_journal_prepare()` passed the revoke record it found where a `bool` is expected; it now passes whether a
+  record was found, because MSVC 14.52 rejects the pointer.

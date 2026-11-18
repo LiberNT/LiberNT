@@ -1890,7 +1890,7 @@ static int jbd_journal_prepare(struct jbd_journal *journal,
 				true,
 				RB_FIND(jbd_revoke_tree,
 					&trans->revoke_root,
-					&tmp_rec));
+					&tmp_rec) != NULL);
 		jbd_trans_remove_block_rec(journal,
 					jbd_buf->block_rec, trans);
 		trans->data_cnt--;
@@ -1924,7 +1924,7 @@ static int jbd_journal_prepare(struct jbd_journal *journal,
 					true,
 					RB_FIND(jbd_revoke_tree,
 						&trans->revoke_root,
-						&tmp_rec));
+						&tmp_rec) != NULL);
 			jbd_trans_remove_block_rec(journal,
 					jbd_buf->block_rec, trans);
 			trans->data_cnt--;
