@@ -939,11 +939,29 @@ CmpHandleNotifyCallback(
     _In_ DWORD dwEventType,
     _In_ DEV_BROADCAST_HDR *pHeader)
 {
-    PDEV_BROADCAST_HANDLE pHandle = (PDEV_BROADCAST_HANDLE)pHeader;
     PHANDLE_NOTIFY_EVENT pEvent;
-    HDEVNOTIFY hHandleNotify = pHandle->dbch_hdevnotify;
+    HDEVNOTIFY hHandleNotify = NULL;
     DWORD_PTR Result = TRUE;
     HWND hWindow;
+    PLIST_ENTRY Entry;
+
+    if (pHeader->dbch_devicetype == DBT_DEVTYP_HANDLE)
+    {
+        hHandleNotify = ((PDEV_BROADCAST_HANDLE)pHeader)->dbch_hdevnotify;
+    }
+    else
+    {
+        EnterCriticalSection(&HandleNotifyLock);
+        for (Entry = HandleNotifyList.Flink; Entry != &HandleNotifyList; Entry = Entry->Flink)
+        {
+            if (CONTAINING_RECORD(Entry, NOTIFY_DATA, ListEntry) == (PNOTIFY_DATA)hContext)
+            {
+                hHandleNotify = ((PNOTIFY_DATA)hContext)->hHandleNotify;
+                break;
+            }
+        }
+        LeaveCriticalSection(&HandleNotifyLock);
+    }
 
     pEvent = HeapAlloc(GetProcessHeap(), 0, FIELD_OFFSET(HANDLE_NOTIFY_EVENT, Header) + pHeader->dbch_size);
     if (pEvent == NULL)
@@ -952,7 +970,8 @@ CmpHandleNotifyCallback(
     pEvent->hHandleNotify = hHandleNotify;
     pEvent->dwEventType = dwEventType;
     CopyMemory(&pEvent->Header, pHeader, pHeader->dbch_size);
-    ((PDEV_BROADCAST_HANDLE)&pEvent->Header)->dbch_hdevnotify = (HDEVNOTIFY)hContext;
+    if (pHeader->dbch_devicetype == DBT_DEVTYP_HANDLE)
+        ((PDEV_BROADCAST_HANDLE)&pEvent->Header)->dbch_hdevnotify = (HDEVNOTIFY)hContext;
 
     /* A query is answered by the window itself: BROADCAST_QUERY_DENY keeps the device */
     if (dwEventType == DBT_DEVICEQUERYREMOVE)
@@ -994,17 +1013,32 @@ static
 CONFIGRET
 CmpRegisterHandleNotification(
     _In_ HWND hWindow,
-    _In_ PDEV_BROADCAST_HANDLE pFilter,
+    _In_ PDEV_BROADCAST_HDR pFilter,
     _In_ ULONG ulFlags,
     _Inout_ PNOTIFY_DATA pNotifyData)
 {
+    DEV_BROADCAST_DEVICEINTERFACE_W InterfaceFilter;
     HDEVNOTIFY hHandleNotify;
 
-    if (pFilter->dbch_size < sizeof(DEV_BROADCAST_HANDLE))
+    if (pFilter->dbch_devicetype == DBT_DEVTYP_DEVICEINTERFACE)
+    {
+        if (pFilter->dbch_size < sizeof(DEV_BROADCAST_DEVICEINTERFACE_W))
+            return CR_INVALID_DATA;
+        InterfaceFilter = *(PDEV_BROADCAST_DEVICEINTERFACE_W)pFilter;
+        if (ulFlags & DEVICE_NOTIFY_ALL_INTERFACE_CLASSES)
+            InterfaceFilter.dbcc_size = FIELD_OFFSET(DEV_BROADCAST_DEVICEINTERFACE_W, dbcc_classguid);
+        else
+            InterfaceFilter.dbcc_size = FIELD_OFFSET(DEV_BROADCAST_DEVICEINTERFACE_W, dbcc_name);
+        pFilter = (PDEV_BROADCAST_HDR)&InterfaceFilter;
+    }
+    else if (pFilter->dbch_size < sizeof(DEV_BROADCAST_HANDLE))
+    {
         return CR_INVALID_DATA;
-
-    if (ulFlags & DEVICE_NOTIFY_ALL_INTERFACE_CLASSES)
+    }
+    else if (ulFlags & DEVICE_NOTIFY_ALL_INTERFACE_CLASSES)
+    {
         return CR_INVALID_FLAG;
+    }
 
     EnterCriticalSection(&HandleNotifyLock);
     if (HandleNotifyThread == NULL)
@@ -1019,7 +1053,7 @@ CmpRegisterHandleNotification(
         return CR_OUT_OF_MEMORY;
 
     hHandleNotify = I_ScRegisterDeviceNotification(pNotifyData,
-                                                   (DEV_BROADCAST_HDR *)pFilter,
+                                                   pFilter,
                                                    CmpHandleNotifyCallback);
     if (hHandleNotify == NULL)
     {
@@ -1088,11 +1122,12 @@ CMP_RegisterNotification(
     pNotifyData->ulMagic = NOTIFY_MAGIC;
     pNotifyData->hNotifyHandle = NULL;
 
-    if (((PDEV_BROADCAST_HDR)lpvNotificationFilter)->dbch_devicetype == DBT_DEVTYP_HANDLE &&
+    if ((((PDEV_BROADCAST_HDR)lpvNotificationFilter)->dbch_devicetype == DBT_DEVTYP_HANDLE ||
+         ((PDEV_BROADCAST_HDR)lpvNotificationFilter)->dbch_devicetype == DBT_DEVTYP_DEVICEINTERFACE) &&
         (ulFlags & DEVICE_NOTIFY_SERVICE_HANDLE) == DEVICE_NOTIFY_WINDOW_HANDLE)
     {
         ret = CmpRegisterHandleNotification((HWND)hRecipient,
-                                            (PDEV_BROADCAST_HANDLE)lpvNotificationFilter,
+                                            (PDEV_BROADCAST_HDR)lpvNotificationFilter,
                                             ulFlags,
                                             pNotifyData);
         if (ret != CR_SUCCESS)
