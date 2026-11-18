@@ -136,6 +136,13 @@ KiDequeueOrWait(
             Thread->WaitIrql = KiAcquireDispatcherLock();
         }
 
+        if (Queue->Header.Abandoned)
+        {
+            KiReleaseDispatcherLock(Thread->WaitIrql);
+            *Status = STATUS_ABANDONED;
+            return NULL;
+        }
+
         PreviousQueue = Thread->Queue;
         if (PreviousQueue != Queue)
         {
