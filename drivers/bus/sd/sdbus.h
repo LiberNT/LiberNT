@@ -122,6 +122,7 @@ typedef struct _FDO_EXTENSION {
     volatile LONG MediaChangeCount;
     USHORT SpecVersion;
     UCHAR CurrentBusWidth;
+    BOOLEAN HostHighSpeed;
     BOOLEAN EmmcPartitionConfigValid;
     UCHAR EmmcPartitionConfig;
 
@@ -436,6 +437,15 @@ VOID
 SdBusSetHostBusWidth(
     _In_ PFDO_EXTENSION FdoExtension,
     _In_ UCHAR BusWidth);
+
+VOID
+SdBusSetHostHighSpeed(
+    _In_ PFDO_EXTENSION FdoExtension,
+    _In_ BOOLEAN HighSpeed);
+
+BOOLEAN
+SdBusHostIsHighSpeed(
+    _In_ PFDO_EXTENSION FdoExtension);
 
 /**
  * @brief Send an application-specific command (CMD55 + ACMDxx).

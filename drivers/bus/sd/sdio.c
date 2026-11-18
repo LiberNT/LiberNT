@@ -1159,7 +1159,6 @@ SdBusSdioEnumerateFunctions(
     {
         UCHAR BusIf = (UCHAR)((BusIfCtrl & ~0x03) | 0x02);
         UCHAR HighSpeed = 0;
-        UCHAR HostCtrl;
         BOOLEAN CanUseFourBit;
 
         SdBusSetHostBusWidth(FdoExtension, 1);
@@ -1233,10 +1232,7 @@ SdBusSdioEnumerateFunctions(
                                              HighSpeed);
                 if (NT_SUCCESS(Status))
                 {
-                    HostCtrl = SdBusReadReg8(FdoExtension,
-                                             SDHCI_HOST_CONTROL);
-                    HostCtrl |= SDHCI_HC_HIGH_SPEED;
-                    SdBusWriteReg8(FdoExtension, SDHCI_HOST_CONTROL, HostCtrl);
+                    SdBusSetHostHighSpeed(FdoExtension, TRUE);
                     DPRINT1("SdBusSdioEnumerateFunctions: SDIO high-speed enabled\n");
                 }
                 else
