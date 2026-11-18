@@ -70,6 +70,7 @@ static ULONG64 KiParkingSampleTime;
 static ULONG KiParkingQuietIntervals;
 static KAFFINITY KiAggregatorParkedSet;
 static KAFFINITY KiHeteroParkedSet;
+static KAFFINITY KiPowerParkedSet;
 static KI_PARKING_SAMPLE KiParkingSamples[MAXIMUM_PROCESSORS];
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -467,7 +468,7 @@ KiPublishParkedProcessors(VOID)
     ASSERT(KiParkingLockOwner == KeGetCurrentPrcb());
     ASSERT((KiHeteroParkedSet & ~KiHeteroPerformanceSet) == 0);
 
-    ParkedSet = (KiAggregatorParkedSet | KiHeteroParkedSet) & ActiveSet;
+    ParkedSet = (KiAggregatorParkedSet | KiHeteroParkedSet | KiPowerParkedSet) & ActiveSet;
     if (ParkedSet == ActiveSet)
         ParkedSet = KiAggregatorParkedSet & ActiveSet;
     NonParkedSet = ActiveSet & ~ParkedSet;
@@ -774,6 +775,20 @@ PoSetProcessorAggregatorParking(
     *ParkedProcessors = Count;
 
     return STATUS_SUCCESS;
+}
+
+/* The processors the power manager's core parking policy leaves without work */
+VOID
+NTAPI
+KiSetPowerParkedProcessors(
+    _In_ KAFFINITY ParkedSet)
+{
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
+    KiAcquireParkingLock();
+    KiPowerParkedSet = ParkedSet;
+    KiPublishParkedProcessors();
+    KiReleaseParkingLock();
 }
 
 VOID

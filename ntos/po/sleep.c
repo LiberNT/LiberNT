@@ -897,6 +897,7 @@ PopSleepSystem(
         if (NT_SUCCESS(Status))
         {
             InterlockedExchange64(&PopLastWakeTime, (LONG64)KeQueryInterruptTime());
+            PopPpmResumeFromSystemState(SystemState);
             DPRINT1("Resumed from sleep state S%u\n", SystemState - PowerSystemWorking);
         }
         else
