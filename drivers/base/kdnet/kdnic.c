@@ -617,48 +617,85 @@ KdpDropSavedDevice(VOID)
 }
 
 static
-BOOLEAN
-KdpStartPlatformDevice(
+NTSTATUS
+KdpStartPlatformController(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock,
-    _In_ PKDNET_PLATFORM_DEVICE Platform)
+    _In_ PKDNET_PLATFORM_DEVICE Platform,
+    _In_ BOOLEAN Usb)
 {
     PUCHAR Registers;
+    NTSTATUS Status;
 
     RtlZeroMemory(&KdNicDevice, sizeof(KdNicDevice));
     KdNicDevice.Bus = MAXULONG;
     KdNicDevice.Slot = MAXULONG;
     KdNicDevice.VendorID = PCI_INVALID_VENDORID;
     KdNicDevice.DeviceID = 0xFFFF;
-    KdNicDevice.BaseClass = PCI_CLASS_NETWORK_CTLR;
+    if (Usb)
+    {
+        KdNicDevice.BaseClass = PCI_CLASS_SERIAL_BUS_CTLR;
+        KdNicDevice.SubClass = PCI_SUBCLASS_SB_USB;
+        KdNicDevice.ProgIf = KDNET_PCI_PROGIF_XHCI;
+    }
+    else
+    {
+        KdNicDevice.BaseClass = PCI_CLASS_NETWORK_CTLR;
+    }
     KdNicDevice.NameSpace = Platform->NameSpace;
     KdNicDevice.PortType = Platform->PortType;
     KdNicDevice.PortSubtype = Platform->PortSubtype;
     KdNicDevice.OemData = Platform->OemData;
     KdNicDevice.OemDataLength = Platform->OemDataLength;
-    if (!NT_SUCCESS(KdpPrepareDevice(LoaderBlock, Platform->ModuleName)))
-        return FALSE;
+    Status = KdpPrepareDevice(LoaderBlock, Platform->ModuleName);
+    if (!NT_SUCCESS(Status))
+        return Status;
 
     Registers = MmMapIoSpace(Platform->Base, Platform->Length, MmNonCached);
     if (!Registers)
     {
         KdpReleaseDevice(&KdNicDevice);
-        return FALSE;
+        return STATUS_INSUFFICIENT_RESOURCES;
     }
 
     KdNicDevice.BaseAddress[0].Type = CmResourceTypeMemory;
     KdNicDevice.BaseAddress[0].Valid = TRUE;
     KdNicDevice.BaseAddress[0].TranslatedAddress = Registers;
     KdNicDevice.BaseAddress[0].Length = Platform->Length;
-    if (!NT_SUCCESS(KdpStartController()))
+    return KdpStartController();
+}
+
+static
+VOID
+KdpSavePlatformDevice(
+    _In_ PKDNET_PLATFORM_DEVICE Platform)
+{
+    KdpSaveDevice();
+    RtlCopyMemory(KdpSavedPath, Platform->Path, sizeof(KdpSavedPath));
+    KdpSavedBase = Platform->Base;
+}
+
+static
+BOOLEAN
+KdpUsePlatformDevice(
+    _In_ PKDNET_PLATFORM_DEVICE Platform)
+{
+    KdpDropSavedDevice();
+    RtlCopyMemory(KdpNicPath, Platform->Path, sizeof(KdpNicPath));
+    KdpNicBase = Platform->Base;
+    return TRUE;
+}
+
+static
+BOOLEAN
+KdpStartPlatformDevice(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock,
+    _In_ PKDNET_PLATFORM_DEVICE Platform)
+{
+    if (!NT_SUCCESS(KdpStartPlatformController(LoaderBlock, Platform, FALSE)))
         return FALSE;
 
     if (KdNicLinkState)
-    {
-        KdpDropSavedDevice();
-        RtlCopyMemory(KdpNicPath, Platform->Path, sizeof(KdpNicPath));
-        KdpNicBase = Platform->Base;
-        return TRUE;
-    }
+        return KdpUsePlatformDevice(Platform);
 
     if (KdpSavedValid)
     {
@@ -666,9 +703,41 @@ KdpStartPlatformDevice(
         return FALSE;
     }
 
-    KdpSaveDevice();
-    RtlCopyMemory(KdpSavedPath, Platform->Path, sizeof(KdpSavedPath));
-    KdpSavedBase = Platform->Base;
+    KdpSavePlatformDevice(Platform);
+    return FALSE;
+}
+
+static
+BOOLEAN
+KdpStartPlatformUsbDevice(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock,
+    _In_ PKDNET_PLATFORM_DEVICE Platform)
+{
+    if (!KdpFindExtension(LoaderBlock, Platform->ModuleName))
+        return FALSE;
+
+    if (!NT_SUCCESS(KdpStartPlatformController(LoaderBlock, Platform, TRUE)))
+        return FALSE;
+
+    if (KdNicLinkState && KdpIsPhone())
+        return KdpUsePlatformDevice(Platform);
+
+    if (!KdpSavedValid)
+    {
+        KdpSavedLink = KdNicLinkState != 0;
+        KdpSavePlatformDevice(Platform);
+    }
+    else if (KdNicLinkState && !KdpSavedLink)
+    {
+        KdpDropSavedDevice();
+        KdpSavedLink = TRUE;
+        KdpSavePlatformDevice(Platform);
+    }
+    else
+    {
+        KdpStopDevice();
+    }
+
     return FALSE;
 }
 
@@ -705,8 +774,7 @@ KdpReserveDevice(VOID)
     ULONG Value, i;
     PKD_USB_SHARE Share = KdNicDevice.OemData;
 
-    if (KdNicDevice.NameSpace == KdNameSpacePCI && Share && KdNicDevice.OemDataLength == sizeof(*Share) &&
-        Share->Signature == KD_USB_SHARE_SIGNATURE)
+    if (Share && KdNicDevice.OemDataLength == sizeof(*Share) && Share->Signature == KD_USB_SHARE_SIGNATURE)
     {
         KdpPublishUsbShare(Share);
         return;
@@ -860,6 +928,13 @@ KdNicInitialize(
 
     if (KdpScanPci(LoaderBlock, TRUE, &Status))
         return STATUS_SUCCESS;
+
+    if (!KdNetOptions.HaveLocation && KdPlatformEnumerateUsbControllers(LoaderBlock, KdpStartPlatformUsbDevice))
+    {
+        KdpNicStarted = TRUE;
+        KdpReserveDevice();
+        return STATUS_SUCCESS;
+    }
 
     if (KdpSavedValid && KdpSavedLink)
     {

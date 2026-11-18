@@ -177,6 +177,13 @@ UsbNetInitializeController(
     Adapter->Registers = Device->BaseAddress[0].TranslatedAddress;
     UsbNetLayout(Adapter);
 
+    Status = UsbNetGluePrepare(KdNet);
+    if (!NT_SUCCESS(Status))
+    {
+        UsbNetTrace("USB debugger: the controller glue did not start the controller: %lx\n", Status);
+        return Status;
+    }
+
     Status = XhciInitialize(Adapter);
     if (NT_SUCCESS(Status))
         Status = UsbFindFunction(Adapter);
