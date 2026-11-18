@@ -938,6 +938,20 @@ DwmPointerLoadImage(HDC hdcScreen, HCURSOR Cursor, ULONG Step)
     return Ok;
 }
 
+static BOOL
+DwmPrimaryOutputChanged(WCHAR *LastDevice)
+{
+    MONITORINFOEXW Info;
+
+    ZeroMemory(&Info, sizeof(Info));
+    Info.cbSize = sizeof(Info);
+    if (!GetMonitorInfoW(MonitorFromPoint((POINT){ 0, 0 }, MONITOR_DEFAULTTOPRIMARY), (MONITORINFO *)&Info) ||
+        !lstrcmpiW(Info.szDevice, LastDevice))
+        return FALSE;
+    lstrcpynW(LastDevice, Info.szDevice, CCHDEVICENAME);
+    return TRUE;
+}
+
 /* TRUE when the pointer differs from what the last frame drew. */
 static BOOL
 DwmPointerUpdate(HDC hdcScreen, const DWM_FRAME_HEADER *Frame)
@@ -4272,6 +4286,7 @@ DwmComposeLoop(HANDLE hStopEvent)
     DWORD gpuLastOutputCheck = 0;
     DWORD gpuRetryLast = GetTickCount();
     ULONG gpuRetryFailures = 0;
+    WCHAR primaryOutput[CCHDEVICENAME] = L"";
     LONG vw, vh, primW, primH;
     ULONG ViewIndex;
 
@@ -4547,6 +4562,25 @@ DwmComposeLoop(HANDLE hStopEvent)
             DwmShadowInit(hdcScreen);
             if (!DwmGpuComposeIsActive() && DwmGpuComposeInitialize(g_W, g_H))
                 DwmLog("DWM: native Direct3D compositor available\n");
+            g_lastFrameQpc = 0;
+            forceFull = TRUE;
+            g_pointer.GpuActive = FALSE;
+            screenCaptureProbes = 0;
+            screenMirrorNeeded = 0;
+            continue;
+        }
+
+        if (DwmPrimaryOutputChanged(primaryOutput))
+        {
+            if (DwmGpuComposeOutputMoved())
+            {
+                DwmGpuComposeShutdown();
+                DwmLog("DWM: the desktop moved to an output the Direct3D compositor does not scan out\n");
+            }
+            gpuRetryFailures = 0;
+            gpuRetryLast = GetTickCount();
+            if (!DwmGpuComposeIsActive() && DwmGpuComposeInitialize(g_W, g_H))
+                DwmLog("DWM: native Direct3D compositor available on the new output\n");
             g_lastFrameQpc = 0;
             forceFull = TRUE;
             g_pointer.GpuActive = FALSE;
