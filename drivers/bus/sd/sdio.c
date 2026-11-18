@@ -1162,10 +1162,7 @@ SdBusSdioEnumerateFunctions(
         UCHAR HostCtrl;
         BOOLEAN CanUseFourBit;
 
-        HostCtrl = SdBusReadReg8(FdoExtension, SDHCI_HOST_CONTROL);
-        HostCtrl &= ~SDHCI_HC_DATA_WIDTH_4BIT;
-        SdBusWriteReg8(FdoExtension, SDHCI_HOST_CONTROL, HostCtrl);
-        FdoExtension->CurrentBusWidth = 1;
+        SdBusSetHostBusWidth(FdoExtension, 1);
 
         CanUseFourBit = !(CardCap & SDIO_CCCR_CAP_LSC) ||
                         (CardCap & SDIO_CCCR_CAP_4BLS);
@@ -1208,10 +1205,7 @@ SdBusSdioEnumerateFunctions(
 
             if (NT_SUCCESS(Status))
             {
-                HostCtrl = SdBusReadReg8(FdoExtension, SDHCI_HOST_CONTROL);
-                HostCtrl |= SDHCI_HC_DATA_WIDTH_4BIT;
-                SdBusWriteReg8(FdoExtension, SDHCI_HOST_CONTROL, HostCtrl);
-                FdoExtension->CurrentBusWidth = 4;
+                SdBusSetHostBusWidth(FdoExtension, 4);
                 DPRINT1("SdBusSdioEnumerateFunctions: SDIO 4-bit bus enabled\n");
             }
             else
