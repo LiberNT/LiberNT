@@ -146,9 +146,9 @@
 /* #undef CHANNEL_RDPEI */
 /* #undef CHANNEL_RDPEI_CLIENT */
 /* #undef CHANNEL_RDPEI_SERVER */
-/* #undef CHANNEL_RDPGFX */
+#define CHANNEL_RDPGFX
 /* #undef CHANNEL_RDPGFX_CLIENT */
-/* #undef CHANNEL_RDPGFX_SERVER */
+#define CHANNEL_RDPGFX_SERVER
 /** If defined mouse cursor channel support is available.
  *
  *  \since version 3.0.0
