@@ -31,6 +31,8 @@ static WDMUSB_POWER_STATE USBPORT_MapDevicePowerState(IN DEVICE_POWER_STATE Stat
 #define USBPORT_HID_SET_PROTOCOL 0x0B
 #define USBPORT_HID_BOOT_PROTOCOL 0
 
+static VOID USBPORT_DumpClearHalt(_In_ PUSBPORT_DUMP_CONTEXT DumpContext, _In_ PUSBPORT_ENDPOINT Endpoint);
+
 static NTSTATUS USBPORT_DumpStart(_In_ PUSBPORT_DUMP_CONTEXT DumpContext, _In_ PUSBPORT_ENDPOINT Endpoint, _In_opt_ PUSB_DEFAULT_PIPE_SETUP_PACKET SetupPacket, _In_ BOOLEAN DirectionIn, _Inout_updates_bytes_opt_(Length) PVOID Buffer, _In_ PHYSICAL_ADDRESS PhysicalAddress, _In_ BOOLEAN UsePhysicalAddress, _In_ ULONG Length)
 {
     PUSBPORT_DEVICE_EXTENSION FdoExtension;
@@ -188,6 +190,8 @@ static NTSTATUS USBPORT_DumpSubmit(_In_ PUSBPORT_DUMP_CONTEXT DumpContext, _In_ 
     if (!NT_SUCCESS(Status))
     {
         USBPORT_DumpReportFailure(DumpContext, Endpoint, SetupPacket, DirectionIn, Length, Status);
+        if ((SetupPacket == NULL) && (DumpContext->TransferStatus == USBD_STATUS_STALL_PID))
+            USBPORT_DumpClearHalt(DumpContext, Endpoint);
         return Status;
     }
 
@@ -242,6 +246,17 @@ static VOID USBPORT_DumpResetPipe(_In_ PUSBPORT_DUMP_CONTEXT DumpContext, _In_op
     if ((Endpoint != DumpContext->ControlEndpoint) && (Packet->SetEndpointDataToggle != NULL))
         Packet->SetEndpointDataToggle(FdoExtension->MiniPortExt, Endpoint + 1, 0);
     Packet->SetEndpointStatus(FdoExtension->MiniPortExt, Endpoint + 1, USBPORT_ENDPOINT_RUN);
+}
+
+static VOID USBPORT_DumpClearHalt(_In_ PUSBPORT_DUMP_CONTEXT DumpContext, _In_ PUSBPORT_ENDPOINT Endpoint)
+{
+    UCHAR Address;
+
+    ASSERT((Endpoint == DumpContext->BulkInEndpoint) || (Endpoint == DumpContext->BulkOutEndpoint));
+
+    Address = (Endpoint == DumpContext->BulkInEndpoint) ? DumpContext->BulkInEndpointAddress : DumpContext->BulkOutEndpointAddress;
+    USBPORT_DumpResetPipe(DumpContext, Endpoint);
+    (VOID)USBPORT_DumpControl(DumpContext, USBPORT_DUMP_RT_STANDARD_ENDPOINT_OUT, USB_REQUEST_CLEAR_FEATURE, USB_FEATURE_ENDPOINT_STALL, Address);
 }
 
 static NTSTATUS NTAPI USBPORT_DumpPrepare(_In_ PVOID Context)
