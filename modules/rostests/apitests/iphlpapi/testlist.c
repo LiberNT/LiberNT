@@ -10,6 +10,7 @@ extern void func_GetIpNetEntry2(void);
 extern void func_GetNetworkParams(void);
 extern void func_GetOwnerModuleFromTcpEntry(void);
 extern void func_GetOwnerModuleFromUdpEntry(void);
+extern void func_IcmpEchoTimeChange(void);
 extern void func_icmp(void);
 extern void func_icmp_echo(void);
 extern void func_icmp6_echo(void);
@@ -29,6 +30,7 @@ const struct test winetest_testlist[] =
     { "GetNetworkParams",           func_GetNetworkParams },
     { "GetOwnerModuleFromTcpEntry", func_GetOwnerModuleFromTcpEntry },
     { "GetOwnerModuleFromUdpEntry", func_GetOwnerModuleFromUdpEntry },
+    { "IcmpEchoTimeChange",         func_IcmpEchoTimeChange },
     { "icmp",                       func_icmp },
     { "icmp_echo",                  func_icmp_echo },
     { "icmp6_echo",                 func_icmp6_echo },
