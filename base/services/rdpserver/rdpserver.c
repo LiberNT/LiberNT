@@ -107,7 +107,12 @@ typedef struct DESKTOP_CONTEXT
     BOOL FramePending;
     int FrameWidth, FrameHeight;
     HCURSOR Pointer;
-    BOOL PointerSent;
+    BOOL PointerSent, PointerCached;
+    UINT32 PointerSteps, PointerStep;
+    DWORD PointerStepTick, PointerStepTime;
+    UINT32 PointerPixels[RDPVDD_POINTER_MAX * RDPVDD_POINTER_MAX];
+    BYTE PointerTransparent[RDPVDD_POINTER_MAX * RDPVDD_POINTER_MAX];
+    BYTE PointerMask[RDPVDD_POINTER_MAX * 2 * (RDPVDD_POINTER_MAX / 8)];
     BYTE PointerXor[RDPVDD_POINTER_MAX * RDPVDD_POINTER_MAX * 4];
     BYTE PointerAnd[RDPVDD_POINTER_MAX * RDPVDD_POINTER_MAX / 8];
     BITMAP_DATA Batch[TILE_BATCH];
@@ -122,6 +127,8 @@ typedef struct DESKTOP_CONTEXT
     UINT32 DispChannelId;
     volatile LONG RequestedSize;
 } DESKTOP_CONTEXT;
+
+HCURSOR WINAPI GetCursorFrameInfo(HCURSOR, DWORD, DWORD, PINT, PDWORD);
 
 static void Log(const char *fmt, ...)
 {
@@ -929,65 +936,94 @@ static void CopyFrameRect(DESKTOP_CONTEXT *ctx, const RECT *rect)
     MarkTiles(ctx, rect);
 }
 
-static void CopyMaskRows(BYTE *target, const BYTE *dib, int rows, int width)
+static BOOL MaskBit(const BYTE *rows, int width, int x, int y)
 {
-    int row, stride = (width + 15) / 16 * 2, dibStride = (width + 31) / 32 * 4;
-    for (row = 0; row < rows; ++row) memcpy(target + row * stride, dib + row * dibStride, stride);
+    return (rows[(size_t)y * ((width + 31) / 32 * 4) + x / 8] & (0x80 >> (x % 8))) != 0;
 }
 
-static BOOL ReadPointer(DESKTOP_CONTEXT *ctx, HCURSOR handle, POINTER_NEW_UPDATE *update)
+static BOOL ReadPointer(DESKTOP_CONTEXT *ctx, HCURSOR handle, UINT16 cacheIndex, POINTER_LARGE_UPDATE *update)
 {
     struct { BITMAPINFOHEADER Header; RGBQUAD Colors[2]; } info = {0};
-    BYTE masks[RDPVDD_POINTER_MAX * 2 * (RDPVDD_POINTER_MAX / 8)];
-    POINTER_COLOR_UPDATE *attr = &update->colorPtrAttr;
+    UINT32 flags = freerdp_settings_get_uint32(ctx->rdp.settings, FreeRDP_LargePointerFlag);
+    int limit = (flags & LARGE_POINTER_FLAG_384x384) ? RDPVDD_POINTER_MAX : (flags & LARGE_POINTER_FLAG_96x96) ? 96 : 32;
     ICONINFO icon = {0};
     BITMAP bitmap = {0};
     BOOL ok = FALSE, alpha = FALSE;
-    int width, height, stride, i;
+    int width, height, targetWidth, targetHeight, stride, x, y;
     HDC dc;
     if (!GetIconInfo(handle, &icon)) return FALSE;
     dc = GetDC(NULL);
     GetObjectW(icon.hbmMask, sizeof(bitmap), &bitmap);
     width = bitmap.bmWidth;
     height = icon.hbmColor ? bitmap.bmHeight : bitmap.bmHeight / 2;
-    stride = (width + 15) / 16 * 2;
     info.Header.biSize = sizeof(info.Header);
     info.Header.biWidth = width;
     info.Header.biHeight = bitmap.bmHeight;
     info.Header.biPlanes = 1;
     info.Header.biBitCount = 1;
     if (dc && width > 0 && height > 0 && width <= RDPVDD_POINTER_MAX && height <= RDPVDD_POINTER_MAX &&
-        GetDIBits(dc, icon.hbmMask, 0, bitmap.bmHeight, masks, (BITMAPINFO *)&info, DIB_RGB_COLORS) == bitmap.bmHeight)
+        GetDIBits(dc, icon.hbmMask, 0, bitmap.bmHeight, ctx->PointerMask, (BITMAPINFO *)&info, DIB_RGB_COLORS) == bitmap.bmHeight)
     {
-        update->xorBpp = icon.hbmColor ? 32 : 1;
-        attr->cacheIndex = 0;
-        attr->hotSpotX = (UINT16)icon.xHotspot;
-        attr->hotSpotY = (UINT16)icon.yHotspot;
-        attr->width = (UINT16)width;
-        attr->height = (UINT16)height;
-        attr->andMaskData = ctx->PointerAnd;
-        attr->xorMaskData = ctx->PointerXor;
-        attr->lengthAndMask = (UINT16)(stride * height);
         if (icon.hbmColor)
         {
-            CopyMaskRows(ctx->PointerAnd, masks, height, width);
             info.Header.biHeight = height;
             info.Header.biBitCount = 32;
-            attr->lengthXorMask = (UINT16)(width * 4 * height);
-            ok = GetDIBits(dc, icon.hbmColor, 0, height, ctx->PointerXor, (BITMAPINFO *)&info, DIB_RGB_COLORS) == height;
-            for (i = 0; ok && i < width * height; ++i) alpha |= ctx->PointerXor[i * 4 + 3] != 0;
-            /* With per-pixel alpha the mask must not mark opaque pixels, or the client inverts or drops them */
-            if (ok && alpha) ZeroMemory(ctx->PointerAnd, (size_t)stride * height);
-            for (i = 0; ok && !alpha && i < width * height; ++i)
-                if (!(ctx->PointerAnd[(i / width) * stride + (i % width) / 8] & (0x80 >> (i % 8)))) ctx->PointerXor[i * 4 + 3] = 0xFF;
+            ok = GetDIBits(dc, icon.hbmColor, 0, height, ctx->PointerPixels, (BITMAPINFO *)&info, DIB_RGB_COLORS) == height;
+            for (x = 0; ok && x < width * height; ++x) alpha |= (ctx->PointerPixels[x] >> 24) != 0;
+            for (y = 0; ok && y < height; ++y)
+                for (x = 0; x < width; ++x)
+                {
+                    UINT32 *pixel = &ctx->PointerPixels[y * width + x];
+                    BOOL transparent = MaskBit(ctx->PointerMask, width, x, y);
+                    if (alpha) ctx->PointerTransparent[y * width + x] = FALSE;
+                    else
+                    {
+                        ctx->PointerTransparent[y * width + x] = transparent;
+                        *pixel = transparent ? *pixel & 0xFFFFFF : *pixel | 0xFF000000;
+                    }
+                }
         }
         else
         {
-            CopyMaskRows(ctx->PointerXor, masks, height, width);
-            CopyMaskRows(ctx->PointerAnd, masks + (size_t)height * ((width + 31) / 32 * 4), height, width);
-            attr->lengthXorMask = attr->lengthAndMask;
+            for (y = 0; y < height; ++y)
+                for (x = 0; x < width; ++x)
+                {
+                    BOOL transparent = MaskBit(ctx->PointerMask, width, x, y + height);
+                    BOOL white = MaskBit(ctx->PointerMask, width, x, y);
+                    ctx->PointerTransparent[y * width + x] = transparent;
+                    ctx->PointerPixels[y * width + x] = white ? 0xFFFFFFFF : transparent ? 0 : 0xFF000000;
+                }
             ok = TRUE;
         }
+    }
+    if (ok)
+    {
+        targetWidth = width;
+        targetHeight = height;
+        if (max(width, height) > limit)
+        {
+            targetWidth = max(1, width * limit / max(width, height));
+            targetHeight = max(1, height * limit / max(width, height));
+        }
+        stride = (targetWidth + 15) / 16 * 2;
+        ZeroMemory(ctx->PointerAnd, (size_t)stride * targetHeight);
+        for (y = 0; y < targetHeight; ++y)
+            for (x = 0; x < targetWidth; ++x)
+            {
+                int source = (y * height / targetHeight) * width + x * width / targetWidth;
+                memcpy(ctx->PointerXor + ((size_t)y * targetWidth + x) * 4, &ctx->PointerPixels[source], 4);
+                if (ctx->PointerTransparent[source]) ctx->PointerAnd[y * stride + x / 8] |= 0x80 >> (x % 8);
+            }
+        update->xorBpp = 32;
+        update->cacheIndex = cacheIndex;
+        update->hotSpotX = (UINT16)(icon.xHotspot * targetWidth / width);
+        update->hotSpotY = (UINT16)(icon.yHotspot * targetHeight / height);
+        update->width = (UINT16)targetWidth;
+        update->height = (UINT16)targetHeight;
+        update->lengthAndMask = (UINT32)(stride * targetHeight);
+        update->lengthXorMask = (UINT32)(targetWidth * 4 * targetHeight);
+        update->andMaskData = ctx->PointerAnd;
+        update->xorMaskData = ctx->PointerXor;
     }
     if (dc) ReleaseDC(NULL, dc);
     if (icon.hbmColor) DeleteObject(icon.hbmColor);
@@ -995,19 +1031,78 @@ static BOOL ReadPointer(DESKTOP_CONTEXT *ctx, HCURSOR handle, POINTER_NEW_UPDATE
     return ok;
 }
 
+static BOOL SendPointer(DESKTOP_CONTEXT *ctx, const POINTER_LARGE_UPDATE *pointer)
+{
+    POINTER_NEW_UPDATE update = {0};
+    if (pointer->width > 96 || pointer->height > 96) return ctx->rdp.update->pointer->PointerLarge(&ctx->rdp, pointer);
+    update.xorBpp = pointer->xorBpp;
+    update.colorPtrAttr.cacheIndex = pointer->cacheIndex;
+    update.colorPtrAttr.hotSpotX = pointer->hotSpotX;
+    update.colorPtrAttr.hotSpotY = pointer->hotSpotY;
+    update.colorPtrAttr.width = pointer->width;
+    update.colorPtrAttr.height = pointer->height;
+    update.colorPtrAttr.lengthAndMask = (UINT16)pointer->lengthAndMask;
+    update.colorPtrAttr.lengthXorMask = (UINT16)pointer->lengthXorMask;
+    update.colorPtrAttr.andMaskData = pointer->andMaskData;
+    update.colorPtrAttr.xorMaskData = pointer->xorMaskData;
+    return ctx->rdp.update->pointer->PointerNew(&ctx->rdp, &update);
+}
+
+static BOOL ShowPointerStep(DESKTOP_CONTEXT *ctx, UINT32 step)
+{
+    POINTER_CACHED_UPDATE cached = {0};
+    POINTER_LARGE_UPDATE update = {0};
+    INT rate = 0;
+    DWORD steps = 0;
+    HCURSOR frame = GetCursorFrameInfo(ctx->Pointer, 0, step, &rate, &steps);
+    ctx->PointerStep = step;
+    ctx->PointerStepTick = GetTickCount();
+    ctx->PointerStepTime = rate > 0 ? (DWORD)rate * 1000 / 60 : 1000 / 60;
+    if (ctx->PointerCached)
+    {
+        cached.cacheIndex = step;
+        return ctx->rdp.update->pointer->PointerCached(&ctx->rdp, &cached);
+    }
+    return !frame || !ReadPointer(ctx, frame, 0, &update) || SendPointer(ctx, &update);
+}
+
 static BOOL UpdatePointer(DESKTOP_CONTEXT *ctx)
 {
     POINTER_SYSTEM_UPDATE hidden = {0};
-    POINTER_NEW_UPDATE update = {0};
+    POINTER_LARGE_UPDATE update = {0};
     CURSORINFO cursor = {0};
+    UINT32 cacheSize = freerdp_settings_get_uint32(ctx->rdp.settings, FreeRDP_PointerCacheSize);
+    INT rate = 0;
+    DWORD steps = 0, step;
     cursor.cbSize = sizeof(cursor);
     if (!GetCursorInfo(&cursor) || !(cursor.flags & CURSOR_SHOWING)) cursor.hCursor = NULL;
-    if (ctx->PointerSent && cursor.hCursor == ctx->Pointer) return TRUE;
+    if (ctx->PointerSent && cursor.hCursor == ctx->Pointer)
+    {
+        if (ctx->PointerSteps > 1 && GetTickCount() - ctx->PointerStepTick >= ctx->PointerStepTime)
+            return ShowPointerStep(ctx, (ctx->PointerStep + 1) % ctx->PointerSteps);
+        return TRUE;
+    }
     ctx->Pointer = cursor.hCursor;
     ctx->PointerSent = TRUE;
-    /* TODO: an animated cursor reaches the client as its first frame */
-    if (cursor.hCursor && ReadPointer(ctx, cursor.hCursor, &update))
-        return ctx->rdp.update->pointer->PointerNew(&ctx->rdp, &update);
+    ctx->PointerSteps = 0;
+    ctx->PointerCached = FALSE;
+    if (cursor.hCursor && !GetCursorFrameInfo(cursor.hCursor, 0, 0, &rate, &steps)) steps = 1;
+    if (steps > 1 && steps <= cacheSize)
+    {
+        for (step = 0; step < steps; ++step)
+        {
+            HCURSOR frame = GetCursorFrameInfo(cursor.hCursor, 0, step, &rate, &steps);
+            if (!frame || !ReadPointer(ctx, frame, (UINT16)step, &update)) break;
+            if (!SendPointer(ctx, &update)) return FALSE;
+        }
+        ctx->PointerCached = step == steps;
+    }
+    if (steps > 1 && (ctx->PointerCached || steps > cacheSize))
+    {
+        ctx->PointerSteps = steps;
+        return ShowPointerStep(ctx, 0);
+    }
+    if (cursor.hCursor && ReadPointer(ctx, cursor.hCursor, 0, &update)) return SendPointer(ctx, &update);
     hidden.type = SYSPTR_NULL;
     return ctx->rdp.update->pointer->PointerSystem(&ctx->rdp, &hidden);
 }
