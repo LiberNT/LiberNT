@@ -808,12 +808,54 @@ KiDisplayBugCheckRegisterState(
     }
 }
 
+/* Intel SDM: CPUID.07H:EDX[15] marks a hybrid part, CPUID.1AH:EAX[31:24] is the core type of the processor running it */
+#define KI_CPUID_HYBRID                 (1 << 15)
+#define KI_CPUID_HYBRID_LEAF            0x1A
+#define KI_HYBRID_CORE_TYPE_SHIFT       24
+#define KI_HYBRID_CORE_TYPE_CORE        0x40
+
+static PUCHAR KiEfficiencyClassCapture;
+
+static
+ULONG_PTR
+NTAPI
+KiCaptureEfficiencyClass(
+    _In_ ULONG_PTR Argument)
+{
+    PKPRCB Prcb = KeGetCurrentPrcb();
+    int Registers[4];
+
+    UNREFERENCED_PARAMETER(Argument);
+    ASSERT(Prcb->Number < MAXIMUM_PROCESSORS);
+
+    __cpuid(Registers, 0);
+    if ((ULONG)Registers[0] < KI_CPUID_HYBRID_LEAF)
+        return 0;
+
+    __cpuidex(Registers, 7, 0);
+    if ((Registers[3] & KI_CPUID_HYBRID) == 0)
+        return 0;
+
+    __cpuidex(Registers, KI_CPUID_HYBRID_LEAF, 0);
+    if (((ULONG)Registers[0] >> KI_HYBRID_CORE_TYPE_SHIFT) == KI_HYBRID_CORE_TYPE_CORE)
+        KiEfficiencyClassCapture[Prcb->Number] = 1;
+
+    return 0;
+}
+
+/* A higher efficiency class is the more performant one, as Windows documents for SYSTEM_CPU_SET_INFORMATION */
 CODE_SEG("INIT")
 VOID
 NTAPI
 KiQueryProcessorEfficiencyClasses(
     _Out_writes_all_(MAXIMUM_PROCESSORS) PUCHAR EfficiencyClasses)
 {
-    /* TODO: report the core types of hybrid processors as efficiency classes */
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
     RtlZeroMemory(EfficiencyClasses, MAXIMUM_PROCESSORS);
+    KiEfficiencyClassCapture = EfficiencyClasses;
+    KeIpiGenericCall(KiCaptureEfficiencyClass, 0);
+    KiEfficiencyClassCapture = NULL;
+
+    /* TODO: AMD processors with compact cores are not told apart */
 }
