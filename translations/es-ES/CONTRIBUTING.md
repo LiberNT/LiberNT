@@ -53,7 +53,7 @@ Te recomendamos usar el inglés en los informes de errores y en las discusiones 
 
 ### Pull requests
 
-Envía tu trabajo como una [pull request] contra la rama `main-nt10`. Las pull requests te permiten informar a los demás de los cambios que has subido a un repositorio de GitHub. Una vez abierta una pull request, puedes discutir y revisar los cambios con el equipo y añadir commits de seguimiento antes de que se fusionen.
+Envía tu trabajo como una [pull request] contra la rama `master`. Las pull requests te permiten informar a los demás de los cambios que has subido a un repositorio de GitHub. Una vez abierta una pull request, puedes discutir y revisar los cambios con el equipo y añadir commits de seguimiento antes de que se fusionen.
 
 Antes de abrirla:
 

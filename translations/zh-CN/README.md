@@ -16,7 +16,7 @@
 
 **源于对 NT 架构的热爱，兼容 Windows® 11，支持 amd64、arm64 与 riscv64。**
 
-[![Build](https://img.shields.io/github/actions/workflow/status/LiberNT/LiberNT/build.yml?branch=main-nt10&label=Build&style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/LiberNT/LiberNT/actions/workflows/build.yml)
+[![Build](https://img.shields.io/github/actions/workflow/status/LiberNT/LiberNT/build.yml?branch=master&label=Build&style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/LiberNT/LiberNT/actions/workflows/build.yml)
 [![License: GPL 3.0](https://img.shields.io/badge/License-GPL_3.0-0161B6?style=for-the-badge&logo=gnu&logoColor=white)](#许可证)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/BpcKg7FZ2)
 [![Matrix](https://img.shields.io/badge/Matrix-%23libernt-000000?style=for-the-badge&logo=matrix&logoColor=white)](https://matrix.to/#/#libernt:matrix.org)
@@ -24,7 +24,7 @@
 <img src="https://img.shields.io/github/repo-size/LiberNT/LiberNT?style=flat-square&color=blue" alt="Repo Size">
 <img src="https://img.shields.io/github/stars/LiberNT/LiberNT?style=flat-square&color=yellow" alt="Stars">
 <img src="https://img.shields.io/github/forks/LiberNT/LiberNT?style=flat-square&color=lightgrey" alt="Forks">
-<img src="https://img.shields.io/github/last-commit/LiberNT/LiberNT/main-nt10?style=flat-square&color=green" alt="Last Commit">
+<img src="https://img.shields.io/github/last-commit/LiberNT/LiberNT/master?style=flat-square&color=green" alt="Last Commit">
 <img src="https://img.shields.io/github/issues/LiberNT/LiberNT?style=flat-square&color=orange" alt="Issues">
 
 <br>
@@ -127,7 +127,7 @@ LiberNT 将现代硬件与平台引入 NT 架构。
 | `LiberNT-vhdx-…-<arch>-…zip` | `LiberNT.vhdx`，同一份预装盘，供 Hyper-V 第二代使用 |
 
 > [!NOTE]
-> 这些构建由 GitHub Actions 从 `main-nt10` 分支生成，均为 Clang Debug 版本。
+> 这些构建由 GitHub Actions 从 `master` 分支生成，均为 Clang Debug 版本。
 
 ### 第 2 步：启动
 

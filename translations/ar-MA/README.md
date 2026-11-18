@@ -16,7 +16,7 @@
 
 **صُنع حبًّا في معمارية NT. متوافق مع Windows® 11، لمعماريات amd64 وarm64 وriscv64.**
 
-[![Build](https://img.shields.io/github/actions/workflow/status/LiberNT/LiberNT/build.yml?branch=main-nt10&label=Build&style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/LiberNT/LiberNT/actions/workflows/build.yml)
+[![Build](https://img.shields.io/github/actions/workflow/status/LiberNT/LiberNT/build.yml?branch=master&label=Build&style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/LiberNT/LiberNT/actions/workflows/build.yml)
 [![License: GPL 3.0](https://img.shields.io/badge/License-GPL_3.0-0161B6?style=for-the-badge&logo=gnu&logoColor=white)](#الترخيص)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/BpcKg7FZ2)
 [![Matrix](https://img.shields.io/badge/Matrix-%23libernt-000000?style=for-the-badge&logo=matrix&logoColor=white)](https://matrix.to/#/#libernt:matrix.org)
@@ -24,7 +24,7 @@
 <img src="https://img.shields.io/github/repo-size/LiberNT/LiberNT?style=flat-square&color=blue" alt="Repo Size">
 <img src="https://img.shields.io/github/stars/LiberNT/LiberNT?style=flat-square&color=yellow" alt="Stars">
 <img src="https://img.shields.io/github/forks/LiberNT/LiberNT?style=flat-square&color=lightgrey" alt="Forks">
-<img src="https://img.shields.io/github/last-commit/LiberNT/LiberNT/main-nt10?style=flat-square&color=green" alt="Last Commit">
+<img src="https://img.shields.io/github/last-commit/LiberNT/LiberNT/master?style=flat-square&color=green" alt="Last Commit">
 <img src="https://img.shields.io/github/issues/LiberNT/LiberNT?style=flat-square&color=orange" alt="Issues">
 
 <br>
@@ -127,7 +127,7 @@ LiberNT نظام تشغيل NT حر. والاسم يدل على ذلك: كلمة
 | ‎`LiberNT-vhdx-…-<arch>-…zip`‎ | ‎`LiberNT.vhdx`‎، القرص المثبّت مسبقًا نفسه لـ Hyper-V من الجيل الثاني |
 
 > [!NOTE]
-> هذه نسخ Debug مبنية بـ Clang، تنتجها GitHub Actions من الفرع ‎`main-nt10`‎.
+> هذه نسخ Debug مبنية بـ Clang، تنتجها GitHub Actions من الفرع ‎`master`‎.
 
 ### الخطوة 2: الإقلاع
 

@@ -53,7 +53,7 @@ We recommend using English in issue reports and community discussions, to keep c
 
 ### Pull Requests
 
-Send your work as a [pull request] against the `main-nt10` branch. Pull requests let you tell others about changes you have pushed to a repository on GitHub. Once a pull request is opened, you can discuss and review the changes with the team and add follow-up commits before they are merged.
+Send your work as a [pull request] against the `master` branch. Pull requests let you tell others about changes you have pushed to a repository on GitHub. Once a pull request is opened, you can discuss and review the changes with the team and add follow-up commits before they are merged.
 
 Before you open it:
 

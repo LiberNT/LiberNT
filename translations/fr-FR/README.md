@@ -14,7 +14,7 @@
 
 **Né de l'amour de l'architecture NT. Compatible Windows® 11, pour amd64, arm64 et riscv64.**
 
-[![Build](https://img.shields.io/github/actions/workflow/status/LiberNT/LiberNT/build.yml?branch=main-nt10&label=Build&style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/LiberNT/LiberNT/actions/workflows/build.yml)
+[![Build](https://img.shields.io/github/actions/workflow/status/LiberNT/LiberNT/build.yml?branch=master&label=Build&style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/LiberNT/LiberNT/actions/workflows/build.yml)
 [![License: GPL 3.0](https://img.shields.io/badge/License-GPL_3.0-0161B6?style=for-the-badge&logo=gnu&logoColor=white)](#licence)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/BpcKg7FZ2)
 [![Matrix](https://img.shields.io/badge/Matrix-%23libernt-000000?style=for-the-badge&logo=matrix&logoColor=white)](https://matrix.to/#/#libernt:matrix.org)
@@ -22,7 +22,7 @@
 <img src="https://img.shields.io/github/repo-size/LiberNT/LiberNT?style=flat-square&color=blue" alt="Repo Size">
 <img src="https://img.shields.io/github/stars/LiberNT/LiberNT?style=flat-square&color=yellow" alt="Stars">
 <img src="https://img.shields.io/github/forks/LiberNT/LiberNT?style=flat-square&color=lightgrey" alt="Forks">
-<img src="https://img.shields.io/github/last-commit/LiberNT/LiberNT/main-nt10?style=flat-square&color=green" alt="Last Commit">
+<img src="https://img.shields.io/github/last-commit/LiberNT/LiberNT/master?style=flat-square&color=green" alt="Last Commit">
 <img src="https://img.shields.io/github/issues/LiberNT/LiberNT?style=flat-square&color=orange" alt="Issues">
 
 <br>
@@ -125,7 +125,7 @@ Chaque compilation de la page [Releases](https://github.com/LiberNT/LiberNT/rele
 | `LiberNT-vhdx-…-<arch>-…zip` | `LiberNT.vhdx`, le même disque préinstallé pour Hyper-V génération 2 |
 
 > [!NOTE]
-> Ce sont des compilations Debug réalisées avec Clang par GitHub Actions à partir de la branche `main-nt10`.
+> Ce sont des compilations Debug réalisées avec Clang par GitHub Actions à partir de la branche `master`.
 
 ### Étape 2 : la démarrer
 

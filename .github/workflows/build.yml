@@ -1,7 +1,7 @@
 name: Build
 on:
   push:
-    branches: [main-nt10]
+    branches: [master]
   pull_request:
   # Saves the pull request configuration's ccache on the default branch, the only cache a new pull request can restore
   schedule:

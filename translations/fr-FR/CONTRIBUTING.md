@@ -53,7 +53,7 @@ Nous vous recommandons d'utiliser l'anglais dans les rapports de bogues et les d
 
 ### Pull requests
 
-Envoyez votre travail sous forme de [pull request] vers la branche `main-nt10`. Les pull requests vous permettent d'informer les autres des modifications que vous avez poussées vers un dépôt sur GitHub. Une fois la pull request ouverte, vous pouvez discuter et relire les modifications avec l'équipe et ajouter des commits de suivi avant leur fusion.
+Envoyez votre travail sous forme de [pull request] vers la branche `master`. Les pull requests vous permettent d'informer les autres des modifications que vous avez poussées vers un dépôt sur GitHub. Une fois la pull request ouverte, vous pouvez discuter et relire les modifications avec l'équipe et ajouter des commits de suivi avant leur fusion.
 
 Avant de l'ouvrir :
 
