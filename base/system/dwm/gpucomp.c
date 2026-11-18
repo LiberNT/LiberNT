@@ -1596,6 +1596,12 @@ DwmGpuComposeAbort(void)
     return DWM_GPU_RETRY;
 }
 
+DWM_GPU_RESULT
+DwmGpuComposeRetry(void)
+{
+    return DwmD3dIsActive() ? DwmD3dRetry() : DwmGpuComposeAbort();
+}
+
 BOOL
 DwmGpuComposeResize(LONG Width, LONG Height)
 {
