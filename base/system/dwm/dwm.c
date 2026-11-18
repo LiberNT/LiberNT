@@ -4644,7 +4644,7 @@ DwmComposeLoop(HANDLE hStopEvent)
                     DPT_SCOPE FrameTrace = DptBegin(&g_DwmPresentTrace, DPT_FRAME);
                     DPT_SCOPE AckTrace;
                     ULONGLONG TraceDrawStart = 0, TraceDrawEnd = 0, TracePresentEnd = 0;
-                    BOOL gpuFrame;
+                    BOOL gpuFrame, gpuStale = FALSE;
                     DWM_GPU_RESULT gpuResult;
                     RECT gpuDamage[ARRAYSIZE(damageParts)] = {{pl, pt, pr, pb}};
                     ULONG gpuDamageCount = 1;
@@ -4679,8 +4679,17 @@ DwmComposeLoop(HANDLE hStopEvent)
 
                         /* Submit the scene in order. Begin's scissor limits
                          * raster work to the repaired buffer region. */
-                        gpix = DwmGpuComposeNeedsSurfacePixels(&wins[i]) ?
-                                   DwmGetSurfaceView(&wins[i]) : NULL;
+                        gpix = NULL;
+                        if (DwmGpuComposeNeedsSurfacePixels(&wins[i]))
+                        {
+                            gpix = DwmGetSurfaceView(&wins[i]);
+                            if (gpix == NULL)
+                            {
+                                gpuStale = TRUE;
+                                gpuFrame = FALSE;
+                                break;
+                            }
+                        }
                         DwmGpuComposePrepareWindow(&wins[i], i);
                         if (wins[i].BlurRectBase > hdr->BlurRectCount ||
                             wins[i].BlurRectCount > hdr->BlurRectCount - wins[i].BlurRectBase)
@@ -4730,7 +4739,8 @@ DwmComposeLoop(HANDLE hStopEvent)
                         DptEnd(&g_DwmPresentTrace, AckTrace, TRUE, 0);
                     }
 
-                    gpuResult = gpuFrame ? DwmGpuComposeEnd() : DwmGpuComposeAbort();
+                    gpuResult = gpuFrame ? DwmGpuComposeEnd() :
+                                gpuStale ? DwmGpuComposeRetry() : DwmGpuComposeAbort();
                     if (FrameTrace.Epoch) TracePresentEnd = DptNow();
                     if (gpuResult == DWM_GPU_COMPLETE ||
                         gpuResult == DWM_GPU_DEFERRED)
