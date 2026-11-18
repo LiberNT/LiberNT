@@ -16487,6 +16487,12 @@ DxgkAdapterRemove(
         ExFreePoolWithTag(Adapter->ChildDescriptors, TAG_DXGK_RESOURCES);
         Adapter->ChildDescriptors = NULL;
     }
+    if (Adapter->ChildConnectionRecords != NULL)
+    {
+        ExFreePoolWithTag(Adapter->ChildConnectionRecords, TAG_DXGK_RESOURCES);
+        Adapter->ChildConnectionRecords = NULL;
+        Adapter->ChildConnectionRecordCount = 0;
+    }
     /*
      * Adapter->Segments (DXGKRNL_SEGMENT array) is freed by
      * DxgkVidMmTeardownAdapter which is called earlier in DxgkAdapterStop.

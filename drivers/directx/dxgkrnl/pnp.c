@@ -195,12 +195,14 @@ DxgkpPublishChildConnection(
     _In_ ULONG ChildUid,
     _In_ DXGK_CHILD_DEVICE_HPD_AWARENESS ExpectedHpdAwareness,
     _In_ BOOLEAN ValidateHpdAwareness,
+    _In_ BOOLEAN RecordAbsentOutput,
     _In_ BOOLEAN Connected,
     _Out_opt_ PBOOLEAN Found)
 {
     PLIST_ENTRY Entry;
     KIRQL OldIrql;
     BOOLEAN Changed = FALSE;
+    BOOLEAN ChildFound = FALSE;
     BOOLEAN NewConnected = Connected ? TRUE : FALSE;
 
     if (Found != NULL)
@@ -213,8 +215,7 @@ DxgkpPublishChildConnection(
 
         if (Child->Descriptor.ChildUid != ChildUid || Child->Descriptor.ChildDeviceType != TypeVideoOutput || (ValidateHpdAwareness && Child->Descriptor.ChildCapabilities.HpdAwareness != ExpectedHpdAwareness))
             continue;
-        if (Found != NULL)
-            *Found = TRUE;
+        ChildFound = TRUE;
         if (Child->Connected != NewConnected)
         {
             Child->Connected = NewConnected;
@@ -228,7 +229,16 @@ DxgkpPublishChildConnection(
         }
         break;
     }
+    if (!ChildFound && RecordAbsentOutput)
+    {
+        ChildFound = DxgkChildRecordConnection(Adapter->ChildConnectionRecords,
+                                               Adapter->ChildConnectionRecordCount,
+                                               ChildUid, NewConnected, &Changed);
+    }
+    ASSERT(ChildFound || !Changed);
     KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
+    if (Found != NULL)
+        *Found = ChildFound;
     return Changed;
 }
 
@@ -249,6 +259,7 @@ DxgkPnpIndicateChildConnection(
                    ChildUid,
                    HpdAwarenessUninitialized,
                    FALSE,
+                   TRUE,
                    Connected,
                    &Found);
     return Found ? STATUS_SUCCESS : STATUS_INVALID_PARAMETER;
@@ -490,6 +501,7 @@ DxgkPnpBeginChildEnumerationEpoch(
     _In_ PDXGKRNL_ADAPTER Adapter)
 {
     PDXGK_CHILD_DESCRIPTOR OldDescriptors;
+    PDXGK_CHILD_CONNECTION_RECORD OldRecords;
     PLIST_ENTRY Entry;
     KIRQL OldIrql;
 
@@ -499,6 +511,9 @@ DxgkPnpBeginChildEnumerationEpoch(
     KeAcquireSpinLock(&Adapter->ChildListLock, &OldIrql);
     OldDescriptors = Adapter->ChildDescriptors;
     Adapter->ChildDescriptors = NULL;
+    OldRecords = Adapter->ChildConnectionRecords;
+    Adapter->ChildConnectionRecords = NULL;
+    Adapter->ChildConnectionRecordCount = 0;
     (VOID)DxgkHotPlugWorkCoreBeginEnumerationEpochLocked(&Adapter->ChildEnumerationEpoch, &Adapter->ChildRelationsEnumerated);
     for (Entry = Adapter->ChildListHead.Flink; Entry != &Adapter->ChildListHead; Entry = Entry->Flink)
     {
@@ -514,6 +529,8 @@ DxgkPnpBeginChildEnumerationEpoch(
     KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
     if (OldDescriptors != NULL)
         ExFreePoolWithTag(OldDescriptors, TAG_DXGK_RESOURCES);
+    if (OldRecords != NULL)
+        ExFreePoolWithTag(OldRecords, TAG_DXGK_RESOURCES);
 }
 
 static NTSTATUS
@@ -572,7 +589,7 @@ DxgkpPollDisplayChildrenAdapter(
         _SEH2_END;
         if (!NT_SUCCESS(Status))
             break;
-        if (DxgkpPublishChildConnection(Adapter, Children[Index].ChildUid, Children[Index].HpdAwareness, TRUE, ChildStatus.HotPlug.Connected, NULL))
+        if (DxgkpPublishChildConnection(Adapter, Children[Index].ChildUid, Children[Index].HpdAwareness, TRUE, FALSE, ChildStatus.HotPlug.Connected, NULL))
             ConnectionChanged = TRUE;
     }
 
@@ -1344,7 +1361,9 @@ DxgkpQueryChildConnectionForEnumeration(
         *Connected = TRUE;
         return STATUS_SUCCESS;
     }
-    if (Descriptor->ChildCapabilities.HpdAwareness != HpdAwarenessPolled && Descriptor->ChildCapabilities.HpdAwareness != HpdAwarenessInterruptible)
+    if (!DxgkChildConnectionFromStatusQuery(Descriptor->ChildCapabilities.HpdAwareness,
+                                            DXGK_CB_FULL(Adapter, DxgkDdiDisplayDetectControl) != NULL &&
+                                            DXGK_CB_FULL(Adapter, DxgkDdiQueryConnectionChange) != NULL))
         return STATUS_SUCCESS;
     QueryChildStatus = DXGK_CB(Adapter, DxgkDdiQueryChildStatus);
     if (QueryChildStatus == NULL)
@@ -1392,7 +1411,9 @@ DxgkPnpCacheInitialChildRelations(
     _In_ PDXGKRNL_ADAPTER Adapter)
 {
     PDXGK_CHILD_DESCRIPTOR Children;
+    PDXGK_CHILD_CONNECTION_RECORD Records;
     ULONG ChildrenSize;
+    ULONG RecordCount;
     KIRQL OldIrql;
     NTSTATUS Status;
 
@@ -1410,21 +1431,35 @@ DxgkPnpCacheInitialChildRelations(
     Children = ExAllocatePoolWithTag(NonPagedPool, ChildrenSize, TAG_DXGK_RESOURCES);
     if (Children == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
+    Records = ExAllocatePoolZero(NonPagedPool, Adapter->NumberOfChildren * sizeof(*Records), TAG_DXGK_RESOURCES);
+    if (Records == NULL)
+    {
+        ExFreePoolWithTag(Children, TAG_DXGK_RESOURCES);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
     RtlZeroMemory(Children, ChildrenSize);
     Status = DXGK_CB(Adapter, DxgkDdiQueryChildRelations)(
                  Adapter->MiniportDeviceContext, Children, ChildrenSize);
     if (NT_SUCCESS(Status))
     {
         DxgkChildNormalizeDescriptors(Children, Adapter->NumberOfChildren + 1);
+        RecordCount = DxgkChildInitializeConnectionRecords(Children, Adapter->NumberOfChildren,
+                                                           Records, Adapter->NumberOfChildren);
         KeAcquireSpinLock(&Adapter->ChildListLock, &OldIrql);
         ASSERT(Adapter->ChildEnumerationEpoch != 0);
         ASSERT(Adapter->ChildDescriptors == NULL);
+        ASSERT(Adapter->ChildConnectionRecords == NULL && Adapter->ChildConnectionRecordCount == 0);
         Adapter->ChildDescriptors = Children;
+        Adapter->ChildConnectionRecords = Records;
+        Adapter->ChildConnectionRecordCount = RecordCount;
         KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
         Children = NULL;
+        Records = NULL;
     }
     if (Children != NULL)
         ExFreePoolWithTag(Children, TAG_DXGK_RESOURCES);
+    if (Records != NULL)
+        ExFreePoolWithTag(Records, TAG_DXGK_RESOURCES);
     return Status;
 }
 
@@ -1655,6 +1690,7 @@ DxgkpQueryBusRelations(
         PDXGK_CHILD_PDO_EXTENSION ExistingChild = NULL;
         PLIST_ENTRY Entry;
         ULONG64 BaselineGeneration = 0;
+        ULONG RecordSequence = 0;
         BOOLEAN ConnectionKnown = FALSE;
         BOOLEAN Connected = FALSE;
         BOOLEAN Found = FALSE;
@@ -1684,6 +1720,15 @@ DxgkpQueryBusRelations(
                 BaselineGeneration = ExistingChild->StateGeneration;
                 break;
             }
+        }
+        if (!Found)
+        {
+            PDXGK_CHILD_CONNECTION_RECORD Record =
+                DxgkChildFindConnectionRecord(Adapter->ChildConnectionRecords,
+                                              Adapter->ChildConnectionRecordCount, Desc->ChildUid);
+
+            if (Record != NULL)
+                RecordSequence = Record->Sequence;
         }
         KeReleaseSpinLock(&Adapter->ChildListLock, OldIrql);
 
@@ -1779,6 +1824,26 @@ DxgkpQueryBusRelations(
                 }
                 if (!Duplicate)
                 {
+                    PDXGK_CHILD_CONNECTION_RECORD Record =
+                        DxgkChildFindConnectionRecord(Adapter->ChildConnectionRecords,
+                                                      Adapter->ChildConnectionRecordCount, Desc->ChildUid);
+
+                    if (Record != NULL)
+                    {
+                        BOOLEAN Resolved = DxgkChildResolveEnumeratedConnection(
+                                               Desc->ChildCapabilities.HpdAwareness,
+                                               ConnectionKnown, Connected, Record, RecordSequence);
+
+                        if (Resolved != NewChild->Connected)
+                        {
+                            DXGKRNL_INFO("DxgkpQueryBusRelations: ChildUid %lu starts %s, as the miniport "
+                                         "reported before its child object existed\n",
+                                         Desc->ChildUid, Resolved ? "connected" : "disconnected");
+                            NewChild->Connected = Resolved;
+                            NewChild->EdidValid = FALSE;
+                        }
+                        Record->Observed = FALSE;
+                    }
                     InsertTailList(&Adapter->ChildListHead, &NewChild->ListEntry);
                     Adapter->ChildPdoCount++;
                     (VOID)DxgkHotPlugWorkCorePublishLocked(&Adapter->HotPlugGeneration);
