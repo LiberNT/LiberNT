@@ -3881,7 +3881,7 @@ DxgkpVidPnRebuildForHotPlugGeneration(
     Candidate = NULL;
     KeReleaseSpinLock(&Adapter->ChildListLock, ChildOldIrql);
     KeReleaseMutex(&Adapter->VidPnMutex, FALSE);
-    DxgkpDisplayPublishInitialMode(Adapter);
+    DxgkpDisplayPublishInitialMode(Adapter, FALSE);
     DxgkVidPnDestroyDisplayModeCache(Adapter);
     /* Windows keeps the desktop mode while the adapter has no output left */
     NotifyMonitorEvent = CommitResult.VidPnCommitted &&
@@ -8776,7 +8776,7 @@ DxgkVidPnSetVideoMode(
     }
     if (Adapter->SharedPrimaryWidth != Result.CommittedWidth || Adapter->SharedPrimaryHeight != Result.CommittedHeight)
         DxgkpDestroySharedPrimaryLocked(Adapter);
-    DxgkpDisplayPublishInitialMode(Adapter);
+    DxgkpDisplayPublishInitialMode(Adapter, TRUE);
     for (TargetModeIndex = 0;
          TargetModeIndex < Current->NumPaths &&
          TargetModeIndex < ((PDXGKP_VIDPN)Adapter->VidPn)->NumPaths;
