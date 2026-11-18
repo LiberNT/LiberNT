@@ -111,6 +111,8 @@ typedef struct _DXGK_CHILD_PDO_EXTENSION
     ULONG                   JoinedInto;
 
     BOOLEAN                 Reported;
+    BOOLEAN                 ReconnectPending;
+    ULONG64                 ReportedConnectSequence;
 
 } DXGK_CHILD_PDO_EXTENSION, *PDXGK_CHILD_PDO_EXTENSION;
 
