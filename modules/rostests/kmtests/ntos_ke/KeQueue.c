@@ -356,6 +356,14 @@ TestQueueRundown(VOID)
     KeInitializeQueue(&Queue, 0);
     First = KeRundownQueue(&Queue);
     ok_eq_pointer(First, NULL);
+    {
+        LARGE_INTEGER Poll;
+        Poll.QuadPart = 0;
+        First = KeRemoveQueue(&Queue, KernelMode, &Poll);
+        ok_eq_pointer(First, (PLIST_ENTRY)(ULONG_PTR)STATUS_ABANDONED);
+        ok_eq_ulong(Queue.CurrentCount, 0UL);
+        ok_bool_true(IsListEmpty(&Queue.ThreadListHead), "Abandoned queue has a new worker");
+    }
 
     KeInitializeQueue(&Queue, 1);
     KeInsertQueue(&Queue, &Entries[0]);
