@@ -721,6 +721,29 @@ BOOL ScansOutOutput(const WCHAR *DeviceName, const LUID &Luid)
     return Open.AdapterLuid.LowPart == Luid.LowPart && Open.AdapterLuid.HighPart == Luid.HighPart;
 }
 
+BOOL QueryPrimaryOutputAdapter(LUID *Luid)
+{
+    MONITORINFOEXW Info = {};
+    Info.cbSize = sizeof(Info);
+    if (!GetMonitorInfoW(MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY), reinterpret_cast<MONITORINFO *>(&Info)))
+        return FALSE;
+    D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME Open = {};
+    lstrcpynW(Open.DeviceName, Info.szDevice, ARRAYSIZE(Open.DeviceName));
+    if (D3DKMTOpenAdapterFromGdiDisplayName(&Open) < 0)
+        return FALSE;
+    D3DKMT_CLOSEADAPTER Close = {};
+    Close.hAdapter = Open.hAdapter;
+    D3DKMTCloseAdapter(&Close);
+    *Luid = Open.AdapterLuid;
+    return TRUE;
+}
+
+BOOL ScansOutPrimaryOutput(const LUID &Luid)
+{
+    LUID Primary;
+    return QueryPrimaryOutputAdapter(&Primary) && Primary.LowPart == Luid.LowPart && Primary.HighPart == Luid.HighPart;
+}
+
 void SetNativeTraceProvider(IDXGIAdapter1 *Adapter)
 {
     DXGI_ADAPTER_DESC1 Desc = {};
@@ -755,35 +778,6 @@ void SetNativeTraceProvider(IDXGIAdapter1 *Adapter)
     }
     State.TraceProvider = Provider;
     DwmPresentTraceSetIcd(Control);
-}
-
-BOOL AnyAdapterHasNativeDriver()
-{
-    D3DKMT_ENUMADAPTERS2 Enumeration = {};
-    if (D3DKMTEnumAdapters2(&Enumeration) < 0 || Enumeration.NumAdapters == 0)
-        return FALSE;
-    const ULONG Capacity = Enumeration.NumAdapters;
-    D3DKMT_ADAPTERINFO *Adapters = static_cast<D3DKMT_ADAPTERINFO *>(
-        HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, Capacity * sizeof(*Adapters)));
-    if (Adapters == NULL)
-        return FALSE;
-    Enumeration.pAdapters = Adapters;
-    BOOL Found = FALSE;
-    if (D3DKMTEnumAdapters2(&Enumeration) >= 0)
-    {
-        for (ULONG Index = 0; Index < Enumeration.NumAdapters && Index < Capacity; ++Index)
-        {
-            if (Adapters[Index].hAdapter == 0)
-                continue;
-            if (!Found && HasNativeDriver(Adapters[Index].AdapterLuid))
-                Found = TRUE;
-            D3DKMT_CLOSEADAPTER Close = {};
-            Close.hAdapter = Adapters[Index].hAdapter;
-            D3DKMTCloseAdapter(&Close);
-        }
-    }
-    HeapFree(GetProcessHeap(), 0, Adapters);
-    return Found;
 }
 
 BOOL CheckSharedSurfaceSupport()
@@ -1653,7 +1647,8 @@ DwmD3dInitialize(LONG Width, LONG Height)
         return TRUE;
     if (Width <= 0 || Height <= 0)
         return FALSE;
-    if (!AnyAdapterHasNativeDriver())
+    LUID Primary;
+    if (!QueryPrimaryOutputAdapter(&Primary) || !HasNativeDriver(Primary))
         return FALSE;
     State.Width = Width;
     State.Height = Height;
@@ -1789,7 +1784,7 @@ DwmD3dShutdown(void)
 BOOL
 DwmD3dResize(LONG Width, LONG Height)
 {
-    if (!State.Active || Width <= 0 || Height <= 0)
+    if (!State.Active || Width <= 0 || Height <= 0 || !ScansOutPrimaryOutput(State.AdapterLuid))
         return FALSE;
     if (Width == State.Width && Height == State.Height)
         return TRUE;
@@ -2677,6 +2672,12 @@ DwmD3dEnd(void)
     State.FrameValid = TRUE;
     State.Scene.Valid = TRUE;
     return DWM_GPU_COMPLETE;
+}
+
+BOOL
+DwmD3dOutputMoved(void)
+{
+    return State.Active && !ScansOutPrimaryOutput(State.AdapterLuid);
 }
 
 DWM_GPU_RESULT
