@@ -664,6 +664,9 @@ PopEnterConsoleSession(
     ULONG ConsoleId = RtlGetActiveConsoleId();
 
     *Session = NULL;
+    /* While the console is remote no session has it, and a process outside every session reports MAXULONG too */
+    if (ConsoleId == MAXULONG)
+        return FALSE;
     if (PsGetProcessSessionIdEx(PsGetCurrentProcess()) == ConsoleId)
         return TRUE;
 
