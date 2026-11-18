@@ -21,6 +21,7 @@
 #define REMOTE_INSTANCE    L"Content0001"
 #define TEST_COLOR         RGB(0x20, 0x80, 0xC0)
 #define MAX_TEST_DEVICES   16
+#define POINTER_SIZE       128
 
 typedef NTSTATUS (APIENTRY *PFN_OPEN_FROM_DEVICE_NAME)(D3DKMT_OPENADAPTERFROMDEVICENAME *);
 typedef NTSTATUS (APIENTRY *PFN_ESCAPE)(const D3DKMT_ESCAPE *);
@@ -209,6 +210,7 @@ TestScanout(
     SetWindowPos(hFill, HWND_TOPMOST, 0, 0, Width, Height, SWP_SHOWWINDOW | SWP_NOACTIVATE);
     /* The remote client draws the pointer, so the frame must not contain it */
     SetCursorPos(Width * Probes[2].x / 5 - 4, Height * Probes[2].y / 5 - 4);
+    SetCursor((HCURSOR)GetClassLongPtrW(hFill, GCLP_HCURSOR));
     RedrawWindow(hFill, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW);
     PumpFor(2000);
 
@@ -246,6 +248,30 @@ cleanup:
         CloseHandle(Event);
     if (Pixels)
         HeapFree(GetProcessHeap(), 0, Pixels);
+}
+
+static HCURSOR
+CreateLargePointer(VOID)
+{
+    BITMAPINFO Info = { { sizeof(BITMAPINFOHEADER), POINTER_SIZE, POINTER_SIZE, 1, 32, BI_RGB } };
+    ICONINFO Icon = { FALSE, 0, 0, NULL, NULL };
+    HCURSOR Cursor = NULL;
+    PULONG Bits;
+    ULONG Index;
+
+    Icon.hbmColor = CreateDIBSection(NULL, &Info, DIB_RGB_COLORS, (PVOID *)&Bits, NULL, 0);
+    Icon.hbmMask = CreateBitmap(POINTER_SIZE, POINTER_SIZE, 1, 1, NULL);
+    if (Icon.hbmColor && Icon.hbmMask)
+    {
+        for (Index = 0; Index < POINTER_SIZE * POINTER_SIZE; Index++)
+            Bits[Index] = 0xFFFF0000;
+        Cursor = CreateIconIndirect(&Icon);
+    }
+    if (Icon.hbmColor)
+        DeleteObject(Icon.hbmColor);
+    if (Icon.hbmMask)
+        DeleteObject(Icon.hbmMask);
+    return Cursor;
 }
 
 static VOID
@@ -287,6 +313,8 @@ START_TEST(RemoteDisplayContent)
     }
 
     Brush = CreateSolidBrush(TEST_COLOR);
+    Class.hCursor = CreateLargePointer();
+    ok(Class.hCursor != NULL, "CreateIconIndirect failed: %lu\n", GetLastError());
     Class.lpfnWndProc = DefWindowProcW;
     Class.hInstance = GetModuleHandleW(NULL);
     Class.hbrBackground = Brush;
@@ -350,4 +378,6 @@ done:
     UninstallTestDevice();
     CloseHandle(Result.Event);
     DeleteObject(Brush);
+    if (Class.hCursor)
+        DestroyCursor(Class.hCursor);
 }
