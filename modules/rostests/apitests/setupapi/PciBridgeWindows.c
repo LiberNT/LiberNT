@@ -27,7 +27,6 @@ GetAllocated(DEVINST Node, RESOURCEID Type, PRANGES Ranges)
     ULONG Size;
     BYTE Data[512];
 
-    Ranges->Count = 0;
     if (CM_Get_First_Log_Conf(&LogConf, Node, ALLOC_LOG_CONF) != CR_SUCCESS)
         return;
 
@@ -48,6 +47,13 @@ GetAllocated(DEVINST Node, RESOURCEID Type, PRANGES Ranges)
 
                 Ranges->Start[Ranges->Count] = Io->IOD_Alloc_Base;
                 Ranges->End[Ranges->Count] = Io->IOD_Alloc_End;
+            }
+            else if (Type == ResType_MemLarge)
+            {
+                PMEM_LARGE_DES Mem = (PMEM_LARGE_DES)Data;
+
+                Ranges->Start[Ranges->Count] = Mem->MLD_Alloc_Base;
+                Ranges->End[Ranges->Count] = Mem->MLD_Alloc_End;
             }
             else
             {
@@ -86,13 +92,18 @@ static VOID
 CheckType(const WCHAR *Id, const WCHAR *Parent, DEVINST Node, DEVINST ParentNode, RESOURCEID Type, const WCHAR *Kind,
           PULONG Checked)
 {
-    RANGES Own, Windows;
+    RANGES Own = { 0 }, Windows = { 0 };
     ULONG Index;
 
+    /* A window of more than 4 GB, such as a 64-bit prefetchable one, is a large memory resource */
     GetAllocated(Node, Type, &Own);
+    if (Type == ResType_Mem)
+        GetAllocated(Node, ResType_MemLarge, &Own);
     if (Own.Count == 0)
         return;
     GetAllocated(ParentNode, Type, &Windows);
+    if (Type == ResType_Mem)
+        GetAllocated(ParentNode, ResType_MemLarge, &Windows);
 
     for (Index = 0; Index < Own.Count; Index++)
     {
