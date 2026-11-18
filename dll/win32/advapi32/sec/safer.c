@@ -476,7 +476,7 @@ SaferDevicePathToDos(PWSTR Path)
 static PWSTR
 SaferCanonicalPath(PWSTR Path)
 {
-    DWORD Length;
+    DWORD Length, Result;
     PWSTR Full;
 
     SaferNormalizeSlashes(Path);
@@ -486,7 +486,7 @@ SaferCanonicalPath(PWSTR Path)
     if (Length)
     {
         Full = SaferAlloc((Length + 1) * sizeof(WCHAR));
-        if (Full && GetFullPathNameW(Path, Length + 1, Full, NULL))
+        if (Full && (Result = GetFullPathNameW(Path, Length + 1, Full, NULL)) && Result <= Length)
         {
             SaferFree(Path);
             Path = Full;
@@ -501,7 +501,7 @@ SaferCanonicalPath(PWSTR Path)
     if (Length)
     {
         Full = SaferAlloc((Length + 1) * sizeof(WCHAR));
-        if (Full && GetLongPathNameW(Path, Full, Length + 1))
+        if (Full && (Result = GetLongPathNameW(Path, Full, Length + 1)) && Result <= Length)
         {
             SaferFree(Path);
             Path = Full;
@@ -521,7 +521,7 @@ static PWSTR
 SaferImagePathFromProperties(PSAFER_CODE_PROPERTIES Properties)
 {
     PWSTR Path = NULL;
-    DWORD Length;
+    DWORD Length, Result;
 
     if (Properties->ImagePath && Properties->ImagePath[0])
     {
@@ -533,7 +533,7 @@ SaferImagePathFromProperties(PSAFER_CODE_PROPERTIES Properties)
         if (Length)
         {
             Path = SaferAlloc((Length + 1) * sizeof(WCHAR));
-            if (Path && !GetFinalPathNameByHandleW(Properties->hImageFileHandle, Path, Length + 1, VOLUME_NAME_DOS))
+            if (Path && (!(Result = GetFinalPathNameByHandleW(Properties->hImageFileHandle, Path, Length + 1, VOLUME_NAME_DOS)) || Result > Length))
             {
                 SaferFree(Path);
                 Path = NULL;
@@ -578,7 +578,7 @@ SaferHiveFromName(PCWSTR Name, SIZE_T Length)
 static PWSTR
 SaferExpandEnvironment(PCWSTR Text)
 {
-    DWORD Length;
+    DWORD Length, Result;
     PWSTR Expanded;
 
     Length = ExpandEnvironmentStringsW(Text, NULL, 0);
@@ -586,7 +586,7 @@ SaferExpandEnvironment(PCWSTR Text)
         return NULL;
 
     Expanded = SaferAlloc((Length + 1) * sizeof(WCHAR));
-    if (Expanded && !ExpandEnvironmentStringsW(Text, Expanded, Length + 1))
+    if (Expanded && (!(Result = ExpandEnvironmentStringsW(Text, Expanded, Length + 1)) || Result > Length + 1))
     {
         SaferFree(Expanded);
         return NULL;
