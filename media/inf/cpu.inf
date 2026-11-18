@@ -33,17 +33,17 @@ HKR, , NoInstallClass, 0, "1"
 CopyFiles = Processor_CopyFiles
 
 [Processor_CopyFiles]
-pnpcpu.sys
+processr.sys
 
 [Processor_Inst.NT.Services]
-AddService = PNPCPU, 0x00000002, Pnpcpu_Service
+AddService = Processor, 0x00000002, Processor_Service
 
-[Pnpcpu_Service]
-DisplayName    = %Pnpcpu.ServiceDesc%
+[Processor_Service]
+DisplayName    = %Processor.SvcDesc%
 ServiceType    = 1
 StartType      = 3
 ErrorControl   = 1
-ServiceBinary  = %12%\pnpcpu.sys
+ServiceBinary  = %12%\processr.sys
 LoadOrderGroup = Extended Base
 
 [Strings]
@@ -51,4 +51,4 @@ LiberNT = "LiberNT Team"
 ProcessorClassName = "Processors"
 StdMfg = "(Standard processor types)"
 processor.DeviceDesc = "Processor"
-Pnpcpu.ServiceDesc = "Processor Driver"
+Processor.SvcDesc = "Processor Driver"
