@@ -414,7 +414,11 @@ OslLoadBootDrivers(
         FileName = strrchr(RelativePath, '\\');
         FileName = FileName ? FileName + 1 : RelativePath;
 
-        RtlStringCbPrintfA(Directory, sizeof(Directory), "%s%s", SystemRoot, RelativePath);
+        if (!NT_SUCCESS(RtlStringCbPrintfA(Directory, sizeof(Directory), "%s%s", SystemRoot, RelativePath)))
+        {
+            RemoveEntryList(Link);
+            continue;
+        }
         Directory[strlen(SystemRoot) + (FileName - RelativePath)] = ANSI_NULL;
 
         if (!PeLoadModule(&LoaderBlock->LoadOrderListHead,

@@ -52,8 +52,12 @@ BmRvaToData(
         if (Rva < Start || Rva - Start >= Span || Length > Span - (Rva - Start))
             continue;
 
-        Offset = Sections[i].PointerToRawData + (Rva - Start);
-        if (Offset > Size || Length > Size - Offset)
+        Offset = Sections[i].PointerToRawData;
+        if (Offset > Size || Rva - Start > Size - Offset)
+            return NULL;
+
+        Offset += Rva - Start;
+        if (Length > Size - Offset)
             return NULL;
 
         return Image + Offset;

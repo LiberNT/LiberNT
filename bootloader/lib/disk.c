@@ -272,6 +272,7 @@ DkFindMbrPartition(
     UCHAR Sector[512];
     PUCHAR Entry;
     ULONG Index, Number;
+    ULONGLONG Length;
 
     if (!DkRead(Disk, 0, sizeof(Sector), Sector) ||
         Sector[DK_MBR_MAGIC_OFFSET] != 0x55 ||
@@ -291,9 +292,13 @@ DkFindMbrPartition(
         if ((ULONGLONG)LeUlong(Entry + DK_MBR_START_OFFSET) * Disk->BlockSize != Offset)
             continue;
 
+        Length = (ULONGLONG)LeUlong(Entry + DK_MBR_LENGTH_OFFSET) * Disk->BlockSize;
+        if (Length == 0 || Offset > Disk->Length || Length > Disk->Length - Offset)
+            return FALSE;
+
         *Partition = *Disk;
         Partition->Offset = Offset;
-        Partition->Length = (ULONGLONG)LeUlong(Entry + DK_MBR_LENGTH_OFFSET) * Disk->BlockSize;
+        Partition->Length = Length;
         Partition->PartitionNumber = Number;
         return TRUE;
     }
