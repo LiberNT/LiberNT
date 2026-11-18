@@ -53,6 +53,7 @@ list(APPEND SOURCE
     EmulatedProcess.c
     DispatcherStress.c
     dosdev.c
+    EevdfShares.c
     DateTimeFormatFlags.c
     EnumDateTimeFormats.c
     EnumSystemCodePages.c

@@ -225,6 +225,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/ke/crash.c
     ${REACTOS_SOURCE_DIR}/ntos/ke/dispatch.c
     ${REACTOS_SOURCE_DIR}/ntos/ke/dpcobj.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/eevdf.c
     ${REACTOS_SOURCE_DIR}/ntos/ke/exceptsvc.c
     ${REACTOS_SOURCE_DIR}/ntos/ke/freezecpu.c
     ${REACTOS_SOURCE_DIR}/ntos/ke/ioqueue.c

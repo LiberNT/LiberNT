@@ -307,6 +307,46 @@ KiCanStealToProcessor(
     return (NonParkedSet & AFFINITY_MASK(TargetCpu)) || !(Affinity & NonParkedSet);
 }
 
+FORCEINLINE
+BOOLEAN
+KiThreadPreempts(
+    _Inout_ PKPRCB Prcb,
+    _Inout_ PKTHREAD Thread,
+    _Inout_ PKTHREAD Incumbent)
+{
+    if (KiEevdfEnabled)
+        return KiEevdfPreempts(Prcb, Thread, Incumbent);
+
+    return (BOOLEAN)(Thread->Priority > Incumbent->Priority);
+}
+
+FORCEINLINE
+PKTHREAD
+KiSelectThreadOver(
+    _Inout_ PKPRCB Prcb,
+    _Inout_ PKTHREAD Incumbent,
+    _In_ KPRIORITY Priority)
+{
+    if (KiEevdfEnabled)
+        return KiEevdfSelectReadyThread(Priority, Prcb, Incumbent);
+
+    return KiSelectReadyThread(Priority, Prcb);
+}
+
+static
+BOOLEAN
+KiThreadTurnEnded(
+    _Inout_ PKPRCB Prcb,
+    _Inout_ PKTHREAD Thread)
+{
+    BOOLEAN Ended;
+
+    if (KiEevdfEnabled && KiEevdfTurnOver(Prcb, Thread, &Ended))
+        return Ended;
+
+    return KiIsThreadQuantumExpired(Thread);
+}
+
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 /*
@@ -374,6 +414,9 @@ KiQueueReadyThread(
     Prcb->ReadySummary |= PRIORITY_MASK(Priority);
     KiAssertReadyQueue(Prcb, Priority);
 
+    if (KiEevdfEnabled)
+        KiEevdfEnqueue(Prcb, Thread, FALSE);
+
     KiReleasePrcbLock(Prcb);
 }
 
@@ -391,7 +434,7 @@ KiDeferredReadyThread(
     PKTHREAD Current, Displaced;
     KPRIORITY Priority;
     ULONG Processor;
-    BOOLEAN Wake;
+    BOOLEAN Wake, Preempts;
 
     ASSERT(Thread->State == DeferredReady);
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
@@ -405,7 +448,13 @@ KiDeferredReadyThread(
         return;
     Prcb = KiProcessorBlock[Processor];
 
+    if (KiEevdfEnabled)
+        KiEevdfDepart(Thread, Processor);
+
     KiAcquirePrcbLock(Prcb);
+
+    if (KiEevdfEnabled)
+        KiEevdfArrive(Prcb, Thread);
 
     Current = Prcb->CurrentThread;
 
@@ -413,7 +462,7 @@ KiDeferredReadyThread(
     if ((Displaced != NULL) &&
         (Displaced != Thread) &&
         (Displaced != Prcb->IdleThread) &&
-        (Priority > (KPRIORITY)Displaced->Priority))
+        KiThreadPreempts(Prcb, Thread, Displaced))
     {
         ASSERT(Displaced->State == Standby);
         ASSERT(Displaced->NextProcessor == Processor);
@@ -430,10 +479,10 @@ KiDeferredReadyThread(
      * Displace what is running only when nothing else is already standing by
      * for that processor; two candidates would otherwise lose one of them.
      */
+    Preempts = (BOOLEAN)((Current != NULL) && (Current != Thread) && KiThreadPreempts(Prcb, Thread, Current));
+
     if ((Prcb->NextThread == NULL) &&
-        (Current != NULL) &&
-        (Current != Thread) &&
-        (Priority > (KPRIORITY)Current->Priority) &&
+        Preempts &&
         !Current->DeferPreemption &&
         !((Current == Prcb->IdleThread) && Prcb->DpcRoutineActive &&
           (KiThreadAffinityMask(Thread) & KeActiveProcessors & ~Prcb->SetMember)))
@@ -462,12 +511,8 @@ KiDeferredReadyThread(
      * request is remembered: the next time its turn comes up for review the
      * thread that should have displaced it gets its chance.
      */
-    if ((Current != NULL) &&
-        Current->DeferPreemption &&
-        (Priority > (KPRIORITY)Current->Priority))
-    {
+    if (Preempts && Current->DeferPreemption)
         Current->QueueDeferPreemption = TRUE;
-    }
 
     KiQueueReadyThread(Thread, Prcb);
 
@@ -620,8 +665,10 @@ KiStealReadyThread(
                 if (KiThreadLeavingProcessor(Thread))
                     continue;
 
-                if (RemoveEntryList(&Thread->WaitListEntry))
-                    Remote->ReadySummary ^= PRIORITY_MASK(Priority);
+                KiReadyQueueRemove(Remote, Thread, Priority);
+
+                if (KiEevdfEnabled)
+                    KiEevdfMigrate(Remote, Prcb, Thread);
 
                 /* Off that queue for good before its lock goes: nothing may unlink it again there */
                 Thread->NextProcessor = Prcb->Number;
@@ -684,7 +731,10 @@ KiYieldDelayExecution(VOID)
     if (Prcb->NextThread == NULL)
     {
         /* FIXME: Windows 11 gives the processor back to a higher-priority yielder after about 2.5 ms; here the thread it yielded to keeps its whole turn */
-        Next = KiSelectReadyThread(0, Prcb);
+        if (KiEevdfEnabled)
+            KiEevdfYield(Prcb, Thread);
+
+        Next = KiSelectThreadOver(Prcb, Thread, 0);
         if (Next == NULL)
             Next = KiStealReadyThread(Prcb, Thread->Priority);
 
@@ -743,6 +793,9 @@ KiSwapThread(
     KiCheckDeferredReadyList(Prcb);
 
     KiAcquirePrcbLock(Prcb);
+
+    if (KiEevdfEnabled)
+        KiEevdfBlock(Prcb, Thread);
 
     NextThread = Prcb->NextThread;
     if (NextThread != NULL)
@@ -871,9 +924,7 @@ KiSetPriorityThread(
             QueuedPriority = Thread->Priority;
 
             KiAssertReadyQueue(Prcb, QueuedPriority);
-            if (RemoveEntryList(&Thread->WaitListEntry))
-                Prcb->ReadySummary ^= PRIORITY_MASK(QueuedPriority);
-            KiAssertReadyQueue(Prcb, QueuedPriority);
+            KiReadyQueueRemove(Prcb, Thread, QueuedPriority);
 
             Thread->Priority = (SCHAR)Priority;
             Thread->Preempted = FALSE;
@@ -905,6 +956,9 @@ KiSetPriorityThread(
             OldPriority = Thread->Priority;
             Thread->Priority = (SCHAR)Priority;
 
+            if (KiEevdfEnabled)
+                KiEevdfPriorityChanged(Prcb, Thread);
+
             /*
              * Lowering a thread that holds a processor can make a queued one
              * the better choice; let that processor pick again.
@@ -915,7 +969,7 @@ KiSetPriorityThread(
                 {
                     if (Prcb->NextThread == Thread)
                     {
-                        Better = KiSelectReadyThread(Priority + 1, Prcb);
+                        Better = KiSelectThreadOver(Prcb, Thread, Priority + 1);
                         if (Better == NULL)
                             Better = KiStealReadyThread(Prcb, Priority + 1);
                         if (Better != NULL)
@@ -934,7 +988,7 @@ KiSetPriorityThread(
                     Current = Prcb->CurrentThread;
                     if ((Current == Thread) && (Prcb->NextThread == NULL))
                     {
-                        Better = KiSelectReadyThread(Priority + 1, Prcb);
+                        Better = KiSelectThreadOver(Prcb, Thread, Priority + 1);
                         if (Better == NULL)
                             Better = KiStealReadyThread(Prcb, Priority + 1);
                         if (Better != NULL)
@@ -1009,8 +1063,7 @@ KiSetAffinityThread(
             }
 
             KiAssertReadyQueue(Prcb, Thread->Priority);
-            if (RemoveEntryList(&Thread->WaitListEntry))
-                Prcb->ReadySummary ^= PRIORITY_MASK(Thread->Priority);
+            KiReadyQueueRemove(Prcb, Thread, Thread->Priority);
 
             Thread->State = DeferredReady;
             KiReleasePrcbLock(Prcb);
@@ -1215,7 +1268,7 @@ KiQuantumEnd(VOID)
         KiAcquirePrcbLock(Prcb);
         if (Prcb->NextThread == NULL)
         {
-            Next = KiSelectReadyThread(Thread->Priority + 1, Prcb);
+            Next = KiSelectThreadOver(Prcb, Thread, Thread->Priority + 1);
             if (Next != NULL)
             {
                 Next->State = Standby;
@@ -1228,12 +1281,12 @@ KiQuantumEnd(VOID)
     }
 
     /* An expired turn is replenished whether or not the thread keeps running */
-    if (!KiIsThreadQuantumExpired(Thread))
+    if (!KiThreadTurnEnded(Prcb, Thread))
     {
         KiAcquirePrcbLock(Prcb);
         if (Prcb->NextThread == NULL)
         {
-            Next = KiSelectReadyThread(Thread->Priority + 1, Prcb);
+            Next = KiSelectThreadOver(Prcb, Thread, Thread->Priority + 1);
             if (Next != NULL)
             {
                 Next->State = Standby;
@@ -1270,7 +1323,7 @@ KiQuantumEnd(VOID)
 
     if (Prcb->NextThread == NULL)
     {
-        Next = KiSelectReadyThread(Thread->Priority, Prcb);
+        Next = KiSelectThreadOver(Prcb, Thread, Thread->Priority);
         if (Next != NULL)
         {
             Next->State = Standby;
@@ -1451,8 +1504,7 @@ KiBalanceReadyQueues(
             continue;
         }
 
-        if (RemoveEntryList(&Thread->WaitListEntry))
-            Source->ReadySummary ^= PRIORITY_MASK(Priority);
+        KiReadyQueueRemove(Source, Thread, Priority);
 
         Thread->State = DeferredReady;
         KiReleasePrcbLock(Source);
@@ -1507,6 +1559,9 @@ NtYieldExecution(VOID)
     /* Any thread ready on this processor takes the turn, whatever its priority */
     if (Prcb->NextThread == NULL)
     {
+        if (KiEevdfEnabled)
+            KiEevdfYield(Prcb, Thread);
+
         Next = KiSelectReadyThread(0, Prcb);
         if (Next != NULL)
         {

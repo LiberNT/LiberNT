@@ -1750,4 +1750,5 @@ KiExtTimerPeriodToMilliseconds(
     return PeriodMs;
 }
 
+#include "eevdf.h"
 #include "ke_x.h"

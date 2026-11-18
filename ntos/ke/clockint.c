@@ -879,6 +879,7 @@ KiChargeRunTime(
 {
     PKTHREAD Thread = Prcb->CurrentThread;
     PKPROCESS Process;
+    BOOLEAN SliceEnded;
 
     ASSERT(Prcb == KeGetCurrentPrcb());
 
@@ -933,7 +934,12 @@ KiChargeRunTime(
      * and the clock has nothing to subtract; otherwise this is where a turn
      * is spent.
      */
-    if (KiGetQuantumUnitCycles() == 0)
+    if (KiEevdfEnabled && KiEevdfClockTick(Prcb, Thread, &SliceEnded))
+    {
+        if (!SliceEnded)
+            return;
+    }
+    else if (KiGetQuantumUnitCycles() == 0)
     {
         if (!KiDecrementThreadQuantum(Thread, CLOCK_QUANTUM_DECREMENT * Ticks))
             return;
