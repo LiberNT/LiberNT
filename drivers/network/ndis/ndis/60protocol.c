@@ -23,6 +23,39 @@ static volatile LONG g_Ndis6ProtocolDriverListState;
 #define NDIS6_PROTOCOL_DRIVER_TAG  'pDNn'  /* "nNDp" */
 #define NDIS6_PROTOCOL_SNAPSHOT_TAG 'sPNn'
 
+/* A legacy miniport is discoverable only after its initialization and
+ * Ethernet OID queries complete. Ndis6Context must never be used here. */
+static BOOLEAN
+Ndis6LegacyAdapterReady(_In_ PLOGICAL_ADAPTER Adapter)
+{
+    return Adapter != NULL && !Adapter->IsNdis6 &&
+           InterlockedCompareExchange(&Adapter->Ndis6LegacyBindingsClosing, 0, 0) == 0 &&
+           Adapter->NdisMiniportBlock.PnPDeviceState == NdisPnPDeviceStarted &&
+           Adapter->NdisMiniportBlock.MediaType == NdisMedium802_3 &&
+           Adapter->AddressLength == ETH_LENGTH_OF_ADDRESS;
+}
+
+static BOOLEAN
+Ndis6ReferenceLegacyAdapter(_In_ PLOGICAL_ADAPTER Adapter)
+{
+    if (!Ndis6LegacyAdapterReady(Adapter) ||
+        !ExAcquireRundownProtection(&Adapter->Ndis6LegacyLifecycleRundown))
+        return FALSE;
+
+    if (!Ndis6LegacyAdapterReady(Adapter))
+    {
+        ExReleaseRundownProtection(&Adapter->Ndis6LegacyLifecycleRundown);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static VOID
+Ndis6DereferenceLegacyAdapter(_In_ PLOGICAL_ADAPTER Adapter)
+{
+    ExReleaseRundownProtection(&Adapter->Ndis6LegacyLifecycleRundown);
+}
+
 static VOID
 Ndis6ProtocolDriverListInit(VOID)
 {
@@ -170,7 +203,7 @@ Ndis6BuildBindParameters(
     _In_  PNDIS6_PROTOCOL_DRIVER_BLOCK Block,
     _Out_ PNDIS_BIND_PARAMETERS  Params)
 {
-    PNDIS6_ADAPTER_EXT Ext = NDIS6_EXT(Adapter);
+    PNDIS6_ADAPTER_EXT Ext = Adapter->IsNdis6 ? NDIS6_EXT(Adapter) : NULL;
 
     RtlZeroMemory(Params, sizeof(*Params));
     Params->Header.Type = NDIS_OBJECT_TYPE_BIND_PARAMETERS;
@@ -196,6 +229,44 @@ Ndis6BuildBindParameters(
     }
     Params->AdapterName     = &Adapter->NdisMiniportBlock.MiniportName;
     Params->BoundAdapterName = &Adapter->NdisMiniportBlock.MiniportName;
+
+    if (!Adapter->IsNdis6)
+    {
+        /*
+         * Legacy Ethernet miniports obtain their MAC address and media
+         * information during initialization in miniport.c (DoQueries).
+         * Build the identity fields without accessing an NDIS 6 extension.
+         *
+         * The NDIS 5 -> NDIS 6 protocol bridge uses the cached legacy
+         * miniport OIDs below; it never treats the adapter as NDIS 6.
+         */
+        if (Adapter->NdisMiniportBlock.MediaType == NdisMedium802_3 &&
+            Adapter->AddressLength == ETH_LENGTH_OF_ADDRESS &&
+            Adapter->AddressLength <= sizeof(Params->CurrentMacAddress) &&
+            Adapter->AddressLength <= sizeof(Adapter->Address.Type.Medium802_3))
+        {
+            Params->MediaType = NdisMedium802_3;
+            Params->MacAddressLength = Adapter->AddressLength;
+            Params->LookaheadSize = Adapter->NdisMiniportBlock.CurrentLookahead;
+            Params->MacOptions = Adapter->NdisMiniportBlock.MacOptions;
+            /* A native TCP/IP bind requires a nonzero MTU. The legacy
+             * start path queries OID_GEN_MAXIMUM_FRAME_SIZE before binding. */
+            Params->MtuSize = Adapter->Ndis6LegacyMtu;
+            Params->PhysicalMediumType = NdisPhysicalMedium802_3;
+            Params->MediaConnectState =
+                Adapter->Ndis6LegacyMediaState == NdisMediaStateConnected
+                    ? MediaConnectStateConnected : MediaConnectStateDisconnected;
+            Params->MediaDuplexState = MediaDuplexStateUnknown;
+            Params->XmitLinkSpeed = Adapter->Ndis6LegacyLinkSpeed;
+            Params->RcvLinkSpeed = Adapter->Ndis6LegacyLinkSpeed;
+            Params->MaxXmitLinkSpeed = Adapter->Ndis6LegacyLinkSpeed;
+            Params->MaxRcvLinkSpeed = Adapter->Ndis6LegacyLinkSpeed;
+            RtlCopyMemory(Params->CurrentMacAddress,
+                          Adapter->Address.Type.Medium802_3,
+                          Adapter->AddressLength);
+        }
+        return;
+    }
 
     if (Ext != NULL)
     {
@@ -401,7 +472,7 @@ Ndis6InvokeProtocolBind(
 /* ============================================================================
  *  Ndis6BindProtocolToAllAdaptersLocked — when a protocol registers, walk the
  *  global LOGICAL_ADAPTER list and call its BindAdapterHandlerEx for every
- *  NDIS 6 adapter.
+ *  supported native or legacy Ethernet adapter.
  * ============================================================================ */
 
 static VOID
@@ -425,10 +496,8 @@ Ndis6BindProtocolToAllAdaptersLocked(
     if (!Ndis6ReferenceProtocolDriver(Block))
         return;
 
-    /* Count every NDIS 6 adapter in one list generation. Adapter teardown
-     * waits on the protocol lifecycle mutex before it can free the object,
-     * and adapters inserted after this count bind the protocol from their own
-     * start path. */
+    /* Snapshot adapters under the global list lock. Legacy adapters have
+     * their own rundown, which Stop/Remove drains before halting hardware. */
     KeAcquireSpinLock(&AdapterListLock, &OldIrql);
     for (entry = AdapterListHead.Flink;
          entry != &AdapterListHead;
@@ -436,7 +505,8 @@ Ndis6BindProtocolToAllAdaptersLocked(
     {
         PLOGICAL_ADAPTER Adapter =
             CONTAINING_RECORD(entry, LOGICAL_ADAPTER, ListEntry);
-        if (Adapter->IsNdis6 && NDIS6_EXT(Adapter) != NULL)
+        if ((Adapter->IsNdis6 && NDIS6_EXT(Adapter) != NULL) ||
+            Ndis6LegacyAdapterReady(Adapter))
             SnapshotCapacity++;
     }
     KeReleaseSpinLock(&AdapterListLock, OldIrql);
@@ -464,8 +534,13 @@ Ndis6BindProtocolToAllAdaptersLocked(
     {
         PLOGICAL_ADAPTER Adapter =
             CONTAINING_RECORD(entry, LOGICAL_ADAPTER, ListEntry);
-        if (Adapter->IsNdis6 && NDIS6_EXT(Adapter) != NULL &&
-            Ndis6ReferenceAdapterLifecycle(Adapter))
+        if (Adapter->IsNdis6)
+        {
+            if (NDIS6_EXT(Adapter) != NULL &&
+                Ndis6ReferenceAdapterLifecycle(Adapter))
+                Snapshot[SnapCount++] = Adapter;
+        }
+        else if (Ndis6ReferenceLegacyAdapter(Adapter))
         {
             Snapshot[SnapCount++] = Adapter;
         }
@@ -474,18 +549,29 @@ Ndis6BindProtocolToAllAdaptersLocked(
 
     for (i = 0; i < SnapCount; i++)
     {
-        PNDIS6_ADAPTER_EXT Ext = NDIS6_EXT(Snapshot[i]);
-        if (Snapshot[i]->IsNdis6 && Ext != NULL &&
-            InterlockedCompareExchange(&Ext->ProtocolBindingsClosing, 0, 0) == 0)
+        if (Snapshot[i]->IsNdis6)
         {
-            (VOID)Ndis6InvokeProtocolBind(Block, Snapshot[i]);
-            if (InterlockedCompareExchange((volatile LONG *)&Ext->PauseState, NDIS6_PAUSE_STATE_RUNNING, NDIS6_PAUSE_STATE_RUNNING) ==
-                NDIS6_PAUSE_STATE_RUNNING)
+            PNDIS6_ADAPTER_EXT Ext = NDIS6_EXT(Snapshot[i]);
+            if (Ext != NULL &&
+                InterlockedCompareExchange(&Ext->ProtocolBindingsClosing, 0, 0) == 0)
             {
+                (VOID)Ndis6InvokeProtocolBind(Block, Snapshot[i]);
+                if (InterlockedCompareExchange((volatile LONG *)&Ext->PauseState,
+                                               NDIS6_PAUSE_STATE_RUNNING,
+                                               NDIS6_PAUSE_STATE_RUNNING) == NDIS6_PAUSE_STATE_RUNNING)
+                    Ndis6RestartProtocolBindings(Snapshot[i]);
+            }
+            Ndis6DereferenceAdapterLifecycle(Snapshot[i]);
+        }
+        else
+        {
+            if (Ndis6LegacyAdapterReady(Snapshot[i]))
+            {
+                (VOID)Ndis6InvokeProtocolBind(Block, Snapshot[i]);
                 Ndis6RestartProtocolBindings(Snapshot[i]);
             }
+            Ndis6DereferenceLegacyAdapter(Snapshot[i]);
         }
-        Ndis6DereferenceAdapterLifecycle(Snapshot[i]);
     }
 
     ExFreePoolWithTag(Snapshot, NDIS6_PROTOCOL_SNAPSHOT_TAG);
@@ -513,13 +599,16 @@ Ndis6BindAllProtocolsToAdapter(
     SIZE_T i;
 
     if (InterlockedCompareExchange(&g_Ndis6ProtocolDriverListState, 2, 2) != 2 ||
-        Adapter == NULL || !Adapter->IsNdis6)
+        Adapter == NULL ||
+        (!Adapter->IsNdis6 && !Ndis6LegacyAdapterReady(Adapter)))
         return;
 
     (VOID)KeWaitForSingleObject(&g_Ndis6ProtocolLifecycleMutex, Executive, KernelMode, FALSE, NULL);
 
-    if (!Adapter->IsNdis6 || NDIS6_EXT(Adapter) == NULL ||
-        InterlockedCompareExchange(&NDIS6_EXT(Adapter)->ProtocolBindingsClosing, 0, 0) != 0)
+    if ((Adapter->IsNdis6 &&
+         (NDIS6_EXT(Adapter) == NULL ||
+          InterlockedCompareExchange(&NDIS6_EXT(Adapter)->ProtocolBindingsClosing, 0, 0) != 0)) ||
+        (!Adapter->IsNdis6 && !Ndis6LegacyAdapterReady(Adapter)))
     {
         KeReleaseMutex(&g_Ndis6ProtocolLifecycleMutex, FALSE);
         return;
@@ -579,6 +668,9 @@ Ndis6BindAllProtocolsToAdapter(
     }
 
     ExFreePoolWithTag(Snapshot, NDIS6_PROTOCOL_SNAPSHOT_TAG);
+
+    if (!Adapter->IsNdis6 && Ndis6LegacyAdapterReady(Adapter))
+        Ndis6RestartProtocolBindings(Adapter);
 
 Exit:
     KeReleaseMutex(&g_Ndis6ProtocolLifecycleMutex, FALSE);
@@ -828,7 +920,7 @@ Ndis6CallProtocolNetPnPEventCode(
 
 static NDIS_STATUS
 Ndis6SnapshotProtocolBindings(
-    _In_ PNDIS6_ADAPTER_EXT Ext,
+    _In_ PLOGICAL_ADAPTER Adapter,
     _Outptr_result_buffer_(*SnapshotCount)
         PNDIS6_PROTOCOL_BINDING **SnapshotOut,
     _Out_ PSIZE_T SnapshotCount)
@@ -838,18 +930,23 @@ Ndis6SnapshotProtocolBindings(
     SIZE_T Count = 0;
     PLIST_ENTRY Entry;
     KIRQL OldIrql;
+    PNDIS6_ADAPTER_EXT Ext = Adapter->IsNdis6 ? NDIS6_EXT(Adapter) : NULL;
+    PLIST_ENTRY Head = Ext != NULL ? &Ext->ProtocolBindingList
+                                  : &Adapter->Ndis6LegacyBindingList;
+    KSPIN_LOCK *Lock = Ext != NULL ? &Ext->ProtocolBindingListLock
+                                  : &Adapter->Ndis6LegacyBindingLock;
 
     *SnapshotOut = NULL;
     *SnapshotCount = 0;
 
-    KeAcquireSpinLock(&Ext->ProtocolBindingListLock, &OldIrql);
-    for (Entry = Ext->ProtocolBindingList.Flink;
-         Entry != &Ext->ProtocolBindingList;
+    KeAcquireSpinLock(Lock, &OldIrql);
+    for (Entry = Head->Flink;
+         Entry != Head;
          Entry = Entry->Flink)
     {
         Capacity++;
     }
-    KeReleaseSpinLock(&Ext->ProtocolBindingListLock, OldIrql);
+    KeReleaseSpinLock(Lock, OldIrql);
 
     if (Capacity == 0)
         return NDIS_STATUS_SUCCESS;
@@ -861,9 +958,9 @@ Ndis6SnapshotProtocolBindings(
     if (Snapshot == NULL)
         return NDIS_STATUS_RESOURCES;
 
-    KeAcquireSpinLock(&Ext->ProtocolBindingListLock, &OldIrql);
-    for (Entry = Ext->ProtocolBindingList.Flink;
-         Entry != &Ext->ProtocolBindingList && Count < Capacity;
+    KeAcquireSpinLock(Lock, &OldIrql);
+    for (Entry = Head->Flink;
+         Entry != Head && Count < Capacity;
          Entry = Entry->Flink)
     {
         PNDIS6_PROTOCOL_BINDING Binding =
@@ -872,7 +969,7 @@ Ndis6SnapshotProtocolBindings(
         if (Ndis6ReferenceProtocolBinding(Binding))
             Snapshot[Count++] = Binding;
     }
-    KeReleaseSpinLock(&Ext->ProtocolBindingListLock, OldIrql);
+    KeReleaseSpinLock(Lock, OldIrql);
 
     if (Count == 0)
     {
@@ -922,7 +1019,7 @@ Ndis6FilterTerminalNetPnPEvent(
     if (InterlockedCompareExchange(&g_Ndis6ProtocolDriverListState, 2, 2) != 2)
         return NDIS_STATUS_SUCCESS;
 
-    Status = Ndis6SnapshotProtocolBindings(Ext, &Snapshot, &SnapshotCount);
+    Status = Ndis6SnapshotProtocolBindings(Adapter, &Snapshot, &SnapshotCount);
     if (Status != NDIS_STATUS_SUCCESS)
         return Status;
 
@@ -1024,7 +1121,7 @@ Ndis6PauseProtocolBindings(
     if (InterlockedCompareExchange(&g_Ndis6ProtocolDriverListState, 2, 2) != 2)
         return NDIS_STATUS_SUCCESS;
 
-    Status = Ndis6SnapshotProtocolBindings(Ext, &Snapshot, &SnapshotCount);
+    Status = Ndis6SnapshotProtocolBindings(Adapter, &Snapshot, &SnapshotCount);
     if (Status != NDIS_STATUS_SUCCESS)
         return Status;
 
@@ -1052,17 +1149,18 @@ Ndis6RestartProtocolBindings(
     SIZE_T Index;
     NDIS_STATUS SnapshotStatus;
 
-    if (Adapter == NULL || !Adapter->IsNdis6)
+    if (Adapter == NULL)
         return;
 
-    Ext = NDIS6_EXT(Adapter);
-    if (Ext == NULL)
+    Ext = Adapter->IsNdis6 ? NDIS6_EXT(Adapter) : NULL;
+    if ((Adapter->IsNdis6 && Ext == NULL) ||
+        (!Adapter->IsNdis6 && !Ndis6LegacyAdapterReady(Adapter)))
         return;
 
     if (InterlockedCompareExchange(&g_Ndis6ProtocolDriverListState, 2, 2) != 2)
         return;
 
-    SnapshotStatus = Ndis6SnapshotProtocolBindings(Ext, &Snapshot, &SnapshotCount);
+    SnapshotStatus = Ndis6SnapshotProtocolBindings(Adapter, &Snapshot, &SnapshotCount);
     if (SnapshotStatus != NDIS_STATUS_SUCCESS)
     {
         DbgPrint("NDIS6: unable to snapshot protocol bindings for restart\n");
@@ -1173,8 +1271,15 @@ Ndis6UnbindAllProtocolsFromAdapter(
 {
     PNDIS6_ADAPTER_EXT Ext;
 
-    if (Adapter == NULL || !Adapter->IsNdis6)
+    if (Adapter == NULL)
         return;
+
+    if (!Adapter->IsNdis6)
+    {
+        InterlockedExchange(&Adapter->Ndis6LegacyBindingsClosing, 1);
+        Ndis6UnbindProtocolsFromAdapter(Adapter);
+        return;
+    }
 
     Ext = NDIS6_EXT(Adapter);
     if (Ext == NULL)
@@ -1190,11 +1295,11 @@ Ndis6UnbindProtocolsFromAdapter(
 {
     PNDIS6_ADAPTER_EXT Ext;
 
-    if (Adapter == NULL || !Adapter->IsNdis6)
+    if (Adapter == NULL)
         return;
 
-    Ext = NDIS6_EXT(Adapter);
-    if (Ext == NULL)
+    Ext = Adapter->IsNdis6 ? NDIS6_EXT(Adapter) : NULL;
+    if (Adapter->IsNdis6 && Ext == NULL)
         return;
 
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
@@ -1205,17 +1310,21 @@ Ndis6UnbindProtocolsFromAdapter(
     for (;;)
     {
         PNDIS6_PROTOCOL_BINDING Binding;
+        PLIST_ENTRY Head;
+        KSPIN_LOCK *Lock;
         KIRQL OldIrql;
 
-        KeAcquireSpinLock(&Ext->ProtocolBindingListLock, &OldIrql);
-        if (IsListEmpty(&Ext->ProtocolBindingList))
+        Head = Ext != NULL ? &Ext->ProtocolBindingList : &Adapter->Ndis6LegacyBindingList;
+        Lock = Ext != NULL ? &Ext->ProtocolBindingListLock : &Adapter->Ndis6LegacyBindingLock;
+        KeAcquireSpinLock(Lock, &OldIrql);
+        if (IsListEmpty(Head))
         {
-            KeReleaseSpinLock(&Ext->ProtocolBindingListLock, OldIrql);
+            KeReleaseSpinLock(Lock, OldIrql);
             break;
         }
 
-        Binding = CONTAINING_RECORD(Ext->ProtocolBindingList.Flink, NDIS6_PROTOCOL_BINDING, AdapterLink);
-        KeReleaseSpinLock(&Ext->ProtocolBindingListLock, OldIrql);
+        Binding = CONTAINING_RECORD(Head->Flink, NDIS6_PROTOCOL_BINDING, AdapterLink);
+        KeReleaseSpinLock(Lock, OldIrql);
         Ndis6UnbindProtocolBinding(Binding);
     }
     KeReleaseMutex(&g_Ndis6ProtocolLifecycleMutex, FALSE);
@@ -1306,7 +1415,8 @@ NdisOpenAdapterEx(
     PNDIS6_PROTOCOL_BINDING      Binding;
     PNDIS6_BIND_OPERATION        BindOperation;
     PLOGICAL_ADAPTER             Adapter;
-    PNDIS6_ADAPTER_EXT           Ext;
+    PNDIS6_ADAPTER_EXT           Ext = NULL;
+    BOOLEAN                      LegacyReference = FALSE;
     PNDIS_OPEN_PARAMETERS        OpenParams = OpenParameters;
 
     if (Block == NULL || NdisBindingHandle == NULL || BindContext == NULL ||
@@ -1337,17 +1447,31 @@ NdisOpenAdapterEx(
     Adapter = (BindOperation->Signature == NDIS6_BIND_OPERATION_SIGNATURE)
         ? BindOperation->Adapter
         : NULL;
-    if (Adapter == NULL || !Adapter->IsNdis6)
+    if (Adapter == NULL)
     {
         Ndis6DereferenceProtocolDriver(Block);
         return NDIS_STATUS_FAILURE;
     }
 
-    Ext = NDIS6_EXT(Adapter);
-    if (Ext == NULL)
+    if (Adapter->IsNdis6)
     {
-        Ndis6DereferenceProtocolDriver(Block);
-        return NDIS_STATUS_FAILURE;
+        Ext = NDIS6_EXT(Adapter);
+        if (Ext == NULL)
+        {
+            Ndis6DereferenceProtocolDriver(Block);
+            return NDIS_STATUS_FAILURE;
+        }
+    }
+    else
+    {
+        /* This reference becomes binding-owned on successful open. Stop
+         * unbinds first and drains it before halting the legacy miniport. */
+        if (!Ndis6ReferenceLegacyAdapter(Adapter))
+        {
+            Ndis6DereferenceProtocolDriver(Block);
+            return NDIS_STATUS_CLOSING;
+        }
+        LegacyReference = TRUE;
     }
 
     Binding = (PNDIS6_PROTOCOL_BINDING)ExAllocatePoolWithTag(
@@ -1355,6 +1479,8 @@ NdisOpenAdapterEx(
         NDIS6_PROTOCOL_BINDING_TAG);
     if (Binding == NULL)
     {
+        if (LegacyReference)
+            Ndis6DereferenceLegacyAdapter(Adapter);
         Ndis6DereferenceProtocolDriver(Block);
         return NDIS_STATUS_RESOURCES;
     }
@@ -1364,6 +1490,7 @@ NdisOpenAdapterEx(
     Binding->DriverBlock            = Block;
     Binding->Adapter                = Adapter;
     Binding->ProtocolBindingContext = ProtocolBindingContext;
+    Binding->IsLegacyMiniport       = LegacyReference;
     /* D4: initialize per-binding pending-OID list. */
     InitializeListHead(&Binding->PendingOidRequests);
     KeInitializeSpinLock(&Binding->PendingOidRequestsLock);
@@ -1381,7 +1508,9 @@ NdisOpenAdapterEx(
         NDIS_MEDIUM  AdapterMedium = NdisMedium802_3;
         UINT         i;
         BOOLEAN      Matched = FALSE;
-        if (Ext != NULL && Ext->GeneralAttrsValid)
+        if (LegacyReference)
+            AdapterMedium = Adapter->NdisMiniportBlock.MediaType;
+        else if (Ext != NULL && Ext->GeneralAttrsValid)
             AdapterMedium = Ndis6AdapterProtocolMedium(Ext);
 
         if (OpenParams->MediumArray != NULL && OpenParams->MediumArraySize > 0)
@@ -1399,6 +1528,8 @@ NdisOpenAdapterEx(
             if (!Matched)
             {
                 ExFreePoolWithTag(Binding, NDIS6_PROTOCOL_BINDING_TAG);
+                if (LegacyReference)
+                    Ndis6DereferenceLegacyAdapter(Adapter);
                 Ndis6DereferenceProtocolDriver(Block);
                 return NDIS_STATUS_UNSUPPORTED_MEDIA;
             }
@@ -1415,25 +1546,35 @@ NdisOpenAdapterEx(
 
         KIRQL DriverIrql;
 
-        KeAcquireSpinLock(&Ext->ProtocolBindingListLock, &OldIrql);
+        PLIST_ENTRY Head = LegacyReference ? &Adapter->Ndis6LegacyBindingList
+                                          : &Ext->ProtocolBindingList;
+        KSPIN_LOCK *Lock = LegacyReference ? &Adapter->Ndis6LegacyBindingLock
+                                          : &Ext->ProtocolBindingListLock;
+
+        KeAcquireSpinLock(Lock, &OldIrql);
         KeAcquireSpinLock(&Block->BindingListLock, &DriverIrql);
         if (InterlockedCompareExchange(&Block->Closing, 0, 0) != 0 ||
-            InterlockedCompareExchange(&Ext->ProtocolBindingsClosing, 0, 0) != 0 ||
-            !Adapter->IsNdis6 || NDIS6_EXT(Adapter) != Ext)
+            (LegacyReference ? !Ndis6LegacyAdapterReady(Adapter) :
+             (InterlockedCompareExchange(&Ext->ProtocolBindingsClosing, 0, 0) != 0 ||
+              !Adapter->IsNdis6 || NDIS6_EXT(Adapter) != Ext)))
         {
             KeReleaseSpinLock(&Block->BindingListLock, DriverIrql);
-            KeReleaseSpinLock(&Ext->ProtocolBindingListLock, OldIrql);
+            KeReleaseSpinLock(Lock, OldIrql);
             ExFreePoolWithTag(Binding, NDIS6_PROTOCOL_BINDING_TAG);
+            if (LegacyReference)
+                Ndis6DereferenceLegacyAdapter(Adapter);
             Ndis6DereferenceProtocolDriver(Block);
             return NDIS_STATUS_CLOSING;
         }
-        InsertTailList(&Ext->ProtocolBindingList, &Binding->AdapterLink);
+        InsertTailList(Head, &Binding->AdapterLink);
         InsertTailList(&Block->BindingList, &Binding->ListEntry);
         KeReleaseSpinLock(&Block->BindingListLock, DriverIrql);
-        KeReleaseSpinLock(&Ext->ProtocolBindingListLock, OldIrql);
+        KeReleaseSpinLock(Lock, OldIrql);
     }
 
     *NdisBindingHandle = (NDIS_HANDLE)Binding;
+    if (LegacyReference)
+        DbgPrint("NDIS6: opened NDIS 6 protocol binding on legacy Ethernet miniport\n");
 
     /* The completion callback is reserved for an asynchronous open. This
      * implementation completes synchronously and therefore only returns the
@@ -1450,6 +1591,7 @@ NdisCloseAdapterEx(
 {
     PNDIS6_PROTOCOL_BINDING Binding = (PNDIS6_PROTOCOL_BINDING)NdisBindingHandle;
     PNDIS6_PROTOCOL_DRIVER_BLOCK Block;
+    PLOGICAL_ADAPTER LegacyAdapter = NULL;
 
     if (Binding == NULL ||
         Binding->Signature != NDIS6_PROTOCOL_BINDING_SIGNATURE)
@@ -1457,6 +1599,8 @@ NdisCloseAdapterEx(
 
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
     Block = Binding->DriverBlock;
+    if (Binding->IsLegacyMiniport)
+        LegacyAdapter = Binding->Adapter;
     if (InterlockedCompareExchange(&Binding->Closing, TRUE, FALSE) != FALSE)
         return NDIS_STATUS_CLOSING;
 
@@ -1466,13 +1610,16 @@ NdisCloseAdapterEx(
      * driver list locks are always acquired in this order. */
     if (Binding->Adapter != NULL)
     {
-        PNDIS6_ADAPTER_EXT Ext = NDIS6_EXT(Binding->Adapter);
-        if (Ext != NULL)
+        PNDIS6_ADAPTER_EXT Ext = LegacyAdapter == NULL ? NDIS6_EXT(Binding->Adapter) : NULL;
+        if (Ext != NULL || LegacyAdapter != NULL)
         {
             KIRQL AdapterIrql;
             KIRQL DriverIrql = PASSIVE_LEVEL;
+            KSPIN_LOCK *Lock = LegacyAdapter != NULL
+                ? &LegacyAdapter->Ndis6LegacyBindingLock
+                : &Ext->ProtocolBindingListLock;
 
-            KeAcquireSpinLock(&Ext->ProtocolBindingListLock, &AdapterIrql);
+            KeAcquireSpinLock(Lock, &AdapterIrql);
             if (Block != NULL)
                 KeAcquireSpinLock(&Block->BindingListLock, &DriverIrql);
             if (Binding->AdapterLink.Flink != NULL &&
@@ -1492,7 +1639,7 @@ NdisCloseAdapterEx(
             }
             if (Block != NULL)
                 KeReleaseSpinLock(&Block->BindingListLock, DriverIrql);
-            KeReleaseSpinLock(&Ext->ProtocolBindingListLock, AdapterIrql);
+            KeReleaseSpinLock(Lock, AdapterIrql);
         }
     }
     if (Block != NULL &&
@@ -1522,6 +1669,8 @@ NdisCloseAdapterEx(
      * called only when NdisCloseAdapterEx returned NDIS_STATUS_PENDING. */
     Binding->Signature = 0;
     ExFreePoolWithTag(Binding, NDIS6_PROTOCOL_BINDING_TAG);
+    if (LegacyAdapter != NULL)
+        Ndis6DereferenceLegacyAdapter(LegacyAdapter);
     return NDIS_STATUS_SUCCESS;
 }
 
