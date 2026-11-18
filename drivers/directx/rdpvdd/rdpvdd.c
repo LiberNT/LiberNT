@@ -587,8 +587,6 @@ RdpVddSetMode(
         return STATUS_INVALID_PARAMETER;
     if (!Adapter->Started)
         return STATUS_DEVICE_NOT_READY;
-    if (Request->Width == Adapter->PreferredWidth && Request->Height == Adapter->PreferredHeight)
-        return STATUS_SUCCESS;
 
     Status = RdpVddIndicateConnection(Adapter, FALSE);
     if (!NT_SUCCESS(Status))
