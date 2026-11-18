@@ -42,6 +42,7 @@ BOOL DwmD3dDrawPointer(const RECT *Rect);
 BOOL DwmD3dMirrorCanvas(HDC Screen);
 DWM_GPU_RESULT DwmD3dEnd(void);
 DWM_GPU_RESULT DwmD3dCheckOutput(void);
+BOOL DwmD3dOutputMoved(void);
 
 #ifdef __cplusplus
 }
