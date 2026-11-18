@@ -1894,6 +1894,88 @@ acpi_bus_scan_fixed (
                              Initialization/Cleanup
    -------------------------------------------------------------------------- */
 
+/* ACPI 6.5, 6.2.11.2: the platform-wide capabilities, UUID 0811B06E-4A27-44F9-8D60-3CBBC22E7B48 */
+static const UINT8 AcpiPlatformOscUuid[16] =
+{
+	0x6E, 0xB0, 0x11, 0x08, 0x27, 0x4A, 0xF9, 0x44, 0x8D, 0x60, 0x3C, 0xBB, 0xC2, 0x2E, 0x7B, 0x48
+};
+
+#define ACPI_OSC_QUERY_ENABLE		0x00000001
+#define ACPI_OSC_ERRORS			0x0000000E
+#define ACPI_OSC_SB_CPC_SUPPORT		0x00000020
+#define ACPI_OSC_SB_CPCV2_SUPPORT	0x00000040
+#define ACPI_OSC_SB_CPC_DIVERSE_HIGH	0x00001000
+
+static
+ACPI_STATUS
+AcpiEvaluatePlatformOsc(
+	_In_ UINT32 Flags,
+	_Inout_ UINT32 *Capabilities)
+{
+	ACPI_OBJECT Arguments[4];
+	ACPI_OBJECT_LIST ArgumentList;
+	ACPI_BUFFER Result = { ACPI_ALLOCATE_BUFFER, NULL };
+	ACPI_OBJECT *Returned;
+	UINT32 Dwords[2];
+	ACPI_STATUS Status;
+
+	Dwords[0] = Flags;
+	Dwords[1] = *Capabilities;
+	Arguments[0].Type = ACPI_TYPE_BUFFER;
+	Arguments[0].Buffer.Length = sizeof(AcpiPlatformOscUuid);
+	Arguments[0].Buffer.Pointer = (UINT8 *)AcpiPlatformOscUuid;
+	Arguments[1].Type = ACPI_TYPE_INTEGER;
+	Arguments[1].Integer.Value = 1;
+	Arguments[2].Type = ACPI_TYPE_INTEGER;
+	Arguments[2].Integer.Value = 2;
+	Arguments[3].Type = ACPI_TYPE_BUFFER;
+	Arguments[3].Buffer.Length = sizeof(Dwords);
+	Arguments[3].Buffer.Pointer = (UINT8 *)Dwords;
+	ArgumentList.Count = 4;
+	ArgumentList.Pointer = Arguments;
+
+	Status = AcpiEvaluateObject(NULL, "\\_SB._OSC", &ArgumentList, &Result);
+	if (ACPI_FAILURE(Status))
+		return Status;
+
+	Returned = Result.Pointer;
+	if (!Returned || Returned->Type != ACPI_TYPE_BUFFER || Returned->Buffer.Length < sizeof(Dwords)) {
+		ACPI_FREE(Result.Pointer);
+		return AE_TYPE;
+	}
+
+	RtlCopyMemory(Dwords, Returned->Buffer.Pointer, sizeof(Dwords));
+	ACPI_FREE(Result.Pointer);
+	if (Dwords[0] & ACPI_OSC_ERRORS) {
+		DPRINT1("ACPI: platform _OSC 0x%x reports errors 0x%x\n", *Capabilities, Dwords[0]);
+		return AE_ERROR;
+	}
+
+	*Capabilities = Dwords[1];
+	return AE_OK;
+}
+
+/* The firmware answers which of the capabilities it takes, and is then told the ones the OS will use */
+static
+VOID
+AcpiDeclarePlatformCapabilities(VOID)
+{
+	/* TODO: the other platform-wide capabilities Windows 11 declares are not sourced */
+	UINT32 Capabilities = ACPI_OSC_SB_CPC_SUPPORT | ACPI_OSC_SB_CPCV2_SUPPORT | ACPI_OSC_SB_CPC_DIVERSE_HIGH;
+	UINT32 Declared = Capabilities;
+	ACPI_STATUS Status;
+
+	Status = AcpiEvaluatePlatformOsc(ACPI_OSC_QUERY_ENABLE, &Capabilities);
+	if (Status == AE_NOT_FOUND)
+		return;
+
+	if (ACPI_SUCCESS(Status))
+		Status = AcpiEvaluatePlatformOsc(0, &Capabilities);
+
+	DPRINT1("ACPI: platform _OSC declared 0x%x, granted 0x%x, status 0x%x\n",
+		Declared, ACPI_SUCCESS(Status) ? Capabilities : 0, Status);
+}
+
 int
 acpi_bus_init (void)
 {
@@ -1964,6 +2046,8 @@ acpi_bus_init (void)
 		/* Reset status so a non-fatal _PIC failure does not stop init. */
 		status = AE_OK;
 	}
+
+	AcpiDeclarePlatformCapabilities();
 
 	/*
 	 * Maybe EC region is required at bus_scan/acpi_get_devices. So it
