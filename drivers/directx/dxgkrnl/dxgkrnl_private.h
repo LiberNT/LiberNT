@@ -4157,7 +4157,8 @@ DxgkDisplayCommitVidPn(
 
 VOID
 DxgkpDisplayPublishInitialMode(
-    _In_ PDXGKRNL_ADAPTER Adapter);
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ BOOLEAN RequestedMode);
 
 VOID
 DxgkDisplayNotifyMonitorEvent(

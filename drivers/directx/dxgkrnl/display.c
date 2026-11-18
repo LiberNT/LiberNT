@@ -257,7 +257,8 @@ static
 VOID
 DxgkpDisplayWriteInitialMode(
     _In_ PDXGKRNL_ADAPTER Adapter,
-    _In_ PDXGKP_DISPLAY_BRIDGE Bridge)
+    _In_ PDXGKP_DISPLAY_BRIDGE Bridge,
+    _In_ BOOLEAN RequestedMode)
 {
     D3DKMT_CURRENTDISPLAYMODE Current;
     WCHAR KeyBuffer[128];
@@ -279,6 +280,10 @@ DxgkpDisplayWriteInitialMode(
     Status = DxgkVidPnQueryCurrentDisplayMode(Adapter, &Current);
     if (!NT_SUCCESS(Status))
         return;
+    Preferred = DxgkVidPnQueryMonitorPreferredMode(Adapter, &Values[0], &Values[1], &Values[2]);
+    /* A mode set through ChangeDisplaySettingsEx is dynamic unless the caller saves it */
+    if (!Preferred && RequestedMode)
+        return;
     RtlStringCchPrintfW(KeyBuffer, RTL_NUMBER_OF(KeyBuffer),
                         L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\dxgkrnl\\Device%lu",
                         Bridge->DeviceNumber);
@@ -287,7 +292,6 @@ DxgkpDisplayWriteInitialMode(
     Status = ZwOpenKey(&Key, KEY_SET_VALUE, &Attributes);
     if (!NT_SUCCESS(Status))
         return;
-    Preferred = DxgkVidPnQueryMonitorPreferredMode(Adapter, &Values[0], &Values[1], &Values[2]);
     if (!Preferred)
     {
         Values[0] = Current.DisplayMode.Width;
@@ -311,7 +315,8 @@ DxgkpDisplayWriteInitialMode(
  * leave registry persistence to ChangeDisplaySettingsEx. */
 VOID
 DxgkpDisplayPublishInitialMode(
-    _In_ PDXGKRNL_ADAPTER Adapter)
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ BOOLEAN RequestedMode)
 {
     PDXGKP_DISPLAY_BRIDGE Bridge;
 
@@ -321,7 +326,7 @@ DxgkpDisplayPublishInitialMode(
     if (Bridge == NULL)
         return;
     if (Bridge->InitialModePending)
-        DxgkpDisplayWriteInitialMode(Adapter, Bridge);
+        DxgkpDisplayWriteInitialMode(Adapter, Bridge, RequestedMode);
     ExReleaseRundownProtection(&Bridge->Rundown);
 }
 
@@ -3532,7 +3537,7 @@ DxgkpDisplayCommitVidPnWhileSharedPrimaryLocked(
     if (hVidPn != NULL)
         DxgkVidPnDestroy(hVidPn);
     if (NT_SUCCESS(Status))
-        DxgkpDisplayPublishInitialMode(Adapter);
+        DxgkpDisplayPublishInitialMode(Adapter, FALSE);
     DxgkpEndSharedSurfaceMutationLocked(Adapter);
     return Status;
 }
