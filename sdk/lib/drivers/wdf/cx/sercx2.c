@@ -11,6 +11,9 @@
 #include <initguid.h>
 #include <reactos/drivers/reshubio.h>
 
+#define NDEBUG
+#include <debug.h>
+
 typedef struct _SERCX2_PIO_TRANSMIT_CONTEXT
 {
     WDFDEVICE Device;
@@ -58,6 +61,7 @@ typedef struct _SERCX2_TRANSACTION
     size_t Transferred;
     BOOLEAN Cleaning;
     PUCHAR Buffer;
+    PMDL Mdl;
     size_t Length;
     size_t Offset;
     BOOLEAN Running;
@@ -65,6 +69,8 @@ typedef struct _SERCX2_TRANSACTION
     BOOLEAN WaitingReady;
     BOOLEAN ReadyArrived;
     BOOLEAN Draining;
+    BOOLEAN DataSeen;
+    BOOLEAN ProgressQueried;
     NTSTATUS AbortStatus;
     BOOLEAN AbortPending;
 } SERCX2_TRANSACTION, *PSERCX2_TRANSACTION;
@@ -116,9 +122,11 @@ WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(SERCX2_CUSTOM_TRANSACTION_CONTEXT, SerCx2GetC
 static VOID SerCx2NonPioAbort(_In_ WDFDEVICE DeviceHandle, _In_ PSERCX2_TRANSACTION Transaction,
                               _In_opt_ WDFREQUEST Expected, _In_ NTSTATUS Status);
 static VOID SerCx2NonPioBegin(_In_ PSERCX2_DEVICE_CONTEXT Device, _In_ PSERCX2_TRANSACTION Transaction);
+static PSERCX2_CUSTOM_TRANSACTION_CONTEXT SerCx2CustomFor(_In_ PSERCX2_DEVICE_CONTEXT Device, _In_ BOOLEAN Receive,
+                                                         _Out_opt_ WDFOBJECT *Handle);
 static VOID NTAPI SerCx2EvtRequestCleanup(_In_ WDFOBJECT Object);
-static SERCX2_TRANSACTION_TYPE SerCx2SelectType(_In_ PSERCX2_DEVICE_CONTEXT Device, _In_ WDFREQUEST Request,
-                                                _In_ ULONG Length, _In_ BOOLEAN Receive);
+static SERCX2_TRANSACTION_TYPE SerCx2SelectType(_In_ PSERCX2_DEVICE_CONTEXT Device, _In_opt_ PMDL Mdl,
+                                                _In_ PUCHAR Buffer, _In_ ULONG Length, _In_ BOOLEAN Receive);
 
 static VOID SerCx2TxRun(_In_ WDFDEVICE DeviceHandle);
 static VOID SerCx2RxRun(_In_ WDFDEVICE DeviceHandle);
@@ -343,6 +351,38 @@ SerCx2EvtReadTimer(
 }
 
 static
+VOID
+NTAPI
+SerCx2EvtReadIntervalTimer(
+    _In_ WDFTIMER Timer)
+{
+    WDFDEVICE DeviceHandle = WdfTimerGetParentObject(Timer);
+    PSERCX2_DEVICE_CONTEXT Device = SerCx2GetDeviceContext(DeviceHandle);
+    PSERCX2_CUSTOM_TRANSACTION_CONTEXT Custom;
+    WDFOBJECT Handle;
+    BOOLEAN Query;
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&Device->Lock, &OldIrql);
+    Query = Device->Rx.Request != NULL && Device->Rx.Type == SerCx2TransactionTypeCustom && !Device->Rx.Cleaning;
+    if (Query)
+        Device->Rx.ProgressQueried = TRUE;
+    KeReleaseSpinLock(&Device->Lock, OldIrql);
+
+    if (Query)
+    {
+        Custom = SerCx2CustomFor(Device, TRUE, &Handle);
+        if (Custom != NULL && Custom->RxConfig.EvtSerCx2CustomReceiveTransactionQueryProgress != NULL)
+        {
+            Custom->RxConfig.EvtSerCx2CustomReceiveTransactionQueryProgress((SERCX2CUSTOMRECEIVETRANSACTION)Handle);
+            return;
+        }
+    }
+
+    SerCx2AbortTransaction(DeviceHandle, &Device->Rx, NULL, STATUS_TIMEOUT);
+}
+
+static
 BOOLEAN
 SerCx2ResumeAfterReady(
     _In_ PSERCX2_DEVICE_CONTEXT Device,
@@ -484,12 +524,15 @@ SerCx2DmaFits(
     _In_ ULONG Length)
 {
     PSERCX2_SYSTEM_DMA_CONTEXT Dma = SerCx2DmaFor(Device, Receive);
+    size_t Minimum;
+    size_t Maximum;
 
     if (Dma == NULL || Dma->Transaction == NULL)
         return FALSE;
-    return Receive ?
-        SerCx2LengthFits(Length, Dma->RxConfig.MinimumTransactionLength, Dma->RxConfig.MaximumTransactionLength) :
-        SerCx2LengthFits(Length, Dma->TxConfig.MinimumTransactionLength, Dma->TxConfig.MaximumTransactionLength);
+    Minimum = Receive ? Dma->RxConfig.MinimumTransactionLength : Dma->TxConfig.MinimumTransactionLength;
+    Maximum = Receive ? Dma->RxConfig.MaximumTransferLength : Dma->TxConfig.MaximumTransferLength;
+    /* TODO: split a request longer than MaximumTransferLength into several system-DMA transactions instead of using PIO */
+    return Length >= Minimum && (Maximum == 0 || Length <= Maximum);
 }
 
 static
@@ -497,47 +540,83 @@ BOOLEAN
 SerCx2CustomFits(
     _In_ PSERCX2_DEVICE_CONTEXT Device,
     _In_ BOOLEAN Receive,
+    _In_ PUCHAR Buffer,
     _In_ ULONG Length)
 {
     PVOID Object = Receive ? (PVOID)Device->CustomReceive : (PVOID)Device->CustomTransmit;
     PSERCX2_CUSTOM_CONTEXT Custom;
+    ULONG Alignment;
+    ULONG Minimum;
+    ULONG Maximum;
 
     if (Object == NULL)
         return FALSE;
     Custom = SerCx2GetCustomContext((WDFOBJECT)Object);
     if (Custom->Transaction == NULL)
         return FALSE;
-    return Receive ?
-        SerCx2LengthFits(Length, Custom->RxConfig.MinimumTransactionLength, Custom->RxConfig.MaximumTransactionLength) :
-        SerCx2LengthFits(Length, Custom->TxConfig.MinimumTransactionLength, Custom->TxConfig.MaximumTransactionLength);
+    if (Receive ? Custom->RxConfig.Exclusive : Custom->TxConfig.Exclusive)
+        return TRUE;
+
+    Alignment = Receive ? Custom->RxConfig.Alignment : Custom->TxConfig.Alignment;
+    Minimum = Receive ? Custom->RxConfig.MinimumTransactionLength : Custom->TxConfig.MinimumTransactionLength;
+    Maximum = Receive ? Custom->RxConfig.MaximumTransactionLength : Custom->TxConfig.MaximumTransactionLength;
+    if (((ULONG_PTR)Buffer & Alignment) != 0)
+        return FALSE;
+    /* TODO: split a request longer than MaximumTransactionLength into several custom transactions instead of using PIO */
+    return SerCx2LengthFits(Length, Minimum, Maximum);
 }
 
 static
 SERCX2_TRANSACTION_TYPE
 SerCx2SelectType(
     _In_ PSERCX2_DEVICE_CONTEXT Device,
-    _In_ WDFREQUEST Request,
+    _In_opt_ PMDL Mdl,
+    _In_ PUCHAR Buffer,
     _In_ ULONG Length,
     _In_ BOOLEAN Receive)
 {
-    SERCX2_TRANSACTION_TYPE Type = SerCx2TransactionTypeInvalid;
+    SERCX2_TRANSACTION_TYPE Type = SerCx2TransactionTypeDefault;
+    SERCX2CUSTOMRECEIVE CustomReceive = NULL;
+    SERCX2CUSTOMTRANSMIT CustomTransmit = NULL;
+    ULONG NextLength = Length;
 
-    if (Receive && Device->Config.EvtSerCx2SelectNextReceiveTransactionType != NULL)
-        Device->Config.EvtSerCx2SelectNextReceiveTransactionType(SerCx2DeviceHandle(Device), Request, Length, &Type);
-    else if (!Receive && Device->Config.EvtSerCx2SelectNextTransmitTransactionType != NULL)
-        Device->Config.EvtSerCx2SelectNextTransmitTransactionType(SerCx2DeviceHandle(Device), Request, Length, &Type);
+    ASSERT(Length != 0);
+
+    if (Mdl == NULL)
+        return SerCx2TransactionTypePio;
+
+    if (Mdl != NULL && Receive && Device->Config.EvtSerCx2SelectNextReceiveTransactionType != NULL)
+    {
+        Type = Device->Config.EvtSerCx2SelectNextReceiveTransactionType(SerCx2DeviceHandle(Device), Mdl, 0, Length,
+                                                                        &CustomReceive, &NextLength);
+    }
+    else if (Mdl != NULL && !Receive && Device->Config.EvtSerCx2SelectNextTransmitTransactionType != NULL)
+    {
+        Type = Device->Config.EvtSerCx2SelectNextTransmitTransactionType(SerCx2DeviceHandle(Device), Mdl, 0, Length,
+                                                                         &CustomTransmit, &NextLength);
+    }
 
     if (Type == SerCx2TransactionTypePio)
         return Type;
+    if (Type != SerCx2TransactionTypeDefault && NextLength != Length)
+    {
+        /* FIXME: a transaction shorter than the request is not supported; the whole request runs as PIO */
+        DPRINT1("SerCx2: driver chose type %d for %lu of %lu bytes, using PIO\n", Type, NextLength, Length);
+        return SerCx2TransactionTypePio;
+    }
     if (Type == SerCx2TransactionTypeSystemDma && SerCx2DmaFits(Device, Receive, Length))
         return Type;
-    if (Type == SerCx2TransactionTypeCustom && SerCx2CustomFits(Device, Receive, Length))
+    if (Type == SerCx2TransactionTypeCustom &&
+        (Receive ? CustomReceive == Device->CustomReceive : CustomTransmit == Device->CustomTransmit) &&
+        SerCx2CustomFor(Device, Receive, NULL) != NULL)
+    {
         return Type;
-    if (Type == SerCx2TransactionTypeInvalid)
+    }
+    if (Type == SerCx2TransactionTypeDefault)
     {
         if (SerCx2DmaFits(Device, Receive, Length))
             return SerCx2TransactionTypeSystemDma;
-        if (SerCx2CustomFits(Device, Receive, Length))
+        if (SerCx2CustomFits(Device, Receive, Buffer, Length))
             return SerCx2TransactionTypeCustom;
     }
     return SerCx2TransactionTypePio;
@@ -795,10 +874,16 @@ SerCx2DmaStart(
     }
     WdfDmaTransactionSetTransferCompleteCallback(Dma->Transaction, SerCx2EvtDmaTransferComplete, Transaction);
 
-    if (Receive && Dma->RxConfig.EvtSerCx2SystemDmaReceiveConfigureDma != NULL)
-        Dma->RxConfig.EvtSerCx2SystemDmaReceiveConfigureDma(Device->SystemDmaReceive, Request, Length, Dma->Transaction);
-    else if (!Receive && Dma->TxConfig.EvtSerCx2SystemDmaTransmitConfigureDma != NULL)
-        Dma->TxConfig.EvtSerCx2SystemDmaTransmitConfigureDma(Device->SystemDmaTransmit, Request, Length, Dma->Transaction);
+    if (Receive && Dma->RxConfig.EvtSerCx2SystemDmaReceiveConfigureDmaChannel != NULL)
+        Status = Dma->RxConfig.EvtSerCx2SystemDmaReceiveConfigureDmaChannel(Device->SystemDmaReceive, Transaction->Mdl, 0, Length);
+    else if (!Receive && Dma->TxConfig.EvtSerCx2SystemDmaTransmitConfigureDmaChannel != NULL)
+        Status = Dma->TxConfig.EvtSerCx2SystemDmaTransmitConfigureDmaChannel(Device->SystemDmaTransmit, Transaction->Mdl, 0, Length);
+    if (!NT_SUCCESS(Status))
+    {
+        WdfDmaTransactionRelease(Dma->Transaction);
+        SerCx2NonPioFinish(Device, Transaction, Status, 0);
+        return;
+    }
 
     Status = WdfRequestMarkCancelableEx(Request, Receive ? SerCx2EvtReadCancel : SerCx2EvtWriteCancel);
     if (!NT_SUCCESS(Status))
@@ -848,16 +933,17 @@ SerCx2CustomStart(
     RequestContext->CustomReceive = Receive;
     if (Receive)
     {
-        Custom->RxConfig.EvtSerCx2CustomReceiveTransactionStart((SERCX2CUSTOMRECEIVETRANSACTION)Handle, Request, Length);
+        Custom->RxConfig.EvtSerCx2CustomReceiveTransactionStart((SERCX2CUSTOMRECEIVETRANSACTION)Handle, Request,
+                                                                Transaction->Mdl, 0, Length);
         if (Custom->RxConfig.EvtSerCx2CustomReceiveTransactionEnableNewDataNotification != NULL)
-        {
-            SerCx2NonPioRestartInterval(Device);
             Custom->RxConfig.EvtSerCx2CustomReceiveTransactionEnableNewDataNotification((SERCX2CUSTOMRECEIVETRANSACTION)Handle);
-        }
+        else
+            SerCx2NonPioRestartInterval(Device);
     }
     else
     {
-        Custom->TxConfig.EvtSerCx2CustomTransmitTransactionStart((SERCX2CUSTOMTRANSMITTRANSACTION)Handle, Request, Length);
+        Custom->TxConfig.EvtSerCx2CustomTransmitTransactionStart((SERCX2CUSTOMTRANSMITTRANSACTION)Handle, Request,
+                                                                 Transaction->Mdl, 0, Length);
     }
 }
 
@@ -895,7 +981,6 @@ SerCx2NonPioBegin(
     _In_ PSERCX2_TRANSACTION Transaction)
 {
     BOOLEAN Receive = Transaction == &Device->Rx;
-    WDFREQUEST Request = Transaction->Request;
     ULONG Length = (ULONG)min(Transaction->Length, MAXULONG);
 
     if (Transaction->Type == SerCx2TransactionTypeSystemDma)
@@ -904,12 +989,12 @@ SerCx2NonPioBegin(
 
         if (Dma != NULL && Receive && Dma->RxConfig.EvtSerCx2SystemDmaReceiveInitializeTransaction != NULL)
         {
-            Dma->RxConfig.EvtSerCx2SystemDmaReceiveInitializeTransaction(Device->SystemDmaReceive, Request, Length);
+            Dma->RxConfig.EvtSerCx2SystemDmaReceiveInitializeTransaction(Device->SystemDmaReceive, Length);
             return;
         }
         if (Dma != NULL && !Receive && Dma->TxConfig.EvtSerCx2SystemDmaTransmitInitializeTransaction != NULL)
         {
-            Dma->TxConfig.EvtSerCx2SystemDmaTransmitInitializeTransaction(Device->SystemDmaTransmit, Request, Length);
+            Dma->TxConfig.EvtSerCx2SystemDmaTransmitInitializeTransaction(Device->SystemDmaTransmit, Length);
             return;
         }
     }
@@ -920,12 +1005,14 @@ SerCx2NonPioBegin(
 
         if (Custom != NULL && Receive && Custom->RxConfig.EvtSerCx2CustomReceiveTransactionInitialize != NULL)
         {
-            Custom->RxConfig.EvtSerCx2CustomReceiveTransactionInitialize((SERCX2CUSTOMRECEIVETRANSACTION)Handle, Request, Length);
+            Custom->RxConfig.EvtSerCx2CustomReceiveTransactionInitialize((SERCX2CUSTOMRECEIVETRANSACTION)Handle,
+                                                                         Transaction->Mdl, 0, Length);
             return;
         }
         if (Custom != NULL && !Receive && Custom->TxConfig.EvtSerCx2CustomTransmitTransactionInitialize != NULL)
         {
-            Custom->TxConfig.EvtSerCx2CustomTransmitTransactionInitialize((SERCX2CUSTOMTRANSMITTRANSACTION)Handle, Request, Length);
+            Custom->TxConfig.EvtSerCx2CustomTransmitTransactionInitialize((SERCX2CUSTOMTRANSMITTRANSACTION)Handle,
+                                                                          Transaction->Mdl, 0, Length);
             return;
         }
     }
@@ -979,15 +1066,8 @@ SerCx2NonPioAbort(
     }
     else if (Type == SerCx2TransactionTypeCustom)
     {
-        WDFOBJECT Handle;
-        PSERCX2_CUSTOM_TRANSACTION_CONTEXT Custom = SerCx2CustomFor(Device, Receive, &Handle);
-
-        if (Custom == NULL)
-            return;
-        if (Receive && Custom->RxConfig.EvtSerCx2CustomReceiveTransactionCancel != NULL)
-            Custom->RxConfig.EvtSerCx2CustomReceiveTransactionCancel((SERCX2CUSTOMRECEIVETRANSACTION)Handle);
-        else if (!Receive && Custom->TxConfig.EvtSerCx2CustomTransmitTransactionCancel != NULL)
-            Custom->TxConfig.EvtSerCx2CustomTransmitTransactionCancel((SERCX2CUSTOMTRANSMITTRANSACTION)Handle);
+        /* FIXME: a time-out or purge does not end a custom transaction; the driver owns the request and only a cancel of the IRP reaches it */
+        DPRINT1("SerCx2: %s custom transaction not ended by status 0x%08lx\n", Receive ? "receive" : "transmit", Status);
     }
 }
 
@@ -998,6 +1078,7 @@ SerCx2TxStartNext(
 {
     PSERCX2_PIO_TRANSMIT_CONTEXT Pio = SerCx2GetPioTransmitContext(Device->PioTransmit);
     SERCX2_TRANSACTION_TYPE Type;
+    PMDL Mdl;
     WDF_REQUEST_PARAMETERS Parameters;
     WDFREQUEST Request;
     PVOID Buffer;
@@ -1026,12 +1107,15 @@ SerCx2TxStartNext(
             WdfRequestComplete(Request, Status);
             continue;
         }
+        if (!NT_SUCCESS(WdfRequestRetrieveInputWdmMdl(Request, &Mdl)))
+            Mdl = NULL;
 
-        Type = SerCx2SelectType(Device, Request, (ULONG)min(Length, MAXULONG), FALSE);
+        Type = SerCx2SelectType(Device, Mdl, Buffer, (ULONG)min(Length, MAXULONG), FALSE);
         KeAcquireSpinLock(&Device->Lock, &OldIrql);
         RtlZeroMemory(&Device->Tx, sizeof(Device->Tx));
         Device->Tx.Request = Request;
         Device->Tx.Buffer = Buffer;
+        Device->Tx.Mdl = Mdl;
         Device->Tx.Length = Length;
         Device->Tx.Running = TRUE;
         Device->Tx.Type = Type;
@@ -1192,6 +1276,7 @@ SerCx2RxStartNext(
 {
     PSERCX2_PIO_RECEIVE_CONTEXT Pio = SerCx2GetPioReceiveContext(Device->PioReceive);
     SERCX2_TRANSACTION_TYPE Type;
+    PMDL Mdl;
     WDF_REQUEST_PARAMETERS Parameters;
     WDFREQUEST Request;
     PVOID Buffer;
@@ -1220,12 +1305,15 @@ SerCx2RxStartNext(
             WdfRequestComplete(Request, Status);
             continue;
         }
+        if (!NT_SUCCESS(WdfRequestRetrieveOutputWdmMdl(Request, &Mdl)))
+            Mdl = NULL;
 
-        Type = SerCx2SelectType(Device, Request, (ULONG)min(Length, MAXULONG), TRUE);
+        Type = SerCx2SelectType(Device, Mdl, Buffer, (ULONG)min(Length, MAXULONG), TRUE);
         KeAcquireSpinLock(&Device->Lock, &OldIrql);
         RtlZeroMemory(&Device->Rx, sizeof(Device->Rx));
         Device->Rx.Request = Request;
         Device->Rx.Buffer = Buffer;
+        Device->Rx.Mdl = Mdl;
         Device->Rx.Length = Length;
         Device->Rx.Running = TRUE;
         Device->Rx.Type = Type;
@@ -1813,7 +1901,7 @@ SerCx2DdiInitializeDevice(
     if (NT_SUCCESS(Status))
         Status = SerCx2CreateTimer(DeviceHandle, SerCx2EvtReadTimer, &Device->ReadTotalTimer);
     if (NT_SUCCESS(Status))
-        Status = SerCx2CreateTimer(DeviceHandle, SerCx2EvtReadTimer, &Device->ReadIntervalTimer);
+        Status = SerCx2CreateTimer(DeviceHandle, SerCx2EvtReadIntervalTimer, &Device->ReadIntervalTimer);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -2161,7 +2249,8 @@ SerCx2CreateDmaObject(
     else
         Context->TxConfig = *(PSERCX2_SYSTEM_DMA_TRANSMIT_CONFIG)Config;
 
-    MaximumLength = Receive ? Context->RxConfig.MaximumTransactionLength : Context->TxConfig.MaximumTransactionLength;
+    /* TODO: configure the system DMA profile from DmaDescriptor, DmaWidth and DeviceAddress, and apply DmaAlignment and MaximumScatterGatherFragments */
+    MaximumLength = (ULONG)min(Receive ? Context->RxConfig.MaximumTransferLength : Context->TxConfig.MaximumTransferLength, MAXULONG);
     if (MaximumLength == 0)
         MaximumLength = 64 * 1024;
     WDF_DMA_ENABLER_CONFIG_INIT(&EnablerConfig, WdfDmaProfileSystem, MaximumLength);
@@ -2263,14 +2352,15 @@ NTAPI
 SerCx2DdiSystemDmaInitializeTransactionComplete(
     _In_ PSERCX_DRIVER_GLOBALS ClientGlobals,
     _In_ WDFOBJECT Object,
-    _In_ NTSTATUS Status)
+    _In_ BOOLEAN InitSuccess)
 {
     PSERCX2_DEVICE_CONTEXT Device;
     PSERCX2_TRANSACTION Transaction = SerCx2DmaTransactionFor(Object, &Device);
 
     UNREFERENCED_PARAMETER(ClientGlobals);
+    /* FIXME: the status of a request whose transaction failed to initialize is not documented */
     if (Transaction != NULL)
-        SerCx2NonPioInitialized(Device, Transaction, Status);
+        SerCx2NonPioInitialized(Device, Transaction, InitSuccess ? STATUS_SUCCESS : STATUS_IO_DEVICE_ERROR);
 }
 
 static
@@ -2547,14 +2637,15 @@ NTAPI
 SerCx2DdiCustomTransactionInitializeComplete(
     _In_ PSERCX_DRIVER_GLOBALS ClientGlobals,
     _In_ WDFOBJECT Object,
-    _In_ NTSTATUS Status)
+    _In_ BOOLEAN InitSuccess)
 {
     PSERCX2_DEVICE_CONTEXT Device;
     PSERCX2_TRANSACTION Transaction = SerCx2CustomTransactionFor(Object, &Device);
 
     UNREFERENCED_PARAMETER(ClientGlobals);
+    /* FIXME: the status of a request whose transaction failed to initialize is not documented */
     if (Transaction != NULL)
-        SerCx2NonPioInitialized(Device, Transaction, Status);
+        SerCx2NonPioInitialized(Device, Transaction, InitSuccess ? STATUS_SUCCESS : STATUS_IO_DEVICE_ERROR);
 }
 
 static
@@ -2581,18 +2672,15 @@ SerCx2DdiCustomReceiveTransactionNewDataNotification(
 {
     PSERCX2_DEVICE_CONTEXT Device;
     PSERCX2_TRANSACTION Transaction = SerCx2CustomTransactionFor((WDFOBJECT)Object, &Device);
-    PSERCX2_CUSTOM_TRANSACTION_CONTEXT Context;
+    KIRQL OldIrql;
 
     UNREFERENCED_PARAMETER(ClientGlobals);
     if (Transaction == NULL)
         return;
+    KeAcquireSpinLock(&Device->Lock, &OldIrql);
+    Transaction->DataSeen = TRUE;
+    KeReleaseSpinLock(&Device->Lock, OldIrql);
     SerCx2NonPioRestartInterval(Device);
-    Context = SerCx2GetCustomTransactionContext((WDFOBJECT)Object);
-    if (Transaction->Request != NULL && !Transaction->Cleaning &&
-        Context->RxConfig.EvtSerCx2CustomReceiveTransactionEnableNewDataNotification != NULL)
-    {
-        Context->RxConfig.EvtSerCx2CustomReceiveTransactionEnableNewDataNotification(Object);
-    }
 }
 
 static
@@ -2605,10 +2693,26 @@ SerCx2DdiCustomReceiveTransactionReportProgress(
 {
     PSERCX2_DEVICE_CONTEXT Device;
     PSERCX2_TRANSACTION Transaction = SerCx2CustomTransactionFor((WDFOBJECT)Object, &Device);
+    BOOLEAN Queried;
+    BOOLEAN DataSeen;
+    KIRQL OldIrql;
 
     UNREFERENCED_PARAMETER(ClientGlobals);
-    if (Transaction != NULL && Progress == SerCx2CustomReceiveTransactionBytesTransferred)
+    if (Transaction == NULL)
+        return;
+
+    KeAcquireSpinLock(&Device->Lock, &OldIrql);
+    Queried = Transaction->ProgressQueried;
+    Transaction->ProgressQueried = FALSE;
+    if (Progress == SerCx2CustomReceiveTransactionBytesTransferred)
+        Transaction->DataSeen = TRUE;
+    DataSeen = Transaction->DataSeen;
+    KeReleaseSpinLock(&Device->Lock, OldIrql);
+
+    if (Progress == SerCx2CustomReceiveTransactionBytesTransferred || !DataSeen)
         SerCx2NonPioRestartInterval(Device);
+    else if (Queried)
+        SerCx2AbortTransaction(SerCx2DeviceHandle(Device), Transaction, NULL, STATUS_TIMEOUT);
 }
 
 static PVOID SerCx2Functions[SercxFunctionTableNumEntries] =
