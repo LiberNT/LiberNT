@@ -199,6 +199,7 @@ if(MSVC)
 else()
     list(APPEND IDL_SOURCES
         wbemcli.idl
+        wbemprov.idl
         wuapi.idl)
 endif()
 
