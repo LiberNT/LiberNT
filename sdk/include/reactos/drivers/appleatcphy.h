@@ -13,6 +13,7 @@ typedef struct _APPLE_ATCPHY_REGION
 {
     PUCHAR Base;
     ULONG Size;
+    PCFDT_DRIVER_IO Io;
 } APPLE_ATCPHY_REGION, *PAPPLE_ATCPHY_REGION;
 
 typedef struct _APPLE_ATCPHY

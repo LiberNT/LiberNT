@@ -14,28 +14,9 @@
 #include <reactos/drivers/appledart.h>
 #include <reactos/drivers/appleatcphy.h>
 #include <reactos/drivers/appleacepd.h>
+#include <reactos/drivers/appledwc3host.h>
 
 #define APPLE_DWC3_TAG              '3wDA'
-
-#define DWC3_GCTL                   0xC110
-#define DWC3_GCTL_PRTCAP_MASK       (3UL << 12)
-#define DWC3_GCTL_PRTCAP_HOST       (1UL << 12)
-#define DWC3_GSNPSID                0xC120
-#define DWC3_GUSB2PHYCFG            0xC200
-#define DWC3_GUSB2PHYCFG_SUSPHY     (1UL << 6)
-#define DWC3_GUSB3PIPECTL           0xC2C0
-#define DWC3_GUSB3PIPECTL_SUSPHY    (1UL << 17)
-#define DWC3_DCTL                   0xC704
-#define DWC3_DCTL_RUN_STOP          (1UL << 31)
-#define DWC3_DCTL_CSFTRST           (1UL << 30)
-#define DWC3_REGISTER_SPAN          0xC800
-#define DWC3_SOFT_RESET_POLLS       250
-#define DWC3_SOFT_RESET_SETTLE_MS   50
-
-#define APPLE_DWC3_CIO_LFPS_OFFSET  0x38
-#define APPLE_DWC3_CIO_BW_NGT       0x3C
-#define APPLE_DWC3_CIO_LINK_TIMER   0x40
-#define APPLE_DWC3_GLUE_SPAN        0x44
 
 #define APPLE_DWC3_FDO              0x4F444641UL
 #define APPLE_DWC3_PDO              0x4F445041UL
@@ -94,71 +75,9 @@ AppleDwc3FindResources(
             Interrupt = TRUE;
         }
     }
-    if (!Memory || !Interrupt || Extension->Memory.u.Memory.Length < DWC3_REGISTER_SPAN)
+    if (!Memory || !Interrupt || Extension->Memory.u.Memory.Length < APPLE_DWC3_REGISTER_SPAN)
         return STATUS_DEVICE_CONFIGURATION_ERROR;
     return STATUS_SUCCESS;
-}
-
-static
-VOID
-AppleDwc3DelayMs(
-    _In_ ULONG Milliseconds)
-{
-    LARGE_INTEGER Interval;
-
-    Interval.QuadPart = -10000LL * Milliseconds;
-    KeDelayExecutionThread(KernelMode, FALSE, &Interval);
-}
-
-static
-NTSTATUS
-AppleDwc3SoftReset(
-    _In_ PUCHAR Core)
-{
-    volatile ULONG *Dctl = (volatile ULONG *)(Core + DWC3_DCTL);
-    ULONG Poll;
-
-    WRITE_REGISTER_ULONG(Dctl, (READ_REGISTER_ULONG(Dctl) & ~DWC3_DCTL_RUN_STOP) | DWC3_DCTL_CSFTRST);
-    for (Poll = 0; Poll < DWC3_SOFT_RESET_POLLS; ++Poll)
-    {
-        if (!(READ_REGISTER_ULONG(Dctl) & DWC3_DCTL_CSFTRST))
-        {
-            AppleDwc3DelayMs(DWC3_SOFT_RESET_SETTLE_MS);
-            return STATUS_SUCCESS;
-        }
-        AppleDwc3DelayMs(1);
-    }
-    return STATUS_IO_TIMEOUT;
-}
-
-static
-VOID
-AppleDwc3SetupGlue(
-    _In_ PFDT_DRIVER_TREE Tree,
-    _In_ PAPPLE_DWC3_EXTENSION Extension)
-{
-    PUCHAR Glue;
-    ULONG Size, Index;
-    volatile ULONG *LinkTimer;
-
-    Index = FdtDriverFindRegIndex(Tree, Tree->Node, "dwc3-apple");
-    if (Index == MAXULONG)
-        return;
-    Glue = FdtDriverMapReg(Tree, Tree->Node, Index, NULL, &Size);
-    if (!Glue)
-        return;
-    if (Size >= APPLE_DWC3_GLUE_SPAN)
-    {
-        WRITE_REGISTER_ULONG((volatile ULONG *)(Glue + APPLE_DWC3_CIO_LFPS_OFFSET), 0x0F800F80);
-        WRITE_REGISTER_ULONG((volatile ULONG *)(Glue + APPLE_DWC3_CIO_BW_NGT), 0x0FC00FC0);
-        LinkTimer = (volatile ULONG *)(Glue + APPLE_DWC3_CIO_LINK_TIMER);
-        WRITE_REGISTER_ULONG(LinkTimer, (READ_REGISTER_ULONG(LinkTimer) & 0xFF000000UL) | 0x00140A10UL);
-    }
-    else
-    {
-        DbgPrint("appledwc3: %I64x glue registers are only %lu bytes\n", Extension->CoreBase, Size);
-    }
-    MmUnmapIoSpace(Glue, Size);
 }
 
 static
@@ -230,82 +149,12 @@ AppleDwc3PowerUp(
     _Inout_ PAPPLE_DWC3_EXTENSION Extension)
 {
     FDT_DRIVER_TREE Tree;
-    APPLE_ATCPHY Phy;
-    PUCHAR Core = NULL;
-    ULONG Identifier, Control;
-    NTSTATUS Status, PhyStatus;
-    BOOLEAN HavePhy = FALSE;
+    NTSTATUS Status;
 
-    RtlZeroMemory(&Phy, sizeof(Phy));
     Status = FdtDriverOpen(Extension->PhysicalDevice, &Tree);
     if (!NT_SUCCESS(Status))
         return Status;
-    PhyStatus = AppleAtcphyOpen(&Tree, Tree.Node, &Phy);
-    if (NT_SUCCESS(PhyStatus))
-    {
-        HavePhy = TRUE;
-        PhyStatus = ApplePmgrPowerOnDevice(&Tree, Phy.Node);
-        if (NT_SUCCESS(PhyStatus))
-            PhyStatus = AppleAtcphyStartUsb2Host(&Tree, &Phy);
-        DbgPrint("appledwc3: %I64x Type-C PHY USB2 host start %lx, tunables %lu/%lu/%lu\n", Extension->CoreBase,
-                 PhyStatus, Phy.TunableEntries[0], Phy.TunableEntries[1], Phy.TunableEntries[2]);
-        if (!NT_SUCCESS(PhyStatus))
-        {
-            Status = PhyStatus;
-            goto Done;
-        }
-    }
-    else if (PhyStatus != STATUS_NOT_FOUND)
-    {
-        DbgPrint("appledwc3: %I64x Type-C PHY is not usable: %lx\n", Extension->CoreBase, PhyStatus);
-    }
-    Core = MmMapIoSpace(Extension->Memory.u.Memory.Start, DWC3_REGISTER_SPAN, MmNonCached);
-    if (!Core)
-    {
-        Status = STATUS_INSUFFICIENT_RESOURCES;
-        goto Done;
-    }
-    Identifier = READ_REGISTER_ULONG((volatile ULONG *)(Core + DWC3_GSNPSID));
-    Control = READ_REGISTER_ULONG((volatile ULONG *)(Core + DWC3_GCTL));
-    DbgPrint("appledwc3: %I64x core %08lx, control %08lx, USB2 PHY %08lx, USB3 pipe %08lx, interrupt %lu\n",
-             Extension->CoreBase, Identifier, Control,
-             READ_REGISTER_ULONG((volatile ULONG *)(Core + DWC3_GUSB2PHYCFG)),
-             READ_REGISTER_ULONG((volatile ULONG *)(Core + DWC3_GUSB3PIPECTL)), Extension->Interrupt.u.Interrupt.Vector);
-    if ((Identifier & 0xFFFF0000UL) != 0x55330000UL && (Identifier & 0xFFFF0000UL) != 0x33310000UL &&
-        (Identifier & 0xFFFF0000UL) != 0x33320000UL)
-    {
-        Status = STATUS_DEVICE_CONFIGURATION_ERROR;
-        goto Done;
-    }
-    if (HavePhy)
-    {
-        Status = AppleDwc3SoftReset(Core);
-        if (!NT_SUCCESS(Status))
-        {
-            DbgPrint("appledwc3: %I64x core soft reset did not finish\n", Extension->CoreBase);
-            goto Done;
-        }
-        AppleDwc3SetupGlue(&Tree, Extension);
-        Control = READ_REGISTER_ULONG((volatile ULONG *)(Core + DWC3_GCTL));
-    }
-    WRITE_REGISTER_ULONG((volatile ULONG *)(Core + DWC3_GCTL), (Control & ~DWC3_GCTL_PRTCAP_MASK) | DWC3_GCTL_PRTCAP_HOST);
-    if (HavePhy)
-    {
-        WRITE_REGISTER_ULONG((volatile ULONG *)(Core + DWC3_GUSB2PHYCFG),
-                             READ_REGISTER_ULONG((volatile ULONG *)(Core + DWC3_GUSB2PHYCFG)) | DWC3_GUSB2PHYCFG_SUSPHY);
-        WRITE_REGISTER_ULONG((volatile ULONG *)(Core + DWC3_GUSB3PIPECTL),
-                             READ_REGISTER_ULONG((volatile ULONG *)(Core + DWC3_GUSB3PIPECTL)) | DWC3_GUSB3PIPECTL_SUSPHY);
-        PhyStatus = AppleAtcphySelectDummyPipe(&Phy);
-        DbgPrint("appledwc3: %I64x USB3 pipe on the dummy PHY %lx, USB2 PHY %08lx, USB3 pipe %08lx\n", Extension->CoreBase,
-                 PhyStatus, READ_REGISTER_ULONG((volatile ULONG *)(Core + DWC3_GUSB2PHYCFG)),
-                 READ_REGISTER_ULONG((volatile ULONG *)(Core + DWC3_GUSB3PIPECTL)));
-    }
-    Status = STATUS_SUCCESS;
-
-Done:
-    if (Core)
-        MmUnmapIoSpace(Core, DWC3_REGISTER_SPAN);
-    AppleAtcphyClose(&Phy);
+    Status = AppleDwc3StartHost(&Tree, Tree.Node, Extension->CoreBase, "appledwc3");
     FdtDriverClose(&Tree);
     return Status;
 }
