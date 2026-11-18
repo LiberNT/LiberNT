@@ -3047,7 +3047,7 @@ LdrpInitializeProcess(IN PCONTEXT Context,
             if (!CurrentDirectory.Buffer)
             {
                 DPRINT1("LDR: LdrpInitializeProcess - unable to allocate current working directory buffer\n");
-                // FIXME: And what?
+                return STATUS_NO_MEMORY;
             }
 
             /* Copy the drive of the system root */
@@ -3078,6 +3078,11 @@ LdrpInitializeProcess(IN PCONTEXT Context,
 
     /* Allocate a data entry for the Image */
     LdrpImageEntry = LdrpAllocateDataTableEntry(Peb->ImageBaseAddress);
+    if (!LdrpImageEntry)
+    {
+        if (FreeCurDir) RtlFreeUnicodeString(&CurrentDirectory);
+        return STATUS_NO_MEMORY;
+    }
 
     /* Set it up */
     LdrpImageEntry->EntryPoint = LdrpFetchAddressOfEntryPoint(LdrpImageEntry->DllBase);
@@ -3132,6 +3137,11 @@ LdrpInitializeProcess(IN PCONTEXT Context,
 
     /* Now add an entry for NTDLL */
     NtLdrEntry = LdrpAllocateDataTableEntry(SystemArgument1);
+    if (!NtLdrEntry)
+    {
+        if (FreeCurDir) RtlFreeUnicodeString(&CurrentDirectory);
+        return STATUS_NO_MEMORY;
+    }
     NtLdrEntry->Flags = LDRP_IMAGE_DLL;
     NtLdrEntry->EntryPoint = LdrpFetchAddressOfEntryPoint(NtLdrEntry->DllBase);
     NtLdrEntry->LoadCount = -1;
