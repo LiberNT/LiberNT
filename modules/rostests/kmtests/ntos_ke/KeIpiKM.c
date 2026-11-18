@@ -59,6 +59,8 @@ TestIpiGenericCall(VOID)
     ok_eq_ulong(Delivered, 256ul);
 }
 
+static volatile LONG *DpcVisits;
+static ULONG DpcProcessorCount;
 static volatile LONG DpcCalls;
 static volatile LONG DpcSyncObserved;
 
@@ -71,7 +73,12 @@ GenericDpcRoutine(
     _In_opt_ PVOID SystemArgument1,
     _In_opt_ PVOID SystemArgument2)
 {
+    ULONG Cpu = KeGetCurrentProcessorNumberEx(NULL);
+
     UNREFERENCED_PARAMETER(Dpc);
+    ok(Cpu < DpcProcessorCount, "unexpected processor %lu\n", Cpu);
+    if (Cpu < DpcProcessorCount)
+        InterlockedIncrement(&DpcVisits[Cpu]);
     ok_eq_pointer(DeferredContext, (PVOID)(ULONG_PTR)0xD00DFEED);
     ok_eq_uint(KeGetCurrentIrql(), DISPATCH_LEVEL);
 
@@ -86,14 +93,18 @@ VOID
 TestGenericCallDpc(VOID)
 {
     ULONG Round;
-    ULONG Reached = 0;
+    ULONG Reached = 0, Cpu;
+
+    DpcProcessorCount = KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
+    DpcVisits = ExAllocatePoolZero(NonPagedPool, DpcProcessorCount * sizeof(*DpcVisits), 'vDpK');
+    if (skip(DpcVisits != NULL, "No memory\n")) return;
 
     DpcCalls = 0;
     DpcSyncObserved = 0;
 
     KeGenericCallDpc(GenericDpcRoutine, (PVOID)(ULONG_PTR)0xD00DFEED);
 
-    ok_eq_long(DpcCalls, (LONG)KeNumberProcessors);
+    ok_eq_long(DpcCalls, (LONG)DpcProcessorCount);
     ok_eq_long(DpcSyncObserved, 1L);
 
     KeFlushQueuedDpcs();
@@ -105,11 +116,14 @@ TestGenericCallDpc(VOID)
         DpcCalls = 0;
         DpcSyncObserved = 0;
         KeGenericCallDpc(GenericDpcRoutine, (PVOID)(ULONG_PTR)0xD00DFEED);
-        if (DpcCalls == (LONG)KeNumberProcessors && DpcSyncObserved == 1L)
+        if (DpcCalls == (LONG)DpcProcessorCount && DpcSyncObserved == 1L)
             Reached++;
         KeFlushQueuedDpcs();
     }
     ok_eq_ulong(Reached, 64ul);
+    for (Cpu = 0; Cpu < DpcProcessorCount; Cpu++)
+        ok_eq_long(DpcVisits[Cpu], (LONG)Round + 1);
+    ExFreePoolWithTag((PVOID)DpcVisits, 'vDpK');
 }
 
 START_TEST(KeIpiKM)
