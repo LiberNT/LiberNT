@@ -28,6 +28,7 @@ struct DeviceInfo
     FILETIME DriverDateData = {};
     std::wstring Provider;
     std::wstring Inf;
+    std::wstring InfSection;
     std::wstring Service;
     std::wstring MatchingId;
     std::vector<std::wstring> HardwareIds;
