@@ -1,5 +1,6 @@
 
-add_executable(rdp_apitest ControllerMode.c RemoteDesktop.c Zgfx.c testlist.c)
+add_executable(rdp_apitest ClearCodec.c ${REACTOS_SOURCE_DIR}/base/services/rdpserver/clearenc.c ControllerMode.c RemoteDesktop.c Zgfx.c testlist.c)
+target_include_directories(rdp_apitest PRIVATE ${REACTOS_SOURCE_DIR}/base/services/rdpserver)
 target_compile_definitions(rdp_apitest PRIVATE __STDC_NO_THREADS__=1)
 target_link_libraries(rdp_apitest freerdp winpr libssl libcrypto uuid oldnames)
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
