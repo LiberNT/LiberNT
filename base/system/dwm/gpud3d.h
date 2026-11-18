@@ -41,6 +41,7 @@ BOOL DwmD3dSetPointerImage(LONG Width, LONG Height, const ULONG *Image, const UL
 BOOL DwmD3dDrawPointer(const RECT *Rect);
 BOOL DwmD3dMirrorCanvas(HDC Screen);
 DWM_GPU_RESULT DwmD3dEnd(void);
+DWM_GPU_RESULT DwmD3dRetry(void);
 DWM_GPU_RESULT DwmD3dCheckOutput(void);
 BOOL DwmD3dOutputMoved(void);
 

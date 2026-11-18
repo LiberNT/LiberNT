@@ -2674,6 +2674,16 @@ DwmD3dEnd(void)
     return DWM_GPU_COMPLETE;
 }
 
+DWM_GPU_RESULT
+DwmD3dRetry(void)
+{
+    if (!State.Active)
+        return DWM_GPU_FAILED;
+    State.FrameValid = FALSE;
+    State.Scene.Valid = FALSE;
+    return DWM_GPU_RETRY;
+}
+
 BOOL
 DwmD3dOutputMoved(void)
 {
