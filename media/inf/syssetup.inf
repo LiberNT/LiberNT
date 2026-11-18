@@ -217,6 +217,7 @@ RegisterDlls = Wow64RegisterDlls
 11,,wininet.dll,2
 11,,wintrust.dll,1
 11,wbem,wmiutils.dll,1
+11,wbem,mofd.dll,1
 11,,wshom.ocx,1
 11,,wuapi.dll,1
 11,wbem,wbemdisp.dll,1
