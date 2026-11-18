@@ -834,6 +834,7 @@ PoInitSystem(
             PopHiberCaptureLoaderBlock(KeLoaderBlock);
 
         PopInitializeButtons();
+        PopInitializePowerSource();
         return TRUE;
     }
 
