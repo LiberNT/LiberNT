@@ -864,6 +864,14 @@ KiEevdfPreempts(
     if (Holder == NULL)
         return (BOOLEAN)(Thread->Priority > Incumbent->Priority);
 
+    if ((Thread->Priority == Incumbent->Priority) &&
+        (Incumbent == Prcb->CurrentThread) &&
+        (Prcb->ReadySummary != 0) &&
+        (Prcb != KeGetCurrentPrcb()))
+    {
+        return FALSE;
+    }
+
     Candidate = KiEevdfEntityOf(Thread);
     ASSERT(Candidate->Home == KiEevdfHomeOf(Prcb));
     ASSERT(!Candidate->Listed);

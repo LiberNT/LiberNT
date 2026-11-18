@@ -20,6 +20,8 @@ types = header[header.index('typedef struct _KI_EEVDF_ENTITY'):header.index('/* 
 defines = '\n'.join(re.findall(r'^#define KI_EEVDF_\w+ .*$', source, re.M))
 core = source[source.index('/* VIRTUAL TIME ARITHMETIC'):source.index('/* GLOBALS')]
 
+preemption = re.search(r'(?ms)^BOOLEAN\nFASTCALL\nKiEevdfPreempts\(.*?^\}\n', source)[0]
+
 fixture = r'''
 #include <stddef.h>
 #include <stdint.h>
@@ -575,8 +577,55 @@ static void TestBookkeeping(void)
     }
 }
 
+typedef struct { UCHAR Priority; KI_EEVDF_ENTITY Entity; } TEST_THREAD, *PKTHREAD;
+typedef struct {
+    ULONG PrcbLock, ReadySummary;
+    PKTHREAD CurrentThread;
+    KI_EEVDF_QUEUE Queue;
+} TEST_PRCB, *PKPRCB;
+static PKPRCB LocalPrcb;
+#define FASTCALL
+#define KeGetCurrentPrcb() LocalPrcb
+#define KiEevdfHomeOf(Prcb) 1
+#define KiEevdfEntityOf(Thread) (&(Thread)->Entity)
+#define KiEevdfQueueOf(Prcb) (&(Prcb)->Queue)
+#define KiEevdfRunningEntity(Prcb) KiEevdfEntityOf((Prcb)->CurrentThread)
+#define KiEevdfHolder(Prcb, Thread) (KiEevdfIsFairPriority((Thread)->Priority) ? KiEevdfEntityOf(Thread) : NULL)
+
+@PREEMPTION@
+
+static void TestRemoteWakePreemption(void)
+{
+    TEST_PRCB Target = {0}, OtherCpu = {0};
+    TEST_THREAD Running = {0}, Woken = {0}, Standby = {0};
+    KI_EEVDF_ENTITY Queued;
+
+    Start(&Target.Queue);
+    Target.PrcbLock = 1;
+    Target.CurrentThread = &Running;
+    Running.Priority = Woken.Priority = Standby.Priority = 8;
+    Make(&Running.Entity, 8, 0, 1000);
+    Make(&Standby.Entity, 8, 0, 1000);
+    Make(&Woken.Entity, 8, 0, 900);
+    Woken.Entity.Home = 1;
+
+    LocalPrcb = &OtherCpu;
+    CHECK(KiEevdfPreempts(&Target, &Woken, &Running));
+    Make(&Queued, 8, 0, 1100);
+    KiEevdfInsert(&Target.Queue, &Queued);
+    Target.ReadySummary = 1u << 8;
+    CHECK(!KiEevdfPreempts(&Target, &Woken, &Running));
+    CHECK(KiEevdfPreempts(&Target, &Woken, &Standby));
+    LocalPrcb = &Target;
+    CHECK(KiEevdfPreempts(&Target, &Woken, &Running));
+    LocalPrcb = &OtherCpu;
+    Woken.Entity.Priority = Woken.Priority = 9;
+    CHECK(KiEevdfPreempts(&Target, &Woken, &Running));
+}
+
 int main(void)
 {
+    TestRemoteWakePreemption();
     TestWeights();
     TestPick();
     TestBeats();
@@ -596,7 +645,7 @@ int main(void)
 
 with tempfile.TemporaryDirectory() as tmp:
     path = pathlib.Path(tmp)
-    text = fixture.replace('@DEFINES@', defines).replace('@TYPES@', types).replace('@CORE@', core)
+    text = fixture.replace('@DEFINES@', defines).replace('@TYPES@', types).replace('@CORE@', core).replace('@PREEMPTION@', preemption)
     (path / 'eevdf.c').write_text(text)
     subprocess.run([args.cc, '-std=gnu11', '-O1', '-Wall', '-Wextra', '-Werror', str(path / 'eevdf.c'), '-o', str(path / 'eevdf')], check=True)
     subprocess.run([str(path / 'eevdf')], check=True)
