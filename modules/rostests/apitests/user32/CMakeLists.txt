@@ -29,6 +29,7 @@ list(APPEND SOURCE
     ForegroundLastInput.c
     RemoteDisplayAdapter.c
     RemoteDisplayModeRemoval.c
+    RemoteDisplayContent.c
     RemoteDisplayResize.c
     CreateIconFromResourceEx.c
     CoveredWindow.c
