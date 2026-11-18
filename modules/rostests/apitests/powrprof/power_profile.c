@@ -45,6 +45,105 @@ static const SCHEME_EXPECTED_VALUES balanced_expected = {5, 5, 100, 100, 0, 0, 3
 static const SCHEME_EXPECTED_VALUES power_saver_expected = {5, 5, 100, 100, 0, 0, 60, 60};
 static const SCHEME_EXPECTED_VALUES high_performance_expected = {100, 5, 100, 100, 0, 0, 0, 0};
 
+typedef struct
+{
+    const char *name;
+    GUID setting;
+    DWORD values[3][2];
+} PROCESSOR_POLICY_EXPECTED;
+
+/* Windows 11 defaults for Balanced, Power saver and High performance, on AC then on DC */
+static const PROCESSOR_POLICY_EXPECTED processor_policy_expected[] =
+{
+    {"increase threshold", {0x06cadf0e, 0x64ed, 0x448a, {0x89, 0x27, 0xce, 0x7b, 0xf9, 0x0e, 0xb3, 0x5d}}, {{60, 90}, {90, 90}, {30, 30}}},
+    {"decrease threshold", {0x12a0ab44, 0xfe28, 0x4fa9, {0xb3, 0xbd, 0x4b, 0x64, 0xf4, 0x49, 0x60, 0xa6}}, {{20, 30}, {60, 60}, {10, 10}}},
+    {"increase policy", {0x465e1f50, 0xb610, 0x473a, {0xab, 0x58, 0x00, 0xd1, 0x07, 0x7d, 0xc4, 0x18}}, {{3, 3}, {1, 1}, {2, 2}}},
+    {"decrease policy", {0x40fbefc7, 0x2e9d, 0x4d25, {0xa1, 0x85, 0x0c, 0xfd, 0x85, 0x74, 0xba, 0xc6}}, {{0, 0}, {2, 2}, {1, 1}}},
+    {"increase time", {0x984cf492, 0x3bed, 0x4488, {0xa8, 0xf9, 0x42, 0x86, 0xc9, 0x7b, 0xf5, 0xaa}}, {{1, 1}, {3, 3}, {1, 1}}},
+    {"decrease time", {0xd8edeb9b, 0x95cf, 0x4f95, {0xa7, 0x3c, 0xb0, 0x61, 0x97, 0x36, 0x93, 0xc8}}, {{1, 1}, {1, 1}, {1, 1}}},
+    {"time check", {0x4d2b0152, 0x7d5c, 0x498b, {0x88, 0xe2, 0x34, 0x34, 0x53, 0x92, 0xa2, 0xc5}}, {{30, 30}, {200, 200}, {15, 15}}},
+    {"boost policy", {0x45bcc044, 0xd885, 0x43e2, {0x86, 0x05, 0xee, 0x0e, 0xc6, 0xe9, 0x6b, 0x59}}, {{60, 40}, {0, 0}, {100, 100}}},
+    {"boost mode", {0xbe337238, 0x0d82, 0x4146, {0xa9, 0x60, 0x4f, 0x37, 0x49, 0xd4, 0x70, 0xc7}}, {{2, 2}, {2, 2}, {2, 2}}},
+    {"increase threshold 1", {0x06cadf0e, 0x64ed, 0x448a, {0x89, 0x27, 0xce, 0x7b, 0xf9, 0x0e, 0xb3, 0x5e}}, {{60, 90}, {60, 90}, {60, 90}}},
+    {"decrease threshold 1", {0x12a0ab44, 0xfe28, 0x4fa9, {0xb3, 0xbd, 0x4b, 0x64, 0xf4, 0x49, 0x60, 0xa7}}, {{20, 30}, {20, 30}, {20, 30}}},
+    {"increase policy 1", {0x465e1f50, 0xb610, 0x473a, {0xab, 0x58, 0x0, 0xd1, 0x7, 0x7d, 0xc4, 0x19}}, {{3, 3}, {3, 3}, {3, 3}}},
+    {"decrease policy 1", {0x40fbefc7, 0x2e9d, 0x4d25, {0xa1, 0x85, 0xc, 0xfd, 0x85, 0x74, 0xba, 0xc7}}, {{0, 0}, {0, 0}, {0, 0}}},
+    {"increase time 1", {0x984cf492, 0x3bed, 0x4488, {0xa8, 0xf9, 0x42, 0x86, 0xc9, 0x7b, 0xf5, 0xab}}, {{1, 1}, {3, 3}, {1, 1}}},
+    {"decrease time 1", {0xd8edeb9b, 0x95cf, 0x4f95, {0xa7, 0x3c, 0xb0, 0x61, 0x97, 0x36, 0x93, 0xc9}}, {{2, 2}, {2, 2}, {2, 2}}},
+    {"minimum 1", {0x893DEE8E, 0x2BEF, 0x41E0, {0x89, 0xC6, 0xB5, 0x5D, 0x09, 0x29, 0x96, 0x4D}}, {{5, 5}, {5, 5}, {100, 5}}},
+    {"maximum 1", {0xBC5038F7, 0x23E0, 0x4960, {0x96, 0xDA, 0x33, 0xAB, 0xAF, 0x59, 0x35, 0xED}}, {{100, 100}, {75, 75}, {100, 100}}},
+    {"epp 1", {0x36687f9e, 0xe3a5, 0x4dbf, {0xb1, 0xdc, 0x15, 0xeb, 0x38, 0x1c, 0x68, 0x64}}, {{33, 50}, {60, 60}, {0, 0}}},
+    {"frequency limit", {0x75b0ae3f, 0xbce0, 0x45a7, {0x8c, 0x89, 0xc9, 0x61, 0x1c, 0x25, 0xe1, 0x00}}, {{0, 0}, {0, 0}, {0, 0}}},
+    {"frequency limit 1", {0x75b0ae3f, 0xbce0, 0x45a7, {0x8c, 0x89, 0xc9, 0x61, 0x1c, 0x25, 0xe1, 0x01}}, {{0, 0}, {0, 0}, {0, 0}}},
+    {"parking min cores", {0x0cc5b647, 0xc1df, 0x4637, {0x89, 0x1a, 0xde, 0xc3, 0x5c, 0x31, 0x85, 0x83}}, {{10, 10}, {10, 10}, {100, 100}}},
+    {"parking min cores 1", {0x0cc5b647, 0xc1df, 0x4637, {0x89, 0x1a, 0xde, 0xc3, 0x5c, 0x31, 0x85, 0x84}}, {{0, 0}, {0, 0}, {0, 0}}},
+    {"parking max cores", {0xea062031, 0x0e34, 0x4ff1, {0x9b, 0x6d, 0xeb, 0x10, 0x59, 0x33, 0x40, 0x28}}, {{100, 100}, {100, 100}, {100, 100}}},
+    {"parking max cores 1", {0xea062031, 0x0e34, 0x4ff1, {0x9b, 0x6d, 0xeb, 0x10, 0x59, 0x33, 0x40, 0x29}}, {{100, 100}, {100, 100}, {100, 100}}},
+    {"parking increase time", {0x2ddd5a84, 0x5a71, 0x437e, {0x91, 0x2a, 0xdb, 0x0b, 0x8c, 0x78, 0x87, 0x32}}, {{1, 1}, {1, 1}, {7, 7}}},
+    {"parking decrease time", {0xdfd10d17, 0xd5eb, 0x45dd, {0x87, 0x7a, 0x9a, 0x34, 0xdd, 0xd1, 0x5c, 0x82}}, {{10, 10}, {2, 2}, {20, 20}}},
+    {"parking increase policy", {0xc7be0679, 0x2817, 0x4d69, {0x9d, 0x02, 0x51, 0x9a, 0x53, 0x7e, 0xd0, 0xc6}}, {{0, 0}, {0, 0}, {0, 0}}},
+    {"parking decrease policy", {0x71021b41, 0xc749, 0x4d21, {0xbe, 0x74, 0xa0, 0x0f, 0x33, 0x5d, 0x58, 0x2b}}, {{0, 0}, {0, 0}, {0, 0}}},
+    {"parking concurrency", {0x2430ab6f, 0xa520, 0x44a2, {0x96, 0x01, 0xf7, 0xf2, 0x3b, 0x51, 0x34, 0xb1}}, {{97, 97}, {97, 97}, {97, 97}}},
+    {"parking headroom", {0xf735a673, 0x2066, 0x4f80, {0xa0, 0xc5, 0xdd, 0xee, 0x0c, 0xf1, 0xbf, 0x5d}}, {{20, 20}, {20, 20}, {20, 20}}},
+    {"parking over utilization", {0x943c8cb6, 0x6f93, 0x4227, {0xad, 0x87, 0xe9, 0xa3, 0xfe, 0xec, 0x08, 0xd1}}, {{85, 85}, {90, 90}, {60, 60}}},
+};
+
+/* Windows 11 defaults of the display and sleep timeouts, in seconds, in the same order */
+static const DWORD timeout_expected[2][3][2] =
+{
+    {{600, 300}, {300, 120}, {900, 600}},
+    {{1800, 900}, {900, 600}, {0, 0}},
+};
+
+static void test_processor_policy_defaults(void)
+{
+    const GUID *schemes[3] = {&balanced_scheme, &power_saver_scheme, &high_performance_scheme};
+    DWORD value, ret;
+    UINT scheme, index;
+
+    for (scheme = 0; scheme < 3; scheme++)
+    {
+        for (index = 0; index < ARRAYSIZE(processor_policy_expected); index++)
+        {
+            value = 0xdeadbeef;
+            ret = PowerReadACValueIndex(NULL, schemes[scheme], &processor_subgroup, &processor_policy_expected[index].setting, &value);
+            ok(ret == ERROR_SUCCESS, "scheme %u AC %s returned %lu\n", scheme, processor_policy_expected[index].name, ret);
+            ok(value == processor_policy_expected[index].values[scheme][0], "scheme %u AC %s is %lu, expected %lu\n",
+               scheme, processor_policy_expected[index].name, value, processor_policy_expected[index].values[scheme][0]);
+
+            value = 0xdeadbeef;
+            ret = PowerReadDCValueIndex(NULL, schemes[scheme], &processor_subgroup, &processor_policy_expected[index].setting, &value);
+            ok(ret == ERROR_SUCCESS, "scheme %u DC %s returned %lu\n", scheme, processor_policy_expected[index].name, ret);
+            ok(value == processor_policy_expected[index].values[scheme][1], "scheme %u DC %s is %lu, expected %lu\n",
+               scheme, processor_policy_expected[index].name, value, processor_policy_expected[index].values[scheme][1]);
+        }
+    }
+}
+
+static void test_timeout_defaults(void)
+{
+    const GUID *schemes[3] = {&balanced_scheme, &power_saver_scheme, &high_performance_scheme};
+    const GUID *subgroups[2] = {&video_subgroup, &sleep_subgroup};
+    const GUID *settings[2] = {&video_powerdown_timeout, &standby_timeout};
+    DWORD ac, dc, ret;
+    UINT setting, scheme;
+
+    for (setting = 0; setting < 2; setting++)
+    {
+        for (scheme = 0; scheme < 3; scheme++)
+        {
+            ac = dc = 0xdeadbeef;
+            ret = PowerReadACValueIndex(NULL, schemes[scheme], subgroups[setting], settings[setting], &ac);
+            ok(ret == ERROR_SUCCESS, "timeout %u scheme %u AC returned %lu\n", setting, scheme, ret);
+            ret = PowerReadDCValueIndex(NULL, schemes[scheme], subgroups[setting], settings[setting], &dc);
+            ok(ret == ERROR_SUCCESS, "timeout %u scheme %u DC returned %lu\n", setting, scheme, ret);
+            ok(ac == timeout_expected[setting][scheme][0] && dc == timeout_expected[setting][scheme][1],
+               "timeout %u scheme %u is %lu/%lu, expected %lu/%lu\n", setting, scheme, ac, dc,
+               timeout_expected[setting][scheme][0], timeout_expected[setting][scheme][1]);
+        }
+    }
+}
+
 static void trace_guid(const char *name, const GUID *guid)
 {
     trace("%s=%08lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x\n", name, guid->Data1, guid->Data2, guid->Data3, guid->Data4[0], guid->Data4[1], guid->Data4[2], guid->Data4[3], guid->Data4[4], guid->Data4[5], guid->Data4[6], guid->Data4[7]);
@@ -135,6 +234,9 @@ static void query_processor_information(const char *name)
             ok(info[i].Number == i, "%s processor %lu reported number %lu\n", name, i, info[i].Number);
             ok(info[i].MaxMhz != 0, "%s processor %lu reported zero MaxMhz\n", name, i);
             ok(info[i].MhzLimit != 0, "%s processor %lu reported zero MhzLimit\n", name, i);
+            ok(info[i].MaxIdleState >= 1, "%s processor %lu reported no idle state\n", name, i);
+            ok(info[i].CurrentIdleState >= 1 && info[i].CurrentIdleState <= info[i].MaxIdleState,
+               "%s processor %lu reported idle state %lu of %lu\n", name, i, info[i].CurrentIdleState, info[i].MaxIdleState);
         }
     }
     HeapFree(GetProcessHeap(), 0, info);
@@ -457,7 +559,9 @@ static void test_default_index(void)
     DWORD ret;
 
     ret = PowerReadACDefaultIndex(NULL, &balanced_scheme, &processor_subgroup, &processor_epp, NULL);
-    ok(ret == ERROR_INVALID_PARAMETER, "AC default without output returned %lu\n", ret);
+    ok(ret == ERROR_SUCCESS, "AC default without output returned %lu\n", ret);
+    ret = PowerReadDCDefaultIndex(NULL, &balanced_scheme, &processor_subgroup, &processor_epp, NULL);
+    ok(ret == ERROR_SUCCESS, "DC default without output returned %lu\n", ret);
     ret = PowerReadDCDefaultIndex(NULL, NULL, &processor_subgroup, &processor_epp, &dc);
     ok(ret == ERROR_INVALID_PARAMETER, "DC default without personality returned %lu\n", ret);
 
@@ -487,6 +591,8 @@ START_TEST(power_profile)
     test_write_read_contract();
     test_disk_defaults();
     test_legacy_policy_contract();
+    test_processor_policy_defaults();
+    test_timeout_defaults();
     query_scheme_settings("original", original, NULL);
     query_processor_information("original-prime");
     query_processor_information("original");
