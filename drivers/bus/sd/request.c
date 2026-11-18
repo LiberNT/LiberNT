@@ -2480,6 +2480,43 @@ SdBusSetHostBusWidth(
     FdoExtension->CurrentBusWidth = BusWidth;
 }
 
+VOID
+SdBusSetHostHighSpeed(
+    _In_ PFDO_EXTENSION FdoExtension,
+    _In_ BOOLEAN HighSpeed)
+{
+    UCHAR HostControl;
+
+    ASSERT(!HighSpeed || (FdoExtension->HostCapabilities & SDHCI_CAP_HIGH_SPEED));
+    FdoExtension->HostHighSpeed = HighSpeed;
+    if (FdoExtension->HostType != SdBusHostSdhci)
+    {
+        return;
+    }
+
+    HostControl = SdBusReadReg8(FdoExtension, SDHCI_HOST_CONTROL);
+    if (HighSpeed)
+    {
+        HostControl |= SDHCI_HC_HIGH_SPEED;
+    }
+    else
+    {
+        HostControl &= ~SDHCI_HC_HIGH_SPEED;
+    }
+    SdBusWriteReg8(FdoExtension, SDHCI_HOST_CONTROL, HostControl);
+}
+
+BOOLEAN
+SdBusHostIsHighSpeed(
+    _In_ PFDO_EXTENSION FdoExtension)
+{
+    if (FdoExtension->HostType == SdBusHostSdhci)
+    {
+        return (SdBusReadReg8(FdoExtension, SDHCI_HOST_CONTROL) & SDHCI_HC_HIGH_SPEED) != 0;
+    }
+    return FdoExtension->HostHighSpeed;
+}
+
 static VOID
 SdBusUpdateSdioBusControlCache(
     _In_ PPDO_EXTENSION PdoExtension,

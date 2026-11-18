@@ -165,11 +165,12 @@ SdHostInitializeController(_In_ PFDO_EXTENSION FdoExtension)
 {
     /*
      * Publish the SDHCI-equivalent capabilities used by shared enumeration:
-     * 250 MHz base clock, 3.3 V, high speed, and PIO-only 4-bit transfers.
+     * 250 MHz base clock, 3.3 V, and PIO-only 4-bit transfers.
      */
     FdoExtension->SpecVersion = SDHCI_SPEC_300;
+    /* FIXME: no high-speed while transfers are polled; a 50 MHz polled card clock was never validated on this host */
     FdoExtension->HostCapabilities =
-        SDHCI_CAP_HIGH_SPEED | SDHCI_CAP_VOLTAGE_330 | ((SDHOST_BASE_CLOCK_KHZ / 1000) << SDHCI_CAP_BASE_CLK_SHIFT);
+        SDHCI_CAP_VOLTAGE_330 | ((SDHOST_BASE_CLOCK_KHZ / 1000) << SDHCI_CAP_BASE_CLK_SHIFT);
     FdoExtension->HostCapabilities2 = 0;
     FdoExtension->MaxClockFrequency = SDHOST_BASE_CLOCK_KHZ;
     FdoExtension->UseAdma2 = FALSE;
