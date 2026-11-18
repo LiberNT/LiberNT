@@ -11,6 +11,7 @@
 #include <winreg.h>
 #include <cfgmgr32.h>
 #include <swdevice.h>
+#include <dbt.h>
 #include <initguid.h>
 #include <ntddvdeo.h>
 #include <d3dkmthk.h>
@@ -39,6 +40,8 @@ static PFN_ESCAPE pEscape;
 static PFN_CLOSE_ADAPTER pCloseAdapter;
 static LONG DisplayChanges;
 static LPARAM LastDisplayChange;
+static LONG MonitorArrivals;
+static LONG MonitorRemovals;
 
 static LRESULT CALLBACK
 WatchProc(
@@ -51,6 +54,15 @@ WatchProc(
     {
         InterlockedIncrement(&DisplayChanges);
         LastDisplayChange = lParam;
+    }
+    else if (uMsg == WM_DEVICECHANGE && lParam &&
+             ((PDEV_BROADCAST_HDR)lParam)->dbch_devicetype == DBT_DEVTYP_DEVICEINTERFACE &&
+             IsEqualGUID(&((PDEV_BROADCAST_DEVICEINTERFACE_W)lParam)->dbcc_classguid, &GUID_DEVINTERFACE_MONITOR))
+    {
+        if (wParam == DBT_DEVICEARRIVAL)
+            InterlockedIncrement(&MonitorArrivals);
+        else if (wParam == DBT_DEVICEREMOVECOMPLETE)
+            InterlockedIncrement(&MonitorRemovals);
     }
     return DefWindowProcW(hWnd, uMsg, wParam, lParam);
 }
@@ -206,6 +218,8 @@ TestResize(
     DWORD Start;
 
     InterlockedExchange(&DisplayChanges, 0);
+    InterlockedExchange(&MonitorArrivals, 0);
+    InterlockedExchange(&MonitorRemovals, 0);
     LastDisplayChange = 0;
     ok_hex(SetMode(Adapter, Width, Height), STATUS_SUCCESS);
     for (Start = GetTickCount(); GetTickCount() - Start < 10000; PumpFor(50))
@@ -224,6 +238,9 @@ TestResize(
     }
     ok(GetSystemMetrics(SM_CXSCREEN) == (INT)Width && GetSystemMetrics(SM_CYSCREEN) == (INT)Height,
        "%lux%lu: the screen is %dx%d\n", Width, Height, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
+    ok(MonitorRemovals == ExpectedChanges && MonitorArrivals == ExpectedChanges,
+       "%lux%lu: %ld monitor removals and %ld arrivals, expected %ld\n", Width, Height, MonitorRemovals,
+       MonitorArrivals, ExpectedChanges);
     ok(GetSystemMetrics(SM_CMONITORS) == 1, "%lux%lu: SM_CMONITORS is %d\n", Width, Height,
        GetSystemMetrics(SM_CMONITORS));
     ZeroMemory(&Mode, sizeof(Mode));
@@ -254,8 +271,11 @@ START_TEST(RemoteDisplayResize)
     D3DKMT_HANDLE Adapter = 0;
     DISPLAY_DEVICEW Remote;
     WNDCLASSW Class = { 0 };
+    DEV_BROADCAST_DEVICEINTERFACE_W Filter = { 0 };
+    HDEVNOTIFY Notify = NULL;
     HSWDEVICE SwDevice = NULL;
     HWND hWatch;
+    DWORD Start;
     ULONG Index;
     HRESULT hr;
 
@@ -274,6 +294,11 @@ START_TEST(RemoteDisplayResize)
     RegisterClassW(&Class);
     hWatch = CreateWindowExW(0, Class.lpszClassName, L"", WS_POPUP, 0, 0, 1, 1, NULL, NULL, Class.hInstance, NULL);
     ok(hWatch != NULL, "CreateWindowExW failed: %lu\n", GetLastError());
+    Filter.dbcc_size = sizeof(Filter);
+    Filter.dbcc_devicetype = DBT_DEVTYP_DEVICEINTERFACE;
+    Filter.dbcc_classguid = GUID_DEVINTERFACE_MONITOR;
+    Notify = RegisterDeviceNotificationW(hWatch, &Filter, DEVICE_NOTIFY_WINDOW_HANDLE);
+    ok(Notify != NULL, "RegisterDeviceNotificationW failed: %lu\n", GetLastError());
 
     Result.Event = CreateEventW(NULL, TRUE, FALSE, NULL);
     Info.cbSize = sizeof(Info);
@@ -295,13 +320,15 @@ START_TEST(RemoteDisplayResize)
     if (!Adapter)
         goto done;
 
+    for (Start = GetTickCount(); MonitorArrivals == 0 && GetTickCount() - Start < 10000; PumpFor(50));
+    ok(MonitorArrivals >= 1, "The remote display brought %ld monitor arrivals\n", MonitorArrivals);
     ok_long(SetDisplayConfig(0, NULL, 0, NULL, SDC_APPLY | SDC_TOPOLOGY_EXTERNAL), ERROR_SUCCESS);
     ok(WaitForPrimary(Remote.DeviceName), "%ls did not become the primary\n", Remote.DeviceName);
     PumpFor(2000);
 
     for (Index = 0; Index < ARRAYSIZE(Modes); Index++)
         TestResize(Adapter, Remote.DeviceName, Modes[Index][0], Modes[Index][1], 1);
-    TestResize(Adapter, Remote.DeviceName, Modes[ARRAYSIZE(Modes) - 1][0], Modes[ARRAYSIZE(Modes) - 1][1], 0);
+    TestResize(Adapter, Remote.DeviceName, Modes[ARRAYSIZE(Modes) - 1][0], Modes[ARRAYSIZE(Modes) - 1][1], 1);
 
     ok_long(SetDisplayConfig(0, NULL, 0, NULL, SDC_APPLY | SDC_TOPOLOGY_INTERNAL), ERROR_SUCCESS);
     PumpFor(2000);
@@ -316,6 +343,8 @@ done:
         SwDeviceClose(SwDevice);
     UninstallTestDevice();
     CloseHandle(Result.Event);
+    if (Notify)
+        UnregisterDeviceNotification(Notify);
     if (hWatch)
         DestroyWindow(hWatch);
 }
