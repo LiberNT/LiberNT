@@ -223,6 +223,10 @@ VOID
 NTAPI
 PopPpmInitialize(VOID);
 
+VOID
+NTAPI
+PopInitializePowerSource(VOID);
+
 NTSTATUS
 NTAPI
 PopPpmProcessorRequest(
