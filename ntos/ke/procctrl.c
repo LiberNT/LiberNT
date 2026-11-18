@@ -22,6 +22,8 @@ typedef struct _PROCESS_VALUES
    have somewhere to start from. */
 LIST_ENTRY KiProcessListHead;
 
+static KSPIN_LOCK KiProcessListLock;
+
 /* Processes and stacks the swapper has been asked to bring in or push out. */
 LIST_ENTRY KiProcessInSwapListHead;
 LIST_ENTRY KiProcessOutSwapListHead;
@@ -168,14 +170,14 @@ KiLinkProcess(
     KIRQL OldIrql = KeGetCurrentIrql();
 
     if (OldIrql < SYNCH_LEVEL) KeRaiseIrql(SYNCH_LEVEL, &OldIrql);
-    KiAcquireDispatcherLockAtSynchLevel();
+    KiAcquireFlagLock(&KiProcessListLock);
 
     if (Link)
         InsertTailList(&KiProcessListHead, &Process->ProcessListEntry);
     else
         RemoveEntryList(&Process->ProcessListEntry);
 
-    KiReleaseDispatcherLockFromSynchLevel();
+    KiReleaseFlagLock(&KiProcessListLock);
     if (OldIrql < SYNCH_LEVEL) KeLowerIrql(OldIrql);
 }
 
@@ -267,7 +269,8 @@ KeSetProcess(
     ASSERT_PROCESS(Process);
     ASSERT_IRQL_LESS_OR_EQUAL(DISPATCH_LEVEL);
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
+    KiAcquireDispatcherObject(&Process->Header);
 
     PreviousState = Process->Header.SignalState;
     Process->Header.SignalState = 1;
@@ -275,9 +278,11 @@ KeSetProcess(
     if ((PreviousState == 0) && !IsListEmpty(&Process->Header.WaitListHead))
         KiWaitTest(Process, Increment);
 
+    KiReleaseDispatcherObject(&Process->Header);
+
     if (!InWait)
     {
-        KiReleaseDispatcherLock(OldIrql);
+        KiExitDispatcher(OldIrql);
     }
     else
     {
@@ -330,7 +335,6 @@ KeSetPriorityAndQuantumProcess(
 
     Process->BasePriority = (SCHAR)Priority;
 
-    KiAcquireDispatcherLockAtSynchLevel();
 
     for (Entry = Process->ThreadListHead.Flink;
          Entry != &Process->ThreadListHead;
@@ -344,7 +348,6 @@ KeSetPriorityAndQuantumProcess(
         KiAdjustThreadToProcessPriority(Thread, OldBase, Priority);
     }
 
-    KiReleaseDispatcherLockFromSynchLevel();
     KiReleaseProcessLockFromSynchLevel(&ProcessLock);
     KiExitDispatcher(ProcessLock.OldIrql);
 
@@ -406,7 +409,6 @@ KeSetAffinityProcess(
     OldAffinity = Process->Affinity;
     Process->Affinity = Affinity;
 
-    KiAcquireDispatcherLockAtSynchLevel();
 
     for (Entry = Process->ThreadListHead.Flink;
          Entry != &Process->ThreadListHead;
@@ -421,7 +423,6 @@ KeSetAffinityProcess(
         KiReleaseThreadLock(Thread);
     }
 
-    KiReleaseDispatcherLockFromSynchLevel();
     KiReleaseProcessLockFromSynchLevel(&ProcessLock);
     KiExitDispatcher(ProcessLock.OldIrql);
 
@@ -888,7 +889,8 @@ KiExpandInitialProcessAffinities(VOID)
     PLIST_ENTRY Entry;
     KIRQL OldIrql;
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
+    KiAcquireFlagLock(&KiProcessListLock);
 
     for (Entry = KiProcessListHead.Flink;
          Entry != &KiProcessListHead;
@@ -898,7 +900,8 @@ KiExpandInitialProcessAffinities(VOID)
         Process->Affinity = KeActiveProcessors;
     }
 
-    KiReleaseDispatcherLock(OldIrql);
+    KiReleaseFlagLock(&KiProcessListLock);
+    KiExitDispatcher(OldIrql);
 }
 
 /* EOF */

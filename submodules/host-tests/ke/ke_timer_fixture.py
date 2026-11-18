@@ -38,9 +38,27 @@ class Sources:
             end += 1
         return source[start:end] + '\n'
 
+    def typedef(self, file, name):
+        """A structure typedef, from its opening line to the names it declares."""
+        source = self.text[file]
+        start = source.index('typedef struct _' + name + '\n')
+        end = source.index(';', source.index('} ' + name, start)) + 1
+        return source[start:end] + '\n'
 
-# The timer world every test builds on: one table bucket, a dispatcher lock and
-# object locks that are real mutexes, and a clock the test moves by hand.
+    def system_time_setter(self, pause=None):
+        """KeSetSystemTime and the timer move it runs in its rendezvous; pause goes in before each absolute timer is put back."""
+        change = self.definition('clockint.c', 'KiChangeSystemTime')
+        if pause:
+            needle = '        Entry = RemoveHeadList(&AbsoluteList);\n'
+            assert change.count(needle) == 1
+            change = change.replace(needle, '        ' + pause + '\n' + needle)
+        return (self.typedef('clockint.c', 'KI_SYSTEM_TIME_CHANGE') + change +
+                self.definition('clockint.c', 'KiSystemTimeChangeDpc') + self.definition('clockint.c', 'KeSetSystemTime'))
+
+
+# The timer world every test builds on: one table bucket, object locks that are
+# real mutexes, a rendezvous no processor above DISPATCH_LEVEL can be inside,
+# and a clock the test moves by hand.
 PRELUDE = r'''
 #include <pthread.h>
 #include <sched.h>
@@ -81,6 +99,7 @@ PRELUDE = r'''
 #define FIELD_OFFSET(t, f) offsetof(t, f)
 #define CONTAINING_RECORD(a, t, f) ((t *)((char *)(a) - offsetof(t, f)))
 #define UlongToPtr(u) ((PVOID)(ULONG_PTR)(u))
+#define YieldProcessor() sched_yield()
 #define CHECK(x) do { if (!(x)) { printf("%s:%d: %s failed\n", Scenario, __LINE__, #x); exit(1); } } while (0)
 #define ASSERT(x) CHECK(x)
 #define ASSERT_TIMER(x) ((void)(x))
@@ -106,9 +125,10 @@ typedef struct { LIST_ENTRY Entry; ULARGE_INTEGER Time; } KTIMER_TABLE_ENTRY, *P
 typedef pthread_mutex_t *PKSPIN_LOCK_QUEUE;
 static const char *Scenario = "setup";
 static KTIMER_TABLE_ENTRY KiTimerTableListHead[TIMER_TABLE_SIZE];
-static pthread_mutex_t DispatcherLock = PTHREAD_MUTEX_INITIALIZER, Bucket = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t Bucket = PTHREAD_MUTEX_INITIALIZER;
+static pthread_rwlock_t Rendezvous = PTHREAD_RWLOCK_INITIALIZER;
 static __thread KIRQL Irql;
-static __thread int DispatcherHeld, ObjectLocks, BucketWithObject;
+static __thread int ObjectLocks, BucketWithObject, InRendezvous;
 static volatile int DispatcherContended;
 static volatile KSYSTEM_TIME KiSystemTimeValue;
 static KSPIN_LOCK KiSystemTimeLock __attribute__((unused));
@@ -123,25 +143,33 @@ static void InsertHeadList(PLIST_ENTRY h, PLIST_ENTRY e) { e->Flink = h->Flink; 
 static BOOLEAN RemoveEntryList(PLIST_ENTRY e) { PLIST_ENTRY b = e->Blink, f = e->Flink; b->Flink = f; f->Blink = b; return f == b; }
 static PLIST_ENTRY RemoveHeadList(PLIST_ENTRY h) { PLIST_ENTRY e = h->Flink; RemoveEntryList(e); return e; }
 static KIRQL KeGetCurrentIrql(void) { return Irql; }
-static KIRQL KfRaiseIrql(KIRQL New) { KIRQL Old = Irql; CHECK(New >= Old); Irql = New; return Old; }
-static void KeLowerIrql(KIRQL New) { CHECK(New <= Irql); Irql = New; }
-static KIRQL KiAcquireDispatcherLock(void) {
-    if (pthread_mutex_trylock(&DispatcherLock) != 0) {
-        __atomic_store_n(&DispatcherContended, 1, __ATOMIC_RELEASE);
-        CHECK(pthread_mutex_lock(&DispatcherLock) == 0);
-    }
-    DispatcherHeld = 1;
-    return KfRaiseIrql(SYNCH_LEVEL);
+/* A DPC cannot run on a processor at DISPATCH_LEVEL or above, so a rendezvous of every processor's DPC waits for each of them to come back below it */
+static KIRQL KfRaiseIrql(KIRQL New) {
+    KIRQL Old = Irql;
+    CHECK(New >= Old);
+    if (Old < DISPATCH_LEVEL && New >= DISPATCH_LEVEL && !InRendezvous)
+        CHECK(pthread_rwlock_rdlock(&Rendezvous) == 0);
+    Irql = New;
+    return Old;
 }
-__attribute__((unused)) static void KiReleaseDispatcherLock(KIRQL Old) { DispatcherHeld = 0; CHECK(pthread_mutex_unlock(&DispatcherLock) == 0); KeLowerIrql(Old); }
-__attribute__((unused)) static void KiReleaseDispatcherLockFromSynchLevel(void) { DispatcherHeld = 0; CHECK(pthread_mutex_unlock(&DispatcherLock) == 0); }
+static void KeLowerIrql(KIRQL New) {
+    CHECK(New <= Irql);
+    if (Irql >= DISPATCH_LEVEL && New < DISPATCH_LEVEL && !InRendezvous)
+        CHECK(pthread_rwlock_unlock(&Rendezvous) == 0);
+    Irql = New;
+}
+__attribute__((unused)) static KIRQL KiEnterDispatcher(void) { return KfRaiseIrql(SYNCH_LEVEL); }
 __attribute__((unused)) static void KiExitDispatcher(KIRQL Old) { KeLowerIrql(Old); }
 static void KiAcquireDispatcherObject(PDISPATCHER_HEADER h) { CHECK(pthread_mutex_lock(&h->Lock) == 0); ObjectLocks++; }
+__attribute__((unused)) static BOOLEAN KiTryAcquireDispatcherObject(PDISPATCHER_HEADER h) { if (pthread_mutex_trylock(&h->Lock) != 0) return FALSE; ObjectLocks++; return TRUE; }
 static void KiReleaseDispatcherObject(PDISPATCHER_HEADER h) { CHECK(ObjectLocks > 0); ObjectLocks--; CHECK(pthread_mutex_unlock(&h->Lock) == 0); }
-/* Every bucket is taken under the dispatcher lock; whether an object lock came first is kept for the insertion checks */
+__attribute__((unused)) static BOOLEAN KiIsDispatcherObjectLocked(PDISPATCHER_HEADER h) { (void)h; return ObjectLocks > 0; }
+static void (*BucketHook)(void);
+/* Whether an object lock came first is kept for the insertion checks */
 static PKSPIN_LOCK_QUEUE KiAcquireTimerLock(ULONG Hand) {
-    CHECK(Hand < TIMER_TABLE_SIZE && DispatcherHeld);
+    CHECK(Hand < TIMER_TABLE_SIZE && Irql >= DISPATCH_LEVEL);
     BucketWithObject = ObjectLocks > 0;
+    if (BucketHook) BucketHook();
     CHECK(pthread_mutex_lock(&Bucket) == 0);
     return &Bucket;
 }
@@ -167,6 +195,27 @@ static void InitTimer(PKTIMER Timer) {
     CHECK(pthread_mutex_init(&Timer->Header.Lock, NULL) == 0);
     InitializeListHead(&Timer->Header.WaitListHead);
 }
+typedef struct { ULONG Barrier; ULONG TotalProcessors; } DEFERRED_REVERSE_BARRIER;
+/* One processor stands for all of them: it runs the routine once everybody else is below DISPATCH_LEVEL */
+__attribute__((unused)) static void KeGenericCallDpc(void (*Routine)(PKDPC, PVOID, PVOID, PVOID), PVOID Context) {
+    volatile LONG Count = 1;
+    DEFERRED_REVERSE_BARRIER Barrier = {1, 1};
+    KIRQL Old = Irql;
+    CHECK(Irql <= APC_LEVEL);
+    if (pthread_rwlock_trywrlock(&Rendezvous) != 0) {
+        __atomic_store_n(&DispatcherContended, 1, __ATOMIC_RELEASE);
+        CHECK(pthread_rwlock_wrlock(&Rendezvous) == 0);
+    }
+    InRendezvous = 1;
+    Irql = DISPATCH_LEVEL;
+    Routine(NULL, Context, (PVOID)&Count, &Barrier);
+    CHECK(Irql == DISPATCH_LEVEL && Count == 0);
+    Irql = Old;
+    InRendezvous = 0;
+    CHECK(pthread_rwlock_unlock(&Rendezvous) == 0);
+}
+__attribute__((unused)) static BOOLEAN KeSignalCallDpcSynchronize(PVOID Barrier) { (void)Barrier; return TRUE; }
+__attribute__((unused)) static void KeSignalCallDpcDone(PVOID Count) { __atomic_sub_fetch((volatile LONG *)Count, 1, __ATOMIC_SEQ_CST); }
 static long long NowNs(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec * 1000000000LL + t.tv_nsec; }
 /* Waits up to 50 ms for a flag another thread sets: long enough to see it run, short enough to keep the test fast */
 static int AwaitFlag(volatile int *Flag) {

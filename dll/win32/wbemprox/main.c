@@ -29,6 +29,9 @@
 #include "rpcproxy.h"
 
 #include "wbemprox_private.h"
+#ifdef __REACTOS__
+#include "wmirepo.h"
+#endif
 #include "wine/debug.h"
 
 WINE_DEFAULT_DEBUG_CHANNEL(wbemprox);
@@ -104,6 +107,10 @@ static const struct IClassFactoryVtbl wbemprox_cf_vtbl =
 static wbemprox_cf wbem_locator_cf = { { &wbemprox_cf_vtbl }, WbemLocator_create };
 static wbemprox_cf wbem_context_cf = { { &wbemprox_cf_vtbl }, WbemContext_create };
 static wbemprox_cf wbem_refresher_cf = { { &wbemprox_cf_vtbl }, WbemRefresher_create };
+#ifdef __REACTOS__
+static wbemprox_cf wbem_decoupled_registrar_cf = { { &wbemprox_cf_vtbl }, WmiDecoupledRegistrarCreate };
+static wbemprox_cf wbem_decoupled_event_provider_cf = { { &wbemprox_cf_vtbl }, WmiDecoupledEventProviderCreate };
+#endif
 
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 {
@@ -142,6 +149,16 @@ HRESULT WINAPI DllGetClassObject( REFCLSID rclsid, REFIID iid, LPVOID *ppv )
     {
        cf = &wbem_refresher_cf.IClassFactory_iface;
     }
+#ifdef __REACTOS__
+    else if (IsEqualGUID( rclsid, &CLSID_WbemDecoupledRegistrar ))
+    {
+       cf = &wbem_decoupled_registrar_cf.IClassFactory_iface;
+    }
+    else if (IsEqualGUID( rclsid, &CLSID_WbemDecoupledBasicEventProvider ))
+    {
+       cf = &wbem_decoupled_event_provider_cf.IClassFactory_iface;
+    }
+#endif
     if (!cf) return CLASS_E_CLASSNOTAVAILABLE;
     return IClassFactory_QueryInterface( cf, iid, ppv );
 }

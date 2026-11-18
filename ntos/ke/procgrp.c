@@ -1788,7 +1788,7 @@ KeSetSelectedCpuSetsThread(
     if ((Selected & ~KeActiveProcessors) != 0)
         return STATUS_INVALID_PARAMETER;
 
-    OldIrql = KiAcquireDispatcherLock();
+    OldIrql = KiEnterDispatcher();
     KiAcquireThreadLock(Thread);
 
     Affinity = KiThreadUserAffinityMask(Thread);
@@ -1799,7 +1799,7 @@ KeSetSelectedCpuSetsThread(
         KiSetAffinityThread(Thread, Affinity);
 
     KiReleaseThreadLock(Thread);
-    KiReleaseDispatcherLock(OldIrql);
+    KiExitDispatcher(OldIrql);
 
     return STATUS_SUCCESS;
 }

@@ -126,6 +126,7 @@ AppContainerLookupMoniker(
 {
     WCHAR Path[512];
     DWORD Type, Size = 0;
+    SIZE_T AllocationSize;
     LPWSTR Buffer;
     HKEY Key;
     LONG Error;
@@ -145,13 +146,20 @@ AppContainerLookupMoniker(
         return HRESULT_FROM_WIN32(Error);
 
     Error = RegQueryValueExW(Key, L"Moniker", NULL, &Type, NULL, &Size);
-    if (Error != ERROR_SUCCESS || Type != REG_SZ || Size < sizeof(WCHAR))
+    if (Error != ERROR_SUCCESS || Type != REG_SZ || Size < sizeof(WCHAR) || Size % sizeof(WCHAR))
     {
         RegCloseKey(Key);
         return Error == ERROR_SUCCESS ? E_INVALIDARG : HRESULT_FROM_WIN32(Error);
     }
 
-    Buffer = LocalAlloc(LMEM_FIXED, Size);
+    AllocationSize = (SIZE_T)Size + sizeof(WCHAR);
+    if (AllocationSize < Size)
+    {
+        RegCloseKey(Key);
+        return E_OUTOFMEMORY;
+    }
+
+    Buffer = LocalAlloc(LMEM_FIXED, AllocationSize);
     if (!Buffer)
     {
         RegCloseKey(Key);
@@ -165,13 +173,13 @@ AppContainerLookupMoniker(
                              (LPBYTE)Buffer,
                              &Size);
     RegCloseKey(Key);
-    if (Error != ERROR_SUCCESS || Type != REG_SZ)
+    if (Error != ERROR_SUCCESS || Type != REG_SZ || Size < sizeof(WCHAR) || Size % sizeof(WCHAR))
     {
         LocalFree(Buffer);
         return Error == ERROR_SUCCESS ? E_INVALIDARG : HRESULT_FROM_WIN32(Error);
     }
 
-    Buffer[Size / sizeof(WCHAR) - 1] = UNICODE_NULL;
+    Buffer[Size / sizeof(WCHAR)] = UNICODE_NULL;
     *Moniker = Buffer;
     return S_OK;
 }

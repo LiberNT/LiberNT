@@ -32,7 +32,7 @@ BasepOpenEffectiveToken(
         return TRUE;
 
     if (OpenThreadToken(GetCurrentThread(), Access, TRUE, Token) ||
-        OpenProcessToken(GetCurrentProcess(), Access, Token))
+        (GetLastError() == ERROR_NO_TOKEN && OpenProcessToken(GetCurrentProcess(), Access, Token)))
     {
         *Opened = TRUE;
         return TRUE;

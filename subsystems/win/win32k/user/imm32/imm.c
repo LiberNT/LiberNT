@@ -1371,12 +1371,13 @@ ImmDllInitialize(
             break;
 
         case DLL_THREAD_DETACH:
-            if (!IS_IMM_MODE() || NtCurrentTeb()->Win32ThreadInfo == NULL)
-                return TRUE;
-
-            hKL = GetKeyboardLayout(0);
-            hIMC = (HIMC)NtUserGetThreadState(THREADSTATE_DEFAULTINPUTCONTEXT);
-            Imm32DestroyInputContext(hIMC, hKL, TRUE);
+            if (IS_IMM_MODE() && NtCurrentTeb()->Win32ThreadInfo != NULL)
+            {
+                hKL = GetKeyboardLayout(0);
+                hIMC = (HIMC)NtUserGetThreadState(THREADSTATE_DEFAULTINPUTCONTEXT);
+                Imm32DestroyInputContext(hIMC, hKL, TRUE);
+            }
+            Imm32FreeTLS();
             break;
 
         case DLL_PROCESS_DETACH:

@@ -1298,6 +1298,7 @@ typedef struct _PSP_WS_WATCH
     KSPIN_LOCK SpinLock;
     ULONG Count;
     ULONG Lost;
+    BOOLEAN QueryInProgress;
     PSP_WS_WATCH_RECORD Records[PSP_WS_WATCH_RECORDS];
 } PSP_WS_WATCH, *PPSP_WS_WATCH;
 
@@ -1321,6 +1322,12 @@ PsWatchWorkingSet(
     if (Watch == NULL) return;
 
     KeAcquireSpinLock(&Watch->SpinLock, &OldIrql);
+
+    if (Watch->QueryInProgress)
+    {
+        KeReleaseSpinLock(&Watch->SpinLock, OldIrql);
+        return;
+    }
 
     if (Watch->Count < PSP_WS_WATCH_RECORDS)
     {
@@ -1393,7 +1400,6 @@ PspQueryWorkingSetWatch(
     _In_ BOOLEAN Extended)
 {
     PPSP_WS_WATCH Watch = (PPSP_WS_WATCH)Process->WorkingSetWatch;
-    PPSP_WS_WATCH_RECORD Records;
     ULONG RecordSize;
     ULONG Count;
     ULONG Lost;
@@ -1408,35 +1414,37 @@ PspQueryWorkingSetWatch(
 
     RecordSize = Extended ? sizeof(PSP_WS_WATCH_INFORMATION_EX) : sizeof(PROCESS_WS_WATCH_INFORMATION);
 
-    Records = ExAllocatePoolWithTag(NonPagedPoolNx, sizeof(Watch->Records), TAG_PS_WS_WATCH);
-    if (Records == NULL) return STATUS_INSUFFICIENT_RESOURCES;
-
     KeAcquireSpinLock(&Watch->SpinLock, &OldIrql);
+    if (Watch->QueryInProgress)
+    {
+        KeReleaseSpinLock(&Watch->SpinLock, OldIrql);
+        return STATUS_NO_MORE_ENTRIES;
+    }
+
     Count = Watch->Count;
     Lost = Watch->Lost;
-    RtlCopyMemory(Records, Watch->Records, Count * sizeof(PSP_WS_WATCH_RECORD));
-    KeReleaseSpinLock(&Watch->SpinLock, OldIrql);
-
+    ASSERT(Count <= PSP_WS_WATCH_RECORDS);
     *ReturnLength = (Count + 1) * RecordSize;
     if (Length < *ReturnLength)
     {
-        ExFreePoolWithTag(Records, TAG_PS_WS_WATCH);
+        KeReleaseSpinLock(&Watch->SpinLock, OldIrql);
         return STATUS_BUFFER_TOO_SMALL;
     }
 
-    Status = PspCopyWorkingSetWatch(Buffer, Length, Records, Count, Lost, Extended);
-    ExFreePoolWithTag(Records, TAG_PS_WS_WATCH);
-    if (!NT_SUCCESS(Status)) return Status;
-
-    KeAcquireSpinLock(&Watch->SpinLock, &OldIrql);
-    RtlMoveMemory(Watch->Records,
-                  &Watch->Records[Count],
-                  (Watch->Count - Count) * sizeof(PSP_WS_WATCH_RECORD));
-    Watch->Count -= Count;
-    Watch->Lost -= Lost;
+    Watch->QueryInProgress = TRUE;
     KeReleaseSpinLock(&Watch->SpinLock, OldIrql);
 
-    return STATUS_SUCCESS;
+    Status = PspCopyWorkingSetWatch(Buffer, Length, Watch->Records, Count, Lost, Extended);
+
+    KeAcquireSpinLock(&Watch->SpinLock, &OldIrql);
+    if (NT_SUCCESS(Status))
+    {
+        Watch->Count = 0;
+        Watch->Lost = 0;
+    }
+    Watch->QueryInProgress = FALSE;
+    KeReleaseSpinLock(&Watch->SpinLock, OldIrql);
+    return Status;
 }
 
 /*

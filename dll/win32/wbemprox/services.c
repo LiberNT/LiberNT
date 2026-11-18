@@ -214,6 +214,31 @@ static HRESULT queue_async( struct async_header *async )
     return HRESULT_FROM_WIN32( GetLastError() );
 }
 
+#ifdef __REACTOS__
+#include "wmirepo.h"
+
+static const WCHAR *wbemprox_namespace_name( enum wbm_namespace ns )
+{
+    switch (ns)
+    {
+    case WBEMPROX_NAMESPACE_CIMV2: return L"cimv2";
+    case WBEMPROX_NAMESPACE_MS_WINDOWS_STORAGE: return L"Microsoft\\Windows\\Storage";
+    case WBEMPROX_NAMESPACE_STANDARDCIMV2: return L"StandardCimv2";
+    case WBEMPROX_NAMESPACE_WMI: return L"wmi";
+    default: return L"";
+    }
+}
+
+static BOOL wbemprox_repository_object( enum wbm_namespace ns, const WCHAR *operation, const WCHAR *path,
+                                        IWbemClassObject *object, LONG flags, IWbemClassObject **result, HRESULT *hr )
+{
+    BOOL handled;
+
+    *hr = WmiBuiltinNamespaceHook( wbemprox_namespace_name( ns ), operation, path, object, flags, result, &handled );
+    return handled;
+}
+#endif
+
 struct wbem_services
 {
     IWbemServices IWbemServices_iface;
@@ -350,6 +375,21 @@ static HRESULT WINAPI wbem_services_OpenNamespace(
     TRACE( "%p, %s, %#lx, %p, %p, %p\n", iface, debugstr_w(strNamespace), lFlags,
            pCtx, ppWorkingNamespace, ppResult );
 
+#ifdef __REACTOS__
+    if (ws->ns != WBEMPROX_NAMESPACE_LAST && strNamespace)
+    {
+        const WCHAR *parent = wbemprox_namespace_name( ws->ns );
+        WCHAR *child;
+        HRESULT hr;
+        size_t len = wcslen( parent ) + wcslen( strNamespace ) + 2;
+
+        if (!(child = malloc( len * sizeof(WCHAR) ))) return E_OUTOFMEMORY;
+        swprintf( child, len, L"%s\\%s", parent, strNamespace );
+        hr = WbemServices_create( child, NULL, (void **)ppWorkingNamespace );
+        free( child );
+        return hr;
+    }
+#endif
     if (ws->ns != WBEMPROX_NAMESPACE_LAST || !strNamespace)
         return WBEM_E_INVALID_NAMESPACE;
 
@@ -654,6 +694,19 @@ static HRESULT WINAPI wbem_services_GetObject(
     if (!strObjectPath || !strObjectPath[0])
         return create_class_object( services->ns, NULL, NULL, 0, NULL, ppObject );
 
+#ifdef __REACTOS__
+    {
+        IWbemClassObject *object = NULL;
+        HRESULT hr;
+
+        if (wbemprox_repository_object( services->ns, L"GetObject", strObjectPath, NULL, lFlags, &object, &hr ))
+        {
+            if (ppObject) *ppObject = object;
+            else if (object) IWbemClassObject_Release( object );
+            return hr;
+        }
+    }
+#endif
     return get_object( services->ns, strObjectPath, ppObject );
 }
 
@@ -675,6 +728,13 @@ static HRESULT WINAPI wbem_services_PutClass(
     IWbemContext *pCtx,
     IWbemCallResult **ppCallResult )
 {
+#ifdef __REACTOS__
+    struct wbem_services *services = impl_from_IWbemServices( iface );
+    HRESULT hr;
+
+    if (ppCallResult) *ppCallResult = NULL;
+    if (wbemprox_repository_object( services->ns, L"PutClass", NULL, pObject, lFlags, NULL, &hr )) return hr;
+#endif
     FIXME("\n");
     return WBEM_E_FAILED;
 }
@@ -697,6 +757,13 @@ static HRESULT WINAPI wbem_services_DeleteClass(
     IWbemContext *pCtx,
     IWbemCallResult **ppCallResult )
 {
+#ifdef __REACTOS__
+    struct wbem_services *services = impl_from_IWbemServices( iface );
+    HRESULT hr;
+
+    if (ppCallResult) *ppCallResult = NULL;
+    if (wbemprox_repository_object( services->ns, L"DeleteClass", strClass, NULL, lFlags, NULL, &hr )) return hr;
+#endif
     FIXME("\n");
     return WBEM_E_FAILED;
 }
@@ -741,6 +808,13 @@ static HRESULT WINAPI wbem_services_PutInstance(
     IWbemContext *pCtx,
     IWbemCallResult **ppCallResult )
 {
+#ifdef __REACTOS__
+    struct wbem_services *services = impl_from_IWbemServices( iface );
+    HRESULT hr;
+
+    if (ppCallResult) *ppCallResult = NULL;
+    if (wbemprox_repository_object( services->ns, L"PutInstance", NULL, pInst, lFlags, NULL, &hr )) return hr;
+#endif
     FIXME("\n");
     return WBEM_E_FAILED;
 }
@@ -763,6 +837,14 @@ static HRESULT WINAPI wbem_services_DeleteInstance(
     IWbemContext *pCtx,
     IWbemCallResult **ppCallResult )
 {
+#ifdef __REACTOS__
+    struct wbem_services *services = impl_from_IWbemServices( iface );
+    HRESULT hr;
+
+    if (ppCallResult) *ppCallResult = NULL;
+    if (wbemprox_repository_object( services->ns, L"DeleteInstance", strObjectPath, NULL, lFlags, NULL, &hr ))
+        return hr;
+#endif
     FIXME("\n");
     return WBEM_E_FAILED;
 }
@@ -796,6 +878,15 @@ static HRESULT WINAPI wbem_services_CreateInstanceEnum(
         FIXME( "unsupported flags %#lx\n", lFlags );
     else if (lFlags) TRACE( "repeated unsupported flags %#lx\n", lFlags );
 
+#ifdef __REACTOS__
+    {
+        BOOL handled;
+
+        hr = WmiBuiltinNamespaceEnum( wbemprox_namespace_name( services->ns ), L"CreateInstanceEnum", strClass, lFlags,
+                                      ppEnum, &handled );
+        if (handled) return hr;
+    }
+#endif
     hr = parse_path( strClass, &path );
     if (hr != S_OK) return hr;
 
@@ -830,6 +921,14 @@ static HRESULT WINAPI wbem_services_ExecQuery(
 
     if (!strQueryLanguage || !strQuery || !strQuery[0]) return WBEM_E_INVALID_PARAMETER;
     if (wcsicmp( strQueryLanguage, L"WQL" )) return WBEM_E_INVALID_QUERY_TYPE;
+#ifdef __REACTOS__
+    {
+        BOOL handled;
+        HRESULT hr = WmiBuiltinNamespaceEnum( wbemprox_namespace_name( services->ns ), L"ExecQuery", strQuery, lFlags,
+                                              ppEnum, &handled );
+        if (handled) return hr;
+    }
+#endif
     return exec_query( services->ns, strQuery, ppEnum );
 }
 
@@ -1100,7 +1199,11 @@ HRESULT WbemServices_create( const WCHAR *namespace, IWbemContext *context, LPVO
     if (!namespace)
         ns = WBEMPROX_NAMESPACE_LAST;
     else if ((ns = get_namespace_from_string( namespace )) == WBEMPROX_NAMESPACE_LAST)
+#ifdef __REACTOS__
+        return WmiRepoServicesCreate( namespace, (IWbemServices **)ppObj );
+#else
         return WBEM_E_INVALID_NAMESPACE;
+#endif
 
     if (!(ws = calloc( 1, sizeof(*ws) ))) return E_OUTOFMEMORY;
 

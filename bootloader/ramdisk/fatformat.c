@@ -46,6 +46,7 @@ ComputeFatLayout(IN ULONG TotalSectors,
                  OUT ULONG *ClusterCount)
 {
     ULONGLONG FatSize = 0;
+    ULONGLONG PreviousFatSize = 0;
     ULONG Iteration;
 
     for (Iteration = 0; Iteration < 128; ++Iteration)
@@ -70,7 +71,7 @@ ComputeFatLayout(IN ULONG TotalSectors,
         RequiredEntries = TotalClusters + 2ULL;
         FatBytes = RequiredEntries * sizeof(ULONG);
         NewFatSize = (FatBytes + BytesPerSector - 1) / BytesPerSector;
-        if (NewFatSize == FatSize)
+        if (NewFatSize == FatSize || (NewFatSize == PreviousFatSize && NewFatSize < FatSize))
         {
             *FatSizeSectors = (ULONG)FatSize;
             *DataSectors = (ULONG)CalcDataSectors;
@@ -81,6 +82,7 @@ ComputeFatLayout(IN ULONG TotalSectors,
         if (NewFatSize == 0 || NewFatSize > 0xFFFFFFFFULL)
             return FALSE;
 
+        PreviousFatSize = FatSize;
         FatSize = NewFatSize;
     }
 

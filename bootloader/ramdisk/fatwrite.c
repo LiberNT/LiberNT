@@ -64,7 +64,7 @@ Fat32AllocateClusters(
     Start = Writer->NextFreeCluster;
 
     /* Check we have enough free clusters (cluster numbers are 2-based) */
-    if (Start + Count - 1 > Writer->TotalClusters + 1)
+    if (Start < 2 || Start - 2 > Writer->TotalClusters || Count > Writer->TotalClusters - (Start - 2))
     {
         WARN("Fat32AllocateClusters: need %lu clusters at %lu but only %lu total\n",
              Count, Start, Writer->TotalClusters);
@@ -85,6 +85,24 @@ Fat32AllocateClusters(
     Writer->NextFreeCluster = Start + Count;
     *FirstCluster = Start;
     return TRUE;
+}
+
+static
+VOID
+Fat32ReleaseLastClusters(
+    _Inout_ PFAT32_WRITER Writer,
+    _In_ ULONG FirstCluster)
+{
+    ULONG Cluster;
+
+    ASSERT(FirstCluster >= 3 && FirstCluster <= Writer->NextFreeCluster);
+    for (Cluster = FirstCluster; Cluster < Writer->NextFreeCluster; Cluster++)
+    {
+        Writer->Fat0[Cluster] = 0;
+        if (Writer->Fat1)
+            Writer->Fat1[Cluster] = 0;
+    }
+    Writer->NextFreeCluster = FirstCluster;
 }
 
 /*
@@ -548,11 +566,6 @@ Fat32ShortNameExists(
  * If not enough space, extends the chain by allocating a new cluster.
  *
  * Returns a pointer to the first free slot, or NULL on failure.
- * The slots are guaranteed to be consecutive within the same cluster.
- *
- * Note: If the required slots span a cluster boundary, we start from the
- * beginning of a new cluster rather than splitting across clusters for
- * simplicity (LFN + short name entries should stay together when possible).
  */
 static
 PDIRENTRY
@@ -608,12 +621,13 @@ Fat32FindFreeSlots(
     /* Need to extend the directory with a new cluster */
     {
         ULONG NewCluster;
+        ULONG ClustersNeeded = 1 + (SlotsNeeded - 1) / (Writer->BytesPerCluster / sizeof(DIRENTRY));
 
-        if (!Fat32AllocateClusters(Writer, 1, &NewCluster))
+        if (!Fat32AllocateClusters(Writer, ClustersNeeded, &NewCluster))
             return NULL;
 
         RtlZeroMemory(Fat32ClusterToPointer(Writer, NewCluster),
-                       Writer->BytesPerCluster);
+                       (SIZE_T)ClustersNeeded * Writer->BytesPerCluster);
 
         /* Chain the new cluster to the end */
         if (PrevCluster != 0)
@@ -643,14 +657,7 @@ Fat32FindFreeSlots(
             }
         }
 
-        /* The new cluster FAT entry is already set to 0x0FFFFFFF by Fat32AllocateClusters */
-
-        if (Writer->BytesPerCluster / sizeof(DIRENTRY) >= SlotsNeeded)
-            return (PDIRENTRY)Fat32ClusterToPointer(Writer, NewCluster);
-
-        /* This should never happen for reasonable slot counts */
-        WARN("Fat32FindFreeSlots: cluster too small for %lu slots\n", SlotsNeeded);
-        return NULL;
+        return (PDIRENTRY)Fat32ClusterToPointer(Writer, NewCluster);
     }
 }
 
@@ -1020,8 +1027,13 @@ Fat32CreateDirectory(
     DotEntries[1].Size = 0;
 
     /* Add directory entry in parent */
-    return Fat32AddDirectoryEntry(Writer, ParentCluster, LeafName,
-                                  NewCluster, 0, FAT_ATTR_DIRECTORY);
+    if (!Fat32AddDirectoryEntry(Writer, ParentCluster, LeafName, NewCluster, 0, FAT_ATTR_DIRECTORY))
+    {
+        Fat32ReleaseLastClusters(Writer, NewCluster);
+        return FALSE;
+    }
+
+    return TRUE;
 }
 
 BOOLEAN
@@ -1053,30 +1065,32 @@ Fat32CreateFileEx(
     /* Allocate clusters for file data */
     if (FileSize > 0)
     {
-        ClustersNeeded = (FileSize + Writer->BytesPerCluster - 1) / Writer->BytesPerCluster;
+        ClustersNeeded = 1 + (FileSize - 1) / Writer->BytesPerCluster;
         if (!Fat32AllocateClusters(Writer, ClustersNeeded, &FirstCluster))
             return FALSE;
 
         /* Zero-fill the last cluster's tail to avoid leaking stale data */
         {
-            ULONG TailPadding = (ClustersNeeded * Writer->BytesPerCluster) - FileSize;
+            ULONG TailPadding = (Writer->BytesPerCluster - FileSize % Writer->BytesPerCluster) % Writer->BytesPerCluster;
             if (TailPadding > 0)
             {
                 PUCHAR TailStart = Fat32ClusterToPointer(Writer, FirstCluster) + FileSize;
                 RtlZeroMemory(TailStart, TailPadding);
             }
         }
-
-        *DataPointer = Fat32ClusterToPointer(Writer, FirstCluster);
     }
 
     /* Add directory entry */
     if (!Fat32AddDirectoryEntry(Writer, ParentCluster, LeafName,
                                 FirstCluster, FileSize, FAT_ATTR_ARCHIVE))
     {
-        /* Note: clusters are "leaked" but this is a fatal error path anyway */
+        if (FirstCluster != 0)
+            Fat32ReleaseLastClusters(Writer, FirstCluster);
         return FALSE;
     }
+
+    if (FirstCluster != 0)
+        *DataPointer = Fat32ClusterToPointer(Writer, FirstCluster);
 
     return TRUE;
 }
