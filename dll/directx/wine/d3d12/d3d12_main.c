@@ -37,32 +37,35 @@ d3d12_signal_event(HANDLE event)
 }
 
 static HRESULT
-d3d12_get_adapter_luid(IUnknown *adapter, LUID *luid)
+d3d12_get_adapter(IUnknown *adapter, IDXGIAdapter **dxgi_adapter, LUID *luid)
 {
     IDXGIFactory1 *factory;
-    IDXGIAdapter *dxgi_adapter;
     DXGI_ADAPTER_DESC desc;
     HRESULT hr;
 
+    *dxgi_adapter = NULL;
     if (adapter)
     {
-        hr = IUnknown_QueryInterface(adapter, &IID_IDXGIAdapter, (void **)&dxgi_adapter);
+        hr = IUnknown_QueryInterface(adapter, &IID_IDXGIAdapter, (void **)dxgi_adapter);
     }
     else
     {
         if (FAILED(hr = CreateDXGIFactory1(&IID_IDXGIFactory1, (void **)&factory)))
             return hr;
-        hr = IDXGIFactory1_EnumAdapters(factory, 0, &dxgi_adapter);
+        hr = IDXGIFactory1_EnumAdapters(factory, 0, dxgi_adapter);
         IDXGIFactory1_Release(factory);
     }
     if (FAILED(hr))
         return hr;
 
-    hr = IDXGIAdapter_GetDesc(dxgi_adapter, &desc);
-    IDXGIAdapter_Release(dxgi_adapter);
-    if (SUCCEEDED(hr))
-        *luid = desc.AdapterLuid;
-    return hr;
+    if (FAILED(hr = IDXGIAdapter_GetDesc(*dxgi_adapter, &desc)))
+    {
+        IDXGIAdapter_Release(*dxgi_adapter);
+        *dxgi_adapter = NULL;
+        return hr;
+    }
+    *luid = desc.AdapterLuid;
+    return S_OK;
 }
 
 static HRESULT
@@ -84,10 +87,11 @@ d3d12_create_vkd3d_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_feature_l
     struct vkd3d_instance_create_info instance_create_info;
     struct vkd3d_device_create_info device_create_info;
     struct vkd3d_application_info application_info;
+    IDXGIAdapter *dxgi_adapter;
     LUID luid;
     HRESULT hr;
 
-    if (FAILED(hr = d3d12_get_adapter_luid(adapter, &luid)))
+    if (FAILED(hr = d3d12_get_adapter(adapter, &dxgi_adapter, &luid)))
         return hr;
 
     memset(&application_info, 0, sizeof(application_info));
@@ -116,6 +120,7 @@ d3d12_create_vkd3d_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_feature_l
     device_create_info.next = &optional_device_extensions_info;
     device_create_info.minimum_feature_level = minimum_feature_level;
     device_create_info.instance_create_info = &instance_create_info;
+    device_create_info.parent = (IUnknown *)dxgi_adapter;
     device_create_info.adapter_luid = luid;
     if (configuration)
     {
@@ -124,7 +129,9 @@ d3d12_create_vkd3d_device(IUnknown *adapter, D3D_FEATURE_LEVEL minimum_feature_l
         device_create_info.next = &device_configuration;
     }
 
-    return vkd3d_create_device(&device_create_info, iid, device);
+    hr = vkd3d_create_device(&device_create_info, iid, device);
+    IDXGIAdapter_Release(dxgi_adapter);
+    return hr;
 }
 
 static HRESULT
