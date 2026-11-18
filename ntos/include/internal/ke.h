@@ -995,6 +995,11 @@ KiGetNonParkedProcessorSet(
     _Out_writes_(KE_MAXIMUM_GROUPS) KAFFINITY *NonParkedSet);
 
 VOID
+NTAPI
+KiSetPowerParkedProcessors(
+    _In_reads_(KE_MAXIMUM_GROUPS) const KAFFINITY *ParkedSet);
+
+VOID
 FASTCALL
 KiHeteroPreferredProcessorSet(
     _In_ PKTHREAD Thread,
