@@ -505,6 +505,7 @@ PopNotifySystemTimeWorker(
     if (SetSystemTimeCallback != NULL)
         ExNotifyCallback(SetSystemTimeCallback, NULL, NULL);
 
+    /* TODO: sessions other than the console's, a remote one included, are not told that the time changed */
     if ((PopEventCallout != NULL) && PopEnterConsoleSession(&Session, &ApcState))
     {
         Parameters.EventNumber = PsW32SystemTime;
