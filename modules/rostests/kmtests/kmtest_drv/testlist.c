@@ -10,6 +10,7 @@ KMT_TESTFUNC Test_CddDisplay;
 KMT_TESTFUNC Test_CmSecurity;
 KMT_TESTFUNC Test_DxgkDeviceWork;
 KMT_TESTFUNC Test_DxgkHotPlugWork;
+KMT_TESTFUNC Test_DxgkChildConnectionRecord;
 KMT_TESTFUNC Test_DxgkChildDescriptor;
 KMT_TESTFUNC Test_DxgkDisplayDetectControl;
 KMT_TESTFUNC Test_DxgkPostDisplayHandoff;
@@ -494,6 +495,7 @@ const KMT_TEST TestList[] =
     { "CmSecurity",                         Test_CmSecurity },
     { "DxgkDeviceWork",                    Test_DxgkDeviceWork },
     { "DxgkHotPlugWork",                   Test_DxgkHotPlugWork },
+    { "DxgkChildConnectionRecord",         Test_DxgkChildConnectionRecord },
     { "DxgkChildDescriptor",               Test_DxgkChildDescriptor },
     { "DxgkDisplayDetectControl",          Test_DxgkDisplayDetectControl },
     { "DxgkPostDisplayHandoff",            Test_DxgkPostDisplayHandoff },
