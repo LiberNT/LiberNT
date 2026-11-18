@@ -1386,8 +1386,9 @@ HalBeginSystemInterrupt(
             /* Read the I/O redirection entry */
             RedirReg = ApicReadIORedirectionEntry(Index);
 
-            /* Re-request the interrupt to be handled later */
-            ApicRequestSelfInterrupt(Vector, (UCHAR)RedirReg.TriggerMode);
+            /* A level line asserts again after the EOI; a self IPI is edge and would keep its next EOI from the I/O APIC */
+            if (RedirReg.TriggerMode == APIC_TGM_Edge)
+                ApicRequestSelfInterrupt(Vector, APIC_TGM_Edge);
        }
        else
        {
