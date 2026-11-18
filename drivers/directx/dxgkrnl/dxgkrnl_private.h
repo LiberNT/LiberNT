@@ -1206,6 +1206,9 @@ struct _DXGKRNL_ADAPTER
     ULONG                       CommittedHeight;
     BOOLEAN                     VidPnCommitted;
     BOOLEAN                     HeadlessDesktop;
+    BOOLEAN                     MonitorEventValid;
+    ULONG                       MonitorEventChildUid;
+    ULONG64                     MonitorEventConnectSequence;
     struct _DXGKP_DISPLAY_MODE_CACHE *DisplayModeCache;
     ULONG                       DisplayModeGeneration;
     DECLSPEC_ALIGN(8) volatile LONG64 HotPlugGeneration;

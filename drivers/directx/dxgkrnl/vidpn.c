@@ -2140,6 +2140,7 @@ typedef struct _DXGKP_HOTPLUG_MONITOR_SNAPSHOT
     BOOLEAN EdidValid;
     ULONG ChildUid;
     ULONG64 ChildStateGeneration;
+    ULONG64 ChildConnectSequence;
     LONG64 ChildEnumerationEpoch;
     D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId;
     UCHAR Edid[128];
@@ -2340,6 +2341,7 @@ DxgkpSnapshotHotPlugMonitor(
         Snapshot->Connected = TRUE;
         Snapshot->ChildUid = ConnectedChild->Descriptor.ChildUid;
         Snapshot->ChildStateGeneration = ConnectedChild->StateGeneration;
+        Snapshot->ChildConnectSequence = ConnectedChild->ConnectSequence;
         Snapshot->EdidValid = ConnectedChild->EdidValid;
         if (Snapshot->EdidValid)
         {
@@ -3716,6 +3718,7 @@ DxgkpVidPnRebuildForHotPlugGeneration(
     PDXGK_CHILD_PDO_EXTENSION MatchingChild = NULL;
     KIRQL ChildOldIrql;
     BOOLEAN NotifyMonitorEvent = FALSE;
+    BOOLEAN MonitorArrived = FALSE;
     NTSTATUS Status;
 
     PAGED_CODE();
@@ -3869,6 +3872,15 @@ DxgkpVidPnRebuildForHotPlugGeneration(
     Adapter->CommittedHeight = CommitResult.CommittedHeight;
     Adapter->VidPnCommitted = CommitResult.VidPnCommitted;
     Adapter->HeadlessDesktop = CommitResult.HeadlessDesktop;
+    MonitorArrived = Snapshot->Connected &&
+                     (!Adapter->MonitorEventValid || Adapter->MonitorEventChildUid != Snapshot->ChildUid ||
+                      Adapter->MonitorEventConnectSequence != Snapshot->ChildConnectSequence);
+    if (MonitorArrived && CommitResult.VidPnCommitted)
+    {
+        Adapter->MonitorEventValid = TRUE;
+        Adapter->MonitorEventChildUid = Snapshot->ChildUid;
+        Adapter->MonitorEventConnectSequence = Snapshot->ChildConnectSequence;
+    }
     DxgkVidPnPublishVsyncTargetMap(Adapter, CommitResult.VidPnCommitted ? Candidate : NULL);
     if (Snapshot->Connected && Snapshot->EdidValid && MatchingChild != NULL)
     {
@@ -3883,9 +3895,9 @@ DxgkpVidPnRebuildForHotPlugGeneration(
     KeReleaseMutex(&Adapter->VidPnMutex, FALSE);
     DxgkpDisplayPublishInitialMode(Adapter, FALSE);
     DxgkVidPnDestroyDisplayModeCache(Adapter);
-    /* Windows keeps the desktop mode while the adapter has no output left */
+    /* Windows keeps the desktop mode while the adapter has no output left, and reports a monitor once */
     NotifyMonitorEvent = CommitResult.VidPnCommitted &&
-                         (Snapshot->Connected ||
+                         (MonitorArrived ||
                           (CommitResult.CommittedWidth != 0 && CommitResult.CommittedHeight != 0 &&
                            (CommitResult.CommittedWidth != OldCommittedWidth || CommitResult.CommittedHeight != OldCommittedHeight)));
     if (CommitResult.CommittedWidth != OldCommittedWidth || CommitResult.CommittedHeight != OldCommittedHeight ||
