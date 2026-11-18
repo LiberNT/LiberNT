@@ -141,3 +141,4 @@ add_subdirectory(wtsapi32)
 add_subdirectory(zipfldr)
 
 add_subdirectory(runtimeexports)
+add_subdirectory(wbemprox)

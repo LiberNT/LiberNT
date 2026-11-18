@@ -278,6 +278,13 @@ typedef [v1_enum] enum tag_WBEM_FLAVOR_TYPE
     WBEM_FLAVOR_MASK_AMENDED                    = 0x80
 } WBEM_FLAVOR_TYPE;
 
+typedef [v1_enum] enum tag_WBEM_QUERY_FLAG_TYPE
+{
+    WBEM_FLAG_DEEP      = 0,
+    WBEM_FLAG_SHALLOW   = 1,
+    WBEM_FLAG_PROTOTYPE = 2
+} WBEM_QUERY_FLAG_TYPE;
+
 typedef [v1_enum] enum tag_WBEM_CHANGE_FLAG_TYPE
 {
     WBEM_FLAG_CREATE_OR_UPDATE  = 0,

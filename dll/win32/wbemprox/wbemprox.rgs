@@ -21,5 +21,13 @@ HKCR
         {
             InprocServer32 = s '%MODULE%' { val ThreadingModel = s 'Both' }
         }
+        '{4CFC7932-0F9D-4BEF-9C32-8EA2A6B56FCB}' = s 'Microsoft WMI Provider Subsystem Decoupled Registrar'
+        {
+            InprocServer32 = s '%MODULE%' { val ThreadingModel = s 'Both' }
+        }
+        '{F5F75737-2843-4F22-933D-C76A97CDA62F}' = s 'Microsoft WMI Provider Subsystem Decoupled Basic Event Provider'
+        {
+            InprocServer32 = s '%MODULE%' { val ThreadingModel = s 'Both' }
+        }
     }
 }
