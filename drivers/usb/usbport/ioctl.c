@@ -44,6 +44,14 @@ static NTSTATUS USBPORT_DumpStart(_In_ PUSBPORT_DUMP_CONTEXT DumpContext, _In_ P
         return STATUS_INVALID_PARAMETER;
     }
 
+    if (DumpContext->TransferHeld)
+    {
+        if (InterlockedCompareExchange(&DumpContext->Completed, 0, 0) == 0)
+            return STATUS_DEVICE_NOT_READY;
+
+        DumpContext->TransferHeld = FALSE;
+    }
+
     FdoExtension = DumpContext->FdoExtension;
     Packet = &FdoExtension->MiniPortInterface->Packet;
     Transfer = DumpContext->Transfer;
@@ -160,6 +168,11 @@ static NTSTATUS USBPORT_DumpSubmit(_In_ PUSBPORT_DUMP_CONTEXT DumpContext, _In_ 
     if (Timeout == ROS_DUMP_POLL_ITERATIONS)
     {
         Status = STATUS_IO_TIMEOUT;
+
+        /* The miniport still owns the transfer; restarting the pipe makes it drop and complete it before the memory is used again */
+        if (Packet->SetEndpointStatus != NULL)
+            Packet->SetEndpointStatus(FdoExtension->MiniPortExt, Endpoint + 1, USBPORT_ENDPOINT_RUN);
+        DumpContext->TransferHeld = (InterlockedCompareExchange(&DumpContext->Completed, 0, 0) == 0);
     }
     else if (!USBD_SUCCESS(DumpContext->TransferStatus))
     {

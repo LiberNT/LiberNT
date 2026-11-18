@@ -625,6 +625,7 @@ typedef struct _USBPORT_DUMP_CONTEXT {
   USBD_STATUS TransferStatus;
   ULONG CompletedLength;
   BOOLEAN TransferPending;
+  BOOLEAN TransferHeld;
   ULONG StashLength;
   UCHAR Stash[ROS_USB_KEYBOARD_BOOT_REPORT_SIZE];
 } USBPORT_DUMP_CONTEXT, *PUSBPORT_DUMP_CONTEXT;
