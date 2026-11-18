@@ -426,9 +426,18 @@ unsigned int __stdcall CDeviceView::RefreshThread(void *Param)
     // Empty the treeview
     This->EmptyDeviceView();
 
-    // Refresh the devices only if requested
+    // Reenumerate hardware before refreshing the device tree.
     if (ThreadData->ScanForChanges)
     {
+        DEVINST Root;
+        CONFIGRET cr;
+
+        cr = CM_Locate_DevNodeW(&Root, NULL, CM_LOCATE_DEVNODE_NORMAL);
+        if (cr == CR_SUCCESS)
+        {
+            cr = CM_Reenumerate_DevNode(Root, CM_REENUMERATE_SYNCHRONOUS);
+        }
+
         This->RefreshDeviceList();
     }
 

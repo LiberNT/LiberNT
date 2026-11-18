@@ -408,7 +408,9 @@ PiFlagParentsOfRemovedDevices(
     while (Node != NULL)
     {
         if (Node != Root && Node->State == DeviceNodeRemoved &&
-            !(Node->Flags & (DNF_HAS_PROBLEM | DNF_DEVICE_GONE)))
+            !(Node->Flags & DNF_DEVICE_GONE) &&
+            (!(Node->Flags & DNF_HAS_PROBLEM) ||
+             (Node->Flags & DNF_UNINSTALLED)))
         {
             PiSetDevNodeFlag(Node->Parent, DNF_REENUMERATE);
         }
