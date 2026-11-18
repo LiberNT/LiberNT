@@ -200,6 +200,58 @@ AuxKlibGetImageExportDirectory(
     return RtlImageDirectoryEntryToData(ImageBase, TRUE, IMAGE_DIRECTORY_ENTRY_EXPORT, &size);
 }
 
+/* Both firmware table requests go through SystemFirmwareTableInformation, whose answer follows a fixed header */
+_IRQL_requires_max_(PASSIVE_LEVEL)
+CODE_SEG("PAGE")
+static
+NTSTATUS
+AuxKlibQueryFirmwareTable(
+    _In_ SYSTEM_FIRMWARE_TABLE_ACTION Action,
+    _In_ ULONG FirmwareTableProviderSignature,
+    _In_ ULONG FirmwareTableID,
+    _Out_writes_bytes_to_opt_(BufferLength, *ReturnLength) PVOID FirmwareTableBuffer,
+    _In_ ULONG BufferLength,
+    _Out_opt_ PULONG ReturnLength)
+{
+    const ULONG Header = FIELD_OFFSET(SYSTEM_FIRMWARE_TABLE_INFORMATION, TableBuffer);
+    PSYSTEM_FIRMWARE_TABLE_INFORMATION Request;
+    ULONG Length, Returned;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    if (gKlibInitialized != 1)
+        return STATUS_UNSUCCESSFUL;
+
+    if ((FirmwareTableBuffer == NULL) && (BufferLength != 0))
+        return STATUS_INVALID_PARAMETER;
+
+    if (!NT_SUCCESS(RtlULongAdd(Header, BufferLength, &Length)))
+        return STATUS_INVALID_BUFFER_SIZE;
+
+    Request = ExAllocatePoolZero(PagedPool, Length, TAG_AUXK);
+    if (Request == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Request->ProviderSignature = FirmwareTableProviderSignature;
+    Request->Action = Action;
+    Request->TableID = FirmwareTableID;
+    Request->TableBufferLength = BufferLength;
+
+    Status = ZwQuerySystemInformation(SystemFirmwareTableInformation, Request, Length, &Returned);
+    if (NT_SUCCESS(Status) || (Status == STATUS_BUFFER_TOO_SMALL))
+    {
+        if (ReturnLength != NULL)
+            *ReturnLength = Request->TableBufferLength;
+
+        if (NT_SUCCESS(Status))
+            RtlCopyMemory(FirmwareTableBuffer, Request->TableBuffer, min(Request->TableBufferLength, BufferLength));
+    }
+
+    ExFreePoolWithTag(Request, TAG_AUXK);
+    return Status;
+}
+
 _IRQL_requires_max_(PASSIVE_LEVEL)
 CODE_SEG("PAGE")
 NTSTATUS
@@ -210,7 +262,14 @@ AuxKlibEnumerateSystemFirmwareTables (
     _In_ ULONG BufferLength,
     _Out_opt_ PULONG ReturnLength)
 {
-    return STATUS_NOT_IMPLEMENTED;
+    PAGED_CODE();
+
+    return AuxKlibQueryFirmwareTable(SystemFirmwareTable_Enumerate,
+                                     FirmwareTableProviderSignature,
+                                     0,
+                                     FirmwareTableBuffer,
+                                     BufferLength,
+                                     ReturnLength);
 }
 
 _IRQL_requires_max_(PASSIVE_LEVEL)
@@ -224,5 +283,12 @@ AuxKlibGetSystemFirmwareTable (
     _In_ ULONG BufferLength,
     _Out_opt_ PULONG ReturnLength)
 {
-    return STATUS_NOT_IMPLEMENTED;
+    PAGED_CODE();
+
+    return AuxKlibQueryFirmwareTable(SystemFirmwareTable_Get,
+                                     FirmwareTableProviderSignature,
+                                     FirmwareTableID,
+                                     FirmwareTableBuffer,
+                                     BufferLength,
+                                     ReturnLength);
 }
