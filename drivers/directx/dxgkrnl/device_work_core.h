@@ -69,4 +69,9 @@ NTSTATUS DxgkDeviceWorkCoreWaitForIdle(_Inout_ PDXGK_DEVICE_WORK_LEDGER Ledger, 
 NTSTATUS DxgkDeviceWorkCoreWaitForItemUntil(_Inout_ PDXGK_DEVICE_WORK_ITEM Item, _In_opt_ PLARGE_INTEGER Deadline);
 BOOLEAN DxgkDeviceWorkCoreIsEmpty(_Inout_opt_ PDXGK_DEVICE_WORK_LEDGER Ledger);
 
+VOID
+DxgkDeviceWorkCoreDumpTimeout(
+    _Inout_ PDXGK_DEVICE_WORK_LEDGER Ledger,
+    _In_ ULONGLONG TargetSequence);
+
 #endif /* _DXGK_DEVICE_WORK_CORE_H_ */

@@ -283,3 +283,61 @@ BOOLEAN DxgkDeviceWorkCoreIsEmpty(_Inout_opt_ PDXGK_DEVICE_WORK_LEDGER Ledger)
     KeReleaseSpinLock(&Ledger->Lock, OldIrql);
     return Empty;
 }
+
+
+VOID
+DxgkDeviceWorkCoreDumpTimeout(
+    _Inout_ PDXGK_DEVICE_WORK_LEDGER Ledger,
+    _In_ ULONGLONG TargetSequence)
+{
+    KIRQL OldIrql;
+    PLIST_ENTRY Entry;
+    ULONGLONG Oldest = 0;
+    ULONGLONG Newest = 0;
+    ULONGLONG LastAssigned = 0;
+    ULONG Pending = 0;
+    ULONG Total = 0;
+
+    if (Ledger == NULL)
+        return;
+
+    KeAcquireSpinLock(&Ledger->Lock, &OldIrql);
+
+    LastAssigned = Ledger->LastAssignedSequence;
+
+    for (Entry = Ledger->OutstandingList.Flink;
+         Entry != &Ledger->OutstandingList;
+         Entry = Entry->Flink)
+    {
+        PDXGK_DEVICE_WORK_ITEM Item =
+            CONTAINING_RECORD(
+                Entry,
+                DXGK_DEVICE_WORK_ITEM,
+                ListEntry);
+
+        Total++;
+
+        if (Item->Sequence <= TargetSequence)
+        {
+            if (Pending == 0)
+                Oldest = Item->Sequence;
+
+            Newest = Item->Sequence;
+            Pending++;
+        }
+    }
+
+    KeReleaseSpinLock(&Ledger->Lock, OldIrql);
+
+    DbgPrint(
+        "DXGK_WORK_DIAG: ledger=%p target=%I64u "
+        "last=%I64u pending=%lu total=%lu "
+        "oldest=%I64u newest=%I64u\n",
+        Ledger,
+        TargetSequence,
+        LastAssigned,
+        Pending,
+        Total,
+        Oldest,
+        Newest);
+}
