@@ -133,7 +133,7 @@ AtcMaskStep(
     _In_ ULONG Set)
 {
     AtcMask(Region, Offset, Clear, Set);
-    KeStallExecutionProcessor(ATCPHY_STEP_US);
+    Region->Io->Stall(ATCPHY_STEP_US);
 }
 
 static
@@ -154,7 +154,7 @@ AtcWait(
             return TRUE;
         if (Waited >= TimeoutUs)
             return FALSE;
-        KeStallExecutionProcessor(StepUs);
+        Region->Io->Stall(StepUs);
     }
 }
 
@@ -171,12 +171,13 @@ AtcMapRegion(
 
     Region->Base = NULL;
     Region->Size = 0;
+    Region->Io = Tree->Io;
     if (Index == MAXULONG)
         return FALSE;
     Region->Base = FdtDriverMapReg(Tree, Node, Index, NULL, &Region->Size);
     if (Region->Base && Region->Size < MinimumSize)
     {
-        MmUnmapIoSpace(Region->Base, Region->Size);
+        Region->Io->Unmap(Region->Base, Region->Size);
         Region->Base = NULL;
         Region->Size = 0;
     }
@@ -233,7 +234,7 @@ AtcUsb2PowerOff(
     _Inout_ PAPPLE_ATCPHY Phy)
 {
     AtcWrite(&Phy->Usb2Phy, USB2PHY_USBCTL, USB2PHY_USBCTL_ISOLATION);
-    KeStallExecutionProcessor(ATCPHY_STEP_US);
+    Phy->Usb2Phy.Io->Stall(ATCPHY_STEP_US);
     AtcMaskStep(&Phy->Usb2Phy, USB2PHY_CTL, 0, USB2PHY_CTL_SIDDQ);
     AtcMaskStep(&Phy->Usb2Phy, USB2PHY_CTL, 0, USB2PHY_CTL_PORT_RESET);
     AtcMaskStep(&Phy->Usb2Phy, USB2PHY_CTL, 0, USB2PHY_CTL_RESET);
@@ -347,7 +348,7 @@ AppleAtcphyClose(
     for (Index = 0; Index < RTL_NUMBER_OF(Regions); ++Index)
     {
         if (Regions[Index]->Base)
-            MmUnmapIoSpace(Regions[Index]->Base, Regions[Index]->Size);
+            Regions[Index]->Io->Unmap(Regions[Index]->Base, Regions[Index]->Size);
         Regions[Index]->Base = NULL;
         Regions[Index]->Size = 0;
     }

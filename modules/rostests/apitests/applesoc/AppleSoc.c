@@ -229,6 +229,12 @@ MockIoOpenDeviceRegistryKey(PDEVICE_OBJECT DeviceObject, ULONG KeyType, ACCESS_M
 #define SIM_PCIE_ROOT_CFG_BASE  0x580000000ULL
 #define SIM_PCIE_ROOT_CFG_SIZE  0x10000
 #define SIM_PCIE_ROOT_INDEX     17
+#define SIM_DWC3_BASE           0x702280000ULL
+#define SIM_DWC3_SIZE           0xcd00
+#define SIM_DWC3_INDEX          18
+#define SIM_DWC3_GLUE_BASE      0x70228cd00ULL
+#define SIM_DWC3_GLUE_SIZE      0x3200
+#define SIM_DWC3_GLUE_INDEX     19
 
 typedef struct _SIM_REGION
 {
@@ -255,6 +261,8 @@ static ULONG SimMcaData[SIM_MCA_SIZE / sizeof(ULONG)];
 static ULONG SimMcaSwitchData[SIM_MCA_SWITCH_SIZE / sizeof(ULONG)];
 static ULONG SimMailboxData[SIM_REGION_SIZE / sizeof(ULONG)];
 static ULONG SimPcieRootConfigData[SIM_PCIE_ROOT_CFG_SIZE / sizeof(ULONG)];
+static ULONG SimDwc3Data[SIM_DWC3_SIZE / sizeof(ULONG)];
+static ULONG SimDwc3GlueData[SIM_DWC3_GLUE_SIZE / sizeof(ULONG)];
 
 typedef struct _SIM_WRITE
 {
@@ -282,6 +290,8 @@ static SIM_REGION SimRegions[] =
     { SIM_MCA_SWITCH_BASE, sizeof(SimMcaSwitchData), SimMcaSwitchData },
     { SIM_MAILBOX_BASE, sizeof(SimMailboxData), SimMailboxData },
     { SIM_PCIE_ROOT_CFG_BASE, sizeof(SimPcieRootConfigData), SimPcieRootConfigData },
+    { SIM_DWC3_BASE, sizeof(SimDwc3Data), SimDwc3Data },
+    { SIM_DWC3_GLUE_BASE, sizeof(SimDwc3GlueData), SimDwc3GlueData },
 };
 static SIM_WRITE SimWrites[256];
 static BOOLEAN SimAtcStuck;
@@ -566,6 +576,9 @@ SimFromVirtual(volatile ULONG *Address, PULONG Offset)
     return NULL;
 }
 
+static BOOLEAN SimSystemMapForbidden;
+static ULONG SimSystemMapViolations;
+
 static
 PVOID
 MmMapIoSpace(PHYSICAL_ADDRESS Physical, SIZE_T Size, MEMORY_CACHING_TYPE Type)
@@ -573,6 +586,12 @@ MmMapIoSpace(PHYSICAL_ADDRESS Physical, SIZE_T Size, MEMORY_CACHING_TYPE Type)
     ULONG Offset;
     SIM_REGION *Region = SimFind((ULONG64)Physical.QuadPart, &Offset);
     PVOID Allocated;
+
+    if (SimSystemMapForbidden)
+    {
+        ++SimSystemMapViolations;
+        return NULL;
+    }
 
     if (!Region || Offset + Size > Region->Size)
     {
@@ -941,6 +960,8 @@ SimWrite(volatile ULONG *Address, ULONG Value)
     if (Region == &SimRegions[SIM_MCA_INDEX] && ((Offset % 0x4000) == 0x300 || (Offset % 0x4000) == 0x400) &&
         (Value & 2) && !SimMcaStuck)
         Value &= ~2;
+    if (Region == &SimRegions[SIM_DWC3_INDEX] && Offset == 0xc704)
+        Value &= ~0x40000000UL;
     if (Region == &SimRegions[0])
     {
         if (!SimPmgrStuck)
@@ -1032,8 +1053,11 @@ UatInvalidateAsid(ULONG Asid)
     ++SimInvalidations;
 }
 
+#include "../../../../sdk/lib/drivers/fdtdrv/fdtnode.c"
 #include "../../../../sdk/lib/drivers/fdtdrv/fdtdrv.c"
+#include "../../../../sdk/lib/drivers/applertkit/pmgrpower.c"
 #include "../../../../sdk/lib/drivers/applertkit/pmgr.c"
+#include "../../../../sdk/lib/drivers/applertkit/dartstream.c"
 #include "../../../../sdk/lib/drivers/applertkit/dart.c"
 #include "../../../../sdk/lib/drivers/applertkit/uat.c"
 #include "../../../../sdk/lib/drivers/applertkit/adt.c"
@@ -1044,6 +1068,7 @@ UatInvalidateAsid(ULONG Asid)
 #include "../../../../sdk/lib/drivers/applertkit/pmpptd.c"
 #include "../../../../sdk/lib/drivers/applertkit/spmi.c"
 #include "../../../../sdk/lib/drivers/applertkit/atcphy.c"
+#include "../../../../sdk/lib/drivers/applertkit/dwc3.c"
 #include "../../../../sdk/lib/drivers/applertkit/pcie.c"
 #include "../../../../sdk/lib/drivers/applertkit/pcielink.c"
 #include "../../../../sdk/lib/drivers/applertkit/gpio.c"
@@ -1134,6 +1159,8 @@ BuildSocTree(VOID)
 
     FdtBeginNode("usb@702280000");
     FdtStrings("compatible", LIST("apple,t6030-dwc3\0apple,t8103-dwc3"));
+    FdtCells("reg", 8, 7, 0x2280000, 0, SIM_DWC3_SIZE, 7, 0x228cd00, 0, SIM_DWC3_GLUE_SIZE);
+    FdtStrings("reg-names", LIST("dwc3-core\0dwc3-apple"));
     FdtCells("iommus", 4, PHANDLE_DART0, 0, PHANDLE_DART0, 1);
     FdtCells("phys", 4, PHANDLE_ATCPHY, 3, PHANDLE_ATCPHY, 4);
     FdtEndNode();
@@ -1265,6 +1292,7 @@ ResetSimulation(PFDT_DRIVER_TREE Tree)
     BuildSocTree();
     memset(Tree, 0, sizeof(*Tree));
     Tree->Blob = Builder.Blob;
+    Tree->Io = FdtDriverGetSystemIo();
     ok(FdtOpen(Builder.Blob, Builder.BlobSize, &Tree->Fdt), "The test tree did not open\n");
 }
 
@@ -1295,6 +1323,8 @@ FindNode(PFDT_DRIVER_TREE Tree, const CHAR *Compatible)
 #define AXI2AF(Offset) SimRegions[4].Data[(Offset) / sizeof(ULONG)]
 #define USB2PHY(Offset) SimRegions[5].Data[(Offset) / sizeof(ULONG)]
 #define PIPE(Offset) SimRegions[6].Data[(Offset) / sizeof(ULONG)]
+#define DWC3(Offset) SimRegions[SIM_DWC3_INDEX].Data[(Offset) / sizeof(ULONG)]
+#define DWC3_GLUE(Offset) SimRegions[SIM_DWC3_GLUE_INDEX].Data[(Offset) / sizeof(ULONG)]
 #define PCIEPORT(Offset) SimRegions[7].Data[(Offset) / sizeof(ULONG)]
 #define PCIEPHY(Offset) SimRegions[8].Data[(Offset) / sizeof(ULONG)]
 #define PINCTRL(Offset) SimRegions[9].Data[(Offset) / sizeof(ULONG)]
@@ -2565,6 +2595,7 @@ OpenMailboxTree(
     FdtFinish();
     memset(Tree, 0, sizeof(*Tree));
     Tree->Blob = Builder.Blob;
+    Tree->Io = FdtDriverGetSystemIo();
     ok(FdtOpen(Builder.Blob, Builder.BlobSize, &Tree->Fdt), "The mailbox tree did not open\n");
 }
 
@@ -5652,6 +5683,163 @@ TestAtcphy(VOID)
     ok(Phy.Core.Base == NULL && Phy.PipeHandler.Base == NULL, "The PHY regions are still mapped\n");
 }
 
+static ULONG TestIoMaps;
+static ULONG TestIoUnmaps;
+static ULONG TestIoSleptMs;
+static ULONG TestIoPrints;
+
+static
+PVOID
+NTAPI
+TestIoMap(ULONG64 Physical, ULONG Size)
+{
+    ULONG Offset;
+    SIM_REGION *Region = SimFind(Physical, &Offset);
+
+    if (!Region || Offset + Size > Region->Size)
+        return NULL;
+    ++TestIoMaps;
+    return (PUCHAR)Region->Data + Offset;
+}
+
+static
+VOID
+NTAPI
+TestIoUnmap(PVOID Address, ULONG Size)
+{
+    ++TestIoUnmaps;
+}
+
+static
+VOID
+NTAPI
+TestIoStall(ULONG Microseconds)
+{
+    SimStalledMicroseconds += Microseconds;
+}
+
+static
+VOID
+NTAPI
+TestIoSleep(ULONG Milliseconds)
+{
+    TestIoSleptMs += Milliseconds;
+}
+
+static
+VOID
+__cdecl
+TestIoPrint(PCSTR Format, ...)
+{
+    ++TestIoPrints;
+}
+
+static const FDT_DRIVER_IO TestDebuggerIo = { TestIoMap, TestIoUnmap, TestIoStall, TestIoSleep, TestIoPrint };
+
+static
+ULONG
+PrepareDwc3Simulation(PFDT_DRIVER_TREE Tree)
+{
+    ResetSimulation(Tree);
+    USB2PHY(0x04) = 0x0000000b;
+    USB2PHY(0x1c) = 0x60000000;
+    ATC(0x20000) = 0x0000001f;
+    ATC(0x20004) = 0x00000003;
+    ATC(0x20008) = 0x00000005;
+    ATC(0x4c) = 0x0003ffff;
+    ATC(0x9010) = 0x00000201;
+    ATC(0x10010) = 0x00000201;
+    ATC(0x20) = 0xabcdefff;
+    ATC(0x2a04) = 0x00000003;
+    AXI2AF(0x100) = 0x000000ff;
+    PIPE(0x1c) = 0x00000001;
+    PIPE(0x0c) = 0x00000009;
+    DART(0x04) = 1;
+    DART(0x0c) = 16;
+    DWC3(0xc110) = 0x00003000;
+    DWC3(0xc120) = 0x5533330a;
+    DWC3_GLUE(0x40) = 0xab000000;
+    SimWriteCount = 0;
+    return FindNode(Tree, "apple,t8103-dwc3");
+}
+
+static
+NTSTATUS
+StartDwc3Host(PFDT_DRIVER_TREE Tree, ULONG Usb, PCSTR Owner)
+{
+    NTSTATUS Status;
+
+    Status = ApplePmgrPowerOnDevice(Tree, Usb);
+    if (NT_SUCCESS(Status))
+        Status = AppleDartMapPhysical(Tree, Usb, Owner);
+    if (NT_SUCCESS(Status))
+        Status = AppleDwc3StartHost(Tree, Usb, SIM_DWC3_BASE, Owner);
+    return Status;
+}
+
+static
+VOID
+TestDwc3StartHost(VOID)
+{
+    static SIM_WRITE SystemWrites[RTL_NUMBER_OF(SimWrites)];
+    FDT_DRIVER_TREE Tree;
+    ULONG Usb, SystemWriteCount, SystemSleptMs;
+
+    Usb = PrepareDwc3Simulation(&Tree);
+    ok_hex(StartDwc3Host(&Tree, Usb, "appledwc3"), STATUS_SUCCESS);
+    ok_int(SimMapCount, 0);
+    ok(SimWriteCount < RTL_NUMBER_OF(SimWrites), "The write log overflowed\n");
+    ok_hex(DART(0x1000), 0x00000006);
+    ok_hex(DART(0x1004), 0x00000006);
+    ok_hex(USB2PHY(0x08), 0x0000700f);
+    ok(FindWrite(SIM_DWC3_BASE + 0xc704, 0x40000000, 0x40000000, 0) != MAXULONG, "The core was not soft reset\n");
+    ok_hex(DWC3(0xc704) & 0xc0000000, 0);
+    ok_hex(DWC3(0xc110) & 0x3000, 0x1000);
+    ok_hex(DWC3(0xc200) & 0x40, 0x40);
+    ok_hex(DWC3(0xc2c0) & 0x20000, 0x20000);
+    ok_hex(DWC3_GLUE(0x38), 0x0f800f80);
+    ok_hex(DWC3_GLUE(0x3c), 0x0fc00fc0);
+    ok_hex(DWC3_GLUE(0x40), 0xab140a10);
+    ok(SimSleptMs >= 50, "The core did not settle after its reset (%lu ms)\n", SimSleptMs);
+    memcpy(SystemWrites, SimWrites, sizeof(SystemWrites));
+    SystemWriteCount = SimWriteCount;
+    SystemSleptMs = SimSleptMs;
+
+    Usb = PrepareDwc3Simulation(&Tree);
+    Tree.Io = &TestDebuggerIo;
+    TestIoMaps = TestIoUnmaps = TestIoSleptMs = TestIoPrints = 0;
+    SimSystemMapViolations = 0;
+    SimSystemMapForbidden = TRUE;
+    ok_hex(StartDwc3Host(&Tree, Usb, "USB debugger"), STATUS_SUCCESS);
+    SimSystemMapForbidden = FALSE;
+    ok_int(SimSystemMapViolations, 0);
+    ok_int(SimMapCount, 0);
+    ok_int(SimSleptMs, 0);
+    ok(TestIoMaps != 0, "The debugger I/O mapped nothing\n");
+    ok_int(TestIoUnmaps, TestIoMaps);
+    ok_int(TestIoSleptMs, SystemSleptMs);
+    ok(TestIoPrints != 0, "The debugger I/O printed nothing\n");
+    ok_int(SimWriteCount, SystemWriteCount);
+    ok(!memcmp(SimWrites, SystemWrites, min(SimWriteCount, SystemWriteCount) * sizeof(SIM_WRITE)),
+       "The debugger I/O wrote another register sequence than the OS I/O\n");
+
+    Usb = PrepareDwc3Simulation(&Tree);
+    Tree.Io = &TestDebuggerIo;
+    DWC3(0xc120) = 0x12345678;
+    ok_hex(StartDwc3Host(&Tree, Usb, "USB debugger"), STATUS_DEVICE_CONFIGURATION_ERROR);
+    ok_hex(DWC3(0xc110) & 0x3000, 0x3000);
+    ok_int(TestIoUnmaps, TestIoMaps);
+
+    Usb = PrepareDwc3Simulation(&Tree);
+    Tree.Io = &TestDebuggerIo;
+    DART(0x04) = 0;
+    DART(0x200) = 1;
+    DART(0x1000) = 0;
+    ok_hex(StartDwc3Host(&Tree, Usb, "USB debugger"), STATUS_ACCESS_DENIED);
+    ok_hex(DWC3(0xc110) & 0x3000, 0x3000);
+    ok_int(TestIoUnmaps, TestIoMaps);
+}
+
 static ULONG TestSmcGpioCalls;
 static BOOLEAN TestSmcGpioLowBank;
 static UCHAR TestSmcGpioPin;
@@ -6313,6 +6501,7 @@ ResetAudioSimulation(PFDT_DRIVER_TREE Tree, ULONG I2cFrequency)
        "The audio tree overflowed the builder (%lu, %lu)\n", Builder.StructureSize, Builder.StringsSize);
     memset(Tree, 0, sizeof(*Tree));
     Tree->Blob = Builder.Blob;
+    Tree->Io = FdtDriverGetSystemIo();
     ok(FdtOpen(Builder.Blob, Builder.BlobSize, &Tree->Fdt), "The audio tree did not open\n");
 }
 
@@ -6392,6 +6581,7 @@ OpenGpioInterruptTree(
     FdtFinish();
     memset(Tree, 0, sizeof(*Tree));
     Tree->Blob = Builder.Blob;
+    Tree->Io = FdtDriverGetSystemIo();
     ok(FdtOpen(Builder.Blob, Builder.BlobSize, &Tree->Fdt), "The GPIO interrupt tree did not open\n");
 }
 
@@ -7222,6 +7412,7 @@ START_TEST(AppleSoc)
     TestPmpPowerRequests();
     TestSpmi();
     TestAtcphy();
+    TestDwc3StartHost();
     TestPcie();
     TestPcieLinkPower();
     TestGpio();

@@ -9,12 +9,31 @@
 
 #include <libernt/fdtlib.h>
 
+typedef struct _FDT_DRIVER_IO
+{
+    PVOID (NTAPI *Map)(_In_ ULONG64 Physical, _In_ ULONG Size);
+    VOID (NTAPI *Unmap)(_In_ PVOID Address, _In_ ULONG Size);
+    VOID (NTAPI *Stall)(_In_ ULONG Microseconds);
+    VOID (NTAPI *Sleep)(_In_ ULONG Milliseconds);
+    VOID (__cdecl *Print)(_In_z_ _Printf_format_string_ PCSTR Format, ...);
+} FDT_DRIVER_IO, *PFDT_DRIVER_IO;
+
+typedef const FDT_DRIVER_IO *PCFDT_DRIVER_IO;
+
 typedef struct _FDT_DRIVER_TREE
 {
     PUCHAR Blob;
     FDT Fdt;
     ULONG Node;
+    PCFDT_DRIVER_IO Io;
 } FDT_DRIVER_TREE, *PFDT_DRIVER_TREE;
+
+#define FdtDriverIoPrint(Io, ...) ((Io)->Print(__VA_ARGS__))
+#define FdtDriverPrint(Tree, ...) FdtDriverIoPrint((Tree)->Io, __VA_ARGS__)
+
+PCFDT_DRIVER_IO
+NTAPI
+FdtDriverGetSystemIo(VOID);
 
 NTSTATUS
 NTAPI
