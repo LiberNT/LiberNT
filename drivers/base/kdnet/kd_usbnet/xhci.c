@@ -656,6 +656,7 @@ XhciShareController(
 
     Share->Dcbaa = XhciPhysical(Adapter->Dcbaa);
     Share->ScratchpadArray = Adapter->Dcbaa[0];
+    Share->Registers = XhciPhysical(Adapter->Registers);
     Adapter->Shared = TRUE;
     Adapter->KdNet->Device->OemData = Share;
     Adapter->KdNet->Device->OemDataLength = sizeof(*Share);
