@@ -696,6 +696,16 @@ MmMoveProcessToSession(
     _Inout_ PEPROCESS Process,
     _In_ ULONG SessionId);
 
+PVOID
+NTAPI
+MmGetNextSession(
+    _Inout_opt_ PVOID SessionEntry);
+
+BOOLEAN
+NTAPI
+MmIsSessionImageAddress(
+    _In_ PVOID Address);
+
 VOID
 NTAPI
 MmQuitNextSession(

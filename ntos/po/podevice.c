@@ -505,13 +505,17 @@ PopNotifySystemTimeWorker(
     if (SetSystemTimeCallback != NULL)
         ExNotifyCallback(SetSystemTimeCallback, NULL, NULL);
 
-    /* TODO: sessions other than the console's, a remote one included, are not told that the time changed */
-    if ((PopEventCallout != NULL) && PopEnterConsoleSession(&Session, &ApcState))
+    if (PopEventCallout == NULL)
+        return;
+    Parameters.EventNumber = PsW32SystemTime;
+    Parameters.Code = 0;
+    for (Session = MmGetNextSession(NULL); Session != NULL; Session = MmGetNextSession(Session))
     {
-        Parameters.EventNumber = PsW32SystemTime;
-        Parameters.Code = 0;
-        (VOID)PopEventCallout(&Parameters);
-        PopLeaveConsoleSession(Session, &ApcState);
+        if (!NT_SUCCESS(MmAttachSession(Session, &ApcState)))
+            continue;
+        if (MmIsSessionImageAddress((PVOID)PopEventCallout))
+            (VOID)PopEventCallout(&Parameters);
+        MmDetachSession(Session, &ApcState);
     }
 }
 
