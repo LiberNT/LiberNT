@@ -8,224 +8,9 @@
 #include <ntoskrnl.h>
 #include <acpiioct.h>
 #include <debug.h>
+#include <pepfx.h>
 
-#define PEP_INFORMATION_V3                0x00000003
-#define PEP_KERNEL_INFORMATION_V3         0x00000003
-#define PEP_FLAG_WORKER_CONCURRENCY       0x00000001
-#define PEP_DPM_WORK                      0x0D
 #define POP_PEP_TAG                       'pePP'
-
-DECLARE_HANDLE(PEPHANDLE);
-
-typedef VOID POFXCALLBACKREQUESTWORKER(_In_ POHANDLE PluginHandle);
-typedef POFXCALLBACKREQUESTWORKER *PPOFXCALLBACKREQUESTWORKER;
-
-typedef VOID POFXCALLBACKCRITICALRESOURCE(
-    _In_ POHANDLE DeviceHandle,
-    _In_ ULONG Component,
-    _In_ BOOLEAN Active);
-typedef POFXCALLBACKCRITICALRESOURCE *PPOFXCALLBACKCRITICALRESOURCE;
-
-typedef NTSTATUS (NTAPI *PPOP_PEP_HALT_ROUTINE)(_Inout_opt_ PVOID Context);
-
-typedef NTSTATUS POFXCALLBACKPROCESSORHALT(
-    _In_ ULONG Flags,
-    _Inout_opt_ PVOID Context,
-    _In_ PPOP_PEP_HALT_ROUTINE Halt);
-typedef POFXCALLBACKPROCESSORHALT *PPOFXCALLBACKPROCESSORHALT;
-
-typedef NTSTATUS POFXCALLBACKREQUESTINTERRUPT(_In_ ULONG Gsiv);
-typedef POFXCALLBACKREQUESTINTERRUPT *PPOFXCALLBACKREQUESTINTERRUPT;
-
-typedef union _PEP_UNMASKED_INTERRUPT_FLAGS
-{
-    struct
-    {
-        USHORT SecondaryInterrupt:1;
-        USHORT Reserved:15;
-    };
-    USHORT AsUSHORT;
-} PEP_UNMASKED_INTERRUPT_FLAGS, *PPEP_UNMASKED_INTERRUPT_FLAGS;
-
-typedef struct _PEP_UNMASKED_INTERRUPT_INFORMATION
-{
-    USHORT Version;
-    USHORT Size;
-    PEP_UNMASKED_INTERRUPT_FLAGS Flags;
-    KINTERRUPT_MODE Mode;
-    KINTERRUPT_POLARITY Polarity;
-    ULONG Gsiv;
-    USHORT PinNumber;
-    PEPHANDLE DeviceHandle;
-} PEP_UNMASKED_INTERRUPT_INFORMATION, *PPEP_UNMASKED_INTERRUPT_INFORMATION;
-
-typedef BOOLEAN (*PPO_ENUMERATE_INTERRUPT_SOURCE_CALLBACK)(
-    _In_ PVOID CallbackContext,
-    _In_ PPEP_UNMASKED_INTERRUPT_INFORMATION InterruptInformation);
-
-typedef NTSTATUS POFXCALLBACKENUMERATEUNMASKEDINTERRUPTS(
-    _In_opt_ POHANDLE PluginHandle,
-    _In_opt_ ULONG EnumerateFlags,
-    _In_ PPO_ENUMERATE_INTERRUPT_SOURCE_CALLBACK Callback,
-    _In_ PVOID CallbackContext,
-    _Inout_ PPEP_UNMASKED_INTERRUPT_INFORMATION InterruptInformation);
-typedef POFXCALLBACKENUMERATEUNMASKEDINTERRUPTS *PPOFXCALLBACKENUMERATEUNMASKEDINTERRUPTS;
-
-typedef NTSTATUS POFXCALLBACKPROCESSORIDLEVETO(
-    _In_ POHANDLE ProcessorHandle,
-    _In_ ULONG ProcessorState,
-    _In_ ULONG VetoReason,
-    _In_ BOOLEAN Increment);
-typedef POFXCALLBACKPROCESSORIDLEVETO *PPOFXCALLBACKPROCESSORIDLEVETO;
-
-typedef NTSTATUS POFXCALLBACKPLATFORMIDLEVETO(
-    _In_ POHANDLE ProcessorHandle,
-    _In_ ULONG PlatformState,
-    _In_ ULONG VetoReason,
-    _In_ BOOLEAN Increment);
-typedef POFXCALLBACKPLATFORMIDLEVETO *PPOFXCALLBACKPLATFORMIDLEVETO;
-
-typedef struct _PEP_PROCESSOR_IDLE_STATE_UPDATE
-{
-    ULONG Version;
-    ULONG Latency;
-    ULONG BreakEvenDuration;
-} PEP_PROCESSOR_IDLE_STATE_UPDATE, *PPEP_PROCESSOR_IDLE_STATE_UPDATE;
-
-typedef NTSTATUS POFXCALLBACKUPDATEPROCESSORIDLESTATE(
-    _In_ POHANDLE ProcessorHandle,
-    _In_ ULONG ProcessorState,
-    _In_ PPEP_PROCESSOR_IDLE_STATE_UPDATE Update);
-typedef POFXCALLBACKUPDATEPROCESSORIDLESTATE *PPOFXCALLBACKUPDATEPROCESSORIDLESTATE;
-
-typedef struct _PEP_PLATFORM_IDLE_STATE_UPDATE
-{
-    ULONG Version;
-    ULONG Latency;
-    ULONG BreakEvenDuration;
-} PEP_PLATFORM_IDLE_STATE_UPDATE, *PPEP_PLATFORM_IDLE_STATE_UPDATE;
-
-typedef NTSTATUS POFXCALLBACKUPDATEPLATFORMIDLESTATE(
-    _In_ POHANDLE ProcessorHandle,
-    _In_ ULONG PlatformState,
-    _In_ PPEP_PLATFORM_IDLE_STATE_UPDATE Update);
-typedef POFXCALLBACKUPDATEPLATFORMIDLESTATE *PPOFXCALLBACKUPDATEPLATFORMIDLESTATE;
-
-typedef NTSTATUS POFXCALLBACKREQUESTCOMMON(
-    _In_ ULONG RequestId,
-    _Inout_opt_ PVOID Data);
-typedef POFXCALLBACKREQUESTCOMMON *PPOFXCALLBACKREQUESTCOMMON;
-
-typedef struct _PEP_KERNEL_INFORMATION_STRUCT_V3
-{
-    USHORT Version;
-    USHORT Size;
-    POHANDLE Plugin;
-    PPOFXCALLBACKREQUESTWORKER RequestWorker;
-    PPOFXCALLBACKENUMERATEUNMASKEDINTERRUPTS EnumerateUnmaskedInterrupts;
-    PPOFXCALLBACKPROCESSORHALT ProcessorHalt;
-    PPOFXCALLBACKREQUESTINTERRUPT RequestInterrupt;
-    PPOFXCALLBACKCRITICALRESOURCE TransitionCriticalResource;
-    PPOFXCALLBACKPROCESSORIDLEVETO ProcessorIdleVeto;
-    PPOFXCALLBACKPLATFORMIDLEVETO PlatformIdleVeto;
-    PPOFXCALLBACKUPDATEPROCESSORIDLESTATE UpdateProcessorIdleState;
-    PPOFXCALLBACKUPDATEPLATFORMIDLESTATE UpdatePlatformIdleState;
-    PPOFXCALLBACKREQUESTCOMMON RequestCommon;
-} PEP_KERNEL_INFORMATION, *PPEP_KERNEL_INFORMATION;
-
-typedef BOOLEAN PEPCALLBACKNOTIFYDPM(
-    _In_ ULONG Notification,
-    _In_ PVOID Data);
-typedef PEPCALLBACKNOTIFYDPM *PPEPCALLBACKNOTIFYDPM;
-
-typedef BOOLEAN PEPCALLBACKNOTIFYPPM(
-    _In_ PEPHANDLE Handle,
-    _In_ ULONG Notification,
-    _Inout_opt_ PVOID Data);
-typedef PEPCALLBACKNOTIFYPPM *PPEPCALLBACKNOTIFYPPM;
-
-typedef BOOLEAN PEPCALLBACKNOTIFYACPI(
-    _In_ ULONG Notification,
-    _Inout_opt_ PVOID Data);
-typedef PEPCALLBACKNOTIFYACPI *PPEPCALLBACKNOTIFYACPI;
-
-typedef struct _PEP_INFORMATION
-{
-    USHORT Version;
-    USHORT Size;
-    PPEPCALLBACKNOTIFYDPM AcceptDeviceNotification;
-    PPEPCALLBACKNOTIFYPPM AcceptProcessorNotification;
-    PPEPCALLBACKNOTIFYACPI AcceptAcpiNotification;
-} PEP_INFORMATION, *PPEP_INFORMATION;
-
-typedef enum _PEP_WORK_TYPE
-{
-    PepWorkRequestPowerControl = 3,
-    PepWorkCompleteIdleState = 5,
-    PepWorkCompletePerfState,
-    PepWorkAcpiNotify,
-    PepWorkAcpiEvaluateControlMethodComplete,
-    PepWorkMax
-} PEP_WORK_TYPE, *PPEP_WORK_TYPE;
-
-typedef struct _PEP_WORK_POWER_CONTROL
-{
-    POHANDLE DeviceHandle;
-    LPCGUID PowerControlCode;
-    PVOID RequestContext;
-    PVOID InBuffer;
-    SIZE_T InBufferSize;
-    PVOID OutBuffer;
-    SIZE_T OutBufferSize;
-} PEP_WORK_POWER_CONTROL, *PPEP_WORK_POWER_CONTROL;
-
-typedef struct _PEP_WORK_COMPLETE_IDLE_STATE
-{
-    POHANDLE DeviceHandle;
-    ULONG Component;
-} PEP_WORK_COMPLETE_IDLE_STATE, *PPEP_WORK_COMPLETE_IDLE_STATE;
-
-typedef struct _PEP_WORK_COMPLETE_PERF_STATE
-{
-    POHANDLE DeviceHandle;
-    ULONG Component;
-    BOOLEAN Succeeded;
-} PEP_WORK_COMPLETE_PERF_STATE, *PPEP_WORK_COMPLETE_PERF_STATE;
-
-typedef struct _PEP_WORK_ACPI_NOTIFY
-{
-    POHANDLE DeviceHandle;
-    ULONG NotifyCode;
-} PEP_WORK_ACPI_NOTIFY, *PPEP_WORK_ACPI_NOTIFY;
-
-typedef struct _PEP_WORK_ACPI_EVALUATE_CONTROL_METHOD_COMPLETE
-{
-    POHANDLE DeviceHandle;
-    ULONG CompletionFlags;
-    NTSTATUS MethodStatus;
-    PVOID CompletionContext;
-    SIZE_T OutputArgumentSize;
-    PACPI_METHOD_ARGUMENT OutputArguments;
-} PEP_WORK_ACPI_EVALUATE_CONTROL_METHOD_COMPLETE, *PPEP_WORK_ACPI_EVALUATE_CONTROL_METHOD_COMPLETE;
-
-typedef struct _PEP_WORK_INFORMATION
-{
-    PEP_WORK_TYPE WorkType;
-    union
-    {
-        PEP_WORK_POWER_CONTROL PowerControl;
-        PEP_WORK_COMPLETE_IDLE_STATE CompleteIdleState;
-        PEP_WORK_COMPLETE_PERF_STATE CompletePerfState;
-        PEP_WORK_ACPI_NOTIFY AcpiNotify;
-        PEP_WORK_ACPI_EVALUATE_CONTROL_METHOD_COMPLETE ControlMethodComplete;
-    };
-} PEP_WORK_INFORMATION, *PPEP_WORK_INFORMATION;
-
-typedef struct _PEP_WORK
-{
-    PPEP_WORK_INFORMATION WorkInformation;
-    BOOLEAN NeedWork;
-} PEP_WORK, *PPEP_WORK;
 
 #include "pepcore.h"
 
@@ -263,6 +48,7 @@ PopPepWorker(
 
 static
 VOID
+NTAPI
 PopPepRequestWorker(
     _In_ POHANDLE PluginHandle)
 {
@@ -274,6 +60,7 @@ PopPepRequestWorker(
 
 static
 NTSTATUS
+NTAPI
 PopPepEnumerateUnmaskedInterrupts(
     _In_opt_ POHANDLE PluginHandle,
     _In_opt_ ULONG EnumerateFlags,
@@ -291,10 +78,11 @@ PopPepEnumerateUnmaskedInterrupts(
 
 static
 NTSTATUS
+NTAPI
 PopPepProcessorHalt(
     _In_ ULONG Flags,
     _Inout_opt_ PVOID Context,
-    _In_ PPOP_PEP_HALT_ROUTINE Halt)
+    _In_ PPROCESSOR_HALT_ROUTINE Halt)
 {
     UNREFERENCED_PARAMETER(Flags);
     UNREFERENCED_PARAMETER(Context);
@@ -304,6 +92,7 @@ PopPepProcessorHalt(
 
 static
 NTSTATUS
+NTAPI
 PopPepRequestInterrupt(
     _In_ ULONG Gsiv)
 {
@@ -313,6 +102,7 @@ PopPepRequestInterrupt(
 
 static
 VOID
+NTAPI
 PopPepTransitionCriticalResource(
     _In_ POHANDLE DeviceHandle,
     _In_ ULONG Component,
@@ -325,6 +115,7 @@ PopPepTransitionCriticalResource(
 
 static
 NTSTATUS
+NTAPI
 PopPepIdleVeto(
     _In_ POHANDLE ProcessorHandle,
     _In_ ULONG State,
@@ -340,6 +131,7 @@ PopPepIdleVeto(
 
 static
 NTSTATUS
+NTAPI
 PopPepUpdateProcessorIdleState(
     _In_ POHANDLE ProcessorHandle,
     _In_ ULONG ProcessorState,
@@ -353,6 +145,7 @@ PopPepUpdateProcessorIdleState(
 
 static
 NTSTATUS
+NTAPI
 PopPepUpdatePlatformIdleState(
     _In_ POHANDLE ProcessorHandle,
     _In_ ULONG PlatformState,
@@ -366,6 +159,7 @@ PopPepUpdatePlatformIdleState(
 
 static
 NTSTATUS
+NTAPI
 PopPepRequestCommon(
     _In_ ULONG RequestId,
     _Inout_opt_ PVOID Data)
