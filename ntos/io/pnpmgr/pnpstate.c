@@ -1479,8 +1479,14 @@ PiProcessNewChildren(
         if (ChildNode != NULL)
         {
             /* A removed device its bus still reports is set up again, its instance key and IDs included */
-            if (ChildNode->State == DeviceNodeRemoved && !(ChildNode->Flags & (DNF_HAS_PROBLEM | DNF_DEVICE_GONE)))
+            if (ChildNode->State == DeviceNodeRemoved &&
+                !(ChildNode->Flags & DNF_DEVICE_GONE) &&
+                (!(ChildNode->Flags & DNF_HAS_PROBLEM) ||
+                 (ChildNode->Flags & DNF_UNINSTALLED)))
             {
+                if (ChildNode->Flags & DNF_UNINSTALLED)
+                    PiClearDevNodeProblem(ChildNode);
+
                 PiClearDevNodeFlag(ChildNode, DNF_IDS_QUERIED | DNF_UNINSTALLED);
                 PiSetDevNodeState(ChildNode, DeviceNodeUninitialized);
             }
