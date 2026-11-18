@@ -16,6 +16,89 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+import "objidl.idl";
+import "oaidl.idl";
+import "wbemcli.idl";
+
+typedef enum tag_WBEM_EXTRA_RETURN_CODES
+{
+    WBEM_S_INITIALIZED          = 0,
+    WBEM_S_LIMITED_SERVICE      = 0x43001,
+    WBEM_S_INDIRECTLY_UPDATED   = 0x43002,
+    WBEM_S_SUBJECT_TO_SDS       = 0x43003,
+    WBEM_E_RETRY_LATER          = 0x80043001,
+    WBEM_E_RESOURCE_CONTENTION  = 0x80043002
+} WBEM_EXTRA_RETURN_CODES;
+
+typedef enum tag_WBEM_PROVIDER_FLAGS
+{
+    WBEM_FLAG_OWNER_UPDATE = 0x10000
+} WBEM_PROVIDER_FLAGS;
+
+[
+    object,
+    uuid(1be41571-91dd-11d1-aeb2-00c04fb68820)
+]
+interface IWbemProviderInitSink : IUnknown
+{
+    HRESULT SetStatus(
+        [in] LONG lStatus,
+        [in] LONG lFlags);
+}
+
+[
+    object,
+    uuid(1be41572-91dd-11d1-aeb2-00c04fb68820)
+]
+interface IWbemProviderInit : IUnknown
+{
+    HRESULT Initialize(
+        [in, unique, string] LPWSTR wszUser,
+        [in] LONG lFlags,
+        [in, string] LPWSTR wszNamespace,
+        [in, unique, string] LPWSTR wszLocale,
+        [in] IWbemServices *pNamespace,
+        [in] IWbemContext *pCtx,
+        [in] IWbemProviderInitSink *pInitSink);
+}
+
+[
+    object,
+    local,
+    uuid(1005cbcf-e64f-4646-bcd3-3a089d8a84b4)
+]
+interface IWbemDecoupledRegistrar : IUnknown
+{
+    HRESULT Register(
+        [in] long a_Flags,
+        [in] IWbemContext *a_Context,
+        [in] LPCWSTR a_User,
+        [in] LPCWSTR a_Locale,
+        [in] LPCWSTR a_Scope,
+        [in] LPCWSTR a_Registration,
+        [in] IUnknown *pIUnknown);
+
+    HRESULT UnRegister();
+}
+
+[
+    object,
+    local,
+    uuid(86336d20-ca11-4786-9ef1-bc8a946b42fc)
+]
+interface IWbemDecoupledBasicEventProvider : IWbemDecoupledRegistrar
+{
+    HRESULT GetSink(
+        [in] long a_Flags,
+        [in] IWbemContext *a_Context,
+        [out] IWbemObjectSink **a_Sink);
+
+    HRESULT GetService(
+        [in] long a_Flags,
+        [in] IWbemContext *a_Context,
+        [out] IWbemServices **a_Service);
+}
+
 [
     uuid(092df710-7010-11d1-ad90-00c04fd8fdff)
 ]
@@ -25,4 +108,14 @@ library WbemProviders_v1
         uuid(cb8555cc-9128-11d1-ad9b-00c04fd8fdff)
     ]
     coclass WbemAdministrativeLocator { interface IWbemLocator; }
+
+    [
+        uuid(4cfc7932-0f9d-4bef-9c32-8ea2a6b56fcb)
+    ]
+    coclass WbemDecoupledRegistrar { interface IWbemDecoupledRegistrar; }
+
+    [
+        uuid(f5f75737-2843-4f22-933d-c76a97cda62f)
+    ]
+    coclass WbemDecoupledBasicEventProvider { interface IWbemDecoupledBasicEventProvider; }
 }
