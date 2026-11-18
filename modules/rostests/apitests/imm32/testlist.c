@@ -3,6 +3,7 @@
 #include <wine/test.h>
 
 extern void func_clientimc(void);
+extern void func_coinit(void);
 extern void func_cuas(void);
 extern void func_cuascompwnd(void);
 extern void func_himc(void);
@@ -17,6 +18,7 @@ extern void func_JapanImeConvTestW(void);
 const struct test winetest_testlist[] =
 {
     { "clientimc", func_clientimc },
+    { "coinit", func_coinit },
     { "cuas", func_cuas },
     { "cuascompwnd", func_cuascompwnd },
     { "himc", func_himc },

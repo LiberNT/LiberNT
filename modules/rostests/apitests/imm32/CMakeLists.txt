@@ -1,6 +1,7 @@
 
 list(APPEND SOURCE
     clientimc.c
+    coinit.c
     cuas.cpp
     cuascompwnd.cpp
     ../msctf/testtip.cpp
