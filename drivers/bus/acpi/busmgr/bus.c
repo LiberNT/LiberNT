@@ -643,7 +643,7 @@ acpi_bus_generate_event (
     ASSERT(!(data & 0xFF000000));
 
     TypeData = data;
-    TypeData |= type << 24;
+    TypeData |= (ULONG_PTR)type << 24;
 
     for (i = 0; i < ACPI_BUS_PENDING_EVENTS; i++)
     {

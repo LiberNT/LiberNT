@@ -27,6 +27,24 @@ typedef struct _KI_PASSIVE_INTERRUPT
 
 static LIST_ENTRY KiPassiveInterruptList = {&KiPassiveInterruptList, &KiPassiveInterruptList};
 static KSPIN_LOCK KiPassiveInterruptLock;
+static EX_PUSH_LOCK KiPassiveInterruptConnectLock;
+
+static
+VOID
+KiLockPassiveInterruptConnection(VOID)
+{
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    KeEnterCriticalRegion();
+    ExAcquirePushLockExclusive(&KiPassiveInterruptConnectLock);
+}
+
+static
+VOID
+KiUnlockPassiveInterruptConnection(VOID)
+{
+    ExReleasePushLockExclusive(&KiPassiveInterruptConnectLock);
+    KeLeaveCriticalRegion();
+}
 
 static
 KIRQL
@@ -136,15 +154,15 @@ KiPassiveInterruptDpc(
     ExQueueWorkItem(&Passive->WorkItem, CriticalWorkQueue);
 }
 
+static
 BOOLEAN
-KiConnectPassiveInterrupt(
+KiConnectPassiveInterruptLocked(
     _Inout_ PKINTERRUPT Interrupt)
 {
     PKI_PASSIVE_INTERRUPT Passive;
     KIRQL OldIrql;
 
-    if (Interrupt->Connected)
-        return TRUE;
+    ASSERT(!Interrupt->Connected);
 
     Passive = ExAllocatePoolZero(NonPagedPool, sizeof(*Passive), TAG_PASSIVE_INTERRUPT);
     if (Passive == NULL)
@@ -180,7 +198,20 @@ KiConnectPassiveInterrupt(
 }
 
 BOOLEAN
-KiDisconnectPassiveInterrupt(
+KiConnectPassiveInterrupt(
+    _Inout_ PKINTERRUPT Interrupt)
+{
+    BOOLEAN Connected;
+
+    KiLockPassiveInterruptConnection();
+    Connected = Interrupt->Connected || KiConnectPassiveInterruptLocked(Interrupt);
+    KiUnlockPassiveInterruptConnection();
+    return Connected;
+}
+
+static
+VOID
+KiDisconnectPassiveInterruptLocked(
     _Inout_ PKINTERRUPT Interrupt)
 {
     PKI_PASSIVE_INTERRUPT Passive;
@@ -191,7 +222,7 @@ KiDisconnectPassiveInterrupt(
     KiReleasePassiveInterruptList(OldIrql);
 
     if (Passive == NULL)
-        return TRUE;
+        return;
 
     KeWaitForSingleObject(&Passive->Lock, Executive, KernelMode, FALSE, NULL);
     Passive->Disconnecting = TRUE;
@@ -215,6 +246,15 @@ KiDisconnectPassiveInterrupt(
            InterlockedCompareExchange(&Passive->Pending, 0, 0) == 1);
     ExFreePoolWithTag(Passive, TAG_PASSIVE_INTERRUPT);
     Interrupt->Connected = FALSE;
+}
+
+BOOLEAN
+KiDisconnectPassiveInterrupt(
+    _Inout_ PKINTERRUPT Interrupt)
+{
+    KiLockPassiveInterruptConnection();
+    KiDisconnectPassiveInterruptLocked(Interrupt);
+    KiUnlockPassiveInterruptConnection();
     return TRUE;
 }
 

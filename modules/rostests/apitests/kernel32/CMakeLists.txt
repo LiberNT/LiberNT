@@ -51,6 +51,7 @@ list(APPEND SOURCE
     DeleteFileOpenHandle.c
     DeviceIoControl.c
     EmulatedProcess.c
+    DispatcherStress.c
     dosdev.c
     EevdfShares.c
     DateTimeFormatFlags.c

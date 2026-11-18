@@ -15,7 +15,12 @@ list(APPEND SOURCE
     services.c
     sysrestore.c
     table.c
-    wbemlocator.c)
+    wbemlocator.c
+    wmidcpl.c
+    wmiobject.c
+    wmipath.c
+    wmistore.c
+    wmisvc.c)
 
 BISON_TARGET(wql wql.y ${CMAKE_CURRENT_BINARY_DIR}/wql.tab.c)
 if(MSVC)

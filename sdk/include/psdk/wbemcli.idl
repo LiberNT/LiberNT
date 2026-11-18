@@ -173,7 +173,59 @@ typedef [v1_enum] enum tag_WBEMSTATUS
     WBEM_E_ENCRYPTED_CONNECTION_REQUIRED    = 0x80041087,
     WBEM_E_PROVIDER_TIMED_OUT               = 0x80041088,
     WBEM_E_NO_KEY                           = 0x80041089,
-    WBEM_E_PROVIDER_DISABLED                = 0x8004108a
+    WBEM_E_PROVIDER_DISABLED                = 0x8004108a,
+    WBEMESS_E_REGISTRATION_TOO_BROAD        = 0x80042001,
+    WBEMESS_E_REGISTRATION_TOO_PRECISE      = 0x80042002,
+    WBEMESS_E_AUTHZ_NOT_PRIVILEGED          = 0x80042003,
+    WBEMMOF_E_EXPECTED_QUALIFIER_NAME       = 0x80044001,
+    WBEMMOF_E_EXPECTED_SEMI                 = 0x80044002,
+    WBEMMOF_E_EXPECTED_OPEN_BRACE           = 0x80044003,
+    WBEMMOF_E_EXPECTED_CLOSE_BRACE          = 0x80044004,
+    WBEMMOF_E_EXPECTED_CLOSE_BRACKET        = 0x80044005,
+    WBEMMOF_E_EXPECTED_CLOSE_PAREN          = 0x80044006,
+    WBEMMOF_E_ILLEGAL_CONSTANT_VALUE        = 0x80044007,
+    WBEMMOF_E_EXPECTED_TYPE_IDENTIFIER      = 0x80044008,
+    WBEMMOF_E_EXPECTED_OPEN_PAREN           = 0x80044009,
+    WBEMMOF_E_UNRECOGNIZED_TOKEN            = 0x8004400a,
+    WBEMMOF_E_UNRECOGNIZED_TYPE             = 0x8004400b,
+    WBEMMOF_E_EXPECTED_PROPERTY_NAME        = 0x8004400c,
+    WBEMMOF_E_TYPEDEF_NOT_SUPPORTED         = 0x8004400d,
+    WBEMMOF_E_UNEXPECTED_ALIAS              = 0x8004400e,
+    WBEMMOF_E_UNEXPECTED_ARRAY_INIT         = 0x8004400f,
+    WBEMMOF_E_INVALID_AMENDMENT_SYNTAX      = 0x80044010,
+    WBEMMOF_E_INVALID_DUPLICATE_AMENDMENT   = 0x80044011,
+    WBEMMOF_E_INVALID_PRAGMA                = 0x80044012,
+    WBEMMOF_E_INVALID_NAMESPACE_SYNTAX      = 0x80044013,
+    WBEMMOF_E_EXPECTED_CLASS_NAME           = 0x80044014,
+    WBEMMOF_E_TYPE_MISMATCH                 = 0x80044015,
+    WBEMMOF_E_EXPECTED_ALIAS_NAME           = 0x80044016,
+    WBEMMOF_E_INVALID_CLASS_DECLARATION     = 0x80044017,
+    WBEMMOF_E_INVALID_INSTANCE_DECLARATION  = 0x80044018,
+    WBEMMOF_E_EXPECTED_DOLLAR               = 0x80044019,
+    WBEMMOF_E_CIMTYPE_QUALIFIER             = 0x8004401a,
+    WBEMMOF_E_DUPLICATE_PROPERTY            = 0x8004401b,
+    WBEMMOF_E_INVALID_NAMESPACE_SPECIFICATION= 0x8004401c,
+    WBEMMOF_E_OUT_OF_RANGE                  = 0x8004401d,
+    WBEMMOF_E_INVALID_FILE                  = 0x8004401e,
+    WBEMMOF_E_ALIASES_IN_EMBEDDED           = 0x8004401f,
+    WBEMMOF_E_NULL_ARRAY_ELEM               = 0x80044020,
+    WBEMMOF_E_DUPLICATE_QUALIFIER           = 0x80044021,
+    WBEMMOF_E_EXPECTED_FLAVOR_TYPE          = 0x80044022,
+    WBEMMOF_E_INCOMPATIBLE_FLAVOR_TYPES     = 0x80044023,
+    WBEMMOF_E_MULTIPLE_ALIASES              = 0x80044024,
+    WBEMMOF_E_INCOMPATIBLE_FLAVOR_TYPES2    = 0x80044025,
+    WBEMMOF_E_NO_ARRAYS_RETURNED            = 0x80044026,
+    WBEMMOF_E_MUST_BE_IN_OR_OUT             = 0x80044027,
+    WBEMMOF_E_INVALID_FLAGS_SYNTAX          = 0x80044028,
+    WBEMMOF_E_EXPECTED_BRACE_OR_BAD_TYPE    = 0x80044029,
+    WBEMMOF_E_UNSUPPORTED_CIMV22_QUAL_VALUE = 0x8004402a,
+    WBEMMOF_E_UNSUPPORTED_CIMV22_DATA_TYPE  = 0x8004402b,
+    WBEMMOF_E_INVALID_DELETEINSTANCE_SYNTAX = 0x8004402c,
+    WBEMMOF_E_INVALID_QUALIFIER_SYNTAX      = 0x8004402d,
+    WBEMMOF_E_QUALIFIER_USED_OUTSIDE_SCOPE  = 0x8004402e,
+    WBEMMOF_E_ERROR_CREATING_TEMP_FILE      = 0x8004402f,
+    WBEMMOF_E_ERROR_INVALID_INCLUDE_FILE    = 0x80044030,
+    WBEMMOF_E_INVALID_DELETECLASS_SYNTAX    = 0x80044031
 } WBEMSTATUS;
 
 typedef [v1_enum] enum tag_WBEM_STATUS_TYPE
@@ -225,6 +277,25 @@ typedef [v1_enum] enum tag_WBEM_FLAVOR_TYPE
     WBEM_FLAVOR_AMENDED                         = 0x80,
     WBEM_FLAVOR_MASK_AMENDED                    = 0x80
 } WBEM_FLAVOR_TYPE;
+
+typedef [v1_enum] enum tag_WBEM_QUERY_FLAG_TYPE
+{
+    WBEM_FLAG_DEEP      = 0,
+    WBEM_FLAG_SHALLOW   = 1,
+    WBEM_FLAG_PROTOTYPE = 2
+} WBEM_QUERY_FLAG_TYPE;
+
+typedef [v1_enum] enum tag_WBEM_CHANGE_FLAG_TYPE
+{
+    WBEM_FLAG_CREATE_OR_UPDATE  = 0,
+    WBEM_FLAG_UPDATE_ONLY       = 0x1,
+    WBEM_FLAG_CREATE_ONLY       = 0x2,
+    WBEM_FLAG_UPDATE_COMPATIBLE = 0,
+    WBEM_FLAG_UPDATE_SAFE_MODE  = 0x20,
+    WBEM_FLAG_UPDATE_FORCE_MODE = 0x40,
+    WBEM_MASK_UPDATE_MODE       = 0x60,
+    WBEM_FLAG_ADVISORY          = 0x10000
+} WBEM_CHANGE_FLAG_TYPE;
 
 typedef [v1_enum] enum tag_WBEM_GENUS_TYPE
 {
@@ -900,6 +971,76 @@ interface IWbemConfigureRefresher : IUnknown
         [in] IWbemContext *pContext,
         [out] IWbemHiPerfEnum **ppEnum,
         [out] long *plId);
+};
+
+typedef struct tag_CompileStatusInfo
+{
+    long lPhaseError;
+    HRESULT hRes;
+    long ObjectNum;
+    long FirstLine;
+    long LastLine;
+    DWORD dwOutFlags;
+} WBEM_COMPILE_STATUS_INFO;
+
+typedef [v1_enum] enum tag_WBEM_COMPILER_OPTIONS
+{
+    WBEM_FLAG_CHECK_ONLY       = 0x1,
+    WBEM_FLAG_AUTORECOVER      = 0x2,
+    WBEM_FLAG_WMI_CHECK        = 0x4,
+    WBEM_FLAG_CONSOLE_PRINT    = 0x8,
+    WBEM_FLAG_DONT_ADD_TO_LIST = 0x10,
+    WBEM_FLAG_SPLIT_FILES      = 0x20,
+    WBEM_FLAG_STORE_FILE       = 0x100
+} WBEM_COMPILER_OPTIONS;
+
+[
+    object,
+    restricted,
+    local,
+    uuid(6daf974e-2e37-11d2-aec9-00c04fb68820)
+]
+interface IMofCompiler : IUnknown
+{
+    HRESULT CompileFile(
+        [in, string] LPWSTR FileName,
+        [in, string] LPWSTR ServerAndNamespace,
+        [in, string] LPWSTR User,
+        [in, string] LPWSTR Authority,
+        [in, string] LPWSTR Password,
+        [in] LONG lOptionFlags,
+        [in] LONG lClassFlags,
+        [in] LONG lInstanceFlags,
+        [in, out] WBEM_COMPILE_STATUS_INFO *pInfo);
+
+    HRESULT CompileBuffer(
+        [in] long BuffSize,
+        [in, size_is(BuffSize)] BYTE *pBuffer,
+        [in, string] LPWSTR ServerAndNamespace,
+        [in, string] LPWSTR User,
+        [in, string] LPWSTR Authority,
+        [in, string] LPWSTR Password,
+        [in] LONG lOptionFlags,
+        [in] LONG lClassFlags,
+        [in] LONG lInstanceFlags,
+        [in, out] WBEM_COMPILE_STATUS_INFO *pInfo);
+
+    HRESULT CreateBMOF(
+        [in, string] LPWSTR TextFileName,
+        [in, string] LPWSTR BMOFFileName,
+        [in, string] LPWSTR ServerAndNamespace,
+        [in] LONG lOptionFlags,
+        [in] LONG lClassFlags,
+        [in] LONG lInstanceFlags,
+        [in, out] WBEM_COMPILE_STATUS_INFO *pInfo);
+};
+
+[
+    uuid(6daf9757-2e37-11d2-aec9-00c04fb68820)
+]
+coclass MofCompiler
+{
+    interface IMofCompiler;
 };
 
 [

@@ -185,6 +185,9 @@ UsbNetInitializeController(
     {
         if (!UsbNetLocalBroadcast)
             Status = UsbWaitForTethering(Adapter);
+        else if (Adapter->PhonePort)
+            UsbNetTrace("USB debugger: the phone on root port %lu is not tethering, and this boot entry does not wait for it\n",
+                        Adapter->PhonePort);
         if (!NT_SUCCESS(Status))
             Status = UsbStartEthernet(Adapter);
     }

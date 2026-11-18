@@ -153,7 +153,7 @@ python3 sdk/tools/kdnet/kdnet.py --local <interface cabled to the machine>
 - The machine's boot log says what the debugger found. `USB debugger: using <vid>:<pid> on root port <n>, <h> hub(s) away, <speed> Mbit/s` names the adapter and its path. `no Ethernet link after 8000 ms, reported 1, carrier 0` is the adapter reporting that its own cable has no link: check the cable and whatever is on its far end before suspecting the debugger.
 
 The debugger NIC is chosen in this order, whatever the mode:
-1. A phone: an RNDIS function, or a device with an ADB interface. With tethering off, the boot waits for it; unplugging it moves on to the next choice.
+1. A phone: an RNDIS function, an ADB interface, or an MTP function (the `MTP` compatible ID of its Microsoft OS descriptor, which Android reports even with USB debugging off). With tethering off, the boot waits for it and follows it through the re-enumerations of the switch, taking whatever network function it brings up (RNDIS, ECM, NCM or EEM); unplugging it, or 10 s with nothing on its port that looks like a phone, moves on to the next choice. `LOCAL_BROADCAST=1` never waits for a phone and only logs that it saw one. An iPhone is not recognized.
 2. A USB-Ethernet adapter with a link (CDC-ECM, CDC-NCM or CDC-EEM). `kd_usbnet` drives the RTL8153 out of the standby a previous OS leaves it in across a warm reboot.
 3. A PCI NIC with a link.
 4. If nothing has a link, the first device found, which starts working when its link comes up.

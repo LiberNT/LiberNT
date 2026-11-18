@@ -166,6 +166,7 @@ PTHREADINFO FASTCALL Imm32CurrentPti(VOID);
 HRESULT CtfImmTIMCreateInputContext(_In_ HIMC hIMC);
 HRESULT CtfImmTIMDestroyInputContext(_In_ HIMC hIMC);
 HRESULT CtfImmCoInitialize(VOID);
+VOID Imm32FreeTLS(VOID);
 HRESULT CtfImeCreateThreadMgr(VOID);
 HRESULT CtfImeDestroyThreadMgr(VOID);
 HRESULT Imm32ActivateOrDeactivateTIM(_In_ BOOL bCreate);

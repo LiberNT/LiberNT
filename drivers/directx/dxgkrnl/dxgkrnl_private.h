@@ -878,6 +878,8 @@ struct _DXGKRNL_ADAPTER
      * Count matches NumberOfChildren.
      */
     PDXGK_CHILD_DESCRIPTOR      ChildDescriptors;
+    struct _DXGK_CHILD_CONNECTION_RECORD *ChildConnectionRecords;
+    ULONG                       ChildConnectionRecordCount;
     DECLSPEC_ALIGN(8) volatile LONG64 ChildEnumerationEpoch;
     volatile LONG               ChildRelationsEnumerated;
 

@@ -552,8 +552,8 @@ KiProcessDeferredReadyList(
 
 /*
  * Declares a thread ready. The work of placing it is deferred so that the
- * caller, which holds the dispatcher database, never has to reach for another
- * processor's lock underneath it.
+ * caller, which holds the thread's lock and an object's, never has to reach
+ * for another processor's lock underneath them.
  */
 VOID
 NTAPI
@@ -760,8 +760,8 @@ KiYieldDelayExecution(VOID)
  * Gives the processor up. Returns the status the wait ended with, which is only
  * known once this thread runs again.
  *
- * Entered at SYNCH_LEVEL with the dispatcher database held and the thread's
- * wait already published; returns at the thread's own wait IRQL.
+ * Entered at SYNCH_LEVEL with the thread's wait already committed and no lock
+ * held; returns at the thread's own wait IRQL.
  */
 LONG_PTR
 FASTCALL
@@ -788,8 +788,6 @@ KiSwapThread(
     {
         KxActivateWaiterQueue(Thread);
     }
-
-    KiReleaseDispatcherLockFromSynchLevel();
 
     /* Placing these needs other processors' locks, so it happens unlocked */
     KiCheckDeferredReadyList(Prcb);
@@ -834,6 +832,9 @@ KiSwapThread(
 
         ApcPending = KiSwapContext(WaitIrql, Thread);
     }
+
+    if (NormalWait)
+        KiEndThreadWait(Thread);
 
     /*
      * Back on this thread's own stack. A kernel APC that came in while it was
@@ -1377,15 +1378,15 @@ KiQueueThreadForReaping(
     /*
      * Only the thread that found the list empty owes the reaper a wake-up. This
      * runs at SYNCH_LEVEL right after a switch, so the work item goes into the
-     * worker queue under the dispatcher lock rather than through ExQueueWorkItem.
+     * worker queue under the queue's own lock rather than through ExQueueWorkItem.
      */
     if (Head == NULL)
     {
-        KiAcquireDispatcherLockAtSynchLevel();
+        KiAcquireDispatcherObject(&ExWorkerQueue[CriticalWorkQueue].WorkerQueue.Header);
         KiInsertQueue(&ExWorkerQueue[CriticalWorkQueue].WorkerQueue,
                       &PspReaperWorkItem.List,
                       FALSE);
-        KiReleaseDispatcherLockFromSynchLevel();
+        KiReleaseDispatcherObject(&ExWorkerQueue[CriticalWorkQueue].WorkerQueue.Header);
     }
 }
 

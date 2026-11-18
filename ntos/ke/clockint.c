@@ -1041,7 +1041,11 @@ KiChargeThreadCycleTime(
         SmpDbgCycleCharge(Prcb->Number, Charge, FALSE);
 }
 
-/* PUBLIC FUNCTIONS: SETTING THE CLOCK ****************************************/
+typedef struct _KI_SYSTEM_TIME_CHANGE
+{
+    LARGE_INTEGER NewTime;
+    LARGE_INTEGER OldTime;
+} KI_SYSTEM_TIME_CHANGE, *PKI_SYSTEM_TIME_CHANGE;
 
 /*
  * Moves the system time to a new value and carries every armed timer with it.
@@ -1049,15 +1053,12 @@ KiChargeThreadCycleTime(
  * moment on the new one is a different interrupt time; a relative timer is
  * unaffected and must not be moved.
  */
+static
 VOID
-NTAPI
-KeSetSystemTime(
-    _In_ PLARGE_INTEGER NewSystemTime,
-    _Out_ PLARGE_INTEGER OldSystemTime,
-    _In_ BOOLEAN FixInterruptTime,
-    _In_opt_ PLARGE_INTEGER HalTime)
+KiChangeSystemTime(
+    _Inout_ PKI_SYSTEM_TIME_CHANGE Change)
 {
-    KIRQL OldIrql, ClockIrql;
+    KIRQL ClockIrql;
     PKSPIN_LOCK_QUEUE LockQueue;
     LIST_ENTRY AbsoluteList;
     LARGE_INTEGER Difference, Previous, NewTime;
@@ -1066,18 +1067,16 @@ KeSetSystemTime(
     ULONG Bucket;
     ULONG Hand;
 
-    ASSERT_IRQL_LESS_OR_EQUAL(APC_LEVEL);
+    ASSERT(KeGetCurrentIrql() >= SYNCH_LEVEL);
 
     InitializeListHead(&AbsoluteList);
-
-    OldIrql = KiAcquireDispatcherLock();
 
     /* Above the clock and the sleep IPI, so neither can wait on this processor for the lock it holds */
     ClockIrql = KfRaiseIrql(IPI_LEVEL);
     KxAcquireSpinLock(&KiSystemTimeLock);
 
     Previous.QuadPart = (LONGLONG)KiGetSystemTime();
-    NewTime = *NewSystemTime;
+    NewTime = Change->NewTime;
     Difference.QuadPart = NewTime.QuadPart - Previous.QuadPart;
 
     KiWriteSystemTime(&KiSystemTimeValue, NewTime);
@@ -1116,12 +1115,6 @@ KeSetSystemTime(
         KiReleaseTimerLock(LockQueue);
     }
 
-    if (FixInterruptTime)
-    {
-        /* TODO: no platform here reports the interrupt time the firmware kept */
-        UNREFERENCED_PARAMETER(HalTime);
-    }
-
     /* Put the absolute timers back where the new clock says they belong */
     while (!IsListEmpty(&AbsoluteList))
     {
@@ -1150,9 +1143,60 @@ KeSetSystemTime(
         KxInsertTimer(Timer, Hand);
     }
 
-    KiReleaseDispatcherLock(OldIrql);
+    Change->OldTime = Previous;
+}
 
-    *OldSystemTime = Previous;
+/* Every processor is held here while the timers move: none of them can be inside a timer, or working out an absolute due time against the old clock */
+static
+VOID
+NTAPI
+KiSystemTimeChangeDpc(
+    _In_ PKDPC Dpc,
+    _In_opt_ PVOID DeferredContext,
+    _In_opt_ PVOID SystemArgument1,
+    _In_opt_ PVOID SystemArgument2)
+{
+    KIRQL OldIrql;
+
+    UNREFERENCED_PARAMETER(Dpc);
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+
+    if (KeSignalCallDpcSynchronize(SystemArgument2))
+    {
+        OldIrql = KiEnterDispatcher();
+        KiChangeSystemTime((PKI_SYSTEM_TIME_CHANGE)DeferredContext);
+        KiExitDispatcher(OldIrql);
+    }
+
+    KeSignalCallDpcSynchronize(SystemArgument2);
+    KeSignalCallDpcDone(SystemArgument1);
+}
+
+/* PUBLIC FUNCTIONS: SETTING THE CLOCK ****************************************/
+
+VOID
+NTAPI
+KeSetSystemTime(
+    _In_ PLARGE_INTEGER NewSystemTime,
+    _Out_ PLARGE_INTEGER OldSystemTime,
+    _In_ BOOLEAN FixInterruptTime,
+    _In_opt_ PLARGE_INTEGER HalTime)
+{
+    KI_SYSTEM_TIME_CHANGE Change;
+
+    ASSERT_IRQL_LESS_OR_EQUAL(APC_LEVEL);
+
+    if (FixInterruptTime)
+    {
+        /* TODO: no platform here reports the interrupt time the firmware kept */
+        UNREFERENCED_PARAMETER(HalTime);
+    }
+
+    Change.NewTime = *NewSystemTime;
+    Change.OldTime.QuadPart = 0;
+    KeGenericCallDpc(KiSystemTimeChangeDpc, &Change);
+
+    *OldSystemTime = Change.OldTime;
 }
 
 /*

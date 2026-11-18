@@ -13,10 +13,7 @@ parser.add_argument('--cc', required=True)
 args = parser.parse_args()
 src = kt.Sources(args.root)
 
-set_time = src.definition('clockint.c', 'KeSetSystemTime')
-needle = '        Entry = RemoveHeadList(&AbsoluteList);\n'
-assert set_time.count(needle) == 1
-set_time = set_time.replace(needle, '        TestPause();\n' + needle)
+set_time = src.system_time_setter('TestPause();')
 
 fixture = kt.PRELUDE + r'''
 static volatile int Paused, Attempted, Done, DoneDuringPause;

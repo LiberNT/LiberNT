@@ -250,6 +250,7 @@ list(APPEND SOURCE
     SatisfiedWait.c
     ScanfSecure.c
     SharedUserData.c
+    WorkingSetWatch.c
     StackOverflow.c
     StackProbe.c
     SystemInfo.c

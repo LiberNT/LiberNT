@@ -126,9 +126,13 @@ HINSTANCE g_hOle32 = NULL;
 
 typedef HRESULT (WINAPI *FN_CoInitializeEx)(LPVOID, DWORD);
 typedef VOID    (WINAPI *FN_CoUninitialize)(VOID);
+typedef HRESULT (WINAPI *FN_CoRegisterInitializeSpy)(IInitializeSpy*, ULARGE_INTEGER*);
+typedef HRESULT (WINAPI *FN_CoRevokeInitializeSpy)(ULARGE_INTEGER);
 
-FN_CoInitializeEx OLE32_FN(CoInitializeEx) = NULL;
-FN_CoUninitialize OLE32_FN(CoUninitialize) = NULL;
+FN_CoInitializeEx          OLE32_FN(CoInitializeEx)          = NULL;
+FN_CoUninitialize          OLE32_FN(CoUninitialize)          = NULL;
+FN_CoRegisterInitializeSpy OLE32_FN(CoRegisterInitializeSpy) = NULL;
+FN_CoRevokeInitializeSpy   OLE32_FN(CoRevokeInitializeSpy)   = NULL;
 
 #define Imm32GetOle32Fn(func_name) \
     IMM32_GET_FN(&OLE32_FN(func_name), &g_hOle32, L"ole32.dll", func_name)
@@ -300,6 +304,194 @@ Imm32GetTLS(VOID)
     return (IMMTLSDATA*)TlsGetValue(g_dwTLSIndex);
 }
 
+/*
+ * The apartment CUAS gives a thread belongs to the application as soon as it initializes COM itself:
+ * its first nested initialization succeeds as a first one, and a multithreaded one replaces ours.
+ */
+typedef struct IMMCOINITSPY
+{
+    IInitializeSpy IInitializeSpy_iface;
+    LONG cRefs;
+    BOOL bHoldsApartment; /* Our CoInitializeEx reference is outstanding */
+    BOOL bCanRelease;     /* No unbalanced CoUninitialize has consumed it since */
+    BOOL bReplaced;       /* The application chose another apartment; we never initialize COM again */
+} IMMCOINITSPY, *PIMMCOINITSPY;
+
+static inline PIMMCOINITSPY
+Imm32SpyFromIface(IInitializeSpy *iface)
+{
+    return CONTAINING_RECORD(iface, IMMCOINITSPY, IInitializeSpy_iface);
+}
+
+static PIMMCOINITSPY
+Imm32GetCoInitSpy(VOID)
+{
+    IMMTLSDATA *pData = Imm32GetTLS();
+
+    if (!pData || !pData->pSpy)
+        return NULL;
+    return Imm32SpyFromIface(pData->pSpy);
+}
+
+static VOID
+Imm32ReleaseApartment(_In_ BOOL bRevoke)
+{
+    IMMTLSDATA *pData = Imm32GetTLS();
+    PIMMCOINITSPY pSpy = Imm32GetCoInitSpy();
+
+    if (!pSpy || pSpy->bReplaced)
+        return;
+
+    if (bRevoke && pData->uliCookie.QuadPart && Imm32GetOle32Fn(CoRevokeInitializeSpy))
+    {
+        OLE32_FN(CoRevokeInitializeSpy)(pData->uliCookie);
+        pData->uliCookie.QuadPart = 0;
+    }
+
+    if (!pSpy->bHoldsApartment)
+        return;
+
+    pSpy->bHoldsApartment = FALSE;
+    if (pSpy->bCanRelease && Imm32GetOle32Fn(CoUninitialize))
+        OLE32_FN(CoUninitialize)();
+    if (bRevoke)
+        pSpy->bCanRelease = FALSE;
+    ASSERT(!pSpy->bHoldsApartment);
+}
+
+static STDMETHODIMP
+Imm32Spy_QueryInterface(IInitializeSpy *iface, REFIID riid, void **ppvObj)
+{
+    if (IsEqualIID(riid, &IID_IUnknown) || IsEqualIID(riid, &IID_IInitializeSpy))
+    {
+        *ppvObj = iface;
+        InterlockedIncrement(&Imm32SpyFromIface(iface)->cRefs);
+        return S_OK;
+    }
+
+    *ppvObj = NULL;
+    return E_NOINTERFACE;
+}
+
+static STDMETHODIMP_(ULONG)
+Imm32Spy_AddRef(IInitializeSpy *iface)
+{
+    return InterlockedIncrement(&Imm32SpyFromIface(iface)->cRefs);
+}
+
+static STDMETHODIMP_(ULONG)
+Imm32Spy_Release(IInitializeSpy *iface)
+{
+    PIMMCOINITSPY pSpy = Imm32SpyFromIface(iface);
+    LONG cRefs = InterlockedDecrement(&pSpy->cRefs);
+
+    ASSERT(cRefs >= 0);
+    if (!cRefs)
+        ImmLocalFree(pSpy);
+    return cRefs;
+}
+
+static STDMETHODIMP
+Imm32Spy_PreInitialize(IInitializeSpy *iface, DWORD dwCoInit, DWORD dwCurThreadAptRefs)
+{
+    PIMMCOINITSPY pSpy = Imm32SpyFromIface(iface);
+
+    if (pSpy != Imm32GetCoInitSpy())
+        return S_OK;
+
+    if (pSpy->bHoldsApartment && !(dwCoInit & COINIT_APARTMENTTHREADED) && dwCurThreadAptRefs == 1)
+    {
+        Imm32ReleaseApartment(TRUE);
+        pSpy->bReplaced = TRUE;
+    }
+    return S_OK;
+}
+
+static STDMETHODIMP
+Imm32Spy_PostInitialize(IInitializeSpy *iface, HRESULT hrCoInit, DWORD dwCoInit, DWORD dwNewThreadAptRefs)
+{
+    PIMMCOINITSPY pSpy = Imm32SpyFromIface(iface);
+
+    if (pSpy != Imm32GetCoInitSpy())
+        return hrCoInit;
+
+    if (pSpy->bHoldsApartment && hrCoInit == S_FALSE && dwNewThreadAptRefs == 2)
+        hrCoInit = S_OK;
+    if (SUCCEEDED(hrCoInit))
+        pSpy->bCanRelease = TRUE;
+    return hrCoInit;
+}
+
+static STDMETHODIMP
+Imm32Spy_PreUninitialize(IInitializeSpy *iface, DWORD dwCurThreadAptRefs)
+{
+    return S_OK;
+}
+
+static STDMETHODIMP
+Imm32Spy_PostUninitialize(IInitializeSpy *iface, DWORD dwNewThreadAptRefs)
+{
+    PIMMCOINITSPY pSpy = Imm32SpyFromIface(iface);
+
+    if (pSpy != Imm32GetCoInitSpy())
+        return S_OK;
+
+    if (dwNewThreadAptRefs == 1 && pSpy->bHoldsApartment && !ImmGetDefaultIMEWnd(NULL))
+    {
+        /* Nothing on the thread needs CUAS any more */
+        GetWin32ClientInfo()->CI_flags &= ~CI_CTFCOINIT;
+        Imm32ReleaseApartment(FALSE);
+    }
+    else if (!dwNewThreadAptRefs)
+    {
+        pSpy->bCanRelease = FALSE;
+    }
+    return S_OK;
+}
+
+static IInitializeSpyVtbl g_Imm32SpyVtbl =
+{
+    Imm32Spy_QueryInterface,
+    Imm32Spy_AddRef,
+    Imm32Spy_Release,
+    Imm32Spy_PreInitialize,
+    Imm32Spy_PostInitialize,
+    Imm32Spy_PreUninitialize,
+    Imm32Spy_PostUninitialize,
+};
+
+static PIMMCOINITSPY
+Imm32CreateCoInitSpy(_Inout_ IMMTLSDATA *pData)
+{
+    PIMMCOINITSPY pSpy;
+
+    if (pData->pSpy)
+        return Imm32SpyFromIface(pData->pSpy);
+
+    pSpy = ImmLocalAlloc(HEAP_ZERO_MEMORY, sizeof(*pSpy));
+    if (IS_NULL_UNEXPECTEDLY(pSpy))
+        return NULL;
+
+    pSpy->IInitializeSpy_iface.lpVtbl = &g_Imm32SpyVtbl;
+    pSpy->cRefs = 1;
+    pData->pSpy = &pSpy->IInitializeSpy_iface;
+    return pSpy;
+}
+
+VOID
+Imm32FreeTLS(VOID)
+{
+    IMMTLSDATA *pData = Imm32GetTLS();
+
+    if (!pData)
+        return;
+
+    TlsSetValue(g_dwTLSIndex, NULL);
+    if (pData->pSpy)
+        Imm32Spy_Release(pData->pSpy);
+    ImmLocalFree(pData);
+}
+
 /***********************************************************************
  *		CtfImmEnterCoInitCountSkipMode (IMM32.@)
  */
@@ -337,23 +529,45 @@ BOOL WINAPI CtfImmLeaveCoInitCountSkipMode(VOID)
 HRESULT
 CtfImmCoInitialize(VOID)
 {
+    IMMTLSDATA *pData;
+    PIMMCOINITSPY pSpy;
     HRESULT hr;
 
     if (GetWin32ClientInfo()->CI_flags & CI_CTFCOINIT)
         return S_OK; /* Already initialized */
 
-    if (!Imm32GetOle32Fn(CoInitializeEx))
+    if (!Imm32GetOle32Fn(CoInitializeEx) || !Imm32GetOle32Fn(CoRegisterInitializeSpy))
         return E_FAIL;
+
+    Imm32InitTLS();
+    pData = Imm32AllocateTLS();
+    if (!pData)
+        return E_OUTOFMEMORY;
+
+    pSpy = Imm32CreateCoInitSpy(pData);
+    if (!pSpy)
+        return E_OUTOFMEMORY;
+    if (pSpy->bReplaced)
+        return RPC_E_CHANGED_MODE;
+    ASSERT(!pSpy->bHoldsApartment);
+
+    if (!pData->uliCookie.QuadPart)
+    {
+        hr = OLE32_FN(CoRegisterInitializeSpy)(pData->pSpy, &pData->uliCookie);
+        if (FAILED(hr))
+        {
+            pData->uliCookie.QuadPart = 0;
+            return hr;
+        }
+    }
 
     /* Text services run in a single-threaded apartment; a thread without COM becomes one */
     hr = OLE32_FN(CoInitializeEx)(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr))
         return hr;
 
+    pSpy->bHoldsApartment = TRUE;
     GetWin32ClientInfo()->CI_flags |= CI_CTFCOINIT;
-    Imm32InitTLS();
-    Imm32AllocateTLS();
-
     return S_OK;
 }
 
@@ -367,8 +581,7 @@ CtfImmCoUninitialize(VOID)
         return;
 
     GetWin32ClientInfo()->CI_flags &= ~CI_CTFCOINIT;
-    if (Imm32GetOle32Fn(CoUninitialize))
-        OLE32_FN(CoUninitialize)();
+    Imm32ReleaseApartment(TRUE);
 }
 
 /***********************************************************************
@@ -732,8 +945,14 @@ HRESULT WINAPI
 CtfImmLastEnabledWndDestroy(
     _In_ BOOL bCreate)
 {
+    HRESULT hr;
+
     TRACE("(%d)\n", bCreate);
-    return Imm32ActivateOrDeactivateTIM(bCreate);
+
+    hr = Imm32ActivateOrDeactivateTIM(bCreate);
+    if (!bCreate)
+        CtfImmCoUninitialize();
+    return hr;
 }
 
 /***********************************************************************
@@ -920,6 +1139,7 @@ CtfImmTIMActivate(_In_ HKL hKL)
     if (!ImmLoadIME(hKL))
         Imm32TF_InvalidAssemblyListCacheIfExist();
 
+    /* FIXME: Windows starts the apartment when the input context activates, not at IME window creation */
     CtfImmCoInitialize();
 
     if ((GetWin32ClientInfo()->CI_flags & CI_CTFCOINIT) &&

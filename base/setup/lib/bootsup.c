@@ -570,6 +570,12 @@ SaveBootSector(
     return Status;
 }
 
+static
+NTSTATUS
+InstallMbrBootCode(
+    IN PCWSTR SrcPath,
+    IN HANDLE DstPath,
+    IN HANDLE DiskHandle);
 
 static
 NTSTATUS
@@ -614,10 +620,14 @@ InstallBootCodeToDisk(
         DPRINT1("Unable to lock the volume before installing boot code. Status 0x%08x.\n", LockStatus);
     }
 
-    Status = NtFsControlFile(PartitionHandle, NULL, NULL, NULL, &IoStatusBlock, FSCTL_DISMOUNT_VOLUME, NULL, 0, NULL, 0);
-    if (!NT_SUCCESS(Status))
+    /* The whole disk has no file system to dismount, and RAW fails I/O on the handle that dismounted it */
+    if (InstallBootCode != InstallMbrBootCode)
     {
-        DPRINT1("Unable to dismount the volume before installing boot code. Status 0x%08x.\n", Status);
+        Status = NtFsControlFile(PartitionHandle, NULL, NULL, NULL, &IoStatusBlock, FSCTL_DISMOUNT_VOLUME, NULL, 0, NULL, 0);
+        if (!NT_SUCCESS(Status))
+        {
+            DPRINT1("Unable to dismount the volume before installing boot code. Status 0x%08x.\n", Status);
+        }
     }
 
     /* Install the bootcode (MBR, VBR) */
@@ -844,7 +854,6 @@ InstallBootloaderFiles(
     WCHAR SrcPath[MAX_PATH];
     WCHAR DstPath[MAX_PATH];
 
-    /* FIXME: A preinstalled image has no \loader directory, so Setup started from it cannot write the BIOS boot code. */
     /* Copy FreeLoader to the system partition, always overwriting the older version */
     CombinePaths(SrcPath, ARRAYSIZE(SrcPath), 2, SourceRootPath->Buffer, L"\\loader\\freeldr.sys");
     CombinePaths(DstPath, ARRAYSIZE(DstPath), 2, SystemRootPath->Buffer, L"freeldr.sys");

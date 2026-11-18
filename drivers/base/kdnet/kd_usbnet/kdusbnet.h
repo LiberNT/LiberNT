@@ -157,6 +157,13 @@
 #define USBNET_PHONE_STEP           100
 #define USBNET_PHONE_SETTLE         200
 
+#define USB_MS_OS_STRING_INDEX      0xEE
+#define USB_MS_OS_STRING_LENGTH     18
+#define USB_MS_OS_VENDOR_IN         0xC0
+#define USB_MS_OS_COMPAT_ID         0x0004
+#define USB_MS_OS_COMPAT_HEADER     16
+#define USB_MS_OS_COMPAT_FUNCTION   24
+
 #define USB_HUB_CLASS_IN            0xA0
 #define USB_HUB_CLASS_OUT           0x20
 #define USB_HUB_PORT_IN             0xA3
@@ -349,6 +356,8 @@ typedef struct _USBNET_ADAPTER
     ULONG WaitPort;
     ULONG PhonePort;
     ULONG PhoneRoute;
+    ULONG TetherPort;
+    ULONG TetherRoute;
     BOOLEAN HoldPhone;
     ULONG EthernetPort;
     BOOLEAN AcceptEthernet;

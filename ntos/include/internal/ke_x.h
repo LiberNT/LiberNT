@@ -294,41 +294,27 @@ KiReleaseWaitLock(IN PKPRCB Prcb)
 }
 
 FORCEINLINE
+BOOLEAN
+KiTryAcquireDispatcherObject(IN DISPATCHER_HEADER* Object)
+{
+    ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
+
+    return (BOOLEAN)((InterlockedOr(&Object->Lock, KOBJECT_LOCK_BIT) & KOBJECT_LOCK_BIT) == 0);
+}
+
+FORCEINLINE
+BOOLEAN
+KiIsDispatcherObjectLocked(IN DISPATCHER_HEADER* Object)
+{
+    return (BOOLEAN)((Object->Lock & KOBJECT_LOCK_BIT) != 0);
+}
+
+/* Nothing is taken on the way in: each object, thread, processor and timer bucket has its own lock, and SYNCH_LEVEL keeps the caller on its processor */
+FORCEINLINE
 KIRQL
-KiAcquireDispatcherLock(VOID)
+KiEnterDispatcher(VOID)
 {
-
-    return KeAcquireQueuedSpinLockRaiseToSynch(LockQueueDispatcherLock);
-}
-
-FORCEINLINE
-VOID
-KiReleaseDispatcherLock(IN KIRQL OldIrql)
-{
-
-    KeReleaseQueuedSpinLockFromDpcLevel(&KeGetCurrentPrcb()->
-                                        LockQueue[LockQueueDispatcherLock]);
-
-    KiExitDispatcher(OldIrql);
-}
-
-FORCEINLINE
-VOID
-KiAcquireDispatcherLockAtSynchLevel(VOID)
-{
-
-    ASSERT(KeGetCurrentIrql() >= SYNCH_LEVEL);
-    KeAcquireQueuedSpinLockAtDpcLevel(&KeGetCurrentPrcb()->
-                                      LockQueue[LockQueueDispatcherLock]);
-}
-
-FORCEINLINE
-VOID
-KiReleaseDispatcherLockFromSynchLevel(VOID)
-{
-
-    KeReleaseQueuedSpinLockFromDpcLevel(&KeGetCurrentPrcb()->
-                                        LockQueue[LockQueueDispatcherLock]);
+    return KeRaiseIrqlToSynchLevel();
 }
 
 FORCEINLINE
@@ -752,6 +738,7 @@ KxInsertTimer(
     PKSPIN_LOCK_QUEUE LockQueue;
 
     ASSERT(KeGetCurrentIrql() >= SYNCH_LEVEL);
+    ASSERT(KiIsDispatcherObjectLocked(&Timer->Header));
 
     LockQueue = KiAcquireTimerLock(Hand);
     if (Timer->Header.Inserted && KiInsertTimerTable(Timer, Hand))
@@ -774,6 +761,7 @@ KxInsertThreadWaitTimer(IN PKTIMER Timer,
 
     ASSERT(KeGetCurrentIrql() >= SYNCH_LEVEL);
     ASSERT(Timer->Header.Inserted);
+    ASSERT(KiIsDispatcherObjectLocked(&Timer->Header));
 
     LockQueue = KiAcquireTimerLock(Hand);
 
@@ -847,9 +835,15 @@ BOOLEAN
 KxRemoveTreeTimer(
     _Inout_ PKTIMER Timer)
 {
-    ULONG Hand = KiComputeTimerTableIndex(Timer->DueTime.QuadPart);
-    PKSPIN_LOCK_QUEUE LockQueue = KiAcquireTimerLock(Hand);
-    BOOLEAN Removed = Timer->Header.Inserted;
+    ULONG Hand;
+    PKSPIN_LOCK_QUEUE LockQueue;
+    BOOLEAN Removed;
+
+    ASSERT(KiIsDispatcherObjectLocked(&Timer->Header));
+
+    Hand = KiComputeTimerTableIndex(Timer->DueTime.QuadPart);
+    LockQueue = KiAcquireTimerLock(Hand);
+    Removed = Timer->Header.Inserted;
 
     if (Removed)
     {
@@ -933,15 +927,41 @@ KiDecrementQueueCurrentCount(IN PKQUEUE Queue)
     return InterlockedDecrement((volatile LONG *)&Queue->CurrentCount);
 }
 
+/*
+ * A thread's queue is written under both the queue's lock and the thread's, so
+ * either one holds it still. The thread lock comes second everywhere else, so
+ * from under it the queue is only tried: a rundown that has the queue is
+ * waiting for this very thread lock to take the thread off it.
+ */
+FORCEINLINE
+PKQUEUE
+KiLockThreadQueue(IN PKTHREAD Thread)
+{
+    PKQUEUE Queue;
+
+    for (;;)
+    {
+        KiAcquireThreadLock(Thread);
+        Queue = Thread->Queue;
+        if ((Queue == NULL) || KiTryAcquireDispatcherObject(&Queue->Header))
+        {
+            KiReleaseThreadLock(Thread);
+            return Queue;
+        }
+
+        KiReleaseThreadLock(Thread);
+        YieldProcessor();
+    }
+}
+
 FORCEINLINE
 VOID
 KxActivateWaiterQueue(IN PKTHREAD Thread)
 {
-    PKQUEUE Queue = Thread->Queue;
+    PKQUEUE Queue = KiLockThreadQueue(Thread);
 
     if (Queue)
     {
-        KiAcquireDispatcherObject(&Queue->Header);
         KiActivateWaiterQueue(Queue);
         KiReleaseDispatcherObject(&Queue->Header);
     }
@@ -962,14 +982,32 @@ KxIsThreadWaitInterrupted(IN PKTHREAD Thread)
     return (Thread->WaitMode != KernelMode) && Thread->ApcState.UserApcPending;
 }
 
+#define KI_WAIT_IN_PROGRESS 0
+#define KI_WAIT_COMMITTED   1
+#define KI_WAIT_ABORTED     2
+
+/* No block of an earlier wait is still on an object here, so nothing can reach the register until the first block of this wait is published */
+FORCEINLINE
+VOID
+KiBeginThreadWait(
+    _Inout_ PKTHREAD Thread)
+{
+    ASSERT(Thread == KeGetCurrentThread());
+    ASSERT(Thread->WaitRegister.State != KI_WAIT_COMMITTED);
+
+    Thread->WaitRegister.State = KI_WAIT_IN_PROGRESS;
+}
+
 FORCEINLINE
 BOOLEAN
 KxTryBeginThreadWait(IN PKTHREAD Thread)
 {
     KiAcquireThreadLock(Thread);
-    if (KiIsKernelApcDeliverable(Thread, Thread->WaitIrql) ||
+    if ((Thread->WaitRegister.State != KI_WAIT_IN_PROGRESS) ||
+        KiIsKernelApcDeliverable(Thread, Thread->WaitIrql) ||
         KxIsThreadWaitInterrupted(Thread))
     {
+        Thread->WaitRegister.State = KI_WAIT_ABORTED;
         KiReleaseThreadLock(Thread);
         return FALSE;
     }
@@ -983,7 +1021,7 @@ KxExitDispatcherForRetry(IN PKTHREAD Thread)
 {
     KIRQL WaitIrql = Thread->WaitIrql;
 
-    KiReleaseDispatcherLock(WaitIrql);
+    KiExitDispatcher(WaitIrql);
     if (KiIsKernelApcDeliverable(Thread, WaitIrql))
         HalRequestSoftwareInterrupt(APC_LEVEL);
 }
@@ -993,6 +1031,9 @@ VOID
 KxCommitThreadWait(IN PKTHREAD Thread,
                    IN BOOLEAN Swappable)
 {
+    ASSERT(Thread->WaitRegister.State == KI_WAIT_IN_PROGRESS);
+
+    Thread->WaitRegister.State = KI_WAIT_COMMITTED;
     Thread->State = Waiting;
     KiAddThreadToWaitList(Thread, Swappable);
     ASSERT(Thread->WaitIrql <= DISPATCH_LEVEL);
@@ -1032,21 +1073,9 @@ KxUnwaitThread(
     _Inout_ DISPATCHER_HEADER *Object,
     _In_ KPRIORITY Increment)
 {
-    PLIST_ENTRY WaitList = &Object->WaitListHead;
-    PKWAIT_BLOCK WaitBlock;
+    ASSERT(Object->SignalState > 0);
 
-    ASSERT(!IsListEmpty(WaitList));
-
-    do
-    {
-        WaitBlock = CONTAINING_RECORD(WaitList->Flink, KWAIT_BLOCK, WaitListEntry);
-        if (WaitBlock->WaitType == WaitDpc)
-            IopSignalWaitCompletionPacket(WaitBlock);
-        else
-            KiUnwaitThread(WaitBlock->Thread,
-                           (WaitBlock->WaitType == WaitAny) ? WaitBlock->WaitKey : STATUS_KERNEL_APC,
-                           Increment);
-    } while (!IsListEmpty(WaitList));
+    KiWaitTest(Object, Increment);
 }
 
 FORCEINLINE

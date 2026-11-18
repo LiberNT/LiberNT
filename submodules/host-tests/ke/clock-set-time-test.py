@@ -15,6 +15,11 @@ args = parser.parse_args()
 source = (pathlib.Path(args.root) / 'ntos/ke/clockint.c').read_text()
 
 
+def typedef(name):
+    start = source.index('typedef struct _' + name + '\n')
+    return source[start:source.index(';', source.index('} ' + name, start)) + 1]
+
+
 def body(name):
     start = source.index('\n' + name + '(')
     start = source.index('{', start)
@@ -40,6 +45,7 @@ fixture = r'''
 #define NTAPI
 #define FASTCALL
 #define APC_LEVEL 1
+#define DISPATCH_LEVEL 2
 #define SYNCH_LEVEL 12
 #define CLOCK_LEVEL 13
 #define IPI_LEVEL 14
@@ -62,7 +68,7 @@ typedef struct _LIST_ENTRY { struct _LIST_ENTRY *Flink, *Blink; } LIST_ENTRY, *P
 typedef union { ULONGLONG QuadPart; struct { uint32_t LowPart; uint32_t HighPart; }; } ULARGE_INTEGER;
 typedef struct { struct { BOOLEAN Absolute, Inserted; UCHAR Hand; } Header; LIST_ENTRY TimerListEntry; ULARGE_INTEGER DueTime; } KTIMER, *PKTIMER;
 typedef struct { LIST_ENTRY Entry; } KTIMER_TABLE_ENTRY;
-typedef void *PKSPIN_LOCK_QUEUE;
+typedef void *PKSPIN_LOCK_QUEUE, *PVOID, *PKDPC;
 static volatile KSYSTEM_TIME KiSystemTimeValue, KiInterruptTimeValue, KeTickCount;
 static KSPIN_LOCK KiSystemTimeLock __attribute__((unused));
 static KUSER_SHARED_DATA Shared, *MmWriteableSharedUserData = &Shared;
@@ -107,8 +113,19 @@ __attribute__((unused)) static void KxAcquireSpinLock(PKSPIN_LOCK Lock) {
     while (__atomic_exchange_n(Lock, 1, __ATOMIC_ACQUIRE)) sched_yield();
 }
 __attribute__((unused)) static void KxReleaseSpinLock(PKSPIN_LOCK Lock) { __atomic_store_n(Lock, 0, __ATOMIC_RELEASE); }
-static KIRQL KiAcquireDispatcherLock(void) { return KfRaiseIrql(SYNCH_LEVEL); }
-static void KiReleaseDispatcherLock(KIRQL Old) { KeLowerIrql(Old); }
+static KIRQL KiEnterDispatcher(void) { return KfRaiseIrql(SYNCH_LEVEL); }
+static void KiExitDispatcher(KIRQL Old) { KeLowerIrql(Old); }
+/* The setter is the only processor taking part here; the clock owner is interrupted above DISPATCH_LEVEL, where the rendezvous does not reach */
+static void KeGenericCallDpc(void (*Routine)(PKDPC, PVOID, PVOID, PVOID), PVOID Context) {
+    volatile LONG Count = 1;
+    KIRQL Old = Irql;
+    Irql = DISPATCH_LEVEL;
+    Routine(NULL, Context, (PVOID)&Count, NULL);
+    CHECK(Irql == DISPATCH_LEVEL && Count == 0);
+    Irql = Old;
+}
+static BOOLEAN KeSignalCallDpcSynchronize(PVOID Barrier) { (void)Barrier; return TRUE; }
+static void KeSignalCallDpcDone(PVOID Count) { __atomic_sub_fetch((volatile LONG *)Count, 1, __ATOMIC_SEQ_CST); }
 static PKSPIN_LOCK_QUEUE KiAcquireTimerLock(ULONG Hand) { (void)Hand; return NULL; }
 static void KiReleaseTimerLock(PKSPIN_LOCK_QUEUE Queue) { (void)Queue; }
 static void InitializeListHead(PLIST_ENTRY Head) { Head->Flink = Head->Blink = Head; }
@@ -123,6 +140,9 @@ static volatile LONG KiClockStopCount;
 __attribute__((unused)) static LONG InterlockedIncrement(volatile LONG *Value) { return __atomic_add_fetch(Value, 1, __ATOMIC_SEQ_CST); }
 static ULONGLONG KiAdjustedIncrement(ULONG Increment) { @ADJUSTED@ }
 ULONGLONG KiUpdateSharedTime(ULONG Increment, BOOLEAN UpdateSystem) { @TICK@ }
+@TYPEDEF@
+static void KiChangeSystemTime(PKI_SYSTEM_TIME_CHANGE Change) { @CHANGE@ }
+static void KiSystemTimeChangeDpc(PKDPC Dpc, PVOID DeferredContext, PVOID SystemArgument1, PVOID SystemArgument2) { @CHANGEDPC@ }
 void KeSetSystemTime(PLARGE_INTEGER NewSystemTime, PLARGE_INTEGER OldSystemTime, BOOLEAN FixInterruptTime, PLARGE_INTEGER HalTime) { @SET@ }
 void KiResumeClockTime(ULONGLONG SleepTime) { @RESUME@ }
 static LARGE_INTEGER Previous;
@@ -193,6 +213,8 @@ int main(void) {
 }
 '''
 fixture = fixture.replace('@TICK@', body('KiUpdateSharedTime')).replace('@SET@', body('KeSetSystemTime'))
+fixture = fixture.replace('@TYPEDEF@', typedef('KI_SYSTEM_TIME_CHANGE')).replace('@CHANGE@', body('KiChangeSystemTime'))
+fixture = fixture.replace('@CHANGEDPC@', body('KiSystemTimeChangeDpc'))
 fixture = fixture.replace('@RESUME@', body('KiResumeClockTime')).replace('@ADJUSTED@', body('KiAdjustedIncrement'))
 with tempfile.TemporaryDirectory(prefix='ke-clock-set-time-') as tmp:
     path = pathlib.Path(tmp)
