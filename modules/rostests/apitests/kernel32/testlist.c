@@ -44,6 +44,7 @@ extern void func_DefaultActCtx(void);
 extern void func_DeleteFileCase(void);
 extern void func_DeleteFileOpenHandle(void);
 extern void func_DeviceIoControl(void);
+extern void func_DispatcherStress(void);
 extern void func_EmulatedProcess(void);
 extern void func_dosdev(void);
 extern void func_DateTimeFormatFlags(void);
@@ -266,6 +267,7 @@ const struct test winetest_testlist[] =
     { "DeleteFileCase",              func_DeleteFileCase },
     { "DeleteFileOpenHandle",        func_DeleteFileOpenHandle },
     { "DeviceIoControl",             func_DeviceIoControl },
+    { "DispatcherStress",            func_DispatcherStress },
     { "EmulatedProcess",             func_EmulatedProcess },
     { "dosdev",                      func_dosdev },
     { "DateTimeFormatFlags",         func_DateTimeFormatFlags },
