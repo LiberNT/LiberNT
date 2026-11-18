@@ -207,8 +207,8 @@ TestScanout(
     ULONG Index, Pixel;
 
     SetWindowPos(hFill, HWND_TOPMOST, 0, 0, Width, Height, SWP_SHOWWINDOW | SWP_NOACTIVATE);
-    /* The remote display has no hardware pointer, so the pointer is composed into the frame it scans out */
-    SetCursorPos(0, 0);
+    /* The remote client draws the pointer, so the frame must not contain it */
+    SetCursorPos(Width * Probes[2].x / 5 - 4, Height * Probes[2].y / 5 - 4);
     RedrawWindow(hFill, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW);
     PumpFor(2000);
 
