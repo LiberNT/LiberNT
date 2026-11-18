@@ -106,9 +106,10 @@ typedef struct DESKTOP_CONTEXT
     HANDLE FrameEvent;
     BOOL FramePending;
     int FrameWidth, FrameHeight;
-    RECT CursorRect;
-    POINT CursorPoint;
-    HCURSOR CursorShape;
+    HCURSOR Pointer;
+    BOOL PointerSent;
+    BYTE PointerXor[RDPVDD_POINTER_MAX * RDPVDD_POINTER_MAX * 4];
+    BYTE PointerAnd[RDPVDD_POINTER_MAX * RDPVDD_POINTER_MAX / 8];
     BITMAP_DATA Batch[TILE_BATCH];
     BYTE Tiles[TILE_BATCH][TILE_BYTES];
     BITMAP_PLANAR_CONTEXT *Planar;
@@ -288,7 +289,6 @@ static BOOL AllocateCapture(DESKTOP_CONTEXT *ctx)
     ctx->TileRows = (ctx->Height + TILE_HEIGHT - 1) / TILE_HEIGHT;
     ctx->TileMask = calloc((size_t)ctx->TileColumns * ctx->TileRows, 1);
     if (!ctx->TileMask) return FALSE;
-    SetRectEmpty(&ctx->CursorRect);
     if (ctx->FrameAdapter)
     {
         ctx->Frame = calloc((size_t)ctx->Width * ctx->Height, 4);
@@ -810,7 +810,6 @@ static BOOL PostConnect(freerdp_peer *peer)
 static BOOL Activate(freerdp_peer *peer)
 {
     DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)peer->context;
-    POINTER_SYSTEM_UPDATE pointer = {0};
     if (!ctx->Authorized) return FALSE;
     if (!ctx->Planar)
     {
@@ -819,8 +818,14 @@ static BOOL Activate(freerdp_peer *peer)
     }
     ctx->Active = TRUE;
     ctx->Refresh = TRUE;
-    pointer.type = SYSPTR_NULL;
-    return ctx->rdp.update->pointer->PointerSystem(&ctx->rdp, &pointer);
+    ctx->PointerSent = FALSE;
+    if (ControllerMode)
+    {
+        POINTER_SYSTEM_UPDATE pointer = {0};
+        pointer.type = SYSPTR_NULL;
+        return ctx->rdp.update->pointer->PointerSystem(&ctx->rdp, &pointer);
+    }
+    return TRUE;
 }
 
 static BOOL Refresh(rdpContext *rdp, BYTE count, const RECTANGLE_16 *rects)
@@ -924,30 +929,87 @@ static void CopyFrameRect(DESKTOP_CONTEXT *ctx, const RECT *rect)
     MarkTiles(ctx, rect);
 }
 
-static POINT CursorPosition(DESKTOP_CONTEXT *ctx, POINT desktop)
+static void CopyMaskRows(BYTE *target, const BYTE *dib, int rows, int width)
 {
-    (void)ctx;
-    return desktop;
+    int row, stride = (width + 15) / 16 * 2, dibStride = (width + 31) / 32 * 4;
+    for (row = 0; row < rows; ++row) memcpy(target + row * stride, dib + row * dibStride, stride);
 }
 
-static void DrawCursor(DESKTOP_CONTEXT *ctx, const CURSORINFO *cursor)
+static BOOL ReadPointer(DESKTOP_CONTEXT *ctx, HCURSOR handle, POINTER_NEW_UPDATE *update)
 {
+    struct { BITMAPINFOHEADER Header; RGBQUAD Colors[2]; } info = {0};
+    BYTE masks[RDPVDD_POINTER_MAX * 2 * (RDPVDD_POINTER_MAX / 8)];
+    POINTER_COLOR_UPDATE *attr = &update->colorPtrAttr;
     ICONINFO icon = {0};
     BITMAP bitmap = {0};
-    POINT position;
-    int width, height;
-    SetRectEmpty(&ctx->CursorRect);
-    if (!(cursor->flags & CURSOR_SHOWING) || !GetIconInfo(cursor->hCursor, &icon)) return;
-    position = CursorPosition(ctx, cursor->ptScreenPos);
-    GetObjectW(icon.hbmColor ? icon.hbmColor : icon.hbmMask, sizeof(bitmap), &bitmap);
+    BOOL ok = FALSE, alpha = FALSE;
+    int width, height, stride, i;
+    HDC dc;
+    if (!GetIconInfo(handle, &icon)) return FALSE;
+    dc = GetDC(NULL);
+    GetObjectW(icon.hbmMask, sizeof(bitmap), &bitmap);
     width = bitmap.bmWidth;
     height = icon.hbmColor ? bitmap.bmHeight : bitmap.bmHeight / 2;
-    position.x -= icon.xHotspot;
-    position.y -= icon.yHotspot;
-    DrawIconEx(ctx->MemoryDC, position.x, position.y, cursor->hCursor, 0, 0, 0, NULL, DI_NORMAL);
-    SetRect(&ctx->CursorRect, position.x, position.y, position.x + width, position.y + height);
+    stride = (width + 15) / 16 * 2;
+    info.Header.biSize = sizeof(info.Header);
+    info.Header.biWidth = width;
+    info.Header.biHeight = bitmap.bmHeight;
+    info.Header.biPlanes = 1;
+    info.Header.biBitCount = 1;
+    if (dc && width > 0 && height > 0 && width <= RDPVDD_POINTER_MAX && height <= RDPVDD_POINTER_MAX &&
+        GetDIBits(dc, icon.hbmMask, 0, bitmap.bmHeight, masks, (BITMAPINFO *)&info, DIB_RGB_COLORS) == bitmap.bmHeight)
+    {
+        update->xorBpp = icon.hbmColor ? 32 : 1;
+        attr->cacheIndex = 0;
+        attr->hotSpotX = (UINT16)icon.xHotspot;
+        attr->hotSpotY = (UINT16)icon.yHotspot;
+        attr->width = (UINT16)width;
+        attr->height = (UINT16)height;
+        attr->andMaskData = ctx->PointerAnd;
+        attr->xorMaskData = ctx->PointerXor;
+        attr->lengthAndMask = (UINT16)(stride * height);
+        if (icon.hbmColor)
+        {
+            CopyMaskRows(ctx->PointerAnd, masks, height, width);
+            info.Header.biHeight = height;
+            info.Header.biBitCount = 32;
+            attr->lengthXorMask = (UINT16)(width * 4 * height);
+            ok = GetDIBits(dc, icon.hbmColor, 0, height, ctx->PointerXor, (BITMAPINFO *)&info, DIB_RGB_COLORS) == height;
+            for (i = 0; ok && i < width * height; ++i) alpha |= ctx->PointerXor[i * 4 + 3] != 0;
+            /* With per-pixel alpha the mask must not mark opaque pixels, or the client inverts or drops them */
+            if (ok && alpha) ZeroMemory(ctx->PointerAnd, (size_t)stride * height);
+            for (i = 0; ok && !alpha && i < width * height; ++i)
+                if (!(ctx->PointerAnd[(i / width) * stride + (i % width) / 8] & (0x80 >> (i % 8)))) ctx->PointerXor[i * 4 + 3] = 0xFF;
+        }
+        else
+        {
+            CopyMaskRows(ctx->PointerXor, masks, height, width);
+            CopyMaskRows(ctx->PointerAnd, masks + (size_t)height * ((width + 31) / 32 * 4), height, width);
+            attr->lengthXorMask = attr->lengthAndMask;
+            ok = TRUE;
+        }
+    }
+    if (dc) ReleaseDC(NULL, dc);
     if (icon.hbmColor) DeleteObject(icon.hbmColor);
     if (icon.hbmMask) DeleteObject(icon.hbmMask);
+    return ok;
+}
+
+static BOOL UpdatePointer(DESKTOP_CONTEXT *ctx)
+{
+    POINTER_SYSTEM_UPDATE hidden = {0};
+    POINTER_NEW_UPDATE update = {0};
+    CURSORINFO cursor = {0};
+    cursor.cbSize = sizeof(cursor);
+    if (!GetCursorInfo(&cursor) || !(cursor.flags & CURSOR_SHOWING)) cursor.hCursor = NULL;
+    if (ctx->PointerSent && cursor.hCursor == ctx->Pointer) return TRUE;
+    ctx->Pointer = cursor.hCursor;
+    ctx->PointerSent = TRUE;
+    /* TODO: an animated cursor reaches the client as its first frame */
+    if (cursor.hCursor && ReadPointer(ctx, cursor.hCursor, &update))
+        return ctx->rdp.update->pointer->PointerNew(&ctx->rdp, &update);
+    hidden.type = SYSPTR_NULL;
+    return ctx->rdp.update->pointer->PointerSystem(&ctx->rdp, &hidden);
 }
 
 static BOOL ReadRemoteFrame(DESKTOP_CONTEXT *ctx, RDPVDD_FRAME_ESCAPE *frame)
@@ -1042,11 +1104,8 @@ static BOOL Capture(DESKTOP_CONTEXT *ctx)
 {
     int x, y, row, width, height;
     UINT32 i, count = 0;
-    CURSORINFO cursor = {0};
     RDPVDD_FRAME_ESCAPE frame = {0};
     BITMAP_DATA *rectangle;
-    RECT old;
-    POINT position;
     size_t length = 0, limit = freerdp_settings_get_uint32(ctx->rdp.settings, FreeRDP_MultifragMaxRequestSize);
     if (!ctx->Authorized || !ctx->Active || ctx->Suppressed) return TRUE;
     if (ControllerMode) return CaptureConsole(ctx);
@@ -1076,20 +1135,9 @@ static BOOL Capture(DESKTOP_CONTEXT *ctx)
         ctx->Active = FALSE;
         return ctx->rdp.update->DesktopResize(&ctx->rdp);
     }
-    cursor.cbSize = sizeof(cursor);
-    if (!GetCursorInfo(&cursor)) cursor.flags = 0;
-    old = ctx->CursorRect;
-    position = CursorPosition(ctx, cursor.ptScreenPos);
-    if (!frame.RectCount && !ctx->Refresh && !IsRectEmpty(&old) == !!(cursor.flags & CURSOR_SHOWING) &&
-        cursor.hCursor == ctx->CursorShape && position.x == ctx->CursorPoint.x && position.y == ctx->CursorPoint.y)
-        return TRUE;
-    ctx->CursorShape = cursor.hCursor;
-    ctx->CursorPoint = position;
+    if (!UpdatePointer(ctx)) return FALSE;
+    if (!frame.RectCount && !ctx->Refresh) return TRUE;
     for (i = 0; i < frame.RectCount; ++i) CopyFrameRect(ctx, &frame.Rects[i]);
-    CopyFrameRect(ctx, &old);
-    DrawCursor(ctx, &cursor);
-    MarkTiles(ctx, &ctx->CursorRect);
-    GdiFlush();
     for (y = 0; y < ctx->Height; y += TILE_HEIGHT)
         for (x = 0; x < ctx->Width; x += TILE_WIDTH)
         {

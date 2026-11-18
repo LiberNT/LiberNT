@@ -515,6 +515,11 @@ RdpVddDdiQueryAdapterInfo(
             Caps->HighestAcceptableAddress.QuadPart = -1;
             Caps->SupportNonVGA = TRUE;
             Caps->SupportSurpriseRemoval = TRUE;
+            Caps->MaxPointerWidth = RDPVDD_POINTER_MAX;
+            Caps->MaxPointerHeight = RDPVDD_POINTER_MAX;
+            Caps->PointerCaps.Monochrome = 1;
+            Caps->PointerCaps.Color = 1;
+            Caps->PointerCaps.MaskedColor = 1;
             return STATUS_SUCCESS;
         }
 
@@ -543,7 +548,7 @@ RdpVddDdiSetPointerPosition(
 
     if (pSetPointerPosition->VidPnSourceId >= RDPVDD_SOURCE_COUNT)
         return STATUS_INVALID_PARAMETER;
-    return pSetPointerPosition->Flags.Visible ? STATUS_UNSUCCESSFUL : STATUS_SUCCESS;
+    return STATUS_SUCCESS;
 }
 
 static
@@ -554,8 +559,13 @@ RdpVddDdiSetPointerShape(
     IN_CONST_PDXGKARG_SETPOINTERSHAPE pSetPointerShape)
 {
     UNREFERENCED_PARAMETER(hAdapter);
-    UNREFERENCED_PARAMETER(pSetPointerShape);
-    return STATUS_NOT_IMPLEMENTED;
+
+    if (pSetPointerShape->VidPnSourceId >= RDPVDD_SOURCE_COUNT ||
+        pSetPointerShape->Width > RDPVDD_POINTER_MAX ||
+        pSetPointerShape->Height > RDPVDD_POINTER_MAX)
+        return STATUS_INVALID_PARAMETER;
+    /* The remote client draws the pointer: the server sends it the cursor of the session */
+    return STATUS_SUCCESS;
 }
 
 static
