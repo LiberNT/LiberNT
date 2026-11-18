@@ -115,6 +115,7 @@ PVOID NTAPI MmGetSessionById(ULONG SessionId);
 NTSTATUS NTAPI MmSetProcessSession(PEPROCESS Process, ULONG SessionId);
 NTSTATUS NTAPI MmAttachSession(PVOID SessionEntry, PKAPC_STATE State);
 VOID NTAPI MmDetachSession(PVOID SessionEntry, PKAPC_STATE State);
+PVOID NTAPI MmGetNextSession(PVOID SessionEntry);
 VOID NTAPI MmQuitNextSession(PVOID SessionEntry);
 VOID MiSessionAddProcess(PEPROCESS Process);
 VOID MiSessionRemoveProcess(PEPROCESS Process);

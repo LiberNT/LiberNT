@@ -137,6 +137,27 @@ MiLookupDataTableEntry(
     return NULL;
 }
 
+BOOLEAN
+NTAPI
+MmIsSessionImageAddress(
+    _In_ PVOID Address)
+{
+    PLDR_DATA_TABLE_ENTRY Entry;
+    BOOLEAN Loaded;
+
+    PAGED_CODE();
+
+    if (!MmIsSessionAddress(Address))
+        return FALSE;
+    KeEnterCriticalRegion();
+    ExAcquireResourceSharedLite(&PsLoadedModuleResource, TRUE);
+    Entry = MiLookupDataTableEntry(Address);
+    Loaded = Entry != NULL && MiSessionHasImage(PsGetCurrentProcess(), Entry);
+    ExReleaseResourceLite(&PsLoadedModuleResource);
+    KeLeaveCriticalRegion();
+    return Loaded;
+}
+
 static
 BOOLEAN
 MiImportListIsTable(

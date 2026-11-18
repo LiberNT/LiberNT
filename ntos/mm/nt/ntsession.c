@@ -645,6 +645,42 @@ MmDetachSession(
     ObDereferenceObject(Process);
 }
 
+PVOID
+NTAPI
+MmGetNextSession(
+    _Inout_opt_ PVOID SessionEntry)
+{
+    PMI_SESSION Previous = SessionEntry, Found = NULL;
+    PLIST_ENTRY Entry;
+
+    MiSessionLockAcquire();
+    if (Previous != NULL)
+    {
+        MiSessionAssertLocked(Previous);
+        ASSERT(Previous->ReferenceCount > Previous->ProcessCount);
+    }
+    for (Entry = Previous != NULL ? Previous->Link.Flink : MiSessionList.Flink; Entry != &MiSessionList;
+         Entry = Entry->Flink)
+    {
+        PMI_SESSION Session = CONTAINING_RECORD(Entry, MI_SESSION, Link);
+
+        MiSessionAssertLocked(Session);
+        ASSERT(Session->ReferenceCount > 0);
+        if (Session->ProcessCount != 0)
+        {
+            ASSERT(Session->ReferenceCount < 0x7fffffffL);
+            InterlockedIncrement(&Session->ReferenceCount);
+            Found = Session;
+            break;
+        }
+    }
+    KeReleaseGuardedMutex(&MiSessionLock);
+
+    if (Previous != NULL)
+        MiSessionDereference(Previous);
+    return Found;
+}
+
 VOID
 NTAPI
 MmQuitNextSession(

@@ -338,6 +338,71 @@ SessionSpaceRelease(PMI_SYSTEM System)
     System->SessionEnd = 0;
 }
 
+static ULONG
+SessionEnumerate(ULONG *Ids, ULONG Capacity)
+{
+    PEPROCESS Outside = MiSessionTestCurrent;
+    KAPC_STATE State;
+    PVOID Session;
+    ULONG Count = 0;
+
+    for (Session = MmGetNextSession(NULL); Session != NULL; Session = MmGetNextSession(Session))
+    {
+        CHECK(MmAttachSession(Session, &State) == STATUS_SUCCESS);
+        if (Count < Capacity)
+            Ids[Count] = MmGetSessionId(MiSessionTestCurrent);
+        Count++;
+        MmDetachSession(Session, &State);
+        CHECK(MiSessionTestCurrent == Outside);
+    }
+    return Count;
+}
+
+static void
+SessionNext(void)
+{
+    struct _EPROCESS_HOST Leader, Keeper0, Keeper1, Outsider;
+    MI_PROCESS Native[4];
+    ULONG Id0, Id1, Ids[4];
+    PVOID Held;
+
+    SessionProcessInitialize(&Leader, &Native[0]);
+    SessionProcessInitialize(&Keeper0, &Native[1]);
+    SessionProcessInitialize(&Keeper1, &Native[2]);
+    SessionProcessInitialize(&Outsider, &Native[3]);
+    MiSessionTestCurrent = &Outsider;
+    CHECK(MmGetNextSession(NULL) == NULL);
+
+    MiSessionTestCurrent = &Leader;
+    CHECK(MmSessionCreate(&Id0) == STATUS_SUCCESS);
+    MiSessionAddProcess(&Keeper0);
+    CHECK(MmSessionDelete(Id0) == STATUS_SUCCESS);
+    CHECK(MmSessionCreate(&Id1) == STATUS_SUCCESS && Id1 != Id0);
+    MiSessionAddProcess(&Keeper1);
+    CHECK(MmSessionDelete(Id1) == STATUS_SUCCESS);
+
+    MiSessionTestCurrent = &Outsider;
+    CHECK(SessionEnumerate(Ids, 4) == 2);
+    CHECK((Ids[0] == Id0 && Ids[1] == Id1) || (Ids[0] == Id1 && Ids[1] == Id0));
+    Held = MmGetNextSession(NULL);
+    CHECK(Held != NULL);
+    MmQuitNextSession(Held);
+
+    Held = MmGetSessionById(Id0);
+    CHECK(Held != NULL);
+    MiSessionRemoveProcess(&Keeper0);
+    CHECK(MmGetSessionById(Id0) == NULL);
+    CHECK(SessionEnumerate(Ids, 4) == 1 && Ids[0] == Id1);
+    MmQuitNextSession(Held);
+    CHECK(SessionEnumerate(Ids, 4) == 1 && Ids[0] == Id1);
+
+    MiSessionRemoveProcess(&Keeper1);
+    CHECK(MmGetNextSession(NULL) == NULL);
+    MiSessionRemoveProcess(&Leader);
+    CHECK(MiSessionTestAllocations == 0);
+    MiSessionTestCurrent = NULL;
+}
+
 void
 TestSession(void)
 {
@@ -351,6 +416,7 @@ TestSession(void)
     SessionLifecycle();
     SessionAttachRundown();
     SessionMoveProcess();
+    SessionNext();
     SessionSpaceRelease(&World.System);
     MiSessionTestSystem = NULL;
     WorldDestroy(&World);
