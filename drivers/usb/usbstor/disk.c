@@ -41,9 +41,40 @@ USBSTOR_MaxPhysicalPages(
     return FdoExtension->MaxTransferLength / PAGE_SIZE + 1;
 }
 
-static NTSTATUS USBSTOR_DumpCommand(_In_ PUSBSTOR_DUMP_CONTEXT DumpContext, _In_reads_bytes_(CdbLength) PUCHAR Cdb, _In_ UCHAR CdbLength, _Inout_updates_bytes_opt_(DataLength) PVOID DataBuffer, _In_ PHYSICAL_ADDRESS DataPhysicalAddress, _In_ BOOLEAN DataIsPhysical, _In_ ULONG DataLength, _In_ BOOLEAN DataIn)
+static NTSTATUS USBSTOR_DumpResetRecovery(_In_ PUSBSTOR_DUMP_CONTEXT DumpContext, _In_ NTSTATUS Status)
+{
+    NTSTATUS ResetStatus;
+
+    ASSERT(!NT_SUCCESS(Status));
+
+    ResetStatus = DumpContext->UsbInterface.Prepare(DumpContext->UsbInterface.Context);
+    if (!NT_SUCCESS(ResetStatus))
+        DPRINT1("USBSTOR: dump reset recovery failed 0x%08lx\n", ResetStatus);
+
+    return Status;
+}
+
+static NTSTATUS USBSTOR_DumpReadStatus(_In_ PUSBSTOR_DUMP_CONTEXT DumpContext)
 {
     NTSTATUS Status;
+
+    Status = DumpContext->UsbInterface.Transfer(DumpContext->UsbInterface.Context, TRUE, &DumpContext->Csw, sizeof(DumpContext->Csw));
+    if (!NT_SUCCESS(Status) && (Status != STATUS_IO_TIMEOUT))
+    {
+        RtlZeroMemory(&DumpContext->Csw, sizeof(DumpContext->Csw));
+        Status = DumpContext->UsbInterface.Transfer(DumpContext->UsbInterface.Context, TRUE, &DumpContext->Csw, sizeof(DumpContext->Csw));
+    }
+
+    return Status;
+}
+
+static NTSTATUS USBSTOR_DumpCommand(_In_ PUSBSTOR_DUMP_CONTEXT DumpContext, _In_reads_bytes_(CdbLength) PUCHAR Cdb, _In_ UCHAR CdbLength, _Inout_updates_bytes_opt_(DataLength) PVOID DataBuffer, _In_ PHYSICAL_ADDRESS DataPhysicalAddress, _In_ BOOLEAN DataIsPhysical, _In_ ULONG DataLength, _In_ BOOLEAN DataIn)
+{
+    NTSTATUS DataStatus = STATUS_SUCCESS;
+    NTSTATUS Status;
+
+    if (DataIsPhysical && DataIn && (DataLength != 0))
+        return STATUS_INVALID_PARAMETER;
 
     RtlZeroMemory(&DumpContext->Cbw, sizeof(DumpContext->Cbw));
     RtlZeroMemory(&DumpContext->Csw, sizeof(DumpContext->Csw));
@@ -57,31 +88,34 @@ static NTSTATUS USBSTOR_DumpCommand(_In_ PUSBSTOR_DUMP_CONTEXT DumpContext, _In_
 
     Status = DumpContext->UsbInterface.Transfer(DumpContext->UsbInterface.Context, FALSE, &DumpContext->Cbw, sizeof(DumpContext->Cbw));
     if (!NT_SUCCESS(Status))
-        return Status;
+        return USBSTOR_DumpResetRecovery(DumpContext, Status);
 
     if (DataLength != 0)
     {
         if (DataIsPhysical)
-        {
-            if (DataIn)
-                return STATUS_INVALID_PARAMETER;
-            Status = DumpContext->UsbInterface.TransferPhysical(DumpContext->UsbInterface.Context, DataPhysicalAddress, DataLength);
-        }
+            DataStatus = DumpContext->UsbInterface.TransferPhysical(DumpContext->UsbInterface.Context, DataPhysicalAddress, DataLength);
         else
-        {
-            Status = DumpContext->UsbInterface.Transfer(DumpContext->UsbInterface.Context, DataIn, DataBuffer, DataLength);
-        }
-        if (!NT_SUCCESS(Status))
-            return Status;
+            DataStatus = DumpContext->UsbInterface.Transfer(DumpContext->UsbInterface.Context, DataIn, DataBuffer, DataLength);
+
+        /* BOT 6.7.2 and 6.7.3: a data stage the device stalled still ends with its status block; only a lost one needs a reset */
+        if (DataStatus == STATUS_IO_TIMEOUT)
+            return USBSTOR_DumpResetRecovery(DumpContext, DataStatus);
     }
 
-    Status = DumpContext->UsbInterface.Transfer(DumpContext->UsbInterface.Context, TRUE, &DumpContext->Csw, sizeof(DumpContext->Csw));
+    Status = USBSTOR_DumpReadStatus(DumpContext);
     if (!NT_SUCCESS(Status))
-        return Status;
+        return USBSTOR_DumpResetRecovery(DumpContext, Status);
 
-    if ((DumpContext->Csw.Signature != CSW_SIGNATURE) || (DumpContext->Csw.Tag != DumpContext->Cbw.Tag) || (DumpContext->Csw.DataResidue != 0) || (DumpContext->Csw.Status != CSW_STATUS_COMMAND_PASSED))
+    if ((DumpContext->Csw.Signature != CSW_SIGNATURE) || (DumpContext->Csw.Tag != DumpContext->Cbw.Tag) || (DumpContext->Csw.Status == CSW_STATUS_PHASE_ERROR))
     {
-        return STATUS_IO_DEVICE_ERROR;
+        DPRINT1("USBSTOR: dump command 0x%02x: status block signature 0x%08lx tag 0x%08lx (sent 0x%08lx) status %u, resetting\n", Cdb[0], DumpContext->Csw.Signature, DumpContext->Csw.Tag, DumpContext->Cbw.Tag, DumpContext->Csw.Status);
+        return USBSTOR_DumpResetRecovery(DumpContext, STATUS_IO_DEVICE_ERROR);
+    }
+
+    if (!NT_SUCCESS(DataStatus) || (DumpContext->Csw.DataResidue != 0) || (DumpContext->Csw.Status != CSW_STATUS_COMMAND_PASSED))
+    {
+        DPRINT1("USBSTOR: dump command 0x%02x: data stage 0x%08lx, residue %lu status %u\n", Cdb[0], DataStatus, DumpContext->Csw.DataResidue, DumpContext->Csw.Status);
+        return NT_SUCCESS(DataStatus) ? STATUS_IO_DEVICE_ERROR : DataStatus;
     }
 
     return STATUS_SUCCESS;
