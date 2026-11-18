@@ -45,6 +45,7 @@ KdInitializeLibrary(
     _Inout_ PDEBUG_DEVICE_DESCRIPTOR Device)
 {
     PKDNET_EXTENSIBILITY_EXPORTS Exports;
+    NTSTATUS Status;
 
     if (!ImportTable || ImportTable->FunctionCount != KDNET_EXT_IMPORTS)
         return STATUS_INVALID_PARAMETER;
@@ -58,6 +59,10 @@ KdInitializeLibrary(
     {
         return STATUS_NOT_SUPPORTED;
     }
+
+    Status = UsbNetGlueAttach(Device);
+    if (!NT_SUCCESS(Status))
+        return Status;
 
     KdNetExtensibilityImports = ImportTable;
     UsbNetLocalBroadcast = UsbNetOptionIsOne(LoaderOptions, "LOCAL_BROADCAST=");

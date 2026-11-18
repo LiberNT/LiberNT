@@ -41,6 +41,7 @@
 #define XHCI_USBCMD_RESET           0x00000002
 #define XHCI_USBSTS_HALTED          0x00000001
 #define XHCI_USBSTS_NOT_READY       0x00000800
+#define XHCI_HCC_AC64               0x00000001
 #define XHCI_HCC_CONTEXT_64         0x00000004
 #define XHCI_HCC_PORT_POWER         0x00000008
 #define XHCI_HCC_XECP_SHIFT         16
@@ -666,6 +667,25 @@ UsbNetFrameTransmit(
     _In_ PUSBNET_ADAPTER Adapter,
     _Inout_ PUCHAR Buffer,
     _In_ ULONG Length);
+
+NTSTATUS
+UsbNetGlueAttach(
+    _Inout_ PDEBUG_DEVICE_DESCRIPTOR Device);
+
+NTSTATUS
+UsbNetGluePrepare(
+    _In_ PKDNET_SHARED_DATA KdNet);
+
+NTSTATUS
+UsbNetTreeAttach(
+    _Inout_ PDEBUG_DEVICE_DESCRIPTOR Device);
+
+struct _FDT_DRIVER_TREE;
+
+NTSTATUS
+UsbNetTreeOpen(
+    _In_ PDEBUG_DEVICE_DESCRIPTOR Device,
+    _Out_ struct _FDT_DRIVER_TREE *Tree);
 
 ULONG
 NTAPI

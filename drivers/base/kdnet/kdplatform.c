@@ -161,13 +161,27 @@ KdpTreeTranslate(
 
 static
 BOOLEAN
+KdpTreeNodeIsUsbController(
+    _In_ const FDT *Tree,
+    _In_ ULONG Node)
+{
+    const CHAR *Name;
+    ULONG Length;
+
+    Name = FdtNodeName(Tree, Node, &Length);
+    return Name && FdtNameMatches(Name, Length, "usb", sizeof("usb") - 1);
+}
+
+static
+BOOLEAN
 KdpTreeNode(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock,
     _In_ PKDNET_PLATFORM_CALLBACK Callback,
     _In_ const FDT *Tree,
     _In_ ULONG Node,
     _In_reads_(Depth) const ULONG *Ancestors,
-    _In_ ULONG Depth)
+    _In_ ULONG Depth,
+    _In_ BOOLEAN UsbControllers)
 {
     KDNET_PLATFORM_DEVICE Device;
     const VOID *Compatible;
@@ -175,6 +189,9 @@ KdpTreeNode(
     ULONG Length, Cursor = 0, NameLength, i;
     ULONGLONG Address, Size;
     CHAR Character;
+
+    if (UsbControllers && !KdpTreeNodeIsUsbController(Tree, Node))
+        return FALSE;
 
     Compatible = FdtGetProperty(Tree, Node, "compatible", &Length);
     if (!Compatible || !KdpTreeNodeEnabled(Tree, Node) ||
@@ -224,7 +241,8 @@ static
 BOOLEAN
 KdpEnumerateDeviceTree(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock,
-    _In_ PKDNET_PLATFORM_CALLBACK Callback)
+    _In_ PKDNET_PLATFORM_CALLBACK Callback,
+    _In_ BOOLEAN UsbControllers)
 {
     ULONG Path[KDNET_TREE_DEPTH], Depth = 0, Node, Next, Size;
     const VOID *Blob;
@@ -239,7 +257,7 @@ KdpEnumerateDeviceTree(
 
     for (;;)
     {
-        if (Depth && KdpTreeNode(LoaderBlock, Callback, &Tree, Node, Path, Depth))
+        if (Depth && KdpTreeNode(LoaderBlock, Callback, &Tree, Node, Path, Depth, UsbControllers))
             return TRUE;
 
         Next = Depth + 1 < KDNET_TREE_DEPTH ? FdtFirstChild(&Tree, Node) : FDT_NO_NODE;
@@ -273,5 +291,13 @@ KdPlatformEnumerate(
     _In_ PKDNET_PLATFORM_CALLBACK Callback)
 {
     return KdpEnumerateDebugPortTable(LoaderBlock, Callback) ||
-           KdpEnumerateDeviceTree(LoaderBlock, Callback);
+           KdpEnumerateDeviceTree(LoaderBlock, Callback, FALSE);
+}
+
+BOOLEAN
+KdPlatformEnumerateUsbControllers(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock,
+    _In_ PKDNET_PLATFORM_CALLBACK Callback)
+{
+    return KdpEnumerateDeviceTree(LoaderBlock, Callback, TRUE);
 }

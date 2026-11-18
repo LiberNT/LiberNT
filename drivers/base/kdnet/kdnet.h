@@ -99,6 +99,11 @@ KdPlatformEnumerate(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock,
     _In_ PKDNET_PLATFORM_CALLBACK Callback);
 
+BOOLEAN
+KdPlatformEnumerateUsbControllers(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock,
+    _In_ PKDNET_PLATFORM_CALLBACK Callback);
+
 VOID
 KdNetService(VOID);
 
