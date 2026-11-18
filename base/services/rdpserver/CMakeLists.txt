@@ -3,7 +3,7 @@
 # PURPOSE:     Build the RDP console server against the in-tree FreeRDP and OpenSSL
 # COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif193@gmail.com>
 
-add_executable(rdpserver rdpserver.c transfer.c)
+add_executable(rdpserver rdpserver.c transfer.c gfx.c clearenc.c)
 target_compile_definitions(rdpserver PRIVATE __STDC_NO_THREADS__=1)
 if(NOT MSVC)
     target_compile_options(rdpserver PRIVATE -std=gnu11)

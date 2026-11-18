@@ -47,6 +47,7 @@
 #include <drivers/directx/rdpvdd.h>
 #include <remoteconsole.h>
 #include "transfer.h"
+#include "gfx.h"
 
 typedef ULONG (__cdecl *DEBUG_PRINT)(const char *, ...);
 static DEBUG_PRINT DebugPrint;
@@ -85,7 +86,7 @@ static BOOL AddressAdded;
 #define CERTIFICATE_DAYS 183
 #define TILE_BATCH 64
 #define TILE_WIDTH 64
-#define TILE_HEIGHT 32
+#define TILE_HEIGHT 64
 #define TILE_BYTES (TILE_WIDTH * TILE_HEIGHT * 4 + 2)
 /* TS_UPDATE_BITMAP_DATA header, and TS_BITMAP_DATA fields with its TS_CD_HEADER */
 #define UPDATE_HEADER_BYTES 4
@@ -102,6 +103,7 @@ typedef struct DESKTOP_CONTEXT
     HGDIOBJ OldBitmap;
     HDESK Desktop, HomeDesktop;
     BYTE *Pixels, *Previous, *Frame, *TileMask;
+    GFX_TILE *GfxTiles;
     D3DKMT_HANDLE FrameAdapter;
     HANDLE FrameEvent;
     BOOL FramePending;
@@ -124,6 +126,8 @@ typedef struct DESKTOP_CONTEXT
     HANDLE Vcm;
     RDP_TRANSFER *Transfer;
     DispServerContext *Disp;
+    RDP_GFX *Gfx;
+    BOOL GfxTried, Deferred;
     UINT32 DispChannelId;
     volatile LONG RequestedSize;
 } DESKTOP_CONTEXT;
@@ -239,6 +243,8 @@ static void FreeDesktopCapture(DESKTOP_CONTEXT *ctx)
     free(ctx->Previous);
     free(ctx->Frame);
     free(ctx->TileMask);
+    free(ctx->GfxTiles);
+    ctx->GfxTiles = NULL;
     ctx->OldBitmap = NULL; ctx->Bitmap = NULL;
     ctx->MemoryDC = ctx->ScreenDC = NULL;
     ctx->Previous = ctx->Pixels = ctx->Frame = ctx->TileMask = NULL;
@@ -295,7 +301,8 @@ static BOOL AllocateCapture(DESKTOP_CONTEXT *ctx)
     ctx->TileColumns = (ctx->Width + TILE_WIDTH - 1) / TILE_WIDTH;
     ctx->TileRows = (ctx->Height + TILE_HEIGHT - 1) / TILE_HEIGHT;
     ctx->TileMask = calloc((size_t)ctx->TileColumns * ctx->TileRows, 1);
-    if (!ctx->TileMask) return FALSE;
+    ctx->GfxTiles = calloc((size_t)ctx->TileColumns * ctx->TileRows, sizeof(*ctx->GfxTiles));
+    if (!ctx->TileMask || !ctx->GfxTiles) return FALSE;
     if (ctx->FrameAdapter)
     {
         ctx->Frame = calloc((size_t)ctx->Width * ctx->Height, 4);
@@ -820,7 +827,7 @@ static BOOL Activate(freerdp_peer *peer)
     if (!ctx->Authorized) return FALSE;
     if (!ctx->Planar)
     {
-        ctx->Planar = freerdp_bitmap_planar_context_new(PLANAR_FORMAT_HEADER_RLE, 64, 32);
+        ctx->Planar = freerdp_bitmap_planar_context_new(PLANAR_FORMAT_HEADER_RLE, TILE_WIDTH, TILE_HEIGHT);
         if (!ctx->Planar) return FALSE;
     }
     ctx->Active = TRUE;
@@ -884,9 +891,19 @@ static BOOL DispChannelIdAssigned(DispServerContext *disp, UINT32 channelId)
 static BOOL DvcCreated(void *userdata, UINT32 channelId, INT32 status)
 {
     DESKTOP_CONTEXT *ctx = userdata;
+    if (ctx->Gfx && channelId == GfxChannelId(ctx->Gfx)) return GfxChannelCreated(ctx->Gfx, status);
     if (!ctx->Disp || channelId != ctx->DispChannelId) return TRUE;
     if (status < 0) { Log("Client declined the display control channel status=%ld", (long)status); return TRUE; }
     return ctx->Disp->DisplayControlCaps(ctx->Disp) == CHANNEL_RC_OK;
+}
+
+static void OpenGraphicsPipeline(DESKTOP_CONTEXT *ctx)
+{
+    ctx->GfxTried = TRUE;
+    ctx->Gfx = GfxCreate(ctx->Vcm, &ctx->rdp, Log);
+    if (!ctx->Gfx) { Log("Cannot create the graphics pipeline"); return; }
+    WTSVirtualChannelManagerSetDVCCreationCallback(ctx->Vcm, DvcCreated, ctx);
+    if (!GfxOpen(ctx->Gfx)) { GfxFree(ctx->Gfx); ctx->Gfx = NULL; }
 }
 
 static void OpenDisplayControl(DESKTOP_CONTEXT *ctx)
@@ -1122,13 +1139,89 @@ static BOOL ReadRemoteFrame(DESKTOP_CONTEXT *ctx, RDPVDD_FRAME_ESCAPE *frame)
     return FALSE;
 }
 
-static BOOL CaptureConsole(DESKTOP_CONTEXT *ctx)
+static BOOL TileChanged(DESKTOP_CONTEXT *ctx, int x, int y, int width, int height)
+{
+    int row;
+    for (row = 0; row < height; ++row)
+    {
+        size_t offset = ((size_t)(y + row) * ctx->Width + x) * 4;
+        if (memcmp(ctx->Pixels + offset, ctx->Previous + offset, (size_t)width * 4)) return TRUE;
+    }
+    return FALSE;
+}
+
+static BOOL SendDesktop(DESKTOP_CONTEXT *ctx, BOOL masked)
 {
     int x, y, row, width, height;
     UINT32 count = 0;
-    CURSORINFO cursor = {0};
     BITMAP_DATA *rectangle;
+    BOOL gfx = GfxActive(ctx->Gfx);
     size_t length = 0, limit = freerdp_settings_get_uint32(ctx->rdp.settings, FreeRDP_MultifragMaxRequestSize);
+    if (gfx)
+    {
+        if (!GfxSurfaceReady(ctx->Gfx, (UINT32)ctx->Width, (UINT32)ctx->Height))
+        {
+            if (!GfxResetSurface(ctx->Gfx, (UINT32)ctx->Width, (UINT32)ctx->Height)) return FALSE;
+            ctx->Refresh = TRUE;
+        }
+        ctx->Deferred = !GfxFrameAllowed(ctx->Gfx);
+        if (ctx->Deferred) return TRUE;
+    }
+    for (y = 0; y < ctx->Height; y += TILE_HEIGHT)
+        for (x = 0; x < ctx->Width; x += TILE_WIDTH)
+        {
+            BYTE *mask = &ctx->TileMask[(y / TILE_HEIGHT) * ctx->TileColumns + x / TILE_WIDTH];
+            width = min(TILE_WIDTH, ctx->Width - x);
+            height = min(TILE_HEIGHT, ctx->Height - y);
+            if (masked && !ctx->Refresh && !*mask) continue;
+            *mask = 0;
+            if (!ctx->Refresh && !TileChanged(ctx, x, y, width, height)) continue;
+            if (gfx)
+            {
+                GFX_TILE *tile = &ctx->GfxTiles[count++];
+                tile->Left = (UINT16)x; tile->Top = (UINT16)y;
+                tile->Width = (UINT16)width; tile->Height = (UINT16)height;
+            }
+            else
+            {
+                if ((count == TILE_BATCH || UPDATE_HEADER_BYTES + length + TILE_HEADER_BYTES + TILE_BYTES > limit) &&
+                    !SendTiles(ctx, &count, &length)) return FALSE;
+                rectangle = &ctx->Batch[count];
+                memset(rectangle, 0, sizeof(*rectangle));
+                rectangle->bitsPerPixel = 32; rectangle->compressed = TRUE;
+                rectangle->bitmapDataStream = freerdp_bitmap_compress_planar(ctx->Planar,
+                    ctx->Pixels + ((size_t)y * ctx->Width + x) * 4, PIXEL_FORMAT_BGRX32, width, height,
+                    ctx->Width * 4, ctx->Tiles[count], &rectangle->bitmapLength);
+                if (!rectangle->bitmapDataStream) return FALSE;
+                rectangle->destLeft = x; rectangle->destTop = y;
+                rectangle->destRight = x + width - 1; rectangle->destBottom = y + height - 1;
+                rectangle->width = width; rectangle->height = height;
+                rectangle->cbScanWidth = width * 4;
+                rectangle->cbUncompressedSize = width * height * 4;
+                rectangle->cbCompMainBodySize = rectangle->bitmapLength;
+                length += TILE_HEADER_BYTES + rectangle->bitmapLength;
+                ++count;
+            }
+            for (row = 0; row < height; ++row)
+            {
+                size_t offset = ((size_t)(y + row) * ctx->Width + x) * 4;
+                memcpy(ctx->Previous + offset, ctx->Pixels + offset, (size_t)width * 4);
+            }
+        }
+    if (gfx)
+    {
+        if (!GfxSendFrame(ctx->Gfx, ctx->Pixels, (UINT32)ctx->Width * 4, ctx->GfxTiles, count)) return FALSE;
+        ctx->Updates += count;
+    }
+    else if (!SendTiles(ctx, &count, &length)) return FALSE;
+    ctx->Refresh = FALSE;
+    if (++ctx->Frames == 1) Log("First desktop frame sent, bitmap updates=%llu", ctx->Updates);
+    return TRUE;
+}
+
+static BOOL CaptureConsole(DESKTOP_CONTEXT *ctx)
+{
+    CURSORINFO cursor = {0};
     assert(ControllerMode && !ctx->RemoteDisplay && !ctx->FrameAdapter);
     if (!FollowInputDesktop(ctx)) return FALSE;
     if (ctx->Width != GetSystemMetrics(SM_CXSCREEN) || ctx->Height != GetSystemMetrics(SM_CYSCREEN))
@@ -1137,6 +1230,7 @@ static BOOL CaptureConsole(DESKTOP_CONTEXT *ctx)
             !freerdp_settings_set_uint32(ctx->rdp.settings, FreeRDP_DesktopWidth, ctx->Width) ||
             !freerdp_settings_set_uint32(ctx->rdp.settings, FreeRDP_DesktopHeight, ctx->Height)) return FALSE;
         Log("Desktop resized to %dx%d", ctx->Width, ctx->Height);
+        if (GfxActive(ctx->Gfx)) return TRUE;
         ctx->Active = FALSE;
         return ctx->rdp.update->DesktopResize(&ctx->rdp);
     }
@@ -1158,50 +1252,14 @@ static BOOL CaptureConsole(DESKTOP_CONTEXT *ctx)
         }
     }
     GdiFlush();
-    for (y = 0; y < ctx->Height; y += TILE_HEIGHT)
-        for (x = 0; x < ctx->Width; x += TILE_WIDTH)
-        {
-            BOOL changed = ctx->Refresh;
-            width = min(TILE_WIDTH, ctx->Width - x);
-            height = min(TILE_HEIGHT, ctx->Height - y);
-            for (row = 0; !changed && row < height; ++row)
-            {
-                size_t offset = ((size_t)(y + row) * ctx->Width + x) * 4;
-                changed = memcmp(ctx->Pixels + offset, ctx->Previous + offset, width * 4) != 0;
-            }
-            if (!changed) continue;
-            if ((count == TILE_BATCH || UPDATE_HEADER_BYTES + length + TILE_HEADER_BYTES + TILE_BYTES > limit) &&
-                !SendTiles(ctx, &count, &length)) return FALSE;
-            rectangle = &ctx->Batch[count];
-            memset(rectangle, 0, sizeof(*rectangle));
-            rectangle->bitsPerPixel = 32; rectangle->compressed = TRUE;
-            rectangle->bitmapDataStream = freerdp_bitmap_compress_planar(ctx->Planar,
-                ctx->Pixels + ((size_t)y * ctx->Width + x) * 4, PIXEL_FORMAT_BGRX32, width, height,
-                ctx->Width * 4, ctx->Tiles[count], &rectangle->bitmapLength);
-            if (!rectangle->bitmapDataStream) return FALSE;
-            rectangle->destLeft = x; rectangle->destTop = y;
-            rectangle->destRight = x + width - 1; rectangle->destBottom = y + height - 1;
-            rectangle->width = width; rectangle->height = height;
-            rectangle->cbScanWidth = width * 4;
-            rectangle->cbUncompressedSize = width * height * 4;
-            rectangle->cbCompMainBodySize = rectangle->bitmapLength;
-            length += TILE_HEADER_BYTES + rectangle->bitmapLength;
-            ++count;
-        }
-    if (!SendTiles(ctx, &count, &length)) return FALSE;
-    memcpy(ctx->Previous, ctx->Pixels, (size_t)ctx->Width * ctx->Height * 4);
-    ctx->Refresh = FALSE;
-    if (++ctx->Frames == 1) Log("First desktop frame sent, bitmap updates=%llu", ctx->Updates);
-    return TRUE;
+    return SendDesktop(ctx, FALSE);
 }
 
 static BOOL Capture(DESKTOP_CONTEXT *ctx)
 {
-    int x, y, row, width, height;
-    UINT32 i, count = 0;
+    int width, height;
+    UINT32 i;
     RDPVDD_FRAME_ESCAPE frame = {0};
-    BITMAP_DATA *rectangle;
-    size_t length = 0, limit = freerdp_settings_get_uint32(ctx->rdp.settings, FreeRDP_MultifragMaxRequestSize);
     if (!ctx->Authorized || !ctx->Active || ctx->Suppressed) return TRUE;
     if (ControllerMode) return CaptureConsole(ctx);
     if (!FollowInputDesktop(ctx) || !ctx->FrameAdapter) return FALSE;
@@ -1227,53 +1285,14 @@ static BOOL Capture(DESKTOP_CONTEXT *ctx)
             !freerdp_settings_set_uint32(ctx->rdp.settings, FreeRDP_DesktopWidth, ctx->Width) ||
             !freerdp_settings_set_uint32(ctx->rdp.settings, FreeRDP_DesktopHeight, ctx->Height)) return FALSE;
         Log("Desktop resized to %dx%d", ctx->Width, ctx->Height);
+        if (GfxActive(ctx->Gfx)) return TRUE;
         ctx->Active = FALSE;
         return ctx->rdp.update->DesktopResize(&ctx->rdp);
     }
     if (!UpdatePointer(ctx)) return FALSE;
-    if (!frame.RectCount && !ctx->Refresh) return TRUE;
+    if (!frame.RectCount && !ctx->Refresh && !ctx->Deferred) return TRUE;
     for (i = 0; i < frame.RectCount; ++i) CopyFrameRect(ctx, &frame.Rects[i]);
-    for (y = 0; y < ctx->Height; y += TILE_HEIGHT)
-        for (x = 0; x < ctx->Width; x += TILE_WIDTH)
-        {
-            int tileWidth = min(TILE_WIDTH, ctx->Width - x), tileHeight = min(TILE_HEIGHT, ctx->Height - y);
-            BYTE *mask = &ctx->TileMask[(y / TILE_HEIGHT) * ctx->TileColumns + x / TILE_WIDTH];
-            BOOL changed = ctx->Refresh;
-            if (!changed && !*mask) continue;
-            *mask = 0;
-            for (row = 0; !changed && row < tileHeight; ++row)
-            {
-                size_t offset = ((size_t)(y + row) * ctx->Width + x) * 4;
-                changed = memcmp(ctx->Pixels + offset, ctx->Previous + offset, tileWidth * 4) != 0;
-            }
-            if (!changed) continue;
-            if ((count == TILE_BATCH || UPDATE_HEADER_BYTES + length + TILE_HEADER_BYTES + TILE_BYTES > limit) &&
-                !SendTiles(ctx, &count, &length)) return FALSE;
-            rectangle = &ctx->Batch[count];
-            memset(rectangle, 0, sizeof(*rectangle));
-            rectangle->bitsPerPixel = 32; rectangle->compressed = TRUE;
-            rectangle->bitmapDataStream = freerdp_bitmap_compress_planar(ctx->Planar,
-                ctx->Pixels + ((size_t)y * ctx->Width + x) * 4, PIXEL_FORMAT_BGRX32, tileWidth, tileHeight,
-                ctx->Width * 4, ctx->Tiles[count], &rectangle->bitmapLength);
-            if (!rectangle->bitmapDataStream) return FALSE;
-            rectangle->destLeft = x; rectangle->destTop = y;
-            rectangle->destRight = x + tileWidth - 1; rectangle->destBottom = y + tileHeight - 1;
-            rectangle->width = tileWidth; rectangle->height = tileHeight;
-            rectangle->cbScanWidth = tileWidth * 4;
-            rectangle->cbUncompressedSize = tileWidth * tileHeight * 4;
-            rectangle->cbCompMainBodySize = rectangle->bitmapLength;
-            length += TILE_HEADER_BYTES + rectangle->bitmapLength;
-            ++count;
-            for (row = 0; row < tileHeight; ++row)
-            {
-                size_t offset = ((size_t)(y + row) * ctx->Width + x) * 4;
-                memcpy(ctx->Previous + offset, ctx->Pixels + offset, tileWidth * 4);
-            }
-        }
-    if (!SendTiles(ctx, &count, &length)) return FALSE;
-    ctx->Refresh = FALSE;
-    if (++ctx->Frames == 1) Log("First desktop frame sent, bitmap updates=%llu", ctx->Updates);
-    return TRUE;
+    return SendDesktop(ctx, TRUE);
 }
 
 static void ContextFree(freerdp_peer *peer, rdpContext *rdp)
@@ -1284,6 +1303,7 @@ static void ContextFree(freerdp_peer *peer, rdpContext *rdp)
     (void)peer;
     TransferStop(ctx->Transfer);
     disp_server_context_free(ctx->Disp);
+    GfxFree(ctx->Gfx);
     freerdp_bitmap_planar_context_free(ctx->Planar);
     if (ctx->Vcm) WTSCloseServer(ctx->Vcm);
     /* A disconnected controller must not leave Ctrl/Alt or mouse buttons held. */
@@ -1362,6 +1382,7 @@ static DWORD WINAPI ClientThread(void *arg)
         events[++count] = WTSVirtualChannelManagerGetEventHandle(ctx->Vcm);
         frameIndex = 0;
         if (ctx->FrameEvent) events[frameIndex = ++count] = ctx->FrameEvent;
+        if (ctx->Gfx && GfxEventHandle(ctx->Gfx)) events[++count] = GfxEventHandle(ctx->Gfx);
         wait = 100;
         if (ctx->Active && peer->activated)
         {
@@ -1373,6 +1394,9 @@ static DWORD WINAPI ClientThread(void *arg)
         if (frameIndex && status == WAIT_OBJECT_0 + frameIndex) ctx->FramePending = TRUE;
         if (!peer->CheckFileDescriptor(peer)) break;
         if (!WTSVirtualChannelManagerCheckFileDescriptorEx(ctx->Vcm, peer->activated)) break;
+        if (ctx->Gfx && !GfxHandleMessages(ctx->Gfx)) break;
+        if (ctx->Authorized && !ctx->GfxTried && freerdp_settings_get_bool(ctx->rdp.settings, FreeRDP_SupportGraphicsPipeline) &&
+            WTSVirtualChannelManagerGetDrdynvcState(ctx->Vcm) == DRDYNVC_STATE_READY) OpenGraphicsPipeline(ctx);
         if (!ControllerMode && ctx->Authorized && !ctx->Disp &&
             WTSVirtualChannelManagerGetDrdynvcState(ctx->Vcm) == DRDYNVC_STATE_READY) OpenDisplayControl(ctx);
         if (!ctx->Authorized && GetTickCount() - started > 30000) break;
