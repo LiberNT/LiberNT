@@ -8,6 +8,7 @@ list(APPEND SOURCE
     GetNetworkParams.c
     GetOwnerModuleFromTcpEntry.c
     GetOwnerModuleFromUdpEntry.c
+    IcmpEchoTimeChange.c
     icmp.c
     icmp_echo.c
     InitializeIpInterfaceEntry.c
