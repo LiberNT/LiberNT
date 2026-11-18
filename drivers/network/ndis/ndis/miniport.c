@@ -196,6 +196,10 @@ MiniIndicateData(
   PLIST_ENTRY CurrentEntry;
   PADAPTER_BINDING AdapterBinding;
 
+  if (Adapter != NULL && !Adapter->IsNdis6)
+      Ndis6LegacyRxIndicateLookahead(Adapter, HeaderBuffer, HeaderBufferSize,
+                                     LookaheadBuffer, LookaheadBufferSize, PacketSize);
+
   NDIS_DbgPrint(DEBUG_MINIPORT, ("Called. Adapter (0x%X)  HeaderBuffer (0x%X)  "
       "HeaderBufferSize (0x%X)  LookaheadBuffer (0x%X)  LookaheadBufferSize (0x%X).\n",
       Adapter, HeaderBuffer, HeaderBufferSize, LookaheadBuffer, LookaheadBufferSize));
@@ -449,6 +453,11 @@ MiniIndicateReceivePacket(
     SIZE_T BindingIndex;
     KIRQL OldIrql;
     UINT i;
+
+    /* NDIS 6 consumers receive independent, synchronous RESOURCES NBLs.
+     * Copy before legacy NDIS 5 protocols or the miniport can reclaim data. */
+    if (!Adapter->IsNdis6 && PacketArray != NULL && NumberOfPackets != 0)
+        Ndis6LegacyRxIndicatePackets(Adapter, PacketArray, NumberOfPackets);
 
     Snapshot = MiniSnapshotReceiveBindings(Adapter,
                                            InlineSnapshot,
@@ -810,6 +819,12 @@ MiniSendComplete(
     PSCATTER_GATHER_LIST SGList;
 
     NDIS_DbgPrint(DEBUG_MINIPORT, ("Called.\n"));
+
+    /* A bridge packet has no ADAPTER_BINDING in Reserved[1]. Its lifetime
+     * and NBL completion are owned by the NDIS 6 -> 5 TX thunk. */
+    if (!Adapter->IsNdis6 && Adapter->Ndis6LegacyTxPacketPool != NULL &&
+        Ndis6LegacyTxComplete(Adapter, Packet, Status))
+        return;
 
     AdapterBinding = (PADAPTER_BINDING)Packet->Reserved[1];
 
@@ -2438,6 +2453,14 @@ NdisIPnPStartDevice(
 
   NDIS_DbgPrint(MAX_TRACE, ("Inserting adapter 0x%x into adapter list\n", Adapter));
 
+  /* Start with cross-version binds closed: the adapter enters the global
+   * list before MiniportInitialize and DoQueries have populated its MAC.
+   * A protocol registering concurrently must not see a half-started NIC. */
+  InitializeListHead(&Adapter->Ndis6LegacyBindingList);
+  KeInitializeSpinLock(&Adapter->Ndis6LegacyBindingLock);
+  ExInitializeRundownProtection(&Adapter->Ndis6LegacyLifecycleRundown);
+  InterlockedExchange(&Adapter->Ndis6LegacyBindingsClosing, 1);
+
   /* Put adapter in global adapter list */
   ExInterlockedInsertTailList(&AdapterListHead, &Adapter->ListEntry, &AdapterListLock);
 
@@ -2689,6 +2712,8 @@ NdisIPnPStartDevice(
   if (NdisStatus != NDIS_STATUS_SUCCESS)
     {
       NDIS_DbgPrint(MIN_TRACE, ("couldn't create filter (%x)\n", NdisStatus));
+      /* The failed adapter must not remain on the global discovery list. */
+      ExInterlockedRemoveEntryList(&Adapter->ListEntry, &AdapterListLock);
       return NdisStatus;
     }
 
@@ -2718,6 +2743,15 @@ NdisIPnPStartDevice(
       CurrentEntry = CurrentEntry->Flink;
   }
 
+  /* Do not expose cross-version bindings unless both packet pools exist. */
+  if (Ndis6LegacyDatapathStart(Adapter))
+  {
+      InterlockedExchange(&Adapter->Ndis6LegacyBindingsClosing, 0);
+      Ndis6BindAllProtocolsToAdapter(Adapter);
+  }
+  else
+      DbgPrint("NDIS6-LEGACY: datapath unavailable, native NDIS 5 remains enabled\n");
+
   return STATUS_SUCCESS;
 }
 
@@ -2741,11 +2775,19 @@ NdisIPnPStopDevice(
    * pass-through; this legacy path must never run for NDIS 6 adapters. */
   ASSERT(!Adapter->IsNdis6);
 
+  /* Prevent new NDIS 6 opens before unlinking the legacy adapter. The
+   * unbind closes persistent binding references; the subsequent rundown
+   * wait drains protocol-registration snapshots before MiniportHalt. */
+  InterlockedExchange(&Adapter->Ndis6LegacyBindingsClosing, 1);
+
   /* Remove adapter from adapter list for this miniport */
   ExInterlockedRemoveEntryList(&Adapter->MiniportListEntry, &Adapter->NdisMiniportBlock.DriverHandle->Lock);
 
   /* Remove adapter from global adapter list */
   ExInterlockedRemoveEntryList(&Adapter->ListEntry, &AdapterListLock);
+
+  Ndis6UnbindAllProtocolsFromAdapter(Adapter);
+  ExWaitForRundownProtectionRelease(&Adapter->Ndis6LegacyLifecycleRundown);
 
   MiniStopHangTimer(Adapter);
 
@@ -2758,6 +2800,7 @@ NdisIPnPStopDevice(
   Adapter->NdisMiniportBlock.PnPDeviceState = NdisPnPDeviceStopped;
 
   (*Adapter->NdisMiniportBlock.DriverHandle->MiniportCharacteristics.HaltHandler)(Adapter->NdisMiniportBlock.MiniportAdapterContext);
+  Ndis6LegacyDatapathStop(Adapter);
 
   if (!NT_SUCCESS(IoSetDeviceInterfaceState(&Adapter->NdisMiniportBlock.SymbolicLinkName, FALSE)))
       NDIS_DbgPrint(MIN_TRACE, ("IoSetDeviceInterfaceState(%wZ) failed\n", &Adapter->NdisMiniportBlock.SymbolicLinkName));
@@ -2873,6 +2916,16 @@ NdisIPnPRemoveDevice(
      * This legacy path must never run for NDIS 6 adapters. */
     ASSERT(!Adapter->IsNdis6);
 
+    /* REMOVE can arrive without STOP. Drain cross-version binds before
+     * the miniport is halted and the device extension is freed. */
+    if (Adapter->NdisMiniportBlock.PnPDeviceState == NdisPnPDeviceStarted)
+    {
+        InterlockedExchange(&Adapter->Ndis6LegacyBindingsClosing, 1);
+        ExInterlockedRemoveEntryList(&Adapter->ListEntry, &AdapterListLock);
+        Ndis6UnbindAllProtocolsFromAdapter(Adapter);
+        ExWaitForRundownProtectionRelease(&Adapter->Ndis6LegacyLifecycleRundown);
+    }
+
     ndisUnbindProtocolsFromAdapter(Adapter);
 
     if (Adapter->NdisMiniportBlock.SymbolicLinkName.Buffer)
@@ -2895,13 +2948,12 @@ NdisIPnPRemoveDevice(
         /* Remove adapter from adapter list for this miniport */
         ExInterlockedRemoveEntryList(&Adapter->MiniportListEntry, &Adapter->NdisMiniportBlock.DriverHandle->Lock);
 
-        /* Remove adapter from global adapter list */
-        ExInterlockedRemoveEntryList(&Adapter->ListEntry, &AdapterListLock);
-
+        /* Global unlink and NDIS 6 binding rundown were done above. */
         MiniStopHangTimer(Adapter);
 
         Adapter->NdisMiniportBlock.DriverHandle->MiniportCharacteristics.HaltHandler(Adapter->NdisMiniportBlock.MiniportAdapterContext);
     }
+    Ndis6LegacyDatapathStop(Adapter);
 
     if (Adapter->NdisMiniportBlock.EthDB)
     {
@@ -3841,30 +3893,50 @@ NdisMRegisterDevice(
         return Status;
     }
 
-    Status = IoCreateSymbolicLink(SymbolicName, DeviceName);
-
-    if (!NT_SUCCESS(Status))
-    {
-        NDIS_DbgPrint(MIN_TRACE, ("IoCreateSymbolicLink failed (%x)\n", Status));
-        IoDeleteDevice(DeviceObject);
-        return Status;
-    }
-
     DeviceBlock = DeviceObject->DeviceExtension;
 
     if (!DeviceBlock)
     {
         NDIS_DbgPrint(MIN_TRACE, ("Insufficient resources\n"));
         IoDeleteDevice(DeviceObject);
-        IoDeleteSymbolicLink(SymbolicName);
         return NDIS_STATUS_RESOURCES;
+    }
+
+    /* NDIS must not retain a pointer to the caller's UNICODE_STRING:
+     * the descriptor (and sometimes its Buffer) can be temporary. */
+    if (!SymbolicName || !SymbolicName->Buffer || !SymbolicName->Length)
+    {
+        IoDeleteDevice(DeviceObject);
+        return NDIS_STATUS_INVALID_PARAMETER;
+    }
+
+    DeviceBlock->SymbolicName.Buffer = ExAllocatePoolWithTag(
+        NonPagedPool, SymbolicName->Length, 'sDdN');
+    if (!DeviceBlock->SymbolicName.Buffer)
+    {
+        IoDeleteDevice(DeviceObject);
+        return NDIS_STATUS_RESOURCES;
+    }
+
+    RtlCopyMemory(DeviceBlock->SymbolicName.Buffer,
+                  SymbolicName->Buffer,
+                  SymbolicName->Length);
+    DeviceBlock->SymbolicName.Length = SymbolicName->Length;
+    DeviceBlock->SymbolicName.MaximumLength = SymbolicName->Length;
+
+    Status = IoCreateSymbolicLink(&DeviceBlock->SymbolicName, DeviceName);
+    if (!NT_SUCCESS(Status))
+    {
+        NDIS_DbgPrint(MIN_TRACE, ("IoCreateSymbolicLink failed (%x)\n", Status));
+        ExFreePoolWithTag(DeviceBlock->SymbolicName.Buffer, 'sDdN');
+        IoDeleteDevice(DeviceObject);
+        return Status;
     }
 
     for (i = 0; i <= IRP_MJ_MAXIMUM_FUNCTION; i++)
          DeviceBlock->MajorFunction[i] = MajorFunctions[i];
 
     DeviceBlock->DeviceObject = DeviceObject;
-    DeviceBlock->SymbolicName = SymbolicName;
 
     *pDeviceObject = DeviceObject;
     *NdisDeviceHandle = DeviceBlock;
@@ -3887,10 +3959,18 @@ NdisMDeregisterDevice(
  */
 {
     PNDIS_M_DEVICE_BLOCK DeviceBlock = NdisDeviceHandle;
+    PDEVICE_OBJECT DeviceObject;
 
-    IoDeleteDevice(DeviceBlock->DeviceObject);
+    if (!DeviceBlock)
+        return NDIS_STATUS_INVALID_PARAMETER;
 
-    IoDeleteSymbolicLink(DeviceBlock->SymbolicName);
+    /* DeviceBlock lives in DeviceObject->DeviceExtension.  Deleting the
+     * device first can free DeviceBlock and turn the following name lookup
+     * into a use-after-free in IoDeleteSymbolicLink / ObOpenObjectByName. */
+    DeviceObject = DeviceBlock->DeviceObject;
+    IoDeleteSymbolicLink(&DeviceBlock->SymbolicName);
+    ExFreePoolWithTag(DeviceBlock->SymbolicName.Buffer, 'sDdN');
+    IoDeleteDevice(DeviceObject);
 
     return NDIS_STATUS_SUCCESS;
 }
