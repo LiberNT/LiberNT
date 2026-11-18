@@ -359,12 +359,15 @@ list(APPEND SERVER_SOURCE
     channels/disp/server/disp_main.c
     channels/drdynvc/server/drdynvc_main.c
     channels/rdpdr/server/rdpdr_main.c
+    channels/rdpgfx/rdpgfx_common.c
+    channels/rdpgfx/server/rdpgfx_main.c
     channels/server/channels.c
     server/common/server.c)
 
 add_library(winpr ${WINPR_SOURCE})
 add_library(freerdp ${FREERDP_SOURCE})
 add_library(freerdp-server ${SERVER_SOURCE})
+target_include_directories(freerdp-server PRIVATE channels/rdpgfx)
 
 foreach(_target winpr freerdp freerdp-server)
     if(NOT MSVC)
