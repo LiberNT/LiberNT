@@ -915,6 +915,8 @@ KiSetPriorityThread(
                     if (Prcb->NextThread == Thread)
                     {
                         Better = KiSelectReadyThread(Priority + 1, Prcb);
+                        if (Better == NULL)
+                            Better = KiStealReadyThread(Prcb, Priority + 1);
                         if (Better != NULL)
                         {
                             ASSERT(Better != Thread);
@@ -932,6 +934,8 @@ KiSetPriorityThread(
                     if ((Current == Thread) && (Prcb->NextThread == NULL))
                     {
                         Better = KiSelectReadyThread(Priority + 1, Prcb);
+                        if (Better == NULL)
+                            Better = KiStealReadyThread(Prcb, Priority + 1);
                         if (Better != NULL)
                         {
                             Better->State = Standby;
