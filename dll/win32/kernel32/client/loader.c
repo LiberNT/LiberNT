@@ -1228,8 +1228,10 @@ LoadModule(LPCSTR lpModuleName,
     STARTUPINFOA StartupInfo;
     PROCESS_INFORMATION ProcessInformation;
     LOADPARMS32 *LoadParams;
+    PWORD CmdShow;
     char FileName[MAX_PATH];
     LPSTR CommandLine;
+    BYTE CommandLength;
     DWORD Length, Error;
     BOOL ProcessStatus;
     ANSI_STRING AnsiStr;
@@ -1238,9 +1240,10 @@ LoadModule(LPCSTR lpModuleName,
     HANDLE Handle;
 
     LoadParams = (LOADPARMS32*)lpParameterBlock;
+    CmdShow = (PWORD)LoadParams->lpCmdShow;
 
     /* Check load parameters */
-    if (LoadParams->dwReserved || LoadParams->wMagicValue != 2)
+    if (LoadParams->dwReserved || (CmdShow && CmdShow[0] != 2))
     {
         /* Fail with invalid param error */
         BaseSetLastNTError(STATUS_INVALID_PARAMETER);
@@ -1257,20 +1260,23 @@ LoadModule(LPCSTR lpModuleName,
         RtlZeroMemory(&StartupInfo, sizeof(StartupInfo));
 
         StartupInfo.cb = sizeof(STARTUPINFOA);
-        StartupInfo.dwFlags = STARTF_USESHOWWINDOW;
-        StartupInfo.wShowWindow = LoadParams->wCmdShow;
+        if (CmdShow)
+        {
+            StartupInfo.dwFlags = STARTF_USESHOWWINDOW;
+            StartupInfo.wShowWindow = CmdShow[1];
+        }
 
         /* Allocate command line buffer */
-        CommandLine = RtlAllocateHeap(RtlGetProcessHeap(),
-                                      HEAP_ZERO_MEMORY,
-                                      (ULONG)LoadParams->lpCmdLine[0] + Length + 2);
+        CommandLength = (BYTE)LoadParams->lpCmdLine[0];
+        CommandLine = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, CommandLength + Length + 2);
+        if (!CommandLine) return 0;
 
         /* Put module name there, then a space, and then copy provided command line,
            and null-terminate it */
         RtlCopyMemory(CommandLine, FileName, Length);
         CommandLine[Length] = ' ';
-        RtlCopyMemory(&CommandLine[Length + 1], &LoadParams->lpCmdLine[1], (ULONG)LoadParams->lpCmdLine[0]);
-        CommandLine[Length + 1 + (ULONG)LoadParams->lpCmdLine[0]] = 0;
+        RtlCopyMemory(&CommandLine[Length + 1], &LoadParams->lpCmdLine[1], CommandLength);
+        CommandLine[Length + 1 + CommandLength] = 0;
 
         /* Create the process */
         ProcessStatus = CreateProcessA(FileName,
