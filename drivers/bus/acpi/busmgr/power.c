@@ -494,6 +494,20 @@ acpi_power_get_inferred_state (
 }
 
 
+static BOOLEAN
+acpi_power_list_has(
+	struct acpi_handle_list	*list,
+	ACPI_HANDLE		handle)
+{
+	UINT32 i;
+
+	for (i = 0; i < list->count; i++) {
+		if (list->handles[i] == handle)
+			return TRUE;
+	}
+	return FALSE;
+}
+
 int
 acpi_power_transition (
 	struct acpi_device	*device,
@@ -533,6 +547,8 @@ acpi_power_transition (
 	 * Then we dereference all power resources used in the current list.
 	 */
 	for (i = 0; i < cl->count; i++) {
+		if (acpi_power_list_has(tl, cl->handles[i]))
+			continue;
 		result = acpi_power_off_device(cl->handles[i], device);
 		if (result)
 			goto end;
