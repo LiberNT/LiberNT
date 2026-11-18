@@ -262,7 +262,20 @@ DxgkDeviceWorkWaitForQueued(
         return Status;
     KeQuerySystemTime(&Deadline);
     Deadline.QuadPart += (LONGLONG)TimeoutMs * 10000LL;
-    return DxgkDeviceWorkCoreWaitForSnapshotUntil(&Device->WorkLedger, &Snapshot, &Deadline);
+    Status = DxgkDeviceWorkCoreWaitForSnapshotUntil(
+        &Device->WorkLedger, &Snapshot, &Deadline);
+
+    if (Status == STATUS_TIMEOUT)
+    {
+        DbgPrint(
+            "DXGK_WORK_DIAG: device=%p target=%I64u timeout=%lu\n",
+            Device, Snapshot.TargetSequence, TimeoutMs);
+
+        DxgkDeviceWorkCoreDumpTimeout(
+            &Device->WorkLedger, Snapshot.TargetSequence);
+    }
+
+    return Status;
 }
 
 /*
@@ -353,6 +366,22 @@ DxgkProcessWaitForQueuedWork(
         if (NT_SUCCESS(WaitStatus))
             WaitStatus = DxgkDeviceWorkCoreWaitForSnapshotUntil(
                 &Devices[Index].Device->WorkLedger, &Devices[Index].Work, &Deadline);
+
+        if (WaitStatus == STATUS_TIMEOUT)
+        {
+            DbgPrint(
+                "DXGK_WORK_DIAG: process=%p device=%p "
+                "index=%lu target=%I64u timeout=%lu\n",
+                ProcessRecord,
+                Devices[Index].Device,
+                Index,
+                Devices[Index].Work.TargetSequence,
+                TimeoutMs);
+
+            DxgkDeviceWorkCoreDumpTimeout(
+                &Devices[Index].Device->WorkLedger,
+                Devices[Index].Work.TargetSequence);
+        }
 
         /* STATUS_TIMEOUT has success severity. A later terminal device
          * must not overwrite it and authorize teardown of a live mapping. */
