@@ -460,27 +460,31 @@ static BOOL FindRemoteDisplay(WCHAR *name)
     }
 }
 
-static BOOL WaitForRemoteDisplay(int width, int height)
+static BOOL RemoteDisplayListsMode(int width, int height)
 {
     WCHAR name[ARRAYSIZE(((DISPLAY_DEVICEW *)0)->DeviceName)];
     DEVMODEW mode;
-    DWORD index, start = GetTickCount();
-    for (;;)
+    DWORD index;
+    if (!FindRemoteDisplay(name)) return FALSE;
+    if (!width) return TRUE;
+    for (index = 0;; ++index)
     {
-        if (FindRemoteDisplay(name))
-        {
-            if (!width) return TRUE;
-            for (index = 0;; ++index)
-            {
-                ZeroMemory(&mode, sizeof(mode));
-                mode.dmSize = sizeof(mode);
-                if (!EnumDisplaySettingsW(name, index, &mode)) break;
-                if ((int)mode.dmPelsWidth == width && (int)mode.dmPelsHeight == height) return TRUE;
-            }
-        }
+        ZeroMemory(&mode, sizeof(mode));
+        mode.dmSize = sizeof(mode);
+        if (!EnumDisplaySettingsW(name, index, &mode)) return FALSE;
+        if ((int)mode.dmPelsWidth == width && (int)mode.dmPelsHeight == height) return TRUE;
+    }
+}
+
+static BOOL WaitForRemoteDisplay(int width, int height)
+{
+    DWORD start = GetTickCount();
+    while (!RemoteDisplayListsMode(width, height))
+    {
         if (GetTickCount() - start > 15000) return FALSE;
         Sleep(100);
     }
+    return TRUE;
 }
 
 static BOOL WaitForRemoteDisplayMode(int width, int height)
@@ -664,7 +668,8 @@ static UINT32 AcquireRemoteDisplay(DESKTOP_CONTEXT *ctx)
         }
         else if (WaitForSingleObject(RemoteDisplayReady, 15000) == WAIT_OBJECT_0 && WaitForRemoteDisplay(0, 0))
         {
-            if (SetRemoteDisplayMode(width, height) && !WaitForRemoteDisplay(width, height))
+            if (!RemoteDisplayListsMode(width, height) && SetRemoteDisplayMode(width, height) &&
+                !WaitForRemoteDisplay(width, height))
                 Log("The remote display does not list %dx%d", width, height);
             RemoteDisplayShown = ConnectRemoteConsole(ctx);
             if (!RemoteDisplayShown)
