@@ -94,8 +94,7 @@ typedef struct tagLOADPARMS32
 {
     LPSTR lpEnvAddress;
     LPSTR lpCmdLine;
-    WORD  wMagicValue;
-    WORD  wCmdShow;
+    LPSTR lpCmdShow;
     DWORD dwReserved;
 } LOADPARMS32;
 
