@@ -880,6 +880,15 @@ KiArm64RefreshProcessorRunTime(
 
 VOID
 NTAPI
+KiArm64StopClockAccounting(VOID);
+
+VOID
+NTAPI
+KiArm64RestartClockAccounting(
+    _In_ KAFFINITY Processors);
+
+VOID
+NTAPI
 KiArm64QueryClockTickBaseline(
     _Out_ PLARGE_INTEGER Counter,
     _Out_ PULONGLONG Remainder);
