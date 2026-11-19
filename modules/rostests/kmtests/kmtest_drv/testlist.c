@@ -445,6 +445,7 @@ KMT_TESTFUNC Test_IoSafeBootPolicy;
 KMT_TESTFUNC Test_IoStackKM;
 KMT_TESTFUNC Test_IoActivityId;
 KMT_TESTFUNC Test_IoAcpiCmosRegion;
+KMT_TESTFUNC Test_IoI8042Hook;
 KMT_TESTFUNC Test_IoI8042Sync;
 KMT_TESTFUNC Test_IoAcpiIoctl;
 KMT_TESTFUNC Test_IoErrorLogEntry;
@@ -687,6 +688,7 @@ const KMT_TEST TestList[] =
     { "IoModern",                           Test_IoModern },
     { "IoActivityId",                       Test_IoActivityId },
     { "IoAcpiCmosRegion",                   Test_IoAcpiCmosRegion },
+    { "IoI8042Hook",                        Test_IoI8042Hook },
     { "IoI8042Sync",                        Test_IoI8042Sync },
     { "IoAcpiIoctl",                        Test_IoAcpiIoctl },
     { "IoErrorLogEntry",                    Test_IoErrorLogEntry },

@@ -239,6 +239,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_io/IoPciPdoPnp.c
     ntos_io/IoRamdiskPnp.c
     ntos_io/IoAcpiCmosRegion.c
+    ntos_io/IoI8042Hook.c
     ntos_io/IoI8042Sync.c
     ntos_io/IoErrorLogEntry.c
     ntos_io/IoPciBusFdo.c
@@ -427,6 +428,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ${COMMON_SOURCE}
 
     ${REACTOS_SOURCE_DIR}/drivers/bus/acpi/cmos_core.c
+    ${REACTOS_SOURCE_DIR}/drivers/input/i8042prt/hook_core.c
     ${REACTOS_SOURCE_DIR}/drivers/input/i8042prt/sync_core.c
     ${REACTOS_SOURCE_DIR}/drivers/directx/dxgkrnl/gpuva_core.c
     ${REACTOS_SOURCE_DIR}/drivers/directx/dxgkrnl/adapter_map_core.c
