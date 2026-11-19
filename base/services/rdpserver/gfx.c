@@ -10,11 +10,13 @@
 #include <string.h>
 #include <freerdp/channels/wtsvc.h>
 #include <freerdp/codec/color.h>
+#include <freerdp/codec/h264.h>
 #include <freerdp/codec/progressive.h>
 #include <freerdp/codec/region.h>
 #include <freerdp/server/rdpgfx.h>
 #include "gfx.h"
 #include "clearenc.h"
+#include "videodetect.h"
 
 #define GFX_SURFACE_ID 0
 #define GFX_TILE_SIZE 64
@@ -25,6 +27,7 @@
 #define GFX_SMALL_CACHE_SLOTS 4096
 #define GFX_CACHE_BYTES (100u * 1024 * 1024)
 #define GFX_SMALL_CACHE_BYTES (16u * 1024 * 1024)
+#define GFX_VIDEO_QP 25
 
 typedef struct GFX_CACHE_ENTRY
 {
@@ -55,6 +58,9 @@ struct RDP_GFX
     UINT16 *Buckets, *FreeSlots;
     UINT16 CacheSlots, NextFreeSlot, FreeCount, Newest, Oldest;
     UINT32 CacheBytes, CacheLimit;
+    BOOL H264Enabled;
+    H264_CONTEXT *H264;
+    VIDEO_TRACKER Video;
 };
 
 static const UINT32 KnownVersions[] =
@@ -126,11 +132,12 @@ static BOOL ChannelIdAssigned(RdpgfxServerContext *context, UINT32 channelId)
     return TRUE;
 }
 
-RDP_GFX *GfxCreate(HANDLE vcm, rdpContext *rdp, GFX_LOG log)
+RDP_GFX *GfxCreate(HANDLE vcm, rdpContext *rdp, GFX_LOG log, BOOL h264)
 {
     RDP_GFX *gfx = calloc(1, sizeof(*gfx));
     if (!gfx) return NULL;
     gfx->Log = log;
+    gfx->H264Enabled = h264;
     gfx->Context = rdpgfx_server_context_new(vcm);
     gfx->Progressive = progressive_context_new(TRUE);
     gfx->Encoded = malloc(GFX_TILE_SIZE * GFX_TILE_SIZE * 4 + 2);
@@ -165,6 +172,8 @@ void GfxFree(RDP_GFX *gfx)
         rdpgfx_server_context_free(gfx->Context);
     }
     progressive_context_free(gfx->Progressive);
+    h264_context_free(gfx->H264);
+    VideoTrackerFree(&gfx->Video);
     free(gfx->Pending);
     free(gfx->PendingKeys);
     free(gfx->Encoded);
@@ -264,6 +273,10 @@ BOOL GfxResetSurface(RDP_GFX *gfx, UINT32 width, UINT32 height)
     gfx->Width = width;
     gfx->Height = height;
     gfx->SurfaceCreated = TRUE;
+    h264_context_free(gfx->H264);
+    gfx->H264 = NULL;
+    VideoTrackerFree(&gfx->Video);
+    if (gfx->H264Enabled && !VideoTrackerReset(&gfx->Video, width, height)) gfx->Log("Cannot track video regions");
     gfx->LastAckedFrameId = gfx->NextFrameId;
     return TRUE;
 }
@@ -561,13 +574,130 @@ static BOOL SendMove(RDP_GFX *gfx, const FRAME_MOVE *move)
     return gfx->Context->SurfaceToSurface(gfx->Context, &copy) == CHANNEL_RC_OK;
 }
 
+static BOOL VideoAllowed(const RDP_GFX *gfx)
+{
+    if (!gfx->H264Enabled || !gfx->Video.First) return FALSE;
+    if (gfx->CapSet.version == RDPGFX_CAPVERSION_81) return (gfx->CapSet.flags & RDPGFX_CAPS_FLAG_AVC420_ENABLED) != 0;
+    return gfx->CapSet.version >= RDPGFX_CAPVERSION_10 && !(gfx->CapSet.flags & RDPGFX_CAPS_FLAG_AVC_DISABLED);
+}
+
+static BOOL StartVideoEncoder(RDP_GFX *gfx, UINT32 width, UINT32 height)
+{
+    h264_context_free(gfx->H264);
+    gfx->H264 = h264_context_new(TRUE);
+    if (gfx->H264 && h264_context_reset(gfx->H264, width, height) &&
+        h264_context_set_option(gfx->H264, H264_CONTEXT_OPTION_USAGETYPE, H264_SCREEN_CONTENT_REAL_TIME) &&
+        h264_context_set_option(gfx->H264, H264_CONTEXT_OPTION_RATECONTROL, H264_RATECONTROL_CQP) &&
+        h264_context_set_option(gfx->H264, H264_CONTEXT_OPTION_QP, GFX_VIDEO_QP) &&
+        h264_context_set_option(gfx->H264, H264_CONTEXT_OPTION_FRAMERATE, 30))
+        return TRUE;
+    gfx->Log("The H.264 encoder is not available; video regions are sent as tiles");
+    h264_context_free(gfx->H264);
+    gfx->H264 = NULL;
+    gfx->H264Enabled = FALSE;
+    return FALSE;
+}
+
+static BOOL SendVideo(RDP_GFX *gfx, const BYTE *pixels, UINT32 stride, BOOL *sent)
+{
+    const RECT *region = &gfx->Video.Region;
+    RECTANGLE_16 rect;
+    RDPGFX_AVC420_BITMAP_STREAM stream = {0};
+    RDPGFX_SURFACE_COMMAND command = {0};
+    INT32 status;
+    BOOL ok;
+    *sent = FALSE;
+    assert(gfx->Video.Active && region->left < region->right && region->top < region->bottom &&
+           (UINT32)region->right <= gfx->Width && (UINT32)region->bottom <= gfx->Height);
+    if (!gfx->H264 && !StartVideoEncoder(gfx, gfx->Width, gfx->Height)) return TRUE;
+    rect.left = (UINT16)region->left;
+    rect.top = (UINT16)region->top;
+    rect.right = (UINT16)region->right;
+    rect.bottom = (UINT16)region->bottom;
+    status = avc420_compress(gfx->H264, pixels, PIXEL_FORMAT_BGRX32, stride, gfx->Width, gfx->Height, &rect,
+                             &stream.data, &stream.length, &stream.meta);
+    if (status < 0)
+    {
+        gfx->Log("H.264 encoding of (%ld,%ld)-(%ld,%ld) failed: %ld", region->left, region->top, region->right,
+                 region->bottom, (long)status);
+        return FALSE;
+    }
+    *sent = TRUE;
+    if (!status || !stream.meta.numRegionRects)
+    {
+        free_h264_metablock(&stream.meta);
+        return TRUE;
+    }
+    command.surfaceId = GFX_SURFACE_ID;
+    command.codecId = RDPGFX_CODECID_AVC420;
+    command.format = PIXEL_FORMAT_BGRX32;
+    command.left = (UINT32)region->left;
+    command.top = (UINT32)region->top;
+    command.right = (UINT32)region->right;
+    command.bottom = (UINT32)region->bottom;
+    command.width = command.right - command.left;
+    command.height = command.bottom - command.top;
+    command.length = stream.length;
+    command.extra = &stream;
+    ok = gfx->Context->SurfaceCommand(gfx->Context, &command) == CHANNEL_RC_OK;
+    free_h264_metablock(&stream.meta);
+    return ok;
+}
+
+static void StopVideo(RDP_GFX *gfx, RECT *refresh)
+{
+    RECT ended;
+    VideoTrackerStop(&gfx->Video, &ended);
+    UnionRect(refresh, refresh, &ended);
+}
+
+static BOOL MoveTouchesVideo(const RDP_GFX *gfx, const FRAME_MOVE *move)
+{
+    RECT source, overlap;
+    SetRect(&source, move->SourceLeft, move->SourceTop, move->SourceLeft + move->Dest.right - move->Dest.left,
+            move->SourceTop + move->Dest.bottom - move->Dest.top);
+    return IntersectRect(&overlap, &source, &gfx->Video.Region) || IntersectRect(&overlap, &move->Dest, &gfx->Video.Region);
+}
+
+BOOL GfxPoll(RDP_GFX *gfx, RECT *refresh)
+{
+    RECT ended;
+    SetRectEmpty(refresh);
+    if (!gfx->Video.Active) return FALSE;
+    VideoTrackerUpdate(&gfx->Video, GetTickCount64(), &ended);
+    *refresh = ended;
+    return !IsRectEmpty(refresh);
+}
+
 BOOL GfxSendFrame(RDP_GFX *gfx, const BYTE *pixels, UINT32 stride, const FRAME_MOVE *moves, UINT32 moveCount,
-                  const GFX_TILE *tiles, UINT32 count)
+                  const GFX_TILE *tiles, UINT32 count, RECT *refresh)
 {
     RDPGFX_START_FRAME_PDU start = {0};
     RDPGFX_END_FRAME_PDU end = {0};
     UINT32 i, pending = 0;
+    BOOL video = FALSE, videoChanged = FALSE, sent = FALSE;
+    ULONGLONG now = GetTickCount64();
     assert(gfx->Active && gfx->SurfaceCreated && GfxFrameAllowed(gfx));
+    SetRectEmpty(refresh);
+    if (VideoAllowed(gfx))
+    {
+        RECT ended;
+        for (i = 0; i < moveCount; ++i)
+            if (gfx->Video.Active && MoveTouchesVideo(gfx, &moves[i]))
+            {
+                StopVideo(gfx, refresh);
+                UnionRect(refresh, refresh, &moves[i].Dest);
+            }
+        for (i = 0; i < count; ++i)
+        {
+            RECT rect;
+            SetRect(&rect, tiles[i].Left, tiles[i].Top, tiles[i].Left + tiles[i].Width, tiles[i].Top + tiles[i].Height);
+            VideoTrackerChanged(&gfx->Video, now, &rect);
+        }
+        video = VideoTrackerUpdate(&gfx->Video, now, &ended);
+        UnionRect(refresh, refresh, &ended);
+        videoChanged = video && gfx->Video.RegionChanged == now;
+    }
     if (!count && !moveCount) return TRUE;
     if (!ReservePending(gfx, count)) return FALSE;
     start.frameId = end.frameId = ++gfx->NextFrameId;
@@ -575,8 +705,18 @@ BOOL GfxSendFrame(RDP_GFX *gfx, const BYTE *pixels, UINT32 stride, const FRAME_M
     if (gfx->Context->StartFrame(gfx->Context, &start) != CHANNEL_RC_OK) return FALSE;
     for (i = 0; i < moveCount; ++i)
         if (!SendMove(gfx, &moves[i])) return FALSE;
+    if (videoChanged)
+    {
+        if (!SendVideo(gfx, pixels, stride, &sent)) return FALSE;
+        if (!sent) StopVideo(gfx, refresh);
+    }
     for (i = 0; i < count; ++i)
+    {
+        RECT rect;
+        SetRect(&rect, tiles[i].Left, tiles[i].Top, tiles[i].Left + tiles[i].Width, tiles[i].Top + tiles[i].Height);
+        if (sent && VideoTrackerCovers(&gfx->Video, &rect)) continue;
         if (!SendTile(gfx, pixels, stride, &tiles[i], &pending)) return FALSE;
+    }
     if (!SendProgressiveTiles(gfx, pixels, stride, pending)) return FALSE;
     return gfx->Context->EndFrame(gfx->Context, &end) == CHANNEL_RC_OK;
 }

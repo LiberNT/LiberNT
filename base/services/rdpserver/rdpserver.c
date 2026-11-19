@@ -82,6 +82,7 @@ static ULONG AddressContext;
 static BOOL AddressAdded;
 
 #define SERVICE_NAME "LiberNTRDPServer"
+#define SERVICE_PARAMETERS_KEY "SYSTEM\\CurrentControlSet\\Services\\" SERVICE_NAME "\\Parameters"
 #define SERVICE_STOP_EVENT "Global\\LiberNT-RDPServer-Stop"
 #define TERMINAL_SERVER_KEY "SYSTEM\\CurrentControlSet\\Control\\Terminal Server"
 #define WINSTATIONS_KEY TERMINAL_SERVER_KEY "\\WinStations"
@@ -130,6 +131,7 @@ typedef struct DESKTOP_CONTEXT
     DispServerContext *Disp;
     RDP_GFX *Gfx;
     BOOL GfxTried, Deferred;
+    RECT RefreshRect;
     FRAME_MOVE Moves[RDPVDD_FRAME_MAX_MOVES];
     UINT32 MoveCount;
     UINT32 DispChannelId;
@@ -775,6 +777,16 @@ static void ReleaseRemoteDisplay(DESKTOP_CONTEXT *ctx)
     LeaveCriticalSection(&RemoteDisplayLock);
 }
 
+static BOOL OpenH264Enabled(void)
+{
+    DWORD value = 0, size = sizeof(value), type;
+    HKEY key;
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, SERVICE_PARAMETERS_KEY, 0, KEY_QUERY_VALUE, &key)) return FALSE;
+    if (RegQueryValueExA(key, "OpenH264", NULL, &type, (BYTE *)&value, &size) || type != REG_DWORD) value = 0;
+    RegCloseKey(key);
+    return value != 0;
+}
+
 static BOOL StartTransfer(DESKTOP_CONTEXT *ctx)
 {
     if (!*TransferRoot || !WTSVirtualChannelManagerIsChannelJoined(ctx->Vcm, "rdpdr")) return TRUE;
@@ -924,7 +936,7 @@ static BOOL DvcCreated(void *userdata, UINT32 channelId, INT32 status)
 static void OpenGraphicsPipeline(DESKTOP_CONTEXT *ctx)
 {
     ctx->GfxTried = TRUE;
-    ctx->Gfx = GfxCreate(ctx->Vcm, &ctx->rdp, Log);
+    ctx->Gfx = GfxCreate(ctx->Vcm, &ctx->rdp, Log, OpenH264Enabled());
     if (!ctx->Gfx) { Log("Cannot create the graphics pipeline"); return; }
     WTSVirtualChannelManagerSetDVCCreationCallback(ctx->Vcm, DvcCreated, ctx);
     if (!GfxOpen(ctx->Gfx)) { GfxFree(ctx->Gfx); ctx->Gfx = NULL; }
@@ -1259,9 +1271,13 @@ static BOOL SendDesktop(DESKTOP_CONTEXT *ctx, BOOL masked)
             BYTE *mask = &ctx->TileMask[(y / TILE_HEIGHT) * ctx->TileColumns + x / TILE_WIDTH];
             width = min(TILE_WIDTH, ctx->Width - x);
             height = min(TILE_HEIGHT, ctx->Height - y);
-            if (masked && !ctx->Refresh && !*mask) continue;
+            RECT tileRect, overlap;
+            BOOL force;
+            SetRect(&tileRect, x, y, x + width, y + height);
+            force = ctx->Refresh || IntersectRect(&overlap, &tileRect, &ctx->RefreshRect);
+            if (masked && !force && !*mask) continue;
             *mask = 0;
-            if (ctx->Refresh) SetRect(&changed, x, y, x + width, y + height);
+            if (force) changed = tileRect;
             else if (!TileChanged(ctx, x, y, width, height, &changed)) continue;
             if (gfx)
             {
@@ -1296,9 +1312,11 @@ static BOOL SendDesktop(DESKTOP_CONTEXT *ctx, BOOL masked)
                 memcpy(ctx->Previous + offset, ctx->Pixels + offset, (size_t)width * 4);
             }
         }
+    SetRectEmpty(&ctx->RefreshRect);
     if (gfx)
     {
-        if (!GfxSendFrame(ctx->Gfx, ctx->Pixels, (UINT32)ctx->Width * 4, ctx->Moves, moves, ctx->GfxTiles, count))
+        if (!GfxSendFrame(ctx->Gfx, ctx->Pixels, (UINT32)ctx->Width * 4, ctx->Moves, moves, ctx->GfxTiles, count,
+                          &ctx->RefreshRect))
             return FALSE;
         ctx->Updates += count + moves;
     }
@@ -1379,7 +1397,12 @@ static BOOL Capture(DESKTOP_CONTEXT *ctx)
         return ctx->rdp.update->DesktopResize(&ctx->rdp);
     }
     if (!UpdatePointer(ctx)) return FALSE;
-    if (!frame.RectCount && !ctx->Refresh && !ctx->Deferred) return TRUE;
+    if (GfxActive(ctx->Gfx))
+    {
+        RECT ended;
+        if (GfxPoll(ctx->Gfx, &ended)) UnionRect(&ctx->RefreshRect, &ctx->RefreshRect, &ended);
+    }
+    if (!frame.RectCount && !ctx->Refresh && !ctx->Deferred && IsRectEmpty(&ctx->RefreshRect)) return TRUE;
     for (i = 0; i < frame.RectCount; ++i) CopyFrameRect(ctx, &frame.Rects[i]);
     QueueMoves(ctx, &frame);
     return SendDesktop(ctx, TRUE);
