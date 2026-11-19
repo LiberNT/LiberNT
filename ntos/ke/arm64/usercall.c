@@ -177,7 +177,7 @@ KiArm64ConvertServiceThreadToGui(
     return Status;
 }
 
-VOID
+BOOLEAN
 KiSystemService(
     _Inout_ PKTHREAD Thread,
     _Inout_ PKTRAP_FRAME TrapFrame,
@@ -223,79 +223,26 @@ KiSystemService(
         PsGetCurrentProcess()->MitigationFlagsValues.DisallowWin32kSystemCalls)
     {
         TrapFrame->X0 = STATUS_INVALID_SYSTEM_SERVICE;
-        return;
+        return FALSE;
     }
 
     if (ServiceNumber >= DescriptorTable->Limit)
     {
-        /*
-         * ARM64 FIX: GUI Thread Conversion for Win32K System Calls.
-         *
-         * When a user-mode thread makes its first win32k system call (table
-         * index 1), the thread's ServiceTable still points to
-         * KeServiceDescriptorTable, which only has the NT table (index 0)
-         * populated. The win32k table (index 1) has Limit=0 and Base=NULL,
-         * so every service number fails this check.
-         *
-         * On x86-64 this is handled by KiSystemCallEntry64/KiConvertToGuiThread
-         * in assembly. On ARM64 we must handle it here in C.
-         *
-         * Call PsConvertToGuiThread() to:
-         * 1. Allocate a large kernel stack if needed
-         * 2. Call the win32k process callout (W32pProcessCallout)
-         * 3. Switch ServiceTable to KeServiceDescriptorTableShadow
-         * 4. Call the win32k thread callout (W32pThreadCallout)
-         *
-         * Then retry the service lookup with the new shadow table.
-         */
+        /* A first win32k call converts the thread; the stack switch has to happen with no C frame live */
         if ((TableIndex == SERVICE_TABLE_TEST) &&
 #if defined(_WIN64) && (NTDDI_VERSION >= NTDDI_LONGHORN)
-            !Thread->GuiThread
+            !Thread->GuiThread &&
 #else
-            (Thread->ServiceTable == KeServiceDescriptorTable)
+            (Thread->ServiceTable == KeServiceDescriptorTable) &&
 #endif
-            )
+            (PspW32ProcessCallout != NULL) && (PspW32ThreadCallout != NULL))
         {
-            /* Only convert if win32k callouts are registered */
-            if (PspW32ProcessCallout != NULL && PspW32ThreadCallout != NULL)
-            {
-                NTSTATUS ConvertStatus;
-
-                ConvertStatus = KiArm64ConvertServiceThreadToGui(Thread);
-                TrapFrame = Thread->TrapFrame;
-                if (NT_SUCCESS(ConvertStatus) ||
-                    ConvertStatus == STATUS_ALREADY_WIN32)
-                {
-                    /* Retry with the new service table */
-#if defined(_WIN64) && (NTDDI_VERSION >= NTDDI_LONGHORN)
-                    ServiceTable = (ULONG_PTR)(Thread->GuiThread ?
-                                               (PVOID)KeServiceDescriptorTableShadow :
-                                               (PVOID)KeServiceDescriptorTable);
-#else
-                    ServiceTable = (ULONG_PTR)(PVOID)Thread->ServiceTable;
-#endif
-                    DescriptorTable =
-                        (PKSERVICE_TABLE_DESCRIPTOR)(ServiceTable + TableIndex);
-
-                    if (ServiceNumber < DescriptorTable->Limit)
-                    {
-                        /* Success - fall through to the service dispatch below */
-                        goto ServiceDispatch;
-                    }
-                }
-                else
-                {
-                    TrapFrame->X0 = KiGetGuiServiceFailureStatus(ServiceNumber);
-                    return;
-                }
-            }
+            return TRUE;
         }
 
         TrapFrame->X0 = STATUS_INVALID_SYSTEM_SERVICE;
-        return;
+        return FALSE;
     }
-
-ServiceDispatch:
 
     if ((KiGetPreviousMode(TrapFrame) == UserMode) &&
         (TableIndex == SERVICE_TABLE_TEST) &&
@@ -396,6 +343,39 @@ ServiceDispatch:
      * TrapFrame from Thread->TrapFrame which was adjusted by
      * KeSwitchKernelStack, and then restores the linked list.
      */
+
+    return FALSE;
+}
+
+VOID
+KiSystemServiceAfterGuiConversion(
+    _Inout_ PKTHREAD Thread,
+    _Inout_ PKTRAP_FRAME TrapFrame,
+    _In_ ULONG Instruction,
+    _In_ NTSTATUS Status)
+{
+    ASSERT(Thread->TrapFrame == TrapFrame);
+
+    if (!NT_SUCCESS(Status) && (Status != STATUS_ALREADY_WIN32))
+    {
+        TrapFrame->X0 = KiGetGuiServiceFailureStatus(Instruction & SERVICE_NUMBER_MASK);
+        return;
+    }
+
+    ASSERT(Thread->GuiThread);
+    if (KiSystemService(Thread, TrapFrame, Instruction))
+        TrapFrame->X0 = STATUS_INVALID_SYSTEM_SERVICE;
+}
+
+VOID
+KiSystemServiceConvertInPlace(
+    _Inout_ PKTHREAD Thread,
+    _In_ ULONG Instruction)
+{
+    /* FIXME: this converts under live C frames, so a spilled pointer into the old stack goes stale */
+    NTSTATUS Status = KiArm64ConvertServiceThreadToGui(Thread);
+
+    KiSystemServiceAfterGuiConversion(Thread, Thread->TrapFrame, Instruction, Status);
 }
 
 DECLSPEC_NORETURN

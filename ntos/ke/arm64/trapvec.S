@@ -536,6 +536,52 @@ KiArm64SvcVectorCommon:
     ARM64_FINISH_SYNC_ENTRY
     .seh_endproc
 
+/*
+ * A first win32k call moves the thread to a large kernel stack. The switch
+ * copies the stack and relocates only frame records and trap frames, so it
+ * runs here, with the service trap frame at sp + 16 and no C frame live.
+ */
+    .seh_proc KiArm64UserServiceConvertToGui
+KiArm64UserServiceConvertToGui:
+    stp x29, x30, [sp, #-16]!
+    .seh_save_fplr_x 16
+    mov x29, sp
+    .seh_set_fp
+    .seh_endprologue
+    ldp x19, x20, [sp, #(16 + TfX0)]
+    ldp x21, x22, [sp, #(16 + TfX2)]
+    ldp x23, x24, [sp, #(16 + TfX4)]
+    ldp x25, x26, [sp, #(16 + TfX6)]
+    mrs x9, tpidr_el1
+    ldr x9, [x9, #PcCurrentThread]
+    ldrb w9, [x9, #ThLargeStack]
+    cbnz w9, .Lgui_large_stack
+    mov w0, #1
+    mov w1, #0
+    bl MmCreateKernelStack
+    cbz x0, .Lgui_no_stack
+    sub x1, x0, #KERNEL_LARGE_STACK_COMMIT
+    bl KeSwitchKernelStack
+    mov w1, #0
+    bl MmDeleteKernelStack
+.Lgui_large_stack:
+    bl PsConvertToGuiThread
+    stp x19, x20, [sp, #(16 + TfX0)]
+    stp x21, x22, [sp, #(16 + TfX2)]
+    stp x23, x24, [sp, #(16 + TfX4)]
+    stp x25, x26, [sp, #(16 + TfX6)]
+    b .Lgui_done
+.Lgui_no_stack:
+    movz w0, #0x009A
+    movk w0, #0xC000, lsl #16
+.Lgui_done:
+    .seh_startepilogue
+    ldp x29, x30, [sp], #16
+    .seh_save_fplr_x 16
+    .seh_endepilogue
+    ret
+    .seh_endproc
+
     .global KiArm64UserServiceEntry
     .seh_proc KiArm64UserServiceEntry
 KiArm64UserServiceEntry:
@@ -602,6 +648,12 @@ KiArm64UserServiceEntry:
 .Luser_service_irq_masked:
     mov x0, sp
     bl KiArm64UserServiceDispatch
+    cbz w0, .Luser_service_dispatched
+    bl KiArm64UserServiceConvertToGui
+    mov w1, w0
+    mov x0, sp
+    bl KiArm64UserServiceRedispatch
+.Luser_service_dispatched:
     mov x0, sp
     bl KiArm64UserServiceComplete
     cmp w0, #0

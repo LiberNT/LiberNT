@@ -169,6 +169,9 @@ OFFSET(PbNumber, KPRCB, Number),
 OFFSET(PbDpcStack, KPRCB, DpcStack),
 OFFSET(PbIsrStack, KPRCB, IsrStack),
 
+HEADER("KTHREAD offsets"),
+OFFSET(ThLargeStack, KTHREAD, LargeStack),
+
 HEADER("Defines for user shared data"),
 CONSTANTX(USER_SHARED_DATA, KI_USER_SHARED_DATA),
 CONSTANTPTR(MM_SHARED_USER_DATA_VA),

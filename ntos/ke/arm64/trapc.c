@@ -378,10 +378,22 @@ MmAccessFault(
     _In_ KPROCESSOR_MODE Mode,
     _In_ PVOID TrapInformation);
 
-VOID
+BOOLEAN
 KiSystemService(
     _Inout_ PKTHREAD Thread,
     _Inout_ PKTRAP_FRAME TrapFrame,
+    _In_ ULONG Instruction);
+
+VOID
+KiSystemServiceAfterGuiConversion(
+    _Inout_ PKTHREAD Thread,
+    _Inout_ PKTRAP_FRAME TrapFrame,
+    _In_ ULONG Instruction,
+    _In_ NTSTATUS Status);
+
+VOID
+KiSystemServiceConvertInPlace(
+    _Inout_ PKTHREAD Thread,
     _In_ ULONG Instruction);
 
 /*
@@ -881,8 +893,8 @@ KiArm64HandleSystemService(
     }
     if ((TrapFrame->PreviousMode == UserMode) && Thread->Header.Minimal)
         PspPicoSystemCallDispatch(TrapFrame, ExceptionFrame);
-    else
-        KiSystemService(Thread, TrapFrame, Instruction);
+    else if (KiSystemService(Thread, TrapFrame, Instruction))
+        KiSystemServiceConvertInPlace(Thread, Instruction);
 
     /* A first win32k call can relocate the entire kernel stack. */
     TrapFrame = Thread->TrapFrame;
@@ -1414,25 +1426,45 @@ KiArm64DeliverServiceUserApc(
     UNREACHABLE;
 }
 
-VOID
+static
+ULONG
+KiArm64UserServiceInstruction(
+    _In_ PKTRAP_FRAME TrapFrame)
+{
+    ULONG Instruction = TrapFrame->Esr & 0xFFFF;
+
+    if (Instruction == 0xFFFF)
+    {
+        Instruction = (ULONG)(TrapFrame->X[8] & 0x1FFF);
+    }
+
+    return Instruction;
+}
+
+BOOLEAN
 KiArm64UserServiceDispatch(
     _Inout_ PKTRAP_FRAME TrapFrame)
 {
     PKTHREAD Thread = KeGetCurrentThread();
-    ULONG Instruction;
 
     TrapFrame->SavedIrql = (UCHAR)KeGetCurrentIrql();
     KiArm64SavePreviousModeForTrap(Thread, TrapFrame);
     TrapFrame->TrapFrame = (ULONG64)(ULONG_PTR)Thread->TrapFrame;
     Thread->TrapFrame = TrapFrame;
 
-    Instruction = TrapFrame->Esr & 0xFFFF;
-    if (Instruction == 0xFFFF)
-    {
-        Instruction = (ULONG)(TrapFrame->X[8] & 0x1FFF);
-    }
+    return KiSystemService(Thread, TrapFrame, KiArm64UserServiceInstruction(TrapFrame));
+}
 
-    KiSystemService(Thread, TrapFrame, Instruction);
+VOID
+KiArm64UserServiceRedispatch(
+    _Inout_ PKTRAP_FRAME TrapFrame,
+    _In_ NTSTATUS Status)
+{
+    PKTHREAD Thread = KeGetCurrentThread();
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(Thread->TrapFrame == TrapFrame);
+    KiSystemServiceAfterGuiConversion(Thread, TrapFrame, KiArm64UserServiceInstruction(TrapFrame), Status);
 }
 
 VOID
