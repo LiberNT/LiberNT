@@ -425,6 +425,7 @@ KxFreezeExecution(
     KiArm64RequestIpiMask(KiFreezeTargetSet);
     HalRequestDebugWakeIpi(KiFreezeTargetSet);
     KiArm64WaitForFrozenTargets(CurrentPrcb);
+    KiArm64StopClockAccounting();
 }
 
 VOID
@@ -438,6 +439,7 @@ KxThawExecution(
         return;
     }
 
+    KiArm64RestartClockAccounting(KiFreezeTargetSet | CurrentPrcb->SetMember);
     KiArm64RequestThaw(CurrentPrcb);
 }
 
@@ -491,6 +493,7 @@ KxFreezeExecution(
 
     KiSingleProcessorFreezeOwner = CurrentPrcb;
     CurrentPrcb->IpiFrozen = IPI_FROZEN_STATE_OWNER | IPI_FROZEN_FLAG_ACTIVE;
+    KiArm64StopClockAccounting();
 }
 
 VOID
@@ -502,6 +505,8 @@ KxThawExecution(
 
     if (CurrentPrcb != NULL)
     {
+        if (KiSingleProcessorFreezeOwner == CurrentPrcb)
+            KiArm64RestartClockAccounting(CurrentPrcb->SetMember);
         CurrentPrcb->IpiFrozen = IPI_FROZEN_STATE_RUNNING;
     }
 
