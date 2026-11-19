@@ -90,6 +90,7 @@ VOID NTAPI HalpRiscvClockInterrupt(_In_ PKTRAP_FRAME TrapFrame);
 VOID NTAPI HalpRiscvProfileInterrupt(_In_ PKTRAP_FRAME TrapFrame);
 VOID NTAPI HalpRiscvSuspendClockTick(VOID);
 ULONG NTAPI HalpRiscvResumeClockTick(VOID);
+ULONG NTAPI HalpRiscvQuerySuspendedClockTicks(_In_ ULONG Number);
 VOID HalpRiscvInitializeProfile(VOID);
 VOID HalpRiscvRegisterProfileInformation(VOID);
 VOID HalpRiscvEnableProfileInterrupt(VOID);

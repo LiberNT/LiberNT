@@ -311,6 +311,8 @@ KiRiscvLeaveIdleSubNode(_In_ PKPRCB Prcb)
     InterlockedAnd64((PLONG64)&SubNode->IdleSmtSet, ~(LONG64)Prcb->MultiThreadProcessorSet);
 }
 
+static KSPIN_LOCK KiRiscvIdleAccountingLock[MAXIMUM_PROCESSORS];
+
 static
 VOID
 KiRiscvCreditIdleTicks(_In_ ULONG Ticks)
@@ -318,7 +320,45 @@ KiRiscvCreditIdleTicks(_In_ ULONG Ticks)
     KTRAP_FRAME TrapFrame;
 
     TrapFrame.Sstatus = RISCV_SSTATUS_SPP;
+    TrapFrame.Context.Pc = (ULONG_PTR)_ReturnAddress();
     KiUpdateIdleRunTime(&TrapFrame, Ticks);
+}
+
+VOID
+NTAPI
+KiRiscvRefreshProcessorRunTime(
+    _In_ PKPRCB Prcb)
+{
+    KIRQL OldIrql = DISPATCH_LEVEL;
+    BOOLEAN Enabled;
+    ULONG Ticks;
+
+    ASSERT(Prcb != NULL);
+    ASSERT(Prcb->Number < MAXIMUM_PROCESSORS);
+    ASSERT(Prcb->IdleThread != NULL);
+
+    if (KeGetCurrentIrql() < DISPATCH_LEVEL)
+        KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
+    if (Prcb != KeGetCurrentPrcb())
+    {
+        Enabled = KeDisableInterrupts();
+        KeAcquireSpinLockAtDpcLevel(&KiRiscvIdleAccountingLock[Prcb->Number]);
+        Ticks = HalpRiscvQuerySuspendedClockTicks(Prcb->Number);
+        if (Ticks != 0)
+        {
+            PKPROCESS Process = Prcb->IdleThread->ApcState.Process;
+
+            ASSERT(Prcb->CurrentThread == Prcb->IdleThread);
+            Prcb->KernelTime += Ticks;
+            Prcb->IdleThread->KernelTime += Ticks;
+            if (Process != NULL)
+                InterlockedExchangeAdd((PLONG)&Process->KernelTime, (LONG)Ticks);
+        }
+        KeReleaseSpinLockFromDpcLevel(&KiRiscvIdleAccountingLock[Prcb->Number]);
+        KeRestoreInterrupts(Enabled);
+    }
+    if (OldIrql < DISPATCH_LEVEL)
+        KeLowerIrql(OldIrql);
 }
 
 DECLSPEC_NORETURN
@@ -393,11 +433,19 @@ KiIdleLoop(VOID)
         }
         KiRiscvEnterIdleSubNode(Prcb);
         if (Pcr->InterruptEnable)
+        {
+            KeAcquireSpinLockAtDpcLevel(&KiRiscvIdleAccountingLock[Prcb->Number]);
             HalpRiscvSuspendClockTick();
+            KeReleaseSpinLockFromDpcLevel(&KiRiscvIdleAccountingLock[Prcb->Number]);
+        }
         KiRiscvIdleWait(Pcr);
         if (Pcr->InterruptEnable)
         {
-            ULONG Ticks = HalpRiscvResumeClockTick();
+            ULONG Ticks;
+
+            KeAcquireSpinLockAtDpcLevel(&KiRiscvIdleAccountingLock[Prcb->Number]);
+            Ticks = HalpRiscvResumeClockTick();
+            KeReleaseSpinLockFromDpcLevel(&KiRiscvIdleAccountingLock[Prcb->Number]);
 
             if (Ticks)
                 KiRiscvCreditIdleTicks(Ticks);
