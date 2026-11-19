@@ -108,9 +108,10 @@ reloc_up:
      */
     mov edx, esi            // Source
     cmp edi, edx
-    jbe 1f
+    jbe reloc_page_above
     mov edx, edi            // Target, when it is the higher of the two
-1:  add edx, ecx            // + KernelSize
+reloc_page_above:
+    add edx, ecx            // + KernelSize
     add edx, HEX(0FFF)      // Round up ...
     and edx, HEX(0FFFF000)  // ... to the next page boundary
 
@@ -120,8 +121,9 @@ reloc_up:
 
     /* Copy the relocation stub itself out of this image */
     mov edi, edx
-    mov esi, offset LinuxRelocationStub
-    mov ecx, (LinuxRelocationStubEnd - LinuxRelocationStub)
+    mov esi, offset _LinuxRelocationStub
+    mov ecx, offset _LinuxRelocationStubEnd
+    sub ecx, offset _LinuxRelocationStub
     rep movsb
 
     /* Copy the REGS block the stub hands to Relocator16Boot */
@@ -165,8 +167,8 @@ after_reloc:
  * page, at LINUX_STUB_REGS_OFFSET) and EBP is Relocator16Boot, whose own code lives
  * in the first stage loader below 1 MiB and therefore survives the copy.
  */
-.balign 16
-LinuxRelocationStub:
+.align 16
+_LinuxRelocationStub:
     /*
      * Both directions, from the same page.  ESI/EDI are source/target and ECX the size, as on entry.
      * Forward (target below source) copies low to high; backward copies high to low.  Getting this wrong is
@@ -205,7 +207,7 @@ LinuxRelocationStub:
 
     /* We must never get there */
     int 3
-LinuxRelocationStubEnd:
+_LinuxRelocationStubEnd:
 
 /* NB: ".if" cannot be used here -- asm.inc #defines "if" (the "." and the "if"
    are separate preprocessor tokens), so the MASM-compatible spelling is required. */
@@ -219,7 +221,7 @@ LinuxRelocationStubEnd:
  * `contrib/freeldr-f2fs/loader-fix/check-stub-size.sh` measures them from the built object.  A guard outside
  * the assembler cannot be defeated by its constant folding, which is the point.
  */
-.globl LinuxRelocationStub
-.globl LinuxRelocationStubEnd
+PUBLIC _LinuxRelocationStub
+PUBLIC _LinuxRelocationStubEnd
 
 END
