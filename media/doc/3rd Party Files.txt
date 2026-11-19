@@ -318,6 +318,13 @@ Used Version: 2.2.0
 License: Modified BSD License (drivers/network/tcpip/lwip/COPYING)
 URL: https://savannah.nongnu.org/projects/lwip/
 
+Title: bzip2
+Path: sdk/lib/3rdparty/bzip2
+Used Version: 1.0.8
+License: bzip2-1.0.6 (sdk/lib/3rdparty/bzip2/LICENSE)
+URL: https://sourceware.org/bzip2/
+Modifications: only the library sources, built with BZ_NO_STDIO; used to unpack the OpenH264 binary Cisco publishes as .bz2
+
 Title: FreeRDP
 Path: sdk/lib/3rdparty/freerdp
 Used Version: 3.32.0
