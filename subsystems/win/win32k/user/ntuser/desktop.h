@@ -148,6 +148,11 @@ IntResolveDesktop(
     OUT HWINSTA* phWinSta,
     OUT HDESK* phDesktop);
 
+VOID
+IntSetDesktopHandleProtection(
+    _In_ HDESK hDesktop,
+    _In_ BOOLEAN ProtectFromClose);
+
 NTSTATUS FASTCALL
 IntValidateDesktopHandle(
    HDESK Desktop,
