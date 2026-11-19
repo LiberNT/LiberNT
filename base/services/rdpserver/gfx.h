@@ -18,7 +18,7 @@ typedef struct GFX_TILE
     UINT16 Left, Top, Width, Height;
 } GFX_TILE;
 
-RDP_GFX *GfxCreate(HANDLE vcm, rdpContext *rdp, GFX_LOG log);
+RDP_GFX *GfxCreate(HANDLE vcm, rdpContext *rdp, GFX_LOG log, BOOL h264);
 void GfxFree(RDP_GFX *gfx);
 BOOL GfxOpen(RDP_GFX *gfx);
 UINT32 GfxChannelId(const RDP_GFX *gfx);
@@ -30,4 +30,5 @@ BOOL GfxSurfaceReady(const RDP_GFX *gfx, UINT32 width, UINT32 height);
 BOOL GfxResetSurface(RDP_GFX *gfx, UINT32 width, UINT32 height);
 BOOL GfxFrameAllowed(const RDP_GFX *gfx);
 BOOL GfxSendFrame(RDP_GFX *gfx, const BYTE *pixels, UINT32 stride, const FRAME_MOVE *moves, UINT32 moveCount,
-                  const GFX_TILE *tiles, UINT32 count);
+                  const GFX_TILE *tiles, UINT32 count, RECT *refresh);
+BOOL GfxPoll(RDP_GFX *gfx, RECT *refresh);
