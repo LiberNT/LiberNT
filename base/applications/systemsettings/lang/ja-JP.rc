@@ -776,7 +776,7 @@ BEGIN
     IDS_REMOTE_DESKTOP_PC_NAME "PC 名"
     IDS_REMOTE_DESKTOP_PC_NAME_DESC "別のデバイスからこの PC に接続するときは、この名前を使います"
     IDS_REMOTE_DESKTOP_PORT "リモート デスクトップ ポート"
-    IDS_REMOTE_DESKTOP_OPENH264 "H.264 ビデオ (OpenH264)"
+    IDS_REMOTE_DESKTOP_OPENH264 "H.264 での伝送 (OpenH264)"
     IDS_REMOTE_DESKTOP_OPENH264_DESC "OpenH264 Video Codec provided by Cisco Systems, Inc."
     IDS_REMOTE_DESKTOP_OPENH264_CONFIRM "OpenH264 をダウンロードしますか?"
     IDS_REMOTE_DESKTOP_OPENH264_CONFIRM_TEXT "リモート デスクトップで、動画など動きのある部分を H.264 で送ります。そのために Cisco の OpenH264 バイナリを ciscobinary.openh264.org からダウンロードします。"
