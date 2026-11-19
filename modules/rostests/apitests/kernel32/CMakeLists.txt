@@ -15,6 +15,7 @@ list(APPEND SOURCE
     LoadAppInitDlls.c
     ComPlusPackageInstallStatus.c
     IntegratedDisplaySize.c
+    Mailslot.c
     MessageWaitingIndicator.c
     TermsrvAppInstallMode.c
     ConsoleAlias.c
