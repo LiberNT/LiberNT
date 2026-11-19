@@ -560,6 +560,47 @@ static BOOL WaitChildProblem(DEVINST Bus, ULONG Expected)
     return FALSE;
 }
 
+/* A disabled child that is uninstalled is installed again, enabled, when user mode rescans the devices: the uninstall
+ * deleted the instance key that held its CONFIGFLAG_DISABLED */
+static VOID CheckReinstallDisabled(DEVINST Bus)
+{
+    SP_DEVINFO_DATA Device = { sizeof(Device) };
+    WCHAR Instance[MAX_DEVICE_ID_LEN];
+    ULONG Status = 0, Problem = 0;
+    HDEVINFO Devices;
+    DEVINST Child, Root;
+    BOOL Removed = FALSE;
+
+    if (CM_Get_Child(&Child, Bus, 0) != CR_SUCCESS ||
+        CM_Get_Device_IDW(Child, Instance, RTL_NUMBER_OF(Instance), 0) != CR_SUCCESS)
+    {
+        ok(FALSE, "The bus has no child to disable\n");
+        return;
+    }
+
+    /* The reloaded bus driver would eject its child again at the rescan: CheckEject leaves its request set */
+    SetRequest(L"EjectChild", 0);
+    ok_once(CM_Disable_DevNode(Child, CM_DISABLE_UI_NOT_OK | CM_DISABLE_PERSIST), (ULONG)CR_SUCCESS);
+    ok(WaitChildProblem(Bus, CM_PROB_DISABLED), "The disabled child has no CM_PROB_DISABLED\n");
+
+    Devices = SetupDiCreateDeviceInfoList(NULL, NULL);
+    if (Devices != INVALID_HANDLE_VALUE && SetupDiOpenDeviceInfoW(Devices, Instance, NULL, 0, &Device))
+        Removed = SetupDiCallClassInstaller(DIF_REMOVE, Devices, &Device);
+    if (Devices != INVALID_HANDLE_VALUE)
+        SetupDiDestroyDeviceInfoList(Devices);
+    ok(Removed, "Uninstalling %ls failed: %lu\n", Instance, GetLastError());
+    if (!Removed)
+        return;
+
+    ok_once(CM_Locate_DevNodeW(&Root, NULL, CM_LOCATE_DEVNODE_NORMAL), (ULONG)CR_SUCCESS);
+    ok_once(CM_Reenumerate_DevNode(Root, CM_REENUMERATE_SYNCHRONOUS), (ULONG)CR_SUCCESS);
+
+    ok(ChildStarted(Bus, 1000), "The uninstalled disabled child was not installed again on a rescan\n");
+    ok(CM_Get_Child(&Child, Bus, 0) == CR_SUCCESS && CM_Get_DevNode_Status(&Status, &Problem, Child, 0) == CR_SUCCESS &&
+       !(Status & DN_HAS_PROBLEM),
+       "The reinstalled child kept problem %lu (status 0x%lx)\n", Problem, Status);
+}
+
 /* A device that fails once its drivers are added gets its remove request and starts over with one stack only */
 static VOID CheckFailedStack(DEVINST Bus)
 {
@@ -1242,6 +1283,7 @@ static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath
         CheckEject(Device->DevInst);
         CheckFailed(Device->DevInst);
         CheckDriverReload(Device->DevInst);
+        CheckReinstallDisabled(Device->DevInst);
     }
 
     Success = SetupDiCallClassInstaller(DIF_REMOVE, Devices, Device);
