@@ -1,7 +1,8 @@
 
 add_executable(rdp_apitest Avc420.c ClearCodec.c ${REACTOS_SOURCE_DIR}/base/services/rdpserver/clearenc.c ControllerMode.c
                ${REACTOS_SOURCE_DIR}/base/services/rdpserver/experience.c Experience.c
-               FrameMove.c ${REACTOS_SOURCE_DIR}/base/services/rdpserver/framemove.c GfxBatch.c RemoteDesktop.c Zgfx.c testlist.c)
+               FrameMove.c ${REACTOS_SOURCE_DIR}/base/services/rdpserver/framemove.c GfxBatch.c RemoteDesktop.c
+               VideoDetect.c ${REACTOS_SOURCE_DIR}/base/services/rdpserver/videodetect.c Zgfx.c testlist.c)
 target_include_directories(rdp_apitest PRIVATE ${REACTOS_SOURCE_DIR}/base/services/rdpserver)
 target_compile_definitions(rdp_apitest PRIVATE __STDC_NO_THREADS__=1)
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
