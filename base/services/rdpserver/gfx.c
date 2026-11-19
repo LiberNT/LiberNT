@@ -536,17 +536,38 @@ static BOOL ReservePending(RDP_GFX *gfx, UINT32 count)
     return TRUE;
 }
 
-BOOL GfxSendFrame(RDP_GFX *gfx, const BYTE *pixels, UINT32 stride, const GFX_TILE *tiles, UINT32 count)
+static BOOL SendMove(RDP_GFX *gfx, const FRAME_MOVE *move)
+{
+    RDPGFX_SURFACE_TO_SURFACE_PDU copy = {0};
+    RDPGFX_POINT16 point;
+    assert(move->Dest.left >= 0 && move->Dest.right <= (LONG)gfx->Width);
+    assert(move->Dest.top >= 0 && move->Dest.bottom <= (LONG)gfx->Height);
+    copy.surfaceIdSrc = copy.surfaceIdDest = GFX_SURFACE_ID;
+    copy.rectSrc.left = (UINT16)move->SourceLeft;
+    copy.rectSrc.top = (UINT16)move->SourceTop;
+    copy.rectSrc.right = (UINT16)(move->SourceLeft + move->Dest.right - move->Dest.left);
+    copy.rectSrc.bottom = (UINT16)(move->SourceTop + move->Dest.bottom - move->Dest.top);
+    point.x = (UINT16)move->Dest.left;
+    point.y = (UINT16)move->Dest.top;
+    copy.destPtsCount = 1;
+    copy.destPts = &point;
+    return gfx->Context->SurfaceToSurface(gfx->Context, &copy) == CHANNEL_RC_OK;
+}
+
+BOOL GfxSendFrame(RDP_GFX *gfx, const BYTE *pixels, UINT32 stride, const FRAME_MOVE *moves, UINT32 moveCount,
+                  const GFX_TILE *tiles, UINT32 count)
 {
     RDPGFX_START_FRAME_PDU start = {0};
     RDPGFX_END_FRAME_PDU end = {0};
     UINT32 i, pending = 0;
     assert(gfx->Active && gfx->SurfaceCreated && GfxFrameAllowed(gfx));
-    if (!count) return TRUE;
+    if (!count && !moveCount) return TRUE;
     if (!ReservePending(gfx, count)) return FALSE;
     start.frameId = end.frameId = ++gfx->NextFrameId;
     start.timestamp = FrameTimestamp();
     if (gfx->Context->StartFrame(gfx->Context, &start) != CHANNEL_RC_OK) return FALSE;
+    for (i = 0; i < moveCount; ++i)
+        if (!SendMove(gfx, &moves[i])) return FALSE;
     for (i = 0; i < count; ++i)
         if (!SendTile(gfx, pixels, stride, &tiles[i], &pending)) return FALSE;
     if (!SendProgressiveTiles(gfx, pixels, stride, pending)) return FALSE;

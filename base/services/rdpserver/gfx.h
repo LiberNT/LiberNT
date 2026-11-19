@@ -8,6 +8,7 @@
 #pragma once
 #include <windows.h>
 #include <freerdp/freerdp.h>
+#include "framemove.h"
 
 typedef struct RDP_GFX RDP_GFX;
 typedef void (*GFX_LOG)(const char *, ...);
@@ -28,4 +29,5 @@ BOOL GfxActive(const RDP_GFX *gfx);
 BOOL GfxSurfaceReady(const RDP_GFX *gfx, UINT32 width, UINT32 height);
 BOOL GfxResetSurface(RDP_GFX *gfx, UINT32 width, UINT32 height);
 BOOL GfxFrameAllowed(const RDP_GFX *gfx);
-BOOL GfxSendFrame(RDP_GFX *gfx, const BYTE *pixels, UINT32 stride, const GFX_TILE *tiles, UINT32 count);
+BOOL GfxSendFrame(RDP_GFX *gfx, const BYTE *pixels, UINT32 stride, const FRAME_MOVE *moves, UINT32 moveCount,
+                  const GFX_TILE *tiles, UINT32 count);
