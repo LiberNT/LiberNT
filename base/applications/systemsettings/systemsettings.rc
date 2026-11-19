@@ -15,6 +15,7 @@
 #include <reactos/version.rc>
 
 1 RT_MANIFEST "res/systemsettings.exe.manifest"
+IDR_OPENH264_LICENSE RCDATA "res/OpenH264License.txt"
 
 #pragma code_page(65001)
 

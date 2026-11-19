@@ -776,4 +776,11 @@ BEGIN
     IDS_REMOTE_DESKTOP_PC_NAME "电脑名称"
     IDS_REMOTE_DESKTOP_PC_NAME_DESC "从另一台设备连接到此电脑时使用此名称"
     IDS_REMOTE_DESKTOP_PORT "远程桌面端口"
+    IDS_REMOTE_DESKTOP_OPENH264 "H.264 video (OpenH264)"
+    IDS_REMOTE_DESKTOP_OPENH264_DESC "OpenH264 Video Codec provided by Cisco Systems, Inc."
+    IDS_REMOTE_DESKTOP_OPENH264_CONFIRM "Download OpenH264?"
+    IDS_REMOTE_DESKTOP_OPENH264_CONFIRM_TEXT "Remote Desktop sends video and other moving content as H.264. To do that, Cisco's OpenH264 binary is downloaded from ciscobinary.openh264.org."
+    IDS_REMOTE_DESKTOP_OPENH264_CONFIRM_ACTION "Download"
+    IDS_REMOTE_DESKTOP_OPENH264_LICENSE "OpenH264 license"
+    IDS_REMOTE_DESKTOP_OPENH264_LICENSE_DESC "Licensing terms of Cisco's OpenH264 binary"
 END

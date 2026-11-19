@@ -6,6 +6,7 @@
  */
 
 #include "settings.h"
+#include <openh264.h>
 #include <powrprof.h>
 #include <algorithm>
 
@@ -750,6 +751,39 @@ BuildRemoteDesktop(PageBuilder &page)
     page.Info(Str(IDS_REMOTE_DESKTOP_PC_NAME), ComputerName(), L"desktop_20_regular").Detail =
         Str(IDS_REMOTE_DESKTOP_PC_NAME_DESC);
     page.Info(Str(IDS_REMOTE_DESKTOP_PORT), L"3389");
+    page.Group();
+    page.Toggle(Str(IDS_REMOTE_DESKTOP_OPENH264), Str(IDS_REMOTE_DESKTOP_OPENH264_DESC), L"video_20_regular",
+                !page.Indexing && OpenH264Enabled(),
+                [host](int on)
+                {
+                    DWORD error;
+                    HCURSOR cursor;
+                    if (on && !Confirm(host->Window(), Str(IDS_REMOTE_DESKTOP_OPENH264_CONFIRM),
+                                       Str(IDS_REMOTE_DESKTOP_OPENH264_CONFIRM_TEXT),
+                                       Str(IDS_REMOTE_DESKTOP_OPENH264_CONFIRM_ACTION)))
+                    {
+                        host->Refresh();
+                        return;
+                    }
+                    cursor = SetCursor(LoadCursorW(NULL, IDC_WAIT));
+                    error = on ? OpenH264Install() : OpenH264Remove();
+                    SetCursor(cursor);
+                    if (error)
+                        ShowError(host->Window(), error);
+                    host->Refresh();
+                }).Enabled = installed && IsAdmin();
+    page.Link(Str(IDS_REMOTE_DESKTOP_OPENH264_LICENSE), Str(IDS_REMOTE_DESKTOP_OPENH264_LICENSE_DESC),
+              L"document_20_regular",
+              [host](int)
+              {
+                  HRSRC resource = FindResourceW(NULL, MAKEINTRESOURCEW(IDR_OPENH264_LICENSE), RT_RCDATA);
+                  const char *text = resource ? (const char *)LockResource(LoadResource(NULL, resource)) : NULL;
+                  int length = text ? (int)SizeofResource(NULL, resource) : 0;
+                  std::wstring license(length, L'\0');
+                  license.resize(length ? MultiByteToWideChar(CP_UTF8, 0, text, length, &license[0], length) : 0);
+                  MessageBoxW(host->Window(), license.c_str(), Str(IDS_REMOTE_DESKTOP_OPENH264_LICENSE).c_str(),
+                              MB_OK | MB_ICONINFORMATION);
+              });
 }
 
 static std::wstring
