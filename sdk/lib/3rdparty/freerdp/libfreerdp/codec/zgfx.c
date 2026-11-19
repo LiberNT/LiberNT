@@ -83,6 +83,7 @@ struct S_ZGFX_CONTEXT
 #define ZGFX_HASH_SIZE (1u << ZGFX_HASH_BITS)
 #define ZGFX_GOOD_MATCH 64
 #define ZGFX_MAX_CHAIN 16
+#define ZGFX_LAZY_MATCH 32
 #define ZGFX_MAX_DISTANCE 2400000
 #define ZGFX_MIN_MATCH 3
 #define ZGFX_MAX_MATCH 65535
@@ -575,23 +576,53 @@ static BOOL zgfx_put_literal(const ZGFX_CONTEXT* WINPR_RESTRICT zgfx, ZGFX_BIT_W
 	return zgfx_put_bits(w, zgfx->LiteralCodes[value], zgfx->LiteralLengths[value]);
 }
 
-static BOOL zgfx_put_match(ZGFX_BIT_WRITER* WINPR_RESTRICT w, UINT32 distance, UINT32 length)
+static const ZGFX_DISTANCE_CODE* zgfx_distance_code(UINT32 distance)
 {
-	const ZGFX_DISTANCE_CODE* code = nullptr;
-	UINT32 bits = 2;
-
 	WINPR_ASSERT(distance > 0 && distance <= ZGFX_MAX_DISTANCE);
-	WINPR_ASSERT(length >= ZGFX_MIN_MATCH && length <= ZGFX_MAX_MATCH);
 	for (size_t i = 0; i < ARRAYSIZE(ZGFX_DISTANCE_CODES); i++)
 	{
 		if (distance >= ZGFX_DISTANCE_CODES[i].valueBase &&
 		    distance - ZGFX_DISTANCE_CODES[i].valueBase < (1u << ZGFX_DISTANCE_CODES[i].valueBits))
-		{
-			code = &ZGFX_DISTANCE_CODES[i];
-			break;
-		}
+			return &ZGFX_DISTANCE_CODES[i];
 	}
+	return nullptr;
+}
+
+static UINT32 zgfx_length_bits(UINT32 length)
+{
+	UINT32 bits = 2;
+
+	WINPR_ASSERT(length >= ZGFX_MIN_MATCH && length <= ZGFX_MAX_MATCH);
+	if (length == 3)
+		return 1;
+	while ((length >> (bits + 1)) != 0)
+		bits++;
+	return 2 * bits;
+}
+
+static UINT32 zgfx_match_bits(UINT32 distance, UINT32 length)
+{
+	const ZGFX_DISTANCE_CODE* code = zgfx_distance_code(distance);
 	WINPR_ASSERT(code);
+	return code->prefixLength + code->valueBits + zgfx_length_bits(length);
+}
+
+static BOOL zgfx_match_pays(const ZGFX_CONTEXT* WINPR_RESTRICT zgfx, const BYTE* WINPR_RESTRICT data,
+                            UINT32 distance, UINT32 length)
+{
+	UINT32 literalBits = 0;
+	for (UINT32 i = 0; i < length; i++)
+		literalBits += zgfx->LiteralLengths[data[i]];
+	return zgfx_match_bits(distance, length) < literalBits;
+}
+
+static BOOL zgfx_put_match(ZGFX_BIT_WRITER* WINPR_RESTRICT w, UINT32 distance, UINT32 length)
+{
+	const ZGFX_DISTANCE_CODE* code = zgfx_distance_code(distance);
+	UINT32 bits = 2;
+
+	WINPR_ASSERT(code);
+	WINPR_ASSERT(length >= ZGFX_MIN_MATCH && length <= ZGFX_MAX_MATCH);
 	if (!zgfx_put_bits(w, code->prefixCode, code->prefixLength) ||
 	    !zgfx_put_bits(w, distance - code->valueBase, code->valueBits))
 		return FALSE;
@@ -734,11 +765,25 @@ static BOOL zgfx_compress_segment(ZGFX_CONTEXT* WINPR_RESTRICT zgfx, wStream* WI
 		while (compressed && index < SrcSize)
 		{
 			UINT32 distance = 0;
-			const UINT32 length = zgfx_find_match(zgfx, pSrcData, index, SrcSize, &distance);
+			UINT32 length = zgfx_find_match(zgfx, pSrcData, index, SrcSize, &distance);
+			UINT32 recorded = 0;
 
+			if (length && !zgfx_match_pays(zgfx, &pSrcData[index], distance, length))
+				length = 0;
+			if (length && length < ZGFX_LAZY_MATCH && index + 1 < SrcSize)
+			{
+				UINT32 nextDistance = 0;
+				zgfx_record(zgfx, pSrcData, index, SrcSize, 1);
+				recorded = 1;
+				const UINT32 next = zgfx_find_match(zgfx, pSrcData, index + 1, SrcSize, &nextDistance);
+				if (next > length + 1 ||
+				    (next > length && zgfx_match_bits(nextDistance, next) < zgfx_match_bits(distance, length)))
+					length = 0;
+			}
 			if (!length)
 			{
-				zgfx_record(zgfx, pSrcData, index, SrcSize, 1);
+				if (!recorded)
+					zgfx_record(zgfx, pSrcData, index, SrcSize, 1);
 				index++;
 				literals++;
 				continue;
@@ -746,7 +791,7 @@ static BOOL zgfx_compress_segment(ZGFX_CONTEXT* WINPR_RESTRICT zgfx, wStream* WI
 			compressed = zgfx_put_literals(zgfx, &writer, &pSrcData[index - literals], literals) &&
 			             zgfx_put_match(&writer, distance, length);
 			literals = 0;
-			zgfx_record(zgfx, pSrcData, index, SrcSize, length);
+			zgfx_record(zgfx, pSrcData, index + recorded, SrcSize, length - recorded);
 			index += length;
 			if (Stream_GetPosition(s) - start > SrcSize)
 				compressed = FALSE;

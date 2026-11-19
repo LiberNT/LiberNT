@@ -60,6 +60,25 @@ START_TEST(Zgfx)
     size = RoundTrip(compressor, decompressor, Data, 60000, "the random bytes again");
     ok(size < 2000, "random bytes repeated from the history compressed to %lu bytes\n", (ULONG)size);
 
+    {
+        ZGFX_CONTEXT *fresh = zgfx_context_new(TRUE), *freshDecompressor = zgfx_context_new(FALSE);
+        ok(fresh && freshDecompressor, "zgfx_context_new failed\n");
+        if (fresh && freshDecompressor)
+        {
+            UINT32 saved = Random;
+            Random = 0x2468ACE1;
+            for (i = 0; i < 60000; ++i) Data[i] = NextRandom() & 1;
+            size = RoundTrip(fresh, freshDecompressor, Data, 60000, "two byte values");
+            ok(size < 16300, "two byte values compressed to %lu bytes\n", (ULONG)size);
+            for (i = 0; i < 60000; ++i) Data[i] = NextRandom() & 3;
+            size = RoundTrip(fresh, freshDecompressor, Data, 60000, "four byte values");
+            ok(size < 26000, "four byte values compressed to %lu bytes\n", (ULONG)size);
+            Random = saved;
+        }
+        zgfx_context_free(fresh);
+        zgfx_context_free(freshDecompressor);
+    }
+
     memset(Data, 0x5A, 100000);
     size = RoundTrip(compressor, decompressor, Data, 100000, "a long run across segments");
     ok(size < 200, "a long run compressed to %lu bytes\n", (ULONG)size);
