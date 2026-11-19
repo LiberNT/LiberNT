@@ -64,11 +64,25 @@ static LONG KdbpHardwareOwner[8];
 /* When to stop, per exception and per chance */
 static KDB_ENTER_CONDITION KdbpEnterCondition[KDB_MAXIMUM_EXCEPTION_NR + 1][2];
 
+#ifndef EXCEPTION_SOFTWARE_ORIGINATE
+#define EXCEPTION_SOFTWARE_ORIGINATE 0x80
+#endif
+
 /* What the person at the prompt decided to do on the way out */
 static KD_CONTINUE_TYPE KdbpContinueType = kdHandleException;
 
-/* The breakpoint whose instruction has to go back before the machine runs on */
-static LONG KdbpStepOverBreakPoint = -1;
+/* The breakpoints taken out of memory for one instruction, each until its thread's step is done */
+typedef struct _KDB_STEP_OVER
+{
+    PKTHREAD Thread;
+    LONG BreakPointNr;
+    BOOLEAN InUse;
+} KDB_STEP_OVER;
+
+static KDB_STEP_OVER KdbpStepOvers[MAXIMUM_PROCESSORS];
+
+/* The thread the person at the prompt is stepping */
+static PKTHREAD KdbpStepThread;
 
 static BOOLEAN KdbpEnterConditionsInitialised = FALSE;
 
@@ -269,6 +283,131 @@ KdbpFindBreakPointAt(
     }
 
     return -1;
+}
+
+static
+LONG
+KdbpFindStepOver(
+    _In_opt_ PKTHREAD Thread)
+{
+    LONG Index;
+
+    for (Index = 0; Index < (LONG)RTL_NUMBER_OF(KdbpStepOvers); Index++)
+    {
+        if (KdbpStepOvers[Index].InUse && (KdbpStepOvers[Index].Thread == Thread))
+            return Index;
+    }
+
+    return -1;
+}
+
+/* Whether some step still has this breakpoint's instruction out of memory */
+static
+BOOLEAN
+KdbpBreakPointSteppedOver(
+    _In_ LONG BreakPointNr)
+{
+    ULONG Index;
+
+    if (BreakPointNr < 0)
+        return FALSE;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(KdbpStepOvers); Index++)
+    {
+        if (KdbpStepOvers[Index].InUse && (KdbpStepOvers[Index].BreakPointNr == BreakPointNr))
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
+static
+VOID
+KdbpEndStepOverAt(
+    _In_ LONG Index)
+{
+    PKDB_BREAKPOINT BreakPoint;
+    LONG BreakPointNr;
+
+    ASSERT((Index >= 0) && (Index < (LONG)RTL_NUMBER_OF(KdbpStepOvers)));
+    ASSERT(KdbpStepOvers[Index].InUse);
+
+    BreakPointNr = KdbpStepOvers[Index].BreakPointNr;
+    KdbpStepOvers[Index].InUse = FALSE;
+    KdbpStepOvers[Index].Thread = NULL;
+    KdbpStepOvers[Index].BreakPointNr = -1;
+
+    if (KdbpBreakPointSteppedOver(BreakPointNr))
+        return;
+
+    BreakPoint = KdbpBreakPointFromNr(BreakPointNr);
+    if ((BreakPoint != NULL) && BreakPoint->Enabled)
+        KdbpApplyBreakPoint(BreakPoint, TRUE);
+}
+
+/* The thread's step past a breakpoint is done: the breakpoint goes back once no other step needs it out */
+static
+VOID
+KdbpEndStepOver(
+    _In_opt_ PKTHREAD Thread)
+{
+    LONG Index = KdbpFindStepOver(Thread);
+
+    if (Index >= 0)
+        KdbpEndStepOverAt(Index);
+}
+
+/*
+ * Takes a breakpoint's instruction out of memory so the current thread can run
+ * it, and steps the thread over it. Other threads that reach the address in the
+ * meantime run the instruction as written.
+ */
+static
+VOID
+KdbpBeginStepOver(
+    _In_ LONG BreakPointNr,
+    _Inout_ PCONTEXT Context)
+{
+    PKDB_BREAKPOINT BreakPoint = KdbpBreakPointFromNr(BreakPointNr);
+    PKTHREAD Thread = KeGetCurrentThread();
+    LONG Index;
+
+    ASSERT(BreakPoint != NULL);
+    KdbpEndStepOver(Thread);
+
+    for (Index = 0; Index < (LONG)RTL_NUMBER_OF(KdbpStepOvers); Index++)
+    {
+        if (!KdbpStepOvers[Index].InUse)
+            break;
+    }
+
+    /* More steps in flight than processors: the breakpoint stays and fires again */
+    if (Index == (LONG)RTL_NUMBER_OF(KdbpStepOvers))
+        return;
+
+    if (!KdbpBreakPointSteppedOver(BreakPointNr))
+        KdbpApplyBreakPoint(BreakPoint, FALSE);
+
+    KdbpStepOvers[Index].InUse = TRUE;
+    KdbpStepOvers[Index].BreakPointNr = BreakPointNr;
+
+    /* A step that cannot be taken leaves the breakpoint out until the machine next stops */
+    KdbpStepOvers[Index].Thread = NT_SUCCESS(KdbpArchSetSingleStep(Context, TRUE)) ? Thread : NULL;
+}
+
+/* Every step past a breakpoint is given up, and every breakpoint goes back */
+static
+VOID
+KdbpEndAllStepOvers(
+    _In_ BOOLEAN OnlyWithoutStep)
+{
+    LONG Index;
+
+    for (Index = 0; Index < (LONG)RTL_NUMBER_OF(KdbpStepOvers); Index++)
+    {
+        if (KdbpStepOvers[Index].InUse && (!OnlyWithoutStep || (KdbpStepOvers[Index].Thread == NULL)))
+            KdbpEndStepOverAt(Index);
+    }
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -564,6 +703,8 @@ KdbpDeleteBreakPoint(
     _In_ LONG BreakPointNr,
     _Inout_opt_ PKDB_BREAKPOINT BreakPoint)
 {
+    ULONG Index;
+
     if (BreakPoint == NULL)
         BreakPoint = KdbpBreakPointFromNr(BreakPointNr);
     else
@@ -572,8 +713,15 @@ KdbpDeleteBreakPoint(
     if ((BreakPoint == NULL) || (BreakPointNr < 0))
         return FALSE;
 
-    if (BreakPoint->Enabled)
+    if (BreakPoint->Enabled && !KdbpBreakPointSteppedOver(BreakPointNr))
         KdbpApplyBreakPoint(BreakPoint, FALSE);
+
+    /* A step in flight past it still ends silently, with nothing to write back */
+    for (Index = 0; Index < RTL_NUMBER_OF(KdbpStepOvers); Index++)
+    {
+        if (KdbpStepOvers[Index].InUse && (KdbpStepOvers[Index].BreakPointNr == BreakPointNr))
+            KdbpStepOvers[Index].BreakPointNr = -1;
+    }
 
     if (BreakPoint->Type == KdbBreakPointHardware)
     {
@@ -764,8 +912,12 @@ KdbpEnableBreakPoint(
     if (BreakPoint->Enabled)
         return TRUE;
 
-    if (!NT_SUCCESS(KdbpApplyBreakPoint(BreakPoint, TRUE)))
+    /* Out of memory for a step in flight: it is written when that step is done */
+    if (!KdbpBreakPointSteppedOver(KdbpBreakPointNr(BreakPoint)) &&
+        !NT_SUCCESS(KdbpApplyBreakPoint(BreakPoint, TRUE)))
+    {
         return FALSE;
+    }
 
     BreakPoint->Enabled = TRUE;
     return TRUE;
@@ -785,8 +937,11 @@ KdbpDisableBreakPoint(
     if (!BreakPoint->Enabled)
         return TRUE;
 
-    if (!NT_SUCCESS(KdbpApplyBreakPoint(BreakPoint, FALSE)))
+    if (!KdbpBreakPointSteppedOver(KdbpBreakPointNr(BreakPoint)) &&
+        !NT_SUCCESS(KdbpApplyBreakPoint(BreakPoint, FALSE)))
+    {
         return FALSE;
+    }
 
     BreakPoint->Enabled = FALSE;
     return TRUE;
@@ -1140,6 +1295,31 @@ KdbpStepPastBreakInstruction(
         KeSetContextPc(Context, Pc + KD_BREAKPOINT_SIZE);
 }
 
+static
+BOOLEAN
+KdbpIsStaleBreak(
+    _In_opt_ PEXCEPTION_RECORD64 ExceptionRecord,
+    _In_ PCONTEXT Context)
+{
+    ULONG_PTR Address;
+    ULONG_PTR Pc = (ULONG_PTR)KeGetContextPc(Context);
+
+    if ((ExceptionRecord == NULL) ||
+        (ExceptionRecord->ExceptionCode != (NTSTATUS)STATUS_BREAKPOINT) ||
+        (ExceptionRecord->NumberParameters < 1) ||
+        (ExceptionRecord->ExceptionInformation[0] != BREAKPOINT_BREAK) ||
+        (ExceptionRecord->ExceptionFlags & EXCEPTION_SOFTWARE_ORIGINATE))
+    {
+        return FALSE;
+    }
+
+    Address = (ULONG_PTR)ExceptionRecord->ExceptionAddress;
+    if ((Pc != Address) && (Pc != Address + KD_BREAKPOINT_SIZE))
+        return FALSE;
+
+    return (KdbpFindBreakPointAt(Address) < 0) && !KdbpArchIsBreakInstruction(Address);
+}
+
 /*
  * Where the machine stopped, and why. Everything the debugger does happens
  * inside this call: when it returns, the machine runs again.
@@ -1168,6 +1348,8 @@ KdbEnterDebuggerException(
         return kdHandleException;
 
     KdbpStopCommands[0] = ANSI_NULL;
+    KdbCurrentThread = NULL;
+    KdbCurrentProcess = NULL;
 
     /* A step the processor could not take by itself ends as a breakpoint, and is reported as the step it was */
     StepHit = KdbpArchTranslateStep(ExceptionRecord, Context);
@@ -1177,6 +1359,24 @@ KdbEnterDebuggerException(
         StepRecord = *ExceptionRecord;
         StepRecord.ExceptionCode = STATUS_SINGLE_STEP;
         ExceptionRecord = &StepRecord;
+    }
+
+    /* Code moved past the debugger's own breakpoints stops nothing, and leaves the step it ran into pending */
+    if (StepHit == KdbStepForeignHit)
+        return kdContinue;
+
+    /* A step whose stepping the debugger has given up since ends here, unseen */
+    if ((StepHit == KdbStepDone) && (KdbpFindStepOver(KeGetCurrentThread()) < 0) &&
+        ((KdbNumSingleSteps == 0) || (KdbpStepThread != KeGetCurrentThread())))
+    {
+        return kdContinue;
+    }
+
+    /* A breakpoint taken out after its trap and before the trap reached the debugger: the code runs on as written */
+    if (KdbpIsStaleBreak(ExceptionRecord, Context))
+    {
+        KeSetContextPc(Context, (ULONG_PTR)ExceptionRecord->ExceptionAddress);
+        return kdContinue;
     }
 
     ExceptionNr = (ExceptionRecord != NULL)
@@ -1198,25 +1398,13 @@ KdbEnterDebuggerException(
         KdbCurrentExceptionRecordValid = FALSE;
     }
 
-    /*
-     * The instruction a breakpoint displaced has to be back in memory before
-     * anything reads the code around the stop.
-     */
-    SteppedOverBreakPoint = (KdbpStepOverBreakPoint >= 0);
+    /* Whether this thread is in the middle of a step past a breakpoint; an entry from elsewhere leaves that step alone */
+    SteppedOverBreakPoint = (KdbpFindStepOver(KeGetCurrentThread()) >= 0);
 
-    if (SteppedOverBreakPoint)
+    /* Other code reached a step's breakpoint and the step was given up: it runs the instruction as written and nothing stops */
+    if (StepHit == KdbStepAbandoned)
     {
-        PKDB_BREAKPOINT Pending = KdbpBreakPointFromNr(KdbpStepOverBreakPoint);
-
-        if ((Pending != NULL) && Pending->Enabled)
-            KdbpApplyBreakPoint(Pending, TRUE);
-
-        KdbpStepOverBreakPoint = -1;
-    }
-
-    /* Other code reached a step's breakpoint: it runs the instruction as written and nothing stops */
-    if (StepHit == KdbStepForeignHit)
-    {
+        KdbpEndAllStepOvers(FALSE);
         KdbCurrentExceptionRecordValid = FALSE;
         KdbCurrentTrapFrame = NULL;
         return kdContinue;
@@ -1225,15 +1413,11 @@ KdbEnterDebuggerException(
     if ((ExceptionRecord != NULL) &&
         (ExceptionRecord->ExceptionCode == (NTSTATUS)STATUS_BREAKPOINT))
     {
-        ULONG_PTR Pc = (ULONG_PTR)KeGetContextPc(Context);
-
         /*
-         * The program counter is past the breakpoint instruction by the time
-         * the fault is reported, so the breakpoint is looked for behind it.
+         * The exception is reported at the breakpoint instruction on every
+         * processor, wherever each leaves the program counter.
          */
-        BreakPointNr = KdbpFindBreakPointAt(Pc - KD_BREAKPOINT_SIZE);
-        if (BreakPointNr < 0)
-            BreakPointNr = KdbpFindBreakPointAt(Pc);
+        BreakPointNr = KdbpFindBreakPointAt((ULONG_PTR)ExceptionRecord->ExceptionAddress);
 
         if (BreakPointNr >= 0)
         {
@@ -1245,12 +1429,10 @@ KdbEnterDebuggerException(
             if (!KdbpBreakPointStops(BreakPoint))
             {
                 /*
-                 * Not this time. The instruction goes back, the machine steps
-                 * over it, and the breakpoint is written again at the next stop.
+                 * Not this time. The instruction goes back, the thread steps
+                 * over it, and the breakpoint is written again after that step.
                  */
-                KdbpApplyBreakPoint(BreakPoint, FALSE);
-                KdbpStepOverBreakPoint = BreakPointNr;
-                KdbpArchSetSingleStep(Context, TRUE);
+                KdbpBeginStepOver(BreakPointNr, Context);
 
                 KdbCurrentExceptionRecordValid = FALSE;
                 KdbCurrentTrapFrame = NULL;
@@ -1285,9 +1467,7 @@ KdbEnterDebuggerException(
             else if (BreakPoint->Data.Hw.AccessType == KdbAccessExec)
             {
                 /* An instruction breakpoint fires before its instruction: it is stepped over with the watch off */
-                KdbpApplyBreakPoint(BreakPoint, FALSE);
-                KdbpStepOverBreakPoint = KdbpHardwareOwner[Register];
-                KdbpArchSetSingleStep(Context, TRUE);
+                KdbpBeginStepOver(KdbpHardwareOwner[Register], Context);
 
                 if (KdbNumSingleSteps == 0)
                 {
@@ -1309,15 +1489,16 @@ KdbEnterDebuggerException(
     if ((ExceptionRecord != NULL) &&
         (ExceptionRecord->ExceptionCode == (NTSTATUS)STATUS_SINGLE_STEP) &&
         (BreakPointNr < 0) &&
-        (SteppedOverBreakPoint || (KdbNumSingleSteps != 0)))
+        (SteppedOverBreakPoint || ((KdbNumSingleSteps != 0) && (KdbpStepThread == KeGetCurrentThread()))))
     {
         EnteredOnSingleStep = TRUE;
+        KdbpEndStepOver(KeGetCurrentThread());
 
         /*
          * A step the debugger took itself, to get off a breakpoint's own
          * instruction, is nothing for the person at the prompt to see.
          */
-        if (SteppedOverBreakPoint && (KdbNumSingleSteps == 0))
+        if ((KdbNumSingleSteps == 0) || (KdbpStepThread != KeGetCurrentThread()))
         {
             KdbpArchSetSingleStep(Context, FALSE);
             KdbCurrentExceptionRecordValid = FALSE;
@@ -1332,9 +1513,14 @@ KdbEnterDebuggerException(
             if (KdbNumSingleSteps != 0)
             {
                 /* Still stepping: nothing to show yet */
-                KdbpArchSetSingleStep(Context, TRUE);
-                KdbCurrentTrapFrame = NULL;
-                return kdContinue;
+                if (NT_SUCCESS(KdbpArchSetSingleStep(Context, TRUE)))
+                {
+                    KdbCurrentTrapFrame = NULL;
+                    return kdContinue;
+                }
+
+                /* The next instruction cannot be stepped to, so the steps end here */
+                KdbNumSingleSteps = 0;
             }
         }
 
@@ -1374,6 +1560,7 @@ KdbEnterDebuggerException(
     }
 
     KdbpDeleteInternalBreakPoints();
+    KdbpEndAllStepOvers(TRUE);
 
     /* From here the machine belongs to whoever is at the prompt */
     KdbActive = TRUE;
@@ -1390,6 +1577,7 @@ KdbEnterDebuggerException(
     KbdEnableMouse();
 
     KdbActive = FALSE;
+    KdbpStepThread = (KdbNumSingleSteps != 0) ? KeGetCurrentThread() : NULL;
 
     if (KdbBugCheckRequested)
     {
@@ -1409,9 +1597,7 @@ KdbEnterDebuggerException(
         if ((BreakPoint != NULL) && BreakPoint->Enabled &&
             ((BreakPoint->Type != KdbBreakPointHardware) || (BreakPoint->Data.Hw.AccessType == KdbAccessExec)))
         {
-            KdbpApplyBreakPoint(BreakPoint, FALSE);
-            KdbpStepOverBreakPoint = BreakPointNr;
-            KdbpArchSetSingleStep(Context, TRUE);
+            KdbpBeginStepOver(BreakPointNr, Context);
         }
     }
     else if ((BreakPointNr < 0) &&

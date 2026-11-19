@@ -61,8 +61,15 @@ typedef enum _KDB_STEP_HIT
 {
     KdbStepNotHit,
     KdbStepDone,
-    KdbStepForeignHit
+    KdbStepForeignHit,
+    KdbStepAbandoned
 } KDB_STEP_HIT;
+
+/* Whether the instruction at an address raises a breakpoint; one that cannot be read counts as one */
+BOOLEAN
+NTAPI
+KdbpArchIsBreakInstruction(
+    _In_ ULONG_PTR Address);
 
 /*
  * Called at every entry: takes back a step the processor could not take by

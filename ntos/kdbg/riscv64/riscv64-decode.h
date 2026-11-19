@@ -34,3 +34,9 @@ KdbpRiscvDecode(
     _Inout_ PKDB_RISCV_DECODE_STATE State,
     _In_ BOOLEAN KeepStaleValues,
     _Out_ PKDB_RISCV_DECODED Decoded);
+
+BOOLEAN
+KdbpRiscvEmulateRelative(
+    _Inout_ PCONTEXT Context,
+    _In_ ULONG Inst,
+    _In_ LONG Length);
