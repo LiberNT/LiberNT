@@ -22,10 +22,9 @@ ULONG                                      ProcessCountOld = 0;
 ULONG                                      ProcessCount = 0;
 double                                     dbIdleTime;
 double                                     dbKernelTime;
-double                                     dbSystemTime;
-LARGE_INTEGER                              liOldIdleTime = {{0,0}};
-double                                     OldKernelTime = 0;
-LARGE_INTEGER                              liOldSystemTime = {{0,0}};
+static LONGLONG                            OldTotalIdleTime = 0;
+static LONGLONG                            OldTotalKernelTime = 0;
+static LONGLONG                            OldTotalUserTime = 0;
 SYSTEM_PERFORMANCE_INFORMATION             SystemPerfInfo;
 SYSTEM_BASIC_INFORMATION                   SystemBasicInfo;
 SYSTEM_FILECACHE_INFORMATION               SystemCacheInfo;
@@ -208,21 +207,18 @@ void PerfDataRefresh(void)
     HANDLE                                     hProcess;
     HANDLE                                     hProcessToken;
     SYSTEM_PERFORMANCE_INFORMATION             SysPerfInfo;
-    SYSTEM_TIMEOFDAY_INFORMATION               SysTimeInfo;
     SYSTEM_FILECACHE_INFORMATION               SysCacheInfo;
     SYSTEM_HANDLE_INFORMATION                  SysHandleInfoData;
     PSYSTEM_PROCESSOR_PERFORMANCE_INFORMATION  SysProcessorTimeInfo;
-    double                                     CurrentKernelTime;
+    LONGLONG                                   TotalIdleTime;
+    LONGLONG                                   TotalKernelTime;
+    LONGLONG                                   TotalUserTime;
+    LONGLONG                                   ProcessorTimeDelta;
     PSECURITY_DESCRIPTOR                       ProcessSD;
     PSID                                       ProcessUser;
     ULONG                                      Buffer[64]; /* must be 4 bytes aligned! */
     ULONG                                      cwcUserName;
     BOOL                                       bIsWow64;
-
-    /* Get new system time */
-    status = NtQuerySystemInformation(SystemTimeOfDayInformation, &SysTimeInfo, sizeof(SysTimeInfo), NULL);
-    if (!NT_SUCCESS(status))
-        return;
 
     /* Get new CPU's idle time */
     status = NtQuerySystemInformation(SystemPerformanceInformation, &SysPerfInfo, sizeof(SysPerfInfo), NULL);
@@ -300,10 +296,10 @@ void PerfDataRefresh(void)
      */
     SystemNumberOfHandles = SysHandleInfoData.NumberOfHandles;
 
-    for (CurrentKernelTime=0, Idx=0; Idx<(ULONG)SystemBasicInfo.NumberOfProcessors; Idx++) {
-        CurrentKernelTime += Li2Double(SystemProcessorTimeInfo[Idx].KernelTime);
-        CurrentKernelTime += Li2Double(SystemProcessorTimeInfo[Idx].DpcTime);
-        CurrentKernelTime += Li2Double(SystemProcessorTimeInfo[Idx].InterruptTime);
+    for (TotalIdleTime=0, TotalKernelTime=0, TotalUserTime=0, Idx=0; Idx<(ULONG)SystemBasicInfo.NumberOfProcessors; Idx++) {
+        TotalIdleTime += SystemProcessorTimeInfo[Idx].IdleTime.QuadPart;
+        TotalKernelTime += SystemProcessorTimeInfo[Idx].KernelTime.QuadPart;
+        TotalUserTime += SystemProcessorTimeInfo[Idx].UserTime.QuadPart;
     }
 
     for (Idx = 0; Idx < (ULONG)SystemBasicInfo.NumberOfProcessors && Idx < PERF_MAX_CPUS; Idx++) {
@@ -332,25 +328,22 @@ void PerfDataRefresh(void)
     }
 
     /* If it's a first call - skip idle time calcs */
-    if (liOldIdleTime.QuadPart != 0) {
-        /*  CurrentValue = NewValue - OldValue */
-        dbIdleTime = Li2Double(SysPerfInfo.IdleProcessTime) - Li2Double(liOldIdleTime);
-        dbKernelTime = CurrentKernelTime - OldKernelTime;
-        dbSystemTime = Li2Double(SysTimeInfo.CurrentTime) - Li2Double(liOldSystemTime);
+    ProcessorTimeDelta = 0;
+    if (OldTotalKernelTime != 0) {
+        LONGLONG IdleDelta = TotalIdleTime - OldTotalIdleTime;
+        LONGLONG KernelDelta = TotalKernelTime - OldTotalKernelTime;
 
-        /*  CurrentCpuIdle = IdleTime / SystemTime */
-        dbIdleTime = dbIdleTime / dbSystemTime;
-        dbKernelTime = dbKernelTime / dbSystemTime;
-
-        /*  CurrentCpuUsage% = 100 - (CurrentCpuIdle * 100) / NumberOfProcessors */
-        dbIdleTime = 100.0 - dbIdleTime * 100.0 / (double)SystemBasicInfo.NumberOfProcessors; /* + 0.5; */
-        dbKernelTime = 100.0 - dbKernelTime * 100.0 / (double)SystemBasicInfo.NumberOfProcessors; /* + 0.5; */
+        ProcessorTimeDelta = KernelDelta + TotalUserTime - OldTotalUserTime;
+        if (ProcessorTimeDelta > 0) {
+            dbIdleTime = 100.0 * (double)(ProcessorTimeDelta - IdleDelta) / (double)ProcessorTimeDelta;
+            dbKernelTime = 100.0 * (double)(KernelDelta - IdleDelta) / (double)ProcessorTimeDelta;
+        }
     }
 
     /* Store new CPU's idle and system time */
-    liOldIdleTime = SysPerfInfo.IdleProcessTime;
-    liOldSystemTime = SysTimeInfo.CurrentTime;
-    OldKernelTime = CurrentKernelTime;
+    OldTotalIdleTime = TotalIdleTime;
+    OldTotalKernelTime = TotalKernelTime;
+    OldTotalUserTime = TotalUserTime;
 
     /* Determine the process count
      * We loop through the data we got from NtQuerySystemInformation
@@ -396,12 +389,12 @@ void PerfDataRefresh(void)
 
         pPerfData[Idx].ProcessId = pSPI->UniqueProcessId;
 
-        if (pPDOld)    {
-            double    CurTime = Li2Double(pSPI->KernelTime) + Li2Double(pSPI->UserTime);
-            double    OldTime = Li2Double(pPDOld->KernelTime) + Li2Double(pPDOld->UserTime);
-            double    CpuTime = (CurTime - OldTime) / dbSystemTime;
-            CpuTime = CpuTime * 100.0 / (double)SystemBasicInfo.NumberOfProcessors; /* + 0.5; */
-            pPerfData[Idx].CPUUsage = (ULONG)CpuTime;
+        if (pPDOld && ProcessorTimeDelta > 0) {
+            LONGLONG  CurTime = pSPI->KernelTime.QuadPart + pSPI->UserTime.QuadPart;
+            LONGLONG  OldTime = pPDOld->KernelTime.QuadPart + pPDOld->UserTime.QuadPart;
+
+            if (CurTime > OldTime)
+                pPerfData[Idx].CPUUsage = (ULONG)min((CurTime - OldTime) * 100 / ProcessorTimeDelta, 100);
         }
         pPerfData[Idx].CPUTime.QuadPart = pSPI->UserTime.QuadPart + pSPI->KernelTime.QuadPart;
         pPerfData[Idx].WorkingSetSizeBytes = pSPI->WorkingSetSize;
