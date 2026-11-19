@@ -4202,6 +4202,7 @@ DxgkDisplayNotifyMonitorEvent(
 
 BOOLEAN
 DxgkDisplayAttachWin32kSession(
+    _In_ ULONG SessionId,
     _Out_ PRKAPC_STATE ApcState,
     _Out_ PEPROCESS *AttachedProcess);
 

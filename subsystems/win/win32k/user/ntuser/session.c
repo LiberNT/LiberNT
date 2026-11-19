@@ -13,6 +13,7 @@
 PRTL_ATOM_TABLE gAtomTable = NULL;
 static PUSER_SESSION gpUserSessions = NULL;
 PUSER_SESSION gpDisplaySession = NULL;
+BOOLEAN gbConsoleSession = FALSE;
 
 /* FUNCTIONS *******************************************************************/
 

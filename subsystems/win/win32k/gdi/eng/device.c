@@ -1012,6 +1012,31 @@ EngpReferenceMonitorDevice(
     return bFound;
 }
 
+/* Session 0 shares the adapters it draws on; any other session asks the device whether it may use it */
+static
+BOOLEAN
+EngpUseGraphicsDeviceInSession(
+    _In_ PDEVICE_OBJECT DeviceObject)
+{
+    VIDEO_DEVICE_SESSION_STATUS SessionStatus;
+    ULONG ulReturn = 0;
+    DWORD Error;
+
+    if (ReadPointerAcquire((PVOID volatile *)&gpDisplaySession) == NULL)
+        return TRUE;
+
+    SessionStatus.bEnable = TRUE;
+    SessionStatus.bSuccess = FALSE;
+    Error = EngDeviceIoControl((HANDLE)DeviceObject,
+                               IOCTL_VIDEO_USE_DEVICE_IN_SESSION,
+                               &SessionStatus,
+                               sizeof(SessionStatus),
+                               &SessionStatus,
+                               sizeof(SessionStatus),
+                               &ulReturn);
+    return Error == ERROR_SUCCESS && ulReturn >= sizeof(SessionStatus) && SessionStatus.bSuccess;
+}
+
 PGRAPHICS_DEVICE
 NTAPI
 EngpRegisterGraphicsDevice(
@@ -1051,6 +1076,14 @@ EngpRegisterGraphicsDevice(
     if (!NT_SUCCESS(Status))
     {
         ERR("Could not open device %wZ, 0x%lx\n", pustrDeviceName, Status);
+        ExFreePoolWithTag(pGraphicsDevice, GDITAG_GDEVICE);
+        return NULL;
+    }
+
+    if (!EngpUseGraphicsDeviceInSession(pDeviceObject))
+    {
+        TRACE("%wZ belongs to another session\n", pustrDeviceName);
+        ObDereferenceObject(pFileObject);
         ExFreePoolWithTag(pGraphicsDevice, GDITAG_GDEVICE);
         return NULL;
     }
