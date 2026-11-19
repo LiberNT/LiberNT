@@ -178,7 +178,7 @@ void print_list_(const CSimpleArray<message>& input, const char* file, int line)
     for (int n = 0; n < input.GetSize(); ++n)
     {
         const message& msg = input[n];
-        trace_(file, line)("msg: %d(%s), wParam:0x%Ix, lParam:0x%Ix\n", msg.uMsg, msg2str(msg.uMsg), msg.wParam, msg.lParam);
+        trace_(file, line)("msg: %d(%s), wParam:0x%Ix, lParam:0x%Ix\n", msg.uMsg, msg2str(msg.uMsg), msg.wParam, (size_t)msg.lParam);
     }
     trace_(file, line)("End of list.\n");
 }
@@ -197,7 +197,7 @@ void compare_list_(const CSimpleArray<message>& input, const message* compare, c
             if (cmp.lParam != (LPARAM)PTR_VALUE)
             {
                 ok_(file, line)(cmp.lParam == inp.lParam, "Expected lParam to be 0x%Ix, was 0x%Ix for %i(%s)\n",
-                                cmp.lParam, inp.lParam, compare_item, msg2str(cmp.uMsg));
+                                (size_t)cmp.lParam, (size_t)inp.lParam, compare_item, msg2str(cmp.uMsg));
             }
             else
             {
