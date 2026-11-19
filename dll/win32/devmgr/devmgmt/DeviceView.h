@@ -35,6 +35,7 @@ class CDeviceView
     bool m_ShowHidden;
     LONG m_RefreshRunning;
     LONG m_RefreshRerun;
+    LONG m_ScanHardware;
 
     CRootNode *m_RootNode;
     CAtlList<CClassNode *> m_ClassNodeList;
