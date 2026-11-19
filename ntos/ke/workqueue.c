@@ -293,8 +293,8 @@ KiDequeueOrWait(
                 return NULL;
             }
 
+            ASSERT(Timer == &Thread->Timer);
             TimerBlock->Thread = Thread;
-            TimerBlock->Object = Timer;
             TimerBlock->WaitKey = (USHORT)STATUS_TIMEOUT;
             TimerBlock->WaitType = WaitAny;
 

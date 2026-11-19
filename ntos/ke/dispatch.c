@@ -35,6 +35,22 @@ KiThreadWaitBlock(
     return &Thread->WaitBlock[TIMER_WAIT_BLOCK];
 }
 
+/* The timer block's Object slot holds WaitTime (x86) or Ucb (x64) in the NT10 KTHREAD, so its object is the thread's own timer */
+FORCEINLINE
+PDISPATCHER_HEADER
+KiWaitBlockObject(
+    _In_ PKWAIT_BLOCK WaitBlock)
+{
+    PKTHREAD Thread = WaitBlock->Thread;
+
+    ASSERT(WaitBlock->WaitType != WaitDpc);
+
+    if (WaitBlock == &Thread->WaitBlock[TIMER_WAIT_BLOCK])
+        return &Thread->Timer.Header;
+
+    return (PDISPATCHER_HEADER)WaitBlock->Object;
+}
+
 FORCEINLINE
 ULONG
 KiThreadWaitBlockCount(
@@ -96,7 +112,8 @@ KiUnlinkWaitBlocks(
     for (Index = 0; Index < Count; Index++)
     {
         WaitBlock = KiThreadWaitBlock(Thread, Index);
-        Object = WaitBlock->Object;
+        ASSERT(WaitBlock->Thread == Thread);
+        Object = KiWaitBlockObject(WaitBlock);
 
         /* A signaller that found the wait over takes the block off under the same lock, so the link is only looked at inside it */
         KiAcquireDispatcherObject(Object);
@@ -202,8 +219,8 @@ KiLockCommittedWaiter(
 {
     PKTHREAD Thread = WaitBlock->Thread;
 
-    ASSERT(((PDISPATCHER_HEADER)WaitBlock->Object)->Lock & KOBJECT_LOCK_BIT);
     ASSERT(WaitBlock->WaitType != WaitDpc);
+    ASSERT(KiWaitBlockObject(WaitBlock)->Lock & KOBJECT_LOCK_BIT);
 
     KiAcquireThreadLock(Thread);
     if (Thread->WaitRegister.State == KI_WAIT_COMMITTED)
@@ -221,7 +238,7 @@ FASTCALL
 KiUnlinkWaitBlock(
     _Inout_ PKWAIT_BLOCK WaitBlock)
 {
-    ASSERT(((PDISPATCHER_HEADER)WaitBlock->Object)->Lock & KOBJECT_LOCK_BIT);
+    ASSERT(KiWaitBlockObject(WaitBlock)->Lock & KOBJECT_LOCK_BIT);
 
     KiUnlinkOneWaitBlock(WaitBlock);
 }

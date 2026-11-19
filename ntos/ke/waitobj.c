@@ -143,8 +143,8 @@ KiArmThreadWaitTimer(
         return FALSE;
     }
 
+    ASSERT(Timer == &Thread->Timer);
     TimerBlock->Thread = Thread;
-    TimerBlock->Object = Timer;
     TimerBlock->WaitKey = (USHORT)STATUS_TIMEOUT;
     TimerBlock->WaitType = WaitAny;
 
@@ -747,7 +747,6 @@ KeWaitForAlertByThreadId(
 
         Thread->WaitBlockList = TimerBlock;
         Thread->WaitStatus = STATUS_SUCCESS;
-        TimerBlock->Object = &Thread->Timer;
         TimerBlock->WaitListEntry.Flink = NULL;
         TimerBlock->WaitListEntry.Blink = NULL;
 

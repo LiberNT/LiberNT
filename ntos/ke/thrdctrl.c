@@ -231,7 +231,6 @@ KeInitThread(
      */
     KeInitializeTimerEx(&Thread->Timer, SynchronizationTimer);
     TimerBlock->Thread = Thread;
-    TimerBlock->Object = &Thread->Timer;
     TimerBlock->WaitKey = (USHORT)STATUS_TIMEOUT;
     TimerBlock->WaitType = WaitAny;
     TimerBlock->WaitListEntry.Flink = NULL;
