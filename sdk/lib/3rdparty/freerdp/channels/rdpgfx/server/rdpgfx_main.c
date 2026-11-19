@@ -40,6 +40,7 @@
 #include "rdpgfx_main.h"
 
 #define TAG CHANNELS_TAG("rdpgfx.server")
+#define RDPGFX_BATCH_MAX ZGFX_SEGMENTED_MAXSIZE
 
 static BOOL rdpgfx_server_close(RdpgfxServerContext* context);
 
@@ -118,13 +119,12 @@ WINPR_ATTR_NODISCARD static inline BOOL rdpgfx_server_packet_complete_header(wSt
  *
  * @return 0 on success, otherwise a Win32 error code
  */
-WINPR_ATTR_NODISCARD static UINT rdpgfx_server_packet_send(RdpgfxServerContext* context, wStream* s)
+WINPR_ATTR_NODISCARD static UINT rdpgfx_server_write(RdpgfxServerContext* context, const BYTE* pSrcData,
+                                                     size_t SrcSize)
 {
 	UINT error = 0;
 	UINT32 flags = 0;
 	ULONG written = 0;
-	BYTE* pSrcData = Stream_Buffer(s);
-	const size_t SrcSize = Stream_GetPosition(s);
 	if (SrcSize > UINT32_MAX)
 		return ERROR_INTERNAL_ERROR;
 
@@ -139,8 +139,7 @@ WINPR_ATTR_NODISCARD static UINT rdpgfx_server_packet_send(RdpgfxServerContext* 
 	if (!fs)
 	{
 		WLog_Print(context->priv->log, WLOG_ERROR, "Stream_New failed!");
-		error = CHANNEL_RC_NO_MEMORY;
-		goto out;
+		return CHANNEL_RC_NO_MEMORY;
 	}
 
 	if (zgfx_compress_to_stream(context->priv->zgfx, fs, pSrcData, (UINT32)SrcSize, &flags) < 0)
@@ -172,6 +171,43 @@ WINPR_ATTR_NODISCARD static UINT rdpgfx_server_packet_send(RdpgfxServerContext* 
 	error = CHANNEL_RC_OK;
 out:
 	Stream_Free(fs, TRUE);
+	return error;
+}
+
+WINPR_ATTR_NODISCARD static UINT rdpgfx_server_flush(RdpgfxServerContext* context)
+{
+	RdpgfxServerPrivate* priv = context->priv;
+	UINT error = CHANNEL_RC_OK;
+	WINPR_ASSERT(priv);
+	if (priv->batch && Stream_GetPosition(priv->batch))
+	{
+		error = rdpgfx_server_write(context, Stream_Buffer(priv->batch), Stream_GetPosition(priv->batch));
+		Stream_ResetPosition(priv->batch);
+	}
+	return error;
+}
+
+WINPR_ATTR_NODISCARD static UINT rdpgfx_server_packet_send(RdpgfxServerContext* context, wStream* s)
+{
+	RdpgfxServerPrivate* priv = nullptr;
+	const size_t size = Stream_GetPosition(s);
+	UINT error = CHANNEL_RC_OK;
+
+	WINPR_ASSERT(context);
+	priv = context->priv;
+	WINPR_ASSERT(priv);
+	if (priv->batching && priv->batchThread == GetCurrentThreadId())
+	{
+		WINPR_ASSERT(priv->batch);
+		if (Stream_GetPosition(priv->batch) && Stream_GetPosition(priv->batch) + size > RDPGFX_BATCH_MAX)
+			error = rdpgfx_server_flush(context);
+		if (!error && !Stream_EnsureRemainingCapacity(priv->batch, size))
+			error = CHANNEL_RC_NO_MEMORY;
+		if (!error)
+			Stream_Write(priv->batch, Stream_Buffer(s), size);
+	}
+	else
+		error = rdpgfx_server_write(context, Stream_Buffer(s), size);
 	Stream_Free(s, TRUE);
 	return error;
 }
@@ -524,6 +560,22 @@ WINPR_ATTR_NODISCARD static UINT rdpgfx_send_start_frame_pdu(RdpgfxServerContext
 		Stream_Free(s, TRUE);
 		return ERROR_INTERNAL_ERROR;
 	}
+	if (!context->priv->batch && !(context->priv->batch = Stream_New(nullptr, RDPGFX_BATCH_MAX)))
+	{
+		Stream_Free(s, TRUE);
+		return CHANNEL_RC_NO_MEMORY;
+	}
+	if (context->priv->batching)
+	{
+		const UINT error = rdpgfx_server_flush(context);
+		if (error)
+		{
+			Stream_Free(s, TRUE);
+			return error;
+		}
+	}
+	context->priv->batching = TRUE;
+	context->priv->batchThread = GetCurrentThreadId();
 	return rdpgfx_server_single_packet_send(context, s);
 }
 
@@ -554,7 +606,15 @@ WINPR_ATTR_NODISCARD static UINT rdpgfx_send_end_frame_pdu(RdpgfxServerContext* 
 		Stream_Free(s, TRUE);
 		return ERROR_INTERNAL_ERROR;
 	}
-	return rdpgfx_server_single_packet_send(context, s);
+	UINT error = rdpgfx_server_single_packet_send(context, s);
+	if (context->priv->batching && context->priv->batchThread == GetCurrentThreadId())
+	{
+		const UINT flushed = rdpgfx_server_flush(context);
+		if (!error)
+			error = flushed;
+		context->priv->batching = FALSE;
+	}
+	return error;
 }
 
 /**
@@ -1821,6 +1881,9 @@ BOOL rdpgfx_server_close(RdpgfxServerContext* context)
 	}
 
 	priv->channelEvent = nullptr;
+	priv->batching = FALSE;
+	if (priv->batch)
+		Stream_ResetPosition(priv->batch);
 	priv->isOpened = FALSE;
 	priv->isReady = FALSE;
 	const RDPGFX_CAPSET empty = WINPR_C_ARRAY_INIT;
@@ -1925,7 +1988,10 @@ void rdpgfx_server_context_free(RdpgfxServerContext* context)
 	(void)rdpgfx_server_close(context);
 
 	if (context->priv)
+	{
 		Stream_Free(context->priv->input_stream, TRUE);
+		Stream_Free(context->priv->batch, TRUE);
+	}
 
 	free(context->priv);
 	free(context);

@@ -1,9 +1,12 @@
 
 add_executable(rdp_apitest ClearCodec.c ${REACTOS_SOURCE_DIR}/base/services/rdpserver/clearenc.c ControllerMode.c
-               FrameMove.c ${REACTOS_SOURCE_DIR}/base/services/rdpserver/framemove.c RemoteDesktop.c Zgfx.c testlist.c)
+               FrameMove.c ${REACTOS_SOURCE_DIR}/base/services/rdpserver/framemove.c GfxBatch.c RemoteDesktop.c Zgfx.c testlist.c)
 target_include_directories(rdp_apitest PRIVATE ${REACTOS_SOURCE_DIR}/base/services/rdpserver)
 target_compile_definitions(rdp_apitest PRIVATE __STDC_NO_THREADS__=1)
-target_link_libraries(rdp_apitest freerdp winpr libssl libcrypto uuid oldnames)
+if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(rdp_apitest PRIVATE -fno-autolink)
+endif()
+target_link_libraries(rdp_apitest freerdp-server freerdp winpr libssl libcrypto uuid oldnames)
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_link_libraries(rdp_apitest libgcc_eh)
 endif()
