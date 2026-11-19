@@ -979,6 +979,11 @@ KAFFINITY
 FASTCALL
 KiGetNonParkedProcessorSet(VOID);
 
+VOID
+NTAPI
+KiSetPowerParkedProcessors(
+    _In_ KAFFINITY ParkedSet);
+
 KAFFINITY
 FASTCALL
 KiHeteroPreferredProcessorSet(

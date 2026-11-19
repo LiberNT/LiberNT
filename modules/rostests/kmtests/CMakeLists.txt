@@ -156,6 +156,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_etw/EtwSessionKM.c
     ntos_wmi/PcwKM.c
     ntos_wmi/WmiEventKM.c
+    ntos_ex/ExAuxKlibFirmwareTable.c
     ntos_ex/ExCallback.c
     ntos_ex/ExCallbackExtra.c
     ntos_ex/ExDoubleList.c
@@ -375,7 +376,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_po/PoSettingSession.c
     ntos_po/PoPowerLimit.c
     ntos_po/PoPowerSettings.c
-    ntos_po/PoProcessorStateHandler.c
+    ntos_po/PoPpmProcessor.c
     ntos_po/PoKernelPowerRequest.c
     ntos_po/PoLockConsoleOnWake.c
     ntos_ps/PsNotify.c
@@ -584,7 +585,7 @@ elseif(CMAKE_C_COMPILER_ID STREQUAL "Clang")
 else()
     target_link_options(kmtest_drv PRIVATE -Wl,--forceinteg)
 endif()
-target_link_libraries(kmtest_drv kmtest_printf chkstk memcmp poguid wdmguid arblib wdmsec ${PSEH_LIB})
+target_link_libraries(kmtest_drv kmtest_printf chkstk memcmp poguid wdmguid arblib wdmsec aux_klib ${PSEH_LIB})
 add_importlibs(kmtest_drv battc ks ksecdd ndis smclib ntoskrnl hal)
 if(REACTOS_USE_WDDM)
     add_importlibs(kmtest_drv dxgkrnl dxgmms2)

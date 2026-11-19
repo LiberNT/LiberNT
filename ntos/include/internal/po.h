@@ -208,6 +208,44 @@ NTAPI
 PoInitializePrcb(
     _In_ PKPRCB Prcb);
 
+VOID
+FASTCALL
+PopIdle0(
+    _In_ PPROCESSOR_POWER_STATE PowerState);
+
+VOID
+FASTCALL
+PopPpmIdle(
+    _In_ PPROCESSOR_POWER_STATE PowerState);
+
+CODE_SEG("INIT")
+VOID
+NTAPI
+PopPpmInitialize(VOID);
+
+VOID
+NTAPI
+PopInitializePowerSource(VOID);
+
+NTSTATUS
+NTAPI
+PopPpmProcessorRequest(
+    _In_reads_bytes_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength);
+
+VOID
+NTAPI
+PopPpmResumeFromSystemState(
+    _In_ SYSTEM_POWER_STATE SystemState);
+
+VOID
+NTAPI
+PopPpmQueryProcessorInformation(
+    _In_ ULONG Index,
+    _Out_ PULONG MaxIdleState,
+    _Out_ PULONG CurrentIdleState,
+    _Out_ PULONG LimitPercent);
+
 ULONG
 NTAPI
 PopGetVideoTimeout(VOID);
@@ -329,13 +367,6 @@ NTAPI
 PopActOnPowerRequest(
     _In_reads_bytes_(InputBufferLength) PVOID InputBuffer,
     _In_ ULONG InputBufferLength);
-
-NTSTATUS
-NTAPI
-PopApplyProcessorPowerSetting(
-    _In_ LPCGUID SettingGuid,
-    _In_reads_bytes_(ValueLength) PVOID Value,
-    _In_ ULONG ValueLength);
 
 NTSTATUS
 NTAPI

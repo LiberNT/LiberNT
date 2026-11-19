@@ -562,20 +562,3 @@ PoQueryWatchdogTime(
     /* TODO: no device is timed while it answers, so none is ever given up on */
     return FALSE;
 }
-
-NTSTATUS
-NTAPI
-PopApplyProcessorPowerSetting(
-    _In_ LPCGUID SettingGuid,
-    _In_reads_bytes_(ValueLength) PVOID Value,
-    _In_ ULONG ValueLength)
-{
-    PAGED_CODE();
-
-    UNREFERENCED_PARAMETER(SettingGuid);
-    UNREFERENCED_PARAMETER(Value);
-    UNREFERENCED_PARAMETER(ValueLength);
-
-    /* TODO: a processor is not told to run differently by a setting */
-    return STATUS_NOT_SUPPORTED;
-}

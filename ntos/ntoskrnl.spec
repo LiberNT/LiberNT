@@ -2675,13 +2675,13 @@
 @ stub -arch=win64 KeReportCacheIncoherentDevice
 @ stdcall -arch=win64 KeRestoreExtendedProcessorState(ptr)
 @ stub -arch=arm64 KeRestoreProcessorState
-@ stdcall -arch=win64 KeRevertToUserGroupAffinityThread(ptr)
+@ stdcall KeRevertToUserGroupAffinityThread(ptr)
 @ stdcall -arch=win64 KeSaveExtendedProcessorState(int64 ptr)
 @ stdcall -arch=win64 KeSetActualBasePriorityThread(ptr long)
 @ stdcall -arch=win64 KeSetHardwareCounterConfiguration(ptr long)
 @ stdcall -arch=win64 KeSetHeteroCpuPolicyThread(ptr long long)
 @ stdcall -arch=win64 KeSetSelectedCpuSetsThread(ptr long ptr)
-@ stdcall -arch=win64 KeSetSystemGroupAffinityThread(ptr ptr)
+@ stdcall KeSetSystemGroupAffinityThread(ptr ptr)
 @ stdcall KeSetTargetProcessorDpcEx(ptr ptr)
 @ stdcall -version=0x603+ -arch=arm64 KeSetTimer2(ptr int64 int64 ptr)
 @ stdcall -arch=win64 KeShouldYieldProcessor()
