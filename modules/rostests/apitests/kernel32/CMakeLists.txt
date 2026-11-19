@@ -130,7 +130,6 @@ list(APPEND SOURCE
     LocaleNameToLCID.c
     lstrcpynW.c
     lstrlen.c
-    Mailslot.c
     MaximumProcessorCount.c
     MuiResources.c
     MultiByteToWideChar.c

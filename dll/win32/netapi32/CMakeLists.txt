@@ -18,11 +18,9 @@ list(APPEND SOURCE
     apibuf.c
     browser.c
     dfs.c
-    display.c
     dssetup.c
     group_new.c
     local_group.c
-    misc.c
     nbcmdqueue.c
     nbnamecache.c
     nbt.c

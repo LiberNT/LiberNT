@@ -276,7 +276,6 @@ set(COMPAT_RUNTIME_MODULES
     shdocvw
     shell32
     shfolder
-    shimgvw
     shlwapi
     slc
     sndvolsso

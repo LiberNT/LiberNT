@@ -110,7 +110,6 @@ set(WOW64_I386_EXECUTABLES
     tcpsvcs
     timeout
     tracert
-    tree
     userinit
     utilman
     werfault

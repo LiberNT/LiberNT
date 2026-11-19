@@ -363,7 +363,6 @@ TARGETS = (
     ("devices/video-display", "dll/win32/setupapi/res/", (8,)),
     ("emblem:emblems/emblem-shared", "dll/win32/shell32/res/icons/", (29,)),
     ("emblem:emblems/emblem-symbolic-link", "dll/win32/shell32/res/icons/", (30,)),
-    ("mimetypes/image-x-generic", "dll/win32/shimgvw/res/", ("bmp", "main", "png")),
     ("legacy:legacy/go-home", "dll/win32/syssetup/resources/", (1,)),
     ("legacy:legacy/contact-new", "dll/win32/syssetup/resources/", (2,)),
     ("legacy:mimetypes/x-office-calendar", "dll/win32/syssetup/resources/", (3,)),

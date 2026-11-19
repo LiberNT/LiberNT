@@ -1,7 +1,6 @@
 list(APPEND SOURCE
     blockdev.c
     btrfs.c
-    cdfs.c
     exfat.c
     ext.c
     fat.c

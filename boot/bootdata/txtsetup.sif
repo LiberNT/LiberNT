@@ -35,9 +35,6 @@ FreeSysPartDiskSpace = 450
 *PNP0C08 = acpi
 PCI\CC_0604 = pci
 PCI\VEN_104B&CC_0100 = buslogic
-;PCI\CC_0104 = uniata
-;PCI\CC_0105 = uniata
-;PCI\CC_0106 = uniata
 PCI\CC_010601 = storahci
 ACPI\CLS_0001&SUBCLS_0006&PI_01 = storahci
 PCI\VEN_1000&DEV_0050 = lsi_sas
@@ -45,7 +42,6 @@ PCI\VEN_1000&DEV_0054 = lsi_sas
 PCI\VEN_1000&DEV_0056 = lsi_sas
 PCI\VEN_1000&DEV_0058 = lsi_sas
 PCI\VEN_1000&DEV_0030 = lsi_sas
-;*PNP0600 = uniata
 USB\CLASS_09 = usbhub
 USB\ROOT_HUB = usbhub
 USB\ROOT_HUB20 = usbhub
@@ -130,7 +126,6 @@ pciide = pciide.sys
 atapi = atapi.sys
 
 [SCSI.Load]
-;uniata = uniata.sys
 buslogic = buslogic.sys
 storahci = storahci.sys
 lsi_sas = lsi_sas.sys

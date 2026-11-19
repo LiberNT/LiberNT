@@ -2232,8 +2232,6 @@ HKLM,"SYSTEM\CurrentControlSet\Services\partmgr","ImagePath",0x00020000,"system3
 HKLM,"SYSTEM\CurrentControlSet\Services\partmgr","Start",0x00010001,0x00000000
 HKLM,"SYSTEM\CurrentControlSet\Services\partmgr","Type",0x00010001,0x00000001
 
-; UniATA: disable legacy detection to avoid pre-PnP IDE claiming
-HKLM,"SYSTEM\CurrentControlSet\Services\UniATA\Parameters","LegacyDetection",0x00010001,0x00000000
 
 ; pci driver (critical for device enumeration)
 HKLM,"SYSTEM\CurrentControlSet\Services\pci","ErrorControl",0x00010001,0x00000001
