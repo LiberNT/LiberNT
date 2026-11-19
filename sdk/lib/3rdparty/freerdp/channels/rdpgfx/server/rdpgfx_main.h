@@ -37,6 +37,9 @@ struct s_rdpgfx_server_private
 	BOOL isReady;
 	wLog* log;
 	RDPGFX_CAPSET activeCapSet;
+	wStream* batch;
+	BOOL batching;
+	DWORD batchThread;
 };
 
 #endif /* FREERDP_CHANNEL_RDPGFX_SERVER_MAIN_H */
