@@ -48,6 +48,7 @@
 #include <remoteconsole.h>
 #include "transfer.h"
 #include "gfx.h"
+#include "experience.h"
 
 typedef ULONG (__cdecl *DEBUG_PRINT)(const char *, ...);
 static DEBUG_PRINT DebugPrint;
@@ -67,6 +68,7 @@ static LONG RemoteDisplayUsers;
 static HANDLE RemoteDisplayReady;
 static WCHAR RemoteDisplayInstance[MAX_DEVICE_ID_LEN];
 static BOOL RemoteDisplayShown;
+static RDP_EXPERIENCE_STATE Experience;
 static HANDLE RemoteConsole;
 static BOOL ControllerMode;
 static volatile LONG ControllerConnected;
@@ -763,6 +765,7 @@ static void ReleaseRemoteDisplay(DESKTOP_CONTEXT *ctx)
     EnterCriticalSection(&RemoteDisplayLock);
     if (!--RemoteDisplayUsers)
     {
+        if (!ExperienceRestore(&Experience)) Log("Cannot restore the console's visual settings");
         RemoteDisplayShown = FALSE;
         DisconnectRemoteConsole(InterlockedExchange(&ConsoleTakeover, FALSE) != 0);
         SwDeviceClose(RemoteDisplay);
@@ -798,6 +801,23 @@ static BOOL ControllerPostConnect(freerdp_peer *peer)
     return TRUE;
 }
 
+static void ApplyExperience(DESKTOP_CONTEXT *ctx)
+{
+    rdpSettings *settings = ctx->rdp.settings;
+    UINT32 flags = freerdp_settings_get_uint32(settings, FreeRDP_PerformanceFlags);
+    UINT32 type = freerdp_settings_get_uint32(settings, FreeRDP_ConnectionType);
+    RDP_EXPERIENCE experience;
+    BOOL applied = FALSE;
+    assert(!ControllerMode && ctx->RemoteDisplay);
+    ExperienceFromClient(flags, type, &experience);
+    EnterCriticalSection(&RemoteDisplayLock);
+    if (RemoteDisplayShown) applied = ExperienceApply(&Experience, &experience);
+    LeaveCriticalSection(&RemoteDisplayLock);
+    Log("Experience flags 0x%08lx connection type %lu: wallpaper %d, full window drag %d, effects %d%s",
+        (ULONG)flags, (ULONG)type, experience.Wallpaper, experience.DragFullWindows, experience.Effects,
+        applied ? "" : " (not applied)");
+}
+
 static BOOL PostConnect(freerdp_peer *peer)
 {
     DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)peer->context;
@@ -819,6 +839,7 @@ static BOOL PostConnect(freerdp_peer *peer)
         if (!freerdp_send_error_info(ctx->rdp.rdp)) Log("Cannot tell peer %s why it is disconnected", peer->hostname);
         return FALSE;
     }
+    ApplyExperience(ctx);
     if (!FollowInputDesktop(ctx) || !StartTransfer(ctx)) return FALSE;
     Log("Authenticated peer %s; desktop %dx%d", peer->hostname, ctx->Width, ctx->Height);
     return TRUE;
