@@ -25,6 +25,7 @@ typedef struct _USER_SESSION
 } USER_SESSION, *PUSER_SESSION;
 
 extern PUSER_SESSION gpDisplaySession;
+extern BOOLEAN gbConsoleSession;
 
 PUSER_SESSION FASTCALL UserFindSession(ULONG SessionId);
 PUSER_SESSION FASTCALL UserGetProcessSession(PEPROCESS Process);

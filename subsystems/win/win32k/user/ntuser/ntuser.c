@@ -377,6 +377,7 @@ NtUserInitialize(
 {
     NTSTATUS Status;
     PUSER_SESSION Session;
+    ULONG ConsoleId;
 
     TRACE("Enter NtUserInitialize(%lx, %p, %p)\n",
           dwWinVersion, hPowerRequestEvent, hMediaRequestEvent);
@@ -439,12 +440,16 @@ NtUserInitialize(
 
     WritePointerRelease((PVOID volatile *)&gpDisplaySession, Session);
 
+    /* A session started while another one owns the console comes up without the physical display and input */
+    ConsoleId = RtlGetActiveConsoleId();
+    gbConsoleSession = (ConsoleId == 0 || ConsoleId == Session->SessionId);
+
 // Initialize Media Change (use hMediaRequestEvent).
 
     /* Initialize USER */
     Status = UserInitialize();
-    if (NT_SUCCESS(Status))
-        RtlSetActiveConsoleId(PsGetCurrentProcessSessionId());
+    if (NT_SUCCESS(Status) && gbConsoleSession)
+        RtlSetActiveConsoleId(Session->SessionId);
 
     /* Return */
     UserLeave();
