@@ -9,6 +9,7 @@
 #include "present.h"
 #include "vidmm.h"
 #include <reactos/dwmframe.h>
+#include <ndk/psfuncs.h>
 
 NTKERNELAPI VOID FASTCALL
 ExfAcquirePushLockExclusive(_Inout_ PEX_PUSH_LOCK PushLock);
@@ -455,7 +456,7 @@ DxgkpRedirectedBltWorker(
     PAGED_CODE();
 
     /* The win32k callouts below are session-space code; a system worker runs outside every session */
-    if (DxgkDisplayAttachWin32kSession(&ApcState, &SessionProcess))
+    if (DxgkDisplayAttachWin32kSession(PsGetProcessSessionId(Work->Present.OwnerProcess), &ApcState, &SessionProcess))
     {
         /* The CDD copy reads the GDI blt texture on its own context: the producer's present must retire first */
         if (NT_SUCCESS(Status) && Work->GdiBltTexture != NULL)

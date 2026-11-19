@@ -1,0 +1,135 @@
+/*
+ * PROJECT:     LiberNT API tests
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Start an extra session through the session manager and check it stays off the console
+ * COPYRIGHT:   Copyright 2026 mikuta0407 <mikuta0407@mikuta0407.net>
+ */
+
+#include <apitest.h>
+#define WIN32_NO_STATUS
+#include <windef.h>
+#include <winbase.h>
+#include <winreg.h>
+#include <wingdi.h>
+#include <winuser.h>
+#include <cfgmgr32.h>
+#include <swdevice.h>
+#include <stdio.h>
+#include <ndk/ntndk.h>
+#include <sm/smmsg.h>
+
+#define CHILD_REPORT L"\\Temp\\session_child.txt"
+
+static HANDLE AdapterReady;
+
+static ULONG VideoDeviceCount(void)
+{
+    DWORD max = 0, size = sizeof(max);
+    if (RegGetValueW(HKEY_LOCAL_MACHINE, L"HARDWARE\\DEVICEMAP\\VIDEO", L"MaxObjectNumber", RRF_RT_REG_DWORD,
+                     NULL, &max, &size) != ERROR_SUCCESS)
+        return 0;
+    return max + 1;
+}
+
+static VOID WINAPI AdapterCreated(HSWDEVICE device, HRESULT result, PVOID context, PCWSTR instance)
+{
+    trace("adapter %ls: 0x%08lx\n", instance ? instance : L"", result);
+    if (SUCCEEDED(result)) SetEvent(AdapterReady);
+}
+
+static BOOL SessionSeesRemoteAdapter(void)
+{
+    DISPLAY_DEVICEW device = { sizeof(device) };
+    DWORD index;
+    for (index = 0; EnumDisplayDevicesW(NULL, index, &device, 0); index++)
+    {
+        if (wcsstr(device.DeviceString, L"Remote Display")) return TRUE;
+        device.cb = sizeof(device);
+    }
+    return FALSE;
+}
+
+static BOOL ReadChildReport(WCHAR *text, DWORD count)
+{
+    WCHAR path[MAX_PATH];
+    HANDLE file;
+    DWORD read = 0;
+    GetWindowsDirectoryW(path, MAX_PATH);
+    lstrcatW(path, CHILD_REPORT);
+    file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    if (file == INVALID_HANDLE_VALUE) return FALSE;
+    ReadFile(file, text, (count - 1) * sizeof(WCHAR), &read, NULL);
+    CloseHandle(file);
+    text[read / sizeof(WCHAR)] = 0;
+    return read != 0;
+}
+
+START_TEST(StartSession)
+{
+    static const WCHAR hardwareIds[] = L"RdpVdd_RemoteDisplay\0";
+    SW_DEVICE_CREATE_INFO info = { sizeof(info) };
+    WCHAR commandLine[MAX_PATH + 32], path[MAX_PATH], report[1024];
+    UNICODE_STRING command;
+    HSWDEVICE adapter = NULL;
+    HANDLE port = NULL, csrss = NULL, initial = NULL;
+    ULONG sessionId = MAXULONG, videoBefore, wait;
+    DWORD ownSession = 0, console;
+    NTSTATUS status;
+    HRESULT hr;
+    int width = 0, height = 0, devices = -1, remote = -1, desktop = 0;
+    DWORD modeWidth = 0, modeHeight = 0;
+    DWORD childSession = MAXULONG, childConsole = MAXULONG;
+
+    ProcessIdToSessionId(GetCurrentProcessId(), &ownSession);
+    console = WTSGetActiveConsoleSessionId();
+    ok(console == ownSession, "the test runs in session %lu, the console is %lu\n", ownSession, console);
+
+    GetWindowsDirectoryW(path, MAX_PATH);
+    lstrcatW(path, CHILD_REPORT);
+    DeleteFileW(path);
+
+    AdapterReady = CreateEventW(NULL, TRUE, FALSE, NULL);
+    videoBefore = VideoDeviceCount();
+    info.pszInstanceId = L"RdpVdd_RemoteDisplay&NewSession";
+    info.pszzHardwareIds = hardwareIds;
+    info.pszzCompatibleIds = hardwareIds;
+    info.CapabilityFlags = SWDeviceCapabilitiesRemovable | SWDeviceCapabilitiesSilentInstall |
+                           SWDeviceCapabilitiesDriverRequired;
+    info.pszDeviceDescription = L"LiberNT Remote Display Adapter";
+    hr = SwDeviceCreate(L"RemoteDisplayEnum", L"HTREE\\ROOT\\0", &info, 0, NULL, AdapterCreated, NULL, &adapter);
+    ok(hr == S_OK, "SwDeviceCreate returned 0x%08lx\n", hr);
+    if (FAILED(hr)) return;
+    ok(WaitForSingleObject(AdapterReady, 15000) == WAIT_OBJECT_0, "the adapter was not created\n");
+    for (wait = 0; wait < 150 && VideoDeviceCount() <= videoBefore; wait++) Sleep(100);
+    ok(VideoDeviceCount() > videoBefore, "the adapter did not start (%lu video devices)\n", VideoDeviceCount());
+    ok(!SessionSeesRemoteAdapter(), "the console session took the adapter meant for a new session\n");
+
+    status = SmConnectToSm(NULL, NULL, 0, &port);
+    ok(status == STATUS_SUCCESS, "SmConnectToSm returned 0x%lx\n", status);
+    if (NT_SUCCESS(status))
+    {
+        GetModuleFileNameW(NULL, path, MAX_PATH);
+        lstrcpyW(wcsrchr(path, L'\\') + 1, L"session_child.exe");
+        lstrcpynW(commandLine, path, ARRAYSIZE(commandLine));
+        RtlInitUnicodeString(&command, commandLine);
+        status = SmStartCsr(port, &sessionId, &command, &csrss, &initial);
+        ok(status == STATUS_SUCCESS, "SmStartCsr returned 0x%lx\n", status);
+        ok(sessionId != ownSession && sessionId != 0, "the new session is %lu\n", sessionId);
+        for (wait = 0; wait < 300 && !ReadChildReport(report, ARRAYSIZE(report)); wait++) Sleep(100);
+        ok(ReadChildReport(report, ARRAYSIZE(report)), "the child in the new session wrote no report\n");
+        trace("child: %ls\n", report);
+        swscanf(report, L"session %lu console %lu devices %d remote %d screen %dx%d mode %lux%lu desktop %d",
+                &childSession, &childConsole, &devices, &remote, &width, &height, &modeWidth, &modeHeight,
+                &desktop);
+        ok(childSession == sessionId, "the child ran in session %lu, not %lu\n", childSession, sessionId);
+        ok(childConsole == ownSession, "the new session saw console %lu\n", childConsole);
+        ok(devices == 1 && remote == 1, "the new session sees %d display devices, %d remote\n", devices, remote);
+        ok(desktop == 1, "the new session could not create its desktop\n");
+        ok(modeWidth > 0 && width == (int)modeWidth && height == (int)modeHeight,
+           "the new session's screen is %dx%d, its display mode %lux%lu\n", width, height, modeWidth, modeHeight);
+        NtClose(port);
+    }
+    ok(WTSGetActiveConsoleSessionId() == console, "the console moved to session %lu\n", WTSGetActiveConsoleSessionId());
+    ok(!SessionSeesRemoteAdapter(), "the console session sees the new session's adapter\n");
+    SwDeviceClose(adapter);
+}
