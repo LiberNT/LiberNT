@@ -323,7 +323,7 @@ Path: sdk/lib/3rdparty/freerdp
 Used Version: 3.32.0
 License: Apache-2.0 (https://spdx.org/licenses/Apache-2.0.html)
 URL: https://www.freerdp.com/
-Modifications: only the WinPR, core library and server sources the RDP console server builds, among them the graphics pipeline (rdpgfx) server channel, with the headers CMake generates for LiberNT; zgfx_compress_segment implements RDP 8.0 bulk compression (MS-RDPEGFX 3.1.9.1) instead of sending raw segments; RDPDR read and write requests keep 64-bit offsets and a write acknowledgement is read as a length; Windows SDK paths instead of the MinGW-w64 ones, an fgetpos _ftelli64, NAN for nan(""), memmove_s for wmemmove_s and an empty FREERDP_API under __REACTOS__
+Modifications: only the WinPR, core library and server sources the RDP console server builds, among them the graphics pipeline (rdpgfx) server channel and the OpenH264 backend that loads openh264.dll at run time, with the headers CMake generates for LiberNT; zgfx_compress_segment implements RDP 8.0 bulk compression (MS-RDPEGFX 3.1.9.1) instead of sending raw segments; RDPDR read and write requests keep 64-bit offsets and a write acknowledgement is read as a length; Windows SDK paths instead of the MinGW-w64 ones, an fgetpos _ftelli64, NAN for nan(""), memmove_s for wmemmove_s and an empty FREERDP_API under __REACTOS__
 
 Title: FreeType
 Path: sdk/lib/3rdparty/freetype
@@ -372,6 +372,13 @@ Path: sdk/lib/3rdparty/libxml2
 Used Version: 2.10.3
 License: MIT (https://spdx.org/licenses/MIT.htmlf)
 URL: http://xmlsoft.org, ftp://xmlsoft.org/libxml2/
+
+Title: OpenH264 API headers
+Path: sdk/lib/3rdparty/openh264
+Used Version: 2.6.0
+License: BSD-2-Clause (sdk/lib/3rdparty/openh264/LICENSE)
+URL: https://github.com/cisco/openh264
+Modifications: only the codec/api/wels headers, which the FreeRDP OpenH264 backend compiles against; the codec itself is Cisco's binary, downloaded at run time when the user turns it on
 
 Title: OpenSSL
 Path: sdk/lib/3rdparty/openssl

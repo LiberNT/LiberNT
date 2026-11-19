@@ -49,9 +49,9 @@
 /* #undef WITH_FAAD2 */
 /* #undef WITH_FAAC */
 /* #undef WITH_SOXR */
-/* #undef WITH_GFX_H264 */
-/* #undef WITH_OPENH264 */
-/* #undef WITH_OPENH264_LOADING */
+#define WITH_GFX_H264
+#define WITH_OPENH264
+#define WITH_OPENH264_LOADING
 /* #undef WITH_VIDEO_FFMPEG */
 /* #undef WITH_DSP_EXPERIMENTAL */
 /* #undef WITH_DSP_FFMPEG */
