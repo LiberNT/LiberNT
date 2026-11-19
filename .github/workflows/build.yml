@@ -69,9 +69,9 @@ jobs:
         curl -fsSL https://raw.githubusercontent.com/LiberNT/libernt-build-toolchain/main/rosbe-unix-bootstrap.sh -o /tmp/rosbe-bootstrap.sh
         echo "sha=$(sha1sum /tmp/rosbe-bootstrap.sh | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
-    - name: Cache RosBE
+    - name: Restore RosBE
       id: cache_rosbe
-      uses: actions/cache@v5
+      uses: actions/cache/restore@v5
       with:
         path: ~/.local/opt/rosbe
         key: rosbe-${{runner.os}}-${{steps.rosbe_spec.outputs.sha}}
@@ -79,6 +79,14 @@ jobs:
     - name: Install RosBE
       if: ${{ steps.cache_rosbe.outputs.cache-hit != 'true' }}
       run: sh /tmp/rosbe-bootstrap.sh
+
+    # Pull requests only restore: their caches filled the 10 GB store and evicted those of master
+    - name: Save RosBE
+      if: ${{ steps.cache_rosbe.outputs.cache-hit != 'true' && github.event_name != 'pull_request' }}
+      uses: actions/cache/save@v5
+      with:
+        path: ~/.local/opt/rosbe
+        key: rosbe-${{runner.os}}-${{steps.rosbe_spec.outputs.sha}}
 
     - name: Restore ccache
       id: ccache_restore
@@ -135,7 +143,7 @@ jobs:
     # A cancelled build holds a partial cache: saving it would make it the newest and prune the full one
     - name: Save ccache
       id: ccache_save
-      if: ${{ !cancelled() && steps.ccache_restore.outcome == 'success' }}
+      if: ${{ !cancelled() && steps.ccache_restore.outcome == 'success' && github.event_name != 'pull_request' }}
       uses: actions/cache/save@v5
       with:
         path: ccache
