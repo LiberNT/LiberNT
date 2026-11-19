@@ -142,14 +142,3 @@ KiDisplayBugCheckRegisterState(
     }
 }
 
-BOOLEAN
-NTAPI
-KiUnwindFrame(
-    _Inout_ PCONTEXT Context,
-    _In_ BOOLEAN CallerFrame)
-{
-    UNREFERENCED_PARAMETER(CallerFrame);
-
-    /* FIXME: the RISC-V psABI keeps the return address at fp-8 and the previous fp at fp-16 */
-    return KiUnwindFrameRecord(Context);
-}
