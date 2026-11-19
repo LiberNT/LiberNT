@@ -610,7 +610,7 @@ endif()
         list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kd/riscv64/kdserial.c)
         if(KDBG)
             list(APPEND ASM_SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/riscv64/kdb_help.S)
-            list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/riscv64/riscv64-dis.c ${REACTOS_SOURCE_DIR}/ntos/kdbg/riscv64/kdbregs.c)
+            list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/riscv64/riscv64-decode.c ${REACTOS_SOURCE_DIR}/ntos/kdbg/riscv64/riscv64-dis.c ${REACTOS_SOURCE_DIR}/ntos/kdbg/riscv64/kdbregs.c)
         endif()
     endif()
 

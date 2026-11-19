@@ -57,6 +57,24 @@ NTAPI
 KdbpArchHardwareBreakPointHit(
     _Inout_ PCONTEXT Context);
 
+typedef enum _KDB_STEP_HIT
+{
+    KdbStepNotHit,
+    KdbStepDone,
+    KdbStepForeignHit
+} KDB_STEP_HIT;
+
+/*
+ * Called at every entry: takes back a step the processor could not take by
+ * itself, and says whether this stop is the end of it or other code that ran
+ * into it.
+ */
+KDB_STEP_HIT
+NTAPI
+KdbpArchTranslateStep(
+    _In_opt_ PEXCEPTION_RECORD64 ExceptionRecord,
+    _Inout_ PCONTEXT Context);
+
 /* Fills the answer to a stop with the stepping and watch state the debugger set up */
 VOID
 NTAPI

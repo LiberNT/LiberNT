@@ -18,6 +18,7 @@
 const KDB_REGISTER KdbpRegisters[] =
 {
     KDB_REG("ra", Ra),
+    KDB_REG("sp", Sp),
     KDB_REG("gp", Gp),
     KDB_REG("tp", Tp),
     KDB_REG("t0", T0),
@@ -47,11 +48,10 @@ const KDB_REGISTER KdbpRegisters[] =
     KDB_REG("t4", T4),
     KDB_REG("t5", T5),
     KDB_REG("t6", T6),
+    KDB_REG("pc", Pc),
     KDB_REG("fcsr", Fcsr),
 
     /* The names that mean the same thing on every architecture */
-    KDB_REG("pc", Pc),
-    KDB_REG("sp", Sp),
     KDB_REG("fp", S0),
     KDB_REG("ret", A0)
 };
@@ -100,19 +100,116 @@ const ULONG KdbpFloatingRegisterCount = RTL_NUMBER_OF(KdbpFloatingRegisters);
 /* PUBLIC FUNCTIONS ***********************************************************/
 
 /*
- * Stepping one instruction at a time is not yet driven on this architecture.
+ * The processor has no step trap in supervisor mode, so a step is a breakpoint
+ * at the instruction that runs next, written over it and taken back at the next stop.
  */
+static ULONG_PTR KdbpRiscvStepAddress;
+static KD_BREAKPOINT_TYPE KdbpRiscvStepSaved;
+static PKTHREAD KdbpRiscvStepThread;
+static ULONG_PTR KdbpRiscvStepStack;
+static BOOLEAN KdbpRiscvStepArmed;
+
+static
+NTSTATUS
+KdbpRiscvCopyCode(
+    _In_ ULONG_PTR Address,
+    _Inout_ KD_BREAKPOINT_TYPE *Value,
+    _In_ BOOLEAN Write)
+{
+    NTSTATUS Status;
+
+    Status = KdpCopyProcessMemoryChunks(NULL,
+                                        (ULONG64)Address,
+                                        Value,
+                                        sizeof(*Value),
+                                        0,
+                                        MMDBG_COPY_UNSAFE | (Write ? MMDBG_COPY_WRITE : 0),
+                                        NULL);
+    if (NT_SUCCESS(Status) && Write)
+        KeSweepICache((PVOID)Address, sizeof(*Value));
+    return Status;
+}
+
+static
+VOID
+KdbpRiscvDisarmStep(VOID)
+{
+    if (!KdbpRiscvStepArmed)
+        return;
+
+    KdbpRiscvStepArmed = FALSE;
+    if (!NT_SUCCESS(KdbpRiscvCopyCode(KdbpRiscvStepAddress, &KdbpRiscvStepSaved, TRUE)))
+        KdbpPrint("The instruction at %p could not be put back after a step\n", (PVOID)KdbpRiscvStepAddress);
+}
+
 NTSTATUS
 NTAPI
 KdbpArchSetSingleStep(
     _Inout_ PCONTEXT Context,
     _In_ BOOLEAN Enable)
 {
-    UNREFERENCED_PARAMETER(Context);
-    UNREFERENCED_PARAMETER(Enable);
+    KD_BREAKPOINT_TYPE Instruction = KD_BREAKPOINT_VALUE;
+    ULONG_PTR NextPc;
+    PCSTR Reason;
+    NTSTATUS Status;
 
-    /* TODO: single stepping needs this architecture's own debug state */
-    return STATUS_NOT_SUPPORTED;
+    KdbpRiscvDisarmStep();
+    if (!Enable)
+        return STATUS_SUCCESS;
+
+    if (!KdbpRiscvGetNextPc(Context, &NextPc, &Reason))
+        return STATUS_NOT_SUPPORTED;
+
+    Status = KdbpRiscvCopyCode(NextPc, &KdbpRiscvStepSaved, FALSE);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = KdbpRiscvCopyCode(NextPc, &Instruction, TRUE);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    KdbpRiscvStepAddress = NextPc;
+    KdbpRiscvStepThread = KeGetCurrentThread();
+    KdbpRiscvStepStack = (ULONG_PTR)Context->Sp;
+    KdbpRiscvStepArmed = TRUE;
+    return STATUS_SUCCESS;
+}
+
+KDB_STEP_HIT
+NTAPI
+KdbpArchTranslateStep(
+    _In_opt_ PEXCEPTION_RECORD64 ExceptionRecord,
+    _Inout_ PCONTEXT Context)
+{
+    ULONG_PTR Pc = (ULONG_PTR)Context->Pc;
+    ULONG_PTR Address = KdbpRiscvStepAddress;
+    ULONG_PTR Distance;
+
+    if (!KdbpRiscvStepArmed)
+        return KdbStepNotHit;
+
+    KdbpRiscvDisarmStep();
+
+    if ((ExceptionRecord == NULL) ||
+        (ExceptionRecord->ExceptionCode != (NTSTATUS)STATUS_BREAKPOINT) ||
+        ((Pc != Address) && (Pc != Address + KD_BREAKPOINT_SIZE)))
+    {
+        return KdbStepNotHit;
+    }
+
+    /* The instruction is back: whoever reached it runs it as written */
+    Context->Pc = Address;
+
+    /* An interrupt runs on its own stack, and in the thread it interrupted */
+    Distance = ((ULONG_PTR)Context->Sp > KdbpRiscvStepStack) ? (ULONG_PTR)Context->Sp - KdbpRiscvStepStack
+                                                             : KdbpRiscvStepStack - (ULONG_PTR)Context->Sp;
+    if ((KeGetCurrentThread() != KdbpRiscvStepThread) || (Distance >= KERNEL_LARGE_STACK_SIZE))
+    {
+        /* FIXME: the step is lost when other code reaches it first; the stepping thread then runs free */
+        return KdbStepForeignHit;
+    }
+
+    return KdbStepDone;
 }
 
 ULONG

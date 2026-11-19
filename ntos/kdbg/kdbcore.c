@@ -198,23 +198,26 @@ KdbpApplySoftwareBreakPoint(
                                             NULL);
         if (!NT_SUCCESS(Status))
             return Status;
-
-        return KdpCopyProcessMemoryChunks(Process,
-                                          (ULONG64)BreakPoint->Address,
-                                          &Instruction,
-                                          sizeof(KD_BREAKPOINT_TYPE),
-                                          0,
-                                          MMDBG_COPY_UNSAFE | MMDBG_COPY_WRITE,
-                                          NULL);
     }
 
-    return KdpCopyProcessMemoryChunks(Process,
-                                      (ULONG64)BreakPoint->Address,
-                                      &BreakPoint->Data.SavedInstruction,
-                                      sizeof(KD_BREAKPOINT_TYPE),
-                                      0,
-                                      MMDBG_COPY_UNSAFE | MMDBG_COPY_WRITE,
-                                      NULL);
+    Status = KdpCopyProcessMemoryChunks(Process,
+                                        (ULONG64)BreakPoint->Address,
+                                        Enable ? &Instruction : &BreakPoint->Data.SavedInstruction,
+                                        sizeof(KD_BREAKPOINT_TYPE),
+                                        0,
+                                        MMDBG_COPY_UNSAFE | MMDBG_COPY_WRITE,
+                                        NULL);
+
+    /* The instruction fetch path does not see a store to code until it is told to */
+    if (NT_SUCCESS(Status))
+    {
+        if (Process == NULL)
+            KeSweepICache((PVOID)BreakPoint->Address, sizeof(KD_BREAKPOINT_TYPE));
+        else
+            KeSweepICache(NULL, 0);
+    }
+
+    return Status;
 }
 
 static
@@ -1151,6 +1154,8 @@ KdbEnterDebuggerException(
     KDB_ENTER_CONDITION EnterCondition = KdbEnterAlways;
     LONG ExceptionNr;
     LONG BreakPointNr = -1;
+    EXCEPTION_RECORD64 StepRecord;
+    KDB_STEP_HIT StepHit;
     BOOLEAN EnteredOnSingleStep = FALSE;
     BOOLEAN StoppedAtInternal = FALSE;
     BOOLEAN SteppedOverBreakPoint;
@@ -1163,6 +1168,16 @@ KdbEnterDebuggerException(
         return kdHandleException;
 
     KdbpStopCommands[0] = ANSI_NULL;
+
+    /* A step the processor could not take by itself ends as a breakpoint, and is reported as the step it was */
+    StepHit = KdbpArchTranslateStep(ExceptionRecord, Context);
+    if (StepHit == KdbStepDone)
+    {
+        ASSERT(ExceptionRecord != NULL);
+        StepRecord = *ExceptionRecord;
+        StepRecord.ExceptionCode = STATUS_SINGLE_STEP;
+        ExceptionRecord = &StepRecord;
+    }
 
     ExceptionNr = (ExceptionRecord != NULL)
                   ? KdbpExceptionNumber(ExceptionRecord->ExceptionCode) : 3;
@@ -1197,6 +1212,14 @@ KdbEnterDebuggerException(
             KdbpApplyBreakPoint(Pending, TRUE);
 
         KdbpStepOverBreakPoint = -1;
+    }
+
+    /* Other code reached a step's breakpoint: it runs the instruction as written and nothing stops */
+    if (StepHit == KdbStepForeignHit)
+    {
+        KdbCurrentExceptionRecordValid = FALSE;
+        KdbCurrentTrapFrame = NULL;
+        return kdContinue;
     }
 
     if ((ExceptionRecord != NULL) &&
