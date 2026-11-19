@@ -43,6 +43,8 @@ typedef struct _RDPVDD_ADAPTER
     PKEVENT FrameEvent;
     ULONG DirtyCount;
     RECT Dirty[RDPVDD_FRAME_MAX_RECTS];
+    ULONG MoveCount;
+    RDPVDD_MOVE Moves[RDPVDD_FRAME_MAX_MOVES];
 } RDPVDD_ADAPTER, *PRDPVDD_ADAPTER;
 
 static
@@ -132,6 +134,7 @@ RdpVddAddDirty(
         Clipped.right = (LONG)Adapter->Width;
         Clipped.bottom = (LONG)Adapter->Height;
         Adapter->DirtyCount = 0;
+        Adapter->MoveCount = 0;
     }
     else
     {
@@ -175,6 +178,32 @@ RdpVddAddDirty(
 
 static
 VOID
+RdpVddAddMove(
+    _In_ PRDPVDD_ADAPTER Adapter,
+    _In_ const D3DKMT_MOVE_RECT *Move)
+{
+    LONG Width = (LONG)Adapter->Width, Height = (LONG)Adapter->Height;
+    RDPVDD_MOVE *Clipped;
+    LONG Dx, Dy;
+
+    ASSERT(Adapter->MoveCount <= RDPVDD_FRAME_MAX_MOVES);
+    if (Adapter->MoveCount == RDPVDD_FRAME_MAX_MOVES ||
+        Move->DestRect.left >= Move->DestRect.right || Move->DestRect.top >= Move->DestRect.bottom ||
+        Move->DestRect.left < 0 || Move->DestRect.top < 0 ||
+        Move->DestRect.right > Width || Move->DestRect.bottom > Height)
+        return;
+    Dx = Move->SourcePoint.x - Move->DestRect.left;
+    Dy = Move->SourcePoint.y - Move->DestRect.top;
+    if (Move->SourcePoint.x < 0 || Move->SourcePoint.y < 0 ||
+        Dx > Width - Move->DestRect.right || Dy > Height - Move->DestRect.bottom)
+        return;
+    Clipped = &Adapter->Moves[Adapter->MoveCount++];
+    Clipped->SourcePoint = Move->SourcePoint;
+    Clipped->DestRect = Move->DestRect;
+}
+
+static
+VOID
 RdpVddSignalFrame(
     _In_ PRDPVDD_ADAPTER Adapter)
 {
@@ -193,6 +222,7 @@ RdpVddCloseFrame(
     Event = Adapter->FrameEvent;
     Adapter->FrameEvent = NULL;
     Adapter->DirtyCount = 0;
+    Adapter->MoveCount = 0;
     RdpVddUnlockFrame(Adapter);
     if (Event != NULL)
     {
@@ -668,6 +698,7 @@ RdpVddReadFrame(
 
     RdpVddLockFrame(Adapter);
     Request->RectCount = 0;
+    Request->MoveCount = 0;
     if (!Adapter->SourceActive || Adapter->Scanout == NULL)
     {
         Request->Width = Request->Height = 0;
@@ -710,6 +741,9 @@ RdpVddReadFrame(
         Request->RectCount = Adapter->DirtyCount;
         RtlCopyMemory(Request->Rects, Adapter->Dirty, Adapter->DirtyCount * sizeof(Adapter->Dirty[0]));
         Adapter->DirtyCount = 0;
+        Request->MoveCount = Adapter->MoveCount;
+        RtlCopyMemory(Request->Moves, Adapter->Moves, Adapter->MoveCount * sizeof(Adapter->Moves[0]));
+        Adapter->MoveCount = 0;
     }
     RdpVddUnlockFrame(Adapter);
     return Status;
@@ -1326,6 +1360,7 @@ RdpVddDdiPresentDisplayOnly(
     {
         RdpVddCopyRect(Adapter, pPresentDisplayOnly->pSource, pPresentDisplayOnly->Pitch, 0, 0,
                        &pPresentDisplayOnly->pMoves[Index].DestRect);
+        RdpVddAddMove(Adapter, &pPresentDisplayOnly->pMoves[Index]);
         RdpVddAddDirty(Adapter, &pPresentDisplayOnly->pMoves[Index].DestRect);
     }
     for (Index = 0; Index < pPresentDisplayOnly->NumDirtyRects; Index++)

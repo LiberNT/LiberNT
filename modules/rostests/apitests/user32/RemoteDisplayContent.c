@@ -22,6 +22,13 @@
 #define TEST_COLOR         RGB(0x20, 0x80, 0xC0)
 #define MAX_TEST_DEVICES   16
 #define POINTER_SIZE       128
+#define MOVE_COLOR         RGB(0xE0, 0x40, 0x30)
+#define MOVE_LEFT          100
+#define MOVE_TOP           100
+#define MOVE_WIDTH         320
+#define MOVE_HEIGHT        240
+#define MOVE_DX            80
+#define MOVE_DY            40
 
 typedef NTSTATUS (APIENTRY *PFN_OPEN_FROM_DEVICE_NAME)(D3DKMT_OPENADAPTERFROMDEVICENAME *);
 typedef NTSTATUS (APIENTRY *PFN_ESCAPE)(const D3DKMT_ESCAPE *);
@@ -250,6 +257,94 @@ cleanup:
         HeapFree(GetProcessHeap(), 0, Pixels);
 }
 
+static BOOL
+ReadFrame(
+    _In_ D3DKMT_HANDLE Adapter,
+    _Out_writes_(Width * Height) PULONG Pixels,
+    _In_ ULONG Width,
+    _In_ ULONG Height,
+    _Out_ PRDPVDD_FRAME_ESCAPE Frame)
+{
+    ZeroMemory(Frame, sizeof(*Frame));
+    Frame->Code = RDPVDD_ESCAPE_READ_FRAME;
+    Frame->Buffer = (ULONG64)(ULONG_PTR)Pixels;
+    Frame->BufferWidth = Width;
+    Frame->BufferHeight = Height;
+    return NT_SUCCESS(FrameEscape(Adapter, Frame));
+}
+
+static VOID
+TestMove(
+    _In_ D3DKMT_HANDLE Adapter,
+    _In_ HWND hMove)
+{
+    RDPVDD_FRAME_ESCAPE Frame;
+    HANDLE Event;
+    PULONG Pixels;
+    ULONG Width = GetSystemMetrics(SM_CXSCREEN), Height = GetSystemMetrics(SM_CYSCREEN);
+    ULONG Expected = (GetRValue(MOVE_COLOR) << 16) | (GetGValue(MOVE_COLOR) << 8) | GetBValue(MOVE_COLOR);
+    ULONG Index, Found = 0;
+    LONG X, Y;
+    RECT Window = { MOVE_LEFT + MOVE_DX, MOVE_TOP + MOVE_DY, MOVE_LEFT + MOVE_DX + MOVE_WIDTH,
+                    MOVE_TOP + MOVE_DY + MOVE_HEIGHT };
+
+    SetWindowPos(hMove, HWND_TOPMOST, MOVE_LEFT, MOVE_TOP, MOVE_WIDTH, MOVE_HEIGHT, SWP_SHOWWINDOW | SWP_NOACTIVATE);
+    RedrawWindow(hMove, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW);
+    PumpFor(1000);
+    Pixels = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (SIZE_T)Width * Height * sizeof(ULONG));
+    Event = CreateEventW(NULL, FALSE, FALSE, NULL);
+    ok(Pixels != NULL && Event != NULL, "Move: no frame buffer\n");
+    if (!Pixels || !Event)
+        goto cleanup;
+    ZeroMemory(&Frame, sizeof(Frame));
+    Frame.Code = RDPVDD_ESCAPE_OPEN_FRAME;
+    Frame.Event = (ULONG64)(ULONG_PTR)Event;
+    ok_hex(FrameEscape(Adapter, &Frame), STATUS_SUCCESS);
+    ok(ReadFrame(Adapter, Pixels, Width, Height, &Frame), "Move: the first frame was not read\n");
+    ok_long(Frame.MoveCount, 0);
+
+    SetWindowPos(hMove, NULL, MOVE_LEFT + MOVE_DX, MOVE_TOP + MOVE_DY, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    PumpFor(1000);
+    ok(ReadFrame(Adapter, Pixels, Width, Height, &Frame), "Move: the moved frame was not read\n");
+    ok(Frame.MoveCount != 0 && Frame.MoveCount <= RDPVDD_FRAME_MAX_MOVES, "Move: %lu moves reported\n", Frame.MoveCount);
+    for (Index = 0; Index < Frame.MoveCount && Index < RDPVDD_FRAME_MAX_MOVES; Index++)
+    {
+        const RDPVDD_MOVE *Move = &Frame.Moves[Index];
+
+        ok(Move->DestRect.left - Move->SourcePoint.x == MOVE_DX && Move->DestRect.top - Move->SourcePoint.y == MOVE_DY,
+           "Move %lu: from (%ld,%ld) to (%ld,%ld)\n", Index, Move->SourcePoint.x, Move->SourcePoint.y,
+           Move->DestRect.left, Move->DestRect.top);
+        ok(Move->DestRect.left >= Window.left && Move->DestRect.top >= Window.top &&
+           Move->DestRect.right <= Window.right && Move->DestRect.bottom <= Window.bottom,
+           "Move %lu: (%ld,%ld)-(%ld,%ld) is outside the window\n", Index, Move->DestRect.left, Move->DestRect.top,
+           Move->DestRect.right, Move->DestRect.bottom);
+        Found += (ULONG)((Move->DestRect.right - Move->DestRect.left) * (Move->DestRect.bottom - Move->DestRect.top));
+        for (Y = Move->DestRect.top; Y < Move->DestRect.bottom; Y += 7)
+            for (X = Move->DestRect.left; X < Move->DestRect.right; X += 7)
+                if ((Pixels[(SIZE_T)Y * Width + X] & 0xFFFFFF) != Expected)
+                {
+                    ok(FALSE, "Move %lu: pixel (%ld,%ld) is 0x%06lx, expected 0x%06lx\n", Index, X, Y,
+                       Pixels[(SIZE_T)Y * Width + X] & 0xFFFFFF, Expected);
+                    Y = Move->DestRect.bottom;
+                    break;
+                }
+    }
+    ok(Found * 2 >= MOVE_WIDTH * MOVE_HEIGHT, "Move: %lu of %lu pixels were reported as moved\n", Found,
+       (ULONG)(MOVE_WIDTH * MOVE_HEIGHT));
+
+    RedrawWindow(hMove, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW);
+    PumpFor(1000);
+    ok(ReadFrame(Adapter, Pixels, Width, Height, &Frame), "Move: the repainted frame was not read\n");
+    ok_long(Frame.MoveCount, 0);
+
+cleanup:
+    ShowWindow(hMove, SW_HIDE);
+    if (Event)
+        CloseHandle(Event);
+    if (Pixels)
+        HeapFree(GetProcessHeap(), 0, Pixels);
+}
+
 static HCURSOR
 CreateLargePointer(VOID)
 {
@@ -296,8 +391,8 @@ START_TEST(RemoteDisplayContent)
     DISPLAY_DEVICEW Remote;
     WNDCLASSW Class = { 0 };
     HSWDEVICE SwDevice = NULL;
-    HBRUSH Brush;
-    HWND hFill = NULL;
+    HBRUSH Brush, MoveBrush;
+    HWND hFill = NULL, hMove = NULL;
     CHAR What[32];
     DWORD Start;
     ULONG Index;
@@ -319,6 +414,10 @@ START_TEST(RemoteDisplayContent)
     Class.hInstance = GetModuleHandleW(NULL);
     Class.hbrBackground = Brush;
     Class.lpszClassName = L"RemoteDisplayContentFill";
+    RegisterClassW(&Class);
+    MoveBrush = CreateSolidBrush(MOVE_COLOR);
+    Class.hbrBackground = MoveBrush;
+    Class.lpszClassName = L"RemoteDisplayContentMove";
     RegisterClassW(&Class);
 
     Result.Event = CreateEventW(NULL, TRUE, FALSE, NULL);
@@ -362,10 +461,18 @@ START_TEST(RemoteDisplayContent)
         TestScanout(Adapter, hFill, What);
     }
 
+    hMove = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, L"RemoteDisplayContentMove", L"",
+                            WS_POPUP, 0, 0, 1, 1, NULL, NULL, Class.hInstance, NULL);
+    ok(hMove != NULL, "CreateWindowExW failed: %lu\n", GetLastError());
+    if (hFill && hMove)
+        TestMove(Adapter, hMove);
+
     ok_long(SetDisplayConfig(0, NULL, 0, NULL, SDC_APPLY | SDC_TOPOLOGY_INTERNAL), ERROR_SUCCESS);
     PumpFor(2000);
 
 done:
+    if (hMove)
+        DestroyWindow(hMove);
     if (hFill)
         DestroyWindow(hFill);
     if (Adapter)
@@ -378,6 +485,7 @@ done:
     UninstallTestDevice();
     CloseHandle(Result.Event);
     DeleteObject(Brush);
+    DeleteObject(MoveBrush);
     if (Class.hCursor)
         DestroyCursor(Class.hCursor);
 }

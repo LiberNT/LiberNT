@@ -18,6 +18,7 @@
 #define RDPVDD_POINTER_MAX 384
 
 #define RDPVDD_FRAME_MAX_RECTS 16
+#define RDPVDD_FRAME_MAX_MOVES 16
 
 typedef struct _RDPVDD_ESCAPE
 {
@@ -25,6 +26,12 @@ typedef struct _RDPVDD_ESCAPE
     ULONG Width;
     ULONG Height;
 } RDPVDD_ESCAPE, *PRDPVDD_ESCAPE;
+
+typedef struct _RDPVDD_MOVE
+{
+    POINT SourcePoint;
+    RECT DestRect;
+} RDPVDD_MOVE, *PRDPVDD_MOVE;
 
 typedef struct _RDPVDD_FRAME_ESCAPE
 {
@@ -38,4 +45,6 @@ typedef struct _RDPVDD_FRAME_ESCAPE
     ULONG Height;
     ULONG RectCount;
     RECT Rects[RDPVDD_FRAME_MAX_RECTS];
+    ULONG MoveCount;
+    RDPVDD_MOVE Moves[RDPVDD_FRAME_MAX_MOVES];
 } RDPVDD_FRAME_ESCAPE, *PRDPVDD_FRAME_ESCAPE;
