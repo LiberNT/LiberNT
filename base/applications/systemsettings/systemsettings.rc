@@ -15,6 +15,7 @@
 #include <libernt/version.rc>
 
 1 RT_MANIFEST "res/systemsettings.exe.manifest"
+IDR_OPENH264_LICENSE RCDATA "res/OpenH264License.txt"
 
 IDI_SYSTEMSETTINGS ICON "res/systemsettings.ico"
 

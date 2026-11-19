@@ -13,7 +13,8 @@ list(APPEND SOURCE
     page_misc.cpp
     pointer.cpp
     bootloader.cpp
-    ${REACTOS_SOURCE_DIR}/base/system/dwm/settings.c)
+    ${REACTOS_SOURCE_DIR}/base/system/dwm/settings.c
+    ${REACTOS_SOURCE_DIR}/base/services/rdpserver/openh264.c)
 
 file(GLOB systemsettings_rc_deps res/*.* lang/*.rc)
 add_rc_deps(systemsettings.rc ${systemsettings_rc_deps})
@@ -21,13 +22,13 @@ add_executable(systemsettings ${SOURCE} systemsettings.rc)
 set_target_properties(systemsettings PROPERTIES OUTPUT_NAME "SystemSettings")
 set_property(TARGET systemsettings PROPERTY CXX_STANDARD 17)
 set_property(TARGET systemsettings PROPERTY CXX_STANDARD_REQUIRED ON)
-target_include_directories(systemsettings PRIVATE ${REACTOS_SOURCE_DIR}/base/system/dwm)
+target_include_directories(systemsettings PRIVATE ${REACTOS_SOURCE_DIR}/base/system/dwm ${REACTOS_SOURCE_DIR}/base/services/rdpserver)
 set_module_type(systemsettings win32gui UNICODE)
 if(MSVC)
     set_target_cpp_properties(systemsettings WITH_EXCEPTIONS)
 endif()
-target_link_libraries(systemsettings shellframe cppstl cpprt uuid)
+target_link_libraries(systemsettings shellframe bzip2 cppstl cpprt uuid)
 add_importlibs(systemsettings advapi32 user32 gdi32 gdiplus shell32 shlwapi comctl32 comdlg32 dwmapi uxtheme ole32
                oleaut32 secur32 netapi32 samlib powrprof wlanapi iphlpapi ws2_32 wininet bluetoothapis setupapi cfgmgr32 winspool winmm
-               version msvcrt kernel32 ntdll)
+               version bcrypt winhttp msvcrt kernel32 ntdll)
 add_cd_file(TARGET systemsettings DESTINATION reactos/ImmersiveControlPanel FOR all)

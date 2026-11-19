@@ -7,6 +7,7 @@ extern void func_ControllerMode(void);
 extern void func_Experience(void);
 extern void func_FrameMove(void);
 extern void func_GfxBatch(void);
+extern void func_OpenH264(void);
 extern void func_RemoteDesktop(void);
 extern void func_VideoDetect(void);
 extern void func_Zgfx(void);
@@ -19,6 +20,7 @@ const struct test winetest_testlist[] =
     { "Experience", func_Experience },
     { "FrameMove", func_FrameMove },
     { "GfxBatch", func_GfxBatch },
+    { "OpenH264", func_OpenH264 },
     { "RemoteDesktop", func_RemoteDesktop },
     { "VideoDetect", func_VideoDetect },
     { "Zgfx", func_Zgfx },
