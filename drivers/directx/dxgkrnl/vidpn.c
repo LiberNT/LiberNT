@@ -3596,6 +3596,7 @@ DxgkVidPnQueryFirmwareTiming(
 {
     PDXGKDDI_RECOMMEND_FUNCTIONAL_VIDPN RecommendFunctionalVidPn;
     DXGKARG_RECOMMENDFUNCTIONALVIDPN RecommendArgs;
+    DXGK_POST_DISPLAY_FIRMWARE_DATA FirmwareData;
     D3DKMDT_HVIDPN Scratch = NULL;
     PDXGKP_VIDPN ScratchObject;
     PDXGKP_VIDPN_TARGET_MODESET TargetSet;
@@ -3607,6 +3608,7 @@ DxgkVidPnQueryFirmwareTiming(
     PAGED_CODE();
 
     Adapter->FirmwareTimingValid = FALSE;
+    Adapter->FirmwareWireFormat.Value = 0;
 
     if (Adapter->MiniportContext == NULL ||
         Adapter->PostDisplayWidth == 0 || Adapter->PostDisplayHeight == 0)
@@ -3623,9 +3625,7 @@ DxgkVidPnQueryFirmwareTiming(
     ScratchObject = (PDXGKP_VIDPN)Scratch;
     DxgkpPrepareVidPnForRecommendation(ScratchObject);
 
-    RtlZeroMemory(&RecommendArgs, sizeof(RecommendArgs));
-    RecommendArgs.hRecommendedFunctionalVidPn = Scratch;
-    RecommendArgs.RequestReason = DXGK_RFVR_FIRMWARE;
+    DxgkPostDisplayCoreFirmwareRequest(&RecommendArgs, &FirmwareData, Scratch);
 
     Status = STATUS_DELETE_PENDING;
     if (DxgkAcquireKmdCall(Adapter))
@@ -3645,11 +3645,12 @@ DxgkVidPnQueryFirmwareTiming(
 
     if (NT_SUCCESS(Status))
         Status = DxgkpValidateRecommendedTopology(ScratchObject);
-    if (!NT_SUCCESS(Status) || ScratchObject->NumPaths == 0)
+    if (!NT_SUCCESS(Status) || !DxgkPostDisplayCoreFirmwareTopologyUsable(ScratchObject->NumPaths))
     {
-        DXGKRNL_TRACE("DxgkVidPnQueryFirmwareTiming: driver did not describe the "
-                      "firmware configuration (0x%08lX); nothing to preserve\n",
-                      Status);
+        DXGKRNL_TRACE("DxgkVidPnQueryFirmwareTiming: driver did not describe a "
+                      "single-path firmware configuration (0x%08lX, %Iu paths); "
+                      "nothing to preserve\n",
+                      Status, ScratchObject->NumPaths);
         goto Done;
     }
 
@@ -3669,6 +3670,7 @@ DxgkVidPnQueryFirmwareTiming(
         {
             Adapter->FirmwareTargetId = TargetId;
             Adapter->FirmwareTargetTiming = TargetSet->Modes[i].VideoSignalInfo;
+            Adapter->FirmwareWireFormat = DxgkPostDisplayCoreFirmwareWireFormat(&FirmwareData);
             Adapter->FirmwareTimingValid = TRUE;
             DXGKRNL_TRACE("DxgkVidPnQueryFirmwareTiming: firmware drives target "
                           "%u at %ux%u\n", TargetId,

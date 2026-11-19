@@ -9,6 +9,7 @@
 #define _DXGK_POSTDISPLAY_CORE_H_
 
 #include <ntddk.h>
+#include <dispmprt.h>
 
 typedef enum _DXGK_POST_DISPLAY_COMPLETION_ACTION
 {
@@ -107,6 +108,67 @@ DxgkPostDisplayCoreUefiRangeSegmentIndex(
         return FALSE;
     *SegmentIndex = DriverSegmentId;
     return TRUE;
+}
+
+/* The block a DXGK_RFVR_FIRMWARE request carries, zeroed; the driver writes what the firmware drives into it. */
+typedef struct _DXGK_POST_DISPLAY_FIRMWARE_DATA
+{
+    D3DDDI_COLOR_SPACE_TYPE ColorSpace;
+    D3DKMDT_WIRE_FORMAT_AND_PREFERENCE WireFormat;
+    /* TODO: INFO_NEEDED: meaning of the two flag bytes the driver writes here */
+    UCHAR Reserved[4];
+} DXGK_POST_DISPLAY_FIRMWARE_DATA, *PDXGK_POST_DISPLAY_FIRMWARE_DATA;
+
+C_ASSERT(sizeof(DXGK_POST_DISPLAY_FIRMWARE_DATA) == 12);
+
+FORCEINLINE
+VOID
+DxgkPostDisplayCoreFirmwareRequest(
+    _Out_ PDXGKARG_RECOMMENDFUNCTIONALVIDPN Args,
+    _Out_ PDXGK_POST_DISPLAY_FIRMWARE_DATA Data,
+    _In_ D3DKMDT_HVIDPN VidPn)
+{
+    RtlZeroMemory(Data, sizeof(*Data));
+    RtlZeroMemory(Args, sizeof(*Args));
+    Args->hRecommendedFunctionalVidPn = VidPn;
+    Args->RequestReason = DXGK_RFVR_FIRMWARE;
+    Args->pPrivateDriverData = Data;
+    Args->PrivateDriverDataSize = sizeof(*Data);
+    ASSERT(Args->pPrivateDriverData != NULL);
+}
+
+FORCEINLINE
+BOOLEAN
+DxgkPostDisplayCoreFirmwareTopologyUsable(
+    _In_ SIZE_T PathCount)
+{
+    return PathCount == 1;
+}
+
+/* A timing record selects one encoding at one depth; any other answer names no wire format. */
+FORCEINLINE
+D3DKMDT_WIRE_FORMAT_AND_PREFERENCE
+DxgkPostDisplayCoreFirmwareWireFormat(
+    _In_ const DXGK_POST_DISPLAY_FIRMWARE_DATA *Data)
+{
+    D3DKMDT_WIRE_FORMAT_AND_PREFERENCE Format = Data->WireFormat;
+
+    Format.Preference = D3DKMDT_MP_UNINITIALIZED;
+    if ((Format.Value & (Format.Value - 1)) != 0)
+        Format.Value = 0;
+    ASSERT(Format.Preference == D3DKMDT_MP_UNINITIALIZED);
+    return Format;
+}
+
+FORCEINLINE
+BOOLEAN
+DxgkPostDisplayCoreFirmwareWireFormatUsable(
+    _In_ D3DKMDT_WIRE_FORMAT_AND_PREFERENCE Firmware,
+    _In_ D3DKMDT_WIRE_FORMAT_AND_PREFERENCE Supported)
+{
+    ASSERT(Firmware.Preference == D3DKMDT_MP_UNINITIALIZED);
+    Supported.Preference = D3DKMDT_MP_UNINITIALIZED;
+    return Firmware.Value != 0 && (Firmware.Value & Supported.Value) == Firmware.Value;
 }
 
 FORCEINLINE
