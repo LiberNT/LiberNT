@@ -149,23 +149,45 @@ DwmSettingsCreateWindow(HINSTANCE Instance, DWM_SETTINGS *Settings)
 }
 
 void
+DwmSettingsUpdateRemote(DWM_SETTINGS *Settings)
+{
+    BOOL Remote = GetSystemMetrics(SM_REMOTESESSION) != 0;
+
+    if (Remote == Settings->Remote)
+        return;
+    Settings->Remote = Remote;
+    Settings->Changed = TRUE;
+}
+
+void
 DwmSettingsApplyWindow(const DWM_SETTINGS *Settings, DWM_WIN *Window)
 {
     DWORD Blur = DWM_EFFECT_BLUR;
+    DWORD Effects = Settings->Effects;
 
-    if (!(Settings->Effects & DWM_EFFECT_SHADOWS))
+    if (Settings->Remote)
+    {
+        Effects &= ~(DWM_EFFECT_BLUR | DWM_EFFECT_ACRYLIC | DWM_EFFECT_CONTENT_BLUR);
+        if (Window->BackdropType == DWM_BACKDROP_MAIN || Window->BackdropType == DWM_BACKDROP_TABBED)
+        {
+            Window->BackdropType = DWM_BACKDROP_NONE;
+            Window->BackdropRegion = 0;
+            Window->BackdropOpacity = 255;
+        }
+    }
+    if (!(Effects & DWM_EFFECT_SHADOWS))
         Window->LayerFlags &= ~DWM_WINDOW_NC_SHADOW;
     if (Window->ContentBackdrop &&
         Window->BackdropRegion == DWM_BACKDROP_REGION_WINDOW)
     {
-        if (Settings->Effects & DWM_EFFECT_CONTENT_BLUR)
+        if (Effects & DWM_EFFECT_CONTENT_BLUR)
             Blur = DWM_EFFECT_CONTENT_BLUR;
         else
             Window->BackdropRegion = DWM_BACKDROP_REGION_NONCLIENT;
     }
     Window->BlurFlags &= ~DWM_BLUR_DISABLE_FILTER;
-    if (!(Settings->Effects & Blur) ||
-        !(Settings->Effects & DWM_EFFECT_ACRYLIC))
+    if (!(Effects & Blur) ||
+        !(Effects & DWM_EFFECT_ACRYLIC))
     {
         /* DWM_BLUR_ENABLE also marks textures with meaningful pixel alpha.
          * Suppress filtering regions without changing that blending rule. */
@@ -173,7 +195,7 @@ DwmSettingsApplyWindow(const DWM_SETTINGS *Settings, DWM_WIN *Window)
         Window->BlurFlags |= DWM_BLUR_DISABLE_FILTER;
         Window->BlurRectCount = 0;
     }
-    if (!(Settings->Effects & DWM_EFFECT_ACRYLIC) && Window->BackdropType == DWM_BACKDROP_TRANSIENT)
+    if (!(Effects & DWM_EFFECT_ACRYLIC) && Window->BackdropType == DWM_BACKDROP_TRANSIENT)
     {
         Window->BackdropType = DWM_BACKDROP_NONE;
         Window->BackdropRegion = 0;

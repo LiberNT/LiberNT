@@ -19,6 +19,7 @@ extern void func_idle_update(void);
 extern void func_mode_switch(void);
 extern void func_monitor_power(void);
 extern void func_pointer_image(void);
+extern void func_remote_materials(void);
 extern void func_scene_cache(void);
 
 const struct test winetest_testlist[] =
@@ -33,6 +34,7 @@ const struct test winetest_testlist[] =
     { "mode_switch", func_mode_switch },
     { "monitor_power", func_monitor_power },
     { "pointer_image", func_pointer_image },
+    { "remote_materials", func_remote_materials },
     { "scene_cache", func_scene_cache },
     { 0, 0 }
 };
