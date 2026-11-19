@@ -1142,15 +1142,23 @@ static BOOL ReadRemoteFrame(DESKTOP_CONTEXT *ctx, RDPVDD_FRAME_ESCAPE *frame)
     return FALSE;
 }
 
-static BOOL TileChanged(DESKTOP_CONTEXT *ctx, int x, int y, int width, int height)
+static BOOL TileChanged(DESKTOP_CONTEXT *ctx, int x, int y, int width, int height, RECT *changed)
 {
-    int row;
+    int row, column;
+    SetRect(changed, x + width, y + height, x, y);
     for (row = 0; row < height; ++row)
     {
-        size_t offset = ((size_t)(y + row) * ctx->Width + x) * 4;
-        if (memcmp(ctx->Pixels + offset, ctx->Previous + offset, (size_t)width * 4)) return TRUE;
+        const UINT32 *current = (const UINT32 *)ctx->Pixels + (size_t)(y + row) * ctx->Width + x;
+        const UINT32 *previous = (const UINT32 *)ctx->Previous + (size_t)(y + row) * ctx->Width + x;
+        if (!memcmp(current, previous, (size_t)width * 4)) continue;
+        for (column = 0; current[column] == previous[column]; ++column);
+        changed->left = min(changed->left, x + column);
+        for (column = width - 1; current[column] == previous[column]; --column);
+        changed->right = max(changed->right, x + column + 1);
+        changed->top = min(changed->top, y + row);
+        changed->bottom = y + row + 1;
     }
-    return FALSE;
+    return changed->left < changed->right;
 }
 
 static BOOL ComposeMove(DESKTOP_CONTEXT *ctx, const FRAME_MOVE *move)
@@ -1208,6 +1216,7 @@ static BOOL SendDesktop(DESKTOP_CONTEXT *ctx, BOOL masked)
 {
     int x, y, row, width, height;
     UINT32 count = 0, moves = 0;
+    RECT changed;
     BITMAP_DATA *rectangle;
     BOOL gfx = GfxActive(ctx->Gfx);
     size_t length = 0, limit = freerdp_settings_get_uint32(ctx->rdp.settings, FreeRDP_MultifragMaxRequestSize);
@@ -1231,12 +1240,14 @@ static BOOL SendDesktop(DESKTOP_CONTEXT *ctx, BOOL masked)
             height = min(TILE_HEIGHT, ctx->Height - y);
             if (masked && !ctx->Refresh && !*mask) continue;
             *mask = 0;
-            if (!ctx->Refresh && !TileChanged(ctx, x, y, width, height)) continue;
+            if (ctx->Refresh) SetRect(&changed, x, y, x + width, y + height);
+            else if (!TileChanged(ctx, x, y, width, height, &changed)) continue;
             if (gfx)
             {
                 GFX_TILE *tile = &ctx->GfxTiles[count++];
-                tile->Left = (UINT16)x; tile->Top = (UINT16)y;
-                tile->Width = (UINT16)width; tile->Height = (UINT16)height;
+                tile->Left = (UINT16)changed.left; tile->Top = (UINT16)changed.top;
+                tile->Width = (UINT16)(changed.right - changed.left);
+                tile->Height = (UINT16)(changed.bottom - changed.top);
             }
             else
             {
