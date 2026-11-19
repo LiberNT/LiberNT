@@ -277,6 +277,7 @@ AhciIssueCommand(
 {
     PAHCI_COMMAND_HEADER Header = &Port->CommandList[0];
 
+    /* TODO: NCQ over all command slots; every command uses slot 0, one at a time per port */
     ASSERT(PrdCount <= AHCI_MAX_PRDT_ENTRIES);
     ASSERT(!(AhciPortRead(Adapter, Port, AHCI_PX_CI) & 1));
 
