@@ -6,6 +6,8 @@
  */
 
 #include <kmt_test.h>
+#undef DXGKDDI_INTERFACE_VERSION
+#define DXGKDDI_INTERFACE_VERSION 0x11007
 #include "postdisplay_core.h"
 #include "adapter_map_core.h"
 
@@ -177,6 +179,86 @@ DxgkPostDisplayTestUefiRangeSegment(VOID)
     ok_bool_true(DxgkPostDisplayCoreUefiUnblockDeferred(DISPATCH_LEVEL), "a release from a DPC is handed to a worker");
 }
 
+static
+D3DKMDT_WIRE_FORMAT_AND_PREFERENCE
+DxgkPostDisplayTestWire(
+    _In_ UINT Rgb,
+    _In_ UINT YCbCr444,
+    _In_ D3DKMDT_MODE_PREFERENCE Preference)
+{
+    D3DKMDT_WIRE_FORMAT_AND_PREFERENCE Format;
+
+    Format.Value = 0;
+    Format.Rgb = Rgb;
+    Format.YCbCr444 = YCbCr444;
+    Format.Preference = Preference;
+    return Format;
+}
+
+static
+VOID
+DxgkPostDisplayTestFirmwareRequest(VOID)
+{
+    DXGKARG_RECOMMENDFUNCTIONALVIDPN Args;
+    DXGK_POST_DISPLAY_FIRMWARE_DATA Data;
+    D3DKMDT_HVIDPN VidPn = (D3DKMDT_HVIDPN)(ULONG_PTR)0x1234;
+    ULONG Index;
+    BOOLEAN Zeroed = TRUE;
+
+    RtlFillMemory(&Args, sizeof(Args), 0xA5);
+    RtlFillMemory(&Data, sizeof(Data), 0xA5);
+    DxgkPostDisplayCoreFirmwareRequest(&Args, &Data, VidPn);
+    ok_eq_uint(Args.RequestReason, DXGK_RFVR_FIRMWARE);
+    ok_eq_pointer(Args.hRecommendedFunctionalVidPn, VidPn);
+    ok_eq_pointer(Args.pPrivateDriverData, &Data);
+    ok_eq_uint(Args.PrivateDriverDataSize, 12);
+    ok_eq_uint(Args.NumberOfVidPnTargets, 0);
+    ok_eq_pointer(Args.pVidPnTargetPrioritizationVector, NULL);
+    for (Index = 0; Index < sizeof(Data); Index++)
+    {
+        if (((PUCHAR)&Data)[Index] != 0)
+            Zeroed = FALSE;
+    }
+    ok_bool_true(Zeroed, "the firmware block the driver writes into starts zeroed");
+
+    ok_bool_false(DxgkPostDisplayCoreFirmwareTopologyUsable(0), "no firmware path describes nothing");
+    ok_bool_true(DxgkPostDisplayCoreFirmwareTopologyUsable(1), "one firmware path is taken");
+    ok_bool_false(DxgkPostDisplayCoreFirmwareTopologyUsable(2), "a firmware clone is not taken");
+}
+
+static
+VOID
+DxgkPostDisplayTestFirmwareWireFormat(VOID)
+{
+    DXGK_POST_DISPLAY_FIRMWARE_DATA Data;
+    D3DKMDT_WIRE_FORMAT_AND_PREFERENCE Format;
+    D3DKMDT_WIRE_FORMAT_AND_PREFERENCE Supported;
+
+    RtlZeroMemory(&Data, sizeof(Data));
+    Data.WireFormat = DxgkPostDisplayTestWire(D3DKMDT_BITS_PER_COMPONENT_06, 0, D3DKMDT_MP_UNINITIALIZED);
+    Format = DxgkPostDisplayCoreFirmwareWireFormat(&Data);
+    ok_eq_uint(Format.Value, DxgkPostDisplayTestWire(D3DKMDT_BITS_PER_COMPONENT_06, 0, D3DKMDT_MP_UNINITIALIZED).Value);
+
+    Data.WireFormat = DxgkPostDisplayTestWire(D3DKMDT_BITS_PER_COMPONENT_08, 0, D3DKMDT_MP_PREFERRED);
+    Format = DxgkPostDisplayCoreFirmwareWireFormat(&Data);
+    ok_eq_uint(Format.Value, DxgkPostDisplayTestWire(D3DKMDT_BITS_PER_COMPONENT_08, 0, D3DKMDT_MP_UNINITIALIZED).Value);
+
+    Data.WireFormat = DxgkPostDisplayTestWire(D3DKMDT_BITS_PER_COMPONENT_08 | D3DKMDT_BITS_PER_COMPONENT_10, 0, D3DKMDT_MP_UNINITIALIZED);
+    ok_eq_uint(DxgkPostDisplayCoreFirmwareWireFormat(&Data).Value, 0);
+    Data.WireFormat = DxgkPostDisplayTestWire(D3DKMDT_BITS_PER_COMPONENT_08, D3DKMDT_BITS_PER_COMPONENT_08, D3DKMDT_MP_UNINITIALIZED);
+    ok_eq_uint(DxgkPostDisplayCoreFirmwareWireFormat(&Data).Value, 0);
+    Data.WireFormat.Value = 0;
+    ok_eq_uint(DxgkPostDisplayCoreFirmwareWireFormat(&Data).Value, 0);
+
+    Format = DxgkPostDisplayTestWire(D3DKMDT_BITS_PER_COMPONENT_06, 0, D3DKMDT_MP_UNINITIALIZED);
+    Supported = DxgkPostDisplayTestWire(D3DKMDT_BITS_PER_COMPONENT_06 | D3DKMDT_BITS_PER_COMPONENT_08, 0, D3DKMDT_MP_PREFERRED);
+    ok_bool_true(DxgkPostDisplayCoreFirmwareWireFormatUsable(Format, Supported), "the target mode offers the depth firmware drives");
+    Supported = DxgkPostDisplayTestWire(D3DKMDT_BITS_PER_COMPONENT_08, 0, D3DKMDT_MP_UNINITIALIZED);
+    ok_bool_false(DxgkPostDisplayCoreFirmwareWireFormatUsable(Format, Supported), "the target mode lacks the depth firmware drives");
+    Format.Value = 0;
+    ok_bool_false(DxgkPostDisplayCoreFirmwareWireFormatUsable(Format, Supported), "no firmware wire format");
+}
+
 START_TEST(DxgkPostDisplayHandoff)
 {
     DxgkPostDisplayTestRestartableFailure();
@@ -186,4 +268,6 @@ START_TEST(DxgkPostDisplayHandoff)
     DxgkPostDisplayTestFirmwareScanout();
     DxgkPostDisplayTestApertureRunTakesBootWindow();
     DxgkPostDisplayTestUefiRangeSegment();
+    DxgkPostDisplayTestFirmwareRequest();
+    DxgkPostDisplayTestFirmwareWireFormat();
 }

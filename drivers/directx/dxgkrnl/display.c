@@ -2999,6 +2999,12 @@ DxgkpDisplayCommitVidPnCandidateWithTarget(
              * described as inherited from firmware: asking it to preserve
              * anything else would leave it guessing what "inherited" means. */
             Timing->Input.PreserveInherited = (i == 0 && InheritedTimingPinned) ? 1 : 0;
+            if (Timing->Input.PreserveInherited &&
+                DxgkPostDisplayCoreFirmwareWireFormatUsable(Adapter->FirmwareWireFormat,
+                                                            DxgkpPinnedWireFormats(VidPn, TargetId)))
+            {
+                Timing->SelectedWireFormat = Adapter->FirmwareWireFormat;
+            }
         }
         for (Old = 0; Old < Adapter->CommittedTargetCount; Old++)
         {

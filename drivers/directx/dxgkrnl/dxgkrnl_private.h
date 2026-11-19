@@ -1272,6 +1272,7 @@ struct _DXGKRNL_ADAPTER
     BOOLEAN                     FirmwareTimingValid;
     D3DDDI_VIDEO_PRESENT_TARGET_ID FirmwareTargetId;
     D3DKMDT_VIDEO_SIGNAL_INFO   FirmwareTargetTiming;
+    D3DKMDT_WIRE_FORMAT_AND_PREFERENCE FirmwareWireFormat;
     BOOLEAN                     SystemDisplayEnabled;
     D3DDDIFORMAT                SystemDisplayColorFormat;
 
