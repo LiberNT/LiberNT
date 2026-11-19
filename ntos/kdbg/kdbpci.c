@@ -366,6 +366,7 @@ KdbpCmdPci(
     ULONG Function;
     ULONG Bus;
     LONG Wanted[3] = { -1, -1, -1 };
+    BOOLEAN Found = FALSE;
     ULONG Index;
 
     if ((Argc == 2) && (strchr(Argv[1], ':') != NULL))
@@ -419,12 +420,16 @@ KdbpCmdPci(
                 }
 
                 KdbpPrintPciFunction(Bus, Slot, &Config, (Wanted[1] >= 0));
+                Found = TRUE;
 
                 if ((Function == 0) && !(Config.HeaderType & PCI_MULTIFUNCTION))
                     break;
             }
         }
     }
+
+    if (!Found && !KdbpIsOutputAborted())
+        KdbPuts("No PCI function answered\n");
 
     return TRUE;
 }
