@@ -1,0 +1,19 @@
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+STRINGTABLE
+BEGIN
+    IDS_USAGE "Graphically displays the folder structure of a drive or path.\n\
+\n\
+TREE [drive:][path] [/F] [/A]\n\
+\n\
+   /F   Display the names of the files in each folder.\n\
+   /A   Use ASCII instead of extended characters.\n\
+\n"
+    IDS_FOLDER_LISTING "Folder PATH listing\n"
+    IDS_FOLDER_LISTING_VOLUME "Folder PATH listing for volume %1\n"
+    IDS_VOLUME_SERIAL "Volume serial number is %1!08X! %2!04X!:%3!04X!\n"
+    IDS_NO_SUBFOLDERS "No subfolders exist \n\n"
+    IDS_INVALID_PATH "Invalid path - %1\n"
+    IDS_INVALID_SWITCH "Invalid switch - %1\n"
+    IDS_TOO_MANY_PARAMETERS "Too many parameters - %1\n"
+END
