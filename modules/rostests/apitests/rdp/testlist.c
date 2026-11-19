@@ -1,6 +1,7 @@
 #define STANDALONE
 #include <apitest.h>
 
+extern void func_Avc420(void);
 extern void func_ClearCodec(void);
 extern void func_ControllerMode(void);
 extern void func_Experience(void);
@@ -11,6 +12,7 @@ extern void func_Zgfx(void);
 
 const struct test winetest_testlist[] =
 {
+    { "Avc420", func_Avc420 },
     { "ClearCodec", func_ClearCodec },
     { "ControllerMode", func_ControllerMode },
     { "Experience", func_Experience },

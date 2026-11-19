@@ -186,6 +186,7 @@ list(APPEND FREERDP_SOURCE
     libfreerdp/codec/color.c
     libfreerdp/codec/dsp.c
     libfreerdp/codec/h264.c
+    libfreerdp/codec/h264_openh264.c
     libfreerdp/codec/interleaved.c
     libfreerdp/codec/jpeg.c
     libfreerdp/codec/mppc.c
@@ -368,6 +369,7 @@ add_library(winpr ${WINPR_SOURCE})
 add_library(freerdp ${FREERDP_SOURCE})
 add_library(freerdp-server ${SERVER_SOURCE})
 target_include_directories(freerdp-server PRIVATE channels/rdpgfx)
+target_include_directories(freerdp PRIVATE ${REACTOS_SOURCE_DIR}/sdk/lib/3rdparty/openh264/include)
 
 foreach(_target winpr freerdp freerdp-server)
     if(NOT MSVC)
