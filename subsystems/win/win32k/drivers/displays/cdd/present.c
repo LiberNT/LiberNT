@@ -38,6 +38,8 @@ RcddNotifyDirtyRects(
    ULONG SourceSize,
    const RECTL *prcl,
    ULONG Count,
+   const DWM_MOVE_RECT *Moves,
+   ULONG MoveCount,
    ULONG Flags)
 {
    union
@@ -56,7 +58,7 @@ RcddNotifyDirtyRects(
       return RcddDxgkPresent(ppdev, prcl, Count);
 
    HeaderSize = FIELD_OFFSET(DXGK_PRESENT_DIRTY_RECTS_INPUT, Rects);
-   if (Count > DXGK_PRESENT_DIRTY_MAX_RECTS)
+   if (Count > DXGK_PRESENT_DIRTY_MAX_RECTS || MoveCount > DWM_PRESENT_MAX_MOVES)
       return FALSE;
    InputSize = HeaderSize + Count * sizeof(Input->Rects[0]);
    Input = (PDXGK_PRESENT_DIRTY_RECTS_INPUT)Packet.Bytes;
@@ -68,6 +70,9 @@ RcddNotifyDirtyRects(
    Input->SourcePitch = SourcePitch;
    Input->SourceSize = SourceSize;
    Input->Source = (ULONG_PTR)Source;
+   Input->MoveCount = MoveCount;
+   if (MoveCount != 0)
+      RtlCopyMemory(Input->Moves, Moves, MoveCount * sizeof(Input->Moves[0]));
    if (Count != 0)
       RtlCopyMemory(Input->Rects, prcl, Count * sizeof(Input->Rects[0]));
 
@@ -208,6 +213,8 @@ RcddPublishPending(
                                    ppdev->ScreenDelta * ppdev->ScreenHeight,
                                    ppdev->PendingRects,
                                    ppdev->PendingRectCount,
+                                   NULL,
+                                   0,
                                    Flags);
    if (!Notified)
    {
@@ -217,6 +224,8 @@ RcddPublishPending(
                                       ppdev->ScreenDelta * ppdev->ScreenHeight,
                                       &SentRect,
                                       1,
+                                      NULL,
+                                      0,
                                       Flags);
    }
    if (Notified)
@@ -277,6 +286,7 @@ RcddPresentComposition(PRCDD_PDEV ppdev, const CDD_PRESENT_SOURCE *Source)
    SourceBytes = (SIZE_T)ppdev->ScreenDelta * ppdev->ScreenHeight;
    Notified = RcddNotifyDirtyRects(ppdev, ppdev->ScreenPtr, ppdev->ScreenDelta,
                                    (ULONG)SourceBytes, Rect, 1,
+                                   Source->Moves, min(Source->MoveCount, DWM_PRESENT_MAX_MOVES),
                                    DXGK_PRESENT_DIRTY_FLUSH);
    if (!Notified)
    {

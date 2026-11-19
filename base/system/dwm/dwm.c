@@ -1473,6 +1473,204 @@ DwmWindowIsOpaque(const DWM_WIN *Window)
     return TRUE;
 }
 
+#define DWM_MOVE_PARTS    32
+#define DWM_MOVE_MIN_AREA 4096
+
+typedef struct _DWM_PLACE
+{
+    ULONG SurfaceId;
+    ULONG Generation;
+    LONG x, y, cx, cy;
+    ULONG BaseGeneration;
+    ULONG DxGeneration;
+    ULONGLONG BaseUpdateId;
+    ULONGLONG DxUpdateId;
+    RECT Reach;
+    RECT Inner;
+    BOOL Movable;
+} DWM_PLACE;
+
+static DWM_PLACE g_places[DWM_MAX_WINDOWS];
+static ULONG g_placeCount;
+static LONG g_placeW, g_placeH;
+static BOOL g_placesValid;
+
+static VOID
+DwmWindowReach(const DWM_WIN *Window, RECT *Reach)
+{
+    if (Window->AnimFlags != 0)
+    {
+        SetRect(Reach, Window->AnimX - g_originX, Window->AnimY - g_originY,
+                Window->AnimX - g_originX + Window->AnimCx, Window->AnimY - g_originY + Window->AnimCy);
+        return;
+    }
+    SetRect(Reach, Window->x - g_originX, Window->y - g_originY,
+            Window->x - g_originX + Window->cx, Window->y - g_originY + Window->cy);
+    if (Window->LayerFlags & DWM_WINDOW_NC_SHADOW)
+    {
+        Reach->left -= g_shadowMarginLeft;
+        Reach->top -= g_shadowMarginTop;
+        Reach->right += g_shadowMarginRight;
+        Reach->bottom += g_shadowMarginBottom;
+    }
+}
+
+static BOOL
+DwmWindowInner(const DWM_WIN *Window, RECT *Inner)
+{
+    RECT Rounded;
+    LONG Radius = (LONG)Window->CornerRadius;
+
+    if (Window->cx <= 0 || Window->cy <= 0 || Window->ClientWidth <= 0 || Window->ClientHeight <= 0 ||
+        Window->AnimFlags != 0 || Window->ContentBackdrop != 0 || Window->BlurRectCount != 0 ||
+        (Window->BlurFlags & DWM_BLUR_ENABLE) || Window->BackdropRegion == DWM_BACKDROP_REGION_WINDOW ||
+        (Window->LayerFlags & (DWM_LWA_COLORKEY | DWM_WINDOW_PREMULTIPLIED_ALPHA |
+                               DWM_WINDOW_DX_PREMULTIPLIED_ALPHA)) ||
+        ((Window->LayerFlags & DWM_LWA_ALPHA) && Window->Alpha < 255))
+        return FALSE;
+    SetRect(Inner, Window->ClientX + (LONG)Window->BackdropNcExtendLeft,
+            Window->ClientY + (LONG)Window->BackdropNcExtend,
+            Window->ClientX + Window->ClientWidth - (LONG)Window->BackdropNcExtendRight,
+            Window->ClientY + Window->ClientHeight - (LONG)Window->BackdropNcExtendBottom);
+    SetRect(&Rounded, Radius, Radius, Window->cx - Radius, Window->cy - Radius);
+    return IntersectRect(Inner, Inner, &Rounded);
+}
+
+static VOID
+DwmSubtractPart(RECT *Parts, ULONG *Count, const RECT *Cut)
+{
+    RECT Kept[DWM_MOVE_PARTS];
+    ULONG Index, KeptCount = 0;
+
+    for (Index = 0; Index < *Count; ++Index)
+    {
+        RECT Part = Parts[Index], Overlap, Piece[4];
+        ULONG Pieces = 0, Next;
+
+        if (!IntersectRect(&Overlap, &Part, Cut))
+        {
+            if (KeptCount < DWM_MOVE_PARTS)
+                Kept[KeptCount++] = Part;
+            continue;
+        }
+        if (Part.top < Overlap.top)
+            SetRect(&Piece[Pieces++], Part.left, Part.top, Part.right, Overlap.top);
+        if (Overlap.bottom < Part.bottom)
+            SetRect(&Piece[Pieces++], Part.left, Overlap.bottom, Part.right, Part.bottom);
+        if (Part.left < Overlap.left)
+            SetRect(&Piece[Pieces++], Part.left, Overlap.top, Overlap.left, Overlap.bottom);
+        if (Overlap.right < Part.right)
+            SetRect(&Piece[Pieces++], Overlap.right, Overlap.top, Part.right, Overlap.bottom);
+        for (Next = 0; Next < Pieces && KeptCount < DWM_MOVE_PARTS; ++Next)
+            Kept[KeptCount++] = Piece[Next];
+    }
+    memcpy(Parts, Kept, KeptCount * sizeof(Kept[0]));
+    *Count = KeptCount;
+}
+
+static VOID
+DwmRecordPlaces(const DWM_WIN *Windows, ULONG Count)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < Count; ++Index)
+    {
+        DWM_PLACE *Place = &g_places[Index];
+        const DWM_WIN *Window = &Windows[Index];
+
+        Place->SurfaceId = Window->SurfaceId;
+        Place->Generation = Window->Generation;
+        Place->x = Window->x;
+        Place->y = Window->y;
+        Place->cx = Window->cx;
+        Place->cy = Window->cy;
+        Place->BaseGeneration = Window->BaseGeneration;
+        Place->DxGeneration = Window->DxGeneration;
+        Place->BaseUpdateId = Window->BaseUpdateId;
+        Place->DxUpdateId = Window->DxUpdateId;
+        DwmWindowReach(Window, &Place->Reach);
+        Place->Movable = DwmWindowInner(Window, &Place->Inner);
+    }
+    g_placeCount = Count;
+    g_placeW = g_W;
+    g_placeH = g_H;
+    g_placesValid = TRUE;
+}
+
+static ULONG
+DwmFindMoves(const DWM_WIN *Windows, ULONG Count, DWM_MOVE_RECT *Moves)
+{
+    RECT Screen = {0, 0, g_W, g_H};
+    ULONG Found = 0, Index;
+
+    if (!g_placesValid || g_placeW != g_W || g_placeH != g_H)
+        return 0;
+    for (Index = Count; Index-- > 0 && Found < DWM_PRESENT_MAX_MOVES;)
+    {
+        const DWM_WIN *Window = &Windows[Index];
+        const DWM_PLACE *Old = NULL;
+        RECT Inner, Source, Cut, Parts[DWM_MOVE_PARTS];
+        ULONG OldIndex, Above, PartCount = 1, Part;
+        LONG Dx, Dy;
+
+        for (OldIndex = 0; OldIndex < g_placeCount; ++OldIndex)
+            if (g_places[OldIndex].SurfaceId == Window->SurfaceId && g_places[OldIndex].Generation == Window->Generation)
+            {
+                Old = &g_places[OldIndex];
+                break;
+            }
+        if (Old == NULL || !Old->Movable || !DwmWindowInner(Window, &Inner))
+            continue;
+        Dx = Window->x - Old->x;
+        Dy = Window->y - Old->y;
+        if ((Dx == 0 && Dy == 0) || Window->cx != Old->cx || Window->cy != Old->cy ||
+            !EqualRect(&Inner, &Old->Inner) || Window->BaseGeneration != Old->BaseGeneration ||
+            Window->BaseUpdateId != Old->BaseUpdateId || Window->DxGeneration != Old->DxGeneration ||
+            Window->DxUpdateId != Old->DxUpdateId)
+            continue;
+        OffsetRect(&Inner, Window->x - g_originX, Window->y - g_originY);
+        Source = Screen;
+        OffsetRect(&Source, Dx, Dy);
+        if (!IntersectRect(&Parts[0], &Inner, &Screen) || !IntersectRect(&Parts[0], &Parts[0], &Source))
+            continue;
+        for (Above = Index + 1; Above < Count && PartCount != 0; ++Above)
+        {
+            DwmWindowReach(&Windows[Above], &Cut);
+            DwmSubtractPart(Parts, &PartCount, &Cut);
+        }
+        for (Above = OldIndex + 1; Above < g_placeCount && PartCount != 0; ++Above)
+        {
+            Cut = g_places[Above].Reach;
+            OffsetRect(&Cut, Dx, Dy);
+            DwmSubtractPart(Parts, &PartCount, &Cut);
+        }
+        if (g_pointer.Composed)
+        {
+            Cut = g_pointer.Rect;
+            OffsetRect(&Cut, -g_originX, -g_originY);
+            DwmSubtractPart(Parts, &PartCount, &Cut);
+            Cut = g_pointer.Drawn;
+            OffsetRect(&Cut, Dx - g_originX, Dy - g_originY);
+            DwmSubtractPart(Parts, &PartCount, &Cut);
+        }
+        for (Part = 0; Part < PartCount && Found < DWM_PRESENT_MAX_MOVES; ++Part)
+        {
+            const RECT *Rect = &Parts[Part];
+
+            if ((LONGLONG)(Rect->right - Rect->left) * (Rect->bottom - Rect->top) < DWM_MOVE_MIN_AREA)
+                continue;
+            Moves[Found].SourcePoint.x = Rect->left - Dx;
+            Moves[Found].SourcePoint.y = Rect->top - Dy;
+            Moves[Found].DestRect.left = Rect->left;
+            Moves[Found].DestRect.top = Rect->top;
+            Moves[Found].DestRect.right = Rect->right;
+            Moves[Found].DestRect.bottom = Rect->bottom;
+            ++Found;
+        }
+    }
+    return Found;
+}
+
 static BOOL
 DwmWindowIsHidden(const DWM_WIN *Windows, ULONG Count, ULONG Index,
                   LONG ClipLeft, LONG ClipTop, LONG ClipRight, LONG ClipBottom)
@@ -4736,6 +4934,7 @@ DwmComposeLoop(HANDLE hStopEvent)
                     ULONG gpuDamageCount = 1;
                     RECT gpuShadowMargins = {g_shadowMarginLeft, g_shadowMarginTop,
                                               g_shadowMarginRight, g_shadowMarginBottom};
+                    g_placesValid = FALSE;
                     /* A dirty frame includes metadata/preparation before Begin.
                      * The fetch counter also exposes an unfinished metadata call. */
                     if (FrameTrace.Epoch && FrameTrace.Epoch == FetchTrace.Epoch)
@@ -5112,6 +5311,7 @@ DwmComposeLoop(HANDLE hStopEvent)
                     DWM_PRESENT_BITMAP publication;
                     publication.Bitmap = (ULONG_PTR)g_hbmComp;
                     publication.Rect = (RECTL){pl, pt, pr, pb};
+                    publication.MoveCount = DwmFindMoves(wins, hdr->Count, publication.Moves);
                     bltResult = g_originX == 0 && g_originY == 0 &&
                         ExtEscape(hdcScreen, DWM_ESCAPE_PRESENT_BITMAP,
                                   sizeof(publication), (LPCSTR)&publication,
@@ -5140,9 +5340,13 @@ DwmComposeLoop(HANDLE hStopEvent)
                         (ULONGLONG)(statPresentEnd.QuadPart - statComposeEnd.QuadPart),
                         (ULONGLONG)((pr - pl) * (pb - pt)));
                     if (!bltResult || !flushResult)
+                    {
+                        g_placesValid = FALSE;
                         forceFull = TRUE;
+                    }
                     else
                     {
+                        DwmRecordPlaces(wins, hdr->Count);
                         g_lastFrameQpc = (ULONGLONG)statFrameStart.QuadPart;
                         DptCount(&g_DwmPresentTrace, DPT_FRAME, (ULONGLONG)(pr - pl) * (pb - pt) * 4);
                         for (i = 0; i < hdr->Count; ++i)

@@ -84,6 +84,7 @@ list(APPEND KMTEST_DRV_SOURCE
     directx/DxgkPostDisplayHandoff.c
     directx/DxgkStopScreen.c
     directx/WdSessionManager.c
+    directx/DxgkPresentMoves.c
     directx/DxgkPresentUserSource.c
     directx/MonitorBrightnessKey.c
     directx/DxgkGpuVaAddress.c
