@@ -115,6 +115,7 @@ list(APPEND SOURCE
     ProcessMitigationPolicy.c
     QuantumRoundRobin.c
     RegisterWaitPeriodic.c
+    SataDiskAddress.c
     SandboxLaunch.c
     SecurityBaseApis.c
     SystemImageCatalog.c
