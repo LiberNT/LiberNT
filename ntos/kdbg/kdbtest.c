@@ -270,7 +270,13 @@ KdbpTestRestore(VOID)
     LONG Index;
 
     if (KdbCurrentTrapFrame != NULL)
+    {
+        CONTEXT Scratch = KdbpTestSavedContext;
+
+        /* A step a test armed must not be waiting in the code when the machine runs again */
+        KdbpArchSetSingleStep(&Scratch, FALSE);
         *KdbCurrentTrapFrame = KdbpTestSavedContext;
+    }
 
     KdbCurrentThread = KdbpTestSavedThread;
     KdbCurrentProcess = KdbpTestSavedProcess;
@@ -444,6 +450,10 @@ KdbpTestSymbols(VOID)
     KdbpTestCommand("sym kdbtest_no_such_symbol_*", "0 symbols", NULL);
     KdbpTestCommand("sym", "needed", NULL);
     KdbpTestCommand("mod", "ntoskrnl.exe", NULL);
+    KdbpTestCommand("x nt!KdbpCmdSelfTest", "1 symbol\n", NULL);
+    KdbpTestCommand("x nt!KdbpCmdSelfTes?", "KdbpCmdSelfTest", NULL);
+    KdbpTestCommand("? kdbtest_zz", "kdbtest_zz", NULL);
+    KdbpTestCommand("? fedcba98", "starts with 0x", NULL);
 }
 
 static
@@ -457,6 +467,8 @@ KdbpTestMemory(VOID)
 
     KdbpTestFormat(Line, "db 0x%p 4", Bytes);
     KdbpTestCommand(Line, "10 11 a5 5a", NULL);
+    KdbpTestFormat(Line, "db 0x%p L4", Bytes);
+    KdbpTestCommand(Line, "10 11 a5 5a", "no such");
     KdbpTestFormat(Line, "dw 0x%p 2", Bytes);
     KdbpTestCommand(Line, "1110 5aa5", NULL);
     KdbpTestFormat(Line, "dd 0x%p 1", Bytes);
@@ -674,6 +686,12 @@ KdbpTestStepping(VOID)
 
     Expected = KdbpTestSavedContext;
     CanStep = NT_SUCCESS(KdbpArchSetSingleStep(&Expected, TRUE));
+    if (CanStep)
+    {
+        CONTEXT Scratch = Expected;
+
+        KdbpArchSetSingleStep(&Scratch, FALSE);
+    }
     if (!CanStep)
         KdbpTestCommand("t", "not supported", NULL);
 
@@ -726,6 +744,33 @@ KdbpTestStepping(VOID)
     KdbpTestPrepareMemory();
 }
 
+/* The name the register list shows for a register a generic name like pc stands for */
+static
+PCSTR
+KdbpTestShownRegisterName(
+    _In_ PCSTR Alias)
+{
+    ULONG Index;
+    ULONG Earlier;
+
+    for (Index = 0; Index < KdbpRegisterCount; Index++)
+    {
+        if (strcmp(KdbpRegisters[Index].Name, Alias) != 0)
+            continue;
+
+        for (Earlier = 0; Earlier <= Index; Earlier++)
+        {
+            if ((KdbpRegisters[Earlier].Offset == KdbpRegisters[Index].Offset) &&
+                (KdbpRegisters[Earlier].Size == KdbpRegisters[Index].Size))
+            {
+                return KdbpRegisters[Earlier].Name;
+            }
+        }
+    }
+
+    return NULL;
+}
+
 static
 VOID
 KdbpTestRegisters(VOID)
@@ -741,6 +786,12 @@ KdbpTestRegisters(VOID)
     KdbpTestCommand("r pc", Expected, NULL);
     KdbpTestCommand("r kdbtestreg", "no register", NULL);
     KdbpTestCommand("regs", NULL, NULL);
+
+    /* The program counter and the stack pointer are shown under whatever name the processor gives them */
+    RtlStringCbPrintfA(Expected, sizeof(Expected), "%-7s ", KdbpTestShownRegisterName("pc"));
+    KdbpTestCommand("regs", Expected, NULL);
+    RtlStringCbPrintfA(Expected, sizeof(Expected), "%-7s ", KdbpTestShownRegisterName("sp"));
+    KdbpTestCommand("regs", Expected, NULL);
     KdbpTestCommand("fpregs kdbtestreg", "no floating-point", NULL);
 
     KdbpTestFormat(Line, "r %s 0x1234", KdbpRegisters[0].Name);
@@ -880,6 +931,30 @@ KdbpTestWalks(VOID)
     KdbpTestCommand("bt all 1", "Thread ", "The list");
     KdbpTestCommand("!timer", "timers queued", "The list");
     KdbpTestCommand("!ready", "Ready queues", "The list");
+
+    /* A back trace from the stop reaches its callers, and every one of them is code of a loaded image */
+    if ((KdbCurrentTrapFrame != NULL) &&
+        ((ULONG_PTR)KeGetContextPc(KdbCurrentTrapFrame) > (ULONG_PTR)MmHighestUserAddress))
+    {
+        static CONTEXT Walk;
+        PLDR_DATA_TABLE_ENTRY Entry;
+        BOOLEAN InKernel;
+        BOOLEAN InImages = TRUE;
+        ULONG Frames = 1;
+
+        Walk = *KdbCurrentTrapFrame;
+        while ((Frames < 64) && KiUnwindFrame(&Walk, (Frames != 1)))
+        {
+            ULONG_PTR Pc = (ULONG_PTR)KeGetContextPc(&Walk);
+
+            if ((Pc > (ULONG_PTR)MmHighestUserAddress) && (KiPcToFileHeader((PVOID)Pc, &Entry, FALSE, &InKernel) == NULL))
+                InImages = FALSE;
+            Frames++;
+        }
+
+        KdbpTestCheck(Frames >= 2, "bt goes past the frame that stopped (%lu frames)", Frames);
+        KdbpTestCheck(InImages, "every frame bt finds is code of a loaded image");
+    }
 }
 
 /* Line separators, quoted words, the memory functions and the names of the stop */

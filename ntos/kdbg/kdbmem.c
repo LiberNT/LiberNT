@@ -73,7 +73,7 @@ KdbpDumpSymbols(
     if (!KdbpGetAddressExpression(Argv[1], &Address))
         return TRUE;
 
-    if ((Argc > 2) && !KdbpGetAddressExpression(Argv[2], &Count))
+    if ((Argc > 2) && !KdbpGetCountExpression(Argv[2], &Count))
         return TRUE;
 
     if (Count > KDB_MAXIMUM_RANGE / Width)
@@ -147,7 +147,7 @@ KdbpCmdDumpUnicode(
     if (!KdbpGetAddressExpression(Argv[1], &Address))
         return TRUE;
 
-    if ((Argc > 2) && !KdbpGetAddressExpression(Argv[2], &Count))
+    if ((Argc > 2) && !KdbpGetCountExpression(Argv[2], &Count))
         return TRUE;
 
     if ((Count == 0) || (Count > KDB_MAXIMUM_RANGE / sizeof(WCHAR)))

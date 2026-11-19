@@ -30,6 +30,7 @@ typedef struct _KDB_PARSER
     PCSTR Error;
     PCSTR ErrorAt;
     ULONG Depth;
+    CHAR ErrorText[KDB_ERROR_MESSAGE_MAX];
 
     /* Checking the text only: registers, memory and symbols are not read */
     BOOLEAN ParseOnly;
@@ -475,7 +476,18 @@ KdbpParseName(
     if (KdbpSymLookupName(Name, &Address))
         return (ULONGLONG)Address;
 
-    KdbpFail(Parser, "no such register or symbol");
+    if (Parser->Error == NULL)
+    {
+        ULONG Index;
+
+        for (Index = 0; (Index < Length) && isxdigit((UCHAR)Name[Index]); Index++);
+        RtlStringCbPrintfA(Parser->ErrorText, sizeof(Parser->ErrorText),
+                           (Index == Length) ? "no such register or symbol: %s; a hexadecimal number starts with 0x"
+                                             : "no such register or symbol: %s",
+                           Name);
+        Parser->Current -= Length;
+        KdbpFail(Parser, Parser->ErrorText);
+    }
     return 0;
 }
 
