@@ -52,8 +52,16 @@ jobs:
 
     - name: Install host build tools
       run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake ninja-build flex bison ccache wget xz-utils tar python3-mako python3-yaml python3-packaging glslang-tools msitools
+        # Every Ubuntu mirror can answer 503 for a minute or more; the whole install is retried after a pause.
+        for attempt in 1 2 3 4; do
+          if sudo apt-get update && sudo apt-get install -y cmake ninja-build flex bison ccache wget xz-utils tar python3-mako python3-yaml python3-packaging glslang-tools msitools; then
+            break
+          fi
+          if [ "$attempt" -eq 4 ]; then
+            exit 1
+          fi
+          sleep $((30 * attempt))
+        done
 
     - name: Compute RosBE bootstrap SHA
       id: rosbe_spec
