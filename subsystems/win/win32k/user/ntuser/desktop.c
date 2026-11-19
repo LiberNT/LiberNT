@@ -2747,7 +2747,7 @@ Quit:
     return Status;
 }
 
-static VOID
+VOID
 IntSetDesktopHandleProtection(
     _In_ HDESK hDesktop,
     _In_ BOOLEAN ProtectFromClose)
@@ -3642,6 +3642,7 @@ IntSetThreadDesktop(IN HDESK hDesktop,
         TRACE("Assigning the initial startup desktop to process %p '%s'\n",
             pti->ppi->peProcess, pti->ppi->peProcess->ImageFileName);
 
+        ObReferenceObject(pdesk);
         pti->ppi->hdeskStartup = hDesktop;
         pti->ppi->rpdeskStartup = pdesk;
     }

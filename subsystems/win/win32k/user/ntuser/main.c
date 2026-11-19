@@ -251,6 +251,8 @@ UserProcessDestroy(PEPROCESS Process)
 
     if (ppiCurrent->hdeskStartup)
     {
+        /* A process that created its startup desktop holds it protected from close, as CreateDesktop returned it */
+        IntSetDesktopHandleProtection(ppiCurrent->hdeskStartup, FALSE);
         ZwClose(ppiCurrent->hdeskStartup);
         ppiCurrent->hdeskStartup = NULL;
     }
