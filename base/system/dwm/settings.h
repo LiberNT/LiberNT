@@ -32,6 +32,7 @@ typedef struct _DWM_SETTINGS
     DWORD Effects;
     BOOL Changed;
     BOOL (*GpuActive)(void);
+    BOOL Remote;
 } DWM_SETTINGS;
 
 struct _DWM_WIN;
@@ -39,4 +40,5 @@ struct _DWM_WIN;
 LONG DwmSettingsRead(DWORD *Effects);
 LONG DwmSettingsWrite(DWORD Effect, BOOL Enabled);
 HWND DwmSettingsCreateWindow(HINSTANCE Instance, DWM_SETTINGS *Settings);
+void DwmSettingsUpdateRemote(DWM_SETTINGS *Settings);
 void DwmSettingsApplyWindow(const DWM_SETTINGS *Settings, struct _DWM_WIN *Window);
