@@ -44,6 +44,7 @@ list(APPEND SOURCE
     ProgramFilesDir.cpp
     SHGetFolderPathToken.cpp
     RealShellExecuteEx.cpp
+    RecycleBin.cpp
     RecentDocs.cpp
     RunFileDlg.cpp
     RegItemDisplayName.cpp

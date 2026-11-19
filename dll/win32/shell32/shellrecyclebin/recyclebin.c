@@ -105,7 +105,7 @@ GetDefaultRecycleBin(
     {
         if (!RecycleBinVolumeRoot(pszVolume, Root))
             return HRESULT_FROM_WIN32(GetLastError());
-        hr = RecycleBin5_Constructor(Root, &Unknown);
+        hr = RecycleBinVolume_Constructor(Root, &Unknown);
     }
 
     if (FAILED(hr))

@@ -38,6 +38,7 @@ extern void func_menu(void);
 extern void func_OpenAs_RunDLL(void);
 extern void func_PathIsEqualOrSubFolder(void);
 extern void func_PathIsSlow(void);
+extern void func_RecycleBin(void);
 extern void func_PathIsTemporary(void);
 extern void func_PathMakeUniqueName(void);
 extern void func_PathProcessCommand(void);
@@ -138,6 +139,7 @@ const struct test winetest_testlist[] =
     //{ "OpenAs_RunDLL", func_OpenAs_RunDLL }, // Test hangs on Win 2003
     { "PathIsEqualOrSubFolder", func_PathIsEqualOrSubFolder },
     { "PathIsSlow", func_PathIsSlow },
+    { "RecycleBin", func_RecycleBin },
     { "PathIsTemporary", func_PathIsTemporary },
     { "PathMakeUniqueName", func_PathMakeUniqueName },
     { "PathProcessCommand", func_PathProcessCommand },
