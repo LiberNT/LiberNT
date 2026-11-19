@@ -391,6 +391,47 @@ KdbSymPrintAddress(
     return TRUE;
 }
 
+/* A return address belongs to the call before it: the name and line are those of the call */
+BOOLEAN
+KdbSymPrintReturnAddress(
+    _In_ PVOID Address)
+{
+    CHAR ModuleName[KDB_MODULE_NAME_MAX];
+    CHAR FunctionName[KDB_SYMBOL_NAME_MAX];
+    CHAR FileName[KDB_FILE_NAME_MAX];
+    ULONG_PTR Displacement = 0;
+    ULONG Line = 0;
+
+    if (!KdbSymDescribeAddress((PUCHAR)Address - 1,
+                               ModuleName,
+                               sizeof(ModuleName),
+                               FunctionName,
+                               sizeof(FunctionName),
+                               &Displacement,
+                               FileName,
+                               sizeof(FileName),
+                               &Line))
+    {
+        return FALSE;
+    }
+
+    if (FunctionName[0] == ANSI_NULL)
+    {
+        KdbPrintf("<%s+0x%Ix>", ModuleName, Displacement + 1);
+        return TRUE;
+    }
+
+    if ((FileName[0] != ANSI_NULL) && (Line != 0))
+    {
+        KdbPrintf("<%s!%s+0x%Ix (%s:%lu)>",
+                  ModuleName, FunctionName, Displacement + 1, FileName, Line);
+        return TRUE;
+    }
+
+    KdbPrintf("<%s!%s+0x%Ix>", ModuleName, FunctionName, Displacement + 1);
+    return TRUE;
+}
+
 /*
  * The same, for an address that is probably not the start of anything: what is
  * printed is the nearest name at or before it.

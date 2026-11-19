@@ -171,6 +171,12 @@ KdbpGetAddressExpression(
 
 BOOLEAN
 NTAPI
+KdbpGetCountExpression(
+    _In_ PCHAR Expression,
+    _Out_ PULONG_PTR Count);
+
+BOOLEAN
+NTAPI
 KdbpGetHexNumber(
     _In_ PCHAR pszNum,
     _Out_ ULONG_PTR *pulValue);
@@ -384,6 +390,10 @@ BOOLEAN
 KdbSymPrintAddress(
     _In_ PVOID Address,
     _In_ PCONTEXT Context);
+
+BOOLEAN
+KdbSymPrintReturnAddress(
+    _In_ PVOID Address);
 
 BOOLEAN
 KdbSymPrintNearest(

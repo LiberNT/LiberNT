@@ -364,6 +364,18 @@ KdbpGetAddressExpression(
     return TRUE;
 }
 
+/* A count may also be written the WinDbg way, as L followed by the number */
+BOOLEAN
+NTAPI
+KdbpGetCountExpression(
+    _In_ PCHAR Expression,
+    _Out_ PULONG_PTR Count)
+{
+    if (((Expression[0] == 'L') || (Expression[0] == 'l')) && (Expression[1] != ANSI_NULL))
+        return KdbpGetAddressExpression(Expression + 1, Count);
+    return KdbpGetAddressExpression(Expression, Count);
+}
+
 /*
  * Lets a component add a command of its own. The callbacks are tried after
  * every command the debugger knows itself.
@@ -1052,18 +1064,19 @@ KdbpCmdRegisters(
     {
         ULONGLONG Value = 0;
         ULONG Size = 0;
+        ULONG Earlier;
 
-        /*
-         * The last few entries are the names that mean the same thing on
-         * every processor, and they say nothing new here.
-         */
-        if ((strcmp(KdbpRegisters[Index].Name, "pc") == 0) ||
-            (strcmp(KdbpRegisters[Index].Name, "sp") == 0) ||
-            (strcmp(KdbpRegisters[Index].Name, "fp") == 0) ||
-            (strcmp(KdbpRegisters[Index].Name, "ret") == 0))
+        /* A second name for a register already shown says nothing new */
+        for (Earlier = 0; Earlier < Index; Earlier++)
         {
-            continue;
+            if ((KdbpRegisters[Earlier].Offset == KdbpRegisters[Index].Offset) &&
+                (KdbpRegisters[Earlier].Size == KdbpRegisters[Index].Size))
+            {
+                break;
+            }
         }
+        if (Earlier != Index)
+            continue;
 
         if (!NT_SUCCESS(KdbpGetRegisterValue(Context,
                                              KdbpRegisters[Index].Name,
@@ -1314,7 +1327,8 @@ VOID
 KdbpPrintFrame(
     _In_ PKDB_KTRAP_FRAME Walk,
     _In_ PKDB_KTRAP_FRAME Context,
-    _In_ BOOLEAN Verbose)
+    _In_ BOOLEAN Verbose,
+    _In_ BOOLEAN ReturnAddress)
 {
     ULONG_PTR Pc = (ULONG_PTR)KeGetContextPc(Walk);
 
@@ -1330,7 +1344,10 @@ KdbpPrintFrame(
         KdbpPrint("%p ", (PVOID)Pc);
     }
 
-    KdbSymPrintAddress((PVOID)Pc, Context);
+    if (ReturnAddress)
+        KdbSymPrintReturnAddress((PVOID)Pc);
+    else
+        KdbSymPrintAddress((PVOID)Pc, Context);
     KdbPuts("\n");
 }
 
@@ -1345,11 +1362,11 @@ KdbpBackTrace(
     ULONG Depth = 0;
 
     Walk = *Context;
-    KdbpPrintFrame(&Walk, Context, Verbose);
+    KdbpPrintFrame(&Walk, Context, Verbose, FALSE);
 
     while ((Depth < Limit) && !KdbpIsOutputAborted() && KiUnwindFrame(&Walk, (Depth != 0)))
     {
-        KdbpPrintFrame(&Walk, Context, Verbose);
+        KdbpPrintFrame(&Walk, Context, Verbose, (Walk.ContextFlags & CONTEXT_UNWOUND_TO_CALL) != 0);
         Depth++;
     }
 }
@@ -1569,7 +1586,7 @@ KdbpDumpMemory(
     if ((Argc > 1) && !KdbpGetAddressExpression(Argv[1], &Address))
         return TRUE;
 
-    if ((Argc > 2) && !KdbpGetAddressExpression(Argv[2], &Count))
+    if ((Argc > 2) && !KdbpGetCountExpression(Argv[2], &Count))
         return TRUE;
 
     if (Count == 0)
@@ -1676,7 +1693,7 @@ KdbpCmdDumpText(
     if ((Argc > 1) && !KdbpGetAddressExpression(Argv[1], &Address))
         return TRUE;
 
-    if ((Argc > 2) && !KdbpGetAddressExpression(Argv[2], &Count))
+    if ((Argc > 2) && !KdbpGetCountExpression(Argv[2], &Count))
         return TRUE;
 
     if ((Count == 0) || (Count > KDB_MAXIMUM_DUMP_BYTES))
@@ -1803,7 +1820,7 @@ KdbpCmdDisassemble(
     if ((Argc > 1) && !KdbpGetAddressExpression(Argv[1], &Address))
         return TRUE;
 
-    if ((Argc > 2) && !KdbpGetAddressExpression(Argv[2], &Count))
+    if ((Argc > 2) && !KdbpGetCountExpression(Argv[2], &Count))
         return TRUE;
 
     if (Count > KDB_MAXIMUM_INSTRUCTIONS)
@@ -1901,6 +1918,8 @@ KdbpCmdSymbols(
     BOOLEAN Truncated = FALSE;
     PCSTR ModulePattern = "*";
     PCSTR SymbolPattern;
+    CHAR Module[64];
+    PCSTR Separator;
 
     if (Argc < 2)
     {
@@ -1914,6 +1933,23 @@ KdbpCmdSymbols(
     {
         ModulePattern = Argv[1];
         SymbolPattern = Argv[2];
+    }
+    else
+    {
+        /* module!pattern, the way WinDbg writes it */
+        Separator = strchr(Argv[1], '!');
+        if (Separator != NULL)
+        {
+            if ((ULONG_PTR)(Separator - Argv[1]) >= sizeof(Module))
+            {
+                KdbPuts("The module name is too long\n");
+                return TRUE;
+            }
+            RtlCopyMemory(Module, Argv[1], Separator - Argv[1]);
+            Module[Separator - Argv[1]] = ANSI_NULL;
+            ModulePattern = (Module[0] != ANSI_NULL) ? Module : "*";
+            SymbolPattern = Separator + 1;
+        }
     }
 
     KdbSymEnumerate(ModulePattern,
