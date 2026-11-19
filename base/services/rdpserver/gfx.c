@@ -61,6 +61,8 @@ struct RDP_GFX
     BOOL H264Enabled;
     H264_CONTEXT *H264;
     VIDEO_TRACKER Video;
+    UINT32 VideoFrames;
+    ULONGLONG VideoBytes;
 };
 
 static const UINT32 KnownVersions[] =
@@ -641,13 +643,25 @@ static BOOL SendVideo(RDP_GFX *gfx, const BYTE *pixels, UINT32 stride, BOOL *sen
     command.extra = &stream;
     ok = gfx->Context->SurfaceCommand(gfx->Context, &command) == CHANNEL_RC_OK;
     free_h264_metablock(&stream.meta);
+    ++gfx->VideoFrames;
+    gfx->VideoBytes += stream.length;
     return ok;
+}
+
+static void LogVideoEnd(RDP_GFX *gfx, const RECT *ended)
+{
+    if (IsRectEmpty(ended)) return;
+    gfx->Log("Video region (%ld,%ld)-(%ld,%ld) ended: %lu AVC420 frames, %llu bytes", ended->left, ended->top,
+             ended->right, ended->bottom, (ULONG)gfx->VideoFrames, gfx->VideoBytes);
+    gfx->VideoFrames = 0;
+    gfx->VideoBytes = 0;
 }
 
 static void StopVideo(RDP_GFX *gfx, RECT *refresh)
 {
     RECT ended;
     VideoTrackerStop(&gfx->Video, &ended);
+    LogVideoEnd(gfx, &ended);
     UnionRect(refresh, refresh, &ended);
 }
 
@@ -665,6 +679,7 @@ BOOL GfxPoll(RDP_GFX *gfx, RECT *refresh)
     SetRectEmpty(refresh);
     if (!gfx->Video.Active) return FALSE;
     VideoTrackerUpdate(&gfx->Video, GetTickCount64(), &ended);
+    LogVideoEnd(gfx, &ended);
     *refresh = ended;
     return !IsRectEmpty(refresh);
 }
@@ -694,8 +709,13 @@ BOOL GfxSendFrame(RDP_GFX *gfx, const BYTE *pixels, UINT32 stride, const FRAME_M
             SetRect(&rect, tiles[i].Left, tiles[i].Top, tiles[i].Left + tiles[i].Width, tiles[i].Top + tiles[i].Height);
             VideoTrackerChanged(&gfx->Video, now, &rect);
         }
+        BOOL wasActive = gfx->Video.Active;
         video = VideoTrackerUpdate(&gfx->Video, now, &ended);
+        LogVideoEnd(gfx, &ended);
         UnionRect(refresh, refresh, &ended);
+        if (video && !wasActive)
+            gfx->Log("Video region (%ld,%ld)-(%ld,%ld) sent as AVC420", gfx->Video.Region.left, gfx->Video.Region.top,
+                     gfx->Video.Region.right, gfx->Video.Region.bottom);
         videoChanged = video && gfx->Video.RegionChanged == now;
     }
     if (!count && !moveCount) return TRUE;

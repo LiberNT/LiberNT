@@ -31,7 +31,7 @@ static BOOL SameRect(const RECT *a, LONG left, LONG top, LONG right, LONG bottom
 static void TestVideo(void)
 {
     VIDEO_TRACKER tracker = {0};
-    RECT video = { 100, 100, 420, 340 }, inside = { 128, 128, 192, 192 }, outside = { 448, 64, 512, 128 };
+    RECT video = { 100, 100, 420, 340 }, inside = { 128, 128, 192, 192 }, outside = { 448, 96, 480, 128 };
     RECT more = { 420, 100, 500, 340 }, ended;
     ULONGLONG now = 1000;
 
@@ -39,13 +39,13 @@ static void TestVideo(void)
     ok(!Play(&tracker, &now, VIDEO_DETECT_MS - 2 * FRAME_MS, &video), "a region was found before %u ms\n",
        VIDEO_DETECT_MS);
     ok(Play(&tracker, &now, 4 * FRAME_MS, &video), "a region changing for %u ms was not found\n", VIDEO_DETECT_MS);
-    ok(SameRect(&tracker.Region, 64, 64, 448, 384), "region (%ld,%ld)-(%ld,%ld), expected the tiles it covers\n",
+    ok(SameRect(&tracker.Region, 96, 96, 448, 352), "region (%ld,%ld)-(%ld,%ld), expected the tiles it covers\n",
        tracker.Region.left, tracker.Region.top, tracker.Region.right, tracker.Region.bottom);
     ok(VideoTrackerCovers(&tracker, &inside), "a tile inside the region is not covered\n");
     ok(!VideoTrackerCovers(&tracker, &outside), "a tile outside the region is covered\n");
 
     ok(Play(&tracker, &now, VIDEO_DETECT_MS + 4 * FRAME_MS, &more), "the region ended while it kept changing\n");
-    ok(SameRect(&tracker.Region, 64, 64, 512, 384), "region (%ld,%ld)-(%ld,%ld) did not grow over the next tiles\n",
+    ok(SameRect(&tracker.Region, 96, 96, 512, 352), "region (%ld,%ld)-(%ld,%ld) did not grow over the next tiles\n",
        tracker.Region.left, tracker.Region.top, tracker.Region.right, tracker.Region.bottom);
 
     now += VIDEO_IDLE_MS - FRAME_MS - 1;
@@ -54,13 +54,13 @@ static void TestVideo(void)
     now += 1;
     ok(!VideoTrackerUpdate(&tracker, now, &ended), "the region did not end after %u ms without change\n",
        VIDEO_IDLE_MS);
-    ok(SameRect(&ended, 64, 64, 512, 384), "the ended region is (%ld,%ld)-(%ld,%ld)\n", ended.left, ended.top,
+    ok(SameRect(&ended, 96, 96, 512, 352), "the ended region is (%ld,%ld)-(%ld,%ld)\n", ended.left, ended.top,
        ended.right, ended.bottom);
     ok(!VideoTrackerCovers(&tracker, &inside), "an ended region still covers its tiles\n");
 
     ok(Play(&tracker, &now, VIDEO_DETECT_MS + 2 * FRAME_MS, &video), "the region was not found again\n");
     VideoTrackerStop(&tracker, &ended);
-    ok(SameRect(&ended, 64, 64, 448, 384), "stopping reported (%ld,%ld)-(%ld,%ld)\n", ended.left, ended.top,
+    ok(SameRect(&ended, 96, 96, 448, 352), "stopping reported (%ld,%ld)-(%ld,%ld)\n", ended.left, ended.top,
        ended.right, ended.bottom);
     ok(!tracker.Active, "the region is still active after a stop\n");
     VideoTrackerFree(&tracker);
