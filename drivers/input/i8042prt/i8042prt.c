@@ -194,17 +194,25 @@ i8042SendHookWorkItem(
 		/* Call the hooked initialization if it exists */
 		if (DeviceExtension->KeyboardHook.InitializationRoutine)
 		{
-			Status = DeviceExtension->KeyboardHook.InitializationRoutine(
+			BOOLEAN TurnTranslationOn;
+
+			Status = I8042CoreKeyboardInitialization(
+				DeviceExtension->KeyboardHook.InitializationRoutine,
 				DeviceExtension->KeyboardHook.Context,
 				PortDeviceExtension,
 				i8042SynchReadPort,
 				i8042SynchWritePortKbd,
-				FALSE);
+				&TurnTranslationOn);
 			if (!NT_SUCCESS(Status))
 			{
 				WARN_(I8042PRT, "KeyboardHook.InitializationRoutine() failed with status 0x%08lx\n", Status);
 				WorkItemData->Irp->IoStatus.Status = Status;
 				goto cleanup;
+			}
+			if (!TurnTranslationOn)
+			{
+				/* FIXME: a filter's request to turn keyboard translation off is not applied; translation stays on */
+				WARN_(I8042PRT, "KeyboardHook.InitializationRoutine() asked for translation off\n");
 			}
 		}
 	}

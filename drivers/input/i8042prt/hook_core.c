@@ -1,0 +1,35 @@
+/*
+ * PROJECT:     LiberNT i8042 port driver
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Rules for the callbacks a keyboard filter hooks into the port
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+#include <ntddk.h>
+#include <ntdd8042.h>
+
+#include "hook_core.h"
+
+NTSTATUS
+I8042CoreKeyboardInitialization(
+    _In_ PI8042_KEYBOARD_INITIALIZATION_ROUTINE InitializationRoutine,
+    _In_ PVOID InitializationContext,
+    _In_ PVOID SynchFuncContext,
+    _In_ PI8042_SYNCH_READ_PORT ReadPort,
+    _In_ PI8042_SYNCH_WRITE_PORT WritePort,
+    _Out_ PBOOLEAN TurnTranslationOn)
+{
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(InitializationRoutine != NULL);
+    ASSERT(SynchFuncContext != NULL);
+    ASSERT(ReadPort != NULL);
+    ASSERT(WritePort != NULL);
+    ASSERT(TurnTranslationOn != NULL);
+
+    *TurnTranslationOn = TRUE;
+    return InitializationRoutine(InitializationContext,
+                                 SynchFuncContext,
+                                 ReadPort,
+                                 WritePort,
+                                 TurnTranslationOn);
+}

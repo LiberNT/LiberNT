@@ -6,6 +6,7 @@
 #include <ntdd8042.h>
 
 #include "sync_core.h"
+#include "hook_core.h"
 
 /*-----------------------------------------------------
  * Structures

@@ -4,6 +4,7 @@ include_directories(
 
 list(APPEND SOURCE
     createclose.c
+    hook_core.c
     hwhacks.c
     i8042prt.c
     keyboard.c
