@@ -8,11 +8,11 @@
 #pragma once
 #include <windows.h>
 
-#define VIDEO_TILE 64
+#define VIDEO_TILE 32
 #define VIDEO_GAP_MS 250
 #define VIDEO_DETECT_MS 2000
 #define VIDEO_IDLE_MS 1000
-#define VIDEO_MIN_TILES 4
+#define VIDEO_MIN_TILES 16
 
 typedef struct VIDEO_TRACKER
 {
