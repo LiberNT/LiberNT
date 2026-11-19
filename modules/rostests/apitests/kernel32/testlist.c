@@ -21,6 +21,7 @@ extern void func_BackupReadWrite(void);
 extern void func_CalendarDateTime(void);
 extern void func_CallbackCallingConventions(void);
 extern void func_CallbackMayRunLong(void);
+extern void func_CdfsVolume(void);
 extern void func_Arm64ThreadContext(void);
 extern void func_ConsoleAlias(void);
 extern void func_ConsoleCharInput(void);
@@ -243,6 +244,7 @@ const struct test winetest_testlist[] =
     { "CalendarDateTime",            func_CalendarDateTime },
     { "CallbackCallingConventions", func_CallbackCallingConventions },
     { "CallbackMayRunLong",          func_CallbackMayRunLong },
+    { "CdfsVolume", func_CdfsVolume },
     { "Arm64ThreadContext",          func_Arm64ThreadContext },
     { "ConsoleAlias", func_ConsoleAlias },
     { "ConsoleCharInput",            func_ConsoleCharInput },

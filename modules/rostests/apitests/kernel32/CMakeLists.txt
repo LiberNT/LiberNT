@@ -28,6 +28,7 @@ list(APPEND SOURCE
     BackupReadWrite.c
     CalendarDateTime.c
     CallbackCallingConventions.c
+    CdfsVolume.c
     CallbackMayRunLong.c
     Arm64ThreadContext.c
     ConsoleCommandHistory.c
