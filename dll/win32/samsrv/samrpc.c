@@ -8896,11 +8896,30 @@ SamrGetDisplayEnumerationIndex2(IN SAMPR_HANDLE DomainHandle,
                                 IN PRPC_UNICODE_STRING Prefix,
                                 OUT unsigned long *Index)
 {
+    PSAM_DB_OBJECT DomainObject;
+    NTSTATUS Status;
+
     TRACE("SamrGetDisplayEnumerationIndex2(%p %lu %p %p)\n",
           DomainHandle, DisplayInformationClass, Prefix, Index);
 
-    UNIMPLEMENTED;
-    return STATUS_NOT_IMPLEMENTED;
+    RtlAcquireResourceShared(&SampResource,
+                             TRUE);
+
+    Status = SampValidateDbObject(DomainHandle,
+                                  SamDbDomainObject,
+                                  DOMAIN_LIST_ACCOUNTS,
+                                  &DomainObject);
+    if (NT_SUCCESS(Status))
+    {
+        Status = SampGetDisplayEnumerationIndex(DomainObject,
+                                                DisplayInformationClass,
+                                                Prefix,
+                                                Index);
+    }
+
+    RtlReleaseResource(&SampResource);
+
+    return Status;
 }
 
 

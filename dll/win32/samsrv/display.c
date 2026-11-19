@@ -464,4 +464,66 @@ SampQueryDisplayInformation(
     return Status;
 }
 
+NTSTATUS
+SampGetDisplayEnumerationIndex(
+    _In_ PSAM_DB_OBJECT DomainObject,
+    _In_ DOMAIN_DISPLAY_INFORMATION DisplayInformationClass,
+    _In_ PRPC_UNICODE_STRING Prefix,
+    _Out_ PULONG Index)
+{
+    PDISPLAY_ENTRY Entries = NULL;
+    ULONG Count = 0;
+    ULONG i;
+    NTSTATUS Status;
+
+    ASSERT(Prefix != NULL);
+    ASSERT((Prefix->Length & 1) == 0);
+    ASSERT(Prefix->Length <= Prefix->MaximumLength);
+
+    *Index = 0;
+
+    switch (DisplayInformationClass)
+    {
+        case DomainDisplayUser:
+        case DomainDisplayMachine:
+        case DomainDisplayGroup:
+            break;
+
+        case DomainDisplayOemUser:
+        case DomainDisplayOemGroup:
+            return STATUS_NOT_IMPLEMENTED;
+
+        default:
+            return STATUS_INVALID_INFO_CLASS;
+    }
+
+    Status = SampReadDisplayEntries(DomainObject,
+                                    DisplayInformationClass,
+                                    &Entries,
+                                    &Count);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = STATUS_NO_MORE_ENTRIES;
+    for (i = 0; i < Count; i++)
+    {
+        if (RtlCompareUnicodeString((PUNICODE_STRING)&Entries[i].AccountName,
+                                    (PUNICODE_STRING)Prefix,
+                                    TRUE) >= 0)
+        {
+            *Index = i;
+            Status = STATUS_SUCCESS;
+            break;
+        }
+    }
+
+    for (i = 0; i < Count; i++)
+        SampFreeDisplayEntry(&Entries[i]);
+
+    if (Entries != NULL)
+        RtlFreeHeap(RtlGetProcessHeap(), 0, Entries);
+
+    return Status;
+}
+
 /* EOF */

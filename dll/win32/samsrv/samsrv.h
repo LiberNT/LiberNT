@@ -235,6 +235,13 @@ SampQueryDisplayInformation(
     _Out_ PULONG TotalReturned,
     _Out_ PSAMPR_DISPLAY_INFO_BUFFER Buffer);
 
+NTSTATUS
+SampGetDisplayEnumerationIndex(
+    _In_ PSAM_DB_OBJECT DomainObject,
+    _In_ DOMAIN_DISPLAY_INFORMATION DisplayInformationClass,
+    _In_ PRPC_UNICODE_STRING Prefix,
+    _Out_ PULONG Index);
+
 
 /* domain.c */
 
