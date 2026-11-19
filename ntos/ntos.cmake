@@ -514,6 +514,7 @@ elseif(ARCH STREQUAL "riscv64")
         ${REACTOS_SOURCE_DIR}/ntos/ke/riscv64/pcr.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/riscv64/spinlock.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/riscv64/stack.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/riscv64/stackwalk.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/riscv64/stubs.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/riscv64/syscall.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/riscv64/thrdini.c
