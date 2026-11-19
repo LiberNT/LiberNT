@@ -69,10 +69,20 @@ typedef struct _DWM_MIRROR_FRAME
     ULONG Reserved;
 } DWM_MIRROR_FRAME;
 
+/* Pixels at DestRect were at SourcePoint in the previous frame; Rect still covers DestRect. */
+#define DWM_PRESENT_MAX_MOVES 8u
+typedef struct _DWM_MOVE_RECT
+{
+    POINTL SourcePoint;
+    RECTL DestRect;
+} DWM_MOVE_RECT;
+
 typedef struct _DWM_PRESENT_BITMAP
 {
     ULONG_PTR Bitmap;
     RECTL Rect;
+    ULONG MoveCount;
+    DWM_MOVE_RECT Moves[DWM_PRESENT_MAX_MOVES];
 } DWM_PRESENT_BITMAP;
 
 typedef struct _CDD_PRESENT_SOURCE
@@ -82,6 +92,8 @@ typedef struct _CDD_PRESENT_SOURCE
     ULONG Height;
     ULONG Pitch;
     RECTL Rect;
+    ULONG MoveCount;
+    DWM_MOVE_RECT Moves[DWM_PRESENT_MAX_MOVES];
 } CDD_PRESENT_SOURCE;
 
 
@@ -150,6 +162,8 @@ typedef struct _DXGK_PRESENT_DIRTY_RECTS_INPUT
     ULONG SourcePitch;
     ULONG SourceSize;
     ULONG_PTR Source;
+    ULONG MoveCount;
+    DWM_MOVE_RECT Moves[DWM_PRESENT_MAX_MOVES];
     RECTL Rects[ANYSIZE_ARRAY];
 } DXGK_PRESENT_DIRTY_RECTS_INPUT, *PDXGK_PRESENT_DIRTY_RECTS_INPUT;
 
