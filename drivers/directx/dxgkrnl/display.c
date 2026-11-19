@@ -3786,6 +3786,38 @@ Cleanup:
  *
  * IRQL: PASSIVE_LEVEL
  * ====================================================================== */
+static BOOLEAN
+DxgkpClipMove(
+    _In_ const DWM_MOVE_RECT *Move,
+    _In_ LONG Width,
+    _In_ LONG Height,
+    _Out_ D3DKMT_MOVE_RECT *Clipped)
+{
+    LONG Dx, Dy;
+
+    if (Move->DestRect.left >= Move->DestRect.right || Move->DestRect.top >= Move->DestRect.bottom ||
+        Move->DestRect.left < -Width || Move->DestRect.top < -Height ||
+        Move->DestRect.right > 2 * Width || Move->DestRect.bottom > 2 * Height ||
+        Move->SourcePoint.x < -Width || Move->SourcePoint.x > 2 * Width ||
+        Move->SourcePoint.y < -Height || Move->SourcePoint.y > 2 * Height)
+        return FALSE;
+    Dx = Move->SourcePoint.x - Move->DestRect.left;
+    Dy = Move->SourcePoint.y - Move->DestRect.top;
+    Clipped->DestRect.left = max(Move->DestRect.left, max(0, -Dx));
+    Clipped->DestRect.top = max(Move->DestRect.top, max(0, -Dy));
+    Clipped->DestRect.right = min(Move->DestRect.right, min(Width, Width - Dx));
+    Clipped->DestRect.bottom = min(Move->DestRect.bottom, min(Height, Height - Dy));
+    if (Clipped->DestRect.left >= Clipped->DestRect.right || Clipped->DestRect.top >= Clipped->DestRect.bottom)
+        return FALSE;
+    Clipped->SourcePoint.x = Clipped->DestRect.left + Dx;
+    Clipped->SourcePoint.y = Clipped->DestRect.top + Dy;
+    ASSERT(Clipped->DestRect.left >= 0 && Clipped->DestRect.right <= Width);
+    ASSERT(Clipped->DestRect.top >= 0 && Clipped->DestRect.bottom <= Height);
+    ASSERT(Clipped->SourcePoint.x >= 0 && Clipped->SourcePoint.x + (Clipped->DestRect.right - Clipped->DestRect.left) <= Width);
+    ASSERT(Clipped->SourcePoint.y >= 0 && Clipped->SourcePoint.y + (Clipped->DestRect.bottom - Clipped->DestRect.top) <= Height);
+    return TRUE;
+}
+
 static NTSTATUS
 DxgkpPresentSourceRects(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -3794,12 +3826,15 @@ DxgkpPresentSourceRects(
     _In_ SIZE_T SourceSize,
     _In_reads_opt_(Count) const RECTL *Rects,
     _In_ ULONG Count,
+    _In_reads_opt_(MoveCount) const DWM_MOVE_RECT *Moves,
+    _In_ ULONG MoveCount,
     _In_ PCSTR TraceReason)
 {
     DXGKARG_PRESENT_DISPLAYONLY PresentArgs;
     DXGKRNL_SHARED_SURFACE_SNAPSHOT SharedSurface;
     RECT DirtyRects[DXGK_DIRTY_RECT_SLOTS];
-    ULONG DirtyCount = 0;
+    D3DKMT_MOVE_RECT MoveRects[DWM_PRESENT_MAX_MOVES];
+    ULONG DirtyCount = 0, MoveRectCount = 0;
     ULONG i;
     ULONGLONG Start100ns;
     ULONGLONG ElapsedUs;
@@ -3915,14 +3950,22 @@ DxgkpPresentSourceRects(
         goto Cleanup;
     }
 
+    ASSERT(MoveCount <= DWM_PRESENT_MAX_MOVES);
+    for (i = 0; Moves != NULL && Adapter->MiniportContext->UseDodLayout && i < min(MoveCount, DWM_PRESENT_MAX_MOVES); i++)
+    {
+        if (DxgkpClipMove(&Moves[i], (LONG)SharedSurface.CommittedWidth, (LONG)SharedSurface.CommittedHeight,
+                          &MoveRects[MoveRectCount]))
+            MoveRectCount++;
+    }
+
     RtlZeroMemory(&PresentArgs, sizeof(PresentArgs));
     PresentArgs.VidPnSourceId = 0;
     PresentArgs.pSource       = SharedSurface.ShadowFb;
     PresentArgs.BytesPerPixel = 4;
     PresentArgs.Pitch         = ShadowPitch;
     PresentArgs.Flags.Value   = 0;
-    PresentArgs.NumMoves      = 0;
-    PresentArgs.pMoves        = NULL;
+    PresentArgs.NumMoves      = MoveRectCount;
+    PresentArgs.pMoves        = MoveRectCount != 0 ? MoveRects : NULL;
     PresentArgs.NumDirtyRects = DirtyCount;
     PresentArgs.pDirtyRect    = DirtyRects;
     PresentArgs.pfnPresentDisplayOnlyProgress = NULL;
@@ -3940,6 +3983,8 @@ DxgkpPresentSourceRects(
     }
     else if (Status == STATUS_NOT_SUPPORTED)
     {
+        PresentArgs.NumMoves = 0;
+        PresentArgs.pMoves = NULL;
         Status = DxgkpPresentDisplayOnlyToSharedPrimary(
                      Adapter,
                      &SharedSurface,
@@ -4041,7 +4086,7 @@ DxgkDisplayPresentBootScreen(
     Rect.top = 0;
     Rect.right = (LONG)Adapter->CommittedWidth;
     Rect.bottom = (LONG)Adapter->CommittedHeight;
-    Status = DxgkpPresentSourceRects(Adapter, Pixels, Pitch, Size, &Rect, 1, "boot");
+    Status = DxgkpPresentSourceRects(Adapter, Pixels, Pitch, Size, &Rect, 1, NULL, 0, "boot");
     DXGKRNL_TRACE("DxgkDisplayPresentBootScreen: adapter %p %lux%lu status 0x%08lX\n",
                   Adapter, Adapter->CommittedWidth, Adapter->CommittedHeight, Status);
     ExFreePoolWithTag(Pixels, TAG_DXGK_PRESENT);
@@ -4060,6 +4105,8 @@ DxgkpPresentShadowFbRects(
                                    0,
                                    Rects,
                                    Count,
+                                   NULL,
+                                   0,
                                    TraceReason);
 }
 
@@ -4989,6 +5036,8 @@ DxgkpDisplayDispatch(
             ULONG RectCount;
             ULONG SourcePitch;
             ULONG SourceSize;
+            ULONG MoveCount;
+            DWM_MOVE_RECT Moves[DWM_PRESENT_MAX_MOVES];
             PVOID Source;
 
             HeaderSize = FIELD_OFFSET(DXGK_PRESENT_DIRTY_RECTS_INPUT, Rects);
@@ -5029,7 +5078,9 @@ DxgkpDisplayDispatch(
                 if (Input->StructSize != RequiredSize ||
                     Stack->Parameters.DeviceIoControl.InputBufferLength !=
                         RequiredSize ||
-                    (Input->Flags & ~DXGK_PRESENT_DIRTY_FLUSH) != 0)
+                    (Input->Flags & ~DXGK_PRESENT_DIRTY_FLUSH) != 0 ||
+                    Input->MoveCount > DWM_PRESENT_MAX_MOVES ||
+                    (Input->MoveCount != 0 && !(Input->Flags & DXGK_PRESENT_DIRTY_FLUSH)))
                 {
                     Status = STATUS_INVALID_PARAMETER;
                     break;
@@ -5040,6 +5091,8 @@ DxgkpDisplayDispatch(
                 SourceSize = Input->SourceSize;
                 Source = (PVOID)Input->Source;
                 DirtyRects = Input->Rects;
+                MoveCount = Input->MoveCount;
+                RtlCopyMemory(Moves, Input->Moves, MoveCount * sizeof(Moves[0]));
             }
 
             /* The source reaches DxgkDdiPresentDisplayOnly, whose pSource is kernel memory. */
@@ -5075,6 +5128,8 @@ DxgkpDisplayDispatch(
                                                  SourceSize,
                                                  DirtyRects,
                                                  RectCount,
+                                                 Moves,
+                                                 MoveCount,
                                                  "cdd");
                 if (!NT_SUCCESS(Status))
                 {

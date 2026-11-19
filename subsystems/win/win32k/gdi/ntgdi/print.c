@@ -270,6 +270,8 @@ NtGdiExtEscape(
          Input.Height = Source->SurfObj.sizlBitmap.cy;
          Input.Pitch = Source->SurfObj.lDelta;
          Input.Rect = Request->Rect;
+         Input.MoveCount = min(Request->MoveCount, DWM_PRESENT_MAX_MOVES);
+         RtlCopyMemory(Input.Moves, Request->Moves, Input.MoveCount * sizeof(Input.Moves[0]));
          Result = ppdev->DriverFunctions.Escape(&psurf->SurfObj,
                      CDD_ESCAPE_PRESENT_SOURCE, sizeof(Input), &Input, 0, NULL);
       }
