@@ -60,6 +60,7 @@ CDeviceView::CDeviceView(
     m_ShowHidden(false),
     m_RefreshRunning(FALSE),
     m_RefreshRerun(FALSE),
+    m_ScanHardware(FALSE),
     m_RootNode(NULL)
 {
     ZeroMemory(&m_ImageListData, sizeof(SP_CLASSIMAGELIST_DATA));
@@ -286,6 +287,7 @@ CDeviceView::OnAction(
 
         case IDM_SCAN_HARDWARE:
         {
+            InterlockedExchange(&m_ScanHardware, TRUE);
             Refresh(GetCurrentView(),
                     true,
                     true);
@@ -418,6 +420,7 @@ unsigned int __stdcall CDeviceView::RefreshThread(void *Param)
 {
     RefreshThreadData *ThreadData = (RefreshThreadData *)Param;
     CDeviceView *This = ThreadData->This;
+    DEVINST Root;
 
     // Get a copy of the currently selected node
     CNode *LastSelectedNode = This->GetSelectedNode();
@@ -426,18 +429,15 @@ unsigned int __stdcall CDeviceView::RefreshThread(void *Param)
     // Empty the treeview
     This->EmptyDeviceView();
 
-    // Reenumerate hardware before refreshing the device tree.
+    if (InterlockedExchange(&This->m_ScanHardware, FALSE) &&
+        CM_Locate_DevNodeW(&Root, NULL, CM_LOCATE_DEVNODE_NORMAL) == CR_SUCCESS)
+    {
+        CM_Reenumerate_DevNode(Root, CM_REENUMERATE_SYNCHRONOUS);
+    }
+
+    // Refresh the devices only if requested
     if (ThreadData->ScanForChanges)
     {
-        DEVINST Root;
-        CONFIGRET cr;
-
-        cr = CM_Locate_DevNodeW(&Root, NULL, CM_LOCATE_DEVNODE_NORMAL);
-        if (cr == CR_SUCCESS)
-        {
-            cr = CM_Reenumerate_DevNode(Root, CM_REENUMERATE_SYNCHRONOUS);
-        }
-
         This->RefreshDeviceList();
     }
 
