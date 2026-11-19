@@ -209,6 +209,16 @@ MsfsWrite(PDEVICE_OBJECT DeviceObject,
     }
 
     Length = IoStack->Parameters.Write.Length;
+    if (Fcb->MaxMessageSize != 0 && Length > Fcb->MaxMessageSize)
+    {
+        Irp->IoStatus.Status = STATUS_INVALID_PARAMETER;
+        Irp->IoStatus.Information = 0;
+
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+
+        return STATUS_INVALID_PARAMETER;
+    }
+
     if (Length != 0)
     {
         Buffer = MmGetSystemAddressForMdlSafe(Irp->MdlAddress, NormalPagePriority);
