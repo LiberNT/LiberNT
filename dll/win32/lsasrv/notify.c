@@ -46,7 +46,6 @@ LsapGetNotificationEntry(
         CurrentNotification = CONTAINING_RECORD(NotificationEntry, LSA_NOTIFICATION_ENTRY, Entry);
 
         if ((CurrentNotification->ClientId.UniqueProcess == pRequestMsg->h.ClientId.UniqueProcess) &&
-            (CurrentNotification->ClientId.UniqueThread == pRequestMsg->h.ClientId.UniqueThread) &&
             (CurrentNotification->InformationClass == pRequestMsg->PolicyChangeNotify.Request.InformationClass) &&
             (CurrentNotification->EventHandle == pRequestMsg->PolicyChangeNotify.Request.NotificationEventHandle))
             return CurrentNotification;
@@ -64,6 +63,8 @@ LsapAddNotification(
     PLSA_API_MSG pRequestMsg)
 {
     PLSA_NOTIFICATION_ENTRY pEntry;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    CLIENT_ID ClientId;
     HANDLE hProcess = NULL;
     NTSTATUS Status = STATUS_SUCCESS;
 
@@ -85,10 +86,17 @@ LsapAddNotification(
     pEntry->ClientId = pRequestMsg->h.ClientId;
 
     /* Open the client process */
+    InitializeObjectAttributes(&ObjectAttributes,
+                               NULL,
+                               0,
+                               NULL,
+                               NULL);
+    ClientId.UniqueProcess = pEntry->ClientId.UniqueProcess;
+    ClientId.UniqueThread = NULL;
     Status = NtOpenProcess(&hProcess,
                            PROCESS_DUP_HANDLE,
-                           NULL,
-                           pEntry->ClientId.UniqueProcess);
+                           &ObjectAttributes,
+                           &ClientId);
     if (!NT_SUCCESS(Status))
     {
         ERR("NtOpenProcess() failed (Status 0x%08lx)\n", Status);
