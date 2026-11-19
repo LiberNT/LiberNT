@@ -128,6 +128,8 @@ typedef struct DESKTOP_CONTEXT
     DispServerContext *Disp;
     RDP_GFX *Gfx;
     BOOL GfxTried, Deferred;
+    FRAME_MOVE Moves[RDPVDD_FRAME_MAX_MOVES];
+    UINT32 MoveCount;
     UINT32 DispChannelId;
     volatile LONG RequestedSize;
 } DESKTOP_CONTEXT;
@@ -248,6 +250,7 @@ static void FreeDesktopCapture(DESKTOP_CONTEXT *ctx)
     ctx->OldBitmap = NULL; ctx->Bitmap = NULL;
     ctx->MemoryDC = ctx->ScreenDC = NULL;
     ctx->Previous = ctx->Pixels = ctx->Frame = ctx->TileMask = NULL;
+    ctx->MoveCount = 0;
 }
 
 static NTSTATUS FrameEscape(D3DKMT_HANDLE adapter, RDPVDD_FRAME_ESCAPE *request)
@@ -1150,10 +1153,61 @@ static BOOL TileChanged(DESKTOP_CONTEXT *ctx, int x, int y, int width, int heigh
     return FALSE;
 }
 
+static BOOL ComposeMove(DESKTOP_CONTEXT *ctx, const FRAME_MOVE *move)
+{
+    UINT32 i;
+    RECT source, overlap;
+    SetRect(&source, move->SourceLeft, move->SourceTop, move->SourceLeft + move->Dest.right - move->Dest.left,
+            move->SourceTop + move->Dest.bottom - move->Dest.top);
+    for (i = ctx->MoveCount; i-- > 0;)
+    {
+        FRAME_MOVE *earlier = &ctx->Moves[i];
+        if (!IntersectRect(&overlap, &source, &earlier->Dest)) continue;
+        earlier->SourceLeft += overlap.left - earlier->Dest.left;
+        earlier->SourceTop += overlap.top - earlier->Dest.top;
+        earlier->Dest = overlap;
+        OffsetRect(&earlier->Dest, move->Dest.left - move->SourceLeft, move->Dest.top - move->SourceTop);
+        if (!FrameMoveClip(earlier, ctx->Width, ctx->Height))
+            memmove(earlier, earlier + 1, (--ctx->MoveCount - i) * sizeof(*earlier));
+        return TRUE;
+    }
+    return FALSE;
+}
+
+static void QueueMoves(DESKTOP_CONTEXT *ctx, const RDPVDD_FRAME_ESCAPE *frame)
+{
+    UINT32 i;
+    for (i = 0; i < frame->MoveCount && i < RDPVDD_FRAME_MAX_MOVES; ++i)
+    {
+        FRAME_MOVE move;
+        move.SourceLeft = frame->Moves[i].SourcePoint.x;
+        move.SourceTop = frame->Moves[i].SourcePoint.y;
+        move.Dest = frame->Moves[i].DestRect;
+        if (!FrameMoveClip(&move, ctx->Width, ctx->Height) || ComposeMove(ctx, &move)) continue;
+        if (ctx->MoveCount == RDPVDD_FRAME_MAX_MOVES) memmove(ctx->Moves, ctx->Moves + 1, --ctx->MoveCount * sizeof(move));
+        ctx->Moves[ctx->MoveCount++] = move;
+    }
+}
+
+static UINT32 ApplyMoves(DESKTOP_CONTEXT *ctx)
+{
+    UINT32 i, applied = 0;
+    for (i = 0; i < ctx->MoveCount; ++i)
+    {
+        const FRAME_MOVE *move = &ctx->Moves[i];
+        if (!FrameMoveMatches(ctx->Previous, ctx->Pixels, (UINT32)ctx->Width * 4, move)) continue;
+        FrameMoveApply(ctx->Previous, (UINT32)ctx->Width * 4, move);
+        MarkTiles(ctx, &move->Dest);
+        ctx->Moves[applied++] = *move;
+    }
+    ctx->MoveCount = 0;
+    return applied;
+}
+
 static BOOL SendDesktop(DESKTOP_CONTEXT *ctx, BOOL masked)
 {
     int x, y, row, width, height;
-    UINT32 count = 0;
+    UINT32 count = 0, moves = 0;
     BITMAP_DATA *rectangle;
     BOOL gfx = GfxActive(ctx->Gfx);
     size_t length = 0, limit = freerdp_settings_get_uint32(ctx->rdp.settings, FreeRDP_MultifragMaxRequestSize);
@@ -1166,7 +1220,9 @@ static BOOL SendDesktop(DESKTOP_CONTEXT *ctx, BOOL masked)
         }
         ctx->Deferred = !GfxFrameAllowed(ctx->Gfx);
         if (ctx->Deferred) return TRUE;
+        if (!ctx->Refresh) moves = ApplyMoves(ctx);
     }
+    ctx->MoveCount = 0;
     for (y = 0; y < ctx->Height; y += TILE_HEIGHT)
         for (x = 0; x < ctx->Width; x += TILE_WIDTH)
         {
@@ -1210,8 +1266,9 @@ static BOOL SendDesktop(DESKTOP_CONTEXT *ctx, BOOL masked)
         }
     if (gfx)
     {
-        if (!GfxSendFrame(ctx->Gfx, ctx->Pixels, (UINT32)ctx->Width * 4, ctx->GfxTiles, count)) return FALSE;
-        ctx->Updates += count;
+        if (!GfxSendFrame(ctx->Gfx, ctx->Pixels, (UINT32)ctx->Width * 4, ctx->Moves, moves, ctx->GfxTiles, count))
+            return FALSE;
+        ctx->Updates += count + moves;
     }
     else if (!SendTiles(ctx, &count, &length)) return FALSE;
     ctx->Refresh = FALSE;
@@ -1292,6 +1349,7 @@ static BOOL Capture(DESKTOP_CONTEXT *ctx)
     if (!UpdatePointer(ctx)) return FALSE;
     if (!frame.RectCount && !ctx->Refresh && !ctx->Deferred) return TRUE;
     for (i = 0; i < frame.RectCount; ++i) CopyFrameRect(ctx, &frame.Rects[i]);
+    QueueMoves(ctx, &frame);
     return SendDesktop(ctx, TRUE);
 }
 
