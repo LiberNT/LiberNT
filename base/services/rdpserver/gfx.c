@@ -461,15 +461,22 @@ static BOOL SendTile(RDP_GFX *gfx, const BYTE *pixels, UINT32 stride, const GFX_
     UINT32 color;
     UINT64 key;
     UINT16 slot;
-    BOOL sent;
-    if (TileSolid(pixels, stride, tile, &color)) return SendSolidTile(gfx, color, tile);
-    key = TileKey(pixels, stride, tile);
+    BOOL sent, partial;
+    GFX_TILE whole;
+    whole.Left = (UINT16)(tile->Left - tile->Left % GFX_TILE_SIZE);
+    whole.Top = (UINT16)(tile->Top - tile->Top % GFX_TILE_SIZE);
+    whole.Width = (UINT16)min(GFX_TILE_SIZE, gfx->Width - whole.Left);
+    whole.Height = (UINT16)min(GFX_TILE_SIZE, gfx->Height - whole.Top);
+    assert(tile->Left + tile->Width <= whole.Left + whole.Width && tile->Top + tile->Height <= whole.Top + whole.Height);
+    partial = tile->Width != whole.Width || tile->Height != whole.Height;
+    key = TileKey(pixels, stride, &whole);
     slot = CacheFind(gfx, key);
-    if (slot) return SendCachedTile(gfx, slot, tile);
+    if (slot) return SendCachedTile(gfx, slot, &whole);
+    if (TileSolid(pixels, stride, tile, &color)) return SendSolidTile(gfx, color, tile);
     if (!SendClearTile(gfx, pixels, stride, tile, &sent)) return FALSE;
-    if (sent) return CacheStore(gfx, key, tile);
+    if (sent) return partial || CacheStore(gfx, key, &whole);
     assert(*pending < gfx->PendingCapacity);
-    gfx->Pending[*pending] = *tile;
+    gfx->Pending[*pending] = whole;
     gfx->PendingKeys[(*pending)++] = key;
     return TRUE;
 }
