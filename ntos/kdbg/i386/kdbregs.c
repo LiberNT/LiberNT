@@ -248,4 +248,17 @@ KdbpArchTranslateStep(
     return KdbStepNotHit;
 }
 
+BOOLEAN
+NTAPI
+KdbpArchIsBreakInstruction(
+    _In_ ULONG_PTR Address)
+{
+    UCHAR Byte;
+
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&Byte, (PVOID)Address, sizeof(Byte))))
+        return TRUE;
+
+    return Byte == 0xCC;
+}
+
 /* EOF */

@@ -485,7 +485,7 @@ KdbpStartStepping(
 
     if (!NT_SUCCESS(KdbpArchSetSingleStep(KdbCurrentTrapFrame, TRUE)))
     {
-        KdbPuts("Stepping is not supported on this processor\n");
+        KdbPuts("The next instruction cannot be stepped to\n");
         return TRUE;
     }
 

@@ -229,3 +229,6 @@ KiRiscvRestoreTrapFrame:
     sb zero, PcTrapActive(sp)
     mv sp, t0
     tail KiRiscvTrapStop
+
+    .global KiRiscvTrapEntryEnd
+KiRiscvTrapEntryEnd:

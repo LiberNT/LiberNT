@@ -303,4 +303,21 @@ KdbpArchTranslateStep(
     return KdbStepNotHit;
 }
 
+/* BRK #imm16 in the A64 encoding */
+#define KDB_ARM64_BRK_MASK  0xFFE0001FUL
+#define KDB_ARM64_BRK       0xD4200000UL
+
+BOOLEAN
+NTAPI
+KdbpArchIsBreakInstruction(
+    _In_ ULONG_PTR Address)
+{
+    ULONG Instruction;
+
+    if (!NT_SUCCESS(KdbpSafeReadMemory(&Instruction, (PVOID)Address, sizeof(Instruction))))
+        return TRUE;
+
+    return (Instruction & KDB_ARM64_BRK_MASK) == KDB_ARM64_BRK;
+}
+
 /* EOF */

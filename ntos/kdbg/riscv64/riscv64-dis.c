@@ -11,11 +11,21 @@
 #define NDEBUG
 #include <debug.h>
 
+#define RISCV_OPCODE_OP_IMM    0x13
+#define RISCV_OPCODE_AUIPC     0x17
+#define RISCV_OPCODE_OP_IMM_32 0x1B
+#define RISCV_OPCODE_AMO       0x2F
+#define RISCV_OPCODE_OP        0x33
+#define RISCV_OPCODE_LUI       0x37
+#define RISCV_OPCODE_OP_32     0x3B
 #define RISCV_OPCODE_BRANCH    0x63
 #define RISCV_OPCODE_JALR      0x67
 #define RISCV_OPCODE_JAL       0x6F
 #define RISCV_OPCODE_SYSTEM    0x73
 #define RISCV_INST_SRET        0x10200073UL
+#define RISCV_AMO_LR           0x02
+#define RISCV_AMO_SC           0x03
+#define RISCV_ATOMIC_SEQUENCE_MAX 16
 
 static LONG64
 KdbpRiscvSignExtend(ULONG64 Value, ULONG Bits)
@@ -118,24 +128,20 @@ KdbpRiscvBranchTaken(ULONG Funct3, ULONG64 Rs1, ULONG64 Rs2)
  * \retval FALSE  The instruction cannot be stepped over (unreadable or
  *                trap return) and *Reason names why.
  */
+static
 BOOLEAN
-KdbpRiscvGetNextPc(
-    IN PCONTEXT Context,
-    OUT PULONG_PTR NextPc,
-    OUT PCSTR *Reason)
+KdbpRiscvNextPcOf(
+    _In_ PCONTEXT Context,
+    _In_ ULONG_PTR Pc,
+    _In_ ULONG Inst,
+    _In_ LONG Length,
+    _Out_ PULONG_PTR NextPc,
+    _Out_ PCSTR *Reason)
 {
-    ULONG_PTR Pc = (ULONG_PTR)Context->Pc;
-    ULONG Inst, Opcode, Funct3, Rs1, Rs2;
-    LONG Length;
+    ULONG Opcode, Funct3, Rs1, Rs2;
 
-    *NextPc = 0;
+    ASSERT((Length == 2) || (Length == 4));
     *Reason = NULL;
-    if (!KdbpRiscvReadInstruction(Pc, &Inst, &Length))
-    {
-        *Reason = "instruction is not readable";
-        return FALSE;
-    }
-
     *NextPc = Pc + Length;
     if (Length == 2)
     {
@@ -196,6 +202,231 @@ KdbpRiscvGetNextPc(
     }
 }
 
+static
+BOOLEAN
+KdbpRiscvIsReservation(
+    _In_ ULONG Inst,
+    _In_ LONG Length,
+    _In_ ULONG Funct5)
+{
+    ULONG Width = (Inst >> 12) & 7;
+
+    return (Length == 4) && ((Inst & 0x7F) == RISCV_OPCODE_AMO) && ((Inst >> 27) == Funct5) &&
+           ((Width == 2) || (Width == 3));
+}
+
+static
+BOOLEAN
+KdbpRiscvIsPlainInteger(
+    _In_ ULONG Inst,
+    _In_ LONG Length)
+{
+    ULONG Funct3;
+
+    if (Length == 2)
+    {
+        Funct3 = (Inst >> 13) & 7;
+        switch (Inst & 3)
+        {
+            case 0:
+                return Funct3 == 0;
+
+            case 1:
+                return Funct3 <= 4;
+
+            default:
+                return (Funct3 == 0) || ((Funct3 == 4) && (((Inst >> 2) & 31) != 0));
+        }
+    }
+
+    switch (Inst & 0x7F)
+    {
+        case RISCV_OPCODE_OP_IMM:
+        case RISCV_OPCODE_OP_IMM_32:
+        case RISCV_OPCODE_OP:
+        case RISCV_OPCODE_OP_32:
+        case RISCV_OPCODE_LUI:
+            return TRUE;
+
+        default:
+            return FALSE;
+    }
+}
+
+static
+BOOLEAN
+KdbpRiscvConditionalTarget(
+    _In_ ULONG_PTR Pc,
+    _In_ ULONG Inst,
+    _In_ LONG Length,
+    _Out_ PULONG_PTR Target)
+{
+    *Target = 0;
+    if (Length == 2)
+    {
+        if (((Inst & 3) != 1) || (((Inst >> 13) & 7) < 6))
+            return FALSE;
+        *Target = Pc + KdbpRiscvCbOffset(Inst);
+        return TRUE;
+    }
+
+    if ((Inst & 0x7F) != RISCV_OPCODE_BRANCH)
+        return FALSE;
+    *Target = Pc + KdbpRiscvBranchOffset(Inst);
+    return TRUE;
+}
+
+static
+BOOLEAN
+KdbpRiscvAtomicSequenceEnd(
+    _In_ ULONG_PTR Start,
+    _Out_ PULONG_PTR End)
+{
+    ULONG_PTR Exits[RISCV_ATOMIC_SEQUENCE_MAX];
+    ULONG_PTR Pc = Start;
+    ULONG_PTR Target;
+    ULONG ExitCount = 0;
+    ULONG Count, Index;
+    ULONG Inst;
+    LONG Length;
+
+    *End = 0;
+    if (!KdbpRiscvReadInstruction(Pc, &Inst, &Length) || !KdbpRiscvIsReservation(Inst, Length, RISCV_AMO_LR))
+        return FALSE;
+
+    for (Count = 1; Count < RISCV_ATOMIC_SEQUENCE_MAX; Count++)
+    {
+        Pc += Length;
+        if (!KdbpRiscvReadInstruction(Pc, &Inst, &Length))
+            return FALSE;
+
+        if (KdbpRiscvIsReservation(Inst, Length, RISCV_AMO_SC))
+        {
+            Pc += Length;
+            if (!KdbpRiscvReadInstruction(Pc, &Inst, &Length) ||
+                !KdbpRiscvConditionalTarget(Pc, Inst, Length, &Target) ||
+                (Target != Start))
+            {
+                return FALSE;
+            }
+
+            for (Index = 0; Index < ExitCount; Index++)
+            {
+                if (Exits[Index] != Pc + Length)
+                    return FALSE;
+            }
+
+            *End = Pc + Length;
+            return TRUE;
+        }
+
+        if (KdbpRiscvConditionalTarget(Pc, Inst, Length, &Target))
+        {
+            if (Target <= Pc)
+                return FALSE;
+            ASSERT(ExitCount < RTL_NUMBER_OF(Exits));
+            Exits[ExitCount++] = Target;
+            continue;
+        }
+
+        if (!KdbpRiscvIsPlainInteger(Inst, Length))
+            return FALSE;
+    }
+
+    return FALSE;
+}
+
+BOOLEAN
+KdbpRiscvGetNextPc(
+    IN PCONTEXT Context,
+    OUT PULONG_PTR NextPc,
+    OUT PCSTR *Reason)
+{
+    ULONG_PTR Pc = (ULONG_PTR)Context->Pc;
+    ULONG_PTR End;
+    ULONG Inst;
+    ULONG Index;
+    LONG Length;
+
+    *NextPc = 0;
+    *Reason = NULL;
+    if (!KdbpRiscvReadInstruction(Pc, &Inst, &Length))
+    {
+        *Reason = "instruction is not readable";
+        return FALSE;
+    }
+
+    /* A breakpoint between a load-reserved and its store-conditional fails the store every time: the sequence is one step */
+    if (KdbpRiscvAtomicSequenceEnd(Pc, &End))
+    {
+        *NextPc = End;
+        return TRUE;
+    }
+
+    if (!KdbpRiscvNextPcOf(Context, Pc, Inst, Length, NextPc, Reason))
+        return FALSE;
+
+    for (Index = 0; (Index < RISCV_ATOMIC_SEQUENCE_MAX) && KdbpRiscvAtomicSequenceEnd(*NextPc, &End); Index++)
+        *NextPc = End;
+    return TRUE;
+}
+
+BOOLEAN
+KdbpRiscvEmulateRelative(
+    _Inout_ PCONTEXT Context,
+    _In_ ULONG Inst,
+    _In_ LONG Length)
+{
+    ULONG_PTR Pc = (ULONG_PTR)Context->Pc;
+    ULONG_PTR NextPc;
+    PCSTR Reason;
+    ULONG Link = 0;
+    ULONG Rd = (Inst >> 7) & 31;
+    ULONG Funct3;
+
+    ASSERT((Length == 2) || (Length == 4));
+    if (Length == 2)
+    {
+        Funct3 = (Inst >> 13) & 7;
+        if (((Inst & 3) == 1) && (Funct3 >= 5))
+            Link = 0;
+        else if (((Inst & 3) == 2) && (Funct3 == 4) && (((Inst >> 2) & 31) == 0) && (Rd != 0))
+            Link = ((Inst >> 12) & 1) ? 1 : 0;
+        else
+            return FALSE;
+    }
+    else
+    {
+        switch (Inst & 0x7F)
+        {
+            case RISCV_OPCODE_AUIPC:
+                if (Rd != 0)
+                    Context->X[Rd] = Pc + (ULONG64)KdbpRiscvSignExtend(Inst & 0xFFFFF000UL, 32);
+                Context->Pc = Pc + 4;
+                return TRUE;
+
+            case RISCV_OPCODE_JAL:
+            case RISCV_OPCODE_JALR:
+                Link = Rd;
+                break;
+
+            case RISCV_OPCODE_BRANCH:
+                break;
+
+            default:
+                return FALSE;
+        }
+    }
+
+    if (!KdbpRiscvNextPcOf(Context, Pc, Inst, Length, &NextPc, &Reason))
+        return FALSE;
+
+    if (Link != 0)
+        Context->X[Link] = Pc + Length;
+    Context->Pc = NextPc;
+    return TRUE;
+}
+
 LONG
 KdbpGetInstLength(IN ULONG_PTR Address)
 {
@@ -246,6 +477,98 @@ KdbpDisassemble(IN ULONG_PTR Address, IN ULONG IntelSyntax)
         KdbSymPrintAddress((PVOID)(ULONG_PTR)Decoded.Address, NULL);
     }
     return Length;
+}
+
+static
+BOOLEAN
+KdbpRiscvStepSelfTest(VOID)
+{
+    typedef struct _KDB_RISCV_EMULATE_TEST
+    {
+        ULONG Instruction;
+        LONG Length;
+        ULONG64 Pc;
+        ULONG64 A0;
+        ULONG64 A1;
+        ULONG64 A4;
+        ULONG64 NextPc;
+        ULONG Link;
+        ULONG64 LinkValue;
+    } KDB_RISCV_EMULATE_TEST;
+    static const KDB_RISCV_EMULATE_TEST Tests[] =
+    {
+        { 0x010000efUL, 4, 0x1000ULL, 0, 0, 0, 0x1010ULL, 1, 0x1004ULL },
+        { 0x00850567UL, 4, 0x2000ULL, 0x3001ULL, 0, 0, 0x3008ULL, 10, 0x2004ULL },
+        { 0x00b50463UL, 4, 0x1104eULL, 5, 5, 0, 0x11056ULL, 0, 0 },
+        { 0x00b50463UL, 4, 0x1104eULL, 5, 6, 0, 0x11052ULL, 0, 0 },
+        { 0xa009UL, 2, 0x1101cULL, 0, 0, 0, 0x1101eULL, 0, 0 },
+        { 0x9702UL, 2, 0x13a90ULL, 0, 0, 0x5001ULL, 0x5000ULL, 1, 0x13a92ULL },
+        { 0x8502UL, 2, 0x16b34ULL, 0x7000ULL, 0, 0, 0x7000ULL, 0, 0 },
+        { 0xc519UL, 2, 0x11046ULL, 0, 0, 0, 0x11054ULL, 0, 0 },
+        { 0xc519UL, 2, 0x11046ULL, 1, 0, 0, 0x11048ULL, 0, 0 },
+        { 0x00000097UL, 4, 0x11012ULL, 0, 0, 0, 0x11016ULL, 1, 0x11012ULL },
+        { 0x80000517UL, 4, 0x100000016ULL, 0, 0, 0, 0x10000001aULL, 10, 0x80000016ULL },
+    };
+    /* addi; lr.w; bne to the end; sc.w; bnez back to the lr.w; nop */
+    static const USHORT Sequence[] = { 0x0685, 0x252f, 0x1606, 0x1563, 0x00b5, 0x25af, 0x1ae6, 0xf9f5, 0x0001 };
+    /* lr.w; ld; sc.w; bnez back: a load inside is no sequence */
+    static const USHORT NotSequence[] = { 0x252f, 0x1606, 0x611c, 0x25af, 0x1ae6, 0xf9fd, 0x0001 };
+    const ULONG64 Sentinel = 0x5A5A5A5A5A5A5A5AULL;
+    CONTEXT Context;
+    ULONG_PTR NextPc;
+    PCSTR Reason;
+    BOOLEAN Passed = TRUE;
+    ULONG Index;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(Tests); Index++)
+    {
+        RtlZeroMemory(&Context, sizeof(Context));
+        Context.Pc = Tests[Index].Pc;
+        Context.Ra = Sentinel;
+        Context.A0 = Tests[Index].A0;
+        Context.A1 = Tests[Index].A1;
+        Context.A4 = Tests[Index].A4;
+        if (!KdbpRiscvEmulateRelative(&Context, Tests[Index].Instruction, Tests[Index].Length) ||
+            (Context.Pc != Tests[Index].NextPc) ||
+            ((Tests[Index].Link != 0) && (Context.X[Tests[Index].Link] != Tests[Index].LinkValue)) ||
+            ((Tests[Index].Link != 1) && (Context.Ra != Sentinel)))
+        {
+            KdbpPrint("riscv64 step: %08lx at %I64x runs to %I64x, expected %I64x\n",
+                      Tests[Index].Instruction, Tests[Index].Pc, Context.Pc, Tests[Index].NextPc);
+            Passed = FALSE;
+        }
+    }
+
+    RtlZeroMemory(&Context, sizeof(Context));
+    Context.Pc = 0x1251cULL;
+    if (KdbpRiscvEmulateRelative(&Context, 0x00c505b3UL, 4) || (Context.Pc != 0x1251cULL))
+        Passed = FALSE;
+
+    RtlZeroMemory(&Context, sizeof(Context));
+    Context.Pc = (ULONG_PTR)&Sequence[1];
+    if (!KdbpRiscvGetNextPc(&Context, &NextPc, &Reason) || (NextPc != (ULONG_PTR)&Sequence[8]))
+        Passed = FALSE;
+
+    Context.Pc = (ULONG_PTR)&Sequence[0];
+    if (!KdbpRiscvGetNextPc(&Context, &NextPc, &Reason) || (NextPc != (ULONG_PTR)&Sequence[8]))
+        Passed = FALSE;
+
+    Context.Pc = (ULONG_PTR)&Sequence[3];
+    Context.A0 = 1;
+    if (!KdbpRiscvGetNextPc(&Context, &NextPc, &Reason) || (NextPc != (ULONG_PTR)&Sequence[8]))
+        Passed = FALSE;
+
+    Context.A0 = 0;
+    if (!KdbpRiscvGetNextPc(&Context, &NextPc, &Reason) || (NextPc != (ULONG_PTR)&Sequence[5]))
+        Passed = FALSE;
+
+    Context.Pc = (ULONG_PTR)&NotSequence[0];
+    if (!KdbpRiscvGetNextPc(&Context, &NextPc, &Reason) || (NextPc != (ULONG_PTR)&NotSequence[2]))
+        Passed = FALSE;
+
+    if (!Passed)
+        KdbpPrint("riscv64 step: the emulation or the atomic sequence cases failed\n");
+    return Passed;
 }
 
 BOOLEAN
@@ -485,6 +808,9 @@ KdbpDisassemblerSelfTest(VOID)
 
     if (KdbpRiscvJalOffset(0x0100006F) != 16 || KdbpRiscvBranchOffset(0xFE208CE3) != -8 ||
         KdbpRiscvCjOffset(0xBFFD) != -2 || KdbpRiscvCbOffset(0xC011) != 4)
+        Passed = FALSE;
+
+    if (!KdbpRiscvStepSelfTest())
         Passed = FALSE;
     return Passed;
 }
