@@ -268,9 +268,6 @@
 @ stub NetpAddTlnFtinfoEntry
 @ stub NetpAllocConfigName
 @ stub NetpAllocFtinfoEntry
-@ stdcall NetpAllocStrFromWStr(wstr)
-@ stdcall NetpAllocWStrFromStr(str)
-@ stdcall NetpAllocWStrFromWStr(wstr)
 @ stub NetpApiStatusToNtStatus
 @ stub NetpAssertFailed
 @ stub NetpCleanFtinfoContext
@@ -305,7 +302,6 @@
 @ stub NetpNetBiosReset
 @ stub NetpNetBiosSend
 @ stdcall NetpNetBiosStatusToApiStatus(long)
-@ stdcall NetpNtStatusToApiStatus(long)
 @ stub NetpOpenConfigData
 @ stub NetpPackString
 @ stub NetpParmsQueryUserProperty

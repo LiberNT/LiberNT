@@ -83,25 +83,10 @@ WINAPI
 NetpAllocAnsiStrFromWStr(
     _In_ PWSTR InString);
 
-PSTR
-WINAPI
-NetpAllocStrFromWStr(
-    _In_ PWSTR InString);
-
 PWSTR
 WINAPI
 NetpAllocWStrFromAnsiStr(
     _In_ PSTR InString);
-
-PWSTR
-WINAPI
-NetpAllocWStrFromStr(
-    _In_ PSTR InString);
-
-PWSTR
-WINAPI
-NetpAllocWStrFromWStr(
-    _In_ PWSTR InString);
 
 NET_API_STATUS
 WINAPI

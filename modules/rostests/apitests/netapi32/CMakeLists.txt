@@ -2,6 +2,8 @@
 list(APPEND SOURCE
     DsRoleGetPrimaryDomainInformation.c
     NetLocalGroupAddMembers.c
+    NetQueryDisplayInformation.c
+    NetStatisticsGet.c
     NetUserEnum.c
     NetUserGetLocalGroups.c
     testlist.c)
