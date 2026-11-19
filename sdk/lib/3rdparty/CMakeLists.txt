@@ -1,5 +1,6 @@
 
 add_subdirectory(adns)
+add_subdirectory(bzip2)
 add_subdirectory(cardlib)
 add_subdirectory(fatfs)
 add_subdirectory(faudio)
