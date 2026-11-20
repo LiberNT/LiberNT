@@ -16,6 +16,7 @@ add_subdirectory(ntfs)
 add_subdirectory(ntos_cc)
 add_subdirectory(ntos_cm)
 add_subdirectory(ntos_io)
+add_subdirectory(ntos_ke)
 add_subdirectory(ntos_mm)
 add_subdirectory(ntos_po)
 add_subdirectory(ntos_ps)
@@ -684,6 +685,7 @@ list(APPEND KMTEST_SOURCE
     ntos_ps/PsTerminateWait_user.c
     ntos_cc/CcSetFileSizes_user.c
     ntos_io/IoAddDeviceUnload_user.c
+    ntos_ke/KeWaitTerminate_user.c
     ntos_io/IoFilterRequirements_user.c
     ntos_io/IoRemoveChild_user.c
     ntos_io/IoRemoveUnload_user.c
