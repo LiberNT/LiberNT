@@ -155,7 +155,7 @@ GetRegistrySettings(PGINA_CONTEXT pgContext)
 {
     HKEY hKey = NULL;
     DWORD dwValue, dwSize;
-    DWORD dwDisableCAD = 0;
+    DWORD dwDisableCAD = 0, dwSession = 0;
     LONG rc;
 
     rc = RegOpenKeyExW(HKEY_LOCAL_MACHINE,
@@ -172,6 +172,10 @@ GetRegistrySettings(PGINA_CONTEXT pgContext)
     rc = ReadRegDwordValue(hKey, L"AutoAdminLogon", &dwValue);
     if (rc == ERROR_SUCCESS)
         pgContext->bAutoAdminLogon = !!dwValue;
+    /* A session started for a remote client signs in with that client's account */
+    if (ProcessIdToSessionId(GetCurrentProcessId(), &dwSession) && WTSGetActiveConsoleSessionId() != 0 &&
+        dwSession != WTSGetActiveConsoleSessionId())
+        pgContext->bAutoAdminLogon = FALSE;
     TRACE("bAutoAdminLogon: %s\n", pgContext->bAutoAdminLogon ? "TRUE" : "FALSE");
 
     // TODO: What to do also depends whether we are on Terminal Services.
