@@ -19,7 +19,7 @@
 ##
 ## ISO image identifier names
 ISO_MANUFACTURER="LiberNT Project"  # For both the publisher and the preparer
-ISO_VOLNAME="ReactOS"               # For both the Volume ID and the Volume set ID
+ISO_VOLNAME="LiberNT"               # For both the Volume ID and the Volume set ID
 
 ## Image names of the MKISOFS and MKDISKIMG tools
 MKISOFS=mkisofs

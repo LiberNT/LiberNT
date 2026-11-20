@@ -17,7 +17,7 @@ setlocal enabledelayedexpansion
 ::
 :: ISO image identifier names
 set ISO_MANUFACTURER="LiberNT Project"& :: For both the publisher and the preparer
-set ISO_VOLNAME="ReactOS"&              :: For both the Volume ID and the Volume set ID
+set ISO_VOLNAME="LiberNT"&              :: For both the Volume ID and the Volume set ID
 
 :: Image names of the MKISOFS and MKDISKIMG tools
 set MKISOFS=MKISOFS.EXE
