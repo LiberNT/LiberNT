@@ -1,5 +1,6 @@
 
 add_executable(rdp_apitest Avc420.c ClearCodec.c ${REACTOS_SOURCE_DIR}/base/services/rdpserver/clearenc.c ControllerMode.c
+               ${REACTOS_SOURCE_DIR}/base/services/rdpserver/cookie.c Cookie.c
                ${REACTOS_SOURCE_DIR}/base/services/rdpserver/experience.c Experience.c
                ${REACTOS_SOURCE_DIR}/base/services/rdpserver/openh264.c OpenH264.c
                FrameMove.c ${REACTOS_SOURCE_DIR}/base/services/rdpserver/framemove.c GfxBatch.c RemoteDesktop.c

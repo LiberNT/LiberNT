@@ -49,6 +49,7 @@
 #include "transfer.h"
 #include "gfx.h"
 #include "experience.h"
+#include "broker.h"
 
 typedef ULONG (__cdecl *DEBUG_PRINT)(const char *, ...);
 static DEBUG_PRINT DebugPrint;
@@ -71,6 +72,7 @@ static BOOL RemoteDisplayShown;
 static RDP_EXPERIENCE_STATE Experience;
 static HANDLE RemoteConsole;
 static BOOL ControllerMode;
+static WCHAR AdoptedDisplay[MAX_DEVICE_ID_LEN];
 static volatile LONG ControllerConnected;
 static char BindAddress[64], AllowedPeer[64], Username[128], Password[256];
 #define MAX_INTERFACE_MACS 8
@@ -679,8 +681,18 @@ static UINT32 AcquireRemoteDisplay(DESKTOP_CONTEXT *ctx)
         info.pszDeviceDescription = L"LiberNT Remote Display Adapter";
         ResetEvent(RemoteDisplayReady);
         InterlockedExchange(&ConsoleTakeover, FALSE);
-        hr = SwDeviceCreate(L"RemoteDisplayEnum", L"HTREE\\ROOT\\0", &info, 0, NULL,
-                            RemoteDisplayCreated, NULL, &RemoteDisplay);
+        if (*AdoptedDisplay)
+        {
+            /* The service made this session's display before the session existed */
+            lstrcpynW(RemoteDisplayInstance, AdoptedDisplay, ARRAYSIZE(RemoteDisplayInstance));
+            SetEvent(RemoteDisplayReady);
+            hr = S_OK;
+        }
+        else
+        {
+            hr = SwDeviceCreate(L"RemoteDisplayEnum", L"HTREE\\ROOT\\0", &info, 0, NULL,
+                                RemoteDisplayCreated, NULL, &RemoteDisplay);
+        }
         if (FAILED(hr))
         {
             Log("Cannot create the remote display adapter: 0x%08lx", hr);
@@ -770,9 +782,12 @@ static void ReleaseRemoteDisplay(DESKTOP_CONTEXT *ctx)
         if (!ExperienceRestore(&Experience)) Log("Cannot restore the console's visual settings");
         RemoteDisplayShown = FALSE;
         DisconnectRemoteConsole(InterlockedExchange(&ConsoleTakeover, FALSE) != 0);
-        SwDeviceClose(RemoteDisplay);
-        RemoteDisplay = NULL;
-        Log("Remote display adapter closed");
+        if (RemoteDisplay)
+        {
+            SwDeviceClose(RemoteDisplay);
+            RemoteDisplay = NULL;
+            Log("Remote display adapter closed");
+        }
     }
     LeaveCriticalSection(&RemoteDisplayLock);
 }
@@ -1785,29 +1800,32 @@ static DWORD WINAPI ServiceControl(DWORD control, DWORD type, void *data, void *
 }
 
 /* Session 0 has no interactive desktop; serve the console session as SYSTEM. */
-static HANDLE StartSessionServer(DWORD session)
+static HANDLE StartSessionServer(DWORD session, const WCHAR *display)
 {
-    char path[MAX_PATH], command[2 * MAX_PATH + 16];
+    char path[MAX_PATH], command[3 * MAX_PATH + 32], instance[MAX_DEVICE_ID_LEN];
     HANDLE token = NULL, primary = NULL;
     STARTUPINFOA startup = {0};
     PROCESS_INFORMATION process = {0};
     BOOL started = FALSE;
     startup.cb = sizeof(startup);
     startup.lpDesktop = "winsta0\\default";
+    if (!display) *instance = 0;
+    else if (!WideCharToMultiByte(CP_UTF8, 0, display, -1, instance, sizeof(instance), NULL, NULL)) return NULL;
     if (GetModuleFileNameA(NULL, path, sizeof(path)) &&
-        snprintf(command, sizeof(command), *ServiceConfig ? "\"%s\" /session \"%s\"" : "\"%s\" /session",
-                 path, ServiceConfig) < (int)sizeof(command) &&
+        snprintf(command, sizeof(command), *ServiceConfig ? "\"%s\" %s%s%s \"%s\"" : "\"%s\" %s%s%s",
+                 path, display ? "/newsession \"" : "/session", instance, display ? "\"" : "",
+                 ServiceConfig) < (int)sizeof(command) &&
         OpenProcessToken(GetCurrentProcess(), TOKEN_DUPLICATE, &token) &&
         DuplicateTokenEx(token, TOKEN_ALL_ACCESS, NULL, SecurityImpersonation, TokenPrimary, &primary) &&
         SetTokenInformation(primary, TokenSessionId, &session, sizeof(session)))
         started = CreateProcessAsUserA(primary, path, command, NULL, NULL, FALSE, CREATE_NO_WINDOW,
                                        NULL, NULL, &startup, &process);
-    if (!started) Log("Cannot start the server in console session %lu error=%lu", session, GetLastError());
+    if (!started) Log("Cannot start the server in session %lu error=%lu", session, GetLastError());
     if (primary) CloseHandle(primary);
     if (token) CloseHandle(token);
     if (!started) return NULL;
     CloseHandle(process.hThread);
-    Log("Server started in console session %lu", session);
+    Log("Server started in %s session %lu", display ? "new" : "console", session);
     return process.hProcess;
 }
 
@@ -1843,6 +1861,23 @@ static BOOL RemoteDesktopAllowed(HKEY key)
     return !deny;
 }
 
+static BOOL BrokerAllowed(void)
+{
+    HKEY key;
+    BOOL allowed = FALSE;
+    if (!RegOpenKeyExA(HKEY_LOCAL_MACHINE, TERMINAL_SERVER_KEY, 0, KEY_QUERY_VALUE, &key))
+    {
+        allowed = RemoteDesktopAllowed(key);
+        RegCloseKey(key);
+    }
+    return allowed;
+}
+
+static HANDLE StartNewSessionServer(DWORD session, const WCHAR *display)
+{
+    return StartSessionServer(session, display);
+}
+
 static void WINAPI ServiceMain(DWORD argc, char **argv)
 {
     HANDLE server = NULL, changed, waits[2];
@@ -1863,6 +1898,12 @@ static void WINAPI ServiceMain(DWORD argc, char **argv)
     }
     waits[0] = ServiceStopEvent;
     waits[1] = changed;
+    /* The controller connects to the console session's server directly */
+    if (!ControllerEnabled(ServiceConfig) && !BrokerStart(Log, StartNewSessionServer, BrokerAllowed))
+    {
+        code = GetLastError();
+        goto done;
+    }
     ReportService(SERVICE_RUNNING, NO_ERROR);
     for (;;)
     {
@@ -1873,22 +1914,30 @@ static void WINAPI ServiceMain(DWORD argc, char **argv)
         if (server && WaitForSingleObject(server, 0) == WAIT_OBJECT_0)
         {
             GetExitCodeProcess(server, &code);
+            BrokerSetConsoleAgent(NULL, 0);
             CloseHandle(server);
             server = NULL;
             Log("Server in console session %lu exited with %lu", session, code);
             failed = code == 2;
         }
-        if (server && (!allowed || (console != session && console != 0xFFFFFFFF))) StopSessionServer(&server);
+        if (server && (!allowed || (console != session && console != 0xFFFFFFFF)))
+        {
+            BrokerSetConsoleAgent(NULL, 0);
+            StopSessionServer(&server);
+        }
         if (!server && !failed && allowed && console != 0 && console != 0xFFFFFFFF)
         {
-            server = StartSessionServer(console);
+            server = StartSessionServer(console, NULL);
             session = console;
+            BrokerSetConsoleAgent(server, session);
         }
         wait = WaitForMultipleObjects(2, waits, FALSE, 2000);
         if (wait == WAIT_OBJECT_0 || wait == WAIT_FAILED) break;
         if (wait == WAIT_OBJECT_0 + 1) armed = failed = FALSE;
     }
+    BrokerSetConsoleAgent(NULL, 0);
     if (server) StopSessionServer(&server);
+    BrokerStop();
     code = NO_ERROR;
 done:
     if (key) RegCloseKey(key);
@@ -1896,6 +1945,75 @@ done:
     if (SessionStopEvent) CloseHandle(SessionStopEvent);
     if (ServiceStopEvent) CloseHandle(ServiceStopEvent);
     ReportService(SERVICE_STOPPED, code);
+}
+
+/* The service accepts connections in session 0 and duplicates each socket into this session's server */
+static DWORD WINAPI TakeConnections(void *unused)
+{
+    SECURITY_ATTRIBUTES security = {sizeof(security), NULL, FALSE};
+    BROKER_HANDOFF message;
+    struct sockaddr_storage address;
+    WCHAR name[64];
+    DWORD session = 0, read;
+    HANDLE pipe;
+    SOCKET socket;
+    u_long nonblocking = 1;
+    int length;
+    freerdp_peer *peer;
+    (void)unused;
+    ProcessIdToSessionId(GetCurrentProcessId(), &session);
+    _snwprintf(name, ARRAYSIZE(name), BROKER_PIPE_FORMAT, session);
+    name[ARRAYSIZE(name) - 1] = 0;
+    if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(L"D:P(A;;GA;;;SY)", SDDL_REVISION_1,
+                                                              &security.lpSecurityDescriptor, NULL))
+        return 1;
+    pipe = CreateNamedPipeW(name, PIPE_ACCESS_INBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE,
+                            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT, 1, 0, sizeof(message), 0,
+                            &security);
+    LocalFree(security.lpSecurityDescriptor);
+    if (pipe == INVALID_HANDLE_VALUE)
+    {
+        Log("Cannot take connections from the service error=%lu", GetLastError());
+        SetEvent(StopEvent);
+        return 1;
+    }
+    Log("Taking connections for session %lu", session);
+    while (WaitForSingleObject(StopEvent, 0) == WAIT_TIMEOUT)
+    {
+        if (!ConnectNamedPipe(pipe, NULL) && GetLastError() != ERROR_PIPE_CONNECTED) break;
+        if (ReadFile(pipe, &message, sizeof(message), &read, NULL) && read == sizeof(message))
+        {
+            socket = WSASocketW(FROM_PROTOCOL_INFO, FROM_PROTOCOL_INFO, FROM_PROTOCOL_INFO, &message.Socket, 0,
+                                WSA_FLAG_OVERLAPPED);
+            peer = NULL;
+            length = sizeof(address);
+            if (socket != INVALID_SOCKET && !ioctlsocket(socket, FIONBIO, &nonblocking) &&
+                !getpeername(socket, (struct sockaddr *)&address, &length))
+                peer = freerdp_peer_new((int)socket);
+            if (peer && address.ss_family == AF_INET6 &&
+                IN6_IS_ADDR_V4MAPPED(&((struct sockaddr_in6 *)&address)->sin6_addr))
+            {
+                struct sockaddr_in mapped = {0};
+                mapped.sin_family = AF_INET;
+                mapped.sin_port = ((struct sockaddr_in6 *)&address)->sin6_port;
+                memcpy(&mapped.sin_addr, &((struct sockaddr_in6 *)&address)->sin6_addr.s6_addr[12], 4);
+                ZeroMemory(&address, sizeof(address));
+                memcpy(&address, &mapped, sizeof(mapped));
+            }
+            if (!peer)
+            {
+                Log("Cannot take a connection from the service error=%lu", WSAGetLastError());
+                if (socket != INVALID_SOCKET) closesocket(socket);
+            }
+            else if (!freerdp_peer_set_local_and_hostname(peer, &address) || !Accepted(NULL, peer))
+            {
+                freerdp_peer_free(peer);
+            }
+        }
+        DisconnectNamedPipe(pipe);
+    }
+    CloseHandle(pipe);
+    return 0;
 }
 
 static DWORD WINAPI WaitServiceStop(void *event)
@@ -1913,11 +2031,14 @@ int main(int argc, char **argv)
     WSADATA winsock;
     HANDLE serviceStop = NULL, thread;
     BOOL serviceMode = argc >= 2 && !_stricmp(argv[1], "/service");
-    BOOL sessionMode = argc >= 2 && !_stricmp(argv[1], "/session");
-    int first = (serviceMode || sessionMode) ? 2 : 1;
+    BOOL newSession = argc >= 3 && !_stricmp(argv[1], "/newsession");
+    BOOL sessionMode = newSession || (argc >= 2 && !_stricmp(argv[1], "/session"));
+    int first = newSession ? 3 : (serviceMode || sessionMode) ? 2 : 1;
     DebugPrint = (DEBUG_PRINT)(void *)GetProcAddress(GetModuleHandleA("ntdll.dll"), "DbgPrint");
     if (argc > first + 1 || (argc == first + 1 && !GetFullPathNameA(argv[first], sizeof(config), config, NULL)))
     { Log("Usage: rdpserver.exe [/service] [rdpserver.ini]"); return 2; }
+    if (newSession && !MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, argv[2], -1, AdoptedDisplay,
+                                           ARRAYSIZE(AdoptedDisplay))) return 2;
     if (serviceMode)
     {
         SERVICE_TABLE_ENTRYA table[] = {{(char *)SERVICE_NAME, ServiceMain}, {NULL, NULL}};
@@ -1950,7 +2071,7 @@ int main(int argc, char **argv)
     StopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (!StopEvent) return 1;
     FrameInterval = ReadFrameInterval();
-    if (sessionMode)
+    if (sessionMode && !newSession)
     {
         serviceStop = OpenEventA(SYNCHRONIZE, FALSE, SERVICE_STOP_EVENT);
         thread = serviceStop ? CreateThread(NULL, 0, WaitServiceStop, serviceStop, 0, NULL) : NULL;
@@ -1962,6 +2083,14 @@ int main(int argc, char **argv)
     if (!listener) return 1;
     listener->PeerAccepted = Accepted;
     if (!WTSRegisterWtsApiFunctionTable(FreeRDP_InitWtsApi())) return 1;
+    if (sessionMode && !ControllerMode)
+    {
+        thread = CreateThread(NULL, 0, TakeConnections, NULL, 0, NULL);
+        if (!thread) return 1;
+        WaitForSingleObject(StopEvent, INFINITE);
+        CloseHandle(thread);
+        goto done;
+    }
     if (ControllerMode)
     {
         Log("Starting console server; waiting for %s:3389", BindAddress);

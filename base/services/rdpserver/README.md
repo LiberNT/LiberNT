@@ -1,11 +1,13 @@
 # LiberNT RDP console server
 
-`rdpserver.exe` is the Remote Desktop server of LiberNT. Like Windows 11 Pro,
-it serves the console session to one client at a time once Remote Desktop is
-turned on; a client that signs in replaces the one already connected. FreeRDP implements the wire protocol, TLS and CredSSP; the server
-captures the desktop with GDI and injects keyboard and mouse input with
-`SendInput` once a client has authenticated. It does not implement Terminal
-Services or create remote sessions. The RDP drive redirection channel also
+`rdpserver.exe` is the Remote Desktop server of LiberNT. Once Remote Desktop
+is turned on, the user signed in at the console gets the console session,
+one client at a time; a client that signs in replaces the one already
+connected. Any other user gets a session of their own, started for them on a
+remote display adapter and kept for their next connection. FreeRDP implements
+the wire protocol, TLS and CredSSP; the server captures the desktop and
+injects keyboard and mouse input with `SendInput` once a client has
+authenticated. The RDP drive redirection channel also
 carries authenticated file transfers to a configured local directory.
 
 ## Building
@@ -20,17 +22,28 @@ OpenSSL licenses in `licenses`.
 
 The service (`rdpserver.exe /service [ini]`) runs in session 0, which has no
 interactive desktop. While `fDenyTSConnections` under
-`HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server` is 0, it starts
-the server as SYSTEM in the active console session and restarts it when it
-exits or when the console session changes; it stops the server within seconds
-when the value changes back to 1. *Settings > System > Remote Desktop* sets
+`HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server` is 0, it listens on
+port 3389 and starts a server (`/session`) as SYSTEM in the active console
+session, restarting it when it exits or when the console session changes; it
+closes the port and stops the server within seconds when the value changes
+back to 1. For each connection it reads the user name from the
+`Cookie: mstshash=` field of the client's X.224 Connection Request. A
+connection without a name, from the console's user, or made while nobody is
+signed in at the console goes to the console session. Any other user goes to
+the session the service started for them, or to a new one: the service
+creates a `RdpVdd_RemoteDisplay&NewSession_<n>` adapter, starts the session
+through the session manager and runs a server in it
+(`/newsession <adapter instance>`). The service duplicates the socket into
+that session's server, which authenticates the client and signs it in through
+Winlogon. NLA and Winlogon still check the credentials, so a wrong name only
+picks a session the client cannot enter. *Settings > System > Remote Desktop* sets
 this value, and it is 1 on a new installation, as on Windows 11.
 The server follows the desktop that receives input, so a client sees and
 drives the logon screen and the lock screen as well as the user's desktop.
 Started by hand, the server ignores `fDenyTSConnections`, runs in the
 caller's session and reaches the Winlogon desktop only when it runs as SYSTEM.
 
-The server listens on port 3389 of every address and only accepts Network
+Port 3389 listens on every address and only accepts Network
 Level Authentication (CredSSP): a client that offers only TLS or standard
 RDP security gets `HYBRID_REQUIRED_BY_SERVER`. The credentials go through the
 Negotiate package, and the server logs the user on with `LogonUser`. The

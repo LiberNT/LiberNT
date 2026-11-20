@@ -4,6 +4,7 @@
 extern void func_Avc420(void);
 extern void func_ClearCodec(void);
 extern void func_ControllerMode(void);
+extern void func_Cookie(void);
 extern void func_Experience(void);
 extern void func_FrameMove(void);
 extern void func_GfxBatch(void);
@@ -17,6 +18,7 @@ const struct test winetest_testlist[] =
     { "Avc420", func_Avc420 },
     { "ClearCodec", func_ClearCodec },
     { "ControllerMode", func_ControllerMode },
+    { "Cookie", func_Cookie },
     { "Experience", func_Experience },
     { "FrameMove", func_FrameMove },
     { "GfxBatch", func_GfxBatch },
