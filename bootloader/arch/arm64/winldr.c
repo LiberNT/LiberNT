@@ -1114,7 +1114,6 @@ Arm64CaptureDeviceTree(PLOADER_PARAMETER_BLOCK LoaderBlock)
     }
     Arm64AddDeviceTreeInterruptRanges(LoaderBlock, Copy, DeviceTreeSize);
     Arm64FindFirmwareWatchdog(Copy, DeviceTreeSize);
-    Arm64FindFirmwareSart(Copy, DeviceTreeSize);
     LoaderBlock->u.Arm64.DeviceTree = ((ULONG_PTR)Copy < ARM64_KSEG0_BASE) ?
                                       ((ULONG_PTR)Copy + ARM64_KSEG0_BASE) : (ULONG_PTR)Copy;
     LoaderBlock->u.Arm64.DeviceTreeSize = DeviceTreeSize;
