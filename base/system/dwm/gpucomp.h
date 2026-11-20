@@ -96,8 +96,8 @@ BOOL DwmGpuComposeBlurWindow(const struct _DWM_WIN *Window,
 
 BOOL DwmGpuComposeShadow(const RECT *Bounds, LONGLONG X, LONGLONG Y,
                           LONG Width, LONG Height, LONG Offset, LONG WideExtent,
-                          BOOL Active, ULONG WideOpacity, ULONG TightOpacity,
-                          ULONG WindowAlpha);
+                          LONG Radius, BOOL Active, ULONG WideOpacity,
+                          ULONG TightOpacity, ULONG WindowAlpha);
 
 /* TRUE when the frame's copies of new client publications have completed on
  * the GPU, so they may be acknowledged before the frame is presented. */

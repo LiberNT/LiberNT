@@ -32,7 +32,7 @@ BOOL DwmD3dBlurRect(const RECT *Rect, ULONG Radius);
 BOOL DwmD3dBlurWindow(const DWM_WIN *Window, const RECTL *Rectangles,
                       LONG OriginX, LONG OriginY, ULONG Radius);
 BOOL DwmD3dShadow(const RECT *Bounds, LONGLONG X, LONGLONG Y, LONG Width,
-                  LONG Height, LONG Offset, LONG WideExtent, BOOL Active,
+                  LONG Height, LONG Offset, LONG WideExtent, LONG Radius, BOOL Active,
                   ULONG WideOpacity, ULONG TightOpacity, ULONG WindowAlpha);
 void DwmD3dBlurStats(ULONGLONG *Filtered, ULONGLONG *Reused);
 BOOL DwmD3dClientCopiesRetired(void);

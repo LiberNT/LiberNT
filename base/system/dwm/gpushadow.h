@@ -5,7 +5,7 @@
 /* Gaussian rectangle coverage; dynamic shadow pixels are evaluated on GPU. */
 static const char *const DwmGpuShadowSource =
     "uniform vec2 uOwner, uSize, uSigma, uOpacity;\n"
-    "uniform float uScreenHeight, uOffset, uWindowAlpha;\n"
+    "uniform float uScreenHeight, uOffset, uWindowAlpha, uRadius;\n"
     "float cdf(float x) {\n"
     "    float z=abs(x), t=1.0/(1.0+0.2316419*z);\n"
     "    float p=0.39894228*exp(-0.5*z*z)*t*(0.319381530+t*(-0.356563782+t*(1.781477937+t*(-1.821255978+t*1.330274429))));\n"
@@ -16,6 +16,10 @@ static const char *const DwmGpuShadowSource =
     "}\n"
     "void main() {\n"
     "    vec2 p=vec2(gl_FragCoord.x-0.5,uScreenHeight-gl_FragCoord.y-0.5)-uOwner;\n"
+    "    if (uRadius > 0.0) {\n"
+    "        vec2 q=abs(p+0.5-uSize*0.5)-(uSize*0.5-vec2(uRadius));\n"
+    "        if (0.5-(length(max(q,vec2(0.0)))+min(max(q.x,q.y),0.0)-uRadius) >= 1.0) discard;\n"
+    "    }\n"
     "    float wx=floor(coverage(p.x,uSize.x,uSigma.x)*256.0+0.5);\n"
     "    float tx=floor(coverage(p.x,uSize.x,uSigma.y)*256.0+0.5);\n"
     "    float wy=floor(coverage(p.y-uOffset,uSize.y,uSigma.x)*uOpacity.x*uWindowAlpha/1000.0);\n"

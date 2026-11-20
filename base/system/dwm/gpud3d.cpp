@@ -2392,7 +2392,7 @@ DwmD3dBlurWindow(const DWM_WIN *Window, const RECTL *Rectangles, LONG OriginX, L
 
 BOOL
 DwmD3dShadow(const RECT *Bounds, LONGLONG X, LONGLONG Y, LONG Width, LONG Height,
-              LONG Offset, LONG WideExtent, BOOL Active, ULONG WideOpacity,
+              LONG Offset, LONG WideExtent, LONG Radius, BOOL Active, ULONG WideOpacity,
               ULONG TightOpacity, ULONG WindowAlpha)
 {
     if (!State.Active || Bounds == NULL || Width <= 0 || Height <= 0 || WideExtent <= 0)
@@ -2409,6 +2409,7 @@ DwmD3dShadow(const RECT *Bounds, LONGLONG X, LONGLONG Y, LONG Width, LONG Height
     Data.Shadow[1] = WideExtent * (Active ? 2.0f : 1.0f) / 9.0f;
     Data.Shadow[2] = (FLOAT)WideOpacity;
     Data.Shadow[3] = (FLOAT)TightOpacity;
+    Data.Extra[0] = (FLOAT)Radius;
     Data.Extra[1] = (FLOAT)Offset;
     Data.Extra[2] = (FLOAT)WindowAlpha;
     LONG L = (LONG)max(Bounds->left, min(Bounds->right, X));
@@ -2420,6 +2421,16 @@ DwmD3dShadow(const RECT *Bounds, LONGLONG X, LONGLONG Y, LONG Width, LONG Height
     for (ULONG Index = 0; Index < ARRAYSIZE(Parts); ++Index)
         if (!Draw(State.Canvas, Shadow, ClipDraw(Parts[Index]), Data, NULL, NULL, TRUE))
             return FALSE;
+    for (ULONG Index = 0; Radius > 0 && Index < 4; ++Index)
+    {
+        LONGLONG Left = (Index & 1) ? X + Width - Radius : X;
+        LONGLONG Top = (Index & 2) ? Y + Height - Radius : Y;
+        RECT Corner = {(LONG)max((LONGLONG)Bounds->left, Left), (LONG)max((LONGLONG)Bounds->top, Top),
+            (LONG)min((LONGLONG)Bounds->right, Left + Radius), (LONG)min((LONGLONG)Bounds->bottom, Top + Radius)};
+        if (Corner.left < Corner.right && Corner.top < Corner.bottom &&
+            !Draw(State.Canvas, Shadow, ClipDraw(Corner), Data, NULL, NULL, TRUE))
+            return FALSE;
+    }
     return TRUE;
 }
 

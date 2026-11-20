@@ -2434,8 +2434,9 @@ DwmBlendShadow(ULONG *comp, LONG scrW, LONG scrH,
     {
         RECT Bounds = {x0, y0, x1, y1};
         return DwmGpuComposeShadow(&Bounds, ownerX, ownerY, w->cx, w->cy,
-                                  verticalOffset, g_shadowMarginLeft, active,
-                                  wideOpacity, tightOpacity, windowAlpha);
+                                  verticalOffset, g_shadowMarginLeft,
+                                  (LONG)min(w->CornerRadius, (ULONG)min(w->cx / 2, w->cy / 2)),
+                                  active, wideOpacity, tightOpacity, windowAlpha);
     }
 
     if (!DwmEnsureShadowCoverage(scrW))
