@@ -335,6 +335,8 @@ typedef struct _SCB
     BOOLEAN Unlinked;
     BOOLEAN PagingFile;
     LONG UncleanCount;
+    BOOLEAN DirectExtending;
+    KEVENT DirectExtendDone;
     NTFS_NATIVE_SCB NativeScb;
 } StreamContextBlock, *PStreamContextBlock;
 
@@ -617,6 +619,7 @@ NtfsMapDirectIo(_In_ PVolumeContextBlock VolCB,
                 _In_ ULONGLONG FileOffset,
                 _In_ ULONG Length,
                 _In_ LOCK_OPERATION Operation,
+                _In_ BOOLEAN AllowExtend,
                 _Out_ PULONGLONG MappedOffset,
                 _Out_ PBOOLEAN Handled);
 

@@ -23,6 +23,48 @@ typedef struct _NTFS_CACHED_GROWTH
 /* FUNCTIONS ****************************************************************/
 
 static
+NTSTATUS
+NtfsEndDirectExtend(_In_ PVolumeContextBlock VolCB,
+                    _In_ PFileContextBlock FileCB,
+                    _In_ PStreamContextBlock StreamCB,
+                    _In_ ULONGLONG EndOffset,
+                    _In_ NTSTATUS WriteStatus)
+{
+    PAttribute Attribute;
+    ULONGLONG ValidEnd;
+    NTSTATUS Status = WriteStatus;
+
+    NtfsAcquireMetadata(VolCB);
+    ASSERT(StreamCB->DirectExtending);
+    ASSERT(ExIsResourceAcquiredSharedLite(&StreamCB->PagingIoResource));
+    if (NT_SUCCESS(Status) && !StreamCB->Deleted)
+    {
+        Status = NtfsRefreshDirectoryRecord(VolCB, FileCB);
+        if (NT_SUCCESS(Status))
+        {
+            Attribute = NtfsFileRecordGetAttribute(FileCB->FileRec, FileCB->RequestedType, FileCB->RequestedStream);
+            if (!Attribute || !Attribute->IsNonResident)
+            {
+                Status = STATUS_FILE_CORRUPT_ERROR;
+            }
+            else
+            {
+                ValidEnd = min(EndOffset, Attribute->NonResident.DataSize);
+                if (ValidEnd > Attribute->NonResident.InitalizedDataSize)
+                {
+                    Status = NtfsFileRecordSetFileValidDataLength(FileCB->FileRec, FileCB->RequestedType,
+                                                                  FileCB->RequestedStream, ValidEnd);
+                }
+            }
+        }
+    }
+    StreamCB->DirectExtending = FALSE;
+    KeSetEvent(&StreamCB->DirectExtendDone, IO_NO_INCREMENT, FALSE);
+    NtfsReleaseMetadata(VolCB);
+    return Status;
+}
+
+static
 BOOLEAN
 NtfsGrowForCachedWrite(_In_ PVolumeContextBlock VolCB,
                        _In_ PFileContextBlock FileCB,
@@ -700,6 +742,8 @@ NtfsFsdWrite(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     {
         ULONGLONG DirectOffset = 0;
         BOOLEAN DirectWrite = FALSE;
+        BOOLEAN Extending = FALSE;
+        PStreamContextBlock ExtendStream = PagingIo ? FileCB->StreamCB : NULL;
 
         NtfsAcquireMetadata(VolCB);
         Status = NtfsRefreshDirectoryRecord(VolCB, FileCB);
@@ -711,8 +755,26 @@ NtfsFsdWrite(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                                      (ULONGLONG)ByteOffset.QuadPart,
                                      Length,
                                      IoReadAccess,
+                                     ExtendStream != NULL && !ExtendStream->DirectExtending,
                                      &DirectOffset,
                                      &DirectWrite);
+        }
+        if (NT_SUCCESS(Status) && DirectWrite && ExtendStream != NULL)
+        {
+            PAttribute Attribute = NtfsFileRecordGetAttribute(FileCB->FileRec,
+                                                              FileCB->RequestedType,
+                                                              FileCB->RequestedStream);
+
+            ASSERT(Attribute != NULL);
+            ASSERT(Attribute->IsNonResident);
+            Extending = (ULONGLONG)ByteOffset.QuadPart + Length > Attribute->NonResident.InitalizedDataSize;
+            if (Extending)
+            {
+                ASSERT(!ExtendStream->DirectExtending);
+                ASSERT((ULONGLONG)ByteOffset.QuadPart <= Attribute->NonResident.InitalizedDataSize);
+                ExtendStream->DirectExtending = TRUE;
+                KeClearEvent(&ExtendStream->DirectExtendDone);
+            }
         }
         NtfsReleaseMetadata(VolCB);
 
@@ -734,6 +796,14 @@ NtfsFsdWrite(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                                                 DirectOffset,
                                                 Length);
                 }
+            }
+            if (Extending)
+            {
+                Status = NtfsEndDirectExtend(VolCB,
+                                             FileCB,
+                                             ExtendStream,
+                                             (ULONGLONG)ByteOffset.QuadPart + Length,
+                                             Status);
             }
             if (NT_SUCCESS(Status))
             {
@@ -764,7 +834,15 @@ NtfsFsdWrite(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         }
     }
 
+    ASSERT(!ExIsResourceAcquiredExclusiveLite(&VolCB->MetadataResource));
     NtfsAcquireMetadata(VolCB);
+    /* The library zeroes the stream from its valid data length up to the write, over a direct extension still in flight */
+    while (FileCB->StreamCB && FileCB->StreamCB->DirectExtending)
+    {
+        NtfsReleaseMetadata(VolCB);
+        KeWaitForSingleObject(&FileCB->StreamCB->DirectExtendDone, Executive, KernelMode, FALSE, NULL);
+        NtfsAcquireMetadata(VolCB);
+    }
     if (PagingIo && FileCB->StreamCB && FileCB->StreamCB->Deleted)
     {
         NtfsReleaseMetadata(VolCB);
