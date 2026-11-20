@@ -147,6 +147,48 @@ IopArcDeviceControl(
     return IopArcWaitIrp(DeviceObject, Irp, &Event, &IoStatusBlock);
 }
 
+/* The disk the system starts from is always online, whatever the policy that keeps the others offline */
+static
+BOOLEAN
+IopArcBringDiskOnline(
+    _In_ PDEVICE_OBJECT DeviceObject)
+{
+    GET_DISK_ATTRIBUTES Current;
+    SET_DISK_ATTRIBUTES Change;
+    IO_STATUS_BLOCK IoStatusBlock;
+    KEVENT Event;
+    PIRP Irp;
+
+    PAGED_CODE();
+
+    if (!NT_SUCCESS(IopArcDeviceControl(DeviceObject,
+                                        IOCTL_DISK_GET_DISK_ATTRIBUTES,
+                                        &Current,
+                                        sizeof(Current))) ||
+        (Current.Attributes & (DISK_ATTRIBUTE_OFFLINE | DISK_ATTRIBUTE_READ_ONLY)) == 0)
+    {
+        return FALSE;
+    }
+
+    RtlZeroMemory(&Change, sizeof(Change));
+    Change.Version = sizeof(Change);
+    Change.AttributesMask = DISK_ATTRIBUTE_OFFLINE | DISK_ATTRIBUTE_READ_ONLY;
+
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildDeviceIoControlRequest(IOCTL_DISK_SET_DISK_ATTRIBUTES,
+                                        DeviceObject,
+                                        &Change,
+                                        sizeof(Change),
+                                        NULL,
+                                        0,
+                                        FALSE,
+                                        &Event,
+                                        &IoStatusBlock);
+    if (Irp == NULL) return FALSE;
+
+    return NT_SUCCESS(IopArcWaitIrp(DeviceObject, Irp, &Event, &IoStatusBlock));
+}
+
 /* Reads Length bytes at ByteOffset, rounded up to whole sectors of the device */
 static
 PULONG
@@ -385,16 +427,22 @@ IopCreateArcNamesDisk(
     PDRIVE_LAYOUT_INFORMATION_EX Layout;
     PARC_DISK_SIGNATURE ArcSignature;
     PCONFIGURATION_INFORMATION Config;
+    GET_DISK_ATTRIBUTES Attributes;
     PDEVICE_OBJECT DeviceObject;
     PFILE_OBJECT FileObject;
     UNICODE_STRING DeviceName;
     WCHAR DeviceBuffer[64];
     PLIST_ENTRY ListHead;
     PLIST_ENTRY Entry;
+    PBOOLEAN Bound;
+    BOOLEAN Offline;
     ULONG Signature;
     NTSTATUS Status;
     PULONG Sector;
     ULONG Disk;
+    ULONG Count;
+    ULONG Index;
+    ULONG Step;
 
     PAGED_CODE();
 
@@ -407,8 +455,17 @@ IopCreateArcNamesDisk(
     Config = IoGetConfigurationInformation();
     ListHead = &LoaderBlock->ArcDiskInformation->DiskSignatureListHead;
 
-    for (Disk = 0; Disk < Config->DiskCount; Disk++)
+    Count = 0;
+    for (Entry = ListHead->Flink; Entry != ListHead; Entry = Entry->Flink) Count++;
+    if (Count == 0) return STATUS_SUCCESS;
+
+    Bound = ExAllocatePoolZero(PagedPool, Count * sizeof(BOOLEAN), TAG_IO);
+    if (Bound == NULL) return STATUS_INSUFFICIENT_RESOURCES;
+
+    for (Step = 0; Step < 2 * Config->DiskCount; Step++)
     {
+        Disk = Step % Config->DiskCount;
+
         Status = RtlStringCchPrintfW(DeviceBuffer,
                                      RTL_NUMBER_OF(DeviceBuffer),
                                      L"\\Device\\Harddisk%lu\\Partition0",
@@ -423,15 +480,28 @@ IopCreateArcNamesDisk(
                                           &DeviceObject);
         if (!NT_SUCCESS(Status)) continue;
 
+        Offline = NT_SUCCESS(IopArcDeviceControl(DeviceObject,
+                                                 IOCTL_DISK_GET_DISK_ATTRIBUTES,
+                                                 &Attributes,
+                                                 sizeof(Attributes))) &&
+                  (Attributes.Attributes & DISK_ATTRIBUTE_OFFLINE);
+        if (Offline != (Step >= Config->DiskCount))
+        {
+            ObDereferenceObject(FileObject);
+            continue;
+        }
+
         Layout = IopArcGetDriveLayout(DeviceObject);
         Sector = IopArcReadBytes(DeviceObject, IOCTL_DISK_GET_DRIVE_GEOMETRY, 0, 512);
 
-        for (Entry = ListHead->Flink;
+        for (Entry = ListHead->Flink, Index = 0;
              Layout != NULL && Sector != NULL && Entry != ListHead;
-             Entry = Entry->Flink)
+             Entry = Entry->Flink, Index++)
         {
             ArcSignature = CONTAINING_RECORD(Entry, ARC_DISK_SIGNATURE, ListEntry);
 
+            ASSERT(Index < Count);
+            if (Bound[Index]) continue;
             if (ArcSignature->ArcName == NULL) continue;
             if (!IopVerifyDiskSignature(Layout, ArcSignature, &Signature)) continue;
 
@@ -442,10 +512,17 @@ IopCreateArcNamesDisk(
                 continue;
             }
 
+            Bound[Index] = TRUE;
             IopArcLinkDisk(ArcSignature, Disk, Layout, LoaderBlock->NtHalPathName);
 
             if (IopArcNameIsPrefixOf(ArcSignature->ArcName, &IoArcBootDeviceName))
+            {
                 *FoundBoot = TRUE;
+
+                /* Its partitions have to exist before the boot partition is opened */
+                if (IopArcBringDiskOnline(DeviceObject))
+                    PiPerformSyncDeviceAction(IopRootDeviceNode->PhysicalDeviceObject, PiActionEnumDeviceTree);
+            }
 
             break;
         }
@@ -455,6 +532,7 @@ IopCreateArcNamesDisk(
         ObDereferenceObject(FileObject);
     }
 
+    ExFreePoolWithTag(Bound, TAG_IO);
     return STATUS_SUCCESS;
 }
 
