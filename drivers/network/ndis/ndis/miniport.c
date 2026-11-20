@@ -710,8 +710,17 @@ MiniResetComplete(
     if (AddressingReset)
         MiniDoAddressingReset(Adapter);
 
-    NdisMIndicateStatus(Adapter, NDIS_STATUS_RESET_END, NULL, 0);
-    NdisMIndicateStatusComplete(Adapter);
+    /* An NDIS 6 adapter has no NDIS 5 status handler */
+    if (Adapter->IsNdis6)
+    {
+        extern VOID Ndis6IndicateResetStatus(PLOGICAL_ADAPTER, NDIS_STATUS);
+        Ndis6IndicateResetStatus(Adapter, NDIS_STATUS_RESET_END);
+    }
+    else
+    {
+        NdisMIndicateStatus(Adapter, NDIS_STATUS_RESET_END, NULL, 0);
+        NdisMIndicateStatusComplete(Adapter);
+    }
 
     KeAcquireSpinLock(&Adapter->NdisMiniportBlock.Lock, &OldIrql);
 
@@ -732,9 +741,13 @@ MiniResetComplete(
     {
         AdapterBinding = CONTAINING_RECORD(CurrentEntry, ADAPTER_BINDING, AdapterListEntry);
 
-        (*AdapterBinding->ProtocolBinding->Chars.ResetCompleteHandler)(
-               AdapterBinding->NdisOpenBlock.ProtocolBindingContext,
-               Status);
+        if (AdapterBinding->ProtocolBinding != NULL &&
+            AdapterBinding->ProtocolBinding->Chars.ResetCompleteHandler != NULL)
+        {
+            (*AdapterBinding->ProtocolBinding->Chars.ResetCompleteHandler)(
+                   AdapterBinding->NdisOpenBlock.ProtocolBindingContext,
+                   Status);
+        }
 
         CurrentEntry = CurrentEntry->Flink;
     }
