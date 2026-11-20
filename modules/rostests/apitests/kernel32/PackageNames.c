@@ -6,10 +6,12 @@
  */
 
 #include "precomp.h"
+#include <appmodel.h>
 
 typedef LONG (WINAPI *PFN_PACKAGEFAMILYNAMEFROMFULLNAME)(PCWSTR, UINT32 *, PWSTR);
 typedef LONG (WINAPI *PFN_PARSEAPPLICATIONUSERMODELID)(PCWSTR, UINT32 *, PWSTR, UINT32 *, PWSTR);
 typedef LONG (WINAPI *PFN_GETPACKAGEFULLNAME)(HANDLE, UINT32 *, PWSTR);
+typedef LONG (WINAPI *PFN_PACKAGEIDFROMFULLNAME)(PCWSTR, UINT32, UINT32 *, BYTE *);
 
 static const WCHAR NotepadFullName[] = L"Microsoft.WindowsNotepad_11.2507.26.0_x64__8wekyb3d8bbwe";
 static const WCHAR NotepadFamilyName[] = L"Microsoft.WindowsNotepad_8wekyb3d8bbwe";
@@ -106,27 +108,64 @@ TestParseApplicationUserModelId(PFN_PARSEAPPLICATIONUSERMODELID Function)
     ok(Result == ERROR_INVALID_PARAMETER, "bad family: result %ld\n", Result);
 }
 
+static VOID
+TestPackageIdFromFullName(PFN_PACKAGEIDFROMFULLNAME Function)
+{
+    BYTE Buffer[512];
+    const PACKAGE_ID *Id = (const PACKAGE_ID *)Buffer;
+    UINT32 Length;
+    LONG Result;
+
+    Length = 0;
+    Result = Function(NotepadFullName, PACKAGE_INFORMATION_BASIC, &Length, NULL);
+    ok(Result == ERROR_INSUFFICIENT_BUFFER, "size: result %ld\n", Result);
+    ok(Length > sizeof(PACKAGE_ID) && Length <= sizeof(Buffer), "size: length %u\n", Length);
+
+    Length = sizeof(Buffer);
+    Result = Function(NotepadFullName, PACKAGE_INFORMATION_BASIC, &Length, Buffer);
+    ok(Result == ERROR_SUCCESS, "result %ld\n", Result);
+    if (Result == ERROR_SUCCESS)
+    {
+        ok(Id->name != NULL && !wcscmp(Id->name, L"Microsoft.WindowsNotepad"), "name %s\n", wine_dbgstr_w(Id->name));
+        ok(Id->version.Major == 11 && Id->version.Minor == 2507 && Id->version.Build == 26 && Id->version.Revision == 0,
+           "version %u.%u.%u.%u\n", Id->version.Major, Id->version.Minor, Id->version.Build, Id->version.Revision);
+        ok(Id->processorArchitecture == PROCESSOR_ARCHITECTURE_AMD64, "architecture %u\n", Id->processorArchitecture);
+        ok(Id->resourceId != NULL && Id->resourceId[0] == UNICODE_NULL, "resource %s\n", wine_dbgstr_w(Id->resourceId));
+        ok(Id->publisherId != NULL && !wcscmp(Id->publisherId, L"8wekyb3d8bbwe"), "publisher id %s\n",
+           wine_dbgstr_w(Id->publisherId));
+    }
+
+    Length = sizeof(Buffer);
+    Result = Function(L"bogus", PACKAGE_INFORMATION_BASIC, &Length, Buffer);
+    ok(Result == ERROR_INVALID_PARAMETER, "bogus: result %ld\n", Result);
+}
+
 START_TEST(PackageNames)
 {
     HMODULE Kernel32 = GetModuleHandleW(L"kernel32.dll");
     PFN_PACKAGEFAMILYNAMEFROMFULLNAME pPackageFamilyNameFromFullName;
     PFN_PARSEAPPLICATIONUSERMODELID pParseApplicationUserModelId;
     PFN_GETPACKAGEFULLNAME pGetPackageFullName;
+    PFN_PACKAGEIDFROMFULLNAME pPackageIdFromFullName;
     UINT32 Length;
     LONG Result;
 
     pPackageFamilyNameFromFullName = (PFN_PACKAGEFAMILYNAMEFROMFULLNAME)GetProcAddress(Kernel32, "PackageFamilyNameFromFullName");
     pParseApplicationUserModelId = (PFN_PARSEAPPLICATIONUSERMODELID)GetProcAddress(Kernel32, "ParseApplicationUserModelId");
     pGetPackageFullName = (PFN_GETPACKAGEFULLNAME)GetProcAddress(Kernel32, "GetPackageFullName");
+    pPackageIdFromFullName = (PFN_PACKAGEIDFROMFULLNAME)GetProcAddress(Kernel32, "PackageIdFromFullName");
 
     ok(pPackageFamilyNameFromFullName != NULL, "PackageFamilyNameFromFullName is missing\n");
     ok(pParseApplicationUserModelId != NULL, "ParseApplicationUserModelId is missing\n");
     ok(pGetPackageFullName != NULL, "GetPackageFullName is missing\n");
+    ok(pPackageIdFromFullName != NULL, "PackageIdFromFullName is missing\n");
 
     if (pPackageFamilyNameFromFullName)
         TestPackageFamilyNameFromFullName(pPackageFamilyNameFromFullName);
     if (pParseApplicationUserModelId)
         TestParseApplicationUserModelId(pParseApplicationUserModelId);
+    if (pPackageIdFromFullName)
+        TestPackageIdFromFullName(pPackageIdFromFullName);
     if (pGetPackageFullName)
     {
         Length = 0;
