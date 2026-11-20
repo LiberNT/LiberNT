@@ -7,50 +7,46 @@
 
 #ifdef _M_ARM
 
-#include <ksarm.h>
+/* STUB_K, STUB_U and STUB_WRAP are GNU as macros taking the argument count. */
+#define SYSCALLS_GNU_AS_STUBS
 
-    GBLA SyscallId
+    .syntax unified
+    .thumb
+    .set SyscallId, 0
 
-SyscallId SETA 0
-
-	MACRO
-	STUB_K $Name
-	LCLS ZwFuncName
-	LCLS ZwFuncEndName
-ZwFuncName    SETS "Zw$Name"
-ZwFuncEndName SETS "$ZwFuncName":CC:"_end"
-	ALIGN 2
-	EXPORT $ZwFuncName [FUNC]
-$ZwFuncName
-	ROUT
-    mov r12, #SyscallId
+    /* The service number travels in r12; arguments past r3 stay on the caller's stack. */
+    .macro STUB_U Name, ArgCount
+    .text
+    .p2align 2
+    .global Nt\Name
+    .global Zw\Name
+    .thumb_func
+Nt\Name:
+    .thumb_func
+Zw\Name:
+    movw r12, #SyscallId
     svc #1
     bx lr
-$ZwFuncEndName
-    MEND
+    .set SyscallId, SyscallId + 1
+    .endm
 
-	MACRO
-	STUB_U $Name
-	LCLS NtFuncName
-	LCLS NtFuncEndName
-	LCLS ZwFuncName
-	LCLS ZwFuncEndName
-NtFuncName    SETS "Nt$Name"
-NtFuncEndName SETS "$NtFuncName":CC:"_end"
-ZwFuncName    SETS "Zw$Name"
-ZwFuncEndName SETS "$ZwFuncName":CC:"_end"
-	ALIGN 2
-	EXPORT $NtFuncName [FUNC]
-$NtFuncName
-	EXPORT $ZwFuncName [FUNC]
-$ZwFuncName
-	ROUT
-    mov r12, #SyscallId
+    .macro STUB_WRAP Name, ArgCount
+    STUB_U \Name, \ArgCount
+    .endm
+
+    /* SVC from SVC mode replaces lr: keep it, which moves the stack arguments by 8. */
+    .macro STUB_K Name, ArgCount
+    .text
+    .p2align 2
+    .global Zw\Name
+    .thumb_func
+Zw\Name:
+    push {r4, lr}
+    movw r12, #SyscallId
     svc #1
-    bx lr
-$NtFuncEndName
-$ZwFuncEndName
-	MEND
+    pop {r4, pc}
+    .set SyscallId, SyscallId + 1
+    .endm
 
 #elif SYSCALLS_ARM64_STUBS
 

@@ -149,6 +149,9 @@ __report_gsfailure (ULONG_PTR StackCookie)
       GS_ContextRecord.Rip = (ULONGLONG) _ReturnAddress();
       GS_ContextRecord.Rsp = (ULONGLONG) _AddressOfReturnAddress() + 8;
 #endif
+#elif defined(_M_ARM) || defined(__arm__)
+      GS_ContextRecord.Pc = (DWORD) _ReturnAddress();
+      GS_ContextRecord.Sp = (DWORD) __builtin_frame_address(0);
 #else
       GS_ContextRecord.Eip = (DWORD) _ReturnAddress();
       GS_ContextRecord.Esp = (DWORD) _AddressOfReturnAddress() + 4;
@@ -163,6 +166,9 @@ __report_gsfailure (ULONG_PTR StackCookie)
   GS_ExceptionRecord.ExceptionAddress = (PVOID) GS_ContextRecord.Rip;
   GS_ContextRecord.Rcx = StackCookie;
 #endif
+#elif defined(_M_ARM) || defined(__arm__)
+  GS_ExceptionRecord.ExceptionAddress = (PVOID) GS_ContextRecord.Pc;
+  GS_ContextRecord.R0 = StackCookie;
 #else
   GS_ExceptionRecord.ExceptionAddress = (PVOID) GS_ContextRecord.Eip;
   GS_ContextRecord.Ecx = StackCookie;

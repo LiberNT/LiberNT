@@ -28,8 +28,10 @@
 #include <arc/arc.h>
 #include <mountmgr.h>
 
+#ifndef _NTHALDLL_
 #undef NTHALAPI
 #define NTHALAPI __declspec(dllimport)
+#endif
 #include <ndk/asm.h>
 #include <ndk/cctypes.h>
 #include <ndk/cmfuncs.h>

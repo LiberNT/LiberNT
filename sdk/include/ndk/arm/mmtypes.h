@@ -1,20 +1,12 @@
-/*++ NDK Version: 0095
-
-Copyright (c) Alex Ionescu.  All rights reserved.
-
-Header Name:
-
-    mmtypes.h (ARM)
-
-Abstract:
-
-    ARM Type definitions for the Memory Manager
-
-Author:
-
-    Alex Ionescu (alex.ionescu@reactos.com)   06-Oct-2004
-
---*/
+/*
+ * PROJECT:     LiberNT NDK
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     ARM (Thumb-2) memory manager types
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ *
+ * The ARMv7 port translates through LPAE long descriptors (ARM ARM B3.6), so a
+ * hardware PTE is 64 bits wide, unlike the WDK's short-descriptor ARM layout.
+ */
 
 #ifndef _ARM_MMTYPES_H
 #define _ARM_MMTYPES_H
@@ -23,207 +15,84 @@ Author:
 extern "C" {
 #endif
 
-//
-// Dependencies
-//
-
-//
-// Page-related Macros
-//
 #ifndef PAGE_SIZE
-#define PAGE_SIZE                         0x1000
+#define PAGE_SIZE                       0x1000
 #endif
-#define PAGE_SHIFT                        12L
-#define MM_ALLOCATION_GRANULARITY         0x10000
-#define MM_ALLOCATION_GRANULARITY_SHIFT   16L
-#define MM_PAGE_FRAME_NUMBER_SIZE         20
+#define PAGE_SHIFT                      12L
+#define MM_ALLOCATION_GRANULARITY       0x10000
+#define MM_ALLOCATION_GRANULARITY_SHIFT 16L
+#define MM_PAGE_FRAME_NUMBER_SIZE       28
+#define MM_SHARED_USER_DATA_VA          0x7FFE0000
+#define MI_HIGHEST_USER_ADDRESS         ((PVOID)0x7FFEFFFF)
 
-//
-// User space range limit
-//
-#define MI_HIGHEST_USER_ADDRESS                 (PVOID)0x7FFEFFFF
-
-//
-// Address of the shared user page
-//
-#define MM_SHARED_USER_DATA_VA 0x7FFE0000
-
-//
-// Sanity checks for Paging Macros
-//
-#ifdef C_ASSERT
-C_ASSERT(PAGE_SIZE == (1 << PAGE_SHIFT));
-C_ASSERT(MM_ALLOCATION_GRANULARITY == (1 << MM_ALLOCATION_GRANULARITY_SHIFT));
-C_ASSERT(MM_ALLOCATION_GRANULARITY &&
-         !(MM_ALLOCATION_GRANULARITY & (MM_ALLOCATION_GRANULARITY - 1)));
-C_ASSERT(MM_ALLOCATION_GRANULARITY >= PAGE_SIZE);
+#if !defined(RC_INVOKED)
+extern NTSYSAPI ULONG MmUserProbeAddress;
+#define MM_USER_PROBE_ADDRESS MmUserProbeAddress
+extern NTSYSAPI PVOID MmSystemRangeStart;
+#define MM_SYSTEM_RANGE_START MmSystemRangeStart
+extern NTSYSAPI PVOID MmHighestUserAddress;
+#define MM_HIGHEST_USER_ADDRESS MmHighestUserAddress
 #endif
 
-//
-// Page Table Entry Definitions
-//
-typedef struct _HARDWARE_PDE_ARMV6
+/* Long-descriptor page/block entry, stage 1 (ARM ARM B3.6.2). */
+typedef struct _HARDWARE_PTE
 {
-    ULONG Valid:1;     // Only for small pages
-    ULONG LargePage:1; // Note, if large then Valid = 0
-    ULONG Buffered:1;
-    ULONG Cached:1;
-    ULONG NoExecute:1;
-    ULONG Domain:4;
-    ULONG Ecc:1;
-    ULONG PageFrameNumber:22;
-} HARDWARE_PDE_ARMV6, *PHARDWARE_PDE_ARMV6;
+    ULONGLONG Valid : 1;
+    ULONGLONG NotLargePage : 1;
+    ULONGLONG AttrIndex : 3;
+    ULONGLONG NonSecure : 1;
+    ULONGLONG Owner : 1;
+    ULONGLONG ReadOnly : 1;
+    ULONGLONG Shareability : 2;
+    ULONGLONG Accessed : 1;
+    ULONGLONG NonGlobal : 1;
+    ULONGLONG PageFrameNumber : 28;
+    ULONGLONG Reserved : 12;
+    ULONGLONG Contiguous : 1;
+    ULONGLONG PrivilegedNoExecute : 1;
+    ULONGLONG UserNoExecute : 1;
+    ULONGLONG Software : 4;
+    ULONGLONG Ignored : 5;
+} HARDWARE_PTE, *PHARDWARE_PTE;
 
-typedef struct _HARDWARE_LARGE_PTE_ARMV6
-{
-    ULONG Valid:1;     // Only for small pages
-    ULONG LargePage:1; // Note, if large then Valid = 0
-    ULONG Buffered:1;
-    ULONG Cached:1;
-    ULONG NoExecute:1;
-    ULONG Domain:4;
-    ULONG Ecc:1;
-    ULONG Sbo:1; // ULONG Accessed:1;?
-    ULONG Owner:1;
-    ULONG CacheAttributes:3;
-    ULONG ReadOnly:1;
-    ULONG Shared:1;
-    ULONG NonGlobal:1;
-    ULONG SuperLagePage:1;
-    ULONG Reserved:1;
-    ULONG PageFrameNumber:12;
-} HARDWARE_LARGE_PTE_ARMV6, *PHARDWARE_LARGE_PTE_ARMV6;
-
-typedef struct _HARDWARE_PTE_ARMV6
-{
-    ULONG NoExecute:1;
-    ULONG Valid:1;
-    ULONG Buffered:1;
-    ULONG Cached:1;
-    ULONG Sbo:1; // ULONG Accessed:1;?
-    ULONG Owner:1;
-    ULONG CacheAttributes:3;
-    ULONG ReadOnly:1;
-    ULONG Shared:1;
-    ULONG NonGlobal:1;
-    ULONG PageFrameNumber:20;
-} HARDWARE_PTE_ARMV6, *PHARDWARE_PTE_ARMV6;
-
-C_ASSERT(sizeof(HARDWARE_PDE_ARMV6) == sizeof(ULONG));
-C_ASSERT(sizeof(HARDWARE_LARGE_PTE_ARMV6) == sizeof(ULONG));
-C_ASSERT(sizeof(HARDWARE_PTE_ARMV6) == sizeof(ULONG));
-
-typedef struct _MMPTE_SOFTWARE
-{
-    ULONG Valid:2;
-    ULONG PageFileLow:4;
-    ULONG Protection:4;
-    ULONG Prototype:1;
-    ULONG Transition:1;
-    ULONG PageFileHigh:20;
-} MMPTE_SOFTWARE;
-
-typedef struct _MMPTE_TRANSITION
-{
-    ULONG Valid:2;
-    ULONG Buffered:1;
-    ULONG Cached:1;
-    ULONG Owner:1;
-    ULONG Protection:4;
-    ULONG ReadOnly:1;
-    ULONG Prototype:1;
-    ULONG Transition:1;
-    ULONG PageFrameNumber:20;
-} MMPTE_TRANSITION;
-
-typedef struct _MMPTE_PROTOTYPE
-{
-    ULONG Valid:2;
-    ULONG ProtoAddressLow:7;
-    ULONG ReadOnly:1;
-    ULONG Prototype:1;
-    ULONG ProtoAddressHigh:21;
-} MMPTE_PROTOTYPE;
-
-typedef struct _MMPTE_SUBSECTION
-{
-    ULONG Valid:2;
-    ULONG SubsectionAddressLow:4;
-    ULONG Protection:4;
-    ULONG Prototype:1;
-    ULONG SubsectionAddressHigh:20;
-    ULONG WhichPool:1;
-} MMPTE_SUBSECTION;
-
-typedef struct _MMPTE_LIST
-{
-    ULONG Valid:2;
-    ULONG OneEntry:1;
-    ULONG filler0:8;
-    ULONG NextEntry:20;
-    ULONG Prototype:1;
-} MMPTE_LIST;
+C_ASSERT(sizeof(HARDWARE_PTE) == sizeof(ULONGLONG));
 
 typedef struct _MMPTE_HARDWARE
 {
-    ULONG NoExecute:1;
-    ULONG Valid:1;
-    ULONG Buffered:1;
-    ULONG Cached:1;
-    ULONG Sbo:1;
-    ULONG Owner:1;
-    ULONG CacheAttributes:3;
-    ULONG ReadOnly:1;
-    ULONG Prototype:1;
-    ULONG NonGlobal:1;
-    ULONG PageFrameNumber:20;
+    ULONGLONG Valid : 1;
+    ULONGLONG NotLargePage : 1;
+    ULONGLONG AttrIndex : 3;
+    ULONGLONG NonSecure : 1;
+    ULONGLONG Owner : 1;
+    ULONGLONG ReadOnly : 1;
+    ULONGLONG Shareability : 2;
+    ULONGLONG Accessed : 1;
+    ULONGLONG NonGlobal : 1;
+    ULONGLONG PageFrameNumber : 28;
+    ULONGLONG Reserved : 12;
+    ULONGLONG Contiguous : 1;
+    ULONGLONG PrivilegedNoExecute : 1;
+    ULONGLONG UserNoExecute : 1;
+    ULONGLONG Writable : 1;
+    ULONGLONG CopyOnWrite : 1;
+    ULONGLONG Software : 2;
+    ULONGLONG Ignored : 5;
 } MMPTE_HARDWARE, *PMMPTE_HARDWARE;
-
-
-//
-// Use the right PTE structure
-//
-#define HARDWARE_PTE        HARDWARE_PTE_ARMV6
-#define PHARDWARE_PTE       PHARDWARE_PTE_ARMV6
 
 typedef struct _MMPTE
 {
     union
     {
-        ULONG_PTR Long;
+        ULONGLONG Long;
         HARDWARE_PTE Flush;
         MMPTE_HARDWARE Hard;
-        MMPTE_PROTOTYPE Proto;
-        MMPTE_SOFTWARE Soft;
-        MMPTE_TRANSITION Trans;
-        MMPTE_SUBSECTION Subsect;
-        MMPTE_LIST List;
     } u;
-} MMPTE, *PMMPTE;
+} MMPTE, *PMMPTE, MMPDE, *PMMPDE;
 
-typedef union _MMPDE_HARDWARE
-{
-    ULONG Valid:1;
-    ULONG LargePage:1;
-    ULONG Buffered:1;
-    ULONG Cached:1;
-    ULONG NoExecute:1;
-    ULONG Domain:4;
-    ULONG Ecc:1;
-    ULONG PageFrameNumber:22;
-} MMPDE_HARDWARE, *PMMPDE_HARDWARE;
-
-typedef struct _MMPDE
-{
-    union
-    {
-        MMPDE_HARDWARE Hard;
-        ULONG Long;
-    } u;
-} MMPDE, *PMMPDE;
+C_ASSERT(sizeof(MMPTE) == sizeof(ULONGLONG));
 
 #ifdef __cplusplus
-}; // extern "C"
+}
 #endif
 
-#endif
+#endif /* _ARM_MMTYPES_H */

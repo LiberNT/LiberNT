@@ -72,7 +72,7 @@ KiIdleSleep(
     Prcb->Sleeping = TRUE;
     KeMemoryBarrier();
 
-    if (KiDpcWorkPending(Prcb) || (Prcb->DpcInterruptRequested != FALSE))
+    if (KiDpcWorkPending(Prcb) || KiIsDpcInterruptRequested(Prcb))
     {
         Prcb->Sleeping = FALSE;
         KiReleasePrcbLock(Prcb);

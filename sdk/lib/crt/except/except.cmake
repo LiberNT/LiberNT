@@ -17,8 +17,12 @@ elseif(ARCH STREQUAL "amd64")
         )
     endif()
 elseif(ARCH STREQUAL "arm")
+    list(APPEND LIBCNTPR_EXCEPT_SOURCE
+        except/arm/ehandler.c
+    )
     list(APPEND LIBCNTPR_EXCEPT_ASM_SOURCE
         except/arm/chkstk_asm.s
+        except/arm/ehandler_asm.s
     )
 endif()
 

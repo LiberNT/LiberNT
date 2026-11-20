@@ -3,13 +3,12 @@
 
 #ifdef _M_ARM
 
-    TEXTAREA
+    .text
+    .set SyscallId, 0x1000
 
-#define SVC_(name, argcount) STUB_U name
+#define SVC_(name, argcount) STUB_U name, argcount
 
 #include "w32ksvc32.h"
-
-    END
 
 #elif SYSCALLS_ARM64_STUBS || defined(_M_RISCV64)
 

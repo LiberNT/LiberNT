@@ -148,9 +148,14 @@ elseif(ARCH STREQUAL "amd64")
         set_property(SOURCE amd64/unwind.c APPEND PROPERTY COMPILE_OPTIONS -Xclang -fasync-exceptions)
     endif()
 elseif(ARCH STREQUAL "arm")
-    list(APPEND ASM_SOURCE arm/debug_asm.S)
+    list(APPEND ASM_SOURCE
+        arm/context_asm.S
+        arm/debug_asm.S
+        arm/except_asm.S)
     list(APPEND SOURCE
+        arm/context.c
         arm/except.c
+        arm/unwind.c
         byteswap.c
         mem.c)
 elseif(ARCH STREQUAL "arm64")

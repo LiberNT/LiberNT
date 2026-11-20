@@ -1,18 +1,7 @@
 
 #include <syscalls.inc>
 
-#ifdef _M_ARM
-
-    TEXTAREA
-
-#define SVC_(name, argcount) STUB_U name
-#define SVC_WRAP_(name, argcount) STUB_U name
-
-#include <sysfuncs.h>
-
-    END
-
-#elif defined(SYSCALLS_GNU_AS_STUBS)
+#if defined(SYSCALLS_GNU_AS_STUBS)
 
     .text
 

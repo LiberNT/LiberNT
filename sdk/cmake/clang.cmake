@@ -191,9 +191,6 @@ endif()
 if(ARCH STREQUAL "amd64")
     add_compile_options(-mcx16) # Generate CMPXCHG16
     add_definitions(-U_X86_ -UWIN32)
-elseif(ARCH STREQUAL "arm")
-    add_definitions(-U_UNICODE -UUNICODE)
-    add_definitions(-D__MSVCRT__) # DUBIOUS
 endif()
 
 # Fix build with GLIBCXX + our c++ headers
@@ -303,7 +300,7 @@ if(ARCH STREQUAL "i386")
     set(_rc_target_flag "--target=pe-i386")
 elseif(ARCH STREQUAL "amd64")
     set(_rc_target_flag "--target=pe-x86-64")
-elseif(ARCH STREQUAL "arm64" OR ARCH STREQUAL "riscv64" OR ARCH STREQUAL "ppc")
+else()
     set(_rc_target_flag "--target=${CMAKE_C_COMPILER_TARGET}")
 endif()
 

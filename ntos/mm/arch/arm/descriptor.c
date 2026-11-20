@@ -7,7 +7,7 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 
-#include <mm/include/nvsenv.h>
+#include <mm/include/mienv.h>
 #include "hardware.h"
 #include <mm/include/miarchcheck.h>
 
