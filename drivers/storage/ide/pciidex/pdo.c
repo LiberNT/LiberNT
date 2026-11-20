@@ -903,6 +903,13 @@ PciIdeXQueryPciIdeInterface(
     ChannelInterface->ChannelObject = PdoExt->Common.Self;
     ChannelInterface->AbortChannel = AtaCtrlAbortChannel;
 
+    if (!(Controller->Flags & CTRL_FLAG_IS_AHCI))
+    {
+        ChannelInterface->DumpPrepare = PataDumpPrepare;
+        ChannelInterface->DumpWrite = PataDumpWrite;
+        ChannelInterface->DumpFlush = PataDumpFlush;
+    }
+
     if (Controller->Flags & CTRL_FLAG_IS_AHCI)
     {
         ChannelInterface->AllocateSlot = AtaAhciAllocateSlot;

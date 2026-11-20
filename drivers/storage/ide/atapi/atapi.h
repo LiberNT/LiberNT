@@ -350,6 +350,9 @@ typedef struct _ATAPORT_PORT_DATA
     PCHANNEL_PREPARE_PRD_TABLE PreparePrdTable;
     PCHANNEL_PREPARE_IO PrepareIo;
     PCHANNEL_START_IO StartIo;
+    PCHANNEL_DUMP_PREPARE DumpPrepare;
+    PCHANNEL_DUMP_WRITE DumpWrite;
+    PCHANNEL_DUMP_FLUSH DumpFlush;
     PDMA_ADAPTER DmaAdapter;
     PDEVICE_OBJECT ChannelObject;
     PATA_DEVICE_REQUEST Slots[MAX_SLOTS];
@@ -548,6 +551,7 @@ typedef struct _ATAPORT_DEVICE_EXTENSION
 
     /** List of ATA commands to the drive created by the ACPI firmware. */
     PVOID GtfDataBuffer;
+    PVOID DumpContext;
 
     /** Tracks the last time a DMA error was encountered. */
     LARGE_INTEGER LastDmaErrorTime;
