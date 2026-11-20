@@ -58,6 +58,8 @@ static BOOLEAN TextUpdateDeferred;
 static BOOLEAN TextDamaged;
 static URECT TextDamage;
 
+static PVID_DISPLAY_WRITE_ROUTINE DisplayWriteRoutine;
+
 NTSTATUS
 NTAPI
 VidSetVirtualFrameBuffer(
@@ -67,6 +69,15 @@ VidSetVirtualFrameBuffer(
                                VirtualFrameBuffer != NULL ?
                                    VirtualFrameBuffer :
                                    (PVOID)PhysicalFrameBufferStart);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+VidSetDisplayWriteRoutine(
+    _In_opt_ PVID_DISPLAY_WRITE_ROUTINE Routine)
+{
+    InterlockedExchangePointer((PVOID volatile *)&DisplayWriteRoutine, (PVOID)Routine);
     return STATUS_SUCCESS;
 }
 
@@ -223,11 +234,15 @@ FlushFrameRect(
     _In_ ULONG Right,
     _In_ ULONG Bottom)
 {
+    PVID_DISPLAY_WRITE_ROUTINE DisplayWrite;
     ULONG_PTR First, Last;
+    PVOID Start;
     ULONG X0, Y0, X1, Y1, Swap;
 
-    if ((FrameBufferStart != PhysicalFrameBufferStart) || (Left >= Right) || (Top >= Bottom))
+    if ((Left >= Right) || (Top >= Bottom))
         return;
+
+    ASSERT((Right <= ScreenWidth) && (Bottom <= ScreenHeight));
 
     First = (ULONG_PTR)FramePixel(Left, Top) - FrameBufferStart;
     Last = (ULONG_PTR)FramePixel(Right - 1, Bottom - 1) - FrameBufferStart;
@@ -248,10 +263,15 @@ FlushFrameRect(
         Y1 = Swap;
     }
 
-    VidpFlushFrameBuffer((PVOID)(FrameBufferStart + (ULONG_PTR)Y0 * BytesPerScanLine + (ULONG_PTR)X0 * BytesPerPixel),
-                         (X1 - X0 + 1) * BytesPerPixel,
-                         Y1 - Y0 + 1,
-                         BytesPerScanLine);
+    ASSERT((X1 < FrameBufferWidth) && (Y1 < FrameBufferHeight));
+    Start = (PVOID)(FrameBufferStart + (ULONG_PTR)Y0 * BytesPerScanLine + (ULONG_PTR)X0 * BytesPerPixel);
+
+    if (FrameBufferStart == PhysicalFrameBufferStart)
+        VidpFlushFrameBuffer(Start, (X1 - X0 + 1) * BytesPerPixel, Y1 - Y0 + 1, BytesPerScanLine);
+
+    DisplayWrite = DisplayWriteRoutine;
+    if (DisplayWrite != NULL)
+        DisplayWrite(Start, BytesPerScanLine, X0, Y0, X1 - X0 + 1, Y1 - Y0 + 1);
 }
 
 static VOID
