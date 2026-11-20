@@ -21,6 +21,7 @@ typedef struct _UEFI_RUNTIME_RANGE
 
 static EFI_MEMORY_DESCRIPTOR* UefiMap;
 static UINTN UefiMapCapacity;
+static BOOLEAN UefiMapLogged;
 static UINT32 UefiMapDescriptorVersion;
 static PFREELDR_MEMORY_DESCRIPTOR UefiLoaderMap;
 static UINTN UefiLoaderMapCapacity;
@@ -153,11 +154,20 @@ UefiMemGetMemoryMap(
     Entry = UefiMap;
     for (i = 0; i < Count; i++)
     {
+        if (!UefiMapLogged)
+        {
+            OslTrace("UEFI map: %I64x-%I64x type %lu attributes %I64x",
+                     (ULONGLONG)Entry->PhysicalStart,
+                     (ULONGLONG)(Entry->PhysicalStart + Entry->NumberOfPages * EFI_PAGE_SIZE - 1),
+                     (ULONG)Entry->Type,
+                     (ULONGLONG)Entry->Attribute);
+        }
         UefiLoaderMap[i].MemoryType = UefiConvertMemoryType(Entry->Type);
         UefiLoaderMap[i].BasePage = (PFN_NUMBER)(Entry->PhysicalStart >> EFI_PAGE_SHIFT);
         UefiLoaderMap[i].PageCount = (PFN_NUMBER)Entry->NumberOfPages;
         Entry = (EFI_MEMORY_DESCRIPTOR*)((PUCHAR)Entry + DescriptorSize);
     }
+    UefiMapLogged = TRUE;
 
     *MaxMemoryMapSize = (ULONG)Count;
     return UefiLoaderMap;
@@ -599,5 +609,6 @@ VOID
 UefiExitBootServices(VOID)
 {
     UefiLeaveBootServices();
+    OslTrace("UEFI: boot services left; giving the firmware its runtime address map");
     FwSetVirtualAddressMap();
 }

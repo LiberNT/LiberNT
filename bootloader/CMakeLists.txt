@@ -249,6 +249,7 @@ if(ARCH STREQUAL "arm64")
         arch/arm64/mmu_v2.c
         arch/arm64/timer.c
         arch/arm64/trap.c
+        arch/arm64/sart.c
         arch/arm64/uefitrap.c
         arch/arm64/watchdog.c
         arch/arm64/winldr.c)

@@ -529,6 +529,11 @@ OslMain(VOID)
         return;
     }
 
+    OslTrace("OS loader: loader block %p, device names at %p and %p, nt path at %p",
+             LoaderBlock,
+             LoaderBlock->ArcBootDeviceName,
+             LoaderBlock->ArcHalDeviceName,
+             LoaderBlock->NtBootPathName);
     OslTrace("OS loader: handing over, boot device %s, hal device %s",
              LoaderBlock->ArcBootDeviceName ? (PCSTR)VaToPa(LoaderBlock->ArcBootDeviceName) : "(none)",
              LoaderBlock->ArcHalDeviceName ? (PCSTR)VaToPa(LoaderBlock->ArcHalDeviceName) : "(none)");
@@ -568,6 +573,7 @@ BlMain(VOID)
         FwPrint(L"The memory map could not be read.\r\n");
         return;
     }
+    OslArchReserveFirmwareMemory(NULL);
 
     BlHeapAllocator = MmHeapAllocate;
 
