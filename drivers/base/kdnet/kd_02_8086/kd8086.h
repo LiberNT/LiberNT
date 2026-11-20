@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT Intel Network Kernel Debugger Extension
  * LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
- * PURPOSE:     Intel 8254x, 82574, I218 and 8255x register layout and module interface
+ * PURPOSE:     Intel 8254x, 82574, I218, I225 and 8255x register layout and module interface
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -38,6 +38,24 @@
 #define E1K_REG_RX_IGB  0xC000
 #define E1K_REG_TX_IGB  0xE000
 
+#define IGC_REG_PHPM        0x0E14
+#define IGC_REG_ICR         0x1500
+#define IGC_REG_IMC         0x150C
+
+#define IGC_CTRL_DEV_RST    0x20000000
+#define IGC_STATUS_SPEED_2500   0x00400000
+#define IGC_PHPM_GO_LINKD   0x00000020
+#define IGC_DCTL_THRESHOLD_MASK 0x001F1F1F
+#define IGC_RXDCTL_THRESHOLDS   (8 | (8 << 8) | (4 << 16))
+#define IGC_TXDCTL_THRESHOLDS   (8 | (1 << 8))
+
+#define IGC_ADVTXD_DTYP_DATA    0x00300000
+#define IGC_ADVTXD_DCMD_EOP     0x01000000
+#define IGC_ADVTXD_DCMD_IFCS    0x02000000
+#define IGC_ADVTXD_DCMD_RS      0x08000000
+#define IGC_ADVTXD_DCMD_DEXT    0x20000000
+#define IGC_ADVTXD_PAYLEN_SHIFT 14
+
 #define E1K_QUEUE_BAL       0x00
 #define E1K_QUEUE_BAH       0x04
 #define E1K_QUEUE_LEN       0x08
@@ -57,6 +75,8 @@
 #define E1K_CTRL_ASDE       0x00000020
 #define E1K_CTRL_SLU        0x00000040
 #define E1K_CTRL_ILOS       0x00000080
+#define E1K_CTRL_FRCSPD     0x00000800
+#define E1K_CTRL_FRCDPX     0x00001000
 #define E1K_CTRL_LANPHYPC_OVERRIDE  0x00010000
 #define E1K_CTRL_LANPHYPC_VALUE     0x00020000
 #define E1K_CTRL_RST        0x04000000
@@ -210,9 +230,18 @@ typedef struct _E1K_RX_ADVANCED_DESCRIPTOR
     USHORT Vlan;
 } E1K_RX_ADVANCED_DESCRIPTOR, *PE1K_RX_ADVANCED_DESCRIPTOR;
 
+typedef struct _E1K_TX_ADVANCED_DESCRIPTOR
+{
+    ULONG64 Address;
+    ULONG CommandTypeLength;
+    ULONG OffloadStatus;
+} E1K_TX_ADVANCED_DESCRIPTOR, *PE1K_TX_ADVANCED_DESCRIPTOR;
+
 C_ASSERT(sizeof(E1K_RX_DESCRIPTOR) == 16);
 C_ASSERT(sizeof(E1K_RX_ADVANCED_DESCRIPTOR) == 16);
 C_ASSERT(sizeof(E1K_TX_DESCRIPTOR) == 16);
+C_ASSERT(sizeof(E1K_TX_ADVANCED_DESCRIPTOR) == 16);
+C_ASSERT(FIELD_OFFSET(E1K_TX_DESCRIPTOR, Status) == FIELD_OFFSET(E1K_TX_ADVANCED_DESCRIPTOR, OffloadStatus));
 
 #define E1K_RX_COUNT        64
 #define E1K_TX_COUNT        16
@@ -226,7 +255,8 @@ typedef enum _E1K_CLASS
     E1kClass8254x,
     E1kClass82574,
     E1kClassIgb,
-    E1kClassPch
+    E1kClassPch,
+    E1kClassIgc
 } E1K_CLASS;
 
 typedef enum _E1K_PCH_GENERATION
