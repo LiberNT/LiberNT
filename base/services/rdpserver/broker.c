@@ -27,6 +27,7 @@ typedef struct AGENT
     HSWDEVICE Display;
     WCHAR DisplayInstance[MAX_DEVICE_ID_LEN];
     WCHAR User[257];
+    HANDLE Winlogon;
 } AGENT;
 
 static BROKER_LOG Log;
@@ -66,7 +67,7 @@ static BOOL AgentAlive(HANDLE process)
 }
 
 /* winpr links its own WTS functions; the session's user comes from the system's wtsapi32 */
-static BOOL ConsoleUserIs(DWORD session, const WCHAR *user, BOOL *signedIn)
+static BOOL SessionUser(DWORD session, WCHAR *user, DWORD count)
 {
     typedef BOOL (WINAPI *QUERY)(HANDLE, DWORD, WTS_INFO_CLASS, WCHAR **, DWORD *);
     typedef void (WINAPI *FREE)(void *);
@@ -75,20 +76,16 @@ static BOOL ConsoleUserIs(DWORD session, const WCHAR *user, BOOL *signedIn)
     HMODULE wtsapi;
     WCHAR *name = NULL;
     DWORD size = 0;
-    BOOL same = FALSE;
-    *signedIn = FALSE;
+    *user = 0;
     if (!Query && (wtsapi = LoadLibraryW(L"wtsapi32.dll")))
     {
         Free = (FREE)(void *)GetProcAddress(wtsapi, "WTSFreeMemory");
         Query = Free ? (QUERY)(void *)GetProcAddress(wtsapi, "WTSQuerySessionInformationW") : NULL;
     }
-    if (Query && Query(WTS_CURRENT_SERVER_HANDLE, session, WTSUserName, &name, &size) && name)
-    {
-        *signedIn = *name != 0;
-        same = *signedIn && !lstrcmpiW(name, user);
-        Free(name);
-    }
-    return same;
+    if (!Query || !Query(WTS_CURRENT_SERVER_HANDLE, session, WTSUserName, &name, &size) || !name) return FALSE;
+    lstrcpynW(user, name, count);
+    Free(name);
+    return TRUE;
 }
 
 static HRESULT DisplayResult;
@@ -120,6 +117,7 @@ static void CloseAgent(AGENT *agent)
         CloseHandle(agent->Process);
     }
     if (agent->Display) SwDeviceClose(agent->Display);
+    if (agent->Winlogon) CloseHandle(agent->Winlogon);
     ZeroMemory(agent, sizeof(*agent));
 }
 
@@ -173,6 +171,7 @@ static AGENT *StartNewSession(const WCHAR *user)
         goto failed;
     }
     agent->Session = session;
+    agent->Winlogon = OpenProcess(SYNCHRONIZE, FALSE, HandleToUlong(initial));
     lstrcpynW(agent->User, user, ARRAYSIZE(agent->User));
     Log("Session %lu started for %ls on %ls", session, user, agent->DisplayInstance);
     return agent;
@@ -219,9 +218,9 @@ static BOOL HandOff(SOCKET client, HANDLE *process, DWORD session, const WCHAR *
 
 static void Route(SOCKET client)
 {
-    WCHAR user[257];
+    WCHAR user[257], consoleUser[257];
     AGENT *agent = NULL;
-    BOOL consoleSignedIn, handed;
+    BOOL handed;
     DWORD i;
     if (!ReadCookie(client, user, ARRAYSIZE(user)))
     {
@@ -229,7 +228,8 @@ static void Route(SOCKET client)
         return;
     }
     EnterCriticalSection(&AgentLock);
-    if (*user && !ConsoleUserIs(ConsoleSession, user, &consoleSignedIn) && consoleSignedIn)
+    if (*user && SessionUser(ConsoleSession, consoleUser, ARRAYSIZE(consoleUser)) && *consoleUser &&
+        lstrcmpiW(consoleUser, user))
     {
         for (i = 0; i < MAX_AGENTS && !agent; ++i)
             if (Agents[i].Display && !lstrcmpiW(Agents[i].User, user)) agent = &Agents[i];
@@ -252,6 +252,26 @@ static void Route(SOCKET client)
     }
     LeaveCriticalSection(&AgentLock);
     if (!handed) Log("Dropped a connection for %ls", *user ? user : L"an unnamed user");
+}
+
+/* Winlogon of a session started for a user leaves when the user signs out, and the session ends with it */
+static void EndSignedOutSessions(void)
+{
+    HANDLE port = NULL;
+    NTSTATUS status;
+    DWORD i;
+    EnterCriticalSection(&AgentLock);
+    for (i = 0; i < MAX_AGENTS; ++i)
+    {
+        if (!Agents[i].Winlogon || WaitForSingleObject(Agents[i].Winlogon, 0) != WAIT_OBJECT_0) continue;
+        status = SmConnectToSm(NULL, NULL, 0, &port);
+        if (NT_SUCCESS(status)) status = SmStopCsr(port, Agents[i].Session);
+        if (port) NtClose(port);
+        port = NULL;
+        Log("Session %lu of %ls ended after its user signed out: 0x%08lx", Agents[i].Session, Agents[i].User, status);
+        CloseAgent(&Agents[i]);
+    }
+    LeaveCriticalSection(&AgentLock);
 }
 
 static SOCKET Listen(void)
@@ -314,6 +334,7 @@ static DWORD WINAPI BrokerMain(void *unused)
                 Log("Listening on port 3389 with NLA");
             }
         }
+        EndSignedOutSessions();
         wait = WaitForMultipleObjects(2, waits, FALSE, 2000);
         if (wait == WAIT_OBJECT_0 || wait == WAIT_FAILED) break;
         if (wait != WAIT_OBJECT_0 + 1 || listener == INVALID_SOCKET) continue;

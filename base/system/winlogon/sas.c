@@ -1686,6 +1686,7 @@ DoGenericAction(
             {
                 RemoveStatusMessage(Session);
                 Session->LogonState = STATE_LOGGED_OFF;
+                EndRemoteOnlySession();
                 Session->Gina.Functions.WlxDisplaySASNotice(Session->Gina.Context);
             }
             break;
