@@ -29,6 +29,8 @@
 #define BMUI_ROW_ENTRIES        5
 #define BMUI_ROW_ADVANCED       16
 #define BMUI_ROW_COUNTDOWN      17
+#define BMUI_ROW_DESCRIPTION    18
+#define BMUI_DESCRIPTION_ROWS   5
 #define BMUI_ROW_FOOTER         24
 #define BMUI_COLUMN_ENTRY       6
 #define BMUI_ENTRY_RIGHT_MARGIN 10
@@ -368,6 +370,42 @@ BmUiDrawEntries(
 
 static
 VOID
+BmUiDrawDescription(
+    _In_opt_ PCSTR Text)
+{
+    static const WCHAR Label[] = L"Description: ";
+    WCHAR Line[BMUI_TEXT_CHARS];
+    ULONG Column = BMUI_COLUMN_ENTRY + RTL_NUMBER_OF(Label) - 1;
+    ULONG Width = BmUiColumns - min(Column + BMUI_ENTRY_RIGHT_MARGIN, BmUiColumns);
+    ULONG Row, Count, Fit, Space, i;
+
+    Width = min(Width, BMUI_TEXT_CHARS - 1);
+    for (Row = 0; Row < BMUI_DESCRIPTION_ROWS; Row++)
+    {
+        Fit = 0;
+        while (Text && *Text == ' ')
+            Text++;
+        if (Text && *Text)
+        {
+            Space = 0;
+            for (Count = 0; Text[Count] && Count < Width; Count++)
+            {
+                if (Text[Count] == ' ')
+                    Space = Count;
+            }
+            Fit = (Text[Count] == ANSI_NULL || Text[Count] == ' ' || Space == 0) ? Count : Space;
+            for (i = 0; i < Fit; i++)
+                Line[i] = (UCHAR)Text[i];
+            Text += Fit;
+        }
+        Line[Fit] = UNICODE_NULL;
+        BmUiPutText(BMUI_ROW_DESCRIPTION + Row, 0, Column, (Row == 0 && Fit != 0) ? Label : NULL, BMUI_ATTR_NORMAL);
+        BmUiPutText(BMUI_ROW_DESCRIPTION + Row, Column, BmUiColumns - min(Column, BmUiColumns), Line, BMUI_ATTR_NORMAL);
+    }
+}
+
+static
+VOID
 BmUiDrawFrame(
     _In_ PCWSTR Title,
     _In_ PCWSTR Heading,
@@ -478,6 +516,7 @@ BmUiChooseEntry(
 BOOLEAN
 BmUiStartupSettings(
     _In_reads_(Count) PCSTR* Names,
+    _In_reads_(Count) PCSTR* Descriptions,
     _In_ ULONG Count,
     _Out_ PULONG Choice)
 {
@@ -502,6 +541,7 @@ BmUiStartupSettings(
     for (;;)
     {
         BmUiDrawEntries(Lines, Count, *Choice);
+        BmUiDrawDescription(Descriptions[*Choice]);
         BmUiPresent(0, BmUiHeight);
 
         Key = BmUiReadKey(NULL, &Extended);

@@ -154,6 +154,7 @@ extern ULONG UiScreenHeight;
 extern BOOLEAN UiKeepFirmwareScreen;
 extern UiMenuIdleCallback UiMenuIdle;
 extern const UI_IMAGE* const* UiMenuImages;
+extern PCSTR const* UiMenuDescriptions;
 extern UI_PROGRESS_BAR UiProgressBar;
 extern BOOLEAN UiShowTime;
 extern BOOLEAN UiMenuBox;

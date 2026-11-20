@@ -92,5 +92,6 @@ BmUiChooseEntry(
 BOOLEAN
 BmUiStartupSettings(
     _In_reads_(Count) PCSTR* Names,
+    _In_reads_(Count) PCSTR* Descriptions,
     _In_ ULONG Count,
     _Out_ PULONG Choice);
