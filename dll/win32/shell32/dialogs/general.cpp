@@ -192,7 +192,7 @@ GeneralDlg_UpdateIcons(HWND hDlg, UINT nCtrlID, PGENERAL_DIALOG pGeneral)
     if (lpTaskIconName)
     {
         hTaskIcon = (HICON)LoadImage(shell32_hInstance, lpTaskIconName,
-                                     IMAGE_ICON, 0, 0, LR_DEFAULTCOLOR);
+                                     IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
         if (hTaskIcon)
         {
             HWND hwndTaskIcon = GetDlgItem(hDlg, IDC_FOLDER_OPTIONS_TASKICON);
@@ -209,7 +209,7 @@ GeneralDlg_UpdateIcons(HWND hDlg, UINT nCtrlID, PGENERAL_DIALOG pGeneral)
     if (lpFolderIconName)
     {
         hFolderIcon = (HICON)LoadImage(shell32_hInstance, lpFolderIconName,
-                                       IMAGE_ICON, 0, 0, LR_DEFAULTCOLOR);
+                                       IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
         if (hFolderIcon)
         {
             HWND hwndFolderIcon = GetDlgItem(hDlg, IDC_FOLDER_OPTIONS_FOLDERICON);
@@ -226,7 +226,7 @@ GeneralDlg_UpdateIcons(HWND hDlg, UINT nCtrlID, PGENERAL_DIALOG pGeneral)
     if (lpClickIconName)
     {
         hClickIcon = (HICON)LoadImage(shell32_hInstance, lpClickIconName,
-                                      IMAGE_ICON, 0, 0, LR_DEFAULTCOLOR);
+                                      IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
         if (hClickIcon)
         {
             HWND hwndClickIcon = GetDlgItem(hDlg, IDC_FOLDER_OPTIONS_CLICKICON);
