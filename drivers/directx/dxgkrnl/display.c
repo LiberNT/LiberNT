@@ -419,7 +419,7 @@ DxgkpBindWin32kSession(
     return Status;
 }
 
-/* A remote display adapter serves the session its instance names, or the next session started off the console; any other adapter serves the console */
+/* A remote display adapter serves the session its instance names, or the next session started off the console (NewSession or NewSession_N); any other adapter serves the console */
 static
 BOOLEAN
 DxgkpSessionMayUseAdapter(
@@ -471,7 +471,8 @@ DxgkpSessionMayUseAdapter(
     }
     if (Tail == NULL)
         May = Console == 0 || Console == SessionId;
-    else if (_wcsicmp(Tail, NewSession) == 0)
+    else if (_wcsnicmp(Tail, NewSession, RTL_NUMBER_OF(NewSession) - 1) == 0 &&
+             (Tail[RTL_NUMBER_OF(NewSession) - 1] == UNICODE_NULL || Tail[RTL_NUMBER_OF(NewSession) - 1] == L'_'))
         May = Console != 0 && Console != SessionId;
     else if (_wcsnicmp(Tail, SessionPrefix, RTL_NUMBER_OF(SessionPrefix) - 1) != 0)
         May = FALSE;
