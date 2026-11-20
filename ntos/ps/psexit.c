@@ -463,6 +463,9 @@ PspTerminateThreadByPointer(
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
+    /* An alertable wait, in either mode, ends with STATUS_ALERTED when the thread is told to end */
+    KeAlertThread(&Thread->Tcb, KernelMode);
+
     KeInitializeApc(Apc,
                     &Thread->Tcb,
                     OriginalApcEnvironment,
