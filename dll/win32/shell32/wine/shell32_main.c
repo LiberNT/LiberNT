@@ -2320,9 +2320,7 @@ static INT_PTR CALLBACK AboutDlgProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM
 {
 #ifdef __REACTOS__
 
-    static DWORD   cxLogoBmp;
-    static DWORD   cyLogoBmp, cyLineBmp;
-    static HBITMAP hLogoBmp, hLineBmp;
+    static const WCHAR szLogoName[] = L"LiberNT";
     static HWND    hWndAuthors;
 
     switch (msg)
@@ -2338,23 +2336,6 @@ static INT_PTR CALLBACK AboutDlgProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM
                 WCHAR szAppTitle[512];
                 WCHAR szAppTitleTemplate[512];
                 WCHAR szAuthorsText[20];
-
-                // Preload the ROS bitmap
-                hLogoBmp = (HBITMAP)LoadImage(shell32_hInstance, MAKEINTRESOURCE(IDB_REACTOS), IMAGE_BITMAP, 0, 0, LR_DEFAULTCOLOR);
-                hLineBmp = (HBITMAP)LoadImage(shell32_hInstance, MAKEINTRESOURCE(IDB_LINEBAR), IMAGE_BITMAP, 0, 0, LR_DEFAULTCOLOR);
-
-                if (hLogoBmp && hLineBmp)
-                {
-                    BITMAP bmpLogo;
-
-                    GetObject(hLogoBmp, sizeof(BITMAP), &bmpLogo);
-
-                    cxLogoBmp = bmpLogo.bmWidth;
-                    cyLogoBmp = bmpLogo.bmHeight;
-
-                    GetObject(hLineBmp, sizeof(BITMAP), &bmpLogo);
-                    cyLineBmp = bmpLogo.bmHeight;
-                }
 
                 // Set App-specific stuff (icon, app name, szOtherStuff string)
                 SendDlgItemMessageW(hWnd, IDC_ABOUT_ICON, STM_SETICON, (WPARAM)info->hIcon, 0);
@@ -2458,31 +2439,57 @@ static INT_PTR CALLBACK AboutDlgProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM
 
         case WM_PAINT:
         {
-            if (hLogoBmp && hLineBmp)
+            PAINTSTRUCT ps;
+            RECT rcClient, rcBand = { 0, 0, 0, 44 };
+            HGDIOBJ hOldFont;
+            SIZE sizeName = { 0, 0 };
+            INT cyBand, cyMark, cxGap, x, y;
+            HDC hdc, hdcMem;
+            HICON hLogoIcon;
+            HFONT hLogoFont;
+            HBITMAP hLineBmp;
+            BITMAP bmpLine;
+
+            hdc = BeginPaint(hWnd, &ps);
+            GetClientRect(hWnd, &rcClient);
+            MapDialogRect(hWnd, &rcBand);
+            cyBand = rcBand.bottom;
+            cyMark = cyBand / 2;
+            cxGap = cyMark / 4;
+            hLogoIcon = (HICON)LoadImageW(NULL, (LPCWSTR)IDI_WINLOGO, IMAGE_ICON, cyMark, cyMark, LR_SHARED);
+            hLogoFont = CreateFontW(-cyMark * 4 / 5, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+                                    OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                                    DEFAULT_PITCH | FF_SWISS, L"Segoe UI Semibold");
+            hLineBmp = (HBITMAP)LoadImageW(shell32_hInstance, MAKEINTRESOURCEW(IDB_LINEBAR), IMAGE_BITMAP, 0, 0,
+                                           LR_DEFAULTCOLOR);
+
+            SendMessageW(hWnd, WM_CTLCOLORSTATIC, (WPARAM)hdc, (LPARAM)GetDlgItem(hWnd, IDC_ABOUT_APPNAME));
+            SetBkMode(hdc, TRANSPARENT);
+            hOldFont = SelectObject(hdc, hLogoFont ? hLogoFont : (HFONT)SendMessageW(hWnd, WM_GETFONT, 0, 0));
+            GetTextExtentPoint32W(hdc, szLogoName, ARRAY_SIZE(szLogoName) - 1, &sizeName);
+            x = (rcClient.right - (cyMark + cxGap + sizeName.cx)) / 2;
+            y = (cyBand - cyMark) / 2;
+            if (hLogoIcon)
+                DrawIconEx(hdc, x, y, hLogoIcon, cyMark, cyMark, 0, NULL, DI_NORMAL);
+            TextOutW(hdc, x + cyMark + cxGap, y + (cyMark - sizeName.cy) / 2, szLogoName, ARRAY_SIZE(szLogoName) - 1);
+            SelectObject(hdc, hOldFont);
+            if (hLogoFont)
+                DeleteObject(hLogoFont);
+
+            if (hLineBmp && GetObjectW(hLineBmp, sizeof(bmpLine), &bmpLine) && (hdcMem = CreateCompatibleDC(hdc)) != NULL)
             {
-                PAINTSTRUCT ps;
-                HDC hdc;
-                HDC hdcMem;
-                HGDIOBJ hOldObj;
+                HGDIOBJ hOldBmp = SelectObject(hdcMem, hLineBmp);
 
-                hdc = BeginPaint(hWnd, &ps);
-                hdcMem = CreateCompatibleDC(hdc);
-
-                if (hdcMem)
-                {
-                    hOldObj = SelectObject(hdcMem, hLogoBmp);
-                    BitBlt(hdc, 0, 0, cxLogoBmp, cyLogoBmp, hdcMem, 0, 0, SRCCOPY);
-
-                    SelectObject(hdcMem, hLineBmp);
-                    BitBlt(hdc, 0, cyLogoBmp, cxLogoBmp, cyLineBmp, hdcMem, 0, 0, SRCCOPY);
-
-                    SelectObject(hdcMem, hOldObj);
-                    DeleteDC(hdcMem);
-                }
-
-                EndPaint(hWnd, &ps);
+                StretchBlt(hdc, 0, cyBand, rcClient.right, bmpLine.bmHeight, hdcMem, 0, 0, bmpLine.bmWidth,
+                           bmpLine.bmHeight, SRCCOPY);
+                SelectObject(hdcMem, hOldBmp);
+                DeleteDC(hdcMem);
             }
-            break;
+            if (hLineBmp)
+                DeleteObject(hLineBmp);
+
+            EndPaint(hWnd, &ps);
+            return TRUE;
         }
 
         case WM_COMMAND:
