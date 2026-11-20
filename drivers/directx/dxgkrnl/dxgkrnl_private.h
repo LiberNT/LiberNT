@@ -2985,6 +2985,11 @@ NTSTATUS
 DxgkDestroyAllocation(
     _In_ CONST D3DKMT_DESTROYALLOCATION *pDestroyAllocation);
 
+NTSTATUS
+DxgkDestroyAllocationWithFlags(
+    _In_ CONST D3DKMT_DESTROYALLOCATION *pDestroyAllocation,
+    _In_ D3DDDICB_DESTROYALLOCATION2FLAGS Flags);
+
 #if (DXGKDDI_INTERFACE_VERSION >= DXGKDDI_INTERFACE_VERSION_WDDM2_0)
 /* ========================================================================
  * Function prototypes — gpuva.c  (GPU virtual address management, WDDM 2.0)

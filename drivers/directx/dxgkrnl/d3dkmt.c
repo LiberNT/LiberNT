@@ -12343,10 +12343,20 @@ DxgkpDispatchBufferedIoctlWorker(
 
         case IOCTL_D3DKMT_DESTROYALLOCATION:
         {
+            D3DDDICB_DESTROYALLOCATION2FLAGS DestroyFlags;
+
+            C_ASSERT(FIELD_OFFSET(D3DKMT_DESTROYALLOCATION2, hDevice) == FIELD_OFFSET(D3DKMT_DESTROYALLOCATION, hDevice));
+            C_ASSERT(FIELD_OFFSET(D3DKMT_DESTROYALLOCATION2, hResource) == FIELD_OFFSET(D3DKMT_DESTROYALLOCATION, hResource));
+            C_ASSERT(FIELD_OFFSET(D3DKMT_DESTROYALLOCATION2, phAllocationList) == FIELD_OFFSET(D3DKMT_DESTROYALLOCATION, phAllocationList));
+            C_ASSERT(FIELD_OFFSET(D3DKMT_DESTROYALLOCATION2, AllocationCount) == FIELD_OFFSET(D3DKMT_DESTROYALLOCATION, AllocationCount));
             if (InputLength < sizeof(D3DKMT_DESTROYALLOCATION) || SystemBuffer == NULL)
                 return STATUS_BUFFER_TOO_SMALL;
 
-            Status = DxgkDestroyAllocation((CONST D3DKMT_DESTROYALLOCATION *)SystemBuffer);
+            /* The second form appends its flags to the first form's fields */
+            DestroyFlags.Value = 0;
+            if (InputLength >= sizeof(D3DKMT_DESTROYALLOCATION2))
+                DestroyFlags = ((CONST D3DKMT_DESTROYALLOCATION2 *)SystemBuffer)->Flags;
+            Status = DxgkDestroyAllocationWithFlags((CONST D3DKMT_DESTROYALLOCATION *)SystemBuffer, DestroyFlags);
             return Status;
         }
 
