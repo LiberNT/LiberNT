@@ -986,7 +986,7 @@ static BOOL DwmGpuComposeMaterial(const DWM_WIN *Window, GLuint Texture, BOOL Fr
                        LONGLONG Left, LONGLONG Top, LONG Width, LONG Height, GLfloat Alpha,
                        const RECT *Cover, const RECT *SceneCover);
 static GLuint g_shadowProgram;
-static struct { GLint Owner, Size, Sigma, Opacity, ScreenHeight, Offset, WindowAlpha; } g_shadowLoc;
+static struct { GLint Owner, Size, Sigma, Opacity, ScreenHeight, Offset, WindowAlpha, Radius; } g_shadowLoc;
 /* Locations belong to this linked program and are refreshed after context
  * recreation. Never resolve uniform names in the per-window draw path. */
 typedef struct _DWM_GPU_MATERIAL_PROGRAM
@@ -2798,10 +2798,11 @@ DwmGpuComposeMaterial(const DWM_WIN *Window, GLuint Texture, BOOL Frame,
 static BOOL
 DwmGpuComposeShadowMeasured(const RECT *Bounds, LONGLONG X, LONGLONG Y,
                     LONG Width, LONG Height, LONG Offset, LONG WideExtent,
-                    BOOL Active, ULONG WideOpacity, ULONG TightOpacity,
+                    LONG Radius, BOOL Active, ULONG WideOpacity, ULONG TightOpacity,
                     ULONG WindowAlpha)
 {
     LONG InnerLeft, InnerTop, InnerRight, InnerBottom;
+    ULONG Corner;
     GLuint Vertex, Fragment;
     GLint Linked = GL_FALSE;
 
@@ -2837,7 +2838,7 @@ DwmGpuComposeShadowMeasured(const RECT *Bounds, LONGLONG X, LONGLONG Y,
 #define SHADOW_LOCATION(Name) g_shadowLoc.Name = pglGetUniformLocation(g_shadowProgram, "u" #Name)
         SHADOW_LOCATION(Owner); SHADOW_LOCATION(Size); SHADOW_LOCATION(Sigma);
         SHADOW_LOCATION(Opacity); SHADOW_LOCATION(ScreenHeight);
-        SHADOW_LOCATION(Offset); SHADOW_LOCATION(WindowAlpha);
+        SHADOW_LOCATION(Offset); SHADOW_LOCATION(WindowAlpha); SHADOW_LOCATION(Radius);
 #undef SHADOW_LOCATION
     }
     pglUseProgram(g_shadowProgram);
@@ -2849,6 +2850,7 @@ DwmGpuComposeShadowMeasured(const RECT *Bounds, LONGLONG X, LONGLONG Y,
     pglUniform1f(g_shadowLoc.ScreenHeight, g_composeHeight);
     pglUniform1f(g_shadowLoc.Offset, Offset);
     pglUniform1f(g_shadowLoc.WindowAlpha, WindowAlpha);
+    pglUniform1f(g_shadowLoc.Radius, (GLfloat)Radius);
     glEnable(GL_BLEND);
     InnerLeft = (LONG)max(Bounds->left, min((LONGLONG)Bounds->right, X));
     InnerRight = (LONG)max(Bounds->left, min((LONGLONG)Bounds->right, X + Width));
@@ -2865,6 +2867,18 @@ DwmGpuComposeShadowMeasured(const RECT *Bounds, LONGLONG X, LONGLONG Y,
         if (InnerRight < Bounds->right)
             DwmGpuComposeQuad(InnerRight, InnerTop, Bounds->right, InnerBottom, 1.0f);
     }
+    for (Corner = 0; Radius > 0 && Corner < 4; ++Corner)
+    {
+        LONGLONG Left = (Corner & 1) ? X + Width - Radius : X;
+        LONGLONG Top = (Corner & 2) ? Y + Height - Radius : Y;
+        LONG CornerLeft = (LONG)max((LONGLONG)Bounds->left, Left);
+        LONG CornerTop = (LONG)max((LONGLONG)Bounds->top, Top);
+        LONG CornerRight = (LONG)min((LONGLONG)Bounds->right, Left + Radius);
+        LONG CornerBottom = (LONG)min((LONGLONG)Bounds->bottom, Top + Radius);
+
+        if (CornerLeft < CornerRight && CornerTop < CornerBottom)
+            DwmGpuComposeQuad(CornerLeft, CornerTop, CornerRight, CornerBottom, 1.0f);
+    }
     pglUseProgram(0);
     return glGetError() == GL_NO_ERROR;
 }
@@ -2872,13 +2886,13 @@ DwmGpuComposeShadowMeasured(const RECT *Bounds, LONGLONG X, LONGLONG Y,
 BOOL
 DwmGpuComposeShadow(const RECT *Bounds, LONGLONG X, LONGLONG Y,
                     LONG Width, LONG Height, LONG Offset, LONG WideExtent,
-                    BOOL Active, ULONG WideOpacity, ULONG TightOpacity,
+                    LONG Radius, BOOL Active, ULONG WideOpacity, ULONG TightOpacity,
                     ULONG WindowAlpha)
 {
     DPT_SCOPE Trace = DptBegin(&g_DwmPresentTrace, DPT_SHADOW);
     BOOL Result = DwmD3dIsActive() ?
-                    DwmD3dShadow(Bounds, X, Y, Width, Height, Offset, WideExtent, Active, WideOpacity, TightOpacity, WindowAlpha) :
-                    DwmGpuComposeShadowMeasured(Bounds, X, Y, Width, Height, Offset, WideExtent, Active, WideOpacity, TightOpacity, WindowAlpha);
+                    DwmD3dShadow(Bounds, X, Y, Width, Height, Offset, WideExtent, Radius, Active, WideOpacity, TightOpacity, WindowAlpha) :
+                    DwmGpuComposeShadowMeasured(Bounds, X, Y, Width, Height, Offset, WideExtent, Radius, Active, WideOpacity, TightOpacity, WindowAlpha);
     DptEnd(&g_DwmPresentTrace, Trace, Result, 0);
     return Result;
 }
