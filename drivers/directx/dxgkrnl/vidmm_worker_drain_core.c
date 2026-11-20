@@ -15,10 +15,8 @@ BOOLEAN DxgkVidMmWorkerDrainCoreTryAdmitLocked(_Inout_ volatile LONG *ActiveWork
         return FALSE;
     *ResetDrainedEvent = *ActiveWorkers == 0;
     (*ActiveWorkers)++;
-    return TRUE;
-
     ASSERT(*ActiveWorkers > 0);
-
+    return TRUE;
 }
 
 BOOLEAN DxgkVidMmWorkerDrainCoreRetireLocked(_Inout_ volatile LONG *ActiveWorkers, _Out_ PBOOLEAN SetDrainedEvent)
@@ -36,4 +34,36 @@ BOOLEAN DxgkVidMmWorkerDrainCoreRetireLocked(_Inout_ volatile LONG *ActiveWorker
 BOOLEAN DxgkVidMmWorkerDrainCoreIsDrainedLocked(_In_ volatile const LONG *ActiveWorkers)
 {
     return ActiveWorkers != NULL && *ActiveWorkers == 0;
+}
+
+VOID DxgkVidMmWorkerDrainCoreYield(_In_ PDXGK_VIDMM_WORKER_DRAIN_GATE Gate)
+{
+    BOOLEAN SetDrainedEvent;
+    BOOLEAN Retired;
+
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    ExAcquireFastMutex(Gate->Lock);
+    Retired = DxgkVidMmWorkerDrainCoreRetireLocked(Gate->ActiveWorkers, &SetDrainedEvent);
+    ASSERT(Retired);
+    if (Retired && SetDrainedEvent)
+        KeSetEvent(Gate->DrainedEvent, IO_NO_INCREMENT, FALSE);
+    ASSERT((KeReadStateEvent(Gate->DrainedEvent) != 0) == DxgkVidMmWorkerDrainCoreIsDrainedLocked(Gate->ActiveWorkers));
+    ExReleaseFastMutex(Gate->Lock);
+}
+
+BOOLEAN DxgkVidMmWorkerDrainCoreReenter(_In_ PDXGK_VIDMM_WORKER_DRAIN_GATE Gate)
+{
+    BOOLEAN ResetDrainedEvent;
+    BOOLEAN Admitted;
+
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    ExAcquireFastMutex(Gate->Lock);
+    Admitted = DxgkVidMmWorkerDrainCoreTryAdmitLocked(Gate->ActiveWorkers,
+                                                      InterlockedCompareExchange(Gate->AdmissionBlocked, 0, 0) != 0,
+                                                      &ResetDrainedEvent);
+    if (Admitted && ResetDrainedEvent)
+        KeResetEvent(Gate->DrainedEvent);
+    ASSERT((KeReadStateEvent(Gate->DrainedEvent) != 0) == DxgkVidMmWorkerDrainCoreIsDrainedLocked(Gate->ActiveWorkers));
+    ExReleaseFastMutex(Gate->Lock);
+    return Admitted;
 }

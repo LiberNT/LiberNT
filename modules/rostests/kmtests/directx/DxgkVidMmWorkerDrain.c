@@ -104,9 +104,96 @@ static VOID DxgkVidMmWorkerDrainTestInvalidTransitions(VOID)
     ok_bool_false(DxgkVidMmWorkerDrainTestRetire(&State), "corrupt negative count rejects retirement");
 }
 
+typedef struct _DXGK_VIDMM_WORKER_DRAIN_RESET_TEST
+{
+    FAST_MUTEX Lock;
+    LONG ActiveWorkers;
+    LONG AdmissionBlocked;
+    KEVENT DrainedEvent;
+    DXGK_VIDMM_WORKER_DRAIN_GATE Gate;
+    KMUTEX ResetMutex;
+    KEVENT ResetOwned;
+    KEVENT WorkerWaiting;
+    BOOLEAN Reentered;
+    LONG WorkersAfterReenter;
+} DXGK_VIDMM_WORKER_DRAIN_RESET_TEST, *PDXGK_VIDMM_WORKER_DRAIN_RESET_TEST;
+
+static VOID NTAPI DxgkVidMmWorkerDrainTestResetWorker(_In_ PVOID Context)
+{
+    PDXGK_VIDMM_WORKER_DRAIN_RESET_TEST Test = Context;
+
+    KeWaitForSingleObject(&Test->ResetOwned, Executive, KernelMode, FALSE, NULL);
+    DxgkVidMmWorkerDrainCoreYield(&Test->Gate);
+    KeSetEvent(&Test->WorkerWaiting, IO_NO_INCREMENT, FALSE);
+    KeWaitForSingleObject(&Test->ResetMutex, Executive, KernelMode, FALSE, NULL);
+    KeReleaseMutex(&Test->ResetMutex, FALSE);
+    Test->Reentered = DxgkVidMmWorkerDrainCoreReenter(&Test->Gate);
+    Test->WorkersAfterReenter = Test->ActiveWorkers;
+    if (Test->Reentered)
+        DxgkVidMmWorkerDrainCoreYield(&Test->Gate);
+    PsTerminateSystemThread(STATUS_SUCCESS);
+}
+
+/* The reset owns the boundary and drains counted workers while a counted worker waits for that boundary. */
+static VOID DxgkVidMmWorkerDrainTestResetBoundary(_In_ BOOLEAN ResetReopensAdmission)
+{
+    PDXGK_VIDMM_WORKER_DRAIN_RESET_TEST Test;
+    LARGE_INTEGER Timeout;
+    PKTHREAD Thread;
+    NTSTATUS Status;
+
+    Test = ExAllocatePoolZero(NonPagedPool, sizeof(*Test), 'tDmV');
+    if (skip(Test != NULL, "No memory\n"))
+        return;
+    ExInitializeFastMutex(&Test->Lock);
+    KeInitializeEvent(&Test->DrainedEvent, NotificationEvent, TRUE);
+    KeInitializeMutex(&Test->ResetMutex, 0);
+    KeInitializeEvent(&Test->ResetOwned, NotificationEvent, FALSE);
+    KeInitializeEvent(&Test->WorkerWaiting, NotificationEvent, FALSE);
+    Test->Gate.Lock = &Test->Lock;
+    Test->Gate.ActiveWorkers = &Test->ActiveWorkers;
+    Test->Gate.AdmissionBlocked = &Test->AdmissionBlocked;
+    Test->Gate.DrainedEvent = &Test->DrainedEvent;
+
+    ok_bool_true(DxgkVidMmWorkerDrainCoreReenter(&Test->Gate), "the worker is counted before the reset");
+    ok_eq_long(Test->ActiveWorkers, 1);
+    ok_eq_long(KeReadStateEvent(&Test->DrainedEvent), 0);
+    Thread = KmtStartThread(DxgkVidMmWorkerDrainTestResetWorker, Test);
+
+    KeWaitForSingleObject(&Test->ResetMutex, Executive, KernelMode, FALSE, NULL);
+    ExAcquireFastMutex(&Test->Lock);
+    InterlockedExchange(&Test->AdmissionBlocked, 1);
+    ExReleaseFastMutex(&Test->Lock);
+    KeSetEvent(&Test->ResetOwned, IO_NO_INCREMENT, FALSE);
+
+    Timeout.QuadPart = -5LL * 10 * 1000 * 1000;
+    Status = KeWaitForSingleObject(&Test->DrainedEvent, Executive, KernelMode, FALSE, &Timeout);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_long(Test->ActiveWorkers, 0);
+    Status = KeWaitForSingleObject(&Test->WorkerWaiting, Executive, KernelMode, FALSE, &Timeout);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+
+    if (ResetReopensAdmission)
+    {
+        ExAcquireFastMutex(&Test->Lock);
+        InterlockedExchange(&Test->AdmissionBlocked, 0);
+        ExReleaseFastMutex(&Test->Lock);
+    }
+    KeReleaseMutex(&Test->ResetMutex, FALSE);
+    KmtFinishThread(Thread, NULL);
+
+    ok_eq_bool(Test->Reentered, ResetReopensAdmission);
+    ok_eq_long(Test->WorkersAfterReenter, ResetReopensAdmission ? 1 : 0);
+    ok_eq_long(Test->ActiveWorkers, 0);
+    ok(KeReadStateEvent(&Test->DrainedEvent) != 0, "the drained event is signaled once the worker leaves\n");
+    ExFreePoolWithTag(Test, 'tDmV');
+}
+
 START_TEST(DxgkVidMmWorkerDrain)
 {
     DxgkVidMmWorkerDrainTestTransitions();
     DxgkVidMmWorkerDrainTestQuiesceInterleaving();
     DxgkVidMmWorkerDrainTestInvalidTransitions();
+    DxgkVidMmWorkerDrainTestResetBoundary(TRUE);
+    DxgkVidMmWorkerDrainTestResetBoundary(FALSE);
 }

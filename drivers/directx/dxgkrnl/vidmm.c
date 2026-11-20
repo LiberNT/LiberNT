@@ -7614,6 +7614,36 @@ DxgkpVidMmWaitForAllocationReferences(
 }
 
 #if defined(REACTOS_WDDM_TARGET_LEVEL) && (REACTOS_WDDM_TARGET_LEVEL >= 2000)
+/* A reset drains the counted retirements before it resets, so a retirement
+ * never waits for that reset while it is counted. */
+static NTSTATUS
+DxgkpVidMmFlushRetiredDevice(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKRNL_DEVICE Device,
+    _Inout_ PBOOLEAN WorkerCounted)
+{
+    DXGK_VIDMM_WORKER_DRAIN_GATE Gate;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    ASSERT(*WorkerCounted);
+    Gate.Lock = &DxgkVidMmDestroyBatchListLock;
+    Gate.ActiveWorkers = &Adapter->VidMmDestroyWorkerCount;
+    Gate.AdmissionBlocked = &Adapter->VidMmDestroyQueuesBlocked;
+    Gate.DrainedEvent = &Adapter->VidMmDestroyWorkersDrainedEvent;
+    for (;;)
+    {
+        Status = DxgkGpuVaFlushPageTableUpdatesForDeviceNoResetWait(Device->ProcessRecord, Device);
+        if (Status != STATUS_DELETE_PENDING)
+            return Status;
+        DxgkVidMmWorkerDrainCoreYield(&Gate);
+        *WorkerCounted = FALSE;
+        if (!DxgkGpuVaWaitForKmdResetBoundary(Adapter, Device) || !DxgkVidMmWorkerDrainCoreReenter(&Gate))
+            return Status;
+        *WorkerCounted = TRUE;
+    }
+}
+
 static VOID
 DxgkpVidMmRetireBatch(
     _In_ PDXGKVMM_DESTROY_BATCH Batch)
@@ -7622,6 +7652,7 @@ DxgkpVidMmRetireBatch(
     NTSTATUS Status = STATUS_SUCCESS;
     UINT Index;
     UINT OtherIndex;
+    BOOLEAN WorkerCounted = TRUE;
 
     PAGED_CODE();
     ASSERT(Batch->AllocationCount != 0);
@@ -7669,7 +7700,7 @@ DxgkpVidMmRetireBatch(
                 continue;
             /* Device cleanup waits for this counted worker before releasing
              * the device/process, including an already unlinked device. */
-            Status = DxgkGpuVaFlushPageTableUpdatesForDevice(Device->ProcessRecord, Device);
+            Status = DxgkpVidMmFlushRetiredDevice(Adapter, Device, &WorkerCounted);
             if (!NT_SUCCESS(Status))
                 break;
         }
@@ -7693,7 +7724,8 @@ DxgkpVidMmRetireBatch(
     KeSetEvent(&Batch->RetirementCompletionEvent, IO_NO_INCREMENT, FALSE);
     ExReleaseFastMutex(&DxgkVidMmDestroyBatchListLock);
     DxgkpVidMmFreeDestroyBatch(Batch);
-    DxgkpVidMmRetireDestroyWorkerCount(Adapter);
+    if (WorkerCounted)
+        DxgkpVidMmRetireDestroyWorkerCount(Adapter);
     DxgkDereferenceAdapter(Adapter);
 }
 

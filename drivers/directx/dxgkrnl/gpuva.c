@@ -1775,8 +1775,8 @@ GpuVaAppendPagingOperation(
     return STATUS_SUCCESS;
 }
 
-static BOOLEAN
-GpuVaWaitForKmdResetBoundary(
+BOOLEAN
+DxgkGpuVaWaitForKmdResetBoundary(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_opt_ PDXGKRNL_DEVICE SubmissionDevice)
 {
@@ -2769,7 +2769,8 @@ Complete:
 static NTSTATUS
 DxgkpGpuVaFlushPageTableUpdates(
     _In_ PDXGKRNL_PROCESS Process,
-    _In_opt_ PDXGKRNL_DEVICE OwnedDevice)
+    _In_opt_ PDXGKRNL_DEVICE OwnedDevice,
+    _In_ BOOLEAN WaitForReset)
 {
     ULONG Retry;
     NTSTATUS Status;
@@ -2782,7 +2783,8 @@ DxgkpGpuVaFlushPageTableUpdates(
         if (Retry >= 999 || Process == NULL || Process->Adapter == NULL)
             return Status;
         if (Status == STATUS_DELETE_PENDING &&
-            GpuVaWaitForKmdResetBoundary(Process->Adapter, OwnedDevice))
+            WaitForReset &&
+            DxgkGpuVaWaitForKmdResetBoundary(Process->Adapter, OwnedDevice))
             continue;
         if (Status != STATUS_DEVICE_BUSY)
             return Status;
@@ -2798,7 +2800,7 @@ NTSTATUS
 DxgkGpuVaFlushPageTableUpdates(
     _In_ PDXGKRNL_PROCESS Process)
 {
-    return DxgkpGpuVaFlushPageTableUpdates(Process, NULL);
+    return DxgkpGpuVaFlushPageTableUpdates(Process, NULL, TRUE);
 }
 
 NTSTATUS
@@ -2808,7 +2810,17 @@ DxgkGpuVaFlushPageTableUpdatesForDevice(
 {
     if (Device == NULL)
         return STATUS_INVALID_PARAMETER;
-    return DxgkpGpuVaFlushPageTableUpdates(Process, Device);
+    return DxgkpGpuVaFlushPageTableUpdates(Process, Device, TRUE);
+}
+
+NTSTATUS
+DxgkGpuVaFlushPageTableUpdatesForDeviceNoResetWait(
+    _In_ PDXGKRNL_PROCESS Process,
+    _In_ PDXGKRNL_DEVICE Device)
+{
+    if (Device == NULL)
+        return STATUS_INVALID_PARAMETER;
+    return DxgkpGpuVaFlushPageTableUpdates(Process, Device, FALSE);
 }
 
 /*
