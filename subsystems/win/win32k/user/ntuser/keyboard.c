@@ -112,6 +112,16 @@ IntKeyboardGetIndicatorTrans(HANDLE hKeyboardDevice,
         return Status;
     }
 
+    /* The table is the driver's answer: its count must fit in what the driver returned */
+    if (Block.Information < FIELD_OFFSET(KEYBOARD_INDICATOR_TRANSLATION, IndicatorList) ||
+        Block.Information > dwSize ||
+        pRet->NumberOfIndicatorKeys >
+            (Block.Information - FIELD_OFFSET(KEYBOARD_INDICATOR_TRANSLATION, IndicatorList)) / sizeof(INDICATOR_LIST))
+    {
+        ExFreePoolWithTag(pRet, USERTAG_KBDTABLE);
+        return STATUS_DEVICE_DATA_ERROR;
+    }
+
     *ppIndicatorTrans = pRet;
     return Status;
 }
