@@ -43,6 +43,8 @@ static unsigned char buff[32768];
 #define FAT32_BACKUP_BOOT_SECTOR_OFFSET 50
 #define FAT32_VOL_ID_OFFSET 67
 #define FAT12_16_VOL_LABEL_OFFSET 43
+#define FAT12_16_FS_TYPE_OFFSET 54
+#define FAT_FS_TYPE_LENGTH 8
 #define FAT32_VOL_LABEL_OFFSET 71
 #define LIST_LINE_SIZE      16384
 
@@ -284,6 +286,10 @@ static int patch_volume_metadata(void)
         return 1;
 
     memcpy(buff + FAT_OEM_NAME_OFFSET, g_MkfsFatOemName, FAT_OEM_NAME_LENGTH);
+    if (g_Filesystem.fs_type == FS_FAT12)
+        memcpy(buff + FAT12_16_FS_TYPE_OFFSET, "FAT12   ", FAT_FS_TYPE_LENGTH);
+    else if (g_Filesystem.fs_type == FS_FAT16)
+        memcpy(buff + FAT12_16_FS_TYPE_OFFSET, "FAT16   ", FAT_FS_TYPE_LENGTH);
 
     volume_id = generate_volume_id();
     volume_id_offset = (g_Filesystem.fs_type == FS_FAT32) ? FAT32_VOL_ID_OFFSET : FAT12_16_VOL_ID_OFFSET;
@@ -802,7 +808,7 @@ static int add_files_from_list(const char* list_path)
         line_number++;
         if (!line_complete)
         {
-            fprintf(stderr, "Error: List entry %u in '%s' exceeds %u bytes.\n", line_number, list_path, LIST_LINE_SIZE - 1);
+            fprintf(stderr, "Error: List entry %u in '%s' exceeds %d bytes.\n", line_number, list_path, LIST_LINE_SIZE - 1);
             goto cleanup;
         }
 
@@ -1309,7 +1315,7 @@ label_complete:
             {
                 if (fwrite(buff, 1, rdlen, fv) < rdlen)
                 {
-                    fprintf(stderr, "Error: Unable to write '%d' bytes to file.", rdlen);
+                    fprintf(stderr, "Error: Unable to write '%u' bytes to file.", rdlen);
                     ret = 1;
                     goto exit;
                 }
@@ -1364,7 +1370,7 @@ label_complete:
             {
                 if (f_write(&fv, buff, rdlen, &wrlen) || wrlen < rdlen)
                 {
-                    fprintf(stderr, "Error: Unable to write '%d' bytes to disk.", wrlen);
+                    fprintf(stderr, "Error: Unable to write '%u' bytes to disk.", wrlen);
                     ret = 1;
                     goto exit;
                 }
