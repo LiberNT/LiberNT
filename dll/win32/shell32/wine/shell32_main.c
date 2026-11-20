@@ -2313,12 +2313,10 @@ INT_PTR CALLBACK AboutAuthorsDlgProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM
 
     return FALSE;
 }
+
 #ifdef __REACTOS__
 #define ABOUT_BAND_EDGE  RGB(198, 212, 223)
-#define ABOUT_BAND_GLOW  RGB(240, 244, 247)
-#define ABOUT_BAND_TEXT  RGB(40, 43, 47)
 #define ABOUT_BAND_NOTE  RGB(58, 64, 66)
-#define ABOUT_BAND_STEPS 24
 
 static HFONT AboutCreateBandFont(HDC hdc, INT CapHeight, INT Weight)
 {
@@ -2341,44 +2339,6 @@ static HFONT AboutCreateBandFont(HDC hdc, INT CapHeight, INT Weight)
     return CreateFontW(-EmHeight, 0, 0, 0, Weight, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
                        CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
 }
-
-static BYTE AboutBandChannel(BYTE Edge, BYTE Glow, INT Step)
-{
-    return (BYTE)(Edge + (Glow - Edge) * Step / ABOUT_BAND_STEPS);
-}
-
-static VOID AboutPaintBand(HDC hdc, INT cx, INT cy)
-{
-    RECT rc = { 0, 0, cx, cy };
-    HBRUSH hbr;
-    HGDIOBJ hOldBrush, hOldPen;
-    INT Step, rx, ry;
-    INT iSaved;
-
-    hbr = CreateSolidBrush(ABOUT_BAND_EDGE);
-    if (hbr)
-    {
-        FillRect(hdc, &rc, hbr);
-        DeleteObject(hbr);
-    }
-
-    iSaved = SaveDC(hdc);
-    IntersectClipRect(hdc, 0, 0, cx, cy);
-    hOldBrush = SelectObject(hdc, GetStockObject(DC_BRUSH));
-    hOldPen = SelectObject(hdc, GetStockObject(NULL_PEN));
-    for (Step = 1; Step <= ABOUT_BAND_STEPS; Step++)
-    {
-        rx = cy * 13 / 5 * (ABOUT_BAND_STEPS + 1 - Step) / ABOUT_BAND_STEPS;
-        ry = cy * 9 / 20 * (ABOUT_BAND_STEPS + 1 - Step) / ABOUT_BAND_STEPS;
-        SetDCBrushColor(hdc, RGB(AboutBandChannel(GetRValue(ABOUT_BAND_EDGE), GetRValue(ABOUT_BAND_GLOW), Step),
-                                 AboutBandChannel(GetGValue(ABOUT_BAND_EDGE), GetGValue(ABOUT_BAND_GLOW), Step),
-                                 AboutBandChannel(GetBValue(ABOUT_BAND_EDGE), GetBValue(ABOUT_BAND_GLOW), Step)));
-        Ellipse(hdc, cx / 2 - rx, cy / 2 - ry, cx / 2 + rx, cy / 2 + ry);
-    }
-    SelectObject(hdc, hOldPen);
-    SelectObject(hdc, hOldBrush);
-    RestoreDC(hdc, iSaved);
-}
 #endif
 
 /*************************************************************************
@@ -2388,7 +2348,6 @@ static INT_PTR CALLBACK AboutDlgProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM
 {
 #ifdef __REACTOS__
 
-    static const WCHAR szLogoName[] = L"LiberNT";
     static const WCHAR szLogoCopyright[] = L"\u00A9 2026 LiberNT Team & Contributors";
     static HWND    hWndAuthors;
 
@@ -2509,62 +2468,59 @@ static INT_PTR CALLBACK AboutDlgProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM
         case WM_PAINT:
         {
             PAINTSTRUCT ps;
-            RECT rcClient, rcBand = { 0, 0, 0, 44 };
-            HGDIOBJ hOldFont;
-            SIZE sizeName = { 0, 0 };
-            INT cyBand, cyMark, cxGap, x;
+            RECT rcClient, rcBand;
+            HGDIOBJ hOldFont, hOldBmp;
             UINT OldAlign;
             HDC hdc, hdcMem;
-            HICON hLogoIcon;
-            HFONT hLogoFont, hNoteFont;
-            HBITMAP hLineBmp;
-            BITMAP bmpLine;
+            HFONT hNoteFont;
+            HBRUSH hbrBand;
+            HBITMAP hBannerBmp, hLineBmp;
+            BITMAP bmpBanner, bmpLine;
 
             hdc = BeginPaint(hWnd, &ps);
             GetClientRect(hWnd, &rcClient);
-            MapDialogRect(hWnd, &rcBand);
-            cyBand = rcBand.bottom;
-            cyMark = cyBand * 40 / 72;
-            cxGap = cyBand * 10 / 72;
-            hLogoIcon = (HICON)LoadImageW(NULL, (LPCWSTR)IDI_WINLOGO, IMAGE_ICON, cyMark, cyMark, LR_SHARED);
-            hLogoFont = AboutCreateBandFont(hdc, cyBand * 32 / 72, FW_BOLD);
-            hNoteFont = AboutCreateBandFont(hdc, cyBand * 6 / 72, FW_NORMAL);
+            hBannerBmp = (HBITMAP)LoadImageW(shell32_hInstance, MAKEINTRESOURCEW(IDB_ABOUT_BANNER), IMAGE_BITMAP, 0, 0,
+                                             LR_DEFAULTCOLOR);
             hLineBmp = (HBITMAP)LoadImageW(shell32_hInstance, MAKEINTRESOURCEW(IDB_LINEBAR), IMAGE_BITMAP, 0, 0,
                                            LR_DEFAULTCOLOR);
-
-            AboutPaintBand(hdc, rcClient.right, cyBand);
-            SetBkMode(hdc, TRANSPARENT);
-            OldAlign = SetTextAlign(hdc, TA_BASELINE | TA_LEFT);
-            hOldFont = SelectObject(hdc, hLogoFont ? hLogoFont : (HFONT)SendMessageW(hWnd, WM_GETFONT, 0, 0));
-            GetTextExtentPoint32W(hdc, szLogoName, ARRAY_SIZE(szLogoName) - 1, &sizeName);
-            x = (rcClient.right - (cyMark + cxGap + sizeName.cx)) / 2;
-            if (hLogoIcon)
-                DrawIconEx(hdc, x, cyBand * 9 / 72, hLogoIcon, cyMark, cyMark, 0, NULL, DI_NORMAL);
-            SetTextColor(hdc, ABOUT_BAND_TEXT);
-            TextOutW(hdc, x + cyMark + cxGap, cyBand * 46 / 72, szLogoName, ARRAY_SIZE(szLogoName) - 1);
-
-            SelectObject(hdc, hNoteFont ? hNoteFont : (HFONT)SendMessageW(hWnd, WM_GETFONT, 0, 0));
-            SetTextAlign(hdc, TA_BASELINE | TA_CENTER);
-            SetTextColor(hdc, ABOUT_BAND_NOTE);
-            TextOutW(hdc, rcClient.right / 2, cyBand * 68 / 72, szLogoCopyright, ARRAY_SIZE(szLogoCopyright) - 1);
-            SetTextAlign(hdc, OldAlign);
-            SelectObject(hdc, hOldFont);
-            if (hNoteFont)
-                DeleteObject(hNoteFont);
-            if (hLogoFont)
-                DeleteObject(hLogoFont);
-
-            if (hLineBmp && GetObjectW(hLineBmp, sizeof(bmpLine), &bmpLine) && (hdcMem = CreateCompatibleDC(hdc)) != NULL)
+            if (hBannerBmp && GetObjectW(hBannerBmp, sizeof(bmpBanner), &bmpBanner) &&
+                (hdcMem = CreateCompatibleDC(hdc)) != NULL)
             {
-                HGDIOBJ hOldBmp = SelectObject(hdcMem, hLineBmp);
-
-                StretchBlt(hdc, 0, cyBand, rcClient.right, bmpLine.bmHeight, hdcMem, 0, 0, bmpLine.bmWidth,
-                           bmpLine.bmHeight, SRCCOPY);
+                SetRect(&rcBand, 0, 0, rcClient.right, bmpBanner.bmHeight);
+                hbrBand = CreateSolidBrush(ABOUT_BAND_EDGE);
+                if (hbrBand)
+                {
+                    FillRect(hdc, &rcBand, hbrBand);
+                    DeleteObject(hbrBand);
+                }
+                hOldBmp = SelectObject(hdcMem, hBannerBmp);
+                BitBlt(hdc, (rcClient.right - bmpBanner.bmWidth) / 2, 0, bmpBanner.bmWidth, bmpBanner.bmHeight,
+                       hdcMem, 0, 0, SRCCOPY);
+                if (hLineBmp && GetObjectW(hLineBmp, sizeof(bmpLine), &bmpLine))
+                {
+                    SelectObject(hdcMem, hLineBmp);
+                    StretchBlt(hdc, 0, bmpBanner.bmHeight, rcClient.right, bmpLine.bmHeight, hdcMem, 0, 0,
+                               bmpLine.bmWidth, bmpLine.bmHeight, SRCCOPY);
+                }
                 SelectObject(hdcMem, hOldBmp);
                 DeleteDC(hdcMem);
+
+                hNoteFont = AboutCreateBandFont(hdc, bmpBanner.bmHeight * 6 / 72, FW_NORMAL);
+                SetBkMode(hdc, TRANSPARENT);
+                SetTextColor(hdc, ABOUT_BAND_NOTE);
+                OldAlign = SetTextAlign(hdc, TA_BASELINE | TA_CENTER);
+                hOldFont = SelectObject(hdc, hNoteFont ? hNoteFont : (HFONT)SendMessageW(hWnd, WM_GETFONT, 0, 0));
+                TextOutW(hdc, rcClient.right / 2, bmpBanner.bmHeight * 68 / 72, szLogoCopyright,
+                         ARRAY_SIZE(szLogoCopyright) - 1);
+                SelectObject(hdc, hOldFont);
+                SetTextAlign(hdc, OldAlign);
+                if (hNoteFont)
+                    DeleteObject(hNoteFont);
             }
             if (hLineBmp)
                 DeleteObject(hLineBmp);
+            if (hBannerBmp)
+                DeleteObject(hBannerBmp);
 
             EndPaint(hWnd, &ps);
             return TRUE;
