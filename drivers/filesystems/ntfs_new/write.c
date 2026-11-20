@@ -734,6 +734,7 @@ NtfsFsdWrite(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                                                 DirectOffset,
                                                 Length);
                 }
+                NtfsDiskDropCleanRangeKm(VolCB->StorageDevice, DirectOffset, Length);
             }
             if (NT_SUCCESS(Status))
             {
