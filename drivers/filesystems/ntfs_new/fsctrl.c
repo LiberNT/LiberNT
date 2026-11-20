@@ -1455,6 +1455,60 @@ NtfsGetNtfsFileRecord(
     return STATUS_SUCCESS;
 }
 
+/*
+ * A stream grown through the cache keeps its size in memory until cleanup.
+ * One of its open files carries the record the size goes to; the reference
+ * on that file object keeps the file context alive without the link lock.
+ */
+static
+NTSTATUS
+NtfsPersistStreamSize(
+    _In_ PVolumeContextBlock VolCB,
+    _In_ PStreamContextBlock StreamCB)
+{
+    PFILE_OBJECT FileObject = NULL;
+    PFileContextBlock FileCB;
+    BOOLEAN Acquired;
+    BOOLEAN Locked;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    KeEnterCriticalRegion();
+    Acquired = NtfsAcquireMetadataSharedUnlessHeld(VolCB);
+    Locked = NtfsLockOpenLinks(VolCB);
+    if (!IsListEmpty(&StreamCB->NativeScb.CcbList))
+    {
+        PNTFS_NATIVE_CCB Ccb = CONTAINING_RECORD(StreamCB->NativeScb.CcbList.Flink, NTFS_NATIVE_CCB, StreamEntry);
+
+        FileObject = Ccb->FileObject;
+        if (FileObject)
+            ObReferenceObject(FileObject);
+    }
+    NtfsUnlockOpenLinks(VolCB, Locked);
+    if (Acquired)
+        NtfsReleaseMetadataShared(VolCB);
+    KeLeaveCriticalRegion();
+
+    /* TODO: a stream whose size stayed pending after its last cleanup failed to persist it has no open file to carry it */
+    if (FileObject == NULL)
+        return STATUS_SUCCESS;
+
+    FileCB = FileObject->FsContext2;
+    ASSERT(FileCB != NULL);
+    ASSERT(FileCB->StreamCB == StreamCB);
+    if (!FileCB->DeletePending && !(FileCB->CreateOptions & FILE_DELETE_ON_CLOSE) && !StreamCB->Deleted)
+    {
+        KeEnterCriticalRegion();
+        ExAcquireResourceExclusiveLite(NtfsGetMainResource(FileCB), TRUE);
+        Status = NtfsPersistPendingSize(VolCB, FileCB);
+        ExReleaseResourceLite(NtfsGetMainResource(FileCB));
+        KeLeaveCriticalRegion();
+    }
+    ObDereferenceObject(FileObject);
+    return Status;
+}
+
 NTSTATUS
 NtfsFlushVolume(
     _In_ PVolumeContextBlock VolCB,
@@ -1505,6 +1559,15 @@ NtfsFlushVolume(
     for (Index = 0; Index < Captured; Index++)
     {
         IO_STATUS_BLOCK IoStatus;
+        NTSTATUS SizeStatus;
+
+        /* The size goes first: data flushed past a size still in memory is written beyond the recorded file */
+        if (Streams[Index]->SizePending)
+        {
+            SizeStatus = NtfsPersistStreamSize(VolCB, Streams[Index]);
+            if (!NT_SUCCESS(SizeStatus) && NT_SUCCESS(Status))
+                Status = SizeStatus;
+        }
 
         CcFlushCache(&Streams[Index]->SectionObjectPointers,
                      NULL,

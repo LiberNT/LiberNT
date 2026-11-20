@@ -247,14 +247,16 @@ NTAPI
 NtfsFsdShutdown (_In_ PDEVICE_OBJECT VolumeDeviceObject,
                  _Inout_ PIRP Irp)
 {
-    NTSTATUS Status = NtfsDiskFlushKm();
+    /* Files still open keep their size in memory until cleanup; shutdown is the last chance to record it */
+    NTSTATUS Status = (VolumeDeviceObject != NtfsDiskFileSystemDeviceObject)
+        ? NtfsFlushVolume((PVolumeContextBlock)VolumeDeviceObject->DeviceExtension, FALSE)
+        : NtfsDiskFlushKm();
 
     /* Overview:
      * Occurs when the system is being shutdown.
      * Do any cleanup needed and return STATUS_SUCCESS.
      * See: https://learn.microsoft.com/en-us/windows-hardware/drivers/ifs/irp-mj-shutdown
      */
-    UNREFERENCED_PARAMETER(VolumeDeviceObject);
     Irp->IoStatus.Status = Status;
     Irp->IoStatus.Information = 0;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
