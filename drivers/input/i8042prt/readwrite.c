@@ -15,6 +15,9 @@
 
 #include <debug.h>
 
+#define I8042_RESET_ACK_TIMEOUT_MS 1000
+#define I8042_RESET_BAT_TIMEOUT_MS 4000
+
 /* FUNCTIONS *****************************************************************/
 
 VOID
@@ -113,6 +116,32 @@ i8042ReadDataWait(
 
 	/* Timed out */
 	return STATUS_IO_TIMEOUT;
+}
+
+NTSTATUS
+i8042ReadResetReply(
+	IN PPORT_DEVICE_EXTENSION DeviceExtension,
+	IN ULONG ReplyByte,
+	OUT PUCHAR Data)
+{
+	ULONGLONG Start;
+	ULONGLONG Timeout;
+
+	ASSERT(ReplyByte < 2);
+	ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+	Timeout = (ULONGLONG)(ReplyByte == 0 ? I8042_RESET_ACK_TIMEOUT_MS : I8042_RESET_BAT_TIMEOUT_MS) * 10000;
+	Start = KeQueryInterruptTime();
+
+	while (!NT_SUCCESS(i8042ReadKeyboardData(DeviceExtension, Data)))
+	{
+		if (KeQueryInterruptTime() - Start >= Timeout)
+			return STATUS_IO_TIMEOUT;
+
+		KeStallExecutionProcessor(50);
+	}
+
+	return STATUS_SUCCESS;
 }
 
 /*
