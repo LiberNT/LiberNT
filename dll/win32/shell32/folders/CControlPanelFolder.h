@@ -193,13 +193,23 @@ public:
 class COpenControlPanel :
     public CComCoClass<COpenControlPanel, &CLSID_OpenControlPanel>,
     public CComObjectRootEx<CComMultiThreadModelNoCS>,
-    public IOpenControlPanel
+    public IOpenControlPanel,
+    public IExecuteCommand
 {
     public:
         // IOpenControlPanel
         STDMETHOD(Open)(LPCWSTR pszName, LPCWSTR pszPage, IUnknown *punkSite) override;
         STDMETHOD(GetPath)(LPCWSTR pszName, LPWSTR pszPath, UINT cchPath) override;
         STDMETHOD(GetCurrentView)(CPVIEW *pView) override;
+
+        // IExecuteCommand
+        STDMETHOD(SetKeyState)(DWORD grfKeyState) override;
+        STDMETHOD(SetParameters)(LPCWSTR pszParameters) override;
+        STDMETHOD(SetPosition)(POINT pt) override;
+        STDMETHOD(SetShowWindow)(int nShow) override;
+        STDMETHOD(SetNoShowUI)(BOOL fNoShowUI) override;
+        STDMETHOD(SetDirectory)(LPCWSTR pszDirectory) override;
+        STDMETHOD(Execute)() override;
 
         static HRESULT WINAPI UpdateRegistry(BOOL bRegister) { return S_OK; } // CControlPanelFolder does it for us
         DECLARE_NOT_AGGREGATABLE(COpenControlPanel)
@@ -208,6 +218,7 @@ class COpenControlPanel :
 
         BEGIN_COM_MAP(COpenControlPanel)
         COM_INTERFACE_ENTRY_IID(IID_IOpenControlPanel, IOpenControlPanel)
+        COM_INTERFACE_ENTRY_IID(IID_IExecuteCommand, IExecuteCommand)
         END_COM_MAP()
 };
 

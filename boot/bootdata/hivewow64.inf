@@ -173,6 +173,9 @@ HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\Extend
 HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\Extended Properties\{305CA226-D286-468e-B848-2B2E8E697B74} 2","odbccp32i.cpl",0x00010001,5
 HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\Extended Properties\{305CA226-D286-468e-B848-2B2E8E697B74} 2","openglcfg.cpl",0x00010001,1
 HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Control Panel\Extended Properties\{305CA226-D286-468e-B848-2B2E8E697B74} 2","wined3dcfg.cpl",0x00010001,1
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Desktop\NameSpace\{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}","",0x00000000,"ControlPanelStartupPage"
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\ClassicStartMenu","{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}",0x00010001,1
+HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel","{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}",0x00010001,1
 HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced",,0x00000012
 HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder",,0x00000012
 HKLM,"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder","Type",0x00000000,"group"
@@ -582,6 +585,13 @@ HKCR,"Wow6432Node\CLSID\{1F4DE370-D627-11D1-BA4F-00A0C91EEDBA}\DefaultIcon","",0
 HKCR,"Wow6432Node\CLSID\{1F4DE370-D627-11D1-BA4F-00A0C91EEDBA}\InProcServer32","",0x00020000,"%SystemRoot%\system32\shell32.dll"
 HKCR,"Wow6432Node\CLSID\{1F4DE370-D627-11D1-BA4F-00A0C91EEDBA}\InProcServer32","ThreadingModel",0x00000000,"Apartment"
 HKCR,"Wow6432Node\CLSID\{1F4DE370-D627-11D1-BA4F-00A0C91EEDBA}\ShellFolder","Attributes",0x00010001,0x20180000
+HKCR,"Wow6432Node\CLSID\{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}","",0x00000000,"Control Panel command object for Start menu and desktop"
+HKCR,"Wow6432Node\CLSID\{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}","InfoTip",0x00020000,"@%SystemRoot%\system32\shell32.dll,-31361"
+HKCR,"Wow6432Node\CLSID\{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}","LocalizedString",0x00020000,"@%SystemRoot%\system32\shell32.dll,-148"
+HKCR,"Wow6432Node\CLSID\{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}\DefaultIcon","",0x00020000,"%SystemRoot%\system32\shell32.dll,-137"
+HKCR,"Wow6432Node\CLSID\{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}\Shell\Open\Command","DelegateExecute",0x00000000,"{06622D85-6856-4460-8DE1-A81921B41C4B}"
+HKCR,"Wow6432Node\CLSID\{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}\ShellFolder","Attributes",0x00010001,0x00000020
+HKCR,"Wow6432Node\CLSID\{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}\ShellFolder","FolderValueFlags",0x00010001,0x00000200
 HKCR,"Wow6432Node\CLSID\{42071712-76d4-11d1-8b24-00a0c9068ff3}","",0x00000000,"Display Adapter CPL Extension"
 HKCR,"Wow6432Node\CLSID\{42071712-76d4-11d1-8b24-00a0c9068ff3}\InProcServer32","",0x00020000,"%SystemRoot%\system32\deskadp.dll"
 HKCR,"Wow6432Node\CLSID\{42071712-76d4-11d1-8b24-00a0c9068ff3}\InProcServer32","ThreadingModel",0x00000000,"Apartment"

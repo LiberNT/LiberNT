@@ -85,7 +85,7 @@ ULONG __cdecl DbgPrint(PCCH Format,...);
 #define MAX_DESK_PAGES        32
 #define NUM_SPECTRUM_BITMAPS  3
 
-#define NUM_DESKTOP_ICONS  4  /* DesktopIcons array size */
+#define NUM_DESKTOP_ICONS  6  /* DesktopIcons array size */
 #define NUM_CHANGE_ICONS   5  /* IconChange array size */
 
 typedef struct
