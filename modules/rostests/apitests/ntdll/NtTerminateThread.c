@@ -42,6 +42,24 @@ static DWORD WINAPI FlushWaitThread(PVOID Context)
     return 0xdead;
 }
 
+static volatile LONG RanAfterWait;
+static volatile LONG ReturnedFromExit;
+
+static DWORD WINAPI AlertableWaitThread(PVOID Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+
+    InterlockedExchange(&ThreadReady, 1);
+    while (ReturnedFromExit < 100)
+    {
+        NtWaitForSingleObject(WaitEvent, TRUE, NULL);
+        InterlockedIncrement(&RanAfterWait);
+        NtTerminateThread(NtCurrentThread(), 0xbad);
+        InterlockedIncrement(&ReturnedFromExit);
+    }
+    return 0xdead;
+}
+
 static DWORD WINAPI NeverRunThread(PVOID Context)
 {
     UNREFERENCED_PARAMETER(Context);
@@ -92,6 +110,33 @@ START_TEST(NtTerminateThread)
     WaitEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     ok(WaitEvent != NULL, "CreateEvent failed: %lu\n", GetLastError());
     EndWaitingThread(EventWaitThread, NULL, 0x4321, "event wait");
+
+    /* Woken first, a thread that outranks the caller would run before it is told how to end */
+    Thread = CreateThread(NULL, 0, AlertableWaitThread, NULL, CREATE_SUSPENDED, NULL);
+    ok(Thread != NULL, "CreateThread failed: %lu\n", GetLastError());
+    if (Thread)
+    {
+        LARGE_INTEGER Interval;
+        ULONG Tries;
+
+        InterlockedExchange(&ThreadReady, 0);
+        ok(SetThreadPriority(Thread, THREAD_PRIORITY_TIME_CRITICAL), "SetThreadPriority failed: %lu\n", GetLastError());
+        ResumeThread(Thread);
+        Interval.QuadPart = -10 * 1000 * 10;
+        for (Tries = 0; Tries < 100 && !ThreadReady; Tries++)
+            NtDelayExecution(FALSE, &Interval);
+        NtDelayExecution(FALSE, &Interval);
+
+        Status = NtTerminateThread(Thread, 0x2468);
+        ok_hex(Status, STATUS_SUCCESS);
+        ok(WaitForSingleObject(Thread, 5000) == WAIT_OBJECT_0, "alertable wait: the thread did not end\n");
+        ok(GetExitCodeThread(Thread, &ExitCode), "GetExitCodeThread failed: %lu\n", GetLastError());
+        ok(ExitCode == 0x2468, "alertable wait: exit code %lx, expected 2468\n", ExitCode);
+        ok(RanAfterWait == 0, "alertable wait: the thread ran %ld times in user mode after it was told to end\n",
+           RanAfterWait);
+        ok(ReturnedFromExit == 0, "alertable wait: ending itself returned %ld times\n", ReturnedFromExit);
+        CloseHandle(Thread);
+    }
     CloseHandle(WaitEvent);
 
     /* A flush of a pipe nobody reads waits until the thread is ended */
