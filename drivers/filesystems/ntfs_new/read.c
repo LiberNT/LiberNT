@@ -198,6 +198,7 @@ NtfsMapDirectIo(
     _In_ ULONGLONG FileOffset,
     _In_ ULONG Length,
     _In_ LOCK_OPERATION Operation,
+    _In_ BOOLEAN AllowExtend,
     _Out_ PULONGLONG MappedOffset,
     _Out_ PBOOLEAN Handled)
 {
@@ -248,8 +249,15 @@ NtfsMapDirectIo(
     if (!Attribute ||
         !Attribute->IsNonResident ||
         (Attribute->Flags & (ATTR_COMPRESSION_MASK | ATTR_ENCRYPTED)) ||
-        FileOffset > ~(ULONGLONG)0 - Length ||
-        FileOffset + Length > Attribute->NonResident.InitalizedDataSize)
+        FileOffset > ~(ULONGLONG)0 - Length)
+    {
+        return STATUS_SUCCESS;
+    }
+    if (FileOffset + Length > Attribute->NonResident.InitalizedDataSize &&
+        (!AllowExtend ||
+         Attribute->Flags != 0 ||
+         FileOffset > Attribute->NonResident.InitalizedDataSize ||
+         FileOffset >= Attribute->NonResident.DataSize))
     {
         return STATUS_SUCCESS;
     }
@@ -502,6 +510,7 @@ NtfsFsdRead(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                                  (ULONGLONG)ReadOffset.QuadPart,
                                  RequestedLength,
                                  IoWriteAccess,
+                                 FALSE,
                                  &DirectOffset,
                                  &DirectRead);
         NtfsReleaseMetadata(VolCB);

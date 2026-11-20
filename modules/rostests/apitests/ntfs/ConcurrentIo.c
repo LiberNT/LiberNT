@@ -15,6 +15,7 @@
 /* Big enough that one transfer costs far more than any in-memory work. */
 #define WRITER_BLOCK    (1024 * 1024)
 #define WRITER_ROUNDS   16
+#define APPEND_LIMIT    24
 
 #define QUERY_COUNT     8
 
@@ -32,6 +33,8 @@ typedef struct _WRITER
     HANDLE Thread;
     LONGLONG Ticks[WRITER_ROUNDS];
     ULONG Samples;
+    ULONG Appended;
+    BOOL Append;
     DWORD Error;
 } WRITER, *PWRITER;
 
@@ -173,10 +176,13 @@ WriterThread(_In_ PVOID Parameter)
     /*
      * Unbuffered, so each transfer is handed to the filesystem whole instead of
      * being broken up by the cache. This is the shape a paging write has.
+     * Appending goes through the cache instead: the flush behind each block is
+     * a paging write past the valid data, which is how a download grows a file.
      */
     File = CreateFileW(Writer->Path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
-                       FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH |
-                       FILE_FLAG_NO_BUFFERING, NULL);
+                       Writer->Append ? FILE_ATTRIBUTE_NORMAL :
+                       FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH | FILE_FLAG_NO_BUFFERING,
+                       NULL);
     if (File == INVALID_HANDLE_VALUE)
     {
         Writer->Error = GetLastError();
@@ -189,14 +195,26 @@ WriterThread(_In_ PVOID Parameter)
         LARGE_INTEGER Before, After, Zero;
         DWORD Written = 0;
 
+        if (Writer->Append && Writer->Appended == APPEND_LIMIT)
+            break;
         Zero.QuadPart = 0;
-        SetFilePointerEx(File, Zero, NULL, FILE_BEGIN);
+        if (!Writer->Append)
+            SetFilePointerEx(File, Zero, NULL, FILE_BEGIN);
 
         QueryPerformanceCounter(&Before);
         if (!WriteFile(File, Buffer, WRITER_BLOCK, &Written, NULL) || Written != WRITER_BLOCK)
         {
             Writer->Error = GetLastError();
             break;
+        }
+        if (Writer->Append)
+        {
+            Writer->Appended++;
+            if (!FlushFileBuffers(File))
+            {
+                Writer->Error = GetLastError();
+                break;
+            }
         }
         QueryPerformanceCounter(&After);
 
@@ -248,15 +266,62 @@ QueryRound(_In_ PCWSTR Path, _Out_ PLONGLONG Result)
     return TRUE;
 }
 
+/* Every appended byte must read back from the device, so the valid data moved with each flush */
 static VOID
-MeasureVolume(VOID)
+CheckAppended(_In_ PCWSTR Path, _In_ ULONG Blocks)
+{
+    LARGE_INTEGER Size;
+    HANDLE File;
+    PUCHAR Buffer;
+    ULONG Block, Index, Bad = 0;
+
+    Buffer = VirtualAlloc(NULL, WRITER_BLOCK, MEM_COMMIT, PAGE_READWRITE);
+    if (Buffer == NULL)
+    {
+        skip(FALSE, "VirtualAlloc failed: %lu\n", GetLastError());
+        return;
+    }
+    File = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
+                       FILE_ATTRIBUTE_NORMAL | FILE_FLAG_NO_BUFFERING, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "reopening %ls failed: %lu\n", Path, GetLastError());
+    if (File == INVALID_HANDLE_VALUE)
+    {
+        VirtualFree(Buffer, 0, MEM_RELEASE);
+        return;
+    }
+    ok(GetFileSizeEx(File, &Size), "GetFileSizeEx failed: %lu\n", GetLastError());
+    ok(Size.QuadPart == (LONGLONG)Blocks * WRITER_BLOCK, "size %I64d, expected %I64d\n",
+       Size.QuadPart, (LONGLONG)Blocks * WRITER_BLOCK);
+    for (Block = 0; Block < Blocks; Block++)
+    {
+        DWORD Read = 0;
+
+        FillMemory(Buffer, WRITER_BLOCK, 0xEE);
+        if (!ReadFile(File, Buffer, WRITER_BLOCK, &Read, NULL) || Read != WRITER_BLOCK)
+        {
+            ok(FALSE, "reading block %lu failed: %lu, %lu bytes\n", Block, GetLastError(), Read);
+            break;
+        }
+        for (Index = 0; Index < WRITER_BLOCK; Index++)
+        {
+            if (Buffer[Index] != 0x5A && Bad++ == 0)
+                ok(FALSE, "block %lu byte %lu reads 0x%02x, expected 0x5a\n", Block, Index, Buffer[Index]);
+        }
+    }
+    ok(Bad == 0, "%lu appended bytes did not read back\n", Bad);
+    CloseHandle(File);
+    VirtualFree(Buffer, 0, MEM_RELEASE);
+}
+
+static VOID
+MeasureVolume(_In_ BOOL Append)
 {
     WCHAR SmallPath[MAX_PATH];
     WRITER Writer;
     LONGLONG Idle = 0, Loaded = 0, Transfer = 0;
 
     StringCchPrintfW(SmallPath, MAX_PATH, L"%sconcio_small.dat", VolumeRoot);
-    StringCchPrintfW(Writer.Path, MAX_PATH, L"%sconcio_write.dat", VolumeRoot);
+    StringCchPrintfW(Writer.Path, MAX_PATH, Append ? L"%sconcio_append.dat" : L"%sconcio_write.dat", VolumeRoot);
 
     if (!MakeFile(SmallPath, 4096))
     {
@@ -275,6 +340,8 @@ MeasureVolume(VOID)
     Writer.Stop = CreateEventW(NULL, TRUE, FALSE, NULL);
     Writer.Ready = CreateEventW(NULL, TRUE, FALSE, NULL);
     Writer.Samples = 0;
+    Writer.Appended = 0;
+    Writer.Append = Append;
     Writer.Error = ERROR_SUCCESS;
     Writer.Thread = NULL;
     if (Writer.Stop == NULL || Writer.Ready == NULL)
@@ -308,11 +375,12 @@ MeasureVolume(VOID)
         ok_eq_hex(Writer.Error, ERROR_SUCCESS);
     Transfer = Median(Writer.Ticks, Writer.Samples);
 
-    trace("open %I64d us idle, %I64d us while a %u KB transfer of %I64d us runs\n",
-          Microseconds(Idle), Microseconds(Loaded), WRITER_BLOCK / 1024,
-          Microseconds(Transfer));
-    Report("CONCIO open idle %I64d us loaded %I64d us transfer %I64d us\n",
-           Microseconds(Idle), Microseconds(Loaded), Microseconds(Transfer));
+    trace("%s: open %I64d us idle, %I64d us while a %u KB transfer of %I64d us runs\n",
+          Append ? "append" : "overwrite", Microseconds(Idle), Microseconds(Loaded),
+          WRITER_BLOCK / 1024, Microseconds(Transfer));
+    Report("CONCIO %s open idle %I64d us loaded %I64d us transfer %I64d us\n",
+           Append ? "append" : "overwrite", Microseconds(Idle), Microseconds(Loaded),
+           Microseconds(Transfer));
 
     /*
      * The open needs no device at all, so it must never cost as much as the
@@ -331,6 +399,9 @@ MeasureVolume(VOID)
     {
         skip(FALSE, "the writer produced no timed transfer\n");
     }
+
+    if (Append && Writer.Error == ERROR_SUCCESS)
+        CheckAppended(Writer.Path, Writer.Appended);
 
     CloseHandle(Writer.Thread);
     CloseHandle(Writer.Stop);
@@ -357,5 +428,6 @@ START_TEST(ConcurrentIo)
     }
     trace("testing on %ls\n", VolumeRoot);
 
-    MeasureVolume();
+    MeasureVolume(FALSE);
+    MeasureVolume(TRUE);
 }

@@ -1298,6 +1298,7 @@ NtfsReferenceStreamContext(
         ExReleaseFastMutex(&VolCB->StreamListMutex);
         return NULL;
     }
+    KeInitializeEvent(&StreamCB->DirectExtendDone, NotificationEvent, TRUE);
     ExInitializeFastMutex(&StreamCB->HeaderMutex);
     FsRtlSetupAdvancedHeader(&StreamCB->CommonFCBHeader, &StreamCB->HeaderMutex);
     StreamCB->CommonFCBHeader.Resource = &StreamCB->MainResource;
