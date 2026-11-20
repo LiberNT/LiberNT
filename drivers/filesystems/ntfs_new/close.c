@@ -35,7 +35,7 @@ NtfsFsdClose(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     if (VolumeDeviceObject == NtfsDiskFileSystemDeviceObject)
     {
         /* DeviceObject represents FileSystem */
-        Irp->IoStatus.Information = STATUS_SUCCESS;
+        Irp->IoStatus.Status = STATUS_SUCCESS;
         IoCompleteRequest(Irp, IO_NO_INCREMENT);
         return STATUS_SUCCESS;
     }
@@ -150,7 +150,7 @@ NtfsFsdClose(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         }
     }
 
-    Irp->IoStatus.Information = STATUS_SUCCESS;
+    Irp->IoStatus.Status = STATUS_SUCCESS;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
     return STATUS_SUCCESS;
 }
