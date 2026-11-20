@@ -12,7 +12,6 @@
 #define AGX_SPIN_STEP_US            20
 #define AGX_POST_TIMEOUT_MS         100
 #define AGX_GROW_TIMEOUT_MS         500
-#define AGX_GLOBALS_COMPUTE_MONITOR 0x9b0
 #define AGX_MAX_CMDBUF              (APPLE_AGX_MAX_COMMANDS * (sizeof(DRM_ASAHI_CMD_HEADER) + 0x400))
 
 #define FW      APPLE_AGX_CLASS_FIRMWARE
@@ -341,7 +340,6 @@ AgxEngineStart(
     PAGX_ENGINE Engine = &Agx->Engine;
     APPLE_AGX_REQUEST Request;
     ULONG Item, Channel;
-    PULONG Monitor;
     NTSTATUS Status;
 
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
@@ -365,10 +363,8 @@ AgxEngineStart(
     }
     for (Channel = 0; Channel < AGX_CHANNELS; ++Channel)
     {
-        AppleAgxRingBind(&Engine->Channel[Channel], Agx->Init.Virtual[APPLE_AGX_FIXED_OBJECTS + 2 * Channel],
-                         Agx->Init.Virtual[APPLE_AGX_FIXED_OBJECTS + 2 * Channel + 1], APPLE_AGX_SUBMIT_RECORD);
-        if (Engine->Channel[Channel].Producer != 0 ||
-            AppleAgxRingIndex(&Engine->Channel[Channel], APPLE_AGX_STATE_READ) != 0)
+        Engine->Channel[Channel] = &Agx->Fw.DataMaster[Channel * 4];
+        if (Engine->Channel[Channel]->Producer != 0 || *Engine->Channel[Channel]->Write != 0)
         {
             DbgPrint("appleagx: submit channel %lu does not start empty\n", Channel);
             AgxEngineStop(Agx);
@@ -383,20 +379,7 @@ AgxEngineStart(
         return Status;
     }
     AppleUatInvalidateAll();
-    Monitor = (PULONG)((PUCHAR)Agx->Init.Virtual[APPLE_AGX_OBJECT_GLOBALS] + AGX_GLOBALS_COMPUTE_MONITOR);
-    WRITE_REGISTER_ULONG((volatile ULONG *)Monitor, 0);
     KeMemoryBarrier();
-    {
-        ULONG Request2[APPLE_AGX_RECORD_WORDS] = { APPLE_AGX_DEVCTL_IMPORT_GLOBALS };
-
-        Status = AgxDeviceControlPost(Agx, Request2, AGX_GROW_TIMEOUT_MS);
-    }
-    if (!NT_SUCCESS(Status))
-    {
-        DbgPrint("appleagx: the compute monitor was not turned off: %lx\n", Status);
-        AgxEngineStop(Agx);
-        return Status;
-    }
     ExAcquireFastMutex(&Engine->Lock);
     Engine->Ready = TRUE;
     ExReleaseFastMutex(&Engine->Lock);
@@ -658,7 +641,7 @@ BOOLEAN
 AgxHalted(
     _In_ PAPPLE_AGX Agx)
 {
-    return *(volatile ULONG *)((PUCHAR)Agx->Init.Virtual[APPLE_AGX_OBJECT_CONTROL] + APPLE_AGX_CONTROL_HALTED) != 0;
+    return *(volatile ULONG *)((PUCHAR)Agx->Fw.Object[APPLE_AGX_FW_CONTROL].Virtual + APPLE_AGX_FW_CTL_HALTED) != 0;
 }
 
 /* A request for more parameter buffer is granted by writing its blocks, moving the producer and
@@ -718,7 +701,7 @@ AgxPostRecord(
     AppleAgxSubmitRecord(Record, Engine->Queue[Channel].Info, Channel, Head, Event, NewQueue);
     for (Waited = 0;; ++Waited)
     {
-        Status = AppleAgxRingPost(&Engine->Channel[Channel], Record, FALSE, NULL);
+        Status = AppleAgxFwPost(Engine->Channel[Channel], Record, NULL);
         if (Status != STATUS_DEVICE_BUSY || Waited >= AGX_POST_TIMEOUT_MS)
             break;
         AppleRtkitPoll(&Agx->Rtkit);
@@ -726,7 +709,7 @@ AgxPostRecord(
     }
     if (!NT_SUCCESS(Status))
         return Status;
-    return AppleRtkitSend(&Agx->Rtkit, APPLE_AGX_EP_DOORBELL, AppleAgxRingDoorbell(Channel)) ? STATUS_SUCCESS
+    return AppleRtkitSend(&Agx->Rtkit, APPLE_AGX_FW_EP_KICK, APPLE_AGX_DOORBELL_BASE | Channel) ? STATUS_SUCCESS
                                                                                             : STATUS_IO_TIMEOUT;
 }
 
@@ -844,7 +827,7 @@ AgxRunRender(
     Job.FragmentWorkClient = Item[AgxPassFsWork].Client;
     Job.FragmentSequenceAddress = Item[AgxPassFsSequence].Address;
     Job.SceneAddress = Item[AgxPassScene].Address;
-    Job.Hwdata = Agx->Init.Object[APPLE_AGX_OBJECT_HWDATA].Address;
+    Job.Hwdata = Agx->Fw.Object[APPLE_AGX_FW_HWCFG].Address;
     Job.Notifier = Item[AgxRenderNotifier].Address;
     Job.Empty = Item[AgxRenderEmpty].Address;
     Job.Manager = Item[AgxPbManager].Address;
@@ -913,7 +896,7 @@ AgxRunRender(
     if (!Engine->C1Written)
     {
         AppleAgxC1Record(C1, APPLE_AGX_PB_INITIAL_BLOCKS);
-        RtlCopyMemory(Agx->Init.Virtual[APPLE_AGX_OBJECT_C1], C1, sizeof(C1));
+        RtlCopyMemory(Agx->FwPbTable.Virtual, C1, sizeof(C1));
         Engine->C1Written = TRUE;
     }
     KeMemoryBarrier();
@@ -968,7 +951,7 @@ AgxRunCompute(
         AppleAgxObjectZero(&Item[AgxSlotSequence], 0, APPLE_AGX_SEQUENCE_STORAGE, 0);
     }
     RtlZeroMemory(&Refs, sizeof(Refs));
-    Refs.Hwdata = Agx->Init.Object[APPLE_AGX_OBJECT_HWDATA].Address;
+    Refs.Hwdata = Agx->Fw.Object[APPLE_AGX_FW_HWCFG].Address;
     Refs.Notifier = Item[AgxComputeNotifier].Address;
     Refs.Queue = Engine->Queue[AGX_CHANNEL_COMPUTE].Info;
     Refs.FirmwareStamp = Item[AgxComputeFirmwareStamp].Address;

@@ -16,6 +16,8 @@
 #define AGX_SGX_ID_WINDOW           0xd04000
 #define AGX_SGX_CORE_WINDOW         0xe00000
 #define AGX_SGX_WINDOW_SIZE         0x4000
+#define AGX_FENDER_OFFSET           0xd00000
+#define AGX_FENDER_SIZE             0x16c000
 #define AGX_ID_VERSION              0x00
 #define AGX_ID_UNKNOWN08            0x08
 #define AGX_ID_COUNTS1              0x10
@@ -334,34 +336,11 @@ AgxShmemSetup(
     return TRUE;
 }
 
-/* The firmware produces on the receive rings and asks over the mailbox for them to be drained. */
 VOID
 AgxDrainRings(
     _Inout_ PAPPLE_AGX Agx)
 {
-    UCHAR Record[APPLE_AGX_EVENT_RECORD];
-    ULONG Taken = 0;
-
-    if (!Agx->Bound)
-        return;
-    while (AppleAgxRingTake(&Agx->Event, Record) && Taken < APPLE_AGX_RING_SLOTS)
-    {
-        ULONG Words[APPLE_AGX_RECORD_WORDS];
-
-        RtlCopyMemory(Words, Record, sizeof(Words));
-        AgxEngineEvent(Agx, Words);
-        ++Taken;
-    }
-    while (AppleAgxRingTake(&Agx->Stats, Record) && Taken < 2 * APPLE_AGX_RING_SLOTS)
-    {
-        ULONG64 Head;
-
-        RtlCopyMemory(&Head, Record, sizeof(Head));
-        DbgPrint("appleagx: statistic %I64x\n", Head);
-        ++Taken;
-    }
-    AppleAgxRingConsume(&Agx->Trace);
-    Agx->Drained += Taken;
+    AgxDrainFirmware(Agx);
 }
 
 static
@@ -374,50 +353,12 @@ AgxReceive(
 {
     PAPPLE_AGX Agx = Context;
 
-    if (Endpoint == APPLE_AGX_EP_FIRMWARE && (Message & ~0xffffffffffffULL) == APPLE_AGX_MESSAGE_RING_SERVICE)
+    if (Endpoint == APPLE_AGX_FW_EP_MAIN && APPLE_AGX_FW_MSG_TYPE(Message) == APPLE_AGX_FW_MSG_TYPE_RINGS)
     {
-        AgxDrainRings(Agx);
+        AgxDrainFirmware(Agx);
         return;
     }
     DbgPrint("appleagx: endpoint %#x sent %I64x\n", Endpoint, Message);
-}
-
-/* A request is posted, the firmware is rung, and the record is waited for until it has been both
- * read and completed. A halted firmware is not posted to at all. */
-static
-NTSTATUS
-AgxSubmit(
-    _Inout_ PAPPLE_AGX Agx,
-    _Inout_ PAPPLE_AGX_RING Ring,
-    _In_ ULONG Channel,
-    _In_ const VOID *Record,
-    _In_ ULONG Timeout)
-{
-    LARGE_INTEGER Interval;
-    ULONG Next, Waited;
-    NTSTATUS Status;
-
-    if (!Agx->Bound)
-        return STATUS_INVALID_DEVICE_STATE;
-    if (Agx->Init.Virtual[APPLE_AGX_OBJECT_CONTROL] &&
-        *(volatile ULONG *)((PUCHAR)Agx->Init.Virtual[APPLE_AGX_OBJECT_CONTROL] + APPLE_AGX_CONTROL_HALTED))
-    {
-        return STATUS_DEVICE_POWERED_OFF;
-    }
-    Status = AppleAgxRingPost(Ring, Record, FALSE, &Next);
-    if (!NT_SUCCESS(Status))
-        return Status;
-    if (!AppleRtkitSend(&Agx->Rtkit, APPLE_AGX_EP_DOORBELL, AppleAgxRingDoorbell(Channel)))
-        return STATUS_IO_TIMEOUT;
-    Interval.QuadPart = -10000LL;
-    for (Waited = 0; Waited < Timeout; ++Waited)
-    {
-        AppleRtkitPoll(&Agx->Rtkit);
-        if (AppleAgxRingDone(Ring, Next))
-            return STATUS_SUCCESS;
-        KeDelayExecutionThread(KernelMode, FALSE, &Interval);
-    }
-    return STATUS_IO_TIMEOUT;
 }
 
 NTSTATUS
@@ -426,41 +367,29 @@ AgxDeviceControlPost(
     _In_ const VOID *Record,
     _In_ ULONG Timeout)
 {
-    return AgxSubmit(Agx, &Agx->DevCtl, APPLE_AGX_DOORBELL_DEVCTL, Record, Timeout);
-}
-
-/* The firmware imports its globals and starts on two device controls; only then does it say it
- * is ready. */
-static
-NTSTATUS
-AgxDeviceControlOp(
-    _Inout_ PAPPLE_AGX Agx,
-    _In_ ULONG Opcode)
-{
-    ULONG Request[APPLE_AGX_RECORD_WORDS] = { 0 };
+    PAPPLE_AGX_FW_SCRATCH_RING Ring = &Agx->Fw.DeviceControl;
+    LARGE_INTEGER Interval;
+    ULONG Next, Waited;
     NTSTATUS Status;
 
-    Request[0] = Opcode;
-    Status = AgxSubmit(Agx, &Agx->DevCtl, APPLE_AGX_DOORBELL_DEVCTL, Request, AGX_DEVCTL_TIMEOUT_MS);
-    DbgPrint("appleagx: device control %#lx: %lx\n", Opcode, Status);
-    return Status;
-}
-
-/* The rings live inside the initial data, so they are bound once it is in place. */
-static
-VOID
-AgxBindRings(
-    _Inout_ PAPPLE_AGX Agx)
-{
-    AppleAgxRingBind(&Agx->Event, Agx->Init.Virtual[APPLE_AGX_OBJECT_EVENT_STATE],
-                     Agx->Init.Virtual[APPLE_AGX_OBJECT_EVENT_RING], APPLE_AGX_EVENT_RECORD);
-    AppleAgxRingBind(&Agx->Trace, Agx->Init.Virtual[APPLE_AGX_OBJECT_TRACE_STATE],
-                     Agx->Init.Virtual[APPLE_AGX_OBJECT_TRACE_RING], APPLE_AGX_EVENT_RECORD);
-    AppleAgxRingBind(&Agx->Stats, Agx->Init.Virtual[APPLE_AGX_OBJECT_STATS_STATE],
-                     Agx->Init.Virtual[APPLE_AGX_OBJECT_STATS_RING], APPLE_AGX_EVENT_RECORD);
-    AppleAgxRingBind(&Agx->DevCtl, Agx->Init.Virtual[APPLE_AGX_OBJECT_DEVCTL_STATE],
-                     Agx->Init.Virtual[APPLE_AGX_OBJECT_DEVCTL_RING], APPLE_AGX_DEVCTL_RECORD);
-    Agx->Bound = TRUE;
+    if (!Agx->Bound)
+        return STATUS_INVALID_DEVICE_STATE;
+    if (*(volatile ULONG *)((PUCHAR)Agx->Fw.Object[APPLE_AGX_FW_CONTROL].Virtual + APPLE_AGX_FW_CTL_HALTED))
+        return STATUS_DEVICE_POWERED_OFF;
+    Status = AppleAgxFwPost(Ring, Record, &Next);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (!AppleRtkitSend(&Agx->Rtkit, APPLE_AGX_FW_EP_KICK, APPLE_AGX_DOORBELL_BASE | APPLE_AGX_DOORBELL_DEVCTL))
+        return STATUS_IO_TIMEOUT;
+    Interval.QuadPart = -10000LL;
+    for (Waited = 0; Waited < Timeout; ++Waited)
+    {
+        AppleRtkitPoll(&Agx->Rtkit);
+        if (*Ring->Read == Next && *Ring->Completed == Next)
+            return STATUS_SUCCESS;
+        KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+    }
+    return STATUS_IO_TIMEOUT;
 }
 
 static
@@ -496,87 +425,41 @@ AgxListen(
     }
 }
 
-/* The firmware is given the addresses of everything it must reach, then told where to find them.
- * It answers by writing its readiness word, which is what the next line of the log reports. */
 static
 NTSTATUS
 AgxHandInitialData(
     _Inout_ PAPPLE_AGX Agx)
 {
-    ULONG Waited;
+    ULONG64 Message;
     NTSTATUS Status;
 
-    Status = AppleAgxInitCreate(&Agx->Init, &Agx->Adopted, "appleagx");
+    Status = AgxReadFirmwareConfig(Agx);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = AgxBuildFirmwareData(Agx);
     if (!NT_SUCCESS(Status))
     {
-        DbgPrint("appleagx: the initial data needed %lu pages that were not available: %lx\n",
-                 Agx->Init.Pages, Status);
+        DbgPrint("appleagx: the firmware data was not built: %lx\n", Status);
         return Status;
     }
-    Agx->Initialised = TRUE;
-    Status = AppleAgxInitWrite(&Agx->Init);
-    if (!NT_SUCCESS(Status))
+    Message = AppleAgxFwInitMessage(&Agx->Fw);
+    if (!AppleRtkitSend(&Agx->Rtkit, APPLE_AGX_FW_EP_MAIN, Message))
     {
-        DbgPrint("appleagx: the initial data was not written: %lx\n", Status);
-        return Status;
-    }
-    if (Agx->Described)
-    {
-        ULONG Top = 0;
-
-        Status = AppleAgxWriteStates(&Agx->Init, &Agx->Description, &Top);
-        DbgPrint("appleagx: %lu operating points of %lu, up to %lu kHz: %lx\n", APPLE_AGX_DVFS_STATES,
-                 Agx->Description.States, Top, Status);
-        if (!NT_SUCCESS(Status))
-            return Status;
-        Agx->Reported.TopKilohertz = Top;
-    }
-    Status = AppleAgxMapRegisters(&Agx->Init);
-    if (!NT_SUCCESS(Status))
-    {
-        DbgPrint("appleagx: the firmware's register windows were not mapped: %lx\n", Status);
-        return Status;
-    }
-    AgxBindRings(Agx);
-    DbgPrint("appleagx: initial data of %lu pages written, root at %I64x\n", Agx->Init.Allocations,
-             AppleAgxInitMessage() & APPLE_AGX_MESSAGE_ADDRESS_MASK);
-    if (!AppleRtkitSend(&Agx->Rtkit, APPLE_AGX_EP_FIRMWARE, AppleAgxInitMessage()))
-    {
-        DbgPrint("appleagx: the firmware was not told where its initial data is\n");
+        DbgPrint("appleagx: the firmware was not told where its data is\n");
         return STATUS_IO_TIMEOUT;
     }
-    Status = AgxDeviceControlOp(Agx, APPLE_AGX_DEVCTL_IMPORT_GLOBALS);
-    if (NT_SUCCESS(Status))
-        Status = AgxDeviceControlOp(Agx, APPLE_AGX_DEVCTL_START);
+    Agx->Reported.State = APPLE_AGX_STATE_STARTED;
+    AgxListen(Agx, AGX_READY_TIMEOUT_MS);
+    AgxDrainFirmware(Agx);
+    DbgPrint("appleagx: init message %I64x sent, %lu events and %lu log records after %lu ms, halted %lu\n", Message,
+             Agx->FwEvents, Agx->FwLogs, AGX_READY_TIMEOUT_MS,
+             *(volatile ULONG *)((PUCHAR)Agx->Fw.Object[APPLE_AGX_FW_CONTROL].Virtual + APPLE_AGX_FW_CTL_HALTED));
+    Status = AgxEngineStart(Agx);
+    DbgPrint("appleagx: render and compute queues built: %lx\n", Status);
     if (!NT_SUCCESS(Status))
         return Status;
-    for (Waited = 0; Waited < AGX_READY_TIMEOUT_MS; Waited += 10)
-    {
-        AgxListen(Agx, 10);
-        AgxDrainRings(Agx);
-        if (AppleAgxInitReady(&Agx->Init))
-        {
-            DbgPrint("appleagx: the firmware is ready after %lu ms, %lu records read\n", Waited, Agx->Drained);
-            Status = AgxDeviceControlOp(Agx, APPLE_AGX_DEVCTL_IMPORT_GLOBALS);
-            if (!NT_SUCCESS(Status))
-                return Status;
-            AgxDrainRings(Agx);
-            Status = AgxEngineStart(Agx);
-            DbgPrint("appleagx: render and compute queues built: %lx\n", Status);
-            if (!NT_SUCCESS(Status))
-                return Status;
-            Agx->Reported.State = APPLE_AGX_STATE_READY;
-            return STATUS_SUCCESS;
-        }
-    }
-    AgxDrainRings(Agx);
-    DbgPrint("appleagx: the firmware did not become ready in %lu ms, %lu records read, halted %lu\n",
-             AGX_READY_TIMEOUT_MS, Agx->Drained,
-             Agx->Init.Virtual[APPLE_AGX_OBJECT_CONTROL]
-                 ? *(volatile ULONG *)((PUCHAR)Agx->Init.Virtual[APPLE_AGX_OBJECT_CONTROL] +
-                                       APPLE_AGX_CONTROL_HALTED)
-                 : 0);
-    return STATUS_DEVICE_NOT_READY;
+    Agx->Reported.State = APPLE_AGX_STATE_READY;
+    return STATUS_SUCCESS;
 }
 
 /* The firmware is started cold and says over the mailbox what it needs; the log keeps its answer. */
@@ -602,11 +485,12 @@ AgxBootFirmware(
     DbgPrint("appleagx: firmware boot %lx, RTKit %lu, endpoints %08lx %08lx, control %08lx\n", Status,
              Agx->Rtkit.Version, Agx->Rtkit.Endpoints[0], Agx->Rtkit.Endpoints[1],
              READ_REGISTER_ULONG((volatile ULONG *)(Agx->Asc + AGX_ASC_CONTROL)));
-    if (!NT_SUCCESS(Status) || !AppleRtkitHasEndpoint(&Agx->Rtkit, APPLE_AGX_EP_FIRMWARE))
+    if (!NT_SUCCESS(Status) || !AppleRtkitHasEndpoint(&Agx->Rtkit, APPLE_AGX_FW_EP_MAIN))
         return NT_SUCCESS(Status) ? STATUS_DEVICE_PROTOCOL_ERROR : Status;
-    AppleRtkitStartEndpoint(&Agx->Rtkit, APPLE_AGX_EP_FIRMWARE);
-    if (AppleRtkitHasEndpoint(&Agx->Rtkit, APPLE_AGX_EP_DOORBELL))
-        AppleRtkitStartEndpoint(&Agx->Rtkit, APPLE_AGX_EP_DOORBELL);
+    if (!AppleRtkitHasEndpoint(&Agx->Rtkit, APPLE_AGX_FW_EP_KICK))
+        return STATUS_DEVICE_PROTOCOL_ERROR;
+    AppleRtkitStartEndpoint(&Agx->Rtkit, APPLE_AGX_FW_EP_MAIN);
+    AppleRtkitStartEndpoint(&Agx->Rtkit, APPLE_AGX_FW_EP_KICK);
     AgxListen(Agx, AGX_LISTEN_MS);
     return AgxHandInitialData(Agx);
 }
@@ -654,10 +538,8 @@ AgxStop(
         Agx->StartThread = NULL;
     }
     AgxEngineStop(Agx);
-    Agx->Bound = FALSE;
     if (Agx->Initialised)
-        AppleAgxInitRelease(&Agx->Init);
-    Agx->Initialised = FALSE;
+        AgxFreeFirmwareData(Agx);
     AgxFreeShared(Agx);
     if (Agx->Owned)
         AppleUatAdoptedRelease(&Agx->Adopted);
@@ -674,6 +556,9 @@ AgxStop(
     if (Agx->Core)
         MmUnmapIoSpace(Agx->Core, Agx->CoreSize);
     Agx->Core = NULL;
+    if (Agx->Fender)
+        MmUnmapIoSpace(Agx->Fender, AGX_FENDER_SIZE);
+    Agx->Fender = NULL;
     if (Agx->Id)
         MmUnmapIoSpace(Agx->Id, Agx->IdSize);
     Agx->Id = NULL;
@@ -763,7 +648,10 @@ AgxStart(
     Agx->Asc = AgxMapWindow(AscBase, 0, Agx->AscSize);
     Agx->Id = AgxMapWindow(SgxBase, AGX_SGX_ID_WINDOW, Agx->IdSize);
     Agx->Core = AgxMapWindow(SgxBase, AGX_SGX_CORE_WINDOW, Agx->CoreSize);
-    if (!Agx->Asc || !Agx->Id || !Agx->Core)
+    Agx->GpuBase = SgxBase;
+    Agx->FenderBase = SgxBase + AGX_FENDER_OFFSET;
+    Agx->Fender = AgxMapWindow(Agx->FenderBase, 0, AGX_FENDER_SIZE);
+    if (!Agx->Asc || !Agx->Id || !Agx->Core || !Agx->Fender)
         return STATUS_INSUFFICIENT_RESOURCES;
 
     Control = READ_REGISTER_ULONG((volatile ULONG *)(Agx->Asc + AGX_ASC_CONTROL));

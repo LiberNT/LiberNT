@@ -28,6 +28,7 @@ option(HOST_TEST_USB "Build native USB host controller tests" ON)
 option(HOST_TEST_STORPORT "Build native Storport tests" ON)
 option(HOST_TEST_DXGKRNL "Build native DirectX graphics kernel tests" ON)
 option(HOST_TEST_BOOTLOADER "Build native boot loader tests" ON)
+option(HOST_TEST_APPLEAGX "Build native Apple graphics firmware data tests" ON)
 
 if(BUILD_TESTING AND HOST_TEST_DHCPCSVC)
     add_subdirectory(dhcpcsvc)
@@ -51,6 +52,10 @@ endif()
 
 if(BUILD_TESTING AND HOST_TEST_BOOTLOADER)
     add_subdirectory(bootloader)
+endif()
+
+if(BUILD_TESTING AND HOST_TEST_APPLEAGX)
+    add_subdirectory(appleagx)
 endif()
 
 if(BUILD_TESTING AND HOST_TEST_NDIS)
