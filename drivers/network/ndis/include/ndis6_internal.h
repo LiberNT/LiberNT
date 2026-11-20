@@ -573,6 +573,11 @@ Ndis6ResetMiniportComplete(
     _In_ BOOLEAN AddressingReset);
 
 VOID
+Ndis6IndicateResetStatus(
+    _In_ PLOGICAL_ADAPTER Adapter,
+    _In_ NDIS_STATUS StatusCode);
+
+VOID
 Ndis6FreePorts(
     _In_ PNDIS6_ADAPTER_EXT Ext);
 
