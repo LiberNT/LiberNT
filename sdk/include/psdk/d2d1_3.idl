@@ -18,6 +18,7 @@
 
 import "d2d1_2.idl";
 import "d2d1effects_2.idl";
+import "d2d1svg.idl";
 
 interface IDWriteFontFace;
 
@@ -529,8 +530,6 @@ interface ID2D1DeviceContext4 : ID2D1DeviceContext3
         [out] ID2D1CommandList **glyph_image
     );
 }
-
-interface ID2D1SvgDocument;
 
 [
     object,

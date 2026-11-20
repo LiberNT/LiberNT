@@ -27,4 +27,8 @@
 #include "d2d1_factory.h"
 #include "d2d1_command_list.h"
 
+HRESULT d2d_svg_document_create(ID2D1Factory *factory, IStream *stream, D2D1_SIZE_F viewport,
+        ID2D1SvgDocument **document);
+void d2d_svg_document_draw(ID2D1SvgDocument *document, ID2D1DeviceContext *context);
+
 #endif

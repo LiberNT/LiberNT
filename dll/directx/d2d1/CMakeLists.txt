@@ -28,6 +28,7 @@ list(APPEND SOURCE
     shader.c
     state_block.c
     stroke.c
+    svg.c
     text.c
     wic_render_target.c
     d2d1_command_list.h
