@@ -101,12 +101,12 @@ KdpScreenSetConsole(
     {
         InbvResetDisplay();
         InbvSolidColorFill(0, 0, Width - 1, Height - 1, BV_COLOR_BLACK);
+        InbvSetScrollRegion(0, 0, Right, Height - 1);
     }
 
     InbvSetTextColor(BV_COLOR_WHITE);
     InbvInstallDisplayStringFilter(NULL);
     InbvEnableDisplayString(TRUE);
-    InbvSetScrollRegion(0, 0, Right, Height - 1);
 }
 
 static
