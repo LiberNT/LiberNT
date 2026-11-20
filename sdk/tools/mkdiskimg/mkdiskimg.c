@@ -90,8 +90,11 @@
 #define HYBRID_SIGNATURE_OFFSET 64
 #define HYBRID_SIGNATURE 0x7078C0FBU
 
+#define MBR_TYPE_UNUSED 0x00
 #define MBR_TYPE_EFI_SYSTEM 0xEF
+#define MBR_TYPE_GPT_PROTECTIVE 0xEE
 #define MBR_TYPE_ISO9660 0x96
+#define CD_GPT_TAIL_SECTORS (((GPT_ENTRY_SECTORS + 1) * SECTOR_SIZE + CD_SECTOR_SIZE - 1) / CD_SECTOR_SIZE * (CD_SECTOR_SIZE / SECTOR_SIZE))
 
 /* Fixed disk media descriptor (0xF8) vs removable (0xF0) */
 #define MEDIA_DESCRIPTOR_FIXED 0xF8
@@ -201,10 +204,10 @@ static void print_usage(const char* name)
     printf("  -format <raw|vhd|vhdx> Output container format (default: raw)\n");
     printf("  -vhd                Shorthand for -format vhd\n");
     printf("  -vhdx               Shorthand for -format vhdx (Hyper-V Generation 2 takes no VHD)\n");
-    printf("\nUsage: %s -cd <image.iso> [-mbr <isombr.bin>] [-signature <hex>]\n\n", name);
-    printf("  -cd <image.iso>     Make an El Torito CD image bootable from a disk, in place: the MBR gets\n");
-    printf("                      an EFI system partition over the EFI boot image and, with -mbr, the\n");
-    printf("                      boot code that starts the BIOS boot image\n");
+    printf("\nUsage: %s -cd <image.iso> [-mbr <isombr.bin>] [-signature <hex>] [-diskid <guid>]\n\n", name);
+    printf("  -cd <image.iso>     Make an El Torito CD image bootable from a disk, in place: a GPT behind a\n");
+    printf("                      protective MBR gets an EFI system partition over the EFI boot image and,\n");
+    printf("                      with -mbr, the MBR gets the boot code that starts the BIOS boot image\n");
 }
 
 static int buffer_is_zero(const unsigned char* data, size_t size);
@@ -1384,14 +1387,20 @@ static int make_hybrid_cd(const char* image_path, const char* mbr_path)
     unsigned char* boot_code = NULL;
     unsigned char sector[CD_SECTOR_SIZE];
     unsigned char mbr_sector[SECTOR_SIZE];
-    unsigned long long volume_sectors = 0;
+    unsigned char gpt_header[SECTOR_SIZE];
+    unsigned char system_area[(GPT_ENTRY_SECTORS + 1) * SECTOR_SIZE];
+    unsigned char* gpt_tail = NULL;
+    unsigned char* gpt_entries;
+    unsigned long long volume_sectors = 0, total_sectors;
     unsigned long long esp_start = 0, esp_sectors = 0;
     unsigned int catalog_sector = 0;
     unsigned int bytes_per_sector, fat_sectors;
     unsigned int index;
     CD_BOOT_IMAGE bios = {0, 0}, efi = {0, 0};
     PARTITION_ENTRY* entry = (PARTITION_ENTRY*)(mbr_sector + MBR_PARTITION_TABLE_OFFSET);
+    PARTITION_INPUT esp;
     long boot_code_size = 0;
+    long image_size;
     int ret = 1;
 
     image = fopen(image_path, "r+b");
@@ -1484,18 +1493,72 @@ static int make_hybrid_cd(const char* image_path, const char* mbr_path)
         }
         esp_start = (unsigned long long)efi.Sector * (CD_SECTOR_SIZE / SECTOR_SIZE);
         esp_sectors = (unsigned long long)fat_sectors * (bytes_per_sector / SECTOR_SIZE);
-        if (esp_start + esp_sectors > volume_sectors || esp_start + esp_sectors > 0xFFFFFFFFULL)
+        total_sectors = volume_sectors + CD_GPT_TAIL_SECTORS;
+        if (esp_start < GPT_FIRST_USABLE_SECTOR || esp_start + esp_sectors > volume_sectors ||
+            esp_start + esp_sectors > 0xFFFFFFFFULL || total_sectors > (unsigned long long)LONG_MAX / SECTOR_SIZE)
         {
-            fprintf(stderr, "Error: The EFI boot image of '%s' lies outside the MBR-addressable volume.\n", image_path);
+            fprintf(stderr, "Error: The EFI boot image of '%s' lies outside the GPT-usable volume.\n", image_path);
+            goto cleanup;
+        }
+        if (fseek(image, 0, SEEK_END) != 0 || (image_size = ftell(image)) < (long)(volume_sectors * SECTOR_SIZE) ||
+            image_size > (long)(total_sectors * SECTOR_SIZE))
+        {
+            fprintf(stderr, "Error: '%s' does not end with its ISO 9660 volume.\n", image_path);
+            goto cleanup;
+        }
+        if (fseek(image, SECTOR_SIZE, SEEK_SET) != 0 ||
+            fread(system_area, 1, sizeof(system_area), image) != sizeof(system_area) ||
+            (memcmp(system_area, "EFI PART", 8) != 0 && !buffer_is_zero(system_area, sizeof(system_area))))
+        {
+            fprintf(stderr, "Error: The system area of '%s' is already in use.\n", image_path);
             goto cleanup;
         }
 
-        entry->Status = mbr_path ? 0x80 : 0;
-        entry->Type = MBR_TYPE_EFI_SYSTEM;
-        entry->LBAStart = (unsigned int)esp_start;
-        entry->LBASize = (unsigned int)esp_sectors;
-        write_chs(entry->LBAStart, entry->CHSFirst);
-        write_chs(entry->LBAStart + entry->LBASize - 1, entry->CHSLast);
+        memset(&esp, 0, sizeof(esp));
+        esp.Name = "EFI system partition";
+        esp.StartSector = (unsigned int)esp_start;
+        esp.SectorCount = (unsigned int)esp_sectors;
+        esp.Type = MBR_TYPE_EFI_SYSTEM;
+        if (!has_disk_guid)
+        {
+            make_gpt_guid(disk_guid, 0, &esp);
+            has_disk_guid = 1;
+        }
+
+        gpt_tail = calloc(CD_GPT_TAIL_SECTORS, SECTOR_SIZE);
+        if (!gpt_tail)
+        {
+            fprintf(stderr, "Error: Out of memory.\n");
+            goto cleanup;
+        }
+        gpt_entries = gpt_tail + (CD_GPT_TAIL_SECTORS - GPT_ENTRY_SECTORS - 1) * SECTOR_SIZE;
+        build_gpt_entries(gpt_entries, &esp, 1);
+        build_gpt_header(gpt_tail + (CD_GPT_TAIL_SECTORS - 1) * SECTOR_SIZE, total_sectors - 1, 1,
+                         total_sectors - 1 - GPT_ENTRY_SECTORS, total_sectors - 1, gpt_entries);
+        build_gpt_header(gpt_header, 1, total_sectors - 1, 2, total_sectors - 1, gpt_entries);
+        if (write_data_at(image, (long)(volume_sectors * SECTOR_SIZE), gpt_tail, CD_GPT_TAIL_SECTORS * SECTOR_SIZE) != 0 ||
+            write_data_at(image, SECTOR_SIZE, gpt_header, sizeof(gpt_header)) != 0 ||
+            write_data_at(image, 2 * SECTOR_SIZE, gpt_entries, GPT_ENTRY_COUNT * GPT_ENTRY_SIZE) != 0)
+        {
+            fprintf(stderr, "Error: Cannot write the GPT of '%s'.\n", image_path);
+            goto cleanup;
+        }
+
+        entry[0].Status = 0;
+        entry[0].Type = MBR_TYPE_GPT_PROTECTIVE;
+        write_chs(1, entry[0].CHSFirst);
+        memset(entry[0].CHSLast, 0xFF, sizeof(entry[0].CHSLast));
+        entry[0].LBAStart = 1;
+        entry[0].LBASize = total_sectors - 1 > 0xFFFFFFFFULL ? 0xFFFFFFFFU : (unsigned int)(total_sectors - 1);
+        if (mbr_path)
+        {
+            entry[1].Status = 0x80;
+            entry[1].Type = MBR_TYPE_UNUSED;
+            write_chs(0, entry[1].CHSFirst);
+            write_chs(0, entry[1].CHSLast);
+            entry[1].LBAStart = 0;
+            entry[1].LBASize = 1;
+        }
     }
     else
     {
@@ -1526,7 +1589,7 @@ static int make_hybrid_cd(const char* image_path, const char* mbr_path)
            image_path,
            mbr_path ? "BIOS" : "",
            mbr_path && efi.Found ? " and " : "",
-           efi.Found ? "EFI system partition" : "");
+           efi.Found ? "GPT EFI system partition" : "");
     ret = 0;
 
 cleanup:
@@ -1535,6 +1598,7 @@ cleanup:
         fprintf(stderr, "Error: Cannot close '%s'.\n", image_path);
         ret = 1;
     }
+    free(gpt_tail);
     free(boot_code);
     return ret;
 }
@@ -1761,7 +1825,7 @@ int main(int argc, char* argv[])
     {
         if (output_path || partition_count != 0 || blob_count != 0 || gpt || output_format != OUTPUT_FORMAT_RAW)
         {
-            fprintf(stderr, "Error: -cd only combines with -mbr and -signature.\n");
+            fprintf(stderr, "Error: -cd only combines with -mbr, -signature and -diskid.\n");
             goto cleanup;
         }
         ret = make_hybrid_cd(cd_path, mbr_path);

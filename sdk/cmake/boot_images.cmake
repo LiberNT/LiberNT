@@ -306,7 +306,7 @@ if(FREELDR_HAS_BIOS_BOOT OR DEFINED EFI_PLATFORM_ID)
     string(SUBSTRING "${_bootcd_disk}" 0 8 _bootcd_signature)
     set(BOOTCD_HYBRID_DEPENDS native-mkdiskimg)
     set(BOOTCD_HYBRID_COMMAND
-        COMMAND native-mkdiskimg -cd ${REACTOS_BINARY_DIR}/bootcd.iso -signature ${_bootcd_signature})
+        COMMAND native-mkdiskimg -cd ${REACTOS_BINARY_DIR}/bootcd.iso -signature ${_bootcd_signature} -diskid ${_bootcd_disk})
     if(FREELDR_HAS_BIOS_BOOT)
         list(APPEND BOOTCD_HYBRID_DEPENDS isombr)
         list(APPEND BOOTCD_HYBRID_COMMAND -mbr ${_isombr_file})

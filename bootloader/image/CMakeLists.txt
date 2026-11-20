@@ -212,7 +212,7 @@ function(bootloader_media _target _directory _image)
             -hide boot.catalog
             -duplicates-once -no-cache-inodes -graft-points
             -path-list ${_directory}/files.lst
-        COMMAND native-mkdiskimg -cd ${_image} -signature ${_signature}
+        COMMAND native-mkdiskimg -cd ${_image} -signature ${_signature} -diskid ${_disk}
         DEPENDS native-fatten native-mkisofs native-mkdiskimg native-wimage bootmgfw winload ${_directory}/BCD
         VERBATIM)
 
