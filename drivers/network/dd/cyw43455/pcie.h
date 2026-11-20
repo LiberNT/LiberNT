@@ -324,6 +324,8 @@ typedef struct _CYW_PCIE
     USHORT IoctlTransId;
     KEVENT IoctlEvent;
     volatile LONG IoctlPending;
+    EX_RUNDOWN_REF IoctlRundown;
+    volatile LONG IoctlAborted;
     LONG IoctlFirmwareStatus;
     BOOLEAN IoctlResponseLost;
     ULONG IoctlResponseLength;
