@@ -5,9 +5,13 @@
  * COPYRIGHT:   Copyright 2026 mikuta0407 <mikuta0407@mikuta0407.net>
  */
 
+#define WIN32_LEAN_AND_MEAN
 #include <apitest.h>
 #include <winsock2.h>
 #include <stdio.h>
+#include <freerdp/freerdp.h>
+#include <freerdp/event.h>
+#include <freerdp/input.h>
 
 #define PROTOCOL_RDP    0x00
 #define PROTOCOL_SSL    0x01
@@ -213,6 +217,72 @@ StopServer(HANDLE Process)
     CloseHandle(Process);
 }
 
+static BOOL EarlyInputSent;
+static int EarlyInputState;
+static UINT32 EarlyInputError;
+
+static void
+SendInputBeforeFontList(void *Context, const StateChangedEventArgs *Event)
+{
+    rdpInput *Input = ((rdpContext *)Context)->input;
+
+    if ((int)Event->newState > EarlyInputState)
+        EarlyInputState = (int)Event->newState;
+    if (Event->newState == CONNECTION_STATE_FINALIZATION_FONT_LIST && Input->SynchronizeEvent)
+        EarlyInputSent = Input->SynchronizeEvent(Input, 0);
+}
+
+static BOOL
+ConnectWithEarlyInput(const char *Password)
+{
+    freerdp *Instance = freerdp_new();
+    rdpSettings *Settings;
+    HANDLE Events[MAXIMUM_WAIT_OBJECTS];
+    DWORD Count, Start;
+    BOOL Alive = FALSE;
+
+    EarlyInputSent = FALSE;
+    EarlyInputState = 0;
+    EarlyInputError = 0;
+    if (!Instance)
+        return FALSE;
+    if (!freerdp_context_new(Instance))
+    {
+        freerdp_free(Instance);
+        return FALSE;
+    }
+    Settings = Instance->context->settings;
+    if (freerdp_settings_set_string(Settings, FreeRDP_ServerHostname, "127.0.0.1") &&
+        freerdp_settings_set_uint32(Settings, FreeRDP_ServerPort, 3389) &&
+        freerdp_settings_set_string(Settings, FreeRDP_Username, "controller") &&
+        freerdp_settings_set_string(Settings, FreeRDP_Password, Password) &&
+        freerdp_settings_set_bool(Settings, FreeRDP_IgnoreCertificate, TRUE) &&
+        freerdp_settings_set_bool(Settings, FreeRDP_RdpSecurity, FALSE) &&
+        freerdp_settings_set_bool(Settings, FreeRDP_TlsSecurity, TRUE) &&
+        freerdp_settings_set_bool(Settings, FreeRDP_NlaSecurity, FALSE) &&
+        freerdp_settings_set_bool(Settings, FreeRDP_ExtSecurity, FALSE) &&
+        freerdp_settings_set_bool(Settings, FreeRDP_DeactivateClientDecoding, TRUE) &&
+        PubSub_SubscribeStateChanged(Instance->context->pubSub, SendInputBeforeFontList) >= 0 &&
+        freerdp_connect(Instance))
+    {
+        Alive = TRUE;
+        Start = GetTickCount();
+        while (Alive && GetTickCount() - Start < 3000)
+        {
+            Count = freerdp_get_event_handles(Instance->context, Events, ARRAYSIZE(Events));
+            if (!Count || WaitForMultipleObjects(Count, Events, FALSE, 100) == WAIT_FAILED ||
+                !freerdp_check_event_handles(Instance->context) || freerdp_shall_disconnect_context(Instance->context))
+                Alive = FALSE;
+        }
+        freerdp_disconnect(Instance);
+    }
+    else
+        EarlyInputError = freerdp_get_last_error(Instance->context);
+    freerdp_context_free(Instance);
+    freerdp_free(Instance);
+    return Alive;
+}
+
 static void
 TestNegotiation(BYTE Requested, BYTE ExpectedType, DWORD ExpectedValue)
 {
@@ -287,6 +357,9 @@ START_TEST(ControllerMode)
         if (Waiting != INVALID_SOCKET)
             closesocket(Waiting);
         ok(WaitForNegotiation(TRUE), "The server does not serve a client after the first one left\n");
+        ok(ConnectWithEarlyInput(Password), "The server dropped a client that sent input before the connection was active: state %d, error 0x%08x\n",
+           EarlyInputState, EarlyInputError);
+        ok(EarlyInputSent, "The client could not send input before the connection was active: state %d\n", EarlyInputState);
         StopServer(Process);
     }
 
