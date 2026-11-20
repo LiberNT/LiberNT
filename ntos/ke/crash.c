@@ -67,8 +67,8 @@ ULONG KiHardwareTrigger;
 PMESSAGE_RESOURCE_DATA KiBugCodeMessages;
 
 /* Callbacks registered to save state when the system stops. */
-LIST_ENTRY KeBugcheckCallbackListHead;
-LIST_ENTRY KeBugcheckReasonCallbackListHead;
+LIST_ENTRY KeBugcheckCallbackListHead = {&KeBugcheckCallbackListHead, &KeBugcheckCallbackListHead};
+LIST_ENTRY KeBugcheckReasonCallbackListHead = {&KeBugcheckReasonCallbackListHead, &KeBugcheckReasonCallbackListHead};
 KSPIN_LOCK BugCheckCallbackLock;
 
 /* Callbacks registered for the unmaskable interrupt. */
