@@ -170,6 +170,7 @@ static BOOL Superseded(DESKTOP_CONTEXT *ctx)
     return ctx->Authorized && ctx->Generation != InterlockedCompareExchange(&ClientGeneration, 0, 0);
 }
 
+/* A client may send input before the connection is active; that input is dropped, not the connection */
 static BOOL InputReady(rdpInput *input)
 {
     DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)input->context;
@@ -181,7 +182,7 @@ static BOOL Keyboard(rdpInput *input, UINT16 flags, UINT8 code)
     DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)input->context;
     INPUT event = {0};
     unsigned index = code | ((flags & KBD_FLAGS_EXTENDED) ? 256 : 0);
-    if (!InputReady(input)) return FALSE;
+    if (!InputReady(input)) return TRUE;
     event.type = INPUT_KEYBOARD;
     event.ki.wScan = code;
     event.ki.dwFlags = KEYEVENTF_SCANCODE;
@@ -196,7 +197,7 @@ static BOOL Keyboard(rdpInput *input, UINT16 flags, UINT8 code)
 static BOOL UnicodeKeyboard(rdpInput *input, UINT16 flags, UINT16 code)
 {
     INPUT event = {0};
-    if (!InputReady(input)) return FALSE;
+    if (!InputReady(input)) return TRUE;
     event.type = INPUT_KEYBOARD;
     event.ki.wScan = code;
     event.ki.dwFlags = KEYEVENTF_UNICODE;
@@ -209,7 +210,7 @@ static BOOL Mouse(rdpInput *input, UINT16 flags, UINT16 x, UINT16 y)
     DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)input->context;
     INPUT event = {0};
     BOOL down = (flags & PTR_FLAGS_DOWN) != 0;
-    if (!InputReady(input)) return FALSE;
+    if (!InputReady(input)) return TRUE;
     event.type = INPUT_MOUSE;
     if (x >= ctx->Width) x = ctx->Width - 1;
     if (y >= ctx->Height) y = ctx->Height - 1;
@@ -239,7 +240,8 @@ static BOOL Mouse(rdpInput *input, UINT16 flags, UINT16 x, UINT16 y)
 static BOOL Synchronize(rdpInput *input, UINT32 flags)
 {
     (void)flags;
-    return InputReady(input);
+    (void)InputReady(input);
+    return TRUE;
 }
 
 static void FreeDesktopCapture(DESKTOP_CONTEXT *ctx)
