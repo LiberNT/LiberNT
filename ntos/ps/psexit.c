@@ -120,14 +120,15 @@ PspNotifyExceptionPortOfExit(
 }
 
 /*
- * A user-mode APC that was queued but never delivered is dropped here. A
+ * An APC that was queued but never delivered is dropped here. A
  * thread on its way out will not run one, and whoever queued it has no claim
  * on the memory the control block sits in.
  */
 static
 VOID
-PspDrainUserApcs(
-    _In_ PETHREAD Thread)
+PspDrainApcs(
+    _In_ PETHREAD Thread,
+    _In_ KPROCESSOR_MODE Mode)
 {
     PLIST_ENTRY First;
     PLIST_ENTRY Entry;
@@ -137,7 +138,7 @@ PspDrainUserApcs(
     /* A timer still set by the thread could queue its APC again while the ring below is walked */
     ASSERT(IsListEmpty(&Thread->ActiveTimerListHead));
 
-    First = KeFlushQueueApc(&Thread->Tcb, UserMode);
+    First = KeFlushQueueApc(&Thread->Tcb, Mode);
     if (First == NULL) return;
 
     /* What comes back is the list with its head taken out, so it is a ring */
@@ -216,6 +217,7 @@ PspExitThread(
 
     PAGED_CODE();
 
+    InterlockedCompareExchange((PLONG)&Thread->ExitStatus, ExitStatus, STATUS_PENDING);
     PspSetCrossThreadFlag(Thread, CT_TERMINATED_BIT);
 
     if (Thread->BreakOnTermination)
@@ -225,7 +227,6 @@ PspExitThread(
                               (PCSTR)Process->ImageFileName);
     }
 
-    Thread->ExitStatus = ExitStatus;
     KeQuerySystemTime(&Thread->ExitTime);
 
     /*
@@ -237,7 +238,7 @@ PspExitThread(
     IoCancelThreadIo(Thread);
     ExTimerRundown();
     CmpFlushNotifyThread(Thread);
-    PspDrainUserApcs(Thread);
+    PspDrainApcs(Thread, UserMode);
     PspSendTerminationMessages(Thread);
     LpcExitThread(Thread);
     DbgkCloseThreadDebugObject(Thread);
@@ -300,6 +301,10 @@ PspExitThread(
     PspRunLegoRoutine(&Thread->Tcb);
 
     KeDisableThreadApcQueueing(&Thread->Tcb);
+
+    /* Another thread may have told this one to end while it was already ending itself */
+    PspDrainApcs(Thread, KernelMode);
+    PspDrainApcs(Thread, UserMode);
 
     /* The scheduler does not come back to a terminated thread */
     KeTerminateThread(0);
@@ -410,6 +415,13 @@ PspExitNormalApc(
     PAGED_CODE();
 
     ExFreePoolWithTag(SystemArgument1, TAG_PS_APC);
+    /* A thread already on its way out, for one it began itself, does not start again */
+    if (InterlockedCompareExchange((PLONG)&PsGetCurrentThread()->ExitStatus,
+                                   (LONG)(ULONG_PTR)NormalContext,
+                                   STATUS_PENDING) != STATUS_PENDING)
+    {
+        return;
+    }
     PspExitThread((NTSTATUS)(ULONG_PTR)NormalContext);
 }
 
@@ -463,9 +475,6 @@ PspTerminateThreadByPointer(
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
-    /* An alertable wait, in either mode, ends with STATUS_ALERTED when the thread is told to end */
-    KeAlertThread(&Thread->Tcb, KernelMode);
-
     KeInitializeApc(Apc,
                     &Thread->Tcb,
                     OriginalApcEnvironment,
@@ -475,11 +484,16 @@ PspTerminateThreadByPointer(
                     KernelMode,
                     (PVOID)(ULONG_PTR)ExitStatus);
 
+    /* A thread that no longer takes APCs is already past the point where it could be stopped from ending */
     if (!KeInsertQueueApc(Apc, Apc, NULL, 2))
     {
         ExFreePoolWithTag(Apc, TAG_PS_APC);
-        return STATUS_UNSUCCESSFUL;
+        return STATUS_SUCCESS;
     }
+
+    /* An alertable wait, in either mode, ends with STATUS_ALERTED when the thread is told to end */
+    /* Woken only once the APC is queued: a thread that sees it is ending must not get back to user mode first */
+    KeAlertThread(&Thread->Tcb, KernelMode);
 
     /*
      * A thread waiting in user mode has to be woken for the APC to run, and
@@ -932,17 +946,17 @@ NtTerminateThread(
         return STATUS_INVALID_HANDLE;
     }
 
-    if (Thread->Terminated)
-    {
-        ObDereferenceObject(Thread);
-        return STATUS_THREAD_IS_TERMINATING;
-    }
-
     /* A thread ending itself does not come back, so it lets go of the object first: running keeps it alive */
     if (Thread == Self)
     {
         ObDereferenceObject(Thread);
         return PspTerminateThreadByPointer(Thread, ExitStatus, TRUE);
+    }
+
+    if (Thread->Terminated)
+    {
+        ObDereferenceObject(Thread);
+        return STATUS_THREAD_IS_TERMINATING;
     }
 
     Status = PspTerminateThreadByPointer(Thread, ExitStatus, FALSE);
