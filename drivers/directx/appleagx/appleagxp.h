@@ -13,6 +13,7 @@
 #include <reactos/drivers/appleuat.h>
 #include <reactos/drivers/appleagx.h>
 #include <reactos/drivers/appleagxinit.h>
+#include <reactos/drivers/appleagxfw.h>
 #include <reactos/drivers/fdtdrv.h>
 
 #define AGX_REGION_CONTEXTS         0
@@ -184,7 +185,7 @@ struct _AGX_ENGINE
     APPLE_AGX_HEAP Heap;
     APPLE_AGX_OBJECT Item[AgxItems];
     APPLE_AGX_QUEUE Queue[AGX_CHANNELS];
-    APPLE_AGX_RING Channel[AGX_CHANNELS];
+    PAPPLE_AGX_FW_SCRATCH_RING Channel[AGX_CHANNELS];
     APPLE_AGX_GROWTH Growth;
     ULONG64 Draws;
     ULONG64 Computes;
@@ -215,18 +216,28 @@ typedef struct _APPLE_AGX
     ULONG IdSize;
     PUCHAR Core;
     ULONG CoreSize;
+    PUCHAR Fender;
+    ULONG64 GpuBase;
+    ULONG64 FenderBase;
     ULONG64 RegionBase[AGX_REGIONS];
     ULONG64 RegionSize[AGX_REGIONS];
     APPLE_UAT_ADOPTED Adopted;
     BOOLEAN Owned;
-    APPLE_AGX_INIT Init;
+    APPLE_AGX_FW_CONFIG FwConfig;
+    APPLE_AGX_FW Fw;
+    APPLE_AGX_HEAP FwHeap;
+    APPLE_AGX_OBJECT FwGroup[APPLE_AGX_FW_GROUPS];
+    APPLE_AGX_OBJECT FwRoot;
+    APPLE_AGX_OBJECT FwRegionA;
+    APPLE_AGX_OBJECT FwPbTable;
+    APPLE_AGX_OBJECT FwUmaTable;
+    PVOID FwScratch;
+    ULONG64 FwIoMapEnd;
     BOOLEAN Initialised;
-    APPLE_AGX_RING Event;
-    APPLE_AGX_RING Trace;
-    APPLE_AGX_RING Stats;
-    APPLE_AGX_RING DevCtl;
     BOOLEAN Bound;
     ULONG Drained;
+    ULONG FwEvents;
+    ULONG FwLogs;
     APPLE_AGX_REPORT Reported;
     ULONG IdVersion;
     ULONG64 CoreWord;
@@ -245,6 +256,22 @@ typedef struct _APPLE_AGX
     ULONG SharedCount;
     AGX_ENGINE Engine;
 } APPLE_AGX, *PAPPLE_AGX;
+
+NTSTATUS
+AgxReadFirmwareConfig(
+    _Inout_ struct _APPLE_AGX *Agx);
+
+NTSTATUS
+AgxBuildFirmwareData(
+    _Inout_ struct _APPLE_AGX *Agx);
+
+VOID
+AgxFreeFirmwareData(
+    _Inout_ struct _APPLE_AGX *Agx);
+
+VOID
+AgxDrainFirmware(
+    _Inout_ struct _APPLE_AGX *Agx);
 
 NTSTATUS
 AgxDeviceControlPost(
