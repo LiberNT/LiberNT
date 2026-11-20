@@ -296,6 +296,8 @@ ApplyAccountSettings(
     GetDlgItemTextW(hwndDlg, IDC_PASSWORD1, Password1, ARRAYSIZE(Password1));
     GetDlgItemTextW(hwndDlg, IDC_PASSWORD2, Password2, ARRAYSIZE(Password2));
     GetDlgItemTextW(hwndDlg, IDC_PASSWORDHINT, Hint, ARRAYSIZE(Hint));
+    if (!UserName[0])
+        Password1[0] = Password2[0] = Hint[0] = UNICODE_NULL;
     StringCchCopyW(LowerPassword, ARRAYSIZE(LowerPassword), Password1);
     CharLowerW(LowerPassword);
 
@@ -368,8 +370,12 @@ static VOID
 UpdateAccountNextButton(
     _In_ HWND hwndDlg)
 {
-    SetupFrameSetButtonText(hwndDlg, IDC_FRAME_NEXT,
-                            GetWindowTextLengthW(GetDlgItem(hwndDlg, IDC_USERNAME)) ? IDS_NEXTBTN : IDS_SKIPBTN);
+    BOOL HasUser = (GetWindowTextLengthW(GetDlgItem(hwndDlg, IDC_USERNAME)) != 0);
+
+    EnableDlgItem(hwndDlg, IDC_PASSWORD1, HasUser);
+    EnableDlgItem(hwndDlg, IDC_PASSWORD2, HasUser);
+    EnableDlgItem(hwndDlg, IDC_PASSWORDHINT, HasUser);
+    SetupFrameSetButtonText(hwndDlg, IDC_FRAME_NEXT, HasUser ? IDS_NEXTBTN : IDS_SKIPBTN);
 }
 
 INT_PTR
