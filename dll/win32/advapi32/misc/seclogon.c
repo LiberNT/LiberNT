@@ -135,6 +135,77 @@ SeclTokenUserName(
     return LookupAccountSidW(NULL, Identity.User.User.Sid, User, &UserLength, Domain, &DomainLength, &Use);
 }
 
+static
+DWORD
+SeclCall(
+    _In_ PSECL_REQUEST Request,
+    _Inout_ PSECL_RESPONSE Response)
+{
+    handle_t hBinding;
+    DWORD dwError;
+
+    hBinding = SeclBind();
+    if (hBinding == NULL)
+        return ERROR_SERVICE_NOT_ACTIVE;
+
+    RpcTryExcept
+    {
+        SeclCreateProcessWithLogonW(hBinding, Request, Response);
+        dwError = Response->dwError;
+    }
+    RpcExcept(EXCEPTION_EXECUTE_HANDLER)
+    {
+        dwError = RpcExceptionCode();
+    }
+    RpcEndExcept;
+
+    RpcBindingFree(&hBinding);
+    return dwError;
+}
+
+static
+DWORD
+SeclStartService(VOID)
+{
+    SERVICE_STATUS_PROCESS Status;
+    SC_HANDLE hManager, hService;
+    DWORD dwError = ERROR_SUCCESS, dwBytes, dwStart;
+
+    hManager = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
+    if (hManager == NULL)
+        return GetLastError();
+
+    hService = OpenServiceW(hManager, L"seclogon", SERVICE_START | SERVICE_QUERY_STATUS);
+    if (hService == NULL)
+    {
+        dwError = GetLastError();
+        CloseServiceHandle(hManager);
+        return dwError;
+    }
+
+    if (!StartServiceW(hService, 0, NULL) && GetLastError() != ERROR_SERVICE_ALREADY_RUNNING)
+        dwError = GetLastError();
+
+    dwStart = GetTickCount();
+    while (dwError == ERROR_SUCCESS)
+    {
+        if (!QueryServiceStatusEx(hService, SC_STATUS_PROCESS_INFO, (LPBYTE)&Status, sizeof(Status), &dwBytes))
+            dwError = GetLastError();
+        else if (Status.dwCurrentState == SERVICE_RUNNING)
+            break;
+        else if (Status.dwCurrentState != SERVICE_START_PENDING)
+            dwError = ERROR_SERVICE_NOT_ACTIVE;
+        else if (GetTickCount() - dwStart > 30000)
+            dwError = ERROR_SERVICE_REQUEST_TIMEOUT;
+        else
+            Sleep(min(max(Status.dwWaitHint / 10, 10), 1000));
+    }
+
+    CloseServiceHandle(hService);
+    CloseServiceHandle(hManager);
+    return dwError;
+}
+
 BOOL
 WINAPI
 CreateProcessWithTokenW(
@@ -151,7 +222,6 @@ CreateProcessWithTokenW(
     WCHAR Desktop[MAX_PATH * 2], Directory[MAX_PATH], User[MAX_PATH], Domain[MAX_PATH];
     SECL_REQUEST Request;
     SECL_RESPONSE Response;
-    handle_t hBinding;
     DWORD dwError = ERROR_SUCCESS;
 
     TRACE("%p 0x%lx %s %s 0x%lx %p %s %p %p\n", hToken, dwLogonFlags, debugstr_w(lpApplicationName),
@@ -217,25 +287,12 @@ CreateProcessWithTokenW(
     Request.dwProcessId = GetCurrentProcessId();
     Request.hToken = (DWORD_PTR)hToken;
 
-    hBinding = SeclBind();
-    if (hBinding == NULL)
+    dwError = SeclCall(&Request, &Response);
+    if (dwError == RPC_S_SERVER_UNAVAILABLE && SeclStartService() == ERROR_SUCCESS)
     {
-        SetLastError(ERROR_SERVICE_NOT_ACTIVE);
-        return FALSE;
+        ZeroMemory(&Response, sizeof(Response));
+        dwError = SeclCall(&Request, &Response);
     }
-
-    RpcTryExcept
-    {
-        SeclCreateProcessWithLogonW(hBinding, &Request, &Response);
-        dwError = Response.dwError;
-    }
-    RpcExcept(EXCEPTION_EXECUTE_HANDLER)
-    {
-        dwError = RpcExceptionCode();
-    }
-    RpcEndExcept;
-
-    RpcBindingFree(&hBinding);
 
     if (dwError != ERROR_SUCCESS)
     {
