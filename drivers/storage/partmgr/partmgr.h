@@ -55,6 +55,9 @@ typedef struct _FDO_EXTENSION
     UINT32 EnumeratedPartitionsTotal;
     BOOLEAN IsSuperFloppy;
     volatile LONG VerifyGeneration;
+    volatile ULONGLONG Attributes;
+    LIST_ENTRY DiskListEntry;
+    BOOLEAN CollisionChecked;
 
     struct {
         UINT64 DiskSize;

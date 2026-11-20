@@ -52,6 +52,8 @@ list(APPEND SOURCE
     DeleteFileCase.c
     DeleteFileOpenHandle.c
     DeviceIoControl.c
+    DiskAttributes.c
+    DiskSignatureCollision.c
     EmulatedProcess.c
     DispatcherStress.c
     ProcessorGroups.c
