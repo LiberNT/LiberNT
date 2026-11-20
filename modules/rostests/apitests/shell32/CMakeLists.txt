@@ -17,6 +17,7 @@ list(APPEND SOURCE
     CIDLData.cpp
     CMyComputer.cpp
     CommandLineToArgvW.cpp
+    ControlPanelItem.cpp
     CShellDesktop.cpp
     CShellDispatch.cpp
     CShellLink.cpp

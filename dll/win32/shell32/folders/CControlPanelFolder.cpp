@@ -1321,6 +1321,41 @@ HRESULT WINAPI COpenControlPanel::Open(LPCWSTR pszName, LPCWSTR pszPage, IUnknow
     return hr;
 }
 
+HRESULT WINAPI COpenControlPanel::SetKeyState(DWORD grfKeyState)
+{
+    return S_OK;
+}
+
+HRESULT WINAPI COpenControlPanel::SetParameters(LPCWSTR pszParameters)
+{
+    return S_OK;
+}
+
+HRESULT WINAPI COpenControlPanel::SetPosition(POINT pt)
+{
+    return S_OK;
+}
+
+HRESULT WINAPI COpenControlPanel::SetShowWindow(int nShow)
+{
+    return S_OK;
+}
+
+HRESULT WINAPI COpenControlPanel::SetNoShowUI(BOOL fNoShowUI)
+{
+    return S_OK;
+}
+
+HRESULT WINAPI COpenControlPanel::SetDirectory(LPCWSTR pszDirectory)
+{
+    return S_OK;
+}
+
+HRESULT WINAPI COpenControlPanel::Execute()
+{
+    return Open(NULL, NULL, NULL);
+}
+
 HRESULT WINAPI COpenControlPanel::GetPath(LPCWSTR pszName, LPWSTR pszPath, UINT cchPath)
 {
     HRESULT hr;

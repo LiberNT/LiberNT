@@ -31,6 +31,8 @@ struct
     {TEXT("{208D2C60-3AEA-1069-A2D7-08002B30309D}"), IDC_ICONS_MYNET},    /* My Network Places */
     {TEXT("{20D04FE0-3AEA-1069-A2D8-08002B30309D}"), IDC_ICONS_MYCOMP},   /* My Computer */
     {TEXT("{871C5380-42A0-1069-A2EA-08002B30309D}"), IDC_ICONS_INTERNET}, /* Internet Browser */
+    {TEXT("{645FF040-5081-101B-9F08-00AA002F954E}"), IDC_ICONS_RECYCLEBIN}, /* Recycle Bin */
+    {TEXT("{5399E694-6CE5-4D6C-8FCE-1D8870FDCBA0}"), IDC_ICONS_CONTROLPANEL}, /* Control Panel */
 };
 
 static const TCHAR szUserClass[] = TEXT("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\CLSID\\");
