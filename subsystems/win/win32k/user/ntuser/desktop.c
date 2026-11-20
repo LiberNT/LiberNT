@@ -1468,7 +1468,11 @@ VOID NTAPI DesktopThreadMain(VOID)
         /* A display change is applied in the session that drives the display; the desktop threads of other sessions wake for their own messages */
         if (Session == ReadPointerAcquire((PVOID volatile *)&gpDisplaySession))
             co_UserProcessDisplayConfigurationUpdate();
-        (VOID)co_MsqWaitForNewMessages(pti, NULL, 0, 0);
+        if (co_MsqWaitForNewMessages(pti, NULL, 0, 0) == STATUS_USER_APC &&
+            PsIsThreadTerminating(PsGetCurrentThread()))
+        {
+            break;
+        }
     }
 
     UserLeave();
