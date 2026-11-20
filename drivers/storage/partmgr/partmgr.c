@@ -13,6 +13,8 @@
 
 #include "partmgr.h"
 
+static LIST_ENTRY PartMgrDiskList;
+static FAST_MUTEX PartMgrDiskListLock;
 
 static
 CODE_SEG("PAGE")
@@ -194,6 +196,95 @@ PartMgrIsDiskSuperFloppy(
 
 static
 CODE_SEG("PAGE")
+BOOLEAN
+PartMgrHasDiskIdentity(
+    _In_ PFDO_EXTENSION FdoExtension)
+{
+    static const GUID zeroGuid = { 0 };
+
+    PAGED_CODE();
+
+    if (FdoExtension->IsSuperFloppy)
+        return FALSE;
+    if (FdoExtension->DiskData.PartitionStyle == PARTITION_STYLE_MBR)
+        return FdoExtension->DiskData.Mbr.Signature != 0;
+    if (FdoExtension->DiskData.PartitionStyle == PARTITION_STYLE_GPT)
+        return !RtlEqualMemory(&FdoExtension->DiskData.Gpt.DiskId, &zeroGuid, sizeof(GUID));
+    return FALSE;
+}
+
+static
+CODE_SEG("PAGE")
+PFDO_EXTENSION
+PartMgrFindOnlineTwin(
+    _In_ PFDO_EXTENSION FdoExtension)
+{
+    PAGED_CODE();
+    ASSERT(KeGetCurrentIrql() == APC_LEVEL);
+
+    if (!PartMgrHasDiskIdentity(FdoExtension))
+        return NULL;
+
+    for (PLIST_ENTRY entry = PartMgrDiskList.Flink; entry != &PartMgrDiskList; entry = entry->Flink)
+    {
+        PFDO_EXTENSION other = CONTAINING_RECORD(entry, FDO_EXTENSION, DiskListEntry);
+
+        ASSERT(other->IsFDO);
+        if (other == FdoExtension || other->Removed || (other->Attributes & DISK_ATTRIBUTE_OFFLINE) ||
+            other->DiskData.PartitionStyle != FdoExtension->DiskData.PartitionStyle ||
+            !PartMgrHasDiskIdentity(other))
+        {
+            continue;
+        }
+
+        if (FdoExtension->DiskData.PartitionStyle == PARTITION_STYLE_MBR ?
+            other->DiskData.Mbr.Signature == FdoExtension->DiskData.Mbr.Signature :
+            RtlEqualMemory(&other->DiskData.Gpt.DiskId, &FdoExtension->DiskData.Gpt.DiskId, sizeof(GUID)))
+        {
+            return other;
+        }
+    }
+
+    return NULL;
+}
+
+static
+CODE_SEG("PAGE")
+VOID
+PartMgrCheckSignatureCollision(
+    _In_ PFDO_EXTENSION FdoExtension)
+{
+    PFDO_EXTENSION twin = NULL;
+    ULONG twinNumber = 0;
+
+    PAGED_CODE();
+
+    if (FdoExtension->CollisionChecked || !PartMgrHasDiskIdentity(FdoExtension))
+        return;
+
+    ExAcquireFastMutex(&PartMgrDiskListLock);
+    FdoExtension->CollisionChecked = TRUE;
+    if (!(FdoExtension->Attributes & DISK_ATTRIBUTE_OFFLINE))
+    {
+        twin = PartMgrFindOnlineTwin(FdoExtension);
+        if (twin)
+        {
+            twinNumber = twin->DiskData.DeviceNumber;
+            FdoExtension->Attributes |= DISK_ATTRIBUTE_OFFLINE;
+        }
+    }
+    ASSERT((FdoExtension->Attributes & DISK_ATTRIBUTE_OFFLINE) || !PartMgrFindOnlineTwin(FdoExtension));
+    ExReleaseFastMutex(&PartMgrDiskListLock);
+
+    if (twin)
+    {
+        ERR("Disk %lu has the same signature as disk %lu, so it stays offline\n",
+            FdoExtension->DiskData.DeviceNumber, twinNumber);
+    }
+}
+
+static
+CODE_SEG("PAGE")
 VOID
 PartMgrSetDiskData(
     _In_ PFDO_EXTENSION FdoExtension,
@@ -205,6 +296,7 @@ PartMgrSetDiskData(
                                Layout->PartitionStyle == PARTITION_STYLE_MBR &&
                                FdoExtension->DiskData.Mbr.Signature != Layout->Mbr.Signature;
 
+    ExAcquireFastMutex(&PartMgrDiskListLock);
     FdoExtension->DiskData.PartitionStyle = Layout->PartitionStyle;
     if (Layout->PartitionStyle == PARTITION_STYLE_MBR)
         FdoExtension->DiskData.Mbr.Signature = Layout->Mbr.Signature;
@@ -212,6 +304,7 @@ PartMgrSetDiskData(
         FdoExtension->DiskData.Gpt.DiskId = Layout->Gpt.DiskId;
 
     FdoExtension->IsSuperFloppy = PartMgrIsDiskSuperFloppy(FdoExtension);
+    ExReleaseFastMutex(&PartMgrDiskListLock);
 
     if (signatureChanged)
     {
@@ -575,6 +668,223 @@ FdoIoctlDiskGetDriveGeometryEx(
     Irp->IoStatus.Information = min(outBufferLength, sizeof(DISK_GEOMETRY_EX_INTERNAL));
 
     return status;
+}
+
+#define PARTMGR_SETTABLE_ATTRIBUTES (DISK_ATTRIBUTE_OFFLINE | DISK_ATTRIBUTE_READ_ONLY)
+
+/* SANPOLICY=OFFLINEALL: every disk starts offline and read-only for this boot, until the I/O manager brings the boot disk online */
+static BOOLEAN PartMgrOfflineAll;
+
+static
+CODE_SEG("INIT")
+BOOLEAN
+PartMgrReadOfflineAllOption(VOID)
+{
+    UNICODE_STRING keyName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control");
+    UNICODE_STRING valueName = RTL_CONSTANT_STRING(L"SystemStartOptions");
+    static const WCHAR option[] = L"SANPOLICY=OFFLINEALL";
+    const SIZE_T optionLength = RTL_NUMBER_OF(option) - 1;
+    PKEY_VALUE_PARTIAL_INFORMATION value;
+    OBJECT_ATTRIBUTES attributes;
+    BOOLEAN found = FALSE;
+    ULONG length;
+    PCWSTR text;
+    HANDLE key;
+
+    PAGED_CODE();
+
+    InitializeObjectAttributes(&attributes, &keyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+    if (!NT_SUCCESS(ZwOpenKey(&key, KEY_QUERY_VALUE, &attributes)))
+        return FALSE;
+
+    length = FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + 1024 * sizeof(WCHAR);
+    value = ExAllocatePoolZero(PagedPool, length + sizeof(WCHAR), TAG_PARTMGR);
+    if (value &&
+        NT_SUCCESS(ZwQueryValueKey(key, &valueName, KeyValuePartialInformation, value, length, &length)) &&
+        value->Type == REG_SZ)
+    {
+        for (text = (PCWSTR)value->Data; *text && !found; text++)
+        {
+            found = (text == (PCWSTR)value->Data || text[-1] == L' ') &&
+                    _wcsnicmp(text, option, optionLength) == 0 &&
+                    (text[optionLength] == UNICODE_NULL || text[optionLength] == L' ');
+        }
+    }
+
+    if (value)
+        ExFreePoolWithTag(value, TAG_PARTMGR);
+    ZwClose(key);
+    return found;
+}
+
+static
+CODE_SEG("PAGE")
+NTSTATUS
+FdoIoctlDiskGetDiskAttributes(
+    _In_ PFDO_EXTENSION FdoExtension,
+    _In_ PIRP Irp)
+{
+    PGET_DISK_ATTRIBUTES diskAttributes = Irp->AssociatedIrp.SystemBuffer;
+
+    PAGED_CODE();
+
+    if (!VerifyIrpOutBufferSize(Irp, sizeof(*diskAttributes)))
+        return STATUS_BUFFER_TOO_SMALL;
+
+    RtlZeroMemory(diskAttributes, sizeof(*diskAttributes));
+    diskAttributes->Version = sizeof(*diskAttributes);
+    diskAttributes->Attributes = FdoExtension->Attributes;
+
+    Irp->IoStatus.Information = sizeof(*diskAttributes);
+    return STATUS_SUCCESS;
+}
+
+static
+CODE_SEG("PAGE")
+NTSTATUS
+PartMgrRenewDiskIdentity(
+    _In_ PFDO_EXTENSION FdoExtension)
+{
+    PDRIVE_LAYOUT_INFORMATION_EX current, layout;
+    ULONG size, seed, signature;
+    BOOLEAN inUse;
+    NTSTATUS status;
+
+    PAGED_CODE();
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    status = PartMgrGetDriveLayout(FdoExtension, &current);
+    if (!NT_SUCCESS(status))
+        return status;
+    if (current->PartitionStyle != PARTITION_STYLE_MBR && current->PartitionStyle != PARTITION_STYLE_GPT)
+        return STATUS_NOT_SUPPORTED;
+
+    size = FIELD_OFFSET(DRIVE_LAYOUT_INFORMATION_EX, PartitionEntry[current->PartitionCount]);
+    layout = ExAllocatePoolWithTag(PagedPool, size, TAG_PARTMGR);
+    if (!layout)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlCopyMemory(layout, current, size);
+
+    if (layout->PartitionStyle == PARTITION_STYLE_MBR)
+    {
+        seed = (ULONG)KeQueryInterruptTime() ^ (ULONG)(ULONG_PTR)FdoExtension;
+        do
+        {
+            signature = RtlRandomEx(&seed);
+            inUse = FALSE;
+            ExAcquireFastMutex(&PartMgrDiskListLock);
+            for (PLIST_ENTRY entry = PartMgrDiskList.Flink; entry != &PartMgrDiskList && !inUse; entry = entry->Flink)
+            {
+                PFDO_EXTENSION other = CONTAINING_RECORD(entry, FDO_EXTENSION, DiskListEntry);
+                inUse = other->DiskData.PartitionStyle == PARTITION_STYLE_MBR && other->DiskData.Mbr.Signature == signature;
+            }
+            ExReleaseFastMutex(&PartMgrDiskListLock);
+        } while (signature == 0 || inUse);
+        layout->Mbr.Signature = signature;
+    }
+    else
+    {
+        status = ExUuidCreate(&layout->Gpt.DiskId);
+        if (!NT_SUCCESS(status))
+        {
+            ExFreePoolWithTag(layout, TAG_PARTMGR);
+            return status;
+        }
+    }
+
+    status = IoWritePartitionTableEx(FdoExtension->LowerDevice, layout);
+    if (!NT_SUCCESS(status))
+    {
+        FdoExtension->LayoutValid = FALSE;
+        ExFreePoolWithTag(layout, TAG_PARTMGR);
+        return status;
+    }
+
+    if (FdoExtension->LayoutCache)
+        ExFreePool(FdoExtension->LayoutCache);
+    FdoExtension->LayoutCache = layout;
+    FdoExtension->LayoutValid = TRUE;
+    PartMgrSetDiskData(FdoExtension, layout);
+    ASSERT(PartMgrHasDiskIdentity(FdoExtension));
+
+    ERR("Disk %lu had the signature of an online disk and gets a new one\n", FdoExtension->DiskData.DeviceNumber);
+    return STATUS_SUCCESS;
+}
+
+static
+CODE_SEG("PAGE")
+NTSTATUS
+FdoIoctlDiskSetDiskAttributes(
+    _In_ PFDO_EXTENSION FdoExtension,
+    _In_ PIRP Irp)
+{
+    PSET_DISK_ATTRIBUTES diskAttributes = Irp->AssociatedIrp.SystemBuffer;
+    ULONGLONG previous, current;
+    PDEVICE_OBJECT displaced = NULL;
+    PFDO_EXTENSION twin = NULL;
+    ULONG twinNumber = 0;
+    NTSTATUS status;
+
+    PAGED_CODE();
+
+    if (!VerifyIrpInBufferSize(Irp, sizeof(*diskAttributes)))
+        return STATUS_INVALID_PARAMETER;
+
+    if (diskAttributes->Version != sizeof(*diskAttributes) ||
+        (diskAttributes->AttributesMask & ~PARTMGR_SETTABLE_ATTRIBUTES) != 0 ||
+        (diskAttributes->Attributes & ~diskAttributes->AttributesMask) != 0)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    /* TODO: keep the attributes across boots when the caller asks for Persist */
+    if (diskAttributes->Persist)
+        return STATUS_NOT_SUPPORTED;
+
+    PartMgrAcquireLayoutLock(FdoExtension);
+    ExAcquireFastMutex(&PartMgrDiskListLock);
+    previous = FdoExtension->Attributes;
+    current = (previous & ~diskAttributes->AttributesMask) |
+              (diskAttributes->Attributes & diskAttributes->AttributesMask);
+    if (previous & ~current & DISK_ATTRIBUTE_OFFLINE)
+        twin = PartMgrFindOnlineTwin(FdoExtension);
+    if (twin && Irp->RequestorMode != KernelMode)
+    {
+        ExReleaseFastMutex(&PartMgrDiskListLock);
+        status = PartMgrRenewDiskIdentity(FdoExtension);
+        ExAcquireFastMutex(&PartMgrDiskListLock);
+        twin = NT_SUCCESS(status) ? PartMgrFindOnlineTwin(FdoExtension) : NULL;
+        if (!NT_SUCCESS(status) || twin)
+        {
+            ExReleaseFastMutex(&PartMgrDiskListLock);
+            PartMgrReleaseLayoutLock(FdoExtension);
+            return NT_SUCCESS(status) ? STATUS_OBJECT_NAME_COLLISION : status;
+        }
+    }
+    if (twin)
+    {
+        twin->Attributes |= DISK_ATTRIBUTE_OFFLINE;
+        twinNumber = twin->DiskData.DeviceNumber;
+        displaced = twin->PhysicalDiskDO;
+        ObReferenceObject(displaced);
+    }
+    FdoExtension->Attributes = current;
+    ASSERT((current & DISK_ATTRIBUTE_OFFLINE) || !PartMgrFindOnlineTwin(FdoExtension));
+    ExReleaseFastMutex(&PartMgrDiskListLock);
+    PartMgrReleaseLayoutLock(FdoExtension);
+
+    if (displaced)
+    {
+        ERR("Disk %lu is brought online for the system and has the same signature as disk %lu, which goes offline\n",
+            FdoExtension->DiskData.DeviceNumber, twinNumber);
+        IoInvalidateDeviceRelations(displaced, BusRelations);
+        ObDereferenceObject(displaced);
+    }
+
+    if ((previous ^ current) & DISK_ATTRIBUTE_OFFLINE)
+        IoInvalidateDeviceRelations(FdoExtension->PhysicalDiskDO, BusRelations);
+
+    return STATUS_SUCCESS;
 }
 
 static
@@ -1367,11 +1677,15 @@ FdoHandleDeviceRelations(
             // PartMgrRefreshDiskData() calls PartMgrGetDriveLayout() inside
             // so we're sure here that it returns only the cached layout.
             PartMgrGetDriveLayout(FdoExtension, &layoutEx);
+            PartMgrCheckSignatureCollision(FdoExtension);
         }
         else
         {
             FdoExtension->LayoutValid = FALSE;
         }
+
+        if (FdoExtension->Attributes & DISK_ATTRIBUTE_OFFLINE)
+            layoutEx = &emptyLayout;
 
         PartMgrUpdatePartitionDevices(FdoExtension, layoutEx);
 
@@ -1453,6 +1767,10 @@ FdoHandleRemoveDevice(
     Irp->IoStatus.Status = STATUS_SUCCESS;
     NTSTATUS status = IoCallDriver(FdoExtension->LowerDevice, Irp);
     IoReleaseRemoveLockAndWait(&FdoExtension->RemoveLock, Irp);
+
+    ExAcquireFastMutex(&PartMgrDiskListLock);
+    RemoveEntryList(&FdoExtension->DiskListEntry);
+    ExReleaseFastMutex(&PartMgrDiskListLock);
 
     IoDetachDevice(FdoExtension->LowerDevice);
     ExDeleteNPagedLookasideList(&FdoExtension->Perf.ContextLookaside);
@@ -1542,6 +1860,7 @@ PartMgrAddDevice(
         return STATUS_DEVICE_REMOVED;
     }
     deviceExtension->PhysicalDiskDO = PhysicalDeviceObject;
+    deviceExtension->Attributes = PartMgrOfflineAll ? PARTMGR_SETTABLE_ATTRIBUTES : 0;
     KeInitializeEvent(&deviceExtension->SyncEvent, SynchronizationEvent, TRUE);
     IoInitializeRemoveLock(&deviceExtension->RemoveLock, TAG_PARTMGR, 0, 0);
     KeInitializeSpinLock(&deviceExtension->Perf.Lock);
@@ -1557,6 +1876,10 @@ PartMgrAddDevice(
     deviceObject->DeviceType = deviceExtension->LowerDevice->DeviceType;
 
     deviceObject->Flags |= DO_DIRECT_IO | DO_POWER_PAGABLE;
+
+    ExAcquireFastMutex(&PartMgrDiskListLock);
+    InsertTailList(&PartMgrDiskList, &deviceExtension->DiskListEntry);
+    ExReleaseFastMutex(&PartMgrDiskListLock);
 
     // The device is initialized
     deviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
@@ -1590,8 +1913,30 @@ PartMgrDeviceControl(
         return PartitionHandleDeviceControl(DeviceObject, Irp);
     }
 
+    if (fdoExtension->Attributes & DISK_ATTRIBUTE_READ_ONLY)
+    {
+        switch (ioStack->Parameters.DeviceIoControl.IoControlCode)
+        {
+            case IOCTL_DISK_IS_WRITABLE:
+            case IOCTL_DISK_SET_DRIVE_LAYOUT:
+            case IOCTL_DISK_SET_DRIVE_LAYOUT_EX:
+            case IOCTL_DISK_CREATE_DISK:
+            case IOCTL_DISK_DELETE_DRIVE_LAYOUT:
+            case IOCTL_DISK_GROW_PARTITION:
+                return PartMgrFailIrp(Irp, STATUS_MEDIA_WRITE_PROTECTED);
+        }
+    }
+
     switch (ioStack->Parameters.DeviceIoControl.IoControlCode)
     {
+        case IOCTL_DISK_GET_DISK_ATTRIBUTES:
+            status = FdoIoctlDiskGetDiskAttributes(fdoExtension, Irp);
+            break;
+
+        case IOCTL_DISK_SET_DISK_ATTRIBUTES:
+            status = FdoIoctlDiskSetDiskAttributes(fdoExtension, Irp);
+            break;
+
         case IOCTL_DISK_PERFORMANCE:
             status = FdoIoctlDiskPerformance(fdoExtension, Irp);
             break;
@@ -1829,6 +2174,12 @@ PartMgrReadWrite(
             return STATUS_DEVICE_DOES_NOT_EXIST;
         }
 
+        if (ioStack->MajorFunction == IRP_MJ_WRITE &&
+            (((PFDO_EXTENSION)partExt->LowerDevice->DeviceExtension)->Attributes & DISK_ATTRIBUTE_READ_ONLY))
+        {
+            return PartMgrFailIrp(Irp, STATUS_MEDIA_WRITE_PROTECTED);
+        }
+
         if (ioStack->MajorFunction == IRP_MJ_WRITE && PartitionQueueHeldWrite(partExt, Irp))
             return STATUS_PENDING;
 
@@ -1854,6 +2205,9 @@ PartMgrReadWrite(
     }
 
     PFDO_EXTENSION fdoExtension = (PFDO_EXTENSION)partExt;
+
+    if (ioStack->MajorFunction == IRP_MJ_WRITE && (fdoExtension->Attributes & DISK_ATTRIBUTE_READ_ONLY))
+        return PartMgrFailIrp(Irp, STATUS_MEDIA_WRITE_PROTECTED);
 
     // Counters are off until IOCTL_DISK_PERFORMANCE enables them; the
     // unlocked read only gates the fast path (rechecked under the lock)
@@ -2081,6 +2435,9 @@ DriverEntry(
     _In_ PDRIVER_OBJECT DriverObject,
     _In_ PUNICODE_STRING RegistryPath)
 {
+    InitializeListHead(&PartMgrDiskList);
+    ExInitializeFastMutex(&PartMgrDiskListLock);
+    PartMgrOfflineAll = PartMgrReadOfflineAllOption();
     DriverObject->DriverUnload = PartMgrUnload;
     DriverObject->DriverExtension->AddDevice = PartMgrAddDevice;
     for (ULONG i = 0; i <= IRP_MJ_MAXIMUM_FUNCTION; i++)

@@ -47,6 +47,8 @@ extern void func_DefaultActCtx(void);
 extern void func_DeleteFileCase(void);
 extern void func_DeleteFileOpenHandle(void);
 extern void func_DeviceIoControl(void);
+extern void func_DiskAttributes(void);
+extern void func_DiskSignatureCollision(void);
 extern void func_DispatcherStress(void);
 extern void func_ProcessorGroups(void);
 extern void func_EmulatedProcess(void);
@@ -273,6 +275,8 @@ const struct test winetest_testlist[] =
     { "DeleteFileCase",              func_DeleteFileCase },
     { "DeleteFileOpenHandle",        func_DeleteFileOpenHandle },
     { "DeviceIoControl",             func_DeviceIoControl },
+    { "DiskAttributes",              func_DiskAttributes },
+    { "DiskSignatureCollision",      func_DiskSignatureCollision },
     { "DispatcherStress",            func_DispatcherStress },
     { "ProcessorGroups",             func_ProcessorGroups },
     { "EmulatedProcess",             func_EmulatedProcess },
