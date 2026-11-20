@@ -12,6 +12,21 @@
 #define NDEBUG
 #include <debug.h>
 
+static NTSTATUS (NTAPI *pPsPicoRegisterProvider)(const PICO_PROVIDER_ROUTINES *);
+static NTSTATUS (NTAPI *pPsPicoCreateProcess)(BOOLEAN, PVOID, PHANDLE);
+static NTSTATUS (NTAPI *pPsPicoCreateThread)(HANDLE, PCONTEXT, PVOID, PHANDLE, PCLIENT_ID);
+static VOID (NTAPI *pPsPicoTerminateCurrentThread)(NTSTATUS);
+static NTSTATUS (NTAPI *pPsPicoTerminateThread)(PETHREAD, NTSTATUS);
+static PVOID (NTAPI *pPsPicoGetProcessContext)(PEPROCESS);
+static PVOID (NTAPI *pPsPicoGetThreadContext)(PETHREAD);
+#define PsPicoRegisterProvider pPsPicoRegisterProvider
+#define PsPicoCreateProcess pPsPicoCreateProcess
+#define PsPicoCreateThread pPsPicoCreateThread
+#define PsPicoTerminateCurrentThread pPsPicoTerminateCurrentThread
+#define PsPicoTerminateThread pPsPicoTerminateThread
+#define PsPicoGetProcessContext pPsPicoGetProcessContext
+#define PsPicoGetThreadContext pPsPicoGetThreadContext
+
 NTKERNELAPI
 PVOID
 NTAPI
@@ -594,6 +609,18 @@ START_TEST(PsPico)
     BOOLEAN Registered;
     NTSTATUS Status;
     ULONG Length;
+
+    pPsPicoRegisterProvider = KmtGetSystemRoutineAddress(L"PsPicoRegisterProvider");
+    pPsPicoCreateProcess = KmtGetSystemRoutineAddress(L"PsPicoCreateProcess");
+    pPsPicoCreateThread = KmtGetSystemRoutineAddress(L"PsPicoCreateThread");
+    pPsPicoTerminateCurrentThread = KmtGetSystemRoutineAddress(L"PsPicoTerminateCurrentThread");
+    pPsPicoTerminateThread = KmtGetSystemRoutineAddress(L"PsPicoTerminateThread");
+    pPsPicoGetProcessContext = KmtGetSystemRoutineAddress(L"PsPicoGetProcessContext");
+    pPsPicoGetThreadContext = KmtGetSystemRoutineAddress(L"PsPicoGetThreadContext");
+    if (skip(pPsPicoRegisterProvider && pPsPicoCreateProcess && pPsPicoCreateThread && pPsPicoTerminateCurrentThread &&
+             pPsPicoTerminateThread && pPsPicoGetProcessContext && pPsPicoGetThreadContext,
+             "The pico provider routines are not exported\n"))
+        return;
 
     RtlZeroMemory(&ParentProcess, sizeof(ParentProcess));
     RtlZeroMemory(&ChildProcess, sizeof(ChildProcess));

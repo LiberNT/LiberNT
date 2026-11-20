@@ -9,8 +9,9 @@
 #define _WMIKM_
 #include <ntwmi.h>
 
-NTSTATUS NTAPI WmiStartTrace(_Inout_ PWMI_LOGGER_INFORMATION LoggerInformation);
-NTSTATUS NTAPI WmiStopTrace(_Inout_ PWMI_LOGGER_INFORMATION LoggerInformation);
+typedef NTSTATUS (NTAPI *PKMT_WMI_TRACE_ROUTINE)(_Inout_ PWMI_LOGGER_INFORMATION LoggerInformation);
+static PKMT_WMI_TRACE_ROUTINE pWmiStartTrace;
+static PKMT_WMI_TRACE_ROUTINE pWmiStopTrace;
 LONGLONG FASTCALL WmiGetClock(_In_ ULONG ClockType, _In_opt_ PVOID Context);
 NTSTATUS __cdecl WmiTraceMessage(_In_ TRACEHANDLE LoggerHandle, _In_ ULONG MessageFlags,
                                  _In_ LPGUID MessageGuid, _In_ USHORT MessageNumber, ...);
@@ -51,7 +52,7 @@ KmtStartSession(
     Session->Info.LoggerName.Length = (USHORT)(wcslen(Session->Name) * sizeof(WCHAR));
     Session->Info.LoggerName.MaximumLength = sizeof(Session->Name);
 
-    Status = WmiStartTrace(&Session->Info);
+    Status = pWmiStartTrace(&Session->Info);
     if (NT_SUCCESS(Status))
         Session->LoggerId = (ULONG)Session->Info.Wnode.HistoricalContext;
 
@@ -71,7 +72,7 @@ KmtStopSession(
     Session->Info.LoggerName.Length = (USHORT)(wcslen(Session->Name) * sizeof(WCHAR));
     Session->Info.LoggerName.MaximumLength = sizeof(Session->Name);
 
-    Status = WmiStopTrace(&Session->Info);
+    Status = pWmiStopTrace(&Session->Info);
     ok_eq_hex(Status, STATUS_SUCCESS);
 }
 
@@ -318,8 +319,19 @@ TestTracedWmiEvents(VOID)
     KmtStopSession(&Session);
 }
 
+static
+BOOLEAN
+KmtResolveTraceRoutines(VOID)
+{
+    pWmiStartTrace = (PKMT_WMI_TRACE_ROUTINE)KmtGetSystemRoutineAddress(L"WmiStartTrace");
+    pWmiStopTrace = (PKMT_WMI_TRACE_ROUTINE)KmtGetSystemRoutineAddress(L"WmiStopTrace");
+    return !skip(pWmiStartTrace != NULL && pWmiStopTrace != NULL, "WmiStartTrace and WmiStopTrace are not exported\n");
+}
+
 START_TEST(EtwSessionKM)
 {
+    if (!KmtResolveTraceRoutines())
+        return;
     TestClocks();
     TestTraceInformation();
     TestTracedWmiEvents();
@@ -335,6 +347,8 @@ START_TEST(EtwSessionIrqlKM)
     KIRQL OldIrql;
     NTSTATUS Status;
 
+    if (!KmtResolveTraceRoutines())
+        return;
     Status = KmtStartSession(&Session, L"KmtEtwRaisedIrql", EVENT_TRACE_CLOCK_PERFCOUNTER);
     ok_eq_hex(Status, STATUS_SUCCESS);
     if (!NT_SUCCESS(Status))
