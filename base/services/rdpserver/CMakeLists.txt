@@ -3,7 +3,8 @@
 # PURPOSE:     Build the RDP console server against the in-tree FreeRDP and OpenSSL
 # COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif193@gmail.com>
 
-add_executable(rdpserver rdpserver.c transfer.c gfx.c clearenc.c framemove.c experience.c videodetect.c)
+add_executable(rdpserver rdpserver.c broker.c cookie.c transfer.c gfx.c clearenc.c framemove.c experience.c videodetect.c)
+target_include_directories(rdpserver PRIVATE ${REACTOS_SOURCE_DIR}/sdk/include/reactos/subsys)
 target_compile_definitions(rdpserver PRIVATE __STDC_NO_THREADS__=1)
 if(NOT MSVC)
     target_compile_options(rdpserver PRIVATE -std=gnu11)
@@ -11,7 +12,7 @@ endif()
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(rdpserver PRIVATE -fno-autolink)
 endif()
-target_link_libraries(rdpserver freerdp-server freerdp winpr libssl libcrypto uuid oldnames)
+target_link_libraries(rdpserver freerdp-server freerdp winpr libssl libcrypto uuid oldnames smlib)
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_link_libraries(rdpserver libgcc_eh)
 endif()
