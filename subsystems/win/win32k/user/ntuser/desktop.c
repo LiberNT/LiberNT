@@ -1461,7 +1461,11 @@ VOID NTAPI DesktopThreadMain(VOID)
             IntDispatchMessage(&Msg);
         }
         co_UserProcessDisplayConfigurationUpdate();
-        (VOID)co_MsqWaitForNewMessages(pti, NULL, 0, 0);
+        if (co_MsqWaitForNewMessages(pti, NULL, 0, 0) == STATUS_USER_APC &&
+            PsIsThreadTerminating(PsGetCurrentThread()))
+        {
+            break;
+        }
     }
 
     UserLeave();
