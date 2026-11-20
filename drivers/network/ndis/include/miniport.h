@@ -165,6 +165,7 @@ BOOLEAN Ndis6LegacyDatapathStart(PLOGICAL_ADAPTER Adapter);
 VOID Ndis6LegacyDatapathStop(PLOGICAL_ADAPTER Adapter);
 BOOLEAN Ndis6LegacyTxComplete(PLOGICAL_ADAPTER Adapter, PNDIS_PACKET Packet, NDIS_STATUS Status);
 VOID Ndis6LegacyRxIndicatePackets(PLOGICAL_ADAPTER Adapter, PPNDIS_PACKET Packets, UINT Count);
+VOID Ndis6LegacyIndicateMediaStatus(PLOGICAL_ADAPTER Adapter, NDIS_STATUS GeneralStatus);
 VOID Ndis6LegacyRxIndicateLookahead(PLOGICAL_ADAPTER Adapter,
                                    PVOID Header, UINT HeaderLength,
                                    PVOID Lookahead, UINT LookaheadLength,

@@ -1916,6 +1916,9 @@ MiniStatus(
     PADAPTER_BINDING AdapterBinding;
     KIRQL OldIrql;
 
+    if (!Adapter->IsNdis6)
+        Ndis6LegacyIndicateMediaStatus(Adapter, GeneralStatus);
+
     KeAcquireSpinLock(&Adapter->NdisMiniportBlock.Lock, &OldIrql);
 
     CurrentEntry = Adapter->ProtocolListHead.Flink;

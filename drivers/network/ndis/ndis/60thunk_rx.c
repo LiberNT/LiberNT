@@ -1337,3 +1337,86 @@ Ndis6LegacyRxIndicateLookahead(PLOGICAL_ADAPTER Adapter,
     }
     Ndis6LegacyRxReleaseSnapshot(Snapshot, SnapshotCount);
 }
+
+VOID
+Ndis6LegacyIndicateMediaStatus(PLOGICAL_ADAPTER Adapter, NDIS_STATUS GeneralStatus)
+{
+    NDIS_LINK_STATE LinkState;
+    NDIS_STATUS_INDICATION Indication;
+    PNDIS6_PROTOCOL_BINDING *Snapshot;
+    SIZE_T Capacity = 0, Count = 0, i;
+    PLIST_ENTRY Entry;
+    KIRQL OldIrql;
+    BOOLEAN Connected;
+
+    if (Adapter == NULL || Adapter->IsNdis6 ||
+        (GeneralStatus != NDIS_STATUS_MEDIA_CONNECT &&
+         GeneralStatus != NDIS_STATUS_MEDIA_DISCONNECT))
+        return;
+
+    Connected = (GeneralStatus == NDIS_STATUS_MEDIA_CONNECT);
+    Adapter->Ndis6LegacyMediaState = Connected ? NdisMediaStateConnected : NdisMediaStateDisconnected;
+
+    if (Adapter->Ndis6LegacyRxNblPool == NULL ||
+        InterlockedCompareExchange(&Adapter->Ndis6LegacyBindingsClosing, 0, 0) != 0)
+        return;
+
+    KeAcquireSpinLock(&Adapter->Ndis6LegacyBindingLock, &OldIrql);
+    for (Entry = Adapter->Ndis6LegacyBindingList.Flink;
+         Entry != &Adapter->Ndis6LegacyBindingList; Entry = Entry->Flink)
+        Capacity++;
+    KeReleaseSpinLock(&Adapter->Ndis6LegacyBindingLock, OldIrql);
+
+    if (Capacity == 0 || Capacity > MAXULONG_PTR / sizeof(*Snapshot))
+        return;
+    Snapshot = ExAllocatePoolWithTag(NonPagedPool, Capacity * sizeof(*Snapshot),
+                                     NDIS6_LEGACY_RX_TAG);
+    if (Snapshot == NULL)
+    {
+        DbgPrint("NDIS6-LEGACY: unable to allocate the link state binding snapshot\n");
+        return;
+    }
+
+    KeAcquireSpinLock(&Adapter->Ndis6LegacyBindingLock, &OldIrql);
+    for (Entry = Adapter->Ndis6LegacyBindingList.Flink;
+         Entry != &Adapter->Ndis6LegacyBindingList && Count < Capacity;
+         Entry = Entry->Flink)
+    {
+        PNDIS6_PROTOCOL_BINDING Binding =
+            CONTAINING_RECORD(Entry, NDIS6_PROTOCOL_BINDING, AdapterLink);
+        if (Binding->IsLegacyMiniport && Binding->DriverBlock != NULL &&
+            Binding->DriverBlock->Characteristics.StatusHandlerEx != NULL &&
+            Ndis6ReferenceProtocolBinding(Binding))
+            Snapshot[Count++] = Binding;
+    }
+    KeReleaseSpinLock(&Adapter->Ndis6LegacyBindingLock, OldIrql);
+
+    RtlZeroMemory(&LinkState, sizeof(LinkState));
+    LinkState.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+    LinkState.Header.Revision = NDIS_LINK_STATE_REVISION_1;
+    LinkState.Header.Size = NDIS_SIZEOF_LINK_STATE_REVISION_1;
+    LinkState.MediaConnectState = Connected ? MediaConnectStateConnected : MediaConnectStateDisconnected;
+    LinkState.MediaDuplexState = MediaDuplexStateUnknown;
+    LinkState.XmitLinkSpeed = (Connected && Adapter->Ndis6LegacyLinkSpeed != 0) ?
+        Adapter->Ndis6LegacyLinkSpeed : NDIS_LINK_SPEED_UNKNOWN;
+    LinkState.RcvLinkSpeed = LinkState.XmitLinkSpeed;
+    LinkState.PauseFunctions = NdisPauseFunctionsUnknown;
+
+    RtlZeroMemory(&Indication, sizeof(Indication));
+    Indication.Header.Type = NDIS_OBJECT_TYPE_STATUS_INDICATION;
+    Indication.Header.Revision = NDIS_STATUS_INDICATION_REVISION_1;
+    Indication.Header.Size = NDIS_SIZEOF_STATUS_INDICATION_REVISION_1;
+    Indication.SourceHandle = (NDIS_HANDLE)Adapter;
+    Indication.PortNumber = NDIS_DEFAULT_PORT_NUMBER;
+    Indication.StatusCode = NDIS_STATUS_LINK_STATE;
+    Indication.StatusBuffer = &LinkState;
+    Indication.StatusBufferSize = sizeof(LinkState);
+
+    for (i = 0; i < Count; ++i)
+    {
+        Snapshot[i]->DriverBlock->Characteristics.StatusHandlerEx(
+            Snapshot[i]->ProtocolBindingContext, &Indication);
+        Ndis6DereferenceProtocolBinding(Snapshot[i]);
+    }
+    ExFreePoolWithTag(Snapshot, NDIS6_LEGACY_RX_TAG);
+}
