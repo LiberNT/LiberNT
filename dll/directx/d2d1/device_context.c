@@ -142,7 +142,7 @@ static ULONG STDMETHODCALLTYPE d2d_device_context_inner_Release(IUnknown *iface)
         }
         free(context->layer_stack.stack);
         d2d_coverage_cleanup(&context->coverage);
-        d2d_device_context_release_mask_ring(context);
+        d2d_device_context_release_mask(context);
         IDWriteRenderingParams_Release(context->default_text_rendering_params);
         if (context->text_rendering_params)
             IDWriteRenderingParams_Release(context->text_rendering_params);

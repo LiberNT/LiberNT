@@ -166,8 +166,6 @@ struct d2d_stream
     UINT size, pos, bind;
 };
 
-#define D2D_MASK_RING 64
-
 struct d2d_device_context
 {
     ID2D1DeviceContext6 ID2D1DeviceContext6_iface;
@@ -237,9 +235,8 @@ struct d2d_device_context
     struct d2d_coverage coverage;
     ID3D11Texture2D *mask_texture;
     ID3D11ShaderResourceView *mask_srv;
-    ID3D11Texture2D *mask_ring_texture[D2D_MASK_RING];
-    ID3D11ShaderResourceView *mask_ring_srv[D2D_MASK_RING];
-    unsigned int mask_ring_pos;
+    BYTE *mask_staging;
+    size_t mask_staging_size;
     UINT mask_width, mask_height;
     BOOL mask_active;
     BOOL ps_clip_on;

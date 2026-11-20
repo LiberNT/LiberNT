@@ -83,7 +83,7 @@ void STDMETHODCALLTYPE d2d_device_context_FillEllipse(ID2D1DeviceContext6 *iface
         const D2D1_ELLIPSE *ellipse, ID2D1Brush *brush);
 void STDMETHODCALLTYPE d2d_device_context_DrawGeometry(ID2D1DeviceContext6 *iface,
         ID2D1Geometry *geometry, ID2D1Brush *brush, float stroke_width, ID2D1StrokeStyle *stroke_style);
-void d2d_device_context_release_mask_ring(struct d2d_device_context *context);
+void d2d_device_context_release_mask(struct d2d_device_context *context);
 void d2d_device_context_fill_geometry(struct d2d_device_context *render_target,
         const struct d2d_geometry *geometry, struct d2d_brush *brush, struct d2d_brush *opacity_brush);
 void STDMETHODCALLTYPE d2d_device_context_FillGeometry(ID2D1DeviceContext6 *iface,
