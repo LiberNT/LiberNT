@@ -649,6 +649,17 @@ DisconnectRemote(
     return lRet;
 }
 
+/* A session started for a remote client ends when its user signs out, as on Windows */
+VOID
+EndRemoteOnlySession(VOID)
+{
+    if (!RemoteOnlySession())
+        return;
+    RtlSetThreadIsCritical(FALSE, NULL, FALSE);
+    RtlSetProcessIsCritical(FALSE, NULL, FALSE);
+    ExitProcess(0);
+}
+
 BOOL
 QueryRemoteLogonCredentials(
     _Out_ PWLX_CLIENT_CREDENTIALS_INFO_V2_0 Credentials)

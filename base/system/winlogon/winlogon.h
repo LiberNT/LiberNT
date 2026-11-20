@@ -468,6 +468,9 @@ VOID
 HandleRemoteLogonDone(
     _In_ PWLSESSION Session);
 
+VOID
+EndRemoteOnlySession(VOID);
+
 BOOL
 QueryRemoteLogonCredentials(
     _Out_ PWLX_CLIENT_CREDENTIALS_INFO_V2_0 Credentials);
