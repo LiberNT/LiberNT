@@ -36,6 +36,7 @@ typedef void VOID;
 typedef void *PVOID;
 typedef uint8_t UCHAR, *PUCHAR, BOOLEAN, KIRQL;
 typedef uint32_t ULONG;
+typedef uint64_t ULONGLONG;
 typedef int32_t NTSTATUS;
 typedef int32_t LONG;
 typedef void *PKINTERRUPT;
@@ -56,6 +57,7 @@ typedef struct { PUCHAR DataPort, ControlPort; I8042_SETTINGS Settings; PKINTERR
 UCHAR TestReadPort(PUCHAR Port);
 VOID TestWritePort(PUCHAR Port, UCHAR Value);
 VOID KeStallExecutionProcessor(ULONG Time);
+ULONGLONG KeQueryInterruptTime(VOID);
 #define PASSIVE_LEVEL 0
 #define DISPATCH_LEVEL 2
 KIRQL KeGetCurrentIrql(VOID);
@@ -66,6 +68,7 @@ VOID KeReleaseInterruptSpinLock(PKINTERRUPT Interrupt, KIRQL OldIrql);
 NTSTATUS i8042ReadData(PPORT_DEVICE_EXTENSION DeviceExtension, UCHAR StatusFlags, PUCHAR Data);
 NTSTATUS i8042ReadStatus(PPORT_DEVICE_EXTENSION DeviceExtension, PUCHAR Status);
 NTSTATUS i8042ReadDataWait(PPORT_DEVICE_EXTENSION DeviceExtension, PUCHAR Data);
+NTSTATUS i8042ReadResetReply(PPORT_DEVICE_EXTENSION DeviceExtension, ULONG ReplyByte, PUCHAR Data);
 BOOLEAN i8042Write(PPORT_DEVICE_EXTENSION DeviceExtension, PUCHAR Port, UCHAR Data);
 BOOLEAN i8042QuiesceMouse(PPORT_DEVICE_EXTENSION DeviceExtension);
 VOID i8042FinishPacket(PPORT_DEVICE_EXTENSION DeviceExtension, NTSTATUS Result);

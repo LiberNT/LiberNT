@@ -13,6 +13,7 @@ static UCHAR ControlPort, DataPort;
 static struct { UCHAR Value; int Mouse; } Queue[8];
 static unsigned Head, Count, Writes, Stalls, LockDepth, LockCalls, UnlockCalls;
 static int Busy, MouseDisabled;
+static ULONGLONG Clock, Arrival;
 static PORT_DEVICE_EXTENSION *ActiveController;
 static IRP FirstIrp, NextIrp;
 static unsigned Completions, Starts, CancelCalls;
@@ -39,7 +40,7 @@ VOID IoStartNextPacket(PDEVICE_OBJECT Device, BOOLEAN Cancelable)
 UCHAR TestReadPort(PUCHAR Port)
 {
     if (Port == &ControlPort)
-        return (Busy ? KBD_IBF : 0) | (Count ? KBD_OBF | (Queue[Head].Mouse ? MOU_OBF : 0) : 0);
+        return (Busy ? KBD_IBF : 0) | (Count && Clock >= Arrival ? KBD_OBF | (Queue[Head].Mouse ? MOU_OBF : 0) : 0);
     assert(Port == &DataPort && Count);
     Count--;
     return Queue[Head++].Value;
@@ -69,6 +70,12 @@ VOID KeStallExecutionProcessor(ULONG Time)
 {
     assert(Time == 50);
     Stalls++;
+    Clock += Time * 10;
+}
+
+ULONGLONG KeQueryInterruptTime(VOID)
+{
+    return Clock;
 }
 
 static KIRQL TestIrql = PASSIVE_LEVEL;
@@ -106,6 +113,7 @@ static PORT_DEVICE_EXTENSION NewController(void)
     memset(&Device, 0, sizeof(Device));
     Head = Count = Writes = Stalls = LockDepth = LockCalls = UnlockCalls = 0;
     Busy = MouseDisabled = 0;
+    Clock = Arrival = 0;
     Completions = Starts = CancelCalls = TestErrors = TestErrorValue = 0;
     Device.DataPort = &DataPort;
     Device.ControlPort = &ControlPort;
@@ -117,6 +125,7 @@ static PORT_DEVICE_EXTENSION NewController(void)
 int main(void)
 {
     PORT_DEVICE_EXTENSION Device = NewController();
+    UCHAR Value;
     Busy = 1;
     assert(!i8042Write(&Device, Device.ControlPort, MOUSE_DISAB));
     assert(Writes == 0 && Stalls == 3);
@@ -231,6 +240,29 @@ int main(void)
     assert(I8042CoreSyncInterrupt(NULL, &Keyboard, 5, 6) == &Keyboard);
     assert(I8042CoreSyncInterrupt(&Keyboard, &Mouse, 6, 6) == &Mouse);
     assert(I8042CoreSyncInterrupt(&Mouse, &Keyboard, 5, 6) == &Mouse);
+
+    Device = NewController();
+    Device.Settings.PollingIterations = 12000;
+    assert(i8042ReadResetReply(&Device, 0, &Value) == STATUS_IO_TIMEOUT);
+    assert(Clock == 10000000 && Stalls == 20000);
+
+    Device = NewController();
+    Device.Settings.PollingIterations = 12000;
+    assert(i8042ReadResetReply(&Device, 1, &Value) == STATUS_IO_TIMEOUT);
+    assert(Clock == 40000000 && Stalls == 80000);
+
+    Device = NewController();
+    Queue[0].Mouse = 1; Queue[0].Value = 0xaa;
+    Count = 1;
+    Arrival = 25000000;
+    assert(i8042ReadResetReply(&Device, 1, &Value) == STATUS_SUCCESS);
+    assert(Value == 0xaa && Clock == 25000000 && Count == 0);
+
+    Device = NewController();
+    Queue[0].Mouse = 1; Queue[0].Value = 0xfa;
+    Count = 1;
+    assert(i8042ReadResetReply(&Device, 0, &Value) == STATUS_SUCCESS);
+    assert(Value == 0xfa && Stalls == 0 && Count == 0);
 #endif
     puts("i8042 controller tests passed");
     return 0;

@@ -206,29 +206,7 @@ i8042DetectMouse(
          ReplyByte < sizeof(ExpectedReply) / sizeof(ExpectedReply[0]);
          ReplyByte++)
     {
-        /* i8042ReadDataWait() polls for up to PollingIterations * 50us
-           per call, so a retry count does not say how long the wait
-           really is; bound it by the clock instead. */
-        LARGE_INTEGER TickCount;
-        ULONGLONG Deadline;
-
-        KeQueryTickCount(&TickCount);
-        Deadline = TickCount.QuadPart +
-                   (ULONGLONG)I8042_RESET_REPLY_TIMEOUT_MS * 10000 / KeQueryTimeIncrement();
-
-        do
-        {
-            Status = i8042ReadDataWait(DeviceExtension, &Value);
-
-            if(!NT_SUCCESS(Status))
-            {
-                /* Wait some time before trying again */
-                KeStallExecutionProcessor(50);
-            }
-
-            KeQueryTickCount(&TickCount);
-        } while (Status == STATUS_IO_TIMEOUT && TickCount.QuadPart < Deadline);
-
+        Status = i8042ReadResetReply(DeviceExtension, ReplyByte, &Value);
         if (!NT_SUCCESS(Status))
         {
             WARN_(I8042PRT, "No ACK after mouse reset, status 0x%08lx\n", Status);
