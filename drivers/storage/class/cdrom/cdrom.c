@@ -38,6 +38,9 @@ Revision History:
 #include "ioctl.h"
 #include "mmc.h"
 #include "scratch.h"
+#ifdef __REACTOS__
+#include <drivers/sanpolicy.h>
+#endif
 
 
 #ifdef DEBUG_USE_WPP
@@ -147,6 +150,13 @@ Return Value:
 
             SET_FLAG(driverExtension->Flags, CDROM_FLAG_WINPE_MODE);
         }
+#ifdef __REACTOS__
+
+        if (SanPolicyIsOfflineAll(CDROM_TAG_STRINGS)) {
+
+            SET_FLAG(driverExtension->Flags, CDROM_FLAG_OFFLINE_ALL);
+        }
+#endif
 
     }
 
@@ -754,7 +764,12 @@ Return Value:
     {
         // If this is a per-session DO, don't register for mount interface so that
         // mountmgr will not automatically assign a drive letter.
+#ifdef __REACTOS__
+        if (devicePropertySessionId == INVALID_SESSION &&
+            !TEST_FLAG(DriverGetExtension(WdfGetDriver())->Flags, CDROM_FLAG_OFFLINE_ALL))
+#else
         if (devicePropertySessionId == INVALID_SESSION)
+#endif
         {
             status = DeviceRegisterInterface(deviceExtension, MountedDeviceInterface);
         }
@@ -1894,6 +1909,11 @@ Return Value:
 
     case IOCTL_CDROM_RAW_READ:
     {
+#ifdef __REACTOS__
+        if (TEST_FLAG(DriverGetExtension(WdfGetDriver())->Flags, CDROM_FLAG_OFFLINE_ALL))
+            status = STATUS_DEVICE_OFF_LINE;
+        else
+#endif
         status = RequestValidateRawRead(deviceExtension, Request, RequestParameters, &dataLength);
 
         processed = TRUE;
@@ -3257,6 +3277,14 @@ Return Value:
                     "Receiving WRITE, Length %Ix\n", (ULONG) Length));
     }
 
+#ifdef __REACTOS__
+    if (TEST_FLAG(DriverGetExtension(WdfGetDriver())->Flags, CDROM_FLAG_OFFLINE_ALL))
+    {
+        RequestCompletion(deviceExtension, Request, STATUS_DEVICE_OFF_LINE, 0);
+        return;
+    }
+
+#endif
     // Check if a verify is required before a READ/WRITE
     if (TEST_FLAG(deviceExtension->DeviceObject->Flags, DO_VERIFY_VOLUME) &&
         (requestParameters.MinorFunction != CDROM_VOLUME_VERIFY_CHECKED) &&

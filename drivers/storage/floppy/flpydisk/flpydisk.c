@@ -11,11 +11,14 @@
 #include <ntddstor.h>
 #include <mountdev.h>
 #include <mountmgr.h>
+#include <ntdddisk.h>
+#include <drivers/sanpolicy.h>
 
 #define NDEBUG
 #include <debug.h>
 
 #define FLPYDISK_MAX_DRIVES 16
+#define FLPYDISK_TAG 'ypfL'
 
 typedef struct _FLPYDISK_EXTENSION
 {
@@ -27,6 +30,8 @@ typedef struct _FLPYDISK_EXTENSION
 } FLPYDISK_EXTENSION, *PFLPYDISK_EXTENSION;
 
 DRIVER_INITIALIZE DriverEntry;
+
+static BOOLEAN FlpyDiskOfflineAll;
 
 static VOID
 SetInterfaceState(PUNICODE_STRING Interface, BOOLEAN Enable)
@@ -108,6 +113,27 @@ DispatchForward(PDEVICE_OBJECT DeviceObject, PIRP Irp)
     return IoCallDriver(Extension->LowerDevice, Irp);
 }
 
+static NTSTATUS
+CompleteOffline(PIRP Irp)
+{
+    Irp->IoStatus.Status = STATUS_DEVICE_OFF_LINE;
+    Irp->IoStatus.Information = 0;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return STATUS_DEVICE_OFF_LINE;
+}
+
+static NTSTATUS NTAPI
+DispatchReadWrite(PDEVICE_OBJECT DeviceObject, PIRP Irp)
+{
+    ASSERT(IoGetCurrentIrpStackLocation(Irp)->MajorFunction == IRP_MJ_READ ||
+           IoGetCurrentIrpStackLocation(Irp)->MajorFunction == IRP_MJ_WRITE);
+
+    if (FlpyDiskOfflineAll)
+        return CompleteOffline(Irp);
+
+    return DispatchForward(DeviceObject, Irp);
+}
+
 static NTSTATUS NTAPI
 DispatchDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 {
@@ -116,6 +142,11 @@ DispatchDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 
     switch (Stack->Parameters.DeviceIoControl.IoControlCode)
     {
+        case IOCTL_DISK_FORMAT_TRACKS:
+        case IOCTL_DISK_FORMAT_TRACKS_EX:
+            if (FlpyDiskOfflineAll)
+                return CompleteOffline(Irp);
+            break;
         case IOCTL_MOUNTDEV_QUERY_DEVICE_NAME:
             return CompleteName(Irp, &Extension->DeviceName, FALSE);
 
@@ -214,10 +245,13 @@ AddDevice(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject)
         return STATUS_NO_SUCH_DEVICE;
     }
 
-    Status = IoRegisterDeviceInterface(PhysicalDeviceObject, &MOUNTDEV_MOUNTED_DEVICE_GUID, NULL,
-                                       &Extension->MountedDeviceInterface);
-    if (!NT_SUCCESS(Status))
-        RtlInitUnicodeString(&Extension->MountedDeviceInterface, NULL);
+    if (!FlpyDiskOfflineAll)
+    {
+        Status = IoRegisterDeviceInterface(PhysicalDeviceObject, &MOUNTDEV_MOUNTED_DEVICE_GUID, NULL,
+                                           &Extension->MountedDeviceInterface);
+        if (!NT_SUCCESS(Status))
+            RtlInitUnicodeString(&Extension->MountedDeviceInterface, NULL);
+    }
     Status = IoRegisterDeviceInterface(PhysicalDeviceObject, &GUID_DEVINTERFACE_FLOPPY, NULL,
                                        &Extension->FloppyInterface);
     if (!NT_SUCCESS(Status))
@@ -238,8 +272,13 @@ DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 
     UNREFERENCED_PARAMETER(RegistryPath);
 
+    FlpyDiskOfflineAll = SanPolicyIsOfflineAll(FLPYDISK_TAG);
+
     for (i = 0; i <= IRP_MJ_MAXIMUM_FUNCTION; i++)
         DriverObject->MajorFunction[i] = DispatchForward;
+
+    DriverObject->MajorFunction[IRP_MJ_READ] = DispatchReadWrite;
+    DriverObject->MajorFunction[IRP_MJ_WRITE] = DispatchReadWrite;
 
     DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = DispatchDeviceControl;
     DriverObject->MajorFunction[IRP_MJ_POWER] = DispatchPower;

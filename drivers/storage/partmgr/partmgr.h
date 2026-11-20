@@ -19,6 +19,7 @@
 #include <ioevent.h>
 #include <stdio.h>
 #include <debug/driverdbg.h>
+#include <drivers/sanpolicy.h>
 
 #include "debug.h"
 
