@@ -559,7 +559,7 @@ NtUserCallOneParam(
             break;
 
         case ONEPARAM_ROUTINE_DWMPRESENTED:
-            Result = (DWORD_PTR)IntCompositionDwmPresented();
+            Result = (DWORD_PTR)IntCompositionDwmPresented(Param);
             break;
 
         case ONEPARAM_ROUTINE_GETINPUTEVENT:

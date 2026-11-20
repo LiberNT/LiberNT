@@ -123,7 +123,7 @@ VOID IntCompositionUnload(VOID);
  * pixels. See sdk/include/reactos/dwmframe.h for the layout. */
 NTSTATUS IntCompositionDwmGetFrame(_In_ PVOID pUser);
 NTSTATUS IntCompositionDwmFlush(VOID);
-NTSTATUS IntCompositionDwmPresented(VOID);
+NTSTATUS IntCompositionDwmPresented(_In_ DWORD_PTR Param);
 
 /* Open a window FRONT section into dwm's process (ONEPARAM_ROUTINE_
  * DWMOPENSURFACE); see DWM_OPEN_SURFACE in dwmframe.h. */

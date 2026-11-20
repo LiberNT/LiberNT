@@ -4329,7 +4329,10 @@ DwmComposeLoop(HANDLE hStopEvent)
             Output = DwmGpuComposeCheckOutput();
             gpuLastOutputCheck = GetTickCount();
             if (Output == DWM_GPU_DEFERRED)
+            {
+                NtUserCallOneParam(DWM_PRESENTED_OCCLUDED, DWM_ROUTINE_PRESENTED);
                 continue;
+            }
             gpuDeferred = FALSE;
             forceFull = TRUE;
             g_lastFrameQpc = 0;
@@ -4712,7 +4715,7 @@ DwmComposeLoop(HANDLE hStopEvent)
                     }
                     if (gpuResult == DWM_GPU_COMPLETE)
                     {
-                        NtUserCallOneParam(0, DWM_ROUTINE_PRESENTED);
+                        NtUserCallOneParam(DWM_PRESENTED_FRAME, DWM_ROUTINE_PRESENTED);
                         /* A read tells CDD whether the driver can capture, before any client reads;
                          * one issued before the compositor owns the output finds nothing yet. */
                         if (screenMirrorNeeded == 0 && screenCaptureProbes < 16)
@@ -4755,6 +4758,7 @@ DwmComposeLoop(HANDLE hStopEvent)
                         gpuDeferred = TRUE;
                         gpuLastOutputCheck = GetTickCount();
                         forceFull = TRUE;
+                        NtUserCallOneParam(DWM_PRESENTED_OCCLUDED, DWM_ROUTINE_PRESENTED);
                         DwmLog("DWM: GPU output occluded; retaining composition until it is available\n");
                         continue;
                     }
@@ -4991,7 +4995,7 @@ DwmComposeLoop(HANDLE hStopEvent)
                             if (DwmDxSurfaceReadBack(&wins[i]))
                                 DwmDxAcknowledgeSurface(&wins[i]);
                         }
-                        NtUserCallOneParam(0, DWM_ROUTINE_PRESENTED);
+                        NtUserCallOneParam(DWM_PRESENTED_FRAME, DWM_ROUTINE_PRESENTED);
                     }
                 }
             }
