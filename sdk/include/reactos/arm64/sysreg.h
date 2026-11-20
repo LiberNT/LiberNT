@@ -163,6 +163,7 @@
 #define ARM64_SI_AT_S1E1W           ARM64_SI_ENCODE(0, 7, 8, 1)
 #define ARM64_SI_AT_S1E0R           ARM64_SI_ENCODE(0, 7, 8, 2)
 #define ARM64_SI_AT_S1E0W           ARM64_SI_ENCODE(0, 7, 8, 3)
+#define ARM64_SI_AT_S1E2R           ARM64_SI_ENCODE(4, 7, 8, 0)
 #define ARM64_SI_AT_S1E2W           ARM64_SI_ENCODE(4, 7, 8, 1)
 
 #define ARM64_OP_SYS_XZR(Si)        (0xD5080000 | ((Si) << 5) | 31)
