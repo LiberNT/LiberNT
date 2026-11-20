@@ -635,16 +635,6 @@ NdisCancelSendNetBufferLists(
 
 /* EOF */
 
-/* ============================================================================
- *  NDIS 6 protocol -> NDIS 5 Ethernet miniport (copy-based TX bridge).
- *
- *  Never pass a native NBL to a legacy miniport. Each NET_BUFFER becomes a
- *  private NDIS_PACKET/MDL/data allocation. The packet address is registered
- *  before calling the miniport so a synchronous NdisMSendComplete can find it.
- *  The call-stack and completion each own a context reference; the packet
- *  cannot be recycled while the miniport SendHandler is still returning.
- * ============================================================================ */
-
 #define NDIS6_LEGACY_TX_TAG '5tNn'
 #define NDIS6_LEGACY_TX_MAX_FRAME 65535UL
 
@@ -653,8 +643,8 @@ typedef struct _NDIS6_LEGACY_TX_PARENT
     PNDIS6_PROTOCOL_BINDING Binding;
     PNET_BUFFER_LIST Nbl;
     ULONG CompletionFlags;
-    volatile LONG Pending;     /* one construction guard + one per packet */
-    volatile LONG Result;      /* first failing NDIS_STATUS */
+    volatile LONG Pending;
+    volatile LONG Result;
 } NDIS6_LEGACY_TX_PARENT, *PNDIS6_LEGACY_TX_PARENT;
 
 typedef struct _NDIS6_LEGACY_TX_PACKET
@@ -664,11 +654,11 @@ typedef struct _NDIS6_LEGACY_TX_PACKET
     PNDIS_PACKET Packet;
     PMDL Mdl;
     PVOID Data;
-    PSCATTER_GATHER_LIST ScatterGatherList; /* DMA mapping owned by this TX */
+    PSCATTER_GATHER_LIST ScatterGatherList;
     PNDIS6_LEGACY_TX_PARENT Parent;
     NDIS_STATUS CompletionStatus;
-    BOOLEAN CompletionArmed;   /* parent has a pending reference for this TX */
-    volatile LONG References;  /* submitter + completion (+ miniport dispatch) */
+    BOOLEAN CompletionArmed;
+    volatile LONG References;
 } NDIS6_LEGACY_TX_PACKET, *PNDIS6_LEGACY_TX_PACKET;
 
 static VOID
@@ -718,9 +708,6 @@ Ndis6LegacyTxReleasePacket(PNDIS6_LEGACY_TX_PACKET Tx)
     CompletionStatus = Tx->CompletionStatus;
     CompletionArmed = Tx->CompletionArmed;
 
-    /* The last reference is dropped only after the miniport has completed
-     * AND the send callback has returned. The adapter is still pinned by
-     * Parent->Binding until Ndis6LegacyTxReleaseParent below. */
     if (Tx->ScatterGatherList != NULL)
     {
         PDMA_ADAPTER DmaAdapter =
@@ -735,9 +722,6 @@ Ndis6LegacyTxReleasePacket(PNDIS6_LEGACY_TX_PACKET Tx)
             NDIS_PER_PACKET_INFO_FROM_PACKET(Tx->Packet,
                                              ScatterGatherListPacketInfo) = NULL;
 
-        /* IoFreeMapRegisters (HAL DMA) requires DISPATCH_LEVEL. The final
-         * TX reference may be dropped at PASSIVE_LEVEL after a synchronous
-         * send has returned, so enforce the HAL contract for the unmap. */
         ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
         if (KeGetCurrentIrql() < DISPATCH_LEVEL)
         {
@@ -763,8 +747,6 @@ Ndis6LegacyTxReleasePacket(PNDIS6_LEGACY_TX_PACKET Tx)
         ExFreePoolWithTag(Tx->Data, NDIS6_LEGACY_TX_TAG);
     ExFreePoolWithTag(Tx, NDIS6_LEGACY_TX_TAG);
 
-    /* Notify TCP/IP only after releasing DMA resources and the copied
-     * packet. This also keeps the adapter alive during PutScatterGatherList. */
     if (CompletionArmed)
         Ndis6LegacyTxReleaseParent(Parent, CompletionStatus);
 }
@@ -801,16 +783,11 @@ Ndis6LegacyTxComplete(PLOGICAL_ADAPTER Adapter, PNDIS_PACKET Packet,
     if (Tx == NULL)
         return FALSE;
 
-    /* The completion reference is consumed here. Parent completion is
-     * deferred to the final packet release, after DMA unmapping and after
-     * any synchronous miniport SendPacketsHandler has returned. */
     Tx->CompletionStatus = Status;
     Ndis6LegacyTxReleasePacket(Tx);
     return TRUE;
 }
 
-/* Copy exactly NET_BUFFER_DATA_LENGTH bytes, respecting the first MDL offset.
- * Do not assume the NB is backed by a single contiguous MDL. */
 static BOOLEAN
 Ndis6LegacyTxCopyNetBuffer(PNET_BUFFER Nb, PVOID Destination, ULONG Length)
 {
@@ -964,10 +941,6 @@ Ndis6LegacyTxDispatchMiniport(PNDIS6_LEGACY_TX_PACKET Tx)
     Ndis6LegacyTxDrain(Adapter);
 }
 
-/* GetScatterGatherList may invoke this callback before it returns or later
- * at DISPATCH_LEVEL. The pending-list completion reference keeps Tx alive
- * until the miniport has completed; the dispatch reference keeps it alive
- * across a synchronous miniport completion. Do not touch Tx after Dispatch. */
 static VOID NTAPI
 Ndis6LegacyTxScatterGatherReady(
     IN PDEVICE_OBJECT DeviceObject,
@@ -981,8 +954,6 @@ Ndis6LegacyTxScatterGatherReady(
     UNREFERENCED_PARAMETER(DeviceObject);
     UNREFERENCED_PARAMETER(Irp);
 
-    /* Even a malformed non-NULL SGL belongs to the DMA adapter and must
-     * be returned through PutScatterGatherList during final TX cleanup. */
     Tx->ScatterGatherList = ScatterGather;
     if (ScatterGather == NULL || ScatterGather->NumberOfElements == 0)
     {
@@ -1016,8 +987,6 @@ Ndis6LegacyTxSendOne(PNDIS6_LEGACY_TX_PARENT Parent, PNET_BUFFER Nb)
          Adapter->NdisMiniportBlock.DriverHandle->MiniportCharacteristics.SendPacketsHandler == NULL))
         return NDIS_STATUS_NOT_SUPPORTED;
 
-    /* An SG-enabled miniport must never be sent a packet without a real
-     * DMA mapping. Fail closed if the HAL DMA interface is unavailable. */
     DmaAdapter = Adapter->NdisMiniportBlock.SystemAdapterObject;
     if (Adapter->NdisMiniportBlock.ScatterGatherListSize != 0 &&
         (DmaAdapter == NULL || DmaAdapter->DmaOperations == NULL ||
@@ -1033,7 +1002,7 @@ Ndis6LegacyTxSendOne(PNDIS6_LEGACY_TX_PARENT Parent, PNET_BUFFER Nb)
     if (Tx == NULL)
         return NDIS_STATUS_RESOURCES;
     RtlZeroMemory(Tx, sizeof(*Tx));
-    Tx->References = 2; /* submitter + pending completion */
+    Tx->References = 2;
     Tx->Parent = Parent;
     Tx->Data = ExAllocatePoolWithTag(NonPagedPool, Length, NDIS6_LEGACY_TX_TAG);
     if (Tx->Data == NULL || !Ndis6LegacyTxCopyNetBuffer(Nb, Tx->Data, Length))
@@ -1056,8 +1025,6 @@ Ndis6LegacyTxSendOne(PNDIS6_LEGACY_TX_PARENT Parent, PNET_BUFFER Nb)
         KeReleaseSpinLock(&Adapter->Ndis6LegacyTxPendingLock, OldIrql);
         goto NoResources;
     }
-    /* The parent owns one reference per inserted packet. Final packet
-     * release (not the raw completion callback) drops that reference. */
     Tx->CompletionArmed = TRUE;
     InsertTailList(&Adapter->Ndis6LegacyTxPendingList, &Tx->Link);
     InterlockedIncrement(&Parent->Pending);
@@ -1065,8 +1032,6 @@ Ndis6LegacyTxSendOne(PNDIS6_LEGACY_TX_PARENT Parent, PNET_BUFFER Nb)
 
     if (Adapter->NdisMiniportBlock.ScatterGatherListSize != 0)
     {
-        /* Mirror the existing NDIS 5 ProSend SG-DMA path. The HAL may
-         * complete this request synchronously or asynchronously. */
         if (KeGetCurrentIrql() < DISPATCH_LEVEL)
         {
             KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
@@ -1087,31 +1052,21 @@ Ndis6LegacyTxSendOne(PNDIS6_LEGACY_TX_PARENT Parent, PNET_BUFFER Nb)
 
         if (!NT_SUCCESS((NTSTATUS)Status))
         {
-            /* On failure the DMA callback is not invoked. Completion
-             * consumes the pending-list reference; we drop the submitter
-             * reference below. */
             DbgPrint("NDIS6-LEGACY: GetScatterGatherList failed (%08lx)\n",
                      (ULONG)Status);
-            /* Defensive against an inconsistent HAL that calls back
-             * synchronously and nevertheless returns a failure status:
-             * do not complete a packet already handed to the miniport. */
             if (Tx->ScatterGatherList == NULL)
                 (VOID)Ndis6LegacyTxComplete(Adapter, Tx->Packet, Status);
         }
     }
     else
     {
-        /* Legacy miniports without SG-DMA continue to use the ordinary
-         * NDIS_PACKET/MDL send path. */
         Ndis6LegacyTxDispatchMiniport(Tx);
     }
 
-    Ndis6LegacyTxReleasePacket(Tx); /* submitter reference */
-    return NDIS_STATUS_SUCCESS; /* completion reports the actual TX status */
+    Ndis6LegacyTxReleasePacket(Tx);
+    return NDIS_STATUS_SUCCESS;
 
 NoResources:
-    /* No packet was inserted into the pending list, so CompletionArmed is
-     * false and neither reference will complete the parent NBL here. */
     Ndis6LegacyTxReleasePacket(Tx);
     Ndis6LegacyTxReleasePacket(Tx);
     return NDIS_STATUS_RESOURCES;
@@ -1171,7 +1126,7 @@ Ndis6LegacySendNetBufferLists(PNDIS6_PROTOCOL_BINDING Binding,
             Status = Ndis6LegacyTxSendOne(Parent, Nb);
             Ndis6LegacyTxRecordStatus(Parent, Status);
         }
-        Ndis6LegacyTxReleaseParent(Parent, NDIS_STATUS_SUCCESS); /* guard */
+        Ndis6LegacyTxReleaseParent(Parent, NDIS_STATUS_SUCCESS);
     }
 }
 
@@ -1186,9 +1141,6 @@ Ndis6LegacyDatapathStart(PLOGICAL_ADAPTER Adapter)
     if (Adapter == NULL || Adapter->IsNdis6)
         return FALSE;
 
-    /* Run only at PASSIVE_LEVEL, before native protocol binding. Legacy
-     * miniport OIDs may complete asynchronously; MiniQueryInformation waits
-     * for that completion. Never invent an MTU when the query fails. */
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
     Adapter->Ndis6LegacyMtu = 0;
     Adapter->Ndis6LegacyLinkSpeed = 0;
@@ -1258,8 +1210,6 @@ Ndis6LegacyDatapathStop(PLOGICAL_ADAPTER Adapter)
 {
     if (Adapter == NULL || Adapter->IsNdis6)
         return;
-    /* The PnP path has already unbound every protocol and waited for all
-     * binding-owned send references before miniport Halt and pool teardown. */
     if (Adapter->Ndis6LegacyTxPacketPool != NULL ||
         Adapter->Ndis6LegacyRxNblPool != NULL)
     {

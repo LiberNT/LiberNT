@@ -23,8 +23,6 @@ static volatile LONG g_Ndis6ProtocolDriverListState;
 #define NDIS6_PROTOCOL_DRIVER_TAG  'pDNn'  /* "nNDp" */
 #define NDIS6_PROTOCOL_SNAPSHOT_TAG 'sPNn'
 
-/* A legacy miniport is discoverable only after its initialization and
- * Ethernet OID queries complete. Ndis6Context must never be used here. */
 static BOOLEAN
 Ndis6LegacyAdapterReady(_In_ PLOGICAL_ADAPTER Adapter)
 {
@@ -232,14 +230,6 @@ Ndis6BuildBindParameters(
 
     if (!Adapter->IsNdis6)
     {
-        /*
-         * Legacy Ethernet miniports obtain their MAC address and media
-         * information during initialization in miniport.c (DoQueries).
-         * Build the identity fields without accessing an NDIS 6 extension.
-         *
-         * The NDIS 5 -> NDIS 6 protocol bridge uses the cached legacy
-         * miniport OIDs below; it never treats the adapter as NDIS 6.
-         */
         if (Adapter->NdisMiniportBlock.MediaType == NdisMedium802_3 &&
             Adapter->AddressLength == ETH_LENGTH_OF_ADDRESS &&
             Adapter->AddressLength <= sizeof(Params->CurrentMacAddress) &&
@@ -249,8 +239,6 @@ Ndis6BuildBindParameters(
             Params->MacAddressLength = Adapter->AddressLength;
             Params->LookaheadSize = Adapter->NdisMiniportBlock.CurrentLookahead;
             Params->MacOptions = Adapter->NdisMiniportBlock.MacOptions;
-            /* A native TCP/IP bind requires a nonzero MTU. The legacy
-             * start path queries OID_GEN_MAXIMUM_FRAME_SIZE before binding. */
             Params->MtuSize = Adapter->Ndis6LegacyMtu;
             Params->PhysicalMediumType = NdisPhysicalMedium802_3;
             Params->MediaConnectState =
@@ -496,8 +484,6 @@ Ndis6BindProtocolToAllAdaptersLocked(
     if (!Ndis6ReferenceProtocolDriver(Block))
         return;
 
-    /* Snapshot adapters under the global list lock. Legacy adapters have
-     * their own rundown, which Stop/Remove drains before halting hardware. */
     KeAcquireSpinLock(&AdapterListLock, &OldIrql);
     for (entry = AdapterListHead.Flink;
          entry != &AdapterListHead;
@@ -1464,8 +1450,6 @@ NdisOpenAdapterEx(
     }
     else
     {
-        /* This reference becomes binding-owned on successful open. Stop
-         * unbinds first and drains it before halting the legacy miniport. */
         if (!Ndis6ReferenceLegacyAdapter(Adapter))
         {
             Ndis6DereferenceProtocolDriver(Block);
@@ -1573,8 +1557,6 @@ NdisOpenAdapterEx(
     }
 
     *NdisBindingHandle = (NDIS_HANDLE)Binding;
-    if (LegacyReference)
-        DbgPrint("NDIS6: opened NDIS 6 protocol binding on legacy Ethernet miniport\n");
 
     /* The completion callback is reserved for an asynchronous open. This
      * implementation completes synchronously and therefore only returns the

@@ -1111,15 +1111,6 @@ Ndis6FilterTerminalStatus(
 
 /* EOF */
 
-/* ============================================================================
- *  NDIS 5 Ethernet miniport -> native NDIS 6 protocol (copy-based RX).
- *
- *  Every indication is a synchronous RESOURCES NBL. The legacy miniport
- *  keeps its NDIS_PACKET; we copy the entire Ethernet frame into nonpaged
- *  memory before returning to the driver. Native protocols must not retain
- *  these NBLs or call NdisReturnNetBufferLists for them.
- * ============================================================================ */
-
 #define NDIS6_LEGACY_RX_TAG '5rNn'
 #define NDIS6_LEGACY_RX_MAX_FRAME 65535UL
 
@@ -1281,9 +1272,6 @@ Ndis6LegacyRxIndicatePackets(PLOGICAL_ADAPTER Adapter,
         if (Packets[i] == NULL)
             continue;
 
-        /* Some legacy miniports reuse NDIS_PACKET descriptors after changing
-         * MDL lengths without invalidating cached packet counts. Recompute
-         * the counters before using the reported frame length. */
         NdisRecalculatePacketCounts(Packets[i]);
         NdisQueryPacket(Packets[i], NULL, NULL, &Buffer, &Length);
 
@@ -1311,9 +1299,6 @@ Ndis6LegacyRxIndicateLookahead(PLOGICAL_ADAPTER Adapter,
     SIZE_T SnapshotCount;
     PVOID Frame;
     ULONG Length;
-
-    /* TransferData is not bridged: indicate only complete frames that the
-     * miniport provided in its lookahead, never truncated packets. */
 
     if (Adapter == NULL || Adapter->IsNdis6 || Header == NULL ||
         HeaderLength != 14 || PacketLength > LookaheadLength ||

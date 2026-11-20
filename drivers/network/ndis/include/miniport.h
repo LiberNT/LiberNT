@@ -33,7 +33,7 @@ typedef struct _NDIS_M_DRIVER_BLOCK {
 /* There must be some defined struct to do this... */
 typedef struct _NDIS_M_DEVICE_BLOCK {
     PDEVICE_OBJECT DeviceObject;
-    NDIS_STRING    SymbolicName;  /* Owns Buffer until deregistration */
+    NDIS_STRING    SymbolicName;
     PDRIVER_DISPATCH MajorFunction[IRP_MJ_MAXIMUM_FUNCTION+1];
 } NDIS_M_DEVICE_BLOCK, *PNDIS_M_DEVICE_BLOCK;
 
@@ -105,17 +105,11 @@ typedef struct _LOGICAL_ADAPTER
     BOOLEAN                     IsNdis6;                /* TRUE if NDIS 6 miniport */
     PVOID                       Ndis6Context;           /* PNDIS6_ADAPTER_EXT */
 
-    /* NDIS 6 protocol bindings to an NDIS 5 Ethernet miniport. These are
-     * deliberately separate from Ndis6Context: a legacy adapter does not
-     * own an NDIS6_ADAPTER_EXT. The lifecycle rundown pins the adapter
-     * during protocol discovery and for every successfully opened binding. */
     LIST_ENTRY                  Ndis6LegacyBindingList;
     KSPIN_LOCK                  Ndis6LegacyBindingLock;
     EX_RUNDOWN_REF              Ndis6LegacyLifecycleRundown;
     volatile LONG               Ndis6LegacyBindingsClosing;
 
-    /* NDIS 6 protocol -> NDIS 5 miniport datapath. Packet completions are
-     * looked up by packet address; they never masquerade as ADAPTER_BINDING. */
     LIST_ENTRY                  Ndis6LegacyTxPendingList;
     KSPIN_LOCK                  Ndis6LegacyTxPendingLock;
     volatile LONG               Ndis6LegacyTxSerializedBusy;
@@ -125,8 +119,6 @@ typedef struct _LOGICAL_ADAPTER
     NDIS_HANDLE                 Ndis6LegacyTxPacketPool;
     NDIS_HANDLE                 Ndis6LegacyRxNblPool;
 
-    /* NDIS 5 OID snapshot obtained before exposing the adapter to native
-     * protocols. A zero MTU prevents NDIS 6 TCP/IP binding. */
     ULONG                       Ndis6LegacyMtu;
     ULONGLONG                   Ndis6LegacyLinkSpeed;
     NDIS_MEDIA_STATE            Ndis6LegacyMediaState;
@@ -159,11 +151,9 @@ extern KSPIN_LOCK MiniportListLock;
 extern LIST_ENTRY AdapterListHead;
 extern KSPIN_LOCK AdapterListLock;
 
-/* NDIS 6 protocol registration/unregistration for legacy miniport PnP. */
 VOID Ndis6BindAllProtocolsToAdapter(PLOGICAL_ADAPTER Adapter);
 VOID Ndis6UnbindAllProtocolsFromAdapter(PLOGICAL_ADAPTER Adapter);
 
-/* Copy-based cross-version datapath, enabled only for started legacy NICs. */
 BOOLEAN Ndis6LegacyDatapathStart(PLOGICAL_ADAPTER Adapter);
 VOID Ndis6LegacyDatapathStop(PLOGICAL_ADAPTER Adapter);
 BOOLEAN Ndis6LegacyTxComplete(PLOGICAL_ADAPTER Adapter, PNDIS_PACKET Packet, NDIS_STATUS Status);
