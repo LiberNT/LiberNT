@@ -2313,6 +2313,51 @@ INT_PTR CALLBACK AboutAuthorsDlgProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM
 
     return FALSE;
 }
+#ifdef __REACTOS__
+#define ABOUT_BAND_EDGE  RGB(198, 212, 223)
+#define ABOUT_BAND_GLOW  RGB(240, 244, 247)
+#define ABOUT_BAND_TEXT  RGB(40, 43, 47)
+#define ABOUT_BAND_STEPS 24
+
+static BYTE AboutBandChannel(BYTE Edge, BYTE Glow, INT Step)
+{
+    return (BYTE)(Edge + (Glow - Edge) * Step / ABOUT_BAND_STEPS);
+}
+
+static VOID AboutPaintBand(HDC hdc, INT cx, INT cy)
+{
+    RECT rc = { 0, 0, cx, cy };
+    HBRUSH hbr;
+    HGDIOBJ hOldBrush, hOldPen;
+    INT Step, rx, ry;
+    INT iSaved;
+
+    hbr = CreateSolidBrush(ABOUT_BAND_EDGE);
+    if (hbr)
+    {
+        FillRect(hdc, &rc, hbr);
+        DeleteObject(hbr);
+    }
+
+    iSaved = SaveDC(hdc);
+    IntersectClipRect(hdc, 0, 0, cx, cy);
+    hOldBrush = SelectObject(hdc, GetStockObject(DC_BRUSH));
+    hOldPen = SelectObject(hdc, GetStockObject(NULL_PEN));
+    for (Step = 1; Step <= ABOUT_BAND_STEPS; Step++)
+    {
+        rx = cy * 13 / 5 * (ABOUT_BAND_STEPS + 1 - Step) / ABOUT_BAND_STEPS;
+        ry = cy * 9 / 20 * (ABOUT_BAND_STEPS + 1 - Step) / ABOUT_BAND_STEPS;
+        SetDCBrushColor(hdc, RGB(AboutBandChannel(GetRValue(ABOUT_BAND_EDGE), GetRValue(ABOUT_BAND_GLOW), Step),
+                                 AboutBandChannel(GetGValue(ABOUT_BAND_EDGE), GetGValue(ABOUT_BAND_GLOW), Step),
+                                 AboutBandChannel(GetBValue(ABOUT_BAND_EDGE), GetBValue(ABOUT_BAND_GLOW), Step)));
+        Ellipse(hdc, cx / 2 - rx, cy / 2 - ry, cx / 2 + rx, cy / 2 + ry);
+    }
+    SelectObject(hdc, hOldPen);
+    SelectObject(hdc, hOldBrush);
+    RestoreDC(hdc, iSaved);
+}
+#endif
+
 /*************************************************************************
  * AboutDlgProc            (internal)
  */
@@ -2463,7 +2508,8 @@ static INT_PTR CALLBACK AboutDlgProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM
             hLineBmp = (HBITMAP)LoadImageW(shell32_hInstance, MAKEINTRESOURCEW(IDB_LINEBAR), IMAGE_BITMAP, 0, 0,
                                            LR_DEFAULTCOLOR);
 
-            SendMessageW(hWnd, WM_CTLCOLORSTATIC, (WPARAM)hdc, (LPARAM)GetDlgItem(hWnd, IDC_ABOUT_APPNAME));
+            AboutPaintBand(hdc, rcClient.right, cyBand);
+            SetTextColor(hdc, ABOUT_BAND_TEXT);
             SetBkMode(hdc, TRANSPARENT);
             hOldFont = SelectObject(hdc, hLogoFont ? hLogoFont : (HFONT)SendMessageW(hWnd, WM_GETFONT, 0, 0));
             GetTextExtentPoint32W(hdc, szLogoName, ARRAY_SIZE(szLogoName) - 1, &sizeName);
