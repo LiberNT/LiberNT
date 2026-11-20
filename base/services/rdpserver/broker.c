@@ -41,7 +41,7 @@ static AGENT Agents[MAX_AGENTS];
 static LONG NextDisplay;
 static HANDLE DisplayReady;
 
-static BOOL ReadCookie(SOCKET client, WCHAR *user, DWORD count)
+static BOOL ReadCookie(SOCKET client, WCHAR *user, DWORD count, BOOL *routed)
 {
     BYTE data[512];
     fd_set readable;
@@ -55,7 +55,7 @@ static BOOL ReadCookie(SOCKET client, WCHAR *user, DWORD count)
         if (select(0, &readable, NULL, NULL, &timeout) != 1) return FALSE;
         got = recv(client, (char *)data, sizeof(data), MSG_PEEK);
         if (got <= 0) return FALSE;
-        if (got >= 4 && ((data[2] << 8) | data[3]) <= got) return BrokerCookieUser(data, got, user, count);
+        if (got >= 4 && ((data[2] << 8) | data[3]) <= got) return BrokerCookieUser(data, got, user, count, routed);
         if (got == sizeof(data) || GetTickCount() - start > 10000) return FALSE;
         Sleep(20);
     }
@@ -180,7 +180,7 @@ failed:
     return NULL;
 }
 
-static BOOL HandOff(SOCKET client, HANDLE *process, DWORD session, const WCHAR *display, BOOL restart)
+static BOOL HandOff(SOCKET client, HANDLE *process, DWORD session, const WCHAR *display, BOOL restart, BOOL named)
 {
     WCHAR pipe[64];
     BROKER_HANDOFF message;
@@ -205,6 +205,7 @@ static BOOL HandOff(SOCKET client, HANDLE *process, DWORD session, const WCHAR *
         Log("The server of session %lu does not take connections", session);
         return FALSE;
     }
+    message.Named = named;
     if (WSADuplicateSocketW(client, GetProcessId(*process), &message.Socket) ||
         !WriteFile(handle, &message, sizeof(message), &written, NULL) || written != sizeof(message))
     {
@@ -220,30 +221,41 @@ static void Route(SOCKET client)
 {
     WCHAR user[257], consoleUser[257];
     AGENT *agent = NULL;
-    BOOL handed;
+    BOOL handed, routed, ambiguous = FALSE;
     DWORD i;
-    if (!ReadCookie(client, user, ARRAYSIZE(user)))
+    if (!ReadCookie(client, user, ARRAYSIZE(user), &routed))
     {
         Log("Dropped a connection without a connection request");
         return;
     }
     EnterCriticalSection(&AgentLock);
     if (*user && SessionUser(ConsoleSession, consoleUser, ARRAYSIZE(consoleUser)) && *consoleUser &&
-        lstrcmpiW(consoleUser, user))
+        !BrokerSameUser(consoleUser, user, routed))
     {
-        for (i = 0; i < MAX_AGENTS && !agent; ++i)
-            if (Agents[i].Display && !lstrcmpiW(Agents[i].User, user)) agent = &Agents[i];
-        if (!agent) agent = StartNewSession(user);
-        if (!agent)
+        for (i = 0; i < MAX_AGENTS; ++i)
         {
-            LeaveCriticalSection(&AgentLock);
-            return;
+            if (!Agents[i].Display || !BrokerSameUser(Agents[i].User, user, routed)) continue;
+            if (agent) ambiguous = TRUE;
+            agent = &Agents[i];
         }
-        handed = HandOff(client, &agent->Process, agent->Session, agent->DisplayInstance, TRUE);
+        if (ambiguous) agent = NULL;
+        if (!agent && (routed || wcslen(user) < BROKER_COOKIE_CHARS))
+        {
+            agent = StartNewSession(user);
+            if (!agent)
+            {
+                LeaveCriticalSection(&AgentLock);
+                return;
+            }
+        }
+    }
+    if (agent)
+    {
+        handed = HandOff(client, &agent->Process, agent->Session, agent->DisplayInstance, TRUE, routed);
     }
     else if (ConsoleAgent)
     {
-        handed = HandOff(client, &ConsoleAgent, ConsoleSession, NULL, FALSE);
+        handed = HandOff(client, &ConsoleAgent, ConsoleSession, NULL, FALSE, routed);
     }
     else
     {
@@ -251,6 +263,7 @@ static void Route(SOCKET client)
         Log("No server runs in the console session");
     }
     LeaveCriticalSection(&AgentLock);
+    if (handed) Log("Connection of %ls handed to session %lu", *user ? user : L"an unnamed user", agent ? agent->Session : ConsoleSession);
     if (!handed) Log("Dropped a connection for %ls", *user ? user : L"an unnamed user");
 }
 

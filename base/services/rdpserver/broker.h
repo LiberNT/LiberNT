@@ -20,9 +20,14 @@ typedef BOOL (*BROKER_ALLOWED)(void);
 typedef struct BROKER_HANDOFF
 {
     WSAPROTOCOL_INFOW Socket;
+    BOOL Named;
 } BROKER_HANDOFF;
 
 BOOL BrokerStart(BROKER_LOG log, BROKER_START_AGENT start, BROKER_ALLOWED allowed);
 void BrokerStop(void);
 void BrokerSetConsoleAgent(HANDLE process, DWORD session);
-BOOL BrokerCookieUser(const BYTE *data, int length, WCHAR *user, DWORD count);
+#define BROKER_ROUTING_USER "user="
+#define BROKER_COOKIE_CHARS 9
+
+BOOL BrokerCookieUser(const BYTE *data, int length, WCHAR *user, DWORD count, BOOL *routed);
+BOOL BrokerSameUser(const WCHAR *name, const WCHAR *cookie, BOOL routed);

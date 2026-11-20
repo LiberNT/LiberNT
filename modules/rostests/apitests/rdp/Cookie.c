@@ -31,38 +31,53 @@ static int Request(BYTE *data, const char *cookie)
     return length;
 }
 
-static void TestCookie(const char *cookie, BOOL valid, const WCHAR *expected, DWORD count)
+static void TestCookie(const char *cookie, BOOL valid, const WCHAR *expected, DWORD count, BOOL routed)
 {
     BYTE data[256];
     WCHAR user[64] = L"x";
+    BOOL token = 2;
     int length = Request(data, cookie);
-    BOOL result = BrokerCookieUser(data, length, user, count);
+    BOOL result = BrokerCookieUser(data, length, user, count, &token);
     ok(result == valid, "%s: returned %d\n", cookie ? cookie : "no cookie", result);
     if (valid) ok(!wcscmp(user, expected), "%s: read %ls\n", cookie ? cookie : "no cookie", user);
+    if (valid) ok(token == routed, "%s: routed %d\n", cookie ? cookie : "no cookie", token);
 }
 
 START_TEST(Cookie)
 {
     BYTE data[256];
     WCHAR user[64];
+    BOOL routed;
     int length;
 
-    TestCookie("Cookie: mstshash=Administrator\r\n", TRUE, L"Administrator", 64);
-    TestCookie("Cookie: mstshash=LIBERNT\\rdpnla\r\n", TRUE, L"rdpnla", 64);
-    TestCookie(NULL, TRUE, L"", 64);
-    TestCookie("Cookie: msts=3640205228.15629.0000\r\n", TRUE, L"", 64);
-    TestCookie("Cookie: mstshash=\r\n", FALSE, L"", 64);
-    TestCookie("Cookie: mstshash=Administrator", FALSE, L"", 64);
-    TestCookie("Cookie: mstshash=Administrator\r\n", FALSE, L"", 8);
+    TestCookie("Cookie: mstshash=Administrator\r\n", TRUE, L"Administrator", 64, FALSE);
+    TestCookie("Cookie: mstshash=LIBERNT\\rdpnla\r\n", TRUE, L"rdpnla", 64, FALSE);
+    TestCookie("Cookie: mstshash=Administr\r\n", TRUE, L"Administr", 64, FALSE);
+    TestCookie(NULL, TRUE, L"", 64, FALSE);
+    TestCookie("Cookie: msts=3640205228.15629.0000\r\n", TRUE, L"", 64, FALSE);
+    TestCookie("Cookie: msts=user=Administrator\r\n", TRUE, L"Administrator", 64, TRUE);
+    TestCookie("Cookie: msts=user=\xe3\x83\xa6\xe3\x83\xbc\xe3\x82\xb6\r\n", TRUE, L"\x30e6\x30fc\x30b6", 64, TRUE);
+    TestCookie("Cookie: msts=user=\r\n", FALSE, L"", 64, TRUE);
+    TestCookie("Cookie: msts=user=\xe3\x83\r\n", FALSE, L"", 64, TRUE);
+    TestCookie("Cookie: mstshash=\r\n", FALSE, L"", 64, FALSE);
+    TestCookie("Cookie: mstshash=Administrator", FALSE, L"", 64, FALSE);
+    TestCookie("Cookie: mstshash=Administrator\r\n", FALSE, L"", 8, FALSE);
 
     length = Request(data, "Cookie: mstshash=Administrator\r\n");
-    ok(!BrokerCookieUser(data, length - 1, user, 64), "a truncated request was read\n");
+    ok(!BrokerCookieUser(data, length - 1, user, 64, &routed), "a truncated request was read\n");
     data[0] = 0x16;
-    ok(!BrokerCookieUser(data, length, user, 64), "a TLS record was read as a connection request\n");
+    ok(!BrokerCookieUser(data, length, user, 64, &routed), "a TLS record was read as a connection request\n");
     data[0] = 3;
     data[5] = 0xD0;
-    ok(!BrokerCookieUser(data, length, user, 64), "a connection confirm was read as a request\n");
+    ok(!BrokerCookieUser(data, length, user, 64, &routed), "a connection confirm was read as a request\n");
     data[5] = 0xE0;
     data[4] = (BYTE)(length - 4);
-    ok(!BrokerCookieUser(data, length, user, 64), "a header longer than its packet was read\n");
+    ok(!BrokerCookieUser(data, length, user, 64, &routed), "a header longer than its packet was read\n");
+
+    ok(BrokerSameUser(L"Administrator", L"Administr", FALSE), "a nine-character cookie did not match its user\n");
+    ok(BrokerSameUser(L"administrator", L"ADMINISTR", FALSE), "a cookie matched only with the same case\n");
+    ok(!BrokerSameUser(L"Administrator", L"Administr", TRUE), "a routing token matched only the start of a name\n");
+    ok(BrokerSameUser(L"rdpnla", L"RDPNLA", FALSE), "a short cookie did not match its user\n");
+    ok(!BrokerSameUser(L"rdpnla2", L"rdpnla", FALSE), "a short cookie matched only the start of a name\n");
+    ok(!BrokerSameUser(L"Admin", L"Administr", FALSE), "a nine-character cookie matched a shorter name\n");
 }

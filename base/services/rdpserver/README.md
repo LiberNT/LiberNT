@@ -27,9 +27,15 @@ port 3389 and starts a server (`/session`) as SYSTEM in the active console
 session, restarting it when it exits or when the console session changes; it
 closes the port and stops the server within seconds when the value changes
 back to 1. For each connection it reads the user name from the
-`Cookie: mstshash=` field of the client's X.224 Connection Request. A
-connection without a name, from the console's user, or made while nobody is
-signed in at the console goes to the console session. Any other user goes to
+`Cookie: mstshash=` field of the client's X.224 Connection Request, which
+holds at most the first nine characters of the name, or from the routing
+token `Cookie: msts=user=<name>` that a redirected client sends back. A
+connection without a name, from the console's user, made while nobody is
+signed in at the console, or whose nine characters match no single session
+goes to the console session; when NLA then shows that the client belongs to
+another user, the server sends it a Server Redirection PDU whose load
+balancing information names that user (MS-RDPBCGR 2.2.13.1), and the client
+connects again with it. Any other user goes to
 the session the service started for them, or to a new one: the service
 creates a `RdpVdd_RemoteDisplay&NewSession_<n>` adapter, starts the session
 through the session manager and runs a server in it

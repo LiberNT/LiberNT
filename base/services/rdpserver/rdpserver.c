@@ -38,6 +38,7 @@
 #include <freerdp/channels/wtsvc.h>
 #include <freerdp/channels/channels.h>
 #include <freerdp/server/disp.h>
+#include <freerdp/redirection.h>
 #include <ntsecapi.h>
 #include <swdevice.h>
 #include <cfgmgr32.h>
@@ -101,6 +102,8 @@ typedef struct DESKTOP_CONTEXT
 {
     rdpContext rdp;
     BOOL Authorized, Active, Suppressed, Refresh, NlaLogon, RemoteDisplay;
+    DWORD ConsoleStatus;
+    BOOL Named;
     char NlaUser[128], NlaDomain[256], NlaPassword[256];
     LONG Generation;
     int Width, Height, ClientWidth, ClientHeight, TileColumns, TileRows;
@@ -635,6 +638,7 @@ static BOOL ConnectRemoteConsole(DESKTOP_CONTEXT *ctx)
         message.Status = ERROR_BROKEN_PIPE;
     SecureZeroMemory(message.Password, sizeof(message.Password));
     SecureZeroMemory(ctx->NlaPassword, sizeof(ctx->NlaPassword));
+    ctx->ConsoleStatus = message.Status;
     Log("Session handed to RDP-Tcp#%lu: %lu", message.Connection, message.Status);
     if (message.Status == ERROR_SUCCESS) return TRUE;
     CloseHandle(RemoteConsole);
@@ -808,6 +812,26 @@ static void ReleaseRemoteDisplay(DESKTOP_CONTEXT *ctx)
     LeaveCriticalSection(&RemoteDisplayLock);
 }
 
+/* Another user is signed in here: the client comes back with load balancing information that names its user (MS-RDPBCGR 2.2.13.1), and the service gives it that user's session */
+static BOOL RedirectToOwnSession(DESKTOP_CONTEXT *ctx)
+{
+    const char *user = ctx->NlaUser;
+    char token[160];
+    rdpRedirection *redirection;
+    int length;
+    BOOL sent = FALSE;
+    if (!*user) return FALSE;
+    length = snprintf(token, sizeof(token), BROKER_ROUTING_USER "%s", user);
+    if (length <= 0 || length >= (int)sizeof(token)) return FALSE;
+    redirection = redirection_new();
+    if (redirection && redirection_set_flags(redirection, LB_LOAD_BALANCE_INFO) &&
+        redirection_set_byte_option(redirection, LB_LOAD_BALANCE_INFO, (const BYTE *)token, (size_t)length))
+        sent = ctx->rdp.peer->SendServerRedirection(ctx->rdp.peer, redirection);
+    if (redirection) redirection_free(redirection);
+    Log("Peer %s redirected to the session of %s: %d", ctx->rdp.peer->hostname, user, sent);
+    return sent;
+}
+
 static BOOL OpenH264Enabled(void)
 {
     DWORD value = 0, size = sizeof(value), type;
@@ -875,6 +899,8 @@ static BOOL PostConnect(freerdp_peer *peer)
     ctx->Authorized = TRUE;
     error = AcquireRemoteDisplay(ctx);
     if (!error && !OpenRemoteFrames(ctx)) error = ERRINFO_CLOSE_STACK_ON_DRIVER_FAILURE;
+    if (error && ctx->ConsoleStatus == ERROR_ACCESS_DENIED && !ctx->Named && !*AdoptedDisplay && RedirectToOwnSession(ctx))
+        return FALSE;
     if (error)
     {
         Log("Peer %s refused: the session has no remote display", peer->hostname);
@@ -1488,6 +1514,7 @@ static DWORD WINAPI ClientThread(void *arg)
     peer->ContextFree = ContextFree;
     if (!freerdp_peer_context_new(peer)) goto done;
     ctx = (DESKTOP_CONTEXT *)peer->context;
+    ctx->Named = peer->ContextExtra != NULL;
     ctx->Vcm = WTSOpenServerA((LPSTR)peer->context);
     if (!ctx->Vcm) goto cleanup;
     settings = ctx->rdp.settings;
@@ -2017,6 +2044,7 @@ static DWORD WINAPI TakeConnections(void *unused)
                 ZeroMemory(&address, sizeof(address));
                 memcpy(&address, &mapped, sizeof(mapped));
             }
+            if (peer) peer->ContextExtra = message.Named ? peer : NULL;
             if (!peer)
             {
                 Log("Cannot take a connection from the service error=%lu", WSAGetLastError());
