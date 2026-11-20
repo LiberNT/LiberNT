@@ -733,19 +733,28 @@ static PNTFS_ATTR_CONTEXT NtfsFindAttribute(PNTFS_VOLUME_INFO Volume, PNTFS_MFT_
     return NtfsFindAttributeHelper(Volume, MftIndex, AttrRecord, AttrRecordEnd, Type, Name, NameLength, NTFS_MAX_ATTRIBUTE_LIST_RECURSION, -1);
 }
 
-static BOOLEAN NtfsFixupRecord(PNTFS_RECORD Record, ULONG RecordSize)
+static BOOLEAN NtfsFixupRecord(PNTFS_VOLUME_INFO Volume, PNTFS_RECORD Record, ULONG RecordSize)
 {
     USHORT *USA;
     USHORT USANumber;
     USHORT USACount;
     USHORT *Block;
+    ULONG Stride = NTFS_SEQUENCE_NUMBER_STRIDE;
 
-    if (RecordSize < NTFS_SEQUENCE_NUMBER_STRIDE ||
-        RecordSize % NTFS_SEQUENCE_NUMBER_STRIDE != 0 ||
-        Record->USACount != RecordSize / NTFS_SEQUENCE_NUMBER_STRIDE + 1 ||
+    /* LiberNT volumes formatted on 4Kn disks protect each sector instead of each 512 bytes */
+    if (Volume->BootSector.BytesPerSector > NTFS_SEQUENCE_NUMBER_STRIDE &&
+        RecordSize % Volume->BootSector.BytesPerSector == 0 &&
+        Record->USACount == RecordSize / Volume->BootSector.BytesPerSector + 1)
+    {
+        Stride = Volume->BootSector.BytesPerSector;
+    }
+
+    if (RecordSize < Stride ||
+        RecordSize % Stride != 0 ||
+        Record->USACount != RecordSize / Stride + 1 ||
         Record->USAOffset < sizeof(*Record) || Record->USAOffset % sizeof(USHORT) != 0 ||
-        Record->USAOffset > NTFS_SEQUENCE_NUMBER_STRIDE - sizeof(USHORT) ||
-        Record->USACount > (NTFS_SEQUENCE_NUMBER_STRIDE - sizeof(USHORT) - Record->USAOffset) / sizeof(USHORT))
+        Record->USAOffset > Stride - sizeof(USHORT) ||
+        Record->USACount > (Stride - sizeof(USHORT) - Record->USAOffset) / sizeof(USHORT))
     {
         return FALSE;
     }
@@ -753,22 +762,22 @@ static BOOLEAN NtfsFixupRecord(PNTFS_RECORD Record, ULONG RecordSize)
     USA = (USHORT*)((PCHAR)Record + Record->USAOffset);
     USANumber = *(USA++);
     USACount = Record->USACount - 1; /* Exclude the USA Number. */
-    Block = (USHORT*)((PCHAR)Record + NTFS_SEQUENCE_NUMBER_STRIDE - sizeof(USHORT));
+    Block = (USHORT*)((PCHAR)Record + Stride - sizeof(USHORT));
 
     while (USACount)
     {
         if (*Block != USANumber)
             return FALSE;
-        Block = (USHORT*)((PCHAR)Block + NTFS_SEQUENCE_NUMBER_STRIDE);
+        Block = (USHORT*)((PCHAR)Block + Stride);
         USACount--;
     }
 
     USACount = Record->USACount - 1;
-    Block = (USHORT*)((PCHAR)Record + NTFS_SEQUENCE_NUMBER_STRIDE - sizeof(USHORT));
+    Block = (USHORT*)((PCHAR)Record + Stride - sizeof(USHORT));
     while (USACount)
     {
         *Block = *(USA++);
-        Block = (USHORT*)((PCHAR)Block + NTFS_SEQUENCE_NUMBER_STRIDE);
+        Block = (USHORT*)((PCHAR)Block + Stride);
         USACount--;
     }
 
@@ -784,7 +793,7 @@ static BOOLEAN NtfsReadMftRecord(PNTFS_VOLUME_INFO Volume, ULONGLONG MFTIndex, P
         return FALSE;
 
     /* Apply update sequence array fixups. */
-    return NtfsFixupRecord((PNTFS_RECORD)Buffer, Volume->MftRecordSize);
+    return NtfsFixupRecord(Volume, (PNTFS_RECORD)Buffer, Volume->MftRecordSize);
 }
 
 static BOOLEAN
@@ -943,7 +952,7 @@ NtfsFindMftRecord(
 
                 NtfsReadAttribute(Volume, IndexAllocationCtx, RecordOffset, IndexRecord, IndexBlockSize);
 
-                if (!NtfsFixupRecord((PNTFS_RECORD)IndexRecord, IndexBlockSize))
+                if (!NtfsFixupRecord(Volume, (PNTFS_RECORD)IndexRecord, IndexBlockSize))
                 {
                     break;
                 }
@@ -1212,7 +1221,7 @@ NtfsMount(
                       Volume->BootSector.MftLocation * Volume->ClusterSize,
                       Volume->MftRecordSize,
                       (PCHAR)Volume->MasterFileTable) ||
-        !NtfsFixupRecord((PNTFS_RECORD)Volume->MasterFileTable, Volume->MftRecordSize))
+        !NtfsFixupRecord(Volume, (PNTFS_RECORD)Volume->MasterFileTable, Volume->MftRecordSize))
     {
         FwFree(Volume->MasterFileTable);
         FwFree(Volume);
