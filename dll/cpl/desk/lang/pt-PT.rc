@@ -158,7 +158,7 @@ CAPTION "Geral"
 FONT 8, "MS Shell Dlg"
 BEGIN
     GROUPBOX "Ícones da área de trabalho", IDC_STATIC, 6, 4, 212, 40
-    AUTOCHECKBOX "Os Meus &Documentos", IDC_ICONS_MYDOCS, 14, 14, 100, 12
+    AUTOCHECKBOX "&User's Files", IDC_ICONS_USERSFILES, 14, 14, 100, 12
     AUTOCHECKBOX "Os Meus Locais na &Rede", IDC_ICONS_MYNET, 116, 14, 100, 12
     AUTOCHECKBOX "O Meu &Computador", IDC_ICONS_MYCOMP, 14, 28, 100, 12
     AUTOCHECKBOX "&Navegador de Internet", IDC_ICONS_INTERNET, 116, 28, 100, 12

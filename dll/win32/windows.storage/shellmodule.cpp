@@ -6,6 +6,7 @@
  */
 
 #include "precomp.h"
+#include "folders/CUsersFilesFolder.h"
 
 HINSTANCE shell32_hInstance;
 WCHAR swShell32Name[MAX_PATH];
@@ -20,6 +21,7 @@ OBJECT_ENTRY_AUTO(CLSID_EnumerableObjectCollection, CEnumerableObjectCollection)
 OBJECT_ENTRY_AUTO(CLSID_DestinationList, CDestinationList)
 OBJECT_ENTRY_AUTO(CLSID_ApplicationDocumentLists, CApplicationDocumentLists)
 OBJECT_ENTRY_AUTO(CLSID_ApplicationDestinations, CApplicationDestinations)
+OBJECT_ENTRY_AUTO(CLSID_UsersFilesFolder, CUsersFilesFolder)
 
 EXTERN_C VOID
 WSTORAGE_InitShell(HINSTANCE hInstance)

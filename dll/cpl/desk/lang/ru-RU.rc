@@ -151,7 +151,7 @@ CAPTION "Общие"
 FONT 8, "MS Shell Dlg"
 BEGIN
     GROUPBOX "Значки рабочего стола", IDC_STATIC, 6, 4, 212, 40
-    AUTOCHECKBOX "Мои &документы", IDC_ICONS_MYDOCS, 14, 14, 100, 12
+    AUTOCHECKBOX "&User's Files", IDC_ICONS_USERSFILES, 14, 14, 100, 12
     AUTOCHECKBOX "&Сетевое окружение", IDC_ICONS_MYNET, 116, 14, 100, 12
     AUTOCHECKBOX "Мой &компьютер", IDC_ICONS_MYCOMP, 14, 28, 100, 12
     AUTOCHECKBOX "&Интернет браузер", IDC_ICONS_INTERNET, 116, 28, 100, 12

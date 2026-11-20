@@ -1,0 +1,44 @@
+HKCR
+{
+	NoRemove CLSID
+	{
+		ForceRemove {59031a47-3f72-44a7-89c5-5595fe6b30ee} = s 'UsersFiles'
+		{
+			DefaultIcon = e '%%SystemRoot%%\system32\windows.storage.dll,-123'
+			InprocServer32 = s '%MODULE%'
+			{
+				val ThreadingModel = s 'Apartment'
+			}
+			'ShellFolder'
+			{
+				val 'Attributes' = d '&Hf084012d'
+				val 'FolderValueFlags' = d '&H00500229'
+			}
+		}
+	}
+}
+HKLM
+{
+	NoRemove Software
+	{
+		NoRemove Microsoft
+		{
+			NoRemove Windows
+			{
+				NoRemove CurrentVersion
+				{
+					NoRemove Explorer
+					{
+						NoRemove Desktop
+						{
+							NoRemove NameSpace
+							{
+								ForceRemove {59031a47-3f72-44a7-89c5-5595fe6b30ee} = s 'UsersFiles'
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}

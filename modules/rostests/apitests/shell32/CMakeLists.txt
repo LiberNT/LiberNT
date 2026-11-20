@@ -82,6 +82,7 @@ list(APPEND SOURCE
     SHSetUnreadMailCountW.cpp
     StrRStr.cpp
     Thumbnails.cpp
+    UsersFilesFolder.cpp
     menu.cpp
     shelltest.cpp)
 

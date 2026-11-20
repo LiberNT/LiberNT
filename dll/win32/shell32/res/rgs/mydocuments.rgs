@@ -15,7 +15,7 @@ HKCR
 			}
 			'ShellFolder'
 			{
-				val 'Attributes' = d '&Hf080013d'
+				val 'Attributes' = d '&Hf090013d'
 				val 'CallForAttributes' = d '&H00020040'
 				val 'HideOnDesktopPerUser' = s ''
 				val 'QueryForOverlay' = s ''

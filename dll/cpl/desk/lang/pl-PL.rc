@@ -162,7 +162,7 @@ CAPTION "Ogólne"
 FONT 8, "MS Shell Dlg"
 BEGIN
     GROUPBOX "Ikony pulpitu", IDC_STATIC, 6, 4, 212, 40
-    AUTOCHECKBOX "Moje &dokumenty", IDC_ICONS_MYDOCS, 14, 14, 100, 12
+    AUTOCHECKBOX "&User's Files", IDC_ICONS_USERSFILES, 14, 14, 100, 12
     AUTOCHECKBOX "Moje &miejsca sieciowe", IDC_ICONS_MYNET, 116, 14, 100, 12//FIXME: accel collision &M
     AUTOCHECKBOX "Mój &komputer", IDC_ICONS_MYCOMP, 14, 28, 100, 12
     AUTOCHECKBOX "&Przeglądarka internetowa", IDC_ICONS_INTERNET, 116, 28, 100, 12
