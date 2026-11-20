@@ -474,13 +474,31 @@ FindConsoleDevice(VOID)
     }
 }
 
+/* A session started for a remote client has no console display to hand over or to lock */
+static
+BOOL
+RemoteOnlySession(VOID)
+{
+    DISPLAY_DEVICEW Device;
+    DWORD Index;
+
+    for (Index = 0;; Index++)
+    {
+        Device.cb = sizeof(Device);
+        if (!EnumDisplayDevicesW(NULL, Index, &Device, 0))
+            return Index != 0;
+        if (_wcsicmp(Device.DeviceID, L"RdpVdd_RemoteDisplay") != 0)
+            return FALSE;
+    }
+}
+
 static
 DWORD
 ConnectRemote(
     _In_ PWLSESSION Session,
     _In_ PREMOTE_CONSOLE_MESSAGE Message)
 {
-    BOOL bLocked;
+    BOOL bLocked, bRemoteOnly;
     LONG lRet;
 
     if (RemoteConnected)
@@ -507,11 +525,12 @@ ConnectRemote(
         /* TODO: offer to sign out the user of the console, as Windows 11 does */
         return ERROR_ACCESS_DENIED;
     }
-    if (!FindConsoleDevice())
+    bRemoteOnly = RemoteOnlySession();
+    if (!bRemoteOnly && !FindConsoleDevice())
         return ERROR_GEN_FAILURE;
 
     bLocked = Session->LogonState == STATE_LOCKED || Session->LogonState == STATE_LOCKED_SAS;
-    if (!RemoteLeftSession)
+    if (!RemoteLeftSession && !bRemoteOnly)
     {
         NotifyWindows(WTS_CONSOLE_DISCONNECT);
         NotifyServices(WTS_CONSOLE_DISCONNECT, RemoteSessionId);
@@ -530,13 +549,20 @@ ConnectRemote(
     ClearConsolePassword();
     RtlZeroMemory(ConsoleKeys, sizeof(ConsoleKeys));
 
-    lRet = SetDisplayConfig(0, NULL, 0, NULL, SDC_APPLY | SDC_TOPOLOGY_EXTERNAL);
-    if (lRet != ERROR_SUCCESS)
-        ERR("WL: Cannot move the desktop to the remote display: %ld\n", lRet);
+    lRet = ERROR_SUCCESS;
+    if (!bRemoteOnly)
+    {
+        lRet = SetDisplayConfig(0, NULL, 0, NULL, SDC_APPLY | SDC_TOPOLOGY_EXTERNAL);
+        if (lRet != ERROR_SUCCESS)
+            ERR("WL: Cannot move the desktop to the remote display: %ld\n", lRet);
+    }
 
     RemoteConnected = TRUE;
-    DrawConsoleLock(Session);
-    SetTimer(Session->SASWindow, CONSOLE_CLOCK_TIMER, 15000, NULL);
+    if (!bRemoteOnly)
+    {
+        DrawConsoleLock(Session);
+        SetTimer(Session->SASWindow, CONSOLE_CLOCK_TIMER, 15000, NULL);
+    }
 
     if (bLocked)
     {
@@ -589,9 +615,13 @@ DisconnectRemote(
         NotifyServices(WTS_SESSION_LOCK, RemoteSessionId);
     }
 
-    lRet = SetDisplayConfig(0, NULL, 0, NULL, SDC_APPLY | SDC_TOPOLOGY_INTERNAL);
-    if (lRet != ERROR_SUCCESS)
-        ERR("WL: Cannot move the desktop back to the console display: %ld\n", lRet);
+    lRet = ERROR_SUCCESS;
+    if (!RemoteOnlySession())
+    {
+        lRet = SetDisplayConfig(0, NULL, 0, NULL, SDC_APPLY | SDC_TOPOLOGY_INTERNAL);
+        if (lRet != ERROR_SUCCESS)
+            ERR("WL: Cannot move the desktop back to the console display: %ld\n", lRet);
+    }
 
     if (!TakenOver)
     {
