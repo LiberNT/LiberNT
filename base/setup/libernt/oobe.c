@@ -503,6 +503,67 @@ SetAccountPasswordHint(
         SamFreeMemory(Use);
 }
 
+static VOID
+WriteLogonSettings(
+    _In_ PSETUPDATA pSetupData)
+{
+    HKEY hKey;
+
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon",
+                      0, KEY_SET_VALUE, &hKey) != ERROR_SUCCESS)
+    {
+        return;
+    }
+
+    SetStringValue(hKey, L"DefaultUserName", pSetupData->UserName);
+    SetStringValue(hKey, L"DefaultDomainName", pSetupData->ComputerName);
+    if (pSetupData->Password[0])
+    {
+        SetStringValue(hKey, L"AutoAdminLogon", L"0");
+        RegDeleteValueW(hKey, L"DefaultPassword");
+    }
+    else
+    {
+        SetStringValue(hKey, L"AutoAdminLogon", L"1");
+        SetStringValue(hKey, L"DefaultPassword", L"");
+    }
+    RegCloseKey(hKey);
+}
+
+static DWORD
+EnableBuiltinAdministrator(
+    _Inout_ PSETUPDATA pSetupData)
+{
+    PUSER_INFO_1 Info;
+    USER_INFO_1003 Password;
+    USER_INFO_1008 Flags;
+    NET_API_STATUS Status;
+
+    if (!GetBuiltinAdministratorName(pSetupData->UserName, ARRAYSIZE(pSetupData->UserName)))
+        return GetLastError();
+
+    Status = NetUserGetInfo(NULL, pSetupData->UserName, 1, (LPBYTE *)&Info);
+    if (Status != NERR_Success)
+        return Status;
+    Flags.usri1008_flags = (Info->usri1_flags & ~UF_ACCOUNTDISABLE) | UF_DONT_EXPIRE_PASSWD;
+    if (!pSetupData->Password[0])
+        Flags.usri1008_flags |= UF_PASSWD_NOTREQD;
+    NetApiBufferFree(Info);
+
+    Status = NetUserSetInfo(NULL, pSetupData->UserName, 1008, (LPBYTE)&Flags, NULL);
+    if (Status != NERR_Success)
+        return Status;
+
+    Password.usri1003_password = pSetupData->Password;
+    Status = NetUserSetInfo(NULL, pSetupData->UserName, 1003, (LPBYTE)&Password, NULL);
+    if (Status != NERR_Success)
+        return Status;
+
+    SetAccountPasswordHint(pSetupData);
+    WriteLogonSettings(pSetupData);
+    return NERR_Success;
+}
+
 static DWORD
 CreateAccount(
     _In_ PSETUPDATA pSetupData)
@@ -514,7 +575,6 @@ CreateAccount(
     DWORD cchDomain = ARRAYSIZE(Domain);
     SID_NAME_USE Use;
     NET_API_STATUS Status;
-    HKEY hKey;
 
     ZeroMemory(&Info, sizeof(Info));
     Info.usri1_name = pSetupData->UserName;
@@ -538,29 +598,13 @@ CreateAccount(
         return Status;
     AddToLocalGroup(WinBuiltinUsersSid, UserSid);
 
-    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon",
-                      0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS)
-    {
-        SetStringValue(hKey, L"DefaultUserName", pSetupData->UserName);
-        SetStringValue(hKey, L"DefaultDomainName", pSetupData->ComputerName);
-        if (pSetupData->Password[0])
-        {
-            SetStringValue(hKey, L"AutoAdminLogon", L"0");
-            RegDeleteValueW(hKey, L"DefaultPassword");
-        }
-        else
-        {
-            SetStringValue(hKey, L"AutoAdminLogon", L"1");
-            SetStringValue(hKey, L"DefaultPassword", L"");
-        }
-        RegCloseKey(hKey);
-    }
-
+    WriteLogonSettings(pSetupData);
     return NERR_Success;
 }
 
 static DWORD
-DisableSetupAccount(VOID)
+DisableSetupAccount(
+    _In_ PSETUPDATA pSetupData)
 {
     WCHAR Name[UNLEN + 1];
     DWORD cchName = ARRAYSIZE(Name);
@@ -570,6 +614,8 @@ DisableSetupAccount(VOID)
 
     if (!GetUserNameW(Name, &cchName))
         return GetLastError();
+    if (_wcsicmp(Name, pSetupData->UserName) == 0)
+        return NERR_Success;
 
     Status = NetUserGetInfo(NULL, Name, 1, (LPBYTE *)&Info);
     if (Status != NERR_Success)
@@ -651,7 +697,7 @@ FinishThread(
         DPRINT1("Could not rename the computer to %S, error %lu\n", pSetupData->ComputerName, Error);
 
     SetResText(Context->Progress.hwndActivity, IDS_OOBE_APPLY_ACCOUNT);
-    Error = CreateAccount(pSetupData);
+    Error = pSetupData->UserName[0] ? CreateAccount(pSetupData) : EnableBuiltinAdministrator(pSetupData);
     SecureZeroMemory(pSetupData->Password, sizeof(pSetupData->Password));
     pSetupData->bInstalled = (Error == NERR_Success);
     DPRINT1("Account %S created with result %lu\n", pSetupData->UserName, Error);
@@ -662,7 +708,7 @@ FinishThread(
     }
     if (FirstBootRun)
     {
-        Error = DisableSetupAccount();
+        Error = DisableSetupAccount(pSetupData);
         DPRINT1("Setup account disabled with result %lu\n", Error);
     }
 

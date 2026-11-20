@@ -190,6 +190,7 @@ BEGIN
     IDS_NEXTBTN "&Далее"
     IDS_CANCELBTN "Отмена"
     IDS_CLOSEBTN "&Закрыть"
+    IDS_SKIPBTN "&Пропустить"
 END
 
 STRINGTABLE

@@ -190,6 +190,7 @@ BEGIN
     IDS_NEXTBTN "次へ(&N)"
     IDS_CANCELBTN "キャンセル"
     IDS_CLOSEBTN "閉じる(&C)"
+    IDS_SKIPBTN "スキップ(&S)"
 END
 
 STRINGTABLE

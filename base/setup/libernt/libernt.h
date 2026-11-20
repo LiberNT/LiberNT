@@ -460,6 +460,11 @@ BOOL
 IsValidSetupUserName(
     _In_ PCWSTR Name);
 
+BOOL
+GetBuiltinAdministratorName(
+    _Out_writes_(cchName) PWSTR Name,
+    _In_ DWORD cchName);
+
 VOID
 LoadPrintfW(
     _Out_writes_(cchText) PWSTR Text,

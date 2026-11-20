@@ -254,6 +254,7 @@
 #define IDS_NEXTBTN                 5509
 #define IDS_CANCELBTN               5510
 #define IDS_CLOSEBTN                5511
+#define IDS_SKIPBTN                 5512
 
 #define IDS_DISK_COL_NAME           5520
 #define IDS_DISK_COL_TOTAL          5521

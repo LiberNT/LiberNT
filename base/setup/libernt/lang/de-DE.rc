@@ -190,6 +190,7 @@ BEGIN
     IDS_NEXTBTN "&Weiter"
     IDS_CANCELBTN "Abbrechen"
     IDS_CLOSEBTN "S&chließen"
+    IDS_SKIPBTN "Ü&berspringen"
 END
 
 STRINGTABLE

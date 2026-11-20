@@ -90,6 +90,7 @@ FillSummary(
     WCHAR Changes[2048];
     WCHAR Target[96];
     WCHAR Size[32];
+    WCHAR Account[UNLEN + 1];
 
     if (pSetupData->bUpgrade)
     {
@@ -127,7 +128,10 @@ FillSummary(
     AppendLine(Text, ARRAYSIZE(Text), IDS_READY_KEYBOARD,
                FindChoiceName(pSetupData->Layouts, pSetupData->LayoutCount, pSetupData->DefaultKBLayout));
     AppendLine(Text, ARRAYSIZE(Text), IDS_READY_COMPUTER, pSetupData->ComputerName);
-    AppendLine(Text, ARRAYSIZE(Text), IDS_READY_ACCOUNT, pSetupData->UserName);
+    if (pSetupData->UserName[0])
+        AppendLine(Text, ARRAYSIZE(Text), IDS_READY_ACCOUNT, pSetupData->UserName);
+    else if (GetBuiltinAdministratorName(Account, ARRAYSIZE(Account)))
+        AppendLine(Text, ARRAYSIZE(Text), IDS_READY_ACCOUNT, Account);
     if (pSetupData->TimeZoneName[0])
         AppendLine(Text, ARRAYSIZE(Text), IDS_READY_TIMEZONE, pSetupData->TimeZoneName);
 

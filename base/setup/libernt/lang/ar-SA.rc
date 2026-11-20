@@ -190,6 +190,7 @@ BEGIN
     IDS_NEXTBTN "ال&تالي"
     IDS_CANCELBTN "إلغاء الأمر"
     IDS_CLOSEBTN "إ&غلاق"
+    IDS_SKIPBTN "ت&خطي"
 END
 
 STRINGTABLE
