@@ -206,7 +206,15 @@ i8042DetectMouse(
          ReplyByte < sizeof(ExpectedReply) / sizeof(ExpectedReply[0]);
          ReplyByte++)
     {
-        ULONG Counter = 500;
+        /* i8042ReadDataWait() polls for up to PollingIterations * 50us
+           per call, so a retry count does not say how long the wait
+           really is; bound it by the clock instead. */
+        LARGE_INTEGER TickCount;
+        ULONGLONG Deadline;
+
+        KeQueryTickCount(&TickCount);
+        Deadline = TickCount.QuadPart +
+                   (ULONGLONG)I8042_RESET_REPLY_TIMEOUT_MS * 10000 / KeQueryTimeIncrement();
 
         do
         {
@@ -217,7 +225,9 @@ i8042DetectMouse(
                 /* Wait some time before trying again */
                 KeStallExecutionProcessor(50);
             }
-        } while (Status == STATUS_IO_TIMEOUT && Counter--);
+
+            KeQueryTickCount(&TickCount);
+        } while (Status == STATUS_IO_TIMEOUT && TickCount.QuadPart < Deadline);
 
         if (!NT_SUCCESS(Status))
         {
