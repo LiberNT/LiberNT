@@ -102,6 +102,8 @@ extern LIST_ENTRY SmpSubSystemsToLoad;
 extern LIST_ENTRY SmpSubSystemsToDefer;
 extern LIST_ENTRY SmpExecuteList;
 extern ULONG AttachedSessionId;
+extern ULONG SmpBootMuSessionId;
+extern RTL_CRITICAL_SECTION SmpMuSessionLock;
 extern BOOLEAN SmpDebug;
 
 /* FUNCTIONS ******************************************************************/
@@ -300,7 +302,20 @@ NTAPI
 SmpLoadSubSystemsForMuSession(
     IN PULONG MuSessionId,
     OUT PHANDLE ProcessId,
-    IN PUNICODE_STRING InitialCommand
+    IN PUNICODE_STRING InitialCommand,
+    IN BOOLEAN BootSession
+);
+
+VOID
+NTAPI
+SmpLeaveMuSession(
+    VOID
+);
+
+NTSTATUS
+NTAPI
+SmpStopMuSession(
+    IN ULONG MuSessionId
 );
 
 /* smutil.c */

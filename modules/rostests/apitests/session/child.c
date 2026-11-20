@@ -56,5 +56,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, LPWSTR commandLine, 
         WriteFile(file, text, length * sizeof(WCHAR), &written, NULL);
         CloseHandle(file);
     }
+    Sleep(INFINITE);
     return 0;
 }
