@@ -268,6 +268,7 @@ static MPSTATUS XHCI_ResetController(PXHCI_EXTENSION Extension);
 static BOOLEAN XHCI_WaitForRegisterBits(volatile ULONG *Reg, ULONG Mask, BOOLEAN WaitSet, ULONG TimeoutUs);
 static VOID XHCI_HandleControllerError(PXHCI_EXTENSION Extension, ULONG PendingStatus);
 static VOID XHCI_HandleCommandTimeout(PXHCI_EXTENSION Extension, PXHCI_COMMAND_CONTEXT CommandContext);
+static BOOLEAN XHCI_AbortCommand(PXHCI_EXTENSION Extension);
 static VOID XHCI_GetRegistryParameters(PXHCI_EXTENSION Extension);
 static BOOLEAN XHCI_ValidateContextLayout(PXHCI_EXTENSION Extension);
 static VOID NTAPI XHCI_RH_GetRootHubData(PVOID MiniPortExtension, PVOID RootHubData);
@@ -7355,6 +7356,9 @@ XHCI_HandleCommandCompletion(
              SlotId,
              CommandPointer);
 
+    if (!CommandContext && CompletionCode == XHCI_COMPLETION_COMMAND_RING_STOPPED)
+        return;
+
     /* Log ALL command completions, especially errors */
     if (CommandContext)
     {
@@ -11343,19 +11347,21 @@ XHCI_WaitForCommandCompletion(
             XHCI_ServiceEventRing(Extension, TRUE, FALSE);
             XHCI_DrainDeferredTransferCompletions(Extension);
             if (CommandContext->Completed)
-            {
                 DPRINT1("usbxhci: command completed after manual event ring drain\n");
-                goto CheckCompletion;
-            }
         }
 
-        if (Irql <= PASSIVE_LEVEL)
-            XHCI_HandleCommandTimeout(Extension, CommandContext);
-        Result = MP_STATUS_HW_ERROR;
-        goto Exit;
+        if (!CommandContext->Completed && Irql <= PASSIVE_LEVEL)
+            (VOID)XHCI_AbortCommand(Extension);
+
+        if (!CommandContext->Completed)
+        {
+            if (Irql <= PASSIVE_LEVEL)
+                XHCI_HandleCommandTimeout(Extension, CommandContext);
+            Result = MP_STATUS_HW_ERROR;
+            goto Exit;
+        }
     }
 
-CheckCompletion:
     KeMemoryBarrier();
     if (SlotIdOut)
         *SlotIdOut = CommandContext->SlotId;
@@ -11434,6 +11440,39 @@ XHCI_DebugEndpointsRunning(
     }
 
     return FALSE;
+}
+
+/* xHCI 4.6.1.2: abort the executing command and stop the ring; only CRCR's low dword is written, the pointer stays untouched */
+static
+BOOLEAN
+XHCI_AbortCommand(
+    _Inout_ PXHCI_EXTENSION Extension)
+{
+    volatile ULONG *CrcrLow = &Extension->OperationalRegisters->CrCrLow;
+    BOOLEAN Pending;
+    KIRQL OldIrql;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    if (!(XHCI_READ_REGISTER_ULONG(CrcrLow) & XHCI_CRCR_CRR))
+        return FALSE;
+
+    KeAcquireSpinLock(&Extension->CommandLock, &OldIrql);
+    XHCI_WRITE_REGISTER_ULONG(CrcrLow, (ULONG)(XHCI_GetCommandRingPointer(Extension) & ~0x3FULL) | XHCI_CRCR_CA);
+    KeReleaseSpinLock(&Extension->CommandLock, OldIrql);
+
+    if (!XHCI_WaitForRegisterBits(CrcrLow, XHCI_CRCR_CRR, FALSE, XHCI_WAIT_HALT_US))
+        return FALSE;
+
+    XHCI_ServiceEventRing(Extension, TRUE, FALSE);
+    XHCI_DrainDeferredTransferCompletions(Extension);
+
+    KeAcquireSpinLock(&Extension->CommandLock, &OldIrql);
+    Pending = !IsListEmpty(&Extension->CommandContextList);
+    KeReleaseSpinLock(&Extension->CommandLock, OldIrql);
+    if (Pending)
+        XHCI_RingCommandDoorbell(Extension);
+    return TRUE;
 }
 
 static
