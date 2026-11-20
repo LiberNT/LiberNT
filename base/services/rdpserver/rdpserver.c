@@ -101,6 +101,7 @@ typedef struct DESKTOP_CONTEXT
 {
     rdpContext rdp;
     BOOL Authorized, Active, Suppressed, Refresh, NlaLogon, RemoteDisplay;
+    char NlaUser[128], NlaDomain[256], NlaPassword[256];
     LONG Generation;
     int Width, Height, ClientWidth, ClientHeight, TileColumns, TileRows;
     HDC ScreenDC, MemoryDC;
@@ -453,6 +454,12 @@ static BOOL Logon(freerdp_peer *peer, const SEC_WINNT_AUTH_IDENTITY *identity, B
         if (!ctx->NlaLogon) SetLastError(ERROR_LOGON_TYPE_NOT_GRANTED);
         CloseHandle(token);
     }
+    if (ctx->NlaLogon)
+    {
+        lstrcpynA(ctx->NlaUser, user, sizeof(ctx->NlaUser));
+        lstrcpynA(ctx->NlaDomain, domain ? domain : "", sizeof(ctx->NlaDomain));
+        lstrcpynA(ctx->NlaPassword, password, sizeof(ctx->NlaPassword));
+    }
     Log("NLA logon of %s for peer %s: %s (%lu)", user, peer->hostname, ctx->NlaLogon ? "accepted" : "rejected",
         ctx->NlaLogon ? 0UL : GetLastError());
     return ctx->NlaLogon;
@@ -600,6 +607,12 @@ static BOOL ConnectRemoteConsole(DESKTOP_CONTEXT *ctx)
     const char *user = freerdp_settings_get_string(ctx->rdp.settings, FreeRDP_Username);
     const char *domain = freerdp_settings_get_string(ctx->rdp.settings, FreeRDP_Domain);
     const char *password = freerdp_settings_get_string(ctx->rdp.settings, FreeRDP_Password);
+    if (ctx->NlaLogon)
+    {
+        user = ctx->NlaUser;
+        domain = ctx->NlaDomain;
+        password = ctx->NlaPassword;
+    }
     ProcessIdToSessionId(GetCurrentProcessId(), &session);
     _snwprintf(pipe, ARRAYSIZE(pipe), REMOTE_CONSOLE_PIPE_FORMAT, session);
     pipe[ARRAYSIZE(pipe) - 1] = 0;
@@ -621,6 +634,7 @@ static BOOL ConnectRemoteConsole(DESKTOP_CONTEXT *ctx)
     if (!WriteFile(RemoteConsole, &message, sizeof(message), &bytes, NULL) || !CallRemoteConsole(&message))
         message.Status = ERROR_BROKEN_PIPE;
     SecureZeroMemory(message.Password, sizeof(message.Password));
+    SecureZeroMemory(ctx->NlaPassword, sizeof(ctx->NlaPassword));
     Log("Session handed to RDP-Tcp#%lu: %lu", message.Connection, message.Status);
     if (message.Status == ERROR_SUCCESS) return TRUE;
     CloseHandle(RemoteConsole);
@@ -1431,6 +1445,7 @@ static void ContextFree(freerdp_peer *peer, rdpContext *rdp)
     unsigned i;
     INPUT event = {0};
     (void)peer;
+    SecureZeroMemory(ctx->NlaPassword, sizeof(ctx->NlaPassword));
     TransferStop(ctx->Transfer);
     disp_server_context_free(ctx->Disp);
     GfxFree(ctx->Gfx);
