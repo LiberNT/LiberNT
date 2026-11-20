@@ -680,6 +680,22 @@ InbvSetVirtualFrameBuffer(
 
 NTSTATUS
 NTAPI
+InbvSetDisplayWriteRoutine(
+    _In_opt_ PVID_DISPLAY_WRITE_ROUTINE Routine)
+{
+    NTSTATUS Status;
+
+    if (!InbvBootDriverInstalled) return STATUS_DEVICE_NOT_READY;
+
+    InbvAcquireLock();
+    Status = VidSetDisplayWriteRoutine(Routine);
+    InbvReleaseLock();
+
+    return Status;
+}
+
+NTSTATUS
+NTAPI
 NtDisplayString(
     _In_ PUNICODE_STRING DisplayString)
 {

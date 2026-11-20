@@ -1651,6 +1651,102 @@ SoftGpuScanoutStop(
         MmUnmapIoSpace(Mapping, MappingSize);
 }
 
+static PUCHAR
+SoftGpuSystemDisplayScanout(
+    _In_ PSOFTGPU_DEVICE Device)
+{
+    PUCHAR Scanout = (PUCHAR)*(PVOID volatile *)&Device->Scanout;
+
+    if (!Device->PlatformSystemDisplay || Scanout == NULL || Device->ScanoutShadowed ||
+        Device->Width == 0 || Device->Height == 0 ||
+        Device->ScanoutPitch < Device->Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL ||
+        (ULONGLONG)Device->ScanoutPitch * Device->Height > Device->ScanoutSize)
+    {
+        return NULL;
+    }
+
+    return Scanout;
+}
+
+NTSTATUS
+APIENTRY
+SoftGpuDdiSystemDisplayEnable(
+    _In_ PVOID MiniportDeviceContext,
+    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId,
+    _In_ PDXGKARG_SYSTEM_DISPLAY_ENABLE_FLAGS Flags,
+    _Out_ PUINT Width,
+    _Out_ PUINT Height,
+    _Out_ D3DDDIFORMAT *ColorFormat)
+{
+    PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)MiniportDeviceContext;
+    PUCHAR Scanout;
+    ULONG Row;
+
+    UNREFERENCED_PARAMETER(Flags);
+
+    *Width = 0;
+    *Height = 0;
+    *ColorFormat = D3DDDIFMT_UNKNOWN;
+
+    if (Device == NULL || TargetId != SOFTGPU_CHILD_UID)
+        return STATUS_NOT_SUPPORTED;
+
+    Scanout = SoftGpuSystemDisplayScanout(Device);
+    if (Scanout == NULL)
+        return STATUS_NOT_SUPPORTED;
+
+    for (Row = 0; Row < Device->Height; Row++)
+    {
+        RtlZeroMemory(Scanout + (SIZE_T)Row * Device->ScanoutPitch,
+                      (SIZE_T)Device->Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL);
+    }
+    KeMemoryBarrier();
+
+    *Width = Device->Width;
+    *Height = Device->Height;
+    *ColorFormat = D3DDDIFMT_X8R8G8B8;
+    return STATUS_SUCCESS;
+}
+
+VOID
+APIENTRY
+SoftGpuDdiSystemDisplayWrite(
+    _In_ PVOID MiniportDeviceContext,
+    _In_ PVOID Source,
+    _In_ UINT SourceWidth,
+    _In_ UINT SourceHeight,
+    _In_ UINT SourceStride,
+    _In_ UINT PositionX,
+    _In_ UINT PositionY)
+{
+    PSOFTGPU_DEVICE Device = (PSOFTGPU_DEVICE)MiniportDeviceContext;
+    PUCHAR Scanout;
+    UINT Width;
+    UINT Height;
+    UINT Row;
+
+    if (Device == NULL || Source == NULL)
+        return;
+
+    Scanout = SoftGpuSystemDisplayScanout(Device);
+    if (Scanout == NULL || PositionX >= Device->Width || PositionY >= Device->Height)
+        return;
+
+    Width = min(SourceWidth, Device->Width - PositionX);
+    Height = min(SourceHeight, Device->Height - PositionY);
+    if (SourceStride < Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL)
+        return;
+
+    for (Row = 0; Row < Height; Row++)
+    {
+        RtlCopyMemory(Scanout + (SIZE_T)(PositionY + Row) * Device->ScanoutPitch +
+                          (SIZE_T)PositionX * SOFTGPU_DISPLAY_BYTES_PER_PIXEL,
+                      (const UCHAR *)Source + (SIZE_T)Row * SourceStride,
+                      (SIZE_T)Width * SOFTGPU_DISPLAY_BYTES_PER_PIXEL);
+    }
+    KeMemoryBarrier();
+}
+
 static BOOLEAN
 SoftGpuClipPresentRect(
     _In_ PSOFTGPU_DEVICE Device,

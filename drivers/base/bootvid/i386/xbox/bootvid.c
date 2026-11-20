@@ -32,6 +32,14 @@ VidSetVirtualFrameBuffer(
     return VirtualFrameBuffer == NULL ? STATUS_SUCCESS : STATUS_NOT_SUPPORTED;
 }
 
+NTSTATUS
+NTAPI
+VidSetDisplayWriteRoutine(
+    _In_opt_ PVID_DISPLAY_WRITE_ROUTINE Routine)
+{
+    return Routine == NULL ? STATUS_SUCCESS : STATUS_NOT_SUPPORTED;
+}
+
 /* PRIVATE FUNCTIONS *********************************************************/
 
 static UCHAR
