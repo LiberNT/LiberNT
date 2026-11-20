@@ -1345,34 +1345,48 @@ HotkeyThread(
     return 0;
 }
 
+static DECLSPEC_NORETURN VOID
+SetupLibMissing(
+    _In_ PCWSTR DllName)
+{
+    WCHAR Text[MAX_PATH + 128];
+
+    LoadPrintfW(Text, ARRAYSIZE(Text), IDS_SETUPLIB_MISSING, DllName);
+    SetupMessage(NULL, TD_ERROR_ICON, TDCBF_CLOSE_BUTTON, IDCLOSE, NULL, Text);
+    ExitProcess(ERROR_MOD_NOT_FOUND);
+}
+
 static FARPROC
 WINAPI
 SetupDelayHook(
     unsigned dliNotify,
     PDelayLoadInfo pdli)
 {
-    static CHAR DllPath[MAX_PATH];
-    WCHAR ModulePath[MAX_PATH];
+    WCHAR DllPath[MAX_PATH];
+    HMODULE Module;
     PWCHAR Name;
     DWORD Length;
 
+    ASSERT(pdli != NULL);
+    ASSERT(pdli->szDll != NULL);
+
     if (dliNotify == dliNotePreLoadLibrary && _stricmp(pdli->szDll, "setuplib.dll") == 0)
     {
-        Length = GetModuleFileNameW(NULL, ModulePath, ARRAYSIZE(ModulePath));
-        if (Length && Length < ARRAYSIZE(ModulePath) && (Name = wcsrchr(ModulePath, L'\\')) != NULL)
+        Length = GetModuleFileNameW(NULL, DllPath, ARRAYSIZE(DllPath));
+        if (Length && Length < ARRAYSIZE(DllPath) && (Name = wcsrchr(DllPath, L'\\')) != NULL &&
+            SUCCEEDED(StringCchCopyW(Name, ARRAYSIZE(DllPath) - (Name - DllPath), L"\\system32\\setuplib.dll")))
         {
-            *Name = UNICODE_NULL;
-            if (SUCCEEDED(StringCchPrintfA(DllPath, ARRAYSIZE(DllPath), "%S\\system32\\%s", ModulePath, pdli->szDll)))
-                pdli->szDll = DllPath;
+            Module = LoadLibraryW(DllPath);
+            if (!Module)
+                SetupLibMissing(DllPath);
+            return (FARPROC)Module;
         }
     }
     else if (dliNotify == dliFailLoadLib)
     {
-        WCHAR Text[MAX_PATH + 128];
-
-        LoadPrintfW(Text, ARRAYSIZE(Text), IDS_SETUPLIB_MISSING, pdli->szDll);
-        SetupMessage(NULL, TD_ERROR_ICON, TDCBF_CLOSE_BUTTON, IDCLOSE, NULL, Text);
-        ExitProcess(ERROR_MOD_NOT_FOUND);
+        if (!MultiByteToWideChar(CP_ACP, 0, pdli->szDll, -1, DllPath, ARRAYSIZE(DllPath)))
+            DllPath[0] = UNICODE_NULL;
+        SetupLibMissing(DllPath);
     }
 
     return NULL;
