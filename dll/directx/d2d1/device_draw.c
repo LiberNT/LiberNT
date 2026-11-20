@@ -800,129 +800,149 @@ void STDMETHODCALLTYPE d2d_device_context_DrawGeometry(ID2D1DeviceContext6 *ifac
     d2d_device_context_draw_geometry(context, geometry_impl, brush_impl, stroke_width);
 }
 
-void d2d_device_context_release_mask_ring(struct d2d_device_context *context)
+void d2d_device_context_release_mask(struct d2d_device_context *context)
 {
-    unsigned int i;
-
-    for (i = 0; i < D2D_MASK_RING; ++i)
-    {
-        if (context->mask_ring_srv[i])
-            ID3D11ShaderResourceView_Release(context->mask_ring_srv[i]);
-        if (context->mask_ring_texture[i])
-            ID3D11Texture2D_Release(context->mask_ring_texture[i]);
-        context->mask_ring_srv[i] = NULL;
-        context->mask_ring_texture[i] = NULL;
-    }
+    if (context->mask_srv)
+        ID3D11ShaderResourceView_Release(context->mask_srv);
+    if (context->mask_texture)
+        ID3D11Texture2D_Release(context->mask_texture);
     context->mask_srv = NULL;
     context->mask_texture = NULL;
     context->mask_width = context->mask_height = 0;
+    free(context->mask_staging);
+    context->mask_staging = NULL;
+    context->mask_staging_size = 0;
 }
 
+/* One mask texture serves every draw: each draw writes its edge tiles with UpdateSubresource, which keeps
+ * the contents earlier draws read, so the mask costs one texture however many draws a frame makes. */
 static BOOL d2d_device_context_ensure_mask_texture(struct d2d_device_context *context, UINT width, UINT height)
 {
     D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc;
     D3D11_TEXTURE2D_DESC desc;
-    unsigned int pos;
+    ID3D11ShaderResourceView *srv;
+    ID3D11Texture2D *texture;
     HRESULT hr;
 
-    if (!context->mask_width || context->mask_width < width || context->mask_height < height)
+    if (context->mask_texture && width <= context->mask_width && height <= context->mask_height)
+        return TRUE;
+
+    memset(&desc, 0, sizeof(desc));
+    desc.Width = (max(width, context->mask_width) + 63) & ~63u;
+    desc.Height = (max(height, context->mask_height) + 63) & ~63u;
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_R8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+    memset(&srv_desc, 0, sizeof(srv_desc));
+    srv_desc.Format = desc.Format;
+    srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srv_desc.Texture2D.MipLevels = 1;
+
+    if (FAILED(hr = ID3D11Device1_CreateTexture2D(context->d3d_device, &desc, NULL, &texture)))
     {
-        width = max(width, context->mask_width);
-        height = max(height, context->mask_height);
-        d2d_device_context_release_mask_ring(context);
-        context->mask_width = (width + 63) & ~63u;
-        context->mask_height = (height + 63) & ~63u;
-        context->mask_ring_pos = D2D_MASK_RING - 1;
+        WARN("Failed to create coverage mask texture, hr %#lx.\n", hr);
+        return FALSE;
+    }
+    if (FAILED(hr = ID3D11Device1_CreateShaderResourceView(context->d3d_device, (ID3D11Resource *)texture,
+            &srv_desc, &srv)))
+    {
+        WARN("Failed to create coverage mask view, hr %#lx.\n", hr);
+        ID3D11Texture2D_Release(texture);
+        return FALSE;
     }
 
-    pos = (context->mask_ring_pos + 1) % D2D_MASK_RING;
-    if (!context->mask_ring_texture[pos])
-    {
-        memset(&desc, 0, sizeof(desc));
-        desc.Width = context->mask_width;
-        desc.Height = context->mask_height;
-        desc.MipLevels = 1;
-        desc.ArraySize = 1;
-        desc.Format = DXGI_FORMAT_R8_UNORM;
-        desc.SampleDesc.Count = 1;
-        desc.Usage = D3D11_USAGE_DYNAMIC;
-        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-        desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-
-        memset(&srv_desc, 0, sizeof(srv_desc));
-        srv_desc.Format = desc.Format;
-        srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-        srv_desc.Texture2D.MipLevels = 1;
-
-        if (FAILED(hr = ID3D11Device1_CreateTexture2D(context->d3d_device, &desc, NULL,
-                &context->mask_ring_texture[pos])))
-        {
-            WARN("Failed to create coverage mask texture, hr %#lx.\n", hr);
-            context->mask_ring_texture[pos] = NULL;
-            return FALSE;
-        }
-        if (FAILED(hr = ID3D11Device1_CreateShaderResourceView(context->d3d_device,
-                (ID3D11Resource *)context->mask_ring_texture[pos], &srv_desc, &context->mask_ring_srv[pos])))
-        {
-            WARN("Failed to create coverage mask view, hr %#lx.\n", hr);
-            ID3D11Texture2D_Release(context->mask_ring_texture[pos]);
-            context->mask_ring_texture[pos] = NULL;
-            context->mask_ring_srv[pos] = NULL;
-            return FALSE;
-        }
-    }
-
-    context->mask_ring_pos = pos;
-    context->mask_texture = context->mask_ring_texture[pos];
-    context->mask_srv = context->mask_ring_srv[pos];
+    if (context->mask_srv)
+        ID3D11ShaderResourceView_Release(context->mask_srv);
+    if (context->mask_texture)
+        ID3D11Texture2D_Release(context->mask_texture);
+    context->mask_texture = texture;
+    context->mask_srv = srv;
+    context->mask_width = desc.Width;
+    context->mask_height = desc.Height;
     return TRUE;
 }
 
+/* Only the pixels of edge runs are read from the mask, so the upload covers the box around those runs. */
 static BOOL d2d_device_context_upload_coverage(struct d2d_device_context *context, UINT width, UINT height)
 {
     const struct d2d_coverage *coverage = &context->coverage;
-    D3D11_MAPPED_SUBRESOURCE map_desc;
     ID3D11DeviceContext *d3d_context;
-    HRESULT hr;
-    size_t i;
+    UINT left = width, top = height, right = 0, bottom = 0, pitch;
+    D3D11_BOX box;
+    size_t i, size;
+    BYTE *staging;
+
+    for (i = 0; i < coverage->run_count; ++i)
+    {
+        const struct d2d_coverage_run *run = &coverage->runs[i];
+
+        if (!run->edge)
+            continue;
+        left = min(left, (UINT)run->x);
+        top = min(top, (UINT)run->y);
+        right = max(right, (UINT)(run->x + run->width));
+        bottom = max(bottom, (UINT)(run->y + run->height));
+    }
+    if (right <= left || bottom <= top)
+        return TRUE;
+    assert(right <= width);
+    assert(bottom <= height);
 
     if (!d2d_device_context_ensure_mask_texture(context, width, height))
         return FALSE;
 
+    pitch = right - left;
+    size = (size_t)pitch * (bottom - top);
+    if (size > context->mask_staging_size)
+    {
+        if (!(staging = realloc(context->mask_staging, size)))
+        {
+            WARN("Failed to allocate %Iu bytes of coverage staging memory.\n", size);
+            return FALSE;
+        }
+        context->mask_staging = staging;
+        context->mask_staging_size = size;
+    }
+    staging = context->mask_staging;
+
+    for (i = 0; i < coverage->run_count; ++i)
+    {
+        const struct d2d_coverage_run *run = &coverage->runs[i];
+        const BYTE *tile = &coverage->tiles[run->tile * D2D_COVERAGE_TILE * D2D_COVERAGE_TILE];
+        int x, row, w;
+
+        if (!run->edge)
+            continue;
+
+        for (x = run->x; x < run->x + run->width; x += D2D_COVERAGE_TILE)
+        {
+            w = min(D2D_COVERAGE_TILE, run->x + run->width - x);
+            for (row = 0; row < run->height; ++row)
+                memcpy(staging + (size_t)(run->y - top + row) * pitch + (x - left), tile + row * D2D_COVERAGE_TILE, w);
+            tile += D2D_COVERAGE_TILE * D2D_COVERAGE_TILE;
+        }
+    }
+
+    box.left = left;
+    box.top = top;
+    box.front = 0;
+    box.right = right;
+    box.bottom = bottom;
+    box.back = 1;
     if (context->cs)
         EnterCriticalSection(context->cs);
     ID3D11Device1_GetImmediateContext(context->d3d_device, &d3d_context);
-    hr = ID3D11DeviceContext_Map(d3d_context, (ID3D11Resource *)context->mask_texture, 0,
-            D3D11_MAP_WRITE_DISCARD, 0, &map_desc);
-    if (SUCCEEDED(hr))
-    {
-        for (i = 0; i < coverage->run_count; ++i)
-        {
-            const struct d2d_coverage_run *run = &coverage->runs[i];
-            const BYTE *tile = &coverage->tiles[run->tile * D2D_COVERAGE_TILE * D2D_COVERAGE_TILE];
-            int x, row, w;
-
-            if (!run->edge)
-                continue;
-
-            for (x = run->x; x < run->x + run->width; x += D2D_COVERAGE_TILE)
-            {
-                w = min(D2D_COVERAGE_TILE, run->x + run->width - x);
-                for (row = 0; row < run->height; ++row)
-                    memcpy((BYTE *)map_desc.pData + (size_t)(run->y + row) * map_desc.RowPitch + x,
-                            tile + row * D2D_COVERAGE_TILE, w);
-                tile += D2D_COVERAGE_TILE * D2D_COVERAGE_TILE;
-            }
-        }
-        ID3D11DeviceContext_Unmap(d3d_context, (ID3D11Resource *)context->mask_texture, 0);
-    }
+    ID3D11DeviceContext_UpdateSubresource(d3d_context, (ID3D11Resource *)context->mask_texture, 0, &box,
+            staging, pitch, 0);
     ID3D11DeviceContext_Release(d3d_context);
     if (context->cs)
         LeaveCriticalSection(context->cs);
-    if (FAILED(hr))
-        WARN("Failed to map coverage mask texture, hr %#lx.\n", hr);
 
-    return SUCCEEDED(hr);
+    return TRUE;
 }
 
 static void d2d_device_context_draw_coverage_runs(struct d2d_device_context *context,
