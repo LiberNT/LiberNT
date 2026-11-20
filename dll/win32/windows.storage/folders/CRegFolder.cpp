@@ -773,6 +773,9 @@ HRESULT WINAPI CRegFolder::GetDisplayNameOf(PCUITEMID_CHILD pidl, DWORD dwFlags,
         }
     }
 
+    if (GET_SHGDN_FOR(dwFlags) != SHGDN_FORPARSING && IsEqualCLSID(*clsid, CLSID_UsersFilesFolder))
+        return SHELL32_GetDisplayNameOfChild(this, pidl, dwFlags, strRet);
+
     /* Allocate the buffer for the result */
     SIZE_T cchPath = MAX_PATH + 1;
     LPWSTR pszPath = (LPWSTR)CoTaskMemAlloc(cchPath * sizeof(WCHAR));

@@ -81,6 +81,7 @@ extern void func_SHSimpleIDListFromPath(void);
 extern void func_SHRestricted(void);
 extern void func_SHSetUnreadMailCountW(void);
 extern void func_StrRStr(void);
+extern void func_UsersFilesFolder(void);
 extern void func_StartMenuPin(void);
 
 extern void func_Win81Ordinals(void);
@@ -182,6 +183,7 @@ const struct test winetest_testlist[] =
     { "SHRestricted", func_SHRestricted },
     { "SHSetUnreadMailCountW", func_SHSetUnreadMailCountW },
     { "StrRStr", func_StrRStr },
+    { "UsersFilesFolder", func_UsersFilesFolder },
 
     { "Win81Ordinals", func_Win81Ordinals },
     { 0, 0 }

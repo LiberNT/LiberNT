@@ -22,6 +22,9 @@ IDR_ENUMERABLEOBJECTCOLLECTION REGISTRY "res/rgs/enumerableobjectcollection.rgs"
 IDR_DESTINATIONLIST REGISTRY "res/rgs/destinationlist.rgs"
 IDR_APPLICATIONDOCUMENTLISTS REGISTRY "res/rgs/applicationdocumentlists.rgs"
 IDR_APPLICATIONDESTINATIONS REGISTRY "res/rgs/applicationdestinations.rgs"
+IDR_USERSFILES REGISTRY "res/rgs/usersfiles.rgs"
+
+IDI_USERSFILES ICON "../../cpl/usrmgr/resources/user.ico"
 
 #ifdef LANGUAGE_EN_GB
     #include "lang/en-GB.rc"

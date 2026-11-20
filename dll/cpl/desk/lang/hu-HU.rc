@@ -153,7 +153,7 @@ CAPTION "Általános"
 FONT 8, "MS Shell Dlg"
 BEGIN
     GROUPBOX "Asztali ikonok", IDC_STATIC, 6, 4, 212, 40
-    AUTOCHECKBOX "&Dokumentumok", IDC_ICONS_MYDOCS, 14, 14, 100, 12
+    AUTOCHECKBOX "&User's Files", IDC_ICONS_USERSFILES, 14, 14, 100, 12
     AUTOCHECKBOX "&Hálózati helyek", IDC_ICONS_MYNET, 116, 14, 100, 12
     AUTOCHECKBOX "&Számítógép", IDC_ICONS_MYCOMP, 14, 28, 100, 12
     AUTOCHECKBOX "&Internet böngésző", IDC_ICONS_INTERNET, 116, 28, 100, 12

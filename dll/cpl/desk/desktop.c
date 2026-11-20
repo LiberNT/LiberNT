@@ -18,14 +18,6 @@
 #define IDS_TITLE_BIN_1   30388
 #define IDS_TITLE_BIN_0   30389
 
-/* Workaround:
- * There's no special fallback icon title string
- * for My Documents in shell32.dll, so use IDS_PERSONAL.
- *
- * Windows does this in some different way.
- */
-#define IDS_PERSONAL  9227
-
 static const TCHAR szHideDesktopIcons[] = TEXT("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\HideDesktopIcons\\");
 static const TCHAR szClassicStartMenu[] = TEXT("ClassicStartMenu");
 static const TCHAR szNewStartPanel[] = TEXT("NewStartPanel");
@@ -35,7 +27,7 @@ struct
     LPCTSTR CLSID;
     UINT Checkbox;
 } DesktopIcons[NUM_DESKTOP_ICONS] = {
-    {TEXT("{450D8FBA-AD25-11D0-98A8-0800361B1103}"), IDC_ICONS_MYDOCS},   /* My Documents */
+    {TEXT("{59031a47-3f72-44a7-89c5-5595fe6b30ee}"), IDC_ICONS_USERSFILES}, /* User's Files */
     {TEXT("{208D2C60-3AEA-1069-A2D7-08002B30309D}"), IDC_ICONS_MYNET},    /* My Network Places */
     {TEXT("{20D04FE0-3AEA-1069-A2D8-08002B30309D}"), IDC_ICONS_MYCOMP},   /* My Computer */
     {TEXT("{871C5380-42A0-1069-A2EA-08002B30309D}"), IDC_ICONS_INTERNET}, /* Internet Browser */
@@ -53,11 +45,32 @@ struct
     LPCTSTR IconName;
 } IconChange[NUM_CHANGE_ICONS] = {
     {TEXT("{20D04FE0-3AEA-1069-A2D8-08002B30309D}"), IDS_TITLE_MYCOMP, NULL},         /* My Computer */
-    {TEXT("{450D8FBA-AD25-11D0-98A8-0800361B1103}"), IDS_PERSONAL, NULL},             /* My Documents */
+    {TEXT("{59031a47-3f72-44a7-89c5-5595fe6b30ee}"), 0, NULL},                        /* User's Files */
     {TEXT("{208D2C60-3AEA-1069-A2D7-08002B30309D}"), IDS_TITLE_MYNET, NULL},          /* My Network Places */
     {TEXT("{645FF040-5081-101B-9F08-00AA002F954E}"), IDS_TITLE_BIN_1, TEXT("Full")},  /* Recycle Bin (full) */
     {TEXT("{645FF040-5081-101B-9F08-00AA002F954E}"), IDS_TITLE_BIN_0, TEXT("Empty")}, /* Recycle Bin (empty) */
 };
+
+static VOID
+GetDesktopItemName(LPCWSTR pszClsid, LPWSTR pszName, UINT cchName)
+{
+    WCHAR szParsingName[2 + 39];
+    PIDLIST_ABSOLUTE pidl;
+    PWSTR pszDisplayName;
+
+    pszName[0] = UNICODE_NULL;
+    if (FAILED(StringCchPrintfW(szParsingName, _countof(szParsingName), L"::%s", pszClsid)) ||
+        FAILED(SHParseDisplayName(szParsingName, NULL, &pidl, 0, NULL)))
+    {
+        return;
+    }
+    if (SUCCEEDED(SHGetNameFromIDList(pidl, SIGDN_NORMALDISPLAY, &pszDisplayName)))
+    {
+        StringCchCopyW(pszName, cchName, pszDisplayName);
+        CoTaskMemFree(pszDisplayName);
+    }
+    ILFree(pidl);
+}
 
 VOID
 InitDesktopSettings(PDESKTOP_DATA pData)
@@ -286,10 +299,14 @@ DesktopOnInitDialog(IN HWND hwndDlg, IN PDESKTOP_DATA pData)
                        pData->LocalIcon[i].szTitle, &cbData) != ERROR_SUCCESS || dwType != REG_SZ)
         {
             /* Fallback to predefined strings */
-            LoadString(GetModuleHandle(TEXT("shell32.dll")),
-                       IconChange[i].TitleId,
-                       pData->LocalIcon[i].szTitle,
-                       _countof(pData->LocalIcon[i].szTitle));
+            if (IconChange[i].TitleId)
+                LoadString(GetModuleHandle(TEXT("shell32.dll")),
+                           IconChange[i].TitleId,
+                           pData->LocalIcon[i].szTitle,
+                           _countof(pData->LocalIcon[i].szTitle));
+            else
+                GetDesktopItemName(IconChange[i].CLSID, pData->LocalIcon[i].szTitle,
+                                   _countof(pData->LocalIcon[i].szTitle));
         }
 
         hIcon = GetIconFromLocation(pData->LocalIcon[i].szPath);

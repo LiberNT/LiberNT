@@ -1,3 +1,5 @@
 #pragma once
 
 #define IDR_STORAGEOBJECTS 100
+#define IDR_USERSFILES 101
+#define IDI_USERSFILES 123

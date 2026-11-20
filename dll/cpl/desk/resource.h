@@ -182,7 +182,7 @@
 
 /* Desktop Items Dialog */
 #define IDS_DESKTOP_ITEMS    3900
-#define IDC_ICONS_MYDOCS     3901
+#define IDC_ICONS_USERSFILES 3901
 #define IDC_ICONS_MYNET      3902
 #define IDC_ICONS_MYCOMP     3903
 #define IDC_ICONS_INTERNET   3904

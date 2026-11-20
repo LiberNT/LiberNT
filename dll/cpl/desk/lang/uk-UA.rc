@@ -161,7 +161,7 @@ CAPTION "General"
 FONT 8, "MS Shell Dlg"
 BEGIN
     GROUPBOX "Піктограми робочого столу", IDC_STATIC, 6, 4, 212, 40
-    AUTOCHECKBOX "Мої &Документи", IDC_ICONS_MYDOCS, 14, 14, 100, 12
+    AUTOCHECKBOX "&User's Files", IDC_ICONS_USERSFILES, 14, 14, 100, 12
     AUTOCHECKBOX "Мої &Мережеві Місця", IDC_ICONS_MYNET, 116, 14, 100, 12
     AUTOCHECKBOX "М&ій Комп'ютер", IDC_ICONS_MYCOMP, 14, 28, 100, 12
     AUTOCHECKBOX "Ін&тернет Браузер", IDC_ICONS_INTERNET, 116, 28, 100, 12
