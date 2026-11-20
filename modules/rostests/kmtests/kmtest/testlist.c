@@ -75,6 +75,7 @@ KMT_TESTFUNC Test_PoShutdownTime;
 KMT_TESTFUNC Test_PoInitiatePowerAction;
 KMT_TESTFUNC Test_BatteryClassNotify;
 KMT_TESTFUNC Test_XpdmVersion;
+KMT_TESTFUNC Test_KeWaitTerminate;
 KMT_TESTFUNC Test_PoIrp;
 KMT_TESTFUNC Test_PoBatteryState;
 KMT_TESTFUNC Test_PoFxState;
@@ -177,6 +178,7 @@ const KMT_TEST TestList[] =
     { "IoDeviceNumaNode",              Test_IoDeviceNumaNode },
     { "BatteryClassNotify",           Test_BatteryClassNotify },
     { "XpdmVersion",                  Test_XpdmVersion },
+    { "KeWaitTerminate",              Test_KeWaitTerminate },
     { "PoIrp",                        Test_PoIrp },
     { "RtlAvlTree",                   Test_RtlAvlTree },
     { "RtlException",                 Test_RtlException },

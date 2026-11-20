@@ -234,6 +234,7 @@ TestPicoThreadStart(
     PPICO_TEST_THREAD Record = PsPicoGetThreadContext(PsGetCurrentThread());
     PROCESS_BASIC_INFORMATION Basic;
     LARGE_INTEGER Timeout;
+    NTSTATUS Status;
 
     UNREFERENCED_PARAMETER(ExceptionFrame);
 
@@ -259,8 +260,9 @@ TestPicoThreadStart(
     {
         Timeout.QuadPart = -5LL * 1000 * 1000 * 10;
         KeSetEvent(&WaiterStarted, IO_NO_INCREMENT, FALSE);
-        /* A thread ends on its way back to user mode, so only an alertable user wait is cut short */
-        if (KeWaitForSingleObject(&WaiterRelease, Executive, UserMode, TRUE, &Timeout) == STATUS_USER_APC)
+        /* A thread told to end has its alertable wait cut short: alerted if it was waiting, by its exit APC if not yet */
+        Status = KeWaitForSingleObject(&WaiterRelease, Executive, UserMode, TRUE, &Timeout);
+        if (Status == STATUS_ALERTED || Status == STATUS_USER_APC)
             return;
         PsPicoTerminateCurrentThread(STATUS_TIMEOUT);
     }
