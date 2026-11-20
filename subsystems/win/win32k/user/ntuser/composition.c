@@ -523,10 +523,18 @@ IntCompositionWakeFlushWaiters(VOID)
 }
 
 NTSTATUS
-IntCompositionDwmPresented(VOID)
+IntCompositionDwmPresented(_In_ DWORD_PTR Param)
 {
     if (!g_DwmAttached || PsGetCurrentProcess() != g_DwmProcess)
         return STATUS_ACCESS_DENIED;
+    if (Param == DWM_PRESENTED_OCCLUDED)
+    {
+        /* An occluded compositor pulls no frames but is alive: keep the watchdog from tearing composition down */
+        g_DwmLastFrameTime = (LONGLONG)KeQueryInterruptTime();
+        return STATUS_SUCCESS;
+    }
+    if (Param != DWM_PRESENTED_FRAME)
+        return STATUS_INVALID_PARAMETER;
     g_DwmFramePresented = g_DwmFrameIssued;
     IntCompositionWakeFlushWaiters();
     return STATUS_SUCCESS;

@@ -38,6 +38,10 @@
 #define DWM_ROUTINE_FLUSH        0xfffe001b
 #define DWM_ROUTINE_PRESENTED    0xfffe001c
 
+/* DWM_ROUTINE_PRESENTED parameter: the frame was presented, or the output is occluded and nothing was presented */
+#define DWM_PRESENTED_FRAME      0
+#define DWM_PRESENTED_OCCLUDED   1
+
 /*
  * Internal win32k control channel to the canonical display driver (DrvEscape).
  * NtGdiExtEscape rejects kernel-only mutations and restricts bitmap publication
