@@ -2317,7 +2317,30 @@ INT_PTR CALLBACK AboutAuthorsDlgProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM
 #define ABOUT_BAND_EDGE  RGB(198, 212, 223)
 #define ABOUT_BAND_GLOW  RGB(240, 244, 247)
 #define ABOUT_BAND_TEXT  RGB(40, 43, 47)
+#define ABOUT_BAND_NOTE  RGB(58, 64, 66)
 #define ABOUT_BAND_STEPS 24
+
+static HFONT AboutCreateBandFont(HDC hdc, INT CapHeight, INT Weight)
+{
+    OUTLINETEXTMETRICW otm;
+    HGDIOBJ hOldFont;
+    HFONT hFont;
+    INT EmHeight = CapHeight * 10 / 7;
+
+    hFont = CreateFontW(-100, 0, 0, 0, Weight, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                        CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+    if (hFont)
+    {
+        hOldFont = SelectObject(hdc, hFont);
+        otm.otmSize = sizeof(otm);
+        if (GetOutlineTextMetricsW(hdc, sizeof(otm), &otm) && otm.otmsCapEmHeight > 0)
+            EmHeight = MulDiv(CapHeight, 100, otm.otmsCapEmHeight);
+        SelectObject(hdc, hOldFont);
+        DeleteObject(hFont);
+    }
+    return CreateFontW(-EmHeight, 0, 0, 0, Weight, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                       CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+}
 
 static BYTE AboutBandChannel(BYTE Edge, BYTE Glow, INT Step)
 {
@@ -2366,6 +2389,7 @@ static INT_PTR CALLBACK AboutDlgProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM
 #ifdef __REACTOS__
 
     static const WCHAR szLogoName[] = L"LiberNT";
+    static const WCHAR szLogoCopyright[] = L"\u00A9 2026 LiberNT Team & Contributors";
     static HWND    hWndAuthors;
 
     switch (msg)
@@ -2488,10 +2512,11 @@ static INT_PTR CALLBACK AboutDlgProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM
             RECT rcClient, rcBand = { 0, 0, 0, 44 };
             HGDIOBJ hOldFont;
             SIZE sizeName = { 0, 0 };
-            INT cyBand, cyMark, cxGap, x, y;
+            INT cyBand, cyMark, cxGap, x;
+            UINT OldAlign;
             HDC hdc, hdcMem;
             HICON hLogoIcon;
-            HFONT hLogoFont;
+            HFONT hLogoFont, hNoteFont;
             HBITMAP hLineBmp;
             BITMAP bmpLine;
 
@@ -2499,26 +2524,33 @@ static INT_PTR CALLBACK AboutDlgProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM
             GetClientRect(hWnd, &rcClient);
             MapDialogRect(hWnd, &rcBand);
             cyBand = rcBand.bottom;
-            cyMark = cyBand / 2;
-            cxGap = cyMark / 4;
+            cyMark = cyBand * 40 / 72;
+            cxGap = cyBand * 10 / 72;
             hLogoIcon = (HICON)LoadImageW(NULL, (LPCWSTR)IDI_WINLOGO, IMAGE_ICON, cyMark, cyMark, LR_SHARED);
-            hLogoFont = CreateFontW(-cyMark * 4 / 5, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
-                                    OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                                    DEFAULT_PITCH | FF_SWISS, L"Segoe UI Semibold");
+            hLogoFont = AboutCreateBandFont(hdc, cyBand * 32 / 72, FW_BOLD);
+            hNoteFont = AboutCreateBandFont(hdc, cyBand * 6 / 72, FW_NORMAL);
             hLineBmp = (HBITMAP)LoadImageW(shell32_hInstance, MAKEINTRESOURCEW(IDB_LINEBAR), IMAGE_BITMAP, 0, 0,
                                            LR_DEFAULTCOLOR);
 
             AboutPaintBand(hdc, rcClient.right, cyBand);
-            SetTextColor(hdc, ABOUT_BAND_TEXT);
             SetBkMode(hdc, TRANSPARENT);
+            OldAlign = SetTextAlign(hdc, TA_BASELINE | TA_LEFT);
             hOldFont = SelectObject(hdc, hLogoFont ? hLogoFont : (HFONT)SendMessageW(hWnd, WM_GETFONT, 0, 0));
             GetTextExtentPoint32W(hdc, szLogoName, ARRAY_SIZE(szLogoName) - 1, &sizeName);
             x = (rcClient.right - (cyMark + cxGap + sizeName.cx)) / 2;
-            y = (cyBand - cyMark) / 2;
             if (hLogoIcon)
-                DrawIconEx(hdc, x, y, hLogoIcon, cyMark, cyMark, 0, NULL, DI_NORMAL);
-            TextOutW(hdc, x + cyMark + cxGap, y + (cyMark - sizeName.cy) / 2, szLogoName, ARRAY_SIZE(szLogoName) - 1);
+                DrawIconEx(hdc, x, cyBand * 9 / 72, hLogoIcon, cyMark, cyMark, 0, NULL, DI_NORMAL);
+            SetTextColor(hdc, ABOUT_BAND_TEXT);
+            TextOutW(hdc, x + cyMark + cxGap, cyBand * 46 / 72, szLogoName, ARRAY_SIZE(szLogoName) - 1);
+
+            SelectObject(hdc, hNoteFont ? hNoteFont : (HFONT)SendMessageW(hWnd, WM_GETFONT, 0, 0));
+            SetTextAlign(hdc, TA_BASELINE | TA_CENTER);
+            SetTextColor(hdc, ABOUT_BAND_NOTE);
+            TextOutW(hdc, rcClient.right / 2, cyBand * 68 / 72, szLogoCopyright, ARRAY_SIZE(szLogoCopyright) - 1);
+            SetTextAlign(hdc, OldAlign);
             SelectObject(hdc, hOldFont);
+            if (hNoteFont)
+                DeleteObject(hNoteFont);
             if (hLogoFont)
                 DeleteObject(hLogoFont);
 
