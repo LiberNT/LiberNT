@@ -163,7 +163,10 @@ SmpLoadDeferedSubsystem(
     DeferedSubsystem.Buffer = SmLoadDefered->Buffer;
 
     /* Find a subsystem responsible for this session */
-    SmpGetProcessMuSessionId(ClientContext->ProcessHandle, &MuSessionId);
+    Status = SmpGetProcessMuSessionId(ClientContext->ProcessHandle, &MuSessionId);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = STATUS_OBJECT_NAME_NOT_FOUND;
     if (!SmpCheckDuplicateMuSessionId(MuSessionId))
     {
         DPRINT1("SMSS: Deferred subsystem load (%wZ) for MuSessionId %u, status=0x%x\n",
@@ -496,7 +499,16 @@ SmpApiLoop(IN PVOID Parameter)
             case LPC_PORT_CLOSED:
                 /* Destroy any state we had for this client */
                 DPRINT1("Port closed\n");
-                //if (ClientContext) SmpPushDeferredClientContext(ClientContext);
+                if (ClientContext)
+                {
+                    HANDLE Handle;
+
+                    /* FIXME: the context itself is kept, as another API thread may still be serving the client */
+                    Handle = InterlockedExchangePointer(&ClientContext->ProcessHandle, NULL);
+                    if (Handle) NtClose(Handle);
+                    Handle = InterlockedExchangePointer(&ClientContext->PortHandle, NULL);
+                    if (Handle) NtClose(Handle);
+                }
                 ReplyMsg = NULL;
                 break;
 
