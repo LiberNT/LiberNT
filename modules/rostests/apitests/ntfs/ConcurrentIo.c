@@ -35,6 +35,7 @@ typedef struct _WRITER
     ULONG Samples;
     ULONG Appended;
     BOOL Append;
+    BOOL Fresh;
     DWORD Error;
 } WRITER, *PWRITER;
 
@@ -180,7 +181,7 @@ WriterThread(_In_ PVOID Parameter)
      * a paging write past the valid data, which is how a download grows a file.
      */
     File = CreateFileW(Writer->Path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
-                       Writer->Append ? FILE_ATTRIBUTE_NORMAL :
+                       (Writer->Append || Writer->Fresh) ? FILE_ATTRIBUTE_NORMAL :
                        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH | FILE_FLAG_NO_BUFFERING,
                        NULL);
     if (File == INVALID_HANDLE_VALUE)
@@ -195,10 +196,22 @@ WriterThread(_In_ PVOID Parameter)
         LARGE_INTEGER Before, After, Zero;
         DWORD Written = 0;
 
+        /* An installer lays each file down with one large write into a file nothing has cached yet */
+        if (Writer->Fresh)
+        {
+            CloseHandle(File);
+            File = CreateFileW(Writer->Path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+            if (File == INVALID_HANDLE_VALUE)
+            {
+                Writer->Error = GetLastError();
+                break;
+            }
+        }
+
         if (Writer->Append && Writer->Appended == APPEND_LIMIT)
             break;
         Zero.QuadPart = 0;
-        if (!Writer->Append)
+        if (!Writer->Append && !Writer->Fresh)
             SetFilePointerEx(File, Zero, NULL, FILE_BEGIN);
 
         QueryPerformanceCounter(&Before);
@@ -314,14 +327,15 @@ CheckAppended(_In_ PCWSTR Path, _In_ ULONG Blocks)
 }
 
 static VOID
-MeasureVolume(_In_ BOOL Append)
+MeasureVolume(_In_ BOOL Append, _In_ BOOL Fresh)
 {
     WCHAR SmallPath[MAX_PATH];
     WRITER Writer;
     LONGLONG Idle = 0, Loaded = 0, Transfer = 0;
 
     StringCchPrintfW(SmallPath, MAX_PATH, L"%sconcio_small.dat", VolumeRoot);
-    StringCchPrintfW(Writer.Path, MAX_PATH, Append ? L"%sconcio_append.dat" : L"%sconcio_write.dat", VolumeRoot);
+    StringCchPrintfW(Writer.Path, MAX_PATH, Fresh ? L"%sconcio_fresh.dat" : Append ? L"%sconcio_append.dat" : L"%sconcio_write.dat",
+                     VolumeRoot);
 
     if (!MakeFile(SmallPath, 4096))
     {
@@ -342,6 +356,7 @@ MeasureVolume(_In_ BOOL Append)
     Writer.Samples = 0;
     Writer.Appended = 0;
     Writer.Append = Append;
+    Writer.Fresh = Fresh;
     Writer.Error = ERROR_SUCCESS;
     Writer.Thread = NULL;
     if (Writer.Stop == NULL || Writer.Ready == NULL)
@@ -376,10 +391,10 @@ MeasureVolume(_In_ BOOL Append)
     Transfer = Median(Writer.Ticks, Writer.Samples);
 
     trace("%s: open %I64d us idle, %I64d us while a %u KB transfer of %I64d us runs\n",
-          Append ? "append" : "overwrite", Microseconds(Idle), Microseconds(Loaded),
+          Fresh ? "fresh" : Append ? "append" : "overwrite", Microseconds(Idle), Microseconds(Loaded),
           WRITER_BLOCK / 1024, Microseconds(Transfer));
     Report("CONCIO %s open idle %I64d us loaded %I64d us transfer %I64d us\n",
-           Append ? "append" : "overwrite", Microseconds(Idle), Microseconds(Loaded),
+           Fresh ? "fresh" : Append ? "append" : "overwrite", Microseconds(Idle), Microseconds(Loaded),
            Microseconds(Transfer));
 
     /*
@@ -428,6 +443,7 @@ START_TEST(ConcurrentIo)
     }
     trace("testing on %ls\n", VolumeRoot);
 
-    MeasureVolume(FALSE);
-    MeasureVolume(TRUE);
+    MeasureVolume(FALSE, FALSE);
+    MeasureVolume(TRUE, FALSE);
+    MeasureVolume(FALSE, TRUE);
 }

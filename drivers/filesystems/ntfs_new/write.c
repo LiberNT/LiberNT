@@ -330,12 +330,6 @@ NtfsCachedWrite(_In_ PVolumeContextBlock VolCB,
     if (ByteOffset->QuadPart < 0 || !CcCanIWrite(FileObj, Length, TRUE, FALSE))
         return FALSE;
 
-    if (Length >= 1024 * 1024 && EndOffset > Header->ValidDataLength.QuadPart &&
-        FileObj->SectionObjectPointer->SharedCacheMap == NULL)
-    {
-        return FALSE;
-    }
-
     KeEnterCriticalRegion();
     ExAcquireResourceSharedLite(NtfsGetMainResource(FileCB), TRUE);
     Extending = EndOffset > Header->ValidDataLength.QuadPart;
