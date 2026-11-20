@@ -342,6 +342,52 @@ KdpReleaseDevice(
     }
 }
 
+/* A bridge forwards its secondary side's memory requests upstream only with Bus Master set; firmware may leave it clear */
+static
+VOID
+KdpEnableUpstreamBridges(
+    _In_ ULONG TargetBus)
+{
+    PCI_COMMON_HEADER Config;
+    PCI_SLOT_NUMBER Slot;
+    ULONG Bus, Device, Function, Length;
+    USHORT Command;
+
+    for (Bus = 0; Bus < TargetBus; Bus++)
+    {
+        for (Device = 0; Device < PCI_MAX_DEVICES; Device++)
+        {
+            for (Function = 0; Function < PCI_MAX_FUNCTION; Function++)
+            {
+                Slot.u.AsULONG = 0;
+                Slot.u.bits.DeviceNumber = Device;
+                Slot.u.bits.FunctionNumber = Function;
+                Length = KdpGetPciData(Bus, Slot.u.AsULONG, &Config, 0, PCI_COMMON_HDR_LENGTH);
+                if (Length < PCI_COMMON_HDR_LENGTH || Config.VendorID == PCI_INVALID_VENDORID ||
+                    Config.VendorID == 0)
+                {
+                    if (!Function)
+                        break;
+
+                    continue;
+                }
+
+                if (PCI_CONFIGURATION_TYPE(&Config) == PCI_BRIDGE_TYPE &&
+                    Config.u.type1.SecondaryBus <= TargetBus && TargetBus <= Config.u.type1.SubordinateBus &&
+                    !(Config.Command & PCI_ENABLE_BUS_MASTER))
+                {
+                    Command = Config.Command | PCI_ENABLE_BUS_MASTER;
+                    KdpSetPciData(Bus, Slot.u.AsULONG, &Command, FIELD_OFFSET(PCI_COMMON_HEADER, Command),
+                                  sizeof(Command));
+                }
+
+                if (!Function && !PCI_MULTIFUNCTION_DEVICE(&Config))
+                    break;
+            }
+        }
+    }
+}
+
 static
 VOID
 KdpMapDevice(
@@ -417,6 +463,7 @@ KdpMapDevice(
             i++;
     }
 
+    KdpEnableUpstreamBridges(Device->Bus);
     Command |= PCI_ENABLE_MEMORY_SPACE | PCI_ENABLE_BUS_MASTER;
     KdpSetPciData(Device->Bus, Device->Slot, &Command, FIELD_OFFSET(PCI_COMMON_HEADER, Command), sizeof(Command));
 }
