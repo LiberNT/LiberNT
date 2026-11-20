@@ -743,7 +743,7 @@ BEGIN
 
     /* special folders */
     IDS_DESKTOP "桌面"
-    IDS_MYCOMPUTER "我的电脑"
+    IDS_MYCOMPUTER "此电脑"
     IDS_RECYCLEBIN_FOLDER_NAME "回收站"
     IDS_CONTROLPANEL "控制面板"
     IDS_ADMINISTRATIVETOOLS "管理工具"
@@ -869,7 +869,7 @@ BEGIN
     IDS_COMMON_PICTURES "Documents\\我的图片"
     IDS_COMMON_VIDEO "Documents\\我的视频"
     IDS_CDBURN_AREA "Local Settings\\Application Data\\Microsoft\\CD Burning"
-    IDS_NETWORKPLACE "网上邻居"
+    IDS_NETWORKPLACE "网络"
 
     IDS_NEWFOLDER "新建文件夹"
     IDS_NEWITEMFORMAT "新建 %s"
@@ -981,8 +981,8 @@ BEGIN
     IDS_RECYCLE_CLEANER_DESCRIPTION "The Recycle Bin contains files you have deleted from your computer. These files are not permanently removed until you empty the Recycle Bin."
     IDS_RECYCLE_CLEANER_BUTTON_TEXT "&View Files"
 
-    IDS_TITLE_MYCOMP "我的电脑"
-    IDS_TITLE_MYNET "网上邻居"
+    IDS_TITLE_MYCOMP "此电脑"
+    IDS_TITLE_MYNET "网络"
     IDS_TITLE_BIN_1 "回收站(满)"
     IDS_TITLE_BIN_0 "回收站(空)"
 
