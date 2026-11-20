@@ -630,6 +630,34 @@ ScmCollectDeviceClasses(PSERVICE lpService, GUID *lpClasses, DWORD dwMax)
     return dwFound;
 }
 
+static BOOL
+ScmStartPlugPlay(VOID)
+{
+    PSERVICE lpService;
+    DWORD dwError = ERROR_SUCCESS;
+
+    ScmLockDatabaseShared();
+    lpService = ScmGetServiceEntryByName(L"PlugPlay");
+    if (lpService != NULL)
+        ScmReferenceService(lpService);
+    ScmUnlockDatabase();
+    if (lpService == NULL)
+        return FALSE;
+
+    if (lpService->Status.dwCurrentState == SERVICE_STOPPED)
+        dwError = ScmStartService(lpService, 0, NULL);
+    if (dwError == ERROR_SUCCESS || dwError == ERROR_SERVICE_ALREADY_RUNNING)
+        dwError = ScmWaitForDependency(lpService);
+
+    ScmLockDatabaseExclusive();
+    ScmDereferenceService(lpService);
+    ScmUnlockDatabase();
+
+    if (dwError != ERROR_SUCCESS)
+        DPRINT1("The Plug and Play service is not running (Error %lu), so no device trigger is armed\n", dwError);
+    return dwError == ERROR_SUCCESS;
+}
+
 static VOID
 ScmWatchDeviceTriggers(BOOL bAtBoot)
 {
@@ -646,6 +674,9 @@ ScmWatchDeviceTriggers(BOOL bAtBoot)
             dwClasses += ScmCollectDeviceClasses(lpService, &Classes[dwClasses], ARRAYSIZE(Classes) - dwClasses);
     }
     ScmUnlockDatabase();
+
+    if (dwClasses == 0 || !ScmStartPlugPlay())
+        return;
 
     for (i = 0; i < dwClasses; i++)
         ScmWatchDeviceClass(&Classes[i], bAtBoot);
@@ -690,14 +721,25 @@ ScmUnicastAddressChanged(PVOID Context, PMIB_UNICASTIPADDRESS_ROW Row, MIB_NOTIF
     ScmFireTriggerEvent(&Event);
 }
 
+static DWORD
+WINAPI
+ScmArmDeviceTriggers(PVOID Context)
+{
+    UNREFERENCED_PARAMETER(Context);
+
+    EnterCriticalSection(&ScmTriggerLock);
+    ScmWatchDeviceTriggers(TRUE);
+    LeaveCriticalSection(&ScmTriggerLock);
+    return 0;
+}
+
 /* Arms the triggers of the configured services; called after the auto-start services were started. */
 VOID
 ScmStartTriggers(VOID)
 {
     InitializeCriticalSection(&ScmTriggerLock);
-    EnterCriticalSection(&ScmTriggerLock);
-    ScmWatchDeviceTriggers(TRUE);
-    LeaveCriticalSection(&ScmTriggerLock);
+    if (!QueueUserWorkItem(ScmArmDeviceTriggers, NULL, WT_EXECUTELONGFUNCTION))
+        ScmArmDeviceTriggers(NULL);
     if (NotifyUnicastIpAddressChange(AF_UNSPEC, ScmUnicastAddressChanged, NULL, TRUE, &ScmIpNotify) != NO_ERROR)
         DPRINT1("Cannot watch IP addresses for service triggers\n");
 }

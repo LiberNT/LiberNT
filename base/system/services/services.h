@@ -205,6 +205,7 @@ DWORD ScmStartService(PSERVICE Service,
                       DWORD argc,
                       const PCWSTR* argv);
 
+DWORD ScmWaitForDependency(PSERVICE Dependency);
 DWORD ScmReferenceService(PSERVICE lpService);
 DWORD ScmDereferenceService(PSERVICE lpService);
 
