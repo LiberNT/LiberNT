@@ -76,6 +76,11 @@ FwIsBootVolume(
     _In_ PVOID Device);
 
 BOOLEAN
+FwIsSameVolume(
+    _In_ PVOID First,
+    _In_ PVOID Second);
+
+BOOLEAN
 FwGetVolumeLabel(
     _In_ PVOID Device,
     _Out_writes_z_(Chars) PWSTR Label,

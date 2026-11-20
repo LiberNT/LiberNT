@@ -167,6 +167,21 @@ BmVolumeIn(
 }
 
 static
+BOOLEAN
+BmVolumeListed(
+    _In_ PVOID Device)
+{
+    ULONG i;
+
+    for (i = BmStoreCount; i < BmCount; i++)
+    {
+        if (BmEntries[i].FirmwareDevice && FwIsSameVolume(Device, BmEntries[i].FirmwareDevice))
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static
 ULONG
 BmInsertEntry(
     _In_ BOOLEAN Usb)
@@ -330,7 +345,7 @@ BmExamineVolume(
 
     if (BmPassCount < RTL_NUMBER_OF(BmPassVolumes))
         BmPassVolumes[BmPassCount++] = Device;
-    if (BmVolumeIn(Device, BmKnownVolumes, BmKnownCount))
+    if (BmVolumeIn(Device, BmKnownVolumes, BmKnownCount) || BmVolumeListed(Device))
         return FALSE;
 
     Usb = FwIsUsbVolume(Device);

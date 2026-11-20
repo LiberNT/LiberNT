@@ -701,11 +701,85 @@ FwConnectUsbDevices(VOID)
     FwUsbDeviceCount = Count;
 }
 
+static
+SIZE_T
+FwDiskPathSize(
+    _In_ EFI_DEVICE_PATH_PROTOCOL* Path)
+{
+    EFI_DEVICE_PATH_PROTOCOL* Node;
+
+    for (Node = Path; !IsDevicePathEnd(Node); Node = NextDevicePathNode(Node))
+    {
+        if (DevicePathType(Node) == MEDIA_DEVICE_PATH &&
+            (DevicePathSubType(Node) == MEDIA_HARDDRIVE_DP || DevicePathSubType(Node) == MEDIA_CDROM_DP))
+        {
+            break;
+        }
+    }
+
+    return (PUCHAR)Node - (PUCHAR)Path;
+}
+
+BOOLEAN
+FwIsSameVolume(
+    _In_ PVOID First,
+    _In_ PVOID Second)
+{
+    EFI_BOOT_SERVICES* BootServices = GlobalSystemTable->BootServices;
+    EFI_DEVICE_PATH_PROTOCOL *FirstPath, *SecondPath;
+    EFI_BLOCK_IO_PROTOCOL *FirstIo, *SecondIo;
+    PUCHAR Buffer;
+    SIZE_T Size;
+    ULONG Compare, i;
+    BOOLEAN Same = FALSE;
+
+    ASSERT(First && Second);
+    if (First == Second)
+        return TRUE;
+
+    if (EFI_ERROR(BootServices->HandleProtocol(First, &FwDevicePathGuid, (VOID**)&FirstPath)) ||
+        EFI_ERROR(BootServices->HandleProtocol(Second, &FwDevicePathGuid, (VOID**)&SecondPath)))
+    {
+        return FALSE;
+    }
+
+    Size = FwDiskPathSize(FirstPath);
+    if (Size == 0 || Size != FwDiskPathSize(SecondPath) || !RtlEqualMemory(FirstPath, SecondPath, Size))
+        return FALSE;
+
+    if (EFI_ERROR(BootServices->HandleProtocol(First, &FwBlockIoGuid, (VOID**)&FirstIo)) ||
+        EFI_ERROR(BootServices->HandleProtocol(Second, &FwBlockIoGuid, (VOID**)&SecondIo)) ||
+        !FirstIo->Media->MediaPresent || !SecondIo->Media->MediaPresent ||
+        FirstIo->Media->BlockSize < 512 || FirstIo->Media->BlockSize > EFI_PAGE_SIZE ||
+        SecondIo->Media->BlockSize < 512 || SecondIo->Media->BlockSize > EFI_PAGE_SIZE)
+    {
+        return FALSE;
+    }
+
+    Buffer = FwAllocatePages(2 * EFI_PAGE_SIZE);
+    if (!Buffer)
+        return FALSE;
+
+    Compare = min(FirstIo->Media->BlockSize, SecondIo->Media->BlockSize);
+    if (FwReadBlocks(FirstIo, 0, 1, Buffer) &&
+        FwReadBlocks(SecondIo, 0, 1, Buffer + EFI_PAGE_SIZE) &&
+        RtlEqualMemory(Buffer, Buffer + EFI_PAGE_SIZE, Compare))
+    {
+        for (i = 0; i < Compare && !Same; i++)
+            Same = (Buffer[i] != 0);
+    }
+
+    FwFreePages(Buffer, 2 * EFI_PAGE_SIZE);
+    return Same;
+}
+
 BOOLEAN
 FwIsBootVolume(
     _In_ PVOID Device)
 {
-    return Device && Device == FwGetBootDeviceHandle();
+    EFI_HANDLE Boot = FwGetBootDeviceHandle();
+
+    return Device && Boot && FwIsSameVolume(Device, Boot);
 }
 
 BOOLEAN
