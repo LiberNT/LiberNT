@@ -171,6 +171,9 @@ KiPopDpc(
         DpcData->DpcList.LastEntry = &DpcData->DpcList.ListHead;
 
     Dpc = CONTAINING_RECORD(Entry, KDPC, DpcListEntry);
+    ASSERT(Dpc->DpcData == DpcData);
+    ASSERT(Entry->Next != Entry);
+    ASSERT(DpcData->DpcQueueDepth > 0);
 
     *Routine = Dpc->DeferredRoutine;
     *Context = Dpc->DeferredContext;
@@ -439,12 +442,14 @@ KeInsertQueueDpc(
 
     KeAcquireSpinLockAtDpcLevel(KiDpcQueueLock(DpcData));
 
-    if (Dpc->DpcData == NULL)
+    /* The lock held is the target queue's; another processor may be claiming the same DPC for its own queue */
+    if (InterlockedCompareExchangePointer(&Dpc->DpcData, DpcData, NULL) == NULL)
     {
         Dpc->SystemArgument1 = SystemArgument1;
         Dpc->SystemArgument2 = SystemArgument2;
         Dpc->ProcessorHistory |= AFFINITY_MASK(KiLegacyProcessorNumber(Processor));
-        Dpc->DpcData = DpcData;
+        ASSERT(DpcData->DpcList.LastEntry != &Dpc->DpcListEntry);
+        ASSERT(DpcData->DpcQueueDepth >= 0);
         DpcData->DpcQueueDepth++;
         DpcData->DpcCount++;
 
