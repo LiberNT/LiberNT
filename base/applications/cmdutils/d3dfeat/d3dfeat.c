@@ -1278,6 +1278,15 @@ FeatDirect3D12Extras(
         if (SUCCEEDED(Result))
         {
             ID3D12GraphicsCommandList_CopyBufferRegion(List, Reserved, 0, Source, 0, 8);
+            Result = FeatExecute12(Queue, List, Fence, Event, FenceValue);
+        }
+        /* The reserved and placed buffers alias one heap tile; separate submissions order the two uses (ResourceHeaps.md) */
+        if (SUCCEEDED(Result))
+            Result = ID3D12CommandAllocator_Reset(Allocator);
+        if (SUCCEEDED(Result))
+            Result = ID3D12GraphicsCommandList_Reset(List, Allocator, NULL);
+        if (SUCCEEDED(Result))
+        {
             ID3D12GraphicsCommandList_CopyBufferRegion(List, Readback, 128, Placed, 0, 8);
             Result = FeatExecute12(Queue, List, Fence, Event, FenceValue);
         }
