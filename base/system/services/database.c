@@ -2471,7 +2471,6 @@ ScmLoadService(PSERVICE Service,
                const PCWSTR* argv);
 
 
-static
 DWORD
 ScmWaitForDependency(
     _In_ PSERVICE Dependency)
