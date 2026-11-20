@@ -1071,6 +1071,11 @@ RawInputThreadMain(VOID)
                     ASSERT(FALSE);
                 }
             }
+            else if ((Status == STATUS_ALERTED || Status == STATUS_USER_APC) &&
+                     PsIsThreadTerminating(PsGetCurrentThread()))
+            {
+                break;
+            }
         }
 
         InputDevicesProcess();
