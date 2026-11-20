@@ -22,6 +22,8 @@
 #define FW_GOP_TRANSFORM_VERSION        1
 #define FW_GOP_TRANSFORM_FIXED_SCANOUT  0x00000001
 
+#define FW_SCAN_LINE_CANDIDATES 8
+
 typedef struct _FW_GOP_TRANSFORM
 {
     UINT32 Size;
@@ -158,6 +160,74 @@ FwGetGopTransform(
     return Transform;
 }
 
+static
+UINT32
+FwMeasureScanLine(
+    _In_ EFI_GRAPHICS_OUTPUT_PROTOCOL* Gop,
+    _In_ PCM_FRAMEBUF_DEVICE_DATA Data)
+{
+    EFI_GRAPHICS_OUTPUT_MODE_INFORMATION* Info = Gop->Mode->Info;
+    volatile ULONG* FrameBuffer = (volatile ULONG*)(ULONG_PTR)Gop->Mode->FrameBufferBase;
+    EFI_GRAPHICS_OUTPUT_BLT_PIXEL Saved, Magenta = {0xFF, 0x00, 0xFF, 0x00}, Green = {0x00, 0xFF, 0x00, 0x00};
+    ULONG MagentaBits = Data->PixelMasks.RedMask | Data->PixelMasks.BlueMask;
+    ULONG GreenBits = Data->PixelMasks.GreenMask;
+    ULONG ColorBits = MagentaBits | GreenBits;
+    ULONGLONG Last;
+    UINT32 Candidates[FW_SCAN_LINE_CANDIDATES];
+    UINT32 Count = 0, Kept = 0, ScanLine = 0, Candidate, i;
+
+    if ((ULONGLONG)Info->PixelsPerScanLine * Info->VerticalResolution * sizeof(ULONG) == Gop->Mode->FrameBufferSize ||
+        Info->VerticalResolution < 2 ||
+        (ULONGLONG)Info->HorizontalResolution * Info->VerticalResolution * sizeof(ULONG) > Gop->Mode->FrameBufferSize ||
+        (MagentaBits & GreenBits) != 0 ||
+        MagentaBits == 0 ||
+        GreenBits == 0)
+    {
+        return Info->PixelsPerScanLine;
+    }
+
+    Last = (Gop->Mode->FrameBufferSize - (ULONGLONG)Info->HorizontalResolution * sizeof(ULONG)) /
+           ((ULONGLONG)(Info->VerticalResolution - 1) * sizeof(ULONG));
+    ASSERT(Last >= Info->HorizontalResolution && Last <= MAXULONG / sizeof(ULONG));
+
+    if (EFI_ERROR(Gop->Blt(Gop, &Saved, EfiBltVideoToBltBuffer, 0, 1, 0, 0, 1, 1, 0)))
+        return Info->PixelsPerScanLine;
+
+    if (!EFI_ERROR(Gop->Blt(Gop, &Magenta, EfiBltBufferToVideo, 0, 0, 0, 1, 1, 1, 0)))
+    {
+        MemoryBarrier();
+        for (Candidate = Info->HorizontalResolution; Candidate <= Last; Candidate++)
+        {
+            if ((FrameBuffer[Candidate] & ColorBits) != MagentaBits)
+                continue;
+
+            if (Count == FW_SCAN_LINE_CANDIDATES)
+            {
+                Count = 0;
+                break;
+            }
+            Candidates[Count++] = Candidate;
+        }
+    }
+
+    if (Count != 0 && !EFI_ERROR(Gop->Blt(Gop, &Green, EfiBltBufferToVideo, 0, 0, 0, 1, 1, 1, 0)))
+    {
+        MemoryBarrier();
+        for (i = 0; i < Count; i++)
+        {
+            if ((FrameBuffer[Candidates[i]] & ColorBits) == GreenBits)
+            {
+                ScanLine = Candidates[i];
+                Kept++;
+            }
+        }
+    }
+
+    Gop->Blt(Gop, &Saved, EfiBltBufferToVideo, 0, 0, 0, 1, 1, 1, 0);
+
+    return (Kept == 1) ? ScanLine : Info->PixelsPerScanLine;
+}
+
 BOOLEAN
 FwGetFrameBuffer(
     _Out_ PCM_FRAMEBUF_DEVICE_DATA Data,
@@ -222,7 +292,7 @@ FwGetFrameBuffer(
 
     Data->ScreenWidth = Info->HorizontalResolution;
     Data->ScreenHeight = Info->VerticalResolution;
-    Data->PixelsPerScanLine = Info->PixelsPerScanLine;
+    Data->PixelsPerScanLine = FwMeasureScanLine(Gop, Data);
     Data->BitsPerPixel = FW_COLOR_BITS;
     Data->LogicalWidth = Info->HorizontalResolution;
     Data->LogicalHeight = Info->VerticalResolution;
@@ -239,7 +309,7 @@ FwGetFrameBuffer(
             return FALSE;
         }
 
-        if ((ULONGLONG)Info->VerticalResolution * Info->PixelsPerScanLine * (FW_COLOR_BITS / 8) > Gop->Mode->FrameBufferSize)
+        if ((ULONGLONG)Info->VerticalResolution * Data->PixelsPerScanLine * (FW_COLOR_BITS / 8) > Gop->Mode->FrameBufferSize)
             return FALSE;
 
         Data->TransformFlags = (Transform->Flags & FW_GOP_TRANSFORM_FIXED_SCANOUT) ? LOADER_PARAMETER_FRAMEBUFFER_FLAG_FIXED_SCANOUT : 0;

@@ -27,6 +27,7 @@ option(HOST_TEST_EXT4 "Build native ext4 driver core tests" ON)
 option(HOST_TEST_USB "Build native USB host controller tests" ON)
 option(HOST_TEST_STORPORT "Build native Storport tests" ON)
 option(HOST_TEST_DXGKRNL "Build native DirectX graphics kernel tests" ON)
+option(HOST_TEST_BOOTLOADER "Build native boot loader tests" ON)
 
 if(BUILD_TESTING AND HOST_TEST_DHCPCSVC)
     add_subdirectory(dhcpcsvc)
@@ -46,6 +47,10 @@ endif()
 
 if(BUILD_TESTING AND HOST_TEST_DXGKRNL)
     add_subdirectory(dxgkrnl)
+endif()
+
+if(BUILD_TESTING AND HOST_TEST_BOOTLOADER)
+    add_subdirectory(bootloader)
 endif()
 
 if(BUILD_TESTING AND HOST_TEST_NDIS)
