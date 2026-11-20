@@ -265,6 +265,54 @@ static const KDB_TYPE_FIELD KdbpObjectHeaderFields[] =
     KDB_FIELD(OBJECT_HEADER, Body, "QUAD", KdbFieldEmbedded)
 };
 
+static const KDB_TYPE_FIELD KdbpHiveBaseBlockFields[] =
+{
+    KDB_FIELD(HBASE_BLOCK, Signature, "ULONG", KdbFieldValue),
+    KDB_FIELD(HBASE_BLOCK, Sequence1, "ULONG", KdbFieldValue),
+    KDB_FIELD(HBASE_BLOCK, Sequence2, "ULONG", KdbFieldValue),
+    KDB_FIELD(HBASE_BLOCK, TimeStamp, "LARGE_INTEGER", KdbFieldValue),
+    KDB_FIELD(HBASE_BLOCK, Major, "ULONG", KdbFieldValue),
+    KDB_FIELD(HBASE_BLOCK, Minor, "ULONG", KdbFieldValue),
+    KDB_FIELD(HBASE_BLOCK, Type, "ULONG", KdbFieldValue),
+    KDB_FIELD(HBASE_BLOCK, Format, "ULONG", KdbFieldValue),
+    KDB_FIELD(HBASE_BLOCK, RootCell, "HCELL_INDEX", KdbFieldValue),
+    KDB_FIELD(HBASE_BLOCK, Length, "ULONG", KdbFieldValue)
+};
+
+static const KDB_TYPE_FIELD KdbpHiveFields[] =
+{
+    KDB_FIELD(HHIVE, Signature, "ULONG", KdbFieldValue),
+    KDB_FIELD(HHIVE, BaseBlock, "HBASE_BLOCK *", KdbFieldPointer),
+    KDB_FIELD(HHIVE, DirtyCount, "ULONG", KdbFieldValue),
+    KDB_FIELD(HHIVE, DirtyAlloc, "ULONG", KdbFieldValue),
+    KDB_FIELD(HHIVE, Cluster, "ULONG", KdbFieldValue),
+    KDB_FIELD(HHIVE, DirtyFlag, "UCHAR", KdbFieldValue),
+    KDB_FIELD(HHIVE, HiveFlags, "ULONG", KdbFieldValue),
+    KDB_FIELD(HHIVE, FlusherFlags, "ULONG", KdbFieldValue),
+    KDB_FIELD(HHIVE, CurrentLog, "ULONG", KdbFieldValue),
+    KDB_FIELD(HHIVE, CurrentLogSequence, "ULONG", KdbFieldValue),
+    KDB_FIELD(HHIVE, CurrentLogOffset, "ULONG", KdbFieldValue),
+    KDB_FIELD(HHIVE, LogFileSizeCap, "ULONG", KdbFieldValue),
+    KDB_FIELD(HHIVE, PrimaryFileValid, "BOOLEAN", KdbFieldValue),
+    KDB_FIELD(HHIVE, BaseBlockDirty, "BOOLEAN", KdbFieldValue),
+    KDB_FIELD(HHIVE, Version, "ULONG", KdbFieldValue)
+};
+
+static const KDB_TYPE_FIELD KdbpConfigHiveFields[] =
+{
+    KDB_FIELD(CMHIVE, Hive, "HHIVE", KdbFieldEmbedded),
+    KDB_FIELD(CMHIVE, HiveList, "LIST_ENTRY", KdbFieldEmbedded),
+    KDB_FIELD(CMHIVE, FlushBaseBlockDirty, "BOOLEAN", KdbFieldValue),
+    KDB_FIELD(CMHIVE, ActualFileSize, "LARGE_INTEGER", KdbFieldValue),
+    KDB_FIELD(CMHIVE, FileFullPath, "UNICODE_STRING", KdbFieldUnicode),
+    KDB_FIELD(CMHIVE, FileUserName, "UNICODE_STRING", KdbFieldUnicode),
+    KDB_FIELD(CMHIVE, HiveRootPath, "UNICODE_STRING", KdbFieldUnicode),
+    KDB_FIELD(CMHIVE, RootKcb, "CM_KEY_CONTROL_BLOCK *", KdbFieldPointer),
+    KDB_FIELD(CMHIVE, Frozen, "BOOLEAN", KdbFieldValue),
+    KDB_FIELD(CMHIVE, Flags, "ULONG", KdbFieldValue),
+    KDB_FIELD(CMHIVE, DirtyTime, "ULONGLONG", KdbFieldValue)
+};
+
 static const KDB_TYPE KdbpTypes[] =
 {
     KDB_TYPE_ENTRY(LIST_ENTRY, KdbpListEntryFields),
@@ -282,7 +330,10 @@ static const KDB_TYPE KdbpTypes[] =
     KDB_TYPE_ENTRY(IO_STACK_LOCATION, KdbpStackLocationFields),
     KDB_TYPE_ENTRY(FILE_OBJECT, KdbpFileObjectFields),
     KDB_TYPE_ENTRY(MDL, KdbpMdlFields),
-    KDB_TYPE_ENTRY(OBJECT_HEADER, KdbpObjectHeaderFields)
+    KDB_TYPE_ENTRY(OBJECT_HEADER, KdbpObjectHeaderFields),
+    KDB_TYPE_ENTRY(CMHIVE, KdbpConfigHiveFields),
+    KDB_TYPE_ENTRY(HHIVE, KdbpHiveFields),
+    KDB_TYPE_ENTRY(HBASE_BLOCK, KdbpHiveBaseBlockFields)
 };
 
 /* PRIVATE FUNCTIONS **********************************************************/

@@ -932,6 +932,20 @@ KdbpTestWalks(VOID)
     KdbpTestCommand("!timer", "timers queued", "The list");
     KdbpTestCommand("!ready", "Ready queues", "The list");
 
+    KdbpTestCommand("dt _CMHIVE", "FileFullPath", "does not know");
+    KdbpTestCommand("dt HHIVE", "BaseBlock", "does not know");
+    KdbpTestCommand("dt nt!_HBASE_BLOCK", "Sequence1", "does not know");
+    if (!IsListEmpty(&CmpHiveListHead))
+    {
+        PCMHIVE Hive = CONTAINING_RECORD(CmpHiveListHead.Flink, CMHIVE, HiveList);
+        CHAR Line[KDB_TEST_LINE_MAX];
+
+        KdbpTestFormat(Line, "dt CMHIVE 0x%p", Hive);
+        KdbpTestCommand(Line, "FileUserName", "??");
+        KdbpTestFormat(Line, "dt HHIVE 0x%p", &Hive->Hive);
+        KdbpTestCommand(Line, "0xbee0bee0", "??");
+    }
+
     /* A back trace from the stop reaches its callers, and every one of them is code of a loaded image */
     if ((KdbCurrentTrapFrame != NULL) &&
         ((ULONG_PTR)KeGetContextPc(KdbCurrentTrapFrame) > (ULONG_PTR)MmHighestUserAddress))
