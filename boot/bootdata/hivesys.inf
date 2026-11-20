@@ -2452,7 +2452,7 @@ HKLM,"SYSTEM\CurrentControlSet\Services\PlugPlay","ErrorControl",0x00010001,0x00
 HKLM,"SYSTEM\CurrentControlSet\Services\PlugPlay","Group",0x00000000,"PlugPlay"
 HKLM,"SYSTEM\CurrentControlSet\Services\PlugPlay","ImagePath",0x00020000,"%SystemRoot%\system32\svchost.exe -k DcomLaunch"
 HKLM,"SYSTEM\CurrentControlSet\Services\PlugPlay","ObjectName",0x00000000,"LocalSystem"
-HKLM,"SYSTEM\CurrentControlSet\Services\PlugPlay","Start",0x00010001,0x00000003
+HKLM,"SYSTEM\CurrentControlSet\Services\PlugPlay","Start",0x00010001,0x00000002
 HKLM,"SYSTEM\CurrentControlSet\Services\PlugPlay","Type",0x00010001,0x00000020
 HKLM,"SYSTEM\CurrentControlSet\Services\PlugPlay\Parameters","ServiceDll",0x00020000,"%SystemRoot%\system32\umpnpmgr.dll"
 
@@ -2500,7 +2500,7 @@ HKLM,"SYSTEM\CurrentControlSet\Services\Seclogon","ErrorControl",0x00010001,0x00
 HKLM,"SYSTEM\CurrentControlSet\Services\Seclogon","Group",0x00000000,"SchedulerGroup"
 HKLM,"SYSTEM\CurrentControlSet\Services\Seclogon","ImagePath",0x00020000,"%SystemRoot%\system32\svchost.exe -k netsvcs"
 HKLM,"SYSTEM\CurrentControlSet\Services\Seclogon","ObjectName",0x00000000,"LocalSystem"
-HKLM,"SYSTEM\CurrentControlSet\Services\Seclogon","Start",0x00010001,0x00000002
+HKLM,"SYSTEM\CurrentControlSet\Services\Seclogon","Start",0x00010001,0x00000003
 HKLM,"SYSTEM\CurrentControlSet\Services\Seclogon","Type",0x00010001,0x00000020
 
 ; Windows Time service
@@ -2546,7 +2546,13 @@ HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","Description",0x00000000,"Mana
 HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","ErrorControl",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","ImagePath",0x00020000,"%SystemRoot%\system32\scardsvr.exe"
 HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","ObjectName",0x00000000,"LocalSystem"
-HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","Start",0x00010001,0x00000002
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","Start",0x00010001,0x00000003
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr\TriggerInfo\0","Type",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr\TriggerInfo\0","Action",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr\TriggerInfo\0","GUID",0x00000001,30,52,dd,50,8a,ba,d1,11,bf,5d,00,00,f8,05,f5,30
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr\TriggerInfo\1","Type",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr\TriggerInfo\1","Action",0x00010001,0x00000001
+HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr\TriggerInfo\1","GUID",0x00000001,61,81,1d,12,6d,86,24,4a,ba,58,90,58,94,0c,0d,47
 HKLM,"SYSTEM\CurrentControlSet\Services\SCardSvr","Type",0x00010001,0x00000010
 
 ; Simple TCP services
@@ -2612,7 +2618,7 @@ HKLM,"SYSTEM\CurrentControlSet\Services\wuauserv","Description",0x00000000,%WUAU
 HKLM,"SYSTEM\CurrentControlSet\Services\wuauserv","ErrorControl",0x00010001,0x00000001
 HKLM,"SYSTEM\CurrentControlSet\Services\wuauserv","ImagePath",0x00020000,"%SystemRoot%\system32\svchost.exe -k netsvcs"
 HKLM,"SYSTEM\CurrentControlSet\Services\wuauserv","ObjectName",0x00000000,"LocalSystem"
-HKLM,"SYSTEM\CurrentControlSet\Services\wuauserv","Start",0x00010001,0x00000002
+HKLM,"SYSTEM\CurrentControlSet\Services\wuauserv","Start",0x00010001,0x00000003
 HKLM,"SYSTEM\CurrentControlSet\Services\wuauserv","Type",0x00010001,0x00000020
 HKLM,"SYSTEM\CurrentControlSet\Services\wuauserv\Parameters","ServiceDll",0x00020000,"%SystemRoot%\system32\wuauserv.dll"
 
