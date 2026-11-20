@@ -514,6 +514,14 @@ DWORD RunInstall(HWND owner, const DeviceInfo &device, const CatalogUpdate &upda
         else if (order == DriverOrder::Older)
             error = ERROR_LNTDRV_NOT_NEWER;
     }
+    if (!error)
+    {
+        std::wstring protectedFile;
+
+        error = FindProtectedFile(driver, protectedFile);
+        if (error == ERROR_LNTDRV_PROTECTED_FILE)
+            detail = protectedFile;
+    }
     if (!error && IsCancelled(cancel))
         error = ERROR_CANCELLED;
     if (!error)

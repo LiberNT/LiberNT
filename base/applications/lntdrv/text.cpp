@@ -175,6 +175,8 @@ std::wstring ErrorText(DWORD error)
             return LoadText(IDS_ERROR_OTHER_ARCH);
         case ERROR_LNTDRV_OTHER_WINDOWS:
             return LoadText(IDS_NOTE_OTHER_WINDOWS);
+        case ERROR_LNTDRV_PROTECTED_FILE:
+            return LoadText(IDS_ERROR_PROTECTED);
     }
     if (IsOfflineError(error))
         return LoadText(IDS_ERROR_OFFLINE);

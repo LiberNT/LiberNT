@@ -188,4 +188,5 @@ BEGIN
     IDS_PROGRESS_DOWNLOADING "Downloading"
     IDS_SPEED_KB "%1 KB/s"
     IDS_SPEED_MB "%1 MB/s"
+    IDS_ERROR_PROTECTED "The package would replace a protected system file."
 END

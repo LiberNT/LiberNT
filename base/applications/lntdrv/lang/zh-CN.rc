@@ -195,4 +195,5 @@ BEGIN
     IDS_PROGRESS_DOWNLOADING "正在下载"
     IDS_SPEED_KB "%1 KB/秒"
     IDS_SPEED_MB "%1 MB/秒"
+    IDS_ERROR_PROTECTED "此程序包会替换受保护的系统文件。"
 END

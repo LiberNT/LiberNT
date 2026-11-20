@@ -15,6 +15,7 @@
 #include <newdev.h>
 #include <shlobj.h>
 #include <sddl.h>
+#include <sfc.h>
 
 #include <algorithm>
 #include <wctype.h>
@@ -951,6 +952,23 @@ bool FunctionDriverInf(const std::wstring &inf)
     return !IsEqualGUID(guid, GUID_DEVCLASS_EXTENSION) && !IsEqualGUID(guid, GUID_DEVCLASS_SOFTWARECOMPONENT);
 }
 
+std::wstring DriverSection(HDEVINFO set, PSP_DEVINFO_DATA data, PSP_DRVINFO_DATA_W driver)
+{
+    std::vector<BYTE> buffer;
+    PSP_DRVINFO_DETAIL_DATA_W detail;
+    DWORD size = 0;
+
+    SetupDiGetDriverInfoDetailW(set, data, driver, NULL, 0, &size);
+    if (size < sizeof(SP_DRVINFO_DETAIL_DATA_W))
+        return std::wstring();
+    buffer.resize(size);
+    detail = (PSP_DRVINFO_DETAIL_DATA_W)buffer.data();
+    detail->cbSize = sizeof(*detail);
+    if (!SetupDiGetDriverInfoDetailW(set, data, driver, detail, size, NULL))
+        return std::wstring();
+    return detail->SectionName;
+}
+
 DWORD FindPackageDriver(const DeviceInfo &device, const std::vector<std::wstring> &infs, PackageDriver &best)
 {
     HDEVINFO set = SetupDiCreateDeviceInfoList(NULL, NULL);
@@ -997,6 +1015,7 @@ DWORD FindPackageDriver(const DeviceInfo &device, const std::vector<std::wstring
             candidate.Date = driver.DriverDate;
             candidate.Version = driver.DriverVersion;
             candidate.Rank = install.Rank;
+            candidate.Section = DriverSection(set, &data, &driver);
             if (!found || BetterDriver(candidate, best))
             {
                 best = candidate;
@@ -1007,6 +1026,56 @@ DWORD FindPackageDriver(const DeviceInfo &device, const std::vector<std::wstring
     SetupDiDestroyDriverInfoList(set, &data, SPDIT_COMPATDRIVER);
     SetupDiDestroyDeviceInfoList(set);
     return found ? ERROR_SUCCESS : ERROR_NO_COMPAT_DRIVERS;
+}
+
+UINT CALLBACK ProtectedFileScan(PVOID context, UINT notification, UINT_PTR param1, UINT_PTR param2)
+{
+    std::wstring *file = (std::wstring *)context;
+    PCWSTR target = (PCWSTR)param1;
+
+    UNREFERENCED_PARAMETER(param2);
+    if (notification != SPFILENOTIFY_QUEUESCAN || !target || !SfcIsFileProtected(NULL, target))
+        return NO_ERROR;
+    *file = target;
+    return ERROR_LNTDRV_PROTECTED_FILE;
+}
+
+DWORD FindProtectedFile(const PackageDriver &driver, std::wstring &file)
+{
+    WCHAR section[MAX_PATH];
+    std::wstring source = driver.Inf.substr(0, driver.Inf.find_last_of(L'\\') + 1);
+    HSPFILEQ queue;
+    HINF inf;
+    DWORD result = 0, error = ERROR_SUCCESS;
+
+    file.clear();
+    if (driver.Section.empty())
+        return ERROR_SECTION_NOT_FOUND;
+    inf = SetupOpenInfFileW(driver.Inf.c_str(), NULL, INF_STYLE_WIN4, NULL);
+    if (inf == INVALID_HANDLE_VALUE)
+        return GetLastError();
+    if (!SetupDiGetActualSectionToInstallW(inf, driver.Section.c_str(), section, _countof(section), NULL, NULL))
+    {
+        error = GetLastError();
+        SetupCloseInfFile(inf);
+        return error;
+    }
+    queue = SetupOpenFileQueue();
+    if (queue == INVALID_HANDLE_VALUE)
+    {
+        error = GetLastError();
+        SetupCloseInfFile(inf);
+        return error;
+    }
+    if (!SetupInstallFilesFromInfSectionW(inf, NULL, queue, section, source.c_str(), SP_COPY_NEWER))
+        error = GetLastError();
+    if (!error)
+        SetupScanFileQueueW(queue, SPQ_SCAN_USE_CALLBACK, NULL, ProtectedFileScan, &file, &result);
+    SetupCloseFileQueue(queue);
+    SetupCloseInfFile(inf);
+    if (error)
+        return error;
+    return file.empty() ? ERROR_SUCCESS : ERROR_LNTDRV_PROTECTED_FILE;
 }
 
 DWORD InstallPackageDriver(HWND owner, const PackageDriver &driver, bool force, BOOL &reboot)

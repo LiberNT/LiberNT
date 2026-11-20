@@ -46,6 +46,7 @@ struct PackageDriver
     FILETIME Date = {};
     DWORDLONG Version = 0;
     DWORD Rank = MAXDWORD;
+    std::wstring Section;
 };
 
 struct HistoryEntry
@@ -101,6 +102,7 @@ bool FunctionDriverInf(const std::wstring &inf);
 DWORD FindPackageDriver(const DeviceInfo &device, const std::vector<std::wstring> &infs, PackageDriver &driver);
 std::vector<std::wstring> PackageInfs(const std::wstring &directory);
 DWORD InstallPackageDriver(HWND owner, const PackageDriver &driver, bool force, BOOL &reboot);
+DWORD FindProtectedFile(const PackageDriver &driver, std::wstring &file);
 DWORD RemoveCatalogDriver(const HistoryEntry &entry, BOOL &reboot);
 DWORD RollBackDriver(HWND owner, const HistoryEntry &entry, BOOL &reboot);
 

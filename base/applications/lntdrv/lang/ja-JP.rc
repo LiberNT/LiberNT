@@ -195,4 +195,5 @@ BEGIN
     IDS_PROGRESS_DOWNLOADING "ダウンロードしています"
     IDS_SPEED_KB "%1 KB/秒"
     IDS_SPEED_MB "%1 MB/秒"
+    IDS_ERROR_PROTECTED "このパッケージは保護されたシステム ファイルを置き換えます。"
 END

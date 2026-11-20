@@ -155,3 +155,4 @@
 #define IDS_PROGRESS_DOWNLOADING     2134
 #define IDS_SPEED_KB                 2135
 #define IDS_SPEED_MB                 2136
+#define IDS_ERROR_PROTECTED          2137
