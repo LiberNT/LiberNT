@@ -160,7 +160,7 @@ ReadTargetSettings(
            *Settings->MachineKey && *Settings->UserKey &&
            *Settings->SystemVolume && *Settings->SystemDrive &&
            *Settings->SystemRoot &&
-           (Settings->Upgrade || (*Settings->ComputerName && *Settings->UserName));
+           (Settings->Upgrade || *Settings->ComputerName);
 }
 
 static NTSTATUS
@@ -638,6 +638,80 @@ done:
         LsaFreeMemory(AccountDomain);
     if (PolicyHandle)
         LsaClose(PolicyHandle);
+
+    return Status;
+}
+
+static NTSTATUS
+EnableTargetAdministrator(
+    _In_ PCWSTR Password,
+    _Out_writes_(cchName) PWSTR Name,
+    _In_ SIZE_T cchName)
+{
+    PPOLICY_ACCOUNT_DOMAIN_INFO AccountDomain = NULL;
+    LSA_OBJECT_ATTRIBUTES ObjectAttributes;
+    LSA_HANDLE PolicyHandle;
+    SAM_HANDLE ServerHandle = NULL;
+    SAM_HANDLE DomainHandle = NULL;
+    SAM_HANDLE UserHandle = NULL;
+    PUSER_ACCOUNT_NAME_INFORMATION NameInfo = NULL;
+    PUSER_CONTROL_INFORMATION ControlInfo = NULL;
+    USER_SET_PASSWORD_INFORMATION PasswordInfo;
+    NTSTATUS Status;
+
+    ZeroMemory(&ObjectAttributes, sizeof(ObjectAttributes));
+    ObjectAttributes.Length = sizeof(ObjectAttributes);
+    Status = LsaOpenPolicy(NULL, &ObjectAttributes, POLICY_VIEW_LOCAL_INFORMATION, &PolicyHandle);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = LsaQueryInformationPolicy(PolicyHandle, PolicyAccountDomainInformation, (PVOID*)&AccountDomain);
+    LsaClose(PolicyHandle);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = SamConnect(NULL, &ServerHandle, SAM_SERVER_CONNECT | SAM_SERVER_LOOKUP_DOMAIN, NULL);
+    if (NT_SUCCESS(Status))
+    {
+        Status = SamOpenDomain(ServerHandle,
+                               DOMAIN_LOOKUP | DOMAIN_READ_PASSWORD_PARAMETERS,
+                               AccountDomain->DomainSid,
+                               &DomainHandle);
+    }
+    if (NT_SUCCESS(Status))
+        Status = SamOpenUser(DomainHandle, USER_ALL_ACCESS, DOMAIN_USER_RID_ADMIN, &UserHandle);
+    if (NT_SUCCESS(Status))
+        Status = SamQueryInformationUser(UserHandle, UserAccountNameInformation, (PVOID*)&NameInfo);
+    if (NT_SUCCESS(Status) &&
+        FAILED(StringCchCopyNW(Name, cchName, NameInfo->UserName.Buffer, NameInfo->UserName.Length / sizeof(WCHAR))))
+    {
+        Status = STATUS_BUFFER_TOO_SMALL;
+    }
+    if (NT_SUCCESS(Status))
+    {
+        RtlInitUnicodeString(&PasswordInfo.Password, Password);
+        PasswordInfo.PasswordExpired = FALSE;
+        Status = SamSetInformationUser(UserHandle, UserSetPasswordInformation, &PasswordInfo);
+    }
+    if (NT_SUCCESS(Status))
+        Status = SamQueryInformationUser(UserHandle, UserControlInformation, (PVOID*)&ControlInfo);
+    if (NT_SUCCESS(Status))
+    {
+        ControlInfo->UserAccountControl &= ~USER_ACCOUNT_DISABLED;
+        ControlInfo->UserAccountControl |= USER_DONT_EXPIRE_PASSWORD;
+        Status = SamSetInformationUser(UserHandle, UserControlInformation, ControlInfo);
+    }
+
+    if (ControlInfo)
+        SamFreeMemory(ControlInfo);
+    if (NameInfo)
+        SamFreeMemory(NameInfo);
+    if (UserHandle)
+        SamCloseHandle(UserHandle);
+    if (DomainHandle)
+        SamCloseHandle(DomainHandle);
+    if (ServerHandle)
+        SamCloseHandle(ServerHandle);
+    LsaFreeMemory(AccountDomain);
 
     return Status;
 }
@@ -1213,7 +1287,6 @@ ConfigureTargetSystem(
     if (!Settings->Upgrade)
     {
         DoWriteInstallationType(INSTALLATION_TYPE_WORKSTATION);
-        WriteOwnerSettings(Settings->UserName, L"");
         Error = WriteTargetComputerName(Settings);
         if (Error != ERROR_SUCCESS)
             return Error;
@@ -1244,11 +1317,15 @@ ConfigureTargetSystem(
     ReportTargetPhase(8);
     if (!Settings->Upgrade)
     {
-        Status = CreateTargetAccount(Settings->UserName, Settings->Password);
+        if (*Settings->UserName)
+            Status = CreateTargetAccount(Settings->UserName, Settings->Password);
+        else
+            Status = EnableTargetAdministrator(Settings->Password, Settings->UserName, ARRAYSIZE(Settings->UserName));
         Error = NT_SUCCESS(Status) ? WriteTargetLogon(Settings) : RtlNtStatusToDosError(Status);
         SecureZeroMemory(Settings->Password, sizeof(Settings->Password));
         if (Error != ERROR_SUCCESS)
             return Error;
+        WriteOwnerSettings(Settings->UserName, L"");
     }
 
     ReportTargetPhase(9);

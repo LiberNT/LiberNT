@@ -6,6 +6,7 @@
  */
 
 #include "libernt.h"
+#include <ntsecapi.h>
 #include <tzlib.h>
 #include "tzdefault.h"
 
@@ -102,6 +103,47 @@ IsExistingAccountName(
     SID_NAME_USE Use;
 
     return LookupAccountNameW(NULL, Name, Sid, &cbSid, Domain, &cchDomain, &Use);
+}
+
+BOOL
+GetBuiltinAdministratorName(
+    _Out_writes_(cchName) PWSTR Name,
+    _In_ DWORD cchName)
+{
+    PPOLICY_ACCOUNT_DOMAIN_INFO AccountDomain = NULL;
+    LSA_OBJECT_ATTRIBUTES ObjectAttributes;
+    LSA_HANDLE PolicyHandle;
+    BYTE Sid[SECURITY_MAX_SID_SIZE];
+    DWORD cbSid = sizeof(Sid);
+    WCHAR Domain[MAX_PATH];
+    DWORD cchDomain = ARRAYSIZE(Domain);
+    SID_NAME_USE Use;
+    NTSTATUS Status;
+    BOOL Result;
+
+    ZeroMemory(&ObjectAttributes, sizeof(ObjectAttributes));
+    ObjectAttributes.Length = sizeof(ObjectAttributes);
+    Status = LsaOpenPolicy(NULL, &ObjectAttributes, POLICY_VIEW_LOCAL_INFORMATION, &PolicyHandle);
+    if (NT_SUCCESS(Status))
+    {
+        Status = LsaQueryInformationPolicy(PolicyHandle, PolicyAccountDomainInformation, (PVOID*)&AccountDomain);
+        LsaClose(PolicyHandle);
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        SetLastError(LsaNtStatusToWinError(Status));
+        return FALSE;
+    }
+
+    Result = CreateWellKnownSid(WinAccountAdministratorSid, AccountDomain->DomainSid, Sid, &cbSid) &&
+             LookupAccountSidW(NULL, Sid, Name, &cchName, Domain, &cchDomain, &Use);
+    LsaFreeMemory(AccountDomain);
+    if (Result && Use != SidTypeUser)
+    {
+        SetLastError(ERROR_NO_SUCH_USER);
+        return FALSE;
+    }
+    return Result;
 }
 
 static LONG
@@ -262,12 +304,12 @@ ApplyAccountSettings(
         ErrorId = IDS_ERROR_COMPUTERNAME;
         FocusId = IDC_COMPUTERNAME;
     }
-    else if (!IsValidSetupUserName(UserName))
+    else if (UserName[0] && !IsValidSetupUserName(UserName))
     {
         ErrorId = IDS_ERROR_USERNAME;
         FocusId = IDC_USERNAME;
     }
-    else if (_wcsicmp(UserName, ComputerName) == 0 || IsExistingAccountName(UserName))
+    else if (UserName[0] && (_wcsicmp(UserName, ComputerName) == 0 || IsExistingAccountName(UserName)))
     {
         ErrorId = IDS_ERROR_USEREXISTS;
         FocusId = IDC_USERNAME;
@@ -320,6 +362,14 @@ ApplyAccountSettings(
     }
 
     return TRUE;
+}
+
+static VOID
+UpdateAccountNextButton(
+    _In_ HWND hwndDlg)
+{
+    SetupFrameSetButtonText(hwndDlg, IDC_FRAME_NEXT,
+                            GetWindowTextLengthW(GetDlgItem(hwndDlg, IDC_USERNAME)) ? IDS_NEXTBTN : IDS_SKIPBTN);
 }
 
 INT_PTR
@@ -376,9 +426,12 @@ AccountPageProc(
         case WM_COMMAND:
             if (HIWORD(wParam) == CBN_SELCHANGE && LOWORD(wParam) == IDC_TIMEZONELIST)
                 UpdateAutoDaylight(hwndDlg, TRUE);
+            else if (HIWORD(wParam) == EN_CHANGE && LOWORD(wParam) == IDC_USERNAME && IsWindowVisible(hwndDlg))
+                UpdateAccountNextButton(hwndDlg);
             break;
 
         case SPN_SETACTIVE:
+            UpdateAccountNextButton(hwndDlg);
             SetFocus(GetDlgItem(hwndDlg, IDC_USERNAME));
             return TRUE;
 

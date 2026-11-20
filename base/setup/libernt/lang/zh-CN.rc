@@ -190,6 +190,7 @@ BEGIN
     IDS_NEXTBTN "下一步(&N)"
     IDS_CANCELBTN "取消"
     IDS_CLOSEBTN "关闭(&C)"
+    IDS_SKIPBTN "跳过(&S)"
 END
 
 STRINGTABLE

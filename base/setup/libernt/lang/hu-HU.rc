@@ -192,6 +192,7 @@ BEGIN
     IDS_NEXTBTN "&Next"
     IDS_CANCELBTN "Cancel"
     IDS_CLOSEBTN "&Close"
+    IDS_SKIPBTN "&Skip"
 END
 
 STRINGTABLE
