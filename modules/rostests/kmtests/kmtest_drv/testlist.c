@@ -308,6 +308,7 @@ KMT_TESTFUNC Test_KeArm64DpcIpi;
 KMT_TESTFUNC Test_KeDeviceQueue;
 KMT_TESTFUNC Test_KeDpc;
 KMT_TESTFUNC Test_KeDpcFlush;
+KMT_TESTFUNC Test_KeDpcInsertRace;
 KMT_TESTFUNC Test_KeDpcReadyThread;
 KMT_TESTFUNC Test_KeDpcRemove;
 KMT_TESTFUNC Test_KeEvent;
@@ -789,6 +790,7 @@ const KMT_TEST TestList[] =
     { "KeDeviceQueue",                      Test_KeDeviceQueue },
     { "KeDpc",                              Test_KeDpc },
     { "KeDpcFlush",                         Test_KeDpcFlush },
+    { "KeDpcInsertRace",                    Test_KeDpcInsertRace },
     { "KeDpcReadyThread",                   Test_KeDpcReadyThread },
     { "KeDpcRemove",                        Test_KeDpcRemove },
     { "KeEvent",                            Test_KeEvent },
