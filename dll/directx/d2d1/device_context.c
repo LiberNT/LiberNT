@@ -1737,16 +1737,32 @@ static void STDMETHODCALLTYPE d2d_device_context_DrawSpriteBatch(ID2D1DeviceCont
 static HRESULT STDMETHODCALLTYPE d2d_device_context_CreateSvgDocument(ID2D1DeviceContext6 *iface,
         IStream *input_xml_stream, D2D1_SIZE_F viewport_size, ID2D1SvgDocument **svg_document)
 {
-    FIXME("iface %p, input_xml_stream %p, svg_document %p stub!\n", iface, input_xml_stream,
-            svg_document);
+    struct d2d_device_context *context = impl_from_ID2D1DeviceContext(iface);
 
-    return E_NOTIMPL;
+    TRACE("iface %p, input_xml_stream %p, viewport_size {%.8e, %.8e}, svg_document %p.\n", iface,
+            input_xml_stream, viewport_size.width, viewport_size.height, svg_document);
+
+    if (!svg_document)
+        return E_INVALIDARG;
+    return d2d_svg_document_create(context->factory, input_xml_stream, viewport_size, svg_document);
 }
 
 static void STDMETHODCALLTYPE d2d_device_context_DrawSvgDocument(ID2D1DeviceContext6 *iface,
         ID2D1SvgDocument *svg_document)
 {
-    FIXME("iface %p, svg_document %p stub!\n", iface, svg_document);
+    struct d2d_device_context *context = impl_from_ID2D1DeviceContext(iface);
+
+    TRACE("iface %p, svg_document %p.\n", iface, svg_document);
+
+    if (!svg_document)
+        return;
+    if (context->target.type == D2D_TARGET_COMMAND_LIST)
+    {
+        /* TODO: recording SVG documents into command lists */
+        FIXME("Command list target not supported.\n");
+        return;
+    }
+    d2d_svg_document_draw(svg_document, (ID2D1DeviceContext *)iface);
 }
 
 static HRESULT STDMETHODCALLTYPE d2d_device_context_CreateColorContextFromDxgiColorSpace(

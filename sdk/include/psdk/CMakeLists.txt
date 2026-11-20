@@ -56,6 +56,7 @@ list(APPEND SOURCE
     d2d1_1.idl
     d2d1_2.idl
     d2d1_3.idl
+    d2d1svg.idl
     d2d1effectauthor.idl
     d2d1effects.idl
     d2d1effects_1.idl
