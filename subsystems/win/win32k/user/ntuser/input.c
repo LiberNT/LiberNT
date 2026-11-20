@@ -565,20 +565,31 @@ InputDevicesStop(VOID)
 
 static
 NTSTATUS
+InputDeviceOpenSynchronous(
+    _In_ PINPUT_DEVICE Device,
+    _Out_ PHANDLE Handle)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    IO_STATUS_BLOCK Block;
+
+    InitializeObjectAttributes(&ObjectAttributes, &Device->Path, OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, NULL, NULL);
+    return ZwOpenFile(Handle, SYNCHRONIZE | FILE_READ_DATA, &ObjectAttributes, &Block,
+                      FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_SYNCHRONOUS_IO_NONALERT);
+}
+
+static
+NTSTATUS
 InputDeviceControl(
     _In_ PINPUT_DEVICE Device,
     _In_ ULONG IoControlCode,
     _In_reads_bytes_(InputLength) PVOID Input,
     _In_ ULONG InputLength)
 {
-    OBJECT_ATTRIBUTES ObjectAttributes;
     IO_STATUS_BLOCK Block;
     HANDLE Handle;
     NTSTATUS Status;
 
-    InitializeObjectAttributes(&ObjectAttributes, &Device->Path, OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, NULL, NULL);
-    Status = ZwOpenFile(&Handle, SYNCHRONIZE | FILE_READ_DATA, &ObjectAttributes, &Block,
-                        FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_SYNCHRONOUS_IO_NONALERT);
+    Status = InputDeviceOpenSynchronous(Device, &Handle);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -630,6 +641,8 @@ InputKeyboardConnected(
     _In_ PINPUT_DEVICE_STATE State,
     _In_ PINPUT_DEVICE Device)
 {
+    HANDLE Handle;
+
     if (gKeyboardConnected)
     {
         UserEnterShared();
@@ -642,8 +655,11 @@ InputKeyboardConnected(
     gKeyboardConnected = TRUE;
     TRACE("Keyboard connected!\n");
     InputDeviceLock(State);
-    if (Device->Handle)
-        UserInitKeyboard(Device->Handle);
+    if (Device->Handle && NT_SUCCESS(InputDeviceOpenSynchronous(Device, &Handle)))
+    {
+        UserInitKeyboard(Handle);
+        ZwClose(Handle);
+    }
     InputDeviceUnlock(State);
     UserEnterExclusive();
     UserRegisterHotKey(PWND_BOTTOM, IDHK_WINKEY, MOD_WIN, 0);
@@ -664,6 +680,7 @@ InputDeviceAttach(
     OBJECT_ATTRIBUTES ObjectAttributes, EventAttributes;
     IO_STATUS_BLOCK Iosb;
     PINPUT_DEVICE Device;
+    HANDLE Handle;
     ULONG Index, Free = INPUT_MAX_DEVICES;
     NTSTATUS Status;
 
@@ -731,8 +748,11 @@ InputDeviceAttach(
     else
     {
         InputDeviceLock(State);
-        if (Device->Handle)
-            RawInputSetMouseAttributes(Device->Handle);
+        if (Device->Handle && NT_SUCCESS(InputDeviceOpenSynchronous(Device, &Handle)))
+        {
+            RawInputSetMouseAttributes(Handle);
+            ZwClose(Handle);
+        }
         InputDeviceUnlock(State);
     }
     RawInputUpdateDevices();
