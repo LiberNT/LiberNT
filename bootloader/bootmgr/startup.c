@@ -51,12 +51,11 @@ BmChooseStartupSettings(
     _Out_ PULONG Tool)
 {
     PCSTR Names[RTL_NUMBER_OF(BmStartupProfiles) + BM_MAX_TOOLS + 1];
-    PCSTR Descriptions[RTL_NUMBER_OF(BmStartupProfiles) + BM_MAX_TOOLS + 1];
+    PCSTR Descriptions[RTL_NUMBER_OF(BmStartupProfiles) + BM_MAX_TOOLS + 1] = { NULL };
     ULONG Choice = 0, Count = 0, i;
     BOOLEAN Chosen;
 
     RtlZeroMemory(Startup, sizeof(*Startup));
-    RtlZeroMemory(Descriptions, sizeof(Descriptions));
     *Tool = MAXULONG;
 
     for (i = 0; i < RTL_NUMBER_OF(BmStartupProfiles); i++)
