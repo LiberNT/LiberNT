@@ -724,13 +724,33 @@ IopTryUnloadDriver(
         if (Busy) return STATUS_SUCCESS;
     }
 
-    DriverObject->Flags |= DRVO_UNLOAD_INVOKED;
+    if (InterlockedOr((PLONG)&DriverObject->Flags, DRVO_UNLOAD_INVOKED) & DRVO_UNLOAD_INVOKED) return STATUS_SUCCESS;
     DriverObject->DriverUnload(DriverObject);
 
     ObMakeTemporaryObject(DriverObject);
     ObDereferenceObject(DriverObject);
 
     return STATUS_SUCCESS;
+}
+
+/* A PnP driver left with no device object after a remove request is unloaded (unload-routine-environment) */
+VOID
+IopUnloadUnusedPnpDriver(
+    _In_ PDRIVER_OBJECT DriverObject)
+{
+    BOOLEAN Unused;
+    KIRQL OldIrql;
+
+    PAGED_CODE();
+
+    if (IoGetDrvObjExtension(DriverObject)->AddDevice == NULL || DriverObject->DriverUnload == NULL) return;
+
+    /* TODO: unload a driver whose last device, deleted by its remove request, is still referenced, once that reference goes */
+    KeAcquireSpinLock(&IopDeviceTreeLock, &OldIrql);
+    Unused = (DriverObject->DeviceObject == NULL && !(DriverObject->Flags & DRVO_UNLOAD_INVOKED));
+    KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
+
+    if (Unused) IopTryUnloadDriver(DriverObject, FALSE);
 }
 
 NTSTATUS

@@ -70,6 +70,14 @@ add_importlibs(ioremovechild_drv ntoskrnl hal)
 add_rostests_file(TARGET ioremovechild_drv)
 
 #
+# IoRemoveUnload
+#
+add_library(ioremoveunload_drv MODULE IoRemoveUnload_drv.c)
+set_module_type(ioremoveunload_drv kernelmodedriver)
+add_importlibs(ioremoveunload_drv ntoskrnl hal)
+add_rostests_file(TARGET ioremoveunload_drv)
+
+#
 # IoHelper
 #
 list(APPEND IOHELPER_DRV_SOURCE

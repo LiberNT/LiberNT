@@ -670,6 +670,7 @@ list(APPEND KMTEST_SOURCE
     ntos_io/IoAddDeviceUnload_user.c
     ntos_io/IoFilterRequirements_user.c
     ntos_io/IoRemoveChild_user.c
+    ntos_io/IoRemoveUnload_user.c
     ntos_io/IoCreateFile_user.c
     ntos_io/IoDeviceObject_user.c
     ntos_io/IoHandleAccess_user.c
@@ -742,6 +743,8 @@ configure_file(ntos_io/kmtest_filterreq.inf kmtest_filterreq.inf COPYONLY)
 add_rostests_file(FILE "${CMAKE_CURRENT_BINARY_DIR}/kmtest_filterreq.inf")
 configure_file(ntos_io/kmtest_remchild.inf kmtest_remchild.inf COPYONLY)
 add_rostests_file(FILE "${CMAKE_CURRENT_BINARY_DIR}/kmtest_remchild.inf")
+configure_file(ntos_io/kmtest_rmunload.inf kmtest_rmunload.inf COPYONLY)
+add_rostests_file(FILE "${CMAKE_CURRENT_BINARY_DIR}/kmtest_rmunload.inf")
 
 #
 # Group targets
@@ -764,6 +767,7 @@ add_dependencies(kmtest_drivers
     iohelper_drv
     ioreadwrite_drv
     ioremovechild_drv
+    ioremoveunload_drv
     kernel32_drv
     mmmaplockedpagesspecifycache_drv
     ntcreatesection_drv

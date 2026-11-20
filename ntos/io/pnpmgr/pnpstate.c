@@ -1245,6 +1245,67 @@ PiReleaseDeviceResources(
     IopUpdateResourceMapForPnPDevice(DeviceNode);
 }
 
+/* The drivers attached above a PDO, held across the remove request that may leave them without a device */
+static
+PDRIVER_OBJECT *
+PiReferenceStackDrivers(
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
+    _Out_ PULONG Count)
+{
+    PDRIVER_OBJECT *Drivers;
+    PDEVICE_OBJECT Device;
+    ULONG Size = 0;
+    ULONG Index = 0;
+    KIRQL OldIrql;
+
+    PAGED_CODE();
+
+    *Count = 0;
+
+    KeAcquireSpinLock(&IopDeviceTreeLock, &OldIrql);
+    for (Device = PhysicalDeviceObject->AttachedDevice; Device != NULL; Device = Device->AttachedDevice) Size++;
+    KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
+
+    if (Size == 0) return NULL;
+
+    Drivers = ExAllocatePoolWithTag(PagedPool, Size * sizeof(*Drivers), TAG_IO);
+    if (Drivers == NULL) return NULL;
+
+    KeAcquireSpinLock(&IopDeviceTreeLock, &OldIrql);
+    for (Device = PhysicalDeviceObject->AttachedDevice;
+         Device != NULL && Index < Size;
+         Device = Device->AttachedDevice)
+    {
+        ASSERT(Device->DriverObject != NULL);
+        ObReferenceObject(Device->DriverObject);
+        Drivers[Index++] = Device->DriverObject;
+    }
+    KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
+
+    *Count = Index;
+    return Drivers;
+}
+
+static
+VOID
+PiUnloadRemovedStackDrivers(
+    _In_reads_opt_(Count) PDRIVER_OBJECT *Drivers,
+    _In_ ULONG Count)
+{
+    ULONG Index;
+
+    PAGED_CODE();
+    ASSERT(Drivers != NULL || Count == 0);
+
+    for (Index = 0; Index < Count; Index++)
+    {
+        IopUnloadUnusedPnpDriver(Drivers[Index]);
+        ObDereferenceObject(Drivers[Index]);
+    }
+
+    if (Drivers != NULL) ExFreePoolWithTag(Drivers, TAG_IO);
+}
+
 /* A device that fails once its drivers are added has its stack removed, as a failed start has (IRP_MN_REMOVE_DEVICE) */
 static
 VOID
@@ -1252,9 +1313,13 @@ PiRemoveFailedStack(
     _In_ PDEVICE_NODE DeviceNode)
 {
     IO_STACK_LOCATION StackLocation;
+    PDRIVER_OBJECT *Drivers;
+    ULONG DriverCount;
 
     PAGED_CODE();
     ASSERT(DeviceNode->Flags & DNF_HAS_PROBLEM);
+
+    Drivers = PiReferenceStackDrivers(DeviceNode->PhysicalDeviceObject, &DriverCount);
 
     RtlZeroMemory(&StackLocation, sizeof(StackLocation));
     StackLocation.MajorFunction = IRP_MJ_PNP;
@@ -1272,6 +1337,8 @@ PiRemoveFailedStack(
     if (!(DeviceNode->Flags & DNF_MADEUP)) PiClearDevNodeFlag(DeviceNode, DNF_NO_RESOURCE_REQUIRED);
 
     PiSetDevNodeState(DeviceNode, DeviceNodeRemoved);
+
+    PiUnloadRemovedStackDrivers(Drivers, DriverCount);
 }
 
 static
@@ -1588,6 +1655,8 @@ PiSendRemoval(
     _In_ BOOLEAN Surprise)
 {
     IO_STACK_LOCATION StackLocation;
+    PDRIVER_OBJECT *Drivers = NULL;
+    ULONG DriverCount = 0;
 
     PAGED_CODE();
 
@@ -1602,6 +1671,8 @@ PiSendRemoval(
     StackLocation.MajorFunction = IRP_MJ_PNP;
     StackLocation.MinorFunction = Surprise ? IRP_MN_SURPRISE_REMOVAL
                                            : IRP_MN_REMOVE_DEVICE;
+
+    if (!Surprise) Drivers = PiReferenceStackDrivers(DeviceNode->PhysicalDeviceObject, &DriverCount);
 
     IopSynchronousCall(DeviceNode->PhysicalDeviceObject,
                        &StackLocation,
@@ -1642,6 +1713,8 @@ PiSendRemoval(
                                            : &GUID_DEVICE_SAFE_REMOVAL,
                                   &DeviceNode->InstancePath);
     }
+
+    PiUnloadRemovedStackDrivers(Drivers, DriverCount);
 }
 
 /* A device whose stack was removed while it was present keeps its PDO; once its bus stops reporting it, the PDO gets
