@@ -22,6 +22,7 @@ static ULONG UefiSerialCount;
 static BOOLEAN UefiSerialProbed;
 static BOOLEAN UefiSerialFirmwareDisabled;
 static BOOLEAN UefiSerialUseConsole;
+static BOOLEAN UefiSerialConsoleWritten;
 static BOOLEAN UefiSerialDirect;
 static BOOLEAN UefiSerialConsoleProbed;
 static BOOLEAN UefiSerialConsole;
@@ -222,7 +223,10 @@ UefiSerialPutChar(
         return;
 
     if (UefiSerialUseConsole)
+    {
         GlobalSystemTable->ConOut->OutputString(GlobalSystemTable->ConOut, Text);
+        UefiSerialConsoleWritten = TRUE;
+    }
     else if (FwLateDebugPutChar)
         FwLateDebugPutChar(Character);
 }
@@ -311,6 +315,7 @@ FwDebugPrint(
     if (!UefiSerialProbed && !BootServicesExitedFlag)
         UefiSerialProbe();
 
+    UefiSerialConsoleWritten = FALSE;
     for (Next = Text; *Next; Next++)
     {
         if (*Next == '\n')
@@ -320,7 +325,8 @@ FwDebugPrint(
     UdpLogWrite(Text);
     BootLogWrite(Text);
 
-    if (FwDebugScreen && !BootServicesExitedFlag && GlobalSystemTable && GlobalSystemTable->ConOut)
+    if (FwDebugScreen && !UefiSerialConsoleWritten && !BootServicesExitedFlag && GlobalSystemTable &&
+        GlobalSystemTable->ConOut)
     {
         CHAR16 Wide[128];
         ULONG Count = 0;

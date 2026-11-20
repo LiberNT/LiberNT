@@ -36,6 +36,7 @@ VOID Arm64ClearIdentityMappings(VOID);
 VOID Arm64FindFirmwareWatchdog(const VOID *DeviceTree, ULONG DeviceTreeSize);
 VOID Arm64InstallAppleSmbios(VOID);
 VOID Arm64StopFirmwareWatchdog(VOID);
+VOID Arm64FindFirmwareSart(const VOID *DeviceTree, ULONG DeviceTreeSize);
 BOOLEAN Arm64MapVirtualMemory(ULONGLONG VirtualAddress, ULONGLONG PhysicalAddress, ULONGLONG Size, ULONG Attributes);
 VOID StallExecutionProcessor(ULONG Microseconds);
 VOID Arm64DescribeDeviceTreePlatform(VOID);

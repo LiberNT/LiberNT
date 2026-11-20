@@ -31,6 +31,7 @@ static ULONG OslFbRow;
 static ULONG OslFbColumn;
 static ULONG OslFbColor;
 static BOOLEAN OslFbRowCleared;
+static BOOLEAN OslFbTrapActive;
 
 static
 BOOLEAN
@@ -46,6 +47,150 @@ OslFbTranslates(
     ARM64_ISB();
     Result = ARM64_READ_SYSREG(PAR_EL1);
     return (Result & 1) == 0;
+}
+
+static
+BOOLEAN
+OslArchReadable(
+    _In_ ULONG_PTR Address)
+{
+    if (((ARM64_READ_SYSREG(CURRENTEL) >> 2) & 3) == 2)
+        ARM64_AT(S1E2R, Address);
+    else
+        ARM64_AT(S1E1R, Address);
+    ARM64_ISB();
+    return (ARM64_READ_SYSREG(PAR_EL1) & 1) == 0;
+}
+
+static
+VOID
+OslArchDumpProcessorState(
+    _In_ PCSTR Stage)
+{
+    OslTrace("OS loader: %s: SCTLR %llx TCR %llx MAIR %llx",
+             Stage, ARM64_READ_SYSREG(SCTLR_EL1), ARM64_READ_SYSREG(TCR_EL1), ARM64_READ_SYSREG(MAIR_EL1));
+    OslTrace("OS loader: %s: DAIF %llx ISR %llx MMFR0 %llx EL%llu",
+             Stage, ARM64_READ_SYSREG(DAIF), ARM64_READ_SYSREG(ISR_EL1),
+             ARM64_READ_SYSREG(ID_AA64MMFR0_EL1), (ARM64_READ_SYSREG(CURRENTEL) >> 2) & 3);
+}
+
+static BOOLEAN OslArchFirmwareIsUBoot;
+
+static
+VOID
+OslArchPowerOffProbe(VOID)
+{
+    register ULONG64 Function __asm__("x0") = 0x84000008ULL;
+
+    if (!OslArchFirmwareIsUBoot)
+        return;
+
+    OslTrace("OS loader: asking the firmware to switch the console off");
+    __asm__ __volatile__("smc #0"
+                         : "+r"(Function)
+                         :
+                         : "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11",
+                           "x12", "x13", "x14", "x15", "x16", "x17", "memory");
+    OslTrace("OS loader: the firmware refused to switch the console off: %llx", Function);
+}
+
+static
+VOID
+OslArchHeartbeat(
+    _In_ PCSTR Stage)
+{
+    ULONG64 Frequency = ARM64_READ_SYSREG(CNTFRQ_EL0);
+    ULONG64 Start = ARM64_READ_SYSREG(CNTVCT_EL0);
+    ULONG Tick;
+
+    if (!OslArchFirmwareIsUBoot)
+        return;
+
+    if (Frequency == 0)
+    {
+        OslTrace("OS loader: %s: no timer frequency, no heartbeat", Stage);
+        return;
+    }
+
+    for (Tick = 1; Tick <= 10; Tick++)
+    {
+        while (ARM64_READ_SYSREG(CNTVCT_EL0) - Start < Tick * Frequency / 5)
+            ARM64_YIELD();
+        OslTrace("OS loader: %s: alive %lu ms", Stage, Tick * 200);
+    }
+}
+
+static
+VOID
+OslArchWalkAddress(
+    _In_ PCSTR Name,
+    _In_ ULONG_PTR Address)
+{
+    ULONG64 Tcr = ARM64_READ_SYSREG(TCR_EL1);
+    ULONG64 Table, Descriptor;
+    ULONG VaBits, Level, Shift, Index;
+
+    if (Address >> 63)
+    {
+        Table = ARM64_READ_SYSREG(TTBR1_EL1) & 0x0000FFFFFFFFFFFEULL;
+        VaBits = 64 - (ULONG)((Tcr >> 16) & 0x3F);
+    }
+    else
+    {
+        Table = ARM64_READ_SYSREG(TTBR0_EL1) & 0x0000FFFFFFFFFFFEULL;
+        VaBits = 64 - (ULONG)(Tcr & 0x3F);
+    }
+
+    Level = (VaBits > 39) ? 0 : ((VaBits > 30) ? 1 : 2);
+    for (; Level < 4; Level++)
+    {
+        Shift = 39 - 9 * Level;
+        Index = (ULONG)((Address >> Shift) & ((Level == 0 || (Level == 1 && VaBits <= 39)) ?
+                                              ((1ULL << (VaBits - Shift)) - 1) : 0x1FF));
+        if (!OslArchReadable((ULONG_PTR)Table))
+        {
+            OslTrace("OS loader: %s level %lu table %p is NOT MAPPED", Name, Level, (PVOID)Table);
+            return;
+        }
+
+        Descriptor = ((volatile ULONG64 *)(ULONG_PTR)Table)[Index];
+        OslTrace("OS loader: %s level %lu table %p [%03lx] = %016llx", Name, Level, (PVOID)Table, Index, Descriptor);
+        if ((Descriptor & 1) == 0 || Level == 3 || (Descriptor & 2) == 0)
+            return;
+        Table = Descriptor & 0x0000FFFFFFFFF000ULL;
+    }
+}
+
+static
+VOID
+OslArchDescribeAddress(
+    _In_ PCSTR Name,
+    _In_ PVOID Address)
+{
+    ULONG64 Result;
+    ULONG64 Physical;
+
+    OslTrace("OS loader: %s %p should be physical %p", Name, Address, VaToPa(Address));
+    OslArchWalkAddress(Name, (ULONG_PTR)Address);
+
+    if (((ARM64_READ_SYSREG(CURRENTEL) >> 2) & 3) == 2)
+        ARM64_AT(S1E2R, (ULONG_PTR)Address);
+    else
+        ARM64_AT(S1E1R, (ULONG_PTR)Address);
+    ARM64_ISB();
+    Result = ARM64_READ_SYSREG(PAR_EL1);
+    if (Result & 1)
+    {
+        OslTrace("OS loader: %s %p: NOT MAPPED, fault status %02llx", Name, Address, (Result >> 1) & 0x3F);
+        return;
+    }
+
+    Physical = (Result & 0x0000FFFFFFFFF000ULL) | ((ULONG_PTR)Address & 0xFFF);
+    OslTrace("OS loader: %s %p: physical %p, memory type %02llx", Name, Address, (PVOID)Physical, Result >> 56);
+    if (OslArchReadable((ULONG_PTR)Physical))
+        OslTrace("OS loader: %s read at its physical address: %.48s", Name, (PCSTR)(ULONG_PTR)Physical);
+    else
+        OslTrace("OS loader: %s: its physical address is NOT MAPPED", Name);
 }
 
 static
@@ -132,6 +277,15 @@ OslFbPuts(
 
 static
 VOID
+OslFbTrapPuts(
+    _In_ PCSTR Text)
+{
+    OslFbTrapActive = TRUE;
+    OslFbPuts(Text);
+}
+
+static
+VOID
 OslFbPrepare(VOID)
 {
     if (!FrameBufferData || !VramAddress || FrameBufferData->BitsPerPixel != 32 ||
@@ -155,7 +309,7 @@ OslFbPrepare(VOID)
     if (!OslFbColor)
         OslFbColor = 0x00FFFFFF;
     OslFbBase = (volatile ULONG *)(VramAddress + FrameBufferData->FrameBufferOffset);
-    Arm64TrapScreenRoutine = OslFbPuts;
+    Arm64TrapScreenRoutine = OslFbTrapPuts;
 }
 
 const PFN_NUMBER MmArchMaxLoaderPage = MM_MAX_PAGE_LOADER;
@@ -175,7 +329,11 @@ VOID
 Arm64LateDebugPutChar(
     UCHAR Character)
 {
+    CHAR Text[2] = {(CHAR)Character, ANSI_NULL};
+
     EarlyUartPutc(Character);
+    if (FwDebugScreen && !OslFbTrapActive && Character != '\r')
+        OslFbPuts(Text);
 }
 
 VOID
@@ -245,11 +403,14 @@ BOOLEAN
 OslArchPrepareHandoff(
     _Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
+    OslTrace("OS loader: describing the processor to the kernel");
     WinLdrSetupMachineDependent(LoaderBlock);
 
+    OslTrace("OS loader: building the kernel memory layout");
     if (!WinLdrSetupMemoryLayout(LoaderBlock))
         return FALSE;
 
+    OslTrace("OS loader: building the kernel page tables");
     Arm64PreparePageTables();
     if (FrameBufferData && VramAddress)
     {
@@ -263,11 +424,28 @@ OslArchPrepareHandoff(
             ERR("winload: framebuffer alias mapping failed\n");
     }
     OslFbPrepare();
+    OslArchFirmwareIsUBoot = GlobalSystemTable->FirmwareVendor &&
+                             _wcsnicmp(GlobalSystemTable->FirmwareVendor, L"Das U-Boot", 10) == 0;
+    OslTrace("OS loader: leaving the firmware");
     FwExitBootServices();
+    OslTrace("OS loader: the firmware is left; switching to the kernel page tables");
+    OslArchHeartbeat("firmware left, firmware page tables");
+    OslArchDumpProcessorState("before the switch");
     Arm64StopFirmwareWatchdog();
     Arm64SetVbarAuto((ULONG_PTR)arm64_exception_vectors);
     WinLdrSetProcessorContext(OSL_NT_VERSION);
+    OslTrace("OS loader: running on the kernel page tables, TTBR0 %p, TTBR1 %p, TCR %p",
+             (PVOID)ARM64_READ_SYSREG(TTBR0_EL1), (PVOID)ARM64_READ_SYSREG(TTBR1_EL1),
+             (PVOID)ARM64_READ_SYSREG(TCR_EL1));
+    OslArchDumpProcessorState("after the switch");
+    OslArchHeartbeat("kernel page tables");
+    OslArchPowerOffProbe();
     RtlZeroMemory((PVOID)KI_USER_SHARED_DATA, MM_PAGE_SIZE);
+    OslTrace("OS loader: shared user data cleared");
+    OslArchDescribeAddress("boot device name", LoaderBlock->ArcBootDeviceName);
+    OslArchDescribeAddress("hal device name", LoaderBlock->ArcHalDeviceName);
+    OslArchDescribeAddress("nt path", LoaderBlock->NtBootPathName);
+    OslArchDescribeAddress("load options", LoaderBlock->LoadOptions);
     return TRUE;
 }
 
@@ -278,7 +456,20 @@ OslArchStartKernel(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
     PLOADER_PARAMETER_BLOCK Physical = VaToPa(LoaderBlock);
+    ULONG_PTR LoaderAlias = (ULONG_PTR)Arm64JumpToKernel | ARM64_KSEG0_BASE;
 
+    OslTrace("OS loader: kernel entry %p %s, stack %p %s",
+             EntryPoint, OslArchReadable((ULONG_PTR)EntryPoint) ? "mapped" : "NOT MAPPED",
+             (PVOID)Physical->KernelStack,
+             OslArchReadable((ULONG_PTR)Physical->KernelStack - sizeof(ULONG_PTR)) ? "mapped" : "NOT MAPPED");
+    OslTrace("OS loader: loader block %p %s, loader code alias %p %s",
+             LoaderBlock, OslArchReadable((ULONG_PTR)LoaderBlock) ? "mapped" : "NOT MAPPED",
+             (PVOID)LoaderAlias, OslArchReadable(LoaderAlias) ? "mapped" : "NOT MAPPED");
+    OslTrace("OS loader: vectors %p %s, TTBR0 %p, TTBR1 %p",
+             (PVOID)ARM64_READ_SYSREG(VBAR_EL1),
+             OslArchReadable((ULONG_PTR)ARM64_READ_SYSREG(VBAR_EL1)) ? "mapped" : "NOT MAPPED",
+             (PVOID)ARM64_READ_SYSREG(TTBR0_EL1), (PVOID)ARM64_READ_SYSREG(TTBR1_EL1));
+    OslTrace("OS loader: jumping to the kernel at %p, stack %p", EntryPoint, (PVOID)Physical->KernelStack);
     Arm64JumpToKernel((ULONGLONG)(ULONG_PTR)EntryPoint,
                       (ULONGLONG)(ULONG_PTR)LoaderBlock,
                       (ULONGLONG)Physical->KernelStack);

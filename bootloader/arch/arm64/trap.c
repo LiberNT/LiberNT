@@ -250,6 +250,7 @@ TrapDisplayDumpContext(
 #define ESR_ELx_SRT_MASK        0x1F
 #define ESR_ELx_SF              (1UL << 15)
 #define ESR_ELx_AR              (1UL << 14)
+#define ESR_ELx_FNV             (1UL << 10)
 #define ESR_ELx_EA              (1UL << 9)
 #define ESR_ELx_CM              (1UL << 8)
 #define ESR_ELx_S1PTW           (1UL << 7)
@@ -416,31 +417,107 @@ VOID Arm64DumpContext(PARM64_CONTEXT Context)
 
 VOID (*Arm64TrapScreenRoutine)(PCSTR Text);
 
+extern UCHAR __ImageBase[];
+
+static
+BOOLEAN
+TrapReadable(
+    _In_ ULONG_PTR Address)
+{
+    if (((ARM64_READ_SYSREG(CURRENTEL) >> 2) & 3) == 2)
+        ARM64_AT(S1E2R, Address);
+    else
+        ARM64_AT(S1E1R, Address);
+    ARM64_ISB();
+    return (ARM64_READ_SYSREG(PAR_EL1) & 1) == 0;
+}
+
+static
+VOID
+TrapScreenPrint(
+    _In_z_ _Printf_format_string_ PCSTR Format,
+    ...)
+{
+    CHAR Line[96];
+    va_list Arguments;
+
+    va_start(Arguments, Format);
+    RtlStringCbVPrintfA(Line, sizeof(Line), Format, Arguments);
+    va_end(Arguments);
+    Arm64TrapScreenRoutine(Line);
+}
+
 static VOID
 TrapScreenDump(
     _In_ PCSTR Title,
+    _In_ PCSTR ExceptionName,
     _In_ ULONGLONG Esr,
     _In_ ULONGLONG FaultAddr,
     _In_ PARM64_CONTEXT Context)
 {
-    CHAR Line[160];
+    ULONG ExceptionClass = (ULONG)((Esr >> ESR_ELx_EC_SHIFT) & ESR_ELx_EC_MASK);
+    ULONG Iss = (ULONG)(Esr & ESR_ELx_ISS_MASK);
+    ULONG FaultStatus = Iss & ESR_ELx_DFSC_MASK;
+    BOOLEAN InstructionAbort = (ExceptionClass == ESR_ELx_EC_IABT_CUR || ExceptionClass == ESR_ELx_EC_IABT_LOW);
+    BOOLEAN DataAbort = (ExceptionClass == ESR_ELx_EC_DABT_CUR || ExceptionClass == ESR_ELx_EC_DABT_LOW);
+    BOOLEAN FaultAddrValid;
+    ULONG_PTR FramePointer, NextFrame;
     ULONG Index;
 
     if (!Arm64TrapScreenRoutine)
         return;
 
-    RtlStringCbPrintfA(Line, sizeof(Line), "LiberNT loader %s: ESR %llx FAR %llx ELR %llx SP %llx PSTATE %llx\n",
-                       Title, Esr, FaultAddr, Context->PC, Context->SP, Context->PSTATE);
-    Arm64TrapScreenRoutine(Line);
-    for (Index = 0; Index < 31; Index += 4)
+    FaultAddrValid = ((InstructionAbort || DataAbort) && !(Iss & ESR_ELx_FNV)) || ExceptionClass == ESR_ELx_EC_PC_ALIGN;
+
+    TrapScreenPrint("\nLiberNT loader %s: %s, class %02lx\n", Title, ExceptionName, ExceptionClass);
+    TrapScreenPrint("ESR %016llx ISS %07lx IL %lu\n", Esr, Iss, (Esr & ESR_ELx_IL) ? 1UL : 0UL);
+    if (InstructionAbort || DataAbort)
     {
-        RtlStringCbPrintfA(Line, sizeof(Line), "x%02lu %016llx %016llx %016llx %016llx\n",
-                           Index, Context->X[Index],
-                           (Index + 1 < 31) ? Context->X[Index + 1] : 0,
-                           (Index + 2 < 31) ? Context->X[Index + 2] : 0,
-                           (Index + 3 < 31) ? Context->X[Index + 3] : 0);
-        Arm64TrapScreenRoutine(Line);
+        TrapScreenPrint("%s: %s%s%s, status %02lx\n",
+                        InstructionAbort ? "instruction fetch" : ((Iss & ESR_ELx_WNR) ? "data write" : "data read"),
+                        (FaultStatus < ARRAYSIZE(Arm64FaultStatusNames)) ? Arm64FaultStatusNames[FaultStatus] : "other fault",
+                        (Iss & ESR_ELx_S1PTW) ? " during a table walk" : "",
+                        (Iss & ESR_ELx_EA) ? ", external abort" : "",
+                        FaultStatus);
     }
+    TrapScreenPrint("FAR %016llx%s\n", FaultAddr, FaultAddrValid ? "" : " (not valid for this exception)");
+    TrapScreenPrint("ELR %016llx SP %016llx\n", Context->PC, Context->SP);
+    TrapScreenPrint("LR  %016llx FP %016llx\n", Context->X[30], Context->X[29]);
+    TrapScreenPrint("PSTATE %08llx at EL%llu, winload.efi image at %p\n",
+                    Context->PSTATE, (ARM64_READ_SYSREG(CURRENTEL) >> 2) & 3, __ImageBase);
+    TrapScreenPrint("SCTLR %016llx TCR   %016llx\n", ARM64_READ_SYSREG(SCTLR_EL1), ARM64_READ_SYSREG(TCR_EL1));
+    TrapScreenPrint("TTBR0 %016llx TTBR1 %016llx\n", ARM64_READ_SYSREG(TTBR0_EL1), ARM64_READ_SYSREG(TTBR1_EL1));
+    TrapScreenPrint("MAIR  %016llx VBAR  %016llx\n", ARM64_READ_SYSREG(MAIR_EL1), ARM64_READ_SYSREG(VBAR_EL1));
+    if ((Context->PC & 3) == 0 && TrapReadable((ULONG_PTR)Context->PC))
+        TrapScreenPrint("instruction at ELR: %08lx\n", *(volatile ULONG *)(ULONG_PTR)Context->PC);
+    else
+        TrapScreenPrint("instruction at ELR: not mapped\n");
+
+    for (Index = 0; Index < 30; Index += 3)
+    {
+        TrapScreenPrint("x%02lu %016llx x%02lu %016llx x%02lu %016llx\n",
+                        Index, Context->X[Index],
+                        Index + 1, Context->X[Index + 1],
+                        Index + 2, Context->X[Index + 2]);
+    }
+
+    FramePointer = (ULONG_PTR)Context->X[29];
+    for (Index = 0; Index < 12; Index++)
+    {
+        if (FramePointer == 0 || (FramePointer & 0xF) != 0 ||
+            !TrapReadable(FramePointer) || !TrapReadable(FramePointer + sizeof(ULONG_PTR)))
+        {
+            break;
+        }
+
+        NextFrame = ((volatile ULONG_PTR *)FramePointer)[0];
+        TrapScreenPrint("frame %02lu at %016llx returns to %016llx\n",
+                        Index, (ULONGLONG)FramePointer, (ULONGLONG)((volatile ULONG_PTR *)FramePointer)[1]);
+        if (NextFrame <= FramePointer)
+            break;
+        FramePointer = NextFrame;
+    }
+
     Arm64TrapScreenRoutine("halted: the machine stays here until you power it off\n");
 }
 
@@ -459,6 +536,8 @@ VOID Arm64HandleSynchronousException(PARM64_CONTEXT Context, ULONGLONG Esr, ULON
     {
         ExceptionName = "Invalid";
     }
+
+    TrapScreenDump("synchronous exception", ExceptionName, Esr, FaultAddr, Context);
 
 #if defined(UEFIBOOT)
     TrapDisplayDumpContext("Synchronous Exception",
@@ -549,8 +628,6 @@ VOID Arm64HandleSynchronousException(PARM64_CONTEXT Context, ULONGLONG Esr, ULON
             ERR("Unknown exception class 0x%02lx, ISS=0x%08lx\n", ExceptionClass, ISS);
             break;
     }
-    
-    TrapScreenDump("synchronous exception", Esr, FaultAddr, Context);
 
     /* Dump register context */
     Arm64DumpContext(Context);
@@ -607,6 +684,8 @@ VOID Arm64HandleFiq(PARM64_CONTEXT Context)
 
 VOID Arm64HandleSerror(PARM64_CONTEXT Context, ULONGLONG Esr)
 {
+    TrapScreenDump("SError", "asynchronous external abort", Esr, 0, Context);
+
 #if defined(UEFIBOOT)
     TrapDisplayDumpContext("SError",
                            "SError asynchronous external abort",
@@ -616,7 +695,6 @@ VOID Arm64HandleSerror(PARM64_CONTEXT Context, ULONGLONG Esr)
                            Context);
 #endif
 
-    TrapScreenDump("SError", Esr, 0, Context);
     ERR("ARM64 System Error (SError) Exception\n");
     ERR("ESR: 0x%016llx\n", Esr);
     
