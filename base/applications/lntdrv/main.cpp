@@ -286,6 +286,7 @@ struct ScanWork
     volatile LONG Parked;
     volatile LONG Pending;
     volatile LONG Error;
+    volatile LONG Searches;
 };
 
 DWORD WINAPI ScanWorker(LPVOID parameter)
@@ -338,12 +339,13 @@ DWORD WINAPI ScanWorker(LPVOID parameter)
             }
         }
     }
+    InterlockedExchangeAdd(&work->Searches, (LONG)catalog.Searches());
     return 0;
 }
 
 DWORD ScanPlans(Catalog &catalog, std::vector<SearchPlan> &plans, PlanSink &sink)
 {
-    ScanWork work = { &plans, &sink, NULL, NULL, NULL, -1, 0, 0, ERROR_SUCCESS };
+    ScanWork work = { &plans, &sink, NULL, NULL, NULL, -1, 0, 0, ERROR_SUCCESS, 0 };
     DWORD error = ERROR_SUCCESS;
 
     catalog.SetThrottleWait(false);
@@ -384,6 +386,7 @@ DWORD ScanPlans(Catalog &catalog, std::vector<SearchPlan> &plans, PlanSink &sink
     }
     if (work.Report)
         CloseHandle(work.Report);
+    catalog.AddSearches((unsigned)work.Searches);
     return error == ERROR_CANCELLED ? error : (IsOfflineError(error) ? error : ERROR_SUCCESS);
 }
 

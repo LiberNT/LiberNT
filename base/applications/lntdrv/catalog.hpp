@@ -111,6 +111,7 @@ public:
     const std::wstring &OtherArchitectures() const;
     const std::wstring &OtherModel() const;
     unsigned Searches() const;
+    void AddSearches(unsigned count);
 
 private:
     class Sink

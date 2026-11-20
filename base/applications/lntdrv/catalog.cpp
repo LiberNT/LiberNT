@@ -1299,6 +1299,11 @@ unsigned Catalog::Searches() const
     return m_Searches;
 }
 
+void Catalog::AddSearches(unsigned count)
+{
+    m_Searches += count;
+}
+
 const std::wstring &Catalog::OtherArchitectures() const
 {
     return m_OtherArchitectures;
