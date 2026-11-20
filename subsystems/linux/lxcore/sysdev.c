@@ -6,6 +6,7 @@
  */
 
 #include "lxcore.h"
+#include <ndk/obfuncs.h>
 #include <initguid.h>
 #include <usbioctl.h>
 #include <stdarg.h>
@@ -18,6 +19,7 @@
 #define LX_SYSDEV_PCI_PUBLIC        64
 #define LX_SYSDEV_PCI_RESOURCES     13
 #define LX_SYSDEV_PCI_BRIDGE_LINES  17
+#define LX_SYSDEV_MAX_PCI_FUNCTIONS 256
 #define LX_SYSDEV_MAX_DRIVERS       64
 #define LX_SYSDEV_MAX_RANGES        16
 #define LX_SYSDEV_MAX_DEPTH         7
@@ -897,6 +899,86 @@ LxSysDevPciDevice(
     }
 }
 
+typedef struct _LX_SYSDEV_PCI_FUNCTIONS
+{
+    ULONG Count;
+    ULONG Location[LX_SYSDEV_MAX_PCI_FUNCTIONS];
+} LX_SYSDEV_PCI_FUNCTIONS, *PLX_SYSDEV_PCI_FUNCTIONS;
+
+#define LX_SYSDEV_PCI_LOCATION(Bus, Device, Function) (((Bus) << 8) | ((Device) << 3) | (Function))
+
+static
+VOID
+LxSysDevCollectPciFunctions(
+    _Out_ PLX_SYSDEV_PCI_FUNCTIONS Functions)
+{
+    UNICODE_STRING Name = RTL_CONSTANT_STRING(L"\\Driver\\pci");
+    PDEVICE_OBJECT *Devices = NULL;
+    PDRIVER_OBJECT Driver;
+    ULONG Count = LX_SYSDEV_MAX_PCI_FUNCTIONS, Index, Bus, Address, Length, Attempt;
+    NTSTATUS Status = STATUS_BUFFER_TOO_SMALL;
+
+    PAGED_CODE();
+
+    Functions->Count = 0;
+    if (!NT_SUCCESS(ObReferenceObjectByName(&Name, OBJ_CASE_INSENSITIVE, NULL, 0, IoDriverObjectType, KernelMode,
+                                            NULL, (PVOID *)&Driver)))
+    {
+        return;
+    }
+
+    for (Attempt = 0; (Attempt < 4) && (Status == STATUS_BUFFER_TOO_SMALL); Attempt++)
+    {
+        if (Devices != NULL)
+            LxFreePaged(Devices);
+        Devices = LxAllocPaged(Count * sizeof(PDEVICE_OBJECT));
+        if (Devices == NULL)
+            break;
+        Status = IoEnumerateDeviceObjectList(Driver, Devices, Count * sizeof(PDEVICE_OBJECT), &Count);
+    }
+
+    if ((Devices != NULL) && NT_SUCCESS(Status))
+    {
+        for (Index = 0; Index < Count; Index++)
+        {
+            if ((Devices[Index]->Flags & DO_BUS_ENUMERATED_DEVICE) &&
+                (Functions->Count < LX_SYSDEV_MAX_PCI_FUNCTIONS) &&
+                NT_SUCCESS(IoGetDeviceProperty(Devices[Index], DevicePropertyBusNumber, sizeof(Bus), &Bus, &Length)) &&
+                NT_SUCCESS(IoGetDeviceProperty(Devices[Index], DevicePropertyAddress, sizeof(Address), &Address,
+                                               &Length)) &&
+                (Bus < 256) && ((Address >> 16) < PCI_MAX_DEVICES) && ((Address & 0xFFFF) < PCI_MAX_FUNCTION))
+            {
+                Functions->Location[Functions->Count++] = LX_SYSDEV_PCI_LOCATION(Bus, Address >> 16, Address & 0xFFFF);
+            }
+            ObDereferenceObject(Devices[Index]);
+        }
+    }
+
+    if (Devices != NULL)
+        LxFreePaged(Devices);
+    ObDereferenceObject(Driver);
+    ASSERT(Functions->Count <= LX_SYSDEV_MAX_PCI_FUNCTIONS);
+}
+
+static
+BOOLEAN
+LxSysDevPciFunctionEnumerated(
+    _In_ PLX_SYSDEV_PCI_FUNCTIONS Functions,
+    _In_ ULONG Bus,
+    _In_ ULONG Device,
+    _In_ ULONG Function)
+{
+    ULONG Location = LX_SYSDEV_PCI_LOCATION(Bus, Device, Function);
+    ULONG Index;
+
+    for (Index = 0; Index < Functions->Count; Index++)
+    {
+        if (Functions->Location[Index] == Location)
+            return TRUE;
+    }
+    return FALSE;
+}
+
 static
 BOOLEAN
 LxSysDevReadConfig(
@@ -926,6 +1008,7 @@ LxSysDevScanBus(
     _In_ ULONG Bus,
     _In_ PCSTR Parent,
     _In_ ULONG Depth,
+    _In_ PLX_SYSDEV_PCI_FUNCTIONS Functions,
     _Inout_ PULONG Seen)
 {
     UCHAR Config[LX_SYSDEV_PCI_CONFIG];
@@ -941,7 +1024,9 @@ LxSysDevScanBus(
             CHAR Name[16];
             PSTR Directory;
 
-            if (!LxSysDevReadConfig(Bus, Device, Function, Config))
+            /* A config request to a function nobody enumerated can crash the firmware of a running device */
+            if (!LxSysDevPciFunctionEnumerated(Functions, Bus, Device, Function) ||
+                !LxSysDevReadConfig(Bus, Device, Function, Config))
             {
                 if (Function == 0)
                     break;
@@ -959,7 +1044,7 @@ LxSysDevScanBus(
                                                  *(PUSHORT)&Config[0x02]),
                               Directory, Name, Config);
             if (((Config[0x0E] & 0x7F) == 1) && (Config[0x19] > Bus))
-                LxSysDevScanBus(Tree, Pci, Config[0x19], Directory, Depth + 1, Seen);
+                LxSysDevScanBus(Tree, Pci, Config[0x19], Directory, Depth + 1, Functions, Seen);
             LxFree(Directory);
             if ((Function == 0) && !(Config[0x0E] & 0x80))
                 break;
@@ -1965,6 +2050,7 @@ LxSysDevBuild(VOID)
         "bus/usb/drivers", "bus/usb/drivers/usb", "bus/usb/drivers/hub", "devices/pci0000:00"
     };
     PLX_SYSDEV_TREE Tree = LxAlloc(sizeof(*Tree));
+    PLX_SYSDEV_PCI_FUNCTIONS Functions;
     PLX_SYSDEV_PCI Pci;
     ULONG Seen[8] = { 0 }, Index;
 
@@ -1978,12 +2064,17 @@ LxSysDevBuild(VOID)
     LxSysDevText(Tree, "devices/pci0000:00", "uevent", "");
 
     Pci = LxAllocPaged(sizeof(*Pci));
-    if (Pci != NULL)
+    Functions = LxAllocPaged(sizeof(*Functions));
+    if ((Pci != NULL) && (Functions != NULL))
     {
+        LxSysDevCollectPciFunctions(Functions);
         LxSysDevReadDrivers(Pci);
-        LxSysDevScanBus(Tree, Pci, 0, "devices/pci0000:00", 0, Seen);
-        LxFreePaged(Pci);
+        LxSysDevScanBus(Tree, Pci, 0, "devices/pci0000:00", 0, Functions, Seen);
     }
+    if (Functions != NULL)
+        LxFreePaged(Functions);
+    if (Pci != NULL)
+        LxFreePaged(Pci);
     LxSysDevReadUsbDrivers(Tree);
     LxSysDevUsb(Tree);
     /* FIXME: sysfs is shared by every instance, while a GPU renderer attaches to one instance */
