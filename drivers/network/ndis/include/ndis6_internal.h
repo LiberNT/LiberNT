@@ -1075,8 +1075,6 @@ typedef struct _NDIS6_PROTOCOL_BINDING
     PNDIS6_PROTOCOL_DRIVER_BLOCK            DriverBlock;
     PLOGICAL_ADAPTER                        Adapter;
     NDIS_HANDLE                             ProtocolBindingContext;
-    /* TRUE means AdapterLink is on LOGICAL_ADAPTER.Ndis6LegacyBindingList,
-     * and this binding owns a legacy adapter lifecycle rundown reference. */
     BOOLEAN                                 IsLegacyMiniport;
     /* Links this binding into the owning adapter's Ext->ProtocolBindingList
      * (or the legacy adapter's separate binding list). */

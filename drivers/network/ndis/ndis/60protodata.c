@@ -170,14 +170,6 @@ NdisReturnNetBufferLists(
     }
 }
 
-/* ------------------------------------------------------------------ */
-/*  NDIS 6 protocol -> NDIS 5 miniport OID bridge                    */
-/* ------------------------------------------------------------------ */
-
-/* MiniQueryInformation/MiniSetInformation use the legacy miniport's
- * serialized request queue and wait for a pending completion. Do not call
- * them at DISPATCH_LEVEL or fabricate an asynchronous NDIS 6 completion.
- * Native NDIS 6 OID dispatch remains unchanged below. */
 static NDIS_STATUS
 Ndis6LegacyProtocolOidRequest(
     _In_ PNDIS6_PROTOCOL_BINDING Binding,
@@ -235,7 +227,6 @@ Ndis6LegacyProtocolOidRequest(
             return Status;
 
         default:
-            /* METHOD and QUERY_STATISTICS are not legacy query/set OIDs. */
             return NDIS_STATUS_NOT_SUPPORTED;
     }
 }
@@ -263,7 +254,6 @@ NdisOidRequest(
     Adapter = Binding->Adapter;
     if (Binding->IsLegacyMiniport)
     {
-        /* Synchronous legacy OID completion: no NDIS 6 callback. */
         Status = Ndis6LegacyProtocolOidRequest(Binding, OidRequest);
         Ndis6DereferenceProtocolBinding(Binding);
         return Status;
