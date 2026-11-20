@@ -5692,6 +5692,7 @@ HRESULT STDMETHODCALLTYPE CDefView::GetArrangeParam(LPARAM *sort)
 HRESULT STDMETHODCALLTYPE CDefView::ArrangeGrid()
 {
     m_ListView.SetExtendedListViewStyle(LVS_EX_SNAPTOGRID, LVS_EX_SNAPTOGRID);
+    m_ListView.Arrange(LVA_SNAPTOGRID);
     return S_OK;
 }
 

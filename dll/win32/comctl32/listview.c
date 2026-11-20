@@ -2930,6 +2930,25 @@ static BOOL LISTVIEW_MoveIconTo(const LISTVIEW_INFO *infoPtr, INT nItem, const P
     return TRUE;
 }
 
+#ifdef __REACTOS__
+static LONG LISTVIEW_NearestGridLine(LONG value, INT size)
+{
+    LONGLONG shifted, line;
+
+    if (size <= 0) return value;
+
+    shifted = (LONGLONG)value + size / 2;
+    line = (shifted >= 0 ? shifted / size : (shifted - size + 1) / size) * size;
+    return (line == (LONG)line) ? (LONG)line : value;
+}
+
+static void LISTVIEW_SnapToGrid(const LISTVIEW_INFO *infoPtr, POINT *pos)
+{
+    pos->x = LISTVIEW_NearestGridLine(pos->x, infoPtr->nItemWidth);
+    pos->y = LISTVIEW_NearestGridLine(pos->y, infoPtr->nItemHeight);
+}
+#endif
+
 /***
  * DESCRIPTION:
  * Arranges listview items in icon display mode.
@@ -2962,7 +2981,19 @@ static BOOL LISTVIEW_Arrange(LISTVIEW_INFO *infoPtr, INT nAlignCode)
     {
     case LVA_ALIGNLEFT:  next_pos = LISTVIEW_NextIconPosLeft; break;
     case LVA_ALIGNTOP:   next_pos = LISTVIEW_NextIconPosTop;  break;
+#ifdef __REACTOS__
+    case LVA_SNAPTOGRID:
+        for (i = 0; i < infoPtr->nItemCount; i++)
+        {
+            pos.x = (LONG_PTR)DPA_GetPtr(infoPtr->hdpaPosX, i);
+            pos.y = (LONG_PTR)DPA_GetPtr(infoPtr->hdpaPosY, i);
+            LISTVIEW_SnapToGrid(infoPtr, &pos);
+            LISTVIEW_MoveIconTo(infoPtr, i, &pos, FALSE);
+        }
+        return TRUE;
+#else
     case LVA_SNAPTOGRID: next_pos = LISTVIEW_NextIconPosTop;  break; /* FIXME */
+#endif
     default: return FALSE;
     }
     
@@ -9481,6 +9512,10 @@ static BOOL LISTVIEW_SetItemPosition(LISTVIEW_INFO *infoPtr, INT nItem, const PO
     }
     Pt.x -= Origin.x;
     Pt.y -= Origin.y;
+#ifdef __REACTOS__
+    if ((infoPtr->dwLvExStyle & LVS_EX_SNAPTOGRID) && infoPtr->uView == LV_VIEW_ICON)
+        LISTVIEW_SnapToGrid(infoPtr, &Pt);
+#endif
 
     return LISTVIEW_MoveIconTo(infoPtr, nItem, &Pt, FALSE);
 }
