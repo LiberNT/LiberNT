@@ -2211,6 +2211,28 @@ SetupDiSelectBestCompatDrv(
     return ret;
 }
 
+struct InstallFilesContext
+{
+    PSP_FILE_CALLBACK_W Handler;
+    PVOID Context;
+    BOOL Delayed;
+};
+
+static UINT CALLBACK
+InstallFilesCallback(
+    IN PVOID Context,
+    IN UINT Notification,
+    IN UINT_PTR Param1,
+    IN UINT_PTR Param2)
+{
+    struct InstallFilesContext *Files = Context;
+
+    if (Notification == SPFILENOTIFY_FILEOPDELAYED)
+        Files->Delayed = TRUE;
+
+    return Files->Handler(Files->Context, Notification, Param1, Param2);
+}
+
 /***********************************************************************
  *		SetupDiInstallDriverFiles (SETUPAPI.@)
  */
@@ -2241,8 +2263,7 @@ SetupDiInstallDriverFiles(
         struct DriverInfoElement *SelectedDriver;
         WCHAR SectionName[MAX_PATH];
         DWORD SectionNameLength = 0;
-        PVOID InstallMsgHandler;
-        PVOID InstallMsgHandlerContext;
+        struct InstallFilesContext Files;
         PVOID Context = NULL;
         WCHAR SourceBuffer[MAX_PATH];
         PCWSTR SourceDirectory;
@@ -2268,23 +2289,24 @@ SetupDiInstallDriverFiles(
         if (!ret)
             goto done;
 
+        Files.Delayed = FALSE;
         if (InstallParams.InstallMsgHandler)
         {
-            InstallMsgHandler = InstallParams.InstallMsgHandler;
-            InstallMsgHandlerContext = InstallParams.InstallMsgHandlerContext;
+            Files.Handler = InstallParams.InstallMsgHandler;
+            Files.Context = InstallParams.InstallMsgHandlerContext;
         }
         else
         {
             Context = SetupInitDefaultQueueCallback(InstallParams.hwndParent);
             if (!Context)
                 goto cleanup;
-            InstallMsgHandler = SetupDefaultQueueCallbackW;
-            InstallMsgHandlerContext = Context;
+            Files.Handler = SetupDefaultQueueCallbackW;
+            Files.Context = Context;
         }
         ret = SetupInstallFromInfSectionW(InstallParams.hwndParent,
             SelectedDriver->InfFileDetails->hInf, SectionName,
             SPINST_FILES, NULL, SourceDirectory, SP_COPY_NEWER,
-            InstallMsgHandler, InstallMsgHandlerContext,
+            InstallFilesCallback, &Files,
             DeviceInfoSet, DeviceInfoData);
         if (!ret)
             goto done;
@@ -2294,7 +2316,7 @@ SetupDiInstallDriverFiles(
         ret = SetupInstallFromInfSectionW(InstallParams.hwndParent,
             SelectedDriver->InfFileDetails->hInf, SectionName,
             SPINST_FILES, NULL, SourceDirectory, SP_COPY_NEWER,
-            InstallMsgHandler, InstallMsgHandlerContext,
+            InstallFilesCallback, &Files,
             DeviceInfoSet, DeviceInfoData);
         if (!ret)
             goto done;
@@ -2302,6 +2324,8 @@ SetupDiInstallDriverFiles(
         /* Set the DI_NOFILECOPY flag to prevent another
          * installation during SetupDiInstallDevice */
         InstallParams.Flags |= DI_NOFILECOPY;
+        if (Files.Delayed)
+            InstallParams.Flags |= DI_NEEDREBOOT;
         ret = SetupDiSetDeviceInstallParamsW(DeviceInfoSet, DeviceInfoData, &InstallParams);
 
 cleanup:

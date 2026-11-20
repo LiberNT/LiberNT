@@ -7,6 +7,7 @@ list(APPEND SOURCE
     DeviceDescription.c
     DeviceExtension.c
     DriverFeatureScore.c
+    DriverFilesNeedReboot.c
     DriverPackageSignerScore.c
     DevicePdoName.c
     DevicePowerOnDisable.c
