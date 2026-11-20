@@ -31,6 +31,8 @@
 #include <internal/arm64/ke.h>
 #elif defined(_M_RISCV64)
 #include <internal/riscv64/ke.h>
+#elif defined(_M_ARM)
+#include <internal/arm/ke.h>
 #else
 #error "Unknown processor"
 #endif

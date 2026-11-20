@@ -432,7 +432,7 @@ WinLdrSetupMachineDependent(
     ArmLoader.KernelStack = ArmAllocateResident(KERNEL_STACK_SIZE, LoaderStartupKernelStack);
     ArmLoader.DpcStack = ArmAllocateResident(KERNEL_STACK_SIZE, LoaderStartupDpcStack);
     ArmLoader.PanicStack = ArmAllocateResident(KERNEL_STACK_SIZE, LoaderStartupPanicStack);
-    ArmLoader.Pcr = ArmAllocateResident(ROUND_UP(sizeof(KPCR), MM_PAGE_SIZE), LoaderStartupPcrPage);
+    ArmLoader.Pcr = ArmAllocateResident(ROUND_UP(sizeof(KIPCR), MM_PAGE_SIZE), LoaderStartupPcrPage);
     ArmLoader.Process = ArmAllocateResident(MM_PAGE_SIZE, LoaderMemoryData);
     ArmLoader.Thread = ArmAllocateResident(MM_PAGE_SIZE, LoaderMemoryData);
     ArmLoader.SharedPage = ArmAllocateResident(MM_PAGE_SIZE, LoaderStartupPcrPage);

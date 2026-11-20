@@ -137,7 +137,9 @@ typedef struct DECLSPEC_ALIGN(16) _AMD64_CONTEXT {
     DWORD64 LastExceptionFromRip; /* 4c8 */
 } AMD64_CONTEXT;
 
+#if !defined(__REACTOS__) || !defined(CONTEXT_ARM)
 #define CONTEXT_ARM                 0x0200000
+#endif
 #define CONTEXT_ARM_CONTROL         (CONTEXT_ARM | 0x00000001)
 #define CONTEXT_ARM_INTEGER         (CONTEXT_ARM | 0x00000002)
 #define CONTEXT_ARM_FLOATING_POINT  (CONTEXT_ARM | 0x00000004)
