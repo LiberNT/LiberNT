@@ -267,7 +267,7 @@ file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/bootfiles.sort ${ISO_SORT_FILE_DATA})
 
 # ISO image identifier names
 set(ISO_MANUFACTURER "LiberNT Project") # For both the publisher and the preparer
-set(ISO_VOLNAME      "ReactOS")         # For both the Volume ID and the Volume set ID
+set(ISO_VOLNAME      "LiberNT")         # For both the Volume ID and the Volume set ID
 
 # ISO image options
 # Preserve Windows DLL names such as avformat-62.dll in the primary ISO directory.
