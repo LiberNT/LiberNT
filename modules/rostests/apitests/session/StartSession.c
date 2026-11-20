@@ -64,29 +64,108 @@ static BOOL ReadChildReport(WCHAR *text, DWORD count)
     return read != 0;
 }
 
-START_TEST(StartSession)
+static ULONG ProcessesInSession(ULONG sessionId)
 {
-    static const WCHAR hardwareIds[] = L"RdpVdd_RemoteDisplay\0";
-    SW_DEVICE_CREATE_INFO info = { sizeof(info) };
+    PSYSTEM_PROCESS_INFORMATION processes, process;
+    ULONG size = 0x100000, live = 0;
+    NTSTATUS status;
+    for (;;)
+    {
+        processes = HeapAlloc(GetProcessHeap(), 0, size);
+        if (!processes) return MAXULONG;
+        status = NtQuerySystemInformation(SystemProcessInformation, processes, size, NULL);
+        if (status != STATUS_INFO_LENGTH_MISMATCH) break;
+        HeapFree(GetProcessHeap(), 0, processes);
+        size *= 2;
+    }
+    if (!NT_SUCCESS(status))
+    {
+        HeapFree(GetProcessHeap(), 0, processes);
+        return MAXULONG;
+    }
+    for (process = processes; ; process = (PSYSTEM_PROCESS_INFORMATION)((PUCHAR)process + process->NextEntryOffset))
+    {
+        if (process->UniqueProcessId && process->SessionId == sessionId)
+        {
+            HANDLE handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
+                                        HandleToUlong(process->UniqueProcessId));
+            DWORD code = STILL_ACTIVE;
+            if (!handle || (GetExitCodeProcess(handle, &code) && code == STILL_ACTIVE))
+            {
+                trace("session %lu still has %.*ls (%lu)\n", sessionId, process->ImageName.Length / 2,
+                      process->ImageName.Buffer, HandleToUlong(process->UniqueProcessId));
+                live++;
+            }
+            if (handle) CloseHandle(handle);
+        }
+        if (!process->NextEntryOffset) break;
+    }
+    HeapFree(GetProcessHeap(), 0, processes);
+    return live;
+}
+
+static void RunSession(HANDLE port, ULONG ownSession, ULONG *previous)
+{
     WCHAR commandLine[MAX_PATH + 32], path[MAX_PATH], report[1024];
     UNICODE_STRING command;
-    HSWDEVICE adapter = NULL;
-    HANDLE port = NULL, csrss = NULL, initial = NULL;
-    ULONG sessionId = MAXULONG, videoBefore, wait;
-    DWORD ownSession = 0, console;
+    HANDLE csrss = NULL, initial = NULL;
+    ULONG sessionId = MAXULONG, wait;
     NTSTATUS status;
-    HRESULT hr;
     int width = 0, height = 0, devices = -1, remote = -1, desktop = 0;
     DWORD modeWidth = 0, modeHeight = 0;
     DWORD childSession = MAXULONG, childConsole = MAXULONG;
 
-    ProcessIdToSessionId(GetCurrentProcessId(), &ownSession);
-    console = WTSGetActiveConsoleSessionId();
-    ok(console == ownSession, "the test runs in session %lu, the console is %lu\n", ownSession, console);
-
     GetWindowsDirectoryW(path, MAX_PATH);
     lstrcatW(path, CHILD_REPORT);
     DeleteFileW(path);
+
+    GetModuleFileNameW(NULL, path, MAX_PATH);
+    lstrcpyW(wcsrchr(path, L'\\') + 1, L"session_child.exe");
+    lstrcpynW(commandLine, path, ARRAYSIZE(commandLine));
+    RtlInitUnicodeString(&command, commandLine);
+    status = SmStartCsr(port, &sessionId, &command, &csrss, &initial);
+    ok(status == STATUS_SUCCESS, "SmStartCsr returned 0x%lx\n", status);
+    if (!NT_SUCCESS(status)) return;
+    ok(sessionId != ownSession && sessionId != 0 && sessionId != *previous, "the new session is %lu\n", sessionId);
+    ok(csrss != NULL && initial != NULL && csrss != initial, "the session's processes are %p and %p\n", csrss, initial);
+    for (wait = 0; wait < 300 && !ReadChildReport(report, ARRAYSIZE(report)); wait++) Sleep(100);
+    ok(ReadChildReport(report, ARRAYSIZE(report)), "the child in the new session wrote no report\n");
+    trace("child: %ls\n", report);
+    swscanf(report, L"session %lu console %lu devices %d remote %d screen %dx%d mode %lux%lu desktop %d",
+            &childSession, &childConsole, &devices, &remote, &width, &height, &modeWidth, &modeHeight,
+            &desktop);
+    ok(childSession == sessionId, "the child ran in session %lu, not %lu\n", childSession, sessionId);
+    ok(childConsole == ownSession, "the new session saw console %lu\n", childConsole);
+    ok(devices == 1 && remote == 1, "the new session sees %d display devices, %d remote\n", devices, remote);
+    ok(desktop == 1, "the new session could not create its desktop\n");
+    ok(modeWidth > 0 && width == (int)modeWidth && height == (int)modeHeight,
+       "the new session's screen is %dx%d, its display mode %lux%lu\n", width, height, modeWidth, modeHeight);
+    ok(ProcessesInSession(sessionId) >= 2, "the new session has %lu processes\n",
+       ProcessesInSession(sessionId));
+
+    status = SmStopCsr(port, sessionId);
+    ok(status == STATUS_SUCCESS, "SmStopCsr returned 0x%lx\n", status);
+    ok(ProcessesInSession(sessionId) == 0, "%lu processes outlived session %lu\n",
+       ProcessesInSession(sessionId), sessionId);
+    status = SmStopCsr(port, sessionId);
+    ok(status == STATUS_INVALID_PARAMETER, "stopping session %lu again returned 0x%lx\n", sessionId, status);
+    *previous = sessionId;
+}
+
+START_TEST(StartSession)
+{
+    static const WCHAR hardwareIds[] = L"RdpVdd_RemoteDisplay\0";
+    SW_DEVICE_CREATE_INFO info = { sizeof(info) };
+    HSWDEVICE adapter = NULL;
+    HANDLE port = NULL;
+    ULONG videoBefore, wait, previous = MAXULONG;
+    DWORD ownSession = 0, console;
+    NTSTATUS status;
+    HRESULT hr;
+
+    ProcessIdToSessionId(GetCurrentProcessId(), &ownSession);
+    console = WTSGetActiveConsoleSessionId();
+    ok(console == ownSession, "the test runs in session %lu, the console is %lu\n", ownSession, console);
 
     AdapterReady = CreateEventW(NULL, TRUE, FALSE, NULL);
     videoBefore = VideoDeviceCount();
@@ -108,28 +187,16 @@ START_TEST(StartSession)
     ok(status == STATUS_SUCCESS, "SmConnectToSm returned 0x%lx\n", status);
     if (NT_SUCCESS(status))
     {
-        GetModuleFileNameW(NULL, path, MAX_PATH);
-        lstrcpyW(wcsrchr(path, L'\\') + 1, L"session_child.exe");
-        lstrcpynW(commandLine, path, ARRAYSIZE(commandLine));
-        RtlInitUnicodeString(&command, commandLine);
-        status = SmStartCsr(port, &sessionId, &command, &csrss, &initial);
-        ok(status == STATUS_SUCCESS, "SmStartCsr returned 0x%lx\n", status);
-        ok(sessionId != ownSession && sessionId != 0, "the new session is %lu\n", sessionId);
-        for (wait = 0; wait < 300 && !ReadChildReport(report, ARRAYSIZE(report)); wait++) Sleep(100);
-        ok(ReadChildReport(report, ARRAYSIZE(report)), "the child in the new session wrote no report\n");
-        trace("child: %ls\n", report);
-        swscanf(report, L"session %lu console %lu devices %d remote %d screen %dx%d mode %lux%lu desktop %d",
-                &childSession, &childConsole, &devices, &remote, &width, &height, &modeWidth, &modeHeight,
-                &desktop);
-        ok(childSession == sessionId, "the child ran in session %lu, not %lu\n", childSession, sessionId);
-        ok(childConsole == ownSession, "the new session saw console %lu\n", childConsole);
-        ok(devices == 1 && remote == 1, "the new session sees %d display devices, %d remote\n", devices, remote);
-        ok(desktop == 1, "the new session could not create its desktop\n");
-        ok(modeWidth > 0 && width == (int)modeWidth && height == (int)modeHeight,
-           "the new session's screen is %dx%d, its display mode %lux%lu\n", width, height, modeWidth, modeHeight);
+        status = SmStopCsr(port, 0);
+        ok(status == STATUS_INVALID_PARAMETER, "stopping session 0 returned 0x%lx\n", status);
+        status = SmStopCsr(port, ownSession);
+        ok(status == STATUS_INVALID_PARAMETER, "stopping the console session returned 0x%lx\n", status);
+        RunSession(port, ownSession, &previous);
+        RunSession(port, ownSession, &previous);
         NtClose(port);
     }
     ok(WTSGetActiveConsoleSessionId() == console, "the console moved to session %lu\n", WTSGetActiveConsoleSessionId());
     ok(!SessionSeesRemoteAdapter(), "the console session sees the new session's adapter\n");
+    ok(ProcessesInSession(ownSession) > 0, "the console session lost its processes\n");
     SwDeviceClose(adapter);
 }
