@@ -253,11 +253,12 @@ NtfsMapDirectIo(
     {
         return STATUS_SUCCESS;
     }
+    /* The valid data length cannot pass the recorded size, so data written past it would later be zeroed over */
     if (FileOffset + Length > Attribute->NonResident.InitalizedDataSize &&
         (!AllowExtend ||
          Attribute->Flags != 0 ||
          FileOffset > Attribute->NonResident.InitalizedDataSize ||
-         FileOffset >= Attribute->NonResident.DataSize))
+         FileOffset + Length > Attribute->NonResident.DataSize))
     {
         return STATUS_SUCCESS;
     }

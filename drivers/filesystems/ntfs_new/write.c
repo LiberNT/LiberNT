@@ -766,6 +766,7 @@ NtfsFsdWrite(_In_ PDEVICE_OBJECT VolumeDeviceObject,
             {
                 ASSERT(!ExtendStream->DirectExtending);
                 ASSERT((ULONGLONG)ByteOffset.QuadPart <= Attribute->NonResident.InitalizedDataSize);
+                ASSERT((ULONGLONG)ByteOffset.QuadPart + Length <= Attribute->NonResident.DataSize);
                 ExtendStream->DirectExtending = TRUE;
                 KeClearEvent(&ExtendStream->DirectExtendDone);
             }
