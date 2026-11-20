@@ -16,4 +16,17 @@ BOOLEAN DxgkVidMmWorkerDrainCoreTryAdmitLocked(_Inout_ volatile LONG *ActiveWork
 BOOLEAN DxgkVidMmWorkerDrainCoreRetireLocked(_Inout_ volatile LONG *ActiveWorkers, _Out_ PBOOLEAN SetDrainedEvent);
 BOOLEAN DxgkVidMmWorkerDrainCoreIsDrainedLocked(_In_ volatile const LONG *ActiveWorkers);
 
+typedef struct _DXGK_VIDMM_WORKER_DRAIN_GATE
+{
+    PFAST_MUTEX Lock;
+    volatile LONG *ActiveWorkers;
+    volatile LONG *AdmissionBlocked;
+    PKEVENT DrainedEvent;
+} DXGK_VIDMM_WORKER_DRAIN_GATE, *PDXGK_VIDMM_WORKER_DRAIN_GATE;
+
+/* A counted worker gives its count back before it waits on an owner that may
+ * be draining the workers, and goes on afterwards only if admission reopened. */
+VOID DxgkVidMmWorkerDrainCoreYield(_In_ PDXGK_VIDMM_WORKER_DRAIN_GATE Gate);
+BOOLEAN DxgkVidMmWorkerDrainCoreReenter(_In_ PDXGK_VIDMM_WORKER_DRAIN_GATE Gate);
+
 #endif /* _DXGK_VIDMM_WORKER_DRAIN_CORE_H_ */

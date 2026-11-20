@@ -4593,6 +4593,17 @@ DxgkGpuVaFlushPageTableUpdatesForDevice(
     _In_ PDXGKRNL_PROCESS Process,
     _In_ PDXGKRNL_DEVICE Device);
 
+/* For a worker a reset drains: STATUS_DELETE_PENDING while the reset owns KMD admission. */
+NTSTATUS
+DxgkGpuVaFlushPageTableUpdatesForDeviceNoResetWait(
+    _In_ PDXGKRNL_PROCESS Process,
+    _In_ PDXGKRNL_DEVICE Device);
+
+BOOLEAN
+DxgkGpuVaWaitForKmdResetBoundary(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_opt_ PDXGKRNL_DEVICE SubmissionDevice);
+
 /* Scratch mappings in the paging process for virtual paging operations. */
 BOOLEAN
 DxgkGpuVaPagingScratchAvailable(
