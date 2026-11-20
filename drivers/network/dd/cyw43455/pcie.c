@@ -1692,6 +1692,7 @@ CywPcieOpen(
     KeInitializeSpinLock(&Pcie->SubmitLock);
     KeInitializeSpinLock(&Pcie->TxLock);
     KeInitializeEvent(&Pcie->IoctlEvent, NotificationEvent, FALSE);
+    ExInitializeRundownProtection(&Pcie->IoctlRundown);
 
     Pcie->RegsLength = min(Regs->u.Memory.Length, CYW_BAR0_MAP_LENGTH);
     Status = NdisMMapIoSpace((PVOID *)&Pcie->Regs, Adapter->MiniportAdapterHandle,
@@ -2076,7 +2077,15 @@ CywPcieRecover(
         return STATUS_DEVICE_BUSY;
     }
 
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
     DPRINT1("CYW: reloading the firmware after a failure\n");
+
+    /* An IOCTL caller still sleeps on the event and reads the buffers this reload replaces */
+    InterlockedExchange(&Pcie->IoctlAborted, 1);
+    KeSetEvent(&Pcie->IoctlEvent, IO_NO_INCREMENT, FALSE);
+    ExWaitForRundownProtectionRelease(&Pcie->IoctlRundown);
+    ASSERT(InterlockedCompareExchange(&Pcie->IoctlPending, 0, 0) == 0);
+
     CywIndicateDisassociation(Adapter);
     CywIndicateLinkState(Adapter, FALSE, 0);
 
@@ -2092,6 +2101,10 @@ CywPcieRecover(
     Pcie->SharedAddress = 0;
     InterlockedExchange(&Pcie->FlowRingState, 0);
     InterlockedExchange(&Pcie->FlowRingRefused, 0);
+
+    KeClearEvent(&Pcie->IoctlEvent);
+    InterlockedExchange(&Pcie->IoctlAborted, 0);
+    ExReInitializeRundownProtection(&Pcie->IoctlRundown);
 
     Status = CywPcieBringUp(Adapter);
     if (NT_SUCCESS(Status))
