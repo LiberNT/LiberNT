@@ -319,6 +319,45 @@ VOID NTAPI ParaNdis6_EnableInterrupt(IN NDIS_HANDLE MiniportInterruptContext)
     ParaNdis_VirtIOEnableIrqSynchronized((PARANDIS_ADAPTER *)MiniportInterruptContext, isAny);
 }
 
+BOOLEAN NTAPI ParaNdis6_MiniportMessageISR(
+    IN NDIS_HANDLE MiniportInterruptContext,
+    IN ULONG MessageId,
+    OUT PBOOLEAN QueueDefaultInterruptDpc,
+    OUT PULONG TargetProcessors)
+{
+    *TargetProcessors = 0;
+    return ParaNdis_OnMessageInterrupt((PARANDIS_ADAPTER *)MiniportInterruptContext, MessageId, QueueDefaultInterruptDpc);
+}
+
+VOID NTAPI ParaNdis6_MiniportMessageDPC(
+    IN NDIS_HANDLE MiniportInterruptContext,
+    IN ULONG MessageId,
+    IN PVOID MiniportDpcContext,
+    IN PVOID ReceiveThrottleParameters,
+    IN PVOID NdisReserved2)
+{
+    ASSERT(MessageId < ((PARANDIS_ADAPTER *)MiniportInterruptContext)->ulMessageCount);
+    ParaNdis6_MiniportDPC(MiniportInterruptContext, MiniportDpcContext, ReceiveThrottleParameters, NdisReserved2);
+}
+
+VOID NTAPI ParaNdis6_DisableMessageInterrupt(IN NDIS_HANDLE MiniportInterruptContext, IN ULONG MessageId)
+{
+    PARANDIS_ADAPTER *pContext = (PARANDIS_ADAPTER *)MiniportInterruptContext;
+
+    ASSERT(MessageId < pContext->ulMessageCount);
+    if (MessageId == pContext->ulRxMessage)
+        ParaNdis_VirtIODisableIrqSynchronized(pContext, isBothTransmitReceive);
+}
+
+VOID NTAPI ParaNdis6_EnableMessageInterrupt(IN NDIS_HANDLE MiniportInterruptContext, IN ULONG MessageId)
+{
+    PARANDIS_ADAPTER *pContext = (PARANDIS_ADAPTER *)MiniportInterruptContext;
+
+    ASSERT(MessageId < pContext->ulMessageCount);
+    if (MessageId == pContext->ulRxMessage)
+        ParaNdis_VirtIOEnableIrqSynchronized(pContext, isBothTransmitReceive);
+}
+
 NTSTATUS NTAPI DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 {
     NDIS_MINIPORT_DRIVER_CHARACTERISTICS chars;

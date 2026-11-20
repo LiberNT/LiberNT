@@ -359,14 +359,20 @@ static void *pci_map_address_range(void *context, int bar, size_t offset, size_t
 static u16 vdev_get_msix_vector(void *context, int queue)
 {
     PARANDIS_ADAPTER *pContext = (PARANDIS_ADAPTER *)context;
-    u16 vector = VIRTIO_MSI_NO_VECTOR;
 
-    /* we don't run on MSI support so this will never be true */
-    if (pContext->bUsingMSIX && queue >= 0) {
-        vector = (u16)pContext->AdapterResources.Vector;
-    }
+    if (!pContext->bUsingMSIX)
+        return VIRTIO_MSI_NO_VECTOR;
 
-    return vector;
+    ASSERT(pContext->ulMessageCount != 0);
+    ASSERT(pContext->ulRxMessage < pContext->ulMessageCount);
+    ASSERT(pContext->ulTxMessage < pContext->ulMessageCount);
+    ASSERT(pContext->ulControlMessage < pContext->ulMessageCount);
+
+    if (queue < 0)
+        return (u16)pContext->ulControlMessage;
+    if (queue == 1)
+        return (u16)pContext->ulTxMessage;
+    return (u16)pContext->ulRxMessage;
 }
 
 static void vdev_sleep(void *context, unsigned int msecs)

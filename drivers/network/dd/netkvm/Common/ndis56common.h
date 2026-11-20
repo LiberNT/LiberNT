@@ -503,6 +503,7 @@ typedef struct _tagPARANDIS_ADAPTER
     ULONG                       ulRxMessage;
     ULONG                       ulTxMessage;
     ULONG                       ulControlMessage;
+    ULONG                       ulMessageCount;
 
 #ifdef __REACTOS__
     NDIS_HANDLE                 InterruptHandle;
@@ -659,6 +660,11 @@ BOOLEAN ParaNdis_OnQueuedInterrupt(
     PARANDIS_ADAPTER *pContext,
     BOOLEAN *pRunDpc,
     ULONG knownInterruptSources);
+
+BOOLEAN ParaNdis_OnMessageInterrupt(
+    PARANDIS_ADAPTER *pContext,
+    ULONG MessageId,
+    BOOLEAN *pRunDpc);
 
 VOID ParaNdis_OnShutdown(
     PARANDIS_ADAPTER *pContext);

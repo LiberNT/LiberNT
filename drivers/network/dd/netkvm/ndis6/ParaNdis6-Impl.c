@@ -231,9 +231,39 @@ NDIS_STATUS NTAPI ParaNdis_FinishSpecificInitialization(
         ic.InterruptDpcHandler = ParaNdis6_MiniportDPC;
         ic.DisableInterruptHandler = ParaNdis6_DisableInterrupt;
         ic.EnableInterruptHandler = ParaNdis6_EnableInterrupt;
+        ic.MsiSupported = pContext->bUsingMSIX;
+        ic.MessageInterruptHandler = ParaNdis6_MiniportMessageISR;
+        ic.MessageInterruptDpcHandler = ParaNdis6_MiniportMessageDPC;
+        ic.DisableMessageInterruptHandler = ParaNdis6_DisableMessageInterrupt;
+        ic.EnableMessageInterruptHandler = ParaNdis6_EnableMessageInterrupt;
         status = NdisMRegisterInterruptEx(pContext->MiniportHandle, pContext, &ic, &pContext->InterruptHandle);
         if (status != NDIS_STATUS_SUCCESS)
+        {
             pContext->InterruptHandle = NULL;
+        }
+        else if (pContext->bUsingMSIX)
+        {
+            if (ic.InterruptType != NDIS_CONNECT_MESSAGE_BASED ||
+                ic.MessageInfoTable == NULL ||
+                ic.MessageInfoTable->MessageCount == 0)
+            {
+                DPrintf(0, ("[%s] the device has message interrupts but none was connected", __FUNCTION__));
+                NdisMDeregisterInterruptEx(pContext->InterruptHandle);
+                pContext->InterruptHandle = NULL;
+                status = NDIS_STATUS_RESOURCE_CONFLICT;
+            }
+            else
+            {
+                pContext->ulMessageCount = ic.MessageInfoTable->MessageCount;
+                pContext->ulRxMessage = 0;
+                pContext->ulTxMessage = 0;
+                pContext->ulControlMessage = pContext->ulMessageCount > 1 ? 1 : 0;
+            }
+        }
+        else
+        {
+            ASSERT(ic.InterruptType == NDIS_CONNECT_LINE_BASED);
+        }
     }
 
     DEBUG_EXIT_STATUS(status ? 0 : 2, status);

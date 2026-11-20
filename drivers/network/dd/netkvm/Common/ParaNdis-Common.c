@@ -1481,6 +1481,50 @@ BOOLEAN ParaNdis_OnLegacyInterrupt(
     return TRUE;
 }
 
+BOOLEAN ParaNdis_OnMessageInterrupt(
+    PARANDIS_ADAPTER *pContext,
+    ULONG MessageId,
+    OUT BOOLEAN *pRunDpc)
+{
+    ULONG sources;
+    ULONG status;
+
+    ASSERT(pContext->bUsingMSIX);
+    ASSERT(pContext->ulRxMessage == pContext->ulTxMessage);
+    ASSERT(MessageId < pContext->ulMessageCount);
+
+    *pRunDpc = FALSE;
+
+    if (MessageId == pContext->ulRxMessage)
+    {
+        sources = isBothTransmitReceive;
+        if (MessageId == pContext->ulControlMessage)
+        {
+            status = virtio_read_isr_status(&pContext->IODevice);
+            if (status != VIRTIO_NET_INVALID_INTERRUPT_STATUS)
+                sources |= status & isControl;
+        }
+    }
+    else if (MessageId == pContext->ulControlMessage)
+    {
+        sources = isControl;
+    }
+    else
+    {
+        return FALSE;
+    }
+
+    if (pContext->powerState != NdisDeviceStateD0)
+        return TRUE;
+
+    PARANDIS_STORE_LAST_INTERRUPT_TIMESTAMP(pContext);
+    if (sources & isBothTransmitReceive)
+        ParaNdis_VirtIODisableIrqSynchronized(pContext, isBothTransmitReceive);
+    InterlockedOr(&pContext->InterruptStatus, (LONG)sources);
+    *pRunDpc = TRUE;
+    return TRUE;
+}
+
 BOOLEAN ParaNdis_OnQueuedInterrupt(
     PARANDIS_ADAPTER *pContext,
     OUT BOOLEAN *pRunDpc,
