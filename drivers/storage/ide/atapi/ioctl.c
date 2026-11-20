@@ -8,6 +8,7 @@
 /* INCLUDES *******************************************************************/
 
 #include "atapi.h"
+#include <reactos/drivers/dumpstor.h>
 
 /* GLOBALS ********************************************************************/
 
@@ -502,6 +503,146 @@ AtaPdoHandleScsiPassthrough(
                                   ChanExt->PortData.MaximumPhysicalPages);
 }
 
+#define ATA_DUMP_MAX_TRANSFER   (64 * 1024)
+
+/* The kernel keeps the interface for the whole boot, so the context copies what it needs from the device */
+typedef struct _ATA_DUMP_CONTEXT
+{
+    PVOID ChannelContext;
+    PCHANNEL_DUMP_PREPARE Prepare;
+    PCHANNEL_DUMP_WRITE Write;
+    PCHANNEL_DUMP_FLUSH Flush;
+    ATA_IO_CONTEXT_COMMON Device;
+    ULONG64 TotalSectors;
+    BOOLEAN Lba48;
+    DECLSPEC_ALIGN(16) UCHAR Buffer[ATA_DUMP_MAX_TRANSFER];
+} ATA_DUMP_CONTEXT, *PATA_DUMP_CONTEXT;
+
+static
+NTSTATUS
+NTAPI
+AtaDumpPrepare(
+    _In_ PVOID Context)
+{
+    PATA_DUMP_CONTEXT Dump = Context;
+
+    return Dump->Prepare(Dump->ChannelContext, &Dump->Device);
+}
+
+static
+NTSTATUS
+NTAPI
+AtaDumpWrite(
+    _In_ PVOID Context,
+    _In_ ULONG64 DiskByteOffset,
+    _In_ PHYSICAL_ADDRESS Buffer,
+    _In_ ULONG Length)
+{
+    PATA_DUMP_CONTEXT Dump = Context;
+    ULONG SectorSize = Dump->Device.SectorSize;
+    ULONG64 Lba;
+    ULONG SectorCount, Copied = 0;
+
+    if ((Length == 0) || (Length > ATA_DUMP_MAX_TRANSFER) ||
+        (Length % SectorSize) != 0 || (DiskByteOffset % SectorSize) != 0)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Lba = DiskByteOffset / SectorSize;
+    SectorCount = Length / SectorSize;
+    if ((Lba >= Dump->TotalSectors) || (SectorCount > Dump->TotalSectors - Lba))
+        return STATUS_END_OF_MEDIA;
+    if (!Dump->Lba48 && (Lba + SectorCount > 0x10000000ULL))
+        return STATUS_END_OF_MEDIA;
+
+    /* The source can be any RAM: the CPU moves it, sector by sector, through the data port */
+    while (Copied < Length)
+    {
+        ULONG Chunk = min(Length - Copied, PAGE_SIZE - BYTE_OFFSET(Buffer.QuadPart));
+        PVOID Virtual = MmGetVirtualForPhysical(Buffer);
+
+        if (Virtual == NULL)
+            return STATUS_INVALID_ADDRESS;
+        RtlCopyMemory(&Dump->Buffer[Copied], Virtual, Chunk);
+        Copied += Chunk;
+        Buffer.QuadPart += Chunk;
+    }
+
+    return Dump->Write(Dump->ChannelContext, &Dump->Device, Lba, SectorCount, Dump->Lba48, Dump->Buffer);
+}
+
+static
+NTSTATUS
+NTAPI
+AtaDumpFlush(
+    _In_ PVOID Context)
+{
+    PATA_DUMP_CONTEXT Dump = Context;
+
+    return Dump->Flush(Dump->ChannelContext, &Dump->Device, Dump->Lba48);
+}
+
+static
+NTSTATUS
+AtaPdoGetDumpInterface(
+    _In_ PATAPORT_DEVICE_EXTENSION DevExt,
+    _Inout_ PIRP Irp,
+    _In_ PIO_STACK_LOCATION IoStack)
+{
+    PROS_STORAGE_DUMP_INTERFACE Interface = Irp->AssociatedIrp.SystemBuffer;
+    PATAPORT_PORT_DATA PortData = DevExt->Device.PortData;
+    PATA_DUMP_CONTEXT Dump;
+
+    if ((Interface == NULL) ||
+        (IoStack->Parameters.DeviceIoControl.InputBufferLength < sizeof(*Interface)) ||
+        (IoStack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(*Interface)))
+    {
+        return STATUS_BUFFER_TOO_SMALL;
+    }
+
+    /* TODO: crash-time path for AHCI channels and ATAPI devices */
+    if ((PortData == NULL) || (PortData->DumpWrite == NULL) || IS_ATAPI(&DevExt->Device) ||
+        !(DevExt->Device.DeviceFlags & DEVICE_LBA_MODE) || (DevExt->Device.TotalSectors == 0))
+    {
+        return STATUS_NOT_SUPPORTED;
+    }
+    if ((Interface->BytesPerSector == 0) || (Interface->BytesPerSector > PAGE_SIZE) ||
+        (Interface->BytesPerSector != DevExt->Device.SectorSize) ||
+        (ATA_DUMP_MAX_TRANSFER % Interface->BytesPerSector) != 0)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Dump = DevExt->DumpContext;
+    if (Dump == NULL)
+    {
+        Dump = ExAllocatePoolZero(NonPagedPool, sizeof(*Dump), ATAPORT_TAG);
+        if (Dump == NULL)
+            return STATUS_INSUFFICIENT_RESOURCES;
+        Dump->ChannelContext = PortData->ChannelContext;
+        Dump->Prepare = PortData->DumpPrepare;
+        Dump->Write = PortData->DumpWrite;
+        Dump->Flush = PortData->DumpFlush;
+        RtlCopyMemory(&Dump->Device, &DevExt->Device, sizeof(Dump->Device));
+        Dump->TotalSectors = DevExt->Device.TotalSectors;
+        Dump->Lba48 = !!(DevExt->Device.DeviceFlags & DEVICE_LBA48);
+        DevExt->DumpContext = Dump;
+    }
+
+    RtlZeroMemory(Interface, sizeof(*Interface));
+    Interface->Version = ROS_STORAGE_DUMP_INTERFACE_VERSION;
+    Interface->Size = sizeof(*Interface);
+    Interface->Context = Dump;
+    Interface->BytesPerSector = Dump->Device.SectorSize;
+    Interface->MaximumTransferLength = ATA_DUMP_MAX_TRANSFER;
+    Interface->Prepare = AtaDumpPrepare;
+    Interface->WriteRoutine = AtaDumpWrite;
+    Interface->Flush = AtaDumpFlush;
+    Irp->IoStatus.Information = sizeof(*Interface);
+    return STATUS_SUCCESS;
+}
+
 static
 NTSTATUS
 AtaPdoDeviceControl(
@@ -527,6 +668,10 @@ AtaPdoDeviceControl(
     {
         case IOCTL_STORAGE_QUERY_PROPERTY:
             Status = AtaPdoHandleStorageQueryProperty(DevExt, Irp, IoStack, &ForwardToFdo);
+            break;
+
+        case IOCTL_REACTOS_STORAGE_GET_DUMP_INTERFACE:
+            Status = AtaPdoGetDumpInterface(DevExt, Irp, IoStack);
             break;
 
         case IOCTL_SCSI_GET_ADDRESS:

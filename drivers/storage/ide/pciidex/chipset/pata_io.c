@@ -8,6 +8,7 @@
 /* INCLUDES *******************************************************************/
 
 #include "pciidex.h"
+#include <reactos/drivers/dumpstor.h>
 
 /* FUNCTIONS ******************************************************************/
 
@@ -1217,4 +1218,146 @@ PataPollingTimerDpc(
 
     if (!IsRequestCompleted)
         KeInsertQueueDpc(&ChanData->PollingTimerDpc, NULL, NULL);
+}
+
+/* A dump runs with interrupts disabled at HIGH_LEVEL: every wait here polls the status register */
+static
+NTSTATUS
+PataDumpWaitReady(
+    _In_ PCHANNEL_DATA_PATA ChanData,
+    _In_ UCHAR Mask,
+    _In_ UCHAR Value)
+{
+    UCHAR IdeStatus;
+    ULONG Round;
+
+    for (Round = 0; Round < ROS_DUMP_POLL_ITERATIONS / ATA_TIME_BUSY_NORMAL / 10; ++Round)
+    {
+        IdeStatus = ATA_WAIT(ChanData, ATA_TIME_BUSY_NORMAL, Mask, Value);
+        if (IdeStatus == 0xFF)
+            return STATUS_NO_SUCH_DEVICE;
+        if ((IdeStatus & IDE_STATUS_BUSY) == 0 && (IdeStatus & (IDE_STATUS_ERROR | IDE_STATUS_DEVICE_FAULT)))
+            return STATUS_IO_DEVICE_ERROR;
+        if ((IdeStatus & Mask) == Value)
+            return STATUS_SUCCESS;
+    }
+
+    return STATUS_IO_TIMEOUT;
+}
+
+static
+VOID
+PataDumpSelect(
+    _In_ PCHANNEL_DATA_PATA ChanData,
+    _In_ PATA_IO_CONTEXT_COMMON Device,
+    _In_ UCHAR LbaHigh)
+{
+    ATA_SELECT_DEVICE(ChanData, DEV_NUMBER(Device), Device->DeviceSelect | IDE_LBA_MODE | LbaHigh);
+    ATA_IO_WAIT();
+}
+
+NTSTATUS
+PataDumpPrepare(
+    _In_ PVOID ChannelContext,
+    _In_ PATA_IO_CONTEXT_COMMON Device)
+{
+    PCHANNEL_DATA_PATA ChanData = ChannelContext;
+
+    ASSERT(!(Device->TransportFlags & DEVICE_IS_ATAPI));
+
+    PataDumpSelect(ChanData, Device, 0);
+    ATA_WRITE(ChanData->Regs.Control, IDE_DC_DISABLE_INTERRUPTS | IDE_DC_ALWAYS, ChanData, MRES_CTRL);
+    ATA_IO_WAIT();
+    ChanData->IsPollingActive = TRUE;
+
+    return PataDumpWaitReady(ChanData, IDE_STATUS_BUSY, 0);
+}
+
+NTSTATUS
+PataDumpWrite(
+    _In_ PVOID ChannelContext,
+    _In_ PATA_IO_CONTEXT_COMMON Device,
+    _In_ ULONG64 Lba,
+    _In_ ULONG SectorCount,
+    _In_ BOOLEAN Lba48,
+    _In_reads_bytes_(SectorCount * Device->SectorSize) PVOID Buffer)
+{
+    PCHANNEL_DATA_PATA ChanData = ChannelContext;
+    PUCHAR Data = Buffer;
+    NTSTATUS Status;
+    ULONG Sector;
+
+    ASSERT(!(Device->TransportFlags & DEVICE_IS_ATAPI));
+    ASSERT(SectorCount != 0 && SectorCount <= (Lba48 ? 0x10000UL : 0x100UL));
+    ASSERT(Lba48 || (Lba + SectorCount) <= 0x10000000ULL);
+    ASSERT((Device->SectorSize % sizeof(USHORT)) == 0);
+
+    PataDumpSelect(ChanData, Device, Lba48 ? 0 : (UCHAR)((Lba >> 24) & 0x0F));
+    Status = PataDumpWaitReady(ChanData, IDE_STATUS_BUSY, 0);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (Lba48)
+    {
+        ATA_WRITE(ChanData->Regs.SectorCount, (UCHAR)(SectorCount >> 8), ChanData, MRES_TF);
+        ATA_WRITE(ChanData->Regs.LbaLow, (UCHAR)(Lba >> 24), ChanData, MRES_TF);
+        ATA_WRITE(ChanData->Regs.LbaMid, (UCHAR)(Lba >> 32), ChanData, MRES_TF);
+        ATA_WRITE(ChanData->Regs.LbaHigh, (UCHAR)(Lba >> 40), ChanData, MRES_TF);
+    }
+    ATA_WRITE(ChanData->Regs.SectorCount, (UCHAR)SectorCount, ChanData, MRES_TF);
+    ATA_WRITE(ChanData->Regs.LbaLow, (UCHAR)Lba, ChanData, MRES_TF);
+    ATA_WRITE(ChanData->Regs.LbaMid, (UCHAR)(Lba >> 8), ChanData, MRES_TF);
+    ATA_WRITE(ChanData->Regs.LbaHigh, (UCHAR)(Lba >> 16), ChanData, MRES_TF);
+    ATA_WRITE(ChanData->Regs.Command, Lba48 ? IDE_COMMAND_WRITE_EXT : IDE_COMMAND_WRITE, ChanData, MRES_TF);
+    ATA_IO_WAIT();
+
+    for (Sector = 0; Sector < SectorCount; ++Sector)
+    {
+        Status = PataDumpWaitReady(ChanData, IDE_STATUS_BUSY | IDE_STATUS_DRQ, IDE_STATUS_DRQ);
+        if (!NT_SUCCESS(Status))
+            return Status;
+
+        if (!(Device->SectorSize & (sizeof(ULONG) - 1)) && (ChanData->ChanInfo & CHANNEL_FLAG_IO32))
+        {
+            ATA_WRITE_BLOCK_32((PULONG)ChanData->Regs.Data, (PULONG)Data, Device->SectorSize / sizeof(ULONG),
+                               ChanData, MRES_TF);
+        }
+        else
+        {
+            ATA_WRITE_BLOCK_16((PUSHORT)ChanData->Regs.Data, (PUSHORT)Data, Device->SectorSize / sizeof(USHORT),
+                               ChanData, MRES_TF);
+        }
+        Data += Device->SectorSize;
+        ATA_IO_WAIT();
+    }
+
+    return PataDumpWaitReady(ChanData, IDE_STATUS_BUSY | IDE_STATUS_DRQ, 0);
+}
+
+NTSTATUS
+PataDumpFlush(
+    _In_ PVOID ChannelContext,
+    _In_ PATA_IO_CONTEXT_COMMON Device,
+    _In_ BOOLEAN Lba48)
+{
+    PCHANNEL_DATA_PATA ChanData = ChannelContext;
+    NTSTATUS Status;
+
+    ASSERT(!(Device->TransportFlags & DEVICE_IS_ATAPI));
+
+    PataDumpSelect(ChanData, Device, 0);
+    Status = PataDumpWaitReady(ChanData, IDE_STATUS_BUSY, 0);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    ATA_WRITE(ChanData->Regs.Command, Lba48 ? IDE_COMMAND_FLUSH_CACHE_EXT : IDE_COMMAND_FLUSH_CACHE, ChanData, MRES_TF);
+    ATA_IO_WAIT();
+    Status = PataDumpWaitReady(ChanData, IDE_STATUS_BUSY, 0);
+
+    /* A hibernation that fails goes back to the interrupt-driven path */
+    ATA_WRITE(ChanData->Regs.Control, IDE_DC_ALWAYS, ChanData, MRES_CTRL);
+    ATA_IO_WAIT();
+    ChanData->IsPollingActive = FALSE;
+
+    return Status;
 }

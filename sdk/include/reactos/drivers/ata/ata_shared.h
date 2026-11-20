@@ -460,6 +460,29 @@ typedef BOOLEAN
 typedef CHANNEL_START_IO *PCHANNEL_START_IO;
 
 typedef NTSTATUS
+(CHANNEL_DUMP_PREPARE)(
+    _In_ PVOID ChannelContext,
+    _In_ PATA_IO_CONTEXT_COMMON Device);
+typedef CHANNEL_DUMP_PREPARE *PCHANNEL_DUMP_PREPARE;
+
+typedef NTSTATUS
+(CHANNEL_DUMP_WRITE)(
+    _In_ PVOID ChannelContext,
+    _In_ PATA_IO_CONTEXT_COMMON Device,
+    _In_ ULONG64 Lba,
+    _In_ ULONG SectorCount,
+    _In_ BOOLEAN Lba48,
+    _In_reads_bytes_(SectorCount * Device->SectorSize) PVOID Buffer);
+typedef CHANNEL_DUMP_WRITE *PCHANNEL_DUMP_WRITE;
+
+typedef NTSTATUS
+(CHANNEL_DUMP_FLUSH)(
+    _In_ PVOID ChannelContext,
+    _In_ PATA_IO_CONTEXT_COMMON Device,
+    _In_ BOOLEAN Lba48);
+typedef CHANNEL_DUMP_FLUSH *PCHANNEL_DUMP_FLUSH;
+
+typedef NTSTATUS
 (CONTROLLER_PNP_ADD_DEVICE)(
     _In_ PDRIVER_OBJECT DriverObject,
     _In_ PDEVICE_OBJECT PhysicalDeviceObject,
@@ -541,6 +564,9 @@ typedef struct _PCIIDEX_CHANNEL_INTERFACE
     PVOID* PortContext;
     PPORT_NOTIFICATION* PortNotification;
     PATA_DEVICE_REQUEST** Slots;
+    PCHANNEL_DUMP_PREPARE DumpPrepare;
+    PCHANNEL_DUMP_WRITE DumpWrite;
+    PCHANNEL_DUMP_FLUSH DumpFlush;
 } PCIIDEX_CHANNEL_INTERFACE, *PPCIIDEX_CHANNEL_INTERFACE;
 
 DEFINE_GUID(GUID_PCIIDE_INTERFACE_ROS,
