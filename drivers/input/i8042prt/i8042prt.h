@@ -247,6 +247,10 @@ typedef struct _I8042_HOOK_WORKITEM
 /* A PS/2 device answers a command byte within milliseconds; a packet that stays unacknowledged this long has lost its answer */
 #define I8042_PACKET_TIMEOUT_MS 1000
 
+/* A mouse that still has not answered its reset after this long is not there;
+   counting poll retries instead made the answer window stretch to minutes */
+#define I8042_RESET_REPLY_TIMEOUT_MS 1000
+
 /*-----------------------------------------------------
  * Keyboard responses
  * --------------------------------------------------*/
