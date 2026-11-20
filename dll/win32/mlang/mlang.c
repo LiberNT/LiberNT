@@ -1568,6 +1568,25 @@ static INT CALLBACK map_font_enum_proc(const LOGFONTW *lf, const TEXTMETRICW *nt
     return 1;
 }
 
+#ifdef __REACTOS__
+static BOOL map_font_codepage_font(struct map_font_enum_data *data, UINT codepage)
+{
+    LOGFONTW lf = {0};
+    UINT i;
+
+    for (i = 0; i < ARRAY_SIZE(mlang_data); i++)
+    {
+        if (mlang_data[i].family_codepage != codepage)
+            continue;
+        lf.lfCharSet = (BYTE)data->charset;
+        lstrcpynW(lf.lfFaceName, (data->src_lf.lfPitchAndFamily & 0x3) == FIXED_PITCH ?
+                  mlang_data[i].fixed_font : mlang_data[i].proportional_font, LF_FACESIZE);
+        return !map_font_enum_proc(&lf, NULL, 0, (LPARAM)data);
+    }
+    return FALSE;
+}
+#endif
+
 static HRESULT map_font(HDC hdc, DWORD codepages, HFONT src_font, HFONT *dst_font)
 {
     struct font_list *font_list_entry;
@@ -1624,7 +1643,12 @@ static HRESULT map_font(HDC hdc, DWORD codepages, HFONT src_font, HFONT *dst_fon
             enum_data.charset = charset_info.ciCharset;
             enum_data.mask = mask;
 
+#ifdef __REACTOS__
+            if (map_font_codepage_font(&enum_data, charset_info.ciACP) ||
+                !EnumFontFamiliesExW(hdc, &font_attr, map_font_enum_proc, (LPARAM)&enum_data, 0))
+#else
             if (!EnumFontFamiliesExW(hdc, &font_attr, map_font_enum_proc, (LPARAM)&enum_data, 0))
+#endif
             {
                 font_list_entry = malloc(sizeof(*font_list_entry));
                 if (font_list_entry == NULL) return E_OUTOFMEMORY;
