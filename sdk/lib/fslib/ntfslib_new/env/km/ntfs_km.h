@@ -51,6 +51,12 @@ NtfsDiskEndDirectWriteKm(_In_ PDEVICE_OBJECT DeviceObject,
                          _In_ ULONGLONG Offset,
                          _In_ ULONG Length);
 
+/* After a transfer that bypassed the block cache: drop clean copies of the bytes it replaced. */
+VOID
+NtfsDiskDropCleanRangeKm(_In_ PDEVICE_OBJECT DeviceObject,
+                         _In_ ULONGLONG Offset,
+                         _In_ ULONG Length);
+
 NTSTATUS
 NtfsDiskReadKm(_In_ PDEVICE_OBJECT DeviceObject,
                _In_ ULONG SectorBytes,

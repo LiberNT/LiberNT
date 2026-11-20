@@ -272,6 +272,37 @@ NtfsCacheInvalidateRange(_In_ PDEVICE_OBJECT Owner,
     ExReleaseFastMutex(&NtfsCacheMutex);
 }
 
+/* Held changes stay; a clean copy of bytes rewritten behind the cache's back goes */
+static
+VOID
+NtfsCacheDropCleanRange(_In_ PDEVICE_OBJECT Owner,
+                        _In_ ULONGLONG Offset,
+                        _In_ ULONG Length)
+{
+    ULONGLONG Block;
+    ULONGLONG LastBlock;
+
+    if (!NtfsCacheReady || !Length)
+        return;
+
+    Block = Offset >> NTFS_CACHE_BLOCK_SHIFT;
+    LastBlock = (Offset + Length - 1) >> NTFS_CACHE_BLOCK_SHIFT;
+    ExAcquireFastMutex(&NtfsCacheMutex);
+    for (; Block <= LastBlock; Block++)
+    {
+        NTFS_CACHE_SLOT* Slot = NtfsCacheProbe(Owner, Block);
+
+        if (Slot && !Slot->Dirty)
+        {
+            Slot->Tag = NTFS_CACHE_EMPTY;
+            Slot->Generation++;
+            ObDereferenceObjectDeferDelete(Slot->Owner);
+            Slot->Owner = NULL;
+        }
+    }
+    ExReleaseFastMutex(&NtfsCacheMutex);
+}
+
 /*
  * Writes go to the volume, so the blocks we already hold can simply take the
  * same bytes instead of being dropped. Discarding them would make every
@@ -1370,6 +1401,18 @@ NtfsDiskEndDirectWriteKm(_In_ PDEVICE_OBJECT DeviceObject,
     NT_ASSERT(Length != 0);
     NT_ASSERT(((Offset | Length) & (NTFS_CACHE_BLOCK_SIZE - 1)) == 0);
     NtfsCacheInvalidateRange(DeviceObject, Offset, Length);
+}
+
+extern "C"
+VOID
+NtfsDiskDropCleanRangeKm(_In_ PDEVICE_OBJECT DeviceObject,
+                         _In_ ULONGLONG Offset,
+                         _In_ ULONG Length)
+{
+    NT_ASSERT(DeviceObject != NULL);
+    if (!Length || Offset > ~(ULONGLONG)0 - Length)
+        return;
+    NtfsCacheDropCleanRange(DeviceObject, Offset, Length);
 }
 
 extern "C"
