@@ -67,6 +67,8 @@ typedef struct _EX_TIMER
     BOOLEAN DeleteAfterExpiry;
     BOOLEAN DeleteQueued;
     BOOLEAN ExpiredWhileDisabled;
+    BOOLEAN EverSet;
+    BOOLEAN MayHaveExpired;
     WORK_QUEUE_ITEM DeleteWorkItem;
     BOOLEAN HighResolutionSet;
     LONGLONG Period;
@@ -924,6 +926,23 @@ ExpRearmHighResolutionTimer(
     KiArmHighResolutionDeadline(&Timer->Deadline, Timer->KeTimer.DueTime.QuadPart);
 }
 
+/*
+ * A setting that replaced a pending one left nothing behind; any other may
+ * have gone off, so its callback can still be queued or running. Called with
+ * the timer's lock held.
+ */
+static
+VOID
+ExpNoteTimerSetting(
+    _Inout_ PEX_TIMER Timer,
+    _In_ BOOLEAN ReplacedPending,
+    _In_ LONGLONG Period)
+{
+    if (Period != 0 || (Timer->EverSet && !ReplacedPending))
+        Timer->MayHaveExpired = TRUE;
+    Timer->EverSet = TRUE;
+}
+
 /* The object goes first, then the driver hears about it (WDK, ExTimerDeleteCallback) */
 static
 VOID
@@ -1097,6 +1116,7 @@ ExSetTimer(
     if (Timer->Attributes & EX_TIMER_HIGH_RESOLUTION)
     {
         WasSet = KeSetTimerEx(&Timer->KeTimer, Due, 0, &Timer->Dpc);
+        ExpNoteTimerSetting(Timer, WasSet, Period);
         Timer->Period = Period;
         Timer->ScheduledTime = Timer->KeTimer.DueTime.QuadPart;
         Timer->HighResolutionSet = TRUE;
@@ -1114,6 +1134,7 @@ ExSetTimer(
     Interval = (LONG)(Period / 10000);
 
     WasSet = KeSetTimerEx(&Timer->KeTimer, Due, Interval, &Timer->Dpc);
+    ExpNoteTimerSetting(Timer, WasSet, Period);
 
     KeReleaseSpinLock(&Timer->Lock, OldIrql);
     return WasSet;
@@ -1159,6 +1180,7 @@ ExDeleteTimer(
     _In_opt_ PEXT_DELETE_PARAMETERS Parameters)
 {
     BOOLEAN WasSet = FALSE;
+    BOOLEAN CallbackPossible;
     KIRQL OldIrql;
 
     ASSERT(KeGetCurrentIrql() <= (Wait ? APC_LEVEL : DISPATCH_LEVEL));
@@ -1197,6 +1219,7 @@ ExDeleteTimer(
     Timer->HighResolutionSet = FALSE;
     KiDisarmHighResolutionDeadline(&Timer->Deadline);
     Timer->DeleteQueued = !Wait;
+    CallbackPossible = Timer->EverSet && (!WasSet || Timer->MayHaveExpired);
 
     KeReleaseSpinLock(&Timer->Lock, OldIrql);
 
@@ -1206,7 +1229,9 @@ ExDeleteTimer(
         return WasSet;
     }
 
-    KeFlushQueuedDpcs();
+    /* A timer taken off the table before any of its settings went off never queued its DPC */
+    if (CallbackPossible)
+        KeFlushQueuedDpcs();
     ExpFinishTimerDelete(Timer);
     return WasSet;
 }

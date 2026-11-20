@@ -395,6 +395,130 @@ START_TEST(ExTimerCombinedAttributes)
     }
 }
 
+static KEVENT HeldCallbackEntered;
+static volatile LONG HeldCallbackRelease;
+static volatile LONG HeldCallbackDone;
+static volatile LONG HeldCallbackCalls;
+static volatile LONG DeleterStarted;
+static volatile LONG DeleterReturned;
+static volatile LONG DoneSeenByDeleter;
+
+static
+VOID
+NTAPI
+HeldCallback(
+    _In_ PEX_TIMER Timer,
+    _In_opt_ PVOID Context)
+{
+    ULONG Waited;
+
+    UNREFERENCED_PARAMETER(Timer);
+    UNREFERENCED_PARAMETER(Context);
+
+    if (InterlockedIncrement(&HeldCallbackCalls) != 1)
+        return;
+    KeSetEvent(&HeldCallbackEntered, IO_NO_INCREMENT, FALSE);
+    for (Waited = 0; Waited < 200000 && ReadAcquire(&HeldCallbackRelease) == 0; Waited += 10)
+        KeStallExecutionProcessor(10);
+    WriteRelease(&HeldCallbackDone, 1);
+}
+
+static
+VOID
+NTAPI
+DeleterThread(
+    _In_ PVOID Context)
+{
+    WriteRelease(&DeleterStarted, 1);
+    ExDeleteTimer((PEX_TIMER)Context, TRUE, TRUE, NULL);
+    WriteRelease(&DoneSeenByDeleter, ReadAcquire(&HeldCallbackDone));
+    WriteRelease(&DeleterReturned, 1);
+    PsTerminateSystemThread(STATUS_SUCCESS);
+}
+
+/* A pending timer taken off the table returns TRUE and its callback never runs */
+static
+VOID
+TestDeletePendingTimer(VOID)
+{
+    LARGE_INTEGER Delay;
+    PEX_TIMER Timer;
+
+    HeldCallbackCalls = 0;
+    Timer = ExAllocateTimer(HeldCallback, NULL, EX_TIMER_HIGH_RESOLUTION);
+    ok(Timer != NULL, "ExAllocateTimer failed\n");
+    if (Timer == NULL)
+        return;
+    ok_bool_false(ExSetTimer(Timer, -10 * 1000 * 20, 0, NULL), "fresh timer was set");
+    ok_bool_true(ExDeleteTimer(Timer, TRUE, TRUE, NULL), "pending timer was not set");
+    Delay.QuadPart = -10 * 1000 * 40;
+    KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+    ok_eq_long(HeldCallbackCalls, 0);
+}
+
+/*
+ * A timer set again while an earlier expiry's callback still runs is pending
+ * when it is deleted, yet the delete must wait for that callback (WDK, ExDeleteTimer).
+ */
+static
+VOID
+TestDeleteWaitsForEarlierExpiry(VOID)
+{
+    OBJECT_ATTRIBUTES Attributes;
+    LARGE_INTEGER Timeout;
+    HANDLE Thread;
+    PEX_TIMER Timer;
+    NTSTATUS Status;
+
+    KeInitializeEvent(&HeldCallbackEntered, NotificationEvent, FALSE);
+    HeldCallbackRelease = HeldCallbackDone = HeldCallbackCalls = 0;
+    DeleterStarted = DeleterReturned = DoneSeenByDeleter = 0;
+
+    Timer = ExAllocateTimer(HeldCallback, NULL, EX_TIMER_HIGH_RESOLUTION);
+    ok(Timer != NULL, "ExAllocateTimer failed\n");
+    if (Timer == NULL)
+        return;
+
+    ExSetTimer(Timer, -10 * 1000, 0, NULL);
+    Timeout.QuadPart = -10 * 1000 * 1000;
+    Status = KeWaitForSingleObject(&HeldCallbackEntered, Executive, KernelMode, FALSE, &Timeout);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (Status != STATUS_SUCCESS)
+    {
+        WriteRelease(&HeldCallbackRelease, 1);
+        ExDeleteTimer(Timer, TRUE, TRUE, NULL);
+        return;
+    }
+
+    ok_bool_false(ExSetTimer(Timer, -10 * 1000 * 1000 * 10, 0, NULL), "timer still set after it went off");
+
+    InitializeObjectAttributes(&Attributes, NULL, OBJ_KERNEL_HANDLE, NULL, NULL);
+    Status = PsCreateSystemThread(&Thread, THREAD_ALL_ACCESS, &Attributes, NULL, NULL, DeleterThread, Timer);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+    {
+        WriteRelease(&HeldCallbackRelease, 1);
+        ExDeleteTimer(Timer, TRUE, TRUE, NULL);
+        return;
+    }
+
+    Timeout.QuadPart = -10 * 1000;
+    while (ReadAcquire(&DeleterStarted) == 0)
+        KeDelayExecutionThread(KernelMode, FALSE, &Timeout);
+    Timeout.QuadPart = -10 * 1000 * 20;
+    KeDelayExecutionThread(KernelMode, FALSE, &Timeout);
+    ok_eq_long(ReadAcquire(&DeleterReturned), 0);
+
+    WriteRelease(&HeldCallbackRelease, 1);
+    Timeout.QuadPart = -10 * 1000 * 1000;
+    Status = ZwWaitForSingleObject(Thread, FALSE, &Timeout);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ZwClose(Thread);
+    ok_eq_long(ReadAcquire(&DeleterReturned), 1);
+    ok_eq_long(ReadAcquire(&DoneSeenByDeleter), 1);
+    ok_eq_long(ReadAcquire(&HeldCallbackCalls), 1);
+}
+
 START_TEST(ExTimerExtra)
 {
     TestOneShotDpc();
@@ -402,5 +526,7 @@ START_TEST(ExTimerExtra)
     TestCancelBeforeFire();
     TestExtendedTimer();
     TestDeleteWithoutWaiting();
+    TestDeletePendingTimer();
+    TestDeleteWaitsForEarlierExpiry();
     TestHighResolutionTimer();
 }
