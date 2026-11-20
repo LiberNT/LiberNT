@@ -657,6 +657,9 @@ static inline
 VOID
 NtfsAcquireMetadata(_In_ PVolumeContextBlock VolCB)
 {
+    ASSERT(KeAreApcsDisabled());
+    ASSERT(ExIsResourceAcquiredExclusiveLite(&VolCB->MetadataResource) ||
+           !ExIsResourceAcquiredSharedLite(&VolCB->MetadataResource));
     if (!ExIsResourceAcquiredExclusiveLite(&VolCB->MetadataResource))
         ExfAcquirePushLockExclusive(&VolCB->MetadataGate);
     ExAcquireResourceExclusiveLite(&VolCB->MetadataResource, TRUE);
@@ -688,6 +691,7 @@ static inline
 VOID
 NtfsAcquireMetadataShared(_In_ PVolumeContextBlock VolCB)
 {
+    ASSERT(KeAreApcsDisabled());
     ASSERT(!ExIsResourceAcquiredSharedLite(&VolCB->MetadataResource));
     ExfAcquirePushLockShared(&VolCB->MetadataGate);
     ExAcquireResourceSharedLite(&VolCB->MetadataResource, TRUE);
