@@ -18,6 +18,8 @@
 #define BOOTUI_ACCENT 0x7AAAF0
 #define BOOTUI_PANEL 0x101A2B
 #define BOOTUI_GLYPH_ARENA (512 * 1024)
+#define BOOTUI_PANE_GAP 24
+#define BOOTUI_PANE_PADDING 20
 
 typedef struct
 {
@@ -898,6 +900,8 @@ BootUiRenderMenu(PUI_MENU_INFO Menu, LONG TimeOut, BOOLEAN CanEscape, BOOTUI_MEN
     ULONG RowHeight = BootUiFontSize + 30;
     ULONG Width = min(BootUiWidth - 64, max(440, BootUiWidth * 2 / 5));
     ULONG Left = (BootUiWidth - Width) / 2, Top, TextWidth, Icon, Size;
+    ULONG PaneLeft = 0, PaneWidth = 0, PaneHeight, Lines;
+    PCSTR Description = NULL;
     CHAR Status[320];
     for (I = 0; I < Menu->MenuItemCount; ++I)
     {
@@ -917,9 +921,23 @@ BootUiRenderMenu(PUI_MENU_INFO Menu, LONG TimeOut, BOOLEAN CanEscape, BOOTUI_MEN
         First = Count - Visible;
     Top = (BootUiHeight - Visible * RowHeight) / 2;
     Size = max(14, BootUiFontSize - 5);
+    if (UiMenuDescriptions)
+    {
+        PaneWidth = min(440, max(300, BootUiWidth * 3 / 10));
+        if (Width + BOOTUI_PANE_GAP + PaneWidth + 64 <= BootUiWidth)
+        {
+            Left = (BootUiWidth - Width - BOOTUI_PANE_GAP - PaneWidth) / 2;
+            PaneLeft = Left + Width + BOOTUI_PANE_GAP;
+            Description = UiMenuDescriptions[Menu->SelectedMenuItem];
+        }
+        else
+            PaneWidth = 0;
+    }
     if (Layout && Layout->Valid && Layout->TabletMode == BootUiTabletMode)
     {
         BootUiSetClip(0, 0, 0, 0);
+        if (PaneWidth != 0 && Layout->Rank != Rank)
+            BootUiInvalidate(PaneLeft, Top, PaneLeft + PaneWidth, BootUiHeight - 110 - Size);
         if (Layout->Rank != Rank && Total > Visible)
             BootUiInvalidate(Left, Top, Left + Width, Top + Visible * RowHeight + 12 + 2 * Size);
         else if (Layout->Rank != Rank)
@@ -1003,6 +1021,19 @@ BootUiRenderMenu(PUI_MENU_INFO Menu, LONG TimeOut, BOOLEAN CanEscape, BOOTUI_MEN
         BootUiText(Left + TextInset, Y + (RowHeight - BootUiFontSize) / 2 - 2,
                    Item, BootUiFontSize, I == Menu->SelectedMenuItem ? BOOTUI_TEXT : 0xC6D1D5,
                    Width - TextInset - 20, MAXULONG);
+    }
+    if (Description)
+    {
+        Lines = BootUiParagraph(Description, 0, 0, PaneWidth - 2 * BOOTUI_PANE_PADDING, 0, 0);
+        PaneHeight = 2 * BOOTUI_PANE_PADDING + BootUiFontSize + 14 + Lines * (max(14, BootUiFontSize - 2) + 8);
+        PaneHeight = max(PaneHeight, Visible * RowHeight - 6);
+        BootUiRect(PaneLeft, Top + 3, PaneWidth, PaneHeight, 14, 0xFFFFFF, 20);
+        BootUiText(PaneLeft + BOOTUI_PANE_PADDING, Top + 3 + BOOTUI_PANE_PADDING,
+                   Menu->MenuItemList[Menu->SelectedMenuItem], BootUiFontSize, BOOTUI_TEXT,
+                   PaneWidth - 2 * BOOTUI_PANE_PADDING, MAXULONG);
+        BootUiParagraph(Description, PaneLeft + BOOTUI_PANE_PADDING,
+                        Top + 3 + BOOTUI_PANE_PADDING + BootUiFontSize + 14,
+                        PaneWidth - 2 * BOOTUI_PANE_PADDING, Lines, 0);
     }
     if (Total > Visible)
     {
