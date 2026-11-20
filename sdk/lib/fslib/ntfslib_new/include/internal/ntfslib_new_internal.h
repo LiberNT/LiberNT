@@ -304,7 +304,7 @@ FileRecordNumber < ((DiskVolume->SectorsPerCluster * DiskVolume->BytesPerSector)
 
 #define MFTDiskOffset (MFTLCN * BytesPerCluster(DiskVolume))
 #define MFTMirrDiskOffset (MFTMirrLCN * BytesPerCluster(DiskVolume))
-#define FileRecordOffset(FileRecordNumber) (FileRecordNumber * FileRecordSize)
+#define FileRecordOffset(FileRecordNumber) ((ULONGLONG)(FileRecordNumber) * FileRecordSize)
 
 #define GetOffset(LCN) (LCN * BytesPerCluster(DiskVolume))
 #define GetRunSize(Run) (Run->Length * BytesPerCluster(DiskVolume))
