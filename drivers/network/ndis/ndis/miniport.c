@@ -822,9 +822,14 @@ MiniSendComplete(
 
     /* A bridge packet has no ADAPTER_BINDING in Reserved[1]. Its lifetime
      * and NBL completion are owned by the NDIS 6 -> 5 TX thunk. */
-    if (!Adapter->IsNdis6 && Adapter->Ndis6LegacyTxPacketPool != NULL &&
-        Ndis6LegacyTxComplete(Adapter, Packet, Status))
-        return;
+    if (!Adapter->IsNdis6 && Adapter->Ndis6LegacyTxPacketPool != NULL)
+    {
+        BOOLEAN Bridged = Ndis6LegacyTxComplete(Adapter, Packet, Status);
+
+        Ndis6LegacyTxResume(Adapter);
+        if (Bridged)
+            return;
+    }
 
     AdapterBinding = (PADAPTER_BINDING)Packet->Reserved[1];
 
@@ -864,6 +869,8 @@ VOID NTAPI
 MiniSendResourcesAvailable(
     IN  NDIS_HANDLE MiniportAdapterHandle)
 {
+    Ndis6LegacyTxResume((PLOGICAL_ADAPTER)MiniportAdapterHandle);
+
     /* Run the work if anything is waiting */
     MiniWorkItemComplete((PLOGICAL_ADAPTER)MiniportAdapterHandle, NdisWorkItemSend);
 }

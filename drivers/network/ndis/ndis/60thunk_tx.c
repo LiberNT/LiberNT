@@ -660,6 +660,7 @@ typedef struct _NDIS6_LEGACY_TX_PARENT
 typedef struct _NDIS6_LEGACY_TX_PACKET
 {
     LIST_ENTRY Link;
+    LIST_ENTRY DeferLink;
     PNDIS_PACKET Packet;
     PMDL Mdl;
     PVOID Data;
@@ -845,60 +846,122 @@ Ndis6LegacyTxCopyNetBuffer(PNET_BUFFER Nb, PVOID Destination, ULONG Length)
     return Remaining == 0;
 }
 
-/* The miniport can complete synchronously from inside SendPacketsHandler.
- * Take a dispatch reference so completion cannot recycle Packet/MDL while
- * the miniport callback (or this function) is still on the stack. */
+static NDIS_STATUS
+Ndis6LegacyTxCallMiniport(PLOGICAL_ADAPTER Adapter, PNDIS6_LEGACY_TX_PACKET Tx, BOOLEAN Serialized)
+{
+    if (Adapter->NdisMiniportBlock.DriverHandle->MiniportCharacteristics.SendPacketsHandler != NULL)
+    {
+        PNDIS_PACKET Packet = Tx->Packet;
+
+        Adapter->NdisMiniportBlock.DriverHandle->MiniportCharacteristics.SendPacketsHandler(
+            Adapter->NdisMiniportBlock.MiniportAdapterContext, &Packet, 1);
+        return Serialized ? NDIS_GET_PACKET_STATUS(Tx->Packet) : NDIS_STATUS_PENDING;
+    }
+
+    return Adapter->NdisMiniportBlock.DriverHandle->MiniportCharacteristics.SendHandler(
+        Adapter->NdisMiniportBlock.MiniportAdapterContext,
+        Tx->Packet, Tx->Packet->Private.Flags);
+}
+
+static VOID
+Ndis6LegacyTxFinishDispatch(PLOGICAL_ADAPTER Adapter, PNDIS6_LEGACY_TX_PACKET Tx, NDIS_STATUS Status)
+{
+    if (Status != NDIS_STATUS_PENDING)
+        (VOID)Ndis6LegacyTxComplete(Adapter, Tx->Packet, Status);
+    Ndis6LegacyTxReleasePacket(Tx);
+}
+
+static VOID
+Ndis6LegacyTxDrain(PLOGICAL_ADAPTER Adapter)
+{
+    KIRQL OldIrql;
+
+    for (;;)
+    {
+        BOOLEAN Again;
+
+        if (InterlockedCompareExchange(&Adapter->Ndis6LegacyTxSerializedBusy, 1, 0) != 0)
+            return;
+
+        KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
+        for (;;)
+        {
+            PNDIS6_LEGACY_TX_PACKET Tx;
+            NDIS_STATUS Status;
+            ULONG ResumeCount;
+
+            KeAcquireSpinLockAtDpcLevel(&Adapter->Ndis6LegacyTxPendingLock);
+            if (Adapter->Ndis6LegacyTxStalled ||
+                IsListEmpty(&Adapter->Ndis6LegacyTxDeferredList))
+            {
+                KeReleaseSpinLockFromDpcLevel(&Adapter->Ndis6LegacyTxPendingLock);
+                break;
+            }
+            Tx = CONTAINING_RECORD(RemoveHeadList(&Adapter->Ndis6LegacyTxDeferredList),
+                                   NDIS6_LEGACY_TX_PACKET, DeferLink);
+            ResumeCount = Adapter->Ndis6LegacyTxResumeCount;
+            KeReleaseSpinLockFromDpcLevel(&Adapter->Ndis6LegacyTxPendingLock);
+
+            Status = Ndis6LegacyTxCallMiniport(Adapter, Tx, TRUE);
+            if (Status == NDIS_STATUS_RESOURCES)
+            {
+                KeAcquireSpinLockAtDpcLevel(&Adapter->Ndis6LegacyTxPendingLock);
+                InsertHeadList(&Adapter->Ndis6LegacyTxDeferredList, &Tx->DeferLink);
+                if (Adapter->Ndis6LegacyTxResumeCount == ResumeCount)
+                    Adapter->Ndis6LegacyTxStalled = TRUE;
+                KeReleaseSpinLockFromDpcLevel(&Adapter->Ndis6LegacyTxPendingLock);
+                continue;
+            }
+            Ndis6LegacyTxFinishDispatch(Adapter, Tx, Status);
+        }
+        KeLowerIrql(OldIrql);
+
+        InterlockedExchange(&Adapter->Ndis6LegacyTxSerializedBusy, 0);
+
+        KeAcquireSpinLock(&Adapter->Ndis6LegacyTxPendingLock, &OldIrql);
+        Again = !Adapter->Ndis6LegacyTxStalled &&
+                !IsListEmpty(&Adapter->Ndis6LegacyTxDeferredList);
+        KeReleaseSpinLock(&Adapter->Ndis6LegacyTxPendingLock, OldIrql);
+        if (!Again)
+            return;
+    }
+}
+
+VOID
+Ndis6LegacyTxResume(PLOGICAL_ADAPTER Adapter)
+{
+    KIRQL OldIrql;
+
+    if (Adapter == NULL || Adapter->IsNdis6 || Adapter->Ndis6LegacyTxPacketPool == NULL)
+        return;
+
+    KeAcquireSpinLock(&Adapter->Ndis6LegacyTxPendingLock, &OldIrql);
+    Adapter->Ndis6LegacyTxResumeCount++;
+    Adapter->Ndis6LegacyTxStalled = FALSE;
+    KeReleaseSpinLock(&Adapter->Ndis6LegacyTxPendingLock, OldIrql);
+
+    Ndis6LegacyTxDrain(Adapter);
+}
+
 static VOID
 Ndis6LegacyTxDispatchMiniport(PNDIS6_LEGACY_TX_PACKET Tx)
 {
     PLOGICAL_ADAPTER Adapter = Tx->Parent->Binding->Adapter;
-    NDIS_STATUS Status;
     KIRQL OldIrql;
-    BOOLEAN Serialized =
-        (Adapter->NdisMiniportBlock.Flags & NDIS_ATTRIBUTE_DESERIALIZE) == 0;
-    BOOLEAN RaisedIrql = FALSE;
 
     InterlockedIncrement(&Tx->References);
 
-    /* Preserve the existing non-reentrancy behavior for serialized NDIS 5
-     * miniports. A proper retry queue can be added separately. */
-    if (Serialized &&
-        InterlockedCompareExchange(&Adapter->Ndis6LegacyTxSerializedBusy, 1, 0) != 0)
+    if (Adapter->NdisMiniportBlock.Flags & NDIS_ATTRIBUTE_DESERIALIZE)
     {
-        (VOID)Ndis6LegacyTxComplete(Adapter, Tx->Packet, NDIS_STATUS_RESOURCES);
-        Ndis6LegacyTxReleasePacket(Tx);
+        Ndis6LegacyTxFinishDispatch(Adapter, Tx, Ndis6LegacyTxCallMiniport(Adapter, Tx, FALSE));
         return;
     }
 
-    if (Serialized && KeGetCurrentIrql() < DISPATCH_LEVEL)
-    {
-        KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
-        RaisedIrql = TRUE;
-    }
+    KeAcquireSpinLock(&Adapter->Ndis6LegacyTxPendingLock, &OldIrql);
+    InsertTailList(&Adapter->Ndis6LegacyTxDeferredList, &Tx->DeferLink);
+    KeReleaseSpinLock(&Adapter->Ndis6LegacyTxPendingLock, OldIrql);
 
-    if (Adapter->NdisMiniportBlock.DriverHandle->MiniportCharacteristics.SendPacketsHandler != NULL)
-    {
-        PNDIS_PACKET Packet = Tx->Packet;
-        Adapter->NdisMiniportBlock.DriverHandle->MiniportCharacteristics.SendPacketsHandler(
-            Adapter->NdisMiniportBlock.MiniportAdapterContext, &Packet, 1);
-        /* A deserialized SendPackets miniport completes via NdisMSendComplete. */
-        Status = Serialized ? NDIS_GET_PACKET_STATUS(Tx->Packet) : NDIS_STATUS_PENDING;
-    }
-    else
-    {
-        Status = Adapter->NdisMiniportBlock.DriverHandle->MiniportCharacteristics.SendHandler(
-            Adapter->NdisMiniportBlock.MiniportAdapterContext,
-            Tx->Packet, Tx->Packet->Private.Flags);
-    }
-
-    if (RaisedIrql)
-        KeLowerIrql(OldIrql);
-    if (Serialized)
-        InterlockedExchange(&Adapter->Ndis6LegacyTxSerializedBusy, 0);
-
-    if (Status != NDIS_STATUS_PENDING)
-        (VOID)Ndis6LegacyTxComplete(Adapter, Tx->Packet, Status);
-    Ndis6LegacyTxReleasePacket(Tx); /* dispatch reference */
+    Ndis6LegacyTxDrain(Adapter);
 }
 
 /* GetScatterGatherList may invoke this callback before it returns or later
@@ -1157,8 +1220,11 @@ Ndis6LegacyDatapathStart(PLOGICAL_ADAPTER Adapter)
         Adapter->Ndis6LegacyMediaState = NdisMediaStateConnected;
 
     InitializeListHead(&Adapter->Ndis6LegacyTxPendingList);
+    InitializeListHead(&Adapter->Ndis6LegacyTxDeferredList);
     KeInitializeSpinLock(&Adapter->Ndis6LegacyTxPendingLock);
     InterlockedExchange(&Adapter->Ndis6LegacyTxSerializedBusy, 0);
+    Adapter->Ndis6LegacyTxStalled = FALSE;
+    Adapter->Ndis6LegacyTxResumeCount = 0;
     Adapter->Ndis6LegacyTxPacketPool = NULL;
     Adapter->Ndis6LegacyRxNblPool = NULL;
 
@@ -1196,7 +1262,10 @@ Ndis6LegacyDatapathStop(PLOGICAL_ADAPTER Adapter)
      * binding-owned send references before miniport Halt and pool teardown. */
     if (Adapter->Ndis6LegacyTxPacketPool != NULL ||
         Adapter->Ndis6LegacyRxNblPool != NULL)
+    {
         ASSERT(IsListEmpty(&Adapter->Ndis6LegacyTxPendingList));
+        ASSERT(IsListEmpty(&Adapter->Ndis6LegacyTxDeferredList));
+    }
     if (Adapter->Ndis6LegacyRxNblPool != NULL)
     {
         NdisFreeNetBufferListPool(Adapter->Ndis6LegacyRxNblPool);

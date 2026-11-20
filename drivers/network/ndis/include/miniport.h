@@ -119,6 +119,9 @@ typedef struct _LOGICAL_ADAPTER
     LIST_ENTRY                  Ndis6LegacyTxPendingList;
     KSPIN_LOCK                  Ndis6LegacyTxPendingLock;
     volatile LONG               Ndis6LegacyTxSerializedBusy;
+    LIST_ENTRY                  Ndis6LegacyTxDeferredList;
+    BOOLEAN                     Ndis6LegacyTxStalled;
+    ULONG                       Ndis6LegacyTxResumeCount;
     NDIS_HANDLE                 Ndis6LegacyTxPacketPool;
     NDIS_HANDLE                 Ndis6LegacyRxNblPool;
 
@@ -164,6 +167,7 @@ VOID Ndis6UnbindAllProtocolsFromAdapter(PLOGICAL_ADAPTER Adapter);
 BOOLEAN Ndis6LegacyDatapathStart(PLOGICAL_ADAPTER Adapter);
 VOID Ndis6LegacyDatapathStop(PLOGICAL_ADAPTER Adapter);
 BOOLEAN Ndis6LegacyTxComplete(PLOGICAL_ADAPTER Adapter, PNDIS_PACKET Packet, NDIS_STATUS Status);
+VOID Ndis6LegacyTxResume(PLOGICAL_ADAPTER Adapter);
 VOID Ndis6LegacyRxIndicatePackets(PLOGICAL_ADAPTER Adapter, PPNDIS_PACKET Packets, UINT Count);
 VOID Ndis6LegacyIndicateMediaStatus(PLOGICAL_ADAPTER Adapter, NDIS_STATUS GeneralStatus);
 VOID Ndis6LegacyRxIndicateLookahead(PLOGICAL_ADAPTER Adapter,
