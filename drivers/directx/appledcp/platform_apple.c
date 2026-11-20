@@ -440,6 +440,7 @@ SoftGpuPlatformQueryStart(
     Config->ScanoutPhysicalAddress = Context->SurfacePhysical;
     Config->ScanoutPitch = Context->Pitch;
     Config->ScanoutSize = Context->SurfaceSize;
+    Config->SystemDisplayDirect = TRUE;
 
     Status = SoftGpu2dComputeAllocationSlabSize(Config->Width,
                                                 Config->Height,

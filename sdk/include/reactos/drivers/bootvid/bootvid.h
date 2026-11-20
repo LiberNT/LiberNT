@@ -48,6 +48,20 @@ NTAPI
 VidSetVirtualFrameBuffer(
     _In_opt_ PVOID VirtualFrameBuffer);
 
+typedef VOID
+(NTAPI *PVID_DISPLAY_WRITE_ROUTINE)(
+    _In_ PVOID Pixels,
+    _In_ ULONG Stride,
+    _In_ ULONG Left,
+    _In_ ULONG Top,
+    _In_ ULONG Width,
+    _In_ ULONG Height);
+
+NTSTATUS
+NTAPI
+VidSetDisplayWriteRoutine(
+    _In_opt_ PVID_DISPLAY_WRITE_ROUTINE Routine);
+
 VOID
 NTAPI
 VidResetDisplay(
