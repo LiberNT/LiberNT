@@ -7,6 +7,7 @@ list(APPEND SOURCE
     imagelist.c
     ListViewActivate.c
     ListViewGroups.c
+    ListViewSnapToGrid.c
     LoadIconWithScaleDown.c
     propsheet.c
     PropSheetRecalc.c
