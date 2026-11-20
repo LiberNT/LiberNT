@@ -676,48 +676,6 @@ FdoIoctlDiskGetDriveGeometryEx(
 static BOOLEAN PartMgrOfflineAll;
 
 static
-CODE_SEG("INIT")
-BOOLEAN
-PartMgrReadOfflineAllOption(VOID)
-{
-    UNICODE_STRING keyName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control");
-    UNICODE_STRING valueName = RTL_CONSTANT_STRING(L"SystemStartOptions");
-    static const WCHAR option[] = L"SANPOLICY=OFFLINEALL";
-    const SIZE_T optionLength = RTL_NUMBER_OF(option) - 1;
-    PKEY_VALUE_PARTIAL_INFORMATION value;
-    OBJECT_ATTRIBUTES attributes;
-    BOOLEAN found = FALSE;
-    ULONG length;
-    PCWSTR text;
-    HANDLE key;
-
-    PAGED_CODE();
-
-    InitializeObjectAttributes(&attributes, &keyName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
-    if (!NT_SUCCESS(ZwOpenKey(&key, KEY_QUERY_VALUE, &attributes)))
-        return FALSE;
-
-    length = FIELD_OFFSET(KEY_VALUE_PARTIAL_INFORMATION, Data) + 1024 * sizeof(WCHAR);
-    value = ExAllocatePoolZero(PagedPool, length + sizeof(WCHAR), TAG_PARTMGR);
-    if (value &&
-        NT_SUCCESS(ZwQueryValueKey(key, &valueName, KeyValuePartialInformation, value, length, &length)) &&
-        value->Type == REG_SZ)
-    {
-        for (text = (PCWSTR)value->Data; *text && !found; text++)
-        {
-            found = (text == (PCWSTR)value->Data || text[-1] == L' ') &&
-                    _wcsnicmp(text, option, optionLength) == 0 &&
-                    (text[optionLength] == UNICODE_NULL || text[optionLength] == L' ');
-        }
-    }
-
-    if (value)
-        ExFreePoolWithTag(value, TAG_PARTMGR);
-    ZwClose(key);
-    return found;
-}
-
-static
 CODE_SEG("PAGE")
 NTSTATUS
 FdoIoctlDiskGetDiskAttributes(
@@ -2437,7 +2395,7 @@ DriverEntry(
 {
     InitializeListHead(&PartMgrDiskList);
     ExInitializeFastMutex(&PartMgrDiskListLock);
-    PartMgrOfflineAll = PartMgrReadOfflineAllOption();
+    PartMgrOfflineAll = SanPolicyIsOfflineAll(TAG_PARTMGR);
     DriverObject->DriverUnload = PartMgrUnload;
     DriverObject->DriverExtension->AddDevice = PartMgrAddDevice;
     for (ULONG i = 0; i <= IRP_MJ_MAXIMUM_FUNCTION; i++)

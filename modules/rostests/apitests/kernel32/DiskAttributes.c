@@ -1,15 +1,19 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Test the disk attribute requests and the disks an OFFLINEALL start keeps offline
+ * PURPOSE:     Test the disk attribute requests and the disks and drives an OFFLINEALL start keeps offline
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include "precomp.h"
 #include <winioctl.h>
+#include <ndk/iofuncs.h>
+#include <ndk/obfuncs.h>
 
 #define BOTH_ATTRIBUTES (DISK_ATTRIBUTE_OFFLINE | DISK_ATTRIBUTE_READ_ONLY)
 #define MAX_DISKS 64
+#define MAX_DRIVES 16
+#define DRIVE_READ_SIZE 2048
 
 static
 BOOL
@@ -275,6 +279,116 @@ TestOfflineAndBack(
     CloseHandle(Handle);
 }
 
+static
+HANDLE
+OpenDrive(
+    _In_ PCWSTR Device,
+    _In_ ACCESS_MASK Access,
+    _Out_ PNTSTATUS Status)
+{
+    OBJECT_ATTRIBUTES Attributes;
+    UNICODE_STRING Name;
+    IO_STATUS_BLOCK Io;
+    HANDLE Handle = NULL;
+
+    RtlInitUnicodeString(&Name, Device);
+    InitializeObjectAttributes(&Attributes, &Name, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    *Status = NtOpenFile(&Handle, Access | SYNCHRONIZE, &Attributes, &Io,
+                         FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_SYNCHRONOUS_IO_NONALERT);
+    return NT_SUCCESS(*Status) ? Handle : NULL;
+}
+
+static
+BOOL
+DriveHasVolume(
+    _In_ PCWSTR Device)
+{
+    WCHAR Name[MAX_PATH], Target[MAX_PATH];
+    HANDLE Find;
+    SIZE_T Length;
+    BOOL Found = FALSE;
+
+    Find = FindFirstVolumeW(Name, RTL_NUMBER_OF(Name));
+    if (Find == INVALID_HANDLE_VALUE)
+        return FALSE;
+    do
+    {
+        Length = wcslen(Name);
+        if (Length > 5 && Name[Length - 1] == L'\\')
+        {
+            Name[Length - 1] = UNICODE_NULL;
+            Found = QueryDosDeviceW(Name + 4, Target, RTL_NUMBER_OF(Target)) != 0 && _wcsicmp(Target, Device) == 0;
+        }
+    } while (!Found && FindNextVolumeW(Find, Name, RTL_NUMBER_OF(Name)));
+    FindVolumeClose(Find);
+    return Found;
+}
+
+static
+NTSTATUS
+ReadDriveStart(
+    _In_ PCWSTR Device)
+{
+    static UCHAR Buffer[DRIVE_READ_SIZE];
+    LARGE_INTEGER Offset;
+    IO_STATUS_BLOCK Io;
+    NTSTATUS Status;
+    HANDLE Handle;
+
+    Handle = OpenDrive(Device, FILE_READ_DATA, &Status);
+    if (Handle == NULL)
+        return Status;
+
+    Offset.QuadPart = 0;
+    Status = NtReadFile(Handle, NULL, NULL, NULL, &Io, Buffer, sizeof(Buffer), &Offset, NULL);
+    ok(!NT_SUCCESS(Status) || Io.Information == sizeof(Buffer), "%s: read %Iu bytes\n", wine_dbgstr_w(Device), Io.Information);
+    NtClose(Handle);
+    return Status;
+}
+
+static
+VOID
+TestRemovableDrives(
+    _In_ BOOL OfflineAll)
+{
+    static const PCWSTR Formats[] = { L"\\Device\\CdRom%lu", L"\\Device\\Floppy%lu" };
+    WCHAR Device[32];
+    IO_STATUS_BLOCK Io;
+    NTSTATUS Status;
+    HANDLE Handle;
+    ULONG Format, Drive;
+    BOOL Media, HasVolume;
+
+    for (Format = 0; Format < RTL_NUMBER_OF(Formats); Format++)
+    {
+        for (Drive = 0; Drive < MAX_DRIVES; Drive++)
+        {
+            StringCchPrintfW(Device, RTL_NUMBER_OF(Device), Formats[Format], Drive);
+            Handle = OpenDrive(Device, FILE_READ_ATTRIBUTES, &Status);
+            if (Handle == NULL)
+                continue;
+            Media = NT_SUCCESS(NtDeviceIoControlFile(Handle, NULL, NULL, NULL, &Io, IOCTL_STORAGE_CHECK_VERIFY2,
+                                                     NULL, 0, NULL, 0));
+            NtClose(Handle);
+
+            HasVolume = DriveHasVolume(Device);
+            ok(HasVolume == !OfflineAll, "%s: volume present %d\n", wine_dbgstr_w(Device), HasVolume);
+
+            Status = ReadDriveStart(Device);
+            trace("%s: media %d, read status 0x%lx\n", wine_dbgstr_w(Device), Media, Status);
+            if (OfflineAll)
+            {
+                ok(!NT_SUCCESS(Status), "%s: an offline drive was read\n", wine_dbgstr_w(Device));
+                ok(!Media || Status == STATUS_DEVICE_OFF_LINE, "%s: read status 0x%lx\n", wine_dbgstr_w(Device), Status);
+            }
+            else if (Media)
+            {
+                ok(NT_SUCCESS(Status), "%s: read status 0x%lx\n", wine_dbgstr_w(Device), Status);
+            }
+        }
+    }
+}
+
 START_TEST(DiskAttributes)
 {
     WCHAR Path[MAX_PATH];
@@ -288,6 +402,7 @@ START_TEST(DiskAttributes)
     trace("System disk %lu, test disk %lu, offline-all start %d\n", SystemDisk, TestDisk, OfflineAll);
 
     TestEveryDisk(SystemDisk, OfflineAll);
+    TestRemovableDrives(OfflineAll);
     TestSetWithoutChange(SystemDisk);
     if (!OfflineAll)
         TestOfflineAndBack(SystemDisk, TestDisk);
