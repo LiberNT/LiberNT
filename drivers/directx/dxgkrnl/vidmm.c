@@ -55,6 +55,7 @@
 #include "residency_core.h"
 #include "vidmm.h"
 #include "vidmm_worker_drain_core.h"
+#include "vidmm_destroy_core.h"
 #include "vidsch.h"
 #include "present.h"
 #include "presenttrace.h"
@@ -10221,6 +10222,17 @@ NTSTATUS
 DxgkDestroyAllocation(
     _In_ CONST D3DKMT_DESTROYALLOCATION *pDestroyAllocation)
 {
+    D3DDDICB_DESTROYALLOCATION2FLAGS Flags;
+
+    Flags.Value = 0;
+    return DxgkDestroyAllocationWithFlags(pDestroyAllocation, Flags);
+}
+
+NTSTATUS
+DxgkDestroyAllocationWithFlags(
+    _In_ CONST D3DKMT_DESTROYALLOCATION *pDestroyAllocation,
+    _In_ D3DDDICB_DESTROYALLOCATION2FLAGS Flags)
+{
     PDXGKRNL_ADAPTER Adapter = NULL;
     PDXGKRNL_DEVICE Device = NULL;
     PDXGKVMM_RESOURCE Resource = NULL;
@@ -10266,7 +10278,7 @@ DxgkDestroyAllocation(
 
     /*
      * D3DKMTDestroyAllocation is the AssumeNotInUse == FALSE form of the
-     * D3DDDICB_DESTROYALLOCATION2FLAGS contract: the video memory manager
+     * D3DDDICB_DESTROYALLOCATION2FLAGS contract, where the video memory manager
      * must assume that commands queued before this request may still access
      * the allocations and defer the destruction until that work finishes.
      * The GPU page-table entries and the backing are released after this
@@ -10277,9 +10289,12 @@ DxgkDestroyAllocation(
      * wait, and a device whose work never completes is torn down by TDR,
      * which terminates its ledger and ends the wait.
      */
-    Status = DxgkpVidMmWaitForQueuedWorkBeforeDestroy(Device, "DxgkDestroyAllocation");
-    if (!NT_SUCCESS(Status) && Status != STATUS_DEVICE_REMOVED)
-        goto Cleanup;
+    if (DxgkVidMmCoreDestroyWaitsForQueuedWork(Flags))
+    {
+        Status = DxgkpVidMmWaitForQueuedWorkBeforeDestroy(Device, "DxgkDestroyAllocation");
+        if (!NT_SUCCESS(Status) && Status != STATUS_DEVICE_REMOVED)
+            goto Cleanup;
+    }
     if (AllocationHandles != NULL)
     {
         UINT Index;

@@ -1541,7 +1541,7 @@ D3DKMTDestroyAllocation2(
     _In_ CONST D3DKMT_DESTROYALLOCATION2 *pData)
 {
     D3DKMT_DESTROYALLOCATION2 Captured;
-    D3DKMT_DESTROYALLOCATION DestroyAllocation;
+    D3DKMT_DESTROYALLOCATION2 DestroyAllocation;
     D3DKMT_HANDLE *AllocationList = NULL;
     SIZE_T AllocationListSize = 0;
     NTSTATUS Status;
@@ -1564,6 +1564,7 @@ D3DKMTDestroyAllocation2(
     DestroyAllocation.hResource = Captured.hResource;
     DestroyAllocation.phAllocationList = AllocationList;
     DestroyAllocation.AllocationCount = Captured.AllocationCount;
+    DestroyAllocation.Flags = Captured.Flags;
     Status = WddmBridgeSendIoctl(IOCTL_D3DKMT_DESTROYALLOCATION, &DestroyAllocation, sizeof(DestroyAllocation), NULL, 0);
     if (AllocationList != NULL)
         ExFreePoolWithTag(AllocationList, TAG_WDDM_BRIDGE);

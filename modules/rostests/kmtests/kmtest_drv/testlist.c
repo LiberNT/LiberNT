@@ -49,6 +49,7 @@ KMT_TESTFUNC Test_DxgkVsyncPower;
 KMT_TESTFUNC Test_Rpi5Vc4Pointer;
 KMT_TESTFUNC Test_DxgkSyncWait;
 KMT_TESTFUNC Test_DxgkTrackedWork;
+KMT_TESTFUNC Test_DxgkVidMmDestroy;
 KMT_TESTFUNC Test_DxgkVidMmWorkerDrain;
 KMT_TESTFUNC Test_DxgkrnlPublicExports;
 KMT_TESTFUNC Test_Dxgmms2ContextStream;
@@ -536,6 +537,7 @@ const KMT_TEST TestList[] =
     { "Rpi5Vc4Pointer",                    Test_Rpi5Vc4Pointer },
     { "DxgkSyncWait",                      Test_DxgkSyncWait },
     { "DxgkTrackedWork",                   Test_DxgkTrackedWork },
+    { "DxgkVidMmDestroy",                  Test_DxgkVidMmDestroy },
     { "DxgkVidMmWorkerDrain",              Test_DxgkVidMmWorkerDrain },
     { "DxgkrnlPublicExports",              Test_DxgkrnlPublicExports },
     { "Dxgmms2ContextStream",              Test_Dxgmms2ContextStream },

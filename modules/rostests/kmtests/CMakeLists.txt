@@ -117,6 +117,7 @@ list(APPEND KMTEST_DRV_SOURCE
     directx/Rpi5Vc4Pointer.c
     directx/DxgkSyncWait.c
     directx/DxgkTrackedWork.c
+    directx/DxgkVidMmDestroy.c
     directx/DxgkVidMmWorkerDrain.c
     directx/DxgkrnlPublicExports.c
     directx/Dxgmms2ContextStream.c
