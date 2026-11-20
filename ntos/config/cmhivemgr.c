@@ -709,6 +709,8 @@ CmpFlushHiveToDisk(
 
     if (CmpNoWrite) return STATUS_SUCCESS;
     if (Hive->Hive.HiveFlags & HIVE_VOLATILE) return STATUS_SUCCESS;
+    /* The boot hive gets its files only when the registry is initialized; until then its changes stay dirty */
+    if (Hive->FileHandles[HFILE_TYPE_PRIMARY] == NULL) return STATUS_SUCCESS;
     if (!Force && (Hive->Hive.HiveFlags & HIVE_NOLAZYFLUSH)) return STATUS_SUCCESS;
 
     /* Writers hold the registry lock exclusively, so a flush must hold it to see a stable dirty vector */
