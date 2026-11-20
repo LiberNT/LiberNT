@@ -210,41 +210,52 @@ SmpStartCsr(IN PSM_API_MSG SmApiMsg,
 {
     PSM_START_CSR_MSG SmStartCsr = &SmApiMsg->u.StartCsr;
     UNICODE_STRING InitialCommand;
-    HANDLE InitialCommandProcess, InitialCommandProcessId, WindowsSubSysProcessId;
+    HANDLE InitialCommandProcess, InitialCommandProcessId, WindowsSubSysProcessId = NULL;
+    ULONG MuSessionId = -1;
     NTSTATUS Status;
 
-    Status = SmpLoadSubSystemsForMuSession(&SmStartCsr->MuSessionId,
+    if (SmStartCsr->Length > sizeof(SmStartCsr->Buffer) || (SmStartCsr->Length & 1))
+        return STATUS_INVALID_PARAMETER;
+
+    RtlEnterCriticalSection(&SmpMuSessionLock);
+    ASSERT(AttachedSessionId == -1);
+    Status = SmpLoadSubSystemsForMuSession(&MuSessionId,
                                            &WindowsSubSysProcessId,
-                                           &InitialCommand);
+                                           &InitialCommand,
+                                           FALSE);
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("SMSS: SmpLoadSubSystemsForMuSession failed with status 0x%08x\n", Status);
-        return Status;
     }
-
-    if (SmStartCsr->Length)
+    else
     {
-        InitialCommand.Length = InitialCommand.MaximumLength = SmStartCsr->Length;
-        InitialCommand.Buffer = SmStartCsr->Buffer;
+        if (SmStartCsr->Length)
+        {
+            InitialCommand.Length = InitialCommand.MaximumLength = (USHORT)SmStartCsr->Length;
+            InitialCommand.Buffer = SmStartCsr->Buffer;
+        }
+
+        Status = SmpExecuteInitialCommand(MuSessionId,
+                                          &InitialCommand,
+                                          &InitialCommandProcess,
+                                          &InitialCommandProcessId);
+        if (!NT_SUCCESS(Status))
+            DPRINT1("SMSS: SmpExecuteInitialCommand failed with status 0x%08x\n", Status);
+        else
+            NtClose(InitialCommandProcess);
     }
 
-    Status = SmpExecuteInitialCommand(SmStartCsr->MuSessionId,
-                                      &InitialCommand,
-                                      &InitialCommandProcess,
-                                      &InitialCommandProcessId);
+    ASSERT(AttachedSessionId == -1 || AttachedSessionId == MuSessionId);
+    SmpLeaveMuSession();
+    if (!NT_SUCCESS(Status) && MuSessionId != -1)
+        SmpStopMuSession(MuSessionId);
+    RtlLeaveCriticalSection(&SmpMuSessionLock);
     if (!NT_SUCCESS(Status))
-    {
-        DPRINT1("SMSS: SmpExecuteInitialCommand failed with status 0x%08x\n", Status);
-        /* FIXME: undo effects of SmpLoadSubSystemsForMuSession */
-        ASSERT(FALSE);
         return Status;
-    }
 
-    NtClose(InitialCommandProcess);
-
+    SmStartCsr->MuSessionId = MuSessionId;
     SmStartCsr->WindowsSubSysProcessId = WindowsSubSysProcessId;
     SmStartCsr->SmpInitialCommandProcessId = InitialCommandProcessId;
-
     return STATUS_SUCCESS;
 }
 
@@ -254,8 +265,20 @@ SmpStopCsr(IN PSM_API_MSG SmApiMsg,
            IN PSMP_CLIENT_CONTEXT ClientContext,
            IN HANDLE SmApiPort)
 {
-    DPRINT1("%s is not yet implemented\n", __FUNCTION__);
-    return STATUS_NOT_IMPLEMENTED;
+    ULONG MuSessionId = SmApiMsg->u.StopCsr.MuSessionId;
+    NTSTATUS Status;
+
+    /* TODO: the boot session cannot be stopped while _main waits on its processes */
+    if (MuSessionId == 0 || MuSessionId == SmpBootMuSessionId)
+        return STATUS_INVALID_PARAMETER;
+
+    RtlEnterCriticalSection(&SmpMuSessionLock);
+    if (!SmpCheckDuplicateMuSessionId(MuSessionId))
+        Status = STATUS_INVALID_PARAMETER;
+    else
+        Status = SmpStopMuSession(MuSessionId);
+    RtlLeaveCriticalSection(&SmpMuSessionLock);
+    return Status;
 }
 
 PSM_API_HANDLER SmpApiDispatch[SmpMaxApiNumber - SmpCreateForeignSessionApi] =

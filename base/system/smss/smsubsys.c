@@ -16,6 +16,7 @@
 /* GLOBALS ********************************************************************/
 
 RTL_CRITICAL_SECTION SmpKnownSubSysLock;
+RTL_CRITICAL_SECTION SmpMuSessionLock;
 LIST_ENTRY SmpKnownSubSysHead;
 HANDLE SmpWindowsSubSysProcess;
 HANDLE SmpWindowsSubSysProcessId;
@@ -602,7 +603,8 @@ NTSTATUS
 NTAPI
 SmpLoadSubSystemsForMuSession(IN PULONG MuSessionId,
                               OUT PHANDLE ProcessId,
-                              IN PUNICODE_STRING InitialCommand)
+                              IN PUNICODE_STRING InitialCommand,
+                              IN BOOLEAN BootSession)
 {
     NTSTATUS Status = STATUS_SUCCESS, Status2;
     PSMP_REGISTRY_VALUE RegEntry;
@@ -611,17 +613,20 @@ SmpLoadSubSystemsForMuSession(IN PULONG MuSessionId,
     LARGE_INTEGER Timeout;
     PVOID State;
 
-    /* Write a few last registry keys with the boot partition information */
-    SmpTranslateSystemPartitionInformation();
-
-    /* Process "SetupExecute" values */
-    NextEntry = SmpSetupExecuteList.Flink;
-    while (NextEntry != &SmpSetupExecuteList)
+    if (BootSession)
     {
-        /* Execute each one and move on */
-        RegEntry = CONTAINING_RECORD(NextEntry, SMP_REGISTRY_VALUE, Entry);
-        SmpExecuteCommand(&RegEntry->Name, 0, NULL, 0);
-        NextEntry = NextEntry->Flink;
+        /* Write a few last registry keys with the boot partition information */
+        SmpTranslateSystemPartitionInformation();
+
+        /* Process "SetupExecute" values */
+        NextEntry = SmpSetupExecuteList.Flink;
+        while (NextEntry != &SmpSetupExecuteList)
+        {
+            /* Execute each one and move on */
+            RegEntry = CONTAINING_RECORD(NextEntry, SMP_REGISTRY_VALUE, Entry);
+            SmpExecuteCommand(&RegEntry->Name, 0, NULL, 0);
+            NextEntry = NextEntry->Flink;
+        }
     }
 
     /* Now process the subsystems */
@@ -719,7 +724,7 @@ SmpLoadSubSystemsForMuSession(IN PULONG MuSessionId,
 
     /* Process the "Execute" list now */
     NextEntry = SmpExecuteList.Blink;
-    if (NextEntry != &SmpExecuteList)
+    if (BootSession && NextEntry != &SmpExecuteList)
     {
         /* Get the custom initial command */
         RegEntry = CONTAINING_RECORD(NextEntry, SMP_REGISTRY_VALUE, Entry);
@@ -753,7 +758,7 @@ SmpLoadSubSystemsForMuSession(IN PULONG MuSessionId,
     }
 
     /* Finally check if there was a custom initial command */
-    NextEntry = SmpExecuteList.Flink;
+    NextEntry = BootSession ? SmpExecuteList.Flink : &SmpExecuteList;
     while (NextEntry != &SmpExecuteList)
     {
         /* Execute each one */
@@ -763,5 +768,168 @@ SmpLoadSubSystemsForMuSession(IN PULONG MuSessionId,
     }
 
     /* Return status */
+    return Status;
+}
+
+VOID
+NTAPI
+SmpLeaveMuSession(VOID)
+{
+    NTSTATUS Status;
+    PVOID State;
+
+    ASSERT(SmpMuSessionLock.OwningThread == NtCurrentTeb()->ClientId.UniqueThread);
+    if (AttachedSessionId == -1)
+        return;
+
+    Status = SmpAcquirePrivilege(SE_LOAD_DRIVER_PRIVILEGE, &State);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("SMSS: Cannot detach from session %lu: %lx\n", AttachedSessionId, Status);
+        return;
+    }
+    Status = NtSetSystemInformation(SystemSessionDetach,
+                                    &AttachedSessionId,
+                                    sizeof(AttachedSessionId));
+    ASSERT(NT_SUCCESS(Status));
+    if (NT_SUCCESS(Status))
+        AttachedSessionId = -1;
+    SmpReleasePrivilege(State);
+}
+
+static
+NTSTATUS
+SmpQueryProcesses(OUT PSYSTEM_PROCESS_INFORMATION *Processes)
+{
+    PSYSTEM_PROCESS_INFORMATION Buffer;
+    ULONG Size = 0x10000;
+    NTSTATUS Status;
+
+    *Processes = NULL;
+    for (;;)
+    {
+        Buffer = RtlAllocateHeap(SmpHeap, 0, Size);
+        if (!Buffer)
+            return STATUS_NO_MEMORY;
+        Status = NtQuerySystemInformation(SystemProcessInformation, Buffer, Size, NULL);
+        if (NT_SUCCESS(Status))
+        {
+            *Processes = Buffer;
+            return Status;
+        }
+        RtlFreeHeap(SmpHeap, 0, Buffer);
+        if (Status != STATUS_INFO_LENGTH_MISMATCH || Size >= 0x4000000)
+            return Status;
+        Size *= 2;
+    }
+}
+
+static
+BOOLEAN
+SmpEndSessionProcess(IN PSYSTEM_PROCESS_INFORMATION Process)
+{
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    PROCESS_BASIC_INFORMATION Basic;
+    LARGE_INTEGER Timeout;
+    CLIENT_ID ClientId;
+    HANDLE ProcessHandle, ThreadHandle;
+    ULONG Index, Critical = 0;
+    NTSTATUS Status;
+
+    InitializeObjectAttributes(&ObjectAttributes, NULL, 0, NULL, NULL);
+    ClientId.UniqueProcess = Process->UniqueProcessId;
+    ClientId.UniqueThread = NULL;
+    Status = NtOpenProcess(&ProcessHandle,
+                           PROCESS_TERMINATE | PROCESS_SET_INFORMATION | PROCESS_QUERY_INFORMATION | SYNCHRONIZE,
+                           &ObjectAttributes,
+                           &ClientId);
+    if (!NT_SUCCESS(Status))
+        return FALSE;
+
+    Status = NtQueryInformationProcess(ProcessHandle, ProcessBasicInformation, &Basic, sizeof(Basic), NULL);
+    if (!NT_SUCCESS(Status) || Basic.ExitStatus != STATUS_PENDING)
+    {
+        NtClose(ProcessHandle);
+        return FALSE;
+    }
+
+    for (Index = 0; Index < Process->NumberOfThreads; Index++)
+    {
+        PSYSTEM_THREAD_INFORMATION Thread = &((PSYSTEM_THREAD_INFORMATION)(Process + 1))[Index];
+
+        if (!NT_SUCCESS(NtOpenThread(&ThreadHandle, THREAD_SET_INFORMATION, &ObjectAttributes, &Thread->ClientId)))
+            continue;
+        NtSetInformationThread(ThreadHandle, ThreadBreakOnTermination, &Critical, sizeof(Critical));
+        NtClose(ThreadHandle);
+    }
+    Status = NtSetInformationProcess(ProcessHandle, ProcessBreakOnTermination, &Critical, sizeof(Critical));
+    ASSERT(NT_SUCCESS(Status));
+
+    Status = NtTerminateProcess(ProcessHandle, STATUS_SUCCESS);
+    if (NT_SUCCESS(Status))
+    {
+        Timeout.QuadPart = -100000000LL;
+        Status = NtWaitForSingleObject(ProcessHandle, FALSE, &Timeout);
+        if (Status != STATUS_WAIT_0)
+            DPRINT1("SMSS: Process %p of the session did not end: %lx\n", Process->UniqueProcessId, Status);
+    }
+    NtClose(ProcessHandle);
+    return TRUE;
+}
+
+NTSTATUS
+NTAPI
+SmpStopMuSession(IN ULONG MuSessionId)
+{
+    PSYSTEM_PROCESS_INFORMATION Processes, Process;
+    PSMP_SUBSYSTEM Subsystem;
+    PLIST_ENTRY NextEntry;
+    ULONG Pass, Ended;
+    NTSTATUS Status;
+    PVOID State;
+
+    ASSERT(SmpMuSessionLock.OwningThread == NtCurrentTeb()->ClientId.UniqueThread);
+    ASSERT(MuSessionId != 0 && MuSessionId != SmpBootMuSessionId && MuSessionId != AttachedSessionId);
+
+    Status = SmpAcquirePrivilege(SE_DEBUG_PRIVILEGE, &State);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    for (Pass = 0; Pass < 8; Pass++)
+    {
+        Status = SmpQueryProcesses(&Processes);
+        if (!NT_SUCCESS(Status))
+            break;
+        Ended = 0;
+        for (Process = Processes; ; Process = (PSYSTEM_PROCESS_INFORMATION)((PUCHAR)Process + Process->NextEntryOffset))
+        {
+            if (Process->UniqueProcessId && Process->UniqueProcessId != NtCurrentTeb()->ClientId.UniqueProcess &&
+                Process->SessionId == MuSessionId && SmpEndSessionProcess(Process))
+                Ended++;
+            if (!Process->NextEntryOffset)
+                break;
+        }
+        RtlFreeHeap(SmpHeap, 0, Processes);
+        if (!Ended)
+            break;
+    }
+    SmpReleasePrivilege(State);
+    if (NT_SUCCESS(Status) && Pass == 8)
+        Status = STATUS_TIMEOUT;
+
+    RtlEnterCriticalSection(&SmpKnownSubSysLock);
+    NextEntry = SmpKnownSubSysHead.Flink;
+    while (NextEntry != &SmpKnownSubSysHead)
+    {
+        Subsystem = CONTAINING_RECORD(NextEntry, SMP_SUBSYSTEM, Entry);
+        NextEntry = NextEntry->Flink;
+        if (Subsystem->MuSessionId != MuSessionId)
+            continue;
+        ASSERT(!Subsystem->Terminating && Subsystem->ReferenceCount != 0);
+        RemoveEntryList(&Subsystem->Entry);
+        Subsystem->Terminating = TRUE;
+        SmpDereferenceSubsystem(Subsystem);
+    }
+    RtlLeaveCriticalSection(&SmpKnownSubSysLock);
     return Status;
 }
