@@ -1902,7 +1902,7 @@
 @ stdcall ZwAllocateLocallyUniqueId(ptr)
 @ stdcall -arch=win64 ZwCompareTokens()
 @ stdcall ZwCreateIoCompletion(ptr long ptr long)
-@ stdcall -arch=win64 ZwCreateProcessEx()
+@ stdcall ZwCreateProcessEx(ptr long ptr ptr long ptr ptr ptr long)
 @ stdcall -arch=win64 ZwCreateSemaphore()
 @ stdcall ZwFlushBuffersFile(ptr ptr)
 @ stdcall -arch=win64 ZwGetWriteWatch()
@@ -2092,7 +2092,7 @@
 @ stdcall EtwWriteEx(int64 ptr int64 long ptr ptr long ptr)
 @ stub -arch=win64 EtwWriteStartScenario
 @ stdcall EtwWriteString(int64 long int64 ptr ptr)
-@ stdcall -arch=win64 EtwWriteTransfer(int64 ptr ptr ptr long ptr)
+@ stdcall EtwWriteTransfer(int64 ptr ptr ptr long ptr)
 @ stdcall EtwpDisableStackWalkApc()
 @ stdcall EtwpReenableStackWalkApc(long)
 @ stub -arch=win64 ExAccessByte
@@ -2301,7 +2301,7 @@
 @ stdcall FsRtlPrepareToReuseEcp(ptr)
 @ stub -arch=win64 FsRtlQueryCachedVdl
 @ stub -arch=win64 FsRtlQueryInformationFile
-@ cdecl -arch=win64 FsRtlQueryKernelEaFile(ptr ptr long long ptr long ptr long ptr)
+@ cdecl FsRtlQueryKernelEaFile(ptr ptr long long ptr long ptr long ptr)
 @ stub -arch=win64 FsRtlQueryMaximumVirtualDiskNestingLevel
 @ stub -arch=win64 FsRtlRegisterFltMgrCalls
 @ stub -arch=win64 FsRtlRegisterMupCalls
@@ -2316,7 +2316,7 @@
 @ stub -arch=win64 FsRtlSendModernAppTermination
 @ stub -arch=win64 FsRtlSetDriverBacking
 @ stdcall FsRtlSetEcpListIntoIrp(ptr ptr)
-@ cdecl -arch=win64 FsRtlSetKernelEaFile(ptr ptr long)
+@ cdecl FsRtlSetKernelEaFile(ptr ptr long)
 @ stdcall FsRtlTeardownPerFileContexts(ptr)
 @ stub -arch=win64 FsRtlTryToAcquireHeaderMutex
 @ stub -arch=win64 FsRtlUpperOplockFsctrl
@@ -2754,11 +2754,11 @@
 @ stdcall ObWaitForSingleObject(ptr long long long ptr)
 @ fastcall ObfDereferenceObjectWithTag(ptr long)
 @ fastcall ObfReferenceObjectWithTag(ptr long)
-@ stdcall -arch=win64 PcwAddInstance(ptr ptr long long ptr)
+@ stdcall PcwAddInstance(ptr ptr long long ptr)
 @ stdcall PcwCloseInstance(ptr)
 @ stdcall PcwCreateInstance(ptr ptr ptr long ptr)
-@ stdcall -arch=win64 PcwRegister(ptr ptr)
-@ stdcall -arch=win64 PcwUnregister(ptr)
+@ stdcall PcwRegister(ptr ptr)
+@ stdcall PcwUnregister(ptr)
 @ stub -arch=win64 PfFileInfoNotify
 @ stdcall PoClearPowerRequest(ptr long)
 @ stub -arch=win64 PoCpuIdledSinceLastCallImprecise
