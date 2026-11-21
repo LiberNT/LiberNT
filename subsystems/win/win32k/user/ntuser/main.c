@@ -1123,6 +1123,8 @@ DriverUnload(IN PDRIVER_OBJECT DriverObject)
     IntCompositionUnload();
     UserReleaseSessions();
     IntWin32PowerManagementCleanup();
+    MsqFreeImpl();
+    FreeGdiLookasideLists();
 }
 
 // Return on failure
