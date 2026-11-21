@@ -3154,6 +3154,8 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         }
         ResolvedGeneration = VolCB->DirGeneration;
     }
+    ASSERT(ExIsResourceAcquiredSharedLite(&VolCB->MetadataResource));
+    FileCB->OpenGeneration = ResolvedGeneration;
     FileCB->LastAccessStampPending = NtfsShouldStampLastAccess(FileCB);
     FileCB->CreateOptions = IrpSp->Parameters.Create.Options;
     FileCB->PagingFileOpen = BooleanFlagOn(IrpSp->Flags, SL_OPEN_PAGING_FILE);

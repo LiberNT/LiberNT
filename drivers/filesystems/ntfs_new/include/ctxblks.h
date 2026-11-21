@@ -416,6 +416,8 @@ typedef struct _FCB
     BOOLEAN DirRealScanStarted;
     BOOLEAN DirRecordCurrent;
     LONG DirRecordGeneration;
+    /* DirGeneration at which this open resolved FileRec by its name. */
+    LONG OpenGeneration;
 
     /* The search pattern belongs to the handle: it is supplied once and
      * every later query without a name reuses it. */
