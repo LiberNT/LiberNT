@@ -2562,35 +2562,7 @@ typedef struct _SCSI_EXTENDED_MESSAGE {
 
 typedef USHORT VERSION_DESCRIPTOR, *PVERSION_DESCRIPTOR;
 
-#if (NTDDI_VERSION < NTDDI_WINXP)
-typedef struct _INQUIRYDATA {
-  UCHAR DeviceType:5;
-  UCHAR DeviceTypeQualifier:3;
-  UCHAR DeviceTypeModifier:7;
-  UCHAR RemovableMedia:1;
-  UCHAR Versions;
-  UCHAR ResponseDataFormat:4;
-  UCHAR HiSupport:1;
-  UCHAR NormACA:1;
-  UCHAR ReservedBit:1;
-  UCHAR AERC:1;
-  UCHAR AdditionalLength;
-  UCHAR Reserved[2];
-  UCHAR SoftReset:1;
-  UCHAR CommandQueue:1;
-  UCHAR Reserved2:1;
-  UCHAR LinkedCommands:1;
-  UCHAR Synchronous:1;
-  UCHAR Wide16Bit:1;
-  UCHAR Wide32Bit:1;
-  UCHAR RelativeAddressing:1;
-  UCHAR VendorId[8];
-  UCHAR ProductId[16];
-  UCHAR ProductRevisionLevel[4];
-  UCHAR VendorSpecific[20];
-  UCHAR Reserved3[40];
-} INQUIRYDATA, *PINQUIRYDATA;
-#else
+#pragma pack(push, 1)
 typedef struct _INQUIRYDATA {
   UCHAR DeviceType:5;
   UCHAR DeviceTypeQualifier:3;
@@ -2635,7 +2607,7 @@ typedef struct _INQUIRYDATA {
   VERSION_DESCRIPTOR VersionDescriptors[8];
   UCHAR Reserved4[30];
 } INQUIRYDATA, *PINQUIRYDATA;
-#endif /* (NTDDI_VERSION < NTDDI_WINXP) */
+#pragma pack(pop)
 
 #endif /* _INQUIRYDATA_DEFINED */
 

@@ -40,6 +40,7 @@ extern "C" {
 #endif
 
 #define IOCTL_SCSI_BASE     FILE_DEVICE_CONTROLLER
+#define FILE_DEVICE_SCSI 0x0000001b
 
 #define DD_SCSI_DEVICE_NAME "\\Device\\ScsiPort"
 #define DD_SCSI_DEVICE_NAME_U  L"\\Device\\ScsiPort"
