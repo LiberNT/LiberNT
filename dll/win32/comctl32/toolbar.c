@@ -3741,8 +3741,7 @@ TOOLBAR_GetButton (const TOOLBAR_INFO *infoPtr, INT nIndex, TBBUTTON *lpTbb)
     lpTbb->idCommand = btnPtr->idCommand;
     lpTbb->fsState   = btnPtr->fsState;
     lpTbb->fsStyle   = btnPtr->fsStyle;
-    lpTbb->bReserved[0] = 0;
-    lpTbb->bReserved[1] = 0;
+    memset(lpTbb->bReserved, 0, sizeof(lpTbb->bReserved));
     lpTbb->dwData    = btnPtr->dwData;
     lpTbb->iString   = btnPtr->iString;
 
