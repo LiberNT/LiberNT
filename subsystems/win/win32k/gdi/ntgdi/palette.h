@@ -65,6 +65,10 @@ NTSTATUS
 NTAPI
 InitPaletteImpl(VOID);
 
+VOID
+NTAPI
+FreePaletteImpl(VOID);
+
 PPALETTE
 NTAPI
 PALETTE_AllocPalette(

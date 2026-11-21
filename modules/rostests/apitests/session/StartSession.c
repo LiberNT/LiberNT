@@ -146,25 +146,39 @@ static BOOL ProcessObjectGone(DWORD pid, ULONG sessionId)
     return NT_SUCCESS(status) && info.SessionId != sessionId;
 }
 
-static LONG NonPagedBlocks(const char *tag)
+static const char SessionGdiTags[][5] =
+{
+    "Gla1", "Gla4", "Gla5", "Gla8", "Gh05", "Gh08", "Gh09", "Gh0:", "Gh0@", "Gh?@",
+    "GDev", "Gdev", "Gmdv", "Gldv", "Gsem", "Gpff", "Gfnt", "FNTE", "CDD ", "Usts"
+};
+
+static PSYSTEM_POOLTAG_INFORMATION PoolTags(void)
 {
     PSYSTEM_POOLTAG_INFORMATION info;
-    ULONG length = 1 << 20, i;
-    LONG blocks = -1;
+    ULONG length = 1 << 20;
 
     info = HeapAlloc(GetProcessHeap(), 0, length);
-    if (!info) return -1;
-    if (NT_SUCCESS(NtQuerySystemInformation(SystemPoolTagInformation, info, length, NULL)))
+    if (info && !NT_SUCCESS(NtQuerySystemInformation(SystemPoolTagInformation, info, length, NULL)))
     {
-        for (i = 0; i < info->Count; i++)
-        {
-            if (!memcmp(info->TagInfo[i].Tag, tag, 4))
-                blocks = (LONG)(info->TagInfo[i].NonPagedAllocs - info->TagInfo[i].NonPagedFrees);
-        }
-        if (blocks < 0) blocks = 0;
+        HeapFree(GetProcessHeap(), 0, info);
+        info = NULL;
     }
-    HeapFree(GetProcessHeap(), 0, info);
-    return blocks;
+    ok(info != NULL, "SystemPoolTagInformation failed\n");
+    return info;
+}
+
+static LONG PoolBlocks(PSYSTEM_POOLTAG_INFORMATION info, const char *tag)
+{
+    ULONG i;
+
+    if (!info) return -1;
+    for (i = 0; i < info->Count; i++)
+    {
+        if (!memcmp(info->TagInfo[i].Tag, tag, 4))
+            return (LONG)(info->TagInfo[i].PagedAllocs - info->TagInfo[i].PagedFrees +
+                          info->TagInfo[i].NonPagedAllocs - info->TagInfo[i].NonPagedFrees);
+    }
+    return 0;
 }
 
 static void RunSession(HANDLE port, ULONG ownSession, ULONG *previous)
@@ -232,7 +246,8 @@ START_TEST(StartSession)
     SW_DEVICE_CREATE_INFO info = { sizeof(info) };
     HSWDEVICE adapter = NULL;
     HANDLE port = NULL;
-    ULONG videoBefore, wait, previous = MAXULONG;
+    ULONG videoBefore, wait, previous = MAXULONG, i;
+    PSYSTEM_POOLTAG_INFORMATION before, between, after;
     LONG messageLists, gdiLists;
     DWORD ownSession = 0, console;
     NTSTATUS status;
@@ -266,16 +281,31 @@ START_TEST(StartSession)
         ok(status == STATUS_INVALID_PARAMETER, "stopping session 0 returned 0x%lx\n", status);
         status = SmStopCsr(port, ownSession);
         ok(status == STATUS_INVALID_PARAMETER, "stopping the console session returned 0x%lx\n", status);
-        messageLists = NonPagedBlocks("UMSG");
-        gdiLists = NonPagedBlocks("Ghtb");
+        before = PoolTags();
+        messageLists = PoolBlocks(before, "UMSG");
+        gdiLists = PoolBlocks(before, "Ghtb");
         ok(messageLists > 0 && gdiLists > 0, "the console's win32k holds %ld UMSG and %ld Ghtb blocks\n",
            messageLists, gdiLists);
         RunSession(port, ownSession, &previous);
+        between = PoolTags();
         RunSession(port, ownSession, &previous);
-        ok(NonPagedBlocks("UMSG") == messageLists, "UMSG went from %ld to %ld blocks across two sessions\n",
-           messageLists, NonPagedBlocks("UMSG"));
-        ok(NonPagedBlocks("Ghtb") == gdiLists, "Ghtb went from %ld to %ld blocks across two sessions\n",
-           gdiLists, NonPagedBlocks("Ghtb"));
+        after = PoolTags();
+        ok(PoolBlocks(after, "UMSG") == messageLists, "UMSG went from %ld to %ld blocks across two sessions\n",
+           messageLists, PoolBlocks(after, "UMSG"));
+        ok(PoolBlocks(after, "Ghtb") == gdiLists, "Ghtb went from %ld to %ld blocks across two sessions\n",
+           gdiLists, PoolBlocks(after, "Ghtb"));
+        ok(PoolBlocks(between, "Gla1") > 0 && PoolBlocks(between, "Gh0@") > 0,
+           "the console's win32k holds %ld Gla1 and %ld Gh0@ blocks\n",
+           PoolBlocks(between, "Gla1"), PoolBlocks(between, "Gh0@"));
+        for (i = 0; i < ARRAYSIZE(SessionGdiTags); i++)
+        {
+            ok(PoolBlocks(after, SessionGdiTags[i]) == PoolBlocks(between, SessionGdiTags[i]),
+               "%s went from %ld to %ld blocks across a session\n", SessionGdiTags[i],
+               PoolBlocks(between, SessionGdiTags[i]), PoolBlocks(after, SessionGdiTags[i]));
+        }
+        HeapFree(GetProcessHeap(), 0, before);
+        HeapFree(GetProcessHeap(), 0, between);
+        HeapFree(GetProcessHeap(), 0, after);
         NtClose(port);
     }
     ok(WTSGetActiveConsoleSessionId() == console, "the console moved to session %lu\n", WTSGetActiveConsoleSessionId());

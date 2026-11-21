@@ -218,6 +218,37 @@ LDEVOBJ_vDisableDriver(
     }
 }
 
+VOID
+NTAPI
+FreeLDEVImpl(VOID)
+{
+    PLDEVOBJ pldev;
+
+    while (!IsListEmpty(&gleLdevListHead))
+    {
+        pldev = CONTAINING_RECORD(RemoveHeadList(&gleLdevListHead), LDEVOBJ, leLink);
+        ASSERT(pldev->cRefs == 1);
+        pldev->cRefs--;
+        LDEVOBJ_vDisableDriver(pldev);
+        if (pldev->pGdiDriverInfo)
+        {
+            ExFreePoolWithTag(pldev->pGdiDriverInfo, GDITAG_LDEV);
+            pldev->pGdiDriverInfo = NULL;
+        }
+        LDEVOBJ_vFreeLDEV(pldev);
+    }
+    if (gpldevWin32k)
+    {
+        ExFreePoolWithTag(gpldevWin32k, GDITAG_LDEV);
+        gpldevWin32k = NULL;
+    }
+    if (ghsemLDEVList)
+    {
+        EngDeleteSemaphore(ghsemLDEVList);
+        ghsemLDEVList = NULL;
+    }
+}
+
 static
 PVOID
 LDEVOBJ_pvFindImageProcAddress(

@@ -6,6 +6,10 @@ NTSTATUS
 NTAPI
 InitSafeSemaphoreImpl(VOID);
 
+VOID
+NTAPI
+FreeSafeSemaphoreImpl(VOID);
+
 #define MIX_TO_ROP4(mix) \
     (((ULONG)gajRop2ToRop3[((mix) - 1) & 0xF]) | \
      ((ULONG)gajRop2ToRop3[(((mix) >> 8) - 1) & 0xF] << 8))

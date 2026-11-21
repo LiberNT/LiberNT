@@ -2436,12 +2436,15 @@ NTAPI
 REGION_vCleanup(PVOID ObjectBody)
 {
     PREGION pRgn = (PREGION)ObjectBody;
-    PPROCESSINFO ppi = PsGetCurrentProcessWin32Process();
-    ASSERT(ppi);
+    PPROCESSINFO ppi;
 
     ASSERT(pRgn->prgnattr);
     if (pRgn->prgnattr != &pRgn->rgnattr)
+    {
+        ppi = PsGetCurrentProcessWin32Process();
+        ASSERT(ppi);
         GdiPoolFree(ppi->pPoolRgnAttr, pRgn->prgnattr);
+    }
 
     if (pRgn->Buffer && pRgn->Buffer != &pRgn->rdh.rcBound)
         ExFreePoolWithTag(pRgn->Buffer, TAG_REGION);

@@ -82,6 +82,14 @@ VOID
 NTAPI
 FreeGdiLookasideLists(VOID);
 
+VOID
+NTAPI
+GDIOBJ_vDeleteSessionObjects(UCHAR objt);
+
+VOID
+NTAPI
+GDIOBJ_vFreeHandleTable(VOID);
+
 BOOL
 NTAPI
 GreIsHandleValid(
