@@ -291,5 +291,8 @@ NTAPI
 KdpSysCheckLowMemory(
     _In_ ULONG Flags)
 {
-    return STATUS_UNSUCCESSFUL;
+    UNREFERENCED_PARAMETER(Flags);
+
+    /* /NOLOWMEM is not honoured, so no pattern below 4 GB can have been corrupted */
+    return STATUS_SUCCESS;
 }
