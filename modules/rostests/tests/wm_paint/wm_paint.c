@@ -92,7 +92,7 @@ LRESULT CALLBACK MainWndProc(HWND HWnd, UINT Msg, WPARAM WParam,
             // fill the client area with the background brush
             /*HBRUSH HBrush =
                reinterpret_cast<HBRUSH>
-                  (HBRUSH)(GetClassLong(HWnd, GCL_HBRBACKGROUND)
+                  (HBRUSH)(GetClassLongPtr(HWnd, GCLP_HBRBACKGROUND)
                   );*/
             FillRect(Hdc, &RClient, NULL);
 

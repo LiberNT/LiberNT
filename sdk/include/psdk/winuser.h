@@ -676,14 +676,18 @@ extern "C" {
 #define GCW_ATOM (-32)
 #define GCL_CBCLSEXTRA (-20)
 #define GCL_CBWNDEXTRA (-18)
+#ifndef _WIN64
 #define GCL_HBRBACKGROUND (-10)
 #define GCL_HCURSOR (-12)
 #define GCL_HICON (-14)
 #define GCL_HICONSM (-34)
 #define GCL_HMODULE (-16)
 #define GCL_MENUNAME (-8)
+#endif
 #define GCL_STYLE (-26)
+#ifndef _WIN64
 #define GCL_WNDPROC (-24)
+#endif
 #define GCLP_HBRBACKGROUND (-10)
 #define GCLP_HCURSOR (-12)
 #define GCLP_HICON (-14)
@@ -869,15 +873,23 @@ extern "C" {
 
 #define GWL_EXSTYLE (-20)
 #define GWL_STYLE (-16)
+#ifndef _WIN64
 #define GWL_WNDPROC (-4)
+#endif
 #define GWLP_WNDPROC (-4)
+#ifndef _WIN64
 #define GWL_HINSTANCE (-6)
+#endif
 #define GWLP_HINSTANCE (-6)
+#ifndef _WIN64
 #define GWL_HWNDPARENT (-8)
+#endif
 #define GWLP_HWNDPARENT (-8)
 #define GWL_ID (-12)
 #define GWLP_ID (-12)
+#ifndef _WIN64
 #define GWL_USERDATA (-21)
+#endif
 #define GWLP_USERDATA (-21)
 
 #ifndef __REACTOS__ // NEVER USE THESE!

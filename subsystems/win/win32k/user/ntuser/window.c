@@ -4348,7 +4348,7 @@ co_IntSetWindowLongPtr(HWND hWnd, DWORD Index, LONG_PTR NewValue, BOOL Ansi, ULO
          if ((Index != GWL_STYLE) &&
              (Index != GWL_EXSTYLE) &&
              (Index != GWL_ID) &&
-             (Index != GWL_USERDATA))
+             (Index != GWLP_USERDATA))
          {
             ERR("NtUserSetWindowLong(): Index requires pointer size: %lu\n", Index);
             EngSetLastError(ERROR_INVALID_INDEX);
