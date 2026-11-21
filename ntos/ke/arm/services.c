@@ -70,6 +70,10 @@ KeFlushIoBuffers(
 {
     PVOID Address;
 
+    /* A request that carries no buffer of its own has none to maintain. */
+    if (!Mdl || (MmGetMdlByteCount(Mdl) == 0))
+        return;
+
     if (!DmaOperation && !ReadOperation)
         return;
 
