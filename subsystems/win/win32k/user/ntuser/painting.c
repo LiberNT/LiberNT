@@ -1275,7 +1275,9 @@ co_IntPrintWindow(
     HDC hdcSrc;
     PWND pwndRoot;
     INT cx, cy, xSrc, ySrc;
-    BOOL Ret;
+    BOOL Ret = FALSE;
+    BOOL Redirected = FALSE;
+    USER_REFERENCE_ENTRY RootRef;
 
     ASSERT(UserIsEnteredExclusive());
     ASSERT_REFS_CO(pwnd);
@@ -1296,27 +1298,48 @@ co_IntPrintWindow(
        ySrc = 0;
     }
 
-    /* FIXME: without composition the window DC reads the screen, so parts other windows cover come out with their content */
     /* TODO: PW_RENDERFULLCONTENT does not capture DirectComposition or flip-model swap chain content */
+    pwndRoot = UserGetAncestor(pwnd, GA_ROOT);
+
+    /* Without composition the window paints into a backing of its own, so windows above it do not show through */
+    if (pwndRoot != NULL && !IntCompositionIsEnabled() && IntIsWindowVisible(pwnd))
+    {
+        UserRefObjectCo(pwndRoot, &RootRef);
+        Redirected = IntCompositionBeginPrintRedirect(pwndRoot);
+        if (!Redirected)
+            UserDerefObjectCo(pwndRoot);
+    }
+
     co_UserRedrawWindow(pwnd, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN | RDW_UPDATENOW);
 
     if (!NtGdiPatBlt(hdcBlt, 0, 0, cx, cy, BLACKNESS))
-        return FALSE;
-
+    {
+        Ret = FALSE;
+    }
     /* FIXME: Windows 11 still sends WM_NCPAINT and WM_PAINT to a hidden window before leaving its area black */
-    if (!IntIsWindowVisible(pwnd))
-        return TRUE;
+    else if (!IntIsWindowVisible(pwnd) ||
+             (pwndRoot != NULL && IntGetWindowDisplayAffinity(pwndRoot) != WDA_NONE))
+    {
+        Ret = TRUE;
+    }
+    else
+    {
+        hdcSrc = UserGetDCEx(pwnd, NULL, DCX_CACHE | DCX_WINDOW);
+        if (hdcSrc != NULL)
+        {
+            Ret = NtGdiBitBlt(hdcBlt, 0, 0, cx, cy, hdcSrc, xSrc, ySrc, SRCCOPY, CLR_INVALID, 0);
+            UserReleaseDC(pwnd, hdcSrc, FALSE);
+        }
+    }
 
-    pwndRoot = UserGetAncestor(pwnd, GA_ROOT);
-    if (pwndRoot != NULL && IntGetWindowDisplayAffinity(pwndRoot) != WDA_NONE)
-        return TRUE;
+    if (Redirected)
+    {
+        IntCompositionEndPrintRedirect(pwndRoot);
+        /* The redirected paint used up the window's update region; the screen still needs its own */
+        co_UserRedrawWindow(pwndRoot, NULL, NULL, RDW_INVALIDATE | RDW_ERASE | RDW_FRAME | RDW_ALLCHILDREN);
+        UserDerefObjectCo(pwndRoot);
+    }
 
-    hdcSrc = UserGetDCEx(pwnd, NULL, DCX_CACHE | DCX_WINDOW);
-    if (!hdcSrc)
-        return FALSE;
-
-    Ret = NtGdiBitBlt(hdcBlt, 0, 0, cx, cy, hdcSrc, xSrc, ySrc, SRCCOPY, CLR_INVALID, 0);
-    UserReleaseDC(pwnd, hdcSrc, FALSE);
     return Ret;
 }
 

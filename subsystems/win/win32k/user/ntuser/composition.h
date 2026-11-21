@@ -150,6 +150,8 @@ PSURFACE IntCompositionGetRedirectSurface(_In_ PWND Wnd);
  * DC is already redirected at the current backing/origin, the (expensive)
  * VisRgn rebuild is skipped — the existing clip is still valid. */
 VOID IntCompositionRedirectDC(_In_opt_ PWND Wnd, _In_ HDC hDC, _In_ ULONG DcxFlags, _In_opt_ HRGN hrgnClip, _In_ BOOL Revalidate);
+BOOL IntCompositionBeginPrintRedirect(_In_ PWND Wnd);
+VOID IntCompositionEndPrintRedirect(_In_ PWND Wnd);
 
 /* Undo a DC redirect (release the backing ref, restore the primary). Called
  * from DceReleaseDC and DceFreeWindowDCE. Runs even when composition has been

@@ -5176,6 +5176,69 @@ IntCompositionRestoreDC(_Inout_ PDC pdc)
  * absolutely from the window rects, so re-running it (UserGetDCEx reuse,
  * DceResetActiveDCEs after a move/resize) always yields the current state.
  */
+/* PrintWindow without composition gives the printed top-level window a backing for the length of the call */
+static PWND g_PrintRedirectWnd = NULL;
+
+BOOL
+IntCompositionBeginPrintRedirect(_In_ PWND Wnd)
+{
+    REDIRECT_ENTRY *e;
+
+    ASSERT(UserIsEnteredExclusive());
+    ASSERT(Wnd != NULL);
+
+    if (gbCompositionEnabled || g_PrintRedirectWnd != NULL)
+        return FALSE;
+    if (Wnd == UserGetDesktopWindow() || Wnd->spwndParent != UserGetDesktopWindow())
+        return FALSE;
+
+    e = IntCompositionFind(Wnd);
+    ASSERT(e == NULL);
+    if (e == NULL)
+        e = IntCompositionAlloc(Wnd);
+    if (e == NULL)
+        return FALSE;
+
+    if (IntCompositionEnsureSurface(Wnd, &e->Redirect) == NULL)
+    {
+        IntCompositionFreeSurface(&e->Redirect, FALSE);
+        e->Wnd = NULL;
+        g_RedirectWnds[e - g_Redirects] = NULL;
+        return FALSE;
+    }
+
+    g_PrintRedirectWnd = Wnd;
+    DceResetActiveDCEs(Wnd);
+    return TRUE;
+}
+
+VOID
+IntCompositionEndPrintRedirect(_In_ PWND Wnd)
+{
+    REDIRECT_ENTRY *e;
+
+    ASSERT(UserIsEnteredExclusive());
+    ASSERT(Wnd != NULL);
+    ASSERT(g_PrintRedirectWnd == Wnd);
+
+    g_PrintRedirectWnd = NULL;
+
+    /* Composition switched on during the paint keeps the backing as its own */
+    if (gbCompositionEnabled)
+        return;
+
+    DceUnredirectAllDCs();
+    e = IntCompositionFind(Wnd);
+    if (e != NULL)
+    {
+        IntCompositionFreeSurface(&e->Redirect, FALSE);
+        IntCompositionFreeBlur(e);
+        e->Wnd = NULL;
+        g_RedirectWnds[e - g_Redirects] = NULL;
+    }
+    DceResetActiveDCEs(Wnd);
+}
+
 VOID
 IntCompositionRedirectDC(_In_opt_ PWND Wnd, _In_ HDC hDC, _In_ ULONG DcxFlags, _In_opt_ HRGN hrgnClip, _In_ BOOL Revalidate)
 {
@@ -5188,7 +5251,8 @@ IntCompositionRedirectDC(_In_opt_ PWND Wnd, _In_ HDC hDC, _In_ ULONG DcxFlags, _
     BOOL bRedirect = FALSE;
     BOOL Virtual;
 
-    if (gbCompositionEnabled && Wnd != NULL)
+    if (Wnd != NULL &&
+        (gbCompositionEnabled || (g_PrintRedirectWnd != NULL && IntCompositionTopLevel(Wnd) == g_PrintRedirectWnd)))
     {
         ancestor = IntCompositionTopLevel(Wnd);
         if (ancestor != NULL)
