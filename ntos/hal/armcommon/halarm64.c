@@ -6084,6 +6084,7 @@ HalProcessorIdle(VOID)
 
 #define HAL_ARM64_RTC_EARLIEST_SECONDS 1767225600UL
 #define HAL_ARM64_PL031_PHYSICAL_ADDRESS 0x09010000ULL
+#define HAL_ARM64_PL031_RTCLR 0x008
 
 static KSPIN_LOCK HalpArm64SoftClockLock;
 static BOOLEAN HalpArm64SoftClockSet;
@@ -6132,15 +6133,38 @@ HalpArm64SetSoftClock(
 
 static
 BOOLEAN
-HalpArm64HasQemuPl031(VOID)
+HalpArm64FindPl031(
+    _Out_ PPHYSICAL_ADDRESS Address)
 {
+    static const PCSTR Compatibles[] = { "arm,pl031" };
+    const VOID *Blob;
+    FDT Fdt;
+    ULONGLONG Base, Size;
+    ULONG BlobSize, Node, Parent, Match;
+
     /*
      * 0x09010000 is the PL031 address on QEMU's "virt" machine, but it is
      * ordinary RAM on systems such as Raspberry Pi.  Only touch it after a
      * positive match for the QEMU FADT; probing this address on an arbitrary
      * ARM64 platform can turn RAM contents into a bogus wall clock.
      */
-    return HaliGetCachedAcpiTable(FADT_SIGNATURE, "BOCHS", "BXPC") != NULL;
+    if (HaliGetCachedAcpiTable(FADT_SIGNATURE, "BOCHS", "BXPC") != NULL)
+    {
+        Address->QuadPart = HAL_ARM64_PL031_PHYSICAL_ADDRESS;
+        return TRUE;
+    }
+
+    if (!HalpArm64GetDeviceTree(&Blob, &BlobSize) || !Blob || !FdtOpen(Blob, BlobSize, &Fdt) ||
+        !HalpArm64FindDeviceTreeNode(&Fdt, Compatibles, RTL_NUMBER_OF(Compatibles), &Node, &Parent, &Match) ||
+        !FdtReadReg(&Fdt, Node, Parent, 0, &Base, &Size) ||
+        !FdtTranslateAddress(&Fdt, Parent, &Base) ||
+        (Base == 0))
+    {
+        return FALSE;
+    }
+
+    Address->QuadPart = (LONGLONG)Base;
+    return TRUE;
 }
 
 BOOLEAN
@@ -6154,7 +6178,7 @@ HalQueryRealTimeClock(
      * FADT identifies the platform. Resolve the base from an ARMH0011 device
      * once the HAL has an ACPI device-enumeration path.
      */
-    PHYSICAL_ADDRESS Pl031Phys = { .QuadPart = HAL_ARM64_PL031_PHYSICAL_ADDRESS };
+    PHYSICAL_ADDRESS Pl031Phys;
     PVOID Pl031Va;
     ULONG Seconds;
     LARGE_INTEGER SystemTime;
@@ -6162,7 +6186,7 @@ HalQueryRealTimeClock(
     if (NT_SUCCESS(HalpEfiQueryTime(TimeFields)))
         return TRUE;
 
-    if (HalpArm64HasQemuPl031())
+    if (HalpArm64FindPl031(&Pl031Phys))
     {
         Pl031Va = MmMapIoSpace(Pl031Phys, PAGE_SIZE, MmNonCached);
         if (Pl031Va)
@@ -6347,19 +6371,29 @@ NTAPI
 HalSetRealTimeClock(
     _In_ PTIME_FIELDS TimeFields)
 {
+    PHYSICAL_ADDRESS Pl031Phys;
     LARGE_INTEGER Time;
+    PVOID Pl031Va;
+    ULONG Seconds;
 
     if (NT_SUCCESS(HalpEfiSetTime(TimeFields)))
         return TRUE;
 
-    if (HalpArm64HasQemuPl031())
-    {
-        UNIMPLEMENTED_STUB();
-        return FALSE;
-    }
-
     if (!RtlTimeFieldsToTime(TimeFields, &Time))
         return FALSE;
+
+    if (HalpArm64FindPl031(&Pl031Phys))
+    {
+        /* PL031 (ARM DDI 0224): RTCLR loads the counter that RTCDR reports, in seconds. */
+        if (!RtlTimeToSecondsSince1970(&Time, &Seconds))
+            return FALSE;
+        Pl031Va = MmMapIoSpace(Pl031Phys, PAGE_SIZE, MmNonCached);
+        if (!Pl031Va)
+            return FALSE;
+        WRITE_REGISTER_ULONG((PULONG)((PUCHAR)Pl031Va + HAL_ARM64_PL031_RTCLR), Seconds);
+        MmUnmapIoSpace(Pl031Va, PAGE_SIZE);
+        return TRUE;
+    }
 
     HalpArm64SetSoftClock(&Time);
     return TRUE;
