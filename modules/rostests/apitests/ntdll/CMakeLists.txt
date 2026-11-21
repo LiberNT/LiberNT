@@ -185,6 +185,7 @@ list(APPEND SOURCE
     ProcessUserModeIopl.c
     MemoryImageInformation.c
     ObjectQuotaLimit.c
+    ObjectTypeIndex.c
     ObHandleRace.c
     LinkReparseLimit.c
     RtlWnfAndSqm.c
