@@ -81,6 +81,136 @@ HandoffThread(_In_ PVOID Parameter)
     PsTerminateSystemThread(STATUS_SUCCESS);
 }
 
+typedef struct _APC_RESUME_CONTEXT
+{
+    KEVENT Ready;
+    KEVENT Release;
+    KAPC Apc;
+    PKTHREAD Target;
+    KAFFINITY Affinity;
+    volatile LONG Delivered;
+    LONG DeliveredBeforeLowering;
+    LONG DeliveredAfterLowering;
+    NTSTATUS WaitStatus;
+    KIRQL WaitReturnIrql;
+    KIRQL DeliveryIrql;
+} APC_RESUME_CONTEXT;
+
+static APC_RESUME_CONTEXT Resume;
+
+static
+VOID
+NTAPI
+ResumeApcRoutine(
+    _In_ PKAPC Apc,
+    _Inout_ PKNORMAL_ROUTINE *NormalRoutine,
+    _Inout_ PVOID *NormalContext,
+    _Inout_ PVOID *SystemArgument1,
+    _Inout_ PVOID *SystemArgument2)
+{
+    APC_RESUME_CONTEXT *Context = *SystemArgument1;
+    UNREFERENCED_PARAMETER(Apc);
+    UNREFERENCED_PARAMETER(NormalRoutine);
+    UNREFERENCED_PARAMETER(NormalContext);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+    Context->DeliveryIrql = KeGetCurrentIrql();
+    InterlockedIncrement(&Context->Delivered);
+}
+
+static
+VOID
+NTAPI
+ResumeThread(_In_ PVOID Parameter)
+{
+    APC_RESUME_CONTEXT *Context = Parameter;
+    LARGE_INTEGER Timeout;
+    KIRQL OldIrql;
+
+    Timeout.QuadPart = -3LL * 1000 * 1000 * 10;
+    KeSetSystemAffinityThreadEx(Context->Affinity);
+    KeSetPriorityThread(KeGetCurrentThread(), LOW_REALTIME_PRIORITY - 1);
+    Context->Target = KeGetCurrentThread();
+    KeRaiseIrql(APC_LEVEL, &OldIrql);
+    KeSetEvent(&Context->Ready, IO_NO_INCREMENT, FALSE);
+    Context->WaitStatus = KeWaitForSingleObject(&Context->Release, Executive, KernelMode, FALSE, &Timeout);
+    Context->WaitReturnIrql = KeGetCurrentIrql();
+    Context->DeliveredBeforeLowering = Context->Delivered;
+    KeLowerIrql(OldIrql);
+    Context->DeliveredAfterLowering = Context->Delivered;
+    PsTerminateSystemThread(STATUS_SUCCESS);
+}
+
+/*
+ * A thread that blocked at APC_LEVEL takes the processor back from one that
+ * leaves it at PASSIVE_LEVEL, with a kernel APC queued in between: the APC has
+ * to wait until the thread lowers its own IRQL.
+ */
+static
+VOID
+TestResumeAtApcLevel(VOID)
+{
+    APC_RESUME_CONTEXT *Context = &Resume;
+    KAFFINITY Active, PreviousAffinity;
+    LARGE_INTEGER Timeout;
+    HANDLE Handle;
+    PVOID ThreadObject;
+    NTSTATUS Status;
+    BOOLEAN Inserted;
+
+    Active = KeQueryActiveProcessors();
+    RtlZeroMemory(Context, sizeof(*Context));
+    KeInitializeEvent(&Context->Ready, SynchronizationEvent, FALSE);
+    KeInitializeEvent(&Context->Release, SynchronizationEvent, FALSE);
+    Context->Affinity = Active & (0 - Active);
+    Timeout.QuadPart = -3LL * 1000 * 1000 * 10;
+
+    PreviousAffinity = KeSetSystemAffinityThreadEx(Context->Affinity);
+    Status = PsCreateSystemThread(&Handle, THREAD_ALL_ACCESS, NULL, NULL, NULL, ResumeThread, Context);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+    {
+        KeRevertToUserAffinityThreadEx(PreviousAffinity);
+        return;
+    }
+    Status = ObReferenceObjectByHandle(Handle, THREAD_ALL_ACCESS, *PsThreadType, KernelMode, &ThreadObject, NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+    {
+        KeSetEvent(&Context->Release, IO_NO_INCREMENT, FALSE);
+        ZwWaitForSingleObject(Handle, FALSE, NULL);
+        ObCloseHandle(Handle, KernelMode);
+        KeRevertToUserAffinityThreadEx(PreviousAffinity);
+        return;
+    }
+    ObCloseHandle(Handle, KernelMode);
+
+    /* The thread is the most urgent one of this processor, which this thread only gets back once that one has blocked. */
+    Status = KeWaitForSingleObject(&Context->Ready, Executive, KernelMode, FALSE, &Timeout);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (Status == STATUS_SUCCESS)
+    {
+        KeInitializeApc(&Context->Apc, Context->Target, OriginalApcEnvironment,
+                        ResumeApcRoutine, NULL, NULL, KernelMode, NULL);
+        Inserted = KeInsertQueueApc(&Context->Apc, Context, NULL, IO_NO_INCREMENT);
+        ok(Inserted, "The APC was not queued\n");
+        ok_eq_long(Context->Delivered, 0);
+    }
+
+    KeSetEvent(&Context->Release, IO_NO_INCREMENT, FALSE);
+    Status = KeWaitForSingleObject(ThreadObject, Executive, KernelMode, FALSE, &Timeout);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (Status != STATUS_SUCCESS)
+        KeWaitForSingleObject(ThreadObject, Executive, KernelMode, FALSE, NULL);
+
+    ok_eq_hex(Context->WaitStatus, STATUS_SUCCESS);
+    ok_eq_uint(Context->WaitReturnIrql, APC_LEVEL);
+    ok_eq_long(Context->DeliveredBeforeLowering, 0);
+    ok_eq_long(Context->DeliveredAfterLowering, 1);
+    ok_eq_uint(Context->DeliveryIrql, APC_LEVEL);
+    ObDereferenceObject(ThreadObject);
+    KeRevertToUserAffinityThreadEx(PreviousAffinity);
+}
+
 START_TEST(KeApcScheduling)
 {
     APC_HANDOFF_CONTEXT *Context = &Handoff;
@@ -91,6 +221,8 @@ START_TEST(KeApcScheduling)
     NTSTATUS Status;
     BOOLEAN Inserted;
     ULONG Index;
+
+    TestResumeAtApcLevel();
 
     Active = KeQueryActiveProcessors();
     Producer = Active & (0 - Active);

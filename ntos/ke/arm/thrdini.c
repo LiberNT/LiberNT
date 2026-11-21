@@ -20,7 +20,7 @@
 typedef struct _KI_ARM_SWITCH_FRAME
 {
     ULONGLONG D[8];
-    ULONG Pad;
+    ULONG ApcBypass;
     ULONG R[8];
     ULONG Lr;
 } KI_ARM_SWITCH_FRAME, *PKI_ARM_SWITCH_FRAME;
@@ -126,6 +126,7 @@ KiInitializeContextThread(
     InitFrame->StartFrame.StartRoutine = (ULONG)(ULONG_PTR)StartRoutine;
     InitFrame->StartFrame.StartContext = (ULONG)(ULONG_PTR)StartContext;
     InitFrame->SwitchFrame.Lr = (ULONG)(ULONG_PTR)KiThreadStartup;
+    InitFrame->SwitchFrame.ApcBypass = APC_LEVEL;
 
     Thread->PreviousMode = Context ? UserMode : KernelMode;
     Thread->KernelStack = &InitFrame->SwitchFrame;
@@ -140,8 +141,16 @@ KiArmSwapContextResume(
     _In_ PKI_ARM_SWITCH_CONTEXT SwitchContext)
 {
     KI_ARM_SWITCH_CONTEXT Copy = *SwitchContext;
+    PKI_ARM_SWITCH_FRAME Outgoing = Copy.OldThread->KernelStack;
+    PKI_ARM_SWITCH_FRAME Incoming = Copy.NewThread->KernelStack;
 
-    return KiSwapContextResume(Copy.WaitIrql, Copy.OldThread, Copy.NewThread);
+    ASSERT(Copy.OldThread != Copy.NewThread);
+    ASSERT(Copy.OldThread->Running);
+    ASSERT(Incoming->ApcBypass <= HIGH_LEVEL);
+
+    /* A thread resumes with the IRQL it was itself switched out at, which its own frame keeps until it runs again. */
+    Outgoing->ApcBypass = Copy.WaitIrql;
+    return KiSwapContextResume((BOOLEAN)(Incoming->ApcBypass != PASSIVE_LEVEL), Copy.OldThread, Copy.NewThread);
 }
 
 BOOLEAN
