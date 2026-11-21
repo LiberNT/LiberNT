@@ -727,7 +727,8 @@ NtfsFsdWrite(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     /* Only a handle granted append access *without* plain write access is
      * append-only; FILE_GENERIC_WRITE includes FILE_APPEND_DATA, so testing
      * that bit alone would redirect every ordinary write to end of file. */
-    if ((FileCB->DesiredAccess & FILE_APPEND_DATA) &&
+    if (!BooleanFlagOn(Irp->Flags, IRP_PAGING_IO) &&
+        (FileCB->DesiredAccess & FILE_APPEND_DATA) &&
         !(FileCB->DesiredAccess & FILE_WRITE_DATA))
     {
         ByteOffset.HighPart = -1;
@@ -760,6 +761,10 @@ NtfsFsdWrite(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     else
         ExAcquireResourceExclusiveLite(NtfsGetMainResource(FileCB), TRUE);
     ResourceAcquired = TRUE;
+
+    ASSERT(!PagingIo || ByteOffset.QuadPart >= 0);
+    if (!PagingIo && ByteOffset.HighPart == -1 && ByteOffset.LowPart == FILE_WRITE_TO_END_OF_FILE)
+        ByteOffset.QuadPart = NtfsGetCommonFcbHeader(FileCB)->FileSize.QuadPart;
 
     if (PagingIo)
     {
