@@ -49,7 +49,7 @@ enum
     SM2M_FLYOUTGONE = WM_APP + 42
 };
 
-enum SM2ANIMPHASE { SM2A_NONE, SM2A_OPEN, SM2A_CLOSE };
+enum SM2ANIMPHASE { SM2A_NONE, SM2A_CLOSE };
 
 struct SM2PALETTE
 {
@@ -2257,13 +2257,11 @@ public:
         ::ShowWindow(m_hwndEdit, SW_SHOW);
         LayoutRows();
 
-        m_AnimPhase = SM2A_OPEN;
-        m_AnimT0 = GetTickCount64();
+        m_AnimPhase = SM2A_NONE;
 
         SetLayeredWindowAttributes(m_hWnd, 0, 0, LWA_ALPHA);
-        SetWindowPos(HWND_TOPMOST, x + m_dxSlide, y + m_dySlide, w, h,
-                     SWP_NOACTIVATE | SWP_SHOWWINDOW);
-        PositionUserPic(x + m_dxSlide, y + m_dySlide, 0);
+        SetWindowPos(HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        PositionUserPic(x, y, 255);
         if (m_UserPic.IsWindow())
             m_UserPic.SetWindowPos(HWND_TOPMOST, 0, 0, 0, 0,
                                    SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE);
@@ -2272,7 +2270,8 @@ public:
         ::SetFocus(m_hwndEdit);
 
         InvalidateRect(NULL, FALSE);
-        StartAnimTimer();
+        UpdateWindow();
+        SetLayeredWindowAttributes(m_hWnd, 0, 255, LWA_ALPHA);
         return S_OK;
     }
 
@@ -2996,22 +2995,7 @@ public:
         ULONGLONG now = GetTickCount64();
         BOOL bActive = FALSE;
 
-        if (m_AnimPhase == SM2A_OPEN)
-        {
-            double t = (double)(now - m_AnimT0) / 170.0;
-            double e = SM2Ease(t);
-            BYTE alpha = (BYTE)(255.0 * e);
-            int x = m_ptFinal.x + (int)(m_dxSlide * (1.0 - e));
-            int y = m_ptFinal.y + (int)(m_dySlide * (1.0 - e));
-            SetLayeredWindowAttributes(m_hWnd, 0, alpha, LWA_ALPHA);
-            SetWindowPos(NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-            PositionUserPic(x, y, alpha);
-            if (t >= 1.0)
-                m_AnimPhase = SM2A_NONE;
-            else
-                bActive = TRUE;
-        }
-        else if (m_AnimPhase == SM2A_CLOSE)
+        if (m_AnimPhase == SM2A_CLOSE)
         {
             double t = (double)(now - m_AnimT0) / 170.0;
             if (t > 1.0) t = 1.0;
