@@ -4,11 +4,11 @@
 @ stdcall -version=0x601+ AddDllDirectory(wstr)
 @ stdcall AddAtomA(str)
 @ stdcall AddAtomW(wstr)
-@ stdcall AddConsoleAliasA(str str str) kernelbase.AddConsoleAliasA
-@ stdcall AddConsoleAliasW(wstr wstr wstr) kernelbase.AddConsoleAliasW
+@ stdcall -thunk AddConsoleAliasA(str str str) kernelbase.AddConsoleAliasA
+@ stdcall -thunk AddConsoleAliasW(wstr wstr wstr) kernelbase.AddConsoleAliasW
 @ stdcall AddLocalAlternateComputerNameA(str long)
 @ stdcall AddLocalAlternateComputerNameW(wstr long)
-@ stdcall -version=0xA00+ AddDependencyToProcessPackageGraph(wstr ptr ptr ptr) kernelbase.AddDependencyToProcessPackageGraph
+@ stdcall -thunk -version=0xA00+ AddDependencyToProcessPackageGraph(wstr ptr ptr ptr) kernelbase.AddDependencyToProcessPackageGraph
 @ stdcall AddRefActCtx(ptr)
 @ stdcall -version=0x600+ AddSIDToBoundaryDescriptor(ptr ptr)
 @ stdcall -version=0x600+ BasepAdjustObjectAttributesForPrivateNamespace(ptr)
@@ -17,16 +17,16 @@
 @ stdcall AddVectoredContinueHandler(long ptr) ntdll.RtlAddVectoredContinueHandler
 @ stdcall AddVectoredExceptionHandler(long ptr) ntdll.RtlAddVectoredExceptionHandler
 @ stdcall -version=0x600+ AdjustCalendarDate(ptr long long)
-@ stdcall AllocConsole() kernelbase.AllocConsole
+@ stdcall -thunk AllocConsole() kernelbase.AllocConsole
 @ stdcall AllocateUserPhysicalPages(long ptr ptr)
 @ stdcall -version=0x600+ AllocateUserPhysicalPagesNuma(ptr ptr ptr long)
-@ stdcall -version=0x602+ AppXFreeMemory(ptr) kernelbase.AppXFreeMemory
-@ stdcall -version=0x602+ AppXGetPackageSid(wstr ptr) kernelbase.AppXGetPackageSid
+@ stdcall -thunk -version=0x602+ AppXFreeMemory(ptr) kernelbase.AppXFreeMemory
+@ stdcall -thunk -version=0x602+ AppXGetPackageSid(wstr ptr) kernelbase.AppXGetPackageSid
 @ stdcall -version=0x600+ ApplicationRecoveryFinished(long)
 @ stdcall -version=0x600+ ApplicationRecoveryInProgress(ptr)
 @ stdcall AreFileApisANSI()
 @ stdcall AssignProcessToJobObject(ptr ptr)
-@ stdcall AttachConsole(long) kernelbase.AttachConsole
+@ stdcall -thunk AttachConsole(long) kernelbase.AttachConsole
 @ stdcall BackupRead(ptr ptr long ptr long long ptr)
 @ stdcall BackupSeek(ptr long long ptr ptr ptr)
 @ stdcall BackupWrite(ptr ptr long ptr long long ptr)
@@ -62,11 +62,11 @@
 @ stdcall BuildCommDCBW(wstr ptr)
 @ stdcall CallNamedPipeA(str ptr long ptr long ptr long)
 @ stdcall CallNamedPipeW(wstr ptr long ptr long ptr long)
-@ stdcall -version=0x600+ CallbackMayRunLong(ptr) kernelbase.CallbackMayRunLong
+@ stdcall -thunk -version=0x600+ CallbackMayRunLong(ptr) kernelbase.CallbackMayRunLong
 @ stdcall CancelDeviceWakeupRequest(long)
 @ stdcall CancelIo(long)
 @ stdcall -version=0x600+ CancelIoEx(ptr ptr)
-@ stdcall -version=0x600+ CancelSynchronousIo(ptr) kernelbase.CancelSynchronousIo
+@ stdcall -thunk -version=0x600+ CancelSynchronousIo(ptr) kernelbase.CancelSynchronousIo
 @ stdcall -version=0x600+ CancelThreadpoolIo(ptr) ntdll.TpCancelAsyncIoOperation
 @ stdcall CancelTimerQueueTimer(long long)
 @ stdcall CancelWaitableTimer(long)
@@ -77,12 +77,12 @@
 @ stdcall CheckNameLegalDOS8Dot3A(str str long long long)
 @ stdcall CheckNameLegalDOS8Dot3W(wstr str long long long)
 @ stdcall CheckRemoteDebuggerPresent(long ptr)
-@ stdcall -version=0x602+ CheckTokenCapability(ptr ptr ptr) kernelbase.CheckTokenCapability
+@ stdcall -thunk -version=0x602+ CheckTokenCapability(ptr ptr ptr) kernelbase.CheckTokenCapability
 @ stdcall ClearCommBreak(long)
 @ stdcall ClearCommError(long ptr ptr)
-@ stdcall CloseConsoleHandle(long) kernelbase.CloseConsoleHandle
+@ stdcall -thunk CloseConsoleHandle(long) kernelbase.CloseConsoleHandle
 @ stdcall CloseHandle(long)
-@ stdcall -version=0xA00+ ClosePseudoConsole(ptr) kernelbase.ClosePseudoConsole
+@ stdcall -thunk -version=0xA00+ ClosePseudoConsole(ptr) kernelbase.ClosePseudoConsole
 @ stdcall -version=0x600+ ClosePrivateNamespace(ptr long)
 @ stdcall CloseProfileUserMapping()
 @ stdcall -version=0x602+ CloseState(ptr)
@@ -99,13 +99,13 @@
 @ stdcall -stub -version=0x600+ CompareCalendarDates(ptr ptr ptr)
 @ stdcall CompareFileTime(ptr ptr)
 @ stdcall -version=0xA00+ CompareObjectHandles(ptr ptr)
-@ stdcall CompareStringA(long long str long str long) kernelbase.CompareStringA
-@ stdcall -version=0x600+ CompareStringEx(wstr long wstr long wstr long ptr ptr ptr) kernelbase.CompareStringEx
+@ stdcall -thunk CompareStringA(long long str long str long) kernelbase.CompareStringA
+@ stdcall -thunk -version=0x600+ CompareStringEx(wstr long wstr long wstr long ptr ptr ptr) kernelbase.CompareStringEx
 @ stdcall -version=0x600+ CompareStringOrdinal(wstr long wstr long long)
-@ stdcall CompareStringW(long long wstr long wstr long) kernelbase.CompareStringW
+@ stdcall -thunk CompareStringW(long long wstr long wstr long) kernelbase.CompareStringW
 @ stdcall ConnectNamedPipe(long ptr)
 @ stdcall -version=0x502-0x600 -arch=win64 ConsoleIMERoutine(ptr) kernelbase.ConsoleIMERoutine
-@ stdcall ConsoleMenuControl(long long long) kernelbase.ConsoleMenuControl
+@ stdcall -thunk ConsoleMenuControl(long long long) kernelbase.ConsoleMenuControl
 @ stdcall ContinueDebugEvent(long long long)
 @ stdcall -version=0x600+ ConvertCalDateTimeToSystemTime(ptr ptr)
 @ stdcall ConvertDefaultLocale(long)
@@ -114,7 +114,7 @@
 @ stdcall -version=0x600+ ConvertSystemTimeToCalDateTime(ptr long ptr)
 @ stdcall ConvertThreadToFiber(ptr)
 @ stdcall ConvertThreadToFiberEx(ptr long)
-@ stdcall -version=0x601+ CopyContext(ptr long ptr) kernelbase.CopyContext
+@ stdcall -thunk -version=0x601+ CopyContext(ptr long ptr) kernelbase.CopyContext
 @ stdcall CopyFileA(str str long)
 @ stdcall CopyFileExA(str str ptr ptr ptr long)
 @ stdcall CopyFileExW(wstr wstr ptr ptr ptr long)
@@ -127,7 +127,7 @@
 @ stdcall CreateActCtxW(ptr)
 @ stdcall -version=0x600+ CreateBoundaryDescriptorA(str long)
 @ stdcall -version=0x600+ CreateBoundaryDescriptorW(wstr long)
-@ stdcall CreateConsoleScreenBuffer(long long ptr long ptr) kernelbase.CreateConsoleScreenBuffer
+@ stdcall -thunk CreateConsoleScreenBuffer(long long ptr long ptr) kernelbase.CreateConsoleScreenBuffer
 @ stdcall CreateDirectoryA(str ptr)
 @ stdcall CreateDirectoryExA(str str ptr)
 @ stdcall CreateDirectoryExW(wstr wstr ptr)
@@ -135,8 +135,8 @@
 @ stdcall -version=0x600+ CreateDirectoryTransactedW(wstr wstr ptr ptr)
 @ stdcall CreateDirectoryW(wstr ptr)
 @ stdcall CreateEventA(ptr long long str)
-@ stdcall -version=0x600+ CreateEventExA(ptr str long long) kernelbase.CreateEventExA
-@ stdcall -version=0x600+ CreateEventExW(ptr wstr long long) kernelbase.CreateEventExW
+@ stdcall -thunk -version=0x600+ CreateEventExA(ptr str long long) kernelbase.CreateEventExA
+@ stdcall -thunk -version=0x600+ CreateEventExW(ptr wstr long long) kernelbase.CreateEventExW
 @ stdcall CreateEventW(ptr long long wstr)
 @ stdcall CreateFiber(long ptr ptr)
 @ stdcall CreateFiberEx(long long long ptr ptr)
@@ -161,8 +161,8 @@
 @ stdcall CreateMailslotW(ptr long long ptr)
 @ stdcall CreateMemoryResourceNotification(long)
 @ stdcall CreateMutexA(ptr long str)
-@ stdcall -version=0x600+ CreateMutexExA(ptr str long long) kernelbase.CreateMutexExA
-@ stdcall -version=0x600+ CreateMutexExW(ptr wstr long long) kernelbase.CreateMutexExW
+@ stdcall -thunk -version=0x600+ CreateMutexExA(ptr str long long) kernelbase.CreateMutexExA
+@ stdcall -thunk -version=0x600+ CreateMutexExW(ptr wstr long long) kernelbase.CreateMutexExW
 @ stdcall CreateMutexW(ptr long wstr)
 @ stdcall CreateNamedPipeA(str long long long long long long ptr)
 @ stdcall CreateNamedPipeW(wstr long long long long long long ptr)
@@ -174,7 +174,7 @@
 @ stdcall CreateProcessInternalA(ptr str str ptr ptr long long ptr str ptr ptr long)
 @ stdcall CreateProcessInternalW(ptr wstr wstr ptr ptr long long ptr wstr ptr ptr long)
 @ stdcall CreateProcessW(wstr wstr ptr ptr long long ptr wstr ptr ptr)
-@ stdcall -version=0xA00+ CreatePseudoConsole(long long long long ptr) kernelbase.CreatePseudoConsole
+@ stdcall -thunk -version=0xA00+ CreatePseudoConsole(long long long long ptr) kernelbase.CreatePseudoConsole
 @ stdcall CreateRemoteThread(long ptr long ptr long long ptr)
 @ stdcall CreateRemoteThreadEx(long ptr long ptr long long ptr ptr)
 @ stdcall CreateSemaphoreA(ptr long long str)
@@ -188,12 +188,12 @@
 @ stdcall -version=0x600+ CreateSymbolicLinkW(wstr wstr long)
 @ stdcall CreateTapePartition(long long long long)
 @ stdcall CreateThread(ptr long ptr long long ptr)
-@ stdcall -version=0x600+ CreateThreadpool(ptr) kernelbase.CreateThreadpool
-@ stdcall -version=0x600+ CreateThreadpoolCleanupGroup() kernelbase.CreateThreadpoolCleanupGroup
-@ stdcall -version=0x600+ CreateThreadpoolIo(ptr ptr ptr ptr) kernelbase.CreateThreadpoolIo
-@ stdcall -version=0x600+ CreateThreadpoolTimer(ptr ptr ptr) kernelbase.CreateThreadpoolTimer
-@ stdcall -version=0x600+ CreateThreadpoolWait(ptr ptr ptr) kernelbase.CreateThreadpoolWait
-@ stdcall -version=0x600+ CreateThreadpoolWork(ptr ptr ptr) kernelbase.CreateThreadpoolWork
+@ stdcall -thunk -version=0x600+ CreateThreadpool(ptr) kernelbase.CreateThreadpool
+@ stdcall -thunk -version=0x600+ CreateThreadpoolCleanupGroup() kernelbase.CreateThreadpoolCleanupGroup
+@ stdcall -thunk -version=0x600+ CreateThreadpoolIo(ptr ptr ptr ptr) kernelbase.CreateThreadpoolIo
+@ stdcall -thunk -version=0x600+ CreateThreadpoolTimer(ptr ptr ptr) kernelbase.CreateThreadpoolTimer
+@ stdcall -thunk -version=0x600+ CreateThreadpoolWait(ptr ptr ptr) kernelbase.CreateThreadpoolWait
+@ stdcall -thunk -version=0x600+ CreateThreadpoolWork(ptr ptr ptr) kernelbase.CreateThreadpoolWork
 @ stdcall CreateTimerQueue()
 @ stdcall CreateTimerQueueTimer(ptr long ptr ptr long long long)
 @ stdcall CreateToolhelp32Snapshot(long long)
@@ -207,7 +207,7 @@
 @ stdcall DeactivateActCtx(long ptr)
 @ stdcall DebugActiveProcess(long)
 @ stdcall DebugActiveProcessStop(long)
-@ stdcall DebugBreak() ntdll.DbgBreakPoint
+@ stdcall -thunk DebugBreak() ntdll.DbgBreakPoint
 @ stdcall DebugBreakProcess(long)
 @ stdcall DebugSetProcessKillOnExit(long)
 @ stdcall DecodePointer(ptr) ntdll.RtlDecodePointer
@@ -243,7 +243,7 @@
 @ stdcall DosDateTimeToFileTime(long long ptr)
 @ stdcall DosPathToSessionPathA(long str str)
 @ stdcall DosPathToSessionPathW(long wstr wstr)
-@ stdcall DuplicateConsoleHandle(long long long long) kernelbase.DuplicateConsoleHandle
+@ stdcall -thunk DuplicateConsoleHandle(long long long long) kernelbase.DuplicateConsoleHandle
 @ stdcall DuplicateHandle(long long long ptr long long long)
 @ stdcall EncodePointer(ptr) ntdll.RtlEncodePointer
 @ stdcall EncodeSystemPointer(ptr) ntdll.RtlEncodeSystemPointer
@@ -254,14 +254,14 @@
 @ stdcall -arch=win64 EnterUmsSchedulingMode(ptr)
 @ stdcall EnumCalendarInfoA(ptr long long long)
 @ stdcall EnumCalendarInfoExA(ptr long long long)
-@ stdcall -version=0x600+ EnumCalendarInfoExEx(ptr wstr long wstr long long) kernelbase.EnumCalendarInfoExEx
-@ stdcall EnumCalendarInfoExW(ptr long long long) kernelbase.EnumCalendarInfoExW
-@ stdcall EnumCalendarInfoW(ptr long long long) kernelbase.EnumCalendarInfoW
+@ stdcall -thunk -version=0x600+ EnumCalendarInfoExEx(ptr wstr long wstr long long) kernelbase.EnumCalendarInfoExEx
+@ stdcall -thunk EnumCalendarInfoExW(ptr long long long) kernelbase.EnumCalendarInfoExW
+@ stdcall -thunk EnumCalendarInfoW(ptr long long long) kernelbase.EnumCalendarInfoW
 @ stdcall EnumDateFormatsA(ptr long long)
 @ stdcall EnumDateFormatsExA(ptr long long)
-@ stdcall -version=0x600+ EnumDateFormatsExEx(ptr wstr long long) kernelbase.EnumDateFormatsExEx
-@ stdcall EnumDateFormatsExW(ptr long long) kernelbase.EnumDateFormatsExW
-@ stdcall EnumDateFormatsW(ptr long long) kernelbase.EnumDateFormatsW
+@ stdcall -thunk -version=0x600+ EnumDateFormatsExEx(ptr wstr long long) kernelbase.EnumDateFormatsExEx
+@ stdcall -thunk EnumDateFormatsExW(ptr long long) kernelbase.EnumDateFormatsExW
+@ stdcall -thunk EnumDateFormatsW(ptr long long) kernelbase.EnumDateFormatsW
 @ stdcall EnumLanguageGroupLocalesA(ptr long long ptr)
 @ stdcall EnumLanguageGroupLocalesW(ptr long long ptr)
 @ stdcall EnumResourceLanguagesA(long str str ptr long)
@@ -279,48 +279,48 @@
 @ stdcall EnumSystemCodePagesA(ptr long)
 @ stdcall EnumSystemCodePagesW(ptr long)
 @ stdcall EnumSystemFirmwareTables(long ptr long)
-@ stdcall EnumSystemGeoID(long long ptr) kernelbase.EnumSystemGeoID
+@ stdcall -thunk EnumSystemGeoID(long long ptr) kernelbase.EnumSystemGeoID
 @ stdcall EnumSystemLanguageGroupsA(ptr long ptr)
 @ stdcall EnumSystemLanguageGroupsW(ptr long ptr)
-@ stdcall EnumSystemLocalesA(ptr long) kernelbase.EnumSystemLocalesA
-@ stdcall -version=0x600+ EnumSystemLocalesEx(ptr long long ptr) kernelbase.EnumSystemLocalesEx
-@ stdcall EnumSystemLocalesW(ptr long) kernelbase.EnumSystemLocalesW
+@ stdcall -thunk EnumSystemLocalesA(ptr long) kernelbase.EnumSystemLocalesA
+@ stdcall -thunk -version=0x600+ EnumSystemLocalesEx(ptr long long ptr) kernelbase.EnumSystemLocalesEx
+@ stdcall -thunk EnumSystemLocalesW(ptr long) kernelbase.EnumSystemLocalesW
 @ stdcall EnumTimeFormatsA(ptr long long)
-@ stdcall -version=0x600+ EnumTimeFormatsEx(ptr wstr long long) kernelbase.EnumTimeFormatsEx
-@ stdcall EnumTimeFormatsW(ptr long long) kernelbase.EnumTimeFormatsW
+@ stdcall -thunk -version=0x600+ EnumTimeFormatsEx(ptr wstr long long) kernelbase.EnumTimeFormatsEx
+@ stdcall -thunk EnumTimeFormatsW(ptr long long) kernelbase.EnumTimeFormatsW
 @ stdcall EnumUILanguagesA(ptr long long)
 @ stdcall EnumUILanguagesW(ptr long long)
 @ stdcall EnumerateLocalComputerNamesA(ptr long str ptr)
 @ stdcall EnumerateLocalComputerNamesW(ptr long wstr ptr)
 @ stdcall EraseTape(ptr long long)
 @ stdcall EscapeCommFunction(long long)
-@ stdcall -version=0x600+ EventActivityIdControl(long ptr) kernelbase.EventActivityIdControl
-@ stdcall -version=0x600+ EventEnabled(int64 ptr) kernelbase.EventEnabled
-@ stdcall -version=0x600+ EventProviderEnabled(int64 long int64) kernelbase.EventProviderEnabled
-@ stdcall -version=0x600+ EventRegister(ptr ptr ptr ptr) kernelbase.EventRegister
-@ stdcall -version=0x600+ EventSetInformation(int64 long ptr long) kernelbase.EventSetInformation
-@ stdcall -version=0x600+ EventUnregister(int64) kernelbase.EventUnregister
-@ stdcall -version=0x600+ EventWrite(int64 ptr long ptr) kernelbase.EventWrite
-@ stdcall -version=0x601+ EventWriteEx(int64 ptr int64 long ptr ptr long ptr) kernelbase.EventWriteEx
-@ stdcall -version=0x600+ EventWriteString(int64 long int64 wstr) kernelbase.EventWriteString
-@ stdcall -version=0x600+ EventWriteTransfer(int64 ptr ptr ptr long ptr) kernelbase.EventWriteTransfer
+@ stdcall -thunk -version=0x600+ EventActivityIdControl(long ptr) kernelbase.EventActivityIdControl
+@ stdcall -thunk -version=0x600+ EventEnabled(int64 ptr) kernelbase.EventEnabled
+@ stdcall -thunk -version=0x600+ EventProviderEnabled(int64 long int64) kernelbase.EventProviderEnabled
+@ stdcall -thunk -version=0x600+ EventRegister(ptr ptr ptr ptr) kernelbase.EventRegister
+@ stdcall -thunk -version=0x600+ EventSetInformation(int64 long ptr long) kernelbase.EventSetInformation
+@ stdcall -thunk -version=0x600+ EventUnregister(int64) kernelbase.EventUnregister
+@ stdcall -thunk -version=0x600+ EventWrite(int64 ptr long ptr) kernelbase.EventWrite
+@ stdcall -thunk -version=0x601+ EventWriteEx(int64 ptr int64 long ptr ptr long ptr) kernelbase.EventWriteEx
+@ stdcall -thunk -version=0x600+ EventWriteString(int64 long int64 wstr) kernelbase.EventWriteString
+@ stdcall -thunk -version=0x600+ EventWriteTransfer(int64 ptr ptr ptr long ptr) kernelbase.EventWriteTransfer
 @ stdcall -arch=win64 ExecuteUmsThread(ptr)
 @ stdcall ExitProcess(long) ; FIXME: ntdll.RtlExitUserProcess
 @ stdcall ExitThread(long) ; FIXME: ntdll.RtlExitUserThread
 @ stdcall ExitVDM(long long)
 @ stdcall ExpandEnvironmentStringsA(str ptr long)
 @ stdcall ExpandEnvironmentStringsW(wstr ptr long)
-@ stdcall ExpungeConsoleCommandHistoryA(long) kernelbase.ExpungeConsoleCommandHistoryA
-@ stdcall ExpungeConsoleCommandHistoryW(long) kernelbase.ExpungeConsoleCommandHistoryW
+@ stdcall -thunk ExpungeConsoleCommandHistoryA(long) kernelbase.ExpungeConsoleCommandHistoryA
+@ stdcall -thunk ExpungeConsoleCommandHistoryW(long) kernelbase.ExpungeConsoleCommandHistoryW
 @ stdcall FatalAppExitA(long str)
 @ stdcall FatalAppExitW(long wstr)
 @ stdcall FatalExit(long)
 @ stdcall FileTimeToDosDateTime(ptr ptr ptr)
 @ stdcall FileTimeToLocalFileTime(ptr ptr)
 @ stdcall FileTimeToSystemTime(ptr ptr)
-@ stdcall FillConsoleOutputAttribute(long long long long ptr) kernelbase.FillConsoleOutputAttribute
-@ stdcall FillConsoleOutputCharacterA(long long long long ptr) kernelbase.FillConsoleOutputCharacterA
-@ stdcall FillConsoleOutputCharacterW(long long long long ptr) kernelbase.FillConsoleOutputCharacterW
+@ stdcall -thunk FillConsoleOutputAttribute(long long long long ptr) kernelbase.FillConsoleOutputAttribute
+@ stdcall -thunk FillConsoleOutputCharacterA(long long long long ptr) kernelbase.FillConsoleOutputCharacterA
+@ stdcall -thunk FillConsoleOutputCharacterW(long long long long ptr) kernelbase.FillConsoleOutputCharacterW
 @ stdcall FindActCtxSectionGuid(long ptr long ptr ptr)
 @ stdcall FindActCtxSectionStringA(long ptr long str ptr)
 @ stdcall FindActCtxSectionStringW(long ptr long wstr ptr)
@@ -344,8 +344,8 @@
 @ stdcall FindFirstVolumeMountPointA(str ptr long)
 @ stdcall FindFirstVolumeMountPointW(wstr ptr long)
 @ stdcall FindFirstVolumeW(ptr long)
-@ stdcall -version=0x600+ FindNLSString(long long wstr long wstr long ptr) kernelbase.FindNLSString
-@ stdcall -version=0x600+ FindNLSStringEx(wstr long wstr long wstr long ptr ptr ptr long) kernelbase.FindNLSStringEx
+@ stdcall -thunk -version=0x600+ FindNLSString(long long wstr long wstr long ptr) kernelbase.FindNLSString
+@ stdcall -thunk -version=0x600+ FindNLSStringEx(wstr long wstr long wstr long ptr ptr ptr long) kernelbase.FindNLSStringEx
 @ stdcall FindNextChangeNotification(long)
 @ stdcall FindNextFileA(long ptr)
 @ stdcall -version=0x600+ FindNextFileNameW(ptr ptr ptr)
@@ -356,28 +356,28 @@
 @ stdcall FindNextVolumeMountPointW(long wstr long)
 @ stdcall FindNextVolumeW(long ptr long)
 @ stdcall -version=0x602+ FindPackagesByPackageFamily(wstr long ptr ptr ptr ptr ptr) kernelbase.FindPackagesByPackageFamily
-@ stdcall -version=0xA00+ DeriveCapabilitySidsFromName(wstr ptr ptr ptr ptr) kernelbase.DeriveCapabilitySidsFromName
+@ stdcall -thunk -version=0xA00+ DeriveCapabilitySidsFromName(wstr ptr ptr ptr ptr) kernelbase.DeriveCapabilitySidsFromName
 @ stdcall FindResourceA(long str str)
 @ stdcall FindResourceExA(long str str long)
 @ stdcall FindResourceExW(long wstr wstr long)
 @ stdcall FindResourceW(long wstr wstr)
-@ stdcall FindStringOrdinal(long wstr long wstr long long) kernelbase.FindStringOrdinal
+@ stdcall -thunk FindStringOrdinal(long wstr long wstr long long) kernelbase.FindStringOrdinal
 @ stdcall FindVolumeClose(ptr)
 @ stdcall FindVolumeMountPointClose(ptr)
 @ stdcall FlsAlloc(ptr)
 @ stdcall FlsFree(long)
 @ stdcall FlsGetValue(long)
 @ stdcall FlsSetValue(long ptr)
-@ stdcall FlushConsoleInputBuffer(long) kernelbase.FlushConsoleInputBuffer
+@ stdcall -thunk FlushConsoleInputBuffer(long) kernelbase.FlushConsoleInputBuffer
 @ stdcall FlushFileBuffers(long)
 @ stdcall FlushInstructionCache(long long long)
 @ stdcall -version=0x600+ FlushProcessWriteBuffers()
 @ stdcall FlushViewOfFile(ptr long)
 @ stdcall FoldStringA(long str long ptr long)
 @ stdcall FoldStringW(long wstr long ptr long)
-@ stdcall FormatMessageA(long ptr long long ptr long ptr) kernelbase.FormatMessageA
-@ stdcall FormatMessageW(long ptr long long ptr long ptr) kernelbase.FormatMessageW
-@ stdcall FreeConsole() kernelbase.FreeConsole
+@ stdcall -thunk FormatMessageA(long ptr long long ptr long ptr) kernelbase.FormatMessageA
+@ stdcall -thunk FormatMessageW(long ptr long long ptr long ptr) kernelbase.FormatMessageW
+@ stdcall -thunk FreeConsole() kernelbase.FreeConsole
 @ stdcall FreeEnvironmentStringsA(ptr)
 @ stdcall FreeEnvironmentStringsW(ptr)
 @ stdcall FreeLibrary(long)
@@ -385,7 +385,7 @@
 @ stdcall -version=0x600+ FreeLibraryWhenCallbackReturns(ptr ptr) ntdll.TpCallbackUnloadDllOnCompletion
 @ stdcall FreeResource(long)
 @ stdcall FreeUserPhysicalPages(long long long)
-@ stdcall GenerateConsoleCtrlEvent(long long) kernelbase.GenerateConsoleCtrlEvent
+@ stdcall -thunk GenerateConsoleCtrlEvent(long long) kernelbase.GenerateConsoleCtrlEvent
 @ stdcall GetACP()
 @ stdcall -version=0x601+ GetActiveProcessorCount(long)
 @ stdcall -version=0x601+ GetActiveProcessorGroupCount()
@@ -405,8 +405,8 @@
 @ stub -version=0x600+ GetCalendarDaysInMonth
 @ stub -version=0x600+ GetCalendarDifferenceInDays
 @ stdcall GetCalendarInfoA(long long long ptr long ptr)
-@ stdcall -version=0x600+ GetCalendarInfoEx(wstr long wstr long wstr long ptr) kernelbase.GetCalendarInfoEx
-@ stdcall GetCalendarInfoW(long long long ptr long ptr) kernelbase.GetCalendarInfoW
+@ stdcall -thunk -version=0x600+ GetCalendarInfoEx(wstr long wstr long wstr long ptr) kernelbase.GetCalendarInfoEx
+@ stdcall -thunk GetCalendarInfoW(long long long ptr long ptr) kernelbase.GetCalendarInfoW
 @ stub -version=0x600+ GetCalendarMonthsInYear
 @ stdcall -version=0x600+ GetCalendarSupportedDateRange(long ptr ptr)
 @ stub -version=0x600+ GetCalendarWeekNumber
@@ -427,52 +427,52 @@
 @ stdcall GetComputerNameExA(long ptr ptr)
 @ stdcall GetComputerNameExW(long ptr ptr)
 @ stdcall GetComputerNameW(ptr ptr)
-@ stdcall GetConsoleAliasA(str str long str) kernelbase.GetConsoleAliasA
-@ stdcall GetConsoleAliasExesA(str long) kernelbase.GetConsoleAliasExesA
-@ stdcall GetConsoleAliasExesLengthA() kernelbase.GetConsoleAliasExesLengthA
-@ stdcall GetConsoleAliasExesLengthW() kernelbase.GetConsoleAliasExesLengthW
-@ stdcall GetConsoleAliasExesW(wstr long) kernelbase.GetConsoleAliasExesW
-@ stdcall GetConsoleAliasW(wstr ptr long wstr) kernelbase.GetConsoleAliasW
-@ stdcall GetConsoleAliasesA(str long str) kernelbase.GetConsoleAliasesA
-@ stdcall GetConsoleAliasesLengthA(str) kernelbase.GetConsoleAliasesLengthA
-@ stdcall GetConsoleAliasesLengthW(wstr) kernelbase.GetConsoleAliasesLengthW
-@ stdcall GetConsoleAliasesW(wstr long wstr) kernelbase.GetConsoleAliasesW
-@ stdcall GetConsoleCP() kernelbase.GetConsoleCP
-@ stdcall GetConsoleCharType(long long ptr) kernelbase.GetConsoleCharType
-@ stdcall GetConsoleCommandHistoryA(long long long) kernelbase.GetConsoleCommandHistoryA
-@ stdcall GetConsoleCommandHistoryLengthA(long) kernelbase.GetConsoleCommandHistoryLengthA
-@ stdcall GetConsoleCommandHistoryLengthW(long) kernelbase.GetConsoleCommandHistoryLengthW
-@ stdcall GetConsoleCommandHistoryW(long long long) kernelbase.GetConsoleCommandHistoryW
-@ stdcall GetConsoleCursorInfo(long ptr) kernelbase.GetConsoleCursorInfo
-@ stdcall GetConsoleCursorMode(long ptr ptr) kernelbase.GetConsoleCursorMode
-@ stdcall GetConsoleDisplayMode(ptr) kernelbase.GetConsoleDisplayMode
-@ stdcall GetConsoleFontInfo(long long long ptr) kernelbase.GetConsoleFontInfo
-@ stdcall GetConsoleFontSize(long long) kernelbase.GetConsoleFontSize
-@ stdcall GetConsoleHardwareState(long long ptr) kernelbase.GetConsoleHardwareState
-@ stdcall -version=0x600+ GetConsoleHistoryInfo(ptr) kernelbase.GetConsoleHistoryInfo
+@ stdcall -thunk GetConsoleAliasA(str str long str) kernelbase.GetConsoleAliasA
+@ stdcall -thunk GetConsoleAliasExesA(str long) kernelbase.GetConsoleAliasExesA
+@ stdcall -thunk GetConsoleAliasExesLengthA() kernelbase.GetConsoleAliasExesLengthA
+@ stdcall -thunk GetConsoleAliasExesLengthW() kernelbase.GetConsoleAliasExesLengthW
+@ stdcall -thunk GetConsoleAliasExesW(wstr long) kernelbase.GetConsoleAliasExesW
+@ stdcall -thunk GetConsoleAliasW(wstr ptr long wstr) kernelbase.GetConsoleAliasW
+@ stdcall -thunk GetConsoleAliasesA(str long str) kernelbase.GetConsoleAliasesA
+@ stdcall -thunk GetConsoleAliasesLengthA(str) kernelbase.GetConsoleAliasesLengthA
+@ stdcall -thunk GetConsoleAliasesLengthW(wstr) kernelbase.GetConsoleAliasesLengthW
+@ stdcall -thunk GetConsoleAliasesW(wstr long wstr) kernelbase.GetConsoleAliasesW
+@ stdcall -thunk GetConsoleCP() kernelbase.GetConsoleCP
+@ stdcall -thunk GetConsoleCharType(long long ptr) kernelbase.GetConsoleCharType
+@ stdcall -thunk GetConsoleCommandHistoryA(long long long) kernelbase.GetConsoleCommandHistoryA
+@ stdcall -thunk GetConsoleCommandHistoryLengthA(long) kernelbase.GetConsoleCommandHistoryLengthA
+@ stdcall -thunk GetConsoleCommandHistoryLengthW(long) kernelbase.GetConsoleCommandHistoryLengthW
+@ stdcall -thunk GetConsoleCommandHistoryW(long long long) kernelbase.GetConsoleCommandHistoryW
+@ stdcall -thunk GetConsoleCursorInfo(long ptr) kernelbase.GetConsoleCursorInfo
+@ stdcall -thunk GetConsoleCursorMode(long ptr ptr) kernelbase.GetConsoleCursorMode
+@ stdcall -thunk GetConsoleDisplayMode(ptr) kernelbase.GetConsoleDisplayMode
+@ stdcall -thunk GetConsoleFontInfo(long long long ptr) kernelbase.GetConsoleFontInfo
+@ stdcall -thunk GetConsoleFontSize(long long) kernelbase.GetConsoleFontSize
+@ stdcall -thunk GetConsoleHardwareState(long long ptr) kernelbase.GetConsoleHardwareState
+@ stdcall -thunk -version=0x600+ GetConsoleHistoryInfo(ptr) kernelbase.GetConsoleHistoryInfo
 @ stdcall GetConsoleInputExeNameA(long ptr) kernelbase.GetConsoleInputExeNameA
 @ stdcall GetConsoleInputExeNameW(long ptr) kernelbase.GetConsoleInputExeNameW
-@ stdcall GetConsoleInputWaitHandle() kernelbase.GetConsoleInputWaitHandle
-@ stdcall GetConsoleKeyboardLayoutNameA(ptr) kernelbase.GetConsoleKeyboardLayoutNameA
-@ stdcall GetConsoleKeyboardLayoutNameW(ptr) kernelbase.GetConsoleKeyboardLayoutNameW
-@ stdcall GetConsoleMode(long ptr) kernelbase.GetConsoleMode
-@ stdcall GetConsoleNlsMode(long ptr) kernelbase.GetConsoleNlsMode
-@ stdcall -version=0x600+ GetConsoleOriginalTitleA(ptr long) kernelbase.GetConsoleOriginalTitleA
-@ stdcall -version=0x600+ GetConsoleOriginalTitleW(ptr long) kernelbase.GetConsoleOriginalTitleW
-@ stdcall GetConsoleOutputCP() kernelbase.GetConsoleOutputCP
-@ stdcall GetConsoleProcessList(ptr long) kernelbase.GetConsoleProcessList
-@ stdcall GetConsoleScreenBufferInfo(long ptr) kernelbase.GetConsoleScreenBufferInfo
-@ stdcall -version=0x600+ GetConsoleScreenBufferInfoEx(ptr ptr) kernelbase.GetConsoleScreenBufferInfoEx
-@ stdcall GetConsoleSelectionInfo(ptr) kernelbase.GetConsoleSelectionInfo
-@ stdcall GetConsoleTitleA(ptr long) kernelbase.GetConsoleTitleA
-@ stdcall GetConsoleTitleW(ptr long) kernelbase.GetConsoleTitleW
-@ stdcall GetConsoleWindow() kernelbase.GetConsoleWindow
+@ stdcall -thunk GetConsoleInputWaitHandle() kernelbase.GetConsoleInputWaitHandle
+@ stdcall -thunk GetConsoleKeyboardLayoutNameA(ptr) kernelbase.GetConsoleKeyboardLayoutNameA
+@ stdcall -thunk GetConsoleKeyboardLayoutNameW(ptr) kernelbase.GetConsoleKeyboardLayoutNameW
+@ stdcall -thunk GetConsoleMode(long ptr) kernelbase.GetConsoleMode
+@ stdcall -thunk GetConsoleNlsMode(long ptr) kernelbase.GetConsoleNlsMode
+@ stdcall -thunk -version=0x600+ GetConsoleOriginalTitleA(ptr long) kernelbase.GetConsoleOriginalTitleA
+@ stdcall -thunk -version=0x600+ GetConsoleOriginalTitleW(ptr long) kernelbase.GetConsoleOriginalTitleW
+@ stdcall -thunk GetConsoleOutputCP() kernelbase.GetConsoleOutputCP
+@ stdcall -thunk GetConsoleProcessList(ptr long) kernelbase.GetConsoleProcessList
+@ stdcall -thunk GetConsoleScreenBufferInfo(long ptr) kernelbase.GetConsoleScreenBufferInfo
+@ stdcall -thunk -version=0x600+ GetConsoleScreenBufferInfoEx(ptr ptr) kernelbase.GetConsoleScreenBufferInfoEx
+@ stdcall -thunk GetConsoleSelectionInfo(ptr) kernelbase.GetConsoleSelectionInfo
+@ stdcall -thunk GetConsoleTitleA(ptr long) kernelbase.GetConsoleTitleA
+@ stdcall -thunk GetConsoleTitleW(ptr long) kernelbase.GetConsoleTitleW
+@ stdcall -thunk GetConsoleWindow() kernelbase.GetConsoleWindow
 @ stdcall GetCurrencyFormatA(long long str ptr str long)
 @ stdcall -version=0x600+ GetCurrencyFormatEx(wstr long wstr ptr wstr long)
 @ stdcall GetCurrencyFormatW(long long wstr ptr wstr long)
 @ stdcall GetCurrentActCtx(ptr)
-@ stdcall GetCurrentConsoleFont(long long ptr) kernelbase.GetCurrentConsoleFont
-@ stdcall -version=0x600+ GetCurrentConsoleFontEx(ptr long ptr) kernelbase.GetCurrentConsoleFontEx
+@ stdcall -thunk GetCurrentConsoleFont(long long ptr) kernelbase.GetCurrentConsoleFont
+@ stdcall -thunk -version=0x600+ GetCurrentConsoleFontEx(ptr long ptr) kernelbase.GetCurrentConsoleFontEx
 @ stdcall GetCurrentDirectoryA(long ptr)
 @ stdcall GetCurrentDirectoryW(long ptr)
 @ stdcall -version=0x602+ GetCurrentApplicationUserModelId(ptr ptr) kernelbase.GetCurrentApplicationUserModelId
@@ -506,7 +506,7 @@
 @ stdcall GetDriveTypeW(wstr)
 @ stdcall -version=0x601+ -ret64 GetEnabledXStateFeatures()
 @ stdcall -version=0x600+ GetDurationFormat(long long ptr int64 wstr ptr long)
-@ stdcall -version=0x600+ GetDurationFormatEx(wstr long ptr int64 wstr ptr long) kernelbase.GetDurationFormatEx
+@ stdcall -thunk -version=0x600+ GetDurationFormatEx(wstr long ptr int64 wstr ptr long) kernelbase.GetDurationFormatEx
 @ stdcall -version=0x600+ GetDynamicTimeZoneInformation(ptr)
 @ stdcall -version=0x602+ GetDynamicTimeZoneInformationEffectiveYears(ptr ptr ptr)
 @ stdcall GetEnvironmentStrings()
@@ -528,7 +528,7 @@
 @ stdcall -version=0x600+ GetFileBandwidthReservation(ptr ptr ptr ptr ptr ptr)
 @ stdcall GetFileInformationByHandle(long ptr)
 @ stdcall -version=0x600+ GetFileInformationByHandleEx(ptr long ptr long)
-@ stdcall -version=0x600+ GetFileMUIInfo(long wstr ptr ptr) kernelbase.GetFileMUIInfo
+@ stdcall -thunk -version=0x600+ GetFileMUIInfo(long wstr ptr ptr) kernelbase.GetFileMUIInfo
 @ stdcall -version=0x600+ GetFileMUIPath(long wstr wstr ptr wstr ptr ptr)
 @ stdcall GetFileSize(long ptr)
 @ stdcall GetFileSizeEx(long ptr)
@@ -546,24 +546,24 @@
 @ stdcall -version=0x600+ GetFullPathNameTransactedW(wstr long ptr ptr ptr)
 @ stdcall GetFullPathNameW(wstr long ptr ptr)
 @ stdcall GetGeoInfoA(long long ptr long long)
-@ stdcall -version=0xA00+ GetGeoInfoEx(ptr long ptr long) kernelbase.GetGeoInfoEx
-@ stdcall GetGeoInfoW(long long ptr long long) kernelbase.GetGeoInfoW
+@ stdcall -thunk -version=0xA00+ GetGeoInfoEx(ptr long ptr long) kernelbase.GetGeoInfoEx
+@ stdcall -thunk GetGeoInfoW(long long ptr long long) kernelbase.GetGeoInfoW
 @ stdcall -i386 GetHandleContext(long) ; missing on x64
 @ stdcall GetHandleInformation(long ptr)
 @ stdcall GetLargePageMinimum()
-@ stdcall GetLargestConsoleWindowSize(long) kernelbase.GetLargestConsoleWindowSize
-@ stdcall GetLastError() ntdll.RtlGetLastWin32Error
+@ stdcall -thunk GetLargestConsoleWindowSize(long) kernelbase.GetLargestConsoleWindowSize
+@ stdcall -thunk GetLastError() ntdll.RtlGetLastWin32Error
 @ stdcall -version=0x500-0x502 GetLinguistLangSize(ptr)
 @ stdcall GetLocalTime(ptr)
-@ stdcall GetLocaleInfoA(long long ptr long) kernelbase.GetLocaleInfoA
-@ stdcall -version=0x600+ GetLocaleInfoEx(wstr long ptr long) kernelbase.GetLocaleInfoEx
-@ stdcall GetLocaleInfoW(long long ptr long) kernelbase.GetLocaleInfoW
+@ stdcall -thunk GetLocaleInfoA(long long ptr long) kernelbase.GetLocaleInfoA
+@ stdcall -thunk -version=0x600+ GetLocaleInfoEx(wstr long ptr long) kernelbase.GetLocaleInfoEx
+@ stdcall -thunk GetLocaleInfoW(long long ptr long) kernelbase.GetLocaleInfoW
 @ stdcall -arch=win64 GetNextUmsListItem(ptr)
 @ stdcall -version=0x602+ GetOsSafeBootMode(ptr)
 @ stdcall -version=0x602+ GetPackageFullName(long ptr ptr) kernelbase.GetPackageFullName
 @ stdcall -version=0x602+ GetStateSettingsFolder(ptr ptr ptr)
 @ stdcall -arch=win64 GetUmsCompletionListEvent(ptr ptr)
-@ stdcall -version=0x600+ IsValidLocaleName(wstr) kernelbase.IsValidLocaleName
+@ stdcall -thunk -version=0x600+ IsValidLocaleName(wstr) kernelbase.IsValidLocaleName
 @ stdcall GetLogicalDriveStringsA(long ptr)
 @ stdcall GetLogicalDriveStringsW(long ptr)
 @ stdcall GetLogicalDrives()
@@ -583,8 +583,8 @@
 @ stdcall GetModuleHandleExA(long ptr ptr)
 @ stdcall GetModuleHandleExW(long ptr ptr)
 @ stdcall GetModuleHandleW(wstr)
-@ stdcall GetNLSVersion(long long ptr) kernelbase.GetNLSVersion
-@ stdcall GetNLSVersionEx(long wstr ptr) kernelbase.GetNLSVersionEx
+@ stdcall -thunk GetNLSVersion(long long ptr) kernelbase.GetNLSVersion
+@ stdcall -thunk GetNLSVersionEx(long wstr ptr) kernelbase.GetNLSVersionEx
 @ stub -version=0x600+ GetNamedPipeAttribute
 @ stdcall -version=0x600+ GetNamedPipeClientComputerNameA(ptr ptr long)
 @ stdcall -version=0x600+ GetNamedPipeClientComputerNameW(ptr ptr long)
@@ -612,17 +612,17 @@
 @ stdcall GetNumberFormatA(long long str ptr ptr long)
 @ stdcall -version=0x600+ GetNumberFormatEx(wstr long wstr ptr wstr long)
 @ stdcall GetNumberFormatW(long long wstr ptr ptr long)
-@ stdcall GetNumberOfConsoleFonts() kernelbase.GetNumberOfConsoleFonts
-@ stdcall GetNumberOfConsoleInputEvents(long ptr) kernelbase.GetNumberOfConsoleInputEvents
-@ stdcall GetNumberOfConsoleMouseButtons(ptr) kernelbase.GetNumberOfConsoleMouseButtons
+@ stdcall -thunk GetNumberOfConsoleFonts() kernelbase.GetNumberOfConsoleFonts
+@ stdcall -thunk GetNumberOfConsoleInputEvents(long ptr) kernelbase.GetNumberOfConsoleInputEvents
+@ stdcall -thunk GetNumberOfConsoleMouseButtons(ptr) kernelbase.GetNumberOfConsoleMouseButtons
 @ stdcall GetOEMCP()
 @ stdcall GetOverlappedResult(long ptr ptr long)
 @ stdcall -version=0x602+ GetOverlappedResultEx(long ptr ptr long long)
 @ stdcall -version=0x602+ GetPackageFamilyName(long ptr ptr) kernelbase.GetPackageFamilyName
-@ stdcall -version=0x602+ GetPackageFamilyNameFromToken(ptr ptr ptr) kernelbase.GetPackageFamilyNameFromToken
-@ stdcall -version=0x602+ GetPackageFullNameFromToken(ptr ptr ptr) kernelbase.GetPackageFullNameFromToken
+@ stdcall -thunk -version=0x602+ GetPackageFamilyNameFromToken(ptr ptr ptr) kernelbase.GetPackageFamilyNameFromToken
+@ stdcall -thunk -version=0x602+ GetPackageFullNameFromToken(ptr ptr ptr) kernelbase.GetPackageFullNameFromToken
 @ stdcall -version=0x602+ GetPackageId(ptr ptr ptr) kernelbase.GetPackageId
-@ stdcall -version=0x602+ GetApplicationUserModelIdFromToken(ptr ptr ptr) kernelbase.GetApplicationUserModelIdFromToken
+@ stdcall -thunk -version=0x602+ GetApplicationUserModelIdFromToken(ptr ptr ptr) kernelbase.GetApplicationUserModelIdFromToken
 @ stdcall -version=0x602+ GetPackagePathByFullName(wstr ptr wstr)
 @ stdcall -version=0x602+ GetPackagesByPackageFamily(wstr ptr ptr ptr ptr)
 @ stdcall -version=0x600+ GetPhysicallyInstalledSystemMemory(ptr)
@@ -648,9 +648,9 @@
 @ stdcall GetProcessId(long)
 @ stdcall GetProcessIdOfThread(ptr)
 @ stdcall GetProcessIoCounters(long ptr)
-@ stdcall -version=0x601+ GetProcessPreferredUILanguages(long ptr ptr ptr) kernelbase.GetProcessPreferredUILanguages
+@ stdcall -thunk -version=0x601+ GetProcessPreferredUILanguages(long ptr ptr ptr) kernelbase.GetProcessPreferredUILanguages
 @ stdcall -version=0x602+ GetProcessInformation(long long ptr long)
-@ stdcall -version=0x602+ GetAppContainerNamedObjectPath(ptr ptr long ptr ptr) kernelbase.GetAppContainerNamedObjectPath
+@ stdcall -thunk -version=0x602+ GetAppContainerNamedObjectPath(ptr ptr long ptr ptr) kernelbase.GetAppContainerNamedObjectPath
 @ stdcall -version=0x602+ GetProcessMitigationPolicy(long long ptr long)
 @ stdcall GetProcessPriorityBoost(long ptr)
 @ stdcall GetProcessShutdownParameters(ptr ptr)
@@ -658,7 +658,7 @@
 @ stdcall GetProcessVersion(long)
 @ stdcall GetProcessWorkingSetSize(long ptr ptr)
 @ stdcall GetProcessWorkingSetSizeEx(long ptr ptr long)
-@ stdcall -version=0x600+ GetProductInfo(long long long long ptr) kernelbase.GetProductInfo
+@ stdcall -thunk -version=0x600+ GetProductInfo(long long long long ptr) kernelbase.GetProductInfo
 @ stdcall GetProfileIntA(str str long)
 @ stdcall GetProfileIntW(wstr wstr long)
 @ stdcall GetProfileSectionA(str ptr long)
@@ -671,17 +671,17 @@
 @ stdcall GetShortPathNameW(wstr ptr long)
 @ stdcall GetStartupInfoA(ptr)
 @ stdcall GetStartupInfoW(ptr)
-@ stdcall GetStdHandle(long) kernelbase.GetStdHandle
-@ stdcall -version=0x600+ GetStringScripts(long wstr long ptr long) kernelbase.GetStringScripts
-@ stdcall GetStringTypeA(long long str long ptr) kernelbase.GetStringTypeA
+@ stdcall -thunk GetStdHandle(long) kernelbase.GetStdHandle
+@ stdcall -thunk -version=0x600+ GetStringScripts(long wstr long ptr long) kernelbase.GetStringScripts
+@ stdcall -thunk GetStringTypeA(long long str long ptr) kernelbase.GetStringTypeA
 @ stdcall GetStringTypeExA(long long str long ptr)
-@ stdcall GetStringTypeExW(long long wstr long ptr) kernelbase.GetStringTypeExW
-@ stdcall GetStringTypeW(long wstr long ptr) kernelbase.GetStringTypeW
+@ stdcall -thunk GetStringTypeExW(long long wstr long ptr) kernelbase.GetStringTypeExW
+@ stdcall -thunk GetStringTypeW(long wstr long ptr) kernelbase.GetStringTypeW
 @ stdcall -version=0xA00+ GetSystemCpuSetInformation(ptr long ptr ptr long) kernelbase.GetSystemCpuSetInformation
 @ stdcall -version=0x600+ GetSystemDEPPolicy()
 @ stdcall GetSystemDefaultLCID()
 @ stdcall GetSystemDefaultLangID()
-@ stdcall -version=0x600+ GetSystemDefaultLocaleName(ptr long) kernelbase.GetSystemDefaultLocaleName
+@ stdcall -thunk -version=0x600+ GetSystemDefaultLocaleName(ptr long) kernelbase.GetSystemDefaultLocaleName
 @ stdcall GetSystemDefaultUILanguage()
 @ stdcall GetSystemDirectoryA(ptr long)
 @ stdcall GetSystemDirectoryW(ptr long)
@@ -689,7 +689,7 @@
 @ stdcall GetSystemFirmwareTable(long long ptr long)
 @ stdcall GetSystemInfo(ptr)
 @ stdcall GetSystemPowerStatus(ptr)
-@ stdcall -version=0x600+ GetSystemPreferredUILanguages(long ptr wstr ptr) kernelbase.GetSystemPreferredUILanguages
+@ stdcall -thunk -version=0x600+ GetSystemPreferredUILanguages(long ptr wstr ptr) kernelbase.GetSystemPreferredUILanguages
 @ stdcall GetSystemRegistryQuota(ptr ptr)
 @ stdcall GetSystemTime(ptr)
 @ stdcall GetSystemTimeAdjustment(ptr ptr ptr)
@@ -710,13 +710,13 @@
 @ stdcall -version=0xA00+ GetTempPath2A(long ptr)
 @ stdcall -version=0xA00+ GetTempPath2W(long ptr)
 @ stdcall GetThreadContext(long ptr)
-@ stdcall -version=0x602+ GetThreadInformation(long long ptr long) kernelbase.GetThreadInformation
-@ stdcall -version=0x600+ GetThreadErrorMode() kernelbase.GetThreadErrorMode
+@ stdcall -thunk -version=0x602+ GetThreadInformation(long long ptr long) kernelbase.GetThreadInformation
+@ stdcall -thunk -version=0x600+ GetThreadErrorMode() kernelbase.GetThreadErrorMode
 @ stdcall -version=0x601+ GetThreadGroupAffinity(long ptr)
 @ stdcall GetThreadIOPendingFlag(long ptr)
 @ stdcall GetThreadId(ptr)
 @ stdcall GetThreadLocale()
-@ stdcall -version=0x600+ GetThreadPreferredUILanguages(long ptr wstr ptr) kernelbase.GetThreadPreferredUILanguages
+@ stdcall -thunk -version=0x600+ GetThreadPreferredUILanguages(long ptr wstr ptr) kernelbase.GetThreadPreferredUILanguages
 @ stdcall GetThreadPriority(long)
 @ stdcall GetThreadPriorityBoost(long ptr)
 @ stdcall -version=0xA00+ GetThreadSelectedCpuSets(ptr ptr long ptr) kernelbase.GetThreadSelectedCpuSets
@@ -731,19 +731,19 @@
 @ stdcall GetTimeZoneInformation(ptr)
 @ stdcall -version=0x600+ GetTimeZoneInformationForYear(long ptr ptr)
 @ stdcall -version=0x600+ GetUILanguageInfo(long wstr wstr ptr ptr)
-@ stdcall GetUserDefaultGeoName(ptr long) kernelbase.GetUserDefaultGeoName
+@ stdcall -thunk GetUserDefaultGeoName(ptr long) kernelbase.GetUserDefaultGeoName
 @ stdcall GetUserDefaultLCID()
 @ stdcall GetUserDefaultLangID()
-@ stdcall -version=0x600+ GetUserDefaultLocaleName(wstr long) kernelbase.GetUserDefaultLocaleName
+@ stdcall -thunk -version=0x600+ GetUserDefaultLocaleName(wstr long) kernelbase.GetUserDefaultLocaleName
 @ stdcall GetUserDefaultUILanguage()
-@ stdcall GetUserGeoID(long) kernelbase.GetUserGeoID
-@ stdcall -version=0x600+ GetUserPreferredUILanguages(long ptr wstr ptr) kernelbase.GetUserPreferredUILanguages
+@ stdcall -thunk GetUserGeoID(long) kernelbase.GetUserGeoID
+@ stdcall -thunk -version=0x600+ GetUserPreferredUILanguages(long ptr wstr ptr) kernelbase.GetUserPreferredUILanguages
 @ stdcall GetVDMCurrentDirectories(long long)
-@ stdcall GetVersion() kernelbase.GetVersion
-@ stdcall GetVersionExA(ptr) kernelbase.GetVersionExA
-@ stdcall GetVersionExW(ptr) kernelbase.GetVersionExW
+@ stdcall -thunk GetVersion() kernelbase.GetVersion
+@ stdcall -thunk GetVersionExA(ptr) kernelbase.GetVersionExA
+@ stdcall -thunk GetVersionExW(ptr) kernelbase.GetVersionExW
 @ stdcall GetVolumeInformationA(str ptr long ptr ptr ptr ptr long)
-@ stdcall -version=0x600+ GetVolumeInformationByHandleW(ptr ptr long ptr ptr ptr ptr long) kernelbase.GetVolumeInformationByHandleW
+@ stdcall -thunk -version=0x600+ GetVolumeInformationByHandleW(ptr ptr long ptr ptr ptr ptr long) kernelbase.GetVolumeInformationByHandleW
 @ stdcall GetVolumeInformationW(wstr ptr long ptr ptr ptr ptr long)
 @ stdcall GetVolumeNameForVolumeMountPointA(str ptr long)
 @ stdcall GetVolumeNameForVolumeMountPointW(wstr ptr long)
@@ -754,7 +754,7 @@
 @ stdcall GetWindowsDirectoryA(ptr long)
 @ stdcall GetWindowsDirectoryW(ptr long)
 @ stdcall GetWriteWatch(long ptr long ptr ptr ptr)
-@ stdcall -version=0x601+ -arch=i386,x86_64,arm64ec GetXStateFeaturesMask(ptr ptr) kernelbase.GetXStateFeaturesMask
+@ stdcall -thunk -version=0x601+ -arch=i386,x86_64,arm64ec GetXStateFeaturesMask(ptr ptr) kernelbase.GetXStateFeaturesMask
 @ stdcall GlobalAddAtomA(str)
 @ stdcall GlobalAddAtomW(wstr)
 @ stdcall GlobalAlloc(long long)
@@ -787,7 +787,7 @@
 @ stdcall -version=0x351-0x502 HeapCreateTagsW(ptr long wstr wstr)
 @ stdcall HeapDestroy(long)
 @ stdcall -version=0x351-0x502 HeapExtend(long long ptr long)
-@ stdcall HeapFree(long long long) ntdll.RtlFreeHeap
+@ stdcall -thunk HeapFree(long long long) ntdll.RtlFreeHeap
 @ stdcall HeapLock(long)
 @ stdcall HeapQueryInformation(long long ptr long ptr)
 @ stdcall -version=0x351-0x502 HeapQueryTagW(long long long long ptr)
@@ -799,17 +799,17 @@
 @ stdcall -version=0x351-0x502 HeapUsage(long long long long ptr)
 @ stdcall HeapValidate(long long ptr)
 @ stdcall HeapWalk(long ptr)
-@ stdcall -version=0x600+ IdnToAscii(long wstr long ptr long) kernelbase.IdnToAscii
-@ stdcall -version=0x600+ IdnToNameprepUnicode(long wstr long ptr long) kernelbase.IdnToNameprepUnicode
-@ stdcall -version=0x600+ IdnToUnicode(long wstr long ptr long) kernelbase.IdnToUnicode
+@ stdcall -thunk -version=0x600+ IdnToAscii(long wstr long ptr long) kernelbase.IdnToAscii
+@ stdcall -thunk -version=0x600+ IdnToNameprepUnicode(long wstr long ptr long) kernelbase.IdnToNameprepUnicode
+@ stdcall -thunk -version=0x600+ IdnToUnicode(long wstr long ptr long) kernelbase.IdnToUnicode
 @ stdcall InitAtomTable(long)
 @ stdcall -version=0x600+ InitOnceBeginInitialize(ptr long ptr ptr)
 @ stdcall -version=0x600+ InitOnceComplete(ptr long ptr)
 @ stdcall -version=0x600+ InitOnceExecuteOnce(ptr ptr ptr ptr)
 @ stdcall -version=0x600+ InitOnceInitialize(ptr) ntdll.RtlRunOnceInitialize
 @ stdcall -version=0x600+ InitializeConditionVariable(ptr) ntdll.RtlInitializeConditionVariable
-@ stdcall -version=0x601+ InitializeContext(ptr long ptr ptr) kernelbase.InitializeContext
-@ stdcall -version=0xA00+ InitializeContext2(ptr long ptr ptr int64) kernelbase.InitializeContext2
+@ stdcall -thunk -version=0x601+ InitializeContext(ptr long ptr ptr) kernelbase.InitializeContext
+@ stdcall -thunk -version=0xA00+ InitializeContext2(ptr long ptr ptr int64) kernelbase.InitializeContext2
 @ stdcall InitializeCriticalSection(ptr)
 @ stdcall InitializeCriticalSectionAndSpinCount(ptr long)
 @ stdcall -version=0x600+ InitializeCriticalSectionEx(ptr long long)
@@ -817,7 +817,7 @@
 @ stdcall InitializeSListHead(ptr) ntdll.RtlInitializeSListHead
 @ stdcall -version=0x600+ InitializeSRWLock(ptr) ntdll.RtlInitializeSRWLock
 @ stdcall InitializeSynchronizationBarrier(ptr long long)
-@ stdcall -arch=i386 -ret64 InterlockedCompareExchange64(ptr double double) ntdll.RtlInterlockedCompareExchange64
+@ stdcall -thunk -arch=i386 -ret64 InterlockedCompareExchange64(ptr double double) ntdll.RtlInterlockedCompareExchange64
 @ stdcall -arch=i386,ppc InterlockedCompareExchange(ptr long long)
 @ stdcall -arch=i386,ppc InterlockedDecrement(ptr)
 @ stdcall -arch=i386,ppc InterlockedExchange(ptr long)
@@ -828,7 +828,7 @@
 @ stdcall InterlockedPushEntrySList(ptr ptr) ntdll.RtlInterlockedPushEntrySList
 @ fastcall -version=0x600+ InterlockedPushListSList(ptr ptr ptr long) ntdll.RtlInterlockedPushListSList
 @ stdcall -version=0x602+ InterlockedPushListSListEx(ptr ptr ptr long) ntdll.RtlInterlockedPushListSListEx
-@ stdcall InvalidateConsoleDIBits(long long) kernelbase.InvalidateConsoleDIBits
+@ stdcall -thunk InvalidateConsoleDIBits(long long) kernelbase.InvalidateConsoleDIBits
 @ stdcall IsBadCodePtr(ptr)
 @ stdcall IsBadHugeReadPtr(ptr long)
 @ stdcall IsBadHugeWritePtr(ptr long)
@@ -842,8 +842,8 @@
 @ stdcall IsDBCSLeadByte(long)
 @ stdcall IsDBCSLeadByteEx(long long)
 @ stdcall IsDebuggerPresent()
-@ stdcall IsNLSDefinedString(long long ptr long long) kernelbase.IsNLSDefinedString
-@ stdcall -version=0x600+ IsNormalizedString(long wstr long) kernelbase.IsNormalizedString
+@ stdcall -thunk IsNLSDefinedString(long long ptr long long) kernelbase.IsNLSDefinedString
+@ stdcall -thunk -version=0x600+ IsNormalizedString(long wstr long) kernelbase.IsNormalizedString
 @ stdcall IsProcessInJob(long long ptr)
 @ stdcall IsProcessorFeaturePresent(long)
 @ stdcall IsSystemResumeAutomatic()
@@ -854,7 +854,7 @@
 @ stdcall IsValidCodePage(long)
 @ stdcall IsValidLanguageGroup(long long)
 @ stdcall IsValidLocale(long long)
-@ stdcall -version=0x600+ IsValidNLSVersion(long wstr ptr) kernelbase.IsValidNLSVersion
+@ stdcall -thunk -version=0x600+ IsValidNLSVersion(long wstr ptr) kernelbase.IsValidNLSVersion
 @ stdcall -version=0x501-0x502 IsValidUILanguage(long)
 @ stdcall IsWow64Process(ptr ptr)
 @ stdcall -version=0xA00+ IsWow64Process2(ptr ptr ptr)
@@ -886,10 +886,10 @@
 @ stdcall -version=0x601+ K32InitializeProcessForWsWatch(long) InitializeProcessForWsWatch
 @ stdcall -version=0x601+ K32QueryWorkingSet(long ptr long) QueryWorkingSet
 @ stdcall -version=0x601+ K32QueryWorkingSetEx(long ptr long) QueryWorkingSetEx
-@ stdcall -version=0x600+ LCIDToLocaleName(long wstr long long) kernelbase.LCIDToLocaleName
-@ stdcall LCMapStringA(long long str long ptr long) kernelbase.LCMapStringA
-@ stdcall -version=0x600+ LCMapStringEx(long long wstr long ptr long ptr ptr long) kernelbase.LCMapStringEx
-@ stdcall LCMapStringW(long long wstr long ptr long) kernelbase.LCMapStringW
+@ stdcall -thunk -version=0x600+ LCIDToLocaleName(long wstr long long) kernelbase.LCIDToLocaleName
+@ stdcall -thunk LCMapStringA(long long str long ptr long) kernelbase.LCMapStringA
+@ stdcall -thunk -version=0x600+ LCMapStringEx(long long wstr long ptr long ptr ptr long) kernelbase.LCMapStringEx
+@ stdcall -thunk LCMapStringW(long long wstr long ptr long) kernelbase.LCMapStringW
 @ stdcall LZClose(long)
 @ stdcall LZCloseFile(long)
 @ stdcall LZCopy(long long)
@@ -903,13 +903,13 @@
 @ stdcall LZStart()
 @ stdcall LeaveCriticalSection(ptr) ntdll.RtlLeaveCriticalSection
 @ stdcall -version=0x600+ LeaveCriticalSectionWhenCallbackReturns(ptr ptr) ntdll.TpCallbackLeaveCriticalSectionOnCompletion
-@ stdcall -version=0x601+ LoadAppInitDlls() kernelbase.LoadAppInitDlls
+@ stdcall -thunk -version=0x601+ LoadAppInitDlls() kernelbase.LoadAppInitDlls
 @ stdcall LoadLibraryA(str)
 @ stdcall LoadLibraryExA(str long long)
 @ stdcall LoadLibraryExW(wstr long long)
 @ stdcall LoadLibraryW(wstr)
 @ stdcall LoadModule(str ptr)
-@ stdcall -version=0x602+ LoadPackagedLibrary(wstr long) kernelbase.LoadPackagedLibrary
+@ stdcall -thunk -version=0x602+ LoadPackagedLibrary(wstr long) kernelbase.LoadPackagedLibrary
 @ stdcall LoadResource(long long)
 @ stub -version=0x600+ LoadStringBaseExW
 @ stub -version=0x600+ LoadStringBaseW
@@ -924,8 +924,8 @@
 @ stdcall LocalShrink(long long)
 @ stdcall LocalSize(long)
 @ stdcall LocalUnlock(long)
-@ stdcall -version=0x600+ LocaleNameToLCID(wstr long) kernelbase.LocaleNameToLCID
-@ stdcall -version=0x601+ -arch=i386,x86_64,arm64ec LocateXStateFeature(ptr long ptr) kernelbase.LocateXStateFeature
+@ stdcall -thunk -version=0x600+ LocaleNameToLCID(wstr long) kernelbase.LocaleNameToLCID
+@ stdcall -thunk -version=0x601+ -arch=i386,x86_64,arm64ec LocateXStateFeature(ptr long ptr) kernelbase.LocateXStateFeature
 @ stdcall LockFile(long long long long long)
 @ stdcall LockFileEx(long long long long long ptr)
 @ stdcall LockResource(long)
@@ -948,7 +948,7 @@
 @ stdcall MoveFileWithProgressA(str str ptr ptr long)
 @ stdcall MoveFileWithProgressW(wstr wstr ptr ptr long)
 @ stdcall MulDiv(long long long)
-@ stdcall MultiByteToWideChar(long long str long ptr long) kernelbase.MultiByteToWideChar
+@ stdcall -thunk MultiByteToWideChar(long long str long ptr long) kernelbase.MultiByteToWideChar
 @ stdcall NeedCurrentDirectoryForExePathA(str)
 @ stdcall NeedCurrentDirectoryForExePathW(wstr)
 @ stub -version=0x600+ NlsCheckPolicy
@@ -959,9 +959,9 @@
 @ stub -version=0x600+ NlsUpdateLocale
 @ stub -version=0x600+ NlsUpdateSystemLocale
 @ stub -version=0x600+ NlsWriteEtwEvent
-@ stdcall -version=0x600+ NormalizeString(long wstr long ptr long) kernelbase.NormalizeString
+@ stdcall -thunk -version=0x600+ NormalizeString(long wstr long ptr long) kernelbase.NormalizeString
 @ stdcall -stub -version=0x600+ NotifyUILanguageChange(long wstr wstr long ptr)
-@ stdcall OpenConsoleW(wstr long long long) kernelbase.OpenConsoleW
+@ stdcall -thunk OpenConsoleW(wstr long long long) kernelbase.OpenConsoleW
 @ stdcall -version=0x500-0x502 OpenDataFile(long long)
 @ stdcall OpenEventA(long long str)
 @ stdcall OpenEventW(long long wstr)
@@ -989,8 +989,8 @@
 @ stdcall -version=0x602+ PackageFamilyNameFromFullName(wstr ptr ptr) kernelbase.PackageFamilyNameFromFullName
 @ stdcall -version=0x602+ PackageIdFromFullName(wstr long ptr ptr) kernelbase.PackageIdFromFullName
 @ stdcall -version=0x602+ ParseApplicationUserModelId(wstr ptr ptr ptr ptr) kernelbase.ParseApplicationUserModelId
-@ stdcall PeekConsoleInputA(ptr ptr long ptr) kernelbase.PeekConsoleInputA
-@ stdcall PeekConsoleInputW(ptr ptr long ptr) kernelbase.PeekConsoleInputW
+@ stdcall -thunk PeekConsoleInputA(ptr ptr long ptr) kernelbase.PeekConsoleInputA
+@ stdcall -thunk PeekConsoleInputW(ptr ptr long ptr) kernelbase.PeekConsoleInputW
 @ stdcall PeekNamedPipe(long ptr long ptr ptr ptr)
 @ stdcall PostQueuedCompletionStatus(long long ptr ptr)
 @ stdcall -version=0x602+ PrefetchVirtualMemory(ptr ptr ptr long)
@@ -1005,9 +1005,9 @@
 @ stdcall Process32Next(ptr ptr)
 @ stdcall Process32NextW(ptr ptr)
 @ stdcall ProcessIdToSessionId(long ptr)
-@ stdcall -version=0x603+ PssCaptureSnapshot(ptr long long ptr) kernelbase.PssCaptureSnapshot
-@ stdcall -version=0x603+ PssFreeSnapshot(ptr ptr) kernelbase.PssFreeSnapshot
-@ stdcall -version=0x603+ PssQuerySnapshot(ptr long ptr long) kernelbase.PssQuerySnapshot
+@ stdcall -thunk -version=0x603+ PssCaptureSnapshot(ptr long long ptr) kernelbase.PssCaptureSnapshot
+@ stdcall -thunk -version=0x603+ PssFreeSnapshot(ptr ptr) kernelbase.PssFreeSnapshot
+@ stdcall -thunk -version=0x603+ PssQuerySnapshot(ptr long ptr long) kernelbase.PssQuerySnapshot
 @ stdcall PulseEvent(long)
 @ stdcall PurgeComm(long long)
 @ stdcall -version=0x600+ QueryActCtxSettingsW(long ptr wstr wstr ptr long ptr)
@@ -1027,7 +1027,7 @@
 @ stdcall -version=0x600+ QueryProcessAffinityUpdateMode(ptr ptr)
 @ stdcall -version=0x600+ QueryProcessCycleTime(ptr ptr)
 @ stdcall -version=0x600+ QueryThreadCycleTime(ptr ptr)
-@ stdcall -version=0x600+ QueryThreadpoolStackInformation(ptr ptr) kernelbase.QueryThreadpoolStackInformation
+@ stdcall -thunk -version=0x600+ QueryThreadpoolStackInformation(ptr ptr) kernelbase.QueryThreadpoolStackInformation
 @ stdcall -arch=win64 QueryUmsThreadInformation(ptr long ptr long ptr)
 @ stdcall -version=0x600+ QueryUnbiasedInterruptTime(ptr)
 @ stdcall -version=0x602+ QueryUnbiasedInterruptTimePrecise(ptr)
@@ -1036,67 +1036,67 @@
 @ stdcall -norelay RaiseException(long long long ptr)
 @ stdcall -version=0x602+ RaiseFailFastException(ptr ptr long) kernelbase.RaiseFailFastException
 @ stdcall ReOpenFile(ptr long long long)
-@ stdcall ReadConsoleA(long ptr long ptr ptr) kernelbase.ReadConsoleA
-@ stdcall ReadConsoleInputA(long ptr long ptr) kernelbase.ReadConsoleInputA
+@ stdcall -thunk ReadConsoleA(long ptr long ptr ptr) kernelbase.ReadConsoleA
+@ stdcall -thunk ReadConsoleInputA(long ptr long ptr) kernelbase.ReadConsoleInputA
 @ stdcall ReadConsoleInputExA(long ptr long ptr long) kernelbase.ReadConsoleInputExA
 @ stdcall ReadConsoleInputExW(long ptr long ptr long) kernelbase.ReadConsoleInputExW
-@ stdcall ReadConsoleInputW(long ptr long ptr) kernelbase.ReadConsoleInputW
-@ stdcall ReadConsoleOutputA(long ptr long long ptr) kernelbase.ReadConsoleOutputA
-@ stdcall ReadConsoleOutputAttribute(long ptr long long ptr) kernelbase.ReadConsoleOutputAttribute
-@ stdcall ReadConsoleOutputCharacterA(long ptr long long ptr) kernelbase.ReadConsoleOutputCharacterA
-@ stdcall ReadConsoleOutputCharacterW(long ptr long long ptr) kernelbase.ReadConsoleOutputCharacterW
-@ stdcall ReadConsoleOutputW(long ptr long long ptr) kernelbase.ReadConsoleOutputW
-@ stdcall ReadConsoleW(long ptr long ptr ptr) kernelbase.ReadConsoleW
+@ stdcall -thunk ReadConsoleInputW(long ptr long ptr) kernelbase.ReadConsoleInputW
+@ stdcall -thunk ReadConsoleOutputA(long ptr long long ptr) kernelbase.ReadConsoleOutputA
+@ stdcall -thunk ReadConsoleOutputAttribute(long ptr long long ptr) kernelbase.ReadConsoleOutputAttribute
+@ stdcall -thunk ReadConsoleOutputCharacterA(long ptr long long ptr) kernelbase.ReadConsoleOutputCharacterA
+@ stdcall -thunk ReadConsoleOutputCharacterW(long ptr long long ptr) kernelbase.ReadConsoleOutputCharacterW
+@ stdcall -thunk ReadConsoleOutputW(long ptr long long ptr) kernelbase.ReadConsoleOutputW
+@ stdcall -thunk ReadConsoleW(long ptr long ptr ptr) kernelbase.ReadConsoleW
 @ stdcall ReadDirectoryChangesW(long ptr long long long ptr ptr ptr)
 @ stdcall ReadFile(long ptr long ptr ptr)
 @ stdcall ReadFileEx(long ptr long ptr ptr)
 @ stdcall ReadFileScatter(long ptr long ptr ptr)
 @ stdcall ReadProcessMemory(long ptr ptr long ptr)
-@ stdcall RegCloseKey(long) kernelbase.RegCloseKey
-@ stdcall RegCopyTreeW(long wstr long) kernelbase.RegCopyTreeW
-@ stdcall RegCreateKeyExA(long str long ptr long long ptr ptr ptr) kernelbase.RegCreateKeyExA
-@ stdcall RegCreateKeyExW(long wstr long ptr long long ptr ptr ptr) kernelbase.RegCreateKeyExW
-@ stdcall RegDeleteKeyExA(long str long long) kernelbase.RegDeleteKeyExA
-@ stdcall RegDeleteKeyExW(long wstr long long) kernelbase.RegDeleteKeyExW
-@ stdcall RegDeleteTreeA(long str) kernelbase.RegDeleteTreeA
-@ stdcall RegDeleteTreeW(long wstr) kernelbase.RegDeleteTreeW
-@ stdcall RegDeleteValueA(long str) kernelbase.RegDeleteValueA
-@ stdcall RegDeleteValueW(long wstr) kernelbase.RegDeleteValueW
+@ stdcall -thunk RegCloseKey(long) kernelbase.RegCloseKey
+@ stdcall -thunk RegCopyTreeW(long wstr long) kernelbase.RegCopyTreeW
+@ stdcall -thunk RegCreateKeyExA(long str long ptr long long ptr ptr ptr) kernelbase.RegCreateKeyExA
+@ stdcall -thunk RegCreateKeyExW(long wstr long ptr long long ptr ptr ptr) kernelbase.RegCreateKeyExW
+@ stdcall -thunk RegDeleteKeyExA(long str long long) kernelbase.RegDeleteKeyExA
+@ stdcall -thunk RegDeleteKeyExW(long wstr long long) kernelbase.RegDeleteKeyExW
+@ stdcall -thunk RegDeleteTreeA(long str) kernelbase.RegDeleteTreeA
+@ stdcall -thunk RegDeleteTreeW(long wstr) kernelbase.RegDeleteTreeW
+@ stdcall -thunk RegDeleteValueA(long str) kernelbase.RegDeleteValueA
+@ stdcall -thunk RegDeleteValueW(long wstr) kernelbase.RegDeleteValueW
 @ stdcall RegDisablePredefinedCacheEx() advapi32.RegDisablePredefinedCacheEx
-@ stdcall RegEnumKeyExA(long long ptr ptr ptr ptr ptr ptr) kernelbase.RegEnumKeyExA
-@ stdcall RegEnumKeyExW(long long ptr ptr ptr ptr ptr ptr) kernelbase.RegEnumKeyExW
-@ stdcall RegEnumValueA(long long ptr ptr ptr ptr ptr ptr) kernelbase.RegEnumValueA
-@ stdcall RegEnumValueW(long long ptr ptr ptr ptr ptr ptr) kernelbase.RegEnumValueW
-@ stdcall RegFlushKey(long) kernelbase.RegFlushKey
-@ stdcall RegGetKeySecurity(long long ptr ptr) kernelbase.RegGetKeySecurity
-@ stdcall RegGetValueA(long str str long ptr ptr ptr) kernelbase.RegGetValueA
-@ stdcall RegGetValueW(long wstr wstr long ptr ptr ptr) kernelbase.RegGetValueW
-@ stdcall RegLoadKeyA(long str str) kernelbase.RegLoadKeyA
-@ stdcall RegLoadKeyW(long wstr wstr) kernelbase.RegLoadKeyW
-@ stdcall RegLoadMUIStringA(long str str long ptr long str) kernelbase.RegLoadMUIStringA
-@ stdcall RegLoadMUIStringW(long wstr wstr long ptr long wstr) kernelbase.RegLoadMUIStringW
-@ stdcall RegNotifyChangeKeyValue(long long long long long) kernelbase.RegNotifyChangeKeyValue
+@ stdcall -thunk RegEnumKeyExA(long long ptr ptr ptr ptr ptr ptr) kernelbase.RegEnumKeyExA
+@ stdcall -thunk RegEnumKeyExW(long long ptr ptr ptr ptr ptr ptr) kernelbase.RegEnumKeyExW
+@ stdcall -thunk RegEnumValueA(long long ptr ptr ptr ptr ptr ptr) kernelbase.RegEnumValueA
+@ stdcall -thunk RegEnumValueW(long long ptr ptr ptr ptr ptr ptr) kernelbase.RegEnumValueW
+@ stdcall -thunk RegFlushKey(long) kernelbase.RegFlushKey
+@ stdcall -thunk RegGetKeySecurity(long long ptr ptr) kernelbase.RegGetKeySecurity
+@ stdcall -thunk RegGetValueA(long str str long ptr ptr ptr) kernelbase.RegGetValueA
+@ stdcall -thunk RegGetValueW(long wstr wstr long ptr ptr ptr) kernelbase.RegGetValueW
+@ stdcall -thunk RegLoadKeyA(long str str) kernelbase.RegLoadKeyA
+@ stdcall -thunk RegLoadKeyW(long wstr wstr) kernelbase.RegLoadKeyW
+@ stdcall -thunk RegLoadMUIStringA(long str str long ptr long str) kernelbase.RegLoadMUIStringA
+@ stdcall -thunk RegLoadMUIStringW(long wstr wstr long ptr long wstr) kernelbase.RegLoadMUIStringW
+@ stdcall -thunk RegNotifyChangeKeyValue(long long long long long) kernelbase.RegNotifyChangeKeyValue
 @ stdcall RegOpenCurrentUser(long ptr) advapi32.RegOpenCurrentUser
-@ stdcall RegOpenKeyExA(long str long long ptr) kernelbase.RegOpenKeyExA
-@ stdcall RegOpenKeyExW(long wstr long long ptr) kernelbase.RegOpenKeyExW
-@ stdcall RegOpenUserClassesRoot(ptr long long ptr) kernelbase.RegOpenUserClassesRoot
-@ stdcall RegQueryInfoKeyA(long ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr) kernelbase.RegQueryInfoKeyA
-@ stdcall RegQueryInfoKeyW(long ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr) kernelbase.RegQueryInfoKeyW
-@ stdcall RegQueryValueExA(long str ptr ptr ptr ptr) kernelbase.RegQueryValueExA
-@ stdcall RegQueryValueExW(long wstr ptr ptr ptr ptr) kernelbase.RegQueryValueExW
-@ stdcall RegRestoreKeyA(long str long) kernelbase.RegRestoreKeyA
-@ stdcall RegRestoreKeyW(long wstr long) kernelbase.RegRestoreKeyW
-@ stdcall RegSaveKeyExA(long str ptr long) kernelbase.RegSaveKeyExA
-@ stdcall RegSaveKeyExW(long wstr ptr long) kernelbase.RegSaveKeyExW
-@ stdcall RegSetKeySecurity(long long ptr) kernelbase.RegSetKeySecurity
-@ stdcall RegSetValueExA(long str long long ptr long) kernelbase.RegSetValueExA
-@ stdcall RegSetValueExW(long wstr long long ptr long) kernelbase.RegSetValueExW
-@ stdcall RegUnLoadKeyA(long str) kernelbase.RegUnLoadKeyA
-@ stdcall RegUnLoadKeyW(long wstr) kernelbase.RegUnLoadKeyW
+@ stdcall -thunk RegOpenKeyExA(long str long long ptr) kernelbase.RegOpenKeyExA
+@ stdcall -thunk RegOpenKeyExW(long wstr long long ptr) kernelbase.RegOpenKeyExW
+@ stdcall -thunk RegOpenUserClassesRoot(ptr long long ptr) kernelbase.RegOpenUserClassesRoot
+@ stdcall -thunk RegQueryInfoKeyA(long ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr) kernelbase.RegQueryInfoKeyA
+@ stdcall -thunk RegQueryInfoKeyW(long ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr) kernelbase.RegQueryInfoKeyW
+@ stdcall -thunk RegQueryValueExA(long str ptr ptr ptr ptr) kernelbase.RegQueryValueExA
+@ stdcall -thunk RegQueryValueExW(long wstr ptr ptr ptr ptr) kernelbase.RegQueryValueExW
+@ stdcall -thunk RegRestoreKeyA(long str long) kernelbase.RegRestoreKeyA
+@ stdcall -thunk RegRestoreKeyW(long wstr long) kernelbase.RegRestoreKeyW
+@ stdcall -thunk RegSaveKeyExA(long str ptr long) kernelbase.RegSaveKeyExA
+@ stdcall -thunk RegSaveKeyExW(long wstr ptr long) kernelbase.RegSaveKeyExW
+@ stdcall -thunk RegSetKeySecurity(long long ptr) kernelbase.RegSetKeySecurity
+@ stdcall -thunk RegSetValueExA(long str long long ptr long) kernelbase.RegSetValueExA
+@ stdcall -thunk RegSetValueExW(long wstr long long ptr long) kernelbase.RegSetValueExW
+@ stdcall -thunk RegUnLoadKeyA(long str) kernelbase.RegUnLoadKeyA
+@ stdcall -thunk RegUnLoadKeyW(long wstr) kernelbase.RegUnLoadKeyW
 @ stdcall -version=0x600+ RegisterApplicationRecoveryCallback(ptr ptr long long)
 @ stdcall -version=0x600+ RegisterApplicationRestart(wstr long)
-@ stdcall RegisterConsoleIME(ptr ptr) kernelbase.RegisterConsoleIME
-@ stdcall RegisterConsoleOS2(long) kernelbase.RegisterConsoleOS2
+@ stdcall -thunk RegisterConsoleIME(ptr ptr) kernelbase.RegisterConsoleIME
+@ stdcall -thunk RegisterConsoleOS2(long) kernelbase.RegisterConsoleOS2
 @ stdcall RegisterConsoleVDM(long long long long long long long long long long long)
 @ stdcall RegisterWaitForInputIdle(ptr)
 @ stdcall RegisterWaitForSingleObject(ptr long ptr ptr long long)
@@ -1130,30 +1130,30 @@
 @ stdcall -version=0x602+ ResolveDelayLoadsFromDll(ptr str long) ntdll.LdrResolveDelayLoadsFromDll
 @ stdcall ResetEvent(long)
 @ stdcall ResetWriteWatch(ptr long)
-@ stdcall -version=0xA00+ ResizePseudoConsole(ptr long) kernelbase.ResizePseudoConsole
-@ stdcall -version=0x601+ ResolveLocaleName(wstr ptr long) kernelbase.ResolveLocaleName
+@ stdcall -thunk -version=0xA00+ ResizePseudoConsole(ptr long) kernelbase.ResizePseudoConsole
+@ stdcall -thunk -version=0x601+ ResolveLocaleName(wstr ptr long) kernelbase.ResolveLocaleName
 @ stdcall RestoreLastError(long) ntdll.RtlRestoreLastWin32Error
 @ stdcall ResumeThread(long)
-@ stdcall -arch=win64 RtlAddFunctionTable(ptr long long) ntdll.RtlAddFunctionTable
-@ stdcall -register RtlCaptureContext(ptr) ntdll.RtlCaptureContext
+@ stdcall -thunk -arch=win64 RtlAddFunctionTable(ptr long long) ntdll.RtlAddFunctionTable
+@ stdcall -thunk -register RtlCaptureContext(ptr) ntdll.RtlCaptureContext
 @ stdcall RtlCaptureStackBackTrace(long long ptr ptr) ntdll.RtlCaptureStackBackTrace
-@ stdcall -arch=win64 RtlCompareMemory(ptr ptr ptr) ntdll.RtlCompareMemory
-@ stdcall -arch=win64,ppc RtlCopyMemory(ptr ptr ptr) ntdll.memcpy
-@ stdcall -arch=win64 RtlDeleteFunctionTable(ptr) ntdll.RtlDeleteFunctionTable
-@ stdcall RtlFillMemory(ptr long long) ntdll.RtlFillMemory
+@ stdcall -thunk -arch=win64 RtlCompareMemory(ptr ptr ptr) ntdll.RtlCompareMemory
+@ stdcall -thunk -arch=win64,ppc RtlCopyMemory(ptr ptr ptr) ntdll.memcpy
+@ stdcall -thunk -arch=win64 RtlDeleteFunctionTable(ptr) ntdll.RtlDeleteFunctionTable
+@ stdcall -thunk RtlFillMemory(ptr long long) ntdll.RtlFillMemory
 @ stdcall -arch=arm64 RtlIsEcCode(ptr) ntdll.RtlIsEcCode
-@ stdcall -arch=win64 RtlInstallFunctionTableCallback(double double long ptr ptr ptr) ntdll.RtlInstallFunctionTableCallback
-@ stdcall -arch=win64,ppc RtlLookupFunctionEntry(ptr ptr ptr) ntdll.RtlLookupFunctionEntry
-@ stdcall RtlMoveMemory(ptr ptr long) ntdll.RtlMoveMemory
-@ stdcall -arch=win64 RtlPcToFileHeader(ptr ptr) ntdll.RtlPcToFileHeader
-@ stdcall -arch=x86_64,arm64ec,riscv64 RtlRaiseException(ptr) ntdll.RtlRaiseException
-@ stdcall -arch=win64 RtlRestoreContext(ptr ptr) ntdll.RtlRestoreContext
-@ stdcall RtlUnwind(ptr ptr ptr ptr) ntdll.RtlUnwind
-@ stdcall -arch=win64 RtlUnwindEx(ptr ptr ptr ptr ptr ptr) ntdll.RtlUnwindEx
-@ stdcall -arch=win64,ppc RtlVirtualUnwind(long int64 int64 ptr ptr ptr ptr ptr) ntdll.RtlVirtualUnwind
+@ stdcall -thunk -arch=win64 RtlInstallFunctionTableCallback(double double long ptr ptr ptr) ntdll.RtlInstallFunctionTableCallback
+@ stdcall -thunk -arch=win64,ppc RtlLookupFunctionEntry(ptr ptr ptr) ntdll.RtlLookupFunctionEntry
+@ stdcall -thunk RtlMoveMemory(ptr ptr long) ntdll.RtlMoveMemory
+@ stdcall -thunk -arch=win64 RtlPcToFileHeader(ptr ptr) ntdll.RtlPcToFileHeader
+@ stdcall -thunk -arch=x86_64,arm64ec,riscv64 RtlRaiseException(ptr) ntdll.RtlRaiseException
+@ stdcall -thunk -arch=win64 RtlRestoreContext(ptr ptr) ntdll.RtlRestoreContext
+@ stdcall -thunk RtlUnwind(ptr ptr ptr ptr) ntdll.RtlUnwind
+@ stdcall -thunk -arch=win64 RtlUnwindEx(ptr ptr ptr ptr ptr ptr) ntdll.RtlUnwindEx
+@ stdcall -thunk -arch=win64,ppc RtlVirtualUnwind(long int64 int64 ptr ptr ptr ptr ptr) ntdll.RtlVirtualUnwind
 @ stdcall RtlZeroMemory(ptr long) ntdll.RtlZeroMemory
-@ stdcall ScrollConsoleScreenBufferA(long ptr ptr ptr ptr) kernelbase.ScrollConsoleScreenBufferA
-@ stdcall ScrollConsoleScreenBufferW(long ptr ptr ptr ptr) kernelbase.ScrollConsoleScreenBufferW
+@ stdcall -thunk ScrollConsoleScreenBufferA(long ptr ptr ptr ptr) kernelbase.ScrollConsoleScreenBufferA
+@ stdcall -thunk ScrollConsoleScreenBufferW(long ptr ptr ptr ptr) kernelbase.ScrollConsoleScreenBufferW
 @ stdcall SearchPathA(str str str long ptr ptr)
 @ stdcall SearchPathW(wstr wstr wstr long ptr ptr)
 @ stdcall SetSearchPathMode(long)
@@ -1171,40 +1171,40 @@
 @ stdcall SetComputerNameExA(long str)
 @ stdcall SetComputerNameExW(long wstr)
 @ stdcall SetComputerNameW(wstr)
-@ stdcall SetConsoleActiveScreenBuffer(long) kernelbase.SetConsoleActiveScreenBuffer
-@ stdcall SetConsoleCP(long) kernelbase.SetConsoleCP
+@ stdcall -thunk SetConsoleActiveScreenBuffer(long) kernelbase.SetConsoleActiveScreenBuffer
+@ stdcall -thunk SetConsoleCP(long) kernelbase.SetConsoleCP
 @ stdcall -version=0x351-0x502 SetConsoleCommandHistoryMode(long) kernelbase.SetConsoleCommandHistoryMode
-@ stdcall SetConsoleCtrlHandler(ptr long) kernelbase.SetConsoleCtrlHandler
-@ stdcall SetConsoleCursor(long long) kernelbase.SetConsoleCursor
-@ stdcall SetConsoleCursorInfo(long ptr) kernelbase.SetConsoleCursorInfo
-@ stdcall SetConsoleCursorMode(long long long) kernelbase.SetConsoleCursorMode
-@ stdcall SetConsoleCursorPosition(long long) kernelbase.SetConsoleCursorPosition
-@ stdcall SetConsoleDisplayMode(long long ptr) kernelbase.SetConsoleDisplayMode
-@ stdcall SetConsoleFont(long long) kernelbase.SetConsoleFont
-@ stdcall SetConsoleHardwareState(long long long) kernelbase.SetConsoleHardwareState
-@ stdcall -version=0x600+ SetConsoleHistoryInfo(ptr) kernelbase.SetConsoleHistoryInfo
-@ stdcall SetConsoleIcon(ptr) kernelbase.SetConsoleIcon
+@ stdcall -thunk SetConsoleCtrlHandler(ptr long) kernelbase.SetConsoleCtrlHandler
+@ stdcall -thunk SetConsoleCursor(long long) kernelbase.SetConsoleCursor
+@ stdcall -thunk SetConsoleCursorInfo(long ptr) kernelbase.SetConsoleCursorInfo
+@ stdcall -thunk SetConsoleCursorMode(long long long) kernelbase.SetConsoleCursorMode
+@ stdcall -thunk SetConsoleCursorPosition(long long) kernelbase.SetConsoleCursorPosition
+@ stdcall -thunk SetConsoleDisplayMode(long long ptr) kernelbase.SetConsoleDisplayMode
+@ stdcall -thunk SetConsoleFont(long long) kernelbase.SetConsoleFont
+@ stdcall -thunk SetConsoleHardwareState(long long long) kernelbase.SetConsoleHardwareState
+@ stdcall -thunk -version=0x600+ SetConsoleHistoryInfo(ptr) kernelbase.SetConsoleHistoryInfo
+@ stdcall -thunk SetConsoleIcon(ptr) kernelbase.SetConsoleIcon
 @ stdcall SetConsoleInputExeNameA(ptr) kernelbase.SetConsoleInputExeNameA
 @ stdcall SetConsoleInputExeNameW(ptr) kernelbase.SetConsoleInputExeNameW
-@ stdcall SetConsoleKeyShortcuts(long long long long) kernelbase.SetConsoleKeyShortcuts
-@ stdcall SetConsoleLocalEUDC(long long long long) kernelbase.SetConsoleLocalEUDC
-@ stdcall SetConsoleMaximumWindowSize(long long) kernelbase.SetConsoleMaximumWindowSize
-@ stdcall SetConsoleMenuClose(long) kernelbase.SetConsoleMenuClose
-@ stdcall SetConsoleMode(long long) kernelbase.SetConsoleMode
-@ stdcall SetConsoleNlsMode(long long) kernelbase.SetConsoleNlsMode
-@ stdcall SetConsoleNumberOfCommandsA(long long) kernelbase.SetConsoleNumberOfCommandsA
-@ stdcall SetConsoleNumberOfCommandsW(long long) kernelbase.SetConsoleNumberOfCommandsW
-@ stdcall SetConsoleOS2OemFormat(long) kernelbase.SetConsoleOS2OemFormat
-@ stdcall SetConsoleOutputCP(long) kernelbase.SetConsoleOutputCP
-@ stdcall SetConsolePalette(long long long) kernelbase.SetConsolePalette
-@ stdcall -version=0x600+ SetConsoleScreenBufferInfoEx(ptr ptr) kernelbase.SetConsoleScreenBufferInfoEx
-@ stdcall SetConsoleScreenBufferSize(long long) kernelbase.SetConsoleScreenBufferSize
-@ stdcall SetConsoleTextAttribute(long long) kernelbase.SetConsoleTextAttribute
-@ stdcall SetConsoleTitleA(str) kernelbase.SetConsoleTitleA
-@ stdcall SetConsoleTitleW(wstr) kernelbase.SetConsoleTitleW
-@ stdcall SetConsoleWindowInfo(long long ptr) kernelbase.SetConsoleWindowInfo
+@ stdcall -thunk SetConsoleKeyShortcuts(long long long long) kernelbase.SetConsoleKeyShortcuts
+@ stdcall -thunk SetConsoleLocalEUDC(long long long long) kernelbase.SetConsoleLocalEUDC
+@ stdcall -thunk SetConsoleMaximumWindowSize(long long) kernelbase.SetConsoleMaximumWindowSize
+@ stdcall -thunk SetConsoleMenuClose(long) kernelbase.SetConsoleMenuClose
+@ stdcall -thunk SetConsoleMode(long long) kernelbase.SetConsoleMode
+@ stdcall -thunk SetConsoleNlsMode(long long) kernelbase.SetConsoleNlsMode
+@ stdcall -thunk SetConsoleNumberOfCommandsA(long long) kernelbase.SetConsoleNumberOfCommandsA
+@ stdcall -thunk SetConsoleNumberOfCommandsW(long long) kernelbase.SetConsoleNumberOfCommandsW
+@ stdcall -thunk SetConsoleOS2OemFormat(long) kernelbase.SetConsoleOS2OemFormat
+@ stdcall -thunk SetConsoleOutputCP(long) kernelbase.SetConsoleOutputCP
+@ stdcall -thunk SetConsolePalette(long long long) kernelbase.SetConsolePalette
+@ stdcall -thunk -version=0x600+ SetConsoleScreenBufferInfoEx(ptr ptr) kernelbase.SetConsoleScreenBufferInfoEx
+@ stdcall -thunk SetConsoleScreenBufferSize(long long) kernelbase.SetConsoleScreenBufferSize
+@ stdcall -thunk SetConsoleTextAttribute(long long) kernelbase.SetConsoleTextAttribute
+@ stdcall -thunk SetConsoleTitleA(str) kernelbase.SetConsoleTitleA
+@ stdcall -thunk SetConsoleTitleW(wstr) kernelbase.SetConsoleTitleW
+@ stdcall -thunk SetConsoleWindowInfo(long long ptr) kernelbase.SetConsoleWindowInfo
 @ stdcall SetCriticalSectionSpinCount(ptr long) ntdll.RtlSetCriticalSectionSpinCount
-@ stdcall -version=0x600+ SetCurrentConsoleFontEx(ptr long ptr) kernelbase.SetCurrentConsoleFontEx
+@ stdcall -thunk -version=0x600+ SetCurrentConsoleFontEx(ptr long ptr) kernelbase.SetCurrentConsoleFontEx
 @ stdcall SetCurrentDirectoryA(str)
 @ stdcall SetCurrentDirectoryW(wstr)
 @ stdcall SetDefaultCommConfigA(str ptr long)
@@ -1246,12 +1246,12 @@
 @ stdcall SetHandleInformation(long long long)
 @ stdcall SetInformationJobObject(long long ptr long)
 @ stdcall SetLastConsoleEventActive() kernelbase.SetLastConsoleEventActive
-@ stdcall SetLastError(long) ntdll.RtlSetLastWin32Error
+@ stdcall -thunk SetLastError(long) ntdll.RtlSetLastWin32Error
 @ stdcall SetLocalPrimaryComputerNameA(long long) ; missing in XP SP3
 @ stdcall SetLocalPrimaryComputerNameW(long long) ; missing in XP SP3
 @ stdcall SetLocalTime(ptr)
 @ stdcall SetLocaleInfoA(long long str)
-@ stdcall SetLocaleInfoW(long long wstr) kernelbase.SetLocaleInfoW
+@ stdcall -thunk SetLocaleInfoW(long long wstr) kernelbase.SetLocaleInfoW
 @ stdcall SetMailslotInfo(long long)
 @ stdcall SetMessageWaitingIndicator(ptr long)
 @ stub -version=0x600+ SetNamedPipeAttribute
@@ -1264,13 +1264,13 @@
 @ stdcall -version=0x602+ SetProcessInformation(long long ptr long)
 @ stdcall -version=0x602+ SetProcessMitigationPolicy(long ptr long)
 @ stdcall -version=0xA00+ SetProcessValidCallTargets(long ptr long long ptr)
-@ stdcall -version=0x601+ SetProcessPreferredUILanguages(long ptr ptr) kernelbase.SetProcessPreferredUILanguages
+@ stdcall -thunk -version=0x601+ SetProcessPreferredUILanguages(long ptr ptr) kernelbase.SetProcessPreferredUILanguages
 @ stdcall SetProcessPriorityBoost(long long)
 @ stdcall SetProcessShutdownParameters(long long)
 @ stdcall SetProcessWorkingSetSize(long long long)
 @ stdcall SetProcessWorkingSetSizeEx(long long long long)
-@ stdcall SetStdHandle(long long) kernelbase.SetStdHandle
-@ stdcall -version=0x600+ SetStdHandleEx(long long ptr) kernelbase.SetStdHandleEx
+@ stdcall -thunk SetStdHandle(long long) kernelbase.SetStdHandle
+@ stdcall -thunk -version=0x600+ SetStdHandleEx(long long ptr) kernelbase.SetStdHandleEx
 @ stdcall SetSystemFileCacheSize(long long long)
 @ stdcall SetSystemPowerState(long long)
 @ stdcall SetSystemTime(ptr)
@@ -1281,22 +1281,22 @@
 @ stdcall SetThreadAffinityMask(long long)
 @ stdcall -version=0x601+ SetThreadGroupAffinity(long ptr ptr)
 @ stdcall SetThreadContext(long ptr)
-@ stdcall -version=0x600+ SetThreadErrorMode(long ptr) kernelbase.SetThreadErrorMode
+@ stdcall -thunk -version=0x600+ SetThreadErrorMode(long ptr) kernelbase.SetThreadErrorMode
 @ stdcall SetThreadExecutionState(long)
 @ stdcall SetThreadIdealProcessor(long long)
 @ stdcall GetThreadIdealProcessorEx(ptr ptr)
 @ stdcall SetThreadIdealProcessorEx(ptr ptr ptr)
-@ stdcall -version=0x602+ SetThreadInformation(long long ptr long) kernelbase.SetThreadInformation
+@ stdcall -thunk -version=0x602+ SetThreadInformation(long long ptr long) kernelbase.SetThreadInformation
 @ stdcall SetThreadLocale(long)
-@ stdcall -version=0x600+ SetThreadPreferredUILanguages(long wstr ptr) kernelbase.SetThreadPreferredUILanguages
+@ stdcall -thunk -version=0x600+ SetThreadPreferredUILanguages(long wstr ptr) kernelbase.SetThreadPreferredUILanguages
 @ stdcall SetThreadPriority(long long)
 @ stdcall SetThreadPriorityBoost(long long)
 @ stdcall -version=0xA00+ SetThreadSelectedCpuSets(ptr ptr long) kernelbase.SetThreadSelectedCpuSets
 @ stdcall SetThreadStackGuarantee(ptr)
 @ stdcall SetThreadUILanguage(long)
-@ stdcall -version=0x600+ SetThreadpoolStackInformation(ptr ptr) kernelbase.SetThreadpoolStackInformation
+@ stdcall -thunk -version=0x600+ SetThreadpoolStackInformation(ptr ptr) kernelbase.SetThreadpoolStackInformation
 @ stdcall -version=0x600+ SetThreadpoolThreadMaximum(ptr long) ntdll.TpSetPoolMaxThreads
-@ stdcall -version=0x600+ SetThreadpoolThreadMinimum(ptr long) ntdll.TpSetPoolMinThreads
+@ stdcall -thunk -version=0x600+ SetThreadpoolThreadMinimum(ptr long) ntdll.TpSetPoolMinThreads
 @ stdcall -version=0x600+ SetThreadpoolTimer(ptr ptr long long) ntdll.TpSetTimer
 @ stdcall -version=0x602+ SetThreadpoolTimerEx(ptr ptr long long) ntdll.TpSetTimerEx
 @ stdcall -version=0x600+ SetThreadpoolWait(ptr long ptr) ntdll.TpSetWait
@@ -1305,8 +1305,8 @@
 @ stdcall SetTimerQueueTimer(long ptr ptr long long long)
 @ stdcall -arch=win64 SetUmsThreadInformation(ptr long ptr long)
 @ stdcall SetUnhandledExceptionFilter(ptr)
-@ stdcall SetUserGeoID(long) kernelbase.SetUserGeoID
-@ stdcall SetUserGeoName(wstr) kernelbase.SetUserGeoName
+@ stdcall -thunk SetUserGeoID(long) kernelbase.SetUserGeoID
+@ stdcall -thunk SetUserGeoName(wstr) kernelbase.SetUserGeoName
 @ stdcall SetVDMCurrentDirectories(long long)
 @ stdcall SetVolumeLabelA(str str)
 @ stdcall SetVolumeLabelW(wstr wstr)
@@ -1314,9 +1314,9 @@
 @ stdcall SetVolumeMountPointW(wstr wstr)
 @ stdcall SetWaitableTimer(long ptr long ptr ptr long)
 @ stdcall -version=0x601+ SetWaitableTimerEx(long ptr long ptr ptr ptr long)
-@ stdcall -version=0x601+ -arch=i386,x86_64,arm64ec SetXStateFeaturesMask(ptr int64) kernelbase.SetXStateFeaturesMask
+@ stdcall -thunk -version=0x601+ -arch=i386,x86_64,arm64ec SetXStateFeaturesMask(ptr int64) kernelbase.SetXStateFeaturesMask
 @ stdcall SetupComm(long long long)
-@ stdcall ShowConsoleCursor(long long) kernelbase.ShowConsoleCursor
+@ stdcall -thunk ShowConsoleCursor(long long) kernelbase.ShowConsoleCursor
 @ stdcall SignalObjectAndWait(long long long long)
 @ stdcall SizeofResource(long long)
 @ stdcall Sleep(long)
@@ -1360,7 +1360,7 @@
 @ stdcall -version=0x602+ UnmapViewOfFileEx(ptr long)
 @ stdcall -version=0x600+ UnregisterApplicationRecoveryCallback()
 @ stdcall -version=0x600+ UnregisterApplicationRestart()
-@ stdcall UnregisterConsoleIME() kernelbase.UnregisterConsoleIME
+@ stdcall -thunk UnregisterConsoleIME() kernelbase.UnregisterConsoleIME
 @ stdcall UnregisterWait(long)
 @ stdcall UnregisterWaitEx(long long)
 @ stdcall -version=0x600+ UpdateCalendarDayOfWeek(ptr)
@@ -1374,8 +1374,8 @@
 @ stdcall VerLanguageNameA(long str long)
 @ stdcall VerLanguageNameW(long wstr long)
 @ stdcall -ret64 VerSetConditionMask(long long long long) ntdll.VerSetConditionMask
-@ stdcall VerifyConsoleIoHandle(long) kernelbase.VerifyConsoleIoHandle
-@ stdcall -version=0x600+ VerifyScripts(long wstr long wstr long) kernelbase.VerifyScripts
+@ stdcall -thunk VerifyConsoleIoHandle(long) kernelbase.VerifyConsoleIoHandle
+@ stdcall -thunk -version=0x600+ VerifyScripts(long wstr long wstr long) kernelbase.VerifyScripts
 @ stdcall VerifyVersionInfoA(long long double)
 @ stdcall VerifyVersionInfoW(long long double)
 @ stdcall VirtualAlloc(ptr long long long)
@@ -1405,39 +1405,39 @@
 @ stdcall WaitNamedPipeW(wstr long)
 @ stdcall -version=0x600+ WakeAllConditionVariable(ptr) ntdll.RtlWakeAllConditionVariable
 @ stdcall -version=0x600+ WakeConditionVariable(ptr) ntdll.RtlWakeConditionVariable
-@ stdcall -version=0x600+ WerGetFlags(ptr ptr) kernelbase.WerGetFlags
-@ stdcall -version=0x600+ WerRegisterFile(wstr long long) kernelbase.WerRegisterFile
-@ stdcall -version=0x600+ WerRegisterMemoryBlock(ptr long) kernelbase.WerRegisterMemoryBlock
-@ stdcall -version=0x601+ WerRegisterRuntimeExceptionModule(wstr ptr) kernelbase.WerRegisterRuntimeExceptionModule
-@ stdcall -version=0x600+ WerSetFlags(long) kernelbase.WerSetFlags
-@ stdcall -version=0x600+ WerUnregisterFile(wstr) kernelbase.WerUnregisterFile
-@ stdcall -version=0x600+ WerUnregisterMemoryBlock(ptr) kernelbase.WerUnregisterMemoryBlock
-@ stdcall -version=0x601+ WerUnregisterRuntimeExceptionModule(wstr ptr) kernelbase.WerUnregisterRuntimeExceptionModule
+@ stdcall -thunk -version=0x600+ WerGetFlags(ptr ptr) kernelbase.WerGetFlags
+@ stdcall -thunk -version=0x600+ WerRegisterFile(wstr long long) kernelbase.WerRegisterFile
+@ stdcall -thunk -version=0x600+ WerRegisterMemoryBlock(ptr long) kernelbase.WerRegisterMemoryBlock
+@ stdcall -thunk -version=0x601+ WerRegisterRuntimeExceptionModule(wstr ptr) kernelbase.WerRegisterRuntimeExceptionModule
+@ stdcall -thunk -version=0x600+ WerSetFlags(long) kernelbase.WerSetFlags
+@ stdcall -thunk -version=0x600+ WerUnregisterFile(wstr) kernelbase.WerUnregisterFile
+@ stdcall -thunk -version=0x600+ WerUnregisterMemoryBlock(ptr) kernelbase.WerUnregisterMemoryBlock
+@ stdcall -thunk -version=0x601+ WerUnregisterRuntimeExceptionModule(wstr ptr) kernelbase.WerUnregisterRuntimeExceptionModule
 @ stub -version=0x600+ WerpCleanupMessageMapping
 @ stub -version=0x600+ WerpInitiateRemoteRecovery
 @ stub -version=0x600+ WerpNotifyLoadStringResource
 @ stub -version=0x600+ WerpNotifyLoadStringResourceEx
 @ stub -version=0x600+ WerpNotifyUseStringResource
 @ stub -version=0x600+ WerpStringLookup
-@ stdcall WideCharToMultiByte(long long wstr long ptr long ptr ptr) kernelbase.WideCharToMultiByte
+@ stdcall -thunk WideCharToMultiByte(long long wstr long ptr long ptr ptr) kernelbase.WideCharToMultiByte
 @ stdcall WinExec(str long)
 @ stdcall Wow64DisableWow64FsRedirection(ptr)
 @ stdcall Wow64EnableWow64FsRedirection(long)
-@ stdcall -version=0x600+ Wow64GetThreadContext(ptr ptr) kernelbase.Wow64GetThreadContext
+@ stdcall -thunk -version=0x600+ Wow64GetThreadContext(ptr ptr) kernelbase.Wow64GetThreadContext
 @ stdcall Wow64RevertWow64FsRedirection(ptr)
-@ stdcall -version=0x600+ Wow64SetThreadContext(ptr ptr) kernelbase.Wow64SetThreadContext
+@ stdcall -thunk -version=0x600+ Wow64SetThreadContext(ptr ptr) kernelbase.Wow64SetThreadContext
 @ stdcall -version=0x600+ Wow64SuspendThread(ptr)
-@ stdcall WriteConsoleA(long ptr long ptr ptr) kernelbase.WriteConsoleA
-@ stdcall WriteConsoleInputA(long ptr long ptr) kernelbase.WriteConsoleInputA
-@ stdcall WriteConsoleInputVDMA(long long long long) kernelbase.WriteConsoleInputVDMA
-@ stdcall WriteConsoleInputVDMW(long long long long) kernelbase.WriteConsoleInputVDMW
-@ stdcall WriteConsoleInputW(long ptr long ptr) kernelbase.WriteConsoleInputW
-@ stdcall WriteConsoleOutputA(long ptr long long ptr) kernelbase.WriteConsoleOutputA
-@ stdcall WriteConsoleOutputAttribute(long ptr long long ptr) kernelbase.WriteConsoleOutputAttribute
-@ stdcall WriteConsoleOutputCharacterA(long ptr long long ptr) kernelbase.WriteConsoleOutputCharacterA
-@ stdcall WriteConsoleOutputCharacterW(long ptr long long ptr) kernelbase.WriteConsoleOutputCharacterW
-@ stdcall WriteConsoleOutputW(long ptr long long ptr) kernelbase.WriteConsoleOutputW
-@ stdcall WriteConsoleW(long ptr long ptr ptr) kernelbase.WriteConsoleW
+@ stdcall -thunk WriteConsoleA(long ptr long ptr ptr) kernelbase.WriteConsoleA
+@ stdcall -thunk WriteConsoleInputA(long ptr long ptr) kernelbase.WriteConsoleInputA
+@ stdcall -thunk WriteConsoleInputVDMA(long long long long) kernelbase.WriteConsoleInputVDMA
+@ stdcall -thunk WriteConsoleInputVDMW(long long long long) kernelbase.WriteConsoleInputVDMW
+@ stdcall -thunk WriteConsoleInputW(long ptr long ptr) kernelbase.WriteConsoleInputW
+@ stdcall -thunk WriteConsoleOutputA(long ptr long long ptr) kernelbase.WriteConsoleOutputA
+@ stdcall -thunk WriteConsoleOutputAttribute(long ptr long long ptr) kernelbase.WriteConsoleOutputAttribute
+@ stdcall -thunk WriteConsoleOutputCharacterA(long ptr long long ptr) kernelbase.WriteConsoleOutputCharacterA
+@ stdcall -thunk WriteConsoleOutputCharacterW(long ptr long long ptr) kernelbase.WriteConsoleOutputCharacterW
+@ stdcall -thunk WriteConsoleOutputW(long ptr long long ptr) kernelbase.WriteConsoleOutputW
+@ stdcall -thunk WriteConsoleW(long ptr long ptr ptr) kernelbase.WriteConsoleW
 @ stdcall WriteFile(long ptr long ptr ptr)
 @ stdcall WriteFileEx(long ptr long ptr ptr)
 @ stdcall WriteFileGather(long ptr long ptr ptr)
@@ -1469,12 +1469,12 @@
 @ stdcall lstrcat(str str) lstrcatA
 @ stdcall lstrcatA(str str)
 @ stdcall lstrcatW(wstr wstr)
-@ stdcall lstrcmp(str str) kernelbase.lstrcmpA
-@ stdcall lstrcmpA(str str) kernelbase.lstrcmpA
-@ stdcall lstrcmpW(wstr wstr) kernelbase.lstrcmpW
-@ stdcall lstrcmpi(str str) kernelbase.lstrcmpiA
-@ stdcall lstrcmpiA(str str) kernelbase.lstrcmpiA
-@ stdcall lstrcmpiW(wstr wstr) kernelbase.lstrcmpiW
+@ stdcall -thunk lstrcmp(str str) kernelbase.lstrcmpA
+@ stdcall -thunk lstrcmpA(str str) kernelbase.lstrcmpA
+@ stdcall -thunk lstrcmpW(wstr wstr) kernelbase.lstrcmpW
+@ stdcall -thunk lstrcmpi(str str) kernelbase.lstrcmpiA
+@ stdcall -thunk lstrcmpiA(str str) kernelbase.lstrcmpiA
+@ stdcall -thunk lstrcmpiW(wstr wstr) kernelbase.lstrcmpiW
 @ stdcall lstrcpy(ptr str) lstrcpyA
 @ stdcall lstrcpyA(ptr str)
 @ stdcall lstrcpyW(ptr wstr)

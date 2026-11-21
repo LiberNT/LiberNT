@@ -82,7 +82,7 @@
 82 stdcall -noname DDECreatePostNotify(ptr)
 83 stdcall -noname CIDLData_CreateFromIDArray(ptr long ptr ptr)
 84 stdcall -noname SHIsBadInterfacePtr(ptr long)
-85 stdcall OpenRegStream(long str str long) shlwapi.SHOpenRegStreamA
+85 stdcall -thunk OpenRegStream(long str str long) shlwapi.SHOpenRegStreamA
 86 stdcall -noname SHRegisterDragDrop(long ptr)
 87 stdcall -noname SHRevokeDragDrop(long)
 88 stdcall SHDoDragDrop(long ptr ptr long ptr)
@@ -167,7 +167,7 @@
 173 stdcall SHValidateUNC(ptr wstr long)
 174 stdcall SHCreateShellFolderViewEx(ptr ptr)
 175 stdcall -noname SHGetSpecialFolderPath(long long long long) SHGetSpecialFolderPathW
-176 stdcall SHSetInstanceExplorer(long) shcore.SetProcessReference
+176 stdcall -thunk SHSetInstanceExplorer(long) shcore.SetProcessReference
 177 stdcall -noname DAD_SetDragImageFromListView(ptr long long)
 178 stdcall SHObjectProperties(long long wstr wstr)
 179 stdcall SHGetNewLinkInfoA(str str ptr long long)
@@ -250,10 +250,10 @@
 265 stdcall -version=0x600+ -noname ShellExecCmdLine(ptr ptr ptr long ptr long)
 266 stub -version=0x600+ -noname ShellExecPidl
 270 stub -version=0x600+ -noname SHResolveUserNames
-520 stdcall SHAllocShared(ptr long long) shlwapi.SHAllocShared
-521 stdcall SHLockShared(long long) shlwapi.SHLockShared
-522 stdcall SHUnlockShared(ptr) shlwapi.SHUnlockShared
-523 stdcall SHFreeShared(long long) shlwapi.SHFreeShared
+520 stdcall -thunk SHAllocShared(ptr long long) shlwapi.SHAllocShared
+521 stdcall -thunk SHLockShared(long long) shlwapi.SHLockShared
+522 stdcall -thunk SHUnlockShared(ptr) shlwapi.SHUnlockShared
+523 stdcall -thunk SHFreeShared(long long) shlwapi.SHFreeShared
 524 stdcall RealDriveType(long long)
 525 stdcall -noname RealDriveTypeFlags(long long)
 526 stdcall SHFlushSFCache()
@@ -510,7 +510,7 @@
 @ stdcall SHEnableServiceObject(ptr long) # 2k3:286, Vista:345
 @ stdcall SHEnumerateUnreadMailAccountsW(ptr long ptr long) # 2k3:287, Vista:346
 @ stdcall -version=0x600+ SHEvaluateSystemCommandTemplate(wstr ptr ptr ptr) # Vista:347
-@ stdcall SHExtractIconsW(wstr long long long ptr ptr long long) user32.PrivateExtractIconsW # 2k3:288, Vista:348
+@ stdcall -thunk SHExtractIconsW(wstr long long long ptr ptr long long) user32.PrivateExtractIconsW # 2k3:288, Vista:348
 @ stdcall SHFileOperation(ptr) SHFileOperationA # 2k3:289, Vista:349
 @ stdcall SHFileOperationA(ptr) # 2k3:290, Vista:350
 @ stdcall SHFileOperationW(ptr) # 2k3:291, Vista:351
@@ -519,9 +519,9 @@
 @ stdcall SHGetDataFromIDListA(ptr ptr long ptr long) # 2k3:294, Vista:354
 @ stdcall SHGetDataFromIDListW(ptr ptr long ptr long) # 2k3:295, Vista:355
 @ stdcall SHGetDesktopFolder(ptr) # 2k3:296, Vista:356
-@ stdcall SHGetDiskFreeSpaceA(str ptr ptr ptr) kernel32.GetDiskFreeSpaceExA # 2k3:297, Vista:357
-@ stdcall SHGetDiskFreeSpaceExA(str ptr ptr ptr) kernel32.GetDiskFreeSpaceExA # 2k3:298, Vista:358
-@ stdcall SHGetDiskFreeSpaceExW(wstr ptr ptr ptr) kernel32.GetDiskFreeSpaceExW # 2k3:299, Vista:359
+@ stdcall -thunk SHGetDiskFreeSpaceA(str ptr ptr ptr) kernel32.GetDiskFreeSpaceExA # 2k3:297, Vista:357
+@ stdcall -thunk SHGetDiskFreeSpaceExA(str ptr ptr ptr) kernel32.GetDiskFreeSpaceExA # 2k3:298, Vista:358
+@ stdcall -thunk SHGetDiskFreeSpaceExW(wstr ptr ptr ptr) kernel32.GetDiskFreeSpaceExW # 2k3:299, Vista:359
 @ stdcall -version=0x600+ SHGetDriveMedia(wstr ptr) # Vista:360
 @ stdcall SHGetFileInfo(ptr long ptr long long) SHGetFileInfoA # 2k3:300, Vista:361
 @ stdcall SHGetFileInfoA(ptr long ptr long long) # 2k3:301, Vista:362
@@ -537,7 +537,7 @@
 @ stdcall -version=0x600+ SHGetItemFromObject(ptr ptr ptr)
 @ stdcall SHGetIconOverlayIndexA(str long) # 2k3:308, Vista:371
 @ stdcall SHGetIconOverlayIndexW(wstr long) # 2k3:309, Vista:372
-@ stdcall SHGetInstanceExplorer(long) shcore.GetProcessReference # 2k3:310, Vista:373
+@ stdcall -thunk SHGetInstanceExplorer(long) shcore.GetProcessReference # 2k3:310, Vista:373
 @ stdcall -version=0x600+ SHGetKnownFolderIDList(ptr long ptr ptr) # Vista:374
 @ stdcall -version=0x600+ SHGetKnownFolderItem(ptr long long ptr ptr)
 @ stdcall -version=0x600+ SHGetKnownFolderPath(ptr long ptr ptr) # Vista:375
@@ -582,8 +582,8 @@
 @ stdcall -version=0x600+ SHSetTemporaryPropertyForItem(ptr ptr ptr) # Vista:410
 @ stdcall SHSetUnreadMailCountW (wstr long wstr) # 2k3:336, Vista:411
 @ stdcall SHUpdateRecycleBinIcon() # 2k3:337, Vista:412
-@ stdcall -version=0x601+ SetCurrentProcessExplicitAppUserModelID(wstr) shcore.SetCurrentProcessExplicitAppUserModelID
-@ stdcall -version=0x601+ GetCurrentProcessExplicitAppUserModelID(ptr) shcore.GetCurrentProcessExplicitAppUserModelID
+@ stdcall -thunk -version=0x601+ SetCurrentProcessExplicitAppUserModelID(wstr) shcore.SetCurrentProcessExplicitAppUserModelID
+@ stdcall -thunk -version=0x601+ GetCurrentProcessExplicitAppUserModelID(ptr) shcore.GetCurrentProcessExplicitAppUserModelID
 @ stdcall SheChangeDirA(str) # 2k3:338, Vista:413
 @ stdcall -version=0x502 SheChangeDirExA(str) # 2k3:339
 @ stdcall SheChangeDirExW(wstr) # 2k3:340, Vista:414
@@ -618,34 +618,34 @@
 @ stdcall Shell_NotifyIconA(long ptr) # 2k3:367, Vista:431
 @ stdcall Shell_NotifyIconW(long ptr) # 2k3:368, Vista:432
 @ stdcall -version=0x601+ Shell_NotifyIconGetRect(ptr ptr)
-@ stdcall StrChrA(str long) shlwapi.StrChrA # 2k3:369, Vista:433
-@ stdcall StrChrIA(str long) shlwapi.StrChrIA # 2k3:370, Vista:434
-@ stdcall StrChrIW(wstr long) shlwapi.StrChrIW # 2k3:371, Vista:435
-@ stdcall StrChrW(wstr long) shlwapi.StrChrW # 2k3:372, Vista:436
-@ stdcall StrCmpNA(str str long) shlwapi.StrCmpNA # 2k3:373, Vista:437
-@ stdcall StrCmpNIA(str str long) shlwapi.StrCmpNIA # 2k3:374, Vista:438
-@ stdcall StrCmpNIW(wstr wstr long) shlwapi.StrCmpNIW # 2k3:375, Vista:439
-@ stdcall StrCmpNW(wstr wstr long) shlwapi.StrCmpNW # 2k3:376, Vista:440
+@ stdcall -thunk StrChrA(str long) shlwapi.StrChrA # 2k3:369, Vista:433
+@ stdcall -thunk StrChrIA(str long) shlwapi.StrChrIA # 2k3:370, Vista:434
+@ stdcall -thunk StrChrIW(wstr long) shlwapi.StrChrIW # 2k3:371, Vista:435
+@ stdcall -thunk StrChrW(wstr long) shlwapi.StrChrW # 2k3:372, Vista:436
+@ stdcall -thunk StrCmpNA(str str long) shlwapi.StrCmpNA # 2k3:373, Vista:437
+@ stdcall -thunk StrCmpNIA(str str long) shlwapi.StrCmpNIA # 2k3:374, Vista:438
+@ stdcall -thunk StrCmpNIW(wstr wstr long) shlwapi.StrCmpNIW # 2k3:375, Vista:439
+@ stdcall -thunk StrCmpNW(wstr wstr long) shlwapi.StrCmpNW # 2k3:376, Vista:440
 @ stdcall -version=0x502 StrCpyNA (ptr str long) kernel32.lstrcpynA # 2k3:377
 @ stdcall -version=0x502 StrCpyNW(wstr wstr long) shlwapi.StrCpyNW # 2k3:378
-@ stdcall StrNCmpA(str str long) shlwapi.StrCmpNA # 2k3:379, Vista:441
-@ stdcall StrNCmpIA(str str long) shlwapi.StrCmpNIA # 2k3:380, Vista:442
-@ stdcall StrNCmpIW(wstr wstr long) shlwapi.StrCmpNIW # 2k3:381, Vista:443
-@ stdcall StrNCmpW(wstr wstr long) shlwapi.StrCmpNW # 2k3:382, Vista:444
+@ stdcall -thunk StrNCmpA(str str long) shlwapi.StrCmpNA # 2k3:379, Vista:441
+@ stdcall -thunk StrNCmpIA(str str long) shlwapi.StrCmpNIA # 2k3:380, Vista:442
+@ stdcall -thunk StrNCmpIW(wstr wstr long) shlwapi.StrCmpNIW # 2k3:381, Vista:443
+@ stdcall -thunk StrNCmpW(wstr wstr long) shlwapi.StrCmpNW # 2k3:382, Vista:444
 @ stdcall -version=0x502 StrNCpyA (ptr str long) kernel32.lstrcpynA # 2k3:383
 @ stdcall -version=0x502 StrNCpyW(wstr wstr long) shlwapi.StrCpyNW # 2k3:384
-@ stdcall StrRChrA(str str long) shlwapi.StrRChrA # 2k3:385, Vista:445
-@ stdcall StrRChrIA(str str long) shlwapi.StrRChrIA # 2k3:386, Vista:446
-@ stdcall StrRChrIW(wstr wstr long) shlwapi.StrRChrIW # 2k3:387, Vista:447
-@ stdcall StrRChrW(wstr wstr long) shlwapi.StrRChrW # 2k3:388, Vista:448
+@ stdcall -thunk StrRChrA(str str long) shlwapi.StrRChrA # 2k3:385, Vista:445
+@ stdcall -thunk StrRChrIA(str str long) shlwapi.StrRChrIA # 2k3:386, Vista:446
+@ stdcall -thunk StrRChrIW(wstr wstr long) shlwapi.StrRChrIW # 2k3:387, Vista:447
+@ stdcall -thunk StrRChrW(wstr wstr long) shlwapi.StrRChrW # 2k3:388, Vista:448
 @ stdcall StrRStrA(str str str) # 2k3:389, Vista:449
-@ stdcall StrRStrIA(str str str) shlwapi.StrRStrIA # 2k3:390, Vista:450
-@ stdcall StrRStrIW(wstr wstr wstr) shlwapi.StrRStrIW # 2k3:391, Vista:451
+@ stdcall -thunk StrRStrIA(str str str) shlwapi.StrRStrIA # 2k3:390, Vista:450
+@ stdcall -thunk StrRStrIW(wstr wstr wstr) shlwapi.StrRStrIW # 2k3:391, Vista:451
 @ stdcall StrRStrW(wstr wstr wstr) # 2k3:392, Vista:452
-@ stdcall StrStrA(str str) shlwapi.StrStrA # 2k3:393, Vista:453
-@ stdcall StrStrIA(str str) shlwapi.StrStrIA # 2k3:394, Vista:454
-@ stdcall StrStrIW(wstr wstr) shlwapi.StrStrIW # 2k3:395, Vista:455
-@ stdcall StrStrW(wstr wstr) shlwapi.StrStrW # 2k3:396, Vista:456
+@ stdcall -thunk StrStrA(str str) shlwapi.StrStrA # 2k3:393, Vista:453
+@ stdcall -thunk StrStrIA(str str) shlwapi.StrStrIA # 2k3:394, Vista:454
+@ stdcall -thunk StrStrIW(wstr wstr) shlwapi.StrStrIW # 2k3:395, Vista:455
+@ stdcall -thunk StrStrW(wstr wstr) shlwapi.StrStrW # 2k3:396, Vista:456
 @ stdcall WOWShellExecute(ptr str str str str long ptr) # 2k3:397, Vista:457
 @ stub -version=0x600+ WaitForExplorerRestartW # Vista:458
 892 stdcall -noname -version=0x602+ Shell32Ordinal892(ptr ptr ptr)

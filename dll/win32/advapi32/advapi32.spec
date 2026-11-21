@@ -7,36 +7,36 @@
 @ stdcall -version=0x600+ A_SHAUpdate(ptr ptr long) ntdll.A_SHAUpdate
 @ stdcall AbortSystemShutdownA(ptr)
 @ stdcall AbortSystemShutdownW(ptr)
-@ stdcall AccessCheck(ptr long long ptr ptr ptr ptr ptr) kernelbase.AccessCheck
+@ stdcall -thunk AccessCheck(ptr long long ptr ptr ptr ptr ptr) kernelbase.AccessCheck
 @ stdcall AccessCheckAndAuditAlarmA(str ptr str str ptr long ptr long ptr ptr ptr)
-@ stdcall AccessCheckAndAuditAlarmW(wstr ptr wstr wstr ptr long ptr long ptr ptr ptr) kernelbase.AccessCheckAndAuditAlarmW
-@ stdcall AccessCheckByType(ptr ptr long long ptr long ptr ptr ptr ptr ptr) kernelbase.AccessCheckByType
+@ stdcall -thunk AccessCheckAndAuditAlarmW(wstr ptr wstr wstr ptr long ptr long ptr ptr ptr) kernelbase.AccessCheckAndAuditAlarmW
+@ stdcall -thunk AccessCheckByType(ptr ptr long long ptr long ptr ptr ptr ptr ptr) kernelbase.AccessCheckByType
 @ stdcall AccessCheckByTypeAndAuditAlarmA(str ptr str str ptr ptr long long long ptr long ptr long ptr ptr ptr)
 @ stdcall AccessCheckByTypeAndAuditAlarmW(wstr ptr wstr wstr ptr ptr long long long ptr long ptr long ptr ptr ptr)
-@ stdcall AccessCheckByTypeResultList(ptr ptr long long ptr long ptr ptr ptr ptr ptr) kernelbase.AccessCheckByTypeResultList
+@ stdcall -thunk AccessCheckByTypeResultList(ptr ptr long long ptr long ptr ptr ptr ptr ptr) kernelbase.AccessCheckByTypeResultList
 @ stdcall AccessCheckByTypeResultListAndAuditAlarmA(str ptr str str ptr long long long long ptr long ptr long ptr ptr ptr)
 @ stdcall AccessCheckByTypeResultListAndAuditAlarmByHandleA(str ptr ptr str str ptr long long long long ptr long ptr long ptr ptr ptr)
 @ stdcall AccessCheckByTypeResultListAndAuditAlarmByHandleW(wstr ptr ptr wstr wstr ptr long long long long ptr long ptr long ptr ptr ptr)
 @ stdcall AccessCheckByTypeResultListAndAuditAlarmW(wstr ptr wstr wstr ptr long long long long ptr long ptr long ptr ptr ptr)
-@ stdcall AddAccessAllowedAce(ptr long long ptr) kernelbase.AddAccessAllowedAce
-@ stdcall AddAccessAllowedAceEx(ptr long long long ptr) kernelbase.AddAccessAllowedAceEx
-@ stdcall AddAccessAllowedObjectAce(ptr long long long ptr ptr ptr) kernelbase.AddAccessAllowedObjectAce
-@ stdcall AddAccessDeniedAce(ptr long long ptr) kernelbase.AddAccessDeniedAce
-@ stdcall AddAccessDeniedAceEx(ptr long long long ptr) kernelbase.AddAccessDeniedAceEx
-@ stdcall AddAccessDeniedObjectAce(ptr long long long ptr ptr ptr) kernelbase.AddAccessDeniedObjectAce
-@ stdcall AddAce(ptr long long ptr long) kernelbase.AddAce
-@ stdcall AddAuditAccessAce(ptr long long ptr long long) kernelbase.AddAuditAccessAce
-@ stdcall AddAuditAccessAceEx(ptr long long long ptr long long) kernelbase.AddAuditAccessAceEx
-@ stdcall AddAuditAccessObjectAce(ptr long long long ptr ptr ptr long long) kernelbase.AddAuditAccessObjectAce
+@ stdcall -thunk AddAccessAllowedAce(ptr long long ptr) kernelbase.AddAccessAllowedAce
+@ stdcall -thunk AddAccessAllowedAceEx(ptr long long long ptr) kernelbase.AddAccessAllowedAceEx
+@ stdcall -thunk AddAccessAllowedObjectAce(ptr long long long ptr ptr ptr) kernelbase.AddAccessAllowedObjectAce
+@ stdcall -thunk AddAccessDeniedAce(ptr long long ptr) kernelbase.AddAccessDeniedAce
+@ stdcall -thunk AddAccessDeniedAceEx(ptr long long long ptr) kernelbase.AddAccessDeniedAceEx
+@ stdcall -thunk AddAccessDeniedObjectAce(ptr long long long ptr ptr ptr) kernelbase.AddAccessDeniedObjectAce
+@ stdcall -thunk AddAce(ptr long long ptr long) kernelbase.AddAce
+@ stdcall -thunk AddAuditAccessAce(ptr long long ptr long long) kernelbase.AddAuditAccessAce
+@ stdcall -thunk AddAuditAccessAceEx(ptr long long long ptr long long) kernelbase.AddAuditAccessAceEx
+@ stdcall -thunk AddAuditAccessObjectAce(ptr long long long ptr ptr ptr long long) kernelbase.AddAuditAccessObjectAce
 @ stdcall -version=0x602+ AddConditionalAce(ptr long long long long ptr wstr ptr)
 @ stdcall -version=0x600+ AddMandatoryAce(ptr long long long ptr) kernelbase.AddMandatoryAce
 @ stdcall AddUsersToEncryptedFile(wstr ptr)
-@ stdcall AdjustTokenGroups(long long ptr long ptr ptr) kernelbase.AdjustTokenGroups
-@ stdcall AdjustTokenPrivileges(long long ptr long ptr ptr) kernelbase.AdjustTokenPrivileges
-@ stdcall AllocateAndInitializeSid(ptr long long long long long long long long long ptr) kernelbase.AllocateAndInitializeSid
-@ stdcall AllocateLocallyUniqueId(ptr) kernelbase.AllocateLocallyUniqueId
-@ stdcall AreAllAccessesGranted(long long) kernelbase.AreAllAccessesGranted
-@ stdcall AreAnyAccessesGranted(long long) kernelbase.AreAnyAccessesGranted
+@ stdcall -thunk AdjustTokenGroups(long long ptr long ptr ptr) kernelbase.AdjustTokenGroups
+@ stdcall -thunk AdjustTokenPrivileges(long long ptr long ptr ptr) kernelbase.AdjustTokenPrivileges
+@ stdcall -thunk AllocateAndInitializeSid(ptr long long long long long long long long long ptr) kernelbase.AllocateAndInitializeSid
+@ stdcall -thunk AllocateLocallyUniqueId(ptr) kernelbase.AllocateLocallyUniqueId
+@ stdcall -thunk AreAllAccessesGranted(long long) kernelbase.AreAllAccessesGranted
+@ stdcall -thunk AreAnyAccessesGranted(long long) kernelbase.AreAnyAccessesGranted
 @ stdcall BackupEventLogA(long str)
 @ stdcall BackupEventLogW(long wstr)
 @ stdcall BuildExplicitAccessWithNameA(ptr str long long long)
@@ -60,7 +60,7 @@
 @ stdcall ChangeServiceConfig2W(long long ptr)
 @ stdcall ChangeServiceConfigA(long long long long wstr str ptr str str str str)
 @ stdcall ChangeServiceConfigW(long long long long wstr wstr ptr wstr wstr wstr wstr)
-@ stdcall CheckTokenMembership(long ptr ptr) kernelbase.CheckTokenMembership
+@ stdcall -thunk CheckTokenMembership(long ptr ptr) kernelbase.CheckTokenMembership
 @ stdcall ClearEventLogA(long str)
 @ stdcall ClearEventLogW(long wstr)
 @ stub CloseCodeAuthzLevel
@@ -86,32 +86,32 @@
 @ stub ConvertSecurityDescriptorToAccessNamedW #ConvertSecurityDescriptorToAccessW
 @ stub ConvertSecurityDescriptorToAccessW
 @ stdcall ConvertSecurityDescriptorToStringSecurityDescriptorA(ptr long long ptr ptr)
-@ stdcall ConvertSecurityDescriptorToStringSecurityDescriptorW(ptr long long ptr ptr) sechost.ConvertSecurityDescriptorToStringSecurityDescriptorW
+@ stdcall -thunk ConvertSecurityDescriptorToStringSecurityDescriptorW(ptr long long ptr ptr) sechost.ConvertSecurityDescriptorToStringSecurityDescriptorW
 @ stdcall ConvertSidToStringSidA(ptr ptr)
-@ stdcall ConvertSidToStringSidW(ptr ptr) sechost.ConvertSidToStringSidW
+@ stdcall -thunk ConvertSidToStringSidW(ptr ptr) sechost.ConvertSidToStringSidW
 @ stub ConvertStringSDToSDDomainA
 @ stub ConvertStringSDToSDDomainW
 @ stub ConvertStringSDToSDRootDomainA
 @ stub ConvertStringSDToSDRootDomainW
 @ stdcall ConvertStringSecurityDescriptorToSecurityDescriptorA(str long ptr ptr)
-@ stdcall ConvertStringSecurityDescriptorToSecurityDescriptorW(wstr long ptr ptr) sechost.ConvertStringSecurityDescriptorToSecurityDescriptorW
+@ stdcall -thunk ConvertStringSecurityDescriptorToSecurityDescriptorW(wstr long ptr ptr) sechost.ConvertStringSecurityDescriptorToSecurityDescriptorW
 @ stdcall ConvertStringSidToSidA(ptr ptr)
-@ stdcall ConvertStringSidToSidW(wstr ptr) sechost.ConvertStringSidToSidW
-@ stdcall ConvertToAutoInheritPrivateObjectSecurity(ptr ptr ptr ptr long ptr) kernelbase.ConvertToAutoInheritPrivateObjectSecurity
-@ stdcall CopySid(long ptr ptr) kernelbase.CopySid
+@ stdcall -thunk ConvertStringSidToSidW(wstr ptr) sechost.ConvertStringSidToSidW
+@ stdcall -thunk ConvertToAutoInheritPrivateObjectSecurity(ptr ptr ptr ptr long ptr) kernelbase.ConvertToAutoInheritPrivateObjectSecurity
+@ stdcall -thunk CopySid(long ptr ptr) kernelbase.CopySid
 @ stub CreateCodeAuthzLevel
-@ stdcall CreatePrivateObjectSecurity(ptr ptr ptr long long ptr) kernelbase.CreatePrivateObjectSecurity
-@ stdcall CreatePrivateObjectSecurityEx(ptr ptr ptr ptr long long ptr ptr) kernelbase.CreatePrivateObjectSecurityEx
-@ stdcall CreatePrivateObjectSecurityWithMultipleInheritance(ptr ptr ptr ptr long long long ptr ptr) kernelbase.CreatePrivateObjectSecurityWithMultipleInheritance
+@ stdcall -thunk CreatePrivateObjectSecurity(ptr ptr ptr long long ptr) kernelbase.CreatePrivateObjectSecurity
+@ stdcall -thunk CreatePrivateObjectSecurityEx(ptr ptr ptr ptr long long ptr ptr) kernelbase.CreatePrivateObjectSecurityEx
+@ stdcall -thunk CreatePrivateObjectSecurityWithMultipleInheritance(ptr ptr ptr ptr long long long ptr ptr) kernelbase.CreatePrivateObjectSecurityWithMultipleInheritance
 @ stdcall CreateProcessAsUserA(long str str ptr ptr long long ptr str ptr ptr)
 @ stdcall CreateProcessAsUserW(long str str ptr ptr long long ptr str ptr ptr)
 @ stdcall CreateProcessWithLogonW(wstr wstr wstr long wstr wstr long ptr wstr ptr ptr)
 @ stdcall CreateProcessWithTokenW(ptr long wstr wstr long ptr wstr ptr ptr)
-@ stdcall CreateRestrictedToken(long long long ptr long ptr long ptr ptr) kernelbase.CreateRestrictedToken
+@ stdcall -thunk CreateRestrictedToken(long long long ptr long ptr long ptr ptr) kernelbase.CreateRestrictedToken
 @ stdcall CreateServiceA(long str str long long long long str str ptr str str str)
 @ stdcall CreateServiceW(long wstr wstr long long long long wstr wstr ptr wstr wstr wstr)
 @ stdcall CreateTraceInstanceId(ptr ptr) ntdll.EtwCreateTraceInstanceId
-@ stdcall CreateWellKnownSid(long ptr ptr ptr) kernelbase.CreateWellKnownSid
+@ stdcall -thunk CreateWellKnownSid(long ptr ptr ptr) kernelbase.CreateWellKnownSid
 @ stdcall CredDeleteA(str long long)
 @ stdcall CredDeleteW(wstr long long)
 @ stdcall CredEnumerateA(str long ptr ptr)
@@ -182,13 +182,13 @@
 @ stdcall CryptVerifySignatureW(long ptr long long ptr long)
 @ stdcall DecryptFileA(str long)
 @ stdcall DecryptFileW(wstr long)
-@ stdcall DeleteAce(ptr long) kernelbase.DeleteAce
+@ stdcall -thunk DeleteAce(ptr long) kernelbase.DeleteAce
 @ stdcall DeleteService(long)
 @ stdcall DeregisterEventSource(long)
-@ stdcall DestroyPrivateObjectSecurity(ptr) kernelbase.DestroyPrivateObjectSecurity
+@ stdcall -thunk DestroyPrivateObjectSecurity(ptr) kernelbase.DestroyPrivateObjectSecurity
 @ stub DuplicateEncryptionInfoFile
-@ stdcall DuplicateToken(long long ptr) kernelbase.DuplicateToken
-@ stdcall DuplicateTokenEx(long long ptr long long ptr) kernelbase.DuplicateTokenEx
+@ stdcall -thunk DuplicateToken(long long ptr) kernelbase.DuplicateToken
+@ stdcall -thunk DuplicateTokenEx(long long ptr long long ptr) kernelbase.DuplicateTokenEx
 @ stdcall ElfBackupEventLogFileA(long ptr)
 @ stdcall ElfBackupEventLogFileW(long ptr)
 @ stdcall ElfChangeNotify(long long)
@@ -221,17 +221,17 @@
 @ stdcall EnumDependentServicesA(long long ptr long ptr ptr)
 @ stdcall EnumDependentServicesW(long long ptr long ptr ptr)
 @ stdcall EnumServiceGroupW(ptr long long ptr long ptr ptr ptr wstr)
-@ stdcall EnumDynamicTimeZoneInformation(long ptr) kernelbase.EnumDynamicTimeZoneInformation
+@ stdcall -thunk EnumDynamicTimeZoneInformation(long ptr) kernelbase.EnumDynamicTimeZoneInformation
 @ stdcall EnumServicesStatusA(long long long ptr long ptr ptr ptr)
 @ stdcall EnumServicesStatusExA(long long long long ptr long ptr ptr ptr str)
 @ stdcall EnumServicesStatusExW(long long long long ptr long ptr ptr ptr wstr)
 @ stdcall EnumServicesStatusW(long long long ptr long ptr ptr ptr)
 @ stdcall -version=0x502 EnumerateTraceGuids(ptr long ptr) ntdll.EtwEnumerateTraceGuids
 @ stdcall -stub -version=0x600+ EnumerateTraceGuids(ptr long ptr) # EtwEnumerateTraceGuids
-@ stdcall -version=0x600+ EnumerateTraceGuidsEx(long ptr long ptr long ptr) sechost.EnumerateTraceGuidsEx
-@ stdcall EqualDomainSid(ptr ptr ptr) kernelbase.EqualDomainSid
-@ stdcall EqualPrefixSid(ptr ptr) kernelbase.EqualPrefixSid
-@ stdcall EqualSid(ptr ptr) kernelbase.EqualSid
+@ stdcall -thunk -version=0x600+ EnumerateTraceGuidsEx(long ptr long ptr long ptr) sechost.EnumerateTraceGuidsEx
+@ stdcall -thunk EqualDomainSid(ptr ptr ptr) kernelbase.EqualDomainSid
+@ stdcall -thunk EqualPrefixSid(ptr ptr) kernelbase.EqualPrefixSid
+@ stdcall -thunk EqualSid(ptr ptr) kernelbase.EqualSid
 @ stdcall -version=0x600+ EventActivityIdControl(long ptr) ntdll.EtwEventActivityIdControl
 @ stdcall -version=0x600+ EventEnabled(int64 ptr) ntdll.EtwEventEnabled
 @ stdcall -version=0x600+ EventProviderEnabled(int64 long int64) ntdll.EtwEventProviderEnabled
@@ -244,7 +244,7 @@
 @ stdcall -version=0x600+ EventWriteTransfer(int64 ptr ptr ptr long ptr) ntdll.EtwEventWriteTransfer
 @ stdcall FileEncryptionStatusA(str ptr)
 @ stdcall FileEncryptionStatusW(wstr ptr)
-@ stdcall FindFirstFreeAce(ptr ptr) kernelbase.FindFirstFreeAce
+@ stdcall -thunk FindFirstFreeAce(ptr ptr) kernelbase.FindFirstFreeAce
 @ stdcall -version=0x502 FlushTraceA(double str ptr) ntdll.EtwFlushTraceA
 @ stdcall -version=0x600+ FlushTraceA(double str ptr) EtwFlushTraceA
 @ stdcall -version=0x502 FlushTraceW(double wstr ptr) ntdll.EtwFlushTraceW
@@ -252,11 +252,11 @@
 @ stub FreeEncryptedFileKeyInfo
 @ stdcall FreeEncryptionCertificateHashList(ptr)
 @ stdcall FreeInheritedFromArray(ptr long ptr)
-@ stdcall FreeSid(ptr) kernelbase.FreeSid
+@ stdcall -thunk FreeSid(ptr) kernelbase.FreeSid
 @ stub GetAccessPermissionsForObjectA
 @ stub GetAccessPermissionsForObjectW
-@ stdcall GetAce(ptr long ptr) kernelbase.GetAce
-@ stdcall GetAclInformation(ptr ptr long long) kernelbase.GetAclInformation
+@ stdcall -thunk GetAce(ptr long ptr) kernelbase.GetAce
+@ stdcall -thunk GetAclInformation(ptr ptr long long) kernelbase.GetAclInformation
 @ stdcall GetAuditedPermissionsFromAclA(ptr ptr ptr ptr)
 @ stdcall GetAuditedPermissionsFromAclW(ptr ptr ptr ptr)
 @ stdcall GetCurrentHwProfileA(ptr)
@@ -267,13 +267,13 @@
 @ stdcall GetExplicitEntriesFromAclA(ptr ptr ptr) advapi32.GetExplicitEntriesFromAclW
 @ stdcall GetExplicitEntriesFromAclW(ptr ptr ptr)
 @ stdcall GetFileSecurityA(str long ptr long ptr)
-@ stdcall GetFileSecurityW(wstr long ptr long ptr) kernelbase.GetFileSecurityW
+@ stdcall -thunk GetFileSecurityW(wstr long ptr long ptr) kernelbase.GetFileSecurityW
 @ stub GetInformationCodeAuthzLevelW
 @ stub GetInformationCodeAuthzPolicyW
 @ stdcall GetInheritanceSourceA(str long long long ptr long ptr ptr ptr ptr)
 @ stdcall GetInheritanceSourceW(wstr long long long ptr long ptr ptr ptr ptr)
-@ stdcall GetKernelObjectSecurity(long long ptr long ptr) kernelbase.GetKernelObjectSecurity
-@ stdcall GetLengthSid(ptr) kernelbase.GetLengthSid
+@ stdcall -thunk GetKernelObjectSecurity(long long ptr long ptr) kernelbase.GetKernelObjectSecurity
+@ stdcall -thunk GetLengthSid(ptr) kernelbase.GetLengthSid
 @ stub GetLocalManagedApplicationData
 @ stub GetLocalManagedApplications
 @ stub GetManagedApplicationCategories
@@ -289,14 +289,14 @@
 @ stdcall GetNumberOfEventLogRecords(long ptr)
 @ stdcall GetOldestEventLogRecord(long ptr)
 @ stub GetOverlappedAccessResults
-@ stdcall GetPrivateObjectSecurity(ptr long ptr long ptr) kernelbase.GetPrivateObjectSecurity
-@ stdcall GetSecurityDescriptorControl(ptr ptr ptr) kernelbase.GetSecurityDescriptorControl
-@ stdcall GetSecurityDescriptorDacl(ptr ptr ptr ptr) kernelbase.GetSecurityDescriptorDacl
-@ stdcall GetSecurityDescriptorGroup(ptr ptr ptr) kernelbase.GetSecurityDescriptorGroup
-@ stdcall GetSecurityDescriptorLength(ptr) kernelbase.GetSecurityDescriptorLength
-@ stdcall GetSecurityDescriptorOwner(ptr ptr ptr) kernelbase.GetSecurityDescriptorOwner
+@ stdcall -thunk GetPrivateObjectSecurity(ptr long ptr long ptr) kernelbase.GetPrivateObjectSecurity
+@ stdcall -thunk GetSecurityDescriptorControl(ptr ptr ptr) kernelbase.GetSecurityDescriptorControl
+@ stdcall -thunk GetSecurityDescriptorDacl(ptr ptr ptr ptr) kernelbase.GetSecurityDescriptorDacl
+@ stdcall -thunk GetSecurityDescriptorGroup(ptr ptr ptr) kernelbase.GetSecurityDescriptorGroup
+@ stdcall -thunk GetSecurityDescriptorLength(ptr) kernelbase.GetSecurityDescriptorLength
+@ stdcall -thunk GetSecurityDescriptorOwner(ptr ptr ptr) kernelbase.GetSecurityDescriptorOwner
 @ stdcall GetSecurityDescriptorRMControl(ptr ptr)
-@ stdcall GetSecurityDescriptorSacl(ptr ptr ptr ptr) kernelbase.GetSecurityDescriptorSacl
+@ stdcall -thunk GetSecurityDescriptorSacl(ptr ptr ptr ptr) kernelbase.GetSecurityDescriptorSacl
 @ stdcall GetSecurityInfo(long long long ptr ptr ptr ptr ptr)
 @ stdcall GetSecurityInfoExA(long long long str str ptr ptr ptr ptr)
 @ stdcall GetSecurityInfoExW(long long long wstr wstr ptr ptr ptr ptr)
@@ -304,11 +304,11 @@
 @ stdcall GetServiceDisplayNameW(ptr wstr ptr ptr)
 @ stdcall GetServiceKeyNameA(long str ptr ptr)
 @ stdcall GetServiceKeyNameW(long wstr ptr ptr)
-@ stdcall GetSidIdentifierAuthority(ptr) kernelbase.GetSidIdentifierAuthority
-@ stdcall GetSidLengthRequired(long) kernelbase.GetSidLengthRequired
-@ stdcall GetSidSubAuthority(ptr long) kernelbase.GetSidSubAuthority
-@ stdcall GetSidSubAuthorityCount(ptr) kernelbase.GetSidSubAuthorityCount
-@ stdcall GetTokenInformation(long long ptr long ptr) kernelbase.GetTokenInformation
+@ stdcall -thunk GetSidIdentifierAuthority(ptr) kernelbase.GetSidIdentifierAuthority
+@ stdcall -thunk GetSidLengthRequired(long) kernelbase.GetSidLengthRequired
+@ stdcall -thunk GetSidSubAuthority(ptr long) kernelbase.GetSidSubAuthority
+@ stdcall -thunk GetSidSubAuthorityCount(ptr) kernelbase.GetSidSubAuthorityCount
+@ stdcall -thunk GetTokenInformation(long long ptr long ptr) kernelbase.GetTokenInformation
 @ stdcall GetTraceEnableFlags(double) ntdll.EtwGetTraceEnableFlags
 @ stdcall GetTraceEnableLevel(double) ntdll.EtwGetTraceEnableLevel
 @ stdcall GetTraceLoggerHandle(ptr) ntdll.EtwGetTraceLoggerHandle
@@ -320,7 +320,7 @@
 @ stdcall GetTrusteeTypeW(ptr)
 @ stdcall GetUserNameA(ptr ptr)
 @ stdcall GetUserNameW(ptr ptr)
-@ stdcall GetWindowsAccountDomainSid(ptr ptr ptr) kernelbase.GetWindowsAccountDomainSid
+@ stdcall -thunk GetWindowsAccountDomainSid(ptr ptr ptr) kernelbase.GetWindowsAccountDomainSid
 @ stdcall I_QueryTagInformation(ptr long ptr)
 @ stdcall I_ScIsSecurityProcess()
 @ stdcall I_ScPnPGetServiceName(ptr wstr long)
@@ -330,13 +330,13 @@
 @ stdcall I_ScSetServiceBitsW(ptr long long long wstr)
 @ stdcall I_ScValidatePnpService(wstr wstr ptr)
 @ stub IdentifyCodeAuthzLevelW
-@ stdcall ImpersonateAnonymousToken(ptr) kernelbase.ImpersonateAnonymousToken
-@ stdcall ImpersonateLoggedOnUser(long) kernelbase.ImpersonateLoggedOnUser
-@ stdcall ImpersonateNamedPipeClient(long) kernelbase.ImpersonateNamedPipeClient
-@ stdcall ImpersonateSelf(long) kernelbase.ImpersonateSelf
-@ stdcall InitializeAcl(ptr long long) kernelbase.InitializeAcl
-@ stdcall InitializeSecurityDescriptor(ptr long) kernelbase.InitializeSecurityDescriptor
-@ stdcall InitializeSid(ptr ptr long) kernelbase.InitializeSid
+@ stdcall -thunk ImpersonateAnonymousToken(ptr) kernelbase.ImpersonateAnonymousToken
+@ stdcall -thunk ImpersonateLoggedOnUser(long) kernelbase.ImpersonateLoggedOnUser
+@ stdcall -thunk ImpersonateNamedPipeClient(long) kernelbase.ImpersonateNamedPipeClient
+@ stdcall -thunk ImpersonateSelf(long) kernelbase.ImpersonateSelf
+@ stdcall -thunk InitializeAcl(ptr long long) kernelbase.InitializeAcl
+@ stdcall -thunk InitializeSecurityDescriptor(ptr long) kernelbase.InitializeSecurityDescriptor
+@ stdcall -thunk InitializeSid(ptr ptr long) kernelbase.InitializeSid
 @ stdcall InitiateShutdownA(str str long long long)
 @ stdcall InitiateShutdownW(wstr wstr long long long)
 @ stdcall InitiateSystemShutdownA(str str long long long)
@@ -345,12 +345,12 @@
 @ stdcall InitiateSystemShutdownW(str str long long long)
 @ stub InstallApplication
 @ stdcall IsTextUnicode(ptr long ptr)
-@ stdcall IsTokenRestricted(long) kernelbase.IsTokenRestricted
+@ stdcall -thunk IsTokenRestricted(long) kernelbase.IsTokenRestricted
 @ stub IsTokenUntrusted
-@ stdcall IsValidAcl(ptr) kernelbase.IsValidAcl
-@ stdcall IsValidSecurityDescriptor(ptr) kernelbase.IsValidSecurityDescriptor
-@ stdcall IsValidSid(ptr) kernelbase.IsValidSid
-@ stdcall IsWellKnownSid(ptr long) kernelbase.IsWellKnownSid
+@ stdcall -thunk IsValidAcl(ptr) kernelbase.IsValidAcl
+@ stdcall -thunk IsValidSecurityDescriptor(ptr) kernelbase.IsValidSecurityDescriptor
+@ stdcall -thunk IsValidSid(ptr) kernelbase.IsValidSid
+@ stdcall -thunk IsWellKnownSid(ptr long) kernelbase.IsWellKnownSid
 @ stdcall LockServiceDatabase(ptr)
 @ stdcall LogonUserA(str str str long long ptr)
 @ stdcall LogonUserExA(str str str long long ptr ptr ptr ptr ptr)
@@ -444,34 +444,34 @@
 @ stub MSChapSrvChangePassword2
 @ stub MSChapSrvChangePassword
 @ stdcall MakeAbsoluteSD2(ptr ptr)
-@ stdcall MakeAbsoluteSD(ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr) kernelbase.MakeAbsoluteSD
-@ stdcall MakeSelfRelativeSD(ptr ptr ptr) kernelbase.MakeSelfRelativeSD
-@ stdcall MapGenericMask(ptr ptr) kernelbase.MapGenericMask
+@ stdcall -thunk MakeAbsoluteSD(ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr) kernelbase.MakeAbsoluteSD
+@ stdcall -thunk MakeSelfRelativeSD(ptr ptr ptr) kernelbase.MakeSelfRelativeSD
+@ stdcall -thunk MapGenericMask(ptr ptr) kernelbase.MapGenericMask
 @ stdcall NotifyBootConfigStatus(long)
 @ stdcall NotifyChangeEventLog(long long)
-@ stdcall -version=0x600+ NotifyServiceStatusChange(ptr long ptr) sechost.NotifyServiceStatusChange
-@ stdcall -version=0x600+ NotifyServiceStatusChangeA(ptr long ptr) sechost.NotifyServiceStatusChangeA
-@ stdcall NotifyServiceStatusChangeW(ptr long ptr) sechost.NotifyServiceStatusChangeW
+@ stdcall -thunk -version=0x600+ NotifyServiceStatusChange(ptr long ptr) sechost.NotifyServiceStatusChange
+@ stdcall -thunk -version=0x600+ NotifyServiceStatusChangeA(ptr long ptr) sechost.NotifyServiceStatusChangeA
+@ stdcall -thunk NotifyServiceStatusChangeW(ptr long ptr) sechost.NotifyServiceStatusChangeW
 @ stdcall ObjectCloseAuditAlarmA(str ptr long)
-@ stdcall ObjectCloseAuditAlarmW(wstr ptr long) kernelbase.ObjectCloseAuditAlarmW
+@ stdcall -thunk ObjectCloseAuditAlarmW(wstr ptr long) kernelbase.ObjectCloseAuditAlarmW
 @ stdcall ObjectDeleteAuditAlarmA(str ptr long)
-@ stdcall ObjectDeleteAuditAlarmW(wstr ptr long) kernelbase.ObjectDeleteAuditAlarmW
+@ stdcall -thunk ObjectDeleteAuditAlarmW(wstr ptr long) kernelbase.ObjectDeleteAuditAlarmW
 @ stdcall ObjectOpenAuditAlarmA(str ptr str str ptr long long long ptr long long ptr)
-@ stdcall ObjectOpenAuditAlarmW(wstr ptr wstr wstr ptr long long long ptr long long ptr) kernelbase.ObjectOpenAuditAlarmW
+@ stdcall -thunk ObjectOpenAuditAlarmW(wstr ptr wstr wstr ptr long long long ptr long long ptr) kernelbase.ObjectOpenAuditAlarmW
 @ stdcall ObjectPrivilegeAuditAlarmA(str ptr long long ptr long)
-@ stdcall ObjectPrivilegeAuditAlarmW(wstr ptr long long ptr long) kernelbase.ObjectPrivilegeAuditAlarmW
+@ stdcall -thunk ObjectPrivilegeAuditAlarmW(wstr ptr long long ptr long) kernelbase.ObjectPrivilegeAuditAlarmW
 @ stdcall OpenBackupEventLogA(str str)
 @ stdcall OpenBackupEventLogW(wstr wstr)
 @ stdcall OpenEncryptedFileRawA(str long ptr)
 @ stdcall OpenEncryptedFileRawW(wstr long ptr)
 @ stdcall OpenEventLogA(str str)
 @ stdcall OpenEventLogW(wstr wstr)
-@ stdcall OpenProcessToken(long long ptr) kernelbase.OpenProcessToken
+@ stdcall -thunk OpenProcessToken(long long ptr) kernelbase.OpenProcessToken
 @ stdcall OpenSCManagerA(str str long)
 @ stdcall OpenSCManagerW(wstr wstr long)
 @ stdcall OpenServiceA(long str long)
 @ stdcall OpenServiceW(long wstr long)
-@ stdcall OpenThreadToken(long long long ptr) kernelbase.OpenThreadToken
+@ stdcall -thunk OpenThreadToken(long long long ptr) kernelbase.OpenThreadToken
 @ stdcall -ret64 OpenTraceA(ptr)
 @ stdcall -ret64 OpenTraceW(ptr)
 @ stdcall -version=0x600+ PerfAddCounters(ptr ptr long)
@@ -497,9 +497,9 @@
 @ stdcall -version=0x600+ PerfStartProvider(ptr ptr ptr) kernelbase.PerfStartProvider
 @ stdcall -version=0x600+ PerfStartProviderEx(ptr ptr ptr) kernelbase.PerfStartProviderEx
 @ stdcall -version=0x600+ PerfStopProvider(long) kernelbase.PerfStopProvider
-@ stdcall PrivilegeCheck(ptr ptr ptr) kernelbase.PrivilegeCheck
+@ stdcall -thunk PrivilegeCheck(ptr ptr ptr) kernelbase.PrivilegeCheck
 @ stdcall PrivilegedServiceAuditAlarmA(str str long ptr long)
-@ stdcall PrivilegedServiceAuditAlarmW(wstr wstr long ptr long) kernelbase.PrivilegedServiceAuditAlarmW
+@ stdcall -thunk PrivilegedServiceAuditAlarmW(wstr wstr long ptr long) kernelbase.PrivilegedServiceAuditAlarmW
 @ stub ProcessIdleTasks
 @ stdcall ProcessTrace(ptr long ptr ptr)
 @ stdcall -version=0x502 QueryAllTracesA(ptr long ptr) ntdll.EtwQueryAllTracesA
@@ -524,84 +524,84 @@
 @ stdcall ReadEncryptedFileRaw(ptr ptr ptr)
 @ stdcall ReadEventLogA(long long long ptr long ptr ptr)
 @ stdcall ReadEventLogW(long long long ptr long ptr ptr)
-@ stdcall RegCloseKey(long) kernelbase.RegCloseKey
+@ stdcall -thunk RegCloseKey(long) kernelbase.RegCloseKey
 @ stdcall RegConnectRegistryA(str long ptr)
 @ stub RegConnectRegistryExA
 @ stub RegConnectRegistryExW
 @ stdcall RegConnectRegistryW(wstr long ptr)
 @ stdcall -version=0x600+ RegCopyTreeA(ptr str ptr)
-@ stdcall -version=0x600+ RegCopyTreeW(ptr wstr ptr) kernelbase.RegCopyTreeW
+@ stdcall -thunk -version=0x600+ RegCopyTreeW(ptr wstr ptr) kernelbase.RegCopyTreeW
 @ stdcall RegCreateKeyA(long str ptr)
-@ stdcall RegCreateKeyExA(long str long ptr long long ptr ptr ptr) kernelbase.RegCreateKeyExA
-@ stdcall RegCreateKeyExW(long wstr long ptr long long ptr ptr ptr) kernelbase.RegCreateKeyExW
+@ stdcall -thunk RegCreateKeyExA(long str long ptr long long ptr ptr ptr) kernelbase.RegCreateKeyExA
+@ stdcall -thunk RegCreateKeyExW(long wstr long ptr long long ptr ptr ptr) kernelbase.RegCreateKeyExW
 @ stdcall -version=0x600+ RegCreateKeyTransactedA(long str long ptr long long ptr ptr ptr ptr ptr)
 @ stdcall -version=0x600+ RegCreateKeyTransactedW(long wstr long ptr long long ptr ptr ptr ptr ptr)
 @ stdcall RegCreateKeyW(long wstr ptr)
 @ stdcall RegDeleteKeyA(long str)
-@ stdcall RegDeleteKeyExA(long str long long) kernelbase.RegDeleteKeyExA
-@ stdcall RegDeleteKeyExW(long wstr long long) kernelbase.RegDeleteKeyExW
-@ stdcall -version=0x600+ RegDeleteKeyValueA(long str str) kernelbase.RegDeleteKeyValueA
-@ stdcall -version=0x600+ RegDeleteKeyValueW(long wstr wstr) kernelbase.RegDeleteKeyValueW
+@ stdcall -thunk RegDeleteKeyExA(long str long long) kernelbase.RegDeleteKeyExA
+@ stdcall -thunk RegDeleteKeyExW(long wstr long long) kernelbase.RegDeleteKeyExW
+@ stdcall -thunk -version=0x600+ RegDeleteKeyValueA(long str str) kernelbase.RegDeleteKeyValueA
+@ stdcall -thunk -version=0x600+ RegDeleteKeyValueW(long wstr wstr) kernelbase.RegDeleteKeyValueW
 @ stdcall RegDeleteKeyW(long wstr)
-@ stdcall -version=0x600+ RegDeleteTreeA(long str) kernelbase.RegDeleteTreeA
-@ stdcall -version=0x600+ RegDeleteTreeW(long wstr) kernelbase.RegDeleteTreeW
-@ stdcall RegDeleteValueA(long str) kernelbase.RegDeleteValueA
-@ stdcall RegDeleteValueW(long wstr) kernelbase.RegDeleteValueW
+@ stdcall -thunk -version=0x600+ RegDeleteTreeA(long str) kernelbase.RegDeleteTreeA
+@ stdcall -thunk -version=0x600+ RegDeleteTreeW(long wstr) kernelbase.RegDeleteTreeW
+@ stdcall -thunk RegDeleteValueA(long str) kernelbase.RegDeleteValueA
+@ stdcall -thunk RegDeleteValueW(long wstr) kernelbase.RegDeleteValueW
 @ stdcall RegDisablePredefinedCache()
 @ stdcall -version=0x600+ RegDisablePredefinedCacheEx()
 @ stdcall RegDisableReflectionKey(ptr)
 @ stdcall RegEnableReflectionKey(ptr)
 @ stdcall RegEnumKeyA(long long ptr long)
-@ stdcall RegEnumKeyExA(long long ptr ptr ptr ptr ptr ptr) kernelbase.RegEnumKeyExA
-@ stdcall RegEnumKeyExW(long long ptr ptr ptr ptr ptr ptr) kernelbase.RegEnumKeyExW
+@ stdcall -thunk RegEnumKeyExA(long long ptr ptr ptr ptr ptr ptr) kernelbase.RegEnumKeyExA
+@ stdcall -thunk RegEnumKeyExW(long long ptr ptr ptr ptr ptr ptr) kernelbase.RegEnumKeyExW
 @ stdcall RegEnumKeyW(long long ptr long)
-@ stdcall RegEnumValueA(long long ptr ptr ptr ptr ptr ptr) kernelbase.RegEnumValueA
-@ stdcall RegEnumValueW(long long ptr ptr ptr ptr ptr ptr) kernelbase.RegEnumValueW
-@ stdcall RegFlushKey(long) kernelbase.RegFlushKey
-@ stdcall RegGetKeySecurity(long long ptr ptr) kernelbase.RegGetKeySecurity
-@ stdcall RegGetValueA(long str str long ptr ptr ptr) kernelbase.RegGetValueA
-@ stdcall RegGetValueW(long wstr wstr long ptr ptr ptr) kernelbase.RegGetValueW
-@ stdcall -version=0x600+ RegLoadAppKeyA(str ptr long long long) kernelbase.RegLoadAppKeyA
-@ stdcall -version=0x600+ RegLoadAppKeyW(wstr ptr long long long) kernelbase.RegLoadAppKeyW
-@ stdcall RegLoadKeyA(long str str) kernelbase.RegLoadKeyA
-@ stdcall RegLoadKeyW(long wstr wstr) kernelbase.RegLoadKeyW
-@ stdcall RegNotifyChangeKeyValue(long long long long long) kernelbase.RegNotifyChangeKeyValue
+@ stdcall -thunk RegEnumValueA(long long ptr ptr ptr ptr ptr ptr) kernelbase.RegEnumValueA
+@ stdcall -thunk RegEnumValueW(long long ptr ptr ptr ptr ptr ptr) kernelbase.RegEnumValueW
+@ stdcall -thunk RegFlushKey(long) kernelbase.RegFlushKey
+@ stdcall -thunk RegGetKeySecurity(long long ptr ptr) kernelbase.RegGetKeySecurity
+@ stdcall -thunk RegGetValueA(long str str long ptr ptr ptr) kernelbase.RegGetValueA
+@ stdcall -thunk RegGetValueW(long wstr wstr long ptr ptr ptr) kernelbase.RegGetValueW
+@ stdcall -thunk -version=0x600+ RegLoadAppKeyA(str ptr long long long) kernelbase.RegLoadAppKeyA
+@ stdcall -thunk -version=0x600+ RegLoadAppKeyW(wstr ptr long long long) kernelbase.RegLoadAppKeyW
+@ stdcall -thunk RegLoadKeyA(long str str) kernelbase.RegLoadKeyA
+@ stdcall -thunk RegLoadKeyW(long wstr wstr) kernelbase.RegLoadKeyW
+@ stdcall -thunk RegNotifyChangeKeyValue(long long long long long) kernelbase.RegNotifyChangeKeyValue
 @ stdcall RegOpenCurrentUser(long ptr)
 @ stdcall RegOpenKeyA(long str ptr)
-@ stdcall RegOpenKeyExA(long str long long ptr) kernelbase.RegOpenKeyExA
-@ stdcall RegOpenKeyExW(long wstr long long ptr) kernelbase.RegOpenKeyExW
+@ stdcall -thunk RegOpenKeyExA(long str long long ptr) kernelbase.RegOpenKeyExA
+@ stdcall -thunk RegOpenKeyExW(long wstr long long ptr) kernelbase.RegOpenKeyExW
 @ stdcall -version=0x600+ RegOpenKeyTransactedA(long str long long ptr ptr ptr)
 @ stdcall -version=0x600+ RegOpenKeyTransactedW(long wstr long long ptr ptr ptr)
 @ stdcall RegOpenKeyW(long wstr ptr)
-@ stdcall RegOpenUserClassesRoot(ptr long long ptr) kernelbase.RegOpenUserClassesRoot
+@ stdcall -thunk RegOpenUserClassesRoot(ptr long long ptr) kernelbase.RegOpenUserClassesRoot
 @ stdcall RegOverridePredefKey(long long)
-@ stdcall RegQueryInfoKeyA(long ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr) kernelbase.RegQueryInfoKeyA
-@ stdcall RegQueryInfoKeyW(long ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr) kernelbase.RegQueryInfoKeyW
+@ stdcall -thunk RegQueryInfoKeyA(long ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr) kernelbase.RegQueryInfoKeyA
+@ stdcall -thunk RegQueryInfoKeyW(long ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr ptr) kernelbase.RegQueryInfoKeyW
 @ stdcall RegQueryMultipleValuesA(long ptr long ptr ptr)
 @ stdcall RegQueryMultipleValuesW(long ptr long ptr ptr)
 @ stdcall RegQueryReflectionKey(ptr ptr)
 @ stdcall RegQueryValueA(long str ptr ptr)
-@ stdcall RegQueryValueExA(long str ptr ptr ptr ptr) kernelbase.RegQueryValueExA
-@ stdcall RegQueryValueExW(long wstr ptr ptr ptr ptr) kernelbase.RegQueryValueExW
+@ stdcall -thunk RegQueryValueExA(long str ptr ptr ptr ptr) kernelbase.RegQueryValueExA
+@ stdcall -thunk RegQueryValueExW(long wstr ptr ptr ptr ptr) kernelbase.RegQueryValueExW
 @ stdcall RegQueryValueW(long wstr ptr ptr)
 @ stdcall -version=0x600+ RegRenameKey(long wstr wstr)
 @ stdcall RegReplaceKeyA(long str str str)
 @ stdcall RegReplaceKeyW(long wstr wstr wstr)
-@ stdcall RegRestoreKeyA(long str long) kernelbase.RegRestoreKeyA
-@ stdcall RegRestoreKeyW(long wstr long) kernelbase.RegRestoreKeyW
+@ stdcall -thunk RegRestoreKeyA(long str long) kernelbase.RegRestoreKeyA
+@ stdcall -thunk RegRestoreKeyW(long wstr long) kernelbase.RegRestoreKeyW
 @ stdcall RegSaveKeyA(long ptr ptr)
-@ stdcall RegSaveKeyExA(long str ptr long) kernelbase.RegSaveKeyExA
-@ stdcall RegSaveKeyExW(long str ptr long) kernelbase.RegSaveKeyExW
+@ stdcall -thunk RegSaveKeyExA(long str ptr long) kernelbase.RegSaveKeyExA
+@ stdcall -thunk RegSaveKeyExW(long str ptr long) kernelbase.RegSaveKeyExW
 @ stdcall RegSaveKeyW(long ptr ptr)
-@ stdcall RegSetKeySecurity(long long ptr) kernelbase.RegSetKeySecurity
-@ stdcall -version=0x600+ RegSetKeyValueA(long str str long ptr long) kernelbase.RegSetKeyValueA
-@ stdcall -version=0x600+ RegSetKeyValueW(long wstr wstr long ptr long) kernelbase.RegSetKeyValueW
+@ stdcall -thunk RegSetKeySecurity(long long ptr) kernelbase.RegSetKeySecurity
+@ stdcall -thunk -version=0x600+ RegSetKeyValueA(long str str long ptr long) kernelbase.RegSetKeyValueA
+@ stdcall -thunk -version=0x600+ RegSetKeyValueW(long wstr wstr long ptr long) kernelbase.RegSetKeyValueW
 @ stdcall RegSetValueA(long str long ptr long)
-@ stdcall RegSetValueExA(long str long long ptr long) kernelbase.RegSetValueExA
-@ stdcall RegSetValueExW(long wstr long long ptr long) kernelbase.RegSetValueExW
+@ stdcall -thunk RegSetValueExA(long str long long ptr long) kernelbase.RegSetValueExA
+@ stdcall -thunk RegSetValueExW(long wstr long long ptr long) kernelbase.RegSetValueExW
 @ stdcall RegSetValueW(long wstr long ptr long)
-@ stdcall RegUnLoadKeyA(long str) kernelbase.RegUnLoadKeyA
-@ stdcall RegUnLoadKeyW(long wstr) kernelbase.RegUnLoadKeyW
+@ stdcall -thunk RegUnLoadKeyA(long str) kernelbase.RegUnLoadKeyA
+@ stdcall -thunk RegUnLoadKeyW(long wstr) kernelbase.RegUnLoadKeyW
 @ stdcall RegisterEventSourceA(ptr ptr)
 @ stdcall RegisterEventSourceW(ptr ptr)
 @ stub RegisterIdleTask
@@ -615,7 +615,7 @@
 @ stdcall RemoveUsersFromEncryptedFile(wstr ptr)
 @ stdcall ReportEventA(long long long long ptr long long str ptr)
 @ stdcall ReportEventW(long long long long ptr long long wstr ptr)
-@ stdcall RevertToSelf() kernelbase.RevertToSelf
+@ stdcall -thunk RevertToSelf() kernelbase.RevertToSelf
 @ stdcall SaferCloseLevel(ptr)
 @ stdcall SaferComputeTokenFromLevel(ptr ptr ptr long ptr)
 @ stdcall SaferCreateLevel(long long long ptr ptr)
@@ -632,7 +632,7 @@
 @ stub SaferiRecordEventLogEntry
 @ stub SaferiReplaceProcessThreadTokens
 @ stdcall SaferiSearchMatchingHashRules(long ptr long long ptr ptr)
-@ stdcall SetAclInformation(ptr ptr long long) kernelbase.SetAclInformation
+@ stdcall -thunk SetAclInformation(ptr ptr long long) kernelbase.SetAclInformation
 @ stub SetEntriesInAccessListA
 @ stub SetEntriesInAccessListW
 @ stdcall SetEntriesInAclA(long ptr ptr ptr)
@@ -640,31 +640,31 @@
 @ stub SetEntriesInAuditListA
 @ stub SetEntriesInAuditListW
 @ stdcall SetFileSecurityA(str long ptr)
-@ stdcall SetFileSecurityW(wstr long ptr) kernelbase.SetFileSecurityW
+@ stdcall -thunk SetFileSecurityW(wstr long ptr) kernelbase.SetFileSecurityW
 @ stub SetInformationCodeAuthzLevelW
 @ stub SetInformationCodeAuthzPolicyW
-@ stdcall SetKernelObjectSecurity(long long ptr) kernelbase.SetKernelObjectSecurity
+@ stdcall -thunk SetKernelObjectSecurity(long long ptr) kernelbase.SetKernelObjectSecurity
 @ stdcall SetNamedSecurityInfoA(str long ptr ptr ptr ptr ptr)
 @ stub SetNamedSecurityInfoExA
 @ stub SetNamedSecurityInfoExW
 @ stdcall SetNamedSecurityInfoW(wstr long ptr ptr ptr ptr ptr)
-@ stdcall SetPrivateObjectSecurity(long ptr ptr ptr long) kernelbase.SetPrivateObjectSecurity
-@ stdcall SetPrivateObjectSecurityEx(long ptr ptr long ptr long) kernelbase.SetPrivateObjectSecurityEx
+@ stdcall -thunk SetPrivateObjectSecurity(long ptr ptr ptr long) kernelbase.SetPrivateObjectSecurity
+@ stdcall -thunk SetPrivateObjectSecurityEx(long ptr ptr long ptr long) kernelbase.SetPrivateObjectSecurityEx
 @ stdcall SetSecurityAccessMask(long ptr)
-@ stdcall SetSecurityDescriptorControl(ptr long long) kernelbase.SetSecurityDescriptorControl
-@ stdcall SetSecurityDescriptorDacl(ptr long ptr long) kernelbase.SetSecurityDescriptorDacl
-@ stdcall SetSecurityDescriptorGroup(ptr ptr long) kernelbase.SetSecurityDescriptorGroup
-@ stdcall SetSecurityDescriptorOwner(ptr ptr long) kernelbase.SetSecurityDescriptorOwner
+@ stdcall -thunk SetSecurityDescriptorControl(ptr long long) kernelbase.SetSecurityDescriptorControl
+@ stdcall -thunk SetSecurityDescriptorDacl(ptr long ptr long) kernelbase.SetSecurityDescriptorDacl
+@ stdcall -thunk SetSecurityDescriptorGroup(ptr ptr long) kernelbase.SetSecurityDescriptorGroup
+@ stdcall -thunk SetSecurityDescriptorOwner(ptr ptr long) kernelbase.SetSecurityDescriptorOwner
 @ stdcall SetSecurityDescriptorRMControl(ptr ptr)
-@ stdcall SetSecurityDescriptorSacl(ptr long ptr long) kernelbase.SetSecurityDescriptorSacl
+@ stdcall -thunk SetSecurityDescriptorSacl(ptr long ptr long) kernelbase.SetSecurityDescriptorSacl
 @ stdcall SetSecurityInfo(long long long ptr ptr ptr ptr)
 @ stub SetSecurityInfoExA
 @ stub SetSecurityInfoExW
 @ stdcall SetServiceBits(long long long long)
 @ stdcall SetServiceObjectSecurity(long long ptr)
 @ stdcall SetServiceStatus(long long)
-@ stdcall SetThreadToken(ptr ptr) kernelbase.SetThreadToken
-@ stdcall SetTokenInformation(long long ptr long) kernelbase.SetTokenInformation
+@ stdcall -thunk SetThreadToken(ptr ptr) kernelbase.SetThreadToken
+@ stdcall -thunk SetTokenInformation(long long ptr long) kernelbase.SetTokenInformation
 @ stub SetTraceCallback
 @ stub SetUserFileEncryptionKey
 @ stdcall StartServiceA(long long ptr)
@@ -779,6 +779,6 @@
 @ stdcall WmiSetSingleItemW(ptr wstr long long long ptr)
 @ stub Wow64Win32ApiEntry
 @ stdcall WriteEncryptedFileRaw(ptr ptr ptr)
-@ stdcall -version=0x600+ RegLoadMUIStringW(ptr wstr wstr long ptr long wstr) kernelbase.RegLoadMUIStringW
-@ stdcall -version=0x600+ RegLoadMUIStringA(ptr str str long ptr long str) kernelbase.RegLoadMUIStringA
+@ stdcall -thunk -version=0x600+ RegLoadMUIStringW(ptr wstr wstr long ptr long wstr) kernelbase.RegLoadMUIStringW
+@ stdcall -thunk -version=0x600+ RegLoadMUIStringA(ptr str str long ptr long str) kernelbase.RegLoadMUIStringA
 1000 stdcall -noname GetServiceRegistryStateKey(ptr long long ptr)
