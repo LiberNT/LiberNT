@@ -246,4 +246,7 @@ typedef KAFFINITY *PKAFFINITY;
 #define Handle64ToHandleh) (Ptr64ToPtr(h))
 #define HandleToHandle64h) (PtrToPtr64(h))
 
+#define Handle64ToHandleh) (Ptr64ToPtr(h))
+#define HandleToHandle64h) (PtrToPtr64(h))
+
 #endif /* _BASETSD_H_ */

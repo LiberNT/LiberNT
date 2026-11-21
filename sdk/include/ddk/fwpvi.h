@@ -761,3 +761,5 @@ extern "C" {
 #define IPsecSaCreateEnumHandle IPsecSaCreateEnumHandle0
 #define IPsecSaEnum IPsecSaEnum1
 
+#define FWPS_CALLOUT_CLASSIFY_FN_FAST 0
+

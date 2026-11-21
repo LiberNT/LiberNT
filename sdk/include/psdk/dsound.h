@@ -2046,4 +2046,22 @@ typedef struct IDirectSoundCaptureFXNoiseSuppress *LPDIRECTSOUNDCAPTUREFXNOISESU
 #define IReferenceClock_Releasep) IUnknown_Release(p)
 #define IReferenceClock_Unadvisep, a) (p) -> lpVtbl -> Unadvise(p, a)
 
+#define IDirectSoundCaptureFXAec_AddRefp) IUnknown_AddRef(p)
+#define IDirectSoundCaptureFXAec_GetAllParametersp, a) (p) -> lpVtbl -> GetAllParameters(p, a)
+#define IDirectSoundCaptureFXAec_QueryInterfacep, a, b) IUnknown_QueryInterface(p, a, b)
+#define IDirectSoundCaptureFXAec_Releasep) IUnknown_Release(p)
+#define IDirectSoundCaptureFXAec_SetAllParametersp, a) (p) -> lpVtbl -> SetAllParameters(p, a)
+#define IDirectSoundCaptureFXNoiseSuppress_AddRefp) IUnknown_AddRef(p)
+#define IDirectSoundCaptureFXNoiseSuppress_GetAllParametersp, a) (p) -> lpVtbl -> GetAllParameters(p, a)
+#define IDirectSoundCaptureFXNoiseSuppress_QueryInterfacep, a, b) IUnknown_QueryInterface(p, a, b)
+#define IDirectSoundCaptureFXNoiseSuppress_Releasep) IUnknown_Release(p)
+#define IDirectSoundCaptureFXNoiseSuppress_SetAllParametersp, a) (p) -> lpVtbl -> SetAllParameters(p, a)
+#define IReferenceClock_AddRefp) IUnknown_AddRef(p)
+#define IReferenceClock_AdvisePeriodicp, a, b, c, d) (p) -> lpVtbl -> AdvisePeriodic(p, a, b, c, d)
+#define IReferenceClock_AdviseTimep, a, b, c, d) (p) -> lpVtbl -> AdviseTime(p, a, b, c, d)
+#define IReferenceClock_GetTimep, a) (p) -> lpVtbl -> GetTime(p, a)
+#define IReferenceClock_QueryInterfacep, a, b) IUnknown_QueryInterface(p, a, b)
+#define IReferenceClock_Releasep) IUnknown_Release(p)
+#define IReferenceClock_Unadvisep, a) (p) -> lpVtbl -> Unadvise(p, a)
+
 #endif /* __DSOUND_INCLUDED__ */

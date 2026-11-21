@@ -719,4 +719,16 @@ typedef struct _VK_VSC VK_VSC;
 #define KOREAN_KBD_LAYOUThkl) (KBD_LAYOUT_LANG(hkl) == LANG_KOREAN)
 #define KOREAN_KEYBOARDId) ((Id) . Type == KEYBOARD_TYPE_KOREA)
 
+#define _EQv4) (VK_ ## v4)
+#define _NEv1, v2, v3, v4, v5, v6) (VK_ ## v4)
+#define DEADTRANSch, accent, comp, flags) { MAKELONG(ch, accent), comp, flags }
+#define FUJITSU_KBD_CONSOLEId) (JAPANESE_KEYBOARD(Id) && (Id) . Subtype == ((NLSKBD_OEM_FUJITSU << 4) | FMV_KBD_OASYS_TYPE))
+#define FUJITSU_KBD_REMOTEId) (JAPANESE_KEYBOARD(Id) && (Id) . SubType == 0x00020002)
+#define IDS_FROM_SCANCODEprefix, base) (0xc000 + ((0x ## prefix) >= 0xE0 ? 0x100 : 0) + (0x ## base))
+#define JAPANESE_KBD_LAYOUThkl) (KBD_LAYOUT_LANG(hkl) == LANG_JAPANESE)
+#define KLL_GLOBAL_ATTR_FROM_KLFx) (KLL_ATTR_FROM_KLF(x) & KLLF_GLOBAL_ATTRS)
+#define KLL_LAYOUT_ATTR_FROM_KLFx) (KLL_ATTR_FROM_KLF(x) & KLLF_LAYOUT_ATTRS)
+#define KOREAN_KBD_LAYOUThkl) (KBD_LAYOUT_LANG(hkl) == LANG_KOREAN)
+#define KOREAN_KEYBOARDId) ((Id) . Type == KEYBOARD_TYPE_KOREA)
+
 #endif /* __KBD_H */

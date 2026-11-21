@@ -505,3 +505,5 @@ cpp_quote("#define EVRPUBLICfunc) STDAPI func")
 
 cpp_quote("#define EVRPUBLICfunc) STDAPI func")
 
+cpp_quote("#define EVRPUBLICfunc) STDAPI func")
+

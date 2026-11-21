@@ -1440,4 +1440,11 @@ LSTATUS WINAPI SHRegSetValue(HKEY hkey, LPCWSTR pszSubKey, LPCWSTR pszValue, SRR
 }
 #endif
 
+#define QITABENTMULTI2Cthis, Ifoo, Iimpl) { (IID *) & Ifoo, OFFSETOFCLASS(Iimpl, Cthis) }
+#define SHAnsiToTCharszSrc, szDest, cchSize) SHAnsiToAnsi(szSrc, szDest, cchSize)
+#define SHTCharToAnsiszSrc, szDest, cchSize) SHAnsiToAnsi(szSrc, szDest, cchSize)
+#define SHTCharToUnicodeszSrc, wzDest, cchSize) SHAnsiToUnicode(szSrc, wzDest, cchSize)
+#define SHUnicodeToTCharwzSrc, szDest, cchSize) SHUnicodeToAnsi(wzSrc, szDest, cchSize)
+#define STATIC_CASTtyp) static_cast < typ >
+
 #endif // _INC_SHLWAPI

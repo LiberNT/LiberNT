@@ -2545,4 +2545,7 @@ LONG WINAPI tapiRequestMediaCall(HWND hwnd, WPARAM wRequestID, LPCSTR lpszDevice
 #define DECLARE_OPAQUE32name) typedef DWORD name
 #define TAPIERROR_FORMATMESSAGE__ErrCode__) (((__ErrCode__) > 0xFFFF0000) ? ((__ErrCode__) & 0x0000FFFF) : (((__ErrCode__) & 0x10000000) ? ((__ErrCode__) - 0x90000000 + 0xF000) : ((__ErrCode__) - 0x80000000 + 0xE000)))
 
+#define DECLARE_OPAQUE32name) typedef DWORD name
+#define TAPIERROR_FORMATMESSAGE__ErrCode__) (((__ErrCode__) > 0xFFFF0000) ? ((__ErrCode__) & 0x0000FFFF) : (((__ErrCode__) & 0x10000000) ? ((__ErrCode__) - 0x90000000 + 0xF000) : ((__ErrCode__) - 0x80000000 + 0xE000)))
+
 #endif /* __WINE_TAPI_H */

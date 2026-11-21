@@ -4826,4 +4826,7 @@ VP_STATUS DlWaitForSingleObject(PVOID DeviceHandle, PVOID pEvent, PLARGE_INTEGER
 #define _Field_size_bytes_DXGK_param)
 #define DlDebugPrintExarg) DlDebugPrint arg
 
+#define _Field_size_bytes_DXGK_param)
+#define DlDebugPrintExarg) DlDebugPrint arg
+
 #endif /* _DISPMPRT_H_ */

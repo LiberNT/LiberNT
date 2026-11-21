@@ -1095,4 +1095,14 @@ void FASTCALL WriteUInt32Release(volatile UINT32 *Destination, UINT32 Value);
 #define DEPRECATED_STDAPIV_type, message) EXTERN_C __declspec(deprecated(message)) type STDAPIVCALLTYPE
 #define STDAPI_CHPE_PATCHABLE_type) EXTERN_C DECLSPEC_CHPE_PATCHABLE type STDAPICALLTYPE
 
+#define CacheLineFlushAddress) _mm_clflush(Address)
+#define COMPILETIME_OR_6FLAGSa, b, c, d, e, f) ((UINT) (a) | (UINT) (b) | (UINT) (c) | (UINT) (d) | (UINT) (e) | (UINT) (f))
+#define DEPRECATED_NO_MESSAGE_STDAPI_type) EXTERN_C __declspec(deprecated) type STDAPICALLTYPE
+#define DEPRECATED_NO_MESSAGE_STDAPIV_type) EXTERN_C __declspec(deprecated) type STDAPIVCALLTYPE
+#define DEPRECATED_STDAPImessage) EXTERN_C __declspec(deprecated(message)) HRESULT STDAPICALLTYPE
+#define DEPRECATED_STDAPI_type, message) EXTERN_C __declspec(deprecated(message)) type STDAPICALLTYPE
+#define DEPRECATED_STDAPIVmessage) EXTERN_C __declspec(deprecated(message)) HRESULT STDAPIVCALLTYPE
+#define DEPRECATED_STDAPIV_type, message) EXTERN_C __declspec(deprecated(message)) type STDAPIVCALLTYPE
+#define STDAPI_CHPE_PATCHABLE_type) EXTERN_C DECLSPEC_CHPE_PATCHABLE type STDAPICALLTYPE
+
 #endif /* __MINIPORT_H */

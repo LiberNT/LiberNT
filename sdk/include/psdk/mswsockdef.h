@@ -114,6 +114,8 @@ typedef struct RIO_RQ_t *RIO_RQ;
 
 #define RIO_CMSG_NEXTHDRbuffer, cmsg) ((cmsg) == NULL ? RIO_CMSG_FIRSTHDR(buffer) : (((PUCHAR) (cmsg) + WSA_CMSGHDR_ALIGN((cmsg) -> cmsg_len) + sizeof (WSACMSGHDR) > (PUCHAR) (buffer) + (buffer) -> TotalLength) ? (PWSACMSGHDR) NULL : (PWSACMSGHDR) ((PUCHAR) (cmsg) + WSA_CMSGHDR_ALIGN((cmsg) -> cmsg_len))))
 
+#define RIO_CMSG_NEXTHDRbuffer, cmsg) ((cmsg) == NULL ? RIO_CMSG_FIRSTHDR(buffer) : (((PUCHAR) (cmsg) + WSA_CMSGHDR_ALIGN((cmsg) -> cmsg_len) + sizeof (WSACMSGHDR) > (PUCHAR) (buffer) + (buffer) -> TotalLength) ? (PWSACMSGHDR) NULL : (PWSACMSGHDR) ((PUCHAR) (cmsg) + WSA_CMSGHDR_ALIGN((cmsg) -> cmsg_len))))
+
 #endif
 #ifndef RIO_MAX_CQ_SIZE
 #define RIO_MAX_CQ_SIZE 0x8000000

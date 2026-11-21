@@ -5899,6 +5899,13 @@ void PsUnregisterSiloMonitor(PSILO_MONITOR Monitor);
 #define WHEA_PMEM_IS_PFN_ALREADY_MARKED_BADPageRange, TargetPfn) (((TargetPfn) - ((PageRange) -> StartingPfn) < sizeof (ULONG64) * 8) && ((((PageRange) -> MarkedBadBitmap) & (1ull << ((TargetPfn) - ((PageRange) -> StartingPfn)))) != 0))
 #define WheaAdd2PtrP, I) ((PVOID) ((PUCHAR) (P) + (I)))
 
+#define CPER_FIELD_CHECKtype, field, offset, length) C_ASSERT(((FIELD_OFFSET(type, field) == (offset)) && (RTL_FIELD_SIZE(type, field) == (length))))
+#define FsRtlIsChecksumErrorSTS) ((BOOLEAN) !FsRtlIsTotalDeviceFailure(STS))
+#define TraceLoggingCORRELATION_VECTORcv) TraceLoggingString((cv) . Vector, "__TlgCV__")
+#define WHEA_PMEM_IS_PAGE_RANGE_ALREADY_MARKED_BADPageRange) (((PageRange) -> PageCount <= sizeof (ULONG64) * 8) && (((PageRange) -> MarkedBadBitmap) == (ULONG64_MAX >> (sizeof (ULONG64) * 8 - (PageRange) -> PageCount))))
+#define WHEA_PMEM_IS_PFN_ALREADY_MARKED_BADPageRange, TargetPfn) (((TargetPfn) - ((PageRange) -> StartingPfn) < sizeof (ULONG64) * 8) && ((((PageRange) -> MarkedBadBitmap) & (1ull << ((TargetPfn) - ((PageRange) -> StartingPfn)))) != 0))
+#define WheaAdd2PtrP, I) ((PVOID) ((PUCHAR) (P) + (I)))
+
 #endif /* _NTLSA_AUDIT_ */
 #endif /* _NTLSA_IFS_ */
 

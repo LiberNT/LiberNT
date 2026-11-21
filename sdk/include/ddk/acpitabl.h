@@ -4376,4 +4376,22 @@ struct _WATCHDOG_TIMER_ACTION_TABLE
 
 typedef struct _WATCHDOG_TIMER_RESOURCE_TABLE WATCHDOG_TIMER_RESOURCE_TABLE;
 
+#define ACPI_IS_VALID_TABLE_ENTRYEntry, Type, TableEnd) ((((PUCHAR) (Entry)) + RTL_SIZEOF_THROUGH_FIELD(Type, Length) <= (PUCHAR) (TableEnd)) && (((Type *) (Entry)) -> Length >= RTL_SIZEOF_THROUGH_FIELD(Type, Length)) && (((PUCHAR) (Entry)) + ((Type *) (Entry)) -> Length <= (PUCHAR) (TableEnd)))
+#define ACPI_PLD_COLOR_BLUEc) ((BYTE) (((c) >> 16) & 0xFF))
+#define ACPI_PLD_COLOR_GREENc) ((BYTE) (((c) >> 8) & 0xFF))
+#define ACPI_PLD_COLOR_REDc) ((BYTE) (((c) >> 0) & 0xFF))
+#define ACPI_PLD_MAKE_COLORr, g, b) ((UINT32) (((r) & 0xFF) | (((g) & 0xFF) << 8) | (((b) & 0xFF) << 16)))
+#define BGRT_STATUS_GET_DISPLAY_ROTATION_Status_) ((UCHAR) ((ULONG) ((_Status_) & BGRT_STATUS_DISPLAY_ROTATION) >> 1))
+#define HMAT_ENTRY_LENGTH_Type) RTL_SIZEOF_THROUGH_FIELD(HMAT_ENTRY, _Type);
+#define IVHD_DEVICE_ENTRY_TYPE_TO_SIZE_Type_) ((ULONG_PTR) (1ULL << (((_Type_) >> 6) + 2)))
+#define NumTableEntriesFromRSDTPointerp) (p -> Header . Length - min(p -> Header . Length, sizeof (DESCRIPTION_HEADER))) / sizeof (ULONG)
+#define NumTableEntriesFromXSDTPointerp) (p -> Header . Length - min(p -> Header . Length, sizeof (DESCRIPTION_HEADER))) / sizeof (PHYSICAL_ADDRESS)
+#define PROC_TOPOLOGY_NODE_CACHE_TYPE_DATACacheType) (CacheType == 0)
+#define PROC_TOPOLOGY_NODE_CACHE_TYPE_INSTRUCTIONCacheType) (CacheType == 1)
+#define PROC_TOPOLOGY_NODE_CACHE_TYPE_UNIFIEDCacheType) ((CacheType == 2) || (CacheType == 3))
+#define PROXIMITY_DOMAIN_1SratEntry) (SratEntry) -> ApicAffinity . ProximityDomainLow
+#define UNCOMPRESS_MPIDR_COMPRESSED_, _MPIDR_) \
+{ (_MPIDR_) = (ULONGLONG) (_COMPRESSED_) & 0x00FFFFFFULL; (_MPIDR_) |= ((ULONGLONG) (_COMPRESSED_) & 0xFF000000ULL) << 8; \
+}
+
 #endif

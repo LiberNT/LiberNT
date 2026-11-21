@@ -1428,4 +1428,7 @@ DWORD DsWriteAccountSpnW(HANDLE hDS, DS_SPN_WRITE_OP Operation, LPCWSTR pszAccou
 #define FRSCONN_GET_PRIORITY_options_) (((((_options_) & FRSCONN_PRIORITY_MASK) >> 28) != 0) ? (((_options_) & FRSCONN_PRIORITY_MASK) >> 28) : FRSCONN_MAX_PRIORITY)
 #define NTDSCONN_IGNORE_SCHEDULE_options_) (((_options_) & NTDSCONN_OPT_IGNORE_SCHEDULE_MASK) >> 31)
 
+#define FRSCONN_GET_PRIORITY_options_) (((((_options_) & FRSCONN_PRIORITY_MASK) >> 28) != 0) ? (((_options_) & FRSCONN_PRIORITY_MASK) >> 28) : FRSCONN_MAX_PRIORITY)
+#define NTDSCONN_IGNORE_SCHEDULE_options_) (((_options_) & NTDSCONN_OPT_IGNORE_SCHEDULE_MASK) >> 31)
+
 #endif /* __WINE_NTDSAPI_H */

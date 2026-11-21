@@ -1476,4 +1476,6 @@ typedef enum _RAS_PORT_CONDITION RAS_PORT_CONDITION;
 
 #define MprInfoBlockExistsh, t) (MprInfoBlockFind((h), (t), NULL, NULL, NULL) == NO_ERROR)
 
+#define MprInfoBlockExistsh, t) (MprInfoBlockFind((h), (t), NULL, NULL, NULL) == NO_ERROR)
+
 #endif /* __WINE_MPRAPI_H */

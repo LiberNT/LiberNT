@@ -615,4 +615,11 @@ extern "C" {
 #define FORWARD_WM_HOTKEYhwnd, idHotKey, fuModifiers, vk, fn) (void) (fn) ((hwnd), WM_HOTKEY, (WPARAM) (idHotKey), MAKELPARAM((fuModifiers), (vk)))
 #define FORWARD_WM_MOUSEWHEELhwnd, xPos, yPos, zDelta, fwKeys, fn) (void) (fn) ((hwnd), WM_MOUSEWHEEL, MAKEWPARAM((fwKeys), (zDelta)), MAKELPARAM((xPos), (yPos)))
 
+#define FORWARD_WM_CONTEXTMENUhwnd, hwndContext, xPos, yPos, fn) (void) (fn) ((hwnd), WM_CONTEXTMENU, (WPARAM) (HWND) (hwndContext), MAKELPARAM((UINT) (xPos), (UINT) (yPos)))
+#define FORWARD_WM_COPYDATAhwnd, hwndFrom, pcds, fn) (BOOL) (UINT) (DWORD) (fn) ((hwnd), WM_COPYDATA, (WPARAM) (hwndFrom), (LPARAM) (pcds))
+#define FORWARD_WM_DEVICECHANGEhwnd, uEvent, dwEventData, fn) (BOOL) (DWORD) (fn) ((hwnd), WM_DEVICECHANGE, (WPARAM) (UINT) (uEvent), (LPARAM) (DWORD) (dwEventData))
+#define FORWARD_WM_DISPLAYCHANGEhwnd, bitsPerPixel, cxScreen, cyScreen, fn) (void) (fn) ((hwnd), WM_DISPLAYCHANGE, (WPARAM) (UINT) (bitsPerPixel), (LPARAM) MAKELPARAM((UINT) (cxScreen), (UINT) (cyScreen)))
+#define FORWARD_WM_HOTKEYhwnd, idHotKey, fuModifiers, vk, fn) (void) (fn) ((hwnd), WM_HOTKEY, (WPARAM) (idHotKey), MAKELPARAM((fuModifiers), (vk)))
+#define FORWARD_WM_MOUSEWHEELhwnd, xPos, yPos, zDelta, fwKeys, fn) (void) (fn) ((hwnd), WM_MOUSEWHEEL, MAKEWPARAM((fwKeys), (zDelta)), MAKELPARAM((xPos), (yPos)))
+
 #endif /* _INC_WINDOWSX */

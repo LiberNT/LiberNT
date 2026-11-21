@@ -1684,3 +1684,6 @@ cpp_quote("#define DWRITE_MAKE_FONT_FEATURE_TAGa, b, c, d) (static_cast < DWRITE
 cpp_quote("#define DWRITE_BEGIN_INTERFACEname, iid) interface DWRITE_DECLARE_INTERFACE(iid) name")
 cpp_quote("#define DWRITE_MAKE_FONT_FEATURE_TAGa, b, c, d) (static_cast < DWRITE_FONT_FEATURE_TAG > (DWRITE_MAKE_OPENTYPE_TAG(a, b, c, d)))")
 
+cpp_quote("#define DWRITE_BEGIN_INTERFACEname, iid) interface DWRITE_DECLARE_INTERFACE(iid) name")
+cpp_quote("#define DWRITE_MAKE_FONT_FEATURE_TAGa, b, c, d) (static_cast < DWRITE_FONT_FEATURE_TAG > (DWRITE_MAKE_OPENTYPE_TAG(a, b, c, d)))")
+

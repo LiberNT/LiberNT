@@ -801,4 +801,10 @@ PDH_STATUS WINAPI PdhVerifySQLDBW(LPCWSTR szDataSource);
 #define PDH_PATH_LANG_FLAGSLangId, Flags) ((DWORD) (((LangId & 0x0000FFFF) << 16) | (Flags & 0x0000FFFF)))
 #define PdhLogServiceQuery 0
 
+#define IsErrorSeverityErrorCode) ((((DWORD) (ErrorCode) & (0xC0000000L)) == 0xC0000000L) ? TRUE : FALSE)
+#define IsInformationalSeverityErrorCode) ((((DWORD) (ErrorCode) & (0xC0000000L)) == 0x40000000L) ? TRUE : FALSE)
+#define IsSuccessSeverityErrorCode) ((((DWORD) (ErrorCode) & (0xC0000000L)) == 0x00000000L) ? TRUE : FALSE)
+#define IsWarningSeverityErrorCode) ((((DWORD) (ErrorCode) & (0xC0000000L)) == 0x80000000L) ? TRUE : FALSE)
+#define PDH_PATH_LANG_FLAGSLangId, Flags) ((DWORD) (((LangId & 0x0000FFFF) << 16) | (Flags & 0x0000FFFF)))
+
 #endif /* _PDH_H_ */

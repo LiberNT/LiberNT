@@ -570,4 +570,7 @@ NTSTATUS NTAPI RxSetMinirdrCancelRoutine(PRX_CONTEXT RxContext, PMRX_CALLDOWN MR
 #define RxSynchronizeBlockingOperationsRXCONTEXT, FCB, IOQUEUE) __RxSynchronizeBlockingOperations(RXCONTEXT, FCB, IOQUEUE, FALSE)
 #define RxSynchronizeBlockingOperationsAndDropFcbLockRXCONTEXT, FCB, IOQUEUE) __RxSynchronizeBlockingOperations(RXCONTEXT, FCB, IOQUEUE, TRUE)
 
+#define RxSynchronizeBlockingOperationsRXCONTEXT, FCB, IOQUEUE) __RxSynchronizeBlockingOperations(RXCONTEXT, FCB, IOQUEUE, FALSE)
+#define RxSynchronizeBlockingOperationsAndDropFcbLockRXCONTEXT, FCB, IOQUEUE) __RxSynchronizeBlockingOperations(RXCONTEXT, FCB, IOQUEUE, TRUE)
+
 #endif

@@ -50,3 +50,9 @@
 #define RATATTRx) x
 #define RATLEVELx) x
 
+#define ANALOG_VIDEO_STANDARD_NAMESPACEx) x
+#define EHRECVR_MGD_NAMESPACEx) x
+#define ENUMGg) typedef V1_ENUMG(g) enum
+#define RATATTRx) x
+#define RATLEVELx) x
+

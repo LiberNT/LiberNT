@@ -1462,4 +1462,7 @@ DWORD WINAPI RasUpdateConnection(HRASCONN hrasconn, struct tagRASUPDATECONN *lpr
 #define RASCF_IsNotOwnerrascFlags) (((rascFlags) & (RASCF_OwnerKnown | RASCF_OwnerMatch)) == (RASCF_OwnerKnown))
 #define RASCF_IsOwnerrascFlags) (((rascFlags) & (RASCF_OwnerKnown | RASCF_OwnerMatch)) == (RASCF_OwnerKnown | RASCF_OwnerMatch))
 
+#define RASCF_IsNotOwnerrascFlags) (((rascFlags) & (RASCF_OwnerKnown | RASCF_OwnerMatch)) == (RASCF_OwnerKnown))
+#define RASCF_IsOwnerrascFlags) (((rascFlags) & (RASCF_OwnerKnown | RASCF_OwnerMatch)) == (RASCF_OwnerKnown | RASCF_OwnerMatch))
+
 #endif /* _RAS_H */

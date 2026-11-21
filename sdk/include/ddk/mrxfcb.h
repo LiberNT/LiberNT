@@ -298,4 +298,7 @@ void RxReleaseFcbResourceInMRx(PMRX_FCB Fcb);
 #define RxInitializeNetRootThrottlingParameters__tp, __incr, __maxdelay) { PNETROOT_THROTTLING_PARAMETERS tp = (__tp); tp -> Increment = (__incr); tp -> MaximumDelay = (__maxdelay); \
 }
 
+#define RxInitializeNetRootThrottlingParameters__tp, __incr, __maxdelay) { PNETROOT_THROTTLING_PARAMETERS tp = (__tp); tp -> Increment = (__incr); tp -> MaximumDelay = (__maxdelay); \
+}
+
 #endif

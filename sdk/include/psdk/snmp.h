@@ -341,4 +341,6 @@ VOID WINAPIV SnmpUtilDbgPrint(INT nLogLevel, LPSTR szFormat, ...);
 
 #define SNMPDBG_x_) SnmpUtilDbgPrint _x_
 
+#define SNMPDBG_x_) SnmpUtilDbgPrint _x_
+
 #endif /* _WINE_SNMP_H */

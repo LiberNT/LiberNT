@@ -103,4 +103,9 @@ typedef unsigned short wchar_t;
 #define IFACEMETHODVmethod) __override STDMETHODV(method)
 #define IFACEMETHODV_type, method) __override STDMETHODV_(type, method)
 
+#define IFACEMETHODmethod) __override STDMETHOD(method)
+#define IFACEMETHOD_type, method) __override STDMETHOD_(type, method)
+#define IFACEMETHODVmethod) __override STDMETHODV(method)
+#define IFACEMETHODV_type, method) __override STDMETHODV_(type, method)
+
 #endif /* _BASETYPS_H_ */

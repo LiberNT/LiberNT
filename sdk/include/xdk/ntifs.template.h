@@ -3075,6 +3075,19 @@ NTSTATUS NTAPI GetSecurityUserInfo(PLUID LogonId, ULONG Flags, PSecurityUserData
 }
 #endif
 
+#define FILE_ID_IS_INVALIDFID) ((FID) . QuadPart == FILE_INVALID_FILE_ID)
+#define FsRtlGetBypassIoOpenCount_fo) (((FsRtlGetPerStreamContextPointer(_fo) != NULL) && (FsRtlGetPerStreamContextPointer(_fo) -> Version >= FSRTL_FCB_HEADER_V4)) ? FsRtlGetPerStreamContextPointer(_fo) -> BypassIoOpenCount : 0)
+#define FsRtlGetBypassIoOpenCountPtr_fo) (((FsRtlGetPerStreamContextPointer(_fo) != NULL) && (FsRtlGetPerStreamContextPointer(_fo) -> Version >= FSRTL_FCB_HEADER_V4)) ? & FsRtlGetPerStreamContextPointer(_fo) -> BypassIoOpenCount : NULL)
+#define FsRtlSetupAdvancedHeaderEx2_advhdr, _fmutx, _fctxptr, _aepushlock) \
+{ FsRtlSetupAdvancedHeaderEx(_advhdr, _fmutx, _fctxptr); if ((_aepushlock) != NULL) { (_advhdr) -> AePushLock = (_aepushlock); } \
+}
+#define GHOSTED_FILE_EXTENTS_OUTPUT_SIZECount, MaxRecallMetadataBufferSize) FIELD_OFFSET(FSCTL_QUERY_GHOSTED_FILE_EXTENTS_OUTPUT, Extents) + ALIGN_UP((FIELD_OFFSET(GHOSTED_FILE_EXTENT, RecallMetadataBuffer) + MaxRecallMetadataBufferSize), 8) * (Count)
+#define IsReparseTagReserved_tag) (((_tag) & 0x40000000))
+#define IsVirtualDiskFileSharedHandleState) (((HandleState) & SharedVirtualDiskHandleStateFileShared) != 0)
+#define MSV1_0_IUM_SUPPLEMENTAL_CREDENTIAL_SIZECreds) (FIELD_OFFSET(MSV1_0_IUM_SUPPLEMENTAL_CREDENTIAL, EncryptedCreds) + (Creds) -> EncryptedCredsSize)
+#define QUERY_TYPE_ULONGTokenInformationClass) (TokenInformationClass == TokenIntegrityLevel || TokenInformationClass == TokenIsAppContainer || TokenInformationClass == TokenVirtualizationAllowed || TokenInformationClass == TokenVirtualizationEnabled || TokenInformationClass == TokenUIAccess || TokenInformationClass == TokenSessionId || TokenInformationClass == TokenHasRestrictions || TokenInformationClass == TokenAppContainerNumber || TokenInformationClass == TokenIsAppSilo || TokenInformationClass == TokenLearningMode || TokenInformationClass == TokenPrivateNameSpace)
+#define REFS_VOLUME_DATA_BUFFER_CONTAINS_DRIVER_VERSIONVOLUME_DATA_BUFFER) ((VOLUME_DATA_BUFFER) -> ByteCount >= RTL_SIZEOF_THROUGH_FIELD(REFS_VOLUME_DATA_BUFFER, DriverMinorVersion))
+
 #endif
 
 #ifndef BooleanFlagOn

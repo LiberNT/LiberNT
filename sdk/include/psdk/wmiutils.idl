@@ -555,3 +555,10 @@ cpp_quote("")
 cpp_quote("typedef enum tag_WMIQ_LANGUAGE_FEATURES WMIQ_LANGUAGE_FEATURES;")
 cpp_quote("")
 cpp_quote("typedef enum tag_WMIQ_RPNQ_FEATURE WMIQ_RPNF_FEATURE;")
+
+cpp_quote("typedef enum __MIDL___MIDL_itf_wmiutils_0000_0001_0001 WMIQ_ANALYSIS_TYPE;")
+cpp_quote("")
+cpp_quote("typedef enum __MIDL___MIDL_itf_wmiutils_0000_0001_0003 WMIQ_ASSOCQ_FLAGS;")
+cpp_quote("")
+cpp_quote("typedef enum __MIDL___MIDL_itf_wmiutils_0000_0001_0002 WMIQ_RPN_TOKEN_FLAGS;")
+

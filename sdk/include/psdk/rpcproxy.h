@@ -167,6 +167,9 @@ struct tagCInterfaceStubVtblTag
     void *tag;
 };
 
+#define DISABLE_THREAD_LIBRARY_CALLSx) DisableThreadLibraryCalls(x)
+#define RPCPROXY_GET_STUB_HEADERStubVtblListEntry) (& (StubVtblListEntry) -> header)
+
 #endif
 
 #ifndef __WINE_RPCPROXY_H

@@ -927,4 +927,6 @@ typedef MCI_DGV_WINDOW_PARMSA MCI_DGV_WINDOW_PARMS;
 
 #define SEND_DGVSIGNALdwFlags, dwCallback, hDriver, wDeviceID, dwUser, dwPos) DriverCallback((dwCallback), DCB_WINDOW, (HANDLE) (wDeviceID), MM_MCISIGNAL, hDriver, ((dwFlags) & MCI_DGV_SIGNAL_POSITION) ? (dwPos) : (dwUser), ((dwFlags) & MCI_DGV_SIGNAL_POSITION) ? (dwUser) : (dwPos))
 
+#define SEND_DGVSIGNALdwFlags, dwCallback, hDriver, wDeviceID, dwUser, dwPos) DriverCallback((dwCallback), DCB_WINDOW, (HANDLE) (wDeviceID), MM_MCISIGNAL, hDriver, ((dwFlags) & MCI_DGV_SIGNAL_POSITION) ? (dwPos) : (dwUser), ((dwFlags) & MCI_DGV_SIGNAL_POSITION) ? (dwUser) : (dwPos))
+
 #endif /* __WINE_DIGITALV_H */

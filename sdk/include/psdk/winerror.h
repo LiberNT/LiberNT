@@ -8275,4 +8275,7 @@ HRESULT HRESULT_FROM_SETUPAPI(unsigned long x);
 #define IS_CAMERA_ERROR_CODExhr) ((xhr) >= E_CAMERA_ERROR_MIN && (xhr) <= E_CAMERA_ERROR_MAX)
 #define PropagateResulthrPrevious, scBase) ((HRESULT) scBase)
 
+#define IS_CAMERA_ERROR_CODExhr) ((xhr) >= E_CAMERA_ERROR_MIN && (xhr) <= E_CAMERA_ERROR_MAX)
+#define PropagateResulthrPrevious, scBase) ((HRESULT) scBase)
+
 #endif  /* __WINE_WINERROR_H */

@@ -166,4 +166,6 @@ typedef float FLOAT32;
 
 #define X3DAUDIO_API_type) EXTERN_C __declspec(dllimport) type STDAPIVCALLTYPE
 
+#define X3DAUDIO_API_type) EXTERN_C __declspec(dllimport) type STDAPIVCALLTYPE
+
 #endif

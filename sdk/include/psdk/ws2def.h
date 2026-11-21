@@ -612,6 +612,8 @@ typedef struct addrinfoex7 *PADDRINFOEX7;
 
 #define _WINSOCK_DEPRECATED_BYreplacement) __declspec(deprecated("Use " replacement " instead or define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings"))
 
+#define _WINSOCK_DEPRECATED_BYreplacement) __declspec(deprecated("Use " replacement " instead or define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings"))
+
 #endif /* __CSADDR_DEFINED__ */
 
 typedef struct sockaddr_storage {

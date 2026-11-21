@@ -1406,4 +1406,6 @@ UINT32 Ipv6pGetVersionClassEcnFlow(UINT8 Class, UINT8 EcnField, UINT32 Flow);
 
 #define IPV6_FULL_TRAFFIC_CLASSVersionClassFlow) ((UCHAR) ((((VersionClassFlow) & IPV6_FULL_TRAFFIC_CLASS_MASK) >> 12) + (((VersionClassFlow) & IPV6_FULL_TRAFFIC_CLASS_MASK) << 4)))
 
+#define IPV6_FULL_TRAFFIC_CLASSVersionClassFlow) ((UCHAR) ((((VersionClassFlow) & IPV6_FULL_TRAFFIC_CLASS_MASK) >> 12) + (((VersionClassFlow) & IPV6_FULL_TRAFFIC_CLASS_MASK) << 4)))
+
 #endif /* _NETIODEF_ */

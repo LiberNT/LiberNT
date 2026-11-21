@@ -34,4 +34,6 @@
 
 #define MAKE_D2DHR_ERRcode) MAKE_D2DHR(1, code)
 
+#define MAKE_D2DHR_ERRcode) MAKE_D2DHR(1, code)
+
 #endif /* __WINE_D2DERR_H */

@@ -1012,4 +1012,6 @@ HRESULT MFValidateMediaTypeSize(GUID FormatType, UINT8 *pBlock, UINT32 cbSize);
 
 #define DEFINE_BINARY_MEDIATYPE_GUIDname, format) DEFINE_GUID(name, format, 0xbf10, 0x48b4, 0xbc, 0x18, 0x59, 0x3d, 0xc1, 0xdb, 0x95, 0xf);
 
+#define DEFINE_BINARY_MEDIATYPE_GUIDname, format) DEFINE_GUID(name, format, 0xbf10, 0x48b4, 0xbc, 0x18, 0x59, 0x3d, 0xc1, 0xdb, 0x95, 0xf);
+
 #endif /* __WINE_MFAPI_H */

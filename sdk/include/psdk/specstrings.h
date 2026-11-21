@@ -581,6 +581,17 @@ void __pfx_assume(int, const char *);
 #define _User_always_and_needs_probe_on_mode)
 #define _User_on_expr)
 
+#define _Accessible_bytes_context, expr)
+#define _Accessible_bytes_when_previousContext, context, expr)
+#define _Memory_origin_context)
+#define _Memory_origin_when_previousContext, context)
+#define _Pre_accessible_bytes_context, expr)
+#define _Pre_accessible_bytes_when_context, previousContext, expr)
+#define _Ret_reallocated_bytes_before, size) _Reallocation_function_(_Curr_, before, size)
+#define _SAL_L_Source_Name, args, annotes) _SA_annotes3(SAL_name, # Name, "", "2") _GrouP_(annotes _SAL_nop_impl_)
+#define _User_always_and_needs_probe_on_mode)
+#define _User_on_expr)
+
 #endif /* #ifndef SPECSTRINGS_H */
 
 

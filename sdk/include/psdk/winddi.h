@@ -4538,4 +4538,9 @@ BOOL EngFntCacheFlush(PVOID OffsetBuffer, BOOL DiscardContent);
 #define SURFOBJ_SET_DHPDEVpso, dhpdevNew) ((pso) -> dhpdev = (dhpdevNew))
 #define SURFOBJ_SET_HDEVpso, hdevNew) ((pso) -> hdev = (hdevNew))
 
+#define SURFOBJ_GET_DHPDEVpso) ((pso) -> dhpdev)
+#define SURFOBJ_GET_HDEVpso) ((pso) -> hdev)
+#define SURFOBJ_SET_DHPDEVpso, dhpdevNew) ((pso) -> dhpdev = (dhpdevNew))
+#define SURFOBJ_SET_HDEVpso, hdevNew) ((pso) -> hdev = (hdevNew))
+
 #endif /* _WINDDI_ */

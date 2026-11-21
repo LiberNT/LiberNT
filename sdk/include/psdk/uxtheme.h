@@ -453,4 +453,6 @@ BOOL UpdatePanningFeedback(HWND hwnd, LONG lTotalOverpanOffsetX, LONG lTotalOver
 
 #define BufferedPaintMakeOpaquehBufferedPaint, prc) BufferedPaintSetAlpha(hBufferedPaint, prc, 255)
 
+#define BufferedPaintMakeOpaquehBufferedPaint, prc) BufferedPaintSetAlpha(hBufferedPaint, prc, 255)
+
 #endif

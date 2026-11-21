@@ -838,4 +838,7 @@ BOOL ObjectTypeIsValid(enum ObjectType type);
 #define GDIP_EMFPLUS_RECORD_TO_WMFn) ((n) & (~GDIP_WMF_RECORD_BASE))
 #define GDIP_IS_WMF_RECORDTYPEn) (((n) & GDIP_WMF_RECORD_BASE) != 0)
 
+#define GDIP_EMFPLUS_RECORD_TO_WMFn) ((n) & (~GDIP_WMF_RECORD_BASE))
+#define GDIP_IS_WMF_RECORDTYPEn) (((n) & GDIP_WMF_RECORD_BASE) != 0)
+
 #endif

@@ -1073,4 +1073,8 @@ DWORD WINAPI WlanUIEditProfile(DWORD dwClientVersion, LPCWSTR wstrProfileName, G
 #define WLAN_API_VERSION_MAJOR_v) ((_v) & 0xffff)
 #define WLAN_API_VERSION_MINOR_v) (((DWORD) (_v)) >> 16)
 
+#define WLAN_API_MAKE_VERSION_major, _minor) (((DWORD) (_minor)) << 16 | (_major))
+#define WLAN_API_VERSION_MAJOR_v) ((_v) & 0xffff)
+#define WLAN_API_VERSION_MINOR_v) (((DWORD) (_v)) >> 16)
+
 #endif  // _WLANAPI_H

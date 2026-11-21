@@ -410,4 +410,6 @@
 
 #define STATUS_SEVERITYhr) (((hr) >> 30) & 0x3)
 
+#define STATUS_SEVERITYhr) (((hr) >> 30) & 0x3)
+
 #endif  /* __WINE_MFERROR_H */

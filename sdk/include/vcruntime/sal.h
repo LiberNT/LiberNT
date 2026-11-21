@@ -25,6 +25,8 @@
 
 #define _Called_from_function_class_x) _In_function_class_(x)
 
+#define _Called_from_function_class_x) _In_function_class_(x)
+
 #endif
 #ifndef __SAL_H_VERSION
 #define __SAL_H_VERSION 180000000

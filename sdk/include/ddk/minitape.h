@@ -1921,4 +1921,9 @@ typedef struct _MODE_MEDIUM_PART_PAGE_PLUS *PMODE_MEDIUM_PART_PAGE_PLUS;
 
 typedef struct _MODE_TAPE_MEDIA_INFORMATION *PMODE_TAPE_MEDIA_INFORMATION;
 
+#define REVERSE_BYTES_6Destination, Source) { PEIGHT_BYTE d = (PEIGHT_BYTE) (Destination); PEIGHT_BYTE s = (PEIGHT_BYTE) (Source); d -> Byte5 = s -> Byte0; d -> Byte4 = s -> Byte1; d -> Byte3 = s -> Byte2; d -> Byte2 = s -> Byte3; d -> Byte1 = s -> Byte4; d -> Byte0 = s -> Byte5; \
+}
+#define REVERSE_LONGLONGLonglong) { UCHAR tmp; PEIGHT_BYTE q = (PEIGHT_BYTE) (Longlong); tmp = q -> Byte7; q -> Byte7 = q -> Byte0; q -> Byte0 = tmp; tmp = q -> Byte6; q -> Byte6 = q -> Byte1; q -> Byte1 = tmp; tmp = q -> Byte5; q -> Byte5 = q -> Byte2; q -> Byte2 = tmp; tmp = q -> Byte4; q -> Byte4 = q -> Byte3; q -> Byte3 = tmp; }
+#define SupportsDeviceSharingBusType) ((BusType == BusTypeScsi) || (BusType == BusTypeFibre) || (BusType == BusTypeiScsi) || (BusType == BusTypeSas) || (BusType == BusTypeSpaces))
+
 #endif /* _MINITAPE_ */

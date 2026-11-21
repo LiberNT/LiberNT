@@ -6032,4 +6032,8 @@ typedef struct _NDIS_PORT_STATE *PNDIS_PORT_STATE;
 
 typedef enum _NDIS_PROCESSOR_VENDOR *PNDIS_PROCESSOR_VENDOR;
 
+#define NDIS_MAKE_NET_LUID_pNetLuid, _IfType, _NetLuidIndex) \
+{ (_pNetLuid) -> Info . IfType = _IfType; (_pNetLuid) -> Info . NetLuidIndex = _NetLuidIndex; (_pNetLuid) -> Info . Reserved = 0; \
+}
+
 #endif /* _NTDDNDIS_ */

@@ -477,4 +477,7 @@ NTSTATUS RxSetDomainForMailslotBroadcast(PUNICODE_STRING DomainName);
 #define RxFillAndInstallFastIoDispatch__devobj, __fastiodisp) { __RxFillAndInstallFastIoDispatch(& __devobj -> RxDeviceObject, & __fastiodisp, sizeof (__fastiodisp)); }
 #define RxGetIoStatusInfoRXCONTEXT) ((RXCONTEXT) -> CurrentIrp -> IoStatus . Information)
 
+#define RxFillAndInstallFastIoDispatch__devobj, __fastiodisp) { __RxFillAndInstallFastIoDispatch(& __devobj -> RxDeviceObject, & __fastiodisp, sizeof (__fastiodisp)); }
+#define RxGetIoStatusInfoRXCONTEXT) ((RXCONTEXT) -> CurrentIrp -> IoStatus . Information)
+
 #endif

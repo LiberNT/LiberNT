@@ -1158,6 +1158,8 @@ BOOL FaxUnregisterServiceProviderW(LPCWSTR DeviceProvider);
 
 #define FaxUnregisterServiceProvider 0
 
+#define PFAXUNREGISTERSERVICEPROVIDER 0
+
 #endif /* __WINFAX_H */
 
 /* EOF */

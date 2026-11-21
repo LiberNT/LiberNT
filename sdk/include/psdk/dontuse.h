@@ -21,4 +21,6 @@
 
 #define lstrcatnA 0
 
+#define lstrcatnW 0
+
 #endif /* _DONTUSE_H_INCLUDED_ */

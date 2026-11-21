@@ -550,4 +550,7 @@
 #define _Ret_writes_to_ptr_p)
 #define _Ret_writes_to_ptr_z_p)
 
+#define _Ret_writes_to_ptr_p)
+#define _Ret_writes_to_ptr_z_p)
+
 #endif /* _NO_SAL_2_H_ */

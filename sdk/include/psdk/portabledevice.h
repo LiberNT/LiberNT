@@ -1051,4 +1051,9 @@ void FreePortableDevicePnPIDs(LPWSTR *pPnPIDs, DWORD cPnPIDs);
 #define WPD_COMMAND_ACCESS_ENTRYWpdCommand, WpdCommandAccessType) { WpdCommand, WpdCommandAccessType, WPD_PROPERTY_NULL },
 #define WPD_COMMAND_ACCESS_PROPERTY_ENTRYWpdCommand, WpdCommandAccessType, WpdAccessProperty) { WpdCommand, WpdCommandAccessType, WpdAccessProperty },
 
+#define BEGIN_WPD_COMMAND_ACCESS_MAPx) static WPD_COMMAND_ACCESS_LOOKUP_ENTRY x [] = {
+#define DECLARE_VERIFY_WPD_COMMAND_ACCESS 0
+#define WPD_COMMAND_ACCESS_ENTRYWpdCommand, WpdCommandAccessType) { WpdCommand, WpdCommandAccessType, WPD_PROPERTY_NULL },
+#define WPD_COMMAND_ACCESS_PROPERTY_ENTRYWpdCommand, WpdCommandAccessType, WpdAccessProperty) { WpdCommand, WpdCommandAccessType, WpdAccessProperty },
+
 #endif /* PORTABLEDEVICE_H */

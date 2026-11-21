@@ -265,3 +265,5 @@ cpp_quote("{")
 cpp_quote("    ASM_CMPF_ALL = 0xFF,")
 cpp_quote("};")
 
+cpp_quote("typedef enum __MIDL_IAssemblyName_0002 ASM_BIND_FLAGS;")
+

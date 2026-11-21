@@ -12,4 +12,6 @@
 
 #define FORCE_LEVELLEVELFLAGS) ((LEVELFLAGS) & 0xffff)
 
+#define FORCE_LEVELLEVELFLAGS) ((LEVELFLAGS) & 0xffff)
+
 #endif

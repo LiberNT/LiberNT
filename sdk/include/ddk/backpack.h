@@ -43,4 +43,7 @@ BOOLEAN RxShouldRequestBeThrottled(PTHROTTLING_STATE pBP);
 #define RxTerminateThrottlingpBP) ((pBP) -> CurrentIncrement = 0)
 #define RxUninitializeBackPackpBP) ()
 
+#define RxTerminateThrottlingpBP) ((pBP) -> CurrentIncrement = 0)
+#define RxUninitializeBackPackpBP) ()
+
 #endif

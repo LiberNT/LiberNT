@@ -798,4 +798,8 @@ void SysReleaseString(BSTR bstrString);
 #define VarUI8FromUI8in, pOut) (* (pOut) = (in))
 #define WINOLEAUTAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
 
+#define VarI8FromI8in, pOut) (* (pOut) = (in))
+#define VarUI8FromUI8in, pOut) (* (pOut) = (in))
+#define WINOLEAUTAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
+
 #endif /*__WINE_OLEAUTO_H*/
