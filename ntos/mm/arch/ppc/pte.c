@@ -216,8 +216,9 @@ MiArchInitializeProcessRoot(_In_ ULONG64 SystemRootFrame, _In_ ULONG64 ProcessRo
 
     MI_ASSERT(SystemRootFrame != ProcessRootFrame);
 
-    /* The system root owns a table for both supervisor slots, so sharing
-     * the root entries shares all kernel mappings. */
+    /* Supervisor root entries do not change after boot, so sharing them
+     * shares all kernel mappings; session entries stay empty until the
+     * session code installs them. */
     for (Index = 0; Index < MI_PPC_ROOT_ENTRIES; Index++)
     {
         MI_PTE Value = (Index >= MI_PPC_ROOT_KERNEL_INDEX) ? MiArchPteRead(&System[Index]) : 0;

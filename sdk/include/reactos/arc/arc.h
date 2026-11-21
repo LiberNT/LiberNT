@@ -763,19 +763,19 @@ typedef struct _I386_LOADER_BLOCK
  * installs its exception vectors (images, loader block, PCR, stacks) lives
  * in KSEG0, so no hashed page table miss can occur before then.
  *
- * Software page tables use 64-bit PAE-format entries in three levels: a
- * 4-entry root indexed by VA[31:30], then two 512-entry levels.
+ * Software page tables use 32-bit i386-format entries in two levels: a
+ * 1024-entry root indexed by VA[31:22], then 1024-entry leaves.
  * Supervisor segment registers 8-15 hold PPC_KERNEL_VSID(n); the boot
  * address space uses PPC_BOOT_USER_VSID(n) for segments 0-7.
  */
-#define PPC_LOADER_BLOCK_VERSION        1
+#define PPC_LOADER_BLOCK_VERSION        2
 #define PPC_LOADER_KSEG0_BASE           0x80000000UL
 #define PPC_LOADER_KSEG0_SIZE           0x10000000UL
 /* DBAT1: cache-inhibited, guarded window onto the PReP I/O space. */
 #define PPC_LOADER_IO_WINDOW_BASE       0xB0000000UL
 #define PPC_LOADER_IO_WINDOW_SIZE       0x01000000UL
-/* The loader populates only the top-level slot 0x80000000-0xBFFFFFFF, which
- * the memory manager adopts whole; 0xC0000000 and above stay dynamic. */
+/* The loader populates only the root entries for 0x80000000-0xBFFFFFFF,
+ * which the memory manager adopts whole; 0xC0000000 and above stay dynamic. */
 #define PPC_LOADER_SYSTEM_SLOT_END      0xC0000000UL
 #define PPC_KERNEL_VSID(Segment)        (0x00FFFFF0UL | (Segment))
 #define PPC_BOOT_USER_VSID(Segment)     (0x00FFFFE0UL | (Segment))

@@ -13,8 +13,8 @@
 
 /* The real-mode reload records Accessed on every load into the hashed page
  * table and Dirty when it loads a writable entry, so both behave as
- * hardware-managed bits. Root slot 2 (0x80000000-0xBFFFFFFF) is the
- * loader's; everything above 0xC0000000 is dynamic system space. */
+ * hardware-managed bits. Root entries 512-767 (0x80000000-0xBFFFFFFF) are
+ * the loader's; everything above 0xC0000000 is dynamic system space. */
 static const MI_ARCH_DESCRIPTOR MiArchDescriptor =
 {
     MI_ARCH_ID_VALUE,
@@ -25,7 +25,7 @@ static const MI_ARCH_DESCRIPTOR MiArchDescriptor =
     MI_ARCH_PTE_BYTES,
     PAGE_SIZE,
     MI_ARCH_PAGE_SHIFT,
-    (2ULL * 1024 * 1024),
+    (4ULL * 1024 * 1024),
     MI_ARCH_LARGE_LEVEL,
     {
         { MI_ARCH_L0_SHIFT, MI_ARCH_L0_BITS, (1ULL << MI_ARCH_L0_BITS) - 1, 1ULL << MI_ARCH_L0_BITS },
@@ -51,7 +51,11 @@ static const MI_ARCH_DESCRIPTOR MiArchDescriptor =
     NULL,
     0,
     0x00000000C0000000ULL,
-    TRUE
+    TRUE,
+    FALSE,
+    0,
+    FALSE,
+    MI_PPC_SESSION_TOP_ENTRIES
 };
 
 const MI_ARCH_DESCRIPTOR *

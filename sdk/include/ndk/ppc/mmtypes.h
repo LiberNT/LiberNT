@@ -9,11 +9,9 @@ Header Name:
 Abstract:
 
     Windows NT PowerPC type definitions for the Memory Manager. The kernel
-    keeps three-level software page tables with 64-bit entries in the i386
-    PAE format and loads the hardware hashed page table from them; these are
-    not the hardware HTAB entries. Valid, Write, Owner, CacheDisable and the
-    page frame number all live in the low word, which is all the real-mode
-    HTAB reload reads.
+    keeps two-level software page tables with 32-bit entries in the i386
+    format and loads the hardware hashed page table from them; these are
+    not the hardware HTAB entries.
 
 Author:
 
@@ -70,7 +68,6 @@ C_ASSERT(MM_ALLOCATION_GRANULARITY >= PAGE_SIZE);
 //
 // Page Table Entry Definitions
 //
-#if 0 /* PowerPC uses the 64-bit PAE entry format */
 
 typedef struct _HARDWARE_PTE_X86
 {
@@ -167,122 +164,6 @@ typedef struct _MMPTE_HARDWARE
     ULONG PageFrameNumber:20;
 } MMPTE_HARDWARE, *PMMPTE_HARDWARE;
 
-#else
-
-typedef struct _HARDWARE_PTE_X86
-{
-    union
-    {
-        struct
-        {
-            ULONGLONG Valid:1;
-            ULONGLONG Write:1;
-            ULONGLONG Owner:1;
-            ULONGLONG WriteThrough:1;
-            ULONGLONG CacheDisable:1;
-            ULONGLONG Accessed:1;
-            ULONGLONG Dirty:1;
-            ULONGLONG LargePage:1;
-            ULONGLONG Global:1;
-            ULONGLONG CopyOnWrite:1;
-            ULONGLONG Prototype:1;
-            ULONGLONG reserved0:1;
-            ULONGLONG PageFrameNumber:26;
-            ULONGLONG reserved1:25;
-            ULONGLONG NoExecute:1;
-        };
-        struct
-        {
-            ULONG LowPart;
-            ULONG HighPart;
-        };
-    };
-} HARDWARE_PTE_X86, *PHARDWARE_PTE_X86;
-
-typedef struct _MMPTE_SOFTWARE
-{
-    ULONGLONG Valid:1;
-    ULONGLONG PageFileLow:4;
-    ULONGLONG Protection:5;
-    ULONGLONG Prototype:1;
-    ULONGLONG Transition:1;
-    ULONGLONG Unused:20;
-    ULONGLONG PageFileHigh:32;
-} MMPTE_SOFTWARE;
-
-typedef struct _MMPTE_TRANSITION
-{
-    ULONGLONG Valid:1;
-    ULONGLONG Write:1;
-    ULONGLONG Owner:1;
-    ULONGLONG WriteThrough:1;
-    ULONGLONG CacheDisable:1;
-    ULONGLONG Protection:5;
-    ULONGLONG Prototype:1;
-    ULONGLONG Transition:1;
-    ULONGLONG PageFrameNumber:26;
-    ULONGLONG Unused:26;
-} MMPTE_TRANSITION;
-
-typedef struct _MMPTE_PROTOTYPE
-{
-    ULONGLONG Valid:1;
-    ULONGLONG Unused0:7;
-    ULONGLONG ReadOnly:1;
-    ULONGLONG Unused1:1;
-    ULONGLONG Prototype:1;
-    ULONGLONG Protection:5;
-    ULONGLONG Unused:16;
-    ULONGLONG ProtoAddress:32;
-} MMPTE_PROTOTYPE;
-
-typedef struct _MMPTE_SUBSECTION
-{
-    ULONGLONG Valid:1;
-    ULONGLONG Unused0:4;
-    ULONGLONG Protection:5;
-    ULONGLONG Prototype:1;
-    ULONGLONG Unused1:21;
-    ULONGLONG SubsectionAddress:32;
-} MMPTE_SUBSECTION;
-
-typedef struct _MMPTE_LIST
-{
-    ULONGLONG Valid:1;
-    ULONGLONG OneEntry:1;
-    ULONGLONG filler0:8;
-    ULONGLONG Prototype:1;
-    ULONGLONG filler1:21;
-    ULONGLONG NextEntry:32;
-} MMPTE_LIST;
-
-typedef struct _MMPTE_HARDWARE
-{
-    ULONGLONG Valid:1;
-#ifndef CONFIG_SMP
-    ULONGLONG Write:1;
-#else
-    ULONGLONG Writable:1;
-#endif
-    ULONGLONG Owner:1;
-    ULONGLONG WriteThrough:1;
-    ULONGLONG CacheDisable:1;
-    ULONGLONG Accessed:1;
-    ULONGLONG Dirty:1;
-    ULONGLONG LargePage:1;
-    ULONGLONG Global:1;
-    ULONGLONG CopyOnWrite:1;
-    ULONGLONG Prototype:1;
-#ifndef CONFIG_SMP
-    ULONGLONG reserved0:1;
-#else
-    ULONGLONG Write:1;
-#endif
-    ULONGLONG PageFrameNumber:26;
-    ULONGLONG reserved1:26;
-} MMPTE_HARDWARE, *PMMPTE_HARDWARE;
-
-#endif
 
 //
 // Use the right PTE structure
@@ -294,16 +175,7 @@ typedef struct _MMPTE
 {
     union
     {
-#if 0 /* PowerPC uses the 64-bit PAE entry format */
         ULONG Long;
-#else
-        ULONGLONG Long;
-        struct
-        {
-            ULONG LowPart;
-            ULONG HighPart;
-        } HighLow;
-#endif
         HARDWARE_PTE Flush;
         MMPTE_HARDWARE Hard;
         MMPTE_PROTOTYPE Proto;
@@ -315,11 +187,7 @@ typedef struct _MMPTE
 } MMPTE, *PMMPTE,
   MMPDE, *PMMPDE;
 
-#if 0 /* PowerPC uses the 64-bit PAE entry format */
 C_ASSERT(sizeof(MMPTE) == sizeof(ULONG));
-#else
-C_ASSERT(sizeof(MMPTE) == sizeof(ULONGLONG));
-#endif
 
 #ifdef __cplusplus
 }; // extern "C"
