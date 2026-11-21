@@ -7,6 +7,7 @@
  */
 
 #include "w32time.h"
+#include <iphlpapi.h>
 #define NDEBUG
 #include <debug.h>
 #include <strsafe.h>
@@ -339,6 +340,11 @@ W32TmServiceMain(DWORD argc, LPWSTR *argv)
     WCHAR szData[8];
     DWORD cbData;
     BOOL bNoSync;
+    OVERLAPPED AddressChange = { 0 };
+    HANDLE NotifyHandle;
+    HANDLE Handles[2];
+    BOOL AddressWatch;
+    DWORD Wait;
 
     UNREFERENCED_PARAMETER(argc);
     UNREFERENCED_PARAMETER(argv);
@@ -372,6 +378,10 @@ W32TmServiceMain(DWORD argc, LPWSTR *argv)
 
     /* Get the interval */
     dwInterval = GetIntervalSetting();
+
+    /* An address that arrives starts the next attempt at once, so a clock that is wrong at boot is set as soon as there is a network */
+    AddressChange.hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
+    AddressWatch = AddressChange.hEvent && NotifyAddrChange(&NotifyHandle, &AddressChange) == ERROR_IO_PENDING;
 
     /* We report the running status to SCM. */
     ServiceStatus.dwCurrentState = SERVICE_RUNNING;
@@ -434,8 +444,20 @@ W32TmServiceMain(DWORD argc, LPWSTR *argv)
                 dwWaitInterval = min(dwWaitInterval, (DWORD)((SlewEndTick - ullNow + 999) / 1000));
         }
 
-        if (WaitForSingleObject(hStopEvent, dwWaitInterval * 1000) == WAIT_OBJECT_0)
+        Handles[0] = hStopEvent;
+        Handles[1] = AddressChange.hEvent;
+        Wait = WaitForMultipleObjects(AddressWatch ? 2 : 1, Handles, FALSE, dwWaitInterval * 1000);
+        if (Wait == WAIT_OBJECT_0 + 1)
         {
+            AddressWatch = NotifyAddrChange(&NotifyHandle, &AddressChange) == ERROR_IO_PENDING;
+            continue;
+        }
+        if (Wait == WAIT_OBJECT_0)
+        {
+            if (AddressWatch)
+                CancelIPChangeNotify(&AddressChange);
+            if (AddressChange.hEvent)
+                CloseHandle(AddressChange.hEvent);
             EndClockSlew();
             CloseHandle(hStopEvent);
             hStopEvent = NULL;
