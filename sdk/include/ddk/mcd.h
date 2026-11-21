@@ -136,4 +136,8 @@ ChangerClassInitialize(
 }
 #endif
 
+#ifndef MODE_PAGE_DISPLAY
+#define MODE_PAGE_DISPLAY 0x22
+#endif
+
 #endif /* __MCD_H */

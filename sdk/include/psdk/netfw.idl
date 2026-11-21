@@ -822,3 +822,10 @@ library NetFwPublicTypeLib
         [default] interface INetFwProducts;
     }
 }
+
+cpp_quote("#ifndef NETISO_GEID_FOR_NEUTRAL_AWARE")
+cpp_quote("#define NETISO_GEID_FOR_NEUTRAL_AWARE 0x02")
+cpp_quote("#endif")
+cpp_quote("#ifndef NETISO_GEID_FOR_WDAG")
+cpp_quote("#define NETISO_GEID_FOR_WDAG 0x01")
+cpp_quote("#endif")

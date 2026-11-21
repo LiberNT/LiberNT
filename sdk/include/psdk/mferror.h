@@ -397,4 +397,8 @@
 #define MF_PARSE_ERR                   0x80700051
 #define MF_TYPE_ERR                    0x80704005
 
+#ifndef FACILITY_MF_WIN32
+#define FACILITY_MF_WIN32 0x7
+#endif
+
 #endif  /* __WINE_MFERROR_H */

@@ -42,4 +42,8 @@
 #define TM_STATE(value, prefix, name)          prefix##_##name = (value),
 #define END_TM_PART_STATES()               };
 
+#ifndef SCHEMADEF_VERSION
+#define SCHEMADEF_VERSION 1
+#endif
+
 #endif

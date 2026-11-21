@@ -258,4 +258,8 @@ VOID WINAPI NcFreeNetconProperties (NETCON_PROPERTIES* pProps);
 }
 #endif
 
+#ifndef NETCON_MAX_NAME_LEN
+#define NETCON_MAX_NAME_LEN 256
+#endif
+
 #endif

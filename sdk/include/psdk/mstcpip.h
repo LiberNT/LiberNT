@@ -1521,3 +1521,19 @@ RtlEthernetStringToAddressW(
 #ifdef __cplusplus
 }
 #endif
+
+#ifndef SO_TIMESTAMP
+#define SO_TIMESTAMP 0x300A
+#endif
+#ifndef SO_TIMESTAMP_ID
+#define SO_TIMESTAMP_ID 0x300B
+#endif
+#ifndef TCP_INITIAL_RTO_DEFAULT_MAX_SYN_RETRANSMISSIONS
+#define TCP_INITIAL_RTO_DEFAULT_MAX_SYN_RETRANSMISSIONS 0
+#endif
+#ifndef TCP_INITIAL_RTO_DEFAULT_RTT
+#define TCP_INITIAL_RTO_DEFAULT_RTT 0
+#endif
+#ifndef TIMESTAMPING_FLAG_TX
+#define TIMESTAMPING_FLAG_TX 0x2
+#endif

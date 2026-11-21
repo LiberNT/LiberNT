@@ -111,4 +111,14 @@ HRESULT WINAPI GetDeviceIDString(_Out_writes_to_opt_(cchWindowsAIK, *pcchResult)
 }
 #endif
 
+#ifndef TPM_WNF_INFO_CLEAR_SUCCESSFUL
+#define TPM_WNF_INFO_CLEAR_SUCCESSFUL 0x00000001
+#endif
+#ifndef TPM_WNF_INFO_NO_REBOOT_REQUIRED
+#define TPM_WNF_INFO_NO_REBOOT_REQUIRED 1
+#endif
+#ifndef TPM_WNF_INFO_OWNERSHIP_SUCCESSFUL
+#define TPM_WNF_INFO_OWNERSHIP_SUCCESSFUL 0x00000002
+#endif
+
 #endif /* _TBS_H_ */

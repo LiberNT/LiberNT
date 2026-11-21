@@ -68,3 +68,28 @@ extern "C++" template<typename T> void **IID_PPV_ARGS_Helper(T **obj)
 #endif
 
 #endif /* _COMBASEAPI_H_ */
+
+#ifndef COM_RIGHTS_ACTIVATE_LOCAL
+#define COM_RIGHTS_ACTIVATE_LOCAL 8
+#endif
+#ifndef COM_RIGHTS_ACTIVATE_REMOTE
+#define COM_RIGHTS_ACTIVATE_REMOTE 16
+#endif
+#ifndef COM_RIGHTS_EXECUTE
+#define COM_RIGHTS_EXECUTE 1
+#endif
+#ifndef COM_RIGHTS_EXECUTE_LOCAL
+#define COM_RIGHTS_EXECUTE_LOCAL 2
+#endif
+#ifndef COM_RIGHTS_EXECUTE_REMOTE
+#define COM_RIGHTS_EXECUTE_REMOTE 4
+#endif
+#ifndef COM_RIGHTS_RESERVED1
+#define COM_RIGHTS_RESERVED1 32
+#endif
+#ifndef COM_RIGHTS_RESERVED2
+#define COM_RIGHTS_RESERVED2 64
+#endif
+#ifndef CWMO_MAX_HANDLES
+#define CWMO_MAX_HANDLES 56
+#endif

@@ -242,4 +242,11 @@ typedef struct DRIVER_VER_INFO_
     DWORD                 dwBuildNumberHigh;
 } DRIVER_VER_INFO, *PDRIVER_VER_INFO;
 
+#ifndef CCPI_RESULT_AUDIT
+#define CCPI_RESULT_AUDIT 3
+#endif
+#ifndef CCPI_RESULT_DENY
+#define CCPI_RESULT_DENY 2
+#endif
+
 #endif /* __WINE_SOFTPUB_H */

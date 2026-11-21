@@ -14,3 +14,10 @@
 #ifdef __GNUC__
 #include "gcc_sal.h"
 #endif
+
+#ifndef SAL_INCLUDED
+#define SAL_INCLUDED 1
+#endif
+#ifndef __SAL_H_VERSION
+#define __SAL_H_VERSION 180000000
+#endif

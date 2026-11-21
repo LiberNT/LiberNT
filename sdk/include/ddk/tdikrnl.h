@@ -1219,4 +1219,8 @@ typedef TDI_CMSGHDR *PTDI_CMSGHDR;
 }
 #endif
 
+#ifndef TDI_DIRECT_ACCEPT
+#define TDI_DIRECT_ACCEPT 0x2A
+#endif
+
 #endif /* __TDIKRNL_H */

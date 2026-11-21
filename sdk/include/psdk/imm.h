@@ -845,4 +845,11 @@ ImmUnregisterWordW(
 }
 #endif
 
+#ifndef IME_CMODE_RESERVED
+#define IME_CMODE_RESERVED 0xF0000000
+#endif
+#ifndef IME_SMODE_RESERVED
+#define IME_SMODE_RESERVED 0x0000F000
+#endif
+
 #endif  /* __WINE_IMM_H */

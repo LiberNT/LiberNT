@@ -237,3 +237,13 @@ Abstract:
 #endif
 
 #endif
+
+#ifndef NTDDI_WIN11_BR
+#define NTDDI_WIN11_BR 0x0A000012
+#endif
+#ifndef NTDDI_WIN11_DT
+#define NTDDI_WIN11_DT 0x0A000011
+#endif
+#ifndef NTDDI_WIN4
+#define NTDDI_WIN4 0x04000000
+#endif

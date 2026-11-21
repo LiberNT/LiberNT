@@ -557,3 +557,7 @@ interface IMFMediaEngineClassFactory2 : IUnknown
     HRESULT CreateMediaKeys2([in] BSTR key_system, [in] BSTR default_cdm_store_path,
             [in] BSTR inprivate_cdm_store_path, [out] IMFMediaKeys **keys);
 }
+
+cpp_quote("#ifndef MF_INVALID_PRESENTATION_TIME")
+cpp_quote("#define MF_INVALID_PRESENTATION_TIME 0x8000000000000000")
+cpp_quote("#endif")

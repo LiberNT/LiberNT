@@ -605,3 +605,28 @@ interface IMPEG2PIDMap : IUnknown
             [out] ULONG* pulCount,
             [out] ULONG** ppulList);
     };
+
+cpp_quote("#ifndef PBDA_Encoder_Audio_AlgorithmType_AC3")
+cpp_quote("#define PBDA_Encoder_Audio_AlgorithmType_AC3 0x00000001")
+cpp_quote("#endif")
+cpp_quote("#ifndef PBDA_Encoder_BitrateMode_Average")
+cpp_quote("#define PBDA_Encoder_BitrateMode_Average 0x00000003")
+cpp_quote("#endif")
+cpp_quote("#ifndef PBDA_Encoder_BitrateMode_Constant")
+cpp_quote("#define PBDA_Encoder_BitrateMode_Constant 0x00000001")
+cpp_quote("#endif")
+cpp_quote("#ifndef PBDA_Encoder_BitrateMode_Variable")
+cpp_quote("#define PBDA_Encoder_BitrateMode_Variable 0x00000002")
+cpp_quote("#endif")
+cpp_quote("#ifndef PBDA_Encoder_Video_AVC")
+cpp_quote("#define PBDA_Encoder_Video_AVC 0x00000001")
+cpp_quote("#endif")
+cpp_quote("#ifndef PBDA_Encoder_Video_H264")
+cpp_quote("#define PBDA_Encoder_Video_H264 0x00000001")
+cpp_quote("#endif")
+cpp_quote("#ifndef PBDA_Encoder_Video_MPEG2PartII")
+cpp_quote("#define PBDA_Encoder_Video_MPEG2PartII 0x00000000")
+cpp_quote("#endif")
+cpp_quote("#ifndef PBDA_Encoder_Video_MPEG4Part10")
+cpp_quote("#define PBDA_Encoder_Video_MPEG4Part10 0x00000001")
+cpp_quote("#endif")

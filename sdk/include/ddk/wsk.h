@@ -663,4 +663,9 @@ WskDeregister(
 }
 #endif
 
-
+#ifndef WSK_FLAG_OOB
+#define WSK_FLAG_OOB 0x00000001
+#endif
+#ifndef WSK_FLAG_STREAM_SOCKET
+#define WSK_FLAG_STREAM_SOCKET 0x00000008
+#endif

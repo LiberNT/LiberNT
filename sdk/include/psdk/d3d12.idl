@@ -5759,3 +5759,22 @@ cpp_quote("static const UUID D3D12MetaCommand = { 0xc734c97e, 0x8077, 0x48c8, { 
 typedef HRESULT (__stdcall *PFN_D3D12_GET_INTERFACE)(REFCLSID clsid, REFIID iid, void **debug);
 
 [local] HRESULT __stdcall D3D12GetInterface(REFCLSID clsid, REFIID iid, void **debug);
+
+cpp_quote("#ifndef D3D12_RAYTRACING_OPACITY_MICROMAP_ARRAY_BYTE_ALIGNMENT")
+cpp_quote("#define D3D12_RAYTRACING_OPACITY_MICROMAP_ARRAY_BYTE_ALIGNMENT 128")
+cpp_quote("#endif")
+cpp_quote("#ifndef D3D12_RAYTRACING_OPACITY_MICROMAP_OC1_MAX_SUBDIVISION_LEVEL")
+cpp_quote("#define D3D12_RAYTRACING_OPACITY_MICROMAP_OC1_MAX_SUBDIVISION_LEVEL 12")
+cpp_quote("#endif")
+cpp_quote("#ifndef D3D12_TIGHT_ALIGNMENT_MIN_COMMITTED_RESOURCE_ALIGNMENT")
+cpp_quote("#define D3D12_TIGHT_ALIGNMENT_MIN_COMMITTED_RESOURCE_ALIGNMENT 4096")
+cpp_quote("#endif")
+cpp_quote("#ifndef D3D12_TIGHT_ALIGNMENT_MIN_PLACED_RESOURCE_ALIGNMENT")
+cpp_quote("#define D3D12_TIGHT_ALIGNMENT_MIN_PLACED_RESOURCE_ALIGNMENT 8")
+cpp_quote("#endif")
+cpp_quote("#ifndef D3D12_WORK_GRAPHS_BACKING_MEMORY_ALIGNMENT_IN_BYTES")
+cpp_quote("#define D3D12_WORK_GRAPHS_BACKING_MEMORY_ALIGNMENT_IN_BYTES 8")
+cpp_quote("#endif")
+cpp_quote("#ifndef D3D12_WORK_GRAPHS_MAX_NODE_DEPTH")
+cpp_quote("#define D3D12_WORK_GRAPHS_MAX_NODE_DEPTH 32")
+cpp_quote("#endif")

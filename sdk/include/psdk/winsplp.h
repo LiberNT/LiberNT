@@ -1521,3 +1521,10 @@ BOOL WINAPI InstallPrintProcessor(HWND hWnd);
 #endif
 
 #endif /* _WINSPLP_ */
+
+#ifndef DOC_INFO_INTERNAL_LEVEL
+#define DOC_INFO_INTERNAL_LEVEL 100
+#endif
+#ifndef SPLCLIENT_INFO_INTERNAL_LEVEL
+#define SPLCLIENT_INFO_INTERNAL_LEVEL 100
+#endif

@@ -196,4 +196,8 @@ typedef ICMPV6_ECHO_REPLY_LH *PICMPV6_ECHO_REPLY;
 
 #endif /* (NTDDI_VERSION >= NTDDI_WINXP) */
 
+#ifndef IP_FLAG_REVERSE
+#define IP_FLAG_REVERSE 0x1
+#endif
+
 #endif /* __WINE_IPEXPORT_H */

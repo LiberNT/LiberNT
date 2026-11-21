@@ -44,4 +44,8 @@ BOOL WINAPI IsNetworkAlive(LPDWORD lpdwFlags);
 }
 #endif
 
+#ifndef NETWORK_ALIVE_INTERNET
+#define NETWORK_ALIVE_INTERNET 0x00000008
+#endif
+
 #endif /* __SENSAPI_H__ */

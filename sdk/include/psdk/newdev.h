@@ -156,3 +156,13 @@ DiUninstallDevice(
 #ifdef __cplusplus
 }
 #endif
+
+#ifndef DIIRFLAG_INSTALL_AS_SET
+#define DIIRFLAG_INSTALL_AS_SET 0x00000040
+#endif
+#ifndef DIIRFLAG_PRE_CONFIGURE_INF
+#define DIIRFLAG_PRE_CONFIGURE_INF 0x00000020
+#endif
+#ifndef DIURFLAG_RESERVED
+#define DIURFLAG_RESERVED 0x00000002
+#endif

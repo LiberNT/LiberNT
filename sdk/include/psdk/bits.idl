@@ -422,3 +422,7 @@ cpp_quote("#include \"bits1_5.h\"")
 #else
 cpp_quote("#include \"bits1_5.h\"")
 #endif
+
+cpp_quote("#ifndef BG_NOTIFY_FILE_RANGES_TRANSFERRED")
+cpp_quote("#define BG_NOTIFY_FILE_RANGES_TRANSFERRED 0x0020")
+cpp_quote("#endif")

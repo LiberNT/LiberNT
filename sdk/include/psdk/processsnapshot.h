@@ -333,3 +333,7 @@ DWORD WINAPI PssWalkMarkerSeekToBeginning(_In_ HPSSWALK WalkMarkerHandle);
 #ifdef __cplusplus
 }
 #endif
+
+#ifndef PSS_PERF_RESOLUTION
+#define PSS_PERF_RESOLUTION 1000000
+#endif

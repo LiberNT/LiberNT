@@ -997,4 +997,8 @@ BOOL    IMAGEAPI UpdateDebugInfoFileEx(PCSTR ImageFileName, PCSTR SymbolPath, PS
 } /* extern "C" */
 #endif /* defined(__cplusplus) */
 
+#ifndef BIND_REPORT_64BIT_VA
+#define BIND_REPORT_64BIT_VA 0x00000010
+#endif
+
 #endif  /* __WINE_IMAGEHLP_H */

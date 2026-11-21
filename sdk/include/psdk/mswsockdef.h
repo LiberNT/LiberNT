@@ -64,3 +64,19 @@ typedef struct _WSA_COMPATIBILITY_MODE {
 #ifdef __cplusplus
 }
 #endif
+
+#ifndef RIO_CORRUPT_CQ
+#define RIO_CORRUPT_CQ 0xFFFFFFFF
+#endif
+#ifndef RIO_MAX_CQ_SIZE
+#define RIO_MAX_CQ_SIZE 0x8000000
+#endif
+#ifndef RIO_MSG_COMMIT_ONLY
+#define RIO_MSG_COMMIT_ONLY 0x00000008
+#endif
+#ifndef RIO_MSG_DEFER
+#define RIO_MSG_DEFER 0x00000002
+#endif
+#ifndef RIO_MSG_WAITALL
+#define RIO_MSG_WAITALL 0x00000004
+#endif

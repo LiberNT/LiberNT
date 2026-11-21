@@ -138,3 +138,13 @@ interface IVersionInfo : IUnknown
         [in] ULONG ulSub,
         [out] BSTR *pImplStr);
 }
+
+cpp_quote("#ifndef TS_STRF_END")
+cpp_quote("#define TS_STRF_END 2")
+cpp_quote("#endif")
+cpp_quote("#ifndef TS_STRF_MID")
+cpp_quote("#define TS_STRF_MID 1")
+cpp_quote("#endif")
+cpp_quote("#ifndef TS_STRF_START")
+cpp_quote("#define TS_STRF_START 0")
+cpp_quote("#endif")
