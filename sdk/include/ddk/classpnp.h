@@ -1509,6 +1509,7 @@ ClassScanForSpecial(
 
 SCSIPORT_API
 ULONG
+NTAPI
 ClassModeSenseEx(
     _In_ PDEVICE_OBJECT Fdo,
     _In_reads_bytes_(Length) PCHAR ModeSenseBuffer,
@@ -1519,6 +1520,7 @@ ClassModeSenseEx(
 
 SCSIPORT_API
 NTSTATUS
+NTAPI
 ClassModeSelect(
     _In_ PDEVICE_OBJECT Fdo,
     _In_reads_bytes_(Length) PCHAR ModeSelectBuffer,
