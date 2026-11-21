@@ -120,4 +120,8 @@ typedef enum mimeassociationdialog_in_flags {
     MIMEASSOCDLG_FL_REGISTER_ASSOC = 1
 } MIMEASSOCIATIONDIALOG_IN_FLAGS;
 
+typedef IUniformResourceLocatorA * PIUniformResourceLocator;
+typedef const IUniformResourceLocatorA CIUniformResourceLocator;
+typedef const IUniformResourceLocatorA * PCIUniformResourceLocator;
+
 #endif  /* __WINE_INTSHCUT_H */

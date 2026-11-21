@@ -3942,6 +3942,11 @@ typedef enum VIDEOENCODER_BITRATE_MODE {
     VariableBitRatePeak = 2
 } VIDEOENCODER_BITRATE_MODE;
 
+typedef BOOL KSPROPERTY_COMPOSIT_ON;
+typedef BOOL * PKSPROPERTY_COMPOSIT_ON;
+typedef LONG KS_AM_MaxFullDataRate;
+typedef DWORD KS_AM_Step;
+
 #endif
 
 #ifndef CC_MAX_HW_DECODE_LINES

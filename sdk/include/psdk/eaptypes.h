@@ -389,4 +389,6 @@ typedef enum _EapCredentialType {
     EAP_SIM_CREDENTIAL = 4
 } EapCredentialType;
 
+typedef DWORD EAP_SESSIONID;
+
 #endif

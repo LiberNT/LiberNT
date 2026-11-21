@@ -325,4 +325,7 @@ typedef enum _ACPI_TIME_RESOLUTION {
     AcpiTimeResolutionMax = 2
 } ACPI_TIME_RESOLUTION, *PACPI_TIME_RESOLUTION;
 
+typedef GUID BATTERY_CHARGER_ID;
+typedef GUID * PBATTERY_CHARGER_ID;
+
 #endif /* __POCLASS_H */

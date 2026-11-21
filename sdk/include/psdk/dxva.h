@@ -1608,4 +1608,19 @@ typedef enum _COPP_BusType {
     COPP_BusType_ForceDWORD = 0x7FFFFFFF
 } COPP_BusType;
 
+typedef DWORD DXVA_ConfigQueryOrReplyFunc;
+typedef DWORD * LPDXVA_ConfigQueryOrReplyFunc;
+typedef DWORD DXVA_EncryptProtocolFunc;
+typedef DWORD * LPDXVA_EncryptProtocolFunc;
+typedef BYTE DXVA_DeblockingEdgeControl;
+typedef DXVA_DeblockingEdgeControl * LPDXVA_DeblockingEdgeControl;
+typedef BYTE DXVA_IA44sample;
+typedef BYTE * LPDXVA_IA44sample;
+typedef BYTE DXVA_AI44sample;
+typedef BYTE * LPDXVA_AI44sample;
+typedef BYTE DXVA_DPXD;
+typedef BYTE * LPDXVA_DPXD;
+typedef WORD DXVA_DCCMD;
+typedef WORD * LPDXVA_DCCMD;
+
 #endif /* __WINE_DXVA_H */

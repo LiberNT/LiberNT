@@ -1287,4 +1287,9 @@ LWSTDAPI StrFormatByteSizeEx(ULONGLONG ull, SFBS_FLAGS flags, _Out_writes_(cchBu
 #pragma pack(pop)
 
 #endif // NOSHLWAPI
+typedef PARSEDURLA PARSEDURL;
+typedef PPARSEDURLA PPARSEDURL;
+typedef const QITAB * LPCQITAB;
+typedef DWORD SHCT_FLAGS;
+
 #endif // _INC_SHLWAPI

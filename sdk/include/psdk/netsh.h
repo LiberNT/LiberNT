@@ -303,4 +303,6 @@ enum NS_EVENTS {
     NS_EVENT_FROM_START = 8
 };
 
+typedef const struct _NS_CONTEXT_ATTRIBUTES * PCNS_CONTEXT_ATTRIBUTES;
+
 #endif /* _NETSH_H_ */

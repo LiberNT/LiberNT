@@ -137,4 +137,6 @@ typedef enum PaletteType
     PaletteTypeFixedHalftone256
 } PaletteType;
 
+typedef DWORDLONG ARGB64;
+
 #endif

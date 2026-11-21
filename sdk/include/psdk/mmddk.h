@@ -528,4 +528,6 @@ DWORD   WINAPI mmGetCurrentTask(void);
 #define VADMAD_Device_ID 0X0444
 #endif
 
+typedef struct tMIXEROPENDESC * PMIXEROPENDESC;
+
 #endif /* __MMDDK_H */
