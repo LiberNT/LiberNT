@@ -26,4 +26,4 @@
 
 ## Допомога
 
-Якщо щось піде не так, повідомте про це в [Issues](https://github.com/LiberNT/LiberNT/issues), зазначивши архітектуру, тип збірки, коміт, з якого збирали, та кроки для відтворення проблеми. Посібники та нотатки можна знайти у [Wiki](https://github.com/LiberNT/LiberNT/wiki), а також ви можете запитати команду в [Discord](https://discord.gg/BpcKg7FZ2) або [Matrix](https://matrix.to/#/#libernt:matrix.org).
+Якщо щось піде не так, повідомте про це в [Issues](https://github.com/LiberNT/LiberNT/issues), зазначивши архітектуру, тип збірки, коміт, з якого збирали, та кроки для відтворення проблеми. Посібники та нотатки можна знайти у [Wiki](https://github.com/LiberNT/LiberNT/wiki), а також ви можете запитати команду в [Discord](https://discord.gg/NjGjzDevEG) або [Matrix](https://matrix.to/#/#libernt:matrix.org).

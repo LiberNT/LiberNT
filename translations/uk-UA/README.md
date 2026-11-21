@@ -16,7 +16,7 @@
 
 [![Build](https://img.shields.io/github/actions/workflow/status/LiberNT/LiberNT/build.yml?branch=master&label=Build&style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/LiberNT/LiberNT/actions/workflows/build.yml)
 [![License: GPL 3.0](https://img.shields.io/badge/License-GPL_3.0-0161B6?style=for-the-badge&logo=gnu&logoColor=white)](#ліцензія)
-[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/BpcKg7FZ2)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/NjGjzDevEG)
 [![Matrix](https://img.shields.io/badge/Matrix-%23libernt-000000?style=for-the-badge&logo=matrix&logoColor=white)](https://matrix.to/#/#libernt:matrix.org)
 
 <img src="https://img.shields.io/github/repo-size/LiberNT/LiberNT?style=flat-square&color=blue" alt="Repo Size">
@@ -269,7 +269,7 @@ LiberNT/
 
 Повідомляйте про помилки та пропонуйте нові можливості в [Issues](https://github.com/LiberNT/LiberNT/issues); посібники та нотатки можна знайти у [Wiki](https://github.com/LiberNT/LiberNT/wiki).
 
-Див. [CONTRIBUTING.md](CONTRIBUTING.md) та [PULL_REQUEST_MANAGEMENT.md](PULL_REQUEST_MANAGEMENT.md). Якщо ви плануєте значні зміни, спершу запитайте про це в [Issues](https://github.com/LiberNT/LiberNT/issues) або в [Discord](https://discord.gg/BpcKg7FZ2).
+Див. [CONTRIBUTING.md](CONTRIBUTING.md) та [PULL_REQUEST_MANAGEMENT.md](PULL_REQUEST_MANAGEMENT.md). Якщо ви плануєте значні зміни, спершу запитайте про це в [Issues](https://github.com/LiberNT/LiberNT/issues) або в [Discord](https://discord.gg/NjGjzDevEG).
 
 > [!WARNING]
 > **Юридичне застереження:** Якщо ви бачили пропрієтарний вихідний код Microsoft Windows (включно з, але не обмежуючись витоками вихідного коду Windows NT 3.5, NT 4, 2000 та Windows Research Kernel), ваш внесок не буде прийнято через потенційне порушення авторських прав.
@@ -312,4 +312,4 @@ LiberNT створюється **авторами LiberNT**. Проєкт зап
 - [Вебсайт](https://libernt.com)
 - [Завантажити останню збірку](https://github.com/LiberNT/LiberNT/releases)
 - [Wiki](https://github.com/LiberNT/LiberNT/wiki)
-- Спілкування в [Discord](https://discord.gg/BpcKg7FZ2) або [Matrix](https://matrix.to/#/#libernt:matrix.org)
+- Спілкування в [Discord](https://discord.gg/NjGjzDevEG) або [Matrix](https://matrix.to/#/#libernt:matrix.org)

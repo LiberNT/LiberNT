@@ -28,4 +28,4 @@
 
 ## 求助
 
-遇到问题请在 [Issues](https://github.com/LiberNT/LiberNT/issues) 反馈，并附上架构、构建类型、所用提交，以及复现步骤。指南和笔记见 [Wiki](https://github.com/LiberNT/LiberNT/wiki)，也可以到 [Discord](https://discord.gg/BpcKg7FZ2) 或 [Matrix](https://matrix.to/#/#libernt:matrix.org) 找团队。
+遇到问题请在 [Issues](https://github.com/LiberNT/LiberNT/issues) 反馈，并附上架构、构建类型、所用提交，以及复现步骤。指南和笔记见 [Wiki](https://github.com/LiberNT/LiberNT/wiki)，也可以到 [Discord](https://discord.gg/NjGjzDevEG) 或 [Matrix](https://matrix.to/#/#libernt:matrix.org) 找团队。

@@ -28,6 +28,6 @@
 
 ## المساعدة
 
-إذا حدث خطأ ما، فأبلغ عنه في [Issues](https://github.com/LiberNT/LiberNT/issues) مع ذكر المعمارية ونوع البناء والإيداع الذي بنيته والخطوات التي تؤدي إلى المشكلة. توجد الأدلة والملاحظات في [Wiki](https://github.com/LiberNT/LiberNT/wiki)، ويمكنك سؤال الفريق على [Discord](https://discord.gg/BpcKg7FZ2) أو [Matrix](https://matrix.to/#/#libernt:matrix.org).
+إذا حدث خطأ ما، فأبلغ عنه في [Issues](https://github.com/LiberNT/LiberNT/issues) مع ذكر المعمارية ونوع البناء والإيداع الذي بنيته والخطوات التي تؤدي إلى المشكلة. توجد الأدلة والملاحظات في [Wiki](https://github.com/LiberNT/LiberNT/wiki)، ويمكنك سؤال الفريق على [Discord](https://discord.gg/NjGjzDevEG) أو [Matrix](https://matrix.to/#/#libernt:matrix.org).
 
 </div>

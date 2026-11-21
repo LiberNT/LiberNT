@@ -39,7 +39,7 @@
 
 ### تنفيذ أشياء جديدة
 
-Windows 11 هو مرجع التوافق. قبل البدء في عمل كبير، اسأل في [Issues](https://github.com/LiberNT/LiberNT/issues) أو على [Discord](https://discord.gg/BpcKg7FZ2) إن كان أحد يعمل عليه بالفعل.
+Windows 11 هو مرجع التوافق. قبل البدء في عمل كبير، اسأل في [Issues](https://github.com/LiberNT/LiberNT/issues) أو على [Discord](https://discord.gg/NjGjzDevEG) إن كان أحد يعمل عليه بالفعل.
 
 ### كتابة التوثيق
 
@@ -85,7 +85,7 @@ Windows 11 هو مرجع التوافق. قبل البدء في عمل كبير�
 - *ابحث عن طلبات سحب مشابهة قبل الإرسال.* قد يكون طلب سحب أو مشكلة مشابهة قد فُتح من قبل. علّق وراجع ذلك الطلب بدلًا من ذلك.
 - *اجعل مساهمتك صغيرة ومركّزة على موضوعها.* قاوم إغراء إصلاح مشكلات لا علاقة لها بالموضوع تصادفها؛ وافتح لها مشكلة بدلًا من ذلك.
 - *احترم __[أسلوب كتابة الشيفرة]__ لدينا.*
-- *لا تتردد في طرح الأسئلة.* اسأل الفريق على [Discord](https://discord.gg/BpcKg7FZ2) أو [Matrix](https://matrix.to/#/#libernt:matrix.org).
+- *لا تتردد في طرح الأسئلة.* اسأل الفريق على [Discord](https://discord.gg/NjGjzDevEG) أو [Matrix](https://matrix.to/#/#libernt:matrix.org).
 
 ## حقوق النشر والتراخيص
 
@@ -104,7 +104,7 @@ Windows 11 هو مرجع التوافق. قبل البدء في عمل كبير�
 - اطّلع على [Issues](https://github.com/LiberNT/LiberNT/issues) المفتوحة.
 - ابحث عن اختبار يفشل، وقارنه بـ Windows 11، واجعله ينجح.
 - اقرأ [Wiki](https://github.com/LiberNT/LiberNT/wiki) للاطلاع على الأدلة وملاحظات التصميم.
-- اطلب المساعدة على [Discord](https://discord.gg/BpcKg7FZ2) أو [Matrix](https://matrix.to/#/#libernt:matrix.org).
+- اطلب المساعدة على [Discord](https://discord.gg/NjGjzDevEG) أو [Matrix](https://matrix.to/#/#libernt:matrix.org).
 
   [الهندسة العكسية بأسلوب الغرفة النظيفة]:                       https://en.wikipedia.org/wiki/Clean_room_design
   [طلب سحب]:                                                     https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/about-pull-requests

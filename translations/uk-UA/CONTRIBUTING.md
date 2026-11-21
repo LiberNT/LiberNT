@@ -37,7 +37,7 @@ LiberNT розробляється методом «чистої кімнати�
 
 ### Реалізовувати нове
 
-Windows 11 є еталоном сумісності. Перш ніж братися за велике завдання, запитайте в [Issues](https://github.com/LiberNT/LiberNT/issues) або в [Discord](https://discord.gg/BpcKg7FZ2), чи хтось уже не працює над цим.
+Windows 11 є еталоном сумісності. Перш ніж братися за велике завдання, запитайте в [Issues](https://github.com/LiberNT/LiberNT/issues) або в [Discord](https://discord.gg/NjGjzDevEG), чи хтось уже не працює над цим.
 
 ### Писати документацію
 
@@ -83,7 +83,7 @@ Windows 11 є еталоном сумісності. Перш ніж брати�
 - *Шукайте схожі pull request'и перед надсиланням.* Можливо, подібний пул-реквест або issue вже було відкрито раніше. Залиште коментар і проведіть огляд саме там.
 - *Зберігайте ваш внесок невеликим і сфокусованим на одній темі.* Не піддавайтеся спокусі виправляти не пов'язані проблеми, які трапляються на шляху; натомість відкрийте для них окремий issue.
 - *Дотримуйтесь нашого __[стилю коду]__.*
-- *Не бійтеся ставити запитання.* Запитуйте в команди в [Discord](https://discord.gg/BpcKg7FZ2) або [Matrix](https://matrix.to/#/#libernt:matrix.org).
+- *Не бійтеся ставити запитання.* Запитуйте в команди в [Discord](https://discord.gg/NjGjzDevEG) або [Matrix](https://matrix.to/#/#libernt:matrix.org).
 
 ## Авторське право та ліцензії
 
@@ -102,7 +102,7 @@ Windows 11 є еталоном сумісності. Перш ніж брати�
 - Перегляньте відкриті [Issues](https://github.com/LiberNT/LiberNT/issues).
 - Знайдіть тест, що не проходить, порівняйте його з Windows 11 та зробіть так, щоб він проходив.
 - Читайте [Wiki](https://github.com/LiberNT/LiberNT/wiki) для отримання посібників та архітектурних нотаток.
-- Звертайтеся по допомогу в [Discord](https://discord.gg/BpcKg7FZ2) або [Matrix](https://matrix.to/#/#libernt:matrix.org).
+- Звертайтеся по допомогу в [Discord](https://discord.gg/NjGjzDevEG) або [Matrix](https://matrix.to/#/#libernt:matrix.org).
 
   [зворотної розробки в чистій кімнаті]:                          https://en.wikipedia.org/wiki/Clean_room_design
   [pull request]:                                                https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/about-pull-requests

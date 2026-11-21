@@ -26,4 +26,4 @@
 
 ## ヘルプ
 
-問題が起きたら、アーキテクチャ、ビルドの種類、ビルドしたコミット、問題に至る手順を添えて [Issues](https://github.com/LiberNT/LiberNT/issues) で報告してください。ガイドやメモは [Wiki](https://github.com/LiberNT/LiberNT/wiki) にあり、[Discord](https://discord.gg/BpcKg7FZ2) または [Matrix](https://matrix.to/#/#libernt:matrix.org) でチームに質問できます。
+問題が起きたら、アーキテクチャ、ビルドの種類、ビルドしたコミット、問題に至る手順を添えて [Issues](https://github.com/LiberNT/LiberNT/issues) で報告してください。ガイドやメモは [Wiki](https://github.com/LiberNT/LiberNT/wiki) にあり、[Discord](https://discord.gg/NjGjzDevEG) または [Matrix](https://matrix.to/#/#libernt:matrix.org) でチームに質問できます。
