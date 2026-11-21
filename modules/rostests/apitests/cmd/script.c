@@ -401,6 +401,44 @@ static void test_dir_double_backslash(void)
     delete_file("unc.txt");
 }
 
+/* Without /O, DIR lists in enumeration order and prints each link's own print name, not the tail of a longer one */
+static void test_dir_symlink_target(void)
+{
+    char target[MAX_PATH], link[MAX_PATH], cmdline[2 * MAX_PATH], output[4096], expected[MAX_PATH + 16];
+    const char *first, *second;
+    DWORD exit_code = 0;
+    BOOL result;
+
+    write_file("t.txt", "x");
+    StringCbPrintfA(target, sizeof(target), "%s\\a_much_longer_symlink_target_name.txt", s_dir);
+    StringCbPrintfA(link, sizeof(link), "%s\\a.lnk", s_dir);
+    result = CreateSymbolicLinkA(link, target, 0);
+    if (!result && GetLastError() == ERROR_PRIVILEGE_NOT_HELD)
+    {
+        skip("the token cannot create symbolic links\n");
+        delete_file("t.txt");
+        return;
+    }
+    ok(result, "CreateSymbolicLinkA(a.lnk) failed with %lu\n", GetLastError());
+    StringCbPrintfA(link, sizeof(link), "%s\\b.lnk", s_dir);
+    StringCbPrintfA(target, sizeof(target), "%s\\t.txt", s_dir);
+    ok(CreateSymbolicLinkA(link, target, 0), "CreateSymbolicLinkA(b.lnk) failed with %lu\n", GetLastError());
+    StringCbPrintfA(expected, sizeof(expected), "b.lnk [%s]\r\n", target);
+
+    StringCbPrintfA(cmdline, sizeof(cmdline), "cmd /c \"dir %s\\*.lnk\"", s_dir);
+    ok(run_cmd(cmdline, NULL, &exit_code, output, sizeof(output)), "cannot run %s\n", cmdline);
+    ok(exit_code == 0, "dir exited with %lu\n", exit_code);
+    first = strstr(output, "a.lnk [");
+    second = strstr(output, "b.lnk [");
+    ok(first != NULL, "no target printed for a.lnk:\n%s\n", output);
+    ok(second != NULL && first < second, "a.lnk is not listed before b.lnk:\n%s\n", output);
+    ok(strstr(output, expected) != NULL, "wrong target printed for b.lnk:\n%s\n", output);
+
+    delete_file("a.lnk");
+    delete_file("b.lnk");
+    delete_file("t.txt");
+}
+
 static void write_own_command_line(void)
 {
     char line[1024];
@@ -474,6 +512,7 @@ START_TEST(script)
     test_if_redirections();
     test_for_f_code_page();
     test_dir_double_backslash();
+    test_dir_symlink_target();
     test_start_passes_arguments_verbatim();
 
     RemoveDirectoryA(s_dir);
