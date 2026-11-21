@@ -63,6 +63,24 @@ typedef struct _ARM_UNWIND_EPILOGUE
     ULONG Index : 8;
 } ARM_UNWIND_EPILOGUE, *PARM_UNWIND_EPILOGUE;
 
+/* The registers of the ARM KTRAP_FRAME (WDK), which this library cannot include: R0 is at 0x60. */
+typedef struct _RTLP_ARM_TRAP_FRAME
+{
+    UCHAR Other[0x60];
+    ULONG R0;
+    ULONG R1;
+    ULONG R2;
+    ULONG R3;
+    ULONG R12;
+    ULONG Sp;
+    ULONG Lr;
+    ULONG R11;
+    ULONG Pc;
+    ULONG Cpsr;
+} RTLP_ARM_TRAP_FRAME, *PRTLP_ARM_TRAP_FRAME;
+
+C_ASSERT(sizeof(RTLP_ARM_TRAP_FRAME) == 0x88);
+
 static const UCHAR RtlpArmUnwindCodeLength[256] =
 {
 /* 00 */ 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
@@ -188,6 +206,7 @@ RtlpArmMicrosoftOpcode(
     _Inout_ PCONTEXT Context,
     _Inout_opt_ PKNONVOLATILE_CONTEXT_POINTERS Pointers)
 {
+    PRTLP_ARM_TRAP_FRAME TrapFrame;
     PCONTEXT Source;
     ULONG Index;
 
@@ -209,6 +228,26 @@ RtlpArmMicrosoftOpcode(
             Pointers->Lr = &Source->Lr;
             for (Index = 0; Index < 8; Index++)
                 (&Pointers->D8)[Index] = &Source->D[Index + 8];
+            break;
+
+        case 3: /* trap frame on the stack */
+            TrapFrame = (PRTLP_ARM_TRAP_FRAME)(ULONG_PTR)Context->Sp;
+            if (Pointers)
+            {
+                Pointers->R11 = &TrapFrame->R11;
+                Pointers->Lr = &TrapFrame->Lr;
+            }
+            Context->R0 = TrapFrame->R0;
+            Context->R1 = TrapFrame->R1;
+            Context->R2 = TrapFrame->R2;
+            Context->R3 = TrapFrame->R3;
+            Context->R12 = TrapFrame->R12;
+            Context->R11 = TrapFrame->R11;
+            Context->Lr = TrapFrame->Lr;
+            Context->Pc = TrapFrame->Pc;
+            Context->Cpsr = TrapFrame->Cpsr;
+            Context->Sp = TrapFrame->Sp;
+            Context->ContextFlags &= ~CONTEXT_UNWOUND_TO_CALL;
             break;
 
         default:
