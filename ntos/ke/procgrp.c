@@ -1894,10 +1894,12 @@ KeSetTargetProcessorDpcEx(
 {
     ULONG Index = KeGetProcessorIndexFromNumber(ProcNumber);
 
-    if ((Index == INVALID_PROCESSOR_INDEX) || (Dpc->DpcData != NULL))
+    if (Index == INVALID_PROCESSOR_INDEX)
         return STATUS_INVALID_PARAMETER;
 
-    KiSetTargetProcessorDpc(Dpc, Index);
+    /* A DPC already queued keeps the target it has, as with KeSetTargetProcessorDpc */
+    if (Dpc->DpcData == NULL)
+        KiSetTargetProcessorDpc(Dpc, Index);
     return STATUS_SUCCESS;
 }
 
