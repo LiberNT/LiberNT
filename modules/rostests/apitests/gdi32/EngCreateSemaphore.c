@@ -22,7 +22,7 @@ void Test_EngCreateSemaphore()
     ok(lpcrit->OwningThread == 0, "lpcrit->OwningThread=%p\n", lpcrit->OwningThread);
     ok(lpcrit->LockSemaphore == 0, "lpcrit->LockSemaphore=%p\n", lpcrit->LockSemaphore);
     ok((lpcrit->SpinCount & RTL_CRITICAL_SECTION_ALL_FLAG_BITS) == RTL_CRITICAL_SECTION_FLAG_DYNAMIC_SPIN,
-       "lpcrit->SpinCount=%Iu\n", lpcrit->SpinCount);
+       "lpcrit->SpinCount=%Iu\n", (size_t)lpcrit->SpinCount);
     ok(lpcrit->DebugInfo == (PRTL_CRITICAL_SECTION_DEBUG)-1, "lpcrit->DebugInfo=%p\n", lpcrit->DebugInfo);
 
     EngDeleteSemaphore(hsem);
