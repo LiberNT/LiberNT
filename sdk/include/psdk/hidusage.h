@@ -251,11 +251,10 @@ typedef USHORT USAGE, *PUSAGE;
 #define HID_USAGE_HAPTICS_WAVEFORM_VENDOR_ID        ((USAGE) 0x27)
 #define HID_USAGE_HAPTICS_WAVEFORM_CUTOFF_TIME      ((USAGE) 0x28)
 #define HID_USAGE_HAPTICS_WAVEFORM_BEGIN            ((USAGE) 0x1000)
-/* Differs from https://usb.org/sites/default/files/hut1_22.pdf */
 /* Waveform None */
-#define HID_USAGE_HAPTICS_WAVEFORM_STOP             ((USAGE) 0x1001)
+#define HID_USAGE_HAPTICS_WAVEFORM_NONE             ((USAGE) 0x1001)
 /* Waveform Stop */
-#define HID_USAGE_HAPTICS_WAVEFORM_NULL             ((USAGE) 0x1002)
+#define HID_USAGE_HAPTICS_WAVEFORM_STOP             ((USAGE) 0x1002)
 #define HID_USAGE_HAPTICS_WAVEFORM_CLICK            ((USAGE) 0x1003)
 #define HID_USAGE_HAPTICS_WAVEFORM_BUZZ             ((USAGE) 0x1004)
 #define HID_USAGE_HAPTICS_WAVEFORM_RUMBLE           ((USAGE) 0x1005)
