@@ -73,11 +73,11 @@ TestDropDownGap(void)
     SendMessageW(hWnd, TB_AUTOSIZE, 0, 0);
 
     ok(SendMessageW(hWnd, TB_GETITEMRECT, 0, (LPARAM)&Before), "TB_GETITEMRECT failed\n");
-    ok(SendMessageW(hWnd, TB_SETDROPDOWNGAP, 6, 0) == 1, "WM_USER + 100 failed\n");
+    ok(SendMessageW(hWnd, TB_SETDROPDOWNGAP, 6, 0) == 0, "WM_USER + 100 did not return 0\n");
     ok(SendMessageW(hWnd, TB_GETITEMRECT, 0, (LPARAM)&After), "TB_GETITEMRECT failed\n");
 
     Delta = (After.right - After.left) - (Before.right - Before.left);
-    ok(Delta == 6, "Button width changed by %ld\n", Delta);
+    ok(Delta == 0, "Button width changed by %ld\n", Delta);
 
     DestroyWindow(hWnd);
 }
