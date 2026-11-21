@@ -237,6 +237,19 @@ static void WCMD_getfileowner(WCHAR *filename, WCHAR *owner, int ownerlen) {
     return;
 }
 
+static void output_reparse_name(const WCHAR *names, USHORT offset, USHORT length, DWORD available)
+{
+    WCHAR *name;
+
+    if (offset % sizeof(WCHAR) || length % sizeof(WCHAR) || (DWORD)offset + length > available)
+        return;
+    name = xalloc(length + sizeof(WCHAR));
+    memcpy(name, (const BYTE *)names + offset, length);
+    name[length / sizeof(WCHAR)] = 0;
+    WCMD_output(L" [%1]", name);
+    free(name);
+}
+
 static void output_reparse_target(const WCHAR *dir, const WCHAR *filename)
 {
     char buffer[MAXIMUM_REPARSE_DATA_BUFFER_SIZE];
@@ -257,15 +270,19 @@ static void output_reparse_target(const WCHAR *dir, const WCHAR *filename)
 
     if (DeviceIoControl(file, FSCTL_GET_REPARSE_POINT, NULL, 0, buffer, sizeof(buffer), &size, NULL))
     {
-        if (data->ReparseTag == IO_REPARSE_TAG_MOUNT_POINT)
+        if (data->ReparseTag == IO_REPARSE_TAG_MOUNT_POINT &&
+            size >= FIELD_OFFSET(REPARSE_DATA_BUFFER, MountPointReparseBuffer.PathBuffer))
         {
-            size_t offset = data->MountPointReparseBuffer.PrintNameOffset / sizeof(WCHAR);
-            WCMD_output(L" [%1]", data->MountPointReparseBuffer.PathBuffer + offset);
+            output_reparse_name(data->MountPointReparseBuffer.PathBuffer, data->MountPointReparseBuffer.PrintNameOffset,
+                                data->MountPointReparseBuffer.PrintNameLength,
+                                size - FIELD_OFFSET(REPARSE_DATA_BUFFER, MountPointReparseBuffer.PathBuffer));
         }
-        else if (data->ReparseTag == IO_REPARSE_TAG_SYMLINK)
+        else if (data->ReparseTag == IO_REPARSE_TAG_SYMLINK &&
+                 size >= FIELD_OFFSET(REPARSE_DATA_BUFFER, SymbolicLinkReparseBuffer.PathBuffer))
         {
-            size_t offset = data->SymbolicLinkReparseBuffer.PrintNameOffset / sizeof(WCHAR);
-            WCMD_output(L" [%1]", data->SymbolicLinkReparseBuffer.PathBuffer + offset);
+            output_reparse_name(data->SymbolicLinkReparseBuffer.PathBuffer, data->SymbolicLinkReparseBuffer.PrintNameOffset,
+                                data->SymbolicLinkReparseBuffer.PrintNameLength,
+                                size - FIELD_OFFSET(REPARSE_DATA_BUFFER, SymbolicLinkReparseBuffer.PathBuffer));
         }
     }
     else
@@ -370,8 +387,10 @@ static RETURN_CODE WCMD_list_directory (DIRECTORY_STACK *inputparms, int level, 
   /* Handle case where everything is filtered out */
   if (entry_count > 0) {
 
-    /* Sort the list of files */
-    qsort (fd, entry_count, sizeof(WIN32_FIND_DATAW), WCMD_dir_sort);
+    /* Without /O the entries keep the order the file system returned them in */
+    /* FIXME: entries that compare equal under /O can be reordered, qsort is not stable */
+    if (dirOrder != Unspecified || orderGroupDirs)
+        qsort (fd, entry_count, sizeof(WIN32_FIND_DATAW), WCMD_dir_sort);
 
     /* Work out the number of columns */
     WINE_TRACE("%d entries, maxwidth=%d, widest=%d\n", entry_count, max_width, widest);
