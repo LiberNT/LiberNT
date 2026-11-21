@@ -5212,4 +5212,151 @@ IntShowOwnedPopups(PWND OwnerWnd, BOOL fShow )
    return TRUE;
 }
 
+DWORD
+FASTCALL
+IntGetWindowDisplayAffinity(
+    _In_ PWND pWnd)
+{
+    ASSERT(UserIsEntered());
+    ASSERT(pWnd != NULL);
+
+    return (DWORD)(ULONG_PTR)UserGetProp(pWnd, AtomDisplayAffinity, TRUE);
+}
+
+static
+BOOL
+IntSetWindowDisplayAffinity(
+    _In_ PWND pWnd,
+    _In_ DWORD dwAffinity)
+{
+    ASSERT(UserIsEnteredExclusive());
+
+    if (pWnd->head.pti == NULL || pWnd->head.pti->ppi != PsGetCurrentProcessWin32Process())
+    {
+        EngSetLastError(ERROR_ACCESS_DENIED);
+        return FALSE;
+    }
+    if (pWnd->style & WS_CHILD)
+    {
+        EngSetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (dwAffinity != WDA_NONE && dwAffinity != WDA_MONITOR && dwAffinity != WDA_EXCLUDEFROMCAPTURE)
+    {
+        EngSetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (!IntCompositionIsEnabled())
+    {
+        EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
+        return FALSE;
+    }
+
+    if (dwAffinity == WDA_NONE)
+    {
+        UserRemoveProp(pWnd, AtomDisplayAffinity, TRUE);
+        return TRUE;
+    }
+    return UserSetProp(pWnd, AtomDisplayAffinity, (HANDLE)(ULONG_PTR)dwAffinity, TRUE);
+}
+
+BOOL
+APIENTRY
+NtUserSetWindowDisplayAffinity(
+    _In_ HWND hWnd,
+    _In_ DWORD dwAffinity)
+{
+    PWND pWnd;
+    BOOL Ret = FALSE;
+
+    UserEnterExclusive();
+
+    pWnd = UserGetWindowObject(hWnd);
+    if (pWnd != NULL)
+        Ret = IntSetWindowDisplayAffinity(pWnd, dwAffinity);
+
+    UserLeave();
+    return Ret;
+}
+
+BOOL
+APIENTRY
+NtUserGetWindowDisplayAffinity(
+    _In_ HWND hWnd,
+    _Out_ PDWORD pdwAffinity)
+{
+    PWND pWnd;
+    DWORD Affinity;
+    BOOL Ret = FALSE;
+
+    UserEnterShared();
+
+    pWnd = UserGetWindowObject(hWnd);
+    if (pWnd != NULL)
+    {
+        Affinity = IntGetWindowDisplayAffinity(pWnd);
+        _SEH2_TRY
+        {
+            ProbeForWrite(pdwAffinity, sizeof(*pdwAffinity), 1);
+            *pdwAffinity = Affinity;
+            Ret = TRUE;
+        }
+        _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+        {
+            SetLastNtError(_SEH2_GetExceptionCode());
+        }
+        _SEH2_END;
+    }
+
+    UserLeave();
+    return Ret;
+}
+
+/* FIXME: WDA_EXCLUDEFROMCAPTURE windows come out black like WDA_MONITOR ones instead of being left out of the capture */
+/* FIXME: another process reading a protected window through that window's own DC still gets its content */
+/* TODO: DXGI desktop duplication, Windows.Graphics.Capture and the AlphaBlend, TransparentBlt and PlgBlt screen reads do not exclude protected windows */
+PREGION
+FASTCALL
+UserCaptureExcludedRegion(
+    _In_ HDC hdcSrc)
+{
+    PREGION prgnExcluded = NULL, prgnVis;
+    PWND pwndDesktop, pwnd;
+    PDC pdc;
+    BOOL Screen;
+
+    if (hdcSrc == NULL || ExGetPreviousMode() != UserMode || UserIsEntered() || IntCompositionIsAttachedProcess())
+        return NULL;
+
+    pdc = DC_LockDc(hdcSrc);
+    if (pdc == NULL)
+        return NULL;
+    Screen = pdc->dctype == DCTYPE_DIRECT && pdc->ppdev != NULL &&
+             pdc->dclevel.pSurface != NULL && pdc->dclevel.pSurface == pdc->ppdev->pSurface;
+    DC_UnlockDc(pdc);
+    if (!Screen)
+        return NULL;
+
+    UserEnterShared();
+    pwndDesktop = UserGetDesktopWindow();
+    for (pwnd = pwndDesktop ? pwndDesktop->spwndChild : NULL; pwnd != NULL; pwnd = pwnd->spwndNext)
+    {
+        if (IntGetWindowDisplayAffinity(pwnd) == WDA_NONE)
+            continue;
+        prgnVis = VIS_ComputeVisibleRegion(pwnd, FALSE, FALSE, TRUE);
+        if (prgnVis == NULL)
+            continue;
+        if (prgnExcluded == NULL)
+        {
+            prgnExcluded = prgnVis;
+            continue;
+        }
+        IntGdiCombineRgn(prgnExcluded, prgnExcluded, prgnVis, RGN_OR);
+        REGION_Delete(prgnVis);
+    }
+    UserLeave();
+
+    return prgnExcluded;
+}
+
 /* EOF */

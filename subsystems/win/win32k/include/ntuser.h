@@ -2659,6 +2659,18 @@ NtUserGetWindowDC(
 
 BOOL
 NTAPI
+NtUserGetWindowDisplayAffinity(
+    _In_ HWND hWnd,
+    _Out_ PDWORD pdwAffinity);
+
+BOOL
+NTAPI
+NtUserSetWindowDisplayAffinity(
+    _In_ HWND hWnd,
+    _In_ DWORD dwAffinity);
+
+BOOL
+NTAPI
 NtUserGetWindowPlacement(
     HWND hWnd,
     WINDOWPLACEMENT *lpwndpl);

@@ -1702,58 +1702,6 @@ LONG_PTR WINAPI SetWindowLongPtrA( HWND hwnd, INT offset, LONG_PTR newval )
 
 #endif
 
-/*****************************************************************************
- *              GetWindowDisplayAffinity (USER32.@)
- */
-BOOL WINAPI GetWindowDisplayAffinity(HWND hwnd, DWORD *affinity)
-{
-    if (!IsWindow(hwnd))
-    {
-        SetLastError(ERROR_INVALID_WINDOW_HANDLE);
-        return FALSE;
-    }
-    if (!affinity)
-    {
-        SetLastError(ERROR_NOACCESS);
-        return FALSE;
-    }
-
-    *affinity = WDA_NONE;
-    return TRUE;
-}
-
-/*****************************************************************************
- *              SetWindowDisplayAffinity (USER32.@)
- */
-BOOL WINAPI SetWindowDisplayAffinity(HWND hwnd, DWORD affinity)
-{
-    DWORD process_id;
-
-    if (!GetWindowThreadProcessId(hwnd, &process_id))
-    {
-        SetLastError(ERROR_INVALID_WINDOW_HANDLE);
-        return FALSE;
-    }
-
-    if (process_id != GetCurrentProcessId())
-    {
-        SetLastError(ERROR_ACCESS_DENIED);
-        return FALSE;
-    }
-    if (GetWindowLongW(hwnd, GWL_STYLE) & WS_CHILD)
-    {
-        SetLastError(ERROR_INVALID_PARAMETER);
-        return FALSE;
-    }
-
-    /* The unprotected state is supported even without capture exclusion. */
-    if (affinity == WDA_NONE)
-        return TRUE;
-
-    SetLastError(ERROR_NOT_ENOUGH_MEMORY);
-    return FALSE;
-}
-
 /**********************************************************************
  *              SetWindowCompositionAttribute (USER32.@)
  */

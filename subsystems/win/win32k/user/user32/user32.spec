@@ -426,7 +426,7 @@
 @ stdcall GetWindowDC(long) User32GetWindowDC
 @ stdcall -version=0xA00+ GetWindowDpiAwarenessContext(long)
 @ stdcall -version=0xA00+ GetWindowDpiHostingBehavior(ptr)
-@ stdcall -version=0x601+ GetWindowDisplayAffinity(long ptr)
+@ stdcall -version=0x601+ GetWindowDisplayAffinity(long ptr) NtUserGetWindowDisplayAffinity
 @ stdcall GetWindowInfo(long ptr)
 @ stdcall GetWindowLongA(long long)
 @ stdcall -arch=win64 GetWindowLongPtrA(ptr long)
@@ -747,7 +747,7 @@
 @ stdcall SetWinEventHook(long long long ptr long long long)
 @ stdcall -version=0x601+ SetWindowCompositionAttribute(ptr ptr)
 @ stdcall SetWindowContextHelpId(long long)
-@ stdcall -version=0x601+ SetWindowDisplayAffinity(long long)
+@ stdcall -version=0x601+ SetWindowDisplayAffinity(long long) NtUserSetWindowDisplayAffinity
 @ stdcall SetWindowLongA(long long long)
 @ stdcall -arch=win64 SetWindowLongPtrA(ptr long ptr)
 @ stdcall -arch=win64 SetWindowLongPtrW(ptr long ptr)

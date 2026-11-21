@@ -4,9 +4,12 @@ extern ATOM AtomMessage;
 extern ATOM AtomWndObj; /* WNDOBJ list */
 extern ATOM AtomLayer;
 extern ATOM AtomFlashWndState;
+extern ATOM AtomDisplayAffinity;
 extern ATOM AtomIconSmall2;
 
 VOID FASTCALL DefWndDestroySmallIcon2(PWND pWnd);
+DWORD FASTCALL IntGetWindowDisplayAffinity(_In_ PWND pWnd);
+struct _REGION *FASTCALL UserCaptureExcludedRegion(_In_ HDC hdcSrc);
 
 #define HAS_DLGFRAME(Style, ExStyle) \
             (((ExStyle) & WS_EX_DLGMODALFRAME) || \
