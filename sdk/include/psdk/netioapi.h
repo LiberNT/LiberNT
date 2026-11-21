@@ -700,7 +700,6 @@ typedef struct _MIB_MULTICASTIPADDRESS_TABLE {
 #define DNS_ENCRYPTION_POLICY_REQUIRED 0x20
 #define IF_NAMESIZE 0x100
 #define NETIO_PULONG 0
-#define NETIO_SUCCESSx) NT_SUCCESS(x)
 
 struct _MIB_IP_NETWORK_CONNECTION_BANDWIDTH_ESTIMATES
 {
@@ -768,9 +767,7 @@ NTSTATUS WINAPI SetSessionCompartmentId(ULONG SessionId, NET_IF_COMPARTMENT_ID C
 }
 #endif
 
-#define NETIO_SUCCESSx) NT_SUCCESS(x)
 
-#define NETIO_SUCCESSx) NT_SUCCESS(x)
 
 #ifdef __cplusplus
 extern "C" {
@@ -782,6 +779,6 @@ NTSTATUS WINAPI ResolveIpNetEntry2(PMIB_IPNET_ROW2 Row, const SOCKADDR_INET *Sou
 }
 #endif
 
-#define NETIO_SUCCESSx) NT_SUCCESS(x)
+#define NETIO_SUCCESS(x) NT_SUCCESS(x)
 
 #endif /* __WINE_NETIOAPI_H */

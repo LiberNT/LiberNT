@@ -314,7 +314,6 @@ VOID WINAPIV SnmpUtilDbgPrint(INT nLogLevel, LPSTR szFormat, ...);
 #define AsnCounter AsnCounter32
 #define AsnGauge AsnGauge32
 #define AsnInteger AsnInteger32
-#define DEFINE_NULLOCTETS) { NULL, 0, FALSE }
 #define RFC1157VarBind SnmpVarBind
 #define RFC1157VarBindList 0
 #define SNMP_CopyVarBind SnmpUtilVarBindCpy
@@ -335,12 +334,8 @@ VOID WINAPIV SnmpUtilDbgPrint(INT nLogLevel, LPSTR szFormat, ...);
 #define SNMP_printany SnmpUtilPrintAsnAny
 #define SNMP_realloc SnmpUtilMemReAlloc
 #define SNMPAPI 0
-#define SNMPDBG_x_) SnmpUtilDbgPrint _x_
 
-#define SNMPDBG_x_) SnmpUtilDbgPrint _x_
-
-#define SNMPDBG_x_) SnmpUtilDbgPrint _x_
-
-#define SNMPDBG_x_) SnmpUtilDbgPrint _x_
+#define DEFINE_NULLOCTETS() { NULL, 0, FALSE }
+#define SNMPDBG(_x_) SnmpUtilDbgPrint _x_
 
 #endif /* _WINE_SNMP_H */

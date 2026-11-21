@@ -1497,32 +1497,18 @@ typedef struct HTTP_SERVICE_CONFIG_CACHE_SET {
 
 #define HTTP_AUTH_ENABLE_ALL 0x1F
 #define HTTP_CERT_CHECK_MODE_NO_REVOCATION 0x00001
-#define HTTP_EQUAL_VERSIONversion, major, minor) ((version) . MajorVersion == (major) && (version) . MinorVersion == (minor))
-#define HTTP_GREATER_EQUAL_VERSIONversion, major, minor) (!HTTP_LESS_VERSION(version, major, minor))
-#define HTTP_GREATER_VERSIONversion, major, minor) ((version) . MajorVersion > (major) || ((version) . MajorVersion == (major) && (version) . MinorVersion > (minor)))
-#define HTTP_IS_NULL_IDpid) (HTTP_NULL_ID == * (pid))
-#define HTTP_LESS_EQUAL_VERSIONversion, major, minor) (!HTTP_GREATER_VERSION(version, major, minor))
-#define HTTP_LESS_VERSIONversion, major, minor) ((version) . MajorVersion < (major) || ((version) . MajorVersion == (major) && (version) . MinorVersion < (minor)))
 #define HTTP_LIMIT_INFINITE ((ULONG)0xFFFFFFFF)
 #define HTTP_MIN_ALLOWED_BANDWIDTH_THROTTLING_RATE ((ULONG)0x400)
 #define HTTP_MIN_ALLOWED_LOG_FILE_ROLLOVER_SIZE ((ULONG)0x100000)
-#define HTTP_NOT_EQUAL_VERSIONversion, major, minor) (!HTTP_EQUAL_VERSION(version, major, minor))
 #define HTTP_QUIC_KEEPALIVE_TIMEOUT_DISABLED ((ULONG)0xFFFFFFFF)
 #define HTTP_REQUEST_FLAG_FAST_FORWARDING_RESPONSE_ALLOWED 0x10
-#define HTTP_SET_NULL_IDpid) (* (pid) = HTTP_NULL_ID)
-#define HTTP_SET_VERSIONversion, major, minor) do { (version) . MajorVersion = (major); (version) . MinorVersion = (minor); \
-} while (0)
 #define HTTP_VERSION_0_9 { 0, 9 }
 #define HTTP_VERSION_1_0 { 1, 0 }
 #define HTTP_VERSION_1_1 { 1, 1 }
 #define HTTP_VERSION_2_0 { 2, 0 }
 #define HTTP_VERSION_3_0 { 3, 0 }
 #define HTTP_VERSION_UNKNOWN 0
-#define HTTPAPI_EQUAL_VERSIONversion, major, minor) ((version) . HttpApiMajorVersion == (major) && (version) . HttpApiMinorVersion == (minor))
-#define HTTPAPI_GREATER_VERSIONversion, major, minor) ((version) . HttpApiMajorVersion > (major) || ((version) . HttpApiMajorVersion == (major) && (version) . HttpApiMinorVersion > (minor)))
-#define HTTPAPI_LESS_VERSIONversion, major, minor) ((version) . HttpApiMajorVersion < (major) || ((version) . HttpApiMajorVersion == (major) && (version) . HttpApiMinorVersion < (minor)))
 #define HTTPAPI_LINKAGE 0
-#define HTTPAPI_VERSION_GREATER_OR_EQUALversion, major, minor) (!HTTPAPI_LESS_VERSION(version, major, minor))
 
 struct _HTTP_SERVICE_CONFIG_SSL_PARAM_EX
 {
@@ -1609,37 +1595,18 @@ ULONG HttpWaitForDisconnectEx(HANDLE RequestQueueHandle, HTTP_CONNECTION_ID Conn
 }
 #endif
 
-#define HTTP_GREATER_EQUAL_VERSIONversion, major, minor) (!HTTP_LESS_VERSION(version, major, minor))
-#define HTTP_IS_NULL_IDpid) (HTTP_NULL_ID == * (pid))
-#define HTTP_LESS_EQUAL_VERSIONversion, major, minor) (!HTTP_GREATER_VERSION(version, major, minor))
-#define HTTP_NOT_EQUAL_VERSIONversion, major, minor) (!HTTP_EQUAL_VERSION(version, major, minor))
-#define HTTP_SET_NULL_IDpid) (* (pid) = HTTP_NULL_ID)
-#define HTTP_SET_VERSIONversion, major, minor) do { (version) . MajorVersion = (major); (version) . MinorVersion = (minor); \
-} while (0)
-#define HTTPAPI_EQUAL_VERSIONversion, major, minor) ((version) . HttpApiMajorVersion == (major) && (version) . HttpApiMinorVersion == (minor))
-#define HTTPAPI_GREATER_VERSIONversion, major, minor) ((version) . HttpApiMajorVersion > (major) || ((version) . HttpApiMajorVersion == (major) && (version) . HttpApiMinorVersion > (minor)))
-#define HTTPAPI_VERSION_GREATER_OR_EQUALversion, major, minor) (!HTTPAPI_LESS_VERSION(version, major, minor))
-
-#define HTTP_GREATER_EQUAL_VERSIONversion, major, minor) (!HTTP_LESS_VERSION(version, major, minor))
-#define HTTP_IS_NULL_IDpid) (HTTP_NULL_ID == * (pid))
-#define HTTP_LESS_EQUAL_VERSIONversion, major, minor) (!HTTP_GREATER_VERSION(version, major, minor))
-#define HTTP_NOT_EQUAL_VERSIONversion, major, minor) (!HTTP_EQUAL_VERSION(version, major, minor))
-#define HTTP_SET_NULL_IDpid) (* (pid) = HTTP_NULL_ID)
-#define HTTP_SET_VERSIONversion, major, minor) do { (version) . MajorVersion = (major); (version) . MinorVersion = (minor); \
-} while (0)
-#define HTTPAPI_EQUAL_VERSIONversion, major, minor) ((version) . HttpApiMajorVersion == (major) && (version) . HttpApiMinorVersion == (minor))
-#define HTTPAPI_GREATER_VERSIONversion, major, minor) ((version) . HttpApiMajorVersion > (major) || ((version) . HttpApiMajorVersion == (major) && (version) . HttpApiMinorVersion > (minor)))
-#define HTTPAPI_VERSION_GREATER_OR_EQUALversion, major, minor) (!HTTPAPI_LESS_VERSION(version, major, minor))
-
-#define HTTP_GREATER_EQUAL_VERSIONversion, major, minor) (!HTTP_LESS_VERSION(version, major, minor))
-#define HTTP_IS_NULL_IDpid) (HTTP_NULL_ID == * (pid))
-#define HTTP_LESS_EQUAL_VERSIONversion, major, minor) (!HTTP_GREATER_VERSION(version, major, minor))
-#define HTTP_NOT_EQUAL_VERSIONversion, major, minor) (!HTTP_EQUAL_VERSION(version, major, minor))
-#define HTTP_SET_NULL_IDpid) (* (pid) = HTTP_NULL_ID)
-#define HTTP_SET_VERSIONversion, major, minor) do { (version) . MajorVersion = (major); (version) . MinorVersion = (minor); \
-} while (0)
-#define HTTPAPI_EQUAL_VERSIONversion, major, minor) ((version) . HttpApiMajorVersion == (major) && (version) . HttpApiMinorVersion == (minor))
-#define HTTPAPI_GREATER_VERSIONversion, major, minor) ((version) . HttpApiMajorVersion > (major) || ((version) . HttpApiMajorVersion == (major) && (version) . HttpApiMinorVersion > (minor)))
-#define HTTPAPI_VERSION_GREATER_OR_EQUALversion, major, minor) (!HTTPAPI_LESS_VERSION(version, major, minor))
+#define HTTP_EQUAL_VERSION(version, major, minor) ((version) . MajorVersion == (major) && (version) . MinorVersion == (minor))
+#define HTTP_GREATER_EQUAL_VERSION(version, major, minor) (!HTTP_LESS_VERSION(version, major, minor))
+#define HTTP_GREATER_VERSION(version, major, minor) ((version) . MajorVersion > (major) || ((version) . MajorVersion == (major) && (version) . MinorVersion > (minor)))
+#define HTTP_IS_NULL_ID(pid) (HTTP_NULL_ID == * (pid))
+#define HTTP_LESS_EQUAL_VERSION(version, major, minor) (!HTTP_GREATER_VERSION(version, major, minor))
+#define HTTP_LESS_VERSION(version, major, minor) ((version) . MajorVersion < (major) || ((version) . MajorVersion == (major) && (version) . MinorVersion < (minor)))
+#define HTTP_NOT_EQUAL_VERSION(version, major, minor) (!HTTP_EQUAL_VERSION(version, major, minor))
+#define HTTP_SET_NULL_ID(pid) (* (pid) = HTTP_NULL_ID)
+#define HTTP_SET_VERSION(version, major, minor) do { (version) . MajorVersion = (major); (version) . MinorVersion = (minor); } while (0)
+#define HTTPAPI_EQUAL_VERSION(version, major, minor) ((version) . HttpApiMajorVersion == (major) && (version) . HttpApiMinorVersion == (minor))
+#define HTTPAPI_GREATER_VERSION(version, major, minor) ((version) . HttpApiMajorVersion > (major) || ((version) . HttpApiMajorVersion == (major) && (version) . HttpApiMinorVersion > (minor)))
+#define HTTPAPI_LESS_VERSION(version, major, minor) ((version) . HttpApiMajorVersion < (major) || ((version) . HttpApiMajorVersion == (major) && (version) . HttpApiMinorVersion < (minor)))
+#define HTTPAPI_VERSION_GREATER_OR_EQUAL(version, major, minor) (!HTTPAPI_LESS_VERSION(version, major, minor))
 
 #endif  /* __WINE_HTTP_H */

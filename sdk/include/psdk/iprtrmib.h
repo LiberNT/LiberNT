@@ -74,7 +74,6 @@ typedef SN_CHAR * SCOPE_NAME;
 
 #define BEST_IF 0x14
 #define BEST_ROUTE 0x15
-#define CAST_MIB_INFOX, Y, Z) Z = (Y) (X -> rgbyData)
 #define DEST_LONGER 0x1D
 #define DEST_MATCHING 0x1C
 #define DEST_SHORTER 0x1E
@@ -98,8 +97,6 @@ typedef SN_CHAR * SCOPE_NAME;
 #define MCAST_MFE_STATS 0x13
 #define MCAST_MFE_STATS_EX 0x23
 #define MCAST_SCOPE 0x1B
-#define MIB_INFO_SIZES) (MAX_MIB_OFFSET + sizeof (S))
-#define MIB_INFO_SIZE_IN_DWORDSS) ((MIB_INFO_SIZE(S)) / sizeof (DWORD) + 1)
 #define NUMBER_OF_EXPORTED_VARIABLES 0x27
 #define PROXY_ARP 0x16
 #define ROUTE_LONGER 0x20
@@ -164,12 +161,7 @@ typedef struct _MIB_IPMCAST_SCOPE MIB_IPMCAST_SCOPE;
 
 typedef struct _MIB_IPMCAST_SCOPE *PMIB_IPMCAST_SCOPE;
 
-#define CAST_MIB_INFOX, Y, Z) Z = (Y) (X -> rgbyData)
-#define MIB_INFO_SIZE_IN_DWORDSS) ((MIB_INFO_SIZE(S)) / sizeof (DWORD) + 1)
 
-#define CAST_MIB_INFOX, Y, Z) Z = (Y) (X -> rgbyData)
-#define MIB_INFO_SIZE_IN_DWORDSS) ((MIB_INFO_SIZE(S)) / sizeof (DWORD) + 1)
-#define SIZEOF_BOUNDARY_TABLEX) (FIELD_OFFSET(MIB_IPMCAST_BOUNDARY_TABLE, table [0]) + ((X) * sizeof (MIB_IPMCAST_BOUNDARY)) + ALIGN_SIZE)
 
 struct _MIB_BEST_IF
 {
@@ -262,8 +254,22 @@ typedef struct _MIB_PROXYARP *PMIB_PROXYARP;
 
 typedef struct _MIB_ROUTESTATE *PMIB_ROUTESTATE;
 
-#define CAST_MIB_INFOX, Y, Z) Z = (Y) (X -> rgbyData)
-#define MIB_INFO_SIZE_IN_DWORDSS) ((MIB_INFO_SIZE(S)) / sizeof (DWORD) + 1)
-#define SIZEOF_BOUNDARY_TABLEX) (FIELD_OFFSET(MIB_IPMCAST_BOUNDARY_TABLE, table [0]) + ((X) * sizeof (MIB_IPMCAST_BOUNDARY)) + ALIGN_SIZE)
+
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+HANDLE WINAPI OpenJobObjectW(DWORD dwDesiredAccess, BOOL bInheritHandle, LPCWSTR lpName);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define CAST_MIB_INFO(X, Y, Z) Z = (Y) (X -> rgbyData)
+#define MIB_INFO_SIZE(S) (MAX_MIB_OFFSET + sizeof (S))
+#define MIB_INFO_SIZE_IN_DWORDS(S) ((MIB_INFO_SIZE(S)) / sizeof (DWORD) + 1)
+#define SIZEOF_BOUNDARY_TABLE(X) (FIELD_OFFSET(MIB_IPMCAST_BOUNDARY_TABLE, table [0]) + ((X) * sizeof (MIB_IPMCAST_BOUNDARY)) + ALIGN_SIZE)
 
 #endif /* WINE_IPRTRMIB_H__ */

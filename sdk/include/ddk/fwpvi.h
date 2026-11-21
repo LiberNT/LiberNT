@@ -763,3 +763,5 @@ extern "C" {
 
 #define FWPS_CALLOUT_CLASSIFY_FN_FAST 0
 
+#define FWPS_CALLOUT_FAST 0
+

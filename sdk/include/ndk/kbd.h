@@ -137,15 +137,12 @@ typedef struct _LIGATURE ## i { \
 };
 #endif//__KBD_H
 
-#define _EQv4) (VK_ ## v4)
 #define _KBD_ 0
-#define _NEv1, v2, v3, v4, v5, v6) (VK_ ## v4)
 #define ACUTE 0x301
 #define AX_KBD_DESKTOP_TYPE 1
 #define BREVE 0x306
 #define CEDILLA 0x327
 #define CIRCUMFLEX 0x302
-#define DEADTRANSch, accent, comp, flags) { MAKELONG(ch, accent), comp, flags }
 #define DEC_KBD_ANSI_LAYOUT_TYPE 1
 #define DEC_KBD_JIS_LAYOUT_TYPE 2
 #define DIARESIS 0x308
@@ -158,15 +155,9 @@ typedef struct _LIGATURE ## i { \
 #define FMR_KBD_JIS_TYPE 0
 #define FMR_KBD_OASYS_TYPE 1
 #define FMV_KBD_OASYS_TYPE 2
-#define FUJITSU_KBD_CONSOLEId) (JAPANESE_KEYBOARD(Id) && (Id) . Subtype == ((NLSKBD_OEM_FUJITSU << 4) | FMV_KBD_OASYS_TYPE))
-#define FUJITSU_KBD_REMOTEId) (JAPANESE_KEYBOARD(Id) && (Id) . SubType == 0x00020002)
 #define GRAVE 0x300
 #define HACEK 0x30C
 #define HOOK_ABOVE 0x309
-#define IDS_FROM_SCANCODEprefix, base) (0xc000 + ((0x ## prefix) >= 0xE0 ? 0x100 : 0) + (0x ## base))
-#define JAPANESE_KBD_LAYOUThkl) (KBD_LAYOUT_LANG(hkl) == LANG_JAPANESE)
-#define JAPANESE_KEYBOARDId) ((Id) . Type == KEYBOARD_TYPE_JAPAN)
-#define KBD_LAYOUT_LANGhkl) (PRIMARYLANGID(HandleToUlong(hkl)))
 #define KBD_LONG_POINTER
 #define KBD_TYPE 4
 #define KBDBASE 0
@@ -204,13 +195,8 @@ typedef struct _LIGATURE ## i { \
 #define KEYBOARD_TYPE_JAPAN 7
 #define KEYBOARD_TYPE_KOREA 8
 #define KEYBOARD_TYPE_UNKNOWN 0x51
-#define KLL_ATTR_FROM_KLFx) ((x) >> 15)
-#define KLL_GLOBAL_ATTR_FROM_KLFx) (KLL_ATTR_FROM_KLF(x) & KLLF_GLOBAL_ATTRS)
-#define KLL_LAYOUT_ATTR_FROM_KLFx) (KLL_ATTR_FROM_KLF(x) & KLLF_LAYOUT_ATTRS)
 #define KLLF_GLOBAL_ATTRS 2
 #define KLLF_LAYOUT_ATTRS 7
-#define KOREAN_KBD_LAYOUThkl) (KBD_LAYOUT_LANG(hkl) == LANG_KOREAN)
-#define KOREAN_KEYBOARDId) ((Id) . Type == KEYBOARD_TYPE_KOREA)
 #define MACRON 0x304
 #define MICROSOFT_KBD_001_TYPE 4
 #define MICROSOFT_KBD_002_TYPE 3
@@ -694,41 +680,21 @@ typedef struct _VK_TO_WCHARS9 VK_TO_WCHARS9;
 
 typedef struct _VK_VSC VK_VSC;
 
-#define _EQv4) (VK_ ## v4)
-#define _NEv1, v2, v3, v4, v5, v6) (VK_ ## v4)
-#define DEADTRANSch, accent, comp, flags) { MAKELONG(ch, accent), comp, flags }
-#define FUJITSU_KBD_CONSOLEId) (JAPANESE_KEYBOARD(Id) && (Id) . Subtype == ((NLSKBD_OEM_FUJITSU << 4) | FMV_KBD_OASYS_TYPE))
-#define FUJITSU_KBD_REMOTEId) (JAPANESE_KEYBOARD(Id) && (Id) . SubType == 0x00020002)
-#define IDS_FROM_SCANCODEprefix, base) (0xc000 + ((0x ## prefix) >= 0xE0 ? 0x100 : 0) + (0x ## base))
-#define JAPANESE_KBD_LAYOUThkl) (KBD_LAYOUT_LANG(hkl) == LANG_JAPANESE)
-#define KLL_GLOBAL_ATTR_FROM_KLFx) (KLL_ATTR_FROM_KLF(x) & KLLF_GLOBAL_ATTRS)
-#define KLL_LAYOUT_ATTR_FROM_KLFx) (KLL_ATTR_FROM_KLF(x) & KLLF_LAYOUT_ATTRS)
-#define KOREAN_KBD_LAYOUThkl) (KBD_LAYOUT_LANG(hkl) == LANG_KOREAN)
-#define KOREAN_KEYBOARDId) ((Id) . Type == KEYBOARD_TYPE_KOREA)
 #define X5F 0x5F
 
-#define _EQv4) (VK_ ## v4)
-#define _NEv1, v2, v3, v4, v5, v6) (VK_ ## v4)
-#define DEADTRANSch, accent, comp, flags) { MAKELONG(ch, accent), comp, flags }
-#define FUJITSU_KBD_CONSOLEId) (JAPANESE_KEYBOARD(Id) && (Id) . Subtype == ((NLSKBD_OEM_FUJITSU << 4) | FMV_KBD_OASYS_TYPE))
-#define FUJITSU_KBD_REMOTEId) (JAPANESE_KEYBOARD(Id) && (Id) . SubType == 0x00020002)
-#define IDS_FROM_SCANCODEprefix, base) (0xc000 + ((0x ## prefix) >= 0xE0 ? 0x100 : 0) + (0x ## base))
-#define JAPANESE_KBD_LAYOUThkl) (KBD_LAYOUT_LANG(hkl) == LANG_JAPANESE)
-#define KLL_GLOBAL_ATTR_FROM_KLFx) (KLL_ATTR_FROM_KLF(x) & KLLF_GLOBAL_ATTRS)
-#define KLL_LAYOUT_ATTR_FROM_KLFx) (KLL_ATTR_FROM_KLF(x) & KLLF_LAYOUT_ATTRS)
-#define KOREAN_KBD_LAYOUThkl) (KBD_LAYOUT_LANG(hkl) == LANG_KOREAN)
-#define KOREAN_KEYBOARDId) ((Id) . Type == KEYBOARD_TYPE_KOREA)
-
-#define _EQv4) (VK_ ## v4)
-#define _NEv1, v2, v3, v4, v5, v6) (VK_ ## v4)
-#define DEADTRANSch, accent, comp, flags) { MAKELONG(ch, accent), comp, flags }
-#define FUJITSU_KBD_CONSOLEId) (JAPANESE_KEYBOARD(Id) && (Id) . Subtype == ((NLSKBD_OEM_FUJITSU << 4) | FMV_KBD_OASYS_TYPE))
-#define FUJITSU_KBD_REMOTEId) (JAPANESE_KEYBOARD(Id) && (Id) . SubType == 0x00020002)
-#define IDS_FROM_SCANCODEprefix, base) (0xc000 + ((0x ## prefix) >= 0xE0 ? 0x100 : 0) + (0x ## base))
-#define JAPANESE_KBD_LAYOUThkl) (KBD_LAYOUT_LANG(hkl) == LANG_JAPANESE)
-#define KLL_GLOBAL_ATTR_FROM_KLFx) (KLL_ATTR_FROM_KLF(x) & KLLF_GLOBAL_ATTRS)
-#define KLL_LAYOUT_ATTR_FROM_KLFx) (KLL_ATTR_FROM_KLF(x) & KLLF_LAYOUT_ATTRS)
-#define KOREAN_KBD_LAYOUThkl) (KBD_LAYOUT_LANG(hkl) == LANG_KOREAN)
-#define KOREAN_KEYBOARDId) ((Id) . Type == KEYBOARD_TYPE_KOREA)
+#define _EQ(v4) (VK_ ## v4)
+#define _NE(v1, v2, v3, v4, v5, v6) (VK_ ## v4)
+#define DEADTRANS(ch, accent, comp, flags) { MAKELONG(ch, accent), comp, flags }
+#define FUJITSU_KBD_CONSOLE(Id) (JAPANESE_KEYBOARD(Id) && (Id) . Subtype == ((NLSKBD_OEM_FUJITSU << 4) | FMV_KBD_OASYS_TYPE))
+#define FUJITSU_KBD_REMOTE(Id) (JAPANESE_KEYBOARD(Id) && (Id) . SubType == 0x00020002)
+#define IDS_FROM_SCANCODE(prefix, base) (0xc000 + ((0x ## prefix) >= 0xE0 ? 0x100 : 0) + (0x ## base))
+#define JAPANESE_KBD_LAYOUT(hkl) (KBD_LAYOUT_LANG(hkl) == LANG_JAPANESE)
+#define JAPANESE_KEYBOARD(Id) ((Id) . Type == KEYBOARD_TYPE_JAPAN)
+#define KBD_LAYOUT_LANG(hkl) (PRIMARYLANGID(HandleToUlong(hkl)))
+#define KLL_ATTR_FROM_KLF(x) ((x) >> 15)
+#define KLL_GLOBAL_ATTR_FROM_KLF(x) (KLL_ATTR_FROM_KLF(x) & KLLF_GLOBAL_ATTRS)
+#define KLL_LAYOUT_ATTR_FROM_KLF(x) (KLL_ATTR_FROM_KLF(x) & KLLF_LAYOUT_ATTRS)
+#define KOREAN_KBD_LAYOUT(hkl) (KBD_LAYOUT_LANG(hkl) == LANG_KOREAN)
+#define KOREAN_KEYBOARD(Id) ((Id) . Type == KEYBOARD_TYPE_KOREA)
 
 #endif /* __KBD_H */

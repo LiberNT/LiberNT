@@ -871,7 +871,6 @@ typedef struct {
 
 typedef LPMCI_DGV_WINDOW_PARMSA LPMCI_DGV_WINDOW_PARMS;
 
-#define SEND_DGVSIGNALdwFlags, dwCallback, hDriver, wDeviceID, dwUser, dwPos) DriverCallback((dwCallback), DCB_WINDOW, (HANDLE) (wDeviceID), MM_MCISIGNAL, hDriver, ((dwFlags) & MCI_DGV_SIGNAL_POSITION) ? (dwPos) : (dwUser), ((dwFlags) & MCI_DGV_SIGNAL_POSITION) ? (dwUser) : (dwPos))
 
 typedef LPMCI_DGV_CAPTURE_PARMSA LPMCI_DGV_CAPTURE_PARMS;
 
@@ -923,10 +922,6 @@ typedef MCI_DGV_STATUS_PARMSA MCI_DGV_STATUS_PARMS;
 
 typedef MCI_DGV_WINDOW_PARMSA MCI_DGV_WINDOW_PARMS;
 
-#define SEND_DGVSIGNALdwFlags, dwCallback, hDriver, wDeviceID, dwUser, dwPos) DriverCallback((dwCallback), DCB_WINDOW, (HANDLE) (wDeviceID), MM_MCISIGNAL, hDriver, ((dwFlags) & MCI_DGV_SIGNAL_POSITION) ? (dwPos) : (dwUser), ((dwFlags) & MCI_DGV_SIGNAL_POSITION) ? (dwUser) : (dwPos))
-
-#define SEND_DGVSIGNALdwFlags, dwCallback, hDriver, wDeviceID, dwUser, dwPos) DriverCallback((dwCallback), DCB_WINDOW, (HANDLE) (wDeviceID), MM_MCISIGNAL, hDriver, ((dwFlags) & MCI_DGV_SIGNAL_POSITION) ? (dwPos) : (dwUser), ((dwFlags) & MCI_DGV_SIGNAL_POSITION) ? (dwUser) : (dwPos))
-
-#define SEND_DGVSIGNALdwFlags, dwCallback, hDriver, wDeviceID, dwUser, dwPos) DriverCallback((dwCallback), DCB_WINDOW, (HANDLE) (wDeviceID), MM_MCISIGNAL, hDriver, ((dwFlags) & MCI_DGV_SIGNAL_POSITION) ? (dwPos) : (dwUser), ((dwFlags) & MCI_DGV_SIGNAL_POSITION) ? (dwUser) : (dwPos))
+#define SEND_DGVSIGNAL(dwFlags, dwCallback, hDriver, wDeviceID, dwUser, dwPos) DriverCallback((dwCallback), DCB_WINDOW, (HANDLE) (wDeviceID), MM_MCISIGNAL, hDriver, ((dwFlags) & MCI_DGV_SIGNAL_POSITION) ? (dwPos) : (dwUser), ((dwFlags) & MCI_DGV_SIGNAL_POSITION) ? (dwUser) : (dwPos))
 
 #endif /* __WINE_DIGITALV_H */

@@ -3455,8 +3455,6 @@ typedef IMiniportStreamAudioEngineNode2 *PIMINIPORTStreamAudioEngineNode2;
 
 #undef INTERFACE
 
-#define DEFINE_ABSTRACT_MINIPORTWAVERTINPUTSTREAM) _IRQL_requires_max_(PASSIVE_LEVEL) STDMETHOD_(NTSTATUS, GetReadPacket) (THIS_ _Out_ ULONG * PacketNumber, _Out_ DWORD * Flags, _Out_ ULONG64 * PerformanceCounterValue, _Out_ BOOL * MoreData) PURE;
-#define DEFINE_ABSTRACT_MINIPORTWAVERTSTREAMNOTIFICATION) STDMETHOD_(NTSTATUS, AllocateBufferWithNotification) (_In_ ULONG NotificationCount, _In_ ULONG RequestedSize, _Out_ PMDL * AudioBufferMdl, _Out_ ULONG * ActualSize, _Out_ ULONG * OffsetFromFirstPage, _Out_ MEMORY_CACHING_TYPE * CacheType) PURE; STDMETHOD_(VOID, FreeBufferWithNotification) (_In_ PMDL AudioBufferMdl, _In_ ULONG BufferSize) PURE; STDMETHOD_(NTSTATUS, RegisterNotificationEvent) (_In_ PKEVENT NotificationEvent) PURE; STDMETHOD_(NTSTATUS, UnregisterNotificationEvent) (_In_ PKEVENT NotificationEvent) PURE;
 #define IID_IAdapterPowerManagment 0
 #define IID_IAdapterPowerManagment2 IID_IAdapterPowerManagement2
 #define IMP_IMiniportMidi IMP_IMiniport; STDMETHODIMP_(NTSTATUS) Init(_In_ PUNKNOWN UnknownAdapter, _In_ PRESOURCELIST ResourceList, _In_ PPORTMIDI Port, _Out_ PSERVICEGROUP * ServiceGroup); STDMETHODIMP_(void) Service(void); STDMETHODIMP_(NTSTATUS) NewStream(_Out_ PMINIPORTMIDISTREAM * Stream, _In_opt_ PUNKNOWN OuterUnknown, _In_ POOL_TYPE PoolType, _In_ ULONG Pin, _In_ BOOLEAN Capture, _In_ PKSDATAFORMAT DataFormat, _Out_ PSERVICEGROUP * ServiceGroup)
@@ -3621,5 +3619,8 @@ NTSTATUS PcUnregisterAdapterPnpManagement(PDEVICE_OBJECT DeviceObject);
 #ifdef __cplusplus
 }
 #endif
+
+#define DEFINE_ABSTRACT_MINIPORTWAVERTINPUTSTREAM() _IRQL_requires_max_(PASSIVE_LEVEL) STDMETHOD_(NTSTATUS, GetReadPacket) (THIS_ _Out_ ULONG * PacketNumber, _Out_ DWORD * Flags, _Out_ ULONG64 * PerformanceCounterValue, _Out_ BOOL * MoreData) PURE;
+#define DEFINE_ABSTRACT_MINIPORTWAVERTSTREAMNOTIFICATION() STDMETHOD_(NTSTATUS, AllocateBufferWithNotification) (_In_ ULONG NotificationCount, _In_ ULONG RequestedSize, _Out_ PMDL * AudioBufferMdl, _Out_ ULONG * ActualSize, _Out_ ULONG * OffsetFromFirstPage, _Out_ MEMORY_CACHING_TYPE * CacheType) PURE; STDMETHOD_(VOID, FreeBufferWithNotification) (_In_ PMDL AudioBufferMdl, _In_ ULONG BufferSize) PURE; STDMETHOD_(NTSTATUS, RegisterNotificationEvent) (_In_ PKEVENT NotificationEvent) PURE; STDMETHOD_(NTSTATUS, UnregisterNotificationEvent) (_In_ PKEVENT NotificationEvent) PURE;
 
 #endif /* PORTCLS_H */

@@ -3640,3 +3640,5 @@ cpp_quote("#define IID_IOInetBindInfoEx 0")
 cpp_quote("")
 cpp_quote("typedef enum __MIDL_IInternetSecurityManager_0002 PUAFOUT;")
 
+cpp_quote("#define IID_IOInetProtocolEx 0")
+

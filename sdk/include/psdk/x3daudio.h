@@ -157,15 +157,10 @@ typedef struct X3DAUDIO_EMITTER * LPX3DAUDIO_EMITTER;
 typedef struct X3DAUDIO_LISTENER * LPX3DAUDIO_LISTENER;
 
 #define X3DAUDIO_2PI 6
-#define X3DAUDIO_API_type) EXTERN_C __declspec(dllimport) type STDAPIVCALLTYPE
 #define X3DAUDIO_PI 3
 
 typedef float FLOAT32;
 
-#define X3DAUDIO_API_type) EXTERN_C __declspec(dllimport) type STDAPIVCALLTYPE
-
-#define X3DAUDIO_API_type) EXTERN_C __declspec(dllimport) type STDAPIVCALLTYPE
-
-#define X3DAUDIO_API_type) EXTERN_C __declspec(dllimport) type STDAPIVCALLTYPE
+#define X3DAUDIO_API_(type) EXTERN_C __declspec(dllimport) type STDAPIVCALLTYPE
 
 #endif

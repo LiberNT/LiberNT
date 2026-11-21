@@ -928,3 +928,16 @@ INT WINAPI WSASetRecvIPEcn(SOCKET Socket, DWORD Enabled);
 }
 #endif
 
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+INT WINAPI WSAGetIcmpErrorInfo(SOCKET Socket, ICMP_ERROR_INFO *Info);
+
+#ifdef __cplusplus
+}
+#endif
+

@@ -1392,8 +1392,6 @@ cpp_quote("#define WINCODEC_SDK_VERSION2 0x0237")
 cpp_quote("#endif")
 
 cpp_quote("#define FACILITY_WINCODEC_ERR 0x898")
-cpp_quote("#define MAKE_WINCODECHRsev, code) MAKE_HRESULT(sev, FACILITY_WINCODEC_ERR, (WINCODEC_ERR_BASE + code))")
-cpp_quote("#define MAKE_WINCODECHR_ERRcode) MAKE_WINCODECHR(1, code)")
 cpp_quote("#define WIC_JPEG_MAX_COMPONENT_COUNT (4)")
 cpp_quote("#define WINCODEC_ERR_ABORTED (-2147467260)")
 cpp_quote("#define WINCODEC_ERR_ACCESSDENIED (-2147024891)")
@@ -2687,9 +2685,6 @@ cpp_quote("#ifdef __cplusplus")
 cpp_quote("}")
 cpp_quote("#endif")
 
-cpp_quote("#define MAKE_WINCODECHR_ERRcode) MAKE_WINCODECHR(1, code)")
-
-cpp_quote("#define MAKE_WINCODECHR_ERRcode) MAKE_WINCODECHR(1, code)")
-
-cpp_quote("#define MAKE_WINCODECHR_ERRcode) MAKE_WINCODECHR(1, code)")
+cpp_quote("#define MAKE_WINCODECHR(sev, code) MAKE_HRESULT(sev, FACILITY_WINCODEC_ERR, (WINCODEC_ERR_BASE + code))")
+cpp_quote("#define MAKE_WINCODECHR_ERR(code) MAKE_WINCODECHR(1, code)")
 

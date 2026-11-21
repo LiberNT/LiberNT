@@ -1398,8 +1398,6 @@ struct tagRASUPDATECONN {
 #define LPRASPPPIPV6 RASPPPIPV6 *
 #define LPRASUPDATECONN RASUPDATECONN *
 #define RASAPIVERSION_CURRENT RASAPIVERSION_601
-#define RASCF_IsNotOwnerrascFlags) (((rascFlags) & (RASCF_OwnerKnown | RASCF_OwnerMatch)) == (RASCF_OwnerKnown))
-#define RASCF_IsOwnerrascFlags) (((rascFlags) & (RASCF_OwnerKnown | RASCF_OwnerMatch)) == (RASCF_OwnerKnown | RASCF_OwnerMatch))
 #define RASIKEv2_FLAGS_MOBIKESUPPORTED 0x00000001
 #define RASPPPIPV6 struct tagRASPPPIPV6
 #define RASUPDATECONN 0
@@ -1456,13 +1454,7 @@ DWORD WINAPI RasUpdateConnection(HRASCONN hrasconn, struct tagRASUPDATECONN *lpr
 }
 #endif
 
-#define RASCF_IsNotOwnerrascFlags) (((rascFlags) & (RASCF_OwnerKnown | RASCF_OwnerMatch)) == (RASCF_OwnerKnown))
-#define RASCF_IsOwnerrascFlags) (((rascFlags) & (RASCF_OwnerKnown | RASCF_OwnerMatch)) == (RASCF_OwnerKnown | RASCF_OwnerMatch))
-
-#define RASCF_IsNotOwnerrascFlags) (((rascFlags) & (RASCF_OwnerKnown | RASCF_OwnerMatch)) == (RASCF_OwnerKnown))
-#define RASCF_IsOwnerrascFlags) (((rascFlags) & (RASCF_OwnerKnown | RASCF_OwnerMatch)) == (RASCF_OwnerKnown | RASCF_OwnerMatch))
-
-#define RASCF_IsNotOwnerrascFlags) (((rascFlags) & (RASCF_OwnerKnown | RASCF_OwnerMatch)) == (RASCF_OwnerKnown))
-#define RASCF_IsOwnerrascFlags) (((rascFlags) & (RASCF_OwnerKnown | RASCF_OwnerMatch)) == (RASCF_OwnerKnown | RASCF_OwnerMatch))
+#define RASCF_IsNotOwner(rascFlags) (((rascFlags) & (RASCF_OwnerKnown | RASCF_OwnerMatch)) == (RASCF_OwnerKnown))
+#define RASCF_IsOwner(rascFlags) (((rascFlags) & (RASCF_OwnerKnown | RASCF_OwnerMatch)) == (RASCF_OwnerKnown | RASCF_OwnerMatch))
 
 #endif /* _RAS_H */

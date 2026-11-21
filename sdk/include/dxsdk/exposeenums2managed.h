@@ -30,29 +30,12 @@
 
 #endif  /* MANAGED_ENUMS */
 
-#define ANALOG_VIDEO_STANDARD_NAMESPACEx) x
-#define EHRECVR_MGD_NAMESPACEx) x
-#define ENUMGg) typedef V1_ENUMG(g) enum
 #define FLAGS16 ENUM16
-#define RATATTRx) x
-#define RATLEVELx) x
-#define V1_ENUMGg)
 
-#define ANALOG_VIDEO_STANDARD_NAMESPACEx) x
-#define EHRECVR_MGD_NAMESPACEx) x
-#define ENUMGg) typedef V1_ENUMG(g) enum
-#define RATATTRx) x
-#define RATLEVELx) x
-
-#define ANALOG_VIDEO_STANDARD_NAMESPACEx) x
-#define EHRECVR_MGD_NAMESPACEx) x
-#define ENUMGg) typedef V1_ENUMG(g) enum
-#define RATATTRx) x
-#define RATLEVELx) x
-
-#define ANALOG_VIDEO_STANDARD_NAMESPACEx) x
-#define EHRECVR_MGD_NAMESPACEx) x
-#define ENUMGg) typedef V1_ENUMG(g) enum
-#define RATATTRx) x
-#define RATLEVELx) x
+#define ANALOG_VIDEO_STANDARD_NAMESPACE(x) x
+#define EHRECVR_MGD_NAMESPACE(x) x
+#define ENUMG(g) typedef V1_ENUMG(g) enum
+#define RATATTR(x) x
+#define RATLEVEL(x) x
+#define V1_ENUMG(g)
 

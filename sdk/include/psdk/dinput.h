@@ -5248,47 +5248,79 @@ typedef struct DIPROPCPOINTS {
 #ifdef UNICODE
 #define IDirectInput IDirectInputW
 #else
+#ifdef UNICODE
+#define IDirectInput IDirectInputW
+#else
 #define IDirectInput IDirectInputA
 #endif
+#endif
+#ifdef UNICODE
+#define IDirectInput2 IDirectInput2W
+#else
 #ifdef UNICODE
 #define IDirectInput2 IDirectInput2W
 #else
 #define IDirectInput2 IDirectInput2A
 #endif
+#endif
 #define IDirectInput2Vtbl IDirectInput2AVtbl
+#ifdef UNICODE
+#define IDirectInput7 IDirectInput7W
+#else
 #ifdef UNICODE
 #define IDirectInput7 IDirectInput7W
 #else
 #define IDirectInput7 IDirectInput7A
 #endif
+#endif
 #define IDirectInput7Vtbl IDirectInput7AVtbl
+#ifdef UNICODE
+#define IDirectInput8 IDirectInput8W
+#else
 #ifdef UNICODE
 #define IDirectInput8 IDirectInput8W
 #else
 #define IDirectInput8 IDirectInput8A
 #endif
+#endif
 #define IDirectInput8Vtbl IDirectInput8AVtbl
+#ifdef UNICODE
+#define IDirectInputDevice IDirectInputDeviceW
+#else
 #ifdef UNICODE
 #define IDirectInputDevice IDirectInputDeviceW
 #else
 #define IDirectInputDevice IDirectInputDeviceA
 #endif
+#endif
+#ifdef UNICODE
+#define IDirectInputDevice2 IDirectInputDevice2W
+#else
 #ifdef UNICODE
 #define IDirectInputDevice2 IDirectInputDevice2W
 #else
 #define IDirectInputDevice2 IDirectInputDevice2A
 #endif
+#endif
 #define IDirectInputDevice2Vtbl IDirectInputDevice2AVtbl
+#ifdef UNICODE
+#define IDirectInputDevice7 IDirectInputDevice7W
+#else
 #ifdef UNICODE
 #define IDirectInputDevice7 IDirectInputDevice7W
 #else
 #define IDirectInputDevice7 IDirectInputDevice7A
 #endif
+#endif
 #define IDirectInputDevice7Vtbl IDirectInputDevice7AVtbl
 #ifdef UNICODE
 #define IDirectInputDevice8 IDirectInputDevice8W
 #else
+#ifdef UNICODE
+#define IDirectInputDevice8 IDirectInputDevice8W
+#else
 #define IDirectInputDevice8 IDirectInputDevice8A
+#endif
 #endif
 #define IDirectInputDevice8Vtbl IDirectInputDevice8AVtbl
 #define IDirectInputDeviceVtbl IDirectInputDeviceAVtbl

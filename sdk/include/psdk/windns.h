@@ -1243,7 +1243,11 @@ typedef struct DNS_PROXY_INFORMATION {
 #define DNS_IP4_REVERSE_DOMAIN_STRING 0
 #define DNS_IP4_REVERSE_DOMAIN_STRING_A 0
 #define DNS_IP4_REVERSE_DOMAIN_STRING_W (L"in-addr.arpa.")
+#ifdef UNICODE
+#define DNS_IP6_REVERSE_DOMAIN_STRING DNS_IP6_REVERSE_DOMAIN_STRING_W
+#else
 #define DNS_IP6_REVERSE_DOMAIN_STRING DNS_IP6_REVERSE_DOMAIN_STRING_A
+#endif
 #define DNS_IP6_REVERSE_DOMAIN_STRING_A 0
 #define DNS_IP6_REVERSE_DOMAIN_STRING_W (L"ip6.arpa.")
 #define DNS_MAX_IP4_REVERSE_NAME_BUFFER_LENGTH DNS_MAX_IP4_REVERSE_NAME_LENGTH
@@ -1253,20 +1257,9 @@ typedef struct DNS_PROXY_INFORMATION {
 #define DNS_MAX_REVERSE_NAME_LENGTH 0x4B
 #define DNS_OFFSET_TO_QUESTION_NAME 0xC
 #define DNS_QUERY_CACHE_ONLY 0x10
-#define DNS_QUESTION_NAME_FROM_HEADER_pHeader_) ((PCHAR) ((PDNS_HEADER) (_pHeader_) + 1))
 #define DNS_VALSVR_ERROR_INVALID_ADDR 0x01
 #define DnsFreeRecordListDeep 1
-#define DnsRecordCopypRR) DnsRecordCopyEx((pRR), DnsCharSetAnsi, DnsCharSetAnsi)
-#define DnsRecordSetCopypRR) DnsRecordSetCopyEx((pRR), DnsCharSetAnsi, DnsCharSetAnsi)
-#define INLINE_DWORD_FLIPout, in) { DWORD _in = (in); (out) = ((_in << 8) & 0x00ff0000) | (_in << 24) | ((_in >> 8) & 0x0000ff00) | (_in >> 24); }
-#define INLINE_HTONLout, in) INLINE_DWORD_FLIP(out, in)
-#define INLINE_NTOHLout, in) INLINE_DWORD_FLIP(out, in)
-#define INLINE_WRITE_FLIPPED_DWORDpout, in) INLINE_DWORD_FLIP(* ((UNALIGNED DWORD *) (pout)), in)
-#define INLINE_WRITE_FLIPPED_WORDpout, in) INLINE_WORD_FLIP(* ((UNALIGNED WORD *) (pout)), in)
 #define INTERNET_DEFAULT_DNS_PORT 0x35
-#define IS_DWORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 3))
-#define IS_QWORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 7))
-#define IS_WORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 1))
 
 struct _DNS_QUERY_RAW_RESULT
 {
@@ -1382,16 +1375,6 @@ DNS_STATUS WINAPI DnsStopMulticastQuery(PMDNS_QUERY_HANDLE pHandle);
 }
 #endif
 
-#define DNS_QUESTION_NAME_FROM_HEADER_pHeader_) ((PCHAR) ((PDNS_HEADER) (_pHeader_) + 1))
-#define DnsRecordCopypRR) DnsRecordCopyEx((pRR), DnsCharSetAnsi, DnsCharSetAnsi)
-#define DnsRecordSetCopypRR) DnsRecordSetCopyEx((pRR), DnsCharSetAnsi, DnsCharSetAnsi)
-#define INLINE_HTONLout, in) INLINE_DWORD_FLIP(out, in)
-#define INLINE_NTOHLout, in) INLINE_DWORD_FLIP(out, in)
-#define INLINE_WRITE_FLIPPED_DWORDpout, in) INLINE_DWORD_FLIP(* ((UNALIGNED DWORD *) (pout)), in)
-#define INLINE_WRITE_FLIPPED_WORDpout, in) INLINE_WORD_FLIP(* ((UNALIGNED WORD *) (pout)), in)
-#define IS_DWORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 3))
-#define IS_QWORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 7))
-#define IS_WORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 1))
 
 struct _DNS_CONNECTION_PROXY_INFO
 {
@@ -1401,8 +1384,21 @@ struct _DNS_CONNECTION_PROXY_INFO
     DNS_CONNECTION_PROXY_INFO_SWITCH Switch;
     union
     {
-        struct _DNS_CONNECTION_PROXY_INFO_CONFIG Config;
-        struct _DNS_CONNECTION_PROXY_INFO_SCRIPT Script;
+        struct _DNS_CONNECTION_PROXY_INFO_CONFIG
+        {
+            WCHAR *pwszServer;
+            WCHAR *pwszUsername;
+            WCHAR *pwszPassword;
+            WCHAR *pwszException;
+            WCHAR *pwszExtraInfo;
+            WORD Port;
+        } Config;
+        struct _DNS_CONNECTION_PROXY_INFO_SCRIPT
+        {
+            WCHAR *pwszScript;
+            WCHAR *pwszUsername;
+            WCHAR *pwszPassword;
+        } Script;
     };
 };
 
@@ -1457,26 +1453,96 @@ DWORD DnsConnectionSetProxyInfo(PCWSTR pwszConnectionName, DNS_CONNECTION_PROXY_
 }
 #endif
 
-#define DNS_QUESTION_NAME_FROM_HEADER_pHeader_) ((PCHAR) ((PDNS_HEADER) (_pHeader_) + 1))
-#define DnsRecordCopypRR) DnsRecordCopyEx((pRR), DnsCharSetAnsi, DnsCharSetAnsi)
-#define DnsRecordSetCopypRR) DnsRecordSetCopyEx((pRR), DnsCharSetAnsi, DnsCharSetAnsi)
-#define INLINE_HTONLout, in) INLINE_DWORD_FLIP(out, in)
-#define INLINE_NTOHLout, in) INLINE_DWORD_FLIP(out, in)
-#define INLINE_WRITE_FLIPPED_DWORDpout, in) INLINE_DWORD_FLIP(* ((UNALIGNED DWORD *) (pout)), in)
-#define INLINE_WRITE_FLIPPED_WORDpout, in) INLINE_WORD_FLIP(* ((UNALIGNED WORD *) (pout)), in)
-#define IS_DWORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 3))
-#define IS_QWORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 7))
-#define IS_WORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 1))
 
-#define DNS_QUESTION_NAME_FROM_HEADER_pHeader_) ((PCHAR) ((PDNS_HEADER) (_pHeader_) + 1))
-#define DnsRecordCopypRR) DnsRecordCopyEx((pRR), DnsCharSetAnsi, DnsCharSetAnsi)
-#define DnsRecordSetCopypRR) DnsRecordSetCopyEx((pRR), DnsCharSetAnsi, DnsCharSetAnsi)
-#define INLINE_HTONLout, in) INLINE_DWORD_FLIP(out, in)
-#define INLINE_NTOHLout, in) INLINE_DWORD_FLIP(out, in)
-#define INLINE_WRITE_FLIPPED_DWORDpout, in) INLINE_DWORD_FLIP(* ((UNALIGNED DWORD *) (pout)), in)
-#define INLINE_WRITE_FLIPPED_WORDpout, in) INLINE_WORD_FLIP(* ((UNALIGNED WORD *) (pout)), in)
-#define IS_DWORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 3))
-#define IS_QWORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 7))
-#define IS_WORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 1))
+
+
+
+
+struct _DNS_CUSTOM_SERVER
+{
+    DWORD dwServerType;
+    ULONG64 ullFlags;
+    union
+    {
+        PWSTR pwszTemplate;
+        PWSTR pwszHostname;
+    };
+    union
+    {
+        CHAR MaxSa[32];
+    };
+};
+
+typedef struct _DNS_CUSTOM_SERVER DNS_CUSTOM_SERVER;
+
+struct _DNS_QUERY_RAW_REQUEST
+{
+    ULONG version;
+    ULONG resultsVersion;
+    ULONG dnsQueryRawSize;
+    BYTE *dnsQueryRaw;
+    PWSTR dnsQueryName;
+    USHORT dnsQueryType;
+    ULONG64 queryOptions;
+    ULONG interfaceIndex;
+    DNS_QUERY_RAW_COMPLETION_ROUTINE queryCompletionCallback;
+    void *queryContext;
+    ULONG64 queryRawOptions;
+    ULONG customServersSize;
+    DNS_CUSTOM_SERVER *customServers;
+    ULONG protocol;
+    union
+    {
+        CHAR maxSa[32];
+    };
+};
+
+struct _DNS_QUERY_REQUEST3
+{
+    ULONG Version;
+    PCWSTR QueryName;
+    WORD QueryType;
+    ULONG64 QueryOptions;
+    PDNS_ADDR_ARRAY pDnsServerList;
+    ULONG InterfaceIndex;
+    PDNS_QUERY_COMPLETION_ROUTINE pQueryCompletionCallback;
+    PVOID pQueryContext;
+    BOOL IsNetworkQueryRequired;
+    DWORD RequiredNetworkIndex;
+    DWORD cCustomServers;
+    DNS_CUSTOM_SERVER *pCustomServers;
+};
+
+typedef struct _DNS_QUERY_RAW_REQUEST DNS_QUERY_RAW_REQUEST;
+
+typedef struct _DNS_QUERY_REQUEST3 DNS_QUERY_REQUEST3;
+
+typedef struct _DNS_QUERY_REQUEST3 *PDNS_QUERY_REQUEST3;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+void DnsFreeCustomServers(DWORD *pcServers, DNS_CUSTOM_SERVER **ppServers);
+DWORD DnsGetApplicationSettings(DWORD *pcServers, DNS_CUSTOM_SERVER **ppDefaultServers, DNS_APPLICATION_SETTINGS *pSettings);
+DNS_STATUS WINAPI DnsQueryRaw(DNS_QUERY_RAW_REQUEST *queryRequest, DNS_QUERY_RAW_CANCEL *cancelHandle);
+DWORD DnsSetApplicationSettings(DWORD cServers, const DNS_CUSTOM_SERVER *pServers, const DNS_APPLICATION_SETTINGS *pSettings);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define DNS_QUESTION_NAME_FROM_HEADER(_pHeader_) ((PCHAR) ((PDNS_HEADER) (_pHeader_) + 1))
+#define DnsRecordCopy(pRR) DnsRecordCopyEx((pRR), DnsCharSetAnsi, DnsCharSetAnsi)
+#define DnsRecordSetCopy(pRR) DnsRecordSetCopyEx((pRR), DnsCharSetAnsi, DnsCharSetAnsi)
+#define INLINE_DWORD_FLIP(out, in) { DWORD _in = (in); (out) = ((_in << 8) & 0x00ff0000) | (_in << 24) | ((_in >> 8) & 0x0000ff00) | (_in >> 24); }
+#define INLINE_HTONL(out, in) INLINE_DWORD_FLIP(out, in)
+#define INLINE_NTOHL(out, in) INLINE_DWORD_FLIP(out, in)
+#define INLINE_WRITE_FLIPPED_DWORD(pout, in) INLINE_DWORD_FLIP(* ((UNALIGNED DWORD *) (pout)), in)
+#define INLINE_WRITE_FLIPPED_WORD(pout, in) INLINE_WORD_FLIP(* ((UNALIGNED WORD *) (pout)), in)
+#define IS_DWORD_ALIGNED(p) (!((UINT_PTR) (p) & (UINT_PTR) 3))
+#define IS_QWORD_ALIGNED(p) (!((UINT_PTR) (p) & (UINT_PTR) 7))
+#define IS_WORD_ALIGNED(p) (!((UINT_PTR) (p) & (UINT_PTR) 1))
 
 #endif /* _WINDNS_INCLUDED_ */

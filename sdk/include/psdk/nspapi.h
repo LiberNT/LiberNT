@@ -348,17 +348,29 @@ typedef struct _SERVICE_TYPE_INFO_ABSW {
 #ifdef UNICODE
 #define GetNameByType GetNameByTypeW
 #else
+#ifdef UNICODE
+#define GetNameByType GetNameByTypeW
+#else
 #define GetNameByType GetNameByTypeA
 #endif
+#endif
+#ifdef UNICODE
+#define GetTypeByName GetTypeByNameW
+#else
 #ifdef UNICODE
 #define GetTypeByName GetTypeByNameW
 #else
 #define GetTypeByName GetTypeByNameA
 #endif
+#endif
+#ifdef UNICODE
+#define SERVICE_TYPE_VALUE_CONN SERVICE_TYPE_VALUE_CONNW
+#else
 #ifdef UNICODE
 #define SERVICE_TYPE_VALUE_CONN SERVICE_TYPE_VALUE_CONNW
 #else
 #define SERVICE_TYPE_VALUE_CONN SERVICE_TYPE_VALUE_CONNA
+#endif
 #endif
 #define SERVICE_TYPE_VALUE_CONNA "ConnectionOriented"
 #define SERVICE_TYPE_VALUE_CONNW L"ConnectionOriented"

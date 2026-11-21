@@ -954,3 +954,17 @@ cpp_quote("#define CROSSOVER_FREQ_KEY_GUID 0")
 
 cpp_quote("#define FULL_RANGE_SPEAKERS_KEY_GUID 0")
 
+cpp_quote("#define BIG_ROOM_KEY_GUID 0")
+
+cpp_quote("#define NO_SUB_KEY_GUID 0")
+
+cpp_quote("#define INVERTED_SUB_KEY_GUID 0")
+
+cpp_quote("#define BASSMGMT_MODE_KEY_GUID 0")
+
+cpp_quote("#define MULTICHANNEL_MODE_KEY_GUID 0")
+
+cpp_quote("#define LEQ_ENABLED_KEY_GUID 0")
+
+cpp_quote("#define ROOM_CORRECTION_ENABLED_KEY_GUID 0")
+

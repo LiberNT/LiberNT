@@ -380,8 +380,6 @@ STDAPI LocateCatalogsW(WCHAR const *, ULONG, WCHAR *, ULONG *, WCHAR *, ULONG *)
 #define MSIDXSPROP_ROWSETQUERYSTATUS 2
 #define PID_FILENAME 100
 #define PSGUID_FILENAME { 0x41CF5AE0, 0xF75A, 0x4806, { 0xBD, 0x87, 0x59, 0xC7, 0xD9, 0x24, 0x8E, 0xB9 } }
-#define QUERY_FILL_STATUSx) ((x) & 0x7)
-#define QUERY_RELIABILITY_STATUSx) ((x) & 0xFFF8)
 
 #ifdef __cplusplus
 extern "C" {
@@ -399,13 +397,7 @@ HRESULT SetCatalogState(const WCHAR *pwcsCat, const WCHAR *pwcsMachine, DWORD dw
 }
 #endif
 
-#define QUERY_FILL_STATUSx) ((x) & 0x7)
-#define QUERY_RELIABILITY_STATUSx) ((x) & 0xFFF8)
-
-#define QUERY_FILL_STATUSx) ((x) & 0x7)
-#define QUERY_RELIABILITY_STATUSx) ((x) & 0xFFF8)
-
-#define QUERY_FILL_STATUSx) ((x) & 0x7)
-#define QUERY_RELIABILITY_STATUSx) ((x) & 0xFFF8)
+#define QUERY_FILL_STATUS(x) ((x) & 0x7)
+#define QUERY_RELIABILITY_STATUS(x) ((x) & 0xFFF8)
 
 #endif

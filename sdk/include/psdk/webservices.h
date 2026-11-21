@@ -2975,10 +2975,7 @@ typedef struct _WS_XML_WRITER_RAW_ENCODING {
 } WS_XML_WRITER_RAW_ENCODING;
 
 #define WS_STRING_EMPTY { 0, NULL }
-#define WS_XML_STRING_DICTIONARY_VALUES, D, I) { sizeof (S) - 1, (BYTE *) RTL_CONST_CAST(char *) (S), RTL_CONST_CAST(WS_XML_DICTIONARY *) (D), I }
 #define WS_XML_STRING_NULL 0
-#define WsCountOfarrayValue) RTL_NUMBER_OF(arrayValue)
-#define WsOffsetOftype, field) FIELD_OFFSET(type, field)
 
 enum WS_SECURITY_ALGORITHM_PROPERTY_ID
 {
@@ -3416,9 +3413,6 @@ HRESULT WINAPI WsVerifyXmlNCName(const WCHAR *ncNameChars, ULONG ncNameCharCount
 }
 #endif
 
-#define WS_XML_STRING_DICTIONARY_VALUES, D, I) { sizeof (S) - 1, (BYTE *) RTL_CONST_CAST(char *) (S), RTL_CONST_CAST(WS_XML_DICTIONARY *) (D), I }
-#define WsCountOfarrayValue) RTL_NUMBER_OF(arrayValue)
-#define WsOffsetOftype, field) FIELD_OFFSET(type, field)
 
 typedef struct _WS_METADATA WS_METADATA;
 
@@ -3495,9 +3489,6 @@ HRESULT WINAPI WsRevokeSecurityContext(WS_SECURITY_CONTEXT *securityContext, WS_
 }
 #endif
 
-#define WS_XML_STRING_DICTIONARY_VALUES, D, I) { sizeof (S) - 1, (BYTE *) RTL_CONST_CAST(char *) (S), RTL_CONST_CAST(WS_XML_DICTIONARY *) (D), I }
-#define WsCountOfarrayValue) RTL_NUMBER_OF(arrayValue)
-#define WsOffsetOftype, field) FIELD_OFFSET(type, field)
 
 struct _WS_CAPI_ASYMMETRIC_SECURITY_KEY_HANDLE
 {
@@ -3532,8 +3523,8 @@ typedef struct _WS_NCRYPT_ASYMMETRIC_SECURITY_KEY_HANDLE WS_NCRYPT_ASYMMETRIC_SE
 
 typedef struct _WS_XML_DECIMAL_TEXT WS_XML_DECIMAL_TEXT;
 
-#define WS_XML_STRING_DICTIONARY_VALUES, D, I) { sizeof (S) - 1, (BYTE *) RTL_CONST_CAST(char *) (S), RTL_CONST_CAST(WS_XML_DICTIONARY *) (D), I }
-#define WsCountOfarrayValue) RTL_NUMBER_OF(arrayValue)
-#define WsOffsetOftype, field) FIELD_OFFSET(type, field)
+#define WS_XML_STRING_DICTIONARY_VALUE(S, D, I) { sizeof (S) - 1, (BYTE *) RTL_CONST_CAST(char *) (S), RTL_CONST_CAST(WS_XML_DICTIONARY *) (D), I }
+#define WsCountOf(arrayValue) RTL_NUMBER_OF(arrayValue)
+#define WsOffsetOf(type, field) FIELD_OFFSET(type, field)
 
 #endif /* __WINE_WEBSERVICES_H */

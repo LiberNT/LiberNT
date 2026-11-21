@@ -664,7 +664,12 @@ typedef struct _TDI_ROUTING_INFO_WS03 {
 struct _TA_ADDRESS_NETBIOS
 {
     LONG TAAddressCount;
-    struct _Addr Address[1];
+    struct _Addr
+    {
+        USHORT AddressLength;
+        USHORT AddressType;
+        TDI_ADDRESS_NETBIOS Address[1];
+    } Address[1];
 };
 #pragma pack(pop)
 
@@ -676,7 +681,12 @@ typedef TDI_ROUTING_INFO *PTDI_ROUTING_INFO;
 struct _TA_ADDRESS_NETBIOS_EX
 {
     LONG TAAddressCount;
-    struct _AddrNetbiosEx Address[1];
+    struct _AddrNetbiosEx
+    {
+        USHORT AddressLength;
+        USHORT AddressType;
+        TDI_ADDRESS_NETBIOS_EX Address[1];
+    } Address[1];
 };
 #pragma pack(pop)
 

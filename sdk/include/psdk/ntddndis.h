@@ -5742,9 +5742,6 @@ typedef struct _NDIS_802_11_PMKID_CANDIDATE_LIST {
 #define IOCTL_NDIS_RESERVED8 0x170040
 #define IOCTL_NDIS_RESERVED9 0x170044
 #define NDIS_IF_MAX_STRING_SIZE 0x100
-#define NDIS_MAKE_NET_LUID_pNetLuid, _IfType, _NetLuidIndex) \
-{ (_pNetLuid) -> Info . IfType = _IfType; (_pNetLuid) -> Info . NetLuidIndex = _NetLuidIndex; (_pNetLuid) -> Info . Reserved = 0; \
-}
 #define NDIS_SIZEOF_HARDWARE_CROSSTIMESTAMP_REVISION_1 0x20
 #define NDIS_SIZEOF_PCI_DEVICE_CUSTOM_PROPERTIES_REVISION_1 0x28
 #define NDIS_SIZEOF_PCI_DEVICE_CUSTOM_PROPERTIES_REVISION_2 0x34
@@ -5879,9 +5876,6 @@ typedef __unaligned NDIS_STATISTICS_VALUE_EX *PNDIS_STATISTICS_VALUE_EX;
 
 typedef struct _NDIS_WLAN_BSSID_EX *PNDIS_WLAN_BSSID_EX;
 
-#define NDIS_MAKE_NET_LUID_pNetLuid, _IfType, _NetLuidIndex) \
-{ (_pNetLuid) -> Info . IfType = _IfType; (_pNetLuid) -> Info . NetLuidIndex = _NetLuidIndex; (_pNetLuid) -> Info . Reserved = 0; \
-}
 
 enum _OFFLOAD_OPERATION_E
 {
@@ -5951,9 +5945,6 @@ typedef struct _OFFLOAD_IPSEC_ADD_UDPESP_SA *POFFLOAD_IPSEC_ADD_UDPESP_SA;
 
 typedef struct _OFFLOAD_SECURITY_ASSOCIATION *POFFLOAD_SECURITY_ASSOCIATION;
 
-#define NDIS_MAKE_NET_LUID_pNetLuid, _IfType, _NetLuidIndex) \
-{ (_pNetLuid) -> Info . IfType = _IfType; (_pNetLuid) -> Info . NetLuidIndex = _NetLuidIndex; (_pNetLuid) -> Info . Reserved = 0; \
-}
 
 enum _NDIS_PROCESSOR_VENDOR
 {
@@ -6032,8 +6023,6 @@ typedef struct _NDIS_PORT_STATE *PNDIS_PORT_STATE;
 
 typedef enum _NDIS_PROCESSOR_VENDOR *PNDIS_PROCESSOR_VENDOR;
 
-#define NDIS_MAKE_NET_LUID_pNetLuid, _IfType, _NetLuidIndex) \
-{ (_pNetLuid) -> Info . IfType = _IfType; (_pNetLuid) -> Info . NetLuidIndex = _NetLuidIndex; (_pNetLuid) -> Info . Reserved = 0; \
-}
+#define NDIS_MAKE_NET_LUID(_pNetLuid, _IfType, _NetLuidIndex) { (_pNetLuid) -> Info . IfType = _IfType; (_pNetLuid) -> Info . NetLuidIndex = _NetLuidIndex; (_pNetLuid) -> Info . Reserved = 0; }
 
 #endif /* _NTDDNDIS_ */

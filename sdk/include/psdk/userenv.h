@@ -360,7 +360,11 @@ typedef struct _POLICYSETTINGSTATUSINFO {
 #ifdef UNICODE
 #define FreeGPOList FreeGPOListW
 #else
+#ifdef UNICODE
+#define FreeGPOList FreeGPOListW
+#else
 #define FreeGPOList FreeGPOListA
+#endif
 #endif
 #define GetGPOList 0
 #define GP_DLLNAME TEXT("DllName")

@@ -7579,21 +7579,19 @@ typedef struct TOUCHPAD_PARAMETERS_V1 {
   UINT rightClickZoneHeight;
 } TOUCHPAD_PARAMETERS_V1, *PTOUCHPAD_PARAMETERS_V1;
 
-#define _In_bypassable_reads_or_z_size) _When_(((size) == - 1) || (_String_length_(_Curr_) < (size)), _In_z_) _When_(((size) != - 1) && (_String_length_(_Curr_) >= (size)), _In_reads_(size))
-#define _Inout_grows_updates_bypassable_or_z_size, grows) _When_(((size) == - 1) || (_String_length_(_Curr_) < (size)), _Pre_z_ _Pre_valid_ _Out_writes_z_(_String_length_(_Curr_) + (grows))) _When_(((size) != - 1) && (_String_length_(_Curr_) >= (size)), _Pre_count_(size) _Pre_valid_ _Out_writes_z_((size) + (grows)))
+#ifdef UNICODE
+#define CreateDesktopEx CreateDesktopExW
+#else
 #ifdef UNICODE
 #define CreateDesktopEx CreateDesktopExW
 #else
 #define CreateDesktopEx CreateDesktopExA
 #endif
+#endif
 #define CURSOR_CREATION_SCALING_NONE 1
 #define GC_ROLLOVER 1
-#define GET_DEVICE_CHANGE_WPARAMwParam) (LOWORD(wParam))
-#define GET_SC_WPARAMwParam) ((int) wParam & 0xFFF0)
 #define GetIconInfoEx 0
 #define GID_ROLLOVER 7
-#define GID_ROTATE_ANGLE_FROM_ARGUMENT_arg_) ((((double) (_arg_) / 65535.0) * 4.0 * 3.14159265) - 2.0 * 3.14159265)
-#define GID_ROTATE_ANGLE_TO_ARGUMENT_arg_) ((USHORT) ((((_arg_) + 2.0 * 3.14159265) / (4.0 * 3.14159265)) * 65535.0))
 #ifdef _WIN64
 #define GR_GLOBAL (-2)
 #else
@@ -7610,9 +7608,7 @@ typedef struct TOUCHPAD_PARAMETERS_V1 {
 #define PMB_ACTIVE 0x00000001
 #define POINTER_STRUCTURES 0
 #define RES_ICON 1
-#define RIDEV_EXMODEmode) ((mode) & RIDEV_EXMODEMASK)
 #define SETWALLPAPER_DEFAULT ((LPWSTR) - 1)
-#define TOUCH_COORD_TO_PIXELl) ((l) / 100)
 #define TOUCHPREDICTIONPARAMETERS_DEFAULT_RLS_DELTA 0
 #define TOUCHPREDICTIONPARAMETERS_DEFAULT_RLS_EXPO_SMOOTH_ALPHA 0
 #define TOUCHPREDICTIONPARAMETERS_DEFAULT_RLS_LAMBDA_LEARNING_RATE 0
@@ -7631,7 +7627,12 @@ struct HSYNTHETICPOINTERDEVICE__
 
 typedef const WINDOW_ACTION *PCWINDOW_ACTION;
 
-typedef enum POINTER_FEEDBACK_MODE POINTER_FEEDBACK_MODE;
+typedef enum POINTER_FEEDBACK_MODE
+{
+    POINTER_FEEDBACK_DEFAULT = 1,
+    POINTER_FEEDBACK_INDIRECT = 2,
+    POINTER_FEEDBACK_NONE = 3,
+} POINTER_FEEDBACK_MODE;
 
 struct tagDRAWTEXTPARAMS
 {
@@ -7908,23 +7909,7 @@ BOOL UnregisterTouchWindow(HWND hwnd);
 }
 #endif
 
-#define _In_bypassable_reads_or_z_size) _When_(((size) == - 1) || (_String_length_(_Curr_) < (size)), _In_z_) _When_(((size) != - 1) && (_String_length_(_Curr_) >= (size)), _In_reads_(size))
-#define _Inout_grows_updates_bypassable_or_z_size, grows) _When_(((size) == - 1) || (_String_length_(_Curr_) < (size)), _Pre_z_ _Pre_valid_ _Out_writes_z_(_String_length_(_Curr_) + (grows))) _When_(((size) != - 1) && (_String_length_(_Curr_) >= (size)), _Pre_count_(size) _Pre_valid_ _Out_writes_z_((size) + (grows)))
-#define GET_DEVICE_CHANGE_WPARAMwParam) (LOWORD(wParam))
-#define GET_SC_WPARAMwParam) ((int) wParam & 0xFFF0)
-#define GID_ROTATE_ANGLE_FROM_ARGUMENT_arg_) ((((double) (_arg_) / 65535.0) * 4.0 * 3.14159265) - 2.0 * 3.14159265)
-#define GID_ROTATE_ANGLE_TO_ARGUMENT_arg_) ((USHORT) ((((_arg_) + 2.0 * 3.14159265) / (4.0 * 3.14159265)) * 65535.0))
-#define RIDEV_EXMODEmode) ((mode) & RIDEV_EXMODEMASK)
-#define TOUCH_COORD_TO_PIXELl) ((l) / 100)
 
-#define _In_bypassable_reads_or_z_size) _When_(((size) == - 1) || (_String_length_(_Curr_) < (size)), _In_z_) _When_(((size) != - 1) && (_String_length_(_Curr_) >= (size)), _In_reads_(size))
-#define _Inout_grows_updates_bypassable_or_z_size, grows) _When_(((size) == - 1) || (_String_length_(_Curr_) < (size)), _Pre_z_ _Pre_valid_ _Out_writes_z_(_String_length_(_Curr_) + (grows))) _When_(((size) != - 1) && (_String_length_(_Curr_) >= (size)), _Pre_count_(size) _Pre_valid_ _Out_writes_z_((size) + (grows)))
-#define GET_DEVICE_CHANGE_WPARAMwParam) (LOWORD(wParam))
-#define GET_SC_WPARAMwParam) ((int) wParam & 0xFFF0)
-#define GID_ROTATE_ANGLE_FROM_ARGUMENT_arg_) ((((double) (_arg_) / 65535.0) * 4.0 * 3.14159265) - 2.0 * 3.14159265)
-#define GID_ROTATE_ANGLE_TO_ARGUMENT_arg_) ((USHORT) ((((_arg_) + 2.0 * 3.14159265) / (4.0 * 3.14159265)) * 65535.0))
-#define RIDEV_EXMODEmode) ((mode) & RIDEV_EXMODEMASK)
-#define TOUCH_COORD_TO_PIXELl) ((l) / 100)
 
 enum ORIENTATION_PREFERENCE
 {
@@ -8023,13 +8008,13 @@ BOOL SetGestureConfig(HWND hwnd, DWORD dwReserved, UINT cIDs, PGESTURECONFIG pGe
 }
 #endif
 
-#define _In_bypassable_reads_or_z_size) _When_(((size) == - 1) || (_String_length_(_Curr_) < (size)), _In_z_) _When_(((size) != - 1) && (_String_length_(_Curr_) >= (size)), _In_reads_(size))
-#define _Inout_grows_updates_bypassable_or_z_size, grows) _When_(((size) == - 1) || (_String_length_(_Curr_) < (size)), _Pre_z_ _Pre_valid_ _Out_writes_z_(_String_length_(_Curr_) + (grows))) _When_(((size) != - 1) && (_String_length_(_Curr_) >= (size)), _Pre_count_(size) _Pre_valid_ _Out_writes_z_((size) + (grows)))
-#define GET_DEVICE_CHANGE_WPARAMwParam) (LOWORD(wParam))
-#define GET_SC_WPARAMwParam) ((int) wParam & 0xFFF0)
-#define GID_ROTATE_ANGLE_FROM_ARGUMENT_arg_) ((((double) (_arg_) / 65535.0) * 4.0 * 3.14159265) - 2.0 * 3.14159265)
-#define GID_ROTATE_ANGLE_TO_ARGUMENT_arg_) ((USHORT) ((((_arg_) + 2.0 * 3.14159265) / (4.0 * 3.14159265)) * 65535.0))
-#define RIDEV_EXMODEmode) ((mode) & RIDEV_EXMODEMASK)
-#define TOUCH_COORD_TO_PIXELl) ((l) / 100)
+#define _In_bypassable_reads_or_z_(size) _When_(((size) == - 1) || (_String_length_(_Curr_) < (size)), _In_z_) _When_(((size) != - 1) && (_String_length_(_Curr_) >= (size)), _In_reads_(size))
+#define _Inout_grows_updates_bypassable_or_z_(size, grows) _When_(((size) == - 1) || (_String_length_(_Curr_) < (size)), _Pre_z_ _Pre_valid_ _Out_writes_z_(_String_length_(_Curr_) + (grows))) _When_(((size) != - 1) && (_String_length_(_Curr_) >= (size)), _Pre_count_(size) _Pre_valid_ _Out_writes_z_((size) + (grows)))
+#define GET_DEVICE_CHANGE_WPARAM(wParam) (LOWORD(wParam))
+#define GET_SC_WPARAM(wParam) ((int) wParam & 0xFFF0)
+#define GID_ROTATE_ANGLE_FROM_ARGUMENT(_arg_) ((((double) (_arg_) / 65535.0) * 4.0 * 3.14159265) - 2.0 * 3.14159265)
+#define GID_ROTATE_ANGLE_TO_ARGUMENT(_arg_) ((USHORT) ((((_arg_) + 2.0 * 3.14159265) / (4.0 * 3.14159265)) * 65535.0))
+#define RIDEV_EXMODE(mode) ((mode) & RIDEV_EXMODEMASK)
+#define TOUCH_COORD_TO_PIXEL(l) ((l) / 100)
 
 #endif

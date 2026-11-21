@@ -2410,8 +2410,6 @@ typedef struct _STORAGE_ZONE_GROUP {
 #define DEVICE_DSM_PHYSICAL_ADDRESS_HAS_MEMORY_ERROR ((LONGLONG)(-1))
 #define DEVICE_DSM_PHYSICAL_ADDRESSES_OUTPUT_VERSION_V1 1
 #define DEVICE_DSM_RANGE_ERROR_INFO_VERSION_V1 1
-#define DEVICE_DSM_ROUND_DN_a, _b) (((_a)) / (_b) * (_b))
-#define DEVICE_DSM_ROUND_UP_a, _b) (((_a) + ((_b) - 1)) / (_b) * (_b))
 #define DEVICE_STORAGE_NO_ERRORS 0x1
 #define DeviceDsmAction_QueryPreferLocalRepair 0x8000001E
 #define DeviceDsmDefinition_CloseZone { DeviceDsmAction_CloseZone, FALSE, 0, 0, FALSE, 0, 0 }
@@ -2443,7 +2441,6 @@ typedef struct _STORAGE_ZONE_GROUP {
 #define DeviceDsmDefinition_VdtSet { DeviceDsmAction_VdtSet, FALSE, 0, 0, FALSE, 0, 0 }
 #define DeviceDsmDefinition_WriteZeroes { DeviceDsmAction_WriteZeroes, FALSE, 0, 0, FALSE, 0, 0 }
 #define DEVICEDUMP_CAP_PRIVATE_SECTION 0x00000001
-#define GET_REPAIR_TOPOLOGY_IDR) RtlOffsetToPointer(R, ALIGN_UP_BY(FIELD_OFFSET(DEVICE_DATA_SET_REPAIR_PARAMETERS, RepairCopies) + sizeof (ULONG) * R -> NumberOfRepairCopies, 8))
 #define IOCTL_STORAGE_BOOT_PARTITION_ACTIVATE 0x2DDC10
 #define IOCTL_STORAGE_BOOT_PARTITION_DOWNLOAD 0x2DDC0C
 #define IOCTL_STORAGE_BOOT_PARTITION_GET_INFO 0x2D1C14
@@ -2875,13 +2872,7 @@ STORAGE_HW_CRYPTO_CAPABILITY * GetStorageHwCryptoCapabilityMut(STORAGE_HW_CRYPTO
 }
 #endif
 
-#define DEVICE_DSM_ROUND_DN_a, _b) (((_a)) / (_b) * (_b))
-#define DEVICE_DSM_ROUND_UP_a, _b) (((_a) + ((_b) - 1)) / (_b) * (_b))
-#define GET_REPAIR_TOPOLOGY_IDR) RtlOffsetToPointer(R, ALIGN_UP_BY(FIELD_OFFSET(DEVICE_DATA_SET_REPAIR_PARAMETERS, RepairCopies) + sizeof (ULONG) * R -> NumberOfRepairCopies, 8))
 
-#define DEVICE_DSM_ROUND_DN_a, _b) (((_a)) / (_b) * (_b))
-#define DEVICE_DSM_ROUND_UP_a, _b) (((_a) + ((_b) - 1)) / (_b) * (_b))
-#define GET_REPAIR_TOPOLOGY_IDR) RtlOffsetToPointer(R, ALIGN_UP_BY(FIELD_OFFSET(DEVICE_DATA_SET_REPAIR_PARAMETERS, RepairCopies) + sizeof (ULONG) * R -> NumberOfRepairCopies, 8))
 
 struct _STORAGE_CRYPTO_CAPABILITY
 {
@@ -2910,8 +2901,8 @@ struct _STORAGE_CRYPTO_DESCRIPTOR
 
 typedef struct _STORAGE_CRYPTO_DESCRIPTOR STORAGE_CRYPTO_DESCRIPTOR;
 
-#define DEVICE_DSM_ROUND_DN_a, _b) (((_a)) / (_b) * (_b))
-#define DEVICE_DSM_ROUND_UP_a, _b) (((_a) + ((_b) - 1)) / (_b) * (_b))
-#define GET_REPAIR_TOPOLOGY_IDR) RtlOffsetToPointer(R, ALIGN_UP_BY(FIELD_OFFSET(DEVICE_DATA_SET_REPAIR_PARAMETERS, RepairCopies) + sizeof (ULONG) * R -> NumberOfRepairCopies, 8))
+#define DEVICE_DSM_ROUND_DN(_a, _b) (((_a)) / (_b) * (_b))
+#define DEVICE_DSM_ROUND_UP(_a, _b) (((_a) + ((_b) - 1)) / (_b) * (_b))
+#define GET_REPAIR_TOPOLOGY_ID(R) RtlOffsetToPointer(R, ALIGN_UP_BY(FIELD_OFFSET(DEVICE_DATA_SET_REPAIR_PARAMETERS, RepairCopies) + sizeof (ULONG) * R -> NumberOfRepairCopies, 8))
 
 #endif /* _NTDDSTOR_H_ */

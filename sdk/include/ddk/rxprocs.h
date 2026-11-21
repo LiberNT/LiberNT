@@ -824,30 +824,7 @@ typedef union _UCHAR4 {
   ULONG ForceAlignment;
 } UCHAR4, *PUCHAR4;
 
-#define CopyU4charDst, Src) { * ((UNALIGNED UCHAR4 *) (Dst)) = * ((UCHAR4 *) (Src)); }
-#define CopyUchar1Dst, Src) { * ((UCHAR1 *) (Dst)) = * ((UNALIGNED UCHAR1 *) (Src)); }
-#define CopyUchar2Dst, Src) { * ((UCHAR2 *) (Dst)) = * ((UNALIGNED UCHAR2 *) (Src)); }
-#define CopyUchar4Dst, Src) { * ((UCHAR4 *) (Dst)) = * ((UNALIGNED UCHAR4 *) (Src)); }
-#define DbgDoitX) { X; }
-#define DEBUG_ONLY_DECLX) X
-#define DebugDoitX) { X; }
-#define IsPtrQuadAlignedPtr) (QuadAlignPtr(Ptr) == (PVOID) (Ptr))
-#define LongAlignVal) (ALIGN_UP(Val, LONG))
-#define LongAlignPtrPtr) (ALIGN_UP_POINTER(Ptr, LONG))
-#define QuadAlignPtrPtr) (ALIGN_UP_POINTER(Ptr, ULONGLONG))
 #define RX_FCBTRACKER_PARAMS , ULONG LineNumber, PSZ FileName, ULONG SerialNumber
-#define RxAcquireSharedFcbStarveExRXCONTEXT, FCB) __RxAcquireFcb((FCB), (RXCONTEXT), FCB_MODE_SHARED_STARVE_EXCLUSIVE, __LINE__, __FILE__, 0)
-#define RxCompleteRequest_OLDRXCONTEXT, IRP, STATUS) { RxCompleteRequest_Real(RXCONTEXT, IRP, STATUS); (IRP) = NULL; (RXCONTEXT) = NULL; \
-}
-#define RxFcbAcquiredSharedRXCONTEXT, FCB) (ExIsResourceAcquiredSharedLite((FCB) -> Header . Resource) \
-)
-#define RxForceNetTableFinalizationRxDeviceObject) RxFinalizeNetTable(RxDeviceObject, TRUE)
-#define RxFsdPostRequestWithResumeRXCONTEXT, RESUMEROUTINE) (((RXCONTEXT) -> ResumeRoutine = (RESUMEROUTINE)), RxFsdPostRequest((RXCONTEXT)))
-#define RxLogEvent_DeviceObject, _OriginatorId, _EventId, _Status) RxLogEventDirect(_DeviceObject, _OriginatorId, _EventId, _Status, __LINE__)
-#define RxLogFailureWithBuffer_DeviceObject, _OriginatorId, _EventId, _Status, _Buffer, _Length) RxLogEventWithBufferDirect(_DeviceObject, _OriginatorId, _EventId, _Status, _Buffer, _Length, __LINE__)
-#define RxUpcaseEaNameRXCONTEXT, NAME, UPCASEDNAME) RtlUpperString(UPCASEDNAME, NAME)
-#define WordAlignVal) (ALIGN_UP(Val, WORD))
-#define WordAlignPtrPtr) (ALIGN_UP_POINTER(Ptr, WORD))
 
 #ifdef __cplusplus
 extern "C" {
@@ -897,28 +874,6 @@ void RxWorkItemDispatcher(PVOID Context);
 }
 #endif
 
-#define CopyU4charDst, Src) { * ((UNALIGNED UCHAR4 *) (Dst)) = * ((UCHAR4 *) (Src)); }
-#define CopyUchar1Dst, Src) { * ((UCHAR1 *) (Dst)) = * ((UNALIGNED UCHAR1 *) (Src)); }
-#define CopyUchar2Dst, Src) { * ((UCHAR2 *) (Dst)) = * ((UNALIGNED UCHAR2 *) (Src)); }
-#define CopyUchar4Dst, Src) { * ((UCHAR4 *) (Dst)) = * ((UNALIGNED UCHAR4 *) (Src)); }
-#define DbgDoitX) { X; }
-#define DEBUG_ONLY_DECLX) X
-#define DebugDoitX) { X; }
-#define IsPtrQuadAlignedPtr) (QuadAlignPtr(Ptr) == (PVOID) (Ptr))
-#define LongAlignVal) (ALIGN_UP(Val, LONG))
-#define LongAlignPtrPtr) (ALIGN_UP_POINTER(Ptr, LONG))
-#define RxAcquireSharedFcbStarveExRXCONTEXT, FCB) __RxAcquireFcb((FCB), (RXCONTEXT), FCB_MODE_SHARED_STARVE_EXCLUSIVE, __LINE__, __FILE__, 0)
-#define RxCompleteRequest_OLDRXCONTEXT, IRP, STATUS) { RxCompleteRequest_Real(RXCONTEXT, IRP, STATUS); (IRP) = NULL; (RXCONTEXT) = NULL; \
-}
-#define RxFcbAcquiredSharedRXCONTEXT, FCB) (ExIsResourceAcquiredSharedLite((FCB) -> Header . Resource) \
-)
-#define RxForceNetTableFinalizationRxDeviceObject) RxFinalizeNetTable(RxDeviceObject, TRUE)
-#define RxFsdPostRequestWithResumeRXCONTEXT, RESUMEROUTINE) (((RXCONTEXT) -> ResumeRoutine = (RESUMEROUTINE)), RxFsdPostRequest((RXCONTEXT)))
-#define RxLogEvent_DeviceObject, _OriginatorId, _EventId, _Status) RxLogEventDirect(_DeviceObject, _OriginatorId, _EventId, _Status, __LINE__)
-#define RxLogFailureWithBuffer_DeviceObject, _OriginatorId, _EventId, _Status, _Buffer, _Length) RxLogEventWithBufferDirect(_DeviceObject, _OriginatorId, _EventId, _Status, _Buffer, _Length, __LINE__)
-#define RxUpcaseEaNameRXCONTEXT, NAME, UPCASEDNAME) RtlUpperString(UPCASEDNAME, NAME)
-#define WordAlignVal) (ALIGN_UP(Val, WORD))
-#define WordAlignPtrPtr) (ALIGN_UP_POINTER(Ptr, WORD))
 
 typedef struct _RX_CALLOUT_PARAMETERS_BLOCK_ *PRX_CALLOUT_PARAMETERS_BLOCK;
 
@@ -936,50 +891,46 @@ NTSTATUS RxCeInitiateConnectRequest(PRX_CALLOUT_PARAMETERS_BLOCK ParameterBlock)
 }
 #endif
 
-#define CopyU4charDst, Src) { * ((UNALIGNED UCHAR4 *) (Dst)) = * ((UCHAR4 *) (Src)); }
-#define CopyUchar1Dst, Src) { * ((UCHAR1 *) (Dst)) = * ((UNALIGNED UCHAR1 *) (Src)); }
-#define CopyUchar2Dst, Src) { * ((UCHAR2 *) (Dst)) = * ((UNALIGNED UCHAR2 *) (Src)); }
-#define CopyUchar4Dst, Src) { * ((UCHAR4 *) (Dst)) = * ((UNALIGNED UCHAR4 *) (Src)); }
-#define DbgDoitX) { X; }
-#define DEBUG_ONLY_DECLX) X
-#define DebugDoitX) { X; }
-#define IsPtrQuadAlignedPtr) (QuadAlignPtr(Ptr) == (PVOID) (Ptr))
-#define LongAlignVal) (ALIGN_UP(Val, LONG))
-#define LongAlignPtrPtr) (ALIGN_UP_POINTER(Ptr, LONG))
-#define RxAcquireSharedFcbStarveExRXCONTEXT, FCB) __RxAcquireFcb((FCB), (RXCONTEXT), FCB_MODE_SHARED_STARVE_EXCLUSIVE, __LINE__, __FILE__, 0)
-#define RxCompleteRequest_OLDRXCONTEXT, IRP, STATUS) { RxCompleteRequest_Real(RXCONTEXT, IRP, STATUS); (IRP) = NULL; (RXCONTEXT) = NULL; \
-}
-#define RxFcbAcquiredSharedRXCONTEXT, FCB) (ExIsResourceAcquiredSharedLite((FCB) -> Header . Resource) \
-)
-#define RxForceNetTableFinalizationRxDeviceObject) RxFinalizeNetTable(RxDeviceObject, TRUE)
-#define RxFsdPostRequestWithResumeRXCONTEXT, RESUMEROUTINE) (((RXCONTEXT) -> ResumeRoutine = (RESUMEROUTINE)), RxFsdPostRequest((RXCONTEXT)))
-#define RxLogEvent_DeviceObject, _OriginatorId, _EventId, _Status) RxLogEventDirect(_DeviceObject, _OriginatorId, _EventId, _Status, __LINE__)
-#define RxLogFailureWithBuffer_DeviceObject, _OriginatorId, _EventId, _Status, _Buffer, _Length) RxLogEventWithBufferDirect(_DeviceObject, _OriginatorId, _EventId, _Status, _Buffer, _Length, __LINE__)
-#define RxUpcaseEaNameRXCONTEXT, NAME, UPCASEDNAME) RtlUpperString(UPCASEDNAME, NAME)
-#define WordAlignVal) (ALIGN_UP(Val, WORD))
-#define WordAlignPtrPtr) (ALIGN_UP_POINTER(Ptr, WORD))
 
-#define CopyU4charDst, Src) { * ((UNALIGNED UCHAR4 *) (Dst)) = * ((UCHAR4 *) (Src)); }
-#define CopyUchar1Dst, Src) { * ((UCHAR1 *) (Dst)) = * ((UNALIGNED UCHAR1 *) (Src)); }
-#define CopyUchar2Dst, Src) { * ((UCHAR2 *) (Dst)) = * ((UNALIGNED UCHAR2 *) (Src)); }
-#define CopyUchar4Dst, Src) { * ((UCHAR4 *) (Dst)) = * ((UNALIGNED UCHAR4 *) (Src)); }
-#define DbgDoitX) { X; }
-#define DEBUG_ONLY_DECLX) X
-#define DebugDoitX) { X; }
-#define IsPtrQuadAlignedPtr) (QuadAlignPtr(Ptr) == (PVOID) (Ptr))
-#define LongAlignVal) (ALIGN_UP(Val, LONG))
-#define LongAlignPtrPtr) (ALIGN_UP_POINTER(Ptr, LONG))
-#define RxAcquireSharedFcbStarveExRXCONTEXT, FCB) __RxAcquireFcb((FCB), (RXCONTEXT), FCB_MODE_SHARED_STARVE_EXCLUSIVE, __LINE__, __FILE__, 0)
-#define RxCompleteRequest_OLDRXCONTEXT, IRP, STATUS) { RxCompleteRequest_Real(RXCONTEXT, IRP, STATUS); (IRP) = NULL; (RXCONTEXT) = NULL; \
+
+
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+NTSTATUS DuplicateConnectionInformation(PRXCE_CONNECTION_INFORMATION *Copy, PRXCE_CONNECTION_INFORMATION Original, POOL_FLAGS PoolFlags);
+
+#ifdef __cplusplus
 }
-#define RxFcbAcquiredSharedRXCONTEXT, FCB) (ExIsResourceAcquiredSharedLite((FCB) -> Header . Resource) \
-)
-#define RxForceNetTableFinalizationRxDeviceObject) RxFinalizeNetTable(RxDeviceObject, TRUE)
-#define RxFsdPostRequestWithResumeRXCONTEXT, RESUMEROUTINE) (((RXCONTEXT) -> ResumeRoutine = (RESUMEROUTINE)), RxFsdPostRequest((RXCONTEXT)))
-#define RxLogEvent_DeviceObject, _OriginatorId, _EventId, _Status) RxLogEventDirect(_DeviceObject, _OriginatorId, _EventId, _Status, __LINE__)
-#define RxLogFailureWithBuffer_DeviceObject, _OriginatorId, _EventId, _Status, _Buffer, _Length) RxLogEventWithBufferDirect(_DeviceObject, _OriginatorId, _EventId, _Status, _Buffer, _Length, __LINE__)
-#define RxUpcaseEaNameRXCONTEXT, NAME, UPCASEDNAME) RtlUpperString(UPCASEDNAME, NAME)
-#define WordAlignVal) (ALIGN_UP(Val, WORD))
-#define WordAlignPtrPtr) (ALIGN_UP_POINTER(Ptr, WORD))
+#endif
+
+#define CopyU4char(Dst, Src) { * ((UNALIGNED UCHAR4 *) (Dst)) = * ((UCHAR4 *) (Src)); }
+#define CopyUchar1(Dst, Src) { * ((UCHAR1 *) (Dst)) = * ((UNALIGNED UCHAR1 *) (Src)); }
+#define CopyUchar2(Dst, Src) { * ((UCHAR2 *) (Dst)) = * ((UNALIGNED UCHAR2 *) (Src)); }
+#define CopyUchar4(Dst, Src) { * ((UCHAR4 *) (Dst)) = * ((UNALIGNED UCHAR4 *) (Src)); }
+#define DbgDoit(X) { X; }
+#define DEBUG_ONLY_DECL(X) X
+#define DebugDoit(X) { X; }
+#define IsPtrQuadAligned(Ptr) (QuadAlignPtr(Ptr) == (PVOID) (Ptr))
+#define LongAlign(Val) (ALIGN_UP(Val, LONG))
+#define LongAlignPtr(Ptr) (ALIGN_UP_POINTER(Ptr, LONG))
+#define QuadAlignPtr(Ptr) (ALIGN_UP_POINTER(Ptr, ULONGLONG))
+#define RxAcquireSharedFcbStarveEx(RXCONTEXT, FCB) __RxAcquireFcb((FCB), (RXCONTEXT), FCB_MODE_SHARED_STARVE_EXCLUSIVE, __LINE__, __FILE__, 0)
+#define RxCompleteRequest_OLD(RXCONTEXT, IRP, STATUS) { RxCompleteRequest_Real(RXCONTEXT, IRP, STATUS); (IRP) = NULL; (RXCONTEXT) = NULL; }
+#define RxFcbAcquiredShared(RXCONTEXT, FCB) (ExIsResourceAcquiredSharedLite((FCB) -> Header . Resource))
+#define RxForceNetTableFinalization(RxDeviceObject) RxFinalizeNetTable(RxDeviceObject, TRUE)
+#define RxFsdPostRequestWithResume(RXCONTEXT, RESUMEROUTINE) (((RXCONTEXT) -> ResumeRoutine = (RESUMEROUTINE)), RxFsdPostRequest((RXCONTEXT)))
+#define RxLogEvent(_DeviceObject, _OriginatorId, _EventId, _Status) RxLogEventDirect(_DeviceObject, _OriginatorId, _EventId, _Status, __LINE__)
+#define RxLogFailureWithBuffer(_DeviceObject, _OriginatorId, _EventId, _Status, _Buffer, _Length) RxLogEventWithBufferDirect(_DeviceObject, _OriginatorId, _EventId, _Status, _Buffer, _Length, __LINE__)
+#define RxUpcaseEaName(RXCONTEXT, NAME, UPCASEDNAME) RtlUpperString(UPCASEDNAME, NAME)
+#define WordAlign(Val) (ALIGN_UP(Val, WORD))
+#define WordAlignPtr(Ptr) (ALIGN_UP_POINTER(Ptr, WORD))
+
+#define RxNotifyReportChange(I, V, F, FL, A) RxDbgTrace(0, Dbg, ("RxNotifyReportChange PRETENDING Fcb %08lx %wZ Filter/Action = %08lx/%08lx\n", (F), & ((F) -> FcbTableEntry . Path), (FL), (A)))
+
+/* TODO: RxCepInitializeConnection and RxCepInitializeVC, which need the RXCE address, connection and VC types */
 
 #endif

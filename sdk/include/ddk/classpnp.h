@@ -1535,9 +1535,6 @@ ClassModeSelect(
 typedef struct _FAILURE_PREDICTION_INFO * PFAILURE_PREDICTION_INFO;
 
 #define CLASS_TAG_ZONE_INFO 0x5A496353
-#define CLEAR_FLAG_NOFENCEFlags, Bit) WriteUShortNoFence(& (Flags), (ReadUShortNoFence(& (Flags)) & ~(Bit)))
-#define SET_FLAG_NOFENCEFlags, Bit) WriteUShortNoFence(& (Flags), (ReadUShortNoFence(& (Flags)) | (Bit)))
-#define TEST_FLAG_NOFENCEFlags, Bit) (((ReadUShortNoFence(& (Flags))) & (Bit)) != 0)
 
 #ifdef __cplusplus
 extern "C" {
@@ -1550,17 +1547,9 @@ NTSTATUS ClassModeSenseTranslate(PDEVICE_OBJECT DeviceObject, PMODE_PARAMETER_HE
 }
 #endif
 
-#define CLEAR_FLAG_NOFENCEFlags, Bit) WriteUShortNoFence(& (Flags), (ReadUShortNoFence(& (Flags)) & ~(Bit)))
-#define SET_FLAG_NOFENCEFlags, Bit) WriteUShortNoFence(& (Flags), (ReadUShortNoFence(& (Flags)) | (Bit)))
-#define TEST_FLAG_NOFENCEFlags, Bit) (((ReadUShortNoFence(& (Flags))) & (Bit)) != 0)
-
-#define CLEAR_FLAG_NOFENCEFlags, Bit) WriteUShortNoFence(& (Flags), (ReadUShortNoFence(& (Flags)) & ~(Bit)))
-#define SET_FLAG_NOFENCEFlags, Bit) WriteUShortNoFence(& (Flags), (ReadUShortNoFence(& (Flags)) | (Bit)))
-#define TEST_FLAG_NOFENCEFlags, Bit) (((ReadUShortNoFence(& (Flags))) & (Bit)) != 0)
-
-#define CLEAR_FLAG_NOFENCEFlags, Bit) WriteUShortNoFence(& (Flags), (ReadUShortNoFence(& (Flags)) & ~(Bit)))
-#define SET_FLAG_NOFENCEFlags, Bit) WriteUShortNoFence(& (Flags), (ReadUShortNoFence(& (Flags)) | (Bit)))
-#define TEST_FLAG_NOFENCEFlags, Bit) (((ReadUShortNoFence(& (Flags))) & (Bit)) != 0)
+#define CLEAR_FLAG_NOFENCE(Flags, Bit) WriteUShortNoFence(& (Flags), (ReadUShortNoFence(& (Flags)) & ~(Bit)))
+#define SET_FLAG_NOFENCE(Flags, Bit) WriteUShortNoFence(& (Flags), (ReadUShortNoFence(& (Flags)) | (Bit)))
+#define TEST_FLAG_NOFENCE(Flags, Bit) (((ReadUShortNoFence(& (Flags))) & (Bit)) != 0)
 
 #endif
 #ifndef DEV_FORWARD_IO

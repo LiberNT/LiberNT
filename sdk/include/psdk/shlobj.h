@@ -3063,30 +3063,29 @@ typedef struct tagAASHELLMENUITEM {
 } AASHELLMENUITEM, *LPAASHELLMENUITEM;
 
 #define BROWSEUIAPI EXTERN_C DECLSPEC_IMPORT HRESULT STDAPICALLTYPE
-#define BROWSEUIAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
+#ifdef UNICODE
+#define ICopyHook ICopyHookW
+#else
 #ifdef UNICODE
 #define ICopyHook ICopyHookW
 #else
 #define ICopyHook ICopyHookA
+#endif
 #endif
 #define ICopyHookVtbl ICopyHookAVtbl
 #define INewShortcutHookVtbl INewShortcutHookAVtbl
 #ifdef UNICODE
 #define LPCOPYHOOK LPCOPYHOOKW
 #else
+#ifdef UNICODE
+#define LPCOPYHOOK LPCOPYHOOKW
+#else
 #define LPCOPYHOOK LPCOPYHOOKA
 #endif
+#endif
 #define OPENPROPS_NONE 0x0000
-#define ShellFolderView_AddObject_hwnd, _pidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_ADDOBJECT, (LPARAM) (_pidl))
-#define ShellFolderView_GetSelectedObjects_hwnd, ppidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_GETSELECTEDOBJECTS, (LPARAM) (ppidl))
-#define ShellFolderView_ReArrange_hwnd, _lparam) (BOOL) SHShellFolderView_Message(_hwnd, SFVM_REARRANGE, _lparam)
-#define ShellFolderView_RemoveObject_hwnd, _pidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_REMOVEOBJECT, (LPARAM) (_pidl))
-#define ShellFolderView_SetClipboard_hwnd, _dwEffect) (void) SHShellFolderView_Message(_hwnd, SFVM_SETCLIPBOARD, (LPARAM) (DWORD) (_dwEffect))
-#define ShellFolderView_SetPoints_hwnd, _pdtobj) (void) SHShellFolderView_Message(_hwnd, SFVM_SETPOINTS, (LPARAM) (_pdtobj))
-#define ShellFolderView_UpdateObject_hwnd, _ppidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_UPDATEOBJECT, (LPARAM) (_ppidl))
 #define SHFOLDERAPI EXTERN_C DECLSPEC_IMPORT HRESULT STDAPICALLTYPE
 #define SHSTDDOCAPI 0
-#define SHSTDDOCAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
 
 typedef struct IActiveDesktopPVtbl IActiveDesktopPVtbl;
 
@@ -3184,34 +3183,14 @@ DWORD SoftwareUpdateMessageBox(HWND hWnd, PCWSTR pszDistUnit, DWORD dwFlags, LPS
 }
 #endif
 
-#define BROWSEUIAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
-#define ShellFolderView_AddObject_hwnd, _pidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_ADDOBJECT, (LPARAM) (_pidl))
-#define ShellFolderView_GetSelectedObjects_hwnd, ppidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_GETSELECTEDOBJECTS, (LPARAM) (ppidl))
-#define ShellFolderView_ReArrange_hwnd, _lparam) (BOOL) SHShellFolderView_Message(_hwnd, SFVM_REARRANGE, _lparam)
-#define ShellFolderView_RemoveObject_hwnd, _pidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_REMOVEOBJECT, (LPARAM) (_pidl))
-#define ShellFolderView_SetClipboard_hwnd, _dwEffect) (void) SHShellFolderView_Message(_hwnd, SFVM_SETCLIPBOARD, (LPARAM) (DWORD) (_dwEffect))
-#define ShellFolderView_SetPoints_hwnd, _pdtobj) (void) SHShellFolderView_Message(_hwnd, SFVM_SETPOINTS, (LPARAM) (_pdtobj))
-#define ShellFolderView_UpdateObject_hwnd, _ppidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_UPDATEOBJECT, (LPARAM) (_ppidl))
-#define SHSTDDOCAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
-
-#define BROWSEUIAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
-#define ShellFolderView_AddObject_hwnd, _pidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_ADDOBJECT, (LPARAM) (_pidl))
-#define ShellFolderView_GetSelectedObjects_hwnd, ppidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_GETSELECTEDOBJECTS, (LPARAM) (ppidl))
-#define ShellFolderView_ReArrange_hwnd, _lparam) (BOOL) SHShellFolderView_Message(_hwnd, SFVM_REARRANGE, _lparam)
-#define ShellFolderView_RemoveObject_hwnd, _pidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_REMOVEOBJECT, (LPARAM) (_pidl))
-#define ShellFolderView_SetClipboard_hwnd, _dwEffect) (void) SHShellFolderView_Message(_hwnd, SFVM_SETCLIPBOARD, (LPARAM) (DWORD) (_dwEffect))
-#define ShellFolderView_SetPoints_hwnd, _pdtobj) (void) SHShellFolderView_Message(_hwnd, SFVM_SETPOINTS, (LPARAM) (_pdtobj))
-#define ShellFolderView_UpdateObject_hwnd, _ppidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_UPDATEOBJECT, (LPARAM) (_ppidl))
-#define SHSTDDOCAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
-
-#define BROWSEUIAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
-#define ShellFolderView_AddObject_hwnd, _pidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_ADDOBJECT, (LPARAM) (_pidl))
-#define ShellFolderView_GetSelectedObjects_hwnd, ppidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_GETSELECTEDOBJECTS, (LPARAM) (ppidl))
-#define ShellFolderView_ReArrange_hwnd, _lparam) (BOOL) SHShellFolderView_Message(_hwnd, SFVM_REARRANGE, _lparam)
-#define ShellFolderView_RemoveObject_hwnd, _pidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_REMOVEOBJECT, (LPARAM) (_pidl))
-#define ShellFolderView_SetClipboard_hwnd, _dwEffect) (void) SHShellFolderView_Message(_hwnd, SFVM_SETCLIPBOARD, (LPARAM) (DWORD) (_dwEffect))
-#define ShellFolderView_SetPoints_hwnd, _pdtobj) (void) SHShellFolderView_Message(_hwnd, SFVM_SETPOINTS, (LPARAM) (_pdtobj))
-#define ShellFolderView_UpdateObject_hwnd, _ppidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_UPDATEOBJECT, (LPARAM) (_ppidl))
-#define SHSTDDOCAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
+#define BROWSEUIAPI_(type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
+#define ShellFolderView_AddObject(_hwnd, _pidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_ADDOBJECT, (LPARAM) (_pidl))
+#define ShellFolderView_GetSelectedObjects(_hwnd, ppidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_GETSELECTEDOBJECTS, (LPARAM) (ppidl))
+#define ShellFolderView_ReArrange(_hwnd, _lparam) (BOOL) SHShellFolderView_Message(_hwnd, SFVM_REARRANGE, _lparam)
+#define ShellFolderView_RemoveObject(_hwnd, _pidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_REMOVEOBJECT, (LPARAM) (_pidl))
+#define ShellFolderView_SetClipboard(_hwnd, _dwEffect) (void) SHShellFolderView_Message(_hwnd, SFVM_SETCLIPBOARD, (LPARAM) (DWORD) (_dwEffect))
+#define ShellFolderView_SetPoints(_hwnd, _pdtobj) (void) SHShellFolderView_Message(_hwnd, SFVM_SETPOINTS, (LPARAM) (_pdtobj))
+#define ShellFolderView_UpdateObject(_hwnd, _ppidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_UPDATEOBJECT, (LPARAM) (_ppidl))
+#define SHSTDDOCAPI_(type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
 
 #endif /* __WINE_SHLOBJ_H */

@@ -75,7 +75,11 @@ BOOL WINAPI GetFileVersionInfoExW(DWORD dwFlags, LPCWSTR lpwstrFilename, DWORD d
 #ifdef UNICODE
 #define GetFileVersionInfoEx GetFileVersionInfoExW
 #else
+#ifdef UNICODE
+#define GetFileVersionInfoEx GetFileVersionInfoExW
+#else
 #define GetFileVersionInfoEx GetFileVersionInfoExA
+#endif
 #endif
 
 #endif /* VER_H */

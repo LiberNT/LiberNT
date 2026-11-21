@@ -15,8 +15,6 @@
 #define INCL_WINSOCK_API_PROTOTYPES 1
 
 #define _WINSOCK_DEPRECATED __declspec(deprecated("Define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings"))
-#define _WS2_32_WINSOCK_SWAP_LONGl) ((((l) >> 24) & 0x000000FFL) | (((l) >> 8) & 0x0000FF00L) | (((l) << 8) & 0x00FF0000L) | (((l) << 24) & 0xFF000000L))
-#define _WS2_32_WINSOCK_SWAP_LONGLONGl) ((((l) >> 56) & 0x00000000000000FFLL) | (((l) >> 40) & 0x000000000000FF00LL) | (((l) >> 24) & 0x0000000000FF0000LL) | (((l) >> 8) & 0x00000000FF000000LL) | (((l) << 8) & 0x000000FF00000000LL) | (((l) << 24) & 0x0000FF0000000000LL) | (((l) << 40) & 0x00FF000000000000LL) | (((l) << 56) & 0xFF00000000000000LL))
 #define SOCK_NOTIFY_EVENT_HANGUP 4
 #define SOCK_NOTIFY_EVENT_IN 1
 #define SOCK_NOTIFY_EVENT_OUT 2
@@ -24,7 +22,6 @@
 #define SOCK_NOTIFY_REGISTER_EVENT_NONE 0x00
 #define SOCK_NOTIFY_REGISTER_EVENTS_ALL 7
 #define SOCK_NOTIFY_TRIGGER_ALL 0xF
-#define SOMAXCONN_HINTb) (- (b))
 
 #ifdef __cplusplus
 extern "C" {
@@ -44,17 +41,9 @@ UINT32 SocketNotificationRetrieveEvents(OVERLAPPED_ENTRY *notification);
 }
 #endif
 
-#define _WS2_32_WINSOCK_SWAP_LONGl) ((((l) >> 24) & 0x000000FFL) | (((l) >> 8) & 0x0000FF00L) | (((l) << 8) & 0x00FF0000L) | (((l) << 24) & 0xFF000000L))
-#define _WS2_32_WINSOCK_SWAP_LONGLONGl) ((((l) >> 56) & 0x00000000000000FFLL) | (((l) >> 40) & 0x000000000000FF00LL) | (((l) >> 24) & 0x0000000000FF0000LL) | (((l) >> 8) & 0x00000000FF000000LL) | (((l) << 8) & 0x000000FF00000000LL) | (((l) << 24) & 0x0000FF0000000000LL) | (((l) << 40) & 0x00FF000000000000LL) | (((l) << 56) & 0xFF00000000000000LL))
-#define SOMAXCONN_HINTb) (- (b))
-
-#define _WS2_32_WINSOCK_SWAP_LONGl) ((((l) >> 24) & 0x000000FFL) | (((l) >> 8) & 0x0000FF00L) | (((l) << 8) & 0x00FF0000L) | (((l) << 24) & 0xFF000000L))
-#define _WS2_32_WINSOCK_SWAP_LONGLONGl) ((((l) >> 56) & 0x00000000000000FFLL) | (((l) >> 40) & 0x000000000000FF00LL) | (((l) >> 24) & 0x0000000000FF0000LL) | (((l) >> 8) & 0x00000000FF000000LL) | (((l) << 8) & 0x000000FF00000000LL) | (((l) << 24) & 0x0000FF0000000000LL) | (((l) << 40) & 0x00FF000000000000LL) | (((l) << 56) & 0xFF00000000000000LL))
-#define SOMAXCONN_HINTb) (- (b))
-
-#define _WS2_32_WINSOCK_SWAP_LONGl) ((((l) >> 24) & 0x000000FFL) | (((l) >> 8) & 0x0000FF00L) | (((l) << 8) & 0x00FF0000L) | (((l) << 24) & 0xFF000000L))
-#define _WS2_32_WINSOCK_SWAP_LONGLONGl) ((((l) >> 56) & 0x00000000000000FFLL) | (((l) >> 40) & 0x000000000000FF00LL) | (((l) >> 24) & 0x0000000000FF0000LL) | (((l) >> 8) & 0x00000000FF000000LL) | (((l) << 8) & 0x000000FF00000000LL) | (((l) << 24) & 0x0000FF0000000000LL) | (((l) << 40) & 0x00FF000000000000LL) | (((l) << 56) & 0xFF00000000000000LL))
-#define SOMAXCONN_HINTb) (- (b))
+#define _WS2_32_WINSOCK_SWAP_LONG(l) ((((l) >> 24) & 0x000000FFL) | (((l) >> 8) & 0x0000FF00L) | (((l) << 8) & 0x00FF0000L) | (((l) << 24) & 0xFF000000L))
+#define _WS2_32_WINSOCK_SWAP_LONGLONG(l) ((((l) >> 56) & 0x00000000000000FFLL) | (((l) >> 40) & 0x000000000000FF00LL) | (((l) >> 24) & 0x0000000000FF0000LL) | (((l) >> 8) & 0x00000000FF000000LL) | (((l) << 8) & 0x000000FF00000000LL) | (((l) << 24) & 0x0000FF0000000000LL) | (((l) << 40) & 0x00FF000000000000LL) | (((l) << 56) & 0xFF00000000000000LL))
+#define SOMAXCONN_HINT(b) (- (b))
 
 #endif
 

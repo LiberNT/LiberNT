@@ -45,96 +45,38 @@
     ASSERT ((Fcb)->Header.ValidDataLength.QuadPart <= (Fcb)->Header.FileSize.QuadPart);        \
 }
 
-#define RX_DEFINE_FLAGa, c, d) a = ((1 << c) & d),
-#define RxAllocateHeaderMdlBuffer, BufferSize, Mdl) { Mdl = RxAllocateMdl(Buffer, BufferSize); if ((Mdl) && (Mdl -> ByteOffset >= TRANSPORT_HEADER_SIZE)) { SetFlag(Mdl -> MdlFlags, MDL_NETWORK_HEADER); } }
-#define RxAllocateMdlBuffer, BufferSize) IoAllocateMdl(Buffer, BufferSize, FALSE, FALSE, NULL)
 #define RxAllocatePool ExAllocatePool
 #define RxAllocatePoolWithTag2 ExAllocatePool2
-#define RxBuildHeaderMdlForNonPagedPoolMdl) MmBuildMdlForNonPagedPool(Mdl)
-#define RxBuildPartialHeaderMdlSourceMdl, TargetMdl, Va, Len) { IoBuildPartialMdl(SourceMdl, TargetMdl, Va, Len); if (FlagOn(SourceMdl -> MdlFlags, MDL_NETWORK_HEADER) && (TargetMdl -> ByteOffset >= TRANSPORT_HEADER_SIZE)) { SetFlag(TargetMdl -> MdlFlags, MDL_NETWORK_HEADER); } \
-}
 #define RXCOMMON_ARGUMENTS RxContext
 #define RXCOMMON_SIGNATURE 0
-#define RxDisownMdlMdl) { NOTHING; }
-#define RxGetRequestorProcessIdRXCONTEXT) IoGetRequestorProcessId((RXCONTEXT) -> CurrentIrp)
-#define RxInitializeHeaderMdlMdl, Va, Len) { MmInitializeMdl(Mdl, Va, Len); if (Mdl -> ByteOffset >= TRANSPORT_HEADER_SIZE) { Mdl -> MdlFlags |= MDL_NETWORK_HEADER; } }
-#define RxMarkContextPendingRXCONTEXT) IoMarkIrpPending((RXCONTEXT) -> CurrentIrp)
-#define RxMdlIsHeaderMdl) (FlagOn(Mdl) -> MdlFlags, MDL_NETWORK_HEADER)
-#define RxMdlIsOwnedMdl) (TRUE)
-#define RxMdlIsPartialMdl) ((Mdl) -> MdlFlags & MDL_PARTIAL)
-#define RxMdlIsProtectedMdl) (FALSE)
-#define RxProbeAndLockHeaderPagesMdl, Mode, Access, Status) RxProbeAndLockPages(Mdl, Mode, Access, Status)
-#define RxProbeAndLockPagesMdl, Mode, Access, Status) Status = STATUS_SUCCESS; try { MmProbeAndLockPages((Mdl), (Mode), (Access)); } except(EXCEPTION_EXECUTE_HANDLER) { Status = GetExceptionCode(); }
-#define RxProtectMdlFromFreeMdl) { NOTHING; }
-#define RxSetCancelRoutineIrp, CancelRoutine) IoSetCancelRoutine(Irp, CancelRoutine);
 #define RxSprintf 0
-#define RxTakeOwnershipOfMdlMdl) { NOTHING; }
-#define RxUnlockHeaderPagesMdl) MmUnlockPages(Mdl)
-#define RxUnprotectMdlFromFreeMdl) { NOTHING; }
 #define TICKS_PER_MILLESECOND 0x2710
 #define TICKS_PER_SECOND 0x989680
 #define TRANSPORT_HEADER_SIZE 128
 
-#define RX_DEFINE_FLAGa, c, d) a = ((1 << c) & d),
-#define RxAllocateHeaderMdlBuffer, BufferSize, Mdl) { Mdl = RxAllocateMdl(Buffer, BufferSize); if ((Mdl) && (Mdl -> ByteOffset >= TRANSPORT_HEADER_SIZE)) { SetFlag(Mdl -> MdlFlags, MDL_NETWORK_HEADER); } }
-#define RxBuildHeaderMdlForNonPagedPoolMdl) MmBuildMdlForNonPagedPool(Mdl)
-#define RxBuildPartialHeaderMdlSourceMdl, TargetMdl, Va, Len) { IoBuildPartialMdl(SourceMdl, TargetMdl, Va, Len); if (FlagOn(SourceMdl -> MdlFlags, MDL_NETWORK_HEADER) && (TargetMdl -> ByteOffset >= TRANSPORT_HEADER_SIZE)) { SetFlag(TargetMdl -> MdlFlags, MDL_NETWORK_HEADER); } \
-}
 #define RxCaptureRequestPacket 0
-#define RxDisownMdlMdl) { NOTHING; }
-#define RxGetRequestorProcessIdRXCONTEXT) IoGetRequestorProcessId((RXCONTEXT) -> CurrentIrp)
-#define RxInitializeHeaderMdlMdl, Va, Len) { MmInitializeMdl(Mdl, Va, Len); if (Mdl -> ByteOffset >= TRANSPORT_HEADER_SIZE) { Mdl -> MdlFlags |= MDL_NETWORK_HEADER; } }
-#define RxMarkContextPendingRXCONTEXT) IoMarkIrpPending((RXCONTEXT) -> CurrentIrp)
-#define RxMdlIsHeaderMdl) (FlagOn(Mdl) -> MdlFlags, MDL_NETWORK_HEADER)
-#define RxMdlIsOwnedMdl) (TRUE)
-#define RxMdlIsPartialMdl) ((Mdl) -> MdlFlags & MDL_PARTIAL)
-#define RxMdlIsProtectedMdl) (FALSE)
-#define RxProbeAndLockHeaderPagesMdl, Mode, Access, Status) RxProbeAndLockPages(Mdl, Mode, Access, Status)
-#define RxProtectMdlFromFreeMdl) { NOTHING; }
-#define RxSetCancelRoutineIrp, CancelRoutine) IoSetCancelRoutine(Irp, CancelRoutine);
-#define RxTakeOwnershipOfMdlMdl) { NOTHING; }
-#define RxUnlockHeaderPagesMdl) MmUnlockPages(Mdl)
-#define RxUnprotectMdlFromFreeMdl) { NOTHING; }
 
 #define capReqPacket 0
-#define RX_DEFINE_FLAGa, c, d) a = ((1 << c) & d),
-#define RxAllocateHeaderMdlBuffer, BufferSize, Mdl) { Mdl = RxAllocateMdl(Buffer, BufferSize); if ((Mdl) && (Mdl -> ByteOffset >= TRANSPORT_HEADER_SIZE)) { SetFlag(Mdl -> MdlFlags, MDL_NETWORK_HEADER); } }
-#define RxBuildHeaderMdlForNonPagedPoolMdl) MmBuildMdlForNonPagedPool(Mdl)
-#define RxBuildPartialHeaderMdlSourceMdl, TargetMdl, Va, Len) { IoBuildPartialMdl(SourceMdl, TargetMdl, Va, Len); if (FlagOn(SourceMdl -> MdlFlags, MDL_NETWORK_HEADER) && (TargetMdl -> ByteOffset >= TRANSPORT_HEADER_SIZE)) { SetFlag(TargetMdl -> MdlFlags, MDL_NETWORK_HEADER); } \
-}
-#define RxDisownMdlMdl) { NOTHING; }
-#define RxGetRequestorProcessIdRXCONTEXT) IoGetRequestorProcessId((RXCONTEXT) -> CurrentIrp)
-#define RxInitializeHeaderMdlMdl, Va, Len) { MmInitializeMdl(Mdl, Va, Len); if (Mdl -> ByteOffset >= TRANSPORT_HEADER_SIZE) { Mdl -> MdlFlags |= MDL_NETWORK_HEADER; } }
-#define RxMarkContextPendingRXCONTEXT) IoMarkIrpPending((RXCONTEXT) -> CurrentIrp)
-#define RxMdlIsHeaderMdl) (FlagOn(Mdl) -> MdlFlags, MDL_NETWORK_HEADER)
-#define RxMdlIsOwnedMdl) (TRUE)
-#define RxMdlIsPartialMdl) ((Mdl) -> MdlFlags & MDL_PARTIAL)
-#define RxMdlIsProtectedMdl) (FALSE)
-#define RxProbeAndLockHeaderPagesMdl, Mode, Access, Status) RxProbeAndLockPages(Mdl, Mode, Access, Status)
-#define RxProtectMdlFromFreeMdl) { NOTHING; }
-#define RxSetCancelRoutineIrp, CancelRoutine) IoSetCancelRoutine(Irp, CancelRoutine);
-#define RxTakeOwnershipOfMdlMdl) { NOTHING; }
-#define RxUnlockHeaderPagesMdl) MmUnlockPages(Mdl)
-#define RxUnprotectMdlFromFreeMdl) { NOTHING; }
 
-#define RX_DEFINE_FLAGa, c, d) a = ((1 << c) & d),
-#define RxAllocateHeaderMdlBuffer, BufferSize, Mdl) { Mdl = RxAllocateMdl(Buffer, BufferSize); if ((Mdl) && (Mdl -> ByteOffset >= TRANSPORT_HEADER_SIZE)) { SetFlag(Mdl -> MdlFlags, MDL_NETWORK_HEADER); } }
-#define RxBuildHeaderMdlForNonPagedPoolMdl) MmBuildMdlForNonPagedPool(Mdl)
-#define RxBuildPartialHeaderMdlSourceMdl, TargetMdl, Va, Len) { IoBuildPartialMdl(SourceMdl, TargetMdl, Va, Len); if (FlagOn(SourceMdl -> MdlFlags, MDL_NETWORK_HEADER) && (TargetMdl -> ByteOffset >= TRANSPORT_HEADER_SIZE)) { SetFlag(TargetMdl -> MdlFlags, MDL_NETWORK_HEADER); } \
-}
-#define RxDisownMdlMdl) { NOTHING; }
-#define RxGetRequestorProcessIdRXCONTEXT) IoGetRequestorProcessId((RXCONTEXT) -> CurrentIrp)
-#define RxInitializeHeaderMdlMdl, Va, Len) { MmInitializeMdl(Mdl, Va, Len); if (Mdl -> ByteOffset >= TRANSPORT_HEADER_SIZE) { Mdl -> MdlFlags |= MDL_NETWORK_HEADER; } }
-#define RxMarkContextPendingRXCONTEXT) IoMarkIrpPending((RXCONTEXT) -> CurrentIrp)
-#define RxMdlIsHeaderMdl) (FlagOn(Mdl) -> MdlFlags, MDL_NETWORK_HEADER)
-#define RxMdlIsOwnedMdl) (TRUE)
-#define RxMdlIsPartialMdl) ((Mdl) -> MdlFlags & MDL_PARTIAL)
-#define RxMdlIsProtectedMdl) (FALSE)
-#define RxProbeAndLockHeaderPagesMdl, Mode, Access, Status) RxProbeAndLockPages(Mdl, Mode, Access, Status)
-#define RxProtectMdlFromFreeMdl) { NOTHING; }
-#define RxSetCancelRoutineIrp, CancelRoutine) IoSetCancelRoutine(Irp, CancelRoutine);
-#define RxTakeOwnershipOfMdlMdl) { NOTHING; }
-#define RxUnlockHeaderPagesMdl) MmUnlockPages(Mdl)
-#define RxUnprotectMdlFromFreeMdl) { NOTHING; }
+#define RX_DEFINE_FLAG(a, c, d) a = ((1 << c) & d),
+#define RxAllocateHeaderMdl(Buffer, BufferSize, Mdl) { Mdl = RxAllocateMdl(Buffer, BufferSize); if ((Mdl) && (Mdl -> ByteOffset >= TRANSPORT_HEADER_SIZE)) { SetFlag(Mdl -> MdlFlags, MDL_NETWORK_HEADER); } }
+#define RxAllocateMdl(Buffer, BufferSize) IoAllocateMdl(Buffer, BufferSize, FALSE, FALSE, NULL)
+#define RxBuildHeaderMdlForNonPagedPool(Mdl) MmBuildMdlForNonPagedPool(Mdl)
+#define RxBuildPartialHeaderMdl(SourceMdl, TargetMdl, Va, Len) { IoBuildPartialMdl(SourceMdl, TargetMdl, Va, Len); if (FlagOn(SourceMdl -> MdlFlags, MDL_NETWORK_HEADER) && (TargetMdl -> ByteOffset >= TRANSPORT_HEADER_SIZE)) { SetFlag(TargetMdl -> MdlFlags, MDL_NETWORK_HEADER); } }
+#define RxDisownMdl(Mdl) { NOTHING; }
+#define RxGetRequestorProcessId(RXCONTEXT) IoGetRequestorProcessId((RXCONTEXT) -> CurrentIrp)
+#define RxInitializeHeaderMdl(Mdl, Va, Len) { MmInitializeMdl(Mdl, Va, Len); if (Mdl -> ByteOffset >= TRANSPORT_HEADER_SIZE) { Mdl -> MdlFlags |= MDL_NETWORK_HEADER; } }
+#define RxMarkContextPending(RXCONTEXT) IoMarkIrpPending((RXCONTEXT) -> CurrentIrp)
+#define RxMdlIsHeader(Mdl) (FlagOn(Mdl) -> MdlFlags, MDL_NETWORK_HEADER)
+#define RxMdlIsOwned(Mdl) (TRUE)
+#define RxMdlIsPartial(Mdl) ((Mdl) -> MdlFlags & MDL_PARTIAL)
+#define RxMdlIsProtected(Mdl) (FALSE)
+#define RxProbeAndLockHeaderPages(Mdl, Mode, Access, Status) RxProbeAndLockPages(Mdl, Mode, Access, Status)
+#define RxProbeAndLockPages(Mdl, Mode, Access, Status) Status = STATUS_SUCCESS; try { MmProbeAndLockPages((Mdl), (Mode), (Access)); } except(EXCEPTION_EXECUTE_HANDLER) { Status = GetExceptionCode(); }
+#define RxProtectMdlFromFree(Mdl) { NOTHING; }
+#define RxSetCancelRoutine(Irp, CancelRoutine) IoSetCancelRoutine(Irp, CancelRoutine);
+#define RxTakeOwnershipOfMdl(Mdl) { NOTHING; }
+#define RxUnlockHeaderPages(Mdl) MmUnlockPages(Mdl)
+#define RxUnprotectMdlFromFree(Mdl) { NOTHING; }
 
 #endif

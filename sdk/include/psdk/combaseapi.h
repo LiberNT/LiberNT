@@ -94,7 +94,6 @@ typedef struct CO_DEVICE_CATALOG_COOKIE__ {
 
 #define _CO_DEVICE_CATALOG_ 0
 #define _CRT_INTERNAL_COMBASE_SYMBOL_PREFIX 0
-#define DECLARE_INTERFACE_IIDiface, iid) DECLARE_INTERFACE(iface)
 
 struct CO_MTA_USAGE_COOKIE__
 {
@@ -125,11 +124,7 @@ HRESULT CoWaitForMultipleObjects(DWORD dwFlags, DWORD dwTimeout, ULONG cHandles,
 }
 #endif
 
-#define DECLARE_INTERFACE_IIDiface, iid) DECLARE_INTERFACE(iface)
-
-#define DECLARE_INTERFACE_IIDiface, iid) DECLARE_INTERFACE(iface)
-
-#define DECLARE_INTERFACE_IIDiface, iid) DECLARE_INTERFACE(iface)
+#define DECLARE_INTERFACE_IID(iface, iid) DECLARE_INTERFACE(iface)
 
 #endif /* _COMBASEAPI_H_ */
 

@@ -275,8 +275,6 @@ RxAcquireExclusiveFcbResourceInMRx(
 #define MRX_PURGE_SYNC_AT_NETROOT ((UCHAR)0)
 #define MRX_PURGE_SYNC_AT_SRVCALL ((UCHAR)1)
 #define NET_ROOT_COMM ((UCHAR)2)
-#define RxInitializeNetRootThrottlingParameters__tp, __incr, __maxdelay) { PNETROOT_THROTTLING_PARAMETERS tp = (__tp); tp -> Increment = (__incr); tp -> MaximumDelay = (__maxdelay); \
-}
 
 #ifdef __cplusplus
 extern "C" {
@@ -292,13 +290,6 @@ void RxReleaseFcbResourceInMRx(PMRX_FCB Fcb);
 }
 #endif
 
-#define RxInitializeNetRootThrottlingParameters__tp, __incr, __maxdelay) { PNETROOT_THROTTLING_PARAMETERS tp = (__tp); tp -> Increment = (__incr); tp -> MaximumDelay = (__maxdelay); \
-}
-
-#define RxInitializeNetRootThrottlingParameters__tp, __incr, __maxdelay) { PNETROOT_THROTTLING_PARAMETERS tp = (__tp); tp -> Increment = (__incr); tp -> MaximumDelay = (__maxdelay); \
-}
-
-#define RxInitializeNetRootThrottlingParameters__tp, __incr, __maxdelay) { PNETROOT_THROTTLING_PARAMETERS tp = (__tp); tp -> Increment = (__incr); tp -> MaximumDelay = (__maxdelay); \
-}
+#define RxInitializeNetRootThrottlingParameters(__tp, __incr, __maxdelay) { PNETROOT_THROTTLING_PARAMETERS tp = (__tp); tp -> Increment = (__incr); tp -> MaximumDelay = (__maxdelay); }
 
 #endif

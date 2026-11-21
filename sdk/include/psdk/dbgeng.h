@@ -449,10 +449,8 @@ typedef struct _SYMBOL_INFO_EX {
 
 #define DEBUG_CREATE_PROCESS_NO_DEBUG_HEAP 0x400
 #define DEBUG_CREATE_PROCESS_THROUGH_RTL 0x10000
-#define DEBUG_EXTEND64Addr) ((ULONG64) (LONG64) (LONG) (Addr))
 #define DEBUG_EXTENSION_CONTINUE_SEARCH (-805305743)
 #define DEBUG_EXTENSION_RELOAD_EXTENSION (-805306130)
-#define DEBUG_EXTENSION_VERSIONMajor, Minor) ((((Major) & 0xffff) << 16) | ((Minor) & 0xffff))
 #define DEBUG_GET_TEXT_COMPLETIONS_NO_DOT_COMMANDS 0x00000001
 #define DEBUG_KERNEL_ACTIVE_DUMP 0x406
 #define DEBUG_KERNEL_DUMP 0x401
@@ -472,7 +470,6 @@ typedef struct _SYMBOL_INFO_EX {
 #define DEBUG_OUTPUT_VALUE_END "**VALUE**"
 #define DEBUG_OUTPUT_VALUE_END_T DEBUG_OUTPUT_VALUE_END
 #define DEBUG_OUTPUT_VALUE_END_WIDE L"**VALUE**"
-#define DEBUG_OUTTYPE_RECURSION_LEVELMax) (((Max) & 0xf) << 4)
 #define DEBUG_SCOPE_GROUP_VALID_FLAGS 7
 #define DEBUG_SYMBOL_EXPANSION_LEVEL_MASK 0x0000000f
 
@@ -761,13 +758,7 @@ HRESULT DebugConnectWide(PCWSTR RemoteOptions, const IID *const InterfaceId, PVO
 }
 #endif
 
-#define DEBUG_EXTEND64Addr) ((ULONG64) (LONG64) (LONG) (Addr))
-#define DEBUG_EXTENSION_VERSIONMajor, Minor) ((((Major) & 0xffff) << 16) | ((Minor) & 0xffff))
-#define DEBUG_OUTTYPE_RECURSION_LEVELMax) (((Max) & 0xf) << 4)
 
-#define DEBUG_EXTEND64Addr) ((ULONG64) (LONG64) (LONG) (Addr))
-#define DEBUG_EXTENSION_VERSIONMajor, Minor) ((((Major) & 0xffff) << 16) | ((Minor) & 0xffff))
-#define DEBUG_OUTTYPE_RECURSION_LEVELMax) (((Max) & 0xf) << 4)
 
 union _DEBUG_PROCESSOR_IDENTIFICATION_ALL
 {
@@ -783,9 +774,9 @@ typedef union _DEBUG_PROCESSOR_IDENTIFICATION_ALL DEBUG_PROCESSOR_IDENTIFICATION
 
 typedef union _DEBUG_PROCESSOR_IDENTIFICATION_ALL *PDEBUG_PROCESSOR_IDENTIFICATION_ALL;
 
-#define DEBUG_EXTEND64Addr) ((ULONG64) (LONG64) (LONG) (Addr))
-#define DEBUG_EXTENSION_VERSIONMajor, Minor) ((((Major) & 0xffff) << 16) | ((Minor) & 0xffff))
-#define DEBUG_OUTTYPE_RECURSION_LEVELMax) (((Max) & 0xf) << 4)
+#define DEBUG_EXTEND64(Addr) ((ULONG64) (LONG64) (LONG) (Addr))
+#define DEBUG_EXTENSION_VERSION(Major, Minor) ((((Major) & 0xffff) << 16) | ((Minor) & 0xffff))
+#define DEBUG_OUTTYPE_RECURSION_LEVEL(Max) (((Max) & 0xf) << 4)
 
 #endif
 

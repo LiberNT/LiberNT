@@ -87,7 +87,6 @@ typedef struct _aviextheader
 #ifndef ckidSTREAMHEADER
 #define ckidSTREAMHEADER FCC('s','t','r','h')
 
-#define Valid_SUPERINDEXpi) (* (DWORD *) (& ((pi) -> wLongsPerEntry)) == (4 | (AVI_INDEX_OF_INDEXES << 24)))
 
 #pragma pack(push, 2)
 struct _avitcdlindex
@@ -116,11 +115,7 @@ struct _avitcdlindex_entry
 };
 #pragma pack(pop)
 
-#define Valid_SUPERINDEXpi) (* (DWORD *) (& ((pi) -> wLongsPerEntry)) == (4 | (AVI_INDEX_OF_INDEXES << 24)))
-
-#define Valid_SUPERINDEXpi) (* (DWORD *) (& ((pi) -> wLongsPerEntry)) == (4 | (AVI_INDEX_OF_INDEXES << 24)))
-
-#define Valid_SUPERINDEXpi) (* (DWORD *) (& ((pi) -> wLongsPerEntry)) == (4 | (AVI_INDEX_OF_INDEXES << 24)))
+#define Valid_SUPERINDEX(pi) (* (DWORD *) (& ((pi) -> wLongsPerEntry)) == (4 | (AVI_INDEX_OF_INDEXES << 24)))
 
 #endif
 

@@ -1951,7 +1951,11 @@ typedef struct PRINT_EXECUTION_DATA {
 #ifdef UNICODE
 #define CorePrinterDriverInstalled CorePrinterDriverInstalledW
 #else
+#ifdef UNICODE
+#define CorePrinterDriverInstalled CorePrinterDriverInstalledW
+#else
 #define CorePrinterDriverInstalled CorePrinterDriverInstalledA
+#endif
 #endif
 #define ERROR_BIDI_DEVICE_CONFIG_UNCHANGED 0x32D6
 #define ERROR_BIDI_GET_ARGUMENT_NOT_SUPPORTED 0x32D4

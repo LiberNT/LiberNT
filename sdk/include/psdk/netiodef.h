@@ -1344,7 +1344,6 @@ typedef struct tcp_opt_fastopen {
 #define IN6_EMBEDDEDV4_UOCTET_POSITION 8
 #define IPV4_MAX_MINIMUM_MTU 0x240
 #define IPV4_VERSION_BYTE 0x40
-#define IPV6_FULL_TRAFFIC_CLASSVersionClassFlow) ((UCHAR) ((((VersionClassFlow) & IPV6_FULL_TRAFFIC_CLASS_MASK) >> 12) + (((VersionClassFlow) & IPV6_FULL_TRAFFIC_CLASS_MASK) << 4)))
 #define NMR_REG_KEY_PATH 0
 
 struct DL_TEREDO_ADDRESS_PRV
@@ -1402,10 +1401,6 @@ UINT32 Ipv6pGetVersionClassEcnFlow(UINT8 Class, UINT8 EcnField, UINT32 Flow);
 }
 #endif
 
-#define IPV6_FULL_TRAFFIC_CLASSVersionClassFlow) ((UCHAR) ((((VersionClassFlow) & IPV6_FULL_TRAFFIC_CLASS_MASK) >> 12) + (((VersionClassFlow) & IPV6_FULL_TRAFFIC_CLASS_MASK) << 4)))
-
-#define IPV6_FULL_TRAFFIC_CLASSVersionClassFlow) ((UCHAR) ((((VersionClassFlow) & IPV6_FULL_TRAFFIC_CLASS_MASK) >> 12) + (((VersionClassFlow) & IPV6_FULL_TRAFFIC_CLASS_MASK) << 4)))
-
-#define IPV6_FULL_TRAFFIC_CLASSVersionClassFlow) ((UCHAR) ((((VersionClassFlow) & IPV6_FULL_TRAFFIC_CLASS_MASK) >> 12) + (((VersionClassFlow) & IPV6_FULL_TRAFFIC_CLASS_MASK) << 4)))
+#define IPV6_FULL_TRAFFIC_CLASS(VersionClassFlow) ((UCHAR) ((((VersionClassFlow) & IPV6_FULL_TRAFFIC_CLASS_MASK) >> 12) + (((VersionClassFlow) & IPV6_FULL_TRAFFIC_CLASS_MASK) << 4)))
 
 #endif /* _NETIODEF_ */

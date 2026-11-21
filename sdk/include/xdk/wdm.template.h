@@ -1462,24 +1462,7 @@ typedef struct PO_EPM_HANDLE__ {
 #define FAST_FAIL_INVALID_NEXT_THREAD 0x1E
 #define FAST_FAIL_SET_CONTEXT_DENIED 0x30
 #define FILE_ATTRIBUTE_DEDICATED FILE_ATTRIBUTE_TEMPORARY
-#define IMAGE_POLICY_ANSI_STRING_PolicyId_, _Value_) { ImagePolicyEntryTypeAnsiString, _PolicyId_, _Value_ },
-#define IMAGE_POLICY_BOOL_PolicyId_, _Value_) { ImagePolicyEntryTypeBool, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_INT16_PolicyId_, _Value_) { ImagePolicyEntryTypeInt16, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_INT32_PolicyId_, _Value_) { ImagePolicyEntryTypeInt32, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_INT64_PolicyId_, _Value_) { ImagePolicyEntryTypeInt64, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_INT8_PolicyId_, _Value_) { ImagePolicyEntryTypeInt8, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_OVERRIDE_PolicyId_) { ImagePolicyEntryTypeOverride, _PolicyId_, 0 },
 #define IMAGE_POLICY_SECTION_NAME 0
-#define IMAGE_POLICY_UINT16_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt16, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_UINT32_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt32, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_UINT64_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt64, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_UINT8_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt8, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_UNICODE_STRING_PolicyId_, _Value_) { ImagePolicyEntryTypeUnicodeString, _PolicyId_, _Value_ },
-#define Iosb64ToIosb_iosb, _iosb64) { (_iosb) = (_iosb64); \
-}
-#define IosbToIosb64_iosb64, _iosb) { (_iosb64) = (_iosb); \
-}
-#define IS_VALIDATION_ENABLEDC, L) ((L) & (C))
 #define KB_SECONDARY_DATA_FLAG_ADDITIONAL_DATA 0x00000001
 #ifdef _WIN64
 #define LOCK_QUEUE_VALID_FLAGS 7
@@ -1507,7 +1490,6 @@ typedef struct PO_EPM_HANDLE__ {
 #define MM_MAPPING_ADDRESS_DIVISIBLE 0x1
 #define MM_PROTECT_DRIVER_SECTION_VALID_FLAGS 1
 #define NPEM_CONTROL_INTERFACE_CURRENT_VERSION 2
-#define NtCurrentSession) ((HANDLE) (LONG_PTR) - 3)
 #define PAGE_ENCLAVE_DECOMMIT 0x10000000
 #define PAGE_ENCLAVE_SS_FIRST 0x10000001
 #define PAGE_ENCLAVE_SS_REST 0x10000002
@@ -1520,7 +1502,6 @@ typedef struct PO_EPM_HANDLE__ {
 #define PO_FX_DEVICE_FLAG_DISABLE_FAST_RESUME 8
 #define POOL_CREATE_FLG_POOL_TYPES 0xD
 #define POOL_FLAG_UNUSED_REQUIRED_BITS 0xFFFFF000
-#define ReadCR8) __readcr8()
 #define REFTAG_AFDCONN 'CdfA'
 #define REFTAG_AFDENDPOINT 0x45646641
 #define REFTAG_AFDPOLL 0x50646641
@@ -1561,8 +1542,6 @@ typedef struct PO_EPM_HANDLE__ {
 #define VRL_ENABLE_KERNEL_BREAKS (-2147483647 - 1)
 #define VRL_GLOBAL_LEVEL 0
 #define VRL_PREDEFINED_CLASS_BEGIN (1 << 0)
-#define WriteCR8Data) __writecr8(Data)
-#define ZwCurrentSession) NtCurrentSession()
 
 typedef int __prefast_analysis_mode_flag0;
 
@@ -2368,26 +2347,7 @@ NTSTATUS ZwMapViewOfSectionEx(HANDLE SectionHandle, HANDLE ProcessHandle, PVOID 
 }
 #endif
 
-#define IMAGE_POLICY_ANSI_STRING_PolicyId_, _Value_) { ImagePolicyEntryTypeAnsiString, _PolicyId_, _Value_ },
-#define IMAGE_POLICY_BOOL_PolicyId_, _Value_) { ImagePolicyEntryTypeBool, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_INT16_PolicyId_, _Value_) { ImagePolicyEntryTypeInt16, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_INT32_PolicyId_, _Value_) { ImagePolicyEntryTypeInt32, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_INT64_PolicyId_, _Value_) { ImagePolicyEntryTypeInt64, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_INT8_PolicyId_, _Value_) { ImagePolicyEntryTypeInt8, _PolicyId_, (const VOID *) _Value_ },
 #define IMAGE_POLICY_METADATA_NAME 0
-#define IMAGE_POLICY_OVERRIDE_PolicyId_) { ImagePolicyEntryTypeOverride, _PolicyId_, 0 },
-#define IMAGE_POLICY_UINT16_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt16, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_UINT32_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt32, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_UINT64_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt64, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_UINT8_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt8, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_UNICODE_STRING_PolicyId_, _Value_) { ImagePolicyEntryTypeUnicodeString, _PolicyId_, _Value_ },
-#define IoGetDriverProxyWrapperFromEndpointDriverProxyExtension, Endpoint, Wrapper) __pragma(warning(push)) __pragma(warning(disable : 28024)) do { IofGetDriverProxyWrapperFromEndpoint((DriverProxyExtension), (PDRIVER_PROXY_ENDPOINT_FUNCTION) (Endpoint), (PDRIVER_PROXY_WRAPPED_ENDPOINT_FUNCTION *) (Wrapper)); } while (0) __pragma(warning(pop))
-#define Iosb64ToIosb_iosb, _iosb64) { (_iosb) = (_iosb64); \
-}
-#define IosbToIosb64_iosb64, _iosb) { (_iosb64) = (_iosb); \
-}
-#define IS_VALIDATION_ENABLEDC, L) ((L) & (C))
-#define WriteCR8Data) __writecr8(Data)
 
 enum _BOUND_CALLBACK_STATUS
 {
@@ -2434,25 +2394,6 @@ NTSTATUS PsSetSystemMultipleGroupAffinityThread(PGROUP_AFFINITY GroupAffinities,
 }
 #endif
 
-#define IMAGE_POLICY_ANSI_STRING_PolicyId_, _Value_) { ImagePolicyEntryTypeAnsiString, _PolicyId_, _Value_ },
-#define IMAGE_POLICY_BOOL_PolicyId_, _Value_) { ImagePolicyEntryTypeBool, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_INT16_PolicyId_, _Value_) { ImagePolicyEntryTypeInt16, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_INT32_PolicyId_, _Value_) { ImagePolicyEntryTypeInt32, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_INT64_PolicyId_, _Value_) { ImagePolicyEntryTypeInt64, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_INT8_PolicyId_, _Value_) { ImagePolicyEntryTypeInt8, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_OVERRIDE_PolicyId_) { ImagePolicyEntryTypeOverride, _PolicyId_, 0 },
-#define IMAGE_POLICY_UINT16_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt16, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_UINT32_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt32, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_UINT64_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt64, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_UINT8_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt8, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_UNICODE_STRING_PolicyId_, _Value_) { ImagePolicyEntryTypeUnicodeString, _PolicyId_, _Value_ },
-#define IoGetDriverProxyWrapperFromEndpointDriverProxyExtension, Endpoint, Wrapper) __pragma(warning(push)) __pragma(warning(disable : 28024)) do { IofGetDriverProxyWrapperFromEndpoint((DriverProxyExtension), (PDRIVER_PROXY_ENDPOINT_FUNCTION) (Endpoint), (PDRIVER_PROXY_WRAPPED_ENDPOINT_FUNCTION *) (Wrapper)); } while (0) __pragma(warning(pop))
-#define Iosb64ToIosb_iosb, _iosb64) { (_iosb) = (_iosb64); \
-}
-#define IosbToIosb64_iosb64, _iosb) { (_iosb64) = (_iosb); \
-}
-#define IS_VALIDATION_ENABLEDC, L) ((L) & (C))
-#define WriteCR8Data) __writecr8(Data)
 
 struct _CLS_LSN
 {
@@ -2606,25 +2547,38 @@ NTSTATUS ExGetSystemFirmwareTable(ULONG FirmwareTableProviderSignature, ULONG Fi
 }
 #endif
 
-#define IMAGE_POLICY_ANSI_STRING_PolicyId_, _Value_) { ImagePolicyEntryTypeAnsiString, _PolicyId_, _Value_ },
-#define IMAGE_POLICY_BOOL_PolicyId_, _Value_) { ImagePolicyEntryTypeBool, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_INT16_PolicyId_, _Value_) { ImagePolicyEntryTypeInt16, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_INT32_PolicyId_, _Value_) { ImagePolicyEntryTypeInt32, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_INT64_PolicyId_, _Value_) { ImagePolicyEntryTypeInt64, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_INT8_PolicyId_, _Value_) { ImagePolicyEntryTypeInt8, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_OVERRIDE_PolicyId_) { ImagePolicyEntryTypeOverride, _PolicyId_, 0 },
-#define IMAGE_POLICY_UINT16_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt16, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_UINT32_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt32, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_UINT64_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt64, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_UINT8_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt8, _PolicyId_, (const VOID *) _Value_ },
-#define IMAGE_POLICY_UNICODE_STRING_PolicyId_, _Value_) { ImagePolicyEntryTypeUnicodeString, _PolicyId_, _Value_ },
-#define IoGetDriverProxyWrapperFromEndpointDriverProxyExtension, Endpoint, Wrapper) __pragma(warning(push)) __pragma(warning(disable : 28024)) do { IofGetDriverProxyWrapperFromEndpoint((DriverProxyExtension), (PDRIVER_PROXY_ENDPOINT_FUNCTION) (Endpoint), (PDRIVER_PROXY_WRAPPED_ENDPOINT_FUNCTION *) (Wrapper)); } while (0) __pragma(warning(pop))
-#define Iosb64ToIosb_iosb, _iosb64) { (_iosb) = (_iosb64); \
-}
-#define IosbToIosb64_iosb64, _iosb) { (_iosb64) = (_iosb); \
-}
-#define IS_VALIDATION_ENABLEDC, L) ((L) & (C))
-#define WriteCR8Data) __writecr8(Data)
+#define IMAGE_POLICY_ANSI_STRING(_PolicyId_, _Value_) { ImagePolicyEntryTypeAnsiString, _PolicyId_, _Value_ },
+#define IMAGE_POLICY_BOOL(_PolicyId_, _Value_) { ImagePolicyEntryTypeBool, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_INT16(_PolicyId_, _Value_) { ImagePolicyEntryTypeInt16, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_INT32(_PolicyId_, _Value_) { ImagePolicyEntryTypeInt32, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_INT64(_PolicyId_, _Value_) { ImagePolicyEntryTypeInt64, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_INT8(_PolicyId_, _Value_) { ImagePolicyEntryTypeInt8, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_OVERRIDE(_PolicyId_) { ImagePolicyEntryTypeOverride, _PolicyId_, 0 },
+#define IMAGE_POLICY_UINT16(_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt16, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_UINT32(_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt32, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_UINT64(_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt64, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_UINT8(_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt8, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_UNICODE_STRING(_PolicyId_, _Value_) { ImagePolicyEntryTypeUnicodeString, _PolicyId_, _Value_ },
+#define IoGetDriverProxyWrapperFromEndpoint(DriverProxyExtension, Endpoint, Wrapper) __pragma(warning(push)) __pragma(warning(disable : 28024)) do { IofGetDriverProxyWrapperFromEndpoint((DriverProxyExtension), (PDRIVER_PROXY_ENDPOINT_FUNCTION) (Endpoint), (PDRIVER_PROXY_WRAPPED_ENDPOINT_FUNCTION *) (Wrapper)); } while (0) __pragma(warning(pop))
+#define Iosb64ToIosb(_iosb, _iosb64) { (_iosb) = (_iosb64); }
+#define IosbToIosb64(_iosb64, _iosb) { (_iosb64) = (_iosb); }
+#define IS_VALIDATION_ENABLED(C, L) ((L) & (C))
+#define NtCurrentSession() ((HANDLE) (LONG_PTR) - 3)
+#define ReadCR8() __readcr8()
+#define WriteCR8(Data) __writecr8(Data)
+#define ZwCurrentSession() NtCurrentSession()
+
+struct _EXTENDED_CREATE_INFORMATION_32
+{
+    LONGLONG ExtendedCreateFlags;
+    void *POINTER_SIGNED POINTER_32 EaBuffer;
+    ULONG EaLength;
+    struct _EXTENDED_CREATE_DUAL_OPLOCK_KEYS *POINTER_SIGNED POINTER_32 DualOplockKeys;
+};
+
+typedef struct _EXTENDED_CREATE_INFORMATION_32 EXTENDED_CREATE_INFORMATION_32;
+
+typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
 
 #endif /* !_WDMDDK_ */
 

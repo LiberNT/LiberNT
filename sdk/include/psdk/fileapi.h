@@ -82,27 +82,47 @@ typedef struct DISK_SPACE_INFORMATION {
 #ifdef UNICODE
 #define CreateDirectory2 CreateDirectory2W
 #else
+#ifdef UNICODE
+#define CreateDirectory2 CreateDirectory2W
+#else
 #define CreateDirectory2 CreateDirectory2A
 #endif
+#endif
+#ifdef UNICODE
+#define DeleteFile2 DeleteFile2W
+#else
 #ifdef UNICODE
 #define DeleteFile2 DeleteFile2W
 #else
 #define DeleteFile2 DeleteFile2A
 #endif
+#endif
+#ifdef UNICODE
+#define GetDiskSpaceInformation GetDiskSpaceInformationW
+#else
 #ifdef UNICODE
 #define GetDiskSpaceInformation GetDiskSpaceInformationW
 #else
 #define GetDiskSpaceInformation GetDiskSpaceInformationA
 #endif
+#endif
+#ifdef UNICODE
+#define GetTempPath2 GetTempPath2W
+#else
 #ifdef UNICODE
 #define GetTempPath2 GetTempPath2W
 #else
 #define GetTempPath2 GetTempPath2A
 #endif
+#endif
+#ifdef UNICODE
+#define RemoveDirectory2 RemoveDirectory2W
+#else
 #ifdef UNICODE
 #define RemoveDirectory2 RemoveDirectory2W
 #else
 #define RemoveDirectory2 RemoveDirectory2A
+#endif
 #endif
 
 #ifdef __cplusplus

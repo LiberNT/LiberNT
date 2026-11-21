@@ -269,16 +269,6 @@ typedef struct _ACPI_GET_DEVICE_SPECIFIC_DATA {
 #define ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_SIGNATURE_V2 0x4D696541
 #define ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_SIGNATURE_V2_EX 0x51696541
 #define ACPI_EVAL_OUTPUT_BUFFER_SIGNATURE_V2 0x4B6F6541
-#define ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENT_LENGTHEvalOutputBuffer) (EvalOutputBuffer -> Length - FIELD_OFFSET(ACPI_EVAL_OUTPUT_BUFFER_V2, Argument))
-#define ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENTS_BEGINEvalOutputBuffer) ((PACPI_METHOD_ARGUMENT_V2) EvalOutputBuffer -> Argument)
-#define ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENTS_ENDEvalOutputBuffer) (PACPI_METHOD_ARGUMENT_V2) ((PUCHAR) EvalOutputBuffer -> Argument + ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENT_LENGTH(EvalOutputBuffer))
-#define ACPI_METHOD_ARGUMENT_V2_LENGTHDataLength) (FIELD_OFFSET(ACPI_METHOD_ARGUMENT_V2, Data) + max(sizeof (ULONG), DataLength))
-#define ACPI_METHOD_ARGUMENT_V2_LENGTH_FROM_ARGUMENTArgument) (ACPI_METHOD_ARGUMENT_V2_LENGTH(((PACPI_METHOD_ARGUMENT_V2) Argument) -> DataLength))
-#define ACPI_METHOD_NEXT_ARGUMENT_V2Argument) (PACPI_METHOD_ARGUMENT_V2) ((PUCHAR) Argument + ACPI_METHOD_ARGUMENT_V2_LENGTH_FROM_ARGUMENT(Argument))
-#define ACPI_METHOD_SET_ARGUMENT_BUFFER_V2Argument, BuffData, BuffLength) { Argument -> Type = ACPI_METHOD_ARGUMENT_BUFFER; Argument -> DataLength = BuffLength; memcpy_s(& Argument -> Data [0], Argument -> DataLength, (PUCHAR) BuffData, BuffLength); }
-#define ACPI_METHOD_SET_ARGUMENT_INTEGER_V2MethodArgument, IntData) { MethodArgument -> Type = ACPI_METHOD_ARGUMENT_INTEGER; MethodArgument -> DataLength = sizeof (ULONG); MethodArgument -> Argument = IntData; }
-#define ACPI_METHOD_SET_ARGUMENT_STRING_V2Argument, StrData) { Argument -> Type = ACPI_METHOD_ARGUMENT_STRING; Argument -> DataLength = strlen((PUCHAR) StrData) + sizeof (UCHAR); memcpy_s(& Argument -> Data [0], Argument -> DataLength, (PUCHAR) StrData, Argument -> DataLength); }
-#define FOR_EACH_ACPI_METHOD_ARGUMENT_V2MethodArgument, MethodArgumentsBegin, MethodArgumentsEnd) for (PACPI_METHOD_ARGUMENT_V2 MethodArgument = (MethodArgumentsBegin); MethodArgument < (MethodArgumentsEnd); MethodArgument = ACPI_METHOD_NEXT_ARGUMENT_V2(MethodArgument))
 #define IOCTL_ACPI_ASYNC_EVAL_METHOD_V1 0x32C000
 #define IOCTL_ACPI_ASYNC_EVAL_METHOD_V1_EX 0x32C01C
 #define IOCTL_ACPI_ASYNC_EVAL_METHOD_V2 0x32C040
@@ -529,24 +519,14 @@ typedef __unaligned ACPI_METHOD_ARGUMENT_V1 *PACPI_METHOD_ARGUMENT_V1;
 
 typedef __unaligned ACPI_METHOD_ARGUMENT_V2 *PACPI_METHOD_ARGUMENT_V2;
 
-#define ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENTS_BEGINEvalOutputBuffer) ((PACPI_METHOD_ARGUMENT_V2) EvalOutputBuffer -> Argument)
-#define ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENTS_ENDEvalOutputBuffer) (PACPI_METHOD_ARGUMENT_V2) ((PUCHAR) EvalOutputBuffer -> Argument + ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENT_LENGTH(EvalOutputBuffer))
-#define ACPI_METHOD_SET_ARGUMENT_BUFFER_V2Argument, BuffData, BuffLength) { Argument -> Type = ACPI_METHOD_ARGUMENT_BUFFER; Argument -> DataLength = BuffLength; memcpy_s(& Argument -> Data [0], Argument -> DataLength, (PUCHAR) BuffData, BuffLength); }
-#define ACPI_METHOD_SET_ARGUMENT_INTEGER_V2MethodArgument, IntData) { MethodArgument -> Type = ACPI_METHOD_ARGUMENT_INTEGER; MethodArgument -> DataLength = sizeof (ULONG); MethodArgument -> Argument = IntData; }
-#define ACPI_METHOD_SET_ARGUMENT_STRING_V2Argument, StrData) { Argument -> Type = ACPI_METHOD_ARGUMENT_STRING; Argument -> DataLength = strlen((PUCHAR) StrData) + sizeof (UCHAR); memcpy_s(& Argument -> Data [0], Argument -> DataLength, (PUCHAR) StrData, Argument -> DataLength); }
-#define FOR_EACH_ACPI_METHOD_ARGUMENT_V2MethodArgument, MethodArgumentsBegin, MethodArgumentsEnd) for (PACPI_METHOD_ARGUMENT_V2 MethodArgument = (MethodArgumentsBegin); MethodArgument < (MethodArgumentsEnd); MethodArgument = ACPI_METHOD_NEXT_ARGUMENT_V2(MethodArgument))
-
-#define ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENTS_BEGINEvalOutputBuffer) ((PACPI_METHOD_ARGUMENT_V2) EvalOutputBuffer -> Argument)
-#define ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENTS_ENDEvalOutputBuffer) (PACPI_METHOD_ARGUMENT_V2) ((PUCHAR) EvalOutputBuffer -> Argument + ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENT_LENGTH(EvalOutputBuffer))
-#define ACPI_METHOD_SET_ARGUMENT_BUFFER_V2Argument, BuffData, BuffLength) { Argument -> Type = ACPI_METHOD_ARGUMENT_BUFFER; Argument -> DataLength = BuffLength; memcpy_s(& Argument -> Data [0], Argument -> DataLength, (PUCHAR) BuffData, BuffLength); }
-#define ACPI_METHOD_SET_ARGUMENT_INTEGER_V2MethodArgument, IntData) { MethodArgument -> Type = ACPI_METHOD_ARGUMENT_INTEGER; MethodArgument -> DataLength = sizeof (ULONG); MethodArgument -> Argument = IntData; }
-#define ACPI_METHOD_SET_ARGUMENT_STRING_V2Argument, StrData) { Argument -> Type = ACPI_METHOD_ARGUMENT_STRING; Argument -> DataLength = strlen((PUCHAR) StrData) + sizeof (UCHAR); memcpy_s(& Argument -> Data [0], Argument -> DataLength, (PUCHAR) StrData, Argument -> DataLength); }
-#define FOR_EACH_ACPI_METHOD_ARGUMENT_V2MethodArgument, MethodArgumentsBegin, MethodArgumentsEnd) for (PACPI_METHOD_ARGUMENT_V2 MethodArgument = (MethodArgumentsBegin); MethodArgument < (MethodArgumentsEnd); MethodArgument = ACPI_METHOD_NEXT_ARGUMENT_V2(MethodArgument))
-
-#define ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENTS_BEGINEvalOutputBuffer) ((PACPI_METHOD_ARGUMENT_V2) EvalOutputBuffer -> Argument)
-#define ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENTS_ENDEvalOutputBuffer) (PACPI_METHOD_ARGUMENT_V2) ((PUCHAR) EvalOutputBuffer -> Argument + ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENT_LENGTH(EvalOutputBuffer))
-#define ACPI_METHOD_SET_ARGUMENT_BUFFER_V2Argument, BuffData, BuffLength) { Argument -> Type = ACPI_METHOD_ARGUMENT_BUFFER; Argument -> DataLength = BuffLength; memcpy_s(& Argument -> Data [0], Argument -> DataLength, (PUCHAR) BuffData, BuffLength); }
-#define ACPI_METHOD_SET_ARGUMENT_INTEGER_V2MethodArgument, IntData) { MethodArgument -> Type = ACPI_METHOD_ARGUMENT_INTEGER; MethodArgument -> DataLength = sizeof (ULONG); MethodArgument -> Argument = IntData; }
-#define ACPI_METHOD_SET_ARGUMENT_STRING_V2Argument, StrData) { Argument -> Type = ACPI_METHOD_ARGUMENT_STRING; Argument -> DataLength = strlen((PUCHAR) StrData) + sizeof (UCHAR); memcpy_s(& Argument -> Data [0], Argument -> DataLength, (PUCHAR) StrData, Argument -> DataLength); }
-#define FOR_EACH_ACPI_METHOD_ARGUMENT_V2MethodArgument, MethodArgumentsBegin, MethodArgumentsEnd) for (PACPI_METHOD_ARGUMENT_V2 MethodArgument = (MethodArgumentsBegin); MethodArgument < (MethodArgumentsEnd); MethodArgument = ACPI_METHOD_NEXT_ARGUMENT_V2(MethodArgument))
+#define ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENT_LENGTH(EvalOutputBuffer) (EvalOutputBuffer -> Length - FIELD_OFFSET(ACPI_EVAL_OUTPUT_BUFFER_V2, Argument))
+#define ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENTS_BEGIN(EvalOutputBuffer) ((PACPI_METHOD_ARGUMENT_V2) EvalOutputBuffer -> Argument)
+#define ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENTS_END(EvalOutputBuffer) (PACPI_METHOD_ARGUMENT_V2) ((PUCHAR) EvalOutputBuffer -> Argument + ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENT_LENGTH(EvalOutputBuffer))
+#define ACPI_METHOD_ARGUMENT_V2_LENGTH(DataLength) (FIELD_OFFSET(ACPI_METHOD_ARGUMENT_V2, Data) + max(sizeof (ULONG), DataLength))
+#define ACPI_METHOD_ARGUMENT_V2_LENGTH_FROM_ARGUMENT(Argument) (ACPI_METHOD_ARGUMENT_V2_LENGTH(((PACPI_METHOD_ARGUMENT_V2) Argument) -> DataLength))
+#define ACPI_METHOD_NEXT_ARGUMENT_V2(Argument) (PACPI_METHOD_ARGUMENT_V2) ((PUCHAR) Argument + ACPI_METHOD_ARGUMENT_V2_LENGTH_FROM_ARGUMENT(Argument))
+#define ACPI_METHOD_SET_ARGUMENT_BUFFER_V2(Argument, BuffData, BuffLength) { Argument -> Type = ACPI_METHOD_ARGUMENT_BUFFER; Argument -> DataLength = BuffLength; memcpy_s(& Argument -> Data [0], Argument -> DataLength, (PUCHAR) BuffData, BuffLength); }
+#define ACPI_METHOD_SET_ARGUMENT_INTEGER_V2(MethodArgument, IntData) { MethodArgument -> Type = ACPI_METHOD_ARGUMENT_INTEGER; MethodArgument -> DataLength = sizeof (ULONG); MethodArgument -> Argument = IntData; }
+#define ACPI_METHOD_SET_ARGUMENT_STRING_V2(Argument, StrData) { Argument -> Type = ACPI_METHOD_ARGUMENT_STRING; Argument -> DataLength = strlen((PUCHAR) StrData) + sizeof (UCHAR); memcpy_s(& Argument -> Data [0], Argument -> DataLength, (PUCHAR) StrData, Argument -> DataLength); }
+#define FOR_EACH_ACPI_METHOD_ARGUMENT_V2(MethodArgument, MethodArgumentsBegin, MethodArgumentsEnd) for (PACPI_METHOD_ARGUMENT_V2 MethodArgument = (MethodArgumentsBegin); MethodArgument < (MethodArgumentsEnd); MethodArgument = ACPI_METHOD_NEXT_ARGUMENT_V2(MethodArgument))
 

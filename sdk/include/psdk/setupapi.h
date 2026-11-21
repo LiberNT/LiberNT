@@ -3191,17 +3191,29 @@ typedef struct _FILEPATHS_SIGNERINFO_W {
 #ifdef UNICODE
 #define SetupGetInfDriverStoreLocation SetupGetInfDriverStoreLocationW
 #else
+#ifdef UNICODE
+#define SetupGetInfDriverStoreLocation SetupGetInfDriverStoreLocationW
+#else
 #define SetupGetInfDriverStoreLocation SetupGetInfDriverStoreLocationA
 #endif
+#endif
+#ifdef UNICODE
+#define SetupGetInfPublishedName SetupGetInfPublishedNameW
+#else
 #ifdef UNICODE
 #define SetupGetInfPublishedName SetupGetInfPublishedNameW
 #else
 #define SetupGetInfPublishedName SetupGetInfPublishedNameA
 #endif
+#endif
+#ifdef UNICODE
+#define SetupPrepareQueueForRestore SetupPrepareQueueForRestoreW
+#else
 #ifdef UNICODE
 #define SetupPrepareQueueForRestore SetupPrepareQueueForRestoreW
 #else
 #define SetupPrepareQueueForRestore SetupPrepareQueueForRestoreA
+#endif
 #endif
 #define SetupVerifyInfFile 0
 
@@ -3259,6 +3271,23 @@ BOOL SetupGetInfPublishedNameW(PCWSTR DriverStoreLocation, PWSTR ReturnBuffer, D
 BOOL SetupPrepareQueueForRestoreA(HSPFILEQ QueueHandle, PCSTR BackupPath, DWORD RestoreFlags);
 BOOL SetupPrepareQueueForRestoreW(HSPFILEQ QueueHandle, PCWSTR BackupPath, DWORD RestoreFlags);
 BOOL SetupUninstallNewlyCopiedInfs(HSPFILEQ FileQueue, DWORD Flags, PVOID Reserved);
+
+#ifdef __cplusplus
+}
+#endif
+
+typedef DWORDLONG SP_LOG_TOKEN;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+SP_LOG_TOKEN SetupGetThreadLogToken(void);
+void SetupSetThreadLogToken(SP_LOG_TOKEN LogToken);
+void SetupWriteTextLog(SP_LOG_TOKEN LogToken, DWORD Category, DWORD Flags, PCSTR MessageStr, ...);
+void SetupWriteTextLogError(SP_LOG_TOKEN LogToken, DWORD Category, DWORD LogFlags, DWORD Error, PCSTR MessageStr, ...);
+void SetupWriteTextLogInfLine(SP_LOG_TOKEN LogToken, DWORD Flags, HINF InfHandle, PINFCONTEXT Context);
 
 #ifdef __cplusplus
 }

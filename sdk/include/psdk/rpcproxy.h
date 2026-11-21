@@ -41,7 +41,6 @@
 #endif
 #define CStdStubBuffer_METHODS_OPT 0
 #define CStdStubBuffer_METHODS_TAG ((void *) - 1)
-#define DISABLE_THREAD_LIBRARY_CALLSx) DisableThreadLibraryCalls(x)
 #define DLLDATA_STANDARD_ROUTINES DLLDATA_ROUTINES((const ProxyFileInfo * *) pProxyFileList, & CLSID_PSFactoryBuffer)
 #ifdef _WIN64
 #define IInspectableInterfaceProxyTag (-1)
@@ -65,7 +64,6 @@
 #define IUnknownInterfaceProxyTag 0xFFFFFFFE
 #endif
 #define NdrDefaultIIDLookup ((PIIDLookup) - 1)
-#define RPCPROXY_GET_STUB_HEADERStubVtblListEntry) (& (StubVtblListEntry) -> header)
 #define RPCPROXY_IID_DECLSPEC_SECTION __declspec(allocate("rpcproxy$_iid"))
 
 #ifdef __cplusplus
@@ -151,13 +149,9 @@ void WINAPI ObjectStublessClient9(void);
 }
 #endif
 
-#define DISABLE_THREAD_LIBRARY_CALLSx) DisableThreadLibraryCalls(x)
 #define DLLRPCDUMMYCALL void __cdecl DLLRPCDUMMYCALL_ENTRY(void) { /* Don't define __purecall method anymore */ }
 #define DLLRPCDUMMYCALL_ENTRY 0
-#define RPCPROXY_GET_STUB_HEADERStubVtblListEntry) (& (StubVtblListEntry) -> header)
 
-#define DISABLE_THREAD_LIBRARY_CALLSx) DisableThreadLibraryCalls(x)
-#define RPCPROXY_GET_STUB_HEADERStubVtblListEntry) (& (StubVtblListEntry) -> header)
 
 typedef struct tagCInterfaceStubVtblTag CInterfaceStubVtblTag;
 
@@ -167,8 +161,8 @@ struct tagCInterfaceStubVtblTag
     void *tag;
 };
 
-#define DISABLE_THREAD_LIBRARY_CALLSx) DisableThreadLibraryCalls(x)
-#define RPCPROXY_GET_STUB_HEADERStubVtblListEntry) (& (StubVtblListEntry) -> header)
+#define DISABLE_THREAD_LIBRARY_CALLS(x) DisableThreadLibraryCalls(x)
+#define RPCPROXY_GET_STUB_HEADER(StubVtblListEntry) (& (StubVtblListEntry) -> header)
 
 #endif
 

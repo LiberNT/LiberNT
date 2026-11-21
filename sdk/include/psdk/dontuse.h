@@ -23,4 +23,20 @@
 
 #define lstrcatnW 0
 
+#define StrNCpyA 0
+
+#define StrNCpyW 0
+
+#define snscanf 0
+
+#define sprintfA 0
+
+#define strcatA 0
+
+#define nsprintf 0
+
+#define _ftccat 0
+
+#define _tccat 0
+
 #endif /* _DONTUSE_H_INCLUDED_ */

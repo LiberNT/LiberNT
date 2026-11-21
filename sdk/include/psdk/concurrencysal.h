@@ -48,37 +48,17 @@
 #ifndef _Interlocked_operand_
 #define _Interlocked_operand_ _Pre_ _SA_annotes0(SAL_interlocked)
 
-#define _Detaches_lock_detached, lock)
-#define _Moves_lock_target, source)
-#define _Replaces_lock_target, source)
-#define _Swaps_locks_left, right)
 #define BENIGN_RACE_BEGIN __pragma(warning(push))
 #define BENIGN_RACE_END __pragma(warning(pop))
-#define CSALCAT1x, y)
-#define CSALCAT2x, y)
 #define NO_COMPETING_THREAD_BEGIN __pragma(warning(push))
 #define NO_COMPETING_THREAD_END __pragma(warning(pop))
 
-#define _Detaches_lock_detached, lock)
-#define _Moves_lock_target, source)
-#define _Replaces_lock_target, source)
-#define _Swaps_locks_left, right)
-#define CSALCAT1x, y)
-#define CSALCAT2x, y)
-
-#define _Detaches_lock_detached, lock)
-#define _Moves_lock_target, source)
-#define _Replaces_lock_target, source)
-#define _Swaps_locks_left, right)
-#define CSALCAT1x, y)
-#define CSALCAT2x, y)
-
-#define _Detaches_lock_detached, lock)
-#define _Moves_lock_target, source)
-#define _Replaces_lock_target, source)
-#define _Swaps_locks_left, right)
-#define CSALCAT1x, y)
-#define CSALCAT2x, y)
+#define _Detaches_lock_(detached, lock)
+#define _Moves_lock_(target, source)
+#define _Replaces_lock_(target, source)
+#define _Swaps_locks_(left, right)
+#define CSALCAT1(x, y)
+#define CSALCAT2(x, y)
 
 #endif
 #define _Internal_lock_level_order_(a,b)

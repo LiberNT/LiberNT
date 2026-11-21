@@ -2292,50 +2292,80 @@ typedef struct linetermcaps_tag {
 } LINETERMCAPS, *LPLINETERMCAPS;
 #pragma pack(pop)
 
-#define DECLARE_OPAQUE32name) typedef DWORD name
 #define lineCreateAgent 0
+#ifdef UNICODE
+#define lineCreateAgentSession lineCreateAgentSessionW
+#else
 #ifdef UNICODE
 #define lineCreateAgentSession lineCreateAgentSessionW
 #else
 #define lineCreateAgentSession lineCreateAgentSessionA
 #endif
+#endif
+#ifdef UNICODE
+#define lineGetAgentActivityList lineGetAgentActivityListW
+#else
 #ifdef UNICODE
 #define lineGetAgentActivityList lineGetAgentActivityListW
 #else
 #define lineGetAgentActivityList lineGetAgentActivityListA
 #endif
+#endif
+#ifdef UNICODE
+#define lineGetAgentCaps lineGetAgentCapsW
+#else
 #ifdef UNICODE
 #define lineGetAgentCaps lineGetAgentCapsW
 #else
 #define lineGetAgentCaps lineGetAgentCapsA
 #endif
+#endif
+#ifdef UNICODE
+#define lineGetAgentGroupList lineGetAgentGroupListW
+#else
 #ifdef UNICODE
 #define lineGetAgentGroupList lineGetAgentGroupListW
 #else
 #define lineGetAgentGroupList lineGetAgentGroupListA
 #endif
+#endif
+#ifdef UNICODE
+#define lineGetAgentStatus lineGetAgentStatusW
+#else
 #ifdef UNICODE
 #define lineGetAgentStatus lineGetAgentStatusW
 #else
 #define lineGetAgentStatus lineGetAgentStatusA
 #endif
+#endif
+#ifdef UNICODE
+#define lineGetGroupList lineGetGroupListW
+#else
 #ifdef UNICODE
 #define lineGetGroupList lineGetGroupListW
 #else
 #define lineGetGroupList lineGetGroupListA
 #endif
+#endif
+#ifdef UNICODE
+#define lineGetQueueList lineGetQueueListW
+#else
 #ifdef UNICODE
 #define lineGetQueueList lineGetQueueListW
 #else
 #define lineGetQueueList lineGetQueueListA
 #endif
+#endif
+#ifdef UNICODE
+#define phoneInitializeEx phoneInitializeExW
+#else
 #ifdef UNICODE
 #define phoneInitializeEx phoneInitializeExW
 #else
 #define phoneInitializeEx phoneInitializeExA
 #endif
+#endif
 #define TAPI_REPLY 0x463
-#define TAPIERROR_FORMATMESSAGE__ErrCode__) (((__ErrCode__) > 0xFFFF0000) ? ((__ErrCode__) & 0x0000FFFF) : (((__ErrCode__) & 0x10000000) ? ((__ErrCode__) - 0x90000000 + 0xF000) : ((__ErrCode__) - 0x80000000 + 0xE000)))
 
 #pragma pack(push, 1)
 struct lineagentgroupentry_tag
@@ -2539,13 +2569,7 @@ LONG WINAPI tapiRequestMediaCall(HWND hwnd, WPARAM wRequestID, LPCSTR lpszDevice
 }
 #endif
 
-#define DECLARE_OPAQUE32name) typedef DWORD name
-#define TAPIERROR_FORMATMESSAGE__ErrCode__) (((__ErrCode__) > 0xFFFF0000) ? ((__ErrCode__) & 0x0000FFFF) : (((__ErrCode__) & 0x10000000) ? ((__ErrCode__) - 0x90000000 + 0xF000) : ((__ErrCode__) - 0x80000000 + 0xE000)))
-
-#define DECLARE_OPAQUE32name) typedef DWORD name
-#define TAPIERROR_FORMATMESSAGE__ErrCode__) (((__ErrCode__) > 0xFFFF0000) ? ((__ErrCode__) & 0x0000FFFF) : (((__ErrCode__) & 0x10000000) ? ((__ErrCode__) - 0x90000000 + 0xF000) : ((__ErrCode__) - 0x80000000 + 0xE000)))
-
-#define DECLARE_OPAQUE32name) typedef DWORD name
-#define TAPIERROR_FORMATMESSAGE__ErrCode__) (((__ErrCode__) > 0xFFFF0000) ? ((__ErrCode__) & 0x0000FFFF) : (((__ErrCode__) & 0x10000000) ? ((__ErrCode__) - 0x90000000 + 0xF000) : ((__ErrCode__) - 0x80000000 + 0xE000)))
+#define DECLARE_OPAQUE32(name) typedef DWORD name
+#define TAPIERROR_FORMATMESSAGE(__ErrCode__) (((__ErrCode__) > 0xFFFF0000) ? ((__ErrCode__) & 0x0000FFFF) : (((__ErrCode__) & 0x10000000) ? ((__ErrCode__) - 0x90000000 + 0xF000) : ((__ErrCode__) - 0x80000000 + 0xE000)))
 
 #endif /* __WINE_TAPI_H */

@@ -88,8 +88,6 @@ coclass OpcFactory
     interface IOpcFactory;
 };
 
-cpp_quote("#define IS_OPC_CONFORMANCE_ERRORx) (((x) & 0x1FFFF000) == (0x0000 + (FACILITY_OPC << 16)))")
-cpp_quote("#define IS_ZIP_CONFORMANCE_ERRORx) (((x) & 0x1FFFF000) == (0x1000 + (FACILITY_OPC << 16)))")
 cpp_quote("#define OPC_E_CONFLICTING_SETTINGS (-2142175212)")
 cpp_quote("#define OPC_E_COULD_NOT_RECOVER (-2142175154)")
 cpp_quote("#define OPC_E_DS_DEFAULT_DIGEST_METHOD_NOT_SET (-2142175161)")
@@ -542,8 +540,6 @@ cpp_quote("    HRESULT (WINAPI *GetRelativeUri)(IOpcUri *, IOpcPartUri *, IUri *
 cpp_quote("    HRESULT (WINAPI *CombinePartUri)(IOpcUri *, IUri *, IOpcPartUri **);")
 cpp_quote("};")
 
-cpp_quote("#define IS_OPC_CONFORMANCE_ERRORx) (((x) & 0x1FFFF000) == (0x0000 + (FACILITY_OPC << 16)))")
-cpp_quote("#define IS_ZIP_CONFORMANCE_ERRORx) (((x) & 0x1FFFF000) == (0x1000 + (FACILITY_OPC << 16)))")
 cpp_quote("")
 cpp_quote("enum __MIDL___MIDL_itf_msopc_0000_0002_0001")
 cpp_quote("{")
@@ -570,11 +566,7 @@ cpp_quote("{")
 cpp_quote("")
 cpp_quote("};")
 
-cpp_quote("#define IS_OPC_CONFORMANCE_ERRORx) (((x) & 0x1FFFF000) == (0x0000 + (FACILITY_OPC << 16)))")
-cpp_quote("#define IS_ZIP_CONFORMANCE_ERRORx) (((x) & 0x1FFFF000) == (0x1000 + (FACILITY_OPC << 16)))")
 
-cpp_quote("#define IS_OPC_CONFORMANCE_ERRORx) (((x) & 0x1FFFF000) == (0x0000 + (FACILITY_OPC << 16)))")
-cpp_quote("#define IS_ZIP_CONFORMANCE_ERRORx) (((x) & 0x1FFFF000) == (0x1000 + (FACILITY_OPC << 16)))")
 cpp_quote("")
 cpp_quote("typedef enum __MIDL___MIDL_itf_msopc_0001_0076_0001 OPC_CANONICALIZATION_METHOD;")
 cpp_quote("")
@@ -719,4 +711,7 @@ cpp_quote("    HRESULT (WINAPI *GetCertificateSet)(IOpcSigningOptions *, IOpcCer
 cpp_quote("    HRESULT (WINAPI *GetSignaturePartName)(IOpcSigningOptions *, IOpcPartUri **);")
 cpp_quote("    HRESULT (WINAPI *SetSignaturePartName)(IOpcSigningOptions *, IOpcPartUri *);")
 cpp_quote("};")
+
+cpp_quote("#define IS_OPC_CONFORMANCE_ERROR(x) (((x) & 0x1FFFF000) == (0x0000 + (FACILITY_OPC << 16)))")
+cpp_quote("#define IS_ZIP_CONFORMANCE_ERROR(x) (((x) & 0x1FFFF000) == (0x1000 + (FACILITY_OPC << 16)))")
 

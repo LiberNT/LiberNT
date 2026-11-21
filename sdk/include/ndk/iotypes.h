@@ -492,7 +492,7 @@ typedef enum _FILE_INFORMATION_CLASS
     FileNetworkPhysicalNameInformation = 49,
     FileIdGlobalTxDirectoryInformation = 50,
     FileIsRemoteDeviceInformation = 51,
-    FileAttributeCacheInformation = 52, // FileUnusedInformation since Windows 8.1
+    FileUnusedInformation = 52,
     FileNumaNodeInformation = 53,
     FileStandardLinkInformation = 54,
     FileRemoteProtocolInformation = 55,

@@ -830,23 +830,75 @@ typedef struct RPC_ENDPOINT_TEMPLATEW {
   unsigned long Backlog;
 } RPC_ENDPOINT_TEMPLATEW, *PRPC_ENDPOINT_TEMPLATEW;
 
+#ifdef UNICODE
+#define _RPC_BINDING_HANDLE_TEMPLATE_V1 _RPC_BINDING_HANDLE_TEMPLATE_V1_W
+#else
 #define _RPC_BINDING_HANDLE_TEMPLATE_V1 _RPC_BINDING_HANDLE_TEMPLATE_V1_A
+#endif
+#ifdef UNICODE
+#define _RPC_HTTP_TRANSPORT_CREDENTIALS _RPC_HTTP_TRANSPORT_CREDENTIALS_W
+#else
 #define _RPC_HTTP_TRANSPORT_CREDENTIALS _RPC_HTTP_TRANSPORT_CREDENTIALS_A
+#endif
+#ifdef UNICODE
+#define _RPC_HTTP_TRANSPORT_CREDENTIALS_V3 _RPC_HTTP_TRANSPORT_CREDENTIALS_V3_W
+#else
 #define _RPC_HTTP_TRANSPORT_CREDENTIALS_V3 _RPC_HTTP_TRANSPORT_CREDENTIALS_V3_A
+#endif
+#ifdef UNICODE
+#define _RPC_SECURITY_QOS_V3 _RPC_SECURITY_QOS_V3_W
+#else
 #define _RPC_SECURITY_QOS_V3 _RPC_SECURITY_QOS_V3_A
+#endif
+#ifdef UNICODE
+#define _RPC_SECURITY_QOS_V4 _RPC_SECURITY_QOS_V4_W
+#else
 #define _RPC_SECURITY_QOS_V4 _RPC_SECURITY_QOS_V4_A
+#endif
+#ifdef UNICODE
+#define _RPC_SECURITY_QOS_V5 _RPC_SECURITY_QOS_V5_W
+#else
 #define _RPC_SECURITY_QOS_V5 _RPC_SECURITY_QOS_V5_A
+#endif
+#ifdef UNICODE
+#define PRPC_BINDING_HANDLE_TEMPLATE_V1 PRPC_BINDING_HANDLE_TEMPLATE_V1_W
+#else
 #define PRPC_BINDING_HANDLE_TEMPLATE_V1 PRPC_BINDING_HANDLE_TEMPLATE_V1_A
+#endif
+#ifdef UNICODE
+#define PRPC_ENDPOINT_TEMPLATE PRPC_ENDPOINT_TEMPLATEW
+#else
 #ifdef UNICODE
 #define PRPC_ENDPOINT_TEMPLATE PRPC_ENDPOINT_TEMPLATEW
 #else
 #define PRPC_ENDPOINT_TEMPLATE PRPC_ENDPOINT_TEMPLATEA
 #endif
+#endif
+#ifdef UNICODE
+#define PRPC_HTTP_TRANSPORT_CREDENTIALS PRPC_HTTP_TRANSPORT_CREDENTIALS_W
+#else
 #define PRPC_HTTP_TRANSPORT_CREDENTIALS PRPC_HTTP_TRANSPORT_CREDENTIALS_A
+#endif
+#ifdef UNICODE
+#define PRPC_HTTP_TRANSPORT_CREDENTIALS_V3 PRPC_HTTP_TRANSPORT_CREDENTIALS_V3_W
+#else
 #define PRPC_HTTP_TRANSPORT_CREDENTIALS_V3 PRPC_HTTP_TRANSPORT_CREDENTIALS_V3_A
+#endif
+#ifdef UNICODE
+#define PRPC_SECURITY_QOS_V3 PRPC_SECURITY_QOS_V3_W
+#else
 #define PRPC_SECURITY_QOS_V3 PRPC_SECURITY_QOS_V3_A
+#endif
+#ifdef UNICODE
+#define PRPC_SECURITY_QOS_V4 PRPC_SECURITY_QOS_V4_W
+#else
 #define PRPC_SECURITY_QOS_V4 PRPC_SECURITY_QOS_V4_A
+#endif
+#ifdef UNICODE
+#define PRPC_SECURITY_QOS_V5 PRPC_SECURITY_QOS_V5_W
+#else
 #define PRPC_SECURITY_QOS_V5 PRPC_SECURITY_QOS_V5_A
+#endif
 #define RPC_BINDING_HANDLE_TEMPLATE_V1 0
 #ifdef _WIN64
 #define RPC_C_NO_CREDENTIALS (-1)
@@ -862,35 +914,75 @@ typedef struct RPC_ENDPOINT_TEMPLATEW {
 #define RPC_C_PROTECT_LEVEL_PKT_PRIVACY 6
 #define RPC_C_STATS_CALLS_IN 0
 #define RPC_ENDPOINT_TEMPLATE 0
+#ifdef UNICODE
+#define RPC_HTTP_TRANSPORT_CREDENTIALS RPC_HTTP_TRANSPORT_CREDENTIALS_W
+#else
 #define RPC_HTTP_TRANSPORT_CREDENTIALS RPC_HTTP_TRANSPORT_CREDENTIALS_A
+#endif
+#ifdef UNICODE
+#define RPC_HTTP_TRANSPORT_CREDENTIALS_V3 RPC_HTTP_TRANSPORT_CREDENTIALS_V3_W
+#else
 #define RPC_HTTP_TRANSPORT_CREDENTIALS_V3 RPC_HTTP_TRANSPORT_CREDENTIALS_V3_A
+#endif
+#ifdef UNICODE
+#define RPC_SECURITY_QOS_V3 RPC_SECURITY_QOS_V3_W
+#else
 #define RPC_SECURITY_QOS_V3 RPC_SECURITY_QOS_V3_A
+#endif
+#ifdef UNICODE
+#define RPC_SECURITY_QOS_V4 RPC_SECURITY_QOS_V4_W
+#else
 #define RPC_SECURITY_QOS_V4 RPC_SECURITY_QOS_V4_A
+#endif
+#ifdef UNICODE
+#define RPC_SECURITY_QOS_V5 RPC_SECURITY_QOS_V5_W
+#else
 #define RPC_SECURITY_QOS_V5 RPC_SECURITY_QOS_V5_A
+#endif
+#ifdef UNICODE
+#define RpcMgmtInqServerPrincName RpcMgmtInqServerPrincNameW
+#else
 #ifdef UNICODE
 #define RpcMgmtInqServerPrincName RpcMgmtInqServerPrincNameW
 #else
 #define RpcMgmtInqServerPrincName RpcMgmtInqServerPrincNameA
 #endif
+#endif
+#ifdef UNICODE
+#define RpcNsBindingInqEntryName RpcNsBindingInqEntryNameW
+#else
 #ifdef UNICODE
 #define RpcNsBindingInqEntryName RpcNsBindingInqEntryNameW
 #else
 #define RpcNsBindingInqEntryName RpcNsBindingInqEntryNameA
 #endif
+#endif
+#ifdef UNICODE
+#define RpcServerUseProtseqEx RpcServerUseProtseqExW
+#else
 #ifdef UNICODE
 #define RpcServerUseProtseqEx RpcServerUseProtseqExW
 #else
 #define RpcServerUseProtseqEx RpcServerUseProtseqExA
 #endif
+#endif
+#ifdef UNICODE
+#define RpcServerUseProtseqIf RpcServerUseProtseqIfW
+#else
 #ifdef UNICODE
 #define RpcServerUseProtseqIf RpcServerUseProtseqIfW
 #else
 #define RpcServerUseProtseqIf RpcServerUseProtseqIfA
 #endif
+#endif
+#ifdef UNICODE
+#define RpcServerUseProtseqIfEx RpcServerUseProtseqIfExW
+#else
 #ifdef UNICODE
 #define RpcServerUseProtseqIfEx RpcServerUseProtseqIfExW
 #else
 #define RpcServerUseProtseqIfEx RpcServerUseProtseqIfExA
+#endif
 #endif
 #define uuid_t UUID
 
@@ -1107,30 +1199,62 @@ RPC_STATUS RpcTestCancel(void);
 
 #define RPC_HTTP_TRANSPORT_CREDENTIALS_V2 0
 
+#ifdef UNICODE
+#define _RPC_BINDING_HANDLE_SECURITY_V1 _RPC_BINDING_HANDLE_SECURITY_V1_W
+#else
 #define _RPC_BINDING_HANDLE_SECURITY_V1 _RPC_BINDING_HANDLE_SECURITY_V1_A
+#endif
+#ifdef UNICODE
+#define _RPC_HTTP_TRANSPORT_CREDENTIALS_V2 _RPC_HTTP_TRANSPORT_CREDENTIALS_V2_W
+#else
 #define _RPC_HTTP_TRANSPORT_CREDENTIALS_V2 _RPC_HTTP_TRANSPORT_CREDENTIALS_V2_A
+#endif
+#ifdef UNICODE
+#define PRPC_BINDING_HANDLE_SECURITY_V1 PRPC_BINDING_HANDLE_SECURITY_V1_W
+#else
 #define PRPC_BINDING_HANDLE_SECURITY_V1 PRPC_BINDING_HANDLE_SECURITY_V1_A
+#endif
 #define PRPC_HTTP_TRANSPORT_CREDENTIALS_V2 0
+#ifdef UNICODE
+#define PRPC_INTERFACE_TEMPLATE PRPC_INTERFACE_TEMPLATEW
+#else
 #ifdef UNICODE
 #define PRPC_INTERFACE_TEMPLATE PRPC_INTERFACE_TEMPLATEW
 #else
 #define PRPC_INTERFACE_TEMPLATE PRPC_INTERFACE_TEMPLATEA
 #endif
+#endif
+#ifdef UNICODE
+#define RPC_BINDING_HANDLE_SECURITY_V1 RPC_BINDING_HANDLE_SECURITY_V1_W
+#else
 #define RPC_BINDING_HANDLE_SECURITY_V1 RPC_BINDING_HANDLE_SECURITY_V1_A
+#endif
+#ifdef UNICODE
+#define RPC_INTERFACE_TEMPLATE RPC_INTERFACE_TEMPLATEW
+#else
 #ifdef UNICODE
 #define RPC_INTERFACE_TEMPLATE RPC_INTERFACE_TEMPLATEW
 #else
 #define RPC_INTERFACE_TEMPLATE RPC_INTERFACE_TEMPLATEA
 #endif
+#endif
+#ifdef UNICODE
+#define RpcBindingCreate RpcBindingCreateW
+#else
 #ifdef UNICODE
 #define RpcBindingCreate RpcBindingCreateW
 #else
 #define RpcBindingCreate RpcBindingCreateA
 #endif
+#endif
+#ifdef UNICODE
+#define RpcServerInterfaceGroupCreate RpcServerInterfaceGroupCreateW
+#else
 #ifdef UNICODE
 #define RpcServerInterfaceGroupCreate RpcServerInterfaceGroupCreateW
 #else
 #define RpcServerInterfaceGroupCreate RpcServerInterfaceGroupCreateA
+#endif
 #endif
 
 struct _RPC_BINDING_HANDLE_SECURITY_V1_A

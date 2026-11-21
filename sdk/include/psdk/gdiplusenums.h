@@ -818,27 +818,35 @@ enum GenericFontFamily {
     GenericFontFamilyMonospace = 2
 };
 
-#define GDIP_EMFPLUS_RECORD_TO_WMFn) ((n) & (~GDIP_WMF_RECORD_BASE))
-#define GDIP_IS_WMF_RECORDTYPEn) (((n) & GDIP_WMF_RECORD_BASE) != 0)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
+enum ObjectType
+{
+    ObjectTypeInvalid = 0,
+    ObjectTypeBrush = 1,
+    ObjectTypePen = 2,
+    ObjectTypePath = 3,
+    ObjectTypeRegion = 4,
+    ObjectTypeImage = 5,
+    ObjectTypeFont = 6,
+    ObjectTypeStringFormat = 7,
+    ObjectTypeImageAttributes = 8,
+    ObjectTypeCustomLineCap = 9,
+    ObjectTypeMax = 9,
+    ObjectTypeMin = 1,
+};
+
 BOOL ObjectTypeIsValid(enum ObjectType type);
 
 #ifdef __cplusplus
 }
 #endif
 
-#define GDIP_EMFPLUS_RECORD_TO_WMFn) ((n) & (~GDIP_WMF_RECORD_BASE))
-#define GDIP_IS_WMF_RECORDTYPEn) (((n) & GDIP_WMF_RECORD_BASE) != 0)
-
-#define GDIP_EMFPLUS_RECORD_TO_WMFn) ((n) & (~GDIP_WMF_RECORD_BASE))
-#define GDIP_IS_WMF_RECORDTYPEn) (((n) & GDIP_WMF_RECORD_BASE) != 0)
-
-#define GDIP_EMFPLUS_RECORD_TO_WMFn) ((n) & (~GDIP_WMF_RECORD_BASE))
-#define GDIP_IS_WMF_RECORDTYPEn) (((n) & GDIP_WMF_RECORD_BASE) != 0)
+#define GDIP_EMFPLUS_RECORD_TO_WMF(n) ((n) & (~GDIP_WMF_RECORD_BASE))
+#define GDIP_IS_WMF_RECORDTYPE(n) (((n) & GDIP_WMF_RECORD_BASE) != 0)
 
 #endif

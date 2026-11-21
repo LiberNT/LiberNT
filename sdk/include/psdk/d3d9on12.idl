@@ -50,12 +50,6 @@ interface IDirect3DDevice9On12 : IUnknown
     HRESULT ReturnUnderlyingResource(IDirect3DResource9 *resource, UINT fence_count, UINT64 *signal_values, ID3D12Fence **fences);
 }
 
-cpp_quote("#define IDirect3DDevice9On12_AddRefp) (p) -> lpVtbl -> AddRef(p)")
-cpp_quote("#define IDirect3DDevice9On12_GetD3D12Devicep, a, b) (p) -> lpVtbl -> GetD3D12Device(p, a, b)")
-cpp_quote("#define IDirect3DDevice9On12_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)")
-cpp_quote("#define IDirect3DDevice9On12_Releasep) (p) -> lpVtbl -> Release(p)")
-cpp_quote("#define IDirect3DDevice9On12_ReturnUnderlyingResourcep, a, b, c, d) (p) -> lpVtbl -> ReturnUnderlyingResource(p, a, b, c, d)")
-cpp_quote("#define IDirect3DDevice9On12_UnwrapUnderlyingResourcep, a, b, c, d) (p) -> lpVtbl -> UnwrapUnderlyingResource(p, a, b, c, d)")
 cpp_quote("")
 cpp_quote("struct _D3D9ON12_ARGS")
 cpp_quote("{")
@@ -81,24 +75,10 @@ cpp_quote("#ifdef __cplusplus")
 cpp_quote("}")
 cpp_quote("#endif")
 
-cpp_quote("#define IDirect3DDevice9On12_AddRefp) (p) -> lpVtbl -> AddRef(p)")
-cpp_quote("#define IDirect3DDevice9On12_GetD3D12Devicep, a, b) (p) -> lpVtbl -> GetD3D12Device(p, a, b)")
-cpp_quote("#define IDirect3DDevice9On12_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)")
-cpp_quote("#define IDirect3DDevice9On12_Releasep) (p) -> lpVtbl -> Release(p)")
-cpp_quote("#define IDirect3DDevice9On12_ReturnUnderlyingResourcep, a, b, c, d) (p) -> lpVtbl -> ReturnUnderlyingResource(p, a, b, c, d)")
-cpp_quote("#define IDirect3DDevice9On12_UnwrapUnderlyingResourcep, a, b, c, d) (p) -> lpVtbl -> UnwrapUnderlyingResource(p, a, b, c, d)")
-
-cpp_quote("#define IDirect3DDevice9On12_AddRefp) (p) -> lpVtbl -> AddRef(p)")
-cpp_quote("#define IDirect3DDevice9On12_GetD3D12Devicep, a, b) (p) -> lpVtbl -> GetD3D12Device(p, a, b)")
-cpp_quote("#define IDirect3DDevice9On12_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)")
-cpp_quote("#define IDirect3DDevice9On12_Releasep) (p) -> lpVtbl -> Release(p)")
-cpp_quote("#define IDirect3DDevice9On12_ReturnUnderlyingResourcep, a, b, c, d) (p) -> lpVtbl -> ReturnUnderlyingResource(p, a, b, c, d)")
-cpp_quote("#define IDirect3DDevice9On12_UnwrapUnderlyingResourcep, a, b, c, d) (p) -> lpVtbl -> UnwrapUnderlyingResource(p, a, b, c, d)")
-
-cpp_quote("#define IDirect3DDevice9On12_AddRefp) (p) -> lpVtbl -> AddRef(p)")
-cpp_quote("#define IDirect3DDevice9On12_GetD3D12Devicep, a, b) (p) -> lpVtbl -> GetD3D12Device(p, a, b)")
-cpp_quote("#define IDirect3DDevice9On12_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)")
-cpp_quote("#define IDirect3DDevice9On12_Releasep) (p) -> lpVtbl -> Release(p)")
-cpp_quote("#define IDirect3DDevice9On12_ReturnUnderlyingResourcep, a, b, c, d) (p) -> lpVtbl -> ReturnUnderlyingResource(p, a, b, c, d)")
-cpp_quote("#define IDirect3DDevice9On12_UnwrapUnderlyingResourcep, a, b, c, d) (p) -> lpVtbl -> UnwrapUnderlyingResource(p, a, b, c, d)")
+cpp_quote("#define IDirect3DDevice9On12_AddRef(p) (p) -> lpVtbl -> AddRef(p)")
+cpp_quote("#define IDirect3DDevice9On12_GetD3D12Device(p, a, b) (p) -> lpVtbl -> GetD3D12Device(p, a, b)")
+cpp_quote("#define IDirect3DDevice9On12_QueryInterface(p, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)")
+cpp_quote("#define IDirect3DDevice9On12_Release(p) (p) -> lpVtbl -> Release(p)")
+cpp_quote("#define IDirect3DDevice9On12_ReturnUnderlyingResource(p, a, b, c, d) (p) -> lpVtbl -> ReturnUnderlyingResource(p, a, b, c, d)")
+cpp_quote("#define IDirect3DDevice9On12_UnwrapUnderlyingResource(p, a, b, c, d) (p) -> lpVtbl -> UnwrapUnderlyingResource(p, a, b, c, d)")
 

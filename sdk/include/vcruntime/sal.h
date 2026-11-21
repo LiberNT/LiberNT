@@ -18,14 +18,10 @@
 #ifndef SAL_INCLUDED
 #define SAL_INCLUDED 1
 
-#define _Called_from_function_class_x) _In_function_class_(x)
 
-#define _Called_from_function_class_x) _In_function_class_(x)
 #define _Published_ 0
 
-#define _Called_from_function_class_x) _In_function_class_(x)
-
-#define _Called_from_function_class_x) _In_function_class_(x)
+#define _Called_from_function_class_(x) _In_function_class_(x)
 
 #endif
 #ifndef __SAL_H_VERSION

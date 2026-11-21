@@ -80,14 +80,11 @@ typedef struct _RIORESULT {
 
 #define _MSWSOCKDEF_ 0
 #define RIO_CMSG_BASE_SIZE 0
-#define RIO_CMSG_FIRSTHDRbuffer) (((buffer) -> TotalLength >= RIO_CMSG_BASE_SIZE) ? ((((buffer) -> TotalLength - RIO_CMSG_BASE_SIZE) >= sizeof (WSACMSGHDR)) ? (PWSACMSGHDR) ((PUCHAR) (buffer) + RIO_CMSG_BASE_SIZE) : (PWSACMSGHDR) NULL) : (PWSACMSGHDR) NULL)
-#define RIO_CMSG_NEXTHDRbuffer, cmsg) ((cmsg) == NULL ? RIO_CMSG_FIRSTHDR(buffer) : (((PUCHAR) (cmsg) + WSA_CMSGHDR_ALIGN((cmsg) -> cmsg_len) + sizeof (WSACMSGHDR) > (PUCHAR) (buffer) + (buffer) -> TotalLength) ? (PWSACMSGHDR) NULL : (PWSACMSGHDR) ((PUCHAR) (cmsg) + WSA_CMSGHDR_ALIGN((cmsg) -> cmsg_len))))
 #define RIO_INVALID_BUFFERID 0xFFFFFFFF
 #define RIO_INVALID_CQ 0
 #define RIO_INVALID_RQ 0
 #define RIO_MSG_DONT_NOTIFY 0x00000001
 
-#define RIO_CMSG_NEXTHDRbuffer, cmsg) ((cmsg) == NULL ? RIO_CMSG_FIRSTHDR(buffer) : (((PUCHAR) (cmsg) + WSA_CMSGHDR_ALIGN((cmsg) -> cmsg_len) + sizeof (WSACMSGHDR) > (PUCHAR) (buffer) + (buffer) -> TotalLength) ? (PWSACMSGHDR) NULL : (PWSACMSGHDR) ((PUCHAR) (cmsg) + WSA_CMSGHDR_ALIGN((cmsg) -> cmsg_len))))
 
 typedef struct _RIO_BUF *PRIO_BUF;
 
@@ -112,9 +109,8 @@ typedef struct RIO_CQ_t *RIO_CQ;
 
 typedef struct RIO_RQ_t *RIO_RQ;
 
-#define RIO_CMSG_NEXTHDRbuffer, cmsg) ((cmsg) == NULL ? RIO_CMSG_FIRSTHDR(buffer) : (((PUCHAR) (cmsg) + WSA_CMSGHDR_ALIGN((cmsg) -> cmsg_len) + sizeof (WSACMSGHDR) > (PUCHAR) (buffer) + (buffer) -> TotalLength) ? (PWSACMSGHDR) NULL : (PWSACMSGHDR) ((PUCHAR) (cmsg) + WSA_CMSGHDR_ALIGN((cmsg) -> cmsg_len))))
-
-#define RIO_CMSG_NEXTHDRbuffer, cmsg) ((cmsg) == NULL ? RIO_CMSG_FIRSTHDR(buffer) : (((PUCHAR) (cmsg) + WSA_CMSGHDR_ALIGN((cmsg) -> cmsg_len) + sizeof (WSACMSGHDR) > (PUCHAR) (buffer) + (buffer) -> TotalLength) ? (PWSACMSGHDR) NULL : (PWSACMSGHDR) ((PUCHAR) (cmsg) + WSA_CMSGHDR_ALIGN((cmsg) -> cmsg_len))))
+#define RIO_CMSG_FIRSTHDR(buffer) (((buffer) -> TotalLength >= RIO_CMSG_BASE_SIZE) ? ((((buffer) -> TotalLength - RIO_CMSG_BASE_SIZE) >= sizeof (WSACMSGHDR)) ? (PWSACMSGHDR) ((PUCHAR) (buffer) + RIO_CMSG_BASE_SIZE) : (PWSACMSGHDR) NULL) : (PWSACMSGHDR) NULL)
+#define RIO_CMSG_NEXTHDR(buffer, cmsg) ((cmsg) == NULL ? RIO_CMSG_FIRSTHDR(buffer) : (((PUCHAR) (cmsg) + WSA_CMSGHDR_ALIGN((cmsg) -> cmsg_len) + sizeof (WSACMSGHDR) > (PUCHAR) (buffer) + (buffer) -> TotalLength) ? (PWSACMSGHDR) NULL : (PWSACMSGHDR) ((PUCHAR) (cmsg) + WSA_CMSGHDR_ALIGN((cmsg) -> cmsg_len))))
 
 #endif
 #ifndef RIO_MAX_CQ_SIZE
