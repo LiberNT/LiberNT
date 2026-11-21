@@ -381,7 +381,7 @@ KsepSetCompletionHook(
 }
 
 static
-PLDR_DATA_TABLE_ENTRY
+PKLDR_DATA_TABLE_ENTRY
 KsepFindModule(
     _In_ PVOID Address)
 {
@@ -389,7 +389,7 @@ KsepFindModule(
 
     for (Entry = PsLoadedModuleList.Flink; Entry != &PsLoadedModuleList; Entry = Entry->Flink)
     {
-        PLDR_DATA_TABLE_ENTRY LdrEntry = CONTAINING_RECORD(Entry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+        PKLDR_DATA_TABLE_ENTRY LdrEntry = CONTAINING_RECORD(Entry, KLDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
 
         if ((ULONG_PTR)Address >= (ULONG_PTR)LdrEntry->DllBase &&
             (ULONG_PTR)Address < (ULONG_PTR)LdrEntry->DllBase + LdrEntry->SizeOfImage)
@@ -407,7 +407,7 @@ KsepValidateShimProviderAndData(
     _In_ PVOID CallerAddress,
     _In_ PKSE_SHIM Shim)
 {
-    PLDR_DATA_TABLE_ENTRY Provider;
+    PKLDR_DATA_TABLE_ENTRY Provider;
     PKSE_HOOK_COLLECTION Collection;
     PKSE_HOOK Hook;
     ULONG_PTR Start, End;

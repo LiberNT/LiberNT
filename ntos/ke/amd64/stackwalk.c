@@ -16,7 +16,7 @@ KiLookupFunctionEntryUnlocked(
     _Out_ PULONG64 ImageBase,
     _Out_ PRUNTIME_FUNCTION *FunctionEntry)
 {
-    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    PKLDR_DATA_TABLE_ENTRY LdrEntry;
     IMAGE_NT_HEADERS64 NtHeaders;
     PIMAGE_DATA_DIRECTORY Directory;
     PRUNTIME_FUNCTION Table;

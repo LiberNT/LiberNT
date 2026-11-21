@@ -100,7 +100,7 @@ KdbpMatchPattern(
 static
 VOID
 KdbpModuleName(
-    _In_ PLDR_DATA_TABLE_ENTRY LdrEntry,
+    _In_ PKLDR_DATA_TABLE_ENTRY LdrEntry,
     _Out_writes_z_(Size) PCHAR Buffer,
     _In_ ULONG Size)
 {
@@ -161,18 +161,18 @@ KdbpModuleMatches(
  * whatever stopped the machine ends the walk rather than the debugger.
  */
 static
-PLDR_DATA_TABLE_ENTRY
+PKLDR_DATA_TABLE_ENTRY
 KdbpNextModule(
     _In_opt_ PLIST_ENTRY Link,
     _Inout_ PULONG Count,
-    _Out_ PLDR_DATA_TABLE_ENTRY Snapshot)
+    _Out_ PKLDR_DATA_TABLE_ENTRY Snapshot)
 {
-    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    PKLDR_DATA_TABLE_ENTRY LdrEntry;
 
     if ((Link == NULL) || (Link == &PsLoadedModuleList) || (*Count >= KDB_MAXIMUM_MODULES))
         return NULL;
 
-    LdrEntry = CONTAINING_RECORD(Link, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+    LdrEntry = CONTAINING_RECORD(Link, KLDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
     if (!NT_SUCCESS(KdbpSafeReadMemory(Snapshot, LdrEntry, sizeof(*Snapshot))))
         return NULL;
 
@@ -183,7 +183,7 @@ KdbpNextModule(
 static
 BOOLEAN
 KdbpAddressInModule(
-    _In_ PLDR_DATA_TABLE_ENTRY LdrEntry,
+    _In_ PKLDR_DATA_TABLE_ENTRY LdrEntry,
     _In_ PVOID Address)
 {
     ULONG_PTR Base = (ULONG_PTR)LdrEntry->DllBase;
@@ -253,10 +253,10 @@ BOOLEAN
 KdbpSymFindModule(
     _In_opt_ PVOID Address,
     _In_opt_ INT Index,
-    _Out_ PLDR_DATA_TABLE_ENTRY *pLdrEntry)
+    _Out_ PKLDR_DATA_TABLE_ENTRY *pLdrEntry)
 {
-    static LDR_DATA_TABLE_ENTRY Snapshot;
-    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    static KLDR_DATA_TABLE_ENTRY Snapshot;
+    PKLDR_DATA_TABLE_ENTRY LdrEntry;
     ULONG Count = 0;
     INT Current = 0;
 
@@ -302,7 +302,7 @@ KdbSymDescribeAddress(
     _In_ ULONG FileNameLength,
     _Out_opt_ PULONG Line)
 {
-    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    PKLDR_DATA_TABLE_ENTRY LdrEntry;
     ULONG_PTR SymbolAddress = 0;
 
     if (ModuleNameLength != 0)
@@ -463,8 +463,8 @@ KdbSymEnumerate(
     _Out_ PULONG MatchCount,
     _Out_ PBOOLEAN Truncated)
 {
-    static LDR_DATA_TABLE_ENTRY Snapshot;
-    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    static KLDR_DATA_TABLE_ENTRY Snapshot;
+    PKLDR_DATA_TABLE_ENTRY LdrEntry;
     KDB_SYM_ENUM Enum;
     CHAR ModuleName[KDB_MODULE_NAME_MAX];
     ULONG Count = 0;
@@ -516,8 +516,8 @@ KdbpSymLookupName(
     _In_ PCSTR Name,
     _Out_ PULONG_PTR Address)
 {
-    static LDR_DATA_TABLE_ENTRY Snapshot;
-    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    static KLDR_DATA_TABLE_ENTRY Snapshot;
+    PKLDR_DATA_TABLE_ENTRY LdrEntry;
     KDB_SYM_LOOKUP Lookup;
     CHAR ModuleName[KDB_MODULE_NAME_MAX];
     CHAR Wanted[KDB_MODULE_NAME_MAX];

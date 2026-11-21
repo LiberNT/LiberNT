@@ -325,7 +325,7 @@ ExpQueryModuleInformationWorker(
     _Out_ PULONG ReturnLength)
 {
     PLIST_ENTRY Entry;
-    PLDR_DATA_TABLE_ENTRY Module;
+    PKLDR_DATA_TABLE_ENTRY Module;
     ULONG Count = 0;
     ULONG Fit;
     ULONG Needed;
@@ -369,7 +369,7 @@ ExpQueryModuleInformationWorker(
     {
         PRTL_PROCESS_MODULE_INFORMATION Info = &Modules->Modules[Index];
 
-        Module = CONTAINING_RECORD(Entry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+        Module = CONTAINING_RECORD(Entry, KLDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
 
         RtlZeroMemory(Info, sizeof(*Info));
 
@@ -413,7 +413,7 @@ ExpQueryModuleInformationEx(
 {
     PRTL_PROCESS_MODULE_INFORMATION_EX Info;
     PIMAGE_NT_HEADERS NtHeaders;
-    PLDR_DATA_TABLE_ENTRY Module;
+    PKLDR_DATA_TABLE_ENTRY Module;
     PLIST_ENTRY Entry;
     ANSI_STRING Ansi;
     ULONG Count = 0;
@@ -446,7 +446,7 @@ ExpQueryModuleInformationEx(
          Entry != &PsLoadedModuleList;
          Entry = Entry->Flink, Index++)
     {
-        Module = CONTAINING_RECORD(Entry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+        Module = CONTAINING_RECORD(Entry, KLDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
         Info = (PRTL_PROCESS_MODULE_INFORMATION_EX)Buffer + Index;
 
         RtlZeroMemory(Info, sizeof(*Info));
@@ -852,7 +852,7 @@ RtlQueryModuleInformation(
     _Out_opt_ PVOID Buffer)
 {
     PAUX_MODULE_EXTENDED_INFO Entry;
-    PLDR_DATA_TABLE_ENTRY Module;
+    PKLDR_DATA_TABLE_ENTRY Module;
     PLIST_ENTRY ListEntry;
     ANSI_STRING Ansi;
     ULONG Count = 0;
@@ -902,7 +902,7 @@ RtlQueryModuleInformation(
          ListEntry = ListEntry->Flink, Index++)
     {
         Module = CONTAINING_RECORD(ListEntry,
-                                   LDR_DATA_TABLE_ENTRY,
+                                   KLDR_DATA_TABLE_ENTRY,
                                    InLoadOrderLinks);
 
         Entry = (PAUX_MODULE_EXTENDED_INFO)((PUCHAR)Buffer + Index * EntrySize);

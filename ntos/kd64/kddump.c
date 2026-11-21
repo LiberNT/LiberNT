@@ -1477,7 +1477,7 @@ static ULONG64 KdpMarkDumpRange(_Inout_ PRTL_BITMAP Bitmap, _In_opt_ PVOID Base,
 
 static ULONG64 KdpMarkAnalysisPages(_Inout_ PRTL_BITMAP Bitmap)
 {
-    PLDR_DATA_TABLE_ENTRY Module;
+    PKLDR_DATA_TABLE_ENTRY Module;
     PLIST_ENTRY ListEntry;
     PKPRCB Prcb;
     PKTHREAD Thread;
@@ -1491,7 +1491,7 @@ static ULONG64 KdpMarkAnalysisPages(_Inout_ PRTL_BITMAP Bitmap)
              (ListEntry != &PsLoadedModuleList) && (ListEntry != NULL) && (Modules < KDP_DUMP_MAX_IMAGES);
              ListEntry = ListEntry->Flink, Modules++)
         {
-            Module = CONTAINING_RECORD(ListEntry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+            Module = CONTAINING_RECORD(ListEntry, KLDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
             Marked += KdpMarkDumpRange(Bitmap, Module, sizeof(*Module));
             Marked += KdpMarkDumpRange(Bitmap, Module->DllBase, Module->SizeOfImage);
             Marked += KdpMarkDumpRange(Bitmap, Module->FullDllName.Buffer, Module->FullDllName.MaximumLength);

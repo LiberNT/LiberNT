@@ -102,11 +102,12 @@ FORCEINLINE
 BOOLEAN
 KiAddressInImage(
     _In_ ULONG_PTR Address,
-    _In_ PLDR_DATA_TABLE_ENTRY Entry)
+    _In_ PVOID DllBase,
+    _In_ ULONG SizeOfImage)
 {
-    ULONG_PTR Base = (ULONG_PTR)Entry->DllBase;
+    ULONG_PTR Base = (ULONG_PTR)DllBase;
 
-    return (Address >= Base) && (Address < (Base + Entry->SizeOfImage));
+    return (Address >= Base) && (Address < (Base + SizeOfImage));
 }
 
 /*
@@ -266,11 +267,11 @@ PVOID
 NTAPI
 KiPcToFileHeader(
     _In_ PVOID Pc,
-    _Out_ PLDR_DATA_TABLE_ENTRY *LdrEntry,
+    _Out_ PKLDR_DATA_TABLE_ENTRY *LdrEntry,
     _In_ BOOLEAN DriversOnly,
     _Out_ PBOOLEAN InKernel)
 {
-    PLDR_DATA_TABLE_ENTRY Entry;
+    PKLDR_DATA_TABLE_ENTRY Entry;
     PLIST_ENTRY ListEntry;
     ULONG_PTR Address = (ULONG_PTR)Pc;
     BOOLEAN First = TRUE;
@@ -286,7 +287,7 @@ KiPcToFileHeader(
          ListEntry = ListEntry->Flink)
     {
         Entry = CONTAINING_RECORD(ListEntry,
-                                  LDR_DATA_TABLE_ENTRY,
+                                  KLDR_DATA_TABLE_ENTRY,
                                   InLoadOrderLinks);
 
         /*
@@ -300,7 +301,7 @@ KiPcToFileHeader(
                 continue;
         }
 
-        if (!KiAddressInImage(Address, Entry))
+        if (!KiAddressInImage(Address, Entry->DllBase, Entry->SizeOfImage))
             continue;
 
         *LdrEntry = Entry;
@@ -348,7 +349,7 @@ KiRosPcToUserFileHeader(
                                       LDR_DATA_TABLE_ENTRY,
                                       InLoadOrderLinks);
 
-            if (KiAddressInImage(Address, Entry))
+            if (KiAddressInImage(Address, Entry->DllBase, Entry->SizeOfImage))
             {
                 *LdrEntry = Entry;
                 _SEH2_YIELD(return Entry->DllBase);
@@ -377,7 +378,7 @@ KiDumpParameterImages(
     _In_ ULONG ParameterCount,
     _In_ PKE_BUGCHECK_UNICODE_TO_ANSI Converter)
 {
-    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    PKLDR_DATA_TABLE_ENTRY LdrEntry;
     BOOLEAN InKernel, Any = FALSE;
     CHAR AnsiName[32];
     ULONG Index;
@@ -514,7 +515,7 @@ KeRosDumpStackFrameArray(
     _In_ PULONG_PTR Frames,
     _In_ ULONG FrameCount)
 {
-    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    PKLDR_DATA_TABLE_ENTRY LdrEntry;
     BOOLEAN InKernel;
     CHAR AnsiName[32];
     ULONG Index;
@@ -685,7 +686,7 @@ KiReportBugCheckBackTrace(
     _In_ BOOLEAN Display)
 {
     static CONTEXT Walk;
-    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    PKLDR_DATA_TABLE_ENTRY LdrEntry;
     CHAR Line[128];
     CHAR AnsiName[32];
     BOOLEAN InKernel;
@@ -756,7 +757,7 @@ KiReportBugCheck(
 {
     ANSI_STRING Message;
     CHAR Line[128];
-    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    PKLDR_DATA_TABLE_ENTRY LdrEntry;
     BOOLEAN InKernel;
     CHAR AnsiName[32];
     ULONG Index;

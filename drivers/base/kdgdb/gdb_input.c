@@ -347,13 +347,13 @@ stream_libraries_xml(
              CurrentEntry != ModuleListHead;
              CurrentEntry = CurrentEntry->Flink)
         {
-            PLDR_DATA_TABLE_ENTRY TableEntry;
+            PKLDR_DATA_TABLE_ENTRY TableEntry;
             CHAR Address[2 + sizeof(ULONG_PTR) * 2 + 1];
             PVOID DllBase;
             LONG AddressLength;
 
             TableEntry = CONTAINING_RECORD(CurrentEntry,
-                                           LDR_DATA_TABLE_ENTRY,
+                                           KLDR_DATA_TABLE_ENTRY,
                                            InLoadOrderLinks);
             DllBase = (PVOID)((ULONG_PTR)TableEntry->DllBase + 0x1000);
 
@@ -900,11 +900,11 @@ handle_gdb_monitor_command(VOID)
                  ModuleEntry != ModuleListHead && Status == KdPacketReceived;
                  ModuleEntry = ModuleEntry->Flink)
             {
-                PLDR_DATA_TABLE_ENTRY Module;
+                PKLDR_DATA_TABLE_ENTRY Module;
                 CHAR Name[96];
 
                 Module = CONTAINING_RECORD(ModuleEntry,
-                                           LDR_DATA_TABLE_ENTRY,
+                                           KLDR_DATA_TABLE_ENTRY,
                                            InLoadOrderLinks);
                 copy_module_name(&Module->BaseDllName, Name, sizeof(Name));
                 MONITOR_PRINT("%p %08lx %s\n",

@@ -126,7 +126,7 @@ KiRiscvScanStackForCode(
              Entry != &KeLoaderBlock->LoadOrderListHead;
              Entry = Entry->Flink)
         {
-            PLDR_DATA_TABLE_ENTRY Ldr = CONTAINING_RECORD(Entry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+            PKLDR_DATA_TABLE_ENTRY Ldr = CONTAINING_RECORD(Entry, KLDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
             ULONG_PTR Base = (ULONG_PTR)Ldr->DllBase;
 
             if ((Value > Base) && (Value < Base + Ldr->SizeOfImage))

@@ -1872,7 +1872,7 @@ KdbpCmdModules(
     ULONG Argc,
     PCHAR Argv[])
 {
-    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    PKLDR_DATA_TABLE_ENTRY LdrEntry;
     INT Index = 0;
 
     UNREFERENCED_PARAMETER(Argc);

@@ -23,20 +23,20 @@ MiLockSystemImages(VOID);
 VOID
 MiUnlockSystemImages(VOID);
 
-PLDR_DATA_TABLE_ENTRY
+PKLDR_DATA_TABLE_ENTRY
 MiFindSystemImage(
     _In_ PCUNICODE_STRING Name,
     _In_ BOOLEAN MatchFullName);
 
 VOID
 MiPublishSystemImage(
-    _In_ PLDR_DATA_TABLE_ENTRY Entry);
+    _In_ PKLDR_DATA_TABLE_ENTRY Entry);
 
 VOID
 MiWithdrawSystemImage(
-    _In_ PLDR_DATA_TABLE_ENTRY Entry);
+    _In_ PKLDR_DATA_TABLE_ENTRY Entry);
 
-PLDR_DATA_TABLE_ENTRY
+PKLDR_DATA_TABLE_ENTRY
 NTAPI
 MiLookupDataTableEntry(
     _In_ PVOID Address);
@@ -45,14 +45,14 @@ ULONG
 MiImportListCount(
     _In_opt_ PVOID ImportList);
 
-PLDR_DATA_TABLE_ENTRY
+PKLDR_DATA_TABLE_ENTRY
 MiImportListEntry(
     _In_ PVOID ImportList,
     _In_ ULONG Index);
 
 PVOID
 MiCreateImportList(
-    _In_reads_(Count) PLDR_DATA_TABLE_ENTRY *Modules,
+    _In_reads_(Count) PKLDR_DATA_TABLE_ENTRY *Modules,
     _In_ ULONG Count);
 
 VOID

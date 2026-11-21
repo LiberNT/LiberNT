@@ -296,7 +296,7 @@ MmDbgCopyProcessMemory(
 NTSTATUS
 NTAPI
 MmCallDllInitialize(
-    _In_ PLDR_DATA_TABLE_ENTRY LdrEntry,
+    _In_ PKLDR_DATA_TABLE_ENTRY LdrEntry,
     _In_ PLIST_ENTRY ModuleListHead);
 
 CODE_SEG("INIT")

@@ -38,7 +38,7 @@ KiLookupFunctionEntryUnlocked(
     _Out_ PRUNTIME_FUNCTION FunctionEntry,
     _Out_ PBOOLEAN Found)
 {
-    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    PKLDR_DATA_TABLE_ENTRY LdrEntry;
     IMAGE_NT_HEADERS64 NtHeaders;
     PIMAGE_DATA_DIRECTORY Directory;
     PRUNTIME_FUNCTION Table;

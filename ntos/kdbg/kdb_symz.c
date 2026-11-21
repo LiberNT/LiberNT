@@ -41,7 +41,7 @@ static LONG KdbpSymzBusy;
 static
 BOOLEAN
 KdbpSymzFindTable(
-    _In_ PLDR_DATA_TABLE_ENTRY LdrEntry,
+    _In_ PKLDR_DATA_TABLE_ENTRY LdrEntry,
     _Out_ PUCHAR *Table,
     _Out_ PULONG TableSize)
 {
@@ -163,7 +163,7 @@ KdbpSymzLoadBlock(
 
 BOOLEAN
 KdbpSymzDescribe(
-    _In_ PLDR_DATA_TABLE_ENTRY LdrEntry,
+    _In_ PKLDR_DATA_TABLE_ENTRY LdrEntry,
     _In_ ULONG_PTR RelativeAddress,
     _Out_writes_z_(FunctionNameLength) PCHAR FunctionName,
     _In_ ULONG FunctionNameLength,
@@ -225,7 +225,7 @@ KdbpSymzDescribe(
 
 BOOLEAN
 KdbpSymzEnumerate(
-    _In_ PLDR_DATA_TABLE_ENTRY LdrEntry,
+    _In_ PKLDR_DATA_TABLE_ENTRY LdrEntry,
     _In_ PSYMZ_ENUM_ROUTINE Routine,
     _In_ PVOID Context)
 {

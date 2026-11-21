@@ -401,11 +401,11 @@ VOID
 ExpInitializeImageNumbers(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
-    PLDR_DATA_TABLE_ENTRY Kernel;
+    PKLDR_DATA_TABLE_ENTRY Kernel;
     PIMAGE_NT_HEADERS Headers;
 
     Kernel = CONTAINING_RECORD(LoaderBlock->LoadOrderListHead.Flink,
-                               LDR_DATA_TABLE_ENTRY,
+                               KLDR_DATA_TABLE_ENTRY,
                                InLoadOrderLinks);
 
     Headers = RtlImageNtHeader(Kernel->DllBase);

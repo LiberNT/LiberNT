@@ -106,18 +106,18 @@ MiExportSlotByName(
 }
 
 static
-PLDR_DATA_TABLE_ENTRY
+PKLDR_DATA_TABLE_ENTRY
 MiFindForwardTarget(
     _In_reads_(Length) PCSTR Module,
     _In_ ULONG Length)
 {
-    PLDR_DATA_TABLE_ENTRY Entry;
+    PKLDR_DATA_TABLE_ENTRY Entry;
     PLIST_ENTRY Link;
     ULONG Index;
 
     for (Link = PsLoadedModuleList.Flink; Link != &PsLoadedModuleList; Link = Link->Flink)
     {
-        Entry = CONTAINING_RECORD(Link, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+        Entry = CONTAINING_RECORD(Link, KLDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
         if (Entry->BaseDllName.Length / sizeof(WCHAR) < Length)
             continue;
 
@@ -144,7 +144,7 @@ MiResolveExport(
     _Out_ PULONG_PTR Address)
 {
     MI_EXPORT_TABLE Next;
-    PLDR_DATA_TABLE_ENTRY Target;
+    PKLDR_DATA_TABLE_ENTRY Target;
     PCSTR Forward, Dot;
     ULONG Slot, Rva;
 
@@ -217,7 +217,7 @@ RtlFindExportedRoutineByName(
 NTSTATUS
 NTAPI
 MmCallDllInitialize(
-    _In_ PLDR_DATA_TABLE_ENTRY LdrEntry,
+    _In_ PKLDR_DATA_TABLE_ENTRY LdrEntry,
     _In_ PLIST_ENTRY ModuleListHead)
 {
     static const UNICODE_STRING Services = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\");
@@ -262,7 +262,7 @@ MmCallDllInitialize(
 static
 VOID
 MiReleaseModule(
-    _In_ PLDR_DATA_TABLE_ENTRY Module)
+    _In_ PKLDR_DATA_TABLE_ENTRY Module)
 {
     PMM_DLL_UNLOAD Unload;
     PVOID Imports;
@@ -345,7 +345,7 @@ MiLoadDependencyFrom(
     _In_ PCUNICODE_STRING Directory,
     _In_opt_ PCUNICODE_STRING SubDirectory,
     _In_ PCUNICODE_STRING ModuleName,
-    _Out_ PLDR_DATA_TABLE_ENTRY *Module)
+    _Out_ PKLDR_DATA_TABLE_ENTRY *Module)
 {
     UNICODE_STRING Path;
     ULONG Bytes;
@@ -379,7 +379,7 @@ NTSTATUS
 MiLoadDependency(
     _In_ PCUNICODE_STRING ModuleName,
     _In_ PCUNICODE_STRING Directory,
-    _Out_ PLDR_DATA_TABLE_ENTRY *Module)
+    _Out_ PKLDR_DATA_TABLE_ENTRY *Module)
 {
     static const UNICODE_STRING Drivers = RTL_CONSTANT_STRING(L"drivers\\");
     static const UNICODE_STRING SystemDrivers = RTL_CONSTANT_STRING(L"\\SystemRoot\\System32\\drivers\\");
@@ -482,7 +482,7 @@ NTSTATUS
 MiBindThunks(
     _In_ PVOID ImageBase,
     _In_ PCUNICODE_STRING ImageName,
-    _In_ PLDR_DATA_TABLE_ENTRY Module,
+    _In_ PKLDR_DATA_TABLE_ENTRY Module,
     _In_ PIMAGE_IMPORT_DESCRIPTOR Descriptor)
 {
     PIMAGE_THUNK_DATA Lookup = (PIMAGE_THUNK_DATA)((PUCHAR)ImageBase + Descriptor->OriginalFirstThunk);
@@ -534,11 +534,11 @@ MiBindDescriptor(
     _In_ PCUNICODE_STRING ImageName,
     _In_ PCUNICODE_STRING Directory,
     _In_ PIMAGE_IMPORT_DESCRIPTOR Descriptor,
-    _Out_ PLDR_DATA_TABLE_ENTRY *Referenced)
+    _Out_ PKLDR_DATA_TABLE_ENTRY *Referenced)
 {
     PCSTR Name = (PCSTR)ImageBase + Descriptor->Name;
     BOOLEAN Counted = !MiImportNameIn(Name, MiUncountedImports, RTL_NUMBER_OF(MiUncountedImports));
-    PLDR_DATA_TABLE_ENTRY Module;
+    PKLDR_DATA_TABLE_ENTRY Module;
     UNICODE_STRING ModuleName;
     ANSI_STRING AnsiName;
     BOOLEAN Hostless;
@@ -608,7 +608,7 @@ MiBindImports(
     _Out_ PVOID *ImportList)
 {
     PIMAGE_IMPORT_DESCRIPTOR Descriptor;
-    PLDR_DATA_TABLE_ENTRY *Held, Module;
+    PKLDR_DATA_TABLE_ENTRY *Held, Module;
     ULONG Size, Count, HeldCount = 0, Index;
     NTSTATUS Status;
     PVOID List;
@@ -698,7 +698,7 @@ MmGetSystemRoutineAddress(
         RTL_CONSTANT_STRING(L"ntoskrnl.exe"),
         RTL_CONSTANT_STRING(L"hal.dll"),
     };
-    PLDR_DATA_TABLE_ENTRY Entry;
+    PKLDR_DATA_TABLE_ENTRY Entry;
     ANSI_STRING RoutineName;
     PVOID Address = NULL;
     PLIST_ENTRY Link;
@@ -714,7 +714,7 @@ MmGetSystemRoutineAddress(
     {
         for (Link = PsLoadedModuleList.Flink; Link != &PsLoadedModuleList; Link = Link->Flink)
         {
-            Entry = CONTAINING_RECORD(Link, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+            Entry = CONTAINING_RECORD(Link, KLDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
             if (!RtlEqualUnicodeString(&Providers[Index], &Entry->BaseDllName, TRUE))
                 continue;
 

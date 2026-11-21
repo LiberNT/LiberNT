@@ -966,7 +966,7 @@ KdbpTestWalks(VOID)
         ((ULONG_PTR)KeGetContextPc(KdbCurrentTrapFrame) > (ULONG_PTR)MmHighestUserAddress))
     {
         static CONTEXT Walk;
-        PLDR_DATA_TABLE_ENTRY Entry;
+        PKLDR_DATA_TABLE_ENTRY Entry;
         BOOLEAN InKernel;
         BOOLEAN InImages = TRUE;
         ULONG Frames = 1;

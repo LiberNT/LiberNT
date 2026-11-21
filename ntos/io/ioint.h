@@ -421,9 +421,9 @@ extern PULONG IopGroupIndex;
 extern PUNICODE_STRING PiInitGroupOrderTable;
 extern ULONG PiInitGroupOrderTableCount;
 
-NTSTATUS LdrProcessDriverModule(_In_ PLDR_DATA_TABLE_ENTRY LdrEntry,
+NTSTATUS LdrProcessDriverModule(_In_ PKLDR_DATA_TABLE_ENTRY LdrEntry,
                                 _In_ PUNICODE_STRING FileName,
-                                _Out_ PLDR_DATA_TABLE_ENTRY *ModuleObject);
+                                _Out_ PKLDR_DATA_TABLE_ENTRY *ModuleObject);
 NTSTATUS IopLoadServiceModule(_In_ HANDLE ServiceHandle,
                               _Out_ PDRIVER_OBJECT *DriverObject);
 

@@ -20,7 +20,7 @@ NTAPI
 MmPageEntireDriver(
     _In_ PVOID AddressWithinSection)
 {
-    PLDR_DATA_TABLE_ENTRY Entry;
+    PKLDR_DATA_TABLE_ENTRY Entry;
     PVOID Base;
 
     PAGED_CODE();
@@ -112,7 +112,7 @@ NTAPI
 MmIsDriverVerifying(
     _In_ PDRIVER_OBJECT DriverObject)
 {
-    PLDR_DATA_TABLE_ENTRY Entry = (PLDR_DATA_TABLE_ENTRY)DriverObject->DriverSection;
+    PKLDR_DATA_TABLE_ENTRY Entry = (PKLDR_DATA_TABLE_ENTRY)DriverObject->DriverSection;
 
     return (LOGICAL)(Entry != NULL && (Entry->Flags & LDRP_IMAGE_VERIFYING) != 0);
 }
