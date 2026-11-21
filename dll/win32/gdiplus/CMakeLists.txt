@@ -1,7 +1,4 @@
 
-remove_definitions(-D_WIN32_WINNT=${REACTOS_TARGET_NT} -DWINVER=${REACTOS_TARGET_NT})
-add_definitions(-D_WIN32_WINNT=0x601)
-
 add_definitions(
     -D_USE_MATH_DEFINES
     -Dwcsicmp=_wcsicmp

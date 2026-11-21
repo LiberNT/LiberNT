@@ -3,16 +3,7 @@
 # PURPOSE:  Build file for rpi5vc4.sys — WDDM2 KMDOD for the BCM2712
 #           HVS/PixelValve display pipeline (firmware GOP framebuffer).
 
-# rpi5vc4 MUST speak the exact same DDI contract as dxgkrnl so that
-# KMDDOD_INITIALIZATION_DATA, DXGK_INTERFACE and every DXGKARG_* structure
-# have byte-identical layouts between the port driver and this miniport.
-# Mirror dxgkrnl/softgpu CMakeLists exactly.
-remove_definitions(-D_WIN32_WINNT=${REACTOS_TARGET_NT})
-remove_definitions(-DWINVER=${REACTOS_TARGET_NT})
-add_definitions(-D_WIN32_WINNT=0x0601 -DWINVER=0x0601)
-add_definitions(-DNTDDI_VERSION=0x06010000)    # NTDDI_WIN7
-
-remove_definitions(-DDXGKDDI_INTERFACE_VERSION=0x1052)
+remove_definitions(-DDXGKDDI_INTERFACE_VERSION=0x11007)
 # Compile with WDDM 3.0 declarations needed by the source. This is a header
 # surface, not the miniport's advertised level: DriverEntry deliberately
 # declares only the WDDM 2.0 callback/behavior contract it implements.

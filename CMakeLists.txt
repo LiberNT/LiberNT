@@ -265,12 +265,12 @@ Enable this if the module uses typeid or dynamic_cast. You will probably need to
     math(EXPR _NT_VALUE "${REACTOS_TARGET_NT} + 0")
 
     add_definitions(-DWINVER=${REACTOS_TARGET_NT}
-                    -D_WIN32_IE=0x603
+                    -D_WIN32_IE=0x0A00
                     -D_WIN32_WINNT=${REACTOS_TARGET_NT}
                     -D_WIN32_WINDOWS=${REACTOS_TARGET_NT}
                     -D_SETUPAPI_VER=${REACTOS_TARGET_NT}
                     -DMINGW_HAS_SECURE_API=1
-                    -DDXGKDDI_INTERFACE_VERSION=0x1052 # Vista
+                    -DDXGKDDI_INTERFACE_VERSION=0x11007
                     -DDLL_EXPORT_VERSION=${DLL_EXPORT_VERSION}
                     -DVER_PRODUCTMAJORVERSION=${_NT_MAJOR}
                     -DVER_PRODUCTMINORVERSION=${_NT_MINOR})

@@ -1,6 +1,6 @@
 
 remove_definitions(-DWINVER=${REACTOS_TARGET_NT} -D_WIN32_WINNT=${REACTOS_TARGET_NT})
-remove_definitions(-DDXGKDDI_INTERFACE_VERSION=0x1052)
+remove_definitions(-DDXGKDDI_INTERFACE_VERSION=0x11007)
 
 include_directories(BEFORE ${REACTOS_SOURCE_DIR}/sdk/include/wine)
 

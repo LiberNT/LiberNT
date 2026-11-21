@@ -17,8 +17,6 @@ list(APPEND SOURCE
     winrt.c)
 
 if(REACTOS_USE_WDDM)
-    remove_definitions(-DDXGKDDI_INTERFACE_VERSION=0x1052)
-    add_definitions(-DDXGKDDI_INTERFACE_VERSION=0x11007)
     list(APPEND SOURCE native.cpp native_on12.cpp)
     set_source_files_properties(native.cpp PROPERTIES
         INCLUDE_DIRECTORIES "${REACTOS_SOURCE_DIR}/sdk/include/ddk;${REACTOS_SOURCE_DIR}/sdk/include/psdk")

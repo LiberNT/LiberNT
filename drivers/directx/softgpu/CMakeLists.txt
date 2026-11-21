@@ -12,20 +12,6 @@
 include(${REACTOS_SOURCE_DIR}/sdk/lib/drivers/softgpu/softgpu.cmake)
 spec2def(BasicDisplay.sys ${SOFTGPU_ENGINE_SPEC} ADD_IMPORTLIB)
 
-# softgpu MUST compile with the same current header version as dxgkrnl so
-# DRIVER_INITIALIZATION_DATA, DXGK_INTERFACE and every DXGKARG_* structure are
-# byte-identical. InitData.Version is selected and capped in softgpu.c. Mirror
-# dxgkrnl/CMakeLists.txt exactly.
-remove_definitions(-D_WIN32_WINNT=${REACTOS_TARGET_NT})
-remove_definitions(-DWINVER=${REACTOS_TARGET_NT})
-add_definitions(-D_WIN32_WINNT=0x0603 -DWINVER=0x0603)
-add_definitions(-DNTDDI_VERSION=0x06030000)    # NTDDI_WINBLUE
-
-# The global default selector gates out newer ABI fields. Compile the audited
-# declaration surface; runtime capability claims remain separately gated.
-remove_definitions(-DDXGKDDI_INTERFACE_VERSION=0x1052)
-add_definitions(-DDXGKDDI_INTERFACE_VERSION=0x11007)
-
 add_library(softgpu MODULE
     platform_root.c
     softgpu.rc

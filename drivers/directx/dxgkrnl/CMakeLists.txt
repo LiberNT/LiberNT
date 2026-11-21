@@ -5,21 +5,6 @@
 
 spec2def(dxgkrnl.sys dxgkrnl.spec ADD_IMPORTLIB)
 
-# dxgkrnl exposes a WDDM DDI surface on top of NT kernel declarations. The
-# floor is Windows 8, not Windows 7: registering the miniport's runtime power
-# components uses the Power Framework (PoFxRegisterDevice and friends), which
-# <potypes.h> declares only from NTDDI_WIN8 upwards, and which ntoskrnl
-# exports at the same level.
-remove_definitions(-D_WIN32_WINNT=${REACTOS_TARGET_NT})
-remove_definitions(-DWINVER=${REACTOS_TARGET_NT})
-add_definitions(-D_WIN32_WINNT=0x0602 -DWINVER=0x0602)
-add_definitions(-DNTDDI_VERSION=0x06020000)    # NTDDI_WIN8
-
-# Compile the shared graphics stack against the audited WDDM 3.2 header surface
-# while runtime capability reporting remains limited to completed paths.
-remove_definitions(-DDXGKDDI_INTERFACE_VERSION=0x1052)
-add_definitions(-DDXGKDDI_INTERFACE_VERSION=0x11007)
-
 list(APPEND SOURCE
     dxgkrnl.c
     dxgmms2_client.c
