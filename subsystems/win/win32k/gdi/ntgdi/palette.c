@@ -122,6 +122,23 @@ InitPaletteImpl(VOID)
     return STATUS_SUCCESS;
 }
 
+VOID
+NTAPI
+FreePaletteImpl(VOID)
+{
+    RtlZeroMemory(appalSurfaceDefault, sizeof(appalSurfaceDefault));
+    if (gppalMono)
+    {
+        PALETTE_ShareUnlockPalette(gppalMono);
+        gppalMono = NULL;
+    }
+    if (gppalDefault)
+    {
+        PALETTE_ShareUnlockPalette(gppalDefault);
+        gppalDefault = NULL;
+    }
+}
+
 
 PPALETTE
 NTAPI

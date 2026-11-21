@@ -147,6 +147,7 @@ enum
 
 /* Per session handle table globals */
 static PVOID gpvGdiHdlTblSection = NULL;
+static PVOID gpvRefCountSection = NULL;
 PENTRY gpentHmgr;
 PULONG gpaulRefCount;
 volatile ULONG gulFirstFree;
@@ -261,7 +262,6 @@ InitGdiHandleTable(void)
 {
     NTSTATUS status;
     LARGE_INTEGER liSize;
-    PVOID pvSection;
     SIZE_T cjViewSize = 0;
 
     /* Create a section for the shared handle table */
@@ -292,14 +292,17 @@ InitGdiHandleTable(void)
     }
 
     /* Allocate memory for the reference counter table */
-    gpaulRefCount = EngAllocSectionMem(&pvSection,
+    gpaulRefCount = EngAllocSectionMem(&gpvRefCountSection,
                                      FL_ZERO_MEMORY,
                                      GDI_HANDLE_COUNT * sizeof(ULONG),
                                      'frHG');
     if (!gpaulRefCount)
     {
         DPRINT1("INITGDI: Failed to allocate reference table.\n");
+        MmUnmapViewInSessionSpace(gpentHmgr);
+        gpentHmgr = NULL;
         ObDereferenceObject(gpvGdiHdlTblSection);
+        gpvGdiHdlTblSection = NULL;
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
@@ -343,6 +346,57 @@ FreeGdiLookasideLists(VOID)
     }
     ExFreePoolWithTag(gpaLookasideList, TAG_GDIHNDTBLE);
     gpaLookasideList = NULL;
+}
+
+VOID
+NTAPI
+GDIOBJ_vDeleteSessionObjects(UCHAR objt)
+{
+    ULONG ulIndex;
+    PENTRY pentry;
+    POBJ pobj;
+
+    for (ulIndex = RESERVE_ENTRIES_COUNT; ulIndex < gulFirstUnused; ulIndex++)
+    {
+        if ((gpaulRefCount[ulIndex] & REF_MASK_VALID) == 0)
+            continue;
+        pentry = &gpentHmgr[ulIndex];
+        if (objt != GDIObjType_DEF_TYPE && pentry->Objt != objt)
+            continue;
+        pobj = pentry->einfo.pobj;
+        ASSERT(pobj->cExclusiveLock == 0);
+        pentry->ObjectOwner.ulObj = GDI_OBJ_HMGR_NONE;
+        InterlockedIncrement((LONG*)&gpaulRefCount[ulIndex]);
+        GDIOBJ_vDeleteObject(pobj);
+    }
+}
+
+VOID
+NTAPI
+GDIOBJ_vFreeHandleTable(VOID)
+{
+    ULONG ulIndex;
+
+    if (gpentHmgr == NULL)
+        return;
+    for (ulIndex = RESERVE_ENTRIES_COUNT; ulIndex < gulFirstUnused; ulIndex++)
+    {
+        if (gpaulRefCount[ulIndex] & REF_MASK_INUSE)
+        {
+            DPRINT1("Leaking object. Index=%lx, type=0x%x, refcount=%lx\n",
+                    ulIndex, gpentHmgr[ulIndex].Objt, gpaulRefCount[ulIndex]);
+            ASSERT(FALSE);
+        }
+    }
+    FreeGdiLookasideLists();
+    EngFreeSectionMem(gpvRefCountSection, gpaulRefCount);
+    gpvRefCountSection = NULL;
+    gpaulRefCount = NULL;
+    GdiHandleTable = NULL;
+    MmUnmapViewInSessionSpace(gpentHmgr);
+    gpentHmgr = NULL;
+    ObDereferenceObject(gpvGdiHdlTblSection);
+    gpvGdiHdlTblSection = NULL;
 }
 
 FORCEINLINE

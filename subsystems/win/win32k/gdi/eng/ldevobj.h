@@ -34,6 +34,10 @@ NTSTATUS
 NTAPI
 InitLDEVImpl(VOID);
 
+VOID
+NTAPI
+FreeLDEVImpl(VOID);
+
 /* Get all available device modes from a driver
  * - pwszDriverName: name of the driver
  * - hDriver: handle of the driver

@@ -1118,13 +1118,31 @@ DriverUnload(IN PDRIVER_OBJECT DriverObject)
     IntReleaseInputDesktop();
     UserLeave();
 
-    FreeFontSupport();
+    GDIOBJ_vDeleteSessionObjects(GDIObjType_DC_TYPE);
+    if (gpmdev != NULL)
+    {
+        MDEVOBJ_vDestroy(gpmdev);
+        gpmdev = NULL;
+    }
+    if (gppdevDetached != NULL)
+    {
+        PDEVOBJ_vRelease(gppdevDetached);
+        gppdevDetached = NULL;
+    }
     EngpReleaseAllGraphicsDevices();
+    GDIOBJ_vDeleteSessionObjects(GDIObjType_DEF_TYPE);
+    FreeDcImpl();
+    FreePaletteImpl();
+    FreeFontSupport();
     IntCompositionUnload();
     UserReleaseSessions();
     IntWin32PowerManagementCleanup();
     MsqFreeImpl();
-    FreeGdiLookasideLists();
+    GDIOBJ_vFreeHandleTable();
+    FreeLDEVImpl();
+    FreePDEVImpl();
+    FreeDeviceImpl();
+    FreeSafeSemaphoreImpl();
 }
 
 // Return on failure

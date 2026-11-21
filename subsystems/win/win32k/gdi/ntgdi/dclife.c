@@ -63,6 +63,41 @@ InitDcImpl(VOID)
     return STATUS_SUCCESS;
 }
 
+VOID
+NTAPI
+FreeDcImpl(VOID)
+{
+    if (defaultDCstate)
+    {
+        DC_vSelectFillBrush(defaultDCstate, NULL);
+        DC_vSelectLineBrush(defaultDCstate, NULL);
+        DC_vSelectPalette(defaultDCstate, NULL);
+        if (defaultDCstate->dclevel.plfnt)
+            LFONT_ShareUnlockFont(defaultDCstate->dclevel.plfnt);
+        if (defaultDCstate->dclevel.pColorSpace)
+            GDIOBJ_vDereferenceObject((POBJ)defaultDCstate->dclevel.pColorSpace);
+        ExFreePoolWithTag(defaultDCstate, TAG_DC);
+        defaultDCstate = NULL;
+    }
+    if (prgnDefault)
+    {
+        PREGION prgn = prgnDefault;
+
+        prgnDefault = NULL;
+        REGION_Delete(prgn);
+    }
+    if (pbrDefaultBrush)
+    {
+        BRUSH_ShareUnlockBrush(pbrDefaultBrush);
+        pbrDefaultBrush = NULL;
+    }
+    if (psurfDefaultBitmap)
+    {
+        SURFACE_ShareUnlockSurface(psurfDefaultBitmap);
+        psurfDefaultBitmap = NULL;
+    }
+}
+
 
 PDC
 NTAPI

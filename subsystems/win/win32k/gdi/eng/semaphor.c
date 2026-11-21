@@ -17,6 +17,17 @@ InitSafeSemaphoreImpl(VOID)
     return STATUS_SUCCESS;
 }
 
+VOID
+NTAPI
+FreeSafeSemaphoreImpl(VOID)
+{
+    if (ghsemSafeSemaphoreLock)
+    {
+        EngDeleteSemaphore(ghsemSafeSemaphoreLock);
+        ghsemSafeSemaphoreLock = NULL;
+    }
+}
+
 /*
  * @implemented
  */
