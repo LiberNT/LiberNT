@@ -301,7 +301,6 @@ typedef enum _SYSTEM_INFORMATION_CLASS
     SystemRegisterFirmwareTableInformationHandler         = 75, // 0x4B
     SystemFirmwareTableInformation                        = 76, // 0x4C
 
-#if (NTDDI_VERSION >= NTDDI_VISTA) || defined(__REACTOS__)
     SystemModuleInformationEx                             = 77, // 0x4D
     SystemVerifierTriageInformation                       = 78, // 0x4E
     SystemSuperfetchInformation                           = 79, // 0x4F
@@ -332,9 +331,7 @@ typedef enum _SYSTEM_INFORMATION_CLASS
     SystemProcessorMicrocodeUpdateInformation             = 104, // 0x68
     SystemProcessorBrandString                            = 105, // 0x69
     SystemVirtualAddressInformation                       = 106, // 0x6A
-#endif // (NTDDI_VERSION >= NTDDI_VISTA)
 
-#if (NTDDI_VERSION >= NTDDI_WIN7) || defined(__REACTOS__)
     SystemLogicalProcessorAndGroupInformation             = 107, // 0x6B
     SystemProcessorCycleTimeInformation                   = 108, // 0x6C
     SystemStoreInformation                                = 109, // 0x6D
@@ -353,9 +350,7 @@ typedef enum _SYSTEM_INFORMATION_CLASS
     SystemAcpiAuditInformation                            = 122, // 0x7A
     SystemBasicPerformanceInformation                     = 123, // 0x7B
     SystemQueryPerformanceCounterInformation              = 124, // 0x7C
-#endif // (NTDDI_VERSION >= NTDDI_WIN7)
 
-#if (NTDDI_VERSION >= NTDDI_WIN8)
     SystemSessionBigPoolInformation                       = 125, // 0x7D
     SystemBootGraphicsInformation                         = 126, // 0x7E
     SystemScrubPhysicalMemoryInformation                  = 127, // 0x7F
@@ -382,9 +377,7 @@ typedef enum _SYSTEM_INFORMATION_CLASS
     SystemEntropyInterruptTimingRawInformation            = 146, // 0x92
     SystemPortableWorkspaceEfiLauncherInformation         = 147, // 0x93
     SystemFullProcessInformation                          = 148, // 0x94
-#endif // (NTDDI_VERSION >= NTDDI_WIN8)
 
-#if (NTDDI_VERSION >= NTDDI_WINBLUE)
     SystemKernelDebuggerInformationEx                     = 149, // 0x95
     SystemBootMetadataInformation                         = 150, // 0x96
     SystemSoftRebootInformation                           = 151, // 0x97
@@ -393,9 +386,7 @@ typedef enum _SYSTEM_INFORMATION_CLASS
     SystemProcessorFeaturesInformation                    = 154, // 0x9A
     SystemRegistryReconciliationInformation               = 155, // 0x9B
     SystemEdidInformation                                 = 156, // 0x9C
-#endif // (NTDDI_VERSION >= NTDDI_WINBLUE)
 
-#if (NTDDI_VERSION >= NTDDI_WIN10) || defined(__REACTOS__)
     SystemManufacturingInformation                        = 157, // 0x9D
     SystemEnergyEstimationConfigInformation               = 158, // 0x9E
     SystemHypervisorDetailInformation                     = 159, // 0x9F
@@ -467,9 +458,7 @@ typedef enum _SYSTEM_INFORMATION_CLASS
     SystemCodeIntegrityClearDynamicStores                 = 225, // 0xE1
     SystemDifPoolTrackingInformation                      = 226, // 0xE2 - Win 11
     SystemPoolZeroingInformation                          = 227, // 0xE3
-#endif // (NTDDI_VERSION >= NTDDI_WIN10)
 
-#if (NTDDI_VERSION >= NTDDI_WIN11) || defined(__REACTOS__)
     SystemDpcWatchdogInformation                          = 228, // 0xE4
     SystemDpcWatchdogInformation2                         = 229, // 0xE5
     SystemSupportedProcessorArchitectures2                = 230, // 0xE6
@@ -490,7 +479,6 @@ typedef enum _SYSTEM_INFORMATION_CLASS
     SystemResourceDeadlockTimeout                         = 245, // 0xF5
     SystemBreakOnContextUnwindFailureInformation          = 246, // 0xF6
     SystemOslRamdiskInformation                           = 247, // 0xF7
-#endif // (NTDDI_VERSION >= NTDDI_WIN11)
 
     MaxSystemInfoClass
 } SYSTEM_INFORMATION_CLASS, *PSYSTEM_INFORMATION_CLASS;
@@ -816,7 +804,6 @@ typedef struct DECLSPEC_ALIGN(128) _HANDLE_TABLE_FREE_LIST
 
 typedef struct _HANDLE_TABLE
 {
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     ULONG NextHandleNeedingPool;
     LONG ExtraInfoPages;
     volatile ULONG_PTR TableCode;
@@ -847,43 +834,6 @@ typedef struct _HANDLE_TABLE
             PHANDLE_TRACE_DEBUG_INFO DebugInfo;
         };
     };
-#elif (NTDDI_VERSION >= NTDDI_WINXP)
-    ULONG_PTR TableCode;
-    PEPROCESS QuotaProcess;
-    PVOID UniqueProcessId;
-    EX_PUSH_LOCK HandleTableLock[4];
-    LIST_ENTRY HandleTableList;
-    EX_PUSH_LOCK HandleContentionEvent;
-    PHANDLE_TRACE_DEBUG_INFO DebugInfo;
-    LONG ExtraInfoPages;
-    ULONG FirstFree;
-    ULONG LastFree;
-    ULONG NextHandleNeedingPool;
-    LONG HandleCount;
-    union
-    {
-        ULONG Flags;
-        UCHAR StrictFIFO:1;
-    };
-#else
-    PHANDLE_TABLE_ENTRY **Table;
-    PEPROCESS QuotaProcess;
-    PVOID UniqueProcessId;
-    ERESOURCE HandleLock;
-    LIST_ENTRY HandleTableList;
-    KEVENT HandleContentionEvent;
-    PHANDLE_TRACE_DEBUG_INFO DebugInfo;
-    LONG ExtraInfoPages;
-    ULONG FirstFree;
-    ULONG LastFree;
-    ULONG NextHandleNeedingPool;
-    LONG HandleCount;
-    union
-    {
-        ULONG Flags;
-        UCHAR StrictFIFO:1;
-    };
-#endif
 } HANDLE_TABLE, *PHANDLE_TABLE;
 
 #endif
@@ -986,16 +936,8 @@ typedef struct _SYSTEM_PROCESSOR_INFORMATION
     USHORT ProcessorArchitecture;
     USHORT ProcessorLevel;
     USHORT ProcessorRevision;
-#if (NTDDI_VERSION < NTDDI_WIN8)
-    USHORT Reserved;
-#else
     USHORT MaximumProcessors;
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN10) || ((NTDDI_VERSION >= NTDDI_WINBLUE) && defined(_WIN64))
     ULONG64 ProcessorFeatureBits;
-#else
-    ULONG ProcessorFeatureBits;
-#endif
 } SYSTEM_PROCESSOR_INFORMATION, *PSYSTEM_PROCESSOR_INFORMATION;
 
 typedef struct _SYSTEM_PROCESSOR_FEATURES_INFORMATION
@@ -1101,14 +1043,10 @@ typedef struct _SYSTEM_PERFORMANCE_INFORMATION
     ULONG FirstLevelTbFills;
     ULONG SecondLevelTbFills;
     ULONG SystemCalls;
-#if (NTDDI_VERSION >= NTDDI_WIN7)
     ULONGLONG CcTotalDirtyPages;
     ULONGLONG CcDirtyPageThreshold;
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN8)
     LONGLONG ResidentAvailablePages;
     ULONGLONG SharedCommittedPages;
-#endif
 } SYSTEM_PERFORMANCE_INFORMATION, *PSYSTEM_PERFORMANCE_INFORMATION;
 
 // Class 3
@@ -1119,10 +1057,8 @@ typedef struct _SYSTEM_TIMEOFDAY_INFORMATION
     LARGE_INTEGER TimeZoneBias;
     ULONG TimeZoneId;
     ULONG Reserved;
-#if (NTDDI_VERSION >= NTDDI_WIN2K)
     ULONGLONG BootTimeBias;
     ULONGLONG SleepTimeBias;
-#endif
 } SYSTEM_TIMEOFDAY_INFORMATION, *PSYSTEM_TIMEOFDAY_INFORMATION;
 
 // Class 4
@@ -1715,28 +1651,21 @@ typedef struct _SYSTEM_HANDLE_INFORMATION_EX
 // FIXME: Class 65-89
 
 // Class 90
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
 typedef struct _SYSTEM_BOOT_ENVIRONMENT_INFORMATION
 {
     GUID BootIdentifier;
     FIRMWARE_TYPE FirmwareType;
-#if (NTDDI_VERSION >= NTDDI_WIN8)
     ULONGLONG BootFlags;
-#endif
 } SYSTEM_BOOT_ENVIRONMENT_INFORMATION, *PSYSTEM_BOOT_ENVIRONMENT_INFORMATION;
-#endif
 
-#if (NTDDI_VERSION >= NTDDI_WIN8)
 typedef struct _SYSTEM_BOOT_ENVIRONMENT_V1
 {
     GUID BootIdentifier;
     FIRMWARE_TYPE FirmwareType;
 } SYSTEM_BOOT_ENVIRONMENT_V1, *PSYSTEM_BOOT_ENVIRONMENT_V1;
-#endif
 
 // FIXME: Class 91-97
 
-#if (NTDDI_VERSION >= NTDDI_VISTA)
 // Class 98
 typedef struct _SYSTEM_SYSTEM_PARTITION_INFORMATION
 {
@@ -1748,7 +1677,6 @@ typedef struct _SYSTEM_SYSTEM_DISK_INFORMATION
 {
     UNICODE_STRING SystemDisk;
 } SYSTEM_SYSTEM_DISK_INFORMATION, *PSYSTEM_SYSTEM_DISK_INFORMATION;
-#endif
 
 // Class 101
 typedef struct _SYSTEM_NUMA_PROXIMITY_MAP
