@@ -381,22 +381,38 @@ NtfsCachedWrite(_In_ PVolumeContextBlock VolCB,
                 _Out_ PNTSTATUS Status)
 {
     PFSRTL_ADVANCED_FCB_HEADER Header = NtfsGetCommonFcbHeader(FileCB);
-    LONGLONG EndOffset = ByteOffset->QuadPart + Length;
+    BOOLEAN WriteToEof = (BOOLEAN)(ByteOffset->HighPart == -1 && ByteOffset->LowPart == FILE_WRITE_TO_END_OF_FILE);
+    LARGE_INTEGER Offset = *ByteOffset;
+    LONGLONG EndOffset;
     NTFS_CACHED_GROWTH Growth;
     BOOLEAN Handled = FALSE;
     BOOLEAN Extending;
     NTSTATUS TimestampStatus;
 
-    if (ByteOffset->QuadPart < 0 || !CcCanIWrite(FileObj, Length, TRUE, FALSE))
+    if ((!WriteToEof && ByteOffset->QuadPart < 0) || !CcCanIWrite(FileObj, Length, TRUE, FALSE))
         return FALSE;
 
     KeEnterCriticalRegion();
-    ExAcquireResourceSharedLite(NtfsGetMainResource(FileCB), TRUE);
+    if (WriteToEof)
+    {
+        ExAcquireResourceExclusiveLite(NtfsGetMainResource(FileCB), TRUE);
+        Offset.QuadPart = Header->FileSize.QuadPart;
+        ASSERT(Offset.QuadPart >= 0);
+    }
+    else
+    {
+        ExAcquireResourceSharedLite(NtfsGetMainResource(FileCB), TRUE);
+    }
+    EndOffset = Offset.QuadPart + Length;
     Extending = EndOffset > Header->ValidDataLength.QuadPart;
     if (Extending)
     {
-        ExReleaseResourceLite(NtfsGetMainResource(FileCB));
-        ExAcquireResourceExclusiveLite(NtfsGetMainResource(FileCB), TRUE);
+        if (!WriteToEof)
+        {
+            ExReleaseResourceLite(NtfsGetMainResource(FileCB));
+            ExAcquireResourceExclusiveLite(NtfsGetMainResource(FileCB), TRUE);
+        }
+        ASSERT(ExIsResourceAcquiredExclusiveLite(NtfsGetMainResource(FileCB)));
         if (!FileCB->StreamCB ||
             FileCB->StreamCB->Deleted ||
             !NtfsGrowForCachedWrite(VolCB, FileCB, FileObj, EndOffset, &Growth))
@@ -414,8 +430,8 @@ NtfsCachedWrite(_In_ PVolumeContextBlock VolCB,
         {
             if (FileObj->PrivateCacheMap == NULL)
                 NtfsInitializeStreamCache(FileCB, FileObj);
-            *Status = CcCopyWrite(FileObj, ByteOffset, Length, TRUE, Buffer) ? STATUS_SUCCESS
-                                                                              : STATUS_CANT_WAIT;
+            *Status = CcCopyWrite(FileObj, &Offset, Length, TRUE, Buffer) ? STATUS_SUCCESS
+                                                                           : STATUS_CANT_WAIT;
         }
         _SEH2_EXCEPT(FsRtlIsNtstatusExpected(_SEH2_GetExceptionCode()) ?
                      EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH)
@@ -433,7 +449,7 @@ NtfsCachedWrite(_In_ PVolumeContextBlock VolCB,
             FileObj->Flags |= FO_FILE_MODIFIED;
             FileCB->NotifyFilter |= FILE_NOTIFY_CHANGE_LAST_WRITE;
             if (FileObj->Flags & FO_SYNCHRONOUS_IO)
-                FileObj->CurrentByteOffset.QuadPart = ByteOffset->QuadPart + Length;
+                FileObj->CurrentByteOffset.QuadPart = Offset.QuadPart + Length;
             Irp->IoStatus.Information = Length;
         }
     }

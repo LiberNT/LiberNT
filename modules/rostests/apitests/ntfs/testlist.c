@@ -16,6 +16,7 @@ extern void func_ConcurrentIo(void);
 extern void func_DirectIo(void);
 extern void func_CreateSecurity(void);
 extern void func_DeleteAfterChange(void);
+extern void func_AppendWrite(void);
 
 const struct test winetest_testlist[] =
 {
@@ -27,5 +28,6 @@ const struct test winetest_testlist[] =
     { "DirectIo", func_DirectIo },
     { "CreateSecurity", func_CreateSecurity },
     { "DeleteAfterChange", func_DeleteAfterChange },
+    { "AppendWrite", func_AppendWrite },
     { 0, 0 }
 };
