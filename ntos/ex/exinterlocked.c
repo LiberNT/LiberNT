@@ -206,17 +206,10 @@ ExInterlockedExchangeUlong(
     _In_ ULONG Value,
     _Inout_ PKSPIN_LOCK Lock)
 {
-    ULONG Old;
-    BOOLEAN Enabled;
+    /* The x86 headers map this name to the lock-free variant, so callers may pass no lock at all */
+    UNREFERENCED_PARAMETER(Lock);
 
-    Enabled = ExpLockAtAnyIrql(Lock);
-
-    Old = *Target;
-    *Target = Value;
-
-    ExpUnlockAtAnyIrql(Lock, Enabled);
-
-    return Old;
+    return (ULONG)InterlockedExchange((PLONG)Target, (LONG)Value);
 }
 
 #undef ExInterlockedIncrementLong
@@ -227,13 +220,10 @@ ExInterlockedIncrementLong(
     _Inout_ PKSPIN_LOCK Lock)
 {
     LONG Value;
-    BOOLEAN Enabled;
 
-    Enabled = ExpLockAtAnyIrql(Lock);
+    UNREFERENCED_PARAMETER(Lock);
 
-    Value = ++(*Addend);
-
-    ExpUnlockAtAnyIrql(Lock, Enabled);
+    Value = InterlockedIncrement(Addend);
 
     if (Value < 0)
     {
@@ -251,13 +241,10 @@ ExInterlockedDecrementLong(
     _Inout_ PKSPIN_LOCK Lock)
 {
     LONG Value;
-    BOOLEAN Enabled;
 
-    Enabled = ExpLockAtAnyIrql(Lock);
+    UNREFERENCED_PARAMETER(Lock);
 
-    Value = --(*Addend);
-
-    ExpUnlockAtAnyIrql(Lock, Enabled);
+    Value = InterlockedDecrement(Addend);
 
     if (Value < 0)
     {
