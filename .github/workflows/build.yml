@@ -25,6 +25,10 @@ jobs:
             arch: i386
           - compiler: clang
             arch: amd64
+            build: release
+          - compiler: clang
+            arch: amd64
+            build: debug
           - compiler: clang
             arch: arm64
             profile: profile_raspberry
@@ -36,8 +40,8 @@ jobs:
       fail-fast: false
     runs-on: ubuntu-24.04
     env:
-      BUILD_TYPE: ${{ github.event_name == 'push' && 'release' || 'debug' }}
-      CCACHE_KEY: ccache-${{ github.event_name == 'push' && 'release-' || '' }}${{matrix.compiler}}-${{matrix.arch}}${{matrix.variant}}-
+      BUILD_TYPE: ${{ matrix.build || (github.event_name == 'push' && 'release' || 'debug') }}
+      CCACHE_KEY: ccache-${{ (matrix.build || (github.event_name == 'push' && 'release' || 'debug')) == 'release' && 'release-' || '' }}${{matrix.compiler}}-${{matrix.arch}}${{matrix.variant}}-
       CCACHE_SEED: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     steps:
     - name: Free disk space
