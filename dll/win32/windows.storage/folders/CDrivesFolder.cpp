@@ -744,6 +744,23 @@ HRESULT CDrivesExtractIcon_CreateInstance(IShellFolder * psf, LPCITEMIDLIST pidl
 class CDrivesFolderEnum :
     public CEnumIDListBase
 {
+    static BOOL IsShownInThisPC(PCWSTR Description)
+    {
+        WCHAR Key[MAX_PATH];
+        WCHAR Policy[16];
+        DWORD Size = sizeof(Policy);
+
+        if (FAILED(StringCchPrintfW(Key, _countof(Key),
+                                    L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FolderDescriptions\\%s\\PropertyBag",
+                                    Description)))
+        {
+            return TRUE;
+        }
+        if (RegGetValueW(HKEY_LOCAL_MACHINE, Key, L"ThisPCPolicy", RRF_RT_REG_SZ, NULL, Policy, &Size) != ERROR_SUCCESS)
+            return TRUE;
+        return _wcsicmp(Policy, L"Hide") != 0;
+    }
+
     HRESULT AddKnownFolder(HWND hwndOwner, CDrivesFolder *folder, REFKNOWNFOLDERID folderId)
     {
         PIDLIST_ABSOLUTE absolute = NULL;
@@ -777,17 +794,25 @@ class CDrivesFolderEnum :
             /* enumerate the folders */
             if (dwFlags & SHCONTF_FOLDERS)
             {
-                const KNOWNFOLDERID *folderIds[] =
+                /* Each folder is listed under the folder description that holds its ThisPCPolicy */
+                static const struct
                 {
-                    &FOLDERID_Desktop,
-                    &FOLDERID_Documents,
-                    &FOLDERID_Downloads,
-                    &FOLDERID_Music,
-                    &FOLDERID_Pictures,
-                    &FOLDERID_Videos,
+                    const KNOWNFOLDERID *Folder;
+                    PCWSTR Description;
+                } Folders[] =
+                {
+                    { &FOLDERID_Desktop,   L"{B4BFCC3A-DB2C-424C-B029-7FE99A87C641}" },
+                    { &FOLDERID_Documents, L"{F42EE2D3-909F-4907-8871-4C22FC0BF756}" },
+                    { &FOLDERID_Downloads, L"{7D83EE9B-2244-4E70-B1F5-5393042AF1E4}" },
+                    { &FOLDERID_Music,     L"{A0C69A99-21C8-4671-8703-7934162FCF1D}" },
+                    { &FOLDERID_Pictures,  L"{0DDD015D-B06C-45D5-8C4C-F59713854639}" },
+                    { &FOLDERID_Videos,    L"{35286A68-3C57-41A1-BBB1-0EAE73D76C95}" },
                 };
-                for (UINT i = 0; i < _countof(folderIds); ++i)
-                    AddKnownFolder(hwndOwner, folder, *folderIds[i]);
+                for (UINT i = 0; i < _countof(Folders); ++i)
+                {
+                    if (IsShownInThisPC(Folders[i].Description))
+                        AddKnownFolder(hwndOwner, folder, *Folders[i].Folder);
+                }
 
             for (UINT i = 0; i < folder->GetDelegateCount(); ++i)
             {
