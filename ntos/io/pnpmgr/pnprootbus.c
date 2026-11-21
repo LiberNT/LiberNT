@@ -999,6 +999,13 @@ PnpRootPnp(
                 break;
             }
 
+            /* A reported device has no hardware IDs of its own; the ones a driver above it supplied stand */
+            if (!PdoExtension->Device->FromRegistry && StackPtr->Parameters.QueryId.IdType == BusQueryHardwareIDs)
+            {
+                Status = Irp->IoStatus.Status;
+                break;
+            }
+
             Status = PnpRootQueryId(PdoExtension->Device,
                                     StackPtr->Parameters.QueryId.IdType,
                                     &Id);
