@@ -91,16 +91,8 @@ extern POBJECT_TYPE NTSYSAPI IoDriverObjectType;
 //
 // NtCreateFile Attributes
 //
-#if (NTDDI_VERSION < NTDDI_WIN8)
-#define FILE_ATTRIBUTE_VALID_FLAGS              0x00007fb7
-#define FILE_ATTRIBUTE_VALID_SET_FLAGS          0x000031a7
-#elif (NTDDI_VERSION < NTDDI_WIN10_RS2)
-#define FILE_ATTRIBUTE_VALID_FLAGS              0x0002ffb7
-#define FILE_ATTRIBUTE_VALID_SET_FLAGS          0x000231a7
-#else
 #define FILE_ATTRIBUTE_VALID_FLAGS              0x005affb7
 #define FILE_ATTRIBUTE_VALID_SET_FLAGS          0x001a31a7
-#endif
 
 //
 // NtCreateFile OpenType Flags
@@ -308,7 +300,7 @@ enum _IRQ_DEVICE_POLICY_USHORT {
   IrqPolicyAllProcessorsInMachineWhenSteered = 6,
   IrqPolicyAllProcessorsInGroupWhenSteered = 6};
 
-#else /* defined(NT_PROCESSOR_GROUPS) */
+#else
 
 typedef enum _IRQ_DEVICE_POLICY {
   IrqPolicyMachineDefault = 0,
@@ -395,7 +387,6 @@ typedef struct _IO_RESOURCE_DESCRIPTOR {
       ULONG Reserved1;
       ULONG Reserved2;
     } ConfigData;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     /* Describes a memory requirement larger than MAXULONG.  The length and
      * alignment are scaled down by 8, 16 or 32 bits, selected by the
      * CM_RESOURCE_MEMORY_LARGE_40/48/64 flag on the descriptor. */
@@ -417,7 +408,6 @@ typedef struct _IO_RESOURCE_DESCRIPTOR {
       PHYSICAL_ADDRESS MinimumAddress;
       PHYSICAL_ADDRESS MaximumAddress;
     } Memory64;
-#endif
     struct {
       UCHAR Class;
       UCHAR Type;
@@ -492,7 +482,6 @@ typedef enum _FILE_INFORMATION_CLASS
     FileValidDataLengthInformation = 39,
     FileShortNameInformation = 40,
     FileIoCompletionNotificationInformation = 41,
-#if (NTDDI_VERSION >= NTDDI_VISTA) || defined(__REACTOS__)
     FileIoStatusBlockRangeInformation = 42,
     FileIoPriorityHintInformation = 43,
     FileSfioReserveInformation = 44,
@@ -501,52 +490,33 @@ typedef enum _FILE_INFORMATION_CLASS
     FileProcessIdsUsingFileInformation = 47,
     FileNormalizedNameInformation = 48,
     FileNetworkPhysicalNameInformation = 49,
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN7) || defined(__REACTOS__)
     FileIdGlobalTxDirectoryInformation = 50,
     FileIsRemoteDeviceInformation = 51,
     FileAttributeCacheInformation = 52, // FileUnusedInformation since Windows 8.1
     FileNumaNodeInformation = 53,
     FileStandardLinkInformation = 54,
     FileRemoteProtocolInformation = 55,
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN8) || defined(__REACTOS__)
     FileRenameInformationBypassAccessCheck = 56,
     FileLinkInformationBypassAccessCheck = 57,
     FileVolumeNameInformation = 58,
     FileIdInformation = 59,
     FileIdExtdDirectoryInformation = 60,
-#endif
-#if (NTDDI_VERSION >= NTDDI_WINBLUE) || defined(__REACTOS__)
     FileReplaceCompletionInformation = 61,
     FileHardLinkFullIdInformation = 62,
     FileIdExtdBothDirectoryInformation = 63, // Update 1
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN10_RS1) || defined(__REACTOS__)
     FileDispositionInformationEx = 64,
     FileRenameInformationEx = 65,
     FileRenameInformationExBypassAccessCheck = 66,
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN10_RS2) || defined(__REACTOS__)
     FileDesiredStorageClassInformation = 67,
     FileStatInformation = 68,
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN10_RS3) || defined(__REACTOS__)
     FileMemoryPartitionInformation = 69,
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN10_RS4) || defined(__REACTOS__)
     FileStatLxInformation = 70,
     FileCaseSensitiveInformation = 71,
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN10_RS5) || defined(__REACTOS__)
     FileLinkInformationEx = 72,
     FileLinkInformationExBypassAccessCheck = 73,
     FileStorageReserveIdInformation = 74,
     FileCaseSensitiveInformationForceAccessCheck = 75,
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN11) || defined(__REACTOS__) // 10.0.20150.1000
     FileKnownFolderInformation = 76,
-#endif
     FileStatBasicInformation,
     FileId64ExtdDirectoryInformation,
     FileId64ExtdBothDirectoryInformation,
@@ -1132,9 +1102,7 @@ typedef struct _DEVICE_NODE
         struct _DEVICE_NODE *NextResourceDeviceNode;
     } OverUsed2;
     PCM_RESOURCE_LIST BootResources;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     PCM_RESOURCE_LIST BootResourcesTranslated;
-#endif
     ULONG CapabilityFlags;
     struct
     {
@@ -1148,9 +1116,7 @@ typedef struct _DEVICE_NODE
     ULONG DriverUnloadRetryCount;
     struct _DEVICE_NODE *PreviousParent;
     ULONG DeletedChildren;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     ULONG NumaNodeIndex;
-#endif
 #if DBG
     volatile PVOID DiagWalkOwner;
 #endif

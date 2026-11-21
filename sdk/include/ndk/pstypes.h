@@ -67,11 +67,7 @@ extern POBJECT_TYPE NTSYSAPI PsJobType;
 #define FLG_ENABLE_CSRDEBUG                     0x00020000
 #define FLG_ENABLE_KDEBUG_SYMBOL_LOAD           0x00040000
 #define FLG_DISABLE_PAGE_KERNEL_STACKS          0x00080000
-#if (NTDDI_VERSION < NTDDI_WINXP)
-#define FLG_HEAP_ENABLE_CALL_TRACING            0x00100000
-#else
 #define FLG_ENABLE_SYSTEM_CRIT_BREAKS           0x00100000
-#endif
 #define FLG_HEAP_DISABLE_COALESCING             0x00200000
 #define FLG_ENABLE_CLOSE_EXCEPTIONS             0x00400000
 #define FLG_ENABLE_EXCEPTION_LOGGING            0x00800000
@@ -96,7 +92,6 @@ extern POBJECT_TYPE NTSYSAPI PsJobType;
                                                      PROCESS_CREATE_FLAGS_OVERRIDE_ADDRESS_SPACE | \
                                                      PROCESS_CREATE_FLAGS_ALL_LARGE_PAGE_FLAGS)
 
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
 
 //
 // Thread creation flags for NtCreateUserProcess / NtCreateThreadEx
@@ -318,7 +313,6 @@ typedef struct _PS_CREATE_INFO
     };
 } PS_CREATE_INFO, *PPS_CREATE_INFO;
 
-#endif /* NTDDI_VERSION >= NTDDI_LONGHORN */
 
 //
 // Process priority classes
@@ -387,15 +381,9 @@ typedef struct _PS_CREATE_INFO
 #define PROCESS_SUSPEND_RESUME                  0x0800
 #define PROCESS_QUERY_LIMITED_INFORMATION       0x1000
 #define PROCESS_SET_LIMITED_INFORMATION         0x2000
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
 #define PROCESS_ALL_ACCESS                      (STANDARD_RIGHTS_REQUIRED | \
                                                  SYNCHRONIZE | \
                                                  0xFFFF)
-#else
-#define PROCESS_ALL_ACCESS                      (STANDARD_RIGHTS_REQUIRED | \
-                                                 SYNCHRONIZE | \
-                                                 0xFFF)
-#endif
 
 //
 // Thread Base Priorities
@@ -935,7 +923,6 @@ NTSTATUS
     _In_ PVOID Parameter
 );
 
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
 typedef
 NTSTATUS
 (NTAPI *PKWIN32_WIN32DATACOLLECTION_CALLOUT)(
@@ -943,7 +930,6 @@ NTSTATUS
     _In_ PVOID Callback,
     _In_ PVOID Context
 );
-#endif
 
 //
 // Lego Callback
@@ -1001,21 +987,13 @@ typedef struct _INITIAL_PEB
     union
     {
         BOOLEAN BitField;
-#if (NTDDI_VERSION >= NTDDI_WS03)
         struct
         {
             BOOLEAN ImageUsesLargePages:1;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
             BOOLEAN IsProtectedProcess:1;
             BOOLEAN IsLegacyProcess:1;
             BOOLEAN SpareBits:5;
-#else
-            BOOLEAN SpareBits:7;
-#endif
         };
-#else
-        BOOLEAN SpareBool;
-#endif
     };
     HANDLE Mutant;
 } INITIAL_PEB, *PINITIAL_PEB;
@@ -1076,15 +1054,6 @@ typedef struct _CLIENT_ID64
     ULONG64 UniqueThread;
 } CLIENT_ID64, *PCLIENT_ID64;
 
-#if (NTDDI_VERSION < NTDDI_WS03)
-typedef struct _Wx86ThreadState
-{
-    PULONG  CallBx86Eip;
-    PVOID   DeallocationCpu;
-    BOOLEAN UseKnownWx86Dll;
-    CHAR    OleStubInvoked;
-} Wx86ThreadState, *PWx86ThreadState;
-#endif
 
 //
 // PEB.AppCompatFlags.LowPart
@@ -1550,12 +1519,7 @@ typedef enum _PS_QUOTA_TYPE
     PsNonPagedPool = 0,
     PsPagedPool,
     PsPageFile,
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     PsWorkingSet,
-#endif
-#if (NTDDI_VERSION == NTDDI_LONGHORN)
-    PsCpuRate,
-#endif
     PsQuotaTypes
 } PS_QUOTA_TYPE;
 
@@ -1637,7 +1601,6 @@ typedef struct _ETHREAD
         LIST_ENTRY LpcReplyChain;
         LIST_ENTRY KeyedWaitChain;
     };
-#if (NTDDI_VERSION >= NTDDI_WIN10)
     union
     {
         LIST_ENTRY PostBlockList;
@@ -1647,88 +1610,39 @@ typedef struct _ETHREAD
             PVOID StartAddress;
         };
     };
-#else
-    union
-    {
-        NTSTATUS ExitStatus;
-        PVOID OfsChain;
-    };
-    LIST_ENTRY PostBlockList;
-#endif
     union
     {
         struct _TERMINATION_PORT *TerminationPort;
         struct _ETHREAD *ReaperLink;
         PVOID KeyedWaitValue;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
         PVOID Win32StartParameter;
-#endif
     };
     KSPIN_LOCK ActiveTimerListLock;
     LIST_ENTRY ActiveTimerListHead;
     CLIENT_ID Cid;
-#if (NTDDI_VERSION >= NTDDI_WIN10)
     union
     {
         KSEMAPHORE KeyedWaitSemaphore;
         KSEMAPHORE AlpcWaitSemaphore;
     };
-#elif (NTDDI_VERSION >= NTDDI_LONGHORN)
-    KSEMAPHORE KeyedWaitSemaphore;
-#else
-    union
-    {
-        KSEMAPHORE LpcReplySemaphore;
-        KSEMAPHORE KeyedWaitSemaphore;
-    };
-    union
-    {
-        PVOID LpcReplyMessage;
-        PVOID LpcWaitingOnPort;
-    };
-#endif
     PPS_IMPERSONATION_INFORMATION ImpersonationInfo;
     LIST_ENTRY IrpList;
     ULONG_PTR TopLevelIrp;
     PDEVICE_OBJECT DeviceToVerify;
-#if (NTDDI_VERSION >= NTDDI_WIN10)
     PVOID Win32StartAddress;
     PVOID ReservedThreadPointer;
     PVOID LegacyPowerObject;
-#elif (NTDDI_VERSION >= NTDDI_LONGHORN)
-    PPSP_RATE_APC RateControlApc;
-    PVOID Win32StartAddress;
-#else
-    struct _EPROCESS *ThreadsProcess;
-    PVOID Win32StartAddress;
-    union
-    {
-        PKSTART_ROUTINE StartAddress;
-        ULONG LpcReceivedMessageId;
-    };
-#endif
     LIST_ENTRY ThreadListEntry;
     EX_RUNDOWN_REF RundownProtect;
     EX_PUSH_LOCK ThreadLock;
-#if (NTDDI_VERSION < NTDDI_LONGHORN)
-    ULONG LpcReplyMessageId;
-#endif
     ULONG ReadClusterSize;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     ULONG SpareUlong0;
-#else
-    ACCESS_MASK GrantedAccess;
-#endif
     union
     {
         struct
         {
            ULONG Terminated:1;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
            ULONG ThreadInserted:1;
-#else
-           ULONG DeadThread:1;
-#endif
            ULONG HideFromDebugger:1;
            ULONG ActiveImpersonationInfo:1;
            ULONG SystemThread:1;
@@ -1736,13 +1650,10 @@ typedef struct _ETHREAD
            ULONG BreakOnTermination:1;
            ULONG SkipCreationMsg:1;
            ULONG SkipTerminationMsg:1;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
            ULONG CreateMsgSent:1;
            ULONG ThreadIoPriority:3;
            ULONG ThreadPagePriority:3;
            ULONG PendingRatecontrol:1;
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN10)
            ULONG IndirectCpuSets:1;
            ULONG DisableDynamicCodeOptOut:1;
            ULONG ExplicitCaseSensitivity:1;
@@ -1752,7 +1663,6 @@ typedef struct _ETHREAD
            ULONG SamplingCoverage:1;
            ULONG ImpersonationSchedulingGroup:1;
            ULONG ReservedCrossThreadFlags:7;
-#endif
         };
         ULONG CrossThreadFlags;
     };
@@ -1764,9 +1674,7 @@ typedef struct _ETHREAD
            ULONG ExWorkerCanWaitUser:1;
            ULONG MemoryMaker:1;
            ULONG KeyedEventInUse:1;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
            ULONG RateApcState:2;
-#endif
         };
         ULONG SameThreadPassiveFlags;
     };
@@ -1776,35 +1684,22 @@ typedef struct _ETHREAD
         {
            ULONG LpcReceivedMsgIdValid:1;
            ULONG LpcExitThreadCalled:1;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
            ULONG Spare:1;
-#else
-           ULONG AddressSpaceOwner:1;
-#endif
            ULONG OwnsProcessWorkingSetExclusive:1;
            ULONG OwnsProcessWorkingSetShared:1;
            ULONG OwnsSystemWorkingSetExclusive:1;
            ULONG OwnsSystemWorkingSetShared:1;
            ULONG OwnsSessionWorkingSetExclusive:1;
            ULONG OwnsSessionWorkingSetShared:1;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
            ULONG SuppressSymbolLoad:1;
            ULONG Spare1:3;
            ULONG PriorityRegionActive:4;
-#else
-           ULONG ApcNeeded:1;
-#endif
         };
         ULONG SameThreadApcFlags;
     };
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     UCHAR CacheManagerActive;
-#else
-    UCHAR ForwardClusterOnly;
-#endif
     UCHAR DisablePageFaultClustering;
     UCHAR ActiveFaultCount;
-#if (NTDDI_VERSION >= NTDDI_WIN10)
     UCHAR ReservedThreadByte;
     ULONG ReservedThreadState[2];
     ULONG_PTR AlpcMessageId;
@@ -1847,26 +1742,11 @@ typedef struct _ETHREAD
         PULONG64 SelectedCpuSetsIndirect;
     };
     struct _EJOB *Silo;
-#elif (NTDDI_VERSION >= NTDDI_LONGHORN)
-    ULONG AlpcMessageId;
-    union
-    {
-        PVOID AlpcMessage;
-        ULONG AlpcReceiveAttributeSet;
-    };
-    LIST_ENTRY AlpcWaitListEntry;
-    KSEMAPHORE AlpcWaitSemaphore;
-    ULONG CacheManagerCount;
-#endif
     // TODO: Missing Vista+ members
-#if (NTDDI_VERSION >= NTDDI_WIN10_RS1) || defined(__REACTOS__)
     PUNICODE_STRING ThreadName;
     // TODO: Missing Win10+ members
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN10_RS3) || defined(__REACTOS__)
     ULONG PowerThrottlingControlMask;
     ULONG PowerThrottlingStateMask;
-#endif
     volatile LONG ExecutableWriteAllowed;
 #if defined(__REACTOS__)
     CHAR Win32kPriorityFloor;
@@ -1875,7 +1755,7 @@ typedef struct _ETHREAD
 #endif
 } ETHREAD;
 
-#if defined(_M_ARM64) && (NTDDI_VERSION >= NTDDI_WIN11_GE)
+#if defined(_M_ARM64)
 C_ASSERT(FIELD_OFFSET(ETHREAD, LegacyPowerObject) == 0x550);
 C_ASSERT(FIELD_OFFSET(ETHREAD, CrossThreadFlags) == 0x580);
 C_ASSERT(FIELD_OFFSET(ETHREAD, CacheManagerCount) == 0x5BC);
@@ -1886,7 +1766,7 @@ C_ASSERT(FIELD_OFFSET(ETHREAD, Silo) == 0x678);
 C_ASSERT(FIELD_OFFSET(ETHREAD, ThreadName) == 0x680);
 #endif
 
-#if defined(_M_AMD64) && (NTDDI_VERSION >= NTDDI_WIN11_GE)
+#if defined(_M_AMD64)
 C_ASSERT(FIELD_OFFSET(ETHREAD, CrossThreadFlags) == 0x5A0);
 C_ASSERT(FIELD_OFFSET(ETHREAD, PicoContext) == 0x670);
 C_ASSERT(FIELD_OFFSET(ETHREAD, UserFsBase) == 0x678);
@@ -3200,9 +3080,7 @@ typedef struct _WIN32_CALLOUTS_FPNS
     PKWIN32_SESSION_CALLOUT WindowStationDeleteProcedure;
     PKWIN32_SESSION_CALLOUT WindowStationParseProcedure;
     PKWIN32_SESSION_CALLOUT WindowStationOpenProcedure;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     PKWIN32_WIN32DATACOLLECTION_CALLOUT Win32DataCollectionProcedure;
-#endif
 } WIN32_CALLOUTS_FPNS, *PWIN32_CALLOUTS_FPNS;
 
 #endif // !NTOS_MODE_USER

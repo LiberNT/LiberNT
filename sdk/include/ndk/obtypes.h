@@ -530,33 +530,17 @@ typedef struct _OBJECT_DIRECTORY_ENTRY
 {
     struct _OBJECT_DIRECTORY_ENTRY *ChainLink;
     PVOID Object;
-#if (NTDDI_VERSION >= NTDDI_WS03)
     ULONG HashValue;
-#endif
 } OBJECT_DIRECTORY_ENTRY, *POBJECT_DIRECTORY_ENTRY;
 
 typedef struct _OBJECT_DIRECTORY
 {
     struct _OBJECT_DIRECTORY_ENTRY *HashBuckets[NUMBER_HASH_BUCKETS];
-#if (NTDDI_VERSION < NTDDI_WINXP)
-    ERESOURCE Lock;
-#else
     EX_PUSH_LOCK Lock;
-#endif
-#if (NTDDI_VERSION < NTDDI_WINXP)
-    BOOLEAN CurrentEntryValid;
-#else
     struct _DEVICE_MAP *DeviceMap;
-#endif
     ULONG SessionId;
-#if (NTDDI_VERSION == NTDDI_WINXP)
-    USHORT Reserved;
-    USHORT SymbolicLinkUsageCount;
-#endif
-#if (NTDDI_VERSION >= NTDDI_VISTA)
     PVOID NamespaceEntry;
     ULONG Flags;
-#endif
 } OBJECT_DIRECTORY, *POBJECT_DIRECTORY;
 
 //

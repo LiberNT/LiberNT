@@ -237,20 +237,11 @@ typedef struct _KEXCEPTION_FRAME
     ULONG64 P3Home;
     ULONG64 P4Home;
     ULONG64 P5;
-#if (NTDDI_VERSION >= NTDDI_WIN8)
     ULONG64 Spare1;
-#else
-    ULONG64 InitialStack;
-#endif
     ULONG64 TrapFrame;
-#if (NTDDI_VERSION < NTDDI_WIN8)
-    ULONG64 CallbackStack;
-#endif
     ULONG64 OutputBuffer;
     ULONG64 OutputLength;
-#if (NTDDI_VERSION >= NTDDI_WIN8)
     ULONG64 Spare2;
-#endif
     ULONG64 Fpcr;
     ULONG64 Fpsr;
     ULONG64 X19;
@@ -451,9 +442,6 @@ typedef struct _REQUEST_MAILBOX
     volatile LONG SubNodeTargetCount;    // 0x38
 } REQUEST_MAILBOX, *PREQUEST_MAILBOX;
 
-#if (NTDDI_VERSION < NTDDI_LONGHORN)
-#define GENERAL_LOOKASIDE_POOL PP_LOOKASIDE_LIST
-#endif
 
 //
 // Processor Control Block, Win11 26100 arm64 layout (ntkrnlmp.pdb 10.0.26100.8036)
@@ -801,16 +789,9 @@ typedef struct _KPRCB
         KSPIN_LOCK_QUEUE TimerTableLockQueue[LOCK_QUEUE_TIMER_TABLE_LOCKS]; // [ReactOS] legacy timer locks
     };
     UCHAR PrcbPad5D98[104];                              // 0x5D98
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     GENERAL_LOOKASIDE_POOL PPNxPagedLookasideList[NUMBER_POOL_LOOKASIDE_LISTS]; // 0x5E00
     GENERAL_LOOKASIDE_POOL PPNPagedLookasideList[NUMBER_POOL_LOOKASIDE_LISTS];  // 0x6A00
     GENERAL_LOOKASIDE_POOL PPPagedLookasideList[NUMBER_POOL_LOOKASIDE_LISTS];   // 0x7600
-#else
-    // Layout-only stand-ins for TUs built with NTDDI < Vista (96-byte stride)
-    UCHAR PPNxPagedLookasideList[3072];                  // 0x5E00
-    UCHAR PPNPagedLookasideList[3072];                   // 0x6A00
-    UCHAR PPPagedLookasideList[3072];                    // 0x7600
-#endif
     SINGLE_LIST_ENTRY AbSelfIoBoostsList;                // 0x8200
     SINGLE_LIST_ENTRY AbPropagateBoostsList;             // 0x8208
     KDPC AbDpc;                                          // 0x8210

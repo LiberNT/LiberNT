@@ -37,11 +37,7 @@ Author:
 //
 #define LDRP_STATIC_LINK                        0x00000002
 #define LDRP_IMAGE_DLL                          0x00000004
-#if (NTDDI_VERSION < NTDDI_WIN8)
-#define LDRP_SHIMENG_SUPPRESSED_ENTRY           0x00000008
-#else
 #define LDRP_LOAD_NOTIFICATIONS_SENT            0x00000008
-#endif
 #define LDRP_IMAGE_INTEGRITY_FORCED             0x00000020
 #define LDRP_LOAD_IN_PROGRESS                   0x00001000
 #define LDRP_UNLOAD_IN_PROGRESS                 0x00002000
@@ -125,10 +121,8 @@ typedef struct _PEB_LDR_DATA
     LIST_ENTRY InMemoryOrderModuleList;
     LIST_ENTRY InInitializationOrderModuleList;
     PVOID EntryInProgress;
-#if (NTDDI_VERSION >= NTDDI_WIN7)
     UCHAR ShutdownInProgress;
     PVOID ShutdownThreadId;
-#endif
 } PEB_LDR_DATA, *PPEB_LDR_DATA;
 
 typedef enum _LDR_DLL_LOAD_REASON
@@ -266,15 +260,11 @@ typedef struct _ALT_RESOURCE_MODULE
 {
     LANGID LangId;
     PVOID ModuleBase;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     PVOID ModuleManifest;
-#endif
     PVOID AlternateModule;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     HANDLE AlternateFileHandle;
     ULONG ModuleCheckSum;
     ULONG ErrorCode;
-#endif
 } ALT_RESOURCE_MODULE, *PALT_RESOURCE_MODULE;
 
 //

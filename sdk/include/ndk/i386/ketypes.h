@@ -270,11 +270,7 @@ typedef KIO_ACCESS_MAP *PKIO_ACCESS_MAP;
 #ifndef CONFIG_SMP
 #define SYNCH_LEVEL             DISPATCH_LEVEL
 #else
-#if (NTDDI_VERSION < NTDDI_WS03)
-#define SYNCH_LEVEL             (IPI_LEVEL - 1)
-#else
 #define SYNCH_LEVEL             (IPI_LEVEL - 2)
-#endif
 #endif
 
 //
@@ -572,12 +568,8 @@ typedef struct _KPRCB
     KPROCESSOR_STATE ProcessorState;
     ULONG KernelReserved[16];
     ULONG HalReserved[16];
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     ULONG CFlushSize;
     UCHAR PrcbPad0[88];
-#else
-    UCHAR PrcbPad0[92];
-#endif
     KSPIN_LOCK_QUEUE LockQueue[LockQueueMaximumLock];
     struct _KTHREAD *NpxThread;
     ULONG InterruptCount;
@@ -590,56 +582,27 @@ typedef struct _KPRCB
     ULONG PageColor;
     UCHAR SkipTick;
     UCHAR DebuggerSavedIRQL;
-#if (NTDDI_VERSION >= NTDDI_WS03)
     UCHAR NodeColor;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     UCHAR PollSlot;
-#else
-    UCHAR Spare1;
-#endif
     ULONG NodeShiftedColor;
-#else
-    UCHAR Spare1[6];
-#endif
     struct _KNODE *ParentNode;
     ULONG MultiThreadProcessorSet;
     struct _KPRCB *MultiThreadSetMaster;
-#if (NTDDI_VERSION >= NTDDI_WS03)
     ULONG SecondaryColorMask;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     ULONG DpcTimeLimit;
-#else
-    LONG Sleeping;
-#endif
-#else
-    ULONG ThreadStartCount[2];
-#endif
     ULONG CcFastReadNoWait;
     ULONG CcFastReadWait;
     ULONG CcFastReadNotPossible;
     ULONG CcCopyReadNoWait;
     ULONG CcCopyReadWait;
     ULONG CcCopyReadNoWaitMiss;
-#if (NTDDI_VERSION < NTDDI_LONGHORN)
-    ULONG KeAlignmentFixupCount;
-#endif
     ULONG SpareCounter0;
-#if (NTDDI_VERSION < NTDDI_LONGHORN)
-    ULONG KeDcacheFlushCount;
-    ULONG KeExceptionDispatchCount;
-    ULONG KeFirstLevelTbFills;
-    ULONG KeFloatingEmulationCount;
-    ULONG KeIcacheFlushCount;
-    ULONG KeSecondLevelTbFills;
-    ULONG KeSystemCalls;
-#endif
     volatile ULONG IoReadOperationCount;
     volatile ULONG IoWriteOperationCount;
     volatile ULONG IoOtherOperationCount;
     LARGE_INTEGER IoReadTransferCount;
     LARGE_INTEGER IoWriteTransferCount;
     LARGE_INTEGER IoOtherTransferCount;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     ULONG CcFastMdlReadNoWait;
     ULONG CcFastMdlReadWait;
     ULONG CcFastMdlReadNotPossible;
@@ -670,9 +633,6 @@ typedef struct _KPRCB
     ULONG KeExceptionDispatchCount;
     ULONG KeSystemCalls;
     ULONG PrcbPad1[3];
-#else
-    ULONG SpareCounter1[8];
-#endif
     PP_LOOKASIDE_LIST PPLookasideList[16];
     PP_LOOKASIDE_LIST PPNPagedLookasideList[NUMBER_POOL_LOOKASIDE_LISTS];
     PP_LOOKASIDE_LIST PPPagedLookasideList[NUMBER_POOL_LOOKASIDE_LISTS];
@@ -708,17 +668,12 @@ typedef struct _KPRCB
     UCHAR PrcbPad50;
     volatile UCHAR IdleSchedule;
     LONG DpcSetEventRequest;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     LONG Sleeping;
     ULONG PeriodicCount;
     ULONG PeriodicBias;
     UCHAR PrcbPad5[6];
-#else
-    UCHAR PrcbPad5[18];
-#endif
     LONG TickOffset;
     KDPC CallDpc;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     LONG ClockKeepAlive;
     UCHAR ClockCheckSlot;
     UCHAR ClockPollCycle;
@@ -728,23 +683,14 @@ typedef struct _KPRCB
     LONG ThreadWatchdogPeriod;
     LONG ThreadWatchDogCount;
     ULONG PrcbPad70[2];
-#else
-    ULONG PrcbPad7[8];
-#endif
     LIST_ENTRY WaitListHead;
     ULONG ReadySummary;
     ULONG QueueIndex;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     SINGLE_LIST_ENTRY DeferredReadyListHead;
     ULONGLONG StartCycles;
     ULONGLONG CycleTime;
     ULONGLONG PrcbPad71[3];
     LIST_ENTRY DispatcherReadyListHead[32];
-#else
-    LIST_ENTRY DispatcherReadyListHead[32];
-    SINGLE_LIST_ENTRY DeferredReadyListHead;
-    ULONG PrcbPad72[11];
-#endif
     PVOID ChainedInterruptList;
     LONG LookasideIrpFloat;
     volatile LONG MmPageFaultCount;
@@ -760,15 +706,11 @@ typedef struct _KPRCB
     volatile LONG MmDirtyWriteIoCount;
     volatile LONG MmMappedPagesWriteCount;
     volatile LONG MmMappedWriteIoCount;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     ULONG CachedCommit;
     ULONG CachedResidentAvailable;
     PVOID HyperPte;
     UCHAR CpuVendor;
     UCHAR PrcbPad9[3];
-#else
-    ULONG SpareFields0[1];
-#endif
     CHAR VendorString[13];
     UCHAR InitialApicId;
     UCHAR LogicalProcessorsPerPhysicalProcessor;
@@ -779,7 +721,6 @@ typedef struct _KPRCB
     LARGE_INTEGER SpareField1;
     FX_SAVE_AREA NpxSaveArea;
     PROCESSOR_POWER_STATE PowerState;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     KDPC DpcWatchdogDoc;
     KTIMER DpcWatchdogTimer;
     PVOID WheaInfo;
@@ -795,7 +736,6 @@ typedef struct _KPRCB
     UCHAR PrcbPad8[3];
     ULONG PackageProcessorSet;
     ULONG CoreProcessorSet;
-#endif
 #ifdef __REACTOS__
     /* ReactOS stores the upper half separately on i386. */
     ULONG FeatureBitsHigh;

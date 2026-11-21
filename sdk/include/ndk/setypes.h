@@ -103,10 +103,8 @@ Author:
 //
 #define DISABLE_MAX_PRIVILEGE 0x1
 #define SANDBOX_INERT         0x2
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
 #define LUA_TOKEN             0x4
 #define WRITE_RESTRICTED      0x8
-#endif
 
 //
 // Proxy Class enumeration
@@ -254,20 +252,14 @@ typedef struct _AUX_ACCESS_DATA
     GENERIC_MAPPING GenericMapping;
     ACCESS_MASK AccessesToAudit;
     ACCESS_MASK MaximumAuditMask;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     GUID TransactionId;
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN7)
     PVOID NewSecurityDescriptor;
     PVOID ExistingSecurityDescriptor;
     PVOID ParentSecurityDescriptor;
     VOID (NTAPI *DerefSecurityDescriptor)(PVOID, PVOID);
     PVOID SDLock;
     ACCESS_REASONS AccessReasons;
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN8)
     BOOLEAN GenerateStagingEvents;
-#endif
 } AUX_ACCESS_DATA, *PAUX_ACCESS_DATA;
 
 //

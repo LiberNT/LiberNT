@@ -99,21 +99,12 @@ typedef struct _INTERRUPT_VECTOR_DATA
     KINTERRUPT_MODE Mode;
     GROUP_AFFINITY TargetProcessors;
     INTERRUPT_REMAPPING_INFO IntRemapInfo;
-#if (NTDDI_VERSION >= NTDDI_WIN10)
     struct {
         ULONG Gsiv;
         ULONG WakeInterrupt : 1;
         ULONG ReservedFlags : 31;
     } ControllerInput;
     union {
-#else
-    union {
-        struct {
-            ULONG Gsiv;
-            ULONG WakeInterrupt : 1;
-            ULONG ReservedFlags : 31;
-        } ControllerInput;
-#endif
         struct {
             PHYSICAL_ADDRESS Address;
             ULONG DataPayload;
@@ -170,18 +161,6 @@ typedef struct _HAL_SECONDARY_INTERRUPT_INFORMATION
 typedef struct _INTERRUPT_CONNECTION_DATA
 {
     ULONG Count;
-#if (NTDDI_VERSION < NTDDI_WIN10)
-    GROUP_AFFINITY OriginalAffinity;
-    LIST_ENTRY SteeringListEntry;
-    VOID* SteeringListRoot;
-    ULONGLONG IsrTime;
-    ULONGLONG DpcTime;
-    ULONG IsrLoad;
-    ULONG DpcLoad;
-    UCHAR IsPrimaryInterrupt;
-    PKINTERRUPT *InterruptObjectArray;
-    ULONG InterruptObjectCount;
-#endif
     INTERRUPT_VECTOR_DATA Vectors[1];
 } INTERRUPT_CONNECTION_DATA, *PINTERRUPT_CONNECTION_DATA;
 
@@ -233,21 +212,12 @@ VOID
     _In_ BOOLEAN Enable
 );
 
-#if (NTDDI_VERSION >= NTDDI_WIN8)
 typedef
 VOID
 (NTAPI *pHalSetWakeAlarm)(
     _In_ ULONGLONG AlartTime,
     _In_ ULONGLONG DcWakeTime
 );
-#else
-typedef
-VOID
-(NTAPI *pHalSetWakeAlarm)(
-    _In_ ULONGLONG AlartTime,
-    _In_ PTIME_FIELDS TimeFields
-);
-#endif
 
 typedef
 VOID
@@ -275,7 +245,6 @@ ULONG
     _Out_ PKAFFINITY Affinity
 );
 
-#if (NTDDI_VERSION >= NTDDI_WIN7)
 typedef
 NTSTATUS
 (NTAPI *pHalGetVectorInput)(
@@ -285,16 +254,6 @@ NTSTATUS
     _Out_ PKINTERRUPT_POLARITY Polarity,
     _Out_ PINTERRUPT_REMAPPING_INFO IntRemapInfo
 );
-#else
-typedef
-NTSTATUS
-(NTAPI *pHalGetVectorInput)(
-    _In_ ULONG Vector,
-    _In_ KAFFINITY Affinity,
-    _Out_ PULONG Input,
-    _Out_ PKINTERRUPT_POLARITY Polarity
-);
-#endif
 
 typedef
 NTSTATUS
@@ -314,7 +273,6 @@ NTSTATUS
     VOID
 );
 
-#if (NTDDI_VERSION >= NTDDI_WIN7)
 typedef
 NTSTATUS
 (NTAPI *pHalAllocateMessageTarget)(
@@ -335,28 +293,6 @@ VOID
     _In_ ULONG Vector,
     _In_ PGROUP_AFFINITY ProcessorSet
 );
-#else
-typedef
-NTSTATUS
-(NTAPI *pHalAllocateMessageTarget)(
-    _In_ PDEVICE_OBJECT Owner,
-    _In_ KAFFINITY ProcessorSet,
-    _In_ ULONG NumberOfIdtEntries,
-    _In_ KINTERRUPT_MODE Mode,
-    _In_ BOOLEAN ShareVector,
-    _Out_ PULONG Vector,
-    _Out_ PKIRQL Irql,
-    _Out_ PULONG IdtEntry
-);
-
-typedef
-VOID
-(NTAPI *pHalFreeMessageTarget)(
-    _In_ PDEVICE_OBJECT Owner,
-    _In_ ULONG Vector,
-    _In_ KAFFINITY ProcessorSet
-);
-#endif
 
 typedef struct _PNP_REPLACE_PROCESSOR_LIST *PPNP_REPLACE_PROCESSOR_LIST;
 
@@ -424,20 +360,12 @@ VOID
     _In_ ULONG Flags
 );
 
-#if (NTDDI_VERSION >= NTDDI_WIN8)
 typedef
 BOOLEAN
 (NTAPI *pHalQueryWakeTime)(
     _Out_ PULONGLONG WakeTime,
     _Out_opt_ PULONGLONG TscOffset
 );
-#else
-typedef
-BOOLEAN
-(NTAPI *pHalQueryWakeTime)(
-    _Out_ PULONGLONG WakeTime
-);
-#endif
 
 typedef
 BOOLEAN
@@ -472,19 +400,11 @@ NTSTATUS
     _Out_ PWHEA_PROCESSOR_GENERIC_ERROR_SECTION Section
 );
 
-#if (NTDDI_VERSION >= NTDDI_WIN8)
 typedef
 VOID
 (NTAPI *pHalStopLegacyUsbInterrupts)(
     _In_ SYSTEM_POWER_STATE LastSystemState
 );
-#else
-typedef
-VOID
-(NTAPI *pHalStopLegacyUsbInterrupts)(
-    VOID
-);
-#endif
 
 typedef
 NTSTATUS
@@ -955,7 +875,6 @@ PVOID
     _In_ ULONG Protection
 );
 
-#if (NTDDI_VERSION >= NTDDI_WINBLUE)
 typedef
 NTSTATUS
 (NTAPI *pHalPrepareProcessorForIdle)(
@@ -974,27 +893,6 @@ VOID
     _In_ BOOLEAN Freezing,
     _In_ BOOLEAN ThawingToSpinLoop
 );
-#else
-typedef
-NTSTATUS
-(NTAPI *pHalPrepareProcessorForIdle)(
-    ULONG Unknown1,
-    ULONG Unknown2,
-    ULONG Unknown3
-);
-
-typedef
-VOID
-(NTAPI *pHalResumeProcessorFromIdle)(
-    PULONG Unknown
-);
-
-typedef
-VOID
-(NTAPI *pHalNotifyProcessorFreeze)(
-    BOOLEAN Unknown
-);
-#endif
 
 typedef
 VOID
@@ -1047,21 +945,11 @@ ULONG
     VOID
 );
 
-#if (NTDDI_VERSION >= NTDDI_WINBLUE)
 typedef
 VOID
 (NTAPI *pHalGetClockConfiguration)(
     _Out_ PHAL_CLOCK_TIMER_CONFIGURATION Configuration
 );
-#else
-typedef
-VOID
-(NTAPI *pHalGetClockConfiguration)(
-    PULONG Unknown1,
-    PULONG Unknown2,
-    PUCHAR Unknown3
-);
-#endif
 
 typedef
 VOID
@@ -1373,7 +1261,6 @@ BOOLEAN
     VOID
 );
 
-#if (NTDDI_VERSION >= NTDDI_WIN10)
 typedef
 NTSTATUS
 (NTAPI *pHalInterruptSetDestination)(
@@ -1381,14 +1268,6 @@ NTSTATUS
     _In_ PINTERRUPT_VECTOR_DATA VectorData,
     _In_ PGROUP_AFFINITY TargetProcessors
 );
-#else
-typedef
-NTSTATUS
-(NTAPI *pHalInterruptSetDestination)(
-    _In_ PINTERRUPT_CONNECTION_DATA ConnectionData,
-    _In_ PGROUP_AFFINITY TargetProcessors
-);
-#endif
 
 typedef union _HAL_UNMASKED_INTERRUPT_FLAGS
 {
@@ -1456,19 +1335,11 @@ NTSTATUS
     VOID
 );
 
-#if (NTDDI_VERSION >= NTDDI_WIN10)
 typedef
 VOID
 (NTAPI *pHalTimerWatchdogResetCountdown)(
     _In_ LOGICAL SetWakeTimer
 );
-#else
-typedef
-VOID
-(NTAPI *pHalTimerWatchdogResetCountdown)(
-    VOID
-);
-#endif
 
 typedef
 NTSTATUS
@@ -1622,27 +1493,7 @@ BOOLEAN
 // See Version table at:
 // https://www.geoffchappell.com/studies/windows/km/ntoskrnl/inc/ntos/hal/hal_private_dispatch.htm
 //
-#if (NTDDI_VERSION < NTDDI_WINXP)
-#define HAL_PRIVATE_DISPATCH_VERSION        1
-#elif (NTDDI_VERSION < NTDDI_LONGHORN)
-#define HAL_PRIVATE_DISPATCH_VERSION        2
-#elif (NTDDI_VERSION < NTDDI_VISTASP1)
-#define HAL_PRIVATE_DISPATCH_VERSION        5
-#elif (NTDDI_VERSION < NTDDI_VISTASP2)
-#define HAL_PRIVATE_DISPATCH_VERSION        6
-#elif (NTDDI_VERSION < NTDDI_WIN7)
-#define HAL_PRIVATE_DISPATCH_VERSION        7
-#elif (NTDDI_VERSION < NTDDI_WIN8)
-#define HAL_PRIVATE_DISPATCH_VERSION        13
-#elif (NTDDI_VERSION < NTDDI_WINBLUE)
-#define HAL_PRIVATE_DISPATCH_VERSION        21
-#elif (NTDDI_VERSION < NTDDI_WIN10)
-#define HAL_PRIVATE_DISPATCH_VERSION        23
-#elif (NTDDI_VERSION >= NTDDI_WIN10)
 #define HAL_PRIVATE_DISPATCH_VERSION        32
-#else
-/* Not yet defined */
-#endif
 typedef struct _HAL_PRIVATE_DISPATCH
 {
     ULONG Version;
@@ -1657,10 +1508,7 @@ typedef struct _HAL_PRIVATE_DISPATCH
     pHalHaltSystem HalHaltSystem;
     pHalFindBusAddressTranslation HalFindBusAddressTranslation;
     pHalResetDisplay HalResetDisplay;
-#if (NTDDI_VERSION >= NTDDI_WS03)
     pHalAllocateMapRegisters HalAllocateMapRegisters;
-#endif
-#if (NTDDI_VERSION >= NTDDI_WINXP)
     pKdSetupPciDeviceForDebugging KdSetupPciDeviceForDebugging;
     pKdReleasePciDeviceForDebugging KdReleasePciDeviceforDebugging;
     pKdGetAcpiTablePhase0 KdGetAcpiTablePhase0;
@@ -1668,8 +1516,6 @@ typedef struct _HAL_PRIVATE_DISPATCH
     pHalVectorToIDTEntry HalVectorToIDTEntry;
     pKdMapPhysicalMemory64 KdMapPhysicalMemory64;
     pKdUnmapVirtualAddress KdUnmapVirtualAddress;
-#endif
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     pKdGetPciDataByOffset KdGetPciDataByOffset;
     pKdSetPciDataByOffset KdSetPciDataByOffset;
     pHalGetInterruptVector HalGetInterruptVectorOverride;
@@ -1677,8 +1523,6 @@ typedef struct _HAL_PRIVATE_DISPATCH
     pHalLoadMicrocode HalLoadMicrocode;
     pHalUnloadMicrocode HalUnloadMicrocode;
     pHalPostMicrocodeUpdate HalPostMicrocodeUpdate;
-#endif
-#if (NTDDI_VERSION >= NTDDI_VISTASP1)
     pHalAllocateMessageTarget HalAllocateMessageTargetOverride;
     pHalFreeMessageTarget HalFreeMessageTargetOverride;
     pHalDpReplaceBegin HalDpReplaceBegin;
@@ -1686,38 +1530,25 @@ typedef struct _HAL_PRIVATE_DISPATCH
     pHalDpReplaceControl HalDpReplaceControl;
     pHalDpReplaceEnd HalDpReplaceEnd;
     pHalPrepareForBugcheck HalPrepareForBugcheck;
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN7)
     pHalQueryWakeTime HalQueryWakeTime;
     pHalReportIdleStateUsage HalReportIdleStateUsage;
     pHalTscSynchronization HalTscSynchronization;
     pHalWheaInitProcessorGenericSection HalWheaInitProcessorGenericSection;
     pHalStopLegacyUsbInterrupts HalStopLegacyUsbInterrupts;
-#endif
-#if (NTDDI_VERSION >= NTDDI_VISTASP2)
     pHalReadWheaPhysicalMemory HalReadWheaPhysicalMemory;
     pHalWriteWheaPhysicalMemory HalWriteWheaPhysicalMemory;
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN7)
     pHalDpMaskLevelTriggeredInterrupts HalDpMaskLevelTriggeredInterrupts;
     pHalDpUnmaskLevelTriggeredInterrupts HalDpUnmaskLevelTriggeredInterrupts;
     pHalDpGetInterruptReplayState HalDpGetInterruptReplayState;
     pHalDpReplayInterrupts HalDpReplayInterrupts;
     pHalQueryIoPortAccessSupported HalQueryIoPortAccessSupported;
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN8)
     pKdSetupIntegratedDeviceForDebugging KdSetupIntegratedDeviceForDebugging;
     pKdReleaseIntegratedDeviceForDebugging KdReleaseIntegratedDeviceForDebugging;
     pHalGetEnlightenmentInformation HalGetEnlightenmentInformation;
     pHalAllocateEarlyPages HalAllocateEarlyPages;
     pHalMapEarlyPages HalMapEarlyPages;
-#if (NTDDI_VERSION == NTDDI_WIN8)
-    pHalGetClockOwner HalGetClockOwner;
-    pHalGetClockConfiguration HalGetClockConfiguration;
-#elif (NTDDI_VERSION >= NTDDI_WINBLUE)
     PVOID Dummy1;
     PVOID Dummy2;
-#endif
     pHalNotifyProcessorFreeze HalNotifyProcessorFreeze;
     pHalPrepareProcessorForIdle HalPrepareProcessorForIdle;
     pHalRegisterLogRoutine HalRegisterLogRoutine;
@@ -1742,11 +1573,7 @@ typedef struct _HAL_PRIVATE_DISPATCH
     pHalFreePmcCounterSet HalFreePmcCounterSet;
     pHalProcessorHalt HalProcessorHalt;
     pHalTimerQueryCycleCounter HalTimerQueryCycleCounter;
-#if (NTDDI_VERSION == NTDDI_WIN8)
-    pHalGetNextTickDuration HalGetNextTickDuration;
-#elif (NTDDI_VERSION >= NTDDI_WINBLUE)
     PVOID Dummy3;
-#endif
     pHalPciMarkHiberPhase HalPciMarkHiberPhase;
     pHalQueryProcessorRestartEntryPoint HalQueryProcessorRestartEntryPoint;
     pHalRequestInterrupt HalRequestInterrupt;
@@ -1760,8 +1587,6 @@ typedef struct _HAL_PRIVATE_DISPATCH
     pHalPciMultiStageResumeCapable HalPciMultiStageResumeCapable;
     pHalDmaFreeCrashDumpRegisters HalDmaFreeCrashDumpRegisters;
     pHalAcpiAoacCapable HalAcpiAoacCapable;
-#endif
-#if (NTDDI_VERSION >= NTDDI_WINBLUE)
     pHalInterruptSetDestination HalInterruptSetDestination;
     pHalGetClockConfiguration HalGetClockConfiguration;
     pHalClockTimerActivate HalClockTimerActivate;
@@ -1777,8 +1602,6 @@ typedef struct _HAL_PRIVATE_DISPATCH
     pHalTimerWatchdogStop HalTimerWatchdogStop;
     pHalTimerWatchdogGeneratedLastReset HalTimerWatchdogGeneratedLastReset;
     pHalTimerWatchdogTriggerSystemReset HalTimerWatchdogTriggerSystemReset;
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN10)
     pHalInterruptVectorDataToGsiv HalInterruptVectorDataToGsiv;
     pHalInterruptGetHighestPriorityInterrupt HalInterruptGetHighestPriorityInterrupt;
     pHalProcessorOn HalProcessorOn;
@@ -1792,7 +1615,6 @@ typedef struct _HAL_PRIVATE_DISPATCH
     pHalTimerQueryAuxiliaryCounterFrequency HalTimerQueryAuxiliaryCounterFrequency;
     pHalConnectThermalInterrupt HalConnectThermalInterrupt;
     pHalIsEFIRuntimeActive HalIsEFIRuntimeActive;
-#endif
 } HAL_PRIVATE_DISPATCH, *PHAL_PRIVATE_DISPATCH;
 
 typedef struct _IOMMU_DEVICE_PATH

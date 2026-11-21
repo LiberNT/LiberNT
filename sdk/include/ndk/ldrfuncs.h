@@ -160,7 +160,6 @@ LdrEnumerateLoadedModules(
     _In_opt_ PVOID Context
 );
 
-#if (_WIN32_WINNT >= _WIN32_WINNT_VISTA) || (DLL_EXPORT_VERSION >= _WIN32_WINNT_VISTA)
 
 NTSTATUS
 NTAPI
@@ -175,7 +174,6 @@ NTAPI
 LdrUnregisterDllNotification(
     _In_ PVOID Cookie);
 
-#endif /* (_WIN32_WINNT >= _WIN32_WINNT_VISTA) || (DLL_EXPORT_VERSION >= _WIN32_WINNT_VISTA) */
 
 #ifdef NTOS_MODE_USER
 NTSYSAPI

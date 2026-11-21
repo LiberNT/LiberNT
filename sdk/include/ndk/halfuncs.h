@@ -73,10 +73,7 @@ HalRequestIpiSpecifyVector(
 #define HalHaltSystem                                       HALPRIVATEDISPATCH->HalHaltSystem
 #define HalFindBusAddressTranslation                        HALPRIVATEDISPATCH->HalFindBusAddressTranslation
 #define HalResetDisplay                                     HALPRIVATEDISPATCH->HalResetDisplay
-#if (NTDDI_VERSION >= NTDDI_WS03)
 #define HalAllocateMapRegisters                             HALPRIVATEDISPATCH->HalAllocateMapRegisters
-#endif
-#if (NTDDI_VERSION >= NTDDI_WINXP)
 #define KdSetupPciDeviceForDebugging                        HALPRIVATEDISPATCH->KdSetupPciDeviceForDebugging
 #define KdReleasePciDeviceforDebugging                      HALPRIVATEDISPATCH->KdReleasePciDeviceforDebugging
 #define KdGetAcpiTablePhase0                                HALPRIVATEDISPATCH->KdGetAcpiTablePhase0
@@ -84,8 +81,6 @@ HalRequestIpiSpecifyVector(
 #define HalVectorToIDTEntry                                 HALPRIVATEDISPATCH->HalVectorToIDTEntry
 #define KdMapPhysicalMemory64                               HALPRIVATEDISPATCH->KdMapPhysicalMemory64
 #define KdUnmapVirtualAddress                               HALPRIVATEDISPATCH->KdUnmapVirtualAddress
-#endif
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
 #define KdGetPciDataByOffset                                HALPRIVATEDISPATCH->KdGetPciDataByOffset
 #define KdSetPciDataByOffset                                HALPRIVATEDISPATCH->KdSetPciDataByOffset
 #define HalGetInterruptVectorOverride                       HALPRIVATEDISPATCH->HalGetInterruptVectorOverride
@@ -93,8 +88,6 @@ HalRequestIpiSpecifyVector(
 #define HalLoadMicrocode                                    HALPRIVATEDISPATCH->HalLoadMicrocode
 #define HalUnloadMicrocode                                  HALPRIVATEDISPATCH->HalUnloadMicrocode
 #define HalPostMicrocodeUpdate                              HALPRIVATEDISPATCH->HalPostMicrocodeUpdate
-#endif
-#if (NTDDI_VERSION >= NTDDI_VISTASP1)
 #define HalAllocateMessageTargetOverride                    HALPRIVATEDISPATCH->HalAllocateMessageTargetOverride
 #define HalFreeMessageTargetOverride                        HALPRIVATEDISPATCH->HalFreeMessageTargetOverride
 #define HalDpReplaceBegin                                   HALPRIVATEDISPATCH->HalDpReplaceBegin
@@ -102,35 +95,23 @@ HalRequestIpiSpecifyVector(
 #define HalDpReplaceControl                                 HALPRIVATEDISPATCH->HalDpReplaceControl
 #define HalDpReplaceEnd                                     HALPRIVATEDISPATCH->HalDpReplaceEnd
 #define HalPrepareForBugcheck                               HALPRIVATEDISPATCH->HalPrepareForBugcheck
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN7)
 #define HalQueryWakeTime                                    HALPRIVATEDISPATCH->HalQueryWakeTime
 #define HalReportIdleStateUsage                             HALPRIVATEDISPATCH->HalReportIdleStateUsage
 #define HalTscSynchronization                               HALPRIVATEDISPATCH->HalTscSynchronization
 #define HalWheaInitProcessorGenericSection                  HALPRIVATEDISPATCH->HalWheaInitProcessorGenericSection
 #define HalStopLegacyUsbInterrupts                          HALPRIVATEDISPATCH->HalStopLegacyUsbInterrupts
-#endif
-#if (NTDDI_VERSION >= NTDDI_VISTASP2)
 #define HalReadWheaPhysicalMemory                           HALPRIVATEDISPATCH->HalReadWheaPhysicalMemory
 #define HalWriteWheaPhysicalMemory                          HALPRIVATEDISPATCH->HalWriteWheaPhysicalMemory
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN7)
 #define HalDpMaskLevelTriggeredInterrupts                   HALPRIVATEDISPATCH->HalDpMaskLevelTriggeredInterrupts
 #define HalDpUnmaskLevelTriggeredInterrupts                 HALPRIVATEDISPATCH->HalDpUnmaskLevelTriggeredInterrupts
 #define HalDpGetInterruptReplayState                        HALPRIVATEDISPATCH->HalDpGetInterruptReplayState
 #define HalDpReplayInterrupts                               HALPRIVATEDISPATCH->HalDpReplayInterrupts
 #define HalQueryIoPortAccessSupported                       HALPRIVATEDISPATCH->HalQueryIoPortAccessSupported
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN8)
 #define KdSetupIntegratedDeviceForDebugging                 HALPRIVATEDISPATCH->KdSetupIntegratedDeviceForDebugging
 #define KdReleaseIntegratedDeviceForDebugging               HALPRIVATEDISPATCH->KdReleaseIntegratedDeviceForDebugging
 #define HalGetEnlightenmentInformation                      HALPRIVATEDISPATCH->HalGetEnlightenmentInformation
 #define HalAllocateEarlyPages                               HALPRIVATEDISPATCH->HalAllocateEarlyPages
 #define HalMapEarlyPages                                    HALPRIVATEDISPATCH->HalMapEarlyPages
-#if (NTDDI_VERSION == NTDDI_WIN8)
-#define HalGetClockOwner                                    HALPRIVATEDISPATCH->HalGetClockOwner
-#define HalGetClockConfiguration                            HALPRIVATEDISPATCH->HalGetClockConfiguration
-#endif
 #define HalNotifyProcessorFreeze                            HALPRIVATEDISPATCH->HalNotifyProcessorFreeze
 #define HalPrepareProcessorForIdle                          HALPRIVATEDISPATCH->HalPrepareProcessorForIdle
 #define HalRegisterLogRoutine                               HALPRIVATEDISPATCH->HalRegisterLogRoutine
@@ -154,9 +135,6 @@ HalRequestIpiSpecifyVector(
 #define HalFreePmcCounterSet                                HALPRIVATEDISPATCH->HalFreePmcCounterSet
 #define HalProcessorHalt                                    HALPRIVATEDISPATCH->HalProcessorHalt
 #define HalTimerQueryCycleCounter                           HALPRIVATEDISPATCH->HalTimerQueryCycleCounter
-#if (NTDDI_VERSION == NTDDI_WIN8)
-#define HalGetNextTickDuration                              HALPRIVATEDISPATCH->HalGetNextTickDuration
-#endif
 #define HalPciMarkHiberPhase                                HALPRIVATEDISPATCH->HalPciMarkHiberPhase
 #define HalQueryProcessorRestartEntryPoint                  HALPRIVATEDISPATCH->HalQueryProcessorRestartEntryPoint
 #define HalRequestInterrupt                                 HALPRIVATEDISPATCH->HalRequestInterrupt
@@ -170,8 +148,6 @@ HalRequestIpiSpecifyVector(
 #define HalPciMultiStageResumeCapable                       HALPRIVATEDISPATCH->HalPciMultiStageResumeCapable
 #define HalDmaFreeCrashDumpRegisters                        HALPRIVATEDISPATCH->HalDmaFreeCrashDumpRegisters
 #define HalAcpiAoacCapable                                  HALPRIVATEDISPATCH->HalAcpiAoacCapable
-#endif
-#if (NTDDI_VERSION >= NTDDI_WINBLUE)
 #define HalInterruptSetDestination                          HALPRIVATEDISPATCH->HalInterruptSetDestination
 #define HalGetClockConfiguration                            HALPRIVATEDISPATCH->HalGetClockConfiguration
 #define HalClockTimerActivate                               HALPRIVATEDISPATCH->HalClockTimerActivate
@@ -187,8 +163,6 @@ HalRequestIpiSpecifyVector(
 #define HalTimerWatchdogStop                                HALPRIVATEDISPATCH->HalTimerWatchdogStop
 #define HalTimerWatchdogGeneratedLastReset                  HALPRIVATEDISPATCH->HalTimerWatchdogGeneratedLastReset
 #define HalTimerWatchdogTriggerSystemReset                  HALPRIVATEDISPATCH->HalTimerWatchdogTriggerSystemReset
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN10)
 #define HalInterruptVectorDataToGsiv                        HALPRIVATEDISPATCH->HalInterruptVectorDataToGsiv
 #define HalInterruptGetHighestPriorityInterrupt             HALPRIVATEDISPATCH->HalInterruptGetHighestPriorityInterrupt
 #define HalProcessorOn                                      HALPRIVATEDISPATCH->HalProcessorOn
@@ -202,7 +176,6 @@ HalRequestIpiSpecifyVector(
 #define HalTimerQueryAuxiliaryCounterFrequency              HALPRIVATEDISPATCH->HalTimerQueryAuxiliaryCounterFrequency
 #define HalConnectThermalInterrupt                          HALPRIVATEDISPATCH->HalConnectThermalInterrupt
 #define HalIsEFIRuntimeActive                               HALPRIVATEDISPATCH->HalIsEFIRuntimeActive
-#endif
 
 //
 // Private HAL IOMMU Callbacks
