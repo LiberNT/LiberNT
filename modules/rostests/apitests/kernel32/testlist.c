@@ -22,6 +22,7 @@ extern void func_CalendarDateTime(void);
 extern void func_CallbackCallingConventions(void);
 extern void func_CallbackMayRunLong(void);
 extern void func_CdfsVolume(void);
+extern void func_CreateSymbolicLink(void);
 extern void func_SataDiskAddress(void);
 extern void func_Mailslot(void);
 extern void func_Arm64ThreadContext(void);
@@ -250,6 +251,7 @@ const struct test winetest_testlist[] =
     { "CallbackCallingConventions", func_CallbackCallingConventions },
     { "CallbackMayRunLong",          func_CallbackMayRunLong },
     { "CdfsVolume", func_CdfsVolume },
+    { "CreateSymbolicLink", func_CreateSymbolicLink },
     { "SataDiskAddress", func_SataDiskAddress },
     { "Mailslot", func_Mailslot },
     { "Arm64ThreadContext",          func_Arm64ThreadContext },

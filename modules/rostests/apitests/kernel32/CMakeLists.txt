@@ -57,6 +57,7 @@ list(APPEND SOURCE
     EmulatedProcess.c
     DispatcherStress.c
     ProcessorGroups.c
+    CreateSymbolicLink.c
     dosdev.c
     DateTimeFormatFlags.c
     EnumDateTimeFormats.c
