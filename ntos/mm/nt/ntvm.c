@@ -63,6 +63,42 @@ MmQueryPageListCounts(
 }
 
 NTSTATUS
+MiReferenceProcessHandleForQuery(
+    _In_ HANDLE ProcessHandle,
+    _In_ KPROCESSOR_MODE PreviousMode,
+    _Out_ PEPROCESS *Process)
+{
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    Status = ObReferenceObjectByHandle(ProcessHandle, PROCESS_QUERY_LIMITED_INFORMATION, PsProcessType, PreviousMode,
+                                       (PVOID *)Process, NULL);
+    if (Status != STATUS_ACCESS_DENIED)
+        return Status;
+
+    return ObReferenceObjectByHandle(ProcessHandle, PROCESS_VM_OPERATION | PROCESS_VM_WRITE, PsProcessType,
+                                     PreviousMode, (PVOID *)Process, NULL);
+}
+
+NTSTATUS
+MiReferenceTargetProcessForQuery(
+    _In_ HANDLE ProcessHandle,
+    _Out_ PMI_PROCESS_REFERENCE Reference)
+{
+    NTSTATUS Status;
+
+    PAGED_CODE();
+
+    Status = MiReferenceTargetProcess(ProcessHandle, PROCESS_QUERY_LIMITED_INFORMATION, Reference);
+    if (Status != STATUS_ACCESS_DENIED)
+        return Status;
+
+    ASSERT(!Reference->Referenced);
+    return MiReferenceTargetProcess(ProcessHandle, PROCESS_VM_OPERATION | PROCESS_VM_WRITE, Reference);
+}
+
+NTSTATUS
 MiReferenceTargetProcess(
     _In_ HANDLE ProcessHandle,
     _In_ ACCESS_MASK Access,
@@ -1362,7 +1398,7 @@ NtQueryVirtualMemory(
     }
     _SEH2_END;
 
-    Status = MiReferenceTargetProcess(ProcessHandle, PROCESS_QUERY_INFORMATION, &Target);
+    Status = MiReferenceTargetProcessForQuery(ProcessHandle, &Target);
     if (!NT_SUCCESS(Status))
         return Status;
 

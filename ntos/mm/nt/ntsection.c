@@ -2383,8 +2383,7 @@ MiQuerySectionName(
     PEPROCESS Process;
     NTSTATUS Status;
 
-    Status = ObReferenceObjectByHandle(ProcessHandle, PROCESS_QUERY_INFORMATION, PsProcessType, PreviousMode,
-                                       (PVOID *)&Process, NULL);
+    Status = MiReferenceProcessHandleForQuery(ProcessHandle, PreviousMode, &Process);
     if (!NT_SUCCESS(Status))
         return Status;
 
