@@ -29,6 +29,7 @@
 #include <halfuncs.h>
 #include <halacpi_arm64.h>
 #include <reactos/arm64/sysreg.h>
+#include <halarch.h>
 #include <debug.h>
 
 /*
@@ -41,7 +42,6 @@
 #define HAL_ARM64_GICR_BASE_DEFAULT         0x080A0000ULL
 #define HAL_ARM64_GICR_STRIDE_DEFAULT       0x20000ULL
 #define HAL_ARM64_GICR_SGI_OFFSET_DEFAULT   0x10000ULL
-#define HAL_ARM64_KSEG0_BASE                0xFFFF800000000000ULL
 
 /*
  * ============================================================================

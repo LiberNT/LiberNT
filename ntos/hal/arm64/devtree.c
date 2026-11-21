@@ -8,6 +8,7 @@
 #include <ntifs.h>
 #include <arc/arc.h>
 #include "devtree.h"
+#include <halarch.h>
 
 #define HALP_FDT_MAXIMUM_DEPTH 8
 
@@ -16,12 +17,13 @@ HalpArm64OpenDeviceTree(
     _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock,
     _Out_ PFDT Fdt)
 {
-    if (!LoaderBlock || !LoaderBlock->u.Arm64.DeviceTree)
+    const VOID *Blob;
+    SIZE_T Size;
+
+    if (!LoaderBlock || !HalpLoaderDeviceTree(LoaderBlock, &Blob, &Size))
         return FALSE;
 
-    return FdtOpen((const VOID *)(ULONG_PTR)LoaderBlock->u.Arm64.DeviceTree,
-                        (SIZE_T)LoaderBlock->u.Arm64.DeviceTreeSize,
-                        Fdt);
+    return FdtOpen(Blob, Size, Fdt);
 }
 
 static

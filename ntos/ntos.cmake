@@ -52,6 +52,7 @@ if(ARCH STREQUAL "arm64")
         ${_arm64_hal_dir}/sysinfo.c
         ${_arm64_hal_dir}/devtree.c
         ${_arm64_hal_dir}/smp.c
+        ${_arm64_hal_dir}/arch/${ARCH}/psci.c
         ${_arm64_hal_dir}/kernstubs.c
         ${_arm64_hal_dir}/gic/gic_common.c
         ${_arm64_hal_dir}/gic/gic_init.c
@@ -62,6 +63,7 @@ if(ARCH STREQUAL "arm64")
     set_property(SOURCE ${_arm64_hal_sources} PROPERTY SKIP_PRECOMPILE_HEADERS ON)
     set_property(SOURCE ${_arm64_hal_sources} APPEND PROPERTY COMPILE_DEFINITIONS _NTHAL_)
     set_property(SOURCE ${_arm64_hal_sources} APPEND PROPERTY INCLUDE_DIRECTORIES
+        ${_arm64_hal_dir}/arch/${ARCH}
         ${_arm64_hal_dir}/include
         ${_arm64_hal_dir}/gic
         ${REACTOS_SOURCE_DIR}/hal/arch/common/include

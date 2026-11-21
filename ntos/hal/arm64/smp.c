@@ -41,6 +41,7 @@
 #include <halfuncs.h>
 #include <halacpi_arm64.h>
 #include <reactos/arm64/sysreg.h>
+#include <halarch.h>
 #include "devtree.h"
 #include <debug.h>
 
@@ -102,10 +103,6 @@ FORCEINLINE VOID HalpWriteIccIgrpen1(unsigned int v)
     ARM64_WRITE_SYSREG(ICC_IGRPEN1_EL1, (UINT64)v);
 }
 
-/*
- * Private physical alias used by the ARM64 kernel/HAL direct map.
- */
-#define HAL_ARM64_PHYS_MAP_BASE 0xFFFFFC0000000000ULL
 
 /*
  * HAL_ARM64_AP_TRAMPOLINE_DATA - Configuration data for AP startup
@@ -745,4 +742,191 @@ HalpArm64ReleaseSpinTableCpu(
     DPRINT1("[arm64][HAL] Released CPU %lu (MPIDR 0x%llx) at %llx into the trampoline\n", ProcessorNumber,
             HalpArm64GicInfo.GiccEntries[ProcessorNumber].Mpidr, HalpArm64SpinTableRelease[ProcessorNumber]);
     return TRUE;
+}
+
+/*
+ * PSCI CPU_ON - wake a secondary processor.
+ * Parameters:
+ *   TargetMpidr - MPIDR of the target CPU
+ *   EntryPoint  - Physical address of the entry point
+ *   ContextId   - Context ID passed to the entry point (typically processor number)
+ * Returns:
+ *   PSCI return code (0 = success, negative = error)
+ */
+static LONG
+HalpPsciCpuOn(
+    _In_ ULONGLONG TargetMpidr,
+    _In_ ULONGLONG EntryPoint,
+    _In_ ULONGLONG ContextId)
+{
+    LONG Result;
+    ULONGLONG PendingIsr;
+
+    ARM64_DSB(SY);
+    PendingIsr = ARM64_READ_SYSREG(ISR_EL1);
+    if (PendingIsr & (1ULL << 8))
+    {
+        DPRINT1("[arm64][HAL] PSCI CPU_ON aborted: SError pending (ISR_EL1=0x%llx)\n",
+                PendingIsr);
+        return -1;
+    }
+
+    DPRINT("[arm64][HAL] PSCI CPU_ON: target=0x%llx entry=0x%llx ctx=0x%llx %s\n",
+            TargetMpidr, EntryPoint, ContextId,
+            HalpArm64PsciInfo.UseHvc ? "HVC" : "SMC");
+
+    Result = HalpPsciCall(PSCI_FN_CPU_ON_64, TargetMpidr, EntryPoint, ContextId);
+
+    if (Result != PSCI_SUCCESS)
+    {
+        DPRINT1("[arm64][HAL] PSCI CPU_ON failed: %ld\n", Result);
+    }
+
+    return Result;
+}
+
+BOOLEAN
+NTAPI
+HalStartNextProcessor(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock,
+    _In_ PKPROCESSOR_STATE ProcessorState)
+{
+    ULONG ProcessorNumber;
+    ULONGLONG TargetMpidr;
+    UINT64 TrampolinePhys;
+    LONG PsciResult;
+
+    /*
+     * ARM64 SMP bring-up using PSCI CPU_ON with proper AP trampoline.
+     *
+     * The boot sequence is:
+     * 1. Use the AP trampoline reserved during phase-zero initialization
+     * 2. Prepare AP data structure with page tables and entry point
+     * 3. Call PSCI CPU_ON with trampoline physical address
+     * 4. AP wakes at trampoline, enables MMU, jumps to kernel entry
+     * 5. Wait for AP to signal synchronization
+     */
+
+    if (!LoaderBlock || !ProcessorState)
+    {
+        DPRINT1("[arm64][HAL] HalStartNextProcessor: invalid parameters\n");
+        return FALSE;
+    }
+
+    /*
+     * Determine which processor to start next, skipping over any MADT GICC
+     * entries whose enabled flag is clear. Advancing past disabled cores (rather
+     * than returning FALSE on the first one) lets a system with a disabled core
+     * in the middle of the MADT still bring up every later enabled core. Logical
+     * CPU numbers stay contiguous because they are assigned by the AP itself
+     * (KeNumberProcessors), independent of this MADT index.
+     */
+    while ((HalpStartedProcessorCount < HalpArm64GicInfo.GiccEntryCount) &&
+           !(HalpArm64GicInfo.GiccEntries[HalpStartedProcessorCount].Flags & 0x1))
+    {
+        DPRINT1("[arm64][HAL] HalStartNextProcessor: skipping disabled CPU %lu (MPIDR 0x%llx)\n",
+                HalpStartedProcessorCount,
+                HalpArm64GicInfo.GiccEntries[HalpStartedProcessorCount].Mpidr);
+        HalpStartedProcessorCount++;
+    }
+
+    ProcessorNumber = HalpStartedProcessorCount;
+
+    /* Check if we have more processors to start from MADT GICC entries */
+    if (ProcessorNumber >= HalpArm64GicInfo.GiccEntryCount)
+    {
+        DPRINT1("[arm64][HAL] HalStartNextProcessor: no more processors (started=%lu, available=%lu)\n",
+                ProcessorNumber, HalpArm64GicInfo.GiccEntryCount);
+        return FALSE;
+    }
+
+    /* Get the MPIDR of the target processor from MADT GICC entries */
+    TargetMpidr = HalpArm64GicInfo.GiccEntries[ProcessorNumber].Mpidr;
+
+    DPRINT("[arm64][HAL] HalStartNextProcessor: starting CPU %lu (MPIDR 0x%llx)\n",
+            ProcessorNumber, TargetMpidr);
+
+    /* The loader-backed startup pages must have been reserved in phase 0. */
+    if (!HalpArm64IsTrampolineInitialized())
+    {
+        DPRINT1("[arm64][HAL] HalStartNextProcessor: phase-0 trampoline unavailable\n");
+        return FALSE;
+    }
+
+    /* Get trampoline physical address */
+    TrampolinePhys = HalpArm64GetTrampolinePhysicalAddress();
+    if (TrampolinePhys == 0)
+    {
+        DPRINT1("[arm64][HAL] HalStartNextProcessor: trampoline not ready\n");
+        return FALSE;
+    }
+
+    /*
+     * Prepare AP data with page tables and entry point. GICR setup is
+     * deliberately left to HalInitializeProcessor after the AP reaches the HAL.
+     */
+    HalpArm64PrepareApData(
+        ProcessorNumber,
+        (UINT64)ProcessorState->ContextFrame.Pc,
+        (UINT64)ProcessorState->ContextFrame.Sp,
+        (UINT64)LoaderBlock
+    );
+
+    ARM64_DSB(SY);
+    ARM64_ISB();
+
+    /* Check if PSCI is available */
+    if (HalpArm64ReleaseSpinTableCpu(ProcessorNumber, TrampolinePhys))
+    {
+        if (!HalpArm64WaitForApSync(5000))
+        {
+            DPRINT1("[arm64][HAL] HalStartNextProcessor: CPU %lu did not leave its spin table\n", ProcessorNumber);
+            return FALSE;
+        }
+        HalpStartedProcessorCount++;
+        return TRUE;
+    }
+
+    if (!HalpArm64PsciInfo.Present)
+    {
+        DPRINT1("[arm64][HAL] HalStartNextProcessor: PSCI unavailable, trying parking\n");
+        if (HalpArm64WakeParkedCpu(ProcessorNumber, TrampolinePhys, ProcessorNumber))
+        {
+            if (HalpArm64WaitForApSync(5000))
+            {
+                DPRINT1("[arm64][HAL] HalStartNextProcessor: CPU %lu started via parking\n",
+                        ProcessorNumber);
+                HalpStartedProcessorCount++;
+                return TRUE;
+            }
+        }
+        DPRINT1("[arm64][HAL] HalStartNextProcessor: no method to start CPU %lu\n",
+                ProcessorNumber);
+        return FALSE;
+    }
+
+    /* Call PSCI CPU_ON with trampoline address */
+    PsciResult = HalpPsciCpuOn(TargetMpidr, TrampolinePhys, (ULONGLONG)ProcessorNumber);
+
+    if (PsciResult == PSCI_SUCCESS || PsciResult == PSCI_E_ALREADY_ON)
+    {
+        if (HalpArm64WaitForApSync(5000))
+        {
+            DPRINT("[arm64][HAL] HalStartNextProcessor: CPU %lu started and synced\n",
+                    ProcessorNumber);
+        }
+        else
+        {
+            DPRINT1("[arm64][HAL] HalStartNextProcessor: CPU %lu started (sync timeout)\n",
+                    ProcessorNumber);
+        }
+        HalpStartedProcessorCount++;
+        return TRUE;
+    }
+    else
+    {
+        DPRINT1("[arm64][HAL] HalStartNextProcessor: PSCI CPU_ON failed, err=%ld\n",
+                PsciResult);
+        return FALSE;
+    }
 }

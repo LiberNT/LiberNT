@@ -262,6 +262,39 @@ extern HALP_ARM64_GIC_INFO HalpArm64GicInfo;
 extern HALP_ARM64_GTDT_INFO HalpArm64GtdtInfo;
 extern HALP_ARM64_SPCR_INFO HalpArm64SpcrInfo;
 extern HALP_ARM64_PSCI_INFO HalpArm64PsciInfo;
+
+/*
+ * PSCI (Power State Coordination Interface) definitions for ARM64.
+ * These are used for SMP bring-up (CPU_ON) and power management (SYSTEM_RESET, SYSTEM_OFF).
+ */
+#define PSCI_FN_SYSTEM_OFF          0x84000008UL
+#define PSCI_FN_SYSTEM_RESET        0x84000009UL
+#define PSCI_SUCCESS                0
+#define PSCI_E_INVALID_PARAMS       (-2)
+#define PSCI_E_DENIED               (-3)
+#define PSCI_E_ALREADY_ON           (-4)
+#define PSCI_E_ON_PENDING           (-5)
+
+LONG
+HalpPsciCall(
+    _In_ ULONGLONG FunctionId,
+    _In_ ULONGLONG Arg0,
+    _In_ ULONGLONG Arg1,
+    _In_ ULONGLONG Arg2);
+
+LONG
+HalpPsciCallSmc(
+    _In_ ULONGLONG FunctionId,
+    _In_ ULONGLONG Arg0,
+    _In_ ULONGLONG Arg1,
+    _In_ ULONGLONG Arg2);
+
+LONG
+HalpPsciCallHvc(
+    _In_ ULONGLONG FunctionId,
+    _In_ ULONGLONG Arg0,
+    _In_ ULONGLONG Arg1,
+    _In_ ULONGLONG Arg2);
 extern HALP_ARM64_IORT_INFO HalpArm64IortInfo;
 extern HALP_ARM64_PPTT_INFO HalpArm64PpttInfo;
 

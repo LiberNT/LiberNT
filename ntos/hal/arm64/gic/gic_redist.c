@@ -213,7 +213,7 @@ HalpArm64MapRedistRegions(VOID)
         PhysicalEnd = PhysicalBase + Region->Length;
         VirtualBase = Region->VirtualBase;
 
-        if (VirtualBase < HAL_ARM64_KSEG0_BASE)
+        if (VirtualBase < HAL_ARM64_SYSTEM_RANGE_BASE)
         {
             PhysicalAddress.QuadPart = PhysicalBase;
             VirtualBase = (ULONG_PTR)MmMapIoSpace(PhysicalAddress,
