@@ -487,7 +487,16 @@ NtfsFinalizePendingDelete(_In_ PVolumeContextBlock VolCB,
         }
     }
 
-    if (FileCB->StreamCB && DeleteLink)
+    ASSERT(ExIsResourceAcquiredExclusiveLite(&VolCB->MetadataResource));
+    if (FileCB->StreamCB && DeleteLink && FileCB->FileRec &&
+        VolCB->DirGeneration == FileCB->OpenGeneration)
+    {
+        ASSERT(NtfsFileRecordGetReference(FileCB->FileRec) == FileCB->StreamCB->FileReference);
+        LastLink = NtfsFileRecordGetLinkCount(FileCB->FileRec) <= 1;
+        VerifiedGeneration = FileCB->OpenGeneration;
+        PathVerified = TRUE;
+    }
+    else if (FileCB->StreamCB && DeleteLink)
     {
         PNtfsFileRecord NamedRecord = NULL;
         ULONG RemainingNameLength = 0;

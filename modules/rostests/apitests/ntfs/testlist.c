@@ -15,6 +15,7 @@ extern void func_FreeClusters(void);
 extern void func_ConcurrentIo(void);
 extern void func_DirectIo(void);
 extern void func_CreateSecurity(void);
+extern void func_DeleteAfterChange(void);
 
 const struct test winetest_testlist[] =
 {
@@ -25,5 +26,6 @@ const struct test winetest_testlist[] =
     { "ConcurrentIo", func_ConcurrentIo },
     { "DirectIo", func_DirectIo },
     { "CreateSecurity", func_CreateSecurity },
+    { "DeleteAfterChange", func_DeleteAfterChange },
     { 0, 0 }
 };
