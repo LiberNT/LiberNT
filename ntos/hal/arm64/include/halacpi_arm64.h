@@ -275,6 +275,27 @@ extern HALP_ARM64_PSCI_INFO HalpArm64PsciInfo;
 #define PSCI_E_ALREADY_ON           (-4)
 #define PSCI_E_ON_PENDING           (-5)
 
+extern ULONG HalpStartedProcessorCount;
+extern ULONG64 HalpArm64SpinTableRelease[MAXIMUM_PROCESSORS];
+
+VOID
+HalpArm64SmpCleanDcacheRange(
+    _In_ PVOID Base,
+    _In_ SIZE_T Length);
+
+VOID
+HalpArm64DiscoverDeviceTreeCpus(
+    _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock);
+
+BOOLEAN
+HalpArm64ReleaseSpinTableCpu(
+    _In_ ULONG ProcessorNumber,
+    _In_ UINT64 EntryPoint);
+
+BOOLEAN
+HalpArchPrepareProcessorStart(
+    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock);
+
 LONG
 HalpPsciCall(
     _In_ ULONGLONG FunctionId,

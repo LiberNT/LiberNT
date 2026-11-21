@@ -53,6 +53,7 @@ if(ARCH STREQUAL "arm64")
         ${_arm64_hal_dir}/devtree.c
         ${_arm64_hal_dir}/smp.c
         ${_arm64_hal_dir}/arch/${ARCH}/psci.c
+        ${_arm64_hal_dir}/arch/${ARCH}/start.c
         ${_arm64_hal_dir}/kernstubs.c
         ${_arm64_hal_dir}/gic/gic_common.c
         ${_arm64_hal_dir}/gic/gic_init.c
@@ -495,11 +496,11 @@ elseif(ARCH STREQUAL "arm64")
         ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/strcpy.S
         ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/wcscmp.S)
     list(APPEND ASM_SOURCE
-        ${REACTOS_SOURCE_DIR}/ntos/hal/arm64/smp_trampoline.S)
+        ${REACTOS_SOURCE_DIR}/ntos/hal/arm64/arch/arm64/smp_trampoline.S)
     if(MSVC)
         list(APPEND ASM_SOURCE
             ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/msvc.S
-            ${REACTOS_SOURCE_DIR}/ntos/hal/arm64/psci.S)
+            ${REACTOS_SOURCE_DIR}/ntos/hal/arm64/arch/arm64/psci.S)
     endif()
     list(APPEND SOURCE ${_arm64_hal_sources})
     list(APPEND SOURCE
