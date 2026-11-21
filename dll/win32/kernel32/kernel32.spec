@@ -1006,8 +1006,15 @@
 @ stdcall Process32NextW(ptr ptr)
 @ stdcall ProcessIdToSessionId(long ptr)
 @ stdcall -thunk -version=0x603+ PssCaptureSnapshot(ptr long long ptr) kernelbase.PssCaptureSnapshot
+@ stdcall -thunk -version=0x603+ PssDuplicateSnapshot(ptr ptr ptr ptr long) kernelbase.PssDuplicateSnapshot
 @ stdcall -thunk -version=0x603+ PssFreeSnapshot(ptr ptr) kernelbase.PssFreeSnapshot
 @ stdcall -thunk -version=0x603+ PssQuerySnapshot(ptr long ptr long) kernelbase.PssQuerySnapshot
+@ stdcall -thunk -version=0x603+ PssWalkMarkerCreate(ptr ptr) kernelbase.PssWalkMarkerCreate
+@ stdcall -thunk -version=0x603+ PssWalkMarkerFree(ptr) kernelbase.PssWalkMarkerFree
+@ stdcall -thunk -version=0x603+ PssWalkMarkerGetPosition(ptr ptr) kernelbase.PssWalkMarkerGetPosition
+@ stdcall -thunk -version=0x603+ PssWalkMarkerSeekToBeginning(ptr) kernelbase.PssWalkMarkerSeekToBeginning
+@ stdcall -thunk -version=0x603+ PssWalkMarkerSetPosition(ptr long) kernelbase.PssWalkMarkerSetPosition
+@ stdcall -thunk -version=0x603+ PssWalkSnapshot(ptr long ptr ptr long) kernelbase.PssWalkSnapshot
 @ stdcall PulseEvent(long)
 @ stdcall PurgeComm(long long)
 @ stdcall -version=0x600+ QueryActCtxSettingsW(long ptr wstr wstr ptr long ptr)
