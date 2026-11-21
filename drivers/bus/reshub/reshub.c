@@ -547,13 +547,26 @@ RhPrepareI2cContext(
     USHORT SlaveAddress;
     USHORT AddressMode;
     NTSTATUS Status;
+    ULONG Retry;
+    LARGE_INTEGER Delay;
 
     if (Context->I2cFileObject)
         return STATUS_SUCCESS;
     Status = RhParseI2cConnection(Context->Connection, &ControllerIndex, &ConnectionSpeed, &SlaveAddress, &AddressMode);
     if (!NT_SUCCESS(Status))
         return Status;
-    Status = RhOpenIntelI2c(ControllerIndex, &FileObject, &DeviceObject);
+    for (Retry = 0;; Retry++)
+    {
+        Status = RhOpenIntelI2c(ControllerIndex, &FileObject, &DeviceObject);
+        if (Status != STATUS_DEVICE_NOT_CONNECTED || KeGetCurrentIrql() != PASSIVE_LEVEL || Retry >= 100)
+            break;
+        if (!(Retry % 10))
+            DPRINT1("RESHUB: waiting for I2C controller %lu, retry %lu\n", ControllerIndex, Retry);
+        Delay.QuadPart = -20 * 10000;
+        KeDelayExecutionThread(KernelMode, FALSE, &Delay);
+    }
+    if (Retry)
+        DPRINT1("RESHUB: controller %lu open ended with %08lx after %lu retries\n", ControllerIndex, Status, Retry);
     if (!NT_SUCCESS(Status))
         return Status;
     Context->ControllerIndex = ControllerIndex;
