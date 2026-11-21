@@ -637,6 +637,9 @@ typedef struct _KSPECIAL_REGISTERS
     ULONG64 MsrLStar;
     ULONG64 MsrCStar;
     ULONG64 MsrSyscallMask;
+    ULONG64 Xcr0;
+    ULONG64 MsrFsBase;
+    ULONG64 SpecialPadding0;
 } KSPECIAL_REGISTERS, *PKSPECIAL_REGISTERS;
 
 //
@@ -721,11 +724,7 @@ typedef struct _KPRCB
     ULONG CFlushSize; // 0x000E8
     UCHAR PrcbFlags[4]; // 0x000EC _KPRCBFLAG
     ULONGLONG PrcbPad11[2]; // 0x000F0
-    union // 0x00100
-    {
-        UCHAR ProcessorStateRaw[1472]; // _KPROCESSOR_STATE
-        KPROCESSOR_STATE ProcessorState; // FIXME: LiberNT layout of the Windows _KPROCESSOR_STATE
-    };
+    KPROCESSOR_STATE ProcessorState; // 0x00100
     struct _XSAVE_AREA_HEADER *ExtendedSupervisorState; // 0x006C0
     ULONG ProcessorSignature; // 0x006C8
     ULONG ProcessorFlags; // 0x006CC
@@ -799,11 +798,7 @@ typedef struct _KPRCB
     ULONGLONG CurrentDpcRuntimeHistoryCached; // 0x03828
     ULONGLONG CurrentDpcStartTime; // 0x03830
     struct _KTHREAD *DpcDelegateThread; // 0x03838
-    union // 0x03840
-    {
-        UCHAR DpcDataRaw[96]; // _KDPC_DATA[2]
-        KDPC_DATA DpcData[2]; // FIXME: LiberNT layout of the Windows _KDPC_DATA[2]
-    };
+    KDPC_DATA DpcData[2]; // 0x03840
     PVOID DpcStack; // 0x038A0
     LONG MaximumDpcQueueDepth; // 0x038A8
     ULONG DpcRequestRate; // 0x038AC
@@ -1149,7 +1144,7 @@ C_ASSERT(FIELD_OFFSET(KPRCB, AcpiReserved) == 0xE0);
 C_ASSERT(FIELD_OFFSET(KPRCB, CFlushSize) == 0xE8);
 C_ASSERT(FIELD_OFFSET(KPRCB, PrcbFlags) == 0xEC);
 C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad11) == 0xF0);
-C_ASSERT(FIELD_OFFSET(KPRCB, ProcessorStateRaw) == 0x100);
+C_ASSERT(FIELD_OFFSET(KPRCB, ProcessorState) == 0x100);
 C_ASSERT(FIELD_OFFSET(KPRCB, ExtendedSupervisorState) == 0x6C0);
 C_ASSERT(FIELD_OFFSET(KPRCB, ProcessorSignature) == 0x6C8);
 C_ASSERT(FIELD_OFFSET(KPRCB, ProcessorFlags) == 0x6CC);
@@ -1223,7 +1218,7 @@ C_ASSERT(FIELD_OFFSET(KPRCB, CurrentDpcRoutine) == 0x3820);
 C_ASSERT(FIELD_OFFSET(KPRCB, CurrentDpcRuntimeHistoryCached) == 0x3828);
 C_ASSERT(FIELD_OFFSET(KPRCB, CurrentDpcStartTime) == 0x3830);
 C_ASSERT(FIELD_OFFSET(KPRCB, DpcDelegateThread) == 0x3838);
-C_ASSERT(FIELD_OFFSET(KPRCB, DpcDataRaw) == 0x3840);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcData) == 0x3840);
 C_ASSERT(FIELD_OFFSET(KPRCB, DpcStack) == 0x38A0);
 C_ASSERT(FIELD_OFFSET(KPRCB, MaximumDpcQueueDepth) == 0x38A8);
 C_ASSERT(FIELD_OFFSET(KPRCB, DpcRequestRate) == 0x38AC);
