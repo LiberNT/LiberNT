@@ -68,6 +68,7 @@ typedef struct _MI_ARCH_DESCRIPTOR
     BOOLEAN PrefersRegionRotation;
     ULONG SessionTopLevelEntries;
     ULONG SessionLevelDepth;
+    ULONG64 SystemPteBytes;
 } MI_ARCH_DESCRIPTOR, *PMI_ARCH_DESCRIPTOR;
 
 typedef struct _MI_PHYSICAL_RANGE

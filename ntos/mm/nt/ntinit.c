@@ -494,6 +494,9 @@ MiInitializePhase0(
         PagedBytes = MiClampBytes(PhysicalBytes / 8, 64 * _1MB, 128 * _1MB);
     }
 
+    if (MiSystem.Arch->SystemPteBytes != 0)
+        SystemPteBytes = MiSystem.Arch->SystemPteBytes;
+
     Status = MiSystemPtesInitialize(&MiSystem, SystemPteBytes >> PAGE_SHIFT, MI_SYSPTE_CPU_CACHES);
     if (!NT_SUCCESS(Status))
         KeBugCheckEx(MEMORY_MANAGEMENT, 0x53505445, (ULONG_PTR)Status, 0, 0);
