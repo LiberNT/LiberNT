@@ -4468,13 +4468,13 @@ FileRecord::UpdateFileNameSizes(
 
 NTSTATUS
 FileRecord::UpdateFileNameEaSize(
-    _In_ USHORT PackedEaSize)
+    _In_ ULONG EaInformation)
 {
     return UpdateFileNameInformation(
         NTFS_FILE_NAME_UPDATE_EA_SIZE,
         0,
         0,
-        PackedEaSize,
+        EaInformation,
         0,
         0);
 }
@@ -4484,7 +4484,7 @@ FileRecord::UpdateFileNameInformation(
     _In_ UINT32 Fields,
     _In_ ULONGLONG AllocatedSize,
     _In_ ULONGLONG DataSize,
-    _In_ USHORT PackedEaSize,
+    _In_ ULONG EaInformation,
     _In_ ULONG ReparseTag,
     _In_ ULONG StorageFlags)
 {
@@ -4583,18 +4583,14 @@ FileRecord::UpdateFileNameInformation(
                 {
                     FileName->Flags &=
                         ~FILE_PERM_REPARSE_PT;
-                    FileName->Extended.EAInfo.PackedEASize =
-                        PackedEaSize;
-                    FileName->Extended.EAInfo.Padding = 0;
+                    NtfsSetFileNameEaInformation(FileName, EaInformation);
                 }
             }
             if ((Fields & NTFS_FILE_NAME_UPDATE_EA_SIZE) &&
                 !(FileName->Flags &
                   FILE_PERM_REPARSE_PT))
             {
-                FileName->Extended.EAInfo.PackedEASize =
-                    PackedEaSize;
-                FileName->Extended.EAInfo.Padding = 0;
+                NtfsSetFileNameEaInformation(FileName, EaInformation);
             }
             if (Fields & NTFS_FILE_NAME_UPDATE_ARCHIVE)
                 FileName->Flags |= FILE_PERM_ARCHIVE;

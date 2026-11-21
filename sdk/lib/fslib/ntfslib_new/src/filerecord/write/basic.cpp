@@ -92,6 +92,8 @@ FileRecord::GetBasicInformation(
         Standard->FilePermissions & ~(ULONG)FILE_PERM_NORMAL;
     if ((Information->FileAttributes & FILE_PERM_REPARSE_PT) && IsWofBacked())
         Information->FileAttributes &= ~NTFS_WOF_HIDDEN_ATTRIBUTES;
+    if (!(Information->FileAttributes & FILE_PERM_REPARSE_PT))
+        Information->FileAttributes &= ~(ULONG)FILE_PERM_EA;
     if (Header->Flags & FR_IS_DIRECTORY)
     {
         Information->FileAttributes |=

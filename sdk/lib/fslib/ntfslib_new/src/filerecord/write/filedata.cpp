@@ -695,15 +695,15 @@ Done:
 static NTSTATUS
 GetPackedEaSizeForMaterialization(
     _In_ PFileRecord File,
-    _Out_ PUSHORT PackedEaSize)
+    _Out_ PULONG EaInformation)
 {
     EAInformationEx Information;
     ULONG Length = 0;
     NTSTATUS Status;
 
-    if (!File || !PackedEaSize)
+    if (!File || !EaInformation)
         return STATUS_INVALID_PARAMETER;
-    *PackedEaSize = 0;
+    *EaInformation = 0;
 
     Status = File->ReadExtendedAttributes(
         NULL,
@@ -714,7 +714,7 @@ GetPackedEaSizeForMaterialization(
     if (Status != STATUS_BUFFER_TOO_SMALL)
         return Status;
 
-    *PackedEaSize = Information.PackedEASize;
+    *EaInformation = NtfsMakeFileNameEaInformation(Information.PackedEASize, Information.UnpackedEASize);
     return STATUS_SUCCESS;
 }
 
@@ -1877,7 +1877,7 @@ FileRecord::MaterializeWofCompressedData(
     ULONG Remaining;
     ULONG Chunk;
     ULONG FileNameFields;
-    USHORT PackedEaSize;
+    ULONG EaInformation;
     UCHAR ProbeByte = 0;
     BOOLEAN Handled = FALSE;
     BOOLEAN Committed = FALSE;
@@ -1956,7 +1956,7 @@ FileRecord::MaterializeWofCompressedData(
 
     Status = GetPackedEaSizeForMaterialization(
         this,
-        &PackedEaSize);
+        &EaInformation);
     if (!NT_SUCCESS(Status))
         return Status;
 
@@ -2251,7 +2251,7 @@ FileRecord::MaterializeWofCompressedData(
         FileNameFields,
         AllocatedSize,
         LogicalSize,
-        PackedEaSize,
+        EaInformation,
         0,
         0);
     if (!NT_SUCCESS(Status))

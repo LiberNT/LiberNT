@@ -524,6 +524,24 @@ EaExtensionRecordIsEmpty(
 }
 
 NTSTATUS
+FileRecord::SetStandardEaFlag(_In_ BOOLEAN HasExtendedAttributes)
+{
+    PAttribute StandardAttribute;
+    PStandardInformationEx Standard;
+    NTSTATUS Status;
+
+    Status = GetStandardInformationForUpdate(&StandardAttribute, &Standard);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    UNREFERENCED_PARAMETER(StandardAttribute);
+    if (HasExtendedAttributes)
+        Standard->FilePermissions |= FILE_PERM_EA;
+    else
+        Standard->FilePermissions &= ~(UINT32)FILE_PERM_EA;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
 FileRecord::ReplaceListedExtendedAttributes(
     _In_opt_ PAttribute InformationAttribute,
     _In_opt_ PAttribute EaAttribute,
@@ -1054,11 +1072,14 @@ FileRecord::ReplaceListedExtendedAttributes(
         }
     }
 
+    Status = SetStandardEaFlag(FinalInformation->PackedEASize != 0);
+    if (!NT_SUCCESS(Status))
+        goto RestoreBase;
     Status = SynchronizeFileNameInformation(
         NTFS_FILE_NAME_UPDATE_EA_SIZE,
         0,
         0,
-        FinalInformation->PackedEASize,
+        NtfsMakeFileNameEaInformation(FinalInformation->PackedEASize, FinalInformation->UnpackedEASize),
         0,
         0);
     if (!NT_SUCCESS(Status))
@@ -1579,11 +1600,14 @@ FileRecord::UpdateExtendedAttributes(
         }
     }
 
+    Status = SetStandardEaFlag(FinalInformation.PackedEASize != 0);
+    if (!NT_SUCCESS(Status))
+        goto Restore;
     Status = SynchronizeFileNameInformation(
         NTFS_FILE_NAME_UPDATE_EA_SIZE,
         0,
         0,
-        FinalInformation.PackedEASize,
+        NtfsMakeFileNameEaInformation(FinalInformation.PackedEASize, FinalInformation.UnpackedEASize),
         0,
         0);
     if (!NT_SUCCESS(Status))
