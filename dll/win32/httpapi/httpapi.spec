@@ -1,53 +1,37 @@
 @ stub HttpAddFragmentToCache
-@ stdcall -stub HttpAddUrl(ptr wstr ptr)
-@ stdcall -stub HttpAddUrlToUrlGroup(int64 wstr int64 long)
-@ stdcall -stub HttpCloseRequestQueue(ptr)
-@ stdcall -stub HttpCloseServerSession(int64)
-@ stdcall -stub HttpCloseUrlGroup(int64)
-@ stub HttpCreateAppPool
-@ stub HttpCreateConfigGroup
-@ stub HttpCreateFilter
-@ stdcall -stub HttpCreateHttpHandle(ptr long)
-@ stdcall -stub HttpCreateRequestQueue(long wstr ptr long ptr)
-@ stdcall -stub HttpCreateServerSession(long ptr long)
-@ stdcall -stub HttpCreateUrlGroup(int64 ptr long)
-@ stub HttpDeleteConfigGroup
-@ stdcall -stub HttpDeleteServiceConfiguration(ptr long ptr long ptr)
-@ stub HttpFilterAccept
-@ stub HttpFilterAppRead
-@ stub HttpFilterAppWrite
-@ stub HttpFilterAppWriteAndRawRead
-@ stub HttpFilterClose
-@ stub HttpFilterRawRead
-@ stub HttpFilterRawWrite
-@ stub HttpFilterRawWriteAndAppRead
+@ stdcall HttpAddUrl(ptr wstr ptr)
+@ stdcall HttpAddUrlToUrlGroup(int64 wstr int64 long)
+@ stdcall HttpCancelHttpRequest(ptr int64 ptr)
+@ stdcall HttpCloseRequestQueue(ptr)
+@ stdcall HttpCloseServerSession(int64)
+@ stdcall HttpCloseUrlGroup(int64)
+@ stub HttpControlService
+@ stdcall HttpCreateHttpHandle(ptr long)
+@ stdcall HttpCreateRequestQueue(long wstr ptr long ptr)
+@ stdcall HttpCreateServerSession(long ptr long)
+@ stdcall HttpCreateUrlGroup(int64 ptr long)
+@ stdcall HttpDeleteServiceConfiguration(ptr long ptr long ptr)
 @ stub HttpFlushResponseCache
 @ stub HttpGetCounters
-@ stdcall -stub HttpInitialize(long long ptr)
-@ stub HttpOpenAppPool
-@ stub HttpOpenControlChannel
-@ stub HttpOpenFilter
-@ stub HttpQueryAppPoolInformation
-@ stub HttpQueryConfigGroupInformation
-@ stub HttpQueryControlChannelInformation
-@ stdcall -stub HttpQueryServiceConfiguration(ptr long ptr long ptr long ptr ptr)
+@ stdcall HttpInitialize(long long ptr)
+@ stdcall HttpQueryRequestQueueProperty(ptr long ptr long long ptr ptr)
+@ stdcall HttpQueryServerSessionProperty(int64 long ptr long ptr)
+@ stdcall HttpQueryServiceConfiguration(ptr long ptr long ptr long ptr ptr)
+@ stdcall HttpQueryUrlGroupProperty(int64 long ptr long ptr)
 @ stub HttpReadFragmentFromCache
 @ stub HttpReceiveClientCertificate
-@ stdcall -stub HttpReceiveHttpRequest(ptr int64 long ptr long ptr ptr)
-@ stdcall -stub HttpReceiveRequestEntityBody(ptr int64 long ptr long ptr ptr)
-@ stub HttpRemoveAllUrlsFromConfigGroup
-@ stdcall -stub HttpRemoveUrl(ptr wstr)
-@ stdcall -stub HttpRemoveUrlFromUrlGroup(int64 wstr long)
-@ stdcall -stub HttpSendHttpResponse(ptr int64 long ptr ptr ptr ptr long ptr ptr)
-@ stub HttpSendResponseEntityBody
-@ stub HttpSetAppPoolInformation
-@ stub HttpSetConfigGroupInformation
-@ stub HttpSetControlChannelInformation
-@ stdcall -stub HttpSetServiceConfiguration(ptr long ptr long ptr)
-@ stdcall -stub HttpSetUrlGroupProperty(int64 long ptr long)
-@ stub HttpShutdownAppPool
-@ stub HttpShutdownFilter
-@ stdcall -stub HttpShutdownRequestQueue(ptr)
-@ stdcall -stub HttpTerminate(long ptr)
+@ stdcall HttpReceiveHttpRequest(ptr int64 long ptr long ptr ptr)
+@ stdcall HttpReceiveRequestEntityBody(ptr int64 long ptr long ptr ptr)
+@ stdcall HttpRemoveUrl(ptr wstr)
+@ stdcall HttpRemoveUrlFromUrlGroup(int64 wstr long)
+@ stdcall HttpSendHttpResponse(ptr int64 long ptr ptr ptr ptr long ptr ptr)
+@ stdcall HttpSendResponseEntityBody(ptr int64 long long ptr ptr ptr long ptr ptr)
+@ stdcall HttpSetRequestQueueProperty(ptr long ptr long long ptr)
+@ stdcall HttpSetServerSessionProperty(int64 long ptr long)
+@ stdcall HttpSetServiceConfiguration(ptr long ptr long ptr)
+@ stdcall HttpSetUrlGroupProperty(int64 long ptr long)
+@ stdcall HttpShutdownRequestQueue(ptr)
+@ stdcall HttpTerminate(long ptr)
 @ stub HttpWaitForDemandStart
-@ stub HttpWaitForDisconnect
+@ stdcall HttpWaitForDisconnect(ptr int64 ptr)
+@ stdcall HttpWaitForDisconnectEx(ptr int64 long ptr)
