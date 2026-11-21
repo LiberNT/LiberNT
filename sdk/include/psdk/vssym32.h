@@ -661,4 +661,11 @@ enum MENUBANDSTATES {
     MDS_HOTCHECKED = 6,
 };
 
+#ifndef TMT_FLOAT
+#define TMT_FLOAT 216
+#endif
+#ifndef TMT_FLOATLIST
+#define TMT_FLOATLIST 217
+#endif
+
 #endif /* __VSSYM32_H__ */

@@ -716,18 +716,18 @@ IntGetClassLongA(PWND Wnd, PCLS Class, int nIndex, UINT Size)
                 Ret = (ULONG_PTR)Class->cbclsExtra;
                 break;
 
-            case GCL_HBRBACKGROUND:
+            case GCLP_HBRBACKGROUND:
                 Ret = (ULONG_PTR)Class->hbrBackground;
                 if (Ret != 0 && Ret < 0x4000)
                     Ret = (ULONG_PTR)GetSysColorBrush((ULONG)Ret - 1);
                 break;
 
-            case GCL_HMODULE:
+            case GCLP_HMODULE:
                 //ERR("Cls 0x%x GCL_HMODULE 0x%x\n", Wnd->pcls, Class->hModule);
                 Ret = (ULONG_PTR)Class->hModule;
                 break;
 
-            case GCL_MENUNAME:
+            case GCLP_MENUNAME:
                 Ret = (ULONG_PTR)Class->lpszClientAnsiMenuName;
                 if (Ret && Class->MenuNameIsString)
                     Ret = (ULONG_PTR)SharedPtrToUser((PVOID)Ret);
@@ -801,7 +801,7 @@ IntGetClassLongW(PWND Wnd, PCLS Class, int nIndex, UINT Size)
                     Ret = (ULONG_PTR)GetSysColorBrush((ULONG)Ret - 1);
                 break;
 
-            case GCL_HMODULE:
+            case GCLP_HMODULE:
                 Ret = (ULONG_PTR)Class->hModule;
                 break;
 
@@ -1588,7 +1588,7 @@ SetClassLongA(HWND hWnd,
 
     /* FIXME - portability!!!! */
 
-    if (nIndex == GCL_MENUNAME && lpStr != NULL)
+    if (nIndex == GCLP_MENUNAME && lpStr != NULL)
     {
         if (!IS_INTRESOURCE(lpStr))
         {
@@ -1657,7 +1657,7 @@ SetClassLongW(HWND hWnd,
 
     /* FIXME - portability!!!! */
 
-    if (nIndex == GCL_MENUNAME && lpStr != NULL)
+    if (nIndex == GCLP_MENUNAME && lpStr != NULL)
     {
         if (!IS_INTRESOURCE(lpStr))
             RtlInitUnicodeString(&Value, lpStr);

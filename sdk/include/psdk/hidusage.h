@@ -190,7 +190,7 @@ typedef USHORT USAGE, *PUSAGE;
 #define HID_USAGE_LED_RED                       ((USAGE) 0x48)
 #define HID_USAGE_LED_GREEN                     ((USAGE) 0x49)
 #define HID_USAGE_LED_AMBER                     ((USAGE) 0x4A)
-#define HID_USAGE_LED_GENERIC_INDICATOR         ((USAGE) 0x3B)
+#define HID_USAGE_LED_GENERIC_INDICATOR         ((USAGE) 0x4B)
 
 #define HID_USAGE_PAGE_UNDEFINED          ((USAGE) 0x00)
 #define HID_USAGE_PAGE_GENERIC            ((USAGE) 0x01)
@@ -251,11 +251,10 @@ typedef USHORT USAGE, *PUSAGE;
 #define HID_USAGE_HAPTICS_WAVEFORM_VENDOR_ID        ((USAGE) 0x27)
 #define HID_USAGE_HAPTICS_WAVEFORM_CUTOFF_TIME      ((USAGE) 0x28)
 #define HID_USAGE_HAPTICS_WAVEFORM_BEGIN            ((USAGE) 0x1000)
-/* Differs from https://usb.org/sites/default/files/hut1_22.pdf */
 /* Waveform None */
-#define HID_USAGE_HAPTICS_WAVEFORM_STOP             ((USAGE) 0x1001)
+#define HID_USAGE_HAPTICS_WAVEFORM_NONE             ((USAGE) 0x1001)
 /* Waveform Stop */
-#define HID_USAGE_HAPTICS_WAVEFORM_NULL             ((USAGE) 0x1002)
+#define HID_USAGE_HAPTICS_WAVEFORM_STOP             ((USAGE) 0x1002)
 #define HID_USAGE_HAPTICS_WAVEFORM_CLICK            ((USAGE) 0x1003)
 #define HID_USAGE_HAPTICS_WAVEFORM_BUZZ             ((USAGE) 0x1004)
 #define HID_USAGE_HAPTICS_WAVEFORM_RUMBLE           ((USAGE) 0x1005)
@@ -271,5 +270,8 @@ typedef USHORT USAGE, *PUSAGE;
 #ifdef __cplusplus
 }
 #endif
+
+typedef LONG USAGE_VALUE;
+typedef LONG * PUSAGE_VALUE;
 
 #endif /* __HIDUSAGE_H */

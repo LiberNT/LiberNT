@@ -312,17 +312,17 @@ typedef struct joyreghwconfig_tag {
 
 /* joystick calibration info structure */
 typedef struct joycalibrate_tag {
-    UINT    wXbase;
-    UINT    wXdelta;
-    UINT    wYbase;
-    UINT    wYdelta;
-    UINT    wZbase;
-    UINT    wZdelta;
+    WORD    wXbase;
+    WORD    wXdelta;
+    WORD    wYbase;
+    WORD    wYdelta;
+    WORD    wZbase;
+    WORD    wZdelta;
 } JOYCALIBRATE;
 typedef JOYCALIBRATE *LPJOYCALIBRATE;
 
 /* prototype for joystick message function */
-typedef UINT (CALLBACK * JOYDEVMSGPROC)(DWORD dwID, UINT uMessage, LPARAM lParam1, LPARAM lParam2);
+typedef DWORD (JOYDEVMSGPROC)(DWORD dwID, UINT uMessage, LONG lParam1, LONG lParam2);
 typedef JOYDEVMSGPROC *LPJOYDEVMSGPROC;
 
 /* messages sent to joystick driver's DriverProc() function */
@@ -373,7 +373,7 @@ typedef JOYDEVMSGPROC *LPJOYDEVMSGPROC;
 #define MCI_INTEGER_RETURNED        0x00080000  /* integer conversion needed */
 #define MCI_RESOURCE_DRIVER         0x00100000  /* driver owns returned resource */
 
-#define MCI_NO_COMMAND_TABLE    0xFFFF
+#define MCI_NO_COMMAND_TABLE    ((UINT)(-1))
 
 #define MCI_COMMAND_HEAD        0
 #define MCI_STRING              1
@@ -413,7 +413,7 @@ typedef struct {
 
 typedef struct {
         DWORD  			dwStreamID;
-        WORD   			wDeviceID;
+        UINT   			uDeviceID;
 } MIDIOPENSTRMID;
 
 typedef struct {
@@ -422,7 +422,7 @@ typedef struct {
 	DWORD_PTR		dwInstance;
 	DWORD_PTR		dnDevNode;
         DWORD          		cIds;
-        MIDIOPENSTRMID 		rgIds;
+        MIDIOPENSTRMID 		rgIds[1];
 } MIDIOPENDESC, *LPMIDIOPENDESC;
 
 typedef struct tMIXEROPENDESC
@@ -487,5 +487,47 @@ DWORD   WINAPI mmGetCurrentTask(void);
 #ifdef __cplusplus
 } // extern "C"
 #endif
+
+#ifndef DRVM_INIT_EX
+#define DRVM_INIT_EX 104
+#endif
+#ifndef DRVM_MAPPER_PREFERRED_FLAGS_PREFERREDONLY
+#define DRVM_MAPPER_PREFERRED_FLAGS_PREFERREDONLY 0x00000001
+#endif
+#ifndef MIDI_IO_COOKED
+#define MIDI_IO_COOKED 0x00000002L
+#endif
+#ifndef MIDI_IO_PACKED
+#define MIDI_IO_PACKED 0x00000000L
+#endif
+#ifndef MODM_GETPOS
+#define MODM_GETPOS 17
+#endif
+#ifndef MODM_PAUSE
+#define MODM_PAUSE 18
+#endif
+#ifndef MODM_PREFERRED
+#define MODM_PREFERRED 22
+#endif
+#ifndef MODM_PROPERTIES
+#define MODM_PROPERTIES 21
+#endif
+#ifndef MODM_RESTART
+#define MODM_RESTART 19
+#endif
+#ifndef MODM_STOP
+#define MODM_STOP 20
+#endif
+#ifndef MODM_STRMDATA
+#define MODM_STRMDATA 14
+#endif
+#ifndef MXDM_BASE
+#define MXDM_BASE 1
+#endif
+#ifndef VADMAD_Device_ID
+#define VADMAD_Device_ID 0X0444
+#endif
+
+typedef struct tMIXEROPENDESC * PMIXEROPENDESC;
 
 #endif /* __MMDDK_H */

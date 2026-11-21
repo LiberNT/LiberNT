@@ -218,4 +218,38 @@ MapUserPhysicalPages(
 }
 #endif
 
+#ifndef FILE_MAP_LARGE_PAGES
+#define FILE_MAP_LARGE_PAGES 0x20000000
+#endif
+#ifndef FILE_MAP_RESERVE
+#define FILE_MAP_RESERVE 0x80000000
+#endif
+#ifndef FILE_MAP_TARGETS_INVALID
+#define FILE_MAP_TARGETS_INVALID 0x40000000
+#endif
+#ifndef MEHC_PATROL_SCRUBBER_PRESENT
+#define MEHC_PATROL_SCRUBBER_PRESENT 0x1
+#endif
+
+typedef enum OFFER_PRIORITY {
+    VmOfferPriorityVeryLow = 1,
+    VmOfferPriorityLow = 2,
+    VmOfferPriorityBelowNormal = 3,
+    VmOfferPriorityNormal = 4
+} OFFER_PRIORITY;
+
+typedef enum WIN32_MEMORY_PARTITION_INFORMATION_CLASS {
+    MemoryPartitionInfo = 0,
+    MemoryPartitionDedicatedMemoryInfo = 1
+} WIN32_MEMORY_PARTITION_INFORMATION_CLASS;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+DWORD WINAPI DiscardVirtualMemory(PVOID VirtualAddress, SIZE_T Size);
+HANDLE WINAPI CreateFileMapping2(HANDLE File, SECURITY_ATTRIBUTES * SecurityAttributes, ULONG DesiredAccess, ULONG PageProtection, ULONG AllocationAttributes, ULONG64 MaximumSize, PCWSTR Name, MEM_EXTENDED_PARAMETER * ExtendedParameters, ULONG ParameterCount);
+#ifdef __cplusplus
+}
+#endif
+
 #endif

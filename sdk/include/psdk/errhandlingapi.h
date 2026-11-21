@@ -29,4 +29,12 @@ WINBASEAPI VOID WINAPI RaiseFailFastException(EXCEPTION_RECORD *record, CONTEXT 
 }
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+DWORD WINAPI GetThreadErrorMode(void);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* _ERRHANDLING_H_ */

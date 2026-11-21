@@ -316,7 +316,7 @@ NotifyIME(
     _In_ HIMC hIMC,
     _In_ DWORD dwAction,
     _In_ DWORD dwIndex,
-    _In_ DWORD_PTR dwValue);
+    _In_ DWORD dwValue);
 
 BOOL WINAPI
 ImeSetCompositionString(
@@ -368,5 +368,12 @@ ImeGetImeMenuItems(
 /* dwSystemInfoFlags bits */
 #define IME_SYSINFO_WINLOGON            0x0001
 #define IME_SYSINFO_WOW16               0x0002
+
+#ifndef IME_ESC_STRING_BUFFER_SIZE
+#define IME_ESC_STRING_BUFFER_SIZE 80
+#endif
+#ifndef IME_UI_CLASS_NAME_SIZE
+#define IME_UI_CLASS_NAME_SIZE 16
+#endif
 
 #endif  /* ndef _IMMDEV_ */

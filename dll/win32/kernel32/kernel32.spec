@@ -777,7 +777,7 @@
 @ stdcall GlobalUnfix(long)
 @ stdcall GlobalUnlock(long)
 @ stdcall GlobalWire(long)
-@ stdcall Heap32First(ptr long long)
+@ stdcall Heap32First(ptr long ptr)
 @ stdcall Heap32ListFirst(long ptr)
 @ stdcall Heap32ListNext(long ptr)
 @ stdcall Heap32Next(ptr)

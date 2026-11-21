@@ -67,4 +67,50 @@ extern "C++" template<typename T> void **IID_PPV_ARGS_Helper(T **obj)
 }
 #endif
 
+typedef enum tagCOINITBASE {
+    COINITBASE_MULTITHREADED = 0
+} COINITBASE;
+
+typedef enum CWMO_FLAGS {
+    CWMO_DEFAULT = 0,
+    CWMO_DISPATCH_CALLS = 1,
+    CWMO_DISPATCH_WINDOW_MESSAGES = 2
+} CWMO_FLAGS;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+HRESULT WINAPI CoGetDefaultContext(APTTYPE aptType, const IID *const riid, void ** ppv);
+HRESULT WINAPI CoDisconnectContext(DWORD dwTimeout);
+HRESULT WINAPI CoCreateInstanceFromApp(const IID *const Clsid, IUnknown * punkOuter, DWORD dwClsCtx, PVOID reserved, DWORD dwCount, MULTI_QI * pResults);
+HRESULT WINAPI CoGetCancelObject(DWORD dwThreadId, const IID *const iid, void ** ppUnk);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* _COMBASEAPI_H_ */
+
+#ifndef COM_RIGHTS_ACTIVATE_LOCAL
+#define COM_RIGHTS_ACTIVATE_LOCAL 8
+#endif
+#ifndef COM_RIGHTS_ACTIVATE_REMOTE
+#define COM_RIGHTS_ACTIVATE_REMOTE 16
+#endif
+#ifndef COM_RIGHTS_EXECUTE
+#define COM_RIGHTS_EXECUTE 1
+#endif
+#ifndef COM_RIGHTS_EXECUTE_LOCAL
+#define COM_RIGHTS_EXECUTE_LOCAL 2
+#endif
+#ifndef COM_RIGHTS_EXECUTE_REMOTE
+#define COM_RIGHTS_EXECUTE_REMOTE 4
+#endif
+#ifndef COM_RIGHTS_RESERVED1
+#define COM_RIGHTS_RESERVED1 32
+#endif
+#ifndef COM_RIGHTS_RESERVED2
+#define COM_RIGHTS_RESERVED2 64
+#endif
+#ifndef CWMO_MAX_HANDLES
+#define CWMO_MAX_HANDLES 56
+#endif

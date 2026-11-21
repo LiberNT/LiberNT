@@ -437,4 +437,14 @@ typedef struct _HDAUDIO_BUS_INTERFACE_V3 {
 #pragma warning(default:4214)
 #endif
 
+typedef enum _HDAUDIO_CODEC_POWER_STATE {
+    PowerCodecUnspecified = 0,
+    PowerCodecD0 = 1,
+    PowerCodecD1 = 2,
+    PowerCodecD2 = 3,
+    PowerCodecD3 = 4,
+    PowerCodecD3Cold = 5,
+    PowerCodecMaximum = 6
+} HDAUDIO_CODEC_POWER_STATE, *PHDAUDIO_CODEC_POWER_STATE;
+
 #endif /* _HDAUDIO_H_ */

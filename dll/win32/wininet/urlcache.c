@@ -3972,9 +3972,9 @@ BOOL WINAPI DeleteUrlCacheGroup(GROUPID GroupId, DWORD dwFlags, LPVOID lpReserve
  *           DeleteWpadCacheForNetworks (WININET.@)
  *    Undocumented, added in IE8
  */
-BOOL WINAPI DeleteWpadCacheForNetworks(DWORD unk1)
+BOOL WINAPI DeleteWpadCacheForNetworks(WPAD_CACHE_DELETE unk1)
 {
-    FIXME("(%ld) stub\n", unk1);
+    FIXME("(%d) stub\n", unk1);
     return FALSE;
 }
 

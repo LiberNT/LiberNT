@@ -27,7 +27,7 @@ extern "C" {
 #endif
 
 #ifndef _RICHEDIT_VER
-#define _RICHEDIT_VER   0x0300
+#define _RICHEDIT_VER   0x0810
 #endif /* _RICHEDIT_VER */
 
 #define cchTextLimitDefault 0x7fff
@@ -206,6 +206,9 @@ static const WCHAR RICHEDIT_CLASS20W[] = { 'R','i','c','h','E','d','i','t','2','
 #define EN_LOWFIRTF                     0x070f
 #define EN_ALIGNLTR			0x0710
 #define EN_ALIGNRTL			0x0711
+#define EN_CLIPFORMAT                   0x0712
+#define EN_STARTCOMPOSITION             0x0713
+#define EN_ENDCOMPOSITION               0x0714
 
 
 typedef DWORD (CALLBACK * EDITSTREAMCALLBACK)( DWORD_PTR, LPBYTE, LONG, LONG * );
@@ -228,7 +231,7 @@ typedef DWORD (CALLBACK * EDITSTREAMCALLBACK)( DWORD_PTR, LPBYTE, LONG, LONG * )
 #define ES_NOIME              0x00080000
 #define ES_VERTICAL           0x00400000
 #define ES_SELECTIONBAR       0x01000000
-#define ES_EX_NOCALLOLEINIT   0x01000000
+#define ES_EX_NOCALLOLEINIT   0x00000000
 
 /* the character formatting options */
 #define SCF_DEFAULT           0x00000000
@@ -353,6 +356,7 @@ DECL_WINELIB_TYPE_AW(CHARFORMAT2)
 #define CFM_SPACING           0x00200000
 #define CFM_WEIGHT            0x00400000
 #define CFM_UNDERLINETYPE     0x00800000
+#define CFM_COOKIE            0x01000000
 #define CFM_LCID              0x02000000
 #define CFM_BACKCOLOR         0x04000000
 #define CFM_CHARSET           0x08000000
@@ -390,6 +394,20 @@ DECL_WINELIB_TYPE_AW(CHARFORMAT2)
                                CFM_OFFSET | \
                                CFM_CHARSET)
 
+#if (_RICHEDIT_VER >= 0x0600)
+#define CFM_ALL2              (CFM_ALL | \
+                               CFM_EFFECTS2 | \
+                               CFM_BACKCOLOR | \
+                               CFM_LCID | \
+                               CFM_UNDERLINETYPE | \
+                               CFM_WEIGHT | \
+                               CFM_REVAUTHOR | \
+                               CFM_SPACING | \
+                               CFM_KERNING | \
+                               CFM_STYLE | \
+                               CFM_ANIMATION | \
+                               CFM_COOKIE)
+#else
 #define CFM_ALL2              (CFM_ALL | \
                                CFM_EFFECTS2 | \
                                CFM_BACKCOLOR | \
@@ -401,6 +419,7 @@ DECL_WINELIB_TYPE_AW(CHARFORMAT2)
                                CFM_KERNING | \
                                CFM_STYLE | \
                                CFM_ANIMATION)
+#endif
 
 /* CHARFORMAT effects */
 #define CFE_BOLD              0x00000001
@@ -923,10 +942,10 @@ void WINAPI HyphenateProc(WCHAR*, LANGID, LONG, HYPHRESULT*);
 #define PFA_CENTER            0x00000003
 #define PFA_JUSTIFY           0x00000004
 #define PFA_FULL_INTERWORD    0x00000004
-#define PFA_FULL_INTERLETTER  0x00000005
-#define PFA_FULL_SCALED       0x00000006
-#define PFA_FULL_GLYPHS       0x00000007
-#define PFA_SNAP_GRID         0x00000008
+#define PFA_FULL_NEWSPAPER    0x00000005
+#define PFA_FULL_INTERLETTER  0x00000006
+#define PFA_FULL_SCALED       0x00000007
+#define PFA_FULL_GLYPHS       0x00000008
 
 /* paragraph effects */
 #define PFE_RTLPARA           0x00000001
@@ -1078,5 +1097,234 @@ typedef struct _settextex {
 #endif
 
 #pragma pack(pop)
+
+#ifndef ATP_CHANGE
+#define ATP_CHANGE 1
+#endif
+#ifndef ATP_NOCHANGE
+#define ATP_NOCHANGE 0
+#endif
+#ifndef ATP_NODELIMITER
+#define ATP_NODELIMITER 2
+#endif
+#ifndef ATP_REPLACEALLTEXT
+#define ATP_REPLACEALLTEXT 4
+#endif
+#ifndef AURL_DISABLEMIXEDLGC
+#define AURL_DISABLEMIXEDLGC 32
+#endif
+#ifndef AURL_ENABLEDRIVELETTERS
+#define AURL_ENABLEDRIVELETTERS 16
+#endif
+#ifndef AURL_ENABLEEA
+#define AURL_ENABLEEA 1
+#endif
+#ifndef AURL_ENABLEEAURLS
+#define AURL_ENABLEEAURLS 8
+#endif
+#ifndef AURL_ENABLEEMAILADDR
+#define AURL_ENABLEEMAILADDR 2
+#endif
+#ifndef AURL_ENABLETELNO
+#define AURL_ENABLETELNO 4
+#endif
+#ifndef AURL_ENABLEURL
+#define AURL_ENABLEURL 1
+#endif
+#ifndef BOE_FORCERECALC
+#define BOE_FORCERECALC 0x0020
+#endif
+#ifndef BOE_UNICODEBIDI
+#define BOE_UNICODEBIDI 0x0080
+#endif
+#ifndef BOM_UNICODEBIDI
+#define BOM_UNICODEBIDI 0x0080
+#endif
+#ifndef CFE_EXTENDED
+#define CFE_EXTENDED 0x02000000
+#endif
+#ifndef CFE_FONTBOUND
+#define CFE_FONTBOUND 0x00100000
+#endif
+#ifndef CFE_LINKPROTECTED
+#define CFE_LINKPROTECTED 0x00800000
+#endif
+#ifndef CFE_MATH
+#define CFE_MATH 0x10000000
+#endif
+#ifndef CFE_MATHNOBUILDUP
+#define CFE_MATHNOBUILDUP 0x08000000
+#endif
+#ifndef CFE_MATHORDINARY
+#define CFE_MATHORDINARY 0x20000000
+#endif
+#ifndef CFM_EXTENDED
+#define CFM_EXTENDED 0x02000000
+#endif
+#ifndef CFM_FONTBOUND
+#define CFM_FONTBOUND 0x00100000
+#endif
+#ifndef CFM_LINKPROTECTED
+#define CFM_LINKPROTECTED 0x00800000
+#endif
+#ifndef CFM_MATH
+#define CFM_MATH 0x10000000
+#endif
+#ifndef CFM_MATHNOBUILDUP
+#define CFM_MATHNOBUILDUP 0x08000000
+#endif
+#ifndef CFM_MATHORDINARY
+#define CFM_MATHORDINARY 0x20000000
+#endif
+#ifndef ECN_ENDCOMPOSITION
+#define ECN_ENDCOMPOSITION 0x0001
+#endif
+#ifndef ECN_NEWTEXT
+#define ECN_NEWTEXT 0x0002
+#endif
+#ifndef ELLIPSIS_END
+#define ELLIPSIS_END 0x00000001
+#endif
+#ifndef ELLIPSIS_MASK
+#define ELLIPSIS_MASK 0x00000003
+#endif
+#ifndef ELLIPSIS_NONE
+#define ELLIPSIS_NONE 0x00000000
+#endif
+#ifndef ELLIPSIS_WORD
+#define ELLIPSIS_WORD 0x00000003
+#endif
+#ifndef ENM_CLIPFORMAT
+#define ENM_CLIPFORMAT 0x00000080
+#endif
+#ifndef ENM_ENDCOMPOSITION
+#define ENM_ENDCOMPOSITION 0x20000000
+#endif
+#ifndef ENM_GROUPTYPINGCHANGE
+#define ENM_GROUPTYPINGCHANGE 0x40000000
+#endif
+#ifndef ENM_HIDELINKTOOLTIP
+#define ENM_HIDELINKTOOLTIP 0x80000000
+#endif
+#ifndef ENM_STARTCOMPOSITION
+#define ENM_STARTCOMPOSITION 0x10000000
+#endif
+#ifndef EPR_SE
+#define EPR_SE 5
+#endif
+#ifndef GCMF_GRIPPER
+#define GCMF_GRIPPER 0x00000001
+#endif
+#ifndef GCMF_MOUSEMENU
+#define GCMF_MOUSEMENU 0x00002000
+#endif
+#ifndef GCMF_SPELLING
+#define GCMF_SPELLING 0x00000002
+#endif
+#ifndef GCMF_TOUCHMENU
+#define GCMF_TOUCHMENU 0x00004000
+#endif
+#ifndef GCM_MOUSEMENU
+#define GCM_MOUSEMENU 0x2000
+#endif
+#ifndef GCM_TOUCHMENU
+#define GCM_TOUCHMENU 0x4000
+#endif
+#ifndef IMF_IMEUIINTEGRATION
+#define IMF_IMEUIINTEGRATION 0x2000
+#endif
+#ifndef IMF_NOIMPLICITLANG
+#define IMF_NOIMPLICITLANG 0x0040
+#endif
+#ifndef IMF_NOKBDLIDFIXUP
+#define IMF_NOKBDLIDFIXUP 0x0200
+#endif
+#ifndef IMF_NORTFFONTSUBSTITUTE
+#define IMF_NORTFFONTSUBSTITUTE 0x0400
+#endif
+#ifndef IMF_SPELLCHECKING
+#define IMF_SPELLCHECKING 0x0800
+#endif
+#ifndef IMF_TKBPREDICTION
+#define IMF_TKBPREDICTION 0x1000
+#endif
+#ifndef RTO_DISABLEHANDLES
+#define RTO_DISABLEHANDLES 2
+#endif
+#ifndef RTO_READINGMODE
+#define RTO_READINGMODE 3
+#endif
+#ifndef RTO_SHOWHANDLES
+#define RTO_SHOWHANDLES 1
+#endif
+#ifndef SCF_CHARREPFROMLCID
+#define SCF_CHARREPFROMLCID 0x0100
+#endif
+#ifndef SCF_SMARTFONT
+#define SCF_SMARTFONT 0x0080
+#endif
+#ifndef SES_CTFNOLOCK
+#define SES_CTFNOLOCK 0x10000000
+#endif
+#ifndef SES_DEFAULTLATINLIGA
+#define SES_DEFAULTLATINLIGA 16
+#endif
+#ifndef SES_EX_HANDLEFRIENDLYURL
+#define SES_EX_HANDLEFRIENDLYURL 0x00000100
+#endif
+#ifndef SES_EX_HIDETEMPFORMAT
+#define SES_EX_HIDETEMPFORMAT 0x10000000
+#endif
+#ifndef SES_EX_MULTITOUCH
+#define SES_EX_MULTITOUCH 0x08000000
+#endif
+#ifndef SES_EX_NOACETATESELECTION
+#define SES_EX_NOACETATESELECTION 0x00100000
+#endif
+#ifndef SES_EX_NOMATH
+#define SES_EX_NOMATH 0x00000040
+#endif
+#ifndef SES_EX_NOTABLE
+#define SES_EX_NOTABLE 0x00000004
+#endif
+#ifndef SES_EX_NOTHEMING
+#define SES_EX_NOTHEMING 0x00080000
+#endif
+#ifndef SES_EX_USEMOUSEWPARAM
+#define SES_EX_USEMOUSEWPARAM 0x20000000
+#endif
+#ifndef SES_EX_USESINGLELINE
+#define SES_EX_USESINGLELINE 0x00200000
+#endif
+#ifndef SES_HYPERLINKTOOLTIPS
+#define SES_HYPERLINKTOOLTIPS 8
+#endif
+#ifndef SES_LOGICALCARET
+#define SES_LOGICALCARET 0x01000000
+#endif
+#ifndef SES_MAX
+#define SES_MAX 0x20000000
+#endif
+#ifndef SES_MULTISELECT
+#define SES_MULTISELECT 0x08000000
+#endif
+#ifndef SES_NOEALINEHEIGHTADJUST
+#define SES_NOEALINEHEIGHTADJUST 0x20000000
+#endif
+#ifndef SES_NOFOCUSLINKNOTIFY
+#define SES_NOFOCUSLINKNOTIFY 32
+#endif
+#ifndef SES_SMARTDRAGDROP
+#define SES_SMARTDRAGDROP 0x04000000
+#endif
+#ifndef SES_WORDDRAGDROP
+#define SES_WORDDRAGDROP 0x02000000
+#endif
+#ifndef SPF_DONTSETDEFAULT
+#define SPF_DONTSETDEFAULT 0x0002
+#endif
+#ifndef SPF_SETDEFAULT
+#define SPF_SETDEFAULT 0x0004
+#endif
 
 #endif /* __WINE_RICHEDIT_H */

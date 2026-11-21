@@ -1304,3 +1304,7 @@ cpp_quote("#endif")
     void SetMuteDebugOutput(BOOL bMute);
     BOOL GetMuteDebugOutput();
 }
+
+cpp_quote("#ifndef D3D11_SDK_LAYERS_VERSION")
+cpp_quote("#define D3D11_SDK_LAYERS_VERSION 1")
+cpp_quote("#endif")

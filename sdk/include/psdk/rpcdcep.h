@@ -80,7 +80,7 @@ typedef struct _RPC_MESSAGE
 #define RPCFLG_NON_NDR              0x80000000
 
 typedef void  (__RPC_STUB *RPC_DISPATCH_FUNCTION)(PRPC_MESSAGE Message);
-typedef RPC_STATUS (RPC_ENTRY *RPC_FORWARD_FUNCTION)(UUID *InterfaceId, RPC_VERSION *InterfaceVersion, UUID *ObjectId, unsigned char *Rpcpro, void **ppDestEndpoint);
+typedef RPC_STATUS RPC_ENTRY RPC_FORWARD_FUNCTION(UUID *InterfaceId, RPC_VERSION *InterfaceVersion, UUID *ObjectId, unsigned char *Rpcpro, void **ppDestEndpoint);
 
 typedef struct
 {
@@ -150,7 +150,7 @@ RPCRTAPI RPC_STATUS RPC_ENTRY
 RPCRTAPI RPC_STATUS RPC_ENTRY
   I_RpcSend( RPC_MESSAGE* Message );
 RPCRTAPI RPC_STATUS RPC_ENTRY
-  I_RpcReceive( RPC_MESSAGE* Message );
+  I_RpcReceive( RPC_MESSAGE* Message, unsigned int Size );
 
 RPCRTAPI void* RPC_ENTRY
   I_RpcAllocate( unsigned int Size );
@@ -228,6 +228,105 @@ RPCRTAPI RPC_STATUS RPC_ENTRY
 
 RPCRTAPI LONG RPC_ENTRY I_RpcMapWin32Status(RPC_STATUS);
 
+#ifdef __cplusplus
+}
+#endif
+
+#ifndef NDR_CUSTOM_OR_DEFAULT_ALLOCATOR
+#define NDR_CUSTOM_OR_DEFAULT_ALLOCATOR 0x10000000UL
+#endif
+#ifndef NDR_DEFAULT_ALLOCATOR
+#define NDR_DEFAULT_ALLOCATOR 0x20000000UL
+#endif
+#ifndef RPCFLG_ACCESSIBILITY_BIT1
+#define RPCFLG_ACCESSIBILITY_BIT1 0x00100000UL
+#endif
+#ifndef RPCFLG_ACCESSIBILITY_BIT2
+#define RPCFLG_ACCESSIBILITY_BIT2 0x00200000UL
+#endif
+#ifndef RPCFLG_ACCESS_LOCAL
+#define RPCFLG_ACCESS_LOCAL 0x00400000UL
+#endif
+#ifndef RPCFLG_HAS_GUARANTEE
+#define RPCFLG_HAS_GUARANTEE 0x00000010UL
+#endif
+#ifndef RPCFLG_NDR64_CONTAINS_ARM_LAYOUT
+#define RPCFLG_NDR64_CONTAINS_ARM_LAYOUT 0x04000000UL
+#endif
+#ifndef RPCFLG_SENDER_WAITING_FOR_REPLY
+#define RPCFLG_SENDER_WAITING_FOR_REPLY 0x00800000UL
+#endif
+#ifndef RPCFLG_WINRT_REMOTE_ASYNC
+#define RPCFLG_WINRT_REMOTE_ASYNC 0x00000020UL
+#endif
+#ifndef RPC_C_OPT_PRIVATE_DO_NOT_DISTURB
+#define RPC_C_OPT_PRIVATE_DO_NOT_DISTURB 2
+#endif
+#ifndef RPC_C_OPT_PRIVATE_SUPPRESS_WAKE
+#define RPC_C_OPT_PRIVATE_SUPPRESS_WAKE 1
+#endif
+#ifndef RPC_C_OPT_RESOURCE_TYPE_UUID
+#define RPC_C_OPT_RESOURCE_TYPE_UUID 8
+#endif
+#ifndef RPC_C_OPT_SESSION_ID
+#define RPC_C_OPT_SESSION_ID 6
+#endif
+#ifndef RPC_PROXY_CONNECTION_TYPE_IN_PROXY
+#define RPC_PROXY_CONNECTION_TYPE_IN_PROXY 0
+#endif
+#ifndef RPC_PROXY_CONNECTION_TYPE_OUT_PROXY
+#define RPC_PROXY_CONNECTION_TYPE_OUT_PROXY 1
+#endif
+#ifndef RPC_P_ADDR_FORMAT_TCP_IPV4
+#define RPC_P_ADDR_FORMAT_TCP_IPV4 1
+#endif
+#ifndef RPC_P_ADDR_FORMAT_TCP_IPV6
+#define RPC_P_ADDR_FORMAT_TCP_IPV6 2
+#endif
+#ifndef RPC_SYSTEM_HANDLE_FREE_ALL
+#define RPC_SYSTEM_HANDLE_FREE_ALL 3
+#endif
+#ifndef RPC_SYSTEM_HANDLE_FREE_ERROR_ON_CLOSE
+#define RPC_SYSTEM_HANDLE_FREE_ERROR_ON_CLOSE 4
+#endif
+#ifndef RPC_SYSTEM_HANDLE_FREE_RETRIEVED
+#define RPC_SYSTEM_HANDLE_FREE_RETRIEVED 2
+#endif
+#ifndef RPC_SYSTEM_HANDLE_FREE_UNRETRIEVED
+#define RPC_SYSTEM_HANDLE_FREE_UNRETRIEVED 1
+#endif
+
+enum RPC_ADDRESS_CHANGE_TYPE {
+    PROTOCOL_NOT_LOADED = 1,
+    PROTOCOL_LOADED = 2,
+    PROTOCOL_ADDRESS_CHANGE = 3
+};
+
+typedef enum _LRPC_SYSTEM_HANDLE_MARSHAL_DIRECTION {
+    MarshalDirectionMarshal = 0,
+    MarshalDirectionUnmarshal = 1
+} LRPC_SYSTEM_HANDLE_MARSHAL_DIRECTION;
+
+typedef enum RpcProxyPerfCounters {
+    RpcCurrentUniqueUser = 1,
+    RpcBackEndConnectionAttempts = 2,
+    RpcBackEndConnectionFailed = 3,
+    RpcRequestsPerSecond = 4,
+    RpcIncomingConnections = 5,
+    RpcIncomingBandwidth = 6,
+    RpcOutgoingBandwidth = 7,
+    RpcAttemptedLbsDecisions = 8,
+    RpcFailedLbsDecisions = 9,
+    RpcAttemptedLbsMessages = 10,
+    RpcFailedLbsMessages = 11,
+    RpcLastCounter = 12
+} RpcPerfCounters;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+RPC_STATUS WINAPI I_UuidCreate(UUID * Uuid);
+RPC_STATUS WINAPI I_RpcOpenClientProcess(RPC_BINDING_HANDLE Binding, unsigned long DesiredAccess, void ** ClientProcess);
 #ifdef __cplusplus
 }
 #endif

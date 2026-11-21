@@ -1,5 +1,5 @@
 
-add_definitions(-DUSE_WINE_TODOS)
+add_definitions(-DUSE_WINE_TODOS -D_RICHEDIT_VER=0x0300)
 
 list(APPEND SOURCE
     editor.c

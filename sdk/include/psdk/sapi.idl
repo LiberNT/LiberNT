@@ -527,11 +527,11 @@ typedef [restricted, hidden] struct SPPHRASEREPLACEMENT
     ULONG        ulCountOfElements;
 } SPPHRASEREPLACEMENT;
 
-typedef [restricted, hidden] struct SPPHRASE
+typedef [restricted, hidden] struct SPPHRASE_50
 {
     ULONG                   cbSize;
     LANGID                  LangID;
-    WORD                    wReserved;
+    WORD                    wHomophoneGroupId;
     ULONGLONG               ullGrammarID;
     ULONGLONG               ftStartTime;
     ULONGLONG               ullAudioStreamPosition;
@@ -546,6 +546,73 @@ typedef [restricted, hidden] struct SPPHRASE
     GUID                    SREngineID;
     ULONG                   ulSREnginePrivateDataSize;
     const BYTE             *pSREnginePrivateData;
+} SPPHRASE_50;
+cpp_quote("#define SP_SPPHRASESIZE_500 sizeof(SPPHRASE_50)")
+
+typedef [restricted, hidden] struct SPSEMANTICERRORINFO
+{
+    ULONG ulLineNumber;
+    LPWSTR pszScriptLine;
+    LPWSTR pszSource;
+    LPWSTR pszDescription;
+    HRESULT hrResultCode;
+} SPSEMANTICERRORINFO;
+
+typedef enum SPSEMANTICFORMAT
+{
+    SPSMF_SAPI_PROPERTIES = 0,
+    SPSMF_SRGS_SEMANTICINTERPRETATION_MS = 1,
+    SPSMF_SRGS_SAPIPROPERTIES = 2,
+    SPSMF_UPS = 4,
+    SPSMF_SRGS_SEMANTICINTERPRETATION_W3C = 8
+} SPSEMANTICFORMAT;
+
+typedef [restricted, hidden] struct SPPHRASE_53
+{
+    ULONG                   cbSize;
+    LANGID                  LangID;
+    WORD                    wHomophoneGroupId;
+    ULONGLONG               ullGrammarID;
+    ULONGLONG               ftStartTime;
+    ULONGLONG               ullAudioStreamPosition;
+    ULONG                   ulAudioSizeBytes;
+    ULONG                   ulRetainedSizeBytes;
+    ULONG                   ulAudioSizeTime;
+    SPPHRASERULE            Rule;
+    const SPPHRASEPROPERTY *pProperties;
+    const SPPHRASEELEMENT  *pElements;
+    ULONG                   cReplacements;
+    const SPPHRASEREPLACEMENT *pReplacements;
+    GUID                    SREngineID;
+    ULONG                   ulSREnginePrivateDataSize;
+    const BYTE             *pSREnginePrivateData;
+    LPWSTR                  pSML;
+    SPSEMANTICERRORINFO    *pSemanticErrorInfo;
+} SPPHRASE_53;
+cpp_quote("#define SP_SPPHRASESIZE_530 sizeof(SPPHRASE_53)")
+
+typedef [restricted, hidden] struct SPPHRASE
+{
+    ULONG                   cbSize;
+    LANGID                  LangID;
+    WORD                    wHomophoneGroupId;
+    ULONGLONG               ullGrammarID;
+    ULONGLONG               ftStartTime;
+    ULONGLONG               ullAudioStreamPosition;
+    ULONG                   ulAudioSizeBytes;
+    ULONG                   ulRetainedSizeBytes;
+    ULONG                   ulAudioSizeTime;
+    SPPHRASERULE            Rule;
+    const SPPHRASEPROPERTY *pProperties;
+    const SPPHRASEELEMENT  *pElements;
+    ULONG                   cReplacements;
+    const SPPHRASEREPLACEMENT *pReplacements;
+    GUID                    SREngineID;
+    ULONG                   ulSREnginePrivateDataSize;
+    const BYTE             *pSREnginePrivateData;
+    LPWSTR                  pSML;
+    SPSEMANTICERRORINFO    *pSemanticErrorInfo;
+    SPSEMANTICFORMAT        SemanticTagFormat;
 } SPPHRASE;
 
 typedef [restricted, hidden] struct SPSERIALIZEDPHRASE
@@ -1373,3 +1440,34 @@ library SpeechLib
         interface ISpMMSysAudio;
     };
 }
+
+cpp_quote("#ifndef DEFAULT_WEIGHT")
+cpp_quote("#define DEFAULT_WEIGHT 1")
+cpp_quote("#endif")
+cpp_quote("#ifndef SPRP_NORMAL")
+cpp_quote("#define SPRP_NORMAL 0")
+cpp_quote("#endif")
+cpp_quote("#ifndef SP_EMULATE_RESULT")
+cpp_quote("#define SP_EMULATE_RESULT 0x40000000")
+cpp_quote("#endif")
+cpp_quote("#ifndef SP_LOW_CONFIDENCE")
+cpp_quote("#define SP_LOW_CONFIDENCE (-1)")
+cpp_quote("#endif")
+cpp_quote("#ifndef SP_MAX_PRON_LENGTH")
+cpp_quote("#define SP_MAX_PRON_LENGTH 384")
+cpp_quote("#endif")
+cpp_quote("#ifndef SP_MAX_WORD_LENGTH")
+cpp_quote("#define SP_MAX_WORD_LENGTH 128")
+cpp_quote("#endif")
+cpp_quote("#ifndef SP_NORMAL_CONFIDENCE")
+cpp_quote("#define SP_NORMAL_CONFIDENCE 0")
+cpp_quote("#endif")
+cpp_quote("#ifndef SP_STREAMPOS_ASAP")
+cpp_quote("#define SP_STREAMPOS_ASAP 0")
+cpp_quote("#endif")
+cpp_quote("#ifndef SP_STREAMPOS_REALTIME")
+cpp_quote("#define SP_STREAMPOS_REALTIME (-1)")
+cpp_quote("#endif")
+cpp_quote("#ifndef _SAPI_VER")
+cpp_quote("#define _SAPI_VER 0x054")
+cpp_quote("#endif")

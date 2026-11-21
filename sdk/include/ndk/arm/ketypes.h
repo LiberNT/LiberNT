@@ -747,9 +747,6 @@ enum _ARM_CACHE_TYPES
     GlobalIcache = 5
 };
 
-#if (NTDDI_VERSION < NTDDI_LONGHORN)
-#define GENERAL_LOOKASIDE_POOL PP_LOOKASIDE_LIST
-#endif
 
 //
 // Processor Region Control Block
@@ -848,7 +845,6 @@ typedef struct _KPRCB
     UCHAR QuantumEnd;
     UCHAR DpcRoutineActive;
     UCHAR IdleSchedule;
-#if (NTDDI_VERSION >= NTDDI_WIN8)
     union
     {
         volatile LONG DpcRequestSummary;
@@ -872,9 +868,6 @@ typedef struct _KPRCB
             ULONG DpcThreadSpare : 14;
         };
     };
-#else
-    LONG DpcSetEventRequest;
-#endif
     ULONG LastTimerHand;
     ULONG LastTick;
     ULONG ClockInterrupts;
@@ -883,11 +876,7 @@ typedef struct _KPRCB
     ULONG InterruptLastCount;
     ULONG InterruptRate;
     UCHAR _PADDING5_[0x4];
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     KGATE DpcGate;
-#else
-    KEVENT DpcEvent;
-#endif
     ULONG MPAffinity;
     KDPC CallDpc;
     LONG ClockKeepAlive;
@@ -931,9 +920,7 @@ typedef struct _KPRCB
     ULONG64 StartCycles;
     ULONG64 GenerationTarget;
     ULONG64 CycleCounterHigh;
-#if (NTDDI_VERSION >= NTDDI_WIN8)
     KENTROPY_TIMING_STATE EntropyTimingState;
-#endif /* (NTDDI_VERSION >= NTDDI_WIN8) */
     LONG MmSpinLockOrdering;
     ULONG PageColor;
     ULONG NodeColor;
@@ -1021,18 +1008,6 @@ typedef struct _KPRCB
     //REQUEST_MAILBOX RequestMailbox[1];
 
     // FIXME: Oldstyle stuff
-#if (NTDDI_VERSION < NTDDI_WIN8) // FIXME
-    UCHAR CpuType;
-    volatile UCHAR DpcInterruptRequested;
-    volatile UCHAR DpcThreadRequested;
-    volatile UCHAR DpcThreadActive;
-    volatile ULONG TimerHand;
-    volatile ULONG TimerRequest;
-    ULONG DebugDpcTime;
-    LONG Sleeping;
-    KAFFINITY SetMember;
-    CHAR VendorString[13];
-#endif
 
 } KPRCB, *PKPRCB;
 C_ASSERT(FIELD_OFFSET(KPRCB, ProcessorState) == 0x20);

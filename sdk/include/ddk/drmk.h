@@ -108,6 +108,8 @@ DECLARE_INTERFACE_(IDrmAudioStream, IUnknown) {
 
 typedef IDrmAudioStream *PDRMAUDIOSTREAM;
 
+#undef INTERFACE
+
 #define IMP_IDrmAudioStream             \
   STDMETHODIMP_(NTSTATUS) SetContentId( \
     _In_ ULONG ContentId,                 \

@@ -1319,6 +1319,7 @@ static WSK_PROVIDER_CONNECTION_DISPATCH TcpDispatch = {
     .WskReceive = WskReceive,
     .WskDisconnect = WskDisconnect,
     .WskRelease = WskReleaseTcp,
+    /* TODO: WskConnectEx, WskSendEx and WskReceiveEx are not implemented; the entries stay NULL */
 };
 
 static NTSTATUS WSKAPI

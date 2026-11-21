@@ -108,4 +108,8 @@
 #define PDH_SQL_ALTER_DETAIL_FAILED     0xc0000bfd
 #define PDH_QUERY_PERF_DATA_TIMEOUT     0xc0000bfe
 
+#ifndef MSG_Publisher_Name
+#define MSG_Publisher_Name 0x90000001L
+#endif
+
 #endif /* _PDH_MSG_H_ */

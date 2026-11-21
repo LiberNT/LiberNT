@@ -45,7 +45,7 @@ typedef enum tagTomConstants
     tomUsePoints        = 10,
     tomUseTwips         = 11,
 
-    tomBackward    = 0xc0000001,
+    tomBackward    = (LONG)0xc0000001,
     tomForward     = 0x3fffffff,
     tomMove        = 0,
     tomExtend      = 1,
@@ -92,10 +92,9 @@ typedef enum tagTomConstants
     tomAlignDecimal     = 3,
     tomAlignBar         = 4,
     tomAlignInterWord   = 3,
-    tomAlignInterLetter = 4,
-    tomAlignScaled      = 5,
-    tomAlignGlyphs      = 6,
-    tomAlignSnapGrid    = 7,
+    tomAlignNewspaper   = 4,
+    tomAlignInterLetter = 5,
+    tomAlignScaled      = 6,
     tomSpaces     = 0,
     tomDots       = 1,
     tomDashes     = 2,
@@ -179,28 +178,28 @@ typedef enum tagTomConstants
     tomText             = 0x2,
     tomHTML             = 0x3,
     tomWordDocument     = 0x4,
-    tomBold      = 0x80000001,
-    tomItalic    = 0x80000002,
-    tomUnderline = 0x80000004,
-    tomStrikeout = 0x80000008,
-    tomProtected = 0x80000010,
-    tomLink      = 0x80000020,
-    tomSmallCaps = 0x80000040,
-    tomAllCaps   = 0x80000080,
-    tomHidden    = 0x80000100,
-    tomOutline   = 0x80000200,
-    tomShadow    = 0x80000400,
-    tomEmboss    = 0x80000800,
-    tomImprint   = 0x80001000,
-    tomDisabled  = 0x80002000,
-    tomRevised   = 0x80004000,
+    tomBold      = (LONG)0x80000001,
+    tomItalic    = (LONG)0x80000002,
+    tomUnderline = (LONG)0x80000004,
+    tomStrikeout = (LONG)0x80000008,
+    tomProtected = (LONG)0x80000010,
+    tomLink      = (LONG)0x80000020,
+    tomSmallCaps = (LONG)0x80000040,
+    tomAllCaps   = (LONG)0x80000080,
+    tomHidden    = (LONG)0x80000100,
+    tomOutline   = (LONG)0x80000200,
+    tomShadow    = (LONG)0x80000400,
+    tomEmboss    = (LONG)0x80000800,
+    tomImprint   = (LONG)0x80001000,
+    tomDisabled  = (LONG)0x80002000,
+    tomRevised   = (LONG)0x80004000,
     tomNormalCaret      = 0,
     tomKoreanBlockCaret = 0x1,
     tomIncludeInset = 0x1,
     tomIgnoreCurrentFont  = 0,
     tomMatchFontCharset   = 0x1,
     tomMatchFontSignature = 0x2,
-    tomCharset = 0x80000000,
+    tomCharset = (LONG)0x80000000,
     tomRE10Mode = 0x1,
     tomNoIME   = 0x80000,
     tomSelfIME = 0x40000
@@ -237,6 +236,9 @@ interface ITextDocument : IDispatch
     HRESULT RangeFromPoint([in]LONG x, [in]LONG y, [retval, out]ITextRange **ppRange);
 }
 
+interface ITextFont;
+interface ITextPara;
+
 [
   object,
   uuid(01c25500-4268-11d1-883a-3c8b00c10000)
@@ -255,7 +257,7 @@ interface ITextDocument2Old : ITextDocument
     HRESULT GetNotificationMode([retval, out]LONG *mode);
     HRESULT SetNotificationMode([in]LONG mode);
     HRESULT GetClientRect([in]LONG type, [out]LONG *left, [out]LONG *top, [out]LONG *right, [out]LONG *bottom);
-    HRESULT GetSelectionEx([retval, out]ITextSelection **selection);
+    HRESULT GetSelection2([retval, out]ITextSelection **selection);
     HRESULT GetWindow([out]LONG *hwnd);
     HRESULT GetFEFlags([out]LONG *flags);
     HRESULT UpdateWindow();
@@ -264,6 +266,10 @@ interface ITextDocument2Old : ITextDocument
     HRESULT SysBeep();
     HRESULT Update([in]LONG mode);
     HRESULT Notify([in]LONG notify);
+    HRESULT GetDocumentFont([retval, out]ITextFont **font);
+    HRESULT GetDocumentPara([retval, out]ITextPara **para);
+    HRESULT GetCallManager([retval, out]IUnknown **manager);
+    HRESULT ReleaseCallManager([in]IUnknown *manager);
 }
 
 interface ITextDisplays;

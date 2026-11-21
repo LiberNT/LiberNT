@@ -1137,4 +1137,362 @@ INT  __cdecl OleUIPromptUserW(INT,HWND, ...);
 #endif
 
 
+#ifndef IDC_BZ_ICON
+#define IDC_BZ_ICON 601
+#endif
+#ifndef IDC_BZ_MESSAGE1
+#define IDC_BZ_MESSAGE1 602
+#endif
+#ifndef IDC_BZ_RETRY
+#define IDC_BZ_RETRY 600
+#endif
+#ifndef IDC_BZ_SWITCHTO
+#define IDC_BZ_SWITCHTO 604
+#endif
+#ifndef IDC_CI_BROWSE
+#define IDC_CI_BROWSE 130
+#endif
+#ifndef IDC_CI_CURRENT
+#define IDC_CI_CURRENT 121
+#endif
+#ifndef IDC_CI_CURRENTICON
+#define IDC_CI_CURRENTICON 122
+#endif
+#ifndef IDC_CI_DEFAULT
+#define IDC_CI_DEFAULT 123
+#endif
+#ifndef IDC_CI_DEFAULTICON
+#define IDC_CI_DEFAULTICON 124
+#endif
+#ifndef IDC_CI_FROMFILE
+#define IDC_CI_FROMFILE 125
+#endif
+#ifndef IDC_CI_FROMFILEEDIT
+#define IDC_CI_FROMFILEEDIT 126
+#endif
+#ifndef IDC_CI_GROUP
+#define IDC_CI_GROUP 120
+#endif
+#ifndef IDC_CI_ICONDISPLAY
+#define IDC_CI_ICONDISPLAY 131
+#endif
+#ifndef IDC_CI_ICONLIST
+#define IDC_CI_ICONLIST 127
+#endif
+#ifndef IDC_CI_LABEL
+#define IDC_CI_LABEL 128
+#endif
+#ifndef IDC_CI_LABELEDIT
+#define IDC_CI_LABELEDIT 129
+#endif
+#ifndef IDC_CV_ACTIVATEAS
+#define IDC_CV_ACTIVATEAS 156
+#endif
+#ifndef IDC_CV_ACTIVATELIST
+#define IDC_CV_ACTIVATELIST 154
+#endif
+#ifndef IDC_CV_CHANGEICON
+#define IDC_CV_CHANGEICON 153
+#endif
+#ifndef IDC_CV_CONVERTLIST
+#define IDC_CV_CONVERTLIST 158
+#endif
+#ifndef IDC_CV_CONVERTTO
+#define IDC_CV_CONVERTTO 155
+#endif
+#ifndef IDC_CV_DISPLAYASICON
+#define IDC_CV_DISPLAYASICON 152
+#endif
+#ifndef IDC_CV_ICONDISPLAY
+#define IDC_CV_ICONDISPLAY 165
+#endif
+#ifndef IDC_CV_OBJECTTYPE
+#define IDC_CV_OBJECTTYPE 150
+#endif
+#ifndef IDC_CV_RESULTTEXT
+#define IDC_CV_RESULTTEXT 157
+#endif
+#ifndef IDC_EL_AUTOMATIC
+#define IDC_EL_AUTOMATIC 202
+#endif
+#ifndef IDC_EL_CANCELLINK
+#define IDC_EL_CANCELLINK 209
+#endif
+#ifndef IDC_EL_CHANGESOURCE
+#define IDC_EL_CHANGESOURCE 201
+#endif
+#ifndef IDC_EL_COL1
+#define IDC_EL_COL1 220
+#endif
+#ifndef IDC_EL_COL2
+#define IDC_EL_COL2 221
+#endif
+#ifndef IDC_EL_COL3
+#define IDC_EL_COL3 222
+#endif
+#ifndef IDC_EL_LINKSLISTBOX
+#define IDC_EL_LINKSLISTBOX 206
+#endif
+#ifndef IDC_EL_LINKSOURCE
+#define IDC_EL_LINKSOURCE 216
+#endif
+#ifndef IDC_EL_LINKTYPE
+#define IDC_EL_LINKTYPE 217
+#endif
+#ifndef IDC_EL_MANUAL
+#define IDC_EL_MANUAL 212
+#endif
+#ifndef IDC_EL_OPENSOURCE
+#define IDC_EL_OPENSOURCE 211
+#endif
+#ifndef IDC_EL_UPDATENOW
+#define IDC_EL_UPDATENOW 210
+#endif
+#ifndef IDC_GP_CONVERT
+#define IDC_GP_CONVERT 1013
+#endif
+#ifndef IDC_GP_OBJECTICON
+#define IDC_GP_OBJECTICON 1014
+#endif
+#ifndef IDC_GP_OBJECTLOCATION
+#define IDC_GP_OBJECTLOCATION 1022
+#endif
+#ifndef IDC_GP_OBJECTNAME
+#define IDC_GP_OBJECTNAME 1009
+#endif
+#ifndef IDC_GP_OBJECTSIZE
+#define IDC_GP_OBJECTSIZE 1011
+#endif
+#ifndef IDC_GP_OBJECTTYPE
+#define IDC_GP_OBJECTTYPE 1010
+#endif
+#ifndef IDC_IO_ADDCONTROL
+#define IDC_IO_ADDCONTROL 2115
+#endif
+#ifndef IDC_IO_CHANGEICON
+#define IDC_IO_CHANGEICON 2105
+#endif
+#ifndef IDC_IO_CONTROLTYPELIST
+#define IDC_IO_CONTROLTYPELIST 2116
+#endif
+#ifndef IDC_IO_CREATEFROMFILE
+#define IDC_IO_CREATEFROMFILE 2101
+#endif
+#ifndef IDC_IO_CREATENEW
+#define IDC_IO_CREATENEW 2100
+#endif
+#ifndef IDC_IO_DISPLAYASICON
+#define IDC_IO_DISPLAYASICON 2104
+#endif
+#ifndef IDC_IO_FILE
+#define IDC_IO_FILE 2106
+#endif
+#ifndef IDC_IO_FILEDISPLAY
+#define IDC_IO_FILEDISPLAY 2107
+#endif
+#ifndef IDC_IO_FILETEXT
+#define IDC_IO_FILETEXT 2112
+#endif
+#ifndef IDC_IO_FILETYPE
+#define IDC_IO_FILETYPE 2113
+#endif
+#ifndef IDC_IO_ICONDISPLAY
+#define IDC_IO_ICONDISPLAY 2110
+#endif
+#ifndef IDC_IO_INSERTCONTROL
+#define IDC_IO_INSERTCONTROL 2114
+#endif
+#ifndef IDC_IO_LINKFILE
+#define IDC_IO_LINKFILE 2102
+#endif
+#ifndef IDC_IO_OBJECTTYPELIST
+#define IDC_IO_OBJECTTYPELIST 2103
+#endif
+#ifndef IDC_IO_OBJECTTYPETEXT
+#define IDC_IO_OBJECTTYPETEXT 2111
+#endif
+#ifndef IDC_IO_RESULTIMAGE
+#define IDC_IO_RESULTIMAGE 2108
+#endif
+#ifndef IDC_IO_RESULTTEXT
+#define IDC_IO_RESULTTEXT 2109
+#endif
+#ifndef IDC_LP_AUTOMATIC
+#define IDC_LP_AUTOMATIC 1016
+#endif
+#ifndef IDC_LP_BREAKLINK
+#define IDC_LP_BREAKLINK 1008
+#endif
+#ifndef IDC_LP_CHANGESOURCE
+#define IDC_LP_CHANGESOURCE 1015
+#endif
+#ifndef IDC_LP_DATE
+#define IDC_LP_DATE 1018
+#endif
+#ifndef IDC_LP_LINKSOURCE
+#define IDC_LP_LINKSOURCE 1012
+#endif
+#ifndef IDC_LP_MANUAL
+#define IDC_LP_MANUAL 1017
+#endif
+#ifndef IDC_LP_OPENSOURCE
+#define IDC_LP_OPENSOURCE 1006
+#endif
+#ifndef IDC_LP_TIME
+#define IDC_LP_TIME 1019
+#endif
+#ifndef IDC_LP_UPDATENOW
+#define IDC_LP_UPDATENOW 1007
+#endif
+#ifndef IDC_PU_CONVERT
+#define IDC_PU_CONVERT 902
+#endif
+#ifndef IDC_PU_ICON
+#define IDC_PU_ICON 908
+#endif
+#ifndef IDC_PU_LINKS
+#define IDC_PU_LINKS 900
+#endif
+#ifndef IDC_PU_TEXT
+#define IDC_PU_TEXT 901
+#endif
+#ifndef IDC_UL_METER
+#define IDC_UL_METER 1029
+#endif
+#ifndef IDC_UL_PERCENT
+#define IDC_UL_PERCENT 1031
+#endif
+#ifndef IDC_UL_PROGRESS
+#define IDC_UL_PROGRESS 1032
+#endif
+#ifndef IDC_UL_STOP
+#define IDC_UL_STOP 1030
+#endif
+#ifndef IDC_VP_ASICON
+#define IDC_VP_ASICON 1003
+#endif
+#ifndef IDC_VP_CHANGEICON
+#define IDC_VP_CHANGEICON 1001
+#endif
+#ifndef IDC_VP_EDITABLE
+#define IDC_VP_EDITABLE 1002
+#endif
+#ifndef IDC_VP_ICONDISPLAY
+#define IDC_VP_ICONDISPLAY 1021
+#endif
+#ifndef IDC_VP_PERCENT
+#define IDC_VP_PERCENT 1000
+#endif
+#ifndef IDC_VP_RELATIVE
+#define IDC_VP_RELATIVE 1005
+#endif
+#ifndef IDC_VP_RESULTIMAGE
+#define IDC_VP_RESULTIMAGE 1033
+#endif
+#ifndef IDC_VP_SCALETXT
+#define IDC_VP_SCALETXT 1034
+#endif
+#ifndef IDC_VP_SPIN
+#define IDC_VP_SPIN 1006
+#endif
+#ifndef IDD_BUSY
+#define IDD_BUSY 1006
+#endif
+#ifndef IDD_CANNOTUPDATELINK
+#define IDD_CANNOTUPDATELINK 1008
+#endif
+#ifndef IDD_CHANGEICON
+#define IDD_CHANGEICON 1001
+#endif
+#ifndef IDD_CHANGEICONBROWSE
+#define IDD_CHANGEICONBROWSE 1011
+#endif
+#ifndef IDD_CHANGESOURCE
+#define IDD_CHANGESOURCE 1009
+#endif
+#ifndef IDD_CHANGESOURCE4
+#define IDD_CHANGESOURCE4 1013
+#endif
+#ifndef IDD_CONVERT
+#define IDD_CONVERT 1002
+#endif
+#ifndef IDD_CONVERT4
+#define IDD_CONVERT4 1103
+#endif
+#ifndef IDD_CONVERTONLY
+#define IDD_CONVERTONLY 1012
+#endif
+#ifndef IDD_CONVERTONLY4
+#define IDD_CONVERTONLY4 1104
+#endif
+#ifndef IDD_EDITLINKS
+#define IDD_EDITLINKS 1004
+#endif
+#ifndef IDD_EDITLINKS4
+#define IDD_EDITLINKS4 1105
+#endif
+#ifndef IDD_GNRLPROPS
+#define IDD_GNRLPROPS 1100
+#endif
+#ifndef IDD_GNRLPROPS4
+#define IDD_GNRLPROPS4 1106
+#endif
+#ifndef IDD_INSERTFILEBROWSE
+#define IDD_INSERTFILEBROWSE 1010
+#endif
+#ifndef IDD_INSERTOBJECT
+#define IDD_INSERTOBJECT 1000
+#endif
+#ifndef IDD_LINKPROPS
+#define IDD_LINKPROPS 1102
+#endif
+#ifndef IDD_LINKPROPS4
+#define IDD_LINKPROPS4 1107
+#endif
+#ifndef IDD_LINKSOURCEUNAVAILABLE
+#define IDD_LINKSOURCEUNAVAILABLE 1020
+#endif
+#ifndef IDD_LINKTYPECHANGEDA
+#define IDD_LINKTYPECHANGEDA 1026
+#endif
+#ifndef IDD_LINKTYPECHANGEDW
+#define IDD_LINKTYPECHANGEDW 1022
+#endif
+#ifndef IDD_OUTOFMEMORY
+#define IDD_OUTOFMEMORY 1024
+#endif
+#ifndef IDD_SERVERNOTFOUND
+#define IDD_SERVERNOTFOUND 1023
+#endif
+#ifndef IDD_SERVERNOTREGA
+#define IDD_SERVERNOTREGA 1025
+#endif
+#ifndef IDD_SERVERNOTREGW
+#define IDD_SERVERNOTREGW 1021
+#endif
+#ifndef IDD_UPDATELINKS
+#define IDD_UPDATELINKS 1007
+#endif
+#ifndef IDD_VIEWPROPS
+#define IDD_VIEWPROPS 1101
+#endif
+#ifndef ID_BROWSE_ADDCONTROL
+#define ID_BROWSE_ADDCONTROL 3
+#endif
+#ifndef ID_BROWSE_CHANGEICON
+#define ID_BROWSE_CHANGEICON 1
+#endif
+#ifndef ID_BROWSE_CHANGESOURCE
+#define ID_BROWSE_CHANGESOURCE 4
+#endif
+#ifndef ID_BROWSE_INSERTFILE
+#define ID_BROWSE_INSERTFILE 2
+#endif
+#ifndef OLEUI_QUERY_GETCLASSID
+#define OLEUI_QUERY_GETCLASSID 0xFF00
+#endif
+#ifndef OLEUI_QUERY_LINKBROKEN
+#define OLEUI_QUERY_LINKBROKEN 0xFF01
+#endif
+
 #endif  /* __WINE_OLEDLG_H */

@@ -27,7 +27,16 @@
  #else
   #define POINTER_32
  #endif
+#elif defined(__clang__) && defined(__MINGW32__) && !defined(MIDL_PASS) && !defined(RC_INVOKED)
+ /* FIXME: POINTER_64 stays empty, so PVOID64 is 4 bytes on 32-bit targets instead of 8 */
+ #define POINTER_64
+ #if defined(_WIN64)
+  #define POINTER_32 __ptr32
+ #else
+  #define POINTER_32
+ #endif
 #else
+ /* FIXME: GCC has no __ptr32/__ptr64; the *32 thunk structures get native pointers on 64-bit targets */
  #define POINTER_64
  #define POINTER_32
 #endif /* defined(_MSC_VER) && !defined(MIDL_PASS) && !defined(RC_INVOKED) */

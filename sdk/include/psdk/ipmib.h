@@ -248,4 +248,8 @@ typedef struct _MIB_ICMP_EX
   MIBICMPSTATS_EX icmpOutStats;
 } MIB_ICMP_EX, *PMIB_ICMP_EX;
 
+#ifndef MIB_IPADDR_DNS_ELIGIBLE
+#define MIB_IPADDR_DNS_ELIGIBLE 0X0100
+#endif
+
 #endif /* __WINE_IPMIB_H */

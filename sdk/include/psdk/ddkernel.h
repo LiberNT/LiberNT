@@ -69,7 +69,8 @@ DECLARE_INTERFACE_ (IDirectDrawKernel, IUnknown) {
   STDMETHOD(QueryInterface) (THIS_ REFIID riid, LPVOID* ppvObj) PURE;
   STDMETHOD_(ULONG,AddRef) (THIS) PURE;
   STDMETHOD_(ULONG,Release) (THIS) PURE;
-  STDMETHOD(GetKernelHandle) (THIS_ ULONG*) PURE;
+  STDMETHOD(GetCaps) (THIS_ LPDDKERNELCAPS) PURE;
+  STDMETHOD(GetKernelHandle) (THIS_ PULONG_PTR) PURE;
   STDMETHOD(ReleaseKernelHandle) (THIS) PURE;
 };
 
@@ -79,7 +80,7 @@ DECLARE_INTERFACE_ (IDirectDrawSurfaceKernel, IUnknown) {
   STDMETHOD(QueryInterface) (THIS_ REFIID riid, LPVOID* ppvObj) PURE;
   STDMETHOD_(ULONG,AddRef) (THIS) PURE;
   STDMETHOD_(ULONG,Release) (THIS) PURE;
-  STDMETHOD(GetKernelHandle) (THIS_ ULONG*) PURE;
+  STDMETHOD(GetKernelHandle) (THIS_ PULONG_PTR) PURE;
   STDMETHOD(ReleaseKernelHandle) (THIS) PURE;
 };
 

@@ -84,7 +84,7 @@ typedef struct tagCSSA
     LPCSTR          szPurposeOid;
     DWORD           cCertContext;
     PCCERT_CONTEXT *arrayCertContext;
-    DWORD           lCustData;
+    LPARAM           lCustData;
     PFNCMHOOKPROC   pfnHook;
     PFNCMFILTERPROC pfnFilter;
     LPCSTR          szHelpFileName;
@@ -105,7 +105,7 @@ typedef struct tagCSSW
     LPCSTR          szPurposeOid;
     DWORD           cCertContext;
     PCCERT_CONTEXT *arrayCertContext;
-    DWORD           lCustData;
+    LPARAM           lCustData;
     PFNCMHOOKPROC   pfnHook;
     PFNCMFILTERPROC pfnFilter;
     LPCWSTR         szHelpFileName;
@@ -149,7 +149,7 @@ typedef struct tagCERT_VIEWPROPERTIES_STRUCT_A
     DWORD           cTrustStores;
     HCERTSTORE     *rghstoreTrust;
     HCRYPTPROV      hprov;
-    DWORD           lCustData;
+    LPARAM           lCustData;
     DWORD           dwPad;
     LPCSTR          szHelpFileName;
     DWORD           dwHelpId;
@@ -179,7 +179,7 @@ typedef struct tagCERT_VIEWPROPERTIES_STRUCT_W
     DWORD           cTrustStores;
     HCERTSTORE     *rghstoreTrust;
     HCRYPTPROV      hprov;
-    DWORD           lCustData;
+    LPARAM           lCustData;
     DWORD           dwPad;
     LPCWSTR         szHelpFileName;
     DWORD           dwHelpId;
@@ -283,7 +283,7 @@ typedef struct _CERT_VERIFY_CERTIFICATE_TRUST
     HCERTSTORE      *rghstoreCAs;
     DWORD            cTrustStores;
     HCERTSTORE      *rghstoreTrust;
-    DWORD            lCustData;
+    LPARAM            lCustData;
     PFNTRUSTHELPER   pfnTrustHelper;
     DWORD           *pcchain;
     PCCERT_CONTEXT **prgChain;
@@ -304,10 +304,19 @@ typedef struct _CTL_MODIFY_REQUEST
 
 HRESULT WINAPI CertModifyCertificatesToTrust(int cCertStore,
  PCTL_MODIFY_REQUEST rgCerts, LPCSTR szPurpose, HWND hwnd,
- HCERTSTORE hcertstoreTrust);
+ HCERTSTORE hcertstoreTrust, PCCERT_CONTEXT pccertSigner);
 
 #ifdef __cplusplus
 }
 #endif
+
+#ifndef CRYPTDLG_CACHE_ONLY_URL_RETRIEVAL
+#define CRYPTDLG_CACHE_ONLY_URL_RETRIEVAL 0x10000000
+#endif
+#ifndef CRYPTDLG_DISABLE_AIA
+#define CRYPTDLG_DISABLE_AIA 0x08000000
+#endif
+
+typedef PCERT_SELECT_STRUCT_A PCERT_SELECT_STRUCT;
 
 #endif

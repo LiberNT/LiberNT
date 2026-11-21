@@ -259,7 +259,19 @@ NdisMRegisterScatterGatherDma(
     /* A3: save the driver's ProcessSGListHandler + MaximumPhysicalMapping
      * so NdisMAllocateNetBufferSGList can call the driver back when the
      * DMA adapter produces a SGL. */
-    Ext->SgDescription      = *DmaDescription;
+    RtlZeroMemory(&Ext->SgDescription, sizeof(Ext->SgDescription));
+#if NDIS_SUPPORT_NDIS685
+    if (DmaDescription->Header.Revision >= NDIS_SG_DMA_DESCRIPTION_REVISION_2 &&
+        DmaDescription->Header.Size >= NDIS_SIZEOF_SG_DMA_DESCRIPTION_REVISION_2)
+    {
+        /* TODO: PdoOverride is copied but the DMA adapter is still taken from the miniport PDO */
+        RtlCopyMemory(&Ext->SgDescription, DmaDescription, NDIS_SIZEOF_SG_DMA_DESCRIPTION_REVISION_2);
+    }
+    else
+#endif
+    {
+        RtlCopyMemory(&Ext->SgDescription, DmaDescription, NDIS_SIZEOF_SG_DMA_DESCRIPTION_REVISION_1);
+    }
     Ext->SgDescriptionValid = TRUE;
     ExInitializeRundownProtection(&Ext->SharedMemoryRundown);
 

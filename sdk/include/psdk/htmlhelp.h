@@ -449,4 +449,10 @@ typedef struct tagHH_GLOBAL_PROPERTY
 }
 #endif
 
+#ifndef HH_SET_QUERYSERVICE
+#define HH_SET_QUERYSERVICE 0x001E
+#endif
+
+typedef struct tagHH_SET_INFOTYPE * PHH_SET_INFOTYPE;
+
 #endif /* __HTMLHELP_H__ */

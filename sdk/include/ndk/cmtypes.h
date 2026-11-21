@@ -199,6 +199,8 @@ typedef enum _KEY_INFORMATION_CLASS
     KeyFlagsInformation,
     KeyVirtualizationInformation,
     KeyHandleTagsInformation,
+    KeyTrustInformation,
+    KeyLayerInformation,
     MaxKeyInfoClass
 } KEY_INFORMATION_CLASS;
 
@@ -220,6 +222,7 @@ typedef enum _KEY_SET_INFORMATION_CLASS
     KeySetVirtualizationInformation,
     KeySetDebugInformation,
     KeySetHandleTagsInformation,
+    KeySetLayerInformation,
     MaxKeySetInfoClass
 } KEY_SET_INFORMATION_CLASS;
 
@@ -647,7 +650,6 @@ typedef struct _CM_PARTIAL_RESOURCE_DESCRIPTOR
             ULONG Vector;
             KAFFINITY Affinity;
         } Interrupt;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
         struct
         {
             union
@@ -667,7 +669,6 @@ typedef struct _CM_PARTIAL_RESOURCE_DESCRIPTOR
                 } Translated;
             };
         } MessageInterrupt;
-#endif
         struct
         {
             PHYSICAL_ADDRESS Start;
@@ -704,7 +705,6 @@ typedef struct _CM_PARTIAL_RESOURCE_DESCRIPTOR
             ULONG Reserved1;
             ULONG Reserved2;
         } DeviceSpecificData;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
         struct
         {
             PHYSICAL_ADDRESS Start;
@@ -720,7 +720,6 @@ typedef struct _CM_PARTIAL_RESOURCE_DESCRIPTOR
             PHYSICAL_ADDRESS Start;
             ULONG Length64;
         } Memory64;
-#endif
         struct
         {
             UCHAR Class;

@@ -1488,7 +1488,8 @@ typedef struct _XSTATE_CONFIGURATION
 #if (NTDDI_VERSION >= NTDDI_WIN11) || defined(__REACTOS__)
     ULONG64 ExtendedFeatureDisableFeatures;
     ULONG AllNonLargeFeatureSize;
-    ULONG Spare;
+    USHORT MaxSveVectorLength;
+    USHORT Spare1;
 #endif
 } XSTATE_CONFIGURATION, *PXSTATE_CONFIGURATION;
 
@@ -1650,6 +1651,7 @@ typedef struct _KUSER_SHARED_DATA
     ULONG DataFlagsPad[1];                                  // 0x2f4
     ULONGLONG TestRetInstruction;                           // 0x2f8
 #if defined(_M_IX86)
+/* FIXME: Windows puts QpcFrequency at 0x300 and SystemCall at 0x308 on x86 too; the i386 system call stubs still call through 0x300 */
     ULONG SystemCall;                                       // 0x300
     ULONG SystemCallReturn;                                 // 0x304
 #elif (NTDDI_VERSION >= NTDDI_WIN8)
@@ -1660,8 +1662,9 @@ typedef struct _KUSER_SHARED_DATA
 #endif
 #if (NTDDI_VERSION >= NTDDI_WIN10_TH2) && !defined(_M_IX86)
     ULONG SystemCall;                                       // 0x308
-    ULONG SystemCallPad0;                                   // 0x30c Renamed to Reserved2 in Vibranium R3
-    ULONGLONG SystemCallPad[2];                             // 0x310
+    ULONG Reserved2;                                        // 0x30c
+    ULONGLONG FullNumberOfPhysicalPages;                    // 0x310
+    ULONGLONG SystemCallPad[1];                             // 0x318
 #else
     ULONGLONG SystemCallPad[3];                             // 0x308
 #endif
@@ -1796,6 +1799,11 @@ typedef struct _KUSER_SHARED_DATA
 //
 #if (NTDDI_VERSION >= NTDDI_WIN11_NI)
     ULONG64 UserPointerAuthMask;                            // 0x730
+#if defined(_ARM64_)
+    XSTATE_CONFIGURATION XStateArm64;                       // 0x738
+#else
+    ULONG Reserved10[210];                                  // 0x738
+#endif
 #endif // NTDDI_VERSION >= NTDDI_WIN11_NI
 
 #if (NTDDI_VERSION < NTDDI_WIN7) && defined(__REACTOS__)

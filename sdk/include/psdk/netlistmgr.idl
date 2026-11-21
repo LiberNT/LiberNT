@@ -86,6 +86,17 @@ typedef [v1_enum] enum NLM_CONNECTION_COST
     NLM_CONNECTION_COST_APPROACHINGDATALIMIT = 0x80000
 } NLM_CONNECTION_COST;
 
+#define MAX_PROFILENAME_LENGTH 256
+cpp_quote("#define MAX_PROFILENAME_LENGTH 256")
+
+typedef struct NLM_SIMULATED_PROFILE_INFO
+{
+    WCHAR ProfileName[MAX_PROFILENAME_LENGTH];
+    NLM_CONNECTION_COST cost;
+    DWORD UsageInMegabytes;
+    DWORD DataLimitInMegabytes;
+} NLM_SIMULATED_PROFILE_INFO;
+
 typedef struct NLM_SOCKADDR
 {
     BYTE data[128];
@@ -247,14 +258,19 @@ interface INetworkListManager : IDispatch
         [in] GUID gdNetworkConnectionId,
         [out, retval] INetworkConnection **ppNetworkConnection);
 
-    HRESULT IsConnectedToInternet(
+    [propget] HRESULT IsConnectedToInternet(
         [out, retval] VARIANT_BOOL *pbIsConnected);
 
-    HRESULT IsConnected(
+    [propget] HRESULT IsConnected(
         [out, retval] VARIANT_BOOL *pbIsConnected);
 
     HRESULT GetConnectivity(
         [out, retval] NLM_CONNECTIVITY *pConnectivity);
+
+    HRESULT SetSimulatedProfileInfo(
+        [in] NLM_SIMULATED_PROFILE_INFO *pSimulatedInfo);
+
+    HRESULT ClearSimulatedProfileInfo();
 }
 
 [
@@ -438,3 +454,7 @@ interface INetworkEvents : IUnknown
         [in] GUID networkId,
         [in] NLM_NETWORK_PROPERTY_CHANGE flags);
 }
+
+cpp_quote("#ifndef NLM_MAX_ADDRESS_LIST_SIZE")
+cpp_quote("#define NLM_MAX_ADDRESS_LIST_SIZE 10")
+cpp_quote("#endif")

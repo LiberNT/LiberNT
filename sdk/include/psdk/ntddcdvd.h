@@ -100,10 +100,12 @@ extern "C" {
 
 typedef ULONG DVD_SESSION_ID, *PDVD_SESSION_ID;
 
+#pragma pack(push, 1)
 typedef struct _STORAGE_SET_READ_AHEAD {
   LARGE_INTEGER  TriggerAddress;
   LARGE_INTEGER  TargetAddress;
 } STORAGE_SET_READ_AHEAD, *PSTORAGE_SET_READ_AHEAD;
+#pragma pack(pop)
 
 typedef enum DVD_STRUCTURE_FORMAT {
   DvdPhysicalDescriptor,
@@ -121,7 +123,6 @@ typedef struct DVD_READ_STRUCTURE {
   DVD_SESSION_ID  SessionId;
   UCHAR  LayerNumber;
 } DVD_READ_STRUCTURE, *PDVD_READ_STRUCTURE;
-#pragma pack(pop)
 
 typedef struct _DVD_DESCRIPTOR_HEADER {
     USHORT Length;
@@ -129,7 +130,6 @@ typedef struct _DVD_DESCRIPTOR_HEADER {
     UCHAR Data[0];
 } DVD_DESCRIPTOR_HEADER, *PDVD_DESCRIPTOR_HEADER;
 
-#pragma pack(push, 1)
 typedef struct _DVD_LAYER_DESCRIPTOR {
   UCHAR  BookVersion : 4;
   UCHAR  BookType : 4;
@@ -146,9 +146,7 @@ typedef struct _DVD_LAYER_DESCRIPTOR {
   ULONG  EndLayerZeroSector;
   UCHAR  Reserved5 : 7;
   UCHAR  BCAFlag : 1;
-  UCHAR  Reserved6;
 } DVD_LAYER_DESCRIPTOR, *PDVD_LAYER_DESCRIPTOR;
-#pragma pack(pop)
 
 typedef struct _DVD_COPYRIGHT_DESCRIPTOR {
   UCHAR  CopyrightProtectionType;
@@ -245,6 +243,7 @@ typedef struct _DVD_REGION {
   UCHAR  SystemRegion;
   UCHAR  ResetCount;
 } DVD_REGION, *PDVD_REGION;
+#pragma pack(pop)
 
 #ifdef __cplusplus
 }
@@ -328,5 +327,12 @@ typedef struct _AACS_READ_BINDING_NONCE
     ULONGLONG ForceStructureLengthToMatch64bit;
   };
 } AACS_READ_BINDING_NONCE, *PAACS_READ_BINDING_NONCE;
+
+typedef enum _DISC_CONTROL_BLOCK_TYPE {
+    FormattingDiscControlBlock = 0x46444300,
+    WriteInhibitDiscControlBlock = 0x57444300,
+    SessionInfoDiscControlBlock = 0x53444300,
+    DiscControlBlockList = (-1)
+} DISC_CONTROL_BLOCK_TYPE, *PDISC_CONTROL_BLOCK_TYPE;
 
 #endif /* _NTDDCDVD_ */

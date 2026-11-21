@@ -1174,3 +1174,7 @@ interface ID3D12InfoQueue1 : ID3D12InfoQueue
         [in] D3D12_MESSAGE_CALLBACK_FLAGS flags, [in] void *context, [in, out] DWORD *cookie);
     HRESULT UnregisterMessageCallback([in] DWORD cookie);
 }
+
+cpp_quote("#ifndef D3D12_INFO_QUEUE_DEFAULT_MESSAGE_COUNT_LIMIT")
+cpp_quote("#define D3D12_INFO_QUEUE_DEFAULT_MESSAGE_COUNT_LIMIT 1024")
+cpp_quote("#endif")

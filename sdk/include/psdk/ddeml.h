@@ -310,12 +310,13 @@ typedef struct tagCONVCONTEXT
     INT   iCodePage;
     DWORD   dwLangID;
     DWORD   dwSecurity;
+    SECURITY_QUALITY_OF_SERVICE qos;
 } CONVCONTEXT, *PCONVCONTEXT;
 
 typedef struct tagCONVINFO
 {
     DWORD		cb;
-    DWORD 		hUser;
+    DWORD_PTR		hUser;
     HCONV		hConvPartner;
     HSZ			hszSvcPartner;
     HSZ			hszServiceReq;
@@ -365,7 +366,7 @@ LPBYTE    WINAPI DdeAccessData(HDDEDATA,LPDWORD);
 BOOL      WINAPI DdeUnaccessData(HDDEDATA);
 BOOL      WINAPI DdeEnableCallback(DWORD,HCONV,UINT);
 INT       WINAPI DdeCmpStringHandles(HSZ,HSZ);
-BOOL      WINAPI DdeSetUserHandle(HCONV,DWORD,DWORD);
+BOOL      WINAPI DdeSetUserHandle(HCONV,DWORD,DWORD_PTR);
 
 HDDEDATA  WINAPI DdeNameService(DWORD,HSZ,HSZ,UINT);
 UINT      WINAPI DdeGetLastError(DWORD);
@@ -374,5 +375,18 @@ UINT      WINAPI DdeQueryConvInfo(HCONV,DWORD,PCONVINFO);
 #ifdef __cplusplus
 } /* extern "C" */
 #endif /* defined(__cplusplus) */
+
+#ifndef MAX_MONITORS
+#define MAX_MONITORS 4
+#endif
+#ifndef MH_CLEANUP
+#define MH_CLEANUP 4
+#endif
+#ifndef MH_DELETE
+#define MH_DELETE 3
+#endif
+#ifndef MH_KEEP
+#define MH_KEEP 2
+#endif
 
 #endif  /* __WINE_DDEML_H */

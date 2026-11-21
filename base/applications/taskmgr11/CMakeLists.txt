@@ -1,13 +1,6 @@
 
 project(taskmgr11)
 
-# The GPU section reads the same D3DKMT interface Windows reads, so this
-# module has to see the very layouts dxgkrnl was compiled against.  Leaving
-# the tree-wide Vista selector in place would silently give it a different
-# D3DKMT_QUERYSTATISTICS shape than the kernel fills in.
-remove_definitions(-DDXGKDDI_INTERFACE_VERSION=0x1052)
-add_definitions(-DDXGKDDI_INTERFACE_VERSION=0x11007)
-
 list(APPEND SOURCE
     theme.cpp
     render.cpp

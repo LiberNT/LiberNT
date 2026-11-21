@@ -579,7 +579,12 @@ typedef struct SRB_ALIGN _SRBEX_DATA_IO_INFO {
     ULONG RWLength;
     BOOLEAN IsWriteRequest;
     UCHAR CachePriority;
+#if (NTDDI_VERSION >= NTDDI_WIN11_GE)
+    UCHAR IoPriorityLevel;
+    UCHAR Reserved;
+#else
     UCHAR Reserved[2];
+#endif
     ULONG Reserved1[2];
 } SRBEX_DATA_IO_INFO, *PSRBEX_DATA_IO_INFO;
 
@@ -3474,7 +3479,8 @@ typedef enum _SCSI_ADAPTER_CONTROL_TYPE {
     ScsiAdapterRestoreEarlyDumpData,
     ScsiAdapterKsrPowerDown,
     ScsiAdapterPreparePLDR,
-    ScsiNvmeofAdapterOperation,
+    ScsiAdapterReserved0,
+    ScsiAdapterReserved1,
     ScsiAdapterControlMax,
     MakeAdapterControlTypeSizeOfUlong = 0xffffffff
 } SCSI_ADAPTER_CONTROL_TYPE, *PSCSI_ADAPTER_CONTROL_TYPE;
@@ -3544,6 +3550,7 @@ typedef enum _SCSI_UNIT_CONTROL_TYPE {
     ScsiUnitQueryFruId,
     ScsiUnitReportInternalData,
     ScsiUnitKsrPowerDown,
+    ScsiUnitNvmeIceInformation,
     ScsiUnitControlMax,
     MakeUnitControlTypeSizeOfUlong = 0xffffffff
 } SCSI_UNIT_CONTROL_TYPE, *PSCSI_UNIT_CONTROL_TYPE;
@@ -6077,7 +6084,11 @@ typedef enum _STORPORT_ETW_EVENT_CHANNEL{
 #define STORPORT_ETW_MAX_DESCRIPTION_LENGTH    32
 
 #endif
-#if ((NTDDI_VERSION >= NTDDI_WIN10_VB))
+#if (NTDDI_VERSION >= NTDDI_WIN11_GE)
+
+#define STORPORT_ETW_MAX_PARAM_NAME_LENGTH     64
+
+#elif ((NTDDI_VERSION >= NTDDI_WIN10_VB))
 
 #define STORPORT_ETW_MAX_PARAM_NAME_LENGTH     32
 
@@ -6819,4 +6830,510 @@ StorPortQueryDpcWatchdogInformation(
 }
 #endif
 
+typedef enum SRBEX_DATA_NVME_COMMAND_TYPE {
+    SRBEX_DATA_NVME_COMMAND_TYPE_NVM = 0,
+    SRBEX_DATA_NVME_COMMAND_TYPE_ADMIN = 1,
+    SRBEX_DATA_NVME_COMMAND_TYPE_FABRICS = 2
+} SRBEX_DATA_NVME_COMMAND_TYPE, *PSRBEX_DATA_NVME_COMMAND_TYPE;
+
+typedef enum SRBEX_DATA_NVME_COMMAND_FLAG {
+    SRBEX_DATA_NVME_COMMAND_FLAG_REQUIRE_DATA_TRANSFER_IN = 1,
+    SRBEX_DATA_NVME_COMMAND_FLAG_REQUIRE_DATA_TRANSFER_OUT = 2,
+    SRBEX_DATA_NVME_COMMAND_FLAG_PRP_SET_ALREADY = 4,
+    SRBEX_DATA_NVME_COMMAND_FLAG_SIGNATURE_ENABLED = 8,
+    SRBEX_DATA_NVME_COMMAND_FLAG_NO_POLLING = 16
+} SRBEX_DATA_NVME_COMMAND_FLAG, *PSRBEX_DATA_NVME_COMMAND_FLAG;
+
+typedef enum SRBEX_DATA_NVME_RESPONSE_FLAG {
+    SRBEX_DATA_NVME_RESPONSE_FLAG_SQHD_VALID = 1
+} SRBEX_DATA_NVME_RESPONSE_FLAG, *PSRBEX_DATA_NVME_RESPONSE_FLAG;
+
+typedef enum _STORAGE_CRYPTO_ALGORITHM_ID {
+    StorageCryptoAlgorithmUnknown = 0,
+    StorageCryptoAlgorithmXTSAES = 1,
+    StorageCryptoAlgorithmBitlockerAESCBC = 2,
+    StorageCryptoAlgorithmAESECB = 3,
+    StorageCryptoAlgorithmESSIVAESCBC = 4,
+    StorageCryptoAlgorithmMax = 5,
+    StorCryptoAlgorithmUnknown = 0,
+    StorCryptoAlgorithmXTSAES = 1,
+    StorCryptoAlgorithmBitlockerAESCBC = 2,
+    StorCryptoAlgorithmAESECB = 3,
+    StorCryptoAlgorithmESSIVAESCBC = 4
+} STORAGE_CRYPTO_ALGORITHM_ID, *PSTORAGE_CRYPTO_ALGORITHM_ID, STORAGE_CRYPTO_ALGORITHM_ID, STOR_CRYPTO_ALGORITHM_ID, *PSTOR_CRYPTO_ALGORITHM_ID;
+
+typedef enum _STORAGE_CRYPTO_KEY_SIZE {
+    StorageCryptoKeySizeUnknown = 0,
+    StorageCryptoKeySize128Bits = 1,
+    StorageCryptoKeySize192Bits = 2,
+    StorageCryptoKeySize256Bits = 3,
+    StorageCryptoKeySize512Bits = 4,
+    StorageCryptoKeySizeMax = 5,
+    StorCryptoKeySizeUnknown = 0,
+    StorCryptoKeySize128Bits = 1,
+    StorCryptoKeySize192Bits = 2,
+    StorCryptoKeySize256Bits = 3,
+    StorCryptoKeySize512Bits = 4
+} STORAGE_CRYPTO_KEY_SIZE, *PSTORAGE_CRYPTO_KEY_SIZE, STORAGE_CRYPTO_KEY_SIZE, STOR_CRYPTO_KEY_SIZE, *PSTOR_CRYPTO_KEY_SIZE;
+
+typedef enum _NVME_ADAPTER_CONTROL_TYPE {
+    NvmeQuerySupportedControlTypes = 0,
+    NvmeStopAdapter = 1,
+    NvmeRestartAdapter = 2,
+    NvmeSetBootConfig = 3,
+    NvmeSetRunningConfig = 4,
+    NvmePowerSettingNotification = 5,
+    NvmeAdapterPower = 6,
+    NvmeAdapterPoFxPowerRequired = 7,
+    NvmeAdapterPoFxPowerActive = 8,
+    NvmeAdapterPoFxPowerSetFState = 9,
+    NvmeAdapterPoFxPowerControl = 10,
+    NvmeAdapterPrepareForBusReScan = 11,
+    NvmeAdapterSystemPowerHints = 12,
+    NvmeAdapterFilterResourceRequirements = 13,
+    NvmeAdapterPoFxMaxOperationalPower = 14,
+    NvmeAdapterPoFxSetPerfState = 15,
+    NvmeAdapterSurpriseRemoval = 16,
+    NvmeAdapterSerialNumber = 17,
+    NvmeAdapterCryptoOperation = 18,
+    NvmeAdapterQueryFruId = 19,
+    NvmeAdapterSetEventLogging = 20,
+    NvmeAdapterReportInternalData = 21,
+    NvmeAdapterResetBusSynchronous = 22,
+    NvmeAdapterPostHwInitialize = 23,
+    NvmeAdapterPrepareEarlyDumpData = 24,
+    NvmeAdapterRestoreEarlyDumpData = 25,
+    NvmeAdapterKsrPowerDown = 26,
+    NvmeAdapterPreparePLDR = 27,
+    NvmeNvmeofAdapterOperation = 28,
+    NvmeAdapterQueryStorMQInterface = 29,
+    NvmeAdapterControlMax = 30,
+    MakeNvmeAdapterControlTypeSizeOfUlong = (-1)
+} NVME_ADAPTER_CONTROL_TYPE, *PNVME_ADAPTER_CONTROL_TYPE;
+
+typedef enum _NVME_ADAPTER_CONTROL_STATUS {
+    NvmeAdapterControlSuccess = 0,
+    NvmeAdapterControlUnsuccessful = 1,
+    NvmeAdapterControlRetryNeeded = 2,
+    NvmeAdapterControlBufferTooSmall = 3
+} NVME_ADAPTER_CONTROL_STATUS, *PNVME_ADAPTER_CONTROL_STATUS;
+
+typedef enum _NVME_NAMESPACE_CONTROL_TYPE {
+    NvmeQuerySupportedNamespaceControlTypes = 0,
+    NvmeNamespaceStart = 1,
+    NvmeNamespacePower = 2,
+    NvmeNamespacePoFxPowerInfo = 3,
+    NvmeNamespacePoFxPowerRequired = 4,
+    NvmeNamespacePoFxPowerActive = 5,
+    NvmeNamespacePoFxPowerSetFState = 6,
+    NvmeNamespacePoFxPowerControl = 7,
+    NvmeNamespaceRemove = 8,
+    NvmeNamespaceSurpriseRemoval = 9,
+    NvmeNamespaceControlMax = 10,
+    MakeNamespaceControlTypeSizeOfUlong = (-1)
+} NVME_NAMESPACE_CONTROL_TYPE, *PNVME_NAMESPACE_CONTROL_TYPE;
+
+typedef enum _NVME_NAMESPACE_CONTROL_STATUS {
+    NvmeNamespaceControlSuccess = 0,
+    NvmeNamespaceControlUnsuccessful = 1,
+    NvmeNamespaceControlNotSupported = 2
+} NVME_NAMESPACE_CONTROL_STATUS, *PNVME_NAMESPACE_CONTROL_STATUS;
+
+typedef enum _SCSI_UC_DEVICE_USAGE_TYPE {
+    ScsiDeviceUsageTypeUndefined = 0,
+    ScsiDeviceUsageTypePaging = 1,
+    ScsiDeviceUsageTypeHibernation = 2,
+    ScsiDeviceUsageTypeDumpFile = 3,
+    ScsiDeviceUsageTypeBoot = 4,
+    ScsiDeviceUsageTypeInlineCryptoEngine = 7
+} SCSI_UC_DEVICE_USAGE_TYPE;
+
+typedef enum _STOR_CRYPTO_OPERATION_TYPE {
+    StorCryptoOperationInsertKey = 1,
+    StorCryptoOperationMax = 2
+} STOR_CRYPTO_OPERATION_TYPE, *PSTOR_CRYPTO_OPERATION_TYPE;
+
+typedef enum _INTERNAL_DATA_SCOPE {
+    InternalDataScopeUndefined = 0,
+    InternalDataScopeInMemoryState = 1,
+    InternalDataScopeMax = 2
+} INTERNAL_DATA_SCOPE, *PINTERNAL_DATA_SCOPE;
+
+typedef enum _STOR_IMPORTANCE {
+    StorLowImportance = 0,
+    StorMediumImportance = 1,
+    StorHighImportance = 2,
+    StorMediumHighImportance = 3
+} STOR_IMPORTANCE;
+
+typedef enum _STOR_RPMB_FRAME_TYPE {
+    StorRpmbFrameTypeUnknown = 0,
+    StorRpmbFrameTypeStandard = 1,
+    StorRpmbFrameTypeMax = 2
+} STOR_RPMB_FRAME_TYPE, *PSTOR_RPMB_FRAME_TYPE;
+
+typedef enum _STOR_TELEMETRY_CATEGORY {
+    StorTelemetryCategory = 0,
+    StorMeasuresCategory = 1
+} STOR_TELEMETRY_CATEGORY, *PSTOR_TELEMETRY_CATEGORY;
+
+typedef enum _STOR_POFX_PERF_STATE_UNIT {
+    StorPoFxPerfStateUnitOther = 0,
+    StorPoFxPerfStateUnitFrequency = 1,
+    StorPoFxPerfStateUnitBandwidth = 2,
+    StorPoFxPerfStateUnitMilliwatts = 3,
+    StorPoFxPerfStateUnitMaximum = 4
+} STOR_POFX_PERF_STATE_UNIT, *PSTOR_POFX_PERF_STATE_UNIT;
+
+typedef enum _STOR_POFX_PERF_STATE_TYPE {
+    StorPoFxPerfStateTypeDiscrete = 0,
+    StorPoFxPerfStateTypeRange = 1,
+    StorPoFxPerfStateTypeMaximum = 2
+} STOR_POFX_PERF_STATE_TYPE, *PSTOR_POFX_PERF_STATE_TYPE;
+
+typedef enum _STORPORT_QUERY_CONFIGURATION_TYPE {
+    StorportQueryConfigurationD3 = 0,
+    StorportQueryConfigurationNvmeIce = 1,
+    StorportQueryConfigurationMax = 2
+} STORPORT_QUERY_CONFIGURATION_TYPE, *PSTORPORT_QUERY_CONFIGURATION_TYPE;
+
+typedef enum _STOR_DEVICE_RESET_TYPE {
+    StorFunctionLevelReset = 0,
+    StorPlatformLevelReset = 1,
+    StorBusSpecificReset = 2
+} STOR_DEVICE_RESET_TYPE;
+
+typedef enum _STORPORT_FEATURE_TYPE {
+    StorportFeatureBusTypeUnitControl = 0,
+    StorportFeatureFruIdUnitControl = 1,
+    StorportFeatureFruIdAdapterControl = 2,
+    StorportFeatureSetEventLoggingAdapterControl = 3,
+    StorportFeatureReportInternalDataUnitControl = 4,
+    StorportFeatureReportInternalDataAdapterControl = 5,
+    StorportFeatureResetBusSynchronous = 6,
+    StorportFeaturePostHwInitialize = 7,
+    StorportFeaturePrepareEarlyDumpData = 8,
+    StorportFeatureRestoreEarlyDumpData = 9,
+    StorportFeatureKsrAdapterPowerDownOptimization = 10,
+    StorportFeatureKsrUnitPowerDownOptimization = 11,
+    StorportFeaturePreparePLDR = 12,
+    StorportFeatureNvmeofAdapterOperation = 13,
+    StorportFeatureReserved1 = 14,
+    StorportFeatureQueryStorMQInterface = 15,
+    StorportFeatureMax = 16
+} STORPORT_FEATURE_TYPE;
+
+typedef enum _STORPORT_LIVEDUMP_ISSUE_TYPE {
+    StorportLivedumpIssueTypeUndefined = 0,
+    StorportLivedumpIssueTypeDevicePanic = 1
+} STORPORT_LIVEDUMP_ISSUE_TYPE, *PSTORPORT_LIVEDUMP_ISSUE_TYPE;
+
+typedef enum _STORPORT_CAPTURE_LIVEDUMP_TYPE {
+    StorportCaptureLiveDumpTypeUndefined = 0,
+    StorportCaptureLiveDumpTypeMini = 1,
+    StorportCaptureLiveDumpTypeFull = 2
+} STORPORT_CAPTURE_LIVEDUMP_TYPE, *PSTORPORT_CAPTURE_LIVEDUMP_TYPE;
+
+typedef enum _STORPORT_LIVEDUMP_DATA_TYPE {
+    StorportLivedumpDataTypeUndefined = 0,
+    StorportLivedumpDataTypeDeviceTelemetryLog = 1
+} STORPORT_LIVEDUMP_DATA_TYPE, *PSTORPORT_LIVEDUMP_DATA_TYPE;
+
+typedef enum _STOR_THREAD_PRIORITY {
+    StorThreadPriorityBackground = 7,
+    StorThreadPriorityNormal = 8,
+    StorThreadPriorityDelayed = 12,
+    StorThreadPriorityCritical = 13,
+    StorThreadPrioritySuperCritical = 14,
+    StorThreadPriorityHyperCritical = 15,
+    StorThreadPriorityRealTime = 18
+} STOR_THREAD_PRIORITY, *PSTOR_THREAD_PRIORITY;
+
+typedef enum _DATA_TYPE {
+    DataTypeGuid = 0,
+    DataTypeBoolean = 1,
+    DataTypeUnicodeString = 2,
+    DataTypeAnsiString = 3,
+    DataTypeInt8 = 4,
+    DataTypeInt16 = 5,
+    DataTypeInt32 = 6,
+    DataTypeInt64 = 7,
+    DataTypeUInt8 = 8,
+    DataTypeUInt16 = 9,
+    DataTypeUInt32 = 10,
+    DataTypeUInt64 = 11,
+    DataTypeHex8 = 12,
+    DataTypeHex16 = 13,
+    DataTypeHex32 = 14,
+    DataTypeHex64 = 15,
+    DataTypeByteArray = 16
+} DATA_TYPE;
+
+typedef enum _STORMQ_CONTROLLER_STATUS {
+    ControllerStatusUnknown = 0,
+    ControllerStatusInitializationFailed = 1,
+    ControllerStatusRemovalInProgress = 2,
+    ControllerStatusRemovalFailed = 3,
+    MakeControllerStatusTypeSizeOfUlong = (-1)
+} STORMQ_CONTROLLER_STATUS, *PSTORMQ_CONTROLLER_STATUS;
+
+typedef enum _STORMQ_PROPERTY_OFFSET {
+    StorMQPropQueueBase = (-2147483648),
+    StorMQPropSQMetadataContext = (-2147483647),
+    StorMQPropSQMiniportContextSize = (-2147483646),
+    StorMQPropSQMiniportContext = (-2147483645),
+    StorMQPropControllerNumaAffinity = (-2147483644),
+    StorMQPropPopulatePrpEntries = (-2147483643),
+    StorMQPropLPSQAffinity = (-2147483642),
+    StorMQPropSQCQAffinity = (-2147483641),
+    StorMQPropCQIVAffinity = (-2147483640),
+    StorMQPropControllerStatus = (-2147483639)
+} STORMQ_PROPERTY_OFFSET;
+
+typedef ULONG_PTR STOR_KSPIN_LOCK;
+typedef STOR_KSPIN_LOCK * PSTOR_KSPIN_LOCK;
+typedef sp_DRIVER_INITIALIZE * sp_PDRIVER_INITIALIZE;
+typedef PVOID PSTOR_DRIVER_PROXY_EXTENSION;
+typedef ULONG STOR_DRIVER_PROXY_ENDPOINT_FUNCTION_ID;
+typedef ULONG * PSTOR_DRIVER_PROXY_ENDPOINT_FUNCTION_ID;
+typedef ULONG_PTR STOR_AFFINITY;
+
 #endif /* _NTSTORPORT_ */
+
+#ifndef ATTRIBUTE_VM_PASSTHROUGH_LUN
+#define ATTRIBUTE_VM_PASSTHROUGH_LUN 0x1
+#endif
+#ifndef DUMP_MINIPORT_VERSION
+#define DUMP_MINIPORT_VERSION 0x0200
+#endif
+#ifndef EXTENDED_FLAG_POWER
+#define EXTENDED_FLAG_POWER 0x00000001
+#endif
+#ifndef FREE_DUMP_INFO_SIGNATURE
+#define FREE_DUMP_INFO_SIGNATURE 0x464D4449
+#endif
+#ifndef GET_DUMP_INFO_SIGNATURE_EXT
+#define GET_DUMP_INFO_SIGNATURE_EXT 0x474D4445
+#endif
+#ifndef MARK_DUMP_MEMORY_FLAG_PHYSICAL_ADDRESS
+#define MARK_DUMP_MEMORY_FLAG_PHYSICAL_ADDRESS 0x1
+#endif
+#ifndef MINIPORT_DUMP_INFO_SIGNATURE
+#define MINIPORT_DUMP_INFO_SIGNATURE 0x4D504449
+#endif
+#ifndef MINIPORT_REG_DWORD
+#define MINIPORT_REG_DWORD 4
+#endif
+#ifndef MINIPORT_REG_MULTI_SZ
+#define MINIPORT_REG_MULTI_SZ 7
+#endif
+#ifndef MINIPORT_REG_SZ
+#define MINIPORT_REG_SZ 1
+#endif
+#ifndef RAID_MIN_TIMER_DELAY_IN_MSEC
+#define RAID_MIN_TIMER_DELAY_IN_MSEC 32
+#endif
+#ifndef SCSISTAT_TASK_ABORTED
+#define SCSISTAT_TASK_ABORTED 0x40
+#endif
+#ifndef SCSI_DMA64_MINIPORT_64BIT_ONE_4GB_SUPPORTED
+#define SCSI_DMA64_MINIPORT_64BIT_ONE_4GB_SUPPORTED 0x04
+#endif
+#ifndef SP_RETURN_ENGAGED
+#define SP_RETURN_ENGAGED 4
+#endif
+#ifndef STATE_CHANGE_BUS
+#define STATE_CHANGE_BUS 0x4
+#endif
+#ifndef STATE_CHANGE_LUN
+#define STATE_CHANGE_LUN 0x1
+#endif
+#ifndef STORMQ_MINIPORT_INTERFACE_VERSION_V1
+#define STORMQ_MINIPORT_INTERFACE_VERSION_V1 0x0001
+#endif
+#ifndef STORMQ_PROPERTY_AFFINITY_DESCRIPTOR_VERSION
+#define STORMQ_PROPERTY_AFFINITY_DESCRIPTOR_VERSION 0x0001
+#endif
+#ifndef STORMQ_PROPERTY_FLAG_STORMQ_SPECIFIC
+#define STORMQ_PROPERTY_FLAG_STORMQ_SPECIFIC 0x00000001
+#endif
+#ifndef STORMQ_PROPERTY_QUEUE_DESCRIPTOR_VERSION
+#define STORMQ_PROPERTY_QUEUE_DESCRIPTOR_VERSION 0x0001
+#endif
+#ifndef STORMQ_SUBMISSION_QUEUE_METADATA_CONTEXT_VERSION
+#define STORMQ_SUBMISSION_QUEUE_METADATA_CONTEXT_VERSION 0x00000001
+#endif
+#ifndef STORPORT_ETW_EVENT_KEYWORD_ASYNC_EVENT
+#define STORPORT_ETW_EVENT_KEYWORD_ASYNC_EVENT 0x0000000000000020
+#endif
+#ifndef STORPORT_ETW_EVENT_KEYWORD_COMMAND_TRACE_IO
+#define STORPORT_ETW_EVENT_KEYWORD_COMMAND_TRACE_IO 0x0000000000000080
+#endif
+#ifndef STORPORT_ETW_EVENT_KEYWORD_COMMAND_TRACE_NON_IO
+#define STORPORT_ETW_EVENT_KEYWORD_COMMAND_TRACE_NON_IO 0x0000000000000100
+#endif
+#ifndef STORPORT_ETW_EVENT_KEYWORD_ENUMERATION
+#define STORPORT_ETW_EVENT_KEYWORD_ENUMERATION 0x0000000000000008
+#endif
+#ifndef STORPORT_ETW_EVENT_KEYWORD_NON_IO
+#define STORPORT_ETW_EVENT_KEYWORD_NON_IO 0x0000000000000040
+#endif
+#ifndef STORPORT_ETW_EVENT_KEYWORD_NVME_FABRIC
+#define STORPORT_ETW_EVENT_KEYWORD_NVME_FABRIC 0x0000000000000200
+#endif
+#ifndef STORPORT_ETW_EVENT_KEYWORD_PERFORMANCE
+#define STORPORT_ETW_EVENT_KEYWORD_PERFORMANCE 0x0000000000000002
+#endif
+#ifndef STORPORT_ETW_MAX_BYTE_STREAM_LENGTH
+#define STORPORT_ETW_MAX_BYTE_STREAM_LENGTH 1024
+#endif
+#ifndef STORPORT_LIVEDUMP_BUCKET_ID_LENGTH
+#define STORPORT_LIVEDUMP_BUCKET_ID_LENGTH 128
+#endif
+#ifndef STORPORT_MAP_WRITECOMBINE
+#define STORPORT_MAP_WRITECOMBINE 0x00000001UL
+#endif
+#ifndef STORPORT_MARK_DEVICE_FAILED_FLAG_PREDICTED_FAILURE
+#define STORPORT_MARK_DEVICE_FAILED_FLAG_PREDICTED_FAILURE 0x2
+#endif
+#ifndef STORPORT_MARK_DEVICE_FAILED_FLAG_REMOVE_DEVICE
+#define STORPORT_MARK_DEVICE_FAILED_FLAG_REMOVE_DEVICE 0x1
+#endif
+#ifndef STOR_ADAPTER_DMA_ADDRESS_WIDTH_SPECIFIED
+#define STOR_ADAPTER_DMA_ADDRESS_WIDTH_SPECIFIED 0x00000040
+#endif
+#ifndef STOR_ADAPTER_FEATURE_ABORT_COMMAND
+#define STOR_ADAPTER_FEATURE_ABORT_COMMAND 0x00000010
+#endif
+#ifndef STOR_ADAPTER_FEATURE_UNIQUE_QUEUEING_TAG
+#define STOR_ADAPTER_FEATURE_UNIQUE_QUEUEING_TAG 0x00000080
+#endif
+#ifndef STOR_ADAPTER_UNCACHED_EXTENSION_NUMA_NODE_PREFERRED
+#define STOR_ADAPTER_UNCACHED_EXTENSION_NUMA_NODE_PREFERRED 0x00000004
+#endif
+#ifndef STOR_CRYPTO_CAPABILITIES_DATA_VERSION_1
+#define STOR_CRYPTO_CAPABILITIES_DATA_VERSION_1 1
+#endif
+#ifndef STOR_CRYPTO_CAPABILITY_VERSION_1
+#define STOR_CRYPTO_CAPABILITY_VERSION_1 1
+#endif
+#ifndef STOR_CRYPTO_CAPABILITY_VERSION_2
+#define STOR_CRYPTO_CAPABILITY_VERSION_2 2
+#endif
+#ifndef STOR_CRYPTO_KEY_INFO_VERSION_1
+#define STOR_CRYPTO_KEY_INFO_VERSION_1 1
+#endif
+#ifndef STOR_CRYPTO_OPERATION_INSERT_KEY_VERSION_1
+#define STOR_CRYPTO_OPERATION_INSERT_KEY_VERSION_1 1
+#endif
+#ifndef STOR_CURRENT_LOG_INTERFACE_REVISION
+#define STOR_CURRENT_LOG_INTERFACE_REVISION 0x0100
+#endif
+#ifndef STOR_FEATURE_DMA_ALLOCATION_NO_BOUNDARY
+#define STOR_FEATURE_DMA_ALLOCATION_NO_BOUNDARY 0x00002000
+#endif
+#ifndef STOR_FEATURE_DUMP_16_BYTE_ALIGNMENT
+#define STOR_FEATURE_DUMP_16_BYTE_ALIGNMENT 0x00000400
+#endif
+#ifndef STOR_FEATURE_EARLY_DUMP
+#define STOR_FEATURE_EARLY_DUMP 0x00010000
+#endif
+#ifndef STOR_FEATURE_NVME_ICE
+#define STOR_FEATURE_NVME_ICE 0x00020000
+#endif
+#ifndef STOR_FEATURE_REPORT_INTERNAL_DATA
+#define STOR_FEATURE_REPORT_INTERNAL_DATA 0x00008000
+#endif
+#ifndef STOR_FEATURE_STORMQ_MINIPORT
+#define STOR_FEATURE_STORMQ_MINIPORT 0x00040000
+#endif
+#ifndef STOR_FRU_ID_DESCRIPTION_STRUCTURE_VERSION_1
+#define STOR_FRU_ID_DESCRIPTION_STRUCTURE_VERSION_1 0x1
+#endif
+#ifndef STOR_FRU_ID_MAX_LENGTH
+#define STOR_FRU_ID_MAX_LENGTH 128
+#endif
+#ifndef STOR_POFX_ADAPTER_MAX_COMPONENTS
+#define STOR_POFX_ADAPTER_MAX_COMPONENTS 1
+#endif
+#ifndef STOR_POFX_ADAPTER_MAX_IDLE_STATES
+#define STOR_POFX_ADAPTER_MAX_IDLE_STATES 8
+#endif
+#ifndef STOR_POFX_ADAPTER_MIN_COMPONENTS
+#define STOR_POFX_ADAPTER_MIN_COMPONENTS 1
+#endif
+#ifndef STOR_POFX_ADAPTER_MIN_IDLE_STATES
+#define STOR_POFX_ADAPTER_MIN_IDLE_STATES 1
+#endif
+#ifndef STOR_POFX_COMPONENT_MAX_PERF_SETS
+#define STOR_POFX_COMPONENT_MAX_PERF_SETS 3
+#endif
+#ifndef STOR_POFX_COMPONENT_MIN_PERF_SETS
+#define STOR_POFX_COMPONENT_MIN_PERF_SETS 0
+#endif
+#ifndef STOR_POFX_COMPONENT_PERF_SET_VERSION_V1
+#define STOR_POFX_COMPONENT_PERF_SET_VERSION_V1 1
+#endif
+#ifndef STOR_POFX_DEVICE_FLAG_DISABLE_INTERRUPTS_ON_D3
+#define STOR_POFX_DEVICE_FLAG_DISABLE_INTERRUPTS_ON_D3 0x400
+#endif
+#ifndef STOR_POFX_DEVICE_FLAG_DUMP_ALWAYS_POWER_ON
+#define STOR_POFX_DEVICE_FLAG_DUMP_ALWAYS_POWER_ON 0x200
+#endif
+#ifndef STOR_POFX_DEVICE_FLAG_GET_PERF_STATE_FROM_PEP
+#define STOR_POFX_DEVICE_FLAG_GET_PERF_STATE_FROM_PEP 0x1000
+#endif
+#ifndef STOR_POFX_DEVICE_FLAG_NO_D0
+#define STOR_POFX_DEVICE_FLAG_NO_D0 0x01
+#endif
+#ifndef STOR_POFX_DEVICE_FLAG_NO_D3
+#define STOR_POFX_DEVICE_FLAG_NO_D3 0x02
+#endif
+#ifndef STOR_POFX_DEVICE_FLAG_NO_UNIT_REGISTRATION
+#define STOR_POFX_DEVICE_FLAG_NO_UNIT_REGISTRATION 0x40
+#endif
+#ifndef STOR_POFX_DEVICE_FLAG_PERF_STATE_PEP_OPTIONAL
+#define STOR_POFX_DEVICE_FLAG_PERF_STATE_PEP_OPTIONAL 0x80
+#endif
+#ifndef STOR_POFX_DEVICE_VERSION_V1
+#define STOR_POFX_DEVICE_VERSION_V1 1
+#endif
+#ifndef STOR_POFX_MAX_DISCRETE_PERF_STATES
+#define STOR_POFX_MAX_DISCRETE_PERF_STATES 8
+#endif
+#ifndef STOR_POFX_MIN_DISCRETE_PERF_STATES
+#define STOR_POFX_MIN_DISCRETE_PERF_STATES 1
+#endif
+#ifndef STOR_POFX_PERF_STATE_VERSION_V1
+#define STOR_POFX_PERF_STATE_VERSION_V1 1
+#endif
+#ifndef STOR_POFX_UNIT_MAX_COMPONENTS
+#define STOR_POFX_UNIT_MAX_COMPONENTS 1
+#endif
+#ifndef STOR_POFX_UNIT_MAX_IDLE_STATES
+#define STOR_POFX_UNIT_MAX_IDLE_STATES 2
+#endif
+#ifndef STOR_POFX_UNIT_MIN_COMPONENTS
+#define STOR_POFX_UNIT_MIN_COMPONENTS 1
+#endif
+#ifndef STOR_POFX_UNIT_MIN_IDLE_STATES
+#define STOR_POFX_UNIT_MIN_IDLE_STATES 1
+#endif
+#ifndef STOR_POFX_UNKNOWN_TIME
+#define STOR_POFX_UNKNOWN_TIME 0xFFFFFFFFFFFFFFFF
+#endif
+#ifndef STOR_REQUEST_INFO_VER_1
+#define STOR_REQUEST_INFO_VER_1 1
+#endif
+#ifndef STOR_REQUEST_INFO_VER_2
+#define STOR_REQUEST_INFO_VER_2 2
+#endif
+#ifndef STOR_RPMB_VERSION_1
+#define STOR_RPMB_VERSION_1 0x00000001
+#endif
+#ifndef STOR_STATUS_RESET_REQUIRED
+#define STOR_STATUS_RESET_REQUIRED 0xC1000010L
+#endif
+#ifndef STOR_SYSTEM_POWER_HINTS_V1
+#define STOR_SYSTEM_POWER_HINTS_V1 0x1
+#endif

@@ -83,8 +83,8 @@ A problem has been detected and LiberNT has been shut down to prevent damage
 to your computer.
 .
 
-MessageId=0x80
-Severity=Warning
+MessageId=0xD2
+Severity=Success
 Facility=System
 SymbolicName=BUGCODE_ID_DRIVER
 Language=English
@@ -1267,7 +1267,7 @@ system vendor for an updated BIOS.
 .
 
 MessageId=0xA8
-Severity=Informational
+Severity=Success
 Facility=System
 SymbolicName=BOOTING_IN_SAFEMODE_MINIMAL
 Language=English
@@ -1275,7 +1275,7 @@ The system is booting in safemode - Minimal Services
 .
 
 MessageId=0xA9
-Severity=Informational
+Severity=Success
 Facility=System
 SymbolicName=BOOTING_IN_SAFEMODE_NETWORK
 Language=English
@@ -1283,7 +1283,7 @@ The system is booting in safemode - Minimal Services with Network
 .
 
 MessageId=0xAA
-Severity=Informational
+Severity=Success
 Facility=System
 SymbolicName=BOOTING_IN_SAFEMODE_DSREPAIR
 Language=English
@@ -1307,7 +1307,7 @@ The video driver failed to initialize.
 .
 
 MessageId=0xB7
-Severity=Informational
+Severity=Success
 Facility=System
 SymbolicName=BOOTLOG_ENABLED
 Language=English

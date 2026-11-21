@@ -159,4 +159,8 @@
 #define SPERR_SISR_MIXED_NOT_ALLOWED              0x80045092
 #define SPERR_VOICE_NOT_FOUND                     0x80045093
 
+#ifndef SAPI_ERROR_BASE
+#define SAPI_ERROR_BASE 0x5000
+#endif
+
 #endif /* SPError_h */

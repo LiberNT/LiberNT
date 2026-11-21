@@ -42,6 +42,7 @@ typedef enum AppPolicyMediaFoundationCodecLoading
     AppPolicyMediaFoundationCodecLoading_All = 0,
 } AppPolicyMediaFoundationCodecLoading;
 
+#pragma pack(push, 4)
 typedef struct PACKAGE_VERSION
 {
     union
@@ -67,6 +68,7 @@ typedef struct PACKAGE_ID
     PWSTR resourceId;
     PWSTR publisherId;
 } PACKAGE_ID;
+#pragma pack(pop)
 
 #define PACKAGE_PROPERTY_FRAMEWORK          0x00000001
 #define PACKAGE_PROPERTY_RESOURCE           0x00000002
@@ -176,4 +178,117 @@ AppPolicyGetMediaFoundationCodecLoading(
 
 #ifdef __cplusplus
 } // extern "C"
+#endif
+
+#ifndef PACKAGE_DEPENDENCY_RANK_DEFAULT
+#define PACKAGE_DEPENDENCY_RANK_DEFAULT 0
+typedef enum PackagePathType {
+    PackagePathType_Install = 0,
+    PackagePathType_Mutable = 1,
+    PackagePathType_Effective = 2,
+    PackagePathType_MachineExternal = 3,
+    PackagePathType_UserExternal = 4,
+    PackagePathType_EffectiveExternal = 5
+} PackagePathType;
+
+typedef enum _PackageOrigin {
+    PackageOrigin_Unknown = 0,
+    PackageOrigin_Unsigned = 1,
+    PackageOrigin_Inbox = 2,
+    PackageOrigin_Store = 3,
+    PackageOrigin_DeveloperUnsigned = 4,
+    PackageOrigin_DeveloperSigned = 5,
+    PackageOrigin_LineOfBusiness = 6,
+    PackageOrigin_SignedSBOM = 7
+} PackageOrigin;
+
+typedef enum _PackageOrigin2 {
+    PackageOrigin2_Unknown = 0,
+    PackageOrigin2_Unsigned = 1,
+    PackageOrigin2_Inbox = 2,
+    PackageOrigin2_Store = 3,
+    PackageOrigin2_DeveloperUnsigned = 4,
+    PackageOrigin2_DeveloperSigned = 5,
+    PackageOrigin2_LineOfBusiness = 6,
+    PackageOrigin2_SignedSBOM = 7
+} PackageOrigin2;
+
+typedef enum AppModelPackageFeature {
+    AppModelPackageFeature_SignedSBOM = 1
+} AppModelPackageFeature;
+
+typedef enum CreatePackageDependencyOptions {
+    CreatePackageDependencyOptions_None = 0,
+    CreatePackageDependencyOptions_DoNotVerifyDependencyResolution = 1,
+    CreatePackageDependencyOptions_ScopeIsSystem = 2
+} CreatePackageDependencyOptions;
+
+typedef enum PackageDependencyLifetimeKind {
+    PackageDependencyLifetimeKind_Process = 0,
+    PackageDependencyLifetimeKind_FilePath = 1,
+    PackageDependencyLifetimeKind_RegistryKey = 2
+} PackageDependencyLifetimeKind;
+
+typedef enum AddPackageDependencyOptions {
+    AddPackageDependencyOptions_None = 0,
+    AddPackageDependencyOptions_PrependIfRankCollision = 1
+} AddPackageDependencyOptions;
+
+typedef enum AddPackageDependencyOptions2 {
+    AddPackageDependencyOptions2_None = 0,
+    AddPackageDependencyOptions2_PrependIfRankCollision = 1,
+    AddPackageDependencyOptions2_SpecifiedPackageFamilyOnly = 2
+} AddPackageDependencyOptions2;
+
+typedef enum PackageDependencyProcessorArchitectures {
+    PackageDependencyProcessorArchitectures_None = 0,
+    PackageDependencyProcessorArchitectures_Neutral = 1,
+    PackageDependencyProcessorArchitectures_X86 = 2,
+    PackageDependencyProcessorArchitectures_X64 = 4,
+    PackageDependencyProcessorArchitectures_Arm = 8,
+    PackageDependencyProcessorArchitectures_Arm64 = 16,
+    PackageDependencyProcessorArchitectures_X86A64 = 32
+} PackageDependencyProcessorArchitectures;
+
+typedef enum AppPolicyLifecycleManagement {
+    AppPolicyLifecycleManagement_Unmanaged = 0,
+    AppPolicyLifecycleManagement_Managed = 1
+} AppPolicyLifecycleManagement;
+
+typedef enum AppPolicyClrCompat {
+    AppPolicyClrCompat_Other = 0,
+    AppPolicyClrCompat_ClassicDesktop = 1,
+    AppPolicyClrCompat_Universal = 2,
+    AppPolicyClrCompat_PackagedDesktop = 3
+} AppPolicyClrCompat;
+
+typedef enum AppPolicyCreateFileAccess {
+    AppPolicyCreateFileAccess_Full = 0,
+    AppPolicyCreateFileAccess_Limited = 1
+} AppPolicyCreateFileAccess;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+LONG WINAPI GetCurrentPackageId(UINT32 * bufferLength, BYTE * buffer);
+LONG WINAPI GetCurrentPackageFamilyName(UINT32 * packageFamilyNameLength, PWSTR packageFamilyName);
+LONG WINAPI GetCurrentPackagePath(UINT32 * pathLength, PWSTR path);
+LONG WINAPI GetPackageFullName(HANDLE hProcess, UINT32 * packageFullNameLength, PWSTR packageFullName);
+LONG WINAPI GetPackageFullNameFromToken(HANDLE token, UINT32 * packageFullNameLength, PWSTR packageFullName);
+LONG WINAPI GetPackageFamilyNameFromToken(HANDLE token, UINT32 * packageFamilyNameLength, PWSTR packageFamilyName);
+LONG WINAPI GetPackagePathByFullName(PCWSTR packageFullName, UINT32 * pathLength, PWSTR path);
+LONG WINAPI PackageIdFromFullName(PCWSTR packageFullName, const UINT32 flags, UINT32 * bufferLength, BYTE * buffer);
+LONG WINAPI PackageFamilyNameFromFullName(PCWSTR packageFullName, UINT32 * packageFamilyNameLength, PWSTR packageFamilyName);
+LONG WINAPI GetPackagesByPackageFamily(PCWSTR packageFamilyName, UINT32 * count, PWSTR * packageFullNames, UINT32 * bufferLength, WCHAR * buffer);
+LONG WINAPI GetCurrentPackageInfo(const UINT32 flags, UINT32 * bufferLength, BYTE * buffer, UINT32 * count);
+#ifdef __cplusplus
+}
+#endif
+
+#endif
+#ifndef PACKAGE_FILTER_ALL_LOADED
+#define PACKAGE_FILTER_ALL_LOADED 0
+#endif
+#ifndef PACKAGE_PROPERTY_HOSTRUNTIME
+#define PACKAGE_PROPERTY_HOSTRUNTIME 0x00200000
 #endif

@@ -2311,7 +2311,7 @@ BOOL		WDML_PostAck(WDML_CONV* pConv, WDML_SIDE side, WORD appRetCode,
 /*****************************************************************
  *            DdeSetUserHandle (USER32.@)
  */
-BOOL WINAPI DdeSetUserHandle(HCONV hConv, DWORD id, DWORD hUser)
+BOOL WINAPI DdeSetUserHandle(HCONV hConv, DWORD id, DWORD_PTR hUser)
 {
     WDML_CONV*	pConv;
 

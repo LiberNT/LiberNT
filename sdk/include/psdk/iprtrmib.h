@@ -56,4 +56,20 @@ typedef struct _TCPIP_OWNER_MODULE_BASIC_INFO {
     PWCHAR pModulePath;
 } TCPIP_OWNER_MODULE_BASIC_INFO, *PTCPIP_OWNER_MODULE_BASIC_INFO;
 
+#ifndef IF_NUMBER
+#define IF_NUMBER 0
+#endif
+#ifndef IPRTRMGR_PID
+#define IPRTRMGR_PID 10000
+#endif
+#ifndef MAX_MIB_OFFSET
+#define MAX_MIB_OFFSET 8
+#endif
+#ifndef MAX_SCOPE_NAME_LEN
+#define MAX_SCOPE_NAME_LEN 255
+#endif
+
+typedef WCHAR SN_CHAR;
+typedef SN_CHAR * SCOPE_NAME;
+
 #endif /* WINE_IPRTRMIB_H__ */

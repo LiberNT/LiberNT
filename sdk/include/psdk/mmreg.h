@@ -408,8 +408,7 @@ typedef struct adpcmwaveformat_tag {
 	WAVEFORMATEX    wfx;
 	WORD            wSamplesPerBlock;
 	WORD            wNumCoef;
-	/* FIXME: this should be aCoef[0] */
-	ADPCMCOEFSET    aCoef[1];
+	ADPCMCOEFSET    aCoef[];
 } ADPCMWAVEFORMAT;
 typedef ADPCMWAVEFORMAT *PADPCMWAVEFORMAT,
 	*NPADPCMWAVEFORMAT, *LPADPCMWAVEFORMAT;
@@ -838,6 +837,12 @@ typedef struct tagEXBMINFOHEADER {
 
 #pragma pack(pop)
 
+typedef G721_ADPCMWAVEFORMAT * NPG721_ADPCMWAVEFORMAT;
+typedef HEAACWAVEINFO * NPHEAACWAVEINFO;
+typedef HEAACWAVEINFO * LPHEAACWAVEINFO;
+typedef HEAACWAVEFORMAT * NPHEAACWAVEFORMAT;
+typedef HEAACWAVEFORMAT * LPHEAACWAVEFORMAT;
+
 #endif /* __WINE_MMREG_H */
 
 #else /* __WIDL__ */
@@ -885,3 +890,4459 @@ typedef struct {
 cpp_quote("#endif")
 
 #endif /* __WIDL__ */
+
+#ifndef AVIIF_CONTROLFRAME
+#define AVIIF_CONTROLFRAME 0x00000200L
+#endif
+#ifndef CRYSTAL_NET_SFM_CODEC
+#define CRYSTAL_NET_SFM_CODEC 1
+#endif
+#ifndef JIFMK_00
+#define JIFMK_00 0xFF00
+#endif
+#ifndef JIFMK_APP0
+#define JIFMK_APP0 0xFFE0
+#endif
+#ifndef JIFMK_APP1
+#define JIFMK_APP1 0xFFE1
+#endif
+#ifndef JIFMK_APP2
+#define JIFMK_APP2 0xFFE2
+#endif
+#ifndef JIFMK_APP3
+#define JIFMK_APP3 0xFFE3
+#endif
+#ifndef JIFMK_APP4
+#define JIFMK_APP4 0xFFE4
+#endif
+#ifndef JIFMK_APP5
+#define JIFMK_APP5 0xFFE5
+#endif
+#ifndef JIFMK_APP6
+#define JIFMK_APP6 0xFFE6
+#endif
+#ifndef JIFMK_APP7
+#define JIFMK_APP7 0xFFE7
+#endif
+#ifndef JIFMK_COM
+#define JIFMK_COM 0xFFFE
+#endif
+#ifndef JIFMK_DAC
+#define JIFMK_DAC 0xFFCC
+#endif
+#ifndef JIFMK_DHP
+#define JIFMK_DHP 0xFFDE
+#endif
+#ifndef JIFMK_DHT
+#define JIFMK_DHT 0xFFC4
+#endif
+#ifndef JIFMK_DNL
+#define JIFMK_DNL 0xFFDC
+#endif
+#ifndef JIFMK_DQT
+#define JIFMK_DQT 0xFFDB
+#endif
+#ifndef JIFMK_DRI
+#define JIFMK_DRI 0xFFDD
+#endif
+#ifndef JIFMK_EOI
+#define JIFMK_EOI 0xFFD9
+#endif
+#ifndef JIFMK_EXP
+#define JIFMK_EXP 0xFFDF
+#endif
+#ifndef JIFMK_FF
+#define JIFMK_FF 0xFFFF
+#endif
+#ifndef JIFMK_JPG
+#define JIFMK_JPG 0xFFC8
+#endif
+#ifndef JIFMK_JPG0
+#define JIFMK_JPG0 0xFFF0
+#endif
+#ifndef JIFMK_JPG1
+#define JIFMK_JPG1 0xFFF1
+#endif
+#ifndef JIFMK_JPG10
+#define JIFMK_JPG10 0xFFFA
+#endif
+#ifndef JIFMK_JPG11
+#define JIFMK_JPG11 0xFFFB
+#endif
+#ifndef JIFMK_JPG12
+#define JIFMK_JPG12 0xFFFC
+#endif
+#ifndef JIFMK_JPG13
+#define JIFMK_JPG13 0xFFFD
+#endif
+#ifndef JIFMK_JPG2
+#define JIFMK_JPG2 0xFFF2
+#endif
+#ifndef JIFMK_JPG3
+#define JIFMK_JPG3 0xFFF3
+#endif
+#ifndef JIFMK_JPG4
+#define JIFMK_JPG4 0xFFF4
+#endif
+#ifndef JIFMK_JPG5
+#define JIFMK_JPG5 0xFFF5
+#endif
+#ifndef JIFMK_JPG6
+#define JIFMK_JPG6 0xFFF6
+#endif
+#ifndef JIFMK_JPG7
+#define JIFMK_JPG7 0xFFF7
+#endif
+#ifndef JIFMK_JPG8
+#define JIFMK_JPG8 0xFFF8
+#endif
+#ifndef JIFMK_JPG9
+#define JIFMK_JPG9 0xFFF9
+#endif
+#ifndef JIFMK_RES
+#define JIFMK_RES 0xFF02
+#endif
+#ifndef JIFMK_RST0
+#define JIFMK_RST0 0xFFD0
+#endif
+#ifndef JIFMK_RST1
+#define JIFMK_RST1 0xFFD1
+#endif
+#ifndef JIFMK_RST2
+#define JIFMK_RST2 0xFFD2
+#endif
+#ifndef JIFMK_RST3
+#define JIFMK_RST3 0xFFD3
+#endif
+#ifndef JIFMK_RST4
+#define JIFMK_RST4 0xFFD4
+#endif
+#ifndef JIFMK_RST5
+#define JIFMK_RST5 0xFFD5
+#endif
+#ifndef JIFMK_RST6
+#define JIFMK_RST6 0xFFD6
+#endif
+#ifndef JIFMK_RST7
+#define JIFMK_RST7 0xFFD7
+#endif
+#ifndef JIFMK_SOF0
+#define JIFMK_SOF0 0xFFC0
+#endif
+#ifndef JIFMK_SOF1
+#define JIFMK_SOF1 0xFFC1
+#endif
+#ifndef JIFMK_SOF10
+#define JIFMK_SOF10 0xFFCA
+#endif
+#ifndef JIFMK_SOF11
+#define JIFMK_SOF11 0xFFCB
+#endif
+#ifndef JIFMK_SOF13
+#define JIFMK_SOF13 0xFFCD
+#endif
+#ifndef JIFMK_SOF14
+#define JIFMK_SOF14 0xFFCE
+#endif
+#ifndef JIFMK_SOF15
+#define JIFMK_SOF15 0xFFCF
+#endif
+#ifndef JIFMK_SOF2
+#define JIFMK_SOF2 0xFFC2
+#endif
+#ifndef JIFMK_SOF3
+#define JIFMK_SOF3 0xFFC3
+#endif
+#ifndef JIFMK_SOF5
+#define JIFMK_SOF5 0xFFC5
+#endif
+#ifndef JIFMK_SOF6
+#define JIFMK_SOF6 0xFFC6
+#endif
+#ifndef JIFMK_SOF7
+#define JIFMK_SOF7 0xFFC7
+#endif
+#ifndef JIFMK_SOF9
+#define JIFMK_SOF9 0xFFC9
+#endif
+#ifndef JIFMK_SOI
+#define JIFMK_SOI 0xFFD8
+#endif
+#ifndef JIFMK_SOS
+#define JIFMK_SOS 0xFFDA
+#endif
+#ifndef JIFMK_TEM
+#define JIFMK_TEM 0xFF01
+#endif
+#ifndef JPEG_PROCESS_BASELINE
+#define JPEG_PROCESS_BASELINE 0
+#endif
+#ifndef JPEG_RGB
+#define JPEG_RGB 3
+#endif
+#ifndef JPEG_Y
+#define JPEG_Y 1
+#endif
+#ifndef JPEG_YCbCr
+#define JPEG_YCbCr 2
+#endif
+#ifndef MM_3COM
+#define MM_3COM 260
+#endif
+#ifndef MM_3COM_CB_MIXER
+#define MM_3COM_CB_MIXER 1
+#endif
+#ifndef MM_3COM_CB_WAVEIN
+#define MM_3COM_CB_WAVEIN 2
+#endif
+#ifndef MM_3COM_CB_WAVEOUT
+#define MM_3COM_CB_WAVEOUT 3
+#endif
+#ifndef MM_3DFX
+#define MM_3DFX 262
+#endif
+#ifndef MM_AARDVARK
+#define MM_AARDVARK 11
+#endif
+#ifndef MM_AARDVARK_STUDIO12_WAVEIN
+#define MM_AARDVARK_STUDIO12_WAVEIN 2
+#endif
+#ifndef MM_AARDVARK_STUDIO12_WAVEOUT
+#define MM_AARDVARK_STUDIO12_WAVEOUT 1
+#endif
+#ifndef MM_AARDVARK_STUDIO88_WAVEIN
+#define MM_AARDVARK_STUDIO88_WAVEIN 4
+#endif
+#ifndef MM_AARDVARK_STUDIO88_WAVEOUT
+#define MM_AARDVARK_STUDIO88_WAVEOUT 3
+#endif
+#ifndef MM_ACTIVEVOICE
+#define MM_ACTIVEVOICE 225
+#endif
+#ifndef MM_ACTIVEVOICE_ACM_VOXADPCM
+#define MM_ACTIVEVOICE_ACM_VOXADPCM 1
+#endif
+#ifndef MM_ACULAB
+#define MM_ACULAB 14
+#endif
+#ifndef MM_ADDX
+#define MM_ADDX 118
+#endif
+#ifndef MM_ADDX_PCTV_AUX_CD
+#define MM_ADDX_PCTV_AUX_CD 5
+#endif
+#ifndef MM_ADDX_PCTV_AUX_LINE
+#define MM_ADDX_PCTV_AUX_LINE 6
+#endif
+#ifndef MM_ADDX_PCTV_DIGITALMIX
+#define MM_ADDX_PCTV_DIGITALMIX 1
+#endif
+#ifndef MM_ADDX_PCTV_MIXER
+#define MM_ADDX_PCTV_MIXER 4
+#endif
+#ifndef MM_ADDX_PCTV_WAVEIN
+#define MM_ADDX_PCTV_WAVEIN 2
+#endif
+#ifndef MM_ADDX_PCTV_WAVEOUT
+#define MM_ADDX_PCTV_WAVEOUT 3
+#endif
+#ifndef MM_ADLACC
+#define MM_ADLACC 91
+#endif
+#ifndef MM_ADMOS
+#define MM_ADMOS 235
+#endif
+#ifndef MM_ADMOS_FM_SYNTH
+#define MM_ADMOS_FM_SYNTH 1
+#endif
+#ifndef MM_ADMOS_QS3AMIDIIN
+#define MM_ADMOS_QS3AMIDIIN 3
+#endif
+#ifndef MM_ADMOS_QS3AMIDIOUT
+#define MM_ADMOS_QS3AMIDIOUT 2
+#endif
+#ifndef MM_ADMOS_QS3AWAVEIN
+#define MM_ADMOS_QS3AWAVEIN 5
+#endif
+#ifndef MM_ADMOS_QS3AWAVEOUT
+#define MM_ADMOS_QS3AWAVEOUT 4
+#endif
+#ifndef MM_AHEAD
+#define MM_AHEAD 77
+#endif
+#ifndef MM_AHEAD_GENERIC
+#define MM_AHEAD_GENERIC 4
+#endif
+#ifndef MM_AHEAD_MULTISOUND
+#define MM_AHEAD_MULTISOUND 1
+#endif
+#ifndef MM_AHEAD_PROAUDIO
+#define MM_AHEAD_PROAUDIO 3
+#endif
+#ifndef MM_AHEAD_SOUNDBLASTER
+#define MM_AHEAD_SOUNDBLASTER 2
+#endif
+#ifndef MM_ALARIS
+#define MM_ALARIS 174
+#endif
+#ifndef MM_ALDIGITAL
+#define MM_ALDIGITAL 143
+#endif
+#ifndef MM_ALESIS
+#define MM_ALESIS 243
+#endif
+#ifndef MM_ALGOVISION
+#define MM_ALGOVISION 266
+#endif
+#ifndef MM_ALGOVISION_VB80AUX
+#define MM_ALGOVISION_VB80AUX 4
+#endif
+#ifndef MM_ALGOVISION_VB80AUX2
+#define MM_ALGOVISION_VB80AUX2 5
+#endif
+#ifndef MM_ALGOVISION_VB80MIXER
+#define MM_ALGOVISION_VB80MIXER 3
+#endif
+#ifndef MM_ALGOVISION_VB80WAVEIN
+#define MM_ALGOVISION_VB80WAVEIN 2
+#endif
+#ifndef MM_ALGOVISION_VB80WAVEOUT
+#define MM_ALGOVISION_VB80WAVEOUT 1
+#endif
+#ifndef MM_AMD
+#define MM_AMD 146
+#endif
+#ifndef MM_AMD_INTERWAVE_AUX1
+#define MM_AMD_INTERWAVE_AUX1 10
+#endif
+#ifndef MM_AMD_INTERWAVE_AUX2
+#define MM_AMD_INTERWAVE_AUX2 11
+#endif
+#ifndef MM_AMD_INTERWAVE_AUX_CD
+#define MM_AMD_INTERWAVE_AUX_CD 13
+#endif
+#ifndef MM_AMD_INTERWAVE_AUX_MIC
+#define MM_AMD_INTERWAVE_AUX_MIC 12
+#endif
+#ifndef MM_AMD_INTERWAVE_EX_CD
+#define MM_AMD_INTERWAVE_EX_CD 7
+#endif
+#ifndef MM_AMD_INTERWAVE_EX_TELEPHONY
+#define MM_AMD_INTERWAVE_EX_TELEPHONY 16
+#endif
+#ifndef MM_AMD_INTERWAVE_JOYSTICK
+#define MM_AMD_INTERWAVE_JOYSTICK 6
+#endif
+#ifndef MM_AMD_INTERWAVE_MIDIIN
+#define MM_AMD_INTERWAVE_MIDIIN 8
+#endif
+#ifndef MM_AMD_INTERWAVE_MIDIOUT
+#define MM_AMD_INTERWAVE_MIDIOUT 9
+#endif
+#ifndef MM_AMD_INTERWAVE_MIXER1
+#define MM_AMD_INTERWAVE_MIXER1 4
+#endif
+#ifndef MM_AMD_INTERWAVE_MIXER2
+#define MM_AMD_INTERWAVE_MIXER2 5
+#endif
+#ifndef MM_AMD_INTERWAVE_MONO_IN
+#define MM_AMD_INTERWAVE_MONO_IN 14
+#endif
+#ifndef MM_AMD_INTERWAVE_MONO_OUT
+#define MM_AMD_INTERWAVE_MONO_OUT 15
+#endif
+#ifndef MM_AMD_INTERWAVE_STEREO_ENHANCED
+#define MM_AMD_INTERWAVE_STEREO_ENHANCED 19
+#endif
+#ifndef MM_AMD_INTERWAVE_SYNTH
+#define MM_AMD_INTERWAVE_SYNTH 3
+#endif
+#ifndef MM_AMD_INTERWAVE_WAVEIN
+#define MM_AMD_INTERWAVE_WAVEIN 1
+#endif
+#ifndef MM_AMD_INTERWAVE_WAVEOUT
+#define MM_AMD_INTERWAVE_WAVEOUT 2
+#endif
+#ifndef MM_AMD_INTERWAVE_WAVEOUT_BASE
+#define MM_AMD_INTERWAVE_WAVEOUT_BASE 17
+#endif
+#ifndef MM_AMD_INTERWAVE_WAVEOUT_TREBLE
+#define MM_AMD_INTERWAVE_WAVEOUT_TREBLE 18
+#endif
+#ifndef MM_ANALOGDEVICES
+#define MM_ANALOGDEVICES 252
+#endif
+#ifndef MM_ANTEX
+#define MM_ANTEX 31
+#endif
+#ifndef MM_ANTEX_AUDIOPORT22_FEEDTHRU
+#define MM_ANTEX_AUDIOPORT22_FEEDTHRU 9
+#endif
+#ifndef MM_ANTEX_AUDIOPORT22_WAVEIN
+#define MM_ANTEX_AUDIOPORT22_WAVEIN 7
+#endif
+#ifndef MM_ANTEX_AUDIOPORT22_WAVEOUT
+#define MM_ANTEX_AUDIOPORT22_WAVEOUT 8
+#endif
+#ifndef MM_ANTEX_SX12_WAVEIN
+#define MM_ANTEX_SX12_WAVEIN 1
+#endif
+#ifndef MM_ANTEX_SX12_WAVEOUT
+#define MM_ANTEX_SX12_WAVEOUT 2
+#endif
+#ifndef MM_ANTEX_SX15_WAVEIN
+#define MM_ANTEX_SX15_WAVEIN 3
+#endif
+#ifndef MM_ANTEX_SX15_WAVEOUT
+#define MM_ANTEX_SX15_WAVEOUT 4
+#endif
+#ifndef MM_ANTEX_VP625_WAVEIN
+#define MM_ANTEX_VP625_WAVEIN 5
+#endif
+#ifndef MM_ANTEX_VP625_WAVEOUT
+#define MM_ANTEX_VP625_WAVEOUT 6
+#endif
+#ifndef MM_APICOM
+#define MM_APICOM 116
+#endif
+#ifndef MM_APPLE
+#define MM_APPLE 99
+#endif
+#ifndef MM_APPS
+#define MM_APPS 42
+#endif
+#ifndef MM_APT
+#define MM_APT 56
+#endif
+#ifndef MM_APT_ACE100CD
+#define MM_APT_ACE100CD 1
+#endif
+#ifndef MM_ARRAY
+#define MM_ARRAY 231
+#endif
+#ifndef MM_ARTISOFT
+#define MM_ARTISOFT 20
+#endif
+#ifndef MM_ARTISOFT_SBWAVEIN
+#define MM_ARTISOFT_SBWAVEIN 1
+#endif
+#ifndef MM_ARTISOFT_SBWAVEOUT
+#define MM_ARTISOFT_SBWAVEOUT 2
+#endif
+#ifndef MM_AST
+#define MM_AST 64
+#endif
+#ifndef MM_AST_MODEMWAVE_WAVEIN
+#define MM_AST_MODEMWAVE_WAVEIN 13
+#endif
+#ifndef MM_AST_MODEMWAVE_WAVEOUT
+#define MM_AST_MODEMWAVE_WAVEOUT 14
+#endif
+#ifndef MM_ATI
+#define MM_ATI 27
+#endif
+#ifndef MM_ATT
+#define MM_ATT 185
+#endif
+#ifndef MM_ATT_G729A
+#define MM_ATT_G729A 1
+#endif
+#ifndef MM_ATT_MICROELECTRONICS
+#define MM_ATT_MICROELECTRONICS 139
+#endif
+#ifndef MM_AU8820_AUX
+#define MM_AU8820_AUX 21
+#endif
+#ifndef MM_AU8820_MIDIIN
+#define MM_AU8820_MIDIIN 23
+#endif
+#ifndef MM_AU8820_MIDIOUT
+#define MM_AU8820_MIDIOUT 22
+#endif
+#ifndef MM_AU8820_MIXER
+#define MM_AU8820_MIXER 20
+#endif
+#ifndef MM_AU8820_SYNTH
+#define MM_AU8820_SYNTH 17
+#endif
+#ifndef MM_AU8820_WAVEIN
+#define MM_AU8820_WAVEIN 19
+#endif
+#ifndef MM_AU8820_WAVEOUT
+#define MM_AU8820_WAVEOUT 18
+#endif
+#ifndef MM_AU8830_AUX
+#define MM_AU8830_AUX 37
+#endif
+#ifndef MM_AU8830_MIDIIN
+#define MM_AU8830_MIDIIN 39
+#endif
+#ifndef MM_AU8830_MIDIOUT
+#define MM_AU8830_MIDIOUT 38
+#endif
+#ifndef MM_AU8830_MIXER
+#define MM_AU8830_MIXER 36
+#endif
+#ifndef MM_AU8830_SYNTH
+#define MM_AU8830_SYNTH 33
+#endif
+#ifndef MM_AU8830_WAVEIN
+#define MM_AU8830_WAVEIN 35
+#endif
+#ifndef MM_AU8830_WAVEOUT
+#define MM_AU8830_WAVEOUT 34
+#endif
+#ifndef MM_AUDIOFILE
+#define MM_AUDIOFILE 47
+#endif
+#ifndef MM_AUDIOPT
+#define MM_AUDIOPT 74
+#endif
+#ifndef MM_AUDIOSCIENCE
+#define MM_AUDIOSCIENCE 217
+#endif
+#ifndef MM_AURAVISION
+#define MM_AURAVISION 80
+#endif
+#ifndef MM_AUREAL
+#define MM_AUREAL 181
+#endif
+#ifndef MM_AUREAL_AU8820
+#define MM_AUREAL_AU8820 16
+#endif
+#ifndef MM_AUREAL_AU8830
+#define MM_AUREAL_AU8830 32
+#endif
+#ifndef MM_AZTECH
+#define MM_AZTECH 52
+#endif
+#ifndef MM_AZTECH_AUX
+#define MM_AZTECH_AUX 404
+#endif
+#ifndef MM_AZTECH_AUX_CD
+#define MM_AZTECH_AUX_CD 401
+#endif
+#ifndef MM_AZTECH_AUX_LINE
+#define MM_AZTECH_AUX_LINE 402
+#endif
+#ifndef MM_AZTECH_AUX_MIC
+#define MM_AZTECH_AUX_MIC 403
+#endif
+#ifndef MM_AZTECH_DSP16_FMSYNTH
+#define MM_AZTECH_DSP16_FMSYNTH 68
+#endif
+#ifndef MM_AZTECH_DSP16_WAVEIN
+#define MM_AZTECH_DSP16_WAVEIN 65
+#endif
+#ifndef MM_AZTECH_DSP16_WAVEOUT
+#define MM_AZTECH_DSP16_WAVEOUT 66
+#endif
+#ifndef MM_AZTECH_DSP16_WAVESYNTH
+#define MM_AZTECH_DSP16_WAVESYNTH 70
+#endif
+#ifndef MM_AZTECH_FMSYNTH
+#define MM_AZTECH_FMSYNTH 20
+#endif
+#ifndef MM_AZTECH_MIDIIN
+#define MM_AZTECH_MIDIIN 4
+#endif
+#ifndef MM_AZTECH_MIDIOUT
+#define MM_AZTECH_MIDIOUT 3
+#endif
+#ifndef MM_AZTECH_MIXER
+#define MM_AZTECH_MIXER 21
+#endif
+#ifndef MM_AZTECH_NOVA16_MIXER
+#define MM_AZTECH_NOVA16_MIXER 73
+#endif
+#ifndef MM_AZTECH_NOVA16_WAVEIN
+#define MM_AZTECH_NOVA16_WAVEIN 71
+#endif
+#ifndef MM_AZTECH_NOVA16_WAVEOUT
+#define MM_AZTECH_NOVA16_WAVEOUT 72
+#endif
+#ifndef MM_AZTECH_PRO16_FMSYNTH
+#define MM_AZTECH_PRO16_FMSYNTH 38
+#endif
+#ifndef MM_AZTECH_PRO16_WAVEIN
+#define MM_AZTECH_PRO16_WAVEIN 33
+#endif
+#ifndef MM_AZTECH_PRO16_WAVEOUT
+#define MM_AZTECH_PRO16_WAVEOUT 34
+#endif
+#ifndef MM_AZTECH_WASH16_MIXER
+#define MM_AZTECH_WASH16_MIXER 76
+#endif
+#ifndef MM_AZTECH_WASH16_WAVEIN
+#define MM_AZTECH_WASH16_WAVEIN 74
+#endif
+#ifndef MM_AZTECH_WASH16_WAVEOUT
+#define MM_AZTECH_WASH16_WAVEOUT 75
+#endif
+#ifndef MM_AZTECH_WAVEIN
+#define MM_AZTECH_WAVEIN 17
+#endif
+#ifndef MM_AZTECH_WAVEOUT
+#define MM_AZTECH_WAVEOUT 18
+#endif
+#ifndef MM_BCB
+#define MM_BCB 192
+#endif
+#ifndef MM_BCB_NETBOARD_10
+#define MM_BCB_NETBOARD_10 1
+#endif
+#ifndef MM_BCB_TT75_10
+#define MM_BCB_TT75_10 2
+#endif
+#ifndef MM_BECUBED
+#define MM_BECUBED 10
+#endif
+#ifndef MM_BERCOS
+#define MM_BERCOS 199
+#endif
+#ifndef MM_BERCOS_MIXER
+#define MM_BERCOS_MIXER 2
+#endif
+#ifndef MM_BERCOS_WAVEIN
+#define MM_BERCOS_WAVEIN 1
+#endif
+#ifndef MM_BERCOS_WAVEOUT
+#define MM_BERCOS_WAVEOUT 3
+#endif
+#ifndef MM_BERKOM
+#define MM_BERKOM 189
+#endif
+#ifndef MM_BINTEC
+#define MM_BINTEC 12
+#endif
+#ifndef MM_BINTEC_TAPI_WAVE
+#define MM_BINTEC_TAPI_WAVE 1
+#endif
+#ifndef MM_BROOKTREE
+#define MM_BROOKTREE 121
+#endif
+#ifndef MM_BTV_AUX_CD
+#define MM_BTV_AUX_CD 8
+#endif
+#ifndef MM_BTV_AUX_LINE
+#define MM_BTV_AUX_LINE 6
+#endif
+#ifndef MM_BTV_AUX_MIC
+#define MM_BTV_AUX_MIC 7
+#endif
+#ifndef MM_BTV_DIGITALIN
+#define MM_BTV_DIGITALIN 9
+#endif
+#ifndef MM_BTV_DIGITALOUT
+#define MM_BTV_DIGITALOUT 10
+#endif
+#ifndef MM_BTV_MIDIIN
+#define MM_BTV_MIDIIN 3
+#endif
+#ifndef MM_BTV_MIDIOUT
+#define MM_BTV_MIDIOUT 4
+#endif
+#ifndef MM_BTV_MIDISYNTH
+#define MM_BTV_MIDISYNTH 5
+#endif
+#ifndef MM_BTV_MIDIWAVESTREAM
+#define MM_BTV_MIDIWAVESTREAM 11
+#endif
+#ifndef MM_BTV_MIXER
+#define MM_BTV_MIXER 12
+#endif
+#ifndef MM_BTV_WAVEIN
+#define MM_BTV_WAVEIN 1
+#endif
+#ifndef MM_BTV_WAVEOUT
+#define MM_BTV_WAVEOUT 2
+#endif
+#ifndef MM_CANAM
+#define MM_CANAM 148
+#endif
+#ifndef MM_CANAM_CBXWAVEIN
+#define MM_CANAM_CBXWAVEIN 2
+#endif
+#ifndef MM_CANAM_CBXWAVEOUT
+#define MM_CANAM_CBXWAVEOUT 1
+#endif
+#ifndef MM_CANOPUS
+#define MM_CANOPUS 49
+#endif
+#ifndef MM_CANOPUS_ACM_DVREX
+#define MM_CANOPUS_ACM_DVREX 1
+#endif
+#ifndef MM_CASIO
+#define MM_CASIO 162
+#endif
+#ifndef MM_CASIO_LSG_MIDIOUT
+#define MM_CASIO_LSG_MIDIOUT 3
+#endif
+#ifndef MM_CASIO_WP150_MIDIIN
+#define MM_CASIO_WP150_MIDIIN 2
+#endif
+#ifndef MM_CASIO_WP150_MIDIOUT
+#define MM_CASIO_WP150_MIDIOUT 1
+#endif
+#ifndef MM_CAT
+#define MM_CAT 41
+#endif
+#ifndef MM_CAT_WAVEOUT
+#define MM_CAT_WAVEOUT 1
+#endif
+#ifndef MM_CHROMATIC
+#define MM_CHROMATIC 155
+#endif
+#ifndef MM_CHROMATIC_M1
+#define MM_CHROMATIC_M1 0x0001
+#endif
+#ifndef MM_CHROMATIC_M1_AUX
+#define MM_CHROMATIC_M1_AUX 0x0006
+#endif
+#ifndef MM_CHROMATIC_M1_AUX_CD
+#define MM_CHROMATIC_M1_AUX_CD 0x0007
+#endif
+#ifndef MM_CHROMATIC_M1_FMSYNTH
+#define MM_CHROMATIC_M1_FMSYNTH 0x0004
+#endif
+#ifndef MM_CHROMATIC_M1_MIDIIN
+#define MM_CHROMATIC_M1_MIDIIN 0x0008
+#endif
+#ifndef MM_CHROMATIC_M1_MIDIOUT
+#define MM_CHROMATIC_M1_MIDIOUT 0x0009
+#endif
+#ifndef MM_CHROMATIC_M1_MIXER
+#define MM_CHROMATIC_M1_MIXER 0x0005
+#endif
+#ifndef MM_CHROMATIC_M1_MPEGWAVEIN
+#define MM_CHROMATIC_M1_MPEGWAVEIN 0x0011
+#endif
+#ifndef MM_CHROMATIC_M1_MPEGWAVEOUT
+#define MM_CHROMATIC_M1_MPEGWAVEOUT 0x0012
+#endif
+#ifndef MM_CHROMATIC_M1_WAVEIN
+#define MM_CHROMATIC_M1_WAVEIN 0x0002
+#endif
+#ifndef MM_CHROMATIC_M1_WAVEOUT
+#define MM_CHROMATIC_M1_WAVEOUT 0x0003
+#endif
+#ifndef MM_CHROMATIC_M1_WTSYNTH
+#define MM_CHROMATIC_M1_WTSYNTH 0x0010
+#endif
+#ifndef MM_CHROMATIC_M2
+#define MM_CHROMATIC_M2 0x0013
+#endif
+#ifndef MM_CHROMATIC_M2_AUX
+#define MM_CHROMATIC_M2_AUX 0x0018
+#endif
+#ifndef MM_CHROMATIC_M2_AUX_CD
+#define MM_CHROMATIC_M2_AUX_CD 0x0019
+#endif
+#ifndef MM_CHROMATIC_M2_FMSYNTH
+#define MM_CHROMATIC_M2_FMSYNTH 0x0016
+#endif
+#ifndef MM_CHROMATIC_M2_MIDIIN
+#define MM_CHROMATIC_M2_MIDIIN 0x0020
+#endif
+#ifndef MM_CHROMATIC_M2_MIDIOUT
+#define MM_CHROMATIC_M2_MIDIOUT 0x0021
+#endif
+#ifndef MM_CHROMATIC_M2_MIXER
+#define MM_CHROMATIC_M2_MIXER 0x0017
+#endif
+#ifndef MM_CHROMATIC_M2_MPEGWAVEIN
+#define MM_CHROMATIC_M2_MPEGWAVEIN 0x0023
+#endif
+#ifndef MM_CHROMATIC_M2_MPEGWAVEOUT
+#define MM_CHROMATIC_M2_MPEGWAVEOUT 0x0024
+#endif
+#ifndef MM_CHROMATIC_M2_WAVEIN
+#define MM_CHROMATIC_M2_WAVEIN 0x0014
+#endif
+#ifndef MM_CHROMATIC_M2_WAVEOUT
+#define MM_CHROMATIC_M2_WAVEOUT 0x0015
+#endif
+#ifndef MM_CHROMATIC_M2_WTSYNTH
+#define MM_CHROMATIC_M2_WTSYNTH 0x0022
+#endif
+#ifndef MM_CIRRUSLOGIC
+#define MM_CIRRUSLOGIC 105
+#endif
+#ifndef MM_COLORGRAPH
+#define MM_COLORGRAPH 179
+#endif
+#ifndef MM_COMPAQ
+#define MM_COMPAQ 92
+#endif
+#ifndef MM_COMPAQ_BB_WAVEAUX
+#define MM_COMPAQ_BB_WAVEAUX 3
+#endif
+#ifndef MM_COMPAQ_BB_WAVEIN
+#define MM_COMPAQ_BB_WAVEIN 1
+#endif
+#ifndef MM_COMPAQ_BB_WAVEOUT
+#define MM_COMPAQ_BB_WAVEOUT 2
+#endif
+#ifndef MM_COMPUSIC
+#define MM_COMPUSIC 89
+#endif
+#ifndef MM_COMPUTER_FRIENDS
+#define MM_COMPUTER_FRIENDS 45
+#endif
+#ifndef MM_CONCEPTS
+#define MM_CONCEPTS 108
+#endif
+#ifndef MM_CONNECTIX
+#define MM_CONNECTIX 158
+#endif
+#ifndef MM_CONNECTIX_VIDEC_CODEC
+#define MM_CONNECTIX_VIDEC_CODEC 1
+#endif
+#ifndef MM_CONTROLRES
+#define MM_CONTROLRES 84
+#endif
+#ifndef MM_COREDYNAMICS
+#define MM_COREDYNAMICS 147
+#endif
+#ifndef MM_COREDYNAMICS_DYNAGRAFX_VGA
+#define MM_COREDYNAMICS_DYNAGRAFX_VGA 9
+#endif
+#ifndef MM_COREDYNAMICS_DYNAGRAFX_WAVE_IN
+#define MM_COREDYNAMICS_DYNAGRAFX_WAVE_IN 10
+#endif
+#ifndef MM_COREDYNAMICS_DYNAGRAFX_WAVE_OUT
+#define MM_COREDYNAMICS_DYNAGRAFX_WAVE_OUT 11
+#endif
+#ifndef MM_COREDYNAMICS_DYNAMIXHR
+#define MM_COREDYNAMICS_DYNAMIXHR 1
+#endif
+#ifndef MM_COREDYNAMICS_DYNASONIX_AUDIO_IN
+#define MM_COREDYNAMICS_DYNASONIX_AUDIO_IN 7
+#endif
+#ifndef MM_COREDYNAMICS_DYNASONIX_AUDIO_OUT
+#define MM_COREDYNAMICS_DYNASONIX_AUDIO_OUT 8
+#endif
+#ifndef MM_COREDYNAMICS_DYNASONIX_MIDI_IN
+#define MM_COREDYNAMICS_DYNASONIX_MIDI_IN 3
+#endif
+#ifndef MM_COREDYNAMICS_DYNASONIX_MIDI_OUT
+#define MM_COREDYNAMICS_DYNASONIX_MIDI_OUT 4
+#endif
+#ifndef MM_COREDYNAMICS_DYNASONIX_SYNTH
+#define MM_COREDYNAMICS_DYNASONIX_SYNTH 2
+#endif
+#ifndef MM_COREDYNAMICS_DYNASONIX_WAVE_IN
+#define MM_COREDYNAMICS_DYNASONIX_WAVE_IN 5
+#endif
+#ifndef MM_COREDYNAMICS_DYNASONIX_WAVE_OUT
+#define MM_COREDYNAMICS_DYNASONIX_WAVE_OUT 6
+#endif
+#ifndef MM_CREATIVE
+#define MM_CREATIVE 2
+#endif
+#ifndef MM_CREATIVE_AUX_CD
+#define MM_CREATIVE_AUX_CD 401
+#endif
+#ifndef MM_CREATIVE_AUX_LINE
+#define MM_CREATIVE_AUX_LINE 402
+#endif
+#ifndef MM_CREATIVE_AUX_MASTER
+#define MM_CREATIVE_AUX_MASTER 404
+#endif
+#ifndef MM_CREATIVE_AUX_MIC
+#define MM_CREATIVE_AUX_MIC 403
+#endif
+#ifndef MM_CREATIVE_AUX_MIDI
+#define MM_CREATIVE_AUX_MIDI 407
+#endif
+#ifndef MM_CREATIVE_AUX_PCSPK
+#define MM_CREATIVE_AUX_PCSPK 405
+#endif
+#ifndef MM_CREATIVE_AUX_WAVE
+#define MM_CREATIVE_AUX_WAVE 406
+#endif
+#ifndef MM_CREATIVE_FMSYNTH_MONO
+#define MM_CREATIVE_FMSYNTH_MONO 301
+#endif
+#ifndef MM_CREATIVE_FMSYNTH_STEREO
+#define MM_CREATIVE_FMSYNTH_STEREO 302
+#endif
+#ifndef MM_CREATIVE_MIDIIN
+#define MM_CREATIVE_MIDIIN 202
+#endif
+#ifndef MM_CREATIVE_MIDIOUT
+#define MM_CREATIVE_MIDIOUT 201
+#endif
+#ifndef MM_CREATIVE_MIDI_AWE32
+#define MM_CREATIVE_MIDI_AWE32 303
+#endif
+#ifndef MM_CREATIVE_PHNBLST_WAVEIN
+#define MM_CREATIVE_PHNBLST_WAVEIN 5
+#endif
+#ifndef MM_CREATIVE_PHNBLST_WAVEOUT
+#define MM_CREATIVE_PHNBLST_WAVEOUT 105
+#endif
+#ifndef MM_CREATIVE_SB15_WAVEIN
+#define MM_CREATIVE_SB15_WAVEIN 1
+#endif
+#ifndef MM_CREATIVE_SB15_WAVEOUT
+#define MM_CREATIVE_SB15_WAVEOUT 101
+#endif
+#ifndef MM_CREATIVE_SB16_MIXER
+#define MM_CREATIVE_SB16_MIXER 409
+#endif
+#ifndef MM_CREATIVE_SB20_WAVEIN
+#define MM_CREATIVE_SB20_WAVEIN 2
+#endif
+#ifndef MM_CREATIVE_SB20_WAVEOUT
+#define MM_CREATIVE_SB20_WAVEOUT 102
+#endif
+#ifndef MM_CREATIVE_SBP16_WAVEIN
+#define MM_CREATIVE_SBP16_WAVEIN 4
+#endif
+#ifndef MM_CREATIVE_SBPRO_MIXER
+#define MM_CREATIVE_SBPRO_MIXER 408
+#endif
+#ifndef MM_CREATIVE_SBPRO_WAVEIN
+#define MM_CREATIVE_SBPRO_WAVEIN 3
+#endif
+#ifndef MM_CREATIVE_SBPRO_WAVEOUT
+#define MM_CREATIVE_SBPRO_WAVEOUT 103
+#endif
+#ifndef MM_CRYSTAL
+#define MM_CRYSTAL 132
+#endif
+#ifndef MM_CRYSTAL_CS4232_INPUTGAIN_AUX1
+#define MM_CRYSTAL_CS4232_INPUTGAIN_AUX1 13
+#endif
+#ifndef MM_CRYSTAL_CS4232_INPUTGAIN_LOOP
+#define MM_CRYSTAL_CS4232_INPUTGAIN_LOOP 14
+#endif
+#ifndef MM_CRYSTAL_CS4232_MIDIIN
+#define MM_CRYSTAL_CS4232_MIDIIN 9
+#endif
+#ifndef MM_CRYSTAL_CS4232_MIDIOUT
+#define MM_CRYSTAL_CS4232_MIDIOUT 10
+#endif
+#ifndef MM_CRYSTAL_CS4232_WAVEAUX_AUX1
+#define MM_CRYSTAL_CS4232_WAVEAUX_AUX1 4
+#endif
+#ifndef MM_CRYSTAL_CS4232_WAVEAUX_AUX2
+#define MM_CRYSTAL_CS4232_WAVEAUX_AUX2 5
+#endif
+#ifndef MM_CRYSTAL_CS4232_WAVEAUX_LINE
+#define MM_CRYSTAL_CS4232_WAVEAUX_LINE 6
+#endif
+#ifndef MM_CRYSTAL_CS4232_WAVEAUX_MASTER
+#define MM_CRYSTAL_CS4232_WAVEAUX_MASTER 8
+#endif
+#ifndef MM_CRYSTAL_CS4232_WAVEAUX_MONO
+#define MM_CRYSTAL_CS4232_WAVEAUX_MONO 7
+#endif
+#ifndef MM_CRYSTAL_CS4232_WAVEIN
+#define MM_CRYSTAL_CS4232_WAVEIN 1
+#endif
+#ifndef MM_CRYSTAL_CS4232_WAVEMIXER
+#define MM_CRYSTAL_CS4232_WAVEMIXER 3
+#endif
+#ifndef MM_CRYSTAL_CS4232_WAVEOUT
+#define MM_CRYSTAL_CS4232_WAVEOUT 2
+#endif
+#ifndef MM_CRYSTAL_NET
+#define MM_CRYSTAL_NET 154
+#endif
+#ifndef MM_CRYSTAL_SOUND_FUSION_JOYSTICK
+#define MM_CRYSTAL_SOUND_FUSION_JOYSTICK 26
+#endif
+#ifndef MM_CRYSTAL_SOUND_FUSION_MIDIIN
+#define MM_CRYSTAL_SOUND_FUSION_MIDIIN 24
+#endif
+#ifndef MM_CRYSTAL_SOUND_FUSION_MIDIOUT
+#define MM_CRYSTAL_SOUND_FUSION_MIDIOUT 25
+#endif
+#ifndef MM_CRYSTAL_SOUND_FUSION_MIXER
+#define MM_CRYSTAL_SOUND_FUSION_MIXER 23
+#endif
+#ifndef MM_CRYSTAL_SOUND_FUSION_WAVEIN
+#define MM_CRYSTAL_SOUND_FUSION_WAVEIN 21
+#endif
+#ifndef MM_CRYSTAL_SOUND_FUSION_WAVEOUT
+#define MM_CRYSTAL_SOUND_FUSION_WAVEOUT 22
+#endif
+#ifndef MM_CS
+#define MM_CS 242
+#endif
+#ifndef MM_CYRIX
+#define MM_CYRIX 6
+#endif
+#ifndef MM_CYRIX_XAAUX
+#define MM_CYRIX_XAAUX 6
+#endif
+#ifndef MM_CYRIX_XAMIDIIN
+#define MM_CYRIX_XAMIDIIN 2
+#endif
+#ifndef MM_CYRIX_XAMIDIOUT
+#define MM_CYRIX_XAMIDIOUT 3
+#endif
+#ifndef MM_CYRIX_XAMIXER
+#define MM_CYRIX_XAMIXER 7
+#endif
+#ifndef MM_CYRIX_XASYNTH
+#define MM_CYRIX_XASYNTH 1
+#endif
+#ifndef MM_CYRIX_XAWAVEIN
+#define MM_CYRIX_XAWAVEIN 4
+#endif
+#ifndef MM_CYRIX_XAWAVEOUT
+#define MM_CYRIX_XAWAVEOUT 5
+#endif
+#ifndef MM_DATAFUSION
+#define MM_DATAFUSION 196
+#endif
+#ifndef MM_DATARAN
+#define MM_DATARAN 232
+#endif
+#ifndef MM_DDD
+#define MM_DDD 151
+#endif
+#ifndef MM_DDD_MIDILINK_MIDIIN
+#define MM_DDD_MIDILINK_MIDIIN 1
+#endif
+#ifndef MM_DDD_MIDILINK_MIDIOUT
+#define MM_DDD_MIDILINK_MIDIOUT 2
+#endif
+#ifndef MM_DF_ACM_G726
+#define MM_DF_ACM_G726 1
+#endif
+#ifndef MM_DF_ACM_GSM610
+#define MM_DF_ACM_GSM610 2
+#endif
+#ifndef MM_DIACOUSTICS
+#define MM_DIACOUSTICS 129
+#endif
+#ifndef MM_DIACOUSTICS_DRUM_ACTION
+#define MM_DIACOUSTICS_DRUM_ACTION 1
+#endif
+#ifndef MM_DIALOGIC
+#define MM_DIALOGIC 93
+#endif
+#ifndef MM_DIAMONDMM
+#define MM_DIAMONDMM 163
+#endif
+#ifndef MM_DICTAPHONE
+#define MM_DICTAPHONE 214
+#endif
+#ifndef MM_DICTAPHONE_G726
+#define MM_DICTAPHONE_G726 1
+#endif
+#ifndef MM_DIGIGRAM
+#define MM_DIGIGRAM 227
+#endif
+#ifndef MM_DIGITAL
+#define MM_DIGITAL 100
+#endif
+#ifndef MM_DIGITAL_ACM_G723
+#define MM_DIGITAL_ACM_G723 3
+#endif
+#ifndef MM_DIGITAL_AUDIO_LABS
+#define MM_DIGITAL_AUDIO_LABS 136
+#endif
+#ifndef MM_DIGITAL_AUDIO_LABS_CDLX
+#define MM_DIGITAL_AUDIO_LABS_CDLX 0x13
+#endif
+#ifndef MM_DIGITAL_AUDIO_LABS_CPRO
+#define MM_DIGITAL_AUDIO_LABS_CPRO 0x11
+#endif
+#ifndef MM_DIGITAL_AUDIO_LABS_CTDIF
+#define MM_DIGITAL_AUDIO_LABS_CTDIF 0x14
+#endif
+#ifndef MM_DIGITAL_AUDIO_LABS_DOC
+#define MM_DIGITAL_AUDIO_LABS_DOC 0x02
+#endif
+#ifndef MM_DIGITAL_AUDIO_LABS_TC
+#define MM_DIGITAL_AUDIO_LABS_TC 0x01
+#endif
+#ifndef MM_DIGITAL_AUDIO_LABS_V8
+#define MM_DIGITAL_AUDIO_LABS_V8 0x10
+#endif
+#ifndef MM_DIGITAL_AUDIO_LABS_VP
+#define MM_DIGITAL_AUDIO_LABS_VP 0x12
+#endif
+#ifndef MM_DIGITAL_AV320_WAVEIN
+#define MM_DIGITAL_AV320_WAVEIN 1
+#endif
+#ifndef MM_DIGITAL_AV320_WAVEOUT
+#define MM_DIGITAL_AV320_WAVEOUT 2
+#endif
+#ifndef MM_DIGITAL_ICM_H261
+#define MM_DIGITAL_ICM_H261 5
+#endif
+#ifndef MM_DIGITAL_ICM_H263
+#define MM_DIGITAL_ICM_H263 4
+#endif
+#ifndef MM_DIMD_AUX_LINE
+#define MM_DIMD_AUX_LINE 9
+#endif
+#ifndef MM_DIMD_DIRSOUND
+#define MM_DIMD_DIRSOUND 1
+#endif
+#ifndef MM_DIMD_MIDIIN
+#define MM_DIMD_MIDIIN 7
+#endif
+#ifndef MM_DIMD_MIDIOUT
+#define MM_DIMD_MIDIOUT 8
+#endif
+#ifndef MM_DIMD_MIXER
+#define MM_DIMD_MIXER 10
+#endif
+#ifndef MM_DIMD_PLATFORM
+#define MM_DIMD_PLATFORM 0
+#endif
+#ifndef MM_DIMD_VIRTJOY
+#define MM_DIMD_VIRTJOY 4
+#endif
+#ifndef MM_DIMD_VIRTMPU
+#define MM_DIMD_VIRTMPU 2
+#endif
+#ifndef MM_DIMD_VIRTSB
+#define MM_DIMD_VIRTSB 3
+#endif
+#ifndef MM_DIMD_WAVEIN
+#define MM_DIMD_WAVEIN 5
+#endif
+#ifndef MM_DIMD_WAVEOUT
+#define MM_DIMD_WAVEOUT 6
+#endif
+#ifndef MM_DIMD_WSS_AUX
+#define MM_DIMD_WSS_AUX 21
+#endif
+#ifndef MM_DIMD_WSS_MIXER
+#define MM_DIMD_WSS_MIXER 17
+#endif
+#ifndef MM_DIMD_WSS_SYNTH
+#define MM_DIMD_WSS_SYNTH 76
+#endif
+#ifndef MM_DIMD_WSS_WAVEIN
+#define MM_DIMD_WSS_WAVEIN 14
+#endif
+#ifndef MM_DIMD_WSS_WAVEOUT
+#define MM_DIMD_WSS_WAVEOUT 15
+#endif
+#ifndef MM_DOLBY
+#define MM_DOLBY 78
+#endif
+#ifndef MM_DPSINC
+#define MM_DPSINC 191
+#endif
+#ifndef MM_DSP_GROUP
+#define MM_DSP_GROUP 43
+#endif
+#ifndef MM_DSP_GROUP_TRUESPEECH
+#define MM_DSP_GROUP_TRUESPEECH 1
+#endif
+#ifndef MM_DSP_SOLUTIONS
+#define MM_DSP_SOLUTIONS 25
+#endif
+#ifndef MM_DSP_SOLUTIONS_AUX
+#define MM_DSP_SOLUTIONS_AUX 4
+#endif
+#ifndef MM_DSP_SOLUTIONS_SYNTH
+#define MM_DSP_SOLUTIONS_SYNTH 3
+#endif
+#ifndef MM_DSP_SOLUTIONS_WAVEIN
+#define MM_DSP_SOLUTIONS_WAVEIN 2
+#endif
+#ifndef MM_DSP_SOLUTIONS_WAVEOUT
+#define MM_DSP_SOLUTIONS_WAVEOUT 1
+#endif
+#ifndef MM_DTS
+#define MM_DTS 226
+#endif
+#ifndef MM_DTS_DS
+#define MM_DTS_DS 1
+#endif
+#ifndef MM_DUCK
+#define MM_DUCK 197
+#endif
+#ifndef MM_DVISION
+#define MM_DVISION 165
+#endif
+#ifndef MM_ECHO
+#define MM_ECHO 39
+#endif
+#ifndef MM_ECHO_AUX
+#define MM_ECHO_AUX 6
+#endif
+#ifndef MM_ECHO_MIDIIN
+#define MM_ECHO_MIDIIN 5
+#endif
+#ifndef MM_ECHO_MIDIOUT
+#define MM_ECHO_MIDIOUT 4
+#endif
+#ifndef MM_ECHO_SYNTH
+#define MM_ECHO_SYNTH 1
+#endif
+#ifndef MM_ECHO_WAVEIN
+#define MM_ECHO_WAVEIN 3
+#endif
+#ifndef MM_ECHO_WAVEOUT
+#define MM_ECHO_WAVEOUT 2
+#endif
+#ifndef MM_ECS
+#define MM_ECS 145
+#endif
+#ifndef MM_ECS_AADF_MIDI_IN
+#define MM_ECS_AADF_MIDI_IN 10
+#endif
+#ifndef MM_ECS_AADF_MIDI_OUT
+#define MM_ECS_AADF_MIDI_OUT 11
+#endif
+#ifndef MM_ECS_AADF_WAVE2MIDI_IN
+#define MM_ECS_AADF_WAVE2MIDI_IN 12
+#endif
+#ifndef MM_EES
+#define MM_EES 219
+#endif
+#ifndef MM_EES_PCMIDI14
+#define MM_EES_PCMIDI14 1
+#endif
+#ifndef MM_EES_PCMIDI14_IN
+#define MM_EES_PCMIDI14_IN 2
+#endif
+#ifndef MM_EES_PCMIDI14_OUT1
+#define MM_EES_PCMIDI14_OUT1 3
+#endif
+#ifndef MM_EES_PCMIDI14_OUT2
+#define MM_EES_PCMIDI14_OUT2 4
+#endif
+#ifndef MM_EES_PCMIDI14_OUT3
+#define MM_EES_PCMIDI14_OUT3 5
+#endif
+#ifndef MM_EES_PCMIDI14_OUT4
+#define MM_EES_PCMIDI14_OUT4 6
+#endif
+#ifndef MM_EMAGIC
+#define MM_EMAGIC 208
+#endif
+#ifndef MM_EMAGIC_UNITOR8
+#define MM_EMAGIC_UNITOR8 1
+#endif
+#ifndef MM_EMU
+#define MM_EMU 19
+#endif
+#ifndef MM_EMU_APSMIDIIN
+#define MM_EMU_APSMIDIIN 2
+#endif
+#ifndef MM_EMU_APSMIDIOUT
+#define MM_EMU_APSMIDIOUT 3
+#endif
+#ifndef MM_EMU_APSSYNTH
+#define MM_EMU_APSSYNTH 1
+#endif
+#ifndef MM_EMU_APSWAVEIN
+#define MM_EMU_APSWAVEIN 4
+#endif
+#ifndef MM_EMU_APSWAVEOUT
+#define MM_EMU_APSWAVEOUT 5
+#endif
+#ifndef MM_ENET
+#define MM_ENET 206
+#endif
+#ifndef MM_ENET_T2000_HANDSETIN
+#define MM_ENET_T2000_HANDSETIN 3
+#endif
+#ifndef MM_ENET_T2000_HANDSETOUT
+#define MM_ENET_T2000_HANDSETOUT 4
+#endif
+#ifndef MM_ENET_T2000_LINEIN
+#define MM_ENET_T2000_LINEIN 1
+#endif
+#ifndef MM_ENET_T2000_LINEOUT
+#define MM_ENET_T2000_LINEOUT 2
+#endif
+#ifndef MM_ENSONIQ
+#define MM_ENSONIQ 125
+#endif
+#ifndef MM_ENSONIQ_SOUNDSCAPE
+#define MM_ENSONIQ_SOUNDSCAPE 0x10
+#endif
+#ifndef MM_EPSON
+#define MM_EPSON 50
+#endif
+#ifndef MM_EPS_FMSND
+#define MM_EPS_FMSND 1
+#endif
+#ifndef MM_ESS
+#define MM_ESS 46
+#endif
+#ifndef MM_ESS_AMAUX
+#define MM_ESS_AMAUX 0x03
+#endif
+#ifndef MM_ESS_AMMIDIIN
+#define MM_ESS_AMMIDIIN 0x06
+#endif
+#ifndef MM_ESS_AMMIDIOUT
+#define MM_ESS_AMMIDIOUT 0x05
+#endif
+#ifndef MM_ESS_AMSYNTH
+#define MM_ESS_AMSYNTH 0x04
+#endif
+#ifndef MM_ESS_AMWAVEIN
+#define MM_ESS_AMWAVEIN 0x02
+#endif
+#ifndef MM_ESS_AMWAVEOUT
+#define MM_ESS_AMWAVEOUT 0x01
+#endif
+#ifndef MM_ESS_AUX_CD
+#define MM_ESS_AUX_CD 0x08
+#endif
+#ifndef MM_ESS_ES1488_MIXER
+#define MM_ESS_ES1488_MIXER 0x18
+#endif
+#ifndef MM_ESS_ES1488_WAVEIN
+#define MM_ESS_ES1488_WAVEIN 0x17
+#endif
+#ifndef MM_ESS_ES1488_WAVEOUT
+#define MM_ESS_ES1488_WAVEOUT 0x16
+#endif
+#ifndef MM_ESS_ES1688_MIXER
+#define MM_ESS_ES1688_MIXER 0x1B
+#endif
+#ifndef MM_ESS_ES1688_WAVEIN
+#define MM_ESS_ES1688_WAVEIN 0x1A
+#endif
+#ifndef MM_ESS_ES1688_WAVEOUT
+#define MM_ESS_ES1688_WAVEOUT 0x19
+#endif
+#ifndef MM_ESS_ES1788_MIXER
+#define MM_ESS_ES1788_MIXER 0x1E
+#endif
+#ifndef MM_ESS_ES1788_WAVEIN
+#define MM_ESS_ES1788_WAVEIN 0x1D
+#endif
+#ifndef MM_ESS_ES1788_WAVEOUT
+#define MM_ESS_ES1788_WAVEOUT 0x1C
+#endif
+#ifndef MM_ESS_ES1868_MIXER
+#define MM_ESS_ES1868_MIXER 0x24
+#endif
+#ifndef MM_ESS_ES1868_WAVEIN
+#define MM_ESS_ES1868_WAVEIN 0x23
+#endif
+#ifndef MM_ESS_ES1868_WAVEOUT
+#define MM_ESS_ES1868_WAVEOUT 0x22
+#endif
+#ifndef MM_ESS_ES1878_MIXER
+#define MM_ESS_ES1878_MIXER 0x27
+#endif
+#ifndef MM_ESS_ES1878_WAVEIN
+#define MM_ESS_ES1878_WAVEIN 0x26
+#endif
+#ifndef MM_ESS_ES1878_WAVEOUT
+#define MM_ESS_ES1878_WAVEOUT 0x25
+#endif
+#ifndef MM_ESS_ES1888_MIXER
+#define MM_ESS_ES1888_MIXER 0x21
+#endif
+#ifndef MM_ESS_ES1888_WAVEIN
+#define MM_ESS_ES1888_WAVEIN 0x20
+#endif
+#ifndef MM_ESS_ES1888_WAVEOUT
+#define MM_ESS_ES1888_WAVEOUT 0x1F
+#endif
+#ifndef MM_ESS_ES488_MIXER
+#define MM_ESS_ES488_MIXER 0x12
+#endif
+#ifndef MM_ESS_ES488_WAVEIN
+#define MM_ESS_ES488_WAVEIN 0x11
+#endif
+#ifndef MM_ESS_ES488_WAVEOUT
+#define MM_ESS_ES488_WAVEOUT 0x10
+#endif
+#ifndef MM_ESS_ES688_MIXER
+#define MM_ESS_ES688_MIXER 0x15
+#endif
+#ifndef MM_ESS_ES688_WAVEIN
+#define MM_ESS_ES688_WAVEIN 0x14
+#endif
+#ifndef MM_ESS_ES688_WAVEOUT
+#define MM_ESS_ES688_WAVEOUT 0x13
+#endif
+#ifndef MM_ESS_MIXER
+#define MM_ESS_MIXER 0x07
+#endif
+#ifndef MM_ESS_MPU401_MIDIIN
+#define MM_ESS_MPU401_MIDIIN 0x0A
+#endif
+#ifndef MM_ESS_MPU401_MIDIOUT
+#define MM_ESS_MPU401_MIDIOUT 0x09
+#endif
+#ifndef MM_ETEK
+#define MM_ETEK 241
+#endif
+#ifndef MM_ETEK_KWIKMIDI_MIDIIN
+#define MM_ETEK_KWIKMIDI_MIDIIN 1
+#endif
+#ifndef MM_ETEK_KWIKMIDI_MIDIOUT
+#define MM_ETEK_KWIKMIDI_MIDIOUT 2
+#endif
+#ifndef MM_EUPHONICS
+#define MM_EUPHONICS 152
+#endif
+#ifndef MM_EUPHONICS_AUX_CD
+#define MM_EUPHONICS_AUX_CD 1
+#endif
+#ifndef MM_EUPHONICS_AUX_LINE
+#define MM_EUPHONICS_AUX_LINE 2
+#endif
+#ifndef MM_EUPHONICS_AUX_MASTER
+#define MM_EUPHONICS_AUX_MASTER 3
+#endif
+#ifndef MM_EUPHONICS_AUX_MIC
+#define MM_EUPHONICS_AUX_MIC 4
+#endif
+#ifndef MM_EUPHONICS_AUX_MIDI
+#define MM_EUPHONICS_AUX_MIDI 5
+#endif
+#ifndef MM_EUPHONICS_AUX_WAVE
+#define MM_EUPHONICS_AUX_WAVE 6
+#endif
+#ifndef MM_EUPHONICS_EUSYNTH
+#define MM_EUPHONICS_EUSYNTH 14
+#endif
+#ifndef MM_EUPHONICS_FMSYNTH_MONO
+#define MM_EUPHONICS_FMSYNTH_MONO 7
+#endif
+#ifndef MM_EUPHONICS_FMSYNTH_STEREO
+#define MM_EUPHONICS_FMSYNTH_STEREO 8
+#endif
+#ifndef MM_EUPHONICS_MIDIIN
+#define MM_EUPHONICS_MIDIIN 9
+#endif
+#ifndef MM_EUPHONICS_MIDIOUT
+#define MM_EUPHONICS_MIDIOUT 10
+#endif
+#ifndef MM_EUPHONICS_MIXER
+#define MM_EUPHONICS_MIXER 11
+#endif
+#ifndef MM_EUPHONICS_WAVEIN
+#define MM_EUPHONICS_WAVEIN 12
+#endif
+#ifndef MM_EUPHONICS_WAVEOUT
+#define MM_EUPHONICS_WAVEOUT 13
+#endif
+#ifndef MM_EVEREX
+#define MM_EVEREX 38
+#endif
+#ifndef MM_EVEREX_CARRIER
+#define MM_EVEREX_CARRIER 1
+#endif
+#ifndef MM_EXAN
+#define MM_EXAN 63
+#endif
+#ifndef MM_FAITH
+#define MM_FAITH 15
+#endif
+#ifndef MM_FAST
+#define MM_FAST 126
+#endif
+#ifndef MM_FHGIIS_MPEGLAYER3
+#define MM_FHGIIS_MPEGLAYER3 10
+#endif
+#ifndef MM_FHGIIS_MPEGLAYER3_ADVANCED
+#define MM_FHGIIS_MPEGLAYER3_ADVANCED 12
+#endif
+#ifndef MM_FHGIIS_MPEGLAYER3_ADVANCEDPLUS
+#define MM_FHGIIS_MPEGLAYER3_ADVANCEDPLUS 14
+#endif
+#ifndef MM_FHGIIS_MPEGLAYER3_BASIC
+#define MM_FHGIIS_MPEGLAYER3_BASIC 11
+#endif
+#ifndef MM_FHGIIS_MPEGLAYER3_LITE
+#define MM_FHGIIS_MPEGLAYER3_LITE 10
+#endif
+#ifndef MM_FLEXION
+#define MM_FLEXION 249
+#endif
+#ifndef MM_FLEXION_X300_WAVEIN
+#define MM_FLEXION_X300_WAVEIN 1
+#endif
+#ifndef MM_FLEXION_X300_WAVEOUT
+#define MM_FLEXION_X300_WAVEOUT 2
+#endif
+#ifndef MM_FORTEMEDIA
+#define MM_FORTEMEDIA 229
+#endif
+#ifndef MM_FORTEMEDIA_AUX
+#define MM_FORTEMEDIA_AUX 5
+#endif
+#ifndef MM_FORTEMEDIA_FMSYNC
+#define MM_FORTEMEDIA_FMSYNC 3
+#endif
+#ifndef MM_FORTEMEDIA_MIXER
+#define MM_FORTEMEDIA_MIXER 4
+#endif
+#ifndef MM_FORTEMEDIA_WAVEIN
+#define MM_FORTEMEDIA_WAVEIN 1
+#endif
+#ifndef MM_FORTEMEDIA_WAVEOUT
+#define MM_FORTEMEDIA_WAVEOUT 2
+#endif
+#ifndef MM_FRONTIER
+#define MM_FRONTIER 160
+#endif
+#ifndef MM_FRONTIER_WAVECENTER_MIDIIN
+#define MM_FRONTIER_WAVECENTER_MIDIIN 1
+#endif
+#ifndef MM_FRONTIER_WAVECENTER_MIDIOUT
+#define MM_FRONTIER_WAVECENTER_MIDIOUT 2
+#endif
+#ifndef MM_FRONTIER_WAVECENTER_WAVEIN
+#define MM_FRONTIER_WAVECENTER_WAVEIN 3
+#endif
+#ifndef MM_FRONTIER_WAVECENTER_WAVEOUT
+#define MM_FRONTIER_WAVECENTER_WAVEOUT 4
+#endif
+#ifndef MM_FTR
+#define MM_FTR 198
+#endif
+#ifndef MM_FTR_ACM
+#define MM_FTR_ACM 2
+#endif
+#ifndef MM_FTR_ENCODER_WAVEIN
+#define MM_FTR_ENCODER_WAVEIN 1
+#endif
+#ifndef MM_FUJITSU
+#define MM_FUJITSU 4
+#endif
+#ifndef MM_GADGETLABS
+#define MM_GADGETLABS 159
+#endif
+#ifndef MM_GADGETLABS_WAVE42_WAVEIN
+#define MM_GADGETLABS_WAVE42_WAVEIN 3
+#endif
+#ifndef MM_GADGETLABS_WAVE42_WAVEOUT
+#define MM_GADGETLABS_WAVE42_WAVEOUT 4
+#endif
+#ifndef MM_GADGETLABS_WAVE44_WAVEIN
+#define MM_GADGETLABS_WAVE44_WAVEIN 1
+#endif
+#ifndef MM_GADGETLABS_WAVE44_WAVEOUT
+#define MM_GADGETLABS_WAVE44_WAVEOUT 2
+#endif
+#ifndef MM_GADGETLABS_WAVE4_MIDIIN
+#define MM_GADGETLABS_WAVE4_MIDIIN 5
+#endif
+#ifndef MM_GADGETLABS_WAVE4_MIDIOUT
+#define MM_GADGETLABS_WAVE4_MIDIOUT 6
+#endif
+#ifndef MM_GRANDE
+#define MM_GRANDE 117
+#endif
+#ifndef MM_GRAVIS
+#define MM_GRAVIS 34
+#endif
+#ifndef MM_GUILLEMOT
+#define MM_GUILLEMOT 207
+#endif
+#ifndef MM_GULBRANSEN
+#define MM_GULBRANSEN 130
+#endif
+#ifndef MM_HAFTMANN
+#define MM_HAFTMANN 220
+#endif
+#ifndef MM_HAFTMANN_LPTDAC2
+#define MM_HAFTMANN_LPTDAC2 1
+#endif
+#ifndef MM_HEADSPACE
+#define MM_HEADSPACE 222
+#endif
+#ifndef MM_HEADSPACE_HAEMIXER
+#define MM_HEADSPACE_HAEMIXER 4
+#endif
+#ifndef MM_HEADSPACE_HAESYNTH
+#define MM_HEADSPACE_HAESYNTH 1
+#endif
+#ifndef MM_HEADSPACE_HAEWAVEIN
+#define MM_HEADSPACE_HAEWAVEIN 3
+#endif
+#ifndef MM_HEADSPACE_HAEWAVEOUT
+#define MM_HEADSPACE_HAEWAVEOUT 2
+#endif
+#ifndef MM_HEWLETT_PACKARD
+#define MM_HEWLETT_PACKARD 13
+#endif
+#ifndef MM_HEWLETT_PACKARD_CU_CODEC
+#define MM_HEWLETT_PACKARD_CU_CODEC 1
+#endif
+#ifndef MM_HORIZONS
+#define MM_HORIZONS 107
+#endif
+#ifndef MM_HP
+#define MM_HP 253
+#endif
+#ifndef MM_HP_WAVEIN
+#define MM_HP_WAVEIN 2
+#endif
+#ifndef MM_HP_WAVEOUT
+#define MM_HP_WAVEOUT 1
+#endif
+#ifndef MM_HYPERACTIVE
+#define MM_HYPERACTIVE 246
+#endif
+#ifndef MM_IBM
+#define MM_IBM 22
+#endif
+#ifndef MM_IBM_MWAVE_AUX
+#define MM_IBM_MWAVE_AUX 23
+#endif
+#ifndef MM_IBM_MWAVE_MIDIIN
+#define MM_IBM_MWAVE_MIDIIN 21
+#endif
+#ifndef MM_IBM_MWAVE_MIDIOUT
+#define MM_IBM_MWAVE_MIDIOUT 22
+#endif
+#ifndef MM_IBM_MWAVE_MIXER
+#define MM_IBM_MWAVE_MIXER 20
+#endif
+#ifndef MM_IBM_MWAVE_WAVEIN
+#define MM_IBM_MWAVE_WAVEIN 18
+#endif
+#ifndef MM_IBM_MWAVE_WAVEOUT
+#define MM_IBM_MWAVE_WAVEOUT 19
+#endif
+#ifndef MM_IBM_PCMCIA_AUX
+#define MM_IBM_PCMCIA_AUX 16
+#endif
+#ifndef MM_IBM_PCMCIA_MIDIIN
+#define MM_IBM_PCMCIA_MIDIIN 14
+#endif
+#ifndef MM_IBM_PCMCIA_MIDIOUT
+#define MM_IBM_PCMCIA_MIDIOUT 15
+#endif
+#ifndef MM_IBM_PCMCIA_SYNTH
+#define MM_IBM_PCMCIA_SYNTH 13
+#endif
+#ifndef MM_IBM_PCMCIA_WAVEIN
+#define MM_IBM_PCMCIA_WAVEIN 11
+#endif
+#ifndef MM_IBM_PCMCIA_WAVEOUT
+#define MM_IBM_PCMCIA_WAVEOUT 12
+#endif
+#ifndef MM_IBM_THINKPAD200
+#define MM_IBM_THINKPAD200 17
+#endif
+#ifndef MM_IBM_WC_MIDIOUT
+#define MM_IBM_WC_MIDIOUT 30
+#endif
+#ifndef MM_IBM_WC_MIXEROUT
+#define MM_IBM_WC_MIXEROUT 33
+#endif
+#ifndef MM_IBM_WC_WAVEOUT
+#define MM_IBM_WC_WAVEOUT 31
+#endif
+#ifndef MM_ICCC
+#define MM_ICCC 259
+#endif
+#ifndef MM_ICCC_UNA3_AUX
+#define MM_ICCC_UNA3_AUX 3
+#endif
+#ifndef MM_ICCC_UNA3_MIXER
+#define MM_ICCC_UNA3_MIXER 4
+#endif
+#ifndef MM_ICCC_UNA3_WAVEIN
+#define MM_ICCC_UNA3_WAVEIN 1
+#endif
+#ifndef MM_ICCC_UNA3_WAVEOUT
+#define MM_ICCC_UNA3_WAVEOUT 2
+#endif
+#ifndef MM_ICE
+#define MM_ICE 239
+#endif
+#ifndef MM_ICE_AUX
+#define MM_ICE_AUX 11
+#endif
+#ifndef MM_ICE_MIDIIN1
+#define MM_ICE_MIDIIN1 6
+#endif
+#ifndef MM_ICE_MIDIIN2
+#define MM_ICE_MIDIIN2 8
+#endif
+#ifndef MM_ICE_MIDIOUT1
+#define MM_ICE_MIDIOUT1 5
+#endif
+#ifndef MM_ICE_MIDIOUT2
+#define MM_ICE_MIDIOUT2 7
+#endif
+#ifndef MM_ICE_MIXER
+#define MM_ICE_MIXER 10
+#endif
+#ifndef MM_ICE_MTWAVEIN
+#define MM_ICE_MTWAVEIN 4
+#endif
+#ifndef MM_ICE_MTWAVEOUT
+#define MM_ICE_MTWAVEOUT 3
+#endif
+#ifndef MM_ICE_SYNTH
+#define MM_ICE_SYNTH 9
+#endif
+#ifndef MM_ICE_WAVEIN
+#define MM_ICE_WAVEIN 2
+#endif
+#ifndef MM_ICE_WAVEOUT
+#define MM_ICE_WAVEOUT 1
+#endif
+#ifndef MM_ICL_PS
+#define MM_ICL_PS 32
+#endif
+#ifndef MM_ICOM_AUX
+#define MM_ICOM_AUX 6
+#endif
+#ifndef MM_ICOM_LINE
+#define MM_ICOM_LINE 7
+#endif
+#ifndef MM_ICOM_MIXER
+#define MM_ICOM_MIXER 5
+#endif
+#ifndef MM_ICOM_WAVEIN
+#define MM_ICOM_WAVEIN 3
+#endif
+#ifndef MM_ICOM_WAVEOUT
+#define MM_ICOM_WAVEOUT 4
+#endif
+#ifndef MM_ICS
+#define MM_ICS 57
+#endif
+#ifndef MM_ICS_2115_LITE_MIDIOUT
+#define MM_ICS_2115_LITE_MIDIOUT 13
+#endif
+#ifndef MM_ICS_2120_LITE_MIDIOUT
+#define MM_ICS_2120_LITE_MIDIOUT 14
+#endif
+#ifndef MM_ICS_WAVEDECK_AUX
+#define MM_ICS_WAVEDECK_AUX 4
+#endif
+#ifndef MM_ICS_WAVEDECK_MIXER
+#define MM_ICS_WAVEDECK_MIXER 3
+#endif
+#ifndef MM_ICS_WAVEDECK_SYNTH
+#define MM_ICS_WAVEDECK_SYNTH 5
+#endif
+#ifndef MM_ICS_WAVEDECK_WAVEIN
+#define MM_ICS_WAVEDECK_WAVEIN 2
+#endif
+#ifndef MM_ICS_WAVEDECK_WAVEOUT
+#define MM_ICS_WAVEDECK_WAVEOUT 1
+#endif
+#ifndef MM_ICS_WAVEDEC_SB_AUX
+#define MM_ICS_WAVEDEC_SB_AUX 12
+#endif
+#ifndef MM_ICS_WAVEDEC_SB_FM_MIDIOUT
+#define MM_ICS_WAVEDEC_SB_FM_MIDIOUT 8
+#endif
+#ifndef MM_ICS_WAVEDEC_SB_MIXER
+#define MM_ICS_WAVEDEC_SB_MIXER 11
+#endif
+#ifndef MM_ICS_WAVEDEC_SB_MPU401_MIDIIN
+#define MM_ICS_WAVEDEC_SB_MPU401_MIDIIN 10
+#endif
+#ifndef MM_ICS_WAVEDEC_SB_MPU401_MIDIOUT
+#define MM_ICS_WAVEDEC_SB_MPU401_MIDIOUT 9
+#endif
+#ifndef MM_ICS_WAVEDEC_SB_WAVEIN
+#define MM_ICS_WAVEDEC_SB_WAVEIN 7
+#endif
+#ifndef MM_ICS_WAVEDEC_SB_WAVEOUT
+#define MM_ICS_WAVEDEC_SB_WAVEOUT 6
+#endif
+#ifndef MM_INSOFT
+#define MM_INSOFT 94
+#endif
+#ifndef MM_INTEL
+#define MM_INTEL 33
+#endif
+#ifndef MM_INTELOPD_AUX
+#define MM_INTELOPD_AUX 401
+#endif
+#ifndef MM_INTELOPD_WAVEIN
+#define MM_INTELOPD_WAVEIN 1
+#endif
+#ifndef MM_INTELOPD_WAVEOUT
+#define MM_INTELOPD_WAVEOUT 101
+#endif
+#ifndef MM_INTEL_NSPMODEMLINEIN
+#define MM_INTEL_NSPMODEMLINEIN 501
+#endif
+#ifndef MM_INTEL_NSPMODEMLINEOUT
+#define MM_INTEL_NSPMODEMLINEOUT 502
+#endif
+#ifndef MM_INTERACTIVE
+#define MM_INTERACTIVE 36
+#endif
+#ifndef MM_INTERACTIVE_WAVEIN
+#define MM_INTERACTIVE_WAVEIN 0x45
+#endif
+#ifndef MM_INTERACTIVE_WAVEOUT
+#define MM_INTERACTIVE_WAVEOUT 0x45
+#endif
+#ifndef MM_INTERNET
+#define MM_INTERNET 244
+#endif
+#ifndef MM_INTERNET_SSW_MIDIIN
+#define MM_INTERNET_SSW_MIDIIN 11
+#endif
+#ifndef MM_INTERNET_SSW_MIDIOUT
+#define MM_INTERNET_SSW_MIDIOUT 10
+#endif
+#ifndef MM_INTERNET_SSW_WAVEIN
+#define MM_INTERNET_SSW_WAVEIN 13
+#endif
+#ifndef MM_INTERNET_SSW_WAVEOUT
+#define MM_INTERNET_SSW_WAVEOUT 12
+#endif
+#ifndef MM_INVISION
+#define MM_INVISION 188
+#endif
+#ifndef MM_IODD
+#define MM_IODD 258
+#endif
+#ifndef MM_IOMAGIC
+#define MM_IOMAGIC 82
+#endif
+#ifndef MM_IOMAGIC_TEMPO_AUXOUT
+#define MM_IOMAGIC_TEMPO_AUXOUT 6
+#endif
+#ifndef MM_IOMAGIC_TEMPO_MIDIOUT
+#define MM_IOMAGIC_TEMPO_MIDIOUT 4
+#endif
+#ifndef MM_IOMAGIC_TEMPO_MXDOUT
+#define MM_IOMAGIC_TEMPO_MXDOUT 5
+#endif
+#ifndef MM_IOMAGIC_TEMPO_SYNTH
+#define MM_IOMAGIC_TEMPO_SYNTH 3
+#endif
+#ifndef MM_IOMAGIC_TEMPO_WAVEIN
+#define MM_IOMAGIC_TEMPO_WAVEIN 2
+#endif
+#ifndef MM_IOMAGIC_TEMPO_WAVEOUT
+#define MM_IOMAGIC_TEMPO_WAVEOUT 1
+#endif
+#ifndef MM_IPI
+#define MM_IPI 238
+#endif
+#ifndef MM_IPI_ACM_HSX
+#define MM_IPI_ACM_HSX 1
+#endif
+#ifndef MM_IPI_ACM_RPELP
+#define MM_IPI_ACM_RPELP 2
+#endif
+#ifndef MM_IPI_AT_MIXER
+#define MM_IPI_AT_MIXER 6
+#endif
+#ifndef MM_IPI_AT_WAVEIN
+#define MM_IPI_AT_WAVEIN 5
+#endif
+#ifndef MM_IPI_AT_WAVEOUT
+#define MM_IPI_AT_WAVEOUT 4
+#endif
+#ifndef MM_IPI_WF_ASSS
+#define MM_IPI_WF_ASSS 3
+#endif
+#ifndef MM_ISOLUTION
+#define MM_ISOLUTION 106
+#endif
+#ifndef MM_ISOLUTION_PASCAL
+#define MM_ISOLUTION_PASCAL 1
+#endif
+#ifndef MM_ITERATEDSYS
+#define MM_ITERATEDSYS 58
+#endif
+#ifndef MM_ITERATEDSYS_FUFCODEC
+#define MM_ITERATEDSYS_FUFCODEC 1
+#endif
+#ifndef MM_I_LINK
+#define MM_I_LINK 233
+#endif
+#ifndef MM_I_LINK_VOICE_CODER
+#define MM_I_LINK_VOICE_CODER 1
+#endif
+#ifndef MM_KAY_ELEMETRICS
+#define MM_KAY_ELEMETRICS 131
+#endif
+#ifndef MM_KAY_ELEMETRICS_CSL
+#define MM_KAY_ELEMETRICS_CSL 0x4300
+#endif
+#ifndef MM_KAY_ELEMETRICS_CSL_4CHANNEL
+#define MM_KAY_ELEMETRICS_CSL_4CHANNEL 0x4309
+#endif
+#ifndef MM_KAY_ELEMETRICS_CSL_DAT
+#define MM_KAY_ELEMETRICS_CSL_DAT 0x4308
+#endif
+#ifndef MM_KORG
+#define MM_KORG 55
+#endif
+#ifndef MM_KORG_1212IO_MSWAVEIN
+#define MM_KORG_1212IO_MSWAVEIN 3
+#endif
+#ifndef MM_KORG_1212IO_MSWAVEOUT
+#define MM_KORG_1212IO_MSWAVEOUT 4
+#endif
+#ifndef MM_KORG_PCIF_MIDIIN
+#define MM_KORG_PCIF_MIDIIN 2
+#endif
+#ifndef MM_KORG_PCIF_MIDIOUT
+#define MM_KORG_PCIF_MIDIOUT 1
+#endif
+#ifndef MM_LERNOUT_ANDHAUSPIE_LHCODECACM
+#define MM_LERNOUT_ANDHAUSPIE_LHCODECACM 1
+#endif
+#ifndef MM_LERNOUT_AND_HAUSPIE
+#define MM_LERNOUT_AND_HAUSPIE 97
+#endif
+#ifndef MM_LEXICON
+#define MM_LEXICON 236
+#endif
+#ifndef MM_LEXICON_STUDIO_WAVE_IN
+#define MM_LEXICON_STUDIO_WAVE_IN 2
+#endif
+#ifndef MM_LEXICON_STUDIO_WAVE_OUT
+#define MM_LEXICON_STUDIO_WAVE_OUT 1
+#endif
+#ifndef MM_LOGITECH
+#define MM_LOGITECH 60
+#endif
+#ifndef MM_LUCENT
+#define MM_LUCENT 184
+#endif
+#ifndef MM_LUCENT_ACM_G723
+#define MM_LUCENT_ACM_G723 0
+#endif
+#ifndef MM_LUCID
+#define MM_LUCID 221
+#endif
+#ifndef MM_LUCID_PCI24WAVEIN
+#define MM_LUCID_PCI24WAVEIN 1
+#endif
+#ifndef MM_LUCID_PCI24WAVEOUT
+#define MM_LUCID_PCI24WAVEOUT 2
+#endif
+#ifndef MM_LUMINOSITI
+#define MM_LUMINOSITI 224
+#endif
+#ifndef MM_LUMINOSITI_SCWAVEIN
+#define MM_LUMINOSITI_SCWAVEIN 1
+#endif
+#ifndef MM_LUMINOSITI_SCWAVEMIX
+#define MM_LUMINOSITI_SCWAVEMIX 3
+#endif
+#ifndef MM_LUMINOSITI_SCWAVEOUT
+#define MM_LUMINOSITI_SCWAVEOUT 2
+#endif
+#ifndef MM_LYNX
+#define MM_LYNX 212
+#endif
+#ifndef MM_LYRRUS
+#define MM_LYRRUS 88
+#endif
+#ifndef MM_LYRRUS_BRIDGE_GUITAR
+#define MM_LYRRUS_BRIDGE_GUITAR 1
+#endif
+#ifndef MM_MALDEN
+#define MM_MALDEN 261
+#endif
+#ifndef MM_MARIAN
+#define MM_MARIAN 190
+#endif
+#ifndef MM_MARIAN_ARC44WAVEIN
+#define MM_MARIAN_ARC44WAVEIN 1
+#endif
+#ifndef MM_MARIAN_ARC44WAVEOUT
+#define MM_MARIAN_ARC44WAVEOUT 2
+#endif
+#ifndef MM_MARIAN_ARC88WAVEIN
+#define MM_MARIAN_ARC88WAVEIN 5
+#endif
+#ifndef MM_MARIAN_ARC88WAVEOUT
+#define MM_MARIAN_ARC88WAVEOUT 6
+#endif
+#ifndef MM_MARIAN_PRODIF24WAVEIN
+#define MM_MARIAN_PRODIF24WAVEIN 3
+#endif
+#ifndef MM_MARIAN_PRODIF24WAVEOUT
+#define MM_MARIAN_PRODIF24WAVEOUT 4
+#endif
+#ifndef MM_MATROX_DIV
+#define MM_MATROX_DIV 254
+#endif
+#ifndef MM_MATSUSHITA
+#define MM_MATSUSHITA 83
+#endif
+#ifndef MM_MATSUSHITA_AUX
+#define MM_MATSUSHITA_AUX 5
+#endif
+#ifndef MM_MATSUSHITA_FMSYNTH_STEREO
+#define MM_MATSUSHITA_FMSYNTH_STEREO 3
+#endif
+#ifndef MM_MATSUSHITA_MIXER
+#define MM_MATSUSHITA_MIXER 4
+#endif
+#ifndef MM_MATSUSHITA_WAVEIN
+#define MM_MATSUSHITA_WAVEIN 1
+#endif
+#ifndef MM_MATSUSHITA_WAVEOUT
+#define MM_MATSUSHITA_WAVEOUT 2
+#endif
+#ifndef MM_MEDIASONIC
+#define MM_MEDIASONIC 71
+#endif
+#ifndef MM_MEDIASONIC_ACM_G723
+#define MM_MEDIASONIC_ACM_G723 1
+#endif
+#ifndef MM_MEDIASONIC_ICOM
+#define MM_MEDIASONIC_ICOM 2
+#endif
+#ifndef MM_MEDIATRIX
+#define MM_MEDIATRIX 141
+#endif
+#ifndef MM_MEDIAVISION
+#define MM_MEDIAVISION 3
+#endif
+#ifndef MM_MEDIAVISION_CDPC
+#define MM_MEDIAVISION_CDPC 0x70
+#endif
+#ifndef MM_MEDIAVISION_OPUS1208
+#define MM_MEDIAVISION_OPUS1208 0x80
+#endif
+#ifndef MM_MEDIAVISION_OPUS1216
+#define MM_MEDIAVISION_OPUS1216 0x90
+#endif
+#ifndef MM_MEDIAVISION_PROAUDIO
+#define MM_MEDIAVISION_PROAUDIO 0x10
+#endif
+#ifndef MM_MEDIAVISION_PROAUDIO_16
+#define MM_MEDIAVISION_PROAUDIO_16 0x60
+#endif
+#ifndef MM_MEDIAVISION_PROAUDIO_PLUS
+#define MM_MEDIAVISION_PROAUDIO_PLUS 0x50
+#endif
+#ifndef MM_MEDIAVISION_PROSTUDIO_16
+#define MM_MEDIAVISION_PROSTUDIO_16 0x60
+#endif
+#ifndef MM_MEDIAVISION_THUNDER
+#define MM_MEDIAVISION_THUNDER 0x20
+#endif
+#ifndef MM_MEDIAVISION_TPORT
+#define MM_MEDIAVISION_TPORT 0x40
+#endif
+#ifndef MM_MELABS
+#define MM_MELABS 44
+#endif
+#ifndef MM_MELABS_MIDI2GO
+#define MM_MELABS_MIDI2GO 1
+#endif
+#ifndef MM_MERGING_MPEGL3
+#define MM_MERGING_MPEGL3 1
+#endif
+#ifndef MM_MERGING_TECHNOLOGIES
+#define MM_MERGING_TECHNOLOGIES 177
+#endif
+#ifndef MM_METHEUS
+#define MM_METHEUS 59
+#endif
+#ifndef MM_METHEUS_ZIPPER
+#define MM_METHEUS_ZIPPER 1
+#endif
+#ifndef MM_MICRONAS
+#define MM_MICRONAS 251
+#endif
+#ifndef MM_MICRONAS_CLP833
+#define MM_MICRONAS_CLP833 2
+#endif
+#ifndef MM_MICRONAS_SC4
+#define MM_MICRONAS_SC4 1
+#endif
+#ifndef MM_MINDMAKER
+#define MM_MINDMAKER 263
+#endif
+#ifndef MM_MINDMAKER_GC_MIXER
+#define MM_MINDMAKER_GC_MIXER 3
+#endif
+#ifndef MM_MINDMAKER_GC_WAVEIN
+#define MM_MINDMAKER_GC_WAVEIN 1
+#endif
+#ifndef MM_MINDMAKER_GC_WAVEOUT
+#define MM_MINDMAKER_GC_WAVEOUT 2
+#endif
+#ifndef MM_MIRO
+#define MM_MIRO 104
+#endif
+#ifndef MM_MIRO_DC30_MIX
+#define MM_MIRO_DC30_MIX 7
+#endif
+#ifndef MM_MIRO_DC30_WAVEIN
+#define MM_MIRO_DC30_WAVEIN 6
+#endif
+#ifndef MM_MIRO_DC30_WAVEOUT
+#define MM_MIRO_DC30_WAVEOUT 5
+#endif
+#ifndef MM_MIRO_MOVIEPRO
+#define MM_MIRO_MOVIEPRO 1
+#endif
+#ifndef MM_MIRO_VIDEOD1
+#define MM_MIRO_VIDEOD1 2
+#endif
+#ifndef MM_MIRO_VIDEODC1TV
+#define MM_MIRO_VIDEODC1TV 3
+#endif
+#ifndef MM_MIRO_VIDEOTD
+#define MM_MIRO_VIDEOTD 4
+#endif
+#ifndef MM_MITEL
+#define MM_MITEL 16
+#endif
+#ifndef MM_MITEL_MEDIAPATH_WAVEIN
+#define MM_MITEL_MEDIAPATH_WAVEIN 301
+#endif
+#ifndef MM_MITEL_MEDIAPATH_WAVEOUT
+#define MM_MITEL_MEDIAPATH_WAVEOUT 300
+#endif
+#ifndef MM_MITEL_MPA_HANDSET_WAVEIN
+#define MM_MITEL_MPA_HANDSET_WAVEIN 201
+#endif
+#ifndef MM_MITEL_MPA_HANDSET_WAVEOUT
+#define MM_MITEL_MPA_HANDSET_WAVEOUT 200
+#endif
+#ifndef MM_MITEL_MPA_HANDSFREE_WAVEIN
+#define MM_MITEL_MPA_HANDSFREE_WAVEIN 203
+#endif
+#ifndef MM_MITEL_MPA_HANDSFREE_WAVEOUT
+#define MM_MITEL_MPA_HANDSFREE_WAVEOUT 202
+#endif
+#ifndef MM_MITEL_MPA_LINE1_WAVEIN
+#define MM_MITEL_MPA_LINE1_WAVEIN 205
+#endif
+#ifndef MM_MITEL_MPA_LINE1_WAVEOUT
+#define MM_MITEL_MPA_LINE1_WAVEOUT 204
+#endif
+#ifndef MM_MITEL_MPA_LINE2_WAVEIN
+#define MM_MITEL_MPA_LINE2_WAVEIN 207
+#endif
+#ifndef MM_MITEL_MPA_LINE2_WAVEOUT
+#define MM_MITEL_MPA_LINE2_WAVEOUT 206
+#endif
+#ifndef MM_MITEL_TALKTO_BRIDGED_WAVEIN
+#define MM_MITEL_TALKTO_BRIDGED_WAVEIN 105
+#endif
+#ifndef MM_MITEL_TALKTO_BRIDGED_WAVEOUT
+#define MM_MITEL_TALKTO_BRIDGED_WAVEOUT 104
+#endif
+#ifndef MM_MITEL_TALKTO_HANDSET_WAVEIN
+#define MM_MITEL_TALKTO_HANDSET_WAVEIN 103
+#endif
+#ifndef MM_MITEL_TALKTO_HANDSET_WAVEOUT
+#define MM_MITEL_TALKTO_HANDSET_WAVEOUT 102
+#endif
+#ifndef MM_MITEL_TALKTO_LINE_WAVEIN
+#define MM_MITEL_TALKTO_LINE_WAVEIN 101
+#endif
+#ifndef MM_MITEL_TALKTO_LINE_WAVEOUT
+#define MM_MITEL_TALKTO_LINE_WAVEOUT 100
+#endif
+#ifndef MM_MMOTION_WAVEAUX
+#define MM_MMOTION_WAVEAUX 1
+#endif
+#ifndef MM_MMOTION_WAVEIN
+#define MM_MMOTION_WAVEIN 3
+#endif
+#ifndef MM_MMOTION_WAVEOUT
+#define MM_MMOTION_WAVEOUT 2
+#endif
+#ifndef MM_MOSCOM
+#define MM_MOSCOM 68
+#endif
+#ifndef MM_MOSCOM_VPC2400_IN
+#define MM_MOSCOM_VPC2400_IN 1
+#endif
+#ifndef MM_MOSCOM_VPC2400_OUT
+#define MM_MOSCOM_VPC2400_OUT 2
+#endif
+#ifndef MM_MOTIONPIXELS
+#define MM_MOTIONPIXELS 193
+#endif
+#ifndef MM_MOTIONPIXELS_MVI2
+#define MM_MOTIONPIXELS_MVI2 1
+#endif
+#ifndef MM_MOTOROLA
+#define MM_MOTOROLA 48
+#endif
+#ifndef MM_MOTU
+#define MM_MOTU 101
+#endif
+#ifndef MM_MOTU_DTX_MIDI_IN_A
+#define MM_MOTU_DTX_MIDI_IN_A 801
+#endif
+#ifndef MM_MOTU_DTX_MIDI_IN_B
+#define MM_MOTU_DTX_MIDI_IN_B 802
+#endif
+#ifndef MM_MOTU_DTX_MIDI_IN_SYNC
+#define MM_MOTU_DTX_MIDI_IN_SYNC 800
+#endif
+#ifndef MM_MOTU_DTX_MIDI_OUT_A
+#define MM_MOTU_DTX_MIDI_OUT_A 801
+#endif
+#ifndef MM_MOTU_DTX_MIDI_OUT_B
+#define MM_MOTU_DTX_MIDI_OUT_B 802
+#endif
+#ifndef MM_MOTU_FLYER_MIDI_IN_A
+#define MM_MOTU_FLYER_MIDI_IN_A 601
+#endif
+#ifndef MM_MOTU_FLYER_MIDI_IN_B
+#define MM_MOTU_FLYER_MIDI_IN_B 602
+#endif
+#ifndef MM_MOTU_FLYER_MIDI_IN_SYNC
+#define MM_MOTU_FLYER_MIDI_IN_SYNC 600
+#endif
+#ifndef MM_MOTU_FLYER_MIDI_OUT_A
+#define MM_MOTU_FLYER_MIDI_OUT_A 601
+#endif
+#ifndef MM_MOTU_FLYER_MIDI_OUT_B
+#define MM_MOTU_FLYER_MIDI_OUT_B 602
+#endif
+#ifndef MM_MOTU_MTPAV_MIDIIN_1
+#define MM_MOTU_MTPAV_MIDIIN_1 901
+#endif
+#ifndef MM_MOTU_MTPAV_MIDIIN_2
+#define MM_MOTU_MTPAV_MIDIIN_2 902
+#endif
+#ifndef MM_MOTU_MTPAV_MIDIIN_3
+#define MM_MOTU_MTPAV_MIDIIN_3 903
+#endif
+#ifndef MM_MOTU_MTPAV_MIDIIN_4
+#define MM_MOTU_MTPAV_MIDIIN_4 904
+#endif
+#ifndef MM_MOTU_MTPAV_MIDIIN_5
+#define MM_MOTU_MTPAV_MIDIIN_5 905
+#endif
+#ifndef MM_MOTU_MTPAV_MIDIIN_6
+#define MM_MOTU_MTPAV_MIDIIN_6 906
+#endif
+#ifndef MM_MOTU_MTPAV_MIDIIN_7
+#define MM_MOTU_MTPAV_MIDIIN_7 907
+#endif
+#ifndef MM_MOTU_MTPAV_MIDIIN_8
+#define MM_MOTU_MTPAV_MIDIIN_8 908
+#endif
+#ifndef MM_MOTU_MTPAV_MIDIIN_ADAT
+#define MM_MOTU_MTPAV_MIDIIN_ADAT 917
+#endif
+#ifndef MM_MOTU_MTPAV_MIDIIN_SYNC
+#define MM_MOTU_MTPAV_MIDIIN_SYNC 900
+#endif
+#ifndef MM_MOTU_MTPAV_MIDIOUT_1
+#define MM_MOTU_MTPAV_MIDIOUT_1 901
+#endif
+#ifndef MM_MOTU_MTPAV_MIDIOUT_2
+#define MM_MOTU_MTPAV_MIDIOUT_2 902
+#endif
+#ifndef MM_MOTU_MTPAV_MIDIOUT_3
+#define MM_MOTU_MTPAV_MIDIOUT_3 903
+#endif
+#ifndef MM_MOTU_MTPAV_MIDIOUT_4
+#define MM_MOTU_MTPAV_MIDIOUT_4 904
+#endif
+#ifndef MM_MOTU_MTPAV_MIDIOUT_5
+#define MM_MOTU_MTPAV_MIDIOUT_5 905
+#endif
+#ifndef MM_MOTU_MTPAV_MIDIOUT_6
+#define MM_MOTU_MTPAV_MIDIOUT_6 906
+#endif
+#ifndef MM_MOTU_MTPAV_MIDIOUT_7
+#define MM_MOTU_MTPAV_MIDIOUT_7 907
+#endif
+#ifndef MM_MOTU_MTPAV_MIDIOUT_8
+#define MM_MOTU_MTPAV_MIDIOUT_8 908
+#endif
+#ifndef MM_MOTU_MTPAV_MIDIOUT_ADAT
+#define MM_MOTU_MTPAV_MIDIOUT_ADAT 917
+#endif
+#ifndef MM_MOTU_MTPAV_MIDIOUT_ALL
+#define MM_MOTU_MTPAV_MIDIOUT_ALL 900
+#endif
+#ifndef MM_MOTU_MTPAV_NET_MIDIIN_1
+#define MM_MOTU_MTPAV_NET_MIDIIN_1 909
+#endif
+#ifndef MM_MOTU_MTPAV_NET_MIDIIN_2
+#define MM_MOTU_MTPAV_NET_MIDIIN_2 910
+#endif
+#ifndef MM_MOTU_MTPAV_NET_MIDIIN_3
+#define MM_MOTU_MTPAV_NET_MIDIIN_3 911
+#endif
+#ifndef MM_MOTU_MTPAV_NET_MIDIIN_4
+#define MM_MOTU_MTPAV_NET_MIDIIN_4 912
+#endif
+#ifndef MM_MOTU_MTPAV_NET_MIDIIN_5
+#define MM_MOTU_MTPAV_NET_MIDIIN_5 913
+#endif
+#ifndef MM_MOTU_MTPAV_NET_MIDIIN_6
+#define MM_MOTU_MTPAV_NET_MIDIIN_6 914
+#endif
+#ifndef MM_MOTU_MTPAV_NET_MIDIIN_7
+#define MM_MOTU_MTPAV_NET_MIDIIN_7 915
+#endif
+#ifndef MM_MOTU_MTPAV_NET_MIDIIN_8
+#define MM_MOTU_MTPAV_NET_MIDIIN_8 916
+#endif
+#ifndef MM_MOTU_MTPAV_NET_MIDIOUT_1
+#define MM_MOTU_MTPAV_NET_MIDIOUT_1 909
+#endif
+#ifndef MM_MOTU_MTPAV_NET_MIDIOUT_2
+#define MM_MOTU_MTPAV_NET_MIDIOUT_2 910
+#endif
+#ifndef MM_MOTU_MTPAV_NET_MIDIOUT_3
+#define MM_MOTU_MTPAV_NET_MIDIOUT_3 911
+#endif
+#ifndef MM_MOTU_MTPAV_NET_MIDIOUT_4
+#define MM_MOTU_MTPAV_NET_MIDIOUT_4 912
+#endif
+#ifndef MM_MOTU_MTPAV_NET_MIDIOUT_5
+#define MM_MOTU_MTPAV_NET_MIDIOUT_5 913
+#endif
+#ifndef MM_MOTU_MTPAV_NET_MIDIOUT_6
+#define MM_MOTU_MTPAV_NET_MIDIOUT_6 914
+#endif
+#ifndef MM_MOTU_MTPAV_NET_MIDIOUT_7
+#define MM_MOTU_MTPAV_NET_MIDIOUT_7 915
+#endif
+#ifndef MM_MOTU_MTPAV_NET_MIDIOUT_8
+#define MM_MOTU_MTPAV_NET_MIDIOUT_8 916
+#endif
+#ifndef MM_MOTU_MTPII_MIDIIN_1
+#define MM_MOTU_MTPII_MIDIIN_1 201
+#endif
+#ifndef MM_MOTU_MTPII_MIDIIN_2
+#define MM_MOTU_MTPII_MIDIIN_2 202
+#endif
+#ifndef MM_MOTU_MTPII_MIDIIN_3
+#define MM_MOTU_MTPII_MIDIIN_3 203
+#endif
+#ifndef MM_MOTU_MTPII_MIDIIN_4
+#define MM_MOTU_MTPII_MIDIIN_4 204
+#endif
+#ifndef MM_MOTU_MTPII_MIDIIN_5
+#define MM_MOTU_MTPII_MIDIIN_5 205
+#endif
+#ifndef MM_MOTU_MTPII_MIDIIN_6
+#define MM_MOTU_MTPII_MIDIIN_6 206
+#endif
+#ifndef MM_MOTU_MTPII_MIDIIN_7
+#define MM_MOTU_MTPII_MIDIIN_7 207
+#endif
+#ifndef MM_MOTU_MTPII_MIDIIN_8
+#define MM_MOTU_MTPII_MIDIIN_8 208
+#endif
+#ifndef MM_MOTU_MTPII_MIDIIN_SYNC
+#define MM_MOTU_MTPII_MIDIIN_SYNC 200
+#endif
+#ifndef MM_MOTU_MTPII_MIDIOUT_1
+#define MM_MOTU_MTPII_MIDIOUT_1 201
+#endif
+#ifndef MM_MOTU_MTPII_MIDIOUT_2
+#define MM_MOTU_MTPII_MIDIOUT_2 202
+#endif
+#ifndef MM_MOTU_MTPII_MIDIOUT_3
+#define MM_MOTU_MTPII_MIDIOUT_3 203
+#endif
+#ifndef MM_MOTU_MTPII_MIDIOUT_4
+#define MM_MOTU_MTPII_MIDIOUT_4 204
+#endif
+#ifndef MM_MOTU_MTPII_MIDIOUT_5
+#define MM_MOTU_MTPII_MIDIOUT_5 205
+#endif
+#ifndef MM_MOTU_MTPII_MIDIOUT_6
+#define MM_MOTU_MTPII_MIDIOUT_6 206
+#endif
+#ifndef MM_MOTU_MTPII_MIDIOUT_7
+#define MM_MOTU_MTPII_MIDIOUT_7 207
+#endif
+#ifndef MM_MOTU_MTPII_MIDIOUT_8
+#define MM_MOTU_MTPII_MIDIOUT_8 208
+#endif
+#ifndef MM_MOTU_MTPII_MIDIOUT_ALL
+#define MM_MOTU_MTPII_MIDIOUT_ALL 200
+#endif
+#ifndef MM_MOTU_MTPII_NET_MIDIIN_1
+#define MM_MOTU_MTPII_NET_MIDIIN_1 209
+#endif
+#ifndef MM_MOTU_MTPII_NET_MIDIIN_2
+#define MM_MOTU_MTPII_NET_MIDIIN_2 210
+#endif
+#ifndef MM_MOTU_MTPII_NET_MIDIIN_3
+#define MM_MOTU_MTPII_NET_MIDIIN_3 211
+#endif
+#ifndef MM_MOTU_MTPII_NET_MIDIIN_4
+#define MM_MOTU_MTPII_NET_MIDIIN_4 212
+#endif
+#ifndef MM_MOTU_MTPII_NET_MIDIIN_5
+#define MM_MOTU_MTPII_NET_MIDIIN_5 213
+#endif
+#ifndef MM_MOTU_MTPII_NET_MIDIIN_6
+#define MM_MOTU_MTPII_NET_MIDIIN_6 214
+#endif
+#ifndef MM_MOTU_MTPII_NET_MIDIIN_7
+#define MM_MOTU_MTPII_NET_MIDIIN_7 215
+#endif
+#ifndef MM_MOTU_MTPII_NET_MIDIIN_8
+#define MM_MOTU_MTPII_NET_MIDIIN_8 216
+#endif
+#ifndef MM_MOTU_MTPII_NET_MIDIOUT_1
+#define MM_MOTU_MTPII_NET_MIDIOUT_1 209
+#endif
+#ifndef MM_MOTU_MTPII_NET_MIDIOUT_2
+#define MM_MOTU_MTPII_NET_MIDIOUT_2 210
+#endif
+#ifndef MM_MOTU_MTPII_NET_MIDIOUT_3
+#define MM_MOTU_MTPII_NET_MIDIOUT_3 211
+#endif
+#ifndef MM_MOTU_MTPII_NET_MIDIOUT_4
+#define MM_MOTU_MTPII_NET_MIDIOUT_4 212
+#endif
+#ifndef MM_MOTU_MTPII_NET_MIDIOUT_5
+#define MM_MOTU_MTPII_NET_MIDIOUT_5 213
+#endif
+#ifndef MM_MOTU_MTPII_NET_MIDIOUT_6
+#define MM_MOTU_MTPII_NET_MIDIOUT_6 214
+#endif
+#ifndef MM_MOTU_MTPII_NET_MIDIOUT_7
+#define MM_MOTU_MTPII_NET_MIDIOUT_7 215
+#endif
+#ifndef MM_MOTU_MTPII_NET_MIDIOUT_8
+#define MM_MOTU_MTPII_NET_MIDIOUT_8 216
+#endif
+#ifndef MM_MOTU_MTP_MIDIIN_1
+#define MM_MOTU_MTP_MIDIIN_1 101
+#endif
+#ifndef MM_MOTU_MTP_MIDIIN_2
+#define MM_MOTU_MTP_MIDIIN_2 102
+#endif
+#ifndef MM_MOTU_MTP_MIDIIN_3
+#define MM_MOTU_MTP_MIDIIN_3 103
+#endif
+#ifndef MM_MOTU_MTP_MIDIIN_4
+#define MM_MOTU_MTP_MIDIIN_4 104
+#endif
+#ifndef MM_MOTU_MTP_MIDIIN_5
+#define MM_MOTU_MTP_MIDIIN_5 105
+#endif
+#ifndef MM_MOTU_MTP_MIDIIN_6
+#define MM_MOTU_MTP_MIDIIN_6 106
+#endif
+#ifndef MM_MOTU_MTP_MIDIIN_7
+#define MM_MOTU_MTP_MIDIIN_7 107
+#endif
+#ifndef MM_MOTU_MTP_MIDIIN_8
+#define MM_MOTU_MTP_MIDIIN_8 108
+#endif
+#ifndef MM_MOTU_MTP_MIDIOUT_1
+#define MM_MOTU_MTP_MIDIOUT_1 101
+#endif
+#ifndef MM_MOTU_MTP_MIDIOUT_2
+#define MM_MOTU_MTP_MIDIOUT_2 102
+#endif
+#ifndef MM_MOTU_MTP_MIDIOUT_3
+#define MM_MOTU_MTP_MIDIOUT_3 103
+#endif
+#ifndef MM_MOTU_MTP_MIDIOUT_4
+#define MM_MOTU_MTP_MIDIOUT_4 104
+#endif
+#ifndef MM_MOTU_MTP_MIDIOUT_5
+#define MM_MOTU_MTP_MIDIOUT_5 105
+#endif
+#ifndef MM_MOTU_MTP_MIDIOUT_6
+#define MM_MOTU_MTP_MIDIOUT_6 106
+#endif
+#ifndef MM_MOTU_MTP_MIDIOUT_7
+#define MM_MOTU_MTP_MIDIOUT_7 107
+#endif
+#ifndef MM_MOTU_MTP_MIDIOUT_8
+#define MM_MOTU_MTP_MIDIOUT_8 108
+#endif
+#ifndef MM_MOTU_MTP_MIDIOUT_ALL
+#define MM_MOTU_MTP_MIDIOUT_ALL 100
+#endif
+#ifndef MM_MOTU_MXN_MIDIIN_1
+#define MM_MOTU_MXN_MIDIIN_1 501
+#endif
+#ifndef MM_MOTU_MXN_MIDIIN_2
+#define MM_MOTU_MXN_MIDIIN_2 502
+#endif
+#ifndef MM_MOTU_MXN_MIDIIN_3
+#define MM_MOTU_MXN_MIDIIN_3 503
+#endif
+#ifndef MM_MOTU_MXN_MIDIIN_4
+#define MM_MOTU_MXN_MIDIIN_4 504
+#endif
+#ifndef MM_MOTU_MXN_MIDIIN_SYNC
+#define MM_MOTU_MXN_MIDIIN_SYNC 500
+#endif
+#ifndef MM_MOTU_MXN_MIDIOUT_1
+#define MM_MOTU_MXN_MIDIOUT_1 501
+#endif
+#ifndef MM_MOTU_MXN_MIDIOUT_2
+#define MM_MOTU_MXN_MIDIOUT_2 502
+#endif
+#ifndef MM_MOTU_MXN_MIDIOUT_3
+#define MM_MOTU_MXN_MIDIOUT_3 503
+#endif
+#ifndef MM_MOTU_MXN_MIDIOUT_4
+#define MM_MOTU_MXN_MIDIOUT_4 504
+#endif
+#ifndef MM_MOTU_MXN_MIDIOUT_ALL
+#define MM_MOTU_MXN_MIDIOUT_ALL 500
+#endif
+#ifndef MM_MOTU_MXPMPU_MIDIIN_1
+#define MM_MOTU_MXPMPU_MIDIIN_1 401
+#endif
+#ifndef MM_MOTU_MXPMPU_MIDIIN_2
+#define MM_MOTU_MXPMPU_MIDIIN_2 402
+#endif
+#ifndef MM_MOTU_MXPMPU_MIDIIN_3
+#define MM_MOTU_MXPMPU_MIDIIN_3 403
+#endif
+#ifndef MM_MOTU_MXPMPU_MIDIIN_4
+#define MM_MOTU_MXPMPU_MIDIIN_4 404
+#endif
+#ifndef MM_MOTU_MXPMPU_MIDIIN_5
+#define MM_MOTU_MXPMPU_MIDIIN_5 405
+#endif
+#ifndef MM_MOTU_MXPMPU_MIDIIN_6
+#define MM_MOTU_MXPMPU_MIDIIN_6 406
+#endif
+#ifndef MM_MOTU_MXPMPU_MIDIIN_SYNC
+#define MM_MOTU_MXPMPU_MIDIIN_SYNC 400
+#endif
+#ifndef MM_MOTU_MXPMPU_MIDIOUT_1
+#define MM_MOTU_MXPMPU_MIDIOUT_1 401
+#endif
+#ifndef MM_MOTU_MXPMPU_MIDIOUT_2
+#define MM_MOTU_MXPMPU_MIDIOUT_2 402
+#endif
+#ifndef MM_MOTU_MXPMPU_MIDIOUT_3
+#define MM_MOTU_MXPMPU_MIDIOUT_3 403
+#endif
+#ifndef MM_MOTU_MXPMPU_MIDIOUT_4
+#define MM_MOTU_MXPMPU_MIDIOUT_4 404
+#endif
+#ifndef MM_MOTU_MXPMPU_MIDIOUT_5
+#define MM_MOTU_MXPMPU_MIDIOUT_5 405
+#endif
+#ifndef MM_MOTU_MXPMPU_MIDIOUT_6
+#define MM_MOTU_MXPMPU_MIDIOUT_6 406
+#endif
+#ifndef MM_MOTU_MXPMPU_MIDIOUT_ALL
+#define MM_MOTU_MXPMPU_MIDIOUT_ALL 400
+#endif
+#ifndef MM_MOTU_MXPXT_MIDIIN_1
+#define MM_MOTU_MXPXT_MIDIIN_1 1001
+#endif
+#ifndef MM_MOTU_MXPXT_MIDIIN_2
+#define MM_MOTU_MXPXT_MIDIIN_2 1002
+#endif
+#ifndef MM_MOTU_MXPXT_MIDIIN_3
+#define MM_MOTU_MXPXT_MIDIIN_3 1003
+#endif
+#ifndef MM_MOTU_MXPXT_MIDIIN_4
+#define MM_MOTU_MXPXT_MIDIIN_4 1004
+#endif
+#ifndef MM_MOTU_MXPXT_MIDIIN_5
+#define MM_MOTU_MXPXT_MIDIIN_5 1005
+#endif
+#ifndef MM_MOTU_MXPXT_MIDIIN_6
+#define MM_MOTU_MXPXT_MIDIIN_6 1006
+#endif
+#ifndef MM_MOTU_MXPXT_MIDIIN_7
+#define MM_MOTU_MXPXT_MIDIIN_7 1007
+#endif
+#ifndef MM_MOTU_MXPXT_MIDIIN_8
+#define MM_MOTU_MXPXT_MIDIIN_8 1008
+#endif
+#ifndef MM_MOTU_MXPXT_MIDIIN_SYNC
+#define MM_MOTU_MXPXT_MIDIIN_SYNC 1000
+#endif
+#ifndef MM_MOTU_MXPXT_MIDIOUT_1
+#define MM_MOTU_MXPXT_MIDIOUT_1 1001
+#endif
+#ifndef MM_MOTU_MXPXT_MIDIOUT_2
+#define MM_MOTU_MXPXT_MIDIOUT_2 1002
+#endif
+#ifndef MM_MOTU_MXPXT_MIDIOUT_3
+#define MM_MOTU_MXPXT_MIDIOUT_3 1003
+#endif
+#ifndef MM_MOTU_MXPXT_MIDIOUT_4
+#define MM_MOTU_MXPXT_MIDIOUT_4 1004
+#endif
+#ifndef MM_MOTU_MXPXT_MIDIOUT_5
+#define MM_MOTU_MXPXT_MIDIOUT_5 1005
+#endif
+#ifndef MM_MOTU_MXPXT_MIDIOUT_6
+#define MM_MOTU_MXPXT_MIDIOUT_6 1006
+#endif
+#ifndef MM_MOTU_MXPXT_MIDIOUT_7
+#define MM_MOTU_MXPXT_MIDIOUT_7 1007
+#endif
+#ifndef MM_MOTU_MXPXT_MIDIOUT_8
+#define MM_MOTU_MXPXT_MIDIOUT_8 1008
+#endif
+#ifndef MM_MOTU_MXPXT_MIDIOUT_ALL
+#define MM_MOTU_MXPXT_MIDIOUT_ALL 1000
+#endif
+#ifndef MM_MOTU_MXP_MIDIIN_MIDIIN_1
+#define MM_MOTU_MXP_MIDIIN_MIDIIN_1 301
+#endif
+#ifndef MM_MOTU_MXP_MIDIIN_MIDIIN_2
+#define MM_MOTU_MXP_MIDIIN_MIDIIN_2 302
+#endif
+#ifndef MM_MOTU_MXP_MIDIIN_MIDIIN_3
+#define MM_MOTU_MXP_MIDIIN_MIDIIN_3 303
+#endif
+#ifndef MM_MOTU_MXP_MIDIIN_MIDIIN_4
+#define MM_MOTU_MXP_MIDIIN_MIDIIN_4 304
+#endif
+#ifndef MM_MOTU_MXP_MIDIIN_MIDIIN_5
+#define MM_MOTU_MXP_MIDIIN_MIDIIN_5 305
+#endif
+#ifndef MM_MOTU_MXP_MIDIIN_MIDIIN_6
+#define MM_MOTU_MXP_MIDIIN_MIDIIN_6 306
+#endif
+#ifndef MM_MOTU_MXP_MIDIIN_MIDIOUT_1
+#define MM_MOTU_MXP_MIDIIN_MIDIOUT_1 301
+#endif
+#ifndef MM_MOTU_MXP_MIDIIN_MIDIOUT_2
+#define MM_MOTU_MXP_MIDIIN_MIDIOUT_2 302
+#endif
+#ifndef MM_MOTU_MXP_MIDIIN_MIDIOUT_3
+#define MM_MOTU_MXP_MIDIIN_MIDIOUT_3 303
+#endif
+#ifndef MM_MOTU_MXP_MIDIIN_MIDIOUT_4
+#define MM_MOTU_MXP_MIDIIN_MIDIOUT_4 304
+#endif
+#ifndef MM_MOTU_MXP_MIDIIN_MIDIOUT_5
+#define MM_MOTU_MXP_MIDIIN_MIDIOUT_5 305
+#endif
+#ifndef MM_MOTU_MXP_MIDIIN_MIDIOUT_6
+#define MM_MOTU_MXP_MIDIIN_MIDIOUT_6 306
+#endif
+#ifndef MM_MOTU_MXP_MIDIIN_MIDIOUT_ALL
+#define MM_MOTU_MXP_MIDIIN_MIDIOUT_ALL 300
+#endif
+#ifndef MM_MOTU_MXP_MIDIIN_SYNC
+#define MM_MOTU_MXP_MIDIIN_SYNC 300
+#endif
+#ifndef MM_MOTU_PKX_MIDI_IN_A
+#define MM_MOTU_PKX_MIDI_IN_A 701
+#endif
+#ifndef MM_MOTU_PKX_MIDI_IN_B
+#define MM_MOTU_PKX_MIDI_IN_B 702
+#endif
+#ifndef MM_MOTU_PKX_MIDI_IN_SYNC
+#define MM_MOTU_PKX_MIDI_IN_SYNC 700
+#endif
+#ifndef MM_MOTU_PKX_MIDI_OUT_A
+#define MM_MOTU_PKX_MIDI_OUT_A 701
+#endif
+#ifndef MM_MOTU_PKX_MIDI_OUT_B
+#define MM_MOTU_PKX_MIDI_OUT_B 702
+#endif
+#ifndef MM_MPTUS
+#define MM_MPTUS 95
+#endif
+#ifndef MM_MPTUS_SPWAVEOUT
+#define MM_MPTUS_SPWAVEOUT 1
+#endif
+#ifndef MM_MSFT_ACM_MSFILTER
+#define MM_MSFT_ACM_MSFILTER 35
+#endif
+#ifndef MM_MSFT_ACM_MSG723
+#define MM_MSFT_ACM_MSG723 92
+#endif
+#ifndef MM_MSFT_ACM_MSNAUDIO
+#define MM_MSFT_ACM_MSNAUDIO 91
+#endif
+#ifndef MM_MSFT_ACM_MSRT24
+#define MM_MSFT_ACM_MSRT24 93
+#endif
+#ifndef MM_MSFT_GENERIC_AUX_CD
+#define MM_MSFT_GENERIC_AUX_CD 30
+#endif
+#ifndef MM_MSFT_GENERIC_AUX_LINE
+#define MM_MSFT_GENERIC_AUX_LINE 28
+#endif
+#ifndef MM_MSFT_GENERIC_AUX_MIC
+#define MM_MSFT_GENERIC_AUX_MIC 29
+#endif
+#ifndef MM_MSFT_GENERIC_MIDIIN
+#define MM_MSFT_GENERIC_MIDIIN 25
+#endif
+#ifndef MM_MSFT_GENERIC_MIDIOUT
+#define MM_MSFT_GENERIC_MIDIOUT 26
+#endif
+#ifndef MM_MSFT_GENERIC_MIDISYNTH
+#define MM_MSFT_GENERIC_MIDISYNTH 27
+#endif
+#ifndef MM_MSFT_GENERIC_WAVEIN
+#define MM_MSFT_GENERIC_WAVEIN 23
+#endif
+#ifndef MM_MSFT_GENERIC_WAVEOUT
+#define MM_MSFT_GENERIC_WAVEOUT 24
+#endif
+#ifndef MM_MSFT_MSACM
+#define MM_MSFT_MSACM 32
+#endif
+#ifndef MM_MSFT_MSOPL_SYNTH
+#define MM_MSFT_MSOPL_SYNTH 76
+#endif
+#ifndef MM_MSFT_SB16_AUX_CD
+#define MM_MSFT_SB16_AUX_CD 66
+#endif
+#ifndef MM_MSFT_SB16_AUX_LINE
+#define MM_MSFT_SB16_AUX_LINE 65
+#endif
+#ifndef MM_MSFT_SB16_MIDIIN
+#define MM_MSFT_SB16_MIDIIN 62
+#endif
+#ifndef MM_MSFT_SB16_MIDIOUT
+#define MM_MSFT_SB16_MIDIOUT 63
+#endif
+#ifndef MM_MSFT_SB16_MIXER
+#define MM_MSFT_SB16_MIXER 67
+#endif
+#ifndef MM_MSFT_SB16_SYNTH
+#define MM_MSFT_SB16_SYNTH 64
+#endif
+#ifndef MM_MSFT_SB16_WAVEIN
+#define MM_MSFT_SB16_WAVEIN 60
+#endif
+#ifndef MM_MSFT_SB16_WAVEOUT
+#define MM_MSFT_SB16_WAVEOUT 61
+#endif
+#ifndef MM_MSFT_SBPRO_AUX_CD
+#define MM_MSFT_SBPRO_AUX_CD 74
+#endif
+#ifndef MM_MSFT_SBPRO_AUX_LINE
+#define MM_MSFT_SBPRO_AUX_LINE 73
+#endif
+#ifndef MM_MSFT_SBPRO_MIDIIN
+#define MM_MSFT_SBPRO_MIDIIN 70
+#endif
+#ifndef MM_MSFT_SBPRO_MIDIOUT
+#define MM_MSFT_SBPRO_MIDIOUT 71
+#endif
+#ifndef MM_MSFT_SBPRO_MIXER
+#define MM_MSFT_SBPRO_MIXER 75
+#endif
+#ifndef MM_MSFT_SBPRO_SYNTH
+#define MM_MSFT_SBPRO_SYNTH 72
+#endif
+#ifndef MM_MSFT_SBPRO_WAVEIN
+#define MM_MSFT_SBPRO_WAVEIN 68
+#endif
+#ifndef MM_MSFT_SBPRO_WAVEOUT
+#define MM_MSFT_SBPRO_WAVEOUT 69
+#endif
+#ifndef MM_MSFT_VMDMS_HANDSET_WAVEIN
+#define MM_MSFT_VMDMS_HANDSET_WAVEIN 82
+#endif
+#ifndef MM_MSFT_VMDMS_HANDSET_WAVEOUT
+#define MM_MSFT_VMDMS_HANDSET_WAVEOUT 83
+#endif
+#ifndef MM_MSFT_VMDMS_LINE_WAVEIN
+#define MM_MSFT_VMDMS_LINE_WAVEIN 80
+#endif
+#ifndef MM_MSFT_VMDMS_LINE_WAVEOUT
+#define MM_MSFT_VMDMS_LINE_WAVEOUT 81
+#endif
+#ifndef MM_MSFT_VMDMW_HANDSET_WAVEIN
+#define MM_MSFT_VMDMW_HANDSET_WAVEIN 86
+#endif
+#ifndef MM_MSFT_VMDMW_HANDSET_WAVEOUT
+#define MM_MSFT_VMDMW_HANDSET_WAVEOUT 87
+#endif
+#ifndef MM_MSFT_VMDMW_LINE_WAVEIN
+#define MM_MSFT_VMDMW_LINE_WAVEIN 84
+#endif
+#ifndef MM_MSFT_VMDMW_LINE_WAVEOUT
+#define MM_MSFT_VMDMW_LINE_WAVEOUT 85
+#endif
+#ifndef MM_MSFT_VMDMW_MIXER
+#define MM_MSFT_VMDMW_MIXER 88
+#endif
+#ifndef MM_MSFT_VMDM_GAME_WAVEIN
+#define MM_MSFT_VMDM_GAME_WAVEIN 90
+#endif
+#ifndef MM_MSFT_VMDM_GAME_WAVEOUT
+#define MM_MSFT_VMDM_GAME_WAVEOUT 89
+#endif
+#ifndef MM_MSFT_WDMAUDIO_AUX
+#define MM_MSFT_WDMAUDIO_AUX 105
+#endif
+#ifndef MM_MSFT_WSS_AUX
+#define MM_MSFT_WSS_AUX 21
+#endif
+#ifndef MM_MSFT_WSS_FMSYNTH_STEREO
+#define MM_MSFT_WSS_FMSYNTH_STEREO 16
+#endif
+#ifndef MM_MSFT_WSS_MIXER
+#define MM_MSFT_WSS_MIXER 17
+#endif
+#ifndef MM_MSFT_WSS_NT_AUX
+#define MM_MSFT_WSS_NT_AUX 59
+#endif
+#ifndef MM_MSFT_WSS_NT_FMSYNTH_STEREO
+#define MM_MSFT_WSS_NT_FMSYNTH_STEREO 57
+#endif
+#ifndef MM_MSFT_WSS_NT_MIXER
+#define MM_MSFT_WSS_NT_MIXER 58
+#endif
+#ifndef MM_MSFT_WSS_NT_WAVEIN
+#define MM_MSFT_WSS_NT_WAVEIN 55
+#endif
+#ifndef MM_MSFT_WSS_NT_WAVEOUT
+#define MM_MSFT_WSS_NT_WAVEOUT 56
+#endif
+#ifndef MM_MSFT_WSS_OEM_AUX
+#define MM_MSFT_WSS_OEM_AUX 22
+#endif
+#ifndef MM_MSFT_WSS_OEM_FMSYNTH_STEREO
+#define MM_MSFT_WSS_OEM_FMSYNTH_STEREO 20
+#endif
+#ifndef MM_MSFT_WSS_OEM_MIXER
+#define MM_MSFT_WSS_OEM_MIXER 31
+#endif
+#ifndef MM_MSFT_WSS_OEM_WAVEIN
+#define MM_MSFT_WSS_OEM_WAVEIN 18
+#endif
+#ifndef MM_MSFT_WSS_OEM_WAVEOUT
+#define MM_MSFT_WSS_OEM_WAVEOUT 19
+#endif
+#ifndef MM_MSFT_WSS_WAVEIN
+#define MM_MSFT_WSS_WAVEIN 14
+#endif
+#ifndef MM_MSFT_WSS_WAVEOUT
+#define MM_MSFT_WSS_WAVEOUT 15
+#endif
+#ifndef MM_MWM
+#define MM_MWM 209
+#endif
+#ifndef MM_NCR
+#define MM_NCR 62
+#endif
+#ifndef MM_NCR_BA_AUX
+#define MM_NCR_BA_AUX 4
+#endif
+#ifndef MM_NCR_BA_MIXER
+#define MM_NCR_BA_MIXER 5
+#endif
+#ifndef MM_NCR_BA_SYNTH
+#define MM_NCR_BA_SYNTH 3
+#endif
+#ifndef MM_NCR_BA_WAVEIN
+#define MM_NCR_BA_WAVEIN 1
+#endif
+#ifndef MM_NCR_BA_WAVEOUT
+#define MM_NCR_BA_WAVEOUT 2
+#endif
+#ifndef MM_NEC
+#define MM_NEC 26
+#endif
+#ifndef MM_NEC_26_SYNTH
+#define MM_NEC_26_SYNTH 9
+#endif
+#ifndef MM_NEC_73_86_SYNTH
+#define MM_NEC_73_86_SYNTH 5
+#endif
+#ifndef MM_NEC_73_86_WAVEIN
+#define MM_NEC_73_86_WAVEIN 7
+#endif
+#ifndef MM_NEC_73_86_WAVEOUT
+#define MM_NEC_73_86_WAVEOUT 6
+#endif
+#ifndef MM_NEC_JOYSTICK
+#define MM_NEC_JOYSTICK 12
+#endif
+#ifndef MM_NEC_MPU401_MIDIIN
+#define MM_NEC_MPU401_MIDIIN 11
+#endif
+#ifndef MM_NEC_MPU401_MIDIOUT
+#define MM_NEC_MPU401_MIDIOUT 10
+#endif
+#ifndef MM_NEOMAGIC
+#define MM_NEOMAGIC 176
+#endif
+#ifndef MM_NEOMAGIC_AUX
+#define MM_NEOMAGIC_AUX 6
+#endif
+#ifndef MM_NEOMAGIC_MIDIIN
+#define MM_NEOMAGIC_MIDIIN 5
+#endif
+#ifndef MM_NEOMAGIC_MIDIOUT
+#define MM_NEOMAGIC_MIDIOUT 4
+#endif
+#ifndef MM_NEOMAGIC_MW3DX_AUX
+#define MM_NEOMAGIC_MW3DX_AUX 17
+#endif
+#ifndef MM_NEOMAGIC_MW3DX_FMSYNTH
+#define MM_NEOMAGIC_MW3DX_FMSYNTH 14
+#endif
+#ifndef MM_NEOMAGIC_MW3DX_GMSYNTH
+#define MM_NEOMAGIC_MW3DX_GMSYNTH 15
+#endif
+#ifndef MM_NEOMAGIC_MW3DX_MIDIIN
+#define MM_NEOMAGIC_MW3DX_MIDIIN 13
+#endif
+#ifndef MM_NEOMAGIC_MW3DX_MIDIOUT
+#define MM_NEOMAGIC_MW3DX_MIDIOUT 12
+#endif
+#ifndef MM_NEOMAGIC_MW3DX_MIXER
+#define MM_NEOMAGIC_MW3DX_MIXER 16
+#endif
+#ifndef MM_NEOMAGIC_MW3DX_WAVEIN
+#define MM_NEOMAGIC_MW3DX_WAVEIN 11
+#endif
+#ifndef MM_NEOMAGIC_MW3DX_WAVEOUT
+#define MM_NEOMAGIC_MW3DX_WAVEOUT 10
+#endif
+#ifndef MM_NEOMAGIC_MWAVE_AUX
+#define MM_NEOMAGIC_MWAVE_AUX 25
+#endif
+#ifndef MM_NEOMAGIC_MWAVE_MIDIIN
+#define MM_NEOMAGIC_MWAVE_MIDIIN 23
+#endif
+#ifndef MM_NEOMAGIC_MWAVE_MIDIOUT
+#define MM_NEOMAGIC_MWAVE_MIDIOUT 22
+#endif
+#ifndef MM_NEOMAGIC_MWAVE_MIXER
+#define MM_NEOMAGIC_MWAVE_MIXER 24
+#endif
+#ifndef MM_NEOMAGIC_MWAVE_WAVEIN
+#define MM_NEOMAGIC_MWAVE_WAVEIN 21
+#endif
+#ifndef MM_NEOMAGIC_MWAVE_WAVEOUT
+#define MM_NEOMAGIC_MWAVE_WAVEOUT 20
+#endif
+#ifndef MM_NEOMAGIC_SYNTH
+#define MM_NEOMAGIC_SYNTH 1
+#endif
+#ifndef MM_NEOMAGIC_WAVEIN
+#define MM_NEOMAGIC_WAVEIN 3
+#endif
+#ifndef MM_NEOMAGIC_WAVEOUT
+#define MM_NEOMAGIC_WAVEOUT 2
+#endif
+#ifndef MM_NETSCAPE
+#define MM_NETSCAPE 166
+#endif
+#ifndef MM_NETXL
+#define MM_NETXL 8
+#endif
+#ifndef MM_NETXL_XLVIDEO
+#define MM_NETXL_XLVIDEO 1
+#endif
+#ifndef MM_NEWMEDIA
+#define MM_NEWMEDIA 86
+#endif
+#ifndef MM_NEWMEDIA_WAVJAMMER
+#define MM_NEWMEDIA_WAVJAMMER 1
+#endif
+#ifndef MM_NMP
+#define MM_NMP 195
+#endif
+#ifndef MM_NMP_ACM_AMR
+#define MM_NMP_ACM_AMR 10
+#endif
+#ifndef MM_NMP_CCP_WAVEIN
+#define MM_NMP_CCP_WAVEIN 1
+#endif
+#ifndef MM_NMP_CCP_WAVEOUT
+#define MM_NMP_CCP_WAVEOUT 2
+#endif
+#ifndef MM_NMS
+#define MM_NMS 87
+#endif
+#ifndef MM_NOGATECH
+#define MM_NOGATECH 75
+#endif
+#ifndef MM_NORRIS
+#define MM_NORRIS 150
+#endif
+#ifndef MM_NORRIS_VOICELINK
+#define MM_NORRIS_VOICELINK 1
+#endif
+#ifndef MM_NORTEL_MPXAC_WAVEIN
+#define MM_NORTEL_MPXAC_WAVEIN 1
+#endif
+#ifndef MM_NORTEL_MPXAC_WAVEOUT
+#define MM_NORTEL_MPXAC_WAVEOUT 2
+#endif
+#ifndef MM_NORTHERN_TELECOM
+#define MM_NORTHERN_TELECOM 115
+#endif
+#ifndef MM_NVIDIA
+#define MM_NVIDIA 127
+#endif
+#ifndef MM_NVIDIA_AUX
+#define MM_NVIDIA_AUX 7
+#endif
+#ifndef MM_NVIDIA_GAMEPORT
+#define MM_NVIDIA_GAMEPORT 5
+#endif
+#ifndef MM_NVIDIA_MIDIIN
+#define MM_NVIDIA_MIDIIN 4
+#endif
+#ifndef MM_NVIDIA_MIDIOUT
+#define MM_NVIDIA_MIDIOUT 3
+#endif
+#ifndef MM_NVIDIA_MIXER
+#define MM_NVIDIA_MIXER 6
+#endif
+#ifndef MM_NVIDIA_WAVEIN
+#define MM_NVIDIA_WAVEIN 2
+#endif
+#ifndef MM_NVIDIA_WAVEOUT
+#define MM_NVIDIA_WAVEOUT 1
+#endif
+#ifndef MM_OKI
+#define MM_OKI 79
+#endif
+#ifndef MM_OKSORI
+#define MM_OKSORI 128
+#endif
+#ifndef MM_OKSORI_BASE
+#define MM_OKSORI_BASE 0
+#endif
+#ifndef MM_OLIVETTI
+#define MM_OLIVETTI 81
+#endif
+#ifndef MM_OLIVETTI_ACM_ADPCM
+#define MM_OLIVETTI_ACM_ADPCM 10
+#endif
+#ifndef MM_OLIVETTI_ACM_CELP
+#define MM_OLIVETTI_ACM_CELP 11
+#endif
+#ifndef MM_OLIVETTI_ACM_GSM
+#define MM_OLIVETTI_ACM_GSM 9
+#endif
+#ifndef MM_OLIVETTI_ACM_OPR
+#define MM_OLIVETTI_ACM_OPR 13
+#endif
+#ifndef MM_OLIVETTI_ACM_SBC
+#define MM_OLIVETTI_ACM_SBC 12
+#endif
+#ifndef MM_OLIVETTI_AUX
+#define MM_OLIVETTI_AUX 4
+#endif
+#ifndef MM_OLIVETTI_JOYSTICK
+#define MM_OLIVETTI_JOYSTICK 8
+#endif
+#ifndef MM_OLIVETTI_MIDIIN
+#define MM_OLIVETTI_MIDIIN 5
+#endif
+#ifndef MM_OLIVETTI_MIDIOUT
+#define MM_OLIVETTI_MIDIOUT 6
+#endif
+#ifndef MM_OLIVETTI_MIXER
+#define MM_OLIVETTI_MIXER 3
+#endif
+#ifndef MM_OLIVETTI_SYNTH
+#define MM_OLIVETTI_SYNTH 7
+#endif
+#ifndef MM_OLIVETTI_WAVEIN
+#define MM_OLIVETTI_WAVEIN 1
+#endif
+#ifndef MM_OLIVETTI_WAVEOUT
+#define MM_OLIVETTI_WAVEOUT 2
+#endif
+#ifndef MM_ONLIVE
+#define MM_ONLIVE 200
+#endif
+#ifndef MM_ONLIVE_MPCODEC
+#define MM_ONLIVE_MPCODEC 1
+#endif
+#ifndef MM_OPCODE
+#define MM_OPCODE 113
+#endif
+#ifndef MM_OPTI
+#define MM_OPTI 90
+#endif
+#ifndef MM_OPTI_M16_AUX
+#define MM_OPTI_M16_AUX 0x0007
+#endif
+#ifndef MM_OPTI_M16_FMSYNTH_STEREO
+#define MM_OPTI_M16_FMSYNTH_STEREO 0x0001
+#endif
+#ifndef MM_OPTI_M16_MIDIIN
+#define MM_OPTI_M16_MIDIIN 0x0002
+#endif
+#ifndef MM_OPTI_M16_MIDIOUT
+#define MM_OPTI_M16_MIDIOUT 0x0003
+#endif
+#ifndef MM_OPTI_M16_MIXER
+#define MM_OPTI_M16_MIXER 0x0006
+#endif
+#ifndef MM_OPTI_M16_WAVEIN
+#define MM_OPTI_M16_WAVEIN 0x0004
+#endif
+#ifndef MM_OPTI_M16_WAVEOUT
+#define MM_OPTI_M16_WAVEOUT 0x0005
+#endif
+#ifndef MM_OPTI_M32_AUX
+#define MM_OPTI_M32_AUX 0x0026
+#endif
+#ifndef MM_OPTI_M32_MIDIIN
+#define MM_OPTI_M32_MIDIIN 0x0022
+#endif
+#ifndef MM_OPTI_M32_MIDIOUT
+#define MM_OPTI_M32_MIDIOUT 0x0023
+#endif
+#ifndef MM_OPTI_M32_MIXER
+#define MM_OPTI_M32_MIXER 0x0025
+#endif
+#ifndef MM_OPTI_M32_SYNTH_STEREO
+#define MM_OPTI_M32_SYNTH_STEREO 0x0024
+#endif
+#ifndef MM_OPTI_M32_WAVEIN
+#define MM_OPTI_M32_WAVEIN 0x0020
+#endif
+#ifndef MM_OPTI_M32_WAVEOUT
+#define MM_OPTI_M32_WAVEOUT 0x0021
+#endif
+#ifndef MM_OPTI_P16_AUX
+#define MM_OPTI_P16_AUX 0x0016
+#endif
+#ifndef MM_OPTI_P16_FMSYNTH_STEREO
+#define MM_OPTI_P16_FMSYNTH_STEREO 0x0010
+#endif
+#ifndef MM_OPTI_P16_MIDIIN
+#define MM_OPTI_P16_MIDIIN 0x0011
+#endif
+#ifndef MM_OPTI_P16_MIDIOUT
+#define MM_OPTI_P16_MIDIOUT 0x0012
+#endif
+#ifndef MM_OPTI_P16_MIXER
+#define MM_OPTI_P16_MIXER 0x0015
+#endif
+#ifndef MM_OPTI_P16_WAVEIN
+#define MM_OPTI_P16_WAVEIN 0x0013
+#endif
+#ifndef MM_OPTI_P16_WAVEOUT
+#define MM_OPTI_P16_WAVEOUT 0x0014
+#endif
+#ifndef MM_OSITECH
+#define MM_OSITECH 103
+#endif
+#ifndef MM_OSITECH_TRUMPCARD
+#define MM_OSITECH_TRUMPCARD 1
+#endif
+#ifndef MM_OSPREY
+#define MM_OSPREY 140
+#endif
+#ifndef MM_OSPREY_1000WAVEIN
+#define MM_OSPREY_1000WAVEIN 1
+#endif
+#ifndef MM_OSPREY_1000WAVEOUT
+#define MM_OSPREY_1000WAVEOUT 2
+#endif
+#ifndef MM_OTI
+#define MM_OTI 180
+#endif
+#ifndef MM_OTI_611MIDIN
+#define MM_OTI_611MIDIN 0x12
+#endif
+#ifndef MM_OTI_611MIDIOUT
+#define MM_OTI_611MIDIOUT 0x13
+#endif
+#ifndef MM_OTI_611MIXER
+#define MM_OTI_611MIXER 7
+#endif
+#ifndef MM_OTI_611WAVEIN
+#define MM_OTI_611WAVEIN 5
+#endif
+#ifndef MM_OTI_611WAVEOUT
+#define MM_OTI_611WAVEOUT 6
+#endif
+#ifndef MM_PACIFICRESEARCH
+#define MM_PACIFICRESEARCH 210
+#endif
+#ifndef MM_PCSPEAKER_WAVEOUT
+#define MM_PCSPEAKER_WAVEOUT 13
+#endif
+#ifndef MM_PHILIPS_ACM_LPCBB
+#define MM_PHILIPS_ACM_LPCBB 1
+#endif
+#ifndef MM_PHILIPS_SPEECH_PROCESSING
+#define MM_PHILIPS_SPEECH_PROCESSING 7
+#endif
+#ifndef MM_PHONET
+#define MM_PHONET 203
+#endif
+#ifndef MM_PHONET_PP_MIXER
+#define MM_PHONET_PP_MIXER 3
+#endif
+#ifndef MM_PHONET_PP_WAVEIN
+#define MM_PHONET_PP_WAVEIN 2
+#endif
+#ifndef MM_PHONET_PP_WAVEOUT
+#define MM_PHONET_PP_WAVEOUT 1
+#endif
+#ifndef MM_PICTURETEL
+#define MM_PICTURETEL 138
+#endif
+#ifndef MM_PINNACLE
+#define MM_PINNACLE 218
+#endif
+#ifndef MM_PRAGMATRAX
+#define MM_PRAGMATRAX 5
+#endif
+#ifndef MM_PRECEPT
+#define MM_PRECEPT 153
+#endif
+#ifndef MM_QCIAR
+#define MM_QCIAR 98
+#endif
+#ifndef MM_QDESIGN
+#define MM_QDESIGN 194
+#endif
+#ifndef MM_QDESIGN_ACM_MPEG
+#define MM_QDESIGN_ACM_MPEG 1
+#endif
+#ifndef MM_QDESIGN_ACM_QDESIGN_MUSIC
+#define MM_QDESIGN_ACM_QDESIGN_MUSIC 2
+#endif
+#ifndef MM_QTEAM
+#define MM_QTEAM 169
+#endif
+#ifndef MM_QUALCOMM
+#define MM_QUALCOMM 215
+#endif
+#ifndef MM_QUANTUM3D
+#define MM_QUANTUM3D 17
+#endif
+#ifndef MM_QUARTERDECK
+#define MM_QUARTERDECK 134
+#endif
+#ifndef MM_QUARTERDECK_LHWAVEIN
+#define MM_QUARTERDECK_LHWAVEIN 0
+#endif
+#ifndef MM_QUARTERDECK_LHWAVEOUT
+#define MM_QUARTERDECK_LHWAVEOUT 1
+#endif
+#ifndef MM_QUICKAUDIO
+#define MM_QUICKAUDIO 255
+#endif
+#ifndef MM_QUICKAUDIO_MAXIMIDI
+#define MM_QUICKAUDIO_MAXIMIDI 2
+#endif
+#ifndef MM_QUICKAUDIO_MINIMIDI
+#define MM_QUICKAUDIO_MINIMIDI 1
+#endif
+#ifndef MM_QUICKNET
+#define MM_QUICKNET 173
+#endif
+#ifndef MM_QUICKNET_PJWAVEIN
+#define MM_QUICKNET_PJWAVEIN 1
+#endif
+#ifndef MM_QUICKNET_PJWAVEOUT
+#define MM_QUICKNET_PJWAVEOUT 2
+#endif
+#ifndef MM_RADIUS
+#define MM_RADIUS 110
+#endif
+#ifndef MM_RHETOREX
+#define MM_RHETOREX 120
+#endif
+#ifndef MM_RHETOREX_WAVEIN
+#define MM_RHETOREX_WAVEIN 1
+#endif
+#ifndef MM_RHETOREX_WAVEOUT
+#define MM_RHETOREX_WAVEOUT 2
+#endif
+#ifndef MM_RICHMOND
+#define MM_RICHMOND 257
+#endif
+#ifndef MM_ROCKWELL
+#define MM_ROCKWELL 111
+#endif
+#ifndef MM_ROLAND
+#define MM_ROLAND 24
+#endif
+#ifndef MM_ROLAND_MPU401_MIDIIN
+#define MM_ROLAND_MPU401_MIDIIN 16
+#endif
+#ifndef MM_ROLAND_MPU401_MIDIOUT
+#define MM_ROLAND_MPU401_MIDIOUT 15
+#endif
+#ifndef MM_ROLAND_RAP10_MIDIIN
+#define MM_ROLAND_RAP10_MIDIIN 11
+#endif
+#ifndef MM_ROLAND_RAP10_MIDIOUT
+#define MM_ROLAND_RAP10_MIDIOUT 10
+#endif
+#ifndef MM_ROLAND_RAP10_SYNTH
+#define MM_ROLAND_RAP10_SYNTH 12
+#endif
+#ifndef MM_ROLAND_RAP10_WAVEIN
+#define MM_ROLAND_RAP10_WAVEIN 14
+#endif
+#ifndef MM_ROLAND_RAP10_WAVEOUT
+#define MM_ROLAND_RAP10_WAVEOUT 13
+#endif
+#ifndef MM_ROLAND_SC7_MIDIIN
+#define MM_ROLAND_SC7_MIDIIN 22
+#endif
+#ifndef MM_ROLAND_SC7_MIDIOUT
+#define MM_ROLAND_SC7_MIDIOUT 21
+#endif
+#ifndef MM_ROLAND_SCP_AUX
+#define MM_ROLAND_SCP_AUX 48
+#endif
+#ifndef MM_ROLAND_SCP_MIDIIN
+#define MM_ROLAND_SCP_MIDIIN 39
+#endif
+#ifndef MM_ROLAND_SCP_MIDIOUT
+#define MM_ROLAND_SCP_MIDIOUT 38
+#endif
+#ifndef MM_ROLAND_SCP_MIXER
+#define MM_ROLAND_SCP_MIXER 42
+#endif
+#ifndef MM_ROLAND_SCP_WAVEIN
+#define MM_ROLAND_SCP_WAVEIN 41
+#endif
+#ifndef MM_ROLAND_SCP_WAVEOUT
+#define MM_ROLAND_SCP_WAVEOUT 40
+#endif
+#ifndef MM_ROLAND_SERIAL_MIDIIN
+#define MM_ROLAND_SERIAL_MIDIIN 24
+#endif
+#ifndef MM_ROLAND_SERIAL_MIDIOUT
+#define MM_ROLAND_SERIAL_MIDIOUT 23
+#endif
+#ifndef MM_ROLAND_SMPU_MIDIINA
+#define MM_ROLAND_SMPU_MIDIINA 19
+#endif
+#ifndef MM_ROLAND_SMPU_MIDIINB
+#define MM_ROLAND_SMPU_MIDIINB 20
+#endif
+#ifndef MM_ROLAND_SMPU_MIDIOUTA
+#define MM_ROLAND_SMPU_MIDIOUTA 17
+#endif
+#ifndef MM_ROLAND_SMPU_MIDIOUTB
+#define MM_ROLAND_SMPU_MIDIOUTB 18
+#endif
+#ifndef MM_RZS
+#define MM_RZS 216
+#endif
+#ifndef MM_RZS_ACM_TUBGSM
+#define MM_RZS_ACM_TUBGSM 1
+#endif
+#ifndef MM_S3
+#define MM_S3 164
+#endif
+#ifndef MM_S3_AUX
+#define MM_S3_AUX 7
+#endif
+#ifndef MM_S3_FMSYNTH
+#define MM_S3_FMSYNTH 5
+#endif
+#ifndef MM_S3_MIDIIN
+#define MM_S3_MIDIIN 4
+#endif
+#ifndef MM_S3_MIDIOUT
+#define MM_S3_MIDIOUT 3
+#endif
+#ifndef MM_S3_MIXER
+#define MM_S3_MIXER 6
+#endif
+#ifndef MM_S3_WAVEIN
+#define MM_S3_WAVEIN 2
+#endif
+#ifndef MM_S3_WAVEOUT
+#define MM_S3_WAVEOUT 1
+#endif
+#ifndef MM_SANYO
+#define MM_SANYO 72
+#endif
+#ifndef MM_SANYO_ACM_LD_ADPCM
+#define MM_SANYO_ACM_LD_ADPCM 1
+#endif
+#ifndef MM_SCALACS
+#define MM_SCALACS 54
+#endif
+#ifndef MM_SEERSYS
+#define MM_SEERSYS 137
+#endif
+#ifndef MM_SEERSYS_REALITY
+#define MM_SEERSYS_REALITY 6
+#endif
+#ifndef MM_SEERSYS_SEERMIX
+#define MM_SEERSYS_SEERMIX 3
+#endif
+#ifndef MM_SEERSYS_SEERSYNTH
+#define MM_SEERSYS_SEERSYNTH 1
+#endif
+#ifndef MM_SEERSYS_SEERWAVE
+#define MM_SEERSYS_SEERWAVE 2
+#endif
+#ifndef MM_SEERSYS_WAVESYNTH
+#define MM_SEERSYS_WAVESYNTH 4
+#endif
+#ifndef MM_SEERSYS_WAVESYNTH_WG
+#define MM_SEERSYS_WAVESYNTH_WG 5
+#endif
+#ifndef MM_SELSIUS_SYSTEMS
+#define MM_SELSIUS_SYSTEMS 234
+#endif
+#ifndef MM_SELSIUS_SYSTEMS_RTPWAVEIN
+#define MM_SELSIUS_SYSTEMS_RTPWAVEIN 2
+#endif
+#ifndef MM_SELSIUS_SYSTEMS_RTPWAVEOUT
+#define MM_SELSIUS_SYSTEMS_RTPWAVEOUT 1
+#endif
+#ifndef MM_SGI
+#define MM_SGI 237
+#endif
+#ifndef MM_SGI_320_MIXER
+#define MM_SGI_320_MIXER 3
+#endif
+#ifndef MM_SGI_320_WAVEIN
+#define MM_SGI_320_WAVEIN 1
+#endif
+#ifndef MM_SGI_320_WAVEOUT
+#define MM_SGI_320_WAVEOUT 2
+#endif
+#ifndef MM_SGI_540_MIXER
+#define MM_SGI_540_MIXER 6
+#endif
+#ifndef MM_SGI_540_WAVEIN
+#define MM_SGI_540_WAVEIN 4
+#endif
+#ifndef MM_SGI_540_WAVEOUT
+#define MM_SGI_540_WAVEOUT 5
+#endif
+#ifndef MM_SGI_RAD_ADAT8CHAN_WAVEIN
+#define MM_SGI_RAD_ADAT8CHAN_WAVEIN 19
+#endif
+#ifndef MM_SGI_RAD_ADAT8CHAN_WAVEOUT
+#define MM_SGI_RAD_ADAT8CHAN_WAVEOUT 32
+#endif
+#ifndef MM_SGI_RAD_ADATMONO1_WAVEIN
+#define MM_SGI_RAD_ADATMONO1_WAVEIN 7
+#endif
+#ifndef MM_SGI_RAD_ADATMONO1_WAVEOUT
+#define MM_SGI_RAD_ADATMONO1_WAVEOUT 20
+#endif
+#ifndef MM_SGI_RAD_ADATMONO2_WAVEIN
+#define MM_SGI_RAD_ADATMONO2_WAVEIN 8
+#endif
+#ifndef MM_SGI_RAD_ADATMONO2_WAVEOUT
+#define MM_SGI_RAD_ADATMONO2_WAVEOUT 21
+#endif
+#ifndef MM_SGI_RAD_ADATMONO3_WAVEIN
+#define MM_SGI_RAD_ADATMONO3_WAVEIN 9
+#endif
+#ifndef MM_SGI_RAD_ADATMONO3_WAVEOUT
+#define MM_SGI_RAD_ADATMONO3_WAVEOUT 22
+#endif
+#ifndef MM_SGI_RAD_ADATMONO4_WAVEIN
+#define MM_SGI_RAD_ADATMONO4_WAVEIN 10
+#endif
+#ifndef MM_SGI_RAD_ADATMONO4_WAVEOUT
+#define MM_SGI_RAD_ADATMONO4_WAVEOUT 23
+#endif
+#ifndef MM_SGI_RAD_ADATMONO5_WAVEIN
+#define MM_SGI_RAD_ADATMONO5_WAVEIN 11
+#endif
+#ifndef MM_SGI_RAD_ADATMONO5_WAVEOUT
+#define MM_SGI_RAD_ADATMONO5_WAVEOUT 24
+#endif
+#ifndef MM_SGI_RAD_ADATMONO6_WAVEIN
+#define MM_SGI_RAD_ADATMONO6_WAVEIN 12
+#endif
+#ifndef MM_SGI_RAD_ADATMONO6_WAVEOUT
+#define MM_SGI_RAD_ADATMONO6_WAVEOUT 25
+#endif
+#ifndef MM_SGI_RAD_ADATMONO7_WAVEIN
+#define MM_SGI_RAD_ADATMONO7_WAVEIN 13
+#endif
+#ifndef MM_SGI_RAD_ADATMONO7_WAVEOUT
+#define MM_SGI_RAD_ADATMONO7_WAVEOUT 26
+#endif
+#ifndef MM_SGI_RAD_ADATMONO8_WAVEIN
+#define MM_SGI_RAD_ADATMONO8_WAVEIN 14
+#endif
+#ifndef MM_SGI_RAD_ADATMONO8_WAVEOUT
+#define MM_SGI_RAD_ADATMONO8_WAVEOUT 27
+#endif
+#ifndef MM_SGI_RAD_ADATSTEREO12_WAVEIN
+#define MM_SGI_RAD_ADATSTEREO12_WAVEIN 15
+#endif
+#ifndef MM_SGI_RAD_ADATSTEREO12_WAVEOUT
+#define MM_SGI_RAD_ADATSTEREO12_WAVEOUT 28
+#endif
+#ifndef MM_SGI_RAD_ADATSTEREO32_WAVEOUT
+#define MM_SGI_RAD_ADATSTEREO32_WAVEOUT 29
+#endif
+#ifndef MM_SGI_RAD_ADATSTEREO34_WAVEIN
+#define MM_SGI_RAD_ADATSTEREO34_WAVEIN 16
+#endif
+#ifndef MM_SGI_RAD_ADATSTEREO56_WAVEIN
+#define MM_SGI_RAD_ADATSTEREO56_WAVEIN 17
+#endif
+#ifndef MM_SGI_RAD_ADATSTEREO56_WAVEOUT
+#define MM_SGI_RAD_ADATSTEREO56_WAVEOUT 30
+#endif
+#ifndef MM_SGI_RAD_ADATSTEREO78_WAVEIN
+#define MM_SGI_RAD_ADATSTEREO78_WAVEIN 18
+#endif
+#ifndef MM_SGI_RAD_ADATSTEREO78_WAVEOUT
+#define MM_SGI_RAD_ADATSTEREO78_WAVEOUT 31
+#endif
+#ifndef MM_SGI_RAD_AESMONO1_WAVEIN
+#define MM_SGI_RAD_AESMONO1_WAVEIN 33
+#endif
+#ifndef MM_SGI_RAD_AESMONO1_WAVEOUT
+#define MM_SGI_RAD_AESMONO1_WAVEOUT 36
+#endif
+#ifndef MM_SGI_RAD_AESMONO2_WAVEIN
+#define MM_SGI_RAD_AESMONO2_WAVEIN 34
+#endif
+#ifndef MM_SGI_RAD_AESMONO2_WAVEOUT
+#define MM_SGI_RAD_AESMONO2_WAVEOUT 37
+#endif
+#ifndef MM_SGI_RAD_AESSTEREO_WAVEIN
+#define MM_SGI_RAD_AESSTEREO_WAVEIN 35
+#endif
+#ifndef MM_SGI_RAD_AESSTEREO_WAVEOUT
+#define MM_SGI_RAD_AESSTEREO_WAVEOUT 38
+#endif
+#ifndef MM_SHARP
+#define MM_SHARP 183
+#endif
+#ifndef MM_SHARP_MDC_AUX
+#define MM_SHARP_MDC_AUX 6
+#endif
+#ifndef MM_SHARP_MDC_AUX_BASS
+#define MM_SHARP_MDC_AUX_BASS 101
+#endif
+#ifndef MM_SHARP_MDC_AUX_CHR
+#define MM_SHARP_MDC_AUX_CHR 109
+#endif
+#ifndef MM_SHARP_MDC_AUX_MASTER
+#define MM_SHARP_MDC_AUX_MASTER 100
+#endif
+#ifndef MM_SHARP_MDC_AUX_MIDI_VOL
+#define MM_SHARP_MDC_AUX_MIDI_VOL 103
+#endif
+#ifndef MM_SHARP_MDC_AUX_RVB
+#define MM_SHARP_MDC_AUX_RVB 108
+#endif
+#ifndef MM_SHARP_MDC_AUX_TREBLE
+#define MM_SHARP_MDC_AUX_TREBLE 102
+#endif
+#ifndef MM_SHARP_MDC_AUX_VOL
+#define MM_SHARP_MDC_AUX_VOL 107
+#endif
+#ifndef MM_SHARP_MDC_AUX_WAVE_CHR
+#define MM_SHARP_MDC_AUX_WAVE_CHR 106
+#endif
+#ifndef MM_SHARP_MDC_AUX_WAVE_RVB
+#define MM_SHARP_MDC_AUX_WAVE_RVB 105
+#endif
+#ifndef MM_SHARP_MDC_AUX_WAVE_VOL
+#define MM_SHARP_MDC_AUX_WAVE_VOL 104
+#endif
+#ifndef MM_SHARP_MDC_MIDI_IN
+#define MM_SHARP_MDC_MIDI_IN 2
+#endif
+#ifndef MM_SHARP_MDC_MIDI_OUT
+#define MM_SHARP_MDC_MIDI_OUT 3
+#endif
+#ifndef MM_SHARP_MDC_MIDI_SYNTH
+#define MM_SHARP_MDC_MIDI_SYNTH 1
+#endif
+#ifndef MM_SHARP_MDC_MIXER
+#define MM_SHARP_MDC_MIXER 10
+#endif
+#ifndef MM_SHARP_MDC_WAVE_IN
+#define MM_SHARP_MDC_WAVE_IN 4
+#endif
+#ifndef MM_SHARP_MDC_WAVE_OUT
+#define MM_SHARP_MDC_WAVE_OUT 5
+#endif
+#ifndef MM_SICRESOURCE
+#define MM_SICRESOURCE 175
+#endif
+#ifndef MM_SICRESOURCE_SSO3D
+#define MM_SICRESOURCE_SSO3D 2
+#endif
+#ifndef MM_SICRESOURCE_SSOW3DI
+#define MM_SICRESOURCE_SSOW3DI 3
+#endif
+#ifndef MM_SIEMENS_SBC
+#define MM_SIEMENS_SBC 201
+#endif
+#ifndef MM_SIERRA
+#define MM_SIERRA 40
+#endif
+#ifndef MM_SIERRA_ARIA_AUX
+#define MM_SIERRA_ARIA_AUX 0x19
+#endif
+#ifndef MM_SIERRA_ARIA_AUX2
+#define MM_SIERRA_ARIA_AUX2 0x20
+#endif
+#ifndef MM_SIERRA_ARIA_MIDIIN
+#define MM_SIERRA_ARIA_MIDIIN 0x15
+#endif
+#ifndef MM_SIERRA_ARIA_MIDIOUT
+#define MM_SIERRA_ARIA_MIDIOUT 0x14
+#endif
+#ifndef MM_SIERRA_ARIA_SYNTH
+#define MM_SIERRA_ARIA_SYNTH 0x16
+#endif
+#ifndef MM_SIERRA_ARIA_WAVEIN
+#define MM_SIERRA_ARIA_WAVEIN 0x18
+#endif
+#ifndef MM_SIERRA_ARIA_WAVEOUT
+#define MM_SIERRA_ARIA_WAVEOUT 0x17
+#endif
+#ifndef MM_SIERRA_QUARTET_AUX_CD
+#define MM_SIERRA_QUARTET_AUX_CD 0x55
+#endif
+#ifndef MM_SIERRA_QUARTET_AUX_LINE
+#define MM_SIERRA_QUARTET_AUX_LINE 0x56
+#endif
+#ifndef MM_SIERRA_QUARTET_AUX_MODEM
+#define MM_SIERRA_QUARTET_AUX_MODEM 0x57
+#endif
+#ifndef MM_SIERRA_QUARTET_MIDIIN
+#define MM_SIERRA_QUARTET_MIDIIN 0x52
+#endif
+#ifndef MM_SIERRA_QUARTET_MIDIOUT
+#define MM_SIERRA_QUARTET_MIDIOUT 0x53
+#endif
+#ifndef MM_SIERRA_QUARTET_MIXER
+#define MM_SIERRA_QUARTET_MIXER 0x58
+#endif
+#ifndef MM_SIERRA_QUARTET_SYNTH
+#define MM_SIERRA_QUARTET_SYNTH 0x54
+#endif
+#ifndef MM_SIERRA_QUARTET_WAVEIN
+#define MM_SIERRA_QUARTET_WAVEIN 0x50
+#endif
+#ifndef MM_SIERRA_QUARTET_WAVEOUT
+#define MM_SIERRA_QUARTET_WAVEOUT 0x51
+#endif
+#ifndef MM_SILICONSOFT
+#define MM_SILICONSOFT 69
+#endif
+#ifndef MM_SILICONSOFT_SC1_WAVEIN
+#define MM_SILICONSOFT_SC1_WAVEIN 1
+#endif
+#ifndef MM_SILICONSOFT_SC1_WAVEOUT
+#define MM_SILICONSOFT_SC1_WAVEOUT 2
+#endif
+#ifndef MM_SILICONSOFT_SC2_WAVEIN
+#define MM_SILICONSOFT_SC2_WAVEIN 3
+#endif
+#ifndef MM_SILICONSOFT_SC2_WAVEOUT
+#define MM_SILICONSOFT_SC2_WAVEOUT 4
+#endif
+#ifndef MM_SILICONSOFT_SOUNDJR2PR_WAVEIN
+#define MM_SILICONSOFT_SOUNDJR2PR_WAVEIN 6
+#endif
+#ifndef MM_SILICONSOFT_SOUNDJR2PR_WAVEOUT
+#define MM_SILICONSOFT_SOUNDJR2PR_WAVEOUT 7
+#endif
+#ifndef MM_SILICONSOFT_SOUNDJR2_WAVEOUT
+#define MM_SILICONSOFT_SOUNDJR2_WAVEOUT 5
+#endif
+#ifndef MM_SILICONSOFT_SOUNDJR3_WAVEOUT
+#define MM_SILICONSOFT_SOUNDJR3_WAVEOUT 8
+#endif
+#ifndef MM_SIPROLAB
+#define MM_SIPROLAB 211
+#endif
+#ifndef MM_SIPROLAB_ACELPNET
+#define MM_SIPROLAB_ACELPNET 1
+#endif
+#ifndef MM_SNI
+#define MM_SNI 18
+#endif
+#ifndef MM_SNI_ACM_G721
+#define MM_SNI_ACM_G721 1
+#endif
+#ifndef MM_SOFTLAB_NSK
+#define MM_SOFTLAB_NSK 228
+#endif
+#ifndef MM_SOFTLAB_NSK_FRW_AUX
+#define MM_SOFTLAB_NSK_FRW_AUX 4
+#endif
+#ifndef MM_SOFTLAB_NSK_FRW_MIXER
+#define MM_SOFTLAB_NSK_FRW_MIXER 3
+#endif
+#ifndef MM_SOFTLAB_NSK_FRW_WAVEIN
+#define MM_SOFTLAB_NSK_FRW_WAVEIN 1
+#endif
+#ifndef MM_SOFTLAB_NSK_FRW_WAVEOUT
+#define MM_SOFTLAB_NSK_FRW_WAVEOUT 2
+#endif
+#ifndef MM_SOFTSOUND
+#define MM_SOFTSOUND 149
+#endif
+#ifndef MM_SOFTSOUND_CODEC
+#define MM_SOFTSOUND_CODEC 1
+#endif
+#ifndef MM_SONICFOUNDRY
+#define MM_SONICFOUNDRY 66
+#endif
+#ifndef MM_SONORUS
+#define MM_SONORUS 230
+#endif
+#ifndef MM_SONORUS_STUDIO
+#define MM_SONORUS_STUDIO 1
+#endif
+#ifndef MM_SONY
+#define MM_SONY 245
+#endif
+#ifndef MM_SONY_ACM_SCX
+#define MM_SONY_ACM_SCX 1
+#endif
+#ifndef MM_SORVIS
+#define MM_SORVIS 187
+#endif
+#ifndef MM_SOUNDESIGNS
+#define MM_SOUNDESIGNS 142
+#endif
+#ifndef MM_SOUNDESIGNS_WAVEIN
+#define MM_SOUNDESIGNS_WAVEIN 1
+#endif
+#ifndef MM_SOUNDESIGNS_WAVEOUT
+#define MM_SOUNDESIGNS_WAVEOUT 2
+#endif
+#ifndef MM_SOUNDSPACE
+#define MM_SOUNDSPACE 167
+#endif
+#ifndef MM_SPECTRUM_PRODUCTIONS
+#define MM_SPECTRUM_PRODUCTIONS 213
+#endif
+#ifndef MM_SPECTRUM_SIGNAL_PROCESSING
+#define MM_SPECTRUM_SIGNAL_PROCESSING 144
+#endif
+#ifndef MM_SPEECHCOMP
+#define MM_SPEECHCOMP 76
+#endif
+#ifndef MM_SPLASH_STUDIOS
+#define MM_SPLASH_STUDIOS 133
+#endif
+#ifndef MM_SSP_SNDFESAUX
+#define MM_SSP_SNDFESAUX 7
+#endif
+#ifndef MM_SSP_SNDFESMIDIIN
+#define MM_SSP_SNDFESMIDIIN 3
+#endif
+#ifndef MM_SSP_SNDFESMIDIOUT
+#define MM_SSP_SNDFESMIDIOUT 4
+#endif
+#ifndef MM_SSP_SNDFESMIX
+#define MM_SSP_SNDFESMIX 6
+#endif
+#ifndef MM_SSP_SNDFESSYNTH
+#define MM_SSP_SNDFESSYNTH 5
+#endif
+#ifndef MM_SSP_SNDFESWAVEIN
+#define MM_SSP_SNDFESWAVEIN 1
+#endif
+#ifndef MM_SSP_SNDFESWAVEOUT
+#define MM_SSP_SNDFESWAVEOUT 2
+#endif
+#ifndef MM_STUDER
+#define MM_STUDER 171
+#endif
+#ifndef MM_ST_MICROELECTRONICS
+#define MM_ST_MICROELECTRONICS 265
+#endif
+#ifndef MM_SUNCOM
+#define MM_SUNCOM 186
+#endif
+#ifndef MM_SUPERMAC
+#define MM_SUPERMAC 73
+#endif
+#ifndef MM_SYDEC_NV
+#define MM_SYDEC_NV 248
+#endif
+#ifndef MM_SYDEC_NV_WAVEIN
+#define MM_SYDEC_NV_WAVEIN 1
+#endif
+#ifndef MM_SYDEC_NV_WAVEOUT
+#define MM_SYDEC_NV_WAVEOUT 2
+#endif
+#ifndef MM_TANDY
+#define MM_TANDY 29
+#endif
+#ifndef MM_TANDY_PSSJWAVEIN
+#define MM_TANDY_PSSJWAVEIN 9
+#endif
+#ifndef MM_TANDY_PSSJWAVEOUT
+#define MM_TANDY_PSSJWAVEOUT 10
+#endif
+#ifndef MM_TANDY_SENS_MMAMIDIIN
+#define MM_TANDY_SENS_MMAMIDIIN 6
+#endif
+#ifndef MM_TANDY_SENS_MMAMIDIOUT
+#define MM_TANDY_SENS_MMAMIDIOUT 7
+#endif
+#ifndef MM_TANDY_SENS_MMAWAVEIN
+#define MM_TANDY_SENS_MMAWAVEIN 4
+#endif
+#ifndef MM_TANDY_SENS_MMAWAVEOUT
+#define MM_TANDY_SENS_MMAWAVEOUT 5
+#endif
+#ifndef MM_TANDY_SENS_VISWAVEOUT
+#define MM_TANDY_SENS_VISWAVEOUT 8
+#endif
+#ifndef MM_TANDY_VISBIOSSYNTH
+#define MM_TANDY_VISBIOSSYNTH 3
+#endif
+#ifndef MM_TANDY_VISWAVEIN
+#define MM_TANDY_VISWAVEIN 1
+#endif
+#ifndef MM_TANDY_VISWAVEOUT
+#define MM_TANDY_VISWAVEOUT 2
+#endif
+#ifndef MM_TBS_TROPEZ_AUX1
+#define MM_TBS_TROPEZ_AUX1 39
+#endif
+#ifndef MM_TBS_TROPEZ_AUX2
+#define MM_TBS_TROPEZ_AUX2 40
+#endif
+#ifndef MM_TBS_TROPEZ_LINE
+#define MM_TBS_TROPEZ_LINE 41
+#endif
+#ifndef MM_TBS_TROPEZ_WAVEIN
+#define MM_TBS_TROPEZ_WAVEIN 37
+#endif
+#ifndef MM_TBS_TROPEZ_WAVEOUT
+#define MM_TBS_TROPEZ_WAVEOUT 38
+#endif
+#ifndef MM_TDK
+#define MM_TDK 135
+#endif
+#ifndef MM_TDK_MW_AUX
+#define MM_TDK_MW_AUX 6
+#endif
+#ifndef MM_TDK_MW_AUX_BASS
+#define MM_TDK_MW_AUX_BASS 101
+#endif
+#ifndef MM_TDK_MW_AUX_CHR
+#define MM_TDK_MW_AUX_CHR 109
+#endif
+#ifndef MM_TDK_MW_AUX_MASTER
+#define MM_TDK_MW_AUX_MASTER 100
+#endif
+#ifndef MM_TDK_MW_AUX_MIDI_VOL
+#define MM_TDK_MW_AUX_MIDI_VOL 103
+#endif
+#ifndef MM_TDK_MW_AUX_RVB
+#define MM_TDK_MW_AUX_RVB 108
+#endif
+#ifndef MM_TDK_MW_AUX_TREBLE
+#define MM_TDK_MW_AUX_TREBLE 102
+#endif
+#ifndef MM_TDK_MW_AUX_VOL
+#define MM_TDK_MW_AUX_VOL 107
+#endif
+#ifndef MM_TDK_MW_AUX_WAVE_CHR
+#define MM_TDK_MW_AUX_WAVE_CHR 106
+#endif
+#ifndef MM_TDK_MW_AUX_WAVE_RVB
+#define MM_TDK_MW_AUX_WAVE_RVB 105
+#endif
+#ifndef MM_TDK_MW_AUX_WAVE_VOL
+#define MM_TDK_MW_AUX_WAVE_VOL 104
+#endif
+#ifndef MM_TDK_MW_MIDI_IN
+#define MM_TDK_MW_MIDI_IN 2
+#endif
+#ifndef MM_TDK_MW_MIDI_OUT
+#define MM_TDK_MW_MIDI_OUT 3
+#endif
+#ifndef MM_TDK_MW_MIDI_SYNTH
+#define MM_TDK_MW_MIDI_SYNTH 1
+#endif
+#ifndef MM_TDK_MW_MIXER
+#define MM_TDK_MW_MIXER 10
+#endif
+#ifndef MM_TDK_MW_WAVE_IN
+#define MM_TDK_MW_WAVE_IN 4
+#endif
+#ifndef MM_TDK_MW_WAVE_OUT
+#define MM_TDK_MW_WAVE_OUT 5
+#endif
+#ifndef MM_TELEKOL
+#define MM_TELEKOL 264
+#endif
+#ifndef MM_TELEKOL_WAVEIN
+#define MM_TELEKOL_WAVEIN 2
+#endif
+#ifndef MM_TELEKOL_WAVEOUT
+#define MM_TELEKOL_WAVEOUT 1
+#endif
+#ifndef MM_TERALOGIC
+#define MM_TERALOGIC 202
+#endif
+#ifndef MM_TERRATEC
+#define MM_TERRATEC 70
+#endif
+#ifndef MM_TRUEVISION
+#define MM_TRUEVISION 51
+#endif
+#ifndef MM_TRUEVISION_WAVEIN1
+#define MM_TRUEVISION_WAVEIN1 1
+#endif
+#ifndef MM_TRUEVISION_WAVEOUT1
+#define MM_TRUEVISION_WAVEOUT1 2
+#endif
+#ifndef MM_TTEWS_AUX
+#define MM_TTEWS_AUX 9
+#endif
+#ifndef MM_TTEWS_MIDIIN
+#define MM_TTEWS_MIDIIN 3
+#endif
+#ifndef MM_TTEWS_MIDIMONITOR
+#define MM_TTEWS_MIDIMONITOR 6
+#endif
+#ifndef MM_TTEWS_MIDIOUT
+#define MM_TTEWS_MIDIOUT 4
+#endif
+#ifndef MM_TTEWS_MIDISYNTH
+#define MM_TTEWS_MIDISYNTH 5
+#endif
+#ifndef MM_TTEWS_MIXER
+#define MM_TTEWS_MIXER 10
+#endif
+#ifndef MM_TTEWS_VMIDIIN
+#define MM_TTEWS_VMIDIIN 7
+#endif
+#ifndef MM_TTEWS_VMIDIOUT
+#define MM_TTEWS_VMIDIOUT 8
+#endif
+#ifndef MM_TTEWS_WAVEIN
+#define MM_TTEWS_WAVEIN 1
+#endif
+#ifndef MM_TTEWS_WAVEOUT
+#define MM_TTEWS_WAVEOUT 2
+#endif
+#ifndef MM_TURTLE_BEACH
+#define MM_TURTLE_BEACH 21
+#endif
+#ifndef MM_UHER_INFORMATIC
+#define MM_UHER_INFORMATIC 247
+#endif
+#ifndef MM_UH_ACM_ADPCM
+#define MM_UH_ACM_ADPCM 1
+#endif
+#ifndef MM_UNISYS
+#define MM_UNISYS 223
+#endif
+#ifndef MM_UNISYS_ACM_NAP
+#define MM_UNISYS_ACM_NAP 1
+#endif
+#ifndef MM_VAL
+#define MM_VAL 35
+#endif
+#ifndef MM_VAL_MICROKEY_AP_WAVEIN
+#define MM_VAL_MICROKEY_AP_WAVEIN 1
+#endif
+#ifndef MM_VAL_MICROKEY_AP_WAVEOUT
+#define MM_VAL_MICROKEY_AP_WAVEOUT 2
+#endif
+#ifndef MM_VANKOEVERING
+#define MM_VANKOEVERING 168
+#endif
+#ifndef MM_VIA
+#define MM_VIA 250
+#endif
+#ifndef MM_VIA_AUX
+#define MM_VIA_AUX 4
+#endif
+#ifndef MM_VIA_MIXER
+#define MM_VIA_MIXER 3
+#endif
+#ifndef MM_VIA_MPU401_MIDIIN
+#define MM_VIA_MPU401_MIDIIN 6
+#endif
+#ifndef MM_VIA_MPU401_MIDIOUT
+#define MM_VIA_MPU401_MIDIOUT 5
+#endif
+#ifndef MM_VIA_SWFM_SYNTH
+#define MM_VIA_SWFM_SYNTH 7
+#endif
+#ifndef MM_VIA_WAVEIN
+#define MM_VIA_WAVEIN 2
+#endif
+#ifndef MM_VIA_WAVEOUT
+#define MM_VIA_WAVEOUT 1
+#endif
+#ifndef MM_VIA_WDM_MIXER
+#define MM_VIA_WDM_MIXER 10
+#endif
+#ifndef MM_VIA_WDM_MPU401_MIDIIN
+#define MM_VIA_WDM_MPU401_MIDIIN 12
+#endif
+#ifndef MM_VIA_WDM_MPU401_MIDIOUT
+#define MM_VIA_WDM_MPU401_MIDIOUT 11
+#endif
+#ifndef MM_VIA_WDM_WAVEIN
+#define MM_VIA_WDM_WAVEIN 9
+#endif
+#ifndef MM_VIA_WDM_WAVEOUT
+#define MM_VIA_WDM_WAVEOUT 8
+#endif
+#ifndef MM_VIDEOLOGIC
+#define MM_VIDEOLOGIC 53
+#endif
+#ifndef MM_VIDEOLOGIC_MSWAVEIN
+#define MM_VIDEOLOGIC_MSWAVEIN 1
+#endif
+#ifndef MM_VIDEOLOGIC_MSWAVEOUT
+#define MM_VIDEOLOGIC_MSWAVEOUT 2
+#endif
+#ifndef MM_VIENNASYS
+#define MM_VIENNASYS 157
+#endif
+#ifndef MM_VIENNASYS_TSP_WAVE_DRIVER
+#define MM_VIENNASYS_TSP_WAVE_DRIVER 1
+#endif
+#ifndef MM_VIONA
+#define MM_VIONA 161
+#endif
+#ifndef MM_VIONAQVINPCI_WAVEOUT
+#define MM_VIONAQVINPCI_WAVEOUT 3
+#endif
+#ifndef MM_VIONA_BUSTER_MIXER
+#define MM_VIONA_BUSTER_MIXER 4
+#endif
+#ifndef MM_VIONA_CINEMASTER_MIXER
+#define MM_VIONA_CINEMASTER_MIXER 5
+#endif
+#ifndef MM_VIONA_CONCERTO_MIXER
+#define MM_VIONA_CONCERTO_MIXER 6
+#endif
+#ifndef MM_VIONA_QVINPCI_MIXER
+#define MM_VIONA_QVINPCI_MIXER 1
+#endif
+#ifndef MM_VIONA_QVINPCI_WAVEIN
+#define MM_VIONA_QVINPCI_WAVEIN 2
+#endif
+#ifndef MM_VIRTUALMUSIC
+#define MM_VIRTUALMUSIC 205
+#endif
+#ifndef MM_VITEC
+#define MM_VITEC 67
+#endif
+#ifndef MM_VITEC_VMAKER
+#define MM_VITEC_VMAKER 1
+#endif
+#ifndef MM_VITEC_VMPRO
+#define MM_VITEC_VMPRO 2
+#endif
+#ifndef MM_VIVO
+#define MM_VIVO 182
+#endif
+#ifndef MM_VIVO_AUDIO_CODEC
+#define MM_VIVO_AUDIO_CODEC 1
+#endif
+#ifndef MM_VKC_MPU401_MIDIIN
+#define MM_VKC_MPU401_MIDIIN 0x0100
+#endif
+#ifndef MM_VKC_MPU401_MIDIOUT
+#define MM_VKC_MPU401_MIDIOUT 0x0200
+#endif
+#ifndef MM_VKC_SERIAL_MIDIIN
+#define MM_VKC_SERIAL_MIDIIN 0x0101
+#endif
+#ifndef MM_VKC_SERIAL_MIDIOUT
+#define MM_VKC_SERIAL_MIDIOUT 0x0201
+#endif
+#ifndef MM_VOCALTEC
+#define MM_VOCALTEC 23
+#endif
+#ifndef MM_VOCALTEC_WAVEIN
+#define MM_VOCALTEC_WAVEIN 2
+#endif
+#ifndef MM_VOCALTEC_WAVEOUT
+#define MM_VOCALTEC_WAVEOUT 1
+#endif
+#ifndef MM_VOICEINFO
+#define MM_VOICEINFO 156
+#endif
+#ifndef MM_VOICEMIXER
+#define MM_VOICEMIXER 1
+#endif
+#ifndef MM_VOXWARE
+#define MM_VOXWARE 114
+#endif
+#ifndef MM_VOXWARE_CODEC
+#define MM_VOXWARE_CODEC 1
+#endif
+#ifndef MM_VOYETRA
+#define MM_VOYETRA 30
+#endif
+#ifndef MM_VQST
+#define MM_VQST 240
+#endif
+#ifndef MM_VQST_VQC1
+#define MM_VQST_VQC1 1
+#endif
+#ifndef MM_VQST_VQC2
+#define MM_VQST_VQC2 2
+#endif
+#ifndef MM_VTG
+#define MM_VTG 109
+#endif
+#ifndef MM_WANGLABS
+#define MM_WANGLABS 28
+#endif
+#ifndef MM_WANGLABS_WAVEIN1
+#define MM_WANGLABS_WAVEIN1 1
+#endif
+#ifndef MM_WANGLABS_WAVEOUT1
+#define MM_WANGLABS_WAVEOUT1 2
+#endif
+#ifndef MM_WEITEK
+#define MM_WEITEK 96
+#endif
+#ifndef MM_WILDCAT
+#define MM_WILDCAT 119
+#endif
+#ifndef MM_WILDCAT_AUTOSCOREMIDIIN
+#define MM_WILDCAT_AUTOSCOREMIDIIN 1
+#endif
+#ifndef MM_WILLOPOND_SNDCOMM_WAVEIN
+#define MM_WILLOPOND_SNDCOMM_WAVEIN 108
+#endif
+#ifndef MM_WILLOWPOND
+#define MM_WILLOWPOND 65
+#endif
+#ifndef MM_WILLOWPOND_FMSYNTH_STEREO
+#define MM_WILLOWPOND_FMSYNTH_STEREO 20
+#endif
+#ifndef MM_WILLOWPOND_GENERIC_AUX
+#define MM_WILLOWPOND_GENERIC_AUX 115
+#endif
+#ifndef MM_WILLOWPOND_GENERIC_MIXER
+#define MM_WILLOWPOND_GENERIC_MIXER 114
+#endif
+#ifndef MM_WILLOWPOND_GENERIC_WAVEIN
+#define MM_WILLOWPOND_GENERIC_WAVEIN 112
+#endif
+#ifndef MM_WILLOWPOND_GENERIC_WAVEOUT
+#define MM_WILLOWPOND_GENERIC_WAVEOUT 113
+#endif
+#ifndef MM_WILLOWPOND_MPU401
+#define MM_WILLOWPOND_MPU401 21
+#endif
+#ifndef MM_WILLOWPOND_PH_AUX
+#define MM_WILLOWPOND_PH_AUX 107
+#endif
+#ifndef MM_WILLOWPOND_PH_MIXER
+#define MM_WILLOWPOND_PH_MIXER 106
+#endif
+#ifndef MM_WILLOWPOND_PH_WAVEIN
+#define MM_WILLOWPOND_PH_WAVEIN 104
+#endif
+#ifndef MM_WILLOWPOND_PH_WAVEOUT
+#define MM_WILLOWPOND_PH_WAVEOUT 105
+#endif
+#ifndef MM_WILLOWPOND_SNDCOMM_AUX
+#define MM_WILLOWPOND_SNDCOMM_AUX 111
+#endif
+#ifndef MM_WILLOWPOND_SNDCOMM_MIXER
+#define MM_WILLOWPOND_SNDCOMM_MIXER 110
+#endif
+#ifndef MM_WILLOWPOND_SNDCOMM_WAVEOUT
+#define MM_WILLOWPOND_SNDCOMM_WAVEOUT 109
+#endif
+#ifndef MM_WILLOWPOND_SNDPORT_AUX
+#define MM_WILLOWPOND_SNDPORT_AUX 103
+#endif
+#ifndef MM_WILLOWPOND_SNDPORT_MIXER
+#define MM_WILLOWPOND_SNDPORT_MIXER 102
+#endif
+#ifndef MM_WILLOWPOND_SNDPORT_WAVEIN
+#define MM_WILLOWPOND_SNDPORT_WAVEIN 100
+#endif
+#ifndef MM_WILLOWPOND_SNDPORT_WAVEOUT
+#define MM_WILLOWPOND_SNDPORT_WAVEOUT 101
+#endif
+#ifndef MM_WINBOND
+#define MM_WINBOND 204
+#endif
+#ifndef MM_WINNOV
+#define MM_WINNOV 61
+#endif
+#ifndef MM_WINNOV_CAVIAR_CHAMPAGNE
+#define MM_WINNOV_CAVIAR_CHAMPAGNE 4
+#endif
+#ifndef MM_WINNOV_CAVIAR_VIDC
+#define MM_WINNOV_CAVIAR_VIDC 3
+#endif
+#ifndef MM_WINNOV_CAVIAR_WAVEIN
+#define MM_WINNOV_CAVIAR_WAVEIN 1
+#endif
+#ifndef MM_WINNOV_CAVIAR_WAVEOUT
+#define MM_WINNOV_CAVIAR_WAVEOUT 2
+#endif
+#ifndef MM_WINNOV_CAVIAR_YUV8
+#define MM_WINNOV_CAVIAR_YUV8 5
+#endif
+#ifndef MM_WORKBIT
+#define MM_WORKBIT 102
+#endif
+#ifndef MM_WORKBIT_AUX
+#define MM_WORKBIT_AUX 7
+#endif
+#ifndef MM_WORKBIT_FMSYNTH
+#define MM_WORKBIT_FMSYNTH 6
+#endif
+#ifndef MM_WORKBIT_JOYSTICK
+#define MM_WORKBIT_JOYSTICK 8
+#endif
+#ifndef MM_WORKBIT_MIDIIN
+#define MM_WORKBIT_MIDIIN 4
+#endif
+#ifndef MM_WORKBIT_MIDIOUT
+#define MM_WORKBIT_MIDIOUT 5
+#endif
+#ifndef MM_WORKBIT_MIXER
+#define MM_WORKBIT_MIXER 1
+#endif
+#ifndef MM_WORKBIT_WAVEIN
+#define MM_WORKBIT_WAVEIN 3
+#endif
+#ifndef MM_WORKBIT_WAVEOUT
+#define MM_WORKBIT_WAVEOUT 2
+#endif
+#ifndef MM_WSS_SB16_AUX_CD
+#define MM_WSS_SB16_AUX_CD 45
+#endif
+#ifndef MM_WSS_SB16_AUX_LINE
+#define MM_WSS_SB16_AUX_LINE 44
+#endif
+#ifndef MM_WSS_SB16_MIDIIN
+#define MM_WSS_SB16_MIDIIN 41
+#endif
+#ifndef MM_WSS_SB16_MIDIOUT
+#define MM_WSS_SB16_MIDIOUT 42
+#endif
+#ifndef MM_WSS_SB16_MIXER
+#define MM_WSS_SB16_MIXER 46
+#endif
+#ifndef MM_WSS_SB16_SYNTH
+#define MM_WSS_SB16_SYNTH 43
+#endif
+#ifndef MM_WSS_SB16_WAVEIN
+#define MM_WSS_SB16_WAVEIN 39
+#endif
+#ifndef MM_WSS_SB16_WAVEOUT
+#define MM_WSS_SB16_WAVEOUT 40
+#endif
+#ifndef MM_WSS_SBPRO_AUX_CD
+#define MM_WSS_SBPRO_AUX_CD 53
+#endif
+#ifndef MM_WSS_SBPRO_AUX_LINE
+#define MM_WSS_SBPRO_AUX_LINE 52
+#endif
+#ifndef MM_WSS_SBPRO_MIDIIN
+#define MM_WSS_SBPRO_MIDIIN 49
+#endif
+#ifndef MM_WSS_SBPRO_MIDIOUT
+#define MM_WSS_SBPRO_MIDIOUT 50
+#endif
+#ifndef MM_WSS_SBPRO_MIXER
+#define MM_WSS_SBPRO_MIXER 54
+#endif
+#ifndef MM_WSS_SBPRO_SYNTH
+#define MM_WSS_SBPRO_SYNTH 51
+#endif
+#ifndef MM_WSS_SBPRO_WAVEIN
+#define MM_WSS_SBPRO_WAVEIN 47
+#endif
+#ifndef MM_WSS_SBPRO_WAVEOUT
+#define MM_WSS_SBPRO_WAVEOUT 48
+#endif
+#ifndef MM_XEBEC
+#define MM_XEBEC 85
+#endif
+#ifndef MM_XIRLINK
+#define MM_XIRLINK 178
+#endif
+#ifndef MM_XIRLINK_VISIONLINK
+#define MM_XIRLINK_VISIONLINK 1
+#endif
+#ifndef MM_XYZ
+#define MM_XYZ 112
+#endif
+#ifndef MM_YAMAHA
+#define MM_YAMAHA 37
+#endif
+#ifndef MM_YAMAHA_ACXG_AUX
+#define MM_YAMAHA_ACXG_AUX 0x29
+#endif
+#ifndef MM_YAMAHA_ACXG_MIDIOUT
+#define MM_YAMAHA_ACXG_MIDIOUT 0x27
+#endif
+#ifndef MM_YAMAHA_ACXG_MIXER
+#define MM_YAMAHA_ACXG_MIXER 0x28
+#endif
+#ifndef MM_YAMAHA_ACXG_WAVEIN
+#define MM_YAMAHA_ACXG_WAVEIN 0x25
+#endif
+#ifndef MM_YAMAHA_ACXG_WAVEOUT
+#define MM_YAMAHA_ACXG_WAVEOUT 0x26
+#endif
+#ifndef MM_YAMAHA_GSS_AUX
+#define MM_YAMAHA_GSS_AUX 0x06
+#endif
+#ifndef MM_YAMAHA_GSS_MIDIIN
+#define MM_YAMAHA_GSS_MIDIIN 0x05
+#endif
+#ifndef MM_YAMAHA_GSS_MIDIOUT
+#define MM_YAMAHA_GSS_MIDIOUT 0x04
+#endif
+#ifndef MM_YAMAHA_GSS_SYNTH
+#define MM_YAMAHA_GSS_SYNTH 0x01
+#endif
+#ifndef MM_YAMAHA_GSS_WAVEIN
+#define MM_YAMAHA_GSS_WAVEIN 0x03
+#endif
+#ifndef MM_YAMAHA_GSS_WAVEOUT
+#define MM_YAMAHA_GSS_WAVEOUT 0x02
+#endif
+#ifndef MM_YAMAHA_OPL3SA_FMSYNTH
+#define MM_YAMAHA_OPL3SA_FMSYNTH 0x12
+#endif
+#ifndef MM_YAMAHA_OPL3SA_JOYSTICK
+#define MM_YAMAHA_OPL3SA_JOYSTICK 0x18
+#endif
+#ifndef MM_YAMAHA_OPL3SA_MIDIIN
+#define MM_YAMAHA_OPL3SA_MIDIIN 0x15
+#endif
+#ifndef MM_YAMAHA_OPL3SA_MIDIOUT
+#define MM_YAMAHA_OPL3SA_MIDIOUT 0x14
+#endif
+#ifndef MM_YAMAHA_OPL3SA_MIXER
+#define MM_YAMAHA_OPL3SA_MIXER 0x17
+#endif
+#ifndef MM_YAMAHA_OPL3SA_WAVEIN
+#define MM_YAMAHA_OPL3SA_WAVEIN 0x11
+#endif
+#ifndef MM_YAMAHA_OPL3SA_WAVEOUT
+#define MM_YAMAHA_OPL3SA_WAVEOUT 0x10
+#endif
+#ifndef MM_YAMAHA_OPL3SA_YSYNTH
+#define MM_YAMAHA_OPL3SA_YSYNTH 0x13
+#endif
+#ifndef MM_YAMAHA_SERIAL_MIDIIN
+#define MM_YAMAHA_SERIAL_MIDIIN 0x08
+#endif
+#ifndef MM_YAMAHA_SERIAL_MIDIOUT
+#define MM_YAMAHA_SERIAL_MIDIOUT 0x07
+#endif
+#ifndef MM_YAMAHA_SXG_MIDIOUT
+#define MM_YAMAHA_SXG_MIDIOUT 0x22
+#endif
+#ifndef MM_YAMAHA_SXG_MIXER
+#define MM_YAMAHA_SXG_MIXER 0x24
+#endif
+#ifndef MM_YAMAHA_SXG_WAVEOUT
+#define MM_YAMAHA_SXG_WAVEOUT 0x23
+#endif
+#ifndef MM_YAMAHA_YMF724LEG_FMSYNTH
+#define MM_YAMAHA_YMF724LEG_FMSYNTH 0x20
+#endif
+#ifndef MM_YAMAHA_YMF724LEG_MIDIIN
+#define MM_YAMAHA_YMF724LEG_MIDIIN 0x1a
+#endif
+#ifndef MM_YAMAHA_YMF724LEG_MIDIOUT
+#define MM_YAMAHA_YMF724LEG_MIDIOUT 0x19
+#endif
+#ifndef MM_YAMAHA_YMF724LEG_MIXER
+#define MM_YAMAHA_YMF724LEG_MIXER 0x21
+#endif
+#ifndef MM_YAMAHA_YMF724_AUX
+#define MM_YAMAHA_YMF724_AUX 0x1e
+#endif
+#ifndef MM_YAMAHA_YMF724_MIDIOUT
+#define MM_YAMAHA_YMF724_MIDIOUT 0x1d
+#endif
+#ifndef MM_YAMAHA_YMF724_MIXER
+#define MM_YAMAHA_YMF724_MIXER 0x1f
+#endif
+#ifndef MM_YAMAHA_YMF724_WAVEIN
+#define MM_YAMAHA_YMF724_WAVEIN 0x1c
+#endif
+#ifndef MM_YAMAHA_YMF724_WAVEOUT
+#define MM_YAMAHA_YMF724_WAVEOUT 0x1b
+#endif
+#ifndef MM_YOUCOM
+#define MM_YOUCOM 256
+#endif
+#ifndef MM_ZEFIRO
+#define MM_ZEFIRO 170
+#endif
+#ifndef MM_ZEFIRO_ZA2
+#define MM_ZEFIRO_ZA2 2
+#endif
+#ifndef MM_ZYXEL
+#define MM_ZYXEL 9
+#endif
+#ifndef MM_ZYXEL_ACM_ADPCM
+#define MM_ZYXEL_ACM_ADPCM 1
+#endif
+#ifndef ROCKWELL_WA1_MIXER
+#define ROCKWELL_WA1_MIXER 103
+#endif
+#ifndef ROCKWELL_WA1_MPU401_IN
+#define ROCKWELL_WA1_MPU401_IN 104
+#endif
+#ifndef ROCKWELL_WA1_MPU401_OUT
+#define ROCKWELL_WA1_MPU401_OUT 105
+#endif
+#ifndef ROCKWELL_WA1_SYNTH
+#define ROCKWELL_WA1_SYNTH 102
+#endif
+#ifndef ROCKWELL_WA1_WAVEIN
+#define ROCKWELL_WA1_WAVEIN 100
+#endif
+#ifndef ROCKWELL_WA1_WAVEOUT
+#define ROCKWELL_WA1_WAVEOUT 101
+#endif
+#ifndef ROCKWELL_WA2_MIXER
+#define ROCKWELL_WA2_MIXER 203
+#endif
+#ifndef ROCKWELL_WA2_MPU401_IN
+#define ROCKWELL_WA2_MPU401_IN 204
+#endif
+#ifndef ROCKWELL_WA2_MPU401_OUT
+#define ROCKWELL_WA2_MPU401_OUT 205
+#endif
+#ifndef ROCKWELL_WA2_SYNTH
+#define ROCKWELL_WA2_SYNTH 202
+#endif
+#ifndef ROCKWELL_WA2_WAVEIN
+#define ROCKWELL_WA2_WAVEIN 200
+#endif
+#ifndef ROCKWELL_WA2_WAVEOUT
+#define ROCKWELL_WA2_WAVEOUT 201
+#endif
+#ifndef WAVE_FORMAT_WMAVOICE10
+#define WAVE_FORMAT_WMAVOICE10 0x000B
+#endif

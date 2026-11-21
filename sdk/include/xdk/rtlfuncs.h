@@ -1377,7 +1377,7 @@ RtlAllocateHeap(
 
 _Success_(return != 0)
 NTSYSAPI
-BOOLEAN
+LOGICAL
 NTAPI
 RtlFreeHeap(
   _In_ PVOID HeapHandle,

@@ -349,4 +349,8 @@ MSIHANDLE WINAPI MsiGetLastErrorRecord(void);
 }
 #endif
 
+#ifndef INSTALLMESSAGE_TYPEMASK
+#define INSTALLMESSAGE_TYPEMASK 0xFF000000L
+#endif
+
 #endif /* __WINE_MSIQUERY_H */

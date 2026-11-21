@@ -525,4 +525,175 @@ DWORD WINAPI WlanScan(IN HANDLE hClientHandle, IN const GUID *pInterfaceGuid, IN
 #endif
 
 
+#ifndef DOT11_PSD_IE_MAX_DATA_SIZE
+#define DOT11_PSD_IE_MAX_DATA_SIZE 240
+#endif
+#ifndef DOT11_PSD_IE_MAX_ENTRY_NUMBER
+#define DOT11_PSD_IE_MAX_ENTRY_NUMBER 5
+#endif
+#ifndef WFD_API_VERSION_1_0
+#define WFD_API_VERSION_1_0 0x00000001
+#endif
+#ifndef WLAN_CONNECTION_ADHOC_JOIN_ONLY
+#define WLAN_CONNECTION_ADHOC_JOIN_ONLY 0x00000002
+#endif
+#ifndef WLAN_CONNECTION_EAPOL_PASSTHROUGH
+#define WLAN_CONNECTION_EAPOL_PASSTHROUGH 0x00000008
+#endif
+#ifndef WLAN_CONNECTION_HIDDEN_NETWORK
+#define WLAN_CONNECTION_HIDDEN_NETWORK 0x00000001
+#endif
+#ifndef WLAN_CONNECTION_IGNORE_PRIVACY_BIT
+#define WLAN_CONNECTION_IGNORE_PRIVACY_BIT 0x00000004
+#endif
+#ifndef WLAN_CONNECTION_PERSIST_DISCOVERY_PROFILE
+#define WLAN_CONNECTION_PERSIST_DISCOVERY_PROFILE 0x00000010
+#endif
+#ifndef WLAN_CONNECTION_PERSIST_DISCOVERY_PROFILE_CONNECTION_MODE_AUTO
+#define WLAN_CONNECTION_PERSIST_DISCOVERY_PROFILE_CONNECTION_MODE_AUTO 0x00000020
+#endif
+#ifndef WLAN_CONNECTION_PERSIST_DISCOVERY_PROFILE_OVERWRITE_EXISTING
+#define WLAN_CONNECTION_PERSIST_DISCOVERY_PROFILE_OVERWRITE_EXISTING 0x00000040
+#endif
+#ifndef WLAN_PROFILE_CONNECTION_MODE_AUTO
+#define WLAN_PROFILE_CONNECTION_MODE_AUTO 0x00020000
+#endif
+#ifndef WLAN_PROFILE_CONNECTION_MODE_SET_BY_CLIENT
+#define WLAN_PROFILE_CONNECTION_MODE_SET_BY_CLIENT 0x00010000
+#endif
+#ifndef WLAN_PROFILE_GET_PLAINTEXT_KEY
+#define WLAN_PROFILE_GET_PLAINTEXT_KEY 0x00000004
+#endif
+#ifndef WLAN_PROFILE_GROUP_POLICY
+#define WLAN_PROFILE_GROUP_POLICY 0x00000001
+#endif
+#ifndef WLAN_PROFILE_USER
+#define WLAN_PROFILE_USER 0x00000002
+#endif
+#ifndef WLAN_SET_EAPHOST_DATA_ALL_USERS
+#define WLAN_SET_EAPHOST_DATA_ALL_USERS 0x00000001
+#endif
+#ifndef WLAN_UI_API_INITIAL_VERSION
+#define WLAN_UI_API_INITIAL_VERSION 1
+#endif
+#ifndef WLAN_UI_API_VERSION
+#define WLAN_UI_API_VERSION 1
+#endif
+
+typedef enum _WLAN_ADHOC_NETWORK_STATE {
+    wlan_adhoc_network_state_formed = 0,
+    wlan_adhoc_network_state_connected = 1
+} WLAN_ADHOC_NETWORK_STATE, *PWLAN_ADHOC_NETWORK_STATE;
+
+typedef enum _WLAN_OPERATIONAL_STATE {
+    wlan_operational_state_unknown = 0,
+    wlan_operational_state_off = 1,
+    wlan_operational_state_on = 2,
+    wlan_operational_state_going_off = 3,
+    wlan_operational_state_going_on = 4
+} WLAN_OPERATIONAL_STATE, *PWLAN_OPERATIONAL_STATE;
+
+typedef enum _WLAN_POWER_SETTING {
+    wlan_power_setting_no_saving = 0,
+    wlan_power_setting_low_saving = 1,
+    wlan_power_setting_medium_saving = 2,
+    wlan_power_setting_maximum_saving = 3,
+    wlan_power_setting_invalid = 4
+} WLAN_POWER_SETTING, *PWLAN_POWER_SETTING;
+
+typedef enum _WLAN_NOTIFICATION_SECURITY {
+    wlan_notification_security_start = 0,
+    wlan_notification_security_end = 1
+} WLAN_NOTIFICATION_SECURITY, *PWLAN_NOTIFICATION_SECURITY;
+
+typedef enum _WLAN_AUTOCONF_OPCODE {
+    wlan_autoconf_opcode_start = 0,
+    wlan_autoconf_opcode_show_denied_networks = 1,
+    wlan_autoconf_opcode_power_setting = 2,
+    wlan_autoconf_opcode_only_use_gp_profiles_for_allowed_networks = 3,
+    wlan_autoconf_opcode_allow_explicit_creds = 4,
+    wlan_autoconf_opcode_block_period = 5,
+    wlan_autoconf_opcode_allow_virtual_station_extensibility = 6,
+    wlan_autoconf_opcode_end = 7
+} WLAN_AUTOCONF_OPCODE, *PWLAN_AUTOCONF_OPCODE;
+
+typedef enum _WLAN_FILTER_LIST_TYPE {
+    wlan_filter_list_type_gp_permit = 0,
+    wlan_filter_list_type_gp_deny = 1,
+    wlan_filter_list_type_user_permit = 2,
+    wlan_filter_list_type_user_deny = 3
+} WLAN_FILTER_LIST_TYPE, *PWLAN_FILTER_LIST_TYPE;
+
+typedef enum _WFD_ROLE_TYPE {
+    WFD_ROLE_TYPE_NONE = 0,
+    WFD_ROLE_TYPE_DEVICE = 1,
+    WFD_ROLE_TYPE_GROUP_OWNER = 2,
+    WFD_ROLE_TYPE_CLIENT = 4,
+    WFD_ROLE_TYPE_MAX = 5
+} WFD_ROLE_TYPE, *PWFD_ROLE_TYPE;
+
+typedef enum _WL_DISPLAY_PAGES {
+    WLConnectionPage = 0,
+    WLSecurityPage = 1,
+    WLAdvPage = 2
+} WL_DISPLAY_PAGES, *PWL_DISPLAY_PAGES;
+
+typedef enum _WLAN_HOSTED_NETWORK_STATE {
+    wlan_hosted_network_unavailable = 0,
+    wlan_hosted_network_idle = 1,
+    wlan_hosted_network_active = 2
+} WLAN_HOSTED_NETWORK_STATE, *PWLAN_HOSTED_NETWORK_STATE;
+
+typedef enum _WLAN_HOSTED_NETWORK_REASON {
+    wlan_hosted_network_reason_success = 0,
+    wlan_hosted_network_reason_unspecified = 1,
+    wlan_hosted_network_reason_bad_parameters = 2,
+    wlan_hosted_network_reason_service_shutting_down = 3,
+    wlan_hosted_network_reason_insufficient_resources = 4,
+    wlan_hosted_network_reason_elevation_required = 5,
+    wlan_hosted_network_reason_read_only = 6,
+    wlan_hosted_network_reason_persistence_failed = 7,
+    wlan_hosted_network_reason_crypt_error = 8,
+    wlan_hosted_network_reason_impersonation = 9,
+    wlan_hosted_network_reason_stop_before_start = 10,
+    wlan_hosted_network_reason_interface_available = 11,
+    wlan_hosted_network_reason_interface_unavailable = 12,
+    wlan_hosted_network_reason_miniport_stopped = 13,
+    wlan_hosted_network_reason_miniport_started = 14,
+    wlan_hosted_network_reason_incompatible_connection_started = 15,
+    wlan_hosted_network_reason_incompatible_connection_stopped = 16,
+    wlan_hosted_network_reason_user_action = 17,
+    wlan_hosted_network_reason_client_abort = 18,
+    wlan_hosted_network_reason_ap_start_failed = 19,
+    wlan_hosted_network_reason_peer_arrived = 20,
+    wlan_hosted_network_reason_peer_departed = 21,
+    wlan_hosted_network_reason_peer_timeout = 22,
+    wlan_hosted_network_reason_gp_denied = 23,
+    wlan_hosted_network_reason_service_unavailable = 24,
+    wlan_hosted_network_reason_device_change = 25,
+    wlan_hosted_network_reason_properties_change = 26,
+    wlan_hosted_network_reason_virtual_station_blocking_use = 27,
+    wlan_hosted_network_reason_service_available_on_virtual_station = 28
+} WLAN_HOSTED_NETWORK_REASON, *PWLAN_HOSTED_NETWORK_REASON;
+
+typedef enum _WLAN_HOSTED_NETWORK_PEER_AUTH_STATE {
+    wlan_hosted_network_peer_state_invalid = 0,
+    wlan_hosted_network_peer_state_authenticated = 1
+} WLAN_HOSTED_NETWORK_PEER_AUTH_STATE, *PWLAN_HOSTED_NETWORK_PEER_AUTH_STATE;
+
+typedef enum _WLAN_HOSTED_NETWORK_NOTIFICATION_CODE {
+    wlan_hosted_network_state_change = 0x1000,
+    wlan_hosted_network_peer_state_change = 0x1001,
+    wlan_hosted_network_radio_state_change = 0x1002
+} WLAN_HOSTED_NETWORK_NOTIFICATION_CODE, *PWLAN_HOSTED_NETWORK_NOTIFICATION_CODE;
+
+typedef enum _WLAN_HOSTED_NETWORK_OPCODE {
+    wlan_hosted_network_opcode_connection_settings = 0,
+    wlan_hosted_network_opcode_security_settings = 1,
+    wlan_hosted_network_opcode_station_profile = 2,
+    wlan_hosted_network_opcode_enable = 3
+} WLAN_HOSTED_NETWORK_OPCODE, *PWLAN_HOSTED_NETWORK_OPCODE;
+
+typedef enum _WLAN_INTERFACE_STATE * PWLAN_INTERFACE_STATE;
+
 #endif  // _WLANAPI_H

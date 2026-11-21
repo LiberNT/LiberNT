@@ -325,3 +325,7 @@ cpp_quote("HRESULT WINAPI MFCreateVideoPresenter(IUnknown *owner, REFIID riid_de
 cpp_quote("HRESULT WINAPI MFCreateVideoRenderer(REFIID riid, void **renderer);")
 cpp_quote("HRESULT WINAPI MFCreateVideoSampleAllocator(REFIID riid, void **allocator);")
 cpp_quote("HRESULT WINAPI MFCreateVideoSampleFromSurface(IUnknown *surface, IMFSample **sample);")
+
+cpp_quote("#ifndef MFEVRDLL")
+cpp_quote("#define MFEVRDLL 0")
+cpp_quote("#endif")

@@ -865,4 +865,10 @@ typedef struct {
 
 #pragma pack(pop)
 
+#ifndef _INC_DIGITALV
+#define _INC_DIGITALV 100
+#endif
+
+typedef LPMCI_DGV_WINDOW_PARMSA LPMCI_DGV_WINDOW_PARMS;
+
 #endif /* __WINE_DIGITALV_H */

@@ -795,6 +795,7 @@ DiInstallDriverW(
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
+    /* TODO: DIIRFLAG_PRE_CONFIGURE_INF, DIIRFLAG_INSTALL_AS_SET, DIIRFLAG_HOTPATCH and DIIRFLAG_NOBACKUP are accepted but ignored */
     if (Flags & ~DIIRFLAG_SYSTEM_BITS)
     {
         SetLastError(ERROR_INVALID_FLAGS);

@@ -49,7 +49,7 @@ if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(nfsd PRIVATE /wd4477)
 endif()
 
-target_link_libraries(nfsd ansi_sync_hacks oldnames)
+target_link_libraries(nfsd oldnames)
 
 set_module_type(nfsd win32cui)
 add_importlibs(nfsd advapi32 iphlpapi libtirpc msvcrt shell32 ws2_32 wldap32 kernel32 ntdll)

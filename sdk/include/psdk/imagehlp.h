@@ -320,16 +320,16 @@ typedef struct _SOURCEFILEW
 
 typedef struct _IMAGEHLP_STACK_FRAME
 {
-  DWORD InstructionOffset;
-  DWORD ReturnOffset;
-  DWORD FrameOffset;
-  DWORD StackOffset;
-  DWORD BackingStoreOffset;
-  DWORD FuncTableEntry;
-  DWORD Params[4];
-  DWORD Reserved[5];
-  DWORD Virtual;
-  DWORD Reserved2;
+  ULONG64 InstructionOffset;
+  ULONG64 ReturnOffset;
+  ULONG64 FrameOffset;
+  ULONG64 StackOffset;
+  ULONG64 BackingStoreOffset;
+  ULONG64 FuncTableEntry;
+  ULONG64 Params[4];
+  ULONG64 Reserved[5];
+  BOOL Virtual;
+  ULONG Reserved2;
 } IMAGEHLP_STACK_FRAME, *PIMAGEHLP_STACK_FRAME;
 
 typedef VOID IMAGEHLP_CONTEXT, *PIMAGEHLP_CONTEXT;
@@ -890,8 +890,8 @@ BOOL    IMAGEAPI SymEnumSourceFiles(HANDLE hProcess, ULONG64 ModBase, PCSTR Mask
 BOOL    IMAGEAPI SymEnumSourceFilesW(HANDLE hProcess, ULONG64 ModBase, PCWSTR Mask, PSYM_ENUMSOURCEFILES_CALLBACKW cbSrcFiles, PVOID UserContext);
 BOOL    IMAGEAPI SymEnumSourceLines(HANDLE, ULONG64, PCSTR, PCSTR, DWORD, DWORD, PSYM_ENUMLINES_CALLBACK, PVOID);
 BOOL    IMAGEAPI SymEnumSourceLinesW(HANDLE, ULONG64, PCWSTR, PCWSTR, DWORD, DWORD, PSYM_ENUMLINES_CALLBACKW, PVOID);
-BOOL    IMAGEAPI SymEnumSymbols(HANDLE hProcess, DWORD BaseOfDll, PCSTR Mask, PSYM_ENUMERATESYMBOLS_CALLBACK EnumSymbolsCallback, PVOID UserContext);
-BOOL    IMAGEAPI SymEnumSymbolsW(HANDLE hProcess, DWORD BaseOfDll, PCWSTR Mask, PSYM_ENUMERATESYMBOLS_CALLBACKW EnumSymbolsCallback, PVOID UserContext);
+BOOL    IMAGEAPI SymEnumSymbols(HANDLE hProcess, ULONG64 BaseOfDll, PCSTR Mask, PSYM_ENUMERATESYMBOLS_CALLBACK EnumSymbolsCallback, PVOID UserContext);
+BOOL    IMAGEAPI SymEnumSymbolsW(HANDLE hProcess, ULONG64 BaseOfDll, PCWSTR Mask, PSYM_ENUMERATESYMBOLS_CALLBACKW EnumSymbolsCallback, PVOID UserContext);
 BOOL    IMAGEAPI SymEnumSymbolsForAddr(HANDLE, DWORD64, PSYM_ENUMERATESYMBOLS_CALLBACK, PVOID);
 BOOL    IMAGEAPI SymEnumSymbolsForAddrW(HANDLE, DWORD64, PSYM_ENUMERATESYMBOLS_CALLBACKW, PVOID);
 BOOL    IMAGEAPI SymEnumTypes(HANDLE, ULONG64, PSYM_ENUMERATESYMBOLS_CALLBACK, PVOID);
@@ -996,5 +996,9 @@ BOOL    IMAGEAPI UpdateDebugInfoFileEx(PCSTR ImageFileName, PCSTR SymbolPath, PS
 #ifdef __cplusplus
 } /* extern "C" */
 #endif /* defined(__cplusplus) */
+
+#ifndef BIND_REPORT_64BIT_VA
+#define BIND_REPORT_64BIT_VA 0x00000010
+#endif
 
 #endif  /* __WINE_IMAGEHLP_H */

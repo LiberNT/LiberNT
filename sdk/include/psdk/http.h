@@ -451,4 +451,524 @@ ULONG WINAPI HttpSetUrlGroupProperty(HTTP_URL_GROUP_ID id, HTTP_SERVER_PROPERTY 
 }
 #endif
 
+#ifndef HTTP_AUTH_ENABLE_BASIC
+#define HTTP_AUTH_ENABLE_BASIC 0x00000001
+#endif
+#ifndef HTTP_AUTH_ENABLE_DIGEST
+#define HTTP_AUTH_ENABLE_DIGEST 0x00000002
+#endif
+#ifndef HTTP_AUTH_ENABLE_KERBEROS
+#define HTTP_AUTH_ENABLE_KERBEROS 0x00000010
+#endif
+#ifndef HTTP_AUTH_ENABLE_NEGOTIATE
+#define HTTP_AUTH_ENABLE_NEGOTIATE 0x00000008
+#endif
+#ifndef HTTP_AUTH_ENABLE_NTLM
+#define HTTP_AUTH_ENABLE_NTLM 0x00000004
+#endif
+#ifndef HTTP_AUTH_EX_FLAG_CAPTURE_CREDENTIAL
+#define HTTP_AUTH_EX_FLAG_CAPTURE_CREDENTIAL 0x02
+#endif
+#ifndef HTTP_AUTH_EX_FLAG_ENABLE_KERBEROS_CREDENTIAL_CACHING
+#define HTTP_AUTH_EX_FLAG_ENABLE_KERBEROS_CREDENTIAL_CACHING 0x01
+#endif
+#ifndef HTTP_CERT_CHECK_MODE_CACHED_REVOCATION
+#define HTTP_CERT_CHECK_MODE_CACHED_REVOCATION 0x00002
+#endif
+#ifndef HTTP_CERT_CHECK_MODE_CACHED_URLS
+#define HTTP_CERT_CHECK_MODE_CACHED_URLS 0x00008
+#endif
+#ifndef HTTP_CERT_CHECK_MODE_NO_AIA
+#define HTTP_CERT_CHECK_MODE_NO_AIA 0x00010
+#endif
+#ifndef HTTP_CERT_CHECK_MODE_NO_USAGE_CHECK
+#define HTTP_CERT_CHECK_MODE_NO_USAGE_CHECK 0x10000
+#endif
+#ifndef HTTP_CERT_CHECK_MODE_USE_REVOCATION_FRESHNESS
+#define HTTP_CERT_CHECK_MODE_USE_REVOCATION_FRESHNESS 0x00004
+#endif
+#ifndef HTTP_CHANNEL_BIND_CLIENT_SERVICE
+#define HTTP_CHANNEL_BIND_CLIENT_SERVICE 0x10
+#endif
+#ifndef HTTP_CHANNEL_BIND_DOTLESS_SERVICE
+#define HTTP_CHANNEL_BIND_DOTLESS_SERVICE 0x4
+#endif
+#ifndef HTTP_CHANNEL_BIND_NO_SERVICE_NAME_CHECK
+#define HTTP_CHANNEL_BIND_NO_SERVICE_NAME_CHECK 0x2
+#endif
+#ifndef HTTP_CHANNEL_BIND_PROXY
+#define HTTP_CHANNEL_BIND_PROXY 0x1
+#endif
+#ifndef HTTP_CHANNEL_BIND_PROXY_COHOSTING
+#define HTTP_CHANNEL_BIND_PROXY_COHOSTING 0x20
+#endif
+#ifndef HTTP_CHANNEL_BIND_SECURE_CHANNEL_TOKEN
+#define HTTP_CHANNEL_BIND_SECURE_CHANNEL_TOKEN 0x8
+#endif
+#ifndef HTTP_CREATE_REQUEST_QUEUE_FLAG_DELEGATION
+#define HTTP_CREATE_REQUEST_QUEUE_FLAG_DELEGATION 0x00000008
+#endif
+#ifndef HTTP_DEMAND_CBT
+#define HTTP_DEMAND_CBT 0x00000004
+#endif
+#ifndef HTTP_FLUSH_RESPONSE_FLAG_RECURSIVE
+#define HTTP_FLUSH_RESPONSE_FLAG_RECURSIVE 0x00000001
+#endif
+#ifndef HTTP_LOGGING_FLAG_LOCAL_TIME_ROLLOVER
+#define HTTP_LOGGING_FLAG_LOCAL_TIME_ROLLOVER 0x00000001
+#endif
+#ifndef HTTP_LOGGING_FLAG_LOG_ERRORS_ONLY
+#define HTTP_LOGGING_FLAG_LOG_ERRORS_ONLY 0x00000004
+#endif
+#ifndef HTTP_LOGGING_FLAG_LOG_SUCCESS_ONLY
+#define HTTP_LOGGING_FLAG_LOG_SUCCESS_ONLY 0x00000008
+#endif
+#ifndef HTTP_LOGGING_FLAG_USE_UTF8_CONVERSION
+#define HTTP_LOGGING_FLAG_USE_UTF8_CONVERSION 0x00000002
+#endif
+#ifndef HTTP_LOG_FIELD_BYTES_RECV
+#define HTTP_LOG_FIELD_BYTES_RECV 0x00002000
+#endif
+#ifndef HTTP_LOG_FIELD_BYTES_SENT
+#define HTTP_LOG_FIELD_BYTES_SENT 0x00001000
+#endif
+#ifndef HTTP_LOG_FIELD_CLIENT_IP
+#define HTTP_LOG_FIELD_CLIENT_IP 0x00000004
+#endif
+#ifndef HTTP_LOG_FIELD_CLIENT_PORT
+#define HTTP_LOG_FIELD_CLIENT_PORT 0x00400000
+#endif
+#ifndef HTTP_LOG_FIELD_COMPUTER_NAME
+#define HTTP_LOG_FIELD_COMPUTER_NAME 0x00000020
+#endif
+#ifndef HTTP_LOG_FIELD_COOKIE
+#define HTTP_LOG_FIELD_COOKIE 0x00020000
+#endif
+#ifndef HTTP_LOG_FIELD_CORRELATION_ID
+#define HTTP_LOG_FIELD_CORRELATION_ID 0x40000000
+#endif
+#ifndef HTTP_LOG_FIELD_DATE
+#define HTTP_LOG_FIELD_DATE 0x00000001
+#endif
+#ifndef HTTP_LOG_FIELD_EXT_FAULT_CODE_EXT
+#define HTTP_LOG_FIELD_EXT_FAULT_CODE_EXT 0x0000000000000001
+#endif
+#ifndef HTTP_LOG_FIELD_FAULT_CODE
+#define HTTP_LOG_FIELD_FAULT_CODE 0x80000000
+#endif
+#ifndef HTTP_LOG_FIELD_HOST
+#define HTTP_LOG_FIELD_HOST 0x00100000
+#endif
+#ifndef HTTP_LOG_FIELD_METHOD
+#define HTTP_LOG_FIELD_METHOD 0x00000080
+#endif
+#ifndef HTTP_LOG_FIELD_QUEUE_NAME
+#define HTTP_LOG_FIELD_QUEUE_NAME 0x04000000
+#endif
+#ifndef HTTP_LOG_FIELD_REASON
+#define HTTP_LOG_FIELD_REASON 0x02000000
+#endif
+#ifndef HTTP_LOG_FIELD_REFERER
+#define HTTP_LOG_FIELD_REFERER 0x00040000
+#endif
+#ifndef HTTP_LOG_FIELD_SERVER_IP
+#define HTTP_LOG_FIELD_SERVER_IP 0x00000040
+#endif
+#ifndef HTTP_LOG_FIELD_SERVER_PORT
+#define HTTP_LOG_FIELD_SERVER_PORT 0x00008000
+#endif
+#ifndef HTTP_LOG_FIELD_SITE_ID
+#define HTTP_LOG_FIELD_SITE_ID 0x01000000
+#endif
+#ifndef HTTP_LOG_FIELD_SITE_NAME
+#define HTTP_LOG_FIELD_SITE_NAME 0x00000010
+#endif
+#ifndef HTTP_LOG_FIELD_STATUS
+#define HTTP_LOG_FIELD_STATUS 0x00000400
+#endif
+#ifndef HTTP_LOG_FIELD_STREAM_ID
+#define HTTP_LOG_FIELD_STREAM_ID 0x08000000
+#endif
+#ifndef HTTP_LOG_FIELD_STREAM_ID_EX
+#define HTTP_LOG_FIELD_STREAM_ID_EX 0x10000000
+#endif
+#ifndef HTTP_LOG_FIELD_SUB_STATUS
+#define HTTP_LOG_FIELD_SUB_STATUS 0x00200000
+#endif
+#ifndef HTTP_LOG_FIELD_TIME
+#define HTTP_LOG_FIELD_TIME 0x00000002
+#endif
+#ifndef HTTP_LOG_FIELD_TIME_TAKEN
+#define HTTP_LOG_FIELD_TIME_TAKEN 0x00004000
+#endif
+#ifndef HTTP_LOG_FIELD_TRANSPORT_TYPE
+#define HTTP_LOG_FIELD_TRANSPORT_TYPE 0x20000000
+#endif
+#ifndef HTTP_LOG_FIELD_URI
+#define HTTP_LOG_FIELD_URI 0x00800000
+#endif
+#ifndef HTTP_LOG_FIELD_URI_QUERY
+#define HTTP_LOG_FIELD_URI_QUERY 0x00000200
+#endif
+#ifndef HTTP_LOG_FIELD_URI_STEM
+#define HTTP_LOG_FIELD_URI_STEM 0x00000100
+#endif
+#ifndef HTTP_LOG_FIELD_USER_AGENT
+#define HTTP_LOG_FIELD_USER_AGENT 0x00010000
+#endif
+#ifndef HTTP_LOG_FIELD_USER_NAME
+#define HTTP_LOG_FIELD_USER_NAME 0x00000008
+#endif
+#ifndef HTTP_LOG_FIELD_VERSION
+#define HTTP_LOG_FIELD_VERSION 0x00080000
+#endif
+#ifndef HTTP_LOG_FIELD_WIN32_STATUS
+#define HTTP_LOG_FIELD_WIN32_STATUS 0x00000800
+#endif
+#ifndef HTTP_MAX_SERVER_QUEUE_LENGTH
+#define HTTP_MAX_SERVER_QUEUE_LENGTH 0x7FFFFFFF
+#endif
+#ifndef HTTP_MIN_SERVER_QUEUE_LENGTH
+#define HTTP_MIN_SERVER_QUEUE_LENGTH 1
+#endif
+#ifndef HTTP_RECEIVE_FULL_CHAIN
+#define HTTP_RECEIVE_FULL_CHAIN 0x2
+#endif
+#ifndef HTTP_RECEIVE_REQUEST_ENTITY_BODY_FLAG_FILL_BUFFER
+#define HTTP_RECEIVE_REQUEST_ENTITY_BODY_FLAG_FILL_BUFFER 0x00000001
+#endif
+#ifndef HTTP_RECEIVE_SECURE_CHANNEL_TOKEN
+#define HTTP_RECEIVE_SECURE_CHANNEL_TOKEN 0x1
+#endif
+#ifndef HTTP_REQUEST_AUTH_FLAG_TOKEN_FOR_CACHED_CRED
+#define HTTP_REQUEST_AUTH_FLAG_TOKEN_FOR_CACHED_CRED 0x00000001
+#endif
+#ifndef HTTP_REQUEST_FLAG_FAST_FORWARDING_ALLOWED
+#define HTTP_REQUEST_FLAG_FAST_FORWARDING_ALLOWED 0x00000010
+#endif
+#ifndef HTTP_REQUEST_FLAG_HTTP3
+#define HTTP_REQUEST_FLAG_HTTP3 0x00000008
+#endif
+#ifndef HTTP_REQUEST_INFO_FLAG_INITIAL_TTL
+#define HTTP_REQUEST_INFO_FLAG_INITIAL_TTL 0x00000001ULL
+#endif
+#ifndef HTTP_REQUEST_PROPERTY_SNI_FLAG_NO_SNI
+#define HTTP_REQUEST_PROPERTY_SNI_FLAG_NO_SNI 0x00000002
+#endif
+#ifndef HTTP_REQUEST_PROPERTY_SNI_FLAG_SNI_USED
+#define HTTP_REQUEST_PROPERTY_SNI_FLAG_SNI_USED 0x00000001
+#endif
+#ifndef HTTP_REQUEST_PROPERTY_SNI_HOST_MAX_LENGTH
+#define HTTP_REQUEST_PROPERTY_SNI_HOST_MAX_LENGTH 255
+#endif
+#ifndef HTTP_REQUEST_SIZING_INFO_FLAG_FIRST_REQUEST
+#define HTTP_REQUEST_SIZING_INFO_FLAG_FIRST_REQUEST 0x00000008
+#endif
+#ifndef HTTP_REQUEST_SIZING_INFO_FLAG_TCP_FAST_OPEN
+#define HTTP_REQUEST_SIZING_INFO_FLAG_TCP_FAST_OPEN 0x00000001
+#endif
+#ifndef HTTP_REQUEST_SIZING_INFO_FLAG_TLS_FALSE_START
+#define HTTP_REQUEST_SIZING_INFO_FLAG_TLS_FALSE_START 0x00000004
+#endif
+#ifndef HTTP_REQUEST_SIZING_INFO_FLAG_TLS_SESSION_RESUMPTION
+#define HTTP_REQUEST_SIZING_INFO_FLAG_TLS_SESSION_RESUMPTION 0x00000002
+#endif
+#ifndef HTTP_RESPONSE_FLAG_MORE_ENTITY_BODY_EXISTS
+#define HTTP_RESPONSE_FLAG_MORE_ENTITY_BODY_EXISTS 0x00000002
+#endif
+#ifndef HTTP_RESPONSE_FLAG_MULTIPLE_ENCODINGS_AVAILABLE
+#define HTTP_RESPONSE_FLAG_MULTIPLE_ENCODINGS_AVAILABLE 0x00000001
+#endif
+#ifndef HTTP_RESPONSE_INFO_FLAGS_PRESERVE_ORDER
+#define HTTP_RESPONSE_INFO_FLAGS_PRESERVE_ORDER 0x00000001
+#endif
+#ifndef HTTP_SEND_RESPONSE_FLAG_AUTOMATIC_CHUNKING
+#define HTTP_SEND_RESPONSE_FLAG_AUTOMATIC_CHUNKING 0x00000200
+#endif
+#ifndef HTTP_SEND_RESPONSE_FLAG_GOAWAY
+#define HTTP_SEND_RESPONSE_FLAG_GOAWAY 0x00000100
+#endif
+#ifndef HTTP_SERVICE_CONFIG_SSL_FLAG_DISABLE_HTTP2
+#define HTTP_SERVICE_CONFIG_SSL_FLAG_DISABLE_HTTP2 0x00000010
+#endif
+#ifndef HTTP_SERVICE_CONFIG_SSL_FLAG_DISABLE_LEGACY_TLS
+#define HTTP_SERVICE_CONFIG_SSL_FLAG_DISABLE_LEGACY_TLS 0x00000400
+#endif
+#ifndef HTTP_SERVICE_CONFIG_SSL_FLAG_DISABLE_OCSP_STAPLING
+#define HTTP_SERVICE_CONFIG_SSL_FLAG_DISABLE_OCSP_STAPLING 0x00000080
+#endif
+#ifndef HTTP_SERVICE_CONFIG_SSL_FLAG_DISABLE_QUIC
+#define HTTP_SERVICE_CONFIG_SSL_FLAG_DISABLE_QUIC 0x00000020
+#endif
+#ifndef HTTP_SERVICE_CONFIG_SSL_FLAG_DISABLE_SESSION_ID
+#define HTTP_SERVICE_CONFIG_SSL_FLAG_DISABLE_SESSION_ID 0x00004000
+#endif
+#ifndef HTTP_SERVICE_CONFIG_SSL_FLAG_DISABLE_TLS12
+#define HTTP_SERVICE_CONFIG_SSL_FLAG_DISABLE_TLS12 0x00001000
+#endif
+#ifndef HTTP_SERVICE_CONFIG_SSL_FLAG_DISABLE_TLS13
+#define HTTP_SERVICE_CONFIG_SSL_FLAG_DISABLE_TLS13 0x00000040
+#endif
+#ifndef HTTP_SERVICE_CONFIG_SSL_FLAG_ENABLE_CACHE_CLIENT_HELLO
+#define HTTP_SERVICE_CONFIG_SSL_FLAG_ENABLE_CACHE_CLIENT_HELLO 0x00008000
+#endif
+#ifndef HTTP_SERVICE_CONFIG_SSL_FLAG_ENABLE_CLIENT_CORRELATION
+#define HTTP_SERVICE_CONFIG_SSL_FLAG_ENABLE_CLIENT_CORRELATION 0x00002000
+#endif
+#ifndef HTTP_SERVICE_CONFIG_SSL_FLAG_ENABLE_SESSION_TICKET
+#define HTTP_SERVICE_CONFIG_SSL_FLAG_ENABLE_SESSION_TICKET 0x00000800
+#endif
+#ifndef HTTP_SERVICE_CONFIG_SSL_FLAG_ENABLE_TOKEN_BINDING
+#define HTTP_SERVICE_CONFIG_SSL_FLAG_ENABLE_TOKEN_BINDING 0x00000100
+#endif
+#ifndef HTTP_SERVICE_CONFIG_SSL_FLAG_LOG_EXTENDED_EVENTS
+#define HTTP_SERVICE_CONFIG_SSL_FLAG_LOG_EXTENDED_EVENTS 0x00000200
+#endif
+#ifndef HTTP_SERVICE_CONFIG_SSL_FLAG_NEGOTIATE_CLIENT_CERT
+#define HTTP_SERVICE_CONFIG_SSL_FLAG_NEGOTIATE_CLIENT_CERT 0x00000002
+#endif
+#ifndef HTTP_SERVICE_CONFIG_SSL_FLAG_REJECT
+#define HTTP_SERVICE_CONFIG_SSL_FLAG_REJECT 0x00000008
+#endif
+#ifndef HTTP_SERVICE_CONFIG_SSL_FLAG_USE_DS_MAPPER
+#define HTTP_SERVICE_CONFIG_SSL_FLAG_USE_DS_MAPPER 0x00000001
+#endif
+#ifndef HTTP_SSL_CERT_SHA_HASH_LENGTH
+#define HTTP_SSL_CERT_SHA_HASH_LENGTH 20
+#endif
+#ifndef HTTP_SSL_CERT_STORE_NAME_LENGTH
+#define HTTP_SSL_CERT_STORE_NAME_LENGTH 128
+#endif
+
+typedef enum _HTTP_ENABLED_STATE {
+    HttpEnabledStateActive = 0,
+    HttpEnabledStateInactive = 1
+} HTTP_ENABLED_STATE, *PHTTP_ENABLED_STATE;
+
+typedef enum _HTTP_503_RESPONSE_VERBOSITY {
+    Http503ResponseVerbosityBasic = 0,
+    Http503ResponseVerbosityLimited = 1,
+    Http503ResponseVerbosityFull = 2
+} HTTP_503_RESPONSE_VERBOSITY, *PHTTP_503_RESPONSE_VERBOSITY;
+
+typedef enum _HTTP_QOS_SETTING_TYPE {
+    HttpQosSettingTypeBandwidth = 0,
+    HttpQosSettingTypeConnectionLimit = 1,
+    HttpQosSettingTypeFlowRate = 2
+} HTTP_QOS_SETTING_TYPE, *PHTTP_QOS_SETTING_TYPE;
+
+typedef enum _HTTP_SERVICE_CONFIG_TIMEOUT_KEY {
+    IdleConnectionTimeout = 0,
+    HeaderWaitTimeout = 1
+} HTTP_SERVICE_CONFIG_TIMEOUT_KEY, *PHTTP_SERVICE_CONFIG_TIMEOUT_KEY;
+
+typedef enum _HTTP_SERVICE_CONFIG_SETTING_KEY {
+    HttpNone = 0,
+    HttpTlsThrottle = 1
+} HTTP_SERVICE_CONFIG_SETTING_KEY, *PHTTP_SERVICE_CONFIG_SETTING_KEY;
+
+typedef enum _HTTP_SERVICE_BINDING_TYPE {
+    HttpServiceBindingTypeNone = 0,
+    HttpServiceBindingTypeW = 1,
+    HttpServiceBindingTypeA = 2
+} HTTP_SERVICE_BINDING_TYPE;
+
+typedef enum _HTTP_AUTHENTICATION_HARDENING_LEVELS {
+    HttpAuthenticationHardeningLegacy = 0,
+    HttpAuthenticationHardeningMedium = 1,
+    HttpAuthenticationHardeningStrict = 2
+} HTTP_AUTHENTICATION_HARDENING_LEVELS;
+
+typedef enum _HTTP_LOGGING_TYPE {
+    HttpLoggingTypeW3C = 0,
+    HttpLoggingTypeIIS = 1,
+    HttpLoggingTypeNCSA = 2,
+    HttpLoggingTypeRaw = 3
+} HTTP_LOGGING_TYPE, *PHTTP_LOGGING_TYPE;
+
+typedef enum _HTTP_LOGGING_ROLLOVER_TYPE {
+    HttpLoggingRolloverSize = 0,
+    HttpLoggingRolloverDaily = 1,
+    HttpLoggingRolloverWeekly = 2,
+    HttpLoggingRolloverMonthly = 3,
+    HttpLoggingRolloverHourly = 4
+} HTTP_LOGGING_ROLLOVER_TYPE, *PHTTP_LOGGING_ROLLOVER_TYPE;
+
+typedef enum _HTTP_PROTECTION_LEVEL_TYPE {
+    HttpProtectionLevelUnrestricted = 0,
+    HttpProtectionLevelEdgeRestricted = 1,
+    HttpProtectionLevelRestricted = 2
+} HTTP_PROTECTION_LEVEL_TYPE, *PHTTP_PROTECTION_LEVEL_TYPE;
+
+typedef enum _HTTP_URI_SCHEME {
+    HttpSchemeHttp = 0,
+    HttpSchemeHttps = 1,
+    HttpSchemeMaximum = 2
+} HTTP_SCHEME, *PHTTP_URI_SCHEME;
+
+typedef enum _HTTP_DELEGATE_REQUEST_PROPERTY_ID {
+    DelegateRequestReservedProperty = 0,
+    DelegateRequestDelegateUrlProperty = 1
+} HTTP_DELEGATE_REQUEST_PROPERTY_ID, *PHTTP_DELEGATE_REQUEST_PROPERTY_ID;
+
+typedef enum _HTTP_CREATE_REQUEST_QUEUE_PROPERTY_ID {
+    CreateRequestQueueExternalIdProperty = 1,
+    CreateRequestQueueMax = 2
+} HTTP_CREATE_REQUEST_QUEUE_PROPERTY_ID, *PHTTP_CREATE_REQUEST_QUEUE_PROPERTY_ID;
+
+typedef enum _HTTP_AUTH_STATUS {
+    HttpAuthStatusSuccess = 0,
+    HttpAuthStatusNotAuthenticated = 1,
+    HttpAuthStatusFailure = 2
+} HTTP_AUTH_STATUS, *PHTTP_AUTH_STATUS;
+
+typedef enum _HTTP_REQUEST_AUTH_TYPE {
+    HttpRequestAuthTypeNone = 0,
+    HttpRequestAuthTypeBasic = 1,
+    HttpRequestAuthTypeDigest = 2,
+    HttpRequestAuthTypeNTLM = 3,
+    HttpRequestAuthTypeNegotiate = 4,
+    HttpRequestAuthTypeKerberos = 5
+} HTTP_REQUEST_AUTH_TYPE, *PHTTP_REQUEST_AUTH_TYPE;
+
+typedef enum _HTTP_REQUEST_SIZING_TYPE {
+    HttpRequestSizingTypeTlsHandshakeLeg1ClientData = 0,
+    HttpRequestSizingTypeTlsHandshakeLeg1ServerData = 1,
+    HttpRequestSizingTypeTlsHandshakeLeg2ClientData = 2,
+    HttpRequestSizingTypeTlsHandshakeLeg2ServerData = 3,
+    HttpRequestSizingTypeHeaders = 4,
+    HttpRequestSizingTypeMax = 5
+} HTTP_REQUEST_SIZING_TYPE, *PHTTP_REQUEST_SIZING_TYPE;
+
+typedef enum _HTTP_REQUEST_TIMING_TYPE {
+    HttpRequestTimingTypeConnectionStart = 0,
+    HttpRequestTimingTypeDataStart = 1,
+    HttpRequestTimingTypeTlsCertificateLoadStart = 2,
+    HttpRequestTimingTypeTlsCertificateLoadEnd = 3,
+    HttpRequestTimingTypeTlsHandshakeLeg1Start = 4,
+    HttpRequestTimingTypeTlsHandshakeLeg1End = 5,
+    HttpRequestTimingTypeTlsHandshakeLeg2Start = 6,
+    HttpRequestTimingTypeTlsHandshakeLeg2End = 7,
+    HttpRequestTimingTypeTlsAttributesQueryStart = 8,
+    HttpRequestTimingTypeTlsAttributesQueryEnd = 9,
+    HttpRequestTimingTypeTlsClientCertQueryStart = 10,
+    HttpRequestTimingTypeTlsClientCertQueryEnd = 11,
+    HttpRequestTimingTypeHttp2StreamStart = 12,
+    HttpRequestTimingTypeHttp2HeaderDecodeStart = 13,
+    HttpRequestTimingTypeHttp2HeaderDecodeEnd = 14,
+    HttpRequestTimingTypeRequestHeaderParseStart = 15,
+    HttpRequestTimingTypeRequestHeaderParseEnd = 16,
+    HttpRequestTimingTypeRequestRoutingStart = 17,
+    HttpRequestTimingTypeRequestRoutingEnd = 18,
+    HttpRequestTimingTypeRequestQueuedForInspection = 19,
+    HttpRequestTimingTypeRequestDeliveredForInspection = 20,
+    HttpRequestTimingTypeRequestReturnedAfterInspection = 21,
+    HttpRequestTimingTypeRequestQueuedForDelegation = 22,
+    HttpRequestTimingTypeRequestDeliveredForDelegation = 23,
+    HttpRequestTimingTypeRequestReturnedAfterDelegation = 24,
+    HttpRequestTimingTypeRequestQueuedForIO = 25,
+    HttpRequestTimingTypeRequestDeliveredForIO = 26,
+    HttpRequestTimingTypeHttp3StreamStart = 27,
+    HttpRequestTimingTypeHttp3HeaderDecodeStart = 28,
+    HttpRequestTimingTypeHttp3HeaderDecodeEnd = 29,
+    HttpRequestTimingTypeMax = 30
+} HTTP_REQUEST_TIMING_TYPE, *PHTTP_REQUEST_TIMING_TYPE;
+
+typedef enum _HTTP_SERVICE_CONFIG_QUERY_TYPE {
+    HttpServiceConfigQueryExact = 0,
+    HttpServiceConfigQueryNext = 1,
+    HttpServiceConfigQueryMax = 2
+} HTTP_SERVICE_CONFIG_QUERY_TYPE, *PHTTP_SERVICE_CONFIG_QUERY_TYPE;
+
+typedef enum _HTTP_SSL_SERVICE_CONFIG_EX_PARAM_TYPE {
+    ExParamTypeHttp2Window = 0,
+    ExParamTypeHttp2SettingsLimits = 1,
+    ExParamTypeHttpPerformance = 2,
+    ExParamTypeTlsRestrictions = 3,
+    ExParamTypeErrorHeaders = 4,
+    ExParamTypeTlsSessionTicketKeys = 5,
+    ExParamTypeCertConfig = 6,
+    ExParamTypeMax = 7
+} HTTP_SSL_SERVICE_CONFIG_EX_PARAM_TYPE, *PHTTP_SSL_SERVICE_CONFIG_EX_PARAM_TYPE;
+
+typedef enum _HTTP_PERFORMANCE_PARAM_TYPE {
+    PerformanceParamSendBufferingFlags = 0,
+    PerformanceParamAggressiveICW = 1,
+    PerformanceParamMaxSendBufferSize = 2,
+    PerformanceParamMaxConcurrentClientStreams = 3,
+    PerformanceParamMaxReceiveBufferSize = 4,
+    PerformanceParamDecryptOnSspiThread = 5,
+    PerformanceParamMax = 6
+} HTTP_PERFORMANCE_PARAM_TYPE, *PHTTP_PERFORMANCE_PARAM_TYPE;
+
+typedef enum _HTTP_SERVICE_CONFIG_CACHE_KEY {
+    MaxCacheResponseSize = 0,
+    CacheRangeChunkSize = 1
+} HTTP_SERVICE_CONFIG_CACHE_KEY, *PHTTP_SERVICE_CONFIG_CACHE_KEY;
+
+typedef enum _HTTP_REQUEST_PROPERTY {
+    HttpRequestPropertyIsb = 0,
+    HttpRequestPropertyTcpInfoV0 = 1,
+    HttpRequestPropertyQuicStats = 2,
+    HttpRequestPropertyTcpInfoV1 = 3,
+    HttpRequestPropertySni = 4,
+    HttpRequestPropertyStreamError = 5,
+    HttpRequestPropertyWskApiTimings = 6,
+    HttpRequestPropertyQuicApiTimings = 7,
+    HttpRequestPropertyQuicStatsV2 = 8,
+    HttpRequestPropertyQuicStreamStats = 9,
+    HttpRequestPropertyTcpInfoV2 = 10,
+    HttpRequestPropertyTlsClientHello = 11,
+    HttpRequestPropertyTransportIdleConnectionTimeout = 12,
+    HttpRequestPropertyDscpTag = 13,
+    HttpRequestPropertyTlsCipherInfo = 14
+} HTTP_REQUEST_PROPERTY, *PHTTP_REQUEST_PROPERTY;
+
+typedef enum _HTTP_FEATURE_ID {
+    HttpFeatureUnknown = 0,
+    HttpFeatureResponseTrailers = 1,
+    HttpFeatureApiTimings = 2,
+    HttpFeatureDelegateEx = 3,
+    HttpFeatureHttp3 = 4,
+    HttpFeatureTlsSessionTickets = 5,
+    HttpFeatureDisableTlsSessionId = 6,
+    HttpFeatureTlsDualCerts = 7,
+    HttpFeatureAutomaticChunkedEncoding = 8,
+    HttpFeatureDedicatedReqQueueDelegationType = 9,
+    HttpFeatureFastForwardResponse = 10,
+    HttpFeatureCacheTlsClientHello = 11,
+    HttpFeatureIdleConnectionTimeoutRequestProperty = 12,
+    HttpFeatureDisableAiaFlag = 13,
+    HttpFeatureDscp = 14,
+    HttpFeatureQueryCipherInfo = 15,
+    HttpFeatureQueryInitialPacketTtl = 16,
+    HttpFeatureTlsHandshakePerformanceCounters = 17,
+    HttpFeatureLast = 18,
+    HttpFeaturemax = (-1)
+} HTTP_FEATURE_ID, *PHTTP_FEATURE_ID;
+
+typedef USHORT HTTP_SERVICE_CONFIG_TIMEOUT_PARAM;
+typedef USHORT * PHTTP_SERVICE_CONFIG_TIMEOUT_PARAM;
+typedef ULONG HTTP_SERVICE_CONFIG_SETTING_PARAM;
+typedef ULONG * PHTTP_SERVICE_CONFIG_SETTING_PARAM;
+typedef HTTP_OPAQUE_ID HTTP_CLIENT_REQUEST_ID;
+typedef HTTP_OPAQUE_ID * PHTTP_CLIENT_REQUEST_ID;
+typedef HTTP_OPAQUE_ID HTTP_CLIENT_CONNECTION_ID;
+typedef HTTP_OPAQUE_ID * PHTTP_CLIENT_CONNECTION_ID;
+typedef HTTP_OPAQUE_ID HTTP_CLIENT_STREAM_ID;
+typedef HTTP_OPAQUE_ID * PHTTP_CLIENT_STREAM_ID;
+typedef HTTP_OPAQUE_ID HTTP_CLIENT_CREDENTIAL_ID;
+typedef HTTP_OPAQUE_ID * PHTTP_CLIENT_CREDENTIAL_ID;
+typedef struct _HTTP_REQUEST_V1 * PHTTP_REQUEST_V1;
+typedef ULONG HTTP_SERVICE_CONFIG_CACHE_PARAM;
+typedef ULONG * PHTTP_SERVICE_CONFIG_CACHE_PARAM;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+ULONG WINAPI HttpShutdownRequestQueue(HANDLE RequestQueueHandle);
+#ifdef __cplusplus
+}
+#endif
+
 #endif  /* __WINE_HTTP_H */

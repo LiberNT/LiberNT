@@ -569,7 +569,7 @@ User32DefWindowProc(HWND hWnd,
         case WM_ICONERASEBKGND:
         {
             RECT Rect;
-            HBRUSH hBrush = (HBRUSH)GetClassLongPtrW(hWnd, GCL_HBRBACKGROUND);
+            HBRUSH hBrush = (HBRUSH)GetClassLongPtrW(hWnd, GCLP_HBRBACKGROUND);
 
             if (NULL == hBrush)
             {
@@ -625,7 +625,7 @@ User32DefWindowProc(HWND hWnd,
             UINT Len;
             HICON hIcon;
 
-            hIcon = (HICON)GetClassLongPtrW(hWnd, GCL_HICON);
+            hIcon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICON);
             if (hIcon)
             {
                 return ((LRESULT)hIcon);

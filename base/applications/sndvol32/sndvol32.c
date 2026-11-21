@@ -21,7 +21,7 @@ PREFERENCES_CONTEXT Preferences;
 #define GetDialogData(hwndDlg, type) \
     ( P##type )GetWindowLongPtr((hwndDlg), DWLP_USER)
 #define GetWindowData(hwnd, type) \
-    ( P##type )GetWindowLongPtr((hwnd), GWL_USERDATA)
+    ( P##type )GetWindowLongPtr((hwnd), GWLP_USERDATA)
 
 /******************************************************************************/
 
@@ -1138,7 +1138,7 @@ MainWindowProc(HWND hwnd,
         {
             MixerWindow = ((LPCREATESTRUCT)lParam)->lpCreateParams;
             SetWindowLongPtr(hwnd,
-                             GWL_USERDATA,
+                             GWLP_USERDATA,
                              (LONG_PTR)MixerWindow);
             MixerWindow->hWnd = hwnd;
             MixerWindow->Mixer = SndMixerCreate(MixerWindow->hWnd, MixerWindow->MixerId);

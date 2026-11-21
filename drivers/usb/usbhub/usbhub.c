@@ -3675,7 +3675,7 @@ USBD_GetDeviceInformationEx(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
 
     if (NT_SUCCESS(Status))
     {
-        NodeInfoLength = (sizeof(USB_NODE_CONNECTION_INFORMATION_EX) - sizeof(USB_PIPE_INFO)) +
+        NodeInfoLength = FIELD_OFFSET(USB_NODE_CONNECTION_INFORMATION_EX, PipeList) +
                          DeviceInfo->NumberOfOpenPipes * sizeof(USB_PIPE_INFO);
 
         NodeInfo = ExAllocatePoolWithTag(PagedPool, NodeInfoLength, USB_HUB_TAG);

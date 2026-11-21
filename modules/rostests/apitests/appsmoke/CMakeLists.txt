@@ -1,6 +1,4 @@
 
-remove_definitions(-DDXGKDDI_INTERFACE_VERSION=0x1052)
-add_definitions(-DDXGKDDI_INTERFACE_VERSION=0x11007)
 
 add_executable(appsmoke_apitest
     d3dkmt.c

@@ -31,7 +31,7 @@ START_TEST(ScrollBarWndExtra)
 
     ok(hScrollBar != NULL, "Scrollbar creation failed (%lu)\n", GetLastError());
 
-    lpfnWndProc = (WNDPROC)GetWindowLongPtrA(hScrollBar, GWL_WNDPROC);
+    lpfnWndProc = (WNDPROC)GetWindowLongPtrA(hScrollBar, GWLP_WNDPROC);
     dwExtra = GetClassLongPtrA(hScrollBar, GCL_CBWNDEXTRA);
 
     ZeroMemory(&WndClass, sizeof(WndClass));

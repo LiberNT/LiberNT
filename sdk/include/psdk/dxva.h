@@ -1052,4 +1052,575 @@ typedef struct _DXVA_ExtendedFormat
 }
 #endif
 
+#ifndef COPP_DefaultProtectionLevel
+#define COPP_DefaultProtectionLevel 0
+#endif
+#ifndef COPP_ImageAspectRatio_EN300294_Mask
+#define COPP_ImageAspectRatio_EN300294_Mask 0x00000007
+#endif
+#ifndef COPP_NoProtectionLevelAvailable
+#define COPP_NoProtectionLevelAvailable (-1)
+#endif
+#ifndef DXVA_ALPHA_BLEND_COMBINATION_BUFFER
+#define DXVA_ALPHA_BLEND_COMBINATION_BUFFER 13
+#endif
+#ifndef DXVA_APV_MAX_COMPONENTS
+#define DXVA_APV_MAX_COMPONENTS 4
+#endif
+#ifndef DXVA_APV_QM_DIMENSION
+#define DXVA_APV_QM_DIMENSION 8
+#endif
+#ifndef DXVA_AYUV_BUFFER
+#define DXVA_AYUV_BUFFER 8
+#endif
+#ifndef DXVA_BIDIRECTIONAL_AVERAGING_H263_TRUNC
+#define DXVA_BIDIRECTIONAL_AVERAGING_H263_TRUNC 1
+#endif
+#ifndef DXVA_BIDIRECTIONAL_AVERAGING_MPEG2_ROUND
+#define DXVA_BIDIRECTIONAL_AVERAGING_MPEG2_ROUND 0
+#endif
+#ifndef DXVA_BITSTREAM_CONCEALMENT_METHOD_BACKWARD
+#define DXVA_BITSTREAM_CONCEALMENT_METHOD_BACKWARD 3
+#endif
+#ifndef DXVA_BITSTREAM_CONCEALMENT_METHOD_FORWARD
+#define DXVA_BITSTREAM_CONCEALMENT_METHOD_FORWARD 2
+#endif
+#ifndef DXVA_BITSTREAM_CONCEALMENT_METHOD_INTRA
+#define DXVA_BITSTREAM_CONCEALMENT_METHOD_INTRA 1
+#endif
+#ifndef DXVA_BITSTREAM_CONCEALMENT_METHOD_UNSPECIFIED
+#define DXVA_BITSTREAM_CONCEALMENT_METHOD_UNSPECIFIED 0
+#endif
+#ifndef DXVA_BITSTREAM_CONCEALMENT_NEED_LIKELY
+#define DXVA_BITSTREAM_CONCEALMENT_NEED_LIKELY 2
+#endif
+#ifndef DXVA_BITSTREAM_CONCEALMENT_NEED_MILD
+#define DXVA_BITSTREAM_CONCEALMENT_NEED_MILD 1
+#endif
+#ifndef DXVA_BITSTREAM_CONCEALMENT_NEED_SEVERE
+#define DXVA_BITSTREAM_CONCEALMENT_NEED_SEVERE 3
+#endif
+#ifndef DXVA_BITSTREAM_CONCEALMENT_NEED_UNLIKELY
+#define DXVA_BITSTREAM_CONCEALMENT_NEED_UNLIKELY 0
+#endif
+#ifndef DXVA_BITSTREAM_DATA_BUFFER
+#define DXVA_BITSTREAM_DATA_BUFFER 7
+#endif
+#ifndef DXVA_CHROMA_FORMAT_420
+#define DXVA_CHROMA_FORMAT_420 1
+#endif
+#ifndef DXVA_CHROMA_FORMAT_422
+#define DXVA_CHROMA_FORMAT_422 2
+#endif
+#ifndef DXVA_CHROMA_FORMAT_444
+#define DXVA_CHROMA_FORMAT_444 3
+#endif
+#ifndef DXVA_COMPBUFFER_TYPE_THAT_IS_NOT_USED
+#define DXVA_COMPBUFFER_TYPE_THAT_IS_NOT_USED 0
+#endif
+#ifndef DXVA_CONFIG_BLEND_TYPE_BACK_HARDWARE
+#define DXVA_CONFIG_BLEND_TYPE_BACK_HARDWARE 1
+#endif
+#ifndef DXVA_CONFIG_BLEND_TYPE_FRONT_BUFFER
+#define DXVA_CONFIG_BLEND_TYPE_FRONT_BUFFER 0
+#endif
+#ifndef DXVA_CONFIG_DATA_TYPE_AI44
+#define DXVA_CONFIG_DATA_TYPE_AI44 1
+#endif
+#ifndef DXVA_CONFIG_DATA_TYPE_AYUV
+#define DXVA_CONFIG_DATA_TYPE_AYUV 3
+#endif
+#ifndef DXVA_CONFIG_DATA_TYPE_DPXD
+#define DXVA_CONFIG_DATA_TYPE_DPXD 2
+#endif
+#ifndef DXVA_CONFIG_DATA_TYPE_IA44
+#define DXVA_CONFIG_DATA_TYPE_IA44 0
+#endif
+#ifndef DXVA_COPPCommandFnCode
+#define DXVA_COPPCommandFnCode 0x04
+#endif
+#ifndef DXVA_COPPGetCertificateLengthFnCode
+#define DXVA_COPPGetCertificateLengthFnCode 0x01
+#endif
+#ifndef DXVA_COPPKeyExchangeFnCode
+#define DXVA_COPPKeyExchangeFnCode 0x02
+#endif
+#ifndef DXVA_COPPQueryStatusFnCode
+#define DXVA_COPPQueryStatusFnCode 0x05
+#endif
+#ifndef DXVA_COPPSequenceStartFnCode
+#define DXVA_COPPSequenceStartFnCode 0x03
+#endif
+#ifndef DXVA_DCCMD_SURFACE_BUFFER
+#define DXVA_DCCMD_SURFACE_BUFFER 12
+#endif
+#ifndef DXVA_DEBLOCKING_CONTROL_BUFFER
+#define DXVA_DEBLOCKING_CONTROL_BUFFER 4
+#endif
+#ifndef DXVA_DPXD_SURFACE_BUFFER
+#define DXVA_DPXD_SURFACE_BUFFER 10
+#endif
+#ifndef DXVA_DeinterlaceBltExFnCode
+#define DXVA_DeinterlaceBltExFnCode 0x02
+#endif
+#ifndef DXVA_DeinterlaceBltFnCode
+#define DXVA_DeinterlaceBltFnCode 0x01
+#endif
+#ifndef DXVA_DeinterlaceQueryAvailableModesFnCode
+#define DXVA_DeinterlaceQueryAvailableModesFnCode 0x01
+#endif
+#ifndef DXVA_DeinterlaceQueryModeCapsFnCode
+#define DXVA_DeinterlaceQueryModeCapsFnCode 0x02
+#endif
+#ifndef DXVA_ENCRYPTPROTOCOLFUNCFLAG_ACCEL
+#define DXVA_ENCRYPTPROTOCOLFUNCFLAG_ACCEL 0xFFFF08
+#endif
+#ifndef DXVA_ENCRYPTPROTOCOLFUNCFLAG_HOST
+#define DXVA_ENCRYPTPROTOCOLFUNCFLAG_HOST 0xFFFF00
+#endif
+#ifndef DXVA_EXECUTE_RETURN_DATA_ERROR_MINOR
+#define DXVA_EXECUTE_RETURN_DATA_ERROR_MINOR 1
+#endif
+#ifndef DXVA_EXECUTE_RETURN_DATA_ERROR_SEVERE
+#define DXVA_EXECUTE_RETURN_DATA_ERROR_SEVERE 3
+#endif
+#ifndef DXVA_EXECUTE_RETURN_DATA_ERROR_SIGNIF
+#define DXVA_EXECUTE_RETURN_DATA_ERROR_SIGNIF 2
+#endif
+#ifndef DXVA_EXECUTE_RETURN_OK
+#define DXVA_EXECUTE_RETURN_OK 0
+#endif
+#ifndef DXVA_EXECUTE_RETURN_OTHER_ERROR_SEVERE
+#define DXVA_EXECUTE_RETURN_OTHER_ERROR_SEVERE 4
+#endif
+#ifndef DXVA_ExtColorData_ShiftBase
+#define DXVA_ExtColorData_ShiftBase 8
+#endif
+#ifndef DXVA_FILM_GRAIN_BUFFER
+#define DXVA_FILM_GRAIN_BUFFER 17
+#endif
+#ifndef DXVA_HIGHLIGHT_BUFFER
+#define DXVA_HIGHLIGHT_BUFFER 11
+#endif
+#ifndef DXVA_IA44_SURFACE_BUFFER
+#define DXVA_IA44_SURFACE_BUFFER 9
+#endif
+#ifndef DXVA_INVERSE_QUANTIZATION_MATRIX_BUFFER
+#define DXVA_INVERSE_QUANTIZATION_MATRIX_BUFFER 5
+#endif
+#ifndef DXVA_MACROBLOCK_CONTROL_BUFFER
+#define DXVA_MACROBLOCK_CONTROL_BUFFER 2
+#endif
+#ifndef DXVA_MOTION_VECTOR_BUFFER
+#define DXVA_MOTION_VECTOR_BUFFER 16
+#endif
+#ifndef DXVA_MV_PRECISION_AND_CHROMA_RELATION_H261
+#define DXVA_MV_PRECISION_AND_CHROMA_RELATION_H261 2
+#endif
+#ifndef DXVA_MV_PRECISION_AND_CHROMA_RELATION_H263
+#define DXVA_MV_PRECISION_AND_CHROMA_RELATION_H263 1
+#endif
+#ifndef DXVA_MV_PRECISION_AND_CHROMA_RELATION_MPEG2
+#define DXVA_MV_PRECISION_AND_CHROMA_RELATION_MPEG2 0
+#endif
+#ifndef DXVA_NUM_TYPES_COMP_BUFFERS
+#define DXVA_NUM_TYPES_COMP_BUFFERS 18
+#endif
+#ifndef DXVA_NumMV_OBMC_off_BinPBwith4MV_off
+#define DXVA_NumMV_OBMC_off_BinPBwith4MV_off 4
+#endif
+#ifndef DXVA_NumMV_OBMC_on__BinPB_off
+#define DXVA_NumMV_OBMC_on__BinPB_off 10
+#endif
+#ifndef DXVA_NumMV_OBMC_on__BinPB_on
+#define DXVA_NumMV_OBMC_on__BinPB_on 11
+#endif
+#ifndef DXVA_PICTURE_DECODE_BUFFER
+#define DXVA_PICTURE_DECODE_BUFFER 1
+#endif
+#ifndef DXVA_PICTURE_RESAMPLE_BUFFER
+#define DXVA_PICTURE_RESAMPLE_BUFFER 14
+#endif
+#ifndef DXVA_PICTURE_STRUCTURE_BOTTOM_FIELD
+#define DXVA_PICTURE_STRUCTURE_BOTTOM_FIELD 2
+#endif
+#ifndef DXVA_PICTURE_STRUCTURE_FRAME
+#define DXVA_PICTURE_STRUCTURE_FRAME 3
+#endif
+#ifndef DXVA_PICTURE_STRUCTURE_TOP_FIELD
+#define DXVA_PICTURE_STRUCTURE_TOP_FIELD 1
+#endif
+#ifndef DXVA_ProcAmpControlBltFnCode
+#define DXVA_ProcAmpControlBltFnCode 0x01
+#endif
+#ifndef DXVA_ProcAmpControlQueryCapsFnCode
+#define DXVA_ProcAmpControlQueryCapsFnCode 0x03
+#endif
+#ifndef DXVA_ProcAmpControlQueryRangeFnCode
+#define DXVA_ProcAmpControlQueryRangeFnCode 0x04
+#endif
+#ifndef DXVA_QUERYORREPLYFUNCFLAG_ACCEL_LOCK_FALSE_PLUS
+#define DXVA_QUERYORREPLYFUNCFLAG_ACCEL_LOCK_FALSE_PLUS 0xFFFFFF
+#endif
+#ifndef DXVA_QUERYORREPLYFUNCFLAG_ACCEL_LOCK_OK_COPY
+#define DXVA_QUERYORREPLYFUNCFLAG_ACCEL_LOCK_OK_COPY 0xFFFFFC
+#endif
+#ifndef DXVA_QUERYORREPLYFUNCFLAG_ACCEL_PROBE_FALSE_PLUS
+#define DXVA_QUERYORREPLYFUNCFLAG_ACCEL_PROBE_FALSE_PLUS 0xFFFFFB
+#endif
+#ifndef DXVA_QUERYORREPLYFUNCFLAG_ACCEL_PROBE_OK_COPY
+#define DXVA_QUERYORREPLYFUNCFLAG_ACCEL_PROBE_OK_COPY 0xFFFFF8
+#endif
+#ifndef DXVA_QUERYORREPLYFUNCFLAG_ACCEL_PROBE_OK_PLUS
+#define DXVA_QUERYORREPLYFUNCFLAG_ACCEL_PROBE_OK_PLUS 0xFFFFF9
+#endif
+#ifndef DXVA_QUERYORREPLYFUNCFLAG_DECODER_LOCK_QUERY
+#define DXVA_QUERYORREPLYFUNCFLAG_DECODER_LOCK_QUERY 0xFFFFF5
+#endif
+#ifndef DXVA_QUERYORREPLYFUNCFLAG_DECODER_PROBE_QUERY
+#define DXVA_QUERYORREPLYFUNCFLAG_DECODER_PROBE_QUERY 0xFFFFF1
+#endif
+#ifndef DXVA_READ_BACK_BUFFER
+#define DXVA_READ_BACK_BUFFER 15
+#endif
+#ifndef DXVA_RESIDUAL_DIFFERENCE_BUFFER
+#define DXVA_RESIDUAL_DIFFERENCE_BUFFER 3
+#endif
+#ifndef DXVA_RESTRICTED_MODE_H261_A
+#define DXVA_RESTRICTED_MODE_H261_A 1
+#endif
+#ifndef DXVA_RESTRICTED_MODE_H261_B
+#define DXVA_RESTRICTED_MODE_H261_B 2
+#endif
+#ifndef DXVA_RESTRICTED_MODE_H263_A
+#define DXVA_RESTRICTED_MODE_H263_A 3
+#endif
+#ifndef DXVA_RESTRICTED_MODE_H263_B
+#define DXVA_RESTRICTED_MODE_H263_B 4
+#endif
+#ifndef DXVA_RESTRICTED_MODE_H263_C
+#define DXVA_RESTRICTED_MODE_H263_C 5
+#endif
+#ifndef DXVA_RESTRICTED_MODE_H263_D
+#define DXVA_RESTRICTED_MODE_H263_D 6
+#endif
+#ifndef DXVA_RESTRICTED_MODE_H263_E
+#define DXVA_RESTRICTED_MODE_H263_E 7
+#endif
+#ifndef DXVA_RESTRICTED_MODE_H263_F
+#define DXVA_RESTRICTED_MODE_H263_F 8
+#endif
+#ifndef DXVA_RESTRICTED_MODE_H264_A
+#define DXVA_RESTRICTED_MODE_H264_A 0x64
+#endif
+#ifndef DXVA_RESTRICTED_MODE_H264_B
+#define DXVA_RESTRICTED_MODE_H264_B 0x65
+#endif
+#ifndef DXVA_RESTRICTED_MODE_H264_C
+#define DXVA_RESTRICTED_MODE_H264_C 0x66
+#endif
+#ifndef DXVA_RESTRICTED_MODE_H264_D
+#define DXVA_RESTRICTED_MODE_H264_D 0x67
+#endif
+#ifndef DXVA_RESTRICTED_MODE_H264_E
+#define DXVA_RESTRICTED_MODE_H264_E 0x68
+#endif
+#ifndef DXVA_RESTRICTED_MODE_H264_F
+#define DXVA_RESTRICTED_MODE_H264_F 0x69
+#endif
+#ifndef DXVA_RESTRICTED_MODE_H264_VLD_MULTIVIEW_NOFGT
+#define DXVA_RESTRICTED_MODE_H264_VLD_MULTIVIEW_NOFGT 0x73
+#endif
+#ifndef DXVA_RESTRICTED_MODE_H264_VLD_STEREO_NOFGT
+#define DXVA_RESTRICTED_MODE_H264_VLD_STEREO_NOFGT 0x72
+#endif
+#ifndef DXVA_RESTRICTED_MODE_H264_VLD_STEREO_PROGRESSIVE_NOFGT
+#define DXVA_RESTRICTED_MODE_H264_VLD_STEREO_PROGRESSIVE_NOFGT 0x71
+#endif
+#ifndef DXVA_RESTRICTED_MODE_H264_VLD_WITHFMOASO_NOFGT
+#define DXVA_RESTRICTED_MODE_H264_VLD_WITHFMOASO_NOFGT 0x70
+#endif
+#ifndef DXVA_RESTRICTED_MODE_MPEG1_A
+#define DXVA_RESTRICTED_MODE_MPEG1_A 9
+#endif
+#ifndef DXVA_RESTRICTED_MODE_MPEG1_VLD
+#define DXVA_RESTRICTED_MODE_MPEG1_VLD 0x10
+#endif
+#ifndef DXVA_RESTRICTED_MODE_MPEG2_A
+#define DXVA_RESTRICTED_MODE_MPEG2_A 0xA
+#endif
+#ifndef DXVA_RESTRICTED_MODE_MPEG2_B
+#define DXVA_RESTRICTED_MODE_MPEG2_B 0xB
+#endif
+#ifndef DXVA_RESTRICTED_MODE_MPEG2_C
+#define DXVA_RESTRICTED_MODE_MPEG2_C 0xC
+#endif
+#ifndef DXVA_RESTRICTED_MODE_MPEG2_D
+#define DXVA_RESTRICTED_MODE_MPEG2_D 0xD
+#endif
+#ifndef DXVA_RESTRICTED_MODE_MPEG2and1_VLD
+#define DXVA_RESTRICTED_MODE_MPEG2and1_VLD 0x11
+#endif
+#ifndef DXVA_RESTRICTED_MODE_MPEG4PT2_VLD_ADV_SIMPLE_GMC
+#define DXVA_RESTRICTED_MODE_MPEG4PT2_VLD_ADV_SIMPLE_GMC 0xB2
+#endif
+#ifndef DXVA_RESTRICTED_MODE_MPEG4PT2_VLD_ADV_SIMPLE_NOGMC
+#define DXVA_RESTRICTED_MODE_MPEG4PT2_VLD_ADV_SIMPLE_NOGMC 0xB1
+#endif
+#ifndef DXVA_RESTRICTED_MODE_MPEG4PT2_VLD_SIMPLE
+#define DXVA_RESTRICTED_MODE_MPEG4PT2_VLD_SIMPLE 0xB0
+#endif
+#ifndef DXVA_RESTRICTED_MODE_VC1_A
+#define DXVA_RESTRICTED_MODE_VC1_A 0xA0
+#endif
+#ifndef DXVA_RESTRICTED_MODE_VC1_B
+#define DXVA_RESTRICTED_MODE_VC1_B 0xA1
+#endif
+#ifndef DXVA_RESTRICTED_MODE_VC1_C
+#define DXVA_RESTRICTED_MODE_VC1_C 0xA2
+#endif
+#ifndef DXVA_RESTRICTED_MODE_VC1_D
+#define DXVA_RESTRICTED_MODE_VC1_D 0xA3
+#endif
+#ifndef DXVA_RESTRICTED_MODE_VC1_D2010
+#define DXVA_RESTRICTED_MODE_VC1_D2010 0xA4
+#endif
+#ifndef DXVA_RESTRICTED_MODE_WMV8_A
+#define DXVA_RESTRICTED_MODE_WMV8_A 0x80
+#endif
+#ifndef DXVA_RESTRICTED_MODE_WMV8_B
+#define DXVA_RESTRICTED_MODE_WMV8_B 0x81
+#endif
+#ifndef DXVA_RESTRICTED_MODE_WMV9_A
+#define DXVA_RESTRICTED_MODE_WMV9_A 0x90
+#endif
+#ifndef DXVA_RESTRICTED_MODE_WMV9_B
+#define DXVA_RESTRICTED_MODE_WMV9_B 0x91
+#endif
+#ifndef DXVA_RESTRICTED_MODE_WMV9_C
+#define DXVA_RESTRICTED_MODE_WMV9_C 0x94
+#endif
+#ifndef DXVA_SCAN_METHOD_ALTERNATE_HORIZONTAL
+#define DXVA_SCAN_METHOD_ALTERNATE_HORIZONTAL 2
+#endif
+#ifndef DXVA_SCAN_METHOD_ALTERNATE_VERTICAL
+#define DXVA_SCAN_METHOD_ALTERNATE_VERTICAL 1
+#endif
+#ifndef DXVA_SCAN_METHOD_ARBITRARY
+#define DXVA_SCAN_METHOD_ARBITRARY 3
+#endif
+#ifndef DXVA_SCAN_METHOD_ZIG_ZAG
+#define DXVA_SCAN_METHOD_ZIG_ZAG 0
+#endif
+#ifndef DXVA_SLICE_CONTROL_BUFFER
+#define DXVA_SLICE_CONTROL_BUFFER 6
+#endif
+#ifndef MAX_DEINTERLACE_DEVICE_GUIDS
+#define MAX_DEINTERLACE_DEVICE_GUIDS 32
+#endif
+#ifndef MAX_DEINTERLACE_SURFACES
+#define MAX_DEINTERLACE_SURFACES 32
+#endif
+
+typedef enum _DXVA_SampleFormat {
+    DXVA_SampleFormatMask = 255,
+    DXVA_SampleUnknown = 0,
+    DXVA_SamplePreviousFrame = 1,
+    DXVA_SampleProgressiveFrame = 2,
+    DXVA_SampleFieldInterleavedEvenFirst = 3,
+    DXVA_SampleFieldInterleavedOddFirst = 4,
+    DXVA_SampleFieldSingleEven = 5,
+    DXVA_SampleFieldSingleOdd = 6,
+    DXVA_SampleSubStream = 7
+} DXVA_SampleFormat;
+
+typedef enum _DXVA_VideoProcessCaps {
+    DXVA_VideoProcess_None = 0,
+    DXVA_VideoProcess_YUV2RGB = 1,
+    DXVA_VideoProcess_StretchX = 2,
+    DXVA_VideoProcess_StretchY = 4,
+    DXVA_VideoProcess_AlphaBlend = 8,
+    DXVA_VideoProcess_SubRects = 16,
+    DXVA_VideoProcess_SubStreams = 32,
+    DXVA_VideoProcess_SubStreamsExtended = 64,
+    DXVA_VideoProcess_YUV2RGBExtended = 128,
+    DXVA_VideoProcess_AlphaBlendExtended = 0x100
+} DXVA_VideoProcessCaps;
+
+typedef enum _DXVA_DeinterlaceTech {
+    DXVA_DeinterlaceTech_Unknown = 0,
+    DXVA_DeinterlaceTech_BOBLineReplicate = 1,
+    DXVA_DeinterlaceTech_BOBVerticalStretch = 2,
+    DXVA_DeinterlaceTech_BOBVerticalStretch4Tap = 0x100,
+    DXVA_DeinterlaceTech_MedianFiltering = 4,
+    DXVA_DeinterlaceTech_EdgeFiltering = 16,
+    DXVA_DeinterlaceTech_FieldAdaptive = 32,
+    DXVA_DeinterlaceTech_PixelAdaptive = 64,
+    DXVA_DeinterlaceTech_MotionVectorSteered = 128
+} DXVA_DeinterlaceTech;
+
+typedef enum _DXVA_SampleFlags {
+    DXVA_SampleFlagsMask = 15,
+    DXVA_SampleFlag_Palette_Changed = 1,
+    DXVA_SampleFlag_SrcRect_Changed = 2,
+    DXVA_SampleFlag_DstRect_Changed = 4,
+    DXVA_SampleFlag_ColorData_Changed = 8
+} DXVA_SampleFlags;
+
+typedef enum _DXVA_DestinationFlags {
+    DXVA_DestinationFlagMask = 15,
+    DXVA_DestinationFlag_Background_Changed = 1,
+    DXVA_DestinationFlag_TargetRect_Changed = 2,
+    DXVA_DestinationFlag_ColorData_Changed = 4,
+    DXVA_DestinationFlag_Alpha_Changed = 8
+} DXVA_DestinationFlags;
+
+typedef enum _DXVA_ProcAmpControlProp {
+    DXVA_ProcAmp_None = 0,
+    DXVA_ProcAmp_Brightness = 1,
+    DXVA_ProcAmp_Contrast = 2,
+    DXVA_ProcAmp_Hue = 4,
+    DXVA_ProcAmp_Saturation = 8
+} DXVA_ProcAmpControlProp;
+
+typedef enum _COPP_DPCP_Protection_Level {
+    COPP_DPCP_Level0 = 0,
+    COPP_DPCP_LevelMin = 0,
+    COPP_DPCP_Level1 = 1,
+    COPP_DPCP_LevelMax = 1,
+    COPP_DPCP_ForceDWORD = 0x7FFFFFFF
+} COPP_DPCP_Protection_Level;
+
+typedef enum _COPP_HDCP_Protection_Level {
+    COPP_HDCP_Level0 = 0,
+    COPP_HDCP_LevelMin = 0,
+    COPP_HDCP_Level1 = 1,
+    COPP_HDCP_LevelMax = 1,
+    COPP_HDCP_ForceDWORD = 0x7FFFFFFF
+} COPP_HDCP_Protection_Level;
+
+typedef enum _COPP_CGMSA_Protection_Level {
+    COPP_CGMSA_Disabled = 0,
+    COPP_CGMSA_LevelMin = 0,
+    COPP_CGMSA_CopyFreely = 1,
+    COPP_CGMSA_CopyNoMore = 2,
+    COPP_CGMSA_CopyOneGeneration = 3,
+    COPP_CGMSA_CopyNever = 4,
+    COPP_CGMSA_RedistributionControlRequired = 8,
+    COPP_CGMSA_LevelMax = 12,
+    COPP_CGMSA_ForceDWORD = 0x7FFFFFFF
+} COPP_CGMSA_Protection_Level;
+
+typedef enum _COPP_ACP_Protection_Level {
+    COPP_ACP_Level0 = 0,
+    COPP_ACP_LevelMin = 0,
+    COPP_ACP_Level1 = 1,
+    COPP_ACP_Level2 = 2,
+    COPP_ACP_Level3 = 3,
+    COPP_ACP_LevelMax = 3,
+    COPP_ACP_ForceDWORD = 0x7FFFFFFF
+} COPP_ACP_Protection_Level;
+
+enum {
+    COPP_ProtectionType_Unknown = (-2147483648),
+    COPP_ProtectionType_None = 0,
+    COPP_ProtectionType_HDCP = 1,
+    COPP_ProtectionType_ACP = 2,
+    COPP_ProtectionType_CGMSA = 4,
+    COPP_ProtectionType_DPCP = 16,
+    COPP_ProtectionType_Mask = (-2147483625),
+    COPP_ProtectionType_Reserved = 0x7FFFFFF8
+};
+
+typedef enum _COPP_TVProtectionStandard {
+    COPP_ProtectionStandard_Unknown = (-2147483648),
+    COPP_ProtectionStandard_None = 0,
+    COPP_ProtectionStandard_IEC61880_525i = 1,
+    COPP_ProtectionStandard_IEC61880_2_525i = 2,
+    COPP_ProtectionStandard_IEC62375_625p = 4,
+    COPP_ProtectionStandard_EIA608B_525 = 8,
+    COPP_ProtectionStandard_EN300294_625i = 16,
+    COPP_ProtectionStandard_CEA805A_TypeA_525p = 32,
+    COPP_ProtectionStandard_CEA805A_TypeA_750p = 64,
+    COPP_ProtectionStandard_CEA805A_TypeA_1125i = 128,
+    COPP_ProtectionStandard_CEA805A_TypeB_525p = 0x100,
+    COPP_ProtectionStandard_CEA805A_TypeB_750p = 0x200,
+    COPP_ProtectionStandard_CEA805A_TypeB_1125i = 0x400,
+    COPP_ProtectionStandard_ARIBTRB15_525i = 0x800,
+    COPP_ProtectionStandard_ARIBTRB15_525p = 0x1000,
+    COPP_ProtectionStandard_ARIBTRB15_750p = 0x2000,
+    COPP_ProtectionStandard_ARIBTRB15_1125i = 0x4000,
+    COPP_ProtectionStandard_Mask = (-2147450881),
+    COPP_ProtectionStandard_Reserved = 0x7FFF8000
+} COPP_TVProtectionStandard;
+
+typedef enum _COPP_ImageAspectRatio_EN300294 {
+    COPP_AspectRatio_EN300294_FullFormat4by3 = 0,
+    COPP_AspectRatio_EN300294_Box14by9Center = 1,
+    COPP_AspectRatio_EN300294_Box14by9Top = 2,
+    COPP_AspectRatio_EN300294_Box16by9Center = 3,
+    COPP_AspectRatio_EN300294_Box16by9Top = 4,
+    COPP_AspectRatio_EN300294_BoxGT16by9Center = 5,
+    COPP_AspectRatio_EN300294_FullFormat4by3ProtectedCenter = 6,
+    COPP_AspectRatio_EN300294_FullFormat16by9Anamorphic = 7,
+    COPP_AspectRatio_ForceDWORD = 0x7FFFFFFF
+} COPP_ImageAspectRatio_EN300294;
+
+typedef enum _COPP_StatusFlags {
+    COPP_StatusNormal = 0,
+    COPP_LinkLost = 1,
+    COPP_RenegotiationRequired = 2,
+    COPP_StatusFlagsReserved = (-4)
+} COPP_StatusFlags;
+
+typedef enum _COPP_StatusHDCPFlags {
+    COPP_HDCPRepeater = 1,
+    COPP_HDCPFlagsReserved = (-2)
+} COPP_StatusHDCPFlags;
+
+typedef enum _COPP_ConnectorType {
+    COPP_ConnectorType_Unknown = (-1),
+    COPP_ConnectorType_VGA = 0,
+    COPP_ConnectorType_SVideo = 1,
+    COPP_ConnectorType_CompositeVideo = 2,
+    COPP_ConnectorType_ComponentVideo = 3,
+    COPP_ConnectorType_DVI = 4,
+    COPP_ConnectorType_HDMI = 5,
+    COPP_ConnectorType_LVDS = 6,
+    COPP_ConnectorType_TMDS = 7,
+    COPP_ConnectorType_D_JPN = 8,
+    COPP_ConnectorType_SDI = 9,
+    COPP_ConnectorType_DisplayPortExternal = 10,
+    COPP_ConnectorType_DisplayPortEmbedded = 11,
+    COPP_ConnectorType_UDIExternal = 12,
+    COPP_ConnectorType_UDIEmbedded = 13,
+    COPP_ConnectorType_Internal = (-2147483648),
+    COPP_ConnectorType_ForceDWORD = 0x7FFFFFFF
+} COPP_ConnectorType;
+
+typedef enum _COPP_BusType {
+    COPP_BusType_Unknown = 0,
+    COPP_BusType_PCI = 1,
+    COPP_BusType_PCIX = 2,
+    COPP_BusType_PCIExpress = 3,
+    COPP_BusType_AGP = 4,
+    COPP_BusType_Integrated = (-2147483648),
+    COPP_BusType_ForceDWORD = 0x7FFFFFFF
+} COPP_BusType;
+
+typedef DWORD DXVA_ConfigQueryOrReplyFunc;
+typedef DWORD * LPDXVA_ConfigQueryOrReplyFunc;
+typedef DWORD DXVA_EncryptProtocolFunc;
+typedef DWORD * LPDXVA_EncryptProtocolFunc;
+typedef BYTE DXVA_DeblockingEdgeControl;
+typedef DXVA_DeblockingEdgeControl * LPDXVA_DeblockingEdgeControl;
+typedef BYTE DXVA_IA44sample;
+typedef BYTE * LPDXVA_IA44sample;
+typedef BYTE DXVA_AI44sample;
+typedef BYTE * LPDXVA_AI44sample;
+typedef BYTE DXVA_DPXD;
+typedef BYTE * LPDXVA_DPXD;
+typedef WORD DXVA_DCCMD;
+typedef WORD * LPDXVA_DCCMD;
+
 #endif /* __WINE_DXVA_H */

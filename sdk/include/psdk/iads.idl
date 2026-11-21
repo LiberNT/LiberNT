@@ -51,7 +51,7 @@ typedef enum
     ADS_RIGHT_WRITE_DAC               = 0x00040000,
     ADS_RIGHT_WRITE_OWNER             = 0x00080000,
     ADS_RIGHT_SYNCHRONIZE             = 0x00100000,
-    ADS_RIGHT_ACCESS_SYSTEM_SECURITY  = 0x00200000,
+    ADS_RIGHT_ACCESS_SYSTEM_SECURITY  = 0x01000000,
 
     ADS_RIGHT_GENERIC_ALL             = 0x10000000,
     ADS_RIGHT_GENERIC_EXECUTE         = 0x20000000,
@@ -1068,3 +1068,28 @@ coclass DNWithString
 }
 
 } /* library */
+
+cpp_quote("#ifndef ADS_ATTR_APPEND")
+cpp_quote("#define ADS_ATTR_APPEND 3")
+cpp_quote("#endif")
+cpp_quote("#ifndef ADS_ATTR_CLEAR")
+cpp_quote("#define ADS_ATTR_CLEAR 1")
+cpp_quote("#endif")
+cpp_quote("#ifndef ADS_ATTR_DELETE")
+cpp_quote("#define ADS_ATTR_DELETE 4")
+cpp_quote("#endif")
+cpp_quote("#ifndef ADS_ATTR_UPDATE")
+cpp_quote("#define ADS_ATTR_UPDATE 2")
+cpp_quote("#endif")
+cpp_quote("#ifndef ADS_EXT_INITCREDENTIALS")
+cpp_quote("#define ADS_EXT_INITCREDENTIALS 1")
+cpp_quote("#endif")
+cpp_quote("#ifndef ADS_EXT_INITIALIZE_COMPLETE")
+cpp_quote("#define ADS_EXT_INITIALIZE_COMPLETE 2")
+cpp_quote("#endif")
+cpp_quote("#ifndef ADS_EXT_MAXEXTDISPID")
+cpp_quote("#define ADS_EXT_MAXEXTDISPID 16777215")
+cpp_quote("#endif")
+cpp_quote("#ifndef ADS_EXT_MINEXTDISPID")
+cpp_quote("#define ADS_EXT_MINEXTDISPID 1")
+cpp_quote("#endif")

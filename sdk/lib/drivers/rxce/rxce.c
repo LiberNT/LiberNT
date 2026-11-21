@@ -204,7 +204,6 @@ RxAcquireFcbForLazyWrite(
     /* The received context is a FCB */
     ASSERT(NodeType(Fcb) == RDBSS_NTC_FCB);
     ASSERT_CORRECT_FCB_STRUCTURE(Fcb);
-    ASSERT(Fcb->Specific.Fcb.LazyWriteThread == NULL);
 
     /* Acquire the paging resource (shared) */
     Ret = ExAcquireResourceSharedLite(Fcb->Header.PagingIoResource, Wait);
@@ -213,8 +212,6 @@ RxAcquireFcbForLazyWrite(
         /* Update tracker information */
         Fcb->PagingIoResourceFile = __FILE__;
         Fcb->PagingIoResourceLine = __LINE__;
-        /* Lazy writer thread is the current one */
-        Fcb->Specific.Fcb.LazyWriteThread = PsGetCurrentThread();
 
         /* There is no top level IRP */
         ASSERT(RxIsThisTheTopLevelIrp(NULL));
@@ -227,7 +224,6 @@ RxAcquireFcbForLazyWrite(
             Fcb->PagingIoResourceFile = NULL;
             Fcb->PagingIoResourceLine = 0;
             ExReleaseResourceLite(Fcb->Header.PagingIoResource);
-            Fcb->Specific.Fcb.LazyWriteThread = NULL;
         }
     }
 
@@ -316,10 +312,11 @@ PVOID
 RxAllocateFcbObject(
     PRDBSS_DEVICE_OBJECT RxDeviceObject,
     NODE_TYPE_CODE NodeType,
-    POOL_TYPE PoolType,
+    POOL_FLAGS PoolFlags,
     ULONG NameSize,
     PVOID AlreadyAllocatedObject)
 {
+    POOL_TYPE PoolType = FlagOn(PoolFlags, POOL_FLAG_NON_PAGED) ? NonPagedPool : PagedPool;
     PFCB Fcb;
     PFOBX Fobx;
     PSRV_OPEN SrvOpen;
@@ -721,7 +718,8 @@ RxBootstrapWorkerThreadDispatcher(
  */
 VOID
 RxCancelBlockingOperation(
-    IN OUT PRX_CONTEXT RxContext)
+    IN OUT PRX_CONTEXT RxContext,
+    IN PIRP Irp)
 {
     PFOBX Fobx;
     BOOLEAN PostRequest;
@@ -885,7 +883,7 @@ RxChangeBufferingState(
                     {
                         DPRINT("Oplock break close for %p\n", SrvOpen);
 
-                        RxCloseAssociatedSrvOpen(Fobx, RxContext);
+                        RxCloseAssociatedSrvOpen(RxContext, Fobx);
                     }
                     /* Otherwise, inform the mini-rdr about completion */
                     else
@@ -1261,6 +1259,7 @@ RxConstructNetRoot(
 NTSTATUS
 RxConstructSrvCall(
     IN PRX_CONTEXT RxContext,
+    IN PIRP Irp,
     IN PSRV_CALL SrvCall,
     OUT PLOCK_HOLDING_STATE LockHoldingState)
 {
@@ -1311,7 +1310,8 @@ RxConstructSrvCall(
     /* If we're async, we'll post, otherwise, we'll have to wait for completion */
     if (BooleanFlagOn(RxContext->Flags, RX_CONTEXT_FLAG_ASYNC_OPERATION))
     {
-        RxPrePostIrp(RxContext, RxContext->CurrentIrp);
+        ASSERT(Irp == RxContext->CurrentIrp);
+        RxPrePostIrp(RxContext, Irp);
     }
     else
     {
@@ -1364,8 +1364,10 @@ RxConstructSrvCall(
 NTSTATUS
 RxConstructVirtualNetRoot(
     IN PRX_CONTEXT RxContext,
+    IN PIRP Irp,
     IN PUNICODE_STRING CanonicalName,
     IN NET_ROOT_TYPE NetRootType,
+    IN BOOLEAN TreeConnect,
     OUT PV_NET_ROOT *VirtualNetRootPointer,
     OUT PLOCK_HOLDING_STATE LockHoldingState,
     OUT PRX_CONNECTION_ID RxConnectionId)
@@ -1382,7 +1384,7 @@ RxConstructVirtualNetRoot(
     VNetRoot = NULL;
     Condition = Condition_Bad;
     /* Before creating the VNetRoot, try to find the appropriate connection */
-    Status = RxFindOrCreateConnections(RxContext, CanonicalName, NetRootType,
+    Status = RxFindOrCreateConnections(RxContext, Irp, CanonicalName, NetRootType, TreeConnect,
                                        &LocalNetRootName, &FilePathName,
                                        LockHoldingState, RxConnectionId);
     /* Found and active */
@@ -1480,13 +1482,14 @@ RxConstructVirtualNetRoot(
 PFCB
 RxCreateNetFcb(
     IN PRX_CONTEXT RxContext,
+    IN PIRP Irp,
     IN PV_NET_ROOT VNetRoot,
     IN PUNICODE_STRING Name)
 {
     PFCB Fcb;
     BOOLEAN FakeFcb;
     PNET_ROOT NetRoot;
-    POOL_TYPE PoolType;
+    POOL_FLAGS PoolFlags;
     NODE_TYPE_CODE NodeType;
     PIO_STACK_LOCATION Stack;
     PRDBSS_DEVICE_OBJECT RxDeviceObject;
@@ -1510,11 +1513,11 @@ RxCreateNetFcb(
               !BooleanFlagOn(NetRoot->Flags, NETROOT_FLAG_SUPPORTS_SYMBOLIC_LINKS);
     ASSERT(FakeFcb || RxIsFcbTableLockExclusive(&NetRoot->FcbTable));
 
-    PoolType = (BooleanFlagOn(Stack->Flags, SL_OPEN_PAGING_FILE) ? NonPagedPool : PagedPool);
+    PoolFlags = (BooleanFlagOn(Stack->Flags, SL_OPEN_PAGING_FILE) ? POOL_FLAG_NON_PAGED : POOL_FLAG_PAGED);
     NodeType = (FakeFcb) ? RDBSS_NTC_OPENTARGETDIR_FCB : RDBSS_STORAGE_NTC(FileTypeNotYetKnown);
 
     /* Allocate the FCB */
-    Fcb = RxAllocateFcbObject(RxDeviceObject, NodeType, PoolType,
+    Fcb = RxAllocateFcbObject(RxDeviceObject, NodeType, PoolFlags,
                               NetRoot->InnerNamePrefix.Length + Name->Length, NULL);
     if (Fcb == NULL)
     {
@@ -1602,7 +1605,7 @@ RxCreateNetFobx(
     ULONG Flags;
     PNET_ROOT NetRoot;
     PSRV_OPEN SrvOpen;
-    POOL_TYPE PoolType;
+    POOL_FLAGS PoolFlags;
 
     PAGED_CODE();
 
@@ -1612,13 +1615,13 @@ RxCreateNetFobx(
     ASSERT(RxIsFcbAcquiredExclusive(SrvOpen->Fcb));
 
     Fcb = SrvOpen->Fcb;
-    PoolType = (BooleanFlagOn(Fcb->FcbState, FCB_STATE_PAGING_FILE) ? NonPagedPool : PagedPool);
+    PoolFlags = (BooleanFlagOn(Fcb->FcbState, FCB_STATE_PAGING_FILE) ? POOL_FLAG_NON_PAGED : POOL_FLAG_PAGED);
     /* Can we use pre-allocated FOBX? */
     if (!BooleanFlagOn(Fcb->FcbState, FCB_STATE_FOBX_USED) && Fcb->InternalSrvOpen == (PSRV_OPEN)MrxSrvOpen)
     {
         Fobx = Fcb->InternalFobx;
         /* Call allocate to initialize the FOBX */
-        RxAllocateFcbObject(Fcb->RxDeviceObject, RDBSS_NTC_FOBX, PoolType, 0, Fobx);
+        RxAllocateFcbObject(Fcb->RxDeviceObject, RDBSS_NTC_FOBX, PoolFlags, 0, Fobx);
         /* Mark it used now */
         Fcb->FcbState |= FCB_STATE_FOBX_USED;
         Flags = FOBX_FLAG_ENCLOSED_ALLOCATED;
@@ -1627,7 +1630,7 @@ RxCreateNetFobx(
     {
         Fobx = SrvOpen->InternalFobx;
         /* Call allocate to initialize the FOBX */
-        RxAllocateFcbObject(Fcb->RxDeviceObject, RDBSS_NTC_FOBX, PoolType, 0, Fobx);
+        RxAllocateFcbObject(Fcb->RxDeviceObject, RDBSS_NTC_FOBX, PoolFlags, 0, Fobx);
         /* Mark it used now */
         SrvOpen->Flags |= SRVOPEN_FLAG_FOBX_USED;
         Flags = FOBX_FLAG_ENCLOSED_ALLOCATED;
@@ -1635,7 +1638,7 @@ RxCreateNetFobx(
     else
     {
         /* Last case, we cannot, allocate a FOBX */
-        Fobx = RxAllocateFcbObject(Fcb->RxDeviceObject, RDBSS_NTC_FOBX, PoolType, 0, NULL);
+        Fobx = RxAllocateFcbObject(Fcb->RxDeviceObject, RDBSS_NTC_FOBX, PoolFlags, 0, NULL);
         Flags = 0;
     }
 
@@ -1971,14 +1974,14 @@ RxCreateSrvOpen(
 {
     ULONG Flags;
     PSRV_OPEN SrvOpen = NULL;
-    POOL_TYPE PoolType;
+    POOL_FLAGS PoolFlags;
 
     PAGED_CODE();
 
     ASSERT(NodeTypeIsFcb(Fcb));
     ASSERT(RxIsFcbAcquiredExclusive(Fcb));
 
-    PoolType = (BooleanFlagOn(Fcb->FcbState, FCB_STATE_PAGING_FILE) ? NonPagedPool : PagedPool);
+    PoolFlags = (BooleanFlagOn(Fcb->FcbState, FCB_STATE_PAGING_FILE) ? POOL_FLAG_NON_PAGED : POOL_FLAG_PAGED);
 
     _SEH2_TRY
     {
@@ -1990,14 +1993,14 @@ RxCreateSrvOpen(
         {
             /* Proceed */
             SrvOpen = RxAllocateFcbObject(Fcb->VNetRoot->NetRoot->pSrvCall->RxDeviceObject,
-                                          RDBSS_NTC_SRVOPEN, PoolType, 0, NULL);
+                                          RDBSS_NTC_SRVOPEN, PoolFlags, 0, NULL);
             Flags = 0;
         }
         else
         {
             /* Otherwise, just use internal one and initialize it */
             RxAllocateFcbObject(Fcb->VNetRoot->NetRoot->pSrvCall->RxDeviceObject,
-                                RDBSS_NTC_INTERNAL_SRVOPEN, PoolType, 0,
+                                RDBSS_NTC_INTERNAL_SRVOPEN, PoolFlags, 0,
                                 Fcb->InternalSrvOpen);
             Fcb->FcbState |= FCB_STATE_SRVOPEN_USED;
             Flags = SRVOPEN_FLAG_ENCLOSED_ALLOCATED | SRVOPEN_FLAG_FOBX_USED;
@@ -2246,7 +2249,7 @@ RxDereference(
 
             ASSERT(SrvCall->RxDeviceObject != NULL);
             ASSERT(RxIsPrefixTableLockAcquired(SrvCall->RxDeviceObject->pRxNetNameTable));
-            RxFinalizeSrvCall(SrvCall, TRUE, TRUE);
+            RxFinalizeSrvCall(SrvCall, TRUE);
             break;
         }
 
@@ -2891,7 +2894,7 @@ RxFinalizeNetFcb(
         /* Free any FCB_LOCK */
         if (NodeType(ThisFcb) == RDBSS_NTC_STORAGE_TYPE_FILE)
         {
-            FsRtlUninitializeFileLock(&ThisFcb->Specific.Fcb.FileLock);
+            FsRtlUninitializeFileLock(&ThisFcb->FileLock);
 
             while (ThisFcb->BufferedLocks.List != NULL)
             {
@@ -3010,7 +3013,7 @@ RxFinalizeNetFobx(
         {
             NTSTATUS Status;
 
-            Status = RxCloseAssociatedSrvOpen(ThisFobx, FALSE);
+            Status = RxCloseAssociatedSrvOpen(NULL, ThisFobx);
             DPRINT("Closing SRV_OPEN %p for %p: %x\n", SrvOpen, ThisFobx, Status);
         }
 
@@ -3163,7 +3166,6 @@ RxFinalizeNetRoot(
 BOOLEAN
 RxFinalizeSrvCall(
     OUT PSRV_CALL ThisSrvCall,
-    IN BOOLEAN RecursiveFinalize,
     IN BOOLEAN ForceFinalize)
 {
     PRX_PREFIX_TABLE PrefixTable;
@@ -3440,6 +3442,7 @@ RxFinalizeVNetRoot(
 NTSTATUS
 RxFindOrConstructVirtualNetRoot(
     IN PRX_CONTEXT RxContext,
+    IN PIRP Irp,
     IN PUNICODE_STRING CanonicalName,
     IN NET_ROOT_TYPE NetRootType,
     IN PUNICODE_STRING RemainingName)
@@ -3611,7 +3614,8 @@ RxFindOrConstructVirtualNetRoot(
     {
         ASSERT(LockHoldingState == LHS_ExclusiveLockHeld);
 
-        Status = RxConstructVirtualNetRoot(RxContext, CanonicalName, NetRootType, &VNetRoot, &LockHoldingState, &ConnectionID);
+        Status = RxConstructVirtualNetRoot(RxContext, Irp, CanonicalName, NetRootType, RxContext->Create.ThisIsATreeConnectOpen,
+                                           &VNetRoot, &LockHoldingState, &ConnectionID);
         ASSERT(Status != STATUS_SUCCESS || LockHoldingState != LHS_LockNotHeld);
 
         if (Status == STATUS_SUCCESS)
@@ -3674,8 +3678,10 @@ RxFindOrConstructVirtualNetRoot(
 NTSTATUS
 RxFindOrCreateConnections(
     _In_ PRX_CONTEXT RxContext,
+    _In_ PIRP Irp,
     _In_ PUNICODE_STRING CanonicalName,
     _In_ NET_ROOT_TYPE NetRootType,
+    _In_ BOOLEAN TreeConnect,
     _Out_ PUNICODE_STRING LocalNetRootName,
     _Out_ PUNICODE_STRING FilePathName,
     _Inout_ PLOCK_HOLDING_STATE LockState,
@@ -3932,7 +3938,7 @@ RetryLookup:
             Container = SrvCall;
 
             /* Construct SRV_CALL, ie, use mini-rdr */
-            Status = RxConstructSrvCall(RxContext, SrvCall, LockState);
+            Status = RxConstructSrvCall(RxContext, Irp, SrvCall, LockState);
             ASSERT(Status != STATUS_SUCCESS || RxIsPrefixTableLockAcquired(PrefixTable));
             if (Status != STATUS_SUCCESS)
             {
@@ -4064,8 +4070,8 @@ RxFinishFcbInitialization(
         {
             if (OldType != RDBSS_NTC_STORAGE_TYPE_FILE)
             {
-                RxInitializeLowIoPerFcbInfo(&((PFCB)Fcb)->Specific.Fcb.LowIoPerFcbInfo);
-                FsRtlInitializeFileLock(&((PFCB)Fcb)->Specific.Fcb.FileLock, RxLockOperationCompletion,
+                RxInitializeLowIoPerFcbInfo(&((PFCB)Fcb)->LowIoPerFcbInfo);
+                FsRtlInitializeFileLock(&((PFCB)Fcb)->FileLock, RxLockOperationCompletion,
                                         RxUnlockOperation);
 
                 ((PFCB)Fcb)->BufferedLocks.List = NULL;
@@ -4170,7 +4176,7 @@ RxFinishSrvCallConstruction(
         /* Otherwise, call resume routine and done! */
         else
         {
-            Status = Context->ResumeRoutine(Context);
+            Status = Context->ResumeRoutine(Context, Context->CurrentIrp);
             if (Status != STATUS_PENDING)
             {
                 RxCompleteRequest(Context, Status);
@@ -4772,15 +4778,14 @@ RxInitializeFcbTable(
 VOID
 NTAPI
 RxInitializeLowIoContext(
-    OUT PLOWIO_CONTEXT LowIoContext,
-    IN ULONG Operation)
+    IN PRX_CONTEXT RxContext,
+    IN ULONG Operation,
+    OUT PLOWIO_CONTEXT LowIoContext)
 {
-    PRX_CONTEXT RxContext;
     PIO_STACK_LOCATION Stack;
 
     PAGED_CODE();
 
-    RxContext = CONTAINING_RECORD(LowIoContext, RX_CONTEXT, LowIoContext);
     ASSERT(LowIoContext == &RxContext->LowIoContext);
 
     Stack = RxContext->CurrentIrpSp;
@@ -5248,17 +5253,18 @@ RxIsThisACscAgentOpen(
 VOID
 RxLockUserBuffer(
     IN PRX_CONTEXT RxContext,
+    IN PIRP Irp,
     IN LOCK_OPERATION Operation,
     IN ULONG BufferLength)
 {
-    PIRP Irp = NULL;
     PMDL Mdl = NULL;
 
     PAGED_CODE();
 
+    ASSERT(Irp == RxContext->CurrentIrp);
+
     _SEH2_TRY
     {
-        Irp = RxContext->CurrentIrp;
         /* If we already have a MDL, make sure it's locked */
         if (Irp->MdlAddress != NULL)
         {
@@ -5374,10 +5380,10 @@ RxLowIoCompletionTail(
 NTSTATUS
 NTAPI
 RxLowIoPopulateFsctlInfo(
-    IN PRX_CONTEXT RxContext)
+    IN PRX_CONTEXT RxContext,
+    IN PIRP Irp)
 {
     PMDL Mdl;
-    PIRP Irp;
     UCHAR Method;
     PIO_STACK_LOCATION Stack;
 
@@ -5385,7 +5391,7 @@ RxLowIoPopulateFsctlInfo(
 
     DPRINT("RxLowIoPopulateFsctlInfo(%p)\n", RxContext);
 
-    Irp = RxContext->CurrentIrp;
+    ASSERT(Irp == RxContext->CurrentIrp);
     Stack = RxContext->CurrentIrpSp;
 
     /* Copy stack parameters */
@@ -5440,6 +5446,8 @@ NTSTATUS
 NTAPI
 RxLowIoSubmit(
     IN PRX_CONTEXT RxContext,
+    IN PIRP Irp,
+    IN PFCB Fcb,
     IN PLOWIO_COMPLETION_ROUTINE CompletionRoutine)
 {
     NTSTATUS Status;
@@ -5450,6 +5458,9 @@ RxLowIoSubmit(
     DPRINT("RxLowIoSubmit(%p, %p)\n", RxContext, CompletionRoutine);
 
     PAGED_CODE();
+
+    ASSERT(Irp == RxContext->CurrentIrp);
+    ASSERT(Fcb == (PFCB)RxContext->pFcb);
 
     LowIoContext = &RxContext->LowIoContext;
     Synchronous = !BooleanFlagOn(RxContext->Flags, RX_CONTEXT_FLAG_ASYNC_OPERATION);
@@ -5469,31 +5480,27 @@ RxLowIoSubmit(
             ASSERT(LowIoContext->ParamsFor.ReadWrite.ByteCount != 0xEEEEEEEE);
 
             /* Lock the buffer */
-            RxLockUserBuffer(RxContext,
+            RxLockUserBuffer(RxContext, Irp,
                              (Operation == LOWIO_OP_READ ? IoWriteAccess : IoReadAccess),
                              LowIoContext->ParamsFor.ReadWrite.ByteCount);
             if (RxNewMapUserBuffer(RxContext) == NULL)
             {
                 return STATUS_INSUFFICIENT_RESOURCES;
             }
-            LowIoContext->ParamsFor.ReadWrite.Buffer = RxContext->CurrentIrp->MdlAddress;
+            LowIoContext->ParamsFor.ReadWrite.Buffer = Irp->MdlAddress;
 
             /* If that's a paging IO, initialize serial operation */
             if (BooleanFlagOn(LowIoContext->ParamsFor.ReadWrite.Flags, LOWIO_READWRITEFLAG_PAGING_IO))
             {
-                PFCB Fcb;
-
-                Fcb = (PFCB)RxContext->pFcb;
-
                 ExAcquireFastMutexUnsafe(&RxLowIoPagingIoSyncMutex);
                 RxContext->BlockedOpsMutex = &RxLowIoPagingIoSyncMutex;
                 if (Operation == LOWIO_OP_READ)
                 {
-                    InsertTailList(&Fcb->Specific.Fcb.PagingIoReadsOutstanding, &RxContext->RxContextSerializationQLinks);
+                    InsertTailList(&Fcb->PagingIoReadsOutstanding, &RxContext->RxContextSerializationQLinks);
                 }
                 else
                 {
-                    InsertTailList(&Fcb->Specific.Fcb.PagingIoWritesOutstanding, &RxContext->RxContextSerializationQLinks);
+                    InsertTailList(&Fcb->PagingIoWritesOutstanding, &RxContext->RxContextSerializationQLinks);
                 }
 
                 ExReleaseFastMutexUnsafe(&RxLowIoPagingIoSyncMutex);
@@ -5504,7 +5511,7 @@ RxLowIoSubmit(
         case LOWIO_OP_FSCTL:
         case LOWIO_OP_IOCTL:
             /* Set FSCTL/IOCTL parameters */
-            Status = RxLowIoPopulateFsctlInfo(RxContext);
+            Status = RxLowIoPopulateFsctlInfo(RxContext, Irp);
             /* Check whether we're consistent: a length means a buffer */
             if (NT_SUCCESS(Status))
             {
@@ -5547,7 +5554,7 @@ RxLowIoSubmit(
             /* If not synchronous, we're likely to return before the operation is finished */
             if (!BooleanFlagOn(RxContext->Flags, RX_CONTEXT_FLAG_IN_FSP))
             {
-                IoMarkIrpPending(RxContext->CurrentIrp);
+                IoMarkIrpPending(Irp);
             }
         }
 
@@ -5606,13 +5613,12 @@ RxLowIoSubmit(
  */
 PVOID
 RxMapSystemBuffer(
-    IN PRX_CONTEXT RxContext)
+    IN PRX_CONTEXT RxContext,
+    IN PIRP Irp)
 {
-    PIRP Irp;
-
     PAGED_CODE();
 
-    Irp = RxContext->CurrentIrp;
+    ASSERT(Irp == RxContext->CurrentIrp);
     /* We should have a MDL (buffered IOs are not supported!) */
     if (Irp->MdlAddress != NULL)
     {
@@ -6054,7 +6060,7 @@ RxpDestroySrvCall(
     RxAcquirePrefixTableLockExclusive(PrefixTable, TRUE);
     InterlockedDecrement((volatile long *)&SrvCall->NodeReferenceCount);
     /* And finalize for real, with the right context */
-    RxFinalizeSrvCall(SrvCall, FALSE, ForceFinalize);
+    RxFinalizeSrvCall(SrvCall, ForceFinalize);
     RxReleasePrefixTableLock(PrefixTable);
 }
 
@@ -7534,9 +7540,6 @@ RxReleaseFcbFromLazyWrite(
     ASSERT(NodeType(Fcb) == RDBSS_NTC_FCB);
     ASSERT_CORRECT_FCB_STRUCTURE(Fcb);
 
-    /* Lazy writer is releasing lock, so forget about it */
-    Fcb->Specific.Fcb.LazyWriteThread = NULL;
-
     /* If we were top level IRP, unwind */
     if (RxGetTopIrpIfRdbssIrp() == (PIRP)FSRTL_CACHE_TOP_LEVEL_IRP)
     {
@@ -8162,7 +8165,8 @@ RxSpinUpWorkerThreads(
 
 VOID
 RxSynchronizeWithScavenger(
-    IN PRX_CONTEXT RxContext)
+    IN PRX_CONTEXT RxContext,
+    IN PFCB Fcb)
 {
     UNIMPLEMENTED;
 }

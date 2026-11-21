@@ -67,7 +67,7 @@ enum msidbControlAttributes {
     msidbControlAttributesRTLRO = 0x00000020,
     msidbControlAttributesRightAligned = 0x00000040,
     msidbControlAttributesLeftScroll = 0x00000080,
-    msidbControlAttributesBiDi = 0x000000c0,
+    msidbControlAttributesBiDi = 0x000000e0,
 
     msidbControlAttributesTransparent = 0x00010000,
     msidbControlAttributesNoPrefix = 0x00020000,
@@ -282,5 +282,43 @@ enum
 #define PID_MSIVERSION PID_PAGECOUNT
 #define PID_MSISOURCE PID_WORDCOUNT
 #define PID_MSIRESTRICT PID_CHARCOUNT
+
+#ifndef _WIN32_MSI
+#define _WIN32_MSI 500
+#endif
+
+enum msidbClassAttributes {
+    msidbClassAttributesRelativePath = 1
+};
+
+enum msidbServiceConfigEvent {
+    msidbServiceConfigEventInstall = 1,
+    msidbServiceConfigEventUninstall = 2,
+    msidbServiceConfigEventReinstall = 4
+};
+
+enum msidbEmbeddedUIAttributes {
+    msidbEmbeddedUI = 1,
+    msidbEmbeddedHandlesBasic = 2
+};
+
+enum msirbRebootType {
+    msirbRebootImmediate = 1,
+    msirbRebootDeferred = 2
+};
+
+enum msirbRebootReason {
+    msirbRebootUndeterminedReason = 0,
+    msirbRebootInUseFilesReason = 1,
+    msirbRebootScheduleRebootReason = 2,
+    msirbRebootForceRebootReason = 3,
+    msirbRebootCustomActionReason = 4
+};
+
+enum msifiFastInstallBits {
+    msifiFastInstallNoSR = 1,
+    msifiFastInstallQuickCosting = 2,
+    msifiFastInstallLessPrgMsg = 4
+};
 
 #endif /* __WINE_MSIDEFS_H */

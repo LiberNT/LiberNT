@@ -93,6 +93,7 @@ RxConjureOriginalName(
 
 #if (_WIN32_WINNT >= 0x0600)
 NTSTATUS
+NTAPI
 RxCompleteMdl(
     _In_ PRX_CONTEXT RxContext,
     _In_ PIRP Irp);
@@ -679,7 +680,7 @@ PVOID
 RxAllocateFcbObject(
     _In_ PRDBSS_DEVICE_OBJECT RxDeviceObject,
     _In_ NODE_TYPE_CODE NodeType,
-    _In_ POOL_TYPE PoolType,
+    _In_ POOL_FLAGS PoolFlags,
     _In_ ULONG NameSize,
     _In_opt_ PVOID AlreadyAllocatedObject);
 

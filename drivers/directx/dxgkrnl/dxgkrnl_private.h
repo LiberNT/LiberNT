@@ -40,33 +40,6 @@
 
 #include "../wddm_cleanroom_gate.h"
 
-/* ---- Minimum OS version for dxgkrnl ------------------------------------ */
-/*
- * dxgkrnl.sys uses the Windows 8 kernel API declaration set.
- * Override both _WIN32_WINNT and NTDDI_VERSION before including any kernel
- * headers so that those declarations are visible.
- *
- * The separately selected DXGKDDI interface level is WDDM 2.0; this NT target
- * controls kernel declarations and does not lower that graphics contract.
- *
- * Windows 8 is the floor rather than Windows 7 because registering the
- * miniport's runtime power components uses the Power Framework -
- * PoFxRegisterDevice, PoFxActivateComponent and the PO_FX_DEVICE description -
- * which <potypes.h> declares only from NTDDI_WIN8 and which ntoskrnl exports
- * at the same level.  Functions such as PsSetCreateProcessNotifyRoutineEx
- * remain declared.
- *
- * The ReactOS build system sets _WIN32_WINNT=0x0502 (Server 2003) globally,
- * but dxgkrnl is a WDDM driver that only loads on Vista+.  The
- * sdkddkver.h consistency check requires (NTDDI_VERSION >> 16) == _WIN32_WINNT,
- * so both values must be updated together, and must agree with the values the
- * module's CMakeLists.txt puts on the command line.
- */
-#undef  _WIN32_WINNT
-#define _WIN32_WINNT  0x0602    /* Windows 8 */
-#undef  NTDDI_VERSION
-#define NTDDI_VERSION 0x06020000 /* NTDDI_WIN8 */
-
 /* ---- Standard kernel headers ------------------------------------------- */
 #include <ntifs.h>
 #include <ntddk.h>

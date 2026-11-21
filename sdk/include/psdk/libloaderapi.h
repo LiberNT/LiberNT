@@ -120,4 +120,33 @@ BOOL WINAPI GetModuleHandleExW(DWORD,LPCWSTR,HMODULE*);
 }
 #endif
 
+#ifndef FIND_RESOURCE_DIRECTORY_LANGUAGES
+#define FIND_RESOURCE_DIRECTORY_LANGUAGES 0x0400
+#endif
+#ifndef FIND_RESOURCE_DIRECTORY_NAMES
+#define FIND_RESOURCE_DIRECTORY_NAMES 0x0200
+#endif
+#ifndef FIND_RESOURCE_DIRECTORY_TYPES
+#define FIND_RESOURCE_DIRECTORY_TYPES 0x0100
+#endif
+#ifndef RESOURCE_ENUM_MODULE_EXACT
+#define RESOURCE_ENUM_MODULE_EXACT 0x0010
+#endif
+#ifndef SUPPORT_LANG_NUMBER
+#define SUPPORT_LANG_NUMBER 32
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+BOOL WINAPI EnumResourceLanguagesExA(HMODULE hModule, LPCSTR lpType, LPCSTR lpName, ENUMRESLANGPROCA lpEnumFunc, LONG_PTR lParam, DWORD dwFlags, LANGID LangId);
+BOOL WINAPI EnumResourceLanguagesExW(HMODULE hModule, LPCWSTR lpType, LPCWSTR lpName, ENUMRESLANGPROCW lpEnumFunc, LONG_PTR lParam, DWORD dwFlags, LANGID LangId);
+BOOL WINAPI EnumResourceNamesExA(HMODULE hModule, LPCSTR lpType, ENUMRESNAMEPROCA lpEnumFunc, LONG_PTR lParam, DWORD dwFlags, LANGID LangId);
+BOOL WINAPI EnumResourceNamesExW(HMODULE hModule, LPCWSTR lpType, ENUMRESNAMEPROCW lpEnumFunc, LONG_PTR lParam, DWORD dwFlags, LANGID LangId);
+BOOL WINAPI EnumResourceTypesExA(HMODULE hModule, ENUMRESTYPEPROCA lpEnumFunc, LONG_PTR lParam, DWORD dwFlags, LANGID LangId);
+BOOL WINAPI EnumResourceTypesExW(HMODULE hModule, ENUMRESTYPEPROCW lpEnumFunc, LONG_PTR lParam, DWORD dwFlags, LANGID LangId);
+#ifdef __cplusplus
+}
+#endif
+
 #endif  /* _APISETLIBLOADER_ */

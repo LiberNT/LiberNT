@@ -191,7 +191,7 @@
 #define IF_TYPE_POS                              171
 #define IF_TYPE_DVB_ASI_IN                       172
 #define IF_TYPE_DVB_ASI_OUT                      173
-#define IF_TYPE_PLC                              175
+#define IF_TYPE_PLC                              174
 #define IF_TYPE_NFAS                             175
 #define IF_TYPE_TR008                            176
 #define IF_TYPE_GR303_RDT                        177
@@ -217,7 +217,9 @@
 #define IF_TYPE_IEEE80216_WANN                   237
 #define IF_TYPE_WWANPP                           243
 #define IF_TYPE_WWANPP2                          244
-#define MAX_IF_TYPE                              244
+#define IF_TYPE_IEEE802154                       259
+#define IF_TYPE_XBOX_WIRELESS                    281
+#define MAX_IF_TYPE                              281
 
 #define MIB_IF_TYPE_OTHER               1
 #define MIB_IF_TYPE_ETHERNET            6
@@ -249,5 +251,48 @@ typedef enum _INTERNAL_IF_OPER_STATUS
 #define MIB_IF_OPER_STATUS_CONNECTING      IF_OPER_STATUS_CONNECTING
 #define MIB_IF_OPER_STATUS_CONNECTED       IF_OPER_STATUS_CONNECTED
 #define MIB_IF_OPER_STATUS_OPERATIONAL     IF_OPER_STATUS_OPERATIONAL
+
+#ifndef IF_ADMIN_STATUS_DOWN
+#define IF_ADMIN_STATUS_DOWN 2
+#endif
+#ifndef IF_ADMIN_STATUS_TESTING
+#define IF_ADMIN_STATUS_TESTING 3
+#endif
+#ifndef IF_ADMIN_STATUS_UP
+#define IF_ADMIN_STATUS_UP 1
+#endif
+#ifndef IF_CHECK_MCAST
+#define IF_CHECK_MCAST 0x01
+#endif
+#ifndef IF_CHECK_NONE
+#define IF_CHECK_NONE 0x00
+#endif
+#ifndef IF_CHECK_SEND
+#define IF_CHECK_SEND 0x02
+#endif
+#ifndef IF_CONNECTION_DEDICATED
+#define IF_CONNECTION_DEDICATED 1
+#endif
+#ifndef IF_CONNECTION_DEMAND
+#define IF_CONNECTION_DEMAND 3
+#endif
+#ifndef IF_CONNECTION_PASSIVE
+#define IF_CONNECTION_PASSIVE 2
+#endif
+#ifndef IF_TYPE_IEEE80216_WMAN
+#define IF_TYPE_IEEE80216_WMAN 237
+#endif
+#ifndef MIN_IF_TYPE
+#define MIN_IF_TYPE 1
+#endif
+
+typedef enum _IF_ACCESS_TYPE {
+    IF_ACCESS_LOOPBACK = 1,
+    IF_ACCESS_BROADCAST = 2,
+    IF_ACCESS_POINT_TO_POINT = 3,
+    IF_ACCESS_POINTTOPOINT = 3,
+    IF_ACCESS_POINT_TO_MULTI_POINT = 4,
+    IF_ACCESS_POINTTOMULTIPOINT = 4
+} IF_ACCESS_TYPE;
 
 #endif /* WINE_IPIFCONS_H__ */

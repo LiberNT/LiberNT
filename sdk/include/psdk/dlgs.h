@@ -204,4 +204,11 @@ typedef struct tagCRGB {
 #ifdef __cplusplus
 }
 #endif
+#ifndef IDC_MANAGE_LINK
+#define IDC_MANAGE_LINK 1592
+#endif
+#ifndef NEWFORMATDLGWITHLINK
+#define NEWFORMATDLGWITHLINK 1591
+#endif
+
 #endif

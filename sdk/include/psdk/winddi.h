@@ -518,7 +518,12 @@ typedef struct _DRIVEROBJ {
 #define INDEX_DrvEndDxInterop            100L
 #define INDEX_DrvLockDisplayArea         101L
 #define INDEX_DrvUnlockDisplayArea       102L
+#if (NTDDI_VERSION >= NTDDI_WIN10_RS1)
+#define INDEX_DrvSurfaceComplete         103L
+#define INDEX_LAST                       104L
+#else
 #define INDEX_LAST                       103L
+#endif
 #else /* (NTDDI_VERSION >= NTDDI_WIN7) */
 #define INDEX_LAST                        94L
 #endif /* (NTDDI_VERSION >= NTDDI_WIN7) */
@@ -932,7 +937,7 @@ typedef struct _GDIINFO {
                                           |PD_ENDSUBPATH \
                                           |PD_RESETSTYLE \
                                           |PD_CLOSEFIGURE \
-                                          PD_BEZIERS)
+                                          |PD_BEZIERS)
 
 typedef struct _PATHDATA {
   FLONG  flags;
@@ -4375,6 +4380,7 @@ typedef struct tagCDDDXGK_REDIRBITMAPPRESENTINFO
     PRECT DirtyRect;
     UINT NumContexts;
     HANDLE hContext[WINDDI_MAX_BROADCAST_CONTEXT+1];
+    BOOLEAN bDoNotSynchronizeWithDxContent;
 } CDDDXGK_REDIRBITMAPPRESENTINFO;
 
 typedef BOOL
@@ -4422,5 +4428,30 @@ extern FN_DrvUnlockDisplayArea DrvUnlockDisplayArea;
 #endif
 
 #endif /* defined __VIDEO_H__ */
+
+#ifndef CDBEX_CROSSADAPTER
+#define CDBEX_CROSSADAPTER 0x00000008
+#endif
+#ifndef CDBEX_NTSHAREDSURFACEHANDLE
+#define CDBEX_NTSHAREDSURFACEHANDLE 0x00000004
+#endif
+#ifndef CDBEX_REUSE
+#define CDBEX_REUSE 0x00000010
+#endif
+#ifndef DSS_RESERVED2
+#define DSS_RESERVED2 0x0010
+#endif
+#ifndef FM_SEL_USE_TYPO_METRICS
+#define FM_SEL_USE_TYPO_METRICS 0x0080
+#endif
+#ifndef GCAPS2_BITMAPEXREUSE
+#define GCAPS2_BITMAPEXREUSE 0x00010000
+#endif
+#ifndef GCAPS2_REMOTEDRIVER
+#define GCAPS2_REMOTEDRIVER 0x00000400
+#endif
+#ifndef MS_REUSEDDEVICEBITMAP
+#define MS_REUSEDDEVICEBITMAP 0x0008
+#endif
 
 #endif /* _WINDDI_ */

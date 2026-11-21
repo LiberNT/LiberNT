@@ -76,4 +76,8 @@ extern "C" {
 }
 #endif
 
+#ifndef TDI_ADDRESS_OPTION_RAW
+#define TDI_ADDRESS_OPTION_RAW 3
+#endif
+
 #endif /* __TDISTAT_H */

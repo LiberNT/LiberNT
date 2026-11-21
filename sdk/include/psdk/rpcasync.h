@@ -189,7 +189,7 @@ RPCRTAPI RPC_STATUS RPC_ENTRY RpcErrorGetNumberOfRecords(RPC_ERROR_ENUM_HANDLE*,
 RPCRTAPI RPC_STATUS RPC_ENTRY RpcErrorSaveErrorInfo(RPC_ERROR_ENUM_HANDLE*,PVOID*,SIZE_T*);
 RPCRTAPI RPC_STATUS RPC_ENTRY RpcErrorLoadErrorInfo(PVOID,SIZE_T,RPC_ERROR_ENUM_HANDLE*);
 RPCRTAPI RPC_STATUS RPC_ENTRY RpcErrorAddRecord(RPC_EXTENDED_ERROR_INFO*);
-RPCRTAPI RPC_STATUS RPC_ENTRY RpcErrorClearInformation(void);
+RPCRTAPI void RPC_ENTRY RpcErrorClearInformation(void);
 RPCRTAPI RPC_STATUS RPC_ENTRY RpcGetAuthorizationContextForClient(RPC_BINDING_HANDLE,BOOL,LPVOID,PLARGE_INTEGER,LUID,DWORD,PVOID,PVOID*);
 RPCRTAPI RPC_STATUS RPC_ENTRY RpcFreeAuthorizationContext(PVOID*);
 RPCRTAPI RPC_STATUS RPC_ENTRY RpcSsContextLockExclusive(RPC_BINDING_HANDLE,PVOID);
@@ -206,5 +206,62 @@ RPCRTAPI int        RPC_ENTRY I_RpcExceptionFilter(ULONG);
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
+
+#ifndef RPC_CALL_ATTRIBUTES_VERSION
+#define RPC_CALL_ATTRIBUTES_VERSION 3
+#endif
+#ifndef RPC_CALL_STATUS_CANCELLED
+#define RPC_CALL_STATUS_CANCELLED 0x01
+#endif
+#ifndef RPC_CALL_STATUS_DISCONNECTED
+#define RPC_CALL_STATUS_DISCONNECTED 0x02
+#endif
+#ifndef RPC_QUERY_CALL_LOCAL_ADDRESS
+#define RPC_QUERY_CALL_LOCAL_ADDRESS 0x08
+#endif
+#ifndef RPC_QUERY_CLIENT_ID
+#define RPC_QUERY_CLIENT_ID 0x80
+#endif
+#ifndef RPC_QUERY_CLIENT_PID
+#define RPC_QUERY_CLIENT_PID 0x10
+#endif
+#ifndef RPC_QUERY_CLIENT_PRINCIPAL_NAME
+#define RPC_QUERY_CLIENT_PRINCIPAL_NAME 0x04
+#endif
+#ifndef RPC_QUERY_IS_CLIENT_LOCAL
+#define RPC_QUERY_IS_CLIENT_LOCAL 0x20
+#endif
+#ifndef RPC_QUERY_NO_AUTH_REQUIRED
+#define RPC_QUERY_NO_AUTH_REQUIRED 0x40
+#endif
+#ifndef RPC_QUERY_SERVER_PRINCIPAL_NAME
+#define RPC_QUERY_SERVER_PRINCIPAL_NAME 0x02
+#endif
+
+typedef enum tagRpcLocalAddressFormat {
+    rlafInvalid = 0,
+    rlafIPv4 = 1,
+    rlafIPv6 = 2
+} RpcLocalAddressFormat;
+
+typedef enum tagRpcCallType {
+    rctInvalid = 0,
+    rctNormal = 1,
+    rctTraining = 2,
+    rctGuaranteed = 3
+} RpcCallType;
+
+typedef enum tagRpcCallClientLocality {
+    rcclInvalid = 0,
+    rcclLocal = 1,
+    rcclRemote = 2,
+    rcclClientUnknownLocality = 3
+} RpcCallClientLocality;
+
+typedef enum _RPC_NOTIFICATIONS {
+    RpcNotificationCallNone = 0,
+    RpcNotificationClientDisconnect = 1,
+    RpcNotificationCallCancel = 2
+} RPC_NOTIFICATIONS;
 
 #endif

@@ -681,7 +681,19 @@ typedef struct _STORAGE_MINIPORT_DESCRIPTOR {
 #endif
 #if (NTDDI_VERSION >= NTDDI_WINBLUE)
   BOOLEAN ExtraIoInfoSupported;
+#if (NTDDI_VERSION >= NTDDI_WIN10_FE)
+  union {
+    _ANONYMOUS_STRUCT struct {
+      UCHAR LogicalPoFxForDisk:1;
+      UCHAR ForwardIo:1;
+      UCHAR Reserved:6;
+    } DUMMYSTRUCTNAME;
+    UCHAR AsUCHAR;
+  } Flags;
+  UCHAR Reserved0[2];
+#else
   UCHAR Reserved0[3];
+#endif
   ULONG Reserved1;
 #endif
 } STORAGE_MINIPORT_DESCRIPTOR, *PSTORAGE_MINIPORT_DESCRIPTOR;
@@ -1363,5 +1375,494 @@ typedef struct _DEVICE_DSM_NVCACHE_CHANGE_PRIORITY_PARAMETERS {
 #ifdef __cplusplus
 }
 #endif
+
+#ifndef CDB_SIZE
+#define CDB_SIZE 16
+#endif
+#ifndef DDUMP_FLAG_DATA_READ_FROM_DEVICE
+#define DDUMP_FLAG_DATA_READ_FROM_DEVICE 0x0001
+#endif
+#ifndef DEVICEDUMP_CAP_RESTRICTED_SECTION
+#define DEVICEDUMP_CAP_RESTRICTED_SECTION 0x00000002
+#endif
+#ifndef DEVICEDUMP_MAX_IDSTRING
+#define DEVICEDUMP_MAX_IDSTRING 32
+#endif
+#ifndef DEVICEDUMP_STRUCTURE_VERSION_V1
+#define DEVICEDUMP_STRUCTURE_VERSION_V1 1
+#endif
+#ifndef DEVICE_DSM_FLAG_REPAIR_INPUT_TOPOLOGY_ID_PRESENT
+#define DEVICE_DSM_FLAG_REPAIR_INPUT_TOPOLOGY_ID_PRESENT 0x40000000
+#endif
+#ifndef DEVICE_DSM_FLAG_REPAIR_OUTPUT_PARITY_EXTENT
+#define DEVICE_DSM_FLAG_REPAIR_OUTPUT_PARITY_EXTENT 0x20000000
+#endif
+#ifndef DEVICE_DSM_FLAG_SCRUB_OUTPUT_PARITY_EXTENT
+#define DEVICE_DSM_FLAG_SCRUB_OUTPUT_PARITY_EXTENT 0x20000000
+#endif
+#ifndef DEVICE_DSM_FLAG_SCRUB_SKIP_IN_SYNC
+#define DEVICE_DSM_FLAG_SCRUB_SKIP_IN_SYNC 0x10000000
+#endif
+#ifndef DEVICE_DSM_FLAG_TRIM_BYPASS_RZAT
+#define DEVICE_DSM_FLAG_TRIM_BYPASS_RZAT 0x40000000
+#endif
+#ifndef DEVICE_DSM_PHYSICAL_ADDRESSES_OUTPUT_V1
+#define DEVICE_DSM_PHYSICAL_ADDRESSES_OUTPUT_V1 1
+#endif
+#ifndef DEVICE_DSM_RANGE_ERROR_OUTPUT_V1
+#define DEVICE_DSM_RANGE_ERROR_OUTPUT_V1 1
+#endif
+#ifndef ERROR_HISTORY_DIRECTORY_ENTRY_DEFAULT_COUNT
+#define ERROR_HISTORY_DIRECTORY_ENTRY_DEFAULT_COUNT 8
+#endif
+#ifndef FW_ISSUEID_NO_ISSUE
+#define FW_ISSUEID_NO_ISSUE 0x00000000
+#endif
+#ifndef FW_ISSUEID_UNKNOWN
+#define FW_ISSUEID_UNKNOWN 0xFFFFFFFF
+#endif
+#ifndef MAX_FW_BUCKET_ID_LENGTH
+#define MAX_FW_BUCKET_ID_LENGTH 132
+#endif
+#ifndef STORAGE_ADAPTER_SERIAL_NUMBER_V1_MAX_LENGTH
+#define STORAGE_ADAPTER_SERIAL_NUMBER_V1_MAX_LENGTH 128
+#endif
+#ifndef STORAGE_ATTRIBUTE_ASYNC_EVENT_NOTIFICATION
+#define STORAGE_ATTRIBUTE_ASYNC_EVENT_NOTIFICATION 0x10
+#endif
+#ifndef STORAGE_ATTRIBUTE_BLOCK_IO
+#define STORAGE_ATTRIBUTE_BLOCK_IO 0x02
+#endif
+#ifndef STORAGE_ATTRIBUTE_BYTE_ADDRESSABLE_IO
+#define STORAGE_ATTRIBUTE_BYTE_ADDRESSABLE_IO 0x01
+#endif
+#ifndef STORAGE_ATTRIBUTE_DYNAMIC_PERSISTENCE
+#define STORAGE_ATTRIBUTE_DYNAMIC_PERSISTENCE 0x04
+#endif
+#ifndef STORAGE_ATTRIBUTE_PERF_SIZE_INDEPENDENT
+#define STORAGE_ATTRIBUTE_PERF_SIZE_INDEPENDENT 0x20
+#endif
+#ifndef STORAGE_ATTRIBUTE_VOLATILE
+#define STORAGE_ATTRIBUTE_VOLATILE 0x08
+#endif
+#ifndef STORAGE_COMPONENT_ROLE_CACHE
+#define STORAGE_COMPONENT_ROLE_CACHE 0x00000001
+#endif
+#ifndef STORAGE_COMPONENT_ROLE_TIERING
+#define STORAGE_COMPONENT_ROLE_TIERING 0x00000002
+#endif
+#ifndef STORAGE_CRYPTO_CAPABILITY_VERSION_1
+#define STORAGE_CRYPTO_CAPABILITY_VERSION_1 1
+#endif
+#ifndef STORAGE_CRYPTO_CAPABILITY_VERSION_2
+#define STORAGE_CRYPTO_CAPABILITY_VERSION_2 2
+#endif
+#ifndef STORAGE_CRYPTO_DESCRIPTOR_VERSION_1
+#define STORAGE_CRYPTO_DESCRIPTOR_VERSION_1 1
+#endif
+#ifndef STORAGE_CRYPTO_DESCRIPTOR_VERSION_2
+#define STORAGE_CRYPTO_DESCRIPTOR_VERSION_2 2
+#endif
+#ifndef STORAGE_DEVICE_FLAGS_PAGE_83_DEVICEGUID
+#define STORAGE_DEVICE_FLAGS_PAGE_83_DEVICEGUID 0x4
+#endif
+#ifndef STORAGE_DEVICE_FLAGS_RANDOM_DEVICEGUID_REASON_CONFLICT
+#define STORAGE_DEVICE_FLAGS_RANDOM_DEVICEGUID_REASON_CONFLICT 0x1
+#endif
+#ifndef STORAGE_DEVICE_FLAGS_RANDOM_DEVICEGUID_REASON_NOHWID
+#define STORAGE_DEVICE_FLAGS_RANDOM_DEVICEGUID_REASON_NOHWID 0x2
+#endif
+#ifndef STORAGE_DEVICE_MAX_OPERATIONAL_STATUS
+#define STORAGE_DEVICE_MAX_OPERATIONAL_STATUS 16
+#endif
+#ifndef STORAGE_DEVICE_POWER_CAP_VERSION_V1
+#define STORAGE_DEVICE_POWER_CAP_VERSION_V1 1
+#endif
+#ifndef STORAGE_DIAGNOSTIC_FLAG_ADAPTER_REQUEST
+#define STORAGE_DIAGNOSTIC_FLAG_ADAPTER_REQUEST 0x00000001
+#endif
+#ifndef STORAGE_FEATURE_SUPPORT_V1
+#define STORAGE_FEATURE_SUPPORT_V1 0x1
+#endif
+#ifndef STORAGE_HW_BOOT_PARTITION_ACTIVATE_STRUCTURE_VERSION
+#define STORAGE_HW_BOOT_PARTITION_ACTIVATE_STRUCTURE_VERSION 0x01
+#endif
+#ifndef STORAGE_HW_BOOT_PARTITION_DOWNLOAD_STRUCTURE_VERSION
+#define STORAGE_HW_BOOT_PARTITION_DOWNLOAD_STRUCTURE_VERSION 0x01
+#endif
+#ifndef STORAGE_HW_BOOT_PARTITION_INFO_STRUCTURE_VERSION_V1
+#define STORAGE_HW_BOOT_PARTITION_INFO_STRUCTURE_VERSION_V1 0x01
+#endif
+#ifndef STORAGE_HW_BOOT_PARTITION_REQUEST_ACTIVATE_EXISTING_BOOT_PARTITION
+#define STORAGE_HW_BOOT_PARTITION_REQUEST_ACTIVATE_EXISTING_BOOT_PARTITION 0x80000000
+#endif
+#ifndef STORAGE_HW_BOOT_PARTITION_REQUEST_FLAG_CONTROLLER
+#define STORAGE_HW_BOOT_PARTITION_REQUEST_FLAG_CONTROLLER 0x00000001
+#endif
+#ifndef STORAGE_HW_BOOT_PARTITION_REQUEST_REPLACE_EXISTING_BOOT_PARTITION
+#define STORAGE_HW_BOOT_PARTITION_REQUEST_REPLACE_EXISTING_BOOT_PARTITION 0x40000000
+#endif
+#ifndef STORAGE_HW_CRYPTO_CAPABILITY_VERSION_1
+#define STORAGE_HW_CRYPTO_CAPABILITY_VERSION_1 1
+#endif
+#ifndef STORAGE_HW_CRYPTO_DESCRIPTOR_VERSION_1
+#define STORAGE_HW_CRYPTO_DESCRIPTOR_VERSION_1 1
+#endif
+#ifndef STORAGE_HW_FIRMWARE_REQUEST_FLAG_REPLACE_AND_SWITCH_UPON_RESET
+#define STORAGE_HW_FIRMWARE_REQUEST_FLAG_REPLACE_AND_SWITCH_UPON_RESET 0x20000000
+#endif
+#ifndef STORAGE_HW_FIRMWARE_REQUEST_FLAG_REPLACE_EXISTING_IMAGE
+#define STORAGE_HW_FIRMWARE_REQUEST_FLAG_REPLACE_EXISTING_IMAGE 0x40000000
+#endif
+#ifndef STORAGE_HW_FIRMWARE_REQUEST_FLAG_SWITCH_TO_FIRMWARE_WITHOUT_RESET
+#define STORAGE_HW_FIRMWARE_REQUEST_FLAG_SWITCH_TO_FIRMWARE_WITHOUT_RESET 0x10000000
+#endif
+#ifndef STORAGE_PROTOCOL_COMMAND_FLAG_ADAPTER_REQUEST
+#define STORAGE_PROTOCOL_COMMAND_FLAG_ADAPTER_REQUEST 0x80000000
+#endif
+#ifndef STORAGE_PROTOCOL_COMMAND_LENGTH_NVME
+#define STORAGE_PROTOCOL_COMMAND_LENGTH_NVME 0x40
+#endif
+#ifndef STORAGE_PROTOCOL_DATA_DESCRIPTOR_EXT_VERSION
+#define STORAGE_PROTOCOL_DATA_DESCRIPTOR_EXT_VERSION 1
+#endif
+#ifndef STORAGE_PROTOCOL_SPECIFIC_NVME_ADMIN_COMMAND
+#define STORAGE_PROTOCOL_SPECIFIC_NVME_ADMIN_COMMAND 0x01
+#endif
+#ifndef STORAGE_PROTOCOL_SPECIFIC_NVME_NVM_COMMAND
+#define STORAGE_PROTOCOL_SPECIFIC_NVME_NVM_COMMAND 0x02
+#endif
+#ifndef STORAGE_PROTOCOL_STATUS_BUSY
+#define STORAGE_PROTOCOL_STATUS_BUSY 0x5
+#endif
+#ifndef STORAGE_PROTOCOL_STATUS_DATA_OVERRUN
+#define STORAGE_PROTOCOL_STATUS_DATA_OVERRUN 0x6
+#endif
+#ifndef STORAGE_PROTOCOL_STATUS_ERROR
+#define STORAGE_PROTOCOL_STATUS_ERROR 0x2
+#endif
+#ifndef STORAGE_PROTOCOL_STATUS_INSUFFICIENT_RESOURCES
+#define STORAGE_PROTOCOL_STATUS_INSUFFICIENT_RESOURCES 0x7
+#endif
+#ifndef STORAGE_PROTOCOL_STATUS_INVALID_REQUEST
+#define STORAGE_PROTOCOL_STATUS_INVALID_REQUEST 0x3
+#endif
+#ifndef STORAGE_PROTOCOL_STATUS_NOT_SUPPORTED
+#define STORAGE_PROTOCOL_STATUS_NOT_SUPPORTED 0xFF
+#endif
+#ifndef STORAGE_PROTOCOL_STATUS_NO_DEVICE
+#define STORAGE_PROTOCOL_STATUS_NO_DEVICE 0x4
+#endif
+#ifndef STORAGE_PROTOCOL_STATUS_PENDING
+#define STORAGE_PROTOCOL_STATUS_PENDING 0x0
+#endif
+#ifndef STORAGE_PROTOCOL_STATUS_SUCCESS
+#define STORAGE_PROTOCOL_STATUS_SUCCESS 0x1
+#endif
+#ifndef STORAGE_PROTOCOL_STATUS_THROTTLED_REQUEST
+#define STORAGE_PROTOCOL_STATUS_THROTTLED_REQUEST 0x8
+#endif
+#ifndef STORAGE_PROTOCOL_STRUCTURE_VERSION
+#define STORAGE_PROTOCOL_STRUCTURE_VERSION 0x1
+#endif
+#ifndef STORAGE_RPMB_DESCRIPTOR_VERSION_1
+#define STORAGE_RPMB_DESCRIPTOR_VERSION_1 1
+#endif
+#ifndef STORAGE_RPMB_MINIMUM_RELIABLE_WRITE_SIZE
+#define STORAGE_RPMB_MINIMUM_RELIABLE_WRITE_SIZE 512
+#endif
+#ifndef STORAGE_SUPPORTED_FEATURES_BYPASS_IO
+#define STORAGE_SUPPORTED_FEATURES_BYPASS_IO 0x00000001
+#endif
+#ifndef STORAGE_TIER_DESCRIPTION_LENGTH
+#define STORAGE_TIER_DESCRIPTION_LENGTH 512
+#endif
+#ifndef STORAGE_TIER_FLAG_NO_SEEK_PENALTY
+#define STORAGE_TIER_FLAG_NO_SEEK_PENALTY 0x00020000
+#endif
+#ifndef STORAGE_TIER_FLAG_PARITY
+#define STORAGE_TIER_FLAG_PARITY 0x00800000
+#endif
+#ifndef STORAGE_TIER_FLAG_READ_CACHE
+#define STORAGE_TIER_FLAG_READ_CACHE 0x00400000
+#endif
+#ifndef STORAGE_TIER_FLAG_SMR
+#define STORAGE_TIER_FLAG_SMR 0x01000000
+#endif
+#ifndef STORAGE_TIER_FLAG_WRITE_BACK_CACHE
+#define STORAGE_TIER_FLAG_WRITE_BACK_CACHE 0x00200000
+#endif
+#ifndef STORAGE_TIER_NAME_LENGTH
+#define STORAGE_TIER_NAME_LENGTH 256
+#endif
+#ifndef STORATTRIBUTE_MANAGEMENT_STATE
+#define STORATTRIBUTE_MANAGEMENT_STATE 1
+#endif
+#ifndef STORATTRIBUTE_NONE
+#define STORATTRIBUTE_NONE 0
+#endif
+#ifndef TC_DEVICEDUMP_SUBSECTION_DESC_LENGTH
+#define TC_DEVICEDUMP_SUBSECTION_DESC_LENGTH 16
+#endif
+#ifndef TC_PUBLIC_DEVICEDUMP_CONTENT_GPLOG
+#define TC_PUBLIC_DEVICEDUMP_CONTENT_GPLOG 0x02
+#endif
+#ifndef TC_PUBLIC_DEVICEDUMP_CONTENT_SMART
+#define TC_PUBLIC_DEVICEDUMP_CONTENT_SMART 0x01
+#endif
+#ifndef TELEMETRY_COMMAND_SIZE
+#define TELEMETRY_COMMAND_SIZE 16
+#endif
+
+typedef enum _STORAGE_SET_TYPE {
+    PropertyStandardSet = 0,
+    PropertyExistsSet = 1,
+    PropertySetMaxDefined = 2
+} STORAGE_SET_TYPE, *PSTORAGE_SET_TYPE;
+
+typedef enum _STORAGE_RPMB_FRAME_TYPE {
+    StorageRpmbFrameTypeUnknown = 0,
+    StorageRpmbFrameTypeStandard = 1,
+    StorageRpmbFrameTypeMax = 2
+} STORAGE_RPMB_FRAME_TYPE, *PSTORAGE_RPMB_FRAME_TYPE;
+
+typedef enum _STORAGE_ICE_TYPE {
+    StorageIceTypeUnknown = 0,
+    StorageIceTypeUfs = 1,
+    StorageIceTypeNvme = 2
+} STORAGE_ICE_TYPE, *PSTORAGE_ICE_TYPE;
+
+typedef enum _STORAGE_TIER_MEDIA_TYPE {
+    StorageTierMediaTypeUnspecified = 0,
+    StorageTierMediaTypeDisk = 1,
+    StorageTierMediaTypeSsd = 2,
+    StorageTierMediaTypeScm = 4,
+    StorageTierMediaTypeMax = 5
+} STORAGE_TIER_MEDIA_TYPE, *PSTORAGE_TIER_MEDIA_TYPE;
+
+typedef enum _STORAGE_TIER_CLASS {
+    StorageTierClassUnspecified = 0,
+    StorageTierClassCapacity = 1,
+    StorageTierClassPerformance = 2,
+    StorageTierClassMax = 3
+} STORAGE_TIER_CLASS, *PSTORAGE_TIER_CLASS;
+
+typedef enum _STORAGE_PROTOCOL_NVME_DATA_TYPE {
+    NVMeDataTypeUnknown = 0,
+    NVMeDataTypeIdentify = 1,
+    NVMeDataTypeLogPage = 2,
+    NVMeDataTypeFeature = 3,
+    NVMeDataTypeLogPageEx = 4,
+    NVMeDataTypeFeatureEx = 5
+} STORAGE_PROTOCOL_NVME_DATA_TYPE, *PSTORAGE_PROTOCOL_NVME_DATA_TYPE;
+
+typedef enum _STORAGE_PROTOCOL_UFS_DATA_TYPE {
+    UfsDataTypeUnknown = 0,
+    UfsDataTypeQueryDescriptor = 1,
+    UfsDataTypeQueryAttribute = 2,
+    UfsDataTypeQueryFlag = 3,
+    UfsDataTypeQueryDmeAttribute = 4,
+    UfsDataTypeQueryDmePeerAttribute = 5,
+    UfsDataTypeMax = 6
+} STORAGE_PROTOCOL_UFS_DATA_TYPE, *PSTORAGE_PROTOCOL_UFS_DATA_TYPE;
+
+typedef enum _STORAGE_DISK_HEALTH_STATUS {
+    DiskHealthUnknown = 0,
+    DiskHealthUnhealthy = 1,
+    DiskHealthWarning = 2,
+    DiskHealthHealthy = 3,
+    DiskHealthMax = 4
+} STORAGE_DISK_HEALTH_STATUS, *PSTORAGE_DISK_HEALTH_STATUS;
+
+typedef enum _STORAGE_DISK_OPERATIONAL_STATUS {
+    DiskOpStatusNone = 0,
+    DiskOpStatusUnknown = 1,
+    DiskOpStatusOk = 2,
+    DiskOpStatusPredictingFailure = 3,
+    DiskOpStatusInService = 4,
+    DiskOpStatusHardwareError = 5,
+    DiskOpStatusNotUsable = 6,
+    DiskOpStatusTransientError = 7,
+    DiskOpStatusMissing = 8
+} STORAGE_DISK_OPERATIONAL_STATUS, *PSTORAGE_DISK_OPERATIONAL_STATUS;
+
+typedef enum _STORAGE_OPERATIONAL_STATUS_REASON {
+    DiskOpReasonUnknown = 0,
+    DiskOpReasonScsiSenseCode = 1,
+    DiskOpReasonMedia = 2,
+    DiskOpReasonIo = 3,
+    DiskOpReasonThresholdExceeded = 4,
+    DiskOpReasonLostData = 5,
+    DiskOpReasonEnergySource = 6,
+    DiskOpReasonConfiguration = 7,
+    DiskOpReasonDeviceController = 8,
+    DiskOpReasonMediaController = 9,
+    DiskOpReasonComponent = 10,
+    DiskOpReasonNVDIMM_N = 11,
+    DiskOpReasonBackgroundOperation = 12,
+    DiskOpReasonInvalidFirmware = 13,
+    DiskOpReasonHealthCheck = 14,
+    DiskOpReasonLostDataPersistence = 15,
+    DiskOpReasonDisabledByPlatform = 16,
+    DiskOpReasonLostWritePersistence = 17,
+    DiskOpReasonDataPersistenceLossImminent = 18,
+    DiskOpReasonWritePersistenceLossImminent = 19,
+    DiskOpReasonMax = 20
+} STORAGE_OPERATIONAL_STATUS_REASON, *PSTORAGE_OPERATIONAL_STATUS_REASON;
+
+typedef enum _STORAGE_ZONED_DEVICE_TYPES {
+    ZonedDeviceTypeUnknown = 0,
+    ZonedDeviceTypeHostManaged = 1,
+    ZonedDeviceTypeHostAware = 2,
+    ZonedDeviceTypeDeviceManaged = 3
+} STORAGE_ZONED_DEVICE_TYPES, *PSTORAGE_ZONED_DEVICE_TYPES;
+
+typedef enum _STORAGE_ZONE_TYPES {
+    ZoneTypeUnknown = 0,
+    ZoneTypeConventional = 1,
+    ZoneTypeSequentialWriteRequired = 2,
+    ZoneTypeSequentialWritePreferred = 3,
+    ZoneTypeMax = 4
+} STORAGE_ZONE_TYPES, *PSTORAGE_ZONE_TYPES;
+
+typedef enum _STORAGE_STACK_TYPE {
+    StorageStackTypeUnknown = 0,
+    StorageStackTypeScsi = 1,
+    StorageStackTypeNVMe = 2
+} STORAGE_STACK_TYPE, *PSTORAGE_STACK_TYPE;
+
+typedef enum _STORAGE_ENCRYPTION_TYPE {
+    StorageEncryptionTypeUnknown = 0,
+    StorageEncryptionTypeEDrive = 1,
+    StorageEncryptionTypeTcgOpal = 2
+} STORAGE_ENCRYPTION_TYPE, *PSTORAGE_ENCRYPTION_TYPE;
+
+typedef enum _STORAGE_ZONES_ATTRIBUTES {
+    ZonesAttributeTypeAndLengthMayDifferent = 0,
+    ZonesAttributeTypeSameLengthSame = 1,
+    ZonesAttributeTypeSameLastZoneLengthDifferent = 2,
+    ZonesAttributeTypeMayDifferentLengthSame = 3
+} STORAGE_ZONES_ATTRIBUTES, *PSTORAGE_ZONES_ATTRIBUTES;
+
+typedef enum _STORAGE_ZONE_CONDITION {
+    ZoneConditionConventional = 0,
+    ZoneConditionEmpty = 1,
+    ZoneConditionImplicitlyOpened = 2,
+    ZoneConditionExplicitlyOpened = 3,
+    ZoneConditionClosed = 4,
+    ZoneConditionReadOnly = 13,
+    ZoneConditionFull = 14,
+    ZoneConditionOffline = 15
+} STORAGE_ZONE_CONDITION, *PSTORAGE_ZONE_CONDITION;
+
+typedef enum _STORAGE_DIAGNOSTIC_LEVEL {
+    StorageDiagnosticLevelDefault = 0,
+    StorageDiagnosticLevelMax = 1
+} STORAGE_DIAGNOSTIC_LEVEL, *PSTORAGE_DIAGNOSTIC_LEVEL;
+
+typedef enum _STORAGE_DIAGNOSTIC_TARGET_TYPE {
+    StorageDiagnosticTargetTypeUndefined = 0,
+    StorageDiagnosticTargetTypePort = 1,
+    StorageDiagnosticTargetTypeMiniport = 2,
+    StorageDiagnosticTargetTypeHbaFirmware = 3,
+    StorageDiagnosticTargetTypeMax = 4
+} STORAGE_DIAGNOSTIC_TARGET_TYPE, *PSTORAGE_DIAGNOSTIC_TARGET_TYPE;
+
+typedef enum _DEVICE_INTERNAL_STATUS_DATA_REQUEST_TYPE {
+    DeviceInternalStatusDataRequestTypeUndefined = 0,
+    DeviceCurrentInternalStatusDataHeader = 1,
+    DeviceCurrentInternalStatusData = 2,
+    DeviceSavedInternalStatusDataHeader = 3,
+    DeviceSavedInternalStatusData = 4
+} DEVICE_INTERNAL_STATUS_DATA_REQUEST_TYPE, *PDEVICE_INTERNAL_STATUS_DATA_REQUEST_TYPE;
+
+typedef enum _DEVICE_INTERNAL_STATUS_DATA_SET {
+    DeviceStatusDataSetUndefined = 0,
+    DeviceStatusDataSet1 = 1,
+    DeviceStatusDataSet2 = 2,
+    DeviceStatusDataSet3 = 3,
+    DeviceStatusDataSet4 = 4,
+    DeviceStatusDataSetMax = 5
+} DEVICE_INTERNAL_STATUS_DATA_SET, *PDEVICE_INTERNAL_STATUS_DATA_SET;
+
+typedef enum _STORAGE_SANITIZE_METHOD {
+    StorageSanitizeMethodDefault = 0,
+    StorageSanitizeMethodBlockErase = 1,
+    StorageSanitizeMethodCryptoErase = 2
+} STORAGE_SANITIZE_METHOD, *PSTORAGE_SANITIZE_METHOD;
+
+typedef enum _DEVICEDUMP_COLLECTION_TYPE {
+    TCCollectionBugCheck = 1,
+    TCCollectionApplicationRequested = 2,
+    TCCollectionDeviceRequested = 3
+} DEVICEDUMP_COLLECTION_TYPEIDE_NOTIFICATION_TYPE, *PDEVICEDUMP_COLLECTION_TYPE;
+
+typedef enum _STORAGE_DEVICE_POWER_CAP_UNITS {
+    StorageDevicePowerCapUnitsPercent = 0,
+    StorageDevicePowerCapUnitsMilliwatts = 1
+} STORAGE_DEVICE_POWER_CAP_UNITS, *PSTORAGE_DEVICE_POWER_CAP_UNITS;
+
+typedef enum _STORAGE_RPMB_COMMAND_TYPE {
+    StorRpmbProgramAuthKey = 1,
+    StorRpmbQueryWriteCounter = 2,
+    StorRpmbAuthenticatedWrite = 3,
+    StorRpmbAuthenticatedRead = 4,
+    StorRpmbReadResultRequest = 5,
+    StorRpmbAuthenticatedDeviceConfigWrite = 6,
+    StorRpmbAuthenticatedDeviceConfigRead = 7
+} STORAGE_RPMB_COMMAND_TYPE, *PSTORAGE_RPMB_COMMAND_TYPE;
+
+typedef enum _STORAGE_COUNTER_TYPE {
+    StorageCounterTypeUnknown = 0,
+    StorageCounterTypeTemperatureCelsius = 1,
+    StorageCounterTypeTemperatureCelsiusMax = 2,
+    StorageCounterTypeReadErrorsTotal = 3,
+    StorageCounterTypeReadErrorsCorrected = 4,
+    StorageCounterTypeReadErrorsUncorrected = 5,
+    StorageCounterTypeWriteErrorsTotal = 6,
+    StorageCounterTypeWriteErrorsCorrected = 7,
+    StorageCounterTypeWriteErrorsUncorrected = 8,
+    StorageCounterTypeManufactureDate = 9,
+    StorageCounterTypeStartStopCycleCount = 10,
+    StorageCounterTypeStartStopCycleCountMax = 11,
+    StorageCounterTypeLoadUnloadCycleCount = 12,
+    StorageCounterTypeLoadUnloadCycleCountMax = 13,
+    StorageCounterTypeWearPercentage = 14,
+    StorageCounterTypeWearPercentageWarning = 15,
+    StorageCounterTypeWearPercentageMax = 16,
+    StorageCounterTypePowerOnHours = 17,
+    StorageCounterTypeReadLatency100NSMax = 18,
+    StorageCounterTypeWriteLatency100NSMax = 19,
+    StorageCounterTypeFlushLatency100NSMax = 20,
+    StorageCounterTypeMax = 21
+} STORAGE_COUNTER_TYPE, *PSTORAGE_COUNTER_TYPE;
+
+typedef enum _STORAGE_ATTRIBUTE_MGMT_ACTION {
+    StorAttributeMgmt_ClearAttribute = 0,
+    StorAttributeMgmt_SetAttribute = 1,
+    StorAttributeMgmt_ResetAttribute = 2
+} STORAGE_ATTRIBUTE_MGMT_ACTION, *PSTORAGE_ATTRIBUTE_MGMT_ACTION;
+
+typedef enum _BPIO_OPERATIONS {
+    BPIO_OP_ENABLE = 1,
+    BPIO_OP_DISABLE = 2,
+    BPIO_OP_QUERY = 3
+} BPIO_OPERATIONS;
+
+typedef enum _BPIO_INFLAGS {
+    BPIO_INFL_NONE = 0
+} BPIO_INFLAGS;
+
+typedef enum _BPIO_OUTFLAGS {
+    BPIO_OUTFL_NONE = 0
+} BPIO_OUTFLAGS;
+
+typedef ULONG DEVICE_DSM_ACTION;
+typedef struct _DEVICE_DATA_SET_RANGE DEVICE_DSM_RANGE;
+typedef struct _DEVICE_DATA_SET_RANGE * PDEVICE_DSM_RANGE;
+typedef struct _DEVICE_MANAGE_DATA_SET_ATTRIBUTES DEVICE_DSM_INPUT;
+typedef struct _DEVICE_MANAGE_DATA_SET_ATTRIBUTES * PDEVICE_DSM_INPUT;
+typedef struct _DEVICE_MANAGE_DATA_SET_ATTRIBUTES_OUTPUT DEVICE_DSM_OUTPUT;
+typedef struct _DEVICE_MANAGE_DATA_SET_ATTRIBUTES_OUTPUT * PDEVICE_DSM_OUTPUT;
 
 #endif /* _NTDDSTOR_H_ */

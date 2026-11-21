@@ -241,4 +241,22 @@ PSSTDAPI StgDeserializePropVariant(const SERIALIZEDPROPERTYVALUE *pprop, ULONG c
 }
 #endif
 
+typedef enum DRAWPROGRESSFLAGS {
+    DPF_NONE = 0,
+    DPF_MARQUEE = 1,
+    DPF_MARQUEE_COMPLETE = 2,
+    DPF_ERROR = 4,
+    DPF_WARNING = 8,
+    DPF_STOPPED = 16
+} DRAWPROGRESSFLAGS;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+HRESULT WINAPI InitVariantFromResource(HINSTANCE hinst, UINT id, VARIANT * pvar);
+int WINAPI VariantCompare(const VARIANT *const var1, const VARIANT *const var2);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* __WINE_PROPVARUTIL_H */

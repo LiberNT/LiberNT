@@ -180,4 +180,22 @@ CRYPTCATSTORE     * WINAPI CryptCATStoreFromHandle(HANDLE);
 }
 #endif
 
+#ifndef CRYPTCAT_ADDCATALOG_HARDLINK
+#define CRYPTCAT_ADDCATALOG_HARDLINK 0x00000001
+#endif
+#ifndef CRYPTCAT_ADDCATALOG_NONE
+#define CRYPTCAT_ADDCATALOG_NONE 0x00000000
+#endif
+#ifndef CRYPTCAT_MAX_MEMBERTAG
+#define CRYPTCAT_MAX_MEMBERTAG 128
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+BOOL WINAPI IsCatalogFile(HANDLE hFile, WCHAR * pwszFileName);
+#ifdef __cplusplus
+}
+#endif
+
 #endif

@@ -104,9 +104,11 @@ typedef struct _LIGATURE ## i { \
     PVSC_VK pVSCtoVK_E0;
     PVSC_VK pVSCtoVK_E1;
     DWORD fLocaleFlags;
-    BYTE nLgMaxd;
+    BYTE nLgMax;
     BYTE cbLgEntry;
     PLIGATURE1 pLigature;
+    DWORD dwType;
+    DWORD dwSubType;
   } KBDTABLES, *PKBDTABLES;
 
 /* Constants that help table decoding */

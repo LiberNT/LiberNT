@@ -648,9 +648,6 @@ typedef struct _KPROCESSOR_STATE
     CONTEXT ContextFrame;
 } KPROCESSOR_STATE, *PKPROCESSOR_STATE;
 
-#if (NTDDI_VERSION < NTDDI_LONGHORN)
-#define GENERAL_LOOKASIDE_POOL PP_LOOKASIDE_LIST
-#endif
 
 typedef struct _KREQUEST_PACKET
 {
@@ -671,37 +668,25 @@ typedef struct _REQUEST_MAILBOX
 typedef struct _KPRCB
 {
     ULONG MxCsr;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     UCHAR LegacyNumber;
     UCHAR ReservedMustBeZero;
-#else
-    UCHAR Number;
-    UCHAR NestingLevel;
-#endif
     UCHAR InterruptRequest;
     UCHAR IdleHalt;
     struct _KTHREAD *CurrentThread;
     struct _KTHREAD *NextThread;
     struct _KTHREAD *IdleThread;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     UCHAR NestingLevel;
     UCHAR ClockOwner;
     UCHAR PendingTickFlags;
     UCHAR IdleState;
     ULONG Number;
-#else
-    UINT64 UserRsp;
-#endif
     UINT64 RspBase;
     UINT64 PrcbLock;
-#if (NTDDI_VERSION >= NTDDI_VISTA)
     PCHAR PriorityState;
-#endif
     UINT64 SetMember;
     KPROCESSOR_STATE ProcessorState;
     CHAR CpuType;
     CHAR CpuID;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     union
     {
         USHORT CpuStep;
@@ -711,37 +696,20 @@ typedef struct _KPRCB
             UCHAR CpuModel;
         };
     };
-#else
-    USHORT CpuStep;
-#endif
     ULONG MHz;
     UINT64 HalReserved[8];
     USHORT MinorVersion;
     USHORT MajorVersion;
     UCHAR BuildType;
     UCHAR CpuVendor;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     UCHAR CoresPerPhysicalProcessor;
     UCHAR LogicalProcessorsPerCore;
-#else
-    UCHAR InitialApicId;
-    UCHAR LogicalProcessorsPerPhysicalProcessor;
-#endif
     ULONG ApicMask;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     ULONG CFlushSize;
-#else
-    UCHAR CFlushSize;
-    UCHAR PrcbPad0x[3];
-#endif
     PVOID AcpiReserved;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     ULONG InitialApicId;
     ULONG Stride;
     UINT64 PrcbPad01[3];
-#else
-    UINT64 PrcbPad00[4];
-#endif
     KSPIN_LOCK_QUEUE LockQueue[LockQueueMaximumLock]; // 2003: 33, vista:49
     PP_LOOKASIDE_LIST PPLookasideList[16];
     GENERAL_LOOKASIDE_POOL PPNPagedLookasideList[NUMBER_POOL_LOOKASIDE_LISTS];
@@ -751,21 +719,13 @@ typedef struct _KPRCB
     volatile LONG MmPageFaultCount;
     volatile LONG MmCopyOnWriteCount;
     volatile LONG MmTransitionCount;
-#if (NTDDI_VERSION < NTDDI_LONGHORN)
-    volatile LONG MmCacheTransitionCount;
-#endif
     volatile LONG MmDemandZeroCount;
     volatile LONG MmPageReadCount;
     volatile LONG MmPageReadIoCount;
-#if (NTDDI_VERSION < NTDDI_LONGHORN)
-    volatile LONG MmCacheReadCount;
-    volatile LONG MmCacheIoCount;
-#endif
     volatile LONG MmDirtyPagesWriteCount;
     volatile LONG MmDirtyWriteIoCount;
     volatile LONG MmMappedPagesWriteCount;
     volatile LONG MmMappedWriteIoCount;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     ULONG KeSystemCalls;
     ULONG KeContextSwitches;
     ULONG CcFastReadNoWait;
@@ -775,20 +735,12 @@ typedef struct _KPRCB
     ULONG CcCopyReadWait;
     ULONG CcCopyReadNoWaitMiss;
     LONG LookasideIrpFloat;
-#else
-    LONG LookasideIrpFloat;
-    ULONG KeSystemCalls;
-#endif
     volatile LONG IoReadOperationCount;
     volatile LONG IoWriteOperationCount;
     volatile LONG IoOtherOperationCount;
     LARGE_INTEGER IoReadTransferCount;
     LARGE_INTEGER IoWriteTransferCount;
     LARGE_INTEGER IoOtherTransferCount;
-#if (NTDDI_VERSION < NTDDI_LONGHORN)
-    ULONG KeContextSwitches;
-    UCHAR PrcbPad2[12];
-#endif
     volatile UINT64 TargetSet;
     volatile ULONG IpiFrozen;
     UCHAR PrcbPad3[116];
@@ -797,11 +749,7 @@ typedef struct _KPRCB
     UCHAR PrcbPad4[120];
     KDPC_DATA DpcData[2];
     PVOID DpcStack;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     PVOID SparePtr0;
-#else
-    PVOID SavedRsp;
-#endif
     LONG MaximumDpcQueueDepth;
     ULONG DpcRequestRate;
     ULONG MinimumDpcRate;
@@ -819,18 +767,10 @@ typedef struct _KPRCB
     UCHAR PrcbPad50;
     UCHAR IdleSchedule;
     LONG DpcSetEventRequest;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     ULONG KeExceptionDispatchCount;
-#else
-    LONG PrcbPad40;
-    PVOID DpcThread;
-#endif
     KEVENT DpcEvent;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     PVOID PrcbPad51;
-#endif
     KDPC CallDpc;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     LONG ClockKeepAlive;
     UCHAR ClockCheckSlot;
     UCHAR ClockPollCycle;
@@ -838,18 +778,11 @@ typedef struct _KPRCB
     LONG DpcWatchdogPeriod;
     LONG DpcWatchdogCount;
     UINT64 PrcbPad70[2];
-#else
-    UINT64 PrcbPad7[4];
-#endif
     LIST_ENTRY WaitListHead;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     UINT64 WaitLock;
-#endif
     ULONG ReadySummary;
     ULONG QueueIndex;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     UINT64 PrcbPad71[12];
-#endif
     LIST_ENTRY DispatcherReadyListHead[32];
     ULONG InterruptCount;
     ULONG KernelTime;
@@ -860,29 +793,22 @@ typedef struct _KPRCB
     UCHAR SkipTick;
     UCHAR DebuggerSavedIRQL;
     UCHAR PollSlot;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     UCHAR PrcbPad80[5];
     ULONG DpcTimeCount;
     ULONG DpcTimeLimit;
     ULONG PeriodicCount;
     ULONG PeriodicBias;
     UINT64 PrcbPad81[2];
-#else
-    UCHAR PrcbPad8[13];
-#endif
     struct _KNODE *ParentNode;
     UINT64 MultiThreadProcessorSet;
     struct _KPRCB *MultiThreadSetMaster;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     UINT64 StartCycles;
     LONG MmSpinLockOrdering;
     ULONG PageColor;
     ULONG NodeColor;
     ULONG NodeShiftedColor;
     ULONG SecondaryColorMask;
-#endif
     LONG Sleeping;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     UINT64 CycleTime;
     ULONG CcFastMdlReadNoWait;
     ULONG CcFastMdlReadWait;
@@ -918,7 +844,6 @@ typedef struct _KPRCB
     ULONG KeAlignmentFixupCount;
     UCHAR VendorString[13];
     UCHAR PrcbPad10[3];
-#if (NTDDI_VERSION >= NTDDI_WINBLUE)
     // Win 8.1+ widened FeatureBits to 64 bits; expose a high-dword accessor
     // (FeatureBitsHigh) for ReactOS code that still composes it from halves.
     union
@@ -930,9 +855,6 @@ typedef struct _KPRCB
             ULONG FeatureBitsHigh;
         };
     };
-#else
-    ULONG FeatureBits;
-#endif
     LARGE_INTEGER UpdateSignature;
     KDPC DpcWatchdogDpc;
     KTIMER DpcWatchdogTimer;
@@ -952,40 +874,7 @@ typedef struct _KPRCB
     UINT64 CacheProcessorMask[5];
     UINT64 PackageProcessorSet;
     UINT64 CoreProcessorSet;
-#else
-    ULONG PrcbPad90[1];
-    ULONG DebugDpcTime;
-    ULONG PageColor;
-    ULONG NodeColor;
-    ULONG NodeShiftedColor;
-    ULONG SecondaryColorMask;
-    UCHAR PrcbPad9[12];
-    ULONG CcFastReadNoWait;
-    ULONG CcFastReadWait;
-    ULONG CcFastReadNotPossible;
-    ULONG CcCopyReadNoWait;
-    ULONG CcCopyReadWait;
-    ULONG CcCopyReadNoWaitMiss;
-    ULONG KeAlignmentFixupCount;
-    ULONG KeDcacheFlushCount;
-    ULONG KeExceptionDispatchCount;
-    ULONG KeFirstLevelTbFills;
-    ULONG KeFloatingEmulationCount;
-    ULONG KeIcacheFlushCount;
-    ULONG KeSecondLevelTbFills;
-    UCHAR VendorString[13];
-    UCHAR PrcbPad10[2];
-    ULONG FeatureBits;
-    LARGE_INTEGER UpdateSignature;
-    PROCESSOR_POWER_STATE PowerState;
-    CACHE_DESCRIPTOR Cache[5];
-    ULONG CacheCount;
-#endif
 #ifdef __REACTOS__
-#if  (NTDDI_VERSION < NTDDI_WINBLUE)
-    // On Win 8.1+ the FeatureBits field is extended to 64 bits
-    ULONG FeatureBitsHigh;
-#endif
     /*
      * Windows dump readers obtain the saved processor context through
      * the OffsetPrcbContext member of KDDEBUGGER_DATA64.
@@ -995,12 +884,10 @@ typedef struct _KPRCB
 } KPRCB, *PKPRCB;
 
 /* TODO: GroupSetMember (0xC8), Group (0xD0) and GroupIndex (0xD1) are missing: this layout departs from Windows 11 at 0x38 */
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
 C_ASSERT(FIELD_OFFSET(KPRCB, LegacyNumber) == 0x004);
 C_ASSERT(FIELD_OFFSET(KPRCB, NestingLevel) == 0x020);
 C_ASSERT(FIELD_OFFSET(KPRCB, Number) == 0x024);
 C_ASSERT(FIELD_OFFSET(KPRCB, RspBase) == 0x028);
-#endif
 
 //
 // Processor Control Region
@@ -1084,11 +971,7 @@ typedef struct _KEXCEPTION_FRAME
     ULONG64 P3Home;
     ULONG64 P4Home;
     ULONG64 P5;
-#if (NTDDI_VERSION >= NTDDI_WIN8)
     ULONG64 InitialStack;                // Win8+ name: Spare1 [ReactOS reuses the freed slot]
-#else
-    ULONG64 InitialStack;
-#endif
     M128A Xmm6;
     M128A Xmm7;
     M128A Xmm8;
@@ -1100,14 +983,9 @@ typedef struct _KEXCEPTION_FRAME
     M128A Xmm14;
     M128A Xmm15;
     ULONG64 TrapFrame;
-#if (NTDDI_VERSION < NTDDI_WIN8)
-    ULONG64 CallbackStack;
-#endif
     ULONG64 OutputBuffer;
     ULONG64 OutputLength;
-#if (NTDDI_VERSION >= NTDDI_WIN8)
     ULONG64 CallbackStack;               // Win8+ name: Spare2 [ReactOS reuses the freed slot]
-#endif
     ULONG64 MxCsr;
     ULONG64 Rbp;
     ULONG64 Rbx;

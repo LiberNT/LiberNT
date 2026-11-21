@@ -4736,4 +4736,11 @@ typedef enum _DEBUG_LEVEL
 
 #pragma warning(pop)
 
+#ifndef DXGK_DISPLAY_CORE_INTERFACE_VERSION_1
+#define DXGK_DISPLAY_CORE_INTERFACE_VERSION_1 0x01
+#endif
+#ifndef DXGK_I2C_INTERFACE_VERSION_2
+#define DXGK_I2C_INTERFACE_VERSION_2 0x02
+#endif
+
 #endif /* _DISPMPRT_H_ */

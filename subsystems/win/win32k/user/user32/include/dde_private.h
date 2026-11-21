@@ -112,7 +112,7 @@ typedef struct tagWDML_XACT {
     UINT			ddeMsg;
     HDDEDATA			hDdeData;
     DWORD			dwTimeout;
-    DWORD			hUser;
+    DWORD_PTR			hUser;
     UINT			wType;
     UINT			wFmt;
     HSZ				hszItem;
@@ -133,7 +133,7 @@ typedef struct tagWDML_CONV
     HWND			hwndClient;	/* source of conversation (ClientConvClass) */
     HWND			hwndServer;	/* destination of conversation (ServerConvClass) */
     WDML_XACT*			transactions;	/* pending transactions */
-    DWORD			hUser;		/* user defined value */
+    DWORD_PTR			hUser;		/* user defined value */
     DWORD			wStatus;	/* same bits as convinfo.wStatus */
     DWORD			wConvst;	/* same values as convinfo.wConvst */
 } WDML_CONV;

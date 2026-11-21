@@ -186,4 +186,12 @@ IPHLPAPI_DLL_LINKAGE DWORD WINAPI ParseNetworkString(const WCHAR *NetworkString,
 }
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+DWORD WINAPI RestoreMediaSense(OVERLAPPED * pOverlapped, LPDWORD lpdwEnableCount);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* WINE_IPHLPAPI_H__ */

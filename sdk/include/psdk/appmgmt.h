@@ -17,7 +17,7 @@ extern "C" {
 
 typedef enum _INSTALLSPECTYPE
 {
-    APPNAME,
+    APPNAME = 1,
     FILEEXT,
     PROGID,
     COMCLASS
@@ -141,5 +141,11 @@ UninstallApplication(
 #ifdef __cplusplus
 } /* extern "C" */
 #endif /* defined(__cplusplus) */
+
+typedef enum APPSTATE {
+    ABSENT = 0,
+    ASSIGNED = 1,
+    PUBLISHED = 2
+} APPSTATE;
 
 #endif /* _APPMGMT_H */

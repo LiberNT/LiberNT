@@ -3406,15 +3406,15 @@ BOOL CTrayIconWnd::SetMainIcon(HKL hKL)
 
 CTrayIconWnd *CTrayIconWnd::GetThis(HWND hWnd)
 {
-    return (CTrayIconWnd *)::GetWindowLongPtr(hWnd, GWL_USERDATA);
+    return (CTrayIconWnd *)::GetWindowLongPtr(hWnd, GWLP_USERDATA);
 }
 
 void CTrayIconWnd::SetThis(HWND hWnd, LPCREATESTRUCT pCS)
 {
     if (pCS)
-        ::SetWindowLongPtr(hWnd, GWL_USERDATA, (LONG_PTR)pCS->lpCreateParams);
+        ::SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)pCS->lpCreateParams);
     else
-        ::SetWindowLongPtr(hWnd, GWL_USERDATA, 0);
+        ::SetWindowLongPtr(hWnd, GWLP_USERDATA, 0);
 }
 
 LRESULT CALLBACK
@@ -3427,7 +3427,7 @@ CTrayIconWnd::_WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             CTrayIconWnd::SetThis(hWnd, (LPCREATESTRUCT)lParam);
             break;
         case WM_DESTROY:
-            ::SetWindowLongPtr(hWnd, GWL_USERDATA, 0);
+            ::SetWindowLongPtr(hWnd, GWLP_USERDATA, 0);
             break;
         case WM_TIMER:
             if (wParam == 100)

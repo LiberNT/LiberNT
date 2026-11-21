@@ -2560,35 +2560,9 @@ typedef struct _SCSI_EXTENDED_MESSAGE {
 
 #define INQUIRYDATABUFFERSIZE 36
 
-#if (NTDDI_VERSION < NTDDI_WINXP)
-typedef struct _INQUIRYDATA {
-  UCHAR DeviceType:5;
-  UCHAR DeviceTypeQualifier:3;
-  UCHAR DeviceTypeModifier:7;
-  UCHAR RemovableMedia:1;
-  UCHAR Versions;
-  UCHAR ResponseDataFormat:4;
-  UCHAR HiSupport:1;
-  UCHAR NormACA:1;
-  UCHAR ReservedBit:1;
-  UCHAR AERC:1;
-  UCHAR AdditionalLength;
-  UCHAR Reserved[2];
-  UCHAR SoftReset:1;
-  UCHAR CommandQueue:1;
-  UCHAR Reserved2:1;
-  UCHAR LinkedCommands:1;
-  UCHAR Synchronous:1;
-  UCHAR Wide16Bit:1;
-  UCHAR Wide32Bit:1;
-  UCHAR RelativeAddressing:1;
-  UCHAR VendorId[8];
-  UCHAR ProductId[16];
-  UCHAR ProductRevisionLevel[4];
-  UCHAR VendorSpecific[20];
-  UCHAR Reserved3[40];
-} INQUIRYDATA, *PINQUIRYDATA;
-#else
+typedef USHORT VERSION_DESCRIPTOR, *PVERSION_DESCRIPTOR;
+
+#pragma pack(push, 1)
 typedef struct _INQUIRYDATA {
   UCHAR DeviceType:5;
   UCHAR DeviceTypeQualifier:3;
@@ -2629,9 +2603,11 @@ typedef struct _INQUIRYDATA {
   UCHAR ProductId[16];
   UCHAR ProductRevisionLevel[4];
   UCHAR VendorSpecific[20];
-  UCHAR Reserved3[40];
+  UCHAR Reserved3[2];
+  VERSION_DESCRIPTOR VersionDescriptors[8];
+  UCHAR Reserved4[30];
 } INQUIRYDATA, *PINQUIRYDATA;
-#endif /* (NTDDI_VERSION < NTDDI_WINXP) */
+#pragma pack(pop)
 
 #endif /* _INQUIRYDATA_DEFINED */
 
@@ -2895,8 +2871,11 @@ typedef struct _PRO_PARAMETER_LIST {
   UCHAR ServiceActionReservationKey[8];
   UCHAR ScopeSpecificAddress[4];
   UCHAR ActivatePersistThroughPowerLoss:1;
-  UCHAR Reserved1:7;
-  UCHAR Reserved2;
+  UCHAR Reserved1:1;
+  UCHAR AllTargetPorts:1;
+  UCHAR SpecifyInitiatorPorts:1;
+  UCHAR Reserved2:4;
+  UCHAR Reserved3;
   UCHAR Obsolete[2];
 } PRO_PARAMETER_LIST, *PPRO_PARAMETER_LIST;
 
@@ -2975,6 +2954,7 @@ typedef union _SENSE_DATA_EX {
   DESCRIPTOR_SENSE_DATA DescriptorData;
 } SENSE_DATA_EX, *PSENSE_DATA_EX;
 
+#pragma pack(push, 1)
 /* Read Capacity Data. Returned in Big Endian format */
 typedef struct _READ_CAPACITY_DATA {
   ULONG LogicalBlockAddress;
@@ -3018,6 +2998,7 @@ typedef struct _LBA_STATUS_LIST_HEADER {
   ULONG Reserved;
   LBA_STATUS_DESCRIPTOR Descriptors[0];
 } LBA_STATUS_LIST_HEADER, *PLBA_STATUS_LIST_HEADER;
+#pragma pack(pop)
 
 #define LBA_STATUS_MAPPED      0x0
 #define LBA_STATUS_DEALLOCATED 0x1
@@ -3460,6 +3441,7 @@ typedef struct _MECHANICAL_STATUS {
 } MECHANICAL_STATUS, *PMECHANICAL_STATUS;
 
 /* Tape definitions */
+#pragma pack(push, 1)
 typedef struct _TAPE_POSITION_DATA {
   UCHAR Reserved1:2;
   UCHAR BlockPositionUnsupported:1;
@@ -3474,6 +3456,7 @@ typedef struct _TAPE_POSITION_DATA {
   UCHAR NumberOfBlocks[3];
   UCHAR NumberOfBytes[4];
 } TAPE_POSITION_DATA, *PTAPE_POSITION_DATA;
+#pragma pack(pop)
 
 #pragma pack(push, 1)
 typedef struct _UNMAP_BLOCK_DESCRIPTOR {
@@ -3651,6 +3634,7 @@ typedef struct _MODE_CONTROL_PAGE {
 
 /* This structure is used to convert little endian ULONGs
    to SCSI CDB big endians values. */
+#pragma pack(push, 1)
 typedef union _EIGHT_BYTE {
   _ANONYMOUS_STRUCT struct {
     UCHAR Byte0;
@@ -3682,6 +3666,7 @@ typedef union _TWO_BYTE {
   } DUMMYSTRUCTNAME;
   USHORT AsUShort;
 } TWO_BYTE, *PTWO_BYTE;
+#pragma pack(pop)
 
 /* Byte reversing macro for converting between
    big- and little-endian formats */

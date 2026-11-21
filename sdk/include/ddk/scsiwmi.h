@@ -31,8 +31,6 @@
 extern "C" {
 #endif
 
-#pragma pack(push,4)
-
 typedef struct _SCSIWMI_REQUEST_CONTEXT {
   PVOID UserContext;
   ULONG BufferSize;
@@ -210,10 +208,12 @@ ScsiPortWmiFireLogicalUnitEvent(
   _In_ ULONG EventDataSize,
   _In_ PVOID EventData);
 
-#pragma pack(pop)
-
 #ifdef __cplusplus
 }
 #endif
 
 #endif /* _SCSIWMI_ */
+
+#ifndef WMIREG_FLAG_CALL_BY_NAME
+#define WMIREG_FLAG_CALL_BY_NAME 0x40000000
+#endif

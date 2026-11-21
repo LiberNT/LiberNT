@@ -88,6 +88,78 @@ typedef struct _SPLCLIENT_INFO_2_V3{
   UINT64 hSplPrinter;
 } SPLCLIENT_INFO_2_LONGHORN;
 
+typedef enum EBranchOfficeJobEventType {
+    kInvalidJobState = 0,
+    kLogJobPrinted = 1,
+    kLogJobRendered = 2,
+    kLogJobError = 3,
+    kLogJobPipelineError = 4,
+    kLogOfflineFileFull = 5
+} EBranchOfficeJobEventType;
+
+typedef struct {
+  DWORD Status;
+  LPWSTR pDocumentName;
+  LPWSTR pUserName;
+  LPWSTR pMachineName;
+  LPWSTR pPrinterName;
+  LPWSTR pPortName;
+  LONGLONG Size;
+  DWORD TotalPages;
+} BranchOfficeJobDataPrinted, *PBranchOfficeJobDataPrinted;
+
+typedef struct {
+  DWORD LastError;
+  LPWSTR pDocumentName;
+  LPWSTR pUserName;
+  LPWSTR pPrinterName;
+  LPWSTR pDataType;
+  LONGLONG TotalSize;
+  LONGLONG PrintedSize;
+  DWORD TotalPages;
+  DWORD PrintedPages;
+  LPWSTR pMachineName;
+  LPWSTR pJobError;
+  LPWSTR pErrorDescription;
+} BranchOfficeJobDataError, *PBranchOfficeJobDataError;
+
+typedef struct {
+  LONGLONG Size;
+  DWORD ICMMethod;
+  short Color;
+  short PrintQuality;
+  short YResolution;
+  short Copies;
+  short TTOption;
+} BranchOfficeJobDataRendered, *PBranchOfficeJobDataRendered;
+
+typedef struct {
+  LPWSTR pDocumentName;
+  LPWSTR pPrinterName;
+  LPWSTR pExtraErrorInfo;
+} BranchOfficeJobDataPipelineFailed, *PBranchOfficeJobDataPipelineFailed;
+
+typedef struct {
+  LPWSTR pMachineName;
+} BranchOfficeLogOfflineFileFull, *PBranchOfficeLogOfflineFileFull;
+
+typedef struct {
+  EBranchOfficeJobEventType eEventType;
+  DWORD JobId;
+  union {
+    BranchOfficeJobDataPrinted LogJobPrinted;
+    BranchOfficeJobDataRendered LogJobRendered;
+    BranchOfficeJobDataError LogJobError;
+    BranchOfficeJobDataPipelineFailed LogPipelineFailed;
+    BranchOfficeLogOfflineFileFull LogOfflineFileFull;
+  } JobInfo;
+} BranchOfficeJobData, *PBranchOfficeJobData;
+
+typedef struct {
+  DWORD cJobDataEntries;
+  BranchOfficeJobData JobData[1];
+} BranchOfficeJobDataContainer, *PBranchOfficeJobDataContainer, *LPBranchOfficeJobDataContainer;
+
 typedef struct _PRINTPROVIDOR {
 
   BOOL
@@ -640,8 +712,29 @@ typedef struct _PRINTPROVIDOR {
     _In_ LPBIDI_REQUEST_CONTAINER pReqData,
     _Outptr_ LPBIDI_RESPONSE_CONTAINER *ppResData);
 
-  BOOL (WINAPI *fpAddDriverCatalog)(HANDLE hPrinter, DWORD dwLevel,
-                                    VOID *pvDriverInfCatInfo, DWORD dwCatalogCopyFlags);
+  BOOL (*fpAddPrinterConnection2)(_In_ LPCWSTR pName, _In_ DWORD dwLevel, _In_ PVOID pInfo);
+  HRESULT (*fpGetPrintClassObject)(_In_ PCWSTR pszPrinterName, _In_ const IID *riid, _Outptr_ VOID **ppv);
+  HRESULT (*fpReportJobProcessingProgress)(_In_ HANDLE hPrinter, _In_ ULONG jobId, _In_ EPrintXPSJobOperation jobOperation, _In_ EPrintXPSJobProgress jobProgress);
+  VOID (*fpEnumAndLogProvidorObjects)(_In_ DWORD dwLevel, _Out_ VOID *pfOut);
+  HRESULT (*fpInternalGetPrinterDriver)(_In_ HANDLE hPrinter, _In_ LPWSTR pEnvironment, _In_ DWORD Level, _Out_writes_bytes_to_opt_(cbBuf, *pcbNeeded) LPBYTE pDriverInfo, _In_ DWORD cbBuf, _Out_ LPDWORD pcbNeeded, _In_ DWORD dwClientMajorVersion, _In_ DWORD dwClientMinorVersion, _Out_ PDWORD pdwServerMajorVersion, _Out_ PDWORD pdwServerMinorVersion);
+  HRESULT (*fpFindCompatibleDriver)(_In_ LPCWSTR pcszPnpId, _In_ LPCWSTR pcszPortName, _Out_writes_(cchManufacturerName) LPWSTR pszManufacturerName, _In_ DWORD cchManufacturerName, _Out_ LPDWORD pcchRequiredManufacturerNameSize, _Out_writes_(cchModelName) LPWSTR pszModelName, _In_ DWORD cchModelName, _Out_ LPDWORD pcchRequiredModelNameSize, _Out_ LPDWORD pdwRank0Matches);
+  HRESULT (*fpInstallPrinterDriverPackageFromConnection)(_In_ LPCWSTR pcszConnectionName);
+  DWORD (*fpGetJobNamedPropertyValue)(_In_ HANDLE hPrinter, _In_ DWORD JobId, _In_ PCWSTR pszName, _Out_ PrintPropertyValue *pValue);
+  DWORD (*fpSetJobNamedProperty)(_In_ HANDLE hPrinter, _In_ DWORD JobId, _In_ const PrintNamedProperty *pProperty);
+  DWORD (*fpDeleteJobNamedProperty)(_In_ HANDLE hPrinter, _In_ DWORD JobId, _In_ PCWSTR pszName);
+  DWORD (*fpEnumJobNamedProperties)(_In_ HANDLE hPrinter, _In_ DWORD JobId, _Out_ DWORD *pcProperties, _Outptr_result_buffer_(*pcProperties) PrintNamedProperty **ppProperties);
+  DWORD (WINAPI *fpPowerEvent)(_In_ DWORD event, _In_opt_ POWERBROADCAST_SETTING *pPowerSetting);
+  DWORD (*fpGetUserPropertyBag)(_In_ HANDLE hPrinter, _Out_ HKEY *phKey);
+  BOOL (*fpCanShutdown)(VOID);
+  DWORD (*fpLogJobInfoForBranchOffice)(_In_ HANDLE hPrinter, _In_ PBranchOfficeJobDataContainer pJobDataContainer);
+  DWORD (*fpRegeneratePrintDeviceCapabilities)(_In_ HANDLE hPrinter);
+  HRESULT (*fpPrintSupportOperation)(_In_ HANDLE hPrinter, _In_ DWORD JobId, _In_ DWORD dwOperationType, _In_reads_bytes_opt_(cbInputData) LPBYTE pInputData, _In_ DWORD cbInputData, _Out_ LPDWORD pcWritten);
+  HRESULT (*fpIppCreateJobOnPrinter)(_In_ HANDLE hPrinter, _In_ DWORD jobId, _In_ PCWSTR pdlFormat, _In_ DWORD jobAttributesBufferSize, _In_reads_bytes_(jobAttributesBufferSize) PBYTE jobAttributeGroupBuffer, _Out_ PDWORD ippResponseBufferSize, _Outptr_result_bytebuffer_(*ippResponseBufferSize) PBYTE *ippResponseBuffer);
+  HRESULT (*fpIppGetJobAttributes)(_In_ HANDLE hPrinter, _In_ DWORD JobId, _In_ DWORD attributeNameCount, _In_reads_(attributeNameCount) const wchar_t **attributeNames, _Out_ DWORD *ippResponseBufferSize, _Outptr_result_bytebuffer_(*ippResponseBufferSize) BYTE **ippResponseBuffer);
+  HRESULT (*fpIppSetJobAttributes)(_In_ HANDLE hPrinter, _In_ DWORD JobId, _In_ DWORD jobAttributeGroupBufferSize, _In_reads_bytes_(jobAttributeGroupBufferSize) BYTE *jobAttributeGroupBuffer, _Out_ DWORD *ippResponseBufferSize, _Outptr_result_bytebuffer_(*ippResponseBufferSize) BYTE **ippResponseBuffer);
+  HRESULT (*fpIppGetPrinterAttributes)(_In_ HANDLE hPrinter, _In_ DWORD attributeNameCount, _In_reads_(attributeNameCount) const wchar_t **attributeNames, _Out_ DWORD *ippResponseBufferSize, _Outptr_result_bytebuffer_(*ippResponseBufferSize) BYTE **ippResponseBuffer);
+  HRESULT (*fpIppSetPrinterAttributes)(_In_ HANDLE hPrinter, _In_ DWORD jobAttributeGroupBufferSize, _In_reads_bytes_(jobAttributeGroupBufferSize) BYTE *jobAttributeGroupBuffer, _Out_ DWORD *ippResponseBufferSize, _Outptr_result_bytebuffer_(*ippResponseBufferSize) BYTE **ippResponseBuffer);
+  HRESULT (*fpIppCreateJobOnPrinterWithAttributes)(_In_ HANDLE hPrinter, _In_ DWORD jobId, _In_ PCWSTR pdlFormat, _In_ DWORD jobAttributesBufferSize, _In_reads_bytes_(jobAttributesBufferSize) PBYTE jobAttributeGroupBuffer, _In_ DWORD operationAttributesBufferSize, _In_reads_bytes_opt_(operationAttributesBufferSize) PBYTE operationAttributeGroupBuffer, _Out_ PDWORD ippResponseBufferSize, _Outptr_result_bytebuffer_(*ippResponseBufferSize) PBYTE *ippResponseBuffer);
 } PRINTPROVIDOR, *LPPRINTPROVIDOR;
 
 typedef struct _PRINTPROCESSOROPENDATA {
@@ -1009,6 +1102,14 @@ typedef struct _MONITOR2 {
     _In_ DWORD cPorts,
     _In_reads_(cPorts) PCWSTR *ppszPorts);
 
+#endif
+
+#if (NTDDI_VERSION >= NTDDI_WIN8)
+  DWORD
+  (WINAPI *pfnPowerEvent)(
+    _In_ HANDLE hMonitor,
+    _In_ DWORD event,
+    _In_opt_ POWERBROADCAST_SETTING *pSettings);
 #endif
 
 } MONITOR2, *LPMONITOR2, *PMONITOR2;
@@ -1512,4 +1613,12 @@ BOOL WINAPI InstallPrintProcessor(HWND hWnd);
 }
 #endif
 
+
 #endif /* _WINSPLP_ */
+
+#ifndef DOC_INFO_INTERNAL_LEVEL
+#define DOC_INFO_INTERNAL_LEVEL 100
+#endif
+#ifndef SPLCLIENT_INFO_INTERNAL_LEVEL
+#define SPLCLIENT_INFO_INTERNAL_LEVEL 100
+#endif

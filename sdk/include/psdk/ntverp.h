@@ -137,6 +137,16 @@
 #define VER_PRIVATE                         0
 #else
 #define VER_PRIVATE                         VS_FF_PRIVATEBUILD
+#ifndef VER_PRODUCTMINORVERSIONWIN81
+#define VER_PRODUCTMINORVERSIONWIN81 3
+#endif
+#ifndef VER_STATICPRODUCTBUILD
+#define VER_STATICPRODUCTBUILD 10011
+#endif
+#ifndef VER_STATICPRODUCTBUILD_QFE
+#define VER_STATICPRODUCTBUILD_QFE 16384
+#endif
+
 #endif
 
 //

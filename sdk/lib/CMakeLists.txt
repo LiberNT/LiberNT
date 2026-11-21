@@ -7,7 +7,6 @@ add_subdirectory(libwim)
 if(CMAKE_CROSSCOMPILING)
 
 add_subdirectory(3rdparty)
-add_subdirectory(ansi_sync_hacks)
 add_subdirectory(bootfont)
 add_subdirectory(bootstatus)
 add_subdirectory(ci)

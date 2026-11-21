@@ -78,7 +78,7 @@ typedef [public] enum tagAutomaticUpdatesScheduledInstallationDay
 
 typedef [public] enum tagDownloadPhase
 {
-    dphInitializing,
+    dphInitializing = 1,
     dphDownloading,
     dphVerifying,
 } DownloadPhase;
@@ -1382,3 +1382,7 @@ coclass SystemInformation { interface ISystemInformation; }
 coclass WindowsUpdateAgentInfo { interface IWindowsUpdateAgentInfo; }
 
 } /* WUApiLib */
+
+cpp_quote("#ifndef UPDATE_LOCKDOWN_WEBSITE_ACCESS")
+cpp_quote("#define UPDATE_LOCKDOWN_WEBSITE_ACCESS 0x1")
+cpp_quote("#endif")

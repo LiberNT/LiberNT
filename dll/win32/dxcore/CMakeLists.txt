@@ -1,7 +1,4 @@
 
-remove_definitions(-DDXGKDDI_INTERFACE_VERSION=0x1052)
-add_definitions(-DDXGKDDI_INTERFACE_VERSION=0x11007)
-
 spec2def(dxcore.dll dxcore.spec ADD_IMPORTLIB)
 
 add_library(dxcore MODULE

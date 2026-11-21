@@ -267,4 +267,8 @@ typedef struct tagPOINTS {
 }
 #endif
 
+#ifndef APP_LOCAL_DEVICE_ID_SIZE
+#define APP_LOCAL_DEVICE_ID_SIZE 32
+#endif
+
 #endif /* _WINDEF_ */

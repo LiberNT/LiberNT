@@ -1430,4 +1430,64 @@ typedef LPNUMBERFMTA LPNUMBERFMT;
 #include <stringapiset.h>
 #endif
 
+#ifndef CAL_SJAPANESEERAFIRSTYEAR
+#define CAL_SJAPANESEERAFIRSTYEAR 0x0000003d
+#endif
+#ifndef IDN_EMAIL_ADDRESS
+#define IDN_EMAIL_ADDRESS 0x04
+#endif
+#ifndef IDN_RAW_PUNYCODE
+#define IDN_RAW_PUNYCODE 0x08
+#endif
+#ifndef LGRPID_TURKIC
+#define LGRPID_TURKIC 0x0006
+#endif
+#ifndef LOCALE_ICONSTRUCTEDLOCALE
+#define LOCALE_ICONSTRUCTEDLOCALE 0x0000007d
+#endif
+#ifndef LOCALE_IDIALINGCODE
+#define LOCALE_IDIALINGCODE 0x00000005
+#endif
+#ifndef LOCALE_IUSEUTF8LEGACYACP
+#define LOCALE_IUSEUTF8LEGACYACP 0x00000666
+#endif
+#ifndef LOCALE_IUSEUTF8LEGACYOEMCP
+#define LOCALE_IUSEUTF8LEGACYOEMCP 0x00000999
+#endif
+#ifndef LOCALE_SAM
+#define LOCALE_SAM 0x00000028
+#endif
+#ifndef LOCALE_SPM
+#define LOCALE_SPM 0x00000029
+#endif
+#ifndef MUI_FORMAT_INF_COMPAT
+#define MUI_FORMAT_INF_COMPAT 0x0002
+#endif
+#ifndef MUI_IMMUTABLE_LOOKUP
+#define MUI_IMMUTABLE_LOOKUP 0x0010
+#endif
+#ifndef MUI_SKIP_STRING_CACHE
+#define MUI_SKIP_STRING_CACHE 0x0008
+#endif
+#ifndef MUI_VERIFY_FILE_EXISTS
+#define MUI_VERIFY_FILE_EXISTS 0x0004
+#endif
+#ifndef SORTING_PARADIGM_ICU
+#define SORTING_PARADIGM_ICU 0x01000000
+#endif
+#ifndef SORTING_PARADIGM_NLS
+#define SORTING_PARADIGM_NLS 0x00000000
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+int WINAPI GetCalendarInfoEx(LPCWSTR lpLocaleName, CALID Calendar, LPCWSTR lpReserved, CALTYPE CalType, LPWSTR lpCalData, int cchData, LPDWORD lpValue);
+int WINAPI GetNumberFormatEx(LPCWSTR lpLocaleName, DWORD dwFlags, LPCWSTR lpValue, const NUMBERFMTW * lpFormat, LPWSTR lpNumberStr, int cchNumber);
+int WINAPI GetCurrencyFormatEx(LPCWSTR lpLocaleName, DWORD dwFlags, LPCWSTR lpValue, const CURRENCYFMTW * lpFormat, LPWSTR lpCurrencyStr, int cchCurrency);
+DWORD WINAPI IsValidNLSVersion(NLS_FUNCTION function, LPCWSTR lpLocaleName, LPNLSVERSIONINFOEX lpVersionInformation);
+#ifdef __cplusplus
+}
+#endif
+
 #endif

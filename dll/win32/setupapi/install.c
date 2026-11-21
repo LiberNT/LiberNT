@@ -1925,6 +1925,7 @@ BOOL WINAPI SetupInstallFromInfSectionW( HWND owner, HINF hinf, PCWSTR section, 
         if (!iterate_section_fields( hinf, section, ProfileItems, profile_items_callback, NULL ))
             return FALSE;
     }
+    /* TODO: SPINST_PROPERTIES (AddProperty and DelProperty) is not processed */
     if (flags & SPINST_COPYINF)
     {
         if (!iterate_section_fields( hinf, section, CopyINF, copy_inf_callback, NULL ))

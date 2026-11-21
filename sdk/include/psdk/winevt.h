@@ -168,4 +168,216 @@ BOOL WINAPI EvtRender(EVT_HANDLE, EVT_HANDLE, DWORD, DWORD, void *, DWORD *, DWO
 } /* extern "C" */
 #endif /* defined(__cplusplus) */
 
+#ifndef EVT_ALL_ACCESS
+#define EVT_ALL_ACCESS 0x7
+#endif
+#ifndef EVT_CLEAR_ACCESS
+#define EVT_CLEAR_ACCESS 0x4
+#endif
+#ifndef EVT_READ_ACCESS
+#define EVT_READ_ACCESS 0x1
+#endif
+#ifndef EVT_WRITE_ACCESS
+#define EVT_WRITE_ACCESS 0x2
+#endif
+
+typedef enum _EVT_RPC_LOGIN_FLAGS {
+    EvtRpcLoginAuthDefault = 0,
+    EvtRpcLoginAuthNegotiate = 1,
+    EvtRpcLoginAuthKerberos = 2,
+    EvtRpcLoginAuthNTLM = 3
+} EVT_RPC_LOGIN_FLAGS;
+
+typedef enum _EVT_QUERY_FLAGS {
+    EvtQueryChannelPath = 1,
+    EvtQueryFilePath = 2,
+    EvtQueryForwardDirection = 0x100,
+    EvtQueryReverseDirection = 0x200,
+    EvtQueryTolerateQueryErrors = 0x1000
+} EVT_QUERY_FLAGS;
+
+typedef enum _EVT_SEEK_FLAGS {
+    EvtSeekRelativeToFirst = 1,
+    EvtSeekRelativeToLast = 2,
+    EvtSeekRelativeToCurrent = 3,
+    EvtSeekRelativeToBookmark = 4,
+    EvtSeekOriginMask = 7,
+    EvtSeekStrict = 0x10000
+} EVT_SEEK_FLAGS;
+
+typedef enum _EVT_SUBSCRIBE_FLAGS {
+    EvtSubscribeToFutureEvents = 1,
+    EvtSubscribeStartAtOldestRecord = 2,
+    EvtSubscribeStartAfterBookmark = 3,
+    EvtSubscribeOriginMask = 3,
+    EvtSubscribeTolerateQueryErrors = 0x1000,
+    EvtSubscribeStrict = 0x10000
+} EVT_SUBSCRIBE_FLAGS;
+
+typedef enum _EVT_SYSTEM_PROPERTY_ID {
+    EvtSystemProviderName = 0,
+    EvtSystemProviderGuid = 1,
+    EvtSystemEventID = 2,
+    EvtSystemQualifiers = 3,
+    EvtSystemLevel = 4,
+    EvtSystemTask = 5,
+    EvtSystemOpcode = 6,
+    EvtSystemKeywords = 7,
+    EvtSystemTimeCreated = 8,
+    EvtSystemEventRecordId = 9,
+    EvtSystemActivityID = 10,
+    EvtSystemRelatedActivityID = 11,
+    EvtSystemProcessID = 12,
+    EvtSystemThreadID = 13,
+    EvtSystemChannel = 14,
+    EvtSystemComputer = 15,
+    EvtSystemUserID = 16,
+    EvtSystemVersion = 17,
+    EvtSystemPropertyIdEND = 18
+} EVT_SYSTEM_PROPERTY_ID;
+
+typedef enum _EVT_RENDER_CONTEXT_FLAGS {
+    EvtRenderContextValues = 0,
+    EvtRenderContextSystem = 1,
+    EvtRenderContextUser = 2
+} EVT_RENDER_CONTEXT_FLAGS;
+
+typedef enum _EVT_RENDER_FLAGS {
+    EvtRenderEventValues = 0,
+    EvtRenderEventXml = 1,
+    EvtRenderBookmark = 2
+} EVT_RENDER_FLAGS;
+
+typedef enum _EVT_FORMAT_MESSAGE_FLAGS {
+    EvtFormatMessageEvent = 1,
+    EvtFormatMessageLevel = 2,
+    EvtFormatMessageTask = 3,
+    EvtFormatMessageOpcode = 4,
+    EvtFormatMessageKeyword = 5,
+    EvtFormatMessageChannel = 6,
+    EvtFormatMessageProvider = 7,
+    EvtFormatMessageId = 8,
+    EvtFormatMessageXml = 9
+} EVT_FORMAT_MESSAGE_FLAGS;
+
+typedef enum _EVT_OPEN_LOG_FLAGS {
+    EvtOpenChannelPath = 1,
+    EvtOpenFilePath = 2
+} EVT_OPEN_LOG_FLAGS;
+
+typedef enum _EVT_LOG_PROPERTY_ID {
+    EvtLogCreationTime = 0,
+    EvtLogLastAccessTime = 1,
+    EvtLogLastWriteTime = 2,
+    EvtLogFileSize = 3,
+    EvtLogAttributes = 4,
+    EvtLogNumberOfLogRecords = 5,
+    EvtLogOldestRecordNumber = 6,
+    EvtLogFull = 7
+} EVT_LOG_PROPERTY_ID;
+
+typedef enum _EVT_EXPORTLOG_FLAGS {
+    EvtExportLogChannelPath = 1,
+    EvtExportLogFilePath = 2,
+    EvtExportLogTolerateQueryErrors = 0x1000,
+    EvtExportLogOverwrite = 0x2000
+} EVT_EXPORTLOG_FLAGS;
+
+typedef enum _EVT_CHANNEL_TYPE {
+    EvtChannelTypeAdmin = 0,
+    EvtChannelTypeOperational = 1,
+    EvtChannelTypeAnalytic = 2,
+    EvtChannelTypeDebug = 3
+} EVT_CHANNEL_TYPE;
+
+typedef enum _EVT_CHANNEL_ISOLATION_TYPE {
+    EvtChannelIsolationTypeApplication = 0,
+    EvtChannelIsolationTypeSystem = 1,
+    EvtChannelIsolationTypeCustom = 2
+} EVT_CHANNEL_ISOLATION_TYPE;
+
+typedef enum _EVT_CHANNEL_CLOCK_TYPE {
+    EvtChannelClockTypeSystemTime = 0,
+    EvtChannelClockTypeQPC = 1
+} EVT_CHANNEL_CLOCK_TYPE;
+
+typedef enum _EVT_CHANNEL_SID_TYPE {
+    EvtChannelSidTypeNone = 0,
+    EvtChannelSidTypePublishing = 1
+} EVT_CHANNEL_SID_TYPE;
+
+typedef enum _EVT_CHANNEL_REFERENCE_FLAGS {
+    EvtChannelReferenceImported = 1
+} EVT_CHANNEL_REFERENCE_FLAGS;
+
+typedef enum _EVT_PUBLISHER_METADATA_PROPERTY_ID {
+    EvtPublisherMetadataPublisherGuid = 0,
+    EvtPublisherMetadataResourceFilePath = 1,
+    EvtPublisherMetadataParameterFilePath = 2,
+    EvtPublisherMetadataMessageFilePath = 3,
+    EvtPublisherMetadataHelpLink = 4,
+    EvtPublisherMetadataPublisherMessageID = 5,
+    EvtPublisherMetadataChannelReferences = 6,
+    EvtPublisherMetadataChannelReferencePath = 7,
+    EvtPublisherMetadataChannelReferenceIndex = 8,
+    EvtPublisherMetadataChannelReferenceID = 9,
+    EvtPublisherMetadataChannelReferenceFlags = 10,
+    EvtPublisherMetadataChannelReferenceMessageID = 11,
+    EvtPublisherMetadataLevels = 12,
+    EvtPublisherMetadataLevelName = 13,
+    EvtPublisherMetadataLevelValue = 14,
+    EvtPublisherMetadataLevelMessageID = 15,
+    EvtPublisherMetadataTasks = 16,
+    EvtPublisherMetadataTaskName = 17,
+    EvtPublisherMetadataTaskEventGuid = 18,
+    EvtPublisherMetadataTaskValue = 19,
+    EvtPublisherMetadataTaskMessageID = 20,
+    EvtPublisherMetadataOpcodes = 21,
+    EvtPublisherMetadataOpcodeName = 22,
+    EvtPublisherMetadataOpcodeValue = 23,
+    EvtPublisherMetadataOpcodeMessageID = 24,
+    EvtPublisherMetadataKeywords = 25,
+    EvtPublisherMetadataKeywordName = 26,
+    EvtPublisherMetadataKeywordValue = 27,
+    EvtPublisherMetadataKeywordMessageID = 28,
+    EvtPublisherMetadataPropertyIdEND = 29
+} EVT_PUBLISHER_METADATA_PROPERTY_ID;
+
+typedef enum _EVT_EVENT_METADATA_PROPERTY_ID {
+    EventMetadataEventID = 0,
+    EventMetadataEventVersion = 1,
+    EventMetadataEventChannel = 2,
+    EventMetadataEventLevel = 3,
+    EventMetadataEventOpcode = 4,
+    EventMetadataEventTask = 5,
+    EventMetadataEventKeyword = 6,
+    EventMetadataEventMessageID = 7,
+    EventMetadataEventTemplate = 8,
+    EvtEventMetadataPropertyIdEND = 9
+} EVT_EVENT_METADATA_PROPERTY_ID;
+
+typedef enum _EVT_QUERY_PROPERTY_ID {
+    EvtQueryNames = 0,
+    EvtQueryStatuses = 1,
+    EvtQueryPropertyIdEND = 2
+} EVT_QUERY_PROPERTY_ID;
+
+typedef enum _EVT_EVENT_PROPERTY_ID {
+    EvtEventQueryIDs = 0,
+    EvtEventPath = 1,
+    EvtEventPropertyIdEND = 2
+} EVT_EVENT_PROPERTY_ID;
+
+typedef HANDLE EVT_OBJECT_ARRAY_PROPERTY_HANDLE;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+EVT_HANDLE WINAPI EvtQuery(EVT_HANDLE Session, LPCWSTR Path, LPCWSTR Query, DWORD Flags);
+EVT_HANDLE WINAPI EvtOpenLog(EVT_HANDLE Session, LPCWSTR Path, DWORD Flags);
+EVT_HANDLE WINAPI EvtOpenChannelEnum(EVT_HANDLE Session, DWORD Flags);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* __WINE_WINEVT_H */

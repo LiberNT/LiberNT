@@ -85,4 +85,106 @@ typedef enum _RDBSS_BUG_CHECK_CODES
 
 #define RxBugCheck(A, B, C) KeBugCheckEx(RDBSS_FILE_SYSTEM, BugCheckFileId | ((ULONG)(__LINE__)), A, B, C)
 
+#ifndef UCHAR_ACK
+#define UCHAR_ACK 0x06
+#endif
+#ifndef UCHAR_BEL
+#define UCHAR_BEL 0x07
+#endif
+#ifndef UCHAR_BS
+#define UCHAR_BS 0x08
+#endif
+#ifndef UCHAR_CAN
+#define UCHAR_CAN 0x18
+#endif
+#ifndef UCHAR_CR
+#define UCHAR_CR 0x0d
+#endif
+#ifndef UCHAR_DC1
+#define UCHAR_DC1 0x11
+#endif
+#ifndef UCHAR_DC2
+#define UCHAR_DC2 0x12
+#endif
+#ifndef UCHAR_DC3
+#define UCHAR_DC3 0x13
+#endif
+#ifndef UCHAR_DC4
+#define UCHAR_DC4 0x14
+#endif
+#ifndef UCHAR_DLE
+#define UCHAR_DLE 0x10
+#endif
+#ifndef UCHAR_EM
+#define UCHAR_EM 0x19
+#endif
+#ifndef UCHAR_ENQ
+#define UCHAR_ENQ 0x05
+#endif
+#ifndef UCHAR_EOT
+#define UCHAR_EOT 0x04
+#endif
+#ifndef UCHAR_ESC
+#define UCHAR_ESC 0x1b
+#endif
+#ifndef UCHAR_ETB
+#define UCHAR_ETB 0x17
+#endif
+#ifndef UCHAR_ETX
+#define UCHAR_ETX 0x03
+#endif
+#ifndef UCHAR_FF
+#define UCHAR_FF 0x0c
+#endif
+#ifndef UCHAR_FS
+#define UCHAR_FS 0x1c
+#endif
+#ifndef UCHAR_GS
+#define UCHAR_GS 0x1d
+#endif
+#ifndef UCHAR_HT
+#define UCHAR_HT 0x09
+#endif
+#ifndef UCHAR_LF
+#define UCHAR_LF 0x0a
+#endif
+#ifndef UCHAR_NAK
+#define UCHAR_NAK 0x15
+#endif
+#ifndef UCHAR_NUL
+#define UCHAR_NUL 0x00
+#endif
+#ifndef UCHAR_RS
+#define UCHAR_RS 0x1e
+#endif
+#ifndef UCHAR_SI
+#define UCHAR_SI 0x0f
+#endif
+#ifndef UCHAR_SO
+#define UCHAR_SO 0x0e
+#endif
+#ifndef UCHAR_SOH
+#define UCHAR_SOH 0x01
+#endif
+#ifndef UCHAR_SP
+#define UCHAR_SP 0x20
+#endif
+#ifndef UCHAR_STX
+#define UCHAR_STX 0x02
+#endif
+#ifndef UCHAR_SUB
+#define UCHAR_SUB 0x1a
+#endif
+#ifndef UCHAR_SYN
+#define UCHAR_SYN 0x16
+#endif
+#ifndef UCHAR_US
+#define UCHAR_US 0x1f
+#endif
+#ifndef UCHAR_VT
+#define UCHAR_VT 0x0b
+#endif
+
+typedef USHORT RDBSS_STORAGE_TYPE_CODES;
+
 #endif

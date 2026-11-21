@@ -100,7 +100,8 @@ typedef struct tag_SCRIPT_CONTROL {
   DWORD fNumericOverride	:1;
   DWORD fLegacyBidiClass	:1;
   DWORD fMergeNeutralItems	:1;
-  DWORD fReserved		:7;
+  DWORD fUseStandardBidi	:1;
+  DWORD fReserved		:6;
 } SCRIPT_CONTROL;
 
 typedef struct {
@@ -661,6 +662,13 @@ ScriptString_pSize(
 
 #ifdef __cplusplus
 } /* extern "C" */
+#endif
+
+#ifndef SCRIPT_TAG_UNKNOWN
+#define SCRIPT_TAG_UNKNOWN 0x00000000
+#endif
+#ifndef UNISCRIBE_OPENTYPE
+#define UNISCRIBE_OPENTYPE 0x0100
 #endif
 
 #endif /* __USP10_H */

@@ -993,7 +993,7 @@ static	BOOL	MMSYSTEM_GetMidiStream(HMIDISTRM hMidiStrm, WINE_MIDIStream** lpMidi
     }
 
     EnterCriticalSection(&WINMM_cs);
-    if ((entry = wine_rb_get(&wine_midi_streams, &lpwm->mod.rgIds.dwStreamID)))
+    if ((entry = wine_rb_get(&wine_midi_streams, &lpwm->mod.rgIds[0].dwStreamID)))
         *lpMidiStrm = WINE_RB_ENTRY_VALUE(entry, struct WINE_MIDIStream, entry);
     LeaveCriticalSection(&WINMM_cs);
 
@@ -1389,7 +1389,7 @@ MMRESULT WINAPI midiStreamOpen(HMIDISTRM* lphMidiStrm, LPUINT lpuDeviceID,
 
     mosm.dwStreamID = lpMidiStrm->dwStreamID;
     /* FIXME: the correct value is not allocated yet for MAPPER */
-    mosm.wDeviceID  = *lpuDeviceID;
+    mosm.uDeviceID  = *lpuDeviceID;
     lpwm = MIDI_OutAlloc(&hMidiOut, &dwCallback, &dwInstance, &fdwOpen, 1, &mosm);
     if (!lpwm) {
 	free(lpMidiStrm);

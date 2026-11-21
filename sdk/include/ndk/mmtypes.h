@@ -494,7 +494,6 @@ typedef struct _SECTION_IMAGE_INFORMATION
     USHORT DllCharacteristics;
     USHORT Machine;
     BOOLEAN ImageContainsCode;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     union
     {
         struct
@@ -507,16 +506,9 @@ typedef struct _SECTION_IMAGE_INFORMATION
         };
         UCHAR ImageFlags;
     };
-#else
-    BOOLEAN Spare1;
-#endif
     ULONG LoaderFlags;
     ULONG ImageFileSize;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     ULONG CheckSum;
-#else
-    ULONG Reserved[1];
-#endif
 } SECTION_IMAGE_INFORMATION, *PSECTION_IMAGE_INFORMATION;
 
 #ifndef NTOS_MODE_USER
@@ -1082,47 +1074,24 @@ typedef struct _MMSUPPORT_FLAGS
 //
 typedef struct _MMSUPPORT
 {
-#if (NTDDI_VERSION >= NTDDI_WS03)
     LIST_ENTRY WorkingSetExpansionLinks;
-#endif
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     USHORT LastTrimpStamp;
     USHORT NextPageColor;
-#else
-    LARGE_INTEGER LastTrimTime;
-#endif
     MMSUPPORT_FLAGS Flags;
     ULONG PageFaultCount;
     ULONG PeakWorkingSetSize;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     ULONG Spare0;
-#else
-    ULONG GrowthSinceLastEstimate;
-#endif
     ULONG MinimumWorkingSetSize;
     ULONG MaximumWorkingSetSize;
     PMMWSL VmWorkingSetList;
-#if (NTDDI_VERSION < NTDDI_WS03)
-    LIST_ENTRY WorkingSetExpansionLinks;
-#endif
     ULONG Claim;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     ULONG Spare;
     ULONG WorkingSetPrivateSize;
     ULONG WorkingSetSizeOverhead;
-#else
-    ULONG NextEstimationSlot;
-    ULONG NextAgingSlot;
-    ULONG EstimatedAvailable;
-#endif
     ULONG WorkingSetSize;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     PKEVENT ExitEvent;
-#endif
     EX_PUSH_LOCK WorkingSetMutex;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     PVOID AccessLog;
-#endif
 } MMSUPPORT, *PMMSUPPORT;
 
 typedef struct _MMSUPPORT_INSTANCE

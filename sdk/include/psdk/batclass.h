@@ -395,6 +395,12 @@ BatteryClassUnload(
 
 #endif /* _WINDOWS_H */
 
+typedef enum BATTERY_CHARGING_STATE {
+    BatteryNoPowerSupply = 0,
+    BatteryInadequatePowerSupply = 1,
+    BatteryAdequatePowerSupply = 2
+} BATTERY_CHARGING_STATE;
+
 #endif /* _BATCLASS_ */
 
 #if !defined(_WINDOWS_)
@@ -420,4 +426,29 @@ typedef struct {
 
 #ifdef __cplusplus
 }
+#endif
+
+#ifndef ADAPTER_CLASS_MAJOR_VERSION
+#define ADAPTER_CLASS_MAJOR_VERSION 0x0001
+#endif
+#ifndef ADAPTER_CLASS_MINOR_VERSION
+#define ADAPTER_CLASS_MINOR_VERSION 0x0000
+#endif
+#ifndef BATTERY_CLASS_MINOR_VERSION_2
+#define BATTERY_CLASS_MINOR_VERSION_2 0x0002
+#endif
+#ifndef BATTERY_MINIPORT_UPDATE_DATA_VER_1
+#define BATTERY_MINIPORT_UPDATE_DATA_VER_1 0x00000001
+#endif
+#ifndef BATTERY_MINIPORT_UPDATE_DATA_VER_2
+#define BATTERY_MINIPORT_UPDATE_DATA_VER_2 0x00000002
+#endif
+#ifndef BATTERY_NOTIFY_VERSION_1
+#define BATTERY_NOTIFY_VERSION_1 1
+#endif
+#ifndef BATTERY_NOTIFY_VERSION_2
+#define BATTERY_NOTIFY_VERSION_2 2
+#endif
+#ifndef CHARGE_REQUIREMENT_MAX_POWER_SOURCE_TYPES
+#define CHARGE_REQUIREMENT_MAX_POWER_SOURCE_TYPES 2
 #endif

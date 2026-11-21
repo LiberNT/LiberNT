@@ -7,7 +7,7 @@
 # Compiled at the same effective UMD interface version as d3dumdrt.  The
 # in-tree VC4 UMD remains a WDDM 2.0 driver even when the configured OS header
 # ceiling is newer; table length follows the UMD contract, not the KMD one.
-remove_definitions(-DDXGKDDI_INTERFACE_VERSION=0x1052)
+remove_definitions(-DDXGKDDI_INTERFACE_VERSION=0x11007)
 add_definitions(-DDXGKDDI_INTERFACE_VERSION=0xF003)
 
 spec2def(rpi5vc4um.dll rpi5vc4um.spec)

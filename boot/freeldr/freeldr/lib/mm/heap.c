@@ -629,7 +629,7 @@ RtlAllocateHeap(
     return ptr;
 }
 
-BOOLEAN
+LOGICAL
 NTAPI
 RtlFreeHeap(
     IN PVOID HeapHandle,

@@ -1509,6 +1509,7 @@ ClassScanForSpecial(
 
 SCSIPORT_API
 ULONG
+NTAPI
 ClassModeSenseEx(
     _In_ PDEVICE_OBJECT Fdo,
     _In_reads_bytes_(Length) PCHAR ModeSenseBuffer,
@@ -1519,6 +1520,7 @@ ClassModeSenseEx(
 
 SCSIPORT_API
 NTSTATUS
+NTAPI
 ClassModeSelect(
     _In_ PDEVICE_OBJECT Fdo,
     _In_reads_bytes_(Length) PCHAR ModeSelectBuffer,
@@ -1528,3 +1530,14 @@ ClassModeSelect(
 
 #endif
 
+#ifndef DEV_BYPASS_IO
+#define DEV_BYPASS_IO 0x00000100
+typedef struct _FAILURE_PREDICTION_INFO * PFAILURE_PREDICTION_INFO;
+
+#endif
+#ifndef DEV_FORWARD_IO
+#define DEV_FORWARD_IO 0x00000040
+#endif
+#ifndef DEV_SPLIT_LARGE_WRITE
+#define DEV_SPLIT_LARGE_WRITE 0x00000080
+#endif

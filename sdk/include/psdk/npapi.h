@@ -206,4 +206,55 @@ typedef DWORD (APIENTRY *PF_AddConnectNotify)(LPNOTIFYINFO lpNotifyInfo,
 typedef DWORD (APIENTRY *PF_CancelConnectNotify)(LPNOTIFYINFO lpNotifyInfo,
  LPNOTIFYADD lpAddInfo);
 
+#ifndef WNGETCON_CONNECTED
+#define WNGETCON_CONNECTED 0x00000000
+#endif
+#ifndef WNGETCON_DISCONNECTED
+#define WNGETCON_DISCONNECTED 0x00000001
+#endif
+#ifndef WNNC_CONNECTION_FLAGS
+#define WNNC_CONNECTION_FLAGS 0x0000000D
+#endif
+#ifndef WNNC_CON_ADDCONNECTION4
+#define WNNC_CON_ADDCONNECTION4 0x00000010
+#endif
+#ifndef WNNC_CON_CANCELCONNECTION2
+#define WNNC_CON_CANCELCONNECTION2 0x00000020
+#endif
+#ifndef WNNC_CON_DEFER
+#define WNNC_CON_DEFER 0x00000080
+#endif
+#ifndef WNNC_CON_GETPERFORMANCE
+#define WNNC_CON_GETPERFORMANCE 0x00000040
+#endif
+#ifndef WNNC_ENUM_SHAREABLE
+#define WNNC_ENUM_SHAREABLE 0x00000008
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+DWORD WINAPI NPAddConnection(LPNETRESOURCEW lpNetResource, LPWSTR lpPassword, LPWSTR lpUserName);
+DWORD WINAPI NPAddConnection3(HWND hwndOwner, LPNETRESOURCEW lpNetResource, LPWSTR lpPassword, LPWSTR lpUserName, DWORD dwFlags);
+DWORD WINAPI NPCancelConnection(LPWSTR lpName, BOOL fForce);
+DWORD WINAPI NPGetConnection(LPWSTR lpLocalName, LPWSTR lpRemoteName, LPDWORD lpnBufferLen);
+DWORD WINAPI NPGetUniversalName(LPCWSTR lpLocalPath, DWORD dwInfoLevel, LPVOID lpBuffer, LPDWORD lpBufferSize);
+DWORD WINAPI NPOpenEnum(DWORD dwScope, DWORD dwType, DWORD dwUsage, LPNETRESOURCEW lpNetResource, LPHANDLE lphEnum);
+DWORD WINAPI NPEnumResource(HANDLE hEnum, LPDWORD lpcCount, LPVOID lpBuffer, LPDWORD lpBufferSize);
+DWORD WINAPI NPCloseEnum(HANDLE hEnum);
+DWORD WINAPI NPGetCaps(DWORD ndex);
+DWORD WINAPI NPGetUser(LPWSTR lpName, LPWSTR lpUserName, LPDWORD lpnBufferLen);
+DWORD WINAPI NPGetResourceParent(LPNETRESOURCEW lpNetResource, LPVOID lpBuffer, LPDWORD lpBufferSize);
+DWORD WINAPI NPGetResourceInformation(LPNETRESOURCEW lpNetResource, LPVOID lpBuffer, LPDWORD lpBufferSize, LPWSTR * lplpSystem);
+DWORD WINAPI NPFormatNetworkName(LPWSTR lpRemoteName, LPWSTR lpFormattedName, LPDWORD lpnLength, DWORD dwFlags, DWORD dwAveCharPerLine);
+DWORD WINAPI NPGetPropertyText(DWORD iButton, DWORD nPropSel, LPWSTR lpName, LPWSTR lpButtonName, DWORD nButtonNameLen, DWORD nType);
+DWORD WINAPI NPPropertyDialog(HWND hwndParent, DWORD iButtonDlg, DWORD nPropSel, LPWSTR lpFileName, DWORD nType);
+DWORD WINAPI NPGetDirectoryType(LPWSTR lpName, LPINT lpType, BOOL bFlushCache);
+DWORD WINAPI NPDirectoryNotify(HWND hwnd, LPWSTR lpDir, DWORD dwOper);
+DWORD WINAPI NPLogonNotify(PLUID lpLogonId, LPCWSTR lpAuthentInfoType, LPVOID lpAuthentInfo, LPCWSTR lpPreviousAuthentInfoType, LPVOID lpPreviousAuthentInfo, LPWSTR lpStationName, LPVOID StationHandle, LPWSTR * lpLogonScript);
+DWORD WINAPI NPPasswordChangeNotify(LPCWSTR lpAuthentInfoType, LPVOID lpAuthentInfo, LPCWSTR lpPreviousAuthentInfoType, LPVOID lpPreviousAuthentInfo, LPWSTR lpStationName, LPVOID StationHandle, DWORD dwChangeInfo);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* ndef __WINE_NPAPI_H__ */

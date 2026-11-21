@@ -144,7 +144,7 @@ typedef struct _MINIDUMP_MEMORY_DESCRIPTOR
 typedef struct _MINIDUMP_MEMORY_LIST
 {
     ULONG32 NumberOfMemoryRanges;
-    MINIDUMP_MEMORY_DESCRIPTOR  MemoryRanges[1]; /* FIXME: 0-sized array not supported */
+    MINIDUMP_MEMORY_DESCRIPTOR  MemoryRanges[0];
 } MINIDUMP_MEMORY_LIST, *PMINIDUMP_MEMORY_LIST;
 
 typedef struct _MINIDUMP_MEMORY_DESCRIPTOR64
@@ -157,7 +157,7 @@ typedef struct _MINIDUMP_MEMORY64_LIST
 {
     ULONG64 NumberOfMemoryRanges;
     RVA64 BaseRva;
-    MINIDUMP_MEMORY_DESCRIPTOR64 MemoryRanges[1]; /* FIXME: 0-sized array not supported */
+    MINIDUMP_MEMORY_DESCRIPTOR64 MemoryRanges[0];
 } MINIDUMP_MEMORY64_LIST, *PMINIDUMP_MEMORY64_LIST;
 
 typedef struct _XSTATE_CONFIG_FEATURE_MSC_INFO
@@ -286,13 +286,13 @@ typedef struct _MINIDUMP_MODULE
 typedef struct _MINIDUMP_MODULE_LIST
 {
     ULONG32 NumberOfModules;
-    MINIDUMP_MODULE Modules[1]; /* FIXME: 0-sized array not supported */
+    MINIDUMP_MODULE Modules[0];
 } MINIDUMP_MODULE_LIST, *PMINIDUMP_MODULE_LIST;
 
 typedef struct _MINIDUMP_STRING
 {
     ULONG32 Length;
-    WCHAR Buffer[1]; /* FIXME: O-sized array not supported */
+    WCHAR Buffer[0];
 } MINIDUMP_STRING, *PMINIDUMP_STRING;
 
 typedef union _CPU_INFORMATION
@@ -357,7 +357,7 @@ typedef struct _MINIDUMP_THREAD
 typedef struct _MINIDUMP_THREAD_LIST
 {
     ULONG32 NumberOfThreads;
-    MINIDUMP_THREAD Threads[1]; /* FIXME: no support of 0 sized array */
+    MINIDUMP_THREAD Threads[0];
 } MINIDUMP_THREAD_LIST, *PMINIDUMP_THREAD_LIST;
 
 typedef struct _MINIDUMP_USER_STREAM
@@ -504,7 +504,7 @@ typedef struct _MINIDUMP_THREAD_NAME
 typedef struct _MINIDUMP_THREAD_NAME_LIST
 {
     ULONG NumberOfThreadNames;
-    MINIDUMP_THREAD_NAME ThreadNames[1]; /* FIXME: 0-sized array not supported */
+    MINIDUMP_THREAD_NAME ThreadNames[0];
 } MINIDUMP_THREAD_NAME_LIST, *PMINIDUMP_THREAD_NAME_LIST;
 
 typedef struct _MINIDUMP_TOKEN_INFO_HEADER
@@ -959,5 +959,32 @@ BOOL WINAPI MiniDumpReadDumpStream(PVOID base, ULONG index, PMINIDUMP_DIRECTORY 
 #endif
 
 #pragma pack(pop)
+
+#ifndef MINIDUMP_SYSMEMINFO1_PERF_MDLPAGESALLOCATED_PFNDATABASECOMMITTEDPAGES
+#define MINIDUMP_SYSMEMINFO1_PERF_MDLPAGESALLOCATED_PFNDATABASECOMMITTEDPAGES 0x0010
+#endif
+#ifndef MINIDUMP_SYSMEMINFO1_PERF_SYSTEMPAGETABLECOMMITTEDPAGES_CONTIGUOUSPAGESALLOCATED
+#define MINIDUMP_SYSMEMINFO1_PERF_SYSTEMPAGETABLECOMMITTEDPAGES_CONTIGUOUSPAGESALLOCATED 0x0020
+#endif
+
+typedef enum _MINIDUMP_HANDLE_OBJECT_INFORMATION_TYPE {
+    MiniHandleObjectInformationNone = 0,
+    MiniThreadInformation1 = 1,
+    MiniMutantInformation1 = 2,
+    MiniMutantInformation2 = 3,
+    MiniProcessInformation1 = 4,
+    MiniProcessInformation2 = 5,
+    MiniEventInformation1 = 6,
+    MiniSectionInformation1 = 7,
+    MiniSemaphoreInformation1 = 8,
+    MiniHandleObjectInformationTypeMax = 9
+} MINIDUMP_HANDLE_OBJECT_INFORMATION_TYPE;
+
+typedef MINIDUMP_HANDLE_DESCRIPTOR_2 MINIDUMP_HANDLE_DESCRIPTOR_N;
+typedef MINIDUMP_HANDLE_DESCRIPTOR_N * PMINIDUMP_HANDLE_DESCRIPTOR_N;
+typedef MINIDUMP_MISC_INFO_5 MINIDUMP_MISC_INFO_N;
+typedef MINIDUMP_MISC_INFO_N * PMINIDUMP_MISC_INFO_N;
+typedef MINIDUMP_PROCESS_VM_COUNTERS_2 MINIDUMP_PROCESS_VM_COUNTERS_N;
+typedef MINIDUMP_PROCESS_VM_COUNTERS_N * PMINIDUMP_PROCESS_VM_COUNTERS_N;
 
 #endif  /* __WINE_MINIDUMP_H */

@@ -86,4 +86,13 @@ ExGetPrmInterface (
 }
 #endif
 
+#ifndef PRM_INTERFACE_STANDARD_VERSION
+#define PRM_INTERFACE_STANDARD_VERSION 0x1
+#endif
+#ifndef PRM_INTERFACE_V1
+#define PRM_INTERFACE_V1 1
+#endif
+
+typedef PRM_HANDLER_ROUTINE * PPRM_HANDLER_ROUTINE;
+
 #endif

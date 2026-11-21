@@ -1,6 +1,6 @@
 
 #pragma once
-#pragma pack(push)
+#pragma pack(push, 1)
 
 #ifdef __midl
   typedef struct

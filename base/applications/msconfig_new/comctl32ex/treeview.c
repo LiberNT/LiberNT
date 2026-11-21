@@ -11,10 +11,6 @@
     #define _WIN32_IE 0x0600
 #endif
 
-// Fake _WIN32_WINNT to 0x0600 in order to get Vista+ style flags
-#undef _WIN32_WINNT
-#define _WIN32_WINNT 0x0600
-
 #include "precomp.h"
 #include "treeview.h"
 

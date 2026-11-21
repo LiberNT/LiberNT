@@ -269,4 +269,369 @@ typedef struct _PARCLASS_INFORMATION {
 }
 #endif
 
+#ifndef BIT_0
+#define BIT_0 0
+#endif
+#ifndef BIT_0_SET
+#define BIT_0_SET 0x1
+#endif
+#ifndef BIT_1
+#define BIT_1 1
+#endif
+#ifndef BIT_1_SET
+#define BIT_1_SET 0x2
+#endif
+#ifndef BIT_2
+#define BIT_2 2
+#endif
+#ifndef BIT_2_SET
+#define BIT_2_SET 0x4
+#endif
+#ifndef BIT_3
+#define BIT_3 3
+#endif
+#ifndef BIT_3_SET
+#define BIT_3_SET 0x8
+#endif
+#ifndef BIT_4
+#define BIT_4 4
+#endif
+#ifndef BIT_4_SET
+#define BIT_4_SET 0x10
+#endif
+#ifndef BIT_5
+#define BIT_5 5
+#endif
+#ifndef BIT_5_SET
+#define BIT_5_SET 0x20
+#endif
+#ifndef BIT_6
+#define BIT_6 6
+#endif
+#ifndef BIT_6_SET
+#define BIT_6_SET 0x40
+#endif
+#ifndef BIT_7
+#define BIT_7 7
+#endif
+#ifndef BIT_7_SET
+#define BIT_7_SET 0x80
+#endif
+#ifndef CNFGA_IMPID_16BIT
+#define CNFGA_IMPID_16BIT 0x00
+#endif
+#ifndef CNFGA_IMPID_32BIT
+#define CNFGA_IMPID_32BIT 0x20
+#endif
+#ifndef CNFGA_IMPID_8BIT
+#define CNFGA_IMPID_8BIT 0x10
+#endif
+#ifndef CNFGA_IMPID_MASK
+#define CNFGA_IMPID_MASK 0x70
+#endif
+#ifndef CNFGA_IMPID_SHIFT
+#define CNFGA_IMPID_SHIFT 4
+#endif
+#ifndef CNFGA_NO_TRANS_BYTE
+#define CNFGA_NO_TRANS_BYTE 0x04
+#endif
+#ifndef CNFGB_OFFSET
+#define CNFGB_OFFSET 0x401
+#endif
+#ifndef CPP_ASSIGN_ADDR
+#define CPP_ASSIGN_ADDR 0x00
+#endif
+#ifndef CPP_CLEAR_INT_LAT
+#define CPP_CLEAR_INT_LAT 0x50
+#endif
+#ifndef CPP_COMMAND_FILTER
+#define CPP_COMMAND_FILTER 0xF8
+#endif
+#ifndef CPP_DESELECT
+#define CPP_DESELECT 0x30
+#endif
+#ifndef CPP_DISABLE_INT
+#define CPP_DISABLE_INT 0x40
+#endif
+#ifndef CPP_ENABLE_INT
+#define CPP_ENABLE_INT 0x48
+#endif
+#ifndef CPP_QUERY_INT
+#define CPP_QUERY_INT 0x08
+#endif
+#ifndef CPP_SELECT
+#define CPP_SELECT 0xE0
+#endif
+#ifndef CPP_SET_INT_LAT
+#define CPP_SET_INT_LAT 0x58
+#endif
+#ifndef DATA_OFFSET
+#define DATA_OFFSET 0
+#endif
+#ifndef DCR_ACKINT_ENABLED
+#define DCR_ACKINT_ENABLED 0x10
+#endif
+#ifndef DCR_ASTRB
+#define DCR_ASTRB 0x08
+#endif
+#ifndef DCR_AUTOFEED
+#define DCR_AUTOFEED 0x02
+#endif
+#ifndef DCR_DIRECTION
+#define DCR_DIRECTION 0x20
+#endif
+#ifndef DCR_DSTRB
+#define DCR_DSTRB 0x02
+#endif
+#ifndef DCR_NOT_1284_ACTIVE
+#define DCR_NOT_1284_ACTIVE 0x08
+#endif
+#ifndef DCR_NOT_HOST_ACK
+#define DCR_NOT_HOST_ACK 0x02
+#endif
+#ifndef DCR_NOT_HOST_BUSY
+#define DCR_NOT_HOST_BUSY 0x02
+#endif
+#ifndef DCR_NOT_HOST_CLK
+#define DCR_NOT_HOST_CLK 0x01
+#endif
+#ifndef DCR_NOT_INIT
+#define DCR_NOT_INIT 0x04
+#endif
+#ifndef DCR_NOT_REVERSE_REQUEST
+#define DCR_NOT_REVERSE_REQUEST 0x04
+#endif
+#ifndef DCR_NULL
+#define DCR_NULL 0x04
+#endif
+#ifndef DCR_OFFSET
+#define DCR_OFFSET 2
+#endif
+#ifndef DCR_RESERVED
+#define DCR_RESERVED 0xC0
+#endif
+#ifndef DCR_SELECT_IN
+#define DCR_SELECT_IN 0x08
+#endif
+#ifndef DCR_STROBE
+#define DCR_STROBE 0x01
+#endif
+#ifndef DCR_WRITE
+#define DCR_WRITE 0x01
+#endif
+#ifndef DEFAULT_ECR_COMPATIBILITY
+#define DEFAULT_ECR_COMPATIBILITY 0x14
+#endif
+#ifndef DEFAULT_ECR_CONFIGURATION
+#define DEFAULT_ECR_CONFIGURATION 0xF4
+#endif
+#ifndef DEFAULT_ECR_TEST
+#define DEFAULT_ECR_TEST 0xD4
+#endif
+#ifndef DIR_READ
+#define DIR_READ 1
+#endif
+#ifndef DIR_WRITE
+#define DIR_WRITE 0
+#endif
+#ifndef DOT3_END_OF_CHAIN_ID
+#define DOT3_END_OF_CHAIN_ID 4
+#endif
+#ifndef DOT3_LEGACY_ZIP_ID
+#define DOT3_LEGACY_ZIP_ID 5
+#endif
+#ifndef DSR_ACK_DATA_REQ
+#define DSR_ACK_DATA_REQ 0x20
+#endif
+#ifndef DSR_INTR
+#define DSR_INTR 0x40
+#endif
+#ifndef DSR_NOT_ACK
+#define DSR_NOT_ACK 0x40
+#endif
+#ifndef DSR_NOT_ACK_REVERSE
+#define DSR_NOT_ACK_REVERSE 0x20
+#endif
+#ifndef DSR_NOT_BUSY
+#define DSR_NOT_BUSY 0x80
+#endif
+#ifndef DSR_NOT_DATA_AVAIL
+#define DSR_NOT_DATA_AVAIL 0x08
+#endif
+#ifndef DSR_NOT_FAULT
+#define DSR_NOT_FAULT 0x08
+#endif
+#ifndef DSR_NOT_PERIPH_ACK
+#define DSR_NOT_PERIPH_ACK 0x80
+#endif
+#ifndef DSR_NOT_PERIPH_REQUEST
+#define DSR_NOT_PERIPH_REQUEST 0x08
+#endif
+#ifndef DSR_NOT_PTR_BUSY
+#define DSR_NOT_PTR_BUSY 0x80
+#endif
+#ifndef DSR_OFFSET
+#define DSR_OFFSET 1
+#endif
+#ifndef DSR_PERIPH_CLK
+#define DSR_PERIPH_CLK 0x40
+#endif
+#ifndef DSR_PERROR
+#define DSR_PERROR 0x20
+#endif
+#ifndef DSR_PTR_CLK
+#define DSR_PTR_CLK 0x40
+#endif
+#ifndef DSR_SELECT
+#define DSR_SELECT 0x10
+#endif
+#ifndef DSR_WAIT
+#define DSR_WAIT 0x80
+#endif
+#ifndef DSR_XFLAG
+#define DSR_XFLAG 0x10
+#endif
+#ifndef DVRH_USE_FAST_MACROS
+#define DVRH_USE_FAST_MACROS 1
+#endif
+#ifndef DVRH_USE_NIBBLE_MACROS
+#define DVRH_USE_NIBBLE_MACROS 1
+#endif
+#ifndef DVRH_USE_PARPORT_ECP_ADDR
+#define DVRH_USE_PARPORT_ECP_ADDR 0
+#endif
+#ifndef ECP_MAX_FIFO_DEPTH
+#define ECP_MAX_FIFO_DEPTH 4098
+#endif
+#ifndef ECP_OFFSET
+#define ECP_OFFSET 0x400
+#endif
+#ifndef ECP_SPAN
+#define ECP_SPAN 3
+#endif
+#ifndef ECR_BYTE_MODE
+#define ECR_BYTE_MODE 0x20
+#endif
+#ifndef ECR_CONFIG_MODE
+#define ECR_CONFIG_MODE 0xE0
+#endif
+#ifndef ECR_DMA_ENABLED
+#define ECR_DMA_ENABLED 0x08
+#endif
+#ifndef ECR_ECP_MODE
+#define ECR_ECP_MODE 0x60
+#endif
+#ifndef ECR_EPP_MODE
+#define ECR_EPP_MODE 0x80
+#endif
+#ifndef ECR_ERRINT_DISABLED
+#define ECR_ERRINT_DISABLED 0x10
+#endif
+#ifndef ECR_FASTCENT_MODE
+#define ECR_FASTCENT_MODE 0x40
+#endif
+#ifndef ECR_FIFO_EMPTY
+#define ECR_FIFO_EMPTY 0x01
+#endif
+#ifndef ECR_FIFO_FULL
+#define ECR_FIFO_FULL 0x02
+#endif
+#ifndef ECR_FIFO_MASK
+#define ECR_FIFO_MASK 0x03
+#endif
+#ifndef ECR_FIFO_SOME_DATA
+#define ECR_FIFO_SOME_DATA 0x00
+#endif
+#ifndef ECR_MODE_MASK
+#define ECR_MODE_MASK 0x1F
+#endif
+#ifndef ECR_OFFSET
+#define ECR_OFFSET 0x402
+#endif
+#ifndef ECR_RESERVED_MODE
+#define ECR_RESERVED_MODE 0x10
+#endif
+#ifndef ECR_SPP_MODE
+#define ECR_SPP_MODE 0x00
+#endif
+#ifndef ECR_SVC_INT_DISABLED
+#define ECR_SVC_INT_DISABLED 0x04
+#endif
+#ifndef ECR_TEST_MODE
+#define ECR_TEST_MODE 0xC0
+#endif
+#ifndef EPP_OFFSET
+#define EPP_OFFSET 4
+#endif
+#ifndef EPP_SPAN
+#define EPP_SPAN 4
+#endif
+#ifndef FIFO_PWORD_16BIT
+#define FIFO_PWORD_16BIT 0
+#endif
+#ifndef FIFO_PWORD_32BIT
+#define FIFO_PWORD_32BIT 2
+#endif
+#ifndef FIFO_PWORD_8BIT
+#define FIFO_PWORD_8BIT 1
+#endif
+#ifndef IEEE_1284_3_DAISY_CHAIN_MAX_ID
+#define IEEE_1284_3_DAISY_CHAIN_MAX_ID 3
+#endif
+#ifndef IRQEN_DISABLE
+#define IRQEN_DISABLE 0
+#endif
+#ifndef IRQEN_ENABLE
+#define IRQEN_ENABLE 1
+#endif
+#ifndef LEGACYZIP_MODE_LEN
+#define LEGACYZIP_MODE_LEN 3
+#endif
+#ifndef MODE_LEN_1284_3
+#define MODE_LEN_1284_3 7
+#endif
+#ifndef OFFSET_ECP_AFIFO
+#define OFFSET_ECP_AFIFO 0x0000
+#endif
+#ifndef OFFSET_PARALLEL_REGISTER_SPAN
+#define OFFSET_PARALLEL_REGISTER_SPAN 0x0003
+#endif
+#ifndef OLD_PARCLASS
+#define OLD_PARCLASS 0
+#endif
+
+typedef enum P12843_DL_MODES {
+    P12843DL_OFF = 0,
+    P12843DL_DOT3_DL = 1,
+    P12843DL_MLC_DL = 2,
+    P12843DL_DOT4_DL = 3
+} P12843_DL_MODES;
+
+typedef enum P1284_PHASE {
+    PHASE_UNKNOWN = 0,
+    PHASE_NEGOTIATION = 1,
+    PHASE_SETUP = 2,
+    PHASE_FORWARD_IDLE = 3,
+    PHASE_FORWARD_XFER = 4,
+    PHASE_FWD_TO_REV = 5,
+    PHASE_REVERSE_IDLE = 6,
+    PHASE_REVERSE_XFER = 7,
+    PHASE_REV_TO_FWD = 8,
+    PHASE_TERMINATE = 9,
+    PHASE_DATA_AVAILABLE = 10,
+    PHASE_DATA_NOT_AVAIL = 11,
+    PHASE_INTERRUPT_HOST = 12
+} P1284_PHASE;
+
+typedef enum P1284_HW_MODE {
+    HW_MODE_COMPATIBILITY = 0,
+    HW_MODE_PS2 = 1,
+    HW_MODE_FAST_CENTRONICS = 2,
+    HW_MODE_ECP = 3,
+    HW_MODE_EPP = 4,
+    HW_MODE_RESERVED = 5,
+    HW_MODE_TEST = 6,
+    HW_MODE_CONFIGURATION = 7
+} P1284_HW_MODE;
+
 #endif /* __PARALLEL_H */

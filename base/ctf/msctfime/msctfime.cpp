@@ -651,9 +651,9 @@ NotifyIME(
     _In_ HIMC hIMC,
     _In_ DWORD dwAction,
     _In_ DWORD dwIndex,
-    _In_ DWORD_PTR dwValue)
+    _In_ DWORD dwValue)
 {
-    TRACE("(%p, 0x%lX, 0x%lX, %p)\n", hIMC, dwAction, dwIndex, dwValue);
+    TRACE("(%p, 0x%lX, 0x%lX, 0x%lX)\n", hIMC, dwAction, dwIndex, dwValue);
 
     TLS *pTLS = TLS::GetTLS();
     if (pTLS && pTLS->m_pBridge && pTLS->m_pThreadMgr)

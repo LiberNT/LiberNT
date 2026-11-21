@@ -1,6 +1,4 @@
 
-remove_definitions(-D_WIN32_WINNT=${REACTOS_TARGET_NT} -DWINVER=${REACTOS_TARGET_NT})
-
 list(APPEND SOURCE
     data.c
     disk.c
@@ -12,10 +10,6 @@ list(APPEND SOURCE
 add_library(disk MODULE ${SOURCE} disk.rc)
 
 target_compile_definitions(disk PUBLIC DEBUG_USE_KDPRINT)
-target_compile_options(disk PUBLIC # NTDDI_WIN8
-    -U_WIN32_WINNT -D_WIN32_WINNT=0x602
-    -UNTDDI_VERSION -DNTDDI_VERSION=0x06020000)
-
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(disk PRIVATE -Wno-pointer-sign)
     target_compile_options(disk PRIVATE -Wno-switch)

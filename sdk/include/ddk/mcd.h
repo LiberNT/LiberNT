@@ -26,6 +26,7 @@
 #include "srb.h"
 #include "scsi.h"
 #include "ntddchgr.h"
+#include <wmidata.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -63,7 +64,7 @@ ChangerClassDebugPrint(
   ...);
 
 CHANGERAPI
-PVOID
+VOID
 NTAPI
 ChangerClassFreePool(
   IN PVOID PoolToFree);
@@ -133,6 +134,10 @@ ChangerClassInitialize(
 
 #ifdef __cplusplus
 }
+#endif
+
+#ifndef MODE_PAGE_DISPLAY
+#define MODE_PAGE_DISPLAY 0x22
 #endif
 
 #endif /* __MCD_H */
