@@ -78,6 +78,40 @@ UserCreateSession(ULONG SessionId, PUSER_SESSION *Session)
     return STATUS_SUCCESS;
 }
 
+VOID FASTCALL
+UserBeginSessionsEnd(VOID)
+{
+    PUSER_SESSION Session;
+
+    ASSERT(UserIsEnteredExclusive());
+    for (Session = ReadPointerAcquire((PVOID volatile *)&gpUserSessions); Session; Session = Session->Next)
+        Session->Ending = TRUE;
+}
+
+VOID FASTCALL
+UserReleaseSessions(VOID)
+{
+    PUSER_SESSION Session;
+
+    for (Session = ReadPointerAcquire((PVOID volatile *)&gpUserSessions); Session; Session = Session->Next)
+    {
+        ASSERT(Session->Ending);
+        ResetCsrApiPort(Session);
+        ResetCsrProcess(Session);
+        if (Session->DesktopSwitchEvent)
+        {
+            ObDereferenceObject(Session->DesktopSwitchEvent);
+            Session->DesktopSwitchEvent = NULL;
+            Session->DesktopSwitchEventHandle = NULL;
+        }
+        if (Session->WinStaDir)
+        {
+            ZwClose(Session->WinStaDir);
+            Session->WinStaDir = NULL;
+        }
+    }
+}
+
 PUNICODE_STRING FASTCALL
 UserGetWinStaDirName(PEPROCESS Process)
 {

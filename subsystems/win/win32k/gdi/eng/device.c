@@ -322,6 +322,31 @@ EngpGraphicsDeviceNotification(
 
 VOID
 NTAPI
+EngpReleaseAllGraphicsDevices(VOID)
+{
+    PGRAPHICS_DEVICE_NOTIFY pNotify;
+    PGRAPHICS_DEVICE pGraphicsDevice;
+
+    for (;;)
+    {
+        EngAcquireSemaphore(ghsemGraphicsDeviceList);
+        pGraphicsDevice = gpGraphicsDeviceFirst;
+        if (pGraphicsDevice)
+            EngpUnlinkGraphicsDevice(pGraphicsDevice);
+        EngReleaseSemaphore(ghsemGraphicsDeviceList);
+        if (!pGraphicsDevice)
+            break;
+
+        pNotify = EngpFreeGraphicsDevice(pGraphicsDevice);
+        if (pNotify)
+            ExFreePoolWithTag(pNotify, GDITAG_GDEVICE);
+    }
+    gpPrimaryGraphicsDevice = NULL;
+    gpVgaGraphicsDevice = NULL;
+}
+
+VOID
+NTAPI
 EngpReleaseRemovedGraphicsDevices(VOID)
 {
     PGRAPHICS_DEVICE_NOTIFY pNotify;
