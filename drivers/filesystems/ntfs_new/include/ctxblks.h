@@ -624,9 +624,13 @@ typedef struct _NTFS_DIRECT_IO_RUN
     ULONG Length;
 } NTFS_DIRECT_IO_RUN, *PNTFS_DIRECT_IO_RUN;
 
+/* A read that runs past the valid data length transfers only TransferLength bytes; the caller zeroes from ValidLength and reports DataLength */
 typedef struct _NTFS_DIRECT_IO_MAP
 {
     ULONG RunCount;
+    ULONG TransferLength;
+    ULONG ValidLength;
+    ULONG DataLength;
     NTFS_DIRECT_IO_RUN Runs[NTFS_DIRECT_IO_RUNS];
 } NTFS_DIRECT_IO_MAP, *PNTFS_DIRECT_IO_MAP;
 
@@ -637,7 +641,7 @@ NtfsMapDirectIo(_In_ PVolumeContextBlock VolCB,
                 _In_ ULONGLONG FileOffset,
                 _In_ ULONG Length,
                 _In_ LOCK_OPERATION Operation,
-                _In_ BOOLEAN AllowExtend,
+                _In_ BOOLEAN AllowPastValidData,
                 _Out_ PNTFS_DIRECT_IO_MAP Map,
                 _Out_ PBOOLEAN Handled);
 
