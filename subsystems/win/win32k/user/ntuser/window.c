@@ -5315,6 +5315,31 @@ NtUserGetWindowDisplayAffinity(
 /* FIXME: WDA_EXCLUDEFROMCAPTURE windows come out black like WDA_MONITOR ones instead of being left out of the capture */
 /* FIXME: another process reading a protected window through that window's own DC still gets its content */
 /* TODO: DXGI desktop duplication, Windows.Graphics.Capture and the AlphaBlend, TransparentBlt and PlgBlt screen reads do not exclude protected windows */
+/* Another process reading a protected window through a DC of that window gets none of its content (documented-safe:
+   the window is protected from capture by public APIs); the owning process still reads its own window */
+static
+PREGION
+UserCaptureForeignWindowRegion(
+    _In_ HDC hdcSrc)
+{
+    PREGION prgn = NULL;
+    PWND pwnd, pwndRoot;
+    HWND hwnd;
+
+    UserEnterShared();
+    hwnd = IntWindowFromDC(hdcSrc);
+    pwnd = (hwnd != NULL) ? ValidateHwndNoErr(hwnd) : NULL;
+    pwndRoot = (pwnd != NULL) ? UserGetAncestor(pwnd, GA_ROOT) : NULL;
+    if (pwndRoot != NULL && pwndRoot != UserGetDesktopWindow() && pwndRoot->head.pti != NULL &&
+        pwndRoot->head.pti->ppi->peProcess != PsGetCurrentProcess() &&
+        IntGetWindowDisplayAffinity(pwndRoot) != WDA_NONE)
+    {
+        prgn = IntSysCreateRectpRgn(-MAXLONG / 2, -MAXLONG / 2, MAXLONG / 2, MAXLONG / 2);
+    }
+    UserLeave();
+    return prgn;
+}
+
 static
 PREGION
 UserCaptureAffinityRegion(
@@ -5325,6 +5350,7 @@ UserCaptureAffinityRegion(
     PWND pwndDesktop, pwnd;
     PDC pdc;
     BOOL Screen;
+    BOOL Direct;
 
     if (hdcSrc == NULL || ExGetPreviousMode() != UserMode || UserIsEntered() || IntCompositionIsAttachedProcess())
         return NULL;
@@ -5334,9 +5360,10 @@ UserCaptureAffinityRegion(
         return NULL;
     Screen = pdc->dctype == DCTYPE_DIRECT && pdc->ppdev != NULL &&
              pdc->dclevel.pSurface != NULL && pdc->dclevel.pSurface == pdc->ppdev->pSurface;
+    Direct = (pdc->dctype == DCTYPE_DIRECT);
     DC_UnlockDc(pdc);
     if (!Screen)
-        return NULL;
+        return (Direct && !ExcludeFromCaptureOnly) ? UserCaptureForeignWindowRegion(hdcSrc) : NULL;
 
     UserEnterShared();
     pwndDesktop = UserGetDesktopWindow();

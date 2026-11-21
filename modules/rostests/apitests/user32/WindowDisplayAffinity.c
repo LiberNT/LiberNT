@@ -191,6 +191,80 @@ CheckScreenReads(COLORREF Expected, PCSTR What)
     }
 }
 
+static COLORREF
+WindowDcPixel(HWND hWnd)
+{
+    HDC hdcWindow = GetDC(hWnd), hdcMem = CreateCompatibleDC(hdcWindow);
+    HBITMAP hbm = CreateCompatibleBitmap(hdcWindow, 4, 4), hbmOld = SelectObject(hdcMem, hbm);
+    COLORREF Color;
+
+    BitBlt(hdcMem, 0, 0, 4, 4, hdcWindow, 20, 20, SRCCOPY);
+    Color = GetPixel(hdcMem, 1, 1);
+    SelectObject(hdcMem, hbmOld);
+    DeleteObject(hbm);
+    DeleteDC(hdcMem);
+    ReleaseDC(hWnd, hdcWindow);
+    return Color;
+}
+
+static void
+RunChild(void)
+{
+    WNDCLASSW wc = { 0 };
+    HANDLE Ready = OpenEventW(EVENT_MODIFY_STATE, FALSE, L"WindowDisplayAffinityChildReady");
+    HANDLE Done = OpenEventW(SYNCHRONIZE, FALSE, L"WindowDisplayAffinityChildDone");
+    HWND hWnd;
+
+    wc.lpfnWndProc = AffinityWndProc;
+    wc.hInstance = GetModuleHandleW(NULL);
+    wc.lpszClassName = L"WindowDisplayAffinityChild";
+    RegisterClassW(&wc);
+    hWnd = CreateWindowExW(WS_EX_TOPMOST, wc.lpszClassName, L"AffinityChild", WS_POPUP,
+                           400, 320, 100, 100, NULL, NULL, wc.hInstance, NULL);
+    SetWindowLongPtrW(hWnd, GWLP_USERDATA, RGB(0, 200, 0));
+    ShowWindow(hWnd, SW_SHOWNOACTIVATE);
+    UpdateWindow(hWnd);
+    SetWindowDisplayAffinity(hWnd, WDA_MONITOR);
+    PumpMessages();
+    if (Ready)
+        SetEvent(Ready);
+    while (Done && MsgWaitForMultipleObjects(1, &Done, FALSE, 5000, QS_ALLINPUT) == WAIT_OBJECT_0 + 1)
+        PumpMessages();
+    DestroyWindow(hWnd);
+}
+
+static void
+TestForeignWindowDc(HWND hOwn)
+{
+    HANDLE Ready = CreateEventW(NULL, TRUE, FALSE, L"WindowDisplayAffinityChildReady");
+    HANDLE Done = CreateEventW(NULL, TRUE, FALSE, L"WindowDisplayAffinityChildDone");
+    STARTUPINFOW si = { sizeof(si) };
+    PROCESS_INFORMATION pi;
+    WCHAR Path[MAX_PATH], CommandLine[MAX_PATH + 64];
+    HWND hChild;
+
+    GetModuleFileNameW(NULL, Path, RTL_NUMBER_OF(Path));
+    wsprintfW(CommandLine, L"\"%s\" WindowDisplayAffinity child", Path);
+    if (!CreateProcessW(NULL, CommandLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
+    {
+        skip("CreateProcessW failed: %lu\n", GetLastError());
+        return;
+    }
+    ok(WaitForSingleObject(Ready, 5000) == WAIT_OBJECT_0, "The child did not get ready\n");
+    hChild = FindWindowW(L"WindowDisplayAffinityChild", L"AffinityChild");
+    ok(hChild != NULL, "The child window was not found\n");
+    if (hChild != NULL)
+        ok(WindowDcPixel(hChild) == RGB(0, 0, 0), "Another process's protected window DC reads 0x%06lx\n", WindowDcPixel(hChild));
+    ok(WindowDcPixel(hOwn) == RGB(0, 200, 0), "The owner's protected window DC reads 0x%06lx\n", WindowDcPixel(hOwn));
+
+    SetEvent(Done);
+    WaitForSingleObject(pi.hProcess, 5000);
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+    CloseHandle(Ready);
+    CloseHandle(Done);
+}
+
 static void
 CheckExcludedReads(COLORREF Expected)
 {
@@ -223,6 +297,7 @@ TestCapture(HWND hWnd, HWND hOther, HWND hUnder)
     ok(ScreenGetPixel(150, 150) == RGB(0, 0, 0), "GetPixel of a WDA_MONITOR window reads 0x%06lx\n", ScreenGetPixel(150, 150));
     CheckScreenReads(RGB(0, 0, 0), "a WDA_MONITOR window");
     ok(PrintedPixel(hWnd) == RGB(0, 0, 0), "A WDA_MONITOR window prints 0x%06lx\n", PrintedPixel(hWnd));
+    TestForeignWindowDc(hWnd);
     ok(ScreenBlt(350, 150, FALSE) == Red, "The unprotected neighbour reads 0x%06lx\n", ScreenBlt(350, 150, FALSE));
 
     ok(SetWindowDisplayAffinity(hWnd, WDA_EXCLUDEFROMCAPTURE), "WDA_EXCLUDEFROMCAPTURE failed: %lu\n", GetLastError());
@@ -295,6 +370,13 @@ START_TEST(WindowDisplayAffinity)
     WNDCLASSW wc = { 0 };
     HWND hWnd, hOther, hUnder, hChild;
     BOOL Composition = FALSE;
+    char **argv;
+
+    if (winetest_get_mainargs(&argv) >= 3 && !strcmp(argv[2], "child"))
+    {
+        RunChild();
+        return;
+    }
 
     if (hDwm)
         pDwmIsCompositionEnabled = (DWM_IS_COMPOSITION_ENABLED)GetProcAddress(hDwm, "DwmIsCompositionEnabled");
