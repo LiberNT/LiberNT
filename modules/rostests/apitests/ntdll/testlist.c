@@ -117,6 +117,7 @@ extern void func_NtQueryInformationProcess(void);
 extern void func_NtQueryInformationThread(void);
 extern void func_NtQueryInformationToken(void);
 extern void func_NtQueryKey(void);
+extern void func_MemoryImageInformation(void);
 extern void func_NtQueryObject(void);
 extern void func_NtQueryObjectName(void);
 extern void func_NtQueryOpenSubKeys(void);
@@ -373,6 +374,7 @@ const struct test winetest_testlist[] =
     { "NtQueryKey",                     func_NtQueryKey },
     { "NtQueryObject",                  func_NtQueryObject },
     { "NtQueryObjectName",              func_NtQueryObjectName },
+    { "MemoryImageInformation",         func_MemoryImageInformation },
     { "NtQueryOpenSubKeys",             func_NtQueryOpenSubKeys },
     { "NtQuerySection",                 func_NtQuerySection },
     { "NtQuerySecurityObject",          func_NtQuerySecurityObject },
