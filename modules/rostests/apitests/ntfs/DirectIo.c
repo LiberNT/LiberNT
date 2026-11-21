@@ -200,6 +200,113 @@ TestFragmentedTransfers(
     ok(DeleteFileW(PathB), "Deleting %ls failed: %lu\n", PathB, GetLastError());
 }
 
+static
+BOOL
+IsZero(
+    _In_reads_bytes_(Length) const UCHAR *Buffer,
+    _In_ ULONG Length)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < Length; Index++)
+    {
+        if (Buffer[Index] != 0)
+            return FALSE;
+    }
+    return TRUE;
+}
+
+static
+VOID
+CheckMapped(
+    _In_ PCWSTR Path,
+    _In_ ULONG ValidLength,
+    _In_ ULONG Size,
+    _In_ ULONG Seed)
+{
+    HANDLE File, Mapping;
+    PUCHAR View;
+
+    File = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "Opening %ls failed: %lu\n", Path, GetLastError());
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+    Mapping = CreateFileMappingW(File, NULL, PAGE_READONLY, 0, 0, NULL);
+    ok(Mapping != NULL, "Mapping %ls failed: %lu\n", Path, GetLastError());
+    if (Mapping)
+    {
+        View = MapViewOfFile(Mapping, FILE_MAP_READ, 0, 0, 0);
+        ok(View != NULL, "Viewing %ls failed: %lu\n", Path, GetLastError());
+        if (View)
+        {
+            ok(Matches(View, ValidLength, Seed), "The mapped valid data of %ls is wrong\n", Path);
+            ok(IsZero(View + ValidLength, ((Size + 4095) & ~4095UL) - ValidLength),
+               "%ls maps nonzero bytes past its valid data\n", Path);
+            UnmapViewOfFile(View);
+        }
+        CloseHandle(Mapping);
+    }
+    CloseHandle(File);
+}
+
+/* What lies on the device past the valid data length is stale, so a read across it must return zeros there */
+static
+VOID
+TestPastValidData(
+    _Inout_updates_bytes_(CHUNK_SIZE * CHUNK_COUNT) PUCHAR Buffer)
+{
+    WCHAR Path[MAX_PATH];
+    FILE_END_OF_FILE_INFO EndOfFile;
+    LARGE_INTEGER Offset;
+    HANDLE File;
+    DWORD Done;
+
+    StringCchPrintfW(Path, ARRAYSIZE(Path), L"%sdirectio_vdl.dat", VolumeRoot);
+    File = CreateFileW(Path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS,
+                       FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "Creating %ls failed: %lu\n", Path, GetLastError());
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+
+    Fill(Buffer, 2 * CHUNK_SIZE, 400);
+    ok(WriteFile(File, Buffer, 2 * CHUNK_SIZE, &Done, NULL) && Done == 2 * CHUNK_SIZE,
+       "Writing %ls wrote %lu bytes, error %lu\n", Path, Done, GetLastError());
+    EndOfFile.EndOfFile.QuadPart = 1000;
+    ok(SetFileInformationByHandle(File, FileEndOfFileInfo, &EndOfFile, sizeof(EndOfFile)),
+       "Truncating %ls failed: %lu\n", Path, GetLastError());
+
+    Offset.QuadPart = 0;
+    FillMemory(Buffer, CHUNK_SIZE, 0xCC);
+    ok(SetFilePointerEx(File, Offset, NULL, FILE_BEGIN), "Seeking %ls failed: %lu\n", Path, GetLastError());
+    ok(ReadFile(File, Buffer, CHUNK_SIZE, &Done, NULL), "Reading past the end of %ls failed: %lu\n", Path, GetLastError());
+    ok_eq_ulong(Done, 1000UL);
+    ok(Matches(Buffer, 1000, 400), "The data before the end of %ls is wrong\n", Path);
+    CloseHandle(File);
+    CheckMapped(Path, 1000, 1000, 400);
+
+    File = CreateFileW(Path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_EXISTING,
+                       FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "Reopening %ls failed: %lu\n", Path, GetLastError());
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+    EndOfFile.EndOfFile.QuadPart = 2 * CHUNK_SIZE;
+    ok(SetFileInformationByHandle(File, FileEndOfFileInfo, &EndOfFile, sizeof(EndOfFile)),
+       "Extending %ls failed: %lu\n", Path, GetLastError());
+
+    Offset.QuadPart = 0;
+    FillMemory(Buffer, 2 * CHUNK_SIZE, 0xCC);
+    ok(SetFilePointerEx(File, Offset, NULL, FILE_BEGIN), "Seeking %ls failed: %lu\n", Path, GetLastError());
+    ok(ReadFile(File, Buffer, 2 * CHUNK_SIZE, &Done, NULL), "Reading across the valid data of %ls failed: %lu\n",
+       Path, GetLastError());
+    ok_eq_ulong(Done, (ULONG)(2 * CHUNK_SIZE));
+    ok(Matches(Buffer, 1000, 400), "The valid data of %ls is wrong\n", Path);
+    ok(IsZero(Buffer + 1000, 2 * CHUNK_SIZE - 1000), "%ls reads nonzero bytes past its valid data\n", Path);
+    CloseHandle(File);
+    CheckMapped(Path, 1000, 2 * CHUNK_SIZE, 400);
+
+    ok(DeleteFileW(Path), "Deleting %ls failed: %lu\n", Path, GetLastError());
+}
+
 START_TEST(DirectIo)
 {
     PUCHAR Buffer;
@@ -217,5 +324,6 @@ START_TEST(DirectIo)
 
     TestExtendingWrites(Buffer);
     TestFragmentedTransfers(Buffer);
+    TestPastValidData(Buffer);
     VirtualFree(Buffer, 0, MEM_RELEASE);
 }

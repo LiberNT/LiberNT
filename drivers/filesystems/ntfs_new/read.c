@@ -308,7 +308,7 @@ NtfsMapDirectIo(
     _In_ ULONGLONG FileOffset,
     _In_ ULONG Length,
     _In_ LOCK_OPERATION Operation,
-    _In_ BOOLEAN AllowExtend,
+    _In_ BOOLEAN AllowPastValidData,
     _Out_ PNTFS_DIRECT_IO_MAP Map,
     _Out_ PBOOLEAN Handled)
 {
@@ -321,6 +321,8 @@ NtfsMapDirectIo(
     ULONGLONG Available;
     ULONGLONG PhysicalCluster;
     ULONGLONG DiskOffset;
+    ULONGLONG ValidDataLength;
+    ULONGLONG DataSize;
     ULONG ExtentCount;
     ULONG Mapped;
     ULONG Piece;
@@ -332,6 +334,9 @@ NtfsMapDirectIo(
 
     *Handled = FALSE;
     Map->RunCount = 0;
+    Map->TransferLength = Length;
+    Map->ValidLength = Length;
+    Map->DataLength = Length;
     if (!Irp->MdlAddress &&
         !Irp->AssociatedIrp.SystemBuffer)
     {
@@ -365,14 +370,36 @@ NtfsMapDirectIo(
     {
         return STATUS_SUCCESS;
     }
+    ValidDataLength = Attribute->NonResident.InitalizedDataSize;
+    DataSize = Attribute->NonResident.DataSize;
     /* The valid data length cannot pass the recorded size, so data written past it would later be zeroed over */
-    if (FileOffset + Length > Attribute->NonResident.InitalizedDataSize &&
-        (!AllowExtend ||
-         Attribute->Flags != 0 ||
-         FileOffset > Attribute->NonResident.InitalizedDataSize ||
-         FileOffset + Length > Attribute->NonResident.DataSize))
+    if (FileOffset + Length > ValidDataLength)
     {
-        return STATUS_SUCCESS;
+        if (!AllowPastValidData ||
+            Attribute->Flags != 0 ||
+            ValidDataLength > DataSize)
+        {
+            return STATUS_SUCCESS;
+        }
+        if (Operation == IoReadAccess)
+        {
+            if (FileOffset > ValidDataLength || FileOffset + Length > DataSize)
+                return STATUS_SUCCESS;
+        }
+        else
+        {
+            /* Only the sectors holding valid data come from the device: what follows them reads as zeros, as the library returns it */
+            if (FileOffset >= ValidDataLength)
+                return STATUS_SUCCESS;
+            Map->ValidLength = (ULONG)(ValidDataLength - FileOffset);
+            Map->DataLength = (ULONG)min((ULONGLONG)Length, DataSize - FileOffset);
+            Map->TransferLength = (Map->ValidLength + VolCB->BytesPerSector - 1) /
+                                  VolCB->BytesPerSector * VolCB->BytesPerSector;
+            ASSERT(Map->ValidLength < Length);
+            ASSERT(Map->ValidLength <= Map->DataLength);
+            ASSERT(Map->TransferLength >= Map->ValidLength);
+            ASSERT(Map->TransferLength <= Length);
+        }
     }
 
     ClusterSize = (ULONGLONG)VolCB->BytesPerSector *
@@ -380,7 +407,7 @@ NtfsMapDirectIo(
     if (!ClusterSize)
         return STATUS_SUCCESS;
 
-    for (Mapped = 0; Mapped < Length; Mapped += Piece)
+    for (Mapped = 0; Mapped < Map->TransferLength; Mapped += Piece)
     {
         StartingVcn = (FileOffset + Mapped) / ClusterSize;
         InClusterOffset = (FileOffset + Mapped) % ClusterSize;
@@ -408,7 +435,7 @@ NtfsMapDirectIo(
         Available *= ClusterSize;
         ASSERT(Available > InClusterOffset);
         Available -= InClusterOffset;
-        Piece = (ULONG)min(Available, (ULONGLONG)(Length - Mapped));
+        Piece = (ULONG)min(Available, (ULONGLONG)(Map->TransferLength - Mapped));
         ASSERT(Piece != 0);
         ASSERT(Piece % VolCB->BytesPerSector == 0);
 
@@ -446,6 +473,7 @@ NtfsMapDirectIo(
     }
 
     ASSERT(Map->RunCount != 0);
+    ASSERT(Mapped == Map->TransferLength);
     *Handled = TRUE;
     return STATUS_SUCCESS;
 }
@@ -668,15 +696,25 @@ NtfsFsdRead(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                                  (ULONGLONG)ReadOffset.QuadPart,
                                  RequestedLength,
                                  IoWriteAccess,
-                                 FALSE,
+                                 TRUE,
                                  &DirectMap,
                                  &DirectRead);
         NtfsReleaseMetadata(VolCB);
         if (DirectRead)
         {
+            PUCHAR ZeroBase = NULL;
+
             /* The stream resource held shared excludes every path that frees or moves this stream's clusters. */
             ASSERT(ExIsResourceAcquiredSharedLite(PagingIo ? NtfsGetPagingIoResource(FileCB)
                                                            : NtfsGetMainResource(FileCB)));
+            if (NT_SUCCESS(Status) && DirectMap.ValidLength < RequestedLength)
+            {
+                ASSERT(DirectMap.TransferLength <= RequestedLength);
+                ASSERT(DirectMap.DataLength <= RequestedLength);
+                ZeroBase = MmGetSystemAddressForMdlSafe(Irp->MdlAddress, NormalPagePriority | MdlMappingNoExecute);
+                if (!ZeroBase)
+                    Status = STATUS_INSUFFICIENT_RESOURCES;
+            }
             if (NT_SUCCESS(Status))
             {
                 /* Small file writes may still be in the library's block cache.
@@ -685,6 +723,19 @@ NtfsFsdRead(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                 Status = NtfsFlushDirectIoMap(VolCB, &DirectMap);
                 if (NT_SUCCESS(Status))
                     Status = NtfsSubmitDirectIoMap(VolCB, Irp, IRP_MJ_READ, &DirectMap);
+            }
+            if (NT_SUCCESS(Status) && ZeroBase)
+            {
+                if (Irp->IoStatus.Information != DirectMap.TransferLength)
+                {
+                    Status = STATUS_DATA_ERROR;
+                }
+                else
+                {
+                    RtlZeroMemory(ZeroBase + DirectMap.ValidLength,
+                                  max(DirectMap.TransferLength, DirectMap.DataLength) - DirectMap.ValidLength);
+                    Irp->IoStatus.Information = DirectMap.DataLength;
+                }
             }
             if (NT_SUCCESS(Status))
             {
