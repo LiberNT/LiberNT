@@ -1056,6 +1056,7 @@ VOID
 KdbpTestMoreMemory(VOID)
 {
     CHAR Line[KDB_TEST_LINE_MAX];
+    CHAR Unreadable[KDB_TEST_LINE_MAX];
     PHYSICAL_ADDRESS Physical;
     PCSTR Output;
     ULONG Index;
@@ -1096,7 +1097,8 @@ KdbpTestMoreMemory(VOID)
     KdbpTestCommand(Line, "2 entries shown, and there are more", NULL);
     KdbpTestListItems[1].Flink = (PLIST_ENTRY)(ULONG_PTR)1;
     KdbpTestFormat(Line, "!list 0x%p", &KdbpTestListHead);
-    KdbpTestCommand(Line, "cannot be read at 0000000000000001", NULL);
+    KdbpTestFormat(Unreadable, "cannot be read at %p", (PVOID)(ULONG_PTR)1);
+    KdbpTestCommand(Line, Unreadable, NULL);
     KdbpTestBuildList();
 }
 
@@ -1172,8 +1174,6 @@ KdbpTestControl(VOID)
     KdbpTestCommand("g kdbtest_zz", "no such", NULL);
     KdbpTestCommand("g 1 2", "more than", NULL);
 
-    /* gu runs to where this function returns, once the stack is back above it */
-    Caller = *KdbCurrentTrapFrame;
     /* Only a breakpoint under the program counter is stepped over when the machine runs again */
     KdbpTestFormat(Line, "g 0x%p", Target);
     KdbpTestRun(Line, &Resumed);
@@ -1187,6 +1187,8 @@ KdbpTestControl(VOID)
                   "a breakpoint the machine does not stand on stays in memory");
     KdbpTestRestore();
 
+    /* gu runs to where this function returns, once the stack is back above it */
+    Caller = *KdbCurrentTrapFrame;
     if (KiUnwindFrame(&Caller, FALSE))
     {
         KdbpTestRun("gu", &Resumed);
