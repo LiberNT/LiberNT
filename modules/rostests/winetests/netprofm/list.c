@@ -288,12 +288,12 @@ static void test_INetworkListManager( void )
     trace( "GetConnectivity: %08x\n", connectivity );
 
     connected = 0xdead;
-    hr = INetworkListManager_IsConnected( mgr, &connected );
+    hr = INetworkListManager_get_IsConnected( mgr, &connected );
     ok( hr == S_OK, "got %08lx\n", hr );
     ok( connected == VARIANT_TRUE || connected == VARIANT_FALSE, "expected boolean value\n" );
 
     connected = 0xdead;
-    hr = INetworkListManager_IsConnectedToInternet( mgr, &connected );
+    hr = INetworkListManager_get_IsConnectedToInternet( mgr, &connected );
     ok( hr == S_OK, "got %08lx\n", hr );
     ok( connected == VARIANT_TRUE || connected == VARIANT_FALSE, "expected boolean value\n" );
 
