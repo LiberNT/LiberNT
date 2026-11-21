@@ -4,7 +4,9 @@
  * PURPOSE:     Unbuffered disk read/write benchmark
  * COPYRIGHT:   Copyright 2026 LiberNT Project
  *
- * Usage: diskbench <file-on-target-volume> [file-size-MB]
+ * Usage: diskbench                  benchmark C: and print a table
+ *        diskbench <seconds> [drive] load a volume (C: by default) for that long and measure responsiveness
+ *        diskbench <file-on-target-volume> [file-size-MB]
  *
  * The file is created with FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH,
  * so every transfer goes through the storage stack to the device; the cache
@@ -25,6 +27,22 @@
 #define RANDOM_OPS      2048
 
 static ULONG RandomOps = RANDOM_OPS;
+
+#define MAX_RESULTS     16
+#define STRESS_WRITERS  3
+#define STRESS_FILE_MB  64
+#define STRESS_PROBE_MS 100
+
+typedef struct _PHASE_RESULT
+{
+    const char* Phase;
+    ULONG BlockSize;
+    double MBs;
+    double Iops;
+} PHASE_RESULT;
+
+static PHASE_RESULT Results[MAX_RESULTS];
+static ULONG ResultCount;
 
 static LARGE_INTEGER Frequency;
 
@@ -60,6 +78,38 @@ static void ReportPhase(const char* Phase, ULONG BlockSize, ULONGLONG Bytes, ULO
     double Iops = Seconds > 0.0 ? (double)Ops / Seconds : 0.0;
 
     Report("DISKBENCH %s %lu %.2f %.0f ticks %lu\n", Phase, BlockSize, MBs, Iops, TickMs);
+    if (ResultCount < MAX_RESULTS)
+    {
+        Results[ResultCount].Phase = Phase;
+        Results[ResultCount].BlockSize = BlockSize;
+        Results[ResultCount].MBs = MBs;
+        Results[ResultCount].Iops = Iops;
+        ResultCount++;
+    }
+}
+
+static void ReportBlock(ULONG BlockSize, char* Text, size_t Size)
+{
+    if (BlockSize >= 1024 * 1024)
+        _snprintf(Text, Size, "%lu MB", BlockSize >> 20);
+    else
+        _snprintf(Text, Size, "%lu KB", BlockSize >> 10);
+    Text[Size - 1] = 0;
+}
+
+static void ReportTable(const char* Target, ULONGLONG FileSize)
+{
+    ULONG Index;
+
+    Report("\ndiskbench %s %I64u MB file, unbuffered, write-through\n", Target, FileSize >> 20);
+    Report("  %-10s %8s %10s %10s\n", "Test", "Block", "MB/s", "IOPS");
+    for (Index = 0; Index < ResultCount; Index++)
+    {
+        char Block[16];
+
+        ReportBlock(Results[Index].BlockSize, Block, sizeof(Block));
+        Report("  %-10s %8s %10.2f %10.0f\n", Results[Index].Phase, Block, Results[Index].MBs, Results[Index].Iops);
+    }
 }
 
 static BOOL RunSequential(HANDLE File, BOOL Write, ULONG BlockSize, ULONGLONG FileSize, PUCHAR Buffer, const char* Phase)
@@ -529,16 +579,273 @@ static int RawReadBenchmark(int argc, char* argv[], PUCHAR Buffer)
     return Failed ? 1 : 0;
 }
 
+typedef struct _STRESS_STATE
+{
+    volatile LONG Stop;
+    volatile LONG64 BytesWritten;
+    volatile LONG64 RandomOps;
+    volatile LONG Errors;
+    char Path[STRESS_WRITERS + 1][MAX_PATH];
+} STRESS_STATE;
+
+typedef struct _STRESS_WORKER
+{
+    STRESS_STATE* State;
+    ULONG Index;
+} STRESS_WORKER;
+
+static DWORD WINAPI StressWriter(LPVOID Context)
+{
+    STRESS_WORKER* Worker = (STRESS_WORKER*)Context;
+    STRESS_STATE* State = Worker->State;
+    PUCHAR Block = (PUCHAR)VirtualAlloc(NULL, 1024 * 1024, MEM_COMMIT, PAGE_READWRITE);
+    HANDLE File;
+    ULONGLONG Written = 0;
+    DWORD Transferred;
+
+    if (!Block)
+    {
+        InterlockedIncrement(&State->Errors);
+        return 1;
+    }
+    memset(Block, 0x5A + (int)Worker->Index, 1024 * 1024);
+    File = CreateFileA(State->Path[Worker->Index], GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (File == INVALID_HANDLE_VALUE)
+    {
+        InterlockedIncrement(&State->Errors);
+        VirtualFree(Block, 0, MEM_RELEASE);
+        return 1;
+    }
+    while (!State->Stop)
+    {
+        if (!WriteFile(File, Block, 1024 * 1024, &Transferred, NULL) || Transferred != 1024 * 1024)
+        {
+            InterlockedIncrement(&State->Errors);
+            break;
+        }
+        InterlockedExchangeAdd64(&State->BytesWritten, Transferred);
+        Written += Transferred;
+        if ((Written & (16 * 1024 * 1024 - 1)) == 0)
+            FlushFileBuffers(File);
+        if (Written >= (ULONGLONG)STRESS_FILE_MB * 1024 * 1024)
+        {
+            LARGE_INTEGER Zero;
+
+            Zero.QuadPart = 0;
+            SetFilePointerEx(File, Zero, NULL, FILE_BEGIN);
+            Written = 0;
+        }
+    }
+    CloseHandle(File);
+    VirtualFree(Block, 0, MEM_RELEASE);
+    return 0;
+}
+
+static DWORD WINAPI StressRandom(LPVOID Context)
+{
+    STRESS_STATE* State = (STRESS_STATE*)Context;
+    PUCHAR Block = (PUCHAR)VirtualAlloc(NULL, 1024 * 1024, MEM_COMMIT, PAGE_READWRITE);
+    ULONGLONG FileSize = (ULONGLONG)STRESS_FILE_MB * 1024 * 1024;
+    ULONG Seed = 0x0DD5EED5;
+    HANDLE File;
+    ULONGLONG Done;
+    DWORD Transferred;
+
+    if (!Block)
+    {
+        InterlockedIncrement(&State->Errors);
+        return 1;
+    }
+    File = CreateFileA(State->Path[STRESS_WRITERS], GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+                       FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH, NULL);
+    if (File == INVALID_HANDLE_VALUE)
+    {
+        InterlockedIncrement(&State->Errors);
+        VirtualFree(Block, 0, MEM_RELEASE);
+        return 1;
+    }
+    for (Done = 0; Done < FileSize && !State->Stop; Done += 1024 * 1024)
+    {
+        if (!WriteFile(File, Block, 1024 * 1024, &Transferred, NULL))
+        {
+            InterlockedIncrement(&State->Errors);
+            break;
+        }
+    }
+    while (!State->Stop)
+    {
+        LARGE_INTEGER Offset;
+        ULONG Op = NextRandom(&Seed);
+        BOOL Ok;
+
+        Offset.QuadPart = (LONGLONG)(Op % (FileSize / 4096)) * 4096;
+        if (!SetFilePointerEx(File, Offset, NULL, FILE_BEGIN))
+            break;
+        Ok = (Op & 1) ? WriteFile(File, Block, 4096, &Transferred, NULL)
+                      : ReadFile(File, Block, 4096, &Transferred, NULL);
+        if (!Ok || Transferred != 4096)
+        {
+            InterlockedIncrement(&State->Errors);
+            break;
+        }
+        InterlockedIncrement64(&State->RandomOps);
+    }
+    CloseHandle(File);
+    VirtualFree(Block, 0, MEM_RELEASE);
+    return 0;
+}
+
+static int CompareLatency(const void* Left, const void* Right)
+{
+    double A = *(const double*)Left, B = *(const double*)Right;
+
+    return (A > B) - (A < B);
+}
+
+static double Percentile(double* Sorted, ULONG Count, ULONG Percent)
+{
+    ULONG Index;
+
+    if (Count == 0)
+        return 0.0;
+    Index = (ULONG)(((ULONGLONG)(Count - 1) * Percent) / 100);
+    return Sorted[Index];
+}
+
+/* Loads the volume for Seconds and measures how long an unrelated open and a 100 ms wake-up take meanwhile */
+static int StressVolume(ULONG Seconds, const char* Root)
+{
+    static STRESS_STATE State;
+    STRESS_WORKER Workers[STRESS_WRITERS];
+    HANDLE Threads[STRESS_WRITERS + 1];
+    char ProbePath[MAX_PATH];
+    double* Opens;
+    ULONG OpenCount = 0, Capacity, Index, Second;
+    double WorstLate = 0.0;
+    LONG64 LastBytes = 0, LastOps = 0;
+    LARGE_INTEGER Begin, Now;
+    HANDLE Probe;
+
+    if (Seconds > 3600)
+        Seconds = 3600;
+    Capacity = Seconds * (1000 / STRESS_PROBE_MS) + 16;
+    Opens = (double*)calloc(Capacity, sizeof(double));
+    if (!Opens)
+    {
+        Report("DISKBENCH STRESS FAILED alloc\n");
+        return 1;
+    }
+    for (Index = 0; Index <= STRESS_WRITERS; Index++)
+        _snprintf(State.Path[Index], MAX_PATH, "%s\\diskbench_stress_%lu.tmp", Root, Index);
+    _snprintf(ProbePath, MAX_PATH, "%s\\diskbench_probe.tmp", Root);
+    Probe = CreateFileA(ProbePath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (Probe == INVALID_HANDLE_VALUE)
+    {
+        Report("DISKBENCH STRESS FAILED probe %lu\n", GetLastError());
+        free(Opens);
+        return 1;
+    }
+    CloseHandle(Probe);
+
+    Report("DISKBENCH STRESS %s %lu s, %u cached writers + 1 random 4 KB worker\n", Root, Seconds, STRESS_WRITERS);
+    for (Index = 0; Index < STRESS_WRITERS; Index++)
+    {
+        Workers[Index].State = &State;
+        Workers[Index].Index = Index;
+        Threads[Index] = CreateThread(NULL, 0, StressWriter, &Workers[Index], 0, NULL);
+    }
+    Threads[STRESS_WRITERS] = CreateThread(NULL, 0, StressRandom, &State, 0, NULL);
+
+    QueryPerformanceCounter(&Begin);
+    for (Second = 1; Second <= Seconds; Second++)
+    {
+        double SecondWorstOpen = 0.0, SecondWorstLate = 0.0;
+        LONG64 Bytes, Ops;
+        ULONG Tick;
+
+        for (Tick = 0; Tick < 1000 / STRESS_PROBE_MS; Tick++)
+        {
+            LARGE_INTEGER Before, After, Due;
+            double Late, Open;
+
+            Due.QuadPart = Begin.QuadPart +
+                           (LONGLONG)(((Second - 1) * 1000 + (Tick + 1) * STRESS_PROBE_MS) * (double)Frequency.QuadPart / 1000.0);
+            QueryPerformanceCounter(&Now);
+            if (Now.QuadPart < Due.QuadPart)
+                Sleep((DWORD)((Due.QuadPart - Now.QuadPart) * 1000 / Frequency.QuadPart));
+            QueryPerformanceCounter(&Before);
+            Late = Before.QuadPart > Due.QuadPart ? ElapsedSeconds(Due, Before) * 1000.0 : 0.0;
+            Probe = CreateFileA(ProbePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+            QueryPerformanceCounter(&After);
+            if (Probe != INVALID_HANDLE_VALUE)
+                CloseHandle(Probe);
+            Open = ElapsedSeconds(Before, After) * 1000000.0;
+            if (OpenCount < Capacity)
+                Opens[OpenCount++] = Open;
+            if (Open > SecondWorstOpen)
+                SecondWorstOpen = Open;
+            if (Late > SecondWorstLate)
+                SecondWorstLate = Late;
+        }
+        if (SecondWorstLate > WorstLate)
+            WorstLate = SecondWorstLate;
+        Bytes = State.BytesWritten;
+        Ops = State.RandomOps;
+        Report("DISKBENCH STRESS t=%lus write %.1f MB/s random %I64d IOPS open max %.0f us late max %.0f ms errors %ld\n",
+               Second, (double)(Bytes - LastBytes) / (1024.0 * 1024.0), Ops - LastOps,
+               SecondWorstOpen, SecondWorstLate, State.Errors);
+        LastBytes = Bytes;
+        LastOps = Ops;
+    }
+    InterlockedExchange(&State.Stop, 1);
+    WaitForMultipleObjects(STRESS_WRITERS + 1, Threads, TRUE, 30000);
+    QueryPerformanceCounter(&Now);
+    for (Index = 0; Index <= STRESS_WRITERS; Index++)
+    {
+        if (Threads[Index])
+            CloseHandle(Threads[Index]);
+        DeleteFileA(State.Path[Index]);
+    }
+    DeleteFileA(ProbePath);
+
+    qsort(Opens, OpenCount, sizeof(double), CompareLatency);
+    Report("\ndiskbench %s under load for %lu s\n", Root, Seconds);
+    Report("  %-26s %12.1f\n", "Cached write MB/s", (double)State.BytesWritten / (1024.0 * 1024.0) / ElapsedSeconds(Begin, Now));
+    Report("  %-26s %12.0f\n", "Random 4 KB IOPS", (double)State.RandomOps / ElapsedSeconds(Begin, Now));
+    Report("  %-26s %12.0f\n", "File open p50 (us)", Percentile(Opens, OpenCount, 50));
+    Report("  %-26s %12.0f\n", "File open p99 (us)", Percentile(Opens, OpenCount, 99));
+    Report("  %-26s %12.0f\n", "File open max (us)", OpenCount ? Opens[OpenCount - 1] : 0.0);
+    Report("  %-26s %12.0f\n", "Worst wake-up delay (ms)", WorstLate);
+    Report("  %-26s %12ld\n", "I/O errors", State.Errors);
+    free(Opens);
+    return State.Errors ? 1 : 0;
+}
+
+static BOOL IsSeconds(const char* Text)
+{
+    if (!*Text)
+        return FALSE;
+    for (; *Text; Text++)
+    {
+        if (*Text < '0' || *Text > '9')
+            return FALSE;
+    }
+    return TRUE;
+}
+
 int main(int argc, char* argv[])
 {
     HANDLE File;
     PUCHAR Buffer;
     ULONGLONG FileSize;
     ULONG Index;
+    const char* Path = argc >= 2 ? argv[1] : "C:\\diskbench.tmp";
 
-    if (argc < 2)
+    if (argc >= 2 && (strcmp(argv[1], "-?") == 0 || strcmp(argv[1], "/?") == 0))
     {
-        printf("Usage: diskbench <file> [size-MB] [random-ops] | diskbench -raw |\n"
+        printf("Usage: diskbench                benchmark C: and print a table\n"
+               "       diskbench <seconds> [drive] load a volume (C: by default) and measure responsiveness\n"
+               "       diskbench <file> [size-MB] [random-ops] | diskbench -raw |\n"
                "       diskbench -rawread [disk] [offset-MB] [size-MB] [block-KB] [runs]\n");
         return 1;
     }
@@ -559,14 +866,16 @@ int main(int argc, char* argv[])
     for (Index = 0; Index < 1024 * 1024; Index++)
         Buffer[Index] = (UCHAR)(Index * 2654435761u >> 24);
 
-    if (strcmp(argv[1], "-raw") == 0)
+    if (argc >= 2 && strcmp(argv[1], "-raw") == 0)
         return RawScan(Buffer);
-    if (strcmp(argv[1], "-rawread") == 0)
+    if (argc >= 2 && strcmp(argv[1], "-rawread") == 0)
         return RawReadBenchmark(argc, argv, Buffer);
-    if (strcmp(argv[1], "-araw") == 0)
+    if (argc >= 2 && strcmp(argv[1], "-araw") == 0)
         return AsyncRawScan(argc >= 3 && atoi(argv[2]) > 0 ? atoi(argv[2]) : 32);
+    if ((argc == 2 || argc == 3) && IsSeconds(argv[1]))
+        return StressVolume((ULONG)atoi(argv[1]) ? (ULONG)atoi(argv[1]) : 1, argc == 3 ? argv[2] : "C:");
 
-    File = CreateFileA(argv[1],
+    File = CreateFileA(Path,
                        GENERIC_READ | GENERIC_WRITE,
                        0,
                        NULL,
@@ -575,8 +884,8 @@ int main(int argc, char* argv[])
                        NULL);
     if (File == INVALID_HANDLE_VALUE)
     {
-        DeleteFileA(argv[1]);
-        File = CreateFileA(argv[1],
+        DeleteFileA(Path);
+        File = CreateFileA(Path,
                            GENERIC_READ | GENERIC_WRITE,
                            0,
                            NULL,
@@ -603,7 +912,8 @@ int main(int argc, char* argv[])
     }
 
     CloseHandle(File);
-    DeleteFileA(argv[1]);
+    DeleteFileA(Path);
+    ReportTable(Path, FileSize);
     Report("DISKBENCH DONE\n");
     return 0;
 }
