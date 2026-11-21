@@ -882,6 +882,41 @@ Bcm2837Phase1MapRuntimeMmio(VOID)
     return TRUE;
 }
 
+/*
+ * A device under the ARMCTRL controller names its interrupt by bank and bit
+ * (Linux binding brcm,bcm2835-armctrl-ic): bank 0 is the ARM basic register,
+ * banks 1 and 2 the two halves of the 64 GPU interrupts. All are level.
+ */
+static
+BOOLEAN
+Bcm2837TranslateDeviceTreeInterrupt(
+    _In_reads_bytes_(CompatibleLength) const CHAR *Compatible,
+    _In_ ULONG CompatibleLength,
+    _In_reads_(CellCount) const ULONG *Cells,
+    _In_ ULONG CellCount,
+    _Out_ PULONG Gsi,
+    _Out_ PBOOLEAN EdgeTriggered)
+{
+    *Gsi = 0;
+    *EdgeTriggered = FALSE;
+
+    if ((CellCount < 2) ||
+        (!FdtStringListContains(Compatible, CompatibleLength, "brcm,bcm2836-armctrl-ic") &&
+         !FdtStringListContains(Compatible, CompatibleLength, "brcm,bcm2835-armctrl-ic")))
+    {
+        return FALSE;
+    }
+
+    if ((Cells[0] == 0) && (Cells[1] < BCM2837_BASIC_IRQ_COUNT))
+        *Gsi = BCM2837_INTID_BASIC_BASE + Cells[1];
+    else if (((Cells[0] == 1) || (Cells[0] == 2)) && (Cells[1] < 32))
+        *Gsi = BCM2837_INTID_GPU_BASE + (Cells[0] - 1) * 32 + Cells[1];
+    else
+        return FALSE;
+
+    return TRUE;
+}
+
 static const HAL_ARM64_INTERRUPT_CONTROLLER Bcm2837InterruptOps =
 {
     "BCM2836 local intc + ARMCTRL",
@@ -897,6 +932,7 @@ static const HAL_ARM64_INTERRUPT_CONTROLLER Bcm2837InterruptOps =
     Bcm2837InitializeProcessor,
     Bcm2837Phase0Initialize,
     Bcm2837Phase1MapRuntimeMmio,
+    Bcm2837TranslateDeviceTreeInterrupt,
 };
 
 /* ================================================================== */
