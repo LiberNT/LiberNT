@@ -433,7 +433,7 @@ INT_PTR CALLBACK MainDialogProc (HWND Dlg, UINT Msg, WPARAM WParam, LPARAM LPara
             SetDisables (Dlg);
             InitDialog (Dlg);
             SetTimer (Dlg, 1, IDLETIME, NULL);
-            SetClassLong (Dlg, GCL_HICON, (LONG) LoadIcon (GlobalHInstance, MAKEINTRESOURCE(IDI_ICON)));
+            SetClassLongPtr (Dlg, GCLP_HICON, (LONG_PTR) LoadIcon (GlobalHInstance, MAKEINTRESOURCE(IDI_ICON)));
             QuitWhenDone = false;
             LoadSettings (Dlg);
             UpdatePriority (Dlg);

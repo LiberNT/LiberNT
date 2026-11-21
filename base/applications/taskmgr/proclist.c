@@ -46,7 +46,7 @@ ProcessListWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         /*
          * Get the background brush
          */
-        hbrBackground = (HBRUSH)(LONG_PTR) GetClassLongPtrW(hWnd, GCL_HBRBACKGROUND);
+        hbrBackground = (HBRUSH)(LONG_PTR) GetClassLongPtrW(hWnd, GCLP_HBRBACKGROUND);
 
         /*
          * Calculate the clip rect by getting the RECT

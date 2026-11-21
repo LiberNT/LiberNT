@@ -172,7 +172,7 @@ void OnInit(
 
 	//	Store the device number
 
-	SetWindowLong(hDlg, GWL_USERDATA, nDevice);
+	SetWindowLongPtr(hDlg, GWLP_USERDATA, nDevice);
 
 	//	Store default file size
 
@@ -549,7 +549,7 @@ DWORD OnOK(
 
 	//	open the image
 
-	hDevice = VfdOpenDevice(GetWindowLong(hDlg, GWL_USERDATA));
+	hDevice = VfdOpenDevice((ULONG)GetWindowLongPtr(hDlg, GWLP_USERDATA));
 
 	if (hDevice == INVALID_HANDLE_VALUE) {
 		ret = GetLastError();
