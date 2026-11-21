@@ -49,3 +49,5 @@ HKLM,"SYSTEM\CurrentControlSet\Control\Print\Environments\Windows x64\Print Proc
 
 ; The software-only vwifi test adapter is not enumerated by default.
 ; Its ROOT\VWIFI device can be installed manually with netvwifi.inf.
+
+HKLM,"SYSTEM\CurrentControlSet\Control\HAL","Extensions",0x00010000,"halextbcm2711.dll","halextbcm2712.dll","halextbcm2836.dll","halextapple.dll"
