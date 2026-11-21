@@ -2,7 +2,7 @@
  * PROJECT:     LiberNT kernel-mode tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     Tests that a PnP driver is unloaded once the removal of its only device leaves it without a device
- *              object, after its remove request returns
+ *              object, after its remove request returns, and that its queued reinitialization routine never runs after
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -15,7 +15,8 @@
 static const GUID TestClass = {0x4d36e97d, 0xe325, 0x11ce, {0xbf, 0xc1, 0x08, 0x00, 0x2b, 0xe1, 0x03, 0x18}};
 static const WCHAR HardwareIds[] = L"ROOT\\KMTESTREMOVEUNLOAD\0";
 static const WCHAR ServiceKey[] = L"SYSTEM\\CurrentControlSet\\Services\\KmtestRemoveUnload";
-static const PCWSTR Values[] = { L"Loaded", L"Started", L"Unloaded", L"UnloadDuringRemove", L"DeviceLeftAtUnload" };
+static const PCWSTR Values[] = { L"Loaded", L"Started", L"Unloaded", L"UnloadDuringRemove", L"DeviceLeftAtUnload",
+                                 L"ReinitCount", L"ReinitAfterUnload" };
 
 static DWORD ReadValue(PCWSTR Name)
 {
@@ -38,6 +39,7 @@ START_TEST(IoRemoveUnload)
     PWSTR Filename;
     DWORD Length;
     BOOL Success, Reboot = FALSE, Registered = FALSE;
+    DWORD Error;
     HKEY Key;
     ULONG Index;
 
@@ -94,6 +96,15 @@ START_TEST(IoRemoveUnload)
     ok_eq_ulong(ReadValue(L"UnloadDuringRemove"), 0UL);
     ok_eq_ulong(ReadValue(L"Unloaded"), 1UL);
     ok_eq_ulong(ReadValue(L"DeviceLeftAtUnload"), 0UL);
+    ok(ReadValue(L"ReinitCount") != MAXDWORD && ReadValue(L"ReinitCount") >= 1,
+       "The reinitialization routine never ran while the driver was loaded\n");
+
+    /* Loading any driver runs a reinitialization pass, which must not reach the unloaded fixture */
+    Error = KmtLoadDriver(L"IoHelper", FALSE);
+    ok_eq_ulong(Error, ERROR_SUCCESS);
+    if (Error == ERROR_SUCCESS)
+        KmtUnloadDriver();
+    ok(ReadValue(L"ReinitAfterUnload") == MAXDWORD, "The reinitialization routine ran after its driver was unloaded\n");
 
 Cleanup:
     if (Registered)

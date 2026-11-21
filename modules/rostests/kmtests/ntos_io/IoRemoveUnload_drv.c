@@ -2,7 +2,7 @@
  * PROJECT:     LiberNT kernel-mode tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     Function driver that records whether it is unloaded once the removal of its only device leaves it
- *              without a device object
+ *              without a device object, and whether its queued reinitialization routine runs after that
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -22,6 +22,20 @@ static VOID NTAPI FixtureUnload(PDRIVER_OBJECT DriverObject)
     InterlockedExchange(&UnloadCalled, 1);
     WriteValue(L"DeviceLeftAtUnload", DriverObject->DeviceObject != NULL);
     WriteValue(L"Unloaded", 1);
+}
+
+static VOID NTAPI FixtureReinitialize(PDRIVER_OBJECT DriverObject, PVOID Context, ULONG Count)
+{
+    UNREFERENCED_PARAMETER(Context);
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    if (InterlockedCompareExchange(&UnloadCalled, 0, 0))
+    {
+        WriteValue(L"ReinitAfterUnload", 1);
+        return;
+    }
+    WriteValue(L"ReinitCount", Count);
+    IoRegisterDriverReinitialization(DriverObject, FixtureReinitialize, NULL);
 }
 
 static NTSTATUS NTAPI FixtureAddDevice(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT Pdo)
@@ -101,6 +115,7 @@ NTSTATUS NTAPI DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING Registry
     DriverObject->MajorFunction[IRP_MJ_PNP] = FixturePnp;
     DriverObject->MajorFunction[IRP_MJ_POWER] = FixturePower;
     DriverObject->MajorFunction[IRP_MJ_SYSTEM_CONTROL] = FixturePassDown;
+    IoRegisterDriverReinitialization(DriverObject, FixtureReinitialize, NULL);
     WriteValue(L"Loaded", 1);
     return STATUS_SUCCESS;
 }

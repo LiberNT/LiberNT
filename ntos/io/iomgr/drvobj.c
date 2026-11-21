@@ -725,6 +725,7 @@ IopTryUnloadDriver(
     }
 
     if (InterlockedOr((PLONG)&DriverObject->Flags, DRVO_UNLOAD_INVOKED) & DRVO_UNLOAD_INVOKED) return STATUS_SUCCESS;
+    IopRemoveDriverReinitialization(DriverObject);
     DriverObject->DriverUnload(DriverObject);
 
     ObMakeTemporaryObject(DriverObject);
@@ -1015,6 +1016,7 @@ IoCreateDriver(
     Status = DriverObject->DriverInit(DriverObject, NULL);
     if (!NT_SUCCESS(Status))
     {
+        IopRemoveDriverReinitialization(DriverObject);
         DriverObject->DriverSection = NULL;
         ObMakeTemporaryObject(DriverObject);
         ObDereferenceObject(DriverObject);
@@ -1033,6 +1035,7 @@ IoDeleteDriver(
 {
     PAGED_CODE();
 
+    IopRemoveDriverReinitialization(DriverObject);
     ObMakeTemporaryObject(DriverObject);
     ObDereferenceObject(DriverObject);
 }
@@ -1139,6 +1142,7 @@ IopRegisterReinitialization(
                               TAG_IO);
     if (Item == NULL) return;
 
+    ObReferenceObject(DriverObject);
     Item->DriverObject = DriverObject;
     Item->ReinitRoutine = ReinitRoutine;
     Item->Context = Context;
@@ -1216,14 +1220,77 @@ IopRunReinitializationList(
         KeReleaseSpinLock(Lock, OldIrql);
 
         Item = CONTAINING_RECORD(Entry, DRIVER_REINIT_ITEM, ItemEntry);
+        ASSERT(Item->DriverObject != NULL);
 
         /* FIXME: concurrent passes (NtLoadDriver beside the PnP worker) share *TailEntry, so a routine that registers itself again can run twice in one pass, and two items of one driver race on DriverExtension->Count */
-        Item->ReinitRoutine(Item->DriverObject,
-                            Item->Context,
-                            ++Item->DriverObject->DriverExtension->Count);
+        /* FIXME: an unload that starts after this check runs beside the routine; the reference only keeps the image mapped */
+        if (!(ReadULongAcquire(&Item->DriverObject->Flags) & DRVO_UNLOAD_INVOKED))
+        {
+            Item->ReinitRoutine(Item->DriverObject,
+                                Item->Context,
+                                ++Item->DriverObject->DriverExtension->Count);
+        }
 
+        ObDereferenceObject(Item->DriverObject);
         ExFreePoolWithTag(Item, TAG_IO);
     }
+}
+
+static
+VOID
+IopRemoveReinitItems(
+    _In_ PDRIVER_OBJECT DriverObject,
+    _In_ PLIST_ENTRY ListHead,
+    _In_ PKSPIN_LOCK Lock,
+    _Inout_ PLIST_ENTRY *TailEntry)
+{
+    PDRIVER_REINIT_ITEM Item;
+    LIST_ENTRY Removed;
+    PLIST_ENTRY Entry;
+    PLIST_ENTRY Next;
+    KIRQL OldIrql;
+
+    PAGED_CODE();
+
+    InitializeListHead(&Removed);
+
+    KeAcquireSpinLock(Lock, &OldIrql);
+    for (Entry = ListHead->Flink; Entry != ListHead; Entry = Next)
+    {
+        Next = Entry->Flink;
+        Item = CONTAINING_RECORD(Entry, DRIVER_REINIT_ITEM, ItemEntry);
+        if (Item->DriverObject != DriverObject) continue;
+
+        /* A pass in progress stops at the entry before a removed last one */
+        if (Entry == *TailEntry) *TailEntry = (Entry->Blink == ListHead) ? NULL : Entry->Blink;
+
+        RemoveEntryList(Entry);
+        InsertTailList(&Removed, Entry);
+    }
+    ASSERT(*TailEntry == NULL || *TailEntry != ListHead);
+    KeReleaseSpinLock(Lock, OldIrql);
+
+    while (!IsListEmpty(&Removed))
+    {
+        Entry = RemoveHeadList(&Removed);
+        Item = CONTAINING_RECORD(Entry, DRIVER_REINIT_ITEM, ItemEntry);
+        ASSERT(Item->DriverObject == DriverObject);
+        ObDereferenceObject(Item->DriverObject);
+        ExFreePoolWithTag(Item, TAG_IO);
+    }
+}
+
+/* A driver that is unloaded or whose DriverEntry failed is never called back to reinitialize */
+VOID
+IopRemoveDriverReinitialization(
+    _In_ PDRIVER_OBJECT DriverObject)
+{
+    PAGED_CODE();
+
+    if (!(DriverObject->Flags & DRVO_REINIT_REGISTERED)) return;
+
+    IopRemoveReinitItems(DriverObject, &DriverReinitListHead, &DriverReinitListLock, &DriverReinitTailEntry);
+    IopRemoveReinitItems(DriverObject, &DriverBootReinitListHead, &DriverBootReinitListLock, &DriverBootReinitTailEntry);
 }
 
 VOID
