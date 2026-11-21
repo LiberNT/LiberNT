@@ -1203,7 +1203,6 @@ static DWORD WINAPI LoadFixtureDriver(PVOID Context)
  * A device set up while its driver is still in the DriverEntry of that load waits for the load to finish */
 static VOID CheckDriverReload(DEVINST Bus)
 {
-    UNICODE_STRING Service = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Services\\KmtestFilterReq");
     NTSTATUS Loaded = STATUS_UNSUCCESSFUL;
     WCHAR VetoName[MAX_PATH];
     PNP_VETO_TYPE VetoType;
@@ -1216,9 +1215,7 @@ static VOID CheckDriverReload(DEVINST Bus)
             (ULONG)CR_SUCCESS);
     Status = RtlAdjustPrivilege(SE_LOAD_DRIVER_PRIVILEGE, TRUE, FALSE, &Enabled);
     ok_eq_hex(Status, STATUS_SUCCESS);
-    Status = NtUnloadDriver(&Service);
-    ok_eq_hex(Status, STATUS_SUCCESS);
-    ok(WaitValue(L"DriverUnloaded", 1000), "The fixture driver was not unloaded\n");
+    ok(WaitValue(L"DriverUnloaded", 1000), "The fixture driver was not unloaded when its devices were removed\n");
 
     SetRequest(L"HoldEntry", 1);
     Thread = CreateThread(NULL, 0, LoadFixtureDriver, &Loaded, 0, NULL);
