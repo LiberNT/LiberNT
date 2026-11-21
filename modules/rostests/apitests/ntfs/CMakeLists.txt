@@ -8,6 +8,7 @@ list(APPEND SOURCE
     DirectIo.c
     CreateSecurity.c
     DeleteAfterChange.c
+    AppendWrite.c
     testlist.c)
 
 add_executable(ntfs_apitest ${SOURCE})
