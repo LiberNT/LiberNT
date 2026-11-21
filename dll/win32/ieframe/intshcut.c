@@ -660,6 +660,16 @@ static HRESULT WINAPI PersistFile_Save(IPersistFile *pFile, LPCOLESTR pszFileNam
             WriteFile(file, url, lstrlenA(url), &bytesWritten, NULL);
             WriteFile(file, str_eol, ARRAY_SIZE(str_eol) - 1, &bytesWritten, NULL);
 
+#ifdef __REACTOS__
+            /* The exclusive storage a caller still holds open is the one to read, as ole32 refuses a second open */
+            if (This->open_storage)
+            {
+                pPropStgRead = This->open_storage;
+                IPropertyStorage_AddRef(pPropStgRead);
+                hr = S_OK;
+            }
+            else
+#endif
             hr = IPropertySetStorage_Open(This->property_set_storage, &FMTID_Intshcut, STGM_READ|STGM_SHARE_EXCLUSIVE, &pPropStgRead);
             if (SUCCEEDED(hr))
             {
@@ -822,6 +832,8 @@ static ULONG WINAPI shortcut_propstg_Release(IPropertyStorage *iface)
 
     if (!ref)
     {
+        if (This->shortcut->open_storage == This->inner)
+            This->shortcut->open_storage = NULL;
         IPropertyStorage_Release(This->inner);
         IPersistFile_Release(&This->shortcut->IPersistFile_iface);
         free(This);
@@ -988,6 +1000,7 @@ static HRESULT WINAPI PropertySetStorage_Open(
         wrapper->inner = inner;
         wrapper->shortcut = This;
         IPersistFile_AddRef(&This->IPersistFile_iface);
+        This->open_storage = inner;
         *ppprstg = &wrapper->IPropertyStorage_iface;
         return S_OK;
     }
