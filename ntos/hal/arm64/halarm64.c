@@ -1588,31 +1588,8 @@ HalpSetPciRoutingMap(
 #define PSCI_E_DISABLED             (-8)
 #define PSCI_E_INVALID_ADDRESS      (-9)
 
-/*
- * SMP processor startup tracking
- * HalpStartedProcessorCount is defined in smp.c
- */
-extern ULONG HalpStartedProcessorCount;
-
-/*
- * External SMP infrastructure functions from smp.c
- */
-extern BOOLEAN HalpArm64InitApTrampoline(_In_ PLOADER_PARAMETER_BLOCK LoaderBlock);
-extern VOID HalpArm64PrepareApData(_In_ ULONG ProcessorNumber,
-                                   _In_ UINT64 EntryPoint,
-                                   _In_ UINT64 StackPointer,
-                                   _In_ UINT64 Arg0);
-extern BOOLEAN HalpArm64WaitForApSync(_In_ ULONG TimeoutMs);
-extern UINT64 HalpArm64GetTrampolinePhysicalAddress(VOID);
-extern BOOLEAN HalpArm64IsTrampolineInitialized(VOID);
-extern VOID HalpArm64DiscoverParkedCpus(_In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock);
-extern VOID HalpArm64DiscoverDeviceTreeCpus(_In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock);
 extern VOID NTAPI HalpAcpiMcfgFromDeviceTree(_In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock);
 extern VOID HalpGicCompleteMsiFrame(VOID);
-extern BOOLEAN HalpArm64ReleaseSpinTableCpu(_In_ ULONG ProcessorNumber, _In_ UINT64 EntryPoint);
-extern BOOLEAN HalpArm64WakeParkedCpu(_In_ ULONG ProcessorNumber,
-                                      _In_ UINT64 EntryPoint,
-                                      _In_ UINT64 ContextId);
 
 static BOOLEAN
 HalpArm64FlushMdlDcacheRange(_In_ PMDL Mdl,
@@ -2822,12 +2799,11 @@ HalInitSystem(
      * owners for the same physical pages.
      */
     HalpArm64DiscoverDeviceTreeCpus(LoaderBlock);
-    if ((HalpArm64GicInfo.GiccEntryCount > 1) && !HalpArm64InitApTrampoline(LoaderBlock))
+    if (!HalpArchPrepareProcessorStart(LoaderBlock))
     {
         DPRINT1("[arm64][HAL] Phase0: failed to reserve AP startup memory\n");
         return FALSE;
     }
-    if (HalpArm64GicInfo.GiccEntryCount > 1) HalpArm64DiscoverParkedCpus(LoaderBlock);
 
     return TRUE;
 }
