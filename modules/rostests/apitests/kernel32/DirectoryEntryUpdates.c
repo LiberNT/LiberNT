@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Tests that directory enumeration keeps a file's reparse, EA, sparse and compression state after later creates
+ * PURPOSE:     Tests directory enumeration of reparse, EA, sparse and compression state, also after later creates
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -37,6 +37,7 @@ typedef struct _TEST_IO_STATUS
 } TEST_IO_STATUS;
 
 typedef LONG (NTAPI *PFN_NT_SET_EA_FILE)(HANDLE, TEST_IO_STATUS *, PVOID, ULONG);
+typedef LONG (NTAPI *PFN_NT_QUERY_INFORMATION_FILE)(HANDLE, TEST_IO_STATUS *, PVOID, ULONG, ULONG);
 typedef LONG (NTAPI *PFN_NT_QUERY_DIRECTORY_FILE)(HANDLE, HANDLE, PVOID, PVOID, TEST_IO_STATUS *, PVOID, ULONG, ULONG,
                                                   BOOLEAN, PVOID, BOOLEAN);
 
@@ -73,7 +74,7 @@ static BOOL FindEntry(PCWSTR Name, WIN32_FIND_DATAW *Data)
     return TRUE;
 }
 
-static ULONG EnumeratedEaSize(PFN_NT_QUERY_DIRECTORY_FILE QueryDirectory, PCWSTR Name)
+static ULONG EnumeratedEaSize(PFN_NT_QUERY_DIRECTORY_FILE QueryDirectory, PCWSTR Name, PULONG Attributes)
 {
     TEST_FULL_DIR_INFORMATION *Entry;
     TEST_IO_STATUS Iosb;
@@ -94,6 +95,7 @@ static ULONG EnumeratedEaSize(PFN_NT_QUERY_DIRECTORY_FILE QueryDirectory, PCWSTR
             !_wcsnicmp(Entry->FileName, Name, wcslen(Name)))
         {
             EaSize = Entry->EaSize;
+            *Attributes = Entry->FileAttributes;
             break;
         }
         if (!Entry->NextEntryOffset)
@@ -107,6 +109,7 @@ START_TEST(DirectoryEntryUpdates)
 {
     PFN_NT_SET_EA_FILE SetEaFile;
     PFN_NT_QUERY_DIRECTORY_FILE QueryDirectory;
+    PFN_NT_QUERY_INFORMATION_FILE QueryInformation;
     WCHAR Path[MAX_PATH], Target[MAX_PATH];
     WIN32_FIND_DATAW Data;
     TEST_IO_STATUS Iosb;
@@ -117,12 +120,13 @@ START_TEST(DirectoryEntryUpdates)
     DWORD Returned;
     BOOL Linked, Sparse, Compressed;
     LONG Status = -1;
-    ULONG EaSize;
+    ULONG EaSize, EaInformation = 0, Attributes = 0;
 
     SetEaFile = (PFN_NT_SET_EA_FILE)GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtSetEaFile");
     QueryDirectory = (PFN_NT_QUERY_DIRECTORY_FILE)GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryDirectoryFile");
-    ok(SetEaFile && QueryDirectory, "ntdll exports are missing\n");
-    if (!SetEaFile || !QueryDirectory)
+    QueryInformation = (PFN_NT_QUERY_INFORMATION_FILE)GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryInformationFile");
+    ok(SetEaFile && QueryDirectory && QueryInformation, "ntdll exports are missing\n");
+    if (!SetEaFile || !QueryDirectory || !QueryInformation)
         return;
 
     GetTempPathW(ARRAYSIZE(s_Directory), s_Directory);
@@ -147,6 +151,8 @@ START_TEST(DirectoryEntryUpdates)
         memcpy(Ea->EaName, "TEST\0hello", 10);
         Status = SetEaFile(File, &Iosb, EaBuffer, 20);
         ok(Status == 0, "NtSetEaFile returned 0x%lx\n", Status);
+        ok(QueryInformation(File, &Iosb, &EaInformation, sizeof(EaInformation), 7) == 0, "FileEaInformation failed\n");
+        ok(EaInformation == 20, "FileEaInformation EaSize %lu\n", EaInformation);
         CloseHandle(File);
     }
 
@@ -178,8 +184,23 @@ START_TEST(DirectoryEntryUpdates)
     }
     if (Status == 0)
     {
-        EaSize = EnumeratedEaSize(QueryDirectory, L"ea.txt");
-        ok(EaSize != 0 && EaSize != 0xffffffffUL, "ea.txt EaSize %lu\n", EaSize);
+        EaSize = EnumeratedEaSize(QueryDirectory, L"ea.txt", &Attributes);
+        ok(EaSize == EaInformation, "ea.txt EaSize %lu, FileEaInformation %lu\n", EaSize, EaInformation);
+        ok(Attributes == FILE_ATTRIBUTE_ARCHIVE, "ea.txt enumerated attributes 0x%lx\n", Attributes);
+        MakePath(Path, L"ea.txt");
+        ok(GetFileAttributesW(Path) == FILE_ATTRIBUTE_ARCHIVE, "ea.txt attributes 0x%lx\n", GetFileAttributesW(Path));
+
+        File = CreateFileW(Path, FILE_WRITE_EA | FILE_READ_EA, 0, NULL, OPEN_EXISTING, 0, NULL);
+        ok(File != INVALID_HANDLE_VALUE, "cannot reopen ea.txt: %lu\n", GetLastError());
+        if (File != INVALID_HANDLE_VALUE)
+        {
+            Ea->EaValueLength = 0;
+            ok(SetEaFile(File, &Iosb, EaBuffer, 16) == 0, "removing the EA failed\n");
+            CloseHandle(File);
+        }
+        EaSize = EnumeratedEaSize(QueryDirectory, L"ea.txt", &Attributes);
+        ok(EaSize == 0, "ea.txt EaSize %lu after removing its EA\n", EaSize);
+        ok(Attributes == FILE_ATTRIBUTE_ARCHIVE, "ea.txt enumerated attributes 0x%lx after removing its EA\n", Attributes);
     }
     if (Sparse)
     {

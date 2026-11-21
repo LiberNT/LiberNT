@@ -35,9 +35,11 @@ AddKeyToBothDirInfo(_In_     PBTreeKey Key,
     Info.EndOfFile.QuadPart = FileNameData->DataSize;
     Info.AllocationSize.QuadPart = FileNameData->AllocatedSize;
     Info.FileAttributes = FileNameData->Flags & ~(ULONG)(FN_DIRECTORY | FN_INDEX_VIEW);
+    if (!(FileNameData->Flags & FILE_PERM_REPARSE_PT))
+        Info.FileAttributes &= ~(ULONG)FILE_PERM_EA;
     Info.EaSize = (FileNameData->Flags & FILE_PERM_REPARSE_PT)
         ? FileNameData->Extended.ReparseTag
-        : FileNameData->Extended.EAInfo.PackedEASize;
+        : NtfsFileNameEaSize(FileNameData);
     if ((FileNameData->Flags & FILE_PERM_REPARSE_PT) &&
         FileNameData->Extended.ReparseTag == NTFS_IO_REPARSE_TAG_WOF)
     {
@@ -985,8 +987,8 @@ Directory::GetNextEntry(_In_ BOOLEAN RestartScan,
     }
     else
     {
-        Entry->EaSize =
-            FileNameData->Extended.EAInfo.PackedEASize;
+        Entry->FileAttributes &= ~(ULONG)FILE_PERM_EA;
+        Entry->EaSize = NtfsFileNameEaSize(FileNameData);
         Entry->ReparseTag = 0;
     }
     Entry->NameLength = FileNameData->NameLength;

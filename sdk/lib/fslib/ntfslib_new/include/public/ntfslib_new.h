@@ -84,6 +84,7 @@ enum FileRecordNumbers
 #define FILE_PERM_NOT_INDXED 0x2000
 #define FILE_PERM_ENCRYPTED  0x4000
 #define FILE_PERM_RECALL_ON_OPEN 0x00040000
+#define FILE_PERM_EA             0x00040000
 
 typedef struct
 {

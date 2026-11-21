@@ -913,6 +913,41 @@ FileRecordHeaderHasNumber(_In_ const FileRecordHeader* Header)
     return Header->Header.UpdateSequenceOffset >= FIELD_OFFSET(FileRecordHeader, MFTRecordNumber) + sizeof(ULONG);
 }
 
+/* NTFS keeps the packed EA size in the low and the unpacked surplus in the high half of the $FILE_NAME EA field */
+static inline ULONG
+NtfsMakeFileNameEaInformation(_In_ USHORT PackedEaSize,
+                              _In_ ULONG UnpackedEaSize)
+{
+    ULONG Surplus;
+
+    if (PackedEaSize == 0)
+        return 0;
+    Surplus = UnpackedEaSize > PackedEaSize ? UnpackedEaSize - PackedEaSize : 0;
+    if (Surplus > 0xFFFF)
+        Surplus = 0xFFFF;
+    return (ULONG)PackedEaSize | (Surplus << 16);
+}
+
+static inline void
+NtfsSetFileNameEaInformation(_Inout_ PFileNameEx FileName,
+                             _In_ ULONG EaInformation)
+{
+    FileName->Extended.EAInfo.PackedEASize = (USHORT)(EaInformation & 0xFFFF);
+    FileName->Extended.EAInfo.Padding = (USHORT)(EaInformation >> 16);
+    if (FileName->Extended.EAInfo.PackedEASize != 0)
+        FileName->Flags |= FILE_PERM_EA;
+    else
+        FileName->Flags &= ~(UINT32)FILE_PERM_EA;
+}
+
+static inline ULONG
+NtfsFileNameEaSize(_In_ const FileNameEx *FileName)
+{
+    if (FileName->Extended.EAInfo.PackedEASize == 0)
+        return 0;
+    return (ULONG)FileName->Extended.EAInfo.PackedEASize + FileName->Extended.EAInfo.Padding;
+}
+
 typedef class FileRecord
 {
 public:
@@ -1225,6 +1260,9 @@ private:
         _Out_opt_ PULONG DataLength);
 
     NTSTATUS
+    SetStandardEaFlag(_In_ BOOLEAN HasExtendedAttributes);
+
+    NTSTATUS
     GetStandardInformationForUpdate(
         _Out_ PAttribute* Attribute,
         _Out_ PStandardInformationEx* Standard);
@@ -1414,14 +1452,14 @@ private:
                         _In_ ULONGLONG DataSize);
 
     NTSTATUS
-    UpdateFileNameEaSize(_In_ USHORT PackedEaSize);
+    UpdateFileNameEaSize(_In_ ULONG EaInformation);
 
     NTSTATUS
     UpdateFileNameInformation(
         _In_ UINT32 Fields,
         _In_ ULONGLONG AllocatedSize,
         _In_ ULONGLONG DataSize,
-        _In_ USHORT PackedEaSize,
+        _In_ ULONG EaInformation,
         _In_ ULONG ReparseTag,
         _In_ ULONG StorageFlags);
 
@@ -1433,14 +1471,14 @@ private:
                              _In_ ULONGLONG DataSize);
 
     NTSTATUS
-    SynchronizeFileNameEaSize(_In_ USHORT PackedEaSize);
+    SynchronizeFileNameEaSize(_In_ ULONG EaInformation);
 
     NTSTATUS
     SynchronizeFileNameInformation(
         _In_ UINT32 Fields,
         _In_ ULONGLONG AllocatedSize,
         _In_ ULONGLONG DataSize,
-        _In_ USHORT PackedEaSize,
+        _In_ ULONG EaInformation,
         _In_ ULONG ReparseTag,
         _In_ ULONG StorageFlags);
 
@@ -1451,7 +1489,7 @@ private:
         _In_ UINT32 Fields,
         _In_ ULONGLONG AllocatedSize,
         _In_ ULONGLONG DataSize,
-        _In_ USHORT PackedEaSize,
+        _In_ ULONG EaInformation,
         _In_ ULONG ReparseTag,
         _In_ ULONG StorageFlags);
 

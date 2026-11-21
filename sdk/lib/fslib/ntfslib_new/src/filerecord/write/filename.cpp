@@ -52,7 +52,7 @@ UpdateIndexNodeInformation(
     _In_ UINT32 Fields,
     _In_ ULONGLONG AllocatedSize,
     _In_ ULONGLONG DataSize,
-    _In_ USHORT PackedEaSize,
+    _In_ ULONG EaInformation,
     _In_ ULONG ReparseTag,
     _In_ ULONG StorageFlags)
 {
@@ -148,17 +148,13 @@ UpdateIndexNodeInformation(
         {
             MatchedName->Flags &=
                 ~FILE_PERM_REPARSE_PT;
-            MatchedName->Extended.EAInfo.PackedEASize =
-                PackedEaSize;
-            MatchedName->Extended.EAInfo.Padding = 0;
+            NtfsSetFileNameEaInformation(MatchedName, EaInformation);
         }
     }
     if ((Fields & NTFS_FILE_NAME_UPDATE_EA_SIZE) &&
         !(MatchedName->Flags & FILE_PERM_REPARSE_PT))
     {
-        MatchedName->Extended.EAInfo.PackedEASize =
-            PackedEaSize;
-        MatchedName->Extended.EAInfo.Padding = 0;
+        NtfsSetFileNameEaInformation(MatchedName, EaInformation);
     }
     if (Fields & NTFS_FILE_NAME_UPDATE_ARCHIVE)
         MatchedName->Flags |= FILE_PERM_ARCHIVE;
@@ -188,7 +184,7 @@ FileRecord::UpdateParentIndexEntry(
     _In_ UINT32 Fields,
     _In_ ULONGLONG AllocatedSize,
     _In_ ULONGLONG DataSize,
-    _In_ USHORT PackedEaSize,
+    _In_ ULONG EaInformation,
     _In_ ULONG ReparseTag,
     _In_ ULONG StorageFlags)
 {
@@ -314,7 +310,7 @@ FileRecord::UpdateParentIndexEntry(
         Fields,
         AllocatedSize,
         DataSize,
-        PackedEaSize,
+        EaInformation,
         ReparseTag,
         StorageFlags);
     if (NT_SUCCESS(Status))
@@ -496,7 +492,7 @@ SearchAllocation:
             Fields,
             AllocatedSize,
             DataSize,
-            PackedEaSize,
+            EaInformation,
             ReparseTag,
             StorageFlags);
         if (Status == STATUS_NOT_FOUND)
@@ -554,13 +550,13 @@ FileRecord::SynchronizeFileNameSizes(
 
 NTSTATUS
 FileRecord::SynchronizeFileNameEaSize(
-    _In_ USHORT PackedEaSize)
+    _In_ ULONG EaInformation)
 {
     return SynchronizeFileNameInformation(
         NTFS_FILE_NAME_UPDATE_EA_SIZE,
         0,
         0,
-        PackedEaSize,
+        EaInformation,
         0,
         0);
 }
@@ -570,7 +566,7 @@ FileRecord::SynchronizeFileNameInformation(
     _In_ UINT32 Fields,
     _In_ ULONGLONG AllocatedSize,
     _In_ ULONGLONG DataSize,
-    _In_ USHORT PackedEaSize,
+    _In_ ULONG EaInformation,
     _In_ ULONG ReparseTag,
     _In_ ULONG StorageFlags)
 {
@@ -655,7 +651,7 @@ FileRecord::SynchronizeFileNameInformation(
                 Fields,
                 AllocatedSize,
                 DataSize,
-                PackedEaSize,
+                EaInformation,
                 ReparseTag,
                 StorageFlags);
             if (!NT_SUCCESS(Status))
@@ -669,7 +665,7 @@ FileRecord::SynchronizeFileNameInformation(
         Fields,
         AllocatedSize,
         DataSize,
-        PackedEaSize,
+        EaInformation,
         ReparseTag,
         StorageFlags);
 }

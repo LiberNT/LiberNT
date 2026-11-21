@@ -55,16 +55,16 @@ CheckDirectoryIsEmpty(_In_ PVolume DiskVolume,
 
 static NTSTATUS
 GetPackedEaSize(_In_ PFileRecord File,
-                _Out_ PUSHORT PackedEaSize,
+                _Out_ PULONG EaInformation,
                 _Out_opt_ PBOOLEAN HasExtendedAttributes)
 {
     EAInformationEx Information;
     ULONG Length = 0;
     NTSTATUS Status;
 
-    if (!File || !PackedEaSize)
+    if (!File || !EaInformation)
         return STATUS_INVALID_PARAMETER;
-    *PackedEaSize = 0;
+    *EaInformation = 0;
     if (HasExtendedAttributes)
         *HasExtendedAttributes = FALSE;
 
@@ -77,7 +77,7 @@ GetPackedEaSize(_In_ PFileRecord File,
     if (Status != STATUS_BUFFER_TOO_SMALL)
         return Status;
 
-    *PackedEaSize = Information.PackedEASize;
+    *EaInformation = NtfsMakeFileNameEaInformation(Information.PackedEASize, Information.UnpackedEASize);
     if (HasExtendedAttributes)
         *HasExtendedAttributes = TRUE;
     return STATUS_SUCCESS;
@@ -224,7 +224,7 @@ FileRecord::UpdateReparsePoint(
     ULONGLONG ExistingLength64;
     ULONGLONG DataLength;
     ULONG ExistingLength = 0;
-    USHORT PackedEaSize = 0;
+    ULONG EaInformation = 0;
     BOOLEAN IsDirectory;
     BOOLEAN Promote = FALSE;
     BOOLEAN Committed = FALSE;
@@ -380,7 +380,7 @@ FileRecord::UpdateReparsePoint(
     }
 
     Status = GetPackedEaSize(this,
-                             &PackedEaSize,
+                             &EaInformation,
                              NULL);
     if (!NT_SUCCESS(Status))
         goto Done;
@@ -481,7 +481,7 @@ FileRecord::UpdateReparsePoint(
         FileNameFields,
         0,
         0,
-        PackedEaSize,
+        EaInformation,
         Delete ? 0 : RequestedHeader.ReparseType,
         0);
     if (!NT_SUCCESS(Status))
