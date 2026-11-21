@@ -8699,6 +8699,7 @@ Exit_Firmware_Get_Info:
 _IRQL_requires_same_
 _IRQL_requires_max_(DISPATCH_LEVEL)
 NTSTATUS
+NTAPI
 ClassHwFirmwareDownloadComplete (
     _In_ PDEVICE_OBJECT Fdo,
     _In_ PIRP Irp,
