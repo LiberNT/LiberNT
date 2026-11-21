@@ -1467,6 +1467,19 @@ KiCompleteThreadSwitch(
     else if (ReapThread)
         KiQueueThreadForReaping(OldThread);
 }
+#else
+
+FORCEINLINE
+VOID
+KiCompleteThreadSwitch(
+    _In_ PKTHREAD OldThread,
+    _In_ PKTHREAD NewThread)
+{
+    UNREFERENCED_PARAMETER(NewThread);
+
+    if (OldThread->State == Terminated)
+        KiQueueThreadForReaping(OldThread);
+}
 #endif
 
 FORCEINLINE

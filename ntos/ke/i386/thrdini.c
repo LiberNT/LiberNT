@@ -289,6 +289,8 @@ KiSwapContextExit(
                      0);
     }
 
+    KiCompleteThreadSwitch(OldThread, NewThread);
+
     if (NewThread->ApcState.KernelApcPending)
     {
         if (!NewThread->SpecialApcDisable)
