@@ -97,3 +97,9 @@ interface IEmptyVolumeCache2: IEmptyVolumeCache
         [in, out] DWORD *pdwFlags);
 }
 
+cpp_quote("#ifndef EVCF_SYSTEMAUTORUN")
+cpp_quote("#define EVCF_SYSTEMAUTORUN 0x0100")
+cpp_quote("#endif")
+cpp_quote("#ifndef EVCF_USERCONSENTOBTAINED")
+cpp_quote("#define EVCF_USERCONSENTOBTAINED 0x0080")
+cpp_quote("#endif")

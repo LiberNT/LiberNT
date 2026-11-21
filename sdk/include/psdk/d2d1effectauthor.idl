@@ -617,3 +617,7 @@ interface ID2D1EffectImpl : IUnknown
         [in] ID2D1TransformGraph *graph
     );
 }
+
+cpp_quote("#ifndef D2D1_APPEND_ALIGNED_ELEMENT")
+cpp_quote("#define D2D1_APPEND_ALIGNED_ELEMENT 0xffffffff")
+cpp_quote("#endif")

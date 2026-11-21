@@ -6069,3 +6069,25 @@ interface IVisualProperties : IUnknown
         [in, unique, string] LPCWSTR pszSubAppName,
         [in, unique, string] LPCWSTR pszSubIdList);
 }
+
+cpp_quote("#ifndef IDD_WIZEXTN_FIRST")
+cpp_quote("#define IDD_WIZEXTN_FIRST 0x5000")
+cpp_quote("#endif")
+cpp_quote("#ifndef IDD_WIZEXTN_LAST")
+cpp_quote("#define IDD_WIZEXTN_LAST 0x5100")
+cpp_quote("#endif")
+cpp_quote("#ifndef SHPWHF_ANYLOCATION")
+cpp_quote("#define SHPWHF_ANYLOCATION 0x00000100")
+cpp_quote("#endif")
+cpp_quote("#ifndef SHPWHF_NOFILESELECTOR")
+cpp_quote("#define SHPWHF_NOFILESELECTOR 0x00000004")
+cpp_quote("#endif")
+cpp_quote("#ifndef SHPWHF_NONETPLACECREATE")
+cpp_quote("#define SHPWHF_NONETPLACECREATE 0x00000002")
+cpp_quote("#endif")
+cpp_quote("#ifndef SHPWHF_USEMRU")
+cpp_quote("#define SHPWHF_USEMRU 0x00000008")
+cpp_quote("#endif")
+cpp_quote("#ifndef SHPWHF_VALIDATEVIAWEBFOLDERS")
+cpp_quote("#define SHPWHF_VALIDATEVIAWEBFOLDERS 0x00010000")
+cpp_quote("#endif")

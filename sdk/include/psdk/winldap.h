@@ -664,4 +664,155 @@ int CDECL LdapUTF8ToUnicode(LPCSTR,int,LPWSTR,int);
 }
 #endif
 
+#ifndef LBER_TRANSLATE_STRINGS
+#define LBER_TRANSLATE_STRINGS 0x04
+#endif
+#ifndef LBER_USE_INDEFINITE_LEN
+#define LBER_USE_INDEFINITE_LEN 0x02
+#endif
+#ifndef LDAP_ABANDON_CMD
+#define LDAP_ABANDON_CMD 0x50L
+#endif
+#ifndef LDAP_ADD_CMD
+#define LDAP_ADD_CMD 0x68L
+#endif
+#ifndef LDAP_API_VERSION
+#define LDAP_API_VERSION 2004
+#endif
+#ifndef LDAP_BIND_CMD
+#define LDAP_BIND_CMD 0x60L
+#endif
+#ifndef LDAP_COMPARE_CMD
+#define LDAP_COMPARE_CMD 0x6eL
+#endif
+#ifndef LDAP_DELETE_CMD
+#define LDAP_DELETE_CMD 0x4aL
+#endif
+#ifndef LDAP_DEREF_ALWAYS
+#define LDAP_DEREF_ALWAYS 3
+#endif
+#ifndef LDAP_DEREF_FINDING
+#define LDAP_DEREF_FINDING 2
+#endif
+#ifndef LDAP_DEREF_NEVER
+#define LDAP_DEREF_NEVER 0
+#endif
+#ifndef LDAP_DEREF_SEARCHING
+#define LDAP_DEREF_SEARCHING 1
+#endif
+#ifndef LDAP_EXTENDED_CMD
+#define LDAP_EXTENDED_CMD 0x77L
+#endif
+#ifndef LDAP_FILTER_AND
+#define LDAP_FILTER_AND 0xa0
+#endif
+#ifndef LDAP_FILTER_APPROX
+#define LDAP_FILTER_APPROX 0xa8
+#endif
+#ifndef LDAP_FILTER_EQUALITY
+#define LDAP_FILTER_EQUALITY 0xa3
+#endif
+#ifndef LDAP_FILTER_EXTENSIBLE
+#define LDAP_FILTER_EXTENSIBLE 0xa9
+#endif
+#ifndef LDAP_FILTER_GE
+#define LDAP_FILTER_GE 0xa5
+#endif
+#ifndef LDAP_FILTER_LE
+#define LDAP_FILTER_LE 0xa6
+#endif
+#ifndef LDAP_FILTER_NOT
+#define LDAP_FILTER_NOT 0xa2
+#endif
+#ifndef LDAP_FILTER_OR
+#define LDAP_FILTER_OR 0xa1
+#endif
+#ifndef LDAP_FILTER_PRESENT
+#define LDAP_FILTER_PRESENT 0x87
+#endif
+#ifndef LDAP_FILTER_SUBSTRINGS
+#define LDAP_FILTER_SUBSTRINGS 0xa4
+#endif
+#ifndef LDAP_GC_PORT
+#define LDAP_GC_PORT 3268
+#endif
+#ifndef LDAP_INVALID_CMD
+#define LDAP_INVALID_CMD 0xff
+#endif
+#ifndef LDAP_INVALID_RES
+#define LDAP_INVALID_RES 0xff
+#endif
+#ifndef LDAP_MODIFY_CMD
+#define LDAP_MODIFY_CMD 0x66L
+#endif
+#ifndef LDAP_MODRDN_CMD
+#define LDAP_MODRDN_CMD 0x6cL
+#endif
+#ifndef LDAP_NO_LIMIT
+#define LDAP_NO_LIMIT 0
+#endif
+#ifndef LDAP_OPT_ANONYMOUS_MAX_VAL_RANGE
+#define LDAP_OPT_ANONYMOUS_MAX_VAL_RANGE 0x47
+#endif
+#ifndef LDAP_OPT_CHASE_REFERRALS
+#define LDAP_OPT_CHASE_REFERRALS 0x00000002
+#endif
+#ifndef LDAP_OPT_CLDAP_TIMEOUT
+#define LDAP_OPT_CLDAP_TIMEOUT 0x45
+#endif
+#ifndef LDAP_OPT_CLDAP_TRIES
+#define LDAP_OPT_CLDAP_TRIES 0x46
+#endif
+#ifndef LDAP_OPT_DNS
+#define LDAP_OPT_DNS 0x00000001
+#endif
+#ifndef LDAP_OPT_RETURN_REFS
+#define LDAP_OPT_RETURN_REFS 0x00000004
+#endif
+#ifndef LDAP_OPT_SCH_FLAGS
+#define LDAP_OPT_SCH_FLAGS 0x43
+#endif
+#ifndef LDAP_OPT_SOCKET_BIND_ADDRESSES
+#define LDAP_OPT_SOCKET_BIND_ADDRESSES 0x44
+#endif
+#ifndef LDAP_PORT
+#define LDAP_PORT 389
+#endif
+#ifndef LDAP_SEARCH_CMD
+#define LDAP_SEARCH_CMD 0x63L
+#endif
+#ifndef LDAP_SESSION_CMD
+#define LDAP_SESSION_CMD 0x71L
+#endif
+#ifndef LDAP_SSL_GC_PORT
+#define LDAP_SSL_GC_PORT 3269
+#endif
+#ifndef LDAP_SSL_PORT
+#define LDAP_SSL_PORT 636
+#endif
+#ifndef LDAP_SUBSTRING_ANY
+#define LDAP_SUBSTRING_ANY 0x81L
+#endif
+#ifndef LDAP_SUBSTRING_FINAL
+#define LDAP_SUBSTRING_FINAL 0x82L
+#endif
+#ifndef LDAP_SUBSTRING_INITIAL
+#define LDAP_SUBSTRING_INITIAL 0x80L
+#endif
+#ifndef LDAP_UNBIND_CMD
+#define LDAP_UNBIND_CMD 0x42L
+#endif
+#ifndef LDAP_VENDOR_VERSION
+#define LDAP_VENDOR_VERSION 510
+#endif
+#ifndef LDAP_VERSION_MAX
+#define LDAP_VERSION_MAX 3
+#endif
+#ifndef LDAP_VERSION_MIN
+#define LDAP_VERSION_MIN 2
+#endif
+#ifndef LDAP_VLVINFO_VERSION
+#define LDAP_VLVINFO_VERSION 1
+#endif
+
 #endif  /* __WINE_WINLDAP_H */

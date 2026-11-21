@@ -45,4 +45,26 @@ ULONG WINAPI TcRegisterClient(ULONG,HANDLE,PTCI_CLIENT_FUNC_LIST,PHANDLE);
 } /* extern "C" */
 #endif /* defined(__cplusplus) */
 
+#ifndef CURRENT_TCI_VERSION
+#define CURRENT_TCI_VERSION 0x0002
+#endif
+#ifndef MAX_STRING_LENGTH
+#define MAX_STRING_LENGTH 256
+#endif
+#ifndef TC_NOTIFY_FLOW_CLOSE
+#define TC_NOTIFY_FLOW_CLOSE 5
+#endif
+#ifndef TC_NOTIFY_IFC_CHANGE
+#define TC_NOTIFY_IFC_CHANGE 3
+#endif
+#ifndef TC_NOTIFY_IFC_CLOSE
+#define TC_NOTIFY_IFC_CLOSE 2
+#endif
+#ifndef TC_NOTIFY_IFC_UP
+#define TC_NOTIFY_IFC_UP 1
+#endif
+#ifndef TC_NOTIFY_PARAM_CHANGED
+#define TC_NOTIFY_PARAM_CHANGED 4
+#endif
+
 #endif /* __WINE_TRAFFIC_H */

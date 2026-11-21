@@ -117,3 +117,7 @@ DWORD WINAPI PssQuerySnapshot(_In_ HPSS SnapshotHandle, _In_ PSS_QUERY_INFORMATI
 #ifdef __cplusplus
 }
 #endif
+
+#ifndef PSS_PERF_RESOLUTION
+#define PSS_PERF_RESOLUTION 1000000
+#endif

@@ -257,4 +257,8 @@ DWORD WINAPI XInputGetStateEx(DWORD, XINPUT_STATE*);
 }
 #endif
 
+#ifndef XINPUT_DEVSUBTYPE_UNKNOWN
+#define XINPUT_DEVSUBTYPE_UNKNOWN 0x00
+#endif
+
 #endif /* __WINE_XINPUT_H */

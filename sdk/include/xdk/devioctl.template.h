@@ -29,3 +29,10 @@ $define (_DEVIOCTL_)
 $include (iotypes.h)
 
 #endif /*_DEVIOCTL_ */
+
+#ifndef FILE_DEVICE_CXL_TYPE3
+#define FILE_DEVICE_CXL_TYPE3 0x00000067
+#endif
+#ifndef FILE_DEVICE_MULTITIER_MEMORY
+#define FILE_DEVICE_MULTITIER_MEMORY 0x00000066
+#endif

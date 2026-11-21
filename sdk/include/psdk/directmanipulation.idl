@@ -458,3 +458,10 @@ library DirectManipulation
         [default] interface IDirectManipulationViewport;
     }
 }
+
+cpp_quote("#ifndef DIRECTMANIPULATION_KEYBOARDFOCUS")
+cpp_quote("#define DIRECTMANIPULATION_KEYBOARDFOCUS 0xfffffffe")
+cpp_quote("#endif")
+cpp_quote("#ifndef DIRECTMANIPULATION_MOUSEFOCUS")
+cpp_quote("#define DIRECTMANIPULATION_MOUSEFOCUS 0xfffffffd")
+cpp_quote("#endif")

@@ -321,4 +321,11 @@ SNMPAPI_STATUS WINSNMPAPI SnmpPasswordToKey(smiLPOCTETS,smiINT32,smiLPOCTETS);
 #ifdef __cplusplus
 }
 #endif
+#ifndef SNMPLISTEN_ALL_ADDR
+#define SNMPLISTEN_ALL_ADDR 1
+#endif
+#ifndef SNMPLISTEN_USEENTITY_ADDR
+#define SNMPLISTEN_USEENTITY_ADDR 0
+#endif
+
 #endif

@@ -310,4 +310,11 @@ HRESULT WINAPI CertModifyCertificatesToTrust(int cCertStore,
 }
 #endif
 
+#ifndef CRYPTDLG_CACHE_ONLY_URL_RETRIEVAL
+#define CRYPTDLG_CACHE_ONLY_URL_RETRIEVAL 0x10000000
+#endif
+#ifndef CRYPTDLG_DISABLE_AIA
+#define CRYPTDLG_DISABLE_AIA 0x08000000
+#endif
+
 #endif

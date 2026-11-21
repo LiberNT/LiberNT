@@ -717,3 +717,10 @@ interface ID3D10InfoQueue : IUnknown
     );
     BOOL GetMuteDebugOutput();
 }
+
+cpp_quote("#ifndef D3D10_INFO_QUEUE_DEFAULT_MESSAGE_COUNT_LIMIT")
+cpp_quote("#define D3D10_INFO_QUEUE_DEFAULT_MESSAGE_COUNT_LIMIT 1024")
+cpp_quote("#endif")
+cpp_quote("#ifndef D3D10_SDK_LAYERS_VERSION")
+cpp_quote("#define D3D10_SDK_LAYERS_VERSION 11")
+cpp_quote("#endif")

@@ -213,3 +213,7 @@ ScsiPortWmiFireLogicalUnitEvent(
 #endif
 
 #endif /* _SCSIWMI_ */
+
+#ifndef WMIREG_FLAG_CALL_BY_NAME
+#define WMIREG_FLAG_CALL_BY_NAME 0x40000000
+#endif

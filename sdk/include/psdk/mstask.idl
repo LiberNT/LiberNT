@@ -405,3 +405,7 @@ coclass CTask
 {
     [default] interface ITask;
 }
+
+cpp_quote("#ifndef TASK_MAX_RUN_TIMES")
+cpp_quote("#define TASK_MAX_RUN_TIMES 1440")
+cpp_quote("#endif")

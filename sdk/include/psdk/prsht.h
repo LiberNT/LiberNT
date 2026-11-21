@@ -412,4 +412,35 @@ static const WCHAR WC_PROPSHEETW[] = { 'S','y','s',
 #ifdef __cplusplus
 }
 #endif
+#ifndef PSH_AEROWIZARD
+#define PSH_AEROWIZARD 0x00004000
+#endif
+#ifndef PSH_HEADERBITMAP
+#define PSH_HEADERBITMAP 0x08000000
+#endif
+#ifndef PSH_NOMARGIN
+#define PSH_NOMARGIN 0x10000000
+#endif
+#ifndef PSH_RESIZABLE
+#define PSH_RESIZABLE 0x04000000
+#endif
+#ifndef PSNRET_MESSAGEHANDLED
+#define PSNRET_MESSAGEHANDLED 3
+#endif
+#ifndef PSP_USEFUSIONCONTEXT
+#define PSP_USEFUSIONCONTEXT 0x00004000
+#endif
+#ifndef PSWIZBF_ELEVATIONREQUIRED
+#define PSWIZBF_ELEVATIONREQUIRED 0x00000001
+#endif
+#ifndef PSWIZB_CANCEL
+#define PSWIZB_CANCEL 0x00000010
+#endif
+#ifndef PSWIZB_RESTORE
+#define PSWIZB_RESTORE 1
+#endif
+#ifndef PSWIZB_SHOW
+#define PSWIZB_SHOW 0
+#endif
+
 #endif

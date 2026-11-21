@@ -21,4 +21,8 @@
 
 #include <msxml2did.h>
 
+#ifndef DISPID_XMLDSIG
+#define DISPID_XMLDSIG 0x00000001
+#endif
+
 #endif /* __MSXML6DID_H__ */

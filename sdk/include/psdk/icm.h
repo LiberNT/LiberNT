@@ -556,4 +556,23 @@ HPROFILE   WINAPI WcsOpenColorProfileW(PROFILE*,PROFILE*,PROFILE*,DWORD,DWORD,DW
 }
 #endif
 
+#ifndef CMS_BACKWARD
+#define CMS_BACKWARD 1
+#endif
+#ifndef CMS_FORWARD
+#define CMS_FORWARD 0
+#endif
+#ifndef CMS_PRINTEROVERFLOW
+#define CMS_PRINTEROVERFLOW 0x40000000L
+#endif
+#ifndef INDEX_DONT_CARE
+#define INDEX_DONT_CARE 0
+#endif
+#ifndef WCS_DEFAULT
+#define WCS_DEFAULT 0x00000000L
+#endif
+#ifndef WCS_ICCONLY
+#define WCS_ICCONLY 0x00010000L
+#endif
+
 #endif /* __WINE_ICM_H */

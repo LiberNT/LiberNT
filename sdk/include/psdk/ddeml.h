@@ -376,4 +376,17 @@ UINT      WINAPI DdeQueryConvInfo(HCONV,DWORD,PCONVINFO);
 } /* extern "C" */
 #endif /* defined(__cplusplus) */
 
+#ifndef MAX_MONITORS
+#define MAX_MONITORS 4
+#endif
+#ifndef MH_CLEANUP
+#define MH_CLEANUP 4
+#endif
+#ifndef MH_DELETE
+#define MH_DELETE 3
+#endif
+#ifndef MH_KEEP
+#define MH_KEEP 2
+#endif
+
 #endif  /* __WINE_DDEML_H */

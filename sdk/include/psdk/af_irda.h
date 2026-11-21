@@ -214,4 +214,11 @@ typedef SOCKADDR_IRDA *PSOCKADDR_IRDA;
 }
 #endif
 
+#ifndef LM_BAUD_16M
+#define LM_BAUD_16M 16000000
+#endif
+#ifndef WCE_AF_IRDA
+#define WCE_AF_IRDA 22
+#endif
+
 #endif /* __AF_IRDA_H */

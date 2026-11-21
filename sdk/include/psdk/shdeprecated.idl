@@ -719,3 +719,16 @@ coclass TrackShellMenu
 {
     [default] interface ITrackShellMenu;
 }
+
+cpp_quote("#ifndef BSF_FEEDNAVIGATION")
+cpp_quote("#define BSF_FEEDNAVIGATION 0x00080000")
+cpp_quote("#endif")
+cpp_quote("#ifndef BSF_FEEDSUBSCRIBED")
+cpp_quote("#define BSF_FEEDSUBSCRIBED 0x00100000")
+cpp_quote("#endif")
+cpp_quote("#ifndef BSF_MERGEDMENUS")
+cpp_quote("#define BSF_MERGEDMENUS 0x00040000")
+cpp_quote("#endif")
+cpp_quote("#ifndef TLOG_CURRENT")
+cpp_quote("#define TLOG_CURRENT 0")
+cpp_quote("#endif")

@@ -69,3 +69,13 @@ library BackgroundCopyManager3_0
 
     interface IBackgroundCopyJob4;
 }
+
+cpp_quote("#ifndef BG_DISABLE_BRANCH_CACHE")
+cpp_quote("#define BG_DISABLE_BRANCH_CACHE 0x0004")
+cpp_quote("#endif")
+cpp_quote("#ifndef BG_ENABLE_PEERCACHING_CLIENT")
+cpp_quote("#define BG_ENABLE_PEERCACHING_CLIENT 0x0001")
+cpp_quote("#endif")
+cpp_quote("#ifndef BG_ENABLE_PEERCACHING_SERVER")
+cpp_quote("#define BG_ENABLE_PEERCACHING_SERVER 0x0002")
+cpp_quote("#endif")

@@ -137,3 +137,22 @@ interface IUrlHistoryNotify : IOleCommandTarget
 {
     typedef [unique] IUrlHistoryNotify *LPURLHISTORYNOTIFY;
 }
+
+cpp_quote("#ifndef STATURLFLAG_ISCACHED")
+cpp_quote("#define STATURLFLAG_ISCACHED 0x00000001")
+cpp_quote("#endif")
+cpp_quote("#ifndef STATURLFLAG_ISTOPLEVEL")
+cpp_quote("#define STATURLFLAG_ISTOPLEVEL 0x00000002")
+cpp_quote("#endif")
+cpp_quote("#ifndef STATURL_QUERYFLAG_ISCACHED")
+cpp_quote("#define STATURL_QUERYFLAG_ISCACHED 0x00010000")
+cpp_quote("#endif")
+cpp_quote("#ifndef STATURL_QUERYFLAG_NOTITLE")
+cpp_quote("#define STATURL_QUERYFLAG_NOTITLE 0x00040000")
+cpp_quote("#endif")
+cpp_quote("#ifndef STATURL_QUERYFLAG_NOURL")
+cpp_quote("#define STATURL_QUERYFLAG_NOURL 0x00020000")
+cpp_quote("#endif")
+cpp_quote("#ifndef STATURL_QUERYFLAG_TOPLEVEL")
+cpp_quote("#define STATURL_QUERYFLAG_TOPLEVEL 0x00080000")
+cpp_quote("#endif")

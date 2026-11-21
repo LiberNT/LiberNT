@@ -341,4 +341,17 @@ HRESULT WINAPI WerUnregisterRuntimeExceptionModule(PCWSTR callbackdll, void *con
 }
 #endif
 
+#ifndef WER_DUMP_AUX_PROMOTE
+#define WER_DUMP_AUX_PROMOTE 4
+#endif
+#ifndef WER_MAX_APPLICATION_NAME_LENGTH
+#define WER_MAX_APPLICATION_NAME_LENGTH 128
+#endif
+#ifndef WER_MAX_DESCRIPTION_LENGTH
+#define WER_MAX_DESCRIPTION_LENGTH 512
+#endif
+#ifndef WER_MAX_FRIENDLY_EVENT_NAME_LENGTH
+#define WER_MAX_FRIENDLY_EVENT_NAME_LENGTH 128
+#endif
+
 #endif /* __WINE_WERAPI_H */

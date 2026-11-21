@@ -335,4 +335,8 @@ DECLARE_INTERFACE_(ID3D11FunctionLinkingGraph, IUnknown)
 };
 #undef INTERFACE
 
+#ifndef D3D_RETURN_PARAMETER_INDEX
+#define D3D_RETURN_PARAMETER_INDEX (-1)
+#endif
+
 #endif

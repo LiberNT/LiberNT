@@ -169,4 +169,41 @@ typedef RASNOUSERA     RASNOUSER, *LPRASNOUSER;
 #ifdef __cplusplus
 }
 #endif
+#ifndef RASDDFLAG_AoacRedial
+#define RASDDFLAG_AoacRedial 0x00000004
+#endif
+#ifndef RASDDFLAG_LinkFailure
+#define RASDDFLAG_LinkFailure 0x80000000
+#endif
+#ifndef RASDDFLAG_NoPrompt
+#define RASDDFLAG_NoPrompt 0x00000002
+#endif
+#ifndef RASEDFLAG_IncomingConnection
+#define RASEDFLAG_IncomingConnection 0x00000400
+#endif
+#ifndef RASEDFLAG_InternetEntry
+#define RASEDFLAG_InternetEntry 0x00000100
+#endif
+#ifndef RASEDFLAG_NAT
+#define RASEDFLAG_NAT 0x00000200
+#endif
+#ifndef RASEDFLAG_NewBroadbandEntry
+#define RASEDFLAG_NewBroadbandEntry 0x00000080
+#endif
+#ifndef RASEDFLAG_NewPhoneEntry
+#define RASEDFLAG_NewPhoneEntry 0x00000010
+#endif
+#ifndef RASEDFLAG_NewTunnelEntry
+#define RASEDFLAG_NewTunnelEntry 0x00000020
+#endif
+#ifndef RASEDFLAG_NoRename
+#define RASEDFLAG_NoRename 0x00000008
+#endif
+#ifndef RASEDFLAG_ShellOwned
+#define RASEDFLAG_ShellOwned 0x40000000
+#endif
+#ifndef RASNOUSER_SmartCard
+#define RASNOUSER_SmartCard 0x00000001
+#endif
+
 #endif
