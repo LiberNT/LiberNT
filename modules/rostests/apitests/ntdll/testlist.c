@@ -123,6 +123,7 @@ extern void func_NtQueryInformationToken(void);
 extern void func_NtQueryKey(void);
 extern void func_ObjectTypeIndex(void);
 extern void func_MemoryImageInformation(void);
+extern void func_ObjectTypeIndex(void);
 extern void func_NtQueryObject(void);
 extern void func_NtQueryObjectName(void);
 extern void func_NtQueryOpenSubKeys(void);
