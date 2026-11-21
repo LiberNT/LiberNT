@@ -9,6 +9,7 @@ list(APPEND SOURCE
 add_library(rdbsslib ${SOURCE})
 target_link_libraries(rdbsslib PRIVATE pseh)
 add_dependencies(rdbsslib bugcodes xdk)
+# FIXME: nfs41_driver links this library at the NT10 RDBSS layout; port it to the NT6+ RDBSS contract and drop this pin
 # Pin rdbsslib to WS03 SP4 API level -- it implements pre-Vista RDBSS APIs.
 # Use -U/-D in compile options to override the global _WIN32_WINNT after
 # directory-level definitions have been emitted.

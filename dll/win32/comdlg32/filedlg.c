@@ -57,11 +57,6 @@
 #include "winternl.h"
 #include "winnls.h"
 #include "wingdi.h"
-#ifdef __REACTOS__
-/* RegGetValueW is supported by Win2k3 SP1 but headers need Win Vista */
-#undef _WIN32_WINNT
-#define _WIN32_WINNT 0x0600
-#endif
 #include "winreg.h"
 #include "winuser.h"
 #include "commdlg.h"

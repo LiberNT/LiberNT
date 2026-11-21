@@ -1,10 +1,3 @@
-# The runtime half is compiled at the same effective UMD interface version as
-# the drivers it serves. Lower WDDM configurations therefore get the native
-# shorter callback table; higher configurations retain the honest WDDM 2.1
-# implementation ceiling instead of exposing zero-filled newer tails.
-remove_definitions(-DDXGKDDI_INTERFACE_VERSION=0x1052)
-add_definitions(-DDXGKDDI_INTERFACE_VERSION=0x11007)
-
 spec2def(d3dumdrt.dll d3dumdrt.spec)
 
 add_library(d3dumdrt MODULE

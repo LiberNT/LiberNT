@@ -22,10 +22,7 @@ if(${ARCH} STREQUAL "i386")
     include_directories(inc/i386)
 endif()
 
-remove_definitions(-D_WIN32_WINNT=${REACTOS_TARGET_NT} -DWINVER=${REACTOS_TARGET_NT})
 add_compile_definitions(
-    WINVER=0x600
-    _WIN32_WINNT=0x600
     _UCRT
     _CORECRT_BUILD
     _CRT_DECLARE_GLOBAL_VARIABLES_DIRECTLY

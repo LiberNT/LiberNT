@@ -1,5 +1,3 @@
-remove_definitions(-D_WIN32_WINNT=${REACTOS_TARGET_NT} -DWINVER=${REACTOS_TARGET_NT})
-
 function(add_wdfdriverentry_version _target _minor)
     add_library(${_target} STATIC
         classbind.c
@@ -18,10 +16,6 @@ function(add_wdfdriverentry_version _target _minor)
             __WDF_MAJOR_VERSION=1
             __WDF_MINOR_VERSION=${_minor}
             __WDF_BUILD_NUMBER=0)
-    target_compile_options(${_target} PRIVATE
-        -U_WIN32_WINNT -D_WIN32_WINNT=0x603
-        -UNTDDI_VERSION -DNTDDI_VERSION=0x06030000)
-
     target_include_directories(${_target}
         PUBLIC ${REACTOS_SOURCE_DIR}/sdk/include/wdf/kmdf/1.${_minor}
         PRIVATE

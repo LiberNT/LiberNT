@@ -4794,9 +4794,6 @@ HRESULT SHELL_RegisterShellFolders(void)
 #include "shell32_main.h"
 #include "shresdef.h"
 
-#undef _WIN32_WINNT
-#define _WIN32_WINNT _WIN32_WINNT_WS03
-
 WINE_DEFAULT_DEBUG_CHANNEL(shell);
 
 static const BOOL is_win64 = sizeof(void *) > sizeof(int);

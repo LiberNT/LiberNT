@@ -1,8 +1,6 @@
 
 spec2def(classpnp.sys classpnp.spec ADD_IMPORTLIB)
 
-remove_definitions(-D_WIN32_WINNT=${REACTOS_TARGET_NT} -DWINVER=${REACTOS_TARGET_NT})
-
 list(APPEND SOURCE
     autorun.c
     class.c
@@ -29,10 +27,6 @@ add_library(classpnp MODULE
     ${CMAKE_CURRENT_BINARY_DIR}/classpnp.def)
 
 target_compile_definitions(classpnp PUBLIC DEBUG_USE_KDPRINT)
-target_compile_options(classpnp PUBLIC # NTDDI_WIN8
-    -U_WIN32_WINNT -D_WIN32_WINNT=0x602
-    -UNTDDI_VERSION -DNTDDI_VERSION=0x06020000)
-
 target_compile_definitions(classpnp PRIVATE
     CLASS_GLOBAL_BREAK_ON_LOST_IRPS=0
     CLASS_GLOBAL_SECONDS_TO_WAIT_FOR_SYNCHRONOUS_SRB=100
