@@ -1249,16 +1249,24 @@ SeFilterToken(
         Groups[GroupCount] = Token->UserAndGroups[i];
 
         /* A holder that is only counted against cannot be turned back on */
-        if (i != 0 && SepNamedInGroups(SidsToDisable, Groups[GroupCount].Sid))
+        if (!(Groups[GroupCount].Attributes & SE_GROUP_INTEGRITY) &&
+            SepNamedInGroups(SidsToDisable, Groups[GroupCount].Sid))
         {
             Groups[GroupCount].Attributes &=
-                ~(SE_GROUP_ENABLED | SE_GROUP_ENABLED_BY_DEFAULT);
+                ~(SE_GROUP_MANDATORY | SE_GROUP_ENABLED_BY_DEFAULT | SE_GROUP_ENABLED | SE_GROUP_OWNER);
             Groups[GroupCount].Attributes |= SE_GROUP_USE_FOR_DENY_ONLY;
         }
 
         if (i == Token->DefaultOwnerIndex) Contents.DefaultOwnerIndex = GroupCount;
 
         GroupCount++;
+    }
+
+    ASSERT(Contents.DefaultOwnerIndex < GroupCount);
+    if (Contents.DefaultOwnerIndex != 0 &&
+        (Groups[Contents.DefaultOwnerIndex].Attributes & SE_GROUP_USE_FOR_DENY_ONLY))
+    {
+        Contents.DefaultOwnerIndex = 0;
     }
 
     for (i = 0; i < Token->PrivilegeCount; i++)
@@ -1277,17 +1285,38 @@ SeFilterToken(
         Privileges[PrivilegeCount++] = Token->Privileges[i];
     }
 
-    for (i = 0; i < Token->RestrictedSidCount; i++)
-        Restricted[RestrictedCount++] = Token->RestrictedSids[i];
-
-    for (i = 0; i < Added; i++)
+    if (Token->RestrictedSidCount != 0)
     {
-        if (RestrictedSids->Groups[i].Sid == NULL) continue;
+        for (i = 0; i < Token->RestrictedSidCount; i++)
+        {
+            if (SepNamedInGroups(RestrictedSids, Token->RestrictedSids[i].Sid))
+                Restricted[RestrictedCount++] = Token->RestrictedSids[i];
+        }
+        ASSERT(RestrictedCount <= Token->RestrictedSidCount);
 
-        Restricted[RestrictedCount].Sid = RestrictedSids->Groups[i].Sid;
-        Restricted[RestrictedCount].Attributes = SE_GROUP_ENABLED;
-        RestrictedCount++;
+        /* A restricted token can only be narrowed; nothing left in common would lift the restriction */
+        if (RestrictedCount == 0)
+        {
+            SepReleaseTokenLock(Token);
+            ExFreePoolWithTag(Groups, TAG_SE);
+            if (Privileges != NULL) ExFreePoolWithTag(Privileges, TAG_SE);
+            if (Restricted != NULL) ExFreePoolWithTag(Restricted, TAG_SE);
+            return STATUS_INVALID_PARAMETER;
+        }
     }
+    else
+    {
+        for (i = 0; i < Added; i++)
+        {
+            if (RestrictedSids->Groups[i].Sid == NULL) continue;
+
+            Restricted[RestrictedCount].Sid = RestrictedSids->Groups[i].Sid;
+            Restricted[RestrictedCount].Attributes =
+                SE_GROUP_MANDATORY | SE_GROUP_ENABLED_BY_DEFAULT | SE_GROUP_ENABLED;
+            RestrictedCount++;
+        }
+    }
+    ASSERT(RestrictedCount <= Token->RestrictedSidCount + Added);
 
     Contents.UserAndGroups = Groups;
     Contents.UserAndGroupCount = GroupCount;

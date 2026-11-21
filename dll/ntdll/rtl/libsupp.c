@@ -1673,6 +1673,62 @@ RtlpQueryTokenBuffer(
     return Status;
 }
 
+static
+BOOLEAN
+RtlpSidCountsInGroups(
+    _In_ PTOKEN_GROUPS Groups,
+    _In_ PSID Sid)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < Groups->GroupCount; Index++)
+    {
+        if ((Groups->Groups[Index].Attributes & SE_GROUP_ENABLED) &&
+            !(Groups->Groups[Index].Attributes & SE_GROUP_USE_FOR_DENY_ONLY) &&
+            RtlEqualSid(Groups->Groups[Index].Sid, Sid))
+        {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+static
+NTSTATUS
+RtlpCheckTokenMembership(
+    _In_ HANDLE Token,
+    _In_ PSID SidToCheck,
+    _Out_ PBOOLEAN IsMember)
+{
+    PTOKEN_USER User;
+    PTOKEN_GROUPS Groups;
+    PTOKEN_GROUPS Restricted;
+    BOOLEAN Member;
+    NTSTATUS Status;
+
+    Status = RtlpQueryTokenBuffer(Token, TokenUser, (PVOID*)&User);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = RtlpQueryTokenBuffer(Token, TokenGroups, (PVOID*)&Groups);
+    if (!NT_SUCCESS(Status))
+    {
+        RtlFreeHeap(RtlGetProcessHeap(), 0, User);
+        return Status;
+    }
+    Status = RtlpQueryTokenBuffer(Token, TokenRestrictedSids, (PVOID*)&Restricted);
+    if (NT_SUCCESS(Status))
+    {
+        Member = (RtlEqualSid(User->User.Sid, SidToCheck) &&
+                  !(User->User.Attributes & SE_GROUP_USE_FOR_DENY_ONLY)) ||
+                 RtlpSidCountsInGroups(Groups, SidToCheck);
+        *IsMember = Member && (Restricted->GroupCount == 0 || RtlpSidCountsInGroups(Restricted, SidToCheck));
+        RtlFreeHeap(RtlGetProcessHeap(), 0, Restricted);
+    }
+    RtlFreeHeap(RtlGetProcessHeap(), 0, Groups);
+    RtlFreeHeap(RtlGetProcessHeap(), 0, User);
+    return Status;
+}
+
 NTSTATUS
 NTAPI
 RtlCheckTokenMembershipEx(
@@ -1681,50 +1737,32 @@ RtlCheckTokenMembershipEx(
     _In_ ULONG Flags,
     _Out_ PBOOLEAN IsMember)
 {
-    HANDLE Token = TokenHandle;
-    BOOLEAN Opened = FALSE;
-    PTOKEN_USER User = NULL;
-    PTOKEN_GROUPS Groups = NULL;
-    ULONG Index;
+    HANDLE Token;
+    TOKEN_TYPE Type;
+    ULONG Length;
     NTSTATUS Status;
 
     if (!IsMember || !SidToCheck || (Flags & ~3))
         return STATUS_INVALID_PARAMETER;
     *IsMember = FALSE;
 
-    if (!Token)
+    if (TokenHandle)
     {
-        Status = NtOpenThreadTokenEx(NtCurrentThread(), TOKEN_QUERY, TRUE, 0, &Token);
-        if (!NT_SUCCESS(Status))
-            Status = NtOpenProcessTokenEx(NtCurrentProcess(), TOKEN_QUERY, 0, &Token);
+        Status = NtQueryInformationToken(TokenHandle, TokenType, &Type, sizeof(Type), &Length);
         if (!NT_SUCCESS(Status))
             return Status;
-        Opened = TRUE;
+        if (Type != TokenImpersonation)
+            return STATUS_NO_IMPERSONATION_TOKEN;
+        return RtlpCheckTokenMembership(TokenHandle, SidToCheck, IsMember);
     }
 
-    Status = RtlpQueryTokenBuffer(Token, TokenUser, (PVOID*)&User);
-    if (!NT_SUCCESS(Status)) goto Quit;
-    Status = RtlpQueryTokenBuffer(Token, TokenGroups, (PVOID*)&Groups);
-    if (!NT_SUCCESS(Status)) goto Quit;
-
-    if (RtlEqualSid(User->User.Sid, SidToCheck))
-        *IsMember = TRUE;
-    for (Index = 0; Index < Groups->GroupCount && !*IsMember; Index++)
-    {
-        if ((Groups->Groups[Index].Attributes & SE_GROUP_ENABLED) &&
-            !(Groups->Groups[Index].Attributes & SE_GROUP_USE_FOR_DENY_ONLY) &&
-            RtlEqualSid(Groups->Groups[Index].Sid, SidToCheck))
-        {
-            *IsMember = TRUE;
-        }
-    }
-
-    Status = STATUS_SUCCESS;
-
-Quit:
-    if (Groups) RtlFreeHeap(RtlGetProcessHeap(), 0, Groups);
-    if (User) RtlFreeHeap(RtlGetProcessHeap(), 0, User);
-    if (Opened) NtClose(Token);
+    Status = NtOpenThreadTokenEx(NtCurrentThread(), TOKEN_QUERY, TRUE, 0, &Token);
+    if (!NT_SUCCESS(Status))
+        Status = NtOpenProcessTokenEx(NtCurrentProcess(), TOKEN_QUERY, 0, &Token);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = RtlpCheckTokenMembership(Token, SidToCheck, IsMember);
+    NtClose(Token);
     return Status;
 }
 
