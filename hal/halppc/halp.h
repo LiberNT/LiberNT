@@ -49,6 +49,7 @@ BOOLEAN NTAPI HalpPpcGetPciBusRange(_Out_ PULONG FirstBus, _Out_ PULONG LastBus)
 BOOLEAN HalpPpcGetPciResource(_Out_ PCM_PARTIAL_RESOURCE_DESCRIPTOR Resource);
 BOOLEAN HalpPpcPciDmaCoherent(VOID);
 NTSTATUS NTAPI HaliInitPnpDriver(VOID);
+PDMA_ADAPTER NTAPI HalpPpcGetDmaAdapter(_In_ PVOID Context, _In_ PDEVICE_DESCRIPTION DeviceDescription, _Out_ PULONG NumberOfMapRegisters);
 ULONGLONG HalpPpcReadTimebase(VOID);
 ULONG HalpPpcCalibrateTimebase(VOID);
 

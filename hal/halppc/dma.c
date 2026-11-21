@@ -42,6 +42,7 @@ HalpPpcAllocateCommonBuffer(PDMA_ADAPTER DmaAdapter, ULONG Length,
     PHYSICAL_ADDRESS Low, High, Boundary;
     PVOID Buffer;
 
+    UNREFERENCED_PARAMETER(CacheEnabled);
     if (!Adapter || Adapter->Signature != PPC_DMA_SIGNATURE ||
         !LogicalAddress || !Length)
         return NULL;
@@ -53,8 +54,7 @@ HalpPpcAllocateCommonBuffer(PDMA_ADAPTER DmaAdapter, ULONG Length,
     High.QuadPart -= HalpPpcDmaOffset;
     Boundary.QuadPart = 0;
     Buffer = MmAllocateContiguousMemorySpecifyCache(Length, Low, High,
-                                                     Boundary,
-                                                     CacheEnabled ? MmCached : MmNonCached);
+                                                     Boundary, MmCached);
     if (!Buffer)
         return NULL;
     *LogicalAddress = MmGetPhysicalAddress(Buffer);
@@ -255,6 +255,14 @@ HalGetAdapter(PDEVICE_DESCRIPTION DeviceDescription, PULONG NumberOfMapRegisters
     if (NumberOfMapRegisters)
         *NumberOfMapRegisters = 64;
     return (PADAPTER_OBJECT)Adapter;
+}
+
+PDMA_ADAPTER NTAPI
+HalpPpcGetDmaAdapter(_In_ PVOID Context, _In_ PDEVICE_DESCRIPTION DeviceDescription,
+                     _Out_ PULONG NumberOfMapRegisters)
+{
+    UNREFERENCED_PARAMETER(Context);
+    return (PDMA_ADAPTER)HalGetAdapter(DeviceDescription, NumberOfMapRegisters);
 }
 
 /* Legacy HAL DMA entry points: the adapter object is the one HalGetAdapter
