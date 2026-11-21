@@ -14,6 +14,7 @@ extern PVOID MmSessionBase;
 extern SIZE_T MmSessionSize;
 
 PMI_SYSTEM MiSessionTestSystem;
+SESSION_TEST_UNLOAD MiSessionTestUnload;
 _Thread_local PEPROCESS MiSessionTestCurrent;
 volatile LONG MiSessionTestAllocations;
 volatile LONG MiSessionTestFailAllocate;
@@ -308,6 +309,83 @@ SessionMoveProcess(void)
 }
 
 static void
+SessionDriverUnload(void)
+{
+    struct _EPROCESS_HOST Leader, First, Last, Outsider;
+    MI_PROCESS Native[4];
+    ULONG Driver1, Driver2;
+    ULONG Id;
+
+    SessionProcessInitialize(&Leader, &Native[0]);
+    SessionProcessInitialize(&First, &Native[1]);
+    SessionProcessInitialize(&Last, &Native[2]);
+    SessionProcessInitialize(&Outsider, &Native[3]);
+    RtlZeroMemory(&MiSessionTestUnload, sizeof(MiSessionTestUnload));
+
+    MiSessionTestCurrent = &Outsider;
+    CHECK(MmSessionAddDriver(&Driver1) == STATUS_NOT_FOUND);
+    MiSessionTestCurrent = &Leader;
+    CHECK(MmSessionCreate(&Id) == STATUS_SUCCESS);
+    CHECK(MmSessionAddDriver(&Driver2) == STATUS_SUCCESS);
+    MiSessionAddProcess(&First);
+    MiSessionAddProcess(&Last);
+    CHECK(MmSessionDelete(Id) == STATUS_SUCCESS);
+    CHECK(MiSessionTestUnload.Count == 0);
+    MiSessionTestCurrent = &First;
+    CHECK(MmSessionAddDriver(&Driver1) == STATUS_SUCCESS);
+    MiSessionTestFailAllocate = TRUE;
+    CHECK(MmSessionAddDriver(&Driver2) == STATUS_INSUFFICIENT_RESOURCES);
+    MiSessionTestFailAllocate = FALSE;
+    CHECK(MmSessionAddDriver(&Driver2) == STATUS_SUCCESS);
+
+    MiSessionProcessCleaned(&First);
+    CHECK(MiSessionTestUnload.Count == 0);
+    MiSessionProcessCleaned(&First);
+    CHECK(MiSessionTestUnload.Count == 0);
+    CHECK(MmSessionAddDriver(&Driver1) == STATUS_SUCCESS);
+    MiSessionTestCurrent = &Outsider;
+    MiSessionProcessCleaned(&Last);
+    CHECK(MiSessionTestUnload.Count == 4);
+    CHECK(MiSessionTestUnload.LastDriver == &Driver1 && MiSessionTestUnload.LastProcess == &Last);
+    CHECK(MiSessionTestCurrent == &Outsider);
+    MiSessionTestCurrent = &Last;
+    CHECK(MmSessionAddDriver(&Driver2) == STATUS_PROCESS_IS_TERMINATING);
+    MiSessionProcessCleaned(&Last);
+    CHECK(MiSessionTestUnload.Count == 4);
+    CHECK(MmMoveProcessToSession(&Outsider, Id) == STATUS_INVALID_PARAMETER);
+    MiSessionTestCurrent = &Outsider;
+    MiSessionRemoveProcess(&First);
+    MiSessionRemoveProcess(&Last);
+    CHECK(MiSessionTestUnload.Count == 4 && MmGetSessionById(Id) == NULL);
+
+    RtlZeroMemory(&MiSessionTestUnload, sizeof(MiSessionTestUnload));
+    MiSessionTestCurrent = &Leader;
+    CHECK(MmSessionCreate(&Id) == STATUS_SUCCESS);
+    CHECK(MmSessionAddDriver(&Driver1) == STATUS_SUCCESS);
+    CHECK(MmSessionDelete(Id) == STATUS_SUCCESS);
+    CHECK(MiSessionTestUnload.Count == 1 && MiSessionTestUnload.LastProcess == &Leader);
+    CHECK(Leader.Session == NULL && MmGetSessionById(Id) == NULL);
+
+    RtlZeroMemory(&MiSessionTestUnload, sizeof(MiSessionTestUnload));
+    SessionProcessInitialize(&First, &Native[1]);
+    MiSessionTestCurrent = &Leader;
+    CHECK(MmSessionCreate(&Id) == STATUS_SUCCESS);
+    MiSessionAddProcess(&First);
+    CHECK(MmSessionDelete(Id) == STATUS_SUCCESS);
+    MiSessionTestCurrent = &First;
+    CHECK(MmSessionAddDriver(&Driver1) == STATUS_SUCCESS);
+    MiSessionTestCurrent = &Outsider;
+    MiSessionRemoveProcess(&First);
+    CHECK(MiSessionTestUnload.Count == 1 && MiSessionTestUnload.LastProcess == &First);
+    CHECK(MiSessionTestCurrent == &Outsider && First.Session == NULL);
+
+    MiSessionRemoveProcess(&Leader);
+    MiSessionRemoveProcess(&Outsider);
+    CHECK(MiSessionTestAllocations == 0);
+    MiSessionTestCurrent = NULL;
+}
+
+static void
 SessionSetBeforeAnySession(void)
 {
     struct _EPROCESS_HOST Process;
@@ -321,6 +399,48 @@ SessionSetBeforeAnySession(void)
     CHECK(MmSetProcessSession(&Process, 1) == STATUS_ACCESS_DENIED);
     CHECK(Process.Session == NULL);
     CHECK(MiSessionTestAllocations == 0);
+}
+
+static void
+SessionMoveLastProcess(void)
+{
+    struct _EPROCESS_HOST Leader, Keeper, Mover, Caller;
+    MI_PROCESS Native[4];
+    ULONG Driver;
+    ULONG Id0, Id1;
+
+    SessionProcessInitialize(&Leader, &Native[0]);
+    SessionProcessInitialize(&Keeper, &Native[1]);
+    SessionProcessInitialize(&Mover, &Native[2]);
+    SessionProcessInitialize(&Caller, &Native[3]);
+    RtlZeroMemory(&MiSessionTestUnload, sizeof(MiSessionTestUnload));
+    MiSessionTestCurrent = &Leader;
+    CHECK(MmSessionCreate(&Id0) == STATUS_SUCCESS);
+    MiSessionAddProcess(&Mover);
+    CHECK(MmSessionDelete(Id0) == STATUS_SUCCESS);
+    CHECK(MmSessionCreate(&Id1) == STATUS_SUCCESS);
+    MiSessionAddProcess(&Keeper);
+    CHECK(MmSessionDelete(Id1) == STATUS_SUCCESS);
+    MiSessionTestCurrent = &Mover;
+    CHECK(MmSessionAddDriver(&Driver) == STATUS_SUCCESS);
+
+    MiSessionTestCurrent = &Caller;
+    CHECK(MmMoveProcessToSession(&Mover, Id1) == STATUS_SUCCESS);
+    CHECK(MiSessionTestUnload.Count == 1 && MiSessionTestUnload.LastProcess == &Mover);
+    CHECK(MiSessionTestCurrent == &Caller && MmGetSessionId(&Mover) == Id1);
+    CHECK(MmGetSessionById(Id0) == NULL);
+    CHECK(MmMoveProcessToSession(&Keeper, Id0) == STATUS_INVALID_PARAMETER);
+
+    MiSessionProcessCleaned(&Keeper);
+    CHECK(MiSessionTestUnload.Count == 1);
+    MiSessionProcessCleaned(&Mover);
+    CHECK(MiSessionTestUnload.Count == 1);
+    MiSessionRemoveProcess(&Keeper);
+    MiSessionRemoveProcess(&Mover);
+    MiSessionRemoveProcess(&Leader);
+    MiSessionRemoveProcess(&Caller);
+    CHECK(MiSessionTestAllocations == 0);
+    MiSessionTestCurrent = NULL;
 }
 
 static void
@@ -487,6 +607,8 @@ TestSession(void)
     SessionAttachRundown();
     SessionSetKeepsProcess();
     SessionMoveProcess();
+    SessionDriverUnload();
+    SessionMoveLastProcess();
     SessionNext();
     SessionSpaceRelease(&World.System);
     MiSessionTestSystem = NULL;

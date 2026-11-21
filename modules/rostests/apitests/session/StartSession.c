@@ -64,7 +64,37 @@ static BOOL ReadChildReport(WCHAR *text, DWORD count)
     return read != 0;
 }
 
-static ULONG ProcessesInSession(ULONG sessionId)
+static DWORD SessionProcessId(ULONG sessionId, PCWSTR image)
+{
+    PSYSTEM_PROCESS_INFORMATION processes, process;
+    ULONG size = 0x100000;
+    DWORD pid = 0;
+    NTSTATUS status;
+    for (;;)
+    {
+        processes = HeapAlloc(GetProcessHeap(), 0, size);
+        if (!processes) return 0;
+        status = NtQuerySystemInformation(SystemProcessInformation, processes, size, NULL);
+        if (status != STATUS_INFO_LENGTH_MISMATCH) break;
+        HeapFree(GetProcessHeap(), 0, processes);
+        size *= 2;
+    }
+    for (process = processes; NT_SUCCESS(status); process = (PSYSTEM_PROCESS_INFORMATION)((PUCHAR)process + process->NextEntryOffset))
+    {
+        if (process->SessionId == sessionId && process->ImageName.Buffer &&
+            process->ImageName.Length == lstrlenW(image) * sizeof(WCHAR) &&
+            !_wcsnicmp(process->ImageName.Buffer, image, lstrlenW(image)))
+        {
+            pid = HandleToUlong(process->UniqueProcessId);
+            break;
+        }
+        if (!process->NextEntryOffset) break;
+    }
+    HeapFree(GetProcessHeap(), 0, processes);
+    return pid;
+}
+
+static ULONG ProcessesInSession(ULONG sessionId, BOOL exited)
 {
     PSYSTEM_PROCESS_INFORMATION processes, process;
     ULONG size = 0x100000, live = 0;
@@ -90,7 +120,7 @@ static ULONG ProcessesInSession(ULONG sessionId)
             HANDLE handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
                                         HandleToUlong(process->UniqueProcessId));
             DWORD code = STILL_ACTIVE;
-            if (!handle || (GetExitCodeProcess(handle, &code) && code == STILL_ACTIVE))
+            if (exited || !handle || (GetExitCodeProcess(handle, &code) && code == STILL_ACTIVE))
             {
                 trace("session %lu still has %.*ls (%lu)\n", sessionId, process->ImageName.Length / 2,
                       process->ImageName.Buffer, HandleToUlong(process->UniqueProcessId));
@@ -104,12 +134,25 @@ static ULONG ProcessesInSession(ULONG sessionId)
     return live;
 }
 
+static BOOL ProcessObjectGone(DWORD pid, ULONG sessionId)
+{
+    PROCESS_SESSION_INFORMATION info = { MAXULONG };
+    HANDLE handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    NTSTATUS status;
+
+    if (!handle) return GetLastError() == ERROR_INVALID_PARAMETER;
+    status = NtQueryInformationProcess(handle, ProcessSessionInformation, &info, sizeof(info), NULL);
+    CloseHandle(handle);
+    return NT_SUCCESS(status) && info.SessionId != sessionId;
+}
+
 static void RunSession(HANDLE port, ULONG ownSession, ULONG *previous)
 {
     WCHAR commandLine[MAX_PATH + 32], path[MAX_PATH], report[1024];
     UNICODE_STRING command;
     HANDLE csrss = NULL, initial = NULL;
     ULONG sessionId = MAXULONG, wait;
+    DWORD csrssPid;
     NTSTATUS status;
     int width = 0, height = 0, devices = -1, remote = -1, desktop = 0;
     DWORD modeWidth = 0, modeHeight = 0;
@@ -140,13 +183,23 @@ static void RunSession(HANDLE port, ULONG ownSession, ULONG *previous)
     ok(desktop == 1, "the new session could not create its desktop\n");
     ok(modeWidth > 0 && width == (int)modeWidth && height == (int)modeHeight,
        "the new session's screen is %dx%d, its display mode %lux%lu\n", width, height, modeWidth, modeHeight);
-    ok(ProcessesInSession(sessionId) >= 2, "the new session has %lu processes\n",
-       ProcessesInSession(sessionId));
+    ok(ProcessesInSession(sessionId, FALSE) >= 2, "the new session has %lu processes\n",
+       ProcessesInSession(sessionId, FALSE));
 
+    csrssPid = SessionProcessId(sessionId, L"csrss.exe");
+    ok(csrssPid != 0, "session %lu has no csrss\n", sessionId);
     status = SmStopCsr(port, sessionId);
     ok(status == STATUS_SUCCESS, "SmStopCsr returned 0x%lx\n", status);
-    ok(ProcessesInSession(sessionId) == 0, "%lu processes outlived session %lu\n",
-       ProcessesInSession(sessionId), sessionId);
+    ok(ProcessesInSession(sessionId, FALSE) == 0, "%lu processes outlived session %lu\n",
+       ProcessesInSession(sessionId, FALSE), sessionId);
+    CloseHandle(csrss);
+    CloseHandle(initial);
+    for (wait = 0; wait < 100 && ProcessesInSession(sessionId, TRUE) != 0; wait++) Sleep(100);
+    ok(ProcessesInSession(sessionId, TRUE) == 0, "%lu exited processes of session %lu were never deleted\n",
+       ProcessesInSession(sessionId, TRUE), sessionId);
+    for (wait = 0; wait < 100 && !ProcessObjectGone(csrssPid, sessionId); wait++) Sleep(100);
+    ok(ProcessObjectGone(csrssPid, sessionId), "the csrss of session %lu (%lu) was never deleted\n",
+       sessionId, csrssPid);
     status = SmStopCsr(port, sessionId);
     ok(status == STATUS_INVALID_PARAMETER, "stopping session %lu again returned 0x%lx\n", sessionId, status);
     *previous = sessionId;
@@ -197,6 +250,6 @@ START_TEST(StartSession)
     }
     ok(WTSGetActiveConsoleSessionId() == console, "the console moved to session %lu\n", WTSGetActiveConsoleSessionId());
     ok(!SessionSeesRemoteAdapter(), "the console session sees the new session's adapter\n");
-    ok(ProcessesInSession(ownSession) > 0, "the console session lost its processes\n");
+    ok(ProcessesInSession(ownSession, FALSE) > 0, "the console session lost its processes\n");
     SwDeviceClose(adapter);
 }

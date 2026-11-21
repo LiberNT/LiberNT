@@ -28,6 +28,7 @@ typedef struct _MI_PROCESS
     ULONG64 Peb;
     BOOLEAN HardWorkingSetMaximum;
     BOOLEAN SessionLeader;
+    BOOLEAN SessionLive;
     volatile LONG SecureRangeCount;
 } MI_PROCESS, *PMI_PROCESS;
 
