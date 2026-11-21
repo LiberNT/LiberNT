@@ -236,10 +236,10 @@ PopSetSystemPowerState(
 }
 
 /* The range of memory that must survive the machine being written out */
-NTSTATUS
+VOID
 NTAPI
 PoSetHiberRange(
-    _In_ PVOID HiberContext,
+    _In_opt_ PVOID HiberContext,
     _In_ ULONG Flags,
     _In_ PVOID StartPage,
     _In_ ULONG_PTR Length,
@@ -254,7 +254,6 @@ PoSetHiberRange(
     UNREFERENCED_PARAMETER(PageTag);
 
     /* TODO: a driver's own range is not added to what is written out */
-    return STATUS_SUCCESS;
 }
 
 /* SETTINGS *******************************************************************/
