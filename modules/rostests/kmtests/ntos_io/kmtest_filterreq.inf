@@ -10,7 +10,7 @@ CatalogFile=kmtest_filterreq.cat
 PnpLockdown=1
 
 [Manufacturer]
-%Provider%=Models,NTx86,NTamd64,NTarm64,NTriscv64
+%Provider%=Models,NTx86,NTamd64,NTarm,NTarm64,NTriscv64
 
 [Models.NTx86]
 %Device%=Fixture,ROOT\KMTESTFILTERREQ
@@ -18,6 +18,11 @@ PnpLockdown=1
 %NullDevice%=NullFixture,KMTEST\FILTERREQNULL
 
 [Models.NTamd64]
+%Device%=Fixture,ROOT\KMTESTFILTERREQ
+%Device%=Fixture,KMTEST\FILTERREQCHILD
+%NullDevice%=NullFixture,KMTEST\FILTERREQNULL
+
+[Models.NTarm]
 %Device%=Fixture,ROOT\KMTESTFILTERREQ
 %Device%=Fixture,KMTEST\FILTERREQCHILD
 %NullDevice%=NullFixture,KMTEST\FILTERREQNULL
