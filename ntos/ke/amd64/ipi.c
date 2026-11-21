@@ -31,7 +31,7 @@ static volatile LONG KiGenericCallOwner = -1;
 #define KiIpiRequests(Prcb) ((volatile LONG64 *)&(Prcb)->RequestMailbox[0].RequestSummary)
 #define KiIpiMemorySenders(Prcb, Word) ((volatile LONG64 *)&(Prcb)->RequestMailbox[1 + (Word)].RequestSummary)
 
-C_ASSERT(KE_MAXIMUM_GROUPS < RTL_NUMBER_OF(((PKPRCB)0)->RequestMailbox));
+C_ASSERT(KE_MAXIMUM_GROUPS < RTL_NUMBER_OF(((PKPRCB)0)->RequestMailbox) + KI_EXTRA_REQUEST_MAILBOXES);
 
 /* FUNCTIONS *****************************************************************/
 

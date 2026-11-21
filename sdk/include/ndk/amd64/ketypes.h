@@ -657,9 +657,11 @@ typedef struct _KREQUEST_PACKET
 
 typedef struct _REQUEST_MAILBOX
 {
+    struct _REQUEST_MAILBOX *Next;
     INT64 RequestSummary;
     KREQUEST_PACKET RequestPacket;
-    PVOID Virtual[7];
+    volatile LONG *SubNodeTargetCountAddr;
+    volatile LONG SubNodeTargetCount;
 } REQUEST_MAILBOX, *PREQUEST_MAILBOX;
 
 //
@@ -667,221 +669,819 @@ typedef struct _REQUEST_MAILBOX
 //
 typedef struct _KPRCB
 {
-    ULONG MxCsr;
-    UCHAR LegacyNumber;
-    UCHAR ReservedMustBeZero;
-    UCHAR InterruptRequest;
-    UCHAR IdleHalt;
-    struct _KTHREAD *CurrentThread;
-    struct _KTHREAD *NextThread;
-    struct _KTHREAD *IdleThread;
-    UCHAR NestingLevel;
-    UCHAR ClockOwner;
-    UCHAR PendingTickFlags;
-    UCHAR IdleState;
-    ULONG Number;
-    UINT64 RspBase;
-    UINT64 PrcbLock;
-    PCHAR PriorityState;
-    UINT64 SetMember;
-    KPROCESSOR_STATE ProcessorState;
-    CHAR CpuType;
-    CHAR CpuID;
-    union
+    ULONG MxCsr; // 0x00000
+    UCHAR LegacyNumber; // 0x00004
+    UCHAR ReservedMustBeZero; // 0x00005
+    UCHAR InterruptRequest; // 0x00006
+    UCHAR IdleHalt; // 0x00007
+    struct _KTHREAD * CurrentThread; // 0x00008
+    struct _KTHREAD * NextThread; // 0x00010
+    struct _KTHREAD * IdleThread; // 0x00018
+    UCHAR NestingLevel; // 0x00020
+    UCHAR ClockOwner; // 0x00021
+    UCHAR PendingTickFlags; // 0x00022
+    UCHAR IdleState; // 0x00023
+    ULONG Number; // 0x00024
+    UINT64 RspBase; // 0x00028
+    UINT64 PrcbLock; // 0x00030
+    PCHAR PriorityState; // 0x00038
+    CHAR CpuType; // 0x00040
+    CHAR CpuID; // 0x00041
+    USHORT CpuStep; // 0x00042
+    ULONG MHz; // 0x00044
+    ULONGLONG HalReserved[8]; // 0x00048
+    USHORT MinorVersion; // 0x00088
+    USHORT MajorVersion; // 0x0008A
+    UCHAR BuildType; // 0x0008C
+    UCHAR CpuVendor; // 0x0008D
+    UCHAR LegacyCoresPerPhysicalProcessor; // 0x0008E
+    UCHAR LegacyLogicalProcessorsPerCore; // 0x0008F
+    ULONGLONG TscFrequency; // 0x00090
+    struct _KPRCB_TRACEPOINT_LOG *TracepointLog; // 0x00098
+    ULONG CoresPerPhysicalProcessor; // 0x000A0
+    ULONG LogicalProcessorsPerCore; // 0x000A4
+    ULONG SelfIpiRequestSummary; // 0x000A8
+    UCHAR QpcToTscIncrementShift; // 0x000AC
+    UCHAR PrcbPad03[3]; // 0x000AD
+    ULONGLONG QpcToTscIncrement; // 0x000B0
+    ULONGLONG PrcbPad04; // 0x000B8
+    struct _KSCHEDULER_SUBNODE *SchedulerSubNode; // 0x000C0
+    union // 0x000C8
     {
-        USHORT CpuStep;
-        struct
-        {
-            UCHAR CpuStepping;
-            UCHAR CpuModel;
-        };
+        ULONGLONG GroupSetMember;
+        ULONG64 SetMember; // [LiberNT] legacy alias
     };
-    ULONG MHz;
-    UINT64 HalReserved[8];
-    USHORT MinorVersion;
-    USHORT MajorVersion;
-    UCHAR BuildType;
-    UCHAR CpuVendor;
-    UCHAR CoresPerPhysicalProcessor;
-    UCHAR LogicalProcessorsPerCore;
-    ULONG ApicMask;
-    ULONG CFlushSize;
-    PVOID AcpiReserved;
-    ULONG InitialApicId;
-    ULONG Stride;
-    UINT64 PrcbPad01[3];
-    KSPIN_LOCK_QUEUE LockQueue[LockQueueMaximumLock]; // 2003: 33, vista:49
-    PP_LOOKASIDE_LIST PPLookasideList[16];
-    GENERAL_LOOKASIDE_POOL PPNPagedLookasideList[NUMBER_POOL_LOOKASIDE_LISTS];
-    GENERAL_LOOKASIDE_POOL PPPagedLookasideList[NUMBER_POOL_LOOKASIDE_LISTS];
-    UINT64 PacketBarrier;
-    SINGLE_LIST_ENTRY DeferredReadyListHead;
-    volatile LONG MmPageFaultCount;
-    volatile LONG MmCopyOnWriteCount;
-    volatile LONG MmTransitionCount;
-    volatile LONG MmDemandZeroCount;
-    volatile LONG MmPageReadCount;
-    volatile LONG MmPageReadIoCount;
-    volatile LONG MmDirtyPagesWriteCount;
-    volatile LONG MmDirtyWriteIoCount;
-    volatile LONG MmMappedPagesWriteCount;
-    volatile LONG MmMappedWriteIoCount;
-    ULONG KeSystemCalls;
-    ULONG KeContextSwitches;
-    ULONG CcFastReadNoWait;
-    ULONG CcFastReadWait;
-    ULONG CcFastReadNotPossible;
-    ULONG CcCopyReadNoWait;
-    ULONG CcCopyReadWait;
-    ULONG CcCopyReadNoWaitMiss;
-    LONG LookasideIrpFloat;
-    volatile LONG IoReadOperationCount;
-    volatile LONG IoWriteOperationCount;
-    volatile LONG IoOtherOperationCount;
-    LARGE_INTEGER IoReadTransferCount;
-    LARGE_INTEGER IoWriteTransferCount;
-    LARGE_INTEGER IoOtherTransferCount;
-    volatile UINT64 TargetSet;
-    volatile ULONG IpiFrozen;
-    UCHAR PrcbPad3[116];
-    REQUEST_MAILBOX RequestMailbox[64];
-    UINT64 SenderSummary;
-    UCHAR PrcbPad4[120];
-    KDPC_DATA DpcData[2];
-    PVOID DpcStack;
-    PVOID SparePtr0;
-    LONG MaximumDpcQueueDepth;
-    ULONG DpcRequestRate;
-    ULONG MinimumDpcRate;
-    UCHAR DpcInterruptRequested;
-    UCHAR DpcThreadRequested;
-    UCHAR DpcRoutineActive;
-    UCHAR DpcThreadActive;
-    UINT64 TimerHand;
-    UINT64 TimerRequest;
-    LONG TickOffset;
-    LONG MasterOffset;
-    ULONG DpcLastCount;
-    UCHAR ThreadDpcEnable;
-    UCHAR QuantumEnd;
-    UCHAR PrcbPad50;
-    UCHAR IdleSchedule;
-    LONG DpcSetEventRequest;
-    ULONG KeExceptionDispatchCount;
-    KEVENT DpcEvent;
-    PVOID PrcbPad51;
-    KDPC CallDpc;
-    LONG ClockKeepAlive;
-    UCHAR ClockCheckSlot;
-    UCHAR ClockPollCycle;
-    UCHAR PrcbPad6[2];
-    LONG DpcWatchdogPeriod;
-    LONG DpcWatchdogCount;
-    UINT64 PrcbPad70[2];
-    LIST_ENTRY WaitListHead;
-    UINT64 WaitLock;
-    ULONG ReadySummary;
-    ULONG QueueIndex;
-    UINT64 PrcbPad71[12];
-    LIST_ENTRY DispatcherReadyListHead[32];
-    ULONG InterruptCount;
-    ULONG KernelTime;
-    ULONG UserTime;
-    ULONG DpcTime;
-    ULONG InterruptTime;
-    ULONG AdjustDpcThreshold;
-    UCHAR SkipTick;
-    UCHAR DebuggerSavedIRQL;
-    UCHAR PollSlot;
-    UCHAR PrcbPad80[5];
-    ULONG DpcTimeCount;
-    ULONG DpcTimeLimit;
-    ULONG PeriodicCount;
-    ULONG PeriodicBias;
-    UINT64 PrcbPad81[2];
-    struct _KNODE *ParentNode;
-    UINT64 MultiThreadProcessorSet;
-    struct _KPRCB *MultiThreadSetMaster;
-    UINT64 StartCycles;
-    LONG MmSpinLockOrdering;
-    ULONG PageColor;
-    ULONG NodeColor;
-    ULONG NodeShiftedColor;
-    ULONG SecondaryColorMask;
-    LONG Sleeping;
-    UINT64 CycleTime;
-    ULONG CcFastMdlReadNoWait;
-    ULONG CcFastMdlReadWait;
-    ULONG CcFastMdlReadNotPossible;
-    ULONG CcMapDataNoWait;
-    ULONG CcMapDataWait;
-    ULONG CcPinMappedDataCount;
-    ULONG CcPinReadNoWait;
-    ULONG CcPinReadWait;
-    ULONG CcMdlReadNoWait;
-    ULONG CcMdlReadWait;
-    ULONG CcLazyWriteHotSpots;
-    ULONG CcLazyWriteIos;
-    ULONG CcLazyWritePages;
-    ULONG CcDataFlushes;
-    ULONG CcDataPages;
-    ULONG CcLostDelayedWrites;
-    ULONG CcFastReadResourceMiss;
-    ULONG CcCopyReadWaitMiss;
-    ULONG CcFastMdlReadResourceMiss;
-    ULONG CcMapDataNoWaitMiss;
-    ULONG CcMapDataWaitMiss;
-    ULONG CcPinReadNoWaitMiss;
-    ULONG CcPinReadWaitMiss;
-    ULONG CcMdlReadNoWaitMiss;
-    ULONG CcMdlReadWaitMiss;
-    ULONG CcReadAheadIos;
-    volatile LONG MmCacheTransitionCount;
-    volatile LONG MmCacheReadCount;
-    volatile LONG MmCacheIoCount;
-    ULONG PrcbPad91[3];
-    PROCESSOR_POWER_STATE PowerState;
-    ULONG KeAlignmentFixupCount;
-    UCHAR VendorString[13];
-    UCHAR PrcbPad10[3];
-    // Win 8.1+ widened FeatureBits to 64 bits; expose a high-dword accessor
-    // (FeatureBitsHigh) for ReactOS code that still composes it from halves.
-    union
+    UCHAR Group; // 0x000D0
+    UCHAR GroupIndex; // 0x000D1
+    UCHAR PrcbPad05[2]; // 0x000D2
+    ULONG InitialApicId; // 0x000D4
+    ULONG ScbOffset; // 0x000D8
+    ULONG ApicMask; // 0x000DC
+    PVOID AcpiReserved; // 0x000E0
+    ULONG CFlushSize; // 0x000E8
+    UCHAR PrcbFlags[4]; // 0x000EC _KPRCBFLAG
+    ULONGLONG PrcbPad11[2]; // 0x000F0
+    union // 0x00100
     {
-        ULONG64 FeatureBits;
-        struct
+        UCHAR ProcessorStateRaw[1472]; // _KPROCESSOR_STATE
+        KPROCESSOR_STATE ProcessorState; // FIXME: LiberNT layout of the Windows _KPROCESSOR_STATE
+    };
+    struct _XSAVE_AREA_HEADER *ExtendedSupervisorState; // 0x006C0
+    ULONG ProcessorSignature; // 0x006C8
+    ULONG ProcessorFlags; // 0x006CC
+    ULONGLONG TrappedSecurityDomain; // 0x006D0
+    UCHAR BpbState[2]; // 0x006D8 _KPRCB_BPB_STATE
+    UCHAR BpbTrappedBpbState[2]; // 0x006DA _KPRCB_BPB_STATE
+    UCHAR BpbFeatures[1]; // 0x006DC _KPRCB_BPB_FEATURES
+    UCHAR PrcbPad12b; // 0x006DD
+    UCHAR BpbRetpolineState[1]; // 0x006DE _KPRCB_BPB_RETPOLINE_STATE
+    UCHAR BpbRetpolineStateOverflow; // 0x006DF
+    volatile SHORT PairRegister; // 0x006E0
+    USHORT BpbRetpolineExitSpecCtrl; // 0x006E2
+    USHORT BpbTrappedRetpolineExitSpecCtrl; // 0x006E4
+    USHORT BpbCurrentSpecCtrl; // 0x006E6
+    USHORT BpbKernelSpecCtrl; // 0x006E8
+    USHORT BpbNmiSpecCtrl; // 0x006EA
+    USHORT BpbUserSpecCtrl; // 0x006EC
+    USHORT PrcbPad12c[1]; // 0x006EE
+    KSPIN_LOCK_QUEUE LockQueue[17]; // 0x006F0
+    PP_LOOKASIDE_LIST PPLookasideList[16]; // 0x00800
+    UCHAR PPNxPagedLookasideList[3072]; // 0x00900 _GENERAL_LOOKASIDE_POOL[32]
+    GENERAL_LOOKASIDE_POOL PPNPagedLookasideList[32]; // 0x01500
+    GENERAL_LOOKASIDE_POOL PPPagedLookasideList[32]; // 0x02100
+    ULONGLONG MsrIa32TsxCtrl; // 0x02D00
+    SINGLE_LIST_ENTRY DeferredReadyListHead; // 0x02D08
+    volatile LONG MmPageFaultCount; // 0x02D10
+    volatile LONG MmCopyOnWriteCount; // 0x02D14
+    volatile LONG MmTransitionCount; // 0x02D18
+    volatile LONG MmDemandZeroCount; // 0x02D1C
+    volatile LONG MmPageReadCount; // 0x02D20
+    volatile LONG MmPageReadIoCount; // 0x02D24
+    volatile LONG MmDirtyPagesWriteCount; // 0x02D28
+    volatile LONG MmDirtyWriteIoCount; // 0x02D2C
+    volatile LONG MmMappedPagesWriteCount; // 0x02D30
+    volatile LONG MmMappedWriteIoCount; // 0x02D34
+    ULONG KeSystemCalls; // 0x02D38
+    ULONG KeContextSwitches; // 0x02D3C
+    ULONG PrcbPad40; // 0x02D40
+    ULONG CcFastReadNoWait; // 0x02D44
+    ULONG CcFastReadWait; // 0x02D48
+    ULONG CcFastReadNotPossible; // 0x02D4C
+    ULONG CcCopyReadNoWait; // 0x02D50
+    ULONG CcCopyReadWait; // 0x02D54
+    ULONG CcCopyReadNoWaitMiss; // 0x02D58
+    volatile LONG IoReadOperationCount; // 0x02D5C
+    volatile LONG IoWriteOperationCount; // 0x02D60
+    volatile LONG IoOtherOperationCount; // 0x02D64
+    LARGE_INTEGER IoReadTransferCount; // 0x02D68
+    LARGE_INTEGER IoWriteTransferCount; // 0x02D70
+    LARGE_INTEGER IoOtherTransferCount; // 0x02D78
+    volatile LONG PacketBarrier; // 0x02D80
+    volatile LONG TargetCount; // 0x02D84
+    volatile ULONG IpiFrozen; // 0x02D88
+    ULONG PrcbPad30; // 0x02D8C
+    PVOID IsrDpcStats; // 0x02D90
+    ULONG DeviceInterrupts; // 0x02D98
+    LONG LookasideIrpFloat; // 0x02D9C
+    ULONG InterruptLastCount; // 0x02DA0
+    ULONG InterruptRate; // 0x02DA4
+    ULONGLONG PrcbPad31; // 0x02DA8
+    struct _KPRCB *PairPrcb; // 0x02DB0
+    UCHAR StaticAffinity[2080]; // 0x02DB8 _KSTATIC_AFFINITY_BLOCK
+    UCHAR DeferredDispatchInterrupts[528]; // 0x035D8 _KSOFTWARE_INTERRUPT_BATCH
+    struct _KI_RESCHEDULE_CONTEXT *StaticRescheduleContext; // 0x037E8
+    struct _KCPU_PARTITION *CpuPartition; // 0x037F0
+    ULONGLONG PrcbPad35[1]; // 0x037F8
+    SLIST_HEADER InterruptObjectPool; // 0x03800
+    struct _RTL_HASH_TABLE *DpcRuntimeHistoryHashTable; // 0x03810
+    struct _KDPC *DpcRuntimeHistoryHashTableCleanupDpc; // 0x03818
+    UCHAR CurrentDpcRoutine[8]; // 0x03820 0x11AF*
+    ULONGLONG CurrentDpcRuntimeHistoryCached; // 0x03828
+    ULONGLONG CurrentDpcStartTime; // 0x03830
+    struct _KTHREAD *DpcDelegateThread; // 0x03838
+    union // 0x03840
+    {
+        UCHAR DpcDataRaw[96]; // _KDPC_DATA[2]
+        KDPC_DATA DpcData[2]; // FIXME: LiberNT layout of the Windows _KDPC_DATA[2]
+    };
+    PVOID DpcStack; // 0x038A0
+    LONG MaximumDpcQueueDepth; // 0x038A8
+    ULONG DpcRequestRate; // 0x038AC
+    ULONG MinimumDpcRate; // 0x038B0
+    ULONG DpcLastCount; // 0x038B4
+    UCHAR ThreadDpcEnable; // 0x038B8
+    UCHAR QuantumEnd; // 0x038B9
+    UCHAR DpcRoutineActive; // 0x038BA
+    UCHAR IdleSchedule; // 0x038BB
+    volatile LONG DpcRequestSummary; // 0x038BC
+    ULONG LastTick; // 0x038C0
+    ULONG ClockInterrupts; // 0x038C4
+    ULONG ReadyScanTick; // 0x038C8
+    ULONG SingleDpcSoftTimeLimitTicks; // 0x038CC
+    struct _KSINGLE_DPC_SOFT_TIMEOUT_EVENT_INFO *SingleDpcSoftTimeoutEventInfo; // 0x038D0
+    ULONG CumulativeDpcSoftTimeLimitTicks; // 0x038D8
+    ULONG DpcWatchdogProfileBufferSize; // 0x038DC
+    UCHAR RcuData[32]; // 0x038E0 _KE_PRCB_RCU_DATA
+    PVOID InterruptObject[256]; // 0x03900
+    union // 0x04100
+    {
+        UCHAR TimerTable[16920]; // _KTIMER_TABLE
+        KSPIN_LOCK_QUEUE TimerTableLockQueue[LOCK_QUEUE_TIMER_TABLE_LOCKS]; // [LiberNT] timer table locks
+    };
+    PVOID DpcLog; // 0x08318
+    ULONG DpcLogIndex; // 0x08320
+    ULONG DpcLogBufferSize; // 0x08324
+    ULONG PrcbPad92[6]; // 0x08328
+    UCHAR DpcGate[24]; // 0x08340 _KGATE
+    PVOID PrcbPad52; // 0x08358
+    KDPC CallDpc; // 0x08360
+    LONG ClockKeepAlive; // 0x083A0
+    UCHAR PrcbPad60[2]; // 0x083A4
+    UCHAR NmiActive; // 0x083A6
+    UCHAR MceActive; // 0x083A7
+    LONG DpcWatchdogPeriodTicks; // 0x083A8
+    LONG DpcWatchdogCount; // 0x083AC
+    volatile LONG KeSpinLockOrdering; // 0x083B0
+    ULONG DpcWatchdogProfileCumulativeDpcThresholdTicks; // 0x083B4
+    PVOID CachedPtes; // 0x083B8
+    LIST_ENTRY WaitListHead; // 0x083C0
+    UINT64 WaitLock; // 0x083D0
+    ULONG ReadySummary; // 0x083D8
+    LONG AffinitizedSelectionMask; // 0x083DC
+    ULONG QueueIndex; // 0x083E0
+    ULONG NormalPriorityQueueIndex; // 0x083E4
+    ULONG NormalPriorityReadyScanTick; // 0x083E8
+    ULONG DpcWatchdogSequenceNumber; // 0x083EC
+    UCHAR TimerExpirationDpc[64]; // 0x083F0 _KDPC
+    UCHAR ScbQueue[16]; // 0x08430 _RTL_RB_TREE
+    LIST_ENTRY DispatcherReadyListHead[32]; // 0x08440
+    ULONG InterruptCount; // 0x08640
+    ULONG KernelTime; // 0x08644
+    ULONG UserTime; // 0x08648
+    ULONG DpcTime; // 0x0864C
+    ULONG InterruptTime; // 0x08650
+    ULONG AdjustDpcThreshold; // 0x08654
+    UCHAR DebuggerSavedIRQL; // 0x08658
+    UCHAR GroupSchedulingOverQuota; // 0x08659
+    volatile UCHAR DeepSleep; // 0x0865A
+    UCHAR PrcbPad80; // 0x0865B
+    ULONG DpcTimeCount; // 0x0865C
+    ULONG DpcTimeLimitTicks; // 0x08660
+    ULONG PeriodicCount; // 0x08664
+    ULONG PeriodicBias; // 0x08668
+    ULONG AvailableTime; // 0x0866C
+    ULONG KeExceptionDispatchCount; // 0x08670
+    ULONG ReadyThreadCount; // 0x08674
+    ULONGLONG ReadyQueueExpectedRunTime; // 0x08678
+    UINT64 StartCycles; // 0x08680
+    ULONGLONG TaggedCycles[4]; // 0x08688
+    ULONGLONG AffinitizedCycles; // 0x086A8
+    UCHAR Pad086B0[8];
+    ULONG CpuCycleScalingFactor; // 0x086B8
+    volatile USHORT PerformanceScoreByClass[8]; // 0x086BC
+    volatile USHORT EfficiencyScoreByClass[8]; // 0x086CC
+    UCHAR CycleAccumulationInitialized; // 0x086DC
+    UCHAR PrcbPad83[3]; // 0x086DD
+    UCHAR MceRecoveryContext[16]; // 0x086E0 _KMCE_RECOVERY_CONTEXT
+    struct _KFORCE_PARK_DUTY_CYCLE_DATA *ForceParkDutyCycleData; // 0x086F0
+    ULONGLONG StartCyclesQpc; // 0x086F8
+    ULONGLONG CycleTimeQpc; // 0x08700
+    ULONGLONG NumberOfSecureFaults; // 0x08708
+    ULONG PrcbPad84[8]; // 0x08710
+    VOID *CachedStacks[2]; // 0x08730
+    ULONG DpcWatchdogProfileSingleDpcThresholdTicks; // 0x08740
+    LONG PrcbPad82[3]; // 0x08744
+    ULONG PageColor; // 0x08750
+    ULONG NodeColor; // 0x08754
+    ULONG PrcbPad87[2]; // 0x08758
+    UCHAR PrcbPad81[5]; // 0x08760
+    UCHAR SystemWorkKickInProgress; // 0x08765
+    UCHAR ExceptionStackActive; // 0x08766
+    UCHAR TbFlushListActive; // 0x08767
+    PVOID ExceptionStack; // 0x08768
+    volatile LONGLONG MmSpinLockOrdering; // 0x08770
+    UINT64 CycleTime; // 0x08778
+    UCHAR Cycles[64]; // 0x08780 ULONGLONG[2][4]
+    ULONG CcFastMdlReadNoWait; // 0x087C0
+    ULONG CcFastMdlReadWait; // 0x087C4
+    ULONG CcFastMdlReadNotPossible; // 0x087C8
+    ULONG CcMapDataNoWait; // 0x087CC
+    ULONG CcMapDataWait; // 0x087D0
+    ULONG CcPinMappedDataCount; // 0x087D4
+    ULONG CcPinReadNoWait; // 0x087D8
+    ULONG CcPinReadWait; // 0x087DC
+    ULONG CcMdlReadNoWait; // 0x087E0
+    ULONG CcMdlReadWait; // 0x087E4
+    ULONG CcLazyWriteHotSpots; // 0x087E8
+    ULONG CcLazyWriteIos; // 0x087EC
+    ULONG CcLazyWritePages; // 0x087F0
+    ULONG CcDataFlushes; // 0x087F4
+    ULONG CcDataPages; // 0x087F8
+    ULONG CcLostDelayedWrites; // 0x087FC
+    ULONG CcFastReadResourceMiss; // 0x08800
+    ULONG CcCopyReadWaitMiss; // 0x08804
+    ULONG CcFastMdlReadResourceMiss; // 0x08808
+    ULONG CcMapDataNoWaitMiss; // 0x0880C
+    ULONG CcMapDataWaitMiss; // 0x08810
+    ULONG CcPinReadNoWaitMiss; // 0x08814
+    ULONG CcPinReadWaitMiss; // 0x08818
+    ULONG CcMdlReadNoWaitMiss; // 0x0881C
+    ULONG CcMdlReadWaitMiss; // 0x08820
+    ULONG CcReadAheadIos; // 0x08824
+    volatile LONG MmCacheTransitionCount; // 0x08828
+    volatile LONG MmCacheReadCount; // 0x0882C
+    volatile LONG MmCacheIoCount; // 0x08830
+    ULONG PrcbPad91; // 0x08834
+    PVOID MmInternal; // 0x08838
+    union // 0x08840
+    {
+        UCHAR PowerStateRaw[568]; // _PROCESSOR_POWER_STATE
+        PROCESSOR_POWER_STATE PowerState; // FIXME: LiberNT layout of the Windows _PROCESSOR_POWER_STATE
+    };
+    ULONGLONG PrcbPad96[1]; // 0x08A78
+    PVOID PrcbPad90; // 0x08A80
+    UCHAR ScbList[16]; // 0x08A88 _LIST_ENTRY
+    UCHAR ForceIdleDpc[64]; // 0x08A98 _KDPC
+    KDPC DpcWatchdogDpc; // 0x08AD8
+    ULONGLONG PrcbPad98[7]; // 0x08B18
+    PVOID VmInternal; // 0x08B50
+    CACHE_DESCRIPTOR Cache[5]; // 0x08B58
+    ULONG CacheCount; // 0x08B94
+    volatile ULONG CachedCommit; // 0x08B98
+    volatile ULONG CachedResidentAvailable; // 0x08B9C
+    PVOID WheaInfo; // 0x08BA0
+    PVOID EtwSupport; // 0x08BA8
+    PVOID ExSaPageArray; // 0x08BB0
+    ULONG KeAlignmentFixupCount; // 0x08BB8
+    ULONG PrcbPad95; // 0x08BBC
+    SLIST_HEADER HypercallPageList; // 0x08BC0
+    UCHAR Pad08BD0[8];
+    ULONGLONG GenerationTarget; // 0x08BD8
+    UCHAR VirtualApicAssistPage[8]; // 0x08BE0 _LARGE_INTEGER
+    ULONGLONG PrcbPad85[3]; // 0x08BE8
+    PVOID HypercallCachedPages; // 0x08C00
+    PVOID VirtualApicAssist; // 0x08C08
+    UCHAR PackageProcessorSet[264]; // 0x08C10 _KAFFINITY_EX
+    ULONGLONG PrcbPad86[32]; // 0x08D18
+    ULONG ProcessorId; // 0x08E18
+    ULONG CoreId; // 0x08E1C
+    ULONG ModuleId; // 0x08E20
+    ULONG DieId; // 0x08E24
+    ULONG PackageId; // 0x08E28
+    ULONG ComplexId; // 0x08E2C
+    ULONG PrcbPad101[4]; // 0x08E30
+    ULONGLONG SharedReadyQueueMask; // 0x08E40
+    struct _KSHARED_READY_QUEUE *SharedReadyQueue; // 0x08E48
+    ULONG SharedQueueScanOwner; // 0x08E50
+    ULONG ScanSiblingIndex; // 0x08E54
+    struct _KCORE_CONTROL_BLOCK *CoreControlBlock; // 0x08E58
+    UINT64 CoreProcessorSet; // 0x08E60
+    ULONGLONG ScanSiblingMask; // 0x08E68
+    ULONGLONG LLCMask; // 0x08E70
+    ULONGLONG GroupModuleProcessorSet; // 0x08E78
+    struct _KTHREAD *SmtIsolationThread; // 0x08E80
+    ULONGLONG PrcbPad97[2]; // 0x08E88
+    struct _PROCESSOR_PROFILE_CONTROL_AREA *ProcessorProfileControlArea; // 0x08E98
+    PVOID ProfileEventIndexAddress; // 0x08EA0
+    PVOID *DpcWatchdogProfile; // 0x08EA8
+    PVOID *DpcWatchdogProfileCurrentEmptyCapture; // 0x08EB0
+    PVOID SchedulerAssist; // 0x08EB8
+    UCHAR SynchCounters[184]; // 0x08EC0 _SYNCH_COUNTERS
+    ULONGLONG PrcbPad94; // 0x08F78
+    UCHAR FsCounters[16]; // 0x08F80 _FILESYSTEM_DISK_COUNTERS
+    UCHAR VendorString[13]; // 0x08F90
+    UCHAR PrcbPad100[3]; // 0x08F9D
+    ULONG64 FeatureBits; // 0x08FA0
+    LARGE_INTEGER UpdateSignature; // 0x08FA8
+    ULONGLONG PteBitCache; // 0x08FB0
+    ULONG PteBitOffset; // 0x08FB8
+    ULONG PrcbPad105; // 0x08FBC
+    PCONTEXT Context; // 0x08FC0
+    ULONG ContextFlagsInit; // 0x08FC8
+    ULONG PrcbPad115; // 0x08FCC
+    struct _XSAVE_AREA *ExtendedState; // 0x08FD0
+    PVOID IsrStack; // 0x08FD8
+    UCHAR EntropyTimingState[344]; // 0x08FE0 _KENTROPY_TIMING_STATE
+    UCHAR StibpPairingTrace[56]; // 0x09138 <unnamed-tag>
+    UCHAR AbSelfIoBoostsList[8]; // 0x09170 _SINGLE_LIST_ENTRY
+    UCHAR AbPropagateBoostsList[8]; // 0x09178 _SINGLE_LIST_ENTRY
+    UCHAR AbDpc[64]; // 0x09180 _KDPC
+    UCHAR SymCryptEntropyAccumulatorState[384]; // 0x091C0 _SYMCRYPT_ENTROPY_ACCUMULATOR_STATE
+    UCHAR IoIrpStackProfilerCurrent[84]; // 0x09340 _IOP_IRP_STACK_PROFILER
+    UCHAR IoIrpStackProfilerPrevious[84]; // 0x09394 _IOP_IRP_STACK_PROFILER
+    UCHAR SecureFault[24]; // 0x093E8 _KSECURE_FAULT_INFORMATION
+    struct _KSHARED_READY_QUEUE *LocalSharedReadyQueue; // 0x09400
+    struct _KI_COOPERATIVE_IDLE_SEARCH_CONTEXT *LocalSearchContexts[2]; // 0x09408
+    struct _KI_COOPERATIVE_IDLE_SEARCH_CONTEXT *SearchContexts[2]; // 0x09418
+    struct _KI_COOPERATIVE_IDLE_SEARCH_GENERATION *SearchGenerations[2]; // 0x09428
+    ULONGLONG PrcbPad125[1]; // 0x09438
+    ULONG TimerExpirationTraceCount; // 0x09440
+    ULONG PrcbPad127; // 0x09444
+    UCHAR TimerExpirationTrace[256]; // 0x09448 _KTIMER_EXPIRATION_TRACE[16]
+    ULONGLONG PrcbPad128[7]; // 0x09548
+    UCHAR ClockTimerState[1304]; // 0x09580 _KCLOCK_TIMER_STATE
+    struct _KTRAP_FRAME *IpiFrame; // 0x09A98
+    UCHAR PrcbPad129[32]; // 0x09AA0
+    struct _REQUEST_MAILBOX *Mailbox; // 0x09AC0
+    ULONGLONG PrcbPad130[7]; // 0x09AC8
+    UCHAR McheckContext[160]; // 0x09B00 _MACHINE_CHECK_CONTEXT[2]
+    ULONGLONG TransitionShadowStack; // 0x09BA0
+    ULONGLONG KernelShadowStackInitial; // 0x09BA8
+    UCHAR Pad09BB0[8];
+    PVOID HiberSwapShadowStacks[5]; // 0x09BB8
+    PVOID HiberSwapShadowStackBases[5]; // 0x09BE0
+    PVOID MmFaultCompletionInfo; // 0x09C08
+    ULONGLONG PrcbPad132[6]; // 0x09C10
+    UCHAR SelfmapLockHandle[96]; // 0x09C40 _KLOCK_QUEUE_HANDLE[4]
+    ULONGLONG PrcbPad134b[4]; // 0x09CA0
+    UCHAR DieProcessorSet[264]; // 0x09CC0 _KAFFINITY_EX
+    ULONGLONG PrcbPad135[32]; // 0x09DC8
+    ULONG CoresPerPhysicalDie; // 0x09EC8
+    ULONG LogicalProcessorsPerModule; // 0x09ECC
+    UCHAR FreezeForRecoveryDpc[64]; // 0x09ED0 _KDPC
+    UCHAR ModuleProcessorSet[264]; // 0x09F10 _KAFFINITY_EX
+    ULONGLONG PrcbPad136[32]; // 0x0A018
+    UCHAR LocalCoreControlBlock[48]; // 0x0A118 _KCORE_CONTROL_BLOCK
+    ULONGLONG PrcbPad137a; // 0x0A148
+    UCHAR KstackFreeDpc[64]; // 0x0A150 _KDPC
+    UCHAR SlistRollbackDpc[64]; // 0x0A190 _KDPC
+    UCHAR KstackFreeList[16]; // 0x0A1D0 _SLIST_HEADER
+    ULONG IsrStackNesting; // 0x0A1E0
+    UCHAR PrcbPad138[3228]; // 0x0A1E4
+    ULONGLONG KernelDirectoryTableBase; // 0x0AE80
+    ULONGLONG RspBaseShadow; // 0x0AE88
+    ULONGLONG UserRspShadow; // 0x0AE90
+    ULONG ShadowFlags; // 0x0AE98
+    ULONG PrcbPad138b; // 0x0AE9C
+    ULONGLONG PrcbPad138c; // 0x0AEA0
+    USHORT PrcbPad138d; // 0x0AEA8
+    USHORT VerwSelector; // 0x0AEAA
+    ULONG DbgMceNestingLevel; // 0x0AEAC
+    ULONG DbgMceFlags; // 0x0AEB0
+    ULONG CoreControlBlockIndex; // 0x0AEB4
+    struct _KCORE_CONTROL_BLOCK_SHADOW *CoreControlBlockShadow; // 0x0AEB8
+    UCHAR LocalCoreControlBlockShadow[64]; // 0x0AEC0 _KCORE_CONTROL_BLOCK_SHADOW
+    UCHAR CacheProcessorSet[1320]; // 0x0AF00 _KAFFINITY_EX[5]
+    ULONGLONG PrcbPad139[160]; // 0x0B428
+    ULONG NodeRelativeTopologyIndex[6]; // 0x0B928
+    UCHAR ComplexProcessorSet[264]; // 0x0B940 _KAFFINITY_EX
+    ULONGLONG PrcbPad139b[32]; // 0x0BA48
+    ULONG LogicalProcessorsPerComplex; // 0x0BB48
+    ULONG PrcbPad139c; // 0x0BB4C
+    ULONGLONG PrcbPad140[102]; // 0x0BB50
+    ULONGLONG PrcbPad140a[8]; // 0x0BE80
+    union // 0x0BEC0
+    {
+        ULONGLONG PrcbPad141[512];
+        struct // [LiberNT] state Windows does not keep in the KPRCB
         {
-            ULONG FeatureBitsLow;
+            KEVENT DpcEvent;
+            UCHAR DpcInterruptRequested;
+            LONG DpcSetEventRequest;
+            ULONG DpcTimeLimit;
+            LONG DpcWatchdogPeriod;
             ULONG FeatureBitsHigh;
+            LONG MasterOffset;
+            UINT64 MultiThreadProcessorSet;
+            struct _KPRCB * MultiThreadSetMaster;
+            struct _KNODE * ParentNode;
+            UCHAR PollSlot;
+            ULONG SecondaryColorMask;
+            UINT64 SenderSummary;
+            UCHAR SkipTick;
+            LONG Sleeping;
+            ULONG Stride;
+            volatile UINT64 TargetSet;
+            LONG TickOffset;
+            UINT64 TimerHand;
+            UINT64 TimerRequest;
+            UCHAR DpcThreadActive;
+            UCHAR DpcThreadRequested;
         };
     };
-    LARGE_INTEGER UpdateSignature;
-    KDPC DpcWatchdogDpc;
-    KTIMER DpcWatchdogTimer;
-    CACHE_DESCRIPTOR Cache[5];
-    ULONG CacheCount;
-    ULONG CachedCommit;
-    ULONG CachedResidentAvailable;
-    PVOID HyperPte;
-    PVOID WheaInfo;
-    PVOID EtwSupport;
-    SLIST_HEADER InterruptObjectPool;
-    SLIST_HEADER HypercallPageList;
-    PVOID HypercallPageVirtual;
-    PVOID VirtualApicAssist;
-    UINT64* StatisticsPage;
-    PVOID RateControl;
-    UINT64 CacheProcessorMask[5];
-    UINT64 PackageProcessorSet;
-    UINT64 CoreProcessorSet;
-#ifdef __REACTOS__
-    /*
-     * Windows dump readers obtain the saved processor context through
-     * the OffsetPrcbContext member of KDDEBUGGER_DATA64.
-     */
-    PCONTEXT Context;
-#endif
+    REQUEST_MAILBOX RequestMailbox[1]; // 0x0CEC0
 } KPRCB, *PKPRCB;
+C_ASSERT(FIELD_OFFSET(KPRCB, MxCsr) == 0x0);
+C_ASSERT(FIELD_OFFSET(KPRCB, LegacyNumber) == 0x4);
+C_ASSERT(FIELD_OFFSET(KPRCB, ReservedMustBeZero) == 0x5);
+C_ASSERT(FIELD_OFFSET(KPRCB, InterruptRequest) == 0x6);
+C_ASSERT(FIELD_OFFSET(KPRCB, IdleHalt) == 0x7);
+C_ASSERT(FIELD_OFFSET(KPRCB, CurrentThread) == 0x8);
+C_ASSERT(FIELD_OFFSET(KPRCB, NextThread) == 0x10);
+C_ASSERT(FIELD_OFFSET(KPRCB, IdleThread) == 0x18);
+C_ASSERT(FIELD_OFFSET(KPRCB, NestingLevel) == 0x20);
+C_ASSERT(FIELD_OFFSET(KPRCB, ClockOwner) == 0x21);
+C_ASSERT(FIELD_OFFSET(KPRCB, PendingTickFlags) == 0x22);
+C_ASSERT(FIELD_OFFSET(KPRCB, IdleState) == 0x23);
+C_ASSERT(FIELD_OFFSET(KPRCB, Number) == 0x24);
+C_ASSERT(FIELD_OFFSET(KPRCB, RspBase) == 0x28);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbLock) == 0x30);
+C_ASSERT(FIELD_OFFSET(KPRCB, PriorityState) == 0x38);
+C_ASSERT(FIELD_OFFSET(KPRCB, CpuType) == 0x40);
+C_ASSERT(FIELD_OFFSET(KPRCB, CpuID) == 0x41);
+C_ASSERT(FIELD_OFFSET(KPRCB, CpuStep) == 0x42);
+C_ASSERT(FIELD_OFFSET(KPRCB, MHz) == 0x44);
+C_ASSERT(FIELD_OFFSET(KPRCB, HalReserved) == 0x48);
+C_ASSERT(FIELD_OFFSET(KPRCB, MinorVersion) == 0x88);
+C_ASSERT(FIELD_OFFSET(KPRCB, MajorVersion) == 0x8A);
+C_ASSERT(FIELD_OFFSET(KPRCB, BuildType) == 0x8C);
+C_ASSERT(FIELD_OFFSET(KPRCB, CpuVendor) == 0x8D);
+C_ASSERT(FIELD_OFFSET(KPRCB, LegacyCoresPerPhysicalProcessor) == 0x8E);
+C_ASSERT(FIELD_OFFSET(KPRCB, LegacyLogicalProcessorsPerCore) == 0x8F);
+C_ASSERT(FIELD_OFFSET(KPRCB, TscFrequency) == 0x90);
+C_ASSERT(FIELD_OFFSET(KPRCB, TracepointLog) == 0x98);
+C_ASSERT(FIELD_OFFSET(KPRCB, CoresPerPhysicalProcessor) == 0xA0);
+C_ASSERT(FIELD_OFFSET(KPRCB, LogicalProcessorsPerCore) == 0xA4);
+C_ASSERT(FIELD_OFFSET(KPRCB, SelfIpiRequestSummary) == 0xA8);
+C_ASSERT(FIELD_OFFSET(KPRCB, QpcToTscIncrementShift) == 0xAC);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad03) == 0xAD);
+C_ASSERT(FIELD_OFFSET(KPRCB, QpcToTscIncrement) == 0xB0);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad04) == 0xB8);
+C_ASSERT(FIELD_OFFSET(KPRCB, SchedulerSubNode) == 0xC0);
+C_ASSERT(FIELD_OFFSET(KPRCB, GroupSetMember) == 0xC8);
+C_ASSERT(FIELD_OFFSET(KPRCB, Group) == 0xD0);
+C_ASSERT(FIELD_OFFSET(KPRCB, GroupIndex) == 0xD1);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad05) == 0xD2);
+C_ASSERT(FIELD_OFFSET(KPRCB, InitialApicId) == 0xD4);
+C_ASSERT(FIELD_OFFSET(KPRCB, ScbOffset) == 0xD8);
+C_ASSERT(FIELD_OFFSET(KPRCB, ApicMask) == 0xDC);
+C_ASSERT(FIELD_OFFSET(KPRCB, AcpiReserved) == 0xE0);
+C_ASSERT(FIELD_OFFSET(KPRCB, CFlushSize) == 0xE8);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbFlags) == 0xEC);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad11) == 0xF0);
+C_ASSERT(FIELD_OFFSET(KPRCB, ProcessorStateRaw) == 0x100);
+C_ASSERT(FIELD_OFFSET(KPRCB, ExtendedSupervisorState) == 0x6C0);
+C_ASSERT(FIELD_OFFSET(KPRCB, ProcessorSignature) == 0x6C8);
+C_ASSERT(FIELD_OFFSET(KPRCB, ProcessorFlags) == 0x6CC);
+C_ASSERT(FIELD_OFFSET(KPRCB, TrappedSecurityDomain) == 0x6D0);
+C_ASSERT(FIELD_OFFSET(KPRCB, BpbState) == 0x6D8);
+C_ASSERT(FIELD_OFFSET(KPRCB, BpbTrappedBpbState) == 0x6DA);
+C_ASSERT(FIELD_OFFSET(KPRCB, BpbFeatures) == 0x6DC);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad12b) == 0x6DD);
+C_ASSERT(FIELD_OFFSET(KPRCB, BpbRetpolineState) == 0x6DE);
+C_ASSERT(FIELD_OFFSET(KPRCB, BpbRetpolineStateOverflow) == 0x6DF);
+C_ASSERT(FIELD_OFFSET(KPRCB, PairRegister) == 0x6E0);
+C_ASSERT(FIELD_OFFSET(KPRCB, BpbRetpolineExitSpecCtrl) == 0x6E2);
+C_ASSERT(FIELD_OFFSET(KPRCB, BpbTrappedRetpolineExitSpecCtrl) == 0x6E4);
+C_ASSERT(FIELD_OFFSET(KPRCB, BpbCurrentSpecCtrl) == 0x6E6);
+C_ASSERT(FIELD_OFFSET(KPRCB, BpbKernelSpecCtrl) == 0x6E8);
+C_ASSERT(FIELD_OFFSET(KPRCB, BpbNmiSpecCtrl) == 0x6EA);
+C_ASSERT(FIELD_OFFSET(KPRCB, BpbUserSpecCtrl) == 0x6EC);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad12c) == 0x6EE);
+C_ASSERT(FIELD_OFFSET(KPRCB, LockQueue) == 0x6F0);
+C_ASSERT(FIELD_OFFSET(KPRCB, PPLookasideList) == 0x800);
+C_ASSERT(FIELD_OFFSET(KPRCB, PPNxPagedLookasideList) == 0x900);
+C_ASSERT(FIELD_OFFSET(KPRCB, PPNPagedLookasideList) == 0x1500);
+C_ASSERT(FIELD_OFFSET(KPRCB, PPPagedLookasideList) == 0x2100);
+C_ASSERT(FIELD_OFFSET(KPRCB, MsrIa32TsxCtrl) == 0x2D00);
+C_ASSERT(FIELD_OFFSET(KPRCB, DeferredReadyListHead) == 0x2D08);
+C_ASSERT(FIELD_OFFSET(KPRCB, MmPageFaultCount) == 0x2D10);
+C_ASSERT(FIELD_OFFSET(KPRCB, MmCopyOnWriteCount) == 0x2D14);
+C_ASSERT(FIELD_OFFSET(KPRCB, MmTransitionCount) == 0x2D18);
+C_ASSERT(FIELD_OFFSET(KPRCB, MmDemandZeroCount) == 0x2D1C);
+C_ASSERT(FIELD_OFFSET(KPRCB, MmPageReadCount) == 0x2D20);
+C_ASSERT(FIELD_OFFSET(KPRCB, MmPageReadIoCount) == 0x2D24);
+C_ASSERT(FIELD_OFFSET(KPRCB, MmDirtyPagesWriteCount) == 0x2D28);
+C_ASSERT(FIELD_OFFSET(KPRCB, MmDirtyWriteIoCount) == 0x2D2C);
+C_ASSERT(FIELD_OFFSET(KPRCB, MmMappedPagesWriteCount) == 0x2D30);
+C_ASSERT(FIELD_OFFSET(KPRCB, MmMappedWriteIoCount) == 0x2D34);
+C_ASSERT(FIELD_OFFSET(KPRCB, KeSystemCalls) == 0x2D38);
+C_ASSERT(FIELD_OFFSET(KPRCB, KeContextSwitches) == 0x2D3C);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad40) == 0x2D40);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcFastReadNoWait) == 0x2D44);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcFastReadWait) == 0x2D48);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcFastReadNotPossible) == 0x2D4C);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcCopyReadNoWait) == 0x2D50);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcCopyReadWait) == 0x2D54);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcCopyReadNoWaitMiss) == 0x2D58);
+C_ASSERT(FIELD_OFFSET(KPRCB, IoReadOperationCount) == 0x2D5C);
+C_ASSERT(FIELD_OFFSET(KPRCB, IoWriteOperationCount) == 0x2D60);
+C_ASSERT(FIELD_OFFSET(KPRCB, IoOtherOperationCount) == 0x2D64);
+C_ASSERT(FIELD_OFFSET(KPRCB, IoReadTransferCount) == 0x2D68);
+C_ASSERT(FIELD_OFFSET(KPRCB, IoWriteTransferCount) == 0x2D70);
+C_ASSERT(FIELD_OFFSET(KPRCB, IoOtherTransferCount) == 0x2D78);
+C_ASSERT(FIELD_OFFSET(KPRCB, PacketBarrier) == 0x2D80);
+C_ASSERT(FIELD_OFFSET(KPRCB, TargetCount) == 0x2D84);
+C_ASSERT(FIELD_OFFSET(KPRCB, IpiFrozen) == 0x2D88);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad30) == 0x2D8C);
+C_ASSERT(FIELD_OFFSET(KPRCB, IsrDpcStats) == 0x2D90);
+C_ASSERT(FIELD_OFFSET(KPRCB, DeviceInterrupts) == 0x2D98);
+C_ASSERT(FIELD_OFFSET(KPRCB, LookasideIrpFloat) == 0x2D9C);
+C_ASSERT(FIELD_OFFSET(KPRCB, InterruptLastCount) == 0x2DA0);
+C_ASSERT(FIELD_OFFSET(KPRCB, InterruptRate) == 0x2DA4);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad31) == 0x2DA8);
+C_ASSERT(FIELD_OFFSET(KPRCB, PairPrcb) == 0x2DB0);
+C_ASSERT(FIELD_OFFSET(KPRCB, StaticAffinity) == 0x2DB8);
+C_ASSERT(FIELD_OFFSET(KPRCB, DeferredDispatchInterrupts) == 0x35D8);
+C_ASSERT(FIELD_OFFSET(KPRCB, StaticRescheduleContext) == 0x37E8);
+C_ASSERT(FIELD_OFFSET(KPRCB, CpuPartition) == 0x37F0);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad35) == 0x37F8);
+C_ASSERT(FIELD_OFFSET(KPRCB, InterruptObjectPool) == 0x3800);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcRuntimeHistoryHashTable) == 0x3810);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcRuntimeHistoryHashTableCleanupDpc) == 0x3818);
+C_ASSERT(FIELD_OFFSET(KPRCB, CurrentDpcRoutine) == 0x3820);
+C_ASSERT(FIELD_OFFSET(KPRCB, CurrentDpcRuntimeHistoryCached) == 0x3828);
+C_ASSERT(FIELD_OFFSET(KPRCB, CurrentDpcStartTime) == 0x3830);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcDelegateThread) == 0x3838);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcDataRaw) == 0x3840);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcStack) == 0x38A0);
+C_ASSERT(FIELD_OFFSET(KPRCB, MaximumDpcQueueDepth) == 0x38A8);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcRequestRate) == 0x38AC);
+C_ASSERT(FIELD_OFFSET(KPRCB, MinimumDpcRate) == 0x38B0);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcLastCount) == 0x38B4);
+C_ASSERT(FIELD_OFFSET(KPRCB, ThreadDpcEnable) == 0x38B8);
+C_ASSERT(FIELD_OFFSET(KPRCB, QuantumEnd) == 0x38B9);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcRoutineActive) == 0x38BA);
+C_ASSERT(FIELD_OFFSET(KPRCB, IdleSchedule) == 0x38BB);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcRequestSummary) == 0x38BC);
+C_ASSERT(FIELD_OFFSET(KPRCB, LastTick) == 0x38C0);
+C_ASSERT(FIELD_OFFSET(KPRCB, ClockInterrupts) == 0x38C4);
+C_ASSERT(FIELD_OFFSET(KPRCB, ReadyScanTick) == 0x38C8);
+C_ASSERT(FIELD_OFFSET(KPRCB, SingleDpcSoftTimeLimitTicks) == 0x38CC);
+C_ASSERT(FIELD_OFFSET(KPRCB, SingleDpcSoftTimeoutEventInfo) == 0x38D0);
+C_ASSERT(FIELD_OFFSET(KPRCB, CumulativeDpcSoftTimeLimitTicks) == 0x38D8);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcWatchdogProfileBufferSize) == 0x38DC);
+C_ASSERT(FIELD_OFFSET(KPRCB, RcuData) == 0x38E0);
+C_ASSERT(FIELD_OFFSET(KPRCB, InterruptObject) == 0x3900);
+C_ASSERT(FIELD_OFFSET(KPRCB, TimerTable) == 0x4100);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcLog) == 0x8318);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcLogIndex) == 0x8320);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcLogBufferSize) == 0x8324);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad92) == 0x8328);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcGate) == 0x8340);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad52) == 0x8358);
+C_ASSERT(FIELD_OFFSET(KPRCB, CallDpc) == 0x8360);
+C_ASSERT(FIELD_OFFSET(KPRCB, ClockKeepAlive) == 0x83A0);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad60) == 0x83A4);
+C_ASSERT(FIELD_OFFSET(KPRCB, NmiActive) == 0x83A6);
+C_ASSERT(FIELD_OFFSET(KPRCB, MceActive) == 0x83A7);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcWatchdogPeriodTicks) == 0x83A8);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcWatchdogCount) == 0x83AC);
+C_ASSERT(FIELD_OFFSET(KPRCB, KeSpinLockOrdering) == 0x83B0);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcWatchdogProfileCumulativeDpcThresholdTicks) == 0x83B4);
+C_ASSERT(FIELD_OFFSET(KPRCB, CachedPtes) == 0x83B8);
+C_ASSERT(FIELD_OFFSET(KPRCB, WaitListHead) == 0x83C0);
+C_ASSERT(FIELD_OFFSET(KPRCB, WaitLock) == 0x83D0);
+C_ASSERT(FIELD_OFFSET(KPRCB, ReadySummary) == 0x83D8);
+C_ASSERT(FIELD_OFFSET(KPRCB, AffinitizedSelectionMask) == 0x83DC);
+C_ASSERT(FIELD_OFFSET(KPRCB, QueueIndex) == 0x83E0);
+C_ASSERT(FIELD_OFFSET(KPRCB, NormalPriorityQueueIndex) == 0x83E4);
+C_ASSERT(FIELD_OFFSET(KPRCB, NormalPriorityReadyScanTick) == 0x83E8);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcWatchdogSequenceNumber) == 0x83EC);
+C_ASSERT(FIELD_OFFSET(KPRCB, TimerExpirationDpc) == 0x83F0);
+C_ASSERT(FIELD_OFFSET(KPRCB, ScbQueue) == 0x8430);
+C_ASSERT(FIELD_OFFSET(KPRCB, DispatcherReadyListHead) == 0x8440);
+C_ASSERT(FIELD_OFFSET(KPRCB, InterruptCount) == 0x8640);
+C_ASSERT(FIELD_OFFSET(KPRCB, KernelTime) == 0x8644);
+C_ASSERT(FIELD_OFFSET(KPRCB, UserTime) == 0x8648);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcTime) == 0x864C);
+C_ASSERT(FIELD_OFFSET(KPRCB, InterruptTime) == 0x8650);
+C_ASSERT(FIELD_OFFSET(KPRCB, AdjustDpcThreshold) == 0x8654);
+C_ASSERT(FIELD_OFFSET(KPRCB, DebuggerSavedIRQL) == 0x8658);
+C_ASSERT(FIELD_OFFSET(KPRCB, GroupSchedulingOverQuota) == 0x8659);
+C_ASSERT(FIELD_OFFSET(KPRCB, DeepSleep) == 0x865A);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad80) == 0x865B);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcTimeCount) == 0x865C);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcTimeLimitTicks) == 0x8660);
+C_ASSERT(FIELD_OFFSET(KPRCB, PeriodicCount) == 0x8664);
+C_ASSERT(FIELD_OFFSET(KPRCB, PeriodicBias) == 0x8668);
+C_ASSERT(FIELD_OFFSET(KPRCB, AvailableTime) == 0x866C);
+C_ASSERT(FIELD_OFFSET(KPRCB, KeExceptionDispatchCount) == 0x8670);
+C_ASSERT(FIELD_OFFSET(KPRCB, ReadyThreadCount) == 0x8674);
+C_ASSERT(FIELD_OFFSET(KPRCB, ReadyQueueExpectedRunTime) == 0x8678);
+C_ASSERT(FIELD_OFFSET(KPRCB, StartCycles) == 0x8680);
+C_ASSERT(FIELD_OFFSET(KPRCB, TaggedCycles) == 0x8688);
+C_ASSERT(FIELD_OFFSET(KPRCB, AffinitizedCycles) == 0x86A8);
+C_ASSERT(FIELD_OFFSET(KPRCB, CpuCycleScalingFactor) == 0x86B8);
+C_ASSERT(FIELD_OFFSET(KPRCB, PerformanceScoreByClass) == 0x86BC);
+C_ASSERT(FIELD_OFFSET(KPRCB, EfficiencyScoreByClass) == 0x86CC);
+C_ASSERT(FIELD_OFFSET(KPRCB, CycleAccumulationInitialized) == 0x86DC);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad83) == 0x86DD);
+C_ASSERT(FIELD_OFFSET(KPRCB, MceRecoveryContext) == 0x86E0);
+C_ASSERT(FIELD_OFFSET(KPRCB, ForceParkDutyCycleData) == 0x86F0);
+C_ASSERT(FIELD_OFFSET(KPRCB, StartCyclesQpc) == 0x86F8);
+C_ASSERT(FIELD_OFFSET(KPRCB, CycleTimeQpc) == 0x8700);
+C_ASSERT(FIELD_OFFSET(KPRCB, NumberOfSecureFaults) == 0x8708);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad84) == 0x8710);
+C_ASSERT(FIELD_OFFSET(KPRCB, CachedStacks) == 0x8730);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcWatchdogProfileSingleDpcThresholdTicks) == 0x8740);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad82) == 0x8744);
+C_ASSERT(FIELD_OFFSET(KPRCB, PageColor) == 0x8750);
+C_ASSERT(FIELD_OFFSET(KPRCB, NodeColor) == 0x8754);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad87) == 0x8758);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad81) == 0x8760);
+C_ASSERT(FIELD_OFFSET(KPRCB, SystemWorkKickInProgress) == 0x8765);
+C_ASSERT(FIELD_OFFSET(KPRCB, ExceptionStackActive) == 0x8766);
+C_ASSERT(FIELD_OFFSET(KPRCB, TbFlushListActive) == 0x8767);
+C_ASSERT(FIELD_OFFSET(KPRCB, ExceptionStack) == 0x8768);
+C_ASSERT(FIELD_OFFSET(KPRCB, MmSpinLockOrdering) == 0x8770);
+C_ASSERT(FIELD_OFFSET(KPRCB, CycleTime) == 0x8778);
+C_ASSERT(FIELD_OFFSET(KPRCB, Cycles) == 0x8780);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcFastMdlReadNoWait) == 0x87C0);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcFastMdlReadWait) == 0x87C4);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcFastMdlReadNotPossible) == 0x87C8);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcMapDataNoWait) == 0x87CC);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcMapDataWait) == 0x87D0);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcPinMappedDataCount) == 0x87D4);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcPinReadNoWait) == 0x87D8);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcPinReadWait) == 0x87DC);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcMdlReadNoWait) == 0x87E0);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcMdlReadWait) == 0x87E4);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcLazyWriteHotSpots) == 0x87E8);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcLazyWriteIos) == 0x87EC);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcLazyWritePages) == 0x87F0);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcDataFlushes) == 0x87F4);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcDataPages) == 0x87F8);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcLostDelayedWrites) == 0x87FC);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcFastReadResourceMiss) == 0x8800);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcCopyReadWaitMiss) == 0x8804);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcFastMdlReadResourceMiss) == 0x8808);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcMapDataNoWaitMiss) == 0x880C);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcMapDataWaitMiss) == 0x8810);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcPinReadNoWaitMiss) == 0x8814);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcPinReadWaitMiss) == 0x8818);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcMdlReadNoWaitMiss) == 0x881C);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcMdlReadWaitMiss) == 0x8820);
+C_ASSERT(FIELD_OFFSET(KPRCB, CcReadAheadIos) == 0x8824);
+C_ASSERT(FIELD_OFFSET(KPRCB, MmCacheTransitionCount) == 0x8828);
+C_ASSERT(FIELD_OFFSET(KPRCB, MmCacheReadCount) == 0x882C);
+C_ASSERT(FIELD_OFFSET(KPRCB, MmCacheIoCount) == 0x8830);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad91) == 0x8834);
+C_ASSERT(FIELD_OFFSET(KPRCB, MmInternal) == 0x8838);
+C_ASSERT(FIELD_OFFSET(KPRCB, PowerStateRaw) == 0x8840);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad96) == 0x8A78);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad90) == 0x8A80);
+C_ASSERT(FIELD_OFFSET(KPRCB, ScbList) == 0x8A88);
+C_ASSERT(FIELD_OFFSET(KPRCB, ForceIdleDpc) == 0x8A98);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcWatchdogDpc) == 0x8AD8);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad98) == 0x8B18);
+C_ASSERT(FIELD_OFFSET(KPRCB, VmInternal) == 0x8B50);
+C_ASSERT(FIELD_OFFSET(KPRCB, Cache) == 0x8B58);
+C_ASSERT(FIELD_OFFSET(KPRCB, CacheCount) == 0x8B94);
+C_ASSERT(FIELD_OFFSET(KPRCB, CachedCommit) == 0x8B98);
+C_ASSERT(FIELD_OFFSET(KPRCB, CachedResidentAvailable) == 0x8B9C);
+C_ASSERT(FIELD_OFFSET(KPRCB, WheaInfo) == 0x8BA0);
+C_ASSERT(FIELD_OFFSET(KPRCB, EtwSupport) == 0x8BA8);
+C_ASSERT(FIELD_OFFSET(KPRCB, ExSaPageArray) == 0x8BB0);
+C_ASSERT(FIELD_OFFSET(KPRCB, KeAlignmentFixupCount) == 0x8BB8);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad95) == 0x8BBC);
+C_ASSERT(FIELD_OFFSET(KPRCB, HypercallPageList) == 0x8BC0);
+C_ASSERT(FIELD_OFFSET(KPRCB, GenerationTarget) == 0x8BD8);
+C_ASSERT(FIELD_OFFSET(KPRCB, VirtualApicAssistPage) == 0x8BE0);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad85) == 0x8BE8);
+C_ASSERT(FIELD_OFFSET(KPRCB, HypercallCachedPages) == 0x8C00);
+C_ASSERT(FIELD_OFFSET(KPRCB, VirtualApicAssist) == 0x8C08);
+C_ASSERT(FIELD_OFFSET(KPRCB, PackageProcessorSet) == 0x8C10);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad86) == 0x8D18);
+C_ASSERT(FIELD_OFFSET(KPRCB, ProcessorId) == 0x8E18);
+C_ASSERT(FIELD_OFFSET(KPRCB, CoreId) == 0x8E1C);
+C_ASSERT(FIELD_OFFSET(KPRCB, ModuleId) == 0x8E20);
+C_ASSERT(FIELD_OFFSET(KPRCB, DieId) == 0x8E24);
+C_ASSERT(FIELD_OFFSET(KPRCB, PackageId) == 0x8E28);
+C_ASSERT(FIELD_OFFSET(KPRCB, ComplexId) == 0x8E2C);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad101) == 0x8E30);
+C_ASSERT(FIELD_OFFSET(KPRCB, SharedReadyQueueMask) == 0x8E40);
+C_ASSERT(FIELD_OFFSET(KPRCB, SharedReadyQueue) == 0x8E48);
+C_ASSERT(FIELD_OFFSET(KPRCB, SharedQueueScanOwner) == 0x8E50);
+C_ASSERT(FIELD_OFFSET(KPRCB, ScanSiblingIndex) == 0x8E54);
+C_ASSERT(FIELD_OFFSET(KPRCB, CoreControlBlock) == 0x8E58);
+C_ASSERT(FIELD_OFFSET(KPRCB, CoreProcessorSet) == 0x8E60);
+C_ASSERT(FIELD_OFFSET(KPRCB, ScanSiblingMask) == 0x8E68);
+C_ASSERT(FIELD_OFFSET(KPRCB, LLCMask) == 0x8E70);
+C_ASSERT(FIELD_OFFSET(KPRCB, GroupModuleProcessorSet) == 0x8E78);
+C_ASSERT(FIELD_OFFSET(KPRCB, SmtIsolationThread) == 0x8E80);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad97) == 0x8E88);
+C_ASSERT(FIELD_OFFSET(KPRCB, ProcessorProfileControlArea) == 0x8E98);
+C_ASSERT(FIELD_OFFSET(KPRCB, ProfileEventIndexAddress) == 0x8EA0);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcWatchdogProfile) == 0x8EA8);
+C_ASSERT(FIELD_OFFSET(KPRCB, DpcWatchdogProfileCurrentEmptyCapture) == 0x8EB0);
+C_ASSERT(FIELD_OFFSET(KPRCB, SchedulerAssist) == 0x8EB8);
+C_ASSERT(FIELD_OFFSET(KPRCB, SynchCounters) == 0x8EC0);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad94) == 0x8F78);
+C_ASSERT(FIELD_OFFSET(KPRCB, FsCounters) == 0x8F80);
+C_ASSERT(FIELD_OFFSET(KPRCB, VendorString) == 0x8F90);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad100) == 0x8F9D);
+C_ASSERT(FIELD_OFFSET(KPRCB, FeatureBits) == 0x8FA0);
+C_ASSERT(FIELD_OFFSET(KPRCB, UpdateSignature) == 0x8FA8);
+C_ASSERT(FIELD_OFFSET(KPRCB, PteBitCache) == 0x8FB0);
+C_ASSERT(FIELD_OFFSET(KPRCB, PteBitOffset) == 0x8FB8);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad105) == 0x8FBC);
+C_ASSERT(FIELD_OFFSET(KPRCB, Context) == 0x8FC0);
+C_ASSERT(FIELD_OFFSET(KPRCB, ContextFlagsInit) == 0x8FC8);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad115) == 0x8FCC);
+C_ASSERT(FIELD_OFFSET(KPRCB, ExtendedState) == 0x8FD0);
+C_ASSERT(FIELD_OFFSET(KPRCB, IsrStack) == 0x8FD8);
+C_ASSERT(FIELD_OFFSET(KPRCB, EntropyTimingState) == 0x8FE0);
+C_ASSERT(FIELD_OFFSET(KPRCB, StibpPairingTrace) == 0x9138);
+C_ASSERT(FIELD_OFFSET(KPRCB, AbSelfIoBoostsList) == 0x9170);
+C_ASSERT(FIELD_OFFSET(KPRCB, AbPropagateBoostsList) == 0x9178);
+C_ASSERT(FIELD_OFFSET(KPRCB, AbDpc) == 0x9180);
+C_ASSERT(FIELD_OFFSET(KPRCB, SymCryptEntropyAccumulatorState) == 0x91C0);
+C_ASSERT(FIELD_OFFSET(KPRCB, IoIrpStackProfilerCurrent) == 0x9340);
+C_ASSERT(FIELD_OFFSET(KPRCB, IoIrpStackProfilerPrevious) == 0x9394);
+C_ASSERT(FIELD_OFFSET(KPRCB, SecureFault) == 0x93E8);
+C_ASSERT(FIELD_OFFSET(KPRCB, LocalSharedReadyQueue) == 0x9400);
+C_ASSERT(FIELD_OFFSET(KPRCB, LocalSearchContexts) == 0x9408);
+C_ASSERT(FIELD_OFFSET(KPRCB, SearchContexts) == 0x9418);
+C_ASSERT(FIELD_OFFSET(KPRCB, SearchGenerations) == 0x9428);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad125) == 0x9438);
+C_ASSERT(FIELD_OFFSET(KPRCB, TimerExpirationTraceCount) == 0x9440);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad127) == 0x9444);
+C_ASSERT(FIELD_OFFSET(KPRCB, TimerExpirationTrace) == 0x9448);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad128) == 0x9548);
+C_ASSERT(FIELD_OFFSET(KPRCB, ClockTimerState) == 0x9580);
+C_ASSERT(FIELD_OFFSET(KPRCB, IpiFrame) == 0x9A98);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad129) == 0x9AA0);
+C_ASSERT(FIELD_OFFSET(KPRCB, Mailbox) == 0x9AC0);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad130) == 0x9AC8);
+C_ASSERT(FIELD_OFFSET(KPRCB, McheckContext) == 0x9B00);
+C_ASSERT(FIELD_OFFSET(KPRCB, TransitionShadowStack) == 0x9BA0);
+C_ASSERT(FIELD_OFFSET(KPRCB, KernelShadowStackInitial) == 0x9BA8);
+C_ASSERT(FIELD_OFFSET(KPRCB, HiberSwapShadowStacks) == 0x9BB8);
+C_ASSERT(FIELD_OFFSET(KPRCB, HiberSwapShadowStackBases) == 0x9BE0);
+C_ASSERT(FIELD_OFFSET(KPRCB, MmFaultCompletionInfo) == 0x9C08);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad132) == 0x9C10);
+C_ASSERT(FIELD_OFFSET(KPRCB, SelfmapLockHandle) == 0x9C40);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad134b) == 0x9CA0);
+C_ASSERT(FIELD_OFFSET(KPRCB, DieProcessorSet) == 0x9CC0);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad135) == 0x9DC8);
+C_ASSERT(FIELD_OFFSET(KPRCB, CoresPerPhysicalDie) == 0x9EC8);
+C_ASSERT(FIELD_OFFSET(KPRCB, LogicalProcessorsPerModule) == 0x9ECC);
+C_ASSERT(FIELD_OFFSET(KPRCB, FreezeForRecoveryDpc) == 0x9ED0);
+C_ASSERT(FIELD_OFFSET(KPRCB, ModuleProcessorSet) == 0x9F10);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad136) == 0xA018);
+C_ASSERT(FIELD_OFFSET(KPRCB, LocalCoreControlBlock) == 0xA118);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad137a) == 0xA148);
+C_ASSERT(FIELD_OFFSET(KPRCB, KstackFreeDpc) == 0xA150);
+C_ASSERT(FIELD_OFFSET(KPRCB, SlistRollbackDpc) == 0xA190);
+C_ASSERT(FIELD_OFFSET(KPRCB, KstackFreeList) == 0xA1D0);
+C_ASSERT(FIELD_OFFSET(KPRCB, IsrStackNesting) == 0xA1E0);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad138) == 0xA1E4);
+C_ASSERT(FIELD_OFFSET(KPRCB, KernelDirectoryTableBase) == 0xAE80);
+C_ASSERT(FIELD_OFFSET(KPRCB, RspBaseShadow) == 0xAE88);
+C_ASSERT(FIELD_OFFSET(KPRCB, UserRspShadow) == 0xAE90);
+C_ASSERT(FIELD_OFFSET(KPRCB, ShadowFlags) == 0xAE98);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad138b) == 0xAE9C);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad138c) == 0xAEA0);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad138d) == 0xAEA8);
+C_ASSERT(FIELD_OFFSET(KPRCB, VerwSelector) == 0xAEAA);
+C_ASSERT(FIELD_OFFSET(KPRCB, DbgMceNestingLevel) == 0xAEAC);
+C_ASSERT(FIELD_OFFSET(KPRCB, DbgMceFlags) == 0xAEB0);
+C_ASSERT(FIELD_OFFSET(KPRCB, CoreControlBlockIndex) == 0xAEB4);
+C_ASSERT(FIELD_OFFSET(KPRCB, CoreControlBlockShadow) == 0xAEB8);
+C_ASSERT(FIELD_OFFSET(KPRCB, LocalCoreControlBlockShadow) == 0xAEC0);
+C_ASSERT(FIELD_OFFSET(KPRCB, CacheProcessorSet) == 0xAF00);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad139) == 0xB428);
+C_ASSERT(FIELD_OFFSET(KPRCB, NodeRelativeTopologyIndex) == 0xB928);
+C_ASSERT(FIELD_OFFSET(KPRCB, ComplexProcessorSet) == 0xB940);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad139b) == 0xBA48);
+C_ASSERT(FIELD_OFFSET(KPRCB, LogicalProcessorsPerComplex) == 0xBB48);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad139c) == 0xBB4C);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad140) == 0xBB50);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad140a) == 0xBE80);
+C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad141) == 0xBEC0);
+C_ASSERT(FIELD_OFFSET(KPRCB, RequestMailbox) == 0xCEC0);
+C_ASSERT(sizeof(KPRCB) == 0xCF00);
 
 /* TODO: GroupSetMember (0xC8), Group (0xD0) and GroupIndex (0xD1) are missing: this layout departs from Windows 11 at 0x38 */
 C_ASSERT(FIELD_OFFSET(KPRCB, LegacyNumber) == 0x004);
@@ -929,10 +1529,6 @@ typedef struct _KIPCR
     ULONG PcrAlign1[24];
     ULONG Fill2[2]; // 0x178
     KPRCB Prcb; // 0x180
-
-    // hack:
-    ULONG ContextSwitches;
-
 } KIPCR, *PKIPCR;
 
 //

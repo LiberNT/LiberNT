@@ -19,7 +19,13 @@ ULONG (*FrLdrDbgPrint)(const char *Format, ...);
 
 KSPIN_LOCK KiFreezeExecutionLock;
 
-KIPCR KiInitialPcr;
+static struct
+{
+    KIPCR Pcr;
+    REQUEST_MAILBOX RequestMailboxTail[KI_EXTRA_REQUEST_MAILBOXES];
+} KiInitialPcrBlock;
+C_ASSERT(FIELD_OFFSET(KIPCR, Prcb.RequestMailbox) + sizeof(REQUEST_MAILBOX) == sizeof(KIPCR));
+#define KiInitialPcr KiInitialPcrBlock.Pcr
 
 UCHAR DECLSPEC_ALIGN(16) KiP0BootStackData[KERNEL_STACK_SIZE] = {0};
 UCHAR DECLSPEC_ALIGN(16) KiP0DoubleFaultStackData[KERNEL_STACK_SIZE] = {0};
