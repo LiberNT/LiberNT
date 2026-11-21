@@ -169,7 +169,7 @@ VOID MiShrinkUserStackToGuard(_In_ PEPROCESS Process, _In_ ULONG64 Base, _In_ UL
 NTSTATUS MiWaitForMemory(_In_ NTSTATUS Status, _Inout_ PULONG Attempts);
 NTSTATUS MiControlRead(_In_opt_ PVOID Context, _In_ ULONG64 Offset, _In_ ULONG Length, _Out_ PVOID Buffer);
 NTSTATUS MiControlReadPages(_In_opt_ PVOID Context, _In_ ULONG64 Offset,
-                            _In_ const ULONG *Frames, _In_ ULONG PageCount);
+                            _In_ const ULONG *Frames, _In_ ULONG PageCount, _Out_ PULONG Transferred);
 NTSTATUS MiControlReadAsync(_In_opt_ PVOID Context, _In_ ULONG64 Offset, _In_ ULONG Frame,
                             _In_ PVOID Buffer, _In_ MI_READ_COMPLETION Completion,
                             _In_opt_ PVOID CompletionContext);
