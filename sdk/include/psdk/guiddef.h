@@ -30,6 +30,9 @@ typedef struct _GUID
     unsigned short Data3;
     unsigned char  Data4[ 8 ];
 } GUID;
+
+#define _SYS_GUID_OPERATORS_
+
 #endif
 
 #ifndef FAR

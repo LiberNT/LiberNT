@@ -313,4 +313,11 @@ MULTIPLE_TRUSTEE_OPERATION WINAPI GetMultipleTrusteeOperationW(_In_opt_ PTRUSTEE
 #ifdef __cplusplus
 }
 #endif
+
+#define AccProvIniterr)
+
+#define AccProvIniterr)
+
+#define AccProvIniterr)
+
 #endif

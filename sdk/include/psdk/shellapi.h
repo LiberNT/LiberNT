@@ -980,7 +980,8 @@ typedef enum SHSTOCKICONID
   SIID_MEDIABDRE,
   SIID_CLUSTEREDDRIVE,
   /* Missing: 141 - 174 */
-  SIID_MAX_ICONS = 175
+  SIID_MAX_ICONS = 175,
+  SIID_MEDIABLURAY = 0x5A,
 } SHSTOCKICONID;
 
 #define SHGSI_SYSICONINDEX SHGFI_SYSICONINDEX
@@ -1068,10 +1069,10 @@ HRESULT WINAPI SHGetStockIconInfo(SHSTOCKICONID siid, UINT uFlags, _Inout_ SHSTO
 extern "C" {
 #endif
 HICON WINAPI DuplicateIcon(HINSTANCE hInst, HICON hIcon);
-HRESULT WINAPI SHLoadNonloadedIconOverlayIdentifiers(void);
-HRESULT WINAPI SHIsFileAvailableOffline(PCWSTR pwszPath, DWORD * pdwStatus);
 BOOL WINAPI IsLFNDriveA(LPCSTR pszPath);
 BOOL WINAPI IsLFNDriveW(LPCWSTR pszPath);
+HRESULT WINAPI SHIsFileAvailableOffline(PCWSTR pwszPath, DWORD * pdwStatus);
+HRESULT WINAPI SHLoadNonloadedIconOverlayIdentifiers(void);
 #ifdef __cplusplus
 }
 #endif
@@ -1091,5 +1092,81 @@ typedef struct _OPEN_PRINTER_PROPS_INFOW {
   DWORD dwFlags;
   BOOL bModal;
 } OPEN_PRINTER_PROPS_INFOW, *POPEN_PRINTER_PROPS_INFOW;
+
+#define EIRESIDx) (- 1 * (int) (x))
+#ifdef UNICODE
+#define ExtractAssociatedIconEx ExtractAssociatedIconExW
+#else
+#define ExtractAssociatedIconEx ExtractAssociatedIconExA
+#endif
+#ifdef UNICODE
+#define IsLFNDrive IsLFNDriveW
+#else
+#define IsLFNDrive IsLFNDriveA
+#endif
+#define PRINT_PROP_FORCE_NAME 0x01
+#define SHDOCAPI EXTERN_C DECLSPEC_IMPORT HRESULT STDAPICALLTYPE
+#define SHDOCAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
+#ifdef UNICODE
+#define SHEnumerateUnreadMailAccounts SHEnumerateUnreadMailAccountsW
+#else
+#define SHEnumerateUnreadMailAccounts SHEnumerateUnreadMailAccountsA
+#endif
+#define SHGetDiskFreeSpace 0
+#ifdef UNICODE
+#define SHGetDiskFreeSpaceEx SHGetDiskFreeSpaceExW
+#else
+#define SHGetDiskFreeSpaceEx SHGetDiskFreeSpaceExA
+#endif
+#ifdef UNICODE
+#define SHGetUnreadMailCount SHGetUnreadMailCountW
+#else
+#define SHGetUnreadMailCount SHGetUnreadMailCountA
+#endif
+#define SHInvokePrinterCommand 0
+#ifdef UNICODE
+#define SHSetUnreadMailCount SHSetUnreadMailCountW
+#else
+#define SHSetUnreadMailCount SHSetUnreadMailCountA
+#endif
+
+struct HDROP__
+{
+    int unused;
+};
+
+typedef OPEN_PRINTER_PROPS_INFOA OPEN_PRINTER_PROPS_INFO;
+
+typedef HRESULT (WINAPI *PFNCANSHAREFOLDERW)(PCWSTR);
+
+typedef HRESULT (WINAPI *PFNSHOWSHAREFOLDERUIW)(HWND, PCWSTR);
+
+typedef POPEN_PRINTER_PROPS_INFOA POPEN_PRINTER_PROPS_INFO;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+HICON WINAPI ExtractAssociatedIconExA(HINSTANCE hInst, LPSTR pszIconPath, WORD *piIconIndex, WORD *piIconId);
+HICON WINAPI ExtractAssociatedIconExW(HINSTANCE hInst, LPWSTR pszIconPath, WORD *piIconIndex, WORD *piIconId);
+BOOL WINAPI SHGetDiskFreeSpaceExA(LPCSTR pszDirectoryName, ULARGE_INTEGER *pulFreeBytesAvailableToCaller, ULARGE_INTEGER *pulTotalNumberOfBytes, ULARGE_INTEGER *pulTotalNumberOfFreeBytes);
+BOOL WINAPI SHGetDiskFreeSpaceExW(LPCWSTR pszDirectoryName, ULARGE_INTEGER *pulFreeBytesAvailableToCaller, ULARGE_INTEGER *pulTotalNumberOfBytes, ULARGE_INTEGER *pulTotalNumberOfFreeBytes);
+BOOL WINAPI SHInvokePrinterCommandA(HWND hwnd, UINT uAction, LPCSTR lpBuf1, LPCSTR lpBuf2, BOOL fModal);
+BOOL WINAPI SHInvokePrinterCommandW(HWND hwnd, UINT uAction, LPCWSTR lpBuf1, LPCWSTR lpBuf2, BOOL fModal);
+
+/* TODO: LiberNT does not implement the functions below yet */
+HRESULT SHEnumerateUnreadMailAccountsA(HKEY hKeyUser, DWORD dwIndex, LPSTR pszMailAddress, int cchMailAddress);
+HRESULT SHGetUnreadMailCountA(HKEY hKeyUser, LPCSTR pszMailAddress, DWORD *pdwCount, FILETIME *pFileTime, LPSTR pszShellExecuteCommand, int cchShellExecuteCommand);
+HRESULT SHSetUnreadMailCountA(LPCSTR pszMailAddress, DWORD dwCount, LPCSTR pszShellExecuteCommand);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define EIRESIDx) (- 1 * (int) (x))
+#define SHDOCAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
+
+#define EIRESIDx) (- 1 * (int) (x))
+#define SHDOCAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
 
 #endif

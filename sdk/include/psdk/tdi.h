@@ -601,23 +601,19 @@ typedef struct _TA_ADDRESS_NETBIOS_UNICODE_EX {
 #define TDI_RECEIVE_NO_PUSH 0x00004000
 #endif
 
-typedef TDI_REQUEST_ASSOCIATE_ADDRESS TDI_REQUEST_USER_ASSOCIATE;
 typedef TDI_REQUEST_ASSOCIATE_ADDRESS * PTDI_REQUEST_USER_ASSOCIATE;
-typedef TDI_REQUEST_CONNECT TDI_REQUEST_USER_CONNECT;
 typedef TDI_REQUEST_CONNECT * PTDI_REQUEST_USER_CONNECT;
-typedef TDI_REQUEST_QUERY_INFORMATION TDI_REQUEST_USER_QUERY_INFO;
 typedef TDI_REQUEST_QUERY_INFORMATION * PTDI_REQUEST_USER_QUERY_INFO;
+typedef TDI_REQUEST_ASSOCIATE_ADDRESS TDI_REQUEST_USER_ASSOCIATE;
+typedef TDI_REQUEST_CONNECT TDI_REQUEST_USER_CONNECT;
+typedef TDI_REQUEST_QUERY_INFORMATION TDI_REQUEST_USER_QUERY_INFO;
 
-#pragma pack(push, 1)
-typedef struct _TDI_ADDRESS_NETBIOS_UNICODE_EX_XP {
-  USHORT NetbiosNameType;
-  enum eNameBufferType NameBufferType;
-  UNICODE_STRING EndpointName;
-  UNICODE_STRING RemoteName;
-  WCHAR EndpointBuffer[17];
-  WCHAR RemoteNameBuffer[1];
-} TDI_ADDRESS_NETBIOS_UNICODE_EX_XP, *PTDI_ADDRESS_NETBIOS_UNICODE_EX_XP;
-#pragma pack(pop)
+typedef struct _STREAMS_TDI_ACTION {
+  TDI_ACTION_HEADER Header;
+  BOOLEAN DatagramOption;
+  ULONG BufferLength;
+  CHAR Buffer[1];
+} STREAMS_TDI_ACTION, *PSTREAMS_TDI_ACTION;
 
 #pragma pack(push, 1)
 typedef struct _TA_ADDRESS_NETBIOS_UNICODE_EX_XP {
@@ -643,6 +639,17 @@ typedef struct _TDI_ADDRESS_IP6_XP {
 } TDI_ADDRESS_IP6_XP, *PTDI_ADDRESS_IP6_XP;
 #pragma pack(pop)
 
+#pragma pack(push, 1)
+typedef struct _TDI_ADDRESS_NETBIOS_UNICODE_EX_XP {
+  USHORT NetbiosNameType;
+  enum eNameBufferType NameBufferType;
+  UNICODE_STRING EndpointName;
+  UNICODE_STRING RemoteName;
+  WCHAR EndpointBuffer[17];
+  WCHAR RemoteNameBuffer[1];
+} TDI_ADDRESS_NETBIOS_UNICODE_EX_XP, *PTDI_ADDRESS_NETBIOS_UNICODE_EX_XP;
+#pragma pack(pop)
+
 typedef struct _TDI_ROUTING_INFO_WS03 {
   ULONG Protocol;
   ULONG InterfaceId;
@@ -650,11 +657,41 @@ typedef struct _TDI_ROUTING_INFO_WS03 {
   TRANSPORT_ADDRESS Address;
 } TDI_ROUTING_INFO_WS03, *PTDI_ROUTING_INFO_WS03;
 
-typedef struct _STREAMS_TDI_ACTION {
-  TDI_ACTION_HEADER Header;
-  BOOLEAN DatagramOption;
-  ULONG BufferLength;
-  CHAR Buffer[1];
-} STREAMS_TDI_ACTION, *PSTREAMS_TDI_ACTION;
+#define _TDI_USER_ 0
+#define IOCTL_TDI_MAGIC_BULLET 0x2101FF
+
+#pragma pack(push, 1)
+struct _TA_ADDRESS_NETBIOS
+{
+    LONG TAAddressCount;
+    struct _Addr Address[1];
+};
+#pragma pack(pop)
+
+typedef TDI_ROUTING_INFO_WS03 TDI_ROUTING_INFO;
+
+typedef TDI_ROUTING_INFO *PTDI_ROUTING_INFO;
+
+#pragma pack(push, 1)
+struct _TA_ADDRESS_NETBIOS_EX
+{
+    LONG TAAddressCount;
+    struct _AddrNetbiosEx Address[1];
+};
+#pragma pack(pop)
+
+typedef struct _TA_ADDRESS_NETBIOS_EX *PTA_NETBIOS_EX_ADDRESS;
+
+typedef struct _TA_ADDRESS_NETBIOS_EX TA_NETBIOS_EX_ADDRESS;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+NTSTATUS WINAPI TdiOpenNetbiosAddress(PHANDLE FileHandle, PUCHAR Buffer, PVOID DeviceName, PVOID Name);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __TDI_H */

@@ -415,4 +415,16 @@ SQLRETURN SQL_API SQLSetStmtAttr(SQLHSTMT,SQLINTEGER,SQLPOINTER,SQLINTEGER);
 #define SQL_PARAM_DATA_AVAILABLE 101
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+SQLRETURN SQLCancelHandle(SQLSMALLINT HandleType, SQLHANDLE InputHandle);
+SQLRETURN SQLCompleteAsync(SQLSMALLINT HandleType, SQLHANDLE Handle, RETCODE *AsyncRetCodePtr);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

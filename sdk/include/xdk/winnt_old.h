@@ -4483,7 +4483,13 @@ typedef enum _PROCESS_MITIGATION_POLICY {
   ProcessSystemCallFilterPolicy,
   ProcessPayloadRestrictionPolicy,
   ProcessChildProcessPolicy,
-  MaxProcessMitigationPolicy
+  MaxProcessMitigationPolicy,
+  ProcessSideChannelIsolationPolicy = 0xE,
+  ProcessUserShadowStackPolicy = 0xF,
+  ProcessRedirectionTrustPolicy = 0x10,
+  ProcessUserPointerAuthPolicy = 0x11,
+  ProcessSEHOPPolicy = 0x12,
+  ProcessActivationContextTrustPolicy = 0x13,
 } PROCESS_MITIGATION_POLICY, *PPROCESS_MITIGATION_POLICY;
 
 typedef struct _PROCESS_MITIGATION_ASLR_POLICY {

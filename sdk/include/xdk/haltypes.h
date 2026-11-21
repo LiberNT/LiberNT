@@ -56,7 +56,34 @@ typedef enum _HAL_QUERY_INFORMATION_CLASS {
   HalIrtInformation,
   HalSecondaryInterruptInformation,
   HalParkingPageInformation,
-  HalNumaRangeTableInformation
+  HalNumaRangeTableInformation,
+  HalChannelTopologyInformation = 0x1F,
+  HalExternalCacheInformation = 0x20,
+  HalQueryDebuggerInformation = 0x21,
+  HalFwBootPerformanceInformation = 0x22,
+  HalFwS3PerformanceInformation = 0x23,
+  HalGetChannelPowerInformation = 0x24,
+  HalQueryStateElementInformation = 0x25,
+  HalPsciInformation = 0x26,
+  HalInterruptControllerInformation = 0x27,
+  HalQueryIommuReservedRegionInformation = 0x28,
+  HalQueryArmErrataInformation = 0x29,
+  HalQueryProcessorEfficiencyInformation = 0x2A,
+  HalQueryAcpiWakeAlarmSystemPowerStateInformation = 0x2B,
+  HalQueryProfileIsTimerBasedProfiling = 0x2C,
+  HalQueryProfileNumberOfCounters = 0x2D,
+  HalQueryHyperlaunchEntrypoint = 0x2E,
+  HalHardwareWatchdogInformation = 0x2F,
+  HalDmaRemappingInformation = 0x30,
+  HalQueryUnused0001 = 0x31,
+  HalHeterogeneousMemoryAttributesInterface = 0x32,
+  HalQueryPerDeviceMsiLimitInformation = 0x33,
+  HalQueryProfileCorruptionStatus = 0x34,
+  HalQueryProfileCounterOwnership = 0x35,
+  HalQueryMpamInformation = 0x36,
+  HalAmuInformation = 0x37,
+  HalQueryApHibernateResumePc = 0x38,
+  HalQueryArm64PlatformInformation = 0x39,
 } HAL_QUERY_INFORMATION_CLASS, *PHAL_QUERY_INFORMATION_CLASS;
 
 typedef enum _HAL_SET_INFORMATION_CLASS {
@@ -76,7 +103,16 @@ typedef enum _HAL_SET_INFORMATION_CLASS {
   HalRegisterSecondaryInterruptInterface,
   HalSetChannelPowerInformation,
   HalI386ExceptionChainTerminatorInformation,
-  HalSetResetParkDisposition
+  HalSetResetParkDisposition,
+  HalSetPsciSuspendMode = 0x11,
+  HalSetHvciEnabled = 0x12,
+  HalSetProcessorTraceInterruptHandler = 0x13,
+  HalProfileSourceAdd = 0x14,
+  HalProfileSourceRemove = 0x15,
+  HalSetSwInterruptHandler = 0x16,
+  HalSetClockTimerMinimumInterval = 0x17,
+  HalRegisterPmuNotification = 0x18,
+  HalUnregisterPmuNotification = 0x19,
 } HAL_SET_INFORMATION_CLASS, *PHAL_SET_INFORMATION_CLASS;
 
 typedef NTSTATUS

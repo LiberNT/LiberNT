@@ -231,4 +231,19 @@ typedef KAFFINITY *PKAFFINITY;
 #endif
 #endif /* !RC_INVOKED */
 
+#define Handle64ToHandleh) (Ptr64ToPtr(h))
+#define HandleToHandle64h) (PtrToPtr64(h))
+#define MAXDWORD32 ((DWORD32) ~((DWORD32) 0))
+#define MAXDWORD64 ((DWORD64)(-1))
+#define MAXINT ((INT) (MAXUINT >> 1))
+#define MININT ((INT) ~MAXINT)
+#define Ptr64ToPtrp) ((void *) p)
+#define PtrToPtr64p) ((void * POINTER_64) p)
+
+#define Handle64ToHandleh) (Ptr64ToPtr(h))
+#define HandleToHandle64h) (PtrToPtr64(h))
+
+#define Handle64ToHandleh) (Ptr64ToPtr(h))
+#define HandleToHandle64h) (PtrToPtr64(h))
+
 #endif /* _BASETSD_H_ */

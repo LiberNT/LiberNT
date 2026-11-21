@@ -1526,6 +1526,31 @@ typedef struct _ATA_GET_PHYSICAL_ELEMENT_STATUS_PARAMETER_DATA {
 #endif
 
 #pragma pack(push, 1)
+typedef struct _ATA_ZONE_DESCRIPTOR {
+  UCHAR ZoneType : 4;
+  UCHAR Reserved0 : 4;
+  UCHAR Reset : 1;
+  UCHAR NonSeq : 1;
+  UCHAR Reserved1 : 2;
+  UCHAR ZoneCondition : 4;
+  UCHAR Reserved2[6];
+  ULONGLONG ZoneLength : 48;
+  ULONGLONG Reserved3 : 16;
+  ULONGLONG ZoneStartLBA : 48;
+  ULONGLONG Reserved4 : 16;
+  ULONGLONG WritePointerLBA : 48;
+  ULONGLONG Reserved5 : 16;
+  UCHAR Reserved6[32];
+} ATA_ZONE_DESCRIPTOR, *PATA_ZONE_DESCRIPTOR;
+#pragma pack(pop)
+
+typedef struct _GP_LOG_SUPPORTED_DEVICE_STATISTICS {
+  DEVICE_STATISTICS_LOG_PAGE_HEADER Header;
+  UCHAR NumberOfEntries;
+  UCHAR LogPageNumbers[503];
+} GP_LOG_SUPPORTED_DEVICE_STATISTICS, *PGP_LOG_SUPPORTED_DEVICE_STATISTICS;
+
+#pragma pack(push, 1)
 typedef struct _REGISTER_FIS {
   UCHAR FisType;
   UCHAR Reserved0 : 7;
@@ -1549,6 +1574,18 @@ typedef struct _REGISTER_FIS {
 #pragma pack(pop)
 
 #pragma pack(push, 1)
+typedef struct _REPORT_ZONES_EXT_DATA {
+  ULONG ZoneListLength;
+  UCHAR SAME : 4;
+  UCHAR Reserved0 : 4;
+  UCHAR Reserved1[3];
+  ULONGLONG MaxLBA : 48;
+  ULONGLONG Reserved2 : 16;
+  UCHAR Reserved3[48];
+} REPORT_ZONES_EXT_DATA, *PREPORT_ZONES_EXT_DATA;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
 typedef struct _SAVED_DEVICE_INTERNAL_STATUS_LOG {
   UCHAR LogAddress;
   UCHAR Reserved0[3];
@@ -1563,41 +1600,297 @@ typedef struct _SAVED_DEVICE_INTERNAL_STATUS_LOG {
 } SAVED_DEVICE_INTERNAL_STATUS_LOG, *PSAVED_DEVICE_INTERNAL_STATUS_LOG;
 #pragma pack(pop)
 
-typedef struct _GP_LOG_SUPPORTED_DEVICE_STATISTICS {
-  DEVICE_STATISTICS_LOG_PAGE_HEADER Header;
-  UCHAR NumberOfEntries;
-  UCHAR LogPageNumbers[503];
-} GP_LOG_SUPPORTED_DEVICE_STATISTICS, *PGP_LOG_SUPPORTED_DEVICE_STATISTICS;
+#define ZM_ALL_ZONES_BIT 0x100
 
 #pragma pack(push, 1)
-typedef struct _REPORT_ZONES_EXT_DATA {
-  ULONG ZoneListLength;
-  UCHAR SAME : 4;
-  UCHAR Reserved0 : 4;
-  UCHAR Reserved1[3];
-  ULONGLONG MaxLBA : 48;
-  ULONGLONG Reserved2 : 16;
-  UCHAR Reserved3[48];
-} REPORT_ZONES_EXT_DATA, *PREPORT_ZONES_EXT_DATA;
+struct _DEVICE_SET_PASSWORD
+{
+    struct
+    {
+        USHORT PasswordIdentifier : 1;
+        USHORT Reserved1 : 7;
+        USHORT MasterPasswordCapability : 1;
+        USHORT Reserved2 : 7;
+    } ControlWord;
+    USHORT Password[16];
+    USHORT MasterPasswordIdentifier;
+    USHORT Reserved[238];
+};
 #pragma pack(pop)
 
-#pragma pack(push, 1)
-typedef struct _ATA_ZONE_DESCRIPTOR {
-  UCHAR ZoneType : 4;
-  UCHAR Reserved0 : 4;
-  UCHAR Reset : 1;
-  UCHAR NonSeq : 1;
-  UCHAR Reserved1 : 2;
-  UCHAR ZoneCondition : 4;
-  UCHAR Reserved2[6];
-  ULONGLONG ZoneLength : 48;
-  ULONGLONG Reserved3 : 16;
-  ULONGLONG ZoneStartLBA : 48;
-  ULONGLONG Reserved4 : 16;
-  ULONGLONG WritePointerLBA : 48;
-  ULONGLONG Reserved5 : 16;
-  UCHAR Reserved6[32];
-} ATA_ZONE_DESCRIPTOR, *PATA_ZONE_DESCRIPTOR;
-#pragma pack(pop)
+struct _GP_LOG_FREE_FALL_STATISTICS
+{
+    DEVICE_STATISTICS_LOG_PAGE_HEADER Header;
+    struct
+    {
+        ULONGLONG Count : 32;
+        ULONGLONG Reserved : 24;
+        ULONGLONG ReservedFlags : 3;
+        ULONGLONG MonitoredConditionMet : 1;
+        ULONGLONG StatisticsSupportsDsn : 1;
+        ULONGLONG Normalized : 1;
+        ULONGLONG ValidValue : 1;
+        ULONGLONG Supported : 1;
+    } NumberofFreeFallEventsDetected;
+    struct
+    {
+        ULONGLONG Count : 32;
+        ULONGLONG Reserved : 24;
+        ULONGLONG ReservedFlags : 3;
+        ULONGLONG MonitoredConditionMet : 1;
+        ULONGLONG StatisticsSupportsDsn : 1;
+        ULONGLONG Normalized : 1;
+        ULONGLONG ValidValue : 1;
+        ULONGLONG Supported : 1;
+    } OverlimitShockEvents;
+    UCHAR Reserved[488];
+};
+
+struct _GP_LOG_GENERAL_ERROR_STATISTICS
+{
+    DEVICE_STATISTICS_LOG_PAGE_HEADER Header;
+    struct
+    {
+        ULONGLONG Count : 32;
+        ULONGLONG Reserved : 24;
+        ULONGLONG ReservedFlags : 3;
+        ULONGLONG MonitoredConditionMet : 1;
+        ULONGLONG StatisticsSupportsDsn : 1;
+        ULONGLONG Normalized : 1;
+        ULONGLONG ValidValue : 1;
+        ULONGLONG Supported : 1;
+    } NumberOfReportedUncorrectableErrors;
+    struct
+    {
+        ULONGLONG Count : 32;
+        ULONGLONG Reserved : 24;
+        ULONGLONG ReservedFlags : 3;
+        ULONGLONG MonitoredConditionMet : 1;
+        ULONGLONG StatisticsSupportsDsn : 1;
+        ULONGLONG Normalized : 1;
+        ULONGLONG ValidValue : 1;
+        ULONGLONG Supported : 1;
+    } NumberOfResetsBetweenCommandAcceptanceAndCommandCompletion;
+    UCHAR Reserved[488];
+};
+
+struct _GP_LOG_ROTATING_MEDIA_STATISTICS
+{
+    DEVICE_STATISTICS_LOG_PAGE_HEADER Header;
+    struct
+    {
+        ULONGLONG Count : 32;
+        ULONGLONG Reserved : 24;
+        ULONGLONG ReservedFlags : 3;
+        ULONGLONG MonitoredConditionMet : 1;
+        ULONGLONG StatisticsSupportsDsn : 1;
+        ULONGLONG Normalized : 1;
+        ULONGLONG ValidValue : 1;
+        ULONGLONG Supported : 1;
+    } SpindleMotorPoweronHours;
+    struct
+    {
+        ULONGLONG Count : 32;
+        ULONGLONG Reserved : 24;
+        ULONGLONG ReservedFlags : 3;
+        ULONGLONG MonitoredConditionMet : 1;
+        ULONGLONG StatisticsSupportsDsn : 1;
+        ULONGLONG Normalized : 1;
+        ULONGLONG ValidValue : 1;
+        ULONGLONG Supported : 1;
+    } HeadFlyingHours;
+    struct
+    {
+        ULONGLONG Count : 32;
+        ULONGLONG Reserved : 24;
+        ULONGLONG ReservedFlags : 3;
+        ULONGLONG MonitoredConditionMet : 1;
+        ULONGLONG StatisticsSupportsDsn : 1;
+        ULONGLONG Normalized : 1;
+        ULONGLONG ValidValue : 1;
+        ULONGLONG Supported : 1;
+    } HeadLoadEvents;
+    struct
+    {
+        ULONGLONG Count : 32;
+        ULONGLONG Reserved : 24;
+        ULONGLONG ReservedFlags : 3;
+        ULONGLONG MonitoredConditionMet : 1;
+        ULONGLONG StatisticsSupportsDsn : 1;
+        ULONGLONG Normalized : 1;
+        ULONGLONG ValidValue : 1;
+        ULONGLONG Supported : 1;
+    } NumberOfReallocatedLogicalSectors;
+    struct
+    {
+        ULONGLONG Count : 32;
+        ULONGLONG Reserved : 24;
+        ULONGLONG ReservedFlags : 3;
+        ULONGLONG MonitoredConditionMet : 1;
+        ULONGLONG StatisticsSupportsDsn : 1;
+        ULONGLONG Normalized : 1;
+        ULONGLONG ValidValue : 1;
+        ULONGLONG Supported : 1;
+    } ReadRecoveryAttempts;
+    struct
+    {
+        ULONGLONG Count : 32;
+        ULONGLONG Reserved : 24;
+        ULONGLONG ReservedFlags : 3;
+        ULONGLONG MonitoredConditionMet : 1;
+        ULONGLONG StatisticsSupportsDsn : 1;
+        ULONGLONG Normalized : 1;
+        ULONGLONG ValidValue : 1;
+        ULONGLONG Supported : 1;
+    } NumberOfMechanicalStartFailures;
+    struct
+    {
+        ULONGLONG Count : 32;
+        ULONGLONG Reserved : 24;
+        ULONGLONG ReservedFlags : 3;
+        ULONGLONG MonitoredConditionMet : 1;
+        ULONGLONG StatisticsSupportsDsn : 1;
+        ULONGLONG Normalized : 1;
+        ULONGLONG ValidValue : 1;
+        ULONGLONG Supported : 1;
+    } NumberOfReallocationCandidateLogicalSectors;
+    struct
+    {
+        ULONGLONG Count : 32;
+        ULONGLONG Reserved : 24;
+        ULONGLONG ReservedFlags : 3;
+        ULONGLONG MonitoredConditionMet : 1;
+        ULONGLONG StatisticsSupportsDsn : 1;
+        ULONGLONG Normalized : 1;
+        ULONGLONG ValidValue : 1;
+        ULONGLONG Supported : 1;
+    } NumberOfHighPriorityUnloadEvents;
+    UCHAR Reserved[440];
+};
+
+struct _GP_LOG_SOLID_STATE_DEVICE_STATISTICS
+{
+    DEVICE_STATISTICS_LOG_PAGE_HEADER Header;
+    struct
+    {
+        ULONGLONG Value : 8;
+        ULONGLONG Reserved : 48;
+        ULONGLONG ReservedFlags : 3;
+        ULONGLONG MonitoredConditionMet : 1;
+        ULONGLONG StatisticsSupportsDsn : 1;
+        ULONGLONG Normalized : 1;
+        ULONGLONG ValidValue : 1;
+        ULONGLONG Supported : 1;
+    } PercentageUsedEnduranceIndicator;
+    UCHAR Reserved[496];
+};
+
+struct _GP_LOG_TRANSPORT_STATISTICS
+{
+    DEVICE_STATISTICS_LOG_PAGE_HEADER Header;
+    struct
+    {
+        ULONGLONG Count : 8;
+        ULONGLONG Reserved : 48;
+        ULONGLONG ReservedFlags : 3;
+        ULONGLONG MonitoredConditionMet : 1;
+        ULONGLONG StatisticsSupportsDsn : 1;
+        ULONGLONG Normalized : 1;
+        ULONGLONG ValidValue : 1;
+        ULONGLONG Supported : 1;
+    } NumberOfHardwareResets;
+    struct
+    {
+        ULONGLONG Count : 32;
+        ULONGLONG Reserved : 24;
+        ULONGLONG ReservedFlags : 3;
+        ULONGLONG MonitoredConditionMet : 1;
+        ULONGLONG StatisticsSupportsDsn : 1;
+        ULONGLONG Normalized : 1;
+        ULONGLONG ValidValue : 1;
+        ULONGLONG Supported : 1;
+    } NumberOfAsrEvents;
+    struct
+    {
+        ULONGLONG Count : 32;
+        ULONGLONG Reserved : 24;
+        ULONGLONG ReservedFlags : 3;
+        ULONGLONG MonitoredConditionMet : 1;
+        ULONGLONG StatisticsSupportsDsn : 1;
+        ULONGLONG Normalized : 1;
+        ULONGLONG ValidValue : 1;
+        ULONGLONG Supported : 1;
+    } NumberOfInterfaceCrcErrors;
+    UCHAR Reserved[480];
+};
+
+struct _IDENTIFY_DEVICE_DATA_LOG_PAGE_ZONED_DEVICE_INFO
+{
+    IDENTIFY_DEVICE_DATA_LOG_PAGE_HEADER Header;
+    struct
+    {
+        ULONGLONG URSWRZ : 1;
+        ULONGLONG Reserved : 62;
+        ULONGLONG Valid : 1;
+    } ZonedDeviceCapabilities;
+    struct
+    {
+        ULONGLONG Reserved : 63;
+        ULONGLONG Valid : 1;
+    } ZonedDeviceSettings;
+    struct
+    {
+        ULONGLONG Number : 32;
+        ULONGLONG Reserved : 31;
+        ULONGLONG Valid : 1;
+    } OptimalNumberOfOpenSequentialWritePreferredZones;
+    struct
+    {
+        ULONGLONG Number : 32;
+        ULONGLONG Reserved : 31;
+        ULONGLONG Valid : 1;
+    } OptimalNumberOfNonSequentiallyWrittenSequentialWritePreferredZones;
+    struct
+    {
+        ULONGLONG Number : 32;
+        ULONGLONG Reserved : 31;
+        ULONGLONG Valid : 1;
+    } MaxNumberOfOpenSequentialWriteRequiredZones;
+    struct
+    {
+        ULONGLONG ZacMinorVersion : 16;
+        ULONGLONG Reserved0 : 47;
+        ULONGLONG Valid : 1;
+    } Version;
+    UCHAR Reserved[456];
+};
+
+typedef struct _DEVICE_SET_PASSWORD DEVICE_SET_PASSWORD;
+
+typedef struct _GP_LOG_FREE_FALL_STATISTICS GP_LOG_FREE_FALL_STATISTICS;
+
+typedef struct _GP_LOG_GENERAL_ERROR_STATISTICS GP_LOG_GENERAL_ERROR_STATISTICS;
+
+typedef struct _GP_LOG_ROTATING_MEDIA_STATISTICS GP_LOG_ROTATING_MEDIA_STATISTICS;
+
+typedef struct _GP_LOG_SOLID_STATE_DEVICE_STATISTICS GP_LOG_SOLID_STATE_DEVICE_STATISTICS;
+
+typedef struct _GP_LOG_TRANSPORT_STATISTICS GP_LOG_TRANSPORT_STATISTICS;
+
+typedef struct _IDENTIFY_DEVICE_DATA_LOG_PAGE_ZONED_DEVICE_INFO IDENTIFY_DEVICE_DATA_LOG_PAGE_ZONED_DEVICE_INFO;
+
+typedef struct _DEVICE_SET_PASSWORD *PDEVICE_SET_PASSWORD;
+
+typedef struct _GP_LOG_FREE_FALL_STATISTICS *PGP_LOG_FREE_FALL_STATISTICS;
+
+typedef struct _GP_LOG_GENERAL_ERROR_STATISTICS *PGP_LOG_GENERAL_ERROR_STATISTICS;
+
+typedef struct _GP_LOG_ROTATING_MEDIA_STATISTICS *PGP_LOG_ROTATING_MEDIA_STATISTICS;
+
+typedef struct _GP_LOG_SOLID_STATE_DEVICE_STATISTICS *PGP_LOG_SOLID_STATE_DEVICE_STATISTICS;
+
+typedef struct _GP_LOG_TRANSPORT_STATISTICS *PGP_LOG_TRANSPORT_STATISTICS;
+
+typedef struct _IDENTIFY_DEVICE_DATA_LOG_PAGE_ZONED_DEVICE_INFO *PIDENTIFY_DEVICE_DATA_LOG_PAGE_ZONED_DEVICE_INFO;
 
 #endif

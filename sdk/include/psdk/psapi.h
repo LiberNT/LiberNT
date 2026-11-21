@@ -219,4 +219,33 @@ typedef struct _PROCESS_MEMORY_COUNTERS_EX2 {
   ULONG64 SharedCommitUsage;
 } PROCESS_MEMORY_COUNTERS_EX2;
 
+union _PSAPI_WORKING_SET_BLOCK
+{
+    ULONG_PTR Flags;
+    struct
+    {
+        ULONG_PTR Protection : 5;
+        ULONG_PTR ShareCount : 3;
+        ULONG_PTR Shared : 1;
+        ULONG_PTR Reserved : 3;
+        ULONG_PTR VirtualPage : 52;
+    };
+};
+
+typedef PROCESS_MEMORY_COUNTERS_EX2 *PPROCESS_MEMORY_COUNTERS_EX2;
+
+typedef union _PSAPI_WORKING_SET_BLOCK *PPSAPI_WORKING_SET_BLOCK;
+
+typedef union _PSAPI_WORKING_SET_BLOCK PSAPI_WORKING_SET_BLOCK;
+
+struct _PSAPI_WORKING_SET_INFORMATION
+{
+    ULONG_PTR NumberOfEntries;
+    PSAPI_WORKING_SET_BLOCK WorkingSetInfo[1];
+};
+
+typedef struct _PSAPI_WORKING_SET_INFORMATION *PPSAPI_WORKING_SET_INFORMATION;
+
+typedef struct _PSAPI_WORKING_SET_INFORMATION PSAPI_WORKING_SET_INFORMATION;
+
 #endif  /* __WINE_PSAPI_H */

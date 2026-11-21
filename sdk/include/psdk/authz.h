@@ -66,7 +66,13 @@ typedef enum _AUTHZ_CONTEXT_INFORMATION_CLASS
     AuthzContextInfoIdentifier,
     AuthzContextInfoSource,
     AuthzContextInfoAll,
-    AuthzContextInfoAuthenticationId
+    AuthzContextInfoAuthenticationId,
+    AuthzContextInfoSecurityAttributes = 0xB,
+    AuthzContextInfoDeviceSids = 0xC,
+    AuthzContextInfoUserClaims = 0xD,
+    AuthzContextInfoDeviceClaims = 0xE,
+    AuthzContextInfoAppContainerSid = 0xF,
+    AuthzContextInfoCapabilitySids = 0x10,
 } AUTHZ_CONTEXT_INFORMATION_CLASS, *PAUTHZ_CONTEXT_INFORMATION_CLASS;
 
 typedef struct _AUTHZ_ACCESS_REQUEST
@@ -368,6 +374,14 @@ AuthzUnregisterSecurityEventSource(IN DWORD dwFlags,
 #define AUTHZ_WPD_CATEGORY_FLAG 0x00000010
 #endif
 
+typedef enum _AUTHZ_AUDIT_EVENT_INFORMATION_CLASS {
+    AuthzAuditEventInfoFlags = 1,
+    AuthzAuditEventInfoOperationType = 2,
+    AuthzAuditEventInfoObjectType = 3,
+    AuthzAuditEventInfoObjectName = 4,
+    AuthzAuditEventInfoAdditionalInfo = 5
+} AUTHZ_AUDIT_EVENT_INFORMATION_CLASS;
+
 typedef enum AUTHZ_SECURITY_ATTRIBUTE_OPERATION {
     AUTHZ_SECURITY_ATTRIBUTE_OPERATION_NONE = 0,
     AUTHZ_SECURITY_ATTRIBUTE_OPERATION_REPLACE_ALL = 1,
@@ -384,17 +398,15 @@ typedef enum AUTHZ_SID_OPERATION {
     AUTHZ_SID_OPERATION_REPLACE = 4
 } AUTHZ_SID_OPERATION, *PAUTHZ_SID_OPERATION;
 
-typedef enum _AUTHZ_AUDIT_EVENT_INFORMATION_CLASS {
-    AuthzAuditEventInfoFlags = 1,
-    AuthzAuditEventInfoOperationType = 2,
-    AuthzAuditEventInfoObjectType = 3,
-    AuthzAuditEventInfoObjectName = 4,
-    AuthzAuditEventInfoAdditionalInfo = 5
-} AUTHZ_AUDIT_EVENT_INFORMATION_CLASS;
-
-typedef struct AUTHZ_CAP_CHANGE_SUBSCRIPTION_HANDLE__ {
-  int unused;
-} *AUTHZ_CAP_CHANGE_SUBSCRIPTION_HANDLE;
+typedef struct _AUTHZ_RPC_INIT_INFO_CLIENT {
+  USHORT version;
+  PWSTR ObjectUuid;
+  PWSTR ProtSeq;
+  PWSTR NetworkAddr;
+  PWSTR Endpoint;
+  PWSTR Options;
+  PWSTR ServerSpn;
+} AUTHZ_RPC_INIT_INFO_CLIENT, *PAUTHZ_RPC_INIT_INFO_CLIENT;
 
 typedef struct _AUTHZ_SECURITY_ATTRIBUTE_FQBN_VALUE {
   ULONG64 Version;
@@ -406,14 +418,121 @@ typedef struct _AUTHZ_SECURITY_ATTRIBUTE_OCTET_STRING_VALUE {
   ULONG ValueLength;
 } AUTHZ_SECURITY_ATTRIBUTE_OCTET_STRING_VALUE, *PAUTHZ_SECURITY_ATTRIBUTE_OCTET_STRING_VALUE;
 
-typedef struct _AUTHZ_RPC_INIT_INFO_CLIENT {
-  USHORT version;
-  PWSTR ObjectUuid;
-  PWSTR ProtSeq;
-  PWSTR NetworkAddr;
-  PWSTR Endpoint;
-  PWSTR Options;
-  PWSTR ServerSpn;
-} AUTHZ_RPC_INIT_INFO_CLIENT, *PAUTHZ_RPC_INIT_INFO_CLIENT;
+typedef struct AUTHZ_CAP_CHANGE_SUBSCRIPTION_HANDLE__ {
+  int unused;
+} *AUTHZ_CAP_CHANGE_SUBSCRIPTION_HANDLE;
+
+#define AUTHZ_SECURITY_ATTRIBUTE_VALID_FLAGS 3
+#define AUTHZ_SECURITY_ATTRIBUTES_INFORMATION_VERSION 1
+#define AUTHZ_VALID_OBJECT_ACCESS_AUDIT_FLAGS 0x17
+#define AUTHZ_VALID_RM_INIT_FLAGS 7
+
+struct _AUTHZ_SECURITY_ATTRIBUTE_V1
+{
+    PWSTR pName;
+    USHORT ValueType;
+    USHORT Reserved;
+    ULONG Flags;
+    ULONG ValueCount;
+    union
+    {
+        PLONG64 pInt64;
+        PULONG64 pUint64;
+        PWSTR *ppString;
+        PAUTHZ_SECURITY_ATTRIBUTE_FQBN_VALUE pFqbn;
+        PAUTHZ_SECURITY_ATTRIBUTE_OCTET_STRING_VALUE pOctetString;
+    } Values;
+};
+
+struct AUTHZ_ACCESS_CHECK_RESULTS_HANDLE__
+{
+    int unused;
+};
+
+struct AUTHZ_AUDIT_EVENT_HANDLE__
+{
+    int unused;
+};
+
+struct AUTHZ_AUDIT_EVENT_TYPE_HANDLE__
+{
+    int unused;
+};
+
+struct AUTHZ_CLIENT_CONTEXT_HANDLE__
+{
+    int unused;
+};
+
+struct AUTHZ_RESOURCE_MANAGER_HANDLE__
+{
+    int unused;
+};
+
+typedef struct _AUTHZ_SECURITY_ATTRIBUTE_V1 AUTHZ_SECURITY_ATTRIBUTE_V1;
+
+struct AUTHZ_SECURITY_EVENT_PROVIDER_HANDLE__
+{
+    int unused;
+};
+
+typedef AUTHZ_CAP_CHANGE_SUBSCRIPTION_HANDLE *PAUTHZ_CAP_CHANGE_SUBSCRIPTION_HANDLE;
+
+typedef struct _AUTHZ_SECURITY_ATTRIBUTE_V1 *PAUTHZ_SECURITY_ATTRIBUTE_V1;
+
+struct _AUTHZ_SECURITY_ATTRIBUTES_INFORMATION
+{
+    USHORT Version;
+    USHORT Reserved;
+    ULONG AttributeCount;
+    union
+    {
+        PAUTHZ_SECURITY_ATTRIBUTE_V1 pAttributeV1;
+    } Attribute;
+};
+
+typedef struct _AUTHZ_SECURITY_ATTRIBUTES_INFORMATION AUTHZ_SECURITY_ATTRIBUTES_INFORMATION;
+
+typedef struct _AUTHZ_SECURITY_ATTRIBUTES_INFORMATION *PAUTHZ_SECURITY_ATTRIBUTES_INFORMATION;
+
+typedef void (WINAPI *PFN_AUTHZ_FREE_CENTRAL_ACCESS_POLICY)(PVOID);
+
+typedef BOOL (WINAPI *PFN_AUTHZ_GET_CENTRAL_ACCESS_POLICY)(AUTHZ_CLIENT_CONTEXT_HANDLE, PSID, PVOID, PBOOL, PVOID *);
+
+struct _AUTHZ_INIT_INFO
+{
+    USHORT version;
+    PCWSTR szResourceManagerName;
+    PFN_AUTHZ_DYNAMIC_ACCESS_CHECK pfnDynamicAccessCheck;
+    PFN_AUTHZ_COMPUTE_DYNAMIC_GROUPS pfnComputeDynamicGroups;
+    PFN_AUTHZ_FREE_DYNAMIC_GROUPS pfnFreeDynamicGroups;
+    PFN_AUTHZ_GET_CENTRAL_ACCESS_POLICY pfnGetCentralAccessPolicy;
+    PFN_AUTHZ_FREE_CENTRAL_ACCESS_POLICY pfnFreeCentralAccessPolicy;
+};
+
+typedef struct _AUTHZ_INIT_INFO AUTHZ_INIT_INFO;
+
+typedef struct _AUTHZ_INIT_INFO *PAUTHZ_INIT_INFO;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL AuthzEvaluateSacl(AUTHZ_CLIENT_CONTEXT_HANDLE AuthzClientContext, PAUTHZ_ACCESS_REQUEST pRequest, PACL Sacl, ACCESS_MASK GrantedAccess, BOOL AccessGranted, PBOOL pbGenerateAudit);
+BOOL AuthzFreeCentralAccessPolicyCache(void);
+BOOL AuthzInitializeCompoundContext(AUTHZ_CLIENT_CONTEXT_HANDLE UserContext, AUTHZ_CLIENT_CONTEXT_HANDLE DeviceContext, PAUTHZ_CLIENT_CONTEXT_HANDLE phCompoundContext);
+BOOL AuthzInitializeRemoteResourceManager(PAUTHZ_RPC_INIT_INFO_CLIENT pRpcInitInfo, PAUTHZ_RESOURCE_MANAGER_HANDLE phAuthzResourceManager);
+BOOL AuthzInitializeResourceManagerEx(DWORD Flags, PAUTHZ_INIT_INFO pAuthzInitInfo, PAUTHZ_RESOURCE_MANAGER_HANDLE phAuthzResourceManager);
+BOOL AuthzModifyClaims(AUTHZ_CLIENT_CONTEXT_HANDLE hAuthzClientContext, AUTHZ_CONTEXT_INFORMATION_CLASS ClaimClass, PAUTHZ_SECURITY_ATTRIBUTE_OPERATION pClaimOperations, PAUTHZ_SECURITY_ATTRIBUTES_INFORMATION pClaims);
+BOOL AuthzModifySecurityAttributes(AUTHZ_CLIENT_CONTEXT_HANDLE hAuthzClientContext, PAUTHZ_SECURITY_ATTRIBUTE_OPERATION pOperations, PAUTHZ_SECURITY_ATTRIBUTES_INFORMATION pAttributes);
+BOOL AuthzModifySids(AUTHZ_CLIENT_CONTEXT_HANDLE hAuthzClientContext, AUTHZ_CONTEXT_INFORMATION_CLASS SidClass, PAUTHZ_SID_OPERATION pSidOperations, PTOKEN_GROUPS pSids);
+BOOL AuthzRegisterCapChangeNotification(PAUTHZ_CAP_CHANGE_SUBSCRIPTION_HANDLE phCapChangeSubscription, LPTHREAD_START_ROUTINE pfnCapChangeCallback, PVOID pCallbackContext);
+BOOL AuthzSetAppContainerInformation(AUTHZ_CLIENT_CONTEXT_HANDLE hAuthzClientContext, PSID pAppContainerSid, DWORD CapabilityCount, PSID_AND_ATTRIBUTES pCapabilitySids);
+BOOL AuthzUnregisterCapChangeNotification(AUTHZ_CAP_CHANGE_SUBSCRIPTION_HANDLE hCapChangeSubscription);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __AUTHZ_H */

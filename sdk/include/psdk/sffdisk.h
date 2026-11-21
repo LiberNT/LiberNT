@@ -193,4 +193,11 @@ typedef struct _SFFDISK_BKOPS_STATUS_DATA {
 }
 #endif
 
+struct __SFFDISK_BKOPS_STATUS_DATA
+{
+    UCHAR BkopsIsSupported;
+    UCHAR BkopsIsEnabled;
+    UCHAR BkopsStatus;
+};
+
 #endif /* __SFFDISK_H__ */

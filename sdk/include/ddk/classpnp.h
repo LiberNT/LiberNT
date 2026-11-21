@@ -1534,6 +1534,30 @@ ClassModeSelect(
 #define DEV_BYPASS_IO 0x00000100
 typedef struct _FAILURE_PREDICTION_INFO * PFAILURE_PREDICTION_INFO;
 
+#define CLASS_TAG_ZONE_INFO 0x5A496353
+#define CLEAR_FLAG_NOFENCEFlags, Bit) WriteUShortNoFence(& (Flags), (ReadUShortNoFence(& (Flags)) & ~(Bit)))
+#define SET_FLAG_NOFENCEFlags, Bit) WriteUShortNoFence(& (Flags), (ReadUShortNoFence(& (Flags)) | (Bit)))
+#define TEST_FLAG_NOFENCEFlags, Bit) (((ReadUShortNoFence(& (Flags))) & (Bit)) != 0)
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+NTSTATUS ClassModeSenseTranslate(PDEVICE_OBJECT DeviceObject, PMODE_PARAMETER_HEADER ModeSenseData, PULONG ModeSenseBufferSize);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define CLEAR_FLAG_NOFENCEFlags, Bit) WriteUShortNoFence(& (Flags), (ReadUShortNoFence(& (Flags)) & ~(Bit)))
+#define SET_FLAG_NOFENCEFlags, Bit) WriteUShortNoFence(& (Flags), (ReadUShortNoFence(& (Flags)) | (Bit)))
+#define TEST_FLAG_NOFENCEFlags, Bit) (((ReadUShortNoFence(& (Flags))) & (Bit)) != 0)
+
+#define CLEAR_FLAG_NOFENCEFlags, Bit) WriteUShortNoFence(& (Flags), (ReadUShortNoFence(& (Flags)) & ~(Bit)))
+#define SET_FLAG_NOFENCEFlags, Bit) WriteUShortNoFence(& (Flags), (ReadUShortNoFence(& (Flags)) | (Bit)))
+#define TEST_FLAG_NOFENCEFlags, Bit) (((ReadUShortNoFence(& (Flags))) & (Bit)) != 0)
+
 #endif
 #ifndef DEV_FORWARD_IO
 #define DEV_FORWARD_IO 0x00000040

@@ -44,6 +44,265 @@ enum {
     MidlWinrtTypeSerializationInfoVersionOne = 1
 };
 
+#define _midl_addpp, n) (p += n)
+#define _midl_advmpmp) * (* (unsigned long * *) & mp) ++
+#define _midl_fa2p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 1) & ~0x1))
+#define _midl_fa4p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 3) & ~0x3))
+#define _midl_fa8p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 7) & ~0x7))
+#define _midl_ma1p, cast) * (* (cast * *) & p) ++
+#define _midl_ma2p, cast) * (* (cast * *) & p) ++
+#define _midl_ma4p, cast) * (* (cast * *) & p) ++
+#define _midl_ma8p, cast) * (* (cast * *) & p) ++
+#define _midl_marsh_lhsp, cast) * (* (cast * *) & p) ++
+#define _midl_marsh_upmp, p) * (* (unsigned long * *) & mp) ++ = (unsigned long) p
+#define _midl_unma1p, cast) * ((cast *) p) ++
+#define _midl_unma2p, cast) * ((cast *) p) ++
+#define _midl_unma3p, cast) * ((cast *) p) ++
+#define _midl_unma4p, cast) * ((cast *) p) ++
+#define _midl_unmarsh_upp) (* (* (unsigned long * *) & p) ++)
+#define boolean_from_ndrsource, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
+#define byte_from_ndrsource, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
+#define MIDL_WINRT_TYPE_SERIALIZATION_INFO_CURRENT_VERSION 1
+#define NdrFieldOffsets, f) (LONG_PTR) (& (((s *) 0) -> f))
+#define NdrFieldPads, f, p, t) ((unsigned long) (NdrFieldOffset(s, f) - NdrFieldOffset(s, p)) - sizeof (t))
+#define NdrMarshCCtxtHdlpc, p) (NDRCContextMarshall((NDR_CCONTEXT) pc, p), p + 20)
+#define NdrMarshConfStringHdrp, s, l) (_midl_ma4(p, unsigned long) = s, _midl_ma4(p, unsigned long) = 0, _midl_ma4(p, unsigned long) = l)
+#define NdrUnMarshConfStringHdrp, s, l) ((s = _midl_unma4(p, unsigned long), (_midl_addp(p, 4)), (l = _midl_unma4(p, unsigned long))
+#define small_from_ndrsource, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
+#define small_from_ndr_tempsource, target, format) { * (target) = * (* (char * *) (source)) ++; }
+
+typedef unsigned short *PARAM_OFFSETTABLE;
+
+typedef void *PMIDL_XMIT_TYPE;
+
+typedef unsigned short *PPARAM_OFFSETTABLE;
+
+typedef void *RPC_CLIENT_ALLOC(size_t);
+
+typedef void RPC_CLIENT_FREE(void *);
+
+typedef void *RPC_SS_THREAD_HANDLE;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void WINAPI NdrComplexArrayBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+void WINAPI NdrComplexArrayFree(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrComplexArrayMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned long WINAPI NdrComplexArrayMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrComplexArrayUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
+void WINAPI NdrComplexStructBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+void WINAPI NdrComplexStructFree(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrComplexStructMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned long WINAPI NdrComplexStructMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrComplexStructUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
+void WINAPI NdrConformantArrayBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+void WINAPI NdrConformantArrayFree(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrConformantArrayMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned long WINAPI NdrConformantArrayMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrConformantArrayUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
+void WINAPI NdrConformantStringBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrConformantStringMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned long WINAPI NdrConformantStringMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrConformantStringUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
+void WINAPI NdrConformantStructBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+void WINAPI NdrConformantStructFree(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrConformantStructMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned long WINAPI NdrConformantStructMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrConformantStructUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
+void WINAPI NdrConformantVaryingArrayBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+void WINAPI NdrConformantVaryingArrayFree(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrConformantVaryingArrayMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned long WINAPI NdrConformantVaryingArrayMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrConformantVaryingArrayUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
+void WINAPI NdrConformantVaryingStructBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+void WINAPI NdrConformantVaryingStructFree(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrConformantVaryingStructMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned long WINAPI NdrConformantVaryingStructMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrConformantVaryingStructUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
+void WINAPI NdrEncapsulatedUnionBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+void WINAPI NdrEncapsulatedUnionFree(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrEncapsulatedUnionMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned long WINAPI NdrEncapsulatedUnionMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrEncapsulatedUnionUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
+void WINAPI NdrFixedArrayBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+void WINAPI NdrFixedArrayFree(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrFixedArrayMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned long WINAPI NdrFixedArrayMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrFixedArrayUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
+void WINAPI NdrInterfacePointerBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+void WINAPI NdrInterfacePointerFree(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrInterfacePointerMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned long WINAPI NdrInterfacePointerMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrInterfacePointerUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
+void WINAPI NdrNonConformantStringBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrNonConformantStringMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned long WINAPI NdrNonConformantStringMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrNonConformantStringUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
+void WINAPI NdrNonEncapsulatedUnionBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+void WINAPI NdrNonEncapsulatedUnionFree(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrNonEncapsulatedUnionMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned long WINAPI NdrNonEncapsulatedUnionMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrNonEncapsulatedUnionUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
+void WINAPI NdrPointerBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+void WINAPI NdrPointerFree(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrPointerMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned long WINAPI NdrPointerMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrPointerUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
+void WINAPI NdrSimpleStructBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+void WINAPI NdrSimpleStructFree(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrSimpleStructMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned long WINAPI NdrSimpleStructMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrSimpleStructUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
+void WINAPI NdrUserMarshalBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+void WINAPI NdrUserMarshalFree(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrUserMarshalMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned long WINAPI NdrUserMarshalMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrUserMarshalUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
+void WINAPI NdrVaryingArrayBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+void WINAPI NdrVaryingArrayFree(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrVaryingArrayMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned long WINAPI NdrVaryingArrayMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrVaryingArrayUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
+void WINAPI NdrXmitOrRepAsBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+void WINAPI NdrXmitOrRepAsFree(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrXmitOrRepAsMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned long WINAPI NdrXmitOrRepAsMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+unsigned char * WINAPI NdrXmitOrRepAsUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
+
+/* TODO: LiberNT does not implement the functions below yet */
+void * I_RpcDefaultAllocate(handle_t bh, size_t size, void *(*RealAlloc)(size_t));
+void I_RpcDefaultFree(handle_t bh, void *, void (*RealFree)(void *));
+void Ndr64AsyncServerCall(PRPC_MESSAGE pRpcMsg);
+void Ndr64AsyncServerCall64(PRPC_MESSAGE pRpcMsg);
+void Ndr64AsyncServerCallAll(PRPC_MESSAGE pRpcMsg);
+long Ndr64AsyncStubCall(struct IRpcStubBuffer *pThis, struct IRpcChannelBuffer *pChannel, PRPC_MESSAGE pRpcMsg, unsigned long *pdwStubPhase);
+CLIENT_CALL_RETURN Ndr64DcomAsyncClientCall(MIDL_STUBLESS_PROXY_INFO *pProxyInfo, unsigned long nProcNum, void *pReturnValue, ...);
+long Ndr64DcomAsyncStubCall(struct IRpcStubBuffer *pThis, struct IRpcChannelBuffer *pChannel, PRPC_MESSAGE pRpcMsg, unsigned long *pdwStubPhase);
+void NDRCContextUnmarshall2(NDR_CCONTEXT *pCContext, RPC_BINDING_HANDLE hBinding, void *pBuff, unsigned long DataRepresentation);
+RPC_STATUS WINAPI NdrClientGetSupportedSyntaxes(RPC_CLIENT_INTERFACE *pInf, unsigned long *pCount, MIDL_SYNTAX_INFO **pArr);
+unsigned long NdrContextHandleMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+RPC_STATUS WINAPI NdrCreateServerInterfaceFromStub(struct IRpcStubBuffer *pStub, RPC_SERVER_INTERFACE *pServerIf);
+void NdrCsArrayBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+void NdrCsArrayFree(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned char * NdrCsArrayMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned long NdrCsArrayMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+unsigned char * NdrCsArrayUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
+void NdrCsTagBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned char * NdrCsTagMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+unsigned long NdrCsTagMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+unsigned char * NdrCsTagUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
+void NdrPartialIgnoreClientBufferSize(PMIDL_STUB_MESSAGE pStubMsg, void *pMemory);
+void NdrPartialIgnoreClientMarshall(PMIDL_STUB_MESSAGE pStubMsg, void *pMemory);
+void NdrPartialIgnoreServerInitialize(PMIDL_STUB_MESSAGE pStubMsg, void **ppMemory, PFORMAT_STRING pFormat);
+void NdrPartialIgnoreServerUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, void **ppMemory);
+void NdrServerCall3(PRPC_MESSAGE pRpcMsg);
+void NdrServerCallNdr64(PRPC_MESSAGE pRpcMsg);
+RPC_STATUS WINAPI NdrServerGetSupportedSyntaxes(RPC_SERVER_INTERFACE *pInf, unsigned long *pCount, MIDL_SYNTAX_INFO **pArr, unsigned long *pPreferSyntaxIndex);
+void NdrServerInitializePartial(PRPC_MESSAGE pRpcMsg, PMIDL_STUB_MESSAGE pStubMsg, PMIDL_STUB_DESC pStubDescriptor, unsigned long RequestedBufferSize);
+long NdrStubCall3(void *pThis, void *pChannel, PRPC_MESSAGE pRpcMsg, unsigned long *pdwStubPhase);
+void RpcCsGetTags(RPC_BINDING_HANDLE hBinding, int fServerSide, unsigned long *pulSendingTag, unsigned long *pulDesiredReceivingTag, unsigned long *pulReceivingTag, error_status_t *pStatus);
+void * RpcSmAllocate(size_t Size, RPC_STATUS *pStatus);
+RPC_STATUS RpcSmClientFree(void *pNodeToFree);
+RPC_STATUS RpcSmDisableAllocate(void);
+RPC_STATUS RpcSmEnableAllocate(void);
+RPC_STATUS RpcSmFree(void *NodeToFree);
+RPC_SS_THREAD_HANDLE RpcSmGetThreadHandle(RPC_STATUS *pStatus);
+RPC_STATUS RpcSmSetClientAllocFree(RPC_CLIENT_ALLOC *ClientAlloc, RPC_CLIENT_FREE *ClientFree);
+RPC_STATUS RpcSmSetThreadHandle(RPC_SS_THREAD_HANDLE Id);
+RPC_STATUS RpcSmSwapClientAllocFree(RPC_CLIENT_ALLOC *ClientAlloc, RPC_CLIENT_FREE *ClientFree, RPC_CLIENT_ALLOC **OldClientAlloc, RPC_CLIENT_FREE **OldClientFree);
+void * RpcSsAllocate(size_t Size);
+void RpcSsDisableAllocate(void);
+void RpcSsEnableAllocate(void);
+void RpcSsFree(void *NodeToFree);
+RPC_SS_THREAD_HANDLE RpcSsGetThreadHandle(void);
+void RpcSsSetClientAllocFree(RPC_CLIENT_ALLOC *ClientAlloc, RPC_CLIENT_FREE *ClientFree);
+void RpcSsSetThreadHandle(RPC_SS_THREAD_HANDLE Id);
+void RpcSsSwapClientAllocFree(RPC_CLIENT_ALLOC *ClientAlloc, RPC_CLIENT_FREE *ClientFree, RPC_CLIENT_ALLOC **OldClientAlloc, RPC_CLIENT_FREE **OldClientFree);
+void WINAPI RpcUserFree(handle_t AsyncHandle, void *pBuffer);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define _midl_advmpmp) * (* (unsigned long * *) & mp) ++
+#define _midl_fa2p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 1) & ~0x1))
+#define _midl_fa4p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 3) & ~0x3))
+#define _midl_fa8p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 7) & ~0x7))
+#define _midl_ma1p, cast) * (* (cast * *) & p) ++
+#define _midl_ma2p, cast) * (* (cast * *) & p) ++
+#define _midl_ma8p, cast) * (* (cast * *) & p) ++
+#define _midl_marsh_lhsp, cast) * (* (cast * *) & p) ++
+#define _midl_marsh_upmp, p) * (* (unsigned long * *) & mp) ++ = (unsigned long) p
+#define _midl_unma1p, cast) * ((cast *) p) ++
+#define _midl_unma2p, cast) * ((cast *) p) ++
+#define _midl_unma3p, cast) * ((cast *) p) ++
+#define _midl_unmarsh_upp) (* (* (unsigned long * *) & p) ++)
+#define boolean_from_ndrsource, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
+#define byte_from_ndrsource, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
+#define NdrFieldPads, f, p, t) ((unsigned long) (NdrFieldOffset(s, f) - NdrFieldOffset(s, p)) - sizeof (t))
+#define NdrMarshCCtxtHdlpc, p) (NDRCContextMarshall((NDR_CCONTEXT) pc, p), p + 20)
+#define NdrMarshConfStringHdrp, s, l) (_midl_ma4(p, unsigned long) = s, _midl_ma4(p, unsigned long) = 0, _midl_ma4(p, unsigned long) = l)
+#define NdrUnMarshConfStringHdrp, s, l) ((s = _midl_unma4(p, unsigned long), (_midl_addp(p, 4)), (l = _midl_unma4(p, unsigned long))
+#define small_from_ndrsource, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
+#define small_from_ndr_tempsource, target, format) { * (target) = * (* (char * *) (source)) ++; }
+
+enum _USER_MARSHAL_CB_TYPE
+{
+
+};
+
+#define _midl_advmpmp) * (* (unsigned long * *) & mp) ++
+#define _midl_fa2p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 1) & ~0x1))
+#define _midl_fa4p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 3) & ~0x3))
+#define _midl_fa8p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 7) & ~0x7))
+#define _midl_ma1p, cast) * (* (cast * *) & p) ++
+#define _midl_ma2p, cast) * (* (cast * *) & p) ++
+#define _midl_ma8p, cast) * (* (cast * *) & p) ++
+#define _midl_marsh_lhsp, cast) * (* (cast * *) & p) ++
+#define _midl_marsh_upmp, p) * (* (unsigned long * *) & mp) ++ = (unsigned long) p
+#define _midl_unma1p, cast) * ((cast *) p) ++
+#define _midl_unma2p, cast) * ((cast *) p) ++
+#define _midl_unma3p, cast) * ((cast *) p) ++
+#define _midl_unmarsh_upp) (* (* (unsigned long * *) & p) ++)
+#define boolean_from_ndrsource, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
+#define byte_from_ndrsource, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
+#define NdrFieldPads, f, p, t) ((unsigned long) (NdrFieldOffset(s, f) - NdrFieldOffset(s, p)) - sizeof (t))
+#define NdrMarshCCtxtHdlpc, p) (NDRCContextMarshall((NDR_CCONTEXT) pc, p), p + 20)
+#define NdrMarshConfStringHdrp, s, l) (_midl_ma4(p, unsigned long) = s, _midl_ma4(p, unsigned long) = 0, _midl_ma4(p, unsigned long) = l)
+#define NdrUnMarshConfStringHdrp, s, l) ((s = _midl_unma4(p, unsigned long), (_midl_addp(p, 4)), (l = _midl_unma4(p, unsigned long))
+#define small_from_ndrsource, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
+#define small_from_ndr_tempsource, target, format) { * (target) = * (* (char * *) (source)) ++; }
+
+struct _MIDL_INTERCEPTION_INFO
+{
+    unsigned long Version;
+    PFORMAT_STRING ProcString;
+    const unsigned short *ProcFormatOffsetTable;
+    unsigned long ProcCount;
+    PFORMAT_STRING TypeString;
+};
+
+struct _MIDL_WINRT_TYPE_SERIALIZATION_INFO
+{
+    unsigned long Version;
+    PFORMAT_STRING TypeFormatString;
+    unsigned short FormatStringSize;
+    unsigned short TypeOffset;
+    PMIDL_STUB_DESC StubDesc;
+};
+
+typedef byte cs_byte;
+
+typedef struct _MIDL_INTERCEPTION_INFO MIDL_INTERCEPTION_INFO;
+
+typedef struct _MIDL_WINRT_TYPE_SERIALIZATION_INFO MIDL_WINRT_TYPE_SERIALIZATION_INFO;
+
+typedef struct _MIDL_INTERCEPTION_INFO *PMIDL_INTERCEPTION_INFO;
+
+typedef struct _MIDL_WINRT_TYPE_SERIALIZATION_INFO *PMIDL_WINRT_TYPE_SERIALIZATION_INFO;
+
 #endif
 
 #ifndef __WINE_RPCNDR_H

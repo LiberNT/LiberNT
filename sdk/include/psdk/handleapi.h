@@ -28,4 +28,14 @@ BOOL WINAPI SetHandleInformation(HANDLE,DWORD,DWORD);
 }
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+BOOL WINAPI CompareObjectHandles(HANDLE hFirstObjectHandle, HANDLE hSecondObjectHandle);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

@@ -68,7 +68,13 @@ typedef enum _IMAGEHLP_STATUS_REASON {
   BindExpandFileHeaders,
   BindImageComplete,
   BindMismatchedSymbols,
-  BindSymbolsNotUpdated
+  BindSymbolsNotUpdated,
+  BindImportProcedure32 = 0xE,
+  BindImportProcedure64 = 0xF,
+  BindForwarder32 = 0x10,
+  BindForwarder64 = 0x11,
+  BindForwarderNOT32 = 0x12,
+  BindForwarderNOT64 = 0x13,
 } IMAGEHLP_STATUS_REASON;
 
 #define BIND_NO_BOUND_IMPORTS  0x00000001
@@ -1000,5 +1006,8 @@ BOOL    IMAGEAPI UpdateDebugInfoFileEx(PCSTR ImageFileName, PCSTR SymbolPath, PS
 #ifndef BIND_REPORT_64BIT_VA
 #define BIND_REPORT_64BIT_VA 0x00000010
 #endif
+
+#define _IMAGEHLP_ 0
+#define MapFileAndCheckSum 0
 
 #endif  /* __WINE_IMAGEHLP_H */

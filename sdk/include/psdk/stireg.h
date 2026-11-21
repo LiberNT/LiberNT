@@ -36,4 +36,8 @@
 #define STI_DEVICE_VALUE_TIMEOUT_A                  "PollTimeout"
 #define STI_DEVICE_VALUE_DISABLE_NOTIFICATIONS_A    "DisableNotifications"
 #define REGSTR_VAL_BAUDRATE_A                       "BaudRate"
+
+#define REGSTR_VAL_SHUTDOWNDELAY TEXT("ShutdownIfUnusedDelay")
+#define REGSTR_VAL_SHUTDOWNDELAY_W L"ShutdownIfUnusedDelay"
+
 #endif

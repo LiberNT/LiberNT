@@ -46,12 +46,21 @@ typedef enum DIRECTORY_FLAGS {
 #ifdef __cplusplus
 extern "C" {
 #endif
-BOOL WINAPI GetVolumeInformationByHandleW(HANDLE hFile, LPWSTR lpVolumeNameBuffer, DWORD nVolumeNameSize, LPDWORD lpVolumeSerialNumber, LPDWORD lpMaximumComponentLength, LPDWORD lpFileSystemFlags, LPWSTR lpFileSystemNameBuffer, DWORD nFileSystemNameSize);
-DWORD WINAPI GetTempPath2W(DWORD BufferLength, LPWSTR Buffer);
 DWORD WINAPI GetTempPath2A(DWORD BufferLength, LPSTR Buffer);
+DWORD WINAPI GetTempPath2W(DWORD BufferLength, LPWSTR Buffer);
+BOOL WINAPI GetVolumeInformationByHandleW(HANDLE hFile, LPWSTR lpVolumeNameBuffer, DWORD nVolumeNameSize, LPDWORD lpVolumeSerialNumber, LPDWORD lpMaximumComponentLength, LPDWORD lpFileSystemFlags, LPWSTR lpFileSystemNameBuffer, DWORD nFileSystemNameSize);
 #ifdef __cplusplus
 }
 #endif
+
+typedef struct _CREATEFILE3_EXTENDED_PARAMETERS {
+  DWORD dwSize;
+  DWORD dwFileAttributes;
+  DWORD dwFileFlags;
+  DWORD dwSecurityQosFlags;
+  LPSECURITY_ATTRIBUTES lpSecurityAttributes;
+  HANDLE hTemplateFile;
+} CREATEFILE3_EXTENDED_PARAMETERS, *PCREATEFILE3_EXTENDED_PARAMETERS, *LPCREATEFILE3_EXTENDED_PARAMETERS;
 
 typedef struct DISK_SPACE_INFORMATION {
   ULONGLONG ActualTotalAllocationUnits;
@@ -69,13 +78,52 @@ typedef struct DISK_SPACE_INFORMATION {
   DWORD BytesPerSector;
 } DISK_SPACE_INFORMATION;
 
-typedef struct _CREATEFILE3_EXTENDED_PARAMETERS {
-  DWORD dwSize;
-  DWORD dwFileAttributes;
-  DWORD dwFileFlags;
-  DWORD dwSecurityQosFlags;
-  LPSECURITY_ATTRIBUTES lpSecurityAttributes;
-  HANDLE hTemplateFile;
-} CREATEFILE3_EXTENDED_PARAMETERS, *PCREATEFILE3_EXTENDED_PARAMETERS, *LPCREATEFILE3_EXTENDED_PARAMETERS;
+#define _APISETFILE_ 0
+#ifdef UNICODE
+#define CreateDirectory2 CreateDirectory2W
+#else
+#define CreateDirectory2 CreateDirectory2A
+#endif
+#ifdef UNICODE
+#define DeleteFile2 DeleteFile2W
+#else
+#define DeleteFile2 DeleteFile2A
+#endif
+#ifdef UNICODE
+#define GetDiskSpaceInformation GetDiskSpaceInformationW
+#else
+#define GetDiskSpaceInformation GetDiskSpaceInformationA
+#endif
+#ifdef UNICODE
+#define GetTempPath2 GetTempPath2W
+#else
+#define GetTempPath2 GetTempPath2A
+#endif
+#ifdef UNICODE
+#define RemoveDirectory2 RemoveDirectory2W
+#else
+#define RemoveDirectory2 RemoveDirectory2A
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+HRESULT WINAPI GetDiskSpaceInformationA(LPCSTR rootPath, DISK_SPACE_INFORMATION *diskSpaceInfo);
+HRESULT WINAPI GetDiskSpaceInformationW(LPCWSTR rootPath, DISK_SPACE_INFORMATION *diskSpaceInfo);
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL AreShortNamesEnabled(HANDLE Handle, BOOL *Enabled);
+HANDLE CreateDirectory2A(LPCSTR lpPathName, DWORD dwDesiredAccess, DWORD dwShareMode, DIRECTORY_FLAGS DirectoryFlags, LPSECURITY_ATTRIBUTES lpSecurityAttributes);
+HANDLE CreateDirectory2W(LPCWSTR lpPathName, DWORD dwDesiredAccess, DWORD dwShareMode, DIRECTORY_FLAGS DirectoryFlags, LPSECURITY_ATTRIBUTES lpSecurityAttributes);
+HANDLE CreateFile3(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, DWORD dwCreationDisposition, LPCREATEFILE3_EXTENDED_PARAMETERS pCreateExParams);
+BOOL DeleteFile2A(LPCSTR lpFileName, DWORD Flags);
+BOOL DeleteFile2W(LPCWSTR lpFileName, DWORD Flags);
+BOOL RemoveDirectory2A(LPCSTR lpPathName, DIRECTORY_FLAGS DirectoryFlags);
+BOOL RemoveDirectory2W(LPCWSTR lpPathName, DIRECTORY_FLAGS DirectoryFlags);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif  /* __WINE_FILEAPI_H */

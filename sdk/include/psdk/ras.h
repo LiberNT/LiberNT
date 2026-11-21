@@ -250,7 +250,8 @@ typedef enum tagRASCONNSTATE {
       RASCS_InvokeEapUI,
 #endif
       RASCS_Connected = RASCS_DONE,
-      RASCS_Disconnected
+      RASCS_Disconnected,
+      RASCS_ApplySettings = 0x18,
 }  RASCONNSTATE, *LPRASCONNSTATE;
 
 #if (WINVER >= 0x601)
@@ -273,7 +274,8 @@ typedef enum tagRASPROJECTION {
     RASP_PppCcp =   0x80FD,
 #endif
     RASP_PppLcp =   0xC021,
-    RASP_Slip =     0x20000
+    RASP_Slip =     0x20000,
+    RASP_PppIpv6 = 0x8057,
 } RASPROJECTION, *LPRASPROJECTION;
 
 DECLARE_HANDLE (HRASCONN);
@@ -1310,6 +1312,11 @@ DWORD APIENTRY  RasDeleteSubEntryW(LPCWSTR pszPhonebook, LPCWSTR pszEntry, DWORD
 #define VS_SstpOnly 5
 #endif
 
+typedef enum _RASPROJECTION_INFO_TYPE {
+    PROJECTION_INFO_TYPE_PPP = 1,
+    PROJECTION_INFO_TYPE_IKEv2 = 2
+} RASPROJECTION_INFO_TYPE;
+
 enum RASAPIVERSION {
     RASAPIVERSION_500 = 1,
     RASAPIVERSION_501 = 2,
@@ -1317,25 +1324,25 @@ enum RASAPIVERSION {
     RASAPIVERSION_601 = 4
 };
 
-typedef enum _RASPROJECTION_INFO_TYPE {
-    PROJECTION_INFO_TYPE_PPP = 1,
-    PROJECTION_INFO_TYPE_IKEv2 = 2
-} RASPROJECTION_INFO_TYPE;
-
-struct tagRASPPPIPXA {
-  DWORD dwSize;
-  DWORD dwError;
-  CHAR szIpxAddress[22];
-};
-
-struct tagRASPPPIPV6 {
-  DWORD dwSize;
-  DWORD dwError;
-  BYTE bLocalInterfaceIdentifier[8];
-  BYTE bPeerInterfaceIdentifier[8];
-  BYTE bLocalCompressionProtocol[2];
-  BYTE bPeerCompressionProtocol[2];
-};
+#pragma pack(push, 4)
+typedef struct _RASIKEV2_PROJECTION_INFO {
+  DWORD dwIPv4NegotiationError;
+  RASIPV4ADDR ipv4Address;
+  RASIPV4ADDR ipv4ServerAddress;
+  DWORD dwIPv6NegotiationError;
+  RASIPV6ADDR ipv6Address;
+  RASIPV6ADDR ipv6ServerAddress;
+  DWORD dwPrefixLength;
+  DWORD dwAuthenticationProtocol;
+  DWORD dwEapTypeId;
+  DWORD dwFlags;
+  DWORD dwEncryptionMethod;
+  DWORD numIPv4ServerAddresses;
+  RASIPV4ADDR * ipv4ServerAddresses;
+  DWORD numIPv6ServerAddresses;
+  RASIPV6ADDR * ipv6ServerAddresses;
+} RASIKEV2_PROJECTION_INFO, *PRASIKEV2_PROJECTION_INFO;
+#pragma pack(pop)
 
 typedef struct _RASPPP_PROJECTION_INFO {
   DWORD dwIPv4NegotiationError;
@@ -1363,25 +1370,20 @@ typedef struct _RASPPP_PROJECTION_INFO {
   DWORD dwCcpServerOptions;
 } RASPPP_PROJECTION_INFO, *PRASPPP_PROJECTION_INFO;
 
-#pragma pack(push, 4)
-typedef struct _RASIKEV2_PROJECTION_INFO {
-  DWORD dwIPv4NegotiationError;
-  RASIPV4ADDR ipv4Address;
-  RASIPV4ADDR ipv4ServerAddress;
-  DWORD dwIPv6NegotiationError;
-  RASIPV6ADDR ipv6Address;
-  RASIPV6ADDR ipv6ServerAddress;
-  DWORD dwPrefixLength;
-  DWORD dwAuthenticationProtocol;
-  DWORD dwEapTypeId;
-  DWORD dwFlags;
-  DWORD dwEncryptionMethod;
-  DWORD numIPv4ServerAddresses;
-  RASIPV4ADDR * ipv4ServerAddresses;
-  DWORD numIPv6ServerAddresses;
-  RASIPV6ADDR * ipv6ServerAddresses;
-} RASIKEV2_PROJECTION_INFO, *PRASIKEV2_PROJECTION_INFO;
-#pragma pack(pop)
+struct tagRASPPPIPV6 {
+  DWORD dwSize;
+  DWORD dwError;
+  BYTE bLocalInterfaceIdentifier[8];
+  BYTE bPeerInterfaceIdentifier[8];
+  BYTE bLocalCompressionProtocol[2];
+  BYTE bPeerCompressionProtocol[2];
+};
+
+struct tagRASPPPIPXA {
+  DWORD dwSize;
+  DWORD dwError;
+  CHAR szIpxAddress[22];
+};
 
 struct tagRASUPDATECONN {
   enum RASAPIVERSION version;
@@ -1391,5 +1393,73 @@ struct tagRASUPDATECONN {
   struct tagRASTUNNELENDPOINT localEndPoint;
   struct tagRASTUNNELENDPOINT remoteEndPoint;
 };
+
+#define LPRASAMB RASAMB *
+#define LPRASPPPIPV6 RASPPPIPV6 *
+#define LPRASUPDATECONN RASUPDATECONN *
+#define RASAPIVERSION_CURRENT RASAPIVERSION_601
+#define RASCF_IsNotOwnerrascFlags) (((rascFlags) & (RASCF_OwnerKnown | RASCF_OwnerMatch)) == (RASCF_OwnerKnown))
+#define RASCF_IsOwnerrascFlags) (((rascFlags) & (RASCF_OwnerKnown | RASCF_OwnerMatch)) == (RASCF_OwnerKnown | RASCF_OwnerMatch))
+#define RASIKEv2_FLAGS_MOBIKESUPPORTED 0x00000001
+#define RASPPPIPV6 struct tagRASPPPIPV6
+#define RASUPDATECONN 0
+
+struct _RAS_PROJECTION_INFO
+{
+    enum RASAPIVERSION version;
+    RASPROJECTION_INFO_TYPE type;
+    union
+    {
+        RASPPP_PROJECTION_INFO ppp;
+        RASIKEV2_PROJECTION_INFO ikev2;
+    };
+};
+
+struct _RAS_STATS
+{
+    DWORD dwSize;
+    DWORD dwBytesXmited;
+    DWORD dwBytesRcved;
+    DWORD dwFramesXmited;
+    DWORD dwFramesRcved;
+    DWORD dwCrcErr;
+    DWORD dwTimeoutErr;
+    DWORD dwAlignmentErr;
+    DWORD dwHardwareOverrunErr;
+    DWORD dwFramingErr;
+    DWORD dwBufferOverrunErr;
+    DWORD dwCompressionRatioIn;
+    DWORD dwCompressionRatioOut;
+    DWORD dwBps;
+    DWORD dwConnectDuration;
+};
+
+struct HRASCONN__
+{
+    int unused;
+};
+
+typedef struct _RAS_PROJECTION_INFO *PRAS_PROJECTION_INFO;
+
+typedef struct _RAS_PROJECTION_INFO RAS_PROJECTION_INFO;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+DWORD WINAPI RasGetPCscf(LPWSTR lpszPCscf);
+DWORD WINAPI RasGetProjectionInfoEx(HRASCONN hrasconn, PRAS_PROJECTION_INFO pRasProjection, LPDWORD lpdwSize);
+DWORD WINAPI RasUpdateConnection(HRASCONN hrasconn, struct tagRASUPDATECONN *lprasupdateconn);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define RASCF_IsNotOwnerrascFlags) (((rascFlags) & (RASCF_OwnerKnown | RASCF_OwnerMatch)) == (RASCF_OwnerKnown))
+#define RASCF_IsOwnerrascFlags) (((rascFlags) & (RASCF_OwnerKnown | RASCF_OwnerMatch)) == (RASCF_OwnerKnown | RASCF_OwnerMatch))
+
+#define RASCF_IsNotOwnerrascFlags) (((rascFlags) & (RASCF_OwnerKnown | RASCF_OwnerMatch)) == (RASCF_OwnerKnown))
+#define RASCF_IsOwnerrascFlags) (((rascFlags) & (RASCF_OwnerKnown | RASCF_OwnerMatch)) == (RASCF_OwnerKnown | RASCF_OwnerMatch))
 
 #endif /* _RAS_H */

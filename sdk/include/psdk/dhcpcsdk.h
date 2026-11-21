@@ -155,4 +155,15 @@ DWORD WINAPI DhcpUndoRequestParams(DWORD, LPVOID, LPWSTR, LPWSTR);
 #define OPTION_IPV6_ONLY_PREFERRED 108
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+DWORD WINAPI DhcpGetOriginalSubnetMask(LPCWSTR sAdapterName, DWORD *dwSubnetMask);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

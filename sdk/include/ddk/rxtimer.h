@@ -22,4 +22,17 @@ NTAPI
 RxInitializeRxTimer(
     VOID);
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+NTSTATUS NTAPI RxCancelTimerRequest(PRDBSS_DEVICE_OBJECT pDeviceObject, PRX_WORKERTHREAD_ROUTINE Routine, PVOID pContext);
+NTSTATUS NTAPI RxPostRecurrentTimerRequest(PRDBSS_DEVICE_OBJECT pDeviceObject, PRX_WORKERTHREAD_ROUTINE Routine, PVOID pContext, LARGE_INTEGER TimeInterval);
+void NTAPI RxTearDownRxTimer(void);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

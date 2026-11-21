@@ -206,3 +206,6 @@ typedef struct _AGP_BUS_INTERFACE_STANDARD {
 #ifdef __cplusplus
 }
 #endif
+
+#define _NTAGP_ 0
+

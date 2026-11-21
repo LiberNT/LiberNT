@@ -131,4 +131,23 @@ CLIENT_CALL_RETURN RPC_VAR_ENTRY
 }
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+CLIENT_CALL_RETURN NdrMesProcEncodeDecode2(handle_t Handle, const MIDL_STUB_DESC *pStubDesc, PFORMAT_STRING pFormatString, ...);
+CLIENT_CALL_RETURN NdrMesProcEncodeDecode3(handle_t Handle, const MIDL_STUBLESS_PROXY_INFO *pProxyInfo, unsigned long nProcNum, void *pReturnValue, ...);
+size_t WINAPI NdrMesSimpleTypeAlignSizeAll(handle_t Handle, const MIDL_STUBLESS_PROXY_INFO *pProxyInfo);
+void WINAPI NdrMesSimpleTypeDecodeAll(handle_t Handle, const MIDL_STUBLESS_PROXY_INFO *pProxyInfo, void *pObject, short Size);
+void WINAPI NdrMesSimpleTypeEncodeAll(handle_t Handle, const MIDL_STUBLESS_PROXY_INFO *pProxyInfo, const void *pObject, short Size);
+size_t WINAPI NdrMesTypeAlignSize3(handle_t Handle, const MIDL_TYPE_PICKLING_INFO *pPicklingInfo, const MIDL_STUBLESS_PROXY_INFO *pProxyInfo, const unsigned long *ArrTypeOffset[], unsigned long nTypeIndex, const void *pObject);
+void WINAPI NdrMesTypeDecode3(handle_t Handle, const MIDL_TYPE_PICKLING_INFO *pPicklingInfo, const MIDL_STUBLESS_PROXY_INFO *pProxyInfo, const unsigned long *ArrTypeOffset[], unsigned long nTypeIndex, void *pObject);
+void WINAPI NdrMesTypeEncode3(handle_t Handle, const MIDL_TYPE_PICKLING_INFO *pPicklingInfo, const MIDL_STUBLESS_PROXY_INFO *pProxyInfo, const unsigned long *ArrTypeOffset[], unsigned long nTypeIndex, const void *pObject);
+void WINAPI NdrMesTypeFree3(handle_t Handle, const MIDL_TYPE_PICKLING_INFO *pPicklingInfo, const MIDL_STUBLESS_PROXY_INFO *pProxyInfo, const unsigned long *ArrTypeOffset[], unsigned long nTypeIndex, void *pObject);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* __WINE_MIDLES_H__ */

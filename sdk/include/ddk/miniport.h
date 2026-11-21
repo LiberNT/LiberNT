@@ -295,18 +295,6 @@ typedef enum _PCI_OSC_CONTROL_BITS {
     PciOscControlBitFirmwareIntermediaryConfig = 0x200
 } PCI_OSC_CONTROL_BITS, *PPCI_OSC_CONTROL_BITS;
 
-typedef enum PCI_EXPRESS_RCB {
-    RCB64Bytes = 0,
-    RCB128Bytes = 1
-} PCI_EXPRESS_RCB;
-
-typedef enum PCI_EXPRESS_LINK_SUBSTATE {
-    PciExpressPciPmLinkSubState_L11_BitIndex = 0,
-    PciExpressPciPmLinkSubState_L12_BitIndex = 1,
-    PciExpressASPMLinkSubState_L11_BitIndex = 2,
-    PciExpressASPMLinkSubState_L12_BitIndex = 3
-} PCI_EXPRESS_LINK_SUBSTATE;
-
 typedef enum PCI_DEVICE_D3COLD_STATE_REASON {
     PciDeviceD3Cold_State_Disabled_BitIndex = 1,
     PciDeviceD3Cold_State_Enabled_BitIndex = 2,
@@ -317,39 +305,25 @@ typedef enum PCI_DEVICE_D3COLD_STATE_REASON {
     PciDeviceD3Cold_Reason_Interface_Api_BitIndex = 10
 } PCI_DEVICE_D3COLD_STATE_REASON;
 
-typedef const PCWSTR * PCZPCWSTR;
+typedef enum PCI_EXPRESS_LINK_SUBSTATE {
+    PciExpressPciPmLinkSubState_L11_BitIndex = 0,
+    PciExpressPciPmLinkSubState_L12_BitIndex = 1,
+    PciExpressASPMLinkSubState_L11_BitIndex = 2,
+    PciExpressASPMLinkSubState_L12_BitIndex = 3
+} PCI_EXPRESS_LINK_SUBSTATE;
+
+typedef enum PCI_EXPRESS_RCB {
+    RCB64Bytes = 0,
+    RCB128Bytes = 1
+} PCI_EXPRESS_RCB;
+
 typedef const PCSTR * PCZPCSTR;
-typedef LONG_PTR RTL_REFERENCE_COUNT;
-typedef LONG_PTR * PRTL_REFERENCE_COUNT;
-typedef LONG RTL_REFERENCE_COUNT32;
-typedef LONG * PRTL_REFERENCE_COUNT32;
+typedef const PCWSTR * PCZPCWSTR;
 typedef enum _PROCESSOR_CACHE_TYPE * PPROCESSOR_CACHE_TYPE;
-
-typedef struct _PCI_FPB_CAPABILITY_HEADER {
-  PCI_CAPABILITIES_HEADER Header;
-  USHORT Reserved;
-} PCI_FPB_CAPABILITY_HEADER, *PPCI_FPB_CAPABILITY_HEADER;
-
-typedef struct _PCI_FPB_MEM_HIGH_VECTOR_CONTROL2_REGISTER {
-  ULONG MemHighVectorStartUpper;
-} PCI_FPB_MEM_HIGH_VECTOR_CONTROL2_REGISTER, *PPCI_FPB_MEM_HIGH_VECTOR_CONTROL2_REGISTER;
-
-typedef struct _PCI_FPB_VECTOR_ACCESS_DATA_REGISTER {
-  ULONG VectorAccessData;
-} PCI_FPB_VECTOR_ACCESS_DATA_REGISTER, *PPCI_FPB_VECTOR_ACCESS_DATA_REGISTER;
-
-typedef struct _PCI_VENDOR_SPECIFIC_CAPABILITY {
-  PCI_CAPABILITIES_HEADER Header;
-  UCHAR VscLength;
-  UCHAR VendorSpecific;
-} PCI_VENDOR_SPECIFIC_CAPABILITY, *PPCI_VENDOR_SPECIFIC_CAPABILITY;
-
-typedef struct _PCI_EXPRESS_VENDOR_SPECIFIC_CAPABILITY {
-  PCI_EXPRESS_ENHANCED_CAPABILITY_HEADER Header;
-  USHORT VsecId;
-  USHORT VsecRev : 4;
-  USHORT VsecLength : 12;
-} PCI_EXPRESS_VENDOR_SPECIFIC_CAPABILITY, *PPCI_EXPRESS_VENDOR_SPECIFIC_CAPABILITY;
+typedef LONG_PTR * PRTL_REFERENCE_COUNT;
+typedef LONG * PRTL_REFERENCE_COUNT32;
+typedef LONG_PTR RTL_REFERENCE_COUNT;
+typedef LONG RTL_REFERENCE_COUNT32;
 
 typedef struct _PCI_EXPRESS_ARI_CAPABILITY_REGISTER {
   USHORT MfvcFunctionGroupsCapability : 1;
@@ -379,5 +353,746 @@ typedef struct _PCI_EXPRESS_ATS_CAPABILITY_REGISTER {
   USHORT RelaxedOrderingSupported : 1;
   USHORT Reserved : 8;
 } PCI_EXPRESS_ATS_CAPABILITY_REGISTER, *PPCI_EXPRESS_ATS_CAPABILITY_REGISTER;
+
+typedef struct _PCI_EXPRESS_VENDOR_SPECIFIC_CAPABILITY {
+  PCI_EXPRESS_ENHANCED_CAPABILITY_HEADER Header;
+  USHORT VsecId;
+  USHORT VsecRev : 4;
+  USHORT VsecLength : 12;
+} PCI_EXPRESS_VENDOR_SPECIFIC_CAPABILITY, *PPCI_EXPRESS_VENDOR_SPECIFIC_CAPABILITY;
+
+typedef struct _PCI_FPB_CAPABILITY_HEADER {
+  PCI_CAPABILITIES_HEADER Header;
+  USHORT Reserved;
+} PCI_FPB_CAPABILITY_HEADER, *PPCI_FPB_CAPABILITY_HEADER;
+
+typedef struct _PCI_FPB_MEM_HIGH_VECTOR_CONTROL2_REGISTER {
+  ULONG MemHighVectorStartUpper;
+} PCI_FPB_MEM_HIGH_VECTOR_CONTROL2_REGISTER, *PPCI_FPB_MEM_HIGH_VECTOR_CONTROL2_REGISTER;
+
+typedef struct _PCI_FPB_VECTOR_ACCESS_DATA_REGISTER {
+  ULONG VectorAccessData;
+} PCI_FPB_VECTOR_ACCESS_DATA_REGISTER, *PPCI_FPB_VECTOR_ACCESS_DATA_REGISTER;
+
+typedef struct _PCI_VENDOR_SPECIFIC_CAPABILITY {
+  PCI_CAPABILITIES_HEADER Header;
+  UCHAR VscLength;
+  UCHAR VendorSpecific;
+} PCI_VENDOR_SPECIFIC_CAPABILITY, *PPCI_VENDOR_SPECIFIC_CAPABILITY;
+
+#define _DBGRAISEASSERTIONFAILURE_ 0
+#define ASAN_WARNING_DISABLE_4714_POP
+#define ASAN_WARNING_DISABLE_4714_PUSH
+#define CacheLineFlushAddress) _mm_clflush(Address)
+#define CFORCEINLINE FORCEINLINE
+#define COMPILETIME_OR_6FLAGSa, b, c, d, e, f) ((UINT) (a) | (UINT) (b) | (UINT) (c) | (UINT) (d) | (UINT) (e) | (UINT) (f))
+#define CpuIdEx __cpuidex
+#define DECLSPEC_CHPE_GUEST
+#define DECLSPEC_CHPE_PATCHABLE DECLSPEC_NOINLINE
+#define DECLSPEC_NOSANITIZEADDRESS
+#define DECLSPEC_RESTRICT __declspec(restrict)
+#define DEPRECATED_NO_MESSAGE_STDAPI EXTERN_C __declspec(deprecated) HRESULT STDAPICALLTYPE
+#define DEPRECATED_NO_MESSAGE_STDAPI_type) EXTERN_C __declspec(deprecated) type STDAPICALLTYPE
+#define DEPRECATED_NO_MESSAGE_STDAPIV EXTERN_C __declspec(deprecated) HRESULT STDAPIVCALLTYPE
+#define DEPRECATED_NO_MESSAGE_STDAPIV_type) EXTERN_C __declspec(deprecated) type STDAPIVCALLTYPE
+#define DEPRECATED_STDAPImessage) EXTERN_C __declspec(deprecated(message)) HRESULT STDAPICALLTYPE
+#define DEPRECATED_STDAPI_type, message) EXTERN_C __declspec(deprecated(message)) type STDAPICALLTYPE
+#define DEPRECATED_STDAPIVmessage) EXTERN_C __declspec(deprecated(message)) HRESULT STDAPIVCALLTYPE
+#define DEPRECATED_STDAPIV_type, message) EXTERN_C __declspec(deprecated(message)) type STDAPIVCALLTYPE
+#define DUMMYSTRUCTNAME6
+#define GetCallersEflags) __getcallerseflags()
+#define GetSegmentLimit __segmentlimit
+#define InterlockedCompareExchangeAcquire128 _InterlockedCompareExchange128
+#define InterlockedCompareExchangeNoFence128 _InterlockedCompareExchange128
+#define InterlockedCompareExchangeRelease128 _InterlockedCompareExchange128
+#define InterlockedExchangeAcquire8 InterlockedExchange8
+#define InterlockedExchangeAdd16 _InterlockedExchangeAdd16
+#define InterlockedExchangeAdd8 _InterlockedExchangeAdd8
+#define InterlockedExchangeNoFence8 InterlockedExchange8
+#define Multiply128 _mul128
+#define PFORCEINLINE FORCEINLINE
+#define PopulationCount64 __popcnt64
+#define ReadMxCsr _mm_getcsr
+#define ReadPMC __readpmc
+#define ShiftLeft128 __shiftleft128
+#define ShiftRight128 __shiftright128
+#define SpeculationFence LoadFence
+#define STDAPI_CHPE_PATCHABLE EXTERN_C DECLSPEC_CHPE_PATCHABLE HRESULT STDAPICALLTYPE
+#define STDAPI_CHPE_PATCHABLE_type) EXTERN_C DECLSPEC_CHPE_PATCHABLE type STDAPICALLTYPE
+#define STKFORCEINLINE FORCEINLINE
+#define WIN_NOEXCEPT
+#define WIN_NOEXCEPT_PFN
+#define WriteMxCsr _mm_setcsr
+
+struct _PCI_ADVANCED_FEATURES_CAPABILITY
+{
+    PCI_CAPABILITIES_HEADER Header;
+    UCHAR Length;
+    union
+    {
+        struct
+        {
+            UCHAR FunctionLevelResetSupported : 1;
+            UCHAR TransactionsPendingSupported : 1;
+            UCHAR Rsvd : 6;
+        };
+        UCHAR AsUCHAR;
+    } Capabilities;
+    union
+    {
+        struct
+        {
+            UCHAR InitiateFunctionLevelReset : 1;
+            UCHAR Rsvd : 7;
+        };
+        UCHAR AsUCHAR;
+    } Control;
+    union
+    {
+        struct
+        {
+            UCHAR TransactionsPending : 1;
+            UCHAR Rsvd : 7;
+        };
+        UCHAR AsUCHAR;
+    } Status;
+};
+
+union _PCI_EXPRESS_ACS_CAPABILITY_REGISTER
+{
+    struct
+    {
+        USHORT SourceValidation : 1;
+        USHORT TranslationBlocking : 1;
+        USHORT RequestRedirect : 1;
+        USHORT CompletionRedirect : 1;
+        USHORT UpstreamForwarding : 1;
+        USHORT EgressControl : 1;
+        USHORT DirectTranslation : 1;
+        USHORT EnhancedCapability : 1;
+        USHORT EgressControlVectorSize : 8;
+    };
+    USHORT AsUSHORT;
+};
+
+union _PCI_EXPRESS_ACS_CONTROL
+{
+    struct
+    {
+        USHORT SourceValidation : 1;
+        USHORT TranslationBlocking : 1;
+        USHORT RequestRedirect : 1;
+        USHORT CompletionRedirect : 1;
+        USHORT UpstreamForwarding : 1;
+        USHORT EgressControl : 1;
+        USHORT DirectTranslation : 1;
+        USHORT IoBlocking : 1;
+        USHORT DspMemoryControl : 2;
+        USHORT UspMemoryControl : 2;
+        USHORT UnclaimedRedirect : 1;
+        USHORT Reserved : 3;
+    };
+    USHORT AsUSHORT;
+};
+
+union _PCI_EXPRESS_ATS_CONTROL_REGISTER
+{
+    struct
+    {
+        USHORT SmallestTransactionUnit : 5;
+        USHORT Reserved : 10;
+        USHORT Enable : 1;
+    };
+    USHORT AsUSHORT;
+};
+
+union _PCI_EXPRESS_DEVICE_CAPABILITIES_3_REGISTER
+{
+    struct
+    {
+        ULONG DmwrRequestRoutingSupported : 1;
+        ULONG Rsvd : 31;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_EXPRESS_DEVICE_CONTROL_3_REGISTER
+{
+    struct
+    {
+        ULONG DmwrRequesterEnable : 1;
+        ULONG Rsvd : 31;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_EXPRESS_PASID_CAPABILITY_REGISTER
+{
+    struct
+    {
+        USHORT Rsvd : 1;
+        USHORT ExecutePermissionSupported : 1;
+        USHORT PrivilegedModeSupported : 1;
+        USHORT Rsvd2 : 5;
+        USHORT MaxPASIDWidth : 5;
+        USHORT Rsvd3 : 3;
+    };
+    USHORT AsUSHORT;
+};
+
+union _PCI_EXPRESS_PASID_CONTROL_REGISTER
+{
+    struct
+    {
+        USHORT PASIDEnable : 1;
+        USHORT ExecutePermissionEnable : 1;
+        USHORT PrivilegedModeEnable : 1;
+        USHORT Rsvd : 13;
+    };
+    USHORT AsUSHORT;
+};
+
+union _PCI_EXPRESS_PRI_CONTROL_REGISTER
+{
+    struct
+    {
+        USHORT Enable : 1;
+        USHORT Reset : 1;
+        USHORT Rsvd : 14;
+    };
+    USHORT AsUSHORT;
+};
+
+union _PCI_EXPRESS_PRI_STATUS_REGISTER
+{
+    struct
+    {
+        USHORT ResponseFailure : 1;
+        USHORT UnexpectedPageRequestGroupIndex : 1;
+        USHORT Rsvd : 6;
+        USHORT Stopped : 1;
+        USHORT Rsvd2 : 6;
+        USHORT PrgResponsePasidRequired : 1;
+    };
+    USHORT AsUSHORT;
+};
+
+union _PCI_EXPRESS_PTM_CAPABILITY_REGISTER
+{
+    struct
+    {
+        ULONG RequesterCapable : 1;
+        ULONG ResponderCapable : 1;
+        ULONG RootCapable : 1;
+        ULONG Rsvd : 5;
+        ULONG LocalGranularity : 8;
+        ULONG Rsvd2 : 16;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_EXPRESS_PTM_CONTROL_REGISTER
+{
+    struct
+    {
+        ULONG Enable : 1;
+        ULONG RootSelect : 1;
+        ULONG Rsvd : 6;
+        ULONG EffectiveGranularity : 8;
+        ULONG Rsvd2 : 16;
+    };
+    ULONG AsULONG;
+};
+
+struct _PCI_FIRMWARE_BUS_CAPS
+{
+    USHORT Type;
+    USHORT Length;
+    struct
+    {
+        UCHAR SixtyFourBitDevice : 1;
+        UCHAR PciXMode1EccCapable : 1;
+        UCHAR DeviceIdMessagingCapable : 1;
+        UCHAR ObffWakeSignalCapable : 1;
+        UCHAR Reserved1 : 4;
+    };
+    UCHAR CurrentSpeedAndMode;
+    UCHAR SupportedSpeedsAndModesLowByte;
+    UCHAR SupportedSpeedsAndModesHighByte;
+    UCHAR Voltage;
+    UCHAR Reserved2[7];
+};
+
+union _PCI_FPB_CAPABILITIES_REGISTER
+{
+    struct
+    {
+        ULONG RidDecodeMechanismSupported : 1;
+        ULONG MemLowDecodeMechanismSupported : 1;
+        ULONG MemHighDecodeMechanismSupported : 1;
+        ULONG NumSecDev : 5;
+        ULONG RidVectorSizeSupported : 3;
+        ULONG Rsvd0 : 5;
+        ULONG MemLowVectorSizeSupported : 3;
+        ULONG Rsvd1 : 5;
+        ULONG MemHighVectorSizeSupported : 3;
+        ULONG Rsvd2 : 5;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_FPB_MEM_HIGH_VECTOR_CONTROL1_REGISTER
+{
+    struct
+    {
+        ULONG MemHighDecodeMechanismEnable : 1;
+        ULONG Rsvd0 : 3;
+        ULONG MemHighVectorGranularity : 4;
+        ULONG Rsvd1 : 20;
+        ULONG MemHighVectorStartLower : 4;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_FPB_MEM_LOW_VECTOR_CONTROL_REGISTER
+{
+    struct
+    {
+        ULONG MemLowDecodeMechanismEnable : 1;
+        ULONG Rsvd0 : 3;
+        ULONG MemLowVectorGranularity : 4;
+        ULONG Rsvd1 : 12;
+        ULONG MemLowVectorStart : 12;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_FPB_RID_VECTOR_CONTROL1_REGISTER
+{
+    struct
+    {
+        ULONG RidDecodeMechanismEnable : 1;
+        ULONG Rsvd0 : 3;
+        ULONG RidVectorGranularity : 4;
+        ULONG Rsvd1 : 11;
+        ULONG RidVectorStart : 13;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_FPB_RID_VECTOR_CONTROL2_REGISTER
+{
+    struct
+    {
+        ULONG Rsvd0 : 3;
+        ULONG RidSecondaryStart : 13;
+        ULONG Rsvd1 : 16;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_FPB_VECTOR_ACCESS_CONTROL_REGISTER
+{
+    struct
+    {
+        ULONG VectorAccessOffset : 8;
+        ULONG Rsvd0 : 6;
+        ULONG VectorSelect : 2;
+        ULONG Rsvd1 : 16;
+    };
+    ULONG AsULONG;
+};
+
+struct _PCI_SEGMENT_BUS_NUMBER
+{
+    union
+    {
+        struct
+        {
+            ULONG BusNumber : 8;
+            ULONG SegmentNumber : 16;
+            ULONG Reserved : 8;
+        } bits;
+        ULONG AsULONG;
+    } u;
+};
+
+union _VIRTUAL_CHANNEL_CAPABILITIES1
+{
+    struct
+    {
+        ULONG ExtendedVCCount : 3;
+        ULONG RsvdP1 : 1;
+        ULONG LowPriorityExtendedVCCount : 3;
+        ULONG RsvdP2 : 1;
+        ULONG ReferenceClock : 2;
+        ULONG PortArbitrationTableEntrySize : 2;
+        ULONG RsvdP3 : 20;
+    };
+    ULONG AsULONG;
+};
+
+union _VIRTUAL_CHANNEL_CAPABILITIES2
+{
+    struct
+    {
+        ULONG VCArbitrationCapability : 8;
+        ULONG RsvdP : 16;
+        ULONG VCArbitrationTableOffset : 8;
+    };
+    ULONG AsULONG;
+};
+
+union _VIRTUAL_CHANNEL_CONTROL
+{
+    struct
+    {
+        USHORT LoadVCArbitrationTable : 1;
+        USHORT VCArbitrationSelect : 3;
+        USHORT RsvdP : 12;
+    };
+    USHORT AsUSHORT;
+};
+
+union _VIRTUAL_CHANNEL_STATUS
+{
+    struct
+    {
+        USHORT VCArbitrationTableStatus : 1;
+        USHORT RsvdZ : 15;
+    };
+    USHORT AsUSHORT;
+};
+
+union _VIRTUAL_RESOURCE_CAPABILITY
+{
+    struct
+    {
+        ULONG PortArbitrationCapability : 8;
+        ULONG RsvdP1 : 6;
+        ULONG Undefined : 1;
+        ULONG RejectSnoopTransactions : 1;
+        ULONG MaximumTimeSlots : 7;
+        ULONG RsvdP2 : 1;
+        ULONG PortArbitrationTableOffset : 8;
+    };
+    ULONG AsULONG;
+};
+
+union _VIRTUAL_RESOURCE_CONTROL
+{
+    struct
+    {
+        ULONG TcVcMap : 8;
+        ULONG RsvdP1 : 8;
+        ULONG LoadPortArbitrationTable : 1;
+        ULONG PortArbitrationSelect : 3;
+        ULONG RsvdP2 : 4;
+        ULONG VcID : 3;
+        ULONG RsvdP3 : 4;
+        ULONG VcEnable : 1;
+    };
+    ULONG AsULONG;
+};
+
+union _VIRTUAL_RESOURCE_STATUS
+{
+    struct
+    {
+        USHORT PortArbitrationTableStatus : 1;
+        USHORT VcNegotiationPending : 1;
+        USHORT RsvdZ : 14;
+    };
+    USHORT AsUSHORT;
+};
+
+typedef struct _PCI_ADVANCED_FEATURES_CAPABILITY PCI_ADVANCED_FEATURES_CAPABILITY;
+
+typedef union _PCI_EXPRESS_ACS_CAPABILITY_REGISTER PCI_EXPRESS_ACS_CAPABILITY_REGISTER;
+
+typedef union _PCI_EXPRESS_ACS_CONTROL PCI_EXPRESS_ACS_CONTROL;
+
+struct _PCI_EXPRESS_ACS_CAPABILITY
+{
+    PCI_EXPRESS_ENHANCED_CAPABILITY_HEADER Header;
+    PCI_EXPRESS_ACS_CAPABILITY_REGISTER Capability;
+    PCI_EXPRESS_ACS_CONTROL Control;
+    ULONG EgressControl[1];
+};
+
+typedef struct _PCI_EXPRESS_ACS_CAPABILITY PCI_EXPRESS_ACS_CAPABILITY;
+
+typedef union _PCI_EXPRESS_ATS_CONTROL_REGISTER PCI_EXPRESS_ATS_CONTROL_REGISTER;
+
+struct _PCI_EXPRESS_ATS_CAPABILITY
+{
+    PCI_EXPRESS_ENHANCED_CAPABILITY_HEADER Header;
+    PCI_EXPRESS_ATS_CAPABILITY_REGISTER Capability;
+    PCI_EXPRESS_ATS_CONTROL_REGISTER Control;
+};
+
+typedef struct _PCI_EXPRESS_ATS_CAPABILITY PCI_EXPRESS_ATS_CAPABILITY;
+
+typedef union _PCI_EXPRESS_DEVICE_CAPABILITIES_3_REGISTER PCI_EXPRESS_DEVICE_CAPABILITIES_3_REGISTER;
+
+typedef union _PCI_EXPRESS_DEVICE_CONTROL_3_REGISTER PCI_EXPRESS_DEVICE_CONTROL_3_REGISTER;
+
+struct _PCI_EXPRESS_DEVICE_3_EXTENDED_CAPABILITY
+{
+    PCI_EXPRESS_ENHANCED_CAPABILITY_HEADER Header;
+    PCI_EXPRESS_DEVICE_CAPABILITIES_3_REGISTER Capability;
+    PCI_EXPRESS_DEVICE_CONTROL_3_REGISTER Control;
+};
+
+typedef struct _PCI_EXPRESS_DEVICE_3_EXTENDED_CAPABILITY PCI_EXPRESS_DEVICE_3_EXTENDED_CAPABILITY;
+
+typedef union _PCI_EXPRESS_PASID_CAPABILITY_REGISTER PCI_EXPRESS_PASID_CAPABILITY_REGISTER;
+
+typedef union _PCI_EXPRESS_PASID_CONTROL_REGISTER PCI_EXPRESS_PASID_CONTROL_REGISTER;
+
+struct _PCI_EXPRESS_PASID_CAPABILITY
+{
+    PCI_EXPRESS_ENHANCED_CAPABILITY_HEADER Header;
+    PCI_EXPRESS_PASID_CAPABILITY_REGISTER Capability;
+    PCI_EXPRESS_PASID_CONTROL_REGISTER Control;
+};
+
+typedef struct _PCI_EXPRESS_PASID_CAPABILITY PCI_EXPRESS_PASID_CAPABILITY;
+
+typedef union _PCI_EXPRESS_PRI_CONTROL_REGISTER PCI_EXPRESS_PRI_CONTROL_REGISTER;
+
+typedef union _PCI_EXPRESS_PRI_STATUS_REGISTER PCI_EXPRESS_PRI_STATUS_REGISTER;
+
+struct _PCI_EXPRESS_PRI_CAPABILITY
+{
+    PCI_EXPRESS_ENHANCED_CAPABILITY_HEADER Header;
+    PCI_EXPRESS_PRI_CONTROL_REGISTER Control;
+    PCI_EXPRESS_PRI_STATUS_REGISTER Status;
+    ULONG PRCapacity;
+    ULONG PRAllocation;
+};
+
+typedef struct _PCI_EXPRESS_PRI_CAPABILITY PCI_EXPRESS_PRI_CAPABILITY;
+
+typedef union _PCI_EXPRESS_PTM_CAPABILITY_REGISTER PCI_EXPRESS_PTM_CAPABILITY_REGISTER;
+
+typedef union _PCI_EXPRESS_PTM_CONTROL_REGISTER PCI_EXPRESS_PTM_CONTROL_REGISTER;
+
+struct _PCI_EXPRESS_PTM_CAPABILITY
+{
+    PCI_EXPRESS_ENHANCED_CAPABILITY_HEADER Header;
+    PCI_EXPRESS_PTM_CAPABILITY_REGISTER PtmCapability;
+    PCI_EXPRESS_PTM_CONTROL_REGISTER PtmControl;
+};
+
+typedef struct _PCI_EXPRESS_PTM_CAPABILITY PCI_EXPRESS_PTM_CAPABILITY;
+
+typedef struct _PCI_FIRMWARE_BUS_CAPS PCI_FIRMWARE_BUS_CAPS;
+
+struct _PCI_FIRMWARE_BUS_CAPS_RETURN_BUFFER
+{
+    USHORT Version;
+    USHORT Status;
+    ULONG Length;
+    PCI_FIRMWARE_BUS_CAPS Caps;
+};
+
+typedef struct _PCI_FIRMWARE_BUS_CAPS_RETURN_BUFFER PCI_FIRMWARE_BUS_CAPS_RETURN_BUFFER;
+
+typedef union _PCI_FPB_CAPABILITIES_REGISTER PCI_FPB_CAPABILITIES_REGISTER;
+
+typedef union _PCI_FPB_MEM_HIGH_VECTOR_CONTROL1_REGISTER PCI_FPB_MEM_HIGH_VECTOR_CONTROL1_REGISTER;
+
+typedef union _PCI_FPB_MEM_LOW_VECTOR_CONTROL_REGISTER PCI_FPB_MEM_LOW_VECTOR_CONTROL_REGISTER;
+
+typedef union _PCI_FPB_RID_VECTOR_CONTROL1_REGISTER PCI_FPB_RID_VECTOR_CONTROL1_REGISTER;
+
+typedef union _PCI_FPB_RID_VECTOR_CONTROL2_REGISTER PCI_FPB_RID_VECTOR_CONTROL2_REGISTER;
+
+typedef union _PCI_FPB_VECTOR_ACCESS_CONTROL_REGISTER PCI_FPB_VECTOR_ACCESS_CONTROL_REGISTER;
+
+struct _PCI_FPB_CAPABILITY
+{
+    PCI_FPB_CAPABILITY_HEADER Header;
+    PCI_FPB_CAPABILITIES_REGISTER CapabilitiesRegister;
+    PCI_FPB_RID_VECTOR_CONTROL1_REGISTER RidVectorControl1Register;
+    PCI_FPB_RID_VECTOR_CONTROL2_REGISTER RidVectorControl2Register;
+    PCI_FPB_MEM_LOW_VECTOR_CONTROL_REGISTER MemLowVectorControlRegister;
+    PCI_FPB_MEM_HIGH_VECTOR_CONTROL1_REGISTER MemHighVectorControl1Register;
+    PCI_FPB_MEM_HIGH_VECTOR_CONTROL2_REGISTER MemHighVectorControl2Register;
+    PCI_FPB_VECTOR_ACCESS_CONTROL_REGISTER VectorAccessControlRegister;
+    PCI_FPB_VECTOR_ACCESS_DATA_REGISTER VectorAccessDataRegister;
+};
+
+typedef struct _PCI_FPB_CAPABILITY PCI_FPB_CAPABILITY;
+
+typedef struct _PCI_SEGMENT_BUS_NUMBER PCI_SEGMENT_BUS_NUMBER;
+
+typedef struct _PCI_ADVANCED_FEATURES_CAPABILITY *PPCI_ADVANCED_FEATURES_CAPABILITY;
+
+typedef struct _PCI_EXPRESS_ACS_CAPABILITY *PPCI_EXPRESS_ACS_CAPABILITY;
+
+typedef union _PCI_EXPRESS_ACS_CAPABILITY_REGISTER *PPCI_EXPRESS_ACS_CAPABILITY_REGISTER;
+
+typedef union _PCI_EXPRESS_ACS_CONTROL *PPCI_EXPRESS_ACS_CONTROL;
+
+typedef struct _PCI_EXPRESS_ATS_CAPABILITY *PPCI_EXPRESS_ATS_CAPABILITY;
+
+typedef union _PCI_EXPRESS_ATS_CONTROL_REGISTER *PPCI_EXPRESS_ATS_CONTROL_REGISTER;
+
+typedef struct _PCI_EXPRESS_DEVICE_3_EXTENDED_CAPABILITY *PPCI_EXPRESS_DEVICE_3_EXTENDED_CAPABILITY;
+
+typedef union _PCI_EXPRESS_DEVICE_CAPABILITIES_3_REGISTER *PPCI_EXPRESS_DEVICE_CAPABILITIES_3_REGISTER;
+
+typedef union _PCI_EXPRESS_DEVICE_CONTROL_3_REGISTER *PPCI_EXPRESS_DEVICE_CONTROL_3_REGISTER;
+
+typedef struct _PCI_EXPRESS_PASID_CAPABILITY *PPCI_EXPRESS_PASID_CAPABILITY;
+
+typedef union _PCI_EXPRESS_PASID_CAPABILITY_REGISTER *PPCI_EXPRESS_PASID_CAPABILITY_REGISTER;
+
+typedef union _PCI_EXPRESS_PASID_CONTROL_REGISTER *PPCI_EXPRESS_PASID_CONTROL_REGISTER;
+
+typedef struct _PCI_EXPRESS_PRI_CAPABILITY *PPCI_EXPRESS_PRI_CAPABILITY;
+
+typedef union _PCI_EXPRESS_PRI_CONTROL_REGISTER *PPCI_EXPRESS_PRI_CONTROL_REGISTER;
+
+typedef union _PCI_EXPRESS_PRI_STATUS_REGISTER *PPCI_EXPRESS_PRI_STATUS_REGISTER;
+
+typedef struct _PCI_EXPRESS_PTM_CAPABILITY *PPCI_EXPRESS_PTM_CAPABILITY;
+
+typedef union _PCI_EXPRESS_PTM_CAPABILITY_REGISTER *PPCI_EXPRESS_PTM_CAPABILITY_REGISTER;
+
+typedef union _PCI_EXPRESS_PTM_CONTROL_REGISTER *PPCI_EXPRESS_PTM_CONTROL_REGISTER;
+
+typedef struct _PCI_FIRMWARE_BUS_CAPS *PPCI_FIRMWARE_BUS_CAPS;
+
+typedef struct _PCI_FIRMWARE_BUS_CAPS_RETURN_BUFFER *PPCI_FIRMWARE_BUS_CAPS_RETURN_BUFFER;
+
+typedef union _PCI_FPB_CAPABILITIES_REGISTER *PPCI_FPB_CAPABILITIES_REGISTER;
+
+typedef struct _PCI_FPB_CAPABILITY *PPCI_FPB_CAPABILITY;
+
+typedef union _PCI_FPB_MEM_HIGH_VECTOR_CONTROL1_REGISTER *PPCI_FPB_MEM_HIGH_VECTOR_CONTROL1_REGISTER;
+
+typedef union _PCI_FPB_MEM_LOW_VECTOR_CONTROL_REGISTER *PPCI_FPB_MEM_LOW_VECTOR_CONTROL_REGISTER;
+
+typedef union _PCI_FPB_RID_VECTOR_CONTROL1_REGISTER *PPCI_FPB_RID_VECTOR_CONTROL1_REGISTER;
+
+typedef union _PCI_FPB_RID_VECTOR_CONTROL2_REGISTER *PPCI_FPB_RID_VECTOR_CONTROL2_REGISTER;
+
+typedef union _PCI_FPB_VECTOR_ACCESS_CONTROL_REGISTER *PPCI_FPB_VECTOR_ACCESS_CONTROL_REGISTER;
+
+typedef struct _PCI_SEGMENT_BUS_NUMBER *PPCI_SEGMENT_BUS_NUMBER;
+
+typedef union _VIRTUAL_CHANNEL_CAPABILITIES1 *PVIRTUAL_CHANNEL_CAPABILITIES1;
+
+typedef union _VIRTUAL_CHANNEL_CAPABILITIES2 *PVIRTUAL_CHANNEL_CAPABILITIES2;
+
+typedef union _VIRTUAL_CHANNEL_CONTROL *PVIRTUAL_CHANNEL_CONTROL;
+
+typedef union _VIRTUAL_CHANNEL_STATUS *PVIRTUAL_CHANNEL_STATUS;
+
+typedef union _VIRTUAL_RESOURCE_CAPABILITY *PVIRTUAL_RESOURCE_CAPABILITY;
+
+typedef union _VIRTUAL_RESOURCE_CONTROL *PVIRTUAL_RESOURCE_CONTROL;
+
+typedef union _VIRTUAL_RESOURCE_STATUS *PVIRTUAL_RESOURCE_STATUS;
+
+typedef union _VIRTUAL_CHANNEL_CAPABILITIES1 VIRTUAL_CHANNEL_CAPABILITIES1;
+
+typedef union _VIRTUAL_CHANNEL_CAPABILITIES2 VIRTUAL_CHANNEL_CAPABILITIES2;
+
+typedef union _VIRTUAL_CHANNEL_CONTROL VIRTUAL_CHANNEL_CONTROL;
+
+typedef union _VIRTUAL_CHANNEL_STATUS VIRTUAL_CHANNEL_STATUS;
+
+typedef union _VIRTUAL_RESOURCE_CAPABILITY VIRTUAL_RESOURCE_CAPABILITY;
+
+typedef union _VIRTUAL_RESOURCE_CONTROL VIRTUAL_RESOURCE_CONTROL;
+
+typedef union _VIRTUAL_RESOURCE_STATUS VIRTUAL_RESOURCE_STATUS;
+
+struct _VIRTUAL_RESOURCE
+{
+    VIRTUAL_RESOURCE_CAPABILITY Capability;
+    VIRTUAL_RESOURCE_CONTROL Control;
+    USHORT RsvdP;
+    VIRTUAL_RESOURCE_STATUS Status;
+};
+
+typedef struct _VIRTUAL_RESOURCE *PVIRTUAL_RESOURCE;
+
+typedef struct _VIRTUAL_RESOURCE VIRTUAL_RESOURCE;
+
+struct _PCI_EXPRESS_VIRTUAL_CHANNEL_CAPABILITY
+{
+    PCI_EXPRESS_ENHANCED_CAPABILITY_HEADER Header;
+    VIRTUAL_CHANNEL_CAPABILITIES1 Capabilities1;
+    VIRTUAL_CHANNEL_CAPABILITIES2 Capabilities2;
+    VIRTUAL_CHANNEL_CONTROL Control;
+    VIRTUAL_CHANNEL_STATUS Status;
+    VIRTUAL_RESOURCE Resource[8];
+};
+
+typedef struct _PCI_EXPRESS_VIRTUAL_CHANNEL_CAPABILITY PCI_EXPRESS_VIRTUAL_CHANNEL_CAPABILITY;
+
+typedef struct _PCI_EXPRESS_VIRTUAL_CHANNEL_CAPABILITY *PPCI_EXPRESS_VIRTUAL_CHANNEL_CAPABILITY;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+LONG FASTCALL AddRaw(volatile LONG *Destination, LONG Value);
+LONG64 FASTCALL AddRaw64(volatile LONG64 *Destination, LONG64 Value);
+ULONG64 FASTCALL AddULong64Raw(volatile ULONG64 *Destination, ULONG64 Value);
+ULONG FASTCALL AddULongRaw(volatile ULONG *Destination, ULONG Value);
+void FASTCALL BarrierAfterRead(void);
+LONG FASTCALL IncrementRaw(volatile LONG *Destination);
+LONG64 FASTCALL IncrementRaw64(volatile LONG64 *Destination);
+ULONG64 FASTCALL IncrementULong64Raw(volatile ULONG64 *Destination);
+ULONG FASTCALL IncrementULongRaw(volatile ULONG *Destination);
+LONG64 MultiplyExtract128(LONG64 Multiplier, LONG64 Multiplicand, UCHAR Shift);
+UCHAR FASTCALL ReadBooleanRaw(const volatile BOOLEAN *Source);
+INT32 FASTCALL ReadInt32Acquire(const volatile INT32 *Source);
+INT32 FASTCALL ReadInt32NoFence(const volatile INT32 *Source);
+INT32 FASTCALL ReadInt32Raw(const volatile INT32 *Source);
+UINT32 FASTCALL ReadUInt32Acquire(const volatile UINT32 *Source);
+UINT32 FASTCALL ReadUInt32NoFence(const volatile UINT32 *Source);
+UINT32 FASTCALL ReadUInt32Raw(const volatile UINT32 *Source);
+ULONG64 UnsignedMultiply128(ULONG64 Multiplier, ULONG64 Multiplicand, ULONG64 *HighProduct);
+ULONG64 UnsignedMultiplyExtract128(ULONG64 Multiplier, ULONG64 Multiplicand, UCHAR Shift);
+void FASTCALL WriteInt32NoFence(volatile INT32 *Destination, INT32 Value);
+void FASTCALL WriteInt32Raw(volatile INT32 *Destination, INT32 Value);
+void FASTCALL WriteInt32Release(volatile INT32 *Destination, INT32 Value);
+void FASTCALL WriteUInt32NoFence(volatile UINT32 *Destination, UINT32 Value);
+void FASTCALL WriteUInt32Raw(volatile UINT32 *Destination, UINT32 Value);
+void FASTCALL WriteUInt32Release(volatile UINT32 *Destination, UINT32 Value);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define CacheLineFlushAddress) _mm_clflush(Address)
+#define COMPILETIME_OR_6FLAGSa, b, c, d, e, f) ((UINT) (a) | (UINT) (b) | (UINT) (c) | (UINT) (d) | (UINT) (e) | (UINT) (f))
+#define DECLSPEC_SAFEBUFFERS 0
+#define DEPRECATED_NO_MESSAGE_STDAPI_type) EXTERN_C __declspec(deprecated) type STDAPICALLTYPE
+#define DEPRECATED_NO_MESSAGE_STDAPIV_type) EXTERN_C __declspec(deprecated) type STDAPIVCALLTYPE
+#define DEPRECATED_STDAPImessage) EXTERN_C __declspec(deprecated(message)) HRESULT STDAPICALLTYPE
+#define DEPRECATED_STDAPI_type, message) EXTERN_C __declspec(deprecated(message)) type STDAPICALLTYPE
+#define DEPRECATED_STDAPIVmessage) EXTERN_C __declspec(deprecated(message)) HRESULT STDAPIVCALLTYPE
+#define DEPRECATED_STDAPIV_type, message) EXTERN_C __declspec(deprecated(message)) type STDAPIVCALLTYPE
+#define STDAPI_CHPE_PATCHABLE_type) EXTERN_C DECLSPEC_CHPE_PATCHABLE type STDAPICALLTYPE
+
+#define CacheLineFlushAddress) _mm_clflush(Address)
+#define COMPILETIME_OR_6FLAGSa, b, c, d, e, f) ((UINT) (a) | (UINT) (b) | (UINT) (c) | (UINT) (d) | (UINT) (e) | (UINT) (f))
+#define DECLSPEC_GUARDNOCF 0
+#define DEPRECATED_NO_MESSAGE_STDAPI_type) EXTERN_C __declspec(deprecated) type STDAPICALLTYPE
+#define DEPRECATED_NO_MESSAGE_STDAPIV_type) EXTERN_C __declspec(deprecated) type STDAPIVCALLTYPE
+#define DEPRECATED_STDAPImessage) EXTERN_C __declspec(deprecated(message)) HRESULT STDAPICALLTYPE
+#define DEPRECATED_STDAPI_type, message) EXTERN_C __declspec(deprecated(message)) type STDAPICALLTYPE
+#define DEPRECATED_STDAPIVmessage) EXTERN_C __declspec(deprecated(message)) HRESULT STDAPIVCALLTYPE
+#define DEPRECATED_STDAPIV_type, message) EXTERN_C __declspec(deprecated(message)) type STDAPIVCALLTYPE
+#define STDAPI_CHPE_PATCHABLE_type) EXTERN_C DECLSPEC_CHPE_PATCHABLE type STDAPICALLTYPE
 
 #endif /* __MINIPORT_H */

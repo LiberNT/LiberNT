@@ -156,7 +156,8 @@ typedef enum
     WMI_ENABLE_COLLECTION,
     WMI_DISABLE_COLLECTION,
     WMI_REGINFO,
-    WMI_EXECUTE_METHOD
+    WMI_EXECUTE_METHOD,
+    WMI_CAPTURE_STATE = 0xA,
 } WMIDPREQUESTCODE;
 
 #define WMIGUID_QUERY                 0x0001
@@ -211,5 +212,21 @@ typedef enum
 typedef struct tagWNODE_EVENT_ITEM {
   struct _WNODE_HEADER WnodeHeader;
 } WNODE_EVENT_ITEM, *PWNODE_EVENT_ITEM;
+
+struct tagWNODE_EVENT_REFERENCE
+{
+    struct _WNODE_HEADER WnodeHeader;
+    GUID TargetGuid;
+    ULONG TargetDataBlockSize;
+    union
+    {
+        ULONG TargetInstanceIndex;
+        WCHAR TargetInstanceName[];
+    };
+};
+
+typedef struct tagWNODE_EVENT_REFERENCE *PWNODE_EVENT_REFERENCE;
+
+typedef struct tagWNODE_EVENT_REFERENCE WNODE_EVENT_REFERENCE;
 
 #endif /* _WMISTR_ */

@@ -1614,159 +1614,19 @@ typedef struct _DEVICE_DSM_NVCACHE_CHANGE_PRIORITY_PARAMETERS {
 #define TELEMETRY_COMMAND_SIZE 16
 #endif
 
-typedef enum _STORAGE_SET_TYPE {
-    PropertyStandardSet = 0,
-    PropertyExistsSet = 1,
-    PropertySetMaxDefined = 2
-} STORAGE_SET_TYPE, *PSTORAGE_SET_TYPE;
+typedef enum _BPIO_INFLAGS {
+    BPIO_INFL_NONE = 0
+} BPIO_INFLAGS;
 
-typedef enum _STORAGE_RPMB_FRAME_TYPE {
-    StorageRpmbFrameTypeUnknown = 0,
-    StorageRpmbFrameTypeStandard = 1,
-    StorageRpmbFrameTypeMax = 2
-} STORAGE_RPMB_FRAME_TYPE, *PSTORAGE_RPMB_FRAME_TYPE;
+typedef enum _BPIO_OPERATIONS {
+    BPIO_OP_ENABLE = 1,
+    BPIO_OP_DISABLE = 2,
+    BPIO_OP_QUERY = 3
+} BPIO_OPERATIONS;
 
-typedef enum _STORAGE_ICE_TYPE {
-    StorageIceTypeUnknown = 0,
-    StorageIceTypeUfs = 1,
-    StorageIceTypeNvme = 2
-} STORAGE_ICE_TYPE, *PSTORAGE_ICE_TYPE;
-
-typedef enum _STORAGE_TIER_MEDIA_TYPE {
-    StorageTierMediaTypeUnspecified = 0,
-    StorageTierMediaTypeDisk = 1,
-    StorageTierMediaTypeSsd = 2,
-    StorageTierMediaTypeScm = 4,
-    StorageTierMediaTypeMax = 5
-} STORAGE_TIER_MEDIA_TYPE, *PSTORAGE_TIER_MEDIA_TYPE;
-
-typedef enum _STORAGE_TIER_CLASS {
-    StorageTierClassUnspecified = 0,
-    StorageTierClassCapacity = 1,
-    StorageTierClassPerformance = 2,
-    StorageTierClassMax = 3
-} STORAGE_TIER_CLASS, *PSTORAGE_TIER_CLASS;
-
-typedef enum _STORAGE_PROTOCOL_NVME_DATA_TYPE {
-    NVMeDataTypeUnknown = 0,
-    NVMeDataTypeIdentify = 1,
-    NVMeDataTypeLogPage = 2,
-    NVMeDataTypeFeature = 3,
-    NVMeDataTypeLogPageEx = 4,
-    NVMeDataTypeFeatureEx = 5
-} STORAGE_PROTOCOL_NVME_DATA_TYPE, *PSTORAGE_PROTOCOL_NVME_DATA_TYPE;
-
-typedef enum _STORAGE_PROTOCOL_UFS_DATA_TYPE {
-    UfsDataTypeUnknown = 0,
-    UfsDataTypeQueryDescriptor = 1,
-    UfsDataTypeQueryAttribute = 2,
-    UfsDataTypeQueryFlag = 3,
-    UfsDataTypeQueryDmeAttribute = 4,
-    UfsDataTypeQueryDmePeerAttribute = 5,
-    UfsDataTypeMax = 6
-} STORAGE_PROTOCOL_UFS_DATA_TYPE, *PSTORAGE_PROTOCOL_UFS_DATA_TYPE;
-
-typedef enum _STORAGE_DISK_HEALTH_STATUS {
-    DiskHealthUnknown = 0,
-    DiskHealthUnhealthy = 1,
-    DiskHealthWarning = 2,
-    DiskHealthHealthy = 3,
-    DiskHealthMax = 4
-} STORAGE_DISK_HEALTH_STATUS, *PSTORAGE_DISK_HEALTH_STATUS;
-
-typedef enum _STORAGE_DISK_OPERATIONAL_STATUS {
-    DiskOpStatusNone = 0,
-    DiskOpStatusUnknown = 1,
-    DiskOpStatusOk = 2,
-    DiskOpStatusPredictingFailure = 3,
-    DiskOpStatusInService = 4,
-    DiskOpStatusHardwareError = 5,
-    DiskOpStatusNotUsable = 6,
-    DiskOpStatusTransientError = 7,
-    DiskOpStatusMissing = 8
-} STORAGE_DISK_OPERATIONAL_STATUS, *PSTORAGE_DISK_OPERATIONAL_STATUS;
-
-typedef enum _STORAGE_OPERATIONAL_STATUS_REASON {
-    DiskOpReasonUnknown = 0,
-    DiskOpReasonScsiSenseCode = 1,
-    DiskOpReasonMedia = 2,
-    DiskOpReasonIo = 3,
-    DiskOpReasonThresholdExceeded = 4,
-    DiskOpReasonLostData = 5,
-    DiskOpReasonEnergySource = 6,
-    DiskOpReasonConfiguration = 7,
-    DiskOpReasonDeviceController = 8,
-    DiskOpReasonMediaController = 9,
-    DiskOpReasonComponent = 10,
-    DiskOpReasonNVDIMM_N = 11,
-    DiskOpReasonBackgroundOperation = 12,
-    DiskOpReasonInvalidFirmware = 13,
-    DiskOpReasonHealthCheck = 14,
-    DiskOpReasonLostDataPersistence = 15,
-    DiskOpReasonDisabledByPlatform = 16,
-    DiskOpReasonLostWritePersistence = 17,
-    DiskOpReasonDataPersistenceLossImminent = 18,
-    DiskOpReasonWritePersistenceLossImminent = 19,
-    DiskOpReasonMax = 20
-} STORAGE_OPERATIONAL_STATUS_REASON, *PSTORAGE_OPERATIONAL_STATUS_REASON;
-
-typedef enum _STORAGE_ZONED_DEVICE_TYPES {
-    ZonedDeviceTypeUnknown = 0,
-    ZonedDeviceTypeHostManaged = 1,
-    ZonedDeviceTypeHostAware = 2,
-    ZonedDeviceTypeDeviceManaged = 3
-} STORAGE_ZONED_DEVICE_TYPES, *PSTORAGE_ZONED_DEVICE_TYPES;
-
-typedef enum _STORAGE_ZONE_TYPES {
-    ZoneTypeUnknown = 0,
-    ZoneTypeConventional = 1,
-    ZoneTypeSequentialWriteRequired = 2,
-    ZoneTypeSequentialWritePreferred = 3,
-    ZoneTypeMax = 4
-} STORAGE_ZONE_TYPES, *PSTORAGE_ZONE_TYPES;
-
-typedef enum _STORAGE_STACK_TYPE {
-    StorageStackTypeUnknown = 0,
-    StorageStackTypeScsi = 1,
-    StorageStackTypeNVMe = 2
-} STORAGE_STACK_TYPE, *PSTORAGE_STACK_TYPE;
-
-typedef enum _STORAGE_ENCRYPTION_TYPE {
-    StorageEncryptionTypeUnknown = 0,
-    StorageEncryptionTypeEDrive = 1,
-    StorageEncryptionTypeTcgOpal = 2
-} STORAGE_ENCRYPTION_TYPE, *PSTORAGE_ENCRYPTION_TYPE;
-
-typedef enum _STORAGE_ZONES_ATTRIBUTES {
-    ZonesAttributeTypeAndLengthMayDifferent = 0,
-    ZonesAttributeTypeSameLengthSame = 1,
-    ZonesAttributeTypeSameLastZoneLengthDifferent = 2,
-    ZonesAttributeTypeMayDifferentLengthSame = 3
-} STORAGE_ZONES_ATTRIBUTES, *PSTORAGE_ZONES_ATTRIBUTES;
-
-typedef enum _STORAGE_ZONE_CONDITION {
-    ZoneConditionConventional = 0,
-    ZoneConditionEmpty = 1,
-    ZoneConditionImplicitlyOpened = 2,
-    ZoneConditionExplicitlyOpened = 3,
-    ZoneConditionClosed = 4,
-    ZoneConditionReadOnly = 13,
-    ZoneConditionFull = 14,
-    ZoneConditionOffline = 15
-} STORAGE_ZONE_CONDITION, *PSTORAGE_ZONE_CONDITION;
-
-typedef enum _STORAGE_DIAGNOSTIC_LEVEL {
-    StorageDiagnosticLevelDefault = 0,
-    StorageDiagnosticLevelMax = 1
-} STORAGE_DIAGNOSTIC_LEVEL, *PSTORAGE_DIAGNOSTIC_LEVEL;
-
-typedef enum _STORAGE_DIAGNOSTIC_TARGET_TYPE {
-    StorageDiagnosticTargetTypeUndefined = 0,
-    StorageDiagnosticTargetTypePort = 1,
-    StorageDiagnosticTargetTypeMiniport = 2,
-    StorageDiagnosticTargetTypeHbaFirmware = 3,
-    StorageDiagnosticTargetTypeMax = 4
-} STORAGE_DIAGNOSTIC_TARGET_TYPE, *PSTORAGE_DIAGNOSTIC_TARGET_TYPE;
+typedef enum _BPIO_OUTFLAGS {
+    BPIO_OUTFL_NONE = 0
+} BPIO_OUTFLAGS;
 
 typedef enum _DEVICE_INTERNAL_STATUS_DATA_REQUEST_TYPE {
     DeviceInternalStatusDataRequestTypeUndefined = 0,
@@ -1785,32 +1645,17 @@ typedef enum _DEVICE_INTERNAL_STATUS_DATA_SET {
     DeviceStatusDataSetMax = 5
 } DEVICE_INTERNAL_STATUS_DATA_SET, *PDEVICE_INTERNAL_STATUS_DATA_SET;
 
-typedef enum _STORAGE_SANITIZE_METHOD {
-    StorageSanitizeMethodDefault = 0,
-    StorageSanitizeMethodBlockErase = 1,
-    StorageSanitizeMethodCryptoErase = 2
-} STORAGE_SANITIZE_METHOD, *PSTORAGE_SANITIZE_METHOD;
-
 typedef enum _DEVICEDUMP_COLLECTION_TYPE {
     TCCollectionBugCheck = 1,
     TCCollectionApplicationRequested = 2,
     TCCollectionDeviceRequested = 3
 } DEVICEDUMP_COLLECTION_TYPEIDE_NOTIFICATION_TYPE, *PDEVICEDUMP_COLLECTION_TYPE;
 
-typedef enum _STORAGE_DEVICE_POWER_CAP_UNITS {
-    StorageDevicePowerCapUnitsPercent = 0,
-    StorageDevicePowerCapUnitsMilliwatts = 1
-} STORAGE_DEVICE_POWER_CAP_UNITS, *PSTORAGE_DEVICE_POWER_CAP_UNITS;
-
-typedef enum _STORAGE_RPMB_COMMAND_TYPE {
-    StorRpmbProgramAuthKey = 1,
-    StorRpmbQueryWriteCounter = 2,
-    StorRpmbAuthenticatedWrite = 3,
-    StorRpmbAuthenticatedRead = 4,
-    StorRpmbReadResultRequest = 5,
-    StorRpmbAuthenticatedDeviceConfigWrite = 6,
-    StorRpmbAuthenticatedDeviceConfigRead = 7
-} STORAGE_RPMB_COMMAND_TYPE, *PSTORAGE_RPMB_COMMAND_TYPE;
+typedef enum _STORAGE_ATTRIBUTE_MGMT_ACTION {
+    StorAttributeMgmt_ClearAttribute = 0,
+    StorAttributeMgmt_SetAttribute = 1,
+    StorAttributeMgmt_ResetAttribute = 2
+} STORAGE_ATTRIBUTE_MGMT_ACTION, *PSTORAGE_ATTRIBUTE_MGMT_ACTION;
 
 typedef enum _STORAGE_COUNTER_TYPE {
     StorageCounterTypeUnknown = 0,
@@ -1837,185 +1682,238 @@ typedef enum _STORAGE_COUNTER_TYPE {
     StorageCounterTypeMax = 21
 } STORAGE_COUNTER_TYPE, *PSTORAGE_COUNTER_TYPE;
 
-typedef enum _STORAGE_ATTRIBUTE_MGMT_ACTION {
-    StorAttributeMgmt_ClearAttribute = 0,
-    StorAttributeMgmt_SetAttribute = 1,
-    StorAttributeMgmt_ResetAttribute = 2
-} STORAGE_ATTRIBUTE_MGMT_ACTION, *PSTORAGE_ATTRIBUTE_MGMT_ACTION;
+typedef enum _STORAGE_DEVICE_POWER_CAP_UNITS {
+    StorageDevicePowerCapUnitsPercent = 0,
+    StorageDevicePowerCapUnitsMilliwatts = 1
+} STORAGE_DEVICE_POWER_CAP_UNITS, *PSTORAGE_DEVICE_POWER_CAP_UNITS;
 
-typedef enum _BPIO_OPERATIONS {
-    BPIO_OP_ENABLE = 1,
-    BPIO_OP_DISABLE = 2,
-    BPIO_OP_QUERY = 3
-} BPIO_OPERATIONS;
+typedef enum _STORAGE_DIAGNOSTIC_LEVEL {
+    StorageDiagnosticLevelDefault = 0,
+    StorageDiagnosticLevelMax = 1
+} STORAGE_DIAGNOSTIC_LEVEL, *PSTORAGE_DIAGNOSTIC_LEVEL;
 
-typedef enum _BPIO_INFLAGS {
-    BPIO_INFL_NONE = 0
-} BPIO_INFLAGS;
+typedef enum _STORAGE_DIAGNOSTIC_TARGET_TYPE {
+    StorageDiagnosticTargetTypeUndefined = 0,
+    StorageDiagnosticTargetTypePort = 1,
+    StorageDiagnosticTargetTypeMiniport = 2,
+    StorageDiagnosticTargetTypeHbaFirmware = 3,
+    StorageDiagnosticTargetTypeMax = 4
+} STORAGE_DIAGNOSTIC_TARGET_TYPE, *PSTORAGE_DIAGNOSTIC_TARGET_TYPE;
 
-typedef enum _BPIO_OUTFLAGS {
-    BPIO_OUTFL_NONE = 0
-} BPIO_OUTFLAGS;
+typedef enum _STORAGE_DISK_HEALTH_STATUS {
+    DiskHealthUnknown = 0,
+    DiskHealthUnhealthy = 1,
+    DiskHealthWarning = 2,
+    DiskHealthHealthy = 3,
+    DiskHealthMax = 4
+} STORAGE_DISK_HEALTH_STATUS, *PSTORAGE_DISK_HEALTH_STATUS;
+
+typedef enum _STORAGE_DISK_OPERATIONAL_STATUS {
+    DiskOpStatusNone = 0,
+    DiskOpStatusUnknown = 1,
+    DiskOpStatusOk = 2,
+    DiskOpStatusPredictingFailure = 3,
+    DiskOpStatusInService = 4,
+    DiskOpStatusHardwareError = 5,
+    DiskOpStatusNotUsable = 6,
+    DiskOpStatusTransientError = 7,
+    DiskOpStatusMissing = 8
+} STORAGE_DISK_OPERATIONAL_STATUS, *PSTORAGE_DISK_OPERATIONAL_STATUS;
+
+typedef enum _STORAGE_ENCRYPTION_TYPE {
+    StorageEncryptionTypeUnknown = 0,
+    StorageEncryptionTypeEDrive = 1,
+    StorageEncryptionTypeTcgOpal = 2
+} STORAGE_ENCRYPTION_TYPE, *PSTORAGE_ENCRYPTION_TYPE;
+
+typedef enum _STORAGE_ICE_TYPE {
+    StorageIceTypeUnknown = 0,
+    StorageIceTypeUfs = 1,
+    StorageIceTypeNvme = 2
+} STORAGE_ICE_TYPE, *PSTORAGE_ICE_TYPE;
+
+typedef enum _STORAGE_OPERATIONAL_STATUS_REASON {
+    DiskOpReasonUnknown = 0,
+    DiskOpReasonScsiSenseCode = 1,
+    DiskOpReasonMedia = 2,
+    DiskOpReasonIo = 3,
+    DiskOpReasonThresholdExceeded = 4,
+    DiskOpReasonLostData = 5,
+    DiskOpReasonEnergySource = 6,
+    DiskOpReasonConfiguration = 7,
+    DiskOpReasonDeviceController = 8,
+    DiskOpReasonMediaController = 9,
+    DiskOpReasonComponent = 10,
+    DiskOpReasonNVDIMM_N = 11,
+    DiskOpReasonBackgroundOperation = 12,
+    DiskOpReasonInvalidFirmware = 13,
+    DiskOpReasonHealthCheck = 14,
+    DiskOpReasonLostDataPersistence = 15,
+    DiskOpReasonDisabledByPlatform = 16,
+    DiskOpReasonLostWritePersistence = 17,
+    DiskOpReasonDataPersistenceLossImminent = 18,
+    DiskOpReasonWritePersistenceLossImminent = 19,
+    DiskOpReasonMax = 20
+} STORAGE_OPERATIONAL_STATUS_REASON, *PSTORAGE_OPERATIONAL_STATUS_REASON;
+
+typedef enum _STORAGE_PROTOCOL_NVME_DATA_TYPE {
+    NVMeDataTypeUnknown = 0,
+    NVMeDataTypeIdentify = 1,
+    NVMeDataTypeLogPage = 2,
+    NVMeDataTypeFeature = 3,
+    NVMeDataTypeLogPageEx = 4,
+    NVMeDataTypeFeatureEx = 5
+} STORAGE_PROTOCOL_NVME_DATA_TYPE, *PSTORAGE_PROTOCOL_NVME_DATA_TYPE;
+
+typedef enum _STORAGE_PROTOCOL_UFS_DATA_TYPE {
+    UfsDataTypeUnknown = 0,
+    UfsDataTypeQueryDescriptor = 1,
+    UfsDataTypeQueryAttribute = 2,
+    UfsDataTypeQueryFlag = 3,
+    UfsDataTypeQueryDmeAttribute = 4,
+    UfsDataTypeQueryDmePeerAttribute = 5,
+    UfsDataTypeMax = 6
+} STORAGE_PROTOCOL_UFS_DATA_TYPE, *PSTORAGE_PROTOCOL_UFS_DATA_TYPE;
+
+typedef enum _STORAGE_RPMB_COMMAND_TYPE {
+    StorRpmbProgramAuthKey = 1,
+    StorRpmbQueryWriteCounter = 2,
+    StorRpmbAuthenticatedWrite = 3,
+    StorRpmbAuthenticatedRead = 4,
+    StorRpmbReadResultRequest = 5,
+    StorRpmbAuthenticatedDeviceConfigWrite = 6,
+    StorRpmbAuthenticatedDeviceConfigRead = 7
+} STORAGE_RPMB_COMMAND_TYPE, *PSTORAGE_RPMB_COMMAND_TYPE;
+
+typedef enum _STORAGE_RPMB_FRAME_TYPE {
+    StorageRpmbFrameTypeUnknown = 0,
+    StorageRpmbFrameTypeStandard = 1,
+    StorageRpmbFrameTypeMax = 2
+} STORAGE_RPMB_FRAME_TYPE, *PSTORAGE_RPMB_FRAME_TYPE;
+
+typedef enum _STORAGE_SANITIZE_METHOD {
+    StorageSanitizeMethodDefault = 0,
+    StorageSanitizeMethodBlockErase = 1,
+    StorageSanitizeMethodCryptoErase = 2
+} STORAGE_SANITIZE_METHOD, *PSTORAGE_SANITIZE_METHOD;
+
+typedef enum _STORAGE_SET_TYPE {
+    PropertyStandardSet = 0,
+    PropertyExistsSet = 1,
+    PropertySetMaxDefined = 2
+} STORAGE_SET_TYPE, *PSTORAGE_SET_TYPE;
+
+typedef enum _STORAGE_STACK_TYPE {
+    StorageStackTypeUnknown = 0,
+    StorageStackTypeScsi = 1,
+    StorageStackTypeNVMe = 2
+} STORAGE_STACK_TYPE, *PSTORAGE_STACK_TYPE;
+
+typedef enum _STORAGE_TIER_CLASS {
+    StorageTierClassUnspecified = 0,
+    StorageTierClassCapacity = 1,
+    StorageTierClassPerformance = 2,
+    StorageTierClassMax = 3
+} STORAGE_TIER_CLASS, *PSTORAGE_TIER_CLASS;
+
+typedef enum _STORAGE_TIER_MEDIA_TYPE {
+    StorageTierMediaTypeUnspecified = 0,
+    StorageTierMediaTypeDisk = 1,
+    StorageTierMediaTypeSsd = 2,
+    StorageTierMediaTypeScm = 4,
+    StorageTierMediaTypeMax = 5
+} STORAGE_TIER_MEDIA_TYPE, *PSTORAGE_TIER_MEDIA_TYPE;
+
+typedef enum _STORAGE_ZONE_CONDITION {
+    ZoneConditionConventional = 0,
+    ZoneConditionEmpty = 1,
+    ZoneConditionImplicitlyOpened = 2,
+    ZoneConditionExplicitlyOpened = 3,
+    ZoneConditionClosed = 4,
+    ZoneConditionReadOnly = 13,
+    ZoneConditionFull = 14,
+    ZoneConditionOffline = 15
+} STORAGE_ZONE_CONDITION, *PSTORAGE_ZONE_CONDITION;
+
+typedef enum _STORAGE_ZONE_TYPES {
+    ZoneTypeUnknown = 0,
+    ZoneTypeConventional = 1,
+    ZoneTypeSequentialWriteRequired = 2,
+    ZoneTypeSequentialWritePreferred = 3,
+    ZoneTypeMax = 4
+} STORAGE_ZONE_TYPES, *PSTORAGE_ZONE_TYPES;
+
+typedef enum _STORAGE_ZONED_DEVICE_TYPES {
+    ZonedDeviceTypeUnknown = 0,
+    ZonedDeviceTypeHostManaged = 1,
+    ZonedDeviceTypeHostAware = 2,
+    ZonedDeviceTypeDeviceManaged = 3
+} STORAGE_ZONED_DEVICE_TYPES, *PSTORAGE_ZONED_DEVICE_TYPES;
+
+typedef enum _STORAGE_ZONES_ATTRIBUTES {
+    ZonesAttributeTypeAndLengthMayDifferent = 0,
+    ZonesAttributeTypeSameLengthSame = 1,
+    ZonesAttributeTypeSameLastZoneLengthDifferent = 2,
+    ZonesAttributeTypeMayDifferentLengthSame = 3
+} STORAGE_ZONES_ATTRIBUTES, *PSTORAGE_ZONES_ATTRIBUTES;
 
 typedef ULONG DEVICE_DSM_ACTION;
-typedef struct _DEVICE_DATA_SET_RANGE DEVICE_DSM_RANGE;
-typedef struct _DEVICE_DATA_SET_RANGE * PDEVICE_DSM_RANGE;
 typedef struct _DEVICE_MANAGE_DATA_SET_ATTRIBUTES DEVICE_DSM_INPUT;
-typedef struct _DEVICE_MANAGE_DATA_SET_ATTRIBUTES * PDEVICE_DSM_INPUT;
 typedef struct _DEVICE_MANAGE_DATA_SET_ATTRIBUTES_OUTPUT DEVICE_DSM_OUTPUT;
+typedef struct _DEVICE_DATA_SET_RANGE DEVICE_DSM_RANGE;
+typedef struct _DEVICE_MANAGE_DATA_SET_ATTRIBUTES * PDEVICE_DSM_INPUT;
 typedef struct _DEVICE_MANAGE_DATA_SET_ATTRIBUTES_OUTPUT * PDEVICE_DSM_OUTPUT;
+typedef struct _DEVICE_DATA_SET_RANGE * PDEVICE_DSM_RANGE;
 
-typedef struct _STORAGE_DEVICE_NUMBERS {
+typedef struct _BPIO_INPUT {
   ULONG Version;
   ULONG Size;
-  ULONG NumberOfDevices;
-  STORAGE_DEVICE_NUMBER Devices[1];
-} STORAGE_DEVICE_NUMBERS, *PSTORAGE_DEVICE_NUMBERS;
+  BPIO_OPERATIONS Operation;
+  BPIO_INFLAGS InFlags;
+  ULONGLONG Reserved2;
+} BPIO_INPUT, *PBPIO_INPUT;
 
-typedef struct _STORAGE_DEVICE_NUMBER_EX {
+typedef struct _BPIO_RESULTS {
+  LONG OpStatus;
+  USHORT FailingDriverNameLen;
+  WCHAR FailingDriverName[32];
+  USHORT FailureReasonLen;
+  WCHAR FailureReason[128];
+} BPIO_RESULTS, *PBPIO_RESULTS;
+
+typedef struct _DEVICE_DATA_SET_REPAIR_OUTPUT {
+  DEVICE_DSM_RANGE ParityExtent;
+} DEVICE_DATA_SET_REPAIR_OUTPUT, *PDEVICE_DATA_SET_REPAIR_OUTPUT, DEVICE_DSM_REPAIR_OUTPUT, *PDEVICE_DSM_REPAIR_OUTPUT;
+
+typedef struct _DEVICE_DATA_SET_REPAIR_PARAMETERS {
+  ULONG NumberOfRepairCopies;
+  ULONG SourceCopy;
+  ULONG RepairCopies[1];
+} DEVICE_DATA_SET_REPAIR_PARAMETERS, *PDEVICE_DATA_SET_REPAIR_PARAMETERS, DEVICE_DSM_REPAIR_PARAMETERS, *PDEVICE_DSM_REPAIR_PARAMETERS;
+
+typedef struct _DEVICE_DATA_SET_SCRUB_EX_OUTPUT {
+  ULONGLONG BytesProcessed;
+  ULONGLONG BytesRepaired;
+  ULONGLONG BytesFailed;
+  DEVICE_DSM_RANGE ParityExtent;
+  ULONGLONG BytesScrubbed;
+} DEVICE_DATA_SET_SCRUB_EX_OUTPUT, *PDEVICE_DATA_SET_SCRUB_EX_OUTPUT, DEVICE_DSM_SCRUB_OUTPUT2, *PDEVICE_DSM_SCRUB_OUTPUT2;
+
+typedef struct _DEVICE_DATA_SET_SCRUB_OUTPUT {
+  ULONGLONG BytesProcessed;
+  ULONGLONG BytesRepaired;
+  ULONGLONG BytesFailed;
+} DEVICE_DATA_SET_SCRUB_OUTPUT, *PDEVICE_DATA_SET_SCRUB_OUTPUT, DEVICE_DSM_SCRUB_OUTPUT, *PDEVICE_DSM_SCRUB_OUTPUT;
+
+typedef struct _DEVICE_DATA_SET_TOPOLOGY_ID_QUERY_OUTPUT {
+  ULONGLONG TopologyRangeBytes;
+  UCHAR TopologyId[16];
+} DEVICE_DATA_SET_TOPOLOGY_ID_QUERY_OUTPUT, *PDEVICE_DATA_SET_TOPOLOGY_ID_QUERY_OUTPUT, DEVICE_DSM_TOPOLOGY_ID_QUERY_OUTPUT, *PDEVICE_DSM_TOPOLOGY_ID_QUERY_OUTPUT;
+
+typedef struct _DEVICE_DSM_CONVERSION_OUTPUT {
   ULONG Version;
-  ULONG Size;
-  ULONG Flags;
-  ULONG DeviceType;
-  ULONG DeviceNumber;
-  GUID DeviceGuid;
-  ULONG PartitionNumber;
-} STORAGE_DEVICE_NUMBER_EX, *PSTORAGE_DEVICE_NUMBER_EX;
-
-typedef struct _STORAGE_PROPERTY_SET {
-  STORAGE_PROPERTY_ID PropertyId;
-  STORAGE_SET_TYPE SetType;
-  UCHAR AdditionalParameters[1];
-} STORAGE_PROPERTY_SET, *PSTORAGE_PROPERTY_SET;
-
-typedef struct _STORAGE_DEVICE_RESILIENCY_DESCRIPTOR {
-  ULONG Version;
-  ULONG Size;
-  ULONG NameOffset;
-  ULONG NumberOfLogicalCopies;
-  ULONG NumberOfPhysicalCopies;
-  ULONG PhysicalDiskRedundancy;
-  ULONG NumberOfColumns;
-  ULONG Interleave;
-} STORAGE_DEVICE_RESILIENCY_DESCRIPTOR, *PSTORAGE_DEVICE_RESILIENCY_DESCRIPTOR;
-
-typedef struct _STORAGE_RPMB_DESCRIPTOR {
-  ULONG Version;
-  ULONG Size;
-  ULONG SizeInBytes;
-  ULONG MaxReliableWriteSizeInBytes;
-  STORAGE_RPMB_FRAME_TYPE FrameFormat;
-} STORAGE_RPMB_DESCRIPTOR, *PSTORAGE_RPMB_DESCRIPTOR;
-
-typedef struct _STORAGE_TIER {
-  GUID Id;
-  WCHAR Name[256];
-  WCHAR Description[256];
-  ULONGLONG Flags;
-  ULONGLONG ProvisionedCapacity;
-  STORAGE_TIER_MEDIA_TYPE MediaType;
-  STORAGE_TIER_CLASS Class;
-} STORAGE_TIER, *PSTORAGE_TIER;
-
-typedef struct _STORAGE_DEVICE_TIERING_DESCRIPTOR {
-  ULONG Version;
-  ULONG Size;
-  ULONG Flags;
-  ULONG TotalNumberOfTiers;
-  ULONG NumberOfTiersReturned;
-  STORAGE_TIER Tiers[1];
-} STORAGE_DEVICE_TIERING_DESCRIPTOR, *PSTORAGE_DEVICE_TIERING_DESCRIPTOR;
-
-typedef struct _STORAGE_DEVICE_FAULT_DOMAIN_DESCRIPTOR {
-  ULONG Version;
-  ULONG Size;
-  ULONG NumberOfFaultDomains;
-  GUID FaultDomainIds[1];
-} STORAGE_DEVICE_FAULT_DOMAIN_DESCRIPTOR, *PSTORAGE_DEVICE_FAULT_DOMAIN_DESCRIPTOR;
-
-typedef struct _STORAGE_PROTOCOL_SPECIFIC_DATA_EXT {
-  STORAGE_PROTOCOL_TYPE ProtocolType;
-  ULONG DataType;
-  ULONG ProtocolDataValue;
-  ULONG ProtocolDataSubValue;
-  ULONG ProtocolDataOffset;
-  ULONG ProtocolDataLength;
-  ULONG FixedProtocolReturnData;
-  ULONG ProtocolDataSubValue2;
-  ULONG ProtocolDataSubValue3;
-  ULONG ProtocolDataSubValue4;
-  ULONG ProtocolDataSubValue5;
-  ULONG ProtocolDataSubValue6;
-  ULONG Reserved[4];
-} STORAGE_PROTOCOL_SPECIFIC_DATA_EXT, *PSTORAGE_PROTOCOL_SPECIFIC_DATA_EXT;
-
-typedef struct _STORAGE_PROTOCOL_DATA_DESCRIPTOR_EXT {
-  ULONG Version;
-  ULONG Size;
-  STORAGE_PROTOCOL_SPECIFIC_DATA_EXT ProtocolSpecificData;
-} STORAGE_PROTOCOL_DATA_DESCRIPTOR_EXT, *PSTORAGE_PROTOCOL_DATA_DESCRIPTOR_EXT;
-
-typedef struct _STORAGE_DEVICE_ATTRIBUTES_DESCRIPTOR {
-  ULONG Version;
-  ULONG Size;
-  ULONG64 Attributes;
-} STORAGE_DEVICE_ATTRIBUTES_DESCRIPTOR, *PSTORAGE_DEVICE_ATTRIBUTES_DESCRIPTOR;
-
-typedef struct _STORAGE_ADAPTER_SERIAL_NUMBER {
-  ULONG Version;
-  ULONG Size;
-  WCHAR SerialNumber[128];
-} STORAGE_ADAPTER_SERIAL_NUMBER, *PSTORAGE_ADAPTER_SERIAL_NUMBER;
-
-typedef struct _STORAGE_ZONE_GROUP {
-  ULONG ZoneCount;
-  STORAGE_ZONE_TYPES ZoneType;
-  ULONGLONG ZoneSize;
-} STORAGE_ZONE_GROUP, *PSTORAGE_ZONE_GROUP;
-
-typedef struct _STORAGE_DEVICE_NUMA_PROPERTY {
-  ULONG Version;
-  ULONG Size;
-  ULONG NumaNode;
-} STORAGE_DEVICE_NUMA_PROPERTY, *PSTORAGE_DEVICE_NUMA_PROPERTY;
-
-typedef struct _STORAGE_DEVICE_UNSAFE_SHUTDOWN_COUNT {
-  ULONG Version;
-  ULONG Size;
-  ULONG UnsafeShutdownCount;
-} STORAGE_DEVICE_UNSAFE_SHUTDOWN_COUNT, *PSTORAGE_DEVICE_UNSAFE_SHUTDOWN_COUNT;
-
-typedef struct _STORAGE_STACK_DESCRIPTOR {
-  ULONG Version;
-  ULONG Size;
-  STORAGE_STACK_TYPE StorageStackType;
-} STORAGE_STACK_DESCRIPTOR, *PSTORAGE_STACK_DESCRIPTOR;
-
-typedef struct _STORAGE_DEVICE_LED_STATE_DESCRIPTOR {
-  ULONG Version;
-  ULONG Size;
-  ULONGLONG State;
-} STORAGE_DEVICE_LED_STATE_DESCRIPTOR, *PSTORAGE_DEVICE_LED_STATE_DESCRIPTOR;
-
-typedef struct _STORAGE_DEVICE_SELF_ENCRYPTION_PROPERTY {
-  ULONG Version;
-  ULONG Size;
-  BOOLEAN SupportsSelfEncryption;
-} STORAGE_DEVICE_SELF_ENCRYPTION_PROPERTY, *PSTORAGE_DEVICE_SELF_ENCRYPTION_PROPERTY;
-
-typedef struct _STORAGE_DEVICE_SELF_ENCRYPTION_PROPERTY_V2 {
-  ULONG Version;
-  ULONG Size;
-  BOOLEAN SupportsSelfEncryption;
-  STORAGE_ENCRYPTION_TYPE EncryptionType;
-} STORAGE_DEVICE_SELF_ENCRYPTION_PROPERTY_V2, *PSTORAGE_DEVICE_SELF_ENCRYPTION_PROPERTY_V2;
-
-typedef struct _STORAGE_FRU_ID_DESCRIPTOR {
-  ULONG Version;
-  ULONG Size;
-  ULONG IdentifierSize;
-  UCHAR Identifier[1];
-} STORAGE_FRU_ID_DESCRIPTOR, *PSTORAGE_FRU_ID_DESCRIPTOR;
+  GUID Source;
+} DEVICE_DSM_CONVERSION_OUTPUT, *PDEVICE_DSM_CONVERSION_OUTPUT;
 
 typedef struct _DEVICE_DSM_DEFINITION {
   DEVICE_DSM_ACTION Action;
@@ -2027,34 +1925,35 @@ typedef struct _DEVICE_DSM_DEFINITION {
   ULONG OutputBlockLength;
 } DEVICE_DSM_DEFINITION, *PDEVICE_DSM_DEFINITION;
 
-typedef struct _DEVICE_DATA_SET_REPAIR_PARAMETERS {
-  ULONG NumberOfRepairCopies;
-  ULONG SourceCopy;
-  ULONG RepairCopies[1];
-} DEVICE_DATA_SET_REPAIR_PARAMETERS, *PDEVICE_DATA_SET_REPAIR_PARAMETERS, DEVICE_DSM_REPAIR_PARAMETERS, *PDEVICE_DSM_REPAIR_PARAMETERS;
+typedef struct _DEVICE_DSM_FREE_SPACE_OUTPUT {
+  ULONG Version;
+  ULONGLONG FreeSpace;
+} DEVICE_DSM_FREE_SPACE_OUTPUT, *PDEVICE_DSM_FREE_SPACE_OUTPUT;
 
-typedef struct _DEVICE_DATA_SET_REPAIR_OUTPUT {
-  DEVICE_DSM_RANGE ParityExtent;
-} DEVICE_DATA_SET_REPAIR_OUTPUT, *PDEVICE_DATA_SET_REPAIR_OUTPUT, DEVICE_DSM_REPAIR_OUTPUT, *PDEVICE_DSM_REPAIR_OUTPUT;
+typedef struct _DEVICE_DSM_LOST_QUERY_OUTPUT {
+  ULONG Version;
+  ULONG Size;
+  ULONGLONG Alignment;
+  ULONG NumberOfBits;
+  ULONG BitMap[1];
+} DEVICE_DSM_LOST_QUERY_OUTPUT, *PDEVICE_DSM_LOST_QUERY_OUTPUT;
+
+typedef struct _DEVICE_DSM_LOST_QUERY_PARAMETERS {
+  ULONG Version;
+  ULONGLONG Granularity;
+} DEVICE_DSM_LOST_QUERY_PARAMETERS, *PDEVICE_DSM_LOST_QUERY_PARAMETERS;
 
 typedef struct _DEVICE_DSM_QUERY_PREFER_LOCAL_REPAIR_OUTPUT {
   ULONG Version;
   BOOLEAN PreferLocalRepair;
 } DEVICE_DSM_QUERY_PREFER_LOCAL_REPAIR_OUTPUT, *PDEVICE_DSM_QUERY_PREFER_LOCAL_REPAIR_OUTPUT;
 
-typedef struct _DEVICE_DATA_SET_SCRUB_OUTPUT {
-  ULONGLONG BytesProcessed;
-  ULONGLONG BytesRepaired;
-  ULONGLONG BytesFailed;
-} DEVICE_DATA_SET_SCRUB_OUTPUT, *PDEVICE_DATA_SET_SCRUB_OUTPUT, DEVICE_DSM_SCRUB_OUTPUT, *PDEVICE_DSM_SCRUB_OUTPUT;
-
-typedef struct _DEVICE_DATA_SET_SCRUB_EX_OUTPUT {
-  ULONGLONG BytesProcessed;
-  ULONGLONG BytesRepaired;
-  ULONGLONG BytesFailed;
-  DEVICE_DSM_RANGE ParityExtent;
-  ULONGLONG BytesScrubbed;
-} DEVICE_DATA_SET_SCRUB_EX_OUTPUT, *PDEVICE_DATA_SET_SCRUB_EX_OUTPUT, DEVICE_DSM_SCRUB_OUTPUT2, *PDEVICE_DSM_SCRUB_OUTPUT2;
+typedef struct _DEVICE_DSM_REPORT_ZONES_PARAMETERS {
+  ULONG Size;
+  UCHAR ReportOption;
+  UCHAR Partial;
+  UCHAR Reserved[2];
+} DEVICE_DSM_REPORT_ZONES_PARAMETERS, *PDEVICE_DSM_REPORT_ZONES_PARAMETERS;
 
 typedef struct _DEVICE_DSM_TIERING_QUERY_INPUT {
   ULONG Version;
@@ -2064,27 +1963,20 @@ typedef struct _DEVICE_DSM_TIERING_QUERY_INPUT {
   GUID TierIds[1];
 } DEVICE_DSM_TIERING_QUERY_INPUT, *PDEVICE_DSM_TIERING_QUERY_INPUT, DEVICE_DSM_TIERING_QUERY_PARAMETERS, *PDEVICE_DSM_TIERING_QUERY_PARAMETERS;
 
-typedef struct _STORAGE_TIER_REGION {
-  GUID TierId;
-  ULONGLONG Offset;
-  ULONGLONG Length;
-} STORAGE_TIER_REGION, *PSTORAGE_TIER_REGION;
-
-typedef struct _DEVICE_DSM_TIERING_QUERY_OUTPUT {
+typedef struct _DEVICE_INTERNAL_STATUS_DATA {
   ULONG Version;
   ULONG Size;
-  ULONG Flags;
-  ULONG Reserved;
-  ULONGLONG Alignment;
-  ULONG TotalNumberOfRegions;
-  ULONG NumberOfRegionsReturned;
-  STORAGE_TIER_REGION Regions[1];
-} DEVICE_DSM_TIERING_QUERY_OUTPUT, *PDEVICE_DSM_TIERING_QUERY_OUTPUT;
-
-typedef struct _DEVICE_DATA_SET_TOPOLOGY_ID_QUERY_OUTPUT {
-  ULONGLONG TopologyRangeBytes;
-  UCHAR TopologyId[16];
-} DEVICE_DATA_SET_TOPOLOGY_ID_QUERY_OUTPUT, *PDEVICE_DATA_SET_TOPOLOGY_ID_QUERY_OUTPUT, DEVICE_DSM_TOPOLOGY_ID_QUERY_OUTPUT, *PDEVICE_DSM_TOPOLOGY_ID_QUERY_OUTPUT;
+  ULONGLONG T10VendorId;
+  ULONG DataSet1Length;
+  ULONG DataSet2Length;
+  ULONG DataSet3Length;
+  ULONG DataSet4Length;
+  UCHAR StatusDataVersion;
+  UCHAR Reserved[3];
+  UCHAR ReasonIdentifier[128];
+  ULONG StatusDataLength;
+  UCHAR StatusData[1];
+} DEVICE_INTERNAL_STATUS_DATA, *PDEVICE_INTERNAL_STATUS_DATA;
 
 typedef struct _DEVICE_STORAGE_ADDRESS_RANGE {
   LONGLONG StartAddress;
@@ -2099,79 +1991,82 @@ typedef struct _DEVICE_DSM_PHYSICAL_ADDRESSES_OUTPUT {
   DEVICE_STORAGE_ADDRESS_RANGE Ranges[1];
 } DEVICE_DSM_PHYSICAL_ADDRESSES_OUTPUT, *PDEVICE_DSM_PHYSICAL_ADDRESSES_OUTPUT;
 
-typedef struct _DEVICE_DSM_REPORT_ZONES_PARAMETERS {
-  ULONG Size;
-  UCHAR ReportOption;
-  UCHAR Partial;
-  UCHAR Reserved[2];
-} DEVICE_DSM_REPORT_ZONES_PARAMETERS, *PDEVICE_DSM_REPORT_ZONES_PARAMETERS;
+typedef struct _DEVICEDUMP_RESTRICTED_SUBSECTION {
+  UCHAR bData[1];
+} DEVICEDUMP_RESTRICTED_SUBSECTION, *PDEVICEDUMP_RESTRICTED_SUBSECTION;
 
-typedef struct _STORAGE_ZONE_DESCRIPTOR {
-  ULONG Size;
-  STORAGE_ZONE_TYPES ZoneType;
-  STORAGE_ZONE_CONDITION ZoneCondition;
-  BOOLEAN ResetWritePointerRecommend;
-  UCHAR Reserved0[3];
-  ULONGLONG ZoneSize;
-  ULONGLONG WritePointerOffset;
-} STORAGE_ZONE_DESCRIPTOR, *PSTORAGE_ZONE_DESCRIPTOR;
+#pragma pack(push, 1)
+typedef struct _DEVICEDUMP_SECTION_HEADER {
+  GUID guidDeviceDataId;
+  UCHAR sOrganizationID[16];
+  ULONG dwFirmwareRevision;
+  UCHAR sModelNumber[32];
+  UCHAR szDeviceManufacturingID[32];
+  ULONG dwFlags;
+  ULONG bRestrictedPrivateDataVersion;
+  ULONG dwFirmwareIssueId;
+  UCHAR szIssueDescriptionString[132];
+} DEVICEDUMP_SECTION_HEADER, *PDEVICEDUMP_SECTION_HEADER;
+#pragma pack(pop)
 
-typedef struct _DEVICE_DSM_REPORT_ZONES_DATA {
-  ULONG Size;
-  ULONG ZoneCount;
-  STORAGE_ZONES_ATTRIBUTES Attributes;
-  ULONG Reserved0;
-  STORAGE_ZONE_DESCRIPTOR ZoneDescriptors[1];
-} DEVICE_DSM_REPORT_ZONES_DATA, *PDEVICE_DSM_REPORT_ZONES_DATA, DEVICE_DSM_REPORT_ZONES_OUTPUT, *PDEVICE_DSM_REPORT_ZONES_OUTPUT;
+#pragma pack(push, 1)
+typedef struct _DEVICEDUMP_STRUCTURE_VERSION {
+  ULONG dwSignature;
+  ULONG dwVersion;
+  ULONG dwSize;
+} DEVICEDUMP_STRUCTURE_VERSION, *PDEVICEDUMP_STRUCTURE_VERSION;
+#pragma pack(pop)
 
-typedef struct _DEVICE_DSM_LOST_QUERY_PARAMETERS {
-  ULONG Version;
-  ULONGLONG Granularity;
-} DEVICE_DSM_LOST_QUERY_PARAMETERS, *PDEVICE_DSM_LOST_QUERY_PARAMETERS;
+#pragma pack(push, 1)
+typedef struct _DEVICEDUMP_SUBSECTION_POINTER {
+  ULONG dwSize;
+  ULONG dwFlags;
+  ULONG dwOffset;
+} DEVICEDUMP_SUBSECTION_POINTER, *PDEVICEDUMP_SUBSECTION_POINTER;
+#pragma pack(pop)
 
-typedef struct _DEVICE_DSM_LOST_QUERY_OUTPUT {
-  ULONG Version;
-  ULONG Size;
-  ULONGLONG Alignment;
-  ULONG NumberOfBits;
-  ULONG BitMap[1];
-} DEVICE_DSM_LOST_QUERY_OUTPUT, *PDEVICE_DSM_LOST_QUERY_OUTPUT;
+#pragma pack(push, 1)
+typedef struct _DEVICEDUMP_STORAGEDEVICE_DATA {
+  DEVICEDUMP_STRUCTURE_VERSION Descriptor;
+  DEVICEDUMP_SECTION_HEADER SectionHeader;
+  ULONG dwBufferSize;
+  ULONG dwReasonForCollection;
+  DEVICEDUMP_SUBSECTION_POINTER PublicData;
+  DEVICEDUMP_SUBSECTION_POINTER RestrictedData;
+  DEVICEDUMP_SUBSECTION_POINTER PrivateData;
+} DEVICEDUMP_STORAGEDEVICE_DATA, *PDEVICEDUMP_STORAGEDEVICE_DATA;
+#pragma pack(pop)
 
-typedef struct _DEVICE_DSM_FREE_SPACE_OUTPUT {
-  ULONG Version;
-  ULONGLONG FreeSpace;
-} DEVICE_DSM_FREE_SPACE_OUTPUT, *PDEVICE_DSM_FREE_SPACE_OUTPUT;
-
-typedef struct _DEVICE_DSM_CONVERSION_OUTPUT {
-  ULONG Version;
-  GUID Source;
-} DEVICE_DSM_CONVERSION_OUTPUT, *PDEVICE_DSM_CONVERSION_OUTPUT;
-
-typedef struct _STORAGE_DIAGNOSTIC_REQUEST {
+typedef struct _GET_DEVICE_INTERNAL_STATUS_DATA_REQUEST {
   ULONG Version;
   ULONG Size;
-  ULONG Flags;
-  STORAGE_DIAGNOSTIC_TARGET_TYPE TargetType;
-  STORAGE_DIAGNOSTIC_LEVEL Level;
-} STORAGE_DIAGNOSTIC_REQUEST, *PSTORAGE_DIAGNOSTIC_REQUEST;
+  DEVICE_INTERNAL_STATUS_DATA_REQUEST_TYPE RequestDataType;
+  DEVICE_INTERNAL_STATUS_DATA_SET RequestDataSet;
+} GET_DEVICE_INTERNAL_STATUS_DATA_REQUEST, *PGET_DEVICE_INTERNAL_STATUS_DATA_REQUEST;
 
-typedef struct _STORAGE_DIAGNOSTIC_DATA {
-  ULONG Version;
-  ULONG Size;
-  GUID ProviderId;
-  ULONG BufferSize;
-  ULONG Reserved;
-  UCHAR DiagnosticDataBuffer[1];
-} STORAGE_DIAGNOSTIC_DATA, *PSTORAGE_DIAGNOSTIC_DATA;
+#pragma pack(push, 1)
+typedef struct _GP_LOG_PAGE_DESCRIPTOR {
+  USHORT LogAddress;
+  USHORT LogSectors;
+} GP_LOG_PAGE_DESCRIPTOR, *PGP_LOG_PAGE_DESCRIPTOR;
+#pragma pack(pop)
 
-typedef struct _PHYSICAL_ELEMENT_STATUS_REQUEST {
-  ULONG Version;
-  ULONG Size;
-  ULONG StartingElement;
-  UCHAR Filter;
-  UCHAR ReportType;
-  UCHAR Reserved[2];
-} PHYSICAL_ELEMENT_STATUS_REQUEST, *PPHYSICAL_ELEMENT_STATUS_REQUEST;
+#pragma pack(push, 1)
+typedef struct _DEVICEDUMP_PRIVATE_SUBSECTION {
+  ULONG dwFlags;
+  GP_LOG_PAGE_DESCRIPTOR GPLogId;
+  UCHAR bData[1];
+} DEVICEDUMP_PRIVATE_SUBSECTION, *PDEVICEDUMP_PRIVATE_SUBSECTION;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _DEVICEDUMP_PUBLIC_SUBSECTION {
+  ULONG dwFlags;
+  GP_LOG_PAGE_DESCRIPTOR GPLogTable[16];
+  CHAR szDescription[16];
+  UCHAR bData[1];
+} DEVICEDUMP_PUBLIC_SUBSECTION, *PDEVICEDUMP_PUBLIC_SUBSECTION;
+#pragma pack(pop)
 
 typedef struct _PHYSICAL_ELEMENT_STATUS_DESCRIPTOR {
   ULONG Version;
@@ -2194,6 +2089,15 @@ typedef struct _PHYSICAL_ELEMENT_STATUS {
   PHYSICAL_ELEMENT_STATUS_DESCRIPTOR Descriptors[1];
 } PHYSICAL_ELEMENT_STATUS, *PPHYSICAL_ELEMENT_STATUS;
 
+typedef struct _PHYSICAL_ELEMENT_STATUS_REQUEST {
+  ULONG Version;
+  ULONG Size;
+  ULONG StartingElement;
+  UCHAR Filter;
+  UCHAR ReportType;
+  UCHAR Reserved[2];
+} PHYSICAL_ELEMENT_STATUS_REQUEST, *PPHYSICAL_ELEMENT_STATUS_REQUEST;
+
 typedef struct _REMOVE_ELEMENT_AND_TRUNCATE_REQUEST {
   ULONG Version;
   ULONG Size;
@@ -2202,97 +2106,60 @@ typedef struct _REMOVE_ELEMENT_AND_TRUNCATE_REQUEST {
   ULONG Reserved;
 } REMOVE_ELEMENT_AND_TRUNCATE_REQUEST, *PREMOVE_ELEMENT_AND_TRUNCATE_REQUEST;
 
-typedef struct _GET_DEVICE_INTERNAL_STATUS_DATA_REQUEST {
+typedef struct _STORAGE_ADAPTER_SERIAL_NUMBER {
   ULONG Version;
   ULONG Size;
-  DEVICE_INTERNAL_STATUS_DATA_REQUEST_TYPE RequestDataType;
-  DEVICE_INTERNAL_STATUS_DATA_SET RequestDataSet;
-} GET_DEVICE_INTERNAL_STATUS_DATA_REQUEST, *PGET_DEVICE_INTERNAL_STATUS_DATA_REQUEST;
+  WCHAR SerialNumber[128];
+} STORAGE_ADAPTER_SERIAL_NUMBER, *PSTORAGE_ADAPTER_SERIAL_NUMBER;
 
-typedef struct _DEVICE_INTERNAL_STATUS_DATA {
+typedef struct _STORAGE_ATTRIBUTE_MGMT {
   ULONG Version;
   ULONG Size;
-  ULONGLONG T10VendorId;
-  ULONG DataSet1Length;
-  ULONG DataSet2Length;
-  ULONG DataSet3Length;
-  ULONG DataSet4Length;
-  UCHAR StatusDataVersion;
-  UCHAR Reserved[3];
-  UCHAR ReasonIdentifier[128];
-  ULONG StatusDataLength;
-  UCHAR StatusData[1];
-} DEVICE_INTERNAL_STATUS_DATA, *PDEVICE_INTERNAL_STATUS_DATA;
+  STORAGE_ATTRIBUTE_MGMT_ACTION Action;
+  ULONG Attribute;
+} STORAGE_ATTRIBUTE_MGMT, *PSTORAGE_ATTRIBUTE_MGMT;
 
-#pragma pack(push, 1)
-typedef struct _DEVICEDUMP_SUBSECTION_POINTER {
-  ULONG dwSize;
-  ULONG dwFlags;
-  ULONG dwOffset;
-} DEVICEDUMP_SUBSECTION_POINTER, *PDEVICEDUMP_SUBSECTION_POINTER;
-#pragma pack(pop)
+typedef struct _STORAGE_DEVICE_ATTRIBUTES_DESCRIPTOR {
+  ULONG Version;
+  ULONG Size;
+  ULONG64 Attributes;
+} STORAGE_DEVICE_ATTRIBUTES_DESCRIPTOR, *PSTORAGE_DEVICE_ATTRIBUTES_DESCRIPTOR;
 
-#pragma pack(push, 1)
-typedef struct _DEVICEDUMP_STRUCTURE_VERSION {
-  ULONG dwSignature;
-  ULONG dwVersion;
-  ULONG dwSize;
-} DEVICEDUMP_STRUCTURE_VERSION, *PDEVICEDUMP_STRUCTURE_VERSION;
-#pragma pack(pop)
+typedef struct _STORAGE_DEVICE_FAULT_DOMAIN_DESCRIPTOR {
+  ULONG Version;
+  ULONG Size;
+  ULONG NumberOfFaultDomains;
+  GUID FaultDomainIds[1];
+} STORAGE_DEVICE_FAULT_DOMAIN_DESCRIPTOR, *PSTORAGE_DEVICE_FAULT_DOMAIN_DESCRIPTOR;
 
-#pragma pack(push, 1)
-typedef struct _DEVICEDUMP_SECTION_HEADER {
-  GUID guidDeviceDataId;
-  UCHAR sOrganizationID[16];
-  ULONG dwFirmwareRevision;
-  UCHAR sModelNumber[32];
-  UCHAR szDeviceManufacturingID[32];
-  ULONG dwFlags;
-  ULONG bRestrictedPrivateDataVersion;
-  ULONG dwFirmwareIssueId;
-  UCHAR szIssueDescriptionString[132];
-} DEVICEDUMP_SECTION_HEADER, *PDEVICEDUMP_SECTION_HEADER;
-#pragma pack(pop)
+typedef struct _STORAGE_DEVICE_LED_STATE_DESCRIPTOR {
+  ULONG Version;
+  ULONG Size;
+  ULONGLONG State;
+} STORAGE_DEVICE_LED_STATE_DESCRIPTOR, *PSTORAGE_DEVICE_LED_STATE_DESCRIPTOR;
 
-#pragma pack(push, 1)
-typedef struct _GP_LOG_PAGE_DESCRIPTOR {
-  USHORT LogAddress;
-  USHORT LogSectors;
-} GP_LOG_PAGE_DESCRIPTOR, *PGP_LOG_PAGE_DESCRIPTOR;
-#pragma pack(pop)
+typedef struct _STORAGE_DEVICE_NUMA_PROPERTY {
+  ULONG Version;
+  ULONG Size;
+  ULONG NumaNode;
+} STORAGE_DEVICE_NUMA_PROPERTY, *PSTORAGE_DEVICE_NUMA_PROPERTY;
 
-#pragma pack(push, 1)
-typedef struct _DEVICEDUMP_PUBLIC_SUBSECTION {
-  ULONG dwFlags;
-  GP_LOG_PAGE_DESCRIPTOR GPLogTable[16];
-  CHAR szDescription[16];
-  UCHAR bData[1];
-} DEVICEDUMP_PUBLIC_SUBSECTION, *PDEVICEDUMP_PUBLIC_SUBSECTION;
-#pragma pack(pop)
+typedef struct _STORAGE_DEVICE_NUMBER_EX {
+  ULONG Version;
+  ULONG Size;
+  ULONG Flags;
+  ULONG DeviceType;
+  ULONG DeviceNumber;
+  GUID DeviceGuid;
+  ULONG PartitionNumber;
+} STORAGE_DEVICE_NUMBER_EX, *PSTORAGE_DEVICE_NUMBER_EX;
 
-typedef struct _DEVICEDUMP_RESTRICTED_SUBSECTION {
-  UCHAR bData[1];
-} DEVICEDUMP_RESTRICTED_SUBSECTION, *PDEVICEDUMP_RESTRICTED_SUBSECTION;
-
-#pragma pack(push, 1)
-typedef struct _DEVICEDUMP_PRIVATE_SUBSECTION {
-  ULONG dwFlags;
-  GP_LOG_PAGE_DESCRIPTOR GPLogId;
-  UCHAR bData[1];
-} DEVICEDUMP_PRIVATE_SUBSECTION, *PDEVICEDUMP_PRIVATE_SUBSECTION;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _DEVICEDUMP_STORAGEDEVICE_DATA {
-  DEVICEDUMP_STRUCTURE_VERSION Descriptor;
-  DEVICEDUMP_SECTION_HEADER SectionHeader;
-  ULONG dwBufferSize;
-  ULONG dwReasonForCollection;
-  DEVICEDUMP_SUBSECTION_POINTER PublicData;
-  DEVICEDUMP_SUBSECTION_POINTER RestrictedData;
-  DEVICEDUMP_SUBSECTION_POINTER PrivateData;
-} DEVICEDUMP_STORAGEDEVICE_DATA, *PDEVICEDUMP_STORAGEDEVICE_DATA;
-#pragma pack(pop)
+typedef struct _STORAGE_DEVICE_NUMBERS {
+  ULONG Version;
+  ULONG Size;
+  ULONG NumberOfDevices;
+  STORAGE_DEVICE_NUMBER Devices[1];
+} STORAGE_DEVICE_NUMBERS, *PSTORAGE_DEVICE_NUMBERS;
 
 typedef struct _STORAGE_DEVICE_POWER_CAP {
   ULONG Version;
@@ -2301,30 +2168,59 @@ typedef struct _STORAGE_DEVICE_POWER_CAP {
   ULONGLONG MaxPower;
 } STORAGE_DEVICE_POWER_CAP, *PSTORAGE_DEVICE_POWER_CAP;
 
-typedef struct _STORAGE_RPMB_DATA_FRAME {
-  UCHAR Stuff[196];
-  UCHAR KeyOrMAC[32];
-  UCHAR Data[256];
-  UCHAR Nonce[16];
-  UCHAR WriteCounter[4];
-  UCHAR Address[2];
-  UCHAR BlockCount[2];
-  UCHAR OperationResult[2];
-  UCHAR RequestOrResponseType[2];
-} STORAGE_RPMB_DATA_FRAME, *PSTORAGE_RPMB_DATA_FRAME;
+typedef struct _STORAGE_DEVICE_RESILIENCY_DESCRIPTOR {
+  ULONG Version;
+  ULONG Size;
+  ULONG NameOffset;
+  ULONG NumberOfLogicalCopies;
+  ULONG NumberOfPhysicalCopies;
+  ULONG PhysicalDiskRedundancy;
+  ULONG NumberOfColumns;
+  ULONG Interleave;
+} STORAGE_DEVICE_RESILIENCY_DESCRIPTOR, *PSTORAGE_DEVICE_RESILIENCY_DESCRIPTOR;
 
-typedef struct _STORAGE_HW_FIRMWARE_DOWNLOAD_V2 {
+typedef struct _STORAGE_DEVICE_SELF_ENCRYPTION_PROPERTY {
+  ULONG Version;
+  ULONG Size;
+  BOOLEAN SupportsSelfEncryption;
+} STORAGE_DEVICE_SELF_ENCRYPTION_PROPERTY, *PSTORAGE_DEVICE_SELF_ENCRYPTION_PROPERTY;
+
+typedef struct _STORAGE_DEVICE_SELF_ENCRYPTION_PROPERTY_V2 {
+  ULONG Version;
+  ULONG Size;
+  BOOLEAN SupportsSelfEncryption;
+  STORAGE_ENCRYPTION_TYPE EncryptionType;
+} STORAGE_DEVICE_SELF_ENCRYPTION_PROPERTY_V2, *PSTORAGE_DEVICE_SELF_ENCRYPTION_PROPERTY_V2;
+
+typedef struct _STORAGE_DEVICE_UNSAFE_SHUTDOWN_COUNT {
+  ULONG Version;
+  ULONG Size;
+  ULONG UnsafeShutdownCount;
+} STORAGE_DEVICE_UNSAFE_SHUTDOWN_COUNT, *PSTORAGE_DEVICE_UNSAFE_SHUTDOWN_COUNT;
+
+typedef struct _STORAGE_DIAGNOSTIC_DATA {
+  ULONG Version;
+  ULONG Size;
+  GUID ProviderId;
+  ULONG BufferSize;
+  ULONG Reserved;
+  UCHAR DiagnosticDataBuffer[1];
+} STORAGE_DIAGNOSTIC_DATA, *PSTORAGE_DIAGNOSTIC_DATA;
+
+typedef struct _STORAGE_DIAGNOSTIC_REQUEST {
   ULONG Version;
   ULONG Size;
   ULONG Flags;
-  UCHAR Slot;
-  UCHAR Reserved[3];
-  ULONGLONG Offset;
-  ULONGLONG BufferSize;
-  ULONG ImageSize;
-  ULONG Reserved2;
-  UCHAR ImageBuffer[1];
-} STORAGE_HW_FIRMWARE_DOWNLOAD_V2, *PSTORAGE_HW_FIRMWARE_DOWNLOAD_V2;
+  STORAGE_DIAGNOSTIC_TARGET_TYPE TargetType;
+  STORAGE_DIAGNOSTIC_LEVEL Level;
+} STORAGE_DIAGNOSTIC_REQUEST, *PSTORAGE_DIAGNOSTIC_REQUEST;
+
+typedef struct _STORAGE_FRU_ID_DESCRIPTOR {
+  ULONG Version;
+  ULONG Size;
+  ULONG IdentifierSize;
+  UCHAR Identifier[1];
+} STORAGE_FRU_ID_DESCRIPTOR, *PSTORAGE_FRU_ID_DESCRIPTOR;
 
 typedef struct _STORAGE_HW_BOOT_PARTITION_ACTIVATE {
   ULONG Version;
@@ -2356,6 +2252,25 @@ typedef struct _STORAGE_HW_BOOT_PARTITION_INFO {
   UCHAR ABPID;
 } STORAGE_HW_BOOT_PARTITION_INFO, *PSTORAGE_HW_BOOT_PARTITION_INFO;
 
+typedef struct _STORAGE_HW_FIRMWARE_DOWNLOAD_V2 {
+  ULONG Version;
+  ULONG Size;
+  ULONG Flags;
+  UCHAR Slot;
+  UCHAR Reserved[3];
+  ULONGLONG Offset;
+  ULONGLONG BufferSize;
+  ULONG ImageSize;
+  ULONG Reserved2;
+  UCHAR ImageBuffer[1];
+} STORAGE_HW_FIRMWARE_DOWNLOAD_V2, *PSTORAGE_HW_FIRMWARE_DOWNLOAD_V2;
+
+typedef struct _STORAGE_PROPERTY_SET {
+  STORAGE_PROPERTY_ID PropertyId;
+  STORAGE_SET_TYPE SetType;
+  UCHAR AdditionalParameters[1];
+} STORAGE_PROPERTY_SET, *PSTORAGE_PROPERTY_SET;
+
 typedef struct _STORAGE_PROTOCOL_COMMAND {
   ULONG Version;
   ULONG Length;
@@ -2379,27 +2294,620 @@ typedef struct _STORAGE_PROTOCOL_COMMAND {
   UCHAR Command[1];
 } STORAGE_PROTOCOL_COMMAND, *PSTORAGE_PROTOCOL_COMMAND;
 
-typedef struct _STORAGE_ATTRIBUTE_MGMT {
+typedef struct _STORAGE_PROTOCOL_SPECIFIC_DATA_EXT {
+  STORAGE_PROTOCOL_TYPE ProtocolType;
+  ULONG DataType;
+  ULONG ProtocolDataValue;
+  ULONG ProtocolDataSubValue;
+  ULONG ProtocolDataOffset;
+  ULONG ProtocolDataLength;
+  ULONG FixedProtocolReturnData;
+  ULONG ProtocolDataSubValue2;
+  ULONG ProtocolDataSubValue3;
+  ULONG ProtocolDataSubValue4;
+  ULONG ProtocolDataSubValue5;
+  ULONG ProtocolDataSubValue6;
+  ULONG Reserved[4];
+} STORAGE_PROTOCOL_SPECIFIC_DATA_EXT, *PSTORAGE_PROTOCOL_SPECIFIC_DATA_EXT;
+
+typedef struct _STORAGE_PROTOCOL_DATA_DESCRIPTOR_EXT {
   ULONG Version;
   ULONG Size;
-  STORAGE_ATTRIBUTE_MGMT_ACTION Action;
-  ULONG Attribute;
-} STORAGE_ATTRIBUTE_MGMT, *PSTORAGE_ATTRIBUTE_MGMT;
+  STORAGE_PROTOCOL_SPECIFIC_DATA_EXT ProtocolSpecificData;
+} STORAGE_PROTOCOL_DATA_DESCRIPTOR_EXT, *PSTORAGE_PROTOCOL_DATA_DESCRIPTOR_EXT;
 
-typedef struct _BPIO_INPUT {
+typedef struct _STORAGE_RPMB_DATA_FRAME {
+  UCHAR Stuff[196];
+  UCHAR KeyOrMAC[32];
+  UCHAR Data[256];
+  UCHAR Nonce[16];
+  UCHAR WriteCounter[4];
+  UCHAR Address[2];
+  UCHAR BlockCount[2];
+  UCHAR OperationResult[2];
+  UCHAR RequestOrResponseType[2];
+} STORAGE_RPMB_DATA_FRAME, *PSTORAGE_RPMB_DATA_FRAME;
+
+typedef struct _STORAGE_RPMB_DESCRIPTOR {
   ULONG Version;
   ULONG Size;
-  BPIO_OPERATIONS Operation;
-  BPIO_INFLAGS InFlags;
-  ULONGLONG Reserved2;
-} BPIO_INPUT, *PBPIO_INPUT;
+  ULONG SizeInBytes;
+  ULONG MaxReliableWriteSizeInBytes;
+  STORAGE_RPMB_FRAME_TYPE FrameFormat;
+} STORAGE_RPMB_DESCRIPTOR, *PSTORAGE_RPMB_DESCRIPTOR;
 
-typedef struct _BPIO_RESULTS {
-  LONG OpStatus;
-  USHORT FailingDriverNameLen;
-  WCHAR FailingDriverName[32];
-  USHORT FailureReasonLen;
-  WCHAR FailureReason[128];
-} BPIO_RESULTS, *PBPIO_RESULTS;
+typedef struct _STORAGE_STACK_DESCRIPTOR {
+  ULONG Version;
+  ULONG Size;
+  STORAGE_STACK_TYPE StorageStackType;
+} STORAGE_STACK_DESCRIPTOR, *PSTORAGE_STACK_DESCRIPTOR;
+
+typedef struct _STORAGE_TIER {
+  GUID Id;
+  WCHAR Name[256];
+  WCHAR Description[256];
+  ULONGLONG Flags;
+  ULONGLONG ProvisionedCapacity;
+  STORAGE_TIER_MEDIA_TYPE MediaType;
+  STORAGE_TIER_CLASS Class;
+} STORAGE_TIER, *PSTORAGE_TIER;
+
+typedef struct _STORAGE_DEVICE_TIERING_DESCRIPTOR {
+  ULONG Version;
+  ULONG Size;
+  ULONG Flags;
+  ULONG TotalNumberOfTiers;
+  ULONG NumberOfTiersReturned;
+  STORAGE_TIER Tiers[1];
+} STORAGE_DEVICE_TIERING_DESCRIPTOR, *PSTORAGE_DEVICE_TIERING_DESCRIPTOR;
+
+typedef struct _STORAGE_TIER_REGION {
+  GUID TierId;
+  ULONGLONG Offset;
+  ULONGLONG Length;
+} STORAGE_TIER_REGION, *PSTORAGE_TIER_REGION;
+
+typedef struct _DEVICE_DSM_TIERING_QUERY_OUTPUT {
+  ULONG Version;
+  ULONG Size;
+  ULONG Flags;
+  ULONG Reserved;
+  ULONGLONG Alignment;
+  ULONG TotalNumberOfRegions;
+  ULONG NumberOfRegionsReturned;
+  STORAGE_TIER_REGION Regions[1];
+} DEVICE_DSM_TIERING_QUERY_OUTPUT, *PDEVICE_DSM_TIERING_QUERY_OUTPUT;
+
+typedef struct _STORAGE_ZONE_DESCRIPTOR {
+  ULONG Size;
+  STORAGE_ZONE_TYPES ZoneType;
+  STORAGE_ZONE_CONDITION ZoneCondition;
+  BOOLEAN ResetWritePointerRecommend;
+  UCHAR Reserved0[3];
+  ULONGLONG ZoneSize;
+  ULONGLONG WritePointerOffset;
+} STORAGE_ZONE_DESCRIPTOR, *PSTORAGE_ZONE_DESCRIPTOR;
+
+typedef struct _DEVICE_DSM_REPORT_ZONES_DATA {
+  ULONG Size;
+  ULONG ZoneCount;
+  STORAGE_ZONES_ATTRIBUTES Attributes;
+  ULONG Reserved0;
+  STORAGE_ZONE_DESCRIPTOR ZoneDescriptors[1];
+} DEVICE_DSM_REPORT_ZONES_DATA, *PDEVICE_DSM_REPORT_ZONES_DATA, DEVICE_DSM_REPORT_ZONES_OUTPUT, *PDEVICE_DSM_REPORT_ZONES_OUTPUT;
+
+typedef struct _STORAGE_ZONE_GROUP {
+  ULONG ZoneCount;
+  STORAGE_ZONE_TYPES ZoneType;
+  ULONGLONG ZoneSize;
+} STORAGE_ZONE_GROUP, *PSTORAGE_ZONE_GROUP;
+
+#define BPIO_OUTPUT_DISABLE_SIZE 0x18
+#define BPIO_OUTPUT_ENABLE_SIZE 0x160
+#define BPIO_OUTPUT_QUERY_SIZE 0x160
+#define BPIO_OUTPUT_VOLUME_DISABLE_SIZE 0x18
+#define DEVICE_DSM_FLAG_PHYSICAL_ADDRESSES_OMIT_TOTAL_RANGES 0x10000000
+#define DEVICE_DSM_PHYSICAL_ADDRESS_HAS_MEMORY_ERROR ((LONGLONG)(-1))
+#define DEVICE_DSM_PHYSICAL_ADDRESSES_OUTPUT_VERSION_V1 1
+#define DEVICE_DSM_RANGE_ERROR_INFO_VERSION_V1 1
+#define DEVICE_DSM_ROUND_DN_a, _b) (((_a)) / (_b) * (_b))
+#define DEVICE_DSM_ROUND_UP_a, _b) (((_a) + ((_b) - 1)) / (_b) * (_b))
+#define DEVICE_STORAGE_NO_ERRORS 0x1
+#define DeviceDsmAction_QueryPreferLocalRepair 0x8000001E
+#define DeviceDsmDefinition_CloseZone { DeviceDsmAction_CloseZone, FALSE, 0, 0, FALSE, 0, 0 }
+#define DeviceDsmDefinition_ConversionQuery { DeviceDsmAction_ConversionQuery, TRUE, 0, 0, TRUE, __alignof(DEVICE_DSM_CONVERSION_OUTPUT), sizeof (DEVICE_DSM_CONVERSION_OUTPUT) }
+#define DeviceDsmDefinition_DrtClear { DeviceDsmAction_DrtClear, FALSE, 0, 0, FALSE, 0, 0 }
+#define DeviceDsmDefinition_DrtDisable { DeviceDsmAction_DrtDisable, FALSE, 0, 0, FALSE, 0, 0 }
+#define DeviceDsmDefinition_DrtQuery { DeviceDsmAction_DrtQuery, FALSE, 0, 0, TRUE, 0, 0 }
+#define DeviceDsmDefinition_FinishZone { DeviceDsmAction_FinishZone, FALSE, 0, 0, FALSE, 0, 0 }
+#define DeviceDsmDefinition_GetFreeSpace { DeviceDsmAction_GetFreeSpace, FALSE, 0, 0, TRUE, __alignof(DEVICE_DSM_FREE_SPACE_OUTPUT), sizeof (DEVICE_DSM_FREE_SPACE_OUTPUT) }
+#define DeviceDsmDefinition_GetPhysicalAddresses 0
+#define DeviceDsmDefinition_GetRangeErrorInfo 0
+#define DeviceDsmDefinition_LostQuery { DeviceDsmAction_LostQuery, TRUE, __alignof(DEVICE_DSM_LOST_QUERY_PARAMETERS), sizeof (DEVICE_DSM_LOST_QUERY_PARAMETERS), TRUE, __alignof(DEVICE_DSM_LOST_QUERY_OUTPUT), sizeof (DEVICE_DSM_LOST_QUERY_OUTPUT) }
+#define DeviceDsmDefinition_Map { DeviceDsmAction_Map, FALSE, 0, 0, FALSE, 0, 0 }
+#define DeviceDsmDefinition_None 0
+#define DeviceDsmDefinition_Notification 0
+#define DeviceDsmDefinition_NvCache_Change_Priority { DeviceDsmAction_NvCache_Change_Priority, FALSE, __alignof(DEVICE_DSM_NVCACHE_CHANGE_PRIORITY_PARAMETERS), sizeof (DEVICE_DSM_NVCACHE_CHANGE_PRIORITY_PARAMETERS), FALSE, 0, 0 }
+#define DeviceDsmDefinition_NvCache_Evict { DeviceDsmAction_NvCache_Evict, FALSE, 0, 0, FALSE, 0, 0 }
+#define DeviceDsmDefinition_OpenZone { DeviceDsmAction_OpenZone, FALSE, 0, 0, FALSE, 0, 0 }
+#define DeviceDsmDefinition_QueryPreferLocalRepair { DeviceDsmAction_QueryPreferLocalRepair, FALSE, 0, 0, TRUE, __alignof(DEVICE_DSM_QUERY_PREFER_LOCAL_REPAIR_OUTPUT), sizeof (DEVICE_DSM_QUERY_PREFER_LOCAL_REPAIR_OUTPUT) }
+#define DeviceDsmDefinition_RegenerateParity { DeviceDsmAction_RegenerateParity, FALSE, 0, 0, FALSE, 0, 0 }
+#define DeviceDsmDefinition_Repair 0
+#define DeviceDsmDefinition_ReportZones { DeviceDsmAction_ReportZones, FALSE, __alignof(DEVICE_DSM_REPORT_ZONES_PARAMETERS), sizeof (DEVICE_DSM_REPORT_ZONES_PARAMETERS), TRUE, __alignof(DEVICE_DSM_REPORT_ZONES_OUTPUT), sizeof (DEVICE_DSM_REPORT_ZONES_OUTPUT) }
+#define DeviceDsmDefinition_ResetWritePointer { DeviceDsmAction_ResetWritePointer, FALSE, 0, 0, FALSE, 0, 0 }
+#define DeviceDsmDefinition_ScopeRegen { DeviceDsmAction_ScopeRegen, FALSE, 0, 0, FALSE, 0, 0 }
+#define DeviceDsmDefinition_Scrub 0
+#define DeviceDsmDefinition_TieringQuery { DeviceDsmAction_TieringQuery, TRUE, __alignof(DEVICE_DSM_TIERING_QUERY_PARAMETERS), sizeof (DEVICE_DSM_TIERING_QUERY_PARAMETERS), TRUE, __alignof(DEVICE_DSM_TIERING_QUERY_OUTPUT), sizeof (DEVICE_DSM_TIERING_QUERY_OUTPUT) }
+#define DeviceDsmDefinition_TopologyIdQuery { DeviceDsmAction_TopologyIdQuery, FALSE, 0, 0, TRUE, __alignof(DEVICE_DSM_TOPOLOGY_ID_QUERY_OUTPUT), sizeof (DEVICE_DSM_TOPOLOGY_ID_QUERY_OUTPUT) }
+#define DeviceDsmDefinition_Trim 0
+#define DeviceDsmDefinition_VdtSet { DeviceDsmAction_VdtSet, FALSE, 0, 0, FALSE, 0, 0 }
+#define DeviceDsmDefinition_WriteZeroes { DeviceDsmAction_WriteZeroes, FALSE, 0, 0, FALSE, 0, 0 }
+#define DEVICEDUMP_CAP_PRIVATE_SECTION 0x00000001
+#define GET_REPAIR_TOPOLOGY_IDR) RtlOffsetToPointer(R, ALIGN_UP_BY(FIELD_OFFSET(DEVICE_DATA_SET_REPAIR_PARAMETERS, RepairCopies) + sizeof (ULONG) * R -> NumberOfRepairCopies, 8))
+#define IOCTL_STORAGE_BOOT_PARTITION_ACTIVATE 0x2DDC10
+#define IOCTL_STORAGE_BOOT_PARTITION_DOWNLOAD 0x2DDC0C
+#define IOCTL_STORAGE_BOOT_PARTITION_GET_INFO 0x2D1C14
+#define IOCTL_STORAGE_GET_SYSTEM_FEATURE_SUPPORT 0x2D4C1C
+#define IOCTL_STORAGE_MANAGE_BYPASS_IO 0x2D08C0
+#define IOCTL_STORAGE_MINIPORT_PASSTHROUGH_REQUEST 0x2DD050
+#define IOCTL_STORAGE_SET_PROPERTY 0x2D93FC
+#define NO_SRBTYPE_ADAPTER_DESCRIPTOR_SIZE 0x1E
+#define STORAGE_ADAPTER_SERIAL_NUMBER_V1_SIZE 0x108
+#define STORAGE_ADAPTER_SERIAL_NUMBER_V1_VERSION 0x108
+#define STORAGE_COUNTERS_VERSION_V1 0x20
+#define STORAGE_CRASH_TELEMETRY_REGKEY 0
+#define STORAGE_DEVICE_NUMA_NODE_UNKNOWN 0xFFFFFFFF
+#define STORAGE_DEVICE_TELEMETRY_REGKEY L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Storage\\StorageTelemetry"
+#define STORAGE_MINIPORT_DESCRIPTOR_V1_SIZE 0x10
+#define STORAGE_SUPPORTED_FEATURES_MASK 1
+#define TC_PUBLIC_DATA_TYPE_ATAGP 0
+#define TC_PUBLIC_DATA_TYPE_ATASMART "ATASMARTPages"
+#define TCRecordStorportSrbFunction 0
+
+struct _BPIO_OUTPUT
+{
+    ULONG Version;
+    ULONG Size;
+    BPIO_OPERATIONS Operation;
+    BPIO_OUTFLAGS OutFlags;
+    ULONGLONG Reserved2;
+    union
+    {
+        BPIO_RESULTS Enable;
+        BPIO_RESULTS Query;
+    };
+};
+
+struct _DEVICE_LOCATION
+{
+    ULONG Socket;
+    ULONG Slot;
+    ULONG Adapter;
+    ULONG Port;
+    union
+    {
+        struct
+        {
+            ULONG Channel;
+            ULONG Device;
+        };
+        struct
+        {
+            ULONG Target;
+            ULONG Lun;
+        };
+    };
+};
+
+struct _DEVICE_STORAGE_RANGE_ATTRIBUTES
+{
+    ULONGLONG LengthInBytes;
+    union
+    {
+        ULONG AllFlags;
+        struct
+        {
+            ULONG IsRangeBad : 1;
+        };
+    };
+    ULONG Reserved;
+};
+
+#pragma pack(push, 1)
+struct _DEVICEDUMP_STORAGESTACK_PUBLIC_STATE_RECORD
+{
+    UCHAR Cdb[16];
+    UCHAR Command[16];
+    ULONGLONG StartTime;
+    ULONGLONG EndTime;
+    ULONG OperationStatus;
+    ULONG OperationError;
+    union
+    {
+        struct
+        {
+            ULONG dwReserved;
+        } ExternalStack;
+        struct
+        {
+            ULONG dwAtaPortSpecific;
+        } AtaPort;
+        struct
+        {
+            ULONG SrbTag;
+        } StorPort;
+    } StackSpecific;
+};
+#pragma pack(pop)
+
+struct _STORAGE_COUNTER
+{
+    STORAGE_COUNTER_TYPE Type;
+    union
+    {
+        struct
+        {
+            ULONG Week;
+            ULONG Year;
+        } ManufactureDate;
+        ULONGLONG AsUlonglong;
+    } Value;
+};
+
+struct _STORAGE_CRYPTO_CAPABILITY_V2
+{
+    ULONG Version;
+    ULONG Size;
+    ULONG CryptoCapabilityIndex;
+    STORAGE_CRYPTO_ALGORITHM_ID AlgorithmId;
+    STORAGE_CRYPTO_KEY_SIZE KeySize;
+    ULONG DataUnitSizeBitmask;
+    USHORT MaxIVBitSize;
+    USHORT Reserved;
+    STORAGE_SECURITY_COMPLIANCE_BITMASK SecurityComplianceBitmask;
+};
+
+struct _STORAGE_FEATURE_SUPPORT
+{
+    ULONG Size;
+    ULONG Version;
+    union
+    {
+        struct
+        {
+            ULONGLONG StorMQMiniportsSupported : 1;
+            ULONGLONG Reserved : 63;
+        };
+        ULONGLONG AsUlonglong;
+    } Flags;
+    ULONGLONG Reserved[6];
+};
+
+struct _STORAGE_HW_CRYPTO_CAPABILITY
+{
+    ULONG Version;
+    ULONG Size;
+    ULONG CryptoCapabilityIndex;
+    STORAGE_CRYPTO_ALGORITHM_ID AlgorithmId;
+    STORAGE_CRYPTO_KEY_SIZE KeySize;
+    ULONG DataUnitSizeBitmask;
+    USHORT MaxIVBitSize;
+    USHORT Reserved;
+    STORAGE_SECURITY_COMPLIANCE_BITMASK SecurityComplianceBitmask;
+};
+
+struct _STORAGE_HW_CRYPTO_DESCRIPTOR
+{
+    STORAGE_DESCRIPTOR_HEADER Header;
+    ULONG NumKeysSupported;
+    ULONG NumCryptoCapabilities;
+    ULONG OffsetToCryptoCapabilities;
+    ULONG SizeOfCryptoCapability;
+    STORAGE_ICE_TYPE IceType;
+    STORAGE_SECURITY_COMPLIANCE_BITMASK SecurityComplianceBitmask;
+    STORAGE_CRYPTO_KEY_TYPE KeyTypeBitmask;
+};
+
+struct _STORAGE_HW_ENDURANCE_INFO
+{
+    ULONG ValidFields;
+    ULONG GroupId;
+    struct
+    {
+        ULONG Shared : 1;
+        ULONG Reserved : 31;
+    } Flags;
+    ULONG LifePercentage;
+    UCHAR BytesReadCount[16];
+    UCHAR ByteWriteCount[16];
+};
+
+struct _STORAGE_OPERATIONAL_REASON
+{
+    ULONG Version;
+    ULONG Size;
+    STORAGE_OPERATIONAL_STATUS_REASON Reason;
+    union
+    {
+        struct
+        {
+            UCHAR SenseKey;
+            UCHAR ASC;
+            UCHAR ASCQ;
+            UCHAR Reserved;
+        } ScsiSenseKey;
+        struct
+        {
+            UCHAR CriticalHealth;
+            UCHAR ModuleHealth[2];
+            UCHAR ErrorThresholdStatus;
+        } NVDIMM_N;
+        ULONG AsUlong;
+    } RawBytes;
+};
+
+union _STORAGE_PROTOCOL_DATA_SUBVALUE_GET_LOG_PAGE
+{
+    struct
+    {
+        ULONG RetainAsynEvent : 1;
+        ULONG LogSpecificField : 4;
+        ULONG Reserved0 : 3;
+        ULONG UUIDIndex : 7;
+        ULONG Reserved : 17;
+    };
+    ULONG AsUlong;
+};
+
+struct _STORAGE_REINITIALIZE_MEDIA
+{
+    ULONG Version;
+    ULONG Size;
+    ULONG TimeoutInSeconds;
+    struct
+    {
+        ULONG SanitizeMethod : 4;
+        ULONG DisallowUnrestrictedSanitizeExit : 1;
+        ULONG Reserved : 27;
+    } SanitizeOption;
+};
+
+struct _STORAGE_ZONED_DEVICE_DESCRIPTOR
+{
+    ULONG Version;
+    ULONG Size;
+    STORAGE_ZONED_DEVICE_TYPES DeviceType;
+    ULONG ZoneCount;
+    union
+    {
+        struct
+        {
+            ULONG MaxOpenZoneCount;
+            BOOLEAN UnrestrictedRead;
+            UCHAR Reserved[3];
+        } SequentialRequiredZone;
+        struct
+        {
+            ULONG OptimalOpenZoneCount;
+            ULONG Reserved;
+        } SequentialPreferredZone;
+    } ZoneAttributes;
+    ULONG ZoneGroupCount;
+    STORAGE_ZONE_GROUP ZoneGroup[1];
+};
+
+typedef struct _BPIO_OUTPUT BPIO_OUTPUT;
+
+typedef struct _DEVICE_LOCATION DEVICE_LOCATION;
+
+struct _STORAGE_DEVICE_LOCATION_DESCRIPTOR
+{
+    ULONG Version;
+    ULONG Size;
+    DEVICE_LOCATION Location;
+    ULONG StringOffset;
+};
+
+typedef struct _DEVICE_STORAGE_RANGE_ATTRIBUTES DEVICE_STORAGE_RANGE_ATTRIBUTES;
+
+struct _DEVICE_DSM_RANGE_ERROR_INFO
+{
+    ULONG Version;
+    ULONG Flags;
+    ULONG TotalNumberOfRanges;
+    ULONG NumberOfRangesReturned;
+    DEVICE_STORAGE_RANGE_ATTRIBUTES Ranges[1];
+};
+
+typedef struct _DEVICE_DSM_RANGE_ERROR_INFO DEVICE_DSM_RANGE_ERROR_INFO;
+
+typedef struct _DEVICE_DSM_RANGE_ERROR_INFO DEVICE_DSM_RANGE_ERROR_OUTPUT;
+
+typedef struct _DEVICEDUMP_STORAGESTACK_PUBLIC_STATE_RECORD DEVICEDUMP_STORAGESTACK_PUBLIC_STATE_RECORD;
+
+#pragma pack(push, 1)
+struct _DEVICEDUMP_STORAGESTACK_PUBLIC_DUMP
+{
+    DEVICEDUMP_STRUCTURE_VERSION Descriptor;
+    ULONG dwReasonForCollection;
+    UCHAR cDriverName[16];
+    ULONG uiNumRecords;
+    DEVICEDUMP_STORAGESTACK_PUBLIC_STATE_RECORD RecordArray[1];
+};
+#pragma pack(pop)
+
+typedef struct _DEVICEDUMP_STORAGESTACK_PUBLIC_DUMP DEVICEDUMP_STORAGESTACK_PUBLIC_DUMP;
+
+typedef struct _BPIO_OUTPUT *PBPIO_OUTPUT;
+
+typedef struct _DEVICE_DSM_RANGE_ERROR_INFO *PDEVICE_DSM_RANGE_ERROR_INFO;
+
+typedef struct _DEVICE_DSM_RANGE_ERROR_INFO *PDEVICE_DSM_RANGE_ERROR_OUTPUT;
+
+typedef struct _DEVICE_LOCATION *PDEVICE_LOCATION;
+
+typedef struct _DEVICE_STORAGE_RANGE_ATTRIBUTES *PDEVICE_STORAGE_RANGE_ATTRIBUTES;
+
+typedef struct _DEVICEDUMP_STORAGESTACK_PUBLIC_DUMP *PDEVICEDUMP_STORAGESTACK_PUBLIC_DUMP;
+
+typedef struct _DEVICEDUMP_STORAGESTACK_PUBLIC_STATE_RECORD *PDEVICEDUMP_STORAGESTACK_PUBLIC_STATE_RECORD;
+
+typedef struct _STORAGE_COUNTER *PSTORAGE_COUNTER;
+
+typedef struct _STORAGE_CRYPTO_CAPABILITY_V2 *PSTORAGE_CRYPTO_CAPABILITY_V2;
+
+typedef struct _STORAGE_DEVICE_LOCATION_DESCRIPTOR *PSTORAGE_DEVICE_LOCATION_DESCRIPTOR;
+
+typedef struct _STORAGE_FEATURE_SUPPORT *PSTORAGE_FEATURE_SUPPORT;
+
+typedef struct _STORAGE_HW_CRYPTO_CAPABILITY *PSTORAGE_HW_CRYPTO_CAPABILITY;
+
+typedef struct _STORAGE_HW_CRYPTO_DESCRIPTOR *PSTORAGE_HW_CRYPTO_DESCRIPTOR;
+
+typedef struct _STORAGE_HW_ENDURANCE_INFO *PSTORAGE_HW_ENDURANCE_INFO;
+
+typedef struct _STORAGE_OPERATIONAL_REASON *PSTORAGE_OPERATIONAL_REASON;
+
+typedef union _STORAGE_PROTOCOL_DATA_SUBVALUE_GET_LOG_PAGE *PSTORAGE_PROTOCOL_DATA_SUBVALUE_GET_LOG_PAGE;
+
+typedef struct _STORAGE_REINITIALIZE_MEDIA *PSTORAGE_REINITIALIZE_MEDIA;
+
+typedef struct _STORAGE_ZONED_DEVICE_DESCRIPTOR *PSTORAGE_ZONED_DEVICE_DESCRIPTOR;
+
+typedef struct _STORAGE_COUNTER STORAGE_COUNTER;
+
+struct _STORAGE_COUNTERS
+{
+    ULONG Version;
+    ULONG Size;
+    ULONG NumberOfCounters;
+    STORAGE_COUNTER Counters[1];
+};
+
+typedef struct _STORAGE_COUNTERS *PSTORAGE_COUNTERS;
+
+typedef struct _STORAGE_COUNTERS STORAGE_COUNTERS;
+
+typedef struct _STORAGE_CRYPTO_CAPABILITY_V2 STORAGE_CRYPTO_CAPABILITY_V2;
+
+struct _STORAGE_CRYPTO_DESCRIPTOR_V2
+{
+    ULONG Version;
+    ULONG Size;
+    ULONG NumKeysSupported;
+    ULONG NumCryptoCapabilities;
+    STORAGE_ICE_TYPE IceType;
+    STORAGE_SECURITY_COMPLIANCE_BITMASK SecurityComplianceBitmask;
+    STORAGE_CRYPTO_CAPABILITY_V2 CryptoCapabilities[1];
+};
+
+typedef struct _STORAGE_CRYPTO_DESCRIPTOR_V2 *PSTORAGE_CRYPTO_DESCRIPTOR_V2;
+
+typedef struct _STORAGE_CRYPTO_DESCRIPTOR_V2 STORAGE_CRYPTO_DESCRIPTOR_V2;
+
+typedef struct _STORAGE_DEVICE_LOCATION_DESCRIPTOR STORAGE_DEVICE_LOCATION_DESCRIPTOR;
+
+typedef struct _STORAGE_FEATURE_SUPPORT STORAGE_FEATURE_SUPPORT;
+
+typedef struct _STORAGE_HW_CRYPTO_CAPABILITY STORAGE_HW_CRYPTO_CAPABILITY;
+
+typedef struct _STORAGE_HW_CRYPTO_DESCRIPTOR STORAGE_HW_CRYPTO_DESCRIPTOR;
+
+typedef struct _STORAGE_HW_ENDURANCE_INFO STORAGE_HW_ENDURANCE_INFO;
+
+struct _STORAGE_HW_ENDURANCE_DATA_DESCRIPTOR
+{
+    ULONG Version;
+    ULONG Size;
+    STORAGE_HW_ENDURANCE_INFO EnduranceInfo;
+};
+
+typedef struct _STORAGE_HW_ENDURANCE_DATA_DESCRIPTOR *PSTORAGE_HW_ENDURANCE_DATA_DESCRIPTOR;
+
+typedef struct _STORAGE_HW_ENDURANCE_DATA_DESCRIPTOR STORAGE_HW_ENDURANCE_DATA_DESCRIPTOR;
+
+typedef struct _STORAGE_OPERATIONAL_REASON STORAGE_OPERATIONAL_REASON;
+
+struct _STORAGE_DEVICE_MANAGEMENT_STATUS
+{
+    ULONG Version;
+    ULONG Size;
+    STORAGE_DISK_HEALTH_STATUS Health;
+    ULONG NumberOfOperationalStatus;
+    ULONG NumberOfAdditionalReasons;
+    STORAGE_DISK_OPERATIONAL_STATUS OperationalStatus[16];
+    STORAGE_OPERATIONAL_REASON AdditionalReasons[1];
+};
+
+typedef struct _STORAGE_DEVICE_MANAGEMENT_STATUS *PSTORAGE_DEVICE_MANAGEMENT_STATUS;
+
+typedef struct _STORAGE_DEVICE_MANAGEMENT_STATUS STORAGE_DEVICE_MANAGEMENT_STATUS;
+
+typedef union _STORAGE_PROTOCOL_DATA_SUBVALUE_GET_LOG_PAGE STORAGE_PROTOCOL_DATA_SUBVALUE_GET_LOG_PAGE;
+
+typedef struct _STORAGE_REINITIALIZE_MEDIA STORAGE_REINITIALIZE_MEDIA;
+
+typedef struct _STORAGE_ZONED_DEVICE_DESCRIPTOR STORAGE_ZONED_DEVICE_DESCRIPTOR;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOLEAN DeviceDsmAddDataSetRange(PDEVICE_DSM_INPUT Input, ULONG InputLength, LONGLONG Offset, ULONGLONG Length);
+PDEVICE_DSM_RANGE DeviceDsmDataSetRanges(PDEVICE_DSM_INPUT Input);
+ULONG DeviceDsmGetInputLength(PDEVICE_DSM_DEFINITION Definition, ULONG ParameterBlockLength, ULONG NumberOfDataSetRanges);
+ULONG DeviceDsmGetNumberOfDataSetRanges(PDEVICE_DSM_DEFINITION Definition, ULONG InputLength, ULONG ParameterBlockLength);
+ULONG DeviceDsmGetOutputBlockLength(PDEVICE_DSM_DEFINITION Definition, ULONG OutputLength);
+ULONG DeviceDsmGetOutputLength(PDEVICE_DSM_DEFINITION Definition, ULONG OutputBlockLength);
+void DeviceDsmInitializeInput(PDEVICE_DSM_DEFINITION Definition, PDEVICE_DSM_INPUT Input, ULONG InputLength, ULONG Flags, PVOID Parameters, ULONG ParameterBlockLength);
+void DeviceDsmInitializeOutput(PDEVICE_DSM_DEFINITION Definition, PDEVICE_DSM_OUTPUT Output, ULONG OutputLength, ULONG Flags);
+ULONG DeviceDsmNumberOfDataSetRanges(PDEVICE_DSM_INPUT Input);
+PVOID DeviceDsmOutputBlock(PDEVICE_DSM_OUTPUT Output);
+PVOID DeviceDsmParameterBlock(PDEVICE_DSM_INPUT Input);
+BOOLEAN DeviceDsmValidateInput(PDEVICE_DSM_DEFINITION Definition, PDEVICE_DSM_INPUT Input, ULONG InputLength);
+BOOLEAN DeviceDsmValidateOutput(PDEVICE_DSM_DEFINITION Definition, PDEVICE_DSM_OUTPUT Output, ULONG OutputLength);
+BOOLEAN DeviceDsmValidateOutputLength(PDEVICE_DSM_DEFINITION Definition, ULONG OutputLength);
+const STORAGE_HW_CRYPTO_CAPABILITY * GetStorageHwCryptoCapability(const STORAGE_HW_CRYPTO_DESCRIPTOR *CryptoDescriptor, ULONG Index);
+STORAGE_HW_CRYPTO_CAPABILITY * GetStorageHwCryptoCapabilityMut(STORAGE_HW_CRYPTO_DESCRIPTOR *CryptoDescriptor, ULONG Index);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define DEVICE_DSM_ROUND_DN_a, _b) (((_a)) / (_b) * (_b))
+#define DEVICE_DSM_ROUND_UP_a, _b) (((_a) + ((_b) - 1)) / (_b) * (_b))
+#define GET_REPAIR_TOPOLOGY_IDR) RtlOffsetToPointer(R, ALIGN_UP_BY(FIELD_OFFSET(DEVICE_DATA_SET_REPAIR_PARAMETERS, RepairCopies) + sizeof (ULONG) * R -> NumberOfRepairCopies, 8))
+
+#define DEVICE_DSM_ROUND_DN_a, _b) (((_a)) / (_b) * (_b))
+#define DEVICE_DSM_ROUND_UP_a, _b) (((_a) + ((_b) - 1)) / (_b) * (_b))
+#define GET_REPAIR_TOPOLOGY_IDR) RtlOffsetToPointer(R, ALIGN_UP_BY(FIELD_OFFSET(DEVICE_DATA_SET_REPAIR_PARAMETERS, RepairCopies) + sizeof (ULONG) * R -> NumberOfRepairCopies, 8))
+
+struct _STORAGE_CRYPTO_CAPABILITY
+{
+    ULONG Version;
+    ULONG Size;
+    ULONG CryptoCapabilityIndex;
+    STORAGE_CRYPTO_ALGORITHM_ID AlgorithmId;
+    STORAGE_CRYPTO_KEY_SIZE KeySize;
+    ULONG DataUnitSizeBitmask;
+};
+
+typedef struct _STORAGE_CRYPTO_CAPABILITY *PSTORAGE_CRYPTO_CAPABILITY;
+
+typedef struct _STORAGE_CRYPTO_DESCRIPTOR *PSTORAGE_CRYPTO_DESCRIPTOR;
+
+typedef struct _STORAGE_CRYPTO_CAPABILITY STORAGE_CRYPTO_CAPABILITY;
+
+struct _STORAGE_CRYPTO_DESCRIPTOR
+{
+    ULONG Version;
+    ULONG Size;
+    ULONG NumKeysSupported;
+    ULONG NumCryptoCapabilities;
+    STORAGE_CRYPTO_CAPABILITY CryptoCapabilities[1];
+};
+
+typedef struct _STORAGE_CRYPTO_DESCRIPTOR STORAGE_CRYPTO_DESCRIPTOR;
 
 #endif /* _NTDDSTOR_H_ */

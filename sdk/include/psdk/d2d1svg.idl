@@ -479,3 +479,5 @@ interface ID2D1SvgDocument : ID2D1Resource
         [out] ID2D1SvgPathData **path_data
     );
 }
+
+cpp_quote("#define _D2D1_SVG_ 0")

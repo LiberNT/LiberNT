@@ -198,4 +198,17 @@ BOOL WINAPI IsCatalogFile(HANDLE hFile, WCHAR * pwszFileName);
 }
 #endif
 
+#define CRYPTCAT_FILEEXT L"CAT"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+void WINAPI CryptCATSetCreatePageHashesFlag(HANDLE hCatalog, BOOL newCreatePageHashesFlag);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

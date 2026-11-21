@@ -115,3 +115,6 @@ typedef struct _MOUSE_ATTRIBUTES {
 #ifdef __cplusplus
 }
 #endif
+
+#define _NTDDMOU_ 0
+

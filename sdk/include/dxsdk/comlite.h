@@ -12,4 +12,6 @@
 #define QzUninitialize          CoUninitialize
 #define QzStringFromGUID2       StringFromGUID2
 
+#define QzInitializeEx CoInitializeEx
+
 #endif

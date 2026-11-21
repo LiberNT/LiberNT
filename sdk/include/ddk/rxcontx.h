@@ -544,4 +544,30 @@ VOID
 RxRemoveOperationFromBlockingQueue(
     _Inout_ PRX_CONTEXT RxContext);
 
+#ifdef _WIN64
+#define MRX_CONTEXT_SIZE 0x20
+#else
+#define MRX_CONTEXT_SIZE 0x10
+#endif
+#define RxSynchronizeBlockingOperationsRXCONTEXT, FCB, IOQUEUE) __RxSynchronizeBlockingOperations(RXCONTEXT, FCB, IOQUEUE, FALSE)
+#define RxSynchronizeBlockingOperationsAndDropFcbLockRXCONTEXT, FCB, IOQUEUE) __RxSynchronizeBlockingOperations(RXCONTEXT, FCB, IOQUEUE, TRUE)
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+NTSTATUS NTAPI __RxSynchronizeBlockingOperations(PRX_CONTEXT RxContext, PFCB Fcb, PLIST_ENTRY BlockingIoQ, BOOLEAN DropFcbLock);
+NTSTATUS NTAPI RxSetMinirdrCancelRoutine(PRX_CONTEXT RxContext, PMRX_CALLDOWN MRxCancelRoutine);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define RxSynchronizeBlockingOperationsRXCONTEXT, FCB, IOQUEUE) __RxSynchronizeBlockingOperations(RXCONTEXT, FCB, IOQUEUE, FALSE)
+#define RxSynchronizeBlockingOperationsAndDropFcbLockRXCONTEXT, FCB, IOQUEUE) __RxSynchronizeBlockingOperations(RXCONTEXT, FCB, IOQUEUE, TRUE)
+
+#define RxSynchronizeBlockingOperationsRXCONTEXT, FCB, IOQUEUE) __RxSynchronizeBlockingOperations(RXCONTEXT, FCB, IOQUEUE, FALSE)
+#define RxSynchronizeBlockingOperationsAndDropFcbLockRXCONTEXT, FCB, IOQUEUE) __RxSynchronizeBlockingOperations(RXCONTEXT, FCB, IOQUEUE, TRUE)
+
 #endif

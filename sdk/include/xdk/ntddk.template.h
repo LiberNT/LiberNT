@@ -60,22 +60,71 @@ extern "C" {
 #include <guiddef.h>
 #endif
 
-typedef enum _SE_IMAGE_SIGNATURE_TYPE {
-    SeImageSignatureNone = 0,
-    SeImageSignatureEmbedded = 1,
-    SeImageSignatureCache = 2,
-    SeImageSignatureCatalogCached = 3,
-    SeImageSignatureCatalogNotCached = 4,
-    SeImageSignatureCatalogHint = 5,
-    SeImageSignaturePackageCatalog = 6,
-    SeImageSignaturePplMitigated = 7
-} SE_IMAGE_SIGNATURE_TYPE, *PSE_IMAGE_SIGNATURE_TYPE;
+typedef enum _HAL_DMA_CRASH_DUMP_REGISTER_TYPE {
+    HalDmaCrashDumpRegisterSet1 = 0,
+    HalDmaCrashDumpRegisterSet2 = 1,
+    HalDmaCrashDumpRegisterSetMax = 2
+} HAL_DMA_CRASH_DUMP_REGISTER_TYPE, *PHAL_DMA_CRASH_DUMP_REGISTER_TYPE;
 
-typedef enum _STATE_LOCATION_TYPE {
-    LocationTypeRegistry = 0,
-    LocationTypeFileSystem = 1,
-    LocationTypeMaximum = 2
-} STATE_LOCATION_TYPE;
+typedef enum _HAL_PMU_NOTIFICATION_TYPE {
+    HalPmuAvailableNotification = 0,
+    HalPmuReleaseNotification = 1
+} HAL_PMU_NOTIFICATION_TYPE;
+
+typedef enum _IPMI_OS_SEL_RECORD_TYPE {
+    IpmiOsSelRecordTypeWhea = 0,
+    IpmiOsSelRecordTypeOther = 1,
+    IpmiOsSelRecordTypeWheaErrorXpfMca = 2,
+    IpmiOsSelRecordTypeWheaErrorPci = 3,
+    IpmiOsSelRecordTypeWheaErrorNmi = 4,
+    IpmiOsSelRecordTypeWheaErrorOther = 5,
+    IpmiOsSelRecordTypeRaw = 6,
+    IpmiOsSelRecordTypeDriver = 7,
+    IpmiOsSelRecordTypeBugcheckRecovery = 8,
+    IpmiOsSelRecordTypeBugcheckData = 9,
+    IpmiOsSelRecordTypeMax = 10
+} IPMI_OS_SEL_RECORD_TYPE, *PIPMI_OS_SEL_RECORD_TYPE;
+
+typedef enum _PAGE_OFFLINE_ERROR_TYPES {
+    BitErrorDdr4 = 0,
+    RowErrorDdr4 = 1,
+    BitErrorDdr5 = 2,
+    RowErrorDdr5 = 3
+} PAGE_OFFLINE_ERROR_TYPES, *PPAGE_OFFLINE_ERROR_TYPES;
+
+typedef enum _PCI_LINK_SPEED {
+    PciLinkSpeed2_5Gts = 0,
+    PciLinkSpeed5_0Gts = 1,
+    PciLinkSpeed8_0Gts = 2,
+    PciLinkSpeed16_0Gts = 3,
+    PciLinkSpeed32_0Gts = 4,
+    PciLinkSpeed64_0Gts = 5,
+    PciLinkSpeedMax = 6
+} PCI_LINK_SPEED, *PPCI_LINK_SPEED;
+
+typedef enum _PCI_LINK_WIDTH {
+    PciLinkWidth_1x = 1,
+    PciLinkWidth_2x = 2,
+    PciLinkWidth_4x = 4,
+    PciLinkWidth_8x = 8,
+    PciLinkWidth_16x = 16,
+    PciLinkWidthMax = 32
+} PCI_LINK_WIDTH, *PPCI_LINK_WIDTH;
+
+typedef enum _PSCREATETHREADNOTIFYTYPE {
+    PsCreateThreadNotifyNonSystem = 0,
+    PsCreateThreadNotifySubsystems = 1
+} PSCREATETHREADNOTIFYTYPE;
+
+typedef enum _PSHED_PI_ERR_READING_PCIE_OVERRIDES {
+    PshedPiErrReadingPcieOverridesNoErr = 0,
+    PshedPiErrReadingPcieOverridesNoMemory = 1,
+    PshedPiErrReadingPcieOverridesQueryErr = 2,
+    PshedPiErrReadingPcieOverridesBadSize = 3,
+    PshedPiErrReadingPcieOverridesBadSignature = 4,
+    PshedPiErrReadingPcieOverridesNoCapOffset = 5,
+    PshedPiErrReadingPcieOverridesNotBinary = 6
+} PSHED_PI_ERR_READING_PCIE_OVERRIDES, *PPSHED_PI_ERR_READING_PCIE_OVERRIDES;
 
 typedef enum _RTL_SYSTEM_GLOBAL_DATA_ID {
     GlobalDataIdUnknown = 0,
@@ -99,88 +148,43 @@ typedef enum _RTL_SYSTEM_GLOBAL_DATA_ID {
     GlobalDataIdQpcBias = 18
 } RTL_SYSTEM_GLOBAL_DATA_ID, *PRTL_SYSTEM_GLOBAL_DATA_ID;
 
-typedef enum _PSCREATETHREADNOTIFYTYPE {
-    PsCreateThreadNotifyNonSystem = 0,
-    PsCreateThreadNotifySubsystems = 1
-} PSCREATETHREADNOTIFYTYPE;
+typedef enum _SE_IMAGE_SIGNATURE_TYPE {
+    SeImageSignatureNone = 0,
+    SeImageSignatureEmbedded = 1,
+    SeImageSignatureCache = 2,
+    SeImageSignatureCatalogCached = 3,
+    SeImageSignatureCatalogNotCached = 4,
+    SeImageSignatureCatalogHint = 5,
+    SeImageSignaturePackageCatalog = 6,
+    SeImageSignaturePplMitigated = 7
+} SE_IMAGE_SIGNATURE_TYPE, *PSE_IMAGE_SIGNATURE_TYPE;
 
-typedef enum _HAL_DMA_CRASH_DUMP_REGISTER_TYPE {
-    HalDmaCrashDumpRegisterSet1 = 0,
-    HalDmaCrashDumpRegisterSet2 = 1,
-    HalDmaCrashDumpRegisterSetMax = 2
-} HAL_DMA_CRASH_DUMP_REGISTER_TYPE, *PHAL_DMA_CRASH_DUMP_REGISTER_TYPE;
+typedef enum _SOC_SUBSYSTEM_TYPE {
+    SOC_SUBSYS_WIRELESS_MODEM = 0,
+    SOC_SUBSYS_AUDIO_DSP = 1,
+    SOC_SUBSYS_WIRELSS_CONNECTIVITY = 2,
+    SOC_SUBSYS_SENSORS = 3,
+    SOC_SUBSYS_COMPUTE_DSP = 4,
+    SOC_SUBSYS_SECURE_PROC = 5,
+    SOC_SUBSYS_VENDOR_DEFINED = 0x10000
+} SOC_SUBSYSTEM_TYPE, *PSOC_SUBSYSTEM_TYPE;
 
-typedef enum _HAL_PMU_NOTIFICATION_TYPE {
-    HalPmuAvailableNotification = 0,
-    HalPmuReleaseNotification = 1
-} HAL_PMU_NOTIFICATION_TYPE;
+typedef enum _STATE_LOCATION_TYPE {
+    LocationTypeRegistry = 0,
+    LocationTypeFileSystem = 1,
+    LocationTypeMaximum = 2
+} STATE_LOCATION_TYPE;
 
-typedef enum _PCI_LINK_WIDTH {
-    PciLinkWidth_1x = 1,
-    PciLinkWidth_2x = 2,
-    PciLinkWidth_4x = 4,
-    PciLinkWidth_8x = 8,
-    PciLinkWidth_16x = 16,
-    PciLinkWidthMax = 32
-} PCI_LINK_WIDTH, *PPCI_LINK_WIDTH;
+typedef enum _WHEA_ARM_RAS_NODE_INTERFACES {
+    WheaArmRasNodeInterfaceSystemRegister = 0,
+    WheaArmRasNodeInterfaceMmio = 1
+} WHEA_ARM_RAS_NODE_INTERFACES, *PWHEA_ARM_RAS_NODE_INTERFACES;
 
-typedef enum _PCI_LINK_SPEED {
-    PciLinkSpeed2_5Gts = 0,
-    PciLinkSpeed5_0Gts = 1,
-    PciLinkSpeed8_0Gts = 2,
-    PciLinkSpeed16_0Gts = 3,
-    PciLinkSpeed32_0Gts = 4,
-    PciLinkSpeed64_0Gts = 5,
-    PciLinkSpeedMax = 6
-} PCI_LINK_SPEED, *PPCI_LINK_SPEED;
-
-typedef enum _WHEA_ERROR_SOURCE_STATE {
-    WheaErrSrcStateStopped = 1,
-    WheaErrSrcStateStarted = 2,
-    WheaErrSrcStateRemoved = 3,
-    WheaErrSrcStateRemovePending = 4
-} WHEA_ERROR_SOURCE_STATE, *PWHEA_ERROR_SOURCE_STATE;
-
-typedef enum _IPMI_OS_SEL_RECORD_TYPE {
-    IpmiOsSelRecordTypeWhea = 0,
-    IpmiOsSelRecordTypeOther = 1,
-    IpmiOsSelRecordTypeWheaErrorXpfMca = 2,
-    IpmiOsSelRecordTypeWheaErrorPci = 3,
-    IpmiOsSelRecordTypeWheaErrorNmi = 4,
-    IpmiOsSelRecordTypeWheaErrorOther = 5,
-    IpmiOsSelRecordTypeRaw = 6,
-    IpmiOsSelRecordTypeDriver = 7,
-    IpmiOsSelRecordTypeBugcheckRecovery = 8,
-    IpmiOsSelRecordTypeBugcheckData = 9,
-    IpmiOsSelRecordTypeMax = 10
-} IPMI_OS_SEL_RECORD_TYPE, *PIPMI_OS_SEL_RECORD_TYPE;
-
-typedef enum _PAGE_OFFLINE_ERROR_TYPES {
-    BitErrorDdr4 = 0,
-    RowErrorDdr4 = 1,
-    BitErrorDdr5 = 2,
-    RowErrorDdr5 = 3
-} PAGE_OFFLINE_ERROR_TYPES, *PPAGE_OFFLINE_ERROR_TYPES;
-
-typedef enum _WHEA_MEMORY_DEFINITION {
-    WheaMemoryUndefined = 0,
-    WheaMemoryFm = 1,
-    WheaMemoryNm = 2,
-    WheaMemoryHbm = 3,
-    WheaMemoryMax = 4
-} WHEA_MEMORY_DEFINITION, *PWHEA_MEMORY_DEFINITION;
-
-typedef enum _WHEA_PCIEXPRESS_DEVICE_TYPE {
-    WheaPciExpressEndpoint = 0,
-    WheaPciExpressLegacyEndpoint = 1,
-    WheaPciExpressRootPort = 4,
-    WheaPciExpressUpstreamSwitchPort = 5,
-    WheaPciExpressDownstreamSwitchPort = 6,
-    WheaPciExpressToPciXBridge = 7,
-    WheaPciXToExpressBridge = 8,
-    WheaPciExpressRootComplexIntegratedEndpoint = 9,
-    WheaPciExpressRootComplexEventCollector = 10
-} WHEA_PCIEXPRESS_DEVICE_TYPE;
+typedef enum _WHEA_BUGCHECK_RECOVERY_LOG_TYPE {
+    WheaEventBugCheckRecoveryEntry = 0,
+    WheaEventBugCheckRecoveryReturn = 1,
+    WheaEventBugCheckRecoveryMax = 2
+} WHEA_BUGCHECK_RECOVERY_LOG_TYPE, *PWHEA_BUGCHECK_RECOVERY_LOG_TYPE;
 
 typedef enum _WHEA_CPU_VENDOR {
     WheaCpuVendorOther = 0,
@@ -188,76 +192,12 @@ typedef enum _WHEA_CPU_VENDOR {
     WheaCpuVendorAmd = 2
 } WHEA_CPU_VENDOR, *PWHEA_CPU_VENDOR;
 
-typedef enum _WHEA_RECOVERY_TYPE {
-    WheaRecoveryTypeActionRequired = 1,
-    WheaRecoveryTypeActionOptional = 2,
-    WheaRecoveryTypeMax = 3
-} WHEA_RECOVERY_TYPE, *PWHEA_RECOVERY_TYPE;
-
-typedef enum _WHEA_RECOVERY_FAILURE_REASON {
-    WheaRecoveryFailureReasonKernelCouldNotMarkMemoryBad = 1,
-    WheaRecoveryFailureReasonKernelMarkMemoryBadTimedOut = 2,
-    WheaRecoveryFailureReasonNoRecoveryContext = 3,
-    WheaRecoveryFailureReasonNotContinuable = 4,
-    WheaRecoveryFailureReasonPcc = 5,
-    WheaRecoveryFailureReasonOverflow = 6,
-    WheaRecoveryFailureReasonNotSupported = 7,
-    WheaRecoveryFailureReasonMiscOrAddrNotValid = 8,
-    WheaRecoveryFailureReasonInvalidAddressMode = 9,
-    WheaRecoveryFailureReasonHighIrql = 10,
-    WheaRecoveryFailureReasonInsufficientAltContextWrappers = 11,
-    WheaRecoveryFailureReasonInterruptsDisabled = 12,
-    WheaRecoveryFailureReasonSwapBusy = 13,
-    WheaRecoveryFailureReasonStackOverflow = 14,
-    WheaRecoveryFailureReasonUnexpectedFailure = 15,
-    WheaRecoveryFailureReasonKernelWillPageFaultBCAtCurrentIrql = 16,
-    WheaRecoveryFailureReasonFarNotValid = 17,
-    WheaRecoveryFailureReasonMax = 18
-} WHEA_RECOVERY_FAILURE_REASON, *PWHEA_RECOVERY_FAILURE_REASON;
-
-typedef enum _WHEA_ARM_RAS_NODE_INTERFACES {
-    WheaArmRasNodeInterfaceSystemRegister = 0,
-    WheaArmRasNodeInterfaceMmio = 1
-} WHEA_ARM_RAS_NODE_INTERFACES, *PWHEA_ARM_RAS_NODE_INTERFACES;
-
-typedef enum _WHEA_PCI_RECOVERY_SIGNAL {
-    WheaPciRecoverySignalUnknown = 0,
-    WheaPciRecoverySignalAer = 1,
-    WheaPciRecoverySignalDpc = 2
-} WHEA_PCI_RECOVERY_SIGNAL, *PWHEA_PCI_RECOVERY_SIGNAL;
-
-typedef enum _WHEA_PCI_RECOVERY_STATUS {
-    WheaPciREcoveryStatusUnknown = 0,
-    WheaPciRecoveryStatusNoError = 1,
-    WheaPciRecoveryStatusLinkDisableTimeout = 2,
-    WheaPciRecoveryStatusLinkEnableTimeout = 3,
-    WheaPciRecoveryStatusRpBusyTimeout = 4,
-    WheaPciRecoveryStatusComplexTree = 5,
-    WheaPciRecoveryStatusBusNotFound = 6,
-    WheaPciRecoveryStatusDeviceNotFound = 7,
-    WheaPciRecoveryStatusDdaAerNotRecoverable = 8,
-    WheaPciRecoveryStatusFailedRecovery = 9
-} WHEA_PCI_RECOVERY_STATUS, *PWHEA_PCI_RECOVERY_STATUS;
-
-typedef enum _WHEA_RAW_DATA_FORMAT {
-    WheaRawDataFormatIPFSalRecord = 0,
-    WheaRawDataFormatIA32MCA = 1,
-    WheaRawDataFormatIntel64MCA = 2,
-    WheaRawDataFormatAMD64MCA = 3,
-    WheaRawDataFormatMemory = 4,
-    WheaRawDataFormatPCIExpress = 5,
-    WheaRawDataFormatNMIPort = 6,
-    WheaRawDataFormatPCIXBus = 7,
-    WheaRawDataFormatPCIXDevice = 8,
-    WheaRawDataFormatGeneric = 9,
-    WheaRawDataFormatMax = 10
-} WHEA_RAW_DATA_FORMAT, *PWHEA_RAW_DATA_FORMAT;
-
-typedef enum _WHEA_EVENT_LOG_ENTRY_TYPE {
-    WheaEventLogEntryTypeInformational = 0,
-    WheaEventLogEntryTypeWarning = 1,
-    WheaEventLogEntryTypeError = 2
-} WHEA_EVENT_LOG_ENTRY_TYPE, *PWHEA_EVENT_LOG_ENTRY_TYPE;
+typedef enum _WHEA_ERROR_SOURCE_STATE {
+    WheaErrSrcStateStopped = 1,
+    WheaErrSrcStateStarted = 2,
+    WheaErrSrcStateRemoved = 3,
+    WheaErrSrcStateRemovePending = 4
+} WHEA_ERROR_SOURCE_STATE, *PWHEA_ERROR_SOURCE_STATE;
 
 typedef enum _WHEA_EVENT_LOG_ENTRY_ID {
     WheaEventLogEntryIdCmcPollingTimeout = (-2147483647),
@@ -362,52 +302,26 @@ typedef enum _WHEA_EVENT_LOG_ENTRY_ID {
     WheaEventLogEntryIdPshedPiTraceLog = (-2147221488)
 } WHEA_EVENT_LOG_ENTRY_ID, *PWHEA_EVENT_LOG_ENTRY_ID;
 
-typedef enum _WHEAP_PFA_OFFLINE_DECISION_TYPE {
-    WheapPfaOfflinePredictiveFailure = 1,
-    WheapPfaOfflineUncorrectedError = 2
-} WHEAP_PFA_OFFLINE_DECISION_TYPE, *PWHEAP_PFA_OFFLINE_DECISION_TYPE;
+typedef enum _WHEA_EVENT_LOG_ENTRY_TYPE {
+    WheaEventLogEntryTypeInformational = 0,
+    WheaEventLogEntryTypeWarning = 1,
+    WheaEventLogEntryTypeError = 2
+} WHEA_EVENT_LOG_ENTRY_TYPE, *PWHEA_EVENT_LOG_ENTRY_TYPE;
 
-typedef enum _WHEA_PFA_REMOVE_TRIGGER {
-    WheaPfaRemoveErrorThreshold = 1,
-    WheaPfaRemoveTimeout = 2,
-    WheaPfaRemoveCapacity = 3
-} WHEA_PFA_REMOVE_TRIGGER, *PWHEA_PFA_REMOVE_TRIGGER;
+typedef enum _WHEA_GAS_ERRORS {
+    WheaGasErrNone = 0,
+    WheaGasErrUnexpectedAddressSpaceId = 1,
+    WheaGasErrInvalidStructFields = 2,
+    WheaGasErrInvalidAccessSize = 3
+} WHEA_GAS_ERRORS, *PWHEA_GAS_ERRORS;
 
-typedef enum _WHEA_PSHED_PLUGIN_ENABLE_NOTIFY_ERRORS {
-    PshedPiEnableNotifyErrorCreateNotifyEvent = 1,
-    PshedPiEnableNotifyErrorCreateSystemThread = 2,
-    PshedPiEnableNotifyErrorMax = 3
-} WHEA_PSHED_PLUGIN_ENABLE_NOTIFY_ERRORS, *PWHEA_PSHED_PLUGIN_ENABLE_NOTIFY_ERRORS;
-
-typedef enum _WHEA_BUGCHECK_RECOVERY_LOG_TYPE {
-    WheaEventBugCheckRecoveryEntry = 0,
-    WheaEventBugCheckRecoveryReturn = 1,
-    WheaEventBugCheckRecoveryMax = 2
-} WHEA_BUGCHECK_RECOVERY_LOG_TYPE, *PWHEA_BUGCHECK_RECOVERY_LOG_TYPE;
-
-typedef enum _WHEAP_DPC_ERROR_EVENT_TYPE {
-    WheapDpcErrNoErr = 0,
-    WheapDpcErrBusNotFound = 1,
-    WheapDpcErrDpcedSubtree = 2,
-    WheapDpcErrDeviceIdBad = 3,
-    WheapDpcErrResetFailed = 4,
-    WheapDpcErrNoChildren = 5
-} WHEAP_DPC_ERROR_EVENT_TYPE, *PWHEAP_DPC_ERROR_EVENT_TYPE;
-
-typedef enum _PSHED_PI_ERR_READING_PCIE_OVERRIDES {
-    PshedPiErrReadingPcieOverridesNoErr = 0,
-    PshedPiErrReadingPcieOverridesNoMemory = 1,
-    PshedPiErrReadingPcieOverridesQueryErr = 2,
-    PshedPiErrReadingPcieOverridesBadSize = 3,
-    PshedPiErrReadingPcieOverridesBadSignature = 4,
-    PshedPiErrReadingPcieOverridesNoCapOffset = 5,
-    PshedPiErrReadingPcieOverridesNotBinary = 6
-} PSHED_PI_ERR_READING_PCIE_OVERRIDES, *PPSHED_PI_ERR_READING_PCIE_OVERRIDES;
-
-typedef enum _WHEA_THROTTLE_TYPE {
-    WheaPcieThrottle = 0,
-    WheaMemoryThrottle = 1
-} WHEA_THROTTLE_TYPE, *PWHEA_THROTTLE_TYPE;
+typedef enum _WHEA_MEMORY_DEFINITION {
+    WheaMemoryUndefined = 0,
+    WheaMemoryFm = 1,
+    WheaMemoryNm = 2,
+    WheaMemoryHbm = 3,
+    WheaMemoryMax = 4
+} WHEA_MEMORY_DEFINITION, *PWHEA_MEMORY_DEFINITION;
 
 typedef enum _WHEA_OFFLINE_ERRS {
     WheaOfflineNoError = 0,
@@ -424,6 +338,90 @@ typedef enum _WHEA_OFFLINE_ERRS {
     NoMemoryForWrapper = 11
 } WHEA_OFFLINE_ERRS, *PWHEA_OFFLINE_ERRS;
 
+typedef enum _WHEA_PCI_RECOVERY_SIGNAL {
+    WheaPciRecoverySignalUnknown = 0,
+    WheaPciRecoverySignalAer = 1,
+    WheaPciRecoverySignalDpc = 2
+} WHEA_PCI_RECOVERY_SIGNAL, *PWHEA_PCI_RECOVERY_SIGNAL;
+
+typedef enum _WHEA_PCI_RECOVERY_STATUS {
+    WheaPciREcoveryStatusUnknown = 0,
+    WheaPciRecoveryStatusNoError = 1,
+    WheaPciRecoveryStatusLinkDisableTimeout = 2,
+    WheaPciRecoveryStatusLinkEnableTimeout = 3,
+    WheaPciRecoveryStatusRpBusyTimeout = 4,
+    WheaPciRecoveryStatusComplexTree = 5,
+    WheaPciRecoveryStatusBusNotFound = 6,
+    WheaPciRecoveryStatusDeviceNotFound = 7,
+    WheaPciRecoveryStatusDdaAerNotRecoverable = 8,
+    WheaPciRecoveryStatusFailedRecovery = 9
+} WHEA_PCI_RECOVERY_STATUS, *PWHEA_PCI_RECOVERY_STATUS;
+
+typedef enum _WHEA_PCIEXPRESS_DEVICE_TYPE {
+    WheaPciExpressEndpoint = 0,
+    WheaPciExpressLegacyEndpoint = 1,
+    WheaPciExpressRootPort = 4,
+    WheaPciExpressUpstreamSwitchPort = 5,
+    WheaPciExpressDownstreamSwitchPort = 6,
+    WheaPciExpressToPciXBridge = 7,
+    WheaPciXToExpressBridge = 8,
+    WheaPciExpressRootComplexIntegratedEndpoint = 9,
+    WheaPciExpressRootComplexEventCollector = 10
+} WHEA_PCIEXPRESS_DEVICE_TYPE;
+
+typedef enum _WHEA_PFA_REMOVE_TRIGGER {
+    WheaPfaRemoveErrorThreshold = 1,
+    WheaPfaRemoveTimeout = 2,
+    WheaPfaRemoveCapacity = 3
+} WHEA_PFA_REMOVE_TRIGGER, *PWHEA_PFA_REMOVE_TRIGGER;
+
+typedef enum _WHEA_PSHED_PLUGIN_ENABLE_NOTIFY_ERRORS {
+    PshedPiEnableNotifyErrorCreateNotifyEvent = 1,
+    PshedPiEnableNotifyErrorCreateSystemThread = 2,
+    PshedPiEnableNotifyErrorMax = 3
+} WHEA_PSHED_PLUGIN_ENABLE_NOTIFY_ERRORS, *PWHEA_PSHED_PLUGIN_ENABLE_NOTIFY_ERRORS;
+
+typedef enum _WHEA_RAW_DATA_FORMAT {
+    WheaRawDataFormatIPFSalRecord = 0,
+    WheaRawDataFormatIA32MCA = 1,
+    WheaRawDataFormatIntel64MCA = 2,
+    WheaRawDataFormatAMD64MCA = 3,
+    WheaRawDataFormatMemory = 4,
+    WheaRawDataFormatPCIExpress = 5,
+    WheaRawDataFormatNMIPort = 6,
+    WheaRawDataFormatPCIXBus = 7,
+    WheaRawDataFormatPCIXDevice = 8,
+    WheaRawDataFormatGeneric = 9,
+    WheaRawDataFormatMax = 10
+} WHEA_RAW_DATA_FORMAT, *PWHEA_RAW_DATA_FORMAT;
+
+typedef enum _WHEA_RECOVERY_FAILURE_REASON {
+    WheaRecoveryFailureReasonKernelCouldNotMarkMemoryBad = 1,
+    WheaRecoveryFailureReasonKernelMarkMemoryBadTimedOut = 2,
+    WheaRecoveryFailureReasonNoRecoveryContext = 3,
+    WheaRecoveryFailureReasonNotContinuable = 4,
+    WheaRecoveryFailureReasonPcc = 5,
+    WheaRecoveryFailureReasonOverflow = 6,
+    WheaRecoveryFailureReasonNotSupported = 7,
+    WheaRecoveryFailureReasonMiscOrAddrNotValid = 8,
+    WheaRecoveryFailureReasonInvalidAddressMode = 9,
+    WheaRecoveryFailureReasonHighIrql = 10,
+    WheaRecoveryFailureReasonInsufficientAltContextWrappers = 11,
+    WheaRecoveryFailureReasonInterruptsDisabled = 12,
+    WheaRecoveryFailureReasonSwapBusy = 13,
+    WheaRecoveryFailureReasonStackOverflow = 14,
+    WheaRecoveryFailureReasonUnexpectedFailure = 15,
+    WheaRecoveryFailureReasonKernelWillPageFaultBCAtCurrentIrql = 16,
+    WheaRecoveryFailureReasonFarNotValid = 17,
+    WheaRecoveryFailureReasonMax = 18
+} WHEA_RECOVERY_FAILURE_REASON, *PWHEA_RECOVERY_FAILURE_REASON;
+
+typedef enum _WHEA_RECOVERY_TYPE {
+    WheaRecoveryTypeActionRequired = 1,
+    WheaRecoveryTypeActionOptional = 2,
+    WheaRecoveryTypeMax = 3
+} WHEA_RECOVERY_TYPE, *PWHEA_RECOVERY_TYPE;
+
 typedef enum _WHEA_REGISTRY_ERRORS {
     WheaRegErrNone = 0,
     WheaRegErrFailedToCreateWheaKey = 1,
@@ -431,123 +429,46 @@ typedef enum _WHEA_REGISTRY_ERRORS {
     WheaRegErrFailedToOpenHandle = 3
 } WHEA_REGISTRY_ERRORS, *PWHEA_REGISTRY_ERRORS;
 
-typedef enum _WHEA_GAS_ERRORS {
-    WheaGasErrNone = 0,
-    WheaGasErrUnexpectedAddressSpaceId = 1,
-    WheaGasErrInvalidStructFields = 2,
-    WheaGasErrInvalidAccessSize = 3
-} WHEA_GAS_ERRORS, *PWHEA_GAS_ERRORS;
+typedef enum _WHEA_THROTTLE_TYPE {
+    WheaPcieThrottle = 0,
+    WheaMemoryThrottle = 1
+} WHEA_THROTTLE_TYPE, *PWHEA_THROTTLE_TYPE;
 
-typedef enum _SOC_SUBSYSTEM_TYPE {
-    SOC_SUBSYS_WIRELESS_MODEM = 0,
-    SOC_SUBSYS_AUDIO_DSP = 1,
-    SOC_SUBSYS_WIRELSS_CONNECTIVITY = 2,
-    SOC_SUBSYS_SENSORS = 3,
-    SOC_SUBSYS_COMPUTE_DSP = 4,
-    SOC_SUBSYS_SECURE_PROC = 5,
-    SOC_SUBSYS_VENDOR_DEFINED = 0x10000
-} SOC_SUBSYSTEM_TYPE, *PSOC_SUBSYSTEM_TYPE;
+typedef enum _WHEAP_DPC_ERROR_EVENT_TYPE {
+    WheapDpcErrNoErr = 0,
+    WheapDpcErrBusNotFound = 1,
+    WheapDpcErrDpcedSubtree = 2,
+    WheapDpcErrDeviceIdBad = 3,
+    WheapDpcErrResetFailed = 4,
+    WheapDpcErrNoChildren = 5
+} WHEAP_DPC_ERROR_EVENT_TYPE, *PWHEAP_DPC_ERROR_EVENT_TYPE;
+
+typedef enum _WHEAP_PFA_OFFLINE_DECISION_TYPE {
+    WheapPfaOfflinePredictiveFailure = 1,
+    WheapPfaOfflineUncorrectedError = 2
+} WHEAP_PFA_OFFLINE_DECISION_TYPE, *PWHEAP_PFA_OFFLINE_DECISION_TYPE;
 
 typedef PVOID WHEA_ERROR_HANDLE;
-typedef struct _WHEA_ERROR_SOURCE_DESCRIPTOR WHEA_ERROR_SOURCE_DESCRIPTOR;
 typedef struct _WHEA_ERROR_RECORD WHEA_ERROR_RECORD;
+typedef struct _WHEA_ERROR_SOURCE_DESCRIPTOR WHEA_ERROR_SOURCE_DESCRIPTOR;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-BOOLEAN NTAPI RtlSuffixUnicodeString(PCUNICODE_STRING String1, PCUNICODE_STRING String2, BOOLEAN CaseInSensitive);
-BOOLEAN NTAPI RtlIsStateSeparationEnabled(void);
-BOOLEAN NTAPI RtlIsZeroMemory(PVOID Buffer, SIZE_T Length);
-NTSTATUS NTAPI RtlGetSystemGlobalData(RTL_SYSTEM_GLOBAL_DATA_ID DataId, PVOID Buffer, ULONG Size);
 PPHYSICAL_MEMORY_RANGE NTAPI MmGetPhysicalMemoryRangesEx(PVOID PartitionObject);
 PVOID NTAPI PsGetThreadProperty(PETHREAD Thread, ULONG_PTR Key, ULONG Flags);
+NTSTATUS NTAPI RtlGetSystemGlobalData(RTL_SYSTEM_GLOBAL_DATA_ID DataId, PVOID Buffer, ULONG Size);
+BOOLEAN NTAPI RtlIsStateSeparationEnabled(void);
+BOOLEAN NTAPI RtlIsZeroMemory(PVOID Buffer, SIZE_T Length);
+BOOLEAN NTAPI RtlSuffixUnicodeString(PCUNICODE_STRING String1, PCUNICODE_STRING String2, BOOLEAN CaseInSensitive);
 #ifdef __cplusplus
 }
 #endif
 
-typedef struct _NV_MEMORY_RANGE {
-  void * BaseAddress;
-  SIZE_T Length;
-} NV_MEMORY_RANGE, *PNV_MEMORY_RANGE;
-
-typedef struct CORRELATION_VECTOR {
-  CHAR Version;
-  CHAR Vector[129];
-} CORRELATION_VECTOR;
-
-typedef struct _CUSTOM_SYSTEM_EVENT_TRIGGER_CONFIG {
-  ULONG Size;
-  PCWSTR TriggerId;
-} CUSTOM_SYSTEM_EVENT_TRIGGER_CONFIG, *PCUSTOM_SYSTEM_EVENT_TRIGGER_CONFIG;
-
-typedef struct _FILE_FS_METADATA_SIZE_INFORMATION {
-  LARGE_INTEGER TotalMetadataAllocationUnits;
-  ULONG SectorsPerAllocationUnit;
-  ULONG BytesPerSector;
-} FILE_FS_METADATA_SIZE_INFORMATION, *PFILE_FS_METADATA_SIZE_INFORMATION;
-
-typedef struct _KEY_LAYER_INFORMATION {
-  ULONG IsTombstone : 1;
-  ULONG IsSupersedeLocal : 1;
-  ULONG IsSupersedeTree : 1;
-  ULONG ClassIsInherited : 1;
-  ULONG Reserved : 28;
-} KEY_LAYER_INFORMATION, *PKEY_LAYER_INFORMATION;
-
-typedef struct _PROCESS_MEMBERSHIP_INFORMATION {
-  ULONG ServerSiloId;
-} PROCESS_MEMBERSHIP_INFORMATION, *PPROCESS_MEMBERSHIP_INFORMATION;
-
-typedef struct _PROCESS_DYNAMIC_EH_CONTINUATION_TARGET {
-  ULONG_PTR TargetAddress;
-  ULONG_PTR Flags;
-} PROCESS_DYNAMIC_EH_CONTINUATION_TARGET, *PPROCESS_DYNAMIC_EH_CONTINUATION_TARGET;
-
-typedef struct _PROCESS_DYNAMIC_EH_CONTINUATION_TARGETS_INFORMATION {
-  USHORT NumberOfTargets;
-  USHORT Reserved;
-  ULONG Reserved2;
-  PPROCESS_DYNAMIC_EH_CONTINUATION_TARGET Targets;
-} PROCESS_DYNAMIC_EH_CONTINUATION_TARGETS_INFORMATION, *PPROCESS_DYNAMIC_EH_CONTINUATION_TARGETS_INFORMATION;
-
-typedef struct _PROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGE {
-  ULONG_PTR BaseAddress;
-  SIZE_T Size;
-  ULONG Flags;
-} PROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGE, *PPROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGE;
-
-typedef struct _PROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGES_INFORMATION {
-  USHORT NumberOfRanges;
-  USHORT Reserved;
-  ULONG Reserved2;
-  PPROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGE Ranges;
-} PROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGES_INFORMATION, *PPROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGES_INFORMATION;
-
-typedef struct _PROCESS_KEEPALIVE_COUNT_INFORMATION {
-  ULONG WakeCount;
-  ULONG NoWakeCount;
-} PROCESS_KEEPALIVE_COUNT_INFORMATION, *PPROCESS_KEEPALIVE_COUNT_INFORMATION;
-
-typedef struct _PROCESS_REVOKE_FILE_HANDLES_INFORMATION {
-  UNICODE_STRING TargetDevicePath;
-} PROCESS_REVOKE_FILE_HANDLES_INFORMATION, *PPROCESS_REVOKE_FILE_HANDLES_INFORMATION;
-
-typedef struct _POWER_THROTTLING_PROCESS_STATE {
-  ULONG Version;
-  ULONG ControlMask;
-  ULONG StateMask;
-} POWER_THROTTLING_PROCESS_STATE, *PPOWER_THROTTLING_PROCESS_STATE;
-
-typedef struct _POWER_THROTTLING_THREAD_STATE {
-  ULONG Version;
-  ULONG ControlMask;
-  ULONG StateMask;
-} POWER_THROTTLING_THREAD_STATE, *PPOWER_THROTTLING_THREAD_STATE;
-
-typedef struct _PROCESS_SYSCALL_PROVIDER_INFORMATION {
-  GUID ProviderId;
-  UCHAR Level;
-} PROCESS_SYSCALL_PROVIDER_INFORMATION, *PPROCESS_SYSCALL_PROVIDER_INFORMATION;
+typedef struct _ACPI_DEBUGGING_DEVICE_IN_USE {
+  ULONG NameSpacePathLength;
+  WCHAR NameSpacePath[1];
+} ACPI_DEBUGGING_DEVICE_IN_USE, *PACPI_DEBUGGING_DEVICE_IN_USE;
 
 typedef struct _CREATE_USER_PROCESS_ECP_CONTEXT {
   USHORT Size;
@@ -555,123 +476,10 @@ typedef struct _CREATE_USER_PROCESS_ECP_CONTEXT {
   PACCESS_TOKEN AccessToken;
 } CREATE_USER_PROCESS_ECP_CONTEXT, *PCREATE_USER_PROCESS_ECP_CONTEXT;
 
-typedef struct _OPLOCK_KEY_CONTEXT {
-  USHORT Version;
-  USHORT Flags;
-  GUID ParentOplockKey;
-  GUID TargetOplockKey;
-  ULONG Reserved;
-} OPLOCK_KEY_CONTEXT, *POPLOCK_KEY_CONTEXT;
-
-typedef struct _IO_FOEXT_SHADOW_FILE {
-  PFILE_OBJECT BackingFileObject;
-  PVOID BackingFltInstance;
-} IO_FOEXT_SHADOW_FILE, *PIO_FOEXT_SHADOW_FILE;
-
-typedef struct HAL_PMU_NOTIFICATION {
-  USHORT Version;
-  USHORT Size;
-  HAL_PMU_NOTIFICATION_TYPE NotificationType;
-} HAL_PMU_NOTIFICATION, *PHAL_PMU_NOTIFICATION;
-
-typedef struct _HAL_UNREGISTER_PMU_NOTIFICATION_INPUT {
-  USHORT Version;
-  USHORT Size;
-  ULONG OwnerTag;
-} HAL_UNREGISTER_PMU_NOTIFICATION_INPUT, *PHAL_UNREGISTER_PMU_NOTIFICATION_INPUT;
-
-typedef struct _PCI_DEBUGGING_DEVICE_IN_USE {
-  USHORT Segment;
-  ULONG Bus;
-  ULONG Slot;
-} PCI_DEBUGGING_DEVICE_IN_USE, *PPCI_DEBUGGING_DEVICE_IN_USE;
-
-typedef struct _ACPI_DEBUGGING_DEVICE_IN_USE {
-  ULONG NameSpacePathLength;
-  WCHAR NameSpacePath[1];
-} ACPI_DEBUGGING_DEVICE_IN_USE, *PACPI_DEBUGGING_DEVICE_IN_USE;
-
-typedef struct _PCI_EXPRESS_DPC_RP_PIO_HEADERLOG_REGISTER {
-  ULONG PioHeaderLogRegister[4];
-} PCI_EXPRESS_DPC_RP_PIO_HEADERLOG_REGISTER, *PPCI_EXPRESS_DPC_RP_PIO_HEADERLOG_REGISTER;
-
-typedef union _PCI_EXPRESS_DPC_RP_PIO_IMPSPECLOG_REGISTER {
-  ULONG PioImpSpecLog;
-} PCI_EXPRESS_DPC_RP_PIO_IMPSPECLOG_REGISTER, *PPCI_EXPRESS_DPC_RP_PIO_IMPSPECLOG_REGISTER;
-
-typedef struct _PCI_EXPRESS_DPC_RP_PIO_TLPPREFIXLOG_REGISTER {
-  ULONG PioTlpPrefixLogRegister[4];
-} PCI_EXPRESS_DPC_RP_PIO_TLPPREFIXLOG_REGISTER, *PPCI_EXPRESS_DPC_RP_PIO_TLPPREFIXLOG_REGISTER;
-
-typedef struct _PCI_EXPRESS_LANE_ERROR_STATUS {
-  ULONG LaneBitmap;
-} PCI_EXPRESS_LANE_ERROR_STATUS, *PPCI_EXPRESS_LANE_ERROR_STATUS;
-
-typedef struct _PCI_EXPRESS_EVENT_COLLECTOR_ENDPOINT_ASSOCIATION_CAPABILITY {
-  PCI_EXPRESS_ENHANCED_CAPABILITY_HEADER Header;
-  ULONG AssociationBitmap;
-} PCI_EXPRESS_EVENT_COLLECTOR_ENDPOINT_ASSOCIATION_CAPABILITY, *PPCI_EXPRESS_EVENT_COLLECTOR_ENDPOINT_ASSOCIATION_CAPABILITY;
-
-typedef struct _PCI_EXPRESS_CXL_DVSEC_RANGE_SIZE_HIGH_REGISTER {
-  ULONG MemSizeHigh;
-} PCI_EXPRESS_CXL_DVSEC_RANGE_SIZE_HIGH_REGISTER, *PPCI_EXPRESS_CXL_DVSEC_RANGE_SIZE_HIGH_REGISTER;
-
-typedef struct _PCI_EXPRESS_CXL_DVSEC_RANGE_BASE_HIGH_REGISTER {
-  ULONG MemBaseHigh;
-} PCI_EXPRESS_CXL_DVSEC_RANGE_BASE_HIGH_REGISTER, *PPCI_EXPRESS_CXL_DVSEC_RANGE_BASE_HIGH_REGISTER;
-
-#pragma pack(push, 1)
-typedef struct _WHEA_DRIVER_BUFFER_SET {
-  ULONG Version;
-  PUCHAR Data;
-  ULONG DataSize;
-  LPGUID SectionTypeGuid;
-  PUCHAR SectionFriendlyName;
-  PUCHAR Flags;
-} WHEA_DRIVER_BUFFER_SET, *PWHEA_DRIVER_BUFFER_SET;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _WHEA_XPF_NMI_DESCRIPTOR {
-  USHORT Type;
-  BOOLEAN Enabled;
-} WHEA_XPF_NMI_DESCRIPTOR, *PWHEA_XPF_NMI_DESCRIPTOR;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _WHEA_IPF_MCA_DESCRIPTOR {
-  USHORT Type;
-  UCHAR Enabled;
-  UCHAR Reserved;
-} WHEA_IPF_MCA_DESCRIPTOR, *PWHEA_IPF_MCA_DESCRIPTOR;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _WHEA_IPF_CMC_DESCRIPTOR {
-  USHORT Type;
-  UCHAR Enabled;
-  UCHAR Reserved;
-} WHEA_IPF_CMC_DESCRIPTOR, *PWHEA_IPF_CMC_DESCRIPTOR;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _WHEA_IPF_CPE_DESCRIPTOR {
-  USHORT Type;
-  UCHAR Enabled;
-  UCHAR Reserved;
-} WHEA_IPF_CPE_DESCRIPTOR, *PWHEA_IPF_CPE_DESCRIPTOR;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _IPMI_OS_SEL_RECORD {
-  ULONG Signature;
-  ULONG Version;
-  ULONG Length;
-  IPMI_OS_SEL_RECORD_TYPE RecordType;
-  ULONG DataLength;
-  UCHAR Data[1];
-} IPMI_OS_SEL_RECORD, *PIPMI_OS_SEL_RECORD;
-#pragma pack(pop)
+typedef struct _CUSTOM_SYSTEM_EVENT_TRIGGER_CONFIG {
+  ULONG Size;
+  PCWSTR TriggerId;
+} CUSTOM_SYSTEM_EVENT_TRIGGER_CONFIG, *PCUSTOM_SYSTEM_EVENT_TRIGGER_CONFIG;
 
 #pragma pack(push, 1)
 typedef struct _DIMM_ADDR_VALID_BITS_DDR4 {
@@ -718,210 +526,46 @@ typedef union _DIMM_ADDR_VALID_BITS {
 } DIMM_ADDR_VALID_BITS, *PDIMM_ADDR_VALID_BITS;
 #pragma pack(pop)
 
-#pragma pack(push, 1)
-typedef struct _WHEA_X86_REGISTER_STATE {
-  ULONG Eax;
-  ULONG Ebx;
-  ULONG Ecx;
-  ULONG Edx;
-  ULONG Esi;
-  ULONG Edi;
-  ULONG Ebp;
-  ULONG Esp;
-  USHORT Cs;
-  USHORT Ds;
-  USHORT Ss;
-  USHORT Es;
-  USHORT Fs;
-  USHORT Gs;
-  ULONG Eflags;
-  ULONG Eip;
-  ULONG Cr0;
-  ULONG Cr1;
-  ULONG Cr2;
-  ULONG Cr3;
-  ULONG Cr4;
-  ULONGLONG Gdtr;
-  ULONGLONG Idtr;
-  USHORT Ldtr;
-  USHORT Tr;
-} WHEA_X86_REGISTER_STATE, *PWHEA_X86_REGISTER_STATE;
-#pragma pack(pop)
+typedef struct _ERROR_SOURCE_INFO {
+  ULONG ErrorCount;
+  ULONG ErrorSourceId;
+} ERROR_SOURCE_INFO, *PERROR_SOURCE_INFO;
 
-typedef struct _WHEA128A {
-  ULONGLONG Low;
-  LONGLONG High;
-} WHEA128A, *PWHEA128A;
+typedef struct _FILE_FS_METADATA_SIZE_INFORMATION {
+  LARGE_INTEGER TotalMetadataAllocationUnits;
+  ULONG SectorsPerAllocationUnit;
+  ULONG BytesPerSector;
+} FILE_FS_METADATA_SIZE_INFORMATION, *PFILE_FS_METADATA_SIZE_INFORMATION;
 
-typedef struct _WHEA_X64_REGISTER_STATE {
-  ULONGLONG Rax;
-  ULONGLONG Rbx;
-  ULONGLONG Rcx;
-  ULONGLONG Rdx;
-  ULONGLONG Rsi;
-  ULONGLONG Rdi;
-  ULONGLONG Rbp;
-  ULONGLONG Rsp;
-  ULONGLONG R8;
-  ULONGLONG R9;
-  ULONGLONG R10;
-  ULONGLONG R11;
-  ULONGLONG R12;
-  ULONGLONG R13;
-  ULONGLONG R14;
-  ULONGLONG R15;
-  USHORT Cs;
-  USHORT Ds;
-  USHORT Ss;
-  USHORT Es;
-  USHORT Fs;
-  USHORT Gs;
-  ULONG Reserved;
-  ULONGLONG Rflags;
-  ULONGLONG Eip;
-  ULONGLONG Cr0;
-  ULONGLONG Cr1;
-  ULONGLONG Cr2;
-  ULONGLONG Cr3;
-  ULONGLONG Cr4;
-  ULONGLONG Cr8;
-  WHEA128A Gdtr;
-  WHEA128A Idtr;
-  USHORT Ldtr;
-  USHORT Tr;
-} WHEA_X64_REGISTER_STATE, *PWHEA_X64_REGISTER_STATE;
+typedef struct _HAL_UNREGISTER_PMU_NOTIFICATION_INPUT {
+  USHORT Version;
+  USHORT Size;
+  ULONG OwnerTag;
+} HAL_UNREGISTER_PMU_NOTIFICATION_INPUT, *PHAL_UNREGISTER_PMU_NOTIFICATION_INPUT;
+
+typedef struct _IO_FOEXT_SHADOW_FILE {
+  PFILE_OBJECT BackingFileObject;
+  PVOID BackingFltInstance;
+} IO_FOEXT_SHADOW_FILE, *PIO_FOEXT_SHADOW_FILE;
 
 #pragma pack(push, 1)
-typedef struct _WHEA_XPF_CONTEXT_INFO {
-  USHORT RegisterContextType;
-  USHORT RegisterDataSize;
-  ULONG MSRAddress;
-  ULONGLONG MmRegisterAddress;
-} WHEA_XPF_CONTEXT_INFO, *PWHEA_XPF_CONTEXT_INFO;
+typedef struct _IPMI_OS_SEL_RECORD {
+  ULONG Signature;
+  ULONG Version;
+  ULONG Length;
+  IPMI_OS_SEL_RECORD_TYPE RecordType;
+  ULONG DataLength;
+  UCHAR Data[1];
+} IPMI_OS_SEL_RECORD, *PIPMI_OS_SEL_RECORD;
 #pragma pack(pop)
 
-#pragma pack(push, 1)
-typedef struct _WHEA_MEMORY_HARDWARE_ADDRESS_INTEL {
-  WHEA_MEMORY_DEFINITION MemDef;
-  UINT64 SystemAddress;
-  UINT64 SpareSystemAddress;
-  UINT64 DevicePhysicalAddress;
-  UINT64 ChannelAddress;
-  UINT64 RankAddress;
-  UINT8 ProcessorSocketId;
-  UINT8 MemoryControllerId;
-  UINT8 TargetId;
-  UINT8 LogicalChannelId;
-  UINT8 ChannelId;
-  UINT8 SubChannelId;
-  UINT8 PhysicalRankId;
-  UINT8 DimmSlotId;
-  UINT8 DimmRankId;
-  UINT8 Bank;
-  UINT8 BankGroup;
-  UINT32 Row;
-  UINT32 Column;
-  UINT8 LockStepRank;
-  UINT8 LockStepPhysicalRank;
-  UINT8 LockStepBank;
-  UINT8 LockStepBankGroup;
-  UINT8 ChipSelect;
-  UINT8 Node;
-  UINT8 ChipId;
-  UINT8 Reserved[40];
-} WHEA_MEMORY_HARDWARE_ADDRESS_INTEL, *PWHEA_MEMORY_HARDWARE_ADDRESS_INTEL;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _WHEA_PMEM_PAGE_RANGE {
-  ULONG64 StartingPfn;
-  ULONG64 PageCount;
-  ULONG64 MarkedBadBitmap;
-} WHEA_PMEM_PAGE_RANGE, *PWHEA_PMEM_PAGE_RANGE;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _WHEA_PCIE_ADDRESS {
-  UINT32 Segment;
-  UINT32 Bus;
-  UINT32 Device;
-  UINT32 Function;
-} WHEA_PCIE_ADDRESS, *PWHEA_PCIE_ADDRESS;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _WHEA_PCIE_CORRECTABLE_ERROR_SECTION_HEADER {
-  UINT16 Version;
-  UINT16 Count;
-} WHEA_PCIE_CORRECTABLE_ERROR_SECTION_HEADER, *PWHEA_PCIE_CORRECTABLE_ERROR_SECTION_HEADER;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _WHEA_MEMORY_CORRECTABLE_ERROR_HEADER {
-  UINT16 Version;
-  UINT16 Count;
-} WHEA_MEMORY_CORRECTABLE_ERROR_HEADER, *PWHEA_MEMORY_CORRECTABLE_ERROR_HEADER;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _WHEA_PCIEXPRESS_DEVICE_ID {
-  USHORT VendorID;
-  USHORT DeviceID;
-  ULONG ClassCode : 24;
-  ULONG FunctionNumber : 8;
-  ULONG DeviceNumber : 8;
-  ULONG Segment : 16;
-  ULONG PrimaryBusNumber : 8;
-  ULONG SecondaryBusNumber : 8;
-  ULONG Reserved1 : 3;
-  ULONG SlotNumber : 13;
-  ULONG Reserved2 : 8;
-} WHEA_PCIEXPRESS_DEVICE_ID, *PWHEA_PCIEXPRESS_DEVICE_ID;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _WHEA_PCIXDEVICE_ID {
-  USHORT VendorId;
-  USHORT DeviceId;
-  ULONG ClassCode : 24;
-  ULONG FunctionNumber : 8;
-  ULONG DeviceNumber : 8;
-  ULONG BusNumber : 8;
-  ULONG SegmentNumber : 8;
-  ULONG Reserved1 : 8;
-  ULONG Reserved2;
-} WHEA_PCIXDEVICE_ID, *PWHEA_PCIXDEVICE_ID;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct WHEA_PCIXDEVICE_REGISTER_PAIR {
-  ULONGLONG Register;
-  ULONGLONG Data;
-} WHEA_PCIXDEVICE_REGISTER_PAIR, *PWHEA_PCIXDEVICE_REGISTER_PAIR;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _WHEA_FIRMWARE_ERROR_RECORD_REFERENCE {
-  UCHAR Type;
-  UCHAR Reserved[7];
-  ULONGLONG FirmwareRecordId;
-} WHEA_FIRMWARE_ERROR_RECORD_REFERENCE, *PWHEA_FIRMWARE_ERROR_RECORD_REFERENCE;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _MCI_STATUS_BITS_COMMON {
-  ULONG64 McaErrorCode : 16;
-  ULONG64 ModelErrorCode : 16;
-  ULONG64 Reserved : 25;
-  ULONG64 ContextCorrupt : 1;
-  ULONG64 AddressValid : 1;
-  ULONG64 MiscValid : 1;
-  ULONG64 ErrorEnabled : 1;
-  ULONG64 UncorrectedError : 1;
-  ULONG64 StatusOverFlow : 1;
-  ULONG64 Valid : 1;
-} MCI_STATUS_BITS_COMMON, *PMCI_STATUS_BITS_COMMON;
-#pragma pack(pop)
+typedef struct _KEY_LAYER_INFORMATION {
+  ULONG IsTombstone : 1;
+  ULONG IsSupersedeLocal : 1;
+  ULONG IsSupersedeTree : 1;
+  ULONG ClassIsInherited : 1;
+  ULONG Reserved : 28;
+} KEY_LAYER_INFORMATION, *PKEY_LAYER_INFORMATION;
 
 #pragma pack(push, 1)
 typedef struct _MCI_STATUS_AMD_BITS {
@@ -939,6 +583,21 @@ typedef struct _MCI_STATUS_AMD_BITS {
   ULONG64 StatusOverFlow : 1;
   ULONG64 Valid : 1;
 } MCI_STATUS_AMD_BITS, *PMCI_STATUS_AMD_BITS;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _MCI_STATUS_BITS_COMMON {
+  ULONG64 McaErrorCode : 16;
+  ULONG64 ModelErrorCode : 16;
+  ULONG64 Reserved : 25;
+  ULONG64 ContextCorrupt : 1;
+  ULONG64 AddressValid : 1;
+  ULONG64 MiscValid : 1;
+  ULONG64 ErrorEnabled : 1;
+  ULONG64 UncorrectedError : 1;
+  ULONG64 StatusOverFlow : 1;
+  ULONG64 Valid : 1;
+} MCI_STATUS_BITS_COMMON, *PMCI_STATUS_BITS_COMMON;
 #pragma pack(pop)
 
 #pragma pack(push, 1)
@@ -962,6 +621,192 @@ typedef struct _MCI_STATUS_INTEL_BITS {
 #pragma pack(pop)
 
 #pragma pack(push, 1)
+typedef struct _MU_TELEMETRY_SECTION {
+  GUID ComponentID;
+  GUID SubComponentID;
+  UINT32 Reserved;
+  UINT32 ErrorStatusValue;
+  UINT64 AdditionalInfo1;
+  UINT64 AdditionalInfo2;
+} MU_TELEMETRY_SECTION, *PMU_TELEMETRY_SECTION;
+#pragma pack(pop)
+
+typedef struct _NV_MEMORY_RANGE {
+  void * BaseAddress;
+  SIZE_T Length;
+} NV_MEMORY_RANGE, *PNV_MEMORY_RANGE;
+
+typedef struct _OPLOCK_KEY_CONTEXT {
+  USHORT Version;
+  USHORT Flags;
+  GUID ParentOplockKey;
+  GUID TargetOplockKey;
+  ULONG Reserved;
+} OPLOCK_KEY_CONTEXT, *POPLOCK_KEY_CONTEXT;
+
+typedef struct _PCI_DEBUGGING_DEVICE_IN_USE {
+  USHORT Segment;
+  ULONG Bus;
+  ULONG Slot;
+} PCI_DEBUGGING_DEVICE_IN_USE, *PPCI_DEBUGGING_DEVICE_IN_USE;
+
+typedef struct _PCI_EXPRESS_CXL_DVSEC_RANGE_BASE_HIGH_REGISTER {
+  ULONG MemBaseHigh;
+} PCI_EXPRESS_CXL_DVSEC_RANGE_BASE_HIGH_REGISTER, *PPCI_EXPRESS_CXL_DVSEC_RANGE_BASE_HIGH_REGISTER;
+
+typedef struct _PCI_EXPRESS_CXL_DVSEC_RANGE_SIZE_HIGH_REGISTER {
+  ULONG MemSizeHigh;
+} PCI_EXPRESS_CXL_DVSEC_RANGE_SIZE_HIGH_REGISTER, *PPCI_EXPRESS_CXL_DVSEC_RANGE_SIZE_HIGH_REGISTER;
+
+typedef struct _PCI_EXPRESS_DPC_RP_PIO_HEADERLOG_REGISTER {
+  ULONG PioHeaderLogRegister[4];
+} PCI_EXPRESS_DPC_RP_PIO_HEADERLOG_REGISTER, *PPCI_EXPRESS_DPC_RP_PIO_HEADERLOG_REGISTER;
+
+typedef union _PCI_EXPRESS_DPC_RP_PIO_IMPSPECLOG_REGISTER {
+  ULONG PioImpSpecLog;
+} PCI_EXPRESS_DPC_RP_PIO_IMPSPECLOG_REGISTER, *PPCI_EXPRESS_DPC_RP_PIO_IMPSPECLOG_REGISTER;
+
+typedef struct _PCI_EXPRESS_DPC_RP_PIO_TLPPREFIXLOG_REGISTER {
+  ULONG PioTlpPrefixLogRegister[4];
+} PCI_EXPRESS_DPC_RP_PIO_TLPPREFIXLOG_REGISTER, *PPCI_EXPRESS_DPC_RP_PIO_TLPPREFIXLOG_REGISTER;
+
+typedef struct _PCI_EXPRESS_EVENT_COLLECTOR_ENDPOINT_ASSOCIATION_CAPABILITY {
+  PCI_EXPRESS_ENHANCED_CAPABILITY_HEADER Header;
+  ULONG AssociationBitmap;
+} PCI_EXPRESS_EVENT_COLLECTOR_ENDPOINT_ASSOCIATION_CAPABILITY, *PPCI_EXPRESS_EVENT_COLLECTOR_ENDPOINT_ASSOCIATION_CAPABILITY;
+
+typedef struct _PCI_EXPRESS_LANE_ERROR_STATUS {
+  ULONG LaneBitmap;
+} PCI_EXPRESS_LANE_ERROR_STATUS, *PPCI_EXPRESS_LANE_ERROR_STATUS;
+
+typedef struct _POWER_THROTTLING_PROCESS_STATE {
+  ULONG Version;
+  ULONG ControlMask;
+  ULONG StateMask;
+} POWER_THROTTLING_PROCESS_STATE, *PPOWER_THROTTLING_PROCESS_STATE;
+
+typedef struct _POWER_THROTTLING_THREAD_STATE {
+  ULONG Version;
+  ULONG ControlMask;
+  ULONG StateMask;
+} POWER_THROTTLING_THREAD_STATE, *PPOWER_THROTTLING_THREAD_STATE;
+
+typedef struct _PROCESS_DYNAMIC_EH_CONTINUATION_TARGET {
+  ULONG_PTR TargetAddress;
+  ULONG_PTR Flags;
+} PROCESS_DYNAMIC_EH_CONTINUATION_TARGET, *PPROCESS_DYNAMIC_EH_CONTINUATION_TARGET;
+
+typedef struct _PROCESS_DYNAMIC_EH_CONTINUATION_TARGETS_INFORMATION {
+  USHORT NumberOfTargets;
+  USHORT Reserved;
+  ULONG Reserved2;
+  PPROCESS_DYNAMIC_EH_CONTINUATION_TARGET Targets;
+} PROCESS_DYNAMIC_EH_CONTINUATION_TARGETS_INFORMATION, *PPROCESS_DYNAMIC_EH_CONTINUATION_TARGETS_INFORMATION;
+
+typedef struct _PROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGE {
+  ULONG_PTR BaseAddress;
+  SIZE_T Size;
+  ULONG Flags;
+} PROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGE, *PPROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGE;
+
+typedef struct _PROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGES_INFORMATION {
+  USHORT NumberOfRanges;
+  USHORT Reserved;
+  ULONG Reserved2;
+  PPROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGE Ranges;
+} PROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGES_INFORMATION, *PPROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGES_INFORMATION;
+
+typedef struct _PROCESS_KEEPALIVE_COUNT_INFORMATION {
+  ULONG WakeCount;
+  ULONG NoWakeCount;
+} PROCESS_KEEPALIVE_COUNT_INFORMATION, *PPROCESS_KEEPALIVE_COUNT_INFORMATION;
+
+typedef struct _PROCESS_MEMBERSHIP_INFORMATION {
+  ULONG ServerSiloId;
+} PROCESS_MEMBERSHIP_INFORMATION, *PPROCESS_MEMBERSHIP_INFORMATION;
+
+typedef struct _PROCESS_REVOKE_FILE_HANDLES_INFORMATION {
+  UNICODE_STRING TargetDevicePath;
+} PROCESS_REVOKE_FILE_HANDLES_INFORMATION, *PPROCESS_REVOKE_FILE_HANDLES_INFORMATION;
+
+typedef struct _PROCESS_SYSCALL_PROVIDER_INFORMATION {
+  GUID ProviderId;
+  UCHAR Level;
+} PROCESS_SYSCALL_PROVIDER_INFORMATION, *PPROCESS_SYSCALL_PROVIDER_INFORMATION;
+
+#pragma pack(push, 1)
+typedef struct _PSHED_MEMORY_DETAILS_VALID_BITS {
+  UINT32 DdrVersion : 1;
+  UINT32 IsClosedPaged : 1;
+  UINT32 ColsPerRow : 1;
+  UINT32 PagesPerRow : 1;
+  UINT32 SocketCnt : 1;
+  UINT32 ChaOnSktCnt : 1;
+  UINT32 DimmSlotCnt : 1;
+  UINT32 SubchannelCnt : 1;
+  UINT32 Reserved : 24;
+} PSHED_MEMORY_DETAILS_VALID_BITS, *PPSHED_MEMORY_DETAILS_VALID_BITS;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _PSHED_MEMORY_DETAILS {
+  UINT16 Version;
+  PSHED_MEMORY_DETAILS_VALID_BITS Vb;
+  UINT16 DdrVersion;
+  BOOLEAN IsClosedPaged;
+  UINT16 ColsPerRow;
+  UINT16 PagesPerRow;
+  UINT8 SocketCnt;
+  UINT8 ChaOnSktCnt;
+  UINT8 DimmSlotCnt;
+  UINT8 SubchannelCnt;
+} PSHED_MEMORY_DETAILS, *PPSHED_MEMORY_DETAILS;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _SIGNAL_REG_VALUE {
+  UINT8 RegName[32];
+  UINT32 MsrAddr;
+  UINT64 Value;
+} SIGNAL_REG_VALUE, *PSIGNAL_REG_VALUE;
+#pragma pack(pop)
+
+typedef struct _SOC_SUBSYSTEM_FAILURE_DETAILS {
+  SOC_SUBSYSTEM_TYPE SubsysType;
+  ULONG64 FirmwareVersion;
+  ULONG64 HardwareVersion;
+  ULONG UnifiedFailureRegionSize;
+  CHAR UnifiedFailureRegion[1];
+} SOC_SUBSYSTEM_FAILURE_DETAILS, *PSOC_SUBSYSTEM_FAILURE_DETAILS;
+
+typedef struct _WHEA128A {
+  ULONGLONG Low;
+  LONGLONG High;
+} WHEA128A, *PWHEA128A;
+
+#pragma pack(push, 1)
+typedef struct _WHEA_ACPI_HEADER {
+  UINT32 Signature;
+  UINT32 Length;
+  UINT8 Revision;
+  UINT8 Checksum;
+  UINT8 OemId[6];
+  UINT64 OemTableId;
+  UINT32 OemRevision;
+  UINT32 CreatorId;
+  UINT32 CreatorRevision;
+} WHEA_ACPI_HEADER, *PWHEA_ACPI_HEADER;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _EFI_ACPI_RAS_SIGNAL_TABLE {
+  WHEA_ACPI_HEADER Header;
+  UINT32 NumberRecord;
+  SIGNAL_REG_VALUE Entries[1];
+} EFI_ACPI_RAS_SIGNAL_TABLE, *PEFI_ACPI_RAS_SIGNAL_TABLE;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
 typedef struct _WHEA_AMD_EXTENDED_REGISTERS {
   ULONGLONG IPID;
   ULONGLONG SYND;
@@ -975,46 +820,6 @@ typedef struct _WHEA_AMD_EXTENDED_REGISTERS {
   ULONGLONG RasCap;
   ULONGLONG Reserved[14];
 } WHEA_AMD_EXTENDED_REGISTERS, *PWHEA_AMD_EXTENDED_REGISTERS;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _WHEA_MSR_DUMP_SECTION {
-  UCHAR MsrDumpBuffer;
-  ULONG MsrDumpLength;
-  UCHAR MsrDumpData[1];
-} WHEA_MSR_DUMP_SECTION, *PWHEA_MSR_DUMP_SECTION;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _MU_TELEMETRY_SECTION {
-  GUID ComponentID;
-  GUID SubComponentID;
-  UINT32 Reserved;
-  UINT32 ErrorStatusValue;
-  UINT64 AdditionalInfo1;
-  UINT64 AdditionalInfo2;
-} MU_TELEMETRY_SECTION, *PMU_TELEMETRY_SECTION;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _WHEA_ARMV8_AARCH32_GPRS {
-  ULONG R0;
-  ULONG R1;
-  ULONG R2;
-  ULONG R3;
-  ULONG R4;
-  ULONG R5;
-  ULONG R6;
-  ULONG R7;
-  ULONG R8;
-  ULONG R9;
-  ULONG R10;
-  ULONG R11;
-  ULONG R12;
-  ULONG R13;
-  ULONG R14;
-  ULONG R15;
-} WHEA_ARMV8_AARCH32_GPRS, *PWHEA_ARMV8_AARCH32_GPRS;
 #pragma pack(pop)
 
 #pragma pack(push, 1)
@@ -1075,43 +880,6 @@ typedef struct _WHEA_ARM_AARCH32_SECURE_CSR {
 #pragma pack(pop)
 
 #pragma pack(push, 1)
-typedef struct _WHEA_ARMV8_AARCH64_GPRS {
-  ULONGLONG X0;
-  ULONGLONG X1;
-  ULONGLONG X2;
-  ULONGLONG X3;
-  ULONGLONG X4;
-  ULONGLONG X5;
-  ULONGLONG X6;
-  ULONGLONG X7;
-  ULONGLONG X8;
-  ULONGLONG X9;
-  ULONGLONG X10;
-  ULONGLONG X11;
-  ULONGLONG X12;
-  ULONGLONG X13;
-  ULONGLONG X14;
-  ULONGLONG X15;
-  ULONGLONG X16;
-  ULONGLONG X17;
-  ULONGLONG X18;
-  ULONGLONG X19;
-  ULONGLONG X20;
-  ULONGLONG X21;
-  ULONGLONG X22;
-  ULONGLONG X23;
-  ULONGLONG X24;
-  ULONGLONG X25;
-  ULONGLONG X26;
-  ULONGLONG X27;
-  ULONGLONG X28;
-  ULONGLONG X29;
-  ULONGLONG X30;
-  ULONGLONG SP;
-} WHEA_ARMV8_AARCH64_GPRS, *PWHEA_ARMV8_AARCH64_GPRS;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
 typedef struct _WHEA_ARM_AARCH64_EL1_CSR {
   ULONGLONG ELR_EL1;
   ULONGLONG ESR_EL2;
@@ -1154,21 +922,6 @@ typedef struct _WHEA_ARM_AARCH64_EL2_CSR {
 #pragma pack(pop)
 
 #pragma pack(push, 1)
-typedef struct _WHEA_ARMV8_AARCH64_EL3_CSR {
-  ULONGLONG ELR_EL3;
-  ULONGLONG ESR_EL3;
-  ULONGLONG FAR_EL3;
-  ULONGLONG MAIR_EL3;
-  ULONGLONG SCTLR_EL3;
-  ULONGLONG SP_EL3;
-  ULONGLONG SPSR_EL3;
-  ULONGLONG TCR_EL3;
-  ULONGLONG TPIDR_EL3;
-  ULONGLONG TTBR0_EL3;
-} WHEA_ARMV8_AARCH64_EL3_CSR, *PWHEA_ARMV8_AARCH64_EL3_CSR;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
 typedef struct _WHEA_ARM_MISC_CSR {
   USHORT MRSEncoding;
   ULONGLONG Value;
@@ -1182,22 +935,6 @@ typedef struct _WHEA_ARM_PROCESSOR_ERROR_CONTEXT_INFORMATION_HEADER {
   ULONG RegisterArraySize;
   UCHAR RegisterArray[1];
 } WHEA_ARM_PROCESSOR_ERROR_CONTEXT_INFORMATION_HEADER, *PWHEA_ARM_PROCESSOR_ERROR_CONTEXT_INFORMATION_HEADER;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _WHEA_SEA_SECTION {
-  ULONG Esr;
-  ULONG64 Far;
-  ULONG64 Par;
-  BOOLEAN WasKernel;
-} WHEA_SEA_SECTION, *PWHEA_SEA_SECTION;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _WHEA_SEI_SECTION {
-  ULONG Esr;
-  ULONG64 Far;
-} WHEA_SEI_SECTION, *PWHEA_SEI_SECTION;
 #pragma pack(pop)
 
 #pragma pack(push, 1)
@@ -1218,69 +955,103 @@ typedef struct _WHEA_ARM_RAS_NODE_SECTION {
 } WHEA_ARM_RAS_NODE_SECTION, *PWHEA_ARM_RAS_NODE_SECTION;
 #pragma pack(pop)
 
-typedef struct _WHEA_PCI_RECOVERY_SECTION {
-  UINT8 SignalType;
-  BOOLEAN RecoveryAttempted;
-  UINT8 RecoveryStatus;
-} WHEA_PCI_RECOVERY_SECTION, *PWHEA_PCI_RECOVERY_SECTION;
-
 #pragma pack(push, 1)
-typedef struct _WHEA_ACPI_HEADER {
-  UINT32 Signature;
-  UINT32 Length;
-  UINT8 Revision;
-  UINT8 Checksum;
-  UINT8 OemId[6];
-  UINT64 OemTableId;
-  UINT32 OemRevision;
-  UINT32 CreatorId;
-  UINT32 CreatorRevision;
-} WHEA_ACPI_HEADER, *PWHEA_ACPI_HEADER;
+typedef struct _WHEA_ARMV8_AARCH32_GPRS {
+  ULONG R0;
+  ULONG R1;
+  ULONG R2;
+  ULONG R3;
+  ULONG R4;
+  ULONG R5;
+  ULONG R6;
+  ULONG R7;
+  ULONG R8;
+  ULONG R9;
+  ULONG R10;
+  ULONG R11;
+  ULONG R12;
+  ULONG R13;
+  ULONG R14;
+  ULONG R15;
+} WHEA_ARMV8_AARCH32_GPRS, *PWHEA_ARMV8_AARCH32_GPRS;
 #pragma pack(pop)
 
 #pragma pack(push, 1)
-typedef struct _SIGNAL_REG_VALUE {
-  UINT8 RegName[32];
-  UINT32 MsrAddr;
-  UINT64 Value;
-} SIGNAL_REG_VALUE, *PSIGNAL_REG_VALUE;
+typedef struct _WHEA_ARMV8_AARCH64_EL3_CSR {
+  ULONGLONG ELR_EL3;
+  ULONGLONG ESR_EL3;
+  ULONGLONG FAR_EL3;
+  ULONGLONG MAIR_EL3;
+  ULONGLONG SCTLR_EL3;
+  ULONGLONG SP_EL3;
+  ULONGLONG SPSR_EL3;
+  ULONGLONG TCR_EL3;
+  ULONGLONG TPIDR_EL3;
+  ULONGLONG TTBR0_EL3;
+} WHEA_ARMV8_AARCH64_EL3_CSR, *PWHEA_ARMV8_AARCH64_EL3_CSR;
 #pragma pack(pop)
 
 #pragma pack(push, 1)
-typedef struct _EFI_ACPI_RAS_SIGNAL_TABLE {
-  WHEA_ACPI_HEADER Header;
-  UINT32 NumberRecord;
-  SIGNAL_REG_VALUE Entries[1];
-} EFI_ACPI_RAS_SIGNAL_TABLE, *PEFI_ACPI_RAS_SIGNAL_TABLE;
+typedef struct _WHEA_ARMV8_AARCH64_GPRS {
+  ULONGLONG X0;
+  ULONGLONG X1;
+  ULONGLONG X2;
+  ULONGLONG X3;
+  ULONGLONG X4;
+  ULONGLONG X5;
+  ULONGLONG X6;
+  ULONGLONG X7;
+  ULONGLONG X8;
+  ULONGLONG X9;
+  ULONGLONG X10;
+  ULONGLONG X11;
+  ULONGLONG X12;
+  ULONGLONG X13;
+  ULONGLONG X14;
+  ULONGLONG X15;
+  ULONGLONG X16;
+  ULONGLONG X17;
+  ULONGLONG X18;
+  ULONGLONG X19;
+  ULONGLONG X20;
+  ULONGLONG X21;
+  ULONGLONG X22;
+  ULONGLONG X23;
+  ULONGLONG X24;
+  ULONGLONG X25;
+  ULONGLONG X26;
+  ULONGLONG X27;
+  ULONGLONG X28;
+  ULONGLONG X29;
+  ULONGLONG X30;
+  ULONGLONG SP;
+} WHEA_ARMV8_AARCH64_GPRS, *PWHEA_ARMV8_AARCH64_GPRS;
 #pragma pack(pop)
 
 #pragma pack(push, 1)
-typedef struct _PSHED_MEMORY_DETAILS_VALID_BITS {
-  UINT32 DdrVersion : 1;
-  UINT32 IsClosedPaged : 1;
-  UINT32 ColsPerRow : 1;
-  UINT32 PagesPerRow : 1;
-  UINT32 SocketCnt : 1;
-  UINT32 ChaOnSktCnt : 1;
-  UINT32 DimmSlotCnt : 1;
-  UINT32 SubchannelCnt : 1;
-  UINT32 Reserved : 24;
-} PSHED_MEMORY_DETAILS_VALID_BITS, *PPSHED_MEMORY_DETAILS_VALID_BITS;
+typedef struct _WHEA_DRIVER_BUFFER_SET {
+  ULONG Version;
+  PUCHAR Data;
+  ULONG DataSize;
+  LPGUID SectionTypeGuid;
+  PUCHAR SectionFriendlyName;
+  PUCHAR Flags;
+} WHEA_DRIVER_BUFFER_SET, *PWHEA_DRIVER_BUFFER_SET;
 #pragma pack(pop)
 
+typedef struct _WHEA_ERROR_SOURCE_OVERRIDE_SETTINGS {
+  WHEA_ERROR_SOURCE_TYPE Type;
+  ULONG MaxRawDataLength;
+  ULONG NumRecordsToPreallocate;
+  ULONG MaxSectionsPerRecord;
+} WHEA_ERROR_SOURCE_OVERRIDE_SETTINGS, *PWHEA_ERROR_SOURCE_OVERRIDE_SETTINGS;
+
 #pragma pack(push, 1)
-typedef struct _PSHED_MEMORY_DETAILS {
-  UINT16 Version;
-  PSHED_MEMORY_DETAILS_VALID_BITS Vb;
-  UINT16 DdrVersion;
-  BOOLEAN IsClosedPaged;
-  UINT16 ColsPerRow;
-  UINT16 PagesPerRow;
-  UINT8 SocketCnt;
-  UINT8 ChaOnSktCnt;
-  UINT8 DimmSlotCnt;
-  UINT8 SubchannelCnt;
-} PSHED_MEMORY_DETAILS, *PPSHED_MEMORY_DETAILS;
+typedef struct _WHEA_FIRMWARE_ERROR_RECORD_REFERENCE {
+  UCHAR Type;
+  UCHAR Reserved[7];
+  ULONGLONG FirmwareRecordId;
+} WHEA_FIRMWARE_ERROR_RECORD_REFERENCE, *PWHEA_FIRMWARE_ERROR_RECORD_REFERENCE;
 #pragma pack(pop)
 
 #pragma pack(push, 1)
@@ -1297,17 +1068,136 @@ typedef struct _WHEA_GENERIC_ERROR_DATA_ENTRY_V1 {
 } WHEA_GENERIC_ERROR_DATA_ENTRY_V1, *PWHEA_GENERIC_ERROR_DATA_ENTRY_V1;
 #pragma pack(pop)
 
-typedef struct _ERROR_SOURCE_INFO {
-  ULONG ErrorCount;
-  ULONG ErrorSourceId;
-} ERROR_SOURCE_INFO, *PERROR_SOURCE_INFO;
+#pragma pack(push, 1)
+typedef struct _WHEA_IPF_CMC_DESCRIPTOR {
+  USHORT Type;
+  UCHAR Enabled;
+  UCHAR Reserved;
+} WHEA_IPF_CMC_DESCRIPTOR, *PWHEA_IPF_CMC_DESCRIPTOR;
+#pragma pack(pop)
 
-typedef struct _WHEA_ERROR_SOURCE_OVERRIDE_SETTINGS {
-  WHEA_ERROR_SOURCE_TYPE Type;
-  ULONG MaxRawDataLength;
-  ULONG NumRecordsToPreallocate;
-  ULONG MaxSectionsPerRecord;
-} WHEA_ERROR_SOURCE_OVERRIDE_SETTINGS, *PWHEA_ERROR_SOURCE_OVERRIDE_SETTINGS;
+#pragma pack(push, 1)
+typedef struct _WHEA_IPF_CPE_DESCRIPTOR {
+  USHORT Type;
+  UCHAR Enabled;
+  UCHAR Reserved;
+} WHEA_IPF_CPE_DESCRIPTOR, *PWHEA_IPF_CPE_DESCRIPTOR;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _WHEA_IPF_MCA_DESCRIPTOR {
+  USHORT Type;
+  UCHAR Enabled;
+  UCHAR Reserved;
+} WHEA_IPF_MCA_DESCRIPTOR, *PWHEA_IPF_MCA_DESCRIPTOR;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _WHEA_MEMORY_CORRECTABLE_ERROR_HEADER {
+  UINT16 Version;
+  UINT16 Count;
+} WHEA_MEMORY_CORRECTABLE_ERROR_HEADER, *PWHEA_MEMORY_CORRECTABLE_ERROR_HEADER;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _WHEA_MEMORY_HARDWARE_ADDRESS_INTEL {
+  WHEA_MEMORY_DEFINITION MemDef;
+  UINT64 SystemAddress;
+  UINT64 SpareSystemAddress;
+  UINT64 DevicePhysicalAddress;
+  UINT64 ChannelAddress;
+  UINT64 RankAddress;
+  UINT8 ProcessorSocketId;
+  UINT8 MemoryControllerId;
+  UINT8 TargetId;
+  UINT8 LogicalChannelId;
+  UINT8 ChannelId;
+  UINT8 SubChannelId;
+  UINT8 PhysicalRankId;
+  UINT8 DimmSlotId;
+  UINT8 DimmRankId;
+  UINT8 Bank;
+  UINT8 BankGroup;
+  UINT32 Row;
+  UINT32 Column;
+  UINT8 LockStepRank;
+  UINT8 LockStepPhysicalRank;
+  UINT8 LockStepBank;
+  UINT8 LockStepBankGroup;
+  UINT8 ChipSelect;
+  UINT8 Node;
+  UINT8 ChipId;
+  UINT8 Reserved[40];
+} WHEA_MEMORY_HARDWARE_ADDRESS_INTEL, *PWHEA_MEMORY_HARDWARE_ADDRESS_INTEL;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _WHEA_MSR_DUMP_SECTION {
+  UCHAR MsrDumpBuffer;
+  ULONG MsrDumpLength;
+  UCHAR MsrDumpData[1];
+} WHEA_MSR_DUMP_SECTION, *PWHEA_MSR_DUMP_SECTION;
+#pragma pack(pop)
+
+typedef struct _WHEA_PCI_RECOVERY_SECTION {
+  UINT8 SignalType;
+  BOOLEAN RecoveryAttempted;
+  UINT8 RecoveryStatus;
+} WHEA_PCI_RECOVERY_SECTION, *PWHEA_PCI_RECOVERY_SECTION;
+
+#pragma pack(push, 1)
+typedef struct _WHEA_PCIE_ADDRESS {
+  UINT32 Segment;
+  UINT32 Bus;
+  UINT32 Device;
+  UINT32 Function;
+} WHEA_PCIE_ADDRESS, *PWHEA_PCIE_ADDRESS;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _WHEA_PCIE_CORRECTABLE_ERROR_SECTION_HEADER {
+  UINT16 Version;
+  UINT16 Count;
+} WHEA_PCIE_CORRECTABLE_ERROR_SECTION_HEADER, *PWHEA_PCIE_CORRECTABLE_ERROR_SECTION_HEADER;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _WHEA_PCIEXPRESS_DEVICE_ID {
+  USHORT VendorID;
+  USHORT DeviceID;
+  ULONG ClassCode : 24;
+  ULONG FunctionNumber : 8;
+  ULONG DeviceNumber : 8;
+  ULONG Segment : 16;
+  ULONG PrimaryBusNumber : 8;
+  ULONG SecondaryBusNumber : 8;
+  ULONG Reserved1 : 3;
+  ULONG SlotNumber : 13;
+  ULONG Reserved2 : 8;
+} WHEA_PCIEXPRESS_DEVICE_ID, *PWHEA_PCIEXPRESS_DEVICE_ID;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _WHEA_PCIXDEVICE_ID {
+  USHORT VendorId;
+  USHORT DeviceId;
+  ULONG ClassCode : 24;
+  ULONG FunctionNumber : 8;
+  ULONG DeviceNumber : 8;
+  ULONG BusNumber : 8;
+  ULONG SegmentNumber : 8;
+  ULONG Reserved1 : 8;
+  ULONG Reserved2;
+} WHEA_PCIXDEVICE_ID, *PWHEA_PCIXDEVICE_ID;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _WHEA_PMEM_PAGE_RANGE {
+  ULONG64 StartingPfn;
+  ULONG64 PageCount;
+  ULONG64 MarkedBadBitmap;
+} WHEA_PMEM_PAGE_RANGE, *PWHEA_PMEM_PAGE_RANGE;
+#pragma pack(pop)
 
 #pragma pack(push, 1)
 typedef struct _WHEA_PRM_ADDRESS_TRANSLATION_BUFFER_INTEL {
@@ -1354,13 +1244,4660 @@ typedef struct _WHEA_PRM_ADDRESS_TRANSLATION_BUFFER_INTEL {
 } WHEA_PRM_ADDRESS_TRANSLATION_BUFFER_INTEL, *PWHEA_PRM_ADDRESS_TRANSLATION_BUFFER_INTEL;
 #pragma pack(pop)
 
-typedef struct _SOC_SUBSYSTEM_FAILURE_DETAILS {
-  SOC_SUBSYSTEM_TYPE SubsysType;
-  ULONG64 FirmwareVersion;
-  ULONG64 HardwareVersion;
-  ULONG UnifiedFailureRegionSize;
-  CHAR UnifiedFailureRegion[1];
-} SOC_SUBSYSTEM_FAILURE_DETAILS, *PSOC_SUBSYSTEM_FAILURE_DETAILS;
+#pragma pack(push, 1)
+typedef struct _WHEA_SEA_SECTION {
+  ULONG Esr;
+  ULONG64 Far;
+  ULONG64 Par;
+  BOOLEAN WasKernel;
+} WHEA_SEA_SECTION, *PWHEA_SEA_SECTION;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _WHEA_SEI_SECTION {
+  ULONG Esr;
+  ULONG64 Far;
+} WHEA_SEI_SECTION, *PWHEA_SEI_SECTION;
+#pragma pack(pop)
+
+typedef struct _WHEA_X64_REGISTER_STATE {
+  ULONGLONG Rax;
+  ULONGLONG Rbx;
+  ULONGLONG Rcx;
+  ULONGLONG Rdx;
+  ULONGLONG Rsi;
+  ULONGLONG Rdi;
+  ULONGLONG Rbp;
+  ULONGLONG Rsp;
+  ULONGLONG R8;
+  ULONGLONG R9;
+  ULONGLONG R10;
+  ULONGLONG R11;
+  ULONGLONG R12;
+  ULONGLONG R13;
+  ULONGLONG R14;
+  ULONGLONG R15;
+  USHORT Cs;
+  USHORT Ds;
+  USHORT Ss;
+  USHORT Es;
+  USHORT Fs;
+  USHORT Gs;
+  ULONG Reserved;
+  ULONGLONG Rflags;
+  ULONGLONG Eip;
+  ULONGLONG Cr0;
+  ULONGLONG Cr1;
+  ULONGLONG Cr2;
+  ULONGLONG Cr3;
+  ULONGLONG Cr4;
+  ULONGLONG Cr8;
+  WHEA128A Gdtr;
+  WHEA128A Idtr;
+  USHORT Ldtr;
+  USHORT Tr;
+} WHEA_X64_REGISTER_STATE, *PWHEA_X64_REGISTER_STATE;
+
+#pragma pack(push, 1)
+typedef struct _WHEA_X86_REGISTER_STATE {
+  ULONG Eax;
+  ULONG Ebx;
+  ULONG Ecx;
+  ULONG Edx;
+  ULONG Esi;
+  ULONG Edi;
+  ULONG Ebp;
+  ULONG Esp;
+  USHORT Cs;
+  USHORT Ds;
+  USHORT Ss;
+  USHORT Es;
+  USHORT Fs;
+  USHORT Gs;
+  ULONG Eflags;
+  ULONG Eip;
+  ULONG Cr0;
+  ULONG Cr1;
+  ULONG Cr2;
+  ULONG Cr3;
+  ULONG Cr4;
+  ULONGLONG Gdtr;
+  ULONGLONG Idtr;
+  USHORT Ldtr;
+  USHORT Tr;
+} WHEA_X86_REGISTER_STATE, *PWHEA_X86_REGISTER_STATE;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _WHEA_XPF_CONTEXT_INFO {
+  USHORT RegisterContextType;
+  USHORT RegisterDataSize;
+  ULONG MSRAddress;
+  ULONGLONG MmRegisterAddress;
+} WHEA_XPF_CONTEXT_INFO, *PWHEA_XPF_CONTEXT_INFO;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _WHEA_XPF_NMI_DESCRIPTOR {
+  USHORT Type;
+  BOOLEAN Enabled;
+} WHEA_XPF_NMI_DESCRIPTOR, *PWHEA_XPF_NMI_DESCRIPTOR;
+#pragma pack(pop)
+
+typedef struct CORRELATION_VECTOR {
+  CHAR Version;
+  CHAR Vector[129];
+} CORRELATION_VECTOR;
+
+typedef struct HAL_PMU_NOTIFICATION {
+  USHORT Version;
+  USHORT Size;
+  HAL_PMU_NOTIFICATION_TYPE NotificationType;
+} HAL_PMU_NOTIFICATION, *PHAL_PMU_NOTIFICATION;
+
+#pragma pack(push, 1)
+typedef struct WHEA_PCIXDEVICE_REGISTER_PAIR {
+  ULONGLONG Register;
+  ULONGLONG Data;
+} WHEA_PCIXDEVICE_REGISTER_PAIR, *PWHEA_PCIXDEVICE_REGISTER_PAIR;
+#pragma pack(pop)
+
+#define CPER_FIELD_CHECKtype, field, offset, length) C_ASSERT(((FIELD_OFFSET(type, field) == (offset)) && (RTL_FIELD_SIZE(type, field) == (length))))
+#define FILL_NV_MEMORY_FLAG_PERSIST 3
+#ifdef _WIN64
+#define FLUSH_NV_MEMORY_DEFAULT_TOKEN ((ULONG_PTR)(-1))
+#else
+#define FLUSH_NV_MEMORY_DEFAULT_TOKEN ((ULONG_PTR)0xFFFFFFFF)
+#endif
+#define FsRtlIsChecksumErrorSTS) ((BOOLEAN) !FsRtlIsTotalDeviceFailure(STS))
+#define IOCTL_IPMI_INTERNAL_RECORD_SEL_EVENT 0x221000
+#define IPMI_OS_SEL_RECORD_SIGNATURE 0x5253534F
+#define IPMI_OS_SEL_RECORD_VERSION 1
+#define KERNEL_SHADOW_STACK_SIZE PAGE_SIZE
+#define KUMS_UCH_VOLATILE_BIT 0
+#define KUMS_UCH_VOLATILE_MASK (1ULL << KUMS_UCH_VOLATILE_BIT)
+#ifdef _WIN64
+#define MM_ALL_PARTITIONS_OBJECT (-2)
+#else
+#define MM_ALL_PARTITIONS_OBJECT 0xFFFFFFFE
+#endif
+#ifdef _WIN64
+#define MM_CURRENT_PROCESS_PARTITION_OBJECT (-1)
+#else
+#define MM_CURRENT_PROCESS_PARTITION_OBJECT 0xFFFFFFFF
+#endif
+#define MM_SYSTEM_PARTITION_OBJECT 0
+#define NTPSHEDAPI 0
+#define POWER_THROTTLING_PROCESS_VALID_FLAGS 7
+#define POWER_THROTTLING_THREAD_VALID_FLAGS 1
+#define RTL_CORRELATION_VECTOR_VERSION_1 ((CHAR)1)
+#define RTL_CORRELATION_VECTOR_VERSION_2 ((CHAR)2)
+#define RTL_CORRELATION_VECTOR_VERSION_CURRENT 2
+#define SE_SIGNING_LEVEL_DEVELOPER 3
+#define SHARED_GLOBAL_FLAGS_ADMINAPPROVALMODE_TYPE_SHADOWADMIN 0x1000
+#define SHARED_GLOBAL_FLAGS_ADMINAPPROVALMODE_TYPE_SPLITTOKEN 0x800
+#define SHARED_GLOBAL_FLAGS_CONSOLE_BROKER_ENABLED 0x40
+#define SHARED_GLOBAL_FLAGS_LKG_ENABLED 0x10
+#define SHARED_GLOBAL_FLAGS_MULTI_SESSION_SKU 0x100
+#define SHARED_GLOBAL_FLAGS_MULTIUSERS_IN_SESSION_SKU 0x200
+#define SHARED_GLOBAL_FLAGS_SECURE_BOOT_ENABLED 0x80
+#define SHARED_GLOBAL_FLAGS_STATE_SEPARATION_ENABLED 0x400
+#define TraceLoggingCORRELATION_VECTORcv) TraceLoggingString((cv) . Vector, "__TlgCV__")
+#define WHEA_ERROR_HANDLE_INVALID 0
+#define WHEA_ERROR_LOG_ENTRY_ACPI 0x49504341
+#define WHEA_ERROR_LOG_ENTRY_HAL 0x204C4148
+#define WHEA_ERROR_LOG_ENTRY_HYPERV 0x50565948
+#define WHEA_ERROR_LOG_ENTRY_KERNEL 0x4C4E524B
+#define WHEA_ERROR_LOG_ENTRY_PCI 0x20494350
+#define WHEA_ERROR_LOG_ENTRY_PSHED 0x44485350
+#define WHEA_ERROR_LOG_ENTRY_PSHED_PI 0x49505350
+#define WHEA_ERROR_LOG_ENTRY_SIGNATURE 0x674C6857
+#define WHEA_ERROR_PACKET_V1_SIGNATURE 0x74507245
+#define WHEA_ERROR_RECORD_SIGNATURE 0x52455043
+#define WHEA_ERROR_SOURCE_DESCRIPTOR_VERSION_10 10
+#define WHEA_GENERIC_ENTRY_VERSION 0x300
+#define WHEA_PHYSICAL_ADDRESS 0
+#define WHEA_PLUGIN_REGISTRATION_PACKET_VERSION 0x20000
+#define WHEA_PMEM_IS_PAGE_RANGE_ALREADY_MARKED_BADPageRange) (((PageRange) -> PageCount <= sizeof (ULONG64) * 8) && (((PageRange) -> MarkedBadBitmap) == (ULONG64_MAX >> (sizeof (ULONG64) * 8 - (PageRange) -> PageCount))))
+#define WHEA_PMEM_IS_PFN_ALREADY_MARKED_BADPageRange, TargetPfn) (((TargetPfn) - ((PageRange) -> StartingPfn) < sizeof (ULONG64) * 8) && ((((PageRange) -> MarkedBadBitmap) & (1ull << ((TargetPfn) - ((PageRange) -> StartingPfn)))) != 0))
+#define WHEA_XPF_MCA_SECTION_VERSION 4
+#define WheaAdd2PtrP, I) ((PVOID) ((PUCHAR) (P) + (I)))
+#define WRITE_NV_MEMORY_FLAG_PERSIST 3
+#define XSTATE_FIRST_NON_LEGACY_FEATURE 2
+#define XSTATE_MASK_AMD64_LEGACY 3
+#define XSTATE_MASK_ARM64_SVE 4
+
+#pragma pack(push, 1)
+union _AER_BRIDGE_DESCRIPTOR_FLAGS
+{
+    struct
+    {
+        USHORT UncorrectableErrorMaskRW : 1;
+        USHORT UncorrectableErrorSeverityRW : 1;
+        USHORT CorrectableErrorMaskRW : 1;
+        USHORT AdvancedCapsAndControlRW : 1;
+        USHORT SecondaryUncorrectableErrorMaskRW : 1;
+        USHORT SecondaryUncorrectableErrorSevRW : 1;
+        USHORT SecondaryCapsAndControlRW : 1;
+        USHORT Reserved : 9;
+    };
+    USHORT AsUSHORT;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _AER_ENDPOINT_DESCRIPTOR_FLAGS
+{
+    struct
+    {
+        USHORT UncorrectableErrorMaskRW : 1;
+        USHORT UncorrectableErrorSeverityRW : 1;
+        USHORT CorrectableErrorMaskRW : 1;
+        USHORT AdvancedCapsAndControlRW : 1;
+        USHORT Reserved : 12;
+    };
+    USHORT AsUSHORT;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _AER_ROOTPORT_DESCRIPTOR_FLAGS
+{
+    struct
+    {
+        USHORT UncorrectableErrorMaskRW : 1;
+        USHORT UncorrectableErrorSeverityRW : 1;
+        USHORT CorrectableErrorMaskRW : 1;
+        USHORT AdvancedCapsAndControlRW : 1;
+        USHORT RootErrorCommandRW : 1;
+        USHORT Reserved : 11;
+    };
+    USHORT AsUSHORT;
+};
+#pragma pack(pop)
+
+struct _DEBUGGING_DEVICE_IN_USE
+{
+    KD_NAMESPACE_ENUM NameSpace;
+    ULONG StructureLength;
+    union
+    {
+        ACPI_DEBUGGING_DEVICE_IN_USE AcpiDevice;
+        PCI_DEBUGGING_DEVICE_IN_USE PciDevice;
+    };
+};
+
+union _DIMM_ADDRESS
+{
+    struct
+    {
+        UINT64 SocketId : 4;
+        UINT64 MemoryControllerId : 2;
+        UINT64 ChannelId : 2;
+        UINT64 DimmSlot : 2;
+        UINT64 DimmRank : 2;
+        UINT64 Device : 5;
+        UINT64 ChipSelect : 3;
+        UINT64 Bank : 8;
+        UINT64 Dq : 4;
+        UINT64 Reserved : 32;
+        UINT32 Row;
+        UINT32 Column;
+        UINT64 Info;
+    } Ddr4;
+    struct
+    {
+        UINT64 SocketId : 5;
+        UINT64 MemoryControllerId : 4;
+        UINT64 ChannelId : 3;
+        UINT64 SubChannelId : 2;
+        UINT64 DimmSlot : 2;
+        UINT64 DimmRank : 4;
+        UINT64 Device : 6;
+        UINT64 ChipId : 4;
+        UINT64 Bank : 8;
+        UINT64 Dq : 5;
+        UINT64 Reserved : 21;
+        UINT32 Row;
+        UINT32 Column;
+        UINT64 Info;
+    } Ddr5;
+};
+
+struct _IO_FOEXT_SILO_PARAMETERS
+{
+    ULONG Length;
+    union
+    {
+        struct
+        {
+            ULONG HasHardReference : 1;
+            ULONG SpareFlags : 31;
+        };
+        ULONG Flags;
+    };
+    PESILO SiloContext;
+};
+
+#pragma pack(push, 1)
+union _MCG_CAP
+{
+    struct
+    {
+        ULONG64 CountField : 8;
+        ULONG64 ControlMsrPresent : 1;
+        ULONG64 ExtendedMsrsPresent : 1;
+        ULONG64 SignalingExtensionPresent : 1;
+        ULONG64 ThresholdErrorStatusPresent : 1;
+        ULONG64 Reserved : 4;
+        ULONG64 ExtendedRegisterCount : 8;
+        ULONG64 SoftwareErrorRecoverySupported : 1;
+        ULONG64 EnhancedMachineCheckCapability : 1;
+        ULONG64 ExtendedErrorLogging : 1;
+        ULONG64 LocalMachineCheckException : 1;
+    };
+    ULONG64 QuadPart;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _MCG_STATUS
+{
+    struct
+    {
+        ULONG RestartIpValid : 1;
+        ULONG ErrorIpValid : 1;
+        ULONG MachineCheckInProgress : 1;
+        ULONG LocalMceValid : 1;
+        ULONG Reserved1 : 28;
+        ULONG Reserved2;
+    };
+    ULONGLONG QuadPart;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _MCI_STATUS
+{
+    MCI_STATUS_BITS_COMMON CommonBits;
+    MCI_STATUS_AMD_BITS AmdBits;
+    MCI_STATUS_INTEL_BITS IntelBits;
+    ULONG64 QuadPart;
+};
+#pragma pack(pop)
+
+union _PAGE_OFFLINE_VALID_BITS
+{
+    struct
+    {
+        UINT8 PhysicalAddress : 1;
+        UINT8 MemDefect : 1;
+        UINT8 Reserved : 6;
+    };
+    UINT8 AsUINT8;
+};
+
+union _PCI_EXPRESS_CXL_DVSEC_CAPABILITY_REGISTER_V11
+{
+    struct
+    {
+        USHORT CacheCapable : 1;
+        USHORT IoCapable : 1;
+        USHORT MemCapable : 1;
+        USHORT MemHwInitMode : 1;
+        USHORT HdmCount : 2;
+        USHORT Reserved0 : 8;
+        USHORT ViralCapable : 1;
+        USHORT Reserved1 : 1;
+    };
+    USHORT AsUSHORT;
+};
+
+union _PCI_EXPRESS_CXL_DVSEC_CONTROL_REGISTER
+{
+    struct
+    {
+        USHORT CacheEnable : 1;
+        USHORT IoEnable : 1;
+        USHORT MemEnable : 1;
+        USHORT CacheSFCoverage : 5;
+        USHORT CacheSFGranularity : 3;
+        USHORT CacheCleanEviction : 1;
+        USHORT Reserved0 : 2;
+        USHORT ViralEnable : 1;
+        USHORT Reserved1 : 1;
+    };
+    USHORT AsUSHORT;
+};
+
+union _PCI_EXPRESS_CXL_DVSEC_LOCK_REGISTER
+{
+    struct
+    {
+        USHORT ConfigLock : 1;
+        USHORT Reserved : 15;
+    };
+    USHORT AsUSHORT;
+};
+
+union _PCI_EXPRESS_CXL_DVSEC_RANGE_BASE_LOW_REGISTER
+{
+    struct
+    {
+        ULONG Reserved : 28;
+        ULONG MemBaseLow : 4;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_EXPRESS_CXL_DVSEC_RANGE_SIZE_LOW_REGISTER_V11
+{
+    struct
+    {
+        ULONG MemInfoValid : 1;
+        ULONG MemActive : 1;
+        ULONG MediaType : 3;
+        ULONG MemClass : 3;
+        ULONG DesiredInterleave : 3;
+        ULONG Reserved : 17;
+        ULONG MemSizeLow : 4;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_EXPRESS_CXL_DVSEC_STATUS_REGISTER
+{
+    struct
+    {
+        USHORT Reserved0 : 14;
+        USHORT ViralStatus : 1;
+        USHORT Reserved1 : 1;
+    };
+    USHORT AsUSHORT;
+};
+
+union _PCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_HEADER_1
+{
+    struct
+    {
+        ULONG DvsecVendorId : 16;
+        ULONG DvsecVersion : 4;
+        ULONG DvsecLength : 12;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_HEADER_2
+{
+    struct
+    {
+        USHORT DvsecId : 16;
+    };
+    USHORT AsUSHORT;
+};
+
+union _PCI_EXPRESS_DPC_CAPS_REGISTER
+{
+    struct
+    {
+        USHORT InterruptMsgNumber : 5;
+        USHORT RpExtensionsForDpc : 1;
+        USHORT PoisonedTlpEgressBlockingSupported : 1;
+        USHORT DpcSoftwareTriggeringSupported : 1;
+        USHORT RpPioLogSize : 4;
+        USHORT DlActiveErrCorSignalingSupported : 1;
+        USHORT Reserved : 3;
+    };
+    USHORT AsUSHORT;
+};
+
+union _PCI_EXPRESS_DPC_CONTROL_REGISTER
+{
+    struct
+    {
+        USHORT TriggerEnable : 2;
+        USHORT CompletionControl : 1;
+        USHORT InterruptEnable : 1;
+        USHORT ErrCorEnable : 1;
+        USHORT PoisonedTlpEgressBlockingEnable : 1;
+        USHORT SoftwareTrigger : 1;
+        USHORT DlActiveErrCorEnable : 1;
+        USHORT Reserved : 8;
+    };
+    USHORT AsUSHORT;
+};
+
+union _PCI_EXPRESS_DPC_ERROR_SOURCE_ID
+{
+    struct
+    {
+        USHORT Function : 3;
+        USHORT Device : 5;
+        USHORT Bus : 8;
+    };
+    USHORT AsUSHORT;
+};
+
+union _PCI_EXPRESS_DPC_RP_PIO_EXCEPTION_REGISTER
+{
+    struct
+    {
+        ULONG CfgURCpl : 1;
+        ULONG CfgCACpl : 1;
+        ULONG CfgCTO : 1;
+        ULONG Reserved1 : 5;
+        ULONG IoURCpl : 1;
+        ULONG IoCACpl : 1;
+        ULONG IoCTO : 1;
+        ULONG Reserved2 : 5;
+        ULONG MemURCpl : 1;
+        ULONG MemCACpl : 1;
+        ULONG MemCTO : 1;
+        ULONG Reserved3 : 13;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_EXPRESS_DPC_RP_PIO_MASK_REGISTER
+{
+    struct
+    {
+        ULONG CfgURCpl : 1;
+        ULONG CfgCACpl : 1;
+        ULONG CfgCTO : 1;
+        ULONG Reserved1 : 5;
+        ULONG IoURCpl : 1;
+        ULONG IoCACpl : 1;
+        ULONG IoCTO : 1;
+        ULONG Reserved2 : 5;
+        ULONG MemURCpl : 1;
+        ULONG MemCACpl : 1;
+        ULONG MemCTO : 1;
+        ULONG Reserved3 : 13;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_EXPRESS_DPC_RP_PIO_SEVERITY_REGISTER
+{
+    struct
+    {
+        ULONG CfgURCpl : 1;
+        ULONG CfgCACpl : 1;
+        ULONG CfgCTO : 1;
+        ULONG Reserved1 : 5;
+        ULONG IoURCpl : 1;
+        ULONG IoCACpl : 1;
+        ULONG IoCTO : 1;
+        ULONG Reserved2 : 5;
+        ULONG MemURCpl : 1;
+        ULONG MemCACpl : 1;
+        ULONG MemCTO : 1;
+        ULONG Reserved3 : 13;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_EXPRESS_DPC_RP_PIO_STATUS_REGISTER
+{
+    struct
+    {
+        ULONG CfgURCpl : 1;
+        ULONG CfgCACpl : 1;
+        ULONG CfgCTO : 1;
+        ULONG Reserved1 : 5;
+        ULONG IoURCpl : 1;
+        ULONG IoCACpl : 1;
+        ULONG IoCTO : 1;
+        ULONG Reserved2 : 5;
+        ULONG MemURCpl : 1;
+        ULONG MemCACpl : 1;
+        ULONG MemCTO : 1;
+        ULONG Reserved3 : 12;
+        ULONG Reserved4 : 1;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_EXPRESS_DPC_RP_PIO_SYSERR_REGISTER
+{
+    struct
+    {
+        ULONG CfgURCpl : 1;
+        ULONG CfgCACpl : 1;
+        ULONG CfgCTO : 1;
+        ULONG Reserved1 : 5;
+        ULONG IoURCpl : 1;
+        ULONG IoCACpl : 1;
+        ULONG IoCTO : 1;
+        ULONG Reserved2 : 5;
+        ULONG MemURCpl : 1;
+        ULONG MemCACpl : 1;
+        ULONG MemCTO : 1;
+        ULONG Reserved3 : 13;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_EXPRESS_DPC_STATUS_REGISTER
+{
+    struct
+    {
+        USHORT TriggerStatus : 1;
+        USHORT TriggerReason : 2;
+        USHORT InterruptStatus : 1;
+        USHORT RpBusy : 1;
+        USHORT TriggerReasonExtension : 2;
+        USHORT Reserved1 : 1;
+        USHORT PioFirstErrPointer : 5;
+        USHORT Reserved2 : 3;
+    };
+    USHORT AsUSHORT;
+};
+
+union _PCI_EXPRESS_L1_PM_SS_CAPABILITIES_REGISTER
+{
+    struct
+    {
+        ULONG PciPmL12Supported : 1;
+        ULONG PciPmL11Supported : 1;
+        ULONG AspmL12Supported : 1;
+        ULONG AspmL11Supported : 1;
+        ULONG L1PmSsSupported : 1;
+        ULONG Rsvd : 3;
+        ULONG PortCommonModeRestoreTime : 8;
+        ULONG PortTPowerOnScale : 2;
+        ULONG Rsvd2 : 1;
+        ULONG PortTPowerOnValue : 5;
+        ULONG Rsvd3 : 8;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_EXPRESS_L1_PM_SS_CONTROL_1_REGISTER
+{
+    struct
+    {
+        ULONG PciPmL12Enabled : 1;
+        ULONG PciPmL11Enabled : 1;
+        ULONG AspmL12Enabled : 1;
+        ULONG AspmL11Enabled : 1;
+        ULONG Rsvd : 4;
+        ULONG CommonModeRestoreTime : 8;
+        ULONG LtrL12ThresholdValue : 10;
+        ULONG Rsvd2 : 3;
+        ULONG LtrL12ThresholdScale : 3;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_EXPRESS_L1_PM_SS_CONTROL_2_REGISTER
+{
+    struct
+    {
+        ULONG TPowerOnScale : 2;
+        ULONG Rsvd : 1;
+        ULONG TPowerOnValue : 5;
+        ULONG Rsvd2 : 24;
+    };
+    ULONG AsULONG;
+};
+
+struct _PCI_EXPRESS_LINK_CONTROL3
+{
+    union
+    {
+        struct
+        {
+            ULONG PerformEq : 1;
+            ULONG LinkEqIntEn : 1;
+            ULONG Reserved : 30;
+        };
+        ULONG AsULONG;
+    };
+};
+
+union _PCI_EXPRESS_LTR_MAX_LATENCY_REGISTER
+{
+    struct
+    {
+        ULONG MaxSnoopLatencyValue : 10;
+        ULONG MaxSnoopLatencyScale : 3;
+        ULONG Rsvd : 2;
+        ULONG MaxSnoopRequirement : 1;
+        ULONG MaxNoSnoopLatencyValue : 10;
+        ULONG MaxNoSnoopLatencyScale : 3;
+        ULONG Rsvd2 : 2;
+        ULONG MaxNoSnoopRequirement : 1;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_EXPRESS_NPEM_CAPABILITY_REGISTER
+{
+    struct
+    {
+        ULONG Capable : 1;
+        ULONG ResetCapable : 1;
+        ULONG OkCapable : 1;
+        ULONG LocateCapable : 1;
+        ULONG FailCapable : 1;
+        ULONG RebuildCapable : 1;
+        ULONG PFACapable : 1;
+        ULONG HotSpareCapable : 1;
+        ULONG InACriticalArrayCapable : 1;
+        ULONG InAFailedArrayCapable : 1;
+        ULONG InvalidDeviceTypeCapable : 1;
+        ULONG DisabledCapable : 1;
+        ULONG Rsvd : 12;
+        ULONG EnclosureSpecificCapabilities : 8;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_EXPRESS_NPEM_CONTROL_REGISTER
+{
+    struct
+    {
+        ULONG Enable : 1;
+        ULONG InitiateReset : 1;
+        ULONG OkControl : 1;
+        ULONG LocateControl : 1;
+        ULONG FailControl : 1;
+        ULONG RebuildControl : 1;
+        ULONG PFAControl : 1;
+        ULONG HotSpareControl : 1;
+        ULONG InACriticalArrayControl : 1;
+        ULONG InAFailedArrayControl : 1;
+        ULONG InvalidDeviceTypeControl : 1;
+        ULONG DisabledControl : 1;
+        ULONG Rsvd : 12;
+        ULONG EnclosureSpecificControls : 8;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_EXPRESS_NPEM_STATUS_REGISTER
+{
+    struct
+    {
+        ULONG CommandCompleted : 1;
+        ULONG Rsvd : 23;
+        ULONG EnclosureSpecificStatus : 8;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_EXPRESS_RESIZABLE_BAR_CAPABILITY_REGISTER
+{
+    struct
+    {
+        ULONG Rsvd : 4;
+        ULONG SizesSupported : 20;
+        ULONG Rsvd2 : 8;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_EXPRESS_RESIZABLE_BAR_CONTROL_REGISTER
+{
+    struct
+    {
+        ULONG BarIndex : 3;
+        ULONG Rsvd : 2;
+        ULONG NumberOfResizableBars : 3;
+        ULONG BarSize : 6;
+        ULONG Rsvd2 : 18;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_EXPRESS_TPH_REQUESTER_CAPABILITY_REGISTER
+{
+    struct
+    {
+        ULONG NoStModeSupported : 1;
+        ULONG InteruptVectorModeSupported : 1;
+        ULONG DeviceSpecificModeSupported : 1;
+        ULONG Rsvd : 5;
+        ULONG ExtendedTPHRequesterSupported : 1;
+        ULONG StTableLocation : 2;
+        ULONG Rsvd2 : 5;
+        ULONG StTableSize : 11;
+        ULONG Rsvd3 : 5;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_EXPRESS_TPH_REQUESTER_CONTROL_REGISTER
+{
+    struct
+    {
+        ULONG StModeSelect : 3;
+        ULONG Rsvd : 5;
+        ULONG TphRequesterEnable : 2;
+        ULONG Rsvd2 : 22;
+    };
+    ULONG AsULONG;
+};
+
+union _PCI_EXPRESS_TPH_ST_TABLE_ENTRY
+{
+    struct
+    {
+        USHORT LowerEntry : 8;
+        USHORT UpperEntry : 8;
+    };
+    USHORT AsUSHORT;
+};
+
+union _PCI_EXPRESS_USB4_DESIGNATED_VENDOR_SPECIFIC_HEADER
+{
+    struct
+    {
+        USHORT PortType : 3;
+        USHORT Reserved : 13;
+    };
+    USHORT AsUSHORT;
+};
+
+union _PCI_EXPRESS_USB4_DESIGNATED_VENDOR_SPECIFIC_PORT_ATTRIBUTES
+{
+    union
+    {
+        struct
+        {
+            USHORT NhiInstance : 3;
+            ULONG Rsvd : 29;
+        } type0;
+        struct
+        {
+            ULONG PortNhi : 3;
+            ULONG Reserved0 : 13;
+            ULONG PortExpandibility : 2;
+            ULONG HostRouterIndication : 2;
+            ULONG D3ColdWakeSupport : 2;
+            ULONG Reserved : 3;
+            ULONG BusNumberReservationHint : 8;
+        } type1;
+        struct
+        {
+            ULONG PortNhi1 : 3;
+            ULONG Reserved1 : 1;
+            ULONG PortNhi2 : 3;
+            ULONG Reserved2 : 1;
+            ULONG PortNhi3 : 3;
+            ULONG Reserved3 : 1;
+            ULONG PortNhi4 : 3;
+            ULONG Reserved4 : 1;
+            ULONG PortNhi5 : 3;
+            ULONG Reserved5 : 1;
+            ULONG PortNhi6 : 3;
+            ULONG Reserved6 : 1;
+            ULONG PortNhi7 : 3;
+            ULONG Reserved7 : 1;
+            ULONG PortNhi8 : 3;
+            ULONG Reserved8 : 1;
+        } type2;
+    };
+    ULONG AsULONG;
+};
+
+struct _PCI_LINK_INFORMATION
+{
+    union
+    {
+        struct
+        {
+            ULONG Gts_2_5 : 1;
+            ULONG Gts_5_0 : 1;
+            ULONG Gts_8_0 : 1;
+            ULONG Gts_16_0 : 1;
+            ULONG Gts_32_0 : 1;
+            ULONG Gts_64_0 : 1;
+            ULONG Reserved : 26;
+        };
+        ULONG AsULONG;
+    } AvailableLinkSpeeds;
+    USHORT LinkWidth;
+    PCI_LINK_SPEED CurrentLinkSpeed;
+};
+
+struct _PROCESS_MITIGATION_REDIRECTION_TRUST_POLICY
+{
+    union
+    {
+        ULONG Flags;
+        struct
+        {
+            ULONG EnforceRedirectionTrust : 1;
+            ULONG AuditRedirectionTrust : 1;
+            ULONG ReservedFlags : 30;
+        };
+    };
+};
+
+struct _PROCESS_MITIGATION_SEHOP_POLICY
+{
+    union
+    {
+        ULONG Flags;
+        struct
+        {
+            ULONG EnableSehop : 1;
+            ULONG ReservedFlags : 31;
+        };
+    };
+};
+
+struct _PROCESS_MITIGATION_SIDE_CHANNEL_ISOLATION_POLICY
+{
+    union
+    {
+        ULONG Flags;
+        struct
+        {
+            ULONG SmtBranchTargetIsolation : 1;
+            ULONG IsolateSecurityDomain : 1;
+            ULONG DisablePageCombine : 1;
+            ULONG SpeculativeStoreBypassDisable : 1;
+            ULONG RestrictCoreSharing : 1;
+            ULONG ReservedFlags : 27;
+        };
+    };
+};
+
+struct _PROCESS_MITIGATION_USER_POINTER_AUTH_POLICY
+{
+    union
+    {
+        ULONG Flags;
+        struct
+        {
+            ULONG EnablePointerAuthUserIp : 1;
+            ULONG ReservedFlags : 31;
+        };
+    };
+};
+
+struct _PROCESS_MITIGATION_USER_SHADOW_STACK_POLICY
+{
+    union
+    {
+        ULONG Flags;
+        struct
+        {
+            ULONG EnableUserShadowStack : 1;
+            ULONG AuditUserShadowStack : 1;
+            ULONG SetContextIpValidation : 1;
+            ULONG AuditSetContextIpValidation : 1;
+            ULONG EnableUserShadowStackStrictMode : 1;
+            ULONG BlockNonCetBinaries : 1;
+            ULONG BlockNonCetBinariesNonEhcont : 1;
+            ULONG AuditBlockNonCetBinaries : 1;
+            ULONG CetDynamicApisOutOfProcOnly : 1;
+            ULONG SetContextIpValidationRelaxedMode : 1;
+            ULONG ReservedFlags : 22;
+        };
+    };
+};
+
+#pragma pack(push, 1)
+union _WHEA_ARM_BUS_ERROR_VALID_BITS
+{
+    struct
+    {
+        USHORT TransactionType : 1;
+        USHORT Operation : 1;
+        USHORT Level : 1;
+        USHORT ProcessorContextCorrupt : 1;
+        USHORT Corrected : 1;
+        USHORT PrecisePC : 1;
+        USHORT RestartablePC : 1;
+        USHORT ParticipationType : 1;
+        USHORT Timeout : 1;
+        USHORT AddressSpace : 1;
+        USHORT MemoryAttributes : 1;
+        USHORT AccessMode : 1;
+        USHORT Reserved : 4;
+    };
+    USHORT AsUSHORT;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_ARM_CACHE_ERROR_VALID_BITS
+{
+    struct
+    {
+        USHORT TransactionType : 1;
+        USHORT Operation : 1;
+        USHORT Level : 1;
+        USHORT ProcessorContextCorrupt : 1;
+        USHORT Corrected : 1;
+        USHORT PrecisePC : 1;
+        USHORT RestartablePC : 1;
+        USHORT Reserved : 9;
+    };
+    USHORT AsUSHORT;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_ARM_PROCESSOR_ERROR_CONTEXT_INFORMATION_HEADER_FLAGS
+{
+    struct
+    {
+        ULONG ExceptionLevel : 1;
+        ULONG NonSecure : 1;
+        ULONG AArch64 : 1;
+        ULONG Reserved : 29;
+    };
+    ULONG AsULONG;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_ARM_PROCESSOR_ERROR_INFORMATION_VALID_BITS
+{
+    struct
+    {
+        USHORT MultipleError : 1;
+        USHORT Flags : 1;
+        USHORT ErrorInformation : 1;
+        USHORT VirtualFaultAddress : 1;
+        USHORT PhysicalFaultAddress : 1;
+        USHORT Reserved : 11;
+    };
+    USHORT AsUSHORT;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_ARM_PROCESSOR_ERROR_SECTION_VALID_BITS
+{
+    struct
+    {
+        ULONG MPIDR : 1;
+        ULONG AffinityLevel : 1;
+        ULONG RunningState : 1;
+        ULONG VendorSpecificInfo : 1;
+        ULONG Reserved : 28;
+    };
+    ULONG AsULONG;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_ARM_TLB_ERROR_VALID_BITS
+{
+    struct
+    {
+        USHORT TransactionType : 1;
+        USHORT Operation : 1;
+        USHORT Level : 1;
+        USHORT ProcessorContextCorrupt : 1;
+        USHORT Corrected : 1;
+        USHORT PrecisePC : 1;
+        USHORT RestartablePC : 1;
+        USHORT Reserved : 9;
+    };
+    USHORT AsUSHORT;
+};
+#pragma pack(pop)
+
+union _WHEA_ERROR_INJECTION_CAPABILITIES
+{
+    struct
+    {
+        ULONG ProcessorCorrectable : 1;
+        ULONG ProcessorUncorrectableNonFatal : 1;
+        ULONG ProcessorUncorrectableFatal : 1;
+        ULONG MemoryCorrectable : 1;
+        ULONG MemoryUncorrectableNonFatal : 1;
+        ULONG MemoryUncorrectableFatal : 1;
+        ULONG PCIExpressCorrectable : 1;
+        ULONG PCIExpressUncorrectableNonFatal : 1;
+        ULONG PCIExpressUncorrectableFatal : 1;
+        ULONG PlatformCorrectable : 1;
+        ULONG PlatformUncorrectableNonFatal : 1;
+        ULONG PlatformUncorrectableFatal : 1;
+        ULONG IA64Corrected : 1;
+        ULONG IA64Recoverable : 1;
+        ULONG IA64Fatal : 1;
+        ULONG IA64RecoverableCache : 1;
+        ULONG IA64RecoverableRegFile : 1;
+        ULONG Reserved : 15;
+    };
+    ULONG AsULONG;
+};
+
+#pragma pack(push, 1)
+union _WHEA_ERROR_RECORD_HEADER_FLAGS
+{
+    struct
+    {
+        ULONG Recovered : 1;
+        ULONG PreviousError : 1;
+        ULONG Simulated : 1;
+        ULONG DeviceDriver : 1;
+        ULONG CriticalEvent : 1;
+        ULONG PersistPfn : 1;
+        ULONG SectionsTruncated : 1;
+        ULONG RecoveryInProgress : 1;
+        ULONG Throttle : 1;
+        ULONG Reserved : 23;
+    };
+    ULONG AsULONG;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_ERROR_RECORD_HEADER_VALIDBITS
+{
+    struct
+    {
+        ULONG PlatformId : 1;
+        ULONG Timestamp : 1;
+        ULONG PartitionId : 1;
+        ULONG Reserved : 29;
+    };
+    ULONG AsULONG;
+};
+#pragma pack(pop)
+
+typedef NTSTATUS _WHEA_ERROR_SOURCE_CORRECT(PWHEA_ERROR_SOURCE_DESCRIPTOR, PULONG);
+
+typedef NTSTATUS _WHEA_ERROR_SOURCE_CORRECT_DEVICE_DRIVER(PVOID, PULONG);
+
+typedef NTSTATUS _WHEA_ERROR_SOURCE_CREATE_RECORD(PWHEA_ERROR_SOURCE_DESCRIPTOR, PWHEA_ERROR_PACKET, PWHEA_ERROR_RECORD, ULONG, PVOID);
+
+typedef NTSTATUS _WHEA_ERROR_SOURCE_INITIALIZE(ULONG, PWHEA_ERROR_SOURCE_DESCRIPTOR, PVOID);
+
+typedef NTSTATUS _WHEA_ERROR_SOURCE_INITIALIZE_DEVICE_DRIVER(PVOID, ULONG);
+
+typedef NTSTATUS _WHEA_ERROR_SOURCE_RECOVER(PVOID, PWHEA_ERROR_SEVERITY);
+
+typedef void _WHEA_ERROR_SOURCE_UNINITIALIZE(PVOID);
+
+typedef void _WHEA_ERROR_SOURCE_UNINITIALIZE_DEVICE_DRIVER(PVOID);
+
+#pragma pack(push, 1)
+union _WHEA_ERROR_STATUS
+{
+    ULONGLONG ErrorStatus;
+    struct
+    {
+        ULONGLONG Reserved1 : 8;
+        ULONGLONG ErrorType : 8;
+        ULONGLONG Address : 1;
+        ULONGLONG Control : 1;
+        ULONGLONG Data : 1;
+        ULONGLONG Responder : 1;
+        ULONGLONG Requester : 1;
+        ULONGLONG FirstError : 1;
+        ULONGLONG Overflow : 1;
+        ULONGLONG Reserved2 : 41;
+    };
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_EVENT_LOG_ENTRY_FLAGS
+{
+    struct
+    {
+        ULONG Reserved1 : 1;
+        ULONG LogInternalEtw : 1;
+        ULONG LogBlackbox : 1;
+        ULONG LogSel : 1;
+        ULONG RawSel : 1;
+        ULONG NoFormat : 1;
+        ULONG Driver : 1;
+        ULONG Reserved2 : 25;
+    };
+    ULONG AsULONG;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_GENERIC_ERROR_BLOCKSTATUS
+{
+    struct
+    {
+        ULONG UncorrectableError : 1;
+        ULONG CorrectableError : 1;
+        ULONG MultipleUncorrectableErrors : 1;
+        ULONG MultipleCorrectableErrors : 1;
+        ULONG ErrorDataEntryCount : 10;
+        ULONG Reserved : 18;
+    };
+    ULONG AsULONG;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_MEMORY_CORRECTABLE_ERROR_SECTION_VALIDBITS
+{
+    struct
+    {
+        ULONGLONG SocketId : 1;
+        ULONGLONG ChannelId : 1;
+        ULONGLONG DimmSlot : 1;
+        ULONGLONG CorrectableErrorCount : 1;
+        ULONGLONG Reserved : 60;
+    };
+    ULONGLONG ValidBits;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_MEMORY_ERROR_EXT_SECTION_FLAGS
+{
+    struct
+    {
+        UINT64 AddressTranslationByPrmSuccess : 1;
+        UINT64 AddressTranslationByPrmFailed : 1;
+        UINT64 AddressTranslationByPrmNotSupported : 1;
+        UINT64 AddressTranslationByPluginSuccess : 1;
+        UINT64 AddressTranslationByPluginFailed : 1;
+        UINT64 AddressTranslationByPluginNotSupported : 1;
+        UINT64 Reserved : 58;
+    };
+    UINT64 AsUINT64;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_MEMORY_ERROR_EXT_SECTION_INTEL_VALIDBITS
+{
+    struct
+    {
+        UINT64 MemDef : 1;
+        UINT64 SystemAddress : 1;
+        UINT64 SpareSystemAddress : 1;
+        UINT64 DevicePhysicalAddress : 1;
+        UINT64 ChannelAddress : 1;
+        UINT64 RankAddress : 1;
+        UINT64 ProcessorSocketId : 1;
+        UINT64 MemoryControllerId : 1;
+        UINT64 TargetId : 1;
+        UINT64 LogicalChannelId : 1;
+        UINT64 ChannelId : 1;
+        UINT64 SubChannelId : 1;
+        UINT64 PhysicalRankId : 1;
+        UINT64 DimmSlotId : 1;
+        UINT64 DimmRankId : 1;
+        UINT64 Bank : 1;
+        UINT64 BankGroup : 1;
+        UINT64 Row : 1;
+        UINT64 Column : 1;
+        UINT64 LockStepRank : 1;
+        UINT64 LockStepPhysicalRank : 1;
+        UINT64 LockStepBank : 1;
+        UINT64 LockStepBankGroup : 1;
+        UINT64 ChipSelect : 1;
+        UINT64 Node : 1;
+        UINT64 ChipId : 1;
+        UINT64 Reserved : 38;
+    };
+    UINT64 ValidBits;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_MEMORY_ERROR_SECTION_VALIDBITS
+{
+    struct
+    {
+        ULONGLONG ErrorStatus : 1;
+        ULONGLONG PhysicalAddress : 1;
+        ULONGLONG PhysicalAddressMask : 1;
+        ULONGLONG Node : 1;
+        ULONGLONG Card : 1;
+        ULONGLONG Module : 1;
+        ULONGLONG Bank : 1;
+        ULONGLONG Device : 1;
+        ULONGLONG Row : 1;
+        ULONGLONG Column : 1;
+        ULONGLONG BitPosition : 1;
+        ULONGLONG RequesterId : 1;
+        ULONGLONG ResponderId : 1;
+        ULONGLONG TargetId : 1;
+        ULONGLONG ErrorType : 1;
+        ULONGLONG RankNumber : 1;
+        ULONGLONG CardHandle : 1;
+        ULONGLONG ModuleHandle : 1;
+        ULONGLONG ExtendedRow : 1;
+        ULONGLONG BankGroup : 1;
+        ULONGLONG BankAddress : 1;
+        ULONGLONG ChipIdentification : 1;
+        ULONGLONG Reserved : 42;
+    };
+    ULONGLONG ValidBits;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_NMI_ERROR_SECTION_FLAGS
+{
+    struct
+    {
+        ULONG HypervisorError : 1;
+        ULONG Reserved : 31;
+    };
+    ULONG AsULONG;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_NOTIFICATION_FLAGS
+{
+    struct
+    {
+        USHORT PollIntervalRW : 1;
+        USHORT SwitchToPollingThresholdRW : 1;
+        USHORT SwitchToPollingWindowRW : 1;
+        USHORT ErrorThresholdRW : 1;
+        USHORT ErrorThresholdWindowRW : 1;
+        USHORT Reserved : 11;
+    };
+    USHORT AsUSHORT;
+};
+#pragma pack(pop)
+
+struct _WHEA_PCI_SLOT_NUMBER
+{
+    union
+    {
+        struct
+        {
+            ULONG DeviceNumber : 5;
+            ULONG FunctionNumber : 3;
+            ULONG Reserved : 24;
+        } bits;
+        ULONG AsULONG;
+    } u;
+};
+
+#pragma pack(push, 1)
+union _WHEA_PCIE_CORRECTABLE_ERROR_DEVICES_VALIDBITS
+{
+    struct
+    {
+        ULONGLONG Segment : 1;
+        ULONGLONG Bus : 1;
+        ULONGLONG Device : 1;
+        ULONGLONG Function : 1;
+        ULONGLONG Mask : 1;
+        ULONGLONG CorrectableErrorCount : 1;
+        ULONGLONG Reserved : 58;
+    };
+    ULONGLONG ValidBits;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_PCIEXPRESS_BRIDGE_CONTROL_STATUS
+{
+    struct
+    {
+        USHORT BridgeSecondaryStatus;
+        USHORT BridgeControl;
+    };
+    ULONG AsULONG;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_PCIEXPRESS_COMMAND_STATUS
+{
+    struct
+    {
+        USHORT Command;
+        USHORT Status;
+    };
+    ULONG AsULONG;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_PCIEXPRESS_ERROR_SECTION_VALIDBITS
+{
+    struct
+    {
+        ULONGLONG PortType : 1;
+        ULONGLONG Version : 1;
+        ULONGLONG CommandStatus : 1;
+        ULONGLONG DeviceId : 1;
+        ULONGLONG DeviceSerialNumber : 1;
+        ULONGLONG BridgeControlStatus : 1;
+        ULONGLONG ExpressCapability : 1;
+        ULONGLONG AerInfo : 1;
+        ULONGLONG Reserved : 56;
+    };
+    ULONGLONG ValidBits;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_PCIEXPRESS_VERSION
+{
+    struct
+    {
+        UCHAR MinorVersion;
+        UCHAR MajorVersion;
+        USHORT Reserved;
+    };
+    ULONG AsULONG;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_PCIXBUS_COMMAND
+{
+    struct
+    {
+        ULONGLONG Command : 56;
+        ULONGLONG PCIXCommand : 1;
+        ULONGLONG Reserved : 7;
+    };
+    ULONGLONG AsULONGLONG;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_PCIXBUS_ERROR_SECTION_VALIDBITS
+{
+    struct
+    {
+        ULONGLONG ErrorStatus : 1;
+        ULONGLONG ErrorType : 1;
+        ULONGLONG BusId : 1;
+        ULONGLONG BusAddress : 1;
+        ULONGLONG BusData : 1;
+        ULONGLONG BusCommand : 1;
+        ULONGLONG RequesterId : 1;
+        ULONGLONG CompleterId : 1;
+        ULONGLONG TargetId : 1;
+        ULONGLONG Reserved : 55;
+    };
+    ULONGLONG ValidBits;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_PCIXBUS_ID
+{
+    struct
+    {
+        UCHAR BusNumber;
+        UCHAR BusSegment;
+    };
+    USHORT AsUSHORT;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_PCIXDEVICE_ERROR_SECTION_VALIDBITS
+{
+    struct
+    {
+        ULONGLONG ErrorStatus : 1;
+        ULONGLONG IdInfo : 1;
+        ULONGLONG MemoryNumber : 1;
+        ULONGLONG IoNumber : 1;
+        ULONGLONG RegisterDataPairs : 1;
+        ULONGLONG Reserved : 59;
+    };
+    ULONGLONG ValidBits;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_PERSISTENCE_INFO
+{
+    struct
+    {
+        ULONGLONG Signature : 16;
+        ULONGLONG Length : 24;
+        ULONGLONG Identifier : 16;
+        ULONGLONG Attributes : 2;
+        ULONGLONG DoNotLog : 1;
+        ULONGLONG Reserved : 5;
+    };
+    ULONGLONG AsULONGLONG;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_PMEM_ERROR_SECTION_VALIDBITS
+{
+    struct
+    {
+        ULONGLONG ErrorStatus : 1;
+        ULONGLONG NFITHandle : 1;
+        ULONGLONG LocationInfo : 1;
+        ULONGLONG Reserved : 61;
+    };
+    ULONGLONG ValidBits;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_PROCESSOR_FAMILY_INFO
+{
+    struct
+    {
+        ULONG Stepping : 4;
+        ULONG Model : 4;
+        ULONG Family : 4;
+        ULONG ProcessorType : 2;
+        ULONG Reserved1 : 2;
+        ULONG ExtendedModel : 4;
+        ULONG ExtendedFamily : 8;
+        ULONG Reserved2 : 4;
+        ULONG NativeModelId;
+    };
+    ULONGLONG AsULONGLONG;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_RECOVERY_ACTION
+{
+    struct
+    {
+        UINT64 NoneAttempted : 1;
+        UINT64 TerminateProcess : 1;
+        UINT64 ForwardedToVm : 1;
+        UINT64 MarkPageBad : 1;
+        UINT64 PoisonNotPresent : 1;
+        UINT64 Reserved : 59;
+    };
+    UINT64 AsUINT64;
+};
+#pragma pack(pop)
+
+union _WHEA_REPORT_HW_ERROR_DEVICE_DRIVER_FLAGS
+{
+    struct
+    {
+        ULONG Reserved : 32;
+    };
+    ULONG AsULONG;
+};
+
+typedef BOOLEAN _WHEA_SIGNAL_HANDLER_OVERRIDE_CALLBACK(UINT_PTR);
+
+#pragma pack(push, 1)
+union _WHEA_TIMESTAMP
+{
+    struct
+    {
+        ULONGLONG Seconds : 8;
+        ULONGLONG Minutes : 8;
+        ULONGLONG Hours : 8;
+        ULONGLONG Precise : 1;
+        ULONGLONG Reserved : 7;
+        ULONGLONG Day : 8;
+        ULONGLONG Month : 8;
+        ULONGLONG Year : 8;
+        ULONGLONG Century : 8;
+    };
+    LARGE_INTEGER AsLARGE_INTEGER;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_XPF_BUS_CHECK
+{
+    struct
+    {
+        ULONGLONG TransactionTypeValid : 1;
+        ULONGLONG OperationValid : 1;
+        ULONGLONG LevelValid : 1;
+        ULONGLONG ProcessorContextCorruptValid : 1;
+        ULONGLONG UncorrectedValid : 1;
+        ULONGLONG PreciseIPValid : 1;
+        ULONGLONG RestartableIPValid : 1;
+        ULONGLONG OverflowValid : 1;
+        ULONGLONG ParticipationValid : 1;
+        ULONGLONG TimeoutValid : 1;
+        ULONGLONG AddressSpaceValid : 1;
+        ULONGLONG ReservedValid : 5;
+        ULONGLONG TransactionType : 2;
+        ULONGLONG Operation : 4;
+        ULONGLONG Level : 3;
+        ULONGLONG ProcessorContextCorrupt : 1;
+        ULONGLONG Uncorrected : 1;
+        ULONGLONG PreciseIP : 1;
+        ULONGLONG RestartableIP : 1;
+        ULONGLONG Overflow : 1;
+        ULONGLONG Participation : 2;
+        ULONGLONG Timeout : 1;
+        ULONGLONG AddressSpace : 2;
+        ULONGLONG Reserved : 29;
+    };
+    ULONGLONG XpfBusCheck;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_XPF_CACHE_CHECK
+{
+    struct
+    {
+        ULONGLONG TransactionTypeValid : 1;
+        ULONGLONG OperationValid : 1;
+        ULONGLONG LevelValid : 1;
+        ULONGLONG ProcessorContextCorruptValid : 1;
+        ULONGLONG UncorrectedValid : 1;
+        ULONGLONG PreciseIPValid : 1;
+        ULONGLONG RestartableIPValid : 1;
+        ULONGLONG OverflowValid : 1;
+        ULONGLONG ReservedValid : 8;
+        ULONGLONG TransactionType : 2;
+        ULONGLONG Operation : 4;
+        ULONGLONG Level : 3;
+        ULONGLONG ProcessorContextCorrupt : 1;
+        ULONGLONG Uncorrected : 1;
+        ULONGLONG PreciseIP : 1;
+        ULONGLONG RestartableIP : 1;
+        ULONGLONG Overflow : 1;
+        ULONGLONG Reserved : 34;
+    };
+    ULONGLONG XpfCacheCheck;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_XPF_MS_CHECK
+{
+    struct
+    {
+        ULONGLONG ErrorTypeValid : 1;
+        ULONGLONG ProcessorContextCorruptValid : 1;
+        ULONGLONG UncorrectedValid : 1;
+        ULONGLONG PreciseIPValid : 1;
+        ULONGLONG RestartableIPValid : 1;
+        ULONGLONG OverflowValid : 1;
+        ULONGLONG ReservedValue : 10;
+        ULONGLONG ErrorType : 3;
+        ULONGLONG ProcessorContextCorrupt : 1;
+        ULONGLONG Uncorrected : 1;
+        ULONGLONG PreciseIP : 1;
+        ULONGLONG RestartableIP : 1;
+        ULONGLONG Overflow : 1;
+        ULONGLONG Reserved : 40;
+    };
+    ULONGLONG XpfMsCheck;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_XPF_PROCESSOR_ERROR_SECTION_VALIDBITS
+{
+    struct
+    {
+        ULONGLONG LocalAPICId : 1;
+        ULONGLONG CpuId : 1;
+        ULONGLONG ProcInfoCount : 6;
+        ULONGLONG ContextInfoCount : 6;
+        ULONGLONG Reserved : 50;
+    };
+    ULONGLONG ValidBits;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_XPF_PROCINFO_VALIDBITS
+{
+    struct
+    {
+        ULONGLONG CheckInfo : 1;
+        ULONGLONG TargetId : 1;
+        ULONGLONG RequesterId : 1;
+        ULONGLONG ResponderId : 1;
+        ULONGLONG InstructionPointer : 1;
+        ULONGLONG Reserved : 59;
+    };
+    ULONGLONG ValidBits;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _WHEA_XPF_TLB_CHECK
+{
+    struct
+    {
+        ULONGLONG TransactionTypeValid : 1;
+        ULONGLONG OperationValid : 1;
+        ULONGLONG LevelValid : 1;
+        ULONGLONG ProcessorContextCorruptValid : 1;
+        ULONGLONG UncorrectedValid : 1;
+        ULONGLONG PreciseIPValid : 1;
+        ULONGLONG RestartableIPValid : 1;
+        ULONGLONG OverflowValid : 1;
+        ULONGLONG ReservedValid : 8;
+        ULONGLONG TransactionType : 2;
+        ULONGLONG Operation : 4;
+        ULONGLONG Level : 3;
+        ULONGLONG ProcessorContextCorrupt : 1;
+        ULONGLONG Uncorrected : 1;
+        ULONGLONG PreciseIP : 1;
+        ULONGLONG RestartableIP : 1;
+        ULONGLONG Overflow : 1;
+        ULONGLONG Reserved : 34;
+    };
+    ULONGLONG XpfTLBCheck;
+};
+#pragma pack(pop)
+
+union _XPF_MC_BANK_FLAGS
+{
+    struct
+    {
+        UCHAR ClearOnInitializationRW : 1;
+        UCHAR ControlDataRW : 1;
+        UCHAR Reserved : 6;
+    };
+    UCHAR AsUCHAR;
+};
+
+#pragma pack(push, 1)
+union _XPF_MCE_FLAGS
+{
+    struct
+    {
+        ULONG MCG_CapabilityRW : 1;
+        ULONG MCG_GlobalControlRW : 1;
+        ULONG Reserved : 30;
+    };
+    ULONG AsULONG;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _XPF_RECOVERY_INFO
+{
+    struct
+    {
+        UINT32 NotSupported : 1;
+        UINT32 Overflow : 1;
+        UINT32 ContextCorrupt : 1;
+        UINT32 RestartIpErrorIpNotValid : 1;
+        UINT32 NoRecoveryContext : 1;
+        UINT32 MiscOrAddrNotValid : 1;
+        UINT32 InvalidAddressMode : 1;
+        UINT32 HighIrql : 1;
+        UINT32 InterruptsDisabled : 1;
+        UINT32 SwapBusy : 1;
+        UINT32 StackOverflow : 1;
+        UINT32 Reserved : 21;
+    } FailureReason;
+    struct
+    {
+        UINT32 RecoveryAttempted : 1;
+        UINT32 HvHandled : 1;
+        UINT32 Reserved : 30;
+    } Action;
+    BOOLEAN ActionRequired;
+    BOOLEAN RecoverySucceeded;
+    BOOLEAN RecoveryKernel;
+    UINT8 Reserved;
+    UINT16 Reserved2;
+    UINT16 Reserved3;
+    UINT32 Reserved4;
+};
+#pragma pack(pop)
+
+typedef union _AER_BRIDGE_DESCRIPTOR_FLAGS AER_BRIDGE_DESCRIPTOR_FLAGS;
+
+typedef union _AER_ENDPOINT_DESCRIPTOR_FLAGS AER_ENDPOINT_DESCRIPTOR_FLAGS;
+
+typedef union _AER_ROOTPORT_DESCRIPTOR_FLAGS AER_ROOTPORT_DESCRIPTOR_FLAGS;
+
+typedef struct _DEBUGGING_DEVICE_IN_USE DEBUGGING_DEVICE_IN_USE;
+
+struct _DEBUGGING_DEVICE_IN_USE_INFORMATION
+{
+    ULONG DeviceCount;
+    DEBUGGING_DEVICE_IN_USE Device[1];
+};
+
+typedef struct _DEBUGGING_DEVICE_IN_USE_INFORMATION DEBUGGING_DEVICE_IN_USE_INFORMATION;
+
+typedef union _DIMM_ADDRESS DIMM_ADDRESS;
+
+struct _DIMM_INFO
+{
+    DIMM_ADDRESS DimmAddress;
+    DIMM_ADDR_VALID_BITS ValidBits;
+};
+
+typedef struct _DIMM_INFO DIMM_INFO;
+
+#pragma pack(push, 1)
+struct _MEMORY_DEFECT
+{
+    UINT32 Version;
+    DIMM_INFO DimmInfo;
+    PAGE_OFFLINE_ERROR_TYPES ErrType;
+};
+#pragma pack(pop)
+
+typedef void DRIVER_REINITIALIZE(struct _DRIVER_OBJECT *, PVOID, ULONG);
+
+typedef void NTAPI HAL_PMU_NOTIFICATION_CALLBACK(PVOID, PHAL_PMU_NOTIFICATION);
+
+typedef NTSTATUS HVL_WHEA_ERROR_NOTIFICATION(PWHEA_RECOVERY_CONTEXT, BOOLEAN);
+
+typedef struct _IO_FOEXT_SILO_PARAMETERS IO_FOEXT_SILO_PARAMETERS;
+
+typedef union _MCG_CAP MCG_CAP;
+
+typedef union _MCG_STATUS MCG_STATUS;
+
+typedef struct _MEMORY_DEFECT MEMORY_DEFECT;
+
+typedef union _AER_BRIDGE_DESCRIPTOR_FLAGS *PAER_BRIDGE_DESCRIPTOR_FLAGS;
+
+typedef union _AER_ENDPOINT_DESCRIPTOR_FLAGS *PAER_ENDPOINT_DESCRIPTOR_FLAGS;
+
+typedef union _AER_ROOTPORT_DESCRIPTOR_FLAGS *PAER_ROOTPORT_DESCRIPTOR_FLAGS;
+
+typedef union _PAGE_OFFLINE_VALID_BITS PAGE_OFFLINE_VALID_BITS;
+
+typedef union _PCI_EXPRESS_CXL_DVSEC_CAPABILITY_REGISTER_V11 PCI_EXPRESS_CXL_DVSEC_CAPABILITY_REGISTER_V11;
+
+typedef union _PCI_EXPRESS_CXL_DVSEC_CONTROL_REGISTER PCI_EXPRESS_CXL_DVSEC_CONTROL_REGISTER;
+
+typedef union _PCI_EXPRESS_CXL_DVSEC_LOCK_REGISTER PCI_EXPRESS_CXL_DVSEC_LOCK_REGISTER;
+
+typedef union _PCI_EXPRESS_CXL_DVSEC_RANGE_BASE_LOW_REGISTER PCI_EXPRESS_CXL_DVSEC_RANGE_BASE_LOW_REGISTER;
+
+typedef union _PCI_EXPRESS_CXL_DVSEC_RANGE_SIZE_LOW_REGISTER_V11 PCI_EXPRESS_CXL_DVSEC_RANGE_SIZE_LOW_REGISTER_V11;
+
+typedef union _PCI_EXPRESS_CXL_DVSEC_STATUS_REGISTER PCI_EXPRESS_CXL_DVSEC_STATUS_REGISTER;
+
+typedef union _PCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_HEADER_1 PCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_HEADER_1;
+
+typedef union _PCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_HEADER_2 PCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_HEADER_2;
+
+struct _PCI_EXPRESS_CXL_DVSEC_CAPABILITY
+{
+    PCI_EXPRESS_ENHANCED_CAPABILITY_HEADER Header;
+    PCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_HEADER_1 DvsecHeader1;
+    PCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_HEADER_2 DvsecHeader2;
+    UCHAR Reserved[46];
+};
+
+struct _PCI_EXPRESS_CXL_DVSEC_CAPABILITY_V11
+{
+    PCI_EXPRESS_ENHANCED_CAPABILITY_HEADER Header;
+    PCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_HEADER_1 DvsecHeader1;
+    PCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_HEADER_2 DvsecHeader2;
+    PCI_EXPRESS_CXL_DVSEC_CAPABILITY_REGISTER_V11 Capability;
+    PCI_EXPRESS_CXL_DVSEC_CONTROL_REGISTER Control;
+    PCI_EXPRESS_CXL_DVSEC_STATUS_REGISTER Status;
+    USHORT Control2;
+    USHORT Status2;
+    PCI_EXPRESS_CXL_DVSEC_LOCK_REGISTER Lock;
+    USHORT Reserved;
+    PCI_EXPRESS_CXL_DVSEC_RANGE_SIZE_HIGH_REGISTER Range1SizeHigh;
+    PCI_EXPRESS_CXL_DVSEC_RANGE_SIZE_LOW_REGISTER_V11 Range1SizeLow;
+    PCI_EXPRESS_CXL_DVSEC_RANGE_BASE_HIGH_REGISTER Range1BaseHigh;
+    PCI_EXPRESS_CXL_DVSEC_RANGE_BASE_LOW_REGISTER Range1BaseLow;
+    PCI_EXPRESS_CXL_DVSEC_RANGE_SIZE_HIGH_REGISTER Range2SizeHigh;
+    PCI_EXPRESS_CXL_DVSEC_RANGE_SIZE_LOW_REGISTER_V11 Range2SizeLow;
+    PCI_EXPRESS_CXL_DVSEC_RANGE_BASE_HIGH_REGISTER Range2BaseHigh;
+    PCI_EXPRESS_CXL_DVSEC_RANGE_BASE_LOW_REGISTER Range2BaseLow;
+};
+
+struct _PCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_CAPABILITY
+{
+    PCI_EXPRESS_ENHANCED_CAPABILITY_HEADER Header;
+    PCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_HEADER_1 DvsecHeader1;
+    PCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_HEADER_2 DvsecHeader2;
+    USHORT DvsecRegisters[1];
+};
+
+typedef struct _PCI_EXPRESS_CXL_DVSEC_CAPABILITY PCI_EXPRESS_CXL_DVSEC_CAPABILITY;
+
+typedef struct _PCI_EXPRESS_CXL_DVSEC_CAPABILITY_V11 PCI_EXPRESS_CXL_DVSEC_CAPABILITY_V11;
+
+typedef struct _PCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_CAPABILITY PCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_CAPABILITY;
+
+typedef union _PCI_EXPRESS_DPC_CAPS_REGISTER PCI_EXPRESS_DPC_CAPS_REGISTER;
+
+typedef union _PCI_EXPRESS_DPC_CONTROL_REGISTER PCI_EXPRESS_DPC_CONTROL_REGISTER;
+
+typedef union _PCI_EXPRESS_DPC_ERROR_SOURCE_ID PCI_EXPRESS_DPC_ERROR_SOURCE_ID;
+
+typedef union _PCI_EXPRESS_DPC_RP_PIO_EXCEPTION_REGISTER PCI_EXPRESS_DPC_RP_PIO_EXCEPTION_REGISTER;
+
+typedef union _PCI_EXPRESS_DPC_RP_PIO_MASK_REGISTER PCI_EXPRESS_DPC_RP_PIO_MASK_REGISTER;
+
+typedef union _PCI_EXPRESS_DPC_RP_PIO_SEVERITY_REGISTER PCI_EXPRESS_DPC_RP_PIO_SEVERITY_REGISTER;
+
+typedef union _PCI_EXPRESS_DPC_RP_PIO_STATUS_REGISTER PCI_EXPRESS_DPC_RP_PIO_STATUS_REGISTER;
+
+typedef union _PCI_EXPRESS_DPC_RP_PIO_SYSERR_REGISTER PCI_EXPRESS_DPC_RP_PIO_SYSERR_REGISTER;
+
+typedef union _PCI_EXPRESS_DPC_STATUS_REGISTER PCI_EXPRESS_DPC_STATUS_REGISTER;
+
+struct _PCI_EXPRESS_DPC_CAPABILITY
+{
+    PCI_EXPRESS_ENHANCED_CAPABILITY_HEADER Header;
+    PCI_EXPRESS_DPC_CAPS_REGISTER DpcCapabilities;
+    PCI_EXPRESS_DPC_CONTROL_REGISTER DpcControl;
+    PCI_EXPRESS_DPC_STATUS_REGISTER DpcStatus;
+    PCI_EXPRESS_DPC_ERROR_SOURCE_ID DpcErrSrcId;
+    PCI_EXPRESS_DPC_RP_PIO_STATUS_REGISTER RpPioStatus;
+    PCI_EXPRESS_DPC_RP_PIO_MASK_REGISTER RpPioMask;
+    PCI_EXPRESS_DPC_RP_PIO_SEVERITY_REGISTER RpPioSeverity;
+    PCI_EXPRESS_DPC_RP_PIO_SYSERR_REGISTER RpPioSysError;
+    PCI_EXPRESS_DPC_RP_PIO_EXCEPTION_REGISTER RpPioException;
+    PCI_EXPRESS_DPC_RP_PIO_HEADERLOG_REGISTER RpPioHeaderLog;
+    PCI_EXPRESS_DPC_RP_PIO_IMPSPECLOG_REGISTER RpPioImpSpecLog;
+    PCI_EXPRESS_DPC_RP_PIO_TLPPREFIXLOG_REGISTER RpPioPrefixLog;
+};
+
+typedef struct _PCI_EXPRESS_DPC_CAPABILITY PCI_EXPRESS_DPC_CAPABILITY;
+
+typedef union _PCI_EXPRESS_L1_PM_SS_CAPABILITIES_REGISTER PCI_EXPRESS_L1_PM_SS_CAPABILITIES_REGISTER;
+
+typedef union _PCI_EXPRESS_L1_PM_SS_CONTROL_1_REGISTER PCI_EXPRESS_L1_PM_SS_CONTROL_1_REGISTER;
+
+typedef union _PCI_EXPRESS_L1_PM_SS_CONTROL_2_REGISTER PCI_EXPRESS_L1_PM_SS_CONTROL_2_REGISTER;
+
+struct _PCI_EXPRESS_L1_PM_SS_CAPABILITY
+{
+    PCI_EXPRESS_ENHANCED_CAPABILITY_HEADER Header;
+    PCI_EXPRESS_L1_PM_SS_CAPABILITIES_REGISTER L1PmSsCapabilities;
+    PCI_EXPRESS_L1_PM_SS_CONTROL_1_REGISTER L1PmSsControl1;
+    PCI_EXPRESS_L1_PM_SS_CONTROL_2_REGISTER L1PmSsControl2;
+};
+
+typedef struct _PCI_EXPRESS_L1_PM_SS_CAPABILITY PCI_EXPRESS_L1_PM_SS_CAPABILITY;
+
+typedef struct _PCI_EXPRESS_LINK_CONTROL3 PCI_EXPRESS_LINK_CONTROL3;
+
+struct _PCI_EXPRESS_SECONDARY_CAPABILITY
+{
+    PCI_EXPRESS_ENHANCED_CAPABILITY_HEADER Header;
+    PCI_EXPRESS_LINK_CONTROL3 LinkControl3;
+    PCI_EXPRESS_LANE_ERROR_STATUS LaneErrorStatus;
+};
+
+typedef union _PCI_EXPRESS_LTR_MAX_LATENCY_REGISTER PCI_EXPRESS_LTR_MAX_LATENCY_REGISTER;
+
+struct _PCI_EXPRESS_LTR_CAPABILITY
+{
+    PCI_EXPRESS_ENHANCED_CAPABILITY_HEADER Header;
+    PCI_EXPRESS_LTR_MAX_LATENCY_REGISTER Latency;
+};
+
+typedef struct _PCI_EXPRESS_LTR_CAPABILITY PCI_EXPRESS_LTR_CAPABILITY;
+
+typedef union _PCI_EXPRESS_NPEM_CAPABILITY_REGISTER PCI_EXPRESS_NPEM_CAPABILITY_REGISTER;
+
+typedef union _PCI_EXPRESS_NPEM_CONTROL_REGISTER PCI_EXPRESS_NPEM_CONTROL_REGISTER;
+
+typedef union _PCI_EXPRESS_NPEM_STATUS_REGISTER PCI_EXPRESS_NPEM_STATUS_REGISTER;
+
+struct _PCI_EXPRESS_NPEM_CAPABILITY
+{
+    PCI_EXPRESS_ENHANCED_CAPABILITY_HEADER Header;
+    PCI_EXPRESS_NPEM_CAPABILITY_REGISTER Capability;
+    PCI_EXPRESS_NPEM_CONTROL_REGISTER Control;
+    PCI_EXPRESS_NPEM_STATUS_REGISTER Status;
+};
+
+typedef struct _PCI_EXPRESS_NPEM_CAPABILITY PCI_EXPRESS_NPEM_CAPABILITY;
+
+typedef union _PCI_EXPRESS_RESIZABLE_BAR_CAPABILITY_REGISTER PCI_EXPRESS_RESIZABLE_BAR_CAPABILITY_REGISTER;
+
+typedef union _PCI_EXPRESS_RESIZABLE_BAR_CONTROL_REGISTER PCI_EXPRESS_RESIZABLE_BAR_CONTROL_REGISTER;
+
+struct _PCI_EXPRESS_RESIZABLE_BAR_ENTRY
+{
+    PCI_EXPRESS_RESIZABLE_BAR_CAPABILITY_REGISTER Capability;
+    PCI_EXPRESS_RESIZABLE_BAR_CONTROL_REGISTER Control;
+};
+
+typedef struct _PCI_EXPRESS_RESIZABLE_BAR_ENTRY PCI_EXPRESS_RESIZABLE_BAR_ENTRY;
+
+struct _PCI_EXPRESS_RESIZABLE_BAR_CAPABILITY
+{
+    PCI_EXPRESS_ENHANCED_CAPABILITY_HEADER Header;
+    PCI_EXPRESS_RESIZABLE_BAR_ENTRY Entry[6];
+};
+
+typedef struct _PCI_EXPRESS_RESIZABLE_BAR_CAPABILITY PCI_EXPRESS_RESIZABLE_BAR_CAPABILITY;
+
+typedef struct _PCI_EXPRESS_SECONDARY_CAPABILITY PCI_EXPRESS_SECONDARY_CAPABILITY;
+
+typedef union _PCI_EXPRESS_TPH_REQUESTER_CAPABILITY_REGISTER PCI_EXPRESS_TPH_REQUESTER_CAPABILITY_REGISTER;
+
+typedef union _PCI_EXPRESS_TPH_REQUESTER_CONTROL_REGISTER PCI_EXPRESS_TPH_REQUESTER_CONTROL_REGISTER;
+
+struct _PCI_EXPRESS_TPH_REQUESTER_CAPABILITY
+{
+    PCI_EXPRESS_ENHANCED_CAPABILITY_HEADER Header;
+    PCI_EXPRESS_TPH_REQUESTER_CAPABILITY_REGISTER RequesterCapability;
+    PCI_EXPRESS_TPH_REQUESTER_CONTROL_REGISTER RequesterControl;
+};
+
+typedef struct _PCI_EXPRESS_TPH_REQUESTER_CAPABILITY PCI_EXPRESS_TPH_REQUESTER_CAPABILITY;
+
+typedef union _PCI_EXPRESS_TPH_ST_TABLE_ENTRY PCI_EXPRESS_TPH_ST_TABLE_ENTRY;
+
+typedef union _PCI_EXPRESS_USB4_DESIGNATED_VENDOR_SPECIFIC_HEADER PCI_EXPRESS_USB4_DESIGNATED_VENDOR_SPECIFIC_HEADER;
+
+typedef union _PCI_EXPRESS_USB4_DESIGNATED_VENDOR_SPECIFIC_PORT_ATTRIBUTES PCI_EXPRESS_USB4_DESIGNATED_VENDOR_SPECIFIC_PORT_ATTRIBUTES;
+
+struct _PCI_EXPRESS_USB4_DESIGNATED_VENDOR_SPECIFIC_CAPABILITY
+{
+    PCI_EXPRESS_ENHANCED_CAPABILITY_HEADER Header;
+    PCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_HEADER_1 DvsecHeader1;
+    PCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_HEADER_2 DvsecHeader2;
+    PCI_EXPRESS_USB4_DESIGNATED_VENDOR_SPECIFIC_HEADER DvsecHeader3;
+    PCI_EXPRESS_USB4_DESIGNATED_VENDOR_SPECIFIC_PORT_ATTRIBUTES PortSpecificAttributes;
+};
+
+typedef struct _PCI_EXPRESS_USB4_DESIGNATED_VENDOR_SPECIFIC_CAPABILITY PCI_EXPRESS_USB4_DESIGNATED_VENDOR_SPECIFIC_CAPABILITY;
+
+typedef struct _PCI_LINK_INFORMATION PCI_LINK_INFORMATION;
+
+typedef NTSTATUS PCI_SET_MAX_LINK_BANDWIDTH(PVOID, ULONG, BOOLEAN, PBOOLEAN, PPCI_LINK_SPEED);
+
+typedef CORRELATION_VECTOR *PCORRELATION_VECTOR;
+
+typedef struct _DEBUGGING_DEVICE_IN_USE *PDEBUGGING_DEVICE_IN_USE;
+
+typedef struct _DEBUGGING_DEVICE_IN_USE_INFORMATION *PDEBUGGING_DEVICE_IN_USE_INFORMATION;
+
+typedef union _DIMM_ADDRESS *PDIMM_ADDRESS;
+
+typedef struct _DIMM_INFO *PDIMM_INFO;
+
+typedef BOOLEAN (*PFN_IN_USE_PAGE_OFFLINE_NOTIFY)(PFN_NUMBER, BOOLEAN, PVOID, PNTSTATUS);
+
+typedef NTSTATUS (*PFN_WHEA_HIGH_IRQL_LOG_SEL_EVENT_HANDLER)(PVOID, PIPMI_OS_SEL_RECORD);
+
+typedef void (*PHAL_PMU_NOTIFICATION_CALLBACK)(PVOID, PHAL_PMU_NOTIFICATION);
+
+struct _HAL_REGISTER_PMU_NOTIFICATION_INPUT
+{
+    USHORT Version;
+    USHORT Size;
+    ULONG OwnerTag;
+    PHAL_PMU_NOTIFICATION_CALLBACK CallbackRoutine;
+    PVOID CallbackContext;
+};
+
+typedef struct _HAL_REGISTER_PMU_NOTIFICATION_INPUT HAL_REGISTER_PMU_NOTIFICATION_INPUT;
+
+typedef struct _HAL_REGISTER_PMU_NOTIFICATION_INPUT *PHAL_REGISTER_PMU_NOTIFICATION_INPUT;
+
+typedef HVL_WHEA_ERROR_NOTIFICATION *PHVL_WHEA_ERROR_NOTIFICATION;
+
+typedef struct _IO_FOEXT_SILO_PARAMETERS *PIO_FOEXT_SILO_PARAMETERS;
+
+typedef union _MCG_CAP *PMCG_CAP;
+
+typedef union _MCG_STATUS *PMCG_STATUS;
+
+typedef union _MCI_STATUS *PMCI_STATUS;
+
+typedef struct _MEMORY_DEFECT *PMEMORY_DEFECT;
+
+typedef union _PAGE_OFFLINE_VALID_BITS *PPAGE_OFFLINE_VALID_BITS;
+
+typedef struct _PCI_EXPRESS_CXL_DVSEC_CAPABILITY *PPCI_EXPRESS_CXL_DVSEC_CAPABILITY;
+
+typedef union _PCI_EXPRESS_CXL_DVSEC_CAPABILITY_REGISTER_V11 *PPCI_EXPRESS_CXL_DVSEC_CAPABILITY_REGISTER_V11;
+
+typedef struct _PCI_EXPRESS_CXL_DVSEC_CAPABILITY_V11 *PPCI_EXPRESS_CXL_DVSEC_CAPABILITY_V11;
+
+typedef union _PCI_EXPRESS_CXL_DVSEC_CONTROL_REGISTER *PPCI_EXPRESS_CXL_DVSEC_CONTROL_REGISTER;
+
+typedef union _PCI_EXPRESS_CXL_DVSEC_LOCK_REGISTER *PPCI_EXPRESS_CXL_DVSEC_LOCK_REGISTER;
+
+typedef union _PCI_EXPRESS_CXL_DVSEC_RANGE_BASE_LOW_REGISTER *PPCI_EXPRESS_CXL_DVSEC_RANGE_BASE_LOW_REGISTER;
+
+typedef union _PCI_EXPRESS_CXL_DVSEC_RANGE_SIZE_LOW_REGISTER_V11 *PPCI_EXPRESS_CXL_DVSEC_RANGE_SIZE_LOW_REGISTER_V11;
+
+typedef union _PCI_EXPRESS_CXL_DVSEC_STATUS_REGISTER *PPCI_EXPRESS_CXL_DVSEC_STATUS_REGISTER;
+
+typedef struct _PCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_CAPABILITY *PPCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_CAPABILITY;
+
+typedef union _PCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_HEADER_1 *PPCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_HEADER_1;
+
+typedef union _PCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_HEADER_2 *PPCI_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_HEADER_2;
+
+typedef struct _PCI_EXPRESS_DPC_CAPABILITY *PPCI_EXPRESS_DPC_CAPABILITY;
+
+typedef union _PCI_EXPRESS_DPC_CAPS_REGISTER *PPCI_EXPRESS_DPC_CAPS_REGISTER;
+
+typedef union _PCI_EXPRESS_DPC_CONTROL_REGISTER *PPCI_EXPRESS_DPC_CONTROL_REGISTER;
+
+typedef union _PCI_EXPRESS_DPC_ERROR_SOURCE_ID *PPCI_EXPRESS_DPC_ERROR_SOURCE_ID;
+
+typedef union _PCI_EXPRESS_DPC_RP_PIO_EXCEPTION_REGISTER *PPCI_EXPRESS_DPC_RP_PIO_EXCEPTION_REGISTER;
+
+typedef union _PCI_EXPRESS_DPC_RP_PIO_MASK_REGISTER *PPCI_EXPRESS_DPC_RP_PIO_MASK_REGISTER;
+
+typedef union _PCI_EXPRESS_DPC_RP_PIO_SEVERITY_REGISTER *PPCI_EXPRESS_DPC_RP_PIO_SEVERITY_REGISTER;
+
+typedef union _PCI_EXPRESS_DPC_RP_PIO_STATUS_REGISTER *PPCI_EXPRESS_DPC_RP_PIO_STATUS_REGISTER;
+
+typedef union _PCI_EXPRESS_DPC_RP_PIO_SYSERR_REGISTER *PPCI_EXPRESS_DPC_RP_PIO_SYSERR_REGISTER;
+
+typedef union _PCI_EXPRESS_DPC_STATUS_REGISTER *PPCI_EXPRESS_DPC_STATUS_REGISTER;
+
+typedef union _PCI_EXPRESS_L1_PM_SS_CAPABILITIES_REGISTER *PPCI_EXPRESS_L1_PM_SS_CAPABILITIES_REGISTER;
+
+typedef struct _PCI_EXPRESS_L1_PM_SS_CAPABILITY *PPCI_EXPRESS_L1_PM_SS_CAPABILITY;
+
+typedef union _PCI_EXPRESS_L1_PM_SS_CONTROL_1_REGISTER *PPCI_EXPRESS_L1_PM_SS_CONTROL_1_REGISTER;
+
+typedef union _PCI_EXPRESS_L1_PM_SS_CONTROL_2_REGISTER *PPCI_EXPRESS_L1_PM_SS_CONTROL_2_REGISTER;
+
+typedef struct _PCI_EXPRESS_LINK_CONTROL3 *PPCI_EXPRESS_LINK_CONTROL3;
+
+typedef struct _PCI_EXPRESS_LTR_CAPABILITY *PPCI_EXPRESS_LTR_CAPABILITY;
+
+typedef union _PCI_EXPRESS_LTR_MAX_LATENCY_REGISTER *PPCI_EXPRESS_LTR_MAX_LATENCY_REGISTER;
+
+typedef struct _PCI_EXPRESS_NPEM_CAPABILITY *PPCI_EXPRESS_NPEM_CAPABILITY;
+
+typedef union _PCI_EXPRESS_NPEM_CAPABILITY_REGISTER *PPCI_EXPRESS_NPEM_CAPABILITY_REGISTER;
+
+typedef union _PCI_EXPRESS_NPEM_CONTROL_REGISTER *PPCI_EXPRESS_NPEM_CONTROL_REGISTER;
+
+typedef union _PCI_EXPRESS_NPEM_STATUS_REGISTER *PPCI_EXPRESS_NPEM_STATUS_REGISTER;
+
+typedef struct _PCI_EXPRESS_RESIZABLE_BAR_CAPABILITY *PPCI_EXPRESS_RESIZABLE_BAR_CAPABILITY;
+
+typedef union _PCI_EXPRESS_RESIZABLE_BAR_CAPABILITY_REGISTER *PPCI_EXPRESS_RESIZABLE_BAR_CAPABILITY_REGISTER;
+
+typedef union _PCI_EXPRESS_RESIZABLE_BAR_CONTROL_REGISTER *PPCI_EXPRESS_RESIZABLE_BAR_CONTROL_REGISTER;
+
+typedef struct _PCI_EXPRESS_RESIZABLE_BAR_ENTRY *PPCI_EXPRESS_RESIZABLE_BAR_ENTRY;
+
+typedef struct _PCI_EXPRESS_SECONDARY_CAPABILITY *PPCI_EXPRESS_SECONDARY_CAPABILITY;
+
+typedef struct _PCI_EXPRESS_TPH_REQUESTER_CAPABILITY *PPCI_EXPRESS_TPH_REQUESTER_CAPABILITY;
+
+typedef union _PCI_EXPRESS_TPH_REQUESTER_CAPABILITY_REGISTER *PPCI_EXPRESS_TPH_REQUESTER_CAPABILITY_REGISTER;
+
+typedef union _PCI_EXPRESS_TPH_REQUESTER_CONTROL_REGISTER *PPCI_EXPRESS_TPH_REQUESTER_CONTROL_REGISTER;
+
+typedef union _PCI_EXPRESS_TPH_ST_TABLE_ENTRY *PPCI_EXPRESS_TPH_ST_TABLE_ENTRY;
+
+typedef union _PCI_EXPRESS_USB4_DESIGNATED_VENDOR_SPECIFIC_HEADER *PPCI_EXPRESS_USB4_DESIGNATED_VENDOR_SPECIFIC_HEADER;
+
+typedef union _PCI_EXPRESS_USB4_DESIGNATED_VENDOR_SPECIFIC_PORT_ATTRIBUTES *PPCI_EXPRESS_USB4_DESIGNATED_VENDOR_SPECIFIC_PORT_ATTRIBUTES;
+
+typedef struct _PCI_LINK_INFORMATION *PPCI_LINK_INFORMATION;
+
+typedef NTSTATUS PCI_GET_LINK_INFORMATION(PVOID, PPCI_LINK_INFORMATION);
+
+typedef PCI_GET_LINK_INFORMATION *PPCI_GET_LINK_INFORMATION;
+
+typedef PCI_SET_MAX_LINK_BANDWIDTH *PPCI_SET_MAX_LINK_BANDWIDTH;
+
+struct _PCI_LINK_CONFIG_INTERFACE_V1
+{
+    USHORT Size;
+    USHORT Version;
+    PVOID Context;
+    PINTERFACE_REFERENCE InterfaceReference;
+    PINTERFACE_DEREFERENCE InterfaceDereference;
+    PPCI_SET_MAX_LINK_BANDWIDTH SetMaximumLinkBandwidth;
+    PPCI_GET_LINK_INFORMATION GetLinkInformation;
+};
+
+typedef struct _PCI_LINK_CONFIG_INTERFACE_V1 PCI_LINK_CONFIG_INTERFACE_V1;
+
+typedef struct _PCI_LINK_CONFIG_INTERFACE_V1 *PPCI_LINK_CONFIG_INTERFACE_V1;
+
+typedef struct _PCI_EXPRESS_USB4_DESIGNATED_VENDOR_SPECIFIC_CAPABILITY *PPCI_USB4_EXPRESS_DESIGNATED_VENDOR_SPECIFIC_CAPABILITY;
+
+typedef struct _PROCESS_MITIGATION_REDIRECTION_TRUST_POLICY *PPROCESS_MITIGATION_REDIRECTION_TRUST_POLICY;
+
+typedef struct _PROCESS_MITIGATION_SEHOP_POLICY *PPROCESS_MITIGATION_SEHOP_POLICY;
+
+typedef struct _PROCESS_MITIGATION_SIDE_CHANNEL_ISOLATION_POLICY *PPROCESS_MITIGATION_SIDE_CHANNEL_ISOLATION_POLICY;
+
+typedef struct _PROCESS_MITIGATION_USER_POINTER_AUTH_POLICY *PPROCESS_MITIGATION_USER_POINTER_AUTH_POLICY;
+
+typedef struct _PROCESS_MITIGATION_USER_SHADOW_STACK_POLICY *PPROCESS_MITIGATION_USER_SHADOW_STACK_POLICY;
+
+typedef struct _PROCESS_MITIGATION_REDIRECTION_TRUST_POLICY PROCESS_MITIGATION_REDIRECTION_TRUST_POLICY;
+
+typedef struct _PROCESS_MITIGATION_SEHOP_POLICY PROCESS_MITIGATION_SEHOP_POLICY;
+
+typedef struct _PROCESS_MITIGATION_SIDE_CHANNEL_ISOLATION_POLICY PROCESS_MITIGATION_SIDE_CHANNEL_ISOLATION_POLICY;
+
+typedef struct _PROCESS_MITIGATION_USER_POINTER_AUTH_POLICY PROCESS_MITIGATION_USER_POINTER_AUTH_POLICY;
+
+typedef struct _PROCESS_MITIGATION_USER_SHADOW_STACK_POLICY PROCESS_MITIGATION_USER_SHADOW_STACK_POLICY;
+
+typedef void PS_AVAILABLE_CPUS_CHANGE_CALLBACK(PVOID);
+
+typedef NTSTATUS (*PSHED_PI_ATTEMPT_ERROR_RECOVERY)(PVOID, ULONG, PWHEA_ERROR_RECORD);
+
+typedef NTSTATUS (*PSHED_PI_CLEAR_ERROR_RECORD)(PVOID, ULONG, ULONGLONG);
+
+typedef NTSTATUS (*PSHED_PI_CLEAR_ERROR_STATUS)(PVOID, PWHEA_ERROR_SOURCE_DESCRIPTOR, ULONG, PWHEA_ERROR_RECORD);
+
+typedef NTSTATUS (*PSHED_PI_DISABLE_ERROR_SOURCE)(PVOID, PWHEA_ERROR_SOURCE_DESCRIPTOR);
+
+typedef NTSTATUS (*PSHED_PI_ENABLE_ERROR_SOURCE)(PVOID, PWHEA_ERROR_SOURCE_DESCRIPTOR);
+
+typedef NTSTATUS (*PSHED_PI_FINALIZE_ERROR_RECORD)(PVOID, PWHEA_ERROR_SOURCE_DESCRIPTOR, ULONG, PWHEA_ERROR_RECORD);
+
+typedef NTSTATUS (*PSHED_PI_GET_ALL_ERROR_SOURCES)(PVOID, PULONG, PWHEA_ERROR_SOURCE_DESCRIPTOR *, PULONG);
+
+typedef NTSTATUS (*PSHED_PI_GET_ERROR_SOURCE_INFO)(PVOID, PWHEA_ERROR_SOURCE_DESCRIPTOR);
+
+typedef NTSTATUS (*PSHED_PI_INJECT_ERROR)(PVOID, ULONGLONG, ULONGLONG, ULONGLONG, ULONGLONG, ULONGLONG);
+
+typedef NTSTATUS (*PSHED_PI_READ_ERROR_RECORD)(PVOID, ULONG, ULONGLONG, PULONGLONG, PULONG, PWHEA_ERROR_RECORD);
+
+typedef NTSTATUS (*PSHED_PI_RETRIEVE_ERROR_INFO)(PVOID, PWHEA_ERROR_SOURCE_DESCRIPTOR, ULONGLONG, PWHEA_ERROR_PACKET);
+
+typedef NTSTATUS (*PSHED_PI_SET_ERROR_SOURCE_INFO)(PVOID, PWHEA_ERROR_SOURCE_DESCRIPTOR);
+
+typedef NTSTATUS (*PSHED_PI_WRITE_ERROR_RECORD)(PVOID, ULONG, ULONG, PWHEA_ERROR_RECORD);
+
+typedef union _WHEA_ARM_BUS_ERROR_VALID_BITS *PWHEA_ARM_BUS_ERROR_VALID_BITS;
+
+typedef union _WHEA_ARM_CACHE_ERROR_VALID_BITS *PWHEA_ARM_CACHE_ERROR_VALID_BITS;
+
+typedef union _WHEA_ARM_PROCESSOR_ERROR_CONTEXT_INFORMATION_HEADER_FLAGS *PWHEA_ARM_PROCESSOR_ERROR_CONTEXT_INFORMATION_HEADER_FLAGS;
+
+typedef union _WHEA_ARM_PROCESSOR_ERROR_INFORMATION_VALID_BITS *PWHEA_ARM_PROCESSOR_ERROR_INFORMATION_VALID_BITS;
+
+typedef union _WHEA_ARM_PROCESSOR_ERROR_SECTION_VALID_BITS *PWHEA_ARM_PROCESSOR_ERROR_SECTION_VALID_BITS;
+
+typedef union _WHEA_ARM_TLB_ERROR_VALID_BITS *PWHEA_ARM_TLB_ERROR_VALID_BITS;
+
+typedef union _WHEA_ERROR_INJECTION_CAPABILITIES *PWHEA_ERROR_INJECTION_CAPABILITIES;
+
+typedef NTSTATUS (*PSHED_PI_GET_INJECTION_CAPABILITIES)(PVOID, PWHEA_ERROR_INJECTION_CAPABILITIES);
+
+struct _WHEA_PSHED_PLUGIN_CALLBACKS
+{
+    PSHED_PI_GET_ALL_ERROR_SOURCES GetAllErrorSources;
+    PVOID Reserved;
+    PSHED_PI_GET_ERROR_SOURCE_INFO GetErrorSourceInfo;
+    PSHED_PI_SET_ERROR_SOURCE_INFO SetErrorSourceInfo;
+    PSHED_PI_ENABLE_ERROR_SOURCE EnableErrorSource;
+    PSHED_PI_DISABLE_ERROR_SOURCE DisableErrorSource;
+    PSHED_PI_WRITE_ERROR_RECORD WriteErrorRecord;
+    PSHED_PI_READ_ERROR_RECORD ReadErrorRecord;
+    PSHED_PI_CLEAR_ERROR_RECORD ClearErrorRecord;
+    PSHED_PI_RETRIEVE_ERROR_INFO RetrieveErrorInfo;
+    PSHED_PI_FINALIZE_ERROR_RECORD FinalizeErrorRecord;
+    PSHED_PI_CLEAR_ERROR_STATUS ClearErrorStatus;
+    PSHED_PI_ATTEMPT_ERROR_RECOVERY AttemptRecovery;
+    PSHED_PI_GET_INJECTION_CAPABILITIES GetInjectionCapabilities;
+    PSHED_PI_INJECT_ERROR InjectError;
+};
+
+typedef union _WHEA_ERROR_RECORD_HEADER_FLAGS *PWHEA_ERROR_RECORD_HEADER_FLAGS;
+
+typedef union _WHEA_ERROR_RECORD_HEADER_VALIDBITS *PWHEA_ERROR_RECORD_HEADER_VALIDBITS;
+
+typedef union _WHEA_ERROR_STATUS *PWHEA_ERROR_STATUS;
+
+typedef union _WHEA_EVENT_LOG_ENTRY_FLAGS *PWHEA_EVENT_LOG_ENTRY_FLAGS;
+
+typedef union _WHEA_GENERIC_ERROR_BLOCKSTATUS *PWHEA_GENERIC_ERROR_BLOCKSTATUS;
+
+typedef union _WHEA_MEMORY_CORRECTABLE_ERROR_SECTION_VALIDBITS *PWHEA_MEMORY_CORRECTABLE_ERROR_SECTION_VALIDBITS;
+
+typedef union _WHEA_MEMORY_ERROR_EXT_SECTION_FLAGS *PWHEA_MEMORY_ERROR_EXT_SECTION_FLAGS;
+
+typedef union _WHEA_MEMORY_ERROR_EXT_SECTION_INTEL_VALIDBITS *PWHEA_MEMORY_ERROR_EXT_SECTION_INTEL_VALIDBITS;
+
+typedef union _WHEA_MEMORY_ERROR_SECTION_VALIDBITS *PWHEA_MEMORY_ERROR_SECTION_VALIDBITS;
+
+typedef union _WHEA_NMI_ERROR_SECTION_FLAGS *PWHEA_NMI_ERROR_SECTION_FLAGS;
+
+typedef union _WHEA_NOTIFICATION_FLAGS *PWHEA_NOTIFICATION_FLAGS;
+
+typedef PCI_EXPRESS_DPC_CAPABILITY *PWHEA_PCI_DPC_SECTION;
+
+typedef struct _WHEA_PCI_SLOT_NUMBER *PWHEA_PCI_SLOT_NUMBER;
+
+typedef union _WHEA_PCIE_CORRECTABLE_ERROR_DEVICES_VALIDBITS *PWHEA_PCIE_CORRECTABLE_ERROR_DEVICES_VALIDBITS;
+
+typedef union _WHEA_PCIEXPRESS_BRIDGE_CONTROL_STATUS *PWHEA_PCIEXPRESS_BRIDGE_CONTROL_STATUS;
+
+typedef union _WHEA_PCIEXPRESS_COMMAND_STATUS *PWHEA_PCIEXPRESS_COMMAND_STATUS;
+
+typedef union _WHEA_PCIEXPRESS_ERROR_SECTION_VALIDBITS *PWHEA_PCIEXPRESS_ERROR_SECTION_VALIDBITS;
+
+typedef union _WHEA_PCIEXPRESS_VERSION *PWHEA_PCIEXPRESS_VERSION;
+
+typedef union _WHEA_PCIXBUS_COMMAND *PWHEA_PCIXBUS_COMMAND;
+
+typedef union _WHEA_PCIXBUS_ERROR_SECTION_VALIDBITS *PWHEA_PCIXBUS_ERROR_SECTION_VALIDBITS;
+
+typedef union _WHEA_PCIXBUS_ID *PWHEA_PCIXBUS_ID;
+
+typedef union _WHEA_PCIXDEVICE_ERROR_SECTION_VALIDBITS *PWHEA_PCIXDEVICE_ERROR_SECTION_VALIDBITS;
+
+typedef union _WHEA_PERSISTENCE_INFO *PWHEA_PERSISTENCE_INFO;
+
+typedef union _WHEA_PMEM_ERROR_SECTION_VALIDBITS *PWHEA_PMEM_ERROR_SECTION_VALIDBITS;
+
+typedef union _WHEA_PROCESSOR_FAMILY_INFO *PWHEA_PROCESSOR_FAMILY_INFO;
+
+typedef struct _WHEA_PSHED_PLUGIN_CALLBACKS *PWHEA_PSHED_PLUGIN_CALLBACKS;
+
+typedef union _WHEA_RECOVERY_ACTION *PWHEA_RECOVERY_ACTION;
+
+typedef union _WHEA_REPORT_HW_ERROR_DEVICE_DRIVER_FLAGS *PWHEA_REPORT_HW_ERROR_DEVICE_DRIVER_FLAGS;
+
+typedef union _WHEA_TIMESTAMP *PWHEA_TIMESTAMP;
+
+typedef union _WHEA_XPF_BUS_CHECK *PWHEA_XPF_BUS_CHECK;
+
+typedef union _WHEA_XPF_CACHE_CHECK *PWHEA_XPF_CACHE_CHECK;
+
+typedef union _WHEA_XPF_MS_CHECK *PWHEA_XPF_MS_CHECK;
+
+typedef union _WHEA_XPF_PROCESSOR_ERROR_SECTION_VALIDBITS *PWHEA_XPF_PROCESSOR_ERROR_SECTION_VALIDBITS;
+
+typedef union _WHEA_XPF_PROCINFO_VALIDBITS *PWHEA_XPF_PROCINFO_VALIDBITS;
+
+typedef union _WHEA_XPF_TLB_CHECK *PWHEA_XPF_TLB_CHECK;
+
+typedef union _XPF_MC_BANK_FLAGS *PXPF_MC_BANK_FLAGS;
+
+typedef union _XPF_MCE_FLAGS *PXPF_MCE_FLAGS;
+
+typedef struct _XPF_RECOVERY_INFO *PXPF_RECOVERY_INFO;
+
+typedef void (NTAPI *SILO_CONTEXT_CLEANUP_CALLBACK)(PVOID);
+
+typedef NTSTATUS (NTAPI *SILO_MONITOR_CREATE_CALLBACK)(PESILO);
+
+typedef void (NTAPI *SILO_MONITOR_TERMINATE_CALLBACK)(PESILO);
+
+struct _SILO_MONITOR_REGISTRATION
+{
+    UCHAR Version;
+    BOOLEAN MonitorHost;
+    BOOLEAN MonitorExistingSilos;
+    UCHAR Reserved[5];
+    union
+    {
+        PUNICODE_STRING DriverObjectName;
+        PUNICODE_STRING ComponentName;
+    };
+    SILO_MONITOR_CREATE_CALLBACK CreateCallback;
+    SILO_MONITOR_TERMINATE_CALLBACK TerminateCallback;
+};
+
+typedef struct _SILO_MONITOR_REGISTRATION *PSILO_MONITOR_REGISTRATION;
+
+typedef struct _SILO_MONITOR_REGISTRATION SILO_MONITOR_REGISTRATION;
+
+typedef union _WHEA_ARM_BUS_ERROR_VALID_BITS WHEA_ARM_BUS_ERROR_VALID_BITS;
+
+#pragma pack(push, 1)
+struct _WHEA_ARM_BUS_ERROR
+{
+    WHEA_ARM_BUS_ERROR_VALID_BITS ValidationBit;
+    UCHAR TransactionType : 2;
+    UCHAR Operation : 4;
+    UCHAR Level : 3;
+    UCHAR ProcessorContextCorrupt : 1;
+    UCHAR Corrected : 1;
+    UCHAR PrecisePC : 1;
+    UCHAR RestartablePC : 1;
+    UCHAR ParticipationType : 2;
+    UCHAR TimeOut : 1;
+    UCHAR AddressSpace : 2;
+    USHORT MemoryAccessAttributes : 9;
+    UCHAR AccessMode : 1;
+    ULONG Reserved : 20;
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_ARM_BUS_ERROR *PWHEA_ARM_BUS_ERROR;
+
+typedef struct _WHEA_ARM_BUS_ERROR WHEA_ARM_BUS_ERROR;
+
+typedef union _WHEA_ARM_CACHE_ERROR_VALID_BITS WHEA_ARM_CACHE_ERROR_VALID_BITS;
+
+#pragma pack(push, 1)
+struct _WHEA_ARM_CACHE_ERROR
+{
+    WHEA_ARM_CACHE_ERROR_VALID_BITS ValidationBit;
+    UCHAR TransactionType : 2;
+    UCHAR Operation : 4;
+    UCHAR Level : 3;
+    UCHAR ProcessorContextCorrupt : 1;
+    UCHAR Corrected : 1;
+    UCHAR PrecisePC : 1;
+    UCHAR RestartablePC : 1;
+    ULONGLONG Reserved : 35;
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_ARM_CACHE_ERROR *PWHEA_ARM_CACHE_ERROR;
+
+typedef struct _WHEA_ARM_CACHE_ERROR WHEA_ARM_CACHE_ERROR;
+
+typedef union _WHEA_ARM_PROCESSOR_ERROR_CONTEXT_INFORMATION_HEADER_FLAGS WHEA_ARM_PROCESSOR_ERROR_CONTEXT_INFORMATION_HEADER_FLAGS;
+
+typedef union _WHEA_ARM_PROCESSOR_ERROR_INFORMATION_VALID_BITS WHEA_ARM_PROCESSOR_ERROR_INFORMATION_VALID_BITS;
+
+#pragma pack(push, 1)
+struct _WHEA_ARM_PROCESSOR_ERROR_INFORMATION
+{
+    UCHAR Version;
+    UCHAR Length;
+    WHEA_ARM_PROCESSOR_ERROR_INFORMATION_VALID_BITS ValidationBit;
+    UCHAR Type;
+    USHORT MultipleError;
+    UCHAR Flags;
+    ULONGLONG ErrorInformation;
+    ULONGLONG VirtualFaultAddress;
+    ULONGLONG PhysicalFaultAddress;
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_ARM_PROCESSOR_ERROR_INFORMATION *PWHEA_ARM_PROCESSOR_ERROR_INFORMATION;
+
+typedef struct _WHEA_ARM_PROCESSOR_ERROR_INFORMATION WHEA_ARM_PROCESSOR_ERROR_INFORMATION;
+
+typedef union _WHEA_ARM_PROCESSOR_ERROR_SECTION_VALID_BITS WHEA_ARM_PROCESSOR_ERROR_SECTION_VALID_BITS;
+
+#pragma pack(push, 1)
+struct _WHEA_ARM_PROCESSOR_ERROR_SECTION
+{
+    WHEA_ARM_PROCESSOR_ERROR_SECTION_VALID_BITS ValidBits;
+    USHORT ErrorInformationStructures;
+    USHORT ContextInformationStructures;
+    ULONG SectionLength;
+    UCHAR ErrorAffinityLevel;
+    UCHAR Reserved[3];
+    ULONGLONG MPIDR_EL1;
+    ULONGLONG MIDR_EL1;
+    ULONG RunningState;
+    ULONG PSCIState;
+    UCHAR Data[1];
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_ARM_PROCESSOR_ERROR_SECTION *PWHEA_ARM_PROCESSOR_ERROR_SECTION;
+
+typedef struct _WHEA_ARM_PROCESSOR_ERROR_SECTION WHEA_ARM_PROCESSOR_ERROR_SECTION;
+
+typedef union _WHEA_ARM_TLB_ERROR_VALID_BITS WHEA_ARM_TLB_ERROR_VALID_BITS;
+
+#pragma pack(push, 1)
+struct _WHEA_ARM_TLB_ERROR
+{
+    WHEA_ARM_TLB_ERROR_VALID_BITS ValidationBit;
+    UCHAR TransactionType : 2;
+    UCHAR Operation : 4;
+    UCHAR Level : 3;
+    UCHAR ProcessorContextCorrupt : 1;
+    UCHAR Corrected : 1;
+    UCHAR PrecisePC : 1;
+    UCHAR RestartablePC : 1;
+    ULONGLONG Reserved : 36;
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_ARM_TLB_ERROR *PWHEA_ARM_TLB_ERROR;
+
+typedef struct _WHEA_ARM_TLB_ERROR WHEA_ARM_TLB_ERROR;
+
+#pragma pack(push, 1)
+union _WHEA_ARM_PROCESSOR_ERROR
+{
+    WHEA_ARM_CACHE_ERROR CacheError;
+    WHEA_ARM_TLB_ERROR TlbError;
+    WHEA_ARM_BUS_ERROR BusError;
+    ULONGLONG AsULONGLONG;
+};
+#pragma pack(pop)
+
+typedef union _WHEA_ARM_PROCESSOR_ERROR *PWHEA_ARM_PROCESSOR_ERROR;
+
+typedef union _WHEA_ARM_PROCESSOR_ERROR WHEA_ARM_PROCESSOR_ERROR;
+
+typedef union _WHEA_ERROR_INJECTION_CAPABILITIES WHEA_ERROR_INJECTION_CAPABILITIES;
+
+typedef union _WHEA_ERROR_RECORD_HEADER_FLAGS WHEA_ERROR_RECORD_HEADER_FLAGS;
+
+typedef union _WHEA_ERROR_RECORD_HEADER_VALIDBITS WHEA_ERROR_RECORD_HEADER_VALIDBITS;
+
+typedef _WHEA_ERROR_SOURCE_CORRECT *WHEA_ERROR_SOURCE_CORRECT;
+
+typedef _WHEA_ERROR_SOURCE_CORRECT_DEVICE_DRIVER *WHEA_ERROR_SOURCE_CORRECT_DEVICE_DRIVER;
+
+typedef _WHEA_ERROR_SOURCE_CREATE_RECORD *WHEA_ERROR_SOURCE_CREATE_RECORD;
+
+typedef _WHEA_ERROR_SOURCE_INITIALIZE *WHEA_ERROR_SOURCE_INITIALIZE;
+
+typedef _WHEA_ERROR_SOURCE_INITIALIZE_DEVICE_DRIVER *WHEA_ERROR_SOURCE_INITIALIZE_DEVICE_DRIVER;
+
+typedef _WHEA_ERROR_SOURCE_RECOVER *WHEA_ERROR_SOURCE_RECOVER;
+
+typedef _WHEA_ERROR_SOURCE_UNINITIALIZE *WHEA_ERROR_SOURCE_UNINITIALIZE;
+
+struct _WHEA_ERROR_SOURCE_CONFIGURATION
+{
+    ULONG Flags;
+    WHEA_ERROR_SOURCE_CORRECT Correct;
+    WHEA_ERROR_SOURCE_INITIALIZE Initialize;
+    WHEA_ERROR_SOURCE_CREATE_RECORD CreateRecord;
+    WHEA_ERROR_SOURCE_RECOVER Recover;
+    WHEA_ERROR_SOURCE_UNINITIALIZE Uninitialize;
+    PVOID Reserved;
+};
+
+typedef struct _WHEA_ERROR_SOURCE_CONFIGURATION *PWHEA_ERROR_SOURCE_CONFIGURATION;
+
+typedef struct _WHEA_ERROR_SOURCE_CONFIGURATION WHEA_ERROR_SOURCE_CONFIGURATION;
+
+typedef _WHEA_ERROR_SOURCE_UNINITIALIZE_DEVICE_DRIVER *WHEA_ERROR_SOURCE_UNINITIALIZE_DEVICE_DRIVER;
+
+#pragma pack(push, 1)
+struct _WHEA_ERROR_SOURCE_CONFIGURATION_DD
+{
+    WHEA_ERROR_SOURCE_INITIALIZE_DEVICE_DRIVER Initialize;
+    WHEA_ERROR_SOURCE_UNINITIALIZE_DEVICE_DRIVER Uninitialize;
+    WHEA_ERROR_SOURCE_CORRECT_DEVICE_DRIVER Correct;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_ERROR_SOURCE_CONFIGURATION_DEVICE_DRIVER
+{
+    ULONG Version;
+    GUID SourceGuid;
+    USHORT LogTag;
+    UCHAR Reserved[6];
+    WHEA_ERROR_SOURCE_INITIALIZE_DEVICE_DRIVER Initialize;
+    WHEA_ERROR_SOURCE_UNINITIALIZE_DEVICE_DRIVER Uninitialize;
+    ULONG MaxSectionDataLength;
+    ULONG MaxSectionsPerReport;
+    GUID CreatorId;
+    GUID PartitionId;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_ERROR_SOURCE_CONFIGURATION_DEVICE_DRIVER_V1
+{
+    ULONG Version;
+    GUID SourceGuid;
+    USHORT LogTag;
+    UCHAR Reserved[6];
+    WHEA_ERROR_SOURCE_INITIALIZE_DEVICE_DRIVER Initialize;
+    WHEA_ERROR_SOURCE_UNINITIALIZE_DEVICE_DRIVER Uninitialize;
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_ERROR_SOURCE_CONFIGURATION_DD *PWHEA_ERROR_SOURCE_CONFIGURATION_DD;
+
+typedef struct _WHEA_ERROR_SOURCE_CONFIGURATION_DEVICE_DRIVER *PWHEA_ERROR_SOURCE_CONFIGURATION_DEVICE_DRIVER;
+
+typedef struct _WHEA_ERROR_SOURCE_CONFIGURATION_DEVICE_DRIVER_V1 *PWHEA_ERROR_SOURCE_CONFIGURATION_DEVICE_DRIVER_V1;
+
+typedef struct _WHEA_ERROR_SOURCE_CONFIGURATION_DD WHEA_ERROR_SOURCE_CONFIGURATION_DD;
+
+#pragma pack(push, 1)
+struct _WHEA_DEVICE_DRIVER_DESCRIPTOR
+{
+    USHORT Type;
+    BOOLEAN Enabled;
+    UCHAR Reserved;
+    GUID SourceGuid;
+    USHORT LogTag;
+    USHORT Reserved2;
+    ULONG PacketLength;
+    ULONG PacketCount;
+    PUCHAR PacketBuffer;
+    WHEA_ERROR_SOURCE_CONFIGURATION_DD Config;
+    GUID CreatorId;
+    GUID PartitionId;
+    ULONG MaxSectionDataLength;
+    ULONG MaxSectionsPerRecord;
+    PUCHAR PacketStateBuffer;
+    LONG OpenHandles;
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_DEVICE_DRIVER_DESCRIPTOR *PWHEA_DEVICE_DRIVER_DESCRIPTOR;
+
+typedef struct _WHEA_DEVICE_DRIVER_DESCRIPTOR WHEA_DEVICE_DRIVER_DESCRIPTOR;
+
+typedef struct _WHEA_ERROR_SOURCE_CONFIGURATION_DEVICE_DRIVER WHEA_ERROR_SOURCE_CONFIGURATION_DEVICE_DRIVER;
+
+typedef struct _WHEA_ERROR_SOURCE_CONFIGURATION_DEVICE_DRIVER_V1 WHEA_ERROR_SOURCE_CONFIGURATION_DEVICE_DRIVER_V1;
+
+typedef union _WHEA_ERROR_STATUS WHEA_ERROR_STATUS;
+
+typedef union _WHEA_EVENT_LOG_ENTRY_FLAGS WHEA_EVENT_LOG_ENTRY_FLAGS;
+
+#pragma pack(push, 1)
+struct _WHEA_EVENT_LOG_ENTRY_HEADER
+{
+    ULONG Signature;
+    ULONG Version;
+    ULONG Length;
+    WHEA_EVENT_LOG_ENTRY_TYPE Type;
+    ULONG OwnerTag;
+    WHEA_EVENT_LOG_ENTRY_ID Id;
+    WHEA_EVENT_LOG_ENTRY_FLAGS Flags;
+    ULONG PayloadLength;
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_EVENT_LOG_ENTRY_HEADER *PWHEA_EVENT_LOG_ENTRY_HEADER;
+
+typedef struct _WHEA_EVENT_LOG_ENTRY_HEADER WHEA_EVENT_LOG_ENTRY_HEADER;
+
+struct _WHEA_EVENT_LOG_ENTRY
+{
+    WHEA_EVENT_LOG_ENTRY_HEADER Header;
+};
+
+typedef struct _WHEA_EVENT_LOG_ENTRY *PWHEA_EVENT_LOG_ENTRY;
+
+typedef struct _WHEA_EVENT_LOG_ENTRY WHEA_EVENT_LOG_ENTRY;
+
+struct _WHEA_AZCC_ROOT_BUS_ERR_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    BOOLEAN MaxBusCountPassed;
+    BOOLEAN InvalidBusMSR;
+};
+
+#pragma pack(push, 1)
+struct _WHEA_AZCC_ROOT_BUS_LIST_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    UINT32 RootBusCount;
+    UINT32 RootBuses[8];
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_AZCC_SET_POISON_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    UINT32 Bus;
+    BOOLEAN ReadSuccess;
+    BOOLEAN WriteSuccess;
+    BOOLEAN IsEnable;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_CRASHDUMP_EVENT_LOG_ENTRY_ULONG1
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    ULONG Value;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_CRASHDUMP_EVENT_LOG_ENTRY_WITH_STATUS
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    ULONG SourceLocationId;
+    NTSTATUS Status;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_ETW_OVERFLOW_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    ULONGLONG RecordId;
+};
+#pragma pack(pop)
+
+struct _WHEA_FAILED_ADD_DEFECT_LIST_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+};
+
+#pragma pack(push, 1)
+struct _WHEA_GAS_ERROR_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    WHEA_GAS_ERRORS Error;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_MEMORY_THROTTLE_SUMMARY_FAILED_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    NTSTATUS Status;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_OFFLINE_DONE_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    ULONG64 Address;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_PSHED_PI_CPU_BUSES_INIT_FAILED_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    NTSTATUS Status;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_PSHED_PI_CPUID
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    UINT32 CpuVendor;
+    UINT32 CpuFamily;
+    UINT32 CpuModel;
+    UINT32 CpuStepping;
+    UINT32 NumBanks;
+};
+#pragma pack(pop)
+
+struct _WHEA_PSHED_PI_TRACE_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    CCHAR Buffer[256];
+};
+
+#pragma pack(push, 1)
+struct _WHEA_PSHED_PLUGIN_DIMM_MISMATCH
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    UINT16 FirmwareBank;
+    UINT16 FirmwareCol;
+    UINT16 FirmwareRow;
+    UINT16 RetryRdBank;
+    UINT16 RetryRdCol;
+    UINT16 RetryRdRow;
+    UINT16 TaBank;
+    UINT16 TaCol;
+    UINT16 TaRow;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_PSHED_PLUGIN_ENABLE_NOTIFY_FAILED_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    WHEA_PSHED_PLUGIN_ENABLE_NOTIFY_ERRORS EnableError;
+};
+#pragma pack(pop)
+
+struct _WHEA_PSHED_PLUGIN_HEARTBEAT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+};
+
+#pragma pack(push, 1)
+struct _WHEA_PSHED_PLUGIN_INIT_FAILED_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    NTSTATUS Status;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_PSHED_PLUGIN_LOAD_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    WCHAR PluginName[32];
+    ULONG MajorVersion;
+    ULONG MinorVersion;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_PSHED_PLUGIN_PLATFORM_SUPPORT_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    WCHAR PluginName[32];
+    BOOLEAN Supported;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_PSHED_PLUGIN_UNLOAD_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    WCHAR PluginName[32];
+};
+#pragma pack(pop)
+
+struct _WHEA_REGISTER_KEY_NOTIFICATION_FAILED_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+};
+
+#pragma pack(push, 1)
+struct _WHEA_REGISTRY_ERROR_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    WHEA_REGISTRY_ERRORS RegErr;
+    UINT32 Status;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_REGNOTIFY_POLICY_CHANGE_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    CCHAR PolicyName[32];
+    ULONG PolicyIndex;
+    ULONG PolicyValue;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_SEL_BUGCHECK_PROGRESS
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    ULONG BugCheckCode;
+    ULONG BugCheckProgressSummary;
+};
+#pragma pack(pop)
+
+struct _WHEA_SEL_BUGCHECK_RECOVERY_STATUS_MULTIPLE_BUGCHECK_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    BOOLEAN IsBugcheckOwner;
+    UCHAR RecursionCount;
+    BOOLEAN IsBugcheckRecoveryOwner;
+};
+
+#pragma pack(push, 1)
+struct _WHEA_SEL_BUGCHECK_RECOVERY_STATUS_PHASE1_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    BOOLEAN Success;
+    UCHAR Version;
+    USHORT EntryCount;
+    struct
+    {
+        UCHAR DumpPolicy;
+        UCHAR Reserved[3];
+    } Data;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_SEL_BUGCHECK_RECOVERY_STATUS_PHASE2_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    ULONG BootId;
+    BOOLEAN Success;
+};
+#pragma pack(pop)
+
+struct _WHEA_SEL_BUGCHECK_RECOVERY_STATUS_START_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    KIRQL StartingIrql;
+};
+
+struct _WHEA_SEL_RAW_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    UCHAR Payload[256];
+};
+
+#pragma pack(push, 1)
+struct _WHEA_SRAR_DETAIL_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    UINT32 RecoveryContextFlags;
+    UINT64 RecoveryContextPa;
+    NTSTATUS PageOfflineStatus;
+    BOOLEAN KernelConsumerError;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_SRAS_TABLE_ENTRIES_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    UINT32 LogNumber;
+    UINT32 NumberSignals;
+    UINT8 Data[1];
+};
+#pragma pack(pop)
+
+struct _WHEA_SRAS_TABLE_ERROR
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+};
+
+struct _WHEA_SRAS_TABLE_NOT_FOUND
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+};
+
+struct _WHEA_THROTTLE_ADD_ERR_SRC_FAILED_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+};
+
+#pragma pack(push, 1)
+struct _WHEA_THROTTLE_MEMORY_ADD_OR_REMOVE_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    UINT32 SocketId;
+    UINT32 ChannelId;
+    UINT32 DimmSlot;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_THROTTLE_PCIE_ADD_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    WHEA_PCIE_ADDRESS Address;
+    UINT32 Mask;
+    BOOLEAN Updated;
+    NTSTATUS Status;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_THROTTLE_PCIE_REMOVE_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    WHEA_PCIE_ADDRESS Address;
+    UINT32 Mask;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_THROTTLE_REG_DATA_IGNORED_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    WHEA_THROTTLE_TYPE ThrottleType;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_THROTTLE_REGISTRY_CORRUPT_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    WHEA_THROTTLE_TYPE ThrottleType;
+};
+#pragma pack(pop)
+
+struct _WHEAP_ACPI_TIMEOUT_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    CHAR TableType[32];
+    CHAR TableRequest[32];
+};
+
+#pragma pack(push, 1)
+struct _WHEAP_ADD_REMOVE_ERROR_SOURCE_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    WHEA_ERROR_SOURCE_DESCRIPTOR Descriptor;
+    NTSTATUS Status;
+    BOOLEAN IsRemove;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_BIT_OFFLINE_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    PFN_NUMBER Page;
+    NTSTATUS Status;
+    WHEA_OFFLINE_ERRS ErrorReason;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_CLEARED_POISON_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    ULONG64 PhysicalAddress;
+};
+#pragma pack(pop)
+
+struct _WHEAP_CMCI_IMPLEMENTED_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    BOOLEAN CmciAvailable;
+};
+
+#pragma pack(push, 1)
+struct _WHEAP_CMCI_INITERR_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    ULONGLONG Msr;
+    ULONG Type;
+    ULONG Bank;
+    ULONG EpIndex;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_CMCI_RESTART_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    ULONG CmciRestoreAttempts;
+    ULONG MaxCmciRestoreLimit;
+    ULONG MaxCorrectedErrorsFound;
+    ULONG MaxCorrectedErrorLimit;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_CREATE_GENERIC_RECORD_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    CHAR Error[32];
+    ULONG EntryCount;
+    NTSTATUS Status;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_DEFERRED_EVENT
+{
+    LIST_ENTRY ListEntry;
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+};
+#pragma pack(pop)
+
+struct _WHEAP_DEVICE_DRV_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    CHAR Function[32];
+};
+
+#pragma pack(push, 1)
+struct _WHEAP_DPC_ERROR_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    WHEAP_DPC_ERROR_EVENT_TYPE ErrType;
+    ULONG Bus;
+    ULONG Device;
+    ULONG Function;
+    USHORT DeviceId;
+    USHORT VendorId;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_DROPPED_CORRECTED_ERROR_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    WHEA_ERROR_SOURCE_TYPE ErrorSourceType;
+    ULONG ErrorSourceId;
+};
+#pragma pack(pop)
+
+struct _WHEAP_EDPC_ENABLED_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    BOOLEAN eDPCEnabled;
+    BOOLEAN eDPCRecovEnabled;
+};
+
+#pragma pack(push, 1)
+struct _WHEAP_ERR_SRC_ARRAY_INVALID_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    ULONG ErrorSourceCount;
+    ULONG ReportedLength;
+    ULONG ExpectedLength;
+};
+#pragma pack(pop)
+
+struct _WHEAP_ERR_SRC_INVALID_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    WHEA_ERROR_SOURCE_DESCRIPTOR ErrDescriptor;
+    CHAR Error[32];
+};
+
+#pragma pack(push, 1)
+struct _WHEAP_ERROR_CLEARED_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    ULONG EpIndex;
+    ULONG Bank;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_ERROR_RECORD_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    PWHEA_ERROR_RECORD Record;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_FOUND_ERROR_IN_BANK_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    ULONG EpIndex;
+    ULONG Bank;
+    ULONG64 MciStatus;
+    ULONG ErrorType;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_GENERIC_ERR_MEM_MAP_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    CHAR MapReason[32];
+    ULONG64 PhysicalAddress;
+    ULONG64 Length;
+};
+#pragma pack(pop)
+
+struct _WHEAP_OSC_IMPLEMENTED
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    BOOLEAN OscImplemented;
+    BOOLEAN DebugChecked;
+};
+
+#pragma pack(push, 1)
+struct _WHEAP_PCIE_CONFIG_INFO
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    UINT32 Segment;
+    UINT32 Bus;
+    UINT32 Device;
+    UINT32 Function;
+    UINT32 Offset;
+    UINT32 Length;
+    UINT64 Value;
+    UINT8 Succeeded;
+    UINT8 Reserved[3];
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_PCIE_OVERRIDE_INFO
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    UINT32 Segment;
+    UINT32 Bus;
+    UINT32 Device;
+    UINT32 Function;
+    UINT8 ValidBits;
+    UINT8 Reserved[3];
+    UINT32 UncorrectableErrorMask;
+    UINT32 UncorrectableErrorSeverity;
+    UINT32 CorrectableErrorMask;
+    UINT32 CapAndControl;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_PCIE_READ_OVERRIDES_ERR
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    UINT32 FailureReason;
+    NTSTATUS FailureStatus;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_PFA_MEMORY_OFFLINED
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    WHEAP_PFA_OFFLINE_DECISION_TYPE DecisionType;
+    BOOLEAN ImmediateSuccess;
+    ULONG Page;
+    BOOLEAN NotifyVid;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_PFA_MEMORY_OFFLINED_NOTIFY_CALLBACK_ACTION
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    ULONG Page;
+    ULONG ComponentTag;
+    NTSTATUS Status;
+    WHEA_RECOVERY_CONTEXT_ACTION_TAKEN ActionTaken;
+    WHEA_RECOVERY_CONTEXT_ACTION_TAKEN_ADDITIONAL_INFO ActionTakenAdditionalInfo;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_PFA_MEMORY_POLICY
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    ULONG RegistryKeysPresent;
+    BOOLEAN DisableOffline;
+    BOOLEAN PersistOffline;
+    BOOLEAN PfaDisabled;
+    ULONG PageCount;
+    ULONG ErrorThreshold;
+    ULONG TimeOut;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_PFA_MEMORY_REMOVE_MONITOR
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    WHEA_PFA_REMOVE_TRIGGER RemoveTrigger;
+    ULONG TimeInList;
+    ULONG ErrorCount;
+    ULONG Page;
+};
+#pragma pack(pop)
+
+struct _WHEAP_PLUGIN_DEFECT_LIST_CORRUPT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+};
+
+struct _WHEAP_PLUGIN_DEFECT_LIST_FULL_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+};
+
+struct _WHEAP_PLUGIN_DEFECT_LIST_UEFI_VAR_FAILED
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+};
+
+struct _WHEAP_PLUGIN_PFA_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    BOOLEAN NoFurtherPfa;
+};
+
+#pragma pack(push, 1)
+struct _WHEAP_PROCESS_EINJ_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    CHAR Error[32];
+    BOOLEAN InjectionActionTableValid;
+    ULONG BeginInjectionInstructionCount;
+    ULONG GetTriggerErrorActionTableInstructionCount;
+    ULONG SetErrorTypeInstructionCount;
+    ULONG GetErrorTypeInstructionCount;
+    ULONG EndOperationInstructionCount;
+    ULONG ExecuteOperationInstructionCount;
+    ULONG CheckBusyStatusInstructionCount;
+    ULONG GetCommandStatusInstructionCount;
+    ULONG SetErrorTypeWithAddressInstructionCount;
+    ULONG GetExecuteOperationTimingsInstructionCount;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_PROCESS_HEST_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    CHAR Error[32];
+    CHAR EntryType[32];
+    ULONG EntryIndex;
+    BOOLEAN HestValid;
+    ULONG CmcCount;
+    ULONG MceCount;
+    ULONG NmiCount;
+    ULONG AerRootCount;
+    ULONG AerBridgeCount;
+    ULONG AerEndPointCount;
+    ULONG GenericV1Count;
+    ULONG GenericV2Count;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_PROMOTED_AER_ERROR_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    WHEA_ERROR_SEVERITY ErrorSeverity;
+    ULONG ErrorHandlerType;
+    ULONG ErrorSourceId;
+    ULONG RootErrorCommand;
+    ULONG RootErrorStatus;
+    ULONG DeviceAssociationBitmap;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_PSHED_INJECT_ERROR
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    ULONG ErrorType;
+    ULONGLONG Parameter1;
+    ULONGLONG Parameter2;
+    ULONGLONG Parameter3;
+    ULONGLONG Parameter4;
+    NTSTATUS InjectionStatus;
+    BOOLEAN InjectionAttempted;
+    BOOLEAN InjectionByPlugin;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_PSHED_PLUGIN_REGISTER
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    ULONG Version;
+    ULONG Length;
+    ULONG FunctionalAreaMask;
+    NTSTATUS Status;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_ROW_FAILURE_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    PFN_NUMBER LowOrderPage;
+    PFN_NUMBER HighOrderPage;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_ROW_OFFLINE_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    PFN_NUMBER FirstPage;
+    PFN_NUMBER LastPage;
+    UINT32 Range;
+    NTSTATUS Status;
+    WHEA_OFFLINE_ERRS ErrorReason;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_SPURIOUS_AER_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    WHEA_ERROR_SEVERITY ErrorSeverity;
+    ULONG ErrorHandlerType;
+    ULONG SpuriousErrorSourceId;
+    ULONG RootErrorCommand;
+    ULONG RootErrorStatus;
+    ULONG DeviceAssociationBitmap;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_STARTED_REPORT_HW_ERROR
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    PWHEA_ERROR_PACKET ErrorPacket;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_STUCK_ERROR_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    ULONG EpIndex;
+    ULONG Bank;
+    ULONG64 MciStatus;
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_AZCC_ROOT_BUS_ERR_EVENT *PWHEA_AZCC_ROOT_BUS_ERR_EVENT;
+
+typedef struct _WHEA_AZCC_ROOT_BUS_LIST_EVENT *PWHEA_AZCC_ROOT_BUS_LIST_EVENT;
+
+typedef struct _WHEA_AZCC_SET_POISON_EVENT *PWHEA_AZCC_SET_POISON_EVENT;
+
+typedef struct _WHEA_CRASHDUMP_EVENT_LOG_ENTRY_ULONG1 *PWHEA_CRASHDUMP_EVENT_LOG_ENTRY_ULONG1;
+
+typedef struct _WHEA_CRASHDUMP_EVENT_LOG_ENTRY_WITH_STATUS *PWHEA_CRASHDUMP_EVENT_LOG_ENTRY_WITH_STATUS;
+
+typedef struct _WHEA_ETW_OVERFLOW_EVENT *PWHEA_ETW_OVERFLOW_EVENT;
+
+typedef struct _WHEA_FAILED_ADD_DEFECT_LIST_EVENT *PWHEA_FAILED_ADD_DEFECT_LIST_EVENT;
+
+typedef struct _WHEA_GAS_ERROR_EVENT *PWHEA_GAS_ERROR_EVENT;
+
+typedef struct _WHEA_MEMORY_THROTTLE_SUMMARY_FAILED_EVENT *PWHEA_MEMORY_THROTTLE_SUMMARY_FAILED_EVENT;
+
+typedef struct _WHEA_OFFLINE_DONE_EVENT *PWHEA_OFFLINE_DONE_EVENT;
+
+typedef struct _WHEA_PSHED_PI_CPU_BUSES_INIT_FAILED_EVENT *PWHEA_PSHED_PI_CPU_BUSES_INIT_FAILED_EVENT;
+
+typedef struct _WHEA_PSHED_PI_CPUID *PWHEA_PSHED_PI_CPUID;
+
+typedef struct _WHEA_PSHED_PI_TRACE_EVENT *PWHEA_PSHED_PI_TRACE_EVENT;
+
+typedef struct _WHEA_PSHED_PLUGIN_DIMM_MISMATCH *PWHEA_PSHED_PLUGIN_DIMM_MISMATCH;
+
+typedef struct _WHEA_PSHED_PLUGIN_ENABLE_NOTIFY_FAILED_EVENT *PWHEA_PSHED_PLUGIN_ENABLE_NOTIFY_FAILED_EVENT;
+
+typedef struct _WHEA_PSHED_PLUGIN_HEARTBEAT *PWHEA_PSHED_PLUGIN_HEARTBEAT;
+
+typedef struct _WHEA_PSHED_PLUGIN_INIT_FAILED_EVENT *PWHEA_PSHED_PLUGIN_INIT_FAILED_EVENT;
+
+typedef struct _WHEA_PSHED_PLUGIN_LOAD_EVENT *PWHEA_PSHED_PLUGIN_LOAD_EVENT;
+
+typedef struct _WHEA_PSHED_PLUGIN_PLATFORM_SUPPORT_EVENT *PWHEA_PSHED_PLUGIN_PLATFORM_SUPPORT_EVENT;
+
+typedef struct _WHEA_PSHED_PLUGIN_UNLOAD_EVENT *PWHEA_PSHED_PLUGIN_UNLOAD_EVENT;
+
+typedef struct _WHEA_REGISTER_KEY_NOTIFICATION_FAILED_EVENT *PWHEA_REGISTER_KEY_NOTIFICATION_FAILED_EVENT;
+
+typedef struct _WHEA_REGISTRY_ERROR_EVENT *PWHEA_REGISTRY_ERROR_EVENT;
+
+typedef struct _WHEA_REGNOTIFY_POLICY_CHANGE_EVENT *PWHEA_REGNOTIFY_POLICY_CHANGE_EVENT;
+
+typedef struct _WHEA_SEL_BUGCHECK_PROGRESS *PWHEA_SEL_BUGCHECK_PROGRESS;
+
+typedef struct _WHEA_SEL_BUGCHECK_RECOVERY_STATUS_MULTIPLE_BUGCHECK_EVENT *PWHEA_SEL_BUGCHECK_RECOVERY_STATUS_MULTIPLE_BUGCHECK_EVENT;
+
+typedef struct _WHEA_SEL_BUGCHECK_RECOVERY_STATUS_PHASE1_EVENT *PWHEA_SEL_BUGCHECK_RECOVERY_STATUS_PHASE1_EVENT;
+
+typedef struct _WHEA_SEL_BUGCHECK_RECOVERY_STATUS_PHASE2_EVENT *PWHEA_SEL_BUGCHECK_RECOVERY_STATUS_PHASE2_EVENT;
+
+typedef struct _WHEA_SEL_BUGCHECK_RECOVERY_STATUS_START_EVENT *PWHEA_SEL_BUGCHECK_RECOVERY_STATUS_START_EVENT;
+
+typedef struct _WHEA_SEL_RAW_EVENT *PWHEA_SEL_RAW_EVENT;
+
+typedef struct _WHEA_SRAR_DETAIL_EVENT *PWHEA_SRAR_DETAIL_EVENT;
+
+typedef struct _WHEA_SRAS_TABLE_ENTRIES_EVENT *PWHEA_SRAS_TABLE_ENTRIES_EVENT;
+
+typedef struct _WHEA_SRAS_TABLE_ERROR *PWHEA_SRAS_TABLE_ERROR;
+
+typedef struct _WHEA_SRAS_TABLE_NOT_FOUND *PWHEA_SRAS_TABLE_NOT_FOUND;
+
+typedef struct _WHEA_THROTTLE_ADD_ERR_SRC_FAILED_EVENT *PWHEA_THROTTLE_ADD_ERR_SRC_FAILED_EVENT;
+
+typedef struct _WHEA_THROTTLE_MEMORY_ADD_OR_REMOVE_EVENT *PWHEA_THROTTLE_MEMORY_ADD_OR_REMOVE_EVENT;
+
+typedef struct _WHEA_THROTTLE_PCIE_ADD_EVENT *PWHEA_THROTTLE_PCIE_ADD_EVENT;
+
+typedef struct _WHEA_THROTTLE_PCIE_REMOVE_EVENT *PWHEA_THROTTLE_PCIE_REMOVE_EVENT;
+
+typedef struct _WHEA_THROTTLE_REG_DATA_IGNORED_EVENT *PWHEA_THROTTLE_REG_DATA_IGNORED_EVENT;
+
+typedef struct _WHEA_THROTTLE_REGISTRY_CORRUPT_EVENT *PWHEA_THROTTLE_REGISTRY_CORRUPT_EVENT;
+
+typedef struct _WHEAP_ACPI_TIMEOUT_EVENT *PWHEAP_ACPI_TIMEOUT_EVENT;
+
+typedef struct _WHEAP_ADD_REMOVE_ERROR_SOURCE_EVENT *PWHEAP_ADD_REMOVE_ERROR_SOURCE_EVENT;
+
+typedef struct _WHEAP_BIT_OFFLINE_EVENT *PWHEAP_BIT_OFFLINE_EVENT;
+
+typedef struct _WHEAP_CLEARED_POISON_EVENT *PWHEAP_CLEARED_POISON_EVENT;
+
+typedef struct _WHEAP_CMCI_IMPLEMENTED_EVENT *PWHEAP_CMCI_IMPLEMENTED_EVENT;
+
+typedef struct _WHEAP_CMCI_INITERR_EVENT *PWHEAP_CMCI_INITERR_EVENT;
+
+typedef struct _WHEAP_CMCI_RESTART_EVENT *PWHEAP_CMCI_RESTART_EVENT;
+
+typedef struct _WHEAP_CREATE_GENERIC_RECORD_EVENT *PWHEAP_CREATE_GENERIC_RECORD_EVENT;
+
+typedef struct _WHEAP_DEFERRED_EVENT *PWHEAP_DEFERRED_EVENT;
+
+typedef struct _WHEAP_DEVICE_DRV_EVENT *PWHEAP_DEVICE_DRV_EVENT;
+
+typedef struct _WHEAP_DPC_ERROR_EVENT *PWHEAP_DPC_ERROR_EVENT;
+
+typedef struct _WHEAP_DROPPED_CORRECTED_ERROR_EVENT *PWHEAP_DROPPED_CORRECTED_ERROR_EVENT;
+
+typedef struct _WHEAP_EDPC_ENABLED_EVENT *PWHEAP_EDPC_ENABLED_EVENT;
+
+typedef struct _WHEAP_ERR_SRC_ARRAY_INVALID_EVENT *PWHEAP_ERR_SRC_ARRAY_INVALID_EVENT;
+
+typedef struct _WHEAP_ERR_SRC_INVALID_EVENT *PWHEAP_ERR_SRC_INVALID_EVENT;
+
+typedef struct _WHEAP_ERROR_CLEARED_EVENT *PWHEAP_ERROR_CLEARED_EVENT;
+
+typedef struct _WHEAP_ERROR_RECORD_EVENT *PWHEAP_ERROR_RECORD_EVENT;
+
+typedef struct _WHEAP_FOUND_ERROR_IN_BANK_EVENT *PWHEAP_FOUND_ERROR_IN_BANK_EVENT;
+
+typedef struct _WHEAP_GENERIC_ERR_MEM_MAP_EVENT *PWHEAP_GENERIC_ERR_MEM_MAP_EVENT;
+
+typedef struct _WHEAP_OSC_IMPLEMENTED *PWHEAP_OSC_IMPLEMENTED;
+
+typedef struct _WHEAP_PCIE_CONFIG_INFO *PWHEAP_PCIE_CONFIG_INFO;
+
+typedef struct _WHEAP_PCIE_OVERRIDE_INFO *PWHEAP_PCIE_OVERRIDE_INFO;
+
+typedef struct _WHEAP_PCIE_READ_OVERRIDES_ERR *PWHEAP_PCIE_READ_OVERRIDES_ERR;
+
+typedef struct _WHEAP_PFA_MEMORY_OFFLINED *PWHEAP_PFA_MEMORY_OFFLINED;
+
+typedef struct _WHEAP_PFA_MEMORY_OFFLINED_NOTIFY_CALLBACK_ACTION *PWHEAP_PFA_MEMORY_OFFLINED_NOTIFY_CALLBACK_ACTION;
+
+typedef struct _WHEAP_PFA_MEMORY_POLICY *PWHEAP_PFA_MEMORY_POLICY;
+
+typedef struct _WHEAP_PFA_MEMORY_REMOVE_MONITOR *PWHEAP_PFA_MEMORY_REMOVE_MONITOR;
+
+typedef struct _WHEAP_PLUGIN_DEFECT_LIST_CORRUPT *PWHEAP_PLUGIN_DEFECT_LIST_CORRUPT;
+
+typedef struct _WHEAP_PLUGIN_DEFECT_LIST_FULL_EVENT *PWHEAP_PLUGIN_DEFECT_LIST_FULL_EVENT;
+
+typedef struct _WHEAP_PLUGIN_DEFECT_LIST_UEFI_VAR_FAILED *PWHEAP_PLUGIN_DEFECT_LIST_UEFI_VAR_FAILED;
+
+typedef struct _WHEAP_PLUGIN_PFA_EVENT *PWHEAP_PLUGIN_PFA_EVENT;
+
+typedef struct _WHEAP_PROCESS_EINJ_EVENT *PWHEAP_PROCESS_EINJ_EVENT;
+
+typedef struct _WHEAP_PROCESS_HEST_EVENT *PWHEAP_PROCESS_HEST_EVENT;
+
+typedef struct _WHEAP_PROMOTED_AER_ERROR_EVENT *PWHEAP_PROMOTED_AER_ERROR_EVENT;
+
+typedef struct _WHEAP_PSHED_INJECT_ERROR *PWHEAP_PSHED_INJECT_ERROR;
+
+typedef struct _WHEAP_PSHED_PLUGIN_REGISTER *PWHEAP_PSHED_PLUGIN_REGISTER;
+
+typedef struct _WHEAP_ROW_FAILURE_EVENT *PWHEAP_ROW_FAILURE_EVENT;
+
+typedef struct _WHEAP_ROW_OFFLINE_EVENT *PWHEAP_ROW_OFFLINE_EVENT;
+
+typedef struct _WHEAP_SPURIOUS_AER_EVENT *PWHEAP_SPURIOUS_AER_EVENT;
+
+typedef struct _WHEAP_STARTED_REPORT_HW_ERROR *PWHEAP_STARTED_REPORT_HW_ERROR;
+
+typedef struct _WHEAP_STUCK_ERROR_EVENT *PWHEAP_STUCK_ERROR_EVENT;
+
+typedef struct _WHEA_AZCC_ROOT_BUS_ERR_EVENT WHEA_AZCC_ROOT_BUS_ERR_EVENT;
+
+typedef struct _WHEA_AZCC_ROOT_BUS_LIST_EVENT WHEA_AZCC_ROOT_BUS_LIST_EVENT;
+
+typedef struct _WHEA_AZCC_SET_POISON_EVENT WHEA_AZCC_SET_POISON_EVENT;
+
+typedef struct _WHEA_CRASHDUMP_EVENT_LOG_ENTRY_ULONG1 WHEA_CRASHDUMP_EVENT_LOG_ENTRY_ULONG1;
+
+typedef struct _WHEA_CRASHDUMP_EVENT_LOG_ENTRY_WITH_STATUS WHEA_CRASHDUMP_EVENT_LOG_ENTRY_WITH_STATUS;
+
+typedef struct _WHEA_ETW_OVERFLOW_EVENT WHEA_ETW_OVERFLOW_EVENT;
+
+typedef struct _WHEA_FAILED_ADD_DEFECT_LIST_EVENT WHEA_FAILED_ADD_DEFECT_LIST_EVENT;
+
+typedef struct _WHEA_GAS_ERROR_EVENT WHEA_GAS_ERROR_EVENT;
+
+typedef union _WHEA_GENERIC_ERROR_BLOCKSTATUS WHEA_GENERIC_ERROR_BLOCKSTATUS;
+
+#pragma pack(push, 1)
+struct _WHEA_GENERIC_ERROR
+{
+    WHEA_GENERIC_ERROR_BLOCKSTATUS BlockStatus;
+    ULONG RawDataOffset;
+    ULONG RawDataLength;
+    ULONG DataLength;
+    WHEA_ERROR_SEVERITY ErrorSeverity;
+    UCHAR Data[1];
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_GENERIC_ERROR *PWHEA_GENERIC_ERROR;
+
+typedef struct _WHEA_GENERIC_ERROR WHEA_GENERIC_ERROR;
+
+typedef union _WHEA_MEMORY_CORRECTABLE_ERROR_SECTION_VALIDBITS WHEA_MEMORY_CORRECTABLE_ERROR_SECTION_VALIDBITS;
+
+#pragma pack(push, 1)
+struct _WHEA_MEMORY_CORRECTABLE_ERROR_DATA
+{
+    WHEA_MEMORY_CORRECTABLE_ERROR_SECTION_VALIDBITS ValidBits;
+    UINT32 SocketId;
+    UINT32 ChannelId;
+    UINT32 DimmSlot;
+    UINT32 CorrectableErrorCount;
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_MEMORY_CORRECTABLE_ERROR_DATA *PWHEA_MEMORY_CORRECTABLE_ERROR_DATA;
+
+typedef struct _WHEA_MEMORY_CORRECTABLE_ERROR_DATA WHEA_MEMORY_CORRECTABLE_ERROR_DATA;
+
+struct _WHEA_MEMORY_CORRECTABLE_ERROR_SECTION
+{
+    WHEA_MEMORY_CORRECTABLE_ERROR_HEADER Header;
+    WHEA_MEMORY_CORRECTABLE_ERROR_DATA Data[1];
+};
+
+typedef struct _WHEA_MEMORY_CORRECTABLE_ERROR_SECTION *PWHEA_MEMORY_CORRECTABLE_ERROR_SECTION;
+
+typedef struct _WHEA_MEMORY_CORRECTABLE_ERROR_SECTION WHEA_MEMORY_CORRECTABLE_ERROR_SECTION;
+
+typedef union _WHEA_MEMORY_ERROR_EXT_SECTION_FLAGS WHEA_MEMORY_ERROR_EXT_SECTION_FLAGS;
+
+typedef union _WHEA_MEMORY_ERROR_EXT_SECTION_INTEL_VALIDBITS WHEA_MEMORY_ERROR_EXT_SECTION_INTEL_VALIDBITS;
+
+struct _WHEA_MEMORY_ERROR_EXT_SECTION_INTEL
+{
+    WHEA_MEMORY_ERROR_EXT_SECTION_FLAGS Flags;
+    WHEA_MEMORY_ERROR_EXT_SECTION_INTEL_VALIDBITS ValidBits;
+    WHEA_MEMORY_HARDWARE_ADDRESS_INTEL HardwareAddress;
+    UINT8 Reserved[40];
+};
+
+typedef struct _WHEA_MEMORY_ERROR_EXT_SECTION_INTEL *PWHEA_MEMORY_ERROR_EXT_SECTION_INTEL;
+
+typedef struct _WHEA_MEMORY_ERROR_EXT_SECTION_INTEL WHEA_MEMORY_ERROR_EXT_SECTION_INTEL;
+
+typedef union _WHEA_MEMORY_ERROR_SECTION_VALIDBITS WHEA_MEMORY_ERROR_SECTION_VALIDBITS;
+
+#pragma pack(push, 1)
+struct _WHEA_MEMORY_ERROR_SECTION
+{
+    WHEA_MEMORY_ERROR_SECTION_VALIDBITS ValidBits;
+    WHEA_ERROR_STATUS ErrorStatus;
+    ULONGLONG PhysicalAddress;
+    ULONGLONG PhysicalAddressMask;
+    USHORT Node;
+    USHORT Card;
+    USHORT Module;
+    USHORT Bank;
+    USHORT Device;
+    USHORT Row;
+    USHORT Column;
+    USHORT BitPosition;
+    ULONGLONG RequesterId;
+    ULONGLONG ResponderId;
+    ULONGLONG TargetId;
+    UCHAR ErrorType;
+    UCHAR Extended;
+    USHORT RankNumber;
+    USHORT CardHandle;
+    USHORT ModuleHandle;
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_MEMORY_ERROR_SECTION *PWHEA_MEMORY_ERROR_SECTION;
+
+typedef struct _WHEA_MEMORY_ERROR_SECTION WHEA_MEMORY_ERROR_SECTION;
+
+typedef struct _WHEA_MEMORY_THROTTLE_SUMMARY_FAILED_EVENT WHEA_MEMORY_THROTTLE_SUMMARY_FAILED_EVENT;
+
+typedef union _WHEA_NMI_ERROR_SECTION_FLAGS WHEA_NMI_ERROR_SECTION_FLAGS;
+
+struct _WHEA_NMI_ERROR_SECTION
+{
+    UCHAR Data[8];
+    WHEA_NMI_ERROR_SECTION_FLAGS Flags;
+};
+
+typedef struct _WHEA_NMI_ERROR_SECTION *PWHEA_NMI_ERROR_SECTION;
+
+typedef struct _WHEA_NMI_ERROR_SECTION WHEA_NMI_ERROR_SECTION;
+
+typedef union _WHEA_NOTIFICATION_FLAGS WHEA_NOTIFICATION_FLAGS;
+
+struct _WHEA_NOTIFICATION_DESCRIPTOR
+{
+    UCHAR Type;
+    UCHAR Length;
+    WHEA_NOTIFICATION_FLAGS Flags;
+    union
+    {
+        struct
+        {
+            ULONG PollInterval;
+        } Polled;
+        struct
+        {
+            ULONG PollInterval;
+            ULONG Vector;
+            ULONG SwitchToPollingThreshold;
+            ULONG SwitchToPollingWindow;
+            ULONG ErrorThreshold;
+            ULONG ErrorThresholdWindow;
+        } Interrupt;
+        struct
+        {
+            ULONG PollInterval;
+            ULONG Vector;
+            ULONG SwitchToPollingThreshold;
+            ULONG SwitchToPollingWindow;
+            ULONG ErrorThreshold;
+            ULONG ErrorThresholdWindow;
+        } LocalInterrupt;
+        struct
+        {
+            ULONG PollInterval;
+            ULONG Vector;
+            ULONG SwitchToPollingThreshold;
+            ULONG SwitchToPollingWindow;
+            ULONG ErrorThreshold;
+            ULONG ErrorThresholdWindow;
+        } Sci;
+        struct
+        {
+            ULONG PollInterval;
+            ULONG Vector;
+            ULONG SwitchToPollingThreshold;
+            ULONG SwitchToPollingWindow;
+            ULONG ErrorThreshold;
+            ULONG ErrorThresholdWindow;
+        } Nmi;
+        struct
+        {
+            ULONG PollInterval;
+            ULONG Vector;
+            ULONG SwitchToPollingThreshold;
+            ULONG SwitchToPollingWindow;
+            ULONG ErrorThreshold;
+            ULONG ErrorThresholdWindow;
+        } Sea;
+        struct
+        {
+            ULONG PollInterval;
+            ULONG Vector;
+            ULONG SwitchToPollingThreshold;
+            ULONG SwitchToPollingWindow;
+            ULONG ErrorThreshold;
+            ULONG ErrorThresholdWindow;
+        } Sei;
+        struct
+        {
+            ULONG PollInterval;
+            ULONG Vector;
+            ULONG SwitchToPollingThreshold;
+            ULONG SwitchToPollingWindow;
+            ULONG ErrorThreshold;
+            ULONG ErrorThresholdWindow;
+        } Gsiv;
+    } u;
+};
+
+typedef struct _WHEA_NOTIFICATION_DESCRIPTOR *PWHEA_NOTIFICATION_DESCRIPTOR;
+
+typedef struct _WHEA_NOTIFICATION_DESCRIPTOR WHEA_NOTIFICATION_DESCRIPTOR;
+
+#pragma pack(push, 1)
+struct _WHEA_GENERIC_ERROR_DESCRIPTOR
+{
+    USHORT Type;
+    UCHAR Reserved;
+    UCHAR Enabled;
+    ULONG ErrStatusBlockLength;
+    ULONG RelatedErrorSourceId;
+    UCHAR ErrStatusAddressSpaceID;
+    UCHAR ErrStatusAddressBitWidth;
+    UCHAR ErrStatusAddressBitOffset;
+    UCHAR ErrStatusAddressAccessSize;
+    LARGE_INTEGER ErrStatusAddress;
+    WHEA_NOTIFICATION_DESCRIPTOR Notify;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_GENERIC_ERROR_DESCRIPTOR_V2
+{
+    USHORT Type;
+    UCHAR Reserved;
+    UCHAR Enabled;
+    ULONG ErrStatusBlockLength;
+    ULONG RelatedErrorSourceId;
+    UCHAR ErrStatusAddressSpaceID;
+    UCHAR ErrStatusAddressBitWidth;
+    UCHAR ErrStatusAddressBitOffset;
+    UCHAR ErrStatusAddressAccessSize;
+    LARGE_INTEGER ErrStatusAddress;
+    WHEA_NOTIFICATION_DESCRIPTOR Notify;
+    UCHAR ReadAckAddressSpaceID;
+    UCHAR ReadAckAddressBitWidth;
+    UCHAR ReadAckAddressBitOffset;
+    UCHAR ReadAckAddressAccessSize;
+    LARGE_INTEGER ReadAckAddress;
+    ULONGLONG ReadAckPreserveMask;
+    ULONGLONG ReadAckWriteMask;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEAP_BAD_HEST_NOTIFY_DATA_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    USHORT SourceId;
+    USHORT Reserved;
+    WHEA_NOTIFICATION_DESCRIPTOR NotifyDesc;
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_GENERIC_ERROR_DESCRIPTOR *PWHEA_GENERIC_ERROR_DESCRIPTOR;
+
+typedef struct _WHEA_GENERIC_ERROR_DESCRIPTOR_V2 *PWHEA_GENERIC_ERROR_DESCRIPTOR_V2;
+
+typedef struct _WHEAP_BAD_HEST_NOTIFY_DATA_EVENT *PWHEAP_BAD_HEST_NOTIFY_DATA_EVENT;
+
+typedef struct _WHEA_GENERIC_ERROR_DESCRIPTOR WHEA_GENERIC_ERROR_DESCRIPTOR;
+
+typedef struct _WHEA_GENERIC_ERROR_DESCRIPTOR_V2 WHEA_GENERIC_ERROR_DESCRIPTOR_V2;
+
+typedef struct _WHEA_OFFLINE_DONE_EVENT WHEA_OFFLINE_DONE_EVENT;
+
+typedef PCI_EXPRESS_DPC_CAPABILITY WHEA_PCI_DPC_SECTION;
+
+typedef struct _WHEA_PCI_SLOT_NUMBER WHEA_PCI_SLOT_NUMBER;
+
+#pragma pack(push, 1)
+struct _WHEA_AER_BRIDGE_DESCRIPTOR
+{
+    USHORT Type;
+    BOOLEAN Enabled;
+    UCHAR Reserved;
+    ULONG BusNumber;
+    WHEA_PCI_SLOT_NUMBER Slot;
+    USHORT DeviceControl;
+    AER_BRIDGE_DESCRIPTOR_FLAGS Flags;
+    ULONG UncorrectableErrorMask;
+    ULONG UncorrectableErrorSeverity;
+    ULONG CorrectableErrorMask;
+    ULONG AdvancedCapsAndControl;
+    ULONG SecondaryUncorrectableErrorMask;
+    ULONG SecondaryUncorrectableErrorSev;
+    ULONG SecondaryCapsAndControl;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_AER_ENDPOINT_DESCRIPTOR
+{
+    USHORT Type;
+    BOOLEAN Enabled;
+    UCHAR Reserved;
+    ULONG BusNumber;
+    WHEA_PCI_SLOT_NUMBER Slot;
+    USHORT DeviceControl;
+    AER_ENDPOINT_DESCRIPTOR_FLAGS Flags;
+    ULONG UncorrectableErrorMask;
+    ULONG UncorrectableErrorSeverity;
+    ULONG CorrectableErrorMask;
+    ULONG AdvancedCapsAndControl;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_AER_ROOTPORT_DESCRIPTOR
+{
+    USHORT Type;
+    BOOLEAN Enabled;
+    UCHAR Reserved;
+    ULONG BusNumber;
+    WHEA_PCI_SLOT_NUMBER Slot;
+    USHORT DeviceControl;
+    AER_ROOTPORT_DESCRIPTOR_FLAGS Flags;
+    ULONG UncorrectableErrorMask;
+    ULONG UncorrectableErrorSeverity;
+    ULONG CorrectableErrorMask;
+    ULONG AdvancedCapsAndControl;
+    ULONG RootErrorCommand;
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_AER_BRIDGE_DESCRIPTOR *PWHEA_AER_BRIDGE_DESCRIPTOR;
+
+typedef struct _WHEA_AER_ENDPOINT_DESCRIPTOR *PWHEA_AER_ENDPOINT_DESCRIPTOR;
+
+typedef struct _WHEA_AER_ROOTPORT_DESCRIPTOR *PWHEA_AER_ROOTPORT_DESCRIPTOR;
+
+typedef struct _WHEA_AER_BRIDGE_DESCRIPTOR WHEA_AER_BRIDGE_DESCRIPTOR;
+
+typedef struct _WHEA_AER_ENDPOINT_DESCRIPTOR WHEA_AER_ENDPOINT_DESCRIPTOR;
+
+typedef struct _WHEA_AER_ROOTPORT_DESCRIPTOR WHEA_AER_ROOTPORT_DESCRIPTOR;
+
+typedef union _WHEA_PCIE_CORRECTABLE_ERROR_DEVICES_VALIDBITS WHEA_PCIE_CORRECTABLE_ERROR_DEVICES_VALIDBITS;
+
+#pragma pack(push, 1)
+struct _WHEA_PCIE_CORRECTABLE_ERROR_DEVICES
+{
+    WHEA_PCIE_CORRECTABLE_ERROR_DEVICES_VALIDBITS ValidBits;
+    WHEA_PCIE_ADDRESS Address;
+    UINT32 Mask;
+    UINT32 CorrectableErrorCount[32];
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_PCIE_CORRECTABLE_ERROR_DEVICES *PWHEA_PCIE_CORRECTABLE_ERROR_DEVICES;
+
+typedef struct _WHEA_PCIE_CORRECTABLE_ERROR_DEVICES WHEA_PCIE_CORRECTABLE_ERROR_DEVICES;
+
+struct _WHEA_PCIE_CORRECTABLE_ERROR_SECTION
+{
+    WHEA_PCIE_CORRECTABLE_ERROR_SECTION_HEADER Header;
+    WHEA_PCIE_CORRECTABLE_ERROR_DEVICES Devices[1];
+};
+
+typedef struct _WHEA_PCIE_CORRECTABLE_ERROR_SECTION *PWHEA_PCIE_CORRECTABLE_ERROR_SECTION;
+
+typedef struct _WHEA_PCIE_CORRECTABLE_ERROR_SECTION WHEA_PCIE_CORRECTABLE_ERROR_SECTION;
+
+typedef union _WHEA_PCIEXPRESS_BRIDGE_CONTROL_STATUS WHEA_PCIEXPRESS_BRIDGE_CONTROL_STATUS;
+
+typedef union _WHEA_PCIEXPRESS_COMMAND_STATUS WHEA_PCIEXPRESS_COMMAND_STATUS;
+
+typedef union _WHEA_PCIEXPRESS_ERROR_SECTION_VALIDBITS WHEA_PCIEXPRESS_ERROR_SECTION_VALIDBITS;
+
+typedef union _WHEA_PCIEXPRESS_VERSION WHEA_PCIEXPRESS_VERSION;
+
+#pragma pack(push, 1)
+struct _WHEA_PCIEXPRESS_ERROR_SECTION
+{
+    WHEA_PCIEXPRESS_ERROR_SECTION_VALIDBITS ValidBits;
+    WHEA_PCIEXPRESS_DEVICE_TYPE PortType;
+    WHEA_PCIEXPRESS_VERSION Version;
+    WHEA_PCIEXPRESS_COMMAND_STATUS CommandStatus;
+    ULONG Reserved;
+    WHEA_PCIEXPRESS_DEVICE_ID DeviceId;
+    ULONGLONG DeviceSerialNumber;
+    WHEA_PCIEXPRESS_BRIDGE_CONTROL_STATUS BridgeControlStatus;
+    UCHAR ExpressCapability[60];
+    UCHAR AerInfo[96];
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_PCIEXPRESS_ERROR_SECTION *PWHEA_PCIEXPRESS_ERROR_SECTION;
+
+typedef struct _WHEA_PCIEXPRESS_ERROR_SECTION WHEA_PCIEXPRESS_ERROR_SECTION;
+
+typedef union _WHEA_PCIXBUS_COMMAND WHEA_PCIXBUS_COMMAND;
+
+typedef union _WHEA_PCIXBUS_ERROR_SECTION_VALIDBITS WHEA_PCIXBUS_ERROR_SECTION_VALIDBITS;
+
+typedef union _WHEA_PCIXBUS_ID WHEA_PCIXBUS_ID;
+
+#pragma pack(push, 1)
+struct _WHEA_PCIXBUS_ERROR_SECTION
+{
+    WHEA_PCIXBUS_ERROR_SECTION_VALIDBITS ValidBits;
+    WHEA_ERROR_STATUS ErrorStatus;
+    USHORT ErrorType;
+    WHEA_PCIXBUS_ID BusId;
+    ULONG Reserved;
+    ULONGLONG BusAddress;
+    ULONGLONG BusData;
+    WHEA_PCIXBUS_COMMAND BusCommand;
+    ULONGLONG RequesterId;
+    ULONGLONG CompleterId;
+    ULONGLONG TargetId;
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_PCIXBUS_ERROR_SECTION *PWHEA_PCIXBUS_ERROR_SECTION;
+
+typedef struct _WHEA_PCIXBUS_ERROR_SECTION WHEA_PCIXBUS_ERROR_SECTION;
+
+typedef union _WHEA_PCIXDEVICE_ERROR_SECTION_VALIDBITS WHEA_PCIXDEVICE_ERROR_SECTION_VALIDBITS;
+
+#pragma pack(push, 1)
+struct _WHEA_PCIXDEVICE_ERROR_SECTION
+{
+    WHEA_PCIXDEVICE_ERROR_SECTION_VALIDBITS ValidBits;
+    WHEA_ERROR_STATUS ErrorStatus;
+    WHEA_PCIXDEVICE_ID IdInfo;
+    ULONG MemoryNumber;
+    ULONG IoNumber;
+    WHEA_PCIXDEVICE_REGISTER_PAIR RegisterDataPairs[1];
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_PCIXDEVICE_ERROR_SECTION *PWHEA_PCIXDEVICE_ERROR_SECTION;
+
+typedef struct _WHEA_PCIXDEVICE_ERROR_SECTION WHEA_PCIXDEVICE_ERROR_SECTION;
+
+typedef union _WHEA_PERSISTENCE_INFO WHEA_PERSISTENCE_INFO;
+
+typedef union _WHEA_PMEM_ERROR_SECTION_VALIDBITS WHEA_PMEM_ERROR_SECTION_VALIDBITS;
+
+#pragma pack(push, 1)
+struct _WHEA_PMEM_ERROR_SECTION
+{
+    WHEA_PMEM_ERROR_SECTION_VALIDBITS ValidBits;
+    UCHAR LocationInfo[64];
+    WHEA_ERROR_STATUS ErrorStatus;
+    ULONG NFITHandle;
+    ULONG PageRangeCount;
+    WHEA_PMEM_PAGE_RANGE PageRange[1];
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_PMEM_ERROR_SECTION *PWHEA_PMEM_ERROR_SECTION;
+
+typedef struct _WHEA_PMEM_ERROR_SECTION WHEA_PMEM_ERROR_SECTION;
+
+#pragma pack(push, 1)
+struct _WHEA_ERROR_PACKET_V1
+{
+    ULONG Signature;
+    WHEA_ERROR_PACKET_FLAGS Flags;
+    ULONG Size;
+    ULONG RawDataLength;
+    ULONGLONG Reserved1;
+    ULONGLONG Context;
+    WHEA_ERROR_TYPE ErrorType;
+    WHEA_ERROR_SEVERITY ErrorSeverity;
+    ULONG ErrorSourceId;
+    WHEA_ERROR_SOURCE_TYPE ErrorSourceType;
+    ULONG Reserved2;
+    ULONG Version;
+    ULONGLONG Cpu;
+    union
+    {
+        WHEA_PROCESSOR_GENERIC_ERROR_SECTION ProcessorError;
+        WHEA_MEMORY_ERROR_SECTION MemoryError;
+        WHEA_NMI_ERROR_SECTION NmiError;
+        WHEA_PCIEXPRESS_ERROR_SECTION PciExpressError;
+        WHEA_PCIXBUS_ERROR_SECTION PciXBusError;
+        WHEA_PCIXDEVICE_ERROR_SECTION PciXDeviceError;
+        WHEA_PMEM_ERROR_SECTION PmemError;
+    } u;
+    WHEA_RAW_DATA_FORMAT RawDataFormat;
+    ULONG RawDataOffset;
+    UCHAR RawData[1];
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_ERROR_PACKET_V1 *PWHEA_ERROR_PACKET_V1;
+
+typedef struct _WHEA_ERROR_PACKET_V1 WHEA_ERROR_PACKET_V1;
+
+typedef union _WHEA_PROCESSOR_FAMILY_INFO WHEA_PROCESSOR_FAMILY_INFO;
+
+typedef struct _WHEA_PSHED_PI_CPU_BUSES_INIT_FAILED_EVENT WHEA_PSHED_PI_CPU_BUSES_INIT_FAILED_EVENT;
+
+typedef struct _WHEA_PSHED_PI_CPUID WHEA_PSHED_PI_CPUID;
+
+typedef struct _WHEA_PSHED_PI_TRACE_EVENT WHEA_PSHED_PI_TRACE_EVENT;
+
+typedef struct _WHEA_PSHED_PLUGIN_CALLBACKS WHEA_PSHED_PLUGIN_CALLBACKS;
+
+struct _WHEA_PSHED_PLUGIN_REGISTRATION_PACKET_V1
+{
+    ULONG Length;
+    ULONG Version;
+    PVOID Context;
+    ULONG FunctionalAreaMask;
+    ULONG Reserved;
+    WHEA_PSHED_PLUGIN_CALLBACKS Callbacks;
+};
+
+struct _WHEA_PSHED_PLUGIN_REGISTRATION_PACKET_V2
+{
+    ULONG Length;
+    ULONG Version;
+    PVOID Context;
+    ULONG FunctionalAreaMask;
+    ULONG Reserved;
+    WHEA_PSHED_PLUGIN_CALLBACKS Callbacks;
+    PVOID PluginHandle;
+};
+
+typedef struct _WHEA_PSHED_PLUGIN_DIMM_MISMATCH WHEA_PSHED_PLUGIN_DIMM_MISMATCH;
+
+typedef struct _WHEA_PSHED_PLUGIN_ENABLE_NOTIFY_FAILED_EVENT WHEA_PSHED_PLUGIN_ENABLE_NOTIFY_FAILED_EVENT;
+
+typedef struct _WHEA_PSHED_PLUGIN_HEARTBEAT WHEA_PSHED_PLUGIN_HEARTBEAT;
+
+typedef struct _WHEA_PSHED_PLUGIN_INIT_FAILED_EVENT WHEA_PSHED_PLUGIN_INIT_FAILED_EVENT;
+
+typedef struct _WHEA_PSHED_PLUGIN_LOAD_EVENT WHEA_PSHED_PLUGIN_LOAD_EVENT;
+
+typedef struct _WHEA_PSHED_PLUGIN_PLATFORM_SUPPORT_EVENT WHEA_PSHED_PLUGIN_PLATFORM_SUPPORT_EVENT;
+
+typedef struct _WHEA_PSHED_PLUGIN_REGISTRATION_PACKET_V1 WHEA_PSHED_PLUGIN_REGISTRATION_PACKET_V1;
+
+typedef struct _WHEA_PSHED_PLUGIN_REGISTRATION_PACKET_V2 WHEA_PSHED_PLUGIN_REGISTRATION_PACKET_V2;
+
+typedef WHEA_PSHED_PLUGIN_REGISTRATION_PACKET_V2 WHEA_PSHED_PLUGIN_REGISTRATION_PACKET;
+
+typedef WHEA_PSHED_PLUGIN_REGISTRATION_PACKET *PWHEA_PSHED_PLUGIN_REGISTRATION_PACKET;
+
+typedef struct _WHEA_PSHED_PLUGIN_UNLOAD_EVENT WHEA_PSHED_PLUGIN_UNLOAD_EVENT;
+
+typedef union _WHEA_RECOVERY_ACTION WHEA_RECOVERY_ACTION;
+
+#pragma pack(push, 1)
+struct _WHEA_ERROR_RECOVERY_INFO_SECTION
+{
+    BOOLEAN RecoveryKernel;
+    WHEA_RECOVERY_ACTION RecoveryAction;
+    WHEA_RECOVERY_TYPE RecoveryType;
+    KIRQL Irql;
+    BOOLEAN RecoverySucceeded;
+    WHEA_RECOVERY_FAILURE_REASON FailureReason;
+    CCHAR ProcessName[20];
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_ERROR_RECOVERY_INFO_SECTION *PWHEA_ERROR_RECOVERY_INFO_SECTION;
+
+typedef struct _WHEA_ERROR_RECOVERY_INFO_SECTION WHEA_ERROR_RECOVERY_INFO_SECTION;
+
+typedef struct _WHEA_REGISTER_KEY_NOTIFICATION_FAILED_EVENT WHEA_REGISTER_KEY_NOTIFICATION_FAILED_EVENT;
+
+typedef struct _WHEA_REGISTRY_ERROR_EVENT WHEA_REGISTRY_ERROR_EVENT;
+
+typedef struct _WHEA_REGNOTIFY_POLICY_CHANGE_EVENT WHEA_REGNOTIFY_POLICY_CHANGE_EVENT;
+
+typedef union _WHEA_REPORT_HW_ERROR_DEVICE_DRIVER_FLAGS WHEA_REPORT_HW_ERROR_DEVICE_DRIVER_FLAGS;
+
+struct _WHEA_PACKET_LOG_DATA
+{
+    UCHAR LogData[36];
+    UCHAR ExtraBytes[36];
+    ULONG_PTR BcParam3;
+    ULONG_PTR BcParam4;
+    ULONG LogDataLength;
+    USHORT LogTag;
+    USHORT Reserved;
+    WHEA_REPORT_HW_ERROR_DEVICE_DRIVER_FLAGS Flags;
+};
+
+typedef struct _WHEA_PACKET_LOG_DATA *PWHEA_PACKET_LOG_DATA;
+
+typedef struct _WHEA_PACKET_LOG_DATA WHEA_PACKET_LOG_DATA;
+
+typedef struct _WHEA_SEL_BUGCHECK_PROGRESS WHEA_SEL_BUGCHECK_PROGRESS;
+
+typedef struct _WHEA_SEL_BUGCHECK_RECOVERY_STATUS_MULTIPLE_BUGCHECK_EVENT WHEA_SEL_BUGCHECK_RECOVERY_STATUS_MULTIPLE_BUGCHECK_EVENT;
+
+typedef struct _WHEA_SEL_BUGCHECK_RECOVERY_STATUS_PHASE1_EVENT WHEA_SEL_BUGCHECK_RECOVERY_STATUS_PHASE1_EVENT;
+
+typedef struct _WHEA_SEL_BUGCHECK_RECOVERY_STATUS_PHASE2_EVENT WHEA_SEL_BUGCHECK_RECOVERY_STATUS_PHASE2_EVENT;
+
+typedef struct _WHEA_SEL_BUGCHECK_RECOVERY_STATUS_START_EVENT WHEA_SEL_BUGCHECK_RECOVERY_STATUS_START_EVENT;
+
+typedef struct _WHEA_SEL_RAW_EVENT WHEA_SEL_RAW_EVENT;
+
+typedef _WHEA_SIGNAL_HANDLER_OVERRIDE_CALLBACK *WHEA_SIGNAL_HANDLER_OVERRIDE_CALLBACK;
+
+typedef struct _WHEA_SRAR_DETAIL_EVENT WHEA_SRAR_DETAIL_EVENT;
+
+typedef struct _WHEA_SRAS_TABLE_ENTRIES_EVENT WHEA_SRAS_TABLE_ENTRIES_EVENT;
+
+typedef struct _WHEA_SRAS_TABLE_ERROR WHEA_SRAS_TABLE_ERROR;
+
+typedef struct _WHEA_SRAS_TABLE_NOT_FOUND WHEA_SRAS_TABLE_NOT_FOUND;
+
+typedef struct _WHEA_THROTTLE_ADD_ERR_SRC_FAILED_EVENT WHEA_THROTTLE_ADD_ERR_SRC_FAILED_EVENT;
+
+typedef struct _WHEA_THROTTLE_MEMORY_ADD_OR_REMOVE_EVENT WHEA_THROTTLE_MEMORY_ADD_OR_REMOVE_EVENT;
+
+typedef struct _WHEA_THROTTLE_PCIE_ADD_EVENT WHEA_THROTTLE_PCIE_ADD_EVENT;
+
+typedef struct _WHEA_THROTTLE_PCIE_REMOVE_EVENT WHEA_THROTTLE_PCIE_REMOVE_EVENT;
+
+typedef struct _WHEA_THROTTLE_REG_DATA_IGNORED_EVENT WHEA_THROTTLE_REG_DATA_IGNORED_EVENT;
+
+typedef struct _WHEA_THROTTLE_REGISTRY_CORRUPT_EVENT WHEA_THROTTLE_REGISTRY_CORRUPT_EVENT;
+
+typedef union _WHEA_TIMESTAMP WHEA_TIMESTAMP;
+
+#pragma pack(push, 1)
+struct _WHEA_ERROR_RECORD_HEADER
+{
+    ULONG Signature;
+    WHEA_REVISION Revision;
+    ULONG SignatureEnd;
+    USHORT SectionCount;
+    WHEA_ERROR_SEVERITY Severity;
+    WHEA_ERROR_RECORD_HEADER_VALIDBITS ValidBits;
+    ULONG Length;
+    WHEA_TIMESTAMP Timestamp;
+    GUID PlatformId;
+    GUID PartitionId;
+    GUID CreatorId;
+    GUID NotifyType;
+    ULONGLONG RecordId;
+    WHEA_ERROR_RECORD_HEADER_FLAGS Flags;
+    WHEA_PERSISTENCE_INFO PersistenceInfo;
+    union
+    {
+        struct
+        {
+            ULONG OsBuildNumber;
+            UCHAR Reserved2[8];
+        };
+        UCHAR Reserved[12];
+    };
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _WHEA_GENERIC_ERROR_DATA_ENTRY_V2
+{
+    GUID SectionType;
+    WHEA_ERROR_SEVERITY ErrorSeverity;
+    WHEA_REVISION Revision;
+    UCHAR ValidBits;
+    UCHAR Flags;
+    ULONG ErrorDataLength;
+    GUID FRUId;
+    UCHAR FRUText[20];
+    WHEA_TIMESTAMP Timestamp;
+    UCHAR Data[1];
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_ERROR_RECORD_HEADER *PWHEA_ERROR_RECORD_HEADER;
+
+typedef struct _WHEA_GENERIC_ERROR_DATA_ENTRY_V2 *PWHEA_GENERIC_ERROR_DATA_ENTRY;
+
+typedef struct _WHEA_GENERIC_ERROR_DATA_ENTRY_V2 *PWHEA_GENERIC_ERROR_DATA_ENTRY_V2;
+
+typedef struct _WHEA_ERROR_RECORD_HEADER WHEA_ERROR_RECORD_HEADER;
+
+#pragma pack(push, 1)
+struct _WHEAP_ATTEMPT_RECOVERY_EVENT
+{
+    WHEA_EVENT_LOG_ENTRY WheaEventLogEntry;
+    WHEA_ERROR_RECORD_HEADER ErrorHeader;
+    BOOLEAN ArchitecturalRecovery;
+    BOOLEAN PshedRecovery;
+    NTSTATUS Status;
+};
+#pragma pack(pop)
+
+typedef struct _WHEAP_ATTEMPT_RECOVERY_EVENT *PWHEAP_ATTEMPT_RECOVERY_EVENT;
+
+typedef struct _WHEA_GENERIC_ERROR_DATA_ENTRY_V2 WHEA_GENERIC_ERROR_DATA_ENTRY;
+
+typedef struct _WHEA_GENERIC_ERROR_DATA_ENTRY_V2 WHEA_GENERIC_ERROR_DATA_ENTRY_V2;
+
+typedef union _WHEA_XPF_BUS_CHECK WHEA_XPF_BUS_CHECK;
+
+typedef union _WHEA_XPF_CACHE_CHECK WHEA_XPF_CACHE_CHECK;
+
+typedef union _WHEA_XPF_MS_CHECK WHEA_XPF_MS_CHECK;
+
+typedef union _WHEA_XPF_PROCESSOR_ERROR_SECTION_VALIDBITS WHEA_XPF_PROCESSOR_ERROR_SECTION_VALIDBITS;
+
+#pragma pack(push, 1)
+struct _WHEA_XPF_PROCESSOR_ERROR_SECTION
+{
+    WHEA_XPF_PROCESSOR_ERROR_SECTION_VALIDBITS ValidBits;
+    ULONGLONG LocalAPICId;
+    UCHAR CpuId[48];
+    UCHAR VariableInfo[1];
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_XPF_PROCESSOR_ERROR_SECTION *PWHEA_XPF_PROCESSOR_ERROR_SECTION;
+
+typedef struct _WHEA_XPF_PROCESSOR_ERROR_SECTION WHEA_XPF_PROCESSOR_ERROR_SECTION;
+
+typedef union _WHEA_XPF_PROCINFO_VALIDBITS WHEA_XPF_PROCINFO_VALIDBITS;
+
+typedef union _WHEA_XPF_TLB_CHECK WHEA_XPF_TLB_CHECK;
+
+#pragma pack(push, 1)
+struct _WHEA_XPF_PROCINFO
+{
+    GUID CheckInfoId;
+    WHEA_XPF_PROCINFO_VALIDBITS ValidBits;
+    union
+    {
+        WHEA_XPF_CACHE_CHECK CacheCheck;
+        WHEA_XPF_TLB_CHECK TlbCheck;
+        WHEA_XPF_BUS_CHECK BusCheck;
+        WHEA_XPF_MS_CHECK MsCheck;
+        ULONGLONG AsULONGLONG;
+    } CheckInfo;
+    ULONGLONG TargetId;
+    ULONGLONG RequesterId;
+    ULONGLONG ResponderId;
+    ULONGLONG InstructionPointer;
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_XPF_PROCINFO *PWHEA_XPF_PROCINFO;
+
+typedef struct _WHEA_XPF_PROCINFO WHEA_XPF_PROCINFO;
+
+typedef struct _WHEAP_ACPI_TIMEOUT_EVENT WHEAP_ACPI_TIMEOUT_EVENT;
+
+typedef struct _WHEAP_ADD_REMOVE_ERROR_SOURCE_EVENT WHEAP_ADD_REMOVE_ERROR_SOURCE_EVENT;
+
+typedef struct _WHEAP_ATTEMPT_RECOVERY_EVENT WHEAP_ATTEMPT_RECOVERY_EVENT;
+
+typedef struct _WHEAP_BAD_HEST_NOTIFY_DATA_EVENT WHEAP_BAD_HEST_NOTIFY_DATA_EVENT;
+
+typedef struct _WHEAP_BIT_OFFLINE_EVENT WHEAP_BIT_OFFLINE_EVENT;
+
+typedef struct _WHEAP_CLEARED_POISON_EVENT WHEAP_CLEARED_POISON_EVENT;
+
+typedef struct _WHEAP_CMCI_IMPLEMENTED_EVENT WHEAP_CMCI_IMPLEMENTED_EVENT;
+
+typedef struct _WHEAP_CMCI_INITERR_EVENT WHEAP_CMCI_INITERR_EVENT;
+
+typedef struct _WHEAP_CMCI_RESTART_EVENT WHEAP_CMCI_RESTART_EVENT;
+
+typedef struct _WHEAP_CREATE_GENERIC_RECORD_EVENT WHEAP_CREATE_GENERIC_RECORD_EVENT;
+
+typedef struct _WHEAP_DEFERRED_EVENT WHEAP_DEFERRED_EVENT;
+
+typedef struct _WHEAP_DEVICE_DRV_EVENT WHEAP_DEVICE_DRV_EVENT;
+
+typedef struct _WHEAP_DPC_ERROR_EVENT WHEAP_DPC_ERROR_EVENT;
+
+typedef struct _WHEAP_DROPPED_CORRECTED_ERROR_EVENT WHEAP_DROPPED_CORRECTED_ERROR_EVENT;
+
+typedef struct _WHEAP_EDPC_ENABLED_EVENT WHEAP_EDPC_ENABLED_EVENT;
+
+typedef struct _WHEAP_ERR_SRC_ARRAY_INVALID_EVENT WHEAP_ERR_SRC_ARRAY_INVALID_EVENT;
+
+typedef struct _WHEAP_ERR_SRC_INVALID_EVENT WHEAP_ERR_SRC_INVALID_EVENT;
+
+typedef struct _WHEAP_ERROR_CLEARED_EVENT WHEAP_ERROR_CLEARED_EVENT;
+
+typedef struct _WHEAP_ERROR_RECORD_EVENT WHEAP_ERROR_RECORD_EVENT;
+
+typedef struct _WHEAP_FOUND_ERROR_IN_BANK_EVENT WHEAP_FOUND_ERROR_IN_BANK_EVENT;
+
+typedef struct _WHEAP_GENERIC_ERR_MEM_MAP_EVENT WHEAP_GENERIC_ERR_MEM_MAP_EVENT;
+
+typedef struct _WHEAP_OSC_IMPLEMENTED WHEAP_OSC_IMPLEMENTED;
+
+typedef struct _WHEAP_PCIE_CONFIG_INFO WHEAP_PCIE_CONFIG_INFO;
+
+typedef struct _WHEAP_PCIE_OVERRIDE_INFO WHEAP_PCIE_OVERRIDE_INFO;
+
+typedef struct _WHEAP_PCIE_READ_OVERRIDES_ERR WHEAP_PCIE_READ_OVERRIDES_ERR;
+
+typedef struct _WHEAP_PFA_MEMORY_OFFLINED WHEAP_PFA_MEMORY_OFFLINED;
+
+typedef struct _WHEAP_PFA_MEMORY_OFFLINED_NOTIFY_CALLBACK_ACTION WHEAP_PFA_MEMORY_OFFLINED_NOTIFY_CALLBACK_ACTION;
+
+typedef struct _WHEAP_PFA_MEMORY_POLICY WHEAP_PFA_MEMORY_POLICY;
+
+typedef struct _WHEAP_PFA_MEMORY_REMOVE_MONITOR WHEAP_PFA_MEMORY_REMOVE_MONITOR;
+
+typedef struct _WHEAP_PLUGIN_DEFECT_LIST_CORRUPT WHEAP_PLUGIN_DEFECT_LIST_CORRUPT;
+
+typedef struct _WHEAP_PLUGIN_DEFECT_LIST_FULL_EVENT WHEAP_PLUGIN_DEFECT_LIST_FULL_EVENT;
+
+typedef struct _WHEAP_PLUGIN_DEFECT_LIST_UEFI_VAR_FAILED WHEAP_PLUGIN_DEFECT_LIST_UEFI_VAR_FAILED;
+
+typedef struct _WHEAP_PLUGIN_PFA_EVENT WHEAP_PLUGIN_PFA_EVENT;
+
+typedef struct _WHEAP_PROCESS_EINJ_EVENT WHEAP_PROCESS_EINJ_EVENT;
+
+typedef struct _WHEAP_PROCESS_HEST_EVENT WHEAP_PROCESS_HEST_EVENT;
+
+typedef struct _WHEAP_PROMOTED_AER_ERROR_EVENT WHEAP_PROMOTED_AER_ERROR_EVENT;
+
+typedef struct _WHEAP_PSHED_INJECT_ERROR WHEAP_PSHED_INJECT_ERROR;
+
+typedef struct _WHEAP_PSHED_PLUGIN_REGISTER WHEAP_PSHED_PLUGIN_REGISTER;
+
+typedef struct _WHEAP_ROW_FAILURE_EVENT WHEAP_ROW_FAILURE_EVENT;
+
+typedef struct _WHEAP_ROW_OFFLINE_EVENT WHEAP_ROW_OFFLINE_EVENT;
+
+typedef struct _WHEAP_SPURIOUS_AER_EVENT WHEAP_SPURIOUS_AER_EVENT;
+
+typedef struct _WHEAP_STARTED_REPORT_HW_ERROR WHEAP_STARTED_REPORT_HW_ERROR;
+
+typedef struct _WHEAP_STUCK_ERROR_EVENT WHEAP_STUCK_ERROR_EVENT;
+
+typedef union _XPF_MC_BANK_FLAGS XPF_MC_BANK_FLAGS;
+
+#pragma pack(push, 1)
+struct _WHEA_XPF_MC_BANK_DESCRIPTOR
+{
+    UCHAR BankNumber;
+    BOOLEAN ClearOnInitialization;
+    UCHAR StatusDataFormat;
+    XPF_MC_BANK_FLAGS Flags;
+    ULONG ControlMsr;
+    ULONG StatusMsr;
+    ULONG AddressMsr;
+    ULONG MiscMsr;
+    ULONGLONG ControlData;
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_XPF_MC_BANK_DESCRIPTOR *PWHEA_XPF_MC_BANK_DESCRIPTOR;
+
+typedef struct _WHEA_XPF_MC_BANK_DESCRIPTOR WHEA_XPF_MC_BANK_DESCRIPTOR;
+
+#pragma pack(push, 1)
+struct _WHEA_XPF_CMC_DESCRIPTOR
+{
+    USHORT Type;
+    BOOLEAN Enabled;
+    UCHAR NumberOfBanks;
+    ULONG Reserved;
+    WHEA_NOTIFICATION_DESCRIPTOR Notify;
+    WHEA_XPF_MC_BANK_DESCRIPTOR Banks[32];
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_XPF_CMC_DESCRIPTOR *PWHEA_XPF_CMC_DESCRIPTOR;
+
+typedef struct _WHEA_XPF_CMC_DESCRIPTOR WHEA_XPF_CMC_DESCRIPTOR;
+
+typedef union _XPF_MCE_FLAGS XPF_MCE_FLAGS;
+
+#pragma pack(push, 1)
+struct _WHEA_XPF_MCE_DESCRIPTOR
+{
+    USHORT Type;
+    UCHAR Enabled;
+    UCHAR NumberOfBanks;
+    XPF_MCE_FLAGS Flags;
+    ULONGLONG MCG_Capability;
+    ULONGLONG MCG_GlobalControl;
+    WHEA_XPF_MC_BANK_DESCRIPTOR Banks[32];
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_XPF_MCE_DESCRIPTOR *PWHEA_XPF_MCE_DESCRIPTOR;
+
+typedef struct _WHEA_XPF_MCE_DESCRIPTOR WHEA_XPF_MCE_DESCRIPTOR;
+
+typedef struct _XPF_RECOVERY_INFO XPF_RECOVERY_INFO;
+
+#pragma pack(push, 1)
+struct _WHEA_XPF_MCA_SECTION
+{
+    ULONG VersionNumber;
+    WHEA_CPU_VENDOR CpuVendor;
+    LARGE_INTEGER Timestamp;
+    ULONG ProcessorNumber;
+    MCG_STATUS GlobalStatus;
+    ULONGLONG InstructionPointer;
+    ULONG BankNumber;
+    MCI_STATUS Status;
+    ULONGLONG Address;
+    ULONGLONG Misc;
+    ULONG ExtendedRegisterCount;
+    ULONG ApicId;
+    union
+    {
+        ULONGLONG ExtendedRegisters[24];
+        WHEA_AMD_EXTENDED_REGISTERS AMDExtendedRegisters;
+    };
+    MCG_CAP GlobalCapability;
+    XPF_RECOVERY_INFO RecoveryInfo;
+    ULONG ExBankCount;
+    ULONG BankNumberEx[32];
+    MCI_STATUS StatusEx[32];
+    ULONGLONG AddressEx[32];
+    ULONGLONG MiscEx[32];
+};
+#pragma pack(pop)
+
+typedef struct _WHEA_XPF_MCA_SECTION *PWHEA_XPF_MCA_SECTION;
+
+typedef struct _WHEA_XPF_MCA_SECTION WHEA_XPF_MCA_SECTION;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+NTSTATUS NTAPI KeInitializeCrashDumpHeader(ULONG DumpType, ULONG Flags, PVOID Buffer, ULONG BufferSize, PULONG BufferNeeded);
+NTSTATUS NTAPI KeQueryNodeActiveAffinity2(USHORT NodeNumber, PGROUP_AFFINITY GroupAffinities, USHORT GroupAffinitiesCount, PUSHORT GroupAffinitiesRequired);
+NTSTATUS NTAPI RtlIsApiSetImplemented(PCSTR apiSetName);
+
+/* TODO: LiberNT does not implement the functions below yet */
+LONG _ExInterlockedDecrementLong(PLONG Addend);
+ULONG _ExInterlockedExchangeUlong(PULONG Target, ULONG Value);
+LONG _ExInterlockedIncrementLong(PLONG Addend);
+void CUSTOM_SYSTEM_EVENT_TRIGGER_INIT(PCUSTOM_SYSTEM_EVENT_TRIGGER_CONFIG Config, PCWSTR TriggerId);
+void ExProbeAlignment(const volatile void *Address, SIZE_T Length, ULONG Alignment);
+BOOLEAN HalCvmDmaEnabled(void);
+NTSTATUS HalDmaAllocateCrashDumpRegistersEx(PADAPTER_OBJECT Adapter, ULONG NumberOfMapRegisters, HAL_DMA_CRASH_DUMP_REGISTER_TYPE Type, PVOID *MapRegisterBase, PULONG MapRegistersAvailable);
+NTSTATUS HalDmaFreeCrashDumpRegistersEx(PADAPTER_OBJECT Adapter, HAL_DMA_CRASH_DUMP_REGISTER_TYPE Type);
+NTSTATUS HvlRegisterWheaErrorNotification(PHVL_WHEA_ERROR_NOTIFICATION Callback);
+NTSTATUS HvlUnregisterWheaErrorNotification(PHVL_WHEA_ERROR_NOTIFICATION Callback);
+NTSTATUS IoDecrementKeepAliveCount(PFILE_OBJECT FileObject, PEPROCESS Process);
+NTSTATUS IoGetFsZeroingOffset(PIRP Irp, PULONG ZeroingOffset);
+PEPROCESS IoGetInitiatorProcess(PFILE_OBJECT FileObject);
+POPLOCK_KEY_ECP_CONTEXT IoGetOplockKeyContext(PFILE_OBJECT FileObject);
+POPLOCK_KEY_CONTEXT IoGetOplockKeyContextEx(PFILE_OBJECT FileObject);
+PIO_FOEXT_SHADOW_FILE IoGetShadowFileInformation(PFILE_OBJECT FileObject);
+PESILO IoGetSilo(PFILE_OBJECT FileObject);
+PIO_FOEXT_SILO_PARAMETERS IoGetSiloParameters(PFILE_OBJECT FileObject);
+NTSTATUS IoIncrementKeepAliveCount(PFILE_OBJECT FileObject, PEPROCESS Process);
+LOGICAL IoIsValidIrpStatus(NTSTATUS Status);
+PIRP IoMakeAssociatedIrpEx(PIRP Irp, PDEVICE_OBJECT DeviceObject, CCHAR StackSize);
+NTSTATUS IoQueryInformationByName(POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock, PVOID FileInformation, ULONG Length, FILE_INFORMATION_CLASS FileInformationClass, ULONG Options, PIO_DRIVER_CREATE_CONTEXT DriverContext);
+NTSTATUS IoSetFsZeroingOffset(PIRP Irp, ULONG ZeroingOffset);
+NTSTATUS IoSetFsZeroingOffsetRequired(PIRP Irp);
+NTSTATUS IoSetShadowFileInformation(PFILE_OBJECT FileObject, PFILE_OBJECT BackingFileObject, PVOID BackingFltInstance);
+NTSTATUS IoVolumeDeviceNameToGuid(PUNICODE_STRING VolumeDeviceName, GUID *Guid);
+NTSTATUS IoVolumeDeviceNameToGuidPath(PUNICODE_STRING VolumeDeviceName, PUNICODE_STRING GuidPath);
+ULONG KeQueryNodeActiveProcessorCount(USHORT NodeNumber);
+NTSTATUS MmAllocateContiguousMemoryEx(PSIZE_T NumberOfBytes, PHYSICAL_ADDRESS LowestAcceptableAddress, PHYSICAL_ADDRESS HighestAcceptableAddress, PHYSICAL_ADDRESS BoundaryAddressMultiple, NODE_REQUIREMENT PreferredNode, ULONG Protect, PVOID PartitionObject, ULONG Tag, ULONG Flags, PVOID *BaseAddress);
+NTSTATUS MmGetCacheAttribute(PHYSICAL_ADDRESS PhysicalAddress, MEMORY_CACHING_TYPE *CacheType);
+NTSTATUS MmGetCacheAttributeEx(PHYSICAL_ADDRESS PhysicalAddress, ULONG Flags, MEMORY_CACHING_TYPE *CacheType);
+PPHYSICAL_MEMORY_RANGE MmGetPhysicalMemoryRangesEx2(PVOID PartitionObject, ULONG Flags);
+HANDLE MmSecureVirtualMemoryEx(PVOID Address, SIZE_T Size, ULONG ProbeMode, ULONG Flags);
+NTSTATUS PsAcquireSiloHardReference(PESILO Silo);
+NTSTATUS PsAllocSiloContextSlot(ULONG_PTR Reserved, ULONG *ReturnedContextSlot);
+NTSTATUS PsCreateSiloContext(PESILO Silo, ULONG Size, POOL_TYPE PoolType, SILO_CONTEXT_CLEANUP_CALLBACK ContextCleanupCallback, PVOID *ReturnedSiloContext);
+void PsDereferenceSiloContext(PVOID SiloContext);
+NTSTATUS PsFreeSiloContextSlot(ULONG ContextSlot);
+PUNICODE_STRING PsGetCurrentServerSiloName(void);
+PESILO PsGetCurrentSilo(void);
+PESILO PsGetEffectiveServerSilo(PESILO Silo);
+NTSTATUS PsGetJobServerSilo(PEJOB Job, PESILO *ServerSilo);
+NTSTATUS PsGetJobSilo(PEJOB Job, PESILO *Silo);
+PESILO PsGetParentSilo(PEJOB Job);
+NTSTATUS PsGetPermanentSiloContext(PESILO Silo, ULONG ContextSlot, PVOID *ReturnedSiloContext);
+ULONG PsGetServerSiloActiveConsoleId(PESILO Silo);
+GUID * PsGetSiloContainerId(PESILO Silo);
+NTSTATUS PsGetSiloContext(PESILO Silo, ULONG ContextSlot, PVOID *ReturnedSiloContext);
+LONGLONG PsGetThreadCreateTime(PETHREAD Thread);
+NTSTATUS PsGetThreadExitStatus(PETHREAD Thread);
+PESILO PsGetThreadServerSilo(PETHREAD Thread);
+PVOID PshedAllocateMemory(ULONG Size);
+void PshedFreeMemory(PVOID Address);
+BOOLEAN PshedIsSystemWheaEnabled(void);
+NTSTATUS PshedRegisterPlugin(PWHEA_PSHED_PLUGIN_REGISTRATION_PACKET Packet);
+BOOLEAN PshedSynchronizeExecution(PWHEA_ERROR_SOURCE_DESCRIPTOR ErrorSource, PKSYNCHRONIZE_ROUTINE SynchronizeRoutine, PVOID SynchronizeContext);
+void PshedUnregisterPlugin(PVOID PluginHandle);
+NTSTATUS PsInsertPermanentSiloContext(PESILO Silo, ULONG ContextSlot, PVOID SiloContext);
+NTSTATUS PsInsertSiloContext(PESILO Silo, ULONG ContextSlot, PVOID SiloContext);
+NTSTATUS PsMakeSiloContextPermanent(PESILO Silo, ULONG ContextSlot);
+NTSTATUS PsQueryProcessAvailableCpus(PEPROCESS Process, PKAFFINITY_EX Affinity, PULONG64 ObservedSequenceNumber, PULONG64 SequenceNumber);
+NTSTATUS PsQueryProcessAvailableCpusCount(PEPROCESS Process, PULONG AvailableCpuCount, PULONG64 SequenceNumber);
+NTSTATUS PsQuerySystemAvailableCpus(PKAFFINITY_EX Affinity, PULONG64 ObservedSequenceNumber, PULONG64 SequenceNumber);
+NTSTATUS PsQuerySystemAvailableCpusCount(PULONG AvailableCpuCount, PULONG64 SequenceNumber);
+void PsReferenceSiloContext(PVOID SiloContext);
+NTSTATUS PsRegisterProcessAvailableCpusChangeNotification(PEPROCESS Process, PS_AVAILABLE_CPUS_CHANGE_CALLBACK *Callback, PVOID Context, PULONG64 ObservedSequenceNumber, PS_AVAILABLE_CPUS_CHANGE_REGISTRATION *RegistrationHandle);
+NTSTATUS PsRegisterSystemAvailableCpusChangeNotification(PS_AVAILABLE_CPUS_CHANGE_CALLBACK *Callback, PVOID Context, PULONG64 ObservedSequenceNumber, PS_AVAILABLE_CPUS_CHANGE_REGISTRATION *RegistrationHandle);
+void PsReleaseSiloHardReference(PESILO Silo);
+NTSTATUS PsRemoveSiloContext(PESILO Silo, ULONG ContextSlot, PVOID *RemovedSiloContext);
+NTSTATUS PsReplaceSiloContext(PESILO Silo, ULONG ContextSlot, PVOID NewSiloContext, PVOID *OldSiloContext);
+NTSTATUS PsSetCreateThreadNotifyRoutineEx(PSCREATETHREADNOTIFYTYPE NotifyType, PVOID NotifyInformation);
+NTSTATUS PsSetLoadImageNotifyRoutineEx(PLOAD_IMAGE_NOTIFY_ROUTINE NotifyRoutine, ULONG_PTR Flags);
+void PsTerminateServerSilo(PESILO ServerSilo, NTSTATUS ExitStatus);
+void PsUnregisterAvailableCpusChangeNotification(PS_AVAILABLE_CPUS_CHANGE_REGISTRATION RegistrationHandle);
+LONGLONG RtlConvertLuidToLonglong(LUID Luid);
+BOOLEAN RtlCreateHashTableEx(PRTL_DYNAMIC_HASH_TABLE *HashTable, ULONG InitialSize, ULONG Shift, ULONG Flags);
+void RtlDeleteElementGenericTableAvlEx(PRTL_AVL_TABLE Table, PVOID NodeOrParent);
+NTSTATUS RtlDrainNonVolatileFlush(PVOID NvToken);
+void RtlEndStrongEnumerationHashTable(PRTL_DYNAMIC_HASH_TABLE HashTable, PRTL_DYNAMIC_HASH_TABLE_ENUMERATOR Enumerator);
+NTSTATUS RtlExtendCorrelationVector(PCORRELATION_VECTOR CorrelationVector);
+NTSTATUS RtlFillNonVolatileMemory(PVOID NvToken, __unaligned void *NvDestination, SIZE_T Size, const UCHAR Value, ULONG Flags);
+NTSTATUS RtlFlushNonVolatileMemory(PVOID NvToken, PVOID NvBuffer, SIZE_T Size, ULONG Flags);
+NTSTATUS RtlFlushNonVolatileMemoryRanges(PVOID NvToken, PNV_MEMORY_RANGE NvRanges, SIZE_T NumRanges, ULONG Flags);
+NTSTATUS RtlFreeNonVolatileToken(PVOID NvToken);
+NTSTATUS RtlGetNonVolatileToken(PVOID NvBuffer, SIZE_T Size, PVOID *NvToken);
+NTSTATUS RtlGetPersistedStateLocation(PCWSTR SourceID, PCWSTR CustomValue, PCWSTR DefaultPath, STATE_LOCATION_TYPE StateLocationType, PWCHAR TargetPath, ULONG BufferLengthIn, PULONG BufferLengthOut);
+NTSTATUS RtlIncrementCorrelationVector(PCORRELATION_VECTOR CorrelationVector);
+NTSTATUS RtlInitializeCorrelationVector(PCORRELATION_VECTOR CorrelationVector, int Version, const GUID *Guid);
+BOOLEAN RtlInitStrongEnumerationHashTable(PRTL_DYNAMIC_HASH_TABLE HashTable, PRTL_DYNAMIC_HASH_TABLE_ENUMERATOR Enumerator);
+BOOLEAN RtlIsMultiUsersInSessionSku(void);
+NTSTATUS RtlIsUntrustedObject(HANDLE Handle, PVOID Object, PBOOLEAN UntrustedObject);
+BOOLEAN RtlNormalizeSecurityDescriptor(PSECURITY_DESCRIPTOR *SecurityDescriptor, ULONG SecurityDescriptorLength, PSECURITY_DESCRIPTOR *NewSecurityDescriptor, PULONG NewSecurityDescriptorLength, BOOLEAN CheckOnly);
+NTSTATUS RtlQueryRegistryValueWithFallback(HANDLE PrimaryHandle, HANDLE FallbackHandle, PUNICODE_STRING ValueName, ULONG ValueLength, PULONG ValueType, PVOID ValueData, PULONG ResultLength);
+NTSTATUS NTAPI RtlRaiseCustomSystemEventTrigger(PCUSTOM_SYSTEM_EVENT_TRIGGER_CONFIG TriggerConfig);
+NTSTATUS RtlSetSystemGlobalData(RTL_SYSTEM_GLOBAL_DATA_ID DataId, PVOID Buffer, ULONG Size);
+PRTL_DYNAMIC_HASH_TABLE_ENTRY RtlStronglyEnumerateEntryHashTable(PRTL_DYNAMIC_HASH_TABLE HashTable, PRTL_DYNAMIC_HASH_TABLE_ENUMERATOR Enumerator);
+NTSTATUS RtlValidateCorrelationVector(PCORRELATION_VECTOR Vector);
+NTSTATUS RtlWriteNonVolatileMemory(PVOID NvToken, __unaligned void *NvDestination, const __unaligned void *Source, SIZE_T Size, ULONG Flags);
+NTSTATUS WheaAddErrorSource(PWHEA_ERROR_SOURCE_DESCRIPTOR ErrorSource, PVOID Context);
+NTSTATUS WheaAddErrorSourceDeviceDriver(PVOID Context, PWHEA_ERROR_SOURCE_CONFIGURATION_DEVICE_DRIVER Configuration, ULONG NumberPreallocatedErrorReports);
+NTSTATUS WheaAddErrorSourceDeviceDriverV1(PVOID Context, PWHEA_ERROR_SOURCE_CONFIGURATION_DEVICE_DRIVER Configuration, ULONG NumBuffersToPreallocate, ULONG MaxDataLength);
+NTSTATUS WheaAddHwErrorReportSectionDeviceDriver(WHEA_ERROR_HANDLE ErrorHandle, ULONG SectionDataLength, PWHEA_DRIVER_BUFFER_SET BufferSet);
+void WheaAttemptRowOffline(PFN_NUMBER Page, PMEMORY_DEFECT MemDefect, ULONG PageCount, PWHEA_RECOVERY_CONTEXT Context);
+NTSTATUS WheaConfigureErrorSource(WHEA_ERROR_SOURCE_TYPE SourceType, PWHEA_ERROR_SOURCE_CONFIGURATION Configuration);
+WHEA_ERROR_HANDLE WheaCreateHwErrorReportDeviceDriver(ULONG ErrorSourceId, PDEVICE_OBJECT DeviceObject);
+PVOID WheaErrorRecordBuilderAddPacket(PWHEA_ERROR_RECORD Record, PWHEA_ERROR_PACKET_V2 Packet, UINT32 MaxSectionCount);
+PVOID WheaErrorRecordBuilderAddSection(PWHEA_ERROR_RECORD Record, UINT32 MaxSectionCount, UINT32 SectionLength, WHEA_ERROR_RECORD_SECTION_DESCRIPTOR_FLAGS Flags, GUID SectionType, PVOID DescriptorOut);
+void WheaErrorRecordBuilderInit(PWHEA_ERROR_RECORD Record, UINT32 RecordLength, WHEA_ERROR_SEVERITY Severity, GUID Notify);
+WHEA_ERROR_SOURCE_STATE WheaErrorSourceGetState(ULONG ErrorSourceId);
+NTSTATUS WheaFindErrorRecordSection(PWHEA_ERROR_RECORD Record, const GUID *SectionType, PWHEA_ERROR_RECORD_SECTION_DESCRIPTOR *SectionDescriptor, PVOID *SectionData);
+NTSTATUS WheaFindNextErrorRecordSection(PWHEA_ERROR_RECORD Record, ULONG *Context, PWHEA_ERROR_RECORD_SECTION_DESCRIPTOR *SectionDescriptor, PVOID *SectionData);
+NTSTATUS WheaGetErrorSourceInfo(WHEA_ERROR_SOURCE_TYPE SourceType, PULONG ErrorCount, PERROR_SOURCE_INFO *SourceInfo, ULONG PoolTag);
+PWHEA_ERROR_PACKET WheaGetErrPacketFromErrRecord(PWHEA_ERROR_RECORD Record);
+BOOLEAN WheaGetNotifyAllOfflinesPolicy(void);
+BOOLEAN WheaHighIrqlLogSelEventHandlerRegister(PFN_WHEA_HIGH_IRQL_LOG_SEL_EVENT_HANDLER Handler, PVOID Context);
+void WheaHighIrqlLogSelEventHandlerUnregister(void);
+NTSTATUS WheaHwErrorReportAbandonDeviceDriver(WHEA_ERROR_HANDLE ErrorHandle);
+NTSTATUS WheaHwErrorReportSetSectionNameDeviceDriver(PWHEA_DRIVER_BUFFER_SET BufferSet, ULONG NameLength, PUCHAR Name);
+NTSTATUS WheaHwErrorReportSetSeverityDeviceDriver(WHEA_ERROR_HANDLE ErrorHandle, WHEA_ERROR_SEVERITY ErrorSeverity);
+NTSTATUS WheaHwErrorReportSubmitDeviceDriver(WHEA_ERROR_HANDLE ErrorHandle);
+void WheaInitEventLogEntry(PWHEA_EVENT_LOG_ENTRY LogEntry, WHEA_EVENT_LOG_ENTRY_TYPE Type, WHEA_EVENT_LOG_ENTRY_ID Id, WHEA_EVENT_LOG_ENTRY_FLAGS Flags, ULONG OwnerTag, ULONG PayloadLength);
+NTSTATUS WheaInitializeRecordHeader(PWHEA_ERROR_RECORD_HEADER Header);
+BOOLEAN WheaIsCriticalState(void);
+BOOLEAN WheaIsGhesAssistSrc(PWHEA_ERROR_SOURCE_DESCRIPTOR ErrSrc);
+BOOLEAN WheaIsLogSelHandlerInitialized(void);
+BOOLEAN WheaIsValidErrorRecordSignature(PWHEA_ERROR_RECORD Record);
+void WheaLogInternalEvent(PWHEA_EVENT_LOG_ENTRY Entry);
+NTSTATUS WheaPrmTranslateDimmAddress(PVOID DimmAddress, PUINT64 PhysicalAddress);
+NTSTATUS WheaPrmTranslatePhysicalAddress(UINT64 PhysicalAddress, PVOID DimmAddress);
+NTSTATUS WheaRegisterErrorSourceOverride(WHEA_ERROR_SOURCE_OVERRIDE_SETTINGS OverrideSettings, PWHEA_ERROR_SOURCE_CONFIGURATION OverrideConfig, WHEA_SIGNAL_HANDLER_OVERRIDE_CALLBACK OverrideCallback);
+NTSTATUS WheaRegisterInUsePageOfflineNotification(PFN_IN_USE_PAGE_OFFLINE_NOTIFY Callback, PVOID Context);
+void WheaRemoveErrorSource(ULONG ErrorSourceId);
+NTSTATUS WheaRemoveErrorSourceDeviceDriver(ULONG ErrorSourceId);
+NTSTATUS WheaReportHwError(PWHEA_ERROR_PACKET ErrorPacket);
+NTSTATUS WheaReportHwErrorDeviceDriver(ULONG ErrorSourceId, PDEVICE_OBJECT DeviceObject, PUCHAR ErrorData, ULONG ErrorDataLength, LPGUID SectionTypeGuid, WHEA_ERROR_SEVERITY ErrorSeverity, LPSTR DeviceFriendlyName);
+BOOLEAN WheaSignalHandlerOverride(WHEA_ERROR_SOURCE_TYPE SourceType, UINT_PTR Context);
+NTSTATUS WheaUnconfigureErrorSource(WHEA_ERROR_SOURCE_TYPE SourceType);
+void WheaUnregisterErrorSourceOverride(WHEA_ERROR_SOURCE_TYPE Type, ULONG32 OverrideErrorSourceId);
+NTSTATUS WheaUnregisterInUsePageOfflineNotification(PFN_IN_USE_PAGE_OFFLINE_NOTIFY Callback);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define CPER_FIELD_CHECKtype, field, offset, length) C_ASSERT(((FIELD_OFFSET(type, field) == (offset)) && (RTL_FIELD_SIZE(type, field) == (length))))
+#define FsRtlIsChecksumErrorSTS) ((BOOLEAN) !FsRtlIsTotalDeviceFailure(STS))
+#define TraceLoggingCORRELATION_VECTORcv) TraceLoggingString((cv) . Vector, "__TlgCV__")
+#define WHEA_PMEM_IS_PAGE_RANGE_ALREADY_MARKED_BADPageRange) (((PageRange) -> PageCount <= sizeof (ULONG64) * 8) && (((PageRange) -> MarkedBadBitmap) == (ULONG64_MAX >> (sizeof (ULONG64) * 8 - (PageRange) -> PageCount))))
+#define WHEA_PMEM_IS_PFN_ALREADY_MARKED_BADPageRange, TargetPfn) (((TargetPfn) - ((PageRange) -> StartingPfn) < sizeof (ULONG64) * 8) && ((((PageRange) -> MarkedBadBitmap) & (1ull << ((TargetPfn) - ((PageRange) -> StartingPfn)))) != 0))
+#define WheaAdd2PtrP, I) ((PVOID) ((PUCHAR) (P) + (I)))
+
+typedef struct _SILO_MONITOR *PSILO_MONITOR;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+ULONG PsGetSiloMonitorContextSlot(PSILO_MONITOR Monitor);
+NTSTATUS PsRegisterSiloMonitor(PSILO_MONITOR_REGISTRATION Registration, PSILO_MONITOR *ReturnedMonitor);
+NTSTATUS PsStartSiloMonitor(PSILO_MONITOR Monitor);
+void PsUnregisterSiloMonitor(PSILO_MONITOR Monitor);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define CPER_FIELD_CHECKtype, field, offset, length) C_ASSERT(((FIELD_OFFSET(type, field) == (offset)) && (RTL_FIELD_SIZE(type, field) == (length))))
+#define FsRtlIsChecksumErrorSTS) ((BOOLEAN) !FsRtlIsTotalDeviceFailure(STS))
+#define TraceLoggingCORRELATION_VECTORcv) TraceLoggingString((cv) . Vector, "__TlgCV__")
+#define WHEA_PMEM_IS_PAGE_RANGE_ALREADY_MARKED_BADPageRange) (((PageRange) -> PageCount <= sizeof (ULONG64) * 8) && (((PageRange) -> MarkedBadBitmap) == (ULONG64_MAX >> (sizeof (ULONG64) * 8 - (PageRange) -> PageCount))))
+#define WHEA_PMEM_IS_PFN_ALREADY_MARKED_BADPageRange, TargetPfn) (((TargetPfn) - ((PageRange) -> StartingPfn) < sizeof (ULONG64) * 8) && ((((PageRange) -> MarkedBadBitmap) & (1ull << ((TargetPfn) - ((PageRange) -> StartingPfn)))) != 0))
+#define WheaAdd2PtrP, I) ((PVOID) ((PUCHAR) (P) + (I)))
 
 #endif /* _NTLSA_AUDIT_ */
 #endif /* _NTLSA_IFS_ */

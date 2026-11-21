@@ -844,19 +844,26 @@ typedef enum _HIBERFILE_BUCKET_SIZE {
     HiberFileBucketMax = 7
 } HIBERFILE_BUCKET_SIZE, *PHIBERFILE_BUCKET_SIZE;
 
+typedef enum _PO_CS_DEVICE_NOTIFICATION_TYPE {
+    PoCsDeviceNotificationStorage = 0,
+    PoCsDeviceNotificationWiFi = 1,
+    PoCsDeviceNotificationMbn = 2,
+    PoCsDeviceNotificationAudio = 3,
+    PoCsDeviceNotificationEthernet = 4,
+    PoCsDeviceNotificationMaximum = 5
+} PO_CS_DEVICE_NOTIFICATION_TYPE;
+
+typedef enum _PO_HIBER_FORCE_DISABLE_REASON {
+    PoHiberForceDisableReasonPolicy = 0,
+    PoHiberForceDisableReasonGuardedHost = 1,
+    PoHiberForceDisableReasonMax = 2
+} PO_HIBER_FORCE_DISABLE_REASON, *PPO_HIBER_FORCE_DISABLE_REASON;
+
 typedef enum _REQUESTER_TYPE {
     KernelRequester = 0,
     UserProcessRequester = 1,
     UserSharedServiceRequester = 2
 } REQUESTER_TYPE, *PREQUESTER_TYPE;
-
-typedef enum PO_WAKE_SOURCE_TYPE {
-    DeviceWakeSourceType = 0,
-    FixedWakeSourceType = 1,
-    TimerWakeSourceType = 2,
-    TimerPresumedWakeSourceType = 3,
-    InternalWakeSourceType = 4
-} PO_WAKE_SOURCE_TYPE, *PPO_WAKE_SOURCE_TYPE;
 
 typedef enum PO_FIXED_WAKE_SOURCE_TYPE {
     FixedWakeSourcePowerButton = 0,
@@ -871,20 +878,53 @@ typedef enum PO_INTERNAL_WAKE_SOURCE_TYPE {
     InternalWakeSourceTimerOverride = 2
 } PO_INTERNAL_WAKE_SOURCE_TYPE, *PPO_INTERNAL_WAKE_SOURCE_TYPE;
 
-typedef enum _PO_HIBER_FORCE_DISABLE_REASON {
-    PoHiberForceDisableReasonPolicy = 0,
-    PoHiberForceDisableReasonGuardedHost = 1,
-    PoHiberForceDisableReasonMax = 2
-} PO_HIBER_FORCE_DISABLE_REASON, *PPO_HIBER_FORCE_DISABLE_REASON;
+typedef enum PO_WAKE_SOURCE_TYPE {
+    DeviceWakeSourceType = 0,
+    FixedWakeSourceType = 1,
+    TimerWakeSourceType = 2,
+    TimerPresumedWakeSourceType = 3,
+    InternalWakeSourceType = 4
+} PO_WAKE_SOURCE_TYPE, *PPO_WAKE_SOURCE_TYPE;
 
-typedef enum _PO_CS_DEVICE_NOTIFICATION_TYPE {
-    PoCsDeviceNotificationStorage = 0,
-    PoCsDeviceNotificationWiFi = 1,
-    PoCsDeviceNotificationMbn = 2,
-    PoCsDeviceNotificationAudio = 3,
-    PoCsDeviceNotificationEthernet = 4,
-    PoCsDeviceNotificationMaximum = 5
-} PO_CS_DEVICE_NOTIFICATION_TYPE;
+typedef struct _HIBERFILE_BUCKET {
+  ULONG64 MaxPhysicalMemory;
+  ULONG PhysicalMemoryPercent[3];
+} HIBERFILE_BUCKET, *PHIBERFILE_BUCKET;
+
+typedef struct _PO_SPR_ACTIVE_SESSION_DATA {
+  BOOLEAN Start;
+  GUID ActiveSessionGuid;
+} PO_SPR_ACTIVE_SESSION_DATA, *PPO_SPR_ACTIVE_SESSION_DATA;
+
+typedef struct _PO_WAKE_SOURCE_HEADER {
+  PO_WAKE_SOURCE_TYPE Type;
+  ULONG Size;
+} PO_WAKE_SOURCE_HEADER, *PPO_WAKE_SOURCE_HEADER;
+
+typedef struct _PO_WAKE_SOURCE_DEVICE {
+  PO_WAKE_SOURCE_HEADER Header;
+  WCHAR InstancePath[1];
+} PO_WAKE_SOURCE_DEVICE, *PPO_WAKE_SOURCE_DEVICE;
+
+typedef struct _PO_WAKE_SOURCE_FIXED {
+  PO_WAKE_SOURCE_HEADER Header;
+  PO_FIXED_WAKE_SOURCE_TYPE FixedWakeSourceType;
+} PO_WAKE_SOURCE_FIXED, *PPO_WAKE_SOURCE_FIXED;
+
+typedef struct _PO_WAKE_SOURCE_HISTORY {
+  ULONG Count;
+  ULONG Offsets[1];
+} PO_WAKE_SOURCE_HISTORY, *PPO_WAKE_SOURCE_HISTORY;
+
+typedef struct _PO_WAKE_SOURCE_INFO {
+  ULONG Count;
+  ULONG Offsets[1];
+} PO_WAKE_SOURCE_INFO, *PPO_WAKE_SOURCE_INFO;
+
+typedef struct _PO_WAKE_SOURCE_INTERNAL {
+  PO_WAKE_SOURCE_HEADER Header;
+  PO_INTERNAL_WAKE_SOURCE_TYPE InternalWakeSourceType;
+} PO_WAKE_SOURCE_INTERNAL, *PPO_WAKE_SOURCE_INTERNAL;
 
 typedef struct _PROCESSOR_IDLE_STATE {
   UCHAR StateType;
@@ -904,11 +944,97 @@ typedef struct _PROCESSOR_IDLE_STATES {
   PROCESSOR_IDLE_STATE State[1];
 } PROCESSOR_IDLE_STATES, *PPROCESSOR_IDLE_STATES;
 
-typedef struct PPM_WMI_LEGACY_PERFSTATE {
-  ULONG Frequency;
-  ULONG Flags;
-  ULONG PercentFrequency;
-} PPM_WMI_LEGACY_PERFSTATE, *PPPM_WMI_LEGACY_PERFSTATE;
+typedef struct _SYSTEM_HIBERFILE_INFORMATION {
+  ULONG NumberOfMcbPairs;
+  LARGE_INTEGER Mcb[1];
+} SYSTEM_HIBERFILE_INFORMATION, *PSYSTEM_HIBERFILE_INFORMATION;
+
+typedef struct _SYSTEM_POWER_SOURCE_STATE {
+  SYSTEM_BATTERY_STATE BatteryState;
+  ULONG InstantaneousPeakPower;
+  ULONG InstantaneousPeakPeriod;
+  ULONG SustainablePeakPower;
+  ULONG SustainablePeakPeriod;
+  ULONG PeakPower;
+  ULONG MaxOutputPower;
+  ULONG MaxInputPower;
+  LONG BatteryRateInCurrent;
+  ULONG BatteryVoltage;
+} SYSTEM_POWER_SOURCE_STATE, *PSYSTEM_POWER_SOURCE_STATE;
+
+typedef struct PPM_IDLE_STATE_ACCOUNTING {
+  ULONG IdleTransitions;
+  ULONG FailedTransitions;
+  ULONG InvalidBucketIndex;
+  ULONG64 TotalTime;
+  ULONG IdleTimeBuckets[6];
+} PPM_IDLE_STATE_ACCOUNTING, *PPPM_IDLE_STATE_ACCOUNTING;
+
+typedef struct PPM_IDLE_ACCOUNTING {
+  ULONG StateCount;
+  ULONG TotalTransitions;
+  ULONG ResetCount;
+  ULONG64 StartTime;
+  PPM_IDLE_STATE_ACCOUNTING State[1];
+} PPM_IDLE_ACCOUNTING, *PPPM_IDLE_ACCOUNTING;
+
+typedef struct PPM_IDLE_STATE_BUCKET_EX {
+  ULONG64 TotalTimeUs;
+  ULONG MinTimeUs;
+  ULONG MaxTimeUs;
+  ULONG Count;
+} PPM_IDLE_STATE_BUCKET_EX, *PPPM_IDLE_STATE_BUCKET_EX;
+
+typedef struct PPM_IDLE_STATE_ACCOUNTING_EX {
+  ULONG64 TotalTime;
+  ULONG IdleTransitions;
+  ULONG FailedTransitions;
+  ULONG InvalidBucketIndex;
+  ULONG MinTimeUs;
+  ULONG MaxTimeUs;
+  ULONG CancelledTransitions;
+  PPM_IDLE_STATE_BUCKET_EX IdleTimeBuckets[16];
+} PPM_IDLE_STATE_ACCOUNTING_EX, *PPPM_IDLE_STATE_ACCOUNTING_EX;
+
+typedef struct PPM_IDLE_ACCOUNTING_EX {
+  ULONG StateCount;
+  ULONG TotalTransitions;
+  ULONG ResetCount;
+  ULONG AbortCount;
+  ULONG64 StartTime;
+  PPM_IDLE_STATE_ACCOUNTING_EX State[1];
+} PPM_IDLE_ACCOUNTING_EX, *PPPM_IDLE_ACCOUNTING_EX;
+
+typedef struct PPM_IDLESTATE_EVENT {
+  ULONG NewState;
+  ULONG OldState;
+  ULONG64 Processors;
+} PPM_IDLESTATE_EVENT, *PPPM_IDLESTATE_EVENT;
+
+typedef struct PPM_PERFSTATE_DOMAIN_EVENT {
+  ULONG State;
+  ULONG Latency;
+  ULONG Speed;
+  ULONG64 Processors;
+} PPM_PERFSTATE_DOMAIN_EVENT, *PPPM_PERFSTATE_DOMAIN_EVENT;
+
+typedef struct PPM_PERFSTATE_EVENT {
+  ULONG State;
+  ULONG Status;
+  ULONG Latency;
+  ULONG Speed;
+  ULONG Processor;
+} PPM_PERFSTATE_EVENT, *PPPM_PERFSTATE_EVENT;
+
+typedef struct PPM_THERMAL_POLICY_EVENT {
+  UCHAR Mode;
+  ULONG64 Processors;
+} PPM_THERMAL_POLICY_EVENT, *PPPM_THERMAL_POLICY_EVENT;
+
+typedef struct PPM_THERMALCHANGE_EVENT {
+  ULONG ThermalConstraint;
+  ULONG64 Processors;
+} PPM_THERMALCHANGE_EVENT, *PPPM_THERMALCHANGE_EVENT;
 
 typedef struct PPM_WMI_IDLE_STATE {
   ULONG Latency;
@@ -941,6 +1067,12 @@ typedef struct PPM_WMI_IDLE_STATES_EX {
   PVOID TargetProcessors;
   PPM_WMI_IDLE_STATE State[1];
 } PPM_WMI_IDLE_STATES_EX, *PPPM_WMI_IDLE_STATES_EX;
+
+typedef struct PPM_WMI_LEGACY_PERFSTATE {
+  ULONG Frequency;
+  ULONG Flags;
+  ULONG PercentFrequency;
+} PPM_WMI_LEGACY_PERFSTATE, *PPPM_WMI_LEGACY_PERFSTATE;
 
 typedef struct PPM_WMI_PERF_STATE {
   ULONG Frequency;
@@ -1007,80 +1139,6 @@ typedef struct PPM_WMI_PERF_STATES_EX {
   PPM_WMI_PERF_STATE State[1];
 } PPM_WMI_PERF_STATES_EX, *PPPM_WMI_PERF_STATES_EX;
 
-typedef struct PPM_IDLE_STATE_ACCOUNTING {
-  ULONG IdleTransitions;
-  ULONG FailedTransitions;
-  ULONG InvalidBucketIndex;
-  ULONG64 TotalTime;
-  ULONG IdleTimeBuckets[6];
-} PPM_IDLE_STATE_ACCOUNTING, *PPPM_IDLE_STATE_ACCOUNTING;
-
-typedef struct PPM_IDLE_ACCOUNTING {
-  ULONG StateCount;
-  ULONG TotalTransitions;
-  ULONG ResetCount;
-  ULONG64 StartTime;
-  PPM_IDLE_STATE_ACCOUNTING State[1];
-} PPM_IDLE_ACCOUNTING, *PPPM_IDLE_ACCOUNTING;
-
-typedef struct PPM_IDLE_STATE_BUCKET_EX {
-  ULONG64 TotalTimeUs;
-  ULONG MinTimeUs;
-  ULONG MaxTimeUs;
-  ULONG Count;
-} PPM_IDLE_STATE_BUCKET_EX, *PPPM_IDLE_STATE_BUCKET_EX;
-
-typedef struct PPM_IDLE_STATE_ACCOUNTING_EX {
-  ULONG64 TotalTime;
-  ULONG IdleTransitions;
-  ULONG FailedTransitions;
-  ULONG InvalidBucketIndex;
-  ULONG MinTimeUs;
-  ULONG MaxTimeUs;
-  ULONG CancelledTransitions;
-  PPM_IDLE_STATE_BUCKET_EX IdleTimeBuckets[16];
-} PPM_IDLE_STATE_ACCOUNTING_EX, *PPPM_IDLE_STATE_ACCOUNTING_EX;
-
-typedef struct PPM_IDLE_ACCOUNTING_EX {
-  ULONG StateCount;
-  ULONG TotalTransitions;
-  ULONG ResetCount;
-  ULONG AbortCount;
-  ULONG64 StartTime;
-  PPM_IDLE_STATE_ACCOUNTING_EX State[1];
-} PPM_IDLE_ACCOUNTING_EX, *PPPM_IDLE_ACCOUNTING_EX;
-
-typedef struct PPM_PERFSTATE_EVENT {
-  ULONG State;
-  ULONG Status;
-  ULONG Latency;
-  ULONG Speed;
-  ULONG Processor;
-} PPM_PERFSTATE_EVENT, *PPPM_PERFSTATE_EVENT;
-
-typedef struct PPM_PERFSTATE_DOMAIN_EVENT {
-  ULONG State;
-  ULONG Latency;
-  ULONG Speed;
-  ULONG64 Processors;
-} PPM_PERFSTATE_DOMAIN_EVENT, *PPPM_PERFSTATE_DOMAIN_EVENT;
-
-typedef struct PPM_IDLESTATE_EVENT {
-  ULONG NewState;
-  ULONG OldState;
-  ULONG64 Processors;
-} PPM_IDLESTATE_EVENT, *PPPM_IDLESTATE_EVENT;
-
-typedef struct PPM_THERMALCHANGE_EVENT {
-  ULONG ThermalConstraint;
-  ULONG64 Processors;
-} PPM_THERMALCHANGE_EVENT, *PPPM_THERMALCHANGE_EVENT;
-
-typedef struct PPM_THERMAL_POLICY_EVENT {
-  UCHAR Mode;
-  ULONG64 Processors;
-} PPM_THERMAL_POLICY_EVENT, *PPPM_THERMAL_POLICY_EVENT;
-
 typedef struct PROCESSOR_IDLESTATE_INFO {
   ULONG TimeCheck;
   UCHAR DemotePercent;
@@ -1088,63 +1146,134 @@ typedef struct PROCESSOR_IDLESTATE_INFO {
   UCHAR Spare[2];
 } PROCESSOR_IDLESTATE_INFO, *PPROCESSOR_IDLESTATE_INFO;
 
-typedef struct _HIBERFILE_BUCKET {
-  ULONG64 MaxPhysicalMemory;
-  ULONG PhysicalMemoryPercent[3];
-} HIBERFILE_BUCKET, *PHIBERFILE_BUCKET;
+#define _NTPOAPI_ 0
+#define GUID_HUPR_ADAPTIVE_DIM_TIMEOUT GUID_HUPR_ADAPTIVE_INATTENTIVE_DIM_TIMEOUT
+#define GUID_HUPR_ADAPTIVE_DISPLAY_TIMEOUT 0
+#define PERFSTATE_POLICY_CHANGE_DECREASE_MAX 2
+#define PERFSTATE_POLICY_CHANGE_INCREASE_MAX 3
+#define PO_SLEEP_DISABLE_ALL 0xF
+#define PO_SLEEP_DISABLE_S1 1
+#define PO_SLEEP_DISABLE_S2 2
+#define PO_SLEEP_DISABLE_S3 4
+#define PO_SLEEP_DISABLE_S4 8
+#define POWERBUTTON_ACTION_INDEX_NOTHING 0
+#define PROCESSOR_PERF_BOOST_MODE_MAX 6
 
-typedef struct _SYSTEM_POWER_SOURCE_STATE {
-  SYSTEM_BATTERY_STATE BatteryState;
-  ULONG InstantaneousPeakPower;
-  ULONG InstantaneousPeakPeriod;
-  ULONG SustainablePeakPower;
-  ULONG SustainablePeakPeriod;
-  ULONG PeakPower;
-  ULONG MaxOutputPower;
-  ULONG MaxInputPower;
-  LONG BatteryRateInCurrent;
-  ULONG BatteryVoltage;
-} SYSTEM_POWER_SOURCE_STATE, *PSYSTEM_POWER_SOURCE_STATE;
+struct _DIAGNOSTIC_BUFFER
+{
+    SIZE_T Size;
+    REQUESTER_TYPE CallerType;
+    union
+    {
+        struct
+        {
+            SIZE_T ProcessImageNameOffset;
+            ULONG ProcessId;
+            ULONG ServiceTag;
+        };
+        struct
+        {
+            SIZE_T DeviceDescriptionOffset;
+            SIZE_T DevicePathOffset;
+        };
+    };
+    SIZE_T ReasonOffset;
+};
 
-typedef struct _SYSTEM_HIBERFILE_INFORMATION {
-  ULONG NumberOfMcbPairs;
-  LARGE_INTEGER Mcb[1];
-} SYSTEM_HIBERFILE_INFORMATION, *PSYSTEM_HIBERFILE_INFORMATION;
+struct _REASON_BUFFER
+{
+    ULONG Flags;
+    union
+    {
+        struct
+        {
+            SIZE_T ResourceFileNameOffset;
+            USHORT ResourceReasonId;
+            ULONG StringCount;
+            SIZE_T SubstitutionStringsOffset;
+        };
+        SIZE_T SimpleStringOffset;
+    };
+};
 
-typedef struct _PO_WAKE_SOURCE_HEADER {
-  PO_WAKE_SOURCE_TYPE Type;
-  ULONG Size;
-} PO_WAKE_SOURCE_HEADER, *PPO_WAKE_SOURCE_HEADER;
+typedef struct _DIAGNOSTIC_BUFFER DIAGNOSTIC_BUFFER;
 
-typedef struct _PO_WAKE_SOURCE_DEVICE {
-  PO_WAKE_SOURCE_HEADER Header;
-  WCHAR InstancePath[1];
-} PO_WAKE_SOURCE_DEVICE, *PPO_WAKE_SOURCE_DEVICE;
+struct _PO_WAKE_SOURCE_TIMER
+{
+    PO_WAKE_SOURCE_HEADER Header;
+    DIAGNOSTIC_BUFFER Reason;
+};
 
-typedef struct _PO_WAKE_SOURCE_FIXED {
-  PO_WAKE_SOURCE_HEADER Header;
-  PO_FIXED_WAKE_SOURCE_TYPE FixedWakeSourceType;
-} PO_WAKE_SOURCE_FIXED, *PPO_WAKE_SOURCE_FIXED;
+struct _WAKE_TIMER_INFO
+{
+    SIZE_T OffsetToNext;
+    ULARGE_INTEGER DueTime;
+    ULONG Period;
+    DIAGNOSTIC_BUFFER ReasonContext;
+};
 
-typedef struct _PO_WAKE_SOURCE_INTERNAL {
-  PO_WAKE_SOURCE_HEADER Header;
-  PO_INTERNAL_WAKE_SOURCE_TYPE InternalWakeSourceType;
-} PO_WAKE_SOURCE_INTERNAL, *PPO_WAKE_SOURCE_INTERNAL;
+typedef struct _DIAGNOSTIC_BUFFER *PDIAGNOSTIC_BUFFER;
 
-typedef struct _PO_WAKE_SOURCE_INFO {
-  ULONG Count;
-  ULONG Offsets[1];
-} PO_WAKE_SOURCE_INFO, *PPO_WAKE_SOURCE_INFO;
+typedef struct _PO_WAKE_SOURCE_TIMER PO_WAKE_SOURCE_TIMER;
 
-typedef struct _PO_WAKE_SOURCE_HISTORY {
-  ULONG Count;
-  ULONG Offsets[1];
-} PO_WAKE_SOURCE_HISTORY, *PPO_WAKE_SOURCE_HISTORY;
+typedef struct _PO_WAKE_SOURCE_TIMER *PPO_WAKE_SOURCE_TIMER;
 
-typedef struct _PO_SPR_ACTIVE_SESSION_DATA {
-  BOOLEAN Start;
-  GUID ActiveSessionGuid;
-} PO_SPR_ACTIVE_SESSION_DATA, *PPO_SPR_ACTIVE_SESSION_DATA;
+typedef struct _REASON_BUFFER *PREASON_BUFFER;
+
+struct PROCESSOR_IDLESTATE_POLICY
+{
+    USHORT Revision;
+    union
+    {
+        USHORT AsUSHORT;
+        struct
+        {
+            USHORT AllowScaling : 1;
+            USHORT Disabled : 1;
+            USHORT Reserved : 14;
+        };
+    } Flags;
+    ULONG PolicyCount;
+    PROCESSOR_IDLESTATE_INFO Policy[3];
+};
+
+typedef struct PROCESSOR_IDLESTATE_POLICY *PPROCESSOR_IDLESTATE_POLICY;
+
+struct PROCESSOR_PERFSTATE_POLICY
+{
+    ULONG Revision;
+    UCHAR MaxThrottle;
+    UCHAR MinThrottle;
+    UCHAR BusyAdjThreshold;
+    union
+    {
+        UCHAR Spare;
+        union
+        {
+            UCHAR AsUCHAR;
+            struct
+            {
+                UCHAR NoDomainAccounting : 1;
+                UCHAR IncreasePolicy : 2;
+                UCHAR DecreasePolicy : 2;
+                UCHAR Reserved : 3;
+            };
+        } Flags;
+    };
+    ULONG TimeCheck;
+    ULONG IncreaseTime;
+    ULONG DecreaseTime;
+    ULONG IncreasePercent;
+    ULONG DecreasePercent;
+};
+
+typedef struct PROCESSOR_PERFSTATE_POLICY *PPROCESSOR_PERFSTATE_POLICY;
+
+typedef struct _WAKE_TIMER_INFO *PWAKE_TIMER_INFO;
+
+typedef struct _REASON_BUFFER REASON_BUFFER;
+
+typedef struct _WAKE_TIMER_INFO WAKE_TIMER_INFO;
 
 #endif /* __NTPOAPI_H */
 

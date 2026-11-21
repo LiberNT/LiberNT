@@ -59,4 +59,9 @@ ComDBResizeDatabase(IN HCOMDB hComDB,
 }
 #endif
 
+struct HCOMDB__
+{
+    int unused;
+};
+
 #endif /* _MSPORTS_ */

@@ -4743,4 +4743,87 @@ typedef enum _DEBUG_LEVEL
 #define DXGK_I2C_INTERFACE_VERSION_2 0x02
 #endif
 
+#define _Field_size_bytes_DXGK_param)
+#define DlDebugPrintExarg) DlDebugPrint arg
+
+struct DXGK_DEBUG_REPORT_HANDLE__
+{
+    int unused;
+};
+
+typedef NTSTATUS (*DXGKDDI_I2C_TRANSMIT_AND_RECEIVE_DATA_FROM_DISPLAY)(PVOID, D3DDDI_VIDEO_PRESENT_TARGET_ID, ULONG, ULONG, const void *, ULONG, ULONG, ULONG, PVOID);
+
+struct _DXGK_I2C_INTERFACE_2
+{
+    USHORT Size;
+    USHORT Version;
+    PVOID Context;
+    PINTERFACE_REFERENCE InterfaceReference;
+    PINTERFACE_DEREFERENCE InterfaceDereference;
+    DXGKDDI_I2C_TRANSMIT_DATA_TO_DISPLAY DxgkDdiI2CTransmitDataToDisplay;
+    DXGKDDI_I2C_RECEIVE_DATA_FROM_DISPLAY DxgkDdiI2CReceiveDataFromDisplay;
+    DXGKDDI_I2C_TRANSMIT_AND_RECEIVE_DATA_FROM_DISPLAY DxgkDdiI2CTransmitAndReceiveDataFromDisplay;
+};
+
+typedef struct _DXGK_I2C_INTERFACE_2 DXGK_I2C_INTERFACE_2;
+
+typedef struct _DXGK_I2C_INTERFACE_2 *PDXGK_I2C_INTERFACE_2;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+PVOID DlAllocateCommonBuffer(PVOID DeviceHandle, PVP_DMA_ADAPTER DlpDmaAdapter, ULONG DesiredLength, PPHYSICAL_ADDRESS LogicalAddress, BOOLEAN CacheEnabled, PVOID Reserved);
+PVOID DlAllocatePool(PVOID DeviceHandle, VP_POOL_TYPE PoolType, SIZE_T NumberOfBytes, ULONG Tag);
+void DlClearEvent(PVOID DeviceHandle, PEVENT pEvent);
+VP_STATUS DlCreateEvent(PVOID DeviceHandle, ULONG EventFlag, PVOID Unused, PEVENT *ppEvent);
+void DlDebugPrint(DEBUG_LEVEL DebugPrintLevel, PSTR DebugMessage, ...);
+VP_STATUS DlDeleteEvent(PVOID DeviceHandle, PEVENT pEvent);
+VP_STATUS DlDisableInterrupt(PVOID DeviceHandle);
+VP_STATUS DlEnableInterrupt(PVOID DeviceHandle);
+VP_STATUS DlEnumerateChildren(PVOID DeviceHandle, PVOID Reserved);
+NTSTATUS DlEvalAcpiMethod(HANDLE DeviceHandle, ULONG DeviceUid, PACPI_EVAL_INPUT_BUFFER_COMPLEX AcpiInputBuffer, ULONG AcpiInputSize, PACPI_EVAL_OUTPUT_BUFFER AcpiOutputBuffer, ULONG AcpiOutputSize);
+void DlFreeDeviceBase(PVOID DeviceHandle, PVOID MappedAddress);
+void DlFreePool(PVOID DeviceHandle, PVOID Ptr);
+NTSTATUS DlGetAccessRanges(PVOID DeviceHandle, ULONG NumRequestedResources, PIO_RESOURCE_DESCRIPTOR RequestedResources, ULONG NumAccessRanges, PVIDEO_ACCESS_RANGE AccessRanges, PVOID VendorId, PVOID DeviceId, PULONG Slot);
+PVOID DlGetAssociatedDeviceExtension(PVOID DeviceObject);
+PVOID DlGetDeviceBase(PVOID DeviceHandle, PHYSICAL_ADDRESS IoAddress, ULONG NumberOfUchars, UCHAR InIoSpace);
+NTSTATUS DlGetDeviceInformation(PVOID DeviceHandle, PDXGK_DEVICE_INFO DeviceInfo);
+PVP_DMA_ADAPTER DlGetDmaAdapter(PVOID DeviceHandle, PVP_DEVICE_DESCRIPTION DlpDeviceDescription);
+VP_STATUS DlGetRegistryParameters(PVOID DeviceHandle, PWSTR ParameterName, UCHAR IsParameterFileName, PMINIPORT_GET_REGISTRY_ROUTINE CallbackRoutine, PVOID Context);
+PVOID DlGetRomImage(PVOID DeviceHandle, PVOID Unused1, ULONG Unused2, ULONG Length);
+VP_STATUS DlGetVersion(PVOID DeviceHandle, PVPOSVERSIONINFO pDlpOsVersionInfo);
+NTSTATUS DlIndicateChildStatus(PVOID DeviceHandle, PDXGK_CHILD_STATUS ChildStatus);
+PVOID DlLockBuffer(PVOID DeviceHandle, PVOID BaseAddress, ULONG Length, VP_LOCK_OPERATION Operation);
+void DlLogError(PVOID DeviceHandle, PVIDEO_REQUEST_PACKET Vrp, VP_STATUS ErrorCode, ULONG UniqueId);
+VP_STATUS DlMapMemory(PVOID DeviceHandle, PHYSICAL_ADDRESS TranslatedAddress, PULONG Length, PULONG InIoSpace, PVOID *VirtualAddress);
+NTSTATUS DlMapMemoryEx(PVOID DeviceHandle, PHYSICAL_ADDRESS TranslatedAddress, PULONG Length, PULONG InIoSpace, HANDLE ProcessHandle, PVOID *VirtualAddress, BOOLEAN MapToUserMode);
+LONGLONG DlQueryPerformanceCounter(PVOID pDeviceHandle, PLONGLONG pllPerformanceFrequency);
+NTSTATUS DlQueryServices(PVOID DeviceHandle, VIDEO_PORT_SERVICES ServicesType, PINTERFACE Interface);
+BOOLEAN DlQueueDpc(PVOID DeviceHandle);
+ULONG DlReadDeviceSpace(PVOID DeviceHandle, ULONG DataType, ULONG SlotNumber, PVOID Buffer, ULONG Offset, ULONG Length);
+void DlReleaseCommonBuffer(PVOID DeviceHandle, PVP_DMA_ADAPTER DlpDmaAdapter, ULONG Length, PHYSICAL_ADDRESS LogicalAddress, PVOID VirtualAddress, BOOLEAN CacheEnabled);
+BOOLEAN DlScanRom(PVOID DeviceHandle, PUCHAR RomBase, ULONG RomLength, PUCHAR String);
+ULONG DlSetBusData(PVOID DeviceHandle, ULONG BusDataType, ULONG SlotNumber, PVOID Buffer, ULONG Offset, ULONG Length);
+LONG DlSetEvent(PVOID DeviceHandle, PEVENT pEvent);
+VP_STATUS DlSetRegistryParameters(PVOID DeviceHandle, PWSTR ValueName, PVOID ValueData, ULONG ValueLength);
+VP_STATUS DlSetTrappedEmulatorPorts(PVOID DeviceHandle, ULONG NumAccessRanges, PVIDEO_ACCESS_RANGE AccessRange);
+void DlStopTimer(PVOID DeviceHandle);
+BOOLEAN DlSynchronizeExecution(PVOID DeviceHandle, VIDEO_SYNCHRONIZE_PRIORITY Priority, PMINIPORT_SYNCHRONIZE_ROUTINE SynchronizeRoutine, PVOID Context, ULONG MessageNumber);
+void DlUnlockBuffer(PVOID DeviceHandle, PVOID Mdl);
+NTSTATUS DlUnmapMemory(PVOID DeviceHandle, PVOID VirtualAddress, HANDLE ProcessHandle);
+VP_STATUS DlVerifyAccessRanges(PVOID DeviceHandle, ULONG NumAccessRanges, PVIDEO_ACCESS_RANGE AccessRanges);
+VP_STATUS DlWaitForSingleObject(PVOID DeviceHandle, PVOID pEvent, PLARGE_INTEGER Timeout);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define _Field_size_bytes_DXGK_param)
+#define DlDebugPrintExarg) DlDebugPrint arg
+
+#define _Field_size_bytes_DXGK_param)
+#define DlDebugPrintExarg) DlDebugPrint arg
+
 #endif /* _DISPMPRT_H_ */

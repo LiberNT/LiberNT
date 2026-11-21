@@ -78,4 +78,6 @@ typedef HRESULT
   _In_ PUNKNOWN OuterUnknown,
   _In_ POOL_TYPE PoolType);
 
+typedef struct IUnknownVtbl IUnknownVtbl;
+
 #endif /* _UNKNOWN_H_ */

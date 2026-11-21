@@ -70,4 +70,21 @@ DWORD WINAPI DavGetUNCFromHTTPPath(LPCWSTR,LPWSTR,LPDWORD);
 OPAQUE_HANDLE WINAPI DavRegisterAuthCallback(PFNDAVAUTHCALLBACK,ULONG);
 VOID WINAPI DavUnregisterAuthCallback(OPAQUE_HANDLE);
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+DWORD WINAPI DavAddConnection(HANDLE *ConnectionHandle, LPCWSTR RemoteName, LPCWSTR UserName, LPCWSTR Password, PBYTE ClientCert, DWORD CertSize);
+DWORD WINAPI DavCancelConnectionsToServer(LPWSTR lpName, BOOL fForce);
+DWORD WINAPI DavDeleteConnection(HANDLE ConnectionHandle);
+DWORD WINAPI DavFlushFile(HANDLE hFile);
+DWORD WINAPI DavGetExtendedError(HANDLE hFile, DWORD *ExtError, LPWSTR ExtErrorString, DWORD *cChSize);
+DWORD WINAPI DavGetTheLockOwnerOfTheFile(LPCWSTR FileName, PWSTR LockOwnerName, PULONG LockOwnerNameLengthInBytes);
+DWORD WINAPI DavInvalidateCache(LPCWSTR URLName);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* __WINE_DAVCLNT_H */

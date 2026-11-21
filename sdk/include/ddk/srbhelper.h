@@ -1411,4 +1411,19 @@ SrbSetPortContext(
 }
 
 #endif /* (NTDDI_VERSION >= NTDDI_WIN8) */
+
+#define _NTSRBHELPER_ 0
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOLEAN SrbContainsScsiCdb(PSTORAGE_REQUEST_BLOCK Srb);
+PVOID SrbGetDataBufferEx(PSTORAGE_REQUEST_BLOCK SrbEx, PULONG DataTransferLength);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* _SRBHELPER_H_ */

@@ -16,3 +16,6 @@
 #define ERROR_DEVICE_REINITIALIZATION_NEEDED     1164
 #define ERROR_CONTINUE                           1246
 #define ERROR_NO_MORE_DEVICES                    1248
+
+#define _DDERROR_ 0
+

@@ -69,4 +69,7 @@
 #define LMCSTR  LPCSTR
 #endif
 
+#define BACKUP_MSG_FILENAME TEXT("BAK.MSG")
+#define LM_DNS_MAX_NAME_LENGTH 255
+
 #endif

@@ -149,16 +149,53 @@ BOOL WINAPI EnumResourceTypesExW(HMODULE hModule, ENUMRESTYPEPROCW lpEnumFunc, L
 }
 #endif
 
+typedef struct _REDIRECTION_FUNCTION_DESCRIPTOR {
+  PCSTR DllName;
+  PCSTR FunctionName;
+  PVOID RedirectionTarget;
+} REDIRECTION_FUNCTION_DESCRIPTOR, *PREDIRECTION_FUNCTION_DESCRIPTOR;
+
 typedef struct tagENUMUILANG {
   ULONG NumOfEnumUILang;
   ULONG SizeOfEnumUIBuffer;
   LANGID * pEnumUIBuffer;
 } ENUMUILANG, *PENUMUILANG;
 
-typedef struct _REDIRECTION_FUNCTION_DESCRIPTOR {
-  PCSTR DllName;
-  PCSTR FunctionName;
-  PVOID RedirectionTarget;
-} REDIRECTION_FUNCTION_DESCRIPTOR, *PREDIRECTION_FUNCTION_DESCRIPTOR;
+#define CURRENT_IMPORT_REDIRECTION_VERSION 1
+#ifdef UNICODE
+#define EnumResourceLanguagesEx EnumResourceLanguagesExW
+#else
+#define EnumResourceLanguagesEx EnumResourceLanguagesExA
+#endif
+#ifdef UNICODE
+#define EnumResourceNamesEx EnumResourceNamesExW
+#else
+#define EnumResourceNamesEx EnumResourceNamesExA
+#endif
+#ifdef UNICODE
+#define EnumResourceTypesEx EnumResourceTypesExW
+#else
+#define EnumResourceTypesEx EnumResourceTypesExA
+#endif
+#define PGET_MODULE_HANDLE_EX 0
+
+typedef const REDIRECTION_FUNCTION_DESCRIPTOR *PCREDIRECTION_FUNCTION_DESCRIPTOR;
+
+struct _REDIRECTION_DESCRIPTOR
+{
+    ULONG Version;
+    ULONG FunctionCount;
+    PCREDIRECTION_FUNCTION_DESCRIPTOR Redirections;
+};
+
+typedef BOOL (WINAPI *PGET_MODULE_HANDLE_EXA)(DWORD, LPCSTR, HMODULE *);
+
+typedef BOOL (WINAPI *PGET_MODULE_HANDLE_EXW)(DWORD, LPCWSTR, HMODULE *);
+
+typedef struct _REDIRECTION_DESCRIPTOR *PREDIRECTION_DESCRIPTOR;
+
+typedef struct _REDIRECTION_DESCRIPTOR REDIRECTION_DESCRIPTOR;
+
+typedef const REDIRECTION_DESCRIPTOR *PCREDIRECTION_DESCRIPTOR;
 
 #endif  /* _APISETLIBLOADER_ */

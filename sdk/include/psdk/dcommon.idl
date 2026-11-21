@@ -189,3 +189,13 @@ typedef struct D2D_MATRIX_5X4_F
         float m[5][4];
     };
 } D2D_MATRIX_5X4_F;
+
+cpp_quote("#define CHECKMETHODmethod) virtual DECLSPEC_NOTHROW _Must_inspect_result_ HRESULT STDMETHODCALLTYPE method")
+cpp_quote("#define DX_DECLARE_INTERFACEx) DECLSPEC_UUID(x) DECLSPEC_NOVTABLE")
+
+cpp_quote("#define CHECKMETHODmethod) virtual DECLSPEC_NOTHROW _Must_inspect_result_ HRESULT STDMETHODCALLTYPE method")
+cpp_quote("#define DX_DECLARE_INTERFACEx) DECLSPEC_UUID(x) DECLSPEC_NOVTABLE")
+
+cpp_quote("#define CHECKMETHODmethod) virtual DECLSPEC_NOTHROW _Must_inspect_result_ HRESULT STDMETHODCALLTYPE method")
+cpp_quote("#define DX_DECLARE_INTERFACEx) DECLSPEC_UUID(x) DECLSPEC_NOVTABLE")
+

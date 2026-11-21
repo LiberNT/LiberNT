@@ -85,6 +85,55 @@ typedef enum {
   MAKE_ROUTE_PROTOCOL(NT_AUTOSTATIC, 10002),
   MAKE_ROUTE_PROTOCOL(NT_STATIC, 10006),
   MAKE_ROUTE_PROTOCOL(NT_STATIC_NON_DOD, 10007),
+  RouteProtocolIdpr = 0xF,
+  RouteProtocolEigrp = 0x10,
+  RouteProtocolDvmrp = 0x11,
+  RouteProtocolRpl = 0x12,
+  RouteProtocolDhcp = 0x13,
+  MIB_IPPROTO_OTHER = 1,
+  PROTO_IP_OTHER = 1,
+  MIB_IPPROTO_LOCAL = 2,
+  PROTO_IP_LOCAL = 2,
+  MIB_IPPROTO_NETMGMT = 3,
+  PROTO_IP_NETMGMT = 3,
+  MIB_IPPROTO_ICMP = 4,
+  PROTO_IP_ICMP = 4,
+  MIB_IPPROTO_EGP = 5,
+  PROTO_IP_EGP = 5,
+  MIB_IPPROTO_GGP = 6,
+  PROTO_IP_GGP = 6,
+  MIB_IPPROTO_HELLO = 7,
+  PROTO_IP_HELLO = 7,
+  MIB_IPPROTO_RIP = 8,
+  PROTO_IP_RIP = 8,
+  MIB_IPPROTO_IS_IS = 9,
+  PROTO_IP_IS_IS = 9,
+  MIB_IPPROTO_ES_IS = 0xA,
+  PROTO_IP_ES_IS = 0xA,
+  MIB_IPPROTO_CISCO = 0xB,
+  PROTO_IP_CISCO = 0xB,
+  MIB_IPPROTO_BBN = 0xC,
+  PROTO_IP_BBN = 0xC,
+  MIB_IPPROTO_OSPF = 0xD,
+  PROTO_IP_OSPF = 0xD,
+  MIB_IPPROTO_BGP = 0xE,
+  PROTO_IP_BGP = 0xE,
+  MIB_IPPROTO_IDPR = 0xF,
+  PROTO_IP_IDPR = 0xF,
+  MIB_IPPROTO_EIGRP = 0x10,
+  PROTO_IP_EIGRP = 0x10,
+  MIB_IPPROTO_DVMRP = 0x11,
+  PROTO_IP_DVMRP = 0x11,
+  MIB_IPPROTO_RPL = 0x12,
+  PROTO_IP_RPL = 0x12,
+  MIB_IPPROTO_DHCP = 0x13,
+  PROTO_IP_DHCP = 0x13,
+  MIB_IPPROTO_NT_AUTOSTATIC = 0x2712,
+  PROTO_IP_NT_AUTOSTATIC = 0x2712,
+  MIB_IPPROTO_NT_STATIC = 0x2716,
+  PROTO_IP_NT_STATIC = 0x2716,
+  MIB_IPPROTO_NT_STATIC_NON_DOD = 0x2717,
+  PROTO_IP_NT_STATIC_NON_DOD = 0x2717,
 } NL_ROUTE_PROTOCOL, *PNL_ROUTE_PROTOCOL;
 
 typedef enum {
@@ -170,6 +219,13 @@ typedef enum _NL_INTERFACE_NETWORK_CATEGORY_STATE {
     NlincCategoryStateMax = 4
 } NL_INTERFACE_NETWORK_CATEGORY_STATE, *PNL_INTERFACE_NETWORK_CATEGORY_STATE;
 
+typedef enum _NL_NETWORK_CONNECTIVITY_COST_HINT {
+    NetworkConnectivityCostHintUnknown = 0,
+    NetworkConnectivityCostHintUnrestricted = 1,
+    NetworkConnectivityCostHintFixed = 2,
+    NetworkConnectivityCostHintVariable = 3
+} NL_NETWORK_CONNECTIVITY_COST_HINT;
+
 typedef enum _NL_NETWORK_CONNECTIVITY_LEVEL_HINT {
     NetworkConnectivityLevelHintUnknown = 0,
     NetworkConnectivityLevelHintNone = 1,
@@ -179,12 +235,11 @@ typedef enum _NL_NETWORK_CONNECTIVITY_LEVEL_HINT {
     NetworkConnectivityLevelHintHidden = 5
 } NL_NETWORK_CONNECTIVITY_LEVEL_HINT;
 
-typedef enum _NL_NETWORK_CONNECTIVITY_COST_HINT {
-    NetworkConnectivityCostHintUnknown = 0,
-    NetworkConnectivityCostHintUnrestricted = 1,
-    NetworkConnectivityCostHintFixed = 2,
-    NetworkConnectivityCostHintVariable = 3
-} NL_NETWORK_CONNECTIVITY_COST_HINT;
+typedef struct _NL_BANDWIDTH_INFORMATION {
+  ULONG64 Bandwidth;
+  ULONG64 Instability;
+  BOOLEAN BandwidthPeaked;
+} NL_BANDWIDTH_INFORMATION, *PNL_BANDWIDTH_INFORMATION;
 
 typedef struct _NL_NETWORK_CONNECTIVITY_HINT {
   NL_NETWORK_CONNECTIVITY_LEVEL_HINT ConnectivityLevel;
@@ -193,12 +248,6 @@ typedef struct _NL_NETWORK_CONNECTIVITY_HINT {
   BOOLEAN OverDataLimit;
   BOOLEAN Roaming;
 } NL_NETWORK_CONNECTIVITY_HINT;
-
-typedef struct _NL_BANDWIDTH_INFORMATION {
-  ULONG64 Bandwidth;
-  ULONG64 Instability;
-  BOOLEAN BandwidthPeaked;
-} NL_BANDWIDTH_INFORMATION, *PNL_BANDWIDTH_INFORMATION;
 
 #endif /* _NLDEF_ */
 

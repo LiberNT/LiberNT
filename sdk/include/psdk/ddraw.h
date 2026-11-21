@@ -2683,4 +2683,6 @@ DECLARE_INTERFACE_( IDirectDrawSurface3, IUnknown )
 #define DDSCAPS3_READONLYRESOURCE 0x00004000L
 #endif
 
+typedef struct _DDFXROP *LPDDFXROP;
+
 #endif

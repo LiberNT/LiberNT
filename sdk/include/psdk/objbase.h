@@ -398,7 +398,8 @@ typedef enum tagREGCLS
     REGCLS_MULTIPLEUSE = 1,
     REGCLS_MULTI_SEPARATE = 2,
     REGCLS_SUSPENDED = 4,
-    REGCLS_SURROGATE = 8
+    REGCLS_SURROGATE = 8,
+    REGCLS_AGILE = 0x10,
 } REGCLS;
 
 _Check_return_
@@ -735,7 +736,8 @@ typedef enum tagCOWAIT_FLAGS
     COWAIT_DEFAULT        = 0x00000000,
     COWAIT_WAITALL        = 0x00000001,
     COWAIT_ALERTABLE      = 0x00000002,
-    COWAIT_INPUTAVAILABLE = 0x00000004
+    COWAIT_INPUTAVAILABLE = 0x00000004,
+    COWAIT_DISPATCH_WINDOW_MESSAGES = 0x10,
 } COWAIT_FLAGS;
 
 _Check_return_
@@ -1102,6 +1104,27 @@ typedef enum tagCOMSD {
     SD_LAUNCHRESTRICTIONS = 2,
     SD_ACCESSRESTRICTIONS = 3
 } COMSD;
+
+#define COM_SUPPORT_MALLOC_SPIES 0
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+HRESULT CoCreateStandardMalloc(DWORD memctx, IMalloc **ppMalloc);
+HRESULT CoGetSystemSecurityPermissions(COMSD comSDType, PSECURITY_DESCRIPTOR *ppSD);
+HRESULT CoInstall(IBindCtx *pbc, DWORD dwFlags, uCLSSPEC *pClassSpec, QUERYCONTEXT *pQuery, LPWSTR pszCodeBase);
+HRESULT CreateStdProgressIndicator(HWND hwndParent, LPCOLESTR pszTitle, IBindStatusCallback *pIbscCaller, IBindStatusCallback **ppIbsc);
+HRESULT DcomChannelSetHResult(LPVOID pvReserved, ULONG *pulReserved, HRESULT appsHR);
+HRESULT StgGetIFillLockBytesOnFile(const OLECHAR *pwcsName, IFillLockBytes **ppflb);
+HRESULT StgGetIFillLockBytesOnILockBytes(ILockBytes *pilb, IFillLockBytes **ppflb);
+HRESULT StgOpenAsyncDocfileOnIFillLockBytes(IFillLockBytes *pflb, DWORD grfMode, DWORD asyncFlags, IStorage **ppstgOpen);
+HRESULT StgOpenLayoutDocfile(const OLECHAR *pwcsDfName, DWORD grfMode, DWORD reserved, IStorage **ppstgOpen);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _OBJBASE_H_ */
 

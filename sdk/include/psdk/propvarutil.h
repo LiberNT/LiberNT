@@ -74,6 +74,7 @@ enum tagPROPVAR_COMPARE_FLAGS
     PVCF_USESTRCMPC        = 0x00000004,
     PVCF_USESTRCMPI        = 0x00000008,
     PVCF_USESTRCMPIC       = 0x00000010,
+    PVCF_DIGITSASNUMBERS_CASESENSITIVE = 0x20,
 };
 
 typedef int PROPVAR_COMPARE_FLAGS;
@@ -255,6 +256,130 @@ extern "C" {
 #endif
 HRESULT WINAPI InitVariantFromResource(HINSTANCE hinst, UINT id, VARIANT * pvar);
 int WINAPI VariantCompare(const VARIANT *const var1, const VARIANT *const var2);
+#ifdef __cplusplus
+}
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+void ClearPropVariantArray(PROPVARIANT *rgPropVar, UINT cVars);
+void ClearVariantArray(VARIANT *pvars, UINT cvars);
+HRESULT InitPropVariantFromBooleanVector(const BOOL *prgf, ULONG cElems, PROPVARIANT *ppropvar);
+HRESULT InitPropVariantFromDoubleVector(const DOUBLE *prgn, ULONG cElems, PROPVARIANT *ppropvar);
+HRESULT InitPropVariantFromFileTimeVector(const FILETIME *prgft, ULONG cElems, PROPVARIANT *ppropvar);
+HRESULT InitPropVariantFromInt16Vector(const SHORT *prgn, ULONG cElems, PROPVARIANT *ppropvar);
+HRESULT InitPropVariantFromInt32Vector(const LONG *prgn, ULONG cElems, PROPVARIANT *ppropvar);
+HRESULT InitPropVariantFromInt64Vector(const LONGLONG *prgn, ULONG cElems, PROPVARIANT *ppropvar);
+HRESULT InitPropVariantFromPropVariantVectorElem(const PROPVARIANT *const propvarIn, ULONG iElem, PROPVARIANT *ppropvar);
+HRESULT InitPropVariantFromResource(HINSTANCE hinst, UINT id, PROPVARIANT *ppropvar);
+HRESULT InitPropVariantFromStringAsVector(PCWSTR psz, PROPVARIANT *ppropvar);
+HRESULT InitPropVariantFromStrRet(STRRET *pstrret, LPCITEMIDLIST pidl, PROPVARIANT *ppropvar);
+HRESULT InitPropVariantFromUInt16Vector(const USHORT *prgn, ULONG cElems, PROPVARIANT *ppropvar);
+HRESULT InitPropVariantFromUInt32Vector(const ULONG *prgn, ULONG cElems, PROPVARIANT *ppropvar);
+HRESULT InitPropVariantFromUInt64Vector(const ULONGLONG *prgn, ULONG cElems, PROPVARIANT *ppropvar);
+HRESULT InitPropVariantVectorFromPropVariant(const PROPVARIANT *const propvarSingle, PROPVARIANT *ppropvarVector);
+HRESULT InitVariantFromBooleanArray(const BOOL *prgf, ULONG cElems, VARIANT *pvar);
+HRESULT InitVariantFromDoubleArray(const DOUBLE *prgn, ULONG cElems, VARIANT *pvar);
+HRESULT InitVariantFromFileTimeArray(const FILETIME *prgft, ULONG cElems, VARIANT *pvar);
+HRESULT InitVariantFromInt16Array(const SHORT *prgn, ULONG cElems, VARIANT *pvar);
+HRESULT InitVariantFromInt32Array(const LONG *prgn, ULONG cElems, VARIANT *pvar);
+HRESULT InitVariantFromInt64Array(const LONGLONG *prgn, ULONG cElems, VARIANT *pvar);
+HRESULT InitVariantFromStringArray(PCWSTR *prgsz, ULONG cElems, VARIANT *pvar);
+HRESULT InitVariantFromStrRet(STRRET *pstrret, LPCITEMIDLIST pidl, VARIANT *pvar);
+HRESULT InitVariantFromUInt16Array(const USHORT *prgn, ULONG cElems, VARIANT *pvar);
+HRESULT InitVariantFromUInt32Array(const ULONG *prgn, ULONG cElems, VARIANT *pvar);
+HRESULT InitVariantFromUInt64Array(const ULONGLONG *prgn, ULONG cElems, VARIANT *pvar);
+HRESULT InitVariantFromVariantArrayElem(const VARIANT *const varIn, ULONG iElem, VARIANT *pvar);
+HRESULT PropVariantGetBooleanElem(const PROPVARIANT *const propvar, ULONG iElem, BOOL *pfVal);
+HRESULT PropVariantGetDoubleElem(const PROPVARIANT *const propvar, ULONG iElem, DOUBLE *pnVal);
+ULONG PropVariantGetElementCount(const PROPVARIANT *const propvar);
+HRESULT PropVariantGetFileTimeElem(const PROPVARIANT *const propvar, ULONG iElem, FILETIME *pftVal);
+HRESULT PropVariantGetInt16Elem(const PROPVARIANT *const propvar, ULONG iElem, SHORT *pnVal);
+HRESULT PropVariantGetInt32Elem(const PROPVARIANT *const propvar, ULONG iElem, LONG *pnVal);
+HRESULT PropVariantGetInt64Elem(const PROPVARIANT *const propvar, ULONG iElem, LONGLONG *pnVal);
+HRESULT PropVariantGetUInt16Elem(const PROPVARIANT *const propvar, ULONG iElem, USHORT *pnVal);
+HRESULT PropVariantGetUInt32Elem(const PROPVARIANT *const propvar, ULONG iElem, ULONG *pnVal);
+HRESULT PropVariantGetUInt64Elem(const PROPVARIANT *const propvar, ULONG iElem, ULONGLONG *pnVal);
+HRESULT PropVariantToBooleanVector(const PROPVARIANT *const propvar, BOOL *prgf, ULONG crgf, ULONG *pcElem);
+HRESULT PropVariantToBooleanVectorAlloc(const PROPVARIANT *const propvar, BOOL **pprgf, ULONG *pcElem);
+BOOL PropVariantToBooleanWithDefault(const PROPVARIANT *const propvarIn, BOOL fDefault);
+HRESULT PropVariantToDoubleVector(const PROPVARIANT *const propvar, DOUBLE *prgn, ULONG crgn, ULONG *pcElem);
+HRESULT PropVariantToDoubleVectorAlloc(const PROPVARIANT *const propvar, DOUBLE **pprgn, ULONG *pcElem);
+DOUBLE PropVariantToDoubleWithDefault(const PROPVARIANT *const propvarIn, DOUBLE dblDefault);
+HRESULT PropVariantToFileTimeVector(const PROPVARIANT *const propvar, FILETIME *prgft, ULONG crgft, ULONG *pcElem);
+HRESULT PropVariantToFileTimeVectorAlloc(const PROPVARIANT *const propvar, FILETIME **pprgft, ULONG *pcElem);
+HRESULT PropVariantToInt16Vector(const PROPVARIANT *const propvar, SHORT *prgn, ULONG crgn, ULONG *pcElem);
+HRESULT PropVariantToInt16VectorAlloc(const PROPVARIANT *const propvar, SHORT **pprgn, ULONG *pcElem);
+SHORT PropVariantToInt16WithDefault(const PROPVARIANT *const propvarIn, SHORT iDefault);
+HRESULT PropVariantToInt32Vector(const PROPVARIANT *const propvar, LONG *prgn, ULONG crgn, ULONG *pcElem);
+HRESULT PropVariantToInt32VectorAlloc(const PROPVARIANT *const propvar, LONG **pprgn, ULONG *pcElem);
+LONG PropVariantToInt32WithDefault(const PROPVARIANT *const propvarIn, LONG lDefault);
+HRESULT PropVariantToInt64Vector(const PROPVARIANT *const propvar, LONGLONG *prgn, ULONG crgn, ULONG *pcElem);
+HRESULT PropVariantToInt64VectorAlloc(const PROPVARIANT *const propvar, LONGLONG **pprgn, ULONG *pcElem);
+LONGLONG PropVariantToInt64WithDefault(const PROPVARIANT *const propvarIn, LONGLONG llDefault);
+HRESULT PropVariantToStringVector(const PROPVARIANT *const propvar, PWSTR *prgsz, ULONG crgsz, ULONG *pcElem);
+HRESULT PropVariantToStringVectorAlloc(const PROPVARIANT *const propvar, PWSTR **pprgsz, ULONG *pcElem);
+HRESULT PropVariantToStrRet(const PROPVARIANT *const propvar, STRRET *pstrret);
+HRESULT PropVariantToUInt16Vector(const PROPVARIANT *const propvar, USHORT *prgn, ULONG crgn, ULONG *pcElem);
+HRESULT PropVariantToUInt16VectorAlloc(const PROPVARIANT *const propvar, USHORT **pprgn, ULONG *pcElem);
+USHORT PropVariantToUInt16WithDefault(const PROPVARIANT *const propvarIn, USHORT uiDefault);
+HRESULT PropVariantToUInt32VectorAlloc(const PROPVARIANT *const propvar, ULONG **pprgn, ULONG *pcElem);
+HRESULT PropVariantToUInt64Vector(const PROPVARIANT *const propvar, ULONGLONG *prgn, ULONG crgn, ULONG *pcElem);
+HRESULT PropVariantToUInt64VectorAlloc(const PROPVARIANT *const propvar, ULONGLONG **pprgn, ULONG *pcElem);
+ULONGLONG PropVariantToUInt64WithDefault(const PROPVARIANT *const propvarIn, ULONGLONG ullDefault);
+HRESULT VariantGetBooleanElem(const VARIANT *const var, ULONG iElem, BOOL *pfVal);
+HRESULT VariantGetDoubleElem(const VARIANT *const var, ULONG iElem, DOUBLE *pnVal);
+ULONG VariantGetElementCount(const VARIANT *const varIn);
+HRESULT VariantGetInt16Elem(const VARIANT *const var, ULONG iElem, SHORT *pnVal);
+HRESULT VariantGetInt32Elem(const VARIANT *const var, ULONG iElem, LONG *pnVal);
+HRESULT VariantGetInt64Elem(const VARIANT *const var, ULONG iElem, LONGLONG *pnVal);
+HRESULT VariantGetStringElem(const VARIANT *const var, ULONG iElem, PWSTR *ppszVal);
+HRESULT VariantGetUInt16Elem(const VARIANT *const var, ULONG iElem, USHORT *pnVal);
+HRESULT VariantGetUInt32Elem(const VARIANT *const var, ULONG iElem, ULONG *pnVal);
+HRESULT VariantGetUInt64Elem(const VARIANT *const var, ULONG iElem, ULONGLONG *pnVal);
+HRESULT VariantToBoolean(const VARIANT *const varIn, BOOL *pfRet);
+HRESULT VariantToBooleanArray(const VARIANT *const var, BOOL *prgf, ULONG crgn, ULONG *pcElem);
+HRESULT VariantToBooleanArrayAlloc(const VARIANT *const var, BOOL **pprgf, ULONG *pcElem);
+BOOL VariantToBooleanWithDefault(const VARIANT *const varIn, BOOL fDefault);
+HRESULT VariantToBuffer(const VARIANT *const varIn, void *pv, UINT cb);
+HRESULT VariantToDosDateTime(const VARIANT *const varIn, WORD *pwDate, WORD *pwTime);
+HRESULT VariantToDouble(const VARIANT *const varIn, DOUBLE *pdblRet);
+HRESULT VariantToDoubleArray(const VARIANT *const var, DOUBLE *prgn, ULONG crgn, ULONG *pcElem);
+HRESULT VariantToDoubleArrayAlloc(const VARIANT *const var, DOUBLE **pprgn, ULONG *pcElem);
+DOUBLE VariantToDoubleWithDefault(const VARIANT *const varIn, DOUBLE dblDefault);
+HRESULT VariantToFileTime(const VARIANT *const varIn, PSTIME_FLAGS stfOut, FILETIME *pftOut);
+HRESULT VariantToInt16(const VARIANT *const varIn, SHORT *piRet);
+HRESULT VariantToInt16Array(const VARIANT *const var, SHORT *prgn, ULONG crgn, ULONG *pcElem);
+HRESULT VariantToInt16ArrayAlloc(const VARIANT *const var, SHORT **pprgn, ULONG *pcElem);
+SHORT VariantToInt16WithDefault(const VARIANT *const varIn, SHORT iDefault);
+HRESULT VariantToInt32(const VARIANT *const varIn, LONG *plRet);
+HRESULT VariantToInt32Array(const VARIANT *const var, LONG *prgn, ULONG crgn, ULONG *pcElem);
+HRESULT VariantToInt32ArrayAlloc(const VARIANT *const var, LONG **pprgn, ULONG *pcElem);
+LONG VariantToInt32WithDefault(const VARIANT *const varIn, LONG lDefault);
+HRESULT VariantToInt64(const VARIANT *const varIn, LONGLONG *pllRet);
+HRESULT VariantToInt64Array(const VARIANT *const var, LONGLONG *prgn, ULONG crgn, ULONG *pcElem);
+HRESULT VariantToInt64ArrayAlloc(const VARIANT *const var, LONGLONG **pprgn, ULONG *pcElem);
+LONGLONG VariantToInt64WithDefault(const VARIANT *const varIn, LONGLONG llDefault);
+HRESULT VariantToStringAlloc(const VARIANT *const varIn, PWSTR *ppszBuf);
+HRESULT VariantToStringArray(const VARIANT *const var, PWSTR *prgsz, ULONG crgsz, ULONG *pcElem);
+HRESULT VariantToStringArrayAlloc(const VARIANT *const var, PWSTR **pprgsz, ULONG *pcElem);
+HRESULT VariantToStrRet(const VARIANT *const varIn, STRRET *pstrret);
+HRESULT VariantToUInt16(const VARIANT *const varIn, USHORT *puiRet);
+HRESULT VariantToUInt16Array(const VARIANT *const var, USHORT *prgn, ULONG crgn, ULONG *pcElem);
+HRESULT VariantToUInt16ArrayAlloc(const VARIANT *const var, USHORT **pprgn, ULONG *pcElem);
+USHORT VariantToUInt16WithDefault(const VARIANT *const varIn, USHORT uiDefault);
+HRESULT VariantToUInt32(const VARIANT *const varIn, ULONG *pulRet);
+HRESULT VariantToUInt32Array(const VARIANT *const var, ULONG *prgn, ULONG crgn, ULONG *pcElem);
+HRESULT VariantToUInt32ArrayAlloc(const VARIANT *const var, ULONG **pprgn, ULONG *pcElem);
+ULONG VariantToUInt32WithDefault(const VARIANT *const varIn, ULONG ulDefault);
+HRESULT VariantToUInt64(const VARIANT *const varIn, ULONGLONG *pullRet);
+HRESULT VariantToUInt64Array(const VARIANT *const var, ULONGLONG *prgn, ULONG crgn, ULONG *pcElem);
+HRESULT VariantToUInt64ArrayAlloc(const VARIANT *const var, ULONGLONG **pprgn, ULONG *pcElem);
+ULONGLONG VariantToUInt64WithDefault(const VARIANT *const varIn, ULONGLONG ullDefault);
+
 #ifdef __cplusplus
 }
 #endif

@@ -2885,6 +2885,11 @@ BOOL WINAPI DeleteWpadCacheForNetworks(WPAD_CACHE_DELETE);
 }
 #endif
 
+typedef struct CookieDecision {
+  DWORD dwCookieState;
+  BOOL fAllowSession;
+} CookieDecision;
+
 typedef struct IncomingCookieState {
   int cSession;
   int cPersistent;
@@ -2895,24 +2900,6 @@ typedef struct IncomingCookieState {
   const char * pszLocation;
 } IncomingCookieState;
 
-typedef struct OutgoingCookieState {
-  int cSent;
-  int cSuppressed;
-  const char * pszLocation;
-} OutgoingCookieState;
-
-typedef struct InternetCookieHistory {
-  BOOL fAccepted;
-  BOOL fLeashed;
-  BOOL fDowngraded;
-  BOOL fRejected;
-} InternetCookieHistory;
-
-typedef struct CookieDecision {
-  DWORD dwCookieState;
-  BOOL fAllowSession;
-} CookieDecision;
-
 typedef struct INTERNET_COOKIE2 {
   PWSTR pwszName;
   PWSTR pwszValue;
@@ -2922,5 +2909,69 @@ typedef struct INTERNET_COOKIE2 {
   FILETIME ftExpires;
   BOOL fExpiresSet;
 } INTERNET_COOKIE2;
+
+typedef struct InternetCookieHistory {
+  BOOL fAccepted;
+  BOOL fLeashed;
+  BOOL fDowngraded;
+  BOOL fRejected;
+} InternetCookieHistory;
+
+typedef struct OutgoingCookieState {
+  int cSent;
+  int cSuppressed;
+  const char * pszLocation;
+} OutgoingCookieState;
+
+#define CACHEGROUP_READWRITE_MASK 0x3C
+#define ERROR_HTTP_HSTS_REDIRECT_REQUIRED 0x2F1C
+#define ERROR_INTERNET_CLIENT_AUTH_CERT_NEEDED_PROXY 0x2F9B
+#define ERROR_INTERNET_FEATURE_DISABLED 0x2FA0
+#define ERROR_INTERNET_GLOBAL_CALLBACK_FAILED 0x2F9F
+#define ERROR_INTERNET_HTTP_PROTOCOL_MISMATCH 0x2F9E
+#define ERROR_INTERNET_SECURE_FAILURE_PROXY 0x2F9C
+#define HTTP_COOKIES_SAME_SITE_LEVEL_MAX 3
+#define HTTP_PROTOCOL_MASK 2
+#define HTTP_QUERY_INCLUDE_REFERER_TOKEN_BINDING_ID 0x5D
+#define HTTP_VERSIONA 0
+#define HTTP_VERSIONW L"HTTP/1.0"
+#define INTERNET_DIAL_FORCE_PROMPT 0x2000
+#define INTERNET_IDENTITY_FLAG_PRIVATE_CACHE 0x01
+#define INTERNETAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
+#define INTERNETAPIXtype, salannotation) EXTERN_C DECLSPEC_IMPORT salannotation type STDAPICALLTYPE
+#define SECURITY_IGNORE_ERROR_MASK 0x13180
+#define URLCACHEAPI EXTERN_C DECLSPEC_IMPORT DWORD STDAPICALLTYPE
+#define URLCACHEAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
+
+typedef BOOL (WINAPI *pfnInternetDeInitializeAutoProxyDll)(LPSTR, DWORD);
+
+typedef BOOL (WINAPI *pfnInternetGetProxyInfo)(LPCSTR, DWORD, LPSTR, DWORD, LPSTR *, LPDWORD);
+
+typedef BOOL (WINAPI *pfnInternetInitializeAutoProxyDll)(DWORD, LPSTR, LPSTR, AutoProxyHelperFunctions *, LPAUTO_PROXY_SCRIPT_BUFFER);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL FtpGetFileEx(HINTERNET hFtpSession, LPCSTR lpszRemoteFile, LPCWSTR lpszNewFile, BOOL fFailIfExists, DWORD dwFlagsAndAttributes, DWORD dwFlags, DWORD_PTR dwContext);
+BOOL FtpPutFileEx(HINTERNET hFtpSession, LPCWSTR lpszLocalFile, LPCSTR lpszNewRemoteFile, DWORD dwFlags, DWORD_PTR dwContext);
+DWORD HttpIsHostHstsEnabled(PCWSTR pcwszUrl, PBOOL pfIsHsts);
+void InternetFreeCookies(INTERNET_COOKIE2 *pCookies, DWORD dwCookieCount);
+DWORD InternetGetCookieEx2(PCWSTR pcwszUrl, PCWSTR pcwszCookieName, DWORD dwFlags, INTERNET_COOKIE2 **ppCookies, PDWORD pdwCookieCount);
+DWORD InternetSetCookieEx2(PCWSTR pcwszUrl, const INTERNET_COOKIE2 *pCookie, PCWSTR pcwszP3PPolicy, DWORD dwFlags, PDWORD pdwCookieState);
+BOOL ReadUrlCacheEntryStreamEx(HANDLE hUrlCacheStream, DWORDLONG qwLocation, LPVOID lpBuffer, LPDWORD lpdwLen);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define INTERNETAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
+#define INTERNETAPIXtype, salannotation) EXTERN_C DECLSPEC_IMPORT salannotation type STDAPICALLTYPE
+#define URLCACHEAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
+
+#define INTERNETAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
+#define INTERNETAPIXtype, salannotation) EXTERN_C DECLSPEC_IMPORT salannotation type STDAPICALLTYPE
+#define URLCACHEAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
 
 #endif /* _WINE_WININET_H_ */

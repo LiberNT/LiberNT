@@ -219,4 +219,6 @@ operator delete(
 
 #endif  /* __cplusplus */
 
+typedef struct INonDelegatingUnknownVtbl INonDelegatingUnknownVtbl;
+
 #endif  /* include guard */

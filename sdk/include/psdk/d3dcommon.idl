@@ -111,6 +111,7 @@ typedef enum D3D_FEATURE_LEVEL
     D3D_FEATURE_LEVEL_12_0 = 0xc000,
     D3D_FEATURE_LEVEL_12_1 = 0xc100,
     D3D_FEATURE_LEVEL_12_2 = 0xc200,
+    D3D_FEATURE_LEVEL_1_0_GENERIC = 0x100,
 } D3D_FEATURE_LEVEL;
 
 cpp_quote("#define D3D_FL9_1_REQ_TEXTURE1D_U_DIMENSION          2048")
@@ -276,6 +277,11 @@ typedef enum _D3D_SHADER_VARIABLE_TYPE
     D3D11_SVT_APPEND_STRUCTURED_BUFFER,
     D3D11_SVT_CONSUME_STRUCTURED_BUFFER,
     D3D_SVT_FORCE_DWORD = 0x7fffffff,
+    D3D_SVT_INT16 = 0x3A,
+    D3D_SVT_UINT16 = 0x3B,
+    D3D_SVT_FLOAT16 = 0x3C,
+    D3D_SVT_INT64 = 0x3D,
+    D3D_SVT_UINT64 = 0x3E,
 } D3D_SHADER_VARIABLE_TYPE;
 
 typedef enum _D3D_SHADER_INPUT_FLAGS
@@ -604,6 +610,18 @@ typedef enum D3D_REGISTER_COMPONENT_TYPE
     D3D10_REGISTER_COMPONENT_UINT32,
     D3D10_REGISTER_COMPONENT_SINT32,
     D3D10_REGISTER_COMPONENT_FLOAT32,
+    D3D_REGISTER_COMPONENT_UINT16 = 4,
+    D3D_REGISTER_COMPONENT_SINT16 = 5,
+    D3D_REGISTER_COMPONENT_FLOAT16 = 6,
+    D3D_REGISTER_COMPONENT_UINT64 = 7,
+    D3D_REGISTER_COMPONENT_SINT64 = 8,
+    D3D_REGISTER_COMPONENT_FLOAT64 = 9,
+    D3D10_REGISTER_COMPONENT_UINT16 = 4,
+    D3D10_REGISTER_COMPONENT_SINT16 = 5,
+    D3D10_REGISTER_COMPONENT_FLOAT16 = 6,
+    D3D10_REGISTER_COMPONENT_UINT64 = 7,
+    D3D10_REGISTER_COMPONENT_SINT64 = 8,
+    D3D10_REGISTER_COMPONENT_FLOAT64 = 9,
 } D3D_REGISTER_COMPONENT_TYPE;
 
 typedef enum D3D_RESOURCE_RETURN_TYPE
@@ -863,3 +881,73 @@ cpp_quote("#endif")
 cpp_quote("#ifndef D3D_SHADER_FEATURE_WRITEABLE_MSAA_TEXTURES")
 cpp_quote("#define D3D_SHADER_FEATURE_WRITEABLE_MSAA_TEXTURES 0x40000000")
 cpp_quote("#endif")
+
+cpp_quote("#define D3D_COMPONENT_MASK_X 1")
+cpp_quote("#define D3D_SET_OBJECT_NAME_ApObject, pName) D3D_SET_OBJECT_NAME_N_A(pObject, lstrlenA(pName), pName)")
+cpp_quote("#define D3D_SET_OBJECT_NAME_N_ApObject, Chars, pName) (pObject) -> SetPrivateData(WKPDID_D3DDebugObjectName, Chars, pName)")
+cpp_quote("")
+cpp_quote("enum D3D_FORMAT_COMPONENT_INTERPRETATION")
+cpp_quote("{")
+cpp_quote("    D3DFCI_TYPELESS = 0,")
+cpp_quote("    D3DFCI_FLOAT = (-4),")
+cpp_quote("    D3DFCI_SNORM = (-3),")
+cpp_quote("    D3DFCI_UNORM = (-2),")
+cpp_quote("    D3DFCI_SINT = (-1),")
+cpp_quote("    D3DFCI_UINT = 1,")
+cpp_quote("    D3DFCI_UNORM_SRGB = 2,")
+cpp_quote("    D3DFCI_BIASED_FIXED_2_8 = 3,")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("enum D3D_FORMAT_COMPONENT_NAME")
+cpp_quote("{")
+cpp_quote("    D3DFCN_R = (-4),")
+cpp_quote("    D3DFCN_G = (-3),")
+cpp_quote("    D3DFCN_B = (-2),")
+cpp_quote("    D3DFCN_A = (-1),")
+cpp_quote("    D3DFCN_D = 0,")
+cpp_quote("    D3DFCN_S = 1,")
+cpp_quote("    D3DFCN_X = 2,")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("enum D3D_FORMAT_LAYOUT")
+cpp_quote("{")
+cpp_quote("    D3DFL_STANDARD = 0,")
+cpp_quote("    D3DFL_CUSTOM = (-1),")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("enum D3D_FORMAT_TYPE_LEVEL")
+cpp_quote("{")
+cpp_quote("    D3DFTL_NO_TYPE = 0,")
+cpp_quote("    D3DFTL_PARTIAL_TYPE = (-2),")
+cpp_quote("    D3DFTL_FULL_TYPE = (-1),")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("struct ID3D10BlobVtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ID3D10Blob *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ID3D10Blob *);")
+cpp_quote("    ULONG (WINAPI *Release)(ID3D10Blob *);")
+cpp_quote("    LPVOID (WINAPI *GetBufferPointer)(ID3D10Blob *);")
+cpp_quote("    SIZE_T (WINAPI *GetBufferSize)(ID3D10Blob *);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("struct ID3DDestructionNotifierVtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ID3DDestructionNotifier *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ID3DDestructionNotifier *);")
+cpp_quote("    ULONG (WINAPI *Release)(ID3DDestructionNotifier *);")
+cpp_quote("    HRESULT (WINAPI *RegisterDestructionCallback)(ID3DDestructionNotifier *, PFN_DESTRUCTION_CALLBACK, void *, UINT *);")
+cpp_quote("    HRESULT (WINAPI *UnregisterDestructionCallback)(ID3DDestructionNotifier *, UINT);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("typedef struct ID3DIncludeVtbl ID3DIncludeVtbl;")
+
+cpp_quote("#define D3D_SET_OBJECT_NAME_ApObject, pName) D3D_SET_OBJECT_NAME_N_A(pObject, lstrlenA(pName), pName)")
+cpp_quote("")
+cpp_quote("enum _D3D_CBUFFER_TYPE")
+cpp_quote("{")
+cpp_quote("")
+cpp_quote("};")
+
+cpp_quote("#define D3D_SET_OBJECT_NAME_ApObject, pName) D3D_SET_OBJECT_NAME_N_A(pObject, lstrlenA(pName), pName)")
+

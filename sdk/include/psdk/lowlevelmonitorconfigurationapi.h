@@ -42,4 +42,30 @@ typedef enum _MC_VCP_CODE_TYPE
 }
 #endif
 
+#define LowLevelMonitorConfigurationAPI_h 0
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+_BOOL WINAPI CapabilitiesRequestAndCapabilitiesReply(HANDLE hMonitor, LPSTR pszASCIICapabilitiesString, DWORD dwCapabilitiesStringLengthInCharacters);
+_BOOL WINAPI GetCapabilitiesStringLength(HANDLE hMonitor, LPDWORD pdwCapabilitiesStringLengthInCharacters);
+_BOOL WINAPI GetTimingReport(HANDLE hMonitor, LPMC_TIMING_REPORT pmtrMonitorTimingReport);
+_BOOL WINAPI GetVCPFeatureAndVCPFeatureReply(HANDLE hMonitor, BYTE bVCPCode, LPMC_VCP_CODE_TYPE pvct, LPDWORD pdwCurrentValue, LPDWORD pdwMaximumValue);
+_BOOL WINAPI SetVCPFeature(HANDLE hMonitor, BYTE bVCPCode, DWORD dwNewValue);
+
+#ifdef __cplusplus
+}
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+_BOOL WINAPI SaveCurrentSettings(HANDLE hMonitor);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* __WINE_LOWLEVELMONITORCONFIGURATIONAPI_H */

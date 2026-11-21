@@ -194,6 +194,12 @@ DWORD WINAPI RestoreMediaSense(OVERLAPPED * pOverlapped, LPDWORD lpdwEnableCount
 }
 #endif
 
+typedef struct _INTERFACE_HARDWARE_CROSSTIMESTAMP {
+  ULONG64 SystemTimestamp1;
+  ULONG64 HardwareClockTimestamp;
+  ULONG64 SystemTimestamp2;
+} INTERFACE_HARDWARE_CROSSTIMESTAMP, *PINTERFACE_HARDWARE_CROSSTIMESTAMP;
+
 typedef struct _INTERFACE_HARDWARE_TIMESTAMP_CAPABILITIES {
   BOOLEAN PtpV2OverUdpIPv4EventMessageReceive;
   BOOLEAN PtpV2OverUdpIPv4AllMessageReceive;
@@ -221,14 +227,46 @@ typedef struct _INTERFACE_TIMESTAMP_CAPABILITIES {
   INTERFACE_SOFTWARE_TIMESTAMP_CAPABILITIES SoftwareCapabilities;
 } INTERFACE_TIMESTAMP_CAPABILITIES, *PINTERFACE_TIMESTAMP_CAPABILITIES;
 
-typedef struct _INTERFACE_HARDWARE_CROSSTIMESTAMP {
-  ULONG64 SystemTimestamp1;
-  ULONG64 HardwareClockTimestamp;
-  ULONG64 SystemTimestamp2;
-} INTERFACE_HARDWARE_CROSSTIMESTAMP, *PINTERFACE_HARDWARE_CROSSTIMESTAMP;
-
 typedef struct HIFTIMESTAMPCHANGE__ {
   int unused;
 } *HIFTIMESTAMPCHANGE;
+
+typedef void WINAPI INTERFACE_TIMESTAMP_CONFIG_CHANGE_CALLBACK(PVOID);
+
+typedef INTERFACE_TIMESTAMP_CONFIG_CHANGE_CALLBACK *PINTERFACE_TIMESTAMP_CONFIG_CHANGE_CALLBACK;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+DWORD WINAPI DisableMediaSense(HANDLE *pHandle, OVERLAPPED *pOverLapped);
+ULONG WINAPI GetTcpTable2(PMIB_TCPTABLE2 TcpTable, PULONG SizePointer, BOOL Order);
+
+/* TODO: LiberNT does not implement the functions below yet */
+void CancelIfTimestampConfigChange(HIFTIMESTAMPCHANGE NotificationHandle);
+DWORD CaptureInterfaceHardwareCrossTimestamp(const NET_LUID *InterfaceLuid, PINTERFACE_HARDWARE_CROSSTIMESTAMP CrossTimestamp);
+ULONG CreatePersistentTcpPortReservation(USHORT StartPort, USHORT NumberOfPorts, PULONG64 Token);
+ULONG CreatePersistentUdpPortReservation(USHORT StartPort, USHORT NumberOfPorts, PULONG64 Token);
+ULONG DeletePersistentTcpPortReservation(USHORT StartPort, USHORT NumberOfPorts);
+ULONG DeletePersistentUdpPortReservation(USHORT StartPort, USHORT NumberOfPorts);
+PIP_ADAPTER_ORDER_MAP GetAdapterOrderMap(void);
+DWORD GetInterfaceActiveTimestampCapabilities(const NET_LUID *InterfaceLuid, PINTERFACE_TIMESTAMP_CAPABILITIES TimestampCapabilites);
+DWORD GetInterfaceCurrentTimestampCapabilities(const NET_LUID *InterfaceLuid, PINTERFACE_TIMESTAMP_CAPABILITIES TimestampCapabilites);
+DWORD GetInterfaceHardwareTimestampCapabilities(const NET_LUID *InterfaceLuid, PINTERFACE_TIMESTAMP_CAPABILITIES TimestampCapabilites);
+DWORD GetInterfaceSupportedTimestampCapabilities(const NET_LUID *InterfaceLuid, PINTERFACE_TIMESTAMP_CAPABILITIES TimestampCapabilites);
+DWORD GetIpErrorString(IP_STATUS ErrorCode, PWSTR Buffer, PDWORD Size);
+DWORD GetOwnerModuleFromPidAndInfo(ULONG ulPid, ULONGLONG *pInfo, TCPIP_OWNER_MODULE_INFO_CLASS Class, PVOID pBuffer, PDWORD pdwSize);
+ULONG GetTcpStatisticsEx2(PMIB_TCPSTATS2 Statistics, ULONG Family);
+ULONG GetUdpStatisticsEx2(PMIB_UDPSTATS2 Statistics, ULONG Family);
+ULONG LookupPersistentTcpPortReservation(USHORT StartPort, USHORT NumberOfPorts, PULONG64 Token);
+ULONG LookupPersistentUdpPortReservation(USHORT StartPort, USHORT NumberOfPorts, PULONG64 Token);
+DWORD NotifyIfTimestampConfigChange(PVOID CallerContext, PINTERFACE_TIMESTAMP_CONFIG_CHANGE_CALLBACK Callback, HIFTIMESTAMPCHANGE *NotificationHandle);
+DWORD RegisterInterfaceTimestampConfigChange(PINTERFACE_TIMESTAMP_CONFIG_CHANGE_CALLBACK Callback, PVOID CallerContext, HIFTIMESTAMPCHANGE *NotificationHandle);
+ULONG SetIpStatisticsEx(PMIB_IPSTATS Statistics, ULONG Family);
+void UnregisterInterfaceTimestampConfigChange(HIFTIMESTAMPCHANGE NotificationHandle);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* WINE_IPHLPAPI_H__ */

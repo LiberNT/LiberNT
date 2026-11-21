@@ -271,4 +271,101 @@ typedef struct tagPOINTS {
 #define APP_LOCAL_DEVICE_ID_SIZE 32
 #endif
 
+#define _DPI_AWARENESS_CONTEXTS_ 0
+
+struct DPI_AWARENESS_CONTEXT__
+{
+    int unused;
+};
+
+struct HACCEL__
+{
+    int unused;
+};
+
+struct HBITMAP__
+{
+    int unused;
+};
+
+struct HBRUSH__
+{
+    int unused;
+};
+
+struct HCOLORSPACE__
+{
+    int unused;
+};
+
+struct HDC__
+{
+    int unused;
+};
+
+struct HDESK__
+{
+    int unused;
+};
+
+struct HENHMETAFILE__
+{
+    int unused;
+};
+
+struct HFONT__
+{
+    int unused;
+};
+
+struct HGLRC__
+{
+    int unused;
+};
+
+struct HHOOK__
+{
+    int unused;
+};
+
+struct HICON__
+{
+    int unused;
+};
+
+struct HMENU__
+{
+    int unused;
+};
+
+struct HMONITOR__
+{
+    int unused;
+};
+
+struct HPALETTE__
+{
+    int unused;
+};
+
+struct HPEN__
+{
+    int unused;
+};
+
+struct HUMPD__
+{
+    int unused;
+};
+
+struct HWINEVENTHOOK__
+{
+    int unused;
+};
+
+struct HWND__
+{
+    int unused;
+};
+
 #endif /* _WINDEF_ */

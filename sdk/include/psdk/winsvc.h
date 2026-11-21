@@ -800,34 +800,110 @@ typedef enum SERVICE_DIRECTORY_TYPE {
     ServiceDirectoryTypeMax = 1
 } SERVICE_DIRECTORY_TYPE;
 
-typedef enum SERVICE_SHARED_REGISTRY_STATE_TYPE {
-    ServiceSharedRegistryPersistentState = 0
-} SERVICE_SHARED_REGISTRY_STATE_TYPE;
-
 typedef enum SERVICE_SHARED_DIRECTORY_TYPE {
     ServiceSharedDirectoryPersistentState = 0
 } SERVICE_SHARED_DIRECTORY_TYPE;
 
-typedef struct SERVICE_TRIGGER_CUSTOM_STATE_ID {
-  DWORD Data[2];
-} SERVICE_TRIGGER_CUSTOM_STATE_ID;
+typedef enum SERVICE_SHARED_REGISTRY_STATE_TYPE {
+    ServiceSharedRegistryPersistentState = 0
+} SERVICE_SHARED_REGISTRY_STATE_TYPE;
+
+typedef struct _SERVICE_LAUNCH_PROTECTED_INFO {
+  DWORD dwLaunchProtected;
+} SERVICE_LAUNCH_PROTECTED_INFO, *PSERVICE_LAUNCH_PROTECTED_INFO;
 
 typedef struct _SERVICE_PREFERRED_NODE_INFO {
   USHORT usPreferredNode;
   BOOLEAN fDelete;
 } SERVICE_PREFERRED_NODE_INFO, *LPSERVICE_PREFERRED_NODE_INFO;
 
+typedef struct _SERVICE_START_REASON {
+  DWORD dwReason;
+} SERVICE_START_REASON, *PSERVICE_START_REASON;
+
 typedef struct _SERVICE_TIMECHANGE_INFO {
   LARGE_INTEGER liNewTime;
   LARGE_INTEGER liOldTime;
 } SERVICE_TIMECHANGE_INFO, *PSERVICE_TIMECHANGE_INFO;
 
-typedef struct _SERVICE_LAUNCH_PROTECTED_INFO {
-  DWORD dwLaunchProtected;
-} SERVICE_LAUNCH_PROTECTED_INFO, *PSERVICE_LAUNCH_PROTECTED_INFO;
+typedef struct SERVICE_TRIGGER_CUSTOM_STATE_ID {
+  DWORD Data[2];
+} SERVICE_TRIGGER_CUSTOM_STATE_ID;
 
-typedef struct _SERVICE_START_REASON {
-  DWORD dwReason;
-} SERVICE_START_REASON, *PSERVICE_START_REASON;
+#define SC_AGGREGATE_STORAGE_KEY L"System\\CurrentControlSet\\Control\\ServiceAggregatedEvents"
+#ifdef UNICODE
+#define SERVICE_MAIN_FUNCTION SERVICE_MAIN_FUNCTIONW
+#else
+#define SERVICE_MAIN_FUNCTION SERVICE_MAIN_FUNCTIONA
+#endif
+#define SERVICE_SID_TYPE_RESTRICTED 3
+
+struct _SERVICE_CUSTOM_SYSTEM_STATE_CHANGE_DATA_ITEM
+{
+    union
+    {
+        SERVICE_TRIGGER_CUSTOM_STATE_ID CustomStateId;
+        struct
+        {
+            DWORD DataOffset;
+            BYTE Data[1];
+        } s;
+    } u;
+};
+
+typedef void WINAPI HANDLER_FUNCTION(DWORD);
+
+typedef DWORD WINAPI HANDLER_FUNCTION_EX(DWORD, DWORD, LPVOID, LPVOID);
+
+typedef struct _SERVICE_CUSTOM_SYSTEM_STATE_CHANGE_DATA_ITEM *LPSERVICE_CUSTOM_SYSTEM_STATE_CHANGE_DATA_ITEM;
+
+struct SC_HANDLE__
+{
+    int unused;
+};
+
+typedef void WINAPI SC_NOTIFICATION_CALLBACK(DWORD, PVOID);
+
+typedef SC_NOTIFICATION_CALLBACK *PSC_NOTIFICATION_CALLBACK;
+
+typedef struct _SERVICE_CUSTOM_SYSTEM_STATE_CHANGE_DATA_ITEM SERVICE_CUSTOM_SYSTEM_STATE_CHANGE_DATA_ITEM;
+
+typedef void WINAPI SERVICE_MAIN_FUNCTIONA(DWORD, LPTSTR *);
+
+typedef void WINAPI SERVICE_MAIN_FUNCTIONW(DWORD, LPWSTR *);
+
+struct SERVICE_STATUS_HANDLE__
+{
+    int unused;
+};
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+DWORD WINAPI GetServiceDirectory(SERVICE_STATUS_HANDLE hServiceStatus, SERVICE_DIRECTORY_TYPE eDirectoryType, PWCHAR lpPathBuffer, DWORD cchPathBufferLength, DWORD *lpcchRequiredBufferLength);
+DWORD WINAPI GetSharedServiceDirectory(SC_HANDLE ServiceHandle, SERVICE_SHARED_DIRECTORY_TYPE DirectoryType, PWCHAR PathBuffer, DWORD PathBufferLength, DWORD *RequiredBufferLength);
+DWORD WINAPI GetSharedServiceRegistryStateKey(SC_HANDLE ServiceHandle, SERVICE_SHARED_REGISTRY_STATE_TYPE StateType, DWORD AccessMask, HKEY *ServiceStateKey);
+BOOL QueryServiceDynamicInformation(SERVICE_STATUS_HANDLE hServiceStatus, DWORD dwInfoLevel, PVOID *ppDynamicInfo);
+DWORD WaitServiceState(SC_HANDLE hService, DWORD dwNotify, DWORD dwTimeout, HANDLE hCancelEvent);
+
+#ifdef __cplusplus
+}
+#endif
+
+typedef struct _SC_NOTIFICATION_REGISTRATION *PSC_NOTIFICATION_REGISTRATION;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+DWORD SubscribeServiceChangeNotifications(SC_HANDLE hService, SC_EVENT_TYPE eEventType, PSC_NOTIFICATION_CALLBACK pCallback, PVOID pCallbackContext, PSC_NOTIFICATION_REGISTRATION *pSubscription);
+void UnsubscribeServiceChangeNotifications(PSC_NOTIFICATION_REGISTRATION pSubscription);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _WINSVC_H */

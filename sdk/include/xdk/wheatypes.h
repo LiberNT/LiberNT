@@ -179,7 +179,8 @@ typedef enum _WHEA_ERROR_TYPE {
     WheaErrTypeNMI,
     WheaErrTypePCIXBus,
     WheaErrTypePCIXDevice,
-    WheaErrTypeGeneric
+    WheaErrTypeGeneric,
+    WheaErrTypePmem = 7,
 } WHEA_ERROR_TYPE, *PWHEA_ERROR_TYPE;
 
 #pragma pack(pop)

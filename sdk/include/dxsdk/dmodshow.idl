@@ -16,3 +16,10 @@ interface IDMOWrapperFilter : IUnknown
     HRESULT Init(REFCLSID clsidDMO, REFCLSID catDMO);
 }
 
+cpp_quote("struct IDMOWrapperFilterVtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(IDMOWrapperFilter *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(IDMOWrapperFilter *);")
+cpp_quote("    ULONG (WINAPI *Release)(IDMOWrapperFilter *);")
+cpp_quote("    HRESULT (WINAPI *Init)(IDMOWrapperFilter *, const IID *const , const IID *const );")
+cpp_quote("};")

@@ -161,6 +161,25 @@ DiUninstallDevice(
 
 #ifndef DIIRFLAG_INSTALL_AS_SET
 #define DIIRFLAG_INSTALL_AS_SET 0x00000040
+
+#define _INC_NEWDEV 0
+#define DiUninstallDriver 0
+#define DIURFLAG_NO_REMOVE_INF (0x00000001)
+#define DIURFLAG_VALID 3
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL WINAPI DiShowUpdateDriver(HWND hwndParent, PCWSTR FilePath, DWORD Flags, PBOOL NeedReboot);
+BOOL WINAPI DiUninstallDriverA(HWND hwndParent, LPCSTR InfPath, DWORD Flags, PBOOL NeedReboot);
+BOOL WINAPI DiUninstallDriverW(HWND hwndParent, LPCWSTR InfPath, DWORD Flags, PBOOL NeedReboot);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif
 #ifndef DIIRFLAG_PRE_CONFIGURE_INF
 #define DIIRFLAG_PRE_CONFIGURE_INF 0x00000020

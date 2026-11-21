@@ -2699,4 +2699,269 @@ typedef struct tagCapInfoChunk {
   LONG cbData;
 } CAPINFOCHUNK, *PCAPINFOCHUNK, *LPCAPINFOCHUNK;
 
+#define _INC_VFW 0
+#define AVIFILEHANDLER_CANREAD 0x0001
+#define AVIStreamDataSizepavi, fcc, plSize) AVIStreamReadData(pavi, fcc, NULL, plSize)
+#define AVIStreamExit AVIFileExit
+#define AVIStreamFindKeyFrame 0
+#define AVIStreamInit AVIFileInit
+#define AVIStreamNearestKeyFrameTimepavi, t) AVIStreamSampleToTime(pavi, AVIStreamNearestKeyFrame(pavi, AVIStreamTimeToSample(pavi, t)))
+#define AVIStreamNearestSampleTimepavi, t) AVIStreamSampleToTime(pavi, AVIStreamNearestSample(pavi, AVIStreamTimeToSample(pavi, t)))
+#define AVIStreamNextKeyFramepavi, l) AVIStreamFindSample(pavi, l + 1, FIND_NEXT | FIND_KEY)
+#define AVIStreamNextKeyFrameTimepavi, t) AVIStreamSampleToTime(pavi, AVIStreamNextKeyFrame(pavi, AVIStreamTimeToSample(pavi, t)))
+#define AVIStreamNextSampleTimepavi, t) AVIStreamSampleToTime(pavi, AVIStreamNextSample(pavi, AVIStreamTimeToSample(pavi, t)))
+#define AVIStreamPrevKeyFramepavi, l) AVIStreamFindSample(pavi, l - 1, FIND_PREV | FIND_KEY)
+#define AVIStreamPrevKeyFrameTimepavi, t) AVIStreamSampleToTime(pavi, AVIStreamPrevKeyFrame(pavi, AVIStreamTimeToSample(pavi, t)))
+#define AVIStreamPrevSampleTimepavi, t) AVIStreamSampleToTime(pavi, AVIStreamPrevSample(pavi, AVIStreamTimeToSample(pavi, t)))
+#define capCaptureAborthwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_ABORT, (WPARAM) 0, (LPARAM) 0L))
+#define capCaptureGetSetuphwnd, s, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_GET_SEQUENCE_SETUP, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPCAPTUREPARMS) (s)))
+#define capCaptureSequencehwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_SEQUENCE, (WPARAM) 0, (LPARAM) 0L))
+#define capCaptureSequenceNoFilehwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_SEQUENCE_NOFILE, (WPARAM) 0, (LPARAM) 0L))
+#define capCaptureSetSetuphwnd, s, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_SEQUENCE_SETUP, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPCAPTUREPARMS) (s)))
+#define capCaptureSingleFramehwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_SINGLE_FRAME, (WPARAM) 0, (LPARAM) 0L))
+#define capCaptureSingleFrameClosehwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_SINGLE_FRAME_CLOSE, (WPARAM) 0, (LPARAM) 0L))
+#define capCaptureSingleFrameOpenhwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_SINGLE_FRAME_OPEN, (WPARAM) 0, (LPARAM) 0L))
+#define capCaptureStophwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_STOP, (WPARAM) 0, (LPARAM) 0L))
+#define capDlgVideoCompressionhwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_DLG_VIDEOCOMPRESSION, 0, 0L))
+#define capDlgVideoDisplayhwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_DLG_VIDEODISPLAY, 0, 0L))
+#define capDlgVideoFormathwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_DLG_VIDEOFORMAT, 0, 0L))
+#define capDlgVideoSourcehwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_DLG_VIDEOSOURCE, 0, 0L))
+#define capDriverConnecthwnd, i) ((BOOL) AVICapSM(hwnd, WM_CAP_DRIVER_CONNECT, (WPARAM) (i), 0L))
+#define capDriverDisconnecthwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_DRIVER_DISCONNECT, (WPARAM) 0, 0L))
+#define capDriverGetCapshwnd, s, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_DRIVER_GET_CAPS, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPCAPDRIVERCAPS) (s)))
+#define capDriverGetNamehwnd, szName, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_DRIVER_GET_NAME, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capDriverGetVersionhwnd, szVer, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_DRIVER_GET_VERSION, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPTSTR) (szVer)))
+#define capEditCopyhwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_EDIT_COPY, 0, 0L))
+#ifdef UNICODE
+#define CAPERRORCALLBACK CAPERRORCALLBACKW
+#else
+#define CAPERRORCALLBACK CAPERRORCALLBACKA
+#endif
+#define capFileAllochwnd, dwSize) ((BOOL) AVICapSM(hwnd, WM_CAP_FILE_ALLOCATE, 0, (LPARAM) (DWORD) (dwSize)))
+#define capFileGetCaptureFilehwnd, szName, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_FILE_GET_CAPTURE_FILE, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capFileSaveAshwnd, szName) ((BOOL) AVICapSM(hwnd, WM_CAP_FILE_SAVEAS, 0, (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capFileSaveDIBhwnd, szName) ((BOOL) AVICapSM(hwnd, WM_CAP_FILE_SAVEDIB, 0, (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capFileSetCaptureFilehwnd, szName) ((BOOL) AVICapSM(hwnd, WM_CAP_FILE_SET_CAPTURE_FILE, 0, (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capFileSetInfoChunkhwnd, lpInfoChunk) ((BOOL) AVICapSM(hwnd, WM_CAP_FILE_SET_INFOCHUNK, (WPARAM) 0, (LPARAM) (LPCAPINFOCHUNK) (lpInfoChunk)))
+#define capGetAudioFormathwnd, s, wSize) ((DWORD) AVICapSM(hwnd, WM_CAP_GET_AUDIOFORMAT, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPWAVEFORMATEX) (s)))
+#define capGetAudioFormatSizehwnd) ((DWORD) AVICapSM(hwnd, WM_CAP_GET_AUDIOFORMAT, (WPARAM) 0, (LPARAM) 0L))
+#define capGetMCIDeviceNamehwnd, szName, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_GET_MCI_DEVICE, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capGetStatushwnd, s, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_GET_STATUS, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPCAPSTATUS) (s)))
+#define capGetUserDatahwnd) (AVICapSM(hwnd, WM_CAP_GET_USER_DATA, 0, 0))
+#define capGetVideoFormathwnd, s, wSize) ((DWORD) AVICapSM(hwnd, WM_CAP_GET_VIDEOFORMAT, (WPARAM) (wSize), (LPARAM) (LPVOID) (s)))
+#define capGetVideoFormatSizehwnd) ((DWORD) AVICapSM(hwnd, WM_CAP_GET_VIDEOFORMAT, 0, 0L))
+#define capGrabFramehwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_GRAB_FRAME, (WPARAM) 0, (LPARAM) 0L))
+#define capGrabFrameNoStophwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_GRAB_FRAME_NOSTOP, (WPARAM) 0, (LPARAM) 0L))
+#define capOverlayhwnd, f) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_OVERLAY, (WPARAM) (BOOL) (f), 0L))
+#define capPaletteAutohwnd, iFrames, iColors) ((BOOL) AVICapSM(hwnd, WM_CAP_PAL_AUTOCREATE, (WPARAM) (iFrames), (LPARAM) (DWORD) (iColors)))
+#define capPaletteManualhwnd, fGrab, iColors) ((BOOL) AVICapSM(hwnd, WM_CAP_PAL_MANUALCREATE, (WPARAM) (fGrab), (LPARAM) (DWORD) (iColors)))
+#define capPaletteOpenhwnd, szName) ((BOOL) AVICapSM(hwnd, WM_CAP_PAL_OPEN, 0, (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capPalettePastehwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_PAL_PASTE, (WPARAM) 0, (LPARAM) 0L))
+#define capPaletteSavehwnd, szName) ((BOOL) AVICapSM(hwnd, WM_CAP_PAL_SAVE, 0, (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capPreviewhwnd, f) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_PREVIEW, (WPARAM) (BOOL) (f), 0L))
+#define capPreviewRatehwnd, wMS) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_PREVIEWRATE, (WPARAM) (wMS), 0))
+#define capPreviewScalehwnd, f) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_SCALE, (WPARAM) (BOOL) f, 0L))
+#define capSetAudioFormathwnd, s, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_AUDIOFORMAT, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPWAVEFORMATEX) (s)))
+#define capSetCallbackOnCapControlhwnd, fpProc) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_CALLBACK_CAPCONTROL, 0, (LPARAM) (LPVOID) (fpProc)))
+#define capSetCallbackOnErrorhwnd, fpProc) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_CALLBACK_ERROR, 0, (LPARAM) (LPVOID) (fpProc)))
+#define capSetCallbackOnFramehwnd, fpProc) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_CALLBACK_FRAME, 0, (LPARAM) (LPVOID) (fpProc)))
+#define capSetCallbackOnStatushwnd, fpProc) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_CALLBACK_STATUS, 0, (LPARAM) (LPVOID) (fpProc)))
+#define capSetCallbackOnVideoStreamhwnd, fpProc) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_CALLBACK_VIDEOSTREAM, 0, (LPARAM) (LPVOID) (fpProc)))
+#define capSetCallbackOnWaveStreamhwnd, fpProc) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_CALLBACK_WAVESTREAM, 0, (LPARAM) (LPVOID) (fpProc)))
+#define capSetCallbackOnYieldhwnd, fpProc) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_CALLBACK_YIELD, 0, (LPARAM) (LPVOID) (fpProc)))
+#define capSetMCIDeviceNamehwnd, szName) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_MCI_DEVICE, 0, (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capSetScrollPoshwnd, lpP) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_SCROLL, (WPARAM) 0, (LPARAM) (LPPOINT) (lpP)))
+#define capSetUserDatahwnd, lUser) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_USER_DATA, 0, (LPARAM) lUser))
+#define capSetVideoFormathwnd, s, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_VIDEOFORMAT, (WPARAM) (wSize), (LPARAM) (LPVOID) (s)))
+#define CAPSTATUSCALLBACK 0
+#define CONTROLCALLBACK_PREROLL 1
+#define FindKeyFrame FindSample
+#define ICM_COMPRESS_FRAMES 0x4047
+#define ICM_DRAW_BITS 0x4014
+#define ICM_DRAW_IDLE 0x4034
+#define ICM_DRAW_UPDATE 0x4011
+#define ICM_ENUMFORMATS 0x5015
+#define ICM_GETERRORTEXT 0x500C
+#define ICM_GETFORMATNAME 0x5014
+#define IDS_CAP_BEGIN 0x12C
+#define infotypeDIGITIZATION_TIME mmioFOURCC('I', 'D', 'I', 'T')
+#define infotypeSMPTE_TIME 0x504D5349
+#define MCIWND_WINDOW_CLASS TEXT("MCIWndClass")
+#define MKFOURCCch0, ch1, ch2, ch3) ((DWORD) (BYTE) (ch0) | ((DWORD) (BYTE) (ch1) << 8) | ((DWORD) (BYTE) (ch2) << 16) | ((DWORD) (BYTE) (ch3) << 24))
+#define SEARCH_ANY 0x20
+#define SEARCH_BACKWARD 4
+#define SEARCH_FORWARD 1
+#define SEARCH_KEY 0x10
+#define SEARCH_NEAREST FIND_PREV
+#define VFWAPI_INLINE WINAPI_INLINE
+
+struct HIC__
+{
+    int unused;
+};
+
+struct HVIDEO__
+{
+    int unused;
+};
+
+typedef struct IAVIEditStreamVtbl IAVIEditStreamVtbl;
+
+typedef struct IAVIFileVtbl IAVIFileVtbl;
+
+typedef struct IAVIPersistFileVtbl IAVIPersistFileVtbl;
+
+struct IAVIPersistFile
+{
+    struct IAVIPersistFileVtbl *lpVtbl;
+};
+
+typedef struct IAVIStreamingVtbl IAVIStreamingVtbl;
+
+typedef struct IAVIStreamVtbl IAVIStreamVtbl;
+
+typedef struct IGetFrameVtbl IGetFrameVtbl;
+
+typedef IAVIPersistFile *PAVIPERSISTFILE;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+UINT DrawDibError(HDRAWDIB hdd);
+BOOL DrawDibInit(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define AVIStreamDataSizepavi, fcc, plSize) AVIStreamReadData(pavi, fcc, NULL, plSize)
+#define AVIStreamNearestKeyFrameTimepavi, t) AVIStreamSampleToTime(pavi, AVIStreamNearestKeyFrame(pavi, AVIStreamTimeToSample(pavi, t)))
+#define AVIStreamNearestSampleTimepavi, t) AVIStreamSampleToTime(pavi, AVIStreamNearestSample(pavi, AVIStreamTimeToSample(pavi, t)))
+#define AVIStreamNextKeyFrameTimepavi, t) AVIStreamSampleToTime(pavi, AVIStreamNextKeyFrame(pavi, AVIStreamTimeToSample(pavi, t)))
+#define AVIStreamNextSampleTimepavi, t) AVIStreamSampleToTime(pavi, AVIStreamNextSample(pavi, AVIStreamTimeToSample(pavi, t)))
+#define AVIStreamPrevKeyFrameTimepavi, t) AVIStreamSampleToTime(pavi, AVIStreamPrevKeyFrame(pavi, AVIStreamTimeToSample(pavi, t)))
+#define AVIStreamPrevSampleTimepavi, t) AVIStreamSampleToTime(pavi, AVIStreamPrevSample(pavi, AVIStreamTimeToSample(pavi, t)))
+#define capCaptureAborthwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_ABORT, (WPARAM) 0, (LPARAM) 0L))
+#define capCaptureGetSetuphwnd, s, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_GET_SEQUENCE_SETUP, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPCAPTUREPARMS) (s)))
+#define capCaptureSequencehwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_SEQUENCE, (WPARAM) 0, (LPARAM) 0L))
+#define capCaptureSequenceNoFilehwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_SEQUENCE_NOFILE, (WPARAM) 0, (LPARAM) 0L))
+#define capCaptureSetSetuphwnd, s, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_SEQUENCE_SETUP, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPCAPTUREPARMS) (s)))
+#define capCaptureSingleFramehwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_SINGLE_FRAME, (WPARAM) 0, (LPARAM) 0L))
+#define capCaptureSingleFrameClosehwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_SINGLE_FRAME_CLOSE, (WPARAM) 0, (LPARAM) 0L))
+#define capCaptureSingleFrameOpenhwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_SINGLE_FRAME_OPEN, (WPARAM) 0, (LPARAM) 0L))
+#define capCaptureStophwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_STOP, (WPARAM) 0, (LPARAM) 0L))
+#define capDlgVideoCompressionhwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_DLG_VIDEOCOMPRESSION, 0, 0L))
+#define capDlgVideoDisplayhwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_DLG_VIDEODISPLAY, 0, 0L))
+#define capDlgVideoFormathwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_DLG_VIDEOFORMAT, 0, 0L))
+#define capDlgVideoSourcehwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_DLG_VIDEOSOURCE, 0, 0L))
+#define capDriverConnecthwnd, i) ((BOOL) AVICapSM(hwnd, WM_CAP_DRIVER_CONNECT, (WPARAM) (i), 0L))
+#define capDriverDisconnecthwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_DRIVER_DISCONNECT, (WPARAM) 0, 0L))
+#define capDriverGetCapshwnd, s, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_DRIVER_GET_CAPS, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPCAPDRIVERCAPS) (s)))
+#define capDriverGetNamehwnd, szName, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_DRIVER_GET_NAME, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capDriverGetVersionhwnd, szVer, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_DRIVER_GET_VERSION, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPTSTR) (szVer)))
+#define capEditCopyhwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_EDIT_COPY, 0, 0L))
+#define capFileAllochwnd, dwSize) ((BOOL) AVICapSM(hwnd, WM_CAP_FILE_ALLOCATE, 0, (LPARAM) (DWORD) (dwSize)))
+#define capFileGetCaptureFilehwnd, szName, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_FILE_GET_CAPTURE_FILE, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capFileSaveAshwnd, szName) ((BOOL) AVICapSM(hwnd, WM_CAP_FILE_SAVEAS, 0, (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capFileSaveDIBhwnd, szName) ((BOOL) AVICapSM(hwnd, WM_CAP_FILE_SAVEDIB, 0, (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capFileSetCaptureFilehwnd, szName) ((BOOL) AVICapSM(hwnd, WM_CAP_FILE_SET_CAPTURE_FILE, 0, (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capFileSetInfoChunkhwnd, lpInfoChunk) ((BOOL) AVICapSM(hwnd, WM_CAP_FILE_SET_INFOCHUNK, (WPARAM) 0, (LPARAM) (LPCAPINFOCHUNK) (lpInfoChunk)))
+#define capGetAudioFormathwnd, s, wSize) ((DWORD) AVICapSM(hwnd, WM_CAP_GET_AUDIOFORMAT, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPWAVEFORMATEX) (s)))
+#define capGetAudioFormatSizehwnd) ((DWORD) AVICapSM(hwnd, WM_CAP_GET_AUDIOFORMAT, (WPARAM) 0, (LPARAM) 0L))
+#define capGetMCIDeviceNamehwnd, szName, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_GET_MCI_DEVICE, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capGetStatushwnd, s, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_GET_STATUS, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPCAPSTATUS) (s)))
+#define capGetUserDatahwnd) (AVICapSM(hwnd, WM_CAP_GET_USER_DATA, 0, 0))
+#define capGetVideoFormathwnd, s, wSize) ((DWORD) AVICapSM(hwnd, WM_CAP_GET_VIDEOFORMAT, (WPARAM) (wSize), (LPARAM) (LPVOID) (s)))
+#define capGetVideoFormatSizehwnd) ((DWORD) AVICapSM(hwnd, WM_CAP_GET_VIDEOFORMAT, 0, 0L))
+#define capGrabFramehwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_GRAB_FRAME, (WPARAM) 0, (LPARAM) 0L))
+#define capGrabFrameNoStophwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_GRAB_FRAME_NOSTOP, (WPARAM) 0, (LPARAM) 0L))
+#define capOverlayhwnd, f) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_OVERLAY, (WPARAM) (BOOL) (f), 0L))
+#define capPaletteAutohwnd, iFrames, iColors) ((BOOL) AVICapSM(hwnd, WM_CAP_PAL_AUTOCREATE, (WPARAM) (iFrames), (LPARAM) (DWORD) (iColors)))
+#define capPaletteManualhwnd, fGrab, iColors) ((BOOL) AVICapSM(hwnd, WM_CAP_PAL_MANUALCREATE, (WPARAM) (fGrab), (LPARAM) (DWORD) (iColors)))
+#define capPaletteOpenhwnd, szName) ((BOOL) AVICapSM(hwnd, WM_CAP_PAL_OPEN, 0, (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capPalettePastehwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_PAL_PASTE, (WPARAM) 0, (LPARAM) 0L))
+#define capPaletteSavehwnd, szName) ((BOOL) AVICapSM(hwnd, WM_CAP_PAL_SAVE, 0, (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capPreviewhwnd, f) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_PREVIEW, (WPARAM) (BOOL) (f), 0L))
+#define capPreviewRatehwnd, wMS) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_PREVIEWRATE, (WPARAM) (wMS), 0))
+#define capPreviewScalehwnd, f) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_SCALE, (WPARAM) (BOOL) f, 0L))
+#define capSetAudioFormathwnd, s, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_AUDIOFORMAT, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPWAVEFORMATEX) (s)))
+#define capSetCallbackOnCapControlhwnd, fpProc) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_CALLBACK_CAPCONTROL, 0, (LPARAM) (LPVOID) (fpProc)))
+#define capSetCallbackOnErrorhwnd, fpProc) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_CALLBACK_ERROR, 0, (LPARAM) (LPVOID) (fpProc)))
+#define capSetCallbackOnFramehwnd, fpProc) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_CALLBACK_FRAME, 0, (LPARAM) (LPVOID) (fpProc)))
+#define capSetCallbackOnStatushwnd, fpProc) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_CALLBACK_STATUS, 0, (LPARAM) (LPVOID) (fpProc)))
+#define capSetCallbackOnVideoStreamhwnd, fpProc) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_CALLBACK_VIDEOSTREAM, 0, (LPARAM) (LPVOID) (fpProc)))
+#define capSetCallbackOnWaveStreamhwnd, fpProc) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_CALLBACK_WAVESTREAM, 0, (LPARAM) (LPVOID) (fpProc)))
+#define capSetCallbackOnYieldhwnd, fpProc) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_CALLBACK_YIELD, 0, (LPARAM) (LPVOID) (fpProc)))
+#define capSetMCIDeviceNamehwnd, szName) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_MCI_DEVICE, 0, (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capSetScrollPoshwnd, lpP) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_SCROLL, (WPARAM) 0, (LPARAM) (LPPOINT) (lpP)))
+#define capSetUserDatahwnd, lUser) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_USER_DATA, 0, (LPARAM) lUser))
+#define capSetVideoFormathwnd, s, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_VIDEOFORMAT, (WPARAM) (wSize), (LPARAM) (LPVOID) (s)))
+#define MKFOURCCch0, ch1, ch2, ch3) ((DWORD) (BYTE) (ch0) | ((DWORD) (BYTE) (ch1) << 8) | ((DWORD) (BYTE) (ch2) << 16) | ((DWORD) (BYTE) (ch3) << 24))
+
+#define AVIStreamDataSizepavi, fcc, plSize) AVIStreamReadData(pavi, fcc, NULL, plSize)
+#define AVIStreamNearestKeyFrameTimepavi, t) AVIStreamSampleToTime(pavi, AVIStreamNearestKeyFrame(pavi, AVIStreamTimeToSample(pavi, t)))
+#define AVIStreamNearestSampleTimepavi, t) AVIStreamSampleToTime(pavi, AVIStreamNearestSample(pavi, AVIStreamTimeToSample(pavi, t)))
+#define AVIStreamNextKeyFrameTimepavi, t) AVIStreamSampleToTime(pavi, AVIStreamNextKeyFrame(pavi, AVIStreamTimeToSample(pavi, t)))
+#define AVIStreamNextSampleTimepavi, t) AVIStreamSampleToTime(pavi, AVIStreamNextSample(pavi, AVIStreamTimeToSample(pavi, t)))
+#define AVIStreamPrevKeyFrameTimepavi, t) AVIStreamSampleToTime(pavi, AVIStreamPrevKeyFrame(pavi, AVIStreamTimeToSample(pavi, t)))
+#define AVIStreamPrevSampleTimepavi, t) AVIStreamSampleToTime(pavi, AVIStreamPrevSample(pavi, AVIStreamTimeToSample(pavi, t)))
+#define capCaptureAborthwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_ABORT, (WPARAM) 0, (LPARAM) 0L))
+#define capCaptureGetSetuphwnd, s, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_GET_SEQUENCE_SETUP, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPCAPTUREPARMS) (s)))
+#define capCaptureSequencehwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_SEQUENCE, (WPARAM) 0, (LPARAM) 0L))
+#define capCaptureSequenceNoFilehwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_SEQUENCE_NOFILE, (WPARAM) 0, (LPARAM) 0L))
+#define capCaptureSetSetuphwnd, s, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_SEQUENCE_SETUP, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPCAPTUREPARMS) (s)))
+#define capCaptureSingleFramehwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_SINGLE_FRAME, (WPARAM) 0, (LPARAM) 0L))
+#define capCaptureSingleFrameClosehwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_SINGLE_FRAME_CLOSE, (WPARAM) 0, (LPARAM) 0L))
+#define capCaptureSingleFrameOpenhwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_SINGLE_FRAME_OPEN, (WPARAM) 0, (LPARAM) 0L))
+#define capCaptureStophwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_STOP, (WPARAM) 0, (LPARAM) 0L))
+#define capDlgVideoCompressionhwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_DLG_VIDEOCOMPRESSION, 0, 0L))
+#define capDlgVideoDisplayhwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_DLG_VIDEODISPLAY, 0, 0L))
+#define capDlgVideoFormathwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_DLG_VIDEOFORMAT, 0, 0L))
+#define capDlgVideoSourcehwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_DLG_VIDEOSOURCE, 0, 0L))
+#define capDriverConnecthwnd, i) ((BOOL) AVICapSM(hwnd, WM_CAP_DRIVER_CONNECT, (WPARAM) (i), 0L))
+#define capDriverDisconnecthwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_DRIVER_DISCONNECT, (WPARAM) 0, 0L))
+#define capDriverGetCapshwnd, s, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_DRIVER_GET_CAPS, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPCAPDRIVERCAPS) (s)))
+#define capDriverGetNamehwnd, szName, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_DRIVER_GET_NAME, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capDriverGetVersionhwnd, szVer, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_DRIVER_GET_VERSION, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPTSTR) (szVer)))
+#define capEditCopyhwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_EDIT_COPY, 0, 0L))
+#define capFileAllochwnd, dwSize) ((BOOL) AVICapSM(hwnd, WM_CAP_FILE_ALLOCATE, 0, (LPARAM) (DWORD) (dwSize)))
+#define capFileGetCaptureFilehwnd, szName, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_FILE_GET_CAPTURE_FILE, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capFileSaveAshwnd, szName) ((BOOL) AVICapSM(hwnd, WM_CAP_FILE_SAVEAS, 0, (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capFileSaveDIBhwnd, szName) ((BOOL) AVICapSM(hwnd, WM_CAP_FILE_SAVEDIB, 0, (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capFileSetCaptureFilehwnd, szName) ((BOOL) AVICapSM(hwnd, WM_CAP_FILE_SET_CAPTURE_FILE, 0, (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capFileSetInfoChunkhwnd, lpInfoChunk) ((BOOL) AVICapSM(hwnd, WM_CAP_FILE_SET_INFOCHUNK, (WPARAM) 0, (LPARAM) (LPCAPINFOCHUNK) (lpInfoChunk)))
+#define capGetAudioFormathwnd, s, wSize) ((DWORD) AVICapSM(hwnd, WM_CAP_GET_AUDIOFORMAT, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPWAVEFORMATEX) (s)))
+#define capGetAudioFormatSizehwnd) ((DWORD) AVICapSM(hwnd, WM_CAP_GET_AUDIOFORMAT, (WPARAM) 0, (LPARAM) 0L))
+#define capGetMCIDeviceNamehwnd, szName, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_GET_MCI_DEVICE, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capGetStatushwnd, s, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_GET_STATUS, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPCAPSTATUS) (s)))
+#define capGetUserDatahwnd) (AVICapSM(hwnd, WM_CAP_GET_USER_DATA, 0, 0))
+#define capGetVideoFormathwnd, s, wSize) ((DWORD) AVICapSM(hwnd, WM_CAP_GET_VIDEOFORMAT, (WPARAM) (wSize), (LPARAM) (LPVOID) (s)))
+#define capGetVideoFormatSizehwnd) ((DWORD) AVICapSM(hwnd, WM_CAP_GET_VIDEOFORMAT, 0, 0L))
+#define capGrabFramehwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_GRAB_FRAME, (WPARAM) 0, (LPARAM) 0L))
+#define capGrabFrameNoStophwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_GRAB_FRAME_NOSTOP, (WPARAM) 0, (LPARAM) 0L))
+#define capOverlayhwnd, f) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_OVERLAY, (WPARAM) (BOOL) (f), 0L))
+#define capPaletteAutohwnd, iFrames, iColors) ((BOOL) AVICapSM(hwnd, WM_CAP_PAL_AUTOCREATE, (WPARAM) (iFrames), (LPARAM) (DWORD) (iColors)))
+#define capPaletteManualhwnd, fGrab, iColors) ((BOOL) AVICapSM(hwnd, WM_CAP_PAL_MANUALCREATE, (WPARAM) (fGrab), (LPARAM) (DWORD) (iColors)))
+#define capPaletteOpenhwnd, szName) ((BOOL) AVICapSM(hwnd, WM_CAP_PAL_OPEN, 0, (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capPalettePastehwnd) ((BOOL) AVICapSM(hwnd, WM_CAP_PAL_PASTE, (WPARAM) 0, (LPARAM) 0L))
+#define capPaletteSavehwnd, szName) ((BOOL) AVICapSM(hwnd, WM_CAP_PAL_SAVE, 0, (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capPreviewhwnd, f) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_PREVIEW, (WPARAM) (BOOL) (f), 0L))
+#define capPreviewRatehwnd, wMS) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_PREVIEWRATE, (WPARAM) (wMS), 0))
+#define capPreviewScalehwnd, f) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_SCALE, (WPARAM) (BOOL) f, 0L))
+#define capSetAudioFormathwnd, s, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_AUDIOFORMAT, (WPARAM) (wSize), (LPARAM) (LPVOID) (LPWAVEFORMATEX) (s)))
+#define capSetCallbackOnCapControlhwnd, fpProc) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_CALLBACK_CAPCONTROL, 0, (LPARAM) (LPVOID) (fpProc)))
+#define capSetCallbackOnErrorhwnd, fpProc) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_CALLBACK_ERROR, 0, (LPARAM) (LPVOID) (fpProc)))
+#define capSetCallbackOnFramehwnd, fpProc) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_CALLBACK_FRAME, 0, (LPARAM) (LPVOID) (fpProc)))
+#define capSetCallbackOnStatushwnd, fpProc) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_CALLBACK_STATUS, 0, (LPARAM) (LPVOID) (fpProc)))
+#define capSetCallbackOnVideoStreamhwnd, fpProc) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_CALLBACK_VIDEOSTREAM, 0, (LPARAM) (LPVOID) (fpProc)))
+#define capSetCallbackOnWaveStreamhwnd, fpProc) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_CALLBACK_WAVESTREAM, 0, (LPARAM) (LPVOID) (fpProc)))
+#define capSetCallbackOnYieldhwnd, fpProc) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_CALLBACK_YIELD, 0, (LPARAM) (LPVOID) (fpProc)))
+#define capSetMCIDeviceNamehwnd, szName) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_MCI_DEVICE, 0, (LPARAM) (LPVOID) (LPTSTR) (szName)))
+#define capSetScrollPoshwnd, lpP) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_SCROLL, (WPARAM) 0, (LPARAM) (LPPOINT) (lpP)))
+#define capSetUserDatahwnd, lUser) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_USER_DATA, 0, (LPARAM) lUser))
+#define capSetVideoFormathwnd, s, wSize) ((BOOL) AVICapSM(hwnd, WM_CAP_SET_VIDEOFORMAT, (WPARAM) (wSize), (LPARAM) (LPVOID) (s)))
+#define MKFOURCCch0, ch1, ch2, ch3) ((DWORD) (BYTE) (ch0) | ((DWORD) (BYTE) (ch1) << 8) | ((DWORD) (BYTE) (ch2) << 16) | ((DWORD) (BYTE) (ch3) << 24))
+
 #endif /* __WINE_VFW_H */

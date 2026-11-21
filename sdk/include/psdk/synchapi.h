@@ -76,4 +76,17 @@ DeleteSynchronizationBarrier(
 
 #ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
 #define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
+
+#define CreateMutexEx 0
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+BOOL WINAPI SetWaitableTimerEx(HANDLE hTimer, const LARGE_INTEGER *lpDueTime, LONG lPeriod, PTIMERAPCROUTINE pfnCompletionRoutine, LPVOID lpArgToCompletionRoutine, PREASON_CONTEXT WakeContext, ULONG TolerableDelay);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

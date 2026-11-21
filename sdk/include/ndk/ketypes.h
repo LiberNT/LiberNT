@@ -369,7 +369,8 @@ typedef enum _KWAIT_REASON
     WrIoRing,
     WrMdlCache,
     WrRcu,
-    MaximumWaitReason
+    MaximumWaitReason,
+    WrSpare0 = 0xE,
 } KWAIT_REASON;
 
 //

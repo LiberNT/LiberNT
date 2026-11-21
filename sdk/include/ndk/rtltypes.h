@@ -491,7 +491,10 @@ typedef enum _RTL_PATH_TYPE
 typedef enum _HEAP_INFORMATION_CLASS
 {
     HeapCompatibilityInformation,
-    HeapEnableTerminationOnCorruption
+    HeapEnableTerminationOnCorruption,
+    HeapOptimizeResources = 3,
+    HeapTag = 7,
+    HeapMemoryUsageInformation = 8,
 } HEAP_INFORMATION_CLASS;
 
 //

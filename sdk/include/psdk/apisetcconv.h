@@ -95,4 +95,6 @@
 #endif
 #endif
 
+#define WINSTORAGEAPI DECLSPEC_IMPORT
+
 #endif /* _APISETCCONV_ */

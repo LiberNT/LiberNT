@@ -1773,16 +1773,6 @@ typedef struct IMAGE_COR20_HEADER
 #define X3_TMPLT_SIZE_X 4
 #endif
 
-typedef enum IMAGE_AUX_SYMBOL_TYPE {
-    IMAGE_AUX_SYMBOL_TYPE_TOKEN_DEF = 1
-} IMAGE_AUX_SYMBOL_TYPE;
-
-typedef enum ARM64_FNPDATA_FLAGS {
-    PdataRefToFullXdata = 0,
-    PdataPackedUnwindFunction = 1,
-    PdataPackedUnwindFragment = 2
-} ARM64_FNPDATA_FLAGS;
-
 typedef enum ARM64_FNPDATA_CR {
     PdataCrUnchained = 0,
     PdataCrUnchainedSavedLr = 1,
@@ -1790,11 +1780,15 @@ typedef enum ARM64_FNPDATA_CR {
     PdataCrChained = 3
 } ARM64_FNPDATA_CR;
 
-typedef enum IMPORT_OBJECT_TYPE {
-    IMPORT_OBJECT_CODE = 0,
-    IMPORT_OBJECT_DATA = 1,
-    IMPORT_OBJECT_CONST = 2
-} IMPORT_OBJECT_TYPE;
+typedef enum ARM64_FNPDATA_FLAGS {
+    PdataRefToFullXdata = 0,
+    PdataPackedUnwindFunction = 1,
+    PdataPackedUnwindFragment = 2
+} ARM64_FNPDATA_FLAGS;
+
+typedef enum IMAGE_AUX_SYMBOL_TYPE {
+    IMAGE_AUX_SYMBOL_TYPE_TOKEN_DEF = 1
+} IMAGE_AUX_SYMBOL_TYPE;
 
 typedef enum IMPORT_OBJECT_NAME_TYPE {
     IMPORT_OBJECT_ORDINAL = 0,
@@ -1804,189 +1798,48 @@ typedef enum IMPORT_OBJECT_NAME_TYPE {
     IMPORT_OBJECT_NAME_EXPORTAS = 4
 } IMPORT_OBJECT_NAME_TYPE;
 
+typedef enum IMPORT_OBJECT_TYPE {
+    IMPORT_OBJECT_CODE = 0,
+    IMPORT_OBJECT_DATA = 1,
+    IMPORT_OBJECT_CONST = 2
+} IMPORT_OBJECT_TYPE;
+
 typedef struct _IMAGE_RUNTIME_FUNCTION_ENTRY * _PIMAGE_RUNTIME_FUNCTION_ENTRY;
-typedef _PIMAGE_RUNTIME_FUNCTION_ENTRY PIMAGE_IA64_RUNTIME_FUNCTION_ENTRY;
-typedef _PIMAGE_RUNTIME_FUNCTION_ENTRY PIMAGE_AMD64_RUNTIME_FUNCTION_ENTRY;
+typedef const IMAGE_EXPORT_DIRECTORY * PCIMAGE_EXPORT_DIRECTORY;
 typedef const IMAGE_IMPORT_BY_NAME * PCIMAGE_IMPORT_BY_NAME;
+typedef const IMAGE_SECTION_HEADER * PCIMAGE_SECTION_HEADER;
 typedef const IMAGE_THUNK_DATA * PCIMAGE_THUNK_DATA;
 typedef const IMAGE_THUNK_DATA32 * PCIMAGE_THUNK_DATA32;
 typedef const IMAGE_THUNK_DATA64 * PCIMAGE_THUNK_DATA64;
 typedef const IMAGE_TLS_DIRECTORY * PCIMAGE_TLS_DIRECTORY;
 typedef const IMAGE_TLS_DIRECTORY32 * PCIMAGE_TLS_DIRECTORY32;
 typedef const IMAGE_TLS_DIRECTORY64 * PCIMAGE_TLS_DIRECTORY64;
-typedef const IMAGE_EXPORT_DIRECTORY * PCIMAGE_EXPORT_DIRECTORY;
-typedef const IMAGE_SECTION_HEADER * PCIMAGE_SECTION_HEADER;
+typedef _PIMAGE_RUNTIME_FUNCTION_ENTRY PIMAGE_AMD64_RUNTIME_FUNCTION_ENTRY;
+typedef _PIMAGE_RUNTIME_FUNCTION_ENTRY PIMAGE_IA64_RUNTIME_FUNCTION_ENTRY;
 
-typedef struct ANON_OBJECT_HEADER {
-  USHORT Sig1;
-  USHORT Sig2;
-  USHORT Version;
-  USHORT Machine;
-  ULONG TimeDateStamp;
-  CLSID ClassID;
-  ULONG SizeOfData;
-} ANON_OBJECT_HEADER;
-
-typedef struct ANON_OBJECT_HEADER_V2 {
-  USHORT Sig1;
-  USHORT Sig2;
-  USHORT Version;
-  USHORT Machine;
-  ULONG TimeDateStamp;
-  CLSID ClassID;
-  ULONG SizeOfData;
-  ULONG Flags;
-  ULONG MetaDataSize;
-  ULONG MetaDataOffset;
-} ANON_OBJECT_HEADER_V2;
-
-typedef struct ANON_OBJECT_HEADER_BIGOBJ {
-  USHORT Sig1;
-  USHORT Sig2;
-  USHORT Version;
-  USHORT Machine;
-  ULONG TimeDateStamp;
-  CLSID ClassID;
-  ULONG SizeOfData;
-  ULONG Flags;
-  ULONG MetaDataSize;
-  ULONG MetaDataOffset;
-  ULONG NumberOfSections;
-  ULONG PointerToSymbolTable;
-  ULONG NumberOfSymbols;
-} ANON_OBJECT_HEADER_BIGOBJ;
-
-typedef struct _IMAGE_DYNAMIC_RELOCATION_TABLE {
-  ULONG Version;
-  ULONG Size;
-} IMAGE_DYNAMIC_RELOCATION_TABLE, *PIMAGE_DYNAMIC_RELOCATION_TABLE;
-
-#pragma pack(push, 1)
-typedef struct _IMAGE_DYNAMIC_RELOCATION32 {
-  ULONG Symbol;
-  ULONG BaseRelocSize;
-} IMAGE_DYNAMIC_RELOCATION32, *PIMAGE_DYNAMIC_RELOCATION32;
+#pragma pack(push, 4)
+typedef struct _IMAGE_ALPHA64_RUNTIME_FUNCTION_ENTRY {
+  ULONGLONG BeginAddress;
+  ULONGLONG EndAddress;
+  ULONGLONG ExceptionHandler;
+  ULONGLONG HandlerData;
+  ULONGLONG PrologEndAddress;
+} IMAGE_ALPHA64_RUNTIME_FUNCTION_ENTRY, *PIMAGE_ALPHA64_RUNTIME_FUNCTION_ENTRY;
 #pragma pack(pop)
 
-#pragma pack(push, 1)
-typedef struct _IMAGE_DYNAMIC_RELOCATION64 {
-  ULONGLONG Symbol;
-  ULONG BaseRelocSize;
-} IMAGE_DYNAMIC_RELOCATION64, *PIMAGE_DYNAMIC_RELOCATION64;
-#pragma pack(pop)
+typedef struct _IMAGE_ALPHA_RUNTIME_FUNCTION_ENTRY {
+  ULONG BeginAddress;
+  ULONG EndAddress;
+  ULONG ExceptionHandler;
+  ULONG HandlerData;
+  ULONG PrologEndAddress;
+} IMAGE_ALPHA_RUNTIME_FUNCTION_ENTRY, *PIMAGE_ALPHA_RUNTIME_FUNCTION_ENTRY;
 
-#pragma pack(push, 1)
-typedef struct _IMAGE_DYNAMIC_RELOCATION32_V2 {
-  ULONG HeaderSize;
-  ULONG FixupInfoSize;
-  ULONG Symbol;
-  ULONG SymbolGroup;
-  ULONG Flags;
-} IMAGE_DYNAMIC_RELOCATION32_V2, *PIMAGE_DYNAMIC_RELOCATION32_V2;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _IMAGE_DYNAMIC_RELOCATION64_V2 {
-  ULONG HeaderSize;
-  ULONG FixupInfoSize;
-  ULONGLONG Symbol;
-  ULONG SymbolGroup;
-  ULONG Flags;
-} IMAGE_DYNAMIC_RELOCATION64_V2, *PIMAGE_DYNAMIC_RELOCATION64_V2;
-#pragma pack(pop)
-
-typedef struct _IMAGE_PROLOGUE_DYNAMIC_RELOCATION_HEADER {
-  UCHAR PrologueByteCount;
-} IMAGE_PROLOGUE_DYNAMIC_RELOCATION_HEADER;
-
-#pragma pack(push, 1)
-typedef struct _IMAGE_EPILOGUE_DYNAMIC_RELOCATION_HEADER {
-  ULONG EpilogueCount;
-  UCHAR EpilogueByteCount;
-  UCHAR BranchDescriptorElementSize;
-  USHORT BranchDescriptorCount;
-} IMAGE_EPILOGUE_DYNAMIC_RELOCATION_HEADER;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _IMAGE_IMPORT_CONTROL_TRANSFER_DYNAMIC_RELOCATION {
-  ULONG PageRelativeOffset : 12;
-  ULONG IndirectCall : 1;
-  ULONG IATIndex : 19;
-} IMAGE_IMPORT_CONTROL_TRANSFER_DYNAMIC_RELOCATION;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _IMAGE_IMPORT_CONTROL_TRANSFER_ARM64_RELOCATION {
-  ULONG PageRelativeOffset : 10;
-  ULONG IndirectCall : 1;
-  ULONG RegisterIndex : 5;
-  ULONG ImportType : 1;
-  ULONG IATIndex : 15;
-} IMAGE_IMPORT_CONTROL_TRANSFER_ARM64_RELOCATION;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _IMAGE_INDIR_CONTROL_TRANSFER_DYNAMIC_RELOCATION {
-  USHORT PageRelativeOffset : 12;
-  USHORT IndirectCall : 1;
-  USHORT RexWPrefix : 1;
-  USHORT CfgCheck : 1;
-  USHORT Reserved : 1;
-} IMAGE_INDIR_CONTROL_TRANSFER_DYNAMIC_RELOCATION;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _IMAGE_SWITCHTABLE_BRANCH_DYNAMIC_RELOCATION {
-  USHORT PageRelativeOffset : 12;
-  USHORT RegisterNumber : 4;
-} IMAGE_SWITCHTABLE_BRANCH_DYNAMIC_RELOCATION;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _IMAGE_FUNCTION_OVERRIDE_HEADER {
-  ULONG FuncOverrideSize;
-} IMAGE_FUNCTION_OVERRIDE_HEADER;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _IMAGE_FUNCTION_OVERRIDE_DYNAMIC_RELOCATION {
-  ULONG OriginalRva;
-  ULONG BDDOffset;
-  ULONG RvaSize;
-  ULONG BaseRelocSize;
-} IMAGE_FUNCTION_OVERRIDE_DYNAMIC_RELOCATION;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _IMAGE_BDD_INFO {
-  ULONG Version;
-  ULONG BDDSize;
-} IMAGE_BDD_INFO;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _IMAGE_BDD_DYNAMIC_RELOCATION {
-  USHORT Left;
-  USHORT Right;
-  ULONG Value;
-} IMAGE_BDD_DYNAMIC_RELOCATION;
-#pragma pack(pop)
-
-typedef struct _IMAGE_CHPE_METADATA_X86 {
-  ULONG Version;
-  ULONG CHPECodeAddressRangeOffset;
-  ULONG CHPECodeAddressRangeCount;
-  ULONG WowA64ExceptionHandlerFunctionPointer;
-  ULONG WowA64DispatchCallFunctionPointer;
-  ULONG WowA64DispatchIndirectCallFunctionPointer;
-  ULONG WowA64DispatchIndirectCallCfgFunctionPointer;
-  ULONG WowA64DispatchRetFunctionPointer;
-  ULONG WowA64DispatchRetLeafFunctionPointer;
-  ULONG WowA64DispatchJumpFunctionPointer;
-  ULONG CompilerIATPointer;
-  ULONG WowA64RdtscFunctionPointer;
-} IMAGE_CHPE_METADATA_X86, *PIMAGE_CHPE_METADATA_X86;
+typedef struct _IMAGE_ARM64EC_CODE_RANGE_ENTRY_POINT {
+  ULONG StartRva;
+  ULONG EndRva;
+  ULONG EntryPoint;
+} IMAGE_ARM64EC_CODE_RANGE_ENTRY_POINT;
 
 typedef struct _IMAGE_ARM64EC_METADATA {
   ULONG Version;
@@ -2042,52 +1895,20 @@ typedef struct _IMAGE_ARM64EC_REDIRECTION_ENTRY {
   ULONG Destination;
 } IMAGE_ARM64EC_REDIRECTION_ENTRY;
 
-typedef struct _IMAGE_ARM64EC_CODE_RANGE_ENTRY_POINT {
-  ULONG StartRva;
-  ULONG EndRva;
-  ULONG EntryPoint;
-} IMAGE_ARM64EC_CODE_RANGE_ENTRY_POINT;
+#pragma pack(push, 1)
+typedef struct _IMAGE_BDD_DYNAMIC_RELOCATION {
+  USHORT Left;
+  USHORT Right;
+  ULONG Value;
+} IMAGE_BDD_DYNAMIC_RELOCATION;
+#pragma pack(pop)
 
-typedef struct _IMAGE_DVRT_ARM64X_FIXUP_RECORD {
-  USHORT Offset : 12;
-  USHORT Type : 2;
-  USHORT Size : 2;
-} IMAGE_DVRT_ARM64X_FIXUP_RECORD, *PIMAGE_DVRT_ARM64X_FIXUP_RECORD;
-
-typedef struct _IMAGE_DVRT_ARM64X_DELTA_FIXUP_RECORD {
-  USHORT Offset : 12;
-  USHORT Type : 2;
-  USHORT Sign : 1;
-  USHORT Scale : 1;
-} IMAGE_DVRT_ARM64X_DELTA_FIXUP_RECORD, *PIMAGE_DVRT_ARM64X_DELTA_FIXUP_RECORD;
-
-typedef struct _IMAGE_HOT_PATCH_INFO {
+#pragma pack(push, 1)
+typedef struct _IMAGE_BDD_INFO {
   ULONG Version;
-  ULONG Size;
-  ULONG SequenceNumber;
-  ULONG BaseImageList;
-  ULONG BaseImageCount;
-  ULONG BufferOffset;
-  ULONG ExtraPatchSize;
-  ULONG MinSequenceNumber;
-  ULONG Flags;
-} IMAGE_HOT_PATCH_INFO, *PIMAGE_HOT_PATCH_INFO;
-
-typedef struct _IMAGE_HOT_PATCH_BASE {
-  ULONG SequenceNumber;
-  ULONG Flags;
-  ULONG OriginalTimeDateStamp;
-  ULONG OriginalCheckSum;
-  ULONG CodeIntegrityInfo;
-  ULONG CodeIntegritySize;
-  ULONG PatchTable;
-  ULONG BufferOffset;
-} IMAGE_HOT_PATCH_BASE, *PIMAGE_HOT_PATCH_BASE;
-
-typedef struct _IMAGE_HOT_PATCH_HASHES {
-  UCHAR SHA256[32];
-  UCHAR SHA1[20];
-} IMAGE_HOT_PATCH_HASHES, *PIMAGE_HOT_PATCH_HASHES;
+  ULONG BDDSize;
+} IMAGE_BDD_INFO;
+#pragma pack(pop)
 
 typedef struct _IMAGE_CE_RUNTIME_FUNCTION_ENTRY {
   ULONG FuncStart;
@@ -2097,23 +1918,72 @@ typedef struct _IMAGE_CE_RUNTIME_FUNCTION_ENTRY {
   ULONG ExceptionFlag : 1;
 } IMAGE_CE_RUNTIME_FUNCTION_ENTRY, *PIMAGE_CE_RUNTIME_FUNCTION_ENTRY;
 
-#pragma pack(push, 4)
-typedef struct _IMAGE_ALPHA64_RUNTIME_FUNCTION_ENTRY {
-  ULONGLONG BeginAddress;
-  ULONGLONG EndAddress;
-  ULONGLONG ExceptionHandler;
-  ULONGLONG HandlerData;
-  ULONGLONG PrologEndAddress;
-} IMAGE_ALPHA64_RUNTIME_FUNCTION_ENTRY, *PIMAGE_ALPHA64_RUNTIME_FUNCTION_ENTRY;
+typedef struct _IMAGE_CHPE_METADATA_X86 {
+  ULONG Version;
+  ULONG CHPECodeAddressRangeOffset;
+  ULONG CHPECodeAddressRangeCount;
+  ULONG WowA64ExceptionHandlerFunctionPointer;
+  ULONG WowA64DispatchCallFunctionPointer;
+  ULONG WowA64DispatchIndirectCallFunctionPointer;
+  ULONG WowA64DispatchIndirectCallCfgFunctionPointer;
+  ULONG WowA64DispatchRetFunctionPointer;
+  ULONG WowA64DispatchRetLeafFunctionPointer;
+  ULONG WowA64DispatchJumpFunctionPointer;
+  ULONG CompilerIATPointer;
+  ULONG WowA64RdtscFunctionPointer;
+} IMAGE_CHPE_METADATA_X86, *PIMAGE_CHPE_METADATA_X86;
+
+typedef struct _IMAGE_DVRT_ARM64X_DELTA_FIXUP_RECORD {
+  USHORT Offset : 12;
+  USHORT Type : 2;
+  USHORT Sign : 1;
+  USHORT Scale : 1;
+} IMAGE_DVRT_ARM64X_DELTA_FIXUP_RECORD, *PIMAGE_DVRT_ARM64X_DELTA_FIXUP_RECORD;
+
+typedef struct _IMAGE_DVRT_ARM64X_FIXUP_RECORD {
+  USHORT Offset : 12;
+  USHORT Type : 2;
+  USHORT Size : 2;
+} IMAGE_DVRT_ARM64X_FIXUP_RECORD, *PIMAGE_DVRT_ARM64X_FIXUP_RECORD;
+
+#pragma pack(push, 1)
+typedef struct _IMAGE_DYNAMIC_RELOCATION32 {
+  ULONG Symbol;
+  ULONG BaseRelocSize;
+} IMAGE_DYNAMIC_RELOCATION32, *PIMAGE_DYNAMIC_RELOCATION32;
 #pragma pack(pop)
 
-typedef struct _IMAGE_ALPHA_RUNTIME_FUNCTION_ENTRY {
-  ULONG BeginAddress;
-  ULONG EndAddress;
-  ULONG ExceptionHandler;
-  ULONG HandlerData;
-  ULONG PrologEndAddress;
-} IMAGE_ALPHA_RUNTIME_FUNCTION_ENTRY, *PIMAGE_ALPHA_RUNTIME_FUNCTION_ENTRY;
+#pragma pack(push, 1)
+typedef struct _IMAGE_DYNAMIC_RELOCATION32_V2 {
+  ULONG HeaderSize;
+  ULONG FixupInfoSize;
+  ULONG Symbol;
+  ULONG SymbolGroup;
+  ULONG Flags;
+} IMAGE_DYNAMIC_RELOCATION32_V2, *PIMAGE_DYNAMIC_RELOCATION32_V2;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IMAGE_DYNAMIC_RELOCATION64 {
+  ULONGLONG Symbol;
+  ULONG BaseRelocSize;
+} IMAGE_DYNAMIC_RELOCATION64, *PIMAGE_DYNAMIC_RELOCATION64;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IMAGE_DYNAMIC_RELOCATION64_V2 {
+  ULONG HeaderSize;
+  ULONG FixupInfoSize;
+  ULONGLONG Symbol;
+  ULONG SymbolGroup;
+  ULONG Flags;
+} IMAGE_DYNAMIC_RELOCATION64_V2, *PIMAGE_DYNAMIC_RELOCATION64_V2;
+#pragma pack(pop)
+
+typedef struct _IMAGE_DYNAMIC_RELOCATION_TABLE {
+  ULONG Version;
+  ULONG Size;
+} IMAGE_DYNAMIC_RELOCATION_TABLE, *PIMAGE_DYNAMIC_RELOCATION_TABLE;
 
 typedef struct _IMAGE_ENCLAVE_CONFIG32 {
   ULONG Size;
@@ -2159,6 +2029,102 @@ typedef struct _IMAGE_ENCLAVE_IMPORT {
   ULONG Reserved;
 } IMAGE_ENCLAVE_IMPORT, *PIMAGE_ENCLAVE_IMPORT;
 
+#pragma pack(push, 1)
+typedef struct _IMAGE_EPILOGUE_DYNAMIC_RELOCATION_HEADER {
+  ULONG EpilogueCount;
+  UCHAR EpilogueByteCount;
+  UCHAR BranchDescriptorElementSize;
+  USHORT BranchDescriptorCount;
+} IMAGE_EPILOGUE_DYNAMIC_RELOCATION_HEADER;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IMAGE_FUNCTION_OVERRIDE_DYNAMIC_RELOCATION {
+  ULONG OriginalRva;
+  ULONG BDDOffset;
+  ULONG RvaSize;
+  ULONG BaseRelocSize;
+} IMAGE_FUNCTION_OVERRIDE_DYNAMIC_RELOCATION;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IMAGE_FUNCTION_OVERRIDE_HEADER {
+  ULONG FuncOverrideSize;
+} IMAGE_FUNCTION_OVERRIDE_HEADER;
+#pragma pack(pop)
+
+typedef struct _IMAGE_HOT_PATCH_BASE {
+  ULONG SequenceNumber;
+  ULONG Flags;
+  ULONG OriginalTimeDateStamp;
+  ULONG OriginalCheckSum;
+  ULONG CodeIntegrityInfo;
+  ULONG CodeIntegritySize;
+  ULONG PatchTable;
+  ULONG BufferOffset;
+} IMAGE_HOT_PATCH_BASE, *PIMAGE_HOT_PATCH_BASE;
+
+typedef struct _IMAGE_HOT_PATCH_HASHES {
+  UCHAR SHA256[32];
+  UCHAR SHA1[20];
+} IMAGE_HOT_PATCH_HASHES, *PIMAGE_HOT_PATCH_HASHES;
+
+typedef struct _IMAGE_HOT_PATCH_INFO {
+  ULONG Version;
+  ULONG Size;
+  ULONG SequenceNumber;
+  ULONG BaseImageList;
+  ULONG BaseImageCount;
+  ULONG BufferOffset;
+  ULONG ExtraPatchSize;
+  ULONG MinSequenceNumber;
+  ULONG Flags;
+} IMAGE_HOT_PATCH_INFO, *PIMAGE_HOT_PATCH_INFO;
+
+#pragma pack(push, 1)
+typedef struct _IMAGE_IMPORT_CONTROL_TRANSFER_ARM64_RELOCATION {
+  ULONG PageRelativeOffset : 10;
+  ULONG IndirectCall : 1;
+  ULONG RegisterIndex : 5;
+  ULONG ImportType : 1;
+  ULONG IATIndex : 15;
+} IMAGE_IMPORT_CONTROL_TRANSFER_ARM64_RELOCATION;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IMAGE_IMPORT_CONTROL_TRANSFER_DYNAMIC_RELOCATION {
+  ULONG PageRelativeOffset : 12;
+  ULONG IndirectCall : 1;
+  ULONG IATIndex : 19;
+} IMAGE_IMPORT_CONTROL_TRANSFER_DYNAMIC_RELOCATION;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IMAGE_INDIR_CONTROL_TRANSFER_DYNAMIC_RELOCATION {
+  USHORT PageRelativeOffset : 12;
+  USHORT IndirectCall : 1;
+  USHORT RexWPrefix : 1;
+  USHORT CfgCheck : 1;
+  USHORT Reserved : 1;
+} IMAGE_INDIR_CONTROL_TRANSFER_DYNAMIC_RELOCATION;
+#pragma pack(pop)
+
+typedef struct _IMAGE_PROLOGUE_DYNAMIC_RELOCATION_HEADER {
+  UCHAR PrologueByteCount;
+} IMAGE_PROLOGUE_DYNAMIC_RELOCATION_HEADER;
+
+#pragma pack(push, 1)
+typedef struct _IMAGE_SWITCHTABLE_BRANCH_DYNAMIC_RELOCATION {
+  USHORT PageRelativeOffset : 12;
+  USHORT RegisterNumber : 4;
+} IMAGE_SWITCHTABLE_BRANCH_DYNAMIC_RELOCATION;
+#pragma pack(pop)
+
+typedef struct _ImageArchitectureEntry {
+  ULONG FixupInstRVA;
+  ULONG NewInst;
+} IMAGE_ARCHITECTURE_ENTRY, *PIMAGE_ARCHITECTURE_ENTRY;
+
 #pragma pack(push, 4)
 typedef struct _NON_PAGED_DEBUG_INFO {
   USHORT Signature;
@@ -2173,15 +2139,292 @@ typedef struct _NON_PAGED_DEBUG_INFO {
 } NON_PAGED_DEBUG_INFO, *PNON_PAGED_DEBUG_INFO;
 #pragma pack(pop)
 
-typedef struct _ImageArchitectureEntry {
-  ULONG FixupInstRVA;
-  ULONG NewInst;
-} IMAGE_ARCHITECTURE_ENTRY, *PIMAGE_ARCHITECTURE_ENTRY;
-
 typedef struct _PATCH_MAIN_CALLOUT_PARAMS {
   ULONG Version;
   ULONG PatchPhase;
   ULONG Flags;
 } PATCH_MAIN_CALLOUT_PARAMS, *PPATCH_MAIN_CALLOUT_PARAMS;
+
+typedef struct ANON_OBJECT_HEADER {
+  USHORT Sig1;
+  USHORT Sig2;
+  USHORT Version;
+  USHORT Machine;
+  ULONG TimeDateStamp;
+  CLSID ClassID;
+  ULONG SizeOfData;
+} ANON_OBJECT_HEADER;
+
+typedef struct ANON_OBJECT_HEADER_BIGOBJ {
+  USHORT Sig1;
+  USHORT Sig2;
+  USHORT Version;
+  USHORT Machine;
+  ULONG TimeDateStamp;
+  CLSID ClassID;
+  ULONG SizeOfData;
+  ULONG Flags;
+  ULONG MetaDataSize;
+  ULONG MetaDataOffset;
+  ULONG NumberOfSections;
+  ULONG PointerToSymbolTable;
+  ULONG NumberOfSymbols;
+} ANON_OBJECT_HEADER_BIGOBJ;
+
+typedef struct ANON_OBJECT_HEADER_V2 {
+  USHORT Sig1;
+  USHORT Sig2;
+  USHORT Version;
+  USHORT Machine;
+  ULONG TimeDateStamp;
+  CLSID ClassID;
+  ULONG SizeOfData;
+  ULONG Flags;
+  ULONG MetaDataSize;
+  ULONG MetaDataOffset;
+} ANON_OBJECT_HEADER_V2;
+
+#define EXT_IMM64Value, Address, Size, InstPos, ValPos) /* Intel-IA64-Filler */ Value |= (((ULONGLONG) ((* (Address) >> InstPos) & (((ULONGLONG) 1 << Size) - 1))) << ValPos)
+#define IMAGE_ARCHIVE_HYBRIDMAP_MEMBER "/<HYBRIDMAP>/   "
+#define IMAGE_DEBUG_TYPE_BBT 0xA
+#define IMAGE_DEBUG_TYPE_REPRO 0x10
+#ifdef _WIN64
+#define IMAGE_DYNAMIC_RELOCATION_IMPORT_CONTROL_TRANSFER 3
+#else
+#define IMAGE_DYNAMIC_RELOCATION_IMPORT_CONTROL_TRANSFER 8
+#endif
+#define IMAGE_DYNAMIC_RELOCATION_KI_USER_SHARED_DATA64 (-9345848836096LL)
+#define IMAGE_ENCLAVE_LONG_ID_LENGTH 0x20
+#ifdef _WIN64
+#define IMAGE_ENCLAVE_MINIMUM_CONFIG_SIZE 0x4C
+#else
+#define IMAGE_ENCLAVE_MINIMUM_CONFIG_SIZE 0x48
+#endif
+#define IMAGE_ENCLAVE_SHORT_ID_LENGTH 0x10
+#define IMAGE_REL_ARM64_ADDR32 1
+#define IMAGE_SYM_SECTION_MAX_EX 0x7FFFFFFF
+#define INS_IMM64Value, Address, Size, InstPos, ValPos) /* Intel-IA64-Filler */ * (PULONG) Address = (* (PULONG) Address & ~(((1 << Size) - 1) << InstPos)) | /* Intel-IA64-Filler */ ((ULONG) ((((ULONGLONG) Value >> ValPos) & (((ULONGLONG) 1 << Size) - 1))) << InstPos)
+#define PATCH_MAIN_CALLOUT_FUNCTION_NAME 0
+
+union _IMAGE_AUX_SYMBOL_EX
+{
+    struct
+    {
+        ULONG WeakDefaultSymIndex;
+        ULONG WeakSearchType;
+        UCHAR rgbReserved[12];
+    } Sym;
+    struct
+    {
+        UCHAR Name[20];
+    } File;
+    struct
+    {
+        ULONG Length;
+        USHORT NumberOfRelocations;
+        USHORT NumberOfLinenumbers;
+        ULONG CheckSum;
+        SHORT Number;
+        UCHAR Selection;
+        UCHAR bReserved;
+        SHORT HighNumber;
+        UCHAR rgbReserved[2];
+    } Section;
+    struct
+    {
+        IMAGE_AUX_SYMBOL_TOKEN_DEF TokenDef;
+        UCHAR rgbReserved[2];
+    };
+    struct
+    {
+        ULONG crc;
+        UCHAR rgbReserved[16];
+    } CRC;
+};
+
+struct _IMAGE_CHPE_RANGE_ENTRY
+{
+    union
+    {
+        ULONG StartOffset;
+        struct
+        {
+            ULONG NativeCode : 1;
+            ULONG AddressBits : 31;
+        };
+    };
+    ULONG Length;
+};
+
+#pragma pack(push, 4)
+struct _IMAGE_FUNCTION_ENTRY64
+{
+    ULONGLONG StartingAddress;
+    ULONGLONG EndingAddress;
+    union
+    {
+        ULONGLONG EndOfPrologue;
+        ULONGLONG UnwindInfoAddress;
+    };
+};
+#pragma pack(pop)
+
+struct _IMAGE_HOT_PATCH_MACHINE
+{
+    struct
+    {
+        ULONG _x86 : 1;
+        ULONG Amd64 : 1;
+        ULONG Arm64 : 1;
+        ULONG Amd64EC : 1;
+    };
+};
+
+#pragma pack(push, 2)
+struct _IMAGE_SYMBOL_EX
+{
+    union
+    {
+        UCHAR ShortName[8];
+        struct
+        {
+            ULONG Short;
+            ULONG Long;
+        } Name;
+        ULONG LongName[2];
+    } N;
+    ULONG Value;
+    LONG SectionNumber;
+    USHORT Type;
+    UCHAR StorageClass;
+    UCHAR NumberOfAuxSymbols;
+};
+#pragma pack(pop)
+
+struct _ImageArchitectureHeader
+{
+    unsigned int AmaskValue : 1;
+    int : 7;
+    unsigned int AmaskShift : 8;
+    int : 16;
+    ULONG FirstEntryRVA;
+};
+
+typedef struct _ImageArchitectureHeader IMAGE_ARCHITECTURE_HEADER;
+
+union IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY_XDATA_EPILOG_SCOPE
+{
+    ULONG EpilogScopeData;
+    struct
+    {
+        ULONG EpilogStartOffset : 18;
+        ULONG Res0 : 4;
+        ULONG EpilogStartIndex : 10;
+    };
+};
+
+union IMAGE_ARM64_RUNTIME_FUNCTION_ENTRY_XDATA_EXTENDED
+{
+    ULONG ExtendedHeaderData;
+    struct
+    {
+        ULONG ExtendedEpilogCount : 16;
+        ULONG ExtendedCodeWords : 8;
+    };
+};
+
+typedef union _IMAGE_AUX_SYMBOL_EX IMAGE_AUX_SYMBOL_EX;
+
+typedef struct _IMAGE_CHPE_RANGE_ENTRY IMAGE_CHPE_RANGE_ENTRY;
+
+typedef IMAGE_DYNAMIC_RELOCATION64 IMAGE_DYNAMIC_RELOCATION;
+
+typedef IMAGE_DYNAMIC_RELOCATION64_V2 IMAGE_DYNAMIC_RELOCATION_V2;
+
+typedef IMAGE_ENCLAVE_CONFIG64 IMAGE_ENCLAVE_CONFIG;
+
+typedef struct _IMAGE_FUNCTION_ENTRY64 IMAGE_FUNCTION_ENTRY64;
+
+typedef struct _IMAGE_HOT_PATCH_MACHINE IMAGE_HOT_PATCH_MACHINE;
+
+typedef IMAGE_IMPORT_CONTROL_TRANSFER_DYNAMIC_RELOCATION IMAGE_IMPORT_CONTROL_TRANSFER_RELOCATION;
+
+typedef struct _IMAGE_SYMBOL_EX IMAGE_SYMBOL_EX;
+
+struct IMPORT_OBJECT_HEADER
+{
+    USHORT Sig1;
+    USHORT Sig2;
+    USHORT Version;
+    USHORT Machine;
+    ULONG TimeDateStamp;
+    ULONG SizeOfData;
+    union
+    {
+        USHORT Ordinal;
+        USHORT Hint;
+    };
+    USHORT Type : 2;
+    USHORT NameType : 3;
+    USHORT Reserved : 11;
+};
+
+typedef NTSTATUS (*PATCH_MAIN_CALLOUT_FUNCTION)(PPATCH_MAIN_CALLOUT_PARAMS, ULONG);
+
+typedef const __unaligned IMAGE_IMPORT_DESCRIPTOR *PCIMAGE_IMPORT_DESCRIPTOR;
+
+typedef struct _ImageArchitectureHeader *PIMAGE_ARCHITECTURE_HEADER;
+
+typedef __unaligned IMAGE_AUX_SYMBOL_EX *PIMAGE_AUX_SYMBOL_EX;
+
+typedef IMAGE_BDD_DYNAMIC_RELOCATION *PIMAGE_BDD_DYNAMIC_RELOCATION;
+
+typedef IMAGE_BDD_INFO *PIMAGE_BDD_INFO;
+
+typedef struct _IMAGE_CHPE_RANGE_ENTRY *PIMAGE_CHPE_RANGE_ENTRY;
+
+typedef PIMAGE_DYNAMIC_RELOCATION64 PIMAGE_DYNAMIC_RELOCATION;
+
+typedef PIMAGE_DYNAMIC_RELOCATION64_V2 PIMAGE_DYNAMIC_RELOCATION_V2;
+
+typedef PIMAGE_ENCLAVE_CONFIG64 PIMAGE_ENCLAVE_CONFIG;
+
+typedef __unaligned IMAGE_EPILOGUE_DYNAMIC_RELOCATION_HEADER *PIMAGE_EPILOGUE_DYNAMIC_RELOCATION_HEADER;
+
+typedef struct _IMAGE_FUNCTION_ENTRY64 *PIMAGE_FUNCTION_ENTRY64;
+
+typedef IMAGE_FUNCTION_OVERRIDE_DYNAMIC_RELOCATION *PIMAGE_FUNCTION_OVERRIDE_DYNAMIC_RELOCATION;
+
+typedef __unaligned IMAGE_FUNCTION_OVERRIDE_HEADER *PIMAGE_FUNCTION_OVERRIDE_HEADER;
+
+typedef struct _IMAGE_HOT_PATCH_MACHINE *PIMAGE_HOT_PATCH_MACHINE;
+
+typedef __unaligned IMAGE_IMPORT_CONTROL_TRANSFER_ARM64_RELOCATION *PIMAGE_IMPORT_CONTROL_TRANSFER_ARM64_RELOCATION;
+
+typedef __unaligned IMAGE_IMPORT_CONTROL_TRANSFER_DYNAMIC_RELOCATION *PIMAGE_IMPORT_CONTROL_TRANSFER_DYNAMIC_RELOCATION;
+
+typedef IMAGE_IMPORT_CONTROL_TRANSFER_DYNAMIC_RELOCATION *PIMAGE_IMPORT_CONTROL_TRANSFER_RELOCATION;
+
+typedef __unaligned IMAGE_INDIR_CONTROL_TRANSFER_DYNAMIC_RELOCATION *PIMAGE_INDIR_CONTROL_TRANSFER_DYNAMIC_RELOCATION;
+
+typedef __unaligned IMAGE_PROLOGUE_DYNAMIC_RELOCATION_HEADER *PIMAGE_PROLOGUE_DYNAMIC_RELOCATION_HEADER;
+
+typedef __unaligned IMAGE_SWITCHTABLE_BRANCH_DYNAMIC_RELOCATION *PIMAGE_SWITCHTABLE_BRANCH_DYNAMIC_RELOCATION;
+
+typedef __unaligned IMAGE_SYMBOL_EX *PIMAGE_SYMBOL_EX;
+
+typedef __unaligned IMAGE_OS2_HEADER *PUIMAGE_OS2_HEADER;
+
+#define EXT_IMM64Value, Address, Size, InstPos, ValPos) /* Intel-IA64-Filler */ Value |= (((ULONGLONG) ((* (Address) >> InstPos) & (((ULONGLONG) 1 << Size) - 1))) << ValPos)
+#define INS_IMM64Value, Address, Size, InstPos, ValPos) /* Intel-IA64-Filler */ * (PULONG) Address = (* (PULONG) Address & ~(((1 << Size) - 1) << InstPos)) | /* Intel-IA64-Filler */ ((ULONG) ((((ULONGLONG) Value >> ValPos) & (((ULONGLONG) 1 << Size) - 1))) << InstPos)
+
+#define EXT_IMM64Value, Address, Size, InstPos, ValPos) /* Intel-IA64-Filler */ Value |= (((ULONGLONG) ((* (Address) >> InstPos) & (((ULONGLONG) 1 << Size) - 1))) << ValPos)
+#define INS_IMM64Value, Address, Size, InstPos, ValPos) /* Intel-IA64-Filler */ * (PULONG) Address = (* (PULONG) Address & ~(((1 << Size) - 1) << InstPos)) | /* Intel-IA64-Filler */ ((ULONG) ((((ULONGLONG) Value >> ValPos) & (((ULONGLONG) 1 << Size) - 1))) << InstPos)
+
+typedef _IMAGE_RUNTIME_FUNCTION_ENTRY IMAGE_IA64_RUNTIME_FUNCTION_ENTRY;
+
+typedef const IMAGE_BOUND_FORWARDER_REF *PCIMAGE_BOUND_FORWARDER_REF;
+
+typedef const IMAGE_BOUND_IMPORT_DESCRIPTOR *PCIMAGE_BOUND_IMPORT_DESCRIPTOR;
 
 #endif /* _NTIMAGE_ */

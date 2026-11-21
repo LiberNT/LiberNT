@@ -30,3 +30,6 @@ CompareStringEx(
 #ifdef __cplusplus
 } // extern "C"
 #endif
+
+#define _APISETSTRING_ 0
+

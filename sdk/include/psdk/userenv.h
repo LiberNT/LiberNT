@@ -356,4 +356,75 @@ typedef struct _POLICYSETTINGSTATUSINFO {
   SYSTEMTIME timeLogged;
 } POLICYSETTINGSTATUSINFO, *LPPOLICYSETTINGSTATUSINFO;
 
+#define FLAG_NO_GPO_FILTER 0x80000000
+#ifdef UNICODE
+#define FreeGPOList FreeGPOListW
+#else
+#define FreeGPOList FreeGPOListA
+#endif
+#define GetGPOList 0
+#define GP_DLLNAME TEXT("DllName")
+#define GP_ENABLEASYNCHRONOUSPROCESSING TEXT("EnableAsynchronousProcessing")
+#define GP_MAXNOGPOLISTCHANGESINTERVAL TEXT("MaxNoGPOListChangesInterval")
+#define GP_NOBACKGROUNDPOLICY TEXT("NoBackgroundPolicy")
+#define GP_NOGPOLISTCHANGES TEXT("NoGPOListChanges")
+#define GP_NOMACHINEPOLICY TEXT("NoMachinePolicy")
+#define GP_NOSLOWLINK TEXT("NoSlowLink")
+#define GP_NOTIFYLINKTRANSITION TEXT("NotifyLinkTransition")
+#define GP_NOUSERPOLICY TEXT("NoUserPolicy")
+#define GP_PERUSERLOCALSETTINGS TEXT("PerUserLocalSettings")
+#define GP_PROCESSGROUPPOLICY TEXT("ProcessGroupPolicy")
+#define GP_REQUIRESSUCCESSFULREGISTRY TEXT("RequiresSuccessfulRegistry")
+#define GPO_INFO_FLAG_MACHINE 0x00000001
+#define GROUP_POLICY_TRIGGER_EVENT_PROVIDER_GUID { 0xBD2F4252, 0x5E1E, 0x49FC, 0x9A, 0x30, 0xF3, 0x97, 0x8A, 0xD8, 0x9E, 0xE2 }
+#define MACHINE_POLICY_PRESENT_TRIGGER_GUID { 0x659FCAE6, 0x5BDB, 0x4DA9, 0xB1, 0xFF, 0xCA, 0x2A, 0x17, 0x8D, 0x46, 0xE0 }
+#define REGISTRY_EXTENSION_GUID 0
+#define USER_POLICY_PRESENT_TRIGGER_GUID { 0x54FB46C8, 0xF089, 0x464C, 0xB1, 0xFD, 0x59, 0xD1, 0xB6, 0x2C, 0x3B, 0x50 }
+#define USERENVAPI DECLSPEC_IMPORT
+
+typedef DWORD (*PFNSTATUSMESSAGECALLBACK)(BOOL, LPWSTR);
+
+typedef DWORD (*PFNPROCESSGROUPPOLICY)(DWORD, HANDLE, HKEY, PGROUP_POLICY_OBJECT, PGROUP_POLICY_OBJECT, ASYNCCOMPLETIONHANDLE, BOOL *, PFNSTATUSMESSAGECALLBACK);
+
+typedef DWORD (*PFNPROCESSGROUPPOLICYEX)(DWORD, HANDLE, HKEY, PGROUP_POLICY_OBJECT, PGROUP_POLICY_OBJECT, ASYNCCOMPLETIONHANDLE, BOOL *, PFNSTATUSMESSAGECALLBACK, IWbemServices *, HRESULT *);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+HRESULT CreateProfile(LPCWSTR pszUserSid, LPCWSTR pszUserName, LPWSTR pszProfilePath, DWORD cchProfilePath);
+HRESULT DeriveRestrictedAppContainerSidFromAppContainerSidAndRestrictedName(PSID psidAppContainerSid, PCWSTR pszRestrictedAppContainerName, PSID *ppsidRestrictedAppContainerSid);
+BOOL FreeGPOListA(PGROUP_POLICY_OBJECTA pGPOList);
+BOOL FreeGPOListW(PGROUP_POLICY_OBJECTW pGPOList);
+DWORD GenerateGPNotification(BOOL bMachine, LPCWSTR lpwszMgmtProduct, DWORD dwMgmtProductOptions);
+BOOL GetGPOListA(HANDLE hToken, LPCSTR lpName, LPCSTR lpHostName, LPCSTR lpComputerName, DWORD dwFlags, PGROUP_POLICY_OBJECTA *pGPOList);
+BOOL GetGPOListW(HANDLE hToken, LPCWSTR lpName, LPCWSTR lpHostName, LPCWSTR lpComputerName, DWORD dwFlags, PGROUP_POLICY_OBJECTW *pGPOList);
+DWORD ProcessGroupPolicyCompleted(REFGPEXTENSIONID extensionId, ASYNCCOMPLETIONHANDLE pAsyncHandle, DWORD dwStatus);
+DWORD ProcessGroupPolicyCompletedEx(REFGPEXTENSIONID extensionId, ASYNCCOMPLETIONHANDLE pAsyncHandle, DWORD dwStatus, HRESULT RsopStatus);
+HRESULT RsopAccessCheckByType(PSECURITY_DESCRIPTOR pSecurityDescriptor, PSID pPrincipalSelfSid, PRSOPTOKEN pRsopToken, DWORD dwDesiredAccessMask, POBJECT_TYPE_LIST pObjectTypeList, DWORD ObjectTypeListLength, PGENERIC_MAPPING pGenericMapping, PPRIVILEGE_SET pPrivilegeSet, LPDWORD pdwPrivilegeSetLength, LPDWORD pdwGrantedAccessMask, LPBOOL pbAccessStatus);
+HRESULT RsopFileAccessCheck(LPWSTR pszFileName, PRSOPTOKEN pRsopToken, DWORD dwDesiredAccessMask, LPDWORD pdwGrantedAccessMask, LPBOOL pbAccessStatus);
+HRESULT RsopResetPolicySettingStatus(DWORD dwFlags, IWbemServices *pServices, IWbemClassObject *pSettingInstance);
+HRESULT RsopSetPolicySettingStatus(DWORD dwFlags, IWbemServices *pServices, IWbemClassObject *pSettingInstance, DWORD nInfo, POLICYSETTINGSTATUSINFO *pStatus);
+
+#ifdef __cplusplus
+}
+#endif
+
+struct _RSOP_TARGET
+{
+    WCHAR *pwszAccountName;
+    WCHAR *pwszNewSOM;
+    SAFEARRAY *psaSecurityGroups;
+    PRSOPTOKEN pRsopToken;
+    PGROUP_POLICY_OBJECT pGPOList;
+    IWbemServices *pWbemServices;
+};
+
+typedef struct _RSOP_TARGET *PRSOP_TARGET;
+
+typedef DWORD (*PFNGENERATEGROUPPOLICY)(DWORD, BOOL *, WCHAR *, PRSOP_TARGET, PRSOP_TARGET);
+
+typedef struct _RSOP_TARGET RSOP_TARGET;
+
 #endif /* _USERENV_H */

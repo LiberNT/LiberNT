@@ -78,4 +78,36 @@ typedef enum COMPRESS_INFORMATION_CLASS {
 typedef COMPRESSOR_HANDLE * PCOMPRESSOR_HANDLE;
 typedef COMPRESSOR_HANDLE * PDECOMPRESSOR_HANDLE;
 
+#define COMPRESS_RAW 0x20000000
+
+struct _COMPRESS_ALLOCATION_ROUTINES
+{
+    PFN_COMPRESS_ALLOCATE Allocate;
+    PFN_COMPRESS_FREE Free;
+    PVOID UserContext;
+};
+
+struct COMPRESSOR_HANDLE__
+{
+    int unused;
+};
+
+typedef struct _COMPRESS_ALLOCATION_ROUTINES *PCOMPRESS_ALLOCATION_ROUTINES;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL WINAPI QueryCompressorInformation(COMPRESSOR_HANDLE CompressorHandle, COMPRESS_INFORMATION_CLASS CompressInformationClass, PVOID CompressInformation, SIZE_T CompressInformationSize);
+BOOL WINAPI QueryDecompressorInformation(DECOMPRESSOR_HANDLE DecompressorHandle, COMPRESS_INFORMATION_CLASS CompressInformationClass, PVOID CompressInformation, SIZE_T CompressInformationSize);
+BOOL WINAPI ResetCompressor(COMPRESSOR_HANDLE CompressorHandle);
+BOOL WINAPI ResetDecompressor(DECOMPRESSOR_HANDLE DecompressorHandle);
+BOOL WINAPI SetCompressorInformation(COMPRESSOR_HANDLE CompressorHandle, COMPRESS_INFORMATION_CLASS CompressInformationClass, LPCVOID CompressInformation, SIZE_T CompressInformationSize);
+BOOL WINAPI SetDecompressorInformation(DECOMPRESSOR_HANDLE DecompressorHandle, COMPRESS_INFORMATION_CLASS CompressInformationClass, LPCVOID CompressInformation, SIZE_T CompressInformationSize);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* __WINE_COMPRESSAPI_H */

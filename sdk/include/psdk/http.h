@@ -65,7 +65,16 @@ typedef enum _HTTP_SERVICE_CONFIG_ID
     HttpServiceConfigSSLCertInfo,
     HttpServiceConfigUrlAclInfo,
     HttpServiceConfigTimeout,
-    HttpServiceConfigMax
+    HttpServiceConfigMax,
+    HttpServiceConfigCache = 4,
+    HttpServiceConfigSslSniCertInfo = 5,
+    HttpServiceConfigSslCcsCertInfo = 6,
+    HttpServiceConfigSetting = 7,
+    HttpServiceConfigSslCertInfoEx = 8,
+    HttpServiceConfigSslSniCertInfoEx = 9,
+    HttpServiceConfigSslCcsCertInfoEx = 0xA,
+    HttpServiceConfigSslScopedCcsCertInfo = 0xB,
+    HttpServiceConfigSslScopedCcsCertInfoEx = 0xC,
 } HTTP_SERVICE_CONFIG_ID, *PHTTP_SERVICE_CONFIG_ID;
 
 #define HTTP_NULL_ID ((ULONGLONG)0)
@@ -218,6 +227,8 @@ typedef enum _HTTP_DATA_CHUNK_TYPE
     HttpDataChunkFromFragmentCache,
     HttpDataChunkFromFragmentCacheEx,
     HttpDataChunkMaximum,
+    HttpDataChunkTrailers = 4,
+    HttpDataChunkFromWinHttpFastForwarding = 5,
 } HTTP_DATA_CHUNK_TYPE, *PHTTP_DATA_CHUNK_TYPE;
 
 #define HTTP_BYTE_RANGE_TO_EOF ((ULONGLONG)-1)
@@ -297,6 +308,20 @@ typedef struct _HTTP_REQUEST_V1
 typedef enum _HTTP_REQUEST_INFO_TYPE
 {
     HttpRequestInfoTypeAuth = 0,
+    HttpRequestInfoTypeChannelBind = 1,
+    HttpRequestInfoTypeSslProtocol = 2,
+    HttpRequestInfoTypeSslTokenBindingDraft = 3,
+    HttpRequestInfoTypeSslTokenBinding = 4,
+    HttpRequestInfoTypeRequestTiming = 5,
+    HttpRequestInfoTypeTcpInfoV0 = 6,
+    HttpRequestInfoTypeRequestSizing = 7,
+    HttpRequestInfoTypeQuicStats = 8,
+    HttpRequestInfoTypeTcpInfoV1 = 9,
+    HttpRequestInfoTypeQuicStatsV2 = 0xA,
+    HttpRequestInfoTypeTcpInfoV2 = 0xB,
+    HttpRequestInfoTypeTransportIdleConnectionTimeout = 0xC,
+    HttpRequestInfoTypeDscpTag = 0xD,
+    HttpRequestInfoTypeInitialPacketTtl = 0xE,
 } HTTP_REQUEST_INFO_TYPE, *PHTTP_REQUEST_INFO_TYPE;
 
 typedef struct _HTTP_REQUEST_INFO
@@ -350,6 +375,7 @@ typedef enum _HTTP_RESPONSE_INFO_TYPE
     HttpResponseInfoTypeAuthenticationProperty,
     HttpResponseInfoTypeQosProperty,
     HttpResponseInfoTypeChannelBind,
+    HttpResponseInfoTypeQoSProperty = 2,
 } HTTP_RESPONSE_INFO_TYPE, *PHTTP_RESPONSE_INFO_TYPE;
 
 typedef struct _HTTP_RESPONSE_INFO
@@ -414,6 +440,9 @@ typedef enum _HTTP_SERVER_PROPERTY
     HttpServerListenEndpointProperty,
     HttpServerChannelBindProperty,
     HttpServerProtectionLevelProperty,
+    HttpServerDelegationProperty = 0x10,
+    HttpServerFastForwardingProperty = 0x12,
+    HttpServerRequestInfoProperty = 0x13,
 } HTTP_SERVER_PROPERTY, *PHTTP_SERVER_PROPERTY;
 
 typedef struct _HTTP_PROPERTY_FLAGS
@@ -740,38 +769,17 @@ ULONG WINAPI HttpSetUrlGroupProperty(HTTP_URL_GROUP_ID id, HTTP_SERVER_PROPERTY 
 #define HTTP_SSL_CERT_STORE_NAME_LENGTH 128
 #endif
 
-typedef enum _HTTP_ENABLED_STATE {
-    HttpEnabledStateActive = 0,
-    HttpEnabledStateInactive = 1
-} HTTP_ENABLED_STATE, *PHTTP_ENABLED_STATE;
-
 typedef enum _HTTP_503_RESPONSE_VERBOSITY {
     Http503ResponseVerbosityBasic = 0,
     Http503ResponseVerbosityLimited = 1,
     Http503ResponseVerbosityFull = 2
 } HTTP_503_RESPONSE_VERBOSITY, *PHTTP_503_RESPONSE_VERBOSITY;
 
-typedef enum _HTTP_QOS_SETTING_TYPE {
-    HttpQosSettingTypeBandwidth = 0,
-    HttpQosSettingTypeConnectionLimit = 1,
-    HttpQosSettingTypeFlowRate = 2
-} HTTP_QOS_SETTING_TYPE, *PHTTP_QOS_SETTING_TYPE;
-
-typedef enum _HTTP_SERVICE_CONFIG_TIMEOUT_KEY {
-    IdleConnectionTimeout = 0,
-    HeaderWaitTimeout = 1
-} HTTP_SERVICE_CONFIG_TIMEOUT_KEY, *PHTTP_SERVICE_CONFIG_TIMEOUT_KEY;
-
-typedef enum _HTTP_SERVICE_CONFIG_SETTING_KEY {
-    HttpNone = 0,
-    HttpTlsThrottle = 1
-} HTTP_SERVICE_CONFIG_SETTING_KEY, *PHTTP_SERVICE_CONFIG_SETTING_KEY;
-
-typedef enum _HTTP_SERVICE_BINDING_TYPE {
-    HttpServiceBindingTypeNone = 0,
-    HttpServiceBindingTypeW = 1,
-    HttpServiceBindingTypeA = 2
-} HTTP_SERVICE_BINDING_TYPE;
+typedef enum _HTTP_AUTH_STATUS {
+    HttpAuthStatusSuccess = 0,
+    HttpAuthStatusNotAuthenticated = 1,
+    HttpAuthStatusFailure = 2
+} HTTP_AUTH_STATUS, *PHTTP_AUTH_STATUS;
 
 typedef enum _HTTP_AUTHENTICATION_HARDENING_LEVELS {
     HttpAuthenticationHardeningLegacy = 0,
@@ -779,12 +787,43 @@ typedef enum _HTTP_AUTHENTICATION_HARDENING_LEVELS {
     HttpAuthenticationHardeningStrict = 2
 } HTTP_AUTHENTICATION_HARDENING_LEVELS;
 
-typedef enum _HTTP_LOGGING_TYPE {
-    HttpLoggingTypeW3C = 0,
-    HttpLoggingTypeIIS = 1,
-    HttpLoggingTypeNCSA = 2,
-    HttpLoggingTypeRaw = 3
-} HTTP_LOGGING_TYPE, *PHTTP_LOGGING_TYPE;
+typedef enum _HTTP_CREATE_REQUEST_QUEUE_PROPERTY_ID {
+    CreateRequestQueueExternalIdProperty = 1,
+    CreateRequestQueueMax = 2
+} HTTP_CREATE_REQUEST_QUEUE_PROPERTY_ID, *PHTTP_CREATE_REQUEST_QUEUE_PROPERTY_ID;
+
+typedef enum _HTTP_DELEGATE_REQUEST_PROPERTY_ID {
+    DelegateRequestReservedProperty = 0,
+    DelegateRequestDelegateUrlProperty = 1
+} HTTP_DELEGATE_REQUEST_PROPERTY_ID, *PHTTP_DELEGATE_REQUEST_PROPERTY_ID;
+
+typedef enum _HTTP_ENABLED_STATE {
+    HttpEnabledStateActive = 0,
+    HttpEnabledStateInactive = 1
+} HTTP_ENABLED_STATE, *PHTTP_ENABLED_STATE;
+
+typedef enum _HTTP_FEATURE_ID {
+    HttpFeatureUnknown = 0,
+    HttpFeatureResponseTrailers = 1,
+    HttpFeatureApiTimings = 2,
+    HttpFeatureDelegateEx = 3,
+    HttpFeatureHttp3 = 4,
+    HttpFeatureTlsSessionTickets = 5,
+    HttpFeatureDisableTlsSessionId = 6,
+    HttpFeatureTlsDualCerts = 7,
+    HttpFeatureAutomaticChunkedEncoding = 8,
+    HttpFeatureDedicatedReqQueueDelegationType = 9,
+    HttpFeatureFastForwardResponse = 10,
+    HttpFeatureCacheTlsClientHello = 11,
+    HttpFeatureIdleConnectionTimeoutRequestProperty = 12,
+    HttpFeatureDisableAiaFlag = 13,
+    HttpFeatureDscp = 14,
+    HttpFeatureQueryCipherInfo = 15,
+    HttpFeatureQueryInitialPacketTtl = 16,
+    HttpFeatureTlsHandshakePerformanceCounters = 17,
+    HttpFeatureLast = 18,
+    HttpFeaturemax = (-1)
+} HTTP_FEATURE_ID, *PHTTP_FEATURE_ID;
 
 typedef enum _HTTP_LOGGING_ROLLOVER_TYPE {
     HttpLoggingRolloverSize = 0,
@@ -794,33 +833,34 @@ typedef enum _HTTP_LOGGING_ROLLOVER_TYPE {
     HttpLoggingRolloverHourly = 4
 } HTTP_LOGGING_ROLLOVER_TYPE, *PHTTP_LOGGING_ROLLOVER_TYPE;
 
+typedef enum _HTTP_LOGGING_TYPE {
+    HttpLoggingTypeW3C = 0,
+    HttpLoggingTypeIIS = 1,
+    HttpLoggingTypeNCSA = 2,
+    HttpLoggingTypeRaw = 3
+} HTTP_LOGGING_TYPE, *PHTTP_LOGGING_TYPE;
+
+typedef enum _HTTP_PERFORMANCE_PARAM_TYPE {
+    PerformanceParamSendBufferingFlags = 0,
+    PerformanceParamAggressiveICW = 1,
+    PerformanceParamMaxSendBufferSize = 2,
+    PerformanceParamMaxConcurrentClientStreams = 3,
+    PerformanceParamMaxReceiveBufferSize = 4,
+    PerformanceParamDecryptOnSspiThread = 5,
+    PerformanceParamMax = 6
+} HTTP_PERFORMANCE_PARAM_TYPE, *PHTTP_PERFORMANCE_PARAM_TYPE;
+
 typedef enum _HTTP_PROTECTION_LEVEL_TYPE {
     HttpProtectionLevelUnrestricted = 0,
     HttpProtectionLevelEdgeRestricted = 1,
     HttpProtectionLevelRestricted = 2
 } HTTP_PROTECTION_LEVEL_TYPE, *PHTTP_PROTECTION_LEVEL_TYPE;
 
-typedef enum _HTTP_URI_SCHEME {
-    HttpSchemeHttp = 0,
-    HttpSchemeHttps = 1,
-    HttpSchemeMaximum = 2
-} HTTP_SCHEME, *PHTTP_URI_SCHEME;
-
-typedef enum _HTTP_DELEGATE_REQUEST_PROPERTY_ID {
-    DelegateRequestReservedProperty = 0,
-    DelegateRequestDelegateUrlProperty = 1
-} HTTP_DELEGATE_REQUEST_PROPERTY_ID, *PHTTP_DELEGATE_REQUEST_PROPERTY_ID;
-
-typedef enum _HTTP_CREATE_REQUEST_QUEUE_PROPERTY_ID {
-    CreateRequestQueueExternalIdProperty = 1,
-    CreateRequestQueueMax = 2
-} HTTP_CREATE_REQUEST_QUEUE_PROPERTY_ID, *PHTTP_CREATE_REQUEST_QUEUE_PROPERTY_ID;
-
-typedef enum _HTTP_AUTH_STATUS {
-    HttpAuthStatusSuccess = 0,
-    HttpAuthStatusNotAuthenticated = 1,
-    HttpAuthStatusFailure = 2
-} HTTP_AUTH_STATUS, *PHTTP_AUTH_STATUS;
+typedef enum _HTTP_QOS_SETTING_TYPE {
+    HttpQosSettingTypeBandwidth = 0,
+    HttpQosSettingTypeConnectionLimit = 1,
+    HttpQosSettingTypeFlowRate = 2
+} HTTP_QOS_SETTING_TYPE, *PHTTP_QOS_SETTING_TYPE;
 
 typedef enum _HTTP_REQUEST_AUTH_TYPE {
     HttpRequestAuthTypeNone = 0,
@@ -830,6 +870,24 @@ typedef enum _HTTP_REQUEST_AUTH_TYPE {
     HttpRequestAuthTypeNegotiate = 4,
     HttpRequestAuthTypeKerberos = 5
 } HTTP_REQUEST_AUTH_TYPE, *PHTTP_REQUEST_AUTH_TYPE;
+
+typedef enum _HTTP_REQUEST_PROPERTY {
+    HttpRequestPropertyIsb = 0,
+    HttpRequestPropertyTcpInfoV0 = 1,
+    HttpRequestPropertyQuicStats = 2,
+    HttpRequestPropertyTcpInfoV1 = 3,
+    HttpRequestPropertySni = 4,
+    HttpRequestPropertyStreamError = 5,
+    HttpRequestPropertyWskApiTimings = 6,
+    HttpRequestPropertyQuicApiTimings = 7,
+    HttpRequestPropertyQuicStatsV2 = 8,
+    HttpRequestPropertyQuicStreamStats = 9,
+    HttpRequestPropertyTcpInfoV2 = 10,
+    HttpRequestPropertyTlsClientHello = 11,
+    HttpRequestPropertyTransportIdleConnectionTimeout = 12,
+    HttpRequestPropertyDscpTag = 13,
+    HttpRequestPropertyTlsCipherInfo = 14
+} HTTP_REQUEST_PROPERTY, *PHTTP_REQUEST_PROPERTY;
 
 typedef enum _HTTP_REQUEST_SIZING_TYPE {
     HttpRequestSizingTypeTlsHandshakeLeg1ClientData = 0,
@@ -874,11 +932,32 @@ typedef enum _HTTP_REQUEST_TIMING_TYPE {
     HttpRequestTimingTypeMax = 30
 } HTTP_REQUEST_TIMING_TYPE, *PHTTP_REQUEST_TIMING_TYPE;
 
+typedef enum _HTTP_SERVICE_BINDING_TYPE {
+    HttpServiceBindingTypeNone = 0,
+    HttpServiceBindingTypeW = 1,
+    HttpServiceBindingTypeA = 2
+} HTTP_SERVICE_BINDING_TYPE;
+
+typedef enum _HTTP_SERVICE_CONFIG_CACHE_KEY {
+    MaxCacheResponseSize = 0,
+    CacheRangeChunkSize = 1
+} HTTP_SERVICE_CONFIG_CACHE_KEY, *PHTTP_SERVICE_CONFIG_CACHE_KEY;
+
 typedef enum _HTTP_SERVICE_CONFIG_QUERY_TYPE {
     HttpServiceConfigQueryExact = 0,
     HttpServiceConfigQueryNext = 1,
     HttpServiceConfigQueryMax = 2
 } HTTP_SERVICE_CONFIG_QUERY_TYPE, *PHTTP_SERVICE_CONFIG_QUERY_TYPE;
+
+typedef enum _HTTP_SERVICE_CONFIG_SETTING_KEY {
+    HttpNone = 0,
+    HttpTlsThrottle = 1
+} HTTP_SERVICE_CONFIG_SETTING_KEY, *PHTTP_SERVICE_CONFIG_SETTING_KEY;
+
+typedef enum _HTTP_SERVICE_CONFIG_TIMEOUT_KEY {
+    IdleConnectionTimeout = 0,
+    HeaderWaitTimeout = 1
+} HTTP_SERVICE_CONFIG_TIMEOUT_KEY, *PHTTP_SERVICE_CONFIG_TIMEOUT_KEY;
 
 typedef enum _HTTP_SSL_SERVICE_CONFIG_EX_PARAM_TYPE {
     ExParamTypeHttp2Window = 0,
@@ -891,77 +970,27 @@ typedef enum _HTTP_SSL_SERVICE_CONFIG_EX_PARAM_TYPE {
     ExParamTypeMax = 7
 } HTTP_SSL_SERVICE_CONFIG_EX_PARAM_TYPE, *PHTTP_SSL_SERVICE_CONFIG_EX_PARAM_TYPE;
 
-typedef enum _HTTP_PERFORMANCE_PARAM_TYPE {
-    PerformanceParamSendBufferingFlags = 0,
-    PerformanceParamAggressiveICW = 1,
-    PerformanceParamMaxSendBufferSize = 2,
-    PerformanceParamMaxConcurrentClientStreams = 3,
-    PerformanceParamMaxReceiveBufferSize = 4,
-    PerformanceParamDecryptOnSspiThread = 5,
-    PerformanceParamMax = 6
-} HTTP_PERFORMANCE_PARAM_TYPE, *PHTTP_PERFORMANCE_PARAM_TYPE;
+typedef enum _HTTP_URI_SCHEME {
+    HttpSchemeHttp = 0,
+    HttpSchemeHttps = 1,
+    HttpSchemeMaximum = 2
+} HTTP_SCHEME, *PHTTP_URI_SCHEME;
 
-typedef enum _HTTP_SERVICE_CONFIG_CACHE_KEY {
-    MaxCacheResponseSize = 0,
-    CacheRangeChunkSize = 1
-} HTTP_SERVICE_CONFIG_CACHE_KEY, *PHTTP_SERVICE_CONFIG_CACHE_KEY;
-
-typedef enum _HTTP_REQUEST_PROPERTY {
-    HttpRequestPropertyIsb = 0,
-    HttpRequestPropertyTcpInfoV0 = 1,
-    HttpRequestPropertyQuicStats = 2,
-    HttpRequestPropertyTcpInfoV1 = 3,
-    HttpRequestPropertySni = 4,
-    HttpRequestPropertyStreamError = 5,
-    HttpRequestPropertyWskApiTimings = 6,
-    HttpRequestPropertyQuicApiTimings = 7,
-    HttpRequestPropertyQuicStatsV2 = 8,
-    HttpRequestPropertyQuicStreamStats = 9,
-    HttpRequestPropertyTcpInfoV2 = 10,
-    HttpRequestPropertyTlsClientHello = 11,
-    HttpRequestPropertyTransportIdleConnectionTimeout = 12,
-    HttpRequestPropertyDscpTag = 13,
-    HttpRequestPropertyTlsCipherInfo = 14
-} HTTP_REQUEST_PROPERTY, *PHTTP_REQUEST_PROPERTY;
-
-typedef enum _HTTP_FEATURE_ID {
-    HttpFeatureUnknown = 0,
-    HttpFeatureResponseTrailers = 1,
-    HttpFeatureApiTimings = 2,
-    HttpFeatureDelegateEx = 3,
-    HttpFeatureHttp3 = 4,
-    HttpFeatureTlsSessionTickets = 5,
-    HttpFeatureDisableTlsSessionId = 6,
-    HttpFeatureTlsDualCerts = 7,
-    HttpFeatureAutomaticChunkedEncoding = 8,
-    HttpFeatureDedicatedReqQueueDelegationType = 9,
-    HttpFeatureFastForwardResponse = 10,
-    HttpFeatureCacheTlsClientHello = 11,
-    HttpFeatureIdleConnectionTimeoutRequestProperty = 12,
-    HttpFeatureDisableAiaFlag = 13,
-    HttpFeatureDscp = 14,
-    HttpFeatureQueryCipherInfo = 15,
-    HttpFeatureQueryInitialPacketTtl = 16,
-    HttpFeatureTlsHandshakePerformanceCounters = 17,
-    HttpFeatureLast = 18,
-    HttpFeaturemax = (-1)
-} HTTP_FEATURE_ID, *PHTTP_FEATURE_ID;
-
-typedef USHORT HTTP_SERVICE_CONFIG_TIMEOUT_PARAM;
-typedef USHORT * PHTTP_SERVICE_CONFIG_TIMEOUT_PARAM;
-typedef ULONG HTTP_SERVICE_CONFIG_SETTING_PARAM;
-typedef ULONG * PHTTP_SERVICE_CONFIG_SETTING_PARAM;
-typedef HTTP_OPAQUE_ID HTTP_CLIENT_REQUEST_ID;
-typedef HTTP_OPAQUE_ID * PHTTP_CLIENT_REQUEST_ID;
 typedef HTTP_OPAQUE_ID HTTP_CLIENT_CONNECTION_ID;
-typedef HTTP_OPAQUE_ID * PHTTP_CLIENT_CONNECTION_ID;
-typedef HTTP_OPAQUE_ID HTTP_CLIENT_STREAM_ID;
-typedef HTTP_OPAQUE_ID * PHTTP_CLIENT_STREAM_ID;
 typedef HTTP_OPAQUE_ID HTTP_CLIENT_CREDENTIAL_ID;
-typedef HTTP_OPAQUE_ID * PHTTP_CLIENT_CREDENTIAL_ID;
-typedef struct _HTTP_REQUEST_V1 * PHTTP_REQUEST_V1;
+typedef HTTP_OPAQUE_ID HTTP_CLIENT_REQUEST_ID;
+typedef HTTP_OPAQUE_ID HTTP_CLIENT_STREAM_ID;
 typedef ULONG HTTP_SERVICE_CONFIG_CACHE_PARAM;
+typedef ULONG HTTP_SERVICE_CONFIG_SETTING_PARAM;
+typedef USHORT HTTP_SERVICE_CONFIG_TIMEOUT_PARAM;
+typedef HTTP_OPAQUE_ID * PHTTP_CLIENT_CONNECTION_ID;
+typedef HTTP_OPAQUE_ID * PHTTP_CLIENT_CREDENTIAL_ID;
+typedef HTTP_OPAQUE_ID * PHTTP_CLIENT_REQUEST_ID;
+typedef HTTP_OPAQUE_ID * PHTTP_CLIENT_STREAM_ID;
+typedef struct _HTTP_REQUEST_V1 * PHTTP_REQUEST_V1;
 typedef ULONG * PHTTP_SERVICE_CONFIG_CACHE_PARAM;
+typedef ULONG * PHTTP_SERVICE_CONFIG_SETTING_PARAM;
+typedef USHORT * PHTTP_SERVICE_CONFIG_TIMEOUT_PARAM;
 
 #ifdef __cplusplus
 extern "C" {
@@ -971,25 +1000,57 @@ ULONG WINAPI HttpShutdownRequestQueue(HANDLE RequestQueueHandle);
 }
 #endif
 
-typedef struct _HTTP_STATE_INFO {
-  HTTP_PROPERTY_FLAGS Flags;
-  HTTP_ENABLED_STATE State;
-} HTTP_STATE_INFO, *PHTTP_STATE_INFO;
+typedef struct _HTTP2_SETTINGS_LIMITS_PARAM {
+  DWORD Http2MaxSettingsPerFrame;
+  DWORD Http2MaxSettingsPerMinute;
+} HTTP2_SETTINGS_LIMITS_PARAM, *PHTTP2_SETTINGS_LIMITS_PARAM;
 
-typedef struct _HTTP_QOS_SETTING_INFO {
-  HTTP_QOS_SETTING_TYPE QosType;
-  PVOID QosSetting;
-} HTTP_QOS_SETTING_INFO, *PHTTP_QOS_SETTING_INFO;
+typedef struct _HTTP2_WINDOW_SIZE_PARAM {
+  DWORD Http2ReceiveWindowSize;
+} HTTP2_WINDOW_SIZE_PARAM, *PHTTP2_WINDOW_SIZE_PARAM;
+
+typedef struct _HTTP_BANDWIDTH_LIMIT_INFO {
+  HTTP_PROPERTY_FLAGS Flags;
+  ULONG MaxBandwidth;
+} HTTP_BANDWIDTH_LIMIT_INFO, *PHTTP_BANDWIDTH_LIMIT_INFO;
+
+typedef struct _HTTP_CERT_CONFIG_ENTRY {
+  BYTE CertHash[20];
+  WCHAR CertStoreName[128];
+} HTTP_CERT_CONFIG_ENTRY, *PHTTP_CERT_CONFIG_ENTRY;
+
+typedef struct _HTTP_CERT_CONFIG_PARAM {
+  ULONG CertConfigCount;
+  PHTTP_CERT_CONFIG_ENTRY CertConfigs;
+} HTTP_CERT_CONFIG_PARAM, *PHTTP_CERT_CONFIG_PARAM;
 
 typedef struct _HTTP_CONNECTION_LIMIT_INFO {
   HTTP_PROPERTY_FLAGS Flags;
   ULONG MaxConnections;
 } HTTP_CONNECTION_LIMIT_INFO, *PHTTP_CONNECTION_LIMIT_INFO;
 
-typedef struct _HTTP_BANDWIDTH_LIMIT_INFO {
+typedef struct _HTTP_CREATE_REQUEST_QUEUE_PROPERTY_INFO {
+  HTTP_CREATE_REQUEST_QUEUE_PROPERTY_ID PropertyId;
+  ULONG PropertyInfoLength;
+  PVOID PropertyInfo;
+} HTTP_CREATE_REQUEST_QUEUE_PROPERTY_INFO, *PHTTP_CREATE_REQUEST_QUEUE_PROPERTY_INFO;
+
+typedef struct _HTTP_DELEGATE_REQUEST_PROPERTY_INFO {
+  HTTP_DELEGATE_REQUEST_PROPERTY_ID PropertyId;
+  ULONG PropertyInfoLength;
+  PVOID PropertyInfo;
+} HTTP_DELEGATE_REQUEST_PROPERTY_INFO, *PHTTP_DELEGATE_REQUEST_PROPERTY_INFO;
+
+typedef struct _HTTP_ERROR_HEADERS_PARAM {
+  USHORT StatusCode;
+  USHORT HeaderCount;
+  PHTTP_UNKNOWN_HEADER Headers;
+} HTTP_ERROR_HEADERS_PARAM, *PHTTP_ERROR_HEADERS_PARAM;
+
+typedef struct _HTTP_FAST_FORWARD_INFO {
   HTTP_PROPERTY_FLAGS Flags;
-  ULONG MaxBandwidth;
-} HTTP_BANDWIDTH_LIMIT_INFO, *PHTTP_BANDWIDTH_LIMIT_INFO;
+  BOOLEAN EnableFastForwarding;
+} HTTP_FAST_FORWARD_INFO, *PHTTP_FAST_FORWARD_INFO;
 
 typedef struct _HTTP_FLOWRATE_INFO {
   HTTP_PROPERTY_FLAGS Flags;
@@ -998,123 +1059,10 @@ typedef struct _HTTP_FLOWRATE_INFO {
   ULONG BurstSize;
 } HTTP_FLOWRATE_INFO, *PHTTP_FLOWRATE_INFO;
 
-typedef struct _HTTP_SERVICE_CONFIG_TIMEOUT_SET {
-  HTTP_SERVICE_CONFIG_TIMEOUT_KEY KeyDesc;
-  HTTP_SERVICE_CONFIG_TIMEOUT_PARAM ParamDesc;
-} HTTP_SERVICE_CONFIG_TIMEOUT_SET, *PHTTP_SERVICE_CONFIG_TIMEOUT_SET;
-
-typedef struct _HTTP_TIMEOUT_LIMIT_INFO {
-  HTTP_PROPERTY_FLAGS Flags;
-  USHORT EntityBody;
-  USHORT DrainEntityBody;
-  USHORT RequestQueue;
-  USHORT IdleConnection;
-  USHORT HeaderWait;
-  ULONG MinSendRate;
-} HTTP_TIMEOUT_LIMIT_INFO, *PHTTP_TIMEOUT_LIMIT_INFO;
-
-typedef struct _HTTP_SERVICE_CONFIG_SETTING_SET {
-  HTTP_SERVICE_CONFIG_SETTING_KEY KeyDesc;
-  HTTP_SERVICE_CONFIG_SETTING_PARAM ParamDesc;
-} HTTP_SERVICE_CONFIG_SETTING_SET, *PHTTP_SERVICE_CONFIG_SETTING_SET;
-
 typedef struct _HTTP_LISTEN_ENDPOINT_INFO {
   HTTP_PROPERTY_FLAGS Flags;
   BOOLEAN EnableSharing;
 } HTTP_LISTEN_ENDPOINT_INFO, *PHTTP_LISTEN_ENDPOINT_INFO;
-
-typedef struct _HTTP_FAST_FORWARD_INFO {
-  HTTP_PROPERTY_FLAGS Flags;
-  BOOLEAN EnableFastForwarding;
-} HTTP_FAST_FORWARD_INFO, *PHTTP_FAST_FORWARD_INFO;
-
-typedef struct _HTTP_SERVER_AUTHENTICATION_DIGEST_PARAMS {
-  USHORT DomainNameLength;
-  PWSTR DomainName;
-  USHORT RealmLength;
-  PWSTR Realm;
-} HTTP_SERVER_AUTHENTICATION_DIGEST_PARAMS, *PHTTP_SERVER_AUTHENTICATION_DIGEST_PARAMS;
-
-typedef struct _HTTP_SERVER_AUTHENTICATION_BASIC_PARAMS {
-  USHORT RealmLength;
-  PWSTR Realm;
-} HTTP_SERVER_AUTHENTICATION_BASIC_PARAMS, *PHTTP_SERVER_AUTHENTICATION_BASIC_PARAMS;
-
-typedef struct _HTTP_SERVER_AUTHENTICATION_INFO {
-  HTTP_PROPERTY_FLAGS Flags;
-  ULONG AuthSchemes;
-  BOOLEAN ReceiveMutualAuth;
-  BOOLEAN ReceiveContextHandle;
-  BOOLEAN DisableNTLMCredentialCaching;
-  UCHAR ExFlags;
-  HTTP_SERVER_AUTHENTICATION_DIGEST_PARAMS DigestParams;
-  HTTP_SERVER_AUTHENTICATION_BASIC_PARAMS BasicParams;
-} HTTP_SERVER_AUTHENTICATION_INFO, *PHTTP_SERVER_AUTHENTICATION_INFO;
-
-typedef struct _HTTP_SERVICE_BINDING_BASE {
-  HTTP_SERVICE_BINDING_TYPE Type;
-} HTTP_SERVICE_BINDING_BASE, *PHTTP_SERVICE_BINDING_BASE;
-
-typedef struct _HTTP_SERVICE_BINDING_A {
-  HTTP_SERVICE_BINDING_BASE Base;
-  PCHAR Buffer;
-  ULONG BufferSize;
-} HTTP_SERVICE_BINDING_A, *PHTTP_SERVICE_BINDING_A;
-
-typedef struct _HTTP_SERVICE_BINDING_W {
-  HTTP_SERVICE_BINDING_BASE Base;
-  PWCHAR Buffer;
-  ULONG BufferSize;
-} HTTP_SERVICE_BINDING_W, *PHTTP_SERVICE_BINDING_W;
-
-typedef struct _HTTP_CHANNEL_BIND_INFO {
-  HTTP_AUTHENTICATION_HARDENING_LEVELS Hardening;
-  ULONG Flags;
-  PHTTP_SERVICE_BINDING_BASE * ServiceNames;
-  ULONG NumberOfServiceNames;
-} HTTP_CHANNEL_BIND_INFO, *PHTTP_CHANNEL_BIND_INFO;
-
-typedef struct _HTTP_REQUEST_CHANNEL_BIND_STATUS {
-  PHTTP_SERVICE_BINDING_BASE ServiceName;
-  PUCHAR ChannelToken;
-  ULONG ChannelTokenSize;
-  ULONG Flags;
-} HTTP_REQUEST_CHANNEL_BIND_STATUS, *PHTTP_REQUEST_CHANNEL_BIND_STATUS;
-
-typedef struct _HTTP_REQUEST_TOKEN_BINDING_INFO {
-  PUCHAR TokenBinding;
-  ULONG TokenBindingSize;
-  PUCHAR EKM;
-  ULONG EKMSize;
-  UCHAR KeyType;
-} HTTP_REQUEST_TOKEN_BINDING_INFO, *PHTTP_REQUEST_TOKEN_BINDING_INFO;
-
-typedef struct _HTTP_LOGGING_INFO {
-  HTTP_PROPERTY_FLAGS Flags;
-  ULONG LoggingFlags;
-  PCWSTR SoftwareName;
-  USHORT SoftwareNameLength;
-  USHORT DirectoryNameLength;
-  PCWSTR DirectoryName;
-  HTTP_LOGGING_TYPE Format;
-  ULONG Fields;
-  PVOID pExtFields;
-  USHORT NumOfExtFields;
-  USHORT MaxRecordSize;
-  HTTP_LOGGING_ROLLOVER_TYPE RolloverType;
-  ULONG RolloverSize;
-  PSECURITY_DESCRIPTOR pSecurityDescriptor;
-} HTTP_LOGGING_INFO, *PHTTP_LOGGING_INFO;
-
-typedef struct _HTTP_PROTECTION_LEVEL_INFO {
-  HTTP_PROPERTY_FLAGS Flags;
-  HTTP_PROTECTION_LEVEL_TYPE Level;
-} HTTP_PROTECTION_LEVEL_INFO, *PHTTP_PROTECTION_LEVEL_INFO;
-
-typedef struct _HTTP_REQUEST_INFO_PROPERTY_INFO {
-  HTTP_PROPERTY_FLAGS Flags;
-  ULONGLONG RequestInfoFlags;
-} HTTP_REQUEST_INFO_PROPERTY_INFO, *PHTTP_REQUEST_INFO_PROPERTY_INFO;
 
 typedef struct _HTTP_LOG_FIELDS_DATA {
   HTTP_LOG_DATA Base;
@@ -1149,71 +1097,22 @@ typedef struct _HTTP_LOG_FIELDS_DATA {
   USHORT SubStatus;
 } HTTP_LOG_FIELDS_DATA, *PHTTP_LOG_FIELDS_DATA;
 
-typedef struct _HTTP_WINHTTP_FAST_FORWARDING_DATA {
-  UCHAR Reserved[16];
-} HTTP_WINHTTP_FAST_FORWARDING_DATA, *PHTTP_WINHTTP_FAST_FORWARDING_DATA;
-
-typedef struct _HTTP_DELEGATE_REQUEST_PROPERTY_INFO {
-  HTTP_DELEGATE_REQUEST_PROPERTY_ID PropertyId;
-  ULONG PropertyInfoLength;
-  PVOID PropertyInfo;
-} HTTP_DELEGATE_REQUEST_PROPERTY_INFO, *PHTTP_DELEGATE_REQUEST_PROPERTY_INFO;
-
-typedef struct _HTTP_CREATE_REQUEST_QUEUE_PROPERTY_INFO {
-  HTTP_CREATE_REQUEST_QUEUE_PROPERTY_ID PropertyId;
-  ULONG PropertyInfoLength;
-  PVOID PropertyInfo;
-} HTTP_CREATE_REQUEST_QUEUE_PROPERTY_INFO, *PHTTP_CREATE_REQUEST_QUEUE_PROPERTY_INFO;
-
-typedef struct _HTTP_SSL_PROTOCOL_INFO {
-  ULONG Protocol;
-  ULONG CipherType;
-  ULONG CipherStrength;
-  ULONG HashType;
-  ULONG HashStrength;
-  ULONG KeyExchangeType;
-  ULONG KeyExchangeStrength;
-} HTTP_SSL_PROTOCOL_INFO, *PHTTP_SSL_PROTOCOL_INFO;
-
-typedef struct _HTTP_REQUEST_SIZING_INFO {
-  ULONGLONG Flags;
-  ULONG RequestIndex;
-  ULONG RequestSizingCount;
-  ULONGLONG RequestSizing[5];
-} HTTP_REQUEST_SIZING_INFO, *PHTTP_REQUEST_SIZING_INFO;
-
-typedef struct _HTTP_REQUEST_TIMING_INFO {
-  ULONG RequestTimingCount;
-  ULONGLONG RequestTiming[30];
-} HTTP_REQUEST_TIMING_INFO, *PHTTP_REQUEST_TIMING_INFO;
-
-typedef struct _HTTP_REQUEST_TRANSPORT_IDLE_CONNECTION_TIMEOUT_INFO {
-  USHORT TransportIdleConnectionTimeout;
-} HTTP_REQUEST_TRANSPORT_IDLE_CONNECTION_TIMEOUT_INFO, *PHTTP_REQUEST_TRANSPORT_IDLE_CONNECTION_TIMEOUT_INFO;
-
-typedef struct _HTTP_REQUEST_DSCP_INFO {
-  BYTE DscpTag;
-} HTTP_REQUEST_DSCP_INFO, *PHTTP_REQUEST_DSCP_INFO;
-
-typedef struct _HTTP_REQUEST_INITIAL_PACKET_TTL_INFO {
-  BYTE InitialPacketTtl;
-} HTTP_REQUEST_INITIAL_PACKET_TTL_INFO, *PHTTP_REQUEST_INITIAL_PACKET_TTL_INFO;
-
-typedef struct _HTTP_REQUEST_AUTH_INFO {
-  HTTP_AUTH_STATUS AuthStatus;
-  SECURITY_STATUS SecStatus;
-  ULONG Flags;
-  HTTP_REQUEST_AUTH_TYPE AuthType;
-  HANDLE AccessToken;
-  ULONG ContextAttributes;
-  ULONG PackedContextLength;
-  ULONG PackedContextType;
-  PVOID PackedContext;
-  ULONG MutualAuthDataLength;
-  PCHAR pMutualAuthData;
-  USHORT PackageNameLength;
-  PWSTR pPackageName;
-} HTTP_REQUEST_AUTH_INFO, *PHTTP_REQUEST_AUTH_INFO;
+typedef struct _HTTP_LOGGING_INFO {
+  HTTP_PROPERTY_FLAGS Flags;
+  ULONG LoggingFlags;
+  PCWSTR SoftwareName;
+  USHORT SoftwareNameLength;
+  USHORT DirectoryNameLength;
+  PCWSTR DirectoryName;
+  HTTP_LOGGING_TYPE Format;
+  ULONG Fields;
+  PVOID pExtFields;
+  USHORT NumOfExtFields;
+  USHORT MaxRecordSize;
+  HTTP_LOGGING_ROLLOVER_TYPE RolloverType;
+  ULONG RolloverSize;
+  PSECURITY_DESCRIPTOR pSecurityDescriptor;
+} HTTP_LOGGING_INFO, *PHTTP_LOGGING_INFO;
 
 typedef struct _HTTP_MULTIPLE_KNOWN_HEADERS {
   HTTP_HEADER_ID HeaderId;
@@ -1222,196 +1121,29 @@ typedef struct _HTTP_MULTIPLE_KNOWN_HEADERS {
   PHTTP_KNOWN_HEADER KnownHeaders;
 } HTTP_MULTIPLE_KNOWN_HEADERS, *PHTTP_MULTIPLE_KNOWN_HEADERS;
 
-typedef struct _HTTP_SERVICE_CONFIG_SSL_KEY {
-  PSOCKADDR pIpPort;
-} HTTP_SERVICE_CONFIG_SSL_KEY, *PHTTP_SERVICE_CONFIG_SSL_KEY;
-
-typedef struct _HTTP_SERVICE_CONFIG_SSL_KEY_EX {
-  SOCKADDR_STORAGE IpPort;
-} HTTP_SERVICE_CONFIG_SSL_KEY_EX, *PHTTP_SERVICE_CONFIG_SSL_KEY_EX;
-
-typedef struct _HTTP_SERVICE_CONFIG_SSL_SNI_KEY {
-  SOCKADDR_STORAGE IpPort;
-  PWSTR Host;
-} HTTP_SERVICE_CONFIG_SSL_SNI_KEY, *PHTTP_SERVICE_CONFIG_SSL_SNI_KEY;
-
-typedef struct _HTTP_SERVICE_CONFIG_SSL_CCS_KEY {
-  SOCKADDR_STORAGE LocalAddress;
-} HTTP_SERVICE_CONFIG_SSL_CCS_KEY, *PHTTP_SERVICE_CONFIG_SSL_CCS_KEY;
-
-typedef struct _HTTP_SERVICE_CONFIG_SSL_PARAM {
-  ULONG SslHashLength;
-  PVOID pSslHash;
-  GUID AppId;
-  PWSTR pSslCertStoreName;
-  DWORD DefaultCertCheckMode;
-  DWORD DefaultRevocationFreshnessTime;
-  DWORD DefaultRevocationUrlRetrievalTimeout;
-  PWSTR pDefaultSslCtlIdentifier;
-  PWSTR pDefaultSslCtlStoreName;
-  DWORD DefaultFlags;
-} HTTP_SERVICE_CONFIG_SSL_PARAM, *PHTTP_SERVICE_CONFIG_SSL_PARAM;
-
-typedef struct _HTTP2_WINDOW_SIZE_PARAM {
-  DWORD Http2ReceiveWindowSize;
-} HTTP2_WINDOW_SIZE_PARAM, *PHTTP2_WINDOW_SIZE_PARAM;
-
-typedef struct _HTTP2_SETTINGS_LIMITS_PARAM {
-  DWORD Http2MaxSettingsPerFrame;
-  DWORD Http2MaxSettingsPerMinute;
-} HTTP2_SETTINGS_LIMITS_PARAM, *PHTTP2_SETTINGS_LIMITS_PARAM;
-
 typedef struct _HTTP_PERFORMANCE_PARAM {
   HTTP_PERFORMANCE_PARAM_TYPE Type;
   ULONG BufferSize;
   PVOID Buffer;
 } HTTP_PERFORMANCE_PARAM, *PHTTP_PERFORMANCE_PARAM;
 
-typedef struct _HTTP_TLS_RESTRICTIONS_PARAM {
-  ULONG RestrictionCount;
-  PVOID TlsRestrictions;
-} HTTP_TLS_RESTRICTIONS_PARAM, *PHTTP_TLS_RESTRICTIONS_PARAM;
+typedef struct _HTTP_PROTECTION_LEVEL_INFO {
+  HTTP_PROPERTY_FLAGS Flags;
+  HTTP_PROTECTION_LEVEL_TYPE Level;
+} HTTP_PROTECTION_LEVEL_INFO, *PHTTP_PROTECTION_LEVEL_INFO;
 
-typedef struct _HTTP_ERROR_HEADERS_PARAM {
-  USHORT StatusCode;
-  USHORT HeaderCount;
-  PHTTP_UNKNOWN_HEADER Headers;
-} HTTP_ERROR_HEADERS_PARAM, *PHTTP_ERROR_HEADERS_PARAM;
-
-typedef struct _HTTP_TLS_SESSION_TICKET_KEYS_PARAM {
-  ULONG SessionTicketKeyCount;
-  PVOID SessionTicketKeys;
-} HTTP_TLS_SESSION_TICKET_KEYS_PARAM, *PHTTP_TLS_SESSION_TICKET_KEYS_PARAM;
-
-typedef struct _HTTP_CERT_CONFIG_ENTRY {
-  BYTE CertHash[20];
-  WCHAR CertStoreName[128];
-} HTTP_CERT_CONFIG_ENTRY, *PHTTP_CERT_CONFIG_ENTRY;
-
-typedef struct _HTTP_CERT_CONFIG_PARAM {
-  ULONG CertConfigCount;
-  PHTTP_CERT_CONFIG_ENTRY CertConfigs;
-} HTTP_CERT_CONFIG_PARAM, *PHTTP_CERT_CONFIG_PARAM;
-
-typedef struct _HTTP_SERVICE_CONFIG_SSL_SET {
-  HTTP_SERVICE_CONFIG_SSL_KEY KeyDesc;
-  HTTP_SERVICE_CONFIG_SSL_PARAM ParamDesc;
-} HTTP_SERVICE_CONFIG_SSL_SET, *PHTTP_SERVICE_CONFIG_SSL_SET;
-
-typedef struct _HTTP_SERVICE_CONFIG_SSL_SNI_SET {
-  HTTP_SERVICE_CONFIG_SSL_SNI_KEY KeyDesc;
-  HTTP_SERVICE_CONFIG_SSL_PARAM ParamDesc;
-} HTTP_SERVICE_CONFIG_SSL_SNI_SET, *PHTTP_SERVICE_CONFIG_SSL_SNI_SET;
-
-typedef struct _HTTP_SERVICE_CONFIG_SSL_CCS_SET {
-  HTTP_SERVICE_CONFIG_SSL_CCS_KEY KeyDesc;
-  HTTP_SERVICE_CONFIG_SSL_PARAM ParamDesc;
-} HTTP_SERVICE_CONFIG_SSL_CCS_SET, *PHTTP_SERVICE_CONFIG_SSL_CCS_SET;
-
-typedef struct _HTTP_SERVICE_CONFIG_SSL_QUERY {
-  HTTP_SERVICE_CONFIG_QUERY_TYPE QueryDesc;
-  HTTP_SERVICE_CONFIG_SSL_KEY KeyDesc;
-  DWORD dwToken;
-} HTTP_SERVICE_CONFIG_SSL_QUERY, *PHTTP_SERVICE_CONFIG_SSL_QUERY;
-
-typedef struct _HTTP_SERVICE_CONFIG_SSL_SNI_QUERY {
-  HTTP_SERVICE_CONFIG_QUERY_TYPE QueryDesc;
-  HTTP_SERVICE_CONFIG_SSL_SNI_KEY KeyDesc;
-  DWORD dwToken;
-} HTTP_SERVICE_CONFIG_SSL_SNI_QUERY, *PHTTP_SERVICE_CONFIG_SSL_SNI_QUERY;
-
-typedef struct _HTTP_SERVICE_CONFIG_SSL_CCS_QUERY {
-  HTTP_SERVICE_CONFIG_QUERY_TYPE QueryDesc;
-  HTTP_SERVICE_CONFIG_SSL_CCS_KEY KeyDesc;
-  DWORD dwToken;
-} HTTP_SERVICE_CONFIG_SSL_CCS_QUERY, *PHTTP_SERVICE_CONFIG_SSL_CCS_QUERY;
-
-typedef struct _HTTP_SERVICE_CONFIG_SSL_QUERY_EX {
-  HTTP_SERVICE_CONFIG_QUERY_TYPE QueryDesc;
-  HTTP_SERVICE_CONFIG_SSL_KEY_EX KeyDesc;
-  DWORD dwToken;
-  HTTP_SSL_SERVICE_CONFIG_EX_PARAM_TYPE ParamType;
-} HTTP_SERVICE_CONFIG_SSL_QUERY_EX, *PHTTP_SERVICE_CONFIG_SSL_QUERY_EX;
-
-typedef struct _HTTP_SERVICE_CONFIG_SSL_SNI_QUERY_EX {
-  HTTP_SERVICE_CONFIG_QUERY_TYPE QueryDesc;
-  HTTP_SERVICE_CONFIG_SSL_SNI_KEY KeyDesc;
-  DWORD dwToken;
-  HTTP_SSL_SERVICE_CONFIG_EX_PARAM_TYPE ParamType;
-} HTTP_SERVICE_CONFIG_SSL_SNI_QUERY_EX, *PHTTP_SERVICE_CONFIG_SSL_SNI_QUERY_EX;
-
-typedef struct _HTTP_SERVICE_CONFIG_SSL_CCS_QUERY_EX {
-  HTTP_SERVICE_CONFIG_QUERY_TYPE QueryDesc;
-  HTTP_SERVICE_CONFIG_SSL_CCS_KEY KeyDesc;
-  DWORD dwToken;
-  HTTP_SSL_SERVICE_CONFIG_EX_PARAM_TYPE ParamType;
-} HTTP_SERVICE_CONFIG_SSL_CCS_QUERY_EX, *PHTTP_SERVICE_CONFIG_SSL_CCS_QUERY_EX;
-
-typedef struct _HTTP_SERVICE_CONFIG_IP_LISTEN_PARAM {
-  USHORT AddrLength;
-  PSOCKADDR pAddress;
-} HTTP_SERVICE_CONFIG_IP_LISTEN_PARAM, *PHTTP_SERVICE_CONFIG_IP_LISTEN_PARAM;
-
-typedef struct _HTTP_SERVICE_CONFIG_IP_LISTEN_QUERY {
-  ULONG AddrCount;
-  SOCKADDR_STORAGE AddrList[1];
-} HTTP_SERVICE_CONFIG_IP_LISTEN_QUERY, *PHTTP_SERVICE_CONFIG_IP_LISTEN_QUERY;
-
-typedef struct _HTTP_SERVICE_CONFIG_URLACL_KEY {
-  PWSTR pUrlPrefix;
-} HTTP_SERVICE_CONFIG_URLACL_KEY, *PHTTP_SERVICE_CONFIG_URLACL_KEY;
-
-typedef struct _HTTP_SERVICE_CONFIG_URLACL_PARAM {
-  PWSTR pStringSecurityDescriptor;
-} HTTP_SERVICE_CONFIG_URLACL_PARAM, *PHTTP_SERVICE_CONFIG_URLACL_PARAM;
-
-typedef struct _HTTP_SERVICE_CONFIG_URLACL_SET {
-  HTTP_SERVICE_CONFIG_URLACL_KEY KeyDesc;
-  HTTP_SERVICE_CONFIG_URLACL_PARAM ParamDesc;
-} HTTP_SERVICE_CONFIG_URLACL_SET, *PHTTP_SERVICE_CONFIG_URLACL_SET;
-
-typedef struct _HTTP_SERVICE_CONFIG_URLACL_QUERY {
-  HTTP_SERVICE_CONFIG_QUERY_TYPE QueryDesc;
-  HTTP_SERVICE_CONFIG_URLACL_KEY KeyDesc;
-  DWORD dwToken;
-} HTTP_SERVICE_CONFIG_URLACL_QUERY, *PHTTP_SERVICE_CONFIG_URLACL_QUERY;
-
-typedef struct HTTP_SERVICE_CONFIG_CACHE_SET {
-  HTTP_SERVICE_CONFIG_CACHE_KEY KeyDesc;
-  HTTP_SERVICE_CONFIG_CACHE_PARAM ParamDesc;
-} HTTP_SERVICE_CONFIG_CACHE_SET, *PHTTP_SERVICE_CONFIG_CACHE_SET;
-
-typedef struct _HTTP_QUERY_REQUEST_QUALIFIER_TCP {
-  ULONGLONG Freshness;
-} HTTP_QUERY_REQUEST_QUALIFIER_TCP, *PHTTP_QUERY_REQUEST_QUALIFIER_TCP;
+typedef struct _HTTP_QOS_SETTING_INFO {
+  HTTP_QOS_SETTING_TYPE QosType;
+  PVOID QosSetting;
+} HTTP_QOS_SETTING_INFO, *PHTTP_QOS_SETTING_INFO;
 
 typedef struct _HTTP_QUERY_REQUEST_QUALIFIER_QUIC {
   ULONGLONG Freshness;
 } HTTP_QUERY_REQUEST_QUALIFIER_QUIC, *PHTTP_QUERY_REQUEST_QUALIFIER_QUIC;
 
-typedef struct _HTTP_REQUEST_PROPERTY_SNI {
-  WCHAR Hostname[256];
-  ULONG Flags;
-} HTTP_REQUEST_PROPERTY_SNI, *PHTTP_REQUEST_PROPERTY_SNI;
-
-typedef struct _HTTP_REQUEST_PROPERTY_STREAM_ERROR {
-  ULONG ErrorCode;
-} HTTP_REQUEST_PROPERTY_STREAM_ERROR, *PHTTP_REQUEST_PROPERTY_STREAM_ERROR;
-
-typedef struct _HTTP_WSK_API_TIMINGS {
-  ULONGLONG ConnectCount;
-  ULONGLONG ConnectSum;
-  ULONGLONG DisconnectCount;
-  ULONGLONG DisconnectSum;
-  ULONGLONG SendCount;
-  ULONGLONG SendSum;
-  ULONGLONG ReceiveCount;
-  ULONGLONG ReceiveSum;
-  ULONGLONG ReleaseCount;
-  ULONGLONG ReleaseSum;
-  ULONGLONG ControlSocketCount;
-  ULONGLONG ControlSocketSum;
-} HTTP_WSK_API_TIMINGS, *PHTTP_WSK_API_TIMINGS;
+typedef struct _HTTP_QUERY_REQUEST_QUALIFIER_TCP {
+  ULONGLONG Freshness;
+} HTTP_QUERY_REQUEST_QUALIFIER_TCP, *PHTTP_QUERY_REQUEST_QUALIFIER_TCP;
 
 typedef struct _HTTP_QUIC_STREAM_API_TIMINGS {
   ULONGLONG OpenCount;
@@ -1465,5 +1197,438 @@ typedef struct _HTTP_QUIC_STREAM_REQUEST_STATS {
   ULONGLONG RequestHeadersCompressedSize;
   ULONGLONG ResponseHeadersCompressedSize;
 } HTTP_QUIC_STREAM_REQUEST_STATS, *PHTTP_QUIC_STREAM_REQUEST_STATS;
+
+typedef struct _HTTP_REQUEST_AUTH_INFO {
+  HTTP_AUTH_STATUS AuthStatus;
+  SECURITY_STATUS SecStatus;
+  ULONG Flags;
+  HTTP_REQUEST_AUTH_TYPE AuthType;
+  HANDLE AccessToken;
+  ULONG ContextAttributes;
+  ULONG PackedContextLength;
+  ULONG PackedContextType;
+  PVOID PackedContext;
+  ULONG MutualAuthDataLength;
+  PCHAR pMutualAuthData;
+  USHORT PackageNameLength;
+  PWSTR pPackageName;
+} HTTP_REQUEST_AUTH_INFO, *PHTTP_REQUEST_AUTH_INFO;
+
+typedef struct _HTTP_REQUEST_DSCP_INFO {
+  BYTE DscpTag;
+} HTTP_REQUEST_DSCP_INFO, *PHTTP_REQUEST_DSCP_INFO;
+
+typedef struct _HTTP_REQUEST_INFO_PROPERTY_INFO {
+  HTTP_PROPERTY_FLAGS Flags;
+  ULONGLONG RequestInfoFlags;
+} HTTP_REQUEST_INFO_PROPERTY_INFO, *PHTTP_REQUEST_INFO_PROPERTY_INFO;
+
+typedef struct _HTTP_REQUEST_INITIAL_PACKET_TTL_INFO {
+  BYTE InitialPacketTtl;
+} HTTP_REQUEST_INITIAL_PACKET_TTL_INFO, *PHTTP_REQUEST_INITIAL_PACKET_TTL_INFO;
+
+typedef struct _HTTP_REQUEST_PROPERTY_SNI {
+  WCHAR Hostname[256];
+  ULONG Flags;
+} HTTP_REQUEST_PROPERTY_SNI, *PHTTP_REQUEST_PROPERTY_SNI;
+
+typedef struct _HTTP_REQUEST_PROPERTY_STREAM_ERROR {
+  ULONG ErrorCode;
+} HTTP_REQUEST_PROPERTY_STREAM_ERROR, *PHTTP_REQUEST_PROPERTY_STREAM_ERROR;
+
+typedef struct _HTTP_REQUEST_SIZING_INFO {
+  ULONGLONG Flags;
+  ULONG RequestIndex;
+  ULONG RequestSizingCount;
+  ULONGLONG RequestSizing[5];
+} HTTP_REQUEST_SIZING_INFO, *PHTTP_REQUEST_SIZING_INFO;
+
+typedef struct _HTTP_REQUEST_TIMING_INFO {
+  ULONG RequestTimingCount;
+  ULONGLONG RequestTiming[30];
+} HTTP_REQUEST_TIMING_INFO, *PHTTP_REQUEST_TIMING_INFO;
+
+typedef struct _HTTP_REQUEST_TOKEN_BINDING_INFO {
+  PUCHAR TokenBinding;
+  ULONG TokenBindingSize;
+  PUCHAR EKM;
+  ULONG EKMSize;
+  UCHAR KeyType;
+} HTTP_REQUEST_TOKEN_BINDING_INFO, *PHTTP_REQUEST_TOKEN_BINDING_INFO;
+
+typedef struct _HTTP_REQUEST_TRANSPORT_IDLE_CONNECTION_TIMEOUT_INFO {
+  USHORT TransportIdleConnectionTimeout;
+} HTTP_REQUEST_TRANSPORT_IDLE_CONNECTION_TIMEOUT_INFO, *PHTTP_REQUEST_TRANSPORT_IDLE_CONNECTION_TIMEOUT_INFO;
+
+typedef struct _HTTP_SERVER_AUTHENTICATION_BASIC_PARAMS {
+  USHORT RealmLength;
+  PWSTR Realm;
+} HTTP_SERVER_AUTHENTICATION_BASIC_PARAMS, *PHTTP_SERVER_AUTHENTICATION_BASIC_PARAMS;
+
+typedef struct _HTTP_SERVER_AUTHENTICATION_DIGEST_PARAMS {
+  USHORT DomainNameLength;
+  PWSTR DomainName;
+  USHORT RealmLength;
+  PWSTR Realm;
+} HTTP_SERVER_AUTHENTICATION_DIGEST_PARAMS, *PHTTP_SERVER_AUTHENTICATION_DIGEST_PARAMS;
+
+typedef struct _HTTP_SERVER_AUTHENTICATION_INFO {
+  HTTP_PROPERTY_FLAGS Flags;
+  ULONG AuthSchemes;
+  BOOLEAN ReceiveMutualAuth;
+  BOOLEAN ReceiveContextHandle;
+  BOOLEAN DisableNTLMCredentialCaching;
+  UCHAR ExFlags;
+  HTTP_SERVER_AUTHENTICATION_DIGEST_PARAMS DigestParams;
+  HTTP_SERVER_AUTHENTICATION_BASIC_PARAMS BasicParams;
+} HTTP_SERVER_AUTHENTICATION_INFO, *PHTTP_SERVER_AUTHENTICATION_INFO;
+
+typedef struct _HTTP_SERVICE_BINDING_BASE {
+  HTTP_SERVICE_BINDING_TYPE Type;
+} HTTP_SERVICE_BINDING_BASE, *PHTTP_SERVICE_BINDING_BASE;
+
+typedef struct _HTTP_CHANNEL_BIND_INFO {
+  HTTP_AUTHENTICATION_HARDENING_LEVELS Hardening;
+  ULONG Flags;
+  PHTTP_SERVICE_BINDING_BASE * ServiceNames;
+  ULONG NumberOfServiceNames;
+} HTTP_CHANNEL_BIND_INFO, *PHTTP_CHANNEL_BIND_INFO;
+
+typedef struct _HTTP_REQUEST_CHANNEL_BIND_STATUS {
+  PHTTP_SERVICE_BINDING_BASE ServiceName;
+  PUCHAR ChannelToken;
+  ULONG ChannelTokenSize;
+  ULONG Flags;
+} HTTP_REQUEST_CHANNEL_BIND_STATUS, *PHTTP_REQUEST_CHANNEL_BIND_STATUS;
+
+typedef struct _HTTP_SERVICE_BINDING_A {
+  HTTP_SERVICE_BINDING_BASE Base;
+  PCHAR Buffer;
+  ULONG BufferSize;
+} HTTP_SERVICE_BINDING_A, *PHTTP_SERVICE_BINDING_A;
+
+typedef struct _HTTP_SERVICE_BINDING_W {
+  HTTP_SERVICE_BINDING_BASE Base;
+  PWCHAR Buffer;
+  ULONG BufferSize;
+} HTTP_SERVICE_BINDING_W, *PHTTP_SERVICE_BINDING_W;
+
+typedef struct _HTTP_SERVICE_CONFIG_IP_LISTEN_PARAM {
+  USHORT AddrLength;
+  PSOCKADDR pAddress;
+} HTTP_SERVICE_CONFIG_IP_LISTEN_PARAM, *PHTTP_SERVICE_CONFIG_IP_LISTEN_PARAM;
+
+typedef struct _HTTP_SERVICE_CONFIG_IP_LISTEN_QUERY {
+  ULONG AddrCount;
+  SOCKADDR_STORAGE AddrList[1];
+} HTTP_SERVICE_CONFIG_IP_LISTEN_QUERY, *PHTTP_SERVICE_CONFIG_IP_LISTEN_QUERY;
+
+typedef struct _HTTP_SERVICE_CONFIG_SETTING_SET {
+  HTTP_SERVICE_CONFIG_SETTING_KEY KeyDesc;
+  HTTP_SERVICE_CONFIG_SETTING_PARAM ParamDesc;
+} HTTP_SERVICE_CONFIG_SETTING_SET, *PHTTP_SERVICE_CONFIG_SETTING_SET;
+
+typedef struct _HTTP_SERVICE_CONFIG_SSL_CCS_KEY {
+  SOCKADDR_STORAGE LocalAddress;
+} HTTP_SERVICE_CONFIG_SSL_CCS_KEY, *PHTTP_SERVICE_CONFIG_SSL_CCS_KEY;
+
+typedef struct _HTTP_SERVICE_CONFIG_SSL_CCS_QUERY {
+  HTTP_SERVICE_CONFIG_QUERY_TYPE QueryDesc;
+  HTTP_SERVICE_CONFIG_SSL_CCS_KEY KeyDesc;
+  DWORD dwToken;
+} HTTP_SERVICE_CONFIG_SSL_CCS_QUERY, *PHTTP_SERVICE_CONFIG_SSL_CCS_QUERY;
+
+typedef struct _HTTP_SERVICE_CONFIG_SSL_CCS_QUERY_EX {
+  HTTP_SERVICE_CONFIG_QUERY_TYPE QueryDesc;
+  HTTP_SERVICE_CONFIG_SSL_CCS_KEY KeyDesc;
+  DWORD dwToken;
+  HTTP_SSL_SERVICE_CONFIG_EX_PARAM_TYPE ParamType;
+} HTTP_SERVICE_CONFIG_SSL_CCS_QUERY_EX, *PHTTP_SERVICE_CONFIG_SSL_CCS_QUERY_EX;
+
+typedef struct _HTTP_SERVICE_CONFIG_SSL_KEY {
+  PSOCKADDR pIpPort;
+} HTTP_SERVICE_CONFIG_SSL_KEY, *PHTTP_SERVICE_CONFIG_SSL_KEY;
+
+typedef struct _HTTP_SERVICE_CONFIG_SSL_KEY_EX {
+  SOCKADDR_STORAGE IpPort;
+} HTTP_SERVICE_CONFIG_SSL_KEY_EX, *PHTTP_SERVICE_CONFIG_SSL_KEY_EX;
+
+typedef struct _HTTP_SERVICE_CONFIG_SSL_PARAM {
+  ULONG SslHashLength;
+  PVOID pSslHash;
+  GUID AppId;
+  PWSTR pSslCertStoreName;
+  DWORD DefaultCertCheckMode;
+  DWORD DefaultRevocationFreshnessTime;
+  DWORD DefaultRevocationUrlRetrievalTimeout;
+  PWSTR pDefaultSslCtlIdentifier;
+  PWSTR pDefaultSslCtlStoreName;
+  DWORD DefaultFlags;
+} HTTP_SERVICE_CONFIG_SSL_PARAM, *PHTTP_SERVICE_CONFIG_SSL_PARAM;
+
+typedef struct _HTTP_SERVICE_CONFIG_SSL_CCS_SET {
+  HTTP_SERVICE_CONFIG_SSL_CCS_KEY KeyDesc;
+  HTTP_SERVICE_CONFIG_SSL_PARAM ParamDesc;
+} HTTP_SERVICE_CONFIG_SSL_CCS_SET, *PHTTP_SERVICE_CONFIG_SSL_CCS_SET;
+
+typedef struct _HTTP_SERVICE_CONFIG_SSL_QUERY {
+  HTTP_SERVICE_CONFIG_QUERY_TYPE QueryDesc;
+  HTTP_SERVICE_CONFIG_SSL_KEY KeyDesc;
+  DWORD dwToken;
+} HTTP_SERVICE_CONFIG_SSL_QUERY, *PHTTP_SERVICE_CONFIG_SSL_QUERY;
+
+typedef struct _HTTP_SERVICE_CONFIG_SSL_QUERY_EX {
+  HTTP_SERVICE_CONFIG_QUERY_TYPE QueryDesc;
+  HTTP_SERVICE_CONFIG_SSL_KEY_EX KeyDesc;
+  DWORD dwToken;
+  HTTP_SSL_SERVICE_CONFIG_EX_PARAM_TYPE ParamType;
+} HTTP_SERVICE_CONFIG_SSL_QUERY_EX, *PHTTP_SERVICE_CONFIG_SSL_QUERY_EX;
+
+typedef struct _HTTP_SERVICE_CONFIG_SSL_SET {
+  HTTP_SERVICE_CONFIG_SSL_KEY KeyDesc;
+  HTTP_SERVICE_CONFIG_SSL_PARAM ParamDesc;
+} HTTP_SERVICE_CONFIG_SSL_SET, *PHTTP_SERVICE_CONFIG_SSL_SET;
+
+typedef struct _HTTP_SERVICE_CONFIG_SSL_SNI_KEY {
+  SOCKADDR_STORAGE IpPort;
+  PWSTR Host;
+} HTTP_SERVICE_CONFIG_SSL_SNI_KEY, *PHTTP_SERVICE_CONFIG_SSL_SNI_KEY;
+
+typedef struct _HTTP_SERVICE_CONFIG_SSL_SNI_QUERY {
+  HTTP_SERVICE_CONFIG_QUERY_TYPE QueryDesc;
+  HTTP_SERVICE_CONFIG_SSL_SNI_KEY KeyDesc;
+  DWORD dwToken;
+} HTTP_SERVICE_CONFIG_SSL_SNI_QUERY, *PHTTP_SERVICE_CONFIG_SSL_SNI_QUERY;
+
+typedef struct _HTTP_SERVICE_CONFIG_SSL_SNI_QUERY_EX {
+  HTTP_SERVICE_CONFIG_QUERY_TYPE QueryDesc;
+  HTTP_SERVICE_CONFIG_SSL_SNI_KEY KeyDesc;
+  DWORD dwToken;
+  HTTP_SSL_SERVICE_CONFIG_EX_PARAM_TYPE ParamType;
+} HTTP_SERVICE_CONFIG_SSL_SNI_QUERY_EX, *PHTTP_SERVICE_CONFIG_SSL_SNI_QUERY_EX;
+
+typedef struct _HTTP_SERVICE_CONFIG_SSL_SNI_SET {
+  HTTP_SERVICE_CONFIG_SSL_SNI_KEY KeyDesc;
+  HTTP_SERVICE_CONFIG_SSL_PARAM ParamDesc;
+} HTTP_SERVICE_CONFIG_SSL_SNI_SET, *PHTTP_SERVICE_CONFIG_SSL_SNI_SET;
+
+typedef struct _HTTP_SERVICE_CONFIG_TIMEOUT_SET {
+  HTTP_SERVICE_CONFIG_TIMEOUT_KEY KeyDesc;
+  HTTP_SERVICE_CONFIG_TIMEOUT_PARAM ParamDesc;
+} HTTP_SERVICE_CONFIG_TIMEOUT_SET, *PHTTP_SERVICE_CONFIG_TIMEOUT_SET;
+
+typedef struct _HTTP_SERVICE_CONFIG_URLACL_KEY {
+  PWSTR pUrlPrefix;
+} HTTP_SERVICE_CONFIG_URLACL_KEY, *PHTTP_SERVICE_CONFIG_URLACL_KEY;
+
+typedef struct _HTTP_SERVICE_CONFIG_URLACL_PARAM {
+  PWSTR pStringSecurityDescriptor;
+} HTTP_SERVICE_CONFIG_URLACL_PARAM, *PHTTP_SERVICE_CONFIG_URLACL_PARAM;
+
+typedef struct _HTTP_SERVICE_CONFIG_URLACL_QUERY {
+  HTTP_SERVICE_CONFIG_QUERY_TYPE QueryDesc;
+  HTTP_SERVICE_CONFIG_URLACL_KEY KeyDesc;
+  DWORD dwToken;
+} HTTP_SERVICE_CONFIG_URLACL_QUERY, *PHTTP_SERVICE_CONFIG_URLACL_QUERY;
+
+typedef struct _HTTP_SERVICE_CONFIG_URLACL_SET {
+  HTTP_SERVICE_CONFIG_URLACL_KEY KeyDesc;
+  HTTP_SERVICE_CONFIG_URLACL_PARAM ParamDesc;
+} HTTP_SERVICE_CONFIG_URLACL_SET, *PHTTP_SERVICE_CONFIG_URLACL_SET;
+
+typedef struct _HTTP_SSL_PROTOCOL_INFO {
+  ULONG Protocol;
+  ULONG CipherType;
+  ULONG CipherStrength;
+  ULONG HashType;
+  ULONG HashStrength;
+  ULONG KeyExchangeType;
+  ULONG KeyExchangeStrength;
+} HTTP_SSL_PROTOCOL_INFO, *PHTTP_SSL_PROTOCOL_INFO;
+
+typedef struct _HTTP_STATE_INFO {
+  HTTP_PROPERTY_FLAGS Flags;
+  HTTP_ENABLED_STATE State;
+} HTTP_STATE_INFO, *PHTTP_STATE_INFO;
+
+typedef struct _HTTP_TIMEOUT_LIMIT_INFO {
+  HTTP_PROPERTY_FLAGS Flags;
+  USHORT EntityBody;
+  USHORT DrainEntityBody;
+  USHORT RequestQueue;
+  USHORT IdleConnection;
+  USHORT HeaderWait;
+  ULONG MinSendRate;
+} HTTP_TIMEOUT_LIMIT_INFO, *PHTTP_TIMEOUT_LIMIT_INFO;
+
+typedef struct _HTTP_TLS_RESTRICTIONS_PARAM {
+  ULONG RestrictionCount;
+  PVOID TlsRestrictions;
+} HTTP_TLS_RESTRICTIONS_PARAM, *PHTTP_TLS_RESTRICTIONS_PARAM;
+
+typedef struct _HTTP_TLS_SESSION_TICKET_KEYS_PARAM {
+  ULONG SessionTicketKeyCount;
+  PVOID SessionTicketKeys;
+} HTTP_TLS_SESSION_TICKET_KEYS_PARAM, *PHTTP_TLS_SESSION_TICKET_KEYS_PARAM;
+
+typedef struct _HTTP_WINHTTP_FAST_FORWARDING_DATA {
+  UCHAR Reserved[16];
+} HTTP_WINHTTP_FAST_FORWARDING_DATA, *PHTTP_WINHTTP_FAST_FORWARDING_DATA;
+
+typedef struct _HTTP_WSK_API_TIMINGS {
+  ULONGLONG ConnectCount;
+  ULONGLONG ConnectSum;
+  ULONGLONG DisconnectCount;
+  ULONGLONG DisconnectSum;
+  ULONGLONG SendCount;
+  ULONGLONG SendSum;
+  ULONGLONG ReceiveCount;
+  ULONGLONG ReceiveSum;
+  ULONGLONG ReleaseCount;
+  ULONGLONG ReleaseSum;
+  ULONGLONG ControlSocketCount;
+  ULONGLONG ControlSocketSum;
+} HTTP_WSK_API_TIMINGS, *PHTTP_WSK_API_TIMINGS;
+
+typedef struct HTTP_SERVICE_CONFIG_CACHE_SET {
+  HTTP_SERVICE_CONFIG_CACHE_KEY KeyDesc;
+  HTTP_SERVICE_CONFIG_CACHE_PARAM ParamDesc;
+} HTTP_SERVICE_CONFIG_CACHE_SET, *PHTTP_SERVICE_CONFIG_CACHE_SET;
+
+#define HTTP_AUTH_ENABLE_ALL 0x1F
+#define HTTP_CERT_CHECK_MODE_NO_REVOCATION 0x00001
+#define HTTP_EQUAL_VERSIONversion, major, minor) ((version) . MajorVersion == (major) && (version) . MinorVersion == (minor))
+#define HTTP_GREATER_EQUAL_VERSIONversion, major, minor) (!HTTP_LESS_VERSION(version, major, minor))
+#define HTTP_GREATER_VERSIONversion, major, minor) ((version) . MajorVersion > (major) || ((version) . MajorVersion == (major) && (version) . MinorVersion > (minor)))
+#define HTTP_IS_NULL_IDpid) (HTTP_NULL_ID == * (pid))
+#define HTTP_LESS_EQUAL_VERSIONversion, major, minor) (!HTTP_GREATER_VERSION(version, major, minor))
+#define HTTP_LESS_VERSIONversion, major, minor) ((version) . MajorVersion < (major) || ((version) . MajorVersion == (major) && (version) . MinorVersion < (minor)))
+#define HTTP_LIMIT_INFINITE ((ULONG)0xFFFFFFFF)
+#define HTTP_MIN_ALLOWED_BANDWIDTH_THROTTLING_RATE ((ULONG)0x400)
+#define HTTP_MIN_ALLOWED_LOG_FILE_ROLLOVER_SIZE ((ULONG)0x100000)
+#define HTTP_NOT_EQUAL_VERSIONversion, major, minor) (!HTTP_EQUAL_VERSION(version, major, minor))
+#define HTTP_QUIC_KEEPALIVE_TIMEOUT_DISABLED ((ULONG)0xFFFFFFFF)
+#define HTTP_REQUEST_FLAG_FAST_FORWARDING_RESPONSE_ALLOWED 0x10
+#define HTTP_SET_NULL_IDpid) (* (pid) = HTTP_NULL_ID)
+#define HTTP_SET_VERSIONversion, major, minor) do { (version) . MajorVersion = (major); (version) . MinorVersion = (minor); \
+} while (0)
+#define HTTP_VERSION_0_9 { 0, 9 }
+#define HTTP_VERSION_1_0 { 1, 0 }
+#define HTTP_VERSION_1_1 { 1, 1 }
+#define HTTP_VERSION_2_0 { 2, 0 }
+#define HTTP_VERSION_3_0 { 3, 0 }
+#define HTTP_VERSION_UNKNOWN 0
+#define HTTPAPI_EQUAL_VERSIONversion, major, minor) ((version) . HttpApiMajorVersion == (major) && (version) . HttpApiMinorVersion == (minor))
+#define HTTPAPI_GREATER_VERSIONversion, major, minor) ((version) . HttpApiMajorVersion > (major) || ((version) . HttpApiMajorVersion == (major) && (version) . HttpApiMinorVersion > (minor)))
+#define HTTPAPI_LESS_VERSIONversion, major, minor) ((version) . HttpApiMajorVersion < (major) || ((version) . HttpApiMajorVersion == (major) && (version) . HttpApiMinorVersion < (minor)))
+#define HTTPAPI_LINKAGE 0
+#define HTTPAPI_VERSION_GREATER_OR_EQUALversion, major, minor) (!HTTPAPI_LESS_VERSION(version, major, minor))
+
+struct _HTTP_SERVICE_CONFIG_SSL_PARAM_EX
+{
+    HTTP_SSL_SERVICE_CONFIG_EX_PARAM_TYPE ParamType;
+    ULONGLONG Flags;
+    union
+    {
+        HTTP2_WINDOW_SIZE_PARAM Http2WindowSizeParam;
+        HTTP2_SETTINGS_LIMITS_PARAM Http2SettingsLimitsParam;
+        HTTP_PERFORMANCE_PARAM HttpPerformanceParam;
+        HTTP_TLS_RESTRICTIONS_PARAM HttpTlsRestrictionsParam;
+        HTTP_ERROR_HEADERS_PARAM HttpErrorHeadersParam;
+        HTTP_TLS_SESSION_TICKET_KEYS_PARAM HttpTlsSessionTicketKeysParam;
+        HTTP_CERT_CONFIG_PARAM HttpCertConfigParam;
+    };
+};
+
+typedef struct _HTTP_SERVICE_CONFIG_SSL_PARAM_EX HTTP_SERVICE_CONFIG_SSL_PARAM_EX;
+
+struct _HTTP_SERVICE_CONFIG_SSL_CCS_SET_EX
+{
+    HTTP_SERVICE_CONFIG_SSL_CCS_KEY KeyDesc;
+    HTTP_SERVICE_CONFIG_SSL_PARAM_EX ParamDesc;
+};
+
+struct _HTTP_SERVICE_CONFIG_SSL_SET_EX
+{
+    HTTP_SERVICE_CONFIG_SSL_KEY_EX KeyDesc;
+    HTTP_SERVICE_CONFIG_SSL_PARAM_EX ParamDesc;
+};
+
+struct _HTTP_SERVICE_CONFIG_SSL_SNI_SET_EX
+{
+    HTTP_SERVICE_CONFIG_SSL_SNI_KEY KeyDesc;
+    HTTP_SERVICE_CONFIG_SSL_PARAM_EX ParamDesc;
+};
+
+typedef struct _HTTP_SERVICE_CONFIG_SSL_CCS_SET_EX HTTP_SERVICE_CONFIG_SSL_CCS_SET_EX;
+
+typedef struct _HTTP_SERVICE_CONFIG_SSL_SET_EX HTTP_SERVICE_CONFIG_SSL_SET_EX;
+
+typedef struct _HTTP_SERVICE_CONFIG_SSL_SNI_SET_EX HTTP_SERVICE_CONFIG_SSL_SNI_SET_EX;
+
+typedef struct _HTTP_SERVICE_CONFIG_SSL_CCS_SET_EX *PHTTP_SERVICE_CONFIG_SSL_CCS_SET_EX;
+
+typedef struct _HTTP_SERVICE_CONFIG_SSL_PARAM_EX *PHTTP_SERVICE_CONFIG_SSL_PARAM_EX;
+
+typedef struct _HTTP_SERVICE_CONFIG_SSL_SET_EX *PHTTP_SERVICE_CONFIG_SSL_SET_EX;
+
+typedef struct _HTTP_SERVICE_CONFIG_SSL_SNI_SET_EX *PHTTP_SERVICE_CONFIG_SSL_SNI_SET_EX;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+ULONG WINAPI HttpReceiveRequestEntityBody(HANDLE RequestQueueHandle, HTTP_REQUEST_ID RequestId, ULONG Flags, PVOID EntityBuffer, ULONG EntityBufferLength, PULONG BytesReturned, LPOVERLAPPED Overlapped);
+
+/* TODO: LiberNT does not implement the functions below yet */
+ULONG HttpAddFragmentToCache(HANDLE RequestQueueHandle, PCWSTR UrlPrefix, PHTTP_DATA_CHUNK DataChunk, PHTTP_CACHE_POLICY CachePolicy, LPOVERLAPPED Overlapped);
+ULONG HttpCancelHttpRequest(HANDLE RequestQueueHandle, HTTP_REQUEST_ID RequestId, LPOVERLAPPED Overlapped);
+ULONG HttpDeclarePush(HANDLE RequestQueueHandle, HTTP_REQUEST_ID RequestId, HTTP_VERB Verb, PCWSTR Path, PCSTR Query, PHTTP_REQUEST_HEADERS Headers);
+ULONG HttpDelegateRequestEx(HANDLE RequestQueueHandle, HANDLE DelegateQueueHandle, HTTP_REQUEST_ID RequestId, HTTP_URL_GROUP_ID DelegateUrlGroupId, ULONG PropertyInfoSetSize, PHTTP_DELEGATE_REQUEST_PROPERTY_INFO PropertyInfoSet);
+ULONG HttpFindUrlGroupId(PCWSTR FullyQualifiedUrl, HANDLE RequestQueueHandle, PHTTP_URL_GROUP_ID UrlGroupId);
+ULONG HttpFlushResponseCache(HANDLE RequestQueueHandle, PCWSTR UrlPrefix, ULONG Flags, LPOVERLAPPED Overlapped);
+ULONG WINAPI HttpGetExtension(HTTPAPI_VERSION Version, ULONG Extension, PVOID Buffer, ULONG BufferSize);
+BOOL WINAPI HttpIsFeatureSupported(HTTP_FEATURE_ID FeatureId);
+ULONG HttpPrepareUrl(PVOID Reserved, ULONG Flags, PCWSTR Url, PWSTR *PreparedUrl);
+ULONG HttpQueryRequestProperty(HANDLE RequestQueueHandle, HTTP_OPAQUE_ID Id, HTTP_REQUEST_PROPERTY PropertyId, const void *Qualifier, ULONG QualifierSize, PVOID Output, ULONG OutputBufferSize, PULONG BytesReturned, LPOVERLAPPED Overlapped);
+ULONG HttpQueryRequestQueueProperty(HANDLE RequestQueueHandle, HTTP_SERVER_PROPERTY Property, PVOID PropertyInformation, ULONG PropertyInformationLength, ULONG Reserved1, PULONG ReturnLength, PVOID Reserved2);
+ULONG HttpQueryServerSessionProperty(HTTP_SERVER_SESSION_ID ServerSessionId, HTTP_SERVER_PROPERTY Property, PVOID PropertyInformation, ULONG PropertyInformationLength, PULONG ReturnLength);
+ULONG HttpQueryUrlGroupProperty(HTTP_URL_GROUP_ID UrlGroupId, HTTP_SERVER_PROPERTY Property, PVOID PropertyInformation, ULONG PropertyInformationLength, PULONG ReturnLength);
+ULONG HttpReadFragmentFromCache(HANDLE RequestQueueHandle, PCWSTR UrlPrefix, PHTTP_BYTE_RANGE ByteRange, PVOID Buffer, ULONG BufferLength, PULONG BytesRead, LPOVERLAPPED Overlapped);
+ULONG HttpReceiveClientCertificate(HANDLE RequestQueueHandle, HTTP_CONNECTION_ID ConnectionId, ULONG Flags, PHTTP_SSL_CLIENT_CERT_INFO SslClientCertInfo, ULONG SslClientCertInfoSize, PULONG BytesReceived, LPOVERLAPPED Overlapped);
+ULONG HttpSendResponseEntityBody(HANDLE RequestQueueHandle, HTTP_REQUEST_ID RequestId, ULONG Flags, USHORT EntityChunkCount, PHTTP_DATA_CHUNK EntityChunks, PULONG BytesSent, PVOID Reserved1, ULONG Reserved2, LPOVERLAPPED Overlapped, PHTTP_LOG_DATA LogData);
+ULONG HttpSetRequestProperty(HANDLE RequestQueueHandle, HTTP_OPAQUE_ID Id, HTTP_REQUEST_PROPERTY PropertyId, PVOID Input, ULONG InputPropertySize, LPOVERLAPPED Overlapped);
+ULONG HttpSetRequestQueueProperty(HANDLE RequestQueueHandle, HTTP_SERVER_PROPERTY Property, PVOID PropertyInformation, ULONG PropertyInformationLength, ULONG Reserved1, PVOID Reserved2);
+ULONG HttpSetServerSessionProperty(HTTP_SERVER_SESSION_ID ServerSessionId, HTTP_SERVER_PROPERTY Property, PVOID PropertyInformation, ULONG PropertyInformationLength);
+ULONG HttpUpdateServiceConfiguration(HANDLE Handle, HTTP_SERVICE_CONFIG_ID ConfigId, PVOID ConfigInfo, ULONG ConfigInfoLength, LPOVERLAPPED Overlapped);
+ULONG HttpWaitForDemandStart(HANDLE RequestQueueHandle, LPOVERLAPPED Overlapped);
+ULONG HttpWaitForDisconnect(HANDLE RequestQueueHandle, HTTP_CONNECTION_ID ConnectionId, LPOVERLAPPED Overlapped);
+ULONG HttpWaitForDisconnectEx(HANDLE RequestQueueHandle, HTTP_CONNECTION_ID ConnectionId, ULONG Reserved, LPOVERLAPPED Overlapped);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define HTTP_GREATER_EQUAL_VERSIONversion, major, minor) (!HTTP_LESS_VERSION(version, major, minor))
+#define HTTP_IS_NULL_IDpid) (HTTP_NULL_ID == * (pid))
+#define HTTP_LESS_EQUAL_VERSIONversion, major, minor) (!HTTP_GREATER_VERSION(version, major, minor))
+#define HTTP_NOT_EQUAL_VERSIONversion, major, minor) (!HTTP_EQUAL_VERSION(version, major, minor))
+#define HTTP_SET_NULL_IDpid) (* (pid) = HTTP_NULL_ID)
+#define HTTP_SET_VERSIONversion, major, minor) do { (version) . MajorVersion = (major); (version) . MinorVersion = (minor); \
+} while (0)
+#define HTTPAPI_EQUAL_VERSIONversion, major, minor) ((version) . HttpApiMajorVersion == (major) && (version) . HttpApiMinorVersion == (minor))
+#define HTTPAPI_GREATER_VERSIONversion, major, minor) ((version) . HttpApiMajorVersion > (major) || ((version) . HttpApiMajorVersion == (major) && (version) . HttpApiMinorVersion > (minor)))
+#define HTTPAPI_VERSION_GREATER_OR_EQUALversion, major, minor) (!HTTPAPI_LESS_VERSION(version, major, minor))
+
+#define HTTP_GREATER_EQUAL_VERSIONversion, major, minor) (!HTTP_LESS_VERSION(version, major, minor))
+#define HTTP_IS_NULL_IDpid) (HTTP_NULL_ID == * (pid))
+#define HTTP_LESS_EQUAL_VERSIONversion, major, minor) (!HTTP_GREATER_VERSION(version, major, minor))
+#define HTTP_NOT_EQUAL_VERSIONversion, major, minor) (!HTTP_EQUAL_VERSION(version, major, minor))
+#define HTTP_SET_NULL_IDpid) (* (pid) = HTTP_NULL_ID)
+#define HTTP_SET_VERSIONversion, major, minor) do { (version) . MajorVersion = (major); (version) . MinorVersion = (minor); \
+} while (0)
+#define HTTPAPI_EQUAL_VERSIONversion, major, minor) ((version) . HttpApiMajorVersion == (major) && (version) . HttpApiMinorVersion == (minor))
+#define HTTPAPI_GREATER_VERSIONversion, major, minor) ((version) . HttpApiMajorVersion > (major) || ((version) . HttpApiMajorVersion == (major) && (version) . HttpApiMinorVersion > (minor)))
+#define HTTPAPI_VERSION_GREATER_OR_EQUALversion, major, minor) (!HTTPAPI_LESS_VERSION(version, major, minor))
 
 #endif  /* __WINE_HTTP_H */

@@ -93,8 +93,10 @@ enum FWP_DATA_TYPE_
         FWP_V4_ADDR_MASK	= ( FWP_SINGLE_DATA_TYPE_MAX + 1 ) ,
         FWP_V6_ADDR_MASK	= ( FWP_V4_ADDR_MASK + 1 ) ,
         FWP_RANGE_TYPE	= ( FWP_V6_ADDR_MASK + 1 ) ,
-        FWP_DATA_TYPE_MAX	= ( FWP_RANGE_TYPE + 1 )
-    } 	FWP_DATA_TYPE;
+        FWP_DATA_TYPE_MAX	= ( FWP_RANGE_TYPE + 1 ),
+        FWP_BITMAP_INDEX_TYPE = 0x13,
+        FWP_BITMAP_ARRAY64_TYPE = 0x14,
+} 	FWP_DATA_TYPE;
 
 typedef struct FWP_BYTE_ARRAY6_
     {

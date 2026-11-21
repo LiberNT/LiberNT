@@ -27,4 +27,11 @@
 #define FACILITY_D2D 0x899
 #endif
 
+#define MAKE_D2DHRsev, code) MAKE_HRESULT(sev, FACILITY_D2D, (code))
+#define MAKE_D2DHR_ERRcode) MAKE_D2DHR(1, code)
+
+#define MAKE_D2DHR_ERRcode) MAKE_D2DHR(1, code)
+
+#define MAKE_D2DHR_ERRcode) MAKE_D2DHR(1, code)
+
 #endif /* __WINE_D2DERR_H */

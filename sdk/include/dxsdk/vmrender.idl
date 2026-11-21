@@ -187,7 +187,8 @@ typedef enum _VMRMixerPrefs
     MixerPref_DynamicSwitchToBOB = 0x10000,
     MixerPref_DynamicDecimateBy2 = 0x20000,
     MixerPref_DynamicReserved = 0xc0000,
-    MixerPref_DynamicMask = 0xf0000
+    MixerPref_DynamicMask = 0xf0000,
+    MixerPref_FilteringMask = 0xF0,
 } VMRMixerPrefs;
 
 typedef struct _NORMALIZEDRECT

@@ -218,7 +218,8 @@ enum {
   kVersionWinServer2003,
   kVersionWin2K_UAAQFE,           /* These support IUnregister* interface */
   kVersionWinXP_UAAQFE,
-  kVersionWinServer2003_UAAQFE
+  kVersionWinServer2003_UAAQFE,
+  kVersionWindowsLonghorn = 0xE,
 };
 
 /* ===============================================================
@@ -3453,5 +3454,172 @@ typedef IMiniportStreamAudioEngineNode2 *PIMINIPORTStreamAudioEngineNode2;
 #endif
 
 #undef INTERFACE
+
+#define DEFINE_ABSTRACT_MINIPORTWAVERTINPUTSTREAM) _IRQL_requires_max_(PASSIVE_LEVEL) STDMETHOD_(NTSTATUS, GetReadPacket) (THIS_ _Out_ ULONG * PacketNumber, _Out_ DWORD * Flags, _Out_ ULONG64 * PerformanceCounterValue, _Out_ BOOL * MoreData) PURE;
+#define DEFINE_ABSTRACT_MINIPORTWAVERTSTREAMNOTIFICATION) STDMETHOD_(NTSTATUS, AllocateBufferWithNotification) (_In_ ULONG NotificationCount, _In_ ULONG RequestedSize, _Out_ PMDL * AudioBufferMdl, _Out_ ULONG * ActualSize, _Out_ ULONG * OffsetFromFirstPage, _Out_ MEMORY_CACHING_TYPE * CacheType) PURE; STDMETHOD_(VOID, FreeBufferWithNotification) (_In_ PMDL AudioBufferMdl, _In_ ULONG BufferSize) PURE; STDMETHOD_(NTSTATUS, RegisterNotificationEvent) (_In_ PKEVENT NotificationEvent) PURE; STDMETHOD_(NTSTATUS, UnregisterNotificationEvent) (_In_ PKEVENT NotificationEvent) PURE;
+#define IID_IAdapterPowerManagment 0
+#define IID_IAdapterPowerManagment2 IID_IAdapterPowerManagement2
+#define IMP_IMiniportMidi IMP_IMiniport; STDMETHODIMP_(NTSTATUS) Init(_In_ PUNKNOWN UnknownAdapter, _In_ PRESOURCELIST ResourceList, _In_ PPORTMIDI Port, _Out_ PSERVICEGROUP * ServiceGroup); STDMETHODIMP_(void) Service(void); STDMETHODIMP_(NTSTATUS) NewStream(_Out_ PMINIPORTMIDISTREAM * Stream, _In_opt_ PUNKNOWN OuterUnknown, _In_ POOL_TYPE PoolType, _In_ ULONG Pin, _In_ BOOLEAN Capture, _In_ PKSDATAFORMAT DataFormat, _Out_ PSERVICEGROUP * ServiceGroup)
+#define IMP_IMiniportMidiStream STDMETHODIMP_(NTSTATUS) SetFormat(_In_ PKSDATAFORMAT DataFormat); STDMETHODIMP_(NTSTATUS) SetState(_In_ KSSTATE State); STDMETHODIMP_(NTSTATUS) Read(_In_ PVOID BufferAddress, _In_ ULONG BufferLength, _Out_ PULONG BytesRead); STDMETHODIMP_(NTSTATUS) Write(_In_ PVOID BufferAddress, _In_ ULONG BytesToWrite, _Out_ PULONG BytesWritten)
+#define IMP_IPinCount STDMETHODIMP_(void) PinCount(_In_ ULONG PinId, _Inout_ PULONG FilterNecessary, _Inout_ PULONG FilterCurrent, _Inout_ PULONG FilterPossible, _Inout_ PULONG GlobalCurrent, _Inout_ PULONG GlobalPossible)
+#define IMP_IPortClsNotifications STDMETHODIMP_(NTSTATUS) AllocNotificationBuffer(_In_ POOL_TYPE PoolType, _In_ USHORT NumberOfBytes, _Out_ PPCNOTIFICATION_BUFFER * NotificationBuffer); STDMETHODIMP_(void) FreeNotificationBuffer(_In_ PPCNOTIFICATION_BUFFER NotificationBuffer); STDMETHODIMP_(void) SendNotification(_In_ const GUID * NotificationId, _In_ PPCNOTIFICATION_BUFFER NotificationBuffer)
+#define PADAPTERPOWERMANAGMENT PADAPTERPOWERMANAGEMENT
+#define PADAPTERPOWERMANAGMENT2 PADAPTERPOWERMANAGEMENT2
+
+typedef NTSTATUS EVT_PC_POST_PO_FX_REGISTER_DEVICE(PVOID, POHANDLE);
+
+typedef void EVT_PC_PRE_PO_FX_UNREGISTER_DEVICE(PVOID, POHANDLE);
+
+typedef struct IAdapterPnpManagementVtbl IAdapterPnpManagementVtbl;
+
+typedef struct IAdapterPowerManagement2Vtbl IAdapterPowerManagement2Vtbl;
+
+typedef struct IAdapterPowerManagement3Vtbl IAdapterPowerManagement3Vtbl;
+
+typedef struct IAdapterPowerManagementVtbl IAdapterPowerManagementVtbl;
+
+typedef struct IDmaChannelVtbl IDmaChannelVtbl;
+
+typedef struct IDrmPort2Vtbl IDrmPort2Vtbl;
+
+typedef struct IDrmPortVtbl IDrmPortVtbl;
+
+typedef struct IInterruptSyncVtbl IInterruptSyncVtbl;
+
+typedef struct IMiniportAudioEngineNodeVtbl IMiniportAudioEngineNodeVtbl;
+
+typedef struct IMiniportAudioSignalProcessingVtbl IMiniportAudioSignalProcessingVtbl;
+
+typedef struct IMiniportMidiStreamVtbl IMiniportMidiStreamVtbl;
+
+typedef struct IMiniportMidiVtbl IMiniportMidiVtbl;
+
+typedef struct IMiniportPnpNotifyVtbl IMiniportPnpNotifyVtbl;
+
+typedef struct IMiniportStreamAudioEngineNode2Vtbl IMiniportStreamAudioEngineNode2Vtbl;
+
+typedef struct IMiniportStreamAudioEngineNodeVtbl IMiniportStreamAudioEngineNodeVtbl;
+
+typedef struct IMiniportTopologyVtbl IMiniportTopologyVtbl;
+
+typedef struct IMiniportVtbl IMiniportVtbl;
+
+typedef struct IMiniportWaveCyclicStreamVtbl IMiniportWaveCyclicStreamVtbl;
+
+typedef struct IMiniportWaveCyclicVtbl IMiniportWaveCyclicVtbl;
+
+typedef struct IMiniportWavePciStreamVtbl IMiniportWavePciStreamVtbl;
+
+typedef struct IMiniportWavePciVtbl IMiniportWavePciVtbl;
+
+typedef struct IMiniportWaveRTInputStreamVtbl IMiniportWaveRTInputStreamVtbl;
+
+typedef struct IMiniportWaveRTOutputStreamVtbl IMiniportWaveRTOutputStreamVtbl;
+
+typedef struct IMiniportWaveRTStreamNotificationVtbl IMiniportWaveRTStreamNotificationVtbl;
+
+typedef struct IMiniportWaveRTStreamVtbl IMiniportWaveRTStreamVtbl;
+
+typedef struct IMiniportWaveRTVtbl IMiniportWaveRTVtbl;
+
+typedef struct IMusicTechnologyVtbl IMusicTechnologyVtbl;
+
+typedef struct IPinCountVtbl IPinCountVtbl;
+
+typedef struct IPinNameVtbl IPinNameVtbl;
+
+typedef struct IPortClsEtwHelperVtbl IPortClsEtwHelperVtbl;
+
+typedef struct IPortClsNotificationsVtbl IPortClsNotificationsVtbl;
+
+typedef struct IPortClsPnpVtbl IPortClsPnpVtbl;
+
+typedef struct IPortClsPowerVtbl IPortClsPowerVtbl;
+
+typedef struct IPortClsRuntimePowerVtbl IPortClsRuntimePowerVtbl;
+
+typedef struct IPortClsStreamResourceManager2Vtbl IPortClsStreamResourceManager2Vtbl;
+
+typedef struct IPortClsStreamResourceManagerVtbl IPortClsStreamResourceManagerVtbl;
+
+typedef struct IPortClsSubdeviceExVtbl IPortClsSubdeviceExVtbl;
+
+typedef struct IPortClsVersionVtbl IPortClsVersionVtbl;
+
+typedef struct IPortEventsVtbl IPortEventsVtbl;
+
+typedef struct IPortMidiVtbl IPortMidiVtbl;
+
+typedef struct IPortTopologyVtbl IPortTopologyVtbl;
+
+typedef struct IPortVtbl IPortVtbl;
+
+typedef struct IPortWaveCyclicVtbl IPortWaveCyclicVtbl;
+
+typedef struct IPortWavePciStreamVtbl IPortWavePciStreamVtbl;
+
+typedef struct IPortWavePciVtbl IPortWavePciVtbl;
+
+typedef struct IPortWaveRTStreamVtbl IPortWaveRTStreamVtbl;
+
+typedef struct IPortWaveRTVtbl IPortWaveRTVtbl;
+
+typedef struct IPortWMIRegistrationVtbl IPortWMIRegistrationVtbl;
+
+typedef struct IPowerNotifyVtbl IPowerNotifyVtbl;
+
+typedef struct IPreFetchOffsetVtbl IPreFetchOffsetVtbl;
+
+typedef struct IRegistryKeyVtbl IRegistryKeyVtbl;
+
+typedef struct IResourceListVtbl IResourceListVtbl;
+
+typedef struct IServiceGroupVtbl IServiceGroupVtbl;
+
+typedef struct IServiceSinkVtbl IServiceSinkVtbl;
+
+typedef struct IUnregisterPhysicalConnectionVtbl IUnregisterPhysicalConnectionVtbl;
+
+typedef struct IUnregisterSubdeviceVtbl IUnregisterSubdeviceVtbl;
+
+struct PCSTREAMRESOURCE__
+{
+    int unused;
+};
+
+typedef EVT_PC_POST_PO_FX_REGISTER_DEVICE *PFN_PC_POST_PO_FX_REGISTER_DEVICE;
+
+typedef EVT_PC_PRE_PO_FX_UNREGISTER_DEVICE *PFN_PC_PRE_PO_FX_UNREGISTER_DEVICE;
+
+struct _PC_POWER_FRAMEWORK_SETTINGS
+{
+    ULONG Size;
+    PFN_PC_POST_PO_FX_REGISTER_DEVICE EvtPcPostPoFxRegisterDevice;
+    PFN_PC_PRE_PO_FX_UNREGISTER_DEVICE EvtPcPrePoFxUnregisterDevice;
+    PPO_FX_COMPONENT Component;
+    PPO_FX_COMPONENT_ACTIVE_CONDITION_CALLBACK ComponentActiveConditionCallback;
+    PPO_FX_COMPONENT_IDLE_CONDITION_CALLBACK ComponentIdleConditionCallback;
+    PPO_FX_COMPONENT_IDLE_STATE_CALLBACK ComponentIdleStateCallback;
+    PPO_FX_POWER_CONTROL_CALLBACK PowerControlCallback;
+    PVOID PoFxDeviceContext;
+};
+
+typedef struct _PC_POWER_FRAMEWORK_SETTINGS PC_POWER_FRAMEWORK_SETTINGS;
+
+typedef struct _PC_POWER_FRAMEWORK_SETTINGS *PPC_POWER_FRAMEWORK_SETTINGS;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+void PC_POWER_FRAMEWORK_SETTINGS_INIT(PPC_POWER_FRAMEWORK_SETTINGS PowerFrameworkSettings);
+NTSTATUS PcAssignPowerFrameworkSettings(PDEVICE_OBJECT DeviceObject, PPC_POWER_FRAMEWORK_SETTINGS PowerFrameworkSettings);
+NTSTATUS PcRegisterAdapterPnpManagement(PUNKNOWN Unknown, PDEVICE_OBJECT DeviceObject);
+NTSTATUS PcUnregisterAdapterPnpManagement(PDEVICE_OBJECT DeviceObject);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* PORTCLS_H */

@@ -87,7 +87,8 @@ enum PathPointType{
     PathPointTypePathDashMode   = 16,   /* not used */
     PathPointTypePathMarker     = 32,
     PathPointTypeCloseSubpath   = 128,  /* end of a closed figure */
-    PathPointTypeBezier3        = 3
+    PathPointTypeBezier3        = 3,
+    PathPointTypeDashMode = 0x10,
 };
 
 enum PenType
@@ -283,7 +284,8 @@ enum StringFormatFlags
     StringFormatFlagsMeasureTrailingSpaces = 0x00000800,
     StringFormatFlagsNoWrap                = 0x00001000,
     StringFormatFlagsLineLimit             = 0x00002000,
-    StringFormatFlagsNoClip                = 0x00004000
+    StringFormatFlagsNoClip                = 0x00004000,
+    StringFormatFlagsBypassGDI = (-2147483647 - 1),
 };
 
 enum StringTrimming
@@ -815,5 +817,25 @@ enum GenericFontFamily {
     GenericFontFamilySansSerif = 1,
     GenericFontFamilyMonospace = 2
 };
+
+#define GDIP_EMFPLUS_RECORD_TO_WMFn) ((n) & (~GDIP_WMF_RECORD_BASE))
+#define GDIP_IS_WMF_RECORDTYPEn) (((n) & GDIP_WMF_RECORD_BASE) != 0)
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL ObjectTypeIsValid(enum ObjectType type);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define GDIP_EMFPLUS_RECORD_TO_WMFn) ((n) & (~GDIP_WMF_RECORD_BASE))
+#define GDIP_IS_WMF_RECORDTYPEn) (((n) & GDIP_WMF_RECORD_BASE) != 0)
+
+#define GDIP_EMFPLUS_RECORD_TO_WMFn) ((n) & (~GDIP_WMF_RECORD_BASE))
+#define GDIP_IS_WMF_RECORDTYPEn) (((n) & GDIP_WMF_RECORD_BASE) != 0)
 
 #endif

@@ -184,4 +184,15 @@ typedef enum _RX_SCAVENGER_ENTRY_STATE {
     RX_SCAVENGING_AWAITING_RESPONSE = 3
 } RX_SCAVENGER_ENTRY_STATE, *PRX_SCAVENGER_ENTRY_STATE;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+void RxTerminateScavenging(PRX_CONTEXT RxContext);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

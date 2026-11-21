@@ -806,14 +806,6 @@ typedef enum _MSA_INFO_STATE {
     MsaInfoInstalled = 5
 } MSA_INFO_STATE, *PMSA_INFO_STATE;
 
-typedef struct _USER_INFO_24 {
-  BOOL usri24_internet_identity;
-  DWORD usri24_flags;
-  LPWSTR usri24_internet_provider_name;
-  LPWSTR usri24_internet_principal_name;
-  PSID usri24_user_sid;
-} USER_INFO_24, *PUSER_INFO_24, *LPUSER_INFO_24;
-
 typedef struct _MSA_INFO_0 {
   MSA_INFO_STATE State;
 } MSA_INFO_0, *PMSA_INFO_0, *LPMSA_INFO_0;
@@ -844,5 +836,38 @@ typedef struct _NET_VALIDATE_PASSWORD_RESET_INPUT_ARG {
   BOOLEAN PasswordMustChangeAtNextLogon;
   BOOLEAN ClearLockout;
 } NET_VALIDATE_PASSWORD_RESET_INPUT_ARG, *PNET_VALIDATE_PASSWORD_RESET_INPUT_ARG;
+
+typedef struct _USER_INFO_24 {
+  BOOL usri24_internet_identity;
+  DWORD usri24_flags;
+  LPWSTR usri24_internet_provider_name;
+  LPWSTR usri24_internet_principal_name;
+  PSID usri24_user_sid;
+} USER_INFO_24, *PUSER_INFO_24, *LPUSER_INFO_24;
+
+#define _LMACCESS_ 0
+#define _LMDOMAIN_ 0
+#define _LMGROUP_ 0
+#define _LMLOCALGROUP_
+#define _LMUSER_ 0
+#define DELEGATED_MANAGED_SERVICE_ACCOUNT_PASSWORD TEXT("_SA_{F8262F4C-499B-4770-88B4-A75C91D0D8E9}")
+#define SERVICE_ACCOUNT_PASSWORD 0
+#define SERVICE_ACCOUNT_SECRET_PREFIX TEXT("_SC_{262E99C9-6160-4871-ACEC-4E61736B6F21}_")
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+NTSTATUS NetAddServiceAccount(LPWSTR ServerName, LPWSTR AccountName, LPWSTR Password, DWORD Flags);
+NTSTATUS NetEnumerateServiceAccounts(LPWSTR ServerName, DWORD Flags, DWORD *AccountsCount, PZPWSTR *Accounts);
+NTSTATUS NetIsServiceAccount(LPWSTR ServerName, LPWSTR AccountName, BOOL *IsService);
+NTSTATUS NetIsServiceAccount2(LPWSTR ServerName, LPWSTR AccountName, BOOL *IsService, MSA_INFO_ACCOUNT_TYPE *AccountType);
+NTSTATUS NetQueryServiceAccount(LPWSTR ServerName, LPWSTR AccountName, DWORD InfoLevel, PBYTE *Buffer);
+NTSTATUS NetRemoveServiceAccount(LPWSTR ServerName, LPWSTR AccountName, DWORD Flags);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

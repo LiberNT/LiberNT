@@ -725,4 +725,26 @@ DECLARE_INTERFACE_(IDirectMusicThru,IUnknown)
 
 #pragma pack(pop)
 
+#define _DMUSICC_ 0
+
+typedef struct IDirectMusic8Vtbl IDirectMusic8Vtbl;
+
+typedef struct IDirectMusicBufferVtbl IDirectMusicBufferVtbl;
+
+typedef struct IDirectMusicCollectionVtbl IDirectMusicCollectionVtbl;
+
+typedef struct IDirectMusicDownloadedInstrumentVtbl IDirectMusicDownloadedInstrumentVtbl;
+
+typedef struct IDirectMusicDownloadVtbl IDirectMusicDownloadVtbl;
+
+typedef struct IDirectMusicInstrumentVtbl IDirectMusicInstrumentVtbl;
+
+typedef struct IDirectMusicPortDownloadVtbl IDirectMusicPortDownloadVtbl;
+
+typedef struct IDirectMusicPortVtbl IDirectMusicPortVtbl;
+
+typedef struct IDirectMusicThruVtbl IDirectMusicThruVtbl;
+
+typedef struct IDirectMusicVtbl IDirectMusicVtbl;
+
 #endif /* __WINE_DMUSIC_CORE_H */

@@ -897,7 +897,9 @@ typedef enum _DISK_SAN_POLICY {
   DiskSanPolicyOfflineShared,
   DiskSanPolicyOffline,
   DiskSanPolicyOfflineInternal,
-  DiskSanPolicyMax
+  DiskSanPolicyMax,
+  DiskSanPolicyPassthrough = 5,
+  DiskSanPolicySuperfloppy = 6,
 } DISK_SAN_POLICY, *PDISK_SAN_POLICY;
 
 typedef struct _DISK_SAN_SETTINGS {
@@ -992,5 +994,7 @@ typedef struct _DISK_PERFORMANCE_INFO {
 #ifndef GPT_SPACES_ATTRIBUTE_NO_METADATA
 #define GPT_SPACES_ATTRIBUTE_NO_METADATA 0x8000000000000000
 #endif
+
+#define SMART_RCV_DRIVE_DATA_EX 0x7008C
 
 #endif /* _NTDDDISK_H_ */

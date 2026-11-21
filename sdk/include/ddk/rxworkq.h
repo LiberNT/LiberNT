@@ -106,4 +106,16 @@ NTSTATUS
 RxInitializeMRxDispatcher(
      _Inout_ PRDBSS_DEVICE_OBJECT pMRxDeviceObject);
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+NTSTATUS RxSpinDownMRxDispatcher(PRDBSS_DEVICE_OBJECT pMRxDeviceObject);
+NTSTATUS RxTearDownDispatcher(void);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

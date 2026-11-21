@@ -70,4 +70,18 @@ extern UINT         MyHelpMessage;
 }
 #endif
 
+#define _INC_SCRNSAVE 0
+#define SCRM_VERIFYPW 0x8000
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+void WINAPI ScreenSaverChangePassword(HWND hParent);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* _SCRNSAVE_H */

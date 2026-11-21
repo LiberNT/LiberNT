@@ -5226,21 +5226,147 @@ HRESULT WINAPI DirectInputCreateEx(HINSTANCE,DWORD,REFIID,LPVOID *,LPUNKNOWN);
 
 typedef const DIDEVICEOBJECTDATA_DX3 * LPCDIDEVICEOBJECTDATA_DX;
 
+typedef struct _CPOINT {
+  LONG lP;
+  DWORD dwLog;
+} CPOINT, *PCPOINT;
+
 typedef struct DIPROPCALPOV {
   DIPROPHEADER diph;
   LONG lMin[5];
   LONG lMax[5];
 } DIPROPCALPOV, *LPDIPROPCALPOV;
 
-typedef struct _CPOINT {
-  LONG lP;
-  DWORD dwLog;
-} CPOINT, *PCPOINT;
-
 typedef struct DIPROPCPOINTS {
   DIPROPHEADER diph;
   DWORD dwCPointsNum;
   CPOINT cp[8];
 } DIPROPCPOINTS, *LPDIPROPCPOINTS;
+
+#define DIFEF_DEFAULT 0x00000000
+#define DIPROP_GETPORTDISPLAYNAME 0x10
+#ifdef UNICODE
+#define IDirectInput IDirectInputW
+#else
+#define IDirectInput IDirectInputA
+#endif
+#ifdef UNICODE
+#define IDirectInput2 IDirectInput2W
+#else
+#define IDirectInput2 IDirectInput2A
+#endif
+#define IDirectInput2Vtbl IDirectInput2AVtbl
+#ifdef UNICODE
+#define IDirectInput7 IDirectInput7W
+#else
+#define IDirectInput7 IDirectInput7A
+#endif
+#define IDirectInput7Vtbl IDirectInput7AVtbl
+#ifdef UNICODE
+#define IDirectInput8 IDirectInput8W
+#else
+#define IDirectInput8 IDirectInput8A
+#endif
+#define IDirectInput8Vtbl IDirectInput8AVtbl
+#ifdef UNICODE
+#define IDirectInputDevice IDirectInputDeviceW
+#else
+#define IDirectInputDevice IDirectInputDeviceA
+#endif
+#ifdef UNICODE
+#define IDirectInputDevice2 IDirectInputDevice2W
+#else
+#define IDirectInputDevice2 IDirectInputDevice2A
+#endif
+#define IDirectInputDevice2Vtbl IDirectInputDevice2AVtbl
+#ifdef UNICODE
+#define IDirectInputDevice7 IDirectInputDevice7W
+#else
+#define IDirectInputDevice7 IDirectInputDevice7A
+#endif
+#define IDirectInputDevice7Vtbl IDirectInputDevice7AVtbl
+#ifdef UNICODE
+#define IDirectInputDevice8 IDirectInputDevice8W
+#else
+#define IDirectInputDevice8 IDirectInputDevice8A
+#endif
+#define IDirectInputDevice8Vtbl IDirectInputDevice8AVtbl
+#define IDirectInputDeviceVtbl IDirectInputDeviceAVtbl
+#define IDirectInputVtbl IDirectInputAVtbl
+#define LPDIENUMEFFECTSCALLBACK 0
+
+struct _DIMOUSESTATE
+{
+    LONG lX;
+    LONG lY;
+    LONG lZ;
+    BYTE rgbButtons[4];
+};
+
+struct _DIMOUSESTATE2
+{
+    LONG lX;
+    LONG lY;
+    LONG lZ;
+    BYTE rgbButtons[8];
+};
+
+typedef struct IDirectInput2AVtbl IDirectInput2AVtbl;
+
+typedef struct IDirectInput2WVtbl IDirectInput2WVtbl;
+
+typedef struct IDirectInput7AVtbl IDirectInput7AVtbl;
+
+typedef struct IDirectInput7WVtbl IDirectInput7WVtbl;
+
+typedef struct IDirectInput8AVtbl IDirectInput8AVtbl;
+
+typedef struct IDirectInput8WVtbl IDirectInput8WVtbl;
+
+typedef struct IDirectInputAVtbl IDirectInputAVtbl;
+
+typedef struct IDirectInputDevice2AVtbl IDirectInputDevice2AVtbl;
+
+typedef struct IDirectInputDevice2WVtbl IDirectInputDevice2WVtbl;
+
+typedef struct IDirectInputDevice7AVtbl IDirectInputDevice7AVtbl;
+
+typedef struct IDirectInputDevice7WVtbl IDirectInputDevice7WVtbl;
+
+typedef struct IDirectInputDevice8AVtbl IDirectInputDevice8AVtbl;
+
+typedef struct IDirectInputDevice8WVtbl IDirectInputDevice8WVtbl;
+
+typedef struct IDirectInputDeviceAVtbl IDirectInputDeviceAVtbl;
+
+typedef struct IDirectInputDeviceWVtbl IDirectInputDeviceWVtbl;
+
+typedef struct IDirectInputEffectVtbl IDirectInputEffectVtbl;
+
+typedef struct IDirectInputWVtbl IDirectInputWVtbl;
+
+typedef const DIPROPCALPOV *LPCDIPROPCALPOV;
+
+typedef const DIPROPCPOINTS *LPCDIPROPCPOINTS;
+
+typedef struct _DIMOUSESTATE *LPDIMOUSESTATE;
+
+typedef struct _DIMOUSESTATE2 *LPDIMOUSESTATE2;
+
+typedef void (WINAPI *LPFNSHOWJOYCPL)(HWND);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+MMRESULT WINAPI joyConfigChanged(DWORD dwFlags);
+
+/* TODO: LiberNT does not implement the functions below yet */
+LPCDIDATAFORMAT WINAPI GetdfDIJoystick(void);
+void WINAPI ShowJoyCPL(HWND hWnd);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __DINPUT_INCLUDED__ */

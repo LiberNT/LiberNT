@@ -65,3 +65,20 @@ interface IDocObjectService : IUnknown
             [in] LPCWSTR lpszUrl,
             [out] BOOL *pfIsError);
 };
+
+cpp_quote("struct IDocObjectServiceVtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(IDocObjectService *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(IDocObjectService *);")
+cpp_quote("    ULONG (WINAPI *Release)(IDocObjectService *);")
+cpp_quote("    HRESULT (WINAPI *FireBeforeNavigate2)(IDocObjectService *, IDispatch *, LPCWSTR, DWORD, LPCWSTR, BYTE *, DWORD, LPCWSTR, BOOL, BOOL *);")
+cpp_quote("    HRESULT (WINAPI *FireNavigateComplete2)(IDocObjectService *, IHTMLWindow2 *, DWORD);")
+cpp_quote("    HRESULT (WINAPI *FireDownloadBegin)(IDocObjectService *);")
+cpp_quote("    HRESULT (WINAPI *FireDownloadComplete)(IDocObjectService *);")
+cpp_quote("    HRESULT (WINAPI *FireDocumentComplete)(IDocObjectService *, IHTMLWindow2 *, DWORD);")
+cpp_quote("    HRESULT (WINAPI *UpdateDesktopComponent)(IDocObjectService *, IHTMLWindow2 *);")
+cpp_quote("    HRESULT (WINAPI *GetPendingUrl)(IDocObjectService *, BSTR *);")
+cpp_quote("    HRESULT (WINAPI *ActiveElementChanged)(IDocObjectService *, IHTMLElement *);")
+cpp_quote("    HRESULT (WINAPI *GetUrlSearchComponent)(IDocObjectService *, BSTR *);")
+cpp_quote("    HRESULT (WINAPI *IsErrorUrl)(IDocObjectService *, LPCWSTR, BOOL *);")
+cpp_quote("};")

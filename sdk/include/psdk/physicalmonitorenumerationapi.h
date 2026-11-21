@@ -39,4 +39,30 @@ typedef struct _PHYSICAL_MONITOR
 }
 #endif
 
+#define PhysicalMonitorEnumerationAPI_h 0
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+_BOOL WINAPI DestroyPhysicalMonitors(DWORD dwPhysicalMonitorArraySize, LPPHYSICAL_MONITOR pPhysicalMonitorArray);
+_BOOL WINAPI GetNumberOfPhysicalMonitorsFromHMONITOR(HMONITOR hMonitor, LPDWORD pdwNumberOfPhysicalMonitors);
+HRESULT WINAPI GetNumberOfPhysicalMonitorsFromIDirect3DDevice9(IDirect3DDevice9 *pDirect3DDevice9, LPDWORD pdwNumberOfPhysicalMonitors);
+_BOOL WINAPI GetPhysicalMonitorsFromHMONITOR(HMONITOR hMonitor, DWORD dwPhysicalMonitorArraySize, LPPHYSICAL_MONITOR pPhysicalMonitorArray);
+HRESULT WINAPI GetPhysicalMonitorsFromIDirect3DDevice9(IDirect3DDevice9 *pDirect3DDevice9, DWORD dwPhysicalMonitorArraySize, LPPHYSICAL_MONITOR pPhysicalMonitorArray);
+
+#ifdef __cplusplus
+}
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+_BOOL WINAPI DestroyPhysicalMonitor(HANDLE hMonitor);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* __WINE_PHYSICALMONITORENUMERATIONAPI_H */

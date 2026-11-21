@@ -108,4 +108,68 @@ typedef enum TDI_TL_IO_CONTROL_TYPE {
     SocketIoControlType = 3
 } TDI_TL_IO_CONTROL_TYPE, *PTDI_TL_IO_CONTROL_TYPE;
 
+#define IOCTL_TDI_TL_IO_CONTROL_ENDPOINT 0x210038
+
+struct _TDI_TL_IO_CONTROL_ENDPOINT
+{
+    TDI_TL_IO_CONTROL_TYPE Type;
+    ULONG Level;
+    union
+    {
+        ULONG IoControlCode;
+        ULONG OptionName;
+    };
+    PVOID InputBuffer;
+    ULONG InputBufferLength;
+    PVOID OutputBuffer;
+    ULONG OutputBufferLength;
+};
+
+typedef struct _TDI_TL_IO_CONTROL_ENDPOINT *PTDI_TL_IO_CONTROL_ENDPOINT;
+
+struct tcp_request_query_information_ex32_xp
+{
+    TDIObjectID ID;
+    ULONG32 Context[4];
+};
+
+typedef struct tcp_request_query_information_ex32_xp *PTCP_REQUEST_QUERY_INFORMATION_EX32_XP;
+
+typedef struct tcp_request_query_information_ex32_xp TCP_REQUEST_QUERY_INFORMATION_EX32_XP;
+
+struct tcp_request_set_information_ex
+{
+    TDIObjectID ID;
+    unsigned int BufferSize;
+    unsigned char Buffer[1];
+};
+
+typedef struct _TDI_TL_IO_CONTROL_ENDPOINT TDI_TL_IO_CONTROL_ENDPOINT;
+
+typedef unsigned char uchar;
+
+typedef unsigned long ulong;
+
+typedef unsigned short ushort;
+
+typedef struct tcp_request_query_information_ex_w2k *PTCP_REQUEST_QUERY_INFORMATION_EX_W2K;
+
+typedef struct tcp_request_query_information_ex_xp *PTCP_REQUEST_QUERY_INFORMATION_EX_XP;
+
+struct tcp_request_query_information_ex_w2k
+{
+    TDIObjectID ID;
+    uchar Context[16];
+};
+
+typedef struct tcp_request_query_information_ex_w2k TCP_REQUEST_QUERY_INFORMATION_EX_W2K;
+
+struct tcp_request_query_information_ex_xp
+{
+    TDIObjectID ID;
+    ULONG_PTR Context[2];
+};
+
+typedef struct tcp_request_query_information_ex_xp TCP_REQUEST_QUERY_INFORMATION_EX_XP;
+
 #endif /* __TDIINFO_H */

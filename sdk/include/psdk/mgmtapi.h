@@ -52,4 +52,24 @@ typedef void *LPSNMP_MGR_SESSION;
 #define SNMP_MGMTAPI_TRAP_ERRORS 42
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+LPSNMP_MGR_SESSION WINAPI SnmpMgrOpen(LPSTR lpAgentAddress, LPSTR lpAgentCommunity, INT nTimeOut, INT nRetries);
+BOOL WINAPI SnmpMgrTrapListen(HANDLE *phTrapAvailable);
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL SnmpMgrClose(LPSNMP_MGR_SESSION session);
+BOOL SnmpMgrCtl(LPSNMP_MGR_SESSION session, DWORD dwCtlCode, LPVOID lpvInBuffer, DWORD cbInBuffer, LPVOID lpvOUTBuffer, DWORD cbOUTBuffer, LPDWORD lpcbBytesReturned);
+BOOL SnmpMgrGetTrap(AsnObjectIdentifier *enterprise, AsnNetworkAddress *IPAddress, AsnInteger32 *genericTrap, AsnInteger32 *specificTrap, AsnTimeticks *timeStamp, SnmpVarBindList *variableBindings);
+BOOL SnmpMgrGetTrapEx(AsnObjectIdentifier *enterprise, AsnNetworkAddress *agentAddress, AsnNetworkAddress *sourceAddress, AsnInteger32 *genericTrap, AsnInteger32 *specificTrap, AsnOctetString *community, AsnTimeticks *timeStamp, SnmpVarBindList *variableBindings);
+BOOL SnmpMgrOidToStr(AsnObjectIdentifier *oid, LPSTR *string);
+INT SnmpMgrRequest(LPSNMP_MGR_SESSION session, BYTE requestType, SnmpVarBindList *variableBindings, AsnInteger32 *errorStatus, AsnInteger32 *errorIndex);
+BOOL SnmpMgrStrToOid(LPSTR string, AsnObjectIdentifier *oid);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* _INC_MGMTAPI */

@@ -1535,4 +1535,45 @@ DECLARE_INTERFACE_(IDirect3DVertexBuffer7,IUnknown)
 #endif
 
 #endif /* (DIRECT3D_VERSION < 0x0800) */
+
+typedef struct IDirect3D2Vtbl IDirect3D2Vtbl;
+
+typedef struct IDirect3D3Vtbl IDirect3D3Vtbl;
+
+typedef struct IDirect3D7Vtbl IDirect3D7Vtbl;
+
+typedef struct IDirect3DDevice2Vtbl IDirect3DDevice2Vtbl;
+
+typedef struct IDirect3DDevice3Vtbl IDirect3DDevice3Vtbl;
+
+typedef struct IDirect3DDevice7Vtbl IDirect3DDevice7Vtbl;
+
+typedef struct IDirect3DDeviceVtbl IDirect3DDeviceVtbl;
+
+typedef struct IDirect3DExecuteBufferVtbl IDirect3DExecuteBufferVtbl;
+
+typedef struct IDirect3DLightVtbl IDirect3DLightVtbl;
+
+typedef struct IDirect3DMaterial2Vtbl IDirect3DMaterial2Vtbl;
+
+typedef struct IDirect3DMaterial3Vtbl IDirect3DMaterial3Vtbl;
+
+typedef struct IDirect3DMaterialVtbl IDirect3DMaterialVtbl;
+
+typedef struct IDirect3DTexture2Vtbl IDirect3DTexture2Vtbl;
+
+typedef struct IDirect3DTextureVtbl IDirect3DTextureVtbl;
+
+typedef struct IDirect3DVertexBuffer7Vtbl IDirect3DVertexBuffer7Vtbl;
+
+typedef struct IDirect3DVertexBufferVtbl IDirect3DVertexBufferVtbl;
+
+typedef struct IDirect3DViewport2Vtbl IDirect3DViewport2Vtbl;
+
+typedef struct IDirect3DViewport3Vtbl IDirect3DViewport3Vtbl;
+
+typedef struct IDirect3DViewportVtbl IDirect3DViewportVtbl;
+
+typedef struct IDirect3DVtbl IDirect3DVtbl;
+
 #endif /* __WINE_D3D_H */

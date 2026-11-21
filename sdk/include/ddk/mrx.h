@@ -449,4 +449,32 @@ typedef enum _MINIRDR_BUFSTATE_COMMANDS {
     MRDRBUFSTCMD_MAXXX = 32
 } MINIRDR_BUFSTATE_COMMANDS;
 
+#define MINIRDR_BUFSTATE_COMMAND_MASK 1
+#define RxFillAndInstallFastIoDispatch__devobj, __fastiodisp) { __RxFillAndInstallFastIoDispatch(& __devobj -> RxDeviceObject, & __fastiodisp, sizeof (__fastiodisp)); }
+#define RxGetIoStatusInfoRXCONTEXT) ((RXCONTEXT) -> CurrentIrp -> IoStatus . Information)
+
+typedef void (NTAPI *PMRX_NEWSTATE_CALLDOWN)(PVOID);
+
+typedef BOOLEAN (*PRX_LOCK_ENUMERATOR)(PMRX_SRV_OPEN, PVOID *, PLARGE_INTEGER, PLARGE_INTEGER, PBOOLEAN);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+void __RxFillAndInstallFastIoDispatch(PRDBSS_DEVICE_OBJECT RxDeviceObject, PFAST_IO_DISPATCH FastIoDispatch, ULONG FastIoDispatchSize);
+void RxFinalizeLockList(struct _RX_CONTEXT *RxContext);
+void RxMakeLateDeviceAvailable(PRDBSS_DEVICE_OBJECT RxDeviceObject);
+NTSTATUS RxSetDomainForMailslotBroadcast(PUNICODE_STRING DomainName);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define RxFillAndInstallFastIoDispatch__devobj, __fastiodisp) { __RxFillAndInstallFastIoDispatch(& __devobj -> RxDeviceObject, & __fastiodisp, sizeof (__fastiodisp)); }
+#define RxGetIoStatusInfoRXCONTEXT) ((RXCONTEXT) -> CurrentIrp -> IoStatus . Information)
+
+#define RxFillAndInstallFastIoDispatch__devobj, __fastiodisp) { __RxFillAndInstallFastIoDispatch(& __devobj -> RxDeviceObject, & __fastiodisp, sizeof (__fastiodisp)); }
+#define RxGetIoStatusInfoRXCONTEXT) ((RXCONTEXT) -> CurrentIrp -> IoStatus . Information)
+
 #endif

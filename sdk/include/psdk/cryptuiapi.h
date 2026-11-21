@@ -480,4 +480,21 @@ typedef struct CERT_SELECTUI_INPUT {
   DWORD cChain;
 } CERT_SELECTUI_INPUT, *PCERT_SELECTUI_INPUT;
 
+#ifdef UNICODE
+#define PCRYPTUI_VIEWCERTIFICATE_STRUCT PCRYPTUI_VIEWCERTIFICATE_STRUCTW
+#else
+#define PCRYPTUI_VIEWCERTIFICATE_STRUCT PCRYPTUI_VIEWCERTIFICATE_STRUCTA
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+HRESULT WINAPI CertSelectionGetSerializedBlob(PCERT_SELECTUI_INPUT pcsi, void **ppOutBuffer, ULONG *pulOutBufferSize);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

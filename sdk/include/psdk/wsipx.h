@@ -22,4 +22,7 @@ typedef struct sockaddr_ipx {
 #ifdef __cplusplus
 }
 #endif
+
+#define _WSIPX_ 0
+
 #endif

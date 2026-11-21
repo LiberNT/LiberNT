@@ -294,7 +294,8 @@ typedef enum
     ASSOCDATA_HASPERUSERASSOC,   /* Use user association */
     ASSOCDATA_EDITFLAGS,         /* Edit flags */
     ASSOCDATA_VALUE,             /* pszExtra is value */
-    ASSOCDATA_MAX
+    ASSOCDATA_MAX,
+    ASSOCDATA_UNUSED1 = 3,
 } ASSOCDATA;
 
 typedef enum

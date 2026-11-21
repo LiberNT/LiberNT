@@ -148,4 +148,15 @@ typedef enum APPSTATE {
     PUBLISHED = 2
 } APPSTATE;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+void WINAPI GetLocalManagedApplicationData(LPWSTR ProductCode, LPWSTR *DisplayName, LPWSTR *SupportUrl);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* _APPMGMT_H */

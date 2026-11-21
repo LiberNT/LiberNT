@@ -168,6 +168,23 @@ typedef enum _SI_PAGE_ACTIVATED {
     SI_SHOW_CENTRAL_POLICY_ACTIVATED = 6
 } SI_PAGE_ACTIVATED;
 
+typedef struct _EFFPERM_RESULT_LIST {
+  BOOLEAN fEvaluated;
+  ULONG cObjectTypeListLength;
+  OBJECT_TYPE_LIST * pObjectTypeList;
+  ACCESS_MASK * pGrantedAccessList;
+} EFFPERM_RESULT_LIST, *PEFFPERM_RESULT_LIST;
+
+typedef struct _SECURITY_OBJECT {
+  PWSTR pwszName;
+  PVOID pData;
+  DWORD cbData;
+  PVOID pData2;
+  DWORD cbData2;
+  DWORD Id;
+  BOOLEAN fWellKnown;
+} SECURITY_OBJECT, *PSECURITY_OBJECT;
+
 typedef struct _SID_INFO {
   PSID pSid;
   PWSTR pwzCommonName;
@@ -180,22 +197,67 @@ typedef struct _SID_INFO_LIST {
   SID_INFO aSidInfo[1];
 } SID_INFO_LIST, *PSID_INFO_LIST;
 
-typedef struct _SECURITY_OBJECT {
-  PWSTR pwszName;
-  PVOID pData;
-  DWORD cbData;
-  PVOID pData2;
-  DWORD cbData2;
-  DWORD Id;
-  BOOLEAN fWellKnown;
-} SECURITY_OBJECT, *PSECURITY_OBJECT;
+#define ACLUIAPI 0
+#define CFSTR_ACLUI_SID_INFO_LIST TEXT("CFSTR_ACLUI_SID_INFO_LIST")
+#define COMBINE_PAGE_ACTIVATIONX, Y) (UINT) (((Y) << 16) | X)
+#define GET_ACTIVATION_TYPEY) (UINT) (((Y) >> 16) & 0x0000ffff)
+#define GET_PAGE_TYPEX) (UINT) ((X) & 0x0000ffff)
+#define PSPCB_SI_INITDIALOG 0x401
+#define SECURITY_OBJECT_ID_OBJECT_SD 1
 
-typedef struct _EFFPERM_RESULT_LIST {
-  BOOLEAN fEvaluated;
-  ULONG cObjectTypeListLength;
-  OBJECT_TYPE_LIST * pObjectTypeList;
-  ACCESS_MASK * pGrantedAccessList;
-} EFFPERM_RESULT_LIST, *PEFFPERM_RESULT_LIST;
+typedef struct IEffectivePermission2Vtbl IEffectivePermission2Vtbl;
+
+struct IEffectivePermission2
+{
+    struct IEffectivePermission2Vtbl *lpVtbl;
+};
+
+typedef struct IEffectivePermissionVtbl IEffectivePermissionVtbl;
+
+typedef struct ISecurityInformation2Vtbl ISecurityInformation2Vtbl;
+
+typedef struct ISecurityInformation3Vtbl ISecurityInformation3Vtbl;
+
+struct ISecurityInformation3
+{
+    struct ISecurityInformation3Vtbl *lpVtbl;
+};
+
+typedef struct ISecurityInformation4Vtbl ISecurityInformation4Vtbl;
+
+struct ISecurityInformation4
+{
+    struct ISecurityInformation4Vtbl *lpVtbl;
+};
+
+typedef struct ISecurityInformationVtbl ISecurityInformationVtbl;
+
+typedef struct ISecurityObjectTypeInfoVtbl ISecurityObjectTypeInfoVtbl;
+
+typedef IEffectivePermission2 *LPEFFECTIVEPERMISSION2;
+
+typedef ISecurityInformation3 *LPSECURITYINFO3;
+
+typedef ISecurityInformation4 *LPSECURITYINFO4;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+HRESULT EditSecurityAdvanced(HWND hwndOwner, LPSECURITYINFO psi, SI_PAGE_TYPE uSIPage);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define COMBINE_PAGE_ACTIVATIONX, Y) (UINT) (((Y) << 16) | X)
+#define GET_ACTIVATION_TYPEY) (UINT) (((Y) >> 16) & 0x0000ffff)
+#define GET_PAGE_TYPEX) (UINT) ((X) & 0x0000ffff)
+
+#define COMBINE_PAGE_ACTIVATIONX, Y) (UINT) (((Y) << 16) | X)
+#define GET_ACTIVATION_TYPEY) (UINT) (((Y) >> 16) & 0x0000ffff)
+#define GET_PAGE_TYPEX) (UINT) ((X) & 0x0000ffff)
 
 #endif /* __ACLUI_H */
 

@@ -213,6 +213,27 @@ BOOL WINAPI DevQueryPrintEx(PDEVQUERYPRINT_INFO);
 #define QCP_SOURCEPROFILE 0x0001
 #endif
 
+typedef struct _ATTRIBUTE_INFO_1 {
+  DWORD dwJobNumberOfPagesPerSide;
+  DWORD dwDrvNumberOfPagesPerSide;
+  DWORD dwNupBorderFlags;
+  DWORD dwJobPageOrderFlags;
+  DWORD dwDrvPageOrderFlags;
+  DWORD dwJobNumberOfCopies;
+  DWORD dwDrvNumberOfCopies;
+} ATTRIBUTE_INFO_1, *PATTRIBUTE_INFO_1;
+
+typedef struct _ATTRIBUTE_INFO_2 {
+  DWORD dwJobNumberOfPagesPerSide;
+  DWORD dwDrvNumberOfPagesPerSide;
+  DWORD dwNupBorderFlags;
+  DWORD dwJobPageOrderFlags;
+  DWORD dwDrvPageOrderFlags;
+  DWORD dwJobNumberOfCopies;
+  DWORD dwDrvNumberOfCopies;
+  DWORD dwColorOptimization;
+} ATTRIBUTE_INFO_2, *PATTRIBUTE_INFO_2;
+
 typedef struct _DRIVER_UPGRADE_INFO_1 {
   LPTSTR pPrinterName;
   LPTSTR pOldDriverDirectory;
@@ -240,25 +261,29 @@ typedef struct _PRINTER_EVENT_ATTRIBUTES_INFO {
   DWORD dwNewAttributes;
 } PRINTER_EVENT_ATTRIBUTES_INFO, *PPRINTER_EVENT_ATTRIBUTES_INFO;
 
-typedef struct _ATTRIBUTE_INFO_1 {
-  DWORD dwJobNumberOfPagesPerSide;
-  DWORD dwDrvNumberOfPagesPerSide;
-  DWORD dwNupBorderFlags;
-  DWORD dwJobPageOrderFlags;
-  DWORD dwDrvPageOrderFlags;
-  DWORD dwJobNumberOfCopies;
-  DWORD dwDrvNumberOfCopies;
-} ATTRIBUTE_INFO_1, *PATTRIBUTE_INFO_1;
+#define _WINDDIUI_ 0
+#define SPLPRINTER_USER_MODE_PRINTER_DRIVER 0
 
-typedef struct _ATTRIBUTE_INFO_2 {
-  DWORD dwJobNumberOfPagesPerSide;
-  DWORD dwDrvNumberOfPagesPerSide;
-  DWORD dwNupBorderFlags;
-  DWORD dwJobPageOrderFlags;
-  DWORD dwDrvPageOrderFlags;
-  DWORD dwJobNumberOfCopies;
-  DWORD dwDrvNumberOfCopies;
-  DWORD dwColorOptimization;
-} ATTRIBUTE_INFO_2, *PATTRIBUTE_INFO_2;
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL WINAPI DrvConvertDevMode(LPTSTR pPrinterName, PDEVMODE pdmIn, PDEVMODE pdmOut, PLONG pcbNeeded, DWORD fMode);
+BOOL WINAPI DrvQueryColorProfile(HANDLE hPrinter, PDEVMODEW pdevmode, ULONG ulQueryMode, void *pvProfileData, ULONG *pcbProfileData, FLONG *pflProfileData);
+BOOL WINAPI DrvQueryJobAttributes(HANDLE hPrinter, PDEVMODE pDevMode, DWORD dwLevel, LPBYTE lpAttributeInfo);
+void DrvSplAbort(HANDLE hDriver);
+void DrvSplClose(HANDLE hDriver);
+DWORD DrvSplDeviceCaps(HANDLE hPrinter, PWSTR pszDeviceName, WORD Capability, PVOID pOutput, DWORD cchBufSize, PDEVMODE pDevmode);
+void DrvSplEndDoc(HANDLE hDriver);
+BOOL WINAPI DrvSplEndPage(HANDLE hDriver);
+HANDLE WINAPI DrvSplStartDoc(HANDLE hPrinter, DWORD JobId);
+BOOL WINAPI DrvSplStartPage(HANDLE hDriver);
+BOOL WINAPI DrvSplWritePrinter(HANDLE hDriver, LPVOID pBuf, DWORD cbBuf, LPDWORD pcWritten);
+BOOL WINAPI DrvUpgradePrinter(DWORD Level, LPBYTE pDriverUpgradeInfo);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __WINE_WINDDIUI_H */

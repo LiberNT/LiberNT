@@ -272,7 +272,9 @@ typedef enum _TOKEN_INFORMATION_CLASS
     TokenIsAppSilo,
     TokenLoggingInformation,
     TokenLearningMode,
-    MaxTokenInfoClass
+    MaxTokenInfoClass,
+    TokenIsSystemManagedAdmin = 0x33,
+    TokenIsInstaller = 0x34,
 } TOKEN_INFORMATION_CLASS, *PTOKEN_INFORMATION_CLASS;
 
 typedef struct _TOKEN_OWNER

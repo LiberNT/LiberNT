@@ -241,11 +241,11 @@ typedef SERVICE_INFOA SERVICE_INFO, *LPSERVICE_INFO;
 #define XP_SUPPORTS_MULTICAST 0x00000400
 #endif
 
-typedef struct _SERVICE_ADDRESS * PSERVICE_ADDRESS;
 typedef struct _SERVICE_ADDRESS * LPSERVICE_ADDRESS;
+typedef struct _SERVICE_ADDRESS * PSERVICE_ADDRESS;
 typedef struct _SERVICE_INFOA * PSERVICE_INFOA;
-typedef struct _SERVICE_INFOW * PSERVICE_INFOW;
 typedef PSERVICE_INFOA PSERVICE_INFO;
+typedef struct _SERVICE_INFOW * PSERVICE_INFOW;
 
 #ifdef __cplusplus
 extern "C" {
@@ -269,48 +269,6 @@ typedef struct _NS_INFOW {
   DWORD dwNameSpaceFlags;
   LPWSTR lpNameSpace;
 } NS_INFOW, *PNS_INFOW, *LPNS_INFOW;
-
-typedef struct _SERVICE_TYPE_VALUE {
-  DWORD dwNameSpace;
-  DWORD dwValueType;
-  DWORD dwValueSize;
-  DWORD dwValueNameOffset;
-  DWORD dwValueOffset;
-} SERVICE_TYPE_VALUE, *PSERVICE_TYPE_VALUE, *LPSERVICE_TYPE_VALUE;
-
-typedef struct _SERVICE_TYPE_VALUE_ABSA {
-  DWORD dwNameSpace;
-  DWORD dwValueType;
-  DWORD dwValueSize;
-  LPSTR lpValueName;
-  PVOID lpValue;
-} SERVICE_TYPE_VALUE_ABSA, *PSERVICE_TYPE_VALUE_ABSA, *LPSERVICE_TYPE_VALUE_ABSA;
-
-typedef struct _SERVICE_TYPE_VALUE_ABSW {
-  DWORD dwNameSpace;
-  DWORD dwValueType;
-  DWORD dwValueSize;
-  LPWSTR lpValueName;
-  PVOID lpValue;
-} SERVICE_TYPE_VALUE_ABSW, *PSERVICE_TYPE_VALUE_ABSW, *LPSERVICE_TYPE_VALUE_ABSW;
-
-typedef struct _SERVICE_TYPE_INFO {
-  DWORD dwTypeNameOffset;
-  DWORD dwValueCount;
-  SERVICE_TYPE_VALUE Values[1];
-} SERVICE_TYPE_INFO, *PSERVICE_TYPE_INFO, *LPSERVICE_TYPE_INFO;
-
-typedef struct _SERVICE_TYPE_INFO_ABSA {
-  LPSTR lpTypeName;
-  DWORD dwValueCount;
-  SERVICE_TYPE_VALUE_ABSA Values[1];
-} SERVICE_TYPE_INFO_ABSA, *PSERVICE_TYPE_INFO_ABSA, *LPSERVICE_TYPE_INFO_ABSA;
-
-typedef struct _SERVICE_TYPE_INFO_ABSW {
-  LPWSTR lpTypeName;
-  DWORD dwValueCount;
-  SERVICE_TYPE_VALUE_ABSW Values[1];
-} SERVICE_TYPE_INFO_ABSW, *PSERVICE_TYPE_INFO_ABSW, *LPSERVICE_TYPE_INFO_ABSW;
 
 typedef struct _NS_SERVICE_INFOA {
   DWORD dwNameSpace;
@@ -343,5 +301,171 @@ typedef struct _PROTOCOL_INFOW {
   DWORD dwMessageSize;
   LPWSTR lpProtocol;
 } PROTOCOL_INFOW, *PPROTOCOL_INFOW, *LPPROTOCOL_INFOW;
+
+typedef struct _SERVICE_TYPE_VALUE {
+  DWORD dwNameSpace;
+  DWORD dwValueType;
+  DWORD dwValueSize;
+  DWORD dwValueNameOffset;
+  DWORD dwValueOffset;
+} SERVICE_TYPE_VALUE, *PSERVICE_TYPE_VALUE, *LPSERVICE_TYPE_VALUE;
+
+typedef struct _SERVICE_TYPE_INFO {
+  DWORD dwTypeNameOffset;
+  DWORD dwValueCount;
+  SERVICE_TYPE_VALUE Values[1];
+} SERVICE_TYPE_INFO, *PSERVICE_TYPE_INFO, *LPSERVICE_TYPE_INFO;
+
+typedef struct _SERVICE_TYPE_VALUE_ABSA {
+  DWORD dwNameSpace;
+  DWORD dwValueType;
+  DWORD dwValueSize;
+  LPSTR lpValueName;
+  PVOID lpValue;
+} SERVICE_TYPE_VALUE_ABSA, *PSERVICE_TYPE_VALUE_ABSA, *LPSERVICE_TYPE_VALUE_ABSA;
+
+typedef struct _SERVICE_TYPE_INFO_ABSA {
+  LPSTR lpTypeName;
+  DWORD dwValueCount;
+  SERVICE_TYPE_VALUE_ABSA Values[1];
+} SERVICE_TYPE_INFO_ABSA, *PSERVICE_TYPE_INFO_ABSA, *LPSERVICE_TYPE_INFO_ABSA;
+
+typedef struct _SERVICE_TYPE_VALUE_ABSW {
+  DWORD dwNameSpace;
+  DWORD dwValueType;
+  DWORD dwValueSize;
+  LPWSTR lpValueName;
+  PVOID lpValue;
+} SERVICE_TYPE_VALUE_ABSW, *PSERVICE_TYPE_VALUE_ABSW, *LPSERVICE_TYPE_VALUE_ABSW;
+
+typedef struct _SERVICE_TYPE_INFO_ABSW {
+  LPWSTR lpTypeName;
+  DWORD dwValueCount;
+  SERVICE_TYPE_VALUE_ABSW Values[1];
+} SERVICE_TYPE_INFO_ABSW, *PSERVICE_TYPE_INFO_ABSW, *LPSERVICE_TYPE_INFO_ABSW;
+
+#define EnumProtocols 0
+#ifdef UNICODE
+#define GetNameByType GetNameByTypeW
+#else
+#define GetNameByType GetNameByTypeA
+#endif
+#ifdef UNICODE
+#define GetTypeByName GetTypeByNameW
+#else
+#define GetTypeByName GetTypeByNameA
+#endif
+#ifdef UNICODE
+#define SERVICE_TYPE_VALUE_CONN SERVICE_TYPE_VALUE_CONNW
+#else
+#define SERVICE_TYPE_VALUE_CONN SERVICE_TYPE_VALUE_CONNA
+#endif
+#define SERVICE_TYPE_VALUE_CONNA "ConnectionOriented"
+#define SERVICE_TYPE_VALUE_CONNW L"ConnectionOriented"
+#define SET_SERVICE_PARTIAL_SUCCESS (0x00000001)
+
+typedef LPNS_INFOA LPNS_INFO;
+
+typedef LPNS_SERVICE_INFOA LPNS_SERVICE_INFO;
+
+typedef LPPROTOCOL_INFOA LPPROTOCOL_INFO;
+
+typedef void (*LPSERVICE_CALLBACK_PROC)(LPARAM, HANDLE);
+
+struct _SERVICE_ASYNC_INFO
+{
+    LPSERVICE_CALLBACK_PROC lpServiceCallbackProc;
+    LPARAM lParam;
+    HANDLE hAsyncTaskHandle;
+};
+
+typedef LPSERVICE_TYPE_INFO_ABSA LPSERVICE_TYPE_INFO_ABS;
+
+typedef LPSERVICE_TYPE_VALUE_ABSA LPSERVICE_TYPE_VALUE_ABS;
+
+typedef NS_INFOA NS_INFO;
+
+struct _NETRESOURCE2A
+{
+    DWORD dwScope;
+    DWORD dwType;
+    DWORD dwUsage;
+    DWORD dwDisplayType;
+    LPSTR lpLocalName;
+    LPSTR lpRemoteName;
+    LPSTR lpComment;
+    NS_INFO ns_info;
+    GUID ServiceType;
+    DWORD dwProtocols;
+    LPINT lpiProtocols;
+};
+
+struct _NETRESOURCE2W
+{
+    DWORD dwScope;
+    DWORD dwType;
+    DWORD dwUsage;
+    DWORD dwDisplayType;
+    LPWSTR lpLocalName;
+    LPWSTR lpRemoteName;
+    LPWSTR lpComment;
+    NS_INFO ns_info;
+    GUID ServiceType;
+    DWORD dwProtocols;
+    LPINT lpiProtocols;
+};
+
+typedef struct _NETRESOURCE2A *LPNETRESOURCE2A;
+
+typedef LPNETRESOURCE2A LPNETRESOURCE2;
+
+typedef struct _NETRESOURCE2W *LPNETRESOURCE2W;
+
+typedef struct _NETRESOURCE2A NETRESOURCE2A;
+
+typedef NETRESOURCE2A NETRESOURCE2;
+
+typedef struct _NETRESOURCE2W NETRESOURCE2W;
+
+typedef NS_SERVICE_INFOA NS_SERVICE_INFO;
+
+typedef struct _NETRESOURCE2A *PNETRESOURCE2A;
+
+typedef PNETRESOURCE2A PNETRESOURCE2;
+
+typedef struct _NETRESOURCE2W *PNETRESOURCE2W;
+
+typedef PNS_INFOA PNS_INFO;
+
+typedef PNS_SERVICE_INFOA PNS_SERVICE_INFO;
+
+typedef PPROTOCOL_INFOA PPROTOCOL_INFO;
+
+typedef PROTOCOL_INFOA PROTOCOL_INFO;
+
+typedef struct _SERVICE_ASYNC_INFO *PSERVICE_ASYNC_INFO;
+
+typedef PSERVICE_TYPE_INFO_ABSA PSERVICE_TYPE_INFO_ABS;
+
+typedef PSERVICE_TYPE_VALUE_ABSA PSERVICE_TYPE_VALUE_ABS;
+
+typedef struct _SERVICE_ASYNC_INFO SERVICE_ASYNC_INFO;
+
+typedef SERVICE_TYPE_INFO_ABSA SERVICE_TYPE_INFO_ABS;
+
+typedef SERVICE_TYPE_VALUE_ABSA SERVICE_TYPE_VALUE_ABS;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+INT WINAPI GetNameByTypeA(LPGUID lpServiceType, LPSTR lpServiceName, DWORD dwNameLength);
+INT WINAPI GetNameByTypeW(LPGUID lpServiceType, LPWSTR lpServiceName, DWORD dwNameLength);
+INT WINAPI GetServiceA(DWORD dwNameSpace, LPGUID lpGuid, LPSTR lpServiceName, DWORD dwProperties, LPVOID lpBuffer, LPDWORD lpdwBufferSize, LPSERVICE_ASYNC_INFO lpServiceAsyncInfo);
+INT WINAPI GetServiceW(DWORD dwNameSpace, LPGUID lpGuid, LPWSTR lpServiceName, DWORD dwProperties, LPVOID lpBuffer, LPDWORD lpdwBufferSize, LPSERVICE_ASYNC_INFO lpServiceAsyncInfo);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _NSPAPI_H */

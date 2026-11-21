@@ -246,8 +246,8 @@ typedef enum WIN32_MEMORY_PARTITION_INFORMATION_CLASS {
 #ifdef __cplusplus
 extern "C" {
 #endif
-DWORD WINAPI DiscardVirtualMemory(PVOID VirtualAddress, SIZE_T Size);
 HANDLE WINAPI CreateFileMapping2(HANDLE File, SECURITY_ATTRIBUTES * SecurityAttributes, ULONG DesiredAccess, ULONG PageProtection, ULONG AllocationAttributes, ULONG64 MaximumSize, PCWSTR Name, MEM_EXTENDED_PARAMETER * ExtendedParameters, ULONG ParameterCount);
+DWORD WINAPI DiscardVirtualMemory(PVOID VirtualAddress, SIZE_T Size);
 #ifdef __cplusplus
 }
 #endif
@@ -271,5 +271,94 @@ typedef struct WIN32_MEMORY_PARTITION_INFORMATION {
   ULONG64 Reserved2;
   ULONG PartitionId;
 } WIN32_MEMORY_PARTITION_INFORMATION;
+
+typedef void WINAPI BAD_MEMORY_CALLBACK_ROUTINE(void);
+
+struct NUMA_NODE_MEMORY_PERFORMANCE_MEASUREMENT_CONDITION
+{
+    struct
+    {
+        UCHAR MinTransferSizeToAchieveValues : 1;
+        UCHAR NonSequentialTransfers : 1;
+        UCHAR Reserved : 6;
+    } Flags;
+    ULONGLONG MinTransferSizeInBytes;
+};
+
+struct NUMA_NODE_MEMORY_PERFORMANCE_BANDWIDTH
+{
+    NUMA_NODE_MEMORY_PERFORMANCE_MEASUREMENT_CONDITION Condition;
+    ULONGLONG Bandwidth;
+};
+
+struct NUMA_NODE_MEMORY_PERFORMANCE_LATENCY
+{
+    NUMA_NODE_MEMORY_PERFORMANCE_MEASUREMENT_CONDITION Condition;
+    ULONGLONG Latency;
+};
+
+typedef BAD_MEMORY_CALLBACK_ROUTINE *PBAD_MEMORY_CALLBACK_ROUTINE;
+
+struct WIN32_MEMORY_REGION_INFORMATION
+{
+    PVOID AllocationBase;
+    ULONG AllocationProtect;
+    union
+    {
+        ULONG Flags;
+        struct
+        {
+            ULONG Private : 1;
+            ULONG MappedDataFile : 1;
+            ULONG MappedImage : 1;
+            ULONG MappedPageFile : 1;
+            ULONG MappedPhysical : 1;
+            ULONG DirectMapped : 1;
+            ULONG Reserved : 26;
+        };
+    };
+    SIZE_T RegionSize;
+    SIZE_T CommitSize;
+};
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+BOOL WINAPI AllocateUserPhysicalPagesNuma(HANDLE hProcess, PULONG_PTR NumberOfPages, PULONG_PTR PageArray, DWORD nndPreferred);
+HANDLE WINAPI CreateFileMappingNumaW(HANDLE hFile, LPSECURITY_ATTRIBUTES lpFileMappingAttributes, DWORD flProtect, DWORD dwMaximumSizeHigh, DWORD dwMaximumSizeLow, LPCWSTR lpName, DWORD nndPreferred);
+BOOL WINAPI GetProcessWorkingSetSizeEx(HANDLE hProcess, PSIZE_T lpMinimumWorkingSetSize, PSIZE_T lpMaximumWorkingSetSize, PDWORD Flags);
+BOOL WINAPI SetProcessValidCallTargets(HANDLE hProcess, PVOID VirtualAddress, SIZE_T RegionSize, ULONG NumberOfOffsets, PCFG_CALL_TARGET_INFO OffsetInformation);
+LPVOID WINAPI VirtualAllocExNuma(HANDLE hProcess, LPVOID lpAddress, SIZE_T dwSize, DWORD flAllocationType, DWORD flProtect, DWORD nndPreferred);
+BOOL WINAPI VirtualProtectFromApp(PVOID Address, SIZE_T Size, ULONG NewProtection, PULONG OldProtection);
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL AllocateUserPhysicalPages2(HANDLE ObjectHandle, PULONG_PTR NumberOfPages, PULONG_PTR PageArray, PMEM_EXTENDED_PARAMETER ExtendedParameters, ULONG ExtendedParameterCount);
+BOOL GetMemoryErrorHandlingCapabilities(PULONG Capabilities);
+BOOL GetNumaNodeMemoryClosestInitiatorNode(USHORT TargetNodeNumber, USHORT *InitiatorNodeNumber);
+BOOL WINAPI GetNumaNodeMemoryReadBandwidth(USHORT TargetNodeNumber, USHORT InitiatorNodeNumber, NUMA_NODE_MEMORY_PERFORMANCE_BANDWIDTH *Bandwidth);
+BOOL WINAPI GetNumaNodeMemoryReadLatency(USHORT TargetNodeNumber, USHORT InitiatorNodeNumber, NUMA_NODE_MEMORY_PERFORMANCE_LATENCY *Latency);
+BOOL WINAPI GetNumaNodeMemoryWriteBandwidth(USHORT TargetNodeNumber, USHORT InitiatorNodeNumber, NUMA_NODE_MEMORY_PERFORMANCE_BANDWIDTH *Bandwidth);
+BOOL WINAPI GetNumaNodeMemoryWriteLatency(USHORT TargetNodeNumber, USHORT InitiatorNodeNumber, NUMA_NODE_MEMORY_PERFORMANCE_LATENCY *Latency);
+PVOID MapViewOfFile2(HANDLE FileMappingHandle, HANDLE ProcessHandle, ULONG64 Offset, PVOID BaseAddress, SIZE_T ViewSize, ULONG AllocationType, ULONG PageProtection);
+PVOID MapViewOfFile3FromApp(HANDLE FileMapping, HANDLE Process, PVOID BaseAddress, ULONG64 Offset, SIZE_T ViewSize, ULONG AllocationType, ULONG PageProtection, MEM_EXTENDED_PARAMETER *ExtendedParameters, ULONG ParameterCount);
+PVOID MapViewOfFileNuma2(HANDLE FileMappingHandle, HANDLE ProcessHandle, ULONG64 Offset, PVOID BaseAddress, SIZE_T ViewSize, ULONG AllocationType, ULONG PageProtection, ULONG PreferredNode);
+DWORD WINAPI OfferVirtualMemory(PVOID VirtualAddress, SIZE_T Size, OFFER_PRIORITY Priority);
+HANDLE OpenDedicatedMemoryPartition(HANDLE Partition, ULONG64 DedicatedMemoryTypeId, ACCESS_MASK DesiredAccess, BOOL InheritHandle);
+BOOL QueryPartitionInformation(HANDLE Partition, WIN32_MEMORY_PARTITION_INFORMATION_CLASS PartitionInformationClass, PVOID PartitionInformation, ULONG PartitionInformationLength);
+DWORD WINAPI ReclaimVirtualMemory(const void *VirtualAddress, SIZE_T Size);
+PVOID RegisterBadMemoryNotification(PBAD_MEMORY_CALLBACK_ROUTINE Callback);
+BOOL SetProcessValidCallTargetsForMappedView(HANDLE Process, PVOID VirtualAddress, SIZE_T RegionSize, ULONG NumberOfOffsets, PCFG_CALL_TARGET_INFO OffsetInformation, HANDLE Section, ULONG64 ExpectedFileOffset);
+BOOL UnregisterBadMemoryNotification(PVOID RegistrationHandle);
+BOOL VirtualUnlockEx(HANDLE Process, LPVOID Address, SIZE_T Size);
+
+#ifdef __cplusplus
+}
+#endif
+
+enum _MEMORY_RESOURCE_NOTIFICATION_TYPE
+{
+
+};
 
 #endif

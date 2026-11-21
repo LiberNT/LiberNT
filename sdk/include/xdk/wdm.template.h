@@ -272,7 +272,11 @@ typedef enum _POWER_LIMIT_TYPES {
     PowerLimitRapid,
     PowerLimitPreemptive,
     PowerLimitPreemptiveOffset,
-    PowerLimitTypeMax
+    PowerLimitTypeMax,
+    PowerLimitType1 = 0,
+    PowerLimitType2 = 1,
+    PowerLimitType3 = 2,
+    PowerLimitType4 = 3,
 } POWER_LIMIT_TYPES, *PPOWER_LIMIT_TYPES;
 
 typedef struct _POWER_LIMIT_ATTRIBUTES {
@@ -807,6 +811,113 @@ typedef struct _DEVICE_RESET_INTERFACE_STANDARD {
 }
 #endif
 
+typedef enum _CLFS_CONTEXT_MODE {
+    ClfsContextNone = 0,
+    ClfsContextUndoNext = 1,
+    ClfsContextPrevious = 2,
+    ClfsContextForward = 3
+} CLFS_CONTEXT_MODE, *PCLFS_CONTEXT_MODE;
+
+typedef enum _CLFS_IOSTATS_CLASS {
+    ClfsIoStatsDefault = 0,
+    ClfsIoStatsMax = 0xFFFF
+} CLFS_IOSTATS_CLASS, *PCLFS_IOSTATS_CLASS;
+
+typedef enum _CLFS_LOG_ARCHIVE_MODE {
+    ClfsLogArchiveEnabled = 1,
+    ClfsLogArchiveDisabled = 2
+} CLFS_LOG_ARCHIVE_MODE, *PCLFS_LOG_ARCHIVE_MODE;
+
+typedef enum _CLFS_MGMT_NOTIFICATION_TYPE {
+    ClfsMgmtAdvanceTailNotification = 0,
+    ClfsMgmtLogFullHandlerNotification = 1,
+    ClfsMgmtLogUnpinnedNotification = 2,
+    ClfsMgmtLogWriteNotification = 3
+} CLFS_MGMT_NOTIFICATION_TYPE, *PCLFS_MGMT_NOTIFICATION_TYPE;
+
+typedef enum _CLFS_MGMT_POLICY_TYPE {
+    ClfsMgmtPolicyMaximumSize = 0,
+    ClfsMgmtPolicyMinimumSize = 1,
+    ClfsMgmtPolicyNewContainerSize = 2,
+    ClfsMgmtPolicyGrowthRate = 3,
+    ClfsMgmtPolicyLogTail = 4,
+    ClfsMgmtPolicyAutoShrink = 5,
+    ClfsMgmtPolicyAutoGrow = 6,
+    ClfsMgmtPolicyNewContainerPrefix = 7,
+    ClfsMgmtPolicyNewContainerSuffix = 8,
+    ClfsMgmtPolicyNewContainerExtension = 9,
+    ClfsMgmtPolicyInvalid = 10
+} CLFS_MGMT_POLICY_TYPE, *PCLFS_MGMT_POLICY_TYPE;
+
+typedef enum _CLS_CONTEXT_MODE {
+    ClsContextNone = 0,
+    ClsContextUndoNext = 1,
+    ClsContextPrevious = 2,
+    ClsContextForward = 3
+} CLS_CONTEXT_MODE, *PCLS_CONTEXT_MODE;
+
+typedef enum _CLS_IOSTATS_CLASS {
+    ClsIoStatsDefault = 0,
+    ClsIoStatsMax = 0xFFFF
+} CLS_IOSTATS_CLASS, *PCLS_IOSTATS_CLASS;
+
+typedef enum _CLS_LOG_INFORMATION_CLASS {
+    ClfsLogBasicInformation = 0,
+    ClfsLogBasicInformationPhysical = 1,
+    ClfsLogPhysicalNameInformation = 2,
+    ClfsLogStreamIdentifierInformation = 3,
+    ClfsLogSystemMarkingInformation = 4,
+    ClfsLogPhysicalLsnInformation = 5
+} CLS_LOG_INFORMATION_CLASS, *PCLS_LOG_INFORMATION_CLASS, CLFS_LOG_INFORMATION_CLASS, *PCLFS_LOG_INFORMATION_CLASS;
+
+typedef enum _DRIVER_PROXY_REGISTER_CALLBACK_PHASE {
+    DriverProxyRegisterCallbackPreProcess = 0,
+    DriverProxyRegisterCallbackProxyStalled = 1,
+    DriverProxyRegisterCallbackPostProcess = 2,
+    DriverProxyRegisterCallbackMax = 3
+} DRIVER_PROXY_REGISTER_CALLBACK_PHASE, *PDRIVER_PROXY_REGISTER_CALLBACK_PHASE;
+
+typedef enum _ENERGY_SAVER_STATUS {
+    ENERGY_SAVER_OFF = 0,
+    ENERGY_SAVER_STANDARD = 1,
+    ENERGY_SAVER_HIGH_SAVINGS = 2
+} ENERGY_SAVER_STATUS, *PENERGY_SAVER_STATUS;
+
+typedef enum _IMAGE_POLICY_ENTRY_TYPE {
+    ImagePolicyEntryTypeNone = 0,
+    ImagePolicyEntryTypeBool = 1,
+    ImagePolicyEntryTypeInt8 = 2,
+    ImagePolicyEntryTypeUInt8 = 3,
+    ImagePolicyEntryTypeInt16 = 4,
+    ImagePolicyEntryTypeUInt16 = 5,
+    ImagePolicyEntryTypeInt32 = 6,
+    ImagePolicyEntryTypeUInt32 = 7,
+    ImagePolicyEntryTypeInt64 = 8,
+    ImagePolicyEntryTypeUInt64 = 9,
+    ImagePolicyEntryTypeAnsiString = 10,
+    ImagePolicyEntryTypeUnicodeString = 11,
+    ImagePolicyEntryTypeOverride = 12,
+    ImagePolicyEntryTypeMaximum = 13
+} IMAGE_POLICY_ENTRY_TYPE;
+
+typedef enum _IMAGE_POLICY_ID {
+    ImagePolicyIdNone = 0,
+    ImagePolicyIdEtw = 1,
+    ImagePolicyIdDebug = 2,
+    ImagePolicyIdCrashDump = 3,
+    ImagePolicyIdCrashDumpKey = 4,
+    ImagePolicyIdCrashDumpKeyGuid = 5,
+    ImagePolicyIdParentSd = 6,
+    ImagePolicyIdParentSdRev = 7,
+    ImagePolicyIdSvn = 8,
+    ImagePolicyIdDeviceId = 9,
+    ImagePolicyIdCapability = 10,
+    ImagePolicyIdScenarioId = 11,
+    ImagePolicyIdCapabilityOverridable = 12,
+    ImagePolicyIdTrustletIdOverridable = 13,
+    ImagePolicyIdMaximum = 14
+} IMAGE_POLICY_ID;
+
 typedef enum _MEM_DEDICATED_ATTRIBUTE_TYPE {
     MemDedicatedAttributeReadBandwidth = 0,
     MemDedicatedAttributeReadLatency = 1,
@@ -815,19 +926,80 @@ typedef enum _MEM_DEDICATED_ATTRIBUTE_TYPE {
     MemDedicatedAttributeMax = 4
 } MEM_DEDICATED_ATTRIBUTE_TYPE, *PMEM_DEDICATED_ATTRIBUTE_TYPE;
 
-typedef enum MEM_SECTION_EXTENDED_PARAMETER_TYPE {
-    MemSectionExtendedParameterInvalidType = 0,
-    MemSectionExtendedParameterUserPhysicalFlags = 1,
-    MemSectionExtendedParameterNumaNode = 2,
-    MemSectionExtendedParameterSigningLevel = 3,
-    MemSectionExtendedParameterMax = 4
-} MEM_SECTION_EXTENDED_PARAMETER_TYPE, *PMEM_SECTION_EXTENDED_PARAMETER_TYPE;
+typedef enum _MM_MDL_PAGE_CONTENTS_STATE {
+    MmMdlPageContentsDynamic = 0,
+    MmMdlPageContentsInvariant = 1,
+    MmMdlPageContentsQuery = 2
+} MM_MDL_PAGE_CONTENTS_STATE, PMM_MDL_PAGE_CONTENTS_STATE;
+
+typedef enum _NPEM_CONTROL_STANDARD_CONTROL_BIT {
+    InitiateReset = 1,
+    OkControl = 2,
+    LocateControl = 3,
+    FailControl = 4,
+    RebuildControl = 5,
+    PFAControl = 6,
+    HotSpareControl = 7,
+    InACriticalArrayControl = 8,
+    InAFailedArrayControl = 9,
+    InvalidDeviceTypeControl = 10,
+    DisabledControl = 11
+} NPEM_CONTROL_STANDARD_CONTROL_BIT, *PNPEM_CONTROL_STANDARD_CONTROL_BIT;
+
+typedef enum _OS_DEPLOYEMENT_STATE_VALUES {
+    OS_DEPLOYMENT_STANDARD = 1,
+    OS_DEPLOYMENT_COMPACT = 2
+} OS_DEPLOYEMENT_STATE_VALUES;
 
 typedef enum _PARTITION_INFORMATION_CLASS {
     SystemMemoryPartitionInformation = 0,
     SystemMemoryPartitionDedicatedMemoryInformation = 9,
     SystemMemoryPartitionOpenDedicatedMemory = 10
 } PARTITION_INFORMATION_CLASS, *PPARTITION_INFORMATION_CLASS;
+
+typedef enum _PCI_ACS_BIT {
+    PciAcsReserved = 0,
+    PciAcsBitEnable = 1,
+    PciAcsBitDisable = 2,
+    PciAcsBitDontCare = 3
+} PCI_ACS_BIT, *PPCI_ACS_BIT;
+
+typedef enum _PO_EFFECTIVE_POWER_MODE {
+    PoEffectivePowerModeBatterySaver = 0,
+    PoEffectivePowerModeEnergySaverHighSavings = 0,
+    PoEffectivePowerModeBetterBattery = 1,
+    PoEffectivePowerModeEnergySaverStandard = 1,
+    PoEffectivePowerModeBalanced = 2,
+    PoEffectivePowerModeHighPerformance = 3,
+    PoEffectivePowerModeMaxPerformance = 4,
+    PoEffectivePowerModeGameMode = 5,
+    PoEffectivePowerModeMixedReality = 6
+} PO_EFFECTIVE_POWER_MODE, *PPO_EFFECTIVE_POWER_MODE;
+
+typedef enum _POOL_CREATE_EXTENDED_PARAMETER_TYPE {
+    PoolCreateExtendedParameterInvalidType = 0,
+    PoolCreateExtendedParameterName = 1
+} POOL_CREATE_EXTENDED_PARAMETER_TYPE, *PPOOL_CREATE_EXTENDED_PARAMETER_TYPE;
+
+typedef enum _POWER_MONITOR_REQUEST_TYPE {
+    MonitorRequestTypeOff = 0,
+    MonitorRequestTypeOnAndPresent = 1,
+    MonitorRequestTypeToggleOn = 2
+} POWER_MONITOR_REQUEST_TYPE;
+
+typedef enum _SE_IMAGE_TYPE {
+    SeImageTypeElamDriver = 0,
+    SeImageTypeDriver = 1,
+    SeImageTypePlatformSecureFile = 2,
+    SeImageTypeDynamicCodeFile = 3,
+    SeImageTypeAll = 4,
+    SeImageTypeMax = 5
+} SE_IMAGE_TYPE, *PSE_IMAGE_TYPE;
+
+typedef enum _SE_IMAGE_VERIFICATION_CALLBACK_TYPE {
+    SeImageVerificationCallbackInformational = 0,
+    SeImageVerificationCallbackBlock = 1
+} SE_IMAGE_VERIFICATION_CALLBACK_TYPE, *PSE_IMAGE_VERIFICATION_CALLBACK_TYPE;
 
 typedef enum _USER_ACTIVITY_PRESENCE {
     PowerUserPresent = 0,
@@ -837,17 +1009,14 @@ typedef enum _USER_ACTIVITY_PRESENCE {
     PowerUserInvalid = 3
 } USER_ACTIVITY_PRESENCE, *PUSER_ACTIVITY_PRESENCE;
 
-typedef enum _ENERGY_SAVER_STATUS {
-    ENERGY_SAVER_OFF = 0,
-    ENERGY_SAVER_STANDARD = 1,
-    ENERGY_SAVER_HIGH_SAVINGS = 2
-} ENERGY_SAVER_STATUS, *PENERGY_SAVER_STATUS;
-
-typedef enum POWER_USER_PRESENCE_TYPE {
-    UserNotPresent = 0,
-    UserPresent = 1,
-    UserUnknown = 255
-} POWER_USER_PRESENCE_TYPE, *PPOWER_USER_PRESENCE_TYPE;
+typedef enum MEM_SECTION_EXTENDED_PARAMETER_TYPE {
+    MemSectionExtendedParameterInvalidType = 0,
+    MemSectionExtendedParameterUserPhysicalFlags = 1,
+    MemSectionExtendedParameterNumaNode = 2,
+    MemSectionExtendedParameterSigningLevel = 3,
+    MemSectionExtendedParameterMax = 4,
+    MemSectionExtendedParameterAttributeFlags = 4,
+} MEM_SECTION_EXTENDED_PARAMETER_TYPE, *PMEM_SECTION_EXTENDED_PARAMETER_TYPE;
 
 typedef enum POWER_MONITOR_REQUEST_REASON {
     MonitorRequestReasonUnknown = 0,
@@ -908,14 +1077,9 @@ typedef enum POWER_MONITOR_REQUEST_REASON {
     MonitorRequestReasonAusterityBatteryDrain = 55,
     MonitorRequestReasonDozeRestrictedStandby = 56,
     MonitorRequestReasonSmartRestrictedStandby = 57,
-    MonitorRequestReasonMax = 58
+    MonitorRequestReasonMax = 58,
+    MonitorRequestReasonRestrictedStandbyBatteryDrain = 0x37,
 } POWER_MONITOR_REQUEST_REASON;
-
-typedef enum _POWER_MONITOR_REQUEST_TYPE {
-    MonitorRequestTypeOff = 0,
-    MonitorRequestTypeOnAndPresent = 1,
-    MonitorRequestTypeToggleOn = 2
-} POWER_MONITOR_REQUEST_TYPE;
 
 typedef enum POWER_SETTING_ALTITUDE {
     ALTITUDE_GROUP_POLICY = 0,
@@ -927,467 +1091,75 @@ typedef enum POWER_SETTING_ALTITUDE {
     ALTITUDE_OS_DEFAULT = 6
 } POWER_SETTING_ALTITUDE, *PPOWER_SETTING_ALTITUDE;
 
-typedef enum _OS_DEPLOYEMENT_STATE_VALUES {
-    OS_DEPLOYMENT_STANDARD = 1,
-    OS_DEPLOYMENT_COMPACT = 2
-} OS_DEPLOYEMENT_STATE_VALUES;
+typedef enum POWER_USER_PRESENCE_TYPE {
+    UserNotPresent = 0,
+    UserPresent = 1,
+    UserUnknown = 255
+} POWER_USER_PRESENCE_TYPE, *PPOWER_USER_PRESENCE_TYPE;
 
-typedef enum _IMAGE_POLICY_ENTRY_TYPE {
-    ImagePolicyEntryTypeNone = 0,
-    ImagePolicyEntryTypeBool = 1,
-    ImagePolicyEntryTypeInt8 = 2,
-    ImagePolicyEntryTypeUInt8 = 3,
-    ImagePolicyEntryTypeInt16 = 4,
-    ImagePolicyEntryTypeUInt16 = 5,
-    ImagePolicyEntryTypeInt32 = 6,
-    ImagePolicyEntryTypeUInt32 = 7,
-    ImagePolicyEntryTypeInt64 = 8,
-    ImagePolicyEntryTypeUInt64 = 9,
-    ImagePolicyEntryTypeAnsiString = 10,
-    ImagePolicyEntryTypeUnicodeString = 11,
-    ImagePolicyEntryTypeOverride = 12,
-    ImagePolicyEntryTypeMaximum = 13
-} IMAGE_POLICY_ENTRY_TYPE;
-
-typedef enum _IMAGE_POLICY_ID {
-    ImagePolicyIdNone = 0,
-    ImagePolicyIdEtw = 1,
-    ImagePolicyIdDebug = 2,
-    ImagePolicyIdCrashDump = 3,
-    ImagePolicyIdCrashDumpKey = 4,
-    ImagePolicyIdCrashDumpKeyGuid = 5,
-    ImagePolicyIdParentSd = 6,
-    ImagePolicyIdParentSdRev = 7,
-    ImagePolicyIdSvn = 8,
-    ImagePolicyIdDeviceId = 9,
-    ImagePolicyIdCapability = 10,
-    ImagePolicyIdScenarioId = 11,
-    ImagePolicyIdCapabilityOverridable = 12,
-    ImagePolicyIdTrustletIdOverridable = 13,
-    ImagePolicyIdMaximum = 14
-} IMAGE_POLICY_ID;
-
-typedef enum _POOL_CREATE_EXTENDED_PARAMETER_TYPE {
-    PoolCreateExtendedParameterInvalidType = 0,
-    PoolCreateExtendedParameterName = 1
-} POOL_CREATE_EXTENDED_PARAMETER_TYPE, *PPOOL_CREATE_EXTENDED_PARAMETER_TYPE;
-
-typedef enum _MM_MDL_PAGE_CONTENTS_STATE {
-    MmMdlPageContentsDynamic = 0,
-    MmMdlPageContentsInvariant = 1,
-    MmMdlPageContentsQuery = 2
-} MM_MDL_PAGE_CONTENTS_STATE, PMM_MDL_PAGE_CONTENTS_STATE;
-
-typedef enum _SE_IMAGE_TYPE {
-    SeImageTypeElamDriver = 0,
-    SeImageTypeDriver = 1,
-    SeImageTypePlatformSecureFile = 2,
-    SeImageTypeDynamicCodeFile = 3,
-    SeImageTypeAll = 4,
-    SeImageTypeMax = 5
-} SE_IMAGE_TYPE, *PSE_IMAGE_TYPE;
-
-typedef enum _SE_IMAGE_VERIFICATION_CALLBACK_TYPE {
-    SeImageVerificationCallbackInformational = 0,
-    SeImageVerificationCallbackBlock = 1
-} SE_IMAGE_VERIFICATION_CALLBACK_TYPE, *PSE_IMAGE_VERIFICATION_CALLBACK_TYPE;
-
-typedef enum _DRIVER_PROXY_REGISTER_CALLBACK_PHASE {
-    DriverProxyRegisterCallbackPreProcess = 0,
-    DriverProxyRegisterCallbackProxyStalled = 1,
-    DriverProxyRegisterCallbackPostProcess = 2,
-    DriverProxyRegisterCallbackMax = 3
-} DRIVER_PROXY_REGISTER_CALLBACK_PHASE, *PDRIVER_PROXY_REGISTER_CALLBACK_PHASE;
-
-typedef enum _PCI_ACS_BIT {
-    PciAcsReserved = 0,
-    PciAcsBitEnable = 1,
-    PciAcsBitDisable = 2,
-    PciAcsBitDontCare = 3
-} PCI_ACS_BIT, *PPCI_ACS_BIT;
-
-typedef enum _NPEM_CONTROL_STANDARD_CONTROL_BIT {
-    InitiateReset = 1,
-    OkControl = 2,
-    LocateControl = 3,
-    FailControl = 4,
-    RebuildControl = 5,
-    PFAControl = 6,
-    HotSpareControl = 7,
-    InACriticalArrayControl = 8,
-    InAFailedArrayControl = 9,
-    InvalidDeviceTypeControl = 10,
-    DisabledControl = 11
-} NPEM_CONTROL_STANDARD_CONTROL_BIT, *PNPEM_CONTROL_STANDARD_CONTROL_BIT;
-
-typedef enum _PO_EFFECTIVE_POWER_MODE {
-    PoEffectivePowerModeBatterySaver = 0,
-    PoEffectivePowerModeEnergySaverHighSavings = 0,
-    PoEffectivePowerModeBetterBattery = 1,
-    PoEffectivePowerModeEnergySaverStandard = 1,
-    PoEffectivePowerModeBalanced = 2,
-    PoEffectivePowerModeHighPerformance = 3,
-    PoEffectivePowerModeMaxPerformance = 4,
-    PoEffectivePowerModeGameMode = 5,
-    PoEffectivePowerModeMixedReality = 6
-} PO_EFFECTIVE_POWER_MODE, *PPO_EFFECTIVE_POWER_MODE;
-
-typedef enum _CLS_CONTEXT_MODE {
-    ClsContextNone = 0,
-    ClsContextUndoNext = 1,
-    ClsContextPrevious = 2,
-    ClsContextForward = 3
-} CLS_CONTEXT_MODE, *PCLS_CONTEXT_MODE;
-
-typedef enum _CLFS_CONTEXT_MODE {
-    ClfsContextNone = 0,
-    ClfsContextUndoNext = 1,
-    ClfsContextPrevious = 2,
-    ClfsContextForward = 3
-} CLFS_CONTEXT_MODE, *PCLFS_CONTEXT_MODE;
-
-typedef enum _CLS_LOG_INFORMATION_CLASS {
-    ClfsLogBasicInformation = 0,
-    ClfsLogBasicInformationPhysical = 1,
-    ClfsLogPhysicalNameInformation = 2,
-    ClfsLogStreamIdentifierInformation = 3,
-    ClfsLogSystemMarkingInformation = 4,
-    ClfsLogPhysicalLsnInformation = 5
-} CLS_LOG_INFORMATION_CLASS, *PCLS_LOG_INFORMATION_CLASS, CLFS_LOG_INFORMATION_CLASS, *PCLFS_LOG_INFORMATION_CLASS;
-
-typedef enum _CLS_IOSTATS_CLASS {
-    ClsIoStatsDefault = 0,
-    ClsIoStatsMax = 0xFFFF
-} CLS_IOSTATS_CLASS, *PCLS_IOSTATS_CLASS;
-
-typedef enum _CLFS_IOSTATS_CLASS {
-    ClfsIoStatsDefault = 0,
-    ClfsIoStatsMax = 0xFFFF
-} CLFS_IOSTATS_CLASS, *PCLFS_IOSTATS_CLASS;
-
-typedef enum _CLFS_LOG_ARCHIVE_MODE {
-    ClfsLogArchiveEnabled = 1,
-    ClfsLogArchiveDisabled = 2
-} CLFS_LOG_ARCHIVE_MODE, *PCLFS_LOG_ARCHIVE_MODE;
-
-typedef enum _CLFS_MGMT_POLICY_TYPE {
-    ClfsMgmtPolicyMaximumSize = 0,
-    ClfsMgmtPolicyMinimumSize = 1,
-    ClfsMgmtPolicyNewContainerSize = 2,
-    ClfsMgmtPolicyGrowthRate = 3,
-    ClfsMgmtPolicyLogTail = 4,
-    ClfsMgmtPolicyAutoShrink = 5,
-    ClfsMgmtPolicyAutoGrow = 6,
-    ClfsMgmtPolicyNewContainerPrefix = 7,
-    ClfsMgmtPolicyNewContainerSuffix = 8,
-    ClfsMgmtPolicyNewContainerExtension = 9,
-    ClfsMgmtPolicyInvalid = 10
-} CLFS_MGMT_POLICY_TYPE, *PCLFS_MGMT_POLICY_TYPE;
-
-typedef enum _CLFS_MGMT_NOTIFICATION_TYPE {
-    ClfsMgmtAdvanceTailNotification = 0,
-    ClfsMgmtLogFullHandlerNotification = 1,
-    ClfsMgmtLogUnpinnedNotification = 2,
-    ClfsMgmtLogWriteNotification = 3
-} CLFS_MGMT_NOTIFICATION_TYPE, *PCLFS_MGMT_NOTIFICATION_TYPE;
-
-typedef PVOID PCLAIMS_BLOB;
-typedef ULONG MM_NODE_NUMBER_ZERO_BASED;
-typedef ULONG MM_NODE_NUMBER_ONE_BASED;
-typedef PVOID SE_IMAGE_VERIFICATION_CALLBACK_TOKEN;
-typedef PVOID * PSE_IMAGE_VERIFICATION_CALLBACK_TOKEN;
-typedef PVOID PS_AVAILABLE_CPUS_CHANGE_REGISTRATION;
-typedef ULONG DRIVER_PROXY_ENDPOINT_FUNCTION_ID;
-typedef ULONG * PDRIVER_PROXY_ENDPOINT_FUNCTION_ID;
 typedef ULONG CLFS_CONTAINER_ID;
-typedef CLFS_CONTAINER_ID * PCLFS_CONTAINER_ID;
-typedef CLFS_CONTAINER_ID ** PPCLFS_CONTAINER_ID;
-typedef UCHAR CLS_RECORD_TYPE;
-typedef UCHAR * PCLS_RECORD_TYPE;
-typedef UCHAR ** PPCLS_RECORD_TYPE;
-typedef CLS_RECORD_TYPE CLFS_RECORD_TYPE;
-typedef CLS_RECORD_TYPE * PCLFS_RECORD_TYPE;
-typedef CLS_RECORD_TYPE ** PPCLFS_RECORD_TYPE;
-typedef enum _CLS_CONTEXT_MODE ** PPCLS_CONTEXT_MODE;
-typedef enum _CLFS_CONTEXT_MODE ** PPCLFS_CONTEXT_MODE;
 typedef GUID CLFS_LOG_ID;
-typedef UINT32 CLS_CONTAINER_STATE;
-typedef UINT32 * PCLS_CONTAINER_STATE;
-typedef UINT32 * PPCLS_CONTAINER_STATE;
-typedef CLS_CONTAINER_STATE CLFS_CONTAINER_STATE;
-typedef CLS_CONTAINER_STATE * PCLFS_CONTAINER_STATE;
-typedef CLS_CONTAINER_STATE * PPCLFS_CONTAINER_STATE;
-typedef enum _CLS_LOG_INFORMATION_CLASS ** PPCLS_LOG_INFORMATION_CLASS;
-typedef CLFS_LOG_INFORMATION_CLASS ** PPCLFS_LOG_INFORMATION_CLASS;
-typedef enum _CLS_IOSTATS_CLASS ** PPCLS_IOSTATS_CLASS;
-typedef enum _CLFS_IOSTATS_CLASS ** PPCLFS_IOSTATS_CLASS;
-typedef UCHAR CLFS_SCAN_MODE;
-typedef UCHAR * PCLFS_SCAN_MODE;
-typedef FILE_OBJECT LOG_FILE_OBJECT;
-typedef FILE_OBJECT * PLOG_FILE_OBJECT;
-typedef FILE_OBJECT ** PPLOG_FILE_OBJECT;
 typedef PVOID CLFS_MGMT_CLIENT;
-typedef PVOID * PCLFS_MGMT_CLIENT;
+typedef UCHAR CLFS_SCAN_MODE;
+typedef UINT32 CLS_CONTAINER_STATE;
+typedef CLS_CONTAINER_STATE CLFS_CONTAINER_STATE;
+typedef UCHAR CLS_RECORD_TYPE;
+typedef CLS_RECORD_TYPE CLFS_RECORD_TYPE;
+typedef ULONG DRIVER_PROXY_ENDPOINT_FUNCTION_ID;
 typedef GUID KCRM_PROTOCOL_ID;
+typedef FILE_OBJECT LOG_FILE_OBJECT;
+typedef ULONG MM_NODE_NUMBER_ONE_BASED;
+typedef ULONG MM_NODE_NUMBER_ZERO_BASED;
+typedef PVOID PCLAIMS_BLOB;
+typedef CLFS_CONTAINER_ID * PCLFS_CONTAINER_ID;
+typedef CLS_CONTAINER_STATE * PCLFS_CONTAINER_STATE;
+typedef PVOID * PCLFS_MGMT_CLIENT;
+typedef CLS_RECORD_TYPE * PCLFS_RECORD_TYPE;
+typedef UCHAR * PCLFS_SCAN_MODE;
+typedef UINT32 * PCLS_CONTAINER_STATE;
+typedef UCHAR * PCLS_RECORD_TYPE;
+typedef ULONG * PDRIVER_PROXY_ENDPOINT_FUNCTION_ID;
 typedef GUID * PKCRM_PROTOCOL_ID;
+typedef FILE_OBJECT * PLOG_FILE_OBJECT;
+typedef CLFS_CONTAINER_ID ** PPCLFS_CONTAINER_ID;
+typedef CLS_CONTAINER_STATE * PPCLFS_CONTAINER_STATE;
+typedef enum _CLFS_CONTEXT_MODE ** PPCLFS_CONTEXT_MODE;
+typedef enum _CLFS_IOSTATS_CLASS ** PPCLFS_IOSTATS_CLASS;
+typedef CLFS_LOG_INFORMATION_CLASS ** PPCLFS_LOG_INFORMATION_CLASS;
+typedef CLS_RECORD_TYPE ** PPCLFS_RECORD_TYPE;
+typedef UINT32 * PPCLS_CONTAINER_STATE;
+typedef enum _CLS_CONTEXT_MODE ** PPCLS_CONTEXT_MODE;
+typedef enum _CLS_IOSTATS_CLASS ** PPCLS_IOSTATS_CLASS;
+typedef enum _CLS_LOG_INFORMATION_CLASS ** PPCLS_LOG_INFORMATION_CLASS;
+typedef UCHAR ** PPCLS_RECORD_TYPE;
+typedef FILE_OBJECT ** PPLOG_FILE_OBJECT;
+typedef PVOID PS_AVAILABLE_CPUS_CHANGE_REGISTRATION;
+typedef PVOID * PSE_IMAGE_VERIFICATION_CALLBACK_TOKEN;
+typedef PVOID SE_IMAGE_VERIFICATION_CALLBACK_TOKEN;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-ULONG NTAPI RtlCrc32(const void * Buffer, size_t Size, ULONG InitialCrc);
-ULONGLONG NTAPI RtlCrc64(const void * Buffer, size_t Size, ULONGLONG InitialCrc);
-NTSTATUS NTAPI KeConvertAuxiliaryCounterToPerformanceCounter(ULONG64 AuxiliaryCounterValue, PULONG64 PerformanceCounterValue, PULONG64 ConversionError);
+FIRMWARE_TYPE NTAPI ExGetFirmwareType(void);
 BOOLEAN NTAPI ExIsManufacturingModeEnabled(void);
 BOOLEAN NTAPI ExIsSoftBoot(void);
-FIRMWARE_TYPE NTAPI ExGetFirmwareType(void);
+NTSTATUS NTAPI KeConvertAuxiliaryCounterToPerformanceCounter(ULONG64 AuxiliaryCounterValue, PULONG64 PerformanceCounterValue, PULONG64 ConversionError);
 void NTAPI PoSetHiberRange(PVOID MemoryMap, ULONG Flags, PVOID Address, ULONG_PTR Length, ULONG Tag);
+ULONG NTAPI RtlCrc32(const void * Buffer, size_t Size, ULONG InitialCrc);
+ULONGLONG NTAPI RtlCrc64(const void * Buffer, size_t Size, ULONGLONG InitialCrc);
 #ifdef __cplusplus
 }
 #endif
-
-typedef struct _DPC_WATCHDOG_GLOBAL_TRIAGE_BLOCK {
-  ULONG Signature;
-  USHORT Revision;
-  USHORT Size;
-  USHORT DpcWatchdogProfileOffset;
-  ULONG DpcWatchdogProfileLength;
-} DPC_WATCHDOG_GLOBAL_TRIAGE_BLOCK, *PDPC_WATCHDOG_GLOBAL_TRIAGE_BLOCK;
-
-typedef struct _XSAVE_CET_U_FORMAT {
-  ULONG64 Ia32CetUMsr;
-  ULONG64 Ia32Pl3SspMsr;
-} XSAVE_CET_U_FORMAT, *PXSAVE_CET_U_FORMAT;
-
-typedef struct _XSAVE_ARM64_SVE_HEADER {
-  ULONG VectorLength;
-  ULONG VectorRegisterOffset;
-  ULONG PredicateRegisterOffset;
-  ULONG Reserved[5];
-} XSAVE_ARM64_SVE_HEADER, *PXSAVE_ARM64_SVE_HEADER;
-
-typedef struct _SE_ADT_CLAIMS {
-  ULONG Length;
-  PCLAIMS_BLOB Claims;
-} SE_ADT_CLAIMS, *PSE_ADT_CLAIMS;
-
-typedef struct _SE_ADT_PARAMETER_ARRAY_EX {
-  ULONG CategoryId;
-  ULONG AuditId;
-  ULONG Version;
-  ULONG ParameterCount;
-  ULONG Length;
-  USHORT FlatSubCategoryId;
-  USHORT Type;
-  ULONG Flags;
-  SE_ADT_PARAMETER_ARRAY_ENTRY Parameters[32];
-} SE_ADT_PARAMETER_ARRAY_EX, *PSE_ADT_PARAMETER_ARRAY_EX;
-
-typedef struct _EXTENDED_CREATE_DUAL_OPLOCK_KEYS {
-  GUID ParentOplockKey;
-  GUID TargetOplockKey;
-} EXTENDED_CREATE_DUAL_OPLOCK_KEYS, *PEXTENDED_CREATE_DUAL_OPLOCK_KEYS;
-
-typedef struct _EXTENDED_CREATE_INFORMATION {
-  LONGLONG ExtendedCreateFlags;
-  PVOID EaBuffer;
-  ULONG EaLength;
-  PEXTENDED_CREATE_DUAL_OPLOCK_KEYS DualOplockKeys;
-} EXTENDED_CREATE_INFORMATION, *PEXTENDED_CREATE_INFORMATION;
-
-typedef struct _FILE_STANDARD_INFORMATION_EX {
-  LARGE_INTEGER AllocationSize;
-  LARGE_INTEGER EndOfFile;
-  ULONG NumberOfLinks;
-  BOOLEAN DeletePending;
-  BOOLEAN Directory;
-  BOOLEAN AlternateStream;
-  BOOLEAN MetadataAttribute;
-} FILE_STANDARD_INFORMATION_EX, *PFILE_STANDARD_INFORMATION_EX;
-
-typedef struct _FILE_IO_PRIORITY_HINT_INFORMATION_EX {
-  IO_PRIORITY_HINT PriorityHint;
-  BOOLEAN BoostOutstanding;
-} FILE_IO_PRIORITY_HINT_INFORMATION_EX, *PFILE_IO_PRIORITY_HINT_INFORMATION_EX;
-
-typedef struct _KEY_VALUE_LAYER_INFORMATION {
-  ULONG IsTombstone : 1;
-  ULONG Reserved : 31;
-} KEY_VALUE_LAYER_INFORMATION, *PKEY_VALUE_LAYER_INFORMATION;
-
-typedef struct _KEY_TRUST_INFORMATION {
-  ULONG TrustedKey : 1;
-  ULONG Reserved : 31;
-} KEY_TRUST_INFORMATION, *PKEY_TRUST_INFORMATION;
-
-typedef struct _MEMORY_PARTITION_DEDICATED_MEMORY_OPEN_INFORMATION {
-  ULONG64 DedicatedMemoryTypeId;
-  ULONG HandleAttributes;
-  ACCESS_MASK DesiredAccess;
-  HANDLE DedicatedMemoryPartitionHandle;
-} MEMORY_PARTITION_DEDICATED_MEMORY_OPEN_INFORMATION, *PMEMORY_PARTITION_DEDICATED_MEMORY_OPEN_INFORMATION;
-
-typedef struct _POWER_USER_PRESENCE {
-  POWER_USER_PRESENCE_TYPE UserPresence;
-} POWER_USER_PRESENCE, *PPOWER_USER_PRESENCE;
-
-typedef struct _POWER_SESSION_CONNECT {
-  BOOLEAN Connected;
-  BOOLEAN Console;
-} POWER_SESSION_CONNECT, *PPOWER_SESSION_CONNECT;
-
-typedef struct _POWER_SESSION_TIMEOUTS {
-  ULONG InputTimeout;
-  ULONG DisplayTimeout;
-} POWER_SESSION_TIMEOUTS, *PPOWER_SESSION_TIMEOUTS;
-
-typedef struct _POWER_SESSION_RIT_STATE {
-  BOOLEAN Active;
-  ULONG64 LastInputTime;
-} POWER_SESSION_RIT_STATE, *PPOWER_SESSION_RIT_STATE;
-
-typedef struct _POWER_SESSION_WINLOGON {
-  ULONG SessionId;
-  BOOLEAN Console;
-  BOOLEAN Locked;
-} POWER_SESSION_WINLOGON, *PPOWER_SESSION_WINLOGON;
-
-typedef struct _POWER_SESSION_ALLOW_EXTERNAL_DMA_DEVICES {
-  BOOLEAN IsAllowed;
-} POWER_SESSION_ALLOW_EXTERNAL_DMA_DEVICES, *PPOWER_SESSION_ALLOW_EXTERNAL_DMA_DEVICES;
-
-typedef struct _POWER_IDLE_RESILIENCY {
-  ULONG CoalescingTimeout;
-  ULONG IdleResiliencyPeriod;
-} POWER_IDLE_RESILIENCY, *PPOWER_IDLE_RESILIENCY;
-
-typedef struct _POWER_MONITOR_INVOCATION {
-  BOOLEAN Console;
-  POWER_MONITOR_REQUEST_REASON RequestReason;
-} POWER_MONITOR_INVOCATION, *PPOWER_MONITOR_INVOCATION;
-
-typedef struct _RESUME_PERFORMANCE {
-  ULONG PostTimeMs;
-  ULONGLONG TotalResumeTimeMs;
-  ULONGLONG ResumeCompleteTimestamp;
-} RESUME_PERFORMANCE, *PRESUME_PERFORMANCE;
-
-typedef struct _SYSTEM_POOL_ZEROING_INFORMATION {
-  BOOLEAN PoolZeroingSupportPresent;
-} SYSTEM_POOL_ZEROING_INFORMATION, *PSYSTEM_POOL_ZEROING_INFORMATION;
-
-typedef struct _KE_SRCU_LOCK {
-  ULONG_PTR Placeholder[2];
-} *PKE_SRCU_LOCK, KE_SRCU_LOCK;
-
-typedef struct _KBUGCHECK_SECONDARY_DUMP_DATA_EX {
-  PVOID InBuffer;
-  ULONG InBufferLength;
-  ULONG MaximumAllowed;
-  GUID Guid;
-  PVOID OutBuffer;
-  ULONG OutBufferLength;
-  PVOID Context;
-  ULONG Flags;
-  ULONG DumpType;
-  ULONG BugCheckCode;
-  ULONG_PTR BugCheckParameter1;
-  ULONG_PTR BugCheckParameter2;
-  ULONG_PTR BugCheckParameter3;
-  ULONG_PTR BugCheckParameter4;
-} KBUGCHECK_SECONDARY_DUMP_DATA_EX, *PKBUGCHECK_SECONDARY_DUMP_DATA_EX;
-
-typedef struct _KBUGCHECK_REMOVE_PAGES {
-  PVOID Context;
-  ULONG Flags;
-  ULONG BugCheckCode;
-  ULONG_PTR Address;
-  ULONG_PTR Count;
-} KBUGCHECK_REMOVE_PAGES, *PKBUGCHECK_REMOVE_PAGES;
-
-typedef struct _KBUGCHECK_TRIAGE_DUMP_DATA {
-  PKTRIAGE_DUMP_DATA_ARRAY DataArray;
-  ULONG Flags;
-  ULONG MaxVirtMemSize;
-  ULONG BugCheckCode;
-  ULONG_PTR BugCheckParameter1;
-  ULONG_PTR BugCheckParameter2;
-  ULONG_PTR BugCheckParameter3;
-  ULONG_PTR BugCheckParameter4;
-} KBUGCHECK_TRIAGE_DUMP_DATA, *PKBUGCHECK_TRIAGE_DUMP_DATA;
-
-typedef struct _KWAIT_CHAIN {
-  PVOID Head;
-} KWAIT_CHAIN, *PKWAIT_CHAIN;
-
-typedef struct _EX_RCU_FREE_POOL_CONTEXT {
-  ULONG_PTR Placeholder[6];
-} EX_RCU_FREE_POOL_CONTEXT, *PEX_RCU_FREE_POOL_CONTEXT;
-
-typedef struct _REG_QUERY_KEY_NAME {
-  PVOID Object;
-  POBJECT_NAME_INFORMATION ObjectNameInfo;
-  ULONG Length;
-  PULONG ReturnLength;
-  PVOID CallContext;
-  PVOID ObjectContext;
-  PVOID Reserved;
-} REG_QUERY_KEY_NAME, *PREG_QUERY_KEY_NAME;
-
-typedef struct _REG_LOAD_KEY_INFORMATION_V2 {
-  PVOID Object;
-  PUNICODE_STRING KeyName;
-  PUNICODE_STRING SourceFile;
-  ULONG Flags;
-  PVOID TrustClassObject;
-  PVOID UserEvent;
-  ACCESS_MASK DesiredAccess;
-  PHANDLE RootHandle;
-  PVOID CallContext;
-  PVOID ObjectContext;
-  ULONG_PTR Version;
-  PVOID FileAccessToken;
-} REG_LOAD_KEY_INFORMATION_V2, *PREG_LOAD_KEY_INFORMATION_V2;
-
-typedef struct _REG_SAVE_MERGED_KEY_INFORMATION {
-  PVOID Object;
-  HANDLE FileHandle;
-  PVOID HighKeyObject;
-  PVOID LowKeyObject;
-  PVOID CallContext;
-  PVOID ObjectContext;
-  PVOID Reserved;
-} REG_SAVE_MERGED_KEY_INFORMATION, *PREG_SAVE_MERGED_KEY_INFORMATION;
-
-typedef struct _LINK_SHARE_ACCESS {
-  ULONG OpenCount;
-  ULONG Deleters;
-  ULONG SharedDelete;
-} LINK_SHARE_ACCESS, *PLINK_SHARE_ACCESS;
-
-typedef struct _KERNEL_SOFT_RESTART_NOTIFICATION {
-  USHORT Version;
-  USHORT Size;
-  GUID Event;
-} KERNEL_SOFT_RESTART_NOTIFICATION, *PKERNEL_SOFT_RESTART_NOTIFICATION;
-
-typedef struct PO_EPM_HANDLE__ {
-  int unused;
-} *PO_EPM_HANDLE;
-
-typedef struct _CLFS_NODE_ID {
-  ULONG cType;
-  ULONG cbNode;
-} CLFS_NODE_ID, *PCLFS_NODE_ID;
-
-typedef struct _CLS_WRITE_ENTRY {
-  PVOID Buffer;
-  ULONG ByteLength;
-} CLS_WRITE_ENTRY, *PCLS_WRITE_ENTRY;
 
 typedef struct _CLFS_LOG_NAME_INFORMATION {
   USHORT NameLengthInBytes;
   WCHAR Name[1];
 } CLFS_LOG_NAME_INFORMATION, *PCLFS_LOG_NAME_INFORMATION;
+
+typedef struct _CLFS_NODE_ID {
+  ULONG cType;
+  ULONG cbNode;
+} CLFS_NODE_ID, *PCLFS_NODE_ID;
 
 typedef struct _CLFS_STREAM_ID_INFORMATION {
   UCHAR StreamIdentifier;
@@ -1407,6 +1179,12 @@ typedef struct _CLS_CONTAINER_INFORMATION {
   CLFS_CONTAINER_ID LogicalContainerId;
 } CLS_CONTAINER_INFORMATION, *PCLS_CONTAINER_INFORMATION;
 
+typedef struct _CLS_ARCHIVE_DESCRIPTOR {
+  ULONGLONG coffLow;
+  ULONGLONG coffHigh;
+  CLS_CONTAINER_INFORMATION infoContainer;
+} CLS_ARCHIVE_DESCRIPTOR, *PCLS_ARCHIVE_DESCRIPTOR;
+
 typedef struct _CLS_IO_STATISTICS_HEADER {
   UCHAR ubMajorVersion;
   UCHAR ubMinorVersion;
@@ -1423,11 +1201,1410 @@ typedef struct _CLS_IO_STATISTICS {
   ULONGLONG cbMetaFlush;
 } CLS_IO_STATISTICS, *PCLS_IO_STATISTICS;
 
-typedef struct _CLS_ARCHIVE_DESCRIPTOR {
-  ULONGLONG coffLow;
-  ULONGLONG coffHigh;
-  CLS_CONTAINER_INFORMATION infoContainer;
-} CLS_ARCHIVE_DESCRIPTOR, *PCLS_ARCHIVE_DESCRIPTOR;
+typedef struct _CLS_WRITE_ENTRY {
+  PVOID Buffer;
+  ULONG ByteLength;
+} CLS_WRITE_ENTRY, *PCLS_WRITE_ENTRY;
+
+typedef struct _DPC_WATCHDOG_GLOBAL_TRIAGE_BLOCK {
+  ULONG Signature;
+  USHORT Revision;
+  USHORT Size;
+  USHORT DpcWatchdogProfileOffset;
+  ULONG DpcWatchdogProfileLength;
+} DPC_WATCHDOG_GLOBAL_TRIAGE_BLOCK, *PDPC_WATCHDOG_GLOBAL_TRIAGE_BLOCK;
+
+typedef struct _EX_RCU_FREE_POOL_CONTEXT {
+  ULONG_PTR Placeholder[6];
+} EX_RCU_FREE_POOL_CONTEXT, *PEX_RCU_FREE_POOL_CONTEXT;
+
+typedef struct _EXTENDED_CREATE_DUAL_OPLOCK_KEYS {
+  GUID ParentOplockKey;
+  GUID TargetOplockKey;
+} EXTENDED_CREATE_DUAL_OPLOCK_KEYS, *PEXTENDED_CREATE_DUAL_OPLOCK_KEYS;
+
+typedef struct _EXTENDED_CREATE_INFORMATION {
+  LONGLONG ExtendedCreateFlags;
+  PVOID EaBuffer;
+  ULONG EaLength;
+  PEXTENDED_CREATE_DUAL_OPLOCK_KEYS DualOplockKeys;
+} EXTENDED_CREATE_INFORMATION, *PEXTENDED_CREATE_INFORMATION;
+
+typedef struct _FILE_IO_PRIORITY_HINT_INFORMATION_EX {
+  IO_PRIORITY_HINT PriorityHint;
+  BOOLEAN BoostOutstanding;
+} FILE_IO_PRIORITY_HINT_INFORMATION_EX, *PFILE_IO_PRIORITY_HINT_INFORMATION_EX;
+
+typedef struct _FILE_STANDARD_INFORMATION_EX {
+  LARGE_INTEGER AllocationSize;
+  LARGE_INTEGER EndOfFile;
+  ULONG NumberOfLinks;
+  BOOLEAN DeletePending;
+  BOOLEAN Directory;
+  BOOLEAN AlternateStream;
+  BOOLEAN MetadataAttribute;
+} FILE_STANDARD_INFORMATION_EX, *PFILE_STANDARD_INFORMATION_EX;
+
+typedef struct _KBUGCHECK_REMOVE_PAGES {
+  PVOID Context;
+  ULONG Flags;
+  ULONG BugCheckCode;
+  ULONG_PTR Address;
+  ULONG_PTR Count;
+} KBUGCHECK_REMOVE_PAGES, *PKBUGCHECK_REMOVE_PAGES;
+
+typedef struct _KBUGCHECK_SECONDARY_DUMP_DATA_EX {
+  PVOID InBuffer;
+  ULONG InBufferLength;
+  ULONG MaximumAllowed;
+  GUID Guid;
+  PVOID OutBuffer;
+  ULONG OutBufferLength;
+  PVOID Context;
+  ULONG Flags;
+  ULONG DumpType;
+  ULONG BugCheckCode;
+  ULONG_PTR BugCheckParameter1;
+  ULONG_PTR BugCheckParameter2;
+  ULONG_PTR BugCheckParameter3;
+  ULONG_PTR BugCheckParameter4;
+} KBUGCHECK_SECONDARY_DUMP_DATA_EX, *PKBUGCHECK_SECONDARY_DUMP_DATA_EX;
+
+typedef struct _KBUGCHECK_TRIAGE_DUMP_DATA {
+  PKTRIAGE_DUMP_DATA_ARRAY DataArray;
+  ULONG Flags;
+  ULONG MaxVirtMemSize;
+  ULONG BugCheckCode;
+  ULONG_PTR BugCheckParameter1;
+  ULONG_PTR BugCheckParameter2;
+  ULONG_PTR BugCheckParameter3;
+  ULONG_PTR BugCheckParameter4;
+} KBUGCHECK_TRIAGE_DUMP_DATA, *PKBUGCHECK_TRIAGE_DUMP_DATA;
+
+typedef struct _KE_SRCU_LOCK {
+  ULONG_PTR Placeholder[2];
+} *PKE_SRCU_LOCK, KE_SRCU_LOCK;
+
+typedef struct _KERNEL_SOFT_RESTART_NOTIFICATION {
+  USHORT Version;
+  USHORT Size;
+  GUID Event;
+} KERNEL_SOFT_RESTART_NOTIFICATION, *PKERNEL_SOFT_RESTART_NOTIFICATION;
+
+typedef struct _KEY_TRUST_INFORMATION {
+  ULONG TrustedKey : 1;
+  ULONG Reserved : 31;
+} KEY_TRUST_INFORMATION, *PKEY_TRUST_INFORMATION;
+
+typedef struct _KEY_VALUE_LAYER_INFORMATION {
+  ULONG IsTombstone : 1;
+  ULONG Reserved : 31;
+} KEY_VALUE_LAYER_INFORMATION, *PKEY_VALUE_LAYER_INFORMATION;
+
+typedef struct _KWAIT_CHAIN {
+  PVOID Head;
+} KWAIT_CHAIN, *PKWAIT_CHAIN;
+
+typedef struct _LINK_SHARE_ACCESS {
+  ULONG OpenCount;
+  ULONG Deleters;
+  ULONG SharedDelete;
+} LINK_SHARE_ACCESS, *PLINK_SHARE_ACCESS;
+
+typedef struct _MEMORY_PARTITION_DEDICATED_MEMORY_OPEN_INFORMATION {
+  ULONG64 DedicatedMemoryTypeId;
+  ULONG HandleAttributes;
+  ACCESS_MASK DesiredAccess;
+  HANDLE DedicatedMemoryPartitionHandle;
+} MEMORY_PARTITION_DEDICATED_MEMORY_OPEN_INFORMATION, *PMEMORY_PARTITION_DEDICATED_MEMORY_OPEN_INFORMATION;
+
+typedef struct _POWER_IDLE_RESILIENCY {
+  ULONG CoalescingTimeout;
+  ULONG IdleResiliencyPeriod;
+} POWER_IDLE_RESILIENCY, *PPOWER_IDLE_RESILIENCY;
+
+typedef struct _POWER_MONITOR_INVOCATION {
+  BOOLEAN Console;
+  POWER_MONITOR_REQUEST_REASON RequestReason;
+} POWER_MONITOR_INVOCATION, *PPOWER_MONITOR_INVOCATION;
+
+typedef struct _POWER_SESSION_ALLOW_EXTERNAL_DMA_DEVICES {
+  BOOLEAN IsAllowed;
+} POWER_SESSION_ALLOW_EXTERNAL_DMA_DEVICES, *PPOWER_SESSION_ALLOW_EXTERNAL_DMA_DEVICES;
+
+typedef struct _POWER_SESSION_CONNECT {
+  BOOLEAN Connected;
+  BOOLEAN Console;
+} POWER_SESSION_CONNECT, *PPOWER_SESSION_CONNECT;
+
+typedef struct _POWER_SESSION_RIT_STATE {
+  BOOLEAN Active;
+  ULONG64 LastInputTime;
+} POWER_SESSION_RIT_STATE, *PPOWER_SESSION_RIT_STATE;
+
+typedef struct _POWER_SESSION_TIMEOUTS {
+  ULONG InputTimeout;
+  ULONG DisplayTimeout;
+} POWER_SESSION_TIMEOUTS, *PPOWER_SESSION_TIMEOUTS;
+
+typedef struct _POWER_SESSION_WINLOGON {
+  ULONG SessionId;
+  BOOLEAN Console;
+  BOOLEAN Locked;
+} POWER_SESSION_WINLOGON, *PPOWER_SESSION_WINLOGON;
+
+typedef struct _POWER_USER_PRESENCE {
+  POWER_USER_PRESENCE_TYPE UserPresence;
+} POWER_USER_PRESENCE, *PPOWER_USER_PRESENCE;
+
+typedef struct _REG_LOAD_KEY_INFORMATION_V2 {
+  PVOID Object;
+  PUNICODE_STRING KeyName;
+  PUNICODE_STRING SourceFile;
+  ULONG Flags;
+  PVOID TrustClassObject;
+  PVOID UserEvent;
+  ACCESS_MASK DesiredAccess;
+  PHANDLE RootHandle;
+  PVOID CallContext;
+  PVOID ObjectContext;
+  ULONG_PTR Version;
+  PVOID FileAccessToken;
+} REG_LOAD_KEY_INFORMATION_V2, *PREG_LOAD_KEY_INFORMATION_V2;
+
+typedef struct _REG_QUERY_KEY_NAME {
+  PVOID Object;
+  POBJECT_NAME_INFORMATION ObjectNameInfo;
+  ULONG Length;
+  PULONG ReturnLength;
+  PVOID CallContext;
+  PVOID ObjectContext;
+  PVOID Reserved;
+} REG_QUERY_KEY_NAME, *PREG_QUERY_KEY_NAME;
+
+typedef struct _REG_SAVE_MERGED_KEY_INFORMATION {
+  PVOID Object;
+  HANDLE FileHandle;
+  PVOID HighKeyObject;
+  PVOID LowKeyObject;
+  PVOID CallContext;
+  PVOID ObjectContext;
+  PVOID Reserved;
+} REG_SAVE_MERGED_KEY_INFORMATION, *PREG_SAVE_MERGED_KEY_INFORMATION;
+
+typedef struct _RESUME_PERFORMANCE {
+  ULONG PostTimeMs;
+  ULONGLONG TotalResumeTimeMs;
+  ULONGLONG ResumeCompleteTimestamp;
+} RESUME_PERFORMANCE, *PRESUME_PERFORMANCE;
+
+typedef struct _SE_ADT_CLAIMS {
+  ULONG Length;
+  PCLAIMS_BLOB Claims;
+} SE_ADT_CLAIMS, *PSE_ADT_CLAIMS;
+
+typedef struct _SE_ADT_PARAMETER_ARRAY_EX {
+  ULONG CategoryId;
+  ULONG AuditId;
+  ULONG Version;
+  ULONG ParameterCount;
+  ULONG Length;
+  USHORT FlatSubCategoryId;
+  USHORT Type;
+  ULONG Flags;
+  SE_ADT_PARAMETER_ARRAY_ENTRY Parameters[32];
+} SE_ADT_PARAMETER_ARRAY_EX, *PSE_ADT_PARAMETER_ARRAY_EX;
+
+typedef struct _SYSTEM_POOL_ZEROING_INFORMATION {
+  BOOLEAN PoolZeroingSupportPresent;
+} SYSTEM_POOL_ZEROING_INFORMATION, *PSYSTEM_POOL_ZEROING_INFORMATION;
+
+typedef struct _XSAVE_ARM64_SVE_HEADER {
+  ULONG VectorLength;
+  ULONG VectorRegisterOffset;
+  ULONG PredicateRegisterOffset;
+  ULONG Reserved[5];
+} XSAVE_ARM64_SVE_HEADER, *PXSAVE_ARM64_SVE_HEADER;
+
+typedef struct _XSAVE_CET_U_FORMAT {
+  ULONG64 Ia32CetUMsr;
+  ULONG64 Ia32Pl3SspMsr;
+} XSAVE_CET_U_FORMAT, *PXSAVE_CET_U_FORMAT;
+
+typedef struct PO_EPM_HANDLE__ {
+  int unused;
+} *PO_EPM_HANDLE;
+
+#define _OB_REFERENCE_TAGS_ 0
+#define _RTL_VOL_MEM_ACCESSORS_ 0
+#define BitScanForwardSizeT BitScanForward64
+#define BitScanReverseSizeT 0
+#define CLFS_BASELOG_EXTENSION L".blf"
+#define CLFS_CONTAINER_RELATIVE_PREFIX L"%BLF%\\"
+#define CLFS_CONTAINER_STREAM_PREFIX 0
+#define CLFS_FLAG_FILTER_INTERMEDIATE_LEVEL 0x10
+#define CLFS_FLAG_FILTER_TOP_LEVEL 0x20
+#define CLFS_LOG_SIZE_MAXIMUM ((ULONGLONG)(-1))
+#define CLFS_LOG_SIZE_MINIMUM ((ULONGLONG)0)
+#define CLFS_MGMT_NUM_POLICIES ((ULONG)0xA)
+#define ClfsClientRecord 3
+#define CLFSUSER_API 0
+#define DPC_WATCHDOG_GLOBAL_TRIAGE_BLOCK_VER_1_SIZE 0x10
+#define DRIVER_PROXY_ENDPOINT_FUNCTION_ID_INVALID 0xFFFFFFFF
+#define EA_CONTAINER_NAME 0
+#define EA_CONTAINER_SIZE "ContainerSize"
+#define EX_CARR_VALID_FLAGS 3
+#define EXCEPTION_VIRTUALIZATION_FAULT 0x20
+#define FAST_FAIL_ENCLAVE_CALL_FAILURE 0x35
+#define FAST_FAIL_GUARD_SS_FAILURE 0x2C
+#define FAST_FAIL_INVALID_BUFFER_ACCESS 0x1C
+#define FAST_FAIL_INVALID_CONTROL_STACK 0x2F
+#define FAST_FAIL_INVALID_NEXT_THREAD 0x1E
+#define FAST_FAIL_SET_CONTEXT_DENIED 0x30
+#define FILE_ATTRIBUTE_DEDICATED FILE_ATTRIBUTE_TEMPORARY
+#define IMAGE_POLICY_ANSI_STRING_PolicyId_, _Value_) { ImagePolicyEntryTypeAnsiString, _PolicyId_, _Value_ },
+#define IMAGE_POLICY_BOOL_PolicyId_, _Value_) { ImagePolicyEntryTypeBool, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_INT16_PolicyId_, _Value_) { ImagePolicyEntryTypeInt16, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_INT32_PolicyId_, _Value_) { ImagePolicyEntryTypeInt32, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_INT64_PolicyId_, _Value_) { ImagePolicyEntryTypeInt64, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_INT8_PolicyId_, _Value_) { ImagePolicyEntryTypeInt8, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_OVERRIDE_PolicyId_) { ImagePolicyEntryTypeOverride, _PolicyId_, 0 },
+#define IMAGE_POLICY_SECTION_NAME 0
+#define IMAGE_POLICY_UINT16_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt16, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_UINT32_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt32, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_UINT64_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt64, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_UINT8_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt8, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_UNICODE_STRING_PolicyId_, _Value_) { ImagePolicyEntryTypeUnicodeString, _PolicyId_, _Value_ },
+#define Iosb64ToIosb_iosb, _iosb64) { (_iosb) = (_iosb64); \
+}
+#define IosbToIosb64_iosb64, _iosb) { (_iosb64) = (_iosb); \
+}
+#define IS_VALIDATION_ENABLEDC, L) ((L) & (C))
+#define KB_SECONDARY_DATA_FLAG_ADDITIONAL_DATA 0x00000001
+#ifdef _WIN64
+#define LOCK_QUEUE_VALID_FLAGS 7
+#else
+#define LOCK_QUEUE_VALID_FLAGS 3
+#endif
+#define MEM_DEDICATED_ATTRIBUTE_NOT_SPECIFIED ((ULONG64)(-1))
+#ifdef _WIN64
+#define MEMORY_CURRENT_PARTITION_HANDLE (-1)
+#else
+#define MEMORY_CURRENT_PARTITION_HANDLE 0xFFFFFFFF
+#endif
+#ifdef _WIN64
+#define MEMORY_EXISTING_VAD_PARTITION_HANDLE (-3)
+#else
+#define MEMORY_EXISTING_VAD_PARTITION_HANDLE 0xFFFFFFFD
+#endif
+#define MEMORY_PARTITION_ALL_ACCESS 0x1F0003
+#ifdef _WIN64
+#define MEMORY_SYSTEM_PARTITION_HANDLE (-2)
+#else
+#define MEMORY_SYSTEM_PARTITION_HANDLE 0xFFFFFFFE
+#endif
+#define MM_BAD_POINTER 0
+#define MM_MAPPING_ADDRESS_DIVISIBLE 0x1
+#define MM_PROTECT_DRIVER_SECTION_VALID_FLAGS 1
+#define NPEM_CONTROL_INTERFACE_CURRENT_VERSION 2
+#define NtCurrentSession) ((HANDLE) (LONG_PTR) - 3)
+#define PAGE_ENCLAVE_DECOMMIT 0x10000000
+#define PAGE_ENCLAVE_SS_FIRST 0x10000001
+#define PAGE_ENCLAVE_SS_REST 0x10000002
+#ifdef _WIN64
+#define PCI_ATS_INTERFACE_SIZE 0x30
+#else
+#define PCI_ATS_INTERFACE_SIZE 0x18
+#endif
+#define PO_EFFECTIVE_POWER_MODE_VMAX 2
+#define PO_FX_DEVICE_FLAG_DISABLE_FAST_RESUME 8
+#define POOL_CREATE_FLG_POOL_TYPES 0xD
+#define POOL_FLAG_UNUSED_REQUIRED_BITS 0xFFFFF000
+#define ReadCR8) __readcr8()
+#define REFTAG_AFDCONN 'CdfA'
+#define REFTAG_AFDENDPOINT 0x45646641
+#define REFTAG_AFDPOLL 0x50646641
+#define REFTAG_ALEIO 0x49656C41
+#define REFTAG_ALEPROCTBL 0x50656C41
+#define REFTAG_ALESIDTOKEN 0x53656C41
+#define REFTAG_CFSFILTER 0x46736643
+#define REFTAG_HTTP 0x70747448
+#define REFTAG_MAILSLOT 0x7346734D
+#define REFTAG_NFSVOLUME 0x5673664E
+#define REFTAG_PGMFILE 0x546D6750
+#define REFTAG_PSLOOKUP 0x554C7350
+#define REFTAG_PSNOTIFICATION 0x6F4E7350
+#define REFTAG_PSWAKE 0x6B577350
+#define REFTAG_RAWENDPOINT 0x45776152
+#define REFTAG_SUBJECTCONTEXT 0x75536553
+#define REFTAG_TCPENDPOINT 0x45706354
+#define REFTAG_TCPLISTENER 0x4C706354
+#define REFTAG_TCPTCB 0x54706354
+#define REFTAG_UDPENDPOINT 0x45706455
+#define REFTAG_VIDEO_PORT 0x50646956
+#define REFTAG_VIDEO_PORT_I386 0x69646956
+#define REFTAG_WS2IFSL 0x69327357
+#define REFTAG_WSKNAMERES 0x4E6B7357
+#define REFTAG_WSKPROV 0x506B7357
+#define REFTAG_WSKTDI 0x546B7357
+#define REG_APP_HIVE_OPEN_READ_ONLY 0x2000
+#define REG_UNLOAD_LEGAL_FLAGS 1
+#define RTL_QUERY_REGISTRY_TYPECHECK_MASK (-16777216)
+#define RtlCompareDeviceMemory RtlCompareMemory
+#define RtlEqualDeviceMemory RtlEqualMemory
+#define SERVICE_USER_OWN_PROCESS 0x50
+#define SERVICE_USER_SHARE_PROCESS 0x60
+#define SYMBOLIC_LINK_ALL_ACCESS_EX 0xFFFFF
+#define TIMER_TOLERABLE_DELAY_BITS 6
+#define VRL_CLASS_CONSISTENCY 1
+#define VRL_CUSTOM_CLASS_BEGIN 0x100
+#define VRL_ENABLE_KERNEL_BREAKS (-2147483647 - 1)
+#define VRL_GLOBAL_LEVEL 0
+#define VRL_PREDEFINED_CLASS_BEGIN (1 << 0)
+#define WriteCR8Data) __writecr8(Data)
+#define ZwCurrentSession) NtCurrentSession()
+
+typedef int __prefast_analysis_mode_flag0;
+
+typedef int __prefast_analysis_mode_flag1;
+
+struct _CLFS_MGMT_POLICY
+{
+    ULONG Version;
+    ULONG LengthInBytes;
+    ULONG PolicyFlags;
+    CLFS_MGMT_POLICY_TYPE PolicyType;
+    union
+    {
+        struct
+        {
+            ULONG Containers;
+        } MaximumSize;
+        struct
+        {
+            ULONG Containers;
+        } MinimumSize;
+        struct
+        {
+            ULONG SizeInBytes;
+        } NewContainerSize;
+        struct
+        {
+            ULONG AbsoluteGrowthInContainers;
+            ULONG RelativeGrowthPercentage;
+        } GrowthRate;
+        struct
+        {
+            ULONG MinimumAvailablePercentage;
+            ULONG MinimumAvailableContainers;
+        } LogTail;
+        struct
+        {
+            ULONG Percentage;
+        } AutoShrink;
+        struct
+        {
+            ULONG Enabled;
+        } AutoGrow;
+        struct
+        {
+            USHORT PrefixLengthInBytes;
+            WCHAR PrefixString[1];
+        } NewContainerPrefix;
+        struct
+        {
+            ULONGLONG NextContainerSuffix;
+        } NewContainerSuffix;
+        struct
+        {
+            USHORT ExtensionLengthInBytes;
+            WCHAR ExtensionString[1];
+        } NewContainerExtension;
+    } PolicyParameters;
+};
+
+union _DRIVER_PROXY_EXTENSION_CREATION_FLAGS
+{
+    ULONG AsUlong;
+    struct
+    {
+        ULONG ReservedZero : 32;
+    };
+};
+
+union _DRIVER_PROXY_FEATURE_FLAGS
+{
+    ULONG AsUlong;
+    struct
+    {
+        ULONG Enabled : 1;
+        ULONG Reserved : 31;
+    };
+};
+
+struct _FILE_MEMORY_PARTITION_INFORMATION
+{
+    ULONG_PTR OwnerPartitionHandle;
+    union
+    {
+        struct
+        {
+            UCHAR NoCrossPartitionAccess;
+            UCHAR Spare[3];
+        };
+        ULONG AllFlags;
+    } Flags;
+};
+
+struct _IMAGE_POLICY_ENTRY
+{
+    IMAGE_POLICY_ENTRY_TYPE Type;
+    IMAGE_POLICY_ID PolicyId;
+    union
+    {
+        const void *None;
+        BOOLEAN BoolValue;
+        INT8 Int8Value;
+        UINT8 UInt8Value;
+        INT16 Int16Value;
+        UINT16 UInt16Value;
+        INT32 Int32Value;
+        UINT32 UInt32Value;
+        INT64 Int64Value;
+        UINT64 UInt64Value;
+        PCSTR AnsiStringValue;
+        PCWSTR UnicodeStringValue;
+    } u;
+};
+
+struct _IO_ATTRIBUTION_INFORMATION
+{
+    ULONG Version;
+    union
+    {
+        struct
+        {
+            ULONG MajorCode : 8;
+            ULONG IoStart : 1;
+            ULONG QueueOnly : 1;
+            ULONG IoFailed : 1;
+            ULONG VirtualDevice : 1;
+            ULONG Spare : 20;
+        };
+        ULONG AllFlags;
+    } Flags;
+    ULONG Length;
+    ULONGLONG ServiceStartTime;
+    ULONGLONG CurrentTime;
+};
+
+struct _KERNEL_CET_CONTEXT
+{
+    ULONG64 Ssp;
+    ULONG64 Rip;
+    USHORT SegCs;
+    union
+    {
+        USHORT AllFlags;
+        struct
+        {
+            USHORT UseWrss : 1;
+            USHORT PopShadowStackOne : 1;
+            USHORT Unused : 14;
+        };
+    };
+    USHORT Fill[2];
+};
+
+union _NPEM_CAPABILITY_STANDARD
+{
+    struct
+    {
+        ULONG Capable : 1;
+        ULONG ResetCapable : 1;
+        ULONG OkCapable : 1;
+        ULONG LocateCapable : 1;
+        ULONG FailCapable : 1;
+        ULONG RebuildCapable : 1;
+        ULONG PFACapable : 1;
+        ULONG HotSpareCapable : 1;
+        ULONG InACriticalArrayCapable : 1;
+        ULONG InAFailedArrayCapable : 1;
+        ULONG InvalidDeviceTypeCapable : 1;
+        ULONG DisabledCapable : 1;
+        ULONG Rsvd : 20;
+    };
+    ULONG AsULONG;
+};
+
+struct _POOL_CREATE_EXTENDED_PARAMETER
+{
+    POOL_CREATE_EXTENDED_PARAMETER_TYPE Type;
+    union
+    {
+        UNICODE_STRING PoolName;
+    };
+};
+
+typedef CLS_ARCHIVE_DESCRIPTOR CLFS_ARCHIVE_DESCRIPTOR;
+
+typedef PVOID (*CLFS_BLOCK_ALLOCATION)(ULONG, PVOID);
+
+typedef void (*CLFS_BLOCK_DEALLOCATION)(PVOID, PVOID);
+
+typedef CLS_CONTAINER_INFORMATION CLFS_CONTAINER_INFORMATION;
+
+typedef CLS_IO_STATISTICS CLFS_IO_STATISTICS;
+
+typedef CLS_IO_STATISTICS_HEADER CLFS_IO_STATISTICS_HEADER;
+
+typedef struct _CLFS_MGMT_POLICY CLFS_MGMT_POLICY;
+
+typedef CLS_WRITE_ENTRY CLFS_WRITE_ENTRY;
+
+typedef void DRIVER_PROXY_ENDPOINT_FUNCTION(void);
+
+typedef union _DRIVER_PROXY_EXTENSION_CREATION_FLAGS DRIVER_PROXY_EXTENSION_CREATION_FLAGS;
+
+typedef union _DRIVER_PROXY_FEATURE_FLAGS DRIVER_PROXY_FEATURE_FLAGS;
+
+typedef BOOLEAN DRIVER_PROXY_HOTSWAP_WORKER_ROUTINE(PVOID, NTSTATUS);
+
+typedef NTSTATUS DRIVER_PROXY_REGISTER_CALLBACK(DRIVER_PROXY_REGISTER_CALLBACK_PHASE, PVOID);
+
+typedef NTSTATUS ENABLE_VIRTUALIZATION(PVOID, UINT16, BOOLEAN, BOOLEAN, BOOLEAN);
+
+typedef void NTAPI ETWENABLECALLBACK(LPCGUID, ULONG, UCHAR, ULONGLONG, ULONGLONG, PEVENT_FILTER_DESCRIPTOR, PVOID);
+
+typedef struct _FILE_MEMORY_PARTITION_INFORMATION FILE_MEMORY_PARTITION_INFORMATION;
+
+typedef void FPGA_BUS_SCAN(PVOID);
+
+typedef NTSTATUS FPGA_CONTROL_CONFIG_SPACE(PVOID, BOOLEAN);
+
+typedef NTSTATUS FPGA_CONTROL_ERROR_REPORTING(PVOID, ULONG, ULONG, BOOLEAN);
+
+typedef NTSTATUS FPGA_CONTROL_LINK(PVOID, BOOLEAN);
+
+typedef ULONGLONG GET_SDEV_IDENTIFIER(PVOID);
+
+typedef NTSTATUS GET_UPDATED_BUS_RESOURCE(PVOID, PCM_RESOURCE_LIST *, PCM_RESOURCE_LIST *);
+
+typedef ULONG GET_VIRTUAL_DEVICE_DATA(PVOID, USHORT, PVOID, ULONG, ULONG);
+
+typedef NTSTATUS GET_VIRTUAL_DEVICE_LOCATION(PVOID, USHORT, PUINT16, PUINT8, PUINT8);
+
+typedef void GET_VIRTUAL_DEVICE_RESOURCES(PVOID, PUINT8);
+
+typedef NTSTATUS GET_VIRTUAL_FUNCTION_PROBED_BARS(PVOID, PULONG);
+
+typedef struct _IMAGE_POLICY_ENTRY IMAGE_POLICY_ENTRY;
+
+struct _IMAGE_POLICY_METADATA
+{
+    UCHAR Version;
+    UCHAR Reserved0[7];
+    ULONGLONG ApplicationId;
+    IMAGE_POLICY_ENTRY Policies[];
+};
+
+typedef struct _IMAGE_POLICY_METADATA IMAGE_POLICY_METADATA;
+
+typedef struct _IO_ATTRIBUTION_INFORMATION IO_ATTRIBUTION_INFORMATION;
+
+typedef NTSTATUS IO_PERSISTED_MEMORY_ENUMERATION_CALLBACK(PDRIVER_OBJECT, PDEVICE_OBJECT, PUNICODE_STRING, PUSHORT, PULONG, PVOID);
+
+typedef IO_STATUS_BLOCK IO_STATUS_BLOCK64;
+
+typedef struct _KERNEL_CET_CONTEXT KERNEL_CET_CONTEXT;
+
+typedef void MM_MDL_ROUTINE(PVOID, PVOID);
+
+typedef union _NPEM_CAPABILITY_STANDARD NPEM_CAPABILITY_STANDARD;
+
+typedef NTSTATUS NPEM_CONTROL_ENABLE_DISABLE(PVOID, BOOLEAN);
+
+typedef ULONG NPEM_CONTROL_QUERY_CONTROL(PVOID);
+
+typedef NTSTATUS NPEM_CONTROL_SET_STANDARD_CONTROL(PVOID, NPEM_CONTROL_STANDARD_CONTROL_BIT, BOOLEAN);
+
+typedef void NTFS_DEREF_EXPORTED_SECURITY_DESCRIPTOR(PVOID, PSECURITY_DESCRIPTOR);
+
+typedef NTSTATUS PCI_SET_ACS(PVOID, PCI_ACS_BIT, PCI_ACS_BIT, PCI_ACS_BIT, PCI_ACS_BIT, PCI_ACS_BIT, PCI_ACS_BIT, PCI_ACS_BIT);
+
+typedef NTSTATUS PCI_SET_ACS2(PVOID, ULONG, ULONG);
+
+typedef NTSTATUS PCI_SET_ATS(PVOID, BOOLEAN);
+
+typedef const IMAGE_POLICY_ENTRY *PCIMAGE_POLICY_ENTRY;
+
+typedef const IMAGE_POLICY_METADATA *PCIMAGE_POLICY_METADATA;
+
+typedef CLFS_ARCHIVE_DESCRIPTOR *PCLFS_ARCHIVE_DESCRIPTOR;
+
+typedef void (*PCLFS_CLIENT_LFF_HANDLER_COMPLETE_CALLBACK)(PLOG_FILE_OBJECT, NTSTATUS, BOOLEAN, PVOID);
+
+typedef void (*PCLFS_CLIENT_LOG_UNPINNED_CALLBACK)(PLOG_FILE_OBJECT, PVOID);
+
+typedef CLFS_CONTAINER_INFORMATION *PCLFS_CONTAINER_INFORMATION;
+
+typedef CLFS_IO_STATISTICS *PCLFS_IO_STATISTICS;
+
+typedef CLFS_IO_STATISTICS_HEADER *PCLFS_IO_STATISTICS_HEADER;
+
+typedef struct _CLFS_MGMT_POLICY *PCLFS_MGMT_POLICY;
+
+typedef void (*PCLFS_SET_LOG_SIZE_COMPLETE_CALLBACK)(PLOG_FILE_OBJECT, NTSTATUS, PVOID);
+
+typedef CLFS_WRITE_ENTRY *PCLFS_WRITE_ENTRY;
+
+typedef NTSTATUS (*PCRASHDUMP_POWER_ON)(PVOID);
+
+struct _CRASHDUMP_FUNCTIONS_INTERFACE
+{
+    USHORT Size;
+    USHORT Version;
+    PVOID Context;
+    PINTERFACE_REFERENCE InterfaceReference;
+    PINTERFACE_DEREFERENCE InterfaceDereference;
+    PCRASHDUMP_POWER_ON PowerOn;
+};
+
+typedef struct _CRASHDUMP_FUNCTIONS_INTERFACE CRASHDUMP_FUNCTIONS_INTERFACE;
+
+typedef struct _CRASHDUMP_FUNCTIONS_INTERFACE *PCRASHDUMP_FUNCTIONS_INTERFACE;
+
+typedef DRIVER_PROXY_ENDPOINT_FUNCTION *PDRIVER_PROXY_ENDPOINT_FUNCTION;
+
+struct _DRIVER_PROXY_ENDPOINT_INFORMATION
+{
+    DRIVER_PROXY_ENDPOINT_FUNCTION_ID Id;
+    PDRIVER_PROXY_ENDPOINT_FUNCTION EndpointFunction;
+    ULONG ParameterCount;
+};
+
+typedef struct _DRIVER_PROXY_ENDPOINT_INFORMATION DRIVER_PROXY_ENDPOINT_INFORMATION;
+
+typedef struct _DRIVER_PROXY_ENDPOINT_INFORMATION *PDRIVER_PROXY_ENDPOINT_INFORMATION;
+
+typedef union _DRIVER_PROXY_EXTENSION_CREATION_FLAGS *PDRIVER_PROXY_EXTENSION_CREATION_FLAGS;
+
+typedef union _DRIVER_PROXY_FEATURE_FLAGS *PDRIVER_PROXY_FEATURE_FLAGS;
+
+typedef DRIVER_PROXY_HOTSWAP_WORKER_ROUTINE *PDRIVER_PROXY_HOTSWAP_WORKER_ROUTINE;
+
+struct _DRIVER_PROXY_HOTSWAP_WORKER_ROUTINE_START_CONTEXT
+{
+    PDRIVER_PROXY_HOTSWAP_WORKER_ROUTINE WorkerRoutine;
+    PVOID Context;
+    WAIT_TYPE WaitType;
+    KWAIT_REASON WaitReason;
+    KPROCESSOR_MODE WaitMode;
+    BOOLEAN Altertable;
+    BOOLEAN HasTimeout;
+    LARGE_INTEGER Timeout;
+    ULONG EventCount;
+    PKEVENT Events[1];
+};
+
+typedef struct _DRIVER_PROXY_HOTSWAP_WORKER_ROUTINE_START_CONTEXT DRIVER_PROXY_HOTSWAP_WORKER_ROUTINE_START_CONTEXT;
+
+typedef struct _DRIVER_PROXY_HOTSWAP_WORKER_ROUTINE_START_CONTEXT *PDRIVER_PROXY_HOTSWAP_WORKER_ROUTINE_START_CONTEXT;
+
+typedef DRIVER_PROXY_REGISTER_CALLBACK *PDRIVER_PROXY_REGISTER_CALLBACK;
+
+typedef DRIVER_PROXY_ENDPOINT_FUNCTION *PDRIVER_PROXY_WRAPPED_ENDPOINT_FUNCTION;
+
+typedef ENABLE_VIRTUALIZATION *PENABLE_VIRTUALIZATION;
+
+typedef struct _FILE_MEMORY_PARTITION_INFORMATION *PFILE_MEMORY_PARTITION_INFORMATION;
+
+typedef FPGA_BUS_SCAN *PFPGA_BUS_SCAN;
+
+typedef FPGA_CONTROL_CONFIG_SPACE *PFPGA_CONTROL_CONFIG_SPACE;
+
+typedef FPGA_CONTROL_ERROR_REPORTING *PFPGA_CONTROL_ERROR_REPORTING;
+
+typedef FPGA_CONTROL_LINK *PFPGA_CONTROL_LINK;
+
+struct _FPGA_CONTROL_INTERFACE
+{
+    USHORT Size;
+    USHORT Version;
+    PVOID Context;
+    PINTERFACE_REFERENCE InterfaceReference;
+    PINTERFACE_DEREFERENCE InterfaceDereference;
+    PFPGA_BUS_SCAN BusScan;
+    PFPGA_CONTROL_LINK ControlLink;
+    PFPGA_CONTROL_CONFIG_SPACE ControlConfigSpace;
+    PFPGA_CONTROL_ERROR_REPORTING ControlErrorReporting;
+};
+
+typedef struct _FPGA_CONTROL_INTERFACE FPGA_CONTROL_INTERFACE;
+
+typedef struct _FPGA_CONTROL_INTERFACE *PFPGA_CONTROL_INTERFACE;
+
+typedef GET_SDEV_IDENTIFIER *PGET_SDEV_IDENTIFIER;
+
+struct _SDEV_IDENTIFIER_INTERFACE
+{
+    INTERFACE InterfaceHeader;
+    PGET_SDEV_IDENTIFIER GetIdentifier;
+};
+
+typedef GET_UPDATED_BUS_RESOURCE *PGET_UPDATED_BUS_RESOURCE;
+
+struct _BUS_RESOURCE_UPDATE_INTERFACE
+{
+    USHORT Size;
+    USHORT Version;
+    PVOID Context;
+    PINTERFACE_REFERENCE InterfaceReference;
+    PINTERFACE_DEREFERENCE InterfaceDereference;
+    PGET_UPDATED_BUS_RESOURCE GetUpdatedBusResource;
+};
+
+typedef struct _BUS_RESOURCE_UPDATE_INTERFACE BUS_RESOURCE_UPDATE_INTERFACE;
+
+typedef struct _BUS_RESOURCE_UPDATE_INTERFACE *PBUS_RESOURCE_UPDATE_INTERFACE;
+
+typedef GET_VIRTUAL_DEVICE_DATA *PGET_VIRTUAL_DEVICE_DATA;
+
+typedef GET_VIRTUAL_DEVICE_LOCATION *PGET_VIRTUAL_DEVICE_LOCATION;
+
+typedef GET_VIRTUAL_DEVICE_RESOURCES *PGET_VIRTUAL_DEVICE_RESOURCES;
+
+typedef GET_VIRTUAL_FUNCTION_PROBED_BARS *PGET_VIRTUAL_FUNCTION_PROBED_BARS;
+
+typedef struct _IO_ATTRIBUTION_INFORMATION *PIO_ATTRIBUTION_INFORMATION;
+
+typedef IO_PERSISTED_MEMORY_ENUMERATION_CALLBACK *PIO_PERSISTED_MEMORY_ENUMERATION_CALLBACK;
+
+typedef IO_STATUS_BLOCK64 *PIO_STATUS_BLOCK64;
+
+typedef struct _KERNEL_CET_CONTEXT *PKERNEL_CET_CONTEXT;
+
+typedef PVOID (*PMM_GET_SYSTEM_ROUTINE_ADDRESS_EX)(PUNICODE_STRING, PSTR);
+
+typedef MM_MDL_ROUTINE *PMM_MDL_ROUTINE;
+
+typedef union _NPEM_CAPABILITY_STANDARD *PNPEM_CAPABILITY_STANDARD;
+
+typedef NTSTATUS NPEM_CONTROL_QUERY_STANDARD_CAPABILITIES(PVOID, PNPEM_CAPABILITY_STANDARD);
+
+typedef NPEM_CONTROL_ENABLE_DISABLE *PNPEM_CONTROL_ENABLE_DISABLE;
+
+typedef NPEM_CONTROL_QUERY_CONTROL *PNPEM_CONTROL_QUERY_CONTROL;
+
+typedef NPEM_CONTROL_QUERY_STANDARD_CAPABILITIES *PNPEM_CONTROL_QUERY_STANDARD_CAPABILITIES;
+
+typedef NPEM_CONTROL_SET_STANDARD_CONTROL *PNPEM_CONTROL_SET_STANDARD_CONTROL;
+
+struct _NPEM_CONTROL_INTERFACE
+{
+    USHORT Size;
+    USHORT Version;
+    PVOID Context;
+    PINTERFACE_REFERENCE InterfaceReference;
+    PINTERFACE_DEREFERENCE InterfaceDereference;
+    PNPEM_CONTROL_ENABLE_DISABLE SetNpemSupportState;
+    PNPEM_CONTROL_QUERY_STANDARD_CAPABILITIES QueryStandardCapabilities;
+    PNPEM_CONTROL_SET_STANDARD_CONTROL SetStandardControl;
+    PNPEM_CONTROL_QUERY_CONTROL QueryNpemControl;
+};
+
+typedef struct _NPEM_CONTROL_INTERFACE NPEM_CONTROL_INTERFACE;
+
+typedef struct _NPEM_CONTROL_INTERFACE *PNPEM_CONTROL_INTERFACE;
+
+typedef void PO_EFFECTIVE_POWER_MODE_CALLBACK(PO_EFFECTIVE_POWER_MODE, void *);
+
+typedef void PO_FX_DRIPS_WATCHDOG_CALLBACK(PVOID, PDEVICE_OBJECT, ULONG);
+
+struct POHANDLE__
+{
+    int unused;
+};
+
+typedef struct _POOL_CREATE_EXTENDED_PARAMETER POOL_CREATE_EXTENDED_PARAMETER;
+
+typedef const POOL_CREATE_EXTENDED_PARAMETER *PCPOOL_CREATE_EXTENDED_PARAMETER;
+
+typedef PCI_SET_ACS *PPCI_SET_ACS;
+
+struct _PCI_SECURITY_INTERFACE
+{
+    USHORT Size;
+    USHORT Version;
+    PVOID Context;
+    PINTERFACE_REFERENCE InterfaceReference;
+    PINTERFACE_DEREFERENCE InterfaceDereference;
+    PPCI_SET_ACS SetAccessControlServices;
+};
+
+typedef struct _PCI_SECURITY_INTERFACE PCI_SECURITY_INTERFACE;
+
+typedef struct _PCI_SECURITY_INTERFACE *PPCI_SECURITY_INTERFACE;
+
+typedef PCI_SET_ACS2 *PPCI_SET_ACS2;
+
+struct _PCI_SECURITY_INTERFACE2
+{
+    USHORT Size;
+    USHORT Version;
+    PVOID Context;
+    PINTERFACE_REFERENCE InterfaceReference;
+    PINTERFACE_DEREFERENCE InterfaceDereference;
+    ULONG Flags;
+    ULONG SupportedScenarios;
+    PPCI_SET_ACS2 SetAccessControlServices;
+};
+
+typedef struct _PCI_SECURITY_INTERFACE2 PCI_SECURITY_INTERFACE2;
+
+typedef struct _PCI_SECURITY_INTERFACE2 *PPCI_SECURITY_INTERFACE2;
+
+typedef PCI_SET_ATS *PPCI_SET_ATS;
+
+struct _PCI_ATS_INTERFACE
+{
+    USHORT Size;
+    USHORT Version;
+    PVOID Context;
+    PINTERFACE_REFERENCE InterfaceReference;
+    PINTERFACE_DEREFERENCE InterfaceDereference;
+    PPCI_SET_ATS SetAddressTranslationServices;
+    UCHAR InvalidateQueueDepth;
+};
+
+typedef struct _PCI_ATS_INTERFACE PCI_ATS_INTERFACE;
+
+typedef struct _PCI_ATS_INTERFACE *PPCI_ATS_INTERFACE;
+
+typedef CLFS_ARCHIVE_DESCRIPTOR **PPCLFS_ARCHIVE_DESCRIPTOR;
+
+typedef CLFS_CONTAINER_INFORMATION **PPCLFS_CONTAINER_INFORMATION;
+
+typedef CLFS_IO_STATISTICS **PPCLFS_IO_STATISTICS;
+
+typedef CLFS_IO_STATISTICS_HEADER **PPCLFS_IO_STATISTICS_HEADER;
+
+typedef struct _CLFS_LOG_NAME_INFORMATION **PPCLFS_LOG_NAME_INFORMATION;
+
+typedef struct _CLFS_STREAM_ID_INFORMATION **PPCLFS_STREAM_ID_INFORMATION;
+
+typedef CLFS_WRITE_ENTRY **PPCLFS_WRITE_ENTRY;
+
+typedef struct _CLS_ARCHIVE_DESCRIPTOR **PPCLS_ARCHIVE_DESCRIPTOR;
+
+typedef struct _CLS_CONTAINER_INFORMATION **PPCLS_CONTAINER_INFORMATION;
+
+typedef struct _CLS_IO_STATISTICS **PPCLS_IO_STATISTICS;
+
+typedef struct _CLS_IO_STATISTICS_HEADER **PPCLS_IO_STATISTICS_HEADER;
+
+typedef struct _CLS_WRITE_ENTRY **PPCLS_WRITE_ENTRY;
+
+typedef PO_EFFECTIVE_POWER_MODE_CALLBACK *PPO_EFFECTIVE_POWER_MODE_CALLBACK;
+
+typedef PO_FX_DRIPS_WATCHDOG_CALLBACK *PPO_FX_DRIPS_WATCHDOG_CALLBACK;
+
+typedef struct _POOL_CREATE_EXTENDED_PARAMETER *PPOOL_CREATE_EXTENDED_PARAMETER;
+
+struct _POOL_CREATE_EXTENDED_PARAMS
+{
+    ULONG Version;
+    ULONG ParameterCount;
+    PPOOL_CREATE_EXTENDED_PARAMETER Parameters;
+};
+
+typedef struct _POOL_CREATE_EXTENDED_PARAMS POOL_CREATE_EXTENDED_PARAMS;
+
+typedef const POOL_CREATE_EXTENDED_PARAMS *PCPOOL_CREATE_EXTENDED_PARAMS;
+
+typedef struct _POOL_CREATE_EXTENDED_PARAMS *PPOOL_CREATE_EXTENDED_PARAMS;
+
+typedef void (*PQUERYEXTENDEDADDRESS)(PVOID, PULONG64);
+
+struct _PNP_EXTENDED_ADDRESS_INTERFACE
+{
+    USHORT Size;
+    USHORT Version;
+    PVOID Context;
+    PINTERFACE_REFERENCE InterfaceReference;
+    PINTERFACE_DEREFERENCE InterfaceDereference;
+    PQUERYEXTENDEDADDRESS QueryExtendedAddress;
+};
+
+typedef struct _PNP_EXTENDED_ADDRESS_INTERFACE PNP_EXTENDED_ADDRESS_INTERFACE;
+
+typedef struct _PNP_EXTENDED_ADDRESS_INTERFACE *PPNP_EXTENDED_ADDRESS_INTERFACE;
+
+typedef struct _SDEV_IDENTIFIER_INTERFACE *PSDEV_IDENTIFIER_INTERFACE;
+
+typedef NTSTATUS PTM_DEVICE_DISABLE(PVOID);
+
+typedef PTM_DEVICE_DISABLE *PPTM_DEVICE_DISABLE;
+
+typedef NTSTATUS PTM_DEVICE_ENABLE(PVOID);
+
+typedef PTM_DEVICE_ENABLE *PPTM_DEVICE_ENABLE;
+
+typedef NTSTATUS PTM_DEVICE_QUERY_GRANULARITY(PVOID, PUCHAR);
+
+typedef PTM_DEVICE_QUERY_GRANULARITY *PPTM_DEVICE_QUERY_GRANULARITY;
+
+typedef NTSTATUS PTM_DEVICE_QUERY_TIME_SOURCE(PVOID, PULONG);
+
+typedef PTM_DEVICE_QUERY_TIME_SOURCE *PPTM_DEVICE_QUERY_TIME_SOURCE;
+
+struct _PTM_CONTROL_INTERFACE
+{
+    USHORT Size;
+    USHORT Version;
+    PVOID Context;
+    PINTERFACE_REFERENCE InterfaceReference;
+    PINTERFACE_DEREFERENCE InterfaceDereference;
+    PPTM_DEVICE_QUERY_GRANULARITY QueryGranularity;
+    PPTM_DEVICE_QUERY_TIME_SOURCE QueryTimeSource;
+    PPTM_DEVICE_ENABLE Enable;
+    PPTM_DEVICE_DISABLE Disable;
+};
+
+typedef struct _PTM_CONTROL_INTERFACE *PPTM_CONTROL_INTERFACE;
+
+typedef struct _PTM_CONTROL_INTERFACE PTM_CONTROL_INTERFACE;
+
+typedef NTSTATUS (NTAPI *PTM_PROPAGATE_ROUTINE)(PVOID, PVOID, NTSTATUS, GUID);
+
+typedef struct _SDEV_IDENTIFIER_INTERFACE SDEV_IDENTIFIER_INTERFACE;
+
+typedef void SE_IMAGE_VERIFICATION_CALLBACK_FUNCTION(PVOID, SE_IMAGE_TYPE, PBDCB_IMAGE_INFORMATION);
+
+typedef SE_IMAGE_VERIFICATION_CALLBACK_FUNCTION *PSE_IMAGE_VERIFICATION_CALLBACK_FUNCTION;
+
+typedef void SECURE_DRIVER_PROCESS_DEREFERENCE(PVOID, PEPROCESS);
+
+typedef SECURE_DRIVER_PROCESS_DEREFERENCE *PSECURE_DRIVER_PROCESS_DEREFERENCE;
+
+typedef PEPROCESS SECURE_DRIVER_PROCESS_REFERENCE(PVOID);
+
+typedef SECURE_DRIVER_PROCESS_REFERENCE *PSECURE_DRIVER_PROCESS_REFERENCE;
+
+struct _SECURE_DRIVER_INTERFACE
+{
+    INTERFACE InterfaceHeader;
+    PSECURE_DRIVER_PROCESS_REFERENCE ProcessReference;
+    PSECURE_DRIVER_PROCESS_DEREFERENCE ProcessDereference;
+    ULONG Reserved;
+};
+
+typedef struct _SECURE_DRIVER_INTERFACE *PSECURE_DRIVER_INTERFACE;
+
+typedef struct _SECURE_DRIVER_INTERFACE SECURE_DRIVER_INTERFACE;
+
+typedef ULONG SET_VIRTUAL_DEVICE_DATA(PVOID, USHORT, PVOID, ULONG, ULONG);
+
+typedef SET_VIRTUAL_DEVICE_DATA *PSET_VIRTUAL_DEVICE_DATA;
+
+struct _PCI_VIRTUALIZATION_INTERFACE
+{
+    USHORT Size;
+    USHORT Version;
+    PVOID Context;
+    PINTERFACE_REFERENCE InterfaceReference;
+    PINTERFACE_DEREFERENCE InterfaceDereference;
+    PSET_VIRTUAL_DEVICE_DATA SetVirtualFunctionData;
+    PGET_VIRTUAL_DEVICE_DATA GetVirtualFunctionData;
+    PGET_VIRTUAL_DEVICE_LOCATION GetLocation;
+    PGET_VIRTUAL_DEVICE_RESOURCES GetResources;
+    PENABLE_VIRTUALIZATION EnableVirtualization;
+    PGET_VIRTUAL_FUNCTION_PROBED_BARS GetVirtualFunctionProbedBars;
+};
+
+typedef struct _PCI_VIRTUALIZATION_INTERFACE PCI_VIRTUALIZATION_INTERFACE;
+
+typedef struct _PCI_VIRTUALIZATION_INTERFACE *PPCI_VIRTUALIZATION_INTERFACE;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+NTSTATUS NTAPI RtlGenerateClass5Guid(const GUID *const NamespaceGuid, PVOID Buffer, ULONG BufferSize, GUID *Guid);
+
+/* TODO: LiberNT does not implement the functions below yet */
+void BugCheckSecondaryMultiPartDumpDataCallback(KBUGCHECK_CALLBACK_REASON, struct _KBUGCHECK_REASON_CALLBACK_RECORD *, PVOID, ULONG);
+NTSTATUS NTAPI ClfsAddLogContainer(PLOG_FILE_OBJECT plfoLog, PULONGLONG pcbContainer, PUNICODE_STRING puszContainerPath);
+NTSTATUS NTAPI ClfsAddLogContainerSet(PLOG_FILE_OBJECT plfoLog, USHORT cContainers, PULONGLONG pcbContainer, PUNICODE_STRING rguszContainerPath);
+NTSTATUS NTAPI ClfsAlignReservedLog(PVOID pvMarshalContext, ULONG cRecords, LONGLONG rgcbReservation[], PLONGLONG pcbAlignReservation);
+NTSTATUS NTAPI ClfsAllocReservedLog(PVOID pvMarshalContext, ULONG cRecords, PLONGLONG pcbAdjustment);
+NTSTATUS NTAPI ClfsCloseAndResetLogFile(PLOG_FILE_OBJECT plfoLog);
+NTSTATUS NTAPI ClfsCloseLogFileObject(PLOG_FILE_OBJECT plfoLog);
+NTSTATUS NTAPI ClfsCreateLogFile(PPLOG_FILE_OBJECT pplfoLog, PUNICODE_STRING puszLogFileName, ACCESS_MASK fDesiredAccess, ULONG dwShareMode, PSECURITY_DESCRIPTOR psdLogFile, ULONG fCreateDisposition, ULONG fCreateOptions, ULONG fFlagsAndAttributes, ULONG fLogOptionFlag, PVOID pvContext, ULONG cbContext);
+NTSTATUS NTAPI ClfsCreateMarshallingArea(PLOG_FILE_OBJECT plfoLog, POOL_TYPE ePoolType, PALLOCATE_FUNCTION pfnAllocBuffer, PFREE_FUNCTION pfnFreeBuffer, ULONG cbMarshallingBuffer, ULONG cMaxWriteBuffers, ULONG cMaxReadBuffers, PVOID *ppvMarshalContext);
+NTSTATUS NTAPI ClfsCreateMarshallingAreaEx(PLOG_FILE_OBJECT plfoLog, POOL_TYPE ePoolType, PALLOCATE_FUNCTION pfnAllocBuffer, PFREE_FUNCTION pfnFreeBuffer, ULONG cbMarshallingBuffer, ULONG cMaxWriteBuffers, ULONG cMaxReadBuffers, ULONG cAlignmentSize, ULONGLONG fFlags, PVOID *ppvMarshalContext);
+NTSTATUS NTAPI ClfsDeleteLogByPointer(PLOG_FILE_OBJECT plfoLog);
+NTSTATUS NTAPI ClfsDeleteLogFile(PUNICODE_STRING puszLogFileName, PVOID pvReserved, ULONG fLogOptionFlag, PVOID pvContext, ULONG cbContext);
+NTSTATUS NTAPI ClfsDeleteMarshallingArea(PVOID pvMarshalContext);
+void NTAPI ClfsFinalize(void);
+NTSTATUS NTAPI ClfsFlushBuffers(PVOID pvMarshalContext);
+NTSTATUS NTAPI ClfsFreeReservedLog(PVOID pvMarshalContext, ULONG cRecords, PLONGLONG pcbAdjustment);
+NTSTATUS NTAPI ClfsGetContainerName(PLOG_FILE_OBJECT plfoLog, CLFS_CONTAINER_ID cidLogicalContainer, PUNICODE_STRING puszContainerName, PULONG pcActualLenContainerName);
+NTSTATUS NTAPI ClfsGetIoStatistics(PLOG_FILE_OBJECT plfoLog, PVOID pvStatsBuffer, ULONG cbStatsBuffer, CLFS_IOSTATS_CLASS eStatsClass, PULONG pcbStatsWritten);
+NTSTATUS NTAPI ClfsInitialize(void);
+NTSTATUS NTAPI ClfsMgmtDeregisterManagedClient(CLFS_MGMT_CLIENT ClientCookie);
+NTSTATUS NTAPI ClfsMgmtHandleLogFileFull(CLFS_MGMT_CLIENT Client);
+NTSTATUS NTAPI ClfsMgmtInstallPolicy(PLOG_FILE_OBJECT LogFile, PCLFS_MGMT_POLICY Policy, ULONG PolicyLength);
+NTSTATUS NTAPI ClfsMgmtQueryPolicy(PLOG_FILE_OBJECT LogFile, CLFS_MGMT_POLICY_TYPE PolicyType, PCLFS_MGMT_POLICY Policy, PULONG PolicyLength);
+NTSTATUS NTAPI ClfsMgmtRemovePolicy(PLOG_FILE_OBJECT LogFile, CLFS_MGMT_POLICY_TYPE PolicyType);
+NTSTATUS NTAPI ClfsMgmtSetLogFileSize(PLOG_FILE_OBJECT LogFile, PULONGLONG NewSizeInContainers, PULONGLONG ResultingSizeInContainers, PCLFS_SET_LOG_SIZE_COMPLETE_CALLBACK CompletionRoutine, PVOID CompletionRoutineData);
+NTSTATUS NTAPI ClfsMgmtSetLogFileSizeAsClient(PLOG_FILE_OBJECT LogFile, CLFS_MGMT_CLIENT ClientCookie, PULONGLONG NewSizeInContainers, PULONGLONG ResultingSizeInContainers, PCLFS_SET_LOG_SIZE_COMPLETE_CALLBACK CompletionRoutine, PVOID CompletionRoutineData);
+NTSTATUS NTAPI ClfsMgmtTailAdvanceFailure(CLFS_MGMT_CLIENT Client, NTSTATUS Reason);
+NTSTATUS NTAPI ClfsQueryLogFileInformation(PLOG_FILE_OBJECT plfoLog, CLFS_LOG_INFORMATION_CLASS eInformationClass, PVOID pinfoInputBuffer, ULONG cbinfoInputBuffer, PVOID pinfoBuffer, PULONG pcbInfoBuffer);
+NTSTATUS NTAPI ClfsRemoveLogContainer(PLOG_FILE_OBJECT plfoLog, PUNICODE_STRING puszContainerPath, BOOLEAN fForce);
+NTSTATUS NTAPI ClfsRemoveLogContainerSet(PLOG_FILE_OBJECT plfoLog, USHORT cContainers, PUNICODE_STRING rgwszContainerPath, BOOLEAN fForce);
+NTSTATUS NTAPI ClfsSetLogFileInformation(PLOG_FILE_OBJECT plfoLog, CLFS_LOG_INFORMATION_CLASS eInformationClass, PVOID pinfoBuffer, ULONG cbBuffer);
+NTSTATUS NTAPI ClfsTerminateReadLog(PVOID pvCursorContext);
+BOOLEAN NTAPI ClfsValidTopLevelContext(PIRP pirpTopLevelContext);
+NTSTATUS EtwSetInformation(REGHANDLE RegHandle, EVENT_INFO_CLASS InformationClass, PVOID EventInformation, ULONG InformationLength);
+void ExCleanupRundownProtectionCacheAware(PEX_RUNDOWN_REF_CACHE_AWARE RunRefCacheAware);
+NTSTATUS ExCreatePool(ULONG Flags, ULONG_PTR Tag, POOL_CREATE_EXTENDED_PARAMS *Params, HANDLE *PoolHandle);
+void ExDestroyPool(HANDLE PoolHandle);
+NTSTATUS ExEnumerateSystemFirmwareTables(ULONG FirmwareTableProviderSignature, PVOID FirmwareTableBuffer, ULONG BufferLength, PULONG ReturnLength);
+NTSTATUS ExInitializeDeviceAts(struct _DEVICE_OBJECT *PhysicalDeviceObject, ULONG Flags);
+void ExInitializeNPagedLookasideList_NXPoolOptIn(PNPAGED_LOOKASIDE_LIST Lookaside, PALLOCATE_FUNCTION Allocate, PFREE_FUNCTION Free, ULONG Flags, SIZE_T Size, ULONG Tag, USHORT Depth);
+void ExInitializeRundownProtectionCacheAwareEx(PEX_RUNDOWN_REF_CACHE_AWARE RunRefCacheAware, ULONG Flags);
+void ExRcuFreePool(PEX_RCU_FREE_POOL_CONTEXT Context, PVOID Ptr);
+NTSTATUS ExSecurePoolUpdate(HANDLE SecurePoolHandle, ULONG Tag, PVOID Allocation, ULONG_PTR Cookie, SIZE_T Offset, SIZE_T Size, PVOID Buffer);
+LOGICAL ExSecurePoolValidate(HANDLE SecurePoolHandle, ULONG Tag, PVOID Allocation, ULONG_PTR Cookie);
+NTSTATUS IoAcquireKsrPersistentMemory(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, PVOID Buffer, PSIZE_T Size);
+NTSTATUS IoAcquireKsrPersistentMemoryEx(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, PUNICODE_STRING PhysicalDeviceId, PUSHORT DataTag, PULONG DataVersion, PVOID Buffer, PSIZE_T Size);
+NTSTATUS IoCheckLinkShareAccess(ACCESS_MASK DesiredAccess, ULONG DesiredShareAccess, PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess, PLINK_SHARE_ACCESS LinkShareAccess, ULONG IoShareAccessFlags);
+NTSTATUS IoEnumerateKsrPersistentMemoryEx(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, PUNICODE_STRING PhysicalDeviceId, PIO_PERSISTED_MEMORY_ENUMERATION_CALLBACK Callback, PVOID CallbackContext);
+NTSTATUS IoFreeKsrPersistentMemory(PVOID DataHandle);
+void IoGetDriverProxyFeatures(PDRIVER_OBJECT DriverObject, PDRIVER_PROXY_FEATURE_FLAGS Flags);
+NTSTATUS IoGetIoAttributionHandle(PIRP Irp, PVOID *IoAttributionHandle);
+NTSTATUS IoGetKsrPersistentMemoryBuffer(PVOID DataHandle, PVOID *BufferPtr, PSIZE_T BufferSize);
+void IoInitializeIrpEx(PIRP Irp, PDEVICE_OBJECT DeviceObject, USHORT PacketSize, CCHAR StackSize);
+BOOLEAN IoIsInitiator32bitProcess(PIRP Irp);
+NTSTATUS IoMapKsrPersistentMemoryEx(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, PUNICODE_STRING PhysicalDeviceId, PUSHORT DataTag, PULONG DataVersion, PVOID *DataHandle);
+NTSTATUS IoQueryKsrPersistentMemorySize(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, PSIZE_T BufferSize);
+NTSTATUS IoQueryKsrPersistentMemorySizeEx(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, PUNICODE_STRING PhysicalDeviceId, PUSHORT DataTag, PULONG DataVersion, PSIZE_T BufferSize);
+NTSTATUS IoRecordIoAttribution(PVOID OpaqueHandle, IO_ATTRIBUTION_INFORMATION *AttributionInformation);
+void IoRemoveLinkShareAccess(PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess, PLINK_SHARE_ACCESS LinkShareAccess);
+void IoRemoveLinkShareAccessEx(PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess, PLINK_SHARE_ACCESS LinkShareAccess, ULONG IoShareAccessFlags);
+NTSTATUS IoReserveKsrPersistentMemory(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, SIZE_T Size, ULONG Flags, PVOID *DataHandle);
+NTSTATUS IoReserveKsrPersistentMemoryEx(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, PUNICODE_STRING PhysicalDeviceId, PUSHORT DataTag, ULONG DataVersion, SIZE_T Size, ULONG Flags, PVOID *DataHandle);
+NTSTATUS IoSetIoAttributionIrp(PIRP Irp, PVOID AttributionSource, ULONG Flags);
+void IoSetLinkShareAccess(ACCESS_MASK DesiredAccess, ULONG DesiredShareAccess, PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess, PLINK_SHARE_ACCESS LinkShareAccess, ULONG IoShareAccessFlags);
+BOOLEAN IoTryQueueWorkItem(PIO_WORKITEM IoWorkItem, PIO_WORKITEM_ROUTINE_EX WorkerRoutine, WORK_QUEUE_TYPE QueueType, PVOID Context);
+void IoUpdateLinkShareAccess(PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess, PLINK_SHARE_ACCESS LinkShareAccess);
+void IoUpdateLinkShareAccessEx(PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess, PLINK_SHARE_ACCESS LinkShareAccess, ULONG IoShareAccessFlags);
+NTSTATUS IoWriteKsrPersistentMemory(PVOID DataHandle, PVOID Buffer, SIZE_T Size);
+NTSTATUS KeConvertPerformanceCounterToAuxiliaryCounter(ULONG64 PerformanceCounterValue, PULONG64 AuxiliaryCounterValue, PULONG64 ConversionError);
+NTSTATUS KeDeregisterBoundCallback(PVOID Handle);
+void KeInitializeTimer2SetParameters(PKT2_SET_PARAMETERS Parameters);
+NTSTATUS KeQueryAuxiliaryCounterFrequency(PULONG64 AuxiliaryCounterFrequency);
+void KeRcuReadLock(void);
+void KeRcuReadUnlock(void);
+void KeRcuSynchronize(void);
+NTSTATUS MmAddVerifierSpecialThunks(ULONG_PTR EntryRoutine, PVOID ThunkBuffer, ULONG ThunkBufferSize);
+PVOID MmAllocateMappingAddressEx(SIZE_T NumberOfBytes, ULONG PoolTag, ULONG Flags);
+PMDL MmAllocateNodePagesForMdlEx(PHYSICAL_ADDRESS LowAddress, PHYSICAL_ADDRESS HighAddress, PHYSICAL_ADDRESS SkipBytes, SIZE_T TotalBytes, MEMORY_CACHING_TYPE CacheType, ULONG IdealNode, ULONG Flags);
+PMDL MmAllocatePartitionNodePagesForMdlEx(PHYSICAL_ADDRESS LowAddress, PHYSICAL_ADDRESS HighAddress, PHYSICAL_ADDRESS SkipBytes, SIZE_T TotalBytes, MEMORY_CACHING_TYPE CacheType, MM_NODE_NUMBER_ZERO_BASED IdealNode, ULONG Flags, PVOID PartitionObject);
+LOGICAL MmAreMdlPagesCached(PMDL MemoryDescriptorList);
+void MmFreePagesFromMdlEx(PMDL MemoryDescriptorList, ULONG Flags);
+LOGICAL MmIsDriverSuspectForVerifier(struct _DRIVER_OBJECT *DriverObject);
+PVOID MmMapLockedPagesSpecifyCache_NXOptIn(PMDL MemoryDescriptorList, KPROCESSOR_MODE AccessMode, MEMORY_CACHING_TYPE CacheType, PVOID RequestedAddress, ULONG BugCheckOnFailure, ULONG Priority);
+NTSTATUS MmMapMdl(PMDL MemoryDescriptorList, ULONG Protection, PMM_MDL_ROUTINE DriverRoutine, PVOID DriverContext);
+NTSTATUS MmMapMemoryDumpMdlEx(PVOID Va, PFN_NUMBER PageTotal, PMDL MemoryDumpMdl, ULONG Flags);
+MM_MDL_PAGE_CONTENTS_STATE MmMdlPageContentsState(PMDL MemoryDescriptorList, MM_MDL_PAGE_CONTENTS_STATE State);
+NTSTATUS MmProtectDriverSection(PVOID AddressWithinSection, SIZE_T Size, ULONG Flags);
+NTSTATUS MmSetPermanentCacheAttribute(PHYSICAL_ADDRESS StartAddress, LARGE_INTEGER NumberOfBytes, MEMORY_CACHING_TYPE CacheType, ULONG Flags);
+NTSTATUS NtManagePartition(HANDLE TargetHandle, HANDLE SourceHandle, PARTITION_INFORMATION_CLASS PartitionInformationClass, PVOID PartitionInformation, ULONG PartitionInformationLength);
+NTSTATUS NtOpenRegistryTransaction(PHANDLE TransactionHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes);
+NTSTATUS NtRollbackRegistryTransaction(HANDLE TransactionHandle, ULONG Flags);
+BOOLEAN ObReferenceObjectSafe(PVOID Object);
+BOOLEAN ObReferenceObjectSafeWithTag(PVOID Object, ULONG Tag);
+void PoFxIssueComponentPerfStateChangeMultiple(POHANDLE Handle, ULONG Flags, ULONG Component, ULONG PerfChangesCount, PO_FX_PERF_STATE_CHANGE PerfChanges[], PVOID Context);
+void PoFxNotifySurprisePowerOn(PDEVICE_OBJECT Pdo);
+void PoFxRegisterDripsWatchdogCallback(POHANDLE Handle, PPO_FX_DRIPS_WATCHDOG_CALLBACK Callback, BOOLEAN IncludeChildDevices, PDRIVER_OBJECT MatchingDriverObject);
+void PoFxSetComponentWake(POHANDLE Handle, ULONG Component, BOOLEAN WakeHint);
+NTSTATUS PoFxSetTargetDripsDevicePowerState(POHANDLE Handle, DEVICE_POWER_STATE TargetState);
+NTSTATUS PoRegisterForEffectivePowerModeNotifications(ULONG Version, PPO_EFFECTIVE_POWER_MODE_CALLBACK Callback, PVOID Context, PO_EPM_HANDLE *RegistrationHandle, PDEVICE_OBJECT DeviceObject);
+void PoSetSystemWakeDevice(PDEVICE_OBJECT DeviceObject);
+NTSTATUS PoUnregisterFromEffectivePowerModeNotifications(PO_EPM_HANDLE RegistrationHandle);
+ULONG64 PsQueryTotalCycleTimeProcess(PEPROCESS Process, PULONG64 CycleTimeStamp);
+int RtlConstantTimeEqualMemory(const void *v1, const void *v2, unsigned long len);
+volatile void * __cdecl RtlCopyDeviceMemory(volatile void *Destination, const volatile void *Source, size_t Length);
+volatile void * __cdecl RtlCopyVolatileMemory(volatile void *Destination, const volatile void *Source, size_t Length);
+void RtlExtractBitMap(PRTL_BITMAP Source, PRTL_BITMAP Destination, ULONG TargetBit, ULONG NumberOfBits);
+volatile void * RtlFillDeviceMemory(volatile void *Destination, size_t Length, int Fill);
+void RtlFillMemoryNonTemporal(__unaligned void *Destination, SIZE_T Length, const UCHAR Value);
+volatile void * RtlFillVolatileMemory(volatile void *Destination, size_t Length, int Fill);
+void RtlFreeUTF8String(PUTF8_STRING utf8String);
+volatile void * __cdecl RtlMoveVolatileMemory(volatile void *Destination, const volatile void *Source, size_t Length);
+ULONG RtlNumberOfClearBitsInRange(PRTL_BITMAP BitMapHeader, ULONG StartingIndex, ULONG Length);
+OS_DEPLOYEMENT_STATE_VALUES RtlOsDeploymentState(ULONG Flags);
+ULONG RtlQueryValidationRunlevel(PCUNICODE_STRING ComponentName);
+void RtlSanitizeUnicodeStringPadding(PUNICODE_STRING String);
+volatile void * RtlSecureZeroMemory2(volatile void *Destination, size_t Length);
+volatile void * __cdecl RtlSetVolatileMemory(volatile void *Destination, int Fill, size_t Length);
+NTSTATUS RtlUnicodeStringToInt64(PCUNICODE_STRING String, ULONG Base, PLONG64 Number, PWSTR *EndPointer);
+NTSTATUS RtlxQueryRegistryValues(ULONG RelativeTo, PCWSTR Path, PRTL_QUERY_REGISTRY_TABLE QueryTable, PVOID Context, PVOID Environment);
+volatile void * RtlZeroDeviceMemory(volatile void *Destination, size_t Length);
+volatile void * RtlZeroVolatileMemory(volatile void *Destination, size_t Length);
+NTSTATUS SeEtwWriteKMCveEvent(PCUNICODE_STRING CveId, PCUNICODE_STRING AdditionalDetails);
+NTSTATUS SeRegisterImageVerificationCallback(SE_IMAGE_TYPE ImageType, SE_IMAGE_VERIFICATION_CALLBACK_TYPE CallbackType, PSE_IMAGE_VERIFICATION_CALLBACK_FUNCTION CallbackFunction, PVOID CallbackContext, SE_IMAGE_VERIFICATION_CALLBACK_TOKEN Token, PVOID *CallbackHandle);
+void SeUnregisterImageVerificationCallback(PVOID CallbackHandle);
+NTSTATUS VslCreateSecureSection(PHANDLE Handle, PEPROCESS TargetProcess, PMDL Mdl, ULONG DevicePageProtection, ULONG Attributes);
+NTSTATUS VslDeleteSecureSection(HANDLE GlobalHandle);
+NTSTATUS ZwCommitRegistryTransaction(HANDLE TransactionHandle, ULONG Flags);
+NTSTATUS ZwCopyFileChunk(HANDLE SourceHandle, HANDLE DestHandle, HANDLE Event, PIO_STATUS_BLOCK IoStatusBlock, ULONG Length, PLARGE_INTEGER SourceOffset, PLARGE_INTEGER DestOffset, PULONG SourceKey, PULONG DestKey, ULONG Flags);
+NTSTATUS ZwCreateRegistryTransaction(PHANDLE TransactionHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, ULONG CreateOptions);
+NTSTATUS ZwMapViewOfSectionEx(HANDLE SectionHandle, HANDLE ProcessHandle, PVOID *BaseAddress, PLARGE_INTEGER SectionOffset, PSIZE_T ViewSize, ULONG AllocationType, ULONG PageProtection, PMEM_EXTENDED_PARAMETER ExtendedParameters, ULONG ExtendedParameterCount);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define IMAGE_POLICY_ANSI_STRING_PolicyId_, _Value_) { ImagePolicyEntryTypeAnsiString, _PolicyId_, _Value_ },
+#define IMAGE_POLICY_BOOL_PolicyId_, _Value_) { ImagePolicyEntryTypeBool, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_INT16_PolicyId_, _Value_) { ImagePolicyEntryTypeInt16, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_INT32_PolicyId_, _Value_) { ImagePolicyEntryTypeInt32, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_INT64_PolicyId_, _Value_) { ImagePolicyEntryTypeInt64, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_INT8_PolicyId_, _Value_) { ImagePolicyEntryTypeInt8, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_METADATA_NAME 0
+#define IMAGE_POLICY_OVERRIDE_PolicyId_) { ImagePolicyEntryTypeOverride, _PolicyId_, 0 },
+#define IMAGE_POLICY_UINT16_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt16, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_UINT32_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt32, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_UINT64_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt64, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_UINT8_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt8, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_UNICODE_STRING_PolicyId_, _Value_) { ImagePolicyEntryTypeUnicodeString, _PolicyId_, _Value_ },
+#define IoGetDriverProxyWrapperFromEndpointDriverProxyExtension, Endpoint, Wrapper) __pragma(warning(push)) __pragma(warning(disable : 28024)) do { IofGetDriverProxyWrapperFromEndpoint((DriverProxyExtension), (PDRIVER_PROXY_ENDPOINT_FUNCTION) (Endpoint), (PDRIVER_PROXY_WRAPPED_ENDPOINT_FUNCTION *) (Wrapper)); } while (0) __pragma(warning(pop))
+#define Iosb64ToIosb_iosb, _iosb64) { (_iosb) = (_iosb64); \
+}
+#define IosbToIosb64_iosb64, _iosb) { (_iosb64) = (_iosb); \
+}
+#define IS_VALIDATION_ENABLEDC, L) ((L) & (C))
+#define WriteCR8Data) __writecr8(Data)
+
+enum _BOUND_CALLBACK_STATUS
+{
+    BoundExceptionMaximum = 3,
+};
+
+typedef enum _BOUND_CALLBACK_STATUS BOUND_CALLBACK_STATUS;
+
+typedef BOUND_CALLBACK_STATUS BOUND_CALLBACK(void);
+
+typedef struct _AFFINITY_TOKEN *PAFFINITY_TOKEN;
+
+typedef BOUND_CALLBACK *PBOUND_CALLBACK;
+
+typedef enum _BOUND_CALLBACK_STATUS *PBOUND_CALLBACK_STATUS;
+
+typedef struct _DRIVER_PROXY_EXTENSION *PDRIVER_PROXY_EXTENSION;
+
+typedef struct _KE_SRCU *PKE_SRCU;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+NTSTATUS IoCreateDriverProxyExtension(PDRIVER_OBJECT OwningDriverObject, DRIVER_PROXY_EXTENSION_CREATION_FLAGS Flags, PDRIVER_PROXY_EXTENSION *DriverProxyExtension);
+NTSTATUS IoDriverProxyCreateHotSwappableWorkerThread(PDRIVER_PROXY_EXTENSION DriverProxyExtension, PHANDLE ThreadHandle, ULONG DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, HANDLE ProcessHandle, PCLIENT_ID ClientId, PDRIVER_PROXY_HOTSWAP_WORKER_ROUTINE_START_CONTEXT WorkerStartContext);
+NTSTATUS IofGetDriverProxyWrapperFromEndpoint(PDRIVER_PROXY_EXTENSION DriverProxyExtension, PDRIVER_PROXY_ENDPOINT_FUNCTION Endpoint, PDRIVER_PROXY_WRAPPED_ENDPOINT_FUNCTION *Wrapper);
+PDRIVER_PROXY_WRAPPED_ENDPOINT_FUNCTION IoGetDriverProxyEndpointWrapper(PDRIVER_PROXY_EXTENSION DriverProxyExtension, DRIVER_PROXY_ENDPOINT_FUNCTION_ID FunctionId);
+PDRIVER_PROXY_EXTENSION IoGetDriverProxyExtensionFromDriverObject(PDRIVER_OBJECT DriverObject);
+NTSTATUS IoRegisterDriverProxyEndpoints(PDRIVER_PROXY_EXTENSION DriverProxyExtension, PDRIVER_PROXY_ENDPOINT_INFORMATION EndpointInfo, ULONG Count, PDRIVER_PROXY_REGISTER_CALLBACK PhasedCallback, PVOID Context);
+PVOID KeRegisterBoundCallback(PBOUND_CALLBACK CallbackRoutine);
+PKE_SRCU KeSrcuAllocate(ULONG Tag);
+void KeSrcuFree(PKE_SRCU Rcu);
+void KeSrcuReadLock(PKE_SRCU Rcu, PKE_SRCU_LOCK Lock);
+void KeSrcuReadUnlock(PKE_SRCU Rcu, PKE_SRCU_LOCK Lock);
+void KeSrcuSynchronize(PKE_SRCU Rcu);
+NTSTATUS PsAllocateAffinityToken(PAFFINITY_TOKEN *AffinityToken);
+void PsFreeAffinityToken(PAFFINITY_TOKEN AffinityToken);
+void PsRevertToUserMultipleGroupAffinityThread(PAFFINITY_TOKEN AffinityToken);
+NTSTATUS PsSetSystemMultipleGroupAffinityThread(PGROUP_AFFINITY GroupAffinities, USHORT GroupCount, PAFFINITY_TOKEN AffinityToken);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define IMAGE_POLICY_ANSI_STRING_PolicyId_, _Value_) { ImagePolicyEntryTypeAnsiString, _PolicyId_, _Value_ },
+#define IMAGE_POLICY_BOOL_PolicyId_, _Value_) { ImagePolicyEntryTypeBool, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_INT16_PolicyId_, _Value_) { ImagePolicyEntryTypeInt16, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_INT32_PolicyId_, _Value_) { ImagePolicyEntryTypeInt32, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_INT64_PolicyId_, _Value_) { ImagePolicyEntryTypeInt64, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_INT8_PolicyId_, _Value_) { ImagePolicyEntryTypeInt8, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_OVERRIDE_PolicyId_) { ImagePolicyEntryTypeOverride, _PolicyId_, 0 },
+#define IMAGE_POLICY_UINT16_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt16, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_UINT32_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt32, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_UINT64_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt64, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_UINT8_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt8, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_UNICODE_STRING_PolicyId_, _Value_) { ImagePolicyEntryTypeUnicodeString, _PolicyId_, _Value_ },
+#define IoGetDriverProxyWrapperFromEndpointDriverProxyExtension, Endpoint, Wrapper) __pragma(warning(push)) __pragma(warning(disable : 28024)) do { IofGetDriverProxyWrapperFromEndpoint((DriverProxyExtension), (PDRIVER_PROXY_ENDPOINT_FUNCTION) (Endpoint), (PDRIVER_PROXY_WRAPPED_ENDPOINT_FUNCTION *) (Wrapper)); } while (0) __pragma(warning(pop))
+#define Iosb64ToIosb_iosb, _iosb64) { (_iosb) = (_iosb64); \
+}
+#define IosbToIosb64_iosb64, _iosb) { (_iosb64) = (_iosb); \
+}
+#define IS_VALIDATION_ENABLEDC, L) ((L) & (C))
+#define WriteCR8Data) __writecr8(Data)
+
+struct _CLS_LSN
+{
+    ULONGLONG Internal;
+};
+
+struct _CLS_SCAN_CONTEXT
+{
+    CLFS_NODE_ID cidNode;
+    PLOG_FILE_OBJECT plfoLog;
+    ULONG cIndex;
+    ULONG cContainers;
+    ULONG cContainersReturned;
+    CLFS_SCAN_MODE eScanMode;
+    PCLS_CONTAINER_INFORMATION pinfoContainer;
+};
+
+typedef struct _CLFS_MGMT_CLIENT_REGISTRATION CLFS_MGMT_CLIENT_REGISTRATION;
+
+typedef struct _CLFS_MGMT_NOTIFICATION CLFS_MGMT_NOTIFICATION;
+
+typedef struct _CLFS_PHYSICAL_LSN_INFORMATION CLFS_PHYSICAL_LSN_INFORMATION;
+
+typedef struct _CLS_INFORMATION CLS_INFORMATION;
+
+typedef CLS_INFORMATION CLFS_INFORMATION;
+
+typedef struct _CLS_LSN CLS_LSN;
+
+struct _CLS_INFORMATION
+{
+    LONGLONG TotalAvailable;
+    LONGLONG CurrentAvailable;
+    LONGLONG TotalReservation;
+    ULONGLONG BaseFileSize;
+    ULONGLONG ContainerSize;
+    ULONG TotalContainers;
+    ULONG FreeContainers;
+    ULONG TotalClients;
+    ULONG Attributes;
+    ULONG FlushThreshold;
+    ULONG SectorSize;
+    CLS_LSN MinArchiveTailLsn;
+    CLS_LSN BaseLsn;
+    CLS_LSN LastFlushedLsn;
+    CLS_LSN LastLsn;
+    CLS_LSN RestartLsn;
+    GUID Identity;
+};
+
+typedef CLS_LSN CLFS_LSN;
+
+struct _CLFS_MGMT_NOTIFICATION
+{
+    CLFS_MGMT_NOTIFICATION_TYPE Notification;
+    CLFS_LSN Lsn;
+    USHORT LogIsPinned;
+};
+
+struct _CLFS_PHYSICAL_LSN_INFORMATION
+{
+    UCHAR StreamIdentifier;
+    CLFS_LSN VirtualLsn;
+    CLFS_LSN PhysicalLsn;
+};
+
+typedef struct _CLS_SCAN_CONTEXT CLS_SCAN_CONTEXT;
+
+typedef CLS_SCAN_CONTEXT CLFS_SCAN_CONTEXT;
+
+typedef CLFS_INFORMATION *PCLFS_INFORMATION;
+
+typedef CLFS_LSN *PCLFS_LSN;
+
+typedef NTSTATUS (*PCLFS_CLIENT_ADVANCE_TAIL_CALLBACK)(PLOG_FILE_OBJECT, PCLFS_LSN, PVOID);
+
+struct _CLFS_MGMT_CLIENT_REGISTRATION
+{
+    ULONG Version;
+    PCLFS_CLIENT_ADVANCE_TAIL_CALLBACK AdvanceTailCallback;
+    PVOID AdvanceTailCallbackData;
+    PCLFS_CLIENT_LFF_HANDLER_COMPLETE_CALLBACK LogGrowthCompleteCallback;
+    PVOID LogGrowthCompleteCallbackData;
+    PCLFS_CLIENT_LOG_UNPINNED_CALLBACK LogUnpinnedCallback;
+    PVOID LogUnpinnedCallbackData;
+};
+
+typedef struct _CLFS_MGMT_CLIENT_REGISTRATION *PCLFS_MGMT_CLIENT_REGISTRATION;
+
+typedef struct _CLFS_MGMT_NOTIFICATION *PCLFS_MGMT_NOTIFICATION;
+
+typedef struct _CLFS_PHYSICAL_LSN_INFORMATION *PCLFS_PHYSICAL_LSN_INFORMATION;
+
+typedef CLFS_SCAN_CONTEXT *PCLFS_SCAN_CONTEXT;
+
+typedef struct _CLS_INFORMATION *PCLS_INFORMATION;
+
+typedef struct _CLS_LSN *PCLS_LSN;
+
+typedef struct _CLS_SCAN_CONTEXT *PCLS_SCAN_CONTEXT;
+
+typedef CLFS_INFORMATION *PPCLFS_INFORMATION;
+
+typedef CLFS_LSN **PPCLFS_LSN;
+
+typedef CLFS_SCAN_CONTEXT **PPCLFS_SCAN_CONTEXT;
+
+typedef struct _CLS_INFORMATION *PPCLS_INFORMATION;
+
+typedef struct _CLS_LSN **PPCLS_LSN;
+
+typedef struct _CLS_SCAN_CONTEXT **PPCLS_SCAN_CONTEXT;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+NTSTATUS NTAPI ClfsAdvanceLogBase(PVOID pvMarshalContext, PCLFS_LSN plsnBase, ULONG fFlags);
+NTSTATUS NTAPI ClfsCreateScanContext(PLOG_FILE_OBJECT plfoLog, ULONG cFromContainer, ULONG cContainers, CLFS_SCAN_MODE eScanMode, PCLFS_SCAN_CONTEXT pcxScan);
+CLFS_LSN NTAPI ClfsEarlierLsn(PCLFS_LSN plsn);
+NTSTATUS NTAPI ClfsFlushToLsn(PVOID pvMarshalContext, PCLFS_LSN plsnFlush, PCLFS_LSN plsnLastFlushed);
+NTSTATUS NTAPI ClfsGetLastLsn(PLOG_FILE_OBJECT plfoLog, PCLFS_LSN plsnLast);
+NTSTATUS NTAPI ClfsGetLogFileInformation(PLOG_FILE_OBJECT plfoLog, PCLFS_INFORMATION pinfoBuffer, PULONG pcbInfoBuffer);
+CLFS_LSN NTAPI ClfsLaterLsn(PCLFS_LSN plsn);
+ULONG NTAPI ClfsLsnBlockOffset(const CLFS_LSN *plsn);
+CLFS_CONTAINER_ID NTAPI ClfsLsnContainer(const CLFS_LSN *plsn);
+CLFS_LSN NTAPI ClfsLsnCreate(CLFS_CONTAINER_ID cidContainer, ULONG offBlock, ULONG cRecord);
+NTSTATUS NTAPI ClfsLsnDifference(PCLFS_LSN plsnStart, PCLFS_LSN plsnFinish, ULONG cbContainer, ULONG cbMaxBlock, PLONGLONG pcbDifference);
+BOOLEAN NTAPI ClfsLsnEqual(const CLFS_LSN *plsn1, const CLFS_LSN *plsn2);
+BOOLEAN NTAPI ClfsLsnGreater(const CLFS_LSN *plsn1, const CLFS_LSN *plsn2);
+CLFS_LSN NTAPI ClfsLsnIncrement(PCLFS_LSN plsn);
+BOOLEAN NTAPI ClfsLsnInvalid(const CLFS_LSN *plsn);
+BOOLEAN NTAPI ClfsLsnLess(const CLFS_LSN *plsn1, const CLFS_LSN *plsn2);
+BOOLEAN NTAPI ClfsLsnNull(const CLFS_LSN *plsn);
+ULONG NTAPI ClfsLsnRecordSequence(const CLFS_LSN *plsn);
+NTSTATUS NTAPI ClfsMgmtRegisterManagedClient(PLOG_FILE_OBJECT LogFile, PCLFS_MGMT_CLIENT_REGISTRATION RegistrationData, PCLFS_MGMT_CLIENT ClientCookie);
+NTSTATUS NTAPI ClfsReadLogRecord(PVOID pvMarshalContext, PCLFS_LSN plsnFirst, CLFS_CONTEXT_MODE peContextMode, PVOID *ppvReadBuffer, PULONG pcbReadBuffer, PCLFS_RECORD_TYPE peRecordType, PCLFS_LSN plsnUndoNext, PCLFS_LSN plsnPrevious, PVOID *ppvReadContext);
+NTSTATUS NTAPI ClfsReadNextLogRecord(PVOID pvReadContext, PVOID *ppvBuffer, PULONG pcbBuffer, PCLFS_RECORD_TYPE peRecordType, PCLFS_LSN plsnUser, PCLFS_LSN plsnUndoNext, PCLFS_LSN plsnPrevious, PCLFS_LSN plsnRecord);
+NTSTATUS NTAPI ClfsReadPreviousRestartArea(PVOID pvReadContext, PVOID *ppvRestartBuffer, PULONG pcbRestartBuffer, PCLFS_LSN plsnRestart);
+NTSTATUS NTAPI ClfsReadRestartArea(PVOID pvMarshalContext, PVOID *ppvRestartBuffer, PULONG pcbRestartBuffer, PCLFS_LSN plsn, PVOID *ppvReadContext);
+NTSTATUS NTAPI ClfsReserveAndAppendLog(PVOID pvMarshalContext, PCLFS_WRITE_ENTRY rgWriteEntries, ULONG cWriteEntries, PCLFS_LSN plsnUndoNext, PCLFS_LSN plsnPrevious, ULONG cReserveRecords, PLONGLONG rgcbReservation, ULONG fFlags, PCLFS_LSN plsn);
+NTSTATUS NTAPI ClfsReserveAndAppendLogAligned(PVOID pvMarshalContext, PCLFS_WRITE_ENTRY rgWriteEntries, ULONG cWriteEntries, ULONG cbEntryAlignment, PCLFS_LSN plsnUndoNext, PCLFS_LSN plsnPrevious, ULONG cReserveRecords, PLONGLONG rgcbReservation, ULONG fFlags, PCLFS_LSN plsn);
+NTSTATUS NTAPI ClfsScanLogContainers(PCLFS_SCAN_CONTEXT pcxScan, CLFS_SCAN_MODE eScanMode);
+NTSTATUS NTAPI ClfsSetArchiveTail(PLOG_FILE_OBJECT plfoLog, PCLFS_LSN plsnArchiveTail);
+NTSTATUS NTAPI ClfsSetEndOfLog(PLOG_FILE_OBJECT plfoLog, PCLFS_LSN plsnEnd);
+NTSTATUS NTAPI ClfsWriteRestartArea(PVOID pvMarshalContext, PVOID pvRestartBuffer, ULONG cbRestartBuffer, PCLFS_LSN plsnBase, ULONG fFlags, PULONG pcbWritten, PCLFS_LSN plsnNext);
+NTSTATUS ExGetSystemFirmwareTable(ULONG FirmwareTableProviderSignature, ULONG FirmwareTableID, PVOID FirmwareTableBuffer, ULONG BufferLength, PULONG ReturnLength);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !_WDMDDK_ */
 

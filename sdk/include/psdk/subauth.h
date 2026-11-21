@@ -88,7 +88,8 @@ typedef enum _NETLOGON_LOGON_INFO_CLASS {
   NetlogonInteractiveInformation = 1,NetlogonNetworkInformation,
   NetlogonServiceInformation,NetlogonGenericInformation,
   NetlogonInteractiveTransitiveInformation,NetlogonNetworkTransitiveInformation,
-  NetlogonServiceTransitiveInformation
+  NetlogonServiceTransitiveInformation,
+  NetlogonTicketLogonInformation = 8,
 } NETLOGON_LOGON_INFO_CLASS;
 typedef struct _CYPHER_BLOCK {
   CHAR data[CYPHER_BLOCK_LENGTH];
@@ -225,5 +226,12 @@ typedef struct _NETLOGON_TARGET_INFO {
   UNICODE_STRING DnsTreeName;
   UNICODE_STRING TargetName;
 } NETLOGON_TARGET_INFO, *PNETLOGON_TARGET_INFO;
+
+#define _NTSAM_SAM_HANDLE_
+#define _NTSAM_SAM_USER_PARMS_ 0
+#define _NTSAM_USER_ACCOUNT_FLAG_ 0
+#define _NTSAM_USER_ALL_INFO_
+#define _NTSUBAUTH_ 0
+#define USER_COMPUTED_ACCOUNT_CONTROL_BITS 0x20400
 
 #endif /* _SUBAUTH_H */

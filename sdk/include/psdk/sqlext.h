@@ -1312,4 +1312,39 @@ SQLRETURN SQL_API SQLAllocHandleStd( SQLSMALLINT,SQLHANDLE,SQLHANDLE*);
 #define TRACE_VS_EVENT_ON 0x00000002L
 #endif
 
+#define SQL_ASYNC_DBC_ENABLE_DEFAULT 0
+
+struct tagODBC_VS_ARGS
+{
+    const GUID *pguidEvent;
+    DWORD dwFlags;
+    union
+    {
+        WCHAR *wszArg;
+        CHAR *szArg;
+    };
+    union
+    {
+        WCHAR *wszCorrelation;
+        CHAR *szCorrelation;
+    };
+    RETCODE RetCode;
+};
+
+typedef struct tagODBC_VS_ARGS ODBC_VS_ARGS;
+
+typedef struct tagODBC_VS_ARGS *PODBC_VS_ARGS;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+void FireVSDebugEvent(PODBC_VS_ARGS);
+RETCODE TraceVSControl(DWORD);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

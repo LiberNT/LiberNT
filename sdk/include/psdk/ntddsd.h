@@ -321,4 +321,6 @@ SdBusSubmitRequestAsync(
 }
 #endif
 
+#define _NTDDSDH_ 0
+
 #endif /* __NTDDSD_H__ */

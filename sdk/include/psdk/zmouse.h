@@ -30,4 +30,23 @@
 # define SPI_SETWHEELSCROLLLINES 105
 #endif
 
+#define MOUSEZ_CLASSNAME 0
+#define MOUSEZ_TITLE "Magellan MSWHEEL"
+#define MSH_MOUSEWHEEL 0
+#define MSH_SCROLL_LINES "MSH_SCROLL_LINES_MSG"
+#define MSH_WHEELMODULE_CLASS (MOUSEZ_CLASSNAME)
+#define MSH_WHEELMODULE_TITLE (MOUSEZ_TITLE)
+#define MSH_WHEELSUPPORT "MSH_WHEELSUPPORT_MSG"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+HWND HwndMSWheel(PUINT puiMsh_MsgMouseWheel, PUINT puiMsh_Msg3DSupport, PUINT puiMsh_MsgScrollLines, PBOOL pf3DSupport, PINT piScrollLines);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* _ZMOUSE_H */

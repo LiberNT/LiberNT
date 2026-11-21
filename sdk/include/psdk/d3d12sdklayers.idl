@@ -892,7 +892,155 @@ typedef enum D3D12_MESSAGE_ID
     D3D12_MESSAGE_ID_CREATEAMPLIFICATIONSHADER_INVALIDSHADERBYTECODE = 0x04fe,
     D3D12_MESSAGE_ID_CREATEAMPLIFICATIONSHADER_OUTOFMEMORY = 0x04ff,
     D3D12_MESSAGE_ID_INCOMPATIBLE_BARRIER_LAYOUT = 0x0536,
-    D3D12_MESSAGE_ID_D3D12_MESSAGES_END
+    D3D12_MESSAGE_ID_D3D12_MESSAGES_END,
+    D3D12_MESSAGE_ID_GET_PROGRAM_IDENTIFIER_ERROR = 0x76,
+    D3D12_MESSAGE_ID_GET_WORK_GRAPH_PROPERTIES_ERROR = 0x77,
+    D3D12_MESSAGE_ID_SET_PROGRAM_ERROR = 0x78,
+    D3D12_MESSAGE_ID_CREATE_SHADERCACHESESSION = 0x500,
+    D3D12_MESSAGE_ID_LIVE_SHADERCACHESESSION = 0x501,
+    D3D12_MESSAGE_ID_DESTROY_SHADERCACHESESSION = 0x502,
+    D3D12_MESSAGE_ID_CREATESHADERCACHESESSION_INVALIDARGS = 0x503,
+    D3D12_MESSAGE_ID_CREATESHADERCACHESESSION_DISABLED = 0x504,
+    D3D12_MESSAGE_ID_CREATESHADERCACHESESSION_ALREADYOPEN = 0x505,
+    D3D12_MESSAGE_ID_SHADERCACHECONTROL_DEVELOPERMODE = 0x506,
+    D3D12_MESSAGE_ID_SHADERCACHECONTROL_INVALIDFLAGS = 0x507,
+    D3D12_MESSAGE_ID_SHADERCACHECONTROL_STATEALREADYSET = 0x508,
+    D3D12_MESSAGE_ID_SHADERCACHECONTROL_IGNOREDFLAG = 0x509,
+    D3D12_MESSAGE_ID_SHADERCACHESESSION_STOREVALUE_ALREADYPRESENT = 0x50A,
+    D3D12_MESSAGE_ID_SHADERCACHESESSION_STOREVALUE_HASHCOLLISION = 0x50B,
+    D3D12_MESSAGE_ID_SHADERCACHESESSION_STOREVALUE_CACHEFULL = 0x50C,
+    D3D12_MESSAGE_ID_SHADERCACHESESSION_FINDVALUE_NOTFOUND = 0x50D,
+    D3D12_MESSAGE_ID_SHADERCACHESESSION_CORRUPT = 0x50E,
+    D3D12_MESSAGE_ID_SHADERCACHESESSION_DISABLED = 0x50F,
+    D3D12_MESSAGE_ID_OVERSIZED_DISPATCH = 0x510,
+    D3D12_MESSAGE_ID_CREATE_VIDEOENCODER = 0x511,
+    D3D12_MESSAGE_ID_LIVE_VIDEOENCODER = 0x512,
+    D3D12_MESSAGE_ID_DESTROY_VIDEOENCODER = 0x513,
+    D3D12_MESSAGE_ID_CREATE_VIDEOENCODERHEAP = 0x514,
+    D3D12_MESSAGE_ID_LIVE_VIDEOENCODERHEAP = 0x515,
+    D3D12_MESSAGE_ID_DESTROY_VIDEOENCODERHEAP = 0x516,
+    D3D12_MESSAGE_ID_COPYTEXTUREREGION_MISMATCH_ENCODE_REFERENCE_ONLY_FLAG = 0x517,
+    D3D12_MESSAGE_ID_COPYRESOURCE_MISMATCH_ENCODE_REFERENCE_ONLY_FLAG = 0x518,
+    D3D12_MESSAGE_ID_ENCODE_FRAME_INVALID_PARAMETERS = 0x519,
+    D3D12_MESSAGE_ID_ENCODE_FRAME_UNSUPPORTED_PARAMETERS = 0x51A,
+    D3D12_MESSAGE_ID_RESOLVE_ENCODER_OUTPUT_METADATA_INVALID_PARAMETERS = 0x51B,
+    D3D12_MESSAGE_ID_RESOLVE_ENCODER_OUTPUT_METADATA_UNSUPPORTED_PARAMETERS = 0x51C,
+    D3D12_MESSAGE_ID_CREATE_VIDEO_ENCODER_INVALID_PARAMETERS = 0x51D,
+    D3D12_MESSAGE_ID_CREATE_VIDEO_ENCODER_UNSUPPORTED_PARAMETERS = 0x51E,
+    D3D12_MESSAGE_ID_CREATE_VIDEO_ENCODER_HEAP_INVALID_PARAMETERS = 0x51F,
+    D3D12_MESSAGE_ID_CREATE_VIDEO_ENCODER_HEAP_UNSUPPORTED_PARAMETERS = 0x520,
+    D3D12_MESSAGE_ID_CREATECOMMANDLIST_NULL_COMMANDALLOCATOR = 0x521,
+    D3D12_MESSAGE_ID_CLEAR_UNORDERED_ACCESS_VIEW_INVALID_DESCRIPTOR_HANDLE = 0x522,
+    D3D12_MESSAGE_ID_DESCRIPTOR_HEAP_NOT_SHADER_VISIBLE = 0x523,
+    D3D12_MESSAGE_ID_CREATEBLENDSTATE_BLENDOP_WARNING = 0x524,
+    D3D12_MESSAGE_ID_CREATEBLENDSTATE_BLENDOPALPHA_WARNING = 0x525,
+    D3D12_MESSAGE_ID_WRITE_COMBINE_PERFORMANCE_WARNING = 0x526,
+    D3D12_MESSAGE_ID_RESOLVE_QUERY_INVALID_QUERY_STATE = 0x527,
+    D3D12_MESSAGE_ID_SETPRIVATEDATA_NO_ACCESS = 0x528,
+    D3D12_MESSAGE_ID_COMMAND_LIST_STATIC_DESCRIPTOR_SAMPLER_MODE_MISMATCH = 0x529,
+    D3D12_MESSAGE_ID_GETCOPYABLEFOOTPRINTS_UNSUPPORTED_BUFFER_WIDTH = 0x52A,
+    D3D12_MESSAGE_ID_CREATEMESHSHADER_TOPOLOGY_MISMATCH = 0x52B,
+    D3D12_MESSAGE_ID_VRS_SUM_COMBINER_REQUIRES_CAPABILITY = 0x52C,
+    D3D12_MESSAGE_ID_SETTING_SHADING_RATE_FROM_MS_REQUIRES_CAPABILITY = 0x52D,
+    D3D12_MESSAGE_ID_SHADERCACHESESSION_SHADERCACHEDELETE_NOTSUPPORTED = 0x52E,
+    D3D12_MESSAGE_ID_SHADERCACHECONTROL_SHADERCACHECLEAR_NOTSUPPORTED = 0x52F,
+    D3D12_MESSAGE_ID_CREATERESOURCE_STATE_IGNORED = 0x530,
+    D3D12_MESSAGE_ID_UNUSED_CROSS_EXECUTE_SPLIT_BARRIER = 0x531,
+    D3D12_MESSAGE_ID_DEVICE_OPEN_SHARED_HANDLE_ACCESS_DENIED = 0x532,
+    D3D12_MESSAGE_ID_INCOMPATIBLE_BARRIER_VALUES = 0x533,
+    D3D12_MESSAGE_ID_INCOMPATIBLE_BARRIER_ACCESS = 0x534,
+    D3D12_MESSAGE_ID_INCOMPATIBLE_BARRIER_SYNC = 0x535,
+    D3D12_MESSAGE_ID_INCOMPATIBLE_BARRIER_TYPE = 0x537,
+    D3D12_MESSAGE_ID_OUT_OF_BOUNDS_BARRIER_SUBRESOURCE_RANGE = 0x538,
+    D3D12_MESSAGE_ID_INCOMPATIBLE_BARRIER_RESOURCE_DIMENSION = 0x539,
+    D3D12_MESSAGE_ID_SET_SCISSOR_RECTS_INVALID_RECT = 0x53A,
+    D3D12_MESSAGE_ID_SHADING_RATE_SOURCE_REQUIRES_DIMENSION_TEXTURE2D = 0x53B,
+    D3D12_MESSAGE_ID_BUFFER_BARRIER_SUBREGION_OUT_OF_BOUNDS = 0x53C,
+    D3D12_MESSAGE_ID_UNSUPPORTED_BARRIER_LAYOUT = 0x53D,
+    D3D12_MESSAGE_ID_CREATERESOURCEANDHEAP_INVALID_PARAMETERS = 0x53E,
+    D3D12_MESSAGE_ID_ENHANCED_BARRIERS_NOT_SUPPORTED = 0x53F,
+    D3D12_MESSAGE_ID_LEGACY_BARRIER_VALIDATION_FORCED_ON = 0x542,
+    D3D12_MESSAGE_ID_EMPTY_ROOT_DESCRIPTOR_TABLE = 0x543,
+    D3D12_MESSAGE_ID_COMMAND_LIST_DRAW_ELEMENT_OFFSET_UNALIGNED = 0x544,
+    D3D12_MESSAGE_ID_ALPHA_BLEND_FACTOR_NOT_SUPPORTED = 0x545,
+    D3D12_MESSAGE_ID_BARRIER_INTEROP_INVALID_LAYOUT = 0x546,
+    D3D12_MESSAGE_ID_BARRIER_INTEROP_INVALID_STATE = 0x547,
+    D3D12_MESSAGE_ID_GRAPHICS_PIPELINE_STATE_DESC_ZERO_SAMPLE_MASK = 0x548,
+    D3D12_MESSAGE_ID_INDEPENDENT_STENCIL_REF_NOT_SUPPORTED = 0x549,
+    D3D12_MESSAGE_ID_CREATEDEPTHSTENCILSTATE_INDEPENDENT_MASKS_UNSUPPORTED = 0x54A,
+    D3D12_MESSAGE_ID_TEXTURE_BARRIER_SUBRESOURCES_OUT_OF_BOUNDS = 0x54B,
+    D3D12_MESSAGE_ID_NON_OPTIMAL_BARRIER_ONLY_EXECUTE_COMMAND_LISTS = 0x54C,
+    D3D12_MESSAGE_ID_EXECUTE_INDIRECT_ZERO_COMMAND_COUNT = 0x54D,
+    D3D12_MESSAGE_ID_GPU_BASED_VALIDATION_INCOMPATIBLE_TEXTURE_LAYOUT = 0x54E,
+    D3D12_MESSAGE_ID_DYNAMIC_INDEX_BUFFER_STRIP_CUT_NOT_SUPPORTED = 0x54F,
+    D3D12_MESSAGE_ID_PRIMITIVE_TOPOLOGY_TRIANGLE_FANS_NOT_SUPPORTED = 0x550,
+    D3D12_MESSAGE_ID_CREATE_SAMPLER_COMPARISON_FUNC_IGNORED = 0x551,
+    D3D12_MESSAGE_ID_CREATEHEAP_INVALIDHEAPTYPE = 0x552,
+    D3D12_MESSAGE_ID_CREATERESOURCEANDHEAP_INVALIDHEAPTYPE = 0x553,
+    D3D12_MESSAGE_ID_DYNAMIC_DEPTH_BIAS_NOT_SUPPORTED = 0x554,
+    D3D12_MESSAGE_ID_CREATERASTERIZERSTATE_NON_WHOLE_DYNAMIC_DEPTH_BIAS = 0x555,
+    D3D12_MESSAGE_ID_DYNAMIC_DEPTH_BIAS_FLAG_MISSING = 0x556,
+    D3D12_MESSAGE_ID_DYNAMIC_DEPTH_BIAS_NO_PIPELINE = 0x557,
+    D3D12_MESSAGE_ID_DYNAMIC_INDEX_BUFFER_STRIP_CUT_FLAG_MISSING = 0x558,
+    D3D12_MESSAGE_ID_DYNAMIC_INDEX_BUFFER_STRIP_CUT_NO_PIPELINE = 0x559,
+    D3D12_MESSAGE_ID_NONNORMALIZED_COORDINATE_SAMPLING_NOT_SUPPORTED = 0x55A,
+    D3D12_MESSAGE_ID_INVALID_CAST_TARGET = 0x55B,
+    D3D12_MESSAGE_ID_RENDER_PASS_COMMANDLIST_INVALID_END_STATE = 0x55C,
+    D3D12_MESSAGE_ID_RENDER_PASS_COMMANDLIST_INVALID_START_STATE = 0x55D,
+    D3D12_MESSAGE_ID_RENDER_PASS_MISMATCHING_ACCESS = 0x55E,
+    D3D12_MESSAGE_ID_RENDER_PASS_MISMATCHING_LOCAL_PRESERVE_PARAMETERS = 0x55F,
+    D3D12_MESSAGE_ID_RENDER_PASS_LOCAL_PRESERVE_RENDER_PARAMETERS_ERROR = 0x560,
+    D3D12_MESSAGE_ID_RENDER_PASS_LOCAL_DEPTH_STENCIL_ERROR = 0x561,
+    D3D12_MESSAGE_ID_DRAW_POTENTIALLY_OUTSIDE_OF_VALID_RENDER_AREA = 0x562,
+    D3D12_MESSAGE_ID_CREATERASTERIZERSTATE_INVALID_LINERASTERIZATIONMODE = 0x563,
+    D3D12_MESSAGE_ID_CREATERESOURCE_INVALIDALIGNMENT_SMALLRESOURCE = 0x564,
+    D3D12_MESSAGE_ID_GENERIC_DEVICE_OPERATION_UNSUPPORTED = 0x565,
+    D3D12_MESSAGE_ID_CREATEGRAPHICSPIPELINESTATE_RENDER_TARGET_WRONG_WRITE_MASK = 0x566,
+    D3D12_MESSAGE_ID_PROBABLE_PIX_EVENT_LEAK = 0x567,
+    D3D12_MESSAGE_ID_PIX_EVENT_UNDERFLOW = 0x568,
+    D3D12_MESSAGE_ID_RECREATEAT_INVALID_TARGET = 0x569,
+    D3D12_MESSAGE_ID_RECREATEAT_INSUFFICIENT_SUPPORT = 0x56A,
+    D3D12_MESSAGE_ID_GPU_BASED_VALIDATION_STRUCTURED_BUFFER_STRIDE_MISMATCH = 0x56B,
+    D3D12_MESSAGE_ID_DISPATCH_GRAPH_INVALID = 0x56C,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_TARGET_FORMAT_INVALID = 0x56D,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_TARGET_DIMENSION_INVALID = 0x56E,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_SOURCE_COLOR_FORMAT_INVALID = 0x56F,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_SOURCE_DEPTH_FORMAT_INVALID = 0x570,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_EXPOSURE_SCALE_FORMAT_INVALID = 0x571,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_ENGINE_CREATE_FLAGS_INVALID = 0x572,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_EXTENSION_INTERNAL_LOAD_FAILURE = 0x573,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_EXTENSION_INTERNAL_ENGINE_CREATION_ERROR = 0x574,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_EXTENSION_INTERNAL_UPSCALER_CREATION_ERROR = 0x575,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_EXTENSION_INTERNAL_UPSCALER_EXECUTION_ERROR = 0x576,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_UPSCALER_EXECUTE_REGION_INVALID = 0x577,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_UPSCALER_EXECUTE_TIME_DELTA_INVALID = 0x578,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_UPSCALER_EXECUTE_REQUIRED_TEXTURE_IS_NULL = 0x579,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_UPSCALER_EXECUTE_MOTION_VECTORS_FORMAT_INVALID = 0x57A,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_UPSCALER_EXECUTE_FLAGS_INVALID = 0x57B,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_UPSCALER_EXECUTE_FORMAT_INVALID = 0x57C,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_UPSCALER_EXECUTE_EXPOSURE_SCALE_TEXTURE_SIZE_INVALID = 0x57D,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_VARIANT_INDEX_OUT_OF_BOUNDS = 0x57E,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_VARIANT_ID_NOT_FOUND = 0x57F,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_DUPLICATE_VARIANT_ID = 0x580,
+    D3D12_MESSAGE_ID_DIRECTSR_OUT_OF_MEMORY = 0x581,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_UPSCALER_EXECUTE_UNEXPECTED_TEXTURE_IS_IGNORED = 0x582,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_UPSCALER_EVICT_UNDERFLOW = 0x583,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_UPSCALER_EXECUTE_OPTIONAL_TEXTURE_IS_NULL = 0x584,
+    D3D12_MESSAGE_ID_DIRECTSR_SUPERRES_UPSCALER_EXECUTE_INVALID_CAMERA_JITTER = 0x585,
+    D3D12_MESSAGE_ID_CREATE_STATE_OBJECT_WARNING = 0x586,
+    D3D12_MESSAGE_ID_GUID_TEXTURE_LAYOUT_UNSUPPORTED = 0x587,
+    D3D12_MESSAGE_ID_RESOLVE_ENCODER_INPUT_PARAM_LAYOUT_INVALID_PARAMETERS = 0x588,
+    D3D12_MESSAGE_ID_INVALID_BARRIER_ACCESS = 0x589,
+    D3D12_MESSAGE_ID_COMMAND_LIST_DRAW_INSTANCE_COUNT_ZERO = 0x58A,
+    D3D12_MESSAGE_ID_DESCRIPTOR_HEAP_NOT_SET_BEFORE_ROOT_SIGNATURE_WITH_DIRECTLY_INDEXED_FLAG = 0x58B,
+    D3D12_MESSAGE_ID_DIFFERENT_DESCRIPTOR_HEAP_SET_AFTER_ROOT_SIGNATURE_WITH_DIRECTLY_INDEXED_FLAG = 0x58C,
+    D3D12_MESSAGE_ID_APPLICATION_SPECIFIC_DRIVER_STATE_NOT_SUPPORTED = 0x58D,
+    D3D12_MESSAGE_ID_RENDER_TARGET_OR_DEPTH_STENCIL_RESOUCE_NOT_INITIALIZED = 0x58E,
+    D3D12_MESSAGE_ID_BYTECODE_VALIDATION_ERROR = 0x58F,
+    D3D12_MESSAGE_ID_FENCE_ZERO_WAIT = 0x590,
+    D3D12_MESSAGE_ID_NON_COMMON_RESOURCE_IN_COPY_QUEUE = 0x597,
+    D3D12_MESSAGE_ID_CREATEPIPELINESTATE_MULTIPLE_ROOT_SIGNATURES_DEFINED = 0x59B,
+    D3D12_MESSAGE_ID_TEXTURE_BARRIER_INVALID_FLAGS = 0x59C,
 } D3D12_MESSAGE_ID;
 
 typedef enum D3D12_GPU_BASED_VALIDATION_SHADER_PATCH_MODE
@@ -925,6 +1073,7 @@ typedef enum D3D12_DEBUG_DEVICE_PARAMETER_TYPE
     D3D12_DEBUG_DEVICE_PARAMETER_FEATURE_FLAGS,
     D3D12_DEBUG_DEVICE_PARAMETER_GPU_BASED_VALIDATION_SETTINGS,
     D3D12_DEBUG_DEVICE_PARAMETER_GPU_SLOWDOWN_PERFORMANCE_FACTOR,
+    D3D12_DEBUG_DEVICE_PARAMETER_BYTECODE_VALIDATION_MODE = 3,
 } D3D12_DEBUG_DEVICE_PARAMETER_TYPE;
 
 typedef enum D3D12_DEBUG_FEATURE
@@ -1178,3 +1327,314 @@ interface ID3D12InfoQueue1 : ID3D12InfoQueue
 cpp_quote("#ifndef D3D12_INFO_QUEUE_DEFAULT_MESSAGE_COUNT_LIMIT")
 cpp_quote("#define D3D12_INFO_QUEUE_DEFAULT_MESSAGE_COUNT_LIMIT 1024")
 cpp_quote("#endif")
+
+cpp_quote("enum D3D12_DEBUG_COMMAND_LIST_PARAMETER_TYPE")
+cpp_quote("{")
+cpp_quote("    D3D12_DEBUG_COMMAND_LIST_PARAMETER_GPU_BASED_VALIDATION_SETTINGS = 0,")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("enum D3D12_DEBUG_DEVICE_BYTECODE_VALIDATION_MODE")
+cpp_quote("{")
+cpp_quote("    D3D12_DEBUG_DEVICE_BYTECODE_VALIDATION_DISABLED = 0,")
+cpp_quote("    D3D12_DEBUG_DEVICE_BYTECODE_VALIDATION_WHEN_HASH_BYPASSED = 1,")
+cpp_quote("    D3D12_DEBUG_DEVICE_BYTECODE_VALIDATION_ALL_BYTECODE = 2,")
+cpp_quote("    D3D12_DEBUG_DEVICE_BYTECODE_VALIDATION_MODE_DEFAULT = 1,")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("struct D3D12_DEBUG_COMMAND_LIST_GPU_BASED_VALIDATION_SETTINGS")
+cpp_quote("{")
+cpp_quote("    D3D12_GPU_BASED_VALIDATION_SHADER_PATCH_MODE ShaderPatchMode;")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("struct ID3D12Debug1Vtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ID3D12Debug1 *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ID3D12Debug1 *);")
+cpp_quote("    ULONG (WINAPI *Release)(ID3D12Debug1 *);")
+cpp_quote("    void (WINAPI *EnableDebugLayer)(ID3D12Debug1 *);")
+cpp_quote("    void (WINAPI *SetEnableGPUBasedValidation)(ID3D12Debug1 *, BOOL);")
+cpp_quote("    void (WINAPI *SetEnableSynchronizedCommandQueueValidation)(ID3D12Debug1 *, BOOL);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("struct ID3D12Debug2Vtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ID3D12Debug2 *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ID3D12Debug2 *);")
+cpp_quote("    ULONG (WINAPI *Release)(ID3D12Debug2 *);")
+cpp_quote("    void (WINAPI *SetGPUBasedValidationFlags)(ID3D12Debug2 *, D3D12_GPU_BASED_VALIDATION_FLAGS);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("struct ID3D12Debug3Vtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ID3D12Debug3 *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ID3D12Debug3 *);")
+cpp_quote("    ULONG (WINAPI *Release)(ID3D12Debug3 *);")
+cpp_quote("    void (WINAPI *EnableDebugLayer)(ID3D12Debug3 *);")
+cpp_quote("    void (WINAPI *SetEnableGPUBasedValidation)(ID3D12Debug3 *, BOOL);")
+cpp_quote("    void (WINAPI *SetEnableSynchronizedCommandQueueValidation)(ID3D12Debug3 *, BOOL);")
+cpp_quote("    void (WINAPI *SetGPUBasedValidationFlags)(ID3D12Debug3 *, D3D12_GPU_BASED_VALIDATION_FLAGS);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("struct ID3D12Debug4Vtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ID3D12Debug4 *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ID3D12Debug4 *);")
+cpp_quote("    ULONG (WINAPI *Release)(ID3D12Debug4 *);")
+cpp_quote("    void (WINAPI *EnableDebugLayer)(ID3D12Debug4 *);")
+cpp_quote("    void (WINAPI *SetEnableGPUBasedValidation)(ID3D12Debug4 *, BOOL);")
+cpp_quote("    void (WINAPI *SetEnableSynchronizedCommandQueueValidation)(ID3D12Debug4 *, BOOL);")
+cpp_quote("    void (WINAPI *SetGPUBasedValidationFlags)(ID3D12Debug4 *, D3D12_GPU_BASED_VALIDATION_FLAGS);")
+cpp_quote("    void (WINAPI *DisableDebugLayer)(ID3D12Debug4 *);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("struct ID3D12Debug5Vtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ID3D12Debug5 *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ID3D12Debug5 *);")
+cpp_quote("    ULONG (WINAPI *Release)(ID3D12Debug5 *);")
+cpp_quote("    void (WINAPI *EnableDebugLayer)(ID3D12Debug5 *);")
+cpp_quote("    void (WINAPI *SetEnableGPUBasedValidation)(ID3D12Debug5 *, BOOL);")
+cpp_quote("    void (WINAPI *SetEnableSynchronizedCommandQueueValidation)(ID3D12Debug5 *, BOOL);")
+cpp_quote("    void (WINAPI *SetGPUBasedValidationFlags)(ID3D12Debug5 *, D3D12_GPU_BASED_VALIDATION_FLAGS);")
+cpp_quote("    void (WINAPI *DisableDebugLayer)(ID3D12Debug5 *);")
+cpp_quote("    void (WINAPI *SetEnableAutoName)(ID3D12Debug5 *, BOOL);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("typedef struct ID3D12Debug6 ID3D12Debug6;")
+cpp_quote("")
+cpp_quote("struct ID3D12Debug6Vtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ID3D12Debug6 *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ID3D12Debug6 *);")
+cpp_quote("    ULONG (WINAPI *Release)(ID3D12Debug6 *);")
+cpp_quote("    void (WINAPI *EnableDebugLayer)(ID3D12Debug6 *);")
+cpp_quote("    void (WINAPI *SetEnableGPUBasedValidation)(ID3D12Debug6 *, BOOL);")
+cpp_quote("    void (WINAPI *SetEnableSynchronizedCommandQueueValidation)(ID3D12Debug6 *, BOOL);")
+cpp_quote("    void (WINAPI *SetGPUBasedValidationFlags)(ID3D12Debug6 *, D3D12_GPU_BASED_VALIDATION_FLAGS);")
+cpp_quote("    void (WINAPI *DisableDebugLayer)(ID3D12Debug6 *);")
+cpp_quote("    void (WINAPI *SetEnableAutoName)(ID3D12Debug6 *, BOOL);")
+cpp_quote("    void (WINAPI *SetForceLegacyBarrierValidation)(ID3D12Debug6 *, BOOL);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("typedef struct ID3D12DebugCommandList ID3D12DebugCommandList;")
+cpp_quote("")
+cpp_quote("typedef struct ID3D12DebugCommandList1 ID3D12DebugCommandList1;")
+cpp_quote("")
+cpp_quote("struct ID3D12DebugCommandList1Vtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ID3D12DebugCommandList1 *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ID3D12DebugCommandList1 *);")
+cpp_quote("    ULONG (WINAPI *Release)(ID3D12DebugCommandList1 *);")
+cpp_quote("    BOOL (WINAPI *AssertResourceState)(ID3D12DebugCommandList1 *, ID3D12Resource *, UINT, UINT);")
+cpp_quote("    HRESULT (WINAPI *SetDebugParameter)(ID3D12DebugCommandList1 *, D3D12_DEBUG_COMMAND_LIST_PARAMETER_TYPE, const void *, UINT);")
+cpp_quote("    HRESULT (WINAPI *GetDebugParameter)(ID3D12DebugCommandList1 *, D3D12_DEBUG_COMMAND_LIST_PARAMETER_TYPE, void *, UINT);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("typedef struct ID3D12DebugCommandList2 ID3D12DebugCommandList2;")
+cpp_quote("")
+cpp_quote("struct ID3D12DebugCommandList2Vtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ID3D12DebugCommandList2 *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ID3D12DebugCommandList2 *);")
+cpp_quote("    ULONG (WINAPI *Release)(ID3D12DebugCommandList2 *);")
+cpp_quote("    BOOL (WINAPI *AssertResourceState)(ID3D12DebugCommandList2 *, ID3D12Resource *, UINT, UINT);")
+cpp_quote("    HRESULT (WINAPI *SetFeatureMask)(ID3D12DebugCommandList2 *, D3D12_DEBUG_FEATURE);")
+cpp_quote("    D3D12_DEBUG_FEATURE (WINAPI *GetFeatureMask)(ID3D12DebugCommandList2 *);")
+cpp_quote("    HRESULT (WINAPI *SetDebugParameter)(ID3D12DebugCommandList2 *, D3D12_DEBUG_COMMAND_LIST_PARAMETER_TYPE, const void *, UINT);")
+cpp_quote("    HRESULT (WINAPI *GetDebugParameter)(ID3D12DebugCommandList2 *, D3D12_DEBUG_COMMAND_LIST_PARAMETER_TYPE, void *, UINT);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("typedef struct ID3D12DebugCommandList3 ID3D12DebugCommandList3;")
+cpp_quote("")
+cpp_quote("struct ID3D12DebugCommandList3Vtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ID3D12DebugCommandList3 *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ID3D12DebugCommandList3 *);")
+cpp_quote("    ULONG (WINAPI *Release)(ID3D12DebugCommandList3 *);")
+cpp_quote("    BOOL (WINAPI *AssertResourceState)(ID3D12DebugCommandList3 *, ID3D12Resource *, UINT, UINT);")
+cpp_quote("    HRESULT (WINAPI *SetFeatureMask)(ID3D12DebugCommandList3 *, D3D12_DEBUG_FEATURE);")
+cpp_quote("    D3D12_DEBUG_FEATURE (WINAPI *GetFeatureMask)(ID3D12DebugCommandList3 *);")
+cpp_quote("    HRESULT (WINAPI *SetDebugParameter)(ID3D12DebugCommandList3 *, D3D12_DEBUG_COMMAND_LIST_PARAMETER_TYPE, const void *, UINT);")
+cpp_quote("    HRESULT (WINAPI *GetDebugParameter)(ID3D12DebugCommandList3 *, D3D12_DEBUG_COMMAND_LIST_PARAMETER_TYPE, void *, UINT);")
+cpp_quote("    void (WINAPI *AssertResourceAccess)(ID3D12DebugCommandList3 *, ID3D12Resource *, UINT, D3D12_BARRIER_ACCESS);")
+cpp_quote("    void (WINAPI *AssertTextureLayout)(ID3D12DebugCommandList3 *, ID3D12Resource *, UINT, D3D12_BARRIER_LAYOUT);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("struct ID3D12DebugCommandListVtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ID3D12DebugCommandList *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ID3D12DebugCommandList *);")
+cpp_quote("    ULONG (WINAPI *Release)(ID3D12DebugCommandList *);")
+cpp_quote("    BOOL (WINAPI *AssertResourceState)(ID3D12DebugCommandList *, ID3D12Resource *, UINT, UINT);")
+cpp_quote("    HRESULT (WINAPI *SetFeatureMask)(ID3D12DebugCommandList *, D3D12_DEBUG_FEATURE);")
+cpp_quote("    D3D12_DEBUG_FEATURE (WINAPI *GetFeatureMask)(ID3D12DebugCommandList *);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("typedef struct ID3D12DebugCommandQueue ID3D12DebugCommandQueue;")
+cpp_quote("")
+cpp_quote("typedef struct ID3D12DebugCommandQueue1 ID3D12DebugCommandQueue1;")
+cpp_quote("")
+cpp_quote("struct ID3D12DebugCommandQueue1Vtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ID3D12DebugCommandQueue1 *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ID3D12DebugCommandQueue1 *);")
+cpp_quote("    ULONG (WINAPI *Release)(ID3D12DebugCommandQueue1 *);")
+cpp_quote("    BOOL (WINAPI *AssertResourceState)(ID3D12DebugCommandQueue1 *, ID3D12Resource *, UINT, UINT);")
+cpp_quote("    void (WINAPI *AssertResourceAccess)(ID3D12DebugCommandQueue1 *, ID3D12Resource *, UINT, D3D12_BARRIER_ACCESS);")
+cpp_quote("    void (WINAPI *AssertTextureLayout)(ID3D12DebugCommandQueue1 *, ID3D12Resource *, UINT, D3D12_BARRIER_LAYOUT);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("struct ID3D12DebugCommandQueueVtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ID3D12DebugCommandQueue *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ID3D12DebugCommandQueue *);")
+cpp_quote("    ULONG (WINAPI *Release)(ID3D12DebugCommandQueue *);")
+cpp_quote("    BOOL (WINAPI *AssertResourceState)(ID3D12DebugCommandQueue *, ID3D12Resource *, UINT, UINT);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("struct ID3D12DebugDevice1Vtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ID3D12DebugDevice1 *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ID3D12DebugDevice1 *);")
+cpp_quote("    ULONG (WINAPI *Release)(ID3D12DebugDevice1 *);")
+cpp_quote("    HRESULT (WINAPI *SetDebugParameter)(ID3D12DebugDevice1 *, D3D12_DEBUG_DEVICE_PARAMETER_TYPE, const void *, UINT);")
+cpp_quote("    HRESULT (WINAPI *GetDebugParameter)(ID3D12DebugDevice1 *, D3D12_DEBUG_DEVICE_PARAMETER_TYPE, void *, UINT);")
+cpp_quote("    HRESULT (WINAPI *ReportLiveDeviceObjects)(ID3D12DebugDevice1 *, D3D12_RLDO_FLAGS);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("struct ID3D12DebugDevice2Vtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ID3D12DebugDevice2 *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ID3D12DebugDevice2 *);")
+cpp_quote("    ULONG (WINAPI *Release)(ID3D12DebugDevice2 *);")
+cpp_quote("    HRESULT (WINAPI *SetFeatureMask)(ID3D12DebugDevice2 *, D3D12_DEBUG_FEATURE);")
+cpp_quote("    D3D12_DEBUG_FEATURE (WINAPI *GetFeatureMask)(ID3D12DebugDevice2 *);")
+cpp_quote("    HRESULT (WINAPI *ReportLiveDeviceObjects)(ID3D12DebugDevice2 *, D3D12_RLDO_FLAGS);")
+cpp_quote("    HRESULT (WINAPI *SetDebugParameter)(ID3D12DebugDevice2 *, D3D12_DEBUG_DEVICE_PARAMETER_TYPE, const void *, UINT);")
+cpp_quote("    HRESULT (WINAPI *GetDebugParameter)(ID3D12DebugDevice2 *, D3D12_DEBUG_DEVICE_PARAMETER_TYPE, void *, UINT);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("struct ID3D12DebugDeviceVtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ID3D12DebugDevice *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ID3D12DebugDevice *);")
+cpp_quote("    ULONG (WINAPI *Release)(ID3D12DebugDevice *);")
+cpp_quote("    HRESULT (WINAPI *SetFeatureMask)(ID3D12DebugDevice *, D3D12_DEBUG_FEATURE);")
+cpp_quote("    D3D12_DEBUG_FEATURE (WINAPI *GetFeatureMask)(ID3D12DebugDevice *);")
+cpp_quote("    HRESULT (WINAPI *ReportLiveDeviceObjects)(ID3D12DebugDevice *, D3D12_RLDO_FLAGS);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("struct ID3D12DebugVtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ID3D12Debug *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ID3D12Debug *);")
+cpp_quote("    ULONG (WINAPI *Release)(ID3D12Debug *);")
+cpp_quote("    void (WINAPI *EnableDebugLayer)(ID3D12Debug *);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("struct ID3D12InfoQueue1Vtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ID3D12InfoQueue1 *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ID3D12InfoQueue1 *);")
+cpp_quote("    ULONG (WINAPI *Release)(ID3D12InfoQueue1 *);")
+cpp_quote("    HRESULT (WINAPI *SetMessageCountLimit)(ID3D12InfoQueue1 *, UINT64);")
+cpp_quote("    void (WINAPI *ClearStoredMessages)(ID3D12InfoQueue1 *);")
+cpp_quote("    HRESULT (WINAPI *GetMessageA)(ID3D12InfoQueue1 *, UINT64, D3D12_MESSAGE *, SIZE_T *);")
+cpp_quote("    UINT64 (WINAPI *GetNumMessagesAllowedByStorageFilter)(ID3D12InfoQueue1 *);")
+cpp_quote("    UINT64 (WINAPI *GetNumMessagesDeniedByStorageFilter)(ID3D12InfoQueue1 *);")
+cpp_quote("    UINT64 (WINAPI *GetNumStoredMessages)(ID3D12InfoQueue1 *);")
+cpp_quote("    UINT64 (WINAPI *GetNumStoredMessagesAllowedByRetrievalFilter)(ID3D12InfoQueue1 *);")
+cpp_quote("    UINT64 (WINAPI *GetNumMessagesDiscardedByMessageCountLimit)(ID3D12InfoQueue1 *);")
+cpp_quote("    UINT64 (WINAPI *GetMessageCountLimit)(ID3D12InfoQueue1 *);")
+cpp_quote("    HRESULT (WINAPI *AddStorageFilterEntries)(ID3D12InfoQueue1 *, D3D12_INFO_QUEUE_FILTER *);")
+cpp_quote("    HRESULT (WINAPI *GetStorageFilter)(ID3D12InfoQueue1 *, D3D12_INFO_QUEUE_FILTER *, SIZE_T *);")
+cpp_quote("    void (WINAPI *ClearStorageFilter)(ID3D12InfoQueue1 *);")
+cpp_quote("    HRESULT (WINAPI *PushEmptyStorageFilter)(ID3D12InfoQueue1 *);")
+cpp_quote("    HRESULT (WINAPI *PushCopyOfStorageFilter)(ID3D12InfoQueue1 *);")
+cpp_quote("    HRESULT (WINAPI *PushStorageFilter)(ID3D12InfoQueue1 *, D3D12_INFO_QUEUE_FILTER *);")
+cpp_quote("    void (WINAPI *PopStorageFilter)(ID3D12InfoQueue1 *);")
+cpp_quote("    UINT (WINAPI *GetStorageFilterStackSize)(ID3D12InfoQueue1 *);")
+cpp_quote("    HRESULT (WINAPI *AddRetrievalFilterEntries)(ID3D12InfoQueue1 *, D3D12_INFO_QUEUE_FILTER *);")
+cpp_quote("    HRESULT (WINAPI *GetRetrievalFilter)(ID3D12InfoQueue1 *, D3D12_INFO_QUEUE_FILTER *, SIZE_T *);")
+cpp_quote("    void (WINAPI *ClearRetrievalFilter)(ID3D12InfoQueue1 *);")
+cpp_quote("    HRESULT (WINAPI *PushEmptyRetrievalFilter)(ID3D12InfoQueue1 *);")
+cpp_quote("    HRESULT (WINAPI *PushCopyOfRetrievalFilter)(ID3D12InfoQueue1 *);")
+cpp_quote("    HRESULT (WINAPI *PushRetrievalFilter)(ID3D12InfoQueue1 *, D3D12_INFO_QUEUE_FILTER *);")
+cpp_quote("    void (WINAPI *PopRetrievalFilter)(ID3D12InfoQueue1 *);")
+cpp_quote("    UINT (WINAPI *GetRetrievalFilterStackSize)(ID3D12InfoQueue1 *);")
+cpp_quote("    HRESULT (WINAPI *AddMessage)(ID3D12InfoQueue1 *, D3D12_MESSAGE_CATEGORY, D3D12_MESSAGE_SEVERITY, D3D12_MESSAGE_ID, LPCSTR);")
+cpp_quote("    HRESULT (WINAPI *AddApplicationMessage)(ID3D12InfoQueue1 *, D3D12_MESSAGE_SEVERITY, LPCSTR);")
+cpp_quote("    HRESULT (WINAPI *SetBreakOnCategory)(ID3D12InfoQueue1 *, D3D12_MESSAGE_CATEGORY, BOOL);")
+cpp_quote("    HRESULT (WINAPI *SetBreakOnSeverity)(ID3D12InfoQueue1 *, D3D12_MESSAGE_SEVERITY, BOOL);")
+cpp_quote("    HRESULT (WINAPI *SetBreakOnID)(ID3D12InfoQueue1 *, D3D12_MESSAGE_ID, BOOL);")
+cpp_quote("    BOOL (WINAPI *GetBreakOnCategory)(ID3D12InfoQueue1 *, D3D12_MESSAGE_CATEGORY);")
+cpp_quote("    BOOL (WINAPI *GetBreakOnSeverity)(ID3D12InfoQueue1 *, D3D12_MESSAGE_SEVERITY);")
+cpp_quote("    BOOL (WINAPI *GetBreakOnID)(ID3D12InfoQueue1 *, D3D12_MESSAGE_ID);")
+cpp_quote("    void (WINAPI *SetMuteDebugOutput)(ID3D12InfoQueue1 *, BOOL);")
+cpp_quote("    BOOL (WINAPI *GetMuteDebugOutput)(ID3D12InfoQueue1 *);")
+cpp_quote("    HRESULT (WINAPI *RegisterMessageCallback)(ID3D12InfoQueue1 *, D3D12MessageFunc, D3D12_MESSAGE_CALLBACK_FLAGS, void *, DWORD *);")
+cpp_quote("    HRESULT (WINAPI *UnregisterMessageCallback)(ID3D12InfoQueue1 *, DWORD);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("struct ID3D12InfoQueueVtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ID3D12InfoQueue *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ID3D12InfoQueue *);")
+cpp_quote("    ULONG (WINAPI *Release)(ID3D12InfoQueue *);")
+cpp_quote("    HRESULT (WINAPI *SetMessageCountLimit)(ID3D12InfoQueue *, UINT64);")
+cpp_quote("    void (WINAPI *ClearStoredMessages)(ID3D12InfoQueue *);")
+cpp_quote("    HRESULT (WINAPI *GetMessageA)(ID3D12InfoQueue *, UINT64, D3D12_MESSAGE *, SIZE_T *);")
+cpp_quote("    UINT64 (WINAPI *GetNumMessagesAllowedByStorageFilter)(ID3D12InfoQueue *);")
+cpp_quote("    UINT64 (WINAPI *GetNumMessagesDeniedByStorageFilter)(ID3D12InfoQueue *);")
+cpp_quote("    UINT64 (WINAPI *GetNumStoredMessages)(ID3D12InfoQueue *);")
+cpp_quote("    UINT64 (WINAPI *GetNumStoredMessagesAllowedByRetrievalFilter)(ID3D12InfoQueue *);")
+cpp_quote("    UINT64 (WINAPI *GetNumMessagesDiscardedByMessageCountLimit)(ID3D12InfoQueue *);")
+cpp_quote("    UINT64 (WINAPI *GetMessageCountLimit)(ID3D12InfoQueue *);")
+cpp_quote("    HRESULT (WINAPI *AddStorageFilterEntries)(ID3D12InfoQueue *, D3D12_INFO_QUEUE_FILTER *);")
+cpp_quote("    HRESULT (WINAPI *GetStorageFilter)(ID3D12InfoQueue *, D3D12_INFO_QUEUE_FILTER *, SIZE_T *);")
+cpp_quote("    void (WINAPI *ClearStorageFilter)(ID3D12InfoQueue *);")
+cpp_quote("    HRESULT (WINAPI *PushEmptyStorageFilter)(ID3D12InfoQueue *);")
+cpp_quote("    HRESULT (WINAPI *PushCopyOfStorageFilter)(ID3D12InfoQueue *);")
+cpp_quote("    HRESULT (WINAPI *PushStorageFilter)(ID3D12InfoQueue *, D3D12_INFO_QUEUE_FILTER *);")
+cpp_quote("    void (WINAPI *PopStorageFilter)(ID3D12InfoQueue *);")
+cpp_quote("    UINT (WINAPI *GetStorageFilterStackSize)(ID3D12InfoQueue *);")
+cpp_quote("    HRESULT (WINAPI *AddRetrievalFilterEntries)(ID3D12InfoQueue *, D3D12_INFO_QUEUE_FILTER *);")
+cpp_quote("    HRESULT (WINAPI *GetRetrievalFilter)(ID3D12InfoQueue *, D3D12_INFO_QUEUE_FILTER *, SIZE_T *);")
+cpp_quote("    void (WINAPI *ClearRetrievalFilter)(ID3D12InfoQueue *);")
+cpp_quote("    HRESULT (WINAPI *PushEmptyRetrievalFilter)(ID3D12InfoQueue *);")
+cpp_quote("    HRESULT (WINAPI *PushCopyOfRetrievalFilter)(ID3D12InfoQueue *);")
+cpp_quote("    HRESULT (WINAPI *PushRetrievalFilter)(ID3D12InfoQueue *, D3D12_INFO_QUEUE_FILTER *);")
+cpp_quote("    void (WINAPI *PopRetrievalFilter)(ID3D12InfoQueue *);")
+cpp_quote("    UINT (WINAPI *GetRetrievalFilterStackSize)(ID3D12InfoQueue *);")
+cpp_quote("    HRESULT (WINAPI *AddMessage)(ID3D12InfoQueue *, D3D12_MESSAGE_CATEGORY, D3D12_MESSAGE_SEVERITY, D3D12_MESSAGE_ID, LPCSTR);")
+cpp_quote("    HRESULT (WINAPI *AddApplicationMessage)(ID3D12InfoQueue *, D3D12_MESSAGE_SEVERITY, LPCSTR);")
+cpp_quote("    HRESULT (WINAPI *SetBreakOnCategory)(ID3D12InfoQueue *, D3D12_MESSAGE_CATEGORY, BOOL);")
+cpp_quote("    HRESULT (WINAPI *SetBreakOnSeverity)(ID3D12InfoQueue *, D3D12_MESSAGE_SEVERITY, BOOL);")
+cpp_quote("    HRESULT (WINAPI *SetBreakOnID)(ID3D12InfoQueue *, D3D12_MESSAGE_ID, BOOL);")
+cpp_quote("    BOOL (WINAPI *GetBreakOnCategory)(ID3D12InfoQueue *, D3D12_MESSAGE_CATEGORY);")
+cpp_quote("    BOOL (WINAPI *GetBreakOnSeverity)(ID3D12InfoQueue *, D3D12_MESSAGE_SEVERITY);")
+cpp_quote("    BOOL (WINAPI *GetBreakOnID)(ID3D12InfoQueue *, D3D12_MESSAGE_ID);")
+cpp_quote("    void (WINAPI *SetMuteDebugOutput)(ID3D12InfoQueue *, BOOL);")
+cpp_quote("    BOOL (WINAPI *GetMuteDebugOutput)(ID3D12InfoQueue *);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("typedef struct ID3D12ManualWriteTrackingResource ID3D12ManualWriteTrackingResource;")
+cpp_quote("")
+cpp_quote("struct ID3D12ManualWriteTrackingResourceVtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ID3D12ManualWriteTrackingResource *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ID3D12ManualWriteTrackingResource *);")
+cpp_quote("    ULONG (WINAPI *Release)(ID3D12ManualWriteTrackingResource *);")
+cpp_quote("    void (WINAPI *TrackWrite)(ID3D12ManualWriteTrackingResource *, UINT, const D3D12_RANGE *);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("struct ID3D12SharingContractVtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ID3D12SharingContract *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ID3D12SharingContract *);")
+cpp_quote("    ULONG (WINAPI *Release)(ID3D12SharingContract *);")
+cpp_quote("    void (WINAPI *Present)(ID3D12SharingContract *, ID3D12Resource *, UINT, HWND);")
+cpp_quote("    void (WINAPI *SharedFenceSignal)(ID3D12SharingContract *, ID3D12Fence *, UINT64);")
+cpp_quote("    void (WINAPI *BeginCapturableWork)(ID3D12SharingContract *, const GUID *const );")
+cpp_quote("    void (WINAPI *EndCapturableWork)(ID3D12SharingContract *, const GUID *const );")
+cpp_quote("};")

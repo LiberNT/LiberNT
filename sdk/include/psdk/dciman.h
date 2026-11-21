@@ -55,4 +55,33 @@ typedef struct HWINWATCH__ {
   int unused;
 } *HWINWATCH;
 
+typedef void (WINAPI *WINWATCHNOTIFYPROC)(HWINWATCH, HWND, DWORD, LPARAM);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+DCIRVAL WINAPI DCIBeginAccess(LPDCISURFACEINFO pdci, int x, int y, int dx, int dy);
+int WINAPI DCICreateOffscreen(HDC hdc, DWORD dwCompression, DWORD dwRedMask, DWORD dwGreenMask, DWORD dwBlueMask, DWORD dwWidth, DWORD dwHeight, DWORD dwDCICaps, DWORD dwBitCount, LPDCIOFFSCREEN *lplpSurface);
+int WINAPI DCICreateOverlay(HDC hdc, LPVOID lpOffscreenSurf, LPDCIOVERLAY *lplpSurface);
+void WINAPI DCIDestroy(LPDCISURFACEINFO pdci);
+DCIRVAL WINAPI DCIDraw(LPDCIOFFSCREEN pdci);
+void WINAPI DCIEndAccess(LPDCISURFACEINFO pdci);
+int WINAPI DCIEnum(HDC hdc, LPRECT lprDst, LPRECT lprSrc, LPVOID lpFnCallback, LPVOID lpContext);
+DCIRVAL WINAPI DCISetClipList(LPDCIOFFSCREEN pdci, LPRGNDATA prd);
+DCIRVAL WINAPI DCISetDestination(LPDCIOFFSCREEN pdci, LPRECT dst, LPRECT src);
+DCIRVAL WINAPI DCISetSrcDestClip(LPDCIOFFSCREEN pdci, LPRECT srcrc, LPRECT destrc, LPRGNDATA prd);
+DWORD WINAPI GetDCRegionData(HDC hdc, DWORD size, LPRGNDATA prd);
+DWORD WINAPI GetWindowRegionData(HWND hwnd, DWORD size, LPRGNDATA prd);
+void WINAPI WinWatchClose(HWINWATCH hWW);
+BOOL WINAPI WinWatchDidStatusChange(HWINWATCH hWW);
+UINT WINAPI WinWatchGetClipList(HWINWATCH hWW, LPRECT prc, UINT size, LPRGNDATA prd);
+BOOL WINAPI WinWatchNotify(HWINWATCH hWW, WINWATCHNOTIFYPROC NotifyCallback, LPARAM NotifyParam);
+HWINWATCH WINAPI WinWatchOpen(HWND hwnd);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* _INC_DCIMAN */

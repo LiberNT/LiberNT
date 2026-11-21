@@ -43,7 +43,9 @@ extern "C" {
 /* enum definitions for Secure Service Provider/Authentication Packages */
 typedef enum _LSA_TOKEN_INFORMATION_TYPE {
     LsaTokenInformationNull,
-    LsaTokenInformationV1
+    LsaTokenInformationV1,
+    LsaTokenInformationV2 = 2,
+    LsaTokenInformationV3 = 3,
 } LSA_TOKEN_INFORMATION_TYPE, *PLSA_TOKEN_INFORMATION_TYPE;
 
 typedef enum _SECPKG_EXTENDED_INFORMATION_CLASS

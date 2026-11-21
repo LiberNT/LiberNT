@@ -4,4 +4,12 @@
 #define USE_NOFORCE 0
 #define USE_FORCE 1
 #define USE_LOTS_OF_FORCE 2
+
+#define _LMUSEFLG_ 0
+#define FORCE_LEVELLEVELFLAGS) ((LEVELFLAGS) & 0xffff)
+
+#define FORCE_LEVELLEVELFLAGS) ((LEVELFLAGS) & 0xffff)
+
+#define FORCE_LEVELLEVELFLAGS) ((LEVELFLAGS) & 0xffff)
+
 #endif

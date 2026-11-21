@@ -38,18 +38,18 @@ DEFINE_GUID (DefaultTraceSecurityGuid, 0x0811c1af, 0x7a07, 0x4a06, 0x82, 0xed, 0
 #ifndef _TRACEHANDLE_DEFINED
 #define _TRACEHANDLE_DEFINED
 typedef ULONG64 TRACEHANDLE, *PTRACEHANDLE;
-typedef enum ETW_COMPRESSION_RESUMPTION_MODE {
-    EtwCompressionModeRestart = 0,
-    EtwCompressionModeNoDisable = 1,
-    EtwCompressionModeNoRestart = 2
-} ETW_COMPRESSION_RESUMPTION_MODE;
-
 typedef enum _ETW_PMC_COUNTER_OWNER_TYPE {
     EtwPmcOwnerFree = 0,
     EtwPmcOwnerUntagged = 1,
     EtwPmcOwnerTagged = 2,
     EtwPmcOwnerTaggedWithSource = 3
 } ETW_PMC_COUNTER_OWNER_TYPE;
+
+typedef enum ETW_COMPRESSION_RESUMPTION_MODE {
+    EtwCompressionModeRestart = 0,
+    EtwCompressionModeNoDisable = 1,
+    EtwCompressionModeNoRestart = 2
+} ETW_COMPRESSION_RESUMPTION_MODE;
 
 typedef enum ETW_CONTEXT_REGISTER_TYPES {
     EtwContextRegisterTypeNone = 0,
@@ -72,18 +72,9 @@ typedef enum TRACE_LBR_CONFIGURATION {
     TRACE_LBR_CONFIGURATION_SAMPLED = 0x400
 } TRACE_LBR_CONFIGURATION;
 
-typedef ULONG64 PROCESSTRACE_HANDLE;
 typedef ULONG64 CONTROLTRACE_ID;
+typedef ULONG64 PROCESSTRACE_HANDLE;
 typedef ULONG64 TRACELOGGER_HANDLE;
-
-typedef struct _PROFILE_SOURCE_INFO {
-  ULONG NextEntryOffset;
-  ULONG Source;
-  ULONG MinInterval;
-  ULONG MaxInterval;
-  ULONG64 Reserved;
-  WCHAR Description[1];
-} PROFILE_SOURCE_INFO, *PPROFILE_SOURCE_INFO;
 
 typedef struct _ETW_PMC_COUNTER_OWNER {
   ETW_PMC_COUNTER_OWNER_TYPE OwnerType;
@@ -97,6 +88,15 @@ typedef struct _ETW_PMC_COUNTER_OWNERSHIP_STATUS {
   ETW_PMC_COUNTER_OWNER CounterOwners[1];
 } ETW_PMC_COUNTER_OWNERSHIP_STATUS, *PETW_PMC_COUNTER_OWNERSHIP_STATUS;
 
+typedef struct _PROFILE_SOURCE_INFO {
+  ULONG NextEntryOffset;
+  ULONG Source;
+  ULONG MinInterval;
+  ULONG MaxInterval;
+  ULONG64 Reserved;
+  WCHAR Description[1];
+} PROFILE_SOURCE_INFO, *PPROFILE_SOURCE_INFO;
+
 typedef struct ETW_PMC_SESSION_INFO {
   ULONG NextEntryOffset;
   USHORT LoggerId;
@@ -104,6 +104,10 @@ typedef struct ETW_PMC_SESSION_INFO {
   ULONG ProfileSourceCount;
   ULONG HookIdCount;
 } ETW_PMC_SESSION_INFO;
+
+#define _EVNTRACE_KERNEL_MODE
+#define ETW_APP_DECLSPEC_DEPRECATED
+#define ETW_BUFFER_CONTEXT_DEF 0
 
 #endif
 

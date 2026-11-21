@@ -203,4 +203,8 @@ extern "C" {
 #endif
 
 #include <sec_api/stralign_s.h>
+
+#define _WINDOWS_INSECURE_DEPRECATE 0
+#define ua_tcscpy_s strcpy_s
+
 #endif

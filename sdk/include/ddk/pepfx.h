@@ -1240,18 +1240,18 @@ typedef enum _PEP_DEVICE_ACCEPTANCE_TYPE {
     PepDeviceAceptedMax = 3
 } PEP_DEVICE_ACCEPTANCE_TYPE, *PPEP_DEVICE_ACCEPTANCE_TYPE;
 
+typedef enum _PEP_PERF_STATE_TYPE {
+    PepPerfStateTypeDiscrete = 0,
+    PepPerfStateTypeRange = 1,
+    PepPerfStateTypeMax = 2
+} PEP_PERF_STATE_TYPE, *PPEP_PERF_STATE_TYPE;
+
 typedef enum _PEP_PERF_STATE_UNIT {
     PepPerfStateUnitOther = 0,
     PepPerfStateUnitFrequency = 1,
     PepPerfStateUnitBandwidth = 2,
     PepPerfStateUnitMax = 3
 } PEP_PERF_STATE_UNIT, *PPEP_PERF_STATE_UNIT;
-
-typedef enum _PEP_PERF_STATE_TYPE {
-    PepPerfStateTypeDiscrete = 0,
-    PepPerfStateTypeRange = 1,
-    PepPerfStateTypeMax = 2
-} PEP_PERF_STATE_TYPE, *PPEP_PERF_STATE_TYPE;
 
 typedef enum _PEP_PPM_WPS_PARK_PREFERENCE {
     NoPreference = 0,
@@ -1273,10 +1273,17 @@ typedef enum _PEP_WPS_PARK_PREFERENCE_REASON {
 typedef PO_FX_COMPONENT_IDLE_STATE PEP_IDLE_STATE;
 typedef PO_FX_COMPONENT_IDLE_STATE * PPEP_IDLE_STATE;
 
-typedef struct _PEP_PPM_CONTEXT_QUERY_PARKING_PAGE {
-  PHYSICAL_ADDRESS PhysicalPageAddress;
-  PVOID VirtualPageAddress;
-} PEP_PPM_CONTEXT_QUERY_PARKING_PAGE, *PPEP_PPM_CONTEXT_QUERY_PARKING_PAGE;
+typedef struct _PEP_ABANDON_DEVICE {
+  PCUNICODE_STRING DeviceId;
+  BOOLEAN DeviceAccepted;
+} PEP_ABANDON_DEVICE, *PPEP_ABANDON_DEVICE;
+
+typedef struct _PEP_COMPONENT_PLATFORM_CONSTRAINTS {
+  PEPHANDLE DeviceHandle;
+  ULONG Component;
+  PULONG MinimumFStates;
+  ULONG PlatformStateCount;
+} PEP_COMPONENT_PLATFORM_CONSTRAINTS, *PPEP_COMPONENT_PLATFORM_CONSTRAINTS;
 
 typedef struct _PEP_COMPONENT_V2 {
   GUID Id;
@@ -1286,38 +1293,36 @@ typedef struct _PEP_COMPONENT_V2 {
   PPO_FX_COMPONENT_IDLE_STATE IdleStates;
 } PEP_COMPONENT_V2, *PPEP_COMPONENT_V2;
 
-typedef struct _PEP_DEVICE_REGISTER_V2 {
-  ULONGLONG Flags;
-  ULONG ComponentCount;
-  PPEP_COMPONENT_V2 Components[1];
-} PEP_DEVICE_REGISTER_V2, *PPEP_DEVICE_REGISTER_V2;
+typedef struct _PEP_COORDINATED_DEPENDENCY_OPTION {
+  UCHAR ExpectedStateIndex;
+  BOOLEAN LooseDependency;
+  BOOLEAN InitiatingState;
+  BOOLEAN DependentState;
+} PEP_COORDINATED_DEPENDENCY_OPTION, *PPEP_COORDINATED_DEPENDENCY_OPTION;
+
+typedef struct _PEP_COORDINATED_IDLE_STATE {
+  ULONG Latency;
+  ULONG BreakEvenDuration;
+  ULONG DependencyCount;
+  ULONG MaximumDependencySize;
+} PEP_COORDINATED_IDLE_STATE, *PPEP_COORDINATED_IDLE_STATE;
 
 typedef struct _PEP_CRASHDUMP_INFORMATION {
   PEPHANDLE DeviceHandle;
   PVOID DeviceContext;
 } PEP_CRASHDUMP_INFORMATION, *PPEP_CRASHDUMP_INFORMATION;
 
-typedef struct _PEP_PREPARE_DEVICE {
-  PCUNICODE_STRING DeviceId;
-  BOOLEAN DeviceAccepted;
-} PEP_PREPARE_DEVICE, *PPEP_PREPARE_DEVICE;
-
-typedef struct _PEP_ABANDON_DEVICE {
-  PCUNICODE_STRING DeviceId;
-  BOOLEAN DeviceAccepted;
-} PEP_ABANDON_DEVICE, *PPEP_ABANDON_DEVICE;
-
-typedef struct _PEP_REGISTER_DEVICE_V2 {
-  PCUNICODE_STRING DeviceId;
-  POHANDLE KernelHandle;
-  PPEP_DEVICE_REGISTER_V2 Register;
+typedef struct _PEP_DEBUGGER_TRANSITION_REQUIREMENTS {
   PEPHANDLE DeviceHandle;
-  PEP_DEVICE_ACCEPTANCE_TYPE DeviceAccepted;
-} PEP_REGISTER_DEVICE_V2, *PPEP_REGISTER_DEVICE_V2;
+  ULONG PlatformStateCount;
+  PBOOLEAN PowerTransitionRequired;
+} PEP_DEBUGGER_TRANSITION_REQUIREMENTS, *PPEP_DEBUGGER_TRANSITION_REQUIREMENTS;
 
-typedef struct _PEP_UNREGISTER_DEVICE {
+typedef struct _PEP_DEVICE_PLATFORM_CONSTRAINTS {
   PEPHANDLE DeviceHandle;
-} PEP_UNREGISTER_DEVICE, *PPEP_UNREGISTER_DEVICE;
+  PDEVICE_POWER_STATE MinimumDStates;
+  ULONG PlatformStateCount;
+} PEP_DEVICE_PLATFORM_CONSTRAINTS, *PPEP_DEVICE_PLATFORM_CONSTRAINTS;
 
 typedef struct _PEP_DEVICE_POWER_STATE {
   PEPHANDLE DeviceHandle;
@@ -1326,28 +1331,11 @@ typedef struct _PEP_DEVICE_POWER_STATE {
   BOOLEAN SystemTransition;
 } PEP_DEVICE_POWER_STATE, *PPEP_DEVICE_POWER_STATE;
 
-typedef struct _PEP_POWER_CONTROL_REQUEST {
-  PEPHANDLE DeviceHandle;
-  LPCGUID PowerControlCode;
-  PVOID InBuffer;
-  SIZE_T InBufferSize;
-  PVOID OutBuffer;
-  SIZE_T OutBufferSize;
-  SIZE_T BytesReturned;
-  NTSTATUS Status;
-} PEP_POWER_CONTROL_REQUEST, *PPEP_POWER_CONTROL_REQUEST;
-
-typedef struct _PEP_POWER_CONTROL_COMPLETE {
-  PEPHANDLE DeviceHandle;
-  LPCGUID PowerControlCode;
-  PVOID RequestContext;
-  SIZE_T BytesReturned;
-  NTSTATUS Status;
-} PEP_POWER_CONTROL_COMPLETE, *PPEP_POWER_CONTROL_COMPLETE;
-
-typedef struct _PEP_SYSTEM_LATENCY {
-  ULONGLONG Latency;
-} PEP_SYSTEM_LATENCY, *PPEP_SYSTEM_LATENCY;
+typedef struct _PEP_DEVICE_REGISTER_V2 {
+  ULONGLONG Flags;
+  ULONG ComponentCount;
+  PPEP_COMPONENT_V2 Components[1];
+} PEP_DEVICE_REGISTER_V2, *PPEP_DEVICE_REGISTER_V2;
 
 typedef struct _PEP_DEVICE_STARTED {
   PEPHANDLE DeviceHandle;
@@ -1361,148 +1349,66 @@ typedef struct _PEP_NOTIFY_COMPONENT_IDLE_STATE {
   BOOLEAN Completed;
 } PEP_NOTIFY_COMPONENT_IDLE_STATE, *PPEP_NOTIFY_COMPONENT_IDLE_STATE;
 
-typedef struct _PEP_REGISTER_DEBUGGER {
-  PEPHANDLE DeviceHandle;
-} PEP_REGISTER_DEBUGGER, *PPEP_REGISTER_DEBUGGER;
-
-typedef struct _PEP_DEVICE_PLATFORM_CONSTRAINTS {
-  PEPHANDLE DeviceHandle;
-  PDEVICE_POWER_STATE MinimumDStates;
-  ULONG PlatformStateCount;
-} PEP_DEVICE_PLATFORM_CONSTRAINTS, *PPEP_DEVICE_PLATFORM_CONSTRAINTS;
-
-typedef struct _PEP_COMPONENT_PLATFORM_CONSTRAINTS {
-  PEPHANDLE DeviceHandle;
-  ULONG Component;
-  PULONG MinimumFStates;
-  ULONG PlatformStateCount;
-} PEP_COMPONENT_PLATFORM_CONSTRAINTS, *PPEP_COMPONENT_PLATFORM_CONSTRAINTS;
-
 typedef struct _PEP_PERF_STATE {
   ULONGLONG Value;
   PVOID Context;
 } PEP_PERF_STATE, *PPEP_PERF_STATE;
 
-typedef struct _PEP_QUERY_COMPONENT_PERF_CAPABILITIES {
+typedef struct _PEP_POWER_CONTROL_COMPLETE {
   PEPHANDLE DeviceHandle;
-  ULONG Component;
-  ULONG SetCount;
-} PEP_QUERY_COMPONENT_PERF_CAPABILITIES, *PPEP_QUERY_COMPONENT_PERF_CAPABILITIES;
+  LPCGUID PowerControlCode;
+  PVOID RequestContext;
+  SIZE_T BytesReturned;
+  NTSTATUS Status;
+} PEP_POWER_CONTROL_COMPLETE, *PPEP_POWER_CONTROL_COMPLETE;
 
-typedef struct _PEP_QUERY_COMPONENT_PERF_SET_NAME {
+typedef struct _PEP_POWER_CONTROL_REQUEST {
   PEPHANDLE DeviceHandle;
-  ULONG Component;
-  ULONG Set;
-  USHORT NameSize;
-  PWCHAR Name;
-} PEP_QUERY_COMPONENT_PERF_SET_NAME, *PPEP_QUERY_COMPONENT_PERF_SET_NAME;
+  LPCGUID PowerControlCode;
+  PVOID InBuffer;
+  SIZE_T InBufferSize;
+  PVOID OutBuffer;
+  SIZE_T OutBufferSize;
+  SIZE_T BytesReturned;
+  NTSTATUS Status;
+} PEP_POWER_CONTROL_REQUEST, *PPEP_POWER_CONTROL_REQUEST;
 
-typedef struct _PEP_QUERY_COMPONENT_PERF_STATES {
-  PEPHANDLE DeviceHandle;
-  ULONG Component;
-  ULONG Set;
-  PPEP_PERF_STATE States;
-} PEP_QUERY_COMPONENT_PERF_STATES, *PPEP_QUERY_COMPONENT_PERF_STATES;
+typedef struct _PEP_PPM_CONTEXT_QUERY_PARKING_PAGE {
+  PHYSICAL_ADDRESS PhysicalPageAddress;
+  PVOID VirtualPageAddress;
+} PEP_PPM_CONTEXT_QUERY_PARKING_PAGE, *PPEP_PPM_CONTEXT_QUERY_PARKING_PAGE;
 
-typedef struct _PEP_DEBUGGER_TRANSITION_REQUIREMENTS {
-  PEPHANDLE DeviceHandle;
-  ULONG PlatformStateCount;
-  PBOOLEAN PowerTransitionRequired;
-} PEP_DEBUGGER_TRANSITION_REQUIREMENTS, *PPEP_DEBUGGER_TRANSITION_REQUIREMENTS;
+typedef struct _PEP_PPM_CST_STATE {
+  UCHAR Type;
+  USHORT Latency;
+  ULONG Power;
+  UCHAR AddressSpaceId;
+  UCHAR BitWidth;
+  UCHAR BitOffset;
+  UCHAR AccessSize;
+  PHYSICAL_ADDRESS Address;
+} PEP_PPM_CST_STATE, *PPEP_PPM_CST_STATE;
 
-typedef struct _PEP_QUERY_SOC_SUBSYSTEM_COUNT {
-  ULONG PlatformIdleStateIndex;
-  ULONG SubsystemCount;
-  ULONG Flags;
-} PEP_QUERY_SOC_SUBSYSTEM_COUNT, *PPEP_QUERY_SOC_SUBSYSTEM_COUNT;
-
-typedef struct _PEP_QUERY_SOC_SUBSYSTEM {
-  ULONG PlatformIdleStateIndex;
-  ULONG SubsystemIndex;
-  PVOID SubsystemHandle;
-  UNICODE_STRING ParentName;
-  UNICODE_STRING SubsystemName;
-  ULONG MetadataCount;
-  ULONG Flags;
-} PEP_QUERY_SOC_SUBSYSTEM, *PPEP_QUERY_SOC_SUBSYSTEM;
-
-typedef struct _PEP_RESET_SOC_SUBSYSTEM_ACCOUNTING {
-  ULONG PlatformIdleStateIndex;
-  ULONG Flags;
-} PEP_RESET_SOC_SUBSYSTEM_ACCOUNTING, *PPEP_RESET_SOC_SUBSYSTEM_ACCOUNTING;
-
-typedef struct _PEP_QUERY_SOC_SUBSYSTEM_BLOCKING_TIME {
-  ULONG PlatformIdleStateIndex;
-  PVOID SubsystemHandle;
-  PCUNICODE_STRING SubsystemName;
-  ULONG64 BlockingTime;
-  ULONG Flags;
-} PEP_QUERY_SOC_SUBSYSTEM_BLOCKING_TIME, *PPEP_QUERY_SOC_SUBSYSTEM_BLOCKING_TIME;
-
-typedef struct _PEP_SOC_SUBSYSTEM_METADATA {
-  UNICODE_STRING Key;
-  UNICODE_STRING Value;
-} PEP_SOC_SUBSYSTEM_METADATA, *PPEP_SOC_SUBSYSTEM_METADATA;
-
-typedef struct _PEP_QUERY_SOC_SUBSYSTEM_METADATA {
-  ULONG PlatformIdleStateIndex;
-  PVOID SubsystemHandle;
-  PCUNICODE_STRING SubsystemName;
-  ULONG Flags;
-  ULONG MetadataCount;
-  PPEP_SOC_SUBSYSTEM_METADATA Metadata[1];
-} PEP_QUERY_SOC_SUBSYSTEM_METADATA, *PPEP_QUERY_SOC_SUBSYSTEM_METADATA;
-
-typedef struct _PEP_PROCESSOR_IDLE_DEPENDENCY {
-  POHANDLE TargetProcessor;
-  UCHAR ExpectedState;
-  BOOLEAN AllowDeeperStates;
-  BOOLEAN LooseDependency;
-} PEP_PROCESSOR_IDLE_DEPENDENCY, *PPEP_PROCESSOR_IDLE_DEPENDENCY;
-
-typedef struct _PEP_PPM_QUERY_CAPABILITIES {
-  ULONG FeedbackCounterCount;
-  ULONG IdleStateCount;
-  BOOLEAN PerformanceStatesSupported;
-  BOOLEAN ParkingSupported;
-  UCHAR DiscretePerformanceStateCount;
-  UCHAR Reserved;
-} PEP_PPM_QUERY_CAPABILITIES, *PPEP_PPM_QUERY_CAPABILITIES;
-
-typedef struct _PEP_PPM_QUERY_IDLE_STATES_V2 {
+typedef struct _PEP_PPM_CST_STATES {
   ULONG Count;
-  PEP_PROCESSOR_IDLE_STATE_V2 IdleStates[1];
-} PEP_PPM_QUERY_IDLE_STATES_V2, *PPEP_PPM_QUERY_IDLE_STATES_V2;
+  PPEP_PPM_CST_STATE IdleStates;
+} PEP_PPM_CST_STATES, *PPEP_PPM_CST_STATES;
 
-typedef struct _PEP_PPM_QUERY_PLATFORM_STATES {
-  ULONG PlatformStateCount;
-} PEP_PPM_QUERY_PLATFORM_STATES, *PPEP_PPM_QUERY_PLATFORM_STATES;
+typedef struct _PEP_PPM_ENTER_SYSTEM_STATE {
+  SYSTEM_POWER_STATE TargetState;
+} PEP_PPM_ENTER_SYSTEM_STATE, *PPEP_PPM_ENTER_SYSTEM_STATE;
 
-typedef struct _PEP_PLATFORM_IDLE_STATE {
-  POHANDLE InitiatingProcessor;
-  UCHAR InitiatingState;
-  ULONG Latency;
-  ULONG BreakEvenDuration;
-  ULONG DependencyArrayUsed;
-  ULONG DependencyArrayCount;
-  PEP_PROCESSOR_IDLE_DEPENDENCY DependencyArray[1];
-} PEP_PLATFORM_IDLE_STATE, *PPEP_PLATFORM_IDLE_STATE;
-
-typedef struct _PEP_PPM_QUERY_PLATFORM_STATE {
-  ULONG StateIndex;
-  PEP_PLATFORM_IDLE_STATE State;
-} PEP_PPM_QUERY_PLATFORM_STATE, *PPEP_PPM_QUERY_PLATFORM_STATE;
-
-typedef struct _PEP_PPM_PROVISIONING_SOC_IDENTIFIER {
-  USHORT Length;
-  PWSTR SocIdentifier;
-} PEP_PPM_PROVISIONING_SOC_IDENTIFIER, *PPEP_PPM_PROVISIONING_SOC_IDENTIFIER;
-
-typedef struct _PEP_PPM_TEST_IDLE_STATE {
+typedef struct _PEP_PPM_IDLE_COMPLETE {
   ULONG ProcessorState;
   ULONG PlatformState;
-  ULONG VetoReason;
-} PEP_PPM_TEST_IDLE_STATE, *PPEP_PPM_TEST_IDLE_STATE;
+} PEP_PPM_IDLE_COMPLETE, *PPEP_PPM_IDLE_COMPLETE;
+
+typedef struct _PEP_PPM_IDLE_COMPLETE_V2 {
+  ULONG ProcessorState;
+  ULONG PlatformState;
+  ULONG CoordinatedStateCount;
+  PULONG CoordinatedStates;
+} PEP_PPM_IDLE_COMPLETE_V2, *PPEP_PPM_IDLE_COMPLETE_V2;
 
 typedef struct _PEP_PPM_IDLE_EXECUTE {
   NTSTATUS Status;
@@ -1518,25 +1424,127 @@ typedef struct _PEP_PPM_IDLE_EXECUTE_V2 {
   PULONG CoordinatedStates;
 } PEP_PPM_IDLE_EXECUTE_V2, *PPEP_PPM_IDLE_EXECUTE_V2;
 
-typedef struct _PEP_PPM_IDLE_COMPLETE {
-  ULONG ProcessorState;
-  ULONG PlatformState;
-} PEP_PPM_IDLE_COMPLETE, *PPEP_PPM_IDLE_COMPLETE;
-
-typedef struct _PEP_PPM_IDLE_COMPLETE_V2 {
-  ULONG ProcessorState;
-  ULONG PlatformState;
-  ULONG CoordinatedStateCount;
-  PULONG CoordinatedStates;
-} PEP_PPM_IDLE_COMPLETE_V2, *PPEP_PPM_IDLE_COMPLETE_V2;
+typedef struct _PEP_PPM_INITIATE_WAKE {
+  BOOLEAN NeedInterruptForCompletion;
+} PEP_PPM_INITIATE_WAKE, *PPEP_PPM_INITIATE_WAKE;
 
 typedef struct _PEP_PPM_IS_PROCESSOR_HALTED {
   BOOLEAN Halted;
 } PEP_PPM_IS_PROCESSOR_HALTED, *PPEP_PPM_IS_PROCESSOR_HALTED;
 
-typedef struct _PEP_PPM_INITIATE_WAKE {
-  BOOLEAN NeedInterruptForCompletion;
-} PEP_PPM_INITIATE_WAKE, *PPEP_PPM_INITIATE_WAKE;
+typedef struct _PEP_PPM_LPI_COMPLETE {
+  ULONG CoordinatedStateCount;
+  PULONG CoordinatedStates;
+} PEP_PPM_LPI_COMPLETE, *PPEP_PPM_LPI_COMPLETE;
+
+typedef struct _PEP_PPM_LPI_COORDINATED_DEPENDENCY {
+  PEPHANDLE TargetProcessor;
+  ULONG OptionCount;
+  PULONG Options;
+} PEP_PPM_LPI_COORDINATED_DEPENDENCY, *PPEP_PPM_LPI_COORDINATED_DEPENDENCY;
+
+typedef struct _PEP_PPM_LPI_PRE_EXECUTE {
+  NTSTATUS Status;
+  ULONG CoordinatedStateCount;
+  PULONG CoordinatedStates;
+} PEP_PPM_LPI_PRE_EXECUTE, *PPEP_PPM_LPI_PRE_EXECUTE;
+
+typedef struct _PEP_PPM_LPI_REGISTER {
+  UCHAR AddressSpaceID;
+  UCHAR BitWidth;
+  UCHAR BitOffset;
+  UCHAR AccessSize;
+  PHYSICAL_ADDRESS Address;
+} PEP_PPM_LPI_REGISTER, *PPEP_PPM_LPI_REGISTER;
+
+typedef struct _PEP_PPM_LPI_SUPPORTED {
+  BOOLEAN OverrideLpiStates;
+} PEP_PPM_LPI_SUPPORTED, *PPEP_PPM_LPI_SUPPORTED;
+
+typedef struct _PEP_PPM_PERF_CHECK_COMPLETE {
+  ULONGLONG EvaluationTime;
+} PEP_PPM_PERF_CHECK_COMPLETE, *PPEP_PPM_PERF_CHECK_COMPLETE;
+
+typedef struct _PEP_PPM_PERF_SET {
+  ULONG MinimumPerformance;
+  ULONG MaximumPerformance;
+  ULONG DesiredPerformance;
+  ULONG TimeWindow;
+  ULONG PerformanceTolerance;
+} PEP_PPM_PERF_SET, *PPEP_PPM_PERF_SET;
+
+typedef struct _PEP_PPM_PERF_SET_STATE {
+  UCHAR MinimumPerformanceState;
+  UCHAR MaximumPerformanceState;
+  UCHAR DesiredPerformanceState;
+  UCHAR EnergyPerformancePreference;
+} PEP_PPM_PERF_SET_STATE, *PPEP_PPM_PERF_SET_STATE;
+
+typedef struct _PEP_PPM_PERF_SET_V2 {
+  ULONG MinimumPerformance;
+  ULONG MaximumPerformance;
+  ULONG DesiredPerformance;
+  ULONG TimeWindow;
+  ULONG PerformanceTolerance;
+  UCHAR EnergyPerformancePreference;
+} PEP_PPM_PERF_SET_V2, *PPEP_PPM_PERF_SET_V2;
+
+typedef struct _PEP_PPM_PLATFORM_STATE_RESIDENCY {
+  ULONG64 Residency;
+  ULONG64 TransitionCount;
+} PEP_PPM_PLATFORM_STATE_RESIDENCY, *PPEP_PPM_PLATFORM_STATE_RESIDENCY;
+
+typedef struct _PEP_PPM_PLATFORM_STATE_RESIDENCIES {
+  ULONG Count;
+  PPEP_PPM_PLATFORM_STATE_RESIDENCY States;
+} PEP_PPM_PLATFORM_STATE_RESIDENCIES, *PPEP_PPM_PLATFORM_STATE_RESIDENCIES;
+
+typedef struct _PEP_PPM_PROVISIONING_SOC_IDENTIFIER {
+  USHORT Length;
+  PWSTR SocIdentifier;
+} PEP_PPM_PROVISIONING_SOC_IDENTIFIER, *PPEP_PPM_PROVISIONING_SOC_IDENTIFIER;
+
+typedef struct _PEP_PPM_QUERY_CAPABILITIES {
+  ULONG FeedbackCounterCount;
+  ULONG IdleStateCount;
+  BOOLEAN PerformanceStatesSupported;
+  BOOLEAN ParkingSupported;
+  UCHAR DiscretePerformanceStateCount;
+  UCHAR Reserved;
+} PEP_PPM_QUERY_CAPABILITIES, *PPEP_PPM_QUERY_CAPABILITIES;
+
+typedef struct _PEP_PPM_QUERY_COORDINATED_DEPENDENCY {
+  ULONG StateIndex;
+  ULONG DependencyIndex;
+  ULONG DependencySize;
+  ULONG DependencySizeUsed;
+  POHANDLE TargetProcessor;
+  PEP_COORDINATED_DEPENDENCY_OPTION Options[1];
+} PEP_PPM_QUERY_COORDINATED_DEPENDENCY, *PPEP_PPM_QUERY_COORDINATED_DEPENDENCY;
+
+typedef struct _PEP_PPM_QUERY_COORDINATED_STATES {
+  ULONG Count;
+  PEP_COORDINATED_IDLE_STATE States[1];
+} PEP_PPM_QUERY_COORDINATED_STATES, *PPEP_PPM_QUERY_COORDINATED_STATES;
+
+typedef struct _PEP_PPM_QUERY_DOMAIN_INFO {
+  ULONG DomainId;
+  UCHAR CoordinationType;
+  BOOLEAN IdleProcessorsDiscounted;
+  BOOLEAN SchedulerDirectedTransitionsSupported;
+  BOOLEAN AffinitizePerfSet;
+  ULONG WorstCaseTransitionLatency;
+  ULONG WorstCaseTransitionOverhead;
+} PEP_PPM_QUERY_DOMAIN_INFO, *PPEP_PPM_QUERY_DOMAIN_INFO;
+
+typedef struct _PEP_PPM_QUERY_IDLE_STATES_V2 {
+  ULONG Count;
+  PEP_PROCESSOR_IDLE_STATE_V2 IdleStates[1];
+} PEP_PPM_QUERY_IDLE_STATES_V2, *PPEP_PPM_QUERY_IDLE_STATES_V2;
+
+typedef struct _PEP_PPM_QUERY_PERF_AUTONOMOUS_SUPPORT {
+  UCHAR AutonomousCapability;
+} PEP_PPM_QUERY_PERF_AUTONOMOUS_SUPPORT, *PPEP_PPM_QUERY_PERF_AUTONOMOUS_SUPPORT;
 
 typedef struct _PEP_PPM_QUERY_PERF_CAPABILITIES {
   ULONG HighestPerformance;
@@ -1552,22 +1560,97 @@ typedef struct _PEP_PPM_QUERY_PERF_CONSTRAINTS {
   ULONG LimitReasons;
 } PEP_PPM_PERF_CONSTRAINTS, *PPEP_PPM_PERF_CONSTRAINTS;
 
-typedef struct _PEP_PPM_PERF_SET {
-  ULONG MinimumPerformance;
-  ULONG MaximumPerformance;
-  ULONG DesiredPerformance;
-  ULONG TimeWindow;
-  ULONG PerformanceTolerance;
-} PEP_PPM_PERF_SET, *PPEP_PPM_PERF_SET;
+typedef struct _PEP_PPM_QUERY_PERF_EPP_SUPPORT {
+  BOOLEAN EnergyPerformancePreferenceSupported;
+} PEP_PPM_QUERY_PERF_EPP_SUPPORT, *PPEP_PPM_QUERY_PERF_EPP_SUPPORT;
 
-typedef struct _PEP_PPM_PERF_SET_V2 {
-  ULONG MinimumPerformance;
-  ULONG MaximumPerformance;
-  ULONG DesiredPerformance;
-  ULONG TimeWindow;
-  ULONG PerformanceTolerance;
-  UCHAR EnergyPerformancePreference;
-} PEP_PPM_PERF_SET_V2, *PPEP_PPM_PERF_SET_V2;
+typedef struct _PEP_PPM_QUERY_PLATFORM_STATES {
+  ULONG PlatformStateCount;
+} PEP_PPM_QUERY_PLATFORM_STATES, *PPEP_PPM_QUERY_PLATFORM_STATES;
+
+typedef struct _PEP_PPM_QUERY_STATE_NAME {
+  ULONG StateIndex;
+  USHORT NameSize;
+  PWSTR Name;
+} PEP_PPM_QUERY_STATE_NAME, *PPEP_PPM_QUERY_STATE_NAME;
+
+typedef struct _PEP_PPM_QUERY_VETO_REASON {
+  ULONG VetoReason;
+  USHORT NameSize;
+  PWSTR Name;
+} PEP_PPM_QUERY_VETO_REASON, *PPEP_PPM_QUERY_VETO_REASON;
+
+typedef struct _PEP_PPM_QUERY_VETO_REASONS {
+  ULONG VetoReasonCount;
+} PEP_PPM_QUERY_VETO_REASONS, *PPEP_PPM_QUERY_VETO_REASONS;
+
+typedef struct _PEP_PPM_RESUME_FROM_SYSTEM_STATE {
+  SYSTEM_POWER_STATE TargetState;
+} PEP_PPM_RESUME_FROM_SYSTEM_STATE, *PPEP_PPM_RESUME_FROM_SYSTEM_STATE;
+
+typedef struct _PEP_PPM_TEST_IDLE_STATE {
+  ULONG ProcessorState;
+  ULONG PlatformState;
+  ULONG VetoReason;
+} PEP_PPM_TEST_IDLE_STATE, *PPEP_PPM_TEST_IDLE_STATE;
+
+typedef struct _PEP_PPM_VETO_REASON_ID {
+  ULONG VetoIdentifier;
+  USHORT NameSize;
+  PWSTR Name;
+} PEP_PPM_VETO_REASON_ID, *PPEP_PPM_VETO_REASON_ID;
+
+typedef struct _PEP_PPM_ALLOCATE_VETO_REASONS {
+  ULONG BaseVetoReason;
+  ULONG VetoCount;
+  PEP_PPM_VETO_REASON_ID VetoReasons[1];
+} PEP_PPM_ALLOCATE_VETO_REASONS, *PPEP_PPM_ALLOCATE_VETO_REASONS;
+
+typedef struct _PEP_PPM_WPS_INFORMATION {
+  UCHAR PerformanceRankingScore;
+  UCHAR EfficiencyRankingScore;
+  PEP_PPM_WPS_PARK_PREFERENCE ParkingPreference;
+  PEP_PPM_WPS_PARK_PREFERENCE_REASON ParkPreferenceReason;
+  UCHAR UnparkOrderingValue;
+  UCHAR Reserved[3];
+} PEP_PPM_WPS_INFORMATION, *PPEP_PPM_WPS_INFORMATION;
+
+typedef struct _PEP_PPM_WPS_TABLE_ENTRY {
+  PEPHANDLE Processor;
+  PEP_PPM_WPS_INFORMATION WpsInformation;
+} PEP_PPM_WPS_TABLE_ENTRY, *PPEP_PPM_WPS_TABLE_ENTRY;
+
+typedef struct _PEP_PPM_QUERY_WPS_TABLE {
+  ULONG EntryCount;
+  PEP_PPM_WPS_TABLE_ENTRY WpsTableEntries[1];
+} PEP_PPM_QUERY_WPS_TABLE, *PPEP_PPM_QUERY_WPS_TABLE;
+
+typedef struct _PEP_PREPARE_DEVICE {
+  PCUNICODE_STRING DeviceId;
+  BOOLEAN DeviceAccepted;
+} PEP_PREPARE_DEVICE, *PPEP_PREPARE_DEVICE;
+
+typedef struct _PEP_PROCESSOR_IDLE_DEPENDENCY {
+  POHANDLE TargetProcessor;
+  UCHAR ExpectedState;
+  BOOLEAN AllowDeeperStates;
+  BOOLEAN LooseDependency;
+} PEP_PROCESSOR_IDLE_DEPENDENCY, *PPEP_PROCESSOR_IDLE_DEPENDENCY;
+
+typedef struct _PEP_PLATFORM_IDLE_STATE {
+  POHANDLE InitiatingProcessor;
+  UCHAR InitiatingState;
+  ULONG Latency;
+  ULONG BreakEvenDuration;
+  ULONG DependencyArrayUsed;
+  ULONG DependencyArrayCount;
+  PEP_PROCESSOR_IDLE_DEPENDENCY DependencyArray[1];
+} PEP_PLATFORM_IDLE_STATE, *PPEP_PLATFORM_IDLE_STATE;
+
+typedef struct _PEP_PPM_QUERY_PLATFORM_STATE {
+  ULONG StateIndex;
+  PEP_PLATFORM_IDLE_STATE State;
+} PEP_PPM_QUERY_PLATFORM_STATE, *PPEP_PPM_QUERY_PLATFORM_STATE;
 
 typedef struct _PEP_PROCESSOR_PARK_PREFERENCE {
   PEPHANDLE Processor;
@@ -1601,117 +1684,6 @@ typedef struct _PEP_PPM_PARK_MASK {
   PPEP_PROCESSOR_PARK_STATE Processors;
 } PEP_PPM_PARK_MASK, *PPEP_PPM_PARK_MASK;
 
-typedef struct _PEP_PPM_PERF_CHECK_COMPLETE {
-  ULONGLONG EvaluationTime;
-} PEP_PPM_PERF_CHECK_COMPLETE, *PPEP_PPM_PERF_CHECK_COMPLETE;
-
-typedef struct _PEP_PPM_CST_STATE {
-  UCHAR Type;
-  USHORT Latency;
-  ULONG Power;
-  UCHAR AddressSpaceId;
-  UCHAR BitWidth;
-  UCHAR BitOffset;
-  UCHAR AccessSize;
-  PHYSICAL_ADDRESS Address;
-} PEP_PPM_CST_STATE, *PPEP_PPM_CST_STATE;
-
-typedef struct _PEP_PPM_CST_STATES {
-  ULONG Count;
-  PPEP_PPM_CST_STATE IdleStates;
-} PEP_PPM_CST_STATES, *PPEP_PPM_CST_STATES;
-
-typedef struct _PEP_PPM_PLATFORM_STATE_RESIDENCY {
-  ULONG64 Residency;
-  ULONG64 TransitionCount;
-} PEP_PPM_PLATFORM_STATE_RESIDENCY, *PPEP_PPM_PLATFORM_STATE_RESIDENCY;
-
-typedef struct _PEP_PPM_PLATFORM_STATE_RESIDENCIES {
-  ULONG Count;
-  PPEP_PPM_PLATFORM_STATE_RESIDENCY States;
-} PEP_PPM_PLATFORM_STATE_RESIDENCIES, *PPEP_PPM_PLATFORM_STATE_RESIDENCIES;
-
-typedef struct _PEP_PPM_QUERY_VETO_REASONS {
-  ULONG VetoReasonCount;
-} PEP_PPM_QUERY_VETO_REASONS, *PPEP_PPM_QUERY_VETO_REASONS;
-
-typedef struct _PEP_PPM_QUERY_VETO_REASON {
-  ULONG VetoReason;
-  USHORT NameSize;
-  PWSTR Name;
-} PEP_PPM_QUERY_VETO_REASON, *PPEP_PPM_QUERY_VETO_REASON;
-
-typedef struct _PEP_PPM_QUERY_STATE_NAME {
-  ULONG StateIndex;
-  USHORT NameSize;
-  PWSTR Name;
-} PEP_PPM_QUERY_STATE_NAME, *PPEP_PPM_QUERY_STATE_NAME;
-
-typedef struct _PEP_COORDINATED_IDLE_STATE {
-  ULONG Latency;
-  ULONG BreakEvenDuration;
-  ULONG DependencyCount;
-  ULONG MaximumDependencySize;
-} PEP_COORDINATED_IDLE_STATE, *PPEP_COORDINATED_IDLE_STATE;
-
-typedef struct _PEP_PPM_QUERY_COORDINATED_STATES {
-  ULONG Count;
-  PEP_COORDINATED_IDLE_STATE States[1];
-} PEP_PPM_QUERY_COORDINATED_STATES, *PPEP_PPM_QUERY_COORDINATED_STATES;
-
-typedef struct _PEP_COORDINATED_DEPENDENCY_OPTION {
-  UCHAR ExpectedStateIndex;
-  BOOLEAN LooseDependency;
-  BOOLEAN InitiatingState;
-  BOOLEAN DependentState;
-} PEP_COORDINATED_DEPENDENCY_OPTION, *PPEP_COORDINATED_DEPENDENCY_OPTION;
-
-typedef struct _PEP_PPM_QUERY_COORDINATED_DEPENDENCY {
-  ULONG StateIndex;
-  ULONG DependencyIndex;
-  ULONG DependencySize;
-  ULONG DependencySizeUsed;
-  POHANDLE TargetProcessor;
-  PEP_COORDINATED_DEPENDENCY_OPTION Options[1];
-} PEP_PPM_QUERY_COORDINATED_DEPENDENCY, *PPEP_PPM_QUERY_COORDINATED_DEPENDENCY;
-
-typedef struct _PEP_PPM_LPI_SUPPORTED {
-  BOOLEAN OverrideLpiStates;
-} PEP_PPM_LPI_SUPPORTED, *PPEP_PPM_LPI_SUPPORTED;
-
-typedef struct _PEP_PPM_LPI_REGISTER {
-  UCHAR AddressSpaceID;
-  UCHAR BitWidth;
-  UCHAR BitOffset;
-  UCHAR AccessSize;
-  PHYSICAL_ADDRESS Address;
-} PEP_PPM_LPI_REGISTER, *PPEP_PPM_LPI_REGISTER;
-
-typedef struct _PEP_PPM_LPI_COORDINATED_DEPENDENCY {
-  PEPHANDLE TargetProcessor;
-  ULONG OptionCount;
-  PULONG Options;
-} PEP_PPM_LPI_COORDINATED_DEPENDENCY, *PPEP_PPM_LPI_COORDINATED_DEPENDENCY;
-
-typedef struct _PEP_PPM_LPI_PRE_EXECUTE {
-  NTSTATUS Status;
-  ULONG CoordinatedStateCount;
-  PULONG CoordinatedStates;
-} PEP_PPM_LPI_PRE_EXECUTE, *PPEP_PPM_LPI_PRE_EXECUTE;
-
-typedef struct _PEP_PPM_LPI_COMPLETE {
-  ULONG CoordinatedStateCount;
-  PULONG CoordinatedStates;
-} PEP_PPM_LPI_COMPLETE, *PPEP_PPM_LPI_COMPLETE;
-
-typedef struct _PEP_PPM_ENTER_SYSTEM_STATE {
-  SYSTEM_POWER_STATE TargetState;
-} PEP_PPM_ENTER_SYSTEM_STATE, *PPEP_PPM_ENTER_SYSTEM_STATE;
-
-typedef struct _PEP_PPM_RESUME_FROM_SYSTEM_STATE {
-  SYSTEM_POWER_STATE TargetState;
-} PEP_PPM_RESUME_FROM_SYSTEM_STATE, *PPEP_PPM_RESUME_FROM_SYSTEM_STATE;
-
 typedef struct _PEP_PROCESSOR_PERF_STATE {
   ULONG Performance;
   ULONG Frequency;
@@ -1723,67 +1695,95 @@ typedef struct _PEP_PPM_QUERY_DISCRETE_PERF_STATES {
   PPEP_PROCESSOR_PERF_STATE States;
 } PEP_PPM_QUERY_DISCRETE_PERF_STATES, *PPEP_PPM_QUERY_DISCRETE_PERF_STATES;
 
-typedef struct _PEP_PPM_QUERY_DOMAIN_INFO {
-  ULONG DomainId;
-  UCHAR CoordinationType;
-  BOOLEAN IdleProcessorsDiscounted;
-  BOOLEAN SchedulerDirectedTransitionsSupported;
-  BOOLEAN AffinitizePerfSet;
-  ULONG WorstCaseTransitionLatency;
-  ULONG WorstCaseTransitionOverhead;
-} PEP_PPM_QUERY_DOMAIN_INFO, *PPEP_PPM_QUERY_DOMAIN_INFO;
+typedef struct _PEP_QUERY_COMPONENT_PERF_CAPABILITIES {
+  PEPHANDLE DeviceHandle;
+  ULONG Component;
+  ULONG SetCount;
+} PEP_QUERY_COMPONENT_PERF_CAPABILITIES, *PPEP_QUERY_COMPONENT_PERF_CAPABILITIES;
 
-typedef struct _PEP_PPM_PERF_SET_STATE {
-  UCHAR MinimumPerformanceState;
-  UCHAR MaximumPerformanceState;
-  UCHAR DesiredPerformanceState;
-  UCHAR EnergyPerformancePreference;
-} PEP_PPM_PERF_SET_STATE, *PPEP_PPM_PERF_SET_STATE;
-
-typedef struct _PEP_PPM_QUERY_PERF_EPP_SUPPORT {
-  BOOLEAN EnergyPerformancePreferenceSupported;
-} PEP_PPM_QUERY_PERF_EPP_SUPPORT, *PPEP_PPM_QUERY_PERF_EPP_SUPPORT;
-
-typedef struct _PEP_PPM_QUERY_PERF_AUTONOMOUS_SUPPORT {
-  UCHAR AutonomousCapability;
-} PEP_PPM_QUERY_PERF_AUTONOMOUS_SUPPORT, *PPEP_PPM_QUERY_PERF_AUTONOMOUS_SUPPORT;
-
-typedef struct _PEP_PPM_VETO_REASON_ID {
-  ULONG VetoIdentifier;
+typedef struct _PEP_QUERY_COMPONENT_PERF_SET_NAME {
+  PEPHANDLE DeviceHandle;
+  ULONG Component;
+  ULONG Set;
   USHORT NameSize;
-  PWSTR Name;
-} PEP_PPM_VETO_REASON_ID, *PPEP_PPM_VETO_REASON_ID;
+  PWCHAR Name;
+} PEP_QUERY_COMPONENT_PERF_SET_NAME, *PPEP_QUERY_COMPONENT_PERF_SET_NAME;
 
-typedef struct _PEP_PPM_ALLOCATE_VETO_REASONS {
-  ULONG BaseVetoReason;
-  ULONG VetoCount;
-  PEP_PPM_VETO_REASON_ID VetoReasons[1];
-} PEP_PPM_ALLOCATE_VETO_REASONS, *PPEP_PPM_ALLOCATE_VETO_REASONS;
+typedef struct _PEP_QUERY_COMPONENT_PERF_STATES {
+  PEPHANDLE DeviceHandle;
+  ULONG Component;
+  ULONG Set;
+  PPEP_PERF_STATE States;
+} PEP_QUERY_COMPONENT_PERF_STATES, *PPEP_QUERY_COMPONENT_PERF_STATES;
+
+typedef struct _PEP_QUERY_SOC_SUBSYSTEM {
+  ULONG PlatformIdleStateIndex;
+  ULONG SubsystemIndex;
+  PVOID SubsystemHandle;
+  UNICODE_STRING ParentName;
+  UNICODE_STRING SubsystemName;
+  ULONG MetadataCount;
+  ULONG Flags;
+} PEP_QUERY_SOC_SUBSYSTEM, *PPEP_QUERY_SOC_SUBSYSTEM;
+
+typedef struct _PEP_QUERY_SOC_SUBSYSTEM_BLOCKING_TIME {
+  ULONG PlatformIdleStateIndex;
+  PVOID SubsystemHandle;
+  PCUNICODE_STRING SubsystemName;
+  ULONG64 BlockingTime;
+  ULONG Flags;
+} PEP_QUERY_SOC_SUBSYSTEM_BLOCKING_TIME, *PPEP_QUERY_SOC_SUBSYSTEM_BLOCKING_TIME;
+
+typedef struct _PEP_QUERY_SOC_SUBSYSTEM_COUNT {
+  ULONG PlatformIdleStateIndex;
+  ULONG SubsystemCount;
+  ULONG Flags;
+} PEP_QUERY_SOC_SUBSYSTEM_COUNT, *PPEP_QUERY_SOC_SUBSYSTEM_COUNT;
+
+typedef struct _PEP_REGISTER_DEBUGGER {
+  PEPHANDLE DeviceHandle;
+} PEP_REGISTER_DEBUGGER, *PPEP_REGISTER_DEBUGGER;
+
+typedef struct _PEP_REGISTER_DEVICE_V2 {
+  PCUNICODE_STRING DeviceId;
+  POHANDLE KernelHandle;
+  PPEP_DEVICE_REGISTER_V2 Register;
+  PEPHANDLE DeviceHandle;
+  PEP_DEVICE_ACCEPTANCE_TYPE DeviceAccepted;
+} PEP_REGISTER_DEVICE_V2, *PPEP_REGISTER_DEVICE_V2;
+
+typedef struct _PEP_RESET_SOC_SUBSYSTEM_ACCOUNTING {
+  ULONG PlatformIdleStateIndex;
+  ULONG Flags;
+} PEP_RESET_SOC_SUBSYSTEM_ACCOUNTING, *PPEP_RESET_SOC_SUBSYSTEM_ACCOUNTING;
+
+typedef struct _PEP_SOC_SUBSYSTEM_METADATA {
+  UNICODE_STRING Key;
+  UNICODE_STRING Value;
+} PEP_SOC_SUBSYSTEM_METADATA, *PPEP_SOC_SUBSYSTEM_METADATA;
+
+typedef struct _PEP_QUERY_SOC_SUBSYSTEM_METADATA {
+  ULONG PlatformIdleStateIndex;
+  PVOID SubsystemHandle;
+  PCUNICODE_STRING SubsystemName;
+  ULONG Flags;
+  ULONG MetadataCount;
+  PPEP_SOC_SUBSYSTEM_METADATA Metadata[1];
+} PEP_QUERY_SOC_SUBSYSTEM_METADATA, *PPEP_QUERY_SOC_SUBSYSTEM_METADATA;
+
+typedef struct _PEP_SYSTEM_LATENCY {
+  ULONGLONG Latency;
+} PEP_SYSTEM_LATENCY, *PPEP_SYSTEM_LATENCY;
+
+typedef struct _PEP_UNREGISTER_DEVICE {
+  PEPHANDLE DeviceHandle;
+} PEP_UNREGISTER_DEVICE, *PPEP_UNREGISTER_DEVICE;
 
 typedef struct _PEP_WPS_QUERY_CAPABILITIES {
   BOOLEAN WpsSupported;
   BOOLEAN WpsLlcContainmentSupported;
   UCHAR Reserved[2];
 } PEP_WPS_QUERY_CAPABILITIES, *PPEP_WPS_QUERY_CAPABILITIES;
-
-typedef struct _PEP_PPM_WPS_INFORMATION {
-  UCHAR PerformanceRankingScore;
-  UCHAR EfficiencyRankingScore;
-  PEP_PPM_WPS_PARK_PREFERENCE ParkingPreference;
-  PEP_PPM_WPS_PARK_PREFERENCE_REASON ParkPreferenceReason;
-  UCHAR UnparkOrderingValue;
-  UCHAR Reserved[3];
-} PEP_PPM_WPS_INFORMATION, *PPEP_PPM_WPS_INFORMATION;
-
-typedef struct _PEP_PPM_WPS_TABLE_ENTRY {
-  PEPHANDLE Processor;
-  PEP_PPM_WPS_INFORMATION WpsInformation;
-} PEP_PPM_WPS_TABLE_ENTRY, *PPEP_PPM_WPS_TABLE_ENTRY;
-
-typedef struct _PEP_PPM_QUERY_WPS_TABLE {
-  ULONG EntryCount;
-  PEP_PPM_WPS_TABLE_ENTRY WpsTableEntries[1];
-} PEP_PPM_QUERY_WPS_TABLE, *PPEP_PPM_QUERY_WPS_TABLE;
 
 typedef struct _PO_FX_CORE_DEVICE {
   ULONG Version;
@@ -1795,5 +1795,347 @@ typedef struct _PO_FX_CORE_DEVICE {
   PVOID DeviceContext;
   PO_FX_COMPONENT Components[1];
 } PO_FX_CORE_DEVICE, *PPO_FX_CORE_DEVICE;
+
+#define PEP_ACPI_RESOURCE_LENGTH 0x48
+#define PEP_ACPI_UART_SERIAL_FLAG_BIG_ENDIAN 0x80
+#define PEP_ACPI_UART_SERIAL_FLAG_DATA_BITS_5 0
+#define PEP_ACPI_UART_SERIAL_FLAG_DATA_BITS_6 0x10
+#define PEP_ACPI_UART_SERIAL_FLAG_DATA_BITS_7 0x20
+#define PEP_ACPI_UART_SERIAL_FLAG_DATA_BITS_8 0x30
+#define PEP_ACPI_UART_SERIAL_FLAG_DATA_BITS_9 0x40
+#define PEP_ACPI_UART_SERIAL_FLAG_DATA_BITS_MASK 0x70
+#define PEP_ACPI_UART_SERIAL_FLAG_FLOW_CTL_HW 1
+#define PEP_ACPI_UART_SERIAL_FLAG_FLOW_CTL_MASK 3
+#define PEP_ACPI_UART_SERIAL_FLAG_FLOW_CTL_NONE 0
+#define PEP_ACPI_UART_SERIAL_FLAG_FLOW_CTL_XONXOFF 2
+#define PEP_ACPI_UART_SERIAL_FLAG_STOP_BITS_0 0
+#define PEP_ACPI_UART_SERIAL_FLAG_STOP_BITS_1 4
+#define PEP_ACPI_UART_SERIAL_FLAG_STOP_BITS_1_5 8
+#define PEP_ACPI_UART_SERIAL_FLAG_STOP_BITS_2 0xC
+#define PEP_ACPI_UART_SERIAL_FLAG_STOP_BITS_MASK 0xC
+#define PEP_ACPI_UART_SERIAL_LINES_CTS 0x40
+#define PEP_ACPI_UART_SERIAL_LINES_DCD 4
+#define PEP_ACPI_UART_SERIAL_LINES_DSR 0x10
+#define PEP_ACPI_UART_SERIAL_LINES_DTR 0x20
+#define PEP_ACPI_UART_SERIAL_LINES_RI 8
+#define PEP_ACPI_UART_SERIAL_LINES_RTS 0x80
+#define PEP_UNSPECIFIED_MINIMUM_STATE 0xFFFFFFFF
+#define PEPFX 0
+#define PERFORMANCE_LIMIT_DOMAIN_DEPENDENCY 4
+#define PERFORMANCE_LIMIT_POWER 2
+#define PERFORMANCE_LIMIT_THERMAL 1
+#define PROCESSOR_HALT_CACHE_COHERENT 2
+#define PROCESSOR_HALT_CACHE_FLUSH_OVERRIDE 1
+#define PROCESSOR_HALT_CONTEXT_RETAINED 4
+#define PROCESSOR_HALT_RETURN_NOT_SAFE 8
+#define PROCESSOR_HALT_VIA_PSCI_CPU_SUSPEND 0x10
+
+struct _PEP_COMPONENT_PERF_SET
+{
+    UNICODE_STRING Name;
+    ULONGLONG Flags;
+    PEP_PERF_STATE_UNIT Unit;
+    PEP_PERF_STATE_TYPE Type;
+    union
+    {
+        struct
+        {
+            ULONG Count;
+            PPEP_PERF_STATE States;
+        } Discrete;
+        struct
+        {
+            ULONGLONG Minimum;
+            ULONGLONG Maximum;
+        } Range;
+    };
+};
+
+struct _PEP_COMPONENT_PERF_STATE_REQUEST
+{
+    ULONG Set;
+    union
+    {
+        ULONG StateIndex;
+        ULONGLONG StateValue;
+    };
+};
+
+struct _PEP_PPM_COORDINATED_LPI_STATE
+{
+    ULONG MinResidency;
+    ULONG WakeupLatency;
+    union
+    {
+        ULONG AsUlong;
+        struct
+        {
+            ULONG Enabled : 1;
+            ULONG Reserved : 31;
+        };
+    } Flags;
+    union
+    {
+        ULONG AsUlong;
+        struct
+        {
+            ULONG CoreContextLost : 1;
+            ULONG TraceContextLost : 1;
+            ULONG GICR : 1;
+            ULONG GICD : 1;
+            ULONG Reserved : 28;
+        } Arm;
+    } ArchContextFlags;
+    ULONG ResidencyCounterFrequency;
+    BOOLEAN IntegerEntryMethod;
+    union
+    {
+        PEP_PPM_LPI_REGISTER AsRegister;
+        ULONG64 AsInteger;
+    } EntryMethod;
+    PEP_PPM_LPI_REGISTER ResidencyCounter;
+    PEP_PPM_LPI_REGISTER UsageCounter;
+    PWSTR StateName;
+    ULONG DependencyCount;
+    PPEP_PPM_LPI_COORDINATED_DEPENDENCY Dependencies;
+};
+
+struct _PEP_PPM_FEEDBACK_READ
+{
+    ULONG CounterIndex;
+    union
+    {
+        ULONG64 InstantaneousValue;
+        struct
+        {
+            ULONG64 NominalCount;
+            ULONG64 ActualCount;
+        };
+    };
+};
+
+struct _PEP_PPM_PROCESSOR_LPI_STATE
+{
+    ULONG MinResidency;
+    ULONG WakeupLatency;
+    union
+    {
+        ULONG AsUlong;
+        struct
+        {
+            ULONG Enabled : 1;
+            ULONG Reserved : 31;
+        };
+    } Flags;
+    union
+    {
+        ULONG AsUlong;
+        struct
+        {
+            ULONG CoreContextLost : 1;
+            ULONG TraceContextLost : 1;
+            ULONG GICR : 1;
+            ULONG GICD : 1;
+            ULONG Reserved : 28;
+        } Arm;
+    } ArchContextFlags;
+    ULONG ResidencyCounterFrequency;
+    PEP_PPM_LPI_REGISTER EntryMethod;
+    PEP_PPM_LPI_REGISTER ResidencyCounter;
+    PEP_PPM_LPI_REGISTER UsageCounter;
+    PWSTR StateName;
+};
+
+struct _PEP_PROCESSOR_FEEDBACK_COUNTER
+{
+    struct
+    {
+        ULONG Affinitized : 1;
+        ULONG Type : 2;
+        ULONG Counter : 4;
+        ULONG DiscountIdle : 1;
+        ULONG Reserved : 24;
+    };
+    ULONG NominalRate;
+};
+
+struct _PEP_QUERY_COMPONENT_PERF_SET
+{
+    PEPHANDLE DeviceHandle;
+    ULONG Component;
+    ULONG Set;
+    ULONGLONG Flags;
+    PEP_PERF_STATE_UNIT Unit;
+    PEP_PERF_STATE_TYPE Type;
+    union
+    {
+        struct
+        {
+            ULONG Count;
+        } Discrete;
+        struct
+        {
+            ULONGLONG Minimum;
+            ULONGLONG Maximum;
+        } Range;
+    };
+};
+
+struct _PEP_QUERY_CURRENT_COMPONENT_PERF_STATE
+{
+    PEPHANDLE DeviceHandle;
+    ULONG Component;
+    ULONG Set;
+    union
+    {
+        ULONG StateIndex;
+        ULONGLONG StateValue;
+    };
+};
+
+typedef PEP_COMPONENT_V2 PEP_COMPONENT;
+
+typedef struct _PEP_COMPONENT_PERF_SET PEP_COMPONENT_PERF_SET;
+
+struct _PEP_COMPONENT_PERF_INFO
+{
+    ULONG SetCount;
+    PEP_COMPONENT_PERF_SET PerfStateSets[1];
+};
+
+typedef struct _PEP_COMPONENT_PERF_INFO PEP_COMPONENT_PERF_INFO;
+
+typedef struct _PEP_COMPONENT_PERF_STATE_REQUEST PEP_COMPONENT_PERF_STATE_REQUEST;
+
+typedef PEP_DEVICE_REGISTER_V2 PEP_DEVICE_REGISTER;
+
+typedef struct _PEP_PPM_COORDINATED_LPI_STATE PEP_PPM_COORDINATED_LPI_STATE;
+
+struct _PEP_PPM_LPI_COORDINATED_STATES
+{
+    ULONG Count;
+    PEP_PPM_COORDINATED_LPI_STATE LpiStates[1];
+};
+
+typedef struct _PEP_PPM_FEEDBACK_READ PEP_PPM_FEEDBACK_READ;
+
+typedef struct _PEP_PPM_LPI_COORDINATED_STATES PEP_PPM_LPI_COORDINATED_STATES;
+
+typedef struct _PEP_PPM_PROCESSOR_LPI_STATE PEP_PPM_PROCESSOR_LPI_STATE;
+
+struct _PEP_PPM_LPI_PROCESSOR_STATES
+{
+    ULONG Count;
+    PEP_PPM_PROCESSOR_LPI_STATE LpiStates[1];
+};
+
+typedef struct _PEP_PPM_LPI_PROCESSOR_STATES PEP_PPM_LPI_PROCESSOR_STATES;
+
+typedef struct _PEP_PROCESSOR_FEEDBACK_COUNTER PEP_PROCESSOR_FEEDBACK_COUNTER;
+
+struct _PEP_PPM_QUERY_FEEDBACK_COUNTERS
+{
+    ULONG Count;
+    PEP_PROCESSOR_FEEDBACK_COUNTER Counters[1];
+};
+
+typedef struct _PEP_PPM_QUERY_FEEDBACK_COUNTERS PEP_PPM_QUERY_FEEDBACK_COUNTERS;
+
+typedef struct _PEP_QUERY_COMPONENT_PERF_SET PEP_QUERY_COMPONENT_PERF_SET;
+
+typedef struct _PEP_QUERY_CURRENT_COMPONENT_PERF_STATE PEP_QUERY_CURRENT_COMPONENT_PERF_STATE;
+
+typedef PEP_REGISTER_DEVICE_V2 PEP_REGISTER_DEVICE;
+
+typedef BOOLEAN PEPCALLBACKPOWERONCRASHDUMPDEVICE(PPEP_CRASHDUMP_INFORMATION);
+
+struct PEPHANDLE__
+{
+    int unused;
+};
+
+typedef PEP_COMPONENT_V2 *PPEP_COMPONENT;
+
+typedef struct _PEP_COMPONENT_PERF_INFO *PPEP_COMPONENT_PERF_INFO;
+
+struct _PEP_REGISTER_COMPONENT_PERF_STATES
+{
+    PEPHANDLE DeviceHandle;
+    ULONG Component;
+    ULONGLONG Flags;
+    PPEP_COMPONENT_PERF_INFO PerfStateInfo;
+};
+
+typedef struct _PEP_REGISTER_COMPONENT_PERF_STATES PEP_REGISTER_COMPONENT_PERF_STATES;
+
+typedef struct _PEP_COMPONENT_PERF_SET *PPEP_COMPONENT_PERF_SET;
+
+typedef struct _PEP_COMPONENT_PERF_STATE_REQUEST *PPEP_COMPONENT_PERF_STATE_REQUEST;
+
+struct _PEP_REQUEST_COMPONENT_PERF_STATE
+{
+    PEPHANDLE DeviceHandle;
+    ULONG Component;
+    BOOLEAN Completed;
+    BOOLEAN Succeeded;
+    ULONG PerfRequestsCount;
+    PPEP_COMPONENT_PERF_STATE_REQUEST PerfRequests;
+};
+
+typedef struct _PEP_REQUEST_COMPONENT_PERF_STATE PEP_REQUEST_COMPONENT_PERF_STATE;
+
+typedef PEP_DEVICE_REGISTER_V2 *PPEP_DEVICE_REGISTER;
+
+typedef struct _PEP_PPM_COORDINATED_LPI_STATE *PPEP_PPM_COORDINATED_LPI_STATE;
+
+typedef struct _PEP_PPM_FEEDBACK_READ *PPEP_PPM_FEEDBACK_READ;
+
+typedef struct _PEP_PPM_LPI_COORDINATED_STATES *PPEP_PPM_LPI_COORDINATED_STATES;
+
+typedef struct _PEP_PPM_LPI_PROCESSOR_STATES *PPEP_PPM_LPI_PROCESSOR_STATES;
+
+typedef struct _PEP_PPM_PROCESSOR_LPI_STATE *PPEP_PPM_PROCESSOR_LPI_STATE;
+
+typedef struct _PEP_PPM_QUERY_FEEDBACK_COUNTERS *PPEP_PPM_QUERY_FEEDBACK_COUNTERS;
+
+typedef struct _PEP_PROCESSOR_FEEDBACK_COUNTER *PPEP_PROCESSOR_FEEDBACK_COUNTER;
+
+typedef struct _PEP_QUERY_COMPONENT_PERF_SET *PPEP_QUERY_COMPONENT_PERF_SET;
+
+typedef struct _PEP_QUERY_CURRENT_COMPONENT_PERF_STATE *PPEP_QUERY_CURRENT_COMPONENT_PERF_STATE;
+
+typedef struct _PEP_REGISTER_COMPONENT_PERF_STATES *PPEP_REGISTER_COMPONENT_PERF_STATES;
+
+typedef PEP_REGISTER_DEVICE_V2 *PPEP_REGISTER_DEVICE;
+
+typedef struct _PEP_REQUEST_COMPONENT_PERF_STATE *PPEP_REQUEST_COMPONENT_PERF_STATE;
+
+typedef PEPCALLBACKPOWERONCRASHDUMPDEVICE *PPEPCALLBACKPOWERONCRASHDUMPDEVICE;
+
+struct _PEP_REGISTER_CRASHDUMP_DEVICE
+{
+    PPEPCALLBACKPOWERONCRASHDUMPDEVICE PowerOnDumpDeviceCallback;
+    PEPHANDLE DeviceHandle;
+};
+
+typedef struct _PEP_REGISTER_CRASHDUMP_DEVICE PEP_REGISTER_CRASHDUMP_DEVICE;
+
+typedef struct _PEP_REGISTER_CRASHDUMP_DEVICE *PPEP_REGISTER_CRASHDUMP_DEVICE;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+void PEP_ACPI_INITIALIZE_EXTENDED_IO_RESOURCE(BOOLEAN ResourceUsage, UCHAR Decode, BOOLEAN IsMinFixed, BOOLEAN IsMaxFixed, UCHAR ISARanges, ULONGLONG AddressGranularity, ULONGLONG AddressMinimum, ULONGLONG AddressMaximum, ULONGLONG AddressTranslation, ULONGLONG RangeLength, ULONGLONG TypeSpecificAttributes, PUNICODE_STRING DescriptorName, BOOLEAN TranslationTypeNonStatic, BOOLEAN TanslationSparseDensity, PPEP_ACPI_RESOURCE Resource);
+void PEP_ACPI_INITIALIZE_EXTENDED_MEMORY_RESOURCE(BOOLEAN ResourceUsage, UCHAR Decode, BOOLEAN IsMinFixed, BOOLEAN IsMaxFixed, UCHAR Cacheable, BOOLEAN ReadWrite, ULONGLONG AddressGranularity, ULONGLONG AddressMinimum, ULONGLONG AddressMaximum, ULONGLONG AddressTranslation, ULONGLONG RangeLength, ULONGLONG TypeSpecificAttributes, PUNICODE_STRING DescriptorName, UCHAR MemoryRangeType, BOOLEAN TranslationTypeNonStatic, PPEP_ACPI_RESOURCE Resource);
+void PEP_ACPI_INITIALIZE_SPB_SPI_RESOURCE(USHORT DeviceSelection, UCHAR DeviceSelectionPolarity, UCHAR WireMode, UCHAR DataBitLength, BOOLEAN SlaveMode, ULONG ConnectionSpeed, UCHAR ClockPolarity, UCHAR ClockPhase, PUNICODE_STRING ResourceSource, UCHAR ResourceSourceIndex, BOOLEAN ResourceUsage, BOOLEAN SharedMode, PCHAR VendorData, USHORT VendorDataLength, PPEP_ACPI_RESOURCE Resource);
+void PEP_ACPI_INITIALIZE_SPB_UART_RESOURCE(ULONG BaudRate, UCHAR BitsPerByte, UCHAR StopBits, UCHAR LinesInUse, UCHAR IsBigEndian, UCHAR Parity, UCHAR FlowControl, USHORT RxSize, USHORT TxSize, PUNICODE_STRING ResourceSource, UCHAR ResourceSourceIndex, BOOLEAN ResourceUsage, BOOLEAN SharedMode, PCHAR VendorData, USHORT VendorDataLength, PPEP_ACPI_RESOURCE Resource);
+NTSTATUS PoFxRegisterCoreDevice(PCUNICODE_STRING Id, PPO_FX_CORE_DEVICE Device, POHANDLE *Handle);
+NTSTATUS PoFxRegisterPluginEx(PPEP_INFORMATION PepInformation, ULONGLONG Flags, PPEP_KERNEL_INFORMATION KernelInformation);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

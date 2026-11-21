@@ -252,4 +252,393 @@ typedef struct _MIB_ICMP_EX
 #define MIB_IPADDR_DNS_ELIGIBLE 0X0100
 #endif
 
+#define _IPMIB_ 0
+#define ICMP4_ISTYPEERRORType) (((Type) == ICMP4_DST_UNREACH) || ((Type) == ICMP4_SOURCE_QUENCH) || ((Type) == ICMP4_REDIRECT) || ((Type) == ICMP4_PARAM_PROB) || ((Type) == ICMP4_TIME_EXCEEDED))
+#define ICMP6_ISTYPEERRORType) (!ICMP6_ISTYPEINFORMATIONAL(Type))
+#define ICMP6_ISTYPEINFORMATIONALType) (((Type) & ICMP6_INFOMSG_MASK) != 0)
+#define MIB_IPROUTE_METRIC_UNUSED ((DWORD)0xFFFFFFFF)
+#define MIB_USE_CURRENT_FORWARDING ((DWORD)0xFFFFFFFF)
+#define MIB_USE_CURRENT_TTL ((DWORD)0xFFFFFFFF)
+#define SIZEOF_BASIC_MIB_MFE ((ULONG)0x3C)
+#define SIZEOF_BASIC_MIB_MFE_STATS ((ULONG)0x40)
+#define SIZEOF_BASIC_MIB_MFE_STATS_EX ((ULONG)0x54)
+#define SIZEOF_IPADDRTABLEX) (FIELD_OFFSET(MIB_IPADDRTABLE, table [0]) + ((X) * sizeof (MIB_IPADDRROW)) + ALIGN_SIZE)
+#define SIZEOF_IPFORWARDTABLEX) (FIELD_OFFSET(MIB_IPFORWARDTABLE, table [0]) + ((X) * sizeof (MIB_IPFORWARDROW)) + ALIGN_SIZE)
+#define SIZEOF_IPNETTABLEX) (FIELD_OFFSET(MIB_IPNETTABLE, table [0]) + ((X) * sizeof (MIB_IPNETROW)) + ALIGN_SIZE)
+
+struct _MIB_IPNETROW_LH
+{
+    IF_INDEX dwIndex;
+    DWORD dwPhysAddrLen;
+    UCHAR bPhysAddr[8];
+    DWORD dwAddr;
+    union
+    {
+        DWORD dwType;
+        MIB_IPNET_TYPE Type;
+    };
+};
+
+struct _MIB_IPSTATS_LH
+{
+    union
+    {
+        DWORD dwForwarding;
+        MIB_IPSTATS_FORWARDING Forwarding;
+    };
+    DWORD dwDefaultTTL;
+    DWORD dwInReceives;
+    DWORD dwInHdrErrors;
+    DWORD dwInAddrErrors;
+    DWORD dwForwDatagrams;
+    DWORD dwInUnknownProtos;
+    DWORD dwInDiscards;
+    DWORD dwInDelivers;
+    DWORD dwOutRequests;
+    DWORD dwRoutingDiscards;
+    DWORD dwOutDiscards;
+    DWORD dwOutNoRoutes;
+    DWORD dwReasmTimeout;
+    DWORD dwReasmReqds;
+    DWORD dwReasmOks;
+    DWORD dwReasmFails;
+    DWORD dwFragOks;
+    DWORD dwFragFails;
+    DWORD dwFragCreates;
+    DWORD dwNumIf;
+    DWORD dwNumAddr;
+    DWORD dwNumRoutes;
+};
+
+typedef struct _MIB_IPNETROW_LH MIB_IPNETROW_LH;
+
+typedef struct _MIB_IPSTATS_LH MIB_IPSTATS_LH;
+
+typedef struct _MIB_IPNETROW_LH *PMIB_IPNETROW_LH;
+
+typedef struct _MIB_IPSTATS_LH *PMIB_IPSTATS_LH;
+
+#define ICMP4_ISTYPEERRORType) (((Type) == ICMP4_DST_UNREACH) || ((Type) == ICMP4_SOURCE_QUENCH) || ((Type) == ICMP4_REDIRECT) || ((Type) == ICMP4_PARAM_PROB) || ((Type) == ICMP4_TIME_EXCEEDED))
+#define ICMP6_ISTYPEERRORType) (!ICMP6_ISTYPEINFORMATIONAL(Type))
+#define SIZEOF_IPADDRTABLEX) (FIELD_OFFSET(MIB_IPADDRTABLE, table [0]) + ((X) * sizeof (MIB_IPADDRROW)) + ALIGN_SIZE)
+#define SIZEOF_IPFORWARDTABLEX) (FIELD_OFFSET(MIB_IPFORWARDTABLE, table [0]) + ((X) * sizeof (MIB_IPFORWARDROW)) + ALIGN_SIZE)
+#define SIZEOF_IPNETTABLEX) (FIELD_OFFSET(MIB_IPNETTABLE, table [0]) + ((X) * sizeof (MIB_IPNETROW)) + ALIGN_SIZE)
+
+#define ICMP4_ISTYPEERRORType) (((Type) == ICMP4_DST_UNREACH) || ((Type) == ICMP4_SOURCE_QUENCH) || ((Type) == ICMP4_REDIRECT) || ((Type) == ICMP4_PARAM_PROB) || ((Type) == ICMP4_TIME_EXCEEDED))
+#define ICMP6_ISTYPEERRORType) (!ICMP6_ISTYPEINFORMATIONAL(Type))
+#define SIZEOF_IPADDRTABLEX) (FIELD_OFFSET(MIB_IPADDRTABLE, table [0]) + ((X) * sizeof (MIB_IPADDRROW)) + ALIGN_SIZE)
+#define SIZEOF_IPFORWARDTABLEX) (FIELD_OFFSET(MIB_IPFORWARDTABLE, table [0]) + ((X) * sizeof (MIB_IPFORWARDROW)) + ALIGN_SIZE)
+#define SIZEOF_IPNETTABLEX) (FIELD_OFFSET(MIB_IPNETTABLE, table [0]) + ((X) * sizeof (MIB_IPNETROW)) + ALIGN_SIZE)
+#define SIZEOF_MCAST_IF_TABLEX) (FIELD_OFFSET(MIB_IPMCAST_IF_TABLE, table [0]) + ((X) * sizeof (MIB_IPMCAST_IF_ENTRY)) + ALIGN_SIZE)
+#define SIZEOF_MIB_MFEX) (SIZEOF_BASIC_MIB_MFE + ((X) * sizeof (MIB_IPMCAST_OIF)))
+#define SIZEOF_MIB_MFE_STATSX) (SIZEOF_BASIC_MIB_MFE_STATS + ((X) * sizeof (MIB_IPMCAST_OIF_STATS)))
+#define SIZEOF_MIB_MFE_STATS_EXX) (SIZEOF_BASIC_MIB_MFE_STATS_EX + ((X) * sizeof (MIB_IPMCAST_OIF_STATS)))
+
+struct _MIB_ICMP_EX_XPSP1
+{
+    MIBICMPSTATS_EX icmpInStats;
+    MIBICMPSTATS_EX icmpOutStats;
+};
+
+struct _MIB_IPADDRROW_W2K
+{
+    DWORD dwAddr;
+    DWORD dwIndex;
+    DWORD dwMask;
+    DWORD dwBCastAddr;
+    DWORD dwReasmSize;
+    unsigned short unused1;
+    unsigned short unused2;
+};
+
+struct _MIB_IPADDRROW_XP
+{
+    DWORD dwAddr;
+    IF_INDEX dwIndex;
+    DWORD dwMask;
+    DWORD dwBCastAddr;
+    DWORD dwReasmSize;
+    unsigned short unused1;
+    unsigned short wType;
+};
+
+struct _MIB_IPMCAST_GLOBAL
+{
+    DWORD dwEnable;
+};
+
+struct _MIB_IPMCAST_IF_ENTRY
+{
+    DWORD dwIfIndex;
+    DWORD dwTtl;
+    DWORD dwProtocol;
+    DWORD dwRateLimit;
+    ULONG ulInMcastOctets;
+    ULONG ulOutMcastOctets;
+};
+
+struct _MIB_IPMCAST_OIF_STATS_LH
+{
+    DWORD dwOutIfIndex;
+    DWORD dwNextHopAddr;
+    DWORD dwDialContext;
+    ULONG ulTtlTooLow;
+    ULONG ulFragNeeded;
+    ULONG ulOutPackets;
+    ULONG ulOutDiscards;
+};
+
+struct _MIB_IPMCAST_OIF_STATS_W2K
+{
+    DWORD dwOutIfIndex;
+    DWORD dwNextHopAddr;
+    PVOID pvDialContext;
+    ULONG ulTtlTooLow;
+    ULONG ulFragNeeded;
+    ULONG ulOutPackets;
+    ULONG ulOutDiscards;
+};
+
+struct _MIB_IPMCAST_OIF_W2K
+{
+    DWORD dwOutIfIndex;
+    DWORD dwNextHopAddr;
+    PVOID pvReserved;
+    DWORD dwReserved;
+};
+
+struct _MIB_IPMCAST_OIF_XP
+{
+    DWORD dwOutIfIndex;
+    DWORD dwNextHopAddr;
+    DWORD dwReserved;
+    DWORD dwReserved1;
+};
+
+struct _MIB_IPNETROW_W2K
+{
+    IF_INDEX dwIndex;
+    DWORD dwPhysAddrLen;
+    UCHAR bPhysAddr[8];
+    DWORD dwAddr;
+    DWORD dwType;
+};
+
+struct _MIB_IPSTATS_W2K
+{
+    DWORD dwForwarding;
+    DWORD dwDefaultTTL;
+    DWORD dwInReceives;
+    DWORD dwInHdrErrors;
+    DWORD dwInAddrErrors;
+    DWORD dwForwDatagrams;
+    DWORD dwInUnknownProtos;
+    DWORD dwInDiscards;
+    DWORD dwInDelivers;
+    DWORD dwOutRequests;
+    DWORD dwRoutingDiscards;
+    DWORD dwOutDiscards;
+    DWORD dwOutNoRoutes;
+    DWORD dwReasmTimeout;
+    DWORD dwReasmReqds;
+    DWORD dwReasmOks;
+    DWORD dwReasmFails;
+    DWORD dwFragOks;
+    DWORD dwFragFails;
+    DWORD dwFragCreates;
+    DWORD dwNumIf;
+    DWORD dwNumAddr;
+    DWORD dwNumRoutes;
+};
+
+struct _MIBICMPSTATS_EX_XPSP1
+{
+    DWORD dwMsgs;
+    DWORD dwErrors;
+    DWORD rgdwTypeCount[256];
+};
+
+typedef struct _MIB_ICMP_EX_XPSP1 MIB_ICMP_EX_XPSP1;
+
+typedef struct _MIB_IPADDRROW_W2K MIB_IPADDRROW_W2K;
+
+typedef struct _MIB_IPADDRROW_XP MIB_IPADDRROW_XP;
+
+typedef struct _MIB_IPMCAST_GLOBAL MIB_IPMCAST_GLOBAL;
+
+typedef struct _MIB_IPMCAST_IF_ENTRY MIB_IPMCAST_IF_ENTRY;
+
+struct _MIB_IPMCAST_IF_TABLE
+{
+    DWORD dwNumEntries;
+    MIB_IPMCAST_IF_ENTRY table[1];
+};
+
+typedef struct _MIB_IPMCAST_IF_TABLE MIB_IPMCAST_IF_TABLE;
+
+typedef struct _MIB_IPMCAST_MFE MIB_IPMCAST_MFE;
+
+struct _MIB_MFE_TABLE
+{
+    DWORD dwNumEntries;
+    MIB_IPMCAST_MFE table[1];
+};
+
+typedef struct _MIB_IPMCAST_MFE_STATS MIB_IPMCAST_MFE_STATS;
+
+struct _MIB_MFE_STATS_TABLE
+{
+    DWORD dwNumEntries;
+    MIB_IPMCAST_MFE_STATS table[1];
+};
+
+typedef struct _MIB_IPMCAST_MFE_STATS_EX_XP MIB_IPMCAST_MFE_STATS_EX_XP;
+
+typedef MIB_IPMCAST_MFE_STATS_EX_XP MIB_IPMCAST_MFE_STATS_EX;
+
+typedef struct _MIB_IPMCAST_OIF_STATS_LH MIB_IPMCAST_OIF_STATS_LH;
+
+typedef MIB_IPMCAST_OIF_STATS_LH MIB_IPMCAST_OIF_STATS;
+
+struct _MIB_IPMCAST_MFE_STATS
+{
+    DWORD dwGroup;
+    DWORD dwSource;
+    DWORD dwSrcMask;
+    DWORD dwUpStrmNgbr;
+    DWORD dwInIfIndex;
+    DWORD dwInIfProtocol;
+    DWORD dwRouteProtocol;
+    DWORD dwRouteNetwork;
+    DWORD dwRouteMask;
+    ULONG ulUpTime;
+    ULONG ulExpiryTime;
+    ULONG ulNumOutIf;
+    ULONG ulInPkts;
+    ULONG ulInOctets;
+    ULONG ulPktsDifferentIf;
+    ULONG ulQueueOverflow;
+    MIB_IPMCAST_OIF_STATS rgmiosOutStats[1];
+};
+
+struct _MIB_IPMCAST_MFE_STATS_EX_XP
+{
+    DWORD dwGroup;
+    DWORD dwSource;
+    DWORD dwSrcMask;
+    DWORD dwUpStrmNgbr;
+    DWORD dwInIfIndex;
+    DWORD dwInIfProtocol;
+    DWORD dwRouteProtocol;
+    DWORD dwRouteNetwork;
+    DWORD dwRouteMask;
+    ULONG ulUpTime;
+    ULONG ulExpiryTime;
+    ULONG ulNumOutIf;
+    ULONG ulInPkts;
+    ULONG ulInOctets;
+    ULONG ulPktsDifferentIf;
+    ULONG ulQueueOverflow;
+    ULONG ulUninitMfe;
+    ULONG ulNegativeMfe;
+    ULONG ulInDiscards;
+    ULONG ulInHdrErrors;
+    ULONG ulTotalOutPackets;
+    MIB_IPMCAST_OIF_STATS rgmiosOutStats[1];
+};
+
+typedef struct _MIB_IPMCAST_OIF_STATS_W2K MIB_IPMCAST_OIF_STATS_W2K;
+
+typedef struct _MIB_IPMCAST_OIF_W2K MIB_IPMCAST_OIF_W2K;
+
+typedef struct _MIB_IPMCAST_OIF_XP MIB_IPMCAST_OIF_XP;
+
+typedef MIB_IPMCAST_OIF_XP MIB_IPMCAST_OIF;
+
+struct _MIB_IPMCAST_MFE
+{
+    DWORD dwGroup;
+    DWORD dwSource;
+    DWORD dwSrcMask;
+    DWORD dwUpStrmNgbr;
+    DWORD dwInIfIndex;
+    DWORD dwInIfProtocol;
+    DWORD dwRouteProtocol;
+    DWORD dwRouteNetwork;
+    DWORD dwRouteMask;
+    ULONG ulUpTime;
+    ULONG ulExpiryTime;
+    ULONG ulTimeOut;
+    ULONG ulNumOutIf;
+    DWORD fFlags;
+    DWORD dwReserved;
+    MIB_IPMCAST_OIF rgmioOutInfo[1];
+};
+
+typedef struct _MIB_IPNETROW_W2K MIB_IPNETROW_W2K;
+
+typedef struct _MIB_IPSTATS_W2K MIB_IPSTATS_W2K;
+
+typedef struct _MIB_MFE_STATS_TABLE MIB_MFE_STATS_TABLE;
+
+typedef struct _MIB_MFE_STATS_TABLE_EX_XP MIB_MFE_STATS_TABLE_EX_XP;
+
+typedef MIB_MFE_STATS_TABLE_EX_XP MIB_MFE_STATS_TABLE_EX;
+
+typedef struct _MIB_MFE_TABLE MIB_MFE_TABLE;
+
+typedef struct _MIBICMPSTATS_EX_XPSP1 MIBICMPSTATS_EX_XPSP1;
+
+typedef struct _MIB_ICMP_EX_XPSP1 *PMIB_ICMP_EX_XPSP1;
+
+typedef struct _MIB_IPADDRROW_W2K *PMIB_IPADDRROW_W2K;
+
+typedef struct _MIB_IPADDRROW_XP *PMIB_IPADDRROW_XP;
+
+typedef struct _MIB_IPMCAST_GLOBAL *PMIB_IPMCAST_GLOBAL;
+
+typedef struct _MIB_IPMCAST_IF_ENTRY *PMIB_IPMCAST_IF_ENTRY;
+
+typedef struct _MIB_IPMCAST_IF_TABLE *PMIB_IPMCAST_IF_TABLE;
+
+typedef struct _MIB_IPMCAST_MFE *PMIB_IPMCAST_MFE;
+
+typedef struct _MIB_IPMCAST_MFE_STATS *PMIB_IPMCAST_MFE_STATS;
+
+typedef MIB_IPMCAST_MFE_STATS_EX_XP *PMIB_IPMCAST_MFE_STATS_EX;
+
+typedef struct _MIB_IPMCAST_MFE_STATS_EX_XP *PMIB_IPMCAST_MFE_STATS_EX_XP;
+
+struct _MIB_MFE_STATS_TABLE_EX_XP
+{
+    DWORD dwNumEntries;
+    PMIB_IPMCAST_MFE_STATS_EX_XP table[1];
+};
+
+typedef MIB_IPMCAST_OIF_XP *PMIB_IPMCAST_OIF;
+
+typedef MIB_IPMCAST_OIF_STATS_LH *PMIB_IPMCAST_OIF_STATS;
+
+typedef struct _MIB_IPMCAST_OIF_STATS_LH *PMIB_IPMCAST_OIF_STATS_LH;
+
+typedef struct _MIB_IPMCAST_OIF_STATS_W2K *PMIB_IPMCAST_OIF_STATS_W2K;
+
+typedef struct _MIB_IPMCAST_OIF_W2K *PMIB_IPMCAST_OIF_W2K;
+
+typedef struct _MIB_IPMCAST_OIF_XP *PMIB_IPMCAST_OIF_XP;
+
+typedef struct _MIB_IPNETROW_W2K *PMIB_IPNETROW_W2K;
+
+typedef struct _MIB_IPSTATS_W2K *PMIB_IPSTATS_W2K;
+
+typedef struct _MIB_MFE_STATS_TABLE *PMIB_MFE_STATS_TABLE;
+
+typedef MIB_MFE_STATS_TABLE_EX_XP *PMIB_MFE_STATS_TABLE_EX;
+
+typedef struct _MIB_MFE_STATS_TABLE_EX_XP *PMIB_MFE_STATS_TABLE_EX_XP;
+
+typedef struct _MIB_MFE_TABLE *PMIB_MFE_TABLE;
+
+typedef struct _MIBICMPSTATS_EX_XPSP1 *PMIBICMPSTATS_EX_XPSP1;
+
 #endif /* __WINE_IPMIB_H */

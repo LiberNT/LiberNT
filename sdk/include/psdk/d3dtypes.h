@@ -1426,4 +1426,34 @@ typedef enum _D3DTEXTURETRANSFORMFLAGS {
 
 #endif /* (DIRECT3D_VERSION < 0x0800) */
 
+struct _D3DSTATS
+{
+    DWORD dwSize;
+    DWORD dwTrianglesDrawn;
+    DWORD dwLinesDrawn;
+    DWORD dwPointsDrawn;
+    DWORD dwSpansDrawn;
+    DWORD dwVerticesProcessed;
+};
+
+enum _D3DLIGHTSTATETYPE
+{
+
+};
+
+enum _D3DTEXTUREBLEND
+{
+
+};
+
+enum _D3DTEXTUREFILTER
+{
+
+};
+
+enum _D3DVERTEXTYPE
+{
+
+};
+
 #endif

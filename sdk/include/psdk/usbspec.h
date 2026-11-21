@@ -225,12 +225,6 @@
 #define USB_STATUS_PORT_STATUS 0x00
 #endif
 
-typedef struct _USB_DEVICE_CAPABILITY_DESCRIPTOR {
-  UCHAR bLength;
-  UCHAR bDescriptorType;
-  UCHAR bDevCapabilityType;
-} USB_DEVICE_CAPABILITY_DESCRIPTOR, *PUSB_DEVICE_CAPABILITY_DESCRIPTOR;
-
 #pragma pack(push, 1)
 typedef struct _EUSB2_ISOCH_ENDPOINT_COMPANION_DESCRIPTOR {
   UCHAR bLength;
@@ -239,5 +233,327 @@ typedef struct _EUSB2_ISOCH_ENDPOINT_COMPANION_DESCRIPTOR {
   ULONG dwBytesPerInterval;
 } EUSB2_ISOCH_ENDPOINT_COMPANION_DESCRIPTOR, *PEUSB2_ISOCH_ENDPOINT_COMPANION_DESCRIPTOR;
 #pragma pack(pop)
+
+typedef struct _USB_DEVICE_CAPABILITY_DESCRIPTOR {
+  UCHAR bLength;
+  UCHAR bDescriptorType;
+  UCHAR bDevCapabilityType;
+} USB_DEVICE_CAPABILITY_DESCRIPTOR, *PUSB_DEVICE_CAPABILITY_DESCRIPTOR;
+
+#define USB_30_ENDPOINT_TYPE_INTERRUPT_USAGEbmAttr) (bmAttr & USB_30_ENDPOINT_TYPE_INTERRUPT_USAGE_MASK)
+#define USB_ENDPOINT_TYPE_ISOCHRONOUS_SYNCHRONIZATIONbmAttr) (bmAttr & USB_ENDPOINT_TYPE_ISOCHRONOUS_SYNCHRONIZATION_MASK)
+#define USB_ENDPOINT_TYPE_ISOCHRONOUS_USAGEbmAttr) (bmAttr & USB_ENDPOINT_TYPE_ISOCHRONOUS_USAGE_MASK)
+
+#pragma pack(push, 1)
+struct _USB_DEVICE_CAPABILITY_BILLBOARD_DESCRIPTOR
+{
+    UCHAR bLength;
+    UCHAR bDescriptorType;
+    UCHAR bDevCapabilityType;
+    UCHAR iAddtionalInfoURL;
+    UCHAR bNumberOfAlternateModes;
+    UCHAR bPreferredAlternateMode;
+    union
+    {
+        USHORT AsUshort;
+        struct
+        {
+            USHORT VConnPowerNeededForFullFunctionality : 3;
+            USHORT Reserved : 12;
+            USHORT NoVconnPowerRequired : 1;
+        };
+    } VconnPower;
+    UCHAR bmConfigured[32];
+    ULONG bReserved;
+    struct
+    {
+        USHORT wSVID;
+        UCHAR bAlternateMode;
+        UCHAR iAlternateModeSetting;
+    } AlternateMode[1];
+};
+#pragma pack(pop)
+
+struct _USB_DEVICE_CAPABILITY_FIRMWARE_STATUS_DESCRIPTOR
+{
+    UCHAR bLength;
+    UCHAR bDescriptorType;
+    UCHAR bDevCapabilityType;
+    UCHAR bcdDescriptorVersion;
+    union
+    {
+        ULONG AsUlong;
+        struct
+        {
+            ULONG GetFirmwareImageHashSupport : 1;
+            ULONG DisallowFirmwareUpdateSupport : 1;
+            ULONG Reserved : 30;
+        };
+    } bmAttributes;
+};
+
+#pragma pack(push, 1)
+struct _USB_DEVICE_CAPABILITY_PD_CONSUMER_PORT_DESCRIPTOR
+{
+    UCHAR bLength;
+    UCHAR bDescriptorType;
+    UCHAR bDevCapabilityType;
+    UCHAR bReserved;
+    union
+    {
+        USHORT AsUshort;
+        struct
+        {
+            USHORT BatteryCharging : 1;
+            USHORT USBPowerDelivery : 1;
+            USHORT USBTypeCCurrent : 1;
+            USHORT Reserved : 13;
+        };
+    } bmCapabilities;
+    USHORT wMinVoltage;
+    USHORT wMaxVoltage;
+    USHORT wReserved;
+    ULONG dwMaxOperatingPower;
+    ULONG dwMaxPeakPower;
+    ULONG dwMaxPeakPowerTime;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct _USB_DEVICE_CAPABILITY_POWER_DELIVERY_DESCRIPTOR
+{
+    UCHAR bLength;
+    UCHAR bDescriptorType;
+    UCHAR bDevCapabilityType;
+    UCHAR bReserved;
+    union
+    {
+        ULONG AsUlong;
+        struct
+        {
+            ULONG Reserved1 : 1;
+            ULONG BatteryCharging : 1;
+            ULONG USBPowerDelivery : 1;
+            ULONG Provider : 1;
+            ULONG Consumer : 1;
+            ULONG ChargingPolicy : 1;
+            ULONG TypeCCurrent : 1;
+            ULONG Reserved2 : 1;
+            ULONG ACSupply : 1;
+            ULONG Battery : 1;
+            ULONG Other : 1;
+            ULONG NumBatteries : 3;
+            ULONG UsesVbus : 1;
+            ULONG Reserved3 : 17;
+        };
+    } bmAttributes;
+    USHORT bmProviderPorts;
+    USHORT bmConsumerPorts;
+    USHORT bcdBCVersion;
+    USHORT bcdPDVersion;
+    USHORT bcdUSBTypeCVersion;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _USB_DEVICE_CAPABILITY_SUPERSPEEDPLUS_SPEED
+{
+    ULONG AsUlong32;
+    struct
+    {
+        ULONG SublinkSpeedAttrID : 4;
+        ULONG LaneSpeedExponent : 2;
+        ULONG SublinkTypeMode : 1;
+        ULONG SublinkTypeDir : 1;
+        ULONG Reserved : 6;
+        ULONG LinkProtocol : 2;
+        ULONG LaneSpeedMantissa : 16;
+    };
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _USB_DEVICE_STATUS
+{
+    USHORT AsUshort16;
+    struct
+    {
+        USHORT SelfPowered : 1;
+        USHORT RemoteWakeup : 1;
+        USHORT U1Enable : 1;
+        USHORT U2Enable : 1;
+        USHORT LtmEnable : 1;
+        USHORT Reserved : 11;
+    };
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _USB_ENDPOINT_STATUS
+{
+    USHORT AsUshort16;
+    struct
+    {
+        USHORT Halt : 1;
+        USHORT Reserved : 15;
+    };
+};
+#pragma pack(pop)
+
+union _USB_FUNCTION_SUSPEND_OPTIONS
+{
+    UCHAR AsUchar;
+    struct
+    {
+        UCHAR PowerState : 1;
+        UCHAR RemoteWakeEnabled : 1;
+        UCHAR Reserved : 6;
+    };
+};
+
+union _USB_HUB_30_PORT_REMOTE_WAKE_MASK
+{
+    UCHAR AsUchar8;
+    struct
+    {
+        UCHAR ConnectRemoteWakeEnable : 1;
+        UCHAR DisconnectRemoteWakeEnable : 1;
+        UCHAR OverCurrentRemoteWakeEnable : 1;
+        UCHAR Reserved0 : 5;
+    };
+};
+
+#pragma pack(push, 1)
+union _USB_INTERFACE_STATUS
+{
+    USHORT AsUshort16;
+    struct
+    {
+        USHORT RemoteWakeupCapable : 1;
+        USHORT RemoteWakeupEnabled : 1;
+        USHORT Reserved : 14;
+    };
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+union _USB_PORT_EXT_STATUS
+{
+    ULONG AsUlong32;
+    struct
+    {
+        ULONG RxSublinkSpeedID : 4;
+        ULONG TxSublinkSpeedID : 4;
+        ULONG RxLaneCount : 4;
+        ULONG TxLaneCount : 4;
+        ULONG Reserved : 16;
+    };
+};
+#pragma pack(pop)
+
+typedef struct _USB_DEVICE_CAPABILITY_BILLBOARD_DESCRIPTOR *PUSB_DEVICE_CAPABILITY_BILLBOARD_DESCRIPTOR;
+
+typedef struct _USB_DEVICE_CAPABILITY_FIRMWARE_STATUS_DESCRIPTOR *PUSB_DEVICE_CAPABILITY_FIRMWARE_STATUS_DESCRIPTOR;
+
+typedef struct _USB_DEVICE_CAPABILITY_PD_CONSUMER_PORT_DESCRIPTOR *PUSB_DEVICE_CAPABILITY_PD_CONSUMER_PORT_DESCRIPTOR;
+
+typedef struct _USB_DEVICE_CAPABILITY_POWER_DELIVERY_DESCRIPTOR *PUSB_DEVICE_CAPABILITY_POWER_DELIVERY_DESCRIPTOR;
+
+typedef union _USB_DEVICE_CAPABILITY_SUPERSPEEDPLUS_SPEED *PUSB_DEVICE_CAPABILITY_SUPERSPEEDPLUS_SPEED;
+
+typedef union _USB_DEVICE_STATUS *PUSB_DEVICE_STATUS;
+
+typedef union _USB_ENDPOINT_STATUS *PUSB_ENDPOINT_STATUS;
+
+typedef union _USB_FUNCTION_SUSPEND_OPTIONS *PUSB_FUNCTION_SUSPEND_OPTIONS;
+
+typedef union _USB_HUB_30_PORT_REMOTE_WAKE_MASK *PUSB_HUB_30_PORT_REMOTE_WAKE_MASK;
+
+typedef union _USB_INTERFACE_STATUS *PUSB_INTERFACE_STATUS;
+
+typedef union _USB_PORT_EXT_STATUS *PUSB_PORT_EXT_STATUS;
+
+typedef struct _USB_DEVICE_CAPABILITY_BILLBOARD_DESCRIPTOR USB_DEVICE_CAPABILITY_BILLBOARD_DESCRIPTOR;
+
+typedef struct _USB_DEVICE_CAPABILITY_FIRMWARE_STATUS_DESCRIPTOR USB_DEVICE_CAPABILITY_FIRMWARE_STATUS_DESCRIPTOR;
+
+typedef struct _USB_DEVICE_CAPABILITY_PD_CONSUMER_PORT_DESCRIPTOR USB_DEVICE_CAPABILITY_PD_CONSUMER_PORT_DESCRIPTOR;
+
+typedef struct _USB_DEVICE_CAPABILITY_POWER_DELIVERY_DESCRIPTOR USB_DEVICE_CAPABILITY_POWER_DELIVERY_DESCRIPTOR;
+
+typedef union _USB_DEVICE_CAPABILITY_SUPERSPEEDPLUS_SPEED USB_DEVICE_CAPABILITY_SUPERSPEEDPLUS_SPEED;
+
+#pragma pack(push, 1)
+struct _USB_DEVICE_CAPABILITY_SUPERSPEEDPLUS_USB_DESCRIPTOR
+{
+    UCHAR bLength;
+    UCHAR bDescriptorType;
+    UCHAR bDevCapabilityType;
+    UCHAR bReserved;
+    union
+    {
+        ULONG AsUlong;
+        struct
+        {
+            ULONG SublinkSpeedAttrCount : 5;
+            ULONG SublinkSpeedIDCount : 4;
+            ULONG Reserved : 23;
+        };
+    } bmAttributes;
+    union
+    {
+        USHORT AsUshort;
+        struct
+        {
+            USHORT SublinkSpeedAttrID : 4;
+            USHORT Reserved : 4;
+            USHORT MinRxLaneCount : 4;
+            USHORT MinTxLaneCount : 4;
+        };
+    } wFunctionalitySupport;
+    USHORT wReserved;
+    USB_DEVICE_CAPABILITY_SUPERSPEEDPLUS_SPEED bmSublinkSpeedAttr[1];
+};
+#pragma pack(pop)
+
+typedef struct _USB_DEVICE_CAPABILITY_SUPERSPEEDPLUS_USB_DESCRIPTOR *PUSB_DEVICE_CAPABILITY_SUPERSPEEDPLUS_USB_DESCRIPTOR;
+
+typedef struct _USB_DEVICE_CAPABILITY_SUPERSPEEDPLUS_USB_DESCRIPTOR USB_DEVICE_CAPABILITY_SUPERSPEEDPLUS_USB_DESCRIPTOR;
+
+typedef union _USB_DEVICE_STATUS USB_DEVICE_STATUS;
+
+typedef union _USB_ENDPOINT_STATUS USB_ENDPOINT_STATUS;
+
+typedef union _USB_FUNCTION_SUSPEND_OPTIONS USB_FUNCTION_SUSPEND_OPTIONS;
+
+typedef union _USB_HUB_30_PORT_REMOTE_WAKE_MASK USB_HUB_30_PORT_REMOTE_WAKE_MASK;
+
+typedef union _USB_INTERFACE_STATUS USB_INTERFACE_STATUS;
+
+typedef union _USB_PORT_EXT_STATUS USB_PORT_EXT_STATUS;
+
+#pragma pack(push, 1)
+union _USB_PORT_EXT_STATUS_AND_CHANGE
+{
+    ULONG64 AsUlong64;
+    struct
+    {
+        USB_PORT_STATUS_AND_CHANGE PortStatusChange;
+        USB_PORT_EXT_STATUS PortExtStatus;
+    };
+};
+#pragma pack(pop)
+
+typedef union _USB_PORT_EXT_STATUS_AND_CHANGE *PUSB_PORT_EXT_STATUS_AND_CHANGE;
+
+typedef union _USB_PORT_EXT_STATUS_AND_CHANGE USB_PORT_EXT_STATUS_AND_CHANGE;
+
+#define USB_30_ENDPOINT_TYPE_INTERRUPT_USAGEbmAttr) (bmAttr & USB_30_ENDPOINT_TYPE_INTERRUPT_USAGE_MASK)
+#define USB_ENDPOINT_TYPE_ISOCHRONOUS_SYNCHRONIZATIONbmAttr) (bmAttr & USB_ENDPOINT_TYPE_ISOCHRONOUS_SYNCHRONIZATION_MASK)
+#define USB_ENDPOINT_TYPE_ISOCHRONOUS_USAGEbmAttr) (bmAttr & USB_ENDPOINT_TYPE_ISOCHRONOUS_USAGE_MASK)
+
+#define USB_30_ENDPOINT_TYPE_INTERRUPT_USAGEbmAttr) (bmAttr & USB_30_ENDPOINT_TYPE_INTERRUPT_USAGE_MASK)
+#define USB_ENDPOINT_TYPE_ISOCHRONOUS_SYNCHRONIZATIONbmAttr) (bmAttr & USB_ENDPOINT_TYPE_ISOCHRONOUS_SYNCHRONIZATION_MASK)
+#define USB_ENDPOINT_TYPE_ISOCHRONOUS_USAGEbmAttr) (bmAttr & USB_ENDPOINT_TYPE_ISOCHRONOUS_USAGE_MASK)
 
 #endif

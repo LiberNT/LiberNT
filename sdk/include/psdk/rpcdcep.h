@@ -296,16 +296,16 @@ RPCRTAPI LONG RPC_ENTRY I_RpcMapWin32Status(RPC_STATUS);
 #define RPC_SYSTEM_HANDLE_FREE_UNRETRIEVED 1
 #endif
 
+typedef enum _LRPC_SYSTEM_HANDLE_MARSHAL_DIRECTION {
+    MarshalDirectionMarshal = 0,
+    MarshalDirectionUnmarshal = 1
+} LRPC_SYSTEM_HANDLE_MARSHAL_DIRECTION;
+
 enum RPC_ADDRESS_CHANGE_TYPE {
     PROTOCOL_NOT_LOADED = 1,
     PROTOCOL_LOADED = 2,
     PROTOCOL_ADDRESS_CHANGE = 3
 };
-
-typedef enum _LRPC_SYSTEM_HANDLE_MARSHAL_DIRECTION {
-    MarshalDirectionMarshal = 0,
-    MarshalDirectionUnmarshal = 1
-} LRPC_SYSTEM_HANDLE_MARSHAL_DIRECTION;
 
 typedef enum RpcProxyPerfCounters {
     RpcCurrentUniqueUser = 1,
@@ -325,8 +325,8 @@ typedef enum RpcProxyPerfCounters {
 #ifdef __cplusplus
 extern "C" {
 #endif
-RPC_STATUS WINAPI I_UuidCreate(UUID * Uuid);
 RPC_STATUS WINAPI I_RpcOpenClientProcess(RPC_BINDING_HANDLE Binding, unsigned long DesiredAccess, void ** ClientProcess);
+RPC_STATUS WINAPI I_UuidCreate(UUID * Uuid);
 #ifdef __cplusplus
 }
 #endif
@@ -342,5 +342,169 @@ typedef struct _RPC_TRANSFER_SYNTAX {
   unsigned short VersMajor;
   unsigned short VersMinor;
 } RPC_TRANSFER_SYNTAX;
+
+#ifdef UNICODE
+#define I_RpcBindingInqDynamicEndpoint I_RpcBindingInqDynamicEndpointW
+#else
+#define I_RpcBindingInqDynamicEndpoint I_RpcBindingInqDynamicEndpointA
+#endif
+#define I_RpcNsBindingSetEntryName 0
+#ifdef UNICODE
+#define I_RpcServerUseProtseq2 I_RpcServerUseProtseq2W
+#else
+#define I_RpcServerUseProtseq2 I_RpcServerUseProtseq2A
+#endif
+#ifdef UNICODE
+#define I_RpcServerUseProtseqEp2 I_RpcServerUseProtseqEp2W
+#else
+#define I_RpcServerUseProtseqEp2 I_RpcServerUseProtseqEp2A
+#endif
+#define I_RRPCUNINITIALIZENDROLE_EXPORT_NAME 0x3E8
+
+typedef void *I_RPC_MUTEX;
+
+typedef RPC_STATUS (WINAPI *I_RpcProxyFilterIfFn)(void *, UUID *, unsigned short, int *);
+
+typedef RPC_STATUS (WINAPI *I_RpcProxyGetClientAddressFn)(void *, char *, unsigned long *);
+
+typedef RPC_STATUS (WINAPI *I_RpcProxyGetClientSessionAndResourceUUID)(void *, int *, UUID *, int *, UUID *);
+
+typedef RPC_STATUS (WINAPI *I_RpcProxyGetConnectionTimeoutFn)(unsigned long *);
+
+typedef RPC_STATUS (WINAPI *I_RpcProxyIsValidMachineFn)(RPC_WSTR, RPC_WSTR, unsigned long);
+
+typedef void (WINAPI *I_RpcProxyUpdatePerfCounterBackendServerFn)(unsigned short *, int);
+
+typedef void (WINAPI *I_RpcProxyUpdatePerfCounterFn)(RpcPerfCounters, int, unsigned long);
+
+typedef void (*PRPC_RUNDOWN)(void *);
+
+typedef void WINAPI RPC_ADDRESS_CHANGE_FN(void *);
+
+typedef void (*RPCLT_PDU_FILTER_FUNC)(void *, unsigned int, int);
+
+typedef void (__cdecl *RPC_SETFILTER_FUNC)(RPCLT_PDU_FILTER_FUNC);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+RPC_STATUS I_RpcBindingCopy(RPC_BINDING_HANDLE SourceBinding, RPC_BINDING_HANDLE *DestinationBinding);
+RPC_STATUS I_RpcBindingCreateNP(RPC_WSTR ServerName, RPC_WSTR ServiceName, RPC_WSTR NetworkOptions, RPC_BINDING_HANDLE *Binding);
+RPC_STATUS I_RpcBindingHandleToAsyncHandle(RPC_BINDING_HANDLE Binding, void **AsyncHandle);
+RPC_STATUS I_RpcBindingInqConnId(RPC_BINDING_HANDLE Binding, void **ConnId, int *pfFirstCall);
+RPC_STATUS I_RpcBindingInqDynamicEndpointA(RPC_BINDING_HANDLE Binding, RPC_CSTR *DynamicEndpoint);
+RPC_STATUS I_RpcBindingInqDynamicEndpointW(RPC_BINDING_HANDLE Binding, RPC_WSTR *DynamicEndpoint);
+RPC_STATUS I_RpcBindingInqMarshalledTargetInfo(RPC_BINDING_HANDLE Binding, unsigned long *MarshalledTargetInfoSize, RPC_CSTR *MarshalledTargetInfo);
+RPC_STATUS I_RpcBindingInqSecurityContext(RPC_BINDING_HANDLE Binding, void **SecurityContextHandle);
+RPC_STATUS I_RpcBindingInqSecurityContextKeyInfo(RPC_BINDING_HANDLE Binding, void *KeyInfo);
+RPC_STATUS I_RpcBindingInqWireIdForSnego(RPC_BINDING_HANDLE Binding, unsigned char *WireId);
+RPC_STATUS I_RpcBindingIsClientLocal(RPC_BINDING_HANDLE BindingHandle, unsigned int *ClientLocalFlag);
+RPC_STATUS I_RpcBindingIsServerLocal(RPC_BINDING_HANDLE Binding, unsigned int *ServerLocalFlag);
+RPC_STATUS WINAPI I_RpcBindingSetPrivateOption(RPC_BINDING_HANDLE hBinding, unsigned long option, ULONG_PTR optionValue);
+RPC_STATUS I_RpcBindingToStaticStringBindingW(RPC_BINDING_HANDLE Binding, unsigned short **StringBinding);
+void I_RpcClearMutex(I_RPC_MUTEX Mutex);
+RPC_STATUS I_RpcConnectionInqSockBuffSize(unsigned long *RecvBuffSize, unsigned long *SendBuffSize);
+RPC_STATUS I_RpcConnectionSetSockBuffSize(unsigned long RecvBuffSize, unsigned long SendBuffSize);
+void I_RpcDeleteMutex(I_RPC_MUTEX Mutex);
+RPC_STATUS I_RpcFreePipeBuffer(RPC_MESSAGE *Message);
+void I_RpcFreeSystemHandle(unsigned char Type, void *Handle);
+unsigned long I_RpcFreeSystemHandleCollection(void *CallObj, unsigned long FreeFlags);
+RPC_STATUS I_RpcGetAssociationContext(RPC_BINDING_HANDLE BindingHandle, void **AssociationContext);
+RPC_STATUS I_RpcGetDefaultSD(void **ppSecurityDescriptor);
+RPC_STATUS I_RpcGetExtendedError(void);
+void * I_RpcGetServerContextList(RPC_BINDING_HANDLE BindingHandle);
+RPC_STATUS I_RpcGetSystemHandle(unsigned char *pMemory, unsigned char Type, unsigned long AccessMask, unsigned long HandleIndex, void *CallObj);
+RPC_STATUS I_RpcIfInqTransferSyntaxes(RPC_IF_HANDLE RpcIfHandle, RPC_TRANSFER_SYNTAX *TransferSyntaxes, unsigned int TransferSyntaxSize, unsigned int *TransferSyntaxCount);
+RPC_STATUS I_RpcLaunchDatagramReceiveThread(void *pAddress);
+RPC_STATUS I_RpcMgmtEnableDedicatedThreadPool(void);
+RPC_STATUS I_RpcMonitorAssociation(RPC_BINDING_HANDLE Handle, PRPC_RUNDOWN RundownRoutine, void *Context);
+RPC_STATUS I_RpcNsBindingSetEntryNameA(RPC_BINDING_HANDLE Binding, unsigned long EntryNameSyntax, RPC_CSTR EntryName);
+RPC_STATUS I_RpcNsBindingSetEntryNameW(RPC_BINDING_HANDLE Binding, unsigned long EntryNameSyntax, RPC_WSTR EntryName);
+RPC_STATUS I_RpcNsInterfaceExported(unsigned long EntryNameSyntax, unsigned short *EntryName, RPC_SERVER_INTERFACE *RpcInterfaceInformation);
+RPC_STATUS I_RpcNsInterfaceUnexported(unsigned long EntryNameSyntax, unsigned short *EntryName, RPC_SERVER_INTERFACE *RpcInterfaceInformation);
+void I_RpcPauseExecution(unsigned long Milliseconds);
+RPC_STATUS I_RpcReallocPipeBuffer(PRPC_MESSAGE Message, unsigned int NewSize);
+RPC_STATUS I_RpcReplyToClientWithStatus(void *ConnectionParameter, RPC_STATUS RpcStatus);
+void I_RpcRequestMutex(I_RPC_MUTEX *Mutex);
+RPC_STATUS I_RpcServerCheckClientRestriction(RPC_BINDING_HANDLE Context);
+long I_RpcServerDisableExceptionFilter(void);
+RPC_STATUS WINAPI I_RpcServerGetAssociationID(RPC_BINDING_HANDLE Binding, unsigned long *AssociationID);
+RPC_ADDRESS_CHANGE_FN * WINAPI I_RpcServerInqAddressChangeFn(void);
+RPC_STATUS I_RpcServerInqLocalConnAddress(RPC_BINDING_HANDLE Binding, void *Buffer, unsigned long *BufferSize, unsigned long *AddressFormat);
+RPC_STATUS I_RpcServerInqRemoteConnAddress(RPC_BINDING_HANDLE Binding, void *Buffer, unsigned long *BufferSize, unsigned long *AddressFormat);
+RPC_STATUS I_RpcServerInqTransportType(unsigned int *Type);
+RPC_STATUS I_RpcServerRegisterForwardFunction(RPC_FORWARD_FUNCTION *pForwardFunction);
+RPC_STATUS WINAPI I_RpcServerSetAddressChangeFn(RPC_ADDRESS_CHANGE_FN *pAddressChangeFn);
+RPC_STATUS I_RpcServerStartService(RPC_WSTR Protseq, RPC_WSTR Endpoint, RPC_IF_HANDLE IfSpec);
+RPC_STATUS WINAPI I_RpcServerSubscribeForDisconnectNotification(RPC_BINDING_HANDLE Binding, void *hEvent);
+RPC_STATUS I_RpcServerUseProtseq2A(RPC_CSTR NetworkAddress, RPC_CSTR Protseq, unsigned int MaxCalls, void *SecurityDescriptor, void *Policy);
+RPC_STATUS I_RpcServerUseProtseq2W(RPC_WSTR NetworkAddress, RPC_WSTR Protseq, unsigned int MaxCalls, void *SecurityDescriptor, void *Policy);
+RPC_STATUS I_RpcServerUseProtseqEp2A(RPC_CSTR NetworkAddress, RPC_CSTR Protseq, unsigned int MaxCalls, RPC_CSTR Endpoint, void *SecurityDescriptor, void *Policy);
+RPC_STATUS I_RpcServerUseProtseqEp2W(RPC_WSTR NetworkAddress, RPC_WSTR Protseq, unsigned int MaxCalls, RPC_WSTR Endpoint, void *SecurityDescriptor, void *Policy);
+void I_RpcSessionStrictContextHandle(void);
+void I_RpcSetServerContextList(RPC_BINDING_HANDLE BindingHandle, void *ServerContextList);
+RPC_STATUS I_RpcSetSystemHandle(void *Handle, unsigned char Type, unsigned long AccessMask, void *CallObj, unsigned long *HandleIndex);
+void I_RpcSsDontSerializeContext(void);
+RPC_STATUS I_RpcStopMonitorAssociation(RPC_BINDING_HANDLE Handle);
+RPC_STATUS I_RpcSystemHandleTypeSpecificWork(void *Handle, unsigned char ActualType, unsigned char IdlType, LRPC_SYSTEM_HANDLE_MARSHAL_DIRECTION MarshalDirection);
+RPC_STATUS I_RpcTurnOnEEInfoPropagation(void);
+void I_RpcUninitializeNdrOle(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+struct _RDR_CALLOUT_STATE
+{
+    RPC_STATUS LastError;
+    void *LastEEInfo;
+    RPC_HTTP_REDIRECTOR_STAGE LastCalledStage;
+    unsigned short *ServerName;
+    unsigned short *ServerPort;
+    unsigned short *RemoteUser;
+    unsigned short *AuthType;
+    unsigned char ResourceTypePresent;
+    unsigned char SessionIdPresent;
+    unsigned char InterfacePresent;
+    UUID ResourceType;
+    UUID SessionId;
+    RPC_SYNTAX_IDENTIFIER Interface;
+    void *CertContext;
+};
+
+typedef struct tagI_RpcProxyCallbackInterface I_RpcProxyCallbackInterface;
+
+typedef struct _RDR_CALLOUT_STATE RDR_CALLOUT_STATE;
+
+typedef void (WINAPI *I_RpcFreeCalloutStateFn)(RDR_CALLOUT_STATE *);
+
+typedef RPC_STATUS (WINAPI *I_RpcPerformCalloutFn)(void *, RDR_CALLOUT_STATE *, RPC_HTTP_REDIRECTOR_STAGE);
+
+struct tagI_RpcProxyCallbackInterface
+{
+    I_RpcProxyIsValidMachineFn IsValidMachineFn;
+    I_RpcProxyGetClientAddressFn GetClientAddressFn;
+    I_RpcProxyGetConnectionTimeoutFn GetConnectionTimeoutFn;
+    I_RpcPerformCalloutFn PerformCalloutFn;
+    I_RpcFreeCalloutStateFn FreeCalloutStateFn;
+    I_RpcProxyGetClientSessionAndResourceUUID GetClientSessionAndResourceUUIDFn;
+    I_RpcProxyFilterIfFn ProxyFilterIfFn;
+    I_RpcProxyUpdatePerfCounterFn RpcProxyUpdatePerfCounterFn;
+    I_RpcProxyUpdatePerfCounterBackendServerFn RpcProxyUpdatePerfCounterBackendServerFn;
+};
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+RPC_STATUS I_RpcProxyNewConnection(unsigned long ConnectionType, unsigned short *ServerAddress, unsigned short *ServerPort, unsigned short *MinConnTimeout, void *ConnectionParameter, RDR_CALLOUT_STATE *CallOutState, I_RpcProxyCallbackInterface *ProxyCallbackInterface);
+void I_RpcRecordCalloutFailure(RPC_STATUS RpcStatus, RDR_CALLOUT_STATE *CallOutState, unsigned short *DllName);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /*__WINE_RPCDCEP_H */

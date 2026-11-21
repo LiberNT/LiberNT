@@ -9,6 +9,53 @@
 
 #ifndef ANYSIZE_ARRAY
 #define ANYSIZE_ARRAY 1
+
+#define MAX_DATAPORT_PER_TERMINAL2 4
+#define SDCA_PATH_DESCRIPTOR2_VERSION_1 1
+
+enum _SDCA_DATAPORT_MAP
+{
+    SdcaDataPortMapIndexA = 1,
+    SdcaDataPortMapIndexB = 2,
+    SdcaDataPortMapIndexC = 4,
+    SdcaDataPortMapIndexD = 8,
+};
+
+struct _SDCA_PATH_DESCRIPTOR2
+{
+    ULONG Size;
+    UINT8 Version;
+    ULONG FunctionInformationId;
+    ULONG TerminalEntityId;
+    ULONG DataPortMap;
+    SOUNDWIRE_DATAPORT_CONFIGURATION DataPortConfig[4];
+};
+
+typedef struct _SDCA_PATH_DESCRIPTOR2 *PSDCA_PATH_DESCRIPTOR2;
+
+typedef enum _SDCA_DATAPORT_MAP SDCA_DATAPORT_MAP;
+
+typedef struct _SDCA_PATH_DESCRIPTOR2 SDCA_PATH_DESCRIPTOR2;
+
+struct _SDCA_PATH_DESCRIPTORS2
+{
+    ULONG Size;
+    UINT8 Version;
+    SDCA_PATH SdcaPath;
+    ULONG EndpointId;
+    union
+    {
+        WAVEFORMATEXTENSIBLE SpecialPathFormat;
+        BYTE Reserved[40];
+    };
+    ULONG DescriptorCount;
+    SDCA_PATH_DESCRIPTOR2 Descriptor[1];
+};
+
+typedef struct _SDCA_PATH_DESCRIPTORS2 *PSDCA_PATH_DESCRIPTORS2;
+
+typedef struct _SDCA_PATH_DESCRIPTORS2 SDCA_PATH_DESCRIPTORS2;
+
 #endif
 
 #define MAX_PATH_DESCRIPTORS 16
@@ -29,6 +76,8 @@ typedef enum {
     KSPROPERTY_SDCA_START_PATH              = 7,
     KSPROPERTY_SDCA_STOP_PATH               = 8,
     KSPROPERTY_SDCA_ACCESS_EVENTS           = 9,
+    KSPROPERTY_SDCA_RESERVED = 0xA,
+    KSPROPERTY_SDCA_CREATE_PATH2 = 0xB,
 } KSPROPERTY_SDCA;
 
 typedef enum _SDCA_PATH {
@@ -36,6 +85,7 @@ typedef enum _SDCA_PATH {
     SdcaPathUltrasoundCapture               = 0x2,
     SdcaPathReferenceStream                 = 0x4,
     SdcaPathIvSense                         = 0x8,
+    SdcaPathDefault = 0x10,
 } SDCA_PATH, *PSDCA_PATH;
 
 typedef enum _SDCA_STREAMING_FUNCTION_INFORMATION_FLAGS

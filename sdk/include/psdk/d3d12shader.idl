@@ -29,6 +29,16 @@ typedef enum D3D12_SHADER_VERSION_TYPE
     D3D12_SHVER_DOMAIN_SHADER = 0x4,
     D3D12_SHVER_COMPUTE_SHADER = 0x5,
     D3D12_SHVER_RESERVED0 = 0xfff0,
+    D3D12_SHVER_LIBRARY = 6,
+    D3D12_SHVER_RAY_GENERATION_SHADER = 7,
+    D3D12_SHVER_INTERSECTION_SHADER = 8,
+    D3D12_SHVER_ANY_HIT_SHADER = 9,
+    D3D12_SHVER_CLOSEST_HIT_SHADER = 0xA,
+    D3D12_SHVER_MISS_SHADER = 0xB,
+    D3D12_SHVER_CALLABLE_SHADER = 0xC,
+    D3D12_SHVER_MESH_SHADER = 0xD,
+    D3D12_SHVER_AMPLIFICATION_SHADER = 0xE,
+    D3D12_SHVER_NODE_SHADER = 0xF,
 } D3D12_SHADER_VERSION_TYPE;
 
 cpp_quote("#define D3D12_SHVER_GET_TYPE(v) (((v) >> 16) & 0xffff)")
@@ -382,3 +392,41 @@ cpp_quote("#endif")
 cpp_quote("#ifndef D3D_SHADER_REQUIRES_WRITEABLE_MSAA_TEXTURES")
 cpp_quote("#define D3D_SHADER_REQUIRES_WRITEABLE_MSAA_TEXTURES 0x40000000")
 cpp_quote("#endif")
+
+cpp_quote("typedef D3D_CBUFFER_TYPE D3D12_CBUFFER_TYPE;")
+cpp_quote("")
+cpp_quote("typedef D3D_RESOURCE_RETURN_TYPE D3D12_RESOURCE_RETURN_TYPE;")
+cpp_quote("")
+cpp_quote("typedef D3D_TESSELLATOR_DOMAIN D3D12_TESSELLATOR_DOMAIN;")
+cpp_quote("")
+cpp_quote("typedef D3D_TESSELLATOR_OUTPUT_PRIMITIVE D3D12_TESSELLATOR_OUTPUT_PRIMITIVE;")
+cpp_quote("")
+cpp_quote("typedef D3D_TESSELLATOR_PARTITIONING D3D12_TESSELLATOR_PARTITIONING;")
+cpp_quote("")
+cpp_quote("typedef struct ID3D12FunctionParameterReflectionVtbl ID3D12FunctionParameterReflectionVtbl;")
+cpp_quote("")
+cpp_quote("typedef struct ID3D12FunctionReflectionVtbl ID3D12FunctionReflectionVtbl;")
+cpp_quote("")
+cpp_quote("typedef struct ID3D12LibraryReflectionVtbl ID3D12LibraryReflectionVtbl;")
+cpp_quote("")
+cpp_quote("typedef struct ID3D12ShaderReflectionConstantBufferVtbl ID3D12ShaderReflectionConstantBufferVtbl;")
+cpp_quote("")
+cpp_quote("typedef struct ID3D12ShaderReflectionTypeVtbl ID3D12ShaderReflectionTypeVtbl;")
+cpp_quote("")
+cpp_quote("typedef struct ID3D12ShaderReflectionVariableVtbl ID3D12ShaderReflectionVariableVtbl;")
+cpp_quote("")
+cpp_quote("typedef struct ID3D12ShaderReflectionVtbl ID3D12ShaderReflectionVtbl;")
+cpp_quote("")
+cpp_quote("typedef struct ID3D12FunctionParameterReflection *LPD3D12FUNCTIONPARAMETERREFLECTION;")
+cpp_quote("")
+cpp_quote("typedef struct ID3D12FunctionReflection *LPD3D12FUNCTIONREFLECTION;")
+cpp_quote("")
+cpp_quote("typedef struct ID3D12LibraryReflection *LPD3D12LIBRARYREFLECTION;")
+cpp_quote("")
+cpp_quote("typedef struct ID3D12ShaderReflection *LPD3D12SHADERREFLECTION;")
+cpp_quote("")
+cpp_quote("typedef struct ID3D12ShaderReflectionConstantBuffer *LPD3D12SHADERREFLECTIONCONSTANTBUFFER;")
+cpp_quote("")
+cpp_quote("typedef struct ID3D12ShaderReflectionType *LPD3D12SHADERREFLECTIONTYPE;")
+cpp_quote("")
+cpp_quote("typedef struct ID3D12ShaderReflectionVariable *LPD3D12SHADERREFLECTIONVARIABLE;")

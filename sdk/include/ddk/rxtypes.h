@@ -8,8 +8,8 @@
 typedef KSPIN_LOCK  RX_SPIN_LOCK;
 typedef PKSPIN_LOCK PRX_SPIN_LOCK;
 
-typedef PVOID RX_HANDLE;
 typedef PVOID * PRX_HANDLE;
+typedef PVOID RX_HANDLE;
 
 typedef struct _BINDING_HANDLE {
   RX_HANDLE pTdiEmulationContext;

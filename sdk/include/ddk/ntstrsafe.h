@@ -3376,4 +3376,85 @@ RtlUnicodeStringPrintfEx(
 #define __WARNING_RETURN_UNINIT_VAR 6101
 #endif
 
+#define NTSTRSAFE_MAX_LENGTH 0x7FFFFFFE
+#define NTSTRSAFE_USE_SECURE_CRT 0
+#define NTSTRSAFEDDI 0
+#define NTSTRSAFEWORKERDDI static NTSTRSAFEDDI
+
+typedef const __unaligned wchar_t *NTSTRSAFE_PCUWSTR;
+
+typedef const char *STRSAFE_PCNZCH;
+
+typedef const wchar_t *STRSAFE_PCNZWCH;
+
+typedef const __unaligned wchar_t *STRSAFE_PCUNZWCH;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+NTSTATUS NTAPI RtlStringCbCopyUnicodeString(NTSTRSAFE_PWSTR pszDest, size_t cbDest, PCUNICODE_STRING SourceString);
+NTSTATUS NTAPI RtlStringCbCopyUnicodeStringEx(NTSTRSAFE_PWSTR pszDest, size_t cbDest, PCUNICODE_STRING SourceString, NTSTRSAFE_PWSTR *ppszDestEnd, size_t *pcbRemaining, DWORD dwFlags);
+NTSTATUS NTAPI RtlStringCchCopyUnicodeString(NTSTRSAFE_PWSTR pszDest, size_t cchDest, PCUNICODE_STRING SourceString);
+NTSTATUS NTAPI RtlStringCchCopyUnicodeStringEx(NTSTRSAFE_PWSTR pszDest, size_t cchDest, PCUNICODE_STRING SourceString, NTSTRSAFE_PWSTR *ppszDestEnd, size_t *pcchRemaining, DWORD dwFlags);
+NTSTATUS RtlStringCopyWideCharArrayWorker(NTSTRSAFE_PWSTR pszDest, size_t cchDest, size_t *pcchNewDestLength, const wchar_t *pszSrc, size_t cchSrcLength);
+NTSTATUS RtlStringExHandleFillBehindNullA(NTSTRSAFE_PSTR pszDestEnd, size_t cbRemaining, DWORD dwFlags);
+NTSTATUS RtlStringExHandleFillBehindNullW(NTSTRSAFE_PWSTR pszDestEnd, size_t cbRemaining, DWORD dwFlags);
+NTSTATUS RtlStringExHandleOtherFlagsA(NTSTRSAFE_PSTR pszDest, size_t cbDest, size_t cchOriginalDestLength, NTSTRSAFE_PSTR *ppszDestEnd, size_t *pcchRemaining, DWORD dwFlags);
+NTSTATUS RtlStringExHandleOtherFlagsW(NTSTRSAFE_PWSTR pszDest, size_t cbDest, size_t cchOriginalDestLength, NTSTRSAFE_PWSTR *ppszDestEnd, size_t *pcchRemaining, DWORD dwFlags);
+NTSTATUS RtlStringExValidateDestA(STRSAFE_PCNZCH pszDest, size_t cchDest, const size_t cchMax, DWORD dwFlags);
+NTSTATUS RtlStringExValidateDestAndLengthA(NTSTRSAFE_PCSTR pszDest, size_t cchDest, size_t *pcchDestLength, const size_t cchMax, DWORD dwFlags);
+NTSTATUS RtlStringExValidateDestAndLengthW(NTSTRSAFE_PCWSTR pszDest, size_t cchDest, size_t *pcchDestLength, const size_t cchMax, DWORD dwFlags);
+NTSTATUS RtlStringExValidateDestW(STRSAFE_PCNZWCH pszDest, size_t cchDest, const size_t cchMax, DWORD dwFlags);
+NTSTATUS RtlStringExValidateSrcA(STRSAFE_PCNZCH *ppszSrc, size_t *pcchToRead, const size_t cchMax, DWORD dwFlags);
+NTSTATUS RtlStringExValidateSrcW(STRSAFE_PCNZWCH *ppszSrc, size_t *pcchToRead, const size_t cchMax, DWORD dwFlags);
+NTSTATUS RtlStringValidateDestA(STRSAFE_PCNZCH pszDest, size_t cchDest, const size_t cchMax);
+NTSTATUS RtlStringValidateDestAndLengthA(NTSTRSAFE_PCSTR pszDest, size_t cchDest, size_t *pcchDestLength, const size_t cchMax);
+NTSTATUS RtlStringValidateDestAndLengthW(NTSTRSAFE_PCWSTR pszDest, size_t cchDest, size_t *pcchDestLength, const size_t cchMax);
+NTSTATUS RtlStringValidateDestW(STRSAFE_PCNZWCH pszDest, size_t cchDest, const size_t cchMax);
+NTSTATUS NTAPI RtlUnalignedStringCbLengthW(STRSAFE_PCUNZWCH psz, size_t cbMax, size_t *pcbLength);
+NTSTATUS NTAPI RtlUnalignedStringCchLengthW(STRSAFE_PCUNZWCH psz, size_t cchMax, size_t *pcchLength);
+NTSTATUS RtlUnalignedStringLengthWorkerW(STRSAFE_PCUNZWCH psz, size_t cchMax, size_t *pcchLength);
+NTSTATUS NTAPI RtlUnicodeStringCat(PUNICODE_STRING DestinationString, PCUNICODE_STRING SourceString);
+NTSTATUS NTAPI RtlUnicodeStringCatEx(PUNICODE_STRING DestinationString, PCUNICODE_STRING SourceString, PUNICODE_STRING RemainingString, DWORD dwFlags);
+NTSTATUS NTAPI RtlUnicodeStringCatString(PUNICODE_STRING DestinationString, NTSTRSAFE_PCWSTR pszSrc);
+NTSTATUS NTAPI RtlUnicodeStringCatStringEx(PUNICODE_STRING DestinationString, NTSTRSAFE_PCWSTR pszSrc, PUNICODE_STRING RemainingString, DWORD dwFlags);
+NTSTATUS NTAPI RtlUnicodeStringCbCatN(PUNICODE_STRING DestinationString, PCUNICODE_STRING SourceString, size_t cbToAppend);
+NTSTATUS NTAPI RtlUnicodeStringCbCatNEx(PUNICODE_STRING DestinationString, PCUNICODE_STRING SourceString, size_t cbToAppend, PUNICODE_STRING RemainingString, DWORD dwFlags);
+NTSTATUS NTAPI RtlUnicodeStringCbCatStringN(PUNICODE_STRING DestinationString, NTSTRSAFE_PCWSTR pszSrc, size_t cbToAppend);
+NTSTATUS NTAPI RtlUnicodeStringCbCatStringNEx(PUNICODE_STRING DestinationString, NTSTRSAFE_PCWSTR pszSrc, size_t cbToAppend, PUNICODE_STRING RemainingString, DWORD dwFlags);
+NTSTATUS NTAPI RtlUnicodeStringCbCopyN(PUNICODE_STRING DestinationString, PCUNICODE_STRING SourceString, size_t cbToCopy);
+NTSTATUS NTAPI RtlUnicodeStringCbCopyNEx(PUNICODE_STRING DestinationString, PCUNICODE_STRING SourceString, size_t cbToCopy, PUNICODE_STRING RemainingString, DWORD dwFlags);
+NTSTATUS NTAPI RtlUnicodeStringCbCopyStringN(PUNICODE_STRING DestinationString, NTSTRSAFE_PCWSTR pszSrc, size_t cbToCopy);
+NTSTATUS NTAPI RtlUnicodeStringCbCopyStringNEx(PUNICODE_STRING DestinationString, NTSTRSAFE_PCWSTR pszSrc, size_t cbToCopy, PUNICODE_STRING RemainingString, DWORD dwFlags);
+NTSTATUS NTAPI RtlUnicodeStringCchCatN(PUNICODE_STRING DestinationString, PCUNICODE_STRING SourceString, size_t cchToAppend);
+NTSTATUS NTAPI RtlUnicodeStringCchCatNEx(PUNICODE_STRING DestinationString, PCUNICODE_STRING SourceString, size_t cchToAppend, PUNICODE_STRING RemainingString, DWORD dwFlags);
+NTSTATUS NTAPI RtlUnicodeStringCchCatStringN(PUNICODE_STRING DestinationString, NTSTRSAFE_PCWSTR pszSrc, size_t cchToAppend);
+NTSTATUS NTAPI RtlUnicodeStringCchCatStringNEx(PUNICODE_STRING DestinationString, NTSTRSAFE_PCWSTR pszSrc, size_t cchToAppend, PUNICODE_STRING RemainingString, DWORD dwFlags);
+NTSTATUS NTAPI RtlUnicodeStringCchCopyN(PUNICODE_STRING DestinationString, PCUNICODE_STRING SourceString, size_t cchToCopy);
+NTSTATUS NTAPI RtlUnicodeStringCchCopyNEx(PUNICODE_STRING DestinationString, PCUNICODE_STRING SourceString, size_t cchToCopy, PUNICODE_STRING RemainingString, DWORD dwFlags);
+NTSTATUS NTAPI RtlUnicodeStringCchCopyStringN(PUNICODE_STRING DestinationString, NTSTRSAFE_PCWSTR pszSrc, size_t cchToCopy);
+NTSTATUS NTAPI RtlUnicodeStringCchCopyStringNEx(PUNICODE_STRING DestinationString, NTSTRSAFE_PCWSTR pszSrc, size_t cchToCopy, PUNICODE_STRING RemainingString, DWORD dwFlags);
+NTSTATUS NTAPI RtlUnicodeStringCopy(PUNICODE_STRING DestinationString, PCUNICODE_STRING SourceString);
+NTSTATUS NTAPI RtlUnicodeStringCopyEx(PUNICODE_STRING DestinationString, PCUNICODE_STRING SourceString, PUNICODE_STRING RemainingString, DWORD dwFlags);
+NTSTATUS NTAPI RtlUnicodeStringCopyString(PUNICODE_STRING DestinationString, NTSTRSAFE_PCWSTR pszSrc);
+NTSTATUS NTAPI RtlUnicodeStringCopyStringEx(PUNICODE_STRING DestinationString, NTSTRSAFE_PCWSTR pszSrc, PUNICODE_STRING RemainingString, DWORD dwFlags);
+NTSTATUS RtlUnicodeStringExHandleFill(wchar_t *pszDestEnd, size_t cchRemaining, DWORD dwFlags);
+NTSTATUS RtlUnicodeStringExHandleOtherFlags(wchar_t *pszDest, size_t cchDest, size_t cchOriginalDestLength, size_t *pcchNewDestLength, wchar_t **ppszDestEnd, size_t *pcchRemaining, DWORD dwFlags);
+NTSTATUS NTAPI RtlUnicodeStringInitEx(PUNICODE_STRING DestinationString, NTSTRSAFE_PCWSTR pszSrc, DWORD dwFlags);
+NTSTATUS RtlUnicodeStringInitWorker(PUNICODE_STRING DestinationString, NTSTRSAFE_PCWSTR pszSrc, const size_t cchMax, DWORD dwFlags);
+NTSTATUS RtlUnicodeStringValidateDestWorker(PCUNICODE_STRING DestinationString, wchar_t **ppszDest, size_t *pcchDest, size_t *pcchDestLength, const size_t cchMax, DWORD dwFlags);
+NTSTATUS RtlUnicodeStringValidateSrcWorker(PCUNICODE_STRING SourceString, wchar_t **ppszSrc, size_t *pcchSrcLength, const size_t cchMax, DWORD dwFlags);
+NTSTATUS RtlUnicodeStringValidateWorker(PCUNICODE_STRING SourceString, const size_t cchMax, DWORD dwFlags);
+NTSTATUS NTAPI RtlUnicodeStringVPrintf(PUNICODE_STRING DestinationString, NTSTRSAFE_PCWSTR pszFormat, va_list argList);
+NTSTATUS NTAPI RtlUnicodeStringVPrintfEx(PUNICODE_STRING DestinationString, PUNICODE_STRING RemainingString, DWORD dwFlags, NTSTRSAFE_PCWSTR pszFormat, va_list argList);
+NTSTATUS RtlWideCharArrayCopyStringWorker(wchar_t *pszDest, size_t cchDest, size_t *pcchNewDestLength, NTSTRSAFE_PCWSTR pszSrc, size_t cchToCopy);
+NTSTATUS RtlWideCharArrayCopyWorker(wchar_t *pszDest, size_t cchDest, size_t *pcchNewDestLength, const wchar_t *pszSrc, size_t cchSrcLength);
+NTSTATUS RtlWideCharArrayVPrintfWorker(wchar_t *pszDest, size_t cchDest, size_t *pcchNewDestLength, NTSTRSAFE_PCWSTR pszFormat, va_list argList);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* _NTSTRSAFE_H_INCLUDED_ */

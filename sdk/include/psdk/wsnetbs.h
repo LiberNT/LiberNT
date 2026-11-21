@@ -29,4 +29,7 @@ typedef struct sockaddr_nb {
 	_s->snb_name[NETBIOS_NAME_LENGTH-1] = (_port); \
 }
 #endif   /* RC_INVOKED */
+
+#define _WSNETBS_ 0
+
 #endif

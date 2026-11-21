@@ -505,22 +505,16 @@ IPHLPAPI_DLL_LINKAGE NET_IFINDEX NETIOAPI_API_ if_nametoindex(PCSTR);
 #define DNS_SETTING_SUPPLEMENTAL_SEARCH_LIST 0x0800
 #endif
 
-typedef enum _MIB_IF_ENTRY_LEVEL {
-    MibIfEntryNormal = 0,
-    MibIfEntryNormalWithoutStatistics = 2
-} MIB_IF_ENTRY_LEVEL, *PMIB_IF_ENTRY_LEVEL;
-
 typedef enum _DNS_SERVER_PROPERTY_TYPE {
     DnsServerInvalidProperty = 0,
     DnsServerDohProperty = 1,
     DnsServerDotProperty = 2
 } DNS_SERVER_PROPERTY_TYPE;
 
-typedef enum _NET_FL_VIRTUAL_INTERFACE_ORIGIN {
-    NetFlVirtualInterfaceOriginOid = 0,
-    NetFlVirtualInterfaceOriginApi = 1,
-    NetFlVirtualInterfaceOriginDefault = 2
-} NET_FL_VIRTUAL_INTERFACE_ORIGIN;
+typedef enum _MIB_IF_ENTRY_LEVEL {
+    MibIfEntryNormal = 0,
+    MibIfEntryNormalWithoutStatistics = 2
+} MIB_IF_ENTRY_LEVEL, *PMIB_IF_ENTRY_LEVEL;
 
 typedef enum _NET_FL_ISOLATION_MODE {
     NetFlIsolationModeNone = 0,
@@ -528,54 +522,11 @@ typedef enum _NET_FL_ISOLATION_MODE {
     NetFlIsolationModeVsid = 2
 } NET_FL_ISOLATION_MODE;
 
-typedef struct _MIB_IFSTACK_ROW {
-  NET_IFINDEX HigherLayerInterfaceIndex;
-  NET_IFINDEX LowerLayerInterfaceIndex;
-} MIB_IFSTACK_ROW, *PMIB_IFSTACK_ROW;
-
-typedef struct _MIB_INVERTEDIFSTACK_ROW {
-  NET_IFINDEX LowerLayerInterfaceIndex;
-  NET_IFINDEX HigherLayerInterfaceIndex;
-} MIB_INVERTEDIFSTACK_ROW, *PMIB_INVERTEDIFSTACK_ROW;
-
-typedef struct _MIB_IFSTACK_TABLE {
-  ULONG NumEntries;
-  MIB_IFSTACK_ROW Table[1];
-} MIB_IFSTACK_TABLE, *PMIB_IFSTACK_TABLE;
-
-typedef struct _MIB_INVERTEDIFSTACK_TABLE {
-  ULONG NumEntries;
-  MIB_INVERTEDIFSTACK_ROW Table[1];
-} MIB_INVERTEDIFSTACK_TABLE, *PMIB_INVERTEDIFSTACK_TABLE;
-
-typedef struct _MIB_MULTICASTIPADDRESS_ROW {
-  SOCKADDR_INET Address;
-  NET_IFINDEX InterfaceIndex;
-  NET_LUID InterfaceLuid;
-  SCOPE_ID ScopeId;
-} MIB_MULTICASTIPADDRESS_ROW, *PMIB_MULTICASTIPADDRESS_ROW;
-
-typedef struct _MIB_MULTICASTIPADDRESS_TABLE {
-  ULONG NumEntries;
-  MIB_MULTICASTIPADDRESS_ROW Table[1];
-} MIB_MULTICASTIPADDRESS_TABLE, *PMIB_MULTICASTIPADDRESS_TABLE;
-
-typedef struct _DNS_SETTINGS {
-  ULONG Version;
-  ULONG64 Flags;
-  PWSTR Hostname;
-  PWSTR Domain;
-  PWSTR SearchList;
-} DNS_SETTINGS;
-
-typedef struct _DNS_SETTINGS2 {
-  ULONG Version;
-  ULONG64 Flags;
-  PWSTR Hostname;
-  PWSTR Domain;
-  PWSTR SearchList;
-  ULONG64 SettingFlags;
-} DNS_SETTINGS2;
+typedef enum _NET_FL_VIRTUAL_INTERFACE_ORIGIN {
+    NetFlVirtualInterfaceOriginOid = 0,
+    NetFlVirtualInterfaceOriginApi = 1,
+    NetFlVirtualInterfaceOriginDefault = 2
+} NET_FL_VIRTUAL_INTERFACE_ORIGIN;
 
 typedef struct _DNS_DOH_SERVER_SETTINGS {
   PWSTR Template;
@@ -587,18 +538,6 @@ typedef struct _DNS_DOT_SERVER_SETTINGS {
   ULONG64 Flags;
   USHORT Port;
 } DNS_DOT_SERVER_SETTINGS;
-
-typedef union _DNS_SERVER_PROPERTY_TYPES {
-  DNS_DOH_SERVER_SETTINGS * DohSettings;
-  DNS_DOT_SERVER_SETTINGS * DotSettings;
-} DNS_SERVER_PROPERTY_TYPES;
-
-typedef struct _DNS_SERVER_PROPERTY {
-  ULONG Version;
-  ULONG ServerIndex;
-  DNS_SERVER_PROPERTY_TYPE Type;
-  DNS_SERVER_PROPERTY_TYPES Property;
-} DNS_SERVER_PROPERTY;
 
 typedef struct _DNS_INTERFACE_SETTINGS {
   ULONG Version;
@@ -618,6 +557,18 @@ typedef struct _DNS_INTERFACE_SETTINGS_EX {
   ULONG DisableUnconstrainedQueries;
   PWSTR SupplementalSearchList;
 } DNS_INTERFACE_SETTINGS_EX;
+
+typedef union _DNS_SERVER_PROPERTY_TYPES {
+  DNS_DOH_SERVER_SETTINGS * DohSettings;
+  DNS_DOT_SERVER_SETTINGS * DotSettings;
+} DNS_SERVER_PROPERTY_TYPES;
+
+typedef struct _DNS_SERVER_PROPERTY {
+  ULONG Version;
+  ULONG ServerIndex;
+  DNS_SERVER_PROPERTY_TYPE Type;
+  DNS_SERVER_PROPERTY_TYPES Property;
+} DNS_SERVER_PROPERTY;
 
 typedef struct _DNS_INTERFACE_SETTINGS3 {
   ULONG Version;
@@ -658,6 +609,23 @@ typedef struct _DNS_INTERFACE_SETTINGS4 {
   ULONG EncryptedDnsAdapterFlags;
 } DNS_INTERFACE_SETTINGS4;
 
+typedef struct _DNS_SETTINGS {
+  ULONG Version;
+  ULONG64 Flags;
+  PWSTR Hostname;
+  PWSTR Domain;
+  PWSTR SearchList;
+} DNS_SETTINGS;
+
+typedef struct _DNS_SETTINGS2 {
+  ULONG Version;
+  ULONG64 Flags;
+  PWSTR Hostname;
+  PWSTR Domain;
+  PWSTR SearchList;
+  ULONG64 SettingFlags;
+} DNS_SETTINGS2;
+
 typedef struct _MIB_FL_VIRTUAL_INTERFACE_ROW {
   ADDRESS_FAMILY Family;
   IF_LUID IfLuid;
@@ -691,5 +659,127 @@ typedef struct _MIB_FL_VIRTUAL_INTERFACE_TABLE {
   ULONG NumEntries;
   MIB_FL_VIRTUAL_INTERFACE_ROW Table[1];
 } MIB_FL_VIRTUAL_INTERFACE_TABLE, *PMIB_FL_VIRTUAL_INTERFACE_TABLE;
+
+typedef struct _MIB_IFSTACK_ROW {
+  NET_IFINDEX HigherLayerInterfaceIndex;
+  NET_IFINDEX LowerLayerInterfaceIndex;
+} MIB_IFSTACK_ROW, *PMIB_IFSTACK_ROW;
+
+typedef struct _MIB_IFSTACK_TABLE {
+  ULONG NumEntries;
+  MIB_IFSTACK_ROW Table[1];
+} MIB_IFSTACK_TABLE, *PMIB_IFSTACK_TABLE;
+
+typedef struct _MIB_INVERTEDIFSTACK_ROW {
+  NET_IFINDEX LowerLayerInterfaceIndex;
+  NET_IFINDEX HigherLayerInterfaceIndex;
+} MIB_INVERTEDIFSTACK_ROW, *PMIB_INVERTEDIFSTACK_ROW;
+
+typedef struct _MIB_INVERTEDIFSTACK_TABLE {
+  ULONG NumEntries;
+  MIB_INVERTEDIFSTACK_ROW Table[1];
+} MIB_INVERTEDIFSTACK_TABLE, *PMIB_INVERTEDIFSTACK_TABLE;
+
+typedef struct _MIB_MULTICASTIPADDRESS_ROW {
+  SOCKADDR_INET Address;
+  NET_IFINDEX InterfaceIndex;
+  NET_LUID InterfaceLuid;
+  SCOPE_ID ScopeId;
+} MIB_MULTICASTIPADDRESS_ROW, *PMIB_MULTICASTIPADDRESS_ROW;
+
+typedef struct _MIB_MULTICASTIPADDRESS_TABLE {
+  ULONG NumEntries;
+  MIB_MULTICASTIPADDRESS_ROW Table[1];
+} MIB_MULTICASTIPADDRESS_TABLE, *PMIB_MULTICASTIPADDRESS_TABLE;
+
+#define _NETIOAPI_SUCCESS_
+#define DNS_DDR_ADAPTER_ENABLE 1
+#define DNS_ENCRYPTION_POLICY_AUTO 0x10
+#define DNS_ENCRYPTION_POLICY_DISABLE 8
+#define DNS_ENCRYPTION_POLICY_NOT_CONFIGURED 4
+#define DNS_ENCRYPTION_POLICY_REQUIRED 0x20
+#define IF_NAMESIZE 0x100
+#define NETIO_PULONG 0
+#define NETIO_SUCCESSx) NT_SUCCESS(x)
+
+struct _MIB_IP_NETWORK_CONNECTION_BANDWIDTH_ESTIMATES
+{
+    NL_BANDWIDTH_INFORMATION InboundBandwidthInformation;
+    NL_BANDWIDTH_INFORMATION OutboundBandwidthInformation;
+};
+
+typedef struct _MIB_IP_NETWORK_CONNECTION_BANDWIDTH_ESTIMATES MIB_IP_NETWORK_CONNECTION_BANDWIDTH_ESTIMATES;
+
+typedef struct _MIB_IP_NETWORK_CONNECTION_BANDWIDTH_ESTIMATES *PMIB_IP_NETWORK_CONNECTION_BANDWIDTH_ESTIMATES;
+
+typedef void (*PNETWORK_CONNECTIVITY_HINT_CHANGE_CALLBACK)(PVOID, NL_NETWORK_CONNECTIVITY_HINT);
+
+typedef void (*PSTABLE_UNICAST_IPADDRESS_TABLE_CALLBACK)(PVOID, PMIB_UNICASTIPADDRESS_TABLE);
+
+typedef void (*PTEREDO_PORT_CHANGE_CALLBACK)(PVOID, USHORT, MIB_NOTIFICATION_TYPE);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+NTSTATUS WINAPI CreateSortedAddressPairs(const PSOCKADDR_IN6 SourceAddressList, ULONG SourceAddressCount, const PSOCKADDR_IN6 DestinationAddressList, ULONG DestinationAddressCount, ULONG AddressSortOptions, PSOCKADDR_IN6_PAIR *SortedAddressPairList, ULONG *SortedAddressPairCount);
+NTSTATUS WINAPI SetInterfaceDnsSettings(GUID Interface, const DNS_INTERFACE_SETTINGS *Settings);
+
+/* TODO: LiberNT does not implement the functions below yet */
+NTSTATUS WINAPI ConvertCompartmentGuidToId(const GUID *CompartmentGuid, PNET_IF_COMPARTMENT_ID CompartmentId);
+NTSTATUS WINAPI ConvertCompartmentIdToGuid(NET_IF_COMPARTMENT_ID CompartmentId, GUID *CompartmentGuid);
+NTSTATUS WINAPI ConvertIpv4MaskToLength(ULONG Mask, PUINT8 MaskLength);
+NTSTATUS WINAPI CreateAnycastIpAddressEntry(const MIB_ANYCASTIPADDRESS_ROW *Row);
+NTSTATUS WINAPI CreateFlVirtualInterface(const MIB_FL_VIRTUAL_INTERFACE_ROW *Row);
+NTSTATUS WINAPI DeleteAnycastIpAddressEntry(const MIB_ANYCASTIPADDRESS_ROW *Row);
+NTSTATUS WINAPI DeleteFlVirtualInterface(const MIB_FL_VIRTUAL_INTERFACE_ROW *Row);
+void FreeDnsSettings(DNS_SETTINGS *Settings);
+void FreeInterfaceDnsSettings(DNS_INTERFACE_SETTINGS *Settings);
+NTSTATUS WINAPI GetAnycastIpAddressEntry(PMIB_ANYCASTIPADDRESS_ROW Row);
+void GetCurrentThreadCompartmentScope(PNET_IF_COMPARTMENT_SCOPE CompartmentScope, PNET_IF_COMPARTMENT_ID CompartmentId);
+NET_IF_COMPARTMENT_ID GetDefaultCompartmentId(void);
+NTSTATUS WINAPI GetDnsSettings(DNS_SETTINGS *Settings);
+NTSTATUS WINAPI GetFlVirtualInterface(PMIB_FL_VIRTUAL_INTERFACE_ROW Row);
+NTSTATUS WINAPI GetFlVirtualInterfaceTable(ADDRESS_FAMILY Family, PMIB_FL_VIRTUAL_INTERFACE_TABLE *Table);
+NTSTATUS WINAPI GetIfStackTable(PMIB_IFSTACK_TABLE *Table);
+NTSTATUS WINAPI GetInterfaceDnsSettings(GUID Interface, DNS_INTERFACE_SETTINGS *Settings);
+NTSTATUS WINAPI GetInvertedIfStackTable(PMIB_INVERTEDIFSTACK_TABLE *Table);
+NTSTATUS WINAPI GetIpNetworkConnectionBandwidthEstimates(NET_IFINDEX InterfaceIndex, ADDRESS_FAMILY AddressFamily, PMIB_IP_NETWORK_CONNECTION_BANDWIDTH_ESTIMATES BandwidthEstimates);
+NET_IF_COMPARTMENT_ID GetJobCompartmentId(HANDLE JobHandle);
+NTSTATUS WINAPI GetMulticastIpAddressEntry(PMIB_MULTICASTIPADDRESS_ROW Row);
+NTSTATUS WINAPI GetMulticastIpAddressTable(ADDRESS_FAMILY Family, PMIB_MULTICASTIPADDRESS_TABLE *Table);
+NTSTATUS WINAPI GetNetworkConnectivityHint(NL_NETWORK_CONNECTIVITY_HINT *ConnectivityHint);
+NTSTATUS WINAPI GetNetworkConnectivityHintForInterface(NET_IFINDEX InterfaceIndex, NL_NETWORK_CONNECTIVITY_HINT *ConnectivityHint);
+NTSTATUS WINAPI GetNetworkInformation(const NET_IF_NETWORK_GUID *NetworkGuid, PNET_IF_COMPARTMENT_ID CompartmentId, PULONG SiteId, PWCHAR NetworkName, ULONG Length);
+NET_IF_COMPARTMENT_ID GetSessionCompartmentId(ULONG SessionId);
+NTSTATUS WINAPI GetTeredoPort(USHORT *Port);
+void InitializeFlVirtualInterfaceEntry(PMIB_FL_VIRTUAL_INTERFACE_ROW Row);
+NTSTATUS WINAPI NotifyNetworkConnectivityHintChange(PNETWORK_CONNECTIVITY_HINT_CHANGE_CALLBACK Callback, PVOID CallerContext, BOOLEAN InitialNotification, PHANDLE NotificationHandle);
+NTSTATUS WINAPI NotifyStableUnicastIpAddressTable(ADDRESS_FAMILY Family, PMIB_UNICASTIPADDRESS_TABLE *Table, PSTABLE_UNICAST_IPADDRESS_TABLE_CALLBACK CallerCallback, PVOID CallerContext, HANDLE *NotificationHandle);
+NTSTATUS WINAPI NotifyTeredoPortChange(PTEREDO_PORT_CHANGE_CALLBACK Callback, PVOID CallerContext, BOOLEAN InitialNotification, HANDLE *NotificationHandle);
+NTSTATUS WINAPI SetCurrentThreadCompartmentScope(NET_IF_COMPARTMENT_SCOPE CompartmentScope);
+NTSTATUS WINAPI SetDnsSettings(const DNS_SETTINGS *Settings);
+NTSTATUS WINAPI SetFlVirtualInterface(const MIB_FL_VIRTUAL_INTERFACE_ROW *Row);
+NTSTATUS WINAPI SetJobCompartmentId(HANDLE JobHandle, NET_IF_COMPARTMENT_ID CompartmentId);
+NTSTATUS WINAPI SetNetworkInformation(const NET_IF_NETWORK_GUID *NetworkGuid, NET_IF_COMPARTMENT_ID CompartmentId, const WCHAR *NetworkName);
+NTSTATUS WINAPI SetSessionCompartmentId(ULONG SessionId, NET_IF_COMPARTMENT_ID CompartmentId);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define NETIO_SUCCESSx) NT_SUCCESS(x)
+
+#define NETIO_SUCCESSx) NT_SUCCESS(x)
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+NTSTATUS WINAPI ResolveIpNetEntry2(PMIB_IPNET_ROW2 Row, const SOCKADDR_INET *SourceAddress);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __WINE_NETIOAPI_H */

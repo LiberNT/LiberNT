@@ -852,9 +852,39 @@ ImmUnregisterWordW(
 #define IME_SMODE_RESERVED 0x0000F000
 #endif
 
-typedef REGISTERWORDA REGISTERWORD;
-typedef PREGISTERWORDA PREGISTERWORD;
-typedef NPREGISTERWORDA NPREGISTERWORD;
 typedef LPREGISTERWORDA LPREGISTERWORD;
+typedef NPREGISTERWORDA NPREGISTERWORD;
+typedef PREGISTERWORDA PREGISTERWORD;
+typedef REGISTERWORDA REGISTERWORD;
+
+#define _IMM_ 0
+
+struct HIMC__
+{
+    int unused;
+};
+
+struct HIMCC__
+{
+    int unused;
+};
+
+struct tagCOMPOSITIONFORM
+{
+    DWORD dwStyle;
+    POINT ptCurrentPos;
+    RECT rcArea;
+};
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL WINAPI ImmDisableLegacyIME(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif  /* __WINE_IMM_H */

@@ -131,3 +131,5 @@ DEFINE_GUID(ApplicationVerifierGuid,
 
 #endif /* (NTDDI_VERSION >= NTDDI_VISTA) */
 
+#define LibraryLoaderGuid ImageLoadGuid
+

@@ -190,21 +190,6 @@ typedef DEV_BROADCAST_DEVICEINTERFACE_A DEV_BROADCAST_DEVICEINTERFACE, *PDEV_BRO
 #define LOCKP_USER_MASK 0x03
 #endif
 
-typedef struct VolLockBroadcast {
-  struct _DEV_BROADCAST_HDR vlb_dbh;
-  DWORD vlb_owner;
-  BYTE vlb_perms;
-  BYTE vlb_lockType;
-  BYTE vlb_drive;
-  BYTE vlb_flags;
-} VolLockBroadcast;
-
-struct _DEV_BROADCAST_HEADER {
-  DWORD dbcd_size;
-  DWORD dbcd_devicetype;
-  DWORD dbcd_reserved;
-};
-
 typedef struct _DEV_BROADCAST_HANDLE32 {
   DWORD dbch_size;
   DWORD dbch_devicetype;
@@ -226,5 +211,24 @@ typedef struct _DEV_BROADCAST_HANDLE64 {
   LONG dbch_nameoffset;
   BYTE dbch_data[1];
 } DEV_BROADCAST_HANDLE64, *PDEV_BROADCAST_HANDLE64;
+
+struct _DEV_BROADCAST_HEADER {
+  DWORD dbcd_size;
+  DWORD dbcd_devicetype;
+  DWORD dbcd_reserved;
+};
+
+typedef struct VolLockBroadcast {
+  struct _DEV_BROADCAST_HDR vlb_dbh;
+  DWORD vlb_owner;
+  BYTE vlb_perms;
+  BYTE vlb_lockType;
+  BYTE vlb_drive;
+  BYTE vlb_flags;
+} VolLockBroadcast;
+
+#define DBTFAR 0
+
+typedef VolLockBroadcast *pVolLockBroadcast;
 
 #endif
