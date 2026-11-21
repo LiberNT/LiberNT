@@ -168,4 +168,17 @@ BOOL WINAPI EvtRender(EVT_HANDLE, EVT_HANDLE, DWORD, DWORD, void *, DWORD *, DWO
 } /* extern "C" */
 #endif /* defined(__cplusplus) */
 
+#ifndef EVT_ALL_ACCESS
+#define EVT_ALL_ACCESS 0x7
+#endif
+#ifndef EVT_CLEAR_ACCESS
+#define EVT_CLEAR_ACCESS 0x4
+#endif
+#ifndef EVT_READ_ACCESS
+#define EVT_READ_ACCESS 0x1
+#endif
+#ifndef EVT_WRITE_ACCESS
+#define EVT_WRITE_ACCESS 0x2
+#endif
+
 #endif /* __WINE_WINEVT_H */

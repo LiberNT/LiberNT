@@ -282,4 +282,17 @@ RegisterHelper(
 }
 #endif
 
+#ifndef MAX_NAME_LEN
+#define MAX_NAME_LEN 48
+#endif
+#ifndef NETSH_MAX_CMD_TOKEN_LENGTH
+#define NETSH_MAX_CMD_TOKEN_LENGTH 128
+#endif
+#ifndef NETSH_MAX_TOKEN_LENGTH
+#define NETSH_MAX_TOKEN_LENGTH 64
+#endif
+#ifndef NETSH_VERSION_50
+#define NETSH_VERSION_50 0x0005000
+#endif
+
 #endif /* _NETSH_H_ */

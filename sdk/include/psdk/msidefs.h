@@ -283,4 +283,8 @@ enum
 #define PID_MSISOURCE PID_WORDCOUNT
 #define PID_MSIRESTRICT PID_CHARCOUNT
 
+#ifndef _WIN32_MSI
+#define _WIN32_MSI 500
+#endif
+
 #endif /* __WINE_MSIDEFS_H */

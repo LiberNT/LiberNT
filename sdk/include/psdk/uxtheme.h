@@ -285,4 +285,50 @@ THEMEAPI_(BOOL) BufferedPaintRenderAnimation(HWND, HDC);
 THEMEAPI BufferedPaintStopAllAnimations(HWND);
 THEMEAPI EndBufferedAnimation(HANIMATIONBUFFER, BOOL);
 
+#ifndef BPPF_ERASE
+#define BPPF_ERASE 0x0001
+#endif
+#ifndef BPPF_NOCLIP
+#define BPPF_NOCLIP 0x0002
+#endif
+#ifndef BPPF_NONCLIENT
+#define BPPF_NONCLIENT 0x0004
+#endif
+#ifndef DTBG_NOMIRROR
+#define DTBG_NOMIRROR 0x00000040
+#endif
+#ifndef DTPB_USECTLCOLORSTATIC
+#define DTPB_USECTLCOLORSTATIC 0x00000002
+#endif
+#ifndef DTPB_USEERASEBKGND
+#define DTPB_USEERASEBKGND 0x00000004
+#endif
+#ifndef DTPB_WINDOWDC
+#define DTPB_WINDOWDC 0x00000001
+#endif
+#ifndef GBF_COPY
+#define GBF_COPY 0x00000002
+#endif
+#ifndef GBF_DIRECT
+#define GBF_DIRECT 0x00000001
+#endif
+#ifndef MAX_THEMECOLOR
+#define MAX_THEMECOLOR 64
+#endif
+#ifndef MAX_THEMESIZE
+#define MAX_THEMESIZE 64
+#endif
+#ifndef WTNCA_NODRAWCAPTION
+#define WTNCA_NODRAWCAPTION 0x00000001
+#endif
+#ifndef WTNCA_NODRAWICON
+#define WTNCA_NODRAWICON 0x00000002
+#endif
+#ifndef WTNCA_NOMIRRORHELP
+#define WTNCA_NOMIRRORHELP 0x00000008
+#endif
+#ifndef WTNCA_NOSYSMENU
+#define WTNCA_NOSYSMENU 0x00000004
+#endif
+
 #endif

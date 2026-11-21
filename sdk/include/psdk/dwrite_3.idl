@@ -1583,3 +1583,7 @@ interface IDWriteBitmapRenderTarget3 : IDWriteBitmapRenderTarget2
         [in] UINT32 palette_index,
         [out] RECT *black_box);
 }
+
+cpp_quote("#ifndef DWRITE_STANDARD_FONT_AXIS_COUNT")
+cpp_quote("#define DWRITE_STANDARD_FONT_AXIS_COUNT 5")
+cpp_quote("#endif")

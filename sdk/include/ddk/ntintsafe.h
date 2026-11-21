@@ -42,3 +42,7 @@
 #endif
 
 #endif // !_NTINTSAFE_H_INCLUDED_
+
+#ifndef _ARM64_MULT_INTRINS_SUPPORTED
+#define _ARM64_MULT_INTRINS_SUPPORTED 0
+#endif

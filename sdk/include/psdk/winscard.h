@@ -194,4 +194,29 @@ WINSCARDAPI LONG        WINAPI SCardTransmit(SCARDHANDLE,LPCSCARD_IO_REQUEST,LPC
 }
 #endif
 
+#ifndef SCARD_AUDIT_CHV_SUCCESS
+#define SCARD_AUDIT_CHV_SUCCESS 0x1
+#endif
+#ifndef SCARD_PROVIDER_CSP
+#define SCARD_PROVIDER_CSP 2
+#endif
+#ifndef SCARD_PROVIDER_KSP
+#define SCARD_PROVIDER_KSP 3
+#endif
+#ifndef SCARD_PROVIDER_PRIMARY
+#define SCARD_PROVIDER_PRIMARY 1
+#endif
+#ifndef SCERR_NOCARDNAME
+#define SCERR_NOCARDNAME 0x4000
+#endif
+#ifndef SCERR_NOGUIDS
+#define SCERR_NOGUIDS 0x8000
+#endif
+#ifndef SC_DLG_FORCE_UI
+#define SC_DLG_FORCE_UI 0x04
+#endif
+#ifndef SC_DLG_NO_UI
+#define SC_DLG_NO_UI 0x02
+#endif
+
 #endif  /* __WINE_WINSCARD_H */

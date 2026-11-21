@@ -1345,3 +1345,22 @@ coclass SWbemNamedValueSet
 }
 
 } /* WbemScripting */
+
+cpp_quote("#ifndef WBEMS_DISPID_COMPLETED")
+cpp_quote("#define WBEMS_DISPID_COMPLETED 2")
+cpp_quote("#endif")
+cpp_quote("#ifndef WBEMS_DISPID_CONNECTION_READY")
+cpp_quote("#define WBEMS_DISPID_CONNECTION_READY 5")
+cpp_quote("#endif")
+cpp_quote("#ifndef WBEMS_DISPID_DERIVATION")
+cpp_quote("#define WBEMS_DISPID_DERIVATION 23")
+cpp_quote("#endif")
+cpp_quote("#ifndef WBEMS_DISPID_OBJECT_PUT")
+cpp_quote("#define WBEMS_DISPID_OBJECT_PUT 4")
+cpp_quote("#endif")
+cpp_quote("#ifndef WBEMS_DISPID_OBJECT_READY")
+cpp_quote("#define WBEMS_DISPID_OBJECT_READY 1")
+cpp_quote("#endif")
+cpp_quote("#ifndef WBEMS_DISPID_PROGRESS")
+cpp_quote("#define WBEMS_DISPID_PROGRESS 3")
+cpp_quote("#endif")

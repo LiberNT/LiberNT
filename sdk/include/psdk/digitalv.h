@@ -865,4 +865,8 @@ typedef struct {
 
 #pragma pack(pop)
 
+#ifndef _INC_DIGITALV
+#define _INC_DIGITALV 100
+#endif
+
 #endif /* __WINE_DIGITALV_H */

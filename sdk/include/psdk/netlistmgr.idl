@@ -454,3 +454,7 @@ interface INetworkEvents : IUnknown
         [in] GUID networkId,
         [in] NLM_NETWORK_PROPERTY_CHANGE flags);
 }
+
+cpp_quote("#ifndef NLM_MAX_ADDRESS_LIST_SIZE")
+cpp_quote("#define NLM_MAX_ADDRESS_LIST_SIZE 10")
+cpp_quote("#endif")

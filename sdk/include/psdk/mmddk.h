@@ -488,4 +488,44 @@ DWORD   WINAPI mmGetCurrentTask(void);
 } // extern "C"
 #endif
 
+#ifndef DRVM_INIT_EX
+#define DRVM_INIT_EX 104
+#endif
+#ifndef DRVM_MAPPER_PREFERRED_FLAGS_PREFERREDONLY
+#define DRVM_MAPPER_PREFERRED_FLAGS_PREFERREDONLY 0x00000001
+#endif
+#ifndef MIDI_IO_COOKED
+#define MIDI_IO_COOKED 0x00000002L
+#endif
+#ifndef MIDI_IO_PACKED
+#define MIDI_IO_PACKED 0x00000000L
+#endif
+#ifndef MODM_GETPOS
+#define MODM_GETPOS 17
+#endif
+#ifndef MODM_PAUSE
+#define MODM_PAUSE 18
+#endif
+#ifndef MODM_PREFERRED
+#define MODM_PREFERRED 22
+#endif
+#ifndef MODM_PROPERTIES
+#define MODM_PROPERTIES 21
+#endif
+#ifndef MODM_RESTART
+#define MODM_RESTART 19
+#endif
+#ifndef MODM_STOP
+#define MODM_STOP 20
+#endif
+#ifndef MODM_STRMDATA
+#define MODM_STRMDATA 14
+#endif
+#ifndef MXDM_BASE
+#define MXDM_BASE 1
+#endif
+#ifndef VADMAD_Device_ID
+#define VADMAD_Device_ID 0X0444
+#endif
+
 #endif /* __MMDDK_H */

@@ -9,3 +9,7 @@
 #ifndef RDBSS_ASSERTS
 #define RDBSS_ASSERTS 1
 #endif
+
+#ifndef RX_ORIGINAL_DBG
+#define RX_ORIGINAL_DBG 1
+#endif

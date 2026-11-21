@@ -857,4 +857,23 @@ RPCRTAPI RPC_STATUS RPC_ENTRY
 #ifdef __cplusplus
 }
 #endif
+#ifndef TARGET_IS_NT100_OR_LATER
+#define TARGET_IS_NT100_OR_LATER 1
+#endif
+#ifndef TARGET_IS_NT51_OR_LATER
+#define TARGET_IS_NT51_OR_LATER 1
+#endif
+#ifndef TARGET_IS_NT60_OR_LATER
+#define TARGET_IS_NT60_OR_LATER 1
+#endif
+#ifndef TARGET_IS_NT61_OR_LATER
+#define TARGET_IS_NT61_OR_LATER 1
+#endif
+#ifndef TARGET_IS_NT62_OR_LATER
+#define TARGET_IS_NT62_OR_LATER 1
+#endif
+#ifndef TARGET_IS_NT63_OR_LATER
+#define TARGET_IS_NT63_OR_LATER 1
+#endif
+
 #endif /*__WINE_RPCNDR_H */

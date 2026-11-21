@@ -41,4 +41,11 @@
 #define CI_E_TIMEOUT                   0x8004181f
 #define CI_E_NOT_RUNNING               0x80041820
 
+#ifndef STATUS_SEVERITY_COERROR
+#define STATUS_SEVERITY_COERROR 0x2
+#endif
+#ifndef STATUS_SEVERITY_COFAIL
+#define STATUS_SEVERITY_COFAIL 0x3
+#endif
+
 #endif

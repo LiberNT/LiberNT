@@ -327,4 +327,8 @@ typedef V1_ENUM enum HierarchyAlpha {
   BDA_HALPHA_MAX,
 } HierarchyAlpha;
 
+#ifndef BDA_PLP_ID_NOT_SET
+#define BDA_PLP_ID_NOT_SET (-1)
+#endif
+
 #endif /* _BDATYPES_ */

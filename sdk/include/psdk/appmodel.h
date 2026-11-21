@@ -179,3 +179,13 @@ AppPolicyGetMediaFoundationCodecLoading(
 #ifdef __cplusplus
 } // extern "C"
 #endif
+
+#ifndef PACKAGE_DEPENDENCY_RANK_DEFAULT
+#define PACKAGE_DEPENDENCY_RANK_DEFAULT 0
+#endif
+#ifndef PACKAGE_FILTER_ALL_LOADED
+#define PACKAGE_FILTER_ALL_LOADED 0
+#endif
+#ifndef PACKAGE_PROPERTY_HOSTRUNTIME
+#define PACKAGE_PROPERTY_HOSTRUNTIME 0x00200000
+#endif

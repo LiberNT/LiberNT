@@ -290,4 +290,11 @@ DWMAPI DwmUpdateThumbnailProperties(HTHUMBNAIL, const DWM_THUMBNAIL_PROPERTIES *
 }
 #endif
 
+#ifndef DWMWA_COLOR_DEFAULT
+#define DWMWA_COLOR_DEFAULT 0xFFFFFFFF
+#endif
+#ifndef DWMWA_COLOR_NONE
+#define DWMWA_COLOR_NONE 0xFFFFFFFE
+#endif
+
 #endif  /* __WINE_DWMAPI_H */

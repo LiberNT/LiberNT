@@ -427,4 +427,77 @@ DEFINE_GUIDSTRUCT("0d7AED42-CB9A-11DB-9705-005056C00008", KSDATAFORMAT_SUBTYPE_P
 
 #define KSDATAFORMAT_SUBTYPE_PBDA_TRANSPORT_RAW DEFINE_GUIDNAMED(KSDATAFORMAT_SUBTYPE_PBDA_TRANSPORT_RAW)
 
+#ifndef AudioType_Commentary
+#define AudioType_Commentary 5
+#endif
+#ifndef AudioType_Dialogue
+#define AudioType_Dialogue 4
+#endif
+#ifndef AudioType_Emergency
+#define AudioType_Emergency 6
+#endif
+#ifndef AudioType_Hearing_Impaired
+#define AudioType_Hearing_Impaired 3
+#endif
+#ifndef AudioType_Music_And_Effects
+#define AudioType_Music_And_Effects 1
+#endif
+#ifndef AudioType_Reserved
+#define AudioType_Reserved (-1)
+#endif
+#ifndef AudioType_Visually_Impaired
+#define AudioType_Visually_Impaired 2
+#endif
+#ifndef AudioType_Voiceover
+#define AudioType_Voiceover 7
+#endif
+#ifndef DTV_CardStatus_Error
+#define DTV_CardStatus_Error 2
+#endif
+#ifndef DTV_CardStatus_FirmwareDownload
+#define DTV_CardStatus_FirmwareDownload 3
+#endif
+#ifndef DTV_CardStatus_Removed
+#define DTV_CardStatus_Removed 1
+#endif
+#ifndef DTV_Entitlement_NotEntitled
+#define DTV_Entitlement_NotEntitled 1
+#endif
+#ifndef DTV_Entitlement_TechnicalFailure
+#define DTV_Entitlement_TechnicalFailure 2
+#endif
+#ifndef DTV_MMIMessage_Close
+#define DTV_MMIMessage_Close 1
+#endif
+#ifndef PARENTAL_CONTROL_ATTRIB_DIALOGUE
+#define PARENTAL_CONTROL_ATTRIB_DIALOGUE 0x00000203
+#endif
+#ifndef PARENTAL_CONTROL_ATTRIB_FANTASY
+#define PARENTAL_CONTROL_ATTRIB_FANTASY 0x00000204
+#endif
+#ifndef PARENTAL_CONTROL_ATTRIB_LANGUAGE
+#define PARENTAL_CONTROL_ATTRIB_LANGUAGE 0x00000201
+#endif
+#ifndef PARENTAL_CONTROL_ATTRIB_SEXUAL
+#define PARENTAL_CONTROL_ATTRIB_SEXUAL 0x00000202
+#endif
+#ifndef PARENTAL_CONTROL_ATTRIB_VIOLENCE
+#define PARENTAL_CONTROL_ATTRIB_VIOLENCE 0x00000200
+#endif
+#ifndef PARENTAL_CONTROL_CONTENT_RATING
+#define PARENTAL_CONTROL_CONTENT_RATING 0x00000100
+#endif
+#ifndef PARENTAL_CONTROL_TIME_RANGE
+#define PARENTAL_CONTROL_TIME_RANGE 0x00000001
+#endif
+#ifndef PARENTAL_CONTROL_VALUE_UNDEFINED
+#define PARENTAL_CONTROL_VALUE_UNDEFINED 0
+#endif
+#ifndef PBDA_PAIRING_PROTOCOL_VERSION
+#define PBDA_PAIRING_PROTOCOL_VERSION 3
+#endif
+#ifndef REQUIRED_PARENTAL_CONTROL_TIME_RANGE
+#define REQUIRED_PARENTAL_CONTROL_TIME_RANGE 0x00000002
+#endif
+
 #endif /* _BDAMEDIA_ */

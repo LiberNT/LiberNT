@@ -65,4 +65,8 @@ BOOL WINAPI CloseDecompressor( DECOMPRESSOR_HANDLE );
 }
 #endif
 
+#ifndef COMPRESS_ALGORITHM_MAX
+#define COMPRESS_ALGORITHM_MAX 6
+#endif
+
 #endif /* __WINE_COMPRESSAPI_H */

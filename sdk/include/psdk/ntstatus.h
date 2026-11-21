@@ -3134,4 +3134,8 @@ __inline NTSTATUS_FROM_WIN32(long x) { return x <= 0 ? (NTSTATUS)x : (NTSTATUS) 
 }
 #endif
 
+#ifndef FACILITY_CAMERA
+#define FACILITY_CAMERA 0x1F
+#endif
+
 #endif /* _NTSTATUS_ */

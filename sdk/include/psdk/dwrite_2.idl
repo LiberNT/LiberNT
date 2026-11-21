@@ -373,3 +373,7 @@ interface IDWriteFactory2 : IDWriteFactory1
         [out] IDWriteGlyphRunAnalysis **analysis
     );
 }
+
+cpp_quote("#ifndef DWRITE_NO_PALETTE_INDEX")
+cpp_quote("#define DWRITE_NO_PALETTE_INDEX 0xFFFF")
+cpp_quote("#endif")

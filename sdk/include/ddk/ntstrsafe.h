@@ -3373,4 +3373,8 @@ RtlUnicodeStringPrintfEx(
 #pragma warning(pop)
 #endif /* _MSC_VER */
 
+#ifndef __WARNING_RETURN_UNINIT_VAR
+#define __WARNING_RETURN_UNINIT_VAR 6101
+#endif
+
 #endif /* _NTSTRSAFE_H_INCLUDED_ */

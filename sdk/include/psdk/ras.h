@@ -1156,4 +1156,158 @@ DWORD APIENTRY  RasDeleteSubEntryW(LPCWSTR pszPhonebook, LPCWSTR pszEntry, DWORD
 }
 #endif
 #pragma pack(pop)
+#ifndef RASCF_OwnerKnown
+#define RASCF_OwnerKnown 0x00000004
+#endif
+#ifndef RASCF_OwnerMatch
+#define RASCF_OwnerMatch 0x00000008
+#endif
+#ifndef RASCN_Dormant
+#define RASCN_Dormant 0x00000010
+#endif
+#ifndef RASCN_EPDGPacketArrival
+#define RASCN_EPDGPacketArrival 0x00000040
+#endif
+#ifndef RASCN_ReConnection
+#define RASCN_ReConnection 0x00000020
+#endif
+#ifndef RASEO2_AuthTypeIsOtp
+#define RASEO2_AuthTypeIsOtp 0x10000000
+#endif
+#ifndef RASEO2_AutoTriggerCapable
+#define RASEO2_AutoTriggerCapable 0x04000000
+#endif
+#ifndef RASEO2_CacheCredentials
+#define RASEO2_CacheCredentials 0x02000000
+#endif
+#ifndef RASEO2_DisableClassBasedStaticRoute
+#define RASEO2_DisableClassBasedStaticRoute 0x00080000
+#endif
+#ifndef RASEO2_DisableIKENameEkuCheck
+#define RASEO2_DisableIKENameEkuCheck 0x00040000
+#endif
+#ifndef RASEO2_DisableMobility
+#define RASEO2_DisableMobility 0x00200000
+#endif
+#ifndef RASEO2_IPv4ExplicitMetric
+#define RASEO2_IPv4ExplicitMetric 0x00010000
+#endif
+#ifndef RASEO2_IPv6ExplicitMetric
+#define RASEO2_IPv6ExplicitMetric 0x00020000
+#endif
+#ifndef RASEO2_IPv6RemoteDefaultGateway
+#define RASEO2_IPv6RemoteDefaultGateway 0x00002000
+#endif
+#ifndef RASEO2_IPv6SpecificNameServers
+#define RASEO2_IPv6SpecificNameServers 0x00001000
+#endif
+#ifndef RASEO2_IsAlwaysOn
+#define RASEO2_IsAlwaysOn 0x20000000
+#endif
+#ifndef RASEO2_IsPrivateNetwork
+#define RASEO2_IsPrivateNetwork 0x40000000
+#endif
+#ifndef RASEO2_IsThirdPartyProfile
+#define RASEO2_IsThirdPartyProfile 0x08000000
+#endif
+#ifndef RASEO2_PlumbIKEv2TSAsRoutes
+#define RASEO2_PlumbIKEv2TSAsRoutes 0x80000000
+#endif
+#ifndef RASEO2_RegisterIpWithDNS
+#define RASEO2_RegisterIpWithDNS 0x00004000
+#endif
+#ifndef RASEO2_RequireMachineCertificates
+#define RASEO2_RequireMachineCertificates 0x00400000
+#endif
+#ifndef RASEO2_SecureRoutingCompartment
+#define RASEO2_SecureRoutingCompartment 0x00000400
+#endif
+#ifndef RASEO2_SpecificIPv6Addr
+#define RASEO2_SpecificIPv6Addr 0x00100000
+#endif
+#ifndef RASEO2_UseDNSSuffixForRegistration
+#define RASEO2_UseDNSSuffixForRegistration 0x00008000
+#endif
+#ifndef RASEO2_UsePreSharedKeyForIkev2Initiator
+#define RASEO2_UsePreSharedKeyForIkev2Initiator 0x00800000
+#endif
+#ifndef RASEO2_UsePreSharedKeyForIkev2Responder
+#define RASEO2_UsePreSharedKeyForIkev2Responder 0x01000000
+#endif
+#ifndef RASEO2_UseTypicalSettings
+#define RASEO2_UseTypicalSettings 0x00000800
+#endif
+#ifndef RASIKEv2_AUTH_EAP
+#define RASIKEv2_AUTH_EAP 2
+#endif
+#ifndef RASIKEv2_AUTH_MACHINECERTIFICATES
+#define RASIKEv2_AUTH_MACHINECERTIFICATES 1
+#endif
+#ifndef RASIKEv2_AUTH_PSK
+#define RASIKEv2_AUTH_PSK 3
+#endif
+#ifndef RASIKEv2_FLAGS_BEHIND_NAT
+#define RASIKEv2_FLAGS_BEHIND_NAT 0x00000002
+#endif
+#ifndef RASIKEv2_FLAGS_SERVERBEHIND_NAT
+#define RASIKEv2_FLAGS_SERVERBEHIND_NAT 0x00000004
+#endif
+#ifndef RASLCPO_AES_128
+#define RASLCPO_AES_128 0x00000020
+#endif
+#ifndef RASLCPO_AES_192
+#define RASLCPO_AES_192 0x00000080
+#endif
+#ifndef RASLCPO_AES_256
+#define RASLCPO_AES_256 0x00000040
+#endif
+#ifndef RASLCPO_GCM_AES_128
+#define RASLCPO_GCM_AES_128 0x00000100
+#endif
+#ifndef RASLCPO_GCM_AES_192
+#define RASLCPO_GCM_AES_192 0x00000200
+#endif
+#ifndef RASLCPO_GCM_AES_256
+#define RASLCPO_GCM_AES_256 0x00000400
+#endif
+#ifndef RASNP_Ipv6
+#define RASNP_Ipv6 0x00000008
+#endif
+#ifndef RCD_Logon
+#define RCD_Logon 0x00000004
+#endif
+#ifndef RDEOPT_EapInfoCryptInCapable
+#define RDEOPT_EapInfoCryptInCapable 0x00008000
+#endif
+#ifndef RDEOPT_InvokeAutoTriggerCredentialUI
+#define RDEOPT_InvokeAutoTriggerCredentialUI 0x00004000
+#endif
+#ifndef VS_GREOnly
+#define VS_GREOnly 9
+#endif
+#ifndef VS_Ikev2First
+#define VS_Ikev2First 8
+#endif
+#ifndef VS_Ikev2Only
+#define VS_Ikev2Only 7
+#endif
+#ifndef VS_Ikev2Sstp
+#define VS_Ikev2Sstp 14
+#endif
+#ifndef VS_L2tpSstp
+#define VS_L2tpSstp 13
+#endif
+#ifndef VS_PptpSstp
+#define VS_PptpSstp 12
+#endif
+#ifndef VS_ProtocolList
+#define VS_ProtocolList 15
+#endif
+#ifndef VS_SstpFirst
+#define VS_SstpFirst 6
+#endif
+#ifndef VS_SstpOnly
+#define VS_SstpOnly 5
+#endif
+
 #endif /* _RAS_H */

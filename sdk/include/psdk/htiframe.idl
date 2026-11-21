@@ -132,3 +132,7 @@ interface ITargetContainer : IUnknown
     HRESULT GetFramesContainer([out] IOleContainer **ppContainer);
 
 }
+
+cpp_quote("#ifndef TF_NAVIGATE")
+cpp_quote("#define TF_NAVIGATE 0x7FAEABAC")
+cpp_quote("#endif")

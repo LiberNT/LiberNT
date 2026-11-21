@@ -664,4 +664,11 @@ ScriptString_pSize(
 } /* extern "C" */
 #endif
 
+#ifndef SCRIPT_TAG_UNKNOWN
+#define SCRIPT_TAG_UNKNOWN 0x00000000
+#endif
+#ifndef UNISCRIBE_OPENTYPE
+#define UNISCRIBE_OPENTYPE 0x0100
+#endif
+
 #endif /* __USP10_H */

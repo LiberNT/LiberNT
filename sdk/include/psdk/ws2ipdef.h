@@ -605,3 +605,64 @@ C_ASSERT(sizeof(IN6_PKTINFO) == 20);
 #ifdef __cplusplus
 }
 #endif
+
+#ifndef IPV6_GET_IFLIST
+#define IPV6_GET_IFLIST 33
+#endif
+#ifndef IPV6_MTU
+#define IPV6_MTU 72
+#endif
+#ifndef IPV6_MTU_DISCOVER
+#define IPV6_MTU_DISCOVER 71
+#endif
+#ifndef IPV6_NRT_INTERFACE
+#define IPV6_NRT_INTERFACE 74
+#endif
+#ifndef IPV6_PKTINFO_EX
+#define IPV6_PKTINFO_EX 51
+#endif
+#ifndef IPV6_RECVERR
+#define IPV6_RECVERR 75
+#endif
+#ifndef IPV6_WFP_REDIRECT_CONTEXT
+#define IPV6_WFP_REDIRECT_CONTEXT 70
+#endif
+#ifndef IPV6_WFP_REDIRECT_RECORDS
+#define IPV6_WFP_REDIRECT_RECORDS 60
+#endif
+#ifndef IP_GET_IFLIST
+#define IP_GET_IFLIST 33
+#endif
+#ifndef IP_MTU
+#define IP_MTU 73
+#endif
+#ifndef IP_MTU_DISCOVER
+#define IP_MTU_DISCOVER 71
+#endif
+#ifndef IP_NRT_INTERFACE
+#define IP_NRT_INTERFACE 74
+#endif
+#ifndef IP_PKTINFO_EX
+#define IP_PKTINFO_EX 51
+#endif
+#ifndef IP_RECVERR
+#define IP_RECVERR 75
+#endif
+#ifndef IP_WFP_REDIRECT_CONTEXT
+#define IP_WFP_REDIRECT_CONTEXT 70
+#endif
+#ifndef IP_WFP_REDIRECT_RECORDS
+#define IP_WFP_REDIRECT_RECORDS 60
+#endif
+#ifndef TCP_FASTOPEN
+#define TCP_FASTOPEN 15
+#endif
+#ifndef TCP_KEEPCNT
+#define TCP_KEEPCNT 16
+#endif
+#ifndef TCP_KEEPINTVL
+#define TCP_KEEPINTVL 17
+#endif
+#ifndef TCP_MAXRTMS
+#define TCP_MAXRTMS 14
+#endif

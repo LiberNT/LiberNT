@@ -755,3 +755,10 @@ typedef struct _USB_DEVICE_PERFORMANCE_INFO_0 {
 #pragma pack(pop)
 
 #endif /* (NTDDI_VERSION >= NTDDI_WINXP) */
+
+#ifndef USB_BUSIF_HUB_VERSION_8
+#define USB_BUSIF_HUB_VERSION_8 0x0008
+#endif
+#ifndef USB_BUSIF_HUB_VERSION_9
+#define USB_BUSIF_HUB_VERSION_9 0x0009
+#endif
