@@ -70,24 +70,6 @@ typedef struct _MI_ARCH_DESCRIPTOR
     ULONG SessionLevelDepth;
 } MI_ARCH_DESCRIPTOR, *PMI_ARCH_DESCRIPTOR;
 
-/* Session space is SessionTopLevelEntries entries of the level SessionLevelDepth below the top. */
-FORCEINLINE
-LONG
-MiSessionLevel(
-    _In_ const MI_ARCH_DESCRIPTOR *Arch)
-{
-    MI_ASSERT(Arch->SessionLevelDepth <= 1 && Arch->SessionLevelDepth < Arch->PagingLevels);
-    return (LONG)Arch->PagingLevels - 1 - (LONG)Arch->SessionLevelDepth;
-}
-
-FORCEINLINE
-ULONG64
-MiSessionSpan(
-    _In_ const MI_ARCH_DESCRIPTOR *Arch)
-{
-    return 1ULL << Arch->Level[MiSessionLevel(Arch)].Shift;
-}
-
 typedef struct _MI_PHYSICAL_RANGE
 {
     ULONG64 BasePage;
