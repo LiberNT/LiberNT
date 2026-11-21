@@ -542,6 +542,15 @@ PeFindExport(
     return PeFindExport(ModuleListHead, Target, Dot + 1, 0, Depth - 1);
 }
 
+PVOID
+PeGetExport(
+    _In_ PLIST_ENTRY ModuleListHead,
+    _In_ PLDR_DATA_TABLE_ENTRY Module,
+    _In_ PCSTR Name)
+{
+    return PeFindExport(ModuleListHead, Module, Name, 0, PE_MAX_FORWARD_DEPTH);
+}
+
 BOOLEAN
 PeResolveImports(
     _Inout_ PLIST_ENTRY ModuleListHead,

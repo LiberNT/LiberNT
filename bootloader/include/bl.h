@@ -95,6 +95,12 @@ VOID
 PeInitializeSecurityCookie(
     _In_ PLDR_DATA_TABLE_ENTRY Entry);
 
+PVOID
+PeGetExport(
+    _In_ PLIST_ENTRY ModuleListHead,
+    _In_ PLDR_DATA_TABLE_ENTRY Module,
+    _In_ PCSTR Name);
+
 BOOLEAN
 PeResolveImports(
     _Inout_ PLIST_ENTRY ModuleListHead,

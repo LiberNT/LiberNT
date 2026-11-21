@@ -351,6 +351,15 @@ typedef struct _BOOT_DRIVER_LIST_ENTRY
     struct _LDR_DATA_TABLE_ENTRY *LdrEntry;
 } BOOT_DRIVER_LIST_ENTRY, *PBOOT_DRIVER_LIST_ENTRY;
 
+/* FIXME: Windows does not publish the entries of HalExtensionModuleList; this layout is LiberNT's. */
+typedef struct _HAL_EXTENSION_MODULE_ENTRY
+{
+    LIST_ENTRY Link;
+    struct _LDR_DATA_TABLE_ENTRY *LdrEntry;
+    PVOID InitializeRoutine;
+    PVOID Phase1InitializeRoutine;
+} HAL_EXTENSION_MODULE_ENTRY, *PHAL_EXTENSION_MODULE_ENTRY;
+
 typedef struct _ARC_DISK_SIGNATURE
 {
     LIST_ENTRY ListEntry;
