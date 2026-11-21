@@ -2932,6 +2932,7 @@ typedef struct _FILTERDBS {
   FILTERDBS_S
 } FILTERDBS, *PFILTERDBS;
 
+#if NDIS_LEGACY_MINIPORT || defined(NDIS_WRAPPER)
 struct _NDIS_MINIPORT_BLOCK {
   NDIS_OBJECT_HEADER Header;
   PNDIS_MINIPORT_BLOCK  NextMiniport;
@@ -3115,6 +3116,7 @@ struct _NDIS_MINIPORT_BLOCK {
   ULONG  ScatterGatherListSize;
 #endif /* _NDIS_ */
 };
+#endif
 
 #if NDIS_LEGACY_DRIVER || NDIS_SUPPORT_60_COMPATIBLE_API
 
@@ -3218,6 +3220,7 @@ typedef struct _NDIS_COMMON_OPEN_BLOCK {
   NDIS_COMMON_OPEN_BLOCK_S
 } NDIS_COMMON_OPEN_BLOCK;
 
+#if NDIS_LEGACY_PROTOCOL || defined(NDIS_WRAPPER)
 struct _NDIS_OPEN_BLOCK
 {
 #ifdef __cplusplus
@@ -3226,6 +3229,7 @@ struct _NDIS_OPEN_BLOCK
   NDIS_COMMON_OPEN_BLOCK_S
 #endif
 };
+#endif
 
 #include <xfilter.h>
 
@@ -7919,7 +7923,7 @@ typedef enum _NDIS_HALT_ACTION {
 typedef enum _NDIS_SHUTDOWN_ACTION {
   NdisShutdownPowerOff,
   NdisShutdownBugCheck
-} NDIS_SHUTDOWN_ACTION, *PNDIS_SHUTDOWN_ACTION;
+} NDIS_SHUTDOWN_ACTION, PNDIS_SHUTDOWN_ACTION;
 
 typedef enum _NDIS_PAUSE_FUNCTIONS {
   NdisPauseFunctionsUnspecified = 0
