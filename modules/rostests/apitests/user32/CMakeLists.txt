@@ -102,6 +102,7 @@ list(APPEND SOURCE
     PhysicalPoint.c
     PhysicalToLogicalPoint.c
     LogicalToPhysicalPoint.c
+    PrintWindowContent.c
     PrivateExtractIcons.c
     RealGetWindowClass.c
     RedrawWindow.c
