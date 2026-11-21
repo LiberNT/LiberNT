@@ -106,7 +106,7 @@ typedef const char *STRSAFE_LPCSTR;
 typedef wchar_t *STRSAFE_LPWSTR;
 typedef const wchar_t *STRSAFE_LPCWSTR;
 
-typedef ULONG STRSAFE_DWORD;
+typedef unsigned long STRSAFE_DWORD;
 
 STRSAFEAPI StringCopyWorkerA(STRSAFE_LPSTR pszDest,size_t cchDest,STRSAFE_LPCSTR pszSrc);
 STRSAFEAPI StringCopyWorkerW(STRSAFE_LPWSTR pszDest,size_t cchDest,STRSAFE_LPCWSTR pszSrc);
@@ -2064,6 +2064,42 @@ STRSAFE_INLINE_API StringGetsExWorkerW(STRSAFE_LPWSTR pszDest,size_t cchDest,siz
 
 #ifdef __clang__
 #pragma clang diagnostic pop
+#endif
+
+#define STRSAFE_MAX_LENGTH 0x7FFFFFFE
+#define STRSAFEWORKERAPI static STRSAFEAPI
+#define UnalignedStringCbLength StringCbLengthA
+#define UnalignedStringCchLength StringCchLengthA
+
+typedef const __unaligned wchar_t *STRSAFE_LPCUWSTR;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+HRESULT WINAPI StringExHandleFillBehindNullA(STRSAFE_LPSTR pszDestEnd, size_t cbRemaining, DWORD dwFlags);
+HRESULT WINAPI StringExHandleFillBehindNullW(STRSAFE_LPWSTR pszDestEnd, size_t cbRemaining, DWORD dwFlags);
+HRESULT WINAPI StringExHandleOtherFlagsA(STRSAFE_LPSTR pszDest, size_t cbDest, size_t cchOriginalDestLength, STRSAFE_LPSTR *ppszDestEnd, size_t *pcchRemaining, DWORD dwFlags);
+HRESULT WINAPI StringExHandleOtherFlagsW(STRSAFE_LPWSTR pszDest, size_t cbDest, size_t cchOriginalDestLength, STRSAFE_LPWSTR *ppszDestEnd, size_t *pcchRemaining, DWORD dwFlags);
+HRESULT WINAPI StringExValidateDestA(STRSAFE_PCNZCH pszDest, size_t cchDest, const size_t cchMax, DWORD dwFlags);
+HRESULT WINAPI StringExValidateDestAndLengthA(STRSAFE_LPCSTR pszDest, size_t cchDest, size_t *pcchDestLength, const size_t cchMax, DWORD dwFlags);
+HRESULT WINAPI StringExValidateDestAndLengthW(STRSAFE_LPCWSTR pszDest, size_t cchDest, size_t *pcchDestLength, const size_t cchMax, DWORD dwFlags);
+HRESULT WINAPI StringExValidateDestW(STRSAFE_PCNZWCH pszDest, size_t cchDest, const size_t cchMax, DWORD dwFlags);
+HRESULT WINAPI StringExValidateSrcA(STRSAFE_PCNZCH *ppszSrc, size_t *pcchToRead, const size_t cchMax, DWORD dwFlags);
+HRESULT WINAPI StringExValidateSrcW(STRSAFE_PCNZWCH *ppszSrc, size_t *pcchToRead, const size_t cchMax, DWORD dwFlags);
+HRESULT WINAPI StringGetsWorkerA(STRSAFE_LPSTR pszDest, size_t cchDest, size_t *pcchNewDestLength);
+HRESULT WINAPI StringGetsWorkerW(STRSAFE_LPWSTR pszDest, size_t cchDest, size_t *pcchNewDestLength);
+HRESULT WINAPI StringValidateDestA(STRSAFE_PCNZCH pszDest, size_t cchDest, const size_t cchMax);
+HRESULT WINAPI StringValidateDestAndLengthA(STRSAFE_LPCSTR pszDest, size_t cchDest, size_t *pcchDestLength, const size_t cchMax);
+HRESULT WINAPI StringValidateDestAndLengthW(STRSAFE_LPCWSTR pszDest, size_t cchDest, size_t *pcchDestLength, const size_t cchMax);
+HRESULT WINAPI StringValidateDestW(STRSAFE_PCNZWCH pszDest, size_t cchDest, const size_t cchMax);
+HRESULT WINAPI UnalignedStringCbLengthW(STRSAFE_PCUNZWCH psz, size_t cbMax, size_t *pcbLength);
+HRESULT WINAPI UnalignedStringCchLengthW(STRSAFE_PCUNZWCH psz, size_t cchMax, size_t *pcchLength);
+HRESULT WINAPI UnalignedStringLengthWorkerW(STRSAFE_PCUNZWCH psz, size_t cchMax, size_t *pcchLength);
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif /* _STRSAFE_H_INCLUDED_ */
