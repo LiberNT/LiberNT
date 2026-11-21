@@ -55,7 +55,6 @@ HalStartNextProcessor(
     LONG Result;
 
     UNREFERENCED_PARAMETER(LoaderBlock);
-    ASSERT(KeGetCurrentProcessorNumber() == 0);
 
     while (HalpStartedProcessorCount < HalpArm64GicInfo.GiccEntryCount)
     {
