@@ -44,6 +44,10 @@ HalAcpiGetTable(
     _In_ ULONG Signature
     );
 
+BOOLEAN
+NTAPI
+HalpAcpiFirmwareDescribesDevices(VOID);
+
 PDESCRIPTION_HEADER
 NTAPI
 HalpAcpiGetCachedTable(

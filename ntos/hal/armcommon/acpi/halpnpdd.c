@@ -536,7 +536,7 @@ HalQueryPciRoutedInterrupt(
     ULONG BlobSize;
 
     *Gsi = 0;
-    if (HalAcpiGetTable(NULL, 'PCAF') || !HalpArm64GetDeviceTree(&Blob, &BlobSize) || !Blob ||
+    if (HalpAcpiFirmwareDescribesDevices() || !HalpArm64GetDeviceTree(&Blob, &BlobSize) || !Blob ||
         !FdtOpen(Blob, BlobSize, &Fdt) ||
         !HalpArm64FindDeviceTreeNode(&Fdt, Compatibles, RTL_NUMBER_OF(Compatibles), &Node, &Parent, &Match) ||
         Pin < 1 || Pin > 4 || Device > 31 || Function > 7 || Bus > 255)
