@@ -61,6 +61,7 @@ OslAllocateLoaderBlock(VOID)
     InitializeListHead(&LoaderBlock->LoadOrderListHead);
     InitializeListHead(&LoaderBlock->MemoryDescriptorListHead);
     InitializeListHead(&LoaderBlock->BootDriverListHead);
+    InitializeListHead(&Extension->HalExtensionModuleList);
     return LoaderBlock;
 }
 
@@ -241,6 +242,7 @@ OslFinalizeLoaderBlock(
 
     OslConvertList(&LoaderBlock->LoadOrderListHead);
     OslConvertList(&LoaderBlock->BootDriverListHead);
+    OslConvertList(&Extension->HalExtensionModuleList);
 
     Extension->Profile.Status = OSL_PROFILE_STATUS;
     if (OslAcpiPresent)

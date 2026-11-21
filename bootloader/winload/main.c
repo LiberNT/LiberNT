@@ -498,6 +498,8 @@ OslMain(VOID)
         return;
     }
 
+    OslLoadHalExtensions(LoaderBlock, &OsDevice, Directory);
+
     OslTrace("OS loader: loading the NLS files");
     if (!OslLoadNlsData(LoaderBlock, &OsDevice, SystemRoot))
     {
