@@ -979,8 +979,15 @@
 @ stdcall PrivilegedServiceAuditAlarmW(wstr wstr long ptr long)
 @ stdcall ProcessIdToSessionId(long ptr) kernel32.ProcessIdToSessionId
 @ stdcall PssCaptureSnapshot(ptr long long ptr)
+@ stdcall PssDuplicateSnapshot(ptr ptr ptr ptr long)
 @ stdcall PssFreeSnapshot(ptr ptr)
 @ stdcall PssQuerySnapshot(ptr long ptr long)
+@ stdcall PssWalkMarkerCreate(ptr ptr)
+@ stdcall PssWalkMarkerFree(ptr)
+@ stdcall PssWalkMarkerGetPosition(ptr ptr)
+@ stdcall PssWalkMarkerSeekToBeginning(ptr)
+@ stdcall PssWalkMarkerSetPosition(ptr long)
+@ stdcall PssWalkSnapshot(ptr long ptr ptr long)
 @ stdcall PulseEvent(long) kernel32.PulseEvent
 @ stdcall PurgeComm(long long) kernel32.PurgeComm
 @ stdcall QISearch(ptr ptr ptr ptr)
