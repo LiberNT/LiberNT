@@ -54,6 +54,7 @@ extern void func_DeviceIoControl(void);
 extern void func_DiskAttributes(void);
 extern void func_DiskSignatureCollision(void);
 extern void func_DispatcherStress(void);
+extern void func_ProcessorAffinity(void);
 extern void func_ProcessorGroups(void);
 extern void func_EmulatedProcess(void);
 extern void func_dosdev(void);
@@ -287,6 +288,7 @@ const struct test winetest_testlist[] =
     { "DiskAttributes",              func_DiskAttributes },
     { "DiskSignatureCollision",      func_DiskSignatureCollision },
     { "DispatcherStress",            func_DispatcherStress },
+    { "ProcessorAffinity",           func_ProcessorAffinity },
     { "ProcessorGroups",             func_ProcessorGroups },
     { "EmulatedProcess",             func_EmulatedProcess },
     { "dosdev",                      func_dosdev },

@@ -180,6 +180,73 @@ KiSystemStartup:
     b 1b
 
 /*
+ * KiArmSecondaryTrampoline: PSCI CPU_ON entry of a secondary processor, in SVC
+ * mode with the MMU and caches off; r0 = physical address of its startup block.
+ * The temporary root maps this code one to one and the kernel half like the
+ * system root, so the MMU can be turned on here and execution moved to the
+ * kernel address of KiArmSecondaryEntry.
+ */
+    .global KiArmSecondaryTrampoline
+    .thumb_func
+KiArmSecondaryTrampoline:
+    cpsid if
+    ldr r1, [r0, #KI_SB_MAIR0]
+    mcr p15, 0, r1, c10, c2, 0
+    ldr r1, [r0, #KI_SB_MAIR1]
+    mcr p15, 0, r1, c10, c2, 1
+    ldr r1, [r0, #KI_SB_TTBCR]
+    mcr p15, 0, r1, c2, c0, 2
+    ldrd r2, r3, [r0, #KI_SB_TEMPORARY_ROOT_PA]
+    mcrr p15, 0, r2, r3, c2
+    mov r1, #0
+    mcr p15, 0, r1, c8, c7, 0
+    mcr p15, 0, r1, c7, c5, 0
+    mcr p15, 0, r1, c7, c5, 6
+    dsb
+    isb
+    ldr r4, [r0, #KI_SB_SELF]
+    ldr r5, [r0, #KI_SB_CONTINUATION]
+    ldr r1, [r0, #KI_SB_SCTLR]
+    mcr p15, 0, r1, c1, c0, 0
+    isb
+    mov r0, r4
+    bx r5
+
+/* KiArmSecondaryEntry(PKI_ARM_STARTUP_BLOCK Block): MMU on, at the kernel address. */
+    .global KiArmSecondaryEntry
+    .thumb_func
+KiArmSecondaryEntry:
+    ldrd r2, r3, [r0, #KI_SB_SYSTEM_ROOT]
+    mcrr p15, 0, r2, r3, c2
+    isb
+    mov r1, #0
+    mcr p15, 0, r1, c8, c7, 0
+    dsb
+    isb
+    movw r1, #:lower16:KiArmVectorTable
+    movt r1, #:upper16:KiArmVectorTable
+    mcr p15, 0, r1, c12, c0, 0
+    mrc p15, 0, r1, c1, c0, 2
+    orr r1, r1, #0x00F00000
+    mcr p15, 0, r1, c1, c0, 2
+    isb
+    mov r1, #0x40000000
+    vmsr fpexc, r1
+    mov r1, #0
+    vmsr fpscr, r1
+    ldr r1, [r0, #KI_SB_PCR]
+    mcr p15, 0, r1, c13, c0, 4
+    isb
+    ldr r1, [r0, #KI_SB_KERNEL_STACK]
+    bic r1, r1, #7
+    mov sp, r1
+    mov r11, #0
+    mov lr, #0
+    bl KiArmStartSecondaryProcessor
+1:  wfi
+    b 1b
+
+/*
  * VOID KiArmSwapStack(PVOID *OldStack, PVOID NewStack, PVOID Context, PKARM_SWITCH_ROUTINE Resume)
  * Saves the AAPCS callee-saved state on the current stack, publishes the stack
  * in *OldStack, loads NewStack and returns Resume(Context) on the new stack.
@@ -297,6 +364,7 @@ KiArmCallUserMode:
     str r1, [sp, #8]
     str r2, [sp, #12]
     mov r0, sp
+    sub sp, sp, #KI_REC_SIZE
     bl KiArmEnterCallout
 1:  udf #0xfe
     b 1b
@@ -313,4 +381,3 @@ KiCallbackReturn:
     vpop {d8-d15}
     mov r0, r1
     bx lr
-    sub sp, sp, #KI_REC_SIZE

@@ -78,7 +78,7 @@ KiArmInitializePcr(
     Prcb->CoreProcessorSet = (ULONG)Prcb->SetMember;
     KiInitSpinLocks(Prcb, Number);
 
-    Pcr->KdVersionBlock = Number ? KeGetPcr()->KdVersionBlock : NULL;
+    Pcr->KdVersionBlock = Number ? CONTAINING_RECORD(KiProcessorBlock[0], KIPCR, Prcb)->KdVersionBlock : NULL;
 }
 
 static
@@ -133,6 +133,7 @@ KiArmSystemStartup(
                        (PVOID)(ULONG_PTR)ArmBlock->DpcStack,
                        (PVOID)(ULONG_PTR)ArmBlock->PanicStack);
     KiArmWriteCp15(13, 0, 0, 4, (ULONG_PTR)Pcr);
+    KiArmWriteCp15(13, 0, 0, 3, (ULONG_PTR)InitialThread);
     KiArmIsb();
     KeLoaderBlock = LoaderBlock;
     KeMemoryBarrier();
@@ -140,11 +141,11 @@ KiArmSystemStartup(
     KiArmInitializeVectors();
 
     Prcb = KeGetCurrentPrcb();
-    KiProcessorBlock[0] = Prcb;
     ASSERT(KeProcessorCount == 0 && Prcb->Number == 0);
-    KiArmIdentifyProcessor(Prcb);
+    KiProcessorBlock[0] = Prcb;
     KeMemoryBarrier();
     KiSetProcessorCount(1);
+    KiArmIdentifyProcessor(Prcb);
     KeProcessorArchitecture = PROCESSOR_ARCHITECTURE_ARM;
     KeProcessorLevel = (USHORT)Prcb->ProcessorModel;
     KeProcessorRevision = Prcb->ProcessorRevision;
@@ -188,10 +189,10 @@ KiArmSystemStartup(
     Prcb->NextThread = NULL;
     Prcb->IdleThread = InitialThread;
 
-    KdInitSystem(0, LoaderBlock);
     HalInitializeProcessor(0, LoaderBlock);
     KiActivateProcessor(Prcb);
 
+    KdInitSystem(0, LoaderBlock);
     ExpInitializeExecutive(0, LoaderBlock);
 
     KfRaiseIrql(DISPATCH_LEVEL);

@@ -20,6 +20,7 @@
 #define KI_ARM_DEVICE_IRQL 6
 
 /* PSCI 0.2 function identifiers (ARM DEN 0022). */
+#define PSCI_CPU_ON       0x84000003
 #define PSCI_SYSTEM_OFF   0x84000008
 #define PSCI_SYSTEM_RESET 0x84000009
 
@@ -30,6 +31,7 @@
 static PUCHAR KiArmRtc;
 static BOOLEAN KiArmRtcProbed;
 static BOOLEAN KiArmPsciUsesSmc;
+static ULONG KiArmNextProcessorIndex;
 
 /* PCI configuration access through the ECAM window of "pci-host-ecam-generic". */
 static PHYSICAL_ADDRESS KiArmEcamBase;
@@ -50,10 +52,10 @@ HalInitSystem(
     if (BootPhase == 0)
     {
         KeGetPcr()->StallScaleFactor = 1;
-        return TRUE;
-    }
         if (KeGetCurrentProcessorNumber() == 0)
             KiArmInitializeTimeBase();
+        return TRUE;
+    }
 
     if (BootPhase == 1)
     {
@@ -75,8 +77,12 @@ HalInitializeProcessor(
     _In_ ULONG ProcessorNumber,
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
-    UNREFERENCED_PARAMETER(ProcessorNumber);
     UNREFERENCED_PARAMETER(LoaderBlock);
+    ASSERT(ProcessorNumber == KeGetCurrentProcessorNumber());
+
+    /* The boot processor's interrupt controller comes up with the platform in phase 1. */
+    if (ProcessorNumber != 0)
+        KiArmInitializeProcessorInterrupts();
 }
 
 BOOLEAN
@@ -86,15 +92,48 @@ HalAllProcessorsStarted(VOID)
     return TRUE;
 }
 
+static
+LONG
+KiArmPsciCallArguments(
+    _In_ ULONG Function,
+    _In_ ULONG Argument1,
+    _In_ ULONG Argument2,
+    _In_ ULONG Argument3)
+{
+    register ULONG R0 __asm__("r0") = Function;
+    register ULONG R1 __asm__("r1") = Argument1;
+    register ULONG R2 __asm__("r2") = Argument2;
+    register ULONG R3 __asm__("r3") = Argument3;
+
+    if (KiArmPsciUsesSmc)
+        __asm__ __volatile__(".arch_extension sec\n\tsmc #0" : "+r"(R0), "+r"(R1), "+r"(R2), "+r"(R3) :: "memory");
+    else
+        __asm__ __volatile__(".arch_extension virt\n\thvc #0" : "+r"(R0), "+r"(R1), "+r"(R2), "+r"(R3) :: "memory");
+    return (LONG)R0;
+}
+
+/* Start the next device tree processor at ContextFrame.Pc with ContextFrame.R0 (PSCI CPU_ON, DEN 0022). */
 BOOLEAN
 NTAPI
 HalStartNextProcessor(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock,
     _In_ PKPROCESSOR_STATE ProcessorState)
 {
+    ULONG Mpidr, Self = KiArmReadCp15(0, 0, 0, 5) & 0x00FFFFFF;
+
     UNREFERENCED_PARAMETER(LoaderBlock);
-    UNREFERENCED_PARAMETER(ProcessorState);
-    /* TODO: start secondary processors through PSCI CPU_ON */
+    ASSERT(KeGetCurrentProcessorNumber() == 0);
+
+    while (KiArmEnumerateProcessor(KiArmNextProcessorIndex++, &Mpidr))
+    {
+        if ((Mpidr & 0x00FFFFFF) == Self)
+            continue;
+        if (KiArmPsciCallArguments(PSCI_CPU_ON, Mpidr, ProcessorState->ContextFrame.Pc,
+                                   ProcessorState->ContextFrame.R0) == 0)
+        {
+            return TRUE;
+        }
+    }
     return FALSE;
 }
 
@@ -103,7 +142,7 @@ NTAPI
 HalRequestIpi(
     _In_ KAFFINITY TargetProcessors)
 {
-    KiArmSendInterprocessorInterrupt((ULONG)TargetProcessors, 0);
+    KiArmSendInterprocessorInterrupt(TargetProcessors);
 }
 
 VOID

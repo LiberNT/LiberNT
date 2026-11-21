@@ -46,6 +46,7 @@ static ULONG KiArmTimerFrequency;
 static ULONG KiArmTimerReload;
 static BOOLEAN KiArmPlatformReady;
 static ULONG KiArmInterruptSource[MAXIMUM_PROCESSORS];
+static UCHAR KiArmGicCpuMask[MAXIMUM_PROCESSORS];
 static FDT KiArmDeviceTree;
 static BOOLEAN KiArmDeviceTreeValid;
 
@@ -188,7 +189,7 @@ KiArmEnableInterruptLine(
     WRITE_REGISTER_UCHAR(KiArmGicDistributor + GICD_IPRIORITYR + Vector, (UCHAR)KiArmIrqlToPriority(Irql));
     if (Vector >= 32)
     {
-        WRITE_REGISTER_UCHAR(KiArmGicDistributor + GICD_ITARGETSR + Vector, 1);
+        WRITE_REGISTER_UCHAR(KiArmGicDistributor + GICD_ITARGETSR + Vector, KiArmGicCpuMask[0]);
         Shift = (Vector % 16) * 2;
         Config = KiArmGicdRead(GICD_ICFGR + (Vector / 16) * 4);
         Config &= ~(2UL << Shift);
@@ -259,7 +260,9 @@ KiArmDispatchDeviceInterrupt(
     Pcr->CurrentIrql = Irql;
     KiArmSetPriorityMask(Irql);
 
-    if ((Vector != KiArmTimerInterrupt) || !KiArmClockInterrupt(TrapFrame, OldIrql))
+    if (Vector == KI_ARM_IPI_SGI)
+        KiIpiProcessRequests();
+    else if ((Vector != KiArmTimerInterrupt) || !KiArmClockInterrupt(TrapFrame, OldIrql))
         KiArmServiceInterruptVector(Vector, TrapFrame);
 
     KiArmGiccWrite(GICC_EOIR, Iar);
@@ -271,13 +274,108 @@ KiArmDispatchDeviceInterrupt(
 VOID
 NTAPI
 KiArmSendInterprocessorInterrupt(
-    _In_ ULONG TargetMask,
-    _In_ ULONG Sgi)
+    _In_ KAFFINITY TargetProcessors)
 {
+    ULONG Number, TargetList = 0;
+    KAFFINITY Remaining;
+
     if (!KiArmGicDistributor)
         return;
+
+    /* SGIR names GIC CPU interfaces, which need not follow the processor numbers. */
+    for (Remaining = TargetProcessors, Number = 0; Remaining && (Number < MAXIMUM_PROCESSORS); Remaining >>= 1, Number++)
+    {
+        if (Remaining & 1)
+            TargetList |= KiArmGicCpuMask[Number];
+    }
+    if (!TargetList)
+        return;
+
     KiArmDsbIsh();
-    KiArmGicdWrite(GICD_SGIR, ((TargetMask & 0xFF) << 16) | (Sgi & 0xF));
+    KiArmGicdWrite(GICD_SGIR, ((TargetList & 0xFF) << 16) | KI_ARM_IPI_SGI);
+}
+
+/* The CPU interface mask GICD_ITARGETSR0-7 returns on the processor reading it (IHI 0048B 4.3.12). */
+static
+UCHAR
+KiArmReadOwnGicCpuMask(VOID)
+{
+    UCHAR Mask = READ_REGISTER_UCHAR(KiArmGicDistributor + GICD_ITARGETSR);
+
+    /* A uniprocessor implementation reads it as zero. */
+    return Mask ? Mask : 1;
+}
+
+/* Banked SGI and PPI state, the CPU interface and the timer of the current processor. */
+static
+VOID
+KiArmInitializeBankedInterrupts(VOID)
+{
+    ULONG Index, Number = KeGetCurrentProcessorNumber();
+
+    ASSERT(Number < MAXIMUM_PROCESSORS);
+    KiArmGicCpuMask[Number] = KiArmReadOwnGicCpuMask();
+
+    KiArmGicdWrite(GICD_ICENABLER, 0xFFFFFFFF);
+    KiArmGicdWrite(GICD_ICPENDR, 0xFFFFFFFF);
+    KiArmGicdWrite(GICD_ICACTIVER, 0xFFFFFFFF);
+    for (Index = 0; Index < 32; Index++)
+        WRITE_REGISTER_UCHAR(KiArmGicDistributor + GICD_IPRIORITYR + Index, 0xF0);
+
+    KiArmInterruptIrql[KI_ARM_IPI_SGI] = IPI_LEVEL;
+    WRITE_REGISTER_UCHAR(KiArmGicDistributor + GICD_IPRIORITYR + KI_ARM_IPI_SGI, (UCHAR)KiArmIrqlToPriority(IPI_LEVEL));
+    KiArmGicdWrite(GICD_ISENABLER, 1UL << KI_ARM_IPI_SGI);
+
+    KiArmGiccWrite(GICC_BPR, 0);
+    KiArmSetPriorityMask(KeGetCurrentIrql());
+    KiArmGiccWrite(GICC_CTLR, 1);
+}
+
+VOID
+NTAPI
+KiArmInitializeProcessorInterrupts(VOID)
+{
+    ASSERT(KiArmPlatformReady);
+    ASSERT(KeGetCurrentProcessorNumber() != 0);
+
+    KiArmInitializeBankedInterrupts();
+    KiArmEnableInterruptLine(KiArmTimerInterrupt, CLOCK_LEVEL, LevelSensitive);
+    KiArmProgramTimer();
+}
+
+/* MPIDR affinity of the Index-th processor node under /cpus, in device tree order. */
+BOOLEAN
+NTAPI
+KiArmEnumerateProcessor(
+    _In_ ULONG Index,
+    _Out_ PULONG Mpidr)
+{
+    const VOID *Property;
+    const CHAR *Type;
+    ULONG Cpus, Child, AddressCells, SizeCells, Length, Found = 0;
+    ULONGLONG Value;
+
+    if (!KiArmOpenDeviceTree() || !FdtFindNode(&KiArmDeviceTree, "/cpus", &Cpus, NULL))
+        return FALSE;
+
+    FdtGetCellCounts(&KiArmDeviceTree, Cpus, &AddressCells, &SizeCells);
+    for (Child = FdtFirstChild(&KiArmDeviceTree, Cpus);
+         Child != FDT_NO_NODE;
+         Child = FdtNextSibling(&KiArmDeviceTree, Child))
+    {
+        Type = FdtGetProperty(&KiArmDeviceTree, Child, "device_type", &Length);
+        if (!Type || (Length < 4) || strncmp(Type, "cpu", 4))
+            continue;
+        Property = FdtGetProperty(&KiArmDeviceTree, Child, "reg", &Length);
+        if (!Property || !FdtReadCells(Property, Length, 0, AddressCells, &Value))
+            continue;
+        if (Found++ == Index)
+        {
+            *Mpidr = (ULONG)Value;
+            return TRUE;
+        }
+    }
+    return FALSE;
 }
 
 static
@@ -287,6 +385,17 @@ KiArmMapDevice(
     _In_ ULONG Length)
 {
     return MmMapIoSpace(Address, max(Length, PAGE_SIZE), MmNonCached);
+}
+
+VOID
+NTAPI
+KiArmInitializeTimeBase(VOID)
+{
+    KiArmTimerFrequency = KiArmReadCp15(14, 0, 0, 0);
+    if (!KiArmTimerFrequency)
+        KeBugCheckEx(HAL_INITIALIZATION_FAILED, 0x41524D03, 0, 0, 0);
+    KiArmTimerReload = (ULONG)(((ULONGLONG)KiArmTimerFrequency * KI_ARM_CLOCK_INCREMENT) / 10000000ULL);
+    KeSetTimeIncrement(KI_ARM_CLOCK_INCREMENT, KI_ARM_CLOCK_INCREMENT);
 }
 
 /* Bring up the interrupt controller and the clock once device mappings exist. */
@@ -317,6 +426,7 @@ KiArmInitializePlatform(
 
     KiArmGicLines = min(((KiArmGicdRead(GICD_TYPER) & 0x1F) + 1) * 32, GIC_MAX_INTID);
     KiArmGicdWrite(GICD_CTLR, 0);
+    KiArmGicCpuMask[0] = KiArmReadOwnGicCpuMask();
     for (Index = 0; Index < KiArmGicLines; Index += 32)
     {
         KiArmGicdWrite(GICD_ICENABLER + Index / 8, 0xFFFFFFFF);
@@ -327,9 +437,7 @@ KiArmInitializePlatform(
         WRITE_REGISTER_UCHAR(KiArmGicDistributor + GICD_IPRIORITYR + Index, 0xF0);
     KiArmGicdWrite(GICD_CTLR, 1);
 
-    KiArmGiccWrite(GICC_BPR, 0);
-    KiArmSetPriorityMask(KeGetCurrentIrql());
-    KiArmGiccWrite(GICC_CTLR, 1);
+    KiArmInitializeBankedInterrupts();
 
     ASSERT(KiArmTimerFrequency != 0 && KiArmTimerReload != 0);
     KiArmTimerInterrupt = KiArmFindTimerInterrupt();
@@ -383,17 +491,6 @@ HalGetInterruptSource(VOID)
 BOOLEAN
 NTAPI
 KiArmPsciConduitIsSmc(VOID)
-VOID
-NTAPI
-KiArmInitializeTimeBase(VOID)
-{
-    KiArmTimerFrequency = KiArmReadCp15(14, 0, 0, 0);
-    if (!KiArmTimerFrequency)
-        KeBugCheckEx(HAL_INITIALIZATION_FAILED, 0x41524D03, 0, 0, 0);
-    KiArmTimerReload = (ULONG)(((ULONGLONG)KiArmTimerFrequency * KI_ARM_CLOCK_INCREMENT) / 10000000ULL);
-    KeSetTimeIncrement(KI_ARM_CLOCK_INCREMENT, KI_ARM_CLOCK_INCREMENT);
-}
-
 {
     static const CHAR * const Psci[] = { "arm,psci-1.0", "arm,psci-0.2", "arm,psci", NULL };
     const CHAR *Method;

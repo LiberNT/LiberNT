@@ -127,43 +127,6 @@ KeZeroPages(
     RtlZeroMemory(Address, Size);
 }
 
-ULONG_PTR
-NTAPI
-KeIpiGenericCall(
-    _In_ PKIPI_BROADCAST_WORKER Function,
-    _In_ ULONG_PTR Argument)
-{
-    ULONG_PTR Status;
-    KIRQL OldIrql;
-
-    /* TODO: run the worker on the other processors once they are started */
-    OldIrql = KfRaiseIrql(IPI_LEVEL);
-    Status = Function(Argument);
-    KfLowerIrql(OldIrql);
-    return Status;
-}
-
-VOID
-FASTCALL
-KiIpiSend(
-    _In_ KAFFINITY TargetSet,
-    _In_ ULONG IpiRequest)
-{
-    UNREFERENCED_PARAMETER(IpiRequest);
-    KiArmSendInterprocessorInterrupt((ULONG)TargetSet, 0);
-}
-
-BOOLEAN
-NTAPI
-KiIpiServiceRoutine(
-    _In_ PKTRAP_FRAME TrapFrame,
-    _In_ PKEXCEPTION_FRAME ExceptionFrame)
-{
-    UNREFERENCED_PARAMETER(TrapFrame);
-    UNREFERENCED_PARAMETER(ExceptionFrame);
-    return FALSE;
-}
-
 VOID
 __cdecl
 KiUnexpectedInterrupt(VOID)
@@ -193,33 +156,6 @@ KiSetClockDeadline(
     UNREFERENCED_PARAMETER(InterruptTime);
     /* The generic timer runs a periodic tick. */
     return FALSE;
-}
-
-VOID
-NTAPI
-KeStartAllProcessors(VOID)
-{
-    /* TODO: start the secondary processors through PSCI CPU_ON */
-}
-
-VOID
-NTAPI
-KxFreezeExecution(VOID)
-{
-}
-
-BOOLEAN
-NTAPI
-KxIsFreezeOwner(
-    _In_ PKPRCB Prcb)
-{
-    return Prcb == KeGetCurrentPrcb();
-}
-
-VOID
-NTAPI
-KxThawExecution(VOID)
-{
 }
 
 VOID

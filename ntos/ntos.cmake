@@ -551,6 +551,7 @@ elseif(ARCH STREQUAL "arm")
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/interrupt.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/irql.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/kiinit.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/arm/mproc.c
         ${REACTOS_SOURCE_DIR}/ntos/hal/arm/platform.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/services.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/syscall.c

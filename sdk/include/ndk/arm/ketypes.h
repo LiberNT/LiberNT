@@ -785,8 +785,15 @@ KeGetCurrentPrcb(VOID)
     return KeGetPcr()->CurrentPrcb;
 }
 
-#define _KeGetCurrentThread()  KeGetCurrentPrcb()->CurrentThread
-#define _KeGetPreviousMode()   KeGetCurrentPrcb()->CurrentThread->PreviousMode
+/* TPIDRURO holds the current thread, as on Windows (kxarm.h CURTHREAD_READ); one read survives a migration. */
+FORCEINLINE
+struct _KTHREAD *
+_KeGetCurrentThread(VOID)
+{
+    return (struct _KTHREAD *)(ULONG_PTR)_MoveFromCoprocessor(CP15_TPIDRURO);
+}
+
+#define _KeGetPreviousMode()   _KeGetCurrentThread()->PreviousMode
 #define _KeIsExecutingDpc()    (KeGetCurrentPrcb()->DpcRoutineActive != 0)
 
 #endif /* !NTOS_MODE_USER */
