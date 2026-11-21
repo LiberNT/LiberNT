@@ -256,11 +256,17 @@ HalpAddDevice(IN PDRIVER_OBJECT DriverObject,
     /* Save the attachment */
     FdoExtension->AttachedDeviceObject = AttachedDevice;
 
-    /* A platform described only by a device tree has no ACPI namespace to enumerate */
+    /* A platform described only by a device tree has its devices there; the tables the boot loader wrote name its processors */
     if (!HalpAcpiFirmwareDescribesDevices() && HalpFdtInitialize())
+    {
         Status = HalpCreateFdtPdos(DriverObject, FdoExtension);
+        if (NT_SUCCESS(Status) && HalAcpiGetTable(0, 'PCAF'))
+            Status = HalpCreatePdo(DriverObject, FdoExtension, AcpiPdo, NULL);
+    }
     else
+    {
         Status = HalpCreatePdo(DriverObject, FdoExtension, AcpiPdo, NULL);
+    }
     if (!NT_SUCCESS(Status))
     {
         /* Fail */
