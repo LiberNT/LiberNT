@@ -85,8 +85,7 @@ ULONG NTAPI KiArmConsoleInterface(VOID);
 VOID NTAPI KiArmIdentifyProcessor(_Inout_ PKPRCB Prcb);
 VOID NTAPI KiArmInitializeVectors(VOID);
 VOID NTAPI KiArmInitializePcr(_Out_ PKIPCR Pcr, _In_ PKTHREAD Thread, _In_ ULONG Number, _In_ PVOID DpcStack, _In_ PVOID PanicStack);
-VOID NTAPI KiArmRequestSoftwareInterrupt(_In_ KIRQL Irql);
-VOID NTAPI KiArmClearSoftwareInterrupt(_In_ KIRQL Irql);
+
 VOID NTAPI KiArmDispatchSoftwareInterrupts(_In_opt_ PKTRAP_FRAME TrapFrame);
 VOID NTAPI KiArmTrapDispatch(_Inout_ PKTRAP_FRAME TrapFrame, _In_ ULONG Vector);
 VOID NTAPI KiArmInterruptDispatch(_Inout_ PKTRAP_FRAME TrapFrame);
@@ -121,22 +120,14 @@ extern ULONG KiArmSpinStartupBlocks[KI_ARM_SPIN_STARTUP_BLOCKS];
 
 VOID FASTCALL KeUpdateSystemTime(_In_opt_ PKTRAP_FRAME TrapFrame, _In_ ULONG Increment, _In_ KIRQL OldIrql);
 
-/* The ARMv7 HAL is a forwarder: the platform devices are driven here. */
-VOID NTAPI KiArmInitializeTimeBase(VOID);
-VOID NTAPI KiArmInitializePlatform(_In_ PLOADER_PARAMETER_BLOCK LoaderBlock);
-VOID NTAPI KiArmSetPriorityMask(_In_ KIRQL Irql);
-BOOLEAN NTAPI KiArmDispatchDeviceInterrupt(_Inout_ PKTRAP_FRAME TrapFrame);
-BOOLEAN NTAPI KiArmPlatformInitialized(VOID);
-BOOLEAN NTAPI KiArmPsciConduitIsSmc(VOID);
-BOOLEAN NTAPI KiArmFindDevice(_In_ const CHAR * const *Compatible, _In_ ULONG RegIndex, _Out_ PPHYSICAL_ADDRESS Address, _Out_opt_ PULONG Length);
-BOOLEAN NTAPI KiArmEnableInterruptLine(_In_ ULONG Vector, _In_ KIRQL Irql, _In_ KINTERRUPT_MODE Mode);
-VOID NTAPI KiArmDisableInterruptLine(_In_ ULONG Vector);
-VOID NTAPI KiArmServiceInterruptVector(_In_ ULONG Vector, _In_ PKTRAP_FRAME TrapFrame);
-VOID NTAPI KiArmSendInterprocessorInterrupt(_In_ KAFFINITY TargetProcessors);
-VOID NTAPI KiArmInitializeProcessorInterrupts(VOID);
-BOOLEAN NTAPI KiArmEnumerateProcessor(_In_ ULONG Index, _Out_ PULONG Mpidr);
-BOOLEAN NTAPI KiArmProcessorEnableMethodIs(_In_ ULONG Index, _In_z_ const CHAR *Method);
-BOOLEAN NTAPI KiArmBcm2836StartProcessor(_In_ ULONG Mpidr, _In_ ULONG Context);
+/* The HAL is part of the kernel; these are the entry points it gives the interrupt and IRQL code. */
+extern BOOLEAN KiArmHalInitialized;
+VOID FASTCALL HalSetGicPriorityMask(_In_ KIRQL Irql);
+VOID NTAPI HalArm64ConnectInterrupt(_In_ ULONG Vector);
+VOID NTAPI HalArm64DisconnectInterrupt(_In_ ULONG Vector);
+VOID NTAPI KiArmStartClock(VOID);
+VOID NTAPI KiArmPostHalInitSystemPhase1(VOID);
+#define ExArchPostHalInitSystemPhase1() KiArmPostHalInitSystemPhase1()
 VOID NTAPI KiArmFlushDmaRange(_In_ PVOID Address, _In_ SIZE_T Length, _In_ BOOLEAN Invalidate);
 VOID NTAPI KiArmCallOnStack(_In_opt_ PVOID Argument0, _In_opt_ PVOID Argument1, _In_ PVOID Routine, _In_ PVOID StackTop);
 BOOLEAN NTAPI KiArmSwapStack(_Out_ PVOID *OldStack, _In_ PVOID NewStack, _In_ PVOID Context, _In_ PVOID Resume);

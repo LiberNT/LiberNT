@@ -9,10 +9,16 @@
 #define NDEBUG
 #include <debug.h>
 
+#undef KeAcquireSpinLock
+#undef KeRaiseIrql
+#undef KeLowerIrql
+
+BOOLEAN KiArmHalInitialized;
+
 /*
- * IRQL lives in the PCR. Levels up to DISPATCH_LEVEL are software only; above
- * it the GIC priority mask follows the IRQL so that interrupts at or below the
- * current level stay pending in the distributor.
+ * IRQL lives in the PCR. Raising it is lazy: the HAL defers an interrupt that
+ * arrives at or below the current level and masks it then; lowering hands the
+ * new level to the HAL, which unmasks and re-raises what it deferred.
  */
 
 FORCEINLINE
@@ -20,6 +26,17 @@ PKIPCR
 KiArmPcr(VOID)
 {
     return (PKIPCR)KeGetPcr();
+}
+
+FORCEINLINE
+VOID
+KiArmSetIrqlAndPriorityMask(
+    _Inout_ PKIPCR Pcr,
+    _In_ KIRQL Irql)
+{
+    Pcr->CurrentIrql = Irql;
+    if (KiArmHalInitialized)
+        HalSetGicPriorityMask(Irql);
 }
 
 /*
@@ -40,8 +57,6 @@ KfRaiseIrql(
         KeBugCheckEx(IRQL_NOT_GREATER_OR_EQUAL, NewIrql, OldIrql, (ULONG_PTR)_ReturnAddress(), 0);
 
     Pcr->CurrentIrql = NewIrql;
-    if (NewIrql > DISPATCH_LEVEL)
-        KiArmSetPriorityMask(NewIrql);
     KeRestoreInterrupts(Enabled);
     return OldIrql;
 }
@@ -59,10 +74,8 @@ KfLowerIrql(
     if (NewIrql > OldIrql)
         KeBugCheckEx(IRQL_NOT_LESS_OR_EQUAL, NewIrql, OldIrql, (ULONG_PTR)_ReturnAddress(), 0);
 
-    Pcr->CurrentIrql = NewIrql;
-    if (OldIrql > DISPATCH_LEVEL)
-        KiArmSetPriorityMask(NewIrql);
-    Pending = (NewIrql < DISPATCH_LEVEL) && Pcr->SoftwareInterruptPending;
+    KiArmSetIrqlAndPriorityMask(Pcr, NewIrql);
+    Pending = (NewIrql < DISPATCH_LEVEL) && Pcr->SoftwareInterruptPending && (Pcr->Prcb.NestingLevel == 0);
     KeRestoreInterrupts(Enabled);
 
     if (Pending)
@@ -124,24 +137,23 @@ KiArmDispatchSoftwareInterrupts(
         OldIrql = Pcr->CurrentIrql;
         if ((OldIrql < DISPATCH_LEVEL) && Pcr->DispatchInterrupt)
         {
-            Pcr->DispatchInterrupt = FALSE;
+            HalClearSoftwareInterrupt(DISPATCH_LEVEL);
             Pcr->CurrentIrql = DISPATCH_LEVEL;
             _enable();
             KiDispatchInterrupt();
             _disable();
-            KiArmPcr()->CurrentIrql = OldIrql;
-            KiArmSetPriorityMask(OldIrql);
+            KiArmSetIrqlAndPriorityMask(KiArmPcr(), OldIrql);
             continue;
         }
 
         if ((OldIrql < APC_LEVEL) && Pcr->ApcInterrupt)
         {
-            Pcr->ApcInterrupt = FALSE;
+            HalClearSoftwareInterrupt(APC_LEVEL);
             Pcr->CurrentIrql = APC_LEVEL;
             _enable();
             KiDeliverApc(KernelMode, NULL, TrapFrame);
             _disable();
-            KiArmPcr()->CurrentIrql = OldIrql;
+            KiArmSetIrqlAndPriorityMask(KiArmPcr(), OldIrql);
             continue;
         }
         break;
@@ -152,52 +164,45 @@ KiArmDispatchSoftwareInterrupts(
 
 VOID
 NTAPI
-KiArmRequestSoftwareInterrupt(
-    _In_ KIRQL Irql)
+KeRaiseIrql(
+    _In_ KIRQL NewIrql,
+    _Out_ PKIRQL OldIrql)
 {
-    BOOLEAN Enabled = KeDisableInterrupts();
-    PKIPCR Pcr = KiArmPcr();
-
-    if (Irql == DISPATCH_LEVEL)
-        Pcr->DispatchInterrupt = TRUE;
-    else if (Irql == APC_LEVEL)
-        Pcr->ApcInterrupt = TRUE;
-    else
-        KeBugCheckEx(IRQL_NOT_GREATER_OR_EQUAL, Irql, Pcr->CurrentIrql, 0, 0);
-
-    /* A self-interrupt fires as soon as the IRQL and the interrupt mask allow it. */
-    if (Enabled && (Pcr->CurrentIrql < Irql))
-        KiArmDispatchSoftwareInterrupts(NULL);
-    KeRestoreInterrupts(Enabled);
+    *OldIrql = KfRaiseIrql(NewIrql);
 }
 
 VOID
 NTAPI
-KiArmClearSoftwareInterrupt(
-    _In_ KIRQL Irql)
+KeLowerIrql(
+    _In_ KIRQL NewIrql)
 {
-    PKIPCR Pcr = KiArmPcr();
+    KfLowerIrql(NewIrql);
+}
 
-    if (Irql == DISPATCH_LEVEL)
-        Pcr->DispatchInterrupt = FALSE;
-    else if (Irql == APC_LEVEL)
-        Pcr->ApcInterrupt = FALSE;
+VOID
+NTAPI
+KeAcquireSpinLock(
+    _Inout_ PKSPIN_LOCK SpinLock,
+    _Out_ PKIRQL OldIrql)
+{
+    *OldIrql = KeAcquireSpinLockRaiseToDpc(SpinLock);
+}
+
+KIRQL
+FASTCALL
+KfAcquireSpinLock(
+    _Inout_ PKSPIN_LOCK SpinLock)
+{
+    return KeAcquireSpinLockRaiseToDpc(SpinLock);
 }
 
 VOID
 FASTCALL
-HalRequestSoftwareInterrupt(
-    _In_ KIRQL Irql)
+KfReleaseSpinLock(
+    _Inout_ PKSPIN_LOCK SpinLock,
+    _In_ KIRQL OldIrql)
 {
-    KiArmRequestSoftwareInterrupt(Irql);
-}
-
-VOID
-FASTCALL
-HalClearSoftwareInterrupt(
-    _In_ KIRQL Irql)
-{
-    KiArmClearSoftwareInterrupt(Irql);
+    KeReleaseSpinLock(SpinLock, OldIrql);
 }
 
 /* Retire DPCs and switch threads at DISPATCH_LEVEL, entered with interrupts on. */

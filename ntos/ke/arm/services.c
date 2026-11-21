@@ -134,19 +134,7 @@ KiUnexpectedInterrupt(VOID)
     KeBugCheckEx(TRAP_CAUSE_UNKNOWN, 0, 0, 0, 0);
 }
 
-BOOLEAN
-NTAPI
-KeDispatchSecondaryInterrupt(
-    _In_ ULONG Vector,
-    _In_ ULONG_PTR Flags,
-    _In_opt_ PVOID Reserved)
-{
-    UNREFERENCED_PARAMETER(Vector);
-    UNREFERENCED_PARAMETER(Flags);
-    UNREFERENCED_PARAMETER(Reserved);
-    /* No secondary interrupt controller is described on this platform. */
-    return FALSE;
-}
+
 
 BOOLEAN
 NTAPI
