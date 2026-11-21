@@ -554,7 +554,6 @@ OFFSET(PbMultiThreadSetMaster, KPRCB, MultiThreadSetMaster), // not Win 10
 //OFFSET(PbStartCycles, KPRCB, StartCycles),
 OFFSET(PbPageColor, KPRCB, PageColor),
 OFFSET(PbNodeColor, KPRCB, NodeColor),
-OFFSET(PbNodeShiftedColor, KPRCB,NodeShiftedColor),
 OFFSET(PbSecondaryColorMask, KPRCB, SecondaryColorMask),
 OFFSET(PbSleeping, KPRCB, Sleeping), // not Win 10
 //OFFSET(PbCycleTime, KPRCB, CycleTime),

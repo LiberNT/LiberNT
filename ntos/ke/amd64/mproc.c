@@ -39,10 +39,13 @@ typedef struct _APINFO
     DECLSPEC_ALIGN(16) UINT8 DoubleFaultStack[DOUBLE_FAULT_STACK_SIZE];
     DECLSPEC_ALIGN(16) UINT8 NmiStack[DOUBLE_FAULT_STACK_SIZE];
     KIPCR Pcr;
+    REQUEST_MAILBOX RequestMailboxTail[KI_EXTRA_REQUEST_MAILBOXES];
     ETHREAD Thread;
     KI_THREAD_AFFINITY ThreadAffinity;
     KTSS64 Tss;
 } APINFO, *PAPINFO;
+
+C_ASSERT(FIELD_OFFSET(APINFO, RequestMailboxTail) == FIELD_OFFSET(APINFO, Pcr) + sizeof(KIPCR));
 
 /* FUNCTIONS *****************************************************************/
 

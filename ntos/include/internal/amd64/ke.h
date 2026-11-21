@@ -82,6 +82,11 @@ typedef struct _KI_SERVICE_EXCEPTION_STATE
 #define KeGetExceptionFrame(Thread) \
     ((PKEXCEPTION_FRAME)((ULONG_PTR)KeGetTrapFrame(Thread) - sizeof(KEXCEPTION_FRAME)))
 #define KeGetContextSwitches(Prcb) ((Prcb)->KeContextSwitches)
+#define KiPrcbTimerTableLockQueue(Prcb, Index) (&(Prcb)->TimerTableLockQueue[(Index)])
+
+/* Windows declares RequestMailbox[1] last in the PRCB and keeps the other mailboxes right after the PCR */
+#define KI_EXTRA_REQUEST_MAILBOXES KE_MAXIMUM_GROUPS
+C_ASSERT(sizeof(KIPCR) == FIELD_OFFSET(KIPCR, Prcb.RequestMailbox) + sizeof(REQUEST_MAILBOX));
 
 FORCEINLINE
 ULONG_PTR
