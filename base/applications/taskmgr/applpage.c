@@ -368,9 +368,9 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam)
         if (!hIcon && bAlive)
             GET_ICON(bLargeIcon ? ICON_SMALL : ICON_BIG);
         if (!hIcon)
-            hIcon = (HICON)(LONG_PTR)GetClassLongPtrW(hWnd, bLargeIcon ? GCL_HICON : GCL_HICONSM);
+            hIcon = (HICON)(LONG_PTR)GetClassLongPtrW(hWnd, bLargeIcon ? GCLP_HICON : GCLP_HICONSM);
         if (!hIcon)
-            hIcon = (HICON)(LONG_PTR)GetClassLongPtrW(hWnd, bLargeIcon ? GCL_HICONSM : GCL_HICON);
+            hIcon = (HICON)(LONG_PTR)GetClassLongPtrW(hWnd, bLargeIcon ? GCLP_HICONSM : GCLP_HICON);
 
         /* If we still do not have any icon, load the default one */
         if (!hIcon) hIcon = LoadIconW(hInst, bLargeIcon ? MAKEINTRESOURCEW(IDI_WINDOW) : MAKEINTRESOURCEW(IDI_WINDOWSM));

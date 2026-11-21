@@ -197,7 +197,7 @@ BOOL CALLBACK EnumerateCallback(HWND window, LPARAM lParam)
     if (!hIcon)
     {
         // If no icon is assigned, try to get the icon assigned to the windows' class
-        hIcon = (HICON)GetClassLongPtrW(window, GCL_HICON);
+        hIcon = (HICON)GetClassLongPtrW(window, GCLP_HICON);
         if (!hIcon)
         {
             // If we still don't have an icon, see if we can do with the small icon,
