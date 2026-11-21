@@ -169,6 +169,7 @@ VOID FASTCALL MsqCleanupThreadCallbacks(PTHREADINFO);
 VOID FASTCALL MsqCleanupThreadMsgs(PTHREADINFO);
 VOID FASTCALL MsqDestroyMessageQueue(_In_ PTHREADINFO pti);
 CODE_SEG("INIT") NTSTATUS NTAPI MsqInitializeImpl(VOID);
+VOID NTAPI MsqFreeImpl(VOID);
 BOOLEAN FASTCALL co_MsqDispatchOneSentMessage(_In_ PTHREADINFO pti);
 NTSTATUS FASTCALL
 co_MsqWaitForNewMessages(PTHREADINFO pti, PWND WndFilter,
