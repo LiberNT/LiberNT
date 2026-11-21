@@ -27,6 +27,7 @@ CONTRACT_HOST_OVERRIDES = {
     'api-ms-win-core-com-l1-1-1.dll': 'combase.dll',
     'api-ms-win-core-featurestaging-l1-1-0.dll': 'shcore.dll',
     'api-ms-win-core-featurestaging-l1-1-1.dll': 'shcore.dll',
+    'api-ms-win-core-apiquery-l2-1-0.dll': 'kernelbase.dll',
     'api-ms-win-core-libraryloader-l1-1-0.dll': 'kernelbase.dll',
     'api-ms-win-core-libraryloader-l1-2-0.dll': 'kernelbase.dll',
     'api-ms-win-core-libraryloader-l1-2-1.dll': 'kernelbase.dll',
