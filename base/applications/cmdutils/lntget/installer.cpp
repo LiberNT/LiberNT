@@ -274,6 +274,12 @@ Status InstallerService::Download(const PackageRecord &package, const InstallerE
     if (!status)
         return status;
     path = JoinPath(targetDirectory, FileNameFromUrl(installer.url));
+    if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES && VerifyFileSha256(path, installer.sha256))
+    {
+        std::printf("Using the verified installer already downloaded for %s %s.\n", package.name.c_str(), package.version.c_str());
+        if (stage) stage->Stage(InstallerDownloadStage::Verified);
+        return Status::Ok();
+    }
     for (unsigned attempt = 0; attempt < VerifiedDownloadAttempts; ++attempt)
     {
         std::printf("Downloading %s %s [%s]\n", package.name.c_str(), package.version.c_str(), installer.architecture.c_str());
