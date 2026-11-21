@@ -33,6 +33,8 @@ typedef enum _SUITE_TYPE {
   StorageServer,
   ComputeServer,
   WHServer,
+  PhoneNT,
+  MultiUserTS,
   MaxSuiteType
 } SUITE_TYPE;
 
