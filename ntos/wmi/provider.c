@@ -1015,7 +1015,9 @@ WmipRegisterProvider(
     ObReferenceObject(DeviceObject);
     Provider->DeviceObject = DeviceObject;
     Provider->ReferenceCount = 1;
-    Provider->ProviderId = (ULONG)InterlockedIncrement(&WmipNextProviderId);
+    /* Where a pointer fits the identifier, wdm.h makes the device object itself the identifier of its provider. */
+    Provider->ProviderId = (sizeof(DeviceObject) == sizeof(ULONG)) ? (ULONG)(ULONG_PTR)DeviceObject
+                                                                    : (ULONG)InterlockedIncrement(&WmipNextProviderId);
     ExInitializeRundownProtection(&Provider->Rundown);
     InitializeListHead(&Provider->InstanceSets);
 
