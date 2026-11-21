@@ -79,6 +79,19 @@ NtfsDirectIoCompletion(
     return STATUS_MORE_PROCESSING_REQUIRED;
 }
 
+/* A write-through file or a non-cached write marked write-through must reach the media, so the device is told to bypass its cache */
+static
+BOOLEAN
+NtfsIsWriteThrough(_In_ PIRP Irp)
+{
+    PIO_STACK_LOCATION IrpSp = IoGetCurrentIrpStackLocation(Irp);
+
+    if (BooleanFlagOn(Irp->Flags, IRP_PAGING_IO))
+        return FALSE;
+    return (IrpSp->FileObject && BooleanFlagOn(IrpSp->FileObject->Flags, FO_WRITE_THROUGH)) ||
+           (BooleanFlagOn(Irp->Flags, IRP_NOCACHE) && BooleanFlagOn(IrpSp->Flags, SL_WRITE_THROUGH));
+}
+
 NTSTATUS
 NtfsSubmitDirectIo(
     _In_ PVolumeContextBlock VolCB,
@@ -106,6 +119,8 @@ NtfsSubmitDirectIo(
     IoStack->MajorFunction = MajorFunction;
     IoStack->MinorFunction = 0;
     IoStack->Flags = SL_OVERRIDE_VERIFY_VOLUME;
+    if (MajorFunction == IRP_MJ_WRITE && NtfsIsWriteThrough(Irp))
+        IoStack->Flags |= SL_WRITE_THROUGH;
     IoStack->Control = 0;
     IoStack->FileObject = NULL;
     if (MajorFunction == IRP_MJ_WRITE)
@@ -177,6 +192,8 @@ NtfsSubmitDirectIoRun(_In_ PVolumeContextBlock VolCB,
     IoStack = IoGetNextIrpStackLocation(Irp);
     IoStack->MajorFunction = MajorFunction;
     IoStack->Flags = SL_OVERRIDE_VERIFY_VOLUME;
+    if (MajorFunction == IRP_MJ_WRITE && NtfsIsWriteThrough(MasterIrp))
+        IoStack->Flags |= SL_WRITE_THROUGH;
     if (MajorFunction == IRP_MJ_WRITE)
     {
         IoStack->Parameters.Write.Length = Run->Length;

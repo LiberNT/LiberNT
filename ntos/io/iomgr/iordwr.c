@@ -877,6 +877,10 @@ NtWriteFile(
     {
         Irp->Flags |= IRP_NOCACHE;
     }
+    if (Request.FileObject->Flags & FO_WRITE_THROUGH)
+    {
+        Request.StackPtr->Flags |= SL_WRITE_THROUGH;
+    }
 
     Request.StackPtr->Parameters.Write.Length = Length;
     Request.StackPtr->Parameters.Write.Key = CapturedKey;

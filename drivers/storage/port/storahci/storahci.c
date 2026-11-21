@@ -771,6 +771,7 @@ AhciAtaModeSense(
     }
 
     RtlZeroMemory(Data, sizeof(Data));
+    Data[Ten ? 3 : 2] = MODE_DSP_FUA_SUPPORTED;
     Page[0] = MODE_PAGE_CACHING;
     Page[1] = 0x12;
     if (PageControl != 1 && Port->WriteCacheEnabled)
@@ -849,6 +850,7 @@ AhciAtaReadWrite(
     ULONGLONG Lba;
     ULONG Count;
     BOOLEAN Write;
+    BOOLEAN ForceUnitAccess;
     PAHCI_FIS_H2D Fis;
 
     switch (Cdb[0])
@@ -879,6 +881,7 @@ AhciAtaReadWrite(
 
     Write = (Cdb[0] == SCSIOP_WRITE6 || Cdb[0] == SCSIOP_WRITE ||
              Cdb[0] == SCSIOP_WRITE12 || Cdb[0] == SCSIOP_WRITE16);
+    ForceUnitAccess = Write && Cdb[0] != SCSIOP_WRITE6 && (Cdb[1] & CDB_FORCE_MEDIA_ACCESS) && Port->WriteCacheEnabled;
 
     if (Count == 0)
     {
@@ -920,7 +923,9 @@ AhciAtaReadWrite(
     Fis->Lba2 = (UCHAR)(Lba >> 16);
     Fis->Count = (UCHAR)Count;
 
-    AhciStartSrbCommand(Adapter, Port, Srb, AhciOperationData, Write ? AHCI_HEADER_WRITE : 0);
+    /* TODO: WRITE DMA FUA EXT where IDENTIFY advertises it; a cache flush after the write covers every device */
+    AhciStartSrbCommand(Adapter, Port, Srb, ForceUnitAccess ? AhciOperationWriteThenFlush : AhciOperationData,
+                        Write ? AHCI_HEADER_WRITE : 0);
 }
 
 static
@@ -935,6 +940,25 @@ AhciAtaFlush(
     Fis->Device = ATA_DEVICE_LBA;
     Srb->DataTransferLength = 0;
     AhciStartSrbCommand(Adapter, Port, Srb, AhciOperationData, 0);
+}
+
+/* The flush that completes a forced-unit-access write keeps the request's transfer length */
+static
+VOID
+AhciIssueSrbFlush(
+    _In_ PAHCI_ADAPTER Adapter,
+    _In_ PAHCI_PORT Port,
+    _In_ PSCSI_REQUEST_BLOCK Srb)
+{
+    PAHCI_FIS_H2D Fis = AhciPrepareFis(Port, Port->FlushExt ? ATA_CMD_FLUSH_CACHE_EXT : ATA_CMD_FLUSH_CACHE);
+
+    Fis->Device = ATA_DEVICE_LBA;
+    ASSERT(Port->ActiveKind == AhciCommandIdle);
+    ASSERT(Port->ActiveSrb == NULL);
+    Port->ActiveKind = AhciCommandSrb;
+    Port->ActiveSrb = Srb;
+    Port->ActiveOperation = AhciOperationData;
+    AhciIssueCommand(Adapter, Port, 0, 0);
 }
 
 static
@@ -1122,6 +1146,10 @@ AhciCommandDone(
     {
         case AhciOperationData:
             AhciCompleteSrb(Adapter, Srb, SRB_STATUS_SUCCESS);
+            break;
+
+        case AhciOperationWriteThenFlush:
+            AhciIssueSrbFlush(Adapter, Port, Srb);
             break;
 
         case AhciOperationPassThrough:
