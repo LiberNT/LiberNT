@@ -42,5 +42,18 @@
 #define KI_VECTOR_IRQ       6
 #define KI_VECTOR_FIQ       7
 
+/* Secondary processor startup block (KI_ARM_STARTUP_BLOCK), read by the PSCI entry with the MMU off. */
+#define KI_SB_TEMPORARY_ROOT      0x000
+#define KI_SB_TEMPORARY_ROOT_PA   0x020
+#define KI_SB_SYSTEM_ROOT         0x028
+#define KI_SB_MAIR0               0x030
+#define KI_SB_MAIR1               0x034
+#define KI_SB_TTBCR               0x038
+#define KI_SB_SCTLR               0x03C
+#define KI_SB_SELF                0x040
+#define KI_SB_CONTINUATION        0x044
+#define KI_SB_PCR                 0x048
+#define KI_SB_KERNEL_STACK        0x04C
+
 /* Switch frame: d8-d15, pad, r4-r11, lr. */
 #define KI_SWITCH_FRAME_SIZE (8 * 8 + 4 + 9 * 4)

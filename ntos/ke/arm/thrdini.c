@@ -163,6 +163,7 @@ KiSwapContext(
 
     Enabled = KeDisableInterrupts();
     KiArmWriteCp15(13, 0, 0, 2, (ULONG_PTR)NewThread->Teb);
+    KiArmWriteCp15(13, 0, 0, 3, (ULONG_PTR)NewThread);
     Result = (BOOLEAN)(ULONG_PTR)KiArmSwapStack(&CurrentThread->KernelStack,
                                                 NewThread->KernelStack,
                                                 &SwitchContext,
@@ -254,11 +255,11 @@ KiArmExitToUserMode(
         _disable();
         if (!Thread->ApcState.UserApcPending)
             break;
-        _enable();
         KfRaiseIrql(APC_LEVEL);
+        _enable();
         KiDeliverApc(UserMode, &KI_ARM_TRAP_RECORD(TrapFrame)->ExceptionFrame, TrapFrame);
-    }
         KfLowerIrql(PASSIVE_LEVEL);
+    }
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
 }
 

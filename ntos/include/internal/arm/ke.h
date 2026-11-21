@@ -27,6 +27,9 @@
 #undef SYNCH_LEVEL
 #define SYNCH_LEVEL 12
 
+/* The software generated interrupt that carries interprocessor requests. */
+#define KI_ARM_IPI_SGI 0
+
 /* CPSR fields (ARM ARM B1.3.3). */
 #define CPSR_MODE_MASK   0x1F
 #define CPSR_MODE_USER   0x10
@@ -110,21 +113,25 @@ VOID NTAPI KiArmRestoreVfpState(_In_ PKARM_VFP_STATE State);
 BOOLEAN KiProcessorFreezeHandler(PKTRAP_FRAME TrapFrame, PKEXCEPTION_FRAME ExceptionFrame);
 VOID NTAPI KiFreezeIfRequested(VOID);
 VOID NTAPI KiIpiProcessRequests(VOID);
+VOID NTAPI KiArmSecondaryTrampoline(VOID);
+VOID NTAPI KiArmSecondaryEntry(VOID);
 
 VOID FASTCALL KeUpdateSystemTime(_In_opt_ PKTRAP_FRAME TrapFrame, _In_ ULONG Increment, _In_ KIRQL OldIrql);
 
 /* The ARMv7 HAL is a forwarder: the platform devices are driven here. */
+VOID NTAPI KiArmInitializeTimeBase(VOID);
 VOID NTAPI KiArmInitializePlatform(_In_ PLOADER_PARAMETER_BLOCK LoaderBlock);
 VOID NTAPI KiArmSetPriorityMask(_In_ KIRQL Irql);
 BOOLEAN NTAPI KiArmDispatchDeviceInterrupt(_Inout_ PKTRAP_FRAME TrapFrame);
 BOOLEAN NTAPI KiArmPlatformInitialized(VOID);
 BOOLEAN NTAPI KiArmPsciConduitIsSmc(VOID);
-VOID NTAPI KiArmInitializeTimeBase(VOID);
 BOOLEAN NTAPI KiArmFindDevice(_In_ const CHAR * const *Compatible, _In_ ULONG RegIndex, _Out_ PPHYSICAL_ADDRESS Address, _Out_opt_ PULONG Length);
 BOOLEAN NTAPI KiArmEnableInterruptLine(_In_ ULONG Vector, _In_ KIRQL Irql, _In_ KINTERRUPT_MODE Mode);
 VOID NTAPI KiArmDisableInterruptLine(_In_ ULONG Vector);
 VOID NTAPI KiArmServiceInterruptVector(_In_ ULONG Vector, _In_ PKTRAP_FRAME TrapFrame);
-VOID NTAPI KiArmSendInterprocessorInterrupt(_In_ ULONG TargetMask, _In_ ULONG Sgi);
+VOID NTAPI KiArmSendInterprocessorInterrupt(_In_ KAFFINITY TargetProcessors);
+VOID NTAPI KiArmInitializeProcessorInterrupts(VOID);
+BOOLEAN NTAPI KiArmEnumerateProcessor(_In_ ULONG Index, _Out_ PULONG Mpidr);
 VOID NTAPI KiArmFlushDmaRange(_In_ PVOID Address, _In_ SIZE_T Length, _In_ BOOLEAN Invalidate);
 VOID NTAPI KiArmCallOnStack(_In_opt_ PVOID Argument0, _In_opt_ PVOID Argument1, _In_ PVOID Routine, _In_ PVOID StackTop);
 BOOLEAN NTAPI KiArmSwapStack(_Out_ PVOID *OldStack, _In_ PVOID NewStack, _In_ PVOID Context, _In_ PVOID Resume);
@@ -138,15 +145,15 @@ VOID NTAPI KiArmExitToUserMode(_Inout_ PKTRAP_FRAME TrapFrame);
 /* The trap code reports a UDF breakpoint at the instruction itself. */
 #define KI_BREAKPOINT_PC_ADJUST 0
 
+VOID NTAPI KiArmPrepareUserBreakpoint(_Inout_ PEXCEPTION_RECORD ExceptionRecord, _Inout_ PKTRAP_FRAME TrapFrame);
+#define KiArchPrepareUserBreakpoint(ExceptionRecord, TrapFrame) KiArmPrepareUserBreakpoint(ExceptionRecord, TrapFrame)
+
 FORCEINLINE
 PULONG_PTR
 KiGetUserModeStackAddress(VOID)
 {
     return (PULONG_PTR)&KeGetCurrentThread()->TrapFrame->Sp;
 }
-
-VOID NTAPI KiArmPrepareUserBreakpoint(_Inout_ PEXCEPTION_RECORD ExceptionRecord, _Inout_ PKTRAP_FRAME TrapFrame);
-#define KiArchPrepareUserBreakpoint(ExceptionRecord, TrapFrame) KiArmPrepareUserBreakpoint(ExceptionRecord, TrapFrame)
 
 #define KiIsUserModeTrap(TrapFrame) (((TrapFrame)->Cpsr & CPSR_MODE_MASK) == CPSR_MODE_USER)
 

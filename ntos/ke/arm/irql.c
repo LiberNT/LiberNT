@@ -22,34 +22,27 @@ KiArmPcr(VOID)
     return (PKIPCR)KeGetPcr();
 }
 
-static
-VOID
-KiArmSetIrqlMasked(
-    _In_ PKIPCR Pcr,
-    _In_ KIRQL NewIrql)
-{
-    BOOLEAN Enabled = KeDisableInterrupts();
-
-    Pcr->CurrentIrql = NewIrql;
-    KiArmSetPriorityMask(NewIrql);
-    KeRestoreInterrupts(Enabled);
-}
-
+/*
+ * The IRQL lives in the PCR, so it is read and written with interrupts masked:
+ * below DISPATCH_LEVEL the thread could otherwise move to another processor
+ * between finding the PCR and using it, and act on the processor it left.
+ */
 KIRQL
 FASTCALL
 KfRaiseIrql(
     _In_ KIRQL NewIrql)
 {
+    BOOLEAN Enabled = KeDisableInterrupts();
     PKIPCR Pcr = KiArmPcr();
     KIRQL OldIrql = Pcr->CurrentIrql;
 
     if ((NewIrql < OldIrql) || (NewIrql > HIGH_LEVEL))
         KeBugCheckEx(IRQL_NOT_GREATER_OR_EQUAL, NewIrql, OldIrql, (ULONG_PTR)_ReturnAddress(), 0);
 
+    Pcr->CurrentIrql = NewIrql;
     if (NewIrql > DISPATCH_LEVEL)
-        KiArmSetIrqlMasked(Pcr, NewIrql);
-    else
-        Pcr->CurrentIrql = NewIrql;
+        KiArmSetPriorityMask(NewIrql);
+    KeRestoreInterrupts(Enabled);
     return OldIrql;
 }
 
@@ -58,18 +51,21 @@ FASTCALL
 KfLowerIrql(
     _In_ KIRQL NewIrql)
 {
+    BOOLEAN Enabled = KeDisableInterrupts();
     PKIPCR Pcr = KiArmPcr();
     KIRQL OldIrql = Pcr->CurrentIrql;
+    BOOLEAN Pending;
 
     if (NewIrql > OldIrql)
         KeBugCheckEx(IRQL_NOT_LESS_OR_EQUAL, NewIrql, OldIrql, (ULONG_PTR)_ReturnAddress(), 0);
 
+    Pcr->CurrentIrql = NewIrql;
     if (OldIrql > DISPATCH_LEVEL)
-        KiArmSetIrqlMasked(Pcr, NewIrql);
-    else
-        Pcr->CurrentIrql = NewIrql;
+        KiArmSetPriorityMask(NewIrql);
+    Pending = (NewIrql < DISPATCH_LEVEL) && Pcr->SoftwareInterruptPending;
+    KeRestoreInterrupts(Enabled);
 
-    if ((NewIrql < DISPATCH_LEVEL) && Pcr->SoftwareInterruptPending)
+    if (Pending)
         KiArmDispatchSoftwareInterrupts(NULL);
 }
 
@@ -77,7 +73,11 @@ KIRQL
 NTAPI
 KeGetCurrentIrql(VOID)
 {
-    return KiArmPcr()->CurrentIrql;
+    BOOLEAN Enabled = KeDisableInterrupts();
+    KIRQL Irql = KiArmPcr()->CurrentIrql;
+
+    KeRestoreInterrupts(Enabled);
+    return Irql;
 }
 
 KIRQL
