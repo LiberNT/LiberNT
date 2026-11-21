@@ -54,6 +54,7 @@ list(APPEND SOURCE
     SaferLevels.c
     SaferRules.c
     SeclogonCaller.c
+    SetSecurityInfoAcl.c
     ServiceArgs.c
     ServiceCrash.c
     ServiceEnv.c

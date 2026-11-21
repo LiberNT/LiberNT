@@ -1923,6 +1923,99 @@ Cleanup:
     return Ret;
 }
 
+/* A caller's ACL is read by its ACE count and ACE sizes alone, as Windows 11 does: the ACL size is ignored and a zero-sized ACE ends the list */
+static DWORD
+AccpCaptureCallerAcl(PACL Acl,
+                     PACL *Captured)
+{
+    PACE_HEADER Ace = (PACE_HEADER)(Acl + 1);
+    ULONG Length = sizeof(ACL);
+    ULONG Allocated;
+    UCHAR Revision;
+    USHORT Count;
+    NTSTATUS Status;
+
+    *Captured = NULL;
+    if (Acl->AclRevision > MAX_ACL_REVISION)
+        return ERROR_INVALID_ACL;
+    Revision = Acl->AclRevision >= MIN_ACL_REVISION ? Acl->AclRevision : ACL_REVISION;
+    for (Count = 0; Count < Acl->AceCount && Ace->AceSize; Count++)
+    {
+        if (Ace->AceSize < sizeof(ACE_HEADER) + sizeof(ACCESS_MASK))
+            return ERROR_BAD_INHERITANCE_ACL;
+        if (Ace->AceType >= ACCESS_ALLOWED_OBJECT_ACE_TYPE &&
+            Ace->AceType <= SYSTEM_ALARM_OBJECT_ACE_TYPE &&
+            Revision < ACL_REVISION4)
+        {
+            Revision = ACL_REVISION4;
+        }
+        Length += Ace->AceSize;
+        if (Length > MAXUSHORT)
+            return ERROR_INVALID_ACL;
+        Ace = (PACE_HEADER)((PUCHAR)Ace + Ace->AceSize);
+    }
+
+    ASSERT(Revision >= MIN_ACL_REVISION);
+    ASSERT(Revision <= MAX_ACL_REVISION);
+    ASSERT(Length >= sizeof(ACL));
+    ASSERT(Length <= MAXUSHORT);
+    Allocated = ALIGN_UP_BY(Length, sizeof(ULONG));
+    *Captured = HeapAlloc(GetProcessHeap(), 0, Allocated);
+    if (!*Captured)
+        return ERROR_NOT_ENOUGH_MEMORY;
+    Status = RtlCreateAcl(*Captured, Allocated, Revision);
+    if (!NT_SUCCESS(Status))
+    {
+        HeapFree(GetProcessHeap(), 0, *Captured);
+        *Captured = NULL;
+        return RtlNtStatusToDosError(Status);
+    }
+    ASSERT((*Captured)->AclSize <= Allocated);
+    RtlCopyMemory(*Captured + 1, Acl + 1, Length - sizeof(ACL));
+    (*Captured)->AceCount = Count;
+    return ERROR_SUCCESS;
+}
+
+static DWORD
+AccpCaptureCallerDescriptor(PSECURITY_DESCRIPTOR Descriptor,
+                            SECURITY_INFORMATION Information,
+                            PISECURITY_DESCRIPTOR Captured,
+                            PACL *CapturedDacl)
+{
+    SECURITY_DESCRIPTOR_CONTROL Control;
+    BOOLEAN Present, Defaulted;
+    PACL Dacl;
+    ULONG Revision;
+    NTSTATUS Status;
+    DWORD Ret;
+
+    *CapturedDacl = NULL;
+    if (!(Information & DACL_SECURITY_INFORMATION))
+        return ERROR_SUCCESS;
+    Status = RtlGetDaclSecurityDescriptor(Descriptor, &Present, &Dacl, &Defaulted);
+    if (!NT_SUCCESS(Status))
+        return RtlNtStatusToDosError(Status);
+    if (!Present || !Dacl || RtlValidAcl(Dacl))
+        return ERROR_SUCCESS;
+    Status = RtlGetControlSecurityDescriptor(Descriptor, &Control, &Revision);
+    if (!NT_SUCCESS(Status))
+        return RtlNtStatusToDosError(Status);
+    Ret = AccpCaptureCallerAcl(Dacl, CapturedDacl);
+    if (Ret != ERROR_SUCCESS)
+        return Ret;
+
+    ASSERT(*CapturedDacl != NULL);
+    RtlCreateSecurityDescriptor(Captured, SECURITY_DESCRIPTOR_REVISION);
+    Captured->Control = Control & ~SE_SELF_RELATIVE;
+    Captured->Sbz1 = ((PISECURITY_DESCRIPTOR)Descriptor)->Sbz1;
+    RtlGetOwnerSecurityDescriptor(Descriptor, &Captured->Owner, &Defaulted);
+    RtlGetGroupSecurityDescriptor(Descriptor, &Captured->Group, &Defaulted);
+    RtlGetSaclSecurityDescriptor(Descriptor, &Present, &Captured->Sacl, &Defaulted);
+    Captured->Dacl = *CapturedDacl;
+    ASSERT(Captured->Control & SE_DACL_PRESENT);
+    return ERROR_SUCCESS;
+}
+
 /**********************************************************************
  * AccRewriteSetHandleRights				EXPORTED
  *
@@ -1934,12 +2027,23 @@ AccRewriteSetHandleRights(HANDLE handle,
                           SECURITY_INFORMATION SecurityInfo,
                           PSECURITY_DESCRIPTOR pSecurityDescriptor)
 {
+    SECURITY_DESCRIPTOR Captured;
+    PACL CapturedDacl;
     NTSTATUS Status;
     DWORD LastErr;
     DWORD Ret = ERROR_SUCCESS;
 
     /* save the last error code */
     LastErr = GetLastError();
+
+    Ret = AccpCaptureCallerDescriptor(pSecurityDescriptor, SecurityInfo, &Captured, &CapturedDacl);
+    if (Ret != ERROR_SUCCESS)
+    {
+        SetLastError(LastErr);
+        return Ret;
+    }
+    if (CapturedDacl)
+        pSecurityDescriptor = &Captured;
 
     /* set the security according to the object type */
     switch (ObjectType)
@@ -2001,6 +2105,7 @@ AccRewriteSetHandleRights(HANDLE handle,
             break;
     }
 
+    HeapFree(GetProcessHeap(), 0, CapturedDacl);
 
     /* restore the last error code */
     SetLastError(LastErr);
