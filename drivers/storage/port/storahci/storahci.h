@@ -271,6 +271,7 @@ typedef enum _AHCI_DEVICE_TYPE
 typedef enum _AHCI_OPERATION
 {
     AhciOperationData,
+    AhciOperationWriteThenFlush,
     AhciOperationPassThrough,
     AhciOperationAtapi,
     AhciOperationSense
