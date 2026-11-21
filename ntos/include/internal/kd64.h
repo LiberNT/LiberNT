@@ -171,7 +171,7 @@ VOID
 NTAPI
 KdSystemRootAvailable(VOID);
 
-#if DBG
+#ifdef REMOTE_ASSISTANCE
 BOOLEAN
 NTAPI
 KdDisplayTransportKey(

@@ -290,7 +290,7 @@ InitDesktopImpl(VOID)
     return STATUS_SUCCESS;
 }
 
-#if DBG
+#ifdef REMOTE_ASSISTANCE
 static VOID
 IntQueryNetworkAssistanceKey(OUT PWSTR pwszText,
                              IN SIZE_T cchText)
@@ -1935,7 +1935,7 @@ static BOOL
 IntPaintDesktopContent(HDC hDC)
 {
     static WCHAR s_wszSafeMode[] = L"Safe Mode"; // FIXME: Localize!
-#if DBG
+#ifdef REMOTE_ASSISTANCE
     static WCHAR s_wszAssistance[64];
 #endif
 
@@ -2187,13 +2187,13 @@ IntPaintDesktopContent(HDC hDC)
     /*
      * Display the system version on the desktop background
      */
-#if DBG
+#ifdef REMOTE_ASSISTANCE
     /* TODO: a key that appears after the desktop was painted shows at the next paint, nothing asks for one */
     if (!*s_wszAssistance && KD_DEBUGGER_ENABLED)
         IntQueryNetworkAssistanceKey(s_wszAssistance, ARRAYSIZE(s_wszAssistance));
 #endif
 
-#if DBG
+#ifdef REMOTE_ASSISTANCE
     if (InSafeMode || g_AlwaysDisplayVersion || g_PaintDesktopVersion || *s_wszAssistance)
 #else
     if (InSafeMode || g_AlwaysDisplayVersion || g_PaintDesktopVersion)
@@ -2284,7 +2284,7 @@ IntPaintDesktopContent(HDC hDC)
                     VerStrs[i].lpstr = pstr;
                     pstr += (VerStrs[i].n + 1);
                 }
-#if DBG
+#ifdef REMOTE_ASSISTANCE
                 if (*s_wszAssistance)
                 {
                     VerStrs[i].n = lstrlenW(s_wszAssistance);
@@ -2353,7 +2353,7 @@ IntPaintDesktopContent(HDC hDC)
 
                 IntGdiSetTextAlign(hDC, TA_CENTER | TA_TOP);
                 GreExtTextOutW(hDC, (Rect.right + Rect.left)/2, Rect.top + 3, 0, NULL, wszzVersion, len, NULL, 0);
-#if DBG
+#ifdef REMOTE_ASSISTANCE
                 if (*s_wszAssistance)
                 {
                     SIZE Size = {0, 0};

@@ -59,7 +59,7 @@ static
 BOOLEAN
 KdpHostUnresolved(VOID)
 {
-#if DBG
+#ifdef REMOTE_ASSISTANCE
     return KdNetOptions.HostName[0] && !KdNetOptions.HostIp;
 #else
     return FALSE;
@@ -210,14 +210,14 @@ KdpParseOptions(
         return;
 
     NoHost = !KdpFindOption(Options, "HOST_IP");
-#if DBG
+#ifdef REMOTE_ASSISTANCE
     NoHost = NoHost && !KdpFindOption(Options, "HOST_NAME");
 #endif
     Text = KdpFindOption(Options, "LOCAL_BROADCAST");
     KdNetOptions.Broadcast = Text && *Text == '1';
     KdNetOptions.BroadcastFallback = NoHost && !Text;
     KdNetBroadcasting = KdNetOptions.Broadcast;
-#if DBG
+#ifdef REMOTE_ASSISTANCE
     if (NoHost && !KdNetOptions.Broadcast)
         RtlCopyMemory(KdNetOptions.HostName, KDNET_DEFAULT_HOST, sizeof(KDNET_DEFAULT_HOST));
 #endif
@@ -229,7 +229,7 @@ KdpParseOptions(
         KdNetOptions.HostIp = KDNET_IP(Values[0], Values[1], Values[2], Values[3]);
     }
 
-#if DBG
+#ifdef REMOTE_ASSISTANCE
     Text = KdpFindOption(Options, "HOST_NAME");
     if (Text && !KdNetOptions.HostIp)
     {
@@ -438,7 +438,7 @@ KdpTerminalQueryStatus(
                            KdNicAddress[3], KdNicAddress[4], KdNicAddress[5],
                            KdNetOptions.BroadcastFallback ? ", broadcasts to UDP port 6666 without one" : "");
     }
-#if DBG
+#ifdef REMOTE_ASSISTANCE
     else if (KdpHostUnresolved())
     {
         Length = _snprintf(Buffer, Size,

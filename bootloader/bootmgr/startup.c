@@ -9,7 +9,7 @@
 #include <gui.h>
 
 #define BM_PROFILE_DEBUGGING          1
-#if DBG
+#ifdef REMOTE_ASSISTANCE
 #define BM_PROFILE_REMOTE_DEBUGGING   2
 #endif
 #define BM_PROFILE_ISOLATED_DEBUGGING 3
@@ -18,7 +18,7 @@ static PCSTR BmStartupNames[] =
 {
     "Debugging",
     "Debugging (isolated)",
-#if DBG
+#ifdef REMOTE_ASSISTANCE
     "Remote debugging"
 #endif
 };
@@ -31,7 +31,7 @@ static PCSTR BmStartupDescriptions[] =
     "Like Debugging but LiberNT only opens the disk it starts from. Other disks stay offline and "
     "read-only even if you plug them in later. Nothing on them can be read or changed. When "
     "LiberNT runs from memory it opens no disk at all.",
-#if DBG
+#ifdef REMOTE_ASSISTANCE
     "Lets a LiberNT maintainer connect to this computer to help you. The debugger joins the "
     "network and opens an encrypted session. The key to join it shows on the screen. Anyone "
     "with the key controls this PC. Give it only to a maintainer."
@@ -42,7 +42,7 @@ static const ULONG BmStartupProfiles[] =
 {
     BM_PROFILE_DEBUGGING,
     BM_PROFILE_ISOLATED_DEBUGGING,
-#if DBG
+#ifdef REMOTE_ASSISTANCE
     BM_PROFILE_REMOTE_DEBUGGING
 #endif
 };
