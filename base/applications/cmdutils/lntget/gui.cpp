@@ -2669,10 +2669,6 @@ Status RunCatalogGui(SourceManager &source, const std::string &initialQuery)
     UpdateWindow(window);
     UpdateStatusBar(state);
 
-    MessageBoxW(window,
-                L"The winget catalog contains applications published for Windows. Some packages may not install or run correctly on LiberNT yet.",
-                L"lntget compatibility notice", MB_OK | MB_ICONWARNING);
-
     if (!state.worker.Start(window, &source))
     {
         DestroyWindow(window);
@@ -2681,6 +2677,10 @@ Status RunCatalogGui(SourceManager &source, const std::string &initialQuery)
     ShowBackgroundProgress(state, L"Loading winget catalog", L"Opening the signed package index…");
     state.worker.RequestCatalog(false);
     UpdateActionButtons(state);
+
+    MessageBoxW(window,
+                L"The winget catalog contains applications published for Windows. Some packages may not install or run correctly on LiberNT yet.",
+                L"lntget compatibility notice", MB_OK | MB_ICONWARNING);
 
     MSG message{};
     while (GetMessageW(&message, nullptr, 0, 0) > 0)
