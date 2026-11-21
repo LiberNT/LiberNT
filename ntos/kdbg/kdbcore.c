@@ -585,6 +585,10 @@ KdbpInsertBreakPoint(
         return STATUS_INVALID_PARAMETER;
     }
 
+    /* An instruction starts at a multiple of the breakpoint's size: an address marked as Thumb code names the one below it */
+    if (Type != KdbBreakPointHardware)
+        Address &= ~(ULONG_PTR)(KD_BREAKPOINT_SIZE - 1);
+
     /* The same address is not watched twice */
     if (KdbpFindBreakPointAt(Address) >= 0)
         return STATUS_OBJECT_NAME_COLLISION;
