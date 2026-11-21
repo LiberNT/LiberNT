@@ -50,6 +50,7 @@ typedef struct
     struct intshcut_prop *props;
     DWORD prop_count;
     BOOL loaded;
+    IPropertyStorage *open_storage;
 } InternetShortcut;
 
 void InternetShortcutExt_Init(InternetShortcut *This);
