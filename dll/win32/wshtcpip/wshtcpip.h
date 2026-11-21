@@ -57,6 +57,7 @@ typedef struct _SOCKET_CONTEXT {
     ULONG KeepAliveTime;
     ULONG KeepAliveInterval;
     ULONG KeepAliveCount;
+    BOOLEAN NoDelay;
     ULONG MulticastInterface;
     ULONG MulticastTTL;
     ULONG UnicastInterface;
