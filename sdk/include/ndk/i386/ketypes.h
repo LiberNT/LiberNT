@@ -571,6 +571,7 @@ typedef struct _KPRCB
     ULONG CFlushSize;
     UCHAR PrcbPad0[88];
     KSPIN_LOCK_QUEUE LockQueue[LockQueueMaximumLock];
+    KSPIN_LOCK_QUEUE TimerTableLockQueue[LOCK_QUEUE_TIMER_TABLE_LOCKS];
     struct _KTHREAD *NpxThread;
     ULONG InterruptCount;
     ULONG KernelTime;

@@ -342,7 +342,7 @@ extern KAFFINITY KiHeteroPerformanceSet[KE_MAXIMUM_GROUPS];
 #define KI_MAX_USER_CALLBACK_NESTING 31
 
 #ifndef KiPrcbTimerTableLockQueue
-#define KiPrcbTimerTableLockQueue(Prcb, Index) (&(Prcb)->LockQueue[LockQueueTimerTableLock + (Index)])
+#define KiPrcbTimerTableLockQueue(Prcb, Index) (&(Prcb)->TimerTableLockQueue[(Index)])
 #endif
 
 #ifdef CONFIG_SMP
