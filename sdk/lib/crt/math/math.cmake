@@ -251,22 +251,7 @@ endif()
 
 if(ARCH STREQUAL "arm")
     list(APPEND LIBCNTPR_MATH_SOURCE
-        math/arm/__rt_sdiv.c
-        math/arm/__rt_sdiv64_worker.c
-        math/arm/__rt_udiv.c
-        math/arm/__rt_udiv64_worker.c
-        math/arm/__dtoi64.c
-        math/arm/__dtou64.c
-        math/arm/__stoi64.c
-        math/arm/__stou64.c
-        math/arm/__i64tod.c
-        math/arm/__u64tod.c
-        math/arm/__i64tos.c
-        math/arm/__u64tos.c)
-    list(APPEND LIBCNTPR_MATH_ASM_SOURCE
-        math/arm/__rt_sdiv64.s
-        math/arm/__rt_srsh.s
-        math/arm/__rt_udiv64.s)
+        math/arm/rt_srsh.c)
 endif()
 
 if(NOT ARCH STREQUAL "i386")
