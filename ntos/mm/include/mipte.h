@@ -194,6 +194,7 @@ ULONG64 MiArchBootFrameAlias(_In_ ULONG Frame);
 VOID MiArchWriteBootPte(_Inout_ PMI_PTE Slot, _In_ MI_PTE Value);
 MI_PTE MiArchPteRead(_In_ PMI_PTE Slot);
 VOID MiArchPteWrite(_Inout_ PMI_PTE Slot, _In_ MI_PTE Value);
+VOID MiArchPteReplaceTable(_Inout_ PMI_PTE Slot, _In_ MI_PTE Value);
 BOOLEAN MiArchPteCompareExchange(_Inout_ PMI_PTE Slot, _In_ MI_PTE Expected, _In_ MI_PTE Value);
 VOID MiArchTlbInvalidate(_In_ ULONG64 VirtualAddress, _In_ ULONG64 PageCount, _In_ BOOLEAN AllProcessors);
 VOID MiArchTlbInvalidateProcessors(_In_ ULONG64 VirtualAddress, _In_ ULONG64 PageCount, _In_ ULONG64 Processors);

@@ -146,6 +146,12 @@ MiArchPteWrite(_Inout_ PMI_PTE Slot, _In_ MI_PTE Value)
     MiRiscvCheckInstructionSync(Old, Value);
 }
 
+VOID
+MiArchPteReplaceTable(_Inout_ PMI_PTE Slot, _In_ MI_PTE Value)
+{
+    MiArchPteWrite(Slot, Value);
+}
+
 BOOLEAN
 MiArchPteCompareExchange(_Inout_ PMI_PTE Slot, _In_ MI_PTE Expected, _In_ MI_PTE Value)
 {
