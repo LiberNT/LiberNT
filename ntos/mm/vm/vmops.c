@@ -556,8 +556,9 @@ MiVadCreate(
     return Vad;
 }
 
+static
 BOOLEAN
-MiSpaceFindEmptyRange(
+MiSpaceFindEmptyRangeOnce(
     _In_ PMI_ADDRESS_SPACE Space,
     _In_ ULONG64 PageCount,
     _In_ ULONG64 Alignment,
@@ -584,6 +585,25 @@ MiSpaceFindEmptyRange(
 
     return MiVadFindEmptyRangeEx(&Space->VadRoot, PageCount, Alignment, Lowest, HighestVpn,
                                  TopDown, StartingVpn);
+}
+
+BOOLEAN
+MiSpaceFindEmptyRange(
+    _In_ PMI_ADDRESS_SPACE Space,
+    _In_ ULONG64 PageCount,
+    _In_ ULONG64 Alignment,
+    _In_ ULONG64 LowestVpn,
+    _In_ ULONG64 HighestVpn,
+    _In_ BOOLEAN TopDown,
+    _Out_ PULONG64 StartingVpn)
+{
+    if (MiSpaceFindEmptyRangeOnce(Space, PageCount, Alignment, LowestVpn, HighestVpn, TopDown, StartingVpn))
+        return TRUE;
+    if (Space != &Space->System->SystemSpace || Space->System->StaleViewCount == 0)
+        return FALSE;
+
+    MiFlushStaleViewsLocked(Space);
+    return MiSpaceFindEmptyRangeOnce(Space, PageCount, Alignment, LowestVpn, HighestVpn, TopDown, StartingVpn);
 }
 
 ULONG64
@@ -773,7 +793,7 @@ MiReplacePlaceholder(
     MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
 
     Vad = MiVadLocate(Space, Start);
-    if (Vad == NULL || !Vad->Placeholder || Start != MI_VAD_START(Vad) || End != MI_VAD_END(Vad))
+    if (Vad == NULL || !Vad->Placeholder || Vad->StaleView || Start != MI_VAD_START(Vad) || End != MI_VAD_END(Vad))
     {
         MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
         return STATUS_CONFLICTING_ADDRESSES;
@@ -1067,7 +1087,7 @@ MiFreePlaceholder(
     MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
 
     Vad = MiVadLocate(Space, Start);
-    if (Vad == NULL)
+    if (Vad == NULL || Vad->StaleView)
     {
         MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
         return STATUS_MEMORY_NOT_ALLOCATED;
@@ -1090,7 +1110,7 @@ MiFreePlaceholder(
         while (MI_VAD_END(Last) < End)
         {
             Next = MiVadLocate(Space, MI_VAD_END(Last));
-            if (Next == NULL || !Next->Placeholder || MI_VAD_START(Next) != MI_VAD_END(Last))
+            if (Next == NULL || !Next->Placeholder || Next->StaleView || MI_VAD_START(Next) != MI_VAD_END(Last))
             {
                 MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
                 return STATUS_CONFLICTING_ADDRESSES;
@@ -1203,7 +1223,7 @@ MiFreeVirtualMemory(
     MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
 
     Vad = MiVadLocate(Space, Start);
-    if (Vad == NULL)
+    if (Vad == NULL || Vad->StaleView)
     {
         MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
         return STATUS_MEMORY_NOT_ALLOCATED;

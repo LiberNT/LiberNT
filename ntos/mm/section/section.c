@@ -1636,10 +1636,12 @@ MiTlbBatchFlush(
 {
     PMI_TLB_BATCH Batch = Space->TlbBatch;
     PMI_SYSTEM System = Space->System;
+    UCHAR Invalidate;
     ULONG First = 0;
     ULONG i;
 
     MI_ASSERT(Batch != NULL && Batch->Count <= MI_TLB_BATCH_SIZE);
+    MI_ASSERT(Batch->Invalidate <= MI_TLB_INVALIDATE_ALL);
 #if DBG || defined(MM_HOST_TEST)
     for (i = 0; i < Batch->Count; i++)
     {
@@ -1654,7 +1656,17 @@ MiTlbBatchFlush(
         MI_ASSERT(Entry->Segment == NULL || !Entry->Private);
     }
 #endif
-    while (First < Batch->Count)
+    Invalidate = Batch->Invalidate;
+    for (i = 0; i < Batch->Count && Invalidate == MI_TLB_INVALIDATE_NONE; i++)
+    {
+        if (Batch->Entry[i].Segment == NULL)
+            Invalidate = MI_TLB_INVALIDATE_RANGES;
+    }
+
+    if (Invalidate == MI_TLB_INVALIDATE_ALL)
+        MiArchTlbInvalidateAll(TRUE);
+
+    while (Invalidate == MI_TLB_INVALIDATE_RANGES && First < Batch->Count)
     {
         ULONG Last = First + 1;
 
@@ -1698,6 +1710,7 @@ MiTlbBatchBegin(
     MI_ASSERT(Space->TlbBatch != Batch);
     Batch->Count = 0;
     Batch->DeferTables = FALSE;
+    Batch->Invalidate = MI_TLB_INVALIDATE_RANGES;
 
     if (Space->TlbBatch != NULL)
         return FALSE;
@@ -1741,6 +1754,7 @@ MiTlbBatchInsert(
     MI_ASSERT((Segment == NULL) == (Proto == NULL));
     MI_ASSERT(Clone == NULL || (Segment == NULL && !Private));
     MI_ASSERT(Segment == NULL || !Private);
+    MI_ASSERT(Batch->Invalidate != MI_TLB_INVALIDATE_NONE || Segment != NULL);
     Index = Batch->Count++;
     while (Index != 0 && Batch->Entry[Index - 1].Va > VirtualAddress)
     {
@@ -2133,7 +2147,8 @@ PMI_SEGMENT
 MiDetachMappedView(
     _Inout_ PMI_ADDRESS_SPACE Space,
     _Inout_ PMI_VAD Vad,
-    _In_ BOOLEAN RetainTables)
+    _In_ BOOLEAN RetainTables,
+    _In_ BOOLEAN Stale)
 {
     PMI_SEGMENT Segment = Vad->Segment;
     ULONG64 End = MI_VAD_END(Vad);
@@ -2142,7 +2157,12 @@ MiDetachMappedView(
     BOOLEAN Owner = MiTlbBatchBegin(Space, &Batch);
     BOOLEAN Deferred = Space->TlbBatch->DeferTables;
 
+    MI_ASSERT(!Stale || Owner);
+    MI_ASSERT(!Stale || Space == &Space->System->SystemSpace);
+    MI_ASSERT(!Stale || Vad->CacheView);
     Space->TlbBatch->DeferTables = TRUE;
+    if (Stale)
+        Batch.Invalidate = MI_TLB_INVALIDATE_NONE;
 
     while (Va < End)
     {
@@ -2166,7 +2186,7 @@ MiDetachMappedView(
             if (MiArchPteRead(Slot) != 0)
                 MiReleaseViewPageEx(Space, Vad, Va, Slot, TableFrame, 0, Clones);
         }
-        if (!Deferred)
+        if (!Deferred && !Stale)
         {
             if (RetainTables && !Space->IsSystem)
                 MiPtCacheEmpty(Space, TableFrame, TableVa);
@@ -2193,7 +2213,7 @@ MiRemoveMappedView(
     _Inout_ PMI_ADDRESS_SPACE Space,
     _Inout_ PMI_VAD Vad)
 {
-    PMI_SEGMENT Segment = MiDetachMappedView(Space, Vad, FALSE);
+    PMI_SEGMENT Segment = MiDetachMappedView(Space, Vad, FALSE, FALSE);
 
     MI_FREE(Vad);
     MiSegmentDereference(Segment);
@@ -2301,7 +2321,7 @@ MiMapViewInternal(
     else if (Replace)
     {
         Placeholder = MiVadLocate(Space, Start);
-        if (Placeholder == NULL || !Placeholder->Placeholder || MI_VAD_START(Placeholder) != Start ||
+        if (Placeholder == NULL || !Placeholder->Placeholder || Placeholder->StaleView || MI_VAD_START(Placeholder) != Start ||
             MI_VAD_END(Placeholder) != Start + Size || Start + Size - 1 > HighestAddress)
         {
             MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
@@ -2393,6 +2413,140 @@ MiMapCacheView(
                              MI_PROT_READWRITE, MI_MEM_RESERVE, ~0ULL, 0, FALSE, TRUE);
 }
 
+static
+VOID
+MiFreeVadList(
+    _In_opt_ PMI_VAD Vad)
+{
+    while (Vad != NULL)
+    {
+        PMI_VAD Next = (PMI_VAD)Vad->Node.Left;
+
+        MI_FREE(Vad);
+        Vad = Next;
+    }
+}
+
+static
+VOID
+MiAssertStaleViews(
+    _In_ PMI_SYSTEM System)
+{
+#if DBG || defined(MM_HOST_TEST)
+    ULONG i;
+
+    MI_ASSERT(System->StaleViewCount <= MI_STALE_VIEW_LIMIT);
+    for (i = 0; i < MI_STALE_VIEW_LIMIT; i++)
+    {
+        PMI_VAD Vad = System->StaleViews[i];
+
+        MI_ASSERT((i < System->StaleViewCount) == (Vad != NULL));
+        if (Vad == NULL)
+            continue;
+        MI_ASSERT(Vad->StaleView);
+        MiAssertPlaceholderVad(Vad);
+        MI_ASSERT(MiVadFind(&System->SystemSpace.VadRoot, Vad->Node.StartingVpn) == &Vad->Node);
+    }
+#else
+    UNREFERENCED_PARAMETER(System);
+#endif
+}
+
+VOID
+MiFlushStaleViewsLocked(
+    _Inout_ PMI_ADDRESS_SPACE Space)
+{
+    PMI_SYSTEM System = Space->System;
+    MI_TLB_BATCH Batch;
+    BOOLEAN Owner;
+    ULONG i;
+
+    MI_ASSERT(Space == &System->SystemSpace);
+    MiAssertStaleViews(System);
+    if (System->StaleViewCount == 0)
+        return;
+
+    Owner = MiTlbBatchBegin(Space, &Batch);
+    MI_ASSERT(Owner);
+    Space->TlbBatch->Invalidate = MI_TLB_INVALIDATE_ALL;
+    for (i = 0; i < System->StaleViewCount; i++)
+    {
+        PMI_VAD Vad = System->StaleViews[i];
+        ULONG64 Va = MI_VAD_START(Vad);
+        ULONG64 End = MI_VAD_END(Vad);
+
+        MiVadRemove(&Space->VadRoot, &Vad->Node);
+        while (Va < End)
+        {
+            MiPtPruneEmpty(Space, Va);
+            Va = MiPtNextTableBoundary(Space, Va);
+        }
+        System->StaleViews[i] = NULL;
+        if (!MiVadCacheFree(Space, Vad))
+        {
+            Vad->Node.Left = (PMI_VAD_NODE)System->StaleVadSpares;
+            System->StaleVadSpares = Vad;
+        }
+    }
+    System->StaleViewCount = 0;
+    if (Owner)
+        MiTlbBatchEnd(Space, Owner);
+    else
+        MiArchTlbInvalidateAll(TRUE);
+    MiAssertStaleViews(System);
+}
+
+VOID
+MiFlushStaleViews(
+    _Inout_ PMI_ADDRESS_SPACE Space)
+{
+    PMI_VAD Spares;
+
+    MI_ASSERT(Space == &Space->System->SystemSpace);
+    MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
+    MiFlushStaleViewsLocked(Space);
+    Spares = Space->System->StaleVadSpares;
+    Space->System->StaleVadSpares = NULL;
+    MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
+    MiFreeVadList(Spares);
+}
+
+static
+VOID
+MiRetainStaleView(
+    _Inout_ PMI_ADDRESS_SPACE Space,
+    _Inout_ PMI_VAD Vad,
+    _In_ ULONG64 StartingVpn,
+    _In_ ULONG64 EndingVpn)
+{
+    PMI_SYSTEM System = Space->System;
+
+    MI_ASSERT(Space == &System->SystemSpace);
+    MI_ASSERT(Space->TlbBatch == NULL);
+    MiAssertStaleViews(System);
+    MI_ASSERT(System->StaleViewCount < MI_STALE_VIEW_LIMIT);
+    RtlZeroMemory(Vad, sizeof(*Vad));
+    Vad->Node.StartingVpn = StartingVpn;
+    Vad->Node.EndingVpn = EndingVpn;
+    Vad->Protection = MI_PROT_NOACCESS;
+    Vad->Type = MiVadPrivate;
+    Vad->Placeholder = TRUE;
+    Vad->StaleView = TRUE;
+    MiAssertPlaceholderVad(Vad);
+    if (!MiVadInsert(&Space->VadRoot, &Vad->Node))
+    {
+        MI_ASSERT(FALSE);
+        MiArchTlbInvalidateAll(TRUE);
+        Vad->Node.Left = (PMI_VAD_NODE)System->StaleVadSpares;
+        System->StaleVadSpares = Vad;
+        return;
+    }
+    System->StaleViews[System->StaleViewCount++] = Vad;
+    if (System->StaleViewCount == MI_STALE_VIEW_LIMIT)
+        MiFlushStaleViewsLocked(Space);
+    MiAssertStaleViews(System);
+}
+
 NTSTATUS
 MiUnmapViewEx(
     _Inout_ PMI_ADDRESS_SPACE Space,
@@ -2401,8 +2555,10 @@ MiUnmapViewEx(
 {
     PMI_SEGMENT Segment;
     PMI_VAD Vad;
+    PMI_VAD Spares = NULL;
     ULONG64 StartingVpn;
     ULONG64 EndingVpn;
+    BOOLEAN Stale;
 
     MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
 
@@ -2437,7 +2593,8 @@ MiUnmapViewEx(
     }
     StartingVpn = Vad->Node.StartingVpn;
     EndingVpn = Vad->Node.EndingVpn;
-    Segment = MiDetachMappedView(Space, Vad, TRUE);
+    Stale = (BOOLEAN)(!PreservePlaceholder && Space == &Space->System->SystemSpace && Vad->CacheView);
+    Segment = MiDetachMappedView(Space, Vad, TRUE, Stale);
     if (PreservePlaceholder)
     {
         RtlZeroMemory(Vad, sizeof(*Vad));
@@ -2450,14 +2607,25 @@ MiUnmapViewEx(
         MiVadInsert(&Space->VadRoot, &Vad->Node);
         Vad = NULL;
     }
+    else if (Stale)
+    {
+        MiRetainStaleView(Space, Vad, StartingVpn, EndingVpn);
+        Vad = NULL;
+    }
     else if (MiVadCacheFree(Space, Vad))
     {
         Vad = NULL;
+    }
+    if (Space == &Space->System->SystemSpace)
+    {
+        Spares = Space->System->StaleVadSpares;
+        Space->System->StaleVadSpares = NULL;
     }
     MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
 
     if (Vad != NULL)
         MI_FREE(Vad);
+    MiFreeVadList(Spares);
     MiSegmentDereference(Segment);
     return STATUS_SUCCESS;
 }

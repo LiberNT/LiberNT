@@ -20,6 +20,11 @@ struct _MI_SECTION_VIEW;
 #define MI_TLB_BATCH_SIZE 32
 #define MI_EMPTY_TABLE_CACHE_SIZE 8
 #define MI_VAD_CACHE_SIZE 16
+#define MI_STALE_VIEW_LIMIT 32
+
+#define MI_TLB_INVALIDATE_RANGES 0
+#define MI_TLB_INVALIDATE_NONE   1
+#define MI_TLB_INVALIDATE_ALL    2
 
 typedef struct _MI_EMPTY_TABLE
 {
@@ -42,6 +47,7 @@ typedef struct _MI_TLB_BATCH
 {
     ULONG Count;
     BOOLEAN DeferTables;
+    UCHAR Invalidate;
     MI_TLB_BATCH_ENTRY Entry[MI_TLB_BATCH_SIZE];
 } MI_TLB_BATCH, *PMI_TLB_BATCH;
 
@@ -129,6 +135,9 @@ typedef struct _MI_SYSTEM
     ULONG64 (*OwnerProcessors)(_In_ PVOID Owner);
     PMI_EXPAND_COMMIT ExpandCommit;
     VOID (*UnusedSegmentsExceeded)(_Inout_ struct _MI_SYSTEM *System);
+    struct _MI_VAD *StaleViews[MI_STALE_VIEW_LIMIT];
+    ULONG StaleViewCount;
+    struct _MI_VAD *StaleVadSpares;
 } MI_SYSTEM, *PMI_SYSTEM;
 
 FORCEINLINE
@@ -244,6 +253,7 @@ typedef struct _MI_VAD
     BOOLEAN EcCode;
     BOOLEAN Placeholder;
     BOOLEAN FromPlaceholder;
+    BOOLEAN StaleView;
     volatile LONG PteTouched;
     struct _MI_SEGMENT *Segment;
     ULONG64 SegmentPageOffset;
@@ -673,6 +683,8 @@ NTSTATUS MiMapViewEx(_Inout_ PMI_ADDRESS_SPACE Space, _Inout_ PMI_SEGMENT Segmen
                      _In_ ULONG AllocationType, _In_ ULONG64 HighestAddress, _In_ ULONG MaximumProtection,
                      _In_ BOOLEAN Inherit);
 NTSTATUS MiUnmapView(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 BaseAddress);
+VOID MiFlushStaleViewsLocked(_Inout_ PMI_ADDRESS_SPACE Space);
+VOID MiFlushStaleViews(_Inout_ PMI_ADDRESS_SPACE Space);
 NTSTATUS MiUnmapViewEx(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 BaseAddress, _In_ BOOLEAN PreservePlaceholder);
 NTSTATUS MiMapCacheView(_Inout_ PMI_SEGMENT Segment, _Inout_ PULONG64 BaseAddress,
                         _In_ ULONG64 SectionOffset, _Inout_ PULONG64 ViewSize);
