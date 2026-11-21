@@ -241,6 +241,7 @@ PspAdoptIdleProcess(VOID)
 {
     PETHREAD Thread = PsGetCurrentThread();
 
+    ASSERT(Thread->Tcb.ApcState.Process == &KiInitialProcess.Pcb);
     PsIdleProcess = &KiInitialProcess;
 
     InitializeListHead(&PsIdleProcess->ThreadListHead);
