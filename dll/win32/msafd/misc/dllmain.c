@@ -793,6 +793,52 @@ MsafdWaitForAlert(
     }
 }
 
+/* AFD opens new handles to the endpoint's TDI address and connection objects in this process; the socket keeps one pair */
+static
+NTSTATUS
+MsafdRefreshTdiHandles(
+    _Inout_ PSOCKET_INFORMATION Socket)
+{
+    AFD_TDI_HANDLE_DATA HandleData = { NULL, NULL };
+    ULONG Flags = AFD_ADDRESS_HANDLE | AFD_CONNECTION_HANDLE;
+    IO_STATUS_BLOCK IoStatus;
+    HANDLE Event;
+    NTSTATUS Status;
+
+    Status = NtCreateEvent(&Event, EVENT_ALL_ACCESS, NULL, SynchronizationEvent, FALSE);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = NtDeviceIoControlFile((HANDLE)Socket->Handle,
+                                   Event,
+                                   NULL,
+                                   NULL,
+                                   &IoStatus,
+                                   IOCTL_AFD_GET_TDI_HANDLES,
+                                   &Flags,
+                                   sizeof(Flags),
+                                   &HandleData,
+                                   sizeof(HandleData));
+    if (Status == STATUS_PENDING)
+    {
+        MsafdWaitForAlert(Event);
+        Status = IoStatus.Status;
+    }
+    NtClose(Event);
+
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (Socket->TdiAddressHandle != NULL)
+        NtClose(Socket->TdiAddressHandle);
+    if (Socket->TdiConnectionHandle != NULL)
+        NtClose(Socket->TdiConnectionHandle);
+
+    Socket->TdiAddressHandle = HandleData.TdiAddressHandle;
+    Socket->TdiConnectionHandle = HandleData.TdiConnectionHandle;
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 MsafdWaitForCompletion(
     _In_ PSOCKET_INFORMATION Socket,
@@ -2125,6 +2171,7 @@ WSPAccept(
     }
 
     AcceptSocketInfo->SharedData->State = SocketConnected;
+    MsafdRefreshTdiHandles(AcceptSocketInfo);
     AcceptSocketInfo->SharedData->ConnectTime = GetCurrentTimeInSeconds();
     AcceptSocketInfo->SharedData->NonBlocking = Socket->SharedData->NonBlocking;
 
@@ -2195,7 +2242,7 @@ MsafdCompleteConnect(
         {
             Socket->SharedData->SocketLastError = NO_ERROR;
             Socket->SharedData->State = SocketConnected;
-            Socket->TdiConnectionHandle = (HANDLE)IoStatusBlock->Information;
+            MsafdRefreshTdiHandles(Socket);
             Socket->SharedData->ConnectTime = GetCurrentTimeInSeconds();
         }
 
@@ -2464,7 +2511,7 @@ WSPConnect(SOCKET Handle,
             goto Leave;
 
         Socket->SharedData->State = SocketConnected;
-        Socket->TdiConnectionHandle = (HANDLE)IOSB->Information;
+        MsafdRefreshTdiHandles(Socket);
         Socket->SharedData->ConnectTime = GetCurrentTimeInSeconds();
     }
 
@@ -3625,7 +3672,7 @@ MsafdUpdateConnectionContext(
     PIO_STATUS_BLOCK           IOSB = &DummyIOSB;
     NTSTATUS                   Status;
     SOCK_SHARED_INFO SharedData;
-    AFD_TDI_HANDLE_DATA HandleData;
+    AFD_TDI_HANDLE_DATA HandleData = { NULL, NULL };
     HANDLE SockEvent;
     PSOCKET_INFORMATION Socket = GetSocketStructure(Handle);
 
@@ -3637,6 +3684,9 @@ MsafdUpdateConnectionContext(
 
     if (Socket->SharedData->State == SocketConnected)
     {
+        /* An AcceptEx socket is connected before it is updated, without TDI handles yet */
+        if (Socket->TdiConnectionHandle == NULL)
+            MsafdRefreshTdiHandles(Socket);
         return NO_ERROR;
     }
 
@@ -3698,6 +3748,10 @@ MsafdUpdateConnectionContext(
     if (SharedData.State == SocketConnected)
     {
         /* Socket is now connected, update usermode msafd socket structure, same as the end of WSPConnect */
+        if (Socket->TdiAddressHandle != NULL)
+            NtClose(Socket->TdiAddressHandle);
+        if (Socket->TdiConnectionHandle != NULL)
+            NtClose(Socket->TdiConnectionHandle);
         Socket->TdiConnectionHandle = HandleData.TdiConnectionHandle;
         Socket->TdiAddressHandle = HandleData.TdiAddressHandle;
         Socket->SharedData->ConnectTime = SharedData.ConnectTime;
@@ -3713,6 +3767,13 @@ MsafdUpdateConnectionContext(
                                       Socket->TdiAddressHandle,
                                       Socket->TdiConnectionHandle,
                                       WSH_NOTIFY_CONNECT);
+    }
+    else
+    {
+        if (HandleData.TdiAddressHandle != NULL)
+            NtClose(HandleData.TdiAddressHandle);
+        if (HandleData.TdiConnectionHandle != NULL)
+            NtClose(HandleData.TdiConnectionHandle);
     }
 
     NtClose(SockEvent);
