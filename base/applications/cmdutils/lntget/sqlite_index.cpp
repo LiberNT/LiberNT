@@ -624,7 +624,7 @@ Status SQLiteIndex::LoadArpCorrelation(std::map<std::string, PackageRecord> &pro
             return Status::Ok();
         const auto package = rows.find(values[1].integer);
         if (package != rows.end())
-            productCodes.emplace(AsciiLower(values[0].text), package->second);
+            productCodes.insert(std::make_pair(AsciiLower(values[0].text), package->second));
         return Status::Ok();
     });
 }

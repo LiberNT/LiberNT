@@ -219,7 +219,7 @@ Status ExtractArchive(const std::wstring &archivePath, const std::wstring &desti
             unzClose(archive);
             return Status::Fail(ERROR_FILE_TOO_LARGE, "the downloaded archive expands beyond 8 GiB");
         }
-        if (relative.back() == L'\\')
+        if (relative[relative.size() - 1] == L'\\')
         {
             status = EnsureDirectoryTree(destination, relative);
         }
