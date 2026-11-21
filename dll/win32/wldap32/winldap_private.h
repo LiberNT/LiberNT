@@ -221,6 +221,7 @@ typedef struct ldap
     ULONG ld_cldaptimeout;
     ULONG ld_refhoplimit;
     ULONG ld_options;
+    ULONG ld_anonymousmaxvalrange;
 } LDAP, *PLDAP;
 
 typedef BOOLEAN (CDECL QUERYCLIENTCERT)(LDAP *, SecPkgContext_IssuerListInfoEx *, const CERT_CONTEXT **);

@@ -1855,10 +1855,45 @@ typedef struct _CRYPT_PASSWORD_CREDENTIALSW {
 #define CRYPT_PASSWORD_CREDENTIALS WINELIB_NAME_AW(CRYPT_PASSWORD_CREDENTIALS)
 #define PCRYPT_PASSWORD_CREDENTIALS WINELIB_NAME_AW(PCRYPT_PASSWORD_CREDENTIALS)
 
+typedef struct _CRYPTNET_URL_CACHE_PRE_FETCH_INFO {
+    DWORD     cbSize;
+    DWORD     dwObjectType;
+    DWORD     dwError;
+    DWORD     dwReserved;
+    FILETIME  ThisUpdateTime;
+    FILETIME  NextUpdateTime;
+    FILETIME  PublishTime;
+} CRYPTNET_URL_CACHE_PRE_FETCH_INFO, *PCRYPTNET_URL_CACHE_PRE_FETCH_INFO;
+
+typedef struct _CRYPTNET_URL_CACHE_FLUSH_INFO {
+    DWORD     cbSize;
+    DWORD     dwExemptSeconds;
+    FILETIME  ExpireTime;
+} CRYPTNET_URL_CACHE_FLUSH_INFO, *PCRYPTNET_URL_CACHE_FLUSH_INFO;
+
+typedef struct _CRYPTNET_URL_CACHE_RESPONSE_INFO {
+    DWORD     cbSize;
+    WORD      wResponseType;
+    WORD      wResponseFlags;
+    FILETIME  LastModifiedTime;
+    DWORD     dwMaxAge;
+    LPCWSTR   pwszETag;
+    DWORD     dwProxyId;
+} CRYPTNET_URL_CACHE_RESPONSE_INFO, *PCRYPTNET_URL_CACHE_RESPONSE_INFO;
+
 typedef struct _CRYPT_RETRIEVE_AUX_INFO {
     DWORD     cbSize;
     FILETIME *pLastSyncTime;
     DWORD     dwMaxUrlRetrievalByteCount;
+    PCRYPTNET_URL_CACHE_PRE_FETCH_INFO pPreFetchInfo;
+    PCRYPTNET_URL_CACHE_FLUSH_INFO pFlushInfo;
+    PCRYPTNET_URL_CACHE_RESPONSE_INFO *ppResponseInfo;
+    LPWSTR    pwszCacheFileNamePrefix;
+    LPFILETIME pftCacheResync;
+    BOOL      fProxyCacheRetrieval;
+    DWORD     dwHttpStatusCode;
+    LPWSTR   *ppwszErrorResponseHeaders;
+    PCRYPT_DATA_BLOB *ppErrorContentBlob;
 } CRYPT_RETRIEVE_AUX_INFO, *PCRYPT_RETRIEVE_AUX_INFO;
 
 #ifdef __REACTOS__
