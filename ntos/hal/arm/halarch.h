@@ -33,3 +33,10 @@ HalpLoaderDeviceTree(
     *Size = (SIZE_T)LoaderBlock->u.Arm.DeviceTreeSize;
     return *Blob != NULL;
 }
+
+/* Configuration space stays mapped: there is no physical alias to reach it through at raised IRQL. */
+PVOID
+HalpArchMapConfigSpace(
+    _In_ PHYSICAL_ADDRESS PhysicalPage);
+
+#define HalpArchUnmapConfigSpace(Mapping) ((VOID)(Mapping))

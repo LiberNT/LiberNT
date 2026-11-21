@@ -128,7 +128,7 @@ HalpAcpiReadEcamBytes(
     physAddr = Allocation->BaseAddress + deviceOffset;
     phys.QuadPart = physAddr & ~((ULONGLONG)PAGE_SIZE - 1);
 
-    tempMapping = MmMapIoSpace(phys, PAGE_SIZE, MmNonCached);
+    tempMapping = HalpArchMapConfigSpace(phys);
     if (!tempMapping)
     {
         RtlFillMemory(Buffer, Length, 0xFF);
@@ -167,7 +167,7 @@ HalpAcpiReadEcamBytes(
         remaining -= toCopy;
     }
 
-    MmUnmapIoSpace(tempMapping, PAGE_SIZE);
+    HalpArchUnmapConfigSpace(tempMapping);
 }
 
 static
@@ -198,7 +198,7 @@ HalpAcpiWriteEcamBytes(
     physAddr = Allocation->BaseAddress + deviceOffset;
     phys.QuadPart = physAddr & ~((ULONGLONG)PAGE_SIZE - 1);
 
-    tempMapping = MmMapIoSpace(phys, PAGE_SIZE, MmNonCached);
+    tempMapping = HalpArchMapConfigSpace(phys);
     if (!tempMapping)
     {
         return;
@@ -245,7 +245,7 @@ HalpAcpiWriteEcamBytes(
         remaining -= toWrite;
     }
 
-    MmUnmapIoSpace(tempMapping, PAGE_SIZE);
+    HalpArchUnmapConfigSpace(tempMapping);
 }
 
 PHYSICAL_ADDRESS HalpFacsPhysicalAddress;

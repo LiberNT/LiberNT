@@ -62,6 +62,9 @@ if(ARCH STREQUAL "arm" OR ARCH STREQUAL "arm64")
         ${_arm_hal_common_dir}/gic/gic_redist.c
         ${_arm_hal_common_dir}/gic/gicv2.c
         ${_arm_hal_common_dir}/gic/gicv3.c)
+    if(ARCH STREQUAL "arm")
+        list(APPEND _arm_hal_sources ${_arm_hal_arch_dir}/pciconfig.c)
+    endif()
     set_property(SOURCE ${_arm_hal_sources} PROPERTY SKIP_PRECOMPILE_HEADERS ON)
     set_property(SOURCE ${_arm_hal_sources} APPEND PROPERTY COMPILE_DEFINITIONS _NTHAL_)
     set_property(SOURCE ${_arm_hal_sources} APPEND PROPERTY INCLUDE_DIRECTORIES
