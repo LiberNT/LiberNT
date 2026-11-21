@@ -78,7 +78,7 @@ RtlWalkFrameChain(
         if (!Return || (Return < (ULONG_PTR)MmSystemRangeStart))
             break;
         if (Index >= Skip)
-            Callers[Captured++] = (PVOID)(Return & ~1UL);
+            Callers[Captured++] = (PVOID)Return;
         if (Next <= Frame)
             break;
         Frame = Next;
