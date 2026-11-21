@@ -200,6 +200,435 @@ C_ASSERT_FIELD(KTHREAD, 0x48C, SchedulerAssistYieldBoostCount)
 C_ASSERT_FIELD(KTHREAD, 0x490, SchedulerAssistLastYieldBoostTime)
 /* FIXME: KTHREAD.Padding is at 0x498 on Windows 11 */
 
+/* KPCR */
+/* FIXME: sizeof(KPCR) is 0xD080 on Windows 11 */
+/* FIXME: KPCR.NtTib is at 0x000 on Windows 11 */
+/* FIXME: KPCR.GdtBase is at 0x000 on Windows 11 */
+/* FIXME: KPCR.TssBase is at 0x008 on Windows 11 */
+/* FIXME: KPCR.UserRsp is at 0x010 on Windows 11 */
+/* FIXME: KPCR.Self is at 0x018 on Windows 11 */
+/* FIXME: KPCR.CurrentPrcb is at 0x020 on Windows 11 */
+/* FIXME: KPCR.LockArray is at 0x028 on Windows 11 */
+/* FIXME: KPCR.Used_Self is at 0x030 on Windows 11 */
+C_ASSERT_FIELD(KPCR, 0x038, IdtBase)
+C_ASSERT_FIELD(KPCR, 0x040, Unused)
+C_ASSERT_FIELD(KPCR, 0x050, Irql)
+C_ASSERT_FIELD(KPCR, 0x051, SecondLevelCacheAssociativity)
+C_ASSERT_FIELD(KPCR, 0x052, ObsoleteNumber)
+C_ASSERT_FIELD(KPCR, 0x053, Fill0)
+C_ASSERT_FIELD(KPCR, 0x054, Unused0)
+C_ASSERT_FIELD(KPCR, 0x060, MajorVersion)
+C_ASSERT_FIELD(KPCR, 0x062, MinorVersion)
+C_ASSERT_FIELD(KPCR, 0x064, StallScaleFactor)
+C_ASSERT_FIELD(KPCR, 0x068, Unused1)
+C_ASSERT_FIELD(KPCR, 0x080, KernelReserved)
+C_ASSERT_FIELD(KPCR, 0x0BC, SecondLevelCacheSize)
+C_ASSERT_FIELD(KPCR, 0x0C0, HalReserved)
+C_ASSERT_FIELD(KPCR, 0x100, Unused2)
+C_ASSERT_FIELD(KPCR, 0x108, KdVersionBlock)
+C_ASSERT_FIELD(KPCR, 0x110, Unused3)
+C_ASSERT_FIELD(KPCR, 0x118, PcrAlign1)
+/* FIXME: KPCR.Prcb is at 0x180 on Windows 11 */
+
+/* KPRCB */
+/* FIXME: sizeof(KPRCB) is 0xCF00 on Windows 11 */
+C_ASSERT_FIELD(KPRCB, 0x000, MxCsr)
+C_ASSERT_FIELD(KPRCB, 0x004, LegacyNumber)
+C_ASSERT_FIELD(KPRCB, 0x005, ReservedMustBeZero)
+C_ASSERT_FIELD(KPRCB, 0x006, InterruptRequest)
+C_ASSERT_FIELD(KPRCB, 0x007, IdleHalt)
+C_ASSERT_FIELD(KPRCB, 0x008, CurrentThread)
+C_ASSERT_FIELD(KPRCB, 0x010, NextThread)
+C_ASSERT_FIELD(KPRCB, 0x018, IdleThread)
+C_ASSERT_FIELD(KPRCB, 0x020, NestingLevel)
+C_ASSERT_FIELD(KPRCB, 0x021, ClockOwner)
+C_ASSERT_FIELD(KPRCB, 0x022, PendingTickFlags)
+/* FIXME: KPRCB.PendingTick is at 0x022 on Windows 11 */
+C_ASSERT_FIELD(KPRCB, 0x023, IdleState)
+C_ASSERT_FIELD(KPRCB, 0x024, Number)
+C_ASSERT_FIELD(KPRCB, 0x028, RspBase)
+C_ASSERT_FIELD(KPRCB, 0x030, PrcbLock)
+C_ASSERT_FIELD(KPRCB, 0x038, PriorityState)
+/* FIXME: KPRCB.CpuType is at 0x040 on Windows 11 */
+/* FIXME: KPRCB.CpuID is at 0x041 on Windows 11 */
+/* FIXME: KPRCB.CpuStep is at 0x042 on Windows 11 */
+/* FIXME: KPRCB.CpuStepping is at 0x042 on Windows 11 */
+/* FIXME: KPRCB.CpuModel is at 0x043 on Windows 11 */
+/* FIXME: KPRCB.MHz is at 0x044 on Windows 11 */
+/* FIXME: KPRCB.HalReserved is at 0x048 on Windows 11 */
+/* FIXME: KPRCB.MinorVersion is at 0x088 on Windows 11 */
+/* FIXME: KPRCB.MajorVersion is at 0x08A on Windows 11 */
+/* FIXME: KPRCB.BuildType is at 0x08C on Windows 11 */
+/* FIXME: KPRCB.CpuVendor is at 0x08D on Windows 11 */
+/* FIXME: KPRCB.LegacyCoresPerPhysicalProcessor is at 0x08E on Windows 11 */
+/* FIXME: KPRCB.LegacyLogicalProcessorsPerCore is at 0x08F on Windows 11 */
+/* FIXME: KPRCB.TscFrequency is at 0x090 on Windows 11 */
+/* FIXME: KPRCB.TracepointLog is at 0x098 on Windows 11 */
+/* FIXME: KPRCB.CoresPerPhysicalProcessor is at 0x0A0 on Windows 11 */
+/* FIXME: KPRCB.LogicalProcessorsPerCore is at 0x0A4 on Windows 11 */
+/* FIXME: KPRCB.SelfIpiRequestSummary is at 0x0A8 on Windows 11 */
+/* FIXME: KPRCB.QpcToTscIncrementShift is at 0x0AC on Windows 11 */
+/* FIXME: KPRCB.PrcbPad03 is at 0x0AD on Windows 11 */
+/* FIXME: KPRCB.QpcToTscIncrement is at 0x0B0 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad04 is at 0x0B8 on Windows 11 */
+/* FIXME: KPRCB.SchedulerSubNode is at 0x0C0 on Windows 11 */
+/* FIXME: KPRCB.GroupSetMember is at 0x0C8 on Windows 11 */
+/* FIXME: KPRCB.Group is at 0x0D0 on Windows 11 */
+/* FIXME: KPRCB.GroupIndex is at 0x0D1 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad05 is at 0x0D2 on Windows 11 */
+/* FIXME: KPRCB.InitialApicId is at 0x0D4 on Windows 11 */
+/* FIXME: KPRCB.ScbOffset is at 0x0D8 on Windows 11 */
+/* FIXME: KPRCB.ApicMask is at 0x0DC on Windows 11 */
+/* FIXME: KPRCB.AcpiReserved is at 0x0E0 on Windows 11 */
+/* FIXME: KPRCB.CFlushSize is at 0x0E8 on Windows 11 */
+/* FIXME: KPRCB.PrcbFlags is at 0x0EC on Windows 11 */
+/* FIXME: KPRCB.PrcbFlagsReserved is at 0x0EC on Windows 11 */
+/* FIXME: KPRCB.PrcbPad11 is at 0x0F0 on Windows 11 */
+/* FIXME: KPRCB.ProcessorState is at 0x100 on Windows 11 */
+/* FIXME: KPRCB.ExtendedSupervisorState is at 0x6C0 on Windows 11 */
+/* FIXME: KPRCB.ProcessorSignature is at 0x6C8 on Windows 11 */
+/* FIXME: KPRCB.ProcessorFlags is at 0x6CC on Windows 11 */
+/* FIXME: KPRCB.TrappedSecurityDomain is at 0x6D0 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad12a is at 0x6D0 on Windows 11 */
+/* FIXME: KPRCB.BpbState is at 0x6D8 on Windows 11 */
+/* FIXME: KPRCB.BpbTrappedBpbState is at 0x6DA on Windows 11 */
+/* FIXME: KPRCB.BpbFeatures is at 0x6DC on Windows 11 */
+/* FIXME: KPRCB.PrcbPad12b is at 0x6DD on Windows 11 */
+/* FIXME: KPRCB.BpbRetpolineState is at 0x6DE on Windows 11 */
+/* FIXME: KPRCB.BpbRetpolineStateOverflow is at 0x6DF on Windows 11 */
+/* FIXME: KPRCB.PairRegister is at 0x6E0 on Windows 11 */
+/* FIXME: KPRCB.BpbRetpolineExitSpecCtrl is at 0x6E2 on Windows 11 */
+/* FIXME: KPRCB.BpbTrappedRetpolineExitSpecCtrl is at 0x6E4 on Windows 11 */
+/* FIXME: KPRCB.BpbCurrentSpecCtrl is at 0x6E6 on Windows 11 */
+/* FIXME: KPRCB.BpbKernelSpecCtrl is at 0x6E8 on Windows 11 */
+/* FIXME: KPRCB.BpbNmiSpecCtrl is at 0x6EA on Windows 11 */
+/* FIXME: KPRCB.BpbUserSpecCtrl is at 0x6EC on Windows 11 */
+/* FIXME: KPRCB.PrcbPad12c is at 0x6EE on Windows 11 */
+/* FIXME: KPRCB.LockQueue is at 0x6F0 on Windows 11 */
+/* FIXME: KPRCB.PPLookasideList is at 0x800 on Windows 11 */
+/* FIXME: KPRCB.PPNxPagedLookasideList is at 0x900 on Windows 11 */
+/* FIXME: KPRCB.PPNPagedLookasideList is at 0x1500 on Windows 11 */
+/* FIXME: KPRCB.PPPagedLookasideList is at 0x2100 on Windows 11 */
+/* FIXME: KPRCB.MsrIa32TsxCtrl is at 0x2D00 on Windows 11 */
+/* FIXME: KPRCB.DeferredReadyListHead is at 0x2D08 on Windows 11 */
+/* FIXME: KPRCB.MmPageFaultCount is at 0x2D10 on Windows 11 */
+/* FIXME: KPRCB.MmCopyOnWriteCount is at 0x2D14 on Windows 11 */
+/* FIXME: KPRCB.MmTransitionCount is at 0x2D18 on Windows 11 */
+/* FIXME: KPRCB.MmDemandZeroCount is at 0x2D1C on Windows 11 */
+/* FIXME: KPRCB.MmPageReadCount is at 0x2D20 on Windows 11 */
+/* FIXME: KPRCB.MmPageReadIoCount is at 0x2D24 on Windows 11 */
+/* FIXME: KPRCB.MmDirtyPagesWriteCount is at 0x2D28 on Windows 11 */
+/* FIXME: KPRCB.MmDirtyWriteIoCount is at 0x2D2C on Windows 11 */
+/* FIXME: KPRCB.MmMappedPagesWriteCount is at 0x2D30 on Windows 11 */
+/* FIXME: KPRCB.MmMappedWriteIoCount is at 0x2D34 on Windows 11 */
+/* FIXME: KPRCB.KeSystemCalls is at 0x2D38 on Windows 11 */
+/* FIXME: KPRCB.KeContextSwitches is at 0x2D3C on Windows 11 */
+/* FIXME: KPRCB.PrcbPad40 is at 0x2D40 on Windows 11 */
+/* FIXME: KPRCB.CcFastReadNoWait is at 0x2D44 on Windows 11 */
+/* FIXME: KPRCB.CcFastReadWait is at 0x2D48 on Windows 11 */
+/* FIXME: KPRCB.CcFastReadNotPossible is at 0x2D4C on Windows 11 */
+/* FIXME: KPRCB.CcCopyReadNoWait is at 0x2D50 on Windows 11 */
+/* FIXME: KPRCB.CcCopyReadWait is at 0x2D54 on Windows 11 */
+/* FIXME: KPRCB.CcCopyReadNoWaitMiss is at 0x2D58 on Windows 11 */
+/* FIXME: KPRCB.IoReadOperationCount is at 0x2D5C on Windows 11 */
+/* FIXME: KPRCB.IoWriteOperationCount is at 0x2D60 on Windows 11 */
+/* FIXME: KPRCB.IoOtherOperationCount is at 0x2D64 on Windows 11 */
+/* FIXME: KPRCB.IoReadTransferCount is at 0x2D68 on Windows 11 */
+/* FIXME: KPRCB.IoWriteTransferCount is at 0x2D70 on Windows 11 */
+/* FIXME: KPRCB.IoOtherTransferCount is at 0x2D78 on Windows 11 */
+/* FIXME: KPRCB.PacketBarrier is at 0x2D80 on Windows 11 */
+/* FIXME: KPRCB.TargetCount is at 0x2D84 on Windows 11 */
+/* FIXME: KPRCB.IpiFrozen is at 0x2D88 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad30 is at 0x2D8C on Windows 11 */
+/* FIXME: KPRCB.IsrDpcStats is at 0x2D90 on Windows 11 */
+/* FIXME: KPRCB.DeviceInterrupts is at 0x2D98 on Windows 11 */
+/* FIXME: KPRCB.LookasideIrpFloat is at 0x2D9C on Windows 11 */
+/* FIXME: KPRCB.InterruptLastCount is at 0x2DA0 on Windows 11 */
+/* FIXME: KPRCB.InterruptRate is at 0x2DA4 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad31 is at 0x2DA8 on Windows 11 */
+/* FIXME: KPRCB.PairPrcb is at 0x2DB0 on Windows 11 */
+/* FIXME: KPRCB.StaticAffinity is at 0x2DB8 on Windows 11 */
+/* FIXME: KPRCB.DeferredDispatchInterrupts is at 0x35D8 on Windows 11 */
+/* FIXME: KPRCB.StaticRescheduleContext is at 0x37E8 on Windows 11 */
+/* FIXME: KPRCB.CpuPartition is at 0x37F0 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad35 is at 0x37F8 on Windows 11 */
+/* FIXME: KPRCB.InterruptObjectPool is at 0x3800 on Windows 11 */
+/* FIXME: KPRCB.DpcRuntimeHistoryHashTable is at 0x3810 on Windows 11 */
+/* FIXME: KPRCB.DpcRuntimeHistoryHashTableCleanupDpc is at 0x3818 on Windows 11 */
+/* FIXME: KPRCB.CurrentDpcRoutine is at 0x3820 on Windows 11 */
+/* FIXME: KPRCB.CurrentDpcRuntimeHistoryCached is at 0x3828 on Windows 11 */
+/* FIXME: KPRCB.CurrentDpcStartTime is at 0x3830 on Windows 11 */
+/* FIXME: KPRCB.DpcDelegateThread is at 0x3838 on Windows 11 */
+/* FIXME: KPRCB.DpcData is at 0x3840 on Windows 11 */
+/* FIXME: KPRCB.DpcStack is at 0x38A0 on Windows 11 */
+/* FIXME: KPRCB.MaximumDpcQueueDepth is at 0x38A8 on Windows 11 */
+/* FIXME: KPRCB.DpcRequestRate is at 0x38AC on Windows 11 */
+/* FIXME: KPRCB.MinimumDpcRate is at 0x38B0 on Windows 11 */
+/* FIXME: KPRCB.DpcLastCount is at 0x38B4 on Windows 11 */
+/* FIXME: KPRCB.ThreadDpcEnable is at 0x38B8 on Windows 11 */
+/* FIXME: KPRCB.QuantumEnd is at 0x38B9 on Windows 11 */
+/* FIXME: KPRCB.DpcRoutineActive is at 0x38BA on Windows 11 */
+/* FIXME: KPRCB.IdleSchedule is at 0x38BB on Windows 11 */
+/* FIXME: KPRCB.DpcRequestSummary is at 0x38BC on Windows 11 */
+/* FIXME: KPRCB.DpcRequestSlot is at 0x38BC on Windows 11 */
+/* FIXME: KPRCB.NormalDpcState is at 0x38BC on Windows 11 */
+/* FIXME: KPRCB.DpcNormalProcessingActive is at 0x38BC on Windows 11 */
+/* FIXME: KPRCB.DpcNormalSpare is at 0x38BD on Windows 11 */
+/* FIXME: KPRCB.ThreadDpcState is at 0x38BE on Windows 11 */
+/* FIXME: KPRCB.DpcThreadActive is at 0x38BE on Windows 11 */
+/* FIXME: KPRCB.LastTick is at 0x38C0 on Windows 11 */
+/* FIXME: KPRCB.ClockInterrupts is at 0x38C4 on Windows 11 */
+/* FIXME: KPRCB.ReadyScanTick is at 0x38C8 on Windows 11 */
+/* FIXME: KPRCB.SingleDpcSoftTimeLimitTicks is at 0x38CC on Windows 11 */
+/* FIXME: KPRCB.SingleDpcSoftTimeoutEventInfo is at 0x38D0 on Windows 11 */
+/* FIXME: KPRCB.CumulativeDpcSoftTimeLimitTicks is at 0x38D8 on Windows 11 */
+/* FIXME: KPRCB.DpcWatchdogProfileBufferSize is at 0x38DC on Windows 11 */
+/* FIXME: KPRCB.RcuData is at 0x38E0 on Windows 11 */
+/* FIXME: KPRCB.InterruptObject is at 0x3900 on Windows 11 */
+/* FIXME: KPRCB.TimerTable is at 0x4100 on Windows 11 */
+/* FIXME: KPRCB.DpcLog is at 0x8318 on Windows 11 */
+/* FIXME: KPRCB.DpcLogIndex is at 0x8320 on Windows 11 */
+/* FIXME: KPRCB.DpcLogBufferSize is at 0x8324 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad92 is at 0x8328 on Windows 11 */
+/* FIXME: KPRCB.DpcGate is at 0x8340 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad52 is at 0x8358 on Windows 11 */
+/* FIXME: KPRCB.CallDpc is at 0x8360 on Windows 11 */
+/* FIXME: KPRCB.ClockKeepAlive is at 0x83A0 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad60 is at 0x83A4 on Windows 11 */
+/* FIXME: KPRCB.NmiActive is at 0x83A6 on Windows 11 */
+/* FIXME: KPRCB.CombinedNmiMceActive is at 0x83A6 on Windows 11 */
+/* FIXME: KPRCB.MceActive is at 0x83A7 on Windows 11 */
+/* FIXME: KPRCB.DpcWatchdogPeriodTicks is at 0x83A8 on Windows 11 */
+/* FIXME: KPRCB.DpcWatchdogCount is at 0x83AC on Windows 11 */
+/* FIXME: KPRCB.KeSpinLockOrdering is at 0x83B0 on Windows 11 */
+/* FIXME: KPRCB.DpcWatchdogProfileCumulativeDpcThresholdTicks is at 0x83B4 on Windows 11 */
+/* FIXME: KPRCB.CachedPtes is at 0x83B8 on Windows 11 */
+/* FIXME: KPRCB.WaitListHead is at 0x83C0 on Windows 11 */
+/* FIXME: KPRCB.WaitLock is at 0x83D0 on Windows 11 */
+/* FIXME: KPRCB.ReadySummary is at 0x83D8 on Windows 11 */
+/* FIXME: KPRCB.AffinitizedSelectionMask is at 0x83DC on Windows 11 */
+/* FIXME: KPRCB.QueueIndex is at 0x83E0 on Windows 11 */
+/* FIXME: KPRCB.NormalPriorityQueueIndex is at 0x83E4 on Windows 11 */
+/* FIXME: KPRCB.NormalPriorityReadyScanTick is at 0x83E8 on Windows 11 */
+/* FIXME: KPRCB.DpcWatchdogSequenceNumber is at 0x83EC on Windows 11 */
+/* FIXME: KPRCB.TimerExpirationDpc is at 0x83F0 on Windows 11 */
+/* FIXME: KPRCB.ScbQueue is at 0x8430 on Windows 11 */
+/* FIXME: KPRCB.DispatcherReadyListHead is at 0x8440 on Windows 11 */
+/* FIXME: KPRCB.InterruptCount is at 0x8640 on Windows 11 */
+/* FIXME: KPRCB.KernelTime is at 0x8644 on Windows 11 */
+/* FIXME: KPRCB.UserTime is at 0x8648 on Windows 11 */
+/* FIXME: KPRCB.DpcTime is at 0x864C on Windows 11 */
+/* FIXME: KPRCB.InterruptTime is at 0x8650 on Windows 11 */
+/* FIXME: KPRCB.AdjustDpcThreshold is at 0x8654 on Windows 11 */
+/* FIXME: KPRCB.DebuggerSavedIRQL is at 0x8658 on Windows 11 */
+/* FIXME: KPRCB.GroupSchedulingOverQuota is at 0x8659 on Windows 11 */
+/* FIXME: KPRCB.DeepSleep is at 0x865A on Windows 11 */
+/* FIXME: KPRCB.PrcbPad80 is at 0x865B on Windows 11 */
+/* FIXME: KPRCB.DpcTimeCount is at 0x865C on Windows 11 */
+/* FIXME: KPRCB.DpcTimeLimitTicks is at 0x8660 on Windows 11 */
+/* FIXME: KPRCB.PeriodicCount is at 0x8664 on Windows 11 */
+/* FIXME: KPRCB.PeriodicBias is at 0x8668 on Windows 11 */
+/* FIXME: KPRCB.AvailableTime is at 0x866C on Windows 11 */
+/* FIXME: KPRCB.KeExceptionDispatchCount is at 0x8670 on Windows 11 */
+/* FIXME: KPRCB.ReadyThreadCount is at 0x8674 on Windows 11 */
+/* FIXME: KPRCB.ReadyQueueExpectedRunTime is at 0x8678 on Windows 11 */
+/* FIXME: KPRCB.StartCycles is at 0x8680 on Windows 11 */
+/* FIXME: KPRCB.TaggedCycles is at 0x8688 on Windows 11 */
+/* FIXME: KPRCB.AffinitizedCycles is at 0x86A8 on Windows 11 */
+/* FIXME: KPRCB.CyclesByThreadType is at 0x86B0 on Windows 11 */
+/* FIXME: KPRCB.CpuCycleScalingFactor is at 0x86B8 on Windows 11 */
+/* FIXME: KPRCB.PerformanceScoreByClass is at 0x86BC on Windows 11 */
+/* FIXME: KPRCB.EfficiencyScoreByClass is at 0x86CC on Windows 11 */
+/* FIXME: KPRCB.CycleAccumulationInitialized is at 0x86DC on Windows 11 */
+/* FIXME: KPRCB.PrcbPad83 is at 0x86DD on Windows 11 */
+/* FIXME: KPRCB.MceRecoveryContext is at 0x86E0 on Windows 11 */
+/* FIXME: KPRCB.ForceParkDutyCycleData is at 0x86F0 on Windows 11 */
+/* FIXME: KPRCB.StartCyclesQpc is at 0x86F8 on Windows 11 */
+/* FIXME: KPRCB.CycleTimeQpc is at 0x8700 on Windows 11 */
+/* FIXME: KPRCB.NumberOfSecureFaults is at 0x8708 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad84 is at 0x8710 on Windows 11 */
+/* FIXME: KPRCB.CachedStacks is at 0x8730 on Windows 11 */
+/* FIXME: KPRCB.DpcWatchdogProfileSingleDpcThresholdTicks is at 0x8740 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad82 is at 0x8744 on Windows 11 */
+/* FIXME: KPRCB.PageColor is at 0x8750 on Windows 11 */
+/* FIXME: KPRCB.NodeColor is at 0x8754 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad87 is at 0x8758 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad81 is at 0x8760 on Windows 11 */
+/* FIXME: KPRCB.SystemWorkKickInProgress is at 0x8765 on Windows 11 */
+/* FIXME: KPRCB.ExceptionStackActive is at 0x8766 on Windows 11 */
+/* FIXME: KPRCB.TbFlushListActive is at 0x8767 on Windows 11 */
+/* FIXME: KPRCB.ExceptionStack is at 0x8768 on Windows 11 */
+/* FIXME: KPRCB.MmSpinLockOrdering is at 0x8770 on Windows 11 */
+/* FIXME: KPRCB.CycleTime is at 0x8778 on Windows 11 */
+/* FIXME: KPRCB.Cycles is at 0x8780 on Windows 11 */
+/* FIXME: KPRCB.CcFastMdlReadNoWait is at 0x87C0 on Windows 11 */
+/* FIXME: KPRCB.CcFastMdlReadWait is at 0x87C4 on Windows 11 */
+/* FIXME: KPRCB.CcFastMdlReadNotPossible is at 0x87C8 on Windows 11 */
+/* FIXME: KPRCB.CcMapDataNoWait is at 0x87CC on Windows 11 */
+/* FIXME: KPRCB.CcMapDataWait is at 0x87D0 on Windows 11 */
+/* FIXME: KPRCB.CcPinMappedDataCount is at 0x87D4 on Windows 11 */
+/* FIXME: KPRCB.CcPinReadNoWait is at 0x87D8 on Windows 11 */
+/* FIXME: KPRCB.CcPinReadWait is at 0x87DC on Windows 11 */
+/* FIXME: KPRCB.CcMdlReadNoWait is at 0x87E0 on Windows 11 */
+/* FIXME: KPRCB.CcMdlReadWait is at 0x87E4 on Windows 11 */
+/* FIXME: KPRCB.CcLazyWriteHotSpots is at 0x87E8 on Windows 11 */
+/* FIXME: KPRCB.CcLazyWriteIos is at 0x87EC on Windows 11 */
+/* FIXME: KPRCB.CcLazyWritePages is at 0x87F0 on Windows 11 */
+/* FIXME: KPRCB.CcDataFlushes is at 0x87F4 on Windows 11 */
+/* FIXME: KPRCB.CcDataPages is at 0x87F8 on Windows 11 */
+/* FIXME: KPRCB.CcLostDelayedWrites is at 0x87FC on Windows 11 */
+/* FIXME: KPRCB.CcFastReadResourceMiss is at 0x8800 on Windows 11 */
+/* FIXME: KPRCB.CcCopyReadWaitMiss is at 0x8804 on Windows 11 */
+/* FIXME: KPRCB.CcFastMdlReadResourceMiss is at 0x8808 on Windows 11 */
+/* FIXME: KPRCB.CcMapDataNoWaitMiss is at 0x880C on Windows 11 */
+/* FIXME: KPRCB.CcMapDataWaitMiss is at 0x8810 on Windows 11 */
+/* FIXME: KPRCB.CcPinReadNoWaitMiss is at 0x8814 on Windows 11 */
+/* FIXME: KPRCB.CcPinReadWaitMiss is at 0x8818 on Windows 11 */
+/* FIXME: KPRCB.CcMdlReadNoWaitMiss is at 0x881C on Windows 11 */
+/* FIXME: KPRCB.CcMdlReadWaitMiss is at 0x8820 on Windows 11 */
+/* FIXME: KPRCB.CcReadAheadIos is at 0x8824 on Windows 11 */
+/* FIXME: KPRCB.MmCacheTransitionCount is at 0x8828 on Windows 11 */
+/* FIXME: KPRCB.MmCacheReadCount is at 0x882C on Windows 11 */
+/* FIXME: KPRCB.MmCacheIoCount is at 0x8830 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad91 is at 0x8834 on Windows 11 */
+/* FIXME: KPRCB.MmInternal is at 0x8838 on Windows 11 */
+/* FIXME: KPRCB.PowerState is at 0x8840 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad96 is at 0x8A78 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad90 is at 0x8A80 on Windows 11 */
+/* FIXME: KPRCB.ScbList is at 0x8A88 on Windows 11 */
+/* FIXME: KPRCB.ForceIdleDpc is at 0x8A98 on Windows 11 */
+/* FIXME: KPRCB.DpcWatchdogDpc is at 0x8AD8 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad98 is at 0x8B18 on Windows 11 */
+/* FIXME: KPRCB.VmInternal is at 0x8B50 on Windows 11 */
+/* FIXME: KPRCB.Cache is at 0x8B58 on Windows 11 */
+/* FIXME: KPRCB.CacheCount is at 0x8B94 on Windows 11 */
+/* FIXME: KPRCB.CachedCommit is at 0x8B98 on Windows 11 */
+/* FIXME: KPRCB.CachedResidentAvailable is at 0x8B9C on Windows 11 */
+/* FIXME: KPRCB.WheaInfo is at 0x8BA0 on Windows 11 */
+/* FIXME: KPRCB.EtwSupport is at 0x8BA8 on Windows 11 */
+/* FIXME: KPRCB.ExSaPageArray is at 0x8BB0 on Windows 11 */
+/* FIXME: KPRCB.KeAlignmentFixupCount is at 0x8BB8 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad95 is at 0x8BBC on Windows 11 */
+/* FIXME: KPRCB.HypercallPageList is at 0x8BC0 on Windows 11 */
+/* FIXME: KPRCB.StatisticsPage is at 0x8BD0 on Windows 11 */
+/* FIXME: KPRCB.GenerationTarget is at 0x8BD8 on Windows 11 */
+/* FIXME: KPRCB.VirtualApicAssistPage is at 0x8BE0 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad85 is at 0x8BE8 on Windows 11 */
+/* FIXME: KPRCB.HypercallCachedPages is at 0x8C00 on Windows 11 */
+/* FIXME: KPRCB.VirtualApicAssist is at 0x8C08 on Windows 11 */
+/* FIXME: KPRCB.PackageProcessorSet is at 0x8C10 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad86 is at 0x8D18 on Windows 11 */
+/* FIXME: KPRCB.ProcessorId is at 0x8E18 on Windows 11 */
+/* FIXME: KPRCB.TopologyId is at 0x8E18 on Windows 11 */
+/* FIXME: KPRCB.CoreId is at 0x8E1C on Windows 11 */
+/* FIXME: KPRCB.ModuleId is at 0x8E20 on Windows 11 */
+/* FIXME: KPRCB.DieId is at 0x8E24 on Windows 11 */
+/* FIXME: KPRCB.PackageId is at 0x8E28 on Windows 11 */
+/* FIXME: KPRCB.ComplexId is at 0x8E2C on Windows 11 */
+/* FIXME: KPRCB.PrcbPad101 is at 0x8E30 on Windows 11 */
+/* FIXME: KPRCB.SharedReadyQueueMask is at 0x8E40 on Windows 11 */
+/* FIXME: KPRCB.SharedReadyQueue is at 0x8E48 on Windows 11 */
+/* FIXME: KPRCB.SharedQueueScanOwner is at 0x8E50 on Windows 11 */
+/* FIXME: KPRCB.ScanSiblingIndex is at 0x8E54 on Windows 11 */
+/* FIXME: KPRCB.CoreControlBlock is at 0x8E58 on Windows 11 */
+/* FIXME: KPRCB.CoreProcessorSet is at 0x8E60 on Windows 11 */
+/* FIXME: KPRCB.ScanSiblingMask is at 0x8E68 on Windows 11 */
+/* FIXME: KPRCB.LLCMask is at 0x8E70 on Windows 11 */
+/* FIXME: KPRCB.GroupModuleProcessorSet is at 0x8E78 on Windows 11 */
+/* FIXME: KPRCB.SmtIsolationThread is at 0x8E80 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad97 is at 0x8E88 on Windows 11 */
+/* FIXME: KPRCB.ProcessorProfileControlArea is at 0x8E98 on Windows 11 */
+/* FIXME: KPRCB.ProfileEventIndexAddress is at 0x8EA0 on Windows 11 */
+/* FIXME: KPRCB.DpcWatchdogProfile is at 0x8EA8 on Windows 11 */
+/* FIXME: KPRCB.DpcWatchdogProfileCurrentEmptyCapture is at 0x8EB0 on Windows 11 */
+/* FIXME: KPRCB.SchedulerAssist is at 0x8EB8 on Windows 11 */
+/* FIXME: KPRCB.SynchCounters is at 0x8EC0 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad94 is at 0x8F78 on Windows 11 */
+/* FIXME: KPRCB.FsCounters is at 0x8F80 on Windows 11 */
+/* FIXME: KPRCB.VendorString is at 0x8F90 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad100 is at 0x8F9D on Windows 11 */
+/* FIXME: KPRCB.FeatureBits is at 0x8FA0 on Windows 11 */
+/* FIXME: KPRCB.UpdateSignature is at 0x8FA8 on Windows 11 */
+/* FIXME: KPRCB.PteBitCache is at 0x8FB0 on Windows 11 */
+/* FIXME: KPRCB.PteBitOffset is at 0x8FB8 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad105 is at 0x8FBC on Windows 11 */
+/* FIXME: KPRCB.Context is at 0x8FC0 on Windows 11 */
+/* FIXME: KPRCB.ContextFlagsInit is at 0x8FC8 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad115 is at 0x8FCC on Windows 11 */
+/* FIXME: KPRCB.ExtendedState is at 0x8FD0 on Windows 11 */
+/* FIXME: KPRCB.IsrStack is at 0x8FD8 on Windows 11 */
+/* FIXME: KPRCB.EntropyTimingState is at 0x8FE0 on Windows 11 */
+/* FIXME: KPRCB.StibpPairingTrace is at 0x9138 on Windows 11 */
+/* FIXME: KPRCB.AbSelfIoBoostsList is at 0x9170 on Windows 11 */
+/* FIXME: KPRCB.AbPropagateBoostsList is at 0x9178 on Windows 11 */
+/* FIXME: KPRCB.AbDpc is at 0x9180 on Windows 11 */
+/* FIXME: KPRCB.SymCryptEntropyAccumulatorState is at 0x91C0 on Windows 11 */
+/* FIXME: KPRCB.IoIrpStackProfilerCurrent is at 0x9340 on Windows 11 */
+/* FIXME: KPRCB.IoIrpStackProfilerPrevious is at 0x9394 on Windows 11 */
+/* FIXME: KPRCB.SecureFault is at 0x93E8 on Windows 11 */
+/* FIXME: KPRCB.LocalSharedReadyQueue is at 0x9400 on Windows 11 */
+/* FIXME: KPRCB.LocalSearchContexts is at 0x9408 on Windows 11 */
+/* FIXME: KPRCB.SearchContexts is at 0x9418 on Windows 11 */
+/* FIXME: KPRCB.SearchGenerations is at 0x9428 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad125 is at 0x9438 on Windows 11 */
+/* FIXME: KPRCB.TimerExpirationTraceCount is at 0x9440 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad127 is at 0x9444 on Windows 11 */
+/* FIXME: KPRCB.TimerExpirationTrace is at 0x9448 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad128 is at 0x9548 on Windows 11 */
+/* FIXME: KPRCB.ClockTimerState is at 0x9580 on Windows 11 */
+/* FIXME: KPRCB.IpiFrame is at 0x9A98 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad129 is at 0x9AA0 on Windows 11 */
+/* FIXME: KPRCB.Mailbox is at 0x9AC0 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad130 is at 0x9AC8 on Windows 11 */
+/* FIXME: KPRCB.McheckContext is at 0x9B00 on Windows 11 */
+/* FIXME: KPRCB.TransitionShadowStack is at 0x9BA0 on Windows 11 */
+/* FIXME: KPRCB.KernelShadowStackInitial is at 0x9BA8 on Windows 11 */
+/* FIXME: KPRCB.IstShadowStacksTable is at 0x9BB0 on Windows 11 */
+/* FIXME: KPRCB.HiberSwapShadowStacks is at 0x9BB8 on Windows 11 */
+/* FIXME: KPRCB.HiberSwapShadowStackBases is at 0x9BE0 on Windows 11 */
+/* FIXME: KPRCB.MmFaultCompletionInfo is at 0x9C08 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad132 is at 0x9C10 on Windows 11 */
+/* FIXME: KPRCB.SelfmapLockHandle is at 0x9C40 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad134b is at 0x9CA0 on Windows 11 */
+/* FIXME: KPRCB.DieProcessorSet is at 0x9CC0 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad135 is at 0x9DC8 on Windows 11 */
+/* FIXME: KPRCB.CoresPerPhysicalDie is at 0x9EC8 on Windows 11 */
+/* FIXME: KPRCB.LogicalProcessorsPerModule is at 0x9ECC on Windows 11 */
+/* FIXME: KPRCB.FreezeForRecoveryDpc is at 0x9ED0 on Windows 11 */
+/* FIXME: KPRCB.ModuleProcessorSet is at 0x9F10 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad136 is at 0xA018 on Windows 11 */
+/* FIXME: KPRCB.LocalCoreControlBlock is at 0xA118 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad137a is at 0xA148 on Windows 11 */
+/* FIXME: KPRCB.KstackFreeDpc is at 0xA150 on Windows 11 */
+/* FIXME: KPRCB.SlistRollbackDpc is at 0xA190 on Windows 11 */
+/* FIXME: KPRCB.KstackFreeList is at 0xA1D0 on Windows 11 */
+/* FIXME: KPRCB.IsrStackNesting is at 0xA1E0 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad138 is at 0xA1E4 on Windows 11 */
+/* FIXME: KPRCB.KernelDirectoryTableBase is at 0xAE80 on Windows 11 */
+/* FIXME: KPRCB.RspBaseShadow is at 0xAE88 on Windows 11 */
+/* FIXME: KPRCB.UserRspShadow is at 0xAE90 on Windows 11 */
+/* FIXME: KPRCB.ShadowFlags is at 0xAE98 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad138b is at 0xAE9C on Windows 11 */
+/* FIXME: KPRCB.PrcbPad138c is at 0xAEA0 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad138d is at 0xAEA8 on Windows 11 */
+/* FIXME: KPRCB.VerwSelector is at 0xAEAA on Windows 11 */
+/* FIXME: KPRCB.DbgMceNestingLevel is at 0xAEAC on Windows 11 */
+/* FIXME: KPRCB.DbgMceFlags is at 0xAEB0 on Windows 11 */
+/* FIXME: KPRCB.CoreControlBlockIndex is at 0xAEB4 on Windows 11 */
+/* FIXME: KPRCB.CoreControlBlockShadow is at 0xAEB8 on Windows 11 */
+/* FIXME: KPRCB.LocalCoreControlBlockShadow is at 0xAEC0 on Windows 11 */
+/* FIXME: KPRCB.CacheProcessorSet is at 0xAF00 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad139 is at 0xB428 on Windows 11 */
+/* FIXME: KPRCB.NodeRelativeTopologyIndex is at 0xB928 on Windows 11 */
+/* FIXME: KPRCB.ComplexProcessorSet is at 0xB940 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad139b is at 0xBA48 on Windows 11 */
+/* FIXME: KPRCB.LogicalProcessorsPerComplex is at 0xBB48 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad139c is at 0xBB4C on Windows 11 */
+/* FIXME: KPRCB.PrcbPad140 is at 0xBB50 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad140a is at 0xBE80 on Windows 11 */
+/* FIXME: KPRCB.PrcbPad141 is at 0xBEC0 on Windows 11 */
+/* FIXME: KPRCB.RequestMailbox is at 0xCEC0 on Windows 11 */
+
 /* TEB */
 C_ASSERT(sizeof(TEB) == 0x1878);
 C_ASSERT_FIELD(TEB, 0x000, NtTib)
