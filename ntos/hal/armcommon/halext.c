@@ -205,6 +205,7 @@ HalpExtQueryPciRoute(
 
 static ULONG NTAPI HalpExtGetMcfgRangeCount(VOID) { return HalpArm64GetMcfgRangeCount(); }
 static BOOLEAN NTAPI HalpExtGetMcfgRange(_In_ ULONG Index, _Out_ PHAL_ACPI_MCFG_RANGE Range) { return HalpArm64GetMcfgRange(Index, Range); }
+static NTSTATUS NTAPI HalpExtRegisterProcessorStart(_In_ const HAL_ARM64_PROCESSOR_START *Start) { return HalpArm64RegisterProcessorStart(Start); }
 
 static const HAL_EXTENSION_SERVICES HalpExtensionServices =
 {
@@ -223,7 +224,8 @@ static const HAL_EXTENSION_SERVICES HalpExtensionServices =
     HalpExtGetDeviceTree,
     HalpExtQueryPciRoute,
     HalpExtGetMcfgRangeCount,
-    HalpExtGetMcfgRange
+    HalpExtGetMcfgRange,
+    HalpExtRegisterProcessorStart
 };
 
 static

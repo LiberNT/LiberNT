@@ -903,6 +903,68 @@ static const HAL_ARM64_INTERRUPT_CONTROLLER Bcm2837InterruptOps =
 /*  Platform detection                                                */
 /* ================================================================== */
 
+/* A device tree whose interrupts end at the ARM-local controller, with no GIC above it. */
+static
+BOOLEAN
+Bcm2837FindInDeviceTree(
+    _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+{
+    static const PCSTR Local[] = { "brcm,bcm2836-l1-intc" };
+    static const PCSTR Armctrl[] = { "brcm,bcm2836-armctrl-ic" };
+    static const PCSTR Gic[] = { "arm,gic-400", "arm,cortex-a15-gic", "arm,cortex-a7-gic", "arm,gic-v3" };
+    ULONGLONG LocalBase, ArmctrlBase, Size;
+    ULONG Node, Parent, Match;
+    FDT Fdt;
+
+    if (!HalpArm64OpenDeviceTree(LoaderBlock, &Fdt) ||
+        HalpArm64FindDeviceTreeNode(&Fdt, Gic, RTL_NUMBER_OF(Gic), &Node, &Parent, &Match))
+    {
+        return FALSE;
+    }
+
+    if (!HalpArm64FindDeviceTreeNode(&Fdt, Local, RTL_NUMBER_OF(Local), &Node, &Parent, &Match) ||
+        !FdtReadReg(&Fdt, Node, Parent, 0, &LocalBase, &Size) ||
+        !FdtTranslateAddress(&Fdt, Parent, &LocalBase))
+    {
+        return FALSE;
+    }
+
+    if (!HalpArm64FindDeviceTreeNode(&Fdt, Armctrl, RTL_NUMBER_OF(Armctrl), &Node, &Parent, &Match) ||
+        !FdtReadReg(&Fdt, Node, Parent, 0, &ArmctrlBase, &Size) ||
+        !FdtTranslateAddress(&Fdt, Parent, &ArmctrlBase))
+    {
+        return FALSE;
+    }
+
+    Bcm2837LocalBase = LocalBase;
+    Bcm2837ArmctrlBase = ArmctrlBase;
+    return TRUE;
+}
+
+/* The firmware parks each secondary core polling its mailbox 3 for the address to jump to. */
+static
+BOOLEAN
+Bcm2837StartProcessor(
+    _In_ ULONG64 Mpidr,
+    _In_ ULONG64 EntryPoint)
+{
+    ULONG Core = (ULONG)(Mpidr & 0xFF);
+
+    if (!Bcm2837Detected || (Core >= BCM2837_CORE_COUNT) || (EntryPoint > MAXULONG))
+        return FALSE;
+
+    *HalpMmio((ULONG_PTR)Bcm2837LocalBase, BCM2837_LOCAL_MAILBOX_SET(Core, 3)) = (ULONG)EntryPoint;
+    ARM64_DSB(SY);
+    ARM64_SEV();
+    return TRUE;
+}
+
+static const HAL_ARM64_PROCESSOR_START Bcm2837ProcessorStart =
+{
+    "BCM2836 mailbox",
+    Bcm2837StartProcessor
+};
+
 BOOLEAN
 Bcm2837InterruptProbe(
     _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock)
@@ -914,19 +976,23 @@ Bcm2837InterruptProbe(
         return TRUE;
 
     Fadt = HalAcpiGetTable(LoaderBlock, FADT_SIGNATURE);
-    if (!Fadt)
-        return FALSE;
+    if (Fadt)
+    {
+        if (RtlCompareMemory(Fadt->OEMID, BCM2837_ACPI_OEM_ID, 6) != 6)
+            return FALSE;
 
-    if (RtlCompareMemory(Fadt->OEMID, BCM2837_ACPI_OEM_ID, 6) != 6)
-        return FALSE;
+        if (RtlCompareMemory(Fadt->OEMTableID, BCM2837_ACPI_OEM_TABLE_ID, 4) != 4)
+            return FALSE;
 
-    if (RtlCompareMemory(Fadt->OEMTableID, BCM2837_ACPI_OEM_TABLE_ID, 4) != 4)
+        Bcm2837LocalBase = BCM2837_LOCAL_BASE;
+        Bcm2837ArmctrlBase = BCM2837_ARMCTRL_BASE;
+    }
+    else if (!Bcm2837FindInDeviceTree(LoaderBlock))
+    {
         return FALSE;
+    }
 
     Bcm2837Detected = TRUE;
-
-    Bcm2837LocalBase = BCM2837_LOCAL_BASE;
-    Bcm2837ArmctrlBase = BCM2837_ARMCTRL_BASE;
 
     /* Until proven otherwise, logical CPU n sits on core n. */
     for (Cpu = 0; Cpu < MAXIMUM_PROCESSORS; Cpu++)
@@ -950,6 +1016,7 @@ Bcm2837InterruptProbe(
      * ARM-local block, which must never be dereferenced as a GIC.
      */
     HalpArm64RegisterInterruptController(&Bcm2837InterruptOps);
+    HalpArm64RegisterProcessorStart(&Bcm2837ProcessorStart);
 
     DPRINT1("[BCM2837] Raspberry Pi 3 detected — using BCM2836 local intc + ARMCTRL backend\n");
 

@@ -611,6 +611,16 @@ HalpArm64WakeParkedCpu(
     return TRUE;
 }
 
+NTSTATUS
+HalpArm64RegisterProcessorStart(
+    _In_ const HAL_ARM64_PROCESSOR_START *Start)
+{
+    UNREFERENCED_PARAMETER(Start);
+
+    /* Processors start through PSCI, a spin table or the parking protocol. */
+    return STATUS_NOT_SUPPORTED;
+}
+
 BOOLEAN
 HalpArchPrepareProcessorStart(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
