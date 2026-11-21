@@ -221,6 +221,7 @@ MiAddressSpaceDestroy(
 {
     MiVadFlushCache(Space);
     MiPtFlushEmpty(Space);
+    MiPtReleaseEmptyRange(Space, Space->LowestVa, Space->HighestVa);
     MI_ASSERT(Space->VadRoot.NodeCount == 0);
     MI_ASSERT(Space->AweRoot.NodeCount == 0 && Space->AwePages == 0);
     MI_ASSERT(Space->CloneRoot.NodeCount == 0);
