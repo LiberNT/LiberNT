@@ -274,6 +274,18 @@ AfdSetDisconnectDataSize(PDEVICE_OBJECT DeviceObject, PIRP Irp,
 }
 
 static NTSTATUS NTAPI
+AfdOpenUserTdiHandle(PFILE_OBJECT Object, PHANDLE Handle)
+{
+    *Handle = NULL;
+    if (Object == NULL)
+        return STATUS_SUCCESS;
+
+    return ObOpenObjectByPointer(Object, 0, NULL, GENERIC_READ | GENERIC_WRITE,
+                                 *IoFileObjectType, KernelMode, Handle);
+}
+
+/* The TDI handles AFD keeps are kernel handles; the caller gets its own handles in its process and closes them */
+static NTSTATUS NTAPI
 AfdGetTdiHandles(PDEVICE_OBJECT DeviceObject, PIRP Irp,
                 PIO_STACK_LOCATION IrpSp)
 {
@@ -283,6 +295,8 @@ AfdGetTdiHandles(PDEVICE_OBJECT DeviceObject, PIRP Irp,
     PAFD_TDI_HANDLE_DATA HandleData = Irp->UserBuffer;
     PAFD_TDI_HANDLE_DATA32 HandleData32 = Irp->UserBuffer;
     BOOLEAN Is32Bit = AfdIs32bitIoctl(Irp);
+    HANDLE AddressHandle = NULL, ConnectionHandle = NULL;
+    NTSTATUS Status = STATUS_SUCCESS;
 
     UNREFERENCED_PARAMETER(DeviceObject);
 
@@ -299,22 +313,41 @@ AfdGetTdiHandles(PDEVICE_OBJECT DeviceObject, PIRP Irp,
         return UnlockAndMaybeComplete(FCB, STATUS_BUFFER_TOO_SMALL, Irp, 0);
     }
 
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(IoGetRequestorProcess(Irp) == PsGetCurrentProcess());
+
+    if ((*HandleFlags) & AFD_ADDRESS_HANDLE)
+        Status = AfdOpenUserTdiHandle(FCB->AddressFile.Object, &AddressHandle);
+
+    if (NT_SUCCESS(Status) && ((*HandleFlags) & AFD_CONNECTION_HANDLE))
+    {
+        Status = AfdOpenUserTdiHandle(FCB->Connection.Object, &ConnectionHandle);
+        if (!NT_SUCCESS(Status) && AddressHandle != NULL)
+        {
+            ZwClose(AddressHandle);
+            AddressHandle = NULL;
+        }
+    }
+
+    if (!NT_SUCCESS(Status))
+        return UnlockAndMaybeComplete(FCB, Status, Irp, 0);
+
     if (Is32Bit)
     {
         if ((*HandleFlags) & AFD_ADDRESS_HANDLE)
-            HandleData32->TdiAddressHandle = HandleToUlong(FCB->AddressFile.Handle);
+            HandleData32->TdiAddressHandle = HandleToUlong(AddressHandle);
 
         if ((*HandleFlags) & AFD_CONNECTION_HANDLE)
-            HandleData32->TdiConnectionHandle = HandleToUlong(FCB->Connection.Handle);
+            HandleData32->TdiConnectionHandle = HandleToUlong(ConnectionHandle);
 
         return UnlockAndMaybeComplete(FCB, STATUS_SUCCESS, Irp, 0);
     }
 
     if ((*HandleFlags) & AFD_ADDRESS_HANDLE)
-        HandleData->TdiAddressHandle = FCB->AddressFile.Handle;
+        HandleData->TdiAddressHandle = AddressHandle;
 
     if ((*HandleFlags) & AFD_CONNECTION_HANDLE)
-        HandleData->TdiConnectionHandle = FCB->Connection.Handle;
+        HandleData->TdiConnectionHandle = ConnectionHandle;
 
     return UnlockAndMaybeComplete(FCB, STATUS_SUCCESS, Irp, 0);
 }

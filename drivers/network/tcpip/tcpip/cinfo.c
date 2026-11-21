@@ -99,3 +99,57 @@ TDI_STATUS SetConnectionInfo(TDIObjectID *ID,
 
     return Status;
 }
+
+/* A request made on a connection file is for that connection, whichever address file it is associated with */
+TDI_STATUS SetConnectionEndpointInfo(TDIObjectID *ID,
+                                     PCONNECTION_ENDPOINT Connection,
+                                     PVOID Buffer,
+                                     UINT BufferSize)
+{
+    TDI_STATUS Status;
+    TCP_KEEPALIVE Set;
+
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    ASSERT(ID->toi_type == INFO_TYPE_CONNECTION);
+
+    if (Connection == NULL)
+        return TDI_INVALID_PARAMETER;
+
+    LockObject(Connection);
+
+    if (Connection->SocketContext == NULL)
+    {
+        UnlockObject(Connection);
+        return TDI_INVALID_STATE;
+    }
+
+    switch (ID->toi_id)
+    {
+        case TCP_SOCKET_NODELAY:
+            Status = (BufferSize < sizeof(BOOLEAN)) ? TDI_INVALID_PARAMETER : TCPSetNoDelay(Connection, *(BOOLEAN *)Buffer);
+            break;
+
+        case TCP_SOCKET_KEEPALIVE:
+            Status = (BufferSize < sizeof(DWORD)) ? TDI_INVALID_PARAMETER : TCPSetKeepAlive(Connection, *(DWORD *)Buffer != 0);
+            break;
+
+        case TCP_SOCKET_KEEPALIVEVALS:
+            if (BufferSize < sizeof(TCP_KEEPALIVE))
+            {
+                Status = TDI_INVALID_PARAMETER;
+                break;
+            }
+            Set = *(TCP_KEEPALIVE *)Buffer;
+            Status = TCPSetKeepAlive(Connection, Set.onoff != 0);
+            if (NT_SUCCESS(Status))
+                Status = TCPSetKeepAliveValues(Connection, Set.keepalivetime, Set.keepaliveinterval);
+            break;
+
+        default:
+            Status = TDI_INVALID_PARAMETER;
+            break;
+    }
+
+    UnlockObject(Connection);
+    return Status;
+}
