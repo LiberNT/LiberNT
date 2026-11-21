@@ -7,9 +7,9 @@
 #define REACTOS_STR_FILE_DESCRIPTION  "LiberNT Printers Folder"
 #define REACTOS_STR_INTERNAL_NAME     "prnfldr"
 #define REACTOS_STR_ORIGINAL_FILENAME "prnfldr.dll"
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
-#include <reactos/manifest_dll.rc>
+#include <libernt/manifest_dll.rc>
 
 IDR_PRINTERS REGISTRY "res/printers.rgs"
 

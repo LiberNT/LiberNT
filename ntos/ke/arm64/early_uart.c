@@ -8,7 +8,7 @@
 
 #include <ntoskrnl.h>
 
-#include <reactos/arm64/early_uart.h>
+#include <libernt/arm64/early_uart.h>
 
 /* Global UART state - set from loader block during kernel init */
 volatile UINT64 EarlyUartBaseAddress = 0;

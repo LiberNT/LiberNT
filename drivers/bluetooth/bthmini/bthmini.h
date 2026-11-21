@@ -17,7 +17,7 @@
 #include <bthguid.h>
 #include <bthminiddi.h>
 #include <ntddser.h>
-#include <reactos/drivers/bthlocal.h>
+#include <libernt/drivers/bthlocal.h>
 
 #define BTHMINI_TAG                     'iMhB'
 #define BTHMINI_EVENT_READS             2

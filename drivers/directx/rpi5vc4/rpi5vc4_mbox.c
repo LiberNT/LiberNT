@@ -9,7 +9,7 @@
 #include "rpi5vc4_mbox.h"
 
 #define NDEBUG
-#include <reactos/debug.h>
+#include <libernt/debug.h>
 
 #define RPI5_MBOX_BUFFER_BYTES  PAGE_SIZE
 #define RPI5_MBOX_TIMEOUT_TRIES 20000   /* x 50 us = 1 s ceiling */

@@ -9,7 +9,7 @@
 #include <windows.h>
 #include <uxtheme.h>
 #include <vssym32.h>
-#include <reactos/dwmframe.h>
+#include <libernt/dwmframe.h>
 
 #define CAPTURE_WIDTH 200
 #define TEXT_LEFT 32

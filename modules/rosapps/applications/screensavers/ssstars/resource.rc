@@ -38,7 +38,7 @@ IDI_STARFIELD   ICON    "res/icon_stars.ico"
 IDB_COSMOS      BITMAP  "res/cosmicfractal.bmp"
 IDB_STAR        BITMAP  "res/star.bmp"
 
-#include <reactos/manifest_exe.rc>
+#include <libernt/manifest_exe.rc>
 
 // Language resources
 /* UTF-8 */

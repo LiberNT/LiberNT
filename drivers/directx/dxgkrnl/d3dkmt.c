@@ -33,9 +33,9 @@
 #include "vidpn.h"
 #include "present.h"
 #include "pnp.h"
-#include <reactos/rddm/rxgkadvcolor.h>
-#include <reactos/rddm/rxgktarget.h>
-#include <reactos/rddm/rxgkmonitor.h>
+#include <libernt/rddm/rxgkadvcolor.h>
+#include <libernt/rddm/rxgktarget.h>
+#include <libernt/rddm/rxgkmonitor.h>
 #include "caps_core.h"
 #include "paging_core.h"
 #if (REACTOS_WDDM_TARGET_LEVEL >= 3200)

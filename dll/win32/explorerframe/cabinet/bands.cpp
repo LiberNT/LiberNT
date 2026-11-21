@@ -8,7 +8,7 @@
 #include "cabinet.h"
 #include <shellframe.h>
 #include <commoncontrols.h>
-#include <reactos/dwmframe.h>
+#include <libernt/dwmframe.h>
 
 #define IDC_CRUMB_OVERFLOW 0x100
 #define IDC_CRUMB(index) (0x200 + (index))

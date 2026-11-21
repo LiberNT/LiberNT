@@ -6,9 +6,9 @@
  */
 
 #include "stornvme.h"
-#include <reactos/drivers/fdtdrv.h>
-#include <reactos/drivers/applertkit.h>
-#include <reactos/drivers/applepmgr.h>
+#include <libernt/drivers/fdtdrv.h>
+#include <libernt/drivers/applertkit.h>
+#include <libernt/drivers/applepmgr.h>
 
 #define ANS_TAG 'snAA'
 

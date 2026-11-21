@@ -6,7 +6,7 @@
  */
 
 #include "../kdnet.h"
-#include <reactos/arm64/sysreg.h>
+#include <libernt/arm64/sysreg.h>
 
 #if defined(_MSC_VER) && !defined(__clang__)
 BOOLEAN

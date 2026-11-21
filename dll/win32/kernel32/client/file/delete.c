@@ -12,7 +12,7 @@
 
 #include <k32.h>
 #define NDEBUG
-#include <reactos/debug.h>
+#include <libernt/debug.h>
 
 /* FUNCTIONS ****************************************************************/
 

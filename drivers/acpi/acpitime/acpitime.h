@@ -8,7 +8,7 @@
 #include <ntddk.h>
 #include <wdmguid.h>
 #include <acpiioct.h>
-#include <reactos/drivers/acpitime.h>
+#include <libernt/drivers/acpitime.h>
 
 #define ACPITIME_TAG 'mTcA'
 #define ACPITIME_MAX_OUTPUT (64 * 1024)

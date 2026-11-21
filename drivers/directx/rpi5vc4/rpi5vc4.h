@@ -22,11 +22,11 @@
 #include <wdm.h>
 #include <windef.h>
 #include <dispmprt.h>
-#include <reactos/rddm/rxgkpresent.h>
-#include <reactos/loader_framebuffer.h>
+#include <libernt/rddm/rxgkpresent.h>
+#include <libernt/loader_framebuffer.h>
 #include "rpi5vc4_pointer.h"
-#include <reactos/rpi5vc4_umd.h>
-#include <reactos/rpi5vc4_xpdm.h>
+#include <libernt/rpi5vc4_umd.h>
+#include <libernt/rpi5vc4_xpdm.h>
 
 #ifndef DXGKDDI_INTERFACE_VERSION_WDDM2_0
 #define DXGKDDI_INTERFACE_VERSION_WDDM2_0 0x5023

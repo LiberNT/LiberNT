@@ -11,7 +11,7 @@ list(APPEND SOURCE
 
 include_directories(
     ${REACTOS_SOURCE_DIR}/dll/appcompat/apphelp
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/appcompat)
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/appcompat)
 add_host_tool(xml2sdb ${SOURCE})
 target_link_libraries(xml2sdb PRIVATE host_includes)
 

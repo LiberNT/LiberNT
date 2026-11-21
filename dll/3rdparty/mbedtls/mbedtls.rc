@@ -18,5 +18,5 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 
 #define REACTOS_STR_FILE_VERSION MBEDTLS_VERSION_STRING
 
-#include <reactos/version.rc>
-#include <reactos/manifest_dll.rc>
+#include <libernt/version.rc>
+#include <libernt/manifest_dll.rc>

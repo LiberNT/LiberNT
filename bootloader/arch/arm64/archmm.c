@@ -8,12 +8,12 @@
 #include <blefi.h>
 #include <fdtacpi.h>
 #include <arm64.h>
-#include <reactos/arm64/early_uart.h>
+#include <libernt/arm64/early_uart.h>
 #include "../../winload/winload.h"
 
 BOOLEAN Arm64IsKernelVaMapped(ULONGLONG Va);
 
-#include <reactos/arm64/earlyfont.h>
+#include <libernt/arm64/earlyfont.h>
 
 #define OSL_FB_CELL_HEIGHT 14
 

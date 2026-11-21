@@ -9,7 +9,7 @@
 #define _RPI5VC4_GDI_H_
 
 #include "framebuf.h"
-#include <reactos/rpi5vc4_xpdm.h>
+#include <libernt/rpi5vc4_xpdm.h>
 
 ULONG APIENTRY
 DrvEscape(

@@ -3,7 +3,7 @@
 #ifndef _ROS_CI_MBEDTLS_CONFIG_H_
 #define _ROS_CI_MBEDTLS_CONFIG_H_
 
-#include <reactos/ci.h>
+#include <libernt/ci.h>
 #include <stdio.h>
 
 #define MBEDTLS_PLATFORM_C

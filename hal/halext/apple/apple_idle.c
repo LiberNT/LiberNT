@@ -8,7 +8,7 @@
 #include <ntifs.h>
 #include <arc/arc.h>
 #include <ioaccess.h>
-#include <reactos/arm64/sysreg.h>
+#include <libernt/arm64/sysreg.h>
 #include <pseh/pseh2.h>
 #include <reactos/hal/halext.h>
 #include "apple_aic.h"

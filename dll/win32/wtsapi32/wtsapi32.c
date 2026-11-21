@@ -31,7 +31,7 @@
 #include "winnls.h"
 #include "lmcons.h"
 #include "wtsapi32.h"
-#include <reactos/wtssession.h>
+#include <libernt/wtssession.h>
 #ifdef __REACTOS__
 #include <ntsecapi.h>
 #endif

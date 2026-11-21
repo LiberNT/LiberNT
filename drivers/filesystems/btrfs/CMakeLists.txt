@@ -27,7 +27,7 @@ list(APPEND SOURCE
     btrfsp.h)
 
 add_library(btrfs MODULE ${SOURCE} btrfs.rc)
-target_include_directories(btrfs PRIVATE ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/zlib)
+target_include_directories(btrfs PRIVATE ${REACTOS_SOURCE_DIR}/sdk/include/libernt/libs/zlib)
 target_compile_definitions(btrfs PRIVATE Z_SOLO)
 set_module_type(btrfs kernelmodedriver)
 target_link_libraries(btrfs zlib_solo zstd_decompress memcmp ${PSEH_LIB})

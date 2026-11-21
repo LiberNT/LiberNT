@@ -12,9 +12,9 @@
 #include <ks.h>
 #include <ksmedia.h>
 #include <ntstrsafe.h>
-#include <reactos/drivers/fdtdrv.h>
-#include <reactos/drivers/appledart.h>
-#include <reactos/drivers/applepmgr.h>
+#include <libernt/drivers/fdtdrv.h>
+#include <libernt/drivers/appledart.h>
+#include <libernt/drivers/applepmgr.h>
 #include "ispwire.h"
 
 #define ISP_TAG                     'pIpA'

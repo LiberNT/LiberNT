@@ -12,7 +12,7 @@
 #define REACTOS_STR_ORIGINAL_FILENAME "tzres.dll"
 #include <windef.h>
 
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
 LANGUAGE LANG_ENGLISH, SUBLANG_DEFAULT
 

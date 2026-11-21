@@ -10,7 +10,7 @@
 #include <objbase.h>
 #include <dxgiformat.h>
 #include <wincodec.h>
-#include <reactos/dwmcore.h>
+#include <libernt/dwmcore.h>
 
 #define DWM_CONNECTION_MAGIC 0x434C494Du /* 'MILC' */
 #define DWM_E_ENGINE_NOT_INITIALIZED ((HRESULT)0x8000000EL)

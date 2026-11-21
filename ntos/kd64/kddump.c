@@ -11,7 +11,7 @@
 #include <ntddstor.h>
 #define NDEBUG
 #include <debug.h>
-#include <reactos/drivers/dumpstor.h>
+#include <libernt/drivers/dumpstor.h>
 #ifdef _WIN64
 #include <mm/nt/mmkernel.h>
 #endif

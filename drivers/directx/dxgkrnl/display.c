@@ -45,10 +45,10 @@
 #include <ndk/inbvfuncs.h>
 #include <ntstrsafe.h>
 /* IOCTL_VIDEO_DXGK_* present-path contract, shared with cdd/win32k. */
-#include <reactos/dwmframe.h>
-#include <reactos/rddm/rxgkpresent.h>
-#include <reactos/rddm/rxgkadvcolor.h>
-#include <reactos/rddm/rxgktarget.h>
+#include <libernt/dwmframe.h>
+#include <libernt/rddm/rxgkpresent.h>
+#include <libernt/rddm/rxgkadvcolor.h>
+#include <libernt/rddm/rxgktarget.h>
 
 /* TAG_DXGK_DISPLAY is now in dxgkrnl_private.h */
 

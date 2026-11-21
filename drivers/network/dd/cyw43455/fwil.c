@@ -6,7 +6,7 @@
  */
 
 #include "cyw43455.h"
-#include <reactos/unaligned.h>
+#include <libernt/unaligned.h>
 
 #define NDEBUG
 #include <debug.h>

@@ -1,5 +1,5 @@
 
-include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/fast486)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/libernt/libs/fast486)
 
 list(APPEND SOURCE
     debug.c

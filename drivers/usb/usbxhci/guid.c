@@ -12,6 +12,6 @@
 #include <wdmguid.h>
 #include <hubbusif.h>
 #include <usbbusif.h>
-#include <reactos/drivers/usbcapability.h>
+#include <libernt/drivers/usbcapability.h>
 
 /* GUID definitions only */

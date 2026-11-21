@@ -39,7 +39,7 @@ list(APPEND SOURCE
     vfs.c)
 
 list(APPEND SOURCE ${ARCH}/lxarch.c ${REACTOS_SOURCE_DIR}/sdk/lib/3rdparty/lzma/LzmaDec.c)
-include_directories(${REACTOS_SOURCE_DIR}/sdk/lib/3rdparty/lzma ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/zlib)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/lib/3rdparty/lzma ${REACTOS_SOURCE_DIR}/sdk/include/libernt/libs/zlib)
 if(ARCH STREQUAL "amd64")
     list(APPEND SOURCE amd64/lxsyscall.c)
     add_asm_files(lxcore_asm amd64/lxfpu.S)

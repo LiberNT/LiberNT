@@ -12,7 +12,7 @@
 #undef WIN32_NO_STATUS
 #include <ntstatus.h>
 #include <ndk/ntndk.h>
-#include <reactos/emulation.h>
+#include <libernt/emulation.h>
 
 VOID
 NTAPI

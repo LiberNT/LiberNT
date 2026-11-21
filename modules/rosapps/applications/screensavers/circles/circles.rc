@@ -11,9 +11,9 @@ IDI_ICON ICON "res/icon_circles.ico"
 #define REACTOS_STR_INTERNAL_NAME       "circles"
 #define REACTOS_STR_ORIGINAL_FILENAME   "circles.scr"
 
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
-#include <reactos/manifest_exe.rc>
+#include <libernt/manifest_exe.rc>
 
 /* UTF-8 */
 #pragma code_page(65001)

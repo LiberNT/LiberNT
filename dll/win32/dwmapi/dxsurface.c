@@ -25,7 +25,7 @@
 #include <d3d11.h>
 #include <d3dkmthk.h>
 #include <ndk/rtlfuncs.h>
-#include <reactos/dwmframe.h>
+#include <libernt/dwmframe.h>
 #include <wine/debug.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(dwmapi);

@@ -8,7 +8,7 @@
 #ifndef UNIT_TEST
 #include <ntddk.h>
 #endif
-#include <reactos/drivers/appleadt.h>
+#include <libernt/drivers/appleadt.h>
 
 #define PTD_RANGE_ENTRY_SIZE        32
 #define PTD_RANGE_INDEX_OFFSET      4

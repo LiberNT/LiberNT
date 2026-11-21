@@ -3,17 +3,17 @@ spec2def(advapi32.dll advapi32.spec ADD_IMPORTLIB)
 add_definitions(-D_ADVAPI32_)
 
 include_directories(
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/drivers/ksecdd
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/drivers/ksecdd
     ${REACTOS_SOURCE_DIR}/sdk/lib/cryptlib
     ${CMAKE_CURRENT_BINARY_DIR})
 
 add_rpc_files(client
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/eventlogrpc.idl
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/lsa.idl
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/seclogon.idl
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/svcctl.idl
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/winreg.idl)
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl/eventlogrpc.idl
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl/lsa.idl
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl/seclogon.idl
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl/svcctl.idl
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl/winreg.idl)
 
 list(APPEND SOURCE
     misc/dllmain.c

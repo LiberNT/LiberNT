@@ -6,7 +6,7 @@
  */
 
 #include "precomp.h"
-#include <reactos/hal/msi.h>
+#include <libernt/hal/msi.h>
 
 #define NDEBUG
 #include <debug.h>

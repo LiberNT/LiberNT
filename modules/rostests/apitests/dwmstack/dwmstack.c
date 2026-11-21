@@ -12,7 +12,7 @@
 #include <dwmapi.h>
 #include <objbase.h>
 #include <wincodec.h>
-#include <reactos/dwmcore.h>
+#include <libernt/dwmcore.h>
 
 #define DWM_E_ENGINE_NOT_INITIALIZED ((HRESULT)0x8000000EL)
 #define DWM_E_CHANNEL_UNAVAILABLE    ((HRESULT)0x88980416L)

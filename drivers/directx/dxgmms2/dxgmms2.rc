@@ -4,4 +4,4 @@
 #define REACTOS_STR_ORIGINAL_FILENAME "dxgmms2.sys"
 #define REACTOS_STR_PRODUCT_VERSION   "6.0.0.0"
 #define REACTOS_STR_FILE_VERSION      "6.0.0.0"
-#include <reactos/version.rc>
+#include <libernt/version.rc>

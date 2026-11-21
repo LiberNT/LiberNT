@@ -6,7 +6,7 @@
  */
 
 #include "app.h"
-#include <reactos/dwmsettings.h>
+#include <libernt/dwmsettings.h>
 
 Theme g_t;
 

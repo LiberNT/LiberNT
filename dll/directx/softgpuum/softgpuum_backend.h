@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <reactos/drivers/directx/softgpu_2d_shared.h>
+#include <libernt/drivers/directx/softgpu_2d_shared.h>
 
 typedef struct _SOFTGPUUM_SURFACE_LAYOUT
 {

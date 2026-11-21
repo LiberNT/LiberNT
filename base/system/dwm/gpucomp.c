@@ -12,8 +12,8 @@
 #include <GL/glext.h>
 #include <wine/wglext.h>
 
-#include <reactos/dwmframe.h>
-#include <reactos/dwmgpuinterop.h>
+#include <libernt/dwmframe.h>
+#include <libernt/dwmgpuinterop.h>
 
 #include "gpucomp.h"
 #include "framebuttons.h"

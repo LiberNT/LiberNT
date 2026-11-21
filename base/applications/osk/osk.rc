@@ -13,7 +13,7 @@
 #define REACTOS_STR_INTERNAL_NAME     "osk"
 #define REACTOS_STR_ORIGINAL_FILENAME "osk.exe"
 
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
 IDI_OSK             ICON "res/osk.ico"
 IDI_SOUNDCLICK      WAVE "res/click.wav"
@@ -33,7 +33,7 @@ IDI_TOP       ICON "res/top.ico"
 IDI_RIGHT     ICON "res/right.ico"
 IDI_BOTTOM    ICON "res/bottom.ico"
 
-#include <reactos/manifest_exe.rc>
+#include <libernt/manifest_exe.rc>
 
 /* UTF-8 */
 #pragma code_page(65001)

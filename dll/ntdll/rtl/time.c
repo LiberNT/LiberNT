@@ -5,7 +5,7 @@
  */
 
 #include <ntdll.h>
-#include <reactos/precisetime.h>
+#include <libernt/precisetime.h>
 
 #define NDEBUG
 #include <debug.h>

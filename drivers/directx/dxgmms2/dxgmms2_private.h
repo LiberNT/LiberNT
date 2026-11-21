@@ -12,8 +12,8 @@
 #include <ntifs.h>
 #include <ntddk.h>
 #include <wdm.h>
-#include <reactos/debug.h>
-#include <reactos/drivers/directx/dxgmms2.h>
+#include <libernt/debug.h>
+#include <libernt/drivers/directx/dxgmms2.h>
 #include "timeline_core.h"
 #include "context_stream_core.h"
 #include "scheduler_core.h"

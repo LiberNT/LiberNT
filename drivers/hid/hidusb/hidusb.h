@@ -13,7 +13,7 @@
 #include <usbdlib.h>
 
 #include <hidport.h>
-#include <reactos/drivers/dumpstor.h>
+#include <libernt/drivers/dumpstor.h>
 
 typedef struct
 {

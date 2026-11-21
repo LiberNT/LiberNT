@@ -9,11 +9,11 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 #define REACTOS_STR_INTERNAL_NAME     "magnify"
 #define REACTOS_STR_ORIGINAL_FILENAME "magnify.exe"
 
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
 IDI_ICON ICON "res/magnify.ico"
 
-#include <reactos/manifest_exe.rc>
+#include <libernt/manifest_exe.rc>
 
 /* UTF-8 */
 #pragma code_page(65001)

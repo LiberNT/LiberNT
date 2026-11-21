@@ -2,4 +2,4 @@
 #define REACTOS_STR_INTERNAL_NAME	"logevent\0"
 #define REACTOS_STR_ORIGINAL_FILENAME	"logevent.exe\0"
 
-#include <reactos/version.rc>
+#include <libernt/version.rc>

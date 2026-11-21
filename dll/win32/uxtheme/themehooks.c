@@ -7,7 +7,7 @@
  */
 
 #include "uxthemep.h"
-#include <reactos/colorscheme.h>
+#include <libernt/colorscheme.h>
 
 USERAPIHOOK g_user32ApiHook;
 BYTE gabDWPmessages[UAHOWP_MAX_SIZE];

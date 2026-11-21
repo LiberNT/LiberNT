@@ -36,8 +36,8 @@
 using namespace ATL;
 
 #define NDEBUG
-#include <reactos/debug.h>
-#include <reactos/shellutils.h>
+#include <libernt/debug.h>
+#include <libernt/shellutils.h>
 #include <ui/rosdlgs.h>
 
 

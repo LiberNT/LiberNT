@@ -21,7 +21,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <reactos/powervr_umd.h>
+#include <libernt/powervr_umd.h>
 
 #include <drm-uapi/drm.h>
 #include <xf86drm.h>

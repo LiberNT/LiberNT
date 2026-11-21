@@ -8,7 +8,7 @@
 #include "opengl32.h"
 
 #include <d3dkmthk.h>
-#include <reactos/dwmframe.h>
+#include <libernt/dwmframe.h>
 #include <winreg.h>
 #include <wchar.h>
 

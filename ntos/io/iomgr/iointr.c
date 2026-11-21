@@ -8,7 +8,7 @@
 #include <ntoskrnl.h>
 #include "../ioint.h"
 #include "../pnpio.h"
-#include <reactos/hal/msi.h>
+#include <libernt/hal/msi.h>
 #define NDEBUG
 #include <debug.h>
 

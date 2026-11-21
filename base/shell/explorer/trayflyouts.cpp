@@ -2,11 +2,11 @@
 #include <math.h>
 #include <commctrl.h>
 #include <windowsx.h>
-#include <reactos/dwmframe.h>
+#include <libernt/dwmframe.h>
 #include <shellframe.h>
 #include <winioctl.h>
 #include <ntddvdeo.h>
-#include <reactos/rddm/rxgkmonitor.h>
+#include <libernt/rddm/rxgkmonitor.h>
 
 static VOID TfyW11Position(HWND hwndOwner, const RECT *prcAnchor, SIZE size, BOOL bCenter, POINT *ppt);
 static VOID TrayNotifCenter_Open(HWND hwndCalendar);

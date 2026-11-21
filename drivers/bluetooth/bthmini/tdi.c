@@ -7,7 +7,7 @@
 
 #include "bthmini.h"
 #include <tdikrnl.h>
-#include <reactos/tdibth.h>
+#include <libernt/tdibth.h>
 #include <ws2bth.h>
 #include <wdmsec.h>
 

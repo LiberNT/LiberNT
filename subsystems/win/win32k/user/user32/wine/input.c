@@ -32,7 +32,7 @@
 #include <wingdi.h>
 #include <winuser.h>
 #include <winbase.h>
-#include <reactos/usertouch.h>
+#include <libernt/usertouch.h>
 typedef enum
 {
     POINTER_FEEDBACK_DEFAULT = 1,

@@ -26,8 +26,8 @@
 #include <pseh/pseh2.h>
 #include "wddm_bridge.h"
 #include <d3dkmthk.h>
-#include <reactos/rddm/rxgkinterface.h>
-#include <reactos/rddm/rxgkioctl.h>
+#include <libernt/rddm/rxgkinterface.h>
+#include <libernt/rddm/rxgkioctl.h>
 
 struct _D3DKMT_ISFEATUREENABLED;
 struct _D3DKMT_QUERYFSEBLOCK;

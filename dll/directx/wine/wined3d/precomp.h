@@ -39,6 +39,6 @@
 
 #include "wined3d_private.h"
 
-#include <reactos/undocuser.h>
+#include <libernt/undocuser.h>
 
 #endif /* !__WINE_WINED3D_PRECOMP_H */

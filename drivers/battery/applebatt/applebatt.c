@@ -7,7 +7,7 @@
 
 #include <ntddk.h>
 #include <batclass.h>
-#include <reactos/drivers/applesmc.h>
+#include <libernt/drivers/applesmc.h>
 
 #define APPLE_BATTERY_TAG           'tBpA'
 #define APPLE_BATTERY_ID            1

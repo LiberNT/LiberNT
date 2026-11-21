@@ -12,7 +12,7 @@
 #include <winioctl.h>
 #include <cfgmgr32.h>
 #include <initguid.h>
-#include <reactos/drivers/tpm2.h>
+#include <libernt/drivers/tpm2.h>
 #include <tbs.h>
 
 #define NDEBUG

@@ -7,7 +7,7 @@
 #include "pnpcpu.h"
 
 #ifdef _M_ARM64
-#include <reactos/arm64/acpi.h>
+#include <libernt/arm64/acpi.h>
 #define PNPCPU_ARM64_MPIDR_AFFINITY_MASK 0xFF00FFFFFFULL
 #define PNPCPU_ARM64_GICC_ENABLED 0x00000001
 #endif

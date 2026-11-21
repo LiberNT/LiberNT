@@ -2,7 +2,7 @@
 spec2def(ksecdd.sys ksecdd.spec ADD_IMPORTLIB)
 
 include_directories(
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/drivers/ksecdd
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/drivers/ksecdd
     ${REACTOS_SOURCE_DIR}/sdk/lib/cryptlib
     ${REACTOS_SOURCE_DIR}/sdk/lib/3rdparty/symcrypt/lib)
 

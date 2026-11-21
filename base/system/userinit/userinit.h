@@ -25,7 +25,7 @@
 
 #include <ndk/exfuncs.h>
 
-#include <reactos/desktopready.h>
+#include <libernt/desktopready.h>
 
 #include <wine/debug.h>
 WINE_DEFAULT_DEBUG_CHANNEL(userinit);

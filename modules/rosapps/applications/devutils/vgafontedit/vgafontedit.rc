@@ -15,7 +15,7 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 #define REACTOS_STR_FILE_DESCRIPTION    "ReactOS VGA Font Editor"
 #define REACTOS_STR_INTERNAL_NAME       "vgafontedit"
 #define REACTOS_STR_ORIGINAL_FILENAME   "vgafontedit.exe"
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
 IDA_MAINACCELERATORS ACCELERATORS
 BEGIN
@@ -31,7 +31,7 @@ IDB_EDIT_GLYPH_TOOLBOX    BITMAP    "res/toolbox.bmp"
 IDI_MAIN                  ICON      "res/main.ico"
 IDI_DOC                   ICON      "res/doc.ico"
 
-#include <reactos/manifest_exe.rc>
+#include <libernt/manifest_exe.rc>
 
 /* UTF-8 */
 #pragma code_page(65001)

@@ -19,7 +19,7 @@
 #include <d3dcompiler.h>
 #include <d3dkmthk.h>
 #include <d3d12umddi.h>
-#include <reactos/drivers/directx/umd_adapter.h>
+#include <libernt/drivers/directx/umd_adapter.h>
 #include <stdio.h>
 #include <stdarg.h>
 

@@ -8,8 +8,8 @@
 #include <ntoskrnl.h>
 #include "kd.h"
 #include <kdterm.h>
-#include <reactos/hal/acpifault.h>
-#include <reactos/buildno.h>
+#include <libernt/hal/acpifault.h>
+#include <libernt/buildno.h>
 
 #define KDP_INFO_TEXT_SIZE      0x8000
 #define KDP_INFO_MACHINE_SIZE   768

@@ -9,8 +9,8 @@
 
 #include <ntddk.h>
 #include <ntddsd.h>
-#include <reactos/drivers/sd/sdhci.h>
-#include <reactos/drivers/sd/sddef.h>
+#include <libernt/drivers/sd/sdhci.h>
+#include <libernt/drivers/sd/sddef.h>
 
 /** @brief Pool tag: 'SDhC' */
 #define TAG_SDHC 'ChDS'

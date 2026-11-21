@@ -7,7 +7,7 @@
 
 #include "kdusbnet.h"
 #include <kdfdt.h>
-#include <reactos/drivers/fdtdrv.h>
+#include <libernt/drivers/fdtdrv.h>
 
 static
 PVOID

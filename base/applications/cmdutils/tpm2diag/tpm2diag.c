@@ -8,7 +8,7 @@
 #include <stdio.h>
 #include <wchar.h>
 #include <initguid.h>
-#include <reactos/drivers/tpm2.h>
+#include <libernt/drivers/tpm2.h>
 
 #define TPM2DIAG_RESPONSE_SIZE 65536
 #define TPM2DIAG_HEADER_SIZE 10

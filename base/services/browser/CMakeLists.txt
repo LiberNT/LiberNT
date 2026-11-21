@@ -1,6 +1,6 @@
 
-include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl)
-add_rpc_files(server ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/browser.idl)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl)
+add_rpc_files(server ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl/browser.idl)
 spec2def(browser.dll browser.spec ADD_IMPORTLIB)
 
 list(APPEND SOURCE

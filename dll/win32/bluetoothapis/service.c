@@ -17,7 +17,7 @@
 #include <stdio.h>
 #include <bthsdpdef.h>
 #include <bluetoothapis.h>
-#include <reactos/drivers/bthlocal.h>
+#include <libernt/drivers/bthlocal.h>
 
 #ifndef STATUS_PRIVILEGE_NOT_HELD
 #define STATUS_PRIVILEGE_NOT_HELD ((DWORD)0xC0000061)

@@ -5,7 +5,7 @@
  * PURPOSE:     IOCTL bridge to the nwifi.sys control device
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  *
- * Issues the <reactos/nwifi_ioctl.h> IOCTLs on \\.\Nwifi; a worker thread
+ * Issues the <libernt/nwifi_ioctl.h> IOCTLs on \\.\Nwifi; a worker thread
  * pends GET_NOTIFICATION and turns kernel events into WLAN ACM notifications.
  * If nwifi is not loaded, entry points fail and no interfaces are presented.
  */

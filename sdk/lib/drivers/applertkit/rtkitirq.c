@@ -6,7 +6,7 @@
  */
 
 #include <ntddk.h>
-#include <reactos/drivers/applertkit.h>
+#include <libernt/drivers/applertkit.h>
 
 #define RTKIT_IRQ_TAG 'iRpA'
 

@@ -11,4 +11,4 @@
 #define REACTOS_STR_INTERNAL_NAME "usbrndis"
 #define REACTOS_STR_ORIGINAL_FILENAME "usbrndis.sys"
 
-#include <reactos/version.rc>
+#include <libernt/version.rc>

@@ -2,7 +2,7 @@
  * SPDX-FileCopyrightText: 2026 Ahmed ARIF <arif193@gmail.com>
  */
 #pragma once
-#include <reactos/dwmpresenttracecore.h>
+#include <libernt/dwmpresenttracecore.h>
 extern DPT_BANK g_DwmPresentTrace;
 void DwmPresentTraceSetIcd(PFNWGLCONTROLPRESENTATIONTRACEROS Control);
 void DwmPresentTraceFrame(DPT_SCOPE Scope, ULONGLONG DrawStart,

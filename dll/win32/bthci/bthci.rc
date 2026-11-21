@@ -10,8 +10,8 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 #define REACTOS_STR_INTERNAL_NAME     "bthci"
 #define REACTOS_STR_ORIGINAL_FILENAME "bthci.dll"
 
-#include <reactos/version.rc>
-#include <reactos/manifest_dll.rc>
+#include <libernt/version.rc>
+#include <libernt/manifest_dll.rc>
 
 IDI_BLUETOOTH ICON "resources/bluetooth.ico"
 

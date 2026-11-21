@@ -6,7 +6,7 @@
  */
 
 #include <ndk/rtlfuncs.h>
-#include <reactos/verifier.h>
+#include <libernt/verifier.h>
 
 #if 0
 #define PROVIDER_PREFIX "AVRF"

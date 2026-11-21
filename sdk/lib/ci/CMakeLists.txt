@@ -9,7 +9,7 @@ list(TRANSFORM CI_MBEDTLS_SOURCE PREPEND "${REACTOS_SOURCE_DIR}/dll/3rdparty/mbe
 
 add_library(ci STATIC authenticode.c ${CI_MBEDTLS_SOURCE})
 add_dependencies(ci psdk)
-target_include_directories(ci PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs)
+target_include_directories(ci PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${REACTOS_SOURCE_DIR}/sdk/include/libernt/libs)
 target_compile_definitions(ci PRIVATE MBEDTLS_CONFIG_FILE="ci_config.h")
 set_property(SOURCE ${REACTOS_SOURCE_DIR}/dll/3rdparty/mbedtls/x509_crt.c APPEND PROPERTY COMPILE_DEFINITIONS MBEDTLS_TEST_SW_INET_PTON)
 

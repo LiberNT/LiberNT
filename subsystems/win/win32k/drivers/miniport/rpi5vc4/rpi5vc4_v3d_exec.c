@@ -12,7 +12,7 @@
 
 #include "rpi5vc4_v3d.h"
 #include "rpi5vc4_v3d_terrain_shaders.h"
-#include <reactos/unaligned.h>
+#include <libernt/unaligned.h>
 
 #define V3D_HUB_INT_STS                    0x0050
 #define V3D_HUB_INT_CLR                    0x0058

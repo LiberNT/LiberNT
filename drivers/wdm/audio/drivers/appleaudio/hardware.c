@@ -6,15 +6,15 @@
  */
 
 #include <ntddk.h>
-#include <reactos/drivers/fdtdrv.h>
-#include <reactos/drivers/applepmgr.h>
-#include <reactos/drivers/appledart.h>
-#include <reactos/drivers/applegpio.h>
-#include <reactos/drivers/applei2c.h>
-#include <reactos/drivers/applenco.h>
-#include <reactos/drivers/appleadmac.h>
-#include <reactos/drivers/applemca.h>
-#include <reactos/drivers/applertkit.h>
+#include <libernt/drivers/fdtdrv.h>
+#include <libernt/drivers/applepmgr.h>
+#include <libernt/drivers/appledart.h>
+#include <libernt/drivers/applegpio.h>
+#include <libernt/drivers/applei2c.h>
+#include <libernt/drivers/applenco.h>
+#include <libernt/drivers/appleadmac.h>
+#include <libernt/drivers/applemca.h>
+#include <libernt/drivers/applertkit.h>
 #include "hardware.h"
 #include "tas2764.h"
 #include "protect.h"

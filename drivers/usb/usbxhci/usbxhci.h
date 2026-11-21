@@ -16,7 +16,7 @@
 #include <usbdlib.h>
 #include <drivers/usbport/usbmport.h>
 #include <drivers/kdusbshare.h>
-#include <reactos/drivers/usbcapability.h>
+#include <libernt/drivers/usbcapability.h>
 
 #include "hardware.h"
 

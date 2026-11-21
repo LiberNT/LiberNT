@@ -9,13 +9,13 @@
 #include <initguid.h>
 #include <wdmguid.h>
 #include <ntstrsafe.h>
-#include <reactos/drivers/fdtdrv.h>
-#include <reactos/drivers/applepmgr.h>
-#include <reactos/drivers/appledart.h>
-#include <reactos/drivers/appleatcphy.h>
-#include <reactos/drivers/appleacepd.h>
-#include <reactos/drivers/appledwc3host.h>
-#include <reactos/drivers/kdusbshare.h>
+#include <libernt/drivers/fdtdrv.h>
+#include <libernt/drivers/applepmgr.h>
+#include <libernt/drivers/appledart.h>
+#include <libernt/drivers/appleatcphy.h>
+#include <libernt/drivers/appleacepd.h>
+#include <libernt/drivers/appledwc3host.h>
+#include <libernt/drivers/kdusbshare.h>
 
 #define APPLE_DWC3_TAG              '3wDA'
 

@@ -8,9 +8,9 @@
 #ifndef UNIT_TEST
 #include <ntddk.h>
 #endif
-#include <reactos/drivers/applepcie.h>
-#include <reactos/drivers/applepmgr.h>
-#include <reactos/drivers/appledart.h>
+#include <libernt/drivers/applepcie.h>
+#include <libernt/drivers/applepmgr.h>
+#include <libernt/drivers/appledart.h>
 
 #define PHY_LANE_CFG                0x00
 #define PHY_LANE_CFG_REFCLK0REQ     (1UL << 0)

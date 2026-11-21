@@ -7,8 +7,8 @@
 #include <ntifs.h>
 #include <initguid.h>
 #include <spb.h>
-#include <reactos/drivers/reshubio.h>
-#include <reactos/drivers/inteli2c.h>
+#include <libernt/drivers/reshubio.h>
+#include <libernt/drivers/inteli2c.h>
 #include <ntstrsafe.h>
 #include <pseh/pseh2.h>
 

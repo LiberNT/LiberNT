@@ -7,8 +7,8 @@
 
 #include <windef.h>
 #include <winver.h>
-#include <reactos/version.h>
-#include <reactos/buildno.h>
+#include <libernt/version.h>
+#include <libernt/buildno.h>
 #include <ntverp.h>
 
 /* Gecko reads plugin strings from the 0409/04E4 block only, like Wine's VER_VERSION_TRANSLATION */

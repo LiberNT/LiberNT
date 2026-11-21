@@ -1,9 +1,9 @@
 
 include_directories(
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl
     ${CMAKE_CURRENT_BINARY_DIR})
 
-add_rpc_files(server ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/winreg.idl)
+add_rpc_files(server ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl/winreg.idl)
 
 list(APPEND SOURCE
     environment.c

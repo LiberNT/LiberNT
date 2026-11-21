@@ -37,7 +37,7 @@
 #include "d3d9on12.h"
 #include "wine/wined3d.h"
 #ifdef __REACTOS__
-#include <reactos/dxva_surface_fence.h>
+#include <libernt/dxva_surface_fence.h>
 #endif
 
 #define D3D9_MAX_VERTEX_SHADER_CONSTANTF 256

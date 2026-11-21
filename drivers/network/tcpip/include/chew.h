@@ -1,7 +1,7 @@
 /*
  * COPYRIGHT:       See COPYING in the top level directory
  * PROJECT:         ReactOS kernel
- * FILE:            include/reactos/chew/chew.h
+ * FILE:            include/libernt/chew/chew.h
  * PURPOSE:         Common Highlevel Executive Worker
  *
  * PROGRAMMERS:     arty (ayerkes@speakeasy.net)

@@ -8,8 +8,8 @@
 #ifndef UNIT_TEST
 #include <ntddk.h>
 #endif
-#include <reactos/drivers/applertkit.h>
-#include <reactos/drivers/appleadmac.h>
+#include <libernt/drivers/applertkit.h>
+#include <libernt/drivers/appleadmac.h>
 
 #define MBOX_CONTROL_FULL       0x00010000
 #define MBOX_CONTROL_EMPTY      0x00020000

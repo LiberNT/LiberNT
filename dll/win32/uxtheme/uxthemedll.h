@@ -24,7 +24,7 @@
 #include <wingdi.h>
 #include <winuser.h>
 #ifdef __REACTOS__
-#include <reactos/user32_compat.h>
+#include <libernt/user32_compat.h>
 #endif
 #include <uxtheme.h>
 #include <msstyles.h>

@@ -52,7 +52,7 @@ DBG_DEFAULT_CHANNEL(WARNING);
 #define ARM64_PXI_SHIFT       39
 
 /* UART output using runtime-detected address from early_uart.h */
-#include <reactos/arm64/early_uart.h>
+#include <libernt/arm64/early_uart.h>
 
 extern volatile BOOLEAN BootServicesExitedFlag;
 

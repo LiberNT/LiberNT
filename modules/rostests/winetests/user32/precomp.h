@@ -15,6 +15,6 @@
 #define WINE_NO_INLINE_RECT
 #include <wine/test.h>
 
-#include <reactos/undocuser.h>
+#include <libernt/undocuser.h>
 
 #endif /* !_USER32_WINETEST_PRECOMP_H_ */

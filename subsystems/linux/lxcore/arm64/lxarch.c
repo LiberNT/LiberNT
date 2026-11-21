@@ -6,7 +6,7 @@
  */
 
 #include "../lxcore.h"
-#include <reactos/arm64/sysreg.h>
+#include <libernt/arm64/sysreg.h>
 
 #define LX_EM_AARCH64     183
 #define LX_HWCAP_FP       (1ULL << 0)

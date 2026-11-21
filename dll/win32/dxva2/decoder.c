@@ -25,7 +25,7 @@
 #include "d3dkmthk.h"
 #include "d3dumddi.h"
 #include "dxva2api.h"
-#include <reactos/dxva_surface_fence.h>
+#include <libernt/dxva_surface_fence.h>
 
 #include "decoder.h"
 #include "wine/debug.h"

@@ -1,11 +1,11 @@
 
 include_directories(
     ${REACTOS_SOURCE_DIR}/sdk/lib/evtlib
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/subsys
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/subsys
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl
     ${CMAKE_CURRENT_BINARY_DIR})
 
-add_rpc_files(server ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/eventlogrpc.idl)
+add_rpc_files(server ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl/eventlogrpc.idl)
 spec2def(wevtsvc.dll wevtsvc.spec)
 
 list(APPEND SOURCE

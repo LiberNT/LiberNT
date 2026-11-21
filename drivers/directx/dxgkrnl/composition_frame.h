@@ -8,7 +8,7 @@
 #pragma once
 
 #include <ntddk.h>
-#include <reactos/dcompbatch.h>
+#include <libernt/dcompbatch.h>
 
 typedef struct _DXGK_COMPOSITION_FRAME_INTERFACE DXGK_COMPOSITION_FRAME_INTERFACE;
 typedef struct _DXGK_COMPOSITION_FRAME_COLLECTION DXGK_COMPOSITION_FRAME_COLLECTION;

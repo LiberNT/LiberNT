@@ -8,7 +8,7 @@
 #define COBJMACROS
 #include <windows.h>
 #include <objbase.h>
-#include <reactos/dwmcore.h>
+#include <libernt/dwmcore.h>
 
 struct IWICImagingFactory;
 struct IWICBitmap;

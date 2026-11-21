@@ -15,8 +15,8 @@
 #undef __BROKEN__
 #include <video.h>
 #include <devioctl.h>
-#include <reactos/loader_framebuffer.h>
-#include <reactos/rpi5vc4_xpdm.h>
+#include <libernt/loader_framebuffer.h>
+#include <libernt/rpi5vc4_xpdm.h>
 
 #define RPI5VC4_CURSOR_WIDTH 64
 #define RPI5VC4_CURSOR_HEIGHT 64

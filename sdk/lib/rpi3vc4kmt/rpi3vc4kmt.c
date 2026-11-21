@@ -17,7 +17,7 @@
 #include <wingdi.h>
 #include <limits.h>
 #include <d3dkmthk.h>
-#include <reactos/rpi3vc4kmt.h>
+#include <libernt/rpi3vc4kmt.h>
 
 #ifndef NT_SUCCESS
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)

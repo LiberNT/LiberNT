@@ -12,7 +12,7 @@
 #include <ntddstor.h>
 #include <ntddsd.h>
 #include <psdk/sffdisk.h>
-#include <reactos/drivers/sd/sddef.h>
+#include <libernt/drivers/sd/sddef.h>
 #include <stdio.h>
 
 /** @brief Pool tag: 'SFfd' */

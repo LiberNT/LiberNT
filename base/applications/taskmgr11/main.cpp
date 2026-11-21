@@ -6,8 +6,8 @@
  */
 
 #include "app.h"
-#include <reactos/dwmframe.h>
-#include <reactos/dwmsettings.h>
+#include <libernt/dwmframe.h>
+#include <libernt/dwmsettings.h>
 
 #define FRAME_CLASS L"TaskManager11Frame"
 #define TRAY_ID 1

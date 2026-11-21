@@ -6,9 +6,9 @@
  */
 
 #include <ntddk.h>
-#include <reactos/drivers/appleadt.h>
-#include <reactos/drivers/appleuat.h>
-#include <reactos/drivers/appleagxinit.h>
+#include <libernt/drivers/appleadt.h>
+#include <libernt/drivers/appleuat.h>
+#include <libernt/drivers/appleagxinit.h>
 
 #define AGX_OBJECT_PAGES            (APPLE_UAT_PAGE_SIZE / PAGE_SIZE)
 

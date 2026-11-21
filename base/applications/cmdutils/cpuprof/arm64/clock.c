@@ -6,7 +6,7 @@
  */
 
 #include <windows.h>
-#include <reactos/arm64/sysreg.h>
+#include <libernt/arm64/sysreg.h>
 #include "../clock.h"
 
 ULONGLONG ReadClockTicks(void)

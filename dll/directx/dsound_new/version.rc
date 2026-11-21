@@ -11,4 +11,4 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 #define REACTOS_STR_PRODUCT_VERSION     "5.3.1.904\0"
 #define REACTOS_STR_FILE_VERSION        "5.3.1.904\0"
 
-#include <reactos/version.rc>
+#include <libernt/version.rc>

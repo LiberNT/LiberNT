@@ -12,7 +12,7 @@
 #include <ntdll.h>
 #include <compat_undoc.h>
 #include <compatguid_undoc.h>
-#include <reactos/wow64shared.h>
+#include <libernt/wow64shared.h>
 
 #define NDEBUG
 #include <debug.h>

@@ -53,13 +53,13 @@ set_target_properties(netadaptercx PROPERTIES CXX_STANDARD 20 CXX_EXTENSIONS ON)
 target_include_directories(netadaptercx BEFORE PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/inc
     ${CMAKE_CURRENT_SOURCE_DIR}/ndl
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/drivers/ndis
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/drivers/ndis
     ${CMAKE_CURRENT_SOURCE_DIR}/netcx
     ${CMAKE_CURRENT_SOURCE_DIR}/rtl
     ${NETCX_INCLUDE_DIRS}
     ${REACTOS_SOURCE_DIR}/sdk/lib/drivers/wdf
     ${REACTOS_SOURCE_DIR}/sdk/lib/drivers/wdf/kmdf/inc/private
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/wil
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/wil
     ${REACTOS_SOURCE_DIR}/sdk/include/ddk/netcx/kmdf/adapter/2.6
     ${REACTOS_SOURCE_DIR}/sdk/include/psdk/netcx/shared/1.0)
 target_include_directories(netadaptercx AFTER PRIVATE ${NETCX_TMH_DIR} ${REACTOS_SOURCE_DIR}/sdk/include/c++)

@@ -8,7 +8,7 @@
 #pragma once
 
 #include <windows.h>
-#include <reactos/dwmframe.h>
+#include <libernt/dwmframe.h>
 
 #ifdef __cplusplus
 extern "C" {

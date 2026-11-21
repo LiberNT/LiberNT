@@ -30,7 +30,7 @@
 #include "winbase.h"
 #include "winuser.h"
 #ifdef __REACTOS__
-#include <reactos/user32_compat.h>
+#include <libernt/user32_compat.h>
 #endif
 #include "winerror.h"
 #include "objbase.h"

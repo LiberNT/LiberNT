@@ -14,7 +14,7 @@
 #define REACTOS_STR_INTERNAL_NAME     "terminal"
 #define REACTOS_STR_ORIGINAL_FILENAME "terminal.exe"
 #define REACTOS_STR_LEGAL_COPYRIGHT   "(C) 2026 LiberNT Team"
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
 1 RT_MANIFEST "res/terminal.exe.manifest"
 

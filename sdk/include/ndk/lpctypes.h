@@ -24,7 +24,7 @@ Author:
 //
 #include <umtypes.h>
 //#include <pstypes.h>
-#include <reactos/alpc.h>
+#include <libernt/alpc.h>
 
 #ifdef __cplusplus
 extern "C" {

@@ -6,7 +6,7 @@
  */
 
 #include "dxgkrnl_private.h"
-#include <reactos/rddm/rxgkntgdi.h>
+#include <libernt/rddm/rxgkntgdi.h>
 
 /*
  * Windows keeps these syscall entry points in dxgkrnl.  ReactOS keeps user

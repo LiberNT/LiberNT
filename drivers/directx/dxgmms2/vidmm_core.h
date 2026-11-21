@@ -12,7 +12,7 @@
 #pragma once
 
 #include <ntddk.h>
-#include <reactos/drivers/directx/dxgmms2.h>
+#include <libernt/drivers/directx/dxgmms2.h>
 
 /* Records pre-allocated with the adapter.  Beyond this the core allocates on
  * demand: a placement must never fail because the ledger ran out of records

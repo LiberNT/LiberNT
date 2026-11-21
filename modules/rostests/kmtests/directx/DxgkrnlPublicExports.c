@@ -5,7 +5,7 @@
  */
 
 #include <kmt_test.h>
-#include <reactos/rddm/rxgkntgdi.h>
+#include <libernt/rddm/rxgkntgdi.h>
 
 #define RXGK_STRING_INNER(Value) #Value
 #define RXGK_STRING(Value) RXGK_STRING_INNER(Value)

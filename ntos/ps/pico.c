@@ -6,7 +6,7 @@
  */
 
 #include <ntoskrnl.h>
-#include <reactos/pico.h>
+#include <libernt/pico.h>
 
 #define NDEBUG
 #include <debug.h>

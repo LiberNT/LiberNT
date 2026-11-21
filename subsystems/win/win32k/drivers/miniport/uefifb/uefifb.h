@@ -17,7 +17,7 @@
 #undef __BROKEN__
 #include <video.h>
 #include <devioctl.h>
-#include <reactos/loader_framebuffer.h>
+#include <libernt/loader_framebuffer.h>
 
 /* DEVICE EXTENSION ***********************************************************/
 

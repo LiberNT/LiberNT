@@ -47,7 +47,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define VER_LEGALCOPYRIGHT_YEARS    ""
 #define VER_LEGALCOPYRIGHT_STR      "BSD-style license"
 
-#include <reactos/manifest_exe.rc>
+#include <libernt/manifest_exe.rc>
 
 /*#include "common.ver"*/
 

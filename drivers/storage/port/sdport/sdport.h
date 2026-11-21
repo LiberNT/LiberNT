@@ -12,8 +12,8 @@
 #include <stdio.h>
 #include <ntstrsafe.h>
 #include <ntddsd.h>
-#include <reactos/drivers/sd/sdhci.h>
-#include <reactos/drivers/sd/sddef.h>
+#include <libernt/drivers/sd/sdhci.h>
+#include <libernt/drivers/sd/sddef.h>
 #include "sdport_win.h"
 
 /* Pool tags */

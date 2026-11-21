@@ -8,8 +8,8 @@
 #include <ntoskrnl.h>
 #include "../ioint.h"
 #include "../pnpio.h"
-#include <reactos/hal/msi.h>
-#include <reactos/drivers/cmreslist.h>
+#include <libernt/hal/msi.h>
+#include <libernt/drivers/cmreslist.h>
 #define NDEBUG
 #include <debug.h>
 

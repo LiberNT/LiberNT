@@ -44,7 +44,7 @@ IDR_FINDFOLDER REGISTRY "res/findfolder.rgs"
 IDR_DOCKINGBARPROPERTYBAG REGISTRY "res/dockingbarpropertybag.rgs"
 IDR_EXECUTEFOLDER REGISTRY "res/executefolder.rgs"
 
-#include <reactos/manifest_dll.rc>
+#include <libernt/manifest_dll.rc>
 
 #include "cabinet/cabinet.rc"
 

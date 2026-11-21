@@ -5,7 +5,7 @@
  */
 
 #include <stdint.h>
-#include <reactos/arm64/sysreg.h>
+#include <libernt/arm64/sysreg.h>
 
 void _set_statfp(uintptr_t mask)
 {

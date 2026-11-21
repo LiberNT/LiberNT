@@ -53,7 +53,7 @@
 #include "present.h"
 #include "present_queue_core.h"
 #include "display_core.h"
-#include <reactos/dwmframe.h>
+#include <libernt/dwmframe.h>
 
 #define DXGK_PRESENT_EXEC_LOG_LIMIT  32
 #define DXGK_PRESENT_EXEC_SLOW_US    5000ULL

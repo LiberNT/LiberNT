@@ -9,7 +9,7 @@
 /* INCLUDES ******************************************************************/
 
 #include <hal.h>
-#include <reactos/hal/acpi_pci.h>   /* PHAL_ACPI_PCI_ROUTE_QUERY */
+#include <libernt/hal/acpi_pci.h>   /* PHAL_ACPI_PCI_ROUTE_QUERY */
 #define NDEBUG
 #include <debug.h>
 

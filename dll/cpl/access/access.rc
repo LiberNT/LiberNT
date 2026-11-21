@@ -10,11 +10,11 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 #define REACTOS_STR_FILE_DESCRIPTION  "LiberNT Accessibility Control Panel"
 #define REACTOS_STR_INTERNAL_NAME     "access"
 #define REACTOS_STR_ORIGINAL_FILENAME "access.cpl"
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
 IDI_CPLACCESS ICON "resources/applet.ico"
 
-#include <reactos/manifest_hosted.rc>
+#include <libernt/manifest_hosted.rc>
 
 /* UTF-8 */
 #pragma code_page(65001)

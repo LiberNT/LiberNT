@@ -7,7 +7,7 @@
 #include "precomp.h"
 
 #include <arc/arc.h>
-#include <reactos/drivers/acpi/acpi.h>
+#include <libernt/drivers/acpi/acpi.h>
 #include <pseh/pseh2.h>
 
 #define NDEBUG

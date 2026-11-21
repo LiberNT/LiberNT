@@ -1,6 +1,6 @@
 
-include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl)
-add_rpc_files(server ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/netlogon.idl)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl)
+add_rpc_files(server ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl/netlogon.idl)
 spec2def(netlogon.dll netlogon.spec ADD_IMPORTLIB)
 
 add_definitions(-DWIN32_LEAN_AND_MEAN=)

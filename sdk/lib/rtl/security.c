@@ -14,7 +14,7 @@
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
-#include <reactos/acltransform.h>
+#include <libernt/acltransform.h>
 
 static NTSTATUS
 RtlpSecurityTransformAcl(PACL Source, BOOLEAN Parent, BOOLEAN MarkInherited,

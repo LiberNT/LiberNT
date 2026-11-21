@@ -49,7 +49,7 @@
 
 
 /* Setup library headers */
-// #include <reactos/rosioctl.h>
+// #include <libernt/rosioctl.h>
 #include <../lib/setuplib.h>
 
 

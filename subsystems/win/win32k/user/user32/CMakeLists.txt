@@ -15,11 +15,11 @@ endif()
 spec2def(user32.dll user32.spec ADD_IMPORTLIB)
 
 include_directories(
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/subsys
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/subsys
     include
     ${REACTOS_SOURCE_DIR}/sdk/include/wine
     ${REACTOS_SOURCE_DIR}/subsystems/win/win32k/include
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/libpng)
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/libs/libpng)
 
 list(APPEND SOURCE
     controls/appswitch.c

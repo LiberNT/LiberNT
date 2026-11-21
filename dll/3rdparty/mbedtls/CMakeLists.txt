@@ -1,6 +1,6 @@
 
-include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs
-                    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/zlib)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/libernt/libs
+                    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/zlib)
 
 spec2def(mbedtls.dll mbedtls.spec ADD_IMPORTLIB)
 

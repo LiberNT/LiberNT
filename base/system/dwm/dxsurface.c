@@ -13,7 +13,7 @@
 
 #include <windows.h>
 #include <d3dkmthk.h>
-#include <reactos/dwmframe.h>
+#include <libernt/dwmframe.h>
 
 #include "dxsurface.h"
 

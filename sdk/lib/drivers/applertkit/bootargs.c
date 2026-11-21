@@ -8,7 +8,7 @@
 #ifndef UNIT_TEST
 #include <ntddk.h>
 #endif
-#include <reactos/drivers/applertkit.h>
+#include <libernt/drivers/applertkit.h>
 
 #define RTKIT_BOOTARG_HEADER_SIZE   (2 * sizeof(ULONG))
 #define RTKIT_BOOTARG_MAX_BLOCK     0x10000

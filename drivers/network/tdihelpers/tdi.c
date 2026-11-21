@@ -21,7 +21,7 @@
 /* If you want to see the DPRINT() output in your debugger,
  * remove the following line (or comment it out): */
 #define NDEBUG
-#include <reactos/debug.h>
+#include <libernt/debug.h>
 
 static NTSTATUS TdiCall(
     PIRP Irp,

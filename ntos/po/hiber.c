@@ -6,8 +6,8 @@
  */
 
 #include <ntoskrnl.h>
-#include <reactos/drivers/dumpstor.h>
-#include <reactos/hiberfil.h>
+#include <libernt/drivers/dumpstor.h>
+#include <libernt/hiberfil.h>
 #define NDEBUG
 #include <debug.h>
 

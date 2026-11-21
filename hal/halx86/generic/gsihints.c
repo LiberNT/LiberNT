@@ -6,7 +6,7 @@
  */
 
 #include <hal.h>
-#include <reactos/hal/acpi_pci.h>
+#include <libernt/hal/acpi_pci.h>
 #define NDEBUG
 #include <debug.h>
 

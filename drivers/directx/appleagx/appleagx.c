@@ -6,8 +6,8 @@
  */
 
 #include "appleagxp.h"
-#include <reactos/drivers/applepmgr.h>
-#include <reactos/drivers/applepmp.h>
+#include <libernt/drivers/applepmgr.h>
+#include <libernt/drivers/applepmp.h>
 #include <pseh/pseh2.h>
 
 #define AGX_TAG                     'xgAA'

@@ -8,7 +8,7 @@
 #include <ntoskrnl.h>
 #define NDEBUG
 #include <debug.h>
-#include <reactos/arm64/early_uart.h>
+#include <libernt/arm64/early_uart.h>
 #include <cportlib/uartinfo.h>
 
 /*

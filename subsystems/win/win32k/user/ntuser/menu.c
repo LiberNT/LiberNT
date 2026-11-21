@@ -7,7 +7,7 @@
  */
 
 #include <win32k.h>
-#include <reactos/dwmframe.h>
+#include <libernt/dwmframe.h>
 DBG_DEFAULT_CHANNEL(UserMenu);
 
 /* INTERNAL ******************************************************************/

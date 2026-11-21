@@ -6,7 +6,7 @@
 #define REACTOS_STR_INTERNAL_NAME      "diskpart"
 #define REACTOS_STR_ORIGINAL_FILENAME  "diskpart.exe"
 #define REACTOS_STR_ORIGINAL_COPYRIGHT "(C) 2011 Lee Schroeder"
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
 #include <diskpart_msg.rc>
 

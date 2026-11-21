@@ -13,8 +13,8 @@
 #include <ntddscsi.h>
 #include <ntdddisk.h>
 #include <mountdev.h>
-#include <reactos/drivers/dumpstor.h>
-#include <reactos/drivers/dumpscsi.h>
+#include <libernt/drivers/dumpstor.h>
+#include <libernt/drivers/dumpscsi.h>
 
 #ifdef DBG
 #include <debug/driverdbg.h>

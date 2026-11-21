@@ -8,7 +8,7 @@
 #include <win32k.h>
 #include "composition.h"
 #include "dcomposition.h"
-#include <reactos/dcompbatch.h>
+#include <libernt/dcompbatch.h>
 
 #define DCOMP_TAG 'pmCD'
 

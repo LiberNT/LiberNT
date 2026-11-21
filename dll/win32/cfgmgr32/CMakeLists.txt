@@ -1,9 +1,9 @@
 
 include_directories(
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl
     ${CMAKE_CURRENT_BINARY_DIR})
 
-add_rpc_files(client ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/pnp.idl)
+add_rpc_files(client ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl/pnp.idl)
 spec2def(cfgmgr32.dll cfgmgr32.spec ADD_IMPORTLIB)
 
 list(APPEND SOURCE

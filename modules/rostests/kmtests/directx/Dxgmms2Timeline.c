@@ -5,7 +5,7 @@
  */
 
 #include <kmt_test.h>
-#include <reactos/drivers/directx/dxgmms2.h>
+#include <libernt/drivers/directx/dxgmms2.h>
 #include "timeline_core.h"
 
 #define TAG_DXGMMS2_TIMELINE_TEST 'tT2D'

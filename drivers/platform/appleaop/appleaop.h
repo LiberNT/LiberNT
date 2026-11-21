@@ -9,10 +9,10 @@
 #pragma once
 
 #include <ntifs.h>
-#include <reactos/drivers/fdtdrv.h>
-#include <reactos/drivers/applertkit.h>
-#include <reactos/drivers/appledart.h>
-#include <reactos/drivers/appleaop.h>
+#include <libernt/drivers/fdtdrv.h>
+#include <libernt/drivers/applertkit.h>
+#include <libernt/drivers/appledart.h>
+#include <libernt/drivers/appleaop.h>
 
 #define AOP_TAG                         'pOpA'
 

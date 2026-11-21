@@ -7,7 +7,7 @@
 
 #include <kmt_test.h>
 #include <windef.h>
-#include <reactos/dwmframe.h>
+#include <libernt/dwmframe.h>
 
 #define SOURCE_PITCH  (4096 * sizeof(ULONG))
 #define SOURCE_ROWS   2304

@@ -47,7 +47,7 @@
  * local debug.h in drivers/directx/dxgmms1/ when -I points at this dir.
  * Must be included before the local debug.h which uses DPRINT/DPRINT1.
  */
-#include <reactos/debug.h>
+#include <libernt/debug.h>
 
 /* Include our own debug helpers (wraps DPRINT/DPRINT1 with module prefix). */
 #include "debug.h"

@@ -42,8 +42,8 @@
 #include "hotplug_work_core.h"
 #include "child_core.h"
 #include <ntddvdeo.h>
-#include <reactos/dwmframe.h>
-#include <reactos/rddm/rxgkioctl.h>
+#include <libernt/dwmframe.h>
+#include <libernt/rddm/rxgkioctl.h>
 
 /* ========================================================================
  * Forward declarations for all interface functions

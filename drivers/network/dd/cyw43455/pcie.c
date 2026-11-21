@@ -8,7 +8,7 @@
 #include "cyw43455.h"
 #include "pcie.h"
 #include <ntstrsafe.h>
-#include <reactos/drivers/fdtdrv.h>
+#include <libernt/drivers/fdtdrv.h>
 
 #define NDEBUG
 #include <debug.h>

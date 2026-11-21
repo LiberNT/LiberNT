@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <reactos/drivers/appledart.h>
+#include <libernt/drivers/appledart.h>
 
 #define DART_PARAMS1                0x00
 #define DART_PARAMS2                0x04

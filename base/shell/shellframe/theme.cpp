@@ -6,8 +6,8 @@
  */
 
 #include "shellframe.h"
-#include <reactos/dwmframe.h>
-#include <reactos/dwmsettings.h>
+#include <libernt/dwmframe.h>
+#include <libernt/dwmsettings.h>
 
 namespace ShellFrame
 {

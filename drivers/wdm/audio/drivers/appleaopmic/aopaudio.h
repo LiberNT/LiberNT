@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include <reactos/drivers/appleaop.h>
+#include <libernt/drivers/appleaop.h>
 
 #ifdef __cplusplus
 extern "C" {

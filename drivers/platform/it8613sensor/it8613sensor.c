@@ -7,7 +7,7 @@
 
 #include <ntddk.h>
 #include <initguid.h>
-#include <reactos/drivers/sensorprovider.h>
+#include <libernt/drivers/sensorprovider.h>
 
 #define NDEBUG
 #include <debug.h>

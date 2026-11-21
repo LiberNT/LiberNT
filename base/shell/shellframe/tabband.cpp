@@ -12,7 +12,7 @@
 #include <strsafe.h>
 #include <uxtheme.h>
 #include <commoncontrols.h>
-#include <reactos/dwmframe.h>
+#include <libernt/dwmframe.h>
 
 namespace ShellFrame
 {

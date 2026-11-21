@@ -33,7 +33,7 @@
  */
 #include "cdlg_xx.rc"
 
-#include <reactos/manifest_dll.rc>
+#include <libernt/manifest_dll.rc>
 
 /*
  * Everything specific to any language goes

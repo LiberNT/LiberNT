@@ -4,7 +4,7 @@
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 
-#include <reactos/manifest_exe.rc>
+#include <libernt/manifest_exe.rc>
 
 5 BITMAP "test.bmp"
 

@@ -1,6 +1,6 @@
 
-include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl ${CMAKE_CURRENT_BINARY_DIR})
-add_rpc_files(client ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/scardsvr.idl)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl ${CMAKE_CURRENT_BINARY_DIR})
+add_rpc_files(client ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl/scardsvr.idl)
 spec2def(winscard.dll winscard.spec ADD_IMPORTLIB)
 
 list(APPEND SOURCE

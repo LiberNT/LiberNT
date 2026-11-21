@@ -32,7 +32,7 @@ DEFINE_GUID(GUID_DEVINTERFACE_MONITOR,
 
 /*
  * ACPI/PCI device interface. Mirrored from
- * <reactos/drivers/acpi/acpipci.h> here to give every driver that links
+ * <libernt/drivers/acpi/acpipci.h> here to give every driver that links
  * wdmguid a real definition of GUID_ACPI_PCI_INTERFACE. Without this,
  * release builds (-O2/-O3) strip the DECLSPEC_SELECTANY storage emitted
  * by DEFINE_GUID in each consumer and the link fails with

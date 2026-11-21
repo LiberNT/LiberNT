@@ -1,6 +1,6 @@
 add_definitions(-D_NTSYSTEM_)
 
-include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/subsys)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/libernt/subsys)
 
 list(APPEND SOURCE
     smclient.c

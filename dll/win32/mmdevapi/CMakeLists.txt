@@ -2,7 +2,7 @@
 spec2def(mmdevapi.dll mmdevapi.spec ADD_IMPORTLIB)
 
 include_directories(
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/sound
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/libs/sound
     ${REACTOS_SOURCE_DIR}/drivers/wdm/audio/legacy/wdmaud)
 
 list(APPEND SOURCE

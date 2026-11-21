@@ -14,10 +14,10 @@
 #include "rpi5vc4_crtc.h"
 #include "rpi5vc4_hvs.h"
 #include "rpi5vc4_mbox.h"
-#include <reactos/vc4cle.h>
+#include <libernt/vc4cle.h>
 
 #define NDEBUG
-#include <reactos/debug.h>
+#include <libernt/debug.h>
 
 C_ASSERT(RPI5VC4_V3D_OVERFLOW_CHUNK_COUNT <= sizeof(ULONG) * 8);
 C_ASSERT((RPI5VC4_V3D_OVERFLOW_SIZE %

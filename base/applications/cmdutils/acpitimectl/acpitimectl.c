@@ -8,7 +8,7 @@
 #include <stdio.h>
 #include <wchar.h>
 #include <initguid.h>
-#include <reactos/drivers/acpitime.h>
+#include <libernt/drivers/acpitime.h>
 
 static
 HANDLE

@@ -28,7 +28,7 @@
  */
 
 #include <ntddk.h>
-#include <reactos/drivers/fdtdrv.h>
+#include <libernt/drivers/fdtdrv.h>
 #include "protect.h"
 
 #define PROTECT_ONE_Q62             (1ULL << 62)

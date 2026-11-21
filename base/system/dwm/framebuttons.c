@@ -9,7 +9,7 @@
 #include <winbase.h>
 #include <wingdi.h>
 #include <winuser.h>
-#include <reactos/dwmframe.h>
+#include <libernt/dwmframe.h>
 
 #include "framebuttons.h"
 

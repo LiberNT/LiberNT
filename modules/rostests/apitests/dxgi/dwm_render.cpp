@@ -9,8 +9,8 @@
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #include <stdarg.h>
-#include <reactos/dwmprof.h>
-#include <reactos/dwmpresenttracenames.h>
+#include <libernt/dwmprof.h>
+#include <libernt/dwmpresenttracenames.h>
 #include "gpud3dshader.h"
 #include "gpuquery.h"
 

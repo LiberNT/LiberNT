@@ -25,7 +25,7 @@ usable under both.
 What was taken is the description of the interface:
 
   sdk/lib/drivers/applertkit/agxinit.c
-  sdk/include/reactos/drivers/appleagxinit.h
+  sdk/include/libernt/drivers/appleagxinit.h
       - the initial data's objects and the addresses the firmware looks for them at
       - the root object's layout and its magic, 0x0c08e21e83800490, which names one firmware build
       - the address-table geometry and level descriptors
@@ -61,7 +61,7 @@ What was taken is the description of the interface:
 The render commands the driver accepts follow Mesa's copy of the same driver's user interface,
 include/drm-uapi/asahi_drm.h (SPDX-License-Identifier: MIT; Copyright (C) The Asahi Linux
 Contributors, 2018-2023 Collabora Ltd., 2014-2018 Broadcom), mirrored with NT types in
-sdk/include/reactos/drivers/appleagxuapi.h so that Mesa's Apple drivers can submit to it: render
+sdk/include/libernt/drivers/appleagxuapi.h so that Mesa's Apple drivers can submit to it: render
 and compute commands, attachments, queues and the submission with its command headers. Its
 layout was measured by compiling Mesa's header, and the mirror asserts every offset. The global
 parameters it answers take the G15S user address range, the kernel range minimum, the command and

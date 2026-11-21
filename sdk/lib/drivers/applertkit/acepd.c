@@ -8,7 +8,7 @@
 #ifndef UNIT_TEST
 #include <ntddk.h>
 #endif
-#include <reactos/drivers/appleacepd.h>
+#include <libernt/drivers/appleacepd.h>
 
 #define ACE_READ_WINDOW         0x20
 #define ACE_WRITE_WINDOW        0xa0

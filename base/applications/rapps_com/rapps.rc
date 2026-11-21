@@ -2,4 +2,4 @@
 #define REACTOS_STR_INTERNAL_NAME     "rapps"
 #define REACTOS_STR_ORIGINAL_FILENAME "rapps.com"
 
-#include <reactos/version.rc>
+#include <libernt/version.rc>

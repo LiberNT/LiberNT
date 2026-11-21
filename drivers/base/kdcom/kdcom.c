@@ -15,7 +15,7 @@
 
 #include <cportlib/cportlib.h>
 #include <cportlib/uartinfo.h>
-#include <reactos/drivers/bootvid/bootvid.h>
+#include <libernt/drivers/bootvid/bootvid.h>
 
 /* GLOBALS ********************************************************************/
 

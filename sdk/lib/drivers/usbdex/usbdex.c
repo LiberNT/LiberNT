@@ -8,7 +8,7 @@
 #include <ntddk.h>
 #include <usb.h>
 #include <usbdlib.h>
-#include <reactos/drivers/usbcapability.h>
+#include <libernt/drivers/usbcapability.h>
 
 #define USBDEX_HANDLE_SIGNATURE 'hdBU'
 

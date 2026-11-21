@@ -3,7 +3,7 @@
 
 include_directories(
     ${REACTOS_SOURCE_DIR}/dll/win32/mmdevapi
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/sound
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/libs/sound
     ${REACTOS_SOURCE_DIR}/drivers/wdm/audio/legacy/wdmaud)
 
 set_source_files_properties(

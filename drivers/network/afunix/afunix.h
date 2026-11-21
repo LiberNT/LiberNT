@@ -11,7 +11,7 @@
 #include <ntifs.h>
 #include <ndk/obtypes.h>
 #include <tdikrnl.h>
-#include <reactos/tdiunix.h>
+#include <libernt/tdiunix.h>
 
 #define TAG_AFUNIX_ENDPOINT 'eufA'
 #define TAG_AFUNIX_CONN     'cufA'

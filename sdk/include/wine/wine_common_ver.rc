@@ -57,4 +57,4 @@
 
 #define REACTOS_VERSION_DLL
 
-#include <reactos/version.rc>
+#include <libernt/version.rc>

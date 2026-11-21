@@ -17,9 +17,9 @@
 #define __WINE_WINNT_EXCEPTION_REGISTRATION_RECORD
 #include <wine/winnt.h>
 #include <pseh/pseh2.h>
-#include <reactos/emulation.h>
-#include <reactos/emuhost.h>
-#include <reactos/chpe.h>
+#include <libernt/emulation.h>
+#include <libernt/emuhost.h>
+#include <libernt/chpe.h>
 #include "cpu.h"
 
 #define EMU_MAX_SERVICE_ARGUMENTS 32

@@ -6,7 +6,7 @@
  */
 
 #include <ntdll.h>
-#include <reactos/arm64/sysreg.h>
+#include <libernt/arm64/sysreg.h>
 
 #define RTL_ARM64_QPC_BYPASS_CONFIGURATION 0x0001
 

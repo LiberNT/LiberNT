@@ -1,7 +1,7 @@
 
 remove_definitions(-D_CRT_NON_CONFORMING_SWPRINTFS)
 
-include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/zlib)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/libernt/libs/zlib)
 
 add_definitions(
     -D_WINE

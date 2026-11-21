@@ -1,6 +1,6 @@
 
-include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl)
-add_rpc_files(server ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/seclogon.idl)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl)
+add_rpc_files(server ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl/seclogon.idl)
 spec2def(seclogon.dll seclogon.spec ADD_IMPORTLIB)
 
 list(APPEND SOURCE

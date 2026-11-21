@@ -4,4 +4,4 @@
 #define REACTOS_STR_INTERNAL_NAME "usbasix"
 #define REACTOS_STR_ORIGINAL_FILENAME "usbasix.sys"
 
-#include <reactos/version.rc>
+#include <libernt/version.rc>

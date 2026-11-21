@@ -15,7 +15,7 @@
 #include "wskname.h"
 
 #define NDEBUG
-#include <reactos/debug.h>
+#include <libernt/debug.h>
 
 /* Exported by the kernel; the prototypes are the ones sdk/include/ndk/rtlfuncs.h declares. */
 NTSYSAPI

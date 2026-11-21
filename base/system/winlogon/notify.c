@@ -11,7 +11,7 @@
 #include "winlogon.h"
 #include <winsvc.h>
 #include <winsvc_undoc.h>
-#include <reactos/wtssession.h>
+#include <libernt/wtssession.h>
 
 /* GLOBALS *******************************************************************/
 

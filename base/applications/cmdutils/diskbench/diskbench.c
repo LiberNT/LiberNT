@@ -21,7 +21,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <reactos/storage_read_benchmark.h>
+#include <libernt/storage_read_benchmark.h>
 
 #define DEFAULT_FILE_MB 64
 #define RANDOM_OPS      2048

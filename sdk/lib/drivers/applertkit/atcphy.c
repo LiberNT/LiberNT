@@ -8,7 +8,7 @@
 #ifndef UNIT_TEST
 #include <ntddk.h>
 #endif
-#include <reactos/drivers/appleatcphy.h>
+#include <libernt/drivers/appleatcphy.h>
 
 #define AUSPLL_FSM_CTRL                     0x1014
 #define AUSPLL_APB_CMD_OVERRIDE             0x2000

@@ -8,7 +8,7 @@
 
 #include <ntoskrnl.h>
 #include "pspriv.h"
-#include <reactos/wow64shared.h>
+#include <libernt/wow64shared.h>
 #define NDEBUG
 #include <debug.h>
 

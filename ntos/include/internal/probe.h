@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include <reactos/probe.h>
+#include <libernt/probe.h>
 
 ROS_PROBE_UNUSED
 static

@@ -8,7 +8,7 @@
 /* INCLUDES ******************************************************************/
 
 #include <ntoskrnl.h>
-#include <reactos/drivers/acpi/acpi.h>
+#include <libernt/drivers/acpi/acpi.h>
 
 #define NDEBUG
 #include <debug.h>

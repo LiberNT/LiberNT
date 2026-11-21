@@ -8,7 +8,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <windef.h>
-#include <reactos/emuhost.h>
+#include <libernt/emuhost.h>
 #include "rv64xtest.h"
 
 static RV64X_TEST_TABLE Rv64xTable;

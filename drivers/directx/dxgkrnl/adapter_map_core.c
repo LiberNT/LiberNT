@@ -5,7 +5,7 @@
  */
 
 #include "adapter_map_core.h"
-#include <reactos/drivers/cmreslist.h>
+#include <libernt/drivers/cmreslist.h>
 
 BOOLEAN
 DxgkAdapterMapRangeAssigned(

@@ -13,7 +13,7 @@
 #include <winbase.h>
 
 
-#include <reactos/buildno.h>
+#include <libernt/buildno.h>
 
 #include "../win32err.h"
 

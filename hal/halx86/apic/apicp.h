@@ -63,7 +63,7 @@
 #define APIC_RESERVED_VECTOR 0xFE
 
 /* Upper bound on boot-IOAPIC redirection entries (PCH-class: 120 pins) */
-#include <reactos/hal/acpi_pci.h>
+#include <libernt/hal/acpi_pci.h>
 #define APIC_MAX_GSI_PINS HAL_ACPI_MAX_GSI_PINS
 
 /* Pins actually present, from the IOAPIC version register; stays at

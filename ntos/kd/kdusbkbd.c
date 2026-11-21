@@ -6,7 +6,7 @@
  */
 
 #include <ntoskrnl.h>
-#include <reactos/drivers/dumpstor.h>
+#include <libernt/drivers/dumpstor.h>
 #include "kd.h"
 #include "kdterminal.h"
 

@@ -6,7 +6,7 @@
 #define REACTOS_STR_INTERNAL_NAME       "route"
 #define REACTOS_STR_ORIGINAL_FILENAME   "route.exe"
 #define REACTOS_STR_ORIGINAL_COPYRIGHT  "Art Yerkes (arty@users.sourceforge.net)"
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
 /* UTF-8 */
 #pragma code_page(65001)

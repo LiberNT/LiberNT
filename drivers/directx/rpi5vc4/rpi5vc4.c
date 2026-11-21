@@ -21,7 +21,7 @@
 #include "rpi5vc4_iommu.h"
 
 #define NDEBUG
-#include <reactos/debug.h>
+#include <libernt/debug.h>
 
 #define RPI5VC4_ACPI_SIGNATURE(a, b, c, d) \
     ((ULONG)(a) | ((ULONG)(b) << 8) | ((ULONG)(c) << 16) | ((ULONG)(d) << 24))

@@ -7,7 +7,7 @@
  */
 
 #include <ntoskrnl.h>
-#include <reactos/smpdbg.h>
+#include <libernt/smpdbg.h>
 
 #ifdef CONFIG_SMP
 static struct

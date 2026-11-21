@@ -58,7 +58,7 @@
 #include <windef.h>
 #include "wddm_bridge.h"
 #include <d3dkmthk.h>
-#include <reactos/rddm/rxgkinterface.h>
+#include <libernt/rddm/rxgkinterface.h>
 #define NDEBUG
 #include <debug.h>
 

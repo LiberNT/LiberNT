@@ -6,12 +6,12 @@
  */
 
 #include <ntddk.h>
-#include <reactos/drivers/applertkit.h>
-#include <reactos/drivers/appleadt.h>
-#include <reactos/drivers/appledart.h>
-#include <reactos/drivers/applepmgr.h>
-#include <reactos/drivers/applepmp.h>
-#include <reactos/drivers/fdtdrv.h>
+#include <libernt/drivers/applertkit.h>
+#include <libernt/drivers/appleadt.h>
+#include <libernt/drivers/appledart.h>
+#include <libernt/drivers/applepmgr.h>
+#include <libernt/drivers/applepmp.h>
+#include <libernt/drivers/fdtdrv.h>
 
 #define PMP_TAG                     'pPpA'
 #define PMP_ENDPOINT                0x20

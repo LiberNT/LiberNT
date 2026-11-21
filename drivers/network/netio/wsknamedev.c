@@ -14,7 +14,7 @@
 #include "wskname.h"
 
 #define NDEBUG
-#include <reactos/debug.h>
+#include <libernt/debug.h>
 
 typedef struct _WSKNAME_FILE
 {

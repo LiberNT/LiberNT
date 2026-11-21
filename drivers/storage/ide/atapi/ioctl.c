@@ -8,7 +8,7 @@
 /* INCLUDES *******************************************************************/
 
 #include "atapi.h"
-#include <reactos/drivers/dumpstor.h>
+#include <libernt/drivers/dumpstor.h>
 
 /* GLOBALS ********************************************************************/
 

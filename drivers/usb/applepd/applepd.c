@@ -6,9 +6,9 @@
  */
 
 #include <ntddk.h>
-#include <reactos/drivers/fdtdrv.h>
-#include <reactos/drivers/applepmgr.h>
-#include <reactos/drivers/appleacepd.h>
+#include <libernt/drivers/fdtdrv.h>
+#include <libernt/drivers/applepmgr.h>
+#include <libernt/drivers/appleacepd.h>
 
 #define APPLE_PD_TAG            'dPpA'
 #define APPLE_PD_MAX_PORTS      4

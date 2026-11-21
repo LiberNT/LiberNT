@@ -8,7 +8,7 @@
 #include "dxgkrnl_private.h"
 #include "present.h"
 #include "vidmm.h"
-#include <reactos/dwmframe.h>
+#include <libernt/dwmframe.h>
 
 NTKERNELAPI VOID FASTCALL
 ExfAcquirePushLockExclusive(_Inout_ PEX_PUSH_LOCK PushLock);

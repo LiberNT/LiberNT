@@ -11,7 +11,7 @@
 #include <ndk/ntndk.h>
 #include <winreg.h>
 #include <libernt/fdtlib.h>
-#include <reactos/drivers/applepmp.h>
+#include <libernt/drivers/applepmp.h>
 
 #define UNIT_TEST
 

@@ -1,6 +1,6 @@
 
-include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl)
-add_rpc_files(client ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/dhcpcsvc.idl)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl)
+add_rpc_files(client ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl/dhcpcsvc.idl)
 
 add_executable(ipconfig ipconfig.c ipconfig.rc ${CMAKE_CURRENT_BINARY_DIR}/dhcpcsvc_c.c)
 set_module_type(ipconfig win32cui UNICODE)

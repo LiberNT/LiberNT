@@ -5,6 +5,6 @@
 #define REACTOS_STR_INTERNAL_NAME	"ksuser.dll\0"
 #define REACTOS_STR_ORIGINAL_FILENAME	"ksuser.dll\0"
 
-#include <reactos/reactx.h>
+#include <libernt/reactx.h>
 
-#include <reactos/version.rc>
+#include <libernt/version.rc>

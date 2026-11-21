@@ -10,7 +10,7 @@ add_definitions(
     -D_DLL -D__USE_CRTIMP
     -D_CRT_NO_POSIX_ERROR_CODES)
 
-include_directories(BEFORE ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/libmpg123)
+include_directories(BEFORE ${REACTOS_SOURCE_DIR}/sdk/include/libernt/libs/libmpg123)
 
 list(APPEND SOURCE
     compat/compat.c

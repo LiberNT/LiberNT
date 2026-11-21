@@ -18,7 +18,7 @@
 #include <acpiioct.h>
 #include <ntintsafe.h>
 #include <initguid.h>
-#include <reactos/drivers/acpi/acpipci.h>
+#include <libernt/drivers/acpi/acpipci.h>
 
 /* TEST DEFINITIONS ***********************************************************/
 

@@ -7,7 +7,7 @@
  */
 
 #include <ntoskrnl.h>
-#include <reactos/arm64/acpi.h>
+#include <libernt/arm64/acpi.h>
 #include <libernt/fdtlib.h>
 
 #define NDEBUG

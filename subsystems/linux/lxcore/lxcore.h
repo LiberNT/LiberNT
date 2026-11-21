@@ -14,7 +14,7 @@
 #include <ndk/mmfuncs.h>
 #include <ndk/psfuncs.h>
 #include <ndk/iofuncs.h>
-#include <reactos/pico.h>
+#include <libernt/pico.h>
 #include <pseh/pseh2.h>
 #include <bcrypt.h>
 #include <ntstrsafe.h>

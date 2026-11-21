@@ -25,7 +25,7 @@
 #define REACTOS_STR_INTERNAL_NAME      "cmd"
 #define REACTOS_STR_ORIGINAL_FILENAME  "cmd.exe"
 #define REACTOS_STR_ORIGINAL_COPYRIGHT "Copyright (C) 1999-2025 D A Pickles, J Edmeades and the Wine authors"
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
 IDI_ICON1 ICON "res/terminal.ico"
 

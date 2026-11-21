@@ -8,8 +8,8 @@
 #ifndef UNIT_TEST
 #include <ntddk.h>
 #endif
-#include <reactos/drivers/applepmgr.h>
-#include <reactos/drivers/appleadmac.h>
+#include <libernt/drivers/applepmgr.h>
+#include <libernt/drivers/appleadmac.h>
 
 #define ADMAC_MAX_CHANNELS          64
 #define ADMAC_INTERRUPT_OUTPUTS     4

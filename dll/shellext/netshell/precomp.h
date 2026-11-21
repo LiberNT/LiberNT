@@ -16,7 +16,7 @@
 #include <shlwapi.h>
 #include <shlobj.h>
 #include <shellapi.h>
-#include <reactos/trayicons.h>
+#include <libernt/trayicons.h>
 #include <atlbase.h>
 #include <atlcom.h>
 #include <atlcoll.h>

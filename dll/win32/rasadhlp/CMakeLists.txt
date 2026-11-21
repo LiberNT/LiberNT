@@ -1,5 +1,5 @@
 
-include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/winsock)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/libernt/winsock)
 spec2def(rasadhlp.dll rasadhlp.spec)
 
 list(APPEND SOURCE

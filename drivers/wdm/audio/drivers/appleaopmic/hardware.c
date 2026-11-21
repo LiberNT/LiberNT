@@ -6,10 +6,10 @@
  */
 
 #include <ntddk.h>
-#include <reactos/drivers/fdtdrv.h>
-#include <reactos/drivers/appleadmac.h>
-#include <reactos/drivers/appledart.h>
-#include <reactos/drivers/applertkit.h>
+#include <libernt/drivers/fdtdrv.h>
+#include <libernt/drivers/appleadmac.h>
+#include <libernt/drivers/appledart.h>
+#include <libernt/drivers/applertkit.h>
 #include "hardware.h"
 
 #define AOP_MIC_HW_TAG 'hOpA'

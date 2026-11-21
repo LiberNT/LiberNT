@@ -10,4 +10,4 @@
 #define REACTOS_STR_INTERNAL_NAME       "wpnapps\0"
 #define REACTOS_STR_ORIGINAL_FILENAME   "wpnapps.dll\0"
 
-#include <reactos/version.rc>
+#include <libernt/version.rc>

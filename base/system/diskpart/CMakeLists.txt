@@ -1,6 +1,6 @@
 
 include_directories(${REACTOS_SOURCE_DIR}/sdk/lib/conutils)
-include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/fmifs)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/libernt/libs/fmifs)
 include_directories(${REACTOS_SOURCE_DIR}/sdk/lib/storageutils)
 
 list(APPEND SOURCE

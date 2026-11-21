@@ -8,8 +8,8 @@
 #ifndef UNIT_TEST
 #include <ntddk.h>
 #endif
-#include <reactos/drivers/applepmgr.h>
-#include <reactos/drivers/applespmi.h>
+#include <libernt/drivers/applepmgr.h>
+#include <libernt/drivers/applespmi.h>
 
 #define SPMI_STATUS                 0x00
 #define SPMI_STATUS_RX_EMPTY        0x01000000

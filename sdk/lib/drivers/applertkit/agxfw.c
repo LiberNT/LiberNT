@@ -8,7 +8,7 @@
 #ifndef UNIT_TEST
 #include <ntddk.h>
 #endif
-#include <reactos/drivers/appleagxfw.h>
+#include <libernt/drivers/appleagxfw.h>
 
 typedef struct _AGX_FW_SPEC
 {

@@ -16,7 +16,7 @@
 #include <wincon_undoc.h>
 #include <ndk/kefuncs.h>
 #include <ndk/mmfuncs.h>
-#include <reactos/subsys/csr/csrwow64.h>
+#include <libernt/subsys/csr/csrwow64.h>
 
 #define NDEBUG
 #include <debug.h>

@@ -6,10 +6,10 @@
  */
 
 #include "kdusbnet.h"
-#include <reactos/drivers/fdtdrv.h>
-#include <reactos/drivers/applepmgr.h>
-#include <reactos/drivers/appledart.h>
-#include <reactos/drivers/appledwc3host.h>
+#include <libernt/drivers/fdtdrv.h>
+#include <libernt/drivers/applepmgr.h>
+#include <libernt/drivers/appledart.h>
+#include <libernt/drivers/appledwc3host.h>
 
 #define USBNET_APPLE_OWNER "USB debugger"
 

@@ -10,10 +10,10 @@
 #include <ndk/kefuncs.h>
 #include <ioaccess.h>
 #include <halfuncs.h>
-#include <reactos/arm64/sysreg.h>
-#include <reactos/hal/halext.h>
+#include <libernt/arm64/sysreg.h>
+#include <libernt/hal/halext.h>
 #include "apple_aic.h"
-#include <reactos/drivers/applepcie.h>
+#include <libernt/drivers/applepcie.h>
 
 #define NDEBUG
 #include <debug.h>

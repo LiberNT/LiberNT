@@ -12,4 +12,4 @@
 #define REACTOS_FILEVERSION 10,0,14393,2247
 #define REACTOS_STR_FILE_VERSION "10.0.14393.2247\0"
 
-#include <reactos/version.rc>
+#include <libernt/version.rc>

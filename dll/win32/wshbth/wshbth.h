@@ -16,7 +16,7 @@
 #include <ws2bth.h>
 #include <bluetoothapis.h>
 #include <bthioctl.h>
-#include <reactos/tdibth.h>
+#include <libernt/tdibth.h>
 
 #define EXPORT WINAPI
 
