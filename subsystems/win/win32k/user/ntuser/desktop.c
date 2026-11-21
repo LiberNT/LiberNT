@@ -189,12 +189,28 @@ IntDesktopObjectDelete(
     if (pdesk->pDeskInfo &&
         pdesk->pDeskInfo->spwnd)
     {
-        ASSERT(pdesk->pDeskInfo->spwnd->spwndChild == NULL);
-        co_UserDestroyWindow(pdesk->pDeskInfo->spwnd);
+        PWND pwnd = pdesk->pDeskInfo->spwnd;
+
+        ASSERT(pwnd->spwndChild == NULL);
+        co_UserDestroyWindow(pwnd);
+        if (UserObjectInDestroy(UserHMGetHandle(pwnd)))
+        {
+            pdesk->pDeskInfo->spwnd = NULL;
+            UserDereferenceObject(pwnd);
+        }
     }
 
     if (pdesk->spwndMessage)
-        co_UserDestroyWindow(pdesk->spwndMessage);
+    {
+        PWND pwnd = pdesk->spwndMessage;
+
+        co_UserDestroyWindow(pwnd);
+        if (UserObjectInDestroy(UserHMGetHandle(pwnd)))
+        {
+            pdesk->spwndMessage = NULL;
+            UserDereferenceObject(pwnd);
+        }
+    }
 
     /* Remove the desktop from the window station's list of associated desktops */
     RemoveEntryList(&pdesk->ListEntry);
@@ -1476,6 +1492,21 @@ VOID NTAPI DesktopThreadMain(VOID)
     }
 
     UserLeave();
+}
+
+VOID
+FASTCALL
+IntReleaseInputDesktop(VOID)
+{
+    PDESKTOP pdesk = gpdeskInputDesktop;
+
+    ASSERT(UserIsEnteredExclusive());
+    if (pdesk == NULL)
+        return;
+    gpdeskInputDesktop = NULL;
+    if (pdesk->rpwinstaParent->ActiveDesktop == pdesk)
+        pdesk->rpwinstaParent->ActiveDesktop = NULL;
+    ObDereferenceObject(pdesk);
 }
 
 HDC FASTCALL

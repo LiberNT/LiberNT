@@ -241,7 +241,7 @@ IntWinStaObjectDelete(
         ASSERT(!(WinSta->Flags & WSS_NOIO));
 
         /* Only Winlogon can close and delete the interactive window station */
-        ASSERT(Session->LogonPid == PsGetCurrentProcessId());
+        ASSERT(Session->LogonPid == PsGetCurrentProcessId() || Session->Ending);
 
         Session->InputWindowStation = NULL;
 
@@ -256,9 +256,12 @@ IntWinStaObjectDelete(
 
             /* Close the handle in the CSRSS process */
             ASSERT(Session->CsrProcess);
-            KeStackAttachProcess(&Session->CsrProcess->Pcb, &ApcState);
-            ObCloseHandle(Session->DesktopSwitchEventHandle, UserMode);
-            KeUnstackDetachProcess(&ApcState);
+            if (!Session->Ending)
+            {
+                KeStackAttachProcess(&Session->CsrProcess->Pcb, &ApcState);
+                ObCloseHandle(Session->DesktopSwitchEventHandle, UserMode);
+                KeUnstackDetachProcess(&ApcState);
+            }
             Session->DesktopSwitchEventHandle = NULL;
         }
     }
