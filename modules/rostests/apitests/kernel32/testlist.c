@@ -155,8 +155,8 @@ extern void func_ProcessPreferredUILanguages(void);
 extern void func_PseudoConsoleCtrlC(void);
 extern void func_PseudoConsoleVtInput(void);
 extern void func_PssSnapshot(void);
-extern void func_ResourceUILanguage(void);
 extern void func_PssWalk(void);
+extern void func_ResourceUILanguage(void);
 extern void func_OpenFileByIdRename(void);
 extern void func_LoaderLock(void);
 extern void func_PagingFileOpen(void);
@@ -393,9 +393,9 @@ const struct test winetest_testlist[] =
     { "PseudoConsoleCtrlC",          func_PseudoConsoleCtrlC },
     { "PseudoConsoleVtInput",        func_PseudoConsoleVtInput },
     { "PssSnapshot",                 func_PssSnapshot },
+    { "PssWalk", func_PssWalk },
     { "ResourceUILanguage",          func_ResourceUILanguage },
     { "OpenFileByIdRename",          func_OpenFileByIdRename },
-    { "PssWalk", func_PssWalk },
     { "LoaderLock",                  func_LoaderLock },
     { "PagingFileOpen",              func_PagingFileOpen },
     { "PrivMoveFileIdentityW",       func_PrivMoveFileIdentityW },

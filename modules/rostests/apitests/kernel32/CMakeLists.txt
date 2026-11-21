@@ -163,8 +163,8 @@ list(APPEND SOURCE
     PseudoConsoleCtrlC.c
     PseudoConsoleVtInput.c
     PssSnapshot.c
-    PrivMoveFileIdentityW.c
     PssWalk.c
+    PrivMoveFileIdentityW.c
     QueueUserAPC.c
     QueryProcessCycleTime.c
     ReadFile.c
