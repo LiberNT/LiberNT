@@ -315,8 +315,8 @@ std::vector<std::wstring> SplitPathVariable(const std::wstring &value)
 
 bool SamePathEntry(std::wstring left, std::wstring right)
 {
-    while (left.size() > 3 && (left.back() == L'\\' || left.back() == L'/')) left.pop_back();
-    while (right.size() > 3 && (right.back() == L'\\' || right.back() == L'/')) right.pop_back();
+    while (left.size() > 3 && (left[left.size() - 1] == L'\\' || left[left.size() - 1] == L'/')) left.pop_back();
+    while (right.size() > 3 && (right[right.size() - 1] == L'\\' || right[right.size() - 1] == L'/')) right.pop_back();
     return _wcsicmp(left.c_str(), right.c_str()) == 0;
 }
 
