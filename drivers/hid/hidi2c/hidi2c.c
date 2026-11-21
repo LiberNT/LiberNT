@@ -1160,6 +1160,6 @@ DriverEntry(
     Registration.DriverObject = DriverObject;
     Registration.RegistryPath = RegistryPath;
     Registration.DeviceExtensionSize = sizeof(HIDI2C_DEVICE_EXTENSION);
-    Registration.DevicesArePolled = FALSE;
+    Registration.DevicesArePolled = TRUE;
     return HidRegisterMinidriver(&Registration);
 }
