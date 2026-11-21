@@ -257,7 +257,7 @@ HalpAddDevice(IN PDRIVER_OBJECT DriverObject,
     FdoExtension->AttachedDeviceObject = AttachedDevice;
 
     /* A platform described only by a device tree has no ACPI namespace to enumerate */
-    if (!HalAcpiGetTable(0, 'PCAF') && HalpFdtInitialize())
+    if (!HalpAcpiFirmwareDescribesDevices() && HalpFdtInitialize())
         Status = HalpCreateFdtPdos(DriverObject, FdoExtension);
     else
         Status = HalpCreatePdo(DriverObject, FdoExtension, AcpiPdo, NULL);
