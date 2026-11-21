@@ -168,8 +168,8 @@
 ; local stubs (kernstubs.c; HalDma*CrashDumpRegistersEx in common sysinfo_stubs.c)
 ; and exported here by bare name. Pure ABI-completeness exports: none are invoked
 ; on the ARM64 boot path, so they are boot-neutral.
-@ stdcall -arch=riscv64,x86_64 HalQueryMaximumProcessorCount()
-@ stdcall -arch=riscv64,x86_64 HalIsHyperThreadingEnabled()
+@ stdcall -arch=i386,riscv64,x86_64 HalQueryMaximumProcessorCount()
+@ stdcall -arch=i386,riscv64,x86_64 HalIsHyperThreadingEnabled()
 @ extern -constant KdHvComPortInUse ntoskrnl.KdHvComPortInUse
 
 ; Internal kernel entry points needed by early ARM64 HAL code.
