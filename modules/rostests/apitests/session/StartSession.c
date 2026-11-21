@@ -146,6 +146,27 @@ static BOOL ProcessObjectGone(DWORD pid, ULONG sessionId)
     return NT_SUCCESS(status) && info.SessionId != sessionId;
 }
 
+static LONG NonPagedBlocks(const char *tag)
+{
+    PSYSTEM_POOLTAG_INFORMATION info;
+    ULONG length = 1 << 20, i;
+    LONG blocks = -1;
+
+    info = HeapAlloc(GetProcessHeap(), 0, length);
+    if (!info) return -1;
+    if (NT_SUCCESS(NtQuerySystemInformation(SystemPoolTagInformation, info, length, NULL)))
+    {
+        for (i = 0; i < info->Count; i++)
+        {
+            if (!memcmp(info->TagInfo[i].Tag, tag, 4))
+                blocks = (LONG)(info->TagInfo[i].NonPagedAllocs - info->TagInfo[i].NonPagedFrees);
+        }
+        if (blocks < 0) blocks = 0;
+    }
+    HeapFree(GetProcessHeap(), 0, info);
+    return blocks;
+}
+
 static void RunSession(HANDLE port, ULONG ownSession, ULONG *previous)
 {
     WCHAR commandLine[MAX_PATH + 32], path[MAX_PATH], report[1024];
@@ -212,6 +233,7 @@ START_TEST(StartSession)
     HSWDEVICE adapter = NULL;
     HANDLE port = NULL;
     ULONG videoBefore, wait, previous = MAXULONG;
+    LONG messageLists, gdiLists;
     DWORD ownSession = 0, console;
     NTSTATUS status;
     HRESULT hr;
@@ -244,8 +266,16 @@ START_TEST(StartSession)
         ok(status == STATUS_INVALID_PARAMETER, "stopping session 0 returned 0x%lx\n", status);
         status = SmStopCsr(port, ownSession);
         ok(status == STATUS_INVALID_PARAMETER, "stopping the console session returned 0x%lx\n", status);
+        messageLists = NonPagedBlocks("UMSG");
+        gdiLists = NonPagedBlocks("Ghtb");
+        ok(messageLists > 0 && gdiLists > 0, "the console's win32k holds %ld UMSG and %ld Ghtb blocks\n",
+           messageLists, gdiLists);
         RunSession(port, ownSession, &previous);
         RunSession(port, ownSession, &previous);
+        ok(NonPagedBlocks("UMSG") == messageLists, "UMSG went from %ld to %ld blocks across two sessions\n",
+           messageLists, NonPagedBlocks("UMSG"));
+        ok(NonPagedBlocks("Ghtb") == gdiLists, "Ghtb went from %ld to %ld blocks across two sessions\n",
+           gdiLists, NonPagedBlocks("Ghtb"));
         NtClose(port);
     }
     ok(WTSGetActiveConsoleSessionId() == console, "the console moved to session %lu\n", WTSGetActiveConsoleSessionId());
