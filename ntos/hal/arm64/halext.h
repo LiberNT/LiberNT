@@ -27,6 +27,12 @@
 
 #pragma once
 
+#if defined(_NTOSKRNL_) || defined(_NTSYSTEM_)
+ULONG
+NTAPI
+KeGetCurrentProcessorNumber(VOID);
+#endif
+
 /* ------------------------------------------------------------------ */
 /*  Generic MMIO accessor (defined in halarm64.c): identity-mapping   */
 /*  aware during Phase 0, physical-alias/kernel-VA aware afterwards.  */

@@ -382,17 +382,20 @@ static ULONG HalpArm64PciRootBridgeCount = 0;
 #define TAG_HAL    ' laH'
 #endif
 
-#ifndef KeGetCurrentProcessorNumber
-ULONG
-NTAPI
-KeGetCurrentProcessorNumber(VOID);
-#endif
-
 #ifndef KeRaiseIrqlToDpcLevel
 KIRQL
 NTAPI
 KeRaiseIrqlToDpcLevel(VOID);
 #endif
+
+NTSTATUS
+NTAPI
+IopAllocateAdapterChannel(
+    _In_ PDMA_ADAPTER DmaAdapter,
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ ULONG NumberOfMapRegisters,
+    _In_ PDRIVER_CONTROL ExecutionRoutine,
+    _In_ PVOID Context);
 
 #ifndef KeLowerIrql
 VOID
@@ -4314,11 +4317,11 @@ HalpArm64AllocateAdapterChannel(
      * Previously we called ExecutionRoutine directly with NULL for the IRP,
      * which caused crashes when the driver tried to access Irp->MdlAddress.
      */
-    return IoAllocateAdapterChannel((PADAPTER_OBJECT)DmaAdapter,
-                                    DeviceObject,
-                                    NumberOfMapRegisters,
-                                    ExecutionRoutine,
-                                    Context);
+    return IopAllocateAdapterChannel(DmaAdapter,
+                                     DeviceObject,
+                                     NumberOfMapRegisters,
+                                     ExecutionRoutine,
+                                     Context);
 }
 
 static PVOID NTAPI
