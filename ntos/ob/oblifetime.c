@@ -1141,6 +1141,11 @@ ObpQueryNameInfoSize(
     return Bytes + sizeof(OBJECT_NAME_INFORMATION) + sizeof(UNICODE_NULL);
 }
 
+/* Windows 11 x64 returns the type index at offset 0x5A, right after MaintainHandleCount (measured) */
+C_ASSERT(FIELD_OFFSET(OBJECT_TYPE_INFORMATION, TypeIndex) ==
+         FIELD_OFFSET(OBJECT_TYPE_INFORMATION, MaintainHandleCount) + sizeof(BOOLEAN));
+C_ASSERT(FIELD_OFFSET(OBJECT_TYPE_INFORMATION, TypeIndex) == sizeof(UNICODE_STRING) + 0x4A);
+
 NTSTATUS
 NTAPI
 ObQueryTypeInfo(
@@ -1182,6 +1187,7 @@ ObQueryTypeInfo(
     ObjectTypeInfo->SecurityRequired = ObjectType->TypeInfo.SecurityRequired;
     ObjectTypeInfo->MaintainHandleCount =
         ObjectType->TypeInfo.MaintainHandleCount;
+    ObjectTypeInfo->TypeIndex = ObjectType->Index;
     ObjectTypeInfo->PoolType = ObjectType->TypeInfo.PoolType;
     ObjectTypeInfo->DefaultPagedPoolCharge =
         ObjectType->TypeInfo.DefaultPagedPoolCharge;
