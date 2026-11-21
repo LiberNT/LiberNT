@@ -174,11 +174,9 @@ elseif(ARCH STREQUAL "amd64")
         client/amd64/emuwork.c
         client/amd64/unwind.c)
 elseif(ARCH STREQUAL "arm")
-    list(APPEND ASM_SOURCE
-        client/arm/fiber.S
-        client/arm/thread.S)
     list(APPEND SOURCE
         client/arm/emuwork.c
+        client/arm/fiber.c
         client/nounwind.c)
 elseif(ARCH STREQUAL "arm64")
     list(APPEND SOURCE

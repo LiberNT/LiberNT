@@ -324,14 +324,7 @@ RtlWalkFrameChain(OUT PVOID *Callers,
         __asm__("move $sp, %0" : "=r" (Stack) : );
 #elif defined(_M_PPC)
     __asm__("mr %0,1" : "=r" (Stack) : );
-#elif defined(_M_ARM)
-#if defined __GNUC__
-    __asm__("mov sp, %0" : "=r"(Stack) : );
-#elif defined(_MSC_VER)
-    // FIXME: Hack. Probably won't work if this ever actually manages to run someday.
-    Stack = (ULONG_PTR)&Stack;
-#endif
-#elif defined(_M_ARM64) || defined(_ARM64_) || defined(__aarch64__)
+#elif defined(_M_ARM) || defined(_M_ARM64) || defined(_ARM64_) || defined(__aarch64__)
 #if defined(__GNUC__) || defined(__clang__)
     Stack = (ULONG_PTR)__builtin_frame_address(0);
 #elif defined(_MSC_VER)

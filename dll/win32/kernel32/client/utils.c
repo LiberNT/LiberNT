@@ -1002,32 +1002,25 @@ BaseInitializeContext(IN PCONTEXT Context,
         Context->ContextFlags = CONTEXT_FULL;
     }
 #elif defined(_M_ARM)
-    DPRINT("BaseInitializeContext: %p\n", Context);
+    ASSERT(((ULONG_PTR)StackAddress & 7) == 0);
 
-    // FIXME: check if this is correct!
-    /* Setup the Initial Win32 Thread Context */
+    RtlZeroMemory(Context, sizeof(*Context));
     Context->R0 = (ULONG_PTR)StartAddress;
     Context->R1 = (ULONG_PTR)Parameter;
     Context->Sp = (ULONG_PTR)StackAddress;
+    Context->Cpsr = 0x20; /* CPSR.T: Windows on ARM runs user code in Thumb state */
 
-    if (ContextType == 1)      /* For Threads */
-    {
-        Context->Pc = (ULONG_PTR)BaseThreadStartupThunk;
-    }
-    else if (ContextType == 2) /* For Fibers */
+    if (ContextType == 2)
     {
         Context->Pc = (ULONG_PTR)BaseFiberStartup;
+        Context->Lr = (ULONG_PTR)ExitThread;
     }
-    else                       /* For first thread in a Process */
+    else
     {
-        Context->Pc = (ULONG_PTR)BaseProcessStartThunk;
+        Context->Pc = (ULONG_PTR)RtlUserThreadStart;
     }
 
-    /* Set the Context Flags */
     Context->ContextFlags = CONTEXT_FULL;
-
-    /* Give it some room for the Parameter */
-    Context->Sp -= sizeof(PVOID);
 #else
 #warning Unknown architecture
     UNIMPLEMENTED;
