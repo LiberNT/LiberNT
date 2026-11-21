@@ -173,11 +173,8 @@ NtfsUpdateReparsePoint(
                 FileCB->FileRec,
                 Input,
                 InputLength);
-        if (NT_SUCCESS(Status) &&
-            (NtfsFileRecordGetHeader(FileCB->FileRec)->Flags & FR_IS_DIRECTORY))
-        {
+        if (NT_SUCCESS(Status))
             InterlockedIncrement(&VolCB->DirGeneration);
-        }
     }
     NtfsReleaseMetadata(VolCB);
     if (NT_SUCCESS(Status))
@@ -241,11 +238,8 @@ NtfsDeleteExternalBacking(
     {
         Status = NtfsFileRecordDeleteExternalBacking(
             FileCB->FileRec);
-        if (NT_SUCCESS(Status) &&
-            (NtfsFileRecordGetHeader(FileCB->FileRec)->Flags & FR_IS_DIRECTORY))
-        {
+        if (NT_SUCCESS(Status))
             InterlockedIncrement(&VolCB->DirGeneration);
-        }
     }
     NtfsReleaseMetadata(VolCB);
     if (NT_SUCCESS(Status))
@@ -507,6 +501,8 @@ NtfsSetSparse(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         FileCB->RequestedType,
         FileCB->RequestedStream,
         SetSparse);
+    if (NT_SUCCESS(Status))
+        InterlockedIncrement(&VolCB->DirGeneration);
     NtfsReleaseMetadata(VolCB);
     if (NT_SUCCESS(Status))
     {
@@ -639,6 +635,8 @@ NtfsSetCompression(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         FileCB->FileRec,
         IsDirectory ? NULL : FileCB->RequestedStream,
         Format != COMPRESSION_FORMAT_NONE);
+    if (NT_SUCCESS(Status))
+        InterlockedIncrement(&VolCB->DirGeneration);
     NtfsReleaseMetadata(VolCB);
     if (NT_SUCCESS(Status))
     {
@@ -750,6 +748,8 @@ NtfsSetZeroData(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         (ULONGLONG)Input->FileOffset.QuadPart,
         (ULONGLONG)Input->
             BeyondFinalZero.QuadPart);
+    if (NT_SUCCESS(Status))
+        InterlockedIncrement(&VolCB->DirGeneration);
     NtfsReleaseMetadata(VolCB);
     if (NT_SUCCESS(Status))
     {

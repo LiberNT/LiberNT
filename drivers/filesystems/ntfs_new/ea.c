@@ -821,8 +821,7 @@ NtfsFsdSetEa(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     }
     if (UpdateCount != 0 && NT_SUCCESS(Status))
     {
-        if (NtfsFileRecordGetHeader(FileCB->FileRec)->Flags & FR_IS_DIRECTORY)
-            InterlockedIncrement(&VolCB->DirGeneration);
+        InterlockedIncrement(&VolCB->DirGeneration);
         FileCB->EaIndex = 1;
         FileObject->Flags |= FO_FILE_MODIFIED;
     }
