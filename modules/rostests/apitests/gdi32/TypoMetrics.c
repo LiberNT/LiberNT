@@ -112,7 +112,7 @@ START_TEST(TypoMetrics)
     BYTE *Font;
     DWORD Size, Count;
     HDC hDC;
-    SIZE_T i;
+    size_t i;
 
     Resource = FindResourceA(GetModuleHandleA(NULL), "ExampleFont.ttf", MAKEINTRESOURCEA(RT_RCDATA));
     ok(Resource != NULL, "ExampleFont.ttf resource not found\n");

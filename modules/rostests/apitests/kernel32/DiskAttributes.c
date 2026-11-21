@@ -341,7 +341,7 @@ ReadDriveStart(
 
     Offset.QuadPart = 0;
     Status = NtReadFile(Handle, NULL, NULL, NULL, &Io, Buffer, sizeof(Buffer), &Offset, NULL);
-    ok(!NT_SUCCESS(Status) || Io.Information == sizeof(Buffer), "%s: read %Iu bytes\n", wine_dbgstr_w(Device), Io.Information);
+    ok(!NT_SUCCESS(Status) || Io.Information == sizeof(Buffer), "%s: read %Iu bytes\n", wine_dbgstr_w(Device), (size_t)Io.Information);
     NtClose(Handle);
     return Status;
 }
