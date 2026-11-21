@@ -8523,7 +8523,7 @@ retry:
 
 #endif // #if (NTDDI_VERSION >= NTDDI_WINTHRESHOLD)
 
-__inline
+static __inline
 BOOLEAN
 ClassDeviceHwFirmwareIsPortDriverSupported(
     _In_  PDEVICE_OBJECT DeviceObject
