@@ -10,5 +10,5 @@ add_library(w32time MODULE
 
 set_module_type(w32time win32dll UNICODE)
 
-add_importlibs(w32time ws2_32 advapi32 msvcrt user32 kernel32 ntdll)
+add_importlibs(w32time ws2_32 iphlpapi advapi32 msvcrt user32 kernel32 ntdll)
 add_cd_file(TARGET w32time DESTINATION reactos/system32 FOR all)
