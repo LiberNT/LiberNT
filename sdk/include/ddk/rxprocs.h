@@ -93,6 +93,7 @@ RxConjureOriginalName(
 
 #if (_WIN32_WINNT >= 0x0600)
 NTSTATUS
+NTAPI
 RxCompleteMdl(
     _In_ PRX_CONTEXT RxContext,
     _In_ PIRP Irp);
