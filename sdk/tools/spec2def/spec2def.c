@@ -67,6 +67,7 @@ enum _ARCH
 typedef int (*PFNOUTLINE)(FILE *, EXPORT *);
 int gbMSComp = 0;
 int gbImportLib = 0;
+int gbThunkImports = 0;
 int gbForwardResolution = 0;
 int gbNotPrivateNoWarn = 0;
 int gbTracing = 0;
@@ -243,6 +244,20 @@ int NeedsX86MsCxxAlias(EXPORT *pexp);
 void PrintExportName(FILE *fileDest, EXPORT *pexp, int fDeco);
 void PrintX86MsCxxAliasTarget(FILE *fileDest, EXPORT *pexp);
 
+static int
+IsPlainCName(PSTRING pstr)
+{
+    unsigned i;
+
+    for (i = 0; i < pstr->len; i++)
+    {
+        char c = pstr->buf[i];
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'))
+            return 0;
+    }
+    return pstr->len != 0;
+}
+
 /* A -thunk export is a function of this DLL that jumps to its forward target through the import table, as Windows exports its stubs */
 static int
 IsThunkExport(EXPORT *pexp)
@@ -259,20 +274,21 @@ OutputThunk_stub(FILE *file, EXPORT *pexp)
     int cchFunction = (int)(pexp->strTarget.buf + pexp->strTarget.len - pszFunction);
     char szThunk[512], szImport[512];
 
+    /* The target goes through the alias its import library adds, which defines no stub of the function's own name */
     if ((giArch == ARCH_X86) && (pexp->nCallingConvention == CC_STDCALL))
     {
         snprintf(szThunk, sizeof(szThunk), "___lnt_thunk_%.*s@%d", pexp->strName.len, pexp->strName.buf, pexp->nStackBytes);
-        snprintf(szImport, sizeof(szImport), "__imp__%.*s@%d", cchFunction, pszFunction, pexp->nStackBytes);
+        snprintf(szImport, sizeof(szImport), "__imp____lnt_import_%.*s@%d", cchFunction, pszFunction, pexp->nStackBytes);
     }
     else if (giArch == ARCH_X86)
     {
         snprintf(szThunk, sizeof(szThunk), "___lnt_thunk_%.*s", pexp->strName.len, pexp->strName.buf);
-        snprintf(szImport, sizeof(szImport), "__imp__%.*s", cchFunction, pszFunction);
+        snprintf(szImport, sizeof(szImport), "__imp____lnt_import_%.*s", cchFunction, pszFunction);
     }
     else
     {
         snprintf(szThunk, sizeof(szThunk), "__lnt_thunk_%.*s", pexp->strName.len, pexp->strName.buf);
-        snprintf(szImport, sizeof(szImport), "__imp_%.*s", cchFunction, pszFunction);
+        snprintf(szImport, sizeof(szImport), "__imp___lnt_import_%.*s", cchFunction, pszFunction);
     }
 
     fprintf(file, "__asm__(\".text\\n.globl %s\\n%s:\\n", szThunk, szThunk);
@@ -1028,6 +1044,27 @@ OutputLine_def(FILE *fileDest, EXPORT *pexp)
     {
         DbgPrint("OutputLine_def: skipping forwarded extern export '%.*s' ->'%.*s'...\n",
             pexp->strName.len, pexp->strName.buf, pexp->strTarget.len, pexp->strTarget.buf);
+        return 1;
+    }
+
+    /* A -thunk export of another DLL imports a function through a data-only alias. The aliases get their own
+       import library: next to the plain export in one def, dlltool makes the alias a weak alias of it */
+    if (gbThunkImports)
+    {
+        if (gbImportLib && !gbMSComp && !(pexp->uFlags & (FL_PRIVATE | FL_IMPSYM)) && IsPlainCName(&pexp->strName) &&
+            ((pexp->nCallingConvention == CC_STDCALL) || (pexp->nCallingConvention == CC_CDECL)) &&
+            ((giArch == ARCH_X86) || (giArch == ARCH_AMD64) || (giArch == ARCH_ARM64)))
+        {
+            fprintf(fileDest, " __lnt_import_%.*s", pexp->strName.len, pexp->strName.buf);
+            if ((giArch == ARCH_X86) && (pexp->nCallingConvention == CC_STDCALL))
+                fprintf(fileDest, "@%d", pexp->nStackBytes);
+
+            /* An export the import library takes by ordinal is imported by the same ordinal */
+            if (pexp->uFlags & FL_NONAME)
+                fprintf(fileDest, " @%d NONAME DATA\n", pexp->nOrdinal);
+            else
+                fprintf(fileDest, " == %.*s DATA\n", pexp->strName.len, pexp->strName.buf);
+        }
         return 1;
     }
 
@@ -1837,6 +1874,7 @@ void usage(void)
            "  -n=<name>               name of the dll\n"
            "  --version=<version>     Sets the version to create exports for\n"
            "  --implib                generate a def file for an import library\n"
+           "  --thunk-imports         with --implib, list only the data aliases -thunk exports of other DLLs import\n"
            "  --forward-resolution    with --implib, list only the private and data exports, as code\n"
            "  --no-private-warnings   suppress warnings about symbols that should be -private\n"
            "  -a=<arch>               set architecture to <arch> (i386, x86_64, arm, arm64, arm64ec, riscv64)\n"
@@ -1892,6 +1930,10 @@ int main(int argc, char *argv[])
         else if (strncasecmp(argv[i], pszVersionOption, strlen(pszVersionOption)) == 0)
         {
             guOsVersion = strtoul(argv[i] + strlen(pszVersionOption), NULL, 16);
+        }
+        else if (strcasecmp(argv[i], "--thunk-imports") == 0)
+        {
+            gbThunkImports = 1;
         }
         else if (strcasecmp(argv[i], "--implib") == 0)
         {

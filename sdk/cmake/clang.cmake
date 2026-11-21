@@ -484,6 +484,23 @@ function(generate_import_lib _libname _dllname _spec_file __version_arg __dbg_ar
     set_target_properties(${_libname} PROPERTIES IMPORTED_LOCATION ${LIBRARY_PRIVATE_DIR}/${_libname}.a)
     add_dependencies(${_libname} ${_libname}_implib_target)
 
+    # The data aliases the -thunk exports of other DLLs import, in their own import library linked with this one
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_thunks.def
+        COMMAND native-spec2def ${__version_arg} ${__dbg_arg} -n=${_dllname} -a=${ARCH2} ${ARGN} --implib --thunk-imports -d=${CMAKE_CURRENT_BINARY_DIR}/${_libname}_thunks.def ${CMAKE_CURRENT_SOURCE_DIR}/${_spec_file}
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${_spec_file} native-spec2def)
+    add_custom_command(
+        OUTPUT ${LIBRARY_PRIVATE_DIR}/${_libname}_thunks.a
+        COMMAND ${CMAKE_COMMAND} -E rm -f ${LIBRARY_PRIVATE_DIR}/${_libname}_thunks.a
+        COMMAND ${CMAKE_DLLTOOL} -d ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_thunks.def -l ${_libname}_thunks.a -m ${LLVM_DLLTOOL_MACHINE} -t ${_libname}_thunks
+        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_thunks.def
+        WORKING_DIRECTORY ${LIBRARY_PRIVATE_DIR})
+    add_custom_target(${_libname}_thunks_implib_target DEPENDS ${LIBRARY_PRIVATE_DIR}/${_libname}_thunks.a)
+    _add_library(${_libname}_thunks STATIC IMPORTED GLOBAL)
+    set_target_properties(${_libname}_thunks PROPERTIES IMPORTED_LOCATION ${LIBRARY_PRIVATE_DIR}/${_libname}_thunks.a)
+    add_dependencies(${_libname}_thunks ${_libname}_thunks_implib_target)
+    set_property(TARGET ${_libname} APPEND PROPERTY INTERFACE_LINK_LIBRARIES ${_libname}_thunks)
+
 endfunction()
 
 function(spec2def _dllname _spec_file)
