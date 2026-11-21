@@ -1112,6 +1112,18 @@ InitInputImpl(
     return STATUS_SUCCESS;
 }
 
+VOID
+NTAPI
+FreeInputImpl(VOID)
+{
+    if (MasterTimer)
+    {
+        KeCancelTimer(MasterTimer);
+        ExFreePoolWithTag(MasterTimer, USERTAG_SYSTEM);
+        MasterTimer = NULL;
+    }
+}
+
 BOOL FASTCALL
 IntBlockInput(PTHREADINFO pti, BOOL BlockIt)
 {

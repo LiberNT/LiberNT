@@ -684,6 +684,23 @@ InitTimerImpl(VOID)
    return STATUS_SUCCESS;
 }
 
+VOID
+NTAPI
+FreeTimerImpl(VOID)
+{
+   if (Mutex == NULL)
+      return;
+   ASSERT(IsListEmpty(&TimersListHead));
+   ExDeleteResourceLite(&TimerLock);
+   if (WindowLessTimersBitMapBuffer)
+   {
+      ExFreePoolWithTag(WindowLessTimersBitMapBuffer, TAG_TIMERBMP);
+      WindowLessTimersBitMapBuffer = NULL;
+   }
+   ExFreePoolWithTag(Mutex, TAG_INTERNAL_SYNC);
+   Mutex = NULL;
+}
+
 UINT_PTR
 APIENTRY
 NtUserSetTimer

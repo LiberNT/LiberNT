@@ -987,15 +987,16 @@ VOID FASTCALL
 DceEmptyCache(VOID)
 {
    PDCE pDCE;
-   PLIST_ENTRY ListEntry;
 
-   ListEntry = LEDce.Flink;
-   while (ListEntry != &LEDce)
+   ASSERT(UserIsEnteredExclusive());
+   while (!IsListEmpty(&LEDce))
    {
-      pDCE = CONTAINING_RECORD(ListEntry, DCE, List);
-      ListEntry = ListEntry->Flink;
-      DceFreeDCE(pDCE, TRUE);
+      pDCE = CONTAINING_RECORD(RemoveHeadList(&LEDce), DCE, List);
+      ASSERT(pDCE->CompositionDcState == COMPOSITION_DC_NONE);
+      ExFreePoolWithTag(pDCE, USERTAG_DCE);
+      DCECount--;
    }
+   ASSERT(DCECount == 0);
 }
 
 VOID FASTCALL

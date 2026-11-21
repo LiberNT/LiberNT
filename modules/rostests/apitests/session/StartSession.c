@@ -146,10 +146,11 @@ static BOOL ProcessObjectGone(DWORD pid, ULONG sessionId)
     return NT_SUCCESS(status) && info.SessionId != sessionId;
 }
 
-static const char SessionGdiTags[][5] =
+static const char SessionTags[][5] =
 {
     "Gla1", "Gla4", "Gla5", "Gla8", "Gh05", "Gh08", "Gh09", "Gh0:", "Gh0@", "Gh?@",
-    "GDev", "Gdev", "Gmdv", "Gldv", "Gsem", "Gpff", "Gfnt", "FNTE", "CDD ", "Usts"
+    "GDev", "Gdev", "Gmdv", "Gldv", "Gsem", "Gpff", "Gfnt", "FNTE", "CDD ", "Usts",
+    "Usdc", "Ussn", "Ussy", "AtoT", "USTR", "TIMB"
 };
 
 static PSYSTEM_POOLTAG_INFORMATION PoolTags(void)
@@ -297,11 +298,11 @@ START_TEST(StartSession)
         ok(PoolBlocks(between, "Gla1") > 0 && PoolBlocks(between, "Gh0@") > 0,
            "the console's win32k holds %ld Gla1 and %ld Gh0@ blocks\n",
            PoolBlocks(between, "Gla1"), PoolBlocks(between, "Gh0@"));
-        for (i = 0; i < ARRAYSIZE(SessionGdiTags); i++)
+        for (i = 0; i < ARRAYSIZE(SessionTags); i++)
         {
-            ok(PoolBlocks(after, SessionGdiTags[i]) == PoolBlocks(between, SessionGdiTags[i]),
-               "%s went from %ld to %ld blocks across a session\n", SessionGdiTags[i],
-               PoolBlocks(between, SessionGdiTags[i]), PoolBlocks(after, SessionGdiTags[i]));
+            ok(PoolBlocks(after, SessionTags[i]) == PoolBlocks(between, SessionTags[i]),
+               "%s went from %ld to %ld blocks across a session\n", SessionTags[i],
+               PoolBlocks(between, SessionTags[i]), PoolBlocks(after, SessionTags[i]));
         }
         HeapFree(GetProcessHeap(), 0, before);
         HeapFree(GetProcessHeap(), 0, between);

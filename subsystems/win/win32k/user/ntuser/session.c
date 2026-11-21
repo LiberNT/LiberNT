@@ -112,6 +112,28 @@ UserReleaseSessions(VOID)
     }
 }
 
+VOID FASTCALL
+FreeSessionImpl(VOID)
+{
+    PUSER_SESSION Session;
+
+    WritePointerRelease((PVOID volatile *)&gpDisplaySession, NULL);
+    while ((Session = gpUserSessions) != NULL)
+    {
+        ASSERT(Session->Ending);
+        ASSERT(Session->CsrProcess == NULL && Session->CsrApiPort == NULL);
+        ASSERT(Session->WinStaDir == NULL && Session->DesktopSwitchEvent == NULL);
+        WritePointerRelease((PVOID volatile *)&gpUserSessions, Session->Next);
+        RtlFreeUnicodeString(&Session->WinStaDirName);
+        ExFreePoolWithTag(Session, TAG_SESSION);
+    }
+    if (gAtomTable)
+    {
+        RtlDestroyAtomTable(gAtomTable);
+        gAtomTable = NULL;
+    }
+}
+
 PUNICODE_STRING FASTCALL
 UserGetWinStaDirName(PEPROCESS Process)
 {

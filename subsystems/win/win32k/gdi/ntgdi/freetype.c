@@ -1099,6 +1099,8 @@ FreeFontSupport(VOID)
     {
         pEntry = RemoveHeadList(pHead);
         pSubstEntry = CONTAINING_RECORD(pEntry, FONTSUBST_ENTRY, ListEntry);
+        RtlFreeUnicodeString(&pSubstEntry->FontNames[FONTSUBST_FROM]);
+        RtlFreeUnicodeString(&pSubstEntry->FontNames[FONTSUBST_TO]);
         ExFreePoolWithTag(pSubstEntry, TAG_FONT);
     }
 
