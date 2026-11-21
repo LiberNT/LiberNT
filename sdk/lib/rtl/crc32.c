@@ -113,7 +113,7 @@ ULONG
 NTAPI
 RtlCrc32(
     _In_reads_bytes_(Size) const void *Buffer,
-    _In_ SIZE_T Size,
+    _In_ size_t Size,
     _In_ ULONG InitialCrc)
 {
     const UCHAR *p = (const UCHAR *)Buffer;
@@ -140,7 +140,7 @@ ULONGLONG
 NTAPI
 RtlCrc64(
     _In_reads_bytes_(Size) const void *Buffer,
-    _In_ SIZE_T Size,
+    _In_ size_t Size,
     _In_ ULONGLONG InitialCrc)
 {
     const UCHAR *p = (const UCHAR *)Buffer;

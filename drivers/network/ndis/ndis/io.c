@@ -584,7 +584,7 @@ NdisMCompleteDmaTransfer(OUT PNDIS_STATUS Status,
 VOID
 EXPORT
 NdisCompleteDmaTransfer(OUT PNDIS_STATUS    Status,
-                        IN  PNDIS_HANDLE    NdisDmaHandle,
+                        IN  NDIS_HANDLE     NdisDmaHandle,
                         IN  PNDIS_BUFFER    Buffer,
                         IN  ULONG           Offset,
                         IN  ULONG           Length,
