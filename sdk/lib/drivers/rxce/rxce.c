@@ -312,10 +312,11 @@ PVOID
 RxAllocateFcbObject(
     PRDBSS_DEVICE_OBJECT RxDeviceObject,
     NODE_TYPE_CODE NodeType,
-    POOL_TYPE PoolType,
+    POOL_FLAGS PoolFlags,
     ULONG NameSize,
     PVOID AlreadyAllocatedObject)
 {
+    POOL_TYPE PoolType = FlagOn(PoolFlags, POOL_FLAG_NON_PAGED) ? NonPagedPool : PagedPool;
     PFCB Fcb;
     PFOBX Fobx;
     PSRV_OPEN SrvOpen;
@@ -1488,7 +1489,7 @@ RxCreateNetFcb(
     PFCB Fcb;
     BOOLEAN FakeFcb;
     PNET_ROOT NetRoot;
-    POOL_TYPE PoolType;
+    POOL_FLAGS PoolFlags;
     NODE_TYPE_CODE NodeType;
     PIO_STACK_LOCATION Stack;
     PRDBSS_DEVICE_OBJECT RxDeviceObject;
@@ -1512,11 +1513,11 @@ RxCreateNetFcb(
               !BooleanFlagOn(NetRoot->Flags, NETROOT_FLAG_SUPPORTS_SYMBOLIC_LINKS);
     ASSERT(FakeFcb || RxIsFcbTableLockExclusive(&NetRoot->FcbTable));
 
-    PoolType = (BooleanFlagOn(Stack->Flags, SL_OPEN_PAGING_FILE) ? NonPagedPool : PagedPool);
+    PoolFlags = (BooleanFlagOn(Stack->Flags, SL_OPEN_PAGING_FILE) ? POOL_FLAG_NON_PAGED : POOL_FLAG_PAGED);
     NodeType = (FakeFcb) ? RDBSS_NTC_OPENTARGETDIR_FCB : RDBSS_STORAGE_NTC(FileTypeNotYetKnown);
 
     /* Allocate the FCB */
-    Fcb = RxAllocateFcbObject(RxDeviceObject, NodeType, PoolType,
+    Fcb = RxAllocateFcbObject(RxDeviceObject, NodeType, PoolFlags,
                               NetRoot->InnerNamePrefix.Length + Name->Length, NULL);
     if (Fcb == NULL)
     {
@@ -1604,7 +1605,7 @@ RxCreateNetFobx(
     ULONG Flags;
     PNET_ROOT NetRoot;
     PSRV_OPEN SrvOpen;
-    POOL_TYPE PoolType;
+    POOL_FLAGS PoolFlags;
 
     PAGED_CODE();
 
@@ -1614,13 +1615,13 @@ RxCreateNetFobx(
     ASSERT(RxIsFcbAcquiredExclusive(SrvOpen->Fcb));
 
     Fcb = SrvOpen->Fcb;
-    PoolType = (BooleanFlagOn(Fcb->FcbState, FCB_STATE_PAGING_FILE) ? NonPagedPool : PagedPool);
+    PoolFlags = (BooleanFlagOn(Fcb->FcbState, FCB_STATE_PAGING_FILE) ? POOL_FLAG_NON_PAGED : POOL_FLAG_PAGED);
     /* Can we use pre-allocated FOBX? */
     if (!BooleanFlagOn(Fcb->FcbState, FCB_STATE_FOBX_USED) && Fcb->InternalSrvOpen == (PSRV_OPEN)MrxSrvOpen)
     {
         Fobx = Fcb->InternalFobx;
         /* Call allocate to initialize the FOBX */
-        RxAllocateFcbObject(Fcb->RxDeviceObject, RDBSS_NTC_FOBX, PoolType, 0, Fobx);
+        RxAllocateFcbObject(Fcb->RxDeviceObject, RDBSS_NTC_FOBX, PoolFlags, 0, Fobx);
         /* Mark it used now */
         Fcb->FcbState |= FCB_STATE_FOBX_USED;
         Flags = FOBX_FLAG_ENCLOSED_ALLOCATED;
@@ -1629,7 +1630,7 @@ RxCreateNetFobx(
     {
         Fobx = SrvOpen->InternalFobx;
         /* Call allocate to initialize the FOBX */
-        RxAllocateFcbObject(Fcb->RxDeviceObject, RDBSS_NTC_FOBX, PoolType, 0, Fobx);
+        RxAllocateFcbObject(Fcb->RxDeviceObject, RDBSS_NTC_FOBX, PoolFlags, 0, Fobx);
         /* Mark it used now */
         SrvOpen->Flags |= SRVOPEN_FLAG_FOBX_USED;
         Flags = FOBX_FLAG_ENCLOSED_ALLOCATED;
@@ -1637,7 +1638,7 @@ RxCreateNetFobx(
     else
     {
         /* Last case, we cannot, allocate a FOBX */
-        Fobx = RxAllocateFcbObject(Fcb->RxDeviceObject, RDBSS_NTC_FOBX, PoolType, 0, NULL);
+        Fobx = RxAllocateFcbObject(Fcb->RxDeviceObject, RDBSS_NTC_FOBX, PoolFlags, 0, NULL);
         Flags = 0;
     }
 
@@ -1973,14 +1974,14 @@ RxCreateSrvOpen(
 {
     ULONG Flags;
     PSRV_OPEN SrvOpen = NULL;
-    POOL_TYPE PoolType;
+    POOL_FLAGS PoolFlags;
 
     PAGED_CODE();
 
     ASSERT(NodeTypeIsFcb(Fcb));
     ASSERT(RxIsFcbAcquiredExclusive(Fcb));
 
-    PoolType = (BooleanFlagOn(Fcb->FcbState, FCB_STATE_PAGING_FILE) ? NonPagedPool : PagedPool);
+    PoolFlags = (BooleanFlagOn(Fcb->FcbState, FCB_STATE_PAGING_FILE) ? POOL_FLAG_NON_PAGED : POOL_FLAG_PAGED);
 
     _SEH2_TRY
     {
@@ -1992,14 +1993,14 @@ RxCreateSrvOpen(
         {
             /* Proceed */
             SrvOpen = RxAllocateFcbObject(Fcb->VNetRoot->NetRoot->pSrvCall->RxDeviceObject,
-                                          RDBSS_NTC_SRVOPEN, PoolType, 0, NULL);
+                                          RDBSS_NTC_SRVOPEN, PoolFlags, 0, NULL);
             Flags = 0;
         }
         else
         {
             /* Otherwise, just use internal one and initialize it */
             RxAllocateFcbObject(Fcb->VNetRoot->NetRoot->pSrvCall->RxDeviceObject,
-                                RDBSS_NTC_INTERNAL_SRVOPEN, PoolType, 0,
+                                RDBSS_NTC_INTERNAL_SRVOPEN, PoolFlags, 0,
                                 Fcb->InternalSrvOpen);
             Fcb->FcbState |= FCB_STATE_SRVOPEN_USED;
             Flags = SRVOPEN_FLAG_ENCLOSED_ALLOCATED | SRVOPEN_FLAG_FOBX_USED;
