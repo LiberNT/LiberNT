@@ -2253,4 +2253,10 @@ HRESULT WINAPI Direct3DCreate9Ex(UINT sdk_version, IDirect3D9Ex **d3d9ex);
 #define D3DPRESENT_VIDEO_RESTRICT_TO_MONITOR 0x00000010L
 #endif
 
+typedef struct IDirect3DDevice9 * PDIRECT3DDEVICE9;
+typedef struct IDirect3DStateBlock9 * PDIRECT3DSTATEBLOCK9;
+typedef struct IDirect3DVertexDeclaration9 * PDIRECT3DVERTEXDECLARATION9;
+typedef struct IDirect3DVertexShader9 * PDIRECT3DVERTEXSHADER9;
+typedef struct IDirect3DPixelShader9 * PDIRECT3DPIXELSHADER9;
+
 #endif /* _D3D9_H_ */

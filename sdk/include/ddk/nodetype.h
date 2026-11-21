@@ -185,4 +185,6 @@ typedef enum _RDBSS_BUG_CHECK_CODES
 #define UCHAR_VT 0x0b
 #endif
 
+typedef USHORT RDBSS_STORAGE_TYPE_CODES;
+
 #endif

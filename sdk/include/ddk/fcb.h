@@ -719,4 +719,6 @@ typedef enum _FCB_CONDITION {
     FcbNeedsToBeVerified = 3
 } FCB_CONDITION;
 
+typedef NODE_TYPE_CODE TYPE_OF_OPEN;
+
 #endif

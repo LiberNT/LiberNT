@@ -694,4 +694,6 @@ typedef enum _WLAN_HOSTED_NETWORK_OPCODE {
     wlan_hosted_network_opcode_enable = 3
 } WLAN_HOSTED_NETWORK_OPCODE, *PWLAN_HOSTED_NETWORK_OPCODE;
 
+typedef enum _WLAN_INTERFACE_STATE * PWLAN_INTERFACE_STATE;
+
 #endif  // _WLANAPI_H

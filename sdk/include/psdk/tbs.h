@@ -121,4 +121,9 @@ HRESULT WINAPI GetDeviceIDString(_Out_writes_to_opt_(cchWindowsAIK, *pcchResult)
 #define TPM_WNF_INFO_OWNERSHIP_SUCCESSFUL 0x00000002
 #endif
 
+typedef const INT32 * PCINT32;
+typedef const UINT32 * PCUINT32;
+typedef const BOOL * PCBOOL;
+typedef const BYTE * PCBYTE;
+
 #endif /* _TBS_H_ */

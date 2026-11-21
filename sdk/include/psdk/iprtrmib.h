@@ -69,4 +69,7 @@ typedef struct _TCPIP_OWNER_MODULE_BASIC_INFO {
 #define MAX_SCOPE_NAME_LEN 255
 #endif
 
+typedef WCHAR SN_CHAR;
+typedef SN_CHAR * SCOPE_NAME;
+
 #endif /* WINE_IPRTRMIB_H__ */

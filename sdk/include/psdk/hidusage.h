@@ -271,4 +271,7 @@ typedef USHORT USAGE, *PUSAGE;
 }
 #endif
 
+typedef LONG USAGE_VALUE;
+typedef LONG * PUSAGE_VALUE;
+
 #endif /* __HIDUSAGE_H */
