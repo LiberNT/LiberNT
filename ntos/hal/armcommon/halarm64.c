@@ -811,7 +811,7 @@ HalpArm64AccessPciConfigByAddress(
         return FALSE;
     }
 
-    Mapping = MmMapIoSpace(PageBase, PAGE_SIZE, MmNonCached);
+    Mapping = HalpArchMapConfigSpace(PageBase);
     if (!Mapping)
     {
         return FALSE;
@@ -868,7 +868,7 @@ HalpArm64AccessPciConfigByAddress(
         Remaining -= TransferLength;
     }
 
-    MmUnmapIoSpace(Mapping, PAGE_SIZE);
+    HalpArchUnmapConfigSpace(Mapping);
     return TRUE;
 }
 

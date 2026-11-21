@@ -32,3 +32,6 @@ HalpLoaderDeviceTree(
     *Size = (SIZE_T)LoaderBlock->u.Arm64.DeviceTreeSize;
     return *Blob != NULL;
 }
+
+#define HalpArchMapConfigSpace(PhysicalPage) MmMapIoSpace((PhysicalPage), PAGE_SIZE, MmNonCached)
+#define HalpArchUnmapConfigSpace(Mapping) MmUnmapIoSpace((Mapping), PAGE_SIZE)
