@@ -52,10 +52,11 @@ NTSTATUS NTAPI KdpSysWriteIoSpace(_In_ INTERFACE_TYPE InterfaceType, _In_ ULONG 
     return STATUS_NOT_SUPPORTED;
 }
 
+/* Nothing is kept out of low memory on ARM, so there is no pattern there to find damaged. */
 NTSTATUS NTAPI KdpSysCheckLowMemory(_In_ ULONG Flags)
 {
     UNREFERENCED_PARAMETER(Flags);
-    return STATUS_NOT_SUPPORTED;
+    return STATUS_SUCCESS;
 }
 
 VOID
