@@ -30,8 +30,6 @@ __C_specific_handler(
     ULONG Index;
     LONG Filter;
 
-    UNREFERENCED_PARAMETER(ContextRecord);
-
     if (DispatcherContext->ControlPcIsUnwound)
         ControlPc -= 2;
 
@@ -66,7 +64,7 @@ __C_specific_handler(
         if (ScopeTable->ScopeRecord[Index].HandlerAddress != EXCEPTION_EXECUTE_HANDLER)
         {
             Pointers.ExceptionRecord = ExceptionRecord;
-            Pointers.ContextRecord = DispatcherContext->ContextRecord;
+            Pointers.ContextRecord = ContextRecord;
             Filter = __C_ExecuteHandler(&Pointers, EstablisherFrame,
                                         (PVOID)(ImageBase + ScopeTable->ScopeRecord[Index].HandlerAddress),
                                         (PULONG)DispatcherContext->NonVolatileRegisters);
