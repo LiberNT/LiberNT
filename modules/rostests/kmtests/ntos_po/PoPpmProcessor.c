@@ -28,6 +28,9 @@ static const GUID TestThrottleMaximum =
 static const GUID TestParkingMinCores =
     { 0x0cc5b647, 0xc1df, 0x4637, { 0x89, 0x1a, 0xde, 0xc3, 0x5c, 0x31, 0x85, 0x83 } };
 
+static const GUID TestParkingMaxCores =
+    { 0xea062031, 0x0e34, 0x4ff1, { 0x9b, 0x6d, 0xeb, 0x10, 0x59, 0x33, 0x40, 0x28 } };
+
 typedef struct _TEST_PROCESSOR
 {
     ULONG Index;
@@ -478,6 +481,8 @@ TestParking(VOID)
     Before = SharedUserData->UnparkedProcessorCount;
     Status = TestSetSetting(&TestParkingMinCores, 10);
     ok_eq_hex(Status, STATUS_SUCCESS);
+    Status = TestSetSetting(&TestParkingMaxCores, 10);
+    ok_eq_hex(Status, STATUS_SUCCESS);
 
     for (Index = (ULONG)KeNumberProcessors; (Index-- != 0) && (Count < TEST_PARKING_MAX);)
     {
@@ -507,6 +512,9 @@ TestParking(VOID)
 
     ok(TestWaitForUnparked(Before), "%u of %u processors are unparked after the registrations ended\n",
        SharedUserData->UnparkedProcessorCount, Before);
+
+    Status = TestSetSetting(&TestParkingMaxCores, 100);
+    ok_eq_hex(Status, STATUS_SUCCESS);
 }
 
 START_TEST(PoPpmProcessor)
