@@ -993,7 +993,7 @@ static	BOOL	MMSYSTEM_GetMidiStream(HMIDISTRM hMidiStrm, WINE_MIDIStream** lpMidi
     }
 
     EnterCriticalSection(&WINMM_cs);
-    if ((entry = wine_rb_get(&wine_midi_streams, &lpwm->mod.rgIds.dwStreamID)))
+    if ((entry = wine_rb_get(&wine_midi_streams, &lpwm->mod.rgIds[0].dwStreamID)))
         *lpMidiStrm = WINE_RB_ENTRY_VALUE(entry, struct WINE_MIDIStream, entry);
     LeaveCriticalSection(&WINMM_cs);
 

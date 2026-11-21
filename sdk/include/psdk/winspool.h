@@ -1832,6 +1832,30 @@ typedef enum EPrintPropertyType {
     kPropertyTypeBuffer = 10
 } EPrintPropertyType;
 
+typedef struct {
+  EPrintPropertyType ePropertyType;
+  union {
+    BYTE propertyByte;
+    PWSTR propertyString;
+    LONG propertyInt32;
+    LONGLONG propertyInt64;
+    struct {
+      DWORD cbBuf;
+      LPVOID pBuf;
+    } propertyBlob;
+  } value;
+} PrintPropertyValue;
+
+typedef struct {
+  WCHAR *propertyName;
+  PrintPropertyValue propertyValue;
+} PrintNamedProperty;
+
+typedef struct {
+  ULONG numberOfProperties;
+  PrintNamedProperty *propertiesCollection;
+} PrintPropertiesCollection;
+
 typedef enum PRINT_EXECUTION_CONTEXT {
     PRINT_EXECUTION_CONTEXT_APPLICATION = 0,
     PRINT_EXECUTION_CONTEXT_SPOOLER_SERVICE = 1,
