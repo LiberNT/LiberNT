@@ -3402,12 +3402,25 @@ MiSegmentReadCluster(
 
     if (Count > 1)
     {
-        Status = Segment->FileOps.ReadPages(Segment->FileContext, Offset, Frames, Count);
+        ULONG Transferred = 0;
+
+        Status = Segment->FileOps.ReadPages(Segment->FileContext, Offset, Frames, Count, &Transferred);
         if (NT_SUCCESS(Status))
         {
+            MI_ASSERT(Transferred <= Count * PAGE_SIZE);
             for (i = 0; i < Count; i++)
             {
                 PMI_PTE Proto = MiSegmentProto(Segment, Page + i);
+
+                if (Transferred < (i + 1) * PAGE_SIZE)
+                {
+                    ULONG Valid = (Transferred > i * PAGE_SIZE) ? Transferred - i * PAGE_SIZE : 0;
+                    PVOID Mapping = MiArchMapFrame(Frames[i]);
+
+                    MI_ASSERT(Valid < PAGE_SIZE);
+                    RtlZeroMemory((PUCHAR)Mapping + Valid, PAGE_SIZE - Valid);
+                    MiArchUnmapFrame(Mapping);
+                }
 
                 MiPfnInitializePage(&Segment->System->Pfn, Frames[i], (ULONG64)(ULONG_PTR)Proto,
                                     0, Originals[i], MI_PFN_FLAG_PROTOTYPE);

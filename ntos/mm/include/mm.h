@@ -513,9 +513,9 @@ typedef struct _MI_FILE_OPS
                           _In_ PVOID Buffer, _In_ MI_READ_COMPLETION Completion,
                           _In_opt_ PVOID CompletionContext);
     BOOLEAN WholePageReads;
-    /* Optional synchronous clustered read. Success requires every frame to be filled. */
+    /* Optional synchronous clustered read. Bytes past Transferred lie beyond the end of the file. */
     NTSTATUS (*ReadPages)(_In_opt_ PVOID Context, _In_ ULONG64 Offset,
-                          _In_ const ULONG *Frames, _In_ ULONG PageCount);
+                          _In_ const ULONG *Frames, _In_ ULONG PageCount, _Out_ PULONG Transferred);
     /* Optional. Writers that do not come from the file system claim the file
      * before taking segment locks: file system locks order before them, and a
      * truncating writer can hold those while it waits on a segment. The
