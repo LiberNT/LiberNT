@@ -2083,6 +2083,7 @@ Exit:
 #else
     UNREFERENCED_PARAMETER(Control);
     UNREFERENCED_PARAMETER(PreviousMode);
+    /* TODO: dumps of a 32-bit kernel; the layout of their files has no public source */
     return STATUS_NOT_SUPPORTED;
 #endif
 }

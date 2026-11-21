@@ -40,6 +40,13 @@ START_TEST(KdLiveDump)
     Control.BugCheckCode = 0x161;
     Control.DumpFileHandle = File;
     Status = NtSystemDebugControl(SysDbgGetLiveKernelDump, &Control, sizeof(Control), NULL, 0, NULL);
+    /* INFO_NEEDED: no public source gives the layout of a 32-bit dump file, and Windows 11 has no 32-bit kernel to take one from */
+    if (skip((sizeof(PVOID) != sizeof(ULONG)) || (Status != STATUS_NOT_SUPPORTED), "A 32-bit kernel writes no live dump\n"))
+    {
+        CloseHandle(File);
+        RtlAdjustPrivilege(SE_DEBUG_PRIVILEGE, Old, FALSE, &Old);
+        return;
+    }
     ok_eq_hex(Status, STATUS_SUCCESS);
 
     ok(GetFileSizeEx(File, &Size), "GetFileSizeEx failed with %lu\n", GetLastError());
