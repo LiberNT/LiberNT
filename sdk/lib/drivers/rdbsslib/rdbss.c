@@ -7622,6 +7622,7 @@ RxNotifyChangeDirectory(
     _SEH2_TRY
     {
         /* Lock user buffer */
+        Irp = RxContext->CurrentIrp;
         Stack = RxContext->CurrentIrpSp;
         RxLockUserBuffer(RxContext, Irp, IoWriteAccess, Stack->Parameters.NotifyDirectory.Length);
 
@@ -7631,7 +7632,6 @@ RxNotifyChangeDirectory(
         RxContext->LowIoContext.ParamsFor.NotifyChangeDirectory.NotificationBufferLength = Stack->Parameters.NotifyDirectory.Length;
 
         /* If we have an associated MDL */
-        Irp = RxContext->CurrentIrp;
         if (Irp->MdlAddress != NULL)
         {
             /* Then, call mini-rdr */
