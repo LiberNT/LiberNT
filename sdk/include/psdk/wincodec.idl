@@ -23,7 +23,7 @@ import "dxgiformat.idl";
 
 cpp_quote ("#include \"dcommon.h\"")
 
-cpp_quote("#define WINCODEC_SDK_VERSION 0x0236")
+cpp_quote("#define WINCODEC_SDK_VERSION 0x0237")
 
 #define CODEC_FORCE_DWORD 0x7fffffff
 

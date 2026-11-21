@@ -77,12 +77,14 @@ UpdateDriverForPlugAndPlayDevicesW(
 #define DIIRFLAG_HW_USING_THE_INF         0x00000004
 #define DIIRFLAG_HOTPATCH                 0x00000008
 #define DIIRFLAG_NOBACKUP                 0x00000010
-#define DIIRFLAG_BITS ( DIIRFLAG_FORCE_INF | DIIRFLAG_HOTPATCH)
+#define DIIRFLAG_BITS ( DIIRFLAG_FORCE_INF | DIIRFLAG_HOTPATCH | DIIRFLAG_PRE_CONFIGURE_INF | DIIRFLAG_INSTALL_AS_SET )
 #define DIIRFLAG_SYSTEM_BITS ( DIIRFLAG_INF_ALREADY_COPIED |\
                                DIIRFLAG_FORCE_INF |\
                                DIIRFLAG_HW_USING_THE_INF |\
                                DIIRFLAG_HOTPATCH |\
-                               DIIRFLAG_NOBACKUP )
+                               DIIRFLAG_NOBACKUP |\
+                               DIIRFLAG_PRE_CONFIGURE_INF |\
+                               DIIRFLAG_INSTALL_AS_SET )
 
 #define ROLLBACK_FLAG_NO_UI               0x00000001
 #define ROLLBACK_BITS                     0x00000001

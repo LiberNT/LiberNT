@@ -20,7 +20,7 @@ extern "C" {
 #define DNS_QUERY_MULTICAST_ONLY            0x400
 #define DNS_QUERY_NO_MULTICAST              0x800
 #define DNS_QUERY_DONT_RESET_TTL_VALUES     0x100000
-#define DNS_QUERY_RESERVED                  0xff000000
+#define DNS_QUERY_RESERVED                  0xf0000000
 
 #define DNS_UPDATE_SECURITY_USE_DEFAULT    0x0
 #define DNS_UPDATE_SECURITY_OFF            0x10
