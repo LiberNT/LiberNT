@@ -24,6 +24,8 @@ public:
     Status Search(const PackageQuery &query, std::vector<PackageRecord> &results);
     Status Resolve(const PackageQuery &query, PackageRecord &package);
     Status FetchInstallerManifest(const PackageRecord &package, std::string &yaml);
+    Status LoadArpCorrelation(std::map<std::string, PackageRecord> &productCodes,
+                              std::map<std::string, PackageRecord> &packages);
     const std::wstring &IndexPath() const { return indexPath_; }
 
 private:

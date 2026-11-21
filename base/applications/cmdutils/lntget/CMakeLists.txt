@@ -3,7 +3,9 @@ include_directories(
     ${REACTOS_SOURCE_DIR}/sdk/lib/3rdparty/zlib/contrib)
 
 list(APPEND SOURCE
+    arp.cpp
     category.cpp
+    dependencies.cpp
     details.cpp
     gui.cpp
     hash.cpp
@@ -12,6 +14,7 @@ list(APPEND SOURCE
     installer.cpp
     main.cpp
     manifest.cpp
+    portable.cpp
     source.cpp
     source_trust.cpp
     sqlite_index.cpp

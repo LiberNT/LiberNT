@@ -9,13 +9,13 @@
 #include <windows.h>
 #include <commctrl.h>
 
+#include "arp.hpp"
 #include "installed.hpp"
 #include "resource.h"
 #include "util.hpp"
 
 #include <algorithm>
-#include <wctype.h>
-#include <set>
+#include <cstdio>
 
 namespace lntget
 {
@@ -23,7 +23,7 @@ namespace lntget
 namespace
 {
 
-constexpr wchar_t UninstallKey[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
+constexpr UINT MessageUninstallDone = WM_APP + 1;
 
 enum : int
 {
@@ -32,16 +32,6 @@ enum : int
     IdUninstall,
     IdInstalledRefresh,
     IdInstalledClose,
-};
-
-struct InstalledApp
-{
-    std::wstring name;
-    std::wstring version;
-    std::wstring publisher;
-    std::wstring location;
-    std::wstring uninstall;
-    unsigned long long estimatedBytes = 0;
 };
 
 struct InstalledWindow
@@ -54,105 +44,16 @@ struct InstalledWindow
     HWND refresh = nullptr;
     HWND close = nullptr;
     HFONT font = nullptr;
-    std::vector<InstalledApp> apps;
+    bool busy = false;
+    std::vector<InstalledPackage> apps;
 };
 
-bool ReadString(HKEY key, const wchar_t *name, std::wstring &value)
+struct UninstallJob
 {
-    DWORD type = 0;
-    DWORD bytes = 0;
-    if (RegQueryValueExW(key, name, nullptr, &type, nullptr, &bytes) != ERROR_SUCCESS ||
-        (type != REG_SZ && type != REG_EXPAND_SZ) || bytes < sizeof(wchar_t))
-    {
-        return false;
-    }
-    std::vector<wchar_t> buffer(bytes / sizeof(wchar_t) + 1);
-    if (RegQueryValueExW(key, name, nullptr, &type, reinterpret_cast<BYTE *>(buffer.data()), &bytes) != ERROR_SUCCESS)
-        return false;
-    buffer.back() = L'\0';
-    value.assign(buffer.data());
-    if (type == REG_EXPAND_SZ && !value.empty())
-    {
-        const DWORD needed = ExpandEnvironmentStringsW(value.c_str(), nullptr, 0);
-        if (needed)
-        {
-            std::vector<wchar_t> expanded(needed);
-            if (ExpandEnvironmentStringsW(value.c_str(), expanded.data(), needed))
-                value.assign(expanded.data());
-        }
-    }
-    return !value.empty();
-}
-
-DWORD ReadDword(HKEY key, const wchar_t *name)
-{
-    DWORD value = 0;
-    DWORD type = 0;
-    DWORD bytes = sizeof(value);
-    return RegQueryValueExW(key, name, nullptr, &type, reinterpret_cast<BYTE *>(&value), &bytes) == ERROR_SUCCESS &&
-           type == REG_DWORD ? value : 0;
-}
-
-void EnumerateView(HKEY root, REGSAM view, std::vector<InstalledApp> &apps, std::set<std::wstring> &seen)
-{
-    HKEY uninstall = nullptr;
-    if (RegOpenKeyExW(root, UninstallKey, 0, KEY_READ | view, &uninstall) != ERROR_SUCCESS)
-        return;
-
-    DWORD index = 0;
-    for (;;)
-    {
-        wchar_t keyName[512]{};
-        DWORD keyLength = ARRAYSIZE(keyName);
-        const LONG enumeration = RegEnumKeyExW(uninstall, index++, keyName, &keyLength, nullptr, nullptr, nullptr, nullptr);
-        if (enumeration == ERROR_NO_MORE_ITEMS)
-            break;
-        if (enumeration != ERROR_SUCCESS)
-            continue;
-
-        HKEY key = nullptr;
-        if (RegOpenKeyExW(uninstall, keyName, 0, KEY_READ, &key) != ERROR_SUCCESS)
-            continue;
-        InstalledApp app;
-        ReadString(key, L"DisplayName", app.name);
-        if (app.name.empty() || ReadDword(key, L"SystemComponent"))
-        {
-            RegCloseKey(key);
-            continue;
-        }
-        ReadString(key, L"DisplayVersion", app.version);
-        ReadString(key, L"Publisher", app.publisher);
-        ReadString(key, L"InstallLocation", app.location);
-        if (!ReadString(key, L"UninstallString", app.uninstall))
-            ReadString(key, L"QuietUninstallString", app.uninstall);
-        app.estimatedBytes = static_cast<unsigned long long>(ReadDword(key, L"EstimatedSize")) * 1024;
-        RegCloseKey(key);
-
-        std::wstring identity = app.name + L"\n" + app.version + L"\n" + app.uninstall;
-        std::transform(identity.begin(), identity.end(), identity.begin(),
-                       [](wchar_t character) { return static_cast<wchar_t>(towlower(character)); });
-        if (seen.insert(identity).second)
-            apps.push_back(app);
-    }
-    RegCloseKey(uninstall);
-}
-
-std::vector<InstalledApp> EnumerateInstalledApps()
-{
-    std::vector<InstalledApp> apps;
-    std::set<std::wstring> seen;
-    const REGSAM views[] = {0, KEY_WOW64_32KEY, KEY_WOW64_64KEY};
-    const HKEY roots[] = {HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
-    for (HKEY root : roots)
-    {
-        for (REGSAM view : views)
-            EnumerateView(root, view, apps, seen);
-    }
-    std::sort(apps.begin(), apps.end(), [](const InstalledApp &left, const InstalledApp &right) {
-        return lstrcmpiW(left.name.c_str(), right.name.c_str()) < 0;
-    });
-    return apps;
-}
+    HWND window = nullptr;
+    InstalledPackage package;
+    Status status;
+};
 
 std::wstring FormatInstalledSize(unsigned long long bytes)
 {
@@ -165,13 +66,13 @@ std::wstring FormatInstalledSize(unsigned long long bytes)
     return DecimalWideString(bytes / 1024) + L" KB";
 }
 
-void RefreshInstalled(InstalledWindow &state)
+void RefreshInstalled(InstalledWindow &state, const std::wstring &message = std::wstring())
 {
-    state.apps = EnumerateInstalledApps();
+    CollectInstalledPackages(nullptr, state.apps);
     ListView_DeleteAllItems(state.list);
     for (std::size_t index = 0; index < state.apps.size(); ++index)
     {
-        const InstalledApp &app = state.apps[index];
+        const ArpEntry &app = state.apps[index].entry;
         LVITEMW item{};
         item.mask = LVIF_TEXT | LVIF_PARAM;
         item.iItem = static_cast<int>(index);
@@ -182,44 +83,57 @@ void RefreshInstalled(InstalledWindow &state)
         ListView_SetItemText(state.list, row, 2, const_cast<LPWSTR>(app.publisher.c_str()));
         std::wstring size = FormatInstalledSize(app.estimatedBytes);
         ListView_SetItemText(state.list, row, 3, const_cast<LPWSTR>(size.c_str()));
+        std::wstring package = WideFromUtf8(state.apps[index].packageId);
+        ListView_SetItemText(state.list, row, 4, const_cast<LPWSTR>(package.c_str()));
     }
-    const std::wstring status = DecimalWideString(state.apps.size()) + L" installed applications";
+    const std::wstring status = message.empty() ? DecimalWideString(state.apps.size()) + L" installed applications" : message;
     SetWindowTextW(state.status, status.c_str());
     EnableWindow(state.uninstall, FALSE);
+}
+
+DWORD WINAPI UninstallThread(LPVOID parameter)
+{
+    UninstallJob *job = static_cast<UninstallJob *>(parameter);
+    DWORD exitCode = 0;
+    job->status = UninstallArpEntry(job->package.entry, job->package.installerType, InstallMode::Default, exitCode);
+    if (job->status && !job->package.installerType.empty())
+        RemoveTrackedPackage(job->package.packageId);
+    std::printf("LNTGET_GUI_UNINSTALL_DONE id=%s status=%lu\n", job->package.entry.Identity().c_str(),
+                job->status ? 0ul : job->status.code);
+    if (!PostMessageW(job->window, MessageUninstallDone, 0, reinterpret_cast<LPARAM>(job)))
+        delete job;
+    return 0;
 }
 
 void RunUninstaller(InstalledWindow &state)
 {
     const int selected = ListView_GetNextItem(state.list, -1, LVNI_SELECTED);
-    if (selected < 0 || static_cast<std::size_t>(selected) >= state.apps.size())
+    if (state.busy || selected < 0 || static_cast<std::size_t>(selected) >= state.apps.size())
         return;
-    const InstalledApp &app = state.apps[selected];
-    if (app.uninstall.empty())
-    {
-        MessageBoxW(state.window, L"This application did not register an uninstall command.", app.name.c_str(),
-                    MB_OK | MB_ICONINFORMATION);
-        return;
-    }
-    const std::wstring prompt = L"Run the uninstall command registered by “" + app.name +
-                                L"”?\n\nThe application publisher controls the uninstaller.";
+    const InstalledPackage &app = state.apps[selected];
+    const std::wstring prompt = L"Run the uninstaller registered by \u201c" + app.entry.name +
+                                L"\u201d?\n\nThe application publisher controls the uninstaller.";
     if (MessageBoxW(state.window, prompt.c_str(), L"Confirm uninstall", MB_OKCANCEL | MB_ICONWARNING) != IDOK)
         return;
 
-    std::vector<wchar_t> command(app.uninstall.begin(), app.uninstall.end());
-    command.push_back(L'\0');
-    STARTUPINFOW startup{};
-    startup.cb = sizeof(startup);
-    PROCESS_INFORMATION process{};
-    if (!CreateProcessW(nullptr, command.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &startup, &process))
+    UninstallJob *job = new UninstallJob();
+    job->window = state.window;
+    job->package = app;
+    HANDLE thread = CreateThread(nullptr, 0, UninstallThread, job, 0, nullptr);
+    if (!thread)
     {
         const DWORD error = GetLastError();
-        const std::wstring message = L"Cannot start the registered uninstaller.\n\n" + WideFromUtf8(WindowsErrorMessage(error));
-        MessageBoxW(state.window, message.c_str(), app.name.c_str(), MB_OK | MB_ICONERROR);
+        delete job;
+        const std::wstring message = L"Cannot start the uninstaller.\n\n" + WideFromUtf8(WindowsErrorMessage(error));
+        MessageBoxW(state.window, message.c_str(), app.entry.name.c_str(), MB_OK | MB_ICONERROR);
         return;
     }
-    CloseHandle(process.hThread);
-    CloseHandle(process.hProcess);
-    SetWindowTextW(state.status, L"Uninstaller started. Press Refresh after it finishes.");
+    CloseHandle(thread);
+    state.busy = true;
+    EnableWindow(state.uninstall, FALSE);
+    EnableWindow(state.refresh, FALSE);
+    const std::wstring status = L"Uninstalling " + app.entry.name + L"\u2026";
+    SetWindowTextW(state.status, status.c_str());
 }
 
 void LayoutInstalled(InstalledWindow &state)
@@ -263,11 +177,11 @@ LRESULT CALLBACK InstalledProc(HWND window, UINT message, WPARAM wParam, LPARAM 
                                            0, 0, 10, 10, window, reinterpret_cast<HMENU>(IdInstalledList), instance, nullptr);
             ListView_SetExtendedListViewStyle(state->list, LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER | LVS_EX_LABELTIP);
             static const struct { const wchar_t *name; int width; } columns[] = {
-                {L"Name", 260}, {L"Version", 110}, {L"Publisher", 220}, {L"Size", 90},
+                {L"Name", 240}, {L"Version", 100}, {L"Publisher", 180}, {L"Size", 80}, {L"Package", 160},
             };
             LVCOLUMNW column{};
             column.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_SUBITEM;
-            for (int index = 0; index < 4; ++index)
+            for (int index = 0; index < static_cast<int>(ARRAYSIZE(columns)); ++index)
             {
                 column.iSubItem = index;
                 column.pszText = const_cast<LPWSTR>(columns[index].name);
@@ -307,15 +221,27 @@ LRESULT CALLBACK InstalledProc(HWND window, UINT message, WPARAM wParam, LPARAM 
                 reinterpret_cast<NMHDR *>(lParam)->code == LVN_ITEMCHANGED)
             {
                 const int selected = ListView_GetNextItem(state->list, -1, LVNI_SELECTED);
-                EnableWindow(state->uninstall, selected >= 0 &&
+                EnableWindow(state->uninstall, !state->busy && selected >= 0 &&
                              static_cast<std::size_t>(selected) < state->apps.size() &&
-                             !state->apps[selected].uninstall.empty());
+                             !BuildUninstallCommand(state->apps[selected].entry, state->apps[selected].installerType,
+                                                    InstallMode::Default).empty());
             }
             return 0;
+        case MessageUninstallDone:
+        {
+            UninstallJob *job = reinterpret_cast<UninstallJob *>(lParam);
+            state->busy = false;
+            EnableWindow(state->refresh, TRUE);
+            const std::wstring message = job->status ? job->package.entry.name + L" was uninstalled." :
+                                         job->package.entry.name + L" was not uninstalled: " + WideFromUtf8(job->status.message);
+            delete job;
+            RefreshInstalled(*state, message);
+            return 0;
+        }
         case WM_COMMAND:
             if (LOWORD(wParam) == IdUninstall)
                 RunUninstaller(*state);
-            else if (LOWORD(wParam) == IdInstalledRefresh)
+            else if (LOWORD(wParam) == IdInstalledRefresh && !state->busy)
                 RefreshInstalled(*state);
             else if (LOWORD(wParam) == IdInstalledClose || LOWORD(wParam) == IDCANCEL)
                 DestroyWindow(window);

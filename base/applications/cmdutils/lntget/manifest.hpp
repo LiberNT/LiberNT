@@ -17,6 +17,7 @@ Status ParseLocaleManifest(const std::string &yaml, PackageDetails &details);
 MachineArchitecture CurrentMachineArchitecture();
 std::string ArchitectureName(MachineArchitecture architecture);
 Status SelectInstaller(const Manifest &manifest, const SelectionOptions &options, InstallerEntry &installer);
+std::string EffectiveInstallerType(const InstallerEntry &installer);
 Status RunManifestSelfTests();
 
 } // namespace lntget

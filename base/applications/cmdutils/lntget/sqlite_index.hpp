@@ -20,6 +20,7 @@ enum class SearchField
     Moniker,
     Tag,
     Command,
+    ProductCode,
 };
 
 struct PackageQuery
@@ -37,6 +38,8 @@ public:
     Status Search(const PackageQuery &query, std::vector<PackageRecord> &results) const;
     Status FindExactId(const std::string &id, PackageRecord &package) const;
     Status LoadCatalog(Catalog &catalog) const;
+    Status LoadArpCorrelation(std::map<std::string, PackageRecord> &productCodes,
+                              std::map<std::string, PackageRecord> &packages) const;
     void Swap(SQLiteIndex &other);
 
 private:
