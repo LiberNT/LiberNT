@@ -26,6 +26,8 @@ extern void func_ParentIdPrefix(void);
 extern void func_PciBridgeWindows(void);
 extern void func_PciDebuggerDevice(void);
 extern void func_PciDeviceIds(void);
+extern void func_DisableableParents(void);
+extern void func_HalDeviceIds(void);
 extern void func_ProcessorDeviceIds(void);
 extern void func_SetupInstallServicesFromInfSectionEx(void);
 extern void func_SoftwareComponent(void);
@@ -64,6 +66,8 @@ const struct test winetest_testlist[] =
     { "PciBridgeWindows", func_PciBridgeWindows },
     { "PciDebuggerDevice", func_PciDebuggerDevice },
     { "PciDeviceIds", func_PciDeviceIds },
+    { "DisableableParents", func_DisableableParents },
+    { "HalDeviceIds", func_HalDeviceIds },
     { "ProcessorDeviceIds", func_ProcessorDeviceIds },
     { "SetupInstallServicesFromInfSectionEx", func_SetupInstallServicesFromInfSectionEx},
     { "SoftwareComponent", func_SoftwareComponent },

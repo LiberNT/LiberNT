@@ -1582,6 +1582,38 @@ PiProcessNewChildren(
     ExFreePool(Relations);
 }
 
+/* A reported device is asked for its hardware IDs once its driver has put a function device on the reported PDO */
+static
+VOID
+PiSaveReportedHardwareIds(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    PDEVICE_OBJECT TopDevice;
+    PWSTR HardwareIds;
+    HANDLE InstanceKey;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    ASSERT(DeviceNode->Flags & DNF_MADEUP);
+    ASSERT(DeviceNode->PhysicalDeviceObject != NULL);
+
+    TopDevice = IoGetAttachedDeviceReference(DeviceNode->PhysicalDeviceObject);
+    ObDereferenceObject(TopDevice);
+    if (TopDevice == DeviceNode->PhysicalDeviceObject) return;
+
+    Status = PiIrpQueryId(DeviceNode, BusQueryHardwareIDs, &HardwareIds);
+    if (!NT_SUCCESS(Status) || HardwareIds == NULL) return;
+
+    Status = PnpDeviceObjectToDeviceInstance(DeviceNode->PhysicalDeviceObject, &InstanceKey, KEY_SET_VALUE);
+    if (NT_SUCCESS(Status))
+    {
+        PiSetMultiSzValue(InstanceKey, L"HardwareID", HardwareIds);
+        ZwClose(InstanceKey);
+    }
+
+    ExFreePool(HardwareIds);
+}
+
 static
 VOID
 PiProcessEnumeration(
@@ -1592,6 +1624,8 @@ PiProcessEnumeration(
     PAGED_CODE();
 
     PiSetDevNodeState(DeviceNode, DeviceNodeEnumeratePending);
+
+    if (DeviceNode->Flags & DNF_MADEUP) PiSaveReportedHardwareIds(DeviceNode);
 
     /* A bus invalidating its relations while they are being processed is asked again */
     PiClearDevNodeFlag(DeviceNode, DNF_REENUMERATE);

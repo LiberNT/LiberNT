@@ -148,9 +148,10 @@ IopCreateDetectedDeviceNode(
 
     Node->InstancePath = InstancePath;
 
-    PiSetDevNodeFlag(Node,
-                     DNF_MADEUP | DNF_ENUMERATED | DNF_IDS_QUERIED |
-                         DNF_LEGACY_DRIVER);
+    PiSetDevNodeFlag(Node, DNF_MADEUP | DNF_ENUMERATED | DNF_IDS_QUERIED);
+
+    /* A reporting driver with an AddDevice routine is a PnP driver, not a legacy one */
+    if (DriverObject->DriverExtension->AddDevice == NULL) PiSetDevNodeFlag(Node, DNF_LEGACY_DRIVER);
 
     if (IopRootDeviceNode != NULL) PiInsertDevNode(Node, IopRootDeviceNode);
 
@@ -160,7 +161,8 @@ IopCreateDetectedDeviceNode(
     return STATUS_SUCCESS;
 }
 
-/* A reported device's identifiers are not queried, so its instance key gets them here */
+/* A reported device's identifiers are not queried, so its instance key gets them here,
+   with the reporting driver's service, which is the full object name of a driver without a service key */
 static
 VOID
 IopSaveDetectedIds(
@@ -169,9 +171,27 @@ IopSaveDetectedIds(
     _In_opt_ PCM_RESOURCE_LIST ResourceList)
 {
     UNICODE_STRING ValueName = RTL_CONSTANT_STRING(L"CompatibleIDs");
+    UNICODE_STRING ServiceValueName = RTL_CONSTANT_STRING(L"Service");
+    PEXTENDED_DRIVER_EXTENSION Extension = IoGetDrvObjExtension(DriverObject);
+    PUNICODE_STRING Service;
     UNICODE_STRING ServiceName;
     PWSTR CompatibleIds;
+    PWSTR ServiceString;
     ULONG Size;
+
+    Service = (Extension->ServiceKeyName.Length != 0) ? &Extension->ServiceKeyName : &DriverObject->DriverName;
+    ASSERT((Service->Length % sizeof(WCHAR)) == 0);
+    if (Service->Length != 0)
+    {
+        ServiceString = ExAllocatePoolZero(PagedPool, Service->Length + sizeof(UNICODE_NULL), TAG_IO);
+        if (ServiceString != NULL)
+        {
+            RtlCopyMemory(ServiceString, Service->Buffer, Service->Length);
+            ZwSetValueKey(InstanceKey, &ServiceValueName, 0, REG_SZ, ServiceString,
+                          Service->Length + sizeof(UNICODE_NULL));
+            ExFreePoolWithTag(ServiceString, TAG_IO);
+        }
+    }
 
     if (!IopGetDetectedServiceName(DriverObject, &ServiceName)) return;
     if (!NT_SUCCESS(IopBuildDetectedIds(&ServiceName, ResourceList, &CompatibleIds, &Size))) return;
