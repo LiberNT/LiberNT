@@ -535,6 +535,36 @@ DxgkpUseAdapterInSession(
     return STATUS_SUCCESS;
 }
 
+VOID
+DxgkDisplayWin32kProcessCleanup(
+    _In_ PEPROCESS Process)
+{
+    PDXGKP_WIN32K_SESSION Session, Found = NULL;
+    PLIST_ENTRY Entry;
+    KIRQL OldIrql;
+
+    PAGED_CODE();
+
+    KeAcquireSpinLock(&g_DisplayWin32kProcessLock, &OldIrql);
+    for (Entry = g_DisplayWin32kSessions.Flink; Entry != &g_DisplayWin32kSessions; Entry = Entry->Flink)
+    {
+        Session = CONTAINING_RECORD(Entry, DXGKP_WIN32K_SESSION, Entry);
+        if (Session->Process == Process)
+        {
+            RemoveEntryList(&Session->Entry);
+            Found = Session;
+            break;
+        }
+    }
+    KeReleaseSpinLock(&g_DisplayWin32kProcessLock, OldIrql);
+
+    if (Found == NULL)
+        return;
+    ASSERT(Found->SessionId == PsGetProcessSessionId(Process));
+    ObDereferenceObject(Found->Process);
+    ExFreePoolWithTag(Found, TAG_DXGK_DISPLAY);
+}
+
 BOOLEAN
 DxgkDisplayAttachWin32kSession(
     _In_ ULONG SessionId,
@@ -601,10 +631,7 @@ DxgkpDisplayRefreshWin32k(
     Params.CalloutType = VideoDxgkMonitorEventCallout;
     Params.PhysDisp = Bridge->Win32kPhysDisp;
     if (!DxgkDisplayAttachWin32kSession(Bridge->Win32kSessionId, &ApcState, &Process))
-    {
-        ASSERT(FALSE);
         return;
-    }
     Callout(&Params);
     DxgkDisplayDetachWin32kSession(&ApcState, Process);
 }
