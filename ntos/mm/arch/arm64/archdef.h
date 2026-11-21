@@ -29,4 +29,8 @@
 #define MI_ARCH_L4_SHIFT       0
 #define MI_ARCH_L4_BITS        0
 
+/* ARMv8 stage 1 EL1&0: bit 54 is UXN and bit 53 PXN. */
+#define MI_ARCH_LEAF_KERNEL_EXECUTE_NEVER     (1ULL << 54)
+#define MI_ARCH_LEAF_PRIVILEGED_EXECUTE_NEVER (1ULL << 53)
+
 #define MI_ARM64_SESSION_TOP_ENTRIES 1

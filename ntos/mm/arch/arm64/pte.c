@@ -56,7 +56,7 @@ MiArchPteMakeLeaf(
         Pte |= A64_NG;
 
     if (MI_PROT_IS_EXECUTE(Protection))
-        Pte |= (Flags & MI_LEAF_USER) ? A64_PXN : A64_UXN;
+        Pte |= (Flags & MI_LEAF_USER) ? A64_PXN : MI_ARCH_LEAF_KERNEL_EXECUTE_NEVER;
     else
         Pte |= A64_PXN | A64_UXN;
 
@@ -186,7 +186,7 @@ MiArchPteIsUser(_In_ MI_PTE Pte)
 BOOLEAN
 MiArchPteIsExecutable(_In_ MI_PTE Pte, _In_ BOOLEAN UserMode)
 {
-    return (Pte & (UserMode ? A64_UXN : A64_PXN)) == 0;
+    return (Pte & (UserMode ? A64_UXN : MI_ARCH_LEAF_PRIVILEGED_EXECUTE_NEVER)) == 0;
 }
 
 MI_PTE

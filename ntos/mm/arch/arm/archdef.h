@@ -28,3 +28,7 @@
 #define MI_ARCH_L3_BITS        0
 #define MI_ARCH_L4_SHIFT       0
 #define MI_ARCH_L4_BITS        0
+
+/* ARMv7 LPAE stage 1: bit 54 is XN at every level, PL0 is kept off kernel pages by AP[1]. */
+#define MI_ARCH_LEAF_KERNEL_EXECUTE_NEVER     0ULL
+#define MI_ARCH_LEAF_PRIVILEGED_EXECUTE_NEVER ((1ULL << 53) | (1ULL << 54))
