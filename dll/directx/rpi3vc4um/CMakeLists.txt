@@ -3,9 +3,6 @@
 # PURPOSE:     Build the Windows-compatible VC4 D3D9 user-mode driver
 # COPYRIGHT:   Copyright 2026 Ahmed Arif <arif193@gmail.com>
 
-remove_definitions(-DDXGKDDI_INTERFACE_VERSION=0x1052)
-add_definitions(-DDXGKDDI_INTERFACE_VERSION=0x11007)
-
 spec2def(rpi3vc4um.dll rpi3vc4um.spec)
 
 add_library(rpi3vc4um MODULE

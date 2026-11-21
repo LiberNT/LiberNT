@@ -4,8 +4,7 @@
 #
 
 add_definitions(
-    -DNDIS620
-    -DNTDDI_VERSION=0x06010000)
+    -DNDIS620)
 
 # WPA2-PSK (RSNA) supplicant static library (rsna_supplicant.h)
 include_directories(${REACTOS_SOURCE_DIR}/sdk/lib/drivers/rsna_supplicant)

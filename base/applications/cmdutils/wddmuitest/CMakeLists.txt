@@ -1,4 +1,4 @@
-remove_definitions(-DDXGKDDI_INTERFACE_VERSION=0x1052)
+remove_definitions(-DDXGKDDI_INTERFACE_VERSION=0x11007)
 add_definitions(-DDXGKDDI_INTERFACE_VERSION=0x5023)
 
 add_executable(wddmuitest wddm_ui_test.c)
