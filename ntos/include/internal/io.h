@@ -609,6 +609,18 @@ IopDeleteDriver(
     _In_ PVOID ObjectBody);
 
 NTSTATUS
+NTAPI
+IopCreateDriver(
+    _In_opt_ PUNICODE_STRING DriverName,
+    _In_ PDRIVER_INITIALIZE InitializationFunction,
+    _Out_opt_ PDRIVER_OBJECT *CreatedDriver);
+
+VOID
+NTAPI
+IoUnloadSessionDriver(
+    _In_ PVOID Driver);
+
+NTSTATUS
 IopGetDriverNames(
     _In_ HANDLE ServiceHandle,
     _Out_ PUNICODE_STRING DriverName,
