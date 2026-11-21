@@ -232,6 +232,21 @@ UserCreateHeap(OUT PVOID *SectionObject,
     return pHeap;
 }
 
+VOID
+UserDestroyGlobalHeap(VOID)
+{
+    if (GlobalUserHeap != NULL)
+    {
+        MmUnmapViewInSessionSpace(GlobalUserHeap);
+        GlobalUserHeap = NULL;
+    }
+    if (GlobalUserHeapSection != NULL)
+    {
+        ObDereferenceObject(GlobalUserHeapSection);
+        GlobalUserHeapSection = NULL;
+    }
+}
+
 NTSTATUS
 UnmapGlobalUserHeap(IN PEPROCESS Process)
 {

@@ -1116,6 +1116,7 @@ DriverUnload(IN PDRIVER_OBJECT DriverObject)
     UserBeginSessionsEnd();
     IntReleaseSessionCursors();
     IntReleaseInputDesktop();
+    DceEmptyCache();
     UserLeave();
 
     GDIOBJ_vDeleteSessionObjects(GDIObjType_DC_TYPE);
@@ -1143,6 +1144,11 @@ DriverUnload(IN PDRIVER_OBJECT DriverObject)
     FreePDEVImpl();
     FreeDeviceImpl();
     FreeSafeSemaphoreImpl();
+    FreeInputImpl();
+    FreeTimerImpl();
+    FreeSessionImpl();
+    gpsi = NULL;
+    UserDestroyGlobalHeap();
 }
 
 // Return on failure

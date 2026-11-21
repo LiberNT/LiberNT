@@ -34,6 +34,7 @@ PUSER_SESSION FASTCALL UserGetCurrentSession(VOID);
 NTSTATUS FASTCALL UserCreateSession(ULONG SessionId, PUSER_SESSION *Session);
 VOID FASTCALL UserBeginSessionsEnd(VOID);
 VOID FASTCALL UserReleaseSessions(VOID);
+VOID FASTCALL FreeSessionImpl(VOID);
 PUNICODE_STRING FASTCALL UserGetWinStaDirName(PEPROCESS Process);
 struct _WINSTATION_OBJECT *FASTCALL UserGetInputWindowStation(PEPROCESS Process);
 struct _WINSTATION_OBJECT *FASTCALL UserGetDisplayInputWindowStation(VOID);

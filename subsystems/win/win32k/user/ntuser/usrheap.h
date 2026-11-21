@@ -22,6 +22,9 @@ UserCreateHeap(OUT PVOID *SectionObject,
                IN OUT PVOID *SystemBase,
                IN SIZE_T HeapSize);
 
+VOID
+UserDestroyGlobalHeap(VOID);
+
 NTSTATUS
 UnmapGlobalUserHeap(IN PEPROCESS Process);
 
