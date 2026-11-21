@@ -304,7 +304,7 @@ typedef struct _CTL_MODIFY_REQUEST
 
 HRESULT WINAPI CertModifyCertificatesToTrust(int cCertStore,
  PCTL_MODIFY_REQUEST rgCerts, LPCSTR szPurpose, HWND hwnd,
- HCERTSTORE hcertstoreTrust);
+ HCERTSTORE hcertstoreTrust, PCCERT_CONTEXT pccertSigner);
 
 #ifdef __cplusplus
 }
