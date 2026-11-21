@@ -2470,6 +2470,28 @@ MiUnmapView(
     return MiUnmapViewEx(Space, BaseAddress, FALSE);
 }
 
+#define MI_SET_MODIFIED_BATCH 64
+
+static
+VOID
+MiSetRangeModifiedFlush(
+    _Inout_ PMI_ADDRESS_SPACE Space,
+    _In_ ULONG64 FlushStart,
+    _In_ ULONG64 FlushLast,
+    _In_reads_(Count) const ULONG *Frames,
+    _In_ ULONG Count)
+{
+    ULONG i;
+
+    MI_ASSERT(Count != 0);
+    MI_ASSERT(Count <= MI_SET_MODIFIED_BATCH);
+    MI_ASSERT(FlushStart <= FlushLast);
+    MI_ASSERT(((FlushLast - FlushStart) & (PAGE_SIZE - 1)) == 0);
+    MiTlbInvalidateSpace(Space, FlushStart, ((FlushLast - FlushStart) >> PAGE_SHIFT) + 1);
+    for (i = 0; i < Count; i++)
+        MiPfnSetModified(&Space->System->Pfn, Frames[i]);
+}
+
 NTSTATUS
 MiSetRangeModified(
     _Inout_ PMI_ADDRESS_SPACE Space,
@@ -2479,6 +2501,10 @@ MiSetRangeModified(
     PMI_SYSTEM System = Space->System;
     ULONG64 End = MI_PAGE_ALIGN_UP(BaseAddress + Length);
     ULONG64 Va = MI_PAGE_ALIGN_DOWN(BaseAddress);
+    ULONG64 FlushStart = 0;
+    ULONG64 FlushLast = 0;
+    ULONG Frames[MI_SET_MODIFIED_BATCH];
+    ULONG Count = 0;
 
     MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
 
@@ -2496,19 +2522,30 @@ MiSetRangeModified(
         }
 
         Pte = MiArchPteRead(Slot);
-        if (MiArchPteIsValid(Pte))
+        if (MiArchPteIsValid(Pte) && !MiArchPteIsDirty(Pte))
         {
             MiPfnSetModified(&System->Pfn, (ULONG)MiArchPteFrame(Pte));
-
-            if (MiArchPteIsDirty(Pte))
+        }
+        else if (MiArchPteIsValid(Pte))
+        {
+            MiArchPteWrite(Slot, MiArchPteSetDirty(Pte, FALSE));
+            if (Count == 0)
+                FlushStart = Va;
+            MI_ASSERT(Count == 0 || Va > FlushLast);
+            FlushLast = Va;
+            Frames[Count++] = (ULONG)MiArchPteFrame(Pte);
+            if (Count == MI_SET_MODIFIED_BATCH)
             {
-                MiArchPteWrite(Slot, MiArchPteSetDirty(Pte, FALSE));
-                MiTlbInvalidateSpace(Space, Va, 1);
+                MiSetRangeModifiedFlush(Space, FlushStart, FlushLast, Frames, Count);
+                Count = 0;
             }
         }
 
         Va += PAGE_SIZE;
     }
+
+    if (Count != 0)
+        MiSetRangeModifiedFlush(Space, FlushStart, FlushLast, Frames, Count);
 
     MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
     return STATUS_SUCCESS;
