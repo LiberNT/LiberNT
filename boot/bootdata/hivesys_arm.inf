@@ -1,0 +1,8 @@
+; PROJECT:     LiberNT ARMv7 boot hive
+; LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+; PURPOSE:     ARMv7 boot registry entries
+; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+
+[AddReg]
+
+HKLM,"SYSTEM\CurrentControlSet\Control\HAL","Extensions",0x00010000,"halextbcm2836.dll"

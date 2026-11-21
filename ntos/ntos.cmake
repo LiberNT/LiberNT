@@ -27,7 +27,7 @@ if(ARCH STREQUAL "arm" OR ARCH STREQUAL "arm64")
     add_definitions(-D_NTHALDLL_)
 endif()
 
-if(ARCH STREQUAL "arm64")
+if(ARCH STREQUAL "arm" OR ARCH STREQUAL "arm64")
     set(_arm_hal_common_dir ${REACTOS_SOURCE_DIR}/ntos/hal/armcommon)
     set(_arm_hal_arch_dir ${REACTOS_SOURCE_DIR}/ntos/hal/${ARCH})
     set(_arm_hal_sources
@@ -584,6 +584,7 @@ elseif(ARCH STREQUAL "riscv64")
 elseif(ARCH STREQUAL "arm")
     list(APPEND ASM_SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/trap.S)
+    list(APPEND SOURCE ${_arm_hal_sources})
     list(APPEND SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/config/arm/cmhardwr.c
         ${REACTOS_SOURCE_DIR}/ntos/kd64/arm/kdarm.c
@@ -592,16 +593,10 @@ elseif(ARCH STREQUAL "arm")
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/console.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/context.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/cpu.c
-        ${REACTOS_SOURCE_DIR}/ntos/hal/arm/hal.c
-        ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/inttarget.c
-        ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/sysinfo_stubs.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/interrupt.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/irql.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/kiinit.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/mproc.c
-        ${REACTOS_SOURCE_DIR}/ntos/hal/arm/platform.c
-        ${REACTOS_SOURCE_DIR}/ntos/hal/arm/gicv2.c
-        ${REACTOS_SOURCE_DIR}/ntos/hal/arm/bcm2836.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/services.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/syscall.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/thrdini.c

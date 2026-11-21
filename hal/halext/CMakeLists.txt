@@ -2,6 +2,7 @@
 add_definitions(-D_NTHAL_)
 
 include_directories(
+    ${REACTOS_SOURCE_DIR}/ntos/hal/${ARCH}
     ${REACTOS_SOURCE_DIR}/ntos/hal/armcommon/include
     ${REACTOS_SOURCE_DIR}/hal/arch/common/include)
 
@@ -19,7 +20,9 @@ function(add_hal_extension _name)
     add_cd_file(TARGET ${_name} DESTINATION reactos/system32 NO_CAB FOR all)
 endfunction()
 
-add_subdirectory(apple)
-add_subdirectory(bcm2711)
-add_subdirectory(bcm2712)
+if(ARCH STREQUAL "arm64")
+    add_subdirectory(apple)
+    add_subdirectory(bcm2711)
+    add_subdirectory(bcm2712)
+endif()
 add_subdirectory(bcm2836)

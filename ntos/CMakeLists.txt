@@ -126,7 +126,11 @@ if(ENABLE_KERNEL_UBSAN)
 endif()
 
 if(ARCH STREQUAL "arm64")
-    target_link_libraries(ntoskrnl rtl_kernel_context halcommon)
+    target_link_libraries(ntoskrnl rtl_kernel_context)
+endif()
+
+if(ARCH STREQUAL "arm" OR ARCH STREQUAL "arm64")
+    target_link_libraries(ntoskrnl halcommon)
 endif()
 
 set(_ntoskrnl_tree_source ${NTOSKRNL_SOURCE})

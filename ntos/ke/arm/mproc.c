@@ -233,12 +233,13 @@ KeStartAllProcessors(VOID)
 {
     KPROCESSOR_STATE ProcessorState;
     PKI_ARM_STARTUP_BLOCK Block;
-    ULONG_PTR TrampolinePhysical;
+    ULONG_PTR TrampolinePhysical, SpinEntryPhysical;
     PHYSICAL_ADDRESS BlockPhysical;
-    ULONG Number, Waited;
+    ULONG Number, Waited, Index;
 
     ASSERT(KeGetCurrentPrcb()->Number == 0);
     TrampolinePhysical = (ULONG_PTR)MmGetPhysicalAddress((PVOID)((ULONG_PTR)KiArmSecondaryTrampoline & ~1UL)).QuadPart;
+    SpinEntryPhysical = (ULONG_PTR)MmGetPhysicalAddress((PVOID)((ULONG_PTR)KiArmSecondarySpinEntry & ~1UL)).QuadPart;
 
     for (Number = 1; Number < MAXIMUM_PROCESSORS; Number++)
     {
@@ -260,6 +261,12 @@ KeStartAllProcessors(VOID)
         RtlZeroMemory(&ProcessorState, sizeof(ProcessorState));
         ProcessorState.ContextFrame.R0 = BlockPhysical.LowPart;
         ProcessorState.ContextFrame.Pc = (ULONG)TrampolinePhysical | 1;
+
+        /* Firmware that passes no argument enters at the spin entry, which reads the block from its core's slot; one processor starts at a time, so every slot names this block. */
+        for (Index = 0; Index < KI_ARM_SPIN_STARTUP_BLOCKS; Index++)
+            KiArmSpinStartupBlocks[Index] = BlockPhysical.LowPart;
+        KiArmCleanToPointOfCoherency(KiArmSpinStartupBlocks, sizeof(KiArmSpinStartupBlocks));
+        ProcessorState.ContextFrame.R1 = (ULONG)SpinEntryPhysical | 1;
         if (!HalStartNextProcessor(KeLoaderBlock, &ProcessorState))
         {
             KiArmFreeStartupResources(Block);
@@ -323,6 +330,7 @@ KiArmStartSecondaryProcessor(
     PoInitializePrcb(Prcb);
     KiSaveProcessorControlState(&Prcb->ProcessorState);
     HalInitializeProcessor(Number, KeLoaderBlock);
+    KiArmStartClock();
     KiActivateProcessor(Prcb);
     ExpInitializeExecutive(Number, KeLoaderBlock);
 
@@ -410,6 +418,7 @@ KiIpiSend(
     _In_ KAFFINITY TargetSet,
     _In_ ULONG IpiRequest)
 {
+    KAFFINITY_EX Affinity;
     KAFFINITY Remaining;
     ULONG Number;
 
@@ -420,7 +429,9 @@ KiIpiSend(
             InterlockedOr((PLONG)&KiProcessorBlock[Number]->RequestSummary, (LONG)IpiRequest);
     }
     KeMemoryBarrier();
-    HalRequestIpi(TargetSet);
+    KeInitializeAffinityEx(&Affinity);
+    Affinity.Bitmap[0] = TargetSet;
+    HalRequestIpi(IpiAffinity, &Affinity);
 }
 
 static
