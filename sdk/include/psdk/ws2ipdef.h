@@ -665,4 +665,12 @@ C_ASSERT(sizeof(IN6_PKTINFO) == 20);
 #endif
 #ifndef TCP_MAXRTMS
 #define TCP_MAXRTMS 14
+typedef enum _PMTUD_STATE {
+    IP_PMTUDISC_NOT_SET = 0,
+    IP_PMTUDISC_DO = 1,
+    IP_PMTUDISC_DONT = 2,
+    IP_PMTUDISC_PROBE = 3,
+    IP_PMTUDISC_MAX = 4
+} PMTUD_STATE, *PPMTUD_STATE;
+
 #endif

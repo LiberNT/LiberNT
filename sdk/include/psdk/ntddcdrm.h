@@ -583,4 +583,14 @@ typedef struct _CDROM_WRITE_SPEED_DESCRIPTOR
 }
 #endif
 
+typedef enum _MEDIA_BLANK_TYPE {
+    MediaBlankTypeFull = 0,
+    MediaBlankTypeMinimal = 1,
+    MediaBlankTypeIncompleteTrack = 2,
+    MediaBlankTypeUnreserveLastTrack = 3,
+    MediaBlankTypeTrackTail = 4,
+    MediaBlankTypeUncloseLastSession = 5,
+    MediaBlankTypeEraseLastSession = 6
+} MEDIA_BLANK_TYPE, *PMEDIA_BLANK_TYPE;
+
 #endif /* _NTDDCDRM_ */

@@ -33,4 +33,11 @@ RxInitializeLog(
 
 #endif
 
+typedef enum RX_LOGGING_STATE {
+    RX_LOG_UNINITIALIZED = 0,
+    RX_LOG_ENABLED = 1,
+    RX_LOG_DISABLED = 2,
+    RX_LOG_ERROR = 3
+} RX_LOGGING_STATE;
+
 #endif

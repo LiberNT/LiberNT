@@ -712,4 +712,61 @@ HRESULT WINAPI MFUnwrapMediaType(IMFMediaType *wrapped, IMFMediaType **original)
 #define MF_METADATATIMESTAMPS_PRESENTATION 0x00000002
 #endif
 
+typedef enum _MFSampleEncryptionProtectionScheme {
+    MF_SAMPLE_ENCRYPTION_PROTECTION_SCHEME_NONE = 0,
+    MF_SAMPLE_ENCRYPTION_PROTECTION_SCHEME_AES_CTR = 1,
+    MF_SAMPLE_ENCRYPTION_PROTECTION_SCHEME_AES_CBC = 2
+} MFSampleEncryptionProtectionScheme;
+
+typedef enum _eAVEncVideoQPMapElementDataType {
+    CODEC_API_QP_MAP_INT8 = 0,
+    CODEC_API_QP_MAP_INT16 = 1,
+    CODEC_API_QP_MAP_INT32 = 2,
+    CODEC_API_QP_MAP_UINT8 = (-2147483648),
+    CODEC_API_QP_MAP_UINT16 = (-2147483647),
+    CODEC_API_QP_MAP_UINT32 = (-2147483646)
+} eAVEncVideoQPMapElementDataType;
+
+typedef enum _MFFrameSourceTypes {
+    MFFrameSourceTypes_Color = 1,
+    MFFrameSourceTypes_Infrared = 2,
+    MFFrameSourceTypes_Depth = 4,
+    MFFrameSourceTypes_Image = 8,
+    MFFrameSourceTypes_Custom = 128
+} MFFrameSourceTypes;
+
+typedef enum _MFVideo3DFormat {
+    MFVideo3DSampleFormat_BaseView = 0,
+    MFVideo3DSampleFormat_MultiView = 1,
+    MFVideo3DSampleFormat_Packed_LeftRight = 2,
+    MFVideo3DSampleFormat_Packed_TopBottom = 3
+} MFVideo3DFormat;
+
+typedef enum _MFVideo3DSampleFormat {
+    MFSampleExtension_3DVideo_MultiView = 1,
+    MFSampleExtension_3DVideo_Packed = 0
+} MFVideo3DSampleFormat;
+
+typedef enum _MFDepthMeasurement {
+    DistanceToFocalPlane = 0,
+    DistanceToOpticalCenter = 1
+} MFDepthMeasurement;
+
+typedef enum _MF_CUSTOM_DECODE_UNIT_TYPE {
+    MF_DECODE_UNIT_NAL = 0,
+    MF_DECODE_UNIT_SEI = 1
+} MF_CUSTOM_DECODE_UNIT_TYPE;
+
+typedef enum _MFVideoPadFlags {
+    MFVideoPadFlag_PAD_TO_None = 0,
+    MFVideoPadFlag_PAD_TO_4x3 = 1,
+    MFVideoPadFlag_PAD_TO_16x9 = 2
+} MFVideoPadFlags;
+
+typedef enum _MFVideoSrcContentHintFlags {
+    MFVideoSrcContentHintFlag_None = 0,
+    MFVideoSrcContentHintFlag_16x9 = 1,
+    MFVideoSrcContentHintFlag_235_1 = 2
+} MFVideoSrcContentHintFlags;
+
 #endif /* __WINE_MFAPI_H */

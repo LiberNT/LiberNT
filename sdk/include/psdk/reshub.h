@@ -224,4 +224,12 @@ RESOURCE_HUB_CREATE_PATH_FROM_ID(
 #endif
 #ifndef SERIAL_BUS_UART_DESCRIPTOR_TYPE
 #define SERIAL_BUS_UART_DESCRIPTOR_TYPE 3
+typedef enum _RH_CONNECTION_PROPERTIES_INPUT_TYPE {
+    GpioIoType = 0,
+    GpioInterruptType = 1,
+    SpiConnectionType = 2,
+    I2cConnectionType = 3,
+    UartConnectionType = 4
+} RH_CONNECTION_PROPERTIES_INPUT_TYPE, *PRH_CONNECTION_PROPERTIES_INPUT_TYPE;
+
 #endif

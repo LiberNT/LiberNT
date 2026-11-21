@@ -1819,4 +1819,25 @@ HRESULT WINAPI UploadPrinterDriverPackageW(
 #define UPDP_UPLOAD_ALWAYS 0x00000002
 #endif
 
+typedef enum EPrintPropertyType {
+    kPropertyTypeString = 1,
+    kPropertyTypeInt32 = 2,
+    kPropertyTypeInt64 = 3,
+    kPropertyTypeByte = 4,
+    kPropertyTypeTime = 5,
+    kPropertyTypeDevMode = 6,
+    kPropertyTypeSD = 7,
+    kPropertyTypeNotificationReply = 8,
+    kPropertyTypeNotificationOptions = 9,
+    kPropertyTypeBuffer = 10
+} EPrintPropertyType;
+
+typedef enum PRINT_EXECUTION_CONTEXT {
+    PRINT_EXECUTION_CONTEXT_APPLICATION = 0,
+    PRINT_EXECUTION_CONTEXT_SPOOLER_SERVICE = 1,
+    PRINT_EXECUTION_CONTEXT_SPOOLER_ISOLATION_HOST = 2,
+    PRINT_EXECUTION_CONTEXT_FILTER_PIPELINE = 3,
+    PRINT_EXECUTION_CONTEXT_WOW64 = 4
+} PRINT_EXECUTION_CONTEXT;
+
 #endif

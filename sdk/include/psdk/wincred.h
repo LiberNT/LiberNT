@@ -577,4 +577,11 @@ DWORD WINAPI CredUIReadSSOCredW(_In_opt_ PCWSTR, _Outptr_ PWSTR*);
 #define CRED_UNPROTECT_ALLOW_TO_SYSTEM 0x2
 #endif
 
+typedef enum _CRED_PROTECTION_TYPE {
+    CredUnprotected = 0,
+    CredUserProtection = 1,
+    CredTrustedProtection = 2,
+    CredForSystemProtection = 3
+} CRED_PROTECTION_TYPE, *PCRED_PROTECTION_TYPE;
+
 #endif /* _WINCRED_H_ */

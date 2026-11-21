@@ -1118,4 +1118,11 @@ StgSetTimes(
 #endif
 #ifndef STG_TOEND
 #define STG_TOEND 0xFFFFFFFFL
+typedef enum tagCOMSD {
+    SD_LAUNCHPERMISSIONS = 0,
+    SD_ACCESSPERMISSIONS = 1,
+    SD_LAUNCHRESTRICTIONS = 2,
+    SD_ACCESSRESTRICTIONS = 3
+} COMSD;
+
 #endif

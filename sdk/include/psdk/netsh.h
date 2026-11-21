@@ -295,4 +295,12 @@ RegisterHelper(
 #define NETSH_VERSION_50 0x0005000
 #endif
 
+enum NS_EVENTS {
+    NS_EVENT_LOOP = 0x10000,
+    NS_EVENT_LAST_N = 1,
+    NS_EVENT_LAST_SECS = 2,
+    NS_EVENT_FROM_N = 4,
+    NS_EVENT_FROM_START = 8
+};
+
 #endif /* _NETSH_H_ */

@@ -1109,4 +1109,130 @@ typedef struct _FILE_OBJECTID_BUFFER {
 #define SCM_PD_PROPERTY_NAME_LENGTH_IN_CHARS 128
 #endif
 
+typedef enum _SCM_REGION_FLAG {
+    ScmRegionFlagNone = 0,
+    ScmRegionFlagLabel = 1
+} SCM_REGION_FLAG, *PSCM_REGION_FLAG;
+
+typedef enum _SCM_BUS_QUERY_TYPE {
+    ScmBusQuery_Descriptor = 0,
+    ScmBusQuery_IsSupported = 1,
+    ScmBusQuery_Max = 2
+} SCM_BUS_QUERY_TYPE, *PSCM_BUS_QUERY_TYPE;
+
+typedef enum _SCM_BUS_SET_TYPE {
+    ScmBusSet_Descriptor = 0,
+    ScmBusSet_IsSupported = 1,
+    ScmBusSet_Max = 2
+} SCM_BUS_SET_TYPE, *PSCM_BUS_SET_TYPE;
+
+typedef enum _SCM_BUS_PROPERTY_ID {
+    ScmBusProperty_RuntimeFwActivationInfo = 0,
+    ScmBusProperty_DedicatedMemoryInfo = 1,
+    ScmBusProperty_DedicatedMemoryState = 2,
+    ScmBusProperty_Max = 3
+} SCM_BUS_PROPERTY_ID, *PSCM_BUS_PROPERTY_ID;
+
+typedef enum _SCM_BUS_FIRMWARE_ACTIVATION_STATE {
+    ScmBusFirmwareActivationState_Idle = 0,
+    ScmBusFirmwareActivationState_Armed = 1,
+    ScmBusFirmwareActivationState_Busy = 2
+} SCM_BUS_FIRMWARE_ACTIVATION_STATE, *PSCM_BUS_FIRMWARE_ACTIVATION_STATE;
+
+typedef enum _SCM_PD_QUERY_TYPE {
+    ScmPhysicalDeviceQuery_Descriptor = 0,
+    ScmPhysicalDeviceQuery_IsSupported = 1,
+    ScmPhysicalDeviceQuery_Max = 2
+} SCM_PD_QUERY_TYPE, *PSCM_PD_QUERY_TYPE;
+
+typedef enum _SCM_PD_SET_TYPE {
+    ScmPhysicalDeviceSet_Descriptor = 0,
+    ScmPhysicalDeviceSet_IsSupported = 1,
+    ScmPhysicalDeviceSet_Max = 2
+} SCM_PD_SET_TYPE, *PSCM_PD_SET_TYPE;
+
+typedef enum _SCM_PD_PROPERTY_ID {
+    ScmPhysicalDeviceProperty_DeviceInfo = 0,
+    ScmPhysicalDeviceProperty_ManagementStatus = 1,
+    ScmPhysicalDeviceProperty_FirmwareInfo = 2,
+    ScmPhysicalDeviceProperty_LocationString = 3,
+    ScmPhysicalDeviceProperty_DeviceSpecificInfo = 4,
+    ScmPhysicalDeviceProperty_DeviceHandle = 5,
+    ScmPhysicalDeviceProperty_FruIdString = 6,
+    ScmPhysicalDeviceProperty_RuntimeFwActivationInfo = 7,
+    ScmPhysicalDeviceProperty_RuntimeFwActivationArmState = 8,
+    ScmPhysicalDeviceProperty_Max = 9
+} SCM_PD_PROPERTY_ID, *PSCM_PD_PROPERTY_ID;
+
+typedef enum _SCM_PD_HEALTH_STATUS {
+    ScmPhysicalDeviceHealth_Unknown = 0,
+    ScmPhysicalDeviceHealth_Unhealthy = 1,
+    ScmPhysicalDeviceHealth_Warning = 2,
+    ScmPhysicalDeviceHealth_Healthy = 3,
+    ScmPhysicalDeviceHealth_Max = 4
+} SCM_PD_HEALTH_STATUS, *PSCM_PD_HEALTH_STATUS;
+
+typedef enum _SCM_PD_OPERATIONAL_STATUS {
+    ScmPhysicalDeviceOpStatus_Unknown = 0,
+    ScmPhysicalDeviceOpStatus_Ok = 1,
+    ScmPhysicalDeviceOpStatus_PredictingFailure = 2,
+    ScmPhysicalDeviceOpStatus_InService = 3,
+    ScmPhysicalDeviceOpStatus_HardwareError = 4,
+    ScmPhysicalDeviceOpStatus_NotUsable = 5,
+    ScmPhysicalDeviceOpStatus_TransientError = 6,
+    ScmPhysicalDeviceOpStatus_Missing = 7,
+    ScmPhysicalDeviceOpStatus_Max = 8
+} SCM_PD_OPERATIONAL_STATUS, *PSCM_PD_OPERATIONAL_STATUS;
+
+typedef enum _SCM_PD_OPERATIONAL_STATUS_REASON {
+    ScmPhysicalDeviceOpReason_Unknown = 0,
+    ScmPhysicalDeviceOpReason_Media = 1,
+    ScmPhysicalDeviceOpReason_ThresholdExceeded = 2,
+    ScmPhysicalDeviceOpReason_LostData = 3,
+    ScmPhysicalDeviceOpReason_EnergySource = 4,
+    ScmPhysicalDeviceOpReason_Configuration = 5,
+    ScmPhysicalDeviceOpReason_DeviceController = 6,
+    ScmPhysicalDeviceOpReason_MediaController = 7,
+    ScmPhysicalDeviceOpReason_Component = 8,
+    ScmPhysicalDeviceOpReason_BackgroundOperation = 9,
+    ScmPhysicalDeviceOpReason_InvalidFirmware = 10,
+    ScmPhysicalDeviceOpReason_HealthCheck = 11,
+    ScmPhysicalDeviceOpReason_LostDataPersistence = 12,
+    ScmPhysicalDeviceOpReason_DisabledByPlatform = 13,
+    ScmPhysicalDeviceOpReason_PermanentError = 14,
+    ScmPhysicalDeviceOpReason_LostWritePersistence = 15,
+    ScmPhysicalDeviceOpReason_FatalError = 16,
+    ScmPhysicalDeviceOpReason_DataPersistenceLossImminent = 17,
+    ScmPhysicalDeviceOpReason_WritePersistenceLossImminent = 18,
+    ScmPhysicalDeviceOpReason_MediaRemainingSpareBlock = 19,
+    ScmPhysicalDeviceOpReason_PerformanceDegradation = 20,
+    ScmPhysicalDeviceOpReason_ExcessiveTemperature = 21,
+    ScmPhysicalDeviceOpReason_InternalFailure = 22,
+    ScmPhysicalDeviceOpReason_Max = 23
+} SCM_PD_OPERATIONAL_STATUS_REASON, *PSCM_PD_OPERATIONAL_STATUS_REASON;
+
+typedef enum _SCM_PD_LAST_FW_ACTIVATION_STATUS {
+    ScmPdLastFwActivationStatus_None = 0,
+    ScmPdLastFwActivationStatus_Success = 1,
+    ScmPdLastFwActivationStatus_FwNotFound = 2,
+    ScmPdLastFwActivationStatus_ColdRebootRequired = 3,
+    ScmPdLastFwActivaitonStatus_ActivationInProgress = 4,
+    ScmPdLastFwActivaitonStatus_Retry = 5,
+    ScmPdLastFwActivaitonStatus_FwUnsupported = 6,
+    ScmPdLastFwActivaitonStatus_UnknownError = 7
+} SCM_PD_LAST_FW_ACTIVATION_STATUS, *PSCM_PD_LAST_FW_ACTIVATION_STATUS;
+
+typedef enum _SCM_PD_FIRMWARE_ACTIVATION_STATE {
+    ScmPdFirmwareActivationState_Idle = 0,
+    ScmPdFirmwareActivationState_Armed = 1,
+    ScmPdFirmwareActivationState_Busy = 2
+} SCM_PD_FIRMWARE_ACTIVATION_STATE, *PSCM_PD_FIRMWARE_ACTIVATION_STATE;
+
+typedef enum _SCM_PD_MEDIA_REINITIALIZATION_STATUS {
+    ScmPhysicalDeviceReinit_Success = 0,
+    ScmPhysicalDeviceReinit_RebootNeeded = 1,
+    ScmPhysicalDeviceReinit_ColdBootNeeded = 2,
+    ScmPhysicalDeviceReinit_Max = 3
+} SCM_PD_MEDIA_REINITIALIZATION_STATUS, *PSCM_PD_MEDIA_REINITIALIZATION_STATUS;
+
 #endif /* _WINIOCTL_ */

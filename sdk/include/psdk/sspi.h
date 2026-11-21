@@ -1062,4 +1062,18 @@ typedef PSecurityFunctionTableW (SEC_ENTRY *INIT_SECURITY_INTERFACE_W)(void);
 #define SSPIPFC_USE_CREDUIBROKER 0x00000008
 #endif
 
+typedef enum _SECPKG_ATTR_LCT_STATUS {
+    SecPkgAttrLastClientTokenYes = 0,
+    SecPkgAttrLastClientTokenNo = 1,
+    SecPkgAttrLastClientTokenMaybe = 2
+} SECPKG_ATTR_LCT_STATUS, *PSECPKG_ATTR_LCT_STATUS;
+
+typedef enum _SecDelegationType {
+    SecFull = 0,
+    SecService = 1,
+    SecTree = 2,
+    SecDirectory = 3,
+    SecObject = 4
+} SecDelegationType, *PSecDelegationType;
+
 #endif /* ndef __WINE_SSPI_H__ */

@@ -238,4 +238,30 @@ RPCRTAPI int        RPC_ENTRY I_RpcExceptionFilter(ULONG);
 #define RPC_QUERY_SERVER_PRINCIPAL_NAME 0x02
 #endif
 
+typedef enum tagRpcLocalAddressFormat {
+    rlafInvalid = 0,
+    rlafIPv4 = 1,
+    rlafIPv6 = 2
+} RpcLocalAddressFormat;
+
+typedef enum tagRpcCallType {
+    rctInvalid = 0,
+    rctNormal = 1,
+    rctTraining = 2,
+    rctGuaranteed = 3
+} RpcCallType;
+
+typedef enum tagRpcCallClientLocality {
+    rcclInvalid = 0,
+    rcclLocal = 1,
+    rcclRemote = 2,
+    rcclClientUnknownLocality = 3
+} RpcCallClientLocality;
+
+typedef enum _RPC_NOTIFICATIONS {
+    RpcNotificationCallNone = 0,
+    RpcNotificationClientDisconnect = 1,
+    RpcNotificationCallCancel = 2
+} RPC_NOTIFICATIONS;
+
 #endif

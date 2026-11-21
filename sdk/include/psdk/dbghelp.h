@@ -1522,4 +1522,12 @@ extern BOOL WINAPI wine_get_module_information(HANDLE, DWORD64 base, struct dhex
 #define TARGET_ATTRIBUTE_PACMASK_LIVETARGET 0xFFFFFFFFFFFFFFFFull
 #endif
 
+typedef enum IMAGEHLP_SF_TYPE {
+    sfImage = 0,
+    sfDbg = 1,
+    sfPdb = 2,
+    sfMpd = 3,
+    sfMax = 4
+} IMAGEHLP_SF_TYPE;
+
 #endif  /* __WINE_DBGHELP_H */

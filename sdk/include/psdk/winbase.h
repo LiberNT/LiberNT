@@ -4330,4 +4330,16 @@ WCHAR * CDECL wine_get_dos_file_name(LPCSTR str);
 #define S_WHITEVOICE 7
 #endif
 
+typedef enum FILE_WRITE_FLAGS {
+    FILE_WRITE_FLAGS_NONE = 0,
+    FILE_WRITE_FLAGS_WRITE_THROUGH = 1
+} FILE_WRITE_FLAGS;
+
+typedef enum FILE_FLUSH_MODE {
+    FILE_FLUSH_DEFAULT = 0,
+    FILE_FLUSH_DATA = 1,
+    FILE_FLUSH_MIN_METADATA = 2,
+    FILE_FLUSH_NO_SYNC = 3
+} FILE_FLUSH_MODE;
+
 #endif /* _WINBASE_ */

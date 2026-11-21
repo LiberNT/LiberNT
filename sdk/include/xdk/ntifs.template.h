@@ -4030,4 +4030,232 @@ typedef struct _OPEN_REPARSE_LIST {
 #endif
 #ifndef WOF_PROVIDER_WIM
 #define WOF_PROVIDER_WIM 0x00000001
+typedef enum _RTL_MEMORY_TYPE {
+    MemoryTypePaged = 0,
+    MemoryTypeNonPaged = 1,
+    MemoryType64KPage = 2,
+    MemoryTypeLargePage = 3,
+    MemoryTypeHugePage = 4,
+    MemoryTypeCustom = 5,
+    MemoryTypeMax = 6
+} RTL_MEMORY_TYPE, *PRTL_MEMORY_TYPE;
+
+typedef enum _HEAP_MEMORY_INFO_CLASS {
+    HeapMemoryBasicInformation = 0
+} HEAP_MEMORY_INFO_CLASS;
+
+typedef enum _MSV1_0_CREDENTIAL_KEY_TYPE {
+    InvalidCredKey = 0,
+    DeprecatedIUMCredKey = 1,
+    DomainUserCredKey = 2,
+    LocalUserCredKey = 3,
+    ExternallySuppliedCredKey = 4
+} MSV1_0_CREDENTIAL_KEY_TYPE;
+
+typedef enum _FILE_KNOWN_FOLDER_TYPE {
+    KnownFolderNone = 0,
+    KnownFolderDesktop = 1,
+    KnownFolderDocuments = 2,
+    KnownFolderDownloads = 3,
+    KnownFolderMusic = 4,
+    KnownFolderPictures = 5,
+    KnownFolderVideos = 6,
+    KnownFolderOther = 7,
+    KnownFolderMax = 7
+} FILE_KNOWN_FOLDER_TYPE;
+
+typedef enum _CSVFS_DISK_CONNECTIVITY {
+    CsvFsDiskConnectivityNone = 0,
+    CsvFsDiskConnectivityMdsNodeOnly = 1,
+    CsvFsDiskConnectivitySubsetOfNodes = 2,
+    CsvFsDiskConnectivityAllNodes = 3
+} CSVFS_DISK_CONNECTIVITY, *PCSVFS_DISK_CONNECTIVITY;
+
+typedef enum _LMR_QUERY_INFO_CLASS {
+    LMRQuerySessionInfo = 1
+} LMR_QUERY_INFO_CLASS, *PLMR_QUERY_INFO_CLASS;
+
+typedef enum _STORAGE_RESERVE_ID {
+    StorageReserveIdNone = 0,
+    StorageReserveIdHard = 1,
+    StorageReserveIdSoft = 2,
+    StorageReserveIdUpdateScratch = 3,
+    StorageReserveIdMax = 4
+} STORAGE_RESERVE_ID, *PSTORAGE_RESERVE_ID;
+
+typedef enum _QUERY_FILE_LAYOUT_FILTER_TYPE {
+    QUERY_FILE_LAYOUT_FILTER_TYPE_NONE = 0,
+    QUERY_FILE_LAYOUT_FILTER_TYPE_CLUSTERS = 1,
+    QUERY_FILE_LAYOUT_FILTER_TYPE_FILEID = 2,
+    QUERY_FILE_LAYOUT_FILTER_TYPE_STORAGE_RESERVE_ID = 3,
+    QUERY_FILE_LAYOUT_NUM_FILTER_TYPES = 4
+} QUERY_FILE_LAYOUT_FILTER_TYPE;
+
+typedef enum _FILE_STORAGE_TIER_MEDIA_TYPE {
+    FileStorageTierMediaTypeUnspecified = 0,
+    FileStorageTierMediaTypeDisk = 1,
+    FileStorageTierMediaTypeSsd = 2,
+    FileStorageTierMediaTypeScm = 4,
+    FileStorageTierMediaTypeMax = 5
+} FILE_STORAGE_TIER_MEDIA_TYPE, *PFILE_STORAGE_TIER_MEDIA_TYPE;
+
+typedef enum _FILE_STORAGE_TIER_CLASS {
+    FileStorageTierClassUnspecified = 0,
+    FileStorageTierClassCapacity = 1,
+    FileStorageTierClassPerformance = 2,
+    FileStorageTierClassMax = 3
+} FILE_STORAGE_TIER_CLASS, *PFILE_STORAGE_TIER_CLASS;
+
+typedef enum _DUPLICATE_EXTENTS_STATE {
+    FileSnapStateInactive = 0,
+    FileSnapStateSource = 1,
+    FileSnapStateTarget = 2
+} DUPLICATE_EXTENTS_STATE, *PDUPLICATE_EXTENTS_STATE;
+
+typedef enum _REFS_SMR_VOLUME_GC_STATE {
+    SmrGcStateInactive = 0,
+    SmrGcStatePaused = 1,
+    SmrGcStateActive = 2,
+    SmrGcStateActiveFullSpeed = 3
+} REFS_SMR_VOLUME_GC_STATE, *PREFS_SMR_VOLUME_GC_STATE;
+
+typedef enum _REFS_SMR_VOLUME_GC_ACTION {
+    SmrGcActionStart = 1,
+    SmrGcActionStartFullSpeed = 2,
+    SmrGcActionPause = 3,
+    SmrGcActionStop = 4
+} REFS_SMR_VOLUME_GC_ACTION, *PREFS_SMR_VOLUME_GC_ACTION;
+
+typedef enum _REFS_SMR_VOLUME_GC_METHOD {
+    SmrGcMethodCompaction = 1,
+    SmrGcMethodCompression = 2,
+    SmrGcMethodRotation = 3
+} REFS_SMR_VOLUME_GC_METHOD, *PREFS_SMR_VOLUME_GC_METHOD;
+
+typedef enum _VIRTUAL_STORAGE_BEHAVIOR_CODE {
+    VirtualStorageBehaviorUndefined = 0,
+    VirtualStorageBehaviorCacheWriteThrough = 1,
+    VirtualStorageBehaviorCacheWriteBack = 2,
+    VirtualStorageBehaviorStopIoProcessing = 3,
+    VirtualStorageBehaviorRestartIoProcessing = 4
+} VIRTUAL_STORAGE_BEHAVIOR_CODE, *PVIRTUAL_STORAGE_BEHAVIOR_CODE;
+
+typedef enum _FS_BPIO_OPERATIONS {
+    FS_BPIO_OP_ENABLE = 1,
+    FS_BPIO_OP_DISABLE = 2,
+    FS_BPIO_OP_QUERY = 3,
+    FS_BPIO_OP_VOLUME_STACK_PAUSE = 4,
+    FS_BPIO_OP_VOLUME_STACK_RESUME = 5,
+    FS_BPIO_OP_STREAM_PAUSE = 6,
+    FS_BPIO_OP_STREAM_RESUME = 7,
+    FS_BPIO_OP_GET_INFO = 8,
+    FS_BPIO_OP_MAX_OPERATION = 9
+} FS_BPIO_OPERATIONS;
+
+typedef enum _FS_BPIO_INFLAGS {
+    FSBPIO_INFL_None = 0,
+    FSBPIO_INFL_SKIP_STORAGE_STACK_QUERY = 1
+} FS_BPIO_INFLAGS;
+
+typedef enum _FS_BPIO_OUTFLAGS {
+    FSBPIO_OUTFL_None = 0,
+    FSBPIO_OUTFL_VOLUME_STACK_BYPASS_PAUSED = 1,
+    FSBPIO_OUTFL_STREAM_BYPASS_PAUSED = 2,
+    FSBPIO_OUTFL_FILTER_ATTACH_BLOCKED = 4,
+    FSBPIO_OUTFL_COMPATIBLE_STORAGE_DRIVER = 8
+} FS_BPIO_OUTFLAGS;
+
+typedef enum _SharedVirtualDiskSupportType {
+    SharedVirtualDisksUnsupported = 0,
+    SharedVirtualDisksSupported = 1,
+    SharedVirtualDiskSnapshotsSupported = 3,
+    SharedVirtualDiskCDPSnapshotsSupported = 7
+} SharedVirtualDiskSupportType;
+
+typedef enum _SharedVirtualDiskHandleState {
+    SharedVirtualDiskHandleStateNone = 0,
+    SharedVirtualDiskHandleStateFileShared = 1,
+    SharedVirtualDiskHandleStateHandleShared = 3
+} SharedVirtualDiskHandleState;
+
+typedef enum _REFS_DEALLOCATE_RANGES_ALLOCATOR {
+    REFS_DEALLOCATE_RANGES_ALLOCATOR_NONE = 0,
+    REFS_DEALLOCATE_RANGES_ALLOCATOR_SAA = 1,
+    REFS_DEALLOCATE_RANGES_ALLOCATOR_CAA = 2,
+    REFS_DEALLOCATE_RANGES_ALLOCATOR_MAA = 3
+} REFS_DEALLOCATE_RANGES_ALLOCATOR, *PREFS_DEALLOCATE_RANGES_ALLOCATOR;
+
+enum _REFS_STREAM_EXTENT_PROPERTIES {
+    REFS_STREAM_EXTENT_PROPERTY_VALID = 16,
+    REFS_STREAM_EXTENT_PROPERTY_STREAM_RESERVED = 32,
+    REFS_STREAM_EXTENT_PROPERTY_CRC32 = 128,
+    REFS_STREAM_EXTENT_PROPERTY_CRC64 = 0x100,
+    REFS_STREAM_EXTENT_PROPERTY_GHOSTED = 0x200,
+    REFS_STREAM_EXTENT_PROPERTY_READONLY = 0x400,
+    REFS_STREAM_EXTENT_PROPERTY_SPARSE = 8
+};
+
+typedef enum _REFS_STREAM_SNAPSHOT_OPERATION {
+    REFS_STREAM_SNAPSHOT_OPERATION_INVALID = 0,
+    REFS_STREAM_SNAPSHOT_OPERATION_CREATE = 1,
+    REFS_STREAM_SNAPSHOT_OPERATION_LIST = 2,
+    REFS_STREAM_SNAPSHOT_OPERATION_QUERY_DELTAS = 3,
+    REFS_STREAM_SNAPSHOT_OPERATION_REVERT = 4,
+    REFS_STREAM_SNAPSHOT_OPERATION_SET_SHADOW_BTREE = 5,
+    REFS_STREAM_SNAPSHOT_OPERATION_CLEAR_SHADOW_BTREE = 6,
+    REFS_STREAM_SNAPSHOT_OPERATION_MAX = 6
+} REFS_STREAM_SNAPSHOT_OPERATION, *PREFS_STREAM_SNAPSHOT_OPERATION;
+
+enum _LCN_WEAK_REFERENCE_STATE {
+    LCN_WEAK_REFERENCE_VALID = 1,
+    LCN_WEAK_REFERENCE_BROKEN = 2,
+    LCN_CHECKSUM_VALID = 4,
+    LCN_IS_VALID = 8,
+    LCN_IS_STREAM_RESERVED = 16,
+    LCN_IS_READ_ONLY = 32
+};
+
+typedef enum _REFS_COMPRESSION_FORMATS {
+    REFS_COMPRESSION_FORMAT_UNCHANGED = 0,
+    REFS_COMPRESSION_FORMAT_UNKNOWN = 1,
+    REFS_COMPRESSION_FORMAT_UNCOMPRESSED = 2,
+    REFS_COMPRESSION_FORMAT_LZ4 = 3,
+    REFS_COMPRESSION_FORMAT_ZSTD = 4
+} REFS_COMPRESSION_FORMATS, *PREFS_COMPRESSION_FORMATS;
+
+typedef enum _REFS_SET_VOLUME_COMPRESSION_INFO_FLAGS {
+    REFS_SET_VOLUME_COMPRESSION_INFO_FLAG_START_COMPRESSION = 1,
+    REFS_SET_VOLUME_COMPRESSION_INFO_FLAG_STOP_COMPRESSION = 2,
+    REFS_SET_VOLUME_COMPRESSION_INFO_FLAG_GC_ONLY = 4,
+    REFS_SET_VOLUME_COMPRESSION_INFO_FLAG_ENABLE_COMPRESSION = 8,
+    REFS_SET_VOLUME_COMPRESSION_INFO_FLAG_DISABLE_COMPRESSION = 16,
+    REFS_SET_VOLUME_COMPRESSION_INFO_FLAG_MAX = 16
+} REFS_SET_VOLUME_COMPRESSION_INFO_FLAGS, *PREFS_SET_VOLUME_COMPRESSION_INFO_FLAGS;
+
+typedef enum _REFS_QUERY_VOLUME_COMPRESSION_INFO_FLAGS {
+    REFS_QUERY_VOLUME_COMPRESSION_INFO_FLAGS_RUNNING = 1,
+    REFS_QUERY_VOLUME_COMPRESSION_INFO_FLAGS_STOPPED = 2
+} REFS_QUERY_VOLUME_COMPRESSION_INFO_FLAGS, *PREFS_QUERY_VOLUME_COMPRESSION_INFO_FLAGS;
+
+typedef enum _REFS_QUERY_VOLUME_IO_METRICS_INFO_QUERY_TYPE {
+    REFS_QUERY_VOLUME_IO_METRICS_INFO_QUERY_TYPE_PARAMETERS = 1,
+    REFS_QUERY_VOLUME_IO_METRICS_INFO_QUERY_TYPE_METRICS_DATA = 2
+} REFS_QUERY_VOLUME_IO_METRICS_INFO_QUERY_TYPE, *PREFS_QUERY_VOLUME_IO_METRICS_INFO_QUERY_TYPE;
+
+typedef enum _CSV_DOWN_LEVEL_FILE_TYPE {
+    CsvDownLevelFileObject = 0,
+    CsvCsvFsInternalFileObject = 1
+} CSV_DOWN_LEVEL_FILE_TYPE;
+
+typedef enum OPLOCK_NOTIFY_REASON {
+    OPLOCK_NOTIFY_BREAK_WAIT_INTERIM_TIMEOUT = 0,
+    OPLOCK_NOTIFY_BREAK_WAIT_TERMINATED = 1
+} OPLOCK_NOTIFY_REASON;
+
+typedef enum _SEC_TRAFFIC_SECRET_TYPE {
+    SecTrafficSecret_None = 0,
+    SecTrafficSecret_Client = 1,
+    SecTrafficSecret_Server = 2
+} SEC_TRAFFIC_SECRET_TYPE, *PSEC_TRAFFIC_SECRET_TYPE;
+
 #endif

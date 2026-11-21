@@ -198,4 +198,11 @@ GetSystemTimePreciseAsFileTime(
 #endif
 #ifndef USER_CET_ENVIRONMENT_WIN32_PROCESS
 #define USER_CET_ENVIRONMENT_WIN32_PROCESS 0x00000000
+typedef enum DEVELOPER_DRIVE_ENABLEMENT_STATE {
+    DeveloperDriveEnablementStateError = 0,
+    DeveloperDriveEnabled = 1,
+    DeveloperDriveDisabledBySystemPolicy = 2,
+    DeveloperDriveDisabledByGroupPolicy = 3
+} DEVELOPER_DRIVE_ENABLEMENT_STATE;
+
 #endif

@@ -464,4 +464,26 @@ typedef struct _SecPkgContext_CipherInfo
 #define SSL_SESSION_RECONNECT 1
 #endif
 
+typedef enum _eTlsSignatureAlgorithm {
+    TlsSignatureAlgorithm_Anonymous = 0,
+    TlsSignatureAlgorithm_Rsa = 1,
+    TlsSignatureAlgorithm_Dsa = 2,
+    TlsSignatureAlgorithm_Ecdsa = 3
+} eTlsSignatureAlgorithm;
+
+typedef enum _eTlsHashAlgorithm {
+    TlsHashAlgorithm_None = 0,
+    TlsHashAlgorithm_Md5 = 1,
+    TlsHashAlgorithm_Sha1 = 2,
+    TlsHashAlgorithm_Sha224 = 3,
+    TlsHashAlgorithm_Sha256 = 4,
+    TlsHashAlgorithm_Sha384 = 5,
+    TlsHashAlgorithm_Sha512 = 6
+} eTlsHashAlgorithm;
+
+typedef enum _SchGetExtensionsOptions {
+    SCH_EXTENSIONS_OPTIONS_NONE = 0,
+    SCH_NO_RECORD_HEADER = 1
+} SchGetExtensionsOptions;
+
 #endif /* __SCHANNEL_H__ */
