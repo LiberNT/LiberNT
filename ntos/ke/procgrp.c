@@ -16,7 +16,7 @@
 /* PRIVATE TYPES *************************************************************/
 
 /* KeSetTimer2 and friends are internal exports not declared by the DDK. */
-NTKERNELAPI USHORT NTAPI KeQueryNodeActiveProcessorCount(_In_ USHORT NodeNumber);
+NTKERNELAPI ULONG NTAPI KeQueryNodeActiveProcessorCount(_In_ USHORT NodeNumber);
 NTKERNELAPI PKPRCB NTAPI KeQueryPrcbAddress(_In_ ULONG Number);
 NTKERNELAPI ULONG NTAPI KeQueryActiveProcessorAffinity(_Out_ PKAFFINITY_EX Affinity);
 NTKERNELAPI NTSTATUS NTAPI KeQueryActiveProcessorAffinity2(_Out_ PGROUP_AFFINITY GroupAffinities, _Inout_ PUSHORT Count);
@@ -1356,7 +1356,7 @@ KeQueryNodeActiveAffinity2(
 /*
  * @implemented
  */
-USHORT
+ULONG
 NTAPI
 KeQueryNodeActiveProcessorCount(
     _In_ USHORT NodeNumber)
@@ -1364,7 +1364,7 @@ KeQueryNodeActiveProcessorCount(
     if (NodeNumber != 0)
         return 0;
 
-    return (USHORT)KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
+    return KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
 }
 
 /*
