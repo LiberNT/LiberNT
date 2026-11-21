@@ -3197,7 +3197,7 @@ typedef struct _KTHREAD
     ULONG ContextSwitches;
     volatile UCHAR State;
 #if (NTDDI_VERSION >= NTDDI_WIN10) // since 10.0.10074.0
-    CHAR Spare12;
+    CHAR DecayBoost; // Windows 10 name: Spare12
 #else
     CHAR NpxState;
 #endif

@@ -1652,7 +1652,6 @@ FORCEINLINE
 KPRIORITY
 KiGetUnflooredPriority(IN PKTHREAD Thread)
 {
-#if defined(_WIN64) && (NTDDI_VERSION >= NTDDI_WIN10)
     if (Thread->PriorityFloorSummary)
     {
         if (Thread->BasePriority >= LOW_REALTIME_PRIORITY)
@@ -1660,9 +1659,10 @@ KiGetUnflooredPriority(IN PKTHREAD Thread)
         return min(Thread->BasePriority + Thread->DecayBoost,
                    LOW_REALTIME_PRIORITY - 1);
     }
-#endif
     return Thread->Priority;
 }
+
+C_ASSERT(RTL_NUMBER_OF(((PKTHREAD)0)->PriorityFloorCounts) >= LOW_REALTIME_PRIORITY);
 
 FORCEINLINE
 VOID
@@ -1670,28 +1670,27 @@ KiUpdatePriorityFloor(IN PKTHREAD Thread,
                      IN KPRIORITY OldFloor,
                      IN KPRIORITY NewFloor)
 {
-#if defined(_WIN64) && (NTDDI_VERSION >= NTDDI_WIN10)
     if (OldFloor == NewFloor)
         return;
+
+    /* Level 0 is no floor and has no count: the count of a floor is at its level less one. */
     if (NewFloor)
     {
         ASSERT(NewFloor <= HIGH_PRIORITY);
-        ASSERT(Thread->PriorityFloorCounts[NewFloor] != MAXUCHAR);
-        ++Thread->PriorityFloorCounts[NewFloor];
+        ASSERT((ULONG)(NewFloor - 1) < RTL_NUMBER_OF(Thread->PriorityFloorCounts));
+        ASSERT(Thread->PriorityFloorCounts[NewFloor - 1] != MAXUCHAR);
+        ++Thread->PriorityFloorCounts[NewFloor - 1];
         Thread->PriorityFloorSummary |= PRIORITY_MASK(NewFloor);
     }
     if (OldFloor)
     {
         ASSERT(OldFloor <= HIGH_PRIORITY);
-        ASSERT(Thread->PriorityFloorCounts[OldFloor] != 0);
-        if (--Thread->PriorityFloorCounts[OldFloor] == 0)
+        ASSERT((ULONG)(OldFloor - 1) < RTL_NUMBER_OF(Thread->PriorityFloorCounts));
+        ASSERT(Thread->PriorityFloorCounts[OldFloor - 1] != 0);
+        ASSERT(Thread->PriorityFloorSummary & PRIORITY_MASK(OldFloor));
+        if (--Thread->PriorityFloorCounts[OldFloor - 1] == 0)
             Thread->PriorityFloorSummary &= ~PRIORITY_MASK(OldFloor);
     }
-#else
-    UNREFERENCED_PARAMETER(Thread);
-    UNREFERENCED_PARAMETER(OldFloor);
-    UNREFERENCED_PARAMETER(NewFloor);
-#endif
 }
 
 FORCEINLINE
@@ -1699,7 +1698,6 @@ KPRIORITY
 KiApplyPriorityFloor(IN PKTHREAD Thread,
                      IN KPRIORITY Priority)
 {
-#if defined(_WIN64) && (NTDDI_VERSION >= NTDDI_WIN10)
     ULONG Floor;
 
     Thread->DecayBoost = (Priority < LOW_REALTIME_PRIORITY) ?
@@ -1709,9 +1707,6 @@ KiApplyPriorityFloor(IN PKTHREAD Thread,
         BitScanReverse(&Floor, Thread->PriorityFloorSummary);
         Priority = max(Priority, (KPRIORITY)Floor);
     }
-#else
-    UNREFERENCED_PARAMETER(Thread);
-#endif
     return Priority;
 }
 
