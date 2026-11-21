@@ -1026,7 +1026,6 @@ typedef struct _RTL_AVL_TREE
 } RTL_AVL_TREE, *PRTL_AVL_TREE;
 #endif
 
-#if (NTDDI_VERSION >= NTDDI_WS03SP1)
 typedef struct _ACTIVATION_CONTEXT_STACK
 {
     struct _RTL_ACTIVATION_CONTEXT_STACK_FRAME *ActiveFrame;
@@ -1035,15 +1034,6 @@ typedef struct _ACTIVATION_CONTEXT_STACK
     ULONG NextCookieSequenceNumber;
     ULONG StackId;
 } ACTIVATION_CONTEXT_STACK, *PACTIVATION_CONTEXT_STACK;
-#else
-typedef struct _ACTIVATION_CONTEXT_STACK
-{
-    ULONG Flags;
-    ULONG NextCookieSequenceNumber;
-    struct _RTL_ACTIVATION_CONTEXT_STACK_FRAME *ActiveFrame;
-    LIST_ENTRY FrameListCache;
-} ACTIVATION_CONTEXT_STACK, *PACTIVATION_CONTEXT_STACK;
-#endif
 
 //
 // ACE Structure
@@ -1667,13 +1657,8 @@ typedef struct _RTL_USER_PROCESS_PARAMETERS
     UNICODE_STRING ShellInfo;
     UNICODE_STRING RuntimeData;
     RTL_DRIVE_LETTER_CURDIR CurrentDirectories[RTL_MAX_DRIVE_LETTERS];
-#if (NTDDI_VERSION >= NTDDI_LONGHORN) || defined(__REACTOS__)
     SIZE_T EnvironmentSize;
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN7) || defined(__REACTOS__)
     SIZE_T EnvironmentVersion;
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN8) || defined(__REACTOS__)
     PVOID PackageDependencyData;
     ULONG ProcessGroupId;
     ULONG LoaderThreads;
@@ -1683,7 +1668,6 @@ typedef struct _RTL_USER_PROCESS_PARAMETERS
     ULONG DefaultThreadpoolCpuSetMaskCount;
     ULONG DefaultThreadpoolThreadMaximum;
     ULONG HeapMemoryTypeMask;
-#endif
 } RTL_USER_PROCESS_PARAMETERS, *PRTL_USER_PROCESS_PARAMETERS;
 
 typedef struct _RTL_USER_PROCESS_INFORMATION
@@ -1695,7 +1679,6 @@ typedef struct _RTL_USER_PROCESS_INFORMATION
     SECTION_IMAGE_INFORMATION ImageInformation;
 } RTL_USER_PROCESS_INFORMATION, *PRTL_USER_PROCESS_INFORMATION;
 
-#if (NTDDI_VERSION >= NTDDI_WIN7)
 
 typedef enum _RTL_UMS_SCHEDULER_REASON
 {
@@ -1707,11 +1690,6 @@ typedef enum _RTL_UMS_SCHEDULER_REASON
 typedef enum _RTL_UMSCTX_FLAGS
 {
     UMSCTX_SCHEDULED_THREAD_BIT = 0,
-#if (NTDDI_VERSION < NTDDI_WIN8)
-    UMSCTX_HAS_QUANTUM_REQ_BIT,
-    UMSCTX_HAS_AFFINITY_REQ_BIT,
-    UMSCTX_HAS_PRIORITY_REQ_BIT,
-#endif
     UMSCTX_SUSPENDED_BIT,
     UMSCTX_VOLATILE_CONTEXT_BIT,
     UMSCTX_TERMINATED_BIT,
@@ -1743,20 +1721,12 @@ typedef struct DECLSPEC_ALIGN(16) _RTL_UMS_CONTEXT
         struct
         {
             ULONG ScheduledThread : 1;
-#if (NTDDI_VERSION < NTDDI_WIN8)
-            ULONG HasQuantumReq : 1;
-            ULONG HasAffinityReq : 1;
-            ULONG HasPriorityReq : 1;
-#endif
             ULONG Suspended : 1;
             ULONG VolatileContext : 1;
             ULONG Terminated : 1;
             ULONG DebugActive : 1;
             ULONG RunningOnSelfThread : 1;
             ULONG DenyRunningOnSelfThread : 1;
-#if (NTDDI_VERSION < NTDDI_WIN8)
-            ULONG ReservedFlags : 22;
-#endif
         };
         LONG Flags;
     };
@@ -1764,28 +1734,17 @@ typedef struct DECLSPEC_ALIGN(16) _RTL_UMS_CONTEXT
     {
         struct
         {
-#if (NTDDI_VERSION >= NTDDI_WIN8)
             ULONG64 KernelUpdateLock : 2;
-#else
-            ULONG64 KernelUpdateLock : 1;
-            ULONG64 Reserved : 1;
-#endif
             ULONG64 PrimaryClientID : 62;
         };
         ULONG64 ContextLock;
     };
-#if (NTDDI_VERSION < NTDDI_WIN8)
-    ULONG64 QuantumValue;
-    GROUP_AFFINITY AffinityMask;
-    LONG Priority;
-#endif
     struct _RTL_UMS_CONTEXT* PrimaryUmsContext;
     ULONG SwitchCount;
     ULONG KernelYieldCount;
     ULONG MixedYieldCount;
     ULONG YieldCount;
 } RTL_UMS_CONTEXT, *PRTL_UMS_CONTEXT;
-#endif // #if (NTDDI_VERSION >= NTDDI_WIN7)
 
 //
 // RTL Atom Table Structures

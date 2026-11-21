@@ -40,13 +40,9 @@ extern "C" {
 //
 // User space range limit
 //
-#if defined(NTDDI_VERSION) && (NTDDI_VERSION >= NTDDI_WINBLUE)
 /* Windows 8.1+ exposes the lower canonical half (128 TiB), less the
  * inaccessible top allocation-granularity region, to native 64-bit code. */
 #define MI_HIGHEST_USER_ADDRESS         (PVOID)0x00007FFFFFFEFFFFULL
-#else
-#define MI_HIGHEST_USER_ADDRESS         (PVOID)0x000007FFFFFEFFFFULL
-#endif
 
 //
 // Address of the shared user page
@@ -109,13 +105,8 @@ typedef struct _MMPTE_TRANSITION
     ULONG64 Protection:5;
     ULONG64 Prototype:1;
     ULONG64 Transition:1;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     ULONG64 PageFrameNumber:36;
     ULONG64 Unused:16;
-#else
-    ULONG64 PageFrameNumber:28;
-    ULONG64 Unused:24;
-#endif
 } MMPTE_TRANSITION;
 
 typedef struct _MMPTE_PROTOTYPE
@@ -154,15 +145,7 @@ typedef struct _MMPTE_LIST
 typedef struct _MMPTE_HARDWARE
 {
     ULONG64 Valid:1;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     ULONG64 Dirty1:1;
-#else
-#ifdef CONFIG_SMP
-    ULONG64 Writable:1;
-#else
-    ULONG64 Write:1;
-#endif
-#endif
     ULONG64 Owner:1;
     ULONG64 WriteThrough:1;
     ULONG64 CacheDisable:1;
@@ -172,19 +155,9 @@ typedef struct _MMPTE_HARDWARE
     ULONG64 Global:1;
     ULONG64 CopyOnWrite:1;
     ULONG64 Prototype:1;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     ULONG64 Write:1;
     ULONG64 PageFrameNumber:36;
     ULONG64 reserved1:4;
-#else
-#ifdef CONFIG_SMP
-    ULONG64 Write:1;
-#else
-    ULONG64 reserved0:1;
-#endif
-    ULONG64 PageFrameNumber:28;
-    ULONG64 reserved1:12;
-#endif
     ULONG64 SoftwareWsIndex:11;
     ULONG64 NoExecute:1;
 } MMPTE_HARDWARE, *PMMPTE_HARDWARE;
@@ -205,13 +178,8 @@ typedef struct _MMPTE_HARDWARE_LARGEPAGE
     ULONG64 reserved0:1;
     ULONG64 PAT:1;
     ULONG64 reserved1:8;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     ULONG64 PageFrameNumber:27;
     ULONG64 reserved2:16;
-#else
-    ULONG64 PageFrameNumber:19;
-    ULONG64 reserved2:24;
-#endif
 } MMPTE_HARDWARE_LARGEPAGE, *PMMPTE_HARDWARE_LARGEPAGE;
 
 typedef struct _MMPTE

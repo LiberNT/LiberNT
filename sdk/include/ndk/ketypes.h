@@ -164,17 +164,11 @@ typedef struct _FIBER                                    /* Field offsets:    */
     PVOID StackLimit;                                    /* 0x00C 0x00C 0x018 */
     PVOID DeallocationStack;                             /* 0x010 0x010 0x020 */
     CONTEXT FiberContext;                                /* 0x014 0x018 0x030 */
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     PVOID Wx86Tib;                                       /* 0x2E0 0x1b8 0x500 */
     struct _ACTIVATION_CONTEXT_STACK *ActivationContextStackPointer; /* 0x2E4 0x1bc 0x508 */
     PVOID FlsData;                                       /* 0x2E8 0x1c0 0x510 */
     ULONG GuaranteedStackBytes;                          /* 0x2EC 0x1c4 0x518 */
     ULONG TebFlags;                                      /* 0x2F0 0x1c8 0x51C */
-#else
-    ULONG GuaranteedStackBytes;                          /* 0x2E0         */
-    PVOID FlsData;                                       /* 0x2E4         */
-    struct _ACTIVATION_CONTEXT_STACK *ActivationContextStackPointer;
-#endif
 } FIBER, *PFIBER;
 
 //
@@ -219,10 +213,8 @@ typedef struct _KAFFINITY_ENUMERATION_CONTEXT
 //
 #ifdef _M_AMD64
 #define DISPATCH_LENGTH                 4
-#elif (NTDDI_VERSION >= NTDDI_LONGHORN)
-#define DISPATCH_LENGTH                 135
 #else
-#define DISPATCH_LENGTH                 106
+#define DISPATCH_LENGTH                 135
 #endif
 
 #else // NTOS_MODE_USER
@@ -373,18 +365,10 @@ typedef enum _KWAIT_REASON
     WrRundown,
     WrAlertByThreadId,
     WrDeferredPreempt,
-#if (NTDDI_VERSION >= NTDDI_WIN10_RS3)
     WrPhysicalFault,
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN11)
     WrIoRing,
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN11_NI)
     WrMdlCache,
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN11_GE)
     WrRcu,
-#endif
     MaximumWaitReason
 } KWAIT_REASON;
 
@@ -440,12 +424,10 @@ typedef enum _ALTERNATIVE_ARCHITECTURE_TYPE
 //
 // Flags for NXSupportPolicy
 //
-#if (NTDDI_VERSION >= NTDDI_WINXPSP2)
 #define NX_SUPPORT_POLICY_ALWAYSOFF 0
 #define NX_SUPPORT_POLICY_ALWAYSON  1
 #define NX_SUPPORT_POLICY_OPTIN     2
 #define NX_SUPPORT_POLICY_OPTOUT    3
-#endif
 
 #endif // NTOS_MODE_USER
 
@@ -462,9 +444,7 @@ typedef enum _KTHREAD_STATE
     Waiting,
     Transition,
     DeferredReady,
-#if (NTDDI_VERSION >= NTDDI_WS03)
     GateWait
-#endif
 } KTHREAD_STATE, *PKTHREAD_STATE;
 
 typedef enum _KHETERO_CPU_POLICY
@@ -640,27 +620,17 @@ typedef struct _KUSER_SHARED_DATA
     ULONG TimeZoneId;                                       // 0x240
     ULONG LargePageMinimum;                                 // 0x244
 
-#if (NTDDI_VERSION >= NTDDI_WIN8)
     ULONG AitSamplingValue;                                 // 0x248
     ULONG AppCompatFlag;                                    // 0x24c
     ULONGLONG RNGSeedVersion;                               // 0x250
     ULONG GlobalValidationRunlevel;                         // 0x258
     volatile LONG TimeZoneBiasStamp;                        // 0x25c
-#if (NTDDI_VERSION >= NTDDI_WIN10)
     ULONG NtBuildNumber;                                    // 0x260
-#else
-    ULONG Reserved2;                                        // 0x260
-#endif
-#else
-    ULONG Reserved2[7];                                     // 0x248
-#endif // NTDDI_VERSION >= NTDDI_WIN8
 
     NT_PRODUCT_TYPE NtProductType;                          // 0x264
     BOOLEAN ProductTypeIsValid;                             // 0x268
     BOOLEAN Reserved0[1];                                   // 0x269
-#if (NTDDI_VERSION >= NTDDI_WIN8)
     USHORT NativeProcessorArchitecture;                     // 0x26a
-#endif
     ULONG NtMajorVersion;                                   // 0x26c
     ULONG NtMinorVersion;                                   // 0x270
     BOOLEAN ProcessorFeatures[PROCESSOR_FEATURE_MAX];       // 0x274
@@ -668,11 +638,7 @@ typedef struct _KUSER_SHARED_DATA
     ULONG Reserved3;                                        // 0x2b8
     volatile ULONG TimeSlip;                                // 0x2bc
     ALTERNATIVE_ARCHITECTURE_TYPE AlternativeArchitecture;  // 0x2c0
-#if (NTDDI_VERSION >= NTDDI_WIN10)
     ULONG BootId;                                           // 0x2c4
-#else
-    ULONG AltArchitecturePad[1];                            // 0x2c4
-#endif
     LARGE_INTEGER SystemExpirationDate;                     // 0x2c8
     ULONG SuiteMask;                                        // 0x2d0
     BOOLEAN KdDebuggerEnabled;                              // 0x2d4
@@ -687,11 +653,7 @@ typedef struct _KUSER_SHARED_DATA
             UCHAR Reserved : 2;
         };
     };
-#if (NTDDI_VERSION >= NTDDI_WIN10_19H1)
     USHORT CyclesPerYield;                                  // 0x2d6 // Win 10 19H1+
-#else
-    UCHAR Reserved6[2];                                     // 0x2d6
-#endif
     volatile ULONG ActiveConsoleId;                         // 0x2d8
     volatile ULONG DismountCount;                           // 0x2dc
     ULONG ComPlusPackage;                                   // 0x2e0
@@ -699,19 +661,6 @@ typedef struct _KUSER_SHARED_DATA
     ULONG NumberOfPhysicalPages;                            // 0x2e8
     BOOLEAN SafeBootMode;                                   // 0x2ec
 
-#if (NTDDI_VERSION == NTDDI_WIN7)
-    union
-    {
-        UCHAR TscQpcData;                                   // 0x2ed
-        struct
-        {
-            UCHAR TscQpcEnabled:1;                          // 0x2ed
-            UCHAR TscQpcSpareFlag:1;                        // 0x2ed
-            UCHAR TscQpcShift:6;                            // 0x2ed
-        } DUMMYSTRUCTNAME;
-    } DUMMYUNIONNAME;
-    UCHAR TscQpcPad[2];                                     // 0x2ee
-#elif (NTDDI_VERSION >= NTDDI_WIN10_RS1)
     union
     {
         UCHAR VirtualizationFlags;                          // 0x2ed
@@ -725,11 +674,7 @@ typedef struct _KUSER_SHARED_DATA
 #endif
     };
     UCHAR Reserved12[2];                                    // 0x2ee
-#else
-    UCHAR Reserved12[3];                                    // 0x2ed
-#endif // NTDDI_VERSION == NTDDI_WIN7
 
-#if (NTDDI_VERSION >= NTDDI_VISTA)
     union
     {
         ULONG SharedDataFlags;                              // 0x2f0
@@ -739,17 +684,9 @@ typedef struct _KUSER_SHARED_DATA
             ULONG DbgElevationEnabled : 1;                  // 0x2f0
             ULONG DbgVirtEnabled : 1;                       // 0x2f0
             ULONG DbgInstallerDetectEnabled : 1;            // 0x2f0
-#if (NTDDI_VERSION >= NTDDI_WIN8)
             ULONG DbgLkgEnabled : 1;                        // 0x2f0
-#else
-            ULONG DbgSystemDllRelocated : 1;                // 0x2f0
-#endif
             ULONG DbgDynProcessorEnabled : 1;               // 0x2f0
-#if (NTDDI_VERSION >= NTDDI_WIN8)
             ULONG DbgConsoleBrokerEnabled : 1;              // 0x2f0
-#else
-            ULONG DbgSEHValidationEnabled : 1;              // 0x2f0
-#endif
             ULONG DbgSecureBootEnabled : 1;                 // 0x2f0 Win8+
             ULONG DbgMultiSessionSku : 1;                   // 0x2f0 Win 10+
             ULONG DbgMultiUsersInSessionSku : 1;            // 0x2f0 Win 10 RS1+
@@ -757,22 +694,16 @@ typedef struct _KUSER_SHARED_DATA
             ULONG SpareBits                 : 21;           // 0x2f0
         } DUMMYSTRUCTNAME2;
     } DUMMYUNIONNAME2;
-#else
-    ULONG TraceLogging;
-#endif // NTDDI_VERSION >= NTDDI_VISTA
 
     ULONG DataFlagsPad[1];                                  // 0x2f4
     ULONGLONG TestRetInstruction;                           // 0x2f8
 #if defined(_M_IX86)
     ULONG SystemCall;                                       // 0x300
     ULONG SystemCallReturn;                                 // 0x304
-#elif (NTDDI_VERSION >= NTDDI_WIN8)
-    ULONGLONG QpcFrequency;                                 // 0x300
 #else
-    ULONG SystemCall;                                       // 0x300
-    ULONG SystemCallReturn;                                 // 0x304
+    ULONGLONG QpcFrequency;                                 // 0x300
 #endif
-#if (NTDDI_VERSION >= NTDDI_WIN10_TH2) && !defined(_M_IX86)
+#if !defined(_M_IX86)
     ULONG SystemCall;                                       // 0x308
     ULONG Reserved2;                                        // 0x30c
     ULONGLONG FullNumberOfPhysicalPages;                    // 0x310
@@ -792,86 +723,40 @@ typedef struct _KUSER_SHARED_DATA
     } DUMMYUNIONNAME3;
     ULONG Cookie;                                           // 0x330
 
-#if (NTDDI_VERSION < NTDDI_VISTA)
-    ULONG Wow64SharedInformation[MAX_WOW64_SHARED_ENTRIES]; // 0x334
-#endif
 
 //
 // Windows Vista and later
 //
-#if (NTDDI_VERSION >= NTDDI_VISTA)
 
     ULONG CookiePad[1];                                     // 0x334
     LONGLONG ConsoleSessionForegroundProcessId;             // 0x338
 
-#if (NTDDI_VERSION >= NTDDI_WIN8)
-#if (NTDDI_VERSION >= NTDDI_WINBLUE)
     ULONGLONG TimeUpdateLock;                               // 0x340
-#else
-    ULONGLONG TimeUpdateSequence;                           // 0x340
-#endif
     ULONGLONG BaselineSystemTimeQpc;                        // 0x348
     ULONGLONG BaselineInterruptTimeQpc;                     // 0x350
     ULONGLONG QpcSystemTimeIncrement;                       // 0x358
     ULONGLONG QpcInterruptTimeIncrement;                    // 0x360
-#if (NTDDI_VERSION >= NTDDI_WIN10)
     UCHAR QpcSystemTimeIncrementShift;                      // 0x368
     UCHAR QpcInterruptTimeIncrementShift;                   // 0x369
     USHORT UnparkedProcessorCount;                          // 0x36a
     ULONG EnclaveFeatureMask[4];                            // 0x36c Win 10 TH2+
     ULONG TelemetryCoverageRound;                           // 0x37c Win 10 RS2+
-#else // NTDDI_VERSION < NTDDI_WIN10
-    ULONG QpcSystemTimeIncrement32;                         // 0x368
-    ULONG QpcInterruptTimeIncrement32;                      // 0x36c
-    UCHAR QpcSystemTimeIncrementShift;                      // 0x370
-    UCHAR QpcInterruptTimeIncrementShift;                   // 0x371
-#if (NTDDI_VERSION >= NTDDI_WINBLUE)
-    USHORT UnparkedProcessorCount;                          // 0x372
-    UCHAR Reserved8[12];                                    // 0x374
-#else
-    UCHAR Reserved8[14];                                    // 0x372
-#endif
-#endif // NTDDI_VERSION < NTDDI_WIN10
-#elif (NTDDI_VERSION >= NTDDI_VISTASP2)
-    ULONG DEPRECATED_Wow64SharedInformation[MAX_WOW64_SHARED_ENTRIES]; // 0x340
-#else
-    ULONG Wow64SharedInformation[MAX_WOW64_SHARED_ENTRIES]; // 0x340
-#endif // NTDDI_VERSION >= NTDDI_VISTA
 
-#if (NTDDI_VERSION >= NTDDI_WIN7)
     USHORT UserModeGlobalLogger[16];                        // 0x380
-#else
-    USHORT UserModeGlobalLogger[8];                         // 0x380
-    ULONG HeapTracingPid[2];                                // 0x390
-    ULONG CritSecTracingPid[2];                             // 0x398
-#endif
 
     ULONG ImageFileExecutionOptions;                        // 0x3a0
     ULONG LangGenerationCount;                              // 0x3a4 Vista SP2+
 
-#if (NTDDI_VERSION >= NTDDI_WIN8)
     ULONGLONG Reserved4;                                    // 0x3a8
-#elif (NTDDI_VERSION >= NTDDI_WIN7)
-    ULONGLONG Reserved5;                                    // 0x3a8
-#else
-    union
-    {
-        KAFFINITY ActiveProcessorAffinity;                  // 0x3a8
-        ULONGLONG AffinityPad;                              // 0x3a8
-    };
-#endif
 
     volatile ULONGLONG InterruptTimeBias;                     // 0x3b0
-#endif // NTDDI_VERSION >= NTDDI_VISTA
 
 //
 // Windows 7 and later
 //
-#if (NTDDI_VERSION >= NTDDI_WIN7)
     volatile ULONGLONG QpcBias;                            // 0x3b8 // Win7: TscQpcBias
     /* volatile */ ULONG ActiveProcessorCount;             // 0x3c0 // not volatile since Win 8.1 Update 1
 
-#if (NTDDI_VERSION >= NTDDI_WIN8)
     volatile UCHAR ActiveGroupCount;                        // 0x3c4
     UCHAR Reserved9;                                        // 0x3c5
     union
@@ -886,41 +771,23 @@ typedef struct _KUSER_SHARED_DATA
     LARGE_INTEGER TimeZoneBiasEffectiveStart;               // 0x3c8
     LARGE_INTEGER TimeZoneBiasEffectiveEnd;                 // 0x3d0
     XSTATE_CONFIGURATION XState;                            // 0x3d8
-#else
-    USHORT ActiveGroupCount;                                // 0x3c4
-    USHORT Reserved4;                                       // 0x3c6
-    volatile ULONG AitSamplingValue;                        // 0x3c8
-    volatile ULONG AppCompatFlag;                           // 0x3cc
-    ULONGLONG SystemDllNativeRelocation;                    // 0x3d0 deprecated in Win7 SP2
-    ULONG SystemDllWowRelocation;                           // 0x3d8 deprecated in Win7 SP2
-    ULONG XStatePad[1];                                     // 0x3dc
-    XSTATE_CONFIGURATION XState;                            // 0x3e0
-#endif // NTDDI_VERSION >= NTDDI_WIN8
-#endif // NTDDI_VERSION >= NTDDI_WIN7
 
 //
 // Windows 10 Vibranium and later
 //
-#if (NTDDI_VERSION >= NTDDI_WIN10_VB)
     KSYSTEM_TIME FeatureConfigurationChangeStamp;           // 0x710 // Win 11: 0x720
     ULONG Spare;                                            // 0x71c // Win 11: 0x72c
-#endif // NTDDI_VERSION >= NTDDI_WIN10_VB
 
 //
 // Windows 11 Nickel and later
 //
-#if (NTDDI_VERSION >= NTDDI_WIN11_NI)
     ULONG64 UserPointerAuthMask;                            // 0x730
 #if defined(_ARM64_)
     XSTATE_CONFIGURATION XStateArm64;                       // 0x738
 #else
     ULONG Reserved10[210];                                  // 0x738
 #endif
-#endif // NTDDI_VERSION >= NTDDI_WIN11_NI
 
-#if (NTDDI_VERSION < NTDDI_WIN7) && defined(__REACTOS__)
-    XSTATE_CONFIGURATION XState;
-#endif
 } KUSER_SHARED_DATA, *PKUSER_SHARED_DATA;
 
 #endif
@@ -1018,9 +885,7 @@ typedef enum _KAPC_ENVIRONMENT
 
 typedef struct _KTIMER_TABLE_ENTRY
 {
-#if (NTDDI_VERSION >= NTDDI_LONGHORN) || defined(_M_ARM) || defined(_M_AMD64)
     KSPIN_LOCK Lock;
-#endif
     LIST_ENTRY Entry;
     ULARGE_INTEGER Time;
 } KTIMER_TABLE_ENTRY, *PKTIMER_TABLE_ENTRY;
@@ -1093,11 +958,7 @@ typedef struct _SYNCH_COUNTERS
 // On arm64 the layout is fixed to the Win11 shape (sizeof == 0x30) for any NTDDI_VERSION
 typedef struct _KDPC_DATA
 {
-#if (NTDDI_VERSION >= NTDDI_LONGHORN) || defined(_M_ARM64)
     KDPC_LIST DpcList;
-#else
-    LIST_ENTRY DpcListHead;
-#endif
     ULONG_PTR DpcLock;
 #if defined(_M_AMD64) || defined(_M_ARM)
     volatile LONG DpcQueueDepth;
@@ -1105,12 +966,10 @@ typedef struct _KDPC_DATA
     volatile ULONG DpcQueueDepth;
 #endif
     ULONG DpcCount;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN) || defined(_M_ARM) || defined(_M_ARM64)
     PKDPC ActiveDpc;
 #if defined(_M_ARM64)
     ULONG LongDpcPresent;
     ULONG Padding;
-#endif
 #endif
 } KDPC_DATA, *PKDPC_DATA;
 
@@ -1312,10 +1171,8 @@ typedef struct _KINTERRUPT
     CSHORT Size;
     LIST_ENTRY InterruptListEntry;
     PKSERVICE_ROUTINE ServiceRoutine;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     PKSERVICE_ROUTINE MessageServiceRoutine;
     ULONG MessageIndex;
-#endif
     PVOID ServiceContext;
     KSPIN_LOCK SpinLock;
     ULONG TickCount;
@@ -1329,14 +1186,10 @@ typedef struct _KINTERRUPT
     CCHAR Number;
     BOOLEAN ShareVector;
     KINTERRUPT_MODE Mode;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     KINTERRUPT_POLARITY Polarity;
-#endif
     ULONG ServiceCount;
     ULONG DispatchCount;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
     ULONGLONG Rsvd1;
-#endif
 #ifdef _M_AMD64
     PKTRAP_FRAME TrapFrame;
     PVOID Reserved;
@@ -1369,7 +1222,6 @@ typedef struct _KEXECUTE_OPTIONS
     UCHAR Spare:2;
 } KEXECUTE_OPTIONS, *PKEXECUTE_OPTIONS;
 
-#if (NTDDI_VERSION >= NTDDI_WIN7) || defined(KERNEL_LAYOUT_WIN11_ARM64)
 typedef union _KWAIT_STATUS_REGISTER
 {
     UCHAR Flags;
@@ -1403,10 +1255,8 @@ typedef struct _KTHREAD_COUNTERS
     ULONG64 HardwareCounters;
     COUNTER_READING HwCounter[16];
 }KTHREAD_COUNTERS, *PKTHREAD_COUNTERS;
-#endif
 
-#if (NTDDI_VERSION >= NTDDI_WINBLUE)
-#if defined(_WIN64) && (NTDDI_VERSION >= NTDDI_WIN11_GE)
+#if defined(_WIN64)
 
 //
 // Win11 26100 KLOCK_ENTRY layout. This ABI is identical in the ARM64 and
@@ -1532,11 +1382,7 @@ typedef struct _KLOCK_ENTRY_LOCK_STATE
     {
         struct
         {
-#if (NTDDI_VERSION >= NTDDI_WIN10) // since 6.4.9841.0
             ULONG_PTR CrossThreadReleasable : 1;
-#else
-            ULONG_PTR Waiting : 1;
-#endif
             ULONG_PTR Busy : 1;
             ULONG_PTR Reserved : (8 * sizeof(PVOID)) - 3; // previously Spare
             ULONG_PTR InTree : 1;
@@ -1563,7 +1409,6 @@ typedef struct _KLOCK_ENTRY
         RTL_BALANCED_NODE TreeNode;
         SINGLE_LIST_ENTRY FreeListEntry;
     };
-#if (NTDDI_VERSION >= NTDDI_WIN10)
     union
     {
         ULONG EntryFlags;
@@ -1605,18 +1450,6 @@ typedef struct _KLOCK_ENTRY
 #ifdef _WIN64
     ULONG SpareFlags;
 #endif
-#else
-    union
-    {
-        PVOID ThreadUnsafe;
-        struct
-        {
-            volatile UCHAR HeadNodeByte;
-            UCHAR Reserved1[2];
-            volatile UCHAR AcquiredByte;
-        };
-    };
-#endif
 
     union
     {
@@ -1624,11 +1457,7 @@ typedef struct _KLOCK_ENTRY
         PVOID LockUnsafe;
         struct
         {
-#if (NTDDI_VERSION >= NTDDI_WIN10)
             volatile UCHAR CrossThreadReleasableAndBusyByte;
-#else
-            volatile UCHAR WaitingAndBusyByte;
-#endif
             UCHAR Reserved[sizeof(PVOID) - 2];
             UCHAR InTreeByte;
             union
@@ -1682,14 +1511,13 @@ typedef struct _KLOCK_ENTRY
 } KLOCK_ENTRY, *PKLOCK_ENTRY;
 
 #endif // defined(_WIN64) && (NTDDI_VERSION >= NTDDI_WIN11_GE)
-#endif
 
 //
 // UMS (User-Mode Scheduling) types -- Win7+, amd64 only
 // TODO: These are stub definitions for asm offset generation.
 // Full UMS support is not yet implemented in ReactOS.
 //
-#if (NTDDI_VERSION >= NTDDI_WIN7) && defined(_M_AMD64)
+#if defined(_M_AMD64)
 
 typedef struct _KUMS_CONTEXT_HEADER
 {
@@ -1725,7 +1553,6 @@ typedef struct _UMS_CONTROL_BLOCK
 
 #endif /* NTDDI_WIN7 && _M_AMD64 */
 
-#if (NTDDI_VERSION >= NTDDI_WIN8)
 //
 // Kernel Stack Segment and Control (Win8+, layout stable through Win11 26100)
 //
@@ -1823,7 +1650,6 @@ C_ASSERT(FIELD_OFFSET(KSTACK_CONTROL, Previous.InitialStack) == 0x38);
 #endif /* _M_AMD64 */
 
 #define KSTACK_ACTUAL_LIMIT_EXPANDED 1
-#endif /* NTDDI_WIN8 */
 
 //
 // Kernel Thread (KTHREAD), Win11 26100 arm64 layout (ntkrnlmp.pdb 10.0.26100.8036)
@@ -2189,7 +2015,7 @@ typedef struct _KTHREAD
 // Mirrors the arm64 variant above: genuine Windows fields are offset-accurate and
 // C_ASSERT-locked; ReactOS-internal scheduler/APC fields are tucked into spares.
 //
-#elif defined(_M_AMD64) && (NTDDI_VERSION >= NTDDI_WIN11_GE)
+#elif defined(_M_AMD64)
 
 #define KTHREAD_DISABLE_BOOST_BIT 3
 #define KTHREAD_AUTO_ALIGNMENT_BIT 2
@@ -2579,482 +2405,13 @@ typedef struct _KTHREAD
     ULONG64 Padding;                                     // 0x4B8
 } KTHREAD;                                               // sizeof 0x4C0
 
-#elif (NTDDI_VERSION < NTDDI_WIN8)
-
-#define KTHREAD_DISABLE_BOOST_BIT 1
-#define KTHREAD_AUTO_ALIGNMENT_BIT 0
-#if (NTDDI_VERSION >= NTDDI_WIN7)
-#define KTHREAD_GROUP_AFFINITY
-#endif
-
-typedef struct _KTHREAD
-{
-    DISPATCHER_HEADER Header;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN) // [
-    volatile ULONGLONG CycleTime;
-#ifndef _WIN64 // [
-    ULONG HighCycleTime;
-#endif // ]
-    ULONGLONG QuantumTarget;
-#else // ][
-    LIST_ENTRY MutantListHead;
-#endif // ]
-    PVOID InitialStack;
-    ULONG_PTR StackLimit; // FIXME: PVOID
-    PVOID KernelStack;
-    KSPIN_LOCK ThreadLock;
-#if (NTDDI_VERSION >= NTDDI_WIN7) // [
-    KWAIT_STATUS_REGISTER WaitRegister;
-    BOOLEAN Running;
-    BOOLEAN Alerted[2];
-    union
-    {
-        struct
-        {
-            ULONG KernelStackResident:1;
-            ULONG ReadyTransition:1;
-            ULONG ProcessReadyQueue:1;
-            ULONG WaitNext:1;
-            ULONG SystemAffinityActive:1;
-            ULONG Alertable:1;
-            ULONG GdiFlushActive:1;
-            ULONG UserStackWalkActive:1;
-            ULONG ApcInterruptRequest:1;
-            ULONG ForceDeferSchedule:1;
-            ULONG QuantumEndMigrate:1;
-            ULONG UmsDirectedSwitchEnable:1;
-            ULONG TimerActive:1;
-            ULONG Reserved:19;
-        };
-        LONG MiscFlags;
-    };
-#endif // ]
-    union
-    {
-        KAPC_STATE ApcState;
-        struct
-        {
-            UCHAR ApcStateFill[FIELD_OFFSET(KAPC_STATE, UserApcPending) + 1];
-#if (NTDDI_VERSION >= NTDDI_LONGHORN) // [
-            SCHAR Priority;
-#if (NTDDI_VERSION >= NTDDI_WIN7) // [
-            /* On x86, the following members "fall out" of the union */
-            volatile ULONG NextProcessor;
-            volatile ULONG DeferredProcessor;
-#else // ][
-            /* On x86, the following members "fall out" of the union */
-            volatile USHORT NextProcessor;
-            volatile USHORT DeferredProcessor;
-#endif // ]
-#else // ][
-            UCHAR ApcQueueable;
-            /* On x86, the following members "fall out" of the union */
-            volatile UCHAR NextProcessor;
-            volatile UCHAR DeferredProcessor;
-            UCHAR AdjustReason;
-            SCHAR AdjustIncrement;
-#endif // ]
-        };
-    };
-    KSPIN_LOCK ApcQueueLock;
-#if !defined(_WIN64) // [
-    ULONG ContextSwitches;
-    volatile UCHAR State;
-    UCHAR NpxState;
-    KIRQL WaitIrql;
-    KPROCESSOR_MODE WaitMode;
-#endif // ]
-    LONG_PTR WaitStatus;
-#if (NTDDI_VERSION >= NTDDI_WIN7) // [
-    PKWAIT_BLOCK WaitBlockList;
-#else // ][
-    union
-    {
-        PKWAIT_BLOCK WaitBlockList;
-        PKGATE GateObject;
-    };
-#if (NTDDI_VERSION >= NTDDI_LONGHORN) // [
-    union
-    {
-        struct
-        {
-            ULONG KernelStackResident:1;
-            ULONG ReadyTransition:1;
-            ULONG ProcessReadyQueue:1;
-            ULONG WaitNext:1;
-            ULONG SystemAffinityActive:1;
-            ULONG Alertable:1;
-            ULONG GdiFlushActive:1;
-            ULONG Reserved:25;
-        };
-        LONG MiscFlags;
-    };
-#else // ][
-    BOOLEAN Alertable;
-    BOOLEAN WaitNext;
-#endif // ]
-    UCHAR WaitReason;
-#if (NTDDI_VERSION < NTDDI_LONGHORN)
-    SCHAR Priority;
-    BOOLEAN EnableStackSwap;
-#endif // ]
-    volatile UCHAR SwapBusy;
-    BOOLEAN Alerted[MaximumMode];
-#endif // ]
-    union
-    {
-        LIST_ENTRY WaitListEntry;
-        SINGLE_LIST_ENTRY SwapListEntry;
-    };
-    PKQUEUE Queue;
-#if !defined(_WIN64) // [
-    ULONG WaitTime;
-    union
-    {
-        struct
-        {
-            SHORT KernelApcDisable;
-            SHORT SpecialApcDisable;
-        };
-        ULONG CombinedApcDisable;
-    };
-#endif // ]
-    struct _TEB *Teb;
-
-#if (NTDDI_VERSION >= NTDDI_WIN7) // [
-    KTIMER Timer;
-#else // ][
-    union
-    {
-        KTIMER Timer;
-        struct
-        {
-            UCHAR TimerFill[FIELD_OFFSET(KTIMER, Period) + sizeof(LONG)];
-#if !defined(_WIN64) // [
-        };
-    };
-#endif // ]
-#endif // ]
-            union
-            {
-                struct
-                {
-                    ULONG AutoAlignment:1;
-                    ULONG DisableBoost:1;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN) // [
-                    ULONG EtwStackTraceApc1Inserted:1;
-                    ULONG EtwStackTraceApc2Inserted:1;
-                    ULONG CycleChargePending:1;
-                    ULONG CalloutActive:1;
-                    ULONG ApcQueueable:1;
-                    ULONG EnableStackSwap:1;
-                    ULONG GuiThread:1;
-                    ULONG ReservedFlags:23;
-#else // ][
-                    LONG ReservedFlags:30;
-#endif // ]
-                };
-                LONG ThreadFlags;
-            };
-#if defined(_WIN64) && (NTDDI_VERSION < NTDDI_WIN7) // [
-        };
-    };
-#endif // ]
-#if (NTDDI_VERSION >= NTDDI_WIN7) // [
-#if defined(_WIN64) // [
-    ULONG Spare0;
-#else // ][
-    PVOID ServiceTable;
-#endif // ]
-#endif // ]
-    union
-    {
-        DECLSPEC_ALIGN(8) KWAIT_BLOCK WaitBlock[THREAD_WAIT_OBJECTS + 1];
-#if (NTDDI_VERSION < NTDDI_WIN7) // [
-        struct
-        {
-            UCHAR WaitBlockFill0[FIELD_OFFSET(KWAIT_BLOCK, SpareByte)]; // 32bit = 23, 64bit = 43
-#if (NTDDI_VERSION >= NTDDI_LONGHORN) // [
-            UCHAR IdealProcessor;
-#else // ][
-            BOOLEAN SystemAffinityActive;
-#endif // ]
-        };
-        struct
-        {
-            UCHAR WaitBlockFill1[1 * sizeof(KWAIT_BLOCK) + FIELD_OFFSET(KWAIT_BLOCK, SpareByte)]; // 47 / 91
-            CCHAR PreviousMode;
-        };
-        struct
-        {
-            UCHAR WaitBlockFill2[2 * sizeof(KWAIT_BLOCK) + FIELD_OFFSET(KWAIT_BLOCK, SpareByte)]; // 71 / 139
-            UCHAR ResourceIndex;
-        };
-        struct
-        {
-            UCHAR WaitBlockFill3[3 * sizeof(KWAIT_BLOCK) + FIELD_OFFSET(KWAIT_BLOCK, SpareByte)]; // 95 / 187
-            UCHAR LargeStack;
-        };
-#endif // ]
-#ifdef _WIN64 // [
-        struct
-        {
-            UCHAR WaitBlockFill4[FIELD_OFFSET(KWAIT_BLOCK, SpareLong)];
-            ULONG ContextSwitches;
-        };
-        struct
-        {
-            UCHAR WaitBlockFill5[1 * sizeof(KWAIT_BLOCK) + FIELD_OFFSET(KWAIT_BLOCK, SpareLong)];
-            UCHAR State;
-            UCHAR NpxState;
-            UCHAR WaitIrql;
-            CHAR WaitMode;
-        };
-        struct
-        {
-            UCHAR WaitBlockFill6[2 * sizeof(KWAIT_BLOCK) + FIELD_OFFSET(KWAIT_BLOCK, SpareLong)];
-            ULONG WaitTime;
-        };
-#if (NTDDI_VERSION >= NTDDI_VISTA) // [
-        struct
-        {
-            UCHAR WaitBlockFill7[168];
-            PVOID TebMappedLowVa;
-            struct _UMS_CONTROL_BLOCK* Ucb;
-        };
-#endif // ]
-        struct
-        {
-#if (NTDDI_VERSION >= NTDDI_VISTA) // [
-            UCHAR WaitBlockFill8[188];
-#else // ][
-            UCHAR WaitBlockFill7[3 * sizeof(KWAIT_BLOCK) + FIELD_OFFSET(KWAIT_BLOCK, SpareLong)];
-#endif // ]
-            union
-            {
-                struct
-                {
-                    SHORT KernelApcDisable;
-                    SHORT SpecialApcDisable;
-                };
-                ULONG CombinedApcDisable;
-            };
-        };
-#endif // ]
-    };
-    LIST_ENTRY QueueListEntry;
-    PKTRAP_FRAME TrapFrame;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN) // [
-    PVOID FirstArgument;
-    union
-    {
-        PVOID CallbackStack;
-        ULONG_PTR CallbackDepth;
-    };
-#else // ][
-    PVOID CallbackStack;
-#endif // ]
-#if (NTDDI_VERSION < NTDDI_LONGHORN) || ((NTDDI_VERSION < NTDDI_WIN7) && !defined(_WIN64)) // [
-    PVOID ServiceTable;
-#endif // ]
-#if (NTDDI_VERSION < NTDDI_LONGHORN) && defined(_WIN64) // [
-    ULONG KernelLimit;
-#endif // ]
-    UCHAR ApcStateIndex;
-#if (NTDDI_VERSION < NTDDI_LONGHORN) // [
-    UCHAR IdealProcessor;
-    BOOLEAN Preempted;
-    BOOLEAN ProcessReadyQueue;
-#ifdef _WIN64 // [
-    PVOID Win32kTable;
-    ULONG Win32kLimit;
-#endif // ]
-    BOOLEAN KernelStackResident;
-#endif // ]
-    SCHAR BasePriority;
-    SCHAR PriorityDecrement;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN) // [
-    BOOLEAN Preempted;
-    UCHAR AdjustReason;
-    CHAR AdjustIncrement;
-#if (NTDDI_VERSION >= NTDDI_WIN7)
-    UCHAR PreviousMode;
 #else
-    UCHAR Spare01;
-#endif
-#endif // ]
-    CHAR Saturation;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN) // [
-    ULONG SystemCallNumber;
-#if (NTDDI_VERSION >= NTDDI_WIN7) // [
-    ULONG FreezeCount;
-#else // ][
-    ULONG Spare02;
-#endif // ]
-#endif // ]
-#if (NTDDI_VERSION >= NTDDI_WIN7) // [
-    GROUP_AFFINITY UserAffinity;
-    struct _KPROCESS *Process;
-    GROUP_AFFINITY Affinity;
-    ULONG IdealProcessor;
-    ULONG UserIdealProcessor;
-#else // ][
-    KAFFINITY UserAffinity;
-    struct _KPROCESS *Process;
-    KAFFINITY Affinity;
-#endif // ]
-    PKAPC_STATE ApcStatePointer[2];
-    union
-    {
-        KAPC_STATE SavedApcState;
-        struct
-        {
-            UCHAR SavedApcStateFill[FIELD_OFFSET(KAPC_STATE, UserApcPending) + 1];
-#if (NTDDI_VERSION >= NTDDI_WIN7) // [
-            UCHAR WaitReason;
-#else // ][
-            CCHAR FreezeCount;
-#endif // ]
-#ifndef _WIN64 // [
-        };
-    };
-#endif // ]
-            CCHAR SuspendCount;
-#if (NTDDI_VERSION >= NTDDI_WIN7) // [
-            CCHAR Spare1;
-#else // ][
-            UCHAR UserIdealProcessor;
-#endif // ]
-#if (NTDDI_VERSION >= NTDDI_WIN7) // [
-#elif (NTDDI_VERSION >= NTDDI_LONGHORN) // ][
-            UCHAR Spare03;
-#else // ][
-            UCHAR CalloutActive;
-#endif // ]
-#ifdef _WIN64 // [
-            UCHAR CodePatchInProgress;
-        };
-    };
-#endif // ]
-#if defined(_M_IX86) // [
-#if (NTDDI_VERSION >= NTDDI_LONGHORN) // [
-    union
-    {
-        UCHAR OtherPlatformFill;
-        UCHAR Iopl;
-    };
-#else // ][
-    UCHAR Iopl;
-#endif // ]
-#endif // ]
-    PVOID Win32Thread;
-    PVOID StackBase;
-    union
-    {
-        KAPC SuspendApc;
-        struct
-        {
-            UCHAR SuspendApcFill0[1];
-#if (NTDDI_VERSION >= NTDDI_WIN7) // [
-            UCHAR ResourceIndex;
-#elif (NTDDI_VERSION >= NTDDI_LONGHORN) // ][
-            CHAR Spare04;
-#else // ][
-            SCHAR Quantum;
-#endif // ]
-        };
-        struct
-        {
-            UCHAR SuspendApcFill1[3];
-            UCHAR QuantumReset;
-        };
-        struct
-        {
-            UCHAR SuspendApcFill2[4];
-            ULONG KernelTime;
-        };
-        struct
-        {
-            UCHAR SuspendApcFill3[FIELD_OFFSET(KAPC, SystemArgument1)];
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
-            PKPRCB WaitPrcb;
-#else
-            PVOID TlsArray;
-#endif
-        };
-        struct
-        {
-            UCHAR SuspendApcFill4[FIELD_OFFSET(KAPC, SystemArgument2)]; // 40 / 72
-            PVOID LegoData;
-        };
-        struct
-        {
-            UCHAR SuspendApcFill5[FIELD_OFFSET(KAPC, Inserted) + 1]; // 47 / 83
-#if (NTDDI_VERSION >= NTDDI_WIN7) // [
-            UCHAR LargeStack;
-#else // ][
-            UCHAR PowerState;
-#endif // ]
-#ifdef _WIN64 // [
-            ULONG UserTime;
-#endif // ]
-        };
-    };
-#ifndef _WIN64 // [
-    ULONG UserTime;
-#endif // ]
-    union
-    {
-        KSEMAPHORE SuspendSemaphore;
-        struct
-        {
-            UCHAR SuspendSemaphorefill[FIELD_OFFSET(KSEMAPHORE, Limit) + 4]; // 20 / 28
-#ifdef _WIN64 // [
-            ULONG SListFaultCount;
-#endif // ]
-        };
-    };
-#ifndef _WIN64 // [
-    ULONG SListFaultCount;
-#endif // ]
-    LIST_ENTRY ThreadListEntry;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN) // [
-    LIST_ENTRY MutantListHead;
-#endif // ]
-    PVOID SListFaultAddress;
-#ifdef _M_AMD64 // [
-    LONG64 ReadOperationCount;
-    LONG64 WriteOperationCount;
-    LONG64 OtherOperationCount;
-    LONG64 ReadTransferCount;
-    LONG64 WriteTransferCount;
-    LONG64 OtherTransferCount;
-#endif // ]
-#if (NTDDI_VERSION >= NTDDI_WIN7) // [
-    PKTHREAD_COUNTERS ThreadCounters;
-    PXSTATE_SAVE XStateSave;
-#elif (NTDDI_VERSION >= NTDDI_LONGHORN) // ][
-    PVOID MdlForLockedTeb;
-#endif // ]
-#if defined(__REACTOS__) && defined(_M_AMD64) // HACK!
-    XSAVE_FORMAT* StateSaveArea;
-#elif defined(__REACTOS__) && defined(_M_ARM64)
-    PVOID StateSaveArea;
-    PVOID Arm64FpState;
-#endif
-} KTHREAD;
-
-#else // not (NTDDI_VERSION < NTDDI_WIN8)
 
 #define KTHREAD_DISABLE_BOOST_BIT 1
 #define KTHREAD_AUTO_ALIGNMENT_BIT 0
 #define KTHREAD_GROUP_AFFINITY
 
-#if defined(_WIN64) && (NTDDI_VERSION < 0x06032580) // since WIN 8.1 Update1 6.3.9600.16384
-#define NUMBER_OF_LOCK_ENTRIES 5
-#else
 #define NUMBER_OF_LOCK_ENTRIES 6
-#endif
 
 typedef struct _KTHREAD
 {
@@ -3086,22 +2443,12 @@ typedef struct _KTHREAD
     {
         struct
         {
-#if (NTDDI_VERSION < NTDDI_WIN10)
-            ULONG KernelStackResident : 1;
-#else
             ULONG AutoBoostActive : 1;
-#endif
             ULONG ReadyTransition : 1;
-#if (NTDDI_VERSION < NTDDI_WIN10TH2)
-            ULONG ProcessReadyQueue : 1;
-#endif
             ULONG ProcessReadyQueue : 1;
             ULONG WaitNext : 1;
             ULONG SystemAffinityActive : 1;
             ULONG Alertable : 1;
-#if (NTDDI_VERSION < NTDDI_WIN81)
-            ULONG CodePatchInProgress : 1;
-#endif
             ULONG UserStackWalkActive : 1;
             ULONG ApcInterruptRequest : 1;
             ULONG QuantumEndMigrate : 1;
@@ -3138,37 +2485,22 @@ typedef struct _KTHREAD
             ULONG ForceDeferSchedule : 1;
             ULONG ExplicitIdealProcessor : 1;
             ULONG FreezeCount : 1;
-#if (NTDDI_VERSION >= 0x060324D7) // since 6.3.9431.0
             ULONG TerminationApcRequest : 1;
-#endif
-#if (NTDDI_VERSION >= 0x06032580) // since 6.3.9600.16384
             ULONG AutoBoostEntriesExhausted : 1;
-#endif
-#if (NTDDI_VERSION >= 0x06032580) // since 6.3.9600.17031
             ULONG KernelStackResident : 1;
-#endif
-#if (NTDDI_VERSION >= NTDDI_WIN10)
             ULONG CommitFailTerminateRequest : 1;
             ULONG ProcessStackCountDecremented : 1;
             ULONG ThreadFlagsSpare : 5;
-#endif
             ULONG EtwStackTraceApcInserted : 8;
-#if (NTDDI_VERSION < NTDDI_WIN10)
-            ULONG ReservedFlags : 10;
-#endif
         };
         LONG ThreadFlags;
     };
 
-#if (NTDDI_VERSION >= NTDDI_WIN10)
     volatile UCHAR Tag;
     UCHAR SystemHeteroCpuPolicy;
     UCHAR UserHeteroCpuPolicy : 7;
     UCHAR ExplicitSystemHeteroCpuPolicy : 1;
     UCHAR Spare0;
-#else
-    ULONG Spare0;
-#endif
     ULONG SystemCallNumber;
 #ifdef _WIN64
     ULONG Spare1; // Win 10: Spare10
@@ -3190,11 +2522,7 @@ typedef struct _KTHREAD
 #ifndef _WIN64
     ULONG ContextSwitches;
     volatile UCHAR State;
-#if (NTDDI_VERSION >= NTDDI_WIN10) // since 10.0.10074.0
     CHAR Spare12;
-#else
-    CHAR NpxState;
-#endif
     KIRQL WaitIrql;
     KPROCESSOR_MODE WaitMode;
 #endif
@@ -3208,9 +2536,7 @@ typedef struct _KTHREAD
     };
     PKQUEUE Queue;
     struct _TEB *Teb;
-#if (NTDDI_VERSION >= NTDDI_WIN8 /* 0x060223F0 */) // since 6.2.9200.16384
     ULONG64 RelativeTimerBias;
-#endif
     KTIMER Timer;
 
     union
@@ -3226,11 +2552,7 @@ typedef struct _KTHREAD
         {
             UCHAR WaitBlockFill5[1 * sizeof(KWAIT_BLOCK) + FIELD_OFFSET(KWAIT_BLOCK, SpareLong)]; // 32bit: -, 64bit: 68/0x44
             volatile UCHAR State;
-#if (NTDDI_VERSION >= NTDDI_WIN10)
             CHAR Spare13;
-#else
-            CHAR NpxState;
-#endif
             UCHAR WaitIrql;
             CHAR WaitMode;
         };
@@ -3293,7 +2615,6 @@ typedef struct _KTHREAD
     PVOID TebMappedLowVa;
 #endif
     LIST_ENTRY QueueListEntry;
-#if (NTDDI_VERSION >= 0x060223F0) // since 6.2.9200.16384
     union
     {
         volatile ULONG NextProcessor;
@@ -3304,10 +2625,6 @@ typedef struct _KTHREAD
         };
     };
     LONG QueuePriority;
-#else
-    volatile ULONG NextProcessor;
-    volatile ULONG DeferredProcessor;
-#endif
     PKPROCESS Process;
 
     union
@@ -3333,9 +2650,7 @@ typedef struct _KTHREAD
         };
     };
 
-#if (NTDDI_VERSION >= NTDDI_WIN10) // since 10.0.10240.16384
     ULONG_PTR AffinityVersion;
-#endif
     union
     {
         GROUP_AFFINITY Affinity;
@@ -3348,14 +2663,10 @@ typedef struct _KTHREAD
         };
     };
 
-#if (NTDDI_VERSION >= NTDDI_WIN10) // since 10.0.10240.16384
 #ifdef _WIN64
     ULONG64 NpxState;
 #else
     ULONG Spare15;
-#endif
-#else
-    PKAPC_STATE ApcStatePointer[2];
 #endif
 
     union
@@ -3420,40 +2731,24 @@ typedef struct _KTHREAD
     LIST_ENTRY ThreadListEntry;
     LIST_ENTRY MutantListHead;
 
-#if (NTDDI_VERSION >= NTDDI_WIN10)
     UCHAR AbEntrySummary;
     UCHAR AbWaitEntryCount;
     USHORT Spare20;
 #if _WIN64
     ULONG SecureThreadCookie;
 #endif
-#elif (NTDDI_VERSION >= NTDDI_WINBLUE) // 6.3.9431.0
-    SINGLE_LIST_ENTRY LockEntriesFreeList;
-#endif
 
-#if (NTDDI_VERSION >= NTDDI_WINBLUE /* 0x06032580 */) // since 6.3.9600.16384
     KLOCK_ENTRY LockEntries[NUMBER_OF_LOCK_ENTRIES];
     SINGLE_LIST_ENTRY PropagateBoostsEntry;
     SINGLE_LIST_ENTRY IoSelfBoostsEntry;
     UCHAR PriorityFloorCounts[16];
     ULONG PriorityFloorSummary;
     volatile LONG AbCompletedIoBoostCount;
-  #if (NTDDI_VERSION >= NTDDI_WIN10_RS1)
     volatile LONG AbCompletedIoQoSBoostCount;
-  #endif
 
-  #if (NTDDI_VERSION >= NTDDI_WIN10) // since 10.0.10240.16384
     volatile SHORT KeReferenceCount;
-  #else
-    volatile SHORT AbReferenceCount;
-  #endif
-  #if (NTDDI_VERSION >= 0x06040000) // since 6.4.9841.0
     UCHAR AbOrphanedEntrySummary;
     UCHAR AbOwnedEntryCount;
-  #else
-    UCHAR AbFreeEntryCount;
-    UCHAR AbWaitEntryCount;
-  #endif
     ULONG ForegroundLossTime;
     union
     {
@@ -3464,7 +2759,6 @@ typedef struct _KTHREAD
             ULONG_PTR InGlobalForegroundList;
         };
     };
-#endif
 
 #if _WIN64
     LONG64 ReadOperationCount;
@@ -3474,13 +2768,11 @@ typedef struct _KTHREAD
     LONG64 WriteTransferCount;
     LONG64 OtherTransferCount;
 #endif
-#if (NTDDI_VERSION >= NTDDI_WIN10) // since 10.0.10041.0
     struct _KSCB *QueuedScb;
 #ifndef _WIN64
     ULONG64 NpxState;
 #endif
-#endif
-#if defined(__REACTOS__) && !defined(_WIN64) && (NTDDI_VERSION >= NTDDI_WIN10)
+#if defined(__REACTOS__) && !defined(_WIN64)
     /* ReactOS-private state absent from the public NT10 x86 layout. */
     KSPIN_LOCK ApcQueueLock;
     PKAPC_STATE ApcStatePointer[2];
@@ -3578,7 +2870,7 @@ C_ASSERT(FIELD_OFFSET(KTHREAD, UserAbEntries) == 0x498);
 // fields live in the Win11 Padding[5] tail (ApcQueueLock/ApcStatePointer/CallbackStack)
 // plus Spare6 (LargeStack). Spare18 overlays WaitBlock[3].Object and is not writable.
 //
-#if defined(_M_AMD64) && (NTDDI_VERSION >= NTDDI_WIN11_GE) && !defined(__ASSEMBLER__)
+#if defined(_M_AMD64) && !defined(__ASSEMBLER__)
 C_ASSERT(sizeof(KTHREAD) == 0x4C0);
 C_ASSERT(sizeof(KWAIT_BLOCK) == 0x30);
 C_ASSERT(sizeof(KAPC) == 0x58);
@@ -3765,7 +3057,7 @@ typedef struct _KPROCESS
 // Kernel Process (KPROCESS), Win11 26100 amd64 layout (ntkrnlmp.pdb 10.0.26100.8036)
 // sizeof == 0x1C8; members marked [ReactOS] live in the Win11 Padding[6] slot
 //
-#elif defined(_M_AMD64) && (NTDDI_VERSION >= NTDDI_WIN11_GE)
+#elif defined(_M_AMD64)
 
 #define KPROCESS_AFFINITY_EX
 
@@ -3865,17 +3157,15 @@ typedef struct _KPROCESS
 #if defined(_M_ARM64) || defined(__aarch64__)
     ULONG_PTR DirectoryTableBase[2];
     ULONG_PTR Unused0;
-#elif (NTDDI_VERSION >= NTDDI_LONGHORN)
+#else
     ULONG_PTR DirectoryTableBase;
     ULONG_PTR Unused0;
-#else
-    ULONG_PTR DirectoryTableBase[2];
 #endif
 #if defined(_M_IX86)
     KGDTENTRY LdtDescriptor;
     KIDTENTRY Int21Descriptor;
 #endif
-#if defined(_M_AMD64) && (NTDDI_VERSION >= NTDDI_VISTA)
+#if defined(_M_AMD64)
     KGDTENTRY64 LdtSystemDescriptor;
     PVOID LdtBaseAddress;
 #endif
@@ -3921,9 +3211,7 @@ typedef struct _KPROCESS
     };
     volatile ULONG StackCount;
     LIST_ENTRY ProcessListEntry;
-#if (NTDDI_VERSION >= NTDDI_LONGHORN) // [
     ULONGLONG CycleTime;
-#endif // ]
     /* FIXME: the x86 offsets of these Windows 10 members are not known here; this layout is the Vista one */
     ULONGLONG ContextSwitches;
     ULONG FreezeCount;
@@ -3953,7 +3241,7 @@ C_ASSERT(FIELD_OFFSET(KPROCESS, KernelTime) == 0x140);
 C_ASSERT(FIELD_OFFSET(KPROCESS, UserTime) == 0x148);
 #endif
 
-#if defined(_M_AMD64) && (NTDDI_VERSION >= NTDDI_WIN11_GE) && !defined(__ASSEMBLER__)
+#if defined(_M_AMD64) && !defined(__ASSEMBLER__)
 C_ASSERT(sizeof(KPROCESS) == 0x1C8);
 C_ASSERT(FIELD_OFFSET(KPROCESS, DirectoryTableBase) == 0x028);
 C_ASSERT(FIELD_OFFSET(KPROCESS, ThreadListHead) == 0x030);
@@ -3997,7 +3285,6 @@ typedef struct _KSERVICE_TABLE_DESCRIPTOR
     PUCHAR Number;
 } KSERVICE_TABLE_DESCRIPTOR, *PKSERVICE_TABLE_DESCRIPTOR;
 
-#if (NTDDI_VERSION >= NTDDI_WIN8)
 //
 // Entropy Timing State
 //
@@ -4017,7 +3304,6 @@ typedef struct _KENTROPY_TIMING_STATE
 #define KENTROPY_TIMING_BUFFER_MASK 0x7ff
 #define KENTROPY_TIMING_ANALYSIS 0x0
 
-#endif /* (NTDDI_VERSION >= NTDDI_WIN8) */
 
 //
 // Exported Loader Parameter Block

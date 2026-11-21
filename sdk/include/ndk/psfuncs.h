@@ -657,7 +657,6 @@ NtCreateThread(
     _In_ BOOLEAN CreateSuspended
 );
 
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
 NTSYSCALLAPI
 NTSTATUS
 NTAPI
@@ -691,7 +690,6 @@ NtCreateThreadEx(
     _In_ SIZE_T MaximumStackSize,
     _In_opt_ PPS_ATTRIBUTE_LIST AttributeList
 );
-#endif
 
 #ifndef NTOS_MODE_USER
 #if !defined(_M_IX86) && !defined(_M_AMD64) && !defined(_M_ARM)
@@ -992,7 +990,6 @@ ZwCreateThread(
     _In_ BOOLEAN CreateSuspended
 );
 
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
 NTSYSAPI
 NTSTATUS
 NTAPI
@@ -1009,7 +1006,6 @@ ZwCreateThreadEx(
     _In_ SIZE_T MaximumStackSize,
     _In_opt_ PPS_ATTRIBUTE_LIST AttributeList
 );
-#endif
 
 NTSYSAPI
 NTSTATUS

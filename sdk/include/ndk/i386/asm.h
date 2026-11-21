@@ -592,11 +592,7 @@ Author:
 #ifndef CONFIG_SMP
 #define SYNCH_LEVEL                             DISPATCH_LEVEL
 #else
-#if (NTDDI_VERSION < NTDDI_WS03)
-#define SYNCH_LEVEL                             (IPI_LEVEL - 1)
-#else
 #define SYNCH_LEVEL                             (IPI_LEVEL - 2)
-#endif
 #endif
 
 //

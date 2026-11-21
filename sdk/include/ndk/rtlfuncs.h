@@ -1778,7 +1778,6 @@ RtlReleasePrivilege(
     _In_ PVOID ReturnedState
 );
 
-#if (NTDDI_VERSION >= NTDDI_VISTA)
 
 NTSYSAPI
 NTSTATUS
@@ -1790,7 +1789,6 @@ RtlRemovePrivileges(
     _In_ ULONG PrivilegeCount
 );
 
-#endif /* (NTDDI_VERSION >= NTDDI_VISTA) */
 
 _IRQL_requires_max_(APC_LEVEL)
 NTSYSAPI
@@ -3014,7 +3012,7 @@ RtlCreateUserProcess(
  * The Win7+ variant has a completely different parameter layout that
  * ReactOS does not implement.
  */
-#if (NTDDI_VERSION >= NTDDI_WIN7) && !defined(__REACTOS__)
+#if !defined(__REACTOS__)
 NTSYSAPI
 NTSTATUS
 NTAPI
@@ -3197,7 +3195,6 @@ RtlIsProcessorFeaturePresent(
     _In_ ULONG ProcessorFeature
 );
 
-#if (NTDDI_VERSION >= NTDDI_WIN7)
 _IRQL_requires_max_(PASSIVE_LEVEL)
 NTSYSAPI
 ULONG64
@@ -3205,7 +3202,6 @@ NTAPI
 RtlGetEnabledExtendedFeatures(
     _In_ ULONG64 FeatureMask
 );
-#endif
 
 
 //
@@ -3416,7 +3412,6 @@ RtlGetFullPathName_U(
     _Out_opt_ PWSTR *ShortName
 );
 
-#if (NTDDI_VERSION >= NTDDI_WIN7)
 NTSYSAPI
 NTSTATUS
 NTAPI
@@ -3427,7 +3422,6 @@ RtlGetFullPathName_UEx(
     _Out_opt_ PWSTR *FilePart,
     _Out_opt_ RTL_PATH_TYPE *InputPathType
     );
-#endif
 
 NTSTATUS
 NTAPI
@@ -5238,7 +5232,6 @@ NTAPI
 RtlSetActiveConsoleId(_In_ ULONG ActiveConsoleId);
 #endif
 
-#if (_WIN32_WINNT >= _WIN32_WINNT_VISTA)
 //
 // Synchronization functions
 //
@@ -5276,7 +5269,6 @@ RtlSleepConditionVariableSRW(
     _Inout_ PRTL_SRWLOCK SRWLock,
     _In_opt_ PLARGE_INTEGER TimeOut,
     _In_ ULONG Flags);
-#endif
 
 //
 // Synchronization functions
@@ -5651,7 +5643,6 @@ RtlGetNativeSystemInformation(
     _Out_opt_ PULONG ReturnLength
 );
 
-#if (_WIN32_WINNT >= _WIN32_WINNT_VISTA) || (DLL_EXPORT_VERSION >= _WIN32_WINNT_VISTA)
 
 NTSYSAPI
 VOID
@@ -5686,9 +5677,7 @@ RtlRunOnceComplete(
     _In_ ULONG Flags,
     _In_opt_ PVOID Context);
 
-#endif
 
-#if (_WIN32_WINNT >= _WIN32_WINNT_VISTA) || (defined(__REACTOS__) && defined(_NTDLLBUILD_))
 /* Put NTSYSAPI back when this will be really exported. Only statically linked for now */
 // NTSYSAPI
 VOID
@@ -5830,9 +5819,7 @@ RtlIsValidLocaleName(
 // Flags for RtlLocaleNameToLcid / RtlLcidToLocaleName / RtlIsValidLocaleName
 #define RTL_LOCALE_ALLOW_NEUTRAL_NAMES 0x00000002 // Return locales like "en" or "de"
 
-#endif /* Win Vista or ReactOS Ntdll build */
 
-#if (_WIN32_WINNT >= _WIN32_WINNT_WIN7) || (defined(__REACTOS__) && defined(_NTDLLBUILD_))
 
 // NTSYSAPI
 BOOLEAN
@@ -5844,7 +5831,6 @@ BOOLEAN
 NTAPI
 RtlTryAcquireSRWLockExclusive(PRTL_SRWLOCK SRWLock);
 
-#endif /* Win7 or ReactOS Ntdll build */
 
 #endif // NTOS_MODE_USER
 
