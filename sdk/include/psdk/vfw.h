@@ -970,6 +970,7 @@ typedef struct {
     DWORD	dwSampleSize;
     struct { SHORT left, top, right, bottom; } rcFrame; /* word.word - word.word in file */
 } AVIStreamHeader;
+/* TODO: Windows declares rcFrame as a RECT (64-byte record); avifil32, mciavi32 and comctl32 still read the 56-byte on-disk header through this type */
 
 /* AVIINDEXENTRY.dwFlags */
 #define AVIIF_LIST	0x00000001	/* chunk is a 'LIST' */
@@ -992,7 +993,7 @@ typedef struct _AVIPALCHANGE {
     BYTE		bFirstEntry;
     BYTE		bNumEntries;
     WORD		wFlags;		/* pad */
-    PALETTEENTRY	peNew[1];
+    PALETTEENTRY	peNew[];
 } AVIPALCHANGE;
 
 #define AVIIF_KEYFRAME	0x00000010	/* this frame is a key frame. */
