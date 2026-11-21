@@ -1243,7 +1243,7 @@ KeQueryEffectivePriorityThread(
 
     OldIrql = KiEnterDispatcher();
     KiAcquireThreadLock(Thread);
-    Priority = KiApplyPriorityFloor(Thread, Thread->Priority);
+    Priority = KiApplyPriorityFloor(Thread, KiGetUnflooredPriority(Thread));
     KiReleaseThreadLock(Thread);
     KiExitDispatcher(OldIrql);
 
