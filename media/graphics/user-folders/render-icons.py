@@ -34,6 +34,7 @@ ICONS = (
     ("user-trash", ("dll/win32/shell32/res/icons/32.ico",)),
     ("user-trash-full", ("dll/win32/shell32/res/icons/33.ico",)),
     ("user-teal-home", ("dll/win32/shell32/res/icons/35.ico",)),
+    ("user-yellow-home", ("dll/win32/windows.storage/res/usersfiles.ico",)),
     ("folder-blue-development", ("dll/win32/shell32/res/icons/137.ico",)),
     ("text-x-readme", ("dll/win32/shell32/res/icons/152.ico",)),
     ("folder-blue-documents", ("dll/win32/shell32/res/icons/235.ico",)),
