@@ -170,11 +170,11 @@ KeConnectInterrupt(
     ULONG Vector;
     KIRQL OldIrql;
 
-    if (Interrupt && Interrupt->ServiceRoutine && (Interrupt->Irql == PASSIVE_LEVEL))
-        return KiConnectPassiveInterrupt(Interrupt);
-
-    if (!Interrupt || !Interrupt->ServiceRoutine)
+    if (!Interrupt || !Interrupt->ServiceRoutine || (Interrupt->Vector < 16))
         return FALSE;
+
+    if (Interrupt->Irql == PASSIVE_LEVEL)
+        return KiConnectPassiveInterrupt(Interrupt);
 
     Vector = Interrupt->Vector;
     if ((Vector < 16) || (Vector >= KI_ARM_INTERRUPT_VECTORS) ||
