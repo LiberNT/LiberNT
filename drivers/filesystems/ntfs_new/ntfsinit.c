@@ -434,6 +434,8 @@ NtfsFinalizePendingDelete(_In_ PVolumeContextBlock VolCB,
     BOOLEAN FileDeletion;
     BOOLEAN StreamOnly;
     BOOLEAN Unlinked;
+    BOOLEAN PathVerified = FALSE;
+    LONG VerifiedGeneration = 0;
 
     KeEnterCriticalRegion();
     NtfsAcquireMetadata(VolCB);
@@ -500,7 +502,11 @@ NtfsFinalizePendingDelete(_In_ PVolumeContextBlock VolCB,
                    NtfsFileRecordGetReference(NamedRecord) ==
                        FileCB->StreamCB->FileReference;
         if (SameFile)
+        {
             LastLink = NtfsFileRecordGetLinkCount(NamedRecord) <= 1;
+            VerifiedGeneration = VolCB->DirGeneration;
+            PathVerified = TRUE;
+        }
         if (NamedRecord)
             NtfsFileRecordDestroy(NamedRecord);
         if (!SameFile)
@@ -568,7 +574,9 @@ NtfsFinalizePendingDelete(_In_ PVolumeContextBlock VolCB,
         MetadataAcquired = TRUE;
     }
     DeleteStatus = STATUS_SUCCESS;
-    if (FileCB->StreamCB && LastLink && !Unlinked)
+    ASSERT(ExIsResourceAcquiredExclusiveLite(&VolCB->MetadataResource));
+    if (FileCB->StreamCB && LastLink && !Unlinked &&
+        !(PathVerified && VolCB->DirGeneration == VerifiedGeneration))
     {
         PNtfsFileRecord NamedRecord = NULL;
         ULONG RemainingNameLength = 0;
