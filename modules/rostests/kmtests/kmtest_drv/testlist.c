@@ -281,6 +281,7 @@ KMT_TESTFUNC Test_KeStandbySteal;
 KMT_TESTFUNC Test_KeDeferredReady;
 KMT_TESTFUNC Test_KeIdleSteal;
 KMT_TESTFUNC Test_KeCacheInvalidation;
+KMT_TESTFUNC Test_KeClockHeldOff;
 KMT_TESTFUNC Test_KeClockKeepAlive;
 KMT_TESTFUNC Test_KeClockWatchdog;
 KMT_TESTFUNC Test_KeModern;
@@ -752,6 +753,7 @@ const KMT_TEST TestList[] =
     { "KeDeferredReady",                    Test_KeDeferredReady },
     { "KeIdleSteal",                        Test_KeIdleSteal },
     { "KeCacheInvalidation",                Test_KeCacheInvalidation },
+    { "KeClockHeldOff",                     Test_KeClockHeldOff },
     { "KeClockKeepAlive",                   Test_KeClockKeepAlive },
     { "KeCycleTime",                        Test_KeCycleTime },
     { "-KeClockWatchdog",                   Test_KeClockWatchdog },
