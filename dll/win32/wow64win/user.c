@@ -3501,6 +3501,14 @@ NTSTATUS WINAPI wow64_NtUserGetWindowDisplayAffinity( UINT *args )
     return NtUserGetWindowDisplayAffinity( hwnd, affinity );
 }
 
+NTSTATUS WINAPI wow64_NtUserSetWindowDisplayAffinity( UINT *args )
+{
+    HWND hwnd = get_handle( &args );
+    DWORD affinity = get_ulong( &args );
+
+    return NtUserSetWindowDisplayAffinity( hwnd, affinity );
+}
+
 NTSTATUS WINAPI wow64_NtUserRealChildWindowFromPoint( UINT *args )
 {
     HWND parent = get_handle( &args );

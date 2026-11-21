@@ -3610,6 +3610,7 @@ typedef struct tagMINIMIZEDMETRICS {
 
 #define WDA_NONE    0x0
 #define WDA_MONITOR 0x1
+#define WDA_EXCLUDEFROMCAPTURE 0x11
 
 typedef struct tagMOUSEKEYS{
 	UINT cbSize;

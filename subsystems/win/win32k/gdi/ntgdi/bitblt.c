@@ -9,6 +9,105 @@
 #include <win32k.h>
 DBG_DEFAULT_CHANNEL(GdiBlt);
 
+#define IntRop3UsesSource(Rop) (((((Rop) << 2) ^ (Rop)) & 0xCC0000) != 0)
+
+static
+LONGLONG
+IntFloorDiv(
+    _In_ LONGLONG Numerator,
+    _In_ LONGLONG Denominator)
+{
+    LONGLONG Quotient = Numerator / Denominator;
+
+    ASSERT(Denominator != 0);
+    if ((Numerator % Denominator) != 0 && ((Numerator < 0) != (Denominator < 0)))
+        Quotient--;
+    return Quotient;
+}
+
+static
+VOID
+IntMapExcludedSpan(
+    _In_ LONG DeviceLow,
+    _In_ LONG DeviceHigh,
+    _In_ LONG DeviceOrigin,
+    _In_ LONGLONG DeviceExtent,
+    _In_ INT DestOrigin,
+    _In_ INT DestExtent,
+    _Out_ PLONGLONG Low,
+    _Out_ PLONGLONG High)
+{
+    LONGLONG A = ((LONGLONG)DeviceLow - DeviceOrigin) * DestExtent;
+    LONGLONG B = ((LONGLONG)DeviceHigh - DeviceOrigin) * DestExtent;
+
+    ASSERT(DeviceExtent != 0);
+    *Low = DestOrigin + min(IntFloorDiv(A, DeviceExtent), IntFloorDiv(B, DeviceExtent));
+    *High = DestOrigin + max(-IntFloorDiv(-A, DeviceExtent), -IntFloorDiv(-B, DeviceExtent));
+}
+
+static
+VOID
+IntGdiBlackOutExcluded(
+    _In_ HDC hdcDest,
+    _In_ INT xDest,
+    _In_ INT yDest,
+    _In_ INT cxDest,
+    _In_ INT cyDest,
+    _In_ HDC hdcSrc,
+    _In_ INT xSrc,
+    _In_ INT ySrc,
+    _In_ INT cxSrc,
+    _In_ INT cySrc,
+    _In_ PREGION prgnExcluded)
+{
+    POINTL aptSrc[2];
+    RECTL rclSrc, rcl;
+    LONGLONG Width, Height, Left, Top, Right, Bottom;
+    PDC pdcSrc;
+    ULONG Index;
+
+    ASSERT(prgnExcluded != NULL);
+    if (cxSrc == 0 || cySrc == 0 || cxDest == 0 || cyDest == 0)
+        return;
+
+    pdcSrc = DC_LockDc(hdcSrc);
+    if (pdcSrc == NULL)
+        return;
+    aptSrc[0].x = xSrc;
+    aptSrc[0].y = ySrc;
+    aptSrc[1].x = xSrc + cxSrc;
+    aptSrc[1].y = ySrc + cySrc;
+    IntLPtoDP(pdcSrc, aptSrc, 2);
+    for (Index = 0; Index < RTL_NUMBER_OF(aptSrc); Index++)
+    {
+        aptSrc[Index].x += pdcSrc->ptlDCOrig.x;
+        aptSrc[Index].y += pdcSrc->ptlDCOrig.y;
+    }
+    DC_UnlockDc(pdcSrc);
+
+    Width = (LONGLONG)aptSrc[1].x - aptSrc[0].x;
+    Height = (LONGLONG)aptSrc[1].y - aptSrc[0].y;
+    if (Width == 0 || Height == 0)
+        return;
+    rclSrc.left = aptSrc[0].x;
+    rclSrc.top = aptSrc[0].y;
+    rclSrc.right = aptSrc[1].x;
+    rclSrc.bottom = aptSrc[1].y;
+    RECTL_vMakeWellOrdered(&rclSrc);
+
+    ASSERT(prgnExcluded->rdh.nCount == 0 || prgnExcluded->Buffer != NULL);
+    for (Index = 0; Index < prgnExcluded->rdh.nCount; Index++)
+    {
+        if (!RECTL_bIntersectRect(&rcl, &prgnExcluded->Buffer[Index], &rclSrc))
+            continue;
+        IntMapExcludedSpan(rcl.left, rcl.right, aptSrc[0].x, Width, xDest, cxDest, &Left, &Right);
+        IntMapExcludedSpan(rcl.top, rcl.bottom, aptSrc[0].y, Height, yDest, cyDest, &Top, &Bottom);
+        ASSERT(Left <= Right);
+        ASSERT(Top <= Bottom);
+        NtGdiPatBlt(hdcDest, (INT)Left, (INT)Top, (INT)(Right - Left), (INT)(Bottom - Top), BLACKNESS);
+    }
+}
+
 BOOL APIENTRY
 NtGdiAlphaBlend(
     HDC hDCDest,
@@ -370,8 +469,9 @@ done:
     return Ret;
 }
 
-BOOL APIENTRY
-NtGdiMaskBlt(
+static
+BOOL
+IntGdiMaskBlt(
     HDC hdcDest,
     INT nXDest,
     INT nYDest,
@@ -602,6 +702,41 @@ cleanup:
         EngSetLastError(ERROR_INVALID_PARAMETER);
 
     return Status;
+}
+
+BOOL APIENTRY
+NtGdiMaskBlt(
+    HDC hdcDest,
+    INT nXDest,
+    INT nYDest,
+    INT nWidth,
+    INT nHeight,
+    HDC hdcSrc,
+    INT nXSrc,
+    INT nYSrc,
+    HBITMAP hbmMask,
+    INT xMask,
+    INT yMask,
+    DWORD dwRop4,
+    IN DWORD crBackColor)
+{
+    PREGION prgnExcluded = NULL;
+    BOOL Ret;
+
+    if (IntRop3UsesSource(dwRop4 & 0x00FF0000) || IntRop3UsesSource((dwRop4 >> 8) & 0x00FF0000))
+        prgnExcluded = UserCaptureExcludedRegion(hdcSrc);
+
+    Ret = IntGdiMaskBlt(hdcDest, nXDest, nYDest, nWidth, nHeight, hdcSrc, nXSrc, nYSrc,
+                        hbmMask, xMask, yMask, dwRop4, crBackColor);
+
+    if (prgnExcluded != NULL)
+    {
+        if (Ret)
+            IntGdiBlackOutExcluded(hdcDest, nXDest, nYDest, nWidth, nHeight,
+                                   hdcSrc, nXSrc, nYSrc, nWidth, nHeight, prgnExcluded);
+        REGION_Delete(prgnExcluded);
+    }
+    return Ret;
 }
 
 BOOL
@@ -1194,12 +1329,16 @@ NtGdiStretchBlt(
     IN DWORD dwBackColor)
 {
     BOOL bNoMirror = (dwRop3 & NOMIRRORBITMAP) != 0;
+    PREGION prgnExcluded = NULL;
+    BOOL Ret;
 
     IntCompositionPrepareScreenRead(hDCSrc);
+    if (IntRop3UsesSource(dwRop3 & 0x00FF0000))
+        prgnExcluded = UserCaptureExcludedRegion(hDCSrc);
 
     dwRop3 = dwRop3 & ~(NOMIRRORBITMAP|CAPTUREBLT);
 
-    return GreStretchBltMask(
+    Ret = GreStretchBltMask(
                 hDCDest,
                 XOriginDest,
                 YOriginDest,
@@ -1216,6 +1355,15 @@ NtGdiStretchBlt(
                 0,
                 0,
                 bNoMirror);
+
+    if (prgnExcluded != NULL)
+    {
+        if (Ret)
+            IntGdiBlackOutExcluded(hDCDest, XOriginDest, YOriginDest, WidthDest, HeightDest,
+                                   hDCSrc, XOriginSrc, YOriginSrc, WidthSrc, HeightSrc, prgnExcluded);
+        REGION_Delete(prgnExcluded);
+    }
+    return Ret;
 }
 
 
@@ -1926,9 +2074,9 @@ NtGdiSetPixel(
     return bResult ? crColor : CLR_INVALID;
 }
 
+static
 COLORREF
-APIENTRY
-NtGdiGetPixel(
+IntGdiGetPixel(
     _In_ HDC hdc,
     _In_ INT x,
     _In_ INT y)
@@ -2046,4 +2194,37 @@ leave:
 
     /* Return the new RGB color or -1 on failure */
     return ulRGBColor;
+}
+
+COLORREF
+APIENTRY
+NtGdiGetPixel(
+    _In_ HDC hdc,
+    _In_ INT x,
+    _In_ INT y)
+{
+    PREGION prgnExcluded;
+    POINTL ptl;
+    COLORREF Color;
+    PDC pdc;
+
+    prgnExcluded = UserCaptureExcludedRegion(hdc);
+    Color = IntGdiGetPixel(hdc, x, y);
+    if (prgnExcluded == NULL)
+        return Color;
+
+    pdc = (Color != CLR_INVALID) ? DC_LockDc(hdc) : NULL;
+    if (pdc != NULL)
+    {
+        ptl.x = x;
+        ptl.y = y;
+        IntLPtoDP(pdc, &ptl, 1);
+        ptl.x += pdc->ptlDCOrig.x;
+        ptl.y += pdc->ptlDCOrig.y;
+        DC_UnlockDc(pdc);
+        if (REGION_PtInRegion(prgnExcluded, ptl.x, ptl.y))
+            Color = RGB(0, 0, 0);
+    }
+    REGION_Delete(prgnExcluded);
+    return Color;
 }

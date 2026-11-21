@@ -1273,6 +1273,7 @@ co_IntPrintWindow(
     UINT nFlags)
 {
     HDC hdcSrc;
+    PWND pwndRoot;
     INT cx, cy, xSrc, ySrc;
     BOOL Ret;
 
@@ -1304,6 +1305,10 @@ co_IntPrintWindow(
 
     /* FIXME: Windows 11 still sends WM_NCPAINT and WM_PAINT to a hidden window before leaving its area black */
     if (!IntIsWindowVisible(pwnd))
+        return TRUE;
+
+    pwndRoot = UserGetAncestor(pwnd, GA_ROOT);
+    if (pwndRoot != NULL && IntGetWindowDisplayAffinity(pwndRoot) != WDA_NONE)
         return TRUE;
 
     hdcSrc = UserGetDCEx(pwnd, NULL, DCX_CACHE | DCX_WINDOW);
