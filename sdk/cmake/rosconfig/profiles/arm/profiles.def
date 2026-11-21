@@ -3,7 +3,14 @@ config PROFILE_ARM
     type choice
     var ROSCONFIG_PROFILE
     value generic "Generic ARMv7"
+    value profile_raspberry2 "Raspberry Pi 2"
+    value profile_raspberry3 "Raspberry Pi 3 (32-bit)"
     default generic
     depends ARCH=arm
     help
-      Select the generic ARMv7-A target without board-specific packages.
+      Generic builds the ARMv7-A target without board-specific packages.
+
+      Raspberry Pi 2 and Raspberry Pi 3 (32-bit) start the SD host and the
+      DWC2 USB controller of the board as boot drivers, bound to the nodes of
+      its device tree, and include the SMSC95xx Ethernet driver. The board
+      boots through U-Boot's UEFI.
