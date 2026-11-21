@@ -1516,26 +1516,6 @@ RtlEthernetStringToAddressW(
 
 #endif /* (NTDDI >= NTDDI_VISTA) */
 
-#endif /* __IP2STRING__ */
-
-#ifdef __cplusplus
-}
-#endif
-
-#ifndef SO_TIMESTAMP
-#define SO_TIMESTAMP 0x300A
-#endif
-#ifndef SO_TIMESTAMP_ID
-#define SO_TIMESTAMP_ID 0x300B
-#endif
-#ifndef TCP_INITIAL_RTO_DEFAULT_MAX_SYN_RETRANSMISSIONS
-#define TCP_INITIAL_RTO_DEFAULT_MAX_SYN_RETRANSMISSIONS 0
-#endif
-#ifndef TCP_INITIAL_RTO_DEFAULT_RTT
-#define TCP_INITIAL_RTO_DEFAULT_RTT 0
-#endif
-#ifndef TIMESTAMPING_FLAG_TX
-#define TIMESTAMPING_FLAG_TX 0x2
 typedef enum _TCPSTATE {
     TCPSTATE_CLOSED = 0,
     TCPSTATE_LISTEN = 1,
@@ -1578,4 +1558,24 @@ typedef enum TCP_ICW_LEVEL {
     TCP_ICW_LEVEL_MAX = 255
 } TCP_ICW_LEVEL, *PTCP_ICW_LEVEL;
 
+#endif /* __IP2STRING__ */
+
+#ifdef __cplusplus
+}
+#endif
+
+#ifndef SO_TIMESTAMP
+#define SO_TIMESTAMP 0x300A
+#endif
+#ifndef SO_TIMESTAMP_ID
+#define SO_TIMESTAMP_ID 0x300B
+#endif
+#ifndef TCP_INITIAL_RTO_DEFAULT_MAX_SYN_RETRANSMISSIONS
+#define TCP_INITIAL_RTO_DEFAULT_MAX_SYN_RETRANSMISSIONS 0
+#endif
+#ifndef TCP_INITIAL_RTO_DEFAULT_RTT
+#define TCP_INITIAL_RTO_DEFAULT_RTT 0
+#endif
+#ifndef TIMESTAMPING_FLAG_TX
+#define TIMESTAMPING_FLAG_TX 0x2
 #endif
