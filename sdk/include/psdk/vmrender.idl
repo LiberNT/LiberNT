@@ -209,6 +209,7 @@ interface IVMRMixerControl : IUnknown
     HRESULT SetZOrder([in] DWORD id, [in] DWORD z);
     HRESULT GetZOrder([in] DWORD id, [out] DWORD *z);
     HRESULT SetOutputRect([in] DWORD id, [in] const NORMALIZEDRECT *rect);
+    HRESULT GetOutputRect([in] DWORD id, [out] NORMALIZEDRECT *rect);
     HRESULT SetBackgroundClr([in] COLORREF background);
     HRESULT GetBackgroundClr([out] COLORREF *background);
     HRESULT SetMixingPrefs([in] DWORD prefs);
@@ -322,9 +323,9 @@ typedef enum _VMRDeinterlaceTech
     DeinterlaceTech_BOBLineReplicate = 0x01,
     DeinterlaceTech_BOBVerticalStretch = 0x02,
     DeinterlaceTech_MedianFiltering = 0x04,
-    DeinterlaceTech_EdgeFiltering = 0x08,
-    DeinterlaceTech_FieldAdaptive = 0x10,
-    DeinterlaceTech_PixelAdaptive = 0x20,
+    DeinterlaceTech_EdgeFiltering = 0x10,
+    DeinterlaceTech_FieldAdaptive = 0x20,
+    DeinterlaceTech_PixelAdaptive = 0x40,
     DeinterlaceTech_MotionVectorSteered = 0x80
 } VMRDeinterlaceTech;
 

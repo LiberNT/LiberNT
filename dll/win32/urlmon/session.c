@@ -483,6 +483,13 @@ static HRESULT WINAPI InternetSession_SetSessionOption(IInternetSession *iface,
     return E_NOTIMPL;
 }
 
+static HRESULT WINAPI InternetSession_GetSessionOption(IInternetSession *iface,
+        DWORD dwOption, LPVOID pBuffer, DWORD *pdwBufferLength, DWORD dwReserved)
+{
+    TRACE("(%08lx %p %p %ld)\n", dwOption, pBuffer, pdwBufferLength, dwReserved);
+    return E_NOTIMPL;
+}
+
 static const IInternetSessionVtbl InternetSessionVtbl = {
     InternetSession_QueryInterface,
     InternetSession_AddRef,
@@ -492,7 +499,8 @@ static const IInternetSessionVtbl InternetSessionVtbl = {
     InternetSession_RegisterMimeFilter,
     InternetSession_UnregisterMimeFilter,
     InternetSession_CreateBinding,
-    InternetSession_SetSessionOption
+    InternetSession_SetSessionOption,
+    InternetSession_GetSessionOption
 };
 
 static IInternetSession InternetSession = { &InternetSessionVtbl };

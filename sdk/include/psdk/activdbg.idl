@@ -38,6 +38,19 @@ interface IDebugStackFrameSniffer;
 interface IDebugThreadCall32;
 interface IActiveScriptErrorDebug;
 interface IProvideExpressionContexts;
+interface IDebugProperty;
+interface IEnumDebugApplicationNodes;
+interface IDebugExpressionContext;
+interface IDebugAsyncOperationCallBack;
+interface IDebugDocumentProvider;
+
+typedef struct tagDebugStackFrameDescriptor {
+    IDebugStackFrame *pdsf;
+    DWORD dwMin;
+    DWORD dwLim;
+    BOOL fFinal;
+    IUnknown *punkFinal;
+} DebugStackFrameDescriptor;
 
 typedef enum tagBREAKPOINT_STATE {
     BREAKPOINT_DELETED,
@@ -190,6 +203,17 @@ interface IDebugDocumentInfo : IUnknown
 ]
 interface IDebugDocument : IDebugDocumentInfo
 {
+}
+
+[
+    object,
+    uuid(51973c20-cb0c-11d0-b5c9-00a0244a0e7a),
+    pointer_default(unique)
+]
+interface IDebugDocumentProvider : IDebugDocumentInfo
+{
+    HRESULT GetDocument(
+        [out] IDebugDocument **ppssd);
 }
 
 /************************************************************
@@ -560,7 +584,22 @@ interface IActiveScriptSiteDebug64 : IUnknown
 ]
 interface IDebugStackFrame : IUnknown
 {
-    /* FIXME: fill me! */
+    HRESULT GetCodeContext(
+        [out] IDebugCodeContext **ppcc);
+
+    HRESULT GetDescriptionString(
+        [in] BOOL fLong,
+        [out] BSTR *pbstrDescription);
+
+    HRESULT GetLanguageString(
+        [in] BOOL fLong,
+        [out] BSTR *pbstrLanguage);
+
+    HRESULT GetThread(
+        [out] IDebugApplicationThread **ppat);
+
+    HRESULT GetDebugProperty(
+        [out] IDebugProperty **ppDebugProp);
 }
 
 [
@@ -570,7 +609,25 @@ interface IDebugStackFrame : IUnknown
 ]
 interface IEnumDebugStackFrames : IUnknown
 {
-    /* FIXME: fill me! */
+    [local]
+    HRESULT Next(
+        [in] ULONG celt,
+        [out] DebugStackFrameDescriptor *prgdsfd,
+        [out] ULONG *pceltFetched);
+
+    [call_as(Next)]
+    HRESULT RemoteNext(
+        [in] ULONG celt,
+        [out, size_is(celt), length_is(*pceltFetched)] DebugStackFrameDescriptor *prgdsfd,
+        [out] ULONG *pceltFetched);
+
+    HRESULT Skip(
+        [in] ULONG celt);
+
+    HRESULT Reset();
+
+    HRESULT Clone(
+        [out] IEnumDebugStackFrames **ppenum);
 }
 
 [
@@ -580,7 +637,28 @@ interface IEnumDebugStackFrames : IUnknown
 ]
 interface IApplicationDebugger : IUnknown
 {
-    /* FIXME: fill me! */
+    HRESULT QueryAlive();
+
+    HRESULT CreateInstanceAtDebugger(
+        [in] REFCLSID rclsid,
+        [in] IUnknown *pUnkOuter,
+        [in] DWORD dwClsContext,
+        [in] REFIID riid,
+        [out, iid_is(riid)] IUnknown **ppvObject);
+
+    HRESULT onDebugOutput(
+        [in] LPCOLESTR pstr);
+
+    HRESULT onHandleBreakPoint(
+        [in] IRemoteDebugApplicationThread *prpt,
+        [in] BREAKREASON br,
+        [in] IActiveScriptErrorDebug *pError);
+
+    HRESULT onClose();
+
+    HRESULT onDebuggerEvent(
+        [in] REFIID riid,
+        [in] IUnknown *punk);
 };
 
 [
@@ -590,7 +668,25 @@ interface IApplicationDebugger : IUnknown
 ]
 interface IEnumRemoteDebugApplicationThreads : IUnknown
 {
-    /* FIXME: fill me! */
+    [local]
+    HRESULT Next(
+        [in] ULONG celt,
+        [out] IRemoteDebugApplicationThread * *pprdat,
+        [out] ULONG *pceltFetched);
+
+    [call_as(Next)]
+    HRESULT RemoteNext(
+        [in] ULONG celt,
+        [out, size_is(celt), length_is(*pceltFetched)] IRemoteDebugApplicationThread * *pprdat,
+        [out] ULONG *pceltFetched);
+
+    HRESULT Skip(
+        [in] ULONG celt);
+
+    HRESULT Reset();
+
+    HRESULT Clone(
+        [out] IEnumRemoteDebugApplicationThreads **ppenum);
 }
 
 [
@@ -598,9 +694,23 @@ interface IEnumRemoteDebugApplicationThreads : IUnknown
     uuid(51973C34-CB0C-11d0-B5C9-00A0244A0E7A),
     pointer_default(unique)
 ]
-interface IDebugApplicationNode : IUnknown
+interface IDebugApplicationNode : IDebugDocumentProvider
 {
-    /* FIXME: fill me! */
+    HRESULT EnumChildren(
+        [out] IEnumDebugApplicationNodes **pperddp);
+
+    HRESULT GetParent(
+        [out] IDebugApplicationNode **pprddp);
+
+    HRESULT SetDocumentProvider(
+        [in] IDebugDocumentProvider *pddp);
+
+    HRESULT Close();
+
+    HRESULT Attach(
+        [in] IDebugApplicationNode *pdanParent);
+
+    HRESULT Detach();
 }
 
 [
@@ -610,7 +720,25 @@ interface IDebugApplicationNode : IUnknown
 ]
 interface IEnumDebugExpressionContexts : IUnknown
 {
-    /* FIXME: fill me! */
+    [local]
+    HRESULT Next(
+        [in] ULONG celt,
+        [out] IDebugExpressionContext * *ppdec,
+        [out] ULONG *pceltFetched);
+
+    [call_as(Next)]
+    HRESULT RemoteNext(
+        [in] ULONG celt,
+        [out, size_is(celt), length_is(*pceltFetched)] IDebugExpressionContext * *ppdec,
+        [out] ULONG *pceltFetched);
+
+    HRESULT Skip(
+        [in] ULONG celt);
+
+    HRESULT Reset();
+
+    HRESULT Clone(
+        [out] IEnumDebugExpressionContexts **ppenum);
 }
 
 [
@@ -621,7 +749,21 @@ interface IEnumDebugExpressionContexts : IUnknown
 ]
 interface IDebugApplicationThread : IRemoteDebugApplicationThread
 {
-    /* FIXME: fill me! */
+    HRESULT SynchronousCallIntoThread32(
+        [in] IDebugThreadCall32 *pstcb,
+        [in] DWORD dwParam1,
+        [in] DWORD dwParam2,
+        [in] DWORD dwParam3);
+
+    HRESULT QueryIsCurrentThread();
+
+    HRESULT QueryIsDebuggerThread();
+
+    HRESULT SetDescription(
+        [in] LPCOLESTR pstrDescription);
+
+    HRESULT SetStateString(
+        [in] LPCOLESTR pstrState);
 }
 
 [
@@ -632,7 +774,13 @@ interface IDebugApplicationThread : IRemoteDebugApplicationThread
 ]
 interface IDebugSyncOperation : IUnknown
 {
-    /* FIXME: fill me! */
+    HRESULT GetTargetThread(
+        [out] IDebugApplicationThread **ppatTarget);
+
+    HRESULT Execute(
+        [out] IUnknown **ppunkResult);
+
+    HRESULT InProgressAbort();
 }
 
 [
@@ -643,7 +791,19 @@ interface IDebugSyncOperation : IUnknown
 ]
 interface IDebugAsyncOperation : IUnknown
 {
-    /* FIXME: fill me! */
+    HRESULT GetSyncDebugOperation(
+        [out] IDebugSyncOperation **ppsdo);
+
+    HRESULT Start(
+        [in] IDebugAsyncOperationCallBack *padocb);
+
+    HRESULT Abort();
+
+    HRESULT QueryIsComplete();
+
+    HRESULT GetResult(
+        [out] HRESULT *phrResult,
+        [out] IUnknown **ppunkResult);
 }
 
 [
@@ -653,7 +813,8 @@ interface IDebugAsyncOperation : IUnknown
 ]
 interface IDebugStackFrameSniffer : IUnknown
 {
-    /* FIXME: fill me! */
+    HRESULT EnumStackFrames(
+        [out] IEnumDebugStackFrames **ppedsf);
 }
 
 [
@@ -664,7 +825,10 @@ interface IDebugStackFrameSniffer : IUnknown
 ]
 interface IDebugThreadCall32 : IUnknown
 {
-    /* FIXME: fill me! */
+    HRESULT ThreadCallHandler(
+        [in] DWORD dwParam1,
+        [in] DWORD dwParam2,
+        [in] DWORD dwParam3);
 }
 
 [
@@ -674,7 +838,11 @@ interface IDebugThreadCall32 : IUnknown
 ]
 interface IActiveScriptErrorDebug : IActiveScriptError
 {
-    /* FIXME: fill me! */
+    HRESULT GetDocumentContext(
+        [out] IDebugDocumentContext **ppssc);
+
+    HRESULT GetStackFrame(
+        [out] IDebugStackFrame **ppdsf);
 }
 
 [
@@ -684,7 +852,8 @@ interface IActiveScriptErrorDebug : IActiveScriptError
 ]
 interface IProvideExpressionContexts : IUnknown
 {
-    /* FIXME: fill me! */
+    HRESULT EnumExpressionContexts(
+        [out] IEnumDebugExpressionContexts **ppedec);
 }
 
 cpp_quote("#ifndef DISABLE_ACTIVDBG_INTERFACE_WRAPPERS")
