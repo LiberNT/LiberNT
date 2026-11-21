@@ -192,9 +192,22 @@ CheckScreenReads(COLORREF Expected, PCSTR What)
 }
 
 static void
-TestCapture(HWND hWnd, HWND hOther)
+CheckExcludedReads(COLORREF Expected)
 {
-    const COLORREF Green = RGB(0, 200, 0), Red = RGB(200, 0, 0);
+    COLORREF Color;
+    BOOL Ret = FALSE;
+
+    Color = ScreenRead(150, 150, READ_ALPHABLEND, &Ret);
+    ok(Ret && Color == Expected, "AlphaBlend under a WDA_EXCLUDEFROMCAPTURE window: %d, 0x%06lx\n", Ret, Color);
+    Ret = FALSE;
+    Color = ScreenRead(150, 150, READ_TRANSPARENTBLT, &Ret);
+    ok(Ret && Color == Expected, "TransparentBlt under a WDA_EXCLUDEFROMCAPTURE window: %d, 0x%06lx\n", Ret, Color);
+}
+
+static void
+TestCapture(HWND hWnd, HWND hOther, HWND hUnder)
+{
+    const COLORREF Green = RGB(0, 200, 0), Red = RGB(200, 0, 0), Blue = RGB(0, 0, 200);
     DWORD Affinity;
 
     ok(ScreenBlt(150, 150, FALSE) == Green, "Unprotected window reads 0x%06lx\n", ScreenBlt(150, 150, FALSE));
@@ -217,6 +230,16 @@ TestCapture(HWND hWnd, HWND hOther)
     ok(GetWindowDisplayAffinity(hWnd, &Affinity) && Affinity == WDA_EXCLUDEFROMCAPTURE, "Affinity is 0x%lx\n", Affinity);
     PumpMessages();
     ok(ScreenBlt(150, 150, FALSE) != Green, "A WDA_EXCLUDEFROMCAPTURE window was captured\n");
+    if (hUnder != NULL)
+    {
+        ok(ScreenBlt(150, 150, FALSE) == Blue, "BitBlt under a WDA_EXCLUDEFROMCAPTURE window reads 0x%06lx\n",
+           ScreenBlt(150, 150, FALSE));
+        ok(ScreenBlt(150, 150, TRUE) == Blue, "StretchBlt under a WDA_EXCLUDEFROMCAPTURE window reads 0x%06lx\n",
+           ScreenBlt(150, 150, TRUE));
+        ok(ScreenGetPixel(150, 150) == Blue, "GetPixel under a WDA_EXCLUDEFROMCAPTURE window reads 0x%06lx\n",
+           ScreenGetPixel(150, 150));
+        CheckExcludedReads(Blue);
+    }
 
     ok(SetWindowDisplayAffinity(hWnd, WDA_NONE), "WDA_NONE failed: %lu\n", GetLastError());
     Affinity = 0xdeadbeef;
@@ -270,7 +293,7 @@ START_TEST(WindowDisplayAffinity)
     DWM_IS_COMPOSITION_ENABLED pDwmIsCompositionEnabled = NULL;
     HMODULE hDwm = LoadLibraryW(L"dwmapi.dll");
     WNDCLASSW wc = { 0 };
-    HWND hWnd, hOther, hChild;
+    HWND hWnd, hOther, hUnder, hChild;
     BOOL Composition = FALSE;
 
     if (hDwm)
@@ -293,6 +316,13 @@ START_TEST(WindowDisplayAffinity)
         return;
     SetWindowLongPtrW(hWnd, GWLP_USERDATA, RGB(0, 200, 0));
     SetWindowLongPtrW(hOther, GWLP_USERDATA, RGB(200, 0, 0));
+    hUnder = CreateWindowExW(0, wc.lpszClassName, L"Under", WS_POPUP, 100, 100, 200, 200, NULL, NULL, wc.hInstance, NULL);
+    if (hUnder != NULL)
+    {
+        SetWindowLongPtrW(hUnder, GWLP_USERDATA, RGB(0, 0, 200));
+        ShowWindow(hUnder, SW_SHOWNOACTIVATE);
+        UpdateWindow(hUnder);
+    }
     ShowWindow(hWnd, SW_SHOWNOACTIVATE);
     ShowWindow(hOther, SW_SHOWNOACTIVATE);
     hChild = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE, 0, 0, 10, 10, hWnd, NULL, NULL, NULL);
@@ -302,11 +332,13 @@ START_TEST(WindowDisplayAffinity)
 
     TestValidation(hWnd, hChild);
     if (Composition)
-        TestCapture(hWnd, hOther);
+        TestCapture(hWnd, hOther, hUnder);
     else
         TestWithoutComposition(hWnd);
 
     DestroyWindow(hOther);
+    if (hUnder != NULL)
+        DestroyWindow(hUnder);
     DestroyWindow(hWnd);
     UnregisterClassW(wc.lpszClassName, wc.hInstance);
     if (hDwm)

@@ -10,6 +10,11 @@ extern ATOM AtomIconSmall2;
 VOID FASTCALL DefWndDestroySmallIcon2(PWND pWnd);
 DWORD FASTCALL IntGetWindowDisplayAffinity(_In_ PWND pWnd);
 struct _REGION *FASTCALL UserCaptureExcludedRegion(_In_ HDC hdcSrc);
+struct _REGION *FASTCALL UserCaptureExcludeFromCaptureRegion(_In_ HDC hdcSrc);
+typedef BOOL (*PUSER_CAPTURE_MAP_RECT)(_In_ PVOID Context, _In_ const RECTL *prclScreen, _Out_ PRECTL prclDest);
+VOID FASTCALL UserCaptureRestoreExcluded(_In_ HDC hdcDest, _In_ const RECTL *prclSource, _In_ struct _REGION *prgnRestore,
+                                         _In_ PUSER_CAPTURE_MAP_RECT MapRect, _In_ PVOID Context);
+COLORREF FASTCALL UserCaptureExcludedPixel(_In_ LONG x, _In_ LONG y);
 
 #define HAS_DLGFRAME(Style, ExStyle) \
             (((ExStyle) & WS_EX_DLGMODALFRAME) || \
