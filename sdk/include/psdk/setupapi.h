@@ -3111,23 +3111,23 @@ WINSETUPAPI PSTR WINAPI UnicodeToMultiByte(PCWSTR lpUnicodeStr, UINT uCodePage);
 #define SUOI_INTERNAL1 0x00000002
 #endif
 
-typedef SP_BACKUP_QUEUE_PARAMS_V1_A SP_BACKUP_QUEUE_PARAMS_V1;
 typedef PSP_BACKUP_QUEUE_PARAMS_V1_A PSP_BACKUP_QUEUE_PARAMS_V1;
-typedef SP_BACKUP_QUEUE_PARAMS_V2_A SP_BACKUP_QUEUE_PARAMS_V2;
 typedef PSP_BACKUP_QUEUE_PARAMS_V2_A PSP_BACKUP_QUEUE_PARAMS_V2;
-typedef SP_INF_SIGNER_INFO_V1_A SP_INF_SIGNER_INFO_V1;
 typedef PSP_INF_SIGNER_INFO_V1_A PSP_INF_SIGNER_INFO_V1;
-typedef SP_INF_SIGNER_INFO_V2_A SP_INF_SIGNER_INFO_V2;
 typedef PSP_INF_SIGNER_INFO_V2_A PSP_INF_SIGNER_INFO_V2;
-typedef SP_INF_SIGNER_INFO_V2 SP_INF_SIGNER_INFO;
 typedef PSP_INF_SIGNER_INFO_V2 PSP_INF_SIGNER_INFO;
+typedef SP_BACKUP_QUEUE_PARAMS_V1_A SP_BACKUP_QUEUE_PARAMS_V1;
+typedef SP_BACKUP_QUEUE_PARAMS_V2_A SP_BACKUP_QUEUE_PARAMS_V2;
+typedef SP_INF_SIGNER_INFO_V1_A SP_INF_SIGNER_INFO_V1;
+typedef SP_INF_SIGNER_INFO_V2_A SP_INF_SIGNER_INFO_V2;
+typedef SP_INF_SIGNER_INFO_V2 SP_INF_SIGNER_INFO;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 BOOL WINAPI SetupGetFileQueueFlags(HSPFILEQ FileQueue, PDWORD Flags);
-BOOL WINAPI SetupSetFileQueueFlags(HSPFILEQ FileQueue, DWORD FlagMask, DWORD Flags);
 BOOL WINAPI SetupGetNonInteractiveMode(void);
+BOOL WINAPI SetupSetFileQueueFlags(HSPFILEQ FileQueue, DWORD FlagMask, DWORD Flags);
 #ifdef __cplusplus
 }
 #endif
@@ -3151,5 +3151,117 @@ typedef struct _FILEPATHS_SIGNERINFO_W {
   PCWSTR Version;
   PCWSTR CatalogFile;
 } FILEPATHS_SIGNERINFO_W, *PFILEPATHS_SIGNERINFO_W;
+
+#define _INC_SETUPAPI 0
+#define _SPAPI_ERRORS 0
+#define DICLASSPROP_INSTALLER 0x00000001
+#define ERROR_AUTHENTICODE_DISALLOWED 0xE0000240
+#define ERROR_AUTHENTICODE_PUBLISHER_NOT_TRUSTED 0xE0000243
+#define ERROR_AUTHENTICODE_TRUST_NOT_ESTABLISHED 0xE0000242
+#define ERROR_AUTHENTICODE_TRUSTED_PUBLISHER 0xE0000241
+#define ERROR_DEVICE_INSTALL_BLOCKED 0xE0000248
+#define ERROR_DEVICE_INSTALLER_NOT_READY 0xE0000246
+#define ERROR_DI_FUNCTION_OBSOLETE 0xE000023E
+#define ERROR_DRIVER_INSTALL_BLOCKED 0xE0000249
+#define ERROR_DRIVER_NONNATIVE 0xE0000234
+#define ERROR_DRIVER_STORE_ADD_FAILED 0xE0000247
+#define ERROR_DRIVER_STORE_DELETE_FAILED 0xE000024C
+#define ERROR_INVALID_TARGET 0xE0000233
+#define ERROR_NO_AUTHENTICODE_CATALOG 0xE000023F
+#define ERROR_ONLY_VALIDATE_VIA_AUTHENTICODE 0xE0000245
+#define ERROR_PNP_REGISTRY_ERROR 0xE000023A
+#define ERROR_REMOTE_REQUEST_UNSUPPORTED 0xE000023B
+#define ERROR_SCE_DISABLED 0xE0000238
+#define ERROR_SET_SYSTEM_RESTORE_POINT 0xE0000236
+#define ERROR_SIGNATURE_OSATTRIBUTE_MISMATCH 0xE0000244
+#define ERROR_UNKNOWN_EXCEPTION 0xE0000239
+#define ERROR_UNRECOVERABLE_STACK_OVERFLOW 0xE0000300
+#define EXCEPTION_SPAPI_UNRECOVERABLE_STACK_OVERFLOW 0xE0000300
+#define FLG_ADDREG_TYPE_QWORD 0xB0001
+#define FLG_DELREG_TYPE_QWORD 0xB0001
+#define SCWMI_CLOBBER_SECURITY 0x00000001
+#define SetupConfigureWmiFromInfSection 0
+#define SetupDiDeleteInterfaceDeviceRegKey SetupDiDeleteDeviceInterfaceRegKey
+#define SetupDiEnumInterfaceDevice SetupDiEnumDeviceInterfaces
+#define SetupDiGetCustomDeviceProperty 0
+#define SetupDiGetInterfaceDeviceAlias SetupDiGetDeviceInterfaceAlias
+#define SetupDiInstallInterfaceDevices SetupDiInstallDeviceInterfaces
+#define SetupDiOpenInterfaceDeviceRegKey SetupDiOpenDeviceInterfaceRegKey
+#define SetupDiRemoveInterfaceDevice SetupDiRemoveDeviceInterface
+#ifdef UNICODE
+#define SetupGetInfDriverStoreLocation SetupGetInfDriverStoreLocationW
+#else
+#define SetupGetInfDriverStoreLocation SetupGetInfDriverStoreLocationA
+#endif
+#ifdef UNICODE
+#define SetupGetInfPublishedName SetupGetInfPublishedNameW
+#else
+#define SetupGetInfPublishedName SetupGetInfPublishedNameA
+#endif
+#ifdef UNICODE
+#define SetupPrepareQueueForRestore SetupPrepareQueueForRestoreW
+#else
+#define SetupPrepareQueueForRestore SetupPrepareQueueForRestoreA
+#endif
+#define SetupVerifyInfFile 0
+
+struct _SP_ALTPLATFORM_INFO_V3
+{
+    DWORD cbSize;
+    DWORD Platform;
+    DWORD MajorVersion;
+    DWORD MinorVersion;
+    WORD ProcessorArchitecture;
+    union
+    {
+        WORD Reserved;
+        WORD Flags;
+    };
+    DWORD FirstValidatedMajorVersion;
+    DWORD FirstValidatedMinorVersion;
+    BYTE ProductType;
+    WORD SuiteMask;
+    DWORD BuildNumber;
+};
+
+typedef FILEPATHS_SIGNERINFO_A FILEPATHS_SIGNERINFO;
+
+typedef PFILEPATHS_SIGNERINFO_A PFILEPATHS_SIGNERINFO;
+
+typedef struct _SP_ALTPLATFORM_INFO_V3 *PSP_ALTPLATFORM_INFO_V3;
+
+typedef struct _SP_ALTPLATFORM_INFO_V3 SP_ALTPLATFORM_INFO_V3;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+BOOL WINAPI SetupDiGetCustomDevicePropertyA(HDEVINFO DeviceInfoSet, PSP_DEVINFO_DATA DeviceInfoData, PCSTR CustomPropertyName, DWORD Flags, PDWORD PropertyRegDataType, PBYTE PropertyBuffer, DWORD PropertyBufferSize, PDWORD RequiredSize);
+BOOL WINAPI SetupDiGetCustomDevicePropertyW(HDEVINFO DeviceInfoSet, PSP_DEVINFO_DATA DeviceInfoData, PCWSTR CustomPropertyName, DWORD Flags, PDWORD PropertyRegDataType, PBYTE PropertyBuffer, DWORD PropertyBufferSize, PDWORD RequiredSize);
+BOOL WINAPI SetupGetFileQueueCount(HSPFILEQ FileQueue, UINT SubQueueFileOp, PUINT NumOperations);
+BOOL WINAPI SetupVerifyInfFileA(PCSTR InfName, PSP_ALTPLATFORM_INFO AltPlatformInfo, PSP_INF_SIGNER_INFO_A InfSignerInfo);
+BOOL WINAPI SetupVerifyInfFileW(PCWSTR InfName, PSP_ALTPLATFORM_INFO AltPlatformInfo, PSP_INF_SIGNER_INFO_W InfSignerInfo);
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL SetupConfigureWmiFromInfSectionA(HINF InfHandle, PCSTR SectionName, DWORD Flags);
+BOOL SetupConfigureWmiFromInfSectionW(HINF InfHandle, PCWSTR SectionName, DWORD Flags);
+BOOL SetupDiGetClassPropertyExW(const GUID *ClassGuid, const DEVPROPKEY *PropertyKey, DEVPROPTYPE *PropertyType, PBYTE PropertyBuffer, DWORD PropertyBufferSize, PDWORD RequiredSize, DWORD Flags, PCWSTR MachineName, PVOID Reserved);
+BOOL SetupDiGetClassPropertyKeys(const GUID *ClassGuid, DEVPROPKEY *PropertyKeyArray, DWORD PropertyKeyCount, PDWORD RequiredPropertyKeyCount, DWORD Flags);
+BOOL SetupDiGetClassPropertyKeysExW(const GUID *ClassGuid, DEVPROPKEY *PropertyKeyArray, DWORD PropertyKeyCount, PDWORD RequiredPropertyKeyCount, DWORD Flags, PCWSTR MachineName, PVOID Reserved);
+BOOL SetupDiGetClassPropertyW(const GUID *ClassGuid, const DEVPROPKEY *PropertyKey, DEVPROPTYPE *PropertyType, PBYTE PropertyBuffer, DWORD PropertyBufferSize, PDWORD RequiredSize, DWORD Flags);
+BOOL SetupDiLoadDeviceIcon(HDEVINFO DeviceInfoSet, PSP_DEVINFO_DATA DeviceInfoData, UINT cxIcon, UINT cyIcon, DWORD Flags, HICON *hIcon);
+BOOL SetupDiSetClassPropertyExW(const GUID *ClassGuid, const DEVPROPKEY *PropertyKey, DEVPROPTYPE PropertyType, const PBYTE PropertyBuffer, DWORD PropertyBufferSize, DWORD Flags, PCWSTR MachineName, PVOID Reserved);
+BOOL SetupDiSetClassPropertyW(const GUID *ClassGuid, const DEVPROPKEY *PropertyKey, DEVPROPTYPE PropertyType, const PBYTE PropertyBuffer, DWORD PropertyBufferSize, DWORD Flags);
+BOOL SetupDiSetDeviceInterfaceDefault(HDEVINFO DeviceInfoSet, PSP_DEVICE_INTERFACE_DATA DeviceInterfaceData, DWORD Flags, PVOID Reserved);
+BOOL SetupGetInfDriverStoreLocationA(PCSTR FileName, PSP_ALTPLATFORM_INFO AlternatePlatformInfo, PCSTR LocaleName, PSTR ReturnBuffer, DWORD ReturnBufferSize, PDWORD RequiredSize);
+BOOL SetupGetInfPublishedNameA(PCSTR DriverStoreLocation, PSTR ReturnBuffer, DWORD ReturnBufferSize, PDWORD RequiredSize);
+BOOL SetupGetInfPublishedNameW(PCWSTR DriverStoreLocation, PWSTR ReturnBuffer, DWORD ReturnBufferSize, PDWORD RequiredSize);
+BOOL SetupPrepareQueueForRestoreA(HSPFILEQ QueueHandle, PCSTR BackupPath, DWORD RestoreFlags);
+BOOL SetupPrepareQueueForRestoreW(HSPFILEQ QueueHandle, PCWSTR BackupPath, DWORD RestoreFlags);
+BOOL SetupUninstallNewlyCopiedInfs(HSPFILEQ FileQueue, DWORD Flags, PVOID Reserved);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _SETUPAPI_H_ */

@@ -1287,18 +1287,155 @@ LWSTDAPI StrFormatByteSizeEx(ULONGLONG ull, SFBS_FLAGS flags, _Out_writes_(cchBu
 #pragma pack(pop)
 
 #endif // NOSHLWAPI
+typedef const QITAB * LPCQITAB;
 typedef PARSEDURLA PARSEDURL;
 typedef PPARSEDURLA PPARSEDURL;
-typedef const QITAB * LPCQITAB;
 typedef DWORD SHCT_FLAGS;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+HRESULT WINAPI GetProcessReference(IUnknown ** punk);
+void WINAPI SetProcessReference(IUnknown * punk);
 int WINAPI SHAnsiToAnsi(PCSTR pszSrc, PSTR pszDst, int cchBuf);
 LRESULT WINAPI SHSendMessageBroadcastA(UINT uMsg, WPARAM wParam, LPARAM lParam);
-void WINAPI SetProcessReference(IUnknown * punk);
-HRESULT WINAPI GetProcessReference(IUnknown ** punk);
+#ifdef __cplusplus
+}
+#endif
+
+#ifdef UNICODE
+#define PathIsHTMLFile PathIsHTMLFileW
+#else
+#define PathIsHTMLFile PathIsHTMLFileA
+#endif
+#define PathIsHTMLFileApszPath) PathIsContentTypeA(pszPath, SZ_CONTENTTYPE_HTMLA)
+#define PathIsHTMLFileWpszPath) PathIsContentTypeW(pszPath, SZ_CONTENTTYPE_HTMLW)
+#define QITABENTMULTI2Cthis, Ifoo, Iimpl) { (IID *) & Ifoo, OFFSETOFCLASS(Iimpl, Cthis) }
+#define SHAnsiToTCharszSrc, szDest, cchSize) SHAnsiToAnsi(szSrc, szDest, cchSize)
+#define SHFormatDateTime 0
+#ifdef UNICODE
+#define SHMessageBoxCheck SHMessageBoxCheckW
+#else
+#define SHMessageBoxCheck SHMessageBoxCheckA
+#endif
+#ifdef UNICODE
+#define SHSendMessageBroadcast SHSendMessageBroadcastW
+#else
+#define SHSendMessageBroadcast SHSendMessageBroadcastA
+#endif
+#ifdef UNICODE
+#define SHStripMneumonic SHStripMneumonicW
+#else
+#define SHStripMneumonic SHStripMneumonicA
+#endif
+#define SHTCharToAnsiszSrc, szDest, cchSize) SHAnsiToAnsi(szSrc, szDest, cchSize)
+#define SHTCharToUnicodeszSrc, wzDest, cchSize) SHAnsiToUnicode(szSrc, wzDest, cchSize)
+#define SHUnicodeToTCharwzSrc, szDest, cchSize) SHUnicodeToAnsi(wzSrc, szDest, cchSize)
+#define STATIC_CASTtyp) static_cast < typ >
+#ifdef UNICODE
+#define StrCmpC StrCmpCW
+#else
+#define StrCmpC StrCmpCA
+#endif
+#ifdef UNICODE
+#define StrCmpIC StrCmpICW
+#else
+#define StrCmpIC StrCmpICA
+#endif
+#ifdef UNICODE
+#define StrCmpNC StrCmpNCW
+#else
+#define StrCmpNC StrCmpNCA
+#endif
+#ifdef UNICODE
+#define StrCmpNIC StrCmpNICW
+#else
+#define StrCmpNIC StrCmpNICA
+#endif
+#ifdef UNICODE
+#define SZ_CONTENTTYPE_CDF SZ_CONTENTTYPE_CDFW
+#else
+#define SZ_CONTENTTYPE_CDF SZ_CONTENTTYPE_CDFA
+#endif
+#define SZ_CONTENTTYPE_CDFA "application/x-cdf"
+#define SZ_CONTENTTYPE_CDFW L"application/x-cdf"
+#ifdef UNICODE
+#define SZ_CONTENTTYPE_HTML SZ_CONTENTTYPE_HTMLW
+#else
+#define SZ_CONTENTTYPE_HTML SZ_CONTENTTYPE_HTMLA
+#endif
+#define SZ_CONTENTTYPE_HTMLA "text/html"
+#define SZ_CONTENTTYPE_HTMLW L"text/html"
+
+struct _DLLVERSIONINFO
+{
+    DWORD cbSize;
+    DWORD dwMajorVersion;
+    DWORD dwMinorVersion;
+    DWORD dwBuildNumber;
+    DWORD dwPlatformID;
+};
+
+typedef struct IQueryAssociationsVtbl IQueryAssociationsVtbl;
+
+typedef int STIF_FLAGS;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+HRESULT WINAPI SHGetInverseCMAP(BYTE *pbMap, ULONG cbMap);
+int WINAPI SHMessageBoxCheckA(HWND hwnd, LPCSTR pszText, LPCSTR pszCaption, UINT uType, int iDefault, LPCSTR pszRegVal);
+int WINAPI SHMessageBoxCheckW(HWND hwnd, LPCWSTR pszText, LPCWSTR pszCaption, UINT uType, int iDefault, LPCWSTR pszRegVal);
+BOOL WINAPI SHRegGetBoolValueFromHKCUHKLM(PCWSTR pszKey, PCWSTR pszValue, BOOL fDefault);
+CHAR WINAPI SHStripMneumonicA(LPSTR pszMenu);
+WCHAR WINAPI SHStripMneumonicW(LPWSTR pszMenu);
+int WINAPI SHUnicodeToUnicode(PCWSTR pwzSrc, PWSTR pwzDst, int cwchBuf);
+PWSTR WINAPI StrChrNW(PCWSTR pszStart, WCHAR wMatch, UINT cchMax);
+int WINAPI StrCmpCA(LPCSTR pszStr1, LPCSTR pszStr2);
+int WINAPI StrCmpCW(LPCWSTR pszStr1, LPCWSTR pszStr2);
+int WINAPI StrCmpICA(LPCSTR pszStr1, LPCSTR pszStr2);
+int WINAPI StrCmpICW(LPCWSTR pszStr1, LPCWSTR pszStr2);
+int WINAPI StrCmpNCA(LPCSTR pszStr1, LPCSTR pszStr2, int nChar);
+int WINAPI StrCmpNCW(LPCWSTR pszStr1, LPCWSTR pszStr2, int nChar);
+int WINAPI StrCmpNICA(LPCSTR pszStr1, LPCSTR pszStr2, int nChar);
+int WINAPI StrCmpNICW(LPCWSTR pszStr1, LPCWSTR pszStr2, int nChar);
+HRESULT WINAPI UrlFixupW(PCWSTR pcszUrl, PWSTR pszTranslatedUrl, DWORD cchMax);
+
+/* TODO: LiberNT does not implement the functions below yet */
+HRESULT IStream_Copy(IStream *pstmFrom, IStream *pstmTo, DWORD cb);
+HRESULT IStream_ReadStr(IStream *pstm, PWSTR *ppsz);
+HRESULT IStream_WriteStr(IStream *pstm, PCWSTR psz);
+BOOL SHCreateThreadWithHandle(LPTHREAD_START_ROUTINE pfnThreadProc, void *pData, SHCT_FLAGS flags, LPTHREAD_START_ROUTINE pfnCallback, HANDLE *pHandle);
+DWORD SHGetAssocKeys(IQueryAssociations *pqa, HKEY *rgKeys, DWORD cKeys);
+PWSTR StrChrNIW(PCWSTR pszStart, WCHAR wMatch, UINT cchMax);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define QITABENTMULTI2Cthis, Ifoo, Iimpl) { (IID *) & Ifoo, OFFSETOFCLASS(Iimpl, Cthis) }
+#define SHAnsiToTCharszSrc, szDest, cchSize) SHAnsiToAnsi(szSrc, szDest, cchSize)
+#define SHTCharToAnsiszSrc, szDest, cchSize) SHAnsiToAnsi(szSrc, szDest, cchSize)
+#define SHTCharToUnicodeszSrc, wzDest, cchSize) SHAnsiToUnicode(szSrc, wzDest, cchSize)
+#define SHUnicodeToTCharwzSrc, szDest, cchSize) SHUnicodeToAnsi(wzSrc, szDest, cchSize)
+#define STATIC_CASTtyp) static_cast < typ >
+
+#define QITABENTMULTI2Cthis, Ifoo, Iimpl) { (IID *) & Ifoo, OFFSETOFCLASS(Iimpl, Cthis) }
+#define SHAnsiToTCharszSrc, szDest, cchSize) SHAnsiToAnsi(szSrc, szDest, cchSize)
+#define SHTCharToAnsiszSrc, szDest, cchSize) SHAnsiToAnsi(szSrc, szDest, cchSize)
+#define SHTCharToUnicodeszSrc, wzDest, cchSize) SHAnsiToUnicode(szSrc, wzDest, cchSize)
+#define SHUnicodeToTCharwzSrc, szDest, cchSize) SHUnicodeToAnsi(wzSrc, szDest, cchSize)
+#define STATIC_CASTtyp) static_cast < typ >
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+long WINAPI SHGlobalCounterDecrement(const SHGLOBALCOUNTER id);
+LSTATUS WINAPI SHRegGetValueFromHKCUHKLM(PCWSTR pwszKey, PCWSTR pwszValue, SRRF srrfFlags, DWORD *pdwType, void *pvData, DWORD *pcbData);
+LSTATUS WINAPI SHRegSetValue(HKEY hkey, LPCWSTR pszSubKey, LPCWSTR pszValue, SRRF srrfFlags, DWORD dwType, LPCVOID pvData, DWORD cbData);
+
 #ifdef __cplusplus
 }
 #endif

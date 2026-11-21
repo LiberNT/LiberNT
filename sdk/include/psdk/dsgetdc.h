@@ -259,4 +259,24 @@ DWORD WINAPI DsValidateSubnetNameW(LPCWSTR);
 #define DS_WS_FLAG 0x00002000
 #endif
 
+#define _DSGETDC_ 0
+#define DS_DIRECTORY_SERVICE_ALL_VERSIONS 0x6E80010
+#define DS_DOMAIN_VALID_FLAGS 0x3F
+#ifdef UNICODE
+#define DsDeregisterDnsHostRecords DsDeregisterDnsHostRecordsW
+#else
+#define DsDeregisterDnsHostRecords DsDeregisterDnsHostRecordsA
+#endif
+#define DSGETDCAPI DECLSPEC_IMPORT
+#ifdef UNICODE
+#define PDOMAIN_CONTROLLER_INFO PDOMAIN_CONTROLLER_INFOW
+#else
+#define PDOMAIN_CONTROLLER_INFO PDOMAIN_CONTROLLER_INFOA
+#endif
+#ifdef UNICODE
+#define PDS_DOMAIN_TRUSTS PDS_DOMAIN_TRUSTSW
+#else
+#define PDS_DOMAIN_TRUSTS PDS_DOMAIN_TRUSTSA
+#endif
+
 #endif /* __WINE_DSGETDC_H */

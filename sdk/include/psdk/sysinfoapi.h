@@ -199,9 +199,33 @@ typedef enum DEVELOPER_DRIVE_ENABLEMENT_STATE {
 #ifdef __cplusplus
 extern "C" {
 #endif
-BOOL WINAPI GetLogicalProcessorInformation(PSYSTEM_LOGICAL_PROCESSOR_INFORMATION Buffer, PDWORD ReturnedLength);
 BOOL WINAPI DnsHostnameToComputerNameExW(LPCWSTR Hostname, LPWSTR ComputerName, LPDWORD nSize);
+BOOL WINAPI GetLogicalProcessorInformation(PSYSTEM_LOGICAL_PROCESSOR_INFORMATION Buffer, PDWORD ReturnedLength);
 BOOL WINAPI GetProcessorSystemCycleTime(USHORT Group, PSYSTEM_PROCESSOR_CYCLE_TIME_INFORMATION Buffer, PDWORD ReturnedLength);
+#ifdef __cplusplus
+}
+#endif
+
+#define NOT_BUILD_WINDOWS_DEPRECATE 0
+#define SCEX2_ALT_NETBIOS_NAME 0x00000001
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+HRESULT WINAPI GetIntegratedDisplaySize(double *sizeInInches);
+BOOL WINAPI GetPhysicallyInstalledSystemMemory(PULONGLONG TotalMemoryInKilobytes);
+
+/* TODO: LiberNT does not implement the functions below yet */
+DEVELOPER_DRIVE_ENABLEMENT_STATE GetDeveloperDriveEnablementState(void);
+BOOL GetOsManufacturingMode(PBOOL pbEnabled);
+BOOL GetSystemLeapSecondInformation(PBOOL Enabled, PDWORD Flags);
+BOOL GetSystemTimeAdjustmentPrecise(PDWORD64 lpTimeAdjustment, PDWORD64 lpTimeIncrement, PBOOL lpTimeAdjustmentDisabled);
+BOOL InstallELAMCertificateInfo(HANDLE ELAMFile);
+BOOL IsUserCetAvailableInEnvironment(DWORD UserCetEnvironment);
+BOOL SetComputerNameEx2W(COMPUTER_NAME_FORMAT NameType, DWORD Flags, LPCWSTR lpBuffer);
+BOOL SetSystemTimeAdjustmentPrecise(DWORD64 dwTimeAdjustment, BOOL bTimeAdjustmentDisabled);
+
 #ifdef __cplusplus
 }
 #endif

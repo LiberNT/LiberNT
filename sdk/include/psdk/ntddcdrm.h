@@ -593,4 +593,6 @@ typedef enum _MEDIA_BLANK_TYPE {
     MediaBlankTypeEraseLastSession = 6
 } MEDIA_BLANK_TYPE, *PMEDIA_BLANK_TYPE;
 
+#define OBSOLETE_IOCTL_CDROM_GET_CONTROL 0x24034
+
 #endif /* _NTDDCDRM_ */

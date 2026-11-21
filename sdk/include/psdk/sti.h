@@ -322,6 +322,22 @@ DECLARE_INTERFACE_(IStillImageW, IUnknown)
 
 typedef DWORD STI_RAW_CONTROL_CODE;
 
+typedef struct _ERROR_INFOW {
+  DWORD dwSize;
+  DWORD dwGenericError;
+  DWORD dwVendorError;
+  WCHAR szExtendedErrorText[255];
+} STI_ERROR_INFOW, *PSTI_ERROR_INFOW;
+
+typedef struct _STI_DEVICE_STATUS {
+  DWORD dwSize;
+  DWORD StatusMask;
+  DWORD dwOnlineState;
+  DWORD dwHardwareStatusCode;
+  DWORD dwEventHandlingState;
+  DWORD dwPollingInterval;
+} STI_DEVICE_STATUS, *PSTI_DEVICE_STATUS;
+
 typedef struct _STI_WIA_DEVICE_INFORMATIONW {
   DWORD dwSize;
   STI_DEVICE_TYPE DeviceType;
@@ -337,22 +353,6 @@ typedef struct _STI_WIA_DEVICE_INFORMATIONW {
   LPWSTR pszServer;
 } STI_WIA_DEVICE_INFORMATIONW, *PSTI_WIA_DEVICE_INFORMATIONW;
 
-typedef struct _STI_DEVICE_STATUS {
-  DWORD dwSize;
-  DWORD StatusMask;
-  DWORD dwOnlineState;
-  DWORD dwHardwareStatusCode;
-  DWORD dwEventHandlingState;
-  DWORD dwPollingInterval;
-} STI_DEVICE_STATUS, *PSTI_DEVICE_STATUS;
-
-typedef struct _ERROR_INFOW {
-  DWORD dwSize;
-  DWORD dwGenericError;
-  DWORD dwVendorError;
-  WCHAR szExtendedErrorText[255];
-} STI_ERROR_INFOW, *PSTI_ERROR_INFOW;
-
 typedef struct _STISUBSCRIBE {
   DWORD dwSize;
   DWORD dwFlags;
@@ -361,5 +361,131 @@ typedef struct _STISUBSCRIBE {
   HANDLE hEvent;
   UINT uiNotificationMessage;
 } STISUBSCRIBE, *LPSTISUBSCRIBE;
+
+#define _STICOM_ 0
+#define DLLEXP 0
+#define GET_STIDCOMMON_CAPSdwGenericCaps) LOWORD(dwGenericCaps)
+#define GET_STIVENDOR_CAPSdwGenericCaps) HIWORD(dwGenericCaps)
+#define GET_STIVER_MAJORdwVersion) (HIWORD(dwVersion) & ~STI_VERSION_FLAG_MASK)
+#define GET_STIVER_MINORdwVersion) LOWORD(dwVersion)
+#define IID_IStillImage 0
+#define IStiDevice_AddRefp) (p) -> lpVtbl -> AddRef(p)
+#define IStiDevice_DeviceResetp) (p) -> lpVtbl -> DeviceReset(p)
+#define IStiDevice_Diagnosticp, a) (p) -> lpVtbl -> Diagnostic(p, a)
+#define IStiDevice_Escapep, a, b, c, d, e, f) (p) -> lpVtbl -> Escape(p, a, b, c, d, e, f)
+#define IStiDevice_GetCapabilitiesp, a) (p) -> lpVtbl -> GetCapabilities(p, a)
+#define IStiDevice_GetLastErrorp, a) (p) -> lpVtbl -> GetLastError(p, a)
+#define IStiDevice_GetLastErrorInfop, a) (p) -> lpVtbl -> GetLastErrorInfo(p, a)
+#define IStiDevice_GetNotificationDatap, a) (p) -> lpVtbl -> GetNotificationData(p, a)
+#define IStiDevice_GetStatusp, a) (p) -> lpVtbl -> GetStatus(p, a)
+#define IStiDevice_Initializep, a, b, c, d) (p) -> lpVtbl -> Initialize(p, a, b, c, d)
+#define IStiDevice_LockDevicep, a) (p) -> lpVtbl -> LockDevice(p, a)
+#define IStiDevice_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
+#define IStiDevice_RawReadCommandp, a, b, c) (p) -> lpVtbl -> RawReadCommand(p, a, b, c)
+#define IStiDevice_RawReadDatap, a, b, c) (p) -> lpVtbl -> RawReadData(p, a, b, c)
+#define IStiDevice_RawWriteCommandp, a, b, c) (p) -> lpVtbl -> RawWriteCommand(p, a, b, c)
+#define IStiDevice_RawWriteDatap, a, b, c) (p) -> lpVtbl -> RawWriteData(p, a, b, c)
+#define IStiDevice_Releasep) (p) -> lpVtbl -> Release(p)
+#define IStiDevice_Subscribep, a) (p) -> lpVtbl -> Subscribe(p, a)
+#define IStiDevice_UnLockDevicep) (p) -> lpVtbl -> UnLockDevice(p)
+#define IStiDevice_UnSubscribep) (p) -> lpVtbl -> UnSubscribe(p)
+#ifdef UNICODE
+#define IStillImage IStillImageW
+#else
+#define IStillImage IStillImageA
+#endif
+#define IStillImageVtbl IStillImageWVtbl
+#define STI_ADD_DEVICE_BROADCAST_ACTION 0
+#define STI_ADD_DEVICE_BROADCAST_STRING "STI\\" STI_ADD_DEVICE_BROADCAST_ACTION "\\%s"
+#define STI_GENCAP_COMMON_MASK ((DWORD)0xFF)
+#define STI_REMOVE_DEVICE_BROADCAST_ACTION "Removal"
+#define STI_REMOVE_DEVICE_BROADCAST_STRING "STI\\" STI_REMOVE_DEVICE_BROADCAST_ACTION "\\%s"
+#define STI_VERSION_3 0x1000003
+
+typedef struct IStiDeviceVtbl IStiDeviceVtbl;
+
+struct IStiDevice
+{
+    struct IStiDeviceVtbl *lpVtbl;
+};
+
+typedef struct IStillImageWVtbl IStillImageWVtbl;
+
+typedef struct IStiDevice *LPSTILLIMAGEDEVICE;
+
+typedef PSTI_WIA_DEVICE_INFORMATIONW PSTI_WIA_DEVICE_INFORMATION;
+
+typedef STI_ERROR_INFOW STI_ERROR_INFO;
+
+struct _STI_DIAG
+{
+    DWORD dwSize;
+    DWORD dwBasicDiagCode;
+    DWORD dwVendorDiagCode;
+    DWORD dwStatusMask;
+    STI_ERROR_INFO sErrorInfo;
+};
+
+typedef struct _STI_DIAG *LPSTI_DIAG;
+
+typedef LPSTI_DIAG LPDIAG;
+
+typedef STI_ERROR_INFO *PSTI_ERROR_INFO;
+
+typedef struct _STI_DIAG STI_DIAG;
+
+typedef STI_DIAG DIAG;
+
+typedef STI_WIA_DEVICE_INFORMATIONW STI_WIA_DEVICE_INFORMATION;
+
+#define GET_STIDCOMMON_CAPSdwGenericCaps) LOWORD(dwGenericCaps)
+#define GET_STIVENDOR_CAPSdwGenericCaps) HIWORD(dwGenericCaps)
+#define GET_STIVER_MAJORdwVersion) (HIWORD(dwVersion) & ~STI_VERSION_FLAG_MASK)
+#define GET_STIVER_MINORdwVersion) LOWORD(dwVersion)
+#define IStiDevice_AddRefp) (p) -> lpVtbl -> AddRef(p)
+#define IStiDevice_DeviceResetp) (p) -> lpVtbl -> DeviceReset(p)
+#define IStiDevice_Diagnosticp, a) (p) -> lpVtbl -> Diagnostic(p, a)
+#define IStiDevice_Escapep, a, b, c, d, e, f) (p) -> lpVtbl -> Escape(p, a, b, c, d, e, f)
+#define IStiDevice_GetCapabilitiesp, a) (p) -> lpVtbl -> GetCapabilities(p, a)
+#define IStiDevice_GetLastErrorp, a) (p) -> lpVtbl -> GetLastError(p, a)
+#define IStiDevice_GetLastErrorInfop, a) (p) -> lpVtbl -> GetLastErrorInfo(p, a)
+#define IStiDevice_GetNotificationDatap, a) (p) -> lpVtbl -> GetNotificationData(p, a)
+#define IStiDevice_GetStatusp, a) (p) -> lpVtbl -> GetStatus(p, a)
+#define IStiDevice_Initializep, a, b, c, d) (p) -> lpVtbl -> Initialize(p, a, b, c, d)
+#define IStiDevice_LockDevicep, a) (p) -> lpVtbl -> LockDevice(p, a)
+#define IStiDevice_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
+#define IStiDevice_RawReadCommandp, a, b, c) (p) -> lpVtbl -> RawReadCommand(p, a, b, c)
+#define IStiDevice_RawReadDatap, a, b, c) (p) -> lpVtbl -> RawReadData(p, a, b, c)
+#define IStiDevice_RawWriteCommandp, a, b, c) (p) -> lpVtbl -> RawWriteCommand(p, a, b, c)
+#define IStiDevice_RawWriteDatap, a, b, c) (p) -> lpVtbl -> RawWriteData(p, a, b, c)
+#define IStiDevice_Releasep) (p) -> lpVtbl -> Release(p)
+#define IStiDevice_Subscribep, a) (p) -> lpVtbl -> Subscribe(p, a)
+#define IStiDevice_UnLockDevicep) (p) -> lpVtbl -> UnLockDevice(p)
+#define IStiDevice_UnSubscribep) (p) -> lpVtbl -> UnSubscribe(p)
+
+#define GET_STIDCOMMON_CAPSdwGenericCaps) LOWORD(dwGenericCaps)
+#define GET_STIVENDOR_CAPSdwGenericCaps) HIWORD(dwGenericCaps)
+#define GET_STIVER_MAJORdwVersion) (HIWORD(dwVersion) & ~STI_VERSION_FLAG_MASK)
+#define GET_STIVER_MINORdwVersion) LOWORD(dwVersion)
+#define IStiDevice_AddRefp) (p) -> lpVtbl -> AddRef(p)
+#define IStiDevice_DeviceResetp) (p) -> lpVtbl -> DeviceReset(p)
+#define IStiDevice_Diagnosticp, a) (p) -> lpVtbl -> Diagnostic(p, a)
+#define IStiDevice_Escapep, a, b, c, d, e, f) (p) -> lpVtbl -> Escape(p, a, b, c, d, e, f)
+#define IStiDevice_GetCapabilitiesp, a) (p) -> lpVtbl -> GetCapabilities(p, a)
+#define IStiDevice_GetLastErrorp, a) (p) -> lpVtbl -> GetLastError(p, a)
+#define IStiDevice_GetLastErrorInfop, a) (p) -> lpVtbl -> GetLastErrorInfo(p, a)
+#define IStiDevice_GetNotificationDatap, a) (p) -> lpVtbl -> GetNotificationData(p, a)
+#define IStiDevice_GetStatusp, a) (p) -> lpVtbl -> GetStatus(p, a)
+#define IStiDevice_Initializep, a, b, c, d) (p) -> lpVtbl -> Initialize(p, a, b, c, d)
+#define IStiDevice_LockDevicep, a) (p) -> lpVtbl -> LockDevice(p, a)
+#define IStiDevice_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
+#define IStiDevice_RawReadCommandp, a, b, c) (p) -> lpVtbl -> RawReadCommand(p, a, b, c)
+#define IStiDevice_RawReadDatap, a, b, c) (p) -> lpVtbl -> RawReadData(p, a, b, c)
+#define IStiDevice_RawWriteCommandp, a, b, c) (p) -> lpVtbl -> RawWriteCommand(p, a, b, c)
+#define IStiDevice_RawWriteDatap, a, b, c) (p) -> lpVtbl -> RawWriteData(p, a, b, c)
+#define IStiDevice_Releasep) (p) -> lpVtbl -> Release(p)
+#define IStiDevice_Subscribep, a) (p) -> lpVtbl -> Subscribe(p, a)
+#define IStiDevice_UnLockDevicep) (p) -> lpVtbl -> UnLockDevice(p)
+#define IStiDevice_UnSubscribep) (p) -> lpVtbl -> UnSubscribe(p)
 
 #endif /* __WINE_STI_H */

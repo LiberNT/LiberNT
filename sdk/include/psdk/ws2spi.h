@@ -1129,3 +1129,6 @@ NSPStartup(
 #ifdef __cplusplus
 }
 #endif
+
+#define _WINSOCK2SPI_ 0
+

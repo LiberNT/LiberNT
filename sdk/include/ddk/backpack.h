@@ -20,4 +20,27 @@ typedef struct _THROTTLING_STATE
     }                                                  \
 }
 
+#define RxInitializeBackoffPackage)
+#define RxTerminateThrottlingpBP) ((pBP) -> CurrentIncrement = 0)
+#define RxUninitializeBackoffPackage)
+#define RxUninitializeBackPackpBP) ()
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+void RxInitiateOrContinueThrottling(PTHROTTLING_STATE pBP);
+BOOLEAN RxShouldRequestBeThrottled(PTHROTTLING_STATE pBP);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define RxTerminateThrottlingpBP) ((pBP) -> CurrentIncrement = 0)
+#define RxUninitializeBackPackpBP) ()
+
+#define RxTerminateThrottlingpBP) ((pBP) -> CurrentIncrement = 0)
+#define RxUninitializeBackPackpBP) ()
+
 #endif

@@ -430,4 +430,192 @@ DECLARE_INTERFACE_(INetCfgSysPrep, IUnknown)
 #define INetCfgSysPrep_HrSetupSetFirstMultiSzField(p,a,b,c) (p)->lpVtbl->HrSetupSetFirstMultiSzField(p,a,b,c)
 #endif
 
+#define NETCFG_CLIENT_CID_MS_MSClient 0
+#define NETCFG_E_DUPLICATE_INSTANCEID (-2147180501)
+#define NETCFG_E_VMSWITCH_ACTIVE_OVER_ADAPTER (-2147180502)
+#define NETCFG_SERVICE_CID_MS_NETBIOS TEXT("ms_netbios")
+#define NETCFG_SERVICE_CID_MS_PSCHED TEXT("ms_pschedpc")
+#define NETCFG_SERVICE_CID_MS_SERVER TEXT("ms_server")
+#define NETCFG_SERVICE_CID_MS_WLBS TEXT("ms_wlbs")
+#define NETCFG_TRANS_CID_MS_APPLETALK TEXT("ms_appletalk")
+#define NETCFG_TRANS_CID_MS_NETBEUI TEXT("ms_netbeui")
+#define NETCFG_TRANS_CID_MS_NETMON TEXT("ms_netmon")
+#define NETCFG_TRANS_CID_MS_NWIPX TEXT("ms_nwipx")
+#define NETCFG_TRANS_CID_MS_NWSPX TEXT("ms_nwspx")
+#define NETCFG_TRANS_CID_MS_TCPIP TEXT("ms_tcpip")
+
+struct IEnumNetCfgBindingInterfaceVtbl
+{
+    HRESULT (WINAPI *QueryInterface)(IEnumNetCfgBindingInterface *, const IID *const , void **);
+    ULONG (WINAPI *AddRef)(IEnumNetCfgBindingInterface *);
+    ULONG (WINAPI *Release)(IEnumNetCfgBindingInterface *);
+    HRESULT (WINAPI *Next)(IEnumNetCfgBindingInterface *, ULONG, INetCfgBindingInterface **, ULONG *);
+    HRESULT (WINAPI *Skip)(IEnumNetCfgBindingInterface *, ULONG);
+    HRESULT (WINAPI *Reset)(IEnumNetCfgBindingInterface *);
+    HRESULT (WINAPI *Clone)(IEnumNetCfgBindingInterface *, IEnumNetCfgBindingInterface **);
+};
+
+struct IEnumNetCfgBindingPathVtbl
+{
+    HRESULT (WINAPI *QueryInterface)(IEnumNetCfgBindingPath *, const IID *const , void **);
+    ULONG (WINAPI *AddRef)(IEnumNetCfgBindingPath *);
+    ULONG (WINAPI *Release)(IEnumNetCfgBindingPath *);
+    HRESULT (WINAPI *Next)(IEnumNetCfgBindingPath *, ULONG, INetCfgBindingPath **, ULONG *);
+    HRESULT (WINAPI *Skip)(IEnumNetCfgBindingPath *, ULONG);
+    HRESULT (WINAPI *Reset)(IEnumNetCfgBindingPath *);
+    HRESULT (WINAPI *Clone)(IEnumNetCfgBindingPath *, IEnumNetCfgBindingPath **);
+};
+
+struct IEnumNetCfgComponentVtbl
+{
+    HRESULT (WINAPI *QueryInterface)(IEnumNetCfgComponent *, const IID *const , void **);
+    ULONG (WINAPI *AddRef)(IEnumNetCfgComponent *);
+    ULONG (WINAPI *Release)(IEnumNetCfgComponent *);
+    HRESULT (WINAPI *Next)(IEnumNetCfgComponent *, ULONG, INetCfgComponent **, ULONG *);
+    HRESULT (WINAPI *Skip)(IEnumNetCfgComponent *, ULONG);
+    HRESULT (WINAPI *Reset)(IEnumNetCfgComponent *);
+    HRESULT (WINAPI *Clone)(IEnumNetCfgComponent *, IEnumNetCfgComponent **);
+};
+
+struct INetCfgBindingInterfaceVtbl
+{
+    HRESULT (WINAPI *QueryInterface)(INetCfgBindingInterface *, const IID *const , void **);
+    ULONG (WINAPI *AddRef)(INetCfgBindingInterface *);
+    ULONG (WINAPI *Release)(INetCfgBindingInterface *);
+    HRESULT (WINAPI *GetName)(INetCfgBindingInterface *, LPWSTR *);
+    HRESULT (WINAPI *GetUpperComponent)(INetCfgBindingInterface *, INetCfgComponent **);
+    HRESULT (WINAPI *GetLowerComponent)(INetCfgBindingInterface *, INetCfgComponent **);
+};
+
+struct INetCfgBindingPathVtbl
+{
+    HRESULT (WINAPI *QueryInterface)(INetCfgBindingPath *, const IID *const , void **);
+    ULONG (WINAPI *AddRef)(INetCfgBindingPath *);
+    ULONG (WINAPI *Release)(INetCfgBindingPath *);
+    HRESULT (WINAPI *IsSamePathAs)(INetCfgBindingPath *, INetCfgBindingPath *);
+    HRESULT (WINAPI *IsSubPathOf)(INetCfgBindingPath *, INetCfgBindingPath *);
+    HRESULT (WINAPI *IsEnabled)(INetCfgBindingPath *);
+    HRESULT (WINAPI *Enable)(INetCfgBindingPath *, BOOL);
+    HRESULT (WINAPI *GetPathToken)(INetCfgBindingPath *, LPWSTR *);
+    HRESULT (WINAPI *GetOwner)(INetCfgBindingPath *, INetCfgComponent **);
+    HRESULT (WINAPI *GetDepth)(INetCfgBindingPath *, ULONG *);
+    HRESULT (WINAPI *EnumBindingInterfaces)(INetCfgBindingPath *, IEnumNetCfgBindingInterface **);
+};
+
+typedef struct INetCfgClassSetup2 INetCfgClassSetup2;
+
+struct INetCfgClassSetup2Vtbl
+{
+    HRESULT (WINAPI *QueryInterface)(INetCfgClassSetup2 *, const IID *const , void **);
+    ULONG (WINAPI *AddRef)(INetCfgClassSetup2 *);
+    ULONG (WINAPI *Release)(INetCfgClassSetup2 *);
+    HRESULT (WINAPI *SelectAndInstall)(INetCfgClassSetup2 *, HWND, OBO_TOKEN *, INetCfgComponent **);
+    HRESULT (WINAPI *Install)(INetCfgClassSetup2 *, LPCWSTR, OBO_TOKEN *, DWORD, DWORD, LPCWSTR, LPCWSTR, INetCfgComponent **);
+    HRESULT (WINAPI *DeInstall)(INetCfgClassSetup2 *, INetCfgComponent *, OBO_TOKEN *, LPWSTR *);
+    HRESULT (WINAPI *UpdateNonEnumeratedComponent)(INetCfgClassSetup2 *, INetCfgComponent *, DWORD, DWORD);
+};
+
+struct INetCfgClassSetupVtbl
+{
+    HRESULT (WINAPI *QueryInterface)(INetCfgClassSetup *, const IID *const , void **);
+    ULONG (WINAPI *AddRef)(INetCfgClassSetup *);
+    ULONG (WINAPI *Release)(INetCfgClassSetup *);
+    HRESULT (WINAPI *SelectAndInstall)(INetCfgClassSetup *, HWND, OBO_TOKEN *, INetCfgComponent **);
+    HRESULT (WINAPI *Install)(INetCfgClassSetup *, LPCWSTR, OBO_TOKEN *, DWORD, DWORD, LPCWSTR, LPCWSTR, INetCfgComponent **);
+    HRESULT (WINAPI *DeInstall)(INetCfgClassSetup *, INetCfgComponent *, OBO_TOKEN *, LPWSTR *);
+};
+
+struct INetCfgClassVtbl
+{
+    HRESULT (WINAPI *QueryInterface)(INetCfgClass *, const IID *const , void **);
+    ULONG (WINAPI *AddRef)(INetCfgClass *);
+    ULONG (WINAPI *Release)(INetCfgClass *);
+    HRESULT (WINAPI *FindComponent)(INetCfgClass *, LPCWSTR, INetCfgComponent **);
+    HRESULT (WINAPI *EnumComponents)(INetCfgClass *, IEnumNetCfgComponent **);
+};
+
+struct INetCfgComponentBindingsVtbl
+{
+    HRESULT (WINAPI *QueryInterface)(INetCfgComponentBindings *, const IID *const , void **);
+    ULONG (WINAPI *AddRef)(INetCfgComponentBindings *);
+    ULONG (WINAPI *Release)(INetCfgComponentBindings *);
+    HRESULT (WINAPI *BindTo)(INetCfgComponentBindings *, INetCfgComponent *);
+    HRESULT (WINAPI *UnbindFrom)(INetCfgComponentBindings *, INetCfgComponent *);
+    HRESULT (WINAPI *SupportsBindingInterface)(INetCfgComponentBindings *, DWORD, LPCWSTR);
+    HRESULT (WINAPI *IsBoundTo)(INetCfgComponentBindings *, INetCfgComponent *);
+    HRESULT (WINAPI *IsBindableTo)(INetCfgComponentBindings *, INetCfgComponent *);
+    HRESULT (WINAPI *EnumBindingPaths)(INetCfgComponentBindings *, DWORD, IEnumNetCfgBindingPath **);
+    HRESULT (WINAPI *MoveBefore)(INetCfgComponentBindings *, INetCfgBindingPath *, INetCfgBindingPath *);
+    HRESULT (WINAPI *MoveAfter)(INetCfgComponentBindings *, INetCfgBindingPath *, INetCfgBindingPath *);
+};
+
+struct INetCfgComponentVtbl
+{
+    HRESULT (WINAPI *QueryInterface)(INetCfgComponent *, const IID *const , void **);
+    ULONG (WINAPI *AddRef)(INetCfgComponent *);
+    ULONG (WINAPI *Release)(INetCfgComponent *);
+    HRESULT (WINAPI *GetDisplayName)(INetCfgComponent *, LPWSTR *);
+    HRESULT (WINAPI *SetDisplayName)(INetCfgComponent *, LPCWSTR);
+    HRESULT (WINAPI *GetHelpText)(INetCfgComponent *, LPWSTR *);
+    HRESULT (WINAPI *GetId)(INetCfgComponent *, LPWSTR *);
+    HRESULT (WINAPI *GetCharacteristics)(INetCfgComponent *, LPDWORD);
+    HRESULT (WINAPI *GetInstanceGuid)(INetCfgComponent *, GUID *);
+    HRESULT (WINAPI *GetPnpDevNodeId)(INetCfgComponent *, LPWSTR *);
+    HRESULT (WINAPI *GetClassGuid)(INetCfgComponent *, GUID *);
+    HRESULT (WINAPI *GetBindName)(INetCfgComponent *, LPWSTR *);
+    HRESULT (WINAPI *GetDeviceStatus)(INetCfgComponent *, ULONG *);
+    HRESULT (WINAPI *OpenParamKey)(INetCfgComponent *, HKEY *);
+    HRESULT (WINAPI *RaisePropertyUi)(INetCfgComponent *, HWND, DWORD, IUnknown *);
+};
+
+struct INetCfgLockVtbl
+{
+    HRESULT (WINAPI *QueryInterface)(INetCfgLock *, const IID *const , void **);
+    ULONG (WINAPI *AddRef)(INetCfgLock *);
+    ULONG (WINAPI *Release)(INetCfgLock *);
+    HRESULT (WINAPI *AcquireWriteLock)(INetCfgLock *, DWORD, LPCWSTR, LPWSTR *);
+    HRESULT (WINAPI *ReleaseWriteLock)(INetCfgLock *);
+    HRESULT (WINAPI *IsWriteLocked)(INetCfgLock *, LPWSTR *);
+};
+
+struct INetCfgSysPrepVtbl
+{
+    HRESULT (WINAPI *QueryInterface)(INetCfgSysPrep *, const IID *const , void **);
+    ULONG (WINAPI *AddRef)(INetCfgSysPrep *);
+    ULONG (WINAPI *Release)(INetCfgSysPrep *);
+    HRESULT (WINAPI *HrSetupSetFirstDword)(INetCfgSysPrep *, LPCWSTR, LPCWSTR, DWORD);
+    HRESULT (WINAPI *HrSetupSetFirstString)(INetCfgSysPrep *, LPCWSTR, LPCWSTR, LPCWSTR);
+    HRESULT (WINAPI *HrSetupSetFirstStringAsBool)(INetCfgSysPrep *, LPCWSTR, LPCWSTR, BOOL);
+    HRESULT (WINAPI *HrSetupSetFirstMultiSzField)(INetCfgSysPrep *, LPCWSTR, LPCWSTR, LPCWSTR);
+};
+
+struct INetCfgVtbl
+{
+    HRESULT (WINAPI *QueryInterface)(INetCfg *, const IID *const , void **);
+    ULONG (WINAPI *AddRef)(INetCfg *);
+    ULONG (WINAPI *Release)(INetCfg *);
+    HRESULT (WINAPI *Initialize)(INetCfg *, PVOID);
+    HRESULT (WINAPI *Uninitialize)(INetCfg *);
+    HRESULT (WINAPI *Apply)(INetCfg *);
+    HRESULT (WINAPI *Cancel)(INetCfg *);
+    HRESULT (WINAPI *EnumComponents)(INetCfg *, const GUID *, IEnumNetCfgComponent **);
+    HRESULT (WINAPI *FindComponent)(INetCfg *, LPCWSTR, INetCfgComponent **);
+    HRESULT (WINAPI *QueryNetCfgClass)(INetCfg *, const GUID *, const IID *const , void **);
+};
+
+enum tagENUM_BINDING_PATHS_FLAGS
+{
+
+};
+
+enum tagNCRP_FLAGS
+{
+
+};
+
+enum tagSUPPORTS_BINDING_INTERFACE_FLAGS
+{
+
+};
+
 #endif

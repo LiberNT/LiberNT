@@ -25,3 +25,14 @@ interface IInputPaneInterop : IInspectable
 {
     HRESULT GetForWindow([in] HWND window, [in] REFIID riid, [out, retval, iid_is(riid)] void **inputpane);
 }
+
+cpp_quote("struct IInputPaneInteropVtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(IInputPaneInterop *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(IInputPaneInterop *);")
+cpp_quote("    ULONG (WINAPI *Release)(IInputPaneInterop *);")
+cpp_quote("    HRESULT (WINAPI *GetIids)(IInputPaneInterop *, ULONG *, IID **);")
+cpp_quote("    HRESULT (WINAPI *GetRuntimeClassName)(IInputPaneInterop *, int *);")
+cpp_quote("    HRESULT (WINAPI *GetTrustLevel)(IInputPaneInterop *, int *);")
+cpp_quote("    HRESULT (WINAPI *GetForWindow)(IInputPaneInterop *, HWND, const IID *const , void **);")
+cpp_quote("};")

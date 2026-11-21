@@ -117,3 +117,6 @@ VideoPortGetAgpServices(
 #ifdef __cplusplus
 }
 #endif
+
+#define VIDEOAGP_DEPRECATED 0
+

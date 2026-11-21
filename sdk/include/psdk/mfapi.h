@@ -712,12 +712,6 @@ HRESULT WINAPI MFUnwrapMediaType(IMFMediaType *wrapped, IMFMediaType **original)
 #define MF_METADATATIMESTAMPS_PRESENTATION 0x00000002
 #endif
 
-typedef enum _MFSampleEncryptionProtectionScheme {
-    MF_SAMPLE_ENCRYPTION_PROTECTION_SCHEME_NONE = 0,
-    MF_SAMPLE_ENCRYPTION_PROTECTION_SCHEME_AES_CTR = 1,
-    MF_SAMPLE_ENCRYPTION_PROTECTION_SCHEME_AES_CBC = 2
-} MFSampleEncryptionProtectionScheme;
-
 typedef enum _eAVEncVideoQPMapElementDataType {
     CODEC_API_QP_MAP_INT8 = 0,
     CODEC_API_QP_MAP_INT16 = 1,
@@ -727,6 +721,16 @@ typedef enum _eAVEncVideoQPMapElementDataType {
     CODEC_API_QP_MAP_UINT32 = (-2147483646)
 } eAVEncVideoQPMapElementDataType;
 
+typedef enum _MF_CUSTOM_DECODE_UNIT_TYPE {
+    MF_DECODE_UNIT_NAL = 0,
+    MF_DECODE_UNIT_SEI = 1
+} MF_CUSTOM_DECODE_UNIT_TYPE;
+
+typedef enum _MFDepthMeasurement {
+    DistanceToFocalPlane = 0,
+    DistanceToOpticalCenter = 1
+} MFDepthMeasurement;
+
 typedef enum _MFFrameSourceTypes {
     MFFrameSourceTypes_Color = 1,
     MFFrameSourceTypes_Infrared = 2,
@@ -734,6 +738,12 @@ typedef enum _MFFrameSourceTypes {
     MFFrameSourceTypes_Image = 8,
     MFFrameSourceTypes_Custom = 128
 } MFFrameSourceTypes;
+
+typedef enum _MFSampleEncryptionProtectionScheme {
+    MF_SAMPLE_ENCRYPTION_PROTECTION_SCHEME_NONE = 0,
+    MF_SAMPLE_ENCRYPTION_PROTECTION_SCHEME_AES_CTR = 1,
+    MF_SAMPLE_ENCRYPTION_PROTECTION_SCHEME_AES_CBC = 2
+} MFSampleEncryptionProtectionScheme;
 
 typedef enum _MFVideo3DFormat {
     MFVideo3DSampleFormat_BaseView = 0,
@@ -747,16 +757,6 @@ typedef enum _MFVideo3DSampleFormat {
     MFSampleExtension_3DVideo_Packed = 0
 } MFVideo3DSampleFormat;
 
-typedef enum _MFDepthMeasurement {
-    DistanceToFocalPlane = 0,
-    DistanceToOpticalCenter = 1
-} MFDepthMeasurement;
-
-typedef enum _MF_CUSTOM_DECODE_UNIT_TYPE {
-    MF_DECODE_UNIT_NAL = 0,
-    MF_DECODE_UNIT_SEI = 1
-} MF_CUSTOM_DECODE_UNIT_TYPE;
-
 typedef enum _MFVideoPadFlags {
     MFVideoPadFlag_PAD_TO_None = 0,
     MFVideoPadFlag_PAD_TO_4x3 = 1,
@@ -769,40 +769,11 @@ typedef enum _MFVideoSrcContentHintFlags {
     MFVideoSrcContentHintFlag_235_1 = 2
 } MFVideoSrcContentHintFlags;
 
-typedef struct _MOVE_RECT {
-  POINT SourcePoint;
-  RECT DestRect;
-} MOVE_RECT;
-
 typedef struct _DIRTYRECT_INFO {
   UINT FrameNumber;
   UINT NumDirtyRects;
   RECT DirtyRects[1];
 } DIRTYRECT_INFO;
-
-typedef struct _MOVEREGION_INFO {
-  UINT FrameNumber;
-  UINT NumMoveRegions;
-  MOVE_RECT MoveRegions[1];
-} MOVEREGION_INFO;
-
-typedef struct _ROI_AREA {
-  RECT rect;
-  INT32 QPDelta;
-} ROI_AREA, *PROI_AREA;
-
-typedef struct _MACROBLOCK_DATA {
-  UINT32 flags;
-  INT16 motionVectorX;
-  INT16 motionVectorY;
-  INT32 QPDelta;
-} MACROBLOCK_DATA;
-
-typedef struct _MFSampleExtensionPsnrYuv {
-  FLOAT psnrY;
-  FLOAT psnrU;
-  FLOAT psnrV;
-} MFSampleExtensionPsnrYuv;
 
 typedef struct _inputQPSettings {
   UINT32 minBlockSize;
@@ -814,108 +785,12 @@ typedef struct _inputQPSettings {
   UINT16 step;
 } InputQPSettings;
 
-typedef struct tagDigitalWindowSetting {
-  double OriginX;
-  double OriginY;
-  double WindowSize;
-} DigitalWindowSetting;
-
-typedef struct tagFaceRectInfoBlobHeader {
-  ULONG Size;
-  ULONG Count;
-} FaceRectInfoBlobHeader;
-
-typedef struct tagFaceRectInfo {
-  RECT Region;
-  LONG confidenceLevel;
-} FaceRectInfo;
-
-typedef struct tagFaceCharacterizationBlobHeader {
-  ULONG Size;
-  ULONG Count;
-} FaceCharacterizationBlobHeader;
-
-typedef struct tagFaceCharacterization {
-  ULONG BlinkScoreLeft;
-  ULONG BlinkScoreRight;
-  ULONG FacialExpression;
-  ULONG FacialExpressionScore;
-} FaceCharacterization;
-
-typedef struct tagCapturedMetadataExposureCompensation {
-  UINT64 Flags;
-  INT32 Value;
-} CapturedMetadataExposureCompensation;
-
-typedef struct tagCapturedMetadataISOGains {
-  FLOAT AnalogGain;
-  FLOAT DigitalGain;
-} CapturedMetadataISOGains;
-
-typedef struct tagCapturedMetadataWhiteBalanceGains {
-  FLOAT R;
-  FLOAT G;
-  FLOAT B;
-} CapturedMetadataWhiteBalanceGains;
-
-typedef struct tagMetadataTimeStamps {
-  ULONG Flags;
-  LONGLONG Device;
-  LONGLONG Presentation;
-} MetadataTimeStamps;
-
-typedef struct tagHistogramGrid {
-  ULONG Width;
-  ULONG Height;
-  RECT Region;
-} HistogramGrid;
-
-typedef struct tagHistogramBlobHeader {
-  ULONG Size;
-  ULONG Histograms;
-} HistogramBlobHeader;
-
-typedef struct tagHistogramHeader {
-  ULONG Size;
-  ULONG Bins;
-  ULONG FourCC;
-  ULONG ChannelMasks;
-  HistogramGrid Grid;
-} HistogramHeader;
-
-typedef struct tagHistogramDataHeader {
-  ULONG Size;
-  ULONG ChannelMask;
-  ULONG Linear;
-} HistogramDataHeader;
-
-typedef struct _MFFOLDDOWN_MATRIX {
-  UINT32 cbSize;
-  UINT32 cSrcChannels;
-  UINT32 cDstChannels;
-  UINT32 dwChannelMask;
-  LONG Coeff[64];
-} MFFOLDDOWN_MATRIX;
-
-typedef struct _MT_CUSTOM_VIDEO_PRIMARIES {
-  float fRx;
-  float fRy;
-  float fGx;
-  float fGy;
-  float fBx;
-  float fBy;
-  float fWx;
-  float fWy;
-} MT_CUSTOM_VIDEO_PRIMARIES;
-
-typedef struct _MT_ARBITRARY_HEADER {
-  GUID majortype;
-  GUID subtype;
-  BOOL bFixedSizeSamples;
-  BOOL bTemporalCompression;
-  ULONG lSampleSize;
-  GUID formattype;
-} MT_ARBITRARY_HEADER;
+typedef struct _MACROBLOCK_DATA {
+  UINT32 flags;
+  INT16 motionVectorX;
+  INT16 motionVectorY;
+  INT32 QPDelta;
+} MACROBLOCK_DATA;
 
 typedef struct _MF_FLOAT2 {
   FLOAT x;
@@ -946,11 +821,6 @@ typedef struct _MFCameraExtrinsics {
   MFCameraExtrinsic_CalibratedTransform CalibratedTransforms[1];
 } MFCameraExtrinsics;
 
-typedef struct _MFCameraIntrinsic_PinholeCameraModel {
-  MF_FLOAT2 FocalLength;
-  MF_FLOAT2 PrincipalPoint;
-} MFCameraIntrinsic_PinholeCameraModel;
-
 typedef struct _MFCameraIntrinsic_DistortionModel {
   FLOAT Radial_k1;
   FLOAT Radial_k2;
@@ -958,6 +828,19 @@ typedef struct _MFCameraIntrinsic_DistortionModel {
   FLOAT Tangential_p1;
   FLOAT Tangential_p2;
 } MFCameraIntrinsic_DistortionModel;
+
+typedef struct _MFCameraIntrinsic_PinholeCameraModel {
+  MF_FLOAT2 FocalLength;
+  MF_FLOAT2 PrincipalPoint;
+} MFCameraIntrinsic_PinholeCameraModel;
+
+typedef struct _MFFOLDDOWN_MATRIX {
+  UINT32 cbSize;
+  UINT32 cSrcChannels;
+  UINT32 cDstChannels;
+  UINT32 dwChannelMask;
+  LONG Coeff[64];
+} MFFOLDDOWN_MATRIX;
 
 typedef struct _MFPinholeCameraIntrinsic_IntrinsicModel {
   UINT32 Width;
@@ -970,5 +853,163 @@ typedef struct _MFPinholeCameraIntrinsics {
   UINT32 IntrinsicModelCount;
   MFPinholeCameraIntrinsic_IntrinsicModel IntrinsicModels[1];
 } MFPinholeCameraIntrinsics;
+
+typedef struct _MFSampleExtensionPsnrYuv {
+  FLOAT psnrY;
+  FLOAT psnrU;
+  FLOAT psnrV;
+} MFSampleExtensionPsnrYuv;
+
+typedef struct _MOVE_RECT {
+  POINT SourcePoint;
+  RECT DestRect;
+} MOVE_RECT;
+
+typedef struct _MOVEREGION_INFO {
+  UINT FrameNumber;
+  UINT NumMoveRegions;
+  MOVE_RECT MoveRegions[1];
+} MOVEREGION_INFO;
+
+typedef struct _MT_ARBITRARY_HEADER {
+  GUID majortype;
+  GUID subtype;
+  BOOL bFixedSizeSamples;
+  BOOL bTemporalCompression;
+  ULONG lSampleSize;
+  GUID formattype;
+} MT_ARBITRARY_HEADER;
+
+typedef struct _MT_CUSTOM_VIDEO_PRIMARIES {
+  float fRx;
+  float fRy;
+  float fGx;
+  float fGy;
+  float fBx;
+  float fBy;
+  float fWx;
+  float fWy;
+} MT_CUSTOM_VIDEO_PRIMARIES;
+
+typedef struct _ROI_AREA {
+  RECT rect;
+  INT32 QPDelta;
+} ROI_AREA, *PROI_AREA;
+
+typedef struct tagCapturedMetadataExposureCompensation {
+  UINT64 Flags;
+  INT32 Value;
+} CapturedMetadataExposureCompensation;
+
+typedef struct tagCapturedMetadataISOGains {
+  FLOAT AnalogGain;
+  FLOAT DigitalGain;
+} CapturedMetadataISOGains;
+
+typedef struct tagCapturedMetadataWhiteBalanceGains {
+  FLOAT R;
+  FLOAT G;
+  FLOAT B;
+} CapturedMetadataWhiteBalanceGains;
+
+typedef struct tagDigitalWindowSetting {
+  double OriginX;
+  double OriginY;
+  double WindowSize;
+} DigitalWindowSetting;
+
+typedef struct tagFaceCharacterization {
+  ULONG BlinkScoreLeft;
+  ULONG BlinkScoreRight;
+  ULONG FacialExpression;
+  ULONG FacialExpressionScore;
+} FaceCharacterization;
+
+typedef struct tagFaceCharacterizationBlobHeader {
+  ULONG Size;
+  ULONG Count;
+} FaceCharacterizationBlobHeader;
+
+typedef struct tagFaceRectInfo {
+  RECT Region;
+  LONG confidenceLevel;
+} FaceRectInfo;
+
+typedef struct tagFaceRectInfoBlobHeader {
+  ULONG Size;
+  ULONG Count;
+} FaceRectInfoBlobHeader;
+
+typedef struct tagHistogramBlobHeader {
+  ULONG Size;
+  ULONG Histograms;
+} HistogramBlobHeader;
+
+typedef struct tagHistogramDataHeader {
+  ULONG Size;
+  ULONG ChannelMask;
+  ULONG Linear;
+} HistogramDataHeader;
+
+typedef struct tagHistogramGrid {
+  ULONG Width;
+  ULONG Height;
+  RECT Region;
+} HistogramGrid;
+
+typedef struct tagHistogramHeader {
+  ULONG Size;
+  ULONG Bins;
+  ULONG FourCC;
+  ULONG ChannelMasks;
+  HistogramGrid Grid;
+} HistogramHeader;
+
+typedef struct tagMetadataTimeStamps {
+  ULONG Flags;
+  LONGLONG Device;
+  LONGLONG Presentation;
+} MetadataTimeStamps;
+
+#define _MFVideoRotationFormat_
+#define DEFINE_BINARY_MEDIATYPE_GUIDname, format) DEFINE_GUID(name, format, 0xbf10, 0x48b4, 0xbc, 0x18, 0x59, 0x3d, 0xc1, 0xdb, 0x95, 0xf);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+HRESULT WINAPI MFCreateMFByteStreamWrapper(IMFByteStream *pStream, IMFByteStream **ppStreamWrapper);
+HRESULT WINAPI MFLockWorkQueue(DWORD dwWorkQueue);
+
+/* TODO: LiberNT does not implement the functions below yet */
+HRESULT MFCalculateBitmapImageSize(const BITMAPINFOHEADER *pBMIH, UINT32 cbBufSize, UINT32 *pcbImageSize, BOOL *pbKnown);
+HRESULT MFCombineSamples(IMFSample *pSample, IMFSample *pSampleToAdd, DWORD dwMaxMergedDurationInMS, BOOL *pMerged);
+HRESULT MFConvertColorInfoFromDXVA(MFVIDEOFORMAT *pToFormat, DWORD dwFromDXVA);
+HRESULT MFConvertFromFP16Array(float *pDest, const WORD *pSrc, DWORD dwCount);
+HRESULT MFConvertToFP16Array(WORD *pDest, const float *pSrc, DWORD dwCount);
+HRESULT MFCreateDXGICrossAdapterBuffer(const IID *const riid, IUnknown *punkDevice, IMFMediaType *pMediaType, UINT uSubresource, IMFMediaBuffer **ppBuffer);
+HRESULT MFCreateMediaBufferWrapper(IMFMediaBuffer *pBuffer, DWORD cbOffset, DWORD dwLength, IMFMediaBuffer **ppBuffer);
+HRESULT MFCreateMediaExtensionActivate(PCWSTR szActivatableClassId, IUnknown *pConfiguration, const IID *const riid, LPVOID *ppvObject);
+HRESULT MFCreateMuxStreamAttributes(IMFCollection *pAttributesToMux, IMFAttributes **ppMuxAttribs);
+HRESULT MFCreateMuxStreamMediaType(IMFCollection *pMediaTypesToMux, IMFMediaType **ppMuxMediaType);
+HRESULT MFCreateMuxStreamSample(IMFCollection *pSamplesToMux, IMFSample **ppMuxSample);
+HRESULT MFCreateVideoMediaTypeFromBitMapInfoHeader(const BITMAPINFOHEADER *pbmihBitMapInfoHeader, DWORD dwPixelAspectRatioX, DWORD dwPixelAspectRatioY, MFVideoInterlaceMode InterlaceMode, QWORD VideoFlags, QWORD qwFramesPerSecondNumerator, QWORD qwFramesPerSecondDenominator, DWORD dwMaxBitRate, IMFVideoMediaType **ppIVideoMediaType);
+HRESULT MFCreateVideoMediaTypeFromBitMapInfoHeaderEx(const BITMAPINFOHEADER *pbmihBitMapInfoHeader, UINT32 cbBitMapInfoHeader, DWORD dwPixelAspectRatioX, DWORD dwPixelAspectRatioY, MFVideoInterlaceMode InterlaceMode, QWORD VideoFlags, DWORD dwFramesPerSecondNumerator, DWORD dwFramesPerSecondDenominator, DWORD dwMaxBitRate, IMFVideoMediaType **ppIVideoMediaType);
+HRESULT MFCreateWICBitmapBuffer(const IID *const riid, IUnknown *punkSurface, IMFMediaBuffer **ppBuffer);
+HRESULT MFGetContentProtectionSystemCLSID(const GUID *const guidProtectionSystemID, CLSID *pclsid);
+HRESULT MFGetDXGIDeviceManageMode(IUnknown *pDeviceManager, MF_DXGI_DEVICE_MANAGER_MODE *mode);
+HRESULT MFGetMFTMerit(IUnknown *pMFT, UINT32 cbVerifier, const BYTE *verifier, DWORD *merit);
+DWORD WINAPI MFGetUncompressedVideoFormat(const MFVIDEOFORMAT *pVideoFormat);
+HRESULT MFInitVideoFormat(MFVIDEOFORMAT *pVideoFormat, MFStandardVideoFormat type);
+HRESULT MFSplitSample(IMFSample *pSample, IMFSample **pOutputSamples, DWORD dwOutputSampleMaxCount, DWORD *pdwOutputSampleCount);
+HRESULT MFValidateMediaTypeSize(GUID FormatType, UINT8 *pBlock, UINT32 cbSize);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define DEFINE_BINARY_MEDIATYPE_GUIDname, format) DEFINE_GUID(name, format, 0xbf10, 0x48b4, 0xbc, 0x18, 0x59, 0x3d, 0xc1, 0xdb, 0x95, 0xf);
+
+#define DEFINE_BINARY_MEDIATYPE_GUIDname, format) DEFINE_GUID(name, format, 0xbf10, 0x48b4, 0xbc, 0x18, 0x59, 0x3d, 0xc1, 0xdb, 0x95, 0xf);
 
 #endif /* __WINE_MFAPI_H */

@@ -45,8 +45,8 @@ BOOLEAN WINAPI HidD_SetOutputReport(HANDLE HidDeviceObject, void *ReportBuffer, 
 extern "C" {
 #endif
 BOOLEAN WINAPI HidD_GetConfiguration(HANDLE HidDeviceObject, PHIDD_CONFIGURATION Configuration, ULONG ConfigurationLength);
-BOOLEAN WINAPI HidD_SetConfiguration(HANDLE HidDeviceObject, PHIDD_CONFIGURATION Configuration, ULONG ConfigurationLength);
 BOOLEAN WINAPI HidD_GetMsGenreDescriptor(HANDLE HidDeviceObject, PVOID Buffer, ULONG BufferLength);
+BOOLEAN WINAPI HidD_SetConfiguration(HANDLE HidDeviceObject, PHIDD_CONFIGURATION Configuration, ULONG ConfigurationLength);
 #ifdef __cplusplus
 }
 #endif

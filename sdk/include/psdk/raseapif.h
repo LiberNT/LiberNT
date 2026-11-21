@@ -138,8 +138,22 @@ typedef enum _RAS_AUTH_ATTRIBUTE_TYPE_
     raatPEAPEmbeddedEAPTypeId,
     raatPEAPFastRoamedSession,
     raatEAPTLV = 8102,
-    raatReserved = 0xFFFFFFFF
-
+    raatReserved = 0xFFFFFFFF,
+    raatNASIPv6Address = 0x5F,
+    raatFramedInterfaceId = 0x60,
+    raatFramedIPv6Prefix = 0x61,
+    raatLoginIPv6Host = 0x62,
+    raatFramedIPv6Route = 0x63,
+    raatFramedIPv6Pool = 0x64,
+    raatInnerEAPTypeId = 0x1FA3,
+    raatFastRoamedSession = 0x1FA4,
+    raatCredentialsChanged = 0x1FA7,
+    raatCertificateThumbprint = 0x203A,
+    raatPeerId = 0x2328,
+    raatServerId = 0x2329,
+    raatMethodId = 0x232A,
+    raatEMSK = 0x232B,
+    raatSessionId = 0x232C,
 }RAS_AUTH_ATTRIBUTE_TYPE;
 
 typedef struct _RAS_AUTH_ATTRIBUTE
@@ -330,6 +344,9 @@ typedef struct _LEGACY_INTERACTIVE_UI_PARAMS {
   BYTE * pInteractiveUIData;
   DWORD dwError;
 } LEGACY_INTERACTIVE_UI_PARAMS;
+
+#define RAS_EAP_VALUENAME_FILTER_INNERMETHODS TEXT("FilterInnerMethods")
+#define RAS_EAP_VALUENAME_ISTUNNEL_METHOD TEXT("IsTunnelMethod")
 
 #endif /* _RASEAPIF_ */
 

@@ -824,4 +824,67 @@ ULONG __cdecl ldap_set_dbg_flags(ULONG NewFlags);
 }
 #endif
 
+#define LDAP_API_FEATURE_VIRTUAL_LIST_VIEW 1001
+#define LDAP_AUTH_SSPI 0x486
+#define LDAP_CONTROL_REFERRALS "1.2.840.113556.1.4.616"
+#define LDAP_CONTROL_REFERRALS_W L"1.2.840.113556.1.4.616"
+#define LDAP_CONTROL_VLVREQUEST "2.16.840.1.113730.3.4.9"
+#define LDAP_CONTROL_VLVREQUEST_W L"2.16.840.1.113730.3.4.9"
+#define LDAP_IS_CLDAPld) ((ld) -> ld_sb . sb_naddr > 0)
+#define ldap_rename ldap_rename_extA
+#define ldap_rename_s ldap_rename_ext_sA
+#define LDAP_SERVER_SORT_OID "1.2.840.113556.1.4.473"
+#define LDAP_SERVER_SORT_OID_W L"1.2.840.113556.1.4.473"
+#define LDAP_START_TLS_OID "1.3.6.1.4.1.1466.20037"
+#define LDAP_START_TLS_OID_W L"1.3.6.1.4.1.1466.20037"
+#define LDAP_TTL_EXTENDED_OP_OID "1.3.6.1.4.1.1466.101.119.1"
+#define LDAP_TTL_EXTENDED_OP_OID_W L"1.3.6.1.4.1.1466.101.119.1"
+#define LDAP_UNICODE 0
+#define LDAP_VENDOR_NAME 0
+#define LDAP_VENDOR_NAME_W L"Microsoft Corporation."
+#define mod_bvalues mod_vals . modv_bvals
+#define mod_values mod_vals . modv_strvals
+#define NAME_ERRORn) ((n & 0xf0) == 0x20)
+#define NULLBER ((BerElement *) 0)
+#define WINLDAPAPI 0
+
+typedef ULONG (*DBGPRINT)(PCCH, ...);
+
+typedef ULONG DEREFERENCECONNECTION(PLDAP, PLDAP);
+
+struct LdapReferralCallback
+{
+    ULONG SizeOfCallbacks;
+    ULONG (*QueryForConnection)(PLDAP, PLDAP, PWCHAR, PCHAR, ULONG, PVOID, PVOID, PLDAP *);
+    BOOLEAN (*NotifyRoutine)(PLDAP, PLDAP, PWCHAR, PCHAR, PLDAP, ULONG, PVOID, PVOID, ULONG);
+    ULONG (*DereferenceRoutine)(PLDAP, PLDAP);
+};
+
+typedef struct LdapReferralCallback LDAP_REFERRAL_CALLBACK;
+
+typedef BOOLEAN NOTIFYOFNEWCONNECTION(PLDAP, PLDAP, PWCHAR, PCHAR, PLDAP, ULONG, PVOID, PVOID, ULONG);
+
+typedef struct LdapReferralCallback *PLDAP_REFERRAL_CALLBACK;
+
+typedef ULONG QUERYFORCONNECTION(PLDAP, PLDAP, PWCHAR, PCHAR, ULONG, PVOID, PVOID, PLDAP *);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+LDAPMessage * __cdecl ldap_next_reference(LDAP *ld, LDAPMessage *entry);
+
+/* TODO: LiberNT does not implement the functions below yet */
+void ldap_set_dbg_routine(DBGPRINT DebugPrintRoutine);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define LDAP_IS_CLDAPld) ((ld) -> ld_sb . sb_naddr > 0)
+#define NAME_ERRORn) ((n & 0xf0) == 0x20)
+
+#define LDAP_IS_CLDAPld) ((ld) -> ld_sb . sb_naddr > 0)
+#define NAME_ERRORn) ((n & 0xf0) == 0x20)
+
 #endif  /* __WINE_WINLDAP_H */

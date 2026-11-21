@@ -39,6 +39,8 @@ typedef enum EFFECTIVE_POWER_MODE
     EffectivePowerModeMaxPerformance,
     EffectivePowerModeGameMode,
     EffectivePowerModeMixedReality,
+    EffectivePowerModeEnergySaverHighSavings = 0,
+    EffectivePowerModeEnergySaverStandard = 1,
 } EFFECTIVE_POWER_MODE;
 
 typedef void WINAPI EFFECTIVE_POWER_MODE_CALLBACK(EFFECTIVE_POWER_MODE mode, void *context);

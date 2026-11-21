@@ -2,22 +2,10 @@
 
 #ifndef DECLSPEC_EXPORT
 #define DECLSPEC_EXPORT __declspec(dllexport)
-typedef struct USBDI_HANDLE__ {
-  int unused;
-} *USBDI_HANDLE;
-
 typedef struct _COMPOSITE_DEVICE_CAPABILITIES {
   ULONG CapabilityFunctionSuspend : 1;
   ULONG Reserved : 31;
 } COMPOSITE_DEVICE_CAPABILITIES, *PCOMPOSITE_DEVICE_CAPABILITIES;
-
-typedef struct _REGISTER_COMPOSITE_DEVICE {
-  USHORT Version;
-  USHORT Size;
-  USBDI_HANDLE Reserved;
-  COMPOSITE_DEVICE_CAPABILITIES CapabilityFlags;
-  ULONG FunctionCount;
-} REGISTER_COMPOSITE_DEVICE, *PREGISTER_COMPOSITE_DEVICE;
 
 typedef struct USBD_FUNCTION_HANDLE__ {
   int unused;
@@ -29,6 +17,41 @@ typedef struct _REQUEST_REMOTE_WAKE_NOTIFICATION {
   USBD_FUNCTION_HANDLE UsbdFunctionHandle;
   ULONG Interface;
 } REQUEST_REMOTE_WAKE_NOTIFICATION, *PREQUEST_REMOTE_WAKE_NOTIFICATION;
+
+typedef struct USBDI_HANDLE__ {
+  int unused;
+} *USBDI_HANDLE;
+
+typedef struct _REGISTER_COMPOSITE_DEVICE {
+  USHORT Version;
+  USHORT Size;
+  USBDI_HANDLE Reserved;
+  COMPOSITE_DEVICE_CAPABILITIES CapabilityFlags;
+  ULONG FunctionCount;
+} REGISTER_COMPOSITE_DEVICE, *PREGISTER_COMPOSITE_DEVICE;
+
+typedef USBD_FUNCTION_HANDLE *PUSBD_FUNCTION_HANDLE;
+
+struct USBD_HANDLE__
+{
+    int unused;
+};
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+void COMPOSITE_DEVICE_CAPABILITIES_INIT(PCOMPOSITE_DEVICE_CAPABILITIES CapabilityFlags);
+void UsbBuildOpenStaticStreamsRequest(PURB Urb, USBD_PIPE_HANDLE PipeHandle, USHORT NumberOfStreams, PUSBD_STREAM_INFORMATION StreamInfoArray);
+void USBD_BuildRegisterCompositeDevice(USBD_HANDLE USBDHandle, COMPOSITE_DEVICE_CAPABILITIES CapabilityFlags, ULONG FunctionCount, PREGISTER_COMPOSITE_DEVICE RegisterCompositeDevice);
+BOOLEAN USBD_IsInterfaceVersionSupported(USBD_HANDLE USBDHandle, ULONG USBDInterfaceVersion);
+NTSTATUS USBD_SelectConfigUrbAllocateAndBuild(USBD_HANDLE USBDHandle, PUSB_CONFIGURATION_DESCRIPTOR ConfigurationDescriptor, PUSBD_INTERFACE_LIST_ENTRY InterfaceList, PURB *Urb);
+NTSTATUS USBD_SelectInterfaceUrbAllocateAndBuild(USBD_HANDLE USBDHandle, USBD_CONFIGURATION_HANDLE ConfigurationHandle, PUSBD_INTERFACE_LIST_ENTRY InterfaceListEntry, PURB *Urb);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
 

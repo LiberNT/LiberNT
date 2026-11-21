@@ -4454,4 +4454,88 @@ extern FN_DrvUnlockDisplayArea DrvUnlockDisplayArea;
 #define MS_REUSEDDEVICEBITMAP 0x0008
 #endif
 
+#define SURFOBJ_GET_DHPDEVpso) ((pso) -> dhpdev)
+#define SURFOBJ_GET_HDEVpso) ((pso) -> hdev)
+#define SURFOBJ_SET_DHPDEVpso, dhpdevNew) ((pso) -> dhpdev = (dhpdevNew))
+#define SURFOBJ_SET_HDEVpso, hdevNew) ((pso) -> hdev = (hdevNew))
+
+struct DHPDEV__
+{
+    int unused;
+};
+
+struct DHSURF__
+{
+    int unused;
+};
+
+struct HBM__
+{
+    int unused;
+};
+
+struct HDEV__
+{
+    int unused;
+};
+
+struct HDRVOBJ__
+{
+    int unused;
+};
+
+struct HFASTMUTEX__
+{
+    int unused;
+};
+
+struct HSEMAPHORE__
+{
+    int unused;
+};
+
+struct HSURF__
+{
+    int unused;
+};
+
+typedef BOOL (WINAPI *PFN_DrvSurfaceComplete)(DHPDEV, HANDLE);
+
+struct tagDEVINFO
+{
+    FLONG flGraphicsCaps;
+    LOGFONTW lfDefaultFont;
+    LOGFONTW lfAnsiVarFont;
+    LOGFONTW lfAnsiFixFont;
+    ULONG cFonts;
+    ULONG iDitherFormat;
+    USHORT cxDither;
+    USHORT cyDither;
+    HPALETTE hpalDefault;
+    FLONG flGraphicsCaps2;
+};
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL WINAPI DrvSurfaceComplete(DHPDEV dhpdev, HANDLE hLogicalSurface);
+BOOL EngAcquireSemaphoreSharedNoWait(HSEMAPHORE hsem);
+BOOL EngFntCacheFlush(PVOID OffsetBuffer, BOOL DiscardContent);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define SURFOBJ_GET_DHPDEVpso) ((pso) -> dhpdev)
+#define SURFOBJ_GET_HDEVpso) ((pso) -> hdev)
+#define SURFOBJ_SET_DHPDEVpso, dhpdevNew) ((pso) -> dhpdev = (dhpdevNew))
+#define SURFOBJ_SET_HDEVpso, hdevNew) ((pso) -> hdev = (hdevNew))
+
+#define SURFOBJ_GET_DHPDEVpso) ((pso) -> dhpdev)
+#define SURFOBJ_GET_HDEVpso) ((pso) -> hdev)
+#define SURFOBJ_SET_DHPDEVpso, dhpdevNew) ((pso) -> dhpdev = (dhpdevNew))
+#define SURFOBJ_SET_HDEVpso, hdevNew) ((pso) -> hdev = (hdevNew))
+
 #endif /* _WINDDI_ */

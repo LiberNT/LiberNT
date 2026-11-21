@@ -480,7 +480,9 @@ typedef enum _SYSTEM_INFORMATION_CLASS
     SystemBreakOnContextUnwindFailureInformation          = 246, // 0xF6
     SystemOslRamdiskInformation                           = 247, // 0xF7
 
-    MaxSystemInfoClass
+    MaxSystemInfoClass,
+    SystemBasicProcessInformation = 0xFC,
+    SystemHandleCountInformation = 0xFD,
 } SYSTEM_INFORMATION_CLASS, *PSYSTEM_INFORMATION_CLASS;
 
 //

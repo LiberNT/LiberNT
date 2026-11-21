@@ -50,7 +50,8 @@ typedef enum _PROCESSOR_CACHE_TYPE {
   CacheUnified,
   CacheInstruction,
   CacheData,
-  CacheTrace
+  CacheTrace,
+  CacheUnknown = 4,
 } PROCESSOR_CACHE_TYPE;
 
 typedef struct _CACHE_DESCRIPTOR {
@@ -101,7 +102,8 @@ typedef enum _LOGICAL_PROCESSOR_RELATIONSHIP {
   RelationProcessorDie,
   RelationNumaNodeEx,
   RelationProcessorModule,
-  RelationAll = 0xffff
+  RelationAll = 0xffff,
+  RelationProcessorSharedComputeUnit = 8,
 } LOGICAL_PROCESSOR_RELATIONSHIP;
 
 typedef struct _PROCESSOR_RELATIONSHIP {
@@ -344,7 +346,12 @@ typedef enum _KBUGCHECK_CALLBACK_REASON {
   KbCallbackReserved1,
   KbCallbackSecondaryDumpData,
   KbCallbackDumpIo,
-  KbCallbackAddPages
+  KbCallbackAddPages,
+  KbCallbackSecondaryMultiPartDumpData = 5,
+  KbCallbackRemovePages = 6,
+  KbCallbackTriageDumpData = 7,
+  KbCallbackReserved2 = 8,
+  KbCallbackReserved3 = 9,
 } KBUGCHECK_CALLBACK_REASON;
 
 struct _KBUGCHECK_REASON_CALLBACK_RECORD;
@@ -472,7 +479,9 @@ typedef enum _KINTERRUPT_POLARITY {
   InterruptRisingEdge = InterruptActiveHigh,
   InterruptActiveLow,
   InterruptFallingEdge = InterruptActiveLow,
-  InterruptActiveBoth
+  InterruptActiveBoth,
+  InterruptActiveBothTriggerLow = 3,
+  InterruptActiveBothTriggerHigh = 4,
 } KINTERRUPT_POLARITY, *PKINTERRUPT_POLARITY;
 
 typedef enum _KPROFILE_SOURCE {

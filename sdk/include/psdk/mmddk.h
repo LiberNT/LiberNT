@@ -531,6 +531,15 @@ DWORD   WINAPI mmGetCurrentTask(void);
 typedef struct tMIXEROPENDESC * PMIXEROPENDESC;
 
 #pragma pack(push, 1)
+typedef struct MCI_OPEN_DRIVER_PARMS {
+  MCIDEVICEID wDeviceID;
+  LPCWSTR lpstrParams;
+  UINT wCustomCommandTable;
+  UINT wType;
+} MCI_OPEN_DRIVER_PARMS;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
 typedef struct MDEVICECAPSEX {
   DWORD cbSize;
   LPVOID pCaps;
@@ -548,13 +557,67 @@ typedef struct timerevent_tag {
 } TIMEREVENT;
 #pragma pack(pop)
 
+#define _INC_MMDDK 0
+#define AUXM_INIT_EX 0x68
+#define DRIVERS_SECTION 0
+#define DRV_QUERYFUNCTIONINSTANCEIDSIZE 0x812
+#define JOY_CONFIGCHANGED_MSGSTRING 0
+#define MCI_SECTION TEXT("MCI32")
+#define MCI_TABLE_NOT_PRESENT ((UINT)0xFFFFFFFF)
+#define MIDM_INIT_EX 0x68
+#define MIDM_MAPPER 0x2000
+#define MIDM_USER 0x4000
+#define MMDDKINC 0
+#define MODM_INIT_EX 0x68
+#define MODM_MAPPER 0x2000
+#define MODM_RECONFIGURE 0x4768
+#define MODM_USER 0x4000
+#define MXDM_INIT_EX 0x68
+#define TDD_BEGINMINPERIOD 0x810
+#define TDD_ENDMINPERIOD 0x814
+#define TDD_GETDEVCAPS 0x80C
+#define TDD_GETSYSTEMTIME 0x808
+#define TDD_KILLTIMEREVENT 0x800
+#define TDD_SETTIMEREVENT 0x804
+#define WIDM_INIT_EX 0x68
+#define WODM_INIT_EX 0x68
+
+typedef MCI_OPEN_DRIVER_PARMS *LPMCI_OPEN_DRIVER_PARMS;
+
+typedef TIMEREVENT *LPTIMEREVENT;
+
 #pragma pack(push, 1)
-typedef struct MCI_OPEN_DRIVER_PARMS {
-  MCIDEVICEID wDeviceID;
-  LPCWSTR lpstrParams;
-  UINT wCustomCommandTable;
-  UINT wType;
-} MCI_OPEN_DRIVER_PARMS;
+struct midiopendesc_tag
+{
+    HMIDI hMidi;
+    DWORD_PTR dwCallback;
+    DWORD_PTR dwInstance;
+    DWORD_PTR dnDevNode;
+    DWORD cIds;
+    MIDIOPENSTRMID rgIds[1];
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+struct midiopenstrmid_tag
+{
+    DWORD dwStreamID;
+    UINT uDeviceID;
+};
+#pragma pack(pop)
+
+typedef void TASKCALLBACK(DWORD_PTR);
+
+#pragma pack(push, 1)
+struct waveopendesc_tag
+{
+    HWAVE hWave;
+    LPWAVEFORMAT lpFormat;
+    DWORD_PTR dwCallback;
+    DWORD_PTR dwInstance;
+    UINT uMappedDeviceID;
+    DWORD_PTR dnDevNode;
+};
 #pragma pack(pop)
 
 #endif /* __MMDDK_H */

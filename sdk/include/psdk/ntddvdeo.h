@@ -299,7 +299,14 @@ typedef enum _VIDEO_WIN32K_CALLBACKS_PARAMS_TYPE {
   VideoPnpNotifyCallout,
   VideoDxgkDisplaySwitchCallout,
   VideoDxgkMonitorEventCallout,
-  VideoDxgkFindAdapterTdrCallout
+  VideoDxgkFindAdapterTdrCallout,
+  VideoDxgkHardwareProtectionTeardown = 0xB,
+  VideoRepaintDesktop = 0xC,
+  VideoUpdateCursor = 0xD,
+  VideoDisableMultiPlaneOverlay = 0xE,
+  VideoDesktopDuplicationChange = 0xF,
+  VideoBlackScreenDiagnostics = 0x10,
+  VideoForceCompositionRender = 0x11,
 } VIDEO_WIN32K_CALLBACKS_PARAMS_TYPE;
 
 #define DXGK_WIN32K_PARAM_FLAG_UPDATEREGISTRY 1
@@ -789,17 +796,6 @@ typedef struct _DISPLAY_BRIGHTNESS {
 #define VIDEO_REASON_SCRATCH 8
 #endif
 
-enum BlackScreenDiagnosticsCalloutParam {
-    BlackScreenDiagnosticsData = 1,
-    BlackScreenDisplayRecovery = 2
-};
-
-typedef enum _BRIGHTNESS_INTERFACE_VERSION {
-    BRIGHTNESS_INTERFACE_VERSION_1 = 1,
-    BRIGHTNESS_INTERFACE_VERSION_2 = 2,
-    BRIGHTNESS_INTERFACE_VERSION_3 = 3
-} BRIGHTNESS_INTERFACE_VERSION;
-
 typedef enum _BACKLIGHT_OPTIMIZATION_LEVEL {
     BacklightOptimizationDisable = 0,
     BacklightOptimizationDesktop = 1,
@@ -808,10 +804,22 @@ typedef enum _BACKLIGHT_OPTIMIZATION_LEVEL {
     BacklightOptimizationEDR = 4
 } BACKLIGHT_OPTIMIZATION_LEVEL;
 
+typedef enum _BRIGHTNESS_INTERFACE_VERSION {
+    BRIGHTNESS_INTERFACE_VERSION_1 = 1,
+    BRIGHTNESS_INTERFACE_VERSION_2 = 2,
+    BRIGHTNESS_INTERFACE_VERSION_3 = 3
+} BRIGHTNESS_INTERFACE_VERSION;
+
 typedef enum _COLORSPACE_TRANSFORM_DATA_TYPE {
     COLORSPACE_TRANSFORM_DATA_TYPE_FIXED_POINT = 0,
     COLORSPACE_TRANSFORM_DATA_TYPE_FLOAT = 1
 } COLORSPACE_TRANSFORM_DATA_TYPE;
+
+typedef enum _COLORSPACE_TRANSFORM_STAGE_CONTROL {
+    ColorSpaceTransformStageControl_No_Change = 0,
+    ColorSpaceTransformStageControl_Enable = 1,
+    ColorSpaceTransformStageControl_Bypass = 2
+} COLORSPACE_TRANSFORM_STAGE_CONTROL, *PCOLORSPACE_TRANSFORM_STAGE_CONTROL;
 
 typedef enum _COLORSPACE_TRANSFORM_TARGET_CAPS_VERSION {
     COLORSPACE_TRANSFORM_VERSION_DEFAULT = 0,
@@ -828,15 +836,11 @@ typedef enum _COLORSPACE_TRANSFORM_TYPE {
     COLORSPACE_TRANSFORM_TYPE_MATRIX_V2 = 5
 } COLORSPACE_TRANSFORM_TYPE;
 
-typedef enum _OUTPUT_WIRE_COLOR_SPACE_TYPE {
-    OUTPUT_WIRE_COLOR_SPACE_G22_P709 = 0,
-    OUTPUT_WIRE_COLOR_SPACE_RESERVED = 4,
-    OUTPUT_WIRE_COLOR_SPACE_G2084_P2020 = 12,
-    OUTPUT_WIRE_COLOR_SPACE_G22_P709_WCG = 30,
-    OUTPUT_WIRE_COLOR_SPACE_G22_P2020 = 31,
-    OUTPUT_WIRE_COLOR_SPACE_G2084_P2020_HDR10PLUS = 32,
-    OUTPUT_WIRE_COLOR_SPACE_G2084_P2020_DVLL = 33
-} OUTPUT_WIRE_COLOR_SPACE_TYPE;
+typedef enum _DSI_CONTROL_TRANSMISSION_MODE {
+    DCT_DEFAULT = 0,
+    DCT_FORCE_LOW_POWER = 1,
+    DCT_FORCE_HIGH_PERFORMANCE = 2
+} DSI_CONTROL_TRANSMISSION_MODE;
 
 typedef enum _OUTPUT_COLOR_ENCODING {
     OUTPUT_COLOR_ENCODING_RGB = 0,
@@ -847,17 +851,141 @@ typedef enum _OUTPUT_COLOR_ENCODING {
     OUTPUT_COLOR_ENCODING_FORCE_UINT32 = (-1)
 } OUTPUT_COLOR_ENCODING;
 
-typedef enum _COLORSPACE_TRANSFORM_STAGE_CONTROL {
-    ColorSpaceTransformStageControl_No_Change = 0,
-    ColorSpaceTransformStageControl_Enable = 1,
-    ColorSpaceTransformStageControl_Bypass = 2
-} COLORSPACE_TRANSFORM_STAGE_CONTROL, *PCOLORSPACE_TRANSFORM_STAGE_CONTROL;
+typedef enum _OUTPUT_WIRE_COLOR_SPACE_TYPE {
+    OUTPUT_WIRE_COLOR_SPACE_G22_P709 = 0,
+    OUTPUT_WIRE_COLOR_SPACE_RESERVED = 4,
+    OUTPUT_WIRE_COLOR_SPACE_G2084_P2020 = 12,
+    OUTPUT_WIRE_COLOR_SPACE_G22_P709_WCG = 30,
+    OUTPUT_WIRE_COLOR_SPACE_G22_P2020 = 31,
+    OUTPUT_WIRE_COLOR_SPACE_G2084_P2020_HDR10PLUS = 32,
+    OUTPUT_WIRE_COLOR_SPACE_G2084_P2020_DVLL = 33
+} OUTPUT_WIRE_COLOR_SPACE_TYPE;
 
-typedef enum _DSI_CONTROL_TRANSMISSION_MODE {
-    DCT_DEFAULT = 0,
-    DCT_FORCE_LOW_POWER = 1,
-    DCT_FORCE_HIGH_PERFORMANCE = 2
-} DSI_CONTROL_TRANSMISSION_MODE;
+enum BlackScreenDiagnosticsCalloutParam {
+    BlackScreenDiagnosticsData = 1,
+    BlackScreenDisplayRecovery = 2
+};
+
+typedef struct _BACKLIGHT_REDUCTION_GAMMA_RAMP {
+  USHORT R[256];
+  USHORT G[256];
+  USHORT B[256];
+} BACKLIGHT_REDUCTION_GAMMA_RAMP;
+
+typedef struct _BANK_POSITION {
+  ULONG ReadBankPosition;
+  ULONG WriteBankPosition;
+} BANK_POSITION, *PBANK_POSITION;
+
+typedef struct _BRIGHTNESS_LEVEL {
+  UCHAR Count;
+  UCHAR Level[103];
+} BRIGHTNESS_LEVEL, *PBRIGHTNESS_LEVEL;
+
+typedef struct _BRIGHTNESS_NIT_RANGE {
+  ULONG MinLevelInMillinit;
+  ULONG MaxLevelInMillinit;
+  ULONG StepSizeInMillinit;
+} BRIGHTNESS_NIT_RANGE, *PBRIGHTNESS_NIT_RANGE;
+
+typedef struct _CHROMATICITY_COORDINATE {
+  float x;
+  float y;
+} CHROMATICITY_COORDINATE;
+
+typedef struct _COLORSPACE_SCALAR_MULTIPLIER_CAPS {
+  BOOLEAN Valid;
+  float NumericRangeMin;
+  float NumericRangeMax;
+} COLORSPACE_SCALAR_MULTIPLIER_CAPS;
+
+typedef struct _FSVIDEO_CURSOR_POSITION {
+  VIDEO_CURSOR_POSITION Coord;
+  ULONG dwType;
+} FSVIDEO_CURSOR_POSITION, *PFSVIDEO_CURSOR_POSITION;
+
+typedef struct _FSVIDEO_MODE_INFORMATION {
+  VIDEO_MODE_INFORMATION VideoMode;
+  VIDEO_MEMORY_INFORMATION VideoMemory;
+} FSVIDEO_MODE_INFORMATION, *PFSVIDEO_MODE_INFORMATION;
+
+typedef struct _GAMMA_RAMP_RGB {
+  float Red;
+  float Green;
+  float Blue;
+} GAMMA_RAMP_RGB;
+
+typedef struct _COLORSPACE_TRANSFORM_3x4 {
+  float ColorMatrix3x4[3][4];
+  float ScalarMultiplier;
+  GAMMA_RAMP_RGB LookupTable1D[4096];
+} COLORSPACE_TRANSFORM_3x4, *PCOLORSPACE_TRANSFORM_3x4;
+
+typedef struct _COLORSPACE_TRANSFORM_MATRIX_V2 {
+  COLORSPACE_TRANSFORM_STAGE_CONTROL StageControlLookupTable1DDegamma;
+  GAMMA_RAMP_RGB LookupTable1DDegamma[4096];
+  COLORSPACE_TRANSFORM_STAGE_CONTROL StageControlColorMatrix3x3;
+  float ColorMatrix3x3[3][3];
+  COLORSPACE_TRANSFORM_STAGE_CONTROL StageControlLookupTable1DRegamma;
+  GAMMA_RAMP_RGB LookupTable1DRegamma[4096];
+} COLORSPACE_TRANSFORM_MATRIX_V2, *PCOLORSPACE_TRANSFORM_MATRIX_V2;
+
+typedef struct _GAMMA_RAMP_DXGI_1 {
+  GAMMA_RAMP_RGB Scale;
+  GAMMA_RAMP_RGB Offset;
+  GAMMA_RAMP_RGB GammaCurve[1025];
+} GAMMA_RAMP_DXGI_1;
+
+typedef struct _GAMMA_RAMP_RGB256x3x16 {
+  USHORT Red[256];
+  USHORT Green[256];
+  USHORT Blue[256];
+} GAMMA_RAMP_RGB256x3x16;
+
+typedef struct _MIPI_DSI_CAPS {
+  UCHAR DSITypeMajor;
+  UCHAR DSITypeMinor;
+  UCHAR SpecVersionMajor;
+  UCHAR SpecVersionMinor;
+  UCHAR SpecVersionPatch;
+  USHORT TargetMaximumReturnPacketSize;
+  UCHAR ResultCodeFlags;
+  UCHAR ResultCodeStatus;
+  UCHAR Revision;
+  UCHAR Level;
+  UCHAR DeviceClassHi;
+  UCHAR DeviceClassLo;
+  UCHAR ManufacturerHi;
+  UCHAR ManufacturerLo;
+  UCHAR ProductHi;
+  UCHAR ProductLo;
+  UCHAR LengthHi;
+  UCHAR LengthLo;
+} MIPI_DSI_CAPS, *PMIPI_DSI_CAPS;
+
+typedef struct _OUTPUT_WIRE_FORMAT {
+  OUTPUT_COLOR_ENCODING ColorEncoding;
+  UINT32 BitsPerPixel;
+} OUTPUT_WIRE_FORMAT;
+
+typedef struct _PANEL_GET_BACKLIGHT_REDUCTION {
+  USHORT BacklightUsersetting;
+  USHORT BacklightEffective;
+  BACKLIGHT_REDUCTION_GAMMA_RAMP GammaRamp;
+} PANEL_GET_BACKLIGHT_REDUCTION, *PPANEL_GET_BACKLIGHT_REDUCTION;
+
+typedef struct _PANEL_SET_BACKLIGHT_OPTIMIZATION {
+  BACKLIGHT_OPTIMIZATION_LEVEL Level;
+} PANEL_SET_BACKLIGHT_OPTIMIZATION, *PPANEL_SET_BACKLIGHT_OPTIMIZATION;
+
+typedef struct _SET_ACTIVE_COLOR_PROFILE_NAME {
+  WCHAR ColorProfileName[1];
+} SET_ACTIVE_COLOR_PROFILE_NAME, *PSET_ACTIVE_COLOR_PROFILE_NAME;
+
+typedef struct _VGA_CHAR {
+  CHAR Char;
+  CHAR Attributes;
+} VGA_CHAR, *PVGA_CHAR;
 
 typedef struct _VIDEO_COLOR_LUT_DATA {
   ULONG Length;
@@ -870,26 +998,6 @@ typedef struct _VIDEO_LUT_RGB256WORDS {
   USHORT Green[256];
   USHORT Blue[256];
 } VIDEO_LUT_RGB256WORDS, *PVIDEO_LUT_RGB256WORDS;
-
-typedef struct _BANK_POSITION {
-  ULONG ReadBankPosition;
-  ULONG WriteBankPosition;
-} BANK_POSITION, *PBANK_POSITION;
-
-typedef struct _VGA_CHAR {
-  CHAR Char;
-  CHAR Attributes;
-} VGA_CHAR, *PVGA_CHAR;
-
-typedef struct _FSVIDEO_MODE_INFORMATION {
-  VIDEO_MODE_INFORMATION VideoMode;
-  VIDEO_MEMORY_INFORMATION VideoMemory;
-} FSVIDEO_MODE_INFORMATION, *PFSVIDEO_MODE_INFORMATION;
-
-typedef struct _FSVIDEO_CURSOR_POSITION {
-  VIDEO_CURSOR_POSITION Coord;
-  ULONG dwType;
-} FSVIDEO_CURSOR_POSITION, *PFSVIDEO_CURSOR_POSITION;
 
 typedef struct _VIDEO_PERFORMANCE_COUNTER {
   UINT64 NbOfAllocationEvicted[10];
@@ -920,17 +1028,6 @@ typedef struct _VIDEO_QUERY_PERFORMANCE_COUNTER {
   PVIDEO_PERFORMANCE_COUNTER Buffer;
 } VIDEO_QUERY_PERFORMANCE_COUNTER, *PVIDEO_QUERY_PERFORMANCE_COUNTER;
 
-typedef struct _BRIGHTNESS_LEVEL {
-  UCHAR Count;
-  UCHAR Level[103];
-} BRIGHTNESS_LEVEL, *PBRIGHTNESS_LEVEL;
-
-typedef struct _BRIGHTNESS_NIT_RANGE {
-  ULONG MinLevelInMillinit;
-  ULONG MaxLevelInMillinit;
-  ULONG StepSizeInMillinit;
-} BRIGHTNESS_NIT_RANGE, *PBRIGHTNESS_NIT_RANGE;
-
 typedef struct BRIGHTNESS_NIT_RANGES {
   ULONG NormalRangeCount;
   ULONG RangeCount;
@@ -938,94 +1035,402 @@ typedef struct BRIGHTNESS_NIT_RANGES {
   BRIGHTNESS_NIT_RANGE SupportedRanges[16];
 } BRIGHTNESS_NIT_RANGES, *PBRIGHTNESS_NIT_RANGES;
 
-typedef struct _CHROMATICITY_COORDINATE {
-  float x;
-  float y;
-} CHROMATICITY_COORDINATE;
+#define BYTE_ALIGN 1
+#define IOCTL_COLORSPACE_TRANSFORM_QUERY_TARGET_CAPS 0x231000
+#define IOCTL_COLORSPACE_TRANSFORM_SET 0x231004
+#define IOCTL_FSVIDEO_COPY_FRAME_BUFFER 0x340800
+#define IOCTL_FSVIDEO_REVERSE_MOUSE_POINTER 0x340808
+#define IOCTL_FSVIDEO_SET_CURRENT_MODE 0x34080C
+#define IOCTL_FSVIDEO_SET_CURSOR_POSITION 0x340814
+#define IOCTL_FSVIDEO_SET_SCREEN_INFORMATION 0x340810
+#define IOCTL_FSVIDEO_WRITE_TO_FRAME_BUFFER 0x340804
+#define IOCTL_GET_SCALAR_MULTIPLIER_CAPS 0x23100C
+#define IOCTL_MIPI_DSI_QUERY_CAPS 0x231400
+#define IOCTL_MIPI_DSI_RESET 0x231408
+#define IOCTL_MIPI_DSI_TRANSMISSION 0x231404
+#define IOCTL_PANEL_GET_BACKLIGHT_REDUCTION 0x230C18
+#define IOCTL_PANEL_GET_BRIGHTNESS 0x230C08
+#define IOCTL_PANEL_GET_MANUFACTURING_MODE 0x230C1C
+#define IOCTL_PANEL_QUERY_BRIGHTNESS_CAPS 0x230C00
+#define IOCTL_PANEL_QUERY_BRIGHTNESS_RANGES 0x230C04
+#define IOCTL_PANEL_SET_BACKLIGHT_OPTIMIZATION 0x230C14
+#define IOCTL_PANEL_SET_BRIGHTNESS 0x230C0C
+#define IOCTL_PANEL_SET_BRIGHTNESS_STATE 0x230C10
+#define IOCTL_SET_ACTIVE_COLOR_PROFILE_NAME 0x231008
+#define IOCTL_SET_SCALAR_MULTIPLIER 0x231010
+#define SCREEN_BUFFER_POINTERX, Y, XSIZE, CELLSIZE) (((XSIZE * (Y)) + (X)) * (ULONG) CELLSIZE)
+#define VIDEO_MAX_REASON 9
+#define WORD_ALIGN 2
 
-typedef struct _PANEL_SET_BACKLIGHT_OPTIMIZATION {
-  BACKLIGHT_OPTIMIZATION_LEVEL Level;
-} PANEL_SET_BACKLIGHT_OPTIMIZATION, *PPANEL_SET_BACKLIGHT_OPTIMIZATION;
+struct _COLORSPACE_TRANSFORM
+{
+    COLORSPACE_TRANSFORM_TYPE Type;
+    union
+    {
+        GAMMA_RAMP_RGB256x3x16 Rgb256x3x16;
+        GAMMA_RAMP_DXGI_1 Dxgi1;
+        COLORSPACE_TRANSFORM_3x4 T3x4;
+        COLORSPACE_TRANSFORM_MATRIX_V2 MatrixV2;
+    } Data;
+};
 
-typedef struct _BACKLIGHT_REDUCTION_GAMMA_RAMP {
-  USHORT R[256];
-  USHORT G[256];
-  USHORT B[256];
-} BACKLIGHT_REDUCTION_GAMMA_RAMP;
+struct _COLORSPACE_TRANSFORM_DATA_CAP
+{
+    COLORSPACE_TRANSFORM_DATA_TYPE DataType;
+    union
+    {
+        struct
+        {
+            ULONG BitCountOfInteger : 6;
+            ULONG BitCountOfFraction : 6;
+        };
+        struct
+        {
+            ULONG BitCountOfExponent : 6;
+            ULONG BitCountOfMantissa : 6;
+        };
+        ULONG Value;
+    };
+    float NumericRangeMin;
+    float NumericRangeMax;
+};
 
-typedef struct _PANEL_GET_BACKLIGHT_REDUCTION {
-  USHORT BacklightUsersetting;
-  USHORT BacklightEffective;
-  BACKLIGHT_REDUCTION_GAMMA_RAMP GammaRamp;
-} PANEL_GET_BACKLIGHT_REDUCTION, *PPANEL_GET_BACKLIGHT_REDUCTION;
+struct _MIPI_DSI_PACKET
+{
+    union
+    {
+        UCHAR DataId;
+        struct
+        {
+            UCHAR DataType : 6;
+            UCHAR VirtualChannel : 2;
+        };
+    };
+    union
+    {
+        struct
+        {
+            UCHAR Data0;
+            UCHAR Data1;
+        };
+        USHORT LongWriteWordCount;
+    };
+    UCHAR EccFiller;
+    UCHAR Payload[8];
+};
 
-typedef struct _COLORSPACE_SCALAR_MULTIPLIER_CAPS {
-  BOOLEAN Valid;
-  float NumericRangeMin;
-  float NumericRangeMax;
-} COLORSPACE_SCALAR_MULTIPLIER_CAPS;
+struct _MIPI_DSI_RESET
+{
+    ULONG Flags;
+    union
+    {
+        struct
+        {
+            ULONG MipiErrors : 16;
+            ULONG ResetFailed : 1;
+            ULONG NeedModeSet : 1;
+        };
+        ULONG Results;
+    };
+};
 
-typedef struct _GAMMA_RAMP_RGB256x3x16 {
-  USHORT Red[256];
-  USHORT Green[256];
-  USHORT Blue[256];
-} GAMMA_RAMP_RGB256x3x16;
+struct _PANEL_BRIGHTNESS_SENSOR_DATA
+{
+    union
+    {
+        struct
+        {
+            ULONG AlsReadingValid : 1;
+            ULONG ChromaticityCoordinateValid : 1;
+            ULONG ColorTemperatureValid : 1;
+            ULONG Reserved : 29;
+        };
+        ULONG Value;
+    };
+    float AlsReading;
+    CHROMATICITY_COORDINATE ChromaticityCoordinate;
+    float ColorTemperature;
+};
 
-typedef struct _GAMMA_RAMP_RGB {
-  float Red;
-  float Green;
-  float Blue;
-} GAMMA_RAMP_RGB;
+struct _PANEL_GET_BRIGHTNESS
+{
+    BRIGHTNESS_INTERFACE_VERSION Version;
+    union
+    {
+        UCHAR Level;
+        struct
+        {
+            ULONG CurrentInMillinits;
+            ULONG TargetInMillinits;
+        };
+    };
+};
 
-typedef struct _GAMMA_RAMP_DXGI_1 {
-  GAMMA_RAMP_RGB Scale;
-  GAMMA_RAMP_RGB Offset;
-  GAMMA_RAMP_RGB GammaCurve[1025];
-} GAMMA_RAMP_DXGI_1;
+struct _PANEL_QUERY_BRIGHTNESS_CAPS
+{
+    BRIGHTNESS_INTERFACE_VERSION Version;
+    union
+    {
+        struct
+        {
+            ULONG Smooth : 1;
+            ULONG Adaptive : 1;
+            ULONG NitsCalibrated : 1;
+            ULONG Reserved : 29;
+        };
+        ULONG Value;
+    };
+};
 
-typedef struct _COLORSPACE_TRANSFORM_3x4 {
-  float ColorMatrix3x4[3][4];
-  float ScalarMultiplier;
-  GAMMA_RAMP_RGB LookupTable1D[4096];
-} COLORSPACE_TRANSFORM_3x4, *PCOLORSPACE_TRANSFORM_3x4;
+struct _PANEL_QUERY_BRIGHTNESS_RANGES
+{
+    BRIGHTNESS_INTERFACE_VERSION Version;
+    union
+    {
+        BRIGHTNESS_LEVEL BrightnessLevel;
+        BRIGHTNESS_NIT_RANGES NitRanges;
+    };
+};
 
-typedef struct _OUTPUT_WIRE_FORMAT {
-  OUTPUT_COLOR_ENCODING ColorEncoding;
-  UINT32 BitsPerPixel;
-} OUTPUT_WIRE_FORMAT;
+struct _PANEL_SET_BRIGHTNESS_STATE
+{
+    union
+    {
+        struct
+        {
+            ULONG Smooth : 1;
+            ULONG Reserved : 31;
+        };
+        ULONG Value;
+    };
+};
 
-typedef struct _COLORSPACE_TRANSFORM_MATRIX_V2 {
-  COLORSPACE_TRANSFORM_STAGE_CONTROL StageControlLookupTable1DDegamma;
-  GAMMA_RAMP_RGB LookupTable1DDegamma[4096];
-  COLORSPACE_TRANSFORM_STAGE_CONTROL StageControlColorMatrix3x3;
-  float ColorMatrix3x3[3][3];
-  COLORSPACE_TRANSFORM_STAGE_CONTROL StageControlLookupTable1DRegamma;
-  GAMMA_RAMP_RGB LookupTable1DRegamma[4096];
-} COLORSPACE_TRANSFORM_MATRIX_V2, *PCOLORSPACE_TRANSFORM_MATRIX_V2;
+typedef struct _COLORSPACE_TRANSFORM COLORSPACE_TRANSFORM;
 
-typedef struct _SET_ACTIVE_COLOR_PROFILE_NAME {
-  WCHAR ColorProfileName[1];
-} SET_ACTIVE_COLOR_PROFILE_NAME, *PSET_ACTIVE_COLOR_PROFILE_NAME;
+struct _COLORSPACE_TRANSFORM_SET_INPUT
+{
+    OUTPUT_WIRE_COLOR_SPACE_TYPE OutputWireColorSpaceExpected;
+    OUTPUT_WIRE_FORMAT OutputWireFormatExpected;
+    COLORSPACE_TRANSFORM ColorSpaceTransform;
+};
 
-typedef struct _MIPI_DSI_CAPS {
-  UCHAR DSITypeMajor;
-  UCHAR DSITypeMinor;
-  UCHAR SpecVersionMajor;
-  UCHAR SpecVersionMinor;
-  UCHAR SpecVersionPatch;
-  USHORT TargetMaximumReturnPacketSize;
-  UCHAR ResultCodeFlags;
-  UCHAR ResultCodeStatus;
-  UCHAR Revision;
-  UCHAR Level;
-  UCHAR DeviceClassHi;
-  UCHAR DeviceClassLo;
-  UCHAR ManufacturerHi;
-  UCHAR ManufacturerLo;
-  UCHAR ProductHi;
-  UCHAR ProductLo;
-  UCHAR LengthHi;
-  UCHAR LengthLo;
-} MIPI_DSI_CAPS, *PMIPI_DSI_CAPS;
+typedef struct _COLORSPACE_TRANSFORM_DATA_CAP COLORSPACE_TRANSFORM_DATA_CAP;
+
+struct _COLORSPACE_TRANSFORM_1DLUT_CAP
+{
+    ULONG NumberOfLUTEntries;
+    COLORSPACE_TRANSFORM_DATA_CAP DataCap;
+};
+
+struct _COLORSPACE_TRANSFORM_MATRIX_CAP
+{
+    union
+    {
+        struct
+        {
+            ULONG MatrixSizeX : 10;
+            ULONG MatrixSizeY : 10;
+        };
+        ULONG Value;
+    };
+    COLORSPACE_TRANSFORM_DATA_CAP DataCap;
+};
+
+typedef struct _COLORSPACE_TRANSFORM_1DLUT_CAP COLORSPACE_TRANSFORM_1DLUT_CAP;
+
+typedef struct _COLORSPACE_TRANSFORM_MATRIX_CAP COLORSPACE_TRANSFORM_MATRIX_CAP;
+
+struct _COLORSPACE_TRANSFORM_TARGET_CAPS
+{
+    COLORSPACE_TRANSFORM_TARGET_CAPS_VERSION Version;
+    COLORSPACE_TRANSFORM_1DLUT_CAP LookupTable1DDegammaCap;
+    COLORSPACE_TRANSFORM_MATRIX_CAP ColorMatrix3x3Cap;
+    COLORSPACE_TRANSFORM_1DLUT_CAP LookupTable1DRegammaCap;
+};
+
+typedef struct _COLORSPACE_TRANSFORM_SET_INPUT COLORSPACE_TRANSFORM_SET_INPUT;
+
+typedef struct _COLORSPACE_TRANSFORM_TARGET_CAPS COLORSPACE_TRANSFORM_TARGET_CAPS;
+
+typedef struct _MIPI_DSI_PACKET MIPI_DSI_PACKET;
+
+struct _MIPI_DSI_TRANSMISSION
+{
+    ULONG TotalBufferSize;
+    UCHAR PacketCount;
+    UCHAR FailedPacket;
+    struct
+    {
+        USHORT TransmissionMode : 2;
+        USHORT ReportMipiErrors : 1;
+        USHORT ClearMipiErrors : 1;
+        USHORT SecondaryPort : 1;
+        USHORT ManufacturingMode : 1;
+        USHORT Reserved : 10;
+    };
+    USHORT ReadWordCount;
+    USHORT FinalCommandExtraPayload;
+    USHORT MipiErrors;
+    USHORT HostErrors;
+    MIPI_DSI_PACKET Packets[1];
+};
+
+typedef struct _MIPI_DSI_RESET MIPI_DSI_RESET;
+
+typedef MIPI_DSI_RESET MIPI_DSI_RESET_INPUT;
+
+typedef MIPI_DSI_RESET MIPI_DSI_RESET_OUTPUT;
+
+typedef struct _MIPI_DSI_TRANSMISSION MIPI_DSI_TRANSMISSION;
+
+typedef MIPI_DSI_TRANSMISSION MIPI_DSI_TRANSMISSION_INPUT;
+
+typedef MIPI_DSI_TRANSMISSION MIPI_DSI_TRANSMISSION_OUTPUT;
+
+typedef struct _PANEL_BRIGHTNESS_SENSOR_DATA PANEL_BRIGHTNESS_SENSOR_DATA;
+
+struct _PANEL_SET_BRIGHTNESS
+{
+    BRIGHTNESS_INTERFACE_VERSION Version;
+    union
+    {
+        UCHAR Level;
+        struct
+        {
+            ULONG Millinits;
+            ULONG TransitionTimeInMs;
+            PANEL_BRIGHTNESS_SENSOR_DATA SensorData;
+        };
+    };
+};
+
+typedef struct _PANEL_GET_BRIGHTNESS PANEL_GET_BRIGHTNESS;
+
+typedef struct _PANEL_QUERY_BRIGHTNESS_CAPS PANEL_QUERY_BRIGHTNESS_CAPS;
+
+typedef struct _PANEL_QUERY_BRIGHTNESS_RANGES PANEL_QUERY_BRIGHTNESS_RANGES;
+
+typedef struct _PANEL_SET_BRIGHTNESS PANEL_SET_BRIGHTNESS;
+
+typedef struct _PANEL_SET_BRIGHTNESS_STATE PANEL_SET_BRIGHTNESS_STATE;
+
+typedef struct _COLORSPACE_TRANSFORM *PCOLORSPACE_TRANSFORM;
+
+typedef struct _COLORSPACE_TRANSFORM_1DLUT_CAP *PCOLORSPACE_TRANSFORM_1DLUT_CAP;
+
+typedef struct _COLORSPACE_TRANSFORM_MATRIX_CAP *PCOLORSPACE_TRANSFORM_MATRIX_CAP;
+
+typedef struct _COLORSPACE_TRANSFORM_SET_INPUT *PCOLORSPACE_TRANSFORM_SET_INPUT;
+
+typedef struct _COLORSPACE_TRANSFORM_TARGET_CAPS *PCOLORSPACE_TRANSFORM_TARGET_CAPS;
+
+typedef struct _MIPI_DSI_RESET *PMIPI_DSI_RESET;
+
+typedef MIPI_DSI_RESET *PMIPI_DSI_RESET_INPUT;
+
+typedef MIPI_DSI_RESET *PMIPI_DSI_RESET_OUTPUT;
+
+typedef MIPI_DSI_TRANSMISSION *PMIPI_DSI_TRANSMISSION_INPUT;
+
+typedef MIPI_DSI_TRANSMISSION *PMIPI_DSI_TRANSMISSION_OUTPUT;
+
+typedef struct _PANEL_GET_BRIGHTNESS *PPANEL_GET_BRIGHTNESS;
+
+typedef struct _PANEL_QUERY_BRIGHTNESS_CAPS *PPANEL_QUERY_BRIGHTNESS_CAPS;
+
+typedef struct _PANEL_QUERY_BRIGHTNESS_RANGES *PPANEL_QUERY_BRIGHTNESS_RANGES;
+
+typedef struct _PANEL_SET_BRIGHTNESS *PPANEL_SET_BRIGHTNESS;
+
+typedef struct _PANEL_SET_BRIGHTNESS_STATE *PPANEL_SET_BRIGHTNESS_STATE;
+
+struct VIDEO_BRIGHTNESS_POLICY
+{
+    BOOLEAN DefaultToBiosPolicy;
+    UCHAR LevelCount;
+    struct
+    {
+        UCHAR BatteryLevel;
+        UCHAR Brightness;
+    } Level[1];
+};
+
+typedef struct VIDEO_BRIGHTNESS_POLICY *PVIDEO_BRIGHTNESS_POLICY;
+
+#define DEVPKEY_DeviceInterface_TerminalLuid 0
+#define SCREEN_BUFFER_POINTERX, Y, XSIZE, CELLSIZE) (((XSIZE * (Y)) + (X)) * (ULONG) CELLSIZE)
+
+#define SCREEN_BUFFER_POINTERX, Y, XSIZE, CELLSIZE) (((XSIZE * (Y)) + (X)) * (ULONG) CELLSIZE)
+
+struct _FONT_IMAGE_INFO
+{
+    COORD FontSize;
+    PUCHAR ImageBits;
+};
+
+struct _FSCNTL_SCREEN_INFO
+{
+    COORD Position;
+    COORD ScreenSize;
+    ULONG nNumberOfChars;
+};
+
+struct _FSVIDEO_SCREEN_INFORMATION
+{
+    COORD ScreenSize;
+    COORD FontSize;
+};
+
+typedef struct _CHAR_IMAGE_INFO CHAR_IMAGE_INFO;
+
+typedef struct _FONT_IMAGE_INFO FONT_IMAGE_INFO;
+
+struct _CHAR_IMAGE_INFO
+{
+    CHAR_INFO CharInfo;
+    FONT_IMAGE_INFO FontImageInfo;
+};
+
+typedef struct _FSCNTL_SCREEN_INFO FSCNTL_SCREEN_INFO;
+
+struct _FSVIDEO_COPY_FRAME_BUFFER
+{
+    FSCNTL_SCREEN_INFO SrcScreen;
+    FSCNTL_SCREEN_INFO DestScreen;
+};
+
+struct _FSVIDEO_REVERSE_MOUSE_POINTER
+{
+    FSCNTL_SCREEN_INFO Screen;
+    ULONG dwType;
+};
+
+typedef struct _FSVIDEO_COPY_FRAME_BUFFER FSVIDEO_COPY_FRAME_BUFFER;
+
+typedef struct _FSVIDEO_REVERSE_MOUSE_POINTER FSVIDEO_REVERSE_MOUSE_POINTER;
+
+typedef struct _FSVIDEO_SCREEN_INFORMATION FSVIDEO_SCREEN_INFORMATION;
+
+typedef struct _FSVIDEO_WRITE_TO_FRAME_BUFFER FSVIDEO_WRITE_TO_FRAME_BUFFER;
+
+typedef struct _CHAR_IMAGE_INFO *PCHAR_IMAGE_INFO;
+
+struct _FSVIDEO_WRITE_TO_FRAME_BUFFER
+{
+    PCHAR_IMAGE_INFO SrcBuffer;
+    FSCNTL_SCREEN_INFO DestScreen;
+};
+
+typedef struct _FONT_IMAGE_INFO *PFONT_IMAGE_INFO;
+
+typedef struct _FSCNTL_SCREEN_INFO *PFSCNTL_SCREEN_INFO;
+
+typedef struct _FSVIDEO_COPY_FRAME_BUFFER *PFSVIDEO_COPY_FRAME_BUFFER;
+
+typedef struct _FSVIDEO_REVERSE_MOUSE_POINTER *PFSVIDEO_REVERSE_MOUSE_POINTER;
+
+typedef struct _FSVIDEO_SCREEN_INFORMATION *PFSVIDEO_SCREEN_INFORMATION;
+
+typedef struct _FSVIDEO_WRITE_TO_FRAME_BUFFER *PFSVIDEO_WRITE_TO_FRAME_BUFFER;
 
 #endif /* _NTDDVDEO_ */

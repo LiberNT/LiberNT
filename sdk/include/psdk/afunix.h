@@ -33,4 +33,10 @@ typedef struct WS(sockaddr_un)
     char sun_path[UNIX_PATH_MAX];
 } SOCKADDR_UN, *PSOCKADDR_UN;
 
+struct _SOCKADDR_UN
+{
+    int Family;
+    wchar_t Path[63];
+};
+
 #endif /* _WS2AFUNIX_ */

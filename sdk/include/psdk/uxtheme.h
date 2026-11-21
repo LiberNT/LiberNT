@@ -351,12 +351,10 @@ typedef enum TA_PROPERTY_FLAG {
     TAPF_HASPERSPECTIVE = 16
 } TA_PROPERTY_FLAG;
 
-typedef enum TA_TRANSFORM_TYPE {
-    TATT_TRANSLATE_2D = 0,
-    TATT_SCALE_2D = 1,
-    TATT_OPACITY = 2,
-    TATT_CLIP = 3
-} TA_TRANSFORM_TYPE;
+typedef enum TA_TIMINGFUNCTION_TYPE {
+    TTFT_UNDEFINED = 0,
+    TTFT_CUBIC_BEZIER = 1
+} TA_TIMINGFUNCTION_TYPE;
 
 typedef enum TA_TRANSFORM_FLAG {
     TATF_NONE = 0,
@@ -365,10 +363,29 @@ typedef enum TA_TRANSFORM_FLAG {
     TATF_HASORIGINVALUES = 4
 } TA_TRANSFORM_FLAG;
 
-typedef enum TA_TIMINGFUNCTION_TYPE {
-    TTFT_UNDEFINED = 0,
-    TTFT_CUBIC_BEZIER = 1
-} TA_TIMINGFUNCTION_TYPE;
+typedef enum TA_TRANSFORM_TYPE {
+    TATT_TRANSLATE_2D = 0,
+    TATT_SCALE_2D = 1,
+    TATT_OPACITY = 2,
+    TATT_CLIP = 3
+} TA_TRANSFORM_TYPE;
+
+typedef struct _WTA_OPTIONS {
+  DWORD dwFlags;
+  DWORD dwMask;
+} WTA_OPTIONS, *PWTA_OPTIONS;
+
+typedef struct TA_TIMINGFUNCTION {
+  TA_TIMINGFUNCTION_TYPE eTimingFunctionType;
+} TA_TIMINGFUNCTION, *PTA_TIMINGFUNCTION;
+
+typedef struct TA_CUBIC_BEZIER {
+  TA_TIMINGFUNCTION header;
+  float rX0;
+  float rY0;
+  float rX1;
+  float rY1;
+} TA_CUBIC_BEZIER, *PTA_CUBIC_BEZIER;
 
 typedef struct TA_TRANSFORM {
   TA_TRANSFORM_TYPE eTransformType;
@@ -388,12 +405,6 @@ typedef struct TA_TRANSFORM_2D {
   float rOriginY;
 } TA_TRANSFORM_2D, *PTA_TRANSFORM_2D;
 
-typedef struct TA_TRANSFORM_OPACITY {
-  TA_TRANSFORM header;
-  float rOpacity;
-  float rInitialOpacity;
-} TA_TRANSFORM_OPACITY, *PTA_TRANSFORM_OPACITY;
-
 typedef struct TA_TRANSFORM_CLIP {
   TA_TRANSFORM header;
   float rLeft;
@@ -406,21 +417,40 @@ typedef struct TA_TRANSFORM_CLIP {
   float rInitialBottom;
 } TA_TRANSFORM_CLIP, *PTA_TRANSFORM_CLIP;
 
-typedef struct TA_TIMINGFUNCTION {
-  TA_TIMINGFUNCTION_TYPE eTimingFunctionType;
-} TA_TIMINGFUNCTION, *PTA_TIMINGFUNCTION;
+typedef struct TA_TRANSFORM_OPACITY {
+  TA_TRANSFORM header;
+  float rOpacity;
+  float rInitialOpacity;
+} TA_TRANSFORM_OPACITY, *PTA_TRANSFORM_OPACITY;
 
-typedef struct TA_CUBIC_BEZIER {
-  TA_TIMINGFUNCTION header;
-  float rX0;
-  float rY0;
-  float rX1;
-  float rY1;
-} TA_CUBIC_BEZIER, *PTA_CUBIC_BEZIER;
+#define BPBF_COMPOSITED 2
+#define BufferedPaintMakeOpaquehBufferedPaint, prc) BufferedPaintSetAlpha(hBufferedPaint, prc, 255)
+#define DTBG_VALIDBITS 0x7F
+#define DTT_FLAGS2VALIDBITS 1
+#define GBF_VALIDBITS 3
+#define STAP_VALIDBITS 7
+#define WTNCA_VALIDBITS 0xF
 
-typedef struct _WTA_OPTIONS {
-  DWORD dwFlags;
-  DWORD dwMask;
-} WTA_OPTIONS, *PWTA_OPTIONS;
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL BeginPanningFeedback(HWND hwnd);
+HRESULT DrawThemeParentBackgroundEx(HWND hwnd, HDC hdc, DWORD dwFlags, const RECT *prc);
+BOOL EndPanningFeedback(HWND hwnd, BOOL fAnimateBack);
+HRESULT GetThemeAnimationProperty(HTHEME hTheme, int iStoryboardId, int iTargetId, TA_PROPERTY eProperty, void *pvProperty, DWORD cbSize, DWORD *pcbSizeOut);
+HRESULT GetThemeAnimationTransform(HTHEME hTheme, int iStoryboardId, int iTargetId, DWORD dwTransformIndex, TA_TRANSFORM *pTransform, DWORD cbSize, DWORD *pcbSizeOut);
+HRESULT GetThemeTimingFunction(HTHEME hTheme, int iTimingFunctionId, TA_TIMINGFUNCTION *pTimingFunction, DWORD cbSize, DWORD *pcbSizeOut);
+HRESULT SetWindowThemeNonClientAttributes(HWND hwnd, DWORD dwMask, DWORD dwAttributes);
+BOOL UpdatePanningFeedback(HWND hwnd, LONG lTotalOverpanOffsetX, LONG lTotalOverpanOffsetY, BOOL fInInertia);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define BufferedPaintMakeOpaquehBufferedPaint, prc) BufferedPaintSetAlpha(hBufferedPaint, prc, 255)
+
+#define BufferedPaintMakeOpaquehBufferedPaint, prc) BufferedPaintSetAlpha(hBufferedPaint, prc, 255)
 
 #endif

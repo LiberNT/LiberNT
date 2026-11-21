@@ -1005,7 +1005,8 @@ typedef enum _undonameid
     UID_DRAGDROP    = 3,
     UID_CUT         = 4,
     UID_PASTE       = 5,
-    UID_AUTOCORRECT = 6
+    UID_AUTOCORRECT = 6,
+    UID_AUTOTABLE = 6,
 } UNDONAMEID;
 
 typedef LONG (*EDITWORDBREAKPROCEX)(char*,LONG,BYTE,INT);
@@ -1327,24 +1328,28 @@ typedef struct _settextex {
 #define SPF_SETDEFAULT 0x0004
 #endif
 
-typedef struct _tableRowParms {
-  BYTE cbRow;
-  BYTE cbCell;
-  BYTE cCell;
-  BYTE cRow;
-  LONG dxCellMargin;
-  LONG dxIndent;
-  LONG dyHeight;
-  DWORD nAlignment : 3;
-  DWORD fRTL : 1;
-  DWORD fKeep : 1;
-  DWORD fKeepFollow : 1;
-  DWORD fWrap : 1;
-  DWORD fIdentCells : 1;
-  LONG cpStartRow;
-  BYTE bTableLevel;
-  BYTE iCell;
-} TABLEROWPARMS;
+#pragma pack(push, 4)
+typedef struct _endcomposition {
+  NMHDR nmhdr;
+  DWORD dwCode;
+} ENDCOMPOSITIONNOTIFY;
+#pragma pack(pop)
+
+#pragma pack(push, 4)
+typedef struct _getcontextmenuex {
+  CHARRANGE chrg;
+  DWORD dwFlags;
+  POINT pt;
+  void * pvReserved;
+} GETCONTEXTMENUEX;
+#pragma pack(pop)
+
+#pragma pack(push, 4)
+typedef struct _grouptypingchange {
+  NMHDR nmhdr;
+  BOOL fGroupTyping;
+} GROUPTYPINGCHANGE;
+#pragma pack(pop)
 
 typedef struct _tableCellParms {
   LONG dxWidth;
@@ -1367,27 +1372,126 @@ typedef struct _tableCellParms {
   COLORREF crForePat;
 } TABLECELLPARMS;
 
+typedef struct _tableRowParms {
+  BYTE cbRow;
+  BYTE cbCell;
+  BYTE cCell;
+  BYTE cRow;
+  LONG dxCellMargin;
+  LONG dxIndent;
+  LONG dyHeight;
+  DWORD nAlignment : 3;
+  DWORD fRTL : 1;
+  DWORD fKeep : 1;
+  DWORD fKeepFollow : 1;
+  DWORD fWrap : 1;
+  DWORD fIdentCells : 1;
+  LONG cpStartRow;
+  BYTE bTableLevel;
+  BYTE iCell;
+} TABLEROWPARMS;
+
+#define CERICHEDIT_CLASSA "RichEditCEA"
+#define CERICHEDIT_CLASSW L"RichEditCEW"
+#define CFM_ALLEFFECTS 0x7E137FFF
+#define EM_CALLAUTOCORRECTPROC 0x4FF
+#define EM_GETAUTOCORRECTPROC 0x4E9
+#define EM_GETEDITSTYLEEX 0x514
+#define EM_GETELLIPSISMODE 0x531
+#define EM_GETELLIPSISSTATE 0x542
+#define EM_GETSTORYTYPE 0x522
+#define EM_GETTABLEPARMS 0x509
+#define EM_GETTOUCHOPTIONS 0x536
+#define EM_INSERTIMAGE 0x53A
+#define EM_INSERTTABLE 0x4E8
+#define EM_SETAUTOCORRECTPROC 0x4EA
+#define EM_SETDISABLEOLELINKCONVERSION 0x594
+#define EM_SETEDITSTYLEEX 0x513
+#define EM_SETELLIPSISMODE 0x532
+#define EM_SETQUERYCONVERTOLELINKCALLBACK 0x593
+#define EM_SETSTORYTYPE 0x523
+#define EM_SETTABLEPARMS 0x533
+#define EM_SETTOUCHOPTIONS 0x537
+#define EM_SETUIANAME 0x540
+#define RICHEDIT60_CLASS 0
+#define RICHEDIT_CLASSA "RichEdit20A"
+#define RICHEDIT_CLASSW L"RichEdit20W"
+
 #pragma pack(push, 4)
-typedef struct _endcomposition {
-  NMHDR nmhdr;
-  DWORD dwCode;
-} ENDCOMPOSITIONNOTIFY;
+struct _enoleopfailed
+{
+    NMHDR nmhdr;
+    LONG iob;
+    LONG lOper;
+    HRESULT hr;
+};
 #pragma pack(pop)
 
 #pragma pack(push, 4)
-typedef struct _grouptypingchange {
-  NMHDR nmhdr;
-  BOOL fGroupTyping;
-} GROUPTYPINGCHANGE;
+struct _findtext
+{
+    CHARRANGE chrg;
+    LPCSTR lpstrText;
+};
 #pragma pack(pop)
 
 #pragma pack(push, 4)
-typedef struct _getcontextmenuex {
-  CHARRANGE chrg;
-  DWORD dwFlags;
-  POINT pt;
-  void * pvReserved;
-} GETCONTEXTMENUEX;
+struct _findtextexa
+{
+    CHARRANGE chrg;
+    LPCSTR lpstrText;
+    CHARRANGE chrgText;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 4)
+struct _findtextexw
+{
+    CHARRANGE chrg;
+    LPCWSTR lpstrText;
+    CHARRANGE chrgText;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 4)
+struct _findtextw
+{
+    CHARRANGE chrg;
+    LPCWSTR lpstrText;
+};
+#pragma pack(pop)
+
+typedef int (WINAPI *AutoCorrectProc)(LANGID, const WCHAR *, WCHAR *, LONG, LONG *);
+
+enum tagTextMode
+{
+
+};
+
+typedef enum tagTextMode TEXTMODE;
+
+#pragma pack(push, 4)
+struct _clipboardformat
+{
+    NMHDR nmhdr;
+    CLIPFORMAT cf;
+};
+#pragma pack(pop)
+
+typedef struct _clipboardformat CLIPBOARDFORMAT;
+
+typedef struct tagRICHEDIT_IMAGE_PARAMETERS RICHEDIT_IMAGE_PARAMETERS;
+
+#pragma pack(push, 4)
+struct tagRICHEDIT_IMAGE_PARAMETERS
+{
+    LONG xWidth;
+    LONG yHeight;
+    LONG Ascent;
+    LONG Type;
+    LPCWSTR pwszAlternateText;
+    IStream *pIStream;
+};
 #pragma pack(pop)
 
 #endif /* __WINE_RICHEDIT_H */

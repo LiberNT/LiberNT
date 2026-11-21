@@ -60,8 +60,9 @@ interface IFilter : IUnknown
     {
         CHUNK_TEXT               = 0x1,
         CHUNK_VALUE              = 0x2,
-        CHUNK_FILTER_OWNED_VALUE = 0x4
-    } CHUNKSTATE;
+        CHUNK_FILTER_OWNED_VALUE = 0x4,
+        CHUNK_IMAGE = 8,
+} CHUNKSTATE;
 
     typedef enum tagCHUNK_BREAKTYPE
     {
@@ -99,3 +100,38 @@ interface IFilter : IUnknown
     [local]
     SCODE BindRegion([in] FILTERREGION pos, [in] REFIID riid, [out] void **unk);
 }
+
+cpp_quote("enum IMAGE_PIXELFORMAT")
+cpp_quote("{")
+cpp_quote("    FILTER_PIXELFORMAT_BGRA8 = 0,")
+cpp_quote("    FILTER_PIXELFORMAT_PBGRA8 = 1,")
+cpp_quote("    FILTER_PIXELFORMAT_BGR8 = 2,")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("struct IFilterVtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(IFilter *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(IFilter *);")
+cpp_quote("    ULONG (WINAPI *Release)(IFilter *);")
+cpp_quote("    SCODE (WINAPI *Init)(IFilter *, ULONG, ULONG, const FULLPROPSPEC *, ULONG *);")
+cpp_quote("    SCODE (WINAPI *GetChunk)(IFilter *, STAT_CHUNK *);")
+cpp_quote("    SCODE (WINAPI *GetText)(IFilter *, ULONG *, WCHAR *);")
+cpp_quote("    SCODE (WINAPI *GetValue)(IFilter *, PROPVARIANT **);")
+cpp_quote("    SCODE (WINAPI *BindRegion)(IFilter *, FILTERREGION, const IID *const , void **);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("typedef struct IPixelFilter IPixelFilter;")
+cpp_quote("")
+cpp_quote("struct IPixelFilterVtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(IPixelFilter *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(IPixelFilter *);")
+cpp_quote("    ULONG (WINAPI *Release)(IPixelFilter *);")
+cpp_quote("    SCODE (WINAPI *Init)(IPixelFilter *, ULONG, ULONG, const FULLPROPSPEC *, ULONG *);")
+cpp_quote("    SCODE (WINAPI *GetChunk)(IPixelFilter *, STAT_CHUNK *);")
+cpp_quote("    SCODE (WINAPI *GetText)(IPixelFilter *, ULONG *, WCHAR *);")
+cpp_quote("    SCODE (WINAPI *GetValue)(IPixelFilter *, PROPVARIANT **);")
+cpp_quote("    SCODE (WINAPI *BindRegion)(IPixelFilter *, FILTERREGION, const IID *const , void **);")
+cpp_quote("    HRESULT (WINAPI *GetImageInfo)(IPixelFilter *, IMAGE_INFO *);")
+cpp_quote("    HRESULT (WINAPI *GetPixelsForImage)(IPixelFilter *, FLOAT, const RECT *, ULONG, BYTE *);")
+cpp_quote("};")

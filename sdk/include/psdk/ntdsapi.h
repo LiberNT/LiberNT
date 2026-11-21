@@ -505,34 +505,6 @@ DWORD WINAPI DsServerRegisterSpnW(DS_SPN_WRITE_OP operation, LPCWSTR ServiceClas
 #define NTDSSETTINGS_DEFAULT_SERVER_REDUNDANCY 2
 #endif
 
-typedef enum DS_NAME_ERROR {
-    DS_NAME_NO_ERROR = 0,
-    DS_NAME_ERROR_RESOLVING = 1,
-    DS_NAME_ERROR_NOT_FOUND = 2,
-    DS_NAME_ERROR_NOT_UNIQUE = 3,
-    DS_NAME_ERROR_NO_MAPPING = 4,
-    DS_NAME_ERROR_DOMAIN_ONLY = 5,
-    DS_NAME_ERROR_NO_SYNTACTICAL_MAPPING = 6,
-    DS_NAME_ERROR_TRUST_REFERRAL = 7
-} DS_NAME_ERROR;
-
-typedef enum DS_REPSYNCALL_ERROR {
-    DS_REPSYNCALL_WIN32_ERROR_CONTACTING_SERVER = 0,
-    DS_REPSYNCALL_WIN32_ERROR_REPLICATING = 1,
-    DS_REPSYNCALL_SERVER_UNREACHABLE = 2
-} DS_REPSYNCALL_ERROR;
-
-typedef enum DS_REPSYNCALL_EVENT {
-    DS_REPSYNCALL_EVENT_ERROR = 0,
-    DS_REPSYNCALL_EVENT_SYNC_STARTED = 1,
-    DS_REPSYNCALL_EVENT_SYNC_COMPLETED = 2,
-    DS_REPSYNCALL_EVENT_FINISHED = 3
-} DS_REPSYNCALL_EVENT;
-
-typedef enum DS_KCC_TASKID {
-    DS_KCC_TASKID_UPDATE_TOPOLOGY = 0
-} DS_KCC_TASKID;
-
 typedef enum _DS_REPL_INFO_TYPE {
     DS_REPL_INFO_NEIGHBORS = 0,
     DS_REPL_INFO_CURSORS_FOR_NC = 1,
@@ -557,64 +529,323 @@ typedef enum _DS_REPL_OP_TYPE {
     DS_REPL_OP_TYPE_UPDATE_REFS = 4
 } DS_REPL_OP_TYPE;
 
-typedef struct DS_REPSYNCALL_SYNCA {
-  LPSTR pszSrcId;
-  LPSTR pszDstId;
-  LPSTR pszNC;
-  GUID * pguidSrc;
-  GUID * pguidDst;
-} DS_REPSYNCALL_SYNCA, *PDS_REPSYNCALL_SYNCA;
+typedef enum DS_KCC_TASKID {
+    DS_KCC_TASKID_UPDATE_TOPOLOGY = 0
+} DS_KCC_TASKID;
 
-typedef struct DS_REPSYNCALL_SYNCW {
-  LPWSTR pszSrcId;
-  LPWSTR pszDstId;
-  LPWSTR pszNC;
-  GUID * pguidSrc;
-  GUID * pguidDst;
-} DS_REPSYNCALL_SYNCW, *PDS_REPSYNCALL_SYNCW;
+typedef enum DS_NAME_ERROR {
+    DS_NAME_NO_ERROR = 0,
+    DS_NAME_ERROR_RESOLVING = 1,
+    DS_NAME_ERROR_NOT_FOUND = 2,
+    DS_NAME_ERROR_NOT_UNIQUE = 3,
+    DS_NAME_ERROR_NO_MAPPING = 4,
+    DS_NAME_ERROR_DOMAIN_ONLY = 5,
+    DS_NAME_ERROR_NO_SYNTACTICAL_MAPPING = 6,
+    DS_NAME_ERROR_TRUST_REFERRAL = 7
+} DS_NAME_ERROR;
 
-typedef struct DS_REPSYNCALL_ERRINFOA {
-  LPSTR pszSvrId;
-  DS_REPSYNCALL_ERROR error;
-  DWORD dwWin32Err;
-  LPSTR pszSrcId;
-} DS_REPSYNCALL_ERRINFOA, *PDS_REPSYNCALL_ERRINFOA;
+typedef enum DS_REPSYNCALL_ERROR {
+    DS_REPSYNCALL_WIN32_ERROR_CONTACTING_SERVER = 0,
+    DS_REPSYNCALL_WIN32_ERROR_REPLICATING = 1,
+    DS_REPSYNCALL_SERVER_UNREACHABLE = 2
+} DS_REPSYNCALL_ERROR;
 
-typedef struct DS_REPSYNCALL_ERRINFOW {
-  LPWSTR pszSvrId;
-  DS_REPSYNCALL_ERROR error;
-  DWORD dwWin32Err;
-  LPWSTR pszSrcId;
-} DS_REPSYNCALL_ERRINFOW, *PDS_REPSYNCALL_ERRINFOW;
+typedef enum DS_REPSYNCALL_EVENT {
+    DS_REPSYNCALL_EVENT_ERROR = 0,
+    DS_REPSYNCALL_EVENT_SYNC_STARTED = 1,
+    DS_REPSYNCALL_EVENT_SYNC_COMPLETED = 2,
+    DS_REPSYNCALL_EVENT_FINISHED = 3
+} DS_REPSYNCALL_EVENT;
 
-typedef struct DS_REPSYNCALL_UPDATEA {
-  DS_REPSYNCALL_EVENT event;
-  DS_REPSYNCALL_ERRINFOA * pErrInfo;
-  DS_REPSYNCALL_SYNCA * pSync;
-} DS_REPSYNCALL_UPDATEA, *PDS_REPSYNCALL_UPDATEA;
+typedef struct _DS_REPL_ATTR_META_DATA {
+  LPWSTR pszAttributeName;
+  DWORD dwVersion;
+  FILETIME ftimeLastOriginatingChange;
+  UUID uuidLastOriginatingDsaInvocationID;
+  USN usnOriginatingChange;
+  USN usnLocalChange;
+} DS_REPL_ATTR_META_DATA;
 
-typedef struct DS_REPSYNCALL_UPDATEW {
-  DS_REPSYNCALL_EVENT event;
-  DS_REPSYNCALL_ERRINFOW * pErrInfo;
-  DS_REPSYNCALL_SYNCW * pSync;
-} DS_REPSYNCALL_UPDATEW, *PDS_REPSYNCALL_UPDATEW;
+typedef struct _DS_REPL_ATTR_META_DATA_2 {
+  LPWSTR pszAttributeName;
+  DWORD dwVersion;
+  FILETIME ftimeLastOriginatingChange;
+  UUID uuidLastOriginatingDsaInvocationID;
+  USN usnOriginatingChange;
+  USN usnLocalChange;
+  LPWSTR pszLastOriginatingDsaDN;
+} DS_REPL_ATTR_META_DATA_2;
 
-typedef struct DS_SITE_COST_INFO {
-  DWORD errorCode;
-  DWORD cost;
-} DS_SITE_COST_INFO, *PDS_SITE_COST_INFO;
+typedef struct _DS_REPL_ATTR_META_DATA_BLOB {
+  DWORD oszAttributeName;
+  DWORD dwVersion;
+  FILETIME ftimeLastOriginatingChange;
+  UUID uuidLastOriginatingDsaInvocationID;
+  USN usnOriginatingChange;
+  USN usnLocalChange;
+  DWORD oszLastOriginatingDsaDN;
+} DS_REPL_ATTR_META_DATA_BLOB;
 
-typedef struct DS_SCHEMA_GUID_MAPA {
-  GUID guid;
-  DWORD guidType;
-  LPSTR pName;
-} DS_SCHEMA_GUID_MAPA, *PDS_SCHEMA_GUID_MAPA;
+typedef struct _DS_REPL_CURSOR {
+  UUID uuidSourceDsaInvocationID;
+  USN usnAttributeFilter;
+} DS_REPL_CURSOR;
 
-typedef struct DS_SCHEMA_GUID_MAPW {
-  GUID guid;
-  DWORD guidType;
-  LPWSTR pName;
-} DS_SCHEMA_GUID_MAPW, *PDS_SCHEMA_GUID_MAPW;
+typedef struct _DS_REPL_CURSOR_2 {
+  UUID uuidSourceDsaInvocationID;
+  USN usnAttributeFilter;
+  FILETIME ftimeLastSyncSuccess;
+} DS_REPL_CURSOR_2;
+
+typedef struct _DS_REPL_CURSOR_3W {
+  UUID uuidSourceDsaInvocationID;
+  USN usnAttributeFilter;
+  FILETIME ftimeLastSyncSuccess;
+  LPWSTR pszSourceDsaDN;
+} DS_REPL_CURSOR_3W;
+
+typedef struct _DS_REPL_CURSOR_BLOB {
+  UUID uuidSourceDsaInvocationID;
+  USN usnAttributeFilter;
+  FILETIME ftimeLastSyncSuccess;
+  DWORD oszSourceDsaDN;
+} DS_REPL_CURSOR_BLOB;
+
+typedef struct _DS_REPL_CURSORS {
+  DWORD cNumCursors;
+  DWORD dwReserved;
+  DS_REPL_CURSOR rgCursor[1];
+} DS_REPL_CURSORS;
+
+typedef struct _DS_REPL_CURSORS_2 {
+  DWORD cNumCursors;
+  DWORD dwEnumerationContext;
+  DS_REPL_CURSOR_2 rgCursor[1];
+} DS_REPL_CURSORS_2;
+
+typedef struct _DS_REPL_CURSORS_3W {
+  DWORD cNumCursors;
+  DWORD dwEnumerationContext;
+  DS_REPL_CURSOR_3W rgCursor[1];
+} DS_REPL_CURSORS_3W;
+
+typedef struct _DS_REPL_KCC_DSA_FAILUREW {
+  LPWSTR pszDsaDN;
+  UUID uuidDsaObjGuid;
+  FILETIME ftimeFirstFailure;
+  DWORD cNumFailures;
+  DWORD dwLastResult;
+} DS_REPL_KCC_DSA_FAILUREW;
+
+typedef struct _DS_REPL_KCC_DSA_FAILURESW {
+  DWORD cNumEntries;
+  DWORD dwReserved;
+  DS_REPL_KCC_DSA_FAILUREW rgDsaFailure[1];
+} DS_REPL_KCC_DSA_FAILURESW;
+
+typedef struct _DS_REPL_KCC_DSA_FAILUREW_BLOB {
+  DWORD oszDsaDN;
+  UUID uuidDsaObjGuid;
+  FILETIME ftimeFirstFailure;
+  DWORD cNumFailures;
+  DWORD dwLastResult;
+} DS_REPL_KCC_DSA_FAILUREW_BLOB;
+
+typedef struct _DS_REPL_NEIGHBORW {
+  LPWSTR pszNamingContext;
+  LPWSTR pszSourceDsaDN;
+  LPWSTR pszSourceDsaAddress;
+  LPWSTR pszAsyncIntersiteTransportDN;
+  DWORD dwReplicaFlags;
+  DWORD dwReserved;
+  UUID uuidNamingContextObjGuid;
+  UUID uuidSourceDsaObjGuid;
+  UUID uuidSourceDsaInvocationID;
+  UUID uuidAsyncIntersiteTransportObjGuid;
+  USN usnLastObjChangeSynced;
+  USN usnAttributeFilter;
+  FILETIME ftimeLastSyncSuccess;
+  FILETIME ftimeLastSyncAttempt;
+  DWORD dwLastSyncResult;
+  DWORD cNumConsecutiveSyncFailures;
+} DS_REPL_NEIGHBORW;
+
+typedef struct _DS_REPL_NEIGHBORSW {
+  DWORD cNumNeighbors;
+  DWORD dwReserved;
+  DS_REPL_NEIGHBORW rgNeighbor[1];
+} DS_REPL_NEIGHBORSW;
+
+typedef struct _DS_REPL_NEIGHBORW_BLOB {
+  DWORD oszNamingContext;
+  DWORD oszSourceDsaDN;
+  DWORD oszSourceDsaAddress;
+  DWORD oszAsyncIntersiteTransportDN;
+  DWORD dwReplicaFlags;
+  DWORD dwReserved;
+  UUID uuidNamingContextObjGuid;
+  UUID uuidSourceDsaObjGuid;
+  UUID uuidSourceDsaInvocationID;
+  UUID uuidAsyncIntersiteTransportObjGuid;
+  USN usnLastObjChangeSynced;
+  USN usnAttributeFilter;
+  FILETIME ftimeLastSyncSuccess;
+  FILETIME ftimeLastSyncAttempt;
+  DWORD dwLastSyncResult;
+  DWORD cNumConsecutiveSyncFailures;
+} DS_REPL_NEIGHBORW_BLOB;
+
+typedef struct _DS_REPL_OBJ_META_DATA {
+  DWORD cNumEntries;
+  DWORD dwReserved;
+  DS_REPL_ATTR_META_DATA rgMetaData[1];
+} DS_REPL_OBJ_META_DATA;
+
+typedef struct _DS_REPL_OBJ_META_DATA_2 {
+  DWORD cNumEntries;
+  DWORD dwReserved;
+  DS_REPL_ATTR_META_DATA_2 rgMetaData[1];
+} DS_REPL_OBJ_META_DATA_2;
+
+typedef struct _DS_REPL_OPW {
+  FILETIME ftimeEnqueued;
+  ULONG ulSerialNumber;
+  ULONG ulPriority;
+  DS_REPL_OP_TYPE OpType;
+  ULONG ulOptions;
+  LPWSTR pszNamingContext;
+  LPWSTR pszDsaDN;
+  LPWSTR pszDsaAddress;
+  UUID uuidNamingContextObjGuid;
+  UUID uuidDsaObjGuid;
+} DS_REPL_OPW;
+
+typedef struct _DS_REPL_OPW_BLOB {
+  FILETIME ftimeEnqueued;
+  ULONG ulSerialNumber;
+  ULONG ulPriority;
+  DS_REPL_OP_TYPE OpType;
+  ULONG ulOptions;
+  DWORD oszNamingContext;
+  DWORD oszDsaDN;
+  DWORD oszDsaAddress;
+  UUID uuidNamingContextObjGuid;
+  UUID uuidDsaObjGuid;
+} DS_REPL_OPW_BLOB;
+
+typedef struct _DS_REPL_PENDING_OPSW {
+  FILETIME ftimeCurrentOpStarted;
+  DWORD cNumPendingOps;
+  DS_REPL_OPW rgPendingOp[1];
+} DS_REPL_PENDING_OPSW;
+
+typedef struct _DS_REPL_QUEUE_STATISTICSW {
+  FILETIME ftimeCurrentOpStarted;
+  DWORD cNumPendingOps;
+  FILETIME ftimeOldestSync;
+  FILETIME ftimeOldestAdd;
+  FILETIME ftimeOldestMod;
+  FILETIME ftimeOldestDel;
+  FILETIME ftimeOldestUpdRefs;
+} DS_REPL_QUEUE_STATISTICSW, DS_REPL_QUEUE_STATISTICSW_BLOB;
+
+typedef struct _DS_REPL_VALUE_META_DATA {
+  LPWSTR pszAttributeName;
+  LPWSTR pszObjectDn;
+  DWORD cbData;
+  BYTE * pbData;
+  FILETIME ftimeDeleted;
+  FILETIME ftimeCreated;
+  DWORD dwVersion;
+  FILETIME ftimeLastOriginatingChange;
+  UUID uuidLastOriginatingDsaInvocationID;
+  USN usnOriginatingChange;
+  USN usnLocalChange;
+} DS_REPL_VALUE_META_DATA;
+
+typedef struct _DS_REPL_ATTR_VALUE_META_DATA {
+  DWORD cNumEntries;
+  DWORD dwEnumerationContext;
+  DS_REPL_VALUE_META_DATA rgMetaData[1];
+} DS_REPL_ATTR_VALUE_META_DATA;
+
+typedef struct _DS_REPL_VALUE_META_DATA_2 {
+  LPWSTR pszAttributeName;
+  LPWSTR pszObjectDn;
+  DWORD cbData;
+  BYTE * pbData;
+  FILETIME ftimeDeleted;
+  FILETIME ftimeCreated;
+  DWORD dwVersion;
+  FILETIME ftimeLastOriginatingChange;
+  UUID uuidLastOriginatingDsaInvocationID;
+  USN usnOriginatingChange;
+  USN usnLocalChange;
+  LPWSTR pszLastOriginatingDsaDN;
+} DS_REPL_VALUE_META_DATA_2;
+
+typedef struct _DS_REPL_ATTR_VALUE_META_DATA_2 {
+  DWORD cNumEntries;
+  DWORD dwEnumerationContext;
+  DS_REPL_VALUE_META_DATA_2 rgMetaData[1];
+} DS_REPL_ATTR_VALUE_META_DATA_2;
+
+typedef struct _DS_REPL_VALUE_META_DATA_BLOB {
+  DWORD oszAttributeName;
+  DWORD oszObjectDn;
+  DWORD cbData;
+  DWORD obData;
+  FILETIME ftimeDeleted;
+  FILETIME ftimeCreated;
+  DWORD dwVersion;
+  FILETIME ftimeLastOriginatingChange;
+  UUID uuidLastOriginatingDsaInvocationID;
+  USN usnOriginatingChange;
+  USN usnLocalChange;
+  DWORD oszLastOriginatingDsaDN;
+} DS_REPL_VALUE_META_DATA_BLOB;
+
+typedef struct _DS_REPL_VALUE_META_DATA_BLOB_EXT {
+  DWORD oszAttributeName;
+  DWORD oszObjectDn;
+  DWORD cbData;
+  DWORD obData;
+  FILETIME ftimeDeleted;
+  FILETIME ftimeCreated;
+  DWORD dwVersion;
+  FILETIME ftimeLastOriginatingChange;
+  UUID uuidLastOriginatingDsaInvocationID;
+  USN usnOriginatingChange;
+  USN usnLocalChange;
+  DWORD oszLastOriginatingDsaDN;
+  DWORD dwUserIdentifier;
+  DWORD dwPriorLinkState;
+  DWORD dwCurrentLinkState;
+} DS_REPL_VALUE_META_DATA_BLOB_EXT;
+
+typedef struct _DS_REPL_VALUE_META_DATA_EXT {
+  LPWSTR pszAttributeName;
+  LPWSTR pszObjectDn;
+  DWORD cbData;
+  BYTE * pbData;
+  FILETIME ftimeDeleted;
+  FILETIME ftimeCreated;
+  DWORD dwVersion;
+  FILETIME ftimeLastOriginatingChange;
+  UUID uuidLastOriginatingDsaInvocationID;
+  USN usnOriginatingChange;
+  USN usnLocalChange;
+  LPWSTR pszLastOriginatingDsaDN;
+  DWORD dwUserIdentifier;
+  DWORD dwPriorLinkState;
+  DWORD dwCurrentLinkState;
+} DS_REPL_VALUE_META_DATA_EXT;
+
+typedef struct _DS_REPL_ATTR_VALUE_META_DATA_EXT {
+  DWORD cNumEntries;
+  DWORD dwEnumerationContext;
+  DS_REPL_VALUE_META_DATA_EXT rgMetaData[1];
+} DS_REPL_ATTR_VALUE_META_DATA_EXT;
 
 typedef struct DS_DOMAIN_CONTROLLER_INFO_1A {
   LPSTR NetbiosName;
@@ -706,294 +937,495 @@ typedef struct DS_DOMAIN_CONTROLLER_INFO_3W {
   GUID NtdsDsaObjectGuid;
 } DS_DOMAIN_CONTROLLER_INFO_3W, *PDS_DOMAIN_CONTROLLER_INFO_3W;
 
-typedef struct _DS_REPL_NEIGHBORW {
-  LPWSTR pszNamingContext;
-  LPWSTR pszSourceDsaDN;
-  LPWSTR pszSourceDsaAddress;
-  LPWSTR pszAsyncIntersiteTransportDN;
-  DWORD dwReplicaFlags;
-  DWORD dwReserved;
-  UUID uuidNamingContextObjGuid;
-  UUID uuidSourceDsaObjGuid;
-  UUID uuidSourceDsaInvocationID;
-  UUID uuidAsyncIntersiteTransportObjGuid;
-  USN usnLastObjChangeSynced;
-  USN usnAttributeFilter;
-  FILETIME ftimeLastSyncSuccess;
-  FILETIME ftimeLastSyncAttempt;
-  DWORD dwLastSyncResult;
-  DWORD cNumConsecutiveSyncFailures;
-} DS_REPL_NEIGHBORW;
+typedef struct DS_REPSYNCALL_ERRINFOA {
+  LPSTR pszSvrId;
+  DS_REPSYNCALL_ERROR error;
+  DWORD dwWin32Err;
+  LPSTR pszSrcId;
+} DS_REPSYNCALL_ERRINFOA, *PDS_REPSYNCALL_ERRINFOA;
 
-typedef struct _DS_REPL_NEIGHBORW_BLOB {
-  DWORD oszNamingContext;
-  DWORD oszSourceDsaDN;
-  DWORD oszSourceDsaAddress;
-  DWORD oszAsyncIntersiteTransportDN;
-  DWORD dwReplicaFlags;
-  DWORD dwReserved;
-  UUID uuidNamingContextObjGuid;
-  UUID uuidSourceDsaObjGuid;
-  UUID uuidSourceDsaInvocationID;
-  UUID uuidAsyncIntersiteTransportObjGuid;
-  USN usnLastObjChangeSynced;
-  USN usnAttributeFilter;
-  FILETIME ftimeLastSyncSuccess;
-  FILETIME ftimeLastSyncAttempt;
-  DWORD dwLastSyncResult;
-  DWORD cNumConsecutiveSyncFailures;
-} DS_REPL_NEIGHBORW_BLOB;
+typedef struct DS_REPSYNCALL_ERRINFOW {
+  LPWSTR pszSvrId;
+  DS_REPSYNCALL_ERROR error;
+  DWORD dwWin32Err;
+  LPWSTR pszSrcId;
+} DS_REPSYNCALL_ERRINFOW, *PDS_REPSYNCALL_ERRINFOW;
 
-typedef struct _DS_REPL_NEIGHBORSW {
-  DWORD cNumNeighbors;
-  DWORD dwReserved;
-  DS_REPL_NEIGHBORW rgNeighbor[1];
-} DS_REPL_NEIGHBORSW;
+typedef struct DS_REPSYNCALL_SYNCA {
+  LPSTR pszSrcId;
+  LPSTR pszDstId;
+  LPSTR pszNC;
+  GUID * pguidSrc;
+  GUID * pguidDst;
+} DS_REPSYNCALL_SYNCA, *PDS_REPSYNCALL_SYNCA;
 
-typedef struct _DS_REPL_CURSOR {
-  UUID uuidSourceDsaInvocationID;
-  USN usnAttributeFilter;
-} DS_REPL_CURSOR;
+typedef struct DS_REPSYNCALL_SYNCW {
+  LPWSTR pszSrcId;
+  LPWSTR pszDstId;
+  LPWSTR pszNC;
+  GUID * pguidSrc;
+  GUID * pguidDst;
+} DS_REPSYNCALL_SYNCW, *PDS_REPSYNCALL_SYNCW;
 
-typedef struct _DS_REPL_CURSOR_2 {
-  UUID uuidSourceDsaInvocationID;
-  USN usnAttributeFilter;
-  FILETIME ftimeLastSyncSuccess;
-} DS_REPL_CURSOR_2;
+typedef struct DS_REPSYNCALL_UPDATEA {
+  DS_REPSYNCALL_EVENT event;
+  DS_REPSYNCALL_ERRINFOA * pErrInfo;
+  DS_REPSYNCALL_SYNCA * pSync;
+} DS_REPSYNCALL_UPDATEA, *PDS_REPSYNCALL_UPDATEA;
 
-typedef struct _DS_REPL_CURSOR_3W {
-  UUID uuidSourceDsaInvocationID;
-  USN usnAttributeFilter;
-  FILETIME ftimeLastSyncSuccess;
-  LPWSTR pszSourceDsaDN;
-} DS_REPL_CURSOR_3W;
+typedef struct DS_REPSYNCALL_UPDATEW {
+  DS_REPSYNCALL_EVENT event;
+  DS_REPSYNCALL_ERRINFOW * pErrInfo;
+  DS_REPSYNCALL_SYNCW * pSync;
+} DS_REPSYNCALL_UPDATEW, *PDS_REPSYNCALL_UPDATEW;
 
-typedef struct _DS_REPL_CURSOR_BLOB {
-  UUID uuidSourceDsaInvocationID;
-  USN usnAttributeFilter;
-  FILETIME ftimeLastSyncSuccess;
-  DWORD oszSourceDsaDN;
-} DS_REPL_CURSOR_BLOB;
+typedef struct DS_SCHEMA_GUID_MAPA {
+  GUID guid;
+  DWORD guidType;
+  LPSTR pName;
+} DS_SCHEMA_GUID_MAPA, *PDS_SCHEMA_GUID_MAPA;
 
-typedef struct _DS_REPL_CURSORS {
-  DWORD cNumCursors;
-  DWORD dwReserved;
-  DS_REPL_CURSOR rgCursor[1];
-} DS_REPL_CURSORS;
+typedef struct DS_SCHEMA_GUID_MAPW {
+  GUID guid;
+  DWORD guidType;
+  LPWSTR pName;
+} DS_SCHEMA_GUID_MAPW, *PDS_SCHEMA_GUID_MAPW;
 
-typedef struct _DS_REPL_CURSORS_2 {
-  DWORD cNumCursors;
-  DWORD dwEnumerationContext;
-  DS_REPL_CURSOR_2 rgCursor[1];
-} DS_REPL_CURSORS_2;
+typedef struct DS_SITE_COST_INFO {
+  DWORD errorCode;
+  DWORD cost;
+} DS_SITE_COST_INFO, *PDS_SITE_COST_INFO;
 
-typedef struct _DS_REPL_CURSORS_3W {
-  DWORD cNumCursors;
-  DWORD dwEnumerationContext;
-  DS_REPL_CURSOR_3W rgCursor[1];
-} DS_REPL_CURSORS_3W;
+#define ADAM_REPL_AUTHENTICATION_MODE_NEGOTIATE_PASS_THROUGH 0
+#define ADAM_SCP_FSMO_NAMING_STRING "naming"
+#define ADAM_SCP_FSMO_NAMING_STRING_W L"naming"
+#define ADAM_SCP_FSMO_SCHEMA_STRING "schema"
+#define ADAM_SCP_FSMO_SCHEMA_STRING_W L"schema"
+#define ADAM_SCP_FSMO_STRING "fsmo:"
+#define ADAM_SCP_FSMO_STRING_W L"fsmo:"
+#define ADAM_SCP_INSTANCE_NAME_STRING "instance:"
+#define ADAM_SCP_INSTANCE_NAME_STRING_W L"instance:"
+#define ADAM_SCP_PARTITION_STRING "partition:"
+#define ADAM_SCP_PARTITION_STRING_W L"partition:"
+#define ADAM_SCP_SITE_NAME_STRING "site:"
+#define ADAM_SCP_SITE_NAME_STRING_W L"site:"
+#define DS_BEHAVIOR_LONGHORN 3
+#define DS_BEHAVIOR_WIN2000 0
+#define DS_BEHAVIOR_WIN7 4
+#define DS_BEHAVIOR_WIN8 5
+#define DS_BEHAVIOR_WINBLUE 6
+#define DS_BEHAVIOR_WINTHRESHOLD 7
+#define DS_DEFAULT_LOCALE 0x409
+#define DS_DEFAULT_LOCALE_COMPARE_FLAGS 0x31003
+#ifdef UNICODE
+#define DS_DOMAIN_CONTROLLER_INFO_1 DS_DOMAIN_CONTROLLER_INFO_1W
+#else
+#define DS_DOMAIN_CONTROLLER_INFO_1 DS_DOMAIN_CONTROLLER_INFO_1A
+#endif
+#ifdef UNICODE
+#define DS_DOMAIN_CONTROLLER_INFO_2 DS_DOMAIN_CONTROLLER_INFO_2W
+#else
+#define DS_DOMAIN_CONTROLLER_INFO_2 DS_DOMAIN_CONTROLLER_INFO_2A
+#endif
+#ifdef UNICODE
+#define DS_DOMAIN_CONTROLLER_INFO_3 DS_DOMAIN_CONTROLLER_INFO_3W
+#else
+#define DS_DOMAIN_CONTROLLER_INFO_3 DS_DOMAIN_CONTROLLER_INFO_3A
+#endif
+#define DS_DOMAIN_SIMPLE_NAME 8
+#define DS_ENTERPRISE_SIMPLE_NAME 8
+#define DS_EXIST_ADVISORY_MODE (0x1)
+#define DS_GENERIC_ALL 0xF01FF
+#define DS_GENERIC_EXECUTE 0x20004
+#define DS_GENERIC_READ 0x20094
+#define DS_GENERIC_WRITE 0x20028
+#define DS_KCC_FLAG_ASYNC_OP (1 << 0)
+#define DS_KCC_FLAG_DAMPED 2
+#define DS_LIST_DSA_OBJECT_FOR_SERVER 0
+#define DS_NAME_LEGAL_FLAGS 1
+#define DS_REPL_NBR_MODIFIABLE_MASK 0x3C000260
+#define DS_REPMOD_UPDATE_ADDRESS 2
+#ifdef UNICODE
+#define DS_REPSYNCALL_ERRINFO DS_REPSYNCALL_ERRINFOW
+#else
+#define DS_REPSYNCALL_ERRINFO DS_REPSYNCALL_ERRINFOA
+#endif
+#define DS_REPSYNCALL_NO_OPTIONS 0x00000000
+#ifdef UNICODE
+#define DS_REPSYNCALL_SYNC DS_REPSYNCALL_SYNCW
+#else
+#define DS_REPSYNCALL_SYNC DS_REPSYNCALL_SYNCA
+#endif
+#ifdef UNICODE
+#define DS_REPSYNCALL_UPDATE DS_REPSYNCALL_UPDATEW
+#else
+#define DS_REPSYNCALL_UPDATE DS_REPSYNCALL_UPDATEA
+#endif
+#define DS_ROLE_SCHEMA_OWNER 0
+#define DS_SCHEMA_GUID_MAP 0
+#define DS_SCHEMA_GUID_NOT_FOUND 0
+#define DS_SYNCED_EVENT_NAME 0
+#define DS_SYNCED_EVENT_NAME_W L"NTDSInitialSyncsCompleted"
+#define DsAddSidHistory 0
+#ifdef UNICODE
+#define DsBind DsBindW
+#else
+#define DsBind DsBindA
+#endif
+#ifdef UNICODE
+#define DsBindByInstance DsBindByInstanceW
+#else
+#define DsBindByInstance DsBindByInstanceA
+#endif
+#ifdef UNICODE
+#define DsBindToISTG DsBindToISTGW
+#else
+#define DsBindToISTG DsBindToISTGA
+#endif
+#ifdef UNICODE
+#define DsBindWithCred DsBindWithCredW
+#else
+#define DsBindWithCred DsBindWithCredA
+#endif
+#ifdef UNICODE
+#define DsBindWithSpn DsBindWithSpnW
+#else
+#define DsBindWithSpn DsBindWithSpnA
+#endif
+#ifdef UNICODE
+#define DsBindWithSpnEx DsBindWithSpnExW
+#else
+#define DsBindWithSpnEx DsBindWithSpnExA
+#endif
+#ifdef UNICODE
+#define DsFreeDomainControllerInfo DsFreeDomainControllerInfoW
+#else
+#define DsFreeDomainControllerInfo DsFreeDomainControllerInfoA
+#endif
+#ifdef UNICODE
+#define DsFreeNameResult DsFreeNameResultW
+#else
+#define DsFreeNameResult DsFreeNameResultA
+#endif
+#define DsFreePasswordCredentialsA DsFreePasswordCredentials
+#define DsFreePasswordCredentialsW DsFreePasswordCredentials
+#ifdef UNICODE
+#define DsFreeSchemaGuidMap DsFreeSchemaGuidMapW
+#else
+#define DsFreeSchemaGuidMap DsFreeSchemaGuidMapA
+#endif
+#ifdef UNICODE
+#define DsFreeSpnArray DsFreeSpnArrayW
+#else
+#define DsFreeSpnArray DsFreeSpnArrayA
+#endif
+#ifdef UNICODE
+#define DsGetDomainControllerInfo DsGetDomainControllerInfoW
+#else
+#define DsGetDomainControllerInfo DsGetDomainControllerInfoA
+#endif
+#ifdef UNICODE
+#define DsGetSpn DsGetSpnW
+#else
+#define DsGetSpn DsGetSpnA
+#endif
+#ifdef UNICODE
+#define DsInheritSecurityIdentity DsInheritSecurityIdentityW
+#else
+#define DsInheritSecurityIdentity DsInheritSecurityIdentityA
+#endif
+#ifdef UNICODE
+#define DsListDomainsInSite DsListDomainsInSiteW
+#else
+#define DsListDomainsInSite DsListDomainsInSiteA
+#endif
+#define DsListInfoForServer 0
+#define DsListRoles 0
+#ifdef UNICODE
+#define DsListServersForDomainInSite DsListServersForDomainInSiteW
+#else
+#define DsListServersForDomainInSite DsListServersForDomainInSiteA
+#endif
+#ifdef UNICODE
+#define DsListServersInSite DsListServersInSiteW
+#else
+#define DsListServersInSite DsListServersInSiteA
+#endif
+#ifdef UNICODE
+#define DsListSites DsListSitesW
+#else
+#define DsListSites DsListSitesA
+#endif
+#ifdef UNICODE
+#define DsMakePasswordCredentials DsMakePasswordCredentialsW
+#else
+#define DsMakePasswordCredentials DsMakePasswordCredentialsA
+#endif
+#ifdef UNICODE
+#define DsMapSchemaGuids DsMapSchemaGuidsW
+#else
+#define DsMapSchemaGuids DsMapSchemaGuidsA
+#endif
+#ifdef UNICODE
+#define DsQuerySitesByCost DsQuerySitesByCostW
+#else
+#define DsQuerySitesByCost DsQuerySitesByCostA
+#endif
+#ifdef UNICODE
+#define DsRemoveDsDomain DsRemoveDsDomainW
+#else
+#define DsRemoveDsDomain DsRemoveDsDomainA
+#endif
+#ifdef UNICODE
+#define DsRemoveDsServer DsRemoveDsServerW
+#else
+#define DsRemoveDsServer DsRemoveDsServerA
+#endif
+#ifdef UNICODE
+#define DsReplicaDel DsReplicaDelW
+#else
+#define DsReplicaDel DsReplicaDelA
+#endif
+#ifdef UNICODE
+#define DsReplicaSync DsReplicaSyncW
+#else
+#define DsReplicaSync DsReplicaSyncA
+#endif
+#define DsReplicaSyncAll 0
+#ifdef UNICODE
+#define DsReplicaUpdateRefs DsReplicaUpdateRefsW
+#else
+#define DsReplicaUpdateRefs DsReplicaUpdateRefsA
+#endif
+#define DsReplicaVerifyObjects 0
+#ifdef UNICODE
+#define DsUnBind DsUnBindW
+#else
+#define DsUnBind DsUnBindA
+#endif
+#ifdef UNICODE
+#define DsWriteAccountSpn DsWriteAccountSpnW
+#else
+#define DsWriteAccountSpn DsWriteAccountSpnA
+#endif
+#define FRSCONN_GET_PRIORITY_options_) (((((_options_) & FRSCONN_PRIORITY_MASK) >> 28) != 0) ? (((_options_) & FRSCONN_PRIORITY_MASK) >> 28) : FRSCONN_MAX_PRIORITY)
+#define GUID_COMPUTRS_CONTAINER_A "aa312825768811d1aded00c04fd8d5cd"
+#define GUID_COMPUTRS_CONTAINER_BYTE "\xaa\x31\x28\x25\x76\x88\x11\xd1\xad\xed\x00\xc0\x4f\xd8\xd5\xcd"
+#define GUID_COMPUTRS_CONTAINER_W L"aa312825768811d1aded00c04fd8d5cd"
+#define GUID_DATABASE_32K_PAGES_OPTIONAL_FEATURE_A "c62a9852731e4f75ae2473ae2775aab8"
+#define GUID_DATABASE_32K_PAGES_OPTIONAL_FEATURE_BYTE "\xc6\x2a\x98\x52\x73\x1e\x4f\x75\xae\x24\x73\xae\x27\x75\xaa\xb8"
+#define GUID_DATABASE_32K_PAGES_OPTIONAL_FEATURE_W L"c62a9852731e4f75ae2473ae2775aab8"
+#define GUID_DELETED_OBJECTS_CONTAINER_A "18e2ea80684f11d2b9aa00c04f79f805"
+#define GUID_DELETED_OBJECTS_CONTAINER_BYTE "\x18\xe2\xea\x80\x68\x4f\x11\xd2\xb9\xaa\x00\xc0\x4f\x79\xf8\x05"
+#define GUID_DELETED_OBJECTS_CONTAINER_W L"18e2ea80684f11d2b9aa00c04f79f805"
+#define GUID_DOMAIN_CONTROLLERS_CONTAINER_A "a361b2ffffd211d1aa4b00c04fd7d83a"
+#define GUID_DOMAIN_CONTROLLERS_CONTAINER_BYTE "\xa3\x61\xb2\xff\xff\xd2\x11\xd1\xaa\x4b\x00\xc0\x4f\xd7\xd8\x3a"
+#define GUID_DOMAIN_CONTROLLERS_CONTAINER_W L"a361b2ffffd211d1aa4b00c04fd7d83a"
+#define GUID_FOREIGNSECURITYPRINCIPALS_CONTAINER_A "22b70c67d56e4efb91e9300fca3dc1aa"
+#define GUID_FOREIGNSECURITYPRINCIPALS_CONTAINER_BYTE "\x22\xb7\x0c\x67\xd5\x6e\x4e\xfb\x91\xe9\x30\x0f\xca\x3d\xc1\xaa"
+#define GUID_FOREIGNSECURITYPRINCIPALS_CONTAINER_W L"22b70c67d56e4efb91e9300fca3dc1aa"
+#define GUID_INFRASTRUCTURE_CONTAINER_A "2fbac1870ade11d297c400c04fd8d5cd"
+#define GUID_INFRASTRUCTURE_CONTAINER_BYTE "\x2f\xba\xc1\x87\x0a\xde\x11\xd2\x97\xc4\x00\xc0\x4f\xd8\xd5\xcd"
+#define GUID_INFRASTRUCTURE_CONTAINER_W L"2fbac1870ade11d297c400c04fd8d5cd"
+#define GUID_KEYS_CONTAINER_W L"683A24E2E8164BD3AF86AC3C2CF3F981"
+#define GUID_LOSTANDFOUND_CONTAINER_A "ab8153b7768811d1aded00c04fd8d5cd"
+#define GUID_LOSTANDFOUND_CONTAINER_BYTE "\xab\x81\x53\xb7\x76\x88\x11\xd1\xad\xed\x00\xc0\x4f\xd8\xd5\xcd"
+#define GUID_LOSTANDFOUND_CONTAINER_W L"ab8153b7768811d1aded00c04fd8d5cd"
+#define GUID_MANAGED_SERVICE_ACCOUNTS_CONTAINER_W L"1EB93889E40C45DF9F0C64D23BBB6237"
+#define GUID_MICROSOFT_PROGRAM_DATA_CONTAINER_A "f4be92a4c777485e878e9421d53087db"
+#define GUID_MICROSOFT_PROGRAM_DATA_CONTAINER_BYTE "\xf4\xbe\x92\xa4\xc7\x77\x48\x5e\x87\x8e\x94\x21\xd5\x30\x87\xdb"
+#define GUID_MICROSOFT_PROGRAM_DATA_CONTAINER_W L"f4be92a4c777485e878e9421d53087db"
+#define GUID_NTDS_QUOTAS_CONTAINER_A "6227f0af1fc2410d8e3bb10615bb5b0f"
+#define GUID_NTDS_QUOTAS_CONTAINER_BYTE "\x62\x27\xf0\xaf\x1f\xc2\x41\x0d\x8e\x3b\xb1\x06\x15\xbb\x5b\x0f"
+#define GUID_NTDS_QUOTAS_CONTAINER_W L"6227f0af1fc2410d8e3bb10615bb5b0f"
+#define GUID_PRIVILEGED_ACCESS_MANAGEMENT_OPTIONAL_FEATURE_A "73e843ece8cc4046b4ab07ffe4ab5bcd"
+#define GUID_PRIVILEGED_ACCESS_MANAGEMENT_OPTIONAL_FEATURE_BYTE "\x73\xe8\x43\xec\xe8\xcc\x40\x46\xb4\xab\x07\xff\xe4\xab\x5b\xcd"
+#define GUID_PRIVILEGED_ACCESS_MANAGEMENT_OPTIONAL_FEATURE_W L"73e843ece8cc4046b4ab07ffe4ab5bcd"
+#define GUID_PROGRAM_DATA_CONTAINER_A "09460c08ae1e4a4ea0f64aee7daa1e5a"
+#define GUID_PROGRAM_DATA_CONTAINER_BYTE "\x09\x46\x0c\x08\xae\x1e\x4a\x4e\xa0\xf6\x4a\xee\x7d\xaa\x1e\x5a"
+#define GUID_PROGRAM_DATA_CONTAINER_W L"09460c08ae1e4a4ea0f64aee7daa1e5a"
+#define GUID_RECYCLE_BIN_OPTIONAL_FEATURE_A 0
+#define GUID_RECYCLE_BIN_OPTIONAL_FEATURE_BYTE "\xd8\xdc\x6d\x76\xd0\xac\x5e\x44\xf3\xb9\xa7\xf9\xb6\x74\x4f\x2a"
+#define GUID_RECYCLE_BIN_OPTIONAL_FEATURE_W L"d8dc6d76d0ac5e44f3b9a7f9b6744f2a"
+#define GUID_SYSTEMS_CONTAINER_A "ab1d30f3768811d1aded00c04fd8d5cd"
+#define GUID_SYSTEMS_CONTAINER_BYTE "\xab\x1d\x30\xf3\x76\x88\x11\xd1\xad\xed\x00\xc0\x4f\xd8\xd5\xcd"
+#define GUID_SYSTEMS_CONTAINER_W L"ab1d30f3768811d1aded00c04fd8d5cd"
+#define GUID_USERS_CONTAINER_A 0
+#define GUID_USERS_CONTAINER_BYTE "\xa9\xd1\xca\x15\x76\x88\x11\xd1\xad\xed\x00\xc0\x4f\xd8\xd5\xcd"
+#define GUID_USERS_CONTAINER_W L"a9d1ca15768811d1aded00c04fd8d5cd"
+#define NTDSAPI 0
+#define NTDSAPI_BIND_ALLOW_DELEGATION (0x00000001)
+#define NTDSAPI_POSTXP DECLSPEC_IMPORT
+#define NTDSCONN_IGNORE_SCHEDULE_options_) (((_options_) & NTDSCONN_OPT_IGNORE_SCHEDULE_MASK) >> 31)
+#define NTDSCONN_KCC_GC_TOPOLOGY 1
+#define NTDSCONN_KCC_INTERSITE_GC_TOPOLOGY 0x20
+#define NTDSCONN_KCC_INTERSITE_TOPOLOGY 0x40
+#define NTDSCONN_KCC_MINIMIZE_HOPS_TOPOLOGY 4
+#define NTDSCONN_KCC_OSCILLATING_CONNECTION_TOPOLOGY 0x10
+#define NTDSCONN_KCC_REDUNDANT_SERVER_TOPOLOGY 0x200
+#define NTDSCONN_KCC_RING_TOPOLOGY 2
+#define NTDSCONN_KCC_SERVER_FAILOVER_TOPOLOGY 0x80
+#define NTDSCONN_KCC_SITE_FAILOVER_TOPOLOGY 0x100
+#define NTDSCONN_KCC_STALE_SERVERS_TOPOLOGY 8
+#define NTDSCONN_OPT_DISABLE_INTERSITE_COMPRESSION 0x10
+#define NTDSCONN_OPT_IS_GENERATED 1
+#define NTDSCONN_OPT_OVERRIDE_NOTIFY_DEFAULT 4
+#define NTDSCONN_OPT_RODC_TOPOLOGY 0x40
+#define NTDSCONN_OPT_TWOWAY_SYNC 2
+#define NTDSCONN_OPT_USE_NOTIFY 8
+#define NTDSCONN_OPT_USER_OWNED_SCHEDULE 0x20
+#define NTDSDSA_OPT_BLOCK_RPC 0x40
+#define NTDSDSA_OPT_DISABLE_INBOUND_REPL 2
+#define NTDSDSA_OPT_DISABLE_NTDSCONN_XLATE 8
+#define NTDSDSA_OPT_DISABLE_OUTBOUND_REPL 4
+#define NTDSDSA_OPT_DISABLE_SPN_REGISTRATION 0x10
+#define NTDSDSA_OPT_GENERATE_OWN_TOPO 0x20
+#define NTDSDSA_OPT_IS_GC 1
+#define NTDSSETTINGS_OPT_FORCE_KCC_W2K_ELECTION 0x80
+#define NTDSSETTINGS_OPT_FORCE_KCC_WHISTLER_BEHAVIOR 0x40
+#define NTDSSETTINGS_OPT_IS_AUTO_TOPOLOGY_DISABLED 1
+#define NTDSSETTINGS_OPT_IS_GROUP_CACHING_ENABLED 0x20
+#define NTDSSETTINGS_OPT_IS_INTER_SITE_AUTO_TOPOLOGY_DISABLED 0x10
+#define NTDSSETTINGS_OPT_IS_RAND_BH_SELECTION_DISABLED 0x100
+#define NTDSSETTINGS_OPT_IS_REDUNDANT_SERVER_TOPOLOGY_ENABLED 0x400
+#define NTDSSETTINGS_OPT_IS_SCHEDULE_HASHING_ENABLED 0x200
+#define NTDSSETTINGS_OPT_IS_TOPL_CLEANUP_DISABLED 2
+#define NTDSSETTINGS_OPT_IS_TOPL_DETECT_STALE_DISABLED 8
+#define NTDSSETTINGS_OPT_IS_TOPL_MIN_HOPS_DISABLED 4
+#define NTDSSETTINGS_OPT_W2K3_BRIDGES_REQUIRED 0x1000
+#define NTDSSETTINGS_OPT_W2K3_IGNORE_SCHEDULES 0x800
+#define NTDSSITECONN_OPT_DISABLE_COMPRESSION 4
+#define NTDSSITECONN_OPT_TWOWAY_SYNC 2
+#define NTDSSITECONN_OPT_USE_NOTIFY 1
+#define NTDSSITELINK_OPT_DISABLE_COMPRESSION 4
+#define NTDSSITELINK_OPT_TWOWAY_SYNC 2
+#define NTDSSITELINK_OPT_USE_NOTIFY 1
+#define NTDSTRANSPORT_OPT_BRIDGES_REQUIRED 2
+#define NTDSTRANSPORT_OPT_IGNORE_SCHEDULES 1
+#ifdef UNICODE
+#define PDS_DOMAIN_CONTROLLER_INFO_1 PDS_DOMAIN_CONTROLLER_INFO_1W
+#else
+#define PDS_DOMAIN_CONTROLLER_INFO_1 PDS_DOMAIN_CONTROLLER_INFO_1A
+#endif
+#ifdef UNICODE
+#define PDS_DOMAIN_CONTROLLER_INFO_2 PDS_DOMAIN_CONTROLLER_INFO_2W
+#else
+#define PDS_DOMAIN_CONTROLLER_INFO_2 PDS_DOMAIN_CONTROLLER_INFO_2A
+#endif
+#ifdef UNICODE
+#define PDS_DOMAIN_CONTROLLER_INFO_3 PDS_DOMAIN_CONTROLLER_INFO_3W
+#else
+#define PDS_DOMAIN_CONTROLLER_INFO_3 PDS_DOMAIN_CONTROLLER_INFO_3A
+#endif
+#ifdef UNICODE
+#define PDS_REPSYNCALL_ERRINFO PDS_REPSYNCALL_ERRINFOW
+#else
+#define PDS_REPSYNCALL_ERRINFO PDS_REPSYNCALL_ERRINFOA
+#endif
+#ifdef UNICODE
+#define PDS_REPSYNCALL_SYNC PDS_REPSYNCALL_SYNCW
+#else
+#define PDS_REPSYNCALL_SYNC PDS_REPSYNCALL_SYNCA
+#endif
+#ifdef UNICODE
+#define PDS_REPSYNCALL_UPDATE PDS_REPSYNCALL_UPDATEW
+#else
+#define PDS_REPSYNCALL_UPDATE PDS_REPSYNCALL_UPDATEA
+#endif
+#ifdef UNICODE
+#define PDS_SCHEMA_GUID_MAP PDS_SCHEMA_GUID_MAPW
+#else
+#define PDS_SCHEMA_GUID_MAP PDS_SCHEMA_GUID_MAPA
+#endif
 
-typedef struct _DS_REPL_ATTR_META_DATA {
-  LPWSTR pszAttributeName;
-  DWORD dwVersion;
-  FILETIME ftimeLastOriginatingChange;
-  UUID uuidLastOriginatingDsaInvocationID;
-  USN usnOriginatingChange;
-  USN usnLocalChange;
-} DS_REPL_ATTR_META_DATA;
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-typedef struct _DS_REPL_ATTR_META_DATA_2 {
-  LPWSTR pszAttributeName;
-  DWORD dwVersion;
-  FILETIME ftimeLastOriginatingChange;
-  UUID uuidLastOriginatingDsaInvocationID;
-  USN usnOriginatingChange;
-  USN usnLocalChange;
-  LPWSTR pszLastOriginatingDsaDN;
-} DS_REPL_ATTR_META_DATA_2;
+DWORD WINAPI DsBindA(LPCSTR DomainControllerName, LPCSTR DnsDomainName, HANDLE *phDS);
+DWORD WINAPI DsBindW(LPCWSTR DomainControllerName, LPCWSTR DnsDomainName, HANDLE *phDS);
+DWORD WINAPI DsGetSpnA(DS_SPN_NAME_TYPE ServiceType, LPCSTR ServiceClass, LPCSTR ServiceName, USHORT InstancePort, USHORT cInstanceNames, LPCSTR *pInstanceNames, const USHORT *pInstancePorts, DWORD *pcSpn, LPSTR **prpszSpn);
 
-typedef struct _DS_REPL_ATTR_META_DATA_BLOB {
-  DWORD oszAttributeName;
-  DWORD dwVersion;
-  FILETIME ftimeLastOriginatingChange;
-  UUID uuidLastOriginatingDsaInvocationID;
-  USN usnOriginatingChange;
-  USN usnLocalChange;
-  DWORD oszLastOriginatingDsaDN;
-} DS_REPL_ATTR_META_DATA_BLOB;
+/* TODO: LiberNT does not implement the functions below yet */
+DWORD DsAddSidHistoryA(HANDLE hDS, DWORD Flags, LPCSTR SrcDomain, LPCSTR SrcPrincipal, LPCSTR SrcDomainController, RPC_AUTH_IDENTITY_HANDLE SrcDomainCreds, LPCSTR DstDomain, LPCSTR DstPrincipal);
+DWORD DsAddSidHistoryW(HANDLE hDS, DWORD Flags, LPCWSTR SrcDomain, LPCWSTR SrcPrincipal, LPCWSTR SrcDomainController, RPC_AUTH_IDENTITY_HANDLE SrcDomainCreds, LPCWSTR DstDomain, LPCWSTR DstPrincipal);
+DWORD DsBindByInstanceA(LPCSTR ServerName, LPCSTR Annotation, GUID *InstanceGuid, LPCSTR DnsDomainName, RPC_AUTH_IDENTITY_HANDLE AuthIdentity, LPCSTR ServicePrincipalName, DWORD BindFlags, HANDLE *phDS);
+DWORD DsBindByInstanceW(LPCWSTR ServerName, LPCWSTR Annotation, GUID *InstanceGuid, LPCWSTR DnsDomainName, RPC_AUTH_IDENTITY_HANDLE AuthIdentity, LPCWSTR ServicePrincipalName, DWORD BindFlags, HANDLE *phDS);
+DWORD DsBindingSetTimeout(HANDLE hDS, ULONG cTimeoutSecs);
+DWORD DsBindToISTGA(LPCSTR SiteName, HANDLE *phDS);
+DWORD DsBindToISTGW(LPCWSTR SiteName, HANDLE *phDS);
+DWORD DsBindWithCredA(LPCSTR DomainControllerName, LPCSTR DnsDomainName, RPC_AUTH_IDENTITY_HANDLE AuthIdentity, HANDLE *phDS);
+DWORD DsBindWithCredW(LPCWSTR DomainControllerName, LPCWSTR DnsDomainName, RPC_AUTH_IDENTITY_HANDLE AuthIdentity, HANDLE *phDS);
+DWORD DsBindWithSpnA(LPCSTR DomainControllerName, LPCSTR DnsDomainName, RPC_AUTH_IDENTITY_HANDLE AuthIdentity, LPCSTR ServicePrincipalName, HANDLE *phDS);
+DWORD DsBindWithSpnExA(LPCSTR DomainControllerName, LPCSTR DnsDomainName, RPC_AUTH_IDENTITY_HANDLE AuthIdentity, LPCSTR ServicePrincipalName, DWORD BindFlags, HANDLE *phDS);
+DWORD DsBindWithSpnExW(LPCWSTR DomainControllerName, LPCWSTR DnsDomainName, RPC_AUTH_IDENTITY_HANDLE AuthIdentity, LPCWSTR ServicePrincipalName, DWORD BindFlags, HANDLE *phDS);
+DWORD DsBindWithSpnW(LPCWSTR DomainControllerName, LPCWSTR DnsDomainName, RPC_AUTH_IDENTITY_HANDLE AuthIdentity, LPCWSTR ServicePrincipalName, HANDLE *phDS);
+void DsFreeDomainControllerInfoA(DWORD InfoLevel, DWORD cInfo, void *pInfo);
+void DsFreeDomainControllerInfoW(DWORD InfoLevel, DWORD cInfo, void *pInfo);
+void DsFreeNameResultA(DS_NAME_RESULTA *pResult);
+void DsFreeNameResultW(DS_NAME_RESULTW *pResult);
+void DsFreePasswordCredentials(RPC_AUTH_IDENTITY_HANDLE AuthIdentity);
+void DsFreeSchemaGuidMapA(PDS_SCHEMA_GUID_MAPA pGuidMap);
+void DsFreeSchemaGuidMapW(PDS_SCHEMA_GUID_MAPW pGuidMap);
+void DsFreeSpnArrayA(DWORD cSpn, LPSTR *rpszSpn);
+void DsFreeSpnArrayW(DWORD cSpn, LPWSTR *rpszSpn);
+DWORD DsGetDomainControllerInfoA(HANDLE hDs, LPCSTR DomainName, DWORD InfoLevel, DWORD *pcOut, void **ppInfo);
+DWORD DsGetDomainControllerInfoW(HANDLE hDs, LPCWSTR DomainName, DWORD InfoLevel, DWORD *pcOut, void **ppInfo);
+DWORD DsGetSpnW(DS_SPN_NAME_TYPE ServiceType, LPCWSTR ServiceClass, LPCWSTR ServiceName, USHORT InstancePort, USHORT cInstanceNames, LPCWSTR *pInstanceNames, const USHORT *pInstancePorts, DWORD *pcSpn, LPWSTR **prpszSpn);
+DWORD DsInheritSecurityIdentityA(HANDLE hDS, DWORD Flags, LPCSTR SrcPrincipal, LPCSTR DstPrincipal);
+DWORD DsInheritSecurityIdentityW(HANDLE hDS, DWORD Flags, LPCWSTR SrcPrincipal, LPCWSTR DstPrincipal);
+DWORD DsListDomainsInSiteA(HANDLE hDs, LPCSTR site, PDS_NAME_RESULTA *ppDomains);
+DWORD DsListDomainsInSiteW(HANDLE hDs, LPCWSTR site, PDS_NAME_RESULTW *ppDomains);
+DWORD DsListInfoForServerA(HANDLE hDs, LPCSTR server, PDS_NAME_RESULTA *ppInfo);
+DWORD DsListInfoForServerW(HANDLE hDs, LPCWSTR server, PDS_NAME_RESULTW *ppInfo);
+DWORD DsListRolesA(HANDLE hDs, PDS_NAME_RESULTA *ppRoles);
+DWORD DsListRolesW(HANDLE hDs, PDS_NAME_RESULTW *ppRoles);
+DWORD DsListServersForDomainInSiteA(HANDLE hDs, LPCSTR domain, LPCSTR site, PDS_NAME_RESULTA *ppServers);
+DWORD DsListServersForDomainInSiteW(HANDLE hDs, LPCWSTR domain, LPCWSTR site, PDS_NAME_RESULTW *ppServers);
+DWORD DsListServersInSiteA(HANDLE hDs, LPCSTR site, PDS_NAME_RESULTA *ppServers);
+DWORD DsListServersInSiteW(HANDLE hDs, LPCWSTR site, PDS_NAME_RESULTW *ppServers);
+DWORD DsListSitesA(HANDLE hDs, PDS_NAME_RESULTA *ppSites);
+DWORD DsListSitesW(HANDLE hDs, PDS_NAME_RESULTW *ppSites);
+DWORD DsMakePasswordCredentialsA(LPCSTR User, LPCSTR Domain, LPCSTR Password, RPC_AUTH_IDENTITY_HANDLE *pAuthIdentity);
+DWORD DsMakePasswordCredentialsW(LPCWSTR User, LPCWSTR Domain, LPCWSTR Password, RPC_AUTH_IDENTITY_HANDLE *pAuthIdentity);
+DWORD DsMapSchemaGuidsA(HANDLE hDs, DWORD cGuids, GUID *rGuids, DS_SCHEMA_GUID_MAPA **ppGuidMap);
+DWORD DsMapSchemaGuidsW(HANDLE hDs, DWORD cGuids, GUID *rGuids, DS_SCHEMA_GUID_MAPW **ppGuidMap);
+DWORD DsQuerySitesByCostA(HANDLE hDS, LPSTR pszFromSite, LPSTR *rgszToSites, DWORD cToSites, DWORD dwFlags, PDS_SITE_COST_INFO *prgSiteInfo);
+DWORD DsQuerySitesByCostW(HANDLE hDS, LPWSTR pwszFromSite, LPWSTR *rgwszToSites, DWORD cToSites, DWORD dwFlags, PDS_SITE_COST_INFO *prgSiteInfo);
+void DsQuerySitesFree(PDS_SITE_COST_INFO rgSiteInfo);
+DWORD DsRemoveDsDomainA(HANDLE hDs, LPSTR DomainDN);
+DWORD DsRemoveDsDomainW(HANDLE hDs, LPWSTR DomainDN);
+DWORD DsRemoveDsServerA(HANDLE hDs, LPSTR ServerDN, LPSTR DomainDN, BOOL *fLastDcInDomain, BOOL fCommit);
+DWORD DsRemoveDsServerW(HANDLE hDs, LPWSTR ServerDN, LPWSTR DomainDN, BOOL *fLastDcInDomain, BOOL fCommit);
+DWORD DsReplicaConsistencyCheck(HANDLE hDS, DS_KCC_TASKID TaskID, DWORD dwFlags);
+DWORD DsReplicaDelA(HANDLE hDS, LPCSTR NameContext, LPCSTR DsaSrc, ULONG Options);
+DWORD DsReplicaDelW(HANDLE hDS, LPCWSTR NameContext, LPCWSTR DsaSrc, ULONG Options);
+void DsReplicaFreeInfo(DS_REPL_INFO_TYPE InfoType, void *pInfo);
+DWORD DsReplicaGetInfo2W(HANDLE hDS, DS_REPL_INFO_TYPE InfoType, LPCWSTR pszObject, UUID *puuidForSourceDsaObjGuid, LPCWSTR pszAttributeName, LPCWSTR pszValue, DWORD dwFlags, DWORD dwEnumerationContext, void **ppInfo);
+DWORD DsReplicaGetInfoW(HANDLE hDS, DS_REPL_INFO_TYPE InfoType, LPCWSTR pszObject, UUID *puuidForSourceDsaObjGuid, void **ppInfo);
+DWORD DsReplicaSyncA(HANDLE hDS, LPCSTR NameContext, const UUID *pUuidDsaSrc, ULONG Options);
+DWORD DsReplicaSyncAllA(HANDLE hDS, LPCSTR pszNameContext, ULONG ulFlags, BOOL (WINAPI *pFnCallBack)(LPVOID, PDS_REPSYNCALL_UPDATEA), LPVOID pCallbackData, PDS_REPSYNCALL_ERRINFOA **pErrors);
+DWORD DsReplicaSyncAllW(HANDLE hDS, LPCWSTR pszNameContext, ULONG ulFlags, BOOL (WINAPI *pFnCallBack)(LPVOID, PDS_REPSYNCALL_UPDATEW), LPVOID pCallbackData, PDS_REPSYNCALL_ERRINFOW **pErrors);
+DWORD DsReplicaSyncW(HANDLE hDS, LPCWSTR NameContext, const UUID *pUuidDsaSrc, ULONG Options);
+DWORD DsReplicaUpdateRefsA(HANDLE hDS, LPCSTR NameContext, LPCSTR DsaDest, const UUID *pUuidDsaDest, ULONG Options);
+DWORD DsReplicaUpdateRefsW(HANDLE hDS, LPCWSTR NameContext, LPCWSTR DsaDest, const UUID *pUuidDsaDest, ULONG Options);
+DWORD DsReplicaVerifyObjectsA(HANDLE hDS, LPCSTR NameContext, const UUID *pUuidDsaSrc, ULONG ulOptions);
+DWORD DsReplicaVerifyObjectsW(HANDLE hDS, LPCWSTR NameContext, const UUID *pUuidDsaSrc, ULONG ulOptions);
+DWORD DsUnBindA(HANDLE *phDS);
+DWORD DsUnBindW(HANDLE *phDS);
+DWORD DsWriteAccountSpnA(HANDLE hDS, DS_SPN_WRITE_OP Operation, LPCSTR pszAccount, DWORD cSpn, LPCSTR *rpszSpn);
+DWORD DsWriteAccountSpnW(HANDLE hDS, DS_SPN_WRITE_OP Operation, LPCWSTR pszAccount, DWORD cSpn, LPCWSTR *rpszSpn);
 
-typedef struct _DS_REPL_OBJ_META_DATA {
-  DWORD cNumEntries;
-  DWORD dwReserved;
-  DS_REPL_ATTR_META_DATA rgMetaData[1];
-} DS_REPL_OBJ_META_DATA;
+#ifdef __cplusplus
+}
+#endif
 
-typedef struct _DS_REPL_OBJ_META_DATA_2 {
-  DWORD cNumEntries;
-  DWORD dwReserved;
-  DS_REPL_ATTR_META_DATA_2 rgMetaData[1];
-} DS_REPL_OBJ_META_DATA_2;
+#define DsReplicaAdd 0
+#define FRSCONN_GET_PRIORITY_options_) (((((_options_) & FRSCONN_PRIORITY_MASK) >> 28) != 0) ? (((_options_) & FRSCONN_PRIORITY_MASK) >> 28) : FRSCONN_MAX_PRIORITY)
+#define NTDSCONN_IGNORE_SCHEDULE_options_) (((_options_) & NTDSCONN_OPT_IGNORE_SCHEDULE_MASK) >> 31)
 
-typedef struct _DS_REPL_KCC_DSA_FAILUREW {
-  LPWSTR pszDsaDN;
-  UUID uuidDsaObjGuid;
-  FILETIME ftimeFirstFailure;
-  DWORD cNumFailures;
-  DWORD dwLastResult;
-} DS_REPL_KCC_DSA_FAILUREW;
-
-typedef struct _DS_REPL_KCC_DSA_FAILUREW_BLOB {
-  DWORD oszDsaDN;
-  UUID uuidDsaObjGuid;
-  FILETIME ftimeFirstFailure;
-  DWORD cNumFailures;
-  DWORD dwLastResult;
-} DS_REPL_KCC_DSA_FAILUREW_BLOB;
-
-typedef struct _DS_REPL_KCC_DSA_FAILURESW {
-  DWORD cNumEntries;
-  DWORD dwReserved;
-  DS_REPL_KCC_DSA_FAILUREW rgDsaFailure[1];
-} DS_REPL_KCC_DSA_FAILURESW;
-
-typedef struct _DS_REPL_OPW {
-  FILETIME ftimeEnqueued;
-  ULONG ulSerialNumber;
-  ULONG ulPriority;
-  DS_REPL_OP_TYPE OpType;
-  ULONG ulOptions;
-  LPWSTR pszNamingContext;
-  LPWSTR pszDsaDN;
-  LPWSTR pszDsaAddress;
-  UUID uuidNamingContextObjGuid;
-  UUID uuidDsaObjGuid;
-} DS_REPL_OPW;
-
-typedef struct _DS_REPL_OPW_BLOB {
-  FILETIME ftimeEnqueued;
-  ULONG ulSerialNumber;
-  ULONG ulPriority;
-  DS_REPL_OP_TYPE OpType;
-  ULONG ulOptions;
-  DWORD oszNamingContext;
-  DWORD oszDsaDN;
-  DWORD oszDsaAddress;
-  UUID uuidNamingContextObjGuid;
-  UUID uuidDsaObjGuid;
-} DS_REPL_OPW_BLOB;
-
-typedef struct _DS_REPL_PENDING_OPSW {
-  FILETIME ftimeCurrentOpStarted;
-  DWORD cNumPendingOps;
-  DS_REPL_OPW rgPendingOp[1];
-} DS_REPL_PENDING_OPSW;
-
-typedef struct _DS_REPL_VALUE_META_DATA {
-  LPWSTR pszAttributeName;
-  LPWSTR pszObjectDn;
-  DWORD cbData;
-  BYTE * pbData;
-  FILETIME ftimeDeleted;
-  FILETIME ftimeCreated;
-  DWORD dwVersion;
-  FILETIME ftimeLastOriginatingChange;
-  UUID uuidLastOriginatingDsaInvocationID;
-  USN usnOriginatingChange;
-  USN usnLocalChange;
-} DS_REPL_VALUE_META_DATA;
-
-typedef struct _DS_REPL_VALUE_META_DATA_2 {
-  LPWSTR pszAttributeName;
-  LPWSTR pszObjectDn;
-  DWORD cbData;
-  BYTE * pbData;
-  FILETIME ftimeDeleted;
-  FILETIME ftimeCreated;
-  DWORD dwVersion;
-  FILETIME ftimeLastOriginatingChange;
-  UUID uuidLastOriginatingDsaInvocationID;
-  USN usnOriginatingChange;
-  USN usnLocalChange;
-  LPWSTR pszLastOriginatingDsaDN;
-} DS_REPL_VALUE_META_DATA_2;
-
-typedef struct _DS_REPL_VALUE_META_DATA_EXT {
-  LPWSTR pszAttributeName;
-  LPWSTR pszObjectDn;
-  DWORD cbData;
-  BYTE * pbData;
-  FILETIME ftimeDeleted;
-  FILETIME ftimeCreated;
-  DWORD dwVersion;
-  FILETIME ftimeLastOriginatingChange;
-  UUID uuidLastOriginatingDsaInvocationID;
-  USN usnOriginatingChange;
-  USN usnLocalChange;
-  LPWSTR pszLastOriginatingDsaDN;
-  DWORD dwUserIdentifier;
-  DWORD dwPriorLinkState;
-  DWORD dwCurrentLinkState;
-} DS_REPL_VALUE_META_DATA_EXT;
-
-typedef struct _DS_REPL_VALUE_META_DATA_BLOB {
-  DWORD oszAttributeName;
-  DWORD oszObjectDn;
-  DWORD cbData;
-  DWORD obData;
-  FILETIME ftimeDeleted;
-  FILETIME ftimeCreated;
-  DWORD dwVersion;
-  FILETIME ftimeLastOriginatingChange;
-  UUID uuidLastOriginatingDsaInvocationID;
-  USN usnOriginatingChange;
-  USN usnLocalChange;
-  DWORD oszLastOriginatingDsaDN;
-} DS_REPL_VALUE_META_DATA_BLOB;
-
-typedef struct _DS_REPL_VALUE_META_DATA_BLOB_EXT {
-  DWORD oszAttributeName;
-  DWORD oszObjectDn;
-  DWORD cbData;
-  DWORD obData;
-  FILETIME ftimeDeleted;
-  FILETIME ftimeCreated;
-  DWORD dwVersion;
-  FILETIME ftimeLastOriginatingChange;
-  UUID uuidLastOriginatingDsaInvocationID;
-  USN usnOriginatingChange;
-  USN usnLocalChange;
-  DWORD oszLastOriginatingDsaDN;
-  DWORD dwUserIdentifier;
-  DWORD dwPriorLinkState;
-  DWORD dwCurrentLinkState;
-} DS_REPL_VALUE_META_DATA_BLOB_EXT;
-
-typedef struct _DS_REPL_ATTR_VALUE_META_DATA {
-  DWORD cNumEntries;
-  DWORD dwEnumerationContext;
-  DS_REPL_VALUE_META_DATA rgMetaData[1];
-} DS_REPL_ATTR_VALUE_META_DATA;
-
-typedef struct _DS_REPL_ATTR_VALUE_META_DATA_2 {
-  DWORD cNumEntries;
-  DWORD dwEnumerationContext;
-  DS_REPL_VALUE_META_DATA_2 rgMetaData[1];
-} DS_REPL_ATTR_VALUE_META_DATA_2;
-
-typedef struct _DS_REPL_ATTR_VALUE_META_DATA_EXT {
-  DWORD cNumEntries;
-  DWORD dwEnumerationContext;
-  DS_REPL_VALUE_META_DATA_EXT rgMetaData[1];
-} DS_REPL_ATTR_VALUE_META_DATA_EXT;
-
-typedef struct _DS_REPL_QUEUE_STATISTICSW {
-  FILETIME ftimeCurrentOpStarted;
-  DWORD cNumPendingOps;
-  FILETIME ftimeOldestSync;
-  FILETIME ftimeOldestAdd;
-  FILETIME ftimeOldestMod;
-  FILETIME ftimeOldestDel;
-  FILETIME ftimeOldestUpdRefs;
-} DS_REPL_QUEUE_STATISTICSW, DS_REPL_QUEUE_STATISTICSW_BLOB;
+#define DsReplicaModify 0
+#define FRSCONN_GET_PRIORITY_options_) (((((_options_) & FRSCONN_PRIORITY_MASK) >> 28) != 0) ? (((_options_) & FRSCONN_PRIORITY_MASK) >> 28) : FRSCONN_MAX_PRIORITY)
+#define NTDSCONN_IGNORE_SCHEDULE_options_) (((_options_) & NTDSCONN_OPT_IGNORE_SCHEDULE_MASK) >> 31)
 
 #endif /* __WINE_NTDSAPI_H */

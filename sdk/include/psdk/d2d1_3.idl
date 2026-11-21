@@ -841,3 +841,18 @@ interface ID2D1CommandSink4 : ID2D1CommandSink3
         [in] D2D1_PRIMITIVE_BLEND primitive_blend
     );
 }
+
+cpp_quote("typedef struct ID2D1GdiMetafile1 ID2D1GdiMetafile1;")
+cpp_quote("")
+cpp_quote("typedef struct ID2D1GdiMetafileSink1 ID2D1GdiMetafileSink1;")
+cpp_quote("")
+cpp_quote("#ifdef __cplusplus")
+cpp_quote("extern \"C\" {")
+cpp_quote("#endif")
+cpp_quote("")
+cpp_quote("/* TODO: LiberNT does not implement the functions below yet */")
+cpp_quote("void WINAPI D2D1GetGradientMeshInteriorPointsFromCoonsPatch(const D2D1_POINT_2F *pPoint0, const D2D1_POINT_2F *pPoint1, const D2D1_POINT_2F *pPoint2, const D2D1_POINT_2F *pPoint3, const D2D1_POINT_2F *pPoint4, const D2D1_POINT_2F *pPoint5, const D2D1_POINT_2F *pPoint6, const D2D1_POINT_2F *pPoint7, const D2D1_POINT_2F *pPoint8, const D2D1_POINT_2F *pPoint9, const D2D1_POINT_2F *pPoint10, const D2D1_POINT_2F *pPoint11, D2D1_POINT_2F *pTensorPoint11, D2D1_POINT_2F *pTensorPoint12, D2D1_POINT_2F *pTensorPoint21, D2D1_POINT_2F *pTensorPoint22);")
+cpp_quote("")
+cpp_quote("#ifdef __cplusplus")
+cpp_quote("}")
+cpp_quote("#endif")

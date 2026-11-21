@@ -252,6 +252,7 @@ typedef enum _STORAGE_PROPERTY_ID {
     StorageStackProperty,
     StorageAdapterProtocolSpecificPropertyEx,
     StorageDeviceProtocolSpecificPropertyEx,
+    StorageHwCryptoProperty = 0x45,
 } STORAGE_PROPERTY_ID, *PSTORAGE_PROPERTY_ID;
 
 typedef struct _STORAGE_PROPERTY_QUERY {

@@ -541,4 +541,13 @@
 #undef _Post_writable_byte_size_
 #define _Post_writable_byte_size_(s) _Post_ _Writable_bytes_(s)
 
+#define _Ret_writes_to_ptr_p)
+#define _Ret_writes_to_ptr_z_p)
+
+#define _Ret_writes_to_ptr_p)
+#define _Ret_writes_to_ptr_z_p)
+
+#define _Ret_writes_to_ptr_p)
+#define _Ret_writes_to_ptr_z_p)
+
 #endif /* _NO_SAL_2_H_ */

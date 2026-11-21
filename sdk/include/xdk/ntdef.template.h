@@ -452,4 +452,14 @@ ListEntry64To32(
 
 typedef const struct _WNF_STATE_NAME * PCWNF_STATE_NAME;
 
+#define _DEFINED__WNF_STATE_NAME 0
+#define DECLSPEC_GUARDIGNORE __declspec(guard(ignore))
+#define DECLSPEC_PAGED_CODE __declspec(code_seg("PAGE"))
+#define LOCALE_UNASSIGNED_LCID 0x1000
+#define UNREFERENCED_VARIABLEV) (& V)
+
+#define UNREFERENCED_VARIABLEV) (& V)
+
+#define UNREFERENCED_VARIABLEV) (& V)
+
 #endif /* _NTDEF_ */

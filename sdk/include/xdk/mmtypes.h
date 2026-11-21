@@ -145,7 +145,8 @@ typedef enum _MEMORY_CACHING_TYPE {
   MmHardwareCoherentCached,
   MmNonCachedUnordered,
   MmUSWCCached,
-  MmMaximumCacheType
+  MmMaximumCacheType,
+  MmNotMapped = (-1),
 } MEMORY_CACHING_TYPE;
 
 typedef enum _MM_PAGE_PRIORITY {

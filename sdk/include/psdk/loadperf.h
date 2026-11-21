@@ -39,4 +39,36 @@ DWORD WINAPI UnloadPerfCounterTextStringsW(LPCWSTR, BOOL);
 }
 #endif
 
+#define LOADPERF_FLAGS_CREATE_MOF_ONLY ((ULONG_PTR)4)
+#define LOADPERF_FLAGS_DELETE_MOF_ON_EXIT ((ULONG_PTR) 1)
+#define LOADPERF_FLAGS_DISPLAY_USER_MSGS ((ULONG_PTR)8)
+#define LOADPERF_FLAGS_LOAD_REGISTRY_ONLY ((ULONG_PTR)2)
+#define LOADPERF_FUNCTION 0
+#ifdef UNICODE
+#define SetServiceAsTrusted SetServiceAsTrustedW
+#else
+#define SetServiceAsTrusted SetServiceAsTrustedA
+#endif
+#ifdef UNICODE
+#define UpdatePerfNameFiles UpdatePerfNameFilesW
+#else
+#define UpdatePerfNameFiles UpdatePerfNameFilesA
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+DWORD WINAPI BackupPerfRegistryToFileW(LPCWSTR szFileName, LPCWSTR szCommentString);
+DWORD WINAPI RestorePerfRegistryFromFileW(LPCWSTR szFileName, LPCWSTR szLangId);
+DWORD WINAPI SetServiceAsTrustedA(LPCSTR szReserved, LPCSTR szServiceName);
+DWORD WINAPI SetServiceAsTrustedW(LPCWSTR szReserved, LPCWSTR szServiceName);
+DWORD WINAPI UpdatePerfNameFilesA(LPCSTR szNewCtrFilePath, LPCSTR szNewHlpFilePath, LPSTR szLanguageID, ULONG_PTR dwModes);
+DWORD WINAPI UpdatePerfNameFilesW(LPCWSTR szNewCtrFilePath, LPCWSTR szNewHlpFilePath, LPWSTR szLanguageID, ULONG_PTR dwModes);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* __WINE_LOADPERF_H */

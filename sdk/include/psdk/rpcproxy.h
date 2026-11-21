@@ -18,6 +18,155 @@
 
 #ifndef __RPCPROXY_H_VERSION__
 #define __RPCPROXY_H_VERSION__ (477)
+
+#define CStdAsyncStubBuffer_DELEGATING_METHODS 0
+#define CStdAsyncStubBuffer_DELEGATING_METHODS_OPT CStdAsyncStubBuffer_QueryInterface, CStdAsyncStubBuffer_AddRef, CStdAsyncStubBuffer2_Release, CStdAsyncStubBuffer2_Connect, CStdAsyncStubBuffer2_Disconnect, CStdAsyncStubBuffer_Invoke, CStdStubBuffer_IsIIDSupported, CStdStubBuffer2_CountRefs, CStdStubBuffer_DebugServerQueryInterface, CStdStubBuffer_DebugServerRelease
+#ifdef _WIN64
+#define CStdAsyncStubBuffer_DELEGATING_METHODS_TAG (-4)
+#else
+#define CStdAsyncStubBuffer_DELEGATING_METHODS_TAG 0xFFFFFFFC
+#endif
+#define CStdAsyncStubBuffer_METHODS 0
+#define CStdAsyncStubBuffer_METHODS_OPT CStdAsyncStubBuffer_QueryInterface, CStdAsyncStubBuffer_AddRef, CStdAsyncStubBuffer_Release, CStdAsyncStubBuffer_Connect, CStdAsyncStubBuffer_Disconnect, CStdAsyncStubBuffer_Invoke, CStdStubBuffer_IsIIDSupported, CStdStubBuffer_CountRefs, CStdStubBuffer_DebugServerQueryInterface, CStdStubBuffer_DebugServerRelease
+#ifdef _WIN64
+#define CStdAsyncStubBuffer_METHODS_TAG (-3)
+#else
+#define CStdAsyncStubBuffer_METHODS_TAG 0xFFFFFFFD
+#endif
+#define CStdStubBuffer_DELEGATING_METHODS_OPT CStdStubBuffer2_QueryInterface, CStdStubBuffer_AddRef, CStdStubBuffer2_Release, CStdStubBuffer2_Connect, CStdStubBuffer2_Disconnect, CStdStubBuffer_Invoke, CStdStubBuffer_IsIIDSupported, CStdStubBuffer2_CountRefs, CStdStubBuffer_DebugServerQueryInterface, CStdStubBuffer_DebugServerRelease
+#ifdef _WIN64
+#define CStdStubBuffer_DELEGATING_METHODS_TAG (-2)
+#else
+#define CStdStubBuffer_DELEGATING_METHODS_TAG 0xFFFFFFFE
+#endif
+#define CStdStubBuffer_METHODS_OPT 0
+#define CStdStubBuffer_METHODS_TAG ((void *) - 1)
+#define DISABLE_THREAD_LIBRARY_CALLSx) DisableThreadLibraryCalls(x)
+#define DLLDATA_STANDARD_ROUTINES DLLDATA_ROUTINES((const ProxyFileInfo * *) pProxyFileList, & CLSID_PSFactoryBuffer)
+#ifdef _WIN64
+#define IInspectableInterfaceProxyTag (-1)
+#else
+#define IInspectableInterfaceProxyTag 0xFFFFFFFF
+#endif
+#ifdef _WIN64
+#define IInspectableNdrStubCall2CommonStubListTag (-1)
+#else
+#define IInspectableNdrStubCall2CommonStubListTag 0xFFFFFFFF
+#endif
+#ifdef _WIN64
+#define IInspectableNdrStubCall3CommonStubListTag (-2)
+#else
+#define IInspectableNdrStubCall3CommonStubListTag 0xFFFFFFFE
+#endif
+#define INC_OLE2 0
+#ifdef _WIN64
+#define IUnknownInterfaceProxyTag (-2)
+#else
+#define IUnknownInterfaceProxyTag 0xFFFFFFFE
+#endif
+#define NdrDefaultIIDLookup ((PIIDLookup) - 1)
+#define RPCPROXY_GET_STUB_HEADERStubVtblListEntry) (& (StubVtblListEntry) -> header)
+#define RPCPROXY_IID_DECLSPEC_SECTION __declspec(allocate("rpcproxy$_iid"))
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+HRESULT WINAPI CStdAsyncStubBuffer2_Connect(IRpcStubBuffer *pthis, IUnknown *pUnkServer);
+void WINAPI CStdAsyncStubBuffer2_Disconnect(IRpcStubBuffer *pthis);
+ULONG WINAPI CStdAsyncStubBuffer2_Release(IRpcStubBuffer *pthis);
+ULONG WINAPI CStdAsyncStubBuffer_AddRef(IRpcStubBuffer *pthis);
+HRESULT WINAPI CStdAsyncStubBuffer_Connect(IRpcStubBuffer *pthis, IUnknown *pUnkServer);
+void WINAPI CStdAsyncStubBuffer_Disconnect(IRpcStubBuffer *pthis);
+HRESULT WINAPI CStdAsyncStubBuffer_Invoke(IRpcStubBuffer *pthis, RPCOLEMESSAGE *_prpcmsg, IRpcChannelBuffer *_pRpcChannelBuffer);
+HRESULT WINAPI CStdAsyncStubBuffer_QueryInterface(IRpcStubBuffer *pthis, const IID *const riid, void **ppvObject);
+ULONG WINAPI CStdAsyncStubBuffer_Release(IRpcStubBuffer *pthis);
+HRESULT WINAPI CStdStubBuffer2_Connect(IRpcStubBuffer *pthis, IUnknown *pUnkServer);
+ULONG WINAPI CStdStubBuffer2_CountRefs(IRpcStubBuffer *pthis);
+void WINAPI CStdStubBuffer2_Disconnect(IRpcStubBuffer *pthis);
+HRESULT WINAPI CStdStubBuffer2_QueryInterface(IRpcStubBuffer *This, const IID *const riid, void **ppvObject);
+void WINAPI NdrProxyForwardingFunction10(void);
+void WINAPI NdrProxyForwardingFunction11(void);
+void WINAPI NdrProxyForwardingFunction12(void);
+void WINAPI NdrProxyForwardingFunction13(void);
+void WINAPI NdrProxyForwardingFunction14(void);
+void WINAPI NdrProxyForwardingFunction15(void);
+void WINAPI NdrProxyForwardingFunction16(void);
+void WINAPI NdrProxyForwardingFunction17(void);
+void WINAPI NdrProxyForwardingFunction18(void);
+void WINAPI NdrProxyForwardingFunction19(void);
+void WINAPI NdrProxyForwardingFunction20(void);
+void WINAPI NdrProxyForwardingFunction21(void);
+void WINAPI NdrProxyForwardingFunction22(void);
+void WINAPI NdrProxyForwardingFunction23(void);
+void WINAPI NdrProxyForwardingFunction24(void);
+void WINAPI NdrProxyForwardingFunction25(void);
+void WINAPI NdrProxyForwardingFunction26(void);
+void WINAPI NdrProxyForwardingFunction27(void);
+void WINAPI NdrProxyForwardingFunction28(void);
+void WINAPI NdrProxyForwardingFunction29(void);
+void WINAPI NdrProxyForwardingFunction3(void);
+void WINAPI NdrProxyForwardingFunction30(void);
+void WINAPI NdrProxyForwardingFunction31(void);
+void WINAPI NdrProxyForwardingFunction32(void);
+void WINAPI NdrProxyForwardingFunction4(void);
+void WINAPI NdrProxyForwardingFunction5(void);
+void WINAPI NdrProxyForwardingFunction6(void);
+void WINAPI NdrProxyForwardingFunction7(void);
+void WINAPI NdrProxyForwardingFunction8(void);
+void WINAPI NdrProxyForwardingFunction9(void);
+void WINAPI ObjectStublessClient10(void);
+void WINAPI ObjectStublessClient11(void);
+void WINAPI ObjectStublessClient12(void);
+void WINAPI ObjectStublessClient13(void);
+void WINAPI ObjectStublessClient14(void);
+void WINAPI ObjectStublessClient15(void);
+void WINAPI ObjectStublessClient16(void);
+void WINAPI ObjectStublessClient17(void);
+void WINAPI ObjectStublessClient18(void);
+void WINAPI ObjectStublessClient19(void);
+void WINAPI ObjectStublessClient20(void);
+void WINAPI ObjectStublessClient21(void);
+void WINAPI ObjectStublessClient22(void);
+void WINAPI ObjectStublessClient23(void);
+void WINAPI ObjectStublessClient24(void);
+void WINAPI ObjectStublessClient25(void);
+void WINAPI ObjectStublessClient26(void);
+void WINAPI ObjectStublessClient27(void);
+void WINAPI ObjectStublessClient28(void);
+void WINAPI ObjectStublessClient29(void);
+void WINAPI ObjectStublessClient3(void);
+void WINAPI ObjectStublessClient30(void);
+void WINAPI ObjectStublessClient31(void);
+void WINAPI ObjectStublessClient32(void);
+void WINAPI ObjectStublessClient4(void);
+void WINAPI ObjectStublessClient5(void);
+void WINAPI ObjectStublessClient6(void);
+void WINAPI ObjectStublessClient7(void);
+void WINAPI ObjectStublessClient8(void);
+void WINAPI ObjectStublessClient9(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define DISABLE_THREAD_LIBRARY_CALLSx) DisableThreadLibraryCalls(x)
+#define DLLRPCDUMMYCALL void __cdecl DLLRPCDUMMYCALL_ENTRY(void) { /* Don't define __purecall method anymore */ }
+#define DLLRPCDUMMYCALL_ENTRY 0
+#define RPCPROXY_GET_STUB_HEADERStubVtblListEntry) (& (StubVtblListEntry) -> header)
+
+#define DISABLE_THREAD_LIBRARY_CALLSx) DisableThreadLibraryCalls(x)
+#define RPCPROXY_GET_STUB_HEADERStubVtblListEntry) (& (StubVtblListEntry) -> header)
+
+typedef struct tagCInterfaceStubVtblTag CInterfaceStubVtblTag;
+
+struct tagCInterfaceStubVtblTag
+{
+    CInterfaceStubHeader header;
+    void *tag;
+};
+
 #endif
 
 #ifndef __WINE_RPCPROXY_H

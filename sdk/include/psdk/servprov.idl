@@ -44,3 +44,25 @@ interface IServiceProvider : IUnknown
         [in] REFIID riid,
         [out, iid_is(riid)] IUnknown ** ppvObject);
 }
+
+cpp_quote("struct IServiceProviderVtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(IServiceProvider *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(IServiceProvider *);")
+cpp_quote("    ULONG (WINAPI *Release)(IServiceProvider *);")
+cpp_quote("    HRESULT (WINAPI *QueryService)(IServiceProvider *, const GUID *const , const IID *const , void **);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("#ifdef __cplusplus")
+cpp_quote("extern \"C\" {")
+cpp_quote("#endif")
+cpp_quote("")
+cpp_quote("/* TODO: LiberNT does not implement the functions below yet */")
+cpp_quote("HRESULT WINAPI IServiceProvider_QueryService_Proxy(IServiceProvider *This, const GUID *const guidService, const IID *const riid, void **ppvObject);")
+cpp_quote("HRESULT WINAPI IServiceProvider_QueryService_Stub(IServiceProvider *This, const GUID *const guidService, const IID *const riid, IUnknown **ppvObject);")
+cpp_quote("HRESULT WINAPI IServiceProvider_RemoteQueryService_Proxy(IServiceProvider *This, const GUID *const guidService, const IID *const riid, IUnknown **ppvObject);")
+cpp_quote("void IServiceProvider_RemoteQueryService_Stub(IRpcStubBuffer *This, IRpcChannelBuffer *_pRpcChannelBuffer, PRPC_MESSAGE _pRpcMessage, DWORD *_pdwStubPhase);")
+cpp_quote("")
+cpp_quote("#ifdef __cplusplus")
+cpp_quote("}")
+cpp_quote("#endif")

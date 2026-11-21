@@ -73,7 +73,8 @@ typedef enum NET_FW_SERVICE_TYPE_
 typedef enum NET_FW_IP_PROTOCOL_
 {
     NET_FW_IP_PROTOCOL_TCP =  6,
-    NET_FW_IP_PROTOCOL_UDP = 17
+    NET_FW_IP_PROTOCOL_UDP = 17,
+    NET_FW_IP_PROTOCOL_ANY = 0x100,
 }   NET_FW_IP_PROTOCOL;
 
 typedef enum NET_FW_RULE_DIRECTION_
@@ -96,3 +97,35 @@ typedef enum NET_FW_MODIFY_STATE_
     NET_FW_MODIFY_STATE_GP_OVERRIDE,
     NET_FW_MODIFY_STATE_INBOUND_BLOCKED
 } NET_FW_MODIFY_STATE;
+
+cpp_quote("enum NET_FW_AUTHENTICATE_TYPE_")
+cpp_quote("{")
+cpp_quote("    NET_FW_AUTHENTICATE_NONE = 0,")
+cpp_quote("    NET_FW_AUTHENTICATE_NO_ENCAPSULATION = 1,")
+cpp_quote("    NET_FW_AUTHENTICATE_WITH_INTEGRITY = 2,")
+cpp_quote("    NET_FW_AUTHENTICATE_AND_NEGOTIATE_ENCRYPTION = 3,")
+cpp_quote("    NET_FW_AUTHENTICATE_AND_ENCRYPT = 4,")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("enum NET_FW_EDGE_TRAVERSAL_TYPE_")
+cpp_quote("{")
+cpp_quote("    NET_FW_EDGE_TRAVERSAL_TYPE_DENY = 0,")
+cpp_quote("    NET_FW_EDGE_TRAVERSAL_TYPE_ALLOW = 1,")
+cpp_quote("    NET_FW_EDGE_TRAVERSAL_TYPE_DEFER_TO_APP = 2,")
+cpp_quote("    NET_FW_EDGE_TRAVERSAL_TYPE_DEFER_TO_USER = 3,")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("enum NET_FW_RULE_CATEGORY_")
+cpp_quote("{")
+cpp_quote("    NET_FW_RULE_CATEGORY_BOOT = 0,")
+cpp_quote("    NET_FW_RULE_CATEGORY_STEALTH = 1,")
+cpp_quote("    NET_FW_RULE_CATEGORY_FIREWALL = 2,")
+cpp_quote("    NET_FW_RULE_CATEGORY_CONSEC = 3,")
+cpp_quote("    NET_FW_RULE_CATEGORY_MAX = 4,")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("typedef enum NET_FW_AUTHENTICATE_TYPE_ NET_FW_AUTHENTICATE_TYPE;")
+cpp_quote("")
+cpp_quote("typedef enum NET_FW_EDGE_TRAVERSAL_TYPE_ NET_FW_EDGE_TRAVERSAL_TYPE;")
+cpp_quote("")
+cpp_quote("typedef enum NET_FW_RULE_CATEGORY_ NET_FW_RULE_CATEGORY;")

@@ -212,6 +212,26 @@ ScsiPortWmiFireLogicalUnitEvent(
 }
 #endif
 
+#define ScsiPortWmiIsQueryAllDataRequestContext) ((RequestContext) -> MinorFunction == WMI_GET_ALL_DATA)
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+PWCHAR ScsiPortWmiGetInstanceName(PSCSIWMI_REQUEST_CONTEXT RequestContext);
+PVOID ScsiPortWmiSetData(PSCSIWMI_REQUEST_CONTEXT RequestContext, ULONG InstanceIndex, ULONG DataLength, PULONG BufferAvail, PULONG SizeNeeded);
+BOOLEAN ScsiPortWmiSetInstanceCount(PSCSIWMI_REQUEST_CONTEXT RequestContext, ULONG InstanceCount, PULONG BufferAvail, PULONG SizeNeeded);
+PWCHAR ScsiPortWmiSetInstanceName(PSCSIWMI_REQUEST_CONTEXT RequestContext, ULONG InstanceIndex, ULONG InstanceNameLength, PULONG BufferAvail, PULONG SizeNeeded);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define ScsiPortWmiIsQueryAllDataRequestContext) ((RequestContext) -> MinorFunction == WMI_GET_ALL_DATA)
+
+#define ScsiPortWmiIsQueryAllDataRequestContext) ((RequestContext) -> MinorFunction == WMI_GET_ALL_DATA)
+
 #endif /* _SCSIWMI_ */
 
 #ifndef WMIREG_FLAG_CALL_BY_NAME

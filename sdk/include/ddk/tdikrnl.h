@@ -1240,4 +1240,40 @@ typedef struct _TDI_NCPA_BINDING_INFO {
   TDI_PNP_OPCODE PnpOpcode;
 } TDI_NCPA_BINDING_INFO, *PTDI_NCPA_BINDING_INFO;
 
+#define _TDI_KRNL_ 0
+#define TDI20 0
+
+struct _TDI_VERSION_
+{
+    union
+    {
+        struct
+        {
+            UCHAR MajorTdiVersion;
+            UCHAR MinorTdiVersion;
+        };
+        USHORT TdiVersion;
+    };
+};
+
+typedef struct _TDI_VERSION_ *PTDI_VERSION;
+
+typedef void (*TDI_NET_READY_HANDLER)(NTSTATUS);
+
+typedef struct _TDI_VERSION_ TDI_VERSION;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+void TdiCopyBufferToMdlWithReservedMapping(PVOID SourceBuffer, PMDL DestinationMdl, ULONG DestinationOffset, ULONG BytesToCopy);
+void TdiCopyBufferToMdlWithReservedMappingAtDpcLevel(PVOID SourceBuffer, PMDL DestinationMdl, ULONG DestinationOffset, ULONG BytesToCopy);
+void TdiGet9FTriageBlock(PVOID *TriageBlockAddress);
+NTSTATUS TdiMakeNCPAChanges(TDI_NCPA_BINDING_INFO NcpaBindingInfo);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* __TDIKRNL_H */

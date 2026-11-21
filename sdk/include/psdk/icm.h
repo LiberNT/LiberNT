@@ -180,7 +180,8 @@ typedef enum
     BM_S2DOT13FIXED_scARGB,
     BM_R10G10B10A2 = 0x0701,
     BM_R10G10B10A2_XR,
-    BM_R16G16B16A16_FLOAT
+    BM_R16G16B16A16_FLOAT,
+    BM_x555Yxy = 0x102,
 } BMFORMAT, *PBMFORMAT, *LPBMFORMAT;
 
 typedef enum
@@ -580,14 +581,9 @@ typedef enum WCS_DEVICE_CAPABILITIES_TYPE {
     MicrosoftHardwareColorV2 = 2
 } WCS_DEVICE_CAPABILITIES_TYPE;
 
-typedef PBMCALLBACKFN LPBMCALLBACKFN;
 typedef HANDLE HCMTRANSFORM;
+typedef PBMCALLBACKFN LPBMCALLBACKFN;
 typedef PVOID LPDEVCHARACTER;
-
-struct WCS_DEVICE_VCGT_CAPABILITIES {
-  UINT Size;
-  BOOL SupportsVcgt;
-};
 
 struct WCS_DEVICE_MHC2_CAPABILITIES {
   UINT Size;
@@ -596,5 +592,99 @@ struct WCS_DEVICE_MHC2_CAPABILITIES {
   UINT CscXyzMatrixRows;
   UINT CscXyzMatrixColumns;
 };
+
+struct WCS_DEVICE_VCGT_CAPABILITIES {
+  UINT Size;
+  BOOL SupportsVcgt;
+};
+
+#define CMM_FROM_PROFILE 0
+#define CMM_WINDOWS_DEFAULT 0x57696E20
+#ifdef UNICODE
+#define COLORMATCHSETUP COLORMATCHSETUPW
+#else
+#define COLORMATCHSETUP COLORMATCHSETUPA
+#endif
+#ifdef UNICODE
+#define ENUMTYPE ENUMTYPEW
+#else
+#define ENUMTYPE ENUMTYPEA
+#endif
+#ifdef UNICODE
+#define LPCOLORMATCHSETUP LPCOLORMATCHSETUPW
+#else
+#define LPCOLORMATCHSETUP LPCOLORMATCHSETUPA
+#endif
+#ifdef UNICODE
+#define PCMSCALLBACK PCMSCALLBACKW
+#else
+#define PCMSCALLBACK PCMSCALLBACKA
+#endif
+#ifdef UNICODE
+#define PCOLORMATCHSETUP PCOLORMATCHSETUPW
+#else
+#define PCOLORMATCHSETUP PCOLORMATCHSETUPA
+#endif
+#ifdef UNICODE
+#define PENUMTYPE PENUMTYPEW
+#else
+#define PENUMTYPE PENUMTYPEA
+#endif
+#define WCS_EMBEDDED_TAG_SIGNATURE 0x4D533030
+#define WCS_EMBEDDED_TAG_TYPE_SIGNATURE 0x4D533130
+#ifdef UNICODE
+#define WcsOpenColorProfile WcsOpenColorProfileW
+#else
+#define WcsOpenColorProfile WcsOpenColorProfileA
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+BOOL WINAPI WcsGetCalibrationManagementState(BOOL *pbIsEnabled);
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL WINAPI CMCheckColors(HCMTRANSFORM hcmTransform, LPCOLOR lpaInputColors, DWORD nColors, COLORTYPE ctInput, LPBYTE lpaResult);
+BOOL WINAPI CMCheckColorsInGamut(HCMTRANSFORM hcmTransform, RGBTRIPLE *lpaRGBTriple, LPBYTE lpaResult, UINT nCount);
+BOOL WINAPI CMCheckRGBs(HCMTRANSFORM hcmTransform, LPVOID lpSrcBits, BMFORMAT bmInput, DWORD dwWidth, DWORD dwHeight, DWORD dwStride, LPBYTE lpaResult, PBMCALLBACKFN pfnCallback, LPARAM ulCallbackData);
+BOOL WINAPI CMConvertColorNameToIndex(HPROFILE hProfile, PCOLOR_NAME paColorName, PDWORD paIndex, DWORD dwCount);
+BOOL WINAPI CMConvertIndexToColorName(HPROFILE hProfile, PDWORD paIndex, PCOLOR_NAME paColorName, DWORD dwCount);
+BOOL WINAPI CMCreateDeviceLinkProfile(PHPROFILE pahProfiles, DWORD nProfiles, PDWORD padwIntents, DWORD nIntents, DWORD dwFlags, LPBYTE *lpProfileData);
+HCMTRANSFORM WINAPI CMCreateMultiProfileTransform(PHPROFILE pahProfiles, DWORD nProfiles, PDWORD padwIntents, DWORD nIntents, DWORD dwFlags);
+BOOL WINAPI CMCreateProfile(LPLOGCOLORSPACEA lpColorSpace, LPDEVCHARACTER *lpProfileData);
+BOOL WINAPI CMCreateProfileW(LPLOGCOLORSPACEW lpColorSpace, LPDEVCHARACTER *lpProfileData);
+HCMTRANSFORM WINAPI CMCreateTransform(LPLOGCOLORSPACEA lpColorSpace, LPDEVCHARACTER lpDevCharacter, LPDEVCHARACTER lpTargetDevCharacter);
+HCMTRANSFORM WINAPI CMCreateTransformExt(LPLOGCOLORSPACEA lpColorSpace, LPDEVCHARACTER lpDevCharacter, LPDEVCHARACTER lpTargetDevCharacter, DWORD dwFlags);
+HCMTRANSFORM WINAPI CMCreateTransformExtW(LPLOGCOLORSPACEW lpColorSpace, LPDEVCHARACTER lpDevCharacter, LPDEVCHARACTER lpTargetDevCharacter, DWORD dwFlags);
+HCMTRANSFORM WINAPI CMCreateTransformW(LPLOGCOLORSPACEW lpColorSpace, LPDEVCHARACTER lpDevCharacter, LPDEVCHARACTER lpTargetDevCharacter);
+BOOL WINAPI CMDeleteTransform(HCMTRANSFORM hcmTransform);
+DWORD WINAPI CMGetInfo(DWORD dwInfo);
+BOOL WINAPI CMGetNamedProfileInfo(HPROFILE hProfile, PNAMED_PROFILE_INFO pNamedProfileInfo);
+BOOL WINAPI CMGetPS2ColorRenderingDictionary(HPROFILE hProfile, DWORD dwIntent, LPBYTE lpBuffer, LPDWORD lpcbSize, LPBOOL lpbBinary);
+BOOL WINAPI CMGetPS2ColorRenderingIntent(HPROFILE hProfile, DWORD dwIntent, LPBYTE lpBuffer, LPDWORD lpcbSize);
+BOOL WINAPI CMGetPS2ColorSpaceArray(HPROFILE hProfile, DWORD dwIntent, DWORD dwCSAType, LPBYTE lpBuffer, LPDWORD lpcbSize, LPBOOL lpbBinary);
+BOOL WINAPI CMIsProfileValid(HPROFILE hProfile, LPBOOL lpbValid);
+BOOL WINAPI CMTranslateColors(HCMTRANSFORM hcmTransform, LPCOLOR lpaInputColors, DWORD nColors, COLORTYPE ctInput, LPCOLOR lpaOutputColors, COLORTYPE ctOutput);
+BOOL WINAPI CMTranslateRGB(HCMTRANSFORM hcmTransform, COLORREF ColorRef, LPCOLORREF lpColorRef, DWORD dwFlags);
+BOOL WINAPI CMTranslateRGBs(HCMTRANSFORM hcmTransform, LPVOID lpSrcBits, BMFORMAT bmInput, DWORD dwWidth, DWORD dwHeight, DWORD dwStride, LPVOID lpDestBits, BMFORMAT bmOutput, DWORD dwTranslateDirection);
+BOOL WINAPI CMTranslateRGBsExt(HCMTRANSFORM hcmTransform, LPVOID lpSrcBits, BMFORMAT bmInput, DWORD dwWidth, DWORD dwHeight, DWORD dwInputStride, LPVOID lpDestBits, BMFORMAT bmOutput, DWORD dwOutputStride, LPBMCALLBACKFN lpfnCallback, LPARAM ulCallbackData);
+HRESULT WINAPI ColorProfileAddDisplayAssociation(WCS_PROFILE_MANAGEMENT_SCOPE scope, PCWSTR profileName, LUID targetAdapterID, UINT32 sourceID, BOOL setAsDefault, BOOL associateAsAdvancedColor);
+HRESULT WINAPI ColorProfileGetDeviceCapabilities(WCS_PROFILE_MANAGEMENT_SCOPE scope, LUID targetAdapterID, UINT32 sourceID, WCS_DEVICE_CAPABILITIES_TYPE capsType, PVOID outputCapabilities);
+HRESULT WINAPI ColorProfileGetDisplayDefault(WCS_PROFILE_MANAGEMENT_SCOPE scope, LUID targetAdapterID, UINT32 sourceID, COLORPROFILETYPE profileType, COLORPROFILESUBTYPE profileSubType, LPWSTR *profileName);
+HRESULT WINAPI ColorProfileGetDisplayList(WCS_PROFILE_MANAGEMENT_SCOPE scope, LUID targetAdapterID, UINT32 sourceID, LPWSTR **profileList, PDWORD profileCount);
+HRESULT WINAPI ColorProfileGetDisplayUserScope(LUID targetAdapterID, UINT32 sourceID, WCS_PROFILE_MANAGEMENT_SCOPE *scope);
+HRESULT WINAPI ColorProfileRemoveDisplayAssociation(WCS_PROFILE_MANAGEMENT_SCOPE scope, PCWSTR profileName, LUID targetAdapterID, UINT32 sourceID, BOOL dissociateAdvancedColor);
+HRESULT WINAPI ColorProfileSetDisplayDefaultAssociation(WCS_PROFILE_MANAGEMENT_SCOPE scope, PCWSTR profileName, COLORPROFILETYPE profileType, COLORPROFILESUBTYPE profileSubType, LUID targetAdapterID, UINT32 sourceID);
+BOOL WINAPI WcsCheckColors(HTRANSFORM hColorTransform, DWORD nColors, DWORD nInputChannels, COLORDATATYPE cdtInput, DWORD cbInput, PVOID pInputData, PBYTE paResult);
+BOOL WINAPI WcsEnumColorProfiles(WCS_PROFILE_MANAGEMENT_SCOPE scope, PENUMTYPEW pEnumRecord, PBYTE pBuffer, DWORD dwSize, PDWORD pnProfiles);
+BOOL WINAPI WcsSetCalibrationManagementState(BOOL bIsEnabled);
+BOOL WINAPI WcsSetDefaultRenderingIntent(WCS_PROFILE_MANAGEMENT_SCOPE scope, DWORD dwRenderingIntent);
+BOOL WINAPI WcsSetUsePerUserProfiles(LPCWSTR pDeviceName, DWORD dwDeviceClass, BOOL usePerUserProfiles);
+BOOL WINAPI WcsTranslateColors(HTRANSFORM hColorTransform, DWORD nColors, DWORD nInputChannels, COLORDATATYPE cdtInput, DWORD cbInput, PVOID pInputData, DWORD nOutputChannels, COLORDATATYPE cdtOutput, DWORD cbOutput, PVOID pOutputData);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __WINE_ICM_H */

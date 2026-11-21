@@ -158,4 +158,28 @@ typedef struct _RESTOREPTINFOEX {
 } RESTOREPOINTINFOEX, *PRESTOREPOINTINFOEX;
 #pragma pack(pop)
 
+#define END_NESTED_SYSTEM_CHANGE_NORP 0x67
+#ifdef UNICODE
+#define PRESTOREPOINTINFO PRESTOREPOINTINFOW
+#else
+#define PRESTOREPOINTINFO PRESTOREPOINTINFOA
+#endif
+#define RESTOREPOINTINFO 0
+#ifdef UNICODE
+#define SRSetRestorePoint SRSetRestorePointW
+#else
+#define SRSetRestorePoint SRSetRestorePointA
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL WINAPI SRSetRestorePointInternal(PRESTOREPOINTINFOW pRestorePtSpec, PSTATEMGRSTATUS pSMgrStatus, BOOL fForceSurrogate);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

@@ -443,12 +443,420 @@ static const WCHAR WC_PROPSHEETW[] = { 'S','y','s',
 #define PSWIZB_SHOW 0
 #endif
 
+typedef struct _PROPSHEETPAGEA * LPPROPSHEETPAGEA_V4;
+typedef struct _PROPSHEETPAGEW * LPPROPSHEETPAGEW_V4;
 typedef LPCDLGTEMPLATE PROPSHEETPAGE_RESOURCE;
 typedef struct _PROPSHEETPAGEA PROPSHEETPAGEA_V4;
-typedef struct _PROPSHEETPAGEA * LPPROPSHEETPAGEA_V4;
 typedef const PROPSHEETPAGEA_V4 * LPCPROPSHEETPAGEA_V4;
 typedef struct _PROPSHEETPAGEW PROPSHEETPAGEW_V4;
-typedef struct _PROPSHEETPAGEW * LPPROPSHEETPAGEW_V4;
 typedef const PROPSHEETPAGEW_V4 * LPCPROPSHEETPAGEW_V4;
+
+#define _PROPSHEETPAGEA_V4 _PROPSHEETPAGEA
+#define _PROPSHEETPAGEW_V4 _PROPSHEETPAGEW
+#define LPCPROPSHEETPAGE_LATEST LPCPROPSHEETPAGEA_LATEST
+#define LPCPROPSHEETPAGE_V1 LPCPROPSHEETPAGEA_V1
+#define LPCPROPSHEETPAGE_V2 LPCPROPSHEETPAGEA_V2
+#define LPCPROPSHEETPAGE_V3 LPCPROPSHEETPAGEA_V3
+#define LPCPROPSHEETPAGE_V4 LPCPROPSHEETPAGEA_V4
+#define LPPROPSHEETPAGE_LATEST LPPROPSHEETPAGEA_LATEST
+#define LPPROPSHEETPAGE_V1 LPPROPSHEETPAGEA_V1
+#define LPPROPSHEETPAGE_V2 LPPROPSHEETPAGEA_V2
+#define LPPROPSHEETPAGE_V3 LPPROPSHEETPAGEA_V3
+#define LPPROPSHEETPAGE_V4 LPPROPSHEETPAGEA_V4
+#define PropSheet_EnableWizButtonshDlg, dwState, dwMask) PSTMSG(hDlg, PSM_ENABLEWIZBUTTONS, (WPARAM) (dwState), (LPARAM) (dwMask))
+#define PropSheet_IdToIndexhDlg, id) (int) SNDMSG(hDlg, PSM_IDTOINDEX, 0, (LPARAM) (id))
+#define PropSheet_IndexToHwndhDlg, i) (HWND) SNDMSG(hDlg, PSM_INDEXTOHWND, (WPARAM) (i), 0)
+#define PropSheet_IndexToIdhDlg, i) SNDMSG(hDlg, PSM_INDEXTOID, (WPARAM) (i), 0)
+#define PropSheet_IndexToPagehDlg, i) (HPROPSHEETPAGE) SNDMSG(hDlg, PSM_INDEXTOPAGE, (WPARAM) (i), 0)
+#define PropSheet_InsertPagehDlg, index, hpage) SNDMSG(hDlg, PSM_INSERTPAGE, (WPARAM) (index), (LPARAM) (hpage))
+#define PropSheet_PageToIndexhDlg, hpage) (int) SNDMSG(hDlg, PSM_PAGETOINDEX, 0, (LPARAM) (hpage))
+#define PropSheet_SetButtonTexthDlg, dwButton, lpszText) SNDMSG(hDlg, PSM_SETBUTTONTEXT, (WPARAM) (dwButton), (LPARAM) (lpszText))
+#define PropSheet_SetHeaderSubTitlehDlg, index, lpszText) SNDMSG(hDlg, PSM_SETHEADERSUBTITLE, (WPARAM) (index), (LPARAM) (lpszText))
+#define PropSheet_SetHeaderTitlehDlg, index, lpszText) SNDMSG(hDlg, PSM_SETHEADERTITLE, (WPARAM) (index), (LPARAM) (lpszText))
+#define PropSheet_SetNextTexthDlg, lpszText) SNDMSG(hDlg, PSM_SETNEXTTEXT, 0, (LPARAM) (lpszText))
+#define PropSheet_ShowWizButtonshDlg, dwFlag, dwButton) PSTMSG(hDlg, PSM_SHOWWIZBUTTONS, (WPARAM) (dwFlag), (LPARAM) (dwButton))
+#define PROPSHEETHEADER_V1_SIZE PROPSHEETHEADERA_V1_SIZE
+#ifdef _WIN64
+#define PROPSHEETHEADER_V2_SIZE 0x60
+#else
+#define PROPSHEETHEADER_V2_SIZE 0x34
+#endif
+#define PROPSHEETHEADERA_V1_FIELDS 0
+#define PROPSHEETHEADERW_V1_FIELDS DWORD dwSize; DWORD dwFlags; HWND hwndParent; HINSTANCE hInstance; union { HICON hIcon; LPCWSTR pszIcon; } DUMMYUNIONNAME; LPCWSTR pszCaption; UINT nPages; union { UINT nStartPage; LPCWSTR pStartPage; } DUMMYUNIONNAME2; union { LPCPROPSHEETPAGEW ppsp; HPROPSHEETPAGE * phpage; } DUMMYUNIONNAME3; PFNPROPSHEETCALLBACK pfnCallback;
+#define PROPSHEETPAGE_LATEST PROPSHEETPAGEA_LATEST
+#define PROPSHEETPAGE_V1 0
+#define PROPSHEETPAGE_V1_SIZE PROPSHEETPAGEA_V1_SIZE
+#define PROPSHEETPAGE_V2 PROPSHEETPAGEA_V2
+#ifdef _WIN64
+#define PROPSHEETPAGE_V2_SIZE 0x58
+#else
+#define PROPSHEETPAGE_V2_SIZE 0x30
+#endif
+#define PROPSHEETPAGE_V3 PROPSHEETPAGEA_V3
+#define PROPSHEETPAGE_V4 PROPSHEETPAGEA_V4
+#define PROPSHEETPAGEA_V1_FIELDS 0
+#define PROPSHEETPAGEW_V1_FIELDS DWORD dwSize; DWORD dwFlags; HINSTANCE hInstance; union { LPCWSTR pszTemplate; PROPSHEETPAGE_RESOURCE pResource; } DUMMYUNIONNAME; union { HICON hIcon; LPCWSTR pszIcon; } DUMMYUNIONNAME2; LPCWSTR pszTitle; DLGPROC pfnDlgProc; LPARAM lParam; LPFNPSPCALLBACKW pfnCallback; UINT * pcRefParent;
+#define PSM_ENABLEWIZBUTTONS 0x48B
+#define PSM_SETBUTTONTEXT 0x48C
+#define PSM_SETBUTTONTEXTW 0x48C
+#define PSM_SETNEXTTEXT 0x489
+#define PSM_SETNEXTTEXTW 0x489
+#define PSM_SHOWWIZBUTTONS 0x48A
+#define PSTMSG PostMessage
+#define PSWIZF_SETCOLOR ((UINT)0xFFFFFFFF)
+
+struct _PROPSHEETHEADERA_V1
+{
+    DWORD dwSize;
+    DWORD dwFlags;
+    HWND hwndParent;
+    HINSTANCE hInstance;
+    union
+    {
+        HICON hIcon;
+        LPCSTR pszIcon;
+    };
+    LPCSTR pszCaption;
+    UINT nPages;
+    union
+    {
+        UINT nStartPage;
+        LPCSTR pStartPage;
+    };
+    union
+    {
+        LPCPROPSHEETPAGEA ppsp;
+        HPROPSHEETPAGE *phpage;
+    };
+    PFNPROPSHEETCALLBACK pfnCallback;
+};
+
+struct _PROPSHEETHEADERA_V2
+{
+    DWORD dwSize;
+    DWORD dwFlags;
+    HWND hwndParent;
+    HINSTANCE hInstance;
+    union
+    {
+        HICON hIcon;
+        LPCSTR pszIcon;
+    };
+    LPCSTR pszCaption;
+    UINT nPages;
+    union
+    {
+        UINT nStartPage;
+        LPCSTR pStartPage;
+    };
+    union
+    {
+        LPCPROPSHEETPAGEA ppsp;
+        HPROPSHEETPAGE *phpage;
+    };
+    PFNPROPSHEETCALLBACK pfnCallback;
+    union
+    {
+        HBITMAP hbmWatermark;
+        LPCSTR pszbmWatermark;
+    };
+    HPALETTE hplWatermark;
+    union
+    {
+        HBITMAP hbmHeader;
+        LPCSTR pszbmHeader;
+    };
+};
+
+struct _PROPSHEETHEADERW_V1
+{
+    DWORD dwSize;
+    DWORD dwFlags;
+    HWND hwndParent;
+    HINSTANCE hInstance;
+    union
+    {
+        HICON hIcon;
+        LPCWSTR pszIcon;
+    };
+    LPCWSTR pszCaption;
+    UINT nPages;
+    union
+    {
+        UINT nStartPage;
+        LPCWSTR pStartPage;
+    };
+    union
+    {
+        LPCPROPSHEETPAGEW ppsp;
+        HPROPSHEETPAGE *phpage;
+    };
+    PFNPROPSHEETCALLBACK pfnCallback;
+};
+
+struct _PROPSHEETHEADERW_V2
+{
+    DWORD dwSize;
+    DWORD dwFlags;
+    HWND hwndParent;
+    HINSTANCE hInstance;
+    union
+    {
+        HICON hIcon;
+        LPCWSTR pszIcon;
+    };
+    LPCWSTR pszCaption;
+    UINT nPages;
+    union
+    {
+        UINT nStartPage;
+        LPCWSTR pStartPage;
+    };
+    union
+    {
+        LPCPROPSHEETPAGEW ppsp;
+        HPROPSHEETPAGE *phpage;
+    };
+    PFNPROPSHEETCALLBACK pfnCallback;
+    union
+    {
+        HBITMAP hbmWatermark;
+        LPCWSTR pszbmWatermark;
+    };
+    HPALETTE hplWatermark;
+    union
+    {
+        HBITMAP hbmHeader;
+        LPCWSTR pszbmHeader;
+    };
+};
+
+struct _PROPSHEETPAGEA_V1
+{
+    DWORD dwSize;
+    DWORD dwFlags;
+    HINSTANCE hInstance;
+    union
+    {
+        LPCSTR pszTemplate;
+        PROPSHEETPAGE_RESOURCE pResource;
+    };
+    union
+    {
+        HICON hIcon;
+        LPCSTR pszIcon;
+    };
+    LPCSTR pszTitle;
+    DLGPROC pfnDlgProc;
+    LPARAM lParam;
+    LPFNPSPCALLBACKA pfnCallback;
+    UINT *pcRefParent;
+};
+
+struct _PROPSHEETPAGEA_V2
+{
+    DWORD dwSize;
+    DWORD dwFlags;
+    HINSTANCE hInstance;
+    union
+    {
+        LPCSTR pszTemplate;
+        PROPSHEETPAGE_RESOURCE pResource;
+    };
+    union
+    {
+        HICON hIcon;
+        LPCSTR pszIcon;
+    };
+    LPCSTR pszTitle;
+    DLGPROC pfnDlgProc;
+    LPARAM lParam;
+    LPFNPSPCALLBACKA pfnCallback;
+    UINT *pcRefParent;
+    LPCSTR pszHeaderTitle;
+    LPCSTR pszHeaderSubTitle;
+};
+
+struct _PROPSHEETPAGEA_V3
+{
+    DWORD dwSize;
+    DWORD dwFlags;
+    HINSTANCE hInstance;
+    union
+    {
+        LPCSTR pszTemplate;
+        PROPSHEETPAGE_RESOURCE pResource;
+    };
+    union
+    {
+        HICON hIcon;
+        LPCSTR pszIcon;
+    };
+    LPCSTR pszTitle;
+    DLGPROC pfnDlgProc;
+    LPARAM lParam;
+    LPFNPSPCALLBACKA pfnCallback;
+    UINT *pcRefParent;
+    LPCSTR pszHeaderTitle;
+    LPCSTR pszHeaderSubTitle;
+    HANDLE hActCtx;
+};
+
+struct _PROPSHEETPAGEW_V1
+{
+    DWORD dwSize;
+    DWORD dwFlags;
+    HINSTANCE hInstance;
+    union
+    {
+        LPCWSTR pszTemplate;
+        PROPSHEETPAGE_RESOURCE pResource;
+    };
+    union
+    {
+        HICON hIcon;
+        LPCWSTR pszIcon;
+    };
+    LPCWSTR pszTitle;
+    DLGPROC pfnDlgProc;
+    LPARAM lParam;
+    LPFNPSPCALLBACKW pfnCallback;
+    UINT *pcRefParent;
+};
+
+struct _PROPSHEETPAGEW_V2
+{
+    DWORD dwSize;
+    DWORD dwFlags;
+    HINSTANCE hInstance;
+    union
+    {
+        LPCWSTR pszTemplate;
+        PROPSHEETPAGE_RESOURCE pResource;
+    };
+    union
+    {
+        HICON hIcon;
+        LPCWSTR pszIcon;
+    };
+    LPCWSTR pszTitle;
+    DLGPROC pfnDlgProc;
+    LPARAM lParam;
+    LPFNPSPCALLBACKW pfnCallback;
+    UINT *pcRefParent;
+    LPCWSTR pszHeaderTitle;
+    LPCWSTR pszHeaderSubTitle;
+};
+
+struct _PROPSHEETPAGEW_V3
+{
+    DWORD dwSize;
+    DWORD dwFlags;
+    HINSTANCE hInstance;
+    union
+    {
+        LPCWSTR pszTemplate;
+        PROPSHEETPAGE_RESOURCE pResource;
+    };
+    union
+    {
+        HICON hIcon;
+        LPCWSTR pszIcon;
+    };
+    LPCWSTR pszTitle;
+    DLGPROC pfnDlgProc;
+    LPARAM lParam;
+    LPFNPSPCALLBACKW pfnCallback;
+    UINT *pcRefParent;
+    LPCWSTR pszHeaderTitle;
+    LPCWSTR pszHeaderSubTitle;
+    HANDLE hActCtx;
+};
+
+typedef struct _PROPSHEETHEADERA_V1 *LPPROPSHEETHEADERA_V1;
+
+typedef struct _PROPSHEETHEADERA_V2 *LPPROPSHEETHEADERA_V2;
+
+typedef struct _PROPSHEETHEADERW_V1 *LPPROPSHEETHEADERW_V1;
+
+typedef struct _PROPSHEETHEADERW_V2 *LPPROPSHEETHEADERW_V2;
+
+typedef struct _PROPSHEETPAGEA_V1 *LPPROPSHEETPAGEA_V1;
+
+typedef struct _PROPSHEETPAGEA_V2 *LPPROPSHEETPAGEA_V2;
+
+typedef struct _PROPSHEETPAGEA_V3 *LPPROPSHEETPAGEA_V3;
+
+typedef struct _PROPSHEETPAGEW_V1 *LPPROPSHEETPAGEW_V1;
+
+typedef struct _PROPSHEETPAGEW_V2 *LPPROPSHEETPAGEW_V2;
+
+typedef struct _PROPSHEETPAGEW_V3 *LPPROPSHEETPAGEW_V3;
+
+typedef struct _PROPSHEETHEADERA_V1 PROPSHEETHEADERA_V1;
+
+typedef const PROPSHEETHEADERA_V1 *LPCPROPSHEETHEADERA_V1;
+
+typedef struct _PROPSHEETHEADERA_V2 PROPSHEETHEADERA_V2;
+
+typedef const PROPSHEETHEADERA_V2 *LPCPROPSHEETHEADERA_V2;
+
+typedef struct _PROPSHEETHEADERW_V1 PROPSHEETHEADERW_V1;
+
+typedef const PROPSHEETHEADERW_V1 *LPCPROPSHEETHEADERW_V1;
+
+typedef struct _PROPSHEETHEADERW_V2 PROPSHEETHEADERW_V2;
+
+typedef const PROPSHEETHEADERW_V2 *LPCPROPSHEETHEADERW_V2;
+
+typedef struct _PROPSHEETPAGEA_V1 PROPSHEETPAGEA_V1;
+
+typedef const PROPSHEETPAGEA_V1 *LPCPROPSHEETPAGEA_V1;
+
+typedef struct _PROPSHEETPAGEA_V2 PROPSHEETPAGEA_V2;
+
+typedef const PROPSHEETPAGEA_V2 *LPCPROPSHEETPAGEA_V2;
+
+typedef struct _PROPSHEETPAGEA_V3 PROPSHEETPAGEA_V3;
+
+typedef const PROPSHEETPAGEA_V3 *LPCPROPSHEETPAGEA_V3;
+
+typedef struct _PROPSHEETPAGEW_V1 PROPSHEETPAGEW_V1;
+
+typedef const PROPSHEETPAGEW_V1 *LPCPROPSHEETPAGEW_V1;
+
+typedef struct _PROPSHEETPAGEW_V2 PROPSHEETPAGEW_V2;
+
+typedef const PROPSHEETPAGEW_V2 *LPCPROPSHEETPAGEW_V2;
+
+typedef struct _PROPSHEETPAGEW_V3 PROPSHEETPAGEW_V3;
+
+typedef const PROPSHEETPAGEW_V3 *LPCPROPSHEETPAGEW_V3;
+
+#define PropSheet_EnableWizButtonshDlg, dwState, dwMask) PSTMSG(hDlg, PSM_ENABLEWIZBUTTONS, (WPARAM) (dwState), (LPARAM) (dwMask))
+#define PropSheet_IdToIndexhDlg, id) (int) SNDMSG(hDlg, PSM_IDTOINDEX, 0, (LPARAM) (id))
+#define PropSheet_IndexToHwndhDlg, i) (HWND) SNDMSG(hDlg, PSM_INDEXTOHWND, (WPARAM) (i), 0)
+#define PropSheet_IndexToIdhDlg, i) SNDMSG(hDlg, PSM_INDEXTOID, (WPARAM) (i), 0)
+#define PropSheet_IndexToPagehDlg, i) (HPROPSHEETPAGE) SNDMSG(hDlg, PSM_INDEXTOPAGE, (WPARAM) (i), 0)
+#define PropSheet_InsertPagehDlg, index, hpage) SNDMSG(hDlg, PSM_INSERTPAGE, (WPARAM) (index), (LPARAM) (hpage))
+#define PropSheet_PageToIndexhDlg, hpage) (int) SNDMSG(hDlg, PSM_PAGETOINDEX, 0, (LPARAM) (hpage))
+#define PropSheet_SetButtonTexthDlg, dwButton, lpszText) SNDMSG(hDlg, PSM_SETBUTTONTEXT, (WPARAM) (dwButton), (LPARAM) (lpszText))
+#define PropSheet_SetHeaderSubTitlehDlg, index, lpszText) SNDMSG(hDlg, PSM_SETHEADERSUBTITLE, (WPARAM) (index), (LPARAM) (lpszText))
+#define PropSheet_SetHeaderTitlehDlg, index, lpszText) SNDMSG(hDlg, PSM_SETHEADERTITLE, (WPARAM) (index), (LPARAM) (lpszText))
+#define PropSheet_SetNextTexthDlg, lpszText) SNDMSG(hDlg, PSM_SETNEXTTEXT, 0, (LPARAM) (lpszText))
+#define PropSheet_ShowWizButtonshDlg, dwFlag, dwButton) PSTMSG(hDlg, PSM_SHOWWIZBUTTONS, (WPARAM) (dwFlag), (LPARAM) (dwButton))
+
+#define PropSheet_EnableWizButtonshDlg, dwState, dwMask) PSTMSG(hDlg, PSM_ENABLEWIZBUTTONS, (WPARAM) (dwState), (LPARAM) (dwMask))
+#define PropSheet_IdToIndexhDlg, id) (int) SNDMSG(hDlg, PSM_IDTOINDEX, 0, (LPARAM) (id))
+#define PropSheet_IndexToHwndhDlg, i) (HWND) SNDMSG(hDlg, PSM_INDEXTOHWND, (WPARAM) (i), 0)
+#define PropSheet_IndexToIdhDlg, i) SNDMSG(hDlg, PSM_INDEXTOID, (WPARAM) (i), 0)
+#define PropSheet_IndexToPagehDlg, i) (HPROPSHEETPAGE) SNDMSG(hDlg, PSM_INDEXTOPAGE, (WPARAM) (i), 0)
+#define PropSheet_InsertPagehDlg, index, hpage) SNDMSG(hDlg, PSM_INSERTPAGE, (WPARAM) (index), (LPARAM) (hpage))
+#define PropSheet_PageToIndexhDlg, hpage) (int) SNDMSG(hDlg, PSM_PAGETOINDEX, 0, (LPARAM) (hpage))
+#define PropSheet_SetButtonTexthDlg, dwButton, lpszText) SNDMSG(hDlg, PSM_SETBUTTONTEXT, (WPARAM) (dwButton), (LPARAM) (lpszText))
+#define PropSheet_SetHeaderSubTitlehDlg, index, lpszText) SNDMSG(hDlg, PSM_SETHEADERSUBTITLE, (WPARAM) (index), (LPARAM) (lpszText))
+#define PropSheet_SetHeaderTitlehDlg, index, lpszText) SNDMSG(hDlg, PSM_SETHEADERTITLE, (WPARAM) (index), (LPARAM) (lpszText))
+#define PropSheet_SetNextTexthDlg, lpszText) SNDMSG(hDlg, PSM_SETNEXTTEXT, 0, (LPARAM) (lpszText))
+#define PropSheet_ShowWizButtonshDlg, dwFlag, dwButton) PSTMSG(hDlg, PSM_SHOWWIZBUTTONS, (WPARAM) (dwFlag), (LPARAM) (dwButton))
 
 #endif

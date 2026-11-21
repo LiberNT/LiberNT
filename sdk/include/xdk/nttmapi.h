@@ -217,14 +217,18 @@ typedef enum _TRANSACTION_INFORMATION_CLASS {
   TransactionBasicInformation,
   TransactionPropertiesInformation,
   TransactionEnlistmentInformation,
-  TransactionSuperiorEnlistmentInformation
+  TransactionSuperiorEnlistmentInformation,
+  TransactionBindInformation = 4,
+  TransactionDTCPrivateInformation = 5,
 } TRANSACTION_INFORMATION_CLASS;
 
 typedef enum _TRANSACTIONMANAGER_INFORMATION_CLASS {
   TransactionManagerBasicInformation,
   TransactionManagerLogInformation,
   TransactionManagerLogPathInformation,
-  TransactionManagerRecoveryInformation = 4
+  TransactionManagerRecoveryInformation = 4,
+  TransactionManagerOnlineProbeInformation = 3,
+  TransactionManagerOldestTransactionInformation = 5,
 } TRANSACTIONMANAGER_INFORMATION_CLASS;
 
 typedef enum _RESOURCEMANAGER_INFORMATION_CLASS {

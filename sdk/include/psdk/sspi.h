@@ -1062,12 +1062,6 @@ typedef PSecurityFunctionTableW (SEC_ENTRY *INIT_SECURITY_INTERFACE_W)(void);
 #define SSPIPFC_USE_CREDUIBROKER 0x00000008
 #endif
 
-typedef enum _SECPKG_ATTR_LCT_STATUS {
-    SecPkgAttrLastClientTokenYes = 0,
-    SecPkgAttrLastClientTokenNo = 1,
-    SecPkgAttrLastClientTokenMaybe = 2
-} SECPKG_ATTR_LCT_STATUS, *PSECPKG_ATTR_LCT_STATUS;
-
 typedef enum _SecDelegationType {
     SecFull = 0,
     SecService = 1,
@@ -1075,6 +1069,12 @@ typedef enum _SecDelegationType {
     SecDirectory = 3,
     SecObject = 4
 } SecDelegationType, *PSecDelegationType;
+
+typedef enum _SECPKG_ATTR_LCT_STATUS {
+    SecPkgAttrLastClientTokenYes = 0,
+    SecPkgAttrLastClientTokenNo = 1,
+    SecPkgAttrLastClientTokenMaybe = 2
+} SECPKG_ATTR_LCT_STATUS, *PSECPKG_ATTR_LCT_STATUS;
 
 #ifdef __cplusplus
 extern "C" {
@@ -1085,25 +1085,6 @@ SECURITY_STATUS WINAPI DeleteSecurityPackageW(LPWSTR pszPackageName);
 }
 #endif
 
-typedef struct _SecPkgCredentials_SSIProviderA {
-  SEC_CHAR * sProviderName;
-  unsigned long ProviderInfoLength;
-  char * ProviderInfo;
-} SecPkgCredentials_SSIProviderA, *PSecPkgCredentials_SSIProviderA;
-
-typedef struct _SecPkgContext_LastClientTokenStatus {
-  SECPKG_ATTR_LCT_STATUS LastClientTokenStatus;
-} SecPkgContext_LastClientTokenStatus, *PSecPkgContext_LastClientTokenStatus;
-
-typedef struct _SecPkgContext_ClientSpecifiedTarget {
-  SEC_WCHAR * sTargetName;
-} SecPkgContext_ClientSpecifiedTarget, *PSecPkgContext_ClientSpecifiedTarget;
-
-typedef struct _SecPkgContext_NegotiatedTlsExtensions {
-  unsigned long ExtensionsCount;
-  unsigned short * Extensions;
-} SecPkgContext_NegotiatedTlsExtensions, *PSecPkgContext_NegotiatedTlsExtensions;
-
 typedef struct _SECPKG_APP_MODE_INFO {
   ULONG UserFunction;
   ULONG_PTR Argument1;
@@ -1111,5 +1092,68 @@ typedef struct _SECPKG_APP_MODE_INFO {
   SecBuffer UserData;
   BOOLEAN ReturnToLsa;
 } SECPKG_APP_MODE_INFO, *PSECPKG_APP_MODE_INFO;
+
+typedef struct _SecPkgContext_ClientSpecifiedTarget {
+  SEC_WCHAR * sTargetName;
+} SecPkgContext_ClientSpecifiedTarget, *PSecPkgContext_ClientSpecifiedTarget;
+
+typedef struct _SecPkgContext_LastClientTokenStatus {
+  SECPKG_ATTR_LCT_STATUS LastClientTokenStatus;
+} SecPkgContext_LastClientTokenStatus, *PSecPkgContext_LastClientTokenStatus;
+
+typedef struct _SecPkgContext_NegotiatedTlsExtensions {
+  unsigned long ExtensionsCount;
+  unsigned short * Extensions;
+} SecPkgContext_NegotiatedTlsExtensions, *PSecPkgContext_NegotiatedTlsExtensions;
+
+typedef struct _SecPkgCredentials_SSIProviderA {
+  SEC_CHAR * sProviderName;
+  unsigned long ProviderInfoLength;
+  char * ProviderInfo;
+} SecPkgCredentials_SSIProviderA, *PSecPkgCredentials_SSIProviderA;
+
+#ifdef UNICODE
+#define DeleteSecurityPackage DeleteSecurityPackageW
+#else
+#define DeleteSecurityPackage DeleteSecurityPackageA
+#endif
+#define SEC_WINNT_AUTH_IDENTITY_FLAGS_SSPIPFC_SAVE_CRED_BY_CALLER 0x80000000
+#define SEC_WINNT_AUTH_IDENTITY_FLAGS_VALID_SSPIPFC_FLAGS 0xF0000000
+#define SECURITY_
+#define SECURITY_ENTRYPOINT16 "INITSECURITYINTERFACEA"
+#define SECURITY_ENTRYPOINTA SEC_TEXT("InitSecurityInterfaceA")
+#define SSPIPFC_SAVE_CRED_BY_CALLER 1
+#define SSPIPFC_VALID_FLAGS 0xF
+
+struct _SECURITY_STRING
+{
+    unsigned short Length;
+    unsigned short MaximumLength;
+    unsigned short *Buffer;
+};
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+SECURITY_STATUS WINAPI DelegateSecurityContext(PCtxtHandle phContext, PSECURITY_STRING pTarget, SecDelegationType DelegationType, PTimeStamp pExpiry, PSecBuffer pPackageParameters, PSecBufferDesc pOutput);
+
+#ifdef __cplusplus
+}
+#endif
+
+union _SEC_WINNT_AUTH_IDENTITY_INFO
+{
+    SEC_WINNT_AUTH_IDENTITY_EXW AuthIdExw;
+    SEC_WINNT_AUTH_IDENTITY_EXA AuthIdExa;
+    SEC_WINNT_AUTH_IDENTITY_A AuthId_a;
+    SEC_WINNT_AUTH_IDENTITY_W AuthId_w;
+    SEC_WINNT_AUTH_IDENTITY_EX2 AuthIdEx2;
+};
+
+typedef union _SEC_WINNT_AUTH_IDENTITY_INFO *PSEC_WINNT_AUTH_IDENTITY_INFO;
+
+typedef union _SEC_WINNT_AUTH_IDENTITY_INFO SEC_WINNT_AUTH_IDENTITY_INFO;
 
 #endif /* ndef __WINE_SSPI_H__ */

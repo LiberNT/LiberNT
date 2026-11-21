@@ -303,7 +303,13 @@ typedef enum _SE_ADT_PARAMETER_TYPE {
   SeAdtParmTypeLogonIdNoSid,
   SeAdtParmTypeUlongNoConv,
   SeAdtParmTypeSockAddrNoPort,
-  SeAdtParmTypeAccessReason
+  SeAdtParmTypeAccessReason,
+  SeAdtParmTypeStagingReason = 0x1E,
+  SeAdtParmTypeResourceAttribute = 0x1F,
+  SeAdtParmTypeClaims = 0x20,
+  SeAdtParmTypeLogonIdAsSid = 0x21,
+  SeAdtParmTypeMultiSzString = 0x22,
+  SeAdtParmTypeLogonIdEx = 0x23,
 } SE_ADT_PARAMETER_TYPE, *PSE_ADT_PARAMETER_TYPE;
 
 typedef struct _SE_ADT_OBJECT_TYPE {
@@ -488,6 +494,10 @@ typedef enum _WELL_KNOWN_SID_TYPE {
   WinAuthenticationKeyPropertyMFASid = 116,
   WinAuthenticationKeyPropertyAttestationSid = 117,
   WinAuthenticationFreshKeyAuthSid = 118,
+  WinBuiltinDeviceOwnersSid = 0x77,
+  WinBuiltinUserModeHardwareOperatorsSid = 0x78,
+  WinBuiltinOpenSSHUsersSid = 0x79,
+  WinBuiltinCUAUsersSid = 0x7A,
 } WELL_KNOWN_SID_TYPE;
 
 $endif (_NTDDK_ || _WINNT_)
@@ -533,7 +543,8 @@ typedef enum _SID_NAME_USE {
   SidTypeInvalid,
   SidTypeUnknown,
   SidTypeComputer,
-  SidTypeLabel
+  SidTypeLabel,
+  SidTypeLogonSession = 0xB,
 } SID_NAME_USE, *PSID_NAME_USE;
 
 typedef struct _SID_AND_ATTRIBUTES {
@@ -1098,7 +1109,12 @@ typedef enum _ACCESS_REASON_TYPE {
   AccessReasonNullDacl = 0x00500000,
   AccessReasonEmptyDacl = 0x00600000,
   AccessReasonNoSD = 0x00700000,
-  AccessReasonNoGrant = 0x00800000
+  AccessReasonNoGrant = 0x00800000,
+  AccessReasonNotGrantedByCape = 0x50000,
+  AccessReasonNotGrantedByParentCape = 0x60000,
+  AccessReasonNotGrantedToAppContainer = 0x70000,
+  AccessReasonTrustLabel = 0x900000,
+  AccessReasonFilterAce = 0xA00000,
 } ACCESS_REASON_TYPE;
 
 typedef $ULONG ACCESS_REASON;

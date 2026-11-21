@@ -721,4 +721,28 @@ typedef enum _FCB_CONDITION {
 
 typedef NODE_TYPE_CODE TYPE_OF_OPEN;
 
+#define FILESIZE_LOCK_DISABLEDx)
+#define RxReferenceSrvCallAtDpcSrvCall) RxpTrackReference(RDBSS_REF_TRACK_SRVCALL, __FILE__, __LINE__, SrvCall); ASSERT(SrvCall -> NodeReferenceCount > 1); InterlockedIncrement(& SrvCall -> NodeReferenceCount)
+#define RxWriteCachingAllowedFCB, SRVOPEN) (FlagOn((FCB) -> FcbState, FCB_STATE_WRITECACHING_ENABLED) && !FlagOn((SRVOPEN) -> Flags, SRVOPEN_FLAG_DONTUSE_WRITE_CACHING))
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+RX_FILE_TYPE RxInferFileType(PRX_CONTEXT RxContext);
+BOOLEAN RxLoudFcbMsg(PUCHAR msg, PUNICODE_STRING Name);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define FILESIZE_LOCK_DISABLEDx)
+#define RxReferenceSrvCallAtDpcSrvCall) RxpTrackReference(RDBSS_REF_TRACK_SRVCALL, __FILE__, __LINE__, SrvCall); ASSERT(SrvCall -> NodeReferenceCount > 1); InterlockedIncrement(& SrvCall -> NodeReferenceCount)
+#define RxWriteCachingAllowedFCB, SRVOPEN) (FlagOn((FCB) -> FcbState, FCB_STATE_WRITECACHING_ENABLED) && !FlagOn((SRVOPEN) -> Flags, SRVOPEN_FLAG_DONTUSE_WRITE_CACHING))
+
+#define FILESIZE_LOCK_DISABLEDx)
+#define RxReferenceSrvCallAtDpcSrvCall) RxpTrackReference(RDBSS_REF_TRACK_SRVCALL, __FILE__, __LINE__, SrvCall); ASSERT(SrvCall -> NodeReferenceCount > 1); InterlockedIncrement(& SrvCall -> NodeReferenceCount)
+#define RxWriteCachingAllowedFCB, SRVOPEN) (FlagOn((FCB) -> FcbState, FCB_STATE_WRITECACHING_ENABLED) && !FlagOn((SRVOPEN) -> Flags, SRVOPEN_FLAG_DONTUSE_WRITE_CACHING))
+
 #endif

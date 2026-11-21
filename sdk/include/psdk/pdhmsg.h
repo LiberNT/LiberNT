@@ -112,4 +112,6 @@
 #define MSG_Publisher_Name 0x90000001L
 #endif
 
+#define S_PDH_Traits 0
+
 #endif /* _PDH_MSG_H_ */

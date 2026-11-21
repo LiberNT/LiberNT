@@ -627,12 +627,6 @@ LSTATUS WINAPI RegOpenUserClassesRoot(HANDLE hToken, DWORD dwOptions, REGSAM sam
 }
 #endif
 
-typedef struct val_context {
-  int valuelen;
-  LPVOID value_context;
-  LPVOID val_buff_ptr;
-} *PVALCONTEXT;
-
 typedef struct pvalueA {
   LPSTR pv_valuename;
   int pv_valuelen;
@@ -646,5 +640,88 @@ typedef struct pvalueW {
   LPVOID pv_value_context;
   DWORD pv_type;
 } PVALUEW, *PPVALUEW;
+
+typedef struct val_context {
+  int valuelen;
+  LPVOID value_context;
+  LPVOID val_buff_ptr;
+} *PVALCONTEXT;
+
+#ifdef _WIN64
+#define HKEY_CURRENT_USER_LOCAL_SETTINGS (-2147483641)
+#else
+#define HKEY_CURRENT_USER_LOCAL_SETTINGS 0x80000007
+#endif
+#define REASON_HWINSTALL 0x10002
+#define REASON_LEGACY_API 0x80070000
+#define REASON_OTHER 0
+#define REASON_PLANNED_FLAG 0x80000000
+#define REASON_SERVICEHANG 0x30005
+#define REASON_SWHWRECONF 0x30004
+#define REASON_SWINSTALL (SHTDN_REASON_MAJOR_SOFTWARE | SHTDN_REASON_MINOR_INSTALLATION)
+#define REASON_UNKNOWN 0xFF
+#define REASON_UNSTABLE 0x50006
+#ifdef UNICODE
+#define RegConnectRegistryEx RegConnectRegistryExW
+#else
+#define RegConnectRegistryEx RegConnectRegistryExA
+#endif
+#ifdef UNICODE
+#define RegCreateKeyTransacted RegCreateKeyTransactedW
+#else
+#define RegCreateKeyTransacted RegCreateKeyTransactedA
+#endif
+#ifdef UNICODE
+#define RegDeleteKeyTransacted RegDeleteKeyTransactedW
+#else
+#define RegDeleteKeyTransacted RegDeleteKeyTransactedA
+#endif
+#ifdef UNICODE
+#define RegOpenKeyTransacted RegOpenKeyTransactedW
+#else
+#define RegOpenKeyTransacted RegOpenKeyTransactedA
+#endif
+#define WIN31_CLASS 0
+
+typedef PPVALUEA PPVALUE;
+
+typedef DWORD (*PQUERYHANDLER)(LPVOID, PVALCONTEXT, DWORD, LPVOID, DWORD *, DWORD);
+
+struct provider_info
+{
+    PQUERYHANDLER pi_R0_1val;
+    PQUERYHANDLER pi_R0_allvals;
+    PQUERYHANDLER pi_R3_1val;
+    PQUERYHANDLER pi_R3_allvals;
+    DWORD pi_flags;
+    LPVOID pi_key_context;
+};
+
+typedef struct provider_info *PPROVIDER;
+
+typedef PVALUEA PVALUE;
+
+typedef DWORD __cdecl QUERYHANDLER(LPVOID, PVALCONTEXT, DWORD, LPVOID, DWORD *, DWORD);
+
+typedef struct provider_info REG_PROVIDER;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+DWORD CheckForHiberboot(PBOOLEAN pHiberboot, BOOLEAN bClearFlag);
+LSTATUS RegConnectRegistryExA(LPCSTR lpMachineName, HKEY hKey, ULONG Flags, PHKEY phkResult);
+LSTATUS RegConnectRegistryExW(LPCWSTR lpMachineName, HKEY hKey, ULONG Flags, PHKEY phkResult);
+LSTATUS RegCreateKeyTransactedA(HKEY hKey, LPCSTR lpSubKey, DWORD Reserved, LPSTR lpClass, DWORD dwOptions, REGSAM samDesired, const LPSECURITY_ATTRIBUTES lpSecurityAttributes, PHKEY phkResult, LPDWORD lpdwDisposition, HANDLE hTransaction, PVOID pExtendedParemeter);
+LSTATUS RegCreateKeyTransactedW(HKEY hKey, LPCWSTR lpSubKey, DWORD Reserved, LPWSTR lpClass, DWORD dwOptions, REGSAM samDesired, const LPSECURITY_ATTRIBUTES lpSecurityAttributes, PHKEY phkResult, LPDWORD lpdwDisposition, HANDLE hTransaction, PVOID pExtendedParemeter);
+LSTATUS RegDeleteKeyTransactedA(HKEY hKey, LPCSTR lpSubKey, REGSAM samDesired, DWORD Reserved, HANDLE hTransaction, PVOID pExtendedParameter);
+LSTATUS RegDeleteKeyTransactedW(HKEY hKey, LPCWSTR lpSubKey, REGSAM samDesired, DWORD Reserved, HANDLE hTransaction, PVOID pExtendedParameter);
+LSTATUS RegOpenKeyTransactedA(HKEY hKey, LPCSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult, HANDLE hTransaction, PVOID pExtendedParemeter);
+LSTATUS RegOpenKeyTransactedW(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult, HANDLE hTransaction, PVOID pExtendedParemeter);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

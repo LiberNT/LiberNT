@@ -20,4 +20,28 @@ typedef struct _MRX_CREATENETROOT_CONTEXT *PMRX_CREATENETROOT_CONTEXT;
 
 typedef struct _NODE_TYPE_CODE_AND_SIZE * PNODE_TYPE_CODE_AND_SIZE;
 
+#define IMPORTANT_STRUCTUREx) struct _ ## x; typedef struct _ ## x * P ## x
+
+#define IMPORTANT_STRUCTUREx) struct _ ## x; typedef struct _ ## x * P ## x
+
+typedef struct _CLEAN_AND_DIRTY_VOLUME_PACKET *PCLEAN_AND_DIRTY_VOLUME_PACKET;
+
+typedef struct _CLOSE_CONTEXT *PCLOSE_CONTEXT;
+
+typedef struct _DELETE_CONTEXT *PDELETE_CONTEXT;
+
+typedef struct _EA_RANGE *PEA_RANGE;
+
+typedef struct _FILE_NAME_NODE *PFILE_NAME_NODE;
+
+typedef struct _IO_RUNS *PIO_RUNS;
+
+typedef struct _RDBSS_IO_CONTEXT *PRDBSS_IO_CONTEXT;
+
+typedef struct _REPINNED_BCBS *PREPINNED_BCBS;
+
+typedef struct _VCB *PVCB;
+
+#define IMPORTANT_STRUCTUREx) struct _ ## x; typedef struct _ ## x * P ## x
+
 #endif

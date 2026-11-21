@@ -79,14 +79,20 @@
 
 typedef SCODE * PSCODE;
 
+typedef struct _DWORD_BLOB {
+  ULONG clSize;
+  ULONG alData[1];
+} DWORD_BLOB;
+
 typedef struct _WORD_BLOB {
   ULONG clSize;
   unsigned short asData[1];
 } WORD_BLOB;
 
-typedef struct _DWORD_BLOB {
-  ULONG clSize;
-  ULONG alData[1];
-} DWORD_BLOB;
+#define CLSCTX_VALID_MASK (-2082474977)
+
+typedef DWORD_BLOB *UP_DWORD_BLOB;
+
+typedef WORD_BLOB *UP_WORD_BLOB;
 
 #endif /* _WTYPESBASE_H_ */

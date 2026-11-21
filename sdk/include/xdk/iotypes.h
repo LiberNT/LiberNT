@@ -1180,6 +1180,7 @@ typedef enum _DEVICE_USAGE_NOTIFICATION_TYPE {
   DeviceUsageTypeBoot,
   DeviceUsageTypePostDisplay,
   DeviceUsageTypeGuestAssigned,
+  DeviceUsageTypeInlineCryptoEngine = 7,
 } DEVICE_USAGE_NOTIFICATION_TYPE;
 
 typedef struct _POWER_SEQUENCE {
@@ -1231,7 +1232,8 @@ typedef enum _IO_NOTIFICATION_EVENT_CATEGORY {
   EventCategoryReserved,
   EventCategoryHardwareProfileChange,
   EventCategoryDeviceInterfaceChange,
-  EventCategoryTargetDeviceChange
+  EventCategoryTargetDeviceChange,
+  EventCategoryKernelSoftRestart = 4,
 } IO_NOTIFICATION_EVENT_CATEGORY;
 
 typedef enum _IO_PRIORITY_HINT {
@@ -6188,7 +6190,9 @@ typedef enum {
 
 typedef enum {
   L0sEntrySupport = 1,
-  L0sAndL1EntrySupport = 3
+  L0sAndL1EntrySupport = 3,
+  NoAspmSupport = 0,
+  L1EntrySupport = 2,
 } PCI_EXPRESS_ASPM_SUPPORT;
 
 typedef enum {

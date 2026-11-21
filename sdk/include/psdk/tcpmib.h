@@ -244,4 +244,84 @@ typedef struct _MIB_TCP6TABLE_OWNER_MODULE {
     (FIELD_OFFSET(MIB_TCP6TABLE_OWNER_MODULE, table[0]) + ((x) * sizeof(MIB_TCP6ROW_OWNER_MODULE)) + ALIGN_SIZE)
 #endif // _WS2IPDEF_
 
+struct _MIB_TCPROW_LH
+{
+    union
+    {
+        DWORD dwState;
+        MIB_TCP_STATE State;
+    };
+    DWORD dwLocalAddr;
+    DWORD dwLocalPort;
+    DWORD dwRemoteAddr;
+    DWORD dwRemotePort;
+};
+
+struct _MIB_TCPSTATS_LH
+{
+    union
+    {
+        DWORD dwRtoAlgorithm;
+        TCP_RTO_ALGORITHM RtoAlgorithm;
+    };
+    DWORD dwRtoMin;
+    DWORD dwRtoMax;
+    DWORD dwMaxConn;
+    DWORD dwActiveOpens;
+    DWORD dwPassiveOpens;
+    DWORD dwAttemptFails;
+    DWORD dwEstabResets;
+    DWORD dwCurrEstab;
+    DWORD dwInSegs;
+    DWORD dwOutSegs;
+    DWORD dwRetransSegs;
+    DWORD dwInErrs;
+    DWORD dwOutRsts;
+    DWORD dwNumConns;
+};
+
+typedef struct _MIB_TCPROW_LH MIB_TCPROW_LH;
+
+typedef struct _MIB_TCPSTATS_LH MIB_TCPSTATS_LH;
+
+typedef struct _MIB_TCPROW_LH *PMIB_TCPROW_LH;
+
+typedef struct _MIB_TCPSTATS_LH *PMIB_TCPSTATS_LH;
+
+struct _MIB_TCPROW_W2K
+{
+    DWORD dwState;
+    DWORD dwLocalAddr;
+    DWORD dwLocalPort;
+    DWORD dwRemoteAddr;
+    DWORD dwRemotePort;
+};
+
+struct _MIB_TCPSTATS_W2K
+{
+    DWORD dwRtoAlgorithm;
+    DWORD dwRtoMin;
+    DWORD dwRtoMax;
+    DWORD dwMaxConn;
+    DWORD dwActiveOpens;
+    DWORD dwPassiveOpens;
+    DWORD dwAttemptFails;
+    DWORD dwEstabResets;
+    DWORD dwCurrEstab;
+    DWORD dwInSegs;
+    DWORD dwOutSegs;
+    DWORD dwRetransSegs;
+    DWORD dwInErrs;
+    DWORD dwOutRsts;
+    DWORD dwNumConns;
+};
+
+typedef struct _MIB_TCPROW_W2K MIB_TCPROW_W2K;
+
+typedef struct _MIB_TCPSTATS_W2K MIB_TCPSTATS_W2K;
+
+typedef struct _MIB_TCPROW_W2K *PMIB_TCPROW_W2K;
+
+typedef struct _MIB_TCPSTATS_W2K *PMIB_TCPSTATS_W2K;
+
 #endif // _TCPMIB_

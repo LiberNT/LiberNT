@@ -1483,8 +1483,8 @@ typedef LPNUMBERFMTA LPNUMBERFMT;
 extern "C" {
 #endif
 int WINAPI GetCalendarInfoEx(LPCWSTR lpLocaleName, CALID Calendar, LPCWSTR lpReserved, CALTYPE CalType, LPWSTR lpCalData, int cchData, LPDWORD lpValue);
-int WINAPI GetNumberFormatEx(LPCWSTR lpLocaleName, DWORD dwFlags, LPCWSTR lpValue, const NUMBERFMTW * lpFormat, LPWSTR lpNumberStr, int cchNumber);
 int WINAPI GetCurrencyFormatEx(LPCWSTR lpLocaleName, DWORD dwFlags, LPCWSTR lpValue, const CURRENCYFMTW * lpFormat, LPWSTR lpCurrencyStr, int cchCurrency);
+int WINAPI GetNumberFormatEx(LPCWSTR lpLocaleName, DWORD dwFlags, LPCWSTR lpValue, const NUMBERFMTW * lpFormat, LPWSTR lpNumberStr, int cchNumber);
 DWORD WINAPI IsValidNLSVersion(NLS_FUNCTION function, LPCWSTR lpLocaleName, LPNLSVERSIONINFOEX lpVersionInformation);
 #ifdef __cplusplus
 }
@@ -1493,5 +1493,62 @@ DWORD WINAPI IsValidNLSVersion(NLS_FUNCTION function, LPCWSTR lpLocaleName, LPNL
 typedef struct HSAVEDUILANGUAGES__ {
   int unused;
 } *HSAVEDUILANGUAGES;
+
+#define DEPRECATED (x)
+#define DISABLE_NLS_DEPRECATION
+#define FILEMUIINFO_GET_CULTUREpInfo) ((LPWSTR) ((pInfo -> dwLanguageNameOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwLanguageNameOffset : NULL))
+#define FILEMUIINFO_GET_MAIN_TYPEIDpInfo, iType) (((iType < pInfo -> dwTypeIDMainSize) && (pInfo -> dwTypeIDMainOffset > 0)) ? * ((DWORD *) ((ULONG_PTR) pInfo + pInfo -> dwTypeIDMainOffset) + iType) : 0)
+#define FILEMUIINFO_GET_MAIN_TYPEIDSpInfo) ((DWORD *) ((pInfo -> dwTypeIDMainOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeIDMainOffset : NULL))
+#define FILEMUIINFO_GET_MAIN_TYPENAMESpInfo) ((LPWSTR) ((pInfo -> dwTypeNameMainOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeNameMainOffset : NULL))
+#define FILEMUIINFO_GET_MUI_TYPEIDpInfo, iType) (((iType < pInfo -> dwTypeIDMUISize) && (pInfo -> dwTypeIDMUIOffset > 0)) ? * ((DWORD *) ((ULONG_PTR) pInfo + pInfo -> dwTypeIDMUIOffset) + iType) : 0)
+#define FILEMUIINFO_GET_MUI_TYPEIDSpInfo) ((DWORD *) ((pInfo -> dwTypeIDMUIOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeIDMUIOffset : NULL))
+#define FILEMUIINFO_GET_MUI_TYPENAMESpInfo) ((LPWSTR) ((pInfo -> dwTypeNameMUIOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeNameMUIOffset : NULL))
+#define GEO_NAME_USER_DEFAULT 0
+#define LOCALE_SLANGDISPLAYNAME 0x6F
+#define MUI_CALLBACK_ALL_FLAGS 0
+#define MUI_FORMAT_REG_COMPAT 0x0001
+#define WINNORMALIZEAPI DECLSPEC_IMPORT
+
+typedef BOOL (WINAPI *GEO_ENUMNAMEPROC)(PWSTR, LPARAM);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+BOOL WINAPI EnumCalendarInfoExEx(CALINFO_ENUMPROCEXEX pCalInfoEnumProcExEx, LPCWSTR lpLocaleName, CALID Calendar, LPCWSTR lpReserved, CALTYPE CalType, LPARAM lParam);
+BOOL WINAPI EnumTimeFormatsEx(TIMEFMT_ENUMPROCEX lpTimeFmtEnumProcEx, LPCWSTR lpLocaleName, DWORD dwFlags, LPARAM lParam);
+int WINAPI ResolveLocaleName(LPCWSTR lpNameToResolve, LPWSTR lpLocaleName, int cchLocaleName);
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL EnumSystemGeoNames(GEOCLASS geoClass, GEO_ENUMNAMEPROC geoEnumProc, LPARAM data);
+BOOL LoadStringByReference(DWORD Flags, PCWSTR Language, PCWSTR SourceString, PWSTR Buffer, ULONG cchBuffer, PCWSTR Directory, PULONG pcchBufferOut);
+BOOL NotifyUILanguageChange(DWORD dwFlags, PCWSTR pcwstrNewLanguage, PCWSTR pcwstrPreviousLanguage, DWORD dwReserved, PDWORD pdwStatusRtrn);
+void RestoreThreadPreferredUILanguages(const HSAVEDUILANGUAGES snapshot);
+BOOL SetThreadPreferredUILanguages2(ULONG flags, PCZZWSTR languages, PULONG numLanguagesSet, HSAVEDUILANGUAGES *snapshot);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define FILEMUIINFO_GET_CULTUREpInfo) ((LPWSTR) ((pInfo -> dwLanguageNameOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwLanguageNameOffset : NULL))
+#define FILEMUIINFO_GET_MAIN_TYPEIDpInfo, iType) (((iType < pInfo -> dwTypeIDMainSize) && (pInfo -> dwTypeIDMainOffset > 0)) ? * ((DWORD *) ((ULONG_PTR) pInfo + pInfo -> dwTypeIDMainOffset) + iType) : 0)
+#define FILEMUIINFO_GET_MAIN_TYPEIDSpInfo) ((DWORD *) ((pInfo -> dwTypeIDMainOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeIDMainOffset : NULL))
+#define FILEMUIINFO_GET_MAIN_TYPENAMESpInfo) ((LPWSTR) ((pInfo -> dwTypeNameMainOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeNameMainOffset : NULL))
+#define FILEMUIINFO_GET_MUI_TYPEIDpInfo, iType) (((iType < pInfo -> dwTypeIDMUISize) && (pInfo -> dwTypeIDMUIOffset > 0)) ? * ((DWORD *) ((ULONG_PTR) pInfo + pInfo -> dwTypeIDMUIOffset) + iType) : 0)
+#define FILEMUIINFO_GET_MUI_TYPEIDSpInfo) ((DWORD *) ((pInfo -> dwTypeIDMUIOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeIDMUIOffset : NULL))
+#define FILEMUIINFO_GET_MUI_TYPENAMESpInfo) ((LPWSTR) ((pInfo -> dwTypeNameMUIOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeNameMUIOffset : NULL))
+
+enum SYSNLS_FUNCTION
+{
+
+};
+
+#define FILEMUIINFO_GET_CULTUREpInfo) ((LPWSTR) ((pInfo -> dwLanguageNameOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwLanguageNameOffset : NULL))
+#define FILEMUIINFO_GET_MAIN_TYPEIDpInfo, iType) (((iType < pInfo -> dwTypeIDMainSize) && (pInfo -> dwTypeIDMainOffset > 0)) ? * ((DWORD *) ((ULONG_PTR) pInfo + pInfo -> dwTypeIDMainOffset) + iType) : 0)
+#define FILEMUIINFO_GET_MAIN_TYPEIDSpInfo) ((DWORD *) ((pInfo -> dwTypeIDMainOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeIDMainOffset : NULL))
+#define FILEMUIINFO_GET_MAIN_TYPENAMESpInfo) ((LPWSTR) ((pInfo -> dwTypeNameMainOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeNameMainOffset : NULL))
+#define FILEMUIINFO_GET_MUI_TYPEIDpInfo, iType) (((iType < pInfo -> dwTypeIDMUISize) && (pInfo -> dwTypeIDMUIOffset > 0)) ? * ((DWORD *) ((ULONG_PTR) pInfo + pInfo -> dwTypeIDMUIOffset) + iType) : 0)
+#define FILEMUIINFO_GET_MUI_TYPEIDSpInfo) ((DWORD *) ((pInfo -> dwTypeIDMUIOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeIDMUIOffset : NULL))
+#define FILEMUIINFO_GET_MUI_TYPENAMESpInfo) ((LPWSTR) ((pInfo -> dwTypeNameMUIOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeNameMUIOffset : NULL))
 
 #endif

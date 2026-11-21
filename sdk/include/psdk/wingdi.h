@@ -5420,48 +5420,37 @@ typedef enum _DISPLAYCONFIG_ADVANCED_COLOR_MODE {
     DISPLAYCONFIG_ADVANCED_COLOR_MODE_HDR = 2
 } DISPLAYCONFIG_ADVANCED_COLOR_MODE;
 
-typedef struct tagBITMAP * NPBITMAP;
-typedef struct tagRGBTRIPLE * PRGBTRIPLE;
-typedef struct tagRGBTRIPLE * NPRGBTRIPLE;
-typedef struct tagCHARSETINFO * NPCHARSETINFO;
-typedef struct tagENHMETARECORD * PENHMETARECORD;
-typedef struct tagTEXTMETRICA * NPTEXTMETRICA;
-typedef struct tagTEXTMETRICW * NPTEXTMETRICW;
-typedef NPTEXTMETRICA NPTEXTMETRIC;
-typedef struct tagNEWTEXTMETRICA * NPNEWTEXTMETRICA;
-typedef struct tagNEWTEXTMETRICW * NPNEWTEXTMETRICW;
-typedef NPNEWTEXTMETRICA NPNEWTEXTMETRIC;
-typedef struct tagPELARRAY * NPPELARRAY;
-typedef struct tagLOGBRUSH * NPLOGBRUSH;
-typedef struct tagLOGBRUSH32 * NPLOGBRUSH32;
 typedef struct tagLOGBRUSH32 * LPLOGBRUSH32;
-typedef PATTERN * NPPATTERN;
-typedef struct tagLOGPEN * NPLOGPEN;
-typedef struct tagLOGFONTA * NPLOGFONTA;
-typedef struct tagLOGFONTW * NPLOGFONTW;
-typedef NPLOGFONTA NPLOGFONT;
-typedef struct tagEXTLOGFONTA * NPEXTLOGFONTA;
-typedef struct tagEXTLOGFONTW * NPEXTLOGFONTW;
-typedef NPEXTLOGFONTA NPEXTLOGFONT;
-typedef struct _devicemodeA * NPDEVMODEA;
-typedef NPDEVMODEA NPDEVMODE;
-typedef struct _RGNDATA * NPRGNDATA;
 typedef struct _ABC * NPABC;
 typedef struct _ABCFLOAT * NPABCFLOAT;
+typedef struct tagBITMAP * NPBITMAP;
+typedef struct tagCHARSETINFO * NPCHARSETINFO;
+typedef struct _devicemodeA * NPDEVMODEA;
+typedef NPDEVMODEA NPDEVMODE;
+typedef struct tagEXTLOGFONTA * NPEXTLOGFONTA;
+typedef NPEXTLOGFONTA NPEXTLOGFONT;
+typedef struct tagEXTLOGFONTW * NPEXTLOGFONTW;
+typedef struct tagLOGBRUSH * NPLOGBRUSH;
+typedef struct tagLOGBRUSH32 * NPLOGBRUSH32;
+typedef struct tagLOGFONTA * NPLOGFONTA;
+typedef NPLOGFONTA NPLOGFONT;
+typedef struct tagLOGFONTW * NPLOGFONTW;
+typedef struct tagLOGPEN * NPLOGPEN;
+typedef struct tagNEWTEXTMETRICA * NPNEWTEXTMETRICA;
+typedef NPNEWTEXTMETRICA NPNEWTEXTMETRIC;
+typedef struct tagNEWTEXTMETRICW * NPNEWTEXTMETRICW;
 typedef struct _OUTLINETEXTMETRICA * NPOUTLINETEXTMETRICA;
-typedef struct _OUTLINETEXTMETRICW * NPOUTLINETEXTMETRICW;
 typedef NPOUTLINETEXTMETRICA NPOUTLINETEXTMETRIC;
-
-typedef struct _PSINJECTDATA {
-  DWORD DataBytes;
-  WORD InjectionPoint;
-  WORD PageNumber;
-} PSINJECTDATA, *PPSINJECTDATA;
-
-typedef struct _PSFEATURE_OUTPUT {
-  BOOL bPageIndependent;
-  BOOL bSetPageDevice;
-} PSFEATURE_OUTPUT, *PPSFEATURE_OUTPUT;
+typedef struct _OUTLINETEXTMETRICW * NPOUTLINETEXTMETRICW;
+typedef PATTERN * NPPATTERN;
+typedef struct tagPELARRAY * NPPELARRAY;
+typedef struct tagRGBTRIPLE * NPRGBTRIPLE;
+typedef struct _RGNDATA * NPRGNDATA;
+typedef struct tagTEXTMETRICA * NPTEXTMETRICA;
+typedef NPTEXTMETRICA NPTEXTMETRIC;
+typedef struct tagTEXTMETRICW * NPTEXTMETRICW;
+typedef struct tagENHMETARECORD * PENHMETARECORD;
+typedef struct tagRGBTRIPLE * PRGBTRIPLE;
 
 typedef struct _PSFEATURE_CUSTPAPER {
   LONG lOrientation;
@@ -5470,6 +5459,34 @@ typedef struct _PSFEATURE_CUSTPAPER {
   LONG lWidthOffset;
   LONG lHeightOffset;
 } PSFEATURE_CUSTPAPER, *PPSFEATURE_CUSTPAPER;
+
+typedef struct _PSFEATURE_OUTPUT {
+  BOOL bPageIndependent;
+  BOOL bSetPageDevice;
+} PSFEATURE_OUTPUT, *PPSFEATURE_OUTPUT;
+
+typedef struct _PSINJECTDATA {
+  DWORD DataBytes;
+  WORD InjectionPoint;
+  WORD PageNumber;
+} PSINJECTDATA, *PPSINJECTDATA;
+
+typedef struct tagCOLORCORRECTPALETTE {
+  EMR emr;
+  DWORD ihPalette;
+  DWORD nFirstEntry;
+  DWORD nPalEntries;
+  DWORD nReserved;
+} EMRCOLORCORRECTPALETTE, *PEMRCOLORCORRECTPALETTE;
+
+typedef struct tagCOLORMATCHTOTARGET {
+  EMR emr;
+  DWORD dwAction;
+  DWORD dwFlags;
+  DWORD cbName;
+  DWORD cbData;
+  BYTE Data[1];
+} EMRCOLORMATCHTOTARGET, *PEMRCOLORMATCHTOTARGET;
 
 typedef struct tagEMREXTESCAPE {
   EMR emr;
@@ -5485,23 +5502,6 @@ typedef struct tagEMRSETICMPROFILE {
   DWORD cbData;
   BYTE Data[1];
 } EMRSETICMPROFILE, *PEMRSETICMPROFILE, EMRSETICMPROFILEA, *PEMRSETICMPROFILEA, EMRSETICMPROFILEW, *PEMRSETICMPROFILEW;
-
-typedef struct tagCOLORMATCHTOTARGET {
-  EMR emr;
-  DWORD dwAction;
-  DWORD dwFlags;
-  DWORD cbName;
-  DWORD cbData;
-  BYTE Data[1];
-} EMRCOLORMATCHTOTARGET, *PEMRCOLORMATCHTOTARGET;
-
-typedef struct tagCOLORCORRECTPALETTE {
-  EMR emr;
-  DWORD ihPalette;
-  DWORD nFirstEntry;
-  DWORD nPalEntries;
-  DWORD nReserved;
-} EMRCOLORCORRECTPALETTE, *PEMRCOLORCORRECTPALETTE;
 
 typedef struct tagEMRTRANSPARENTBLT {
   EMR emr;
@@ -5523,5 +5523,192 @@ typedef struct tagEMRTRANSPARENTBLT {
   LONG cxSrc;
   LONG cySrc;
 } EMRTRANSPARENTBLT, *PEMRTRANSPARENTBLT;
+
+#define _XFORM_ 0
+#ifdef UNICODE
+#define CreateColorSpace CreateColorSpaceW
+#else
+#define CreateColorSpace CreateColorSpaceA
+#endif
+#define GDI_MAX_OBJ_TYPE 0xE
+#define GDI_MIN_OBJ_TYPE 1
+#define GDI_OBJ_LAST 0xE
+#define PROFILE_EMBEDDED 0x4D424544
+#define PROFILE_LINKED 0x4C494E4B
+#define RGN_ERROR 0
+#define RGN_MAX 5
+#define RGN_MIN 1
+#define STAMP_CFF2 0x8007663
+#define STAMP_TRUETYPE_VARIATION 0x8007674
+#define WINSPOOLAPI DECLSPEC_IMPORT
+
+struct _DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2
+{
+    DISPLAYCONFIG_DEVICE_INFO_HEADER header;
+    union
+    {
+        struct
+        {
+            UINT32 advancedColorSupported : 1;
+            UINT32 advancedColorActive : 1;
+            UINT32 reserved1 : 1;
+            UINT32 advancedColorLimitedByPolicy : 1;
+            UINT32 highDynamicRangeSupported : 1;
+            UINT32 highDynamicRangeUserEnabled : 1;
+            UINT32 wideColorSupported : 1;
+            UINT32 wideColorUserEnabled : 1;
+            UINT32 reserved : 24;
+        };
+        UINT32 value;
+    };
+    DISPLAYCONFIG_COLOR_ENCODING colorEncoding;
+    UINT32 bitsPerColorChannel;
+    DISPLAYCONFIG_ADVANCED_COLOR_MODE activeColorMode;
+};
+
+struct _DISPLAYCONFIG_SET_HDR_STATE
+{
+    DISPLAYCONFIG_DEVICE_INFO_HEADER header;
+    union
+    {
+        struct
+        {
+            UINT32 enableHdr : 1;
+            UINT32 reserved : 31;
+        };
+        UINT32 value;
+    };
+};
+
+struct _DISPLAYCONFIG_SET_WCG_STATE
+{
+    DISPLAYCONFIG_DEVICE_INFO_HEADER header;
+    union
+    {
+        struct
+        {
+            UINT32 enableWcg : 1;
+            UINT32 reserved : 31;
+        };
+        UINT32 value;
+    };
+};
+
+typedef struct _DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2 DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO_2;
+
+typedef struct _DISPLAYCONFIG_SET_HDR_STATE DISPLAYCONFIG_SET_HDR_STATE;
+
+typedef struct _DISPLAYCONFIG_SET_WCG_STATE DISPLAYCONFIG_SET_WCG_STATE;
+
+struct tagAXESLISTA
+{
+    DWORD axlReserved;
+    DWORD axlNumAxes;
+    AXISINFOA axlAxisInfo[16];
+};
+
+struct tagAXESLISTW
+{
+    DWORD axlReserved;
+    DWORD axlNumAxes;
+    AXISINFOW axlAxisInfo[16];
+};
+
+struct tagAXISINFOA
+{
+    LONG axMinValue;
+    LONG axMaxValue;
+    BYTE axAxisName[16];
+};
+
+struct tagAXISINFOW
+{
+    LONG axMinValue;
+    LONG axMaxValue;
+    WCHAR axAxisName[16];
+};
+
+struct tagBITMAPCOREINFO
+{
+    BITMAPCOREHEADER bmciHeader;
+    RGBTRIPLE bmciColors[1];
+};
+
+struct tagDESIGNVECTOR
+{
+    DWORD dvReserved;
+    DWORD dvNumAxes;
+    LONG dvValues[16];
+};
+
+struct tagENUMTEXTMETRICA
+{
+    NEWTEXTMETRICEXA etmNewTextMetricEx;
+    AXESLISTA etmAxesList;
+};
+
+struct tagENUMTEXTMETRICW
+{
+    NEWTEXTMETRICEXW etmNewTextMetricEx;
+    AXESLISTW etmAxesList;
+};
+
+struct tagICEXYZTRIPLE
+{
+    CIEXYZ ciexyzRed;
+    CIEXYZ ciexyzGreen;
+    CIEXYZ ciexyzBlue;
+};
+
+struct tagPOLYTEXTA
+{
+    int x;
+    int y;
+    UINT n;
+    LPCSTR lpstr;
+    UINT uiFlags;
+    RECT rcl;
+    int *pdx;
+};
+
+typedef struct tagPOLYTEXTA *NPPOLYTEXTA;
+
+typedef NPPOLYTEXTA NPPOLYTEXT;
+
+struct tagPOLYTEXTW
+{
+    int x;
+    int y;
+    UINT n;
+    LPCWSTR lpstr;
+    UINT uiFlags;
+    RECT rcl;
+    int *pdx;
+};
+
+typedef struct tagPOLYTEXTW *NPPOLYTEXTW;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+BOOL WINAPI ColorCorrectPalette(HDC hdc, HPALETTE hPal, DWORD deFirst, DWORD num);
+
+#ifdef __cplusplus
+}
+#endif
+
+typedef struct tagEMRNAMEDESCAPE EMRNAMEDESCAPE;
+
+typedef struct tagEMRNAMEDESCAPE *PEMRNAMEDESCAPE;
+
+struct tagEMRNAMEDESCAPE
+{
+    EMR emr;
+    INT iEscape;
+    INT cbDriver;
+    INT cbEscData;
+    BYTE EscData[1];
+};
 
 #endif // _WINGDI_H

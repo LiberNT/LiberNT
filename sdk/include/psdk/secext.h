@@ -19,7 +19,9 @@ typedef enum
   NameUserPrincipal = 8,
   NameCanonicalEx = 9,
   NameServicePrincipal = 10,
-  NameDnsDomain = 12
+  NameDnsDomain = 12,
+  NameGivenName = 0xD,
+  NameSurname = 0xE,
 } EXTENDED_NAME_FORMAT, *PEXTENDED_NAME_FORMAT;
 
 BOOLEAN WINAPI GetComputerObjectNameA(EXTENDED_NAME_FORMAT,LPSTR,PULONG);

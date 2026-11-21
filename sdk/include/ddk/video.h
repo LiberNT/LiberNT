@@ -1760,3 +1760,7 @@ VideoPortDbgReportComplete(
 #ifdef __cplusplus
 }
 #endif
+
+#define VIDEOPORT_API 0
+#define VIDEOPORT_DEPRECATED 0
+

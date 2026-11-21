@@ -1339,9 +1339,28 @@ typedef struct DD_KERNELCALLBACKS {
 
 typedef VIDEOMEMORY * LPVIDEOMEMORY;
 typedef struct _DD_CLIPPER_GLOBAL * PDD_CLIPPER_GLOBAL;
-typedef struct _DD_PALETTE_LOCAL * PDD_PALETTE_LOCAL;
 typedef struct _DD_CLIPPER_LOCAL * PDD_CLIPPER_LOCAL;
+typedef struct _DD_PALETTE_LOCAL * PDD_PALETTE_LOCAL;
 typedef DDSURFACEDESC * PDD_SURFACEDESC;
 typedef DDVIDEOPORTINFO * PDD_VIDEOPORTINFO;
+
+struct _DD_MOTIONCOMP_LOCAL
+{
+    PDD_DIRECTDRAW_LOCAL lpDD;
+    GUID guid;
+    DWORD dwUncompWidth;
+    DWORD dwUncompHeight;
+    DDPIXELFORMAT ddUncompPixelFormat;
+    DWORD dwDriverReserved1;
+    DWORD dwDriverReserved2;
+    DWORD dwDriverReserved3;
+    LPVOID lpDriverReserved1;
+    LPVOID lpDriverReserved2;
+    LPVOID lpDriverReserved3;
+};
+
+typedef struct _DD_GETVPORTAUTOFLIPSURFACEDATA *PDD_GETVPORTAUTOFLIPSURFACEDATA;
+
+typedef DWORD (WINAPI *PDD_VPORTCB_GETAUTOFLIPSURF)(PDD_GETVPORTAUTOFLIPSURFACEDATA);
 
 #endif /* __DD_INCLUDED__ */

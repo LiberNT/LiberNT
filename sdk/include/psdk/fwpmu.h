@@ -152,3 +152,79 @@ FwpmGetAppIdFromFileName0(
 #endif
 
 #endif
+
+#define FWPM_NOTIFY_ADDRESSES_ALL 3
+#define FWPM_NOTIFY_ADDRESSES_AUTO_RESOLVE 1
+#define FWPM_NOTIFY_ADDRESSES_NON_AUTO_RESOLVE 2
+#define FWPM_NOTIFY_GRANULAR 4
+
+typedef void (WINAPI *FWPM_CALLOUT_CHANGE_CALLBACK0)(void *, const FWPM_CALLOUT_CHANGE0 *);
+
+typedef void (WINAPI *FWPM_CONNECTION_CALLBACK0)(void *, FWPM_CONNECTION_EVENT_TYPE, const FWPM_CONNECTION0 *);
+
+typedef void (WINAPI *FWPM_DYNAMIC_KEYWORD_CALLBACK0)(void *, void *);
+
+typedef void (WINAPI *FWPM_FILTER_CHANGE_CALLBACK0)(void *, const FWPM_FILTER_CHANGE0 *);
+
+typedef void (WINAPI *FWPM_NET_EVENT_CALLBACK0)(void *, const FWPM_NET_EVENT1 *);
+
+typedef void (WINAPI *FWPM_NET_EVENT_CALLBACK1)(void *, const FWPM_NET_EVENT2 *);
+
+typedef void (WINAPI *FWPM_NET_EVENT_CALLBACK2)(void *, const FWPM_NET_EVENT3 *);
+
+typedef void (WINAPI *FWPM_NET_EVENT_CALLBACK3)(void *, const FWPM_NET_EVENT4 *);
+
+typedef void (WINAPI *FWPM_NET_EVENT_CALLBACK4)(void *, const FWPM_NET_EVENT5 *);
+
+typedef void (WINAPI *FWPM_PROVIDER_CHANGE_CALLBACK0)(void *, const FWPM_PROVIDER_CHANGE0 *);
+
+typedef void (WINAPI *FWPM_PROVIDER_CONTEXT_CHANGE_CALLBACK0)(void *, const FWPM_PROVIDER_CONTEXT_CHANGE0 *);
+
+typedef void (WINAPI *FWPM_SUBLAYER_CHANGE_CALLBACK0)(void *, const FWPM_SUBLAYER_CHANGE0 *);
+
+typedef void (WINAPI *FWPM_SYSTEM_PORTS_CALLBACK0)(void *, const FWPM_SYSTEM_PORTS0 *);
+
+typedef DWORD (WINAPI *FWPM_VSWITCH_EVENT_CALLBACK0)(void *, const FWPM_VSWITCH_EVENT0 *);
+
+typedef DWORD (WINAPI *IPSEC_KEY_MANAGER_DICTATE_KEY0)(IPSEC_SA_DETAILS1 *, IPSEC_SA_DETAILS1 *, BOOL *);
+
+typedef void (WINAPI *IPSEC_KEY_MANAGER_KEY_DICTATION_CHECK0)(const IKEEXT_TRAFFIC0 *, BOOL *, UINT32 *);
+
+typedef void (WINAPI *IPSEC_KEY_MANAGER_NOTIFY_KEY0)(const IPSEC_SA_DETAILS1 *, const IPSEC_SA_DETAILS1 *);
+
+struct _IPSEC_KEY_MANAGER_CALLBACKS0
+{
+    GUID reserved;
+    UINT32 flags;
+    IPSEC_KEY_MANAGER_KEY_DICTATION_CHECK0 keyDictationCheck;
+    IPSEC_KEY_MANAGER_DICTATE_KEY0 keyDictation;
+    IPSEC_KEY_MANAGER_NOTIFY_KEY0 keyNotify;
+};
+
+typedef struct _IPSEC_KEY_MANAGER_CALLBACKS0 IPSEC_KEY_MANAGER_CALLBACKS0;
+
+typedef void (WINAPI *IPSEC_SA_CONTEXT_CALLBACK0)(void *, const IPSEC_SA_CONTEXT_CHANGE0 *);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+DWORD WINAPI FwpmDynamicKeywordUnsubscribe0(HANDLE subscriptionHandle);
+DWORD WINAPI FwpmNetEventSubscribe0(HANDLE engineHandle, const FWPM_NET_EVENT_SUBSCRIPTION0 *subscription, FWPM_NET_EVENT_CALLBACK0 callback, void *context, HANDLE *eventsHandle);
+DWORD WINAPI FwpmNetEventSubscribe1(HANDLE engineHandle, const FWPM_NET_EVENT_SUBSCRIPTION0 *subscription, FWPM_NET_EVENT_CALLBACK1 callback, void *context, HANDLE *eventsHandle);
+DWORD WINAPI FwpmNetEventSubscribe2(HANDLE engineHandle, const FWPM_NET_EVENT_SUBSCRIPTION0 *subscription, FWPM_NET_EVENT_CALLBACK2 callback, void *context, HANDLE *eventsHandle);
+DWORD WINAPI FwpmNetEventSubscribe3(HANDLE engineHandle, const FWPM_NET_EVENT_SUBSCRIPTION0 *subscription, FWPM_NET_EVENT_CALLBACK3 callback, void *context, HANDLE *eventsHandle);
+DWORD WINAPI IPsecKeyManagerAddAndRegister0(HANDLE engineHandle, const IPSEC_KEY_MANAGER0 *keyManager, const IPSEC_KEY_MANAGER_CALLBACKS0 *keyManagerCallbacks, HANDLE *keyMgmtHandle);
+DWORD WINAPI IPsecKeyManagerGetSecurityInfoByKey0(HANDLE engineHandle, const void *reserved, SECURITY_INFORMATION securityInfo, PSID *sidOwner, PSID *sidGroup, PACL *dacl, PACL *sacl, PSECURITY_DESCRIPTOR *securityDescriptor);
+DWORD WINAPI IPsecKeyManagerSetSecurityInfoByKey0(HANDLE engineHandle, const void *reserved, SECURITY_INFORMATION securityInfo, const SID *sidOwner, const SID *sidGroup, const ACL *dacl, const ACL *sacl);
+DWORD WINAPI IPsecKeyManagersGet0(HANDLE engineHandle, IPSEC_KEY_MANAGER0 ***entries, UINT32 *numEntries);
+DWORD WINAPI IPsecKeyManagerUnregisterAndDelete0(HANDLE engineHandle, HANDLE keyMgmtHandle);
+DWORD WINAPI IPsecSaContextSubscribe0(HANDLE engineHandle, const IPSEC_SA_CONTEXT_SUBSCRIPTION0 *subscription, IPSEC_SA_CONTEXT_CALLBACK0 callback, void *context, HANDLE *eventsHandle);
+DWORD WINAPI IPsecSaContextSubscriptionsGet0(HANDLE engineHandle, IPSEC_SA_CONTEXT_SUBSCRIPTION0 ***entries, UINT32 *numEntries);
+DWORD WINAPI IPsecSaContextUnsubscribe0(HANDLE engineHandle, HANDLE eventsHandle);
+
+#ifdef __cplusplus
+}
+#endif
+

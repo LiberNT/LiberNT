@@ -305,4 +305,21 @@ enum NS_EVENTS {
 
 typedef const struct _NS_CONTEXT_ATTRIBUTES * PCNS_CONTEXT_ATTRIBUTES;
 
+#define GET_RESOURCE_STRING_FN_NAME 0
+#define NETSH_ARG_DELIMITER 0
+#define NETSH_CMD_DELIMITER L" "
+#define NS_GET_EVENT_IDS_FN_NAME 0
+#define NUM_TAGS_IN_TABLETagsArray) sizeof (TagsArray) / sizeof (TAG_TYPE)
+#define NUM_TOKENS_IN_TABLETokenArray) sizeof (TokenArray) / sizeof (TOKEN_VALUE)
+
+typedef DWORD WINAPI NS_DLL_STOP_FN(DWORD);
+
+typedef NS_DLL_STOP_FN *PNS_DLL_STOP_FN;
+
+#define NUM_TAGS_IN_TABLETagsArray) sizeof (TagsArray) / sizeof (TAG_TYPE)
+#define NUM_TOKENS_IN_TABLETokenArray) sizeof (TokenArray) / sizeof (TOKEN_VALUE)
+
+#define NUM_TAGS_IN_TABLETagsArray) sizeof (TagsArray) / sizeof (TAG_TYPE)
+#define NUM_TOKENS_IN_TABLETokenArray) sizeof (TokenArray) / sizeof (TOKEN_VALUE)
+
 #endif /* _NETSH_H_ */

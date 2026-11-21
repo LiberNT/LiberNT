@@ -1898,12 +1898,12 @@ enum
 #define DSCFX_AEC_STATUS_HISTORY_UNINITIALIZED 0x0
 #endif
 
-typedef struct IDirectSoundFXGargle * LPDIRECTSOUNDFXGARGLE;
 typedef struct IDirectSoundFXChorus * LPDIRECTSOUNDFXCHORUS;
-typedef struct IDirectSoundFXFlanger * LPDIRECTSOUNDFXFLANGER;
-typedef struct IDirectSoundFXEcho * LPDIRECTSOUNDFXECHO;
-typedef struct IDirectSoundFXDistortion * LPDIRECTSOUNDFXDISTORTION;
 typedef struct IDirectSoundFXCompressor * LPDIRECTSOUNDFXCOMPRESSOR;
+typedef struct IDirectSoundFXDistortion * LPDIRECTSOUNDFXDISTORTION;
+typedef struct IDirectSoundFXEcho * LPDIRECTSOUNDFXECHO;
+typedef struct IDirectSoundFXFlanger * LPDIRECTSOUNDFXFLANGER;
+typedef struct IDirectSoundFXGargle * LPDIRECTSOUNDFXGARGLE;
 typedef struct IDirectSoundFXParamEq * LPDIRECTSOUNDFXPARAMEQ;
 typedef struct IDirectSoundFXWavesReverb * LPDIRECTSOUNDFXWAVESREVERB;
 
@@ -1916,5 +1916,134 @@ typedef struct _DSCFXAec {
 typedef struct _DSCFXNoiseSuppress {
   BOOL fEnable;
 } DSCFXNoiseSuppress, *LPDSCFXNoiseSuppress;
+
+#define _IDirectSoundFullDuplex_
+#define IDirectSoundCaptureFXAec8 IDirectSoundCaptureFXAec
+#define IDirectSoundCaptureFXAec_AddRefp) IUnknown_AddRef(p)
+#define IDirectSoundCaptureFXAec_GetAllParametersp, a) (p) -> lpVtbl -> GetAllParameters(p, a)
+#define IDirectSoundCaptureFXAec_QueryInterfacep, a, b) IUnknown_QueryInterface(p, a, b)
+#define IDirectSoundCaptureFXAec_Releasep) IUnknown_Release(p)
+#define IDirectSoundCaptureFXAec_SetAllParametersp, a) (p) -> lpVtbl -> SetAllParameters(p, a)
+#define IDirectSoundCaptureFXNoiseSuppress8 IDirectSoundCaptureFXNoiseSuppress
+#define IDirectSoundCaptureFXNoiseSuppress_AddRefp) IUnknown_AddRef(p)
+#define IDirectSoundCaptureFXNoiseSuppress_GetAllParametersp, a) (p) -> lpVtbl -> GetAllParameters(p, a)
+#define IDirectSoundCaptureFXNoiseSuppress_QueryInterfacep, a, b) IUnknown_QueryInterface(p, a, b)
+#define IDirectSoundCaptureFXNoiseSuppress_Releasep) IUnknown_Release(p)
+#define IDirectSoundCaptureFXNoiseSuppress_SetAllParametersp, a) (p) -> lpVtbl -> SetAllParameters(p, a)
+#define IReferenceClock_AddRefp) IUnknown_AddRef(p)
+#define IReferenceClock_AdvisePeriodicp, a, b, c, d) (p) -> lpVtbl -> AdvisePeriodic(p, a, b, c, d)
+#define IReferenceClock_AdviseTimep, a, b, c, d) (p) -> lpVtbl -> AdviseTime(p, a, b, c, d)
+#define IReferenceClock_GetTimep, a) (p) -> lpVtbl -> GetTime(p, a)
+#define IReferenceClock_QueryInterfacep, a, b) IUnknown_QueryInterface(p, a, b)
+#define IReferenceClock_Releasep) IUnknown_Release(p)
+#define IReferenceClock_Unadvisep, a) (p) -> lpVtbl -> Unadvise(p, a)
+
+typedef struct IDirectSound3DBufferVtbl IDirectSound3DBufferVtbl;
+
+typedef struct IDirectSound3DListenerVtbl IDirectSound3DListenerVtbl;
+
+typedef struct IDirectSound8Vtbl IDirectSound8Vtbl;
+
+typedef struct IDirectSoundBuffer8Vtbl IDirectSoundBuffer8Vtbl;
+
+typedef struct IDirectSoundBufferVtbl IDirectSoundBufferVtbl;
+
+typedef struct IDirectSoundCaptureBuffer8Vtbl IDirectSoundCaptureBuffer8Vtbl;
+
+typedef struct IDirectSoundCaptureBufferVtbl IDirectSoundCaptureBufferVtbl;
+
+typedef struct IDirectSoundCaptureFXAecVtbl IDirectSoundCaptureFXAecVtbl;
+
+struct IDirectSoundCaptureFXAec
+{
+    struct IDirectSoundCaptureFXAecVtbl *lpVtbl;
+};
+
+typedef struct IDirectSoundCaptureFXNoiseSuppressVtbl IDirectSoundCaptureFXNoiseSuppressVtbl;
+
+struct IDirectSoundCaptureFXNoiseSuppress
+{
+    struct IDirectSoundCaptureFXNoiseSuppressVtbl *lpVtbl;
+};
+
+typedef struct IDirectSoundCaptureVtbl IDirectSoundCaptureVtbl;
+
+typedef struct IDirectSoundFullDuplexVtbl IDirectSoundFullDuplexVtbl;
+
+typedef struct IDirectSoundFXChorusVtbl IDirectSoundFXChorusVtbl;
+
+typedef struct IDirectSoundFXCompressorVtbl IDirectSoundFXCompressorVtbl;
+
+typedef struct IDirectSoundFXDistortionVtbl IDirectSoundFXDistortionVtbl;
+
+typedef struct IDirectSoundFXEchoVtbl IDirectSoundFXEchoVtbl;
+
+typedef struct IDirectSoundFXFlangerVtbl IDirectSoundFXFlangerVtbl;
+
+typedef struct IDirectSoundFXGargleVtbl IDirectSoundFXGargleVtbl;
+
+typedef struct IDirectSoundFXI3DL2ReverbVtbl IDirectSoundFXI3DL2ReverbVtbl;
+
+typedef struct IDirectSoundFXParamEqVtbl IDirectSoundFXParamEqVtbl;
+
+typedef struct IDirectSoundFXWavesReverbVtbl IDirectSoundFXWavesReverbVtbl;
+
+typedef struct IDirectSoundNotifyVtbl IDirectSoundNotifyVtbl;
+
+typedef struct IDirectSoundVtbl IDirectSoundVtbl;
+
+typedef struct IKsPropertySetVtbl IKsPropertySetVtbl;
+
+typedef struct IReferenceClockVtbl IReferenceClockVtbl;
+
+typedef const DSCFXAec *LPCDSCFXAec;
+
+typedef const DSCFXNoiseSuppress *LPCDSCFXNoiseSuppress;
+
+typedef struct IDirectSoundCaptureFXAec *LPDIRECTSOUNDCAPTUREFXAEC;
+
+typedef struct IDirectSoundCaptureFXAec *LPDIRECTSOUNDCAPTUREFXAEC8;
+
+typedef struct IDirectSoundCaptureFXNoiseSuppress *LPDIRECTSOUNDCAPTUREFXNOISESUPPRESS;
+
+typedef struct IDirectSoundCaptureFXNoiseSuppress *LPDIRECTSOUNDCAPTUREFXNOISESUPPRESS8;
+
+#define IDirectSoundCaptureFXAec_AddRefp) IUnknown_AddRef(p)
+#define IDirectSoundCaptureFXAec_GetAllParametersp, a) (p) -> lpVtbl -> GetAllParameters(p, a)
+#define IDirectSoundCaptureFXAec_QueryInterfacep, a, b) IUnknown_QueryInterface(p, a, b)
+#define IDirectSoundCaptureFXAec_Releasep) IUnknown_Release(p)
+#define IDirectSoundCaptureFXAec_SetAllParametersp, a) (p) -> lpVtbl -> SetAllParameters(p, a)
+#define IDirectSoundCaptureFXNoiseSuppress_AddRefp) IUnknown_AddRef(p)
+#define IDirectSoundCaptureFXNoiseSuppress_GetAllParametersp, a) (p) -> lpVtbl -> GetAllParameters(p, a)
+#define IDirectSoundCaptureFXNoiseSuppress_QueryInterfacep, a, b) IUnknown_QueryInterface(p, a, b)
+#define IDirectSoundCaptureFXNoiseSuppress_Releasep) IUnknown_Release(p)
+#define IDirectSoundCaptureFXNoiseSuppress_SetAllParametersp, a) (p) -> lpVtbl -> SetAllParameters(p, a)
+#define IID_IDirectSoundCaptureFXAec8 0
+#define IReferenceClock_AddRefp) IUnknown_AddRef(p)
+#define IReferenceClock_AdvisePeriodicp, a, b, c, d) (p) -> lpVtbl -> AdvisePeriodic(p, a, b, c, d)
+#define IReferenceClock_AdviseTimep, a, b, c, d) (p) -> lpVtbl -> AdviseTime(p, a, b, c, d)
+#define IReferenceClock_GetTimep, a) (p) -> lpVtbl -> GetTime(p, a)
+#define IReferenceClock_QueryInterfacep, a, b) IUnknown_QueryInterface(p, a, b)
+#define IReferenceClock_Releasep) IUnknown_Release(p)
+#define IReferenceClock_Unadvisep, a) (p) -> lpVtbl -> Unadvise(p, a)
+
+#define IDirectSoundCaptureFXAec_AddRefp) IUnknown_AddRef(p)
+#define IDirectSoundCaptureFXAec_GetAllParametersp, a) (p) -> lpVtbl -> GetAllParameters(p, a)
+#define IDirectSoundCaptureFXAec_QueryInterfacep, a, b) IUnknown_QueryInterface(p, a, b)
+#define IDirectSoundCaptureFXAec_Releasep) IUnknown_Release(p)
+#define IDirectSoundCaptureFXAec_SetAllParametersp, a) (p) -> lpVtbl -> SetAllParameters(p, a)
+#define IDirectSoundCaptureFXNoiseSuppress_AddRefp) IUnknown_AddRef(p)
+#define IDirectSoundCaptureFXNoiseSuppress_GetAllParametersp, a) (p) -> lpVtbl -> GetAllParameters(p, a)
+#define IDirectSoundCaptureFXNoiseSuppress_QueryInterfacep, a, b) IUnknown_QueryInterface(p, a, b)
+#define IDirectSoundCaptureFXNoiseSuppress_Releasep) IUnknown_Release(p)
+#define IDirectSoundCaptureFXNoiseSuppress_SetAllParametersp, a) (p) -> lpVtbl -> SetAllParameters(p, a)
+#define IID_IDirectSoundCaptureFXNoiseSuppress8 0
+#define IReferenceClock_AddRefp) IUnknown_AddRef(p)
+#define IReferenceClock_AdvisePeriodicp, a, b, c, d) (p) -> lpVtbl -> AdvisePeriodic(p, a, b, c, d)
+#define IReferenceClock_AdviseTimep, a, b, c, d) (p) -> lpVtbl -> AdviseTime(p, a, b, c, d)
+#define IReferenceClock_GetTimep, a) (p) -> lpVtbl -> GetTime(p, a)
+#define IReferenceClock_QueryInterfacep, a, b) IUnknown_QueryInterface(p, a, b)
+#define IReferenceClock_Releasep) IUnknown_Release(p)
+#define IReferenceClock_Unadvisep, a) (p) -> lpVtbl -> Unadvise(p, a)
 
 #endif /* __DSOUND_INCLUDED__ */

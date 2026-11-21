@@ -17,4 +17,8 @@
  * cleanroom headers can include it without forcing policy changes on callers.
  */
 
+#define lstrcatn 0
+
+#define lstrcatnA 0
+
 #endif /* _DONTUSE_H_INCLUDED_ */

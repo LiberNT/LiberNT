@@ -7325,73 +7325,17 @@ WINUSERAPI void WINAPI UnregisterUserApiHook(void);
 #define WTS_SESSION_DESKTOP_READY 0xf
 #endif
 
-typedef enum tagSYNTHETIC_DEVICE_CREATION_OPTIONS {
-    SDCO_NONE = 0,
-    SDCO_PHYSICAL_SIZE = 1,
-    SDCO_TOUCHPAD_GESTURE_ONLY = 2
-} SYNTHETIC_DEVICE_CREATION_OPTIONS;
-
-typedef enum tagTOUCHPAD_ACTION {
-    TA_3FINGER_TAP = 0,
-    TA_3FINGER_PRESS = 1,
-    TA_3FINGER_RELEASE = 2,
-    TA_4FINGER_TAP = 3,
-    TA_4FINGER_PRESS = 4,
-    TA_4FINGER_RELEASE = 5,
-    TA_5FINGER_TAP = 6,
-    TA_5FINGER_PRESS = 7,
-    TA_5FINGER_RELEASE = 8,
-    TA_INERTIA_STOP = 9,
-    TA_INERTIA_END = 10
-} TOUCHPAD_ACTION;
-
-typedef enum tagFEEDBACK_TYPE {
-    FEEDBACK_TOUCH_CONTACTVISUALIZATION = 1,
-    FEEDBACK_PEN_BARRELVISUALIZATION = 2,
-    FEEDBACK_PEN_TAP = 3,
-    FEEDBACK_PEN_DOUBLETAP = 4,
-    FEEDBACK_PEN_PRESSANDHOLD = 5,
-    FEEDBACK_PEN_RIGHTTAP = 6,
-    FEEDBACK_TOUCH_TAP = 7,
-    FEEDBACK_TOUCH_DOUBLETAP = 8,
-    FEEDBACK_TOUCH_PRESSANDHOLD = 9,
-    FEEDBACK_TOUCH_RIGHTTAP = 10,
-    FEEDBACK_GESTURE_PRESSANDTAP = 11,
-    FEEDBACK_MAX = (-1)
-} FEEDBACK_TYPE;
-
-typedef enum EDIT_CONTROL_FEATURE {
-    EDIT_CONTROL_FEATURE_ENTERPRISE_DATA_PROTECTION_PASTE_SUPPORT = 0,
-    EDIT_CONTROL_FEATURE_PASTE_NOTIFICATIONS = 1
-} EDIT_CONTROL_FEATURE;
-
-typedef enum tagPOINTER_DEVICE_CURSOR_TYPE {
-    POINTER_DEVICE_CURSOR_TYPE_UNKNOWN = 0,
-    POINTER_DEVICE_CURSOR_TYPE_TIP = 1,
-    POINTER_DEVICE_CURSOR_TYPE_ERASER = 2,
-    POINTER_DEVICE_CURSOR_TYPE_MAX = (-1)
-} POINTER_DEVICE_CURSOR_TYPE;
-
-typedef enum LEGACY_TOUCHPAD_FEATURES {
-    LEGACY_TOUCHPAD_FEATURE_NONE = 0,
-    LEGACY_TOUCHPAD_FEATURE_ENABLE_DISABLE = 1,
-    LEGACY_TOUCHPAD_FEATURE_REVERSE_SCROLL_DIRECTION = 4
-} LEGACY_TOUCHPAD_FEATURES;
-
-typedef enum TOUCHPAD_SENSITIVITY_LEVEL {
-    TOUCHPAD_SENSITIVITY_LEVEL_MOST_SENSITIVE = 0,
-    TOUCHPAD_SENSITIVITY_LEVEL_HIGH_SENSITIVITY = 1,
-    TOUCHPAD_SENSITIVITY_LEVEL_MEDIUM_SENSITIVITY = 2,
-    TOUCHPAD_SENSITIVITY_LEVEL_LOW_SENSITIVITY = 3,
-    TOUCHPAD_SENSITIVITY_LEVEL_LEAST_SENSITIVE = 4
-} TOUCHPAD_SENSITIVITY_LEVEL;
-
-typedef enum _WINDOW_PLACEMENT_STATE {
-    WPS_NORMAL = 0,
-    WPS_MAXIMIZED = 1,
-    WPS_MINIMIZED = 2,
-    WPS_ARRANGED = 3
-} WINDOW_PLACEMENT_STATE;
+typedef enum _MOVESIZE_OPERATION {
+    MSO_SIZE_LEFT = 1,
+    MSO_SIZE_RIGHT = 2,
+    MSO_SIZE_TOP = 3,
+    MSO_SIZE_TOPLEFT = 4,
+    MSO_SIZE_TOPRIGHT = 5,
+    MSO_SIZE_BOTTOM = 6,
+    MSO_SIZE_BOTTOMLEFT = 7,
+    MSO_SIZE_BOTTOMRIGHT = 8,
+    MSO_MOVE = 9
+} MOVESIZE_OPERATION;
 
 typedef enum _WINDOW_ACTION_KINDS {
     WAK_NONE = 0,
@@ -7424,36 +7368,92 @@ typedef enum _WINDOW_ACTION_MODIFIERS {
     WAM_SCALED_TO_MONITOR = 0x400
 } WINDOW_ACTION_MODIFIERS;
 
+typedef enum _WINDOW_PLACEMENT_STATE {
+    WPS_NORMAL = 0,
+    WPS_MAXIMIZED = 1,
+    WPS_MINIMIZED = 2,
+    WPS_ARRANGED = 3
+} WINDOW_PLACEMENT_STATE;
+
+typedef enum EDIT_CONTROL_FEATURE {
+    EDIT_CONTROL_FEATURE_ENTERPRISE_DATA_PROTECTION_PASTE_SUPPORT = 0,
+    EDIT_CONTROL_FEATURE_PASTE_NOTIFICATIONS = 1
+} EDIT_CONTROL_FEATURE;
+
+typedef enum LEGACY_TOUCHPAD_FEATURES {
+    LEGACY_TOUCHPAD_FEATURE_NONE = 0,
+    LEGACY_TOUCHPAD_FEATURE_ENABLE_DISABLE = 1,
+    LEGACY_TOUCHPAD_FEATURE_REVERSE_SCROLL_DIRECTION = 4
+} LEGACY_TOUCHPAD_FEATURES;
+
+typedef enum tagFEEDBACK_TYPE {
+    FEEDBACK_TOUCH_CONTACTVISUALIZATION = 1,
+    FEEDBACK_PEN_BARRELVISUALIZATION = 2,
+    FEEDBACK_PEN_TAP = 3,
+    FEEDBACK_PEN_DOUBLETAP = 4,
+    FEEDBACK_PEN_PRESSANDHOLD = 5,
+    FEEDBACK_PEN_RIGHTTAP = 6,
+    FEEDBACK_TOUCH_TAP = 7,
+    FEEDBACK_TOUCH_DOUBLETAP = 8,
+    FEEDBACK_TOUCH_PRESSANDHOLD = 9,
+    FEEDBACK_TOUCH_RIGHTTAP = 10,
+    FEEDBACK_GESTURE_PRESSANDTAP = 11,
+    FEEDBACK_MAX = (-1)
+} FEEDBACK_TYPE;
+
+typedef enum tagPOINTER_DEVICE_CURSOR_TYPE {
+    POINTER_DEVICE_CURSOR_TYPE_UNKNOWN = 0,
+    POINTER_DEVICE_CURSOR_TYPE_TIP = 1,
+    POINTER_DEVICE_CURSOR_TYPE_ERASER = 2,
+    POINTER_DEVICE_CURSOR_TYPE_MAX = (-1)
+} POINTER_DEVICE_CURSOR_TYPE;
+
+typedef enum tagSYNTHETIC_DEVICE_CREATION_OPTIONS {
+    SDCO_NONE = 0,
+    SDCO_PHYSICAL_SIZE = 1,
+    SDCO_TOUCHPAD_GESTURE_ONLY = 2
+} SYNTHETIC_DEVICE_CREATION_OPTIONS;
+
+typedef enum tagTOUCHPAD_ACTION {
+    TA_3FINGER_TAP = 0,
+    TA_3FINGER_PRESS = 1,
+    TA_3FINGER_RELEASE = 2,
+    TA_4FINGER_TAP = 3,
+    TA_4FINGER_PRESS = 4,
+    TA_4FINGER_RELEASE = 5,
+    TA_5FINGER_TAP = 6,
+    TA_5FINGER_PRESS = 7,
+    TA_5FINGER_RELEASE = 8,
+    TA_INERTIA_STOP = 9,
+    TA_INERTIA_END = 10
+} TOUCHPAD_ACTION;
+
 typedef enum TOOLTIP_DISMISS_FLAGS {
     TDF_REGISTER = 1,
     TDF_UNREGISTER = 2
 } TOOLTIP_DISMISS_FLAGS;
 
-typedef enum _MOVESIZE_OPERATION {
-    MSO_SIZE_LEFT = 1,
-    MSO_SIZE_RIGHT = 2,
-    MSO_SIZE_TOP = 3,
-    MSO_SIZE_TOPLEFT = 4,
-    MSO_SIZE_TOPRIGHT = 5,
-    MSO_SIZE_BOTTOM = 6,
-    MSO_SIZE_BOTTOMLEFT = 7,
-    MSO_SIZE_BOTTOMRIGHT = 8,
-    MSO_MOVE = 9
-} MOVESIZE_OPERATION;
+typedef enum TOUCHPAD_SENSITIVITY_LEVEL {
+    TOUCHPAD_SENSITIVITY_LEVEL_MOST_SENSITIVE = 0,
+    TOUCHPAD_SENSITIVITY_LEVEL_HIGH_SENSITIVITY = 1,
+    TOUCHPAD_SENSITIVITY_LEVEL_MEDIUM_SENSITIVITY = 2,
+    TOUCHPAD_SENSITIVITY_LEVEL_LOW_SENSITIVITY = 3,
+    TOUCHPAD_SENSITIVITY_LEVEL_LEAST_SENSITIVE = 4
+} TOUCHPAD_SENSITIVITY_LEVEL;
 
-typedef struct tagEVENTMSG * NPEVENTMSGMSG;
-typedef struct tagEVENTMSG * NPEVENTMSG;
-typedef struct tagCWPSTRUCT * NPCWPSTRUCT;
-typedef struct tagCWPRETSTRUCT * NPCWPRETSTRUCT;
-typedef struct tagDEBUGHOOKINFO * NPDEBUGHOOKINFO;
-typedef struct tagPAINTSTRUCT * NPPAINTSTRUCT;
-typedef ICONINFOEXA ICONINFOEX;
-typedef PICONINFOEXA PICONINFOEX;
 typedef HELPWININFOA HELPWININFO;
-typedef PHELPWININFOA PHELPWININFO;
+typedef ICONINFOEXA ICONINFOEX;
 typedef LPHELPWININFOA LPHELPWININFO;
 typedef struct tagMENUBARINFO * LPMENUBARINFO;
 typedef struct tagRAWINPUTHEADER * LPRAWINPUTHEADER;
+typedef struct tagCWPRETSTRUCT * NPCWPRETSTRUCT;
+typedef struct tagCWPSTRUCT * NPCWPSTRUCT;
+typedef struct tagDEBUGHOOKINFO * NPDEBUGHOOKINFO;
+typedef struct tagEVENTMSG * NPEVENTMSG;
+typedef struct tagEVENTMSG * NPEVENTMSGMSG;
+typedef struct tagPAINTSTRUCT * NPPAINTSTRUCT;
+typedef PHELPWININFOA PHELPWININFO;
+typedef PICONINFOEXA PICONINFOEX;
 
 #ifdef __cplusplus
 extern "C" {
@@ -7464,10 +7464,20 @@ BOOL WINAPI IsWow64Message(void);
 }
 #endif
 
-typedef struct SHELLHOOKINFO {
-  HWND hwnd;
-  RECT rc;
-} SHELLHOOKINFO, *LPSHELLHOOKINFO;
+typedef struct _WINDOW_ACTION {
+  WINDOW_ACTION_KINDS kinds;
+  WINDOW_ACTION_MODIFIERS modifiers;
+  BOOL visible;
+  POINT position;
+  SIZE size;
+  HWND insertAfter;
+  WINDOW_PLACEMENT_STATE placementState;
+  RECT normalRect;
+  RECT workArea;
+  UINT dpi;
+  POINT pointOnMonitor;
+  UINT monitorTopologyId;
+} WINDOW_ACTION, *PWINDOW_ACTION;
 
 typedef struct FRAME_MARGIN {
   short left;
@@ -7476,11 +7486,54 @@ typedef struct FRAME_MARGIN {
   short bottom;
 } FRAME_MARGIN;
 
+typedef struct SHELLHOOKINFO {
+  HWND hwnd;
+  RECT rc;
+} SHELLHOOKINFO, *LPSHELLHOOKINFO;
+
+typedef struct tagGESTURENOTIFYSTRUCT {
+  UINT cbSize;
+  DWORD dwFlags;
+  HWND hwndTarget;
+  POINTS ptsLocation;
+  DWORD dwInstanceID;
+} GESTURENOTIFYSTRUCT, *PGESTURENOTIFYSTRUCT;
+
 typedef struct tagGETCLIPBMETADATA {
   UINT Version;
   BOOL IsDelayRendered;
   BOOL IsSynthetic;
 } GETCLIPBMETADATA, *PGETCLIPBMETADATA;
+
+typedef struct tagINPUT_INJECTION_VALUE {
+  USHORT page;
+  USHORT usage;
+  INT32 value;
+  USHORT index;
+} INPUT_INJECTION_VALUE, *PINPUT_INJECTION_VALUE;
+
+typedef struct tagPOINTER_DEVICE_CURSOR_INFO {
+  UINT32 cursorId;
+  POINTER_DEVICE_CURSOR_TYPE cursor;
+} POINTER_DEVICE_CURSOR_INFO;
+
+typedef struct tagPOINTER_DEVICE_PROPERTY {
+  INT32 logicalMin;
+  INT32 logicalMax;
+  INT32 physicalMin;
+  INT32 physicalMax;
+  UINT32 unit;
+  UINT32 unitExponent;
+  USHORT usagePageId;
+  USHORT usageId;
+} POINTER_DEVICE_PROPERTY;
+
+typedef struct tagTouchPredictionParameters {
+  UINT cbSize;
+  UINT dwLatency;
+  UINT dwSampleTime;
+  UINT bUseHWTimeStamp;
+} TOUCHPREDICTIONPARAMETERS, *PTOUCHPREDICTIONPARAMETERS;
 
 typedef struct tagUSAGE_PROPERTIES {
   USHORT level;
@@ -7494,36 +7547,6 @@ typedef struct tagUSAGE_PROPERTIES {
   INT32 physicalMinimum;
   INT32 physicalMaximum;
 } USAGE_PROPERTIES, *PUSAGE_PROPERTIES;
-
-typedef struct tagINPUT_INJECTION_VALUE {
-  USHORT page;
-  USHORT usage;
-  INT32 value;
-  USHORT index;
-} INPUT_INJECTION_VALUE, *PINPUT_INJECTION_VALUE;
-
-typedef struct tagTouchPredictionParameters {
-  UINT cbSize;
-  UINT dwLatency;
-  UINT dwSampleTime;
-  UINT bUseHWTimeStamp;
-} TOUCHPREDICTIONPARAMETERS, *PTOUCHPREDICTIONPARAMETERS;
-
-typedef struct tagPOINTER_DEVICE_PROPERTY {
-  INT32 logicalMin;
-  INT32 logicalMax;
-  INT32 physicalMin;
-  INT32 physicalMax;
-  UINT32 unit;
-  UINT32 unitExponent;
-  USHORT usagePageId;
-  USHORT usageId;
-} POINTER_DEVICE_PROPERTY;
-
-typedef struct tagPOINTER_DEVICE_CURSOR_INFO {
-  UINT32 cursorId;
-  POINTER_DEVICE_CURSOR_TYPE cursor;
-} POINTER_DEVICE_CURSOR_INFO;
 
 typedef struct TOUCHPAD_PARAMETERS_V1 {
   UINT versionNumber;
@@ -7556,27 +7579,448 @@ typedef struct TOUCHPAD_PARAMETERS_V1 {
   UINT rightClickZoneHeight;
 } TOUCHPAD_PARAMETERS_V1, *PTOUCHPAD_PARAMETERS_V1;
 
-typedef struct tagGESTURENOTIFYSTRUCT {
-  UINT cbSize;
-  DWORD dwFlags;
-  HWND hwndTarget;
-  POINTS ptsLocation;
-  DWORD dwInstanceID;
-} GESTURENOTIFYSTRUCT, *PGESTURENOTIFYSTRUCT;
+#define _In_bypassable_reads_or_z_size) _When_(((size) == - 1) || (_String_length_(_Curr_) < (size)), _In_z_) _When_(((size) != - 1) && (_String_length_(_Curr_) >= (size)), _In_reads_(size))
+#define _Inout_grows_updates_bypassable_or_z_size, grows) _When_(((size) == - 1) || (_String_length_(_Curr_) < (size)), _Pre_z_ _Pre_valid_ _Out_writes_z_(_String_length_(_Curr_) + (grows))) _When_(((size) != - 1) && (_String_length_(_Curr_) >= (size)), _Pre_count_(size) _Pre_valid_ _Out_writes_z_((size) + (grows)))
+#ifdef UNICODE
+#define CreateDesktopEx CreateDesktopExW
+#else
+#define CreateDesktopEx CreateDesktopExA
+#endif
+#define CURSOR_CREATION_SCALING_NONE 1
+#define GC_ROLLOVER 1
+#define GET_DEVICE_CHANGE_WPARAMwParam) (LOWORD(wParam))
+#define GET_SC_WPARAMwParam) ((int) wParam & 0xFFF0)
+#define GetIconInfoEx 0
+#define GID_ROLLOVER 7
+#define GID_ROTATE_ANGLE_FROM_ARGUMENT_arg_) ((((double) (_arg_) / 65535.0) * 4.0 * 3.14159265) - 2.0 * 3.14159265)
+#define GID_ROTATE_ANGLE_TO_ARGUMENT_arg_) ((USHORT) ((((_arg_) + 2.0 * 3.14159265) / (4.0 * 3.14159265)) * 65535.0))
+#ifdef _WIN64
+#define GR_GLOBAL (-2)
+#else
+#define GR_GLOBAL 0xFFFFFFFE
+#endif
+#define IDC_PERSON 0x7FA0
+#define IDC_PIN 0x7F9F
+#define ISOLATIONPOLICY_BROWSER_MANIFEST_RESOURCE_ID 5
+#define ISOLATIONPOLICY_MANIFEST_RESOURCE_ID 4
+#define MENU_ALL_ACCESS 0x1F0FFF
+#define MENU_EXECUTE_ACCESS 0x20000
+#define MENU_READ_ACCESS 0x20007
+#define MENU_WRITE_ACCESS 0x20FF8
+#define PMB_ACTIVE 0x00000001
+#define POINTER_STRUCTURES 0
+#define RES_ICON 1
+#define RIDEV_EXMODEmode) ((mode) & RIDEV_EXMODEMASK)
+#define SETWALLPAPER_DEFAULT ((LPWSTR) - 1)
+#define TOUCH_COORD_TO_PIXELl) ((l) / 100)
+#define TOUCHPREDICTIONPARAMETERS_DEFAULT_RLS_DELTA 0
+#define TOUCHPREDICTIONPARAMETERS_DEFAULT_RLS_EXPO_SMOOTH_ALPHA 0
+#define TOUCHPREDICTIONPARAMETERS_DEFAULT_RLS_LAMBDA_LEARNING_RATE 0
+#define TOUCHPREDICTIONPARAMETERS_DEFAULT_RLS_LAMBDA_MAX 0
+#define TOUCHPREDICTIONPARAMETERS_DEFAULT_RLS_LAMBDA_MIN 0
 
-typedef struct _WINDOW_ACTION {
-  WINDOW_ACTION_KINDS kinds;
-  WINDOW_ACTION_MODIFIERS modifiers;
-  BOOL visible;
-  POINT position;
-  SIZE size;
-  HWND insertAfter;
-  WINDOW_PLACEMENT_STATE placementState;
-  RECT normalRect;
-  RECT workArea;
-  UINT dpi;
-  POINT pointOnMonitor;
-  UINT monitorTopologyId;
-} WINDOW_ACTION, *PWINDOW_ACTION;
+struct HRAWINPUT__
+{
+    int unused;
+};
+
+struct HSYNTHETICPOINTERDEVICE__
+{
+    int unused;
+};
+
+typedef const WINDOW_ACTION *PCWINDOW_ACTION;
+
+typedef enum POINTER_FEEDBACK_MODE POINTER_FEEDBACK_MODE;
+
+struct tagDRAWTEXTPARAMS
+{
+    UINT cbSize;
+    int iTabLength;
+    int iLeftMargin;
+    int iRightMargin;
+    UINT uiLengthDrawn;
+};
+
+struct tagINPUT_TRANSFORM
+{
+    union
+    {
+        struct
+        {
+            float _11;
+            float _12;
+            float _13;
+            float _14;
+            float _21;
+            float _22;
+            float _23;
+            float _24;
+            float _31;
+            float _32;
+            float _33;
+            float _34;
+            float _41;
+            float _42;
+            float _43;
+            float _44;
+        };
+        float m[4][4];
+    };
+};
+
+typedef struct tagINPUT_TRANSFORM INPUT_TRANSFORM;
+
+struct tagMSGBOXPARAMSA
+{
+    UINT cbSize;
+    HWND hwndOwner;
+    HINSTANCE hInstance;
+    LPCSTR lpszText;
+    LPCSTR lpszCaption;
+    DWORD dwStyle;
+    LPCSTR lpszIcon;
+    DWORD_PTR dwContextHelpId;
+    MSGBOXCALLBACK lpfnMsgBoxCallback;
+    DWORD dwLanguageId;
+};
+
+struct tagMSGBOXPARAMSW
+{
+    UINT cbSize;
+    HWND hwndOwner;
+    HINSTANCE hInstance;
+    LPCWSTR lpszText;
+    LPCWSTR lpszCaption;
+    DWORD dwStyle;
+    LPCWSTR lpszIcon;
+    DWORD_PTR dwContextHelpId;
+    MSGBOXCALLBACK lpfnMsgBoxCallback;
+    DWORD dwLanguageId;
+};
+
+struct tagSYNTHETIC_DEVICE_CREATION_PARAMS
+{
+    POINTER_INPUT_TYPE pointerType;
+    ULONG maxCount;
+    POINTER_FEEDBACK_MODE feedbackMode;
+    HMONITOR hMonitor;
+    ULONG deviceWidth;
+    ULONG deviceHeight;
+    SYNTHETIC_DEVICE_CREATION_OPTIONS options;
+};
+
+typedef struct tagSYNTHETIC_DEVICE_CREATION_PARAMS SYNTHETIC_DEVICE_CREATION_PARAMS;
+
+struct tagTOUCHPAD_PARAMETERS_V2
+{
+    BOOL button1Supported : 1;
+    BOOL button2Supported : 1;
+    BOOL button3Supported : 1;
+    BOOL Reserved3 : 29;
+};
+
+typedef struct tagTOUCHPAD_PARAMETERS_V2 *PTOUCHPAD_PARAMETERS_V2;
+
+struct tagWINDOWPLACEMENT
+{
+    UINT length;
+    UINT flags;
+    UINT showCmd;
+    POINT ptMinPosition;
+    POINT ptMaxPosition;
+    RECT rcNormalPosition;
+};
+
+struct tagWINDOWPOS
+{
+    HWND hwnd;
+    HWND hwndInsertAfter;
+    int x;
+    int y;
+    int cx;
+    int cy;
+    UINT flags;
+};
+
+struct tagWNDCLASSA
+{
+    UINT style;
+    WNDPROC lpfnWndProc;
+    int cbClsExtra;
+    int cbWndExtra;
+    HINSTANCE hInstance;
+    HICON hIcon;
+    HCURSOR hCursor;
+    HBRUSH hbrBackground;
+    LPCSTR lpszMenuName;
+    LPCSTR lpszClassName;
+};
+
+typedef struct tagWNDCLASSA *NPWNDCLASSA;
+
+typedef NPWNDCLASSA NPWNDCLASS;
+
+struct tagWNDCLASSEXA
+{
+    UINT cbSize;
+    UINT style;
+    WNDPROC lpfnWndProc;
+    int cbClsExtra;
+    int cbWndExtra;
+    HINSTANCE hInstance;
+    HICON hIcon;
+    HCURSOR hCursor;
+    HBRUSH hbrBackground;
+    LPCSTR lpszMenuName;
+    LPCSTR lpszClassName;
+    HICON hIconSm;
+};
+
+typedef struct tagWNDCLASSEXA *NPWNDCLASSEXA;
+
+typedef NPWNDCLASSEXA NPWNDCLASSEX;
+
+struct tagWNDCLASSEXW
+{
+    UINT cbSize;
+    UINT style;
+    WNDPROC lpfnWndProc;
+    int cbClsExtra;
+    int cbWndExtra;
+    HINSTANCE hInstance;
+    HICON hIcon;
+    HCURSOR hCursor;
+    HBRUSH hbrBackground;
+    LPCWSTR lpszMenuName;
+    LPCWSTR lpszClassName;
+    HICON hIconSm;
+};
+
+typedef struct tagWNDCLASSEXW *NPWNDCLASSEXW;
+
+struct tagWNDCLASSW
+{
+    UINT style;
+    WNDPROC lpfnWndProc;
+    int cbClsExtra;
+    int cbWndExtra;
+    HINSTANCE hInstance;
+    HICON hIcon;
+    HCURSOR hCursor;
+    HBRUSH hbrBackground;
+    LPCWSTR lpszMenuName;
+    LPCWSTR lpszClassName;
+};
+
+typedef struct tagWNDCLASSW *NPWNDCLASSW;
+
+typedef struct tagTOUCHPAD_PARAMETERS_V2 TOUCHPAD_PARAMETERS_V2;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL ApplyWindowAction(HWND hwnd, WINDOW_ACTION *pAction);
+BOOL CancelShutdown(void);
+BOOL ConvertPrimaryPointerToMouseDrag(void);
+BOOL ConvertToInterceptWindow(HWND topLevelWindow);
+HDESK CreateDesktopExA(LPCSTR lpszDesktop, LPCSTR lpszDevice, DEVMODEA *pDevmode, DWORD dwFlags, ACCESS_MASK dwDesiredAccess, LPSECURITY_ATTRIBUTES lpsa, ULONG ulHeapSize, PVOID pvoid);
+HDESK CreateDesktopExW(LPCWSTR lpszDesktop, LPCWSTR lpszDevice, DEVMODEW *pDevmode, DWORD dwFlags, ACCESS_MASK dwDesiredAccess, LPSECURITY_ATTRIBUTES lpsa, ULONG ulHeapSize, PVOID pvoid);
+HSYNTHETICPOINTERDEVICE CreateSyntheticPointerDevice(POINTER_INPUT_TYPE pointerType, ULONG maxCount, POINTER_FEEDBACK_MODE mode);
+HSYNTHETICPOINTERDEVICE CreateSyntheticPointerDevice2(SYNTHETIC_DEVICE_CREATION_PARAMS *pParams);
+void DestroySyntheticPointerDevice(HSYNTHETICPOINTERDEVICE device);
+LONG DisplayConfigGetDeviceInfo(DISPLAYCONFIG_DEVICE_INFO_HEADER *requestPacket);
+LONG DisplayConfigSetDeviceInfo(DISPLAYCONFIG_DEVICE_INFO_HEADER *setPacket);
+BOOL EnableMouseInPointerForThread(void);
+BOOL EnterMoveSizeLoop(HWND hwnd, POINT ptCursor, MOVESIZE_OPERATION moveSizeCode);
+BOOL GetCIMSSM(INPUT_MESSAGE_SOURCE *inputMessageSource);
+BOOL GetClipboardMetadata(UINT format, PGETCLIPBMETADATA metadata);
+UINT GetCurrentMonitorTopologyId(void);
+LONG GetDisplayConfigBufferSizes(UINT32 flags, UINT32 *numPathArrayElements, UINT32 *numModeInfoArrayElements);
+BOOL GetPointerCursorId(UINT32 pointerId, UINT32 *cursorId);
+BOOL GetPointerDeviceCursors(HANDLE device, UINT32 *cursorCount, POINTER_DEVICE_CURSOR_INFO *deviceCursors);
+BOOL GetPointerDeviceProperties(HANDLE device, UINT32 *propertyCount, POINTER_DEVICE_PROPERTY *pointerProperties);
+BOOL GetPointerDeviceRects(HANDLE device, RECT *pointerDeviceRect, RECT *displayRect);
+BOOL GetPointerFrameInfo(UINT32 pointerId, UINT32 *pointerCount, POINTER_INFO *pointerInfo);
+BOOL GetPointerFrameInfoHistory(UINT32 pointerId, UINT32 *entriesCount, UINT32 *pointerCount, POINTER_INFO *pointerInfo);
+BOOL GetPointerFramePenInfo(UINT32 pointerId, UINT32 *pointerCount, POINTER_PEN_INFO *penInfo);
+BOOL GetPointerFramePenInfoHistory(UINT32 pointerId, UINT32 *entriesCount, UINT32 *pointerCount, POINTER_PEN_INFO *penInfo);
+BOOL GetPointerFrameTouchInfoHistory(UINT32 pointerId, UINT32 *entriesCount, UINT32 *pointerCount, POINTER_TOUCH_INFO *touchInfo);
+BOOL GetPointerFrameTouchpadInfo(UINT32 pointerId, UINT32 *pointerCount, POINTER_TOUCH_INFO *touchpadInfo);
+BOOL GetPointerFrameTouchpadInfoHistory(UINT32 pointerId, UINT32 *entriesCount, UINT32 *pointerCount, POINTER_TOUCH_INFO *touchpadInfo);
+BOOL GetPointerInfoHistory(UINT32 pointerId, UINT32 *entriesCount, POINTER_INFO *pointerInfo);
+BOOL GetPointerInputTransform(UINT32 pointerId, UINT32 historyCount, INPUT_TRANSFORM *inputTransform);
+BOOL GetPointerPenInfoHistory(UINT32 pointerId, UINT32 *entriesCount, POINTER_PEN_INFO *penInfo);
+BOOL GetPointerTouchpadInfo(UINT32 pointerId, POINTER_TOUCH_INFO *touchpadInfo);
+BOOL GetPointerTouchpadInfoHistory(UINT32 pointerId, UINT32 *entriesCount, POINTER_TOUCH_INFO *touchpadInfo);
+BOOL GetRawPointerDeviceData(UINT32 pointerId, UINT32 historyCount, UINT32 propertiesCount, POINTER_DEVICE_PROPERTY *pProperties, LONG *pValues);
+UINT GetSystemDpiForProcess(HANDLE hProcess);
+DPI_HOSTING_BEHAVIOR GetThreadDpiHostingBehavior(void);
+DWORD GetUnpredictedMessagePos(void);
+BOOL GetUpdatedClipboardFormats(PUINT lpuiFormats, UINT cFormats, PUINT pcFormatsOut);
+DPI_HOSTING_BEHAVIOR GetWindowDpiHostingBehavior(HWND hwnd);
+BOOL GetWindowFeedbackSetting(HWND hwnd, FEEDBACK_TYPE feedback, DWORD dwFlags, UINT32 *pSize, void *config);
+BOOL InheritWindowMonitor(HWND hwnd, HWND hwndInherit);
+BOOL InjectTouchpadAction(HSYNTHETICPOINTERDEVICE hDevice, TOUCHPAD_ACTION action);
+BOOL IsImmersiveProcess(HANDLE hProcess);
+BOOL IsInterceptWindow(HWND topLevelWindow, BOOL *isIntercept);
+BOOL IsTouchWindow(HWND hwnd, PULONG pulFlags);
+BOOL LogicalToPhysicalPoint(HWND hWnd, LPPOINT lpPoint);
+BOOL LogicalToPhysicalPointForPerMonitorDPI(HWND hWnd, LPPOINT lpPoint);
+LRESULT PackTouchHitTestingProximityEvaluation(const TOUCH_HIT_TESTING_INPUT *pHitTestingInput, const TOUCH_HIT_TESTING_PROXIMITY_EVALUATION *pProximityEval);
+BOOL PhysicalToLogicalPoint(HWND hWnd, LPPOINT lpPoint);
+BOOL PhysicalToLogicalPointForPerMonitorDPI(HWND hWnd, LPPOINT lpPoint);
+LONG QueryDisplayConfig(UINT32 flags, UINT32 *numPathArrayElements, DISPLAYCONFIG_PATH_INFO *pathArray, UINT32 *numModeInfoArrayElements, DISPLAYCONFIG_MODE_INFO *modeInfoArray, DISPLAYCONFIG_TOPOLOGY_ID *currentTopologyId);
+BOOL RegisterCloakedNotification(HWND hwnd, BOOL fRegister);
+BOOL RegisterForTooltipDismissNotification(HWND hWnd, TOOLTIP_DISMISS_FLAGS tdFlags);
+BOOL RegisterPointerDeviceNotifications(HWND window, BOOL notifyRange);
+BOOL RegisterPointerInputTarget(HWND hwnd, POINTER_INPUT_TYPE pointerType);
+BOOL RegisterPointerInputTargetEx(HWND hwnd, POINTER_INPUT_TYPE pointerType, BOOL fObserve);
+HPOWERNOTIFY RegisterSuspendResumeNotification(HANDLE hRecipient, DWORD Flags);
+BOOL RegisterTouchHitTestingWindow(HWND hwnd, ULONG value);
+BOOL RegisterTouchpadCapableThread(BOOL fEnable);
+BOOL RegisterTouchpadCapableWindow(HWND hWnd, BOOL fEnable);
+BOOL RegisterTouchWindow(HWND hwnd, ULONG ulFlags);
+BOOL ReportWindowContentInertia(HWND hWnd, BOOL bStartInertia);
+BOOL SetAdditionalForegroundBoostProcesses(HWND topLevelWindow, DWORD processHandleCount, HANDLE *processHandleArray);
+UINT_PTR SetCoalescableTimer(HWND hWnd, UINT_PTR nIDEvent, UINT uElapse, TIMERPROC lpTimerFunc, ULONG uToleranceDelay);
+LONG SetDisplayConfig(UINT32 numPathArrayElements, DISPLAYCONFIG_PATH_INFO *pathArray, UINT32 numModeInfoArrayElements, DISPLAYCONFIG_MODE_INFO *modeInfoArray, UINT32 flags);
+BOOL SetMaxTouchpadSensitivity(BOOL maxSensitivity);
+BOOL SetPhysicalCursorPos(int X, int Y);
+BOOL SetProcessRestrictionExemption(BOOL fEnableExemption);
+UINT SetThreadCursorCreationScaling(UINT cursorDpi);
+DPI_HOSTING_BEHAVIOR SetThreadDpiHostingBehavior(DPI_HOSTING_BEHAVIOR value);
+BOOL SetWindowFeedbackSetting(HWND hwnd, FEEDBACK_TYPE feedback, DWORD dwFlags, UINT32 size, const void *configuration);
+BOOL ShutdownBlockReasonCreate(HWND hWnd, LPCWSTR pwszReason);
+BOOL ShutdownBlockReasonDestroy(HWND hWnd);
+BOOL ShutdownBlockReasonQuery(HWND hWnd, LPWSTR pwszBuff, DWORD *pcchBuff);
+BOOL SkipPointerFrameMessages(UINT32 pointerId);
+BOOL SoundSentry(void);
+BOOL SystemParametersInfoForDpi(UINT uiAction, UINT uiParam, PVOID pvParam, UINT fWinIni, UINT dpi);
+BOOL UnregisterPointerInputTarget(HWND hwnd, POINTER_INPUT_TYPE pointerType);
+BOOL UnregisterPointerInputTargetEx(HWND hwnd, POINTER_INPUT_TYPE pointerType);
+BOOL UnregisterSuspendResumeNotification(HPOWERNOTIFY Handle);
+BOOL UnregisterTouchWindow(HWND hwnd);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define _In_bypassable_reads_or_z_size) _When_(((size) == - 1) || (_String_length_(_Curr_) < (size)), _In_z_) _When_(((size) != - 1) && (_String_length_(_Curr_) >= (size)), _In_reads_(size))
+#define _Inout_grows_updates_bypassable_or_z_size, grows) _When_(((size) == - 1) || (_String_length_(_Curr_) < (size)), _Pre_z_ _Pre_valid_ _Out_writes_z_(_String_length_(_Curr_) + (grows))) _When_(((size) != - 1) && (_String_length_(_Curr_) >= (size)), _Pre_count_(size) _Pre_valid_ _Out_writes_z_((size) + (grows)))
+#define GET_DEVICE_CHANGE_WPARAMwParam) (LOWORD(wParam))
+#define GET_SC_WPARAMwParam) ((int) wParam & 0xFFF0)
+#define GID_ROTATE_ANGLE_FROM_ARGUMENT_arg_) ((((double) (_arg_) / 65535.0) * 4.0 * 3.14159265) - 2.0 * 3.14159265)
+#define GID_ROTATE_ANGLE_TO_ARGUMENT_arg_) ((USHORT) ((((_arg_) + 2.0 * 3.14159265) / (4.0 * 3.14159265)) * 65535.0))
+#define RIDEV_EXMODEmode) ((mode) & RIDEV_EXMODEMASK)
+#define TOUCH_COORD_TO_PIXELl) ((l) / 100)
+
+#define _In_bypassable_reads_or_z_size) _When_(((size) == - 1) || (_String_length_(_Curr_) < (size)), _In_z_) _When_(((size) != - 1) && (_String_length_(_Curr_) >= (size)), _In_reads_(size))
+#define _Inout_grows_updates_bypassable_or_z_size, grows) _When_(((size) == - 1) || (_String_length_(_Curr_) < (size)), _Pre_z_ _Pre_valid_ _Out_writes_z_(_String_length_(_Curr_) + (grows))) _When_(((size) != - 1) && (_String_length_(_Curr_) >= (size)), _Pre_count_(size) _Pre_valid_ _Out_writes_z_((size) + (grows)))
+#define GET_DEVICE_CHANGE_WPARAMwParam) (LOWORD(wParam))
+#define GET_SC_WPARAMwParam) ((int) wParam & 0xFFF0)
+#define GID_ROTATE_ANGLE_FROM_ARGUMENT_arg_) ((((double) (_arg_) / 65535.0) * 4.0 * 3.14159265) - 2.0 * 3.14159265)
+#define GID_ROTATE_ANGLE_TO_ARGUMENT_arg_) ((USHORT) ((((_arg_) + 2.0 * 3.14159265) / (4.0 * 3.14159265)) * 65535.0))
+#define RIDEV_EXMODEmode) ((mode) & RIDEV_EXMODEMASK)
+#define TOUCH_COORD_TO_PIXELl) ((l) / 100)
+
+enum ORIENTATION_PREFERENCE
+{
+    ORIENTATION_PREFERENCE_NONE = 0,
+    ORIENTATION_PREFERENCE_LANDSCAPE = 1,
+    ORIENTATION_PREFERENCE_PORTRAIT = 2,
+    ORIENTATION_PREFERENCE_LANDSCAPE_FLIPPED = 4,
+    ORIENTATION_PREFERENCE_PORTRAIT_FLIPPED = 8,
+};
+
+typedef struct tagGESTURECONFIG GESTURECONFIG;
+
+typedef struct tagGESTUREINFO GESTUREINFO;
+
+typedef struct HGESTUREINFO__ *HGESTUREINFO;
+
+struct HGESTUREINFO__
+{
+    int unused;
+};
+
+typedef struct HTOUCHINPUT__ *HTOUCHINPUT;
+
+struct HTOUCHINPUT__
+{
+    int unused;
+};
+
+typedef const GESTUREINFO *PCGESTUREINFO;
+
+typedef struct tagGESTURECONFIG *PGESTURECONFIG;
+
+typedef struct tagGESTUREINFO *PGESTUREINFO;
+
+typedef PICONMETRICSA PICONMETRICS;
+
+typedef PNONCLIENTMETRICSA PNONCLIENTMETRICS;
+
+typedef struct tagTOUCHINPUT *PTOUCHINPUT;
+
+struct tagGESTURECONFIG
+{
+    DWORD dwID;
+    DWORD dwWant;
+    DWORD dwBlock;
+};
+
+struct tagGESTUREINFO
+{
+    UINT cbSize;
+    DWORD dwFlags;
+    DWORD dwID;
+    HWND hwndTarget;
+    POINTS ptsLocation;
+    DWORD dwInstanceID;
+    DWORD dwSequenceID;
+    ULONGLONG ullArguments;
+    UINT cbExtraArgs;
+};
+
+struct tagTOUCHINPUT
+{
+    LONG x;
+    LONG y;
+    HANDLE hSource;
+    DWORD dwID;
+    DWORD dwFlags;
+    DWORD dwMask;
+    DWORD dwTime;
+    ULONG_PTR dwExtraInfo;
+    DWORD cxContact;
+    DWORD cyContact;
+};
+
+typedef struct tagTOUCHINPUT TOUCHINPUT;
+
+typedef const TOUCHINPUT *PCTOUCHINPUT;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL CloseGestureInfoHandle(HGESTUREINFO hGestureInfo);
+BOOL CloseTouchInputHandle(HTOUCHINPUT hTouchInput);
+BOOL GetDisplayAutoRotationPreferences(ORIENTATION_PREFERENCE *pOrientation);
+BOOL GetDisplayAutoRotationPreferencesByProcessId(DWORD dwProcessId, ORIENTATION_PREFERENCE *pOrientation, BOOL *fRotateScreen);
+BOOL GetGestureConfig(HWND hwnd, DWORD dwReserved, DWORD dwFlags, PUINT pcIDs, PGESTURECONFIG pGestureConfig, UINT cbSize);
+BOOL GetGestureExtraArgs(HGESTUREINFO hGestureInfo, UINT cbExtraArgs, PBYTE pExtraArgs);
+BOOL GetGestureInfo(HGESTUREINFO hGestureInfo, PGESTUREINFO pGestureInfo);
+BOOL GetTouchInputInfo(HTOUCHINPUT hTouchInput, UINT cInputs, PTOUCHINPUT pInputs, int cbSize);
+BOOL SetDisplayAutoRotationPreferences(ORIENTATION_PREFERENCE orientation);
+BOOL SetGestureConfig(HWND hwnd, DWORD dwReserved, UINT cIDs, PGESTURECONFIG pGestureConfig, UINT cbSize);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

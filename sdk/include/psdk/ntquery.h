@@ -365,4 +365,44 @@ STDAPI LocateCatalogsW(WCHAR const *, ULONG, WCHAR *, ULONG *, WCHAR *, ULONG *)
 #define STAT_TIME_LIMIT_EXCEEDED 0x100
 #endif
 
+#define CIADMIN L"::_nodocstore_::"
+#define CINULLCATALOG 0
+#define CLSID_INDEX_SERVER_DSO 0
+#define DBPROP_CI_CATALOG_NAME 2
+#define DBPROP_DEFAULT_EQUALS_BEHAVIOR 2
+#define DBPROP_MACHINE 2
+#define DBPROP_USECONTENTINDEX 2
+#define DBPROPSET_CIFRMWRKCORE_EXT 0
+#define DBPROPSET_FSCIFRMWRK_EXT 0
+#define DBPROPSET_MSIDXS_ROWSETEXT 0
+#define DBPROPSET_QUERYEXT 0
+#define DBPROPSET_SESS_QUERYEXT 0
+#define MSIDXSPROP_ROWSETQUERYSTATUS 2
+#define PID_FILENAME 100
+#define PSGUID_FILENAME { 0x41CF5AE0, 0xF75A, 0x4806, { 0xBD, 0x87, 0x59, 0xC7, 0xD9, 0x24, 0x8E, 0xB9 } }
+#define QUERY_FILL_STATUSx) ((x) & 0x7)
+#define QUERY_RELIABILITY_STATUSx) ((x) & 0xFFF8)
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+HRESULT WINAPI LoadIFilter(PCWSTR pwcsPath, IUnknown *pUnkOuter, void **ppIUnk);
+
+/* TODO: LiberNT does not implement the functions below yet */
+HRESULT BindIFilterFromStorage(IStorage *pStg, IUnknown *pUnkOuter, void **ppIUnk);
+HRESULT BindIFilterFromStream(IStream *pStm, IUnknown *pUnkOuter, void **ppIUnk);
+HRESULT LoadIFilterEx(PCWSTR pwcsPath, DWORD dwFlags, const IID *const riid, void **ppIUnk);
+HRESULT SetCatalogState(const WCHAR *pwcsCat, const WCHAR *pwcsMachine, DWORD dwNewState, DWORD *pdwOldState);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define QUERY_FILL_STATUSx) ((x) & 0x7)
+#define QUERY_RELIABILITY_STATUSx) ((x) & 0xFFF8)
+
+#define QUERY_FILL_STATUSx) ((x) & 0x7)
+#define QUERY_RELIABILITY_STATUSx) ((x) & 0xFFF8)
+
 #endif

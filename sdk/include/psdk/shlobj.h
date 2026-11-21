@@ -2997,16 +2997,16 @@ LRESULT WINAPI CallCPLEntry16(HINSTANCE hMod, FARPROC16 pFunc, HWND dw3, UINT dw
 #endif
 
 enum {
-    SFBID_PIDLCHANGED = 0
-};
-
-enum {
     DBCID_EMPTY = 0,
     DBCID_ONDRAG = 1,
     DBCID_CLSIDOFBAR = 2,
     DBCID_RESIZE = 3,
     DBCID_GETBAR = 4,
     DBCID_UPDATESIZE = 5
+};
+
+enum {
+    SFBID_PIDLCHANGED = 0
 };
 
 #ifdef __cplusplus
@@ -3016,6 +3016,19 @@ void WINAPI PathQualify(PWSTR psz);
 #ifdef __cplusplus
 }
 #endif
+
+typedef struct _SFV_SETITEMPOS {
+  LPCITEMIDLIST pidl;
+  POINT pt;
+} SFV_SETITEMPOS;
+
+typedef struct SHCOLUMNDATA {
+  ULONG dwFlags;
+  DWORD dwFileAttributes;
+  ULONG dwReserved;
+  WCHAR * pwszExt;
+  WCHAR wszFile[260];
+} SHCOLUMNDATA, *LPSHCOLUMNDATA;
 
 #pragma pack(push, 1)
 typedef struct SHCOLUMNINFO {
@@ -3035,19 +3048,6 @@ typedef struct SHCOLUMNINIT {
   WCHAR wszFolder[260];
 } SHCOLUMNINIT, *LPSHCOLUMNINIT;
 
-typedef struct SHCOLUMNDATA {
-  ULONG dwFlags;
-  DWORD dwFileAttributes;
-  ULONG dwReserved;
-  WCHAR * pwszExt;
-  WCHAR wszFile[260];
-} SHCOLUMNDATA, *LPSHCOLUMNDATA;
-
-typedef struct _SFV_SETITEMPOS {
-  LPCITEMIDLIST pidl;
-  POINT pt;
-} SFV_SETITEMPOS;
-
 typedef struct tagAAMENUFILENAME {
   SHORT cbTotal;
   BYTE rgbReserved[12];
@@ -3061,5 +3061,147 @@ typedef struct tagAASHELLMENUITEM {
   LPAASHELLMENUFILENAME lpName;
   LPWSTR psz;
 } AASHELLMENUITEM, *LPAASHELLMENUITEM;
+
+#define BROWSEUIAPI EXTERN_C DECLSPEC_IMPORT HRESULT STDAPICALLTYPE
+#define BROWSEUIAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
+#ifdef UNICODE
+#define ICopyHook ICopyHookW
+#else
+#define ICopyHook ICopyHookA
+#endif
+#define ICopyHookVtbl ICopyHookAVtbl
+#define INewShortcutHookVtbl INewShortcutHookAVtbl
+#ifdef UNICODE
+#define LPCOPYHOOK LPCOPYHOOKW
+#else
+#define LPCOPYHOOK LPCOPYHOOKA
+#endif
+#define OPENPROPS_NONE 0x0000
+#define ShellFolderView_AddObject_hwnd, _pidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_ADDOBJECT, (LPARAM) (_pidl))
+#define ShellFolderView_GetSelectedObjects_hwnd, ppidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_GETSELECTEDOBJECTS, (LPARAM) (ppidl))
+#define ShellFolderView_ReArrange_hwnd, _lparam) (BOOL) SHShellFolderView_Message(_hwnd, SFVM_REARRANGE, _lparam)
+#define ShellFolderView_RemoveObject_hwnd, _pidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_REMOVEOBJECT, (LPARAM) (_pidl))
+#define ShellFolderView_SetClipboard_hwnd, _dwEffect) (void) SHShellFolderView_Message(_hwnd, SFVM_SETCLIPBOARD, (LPARAM) (DWORD) (_dwEffect))
+#define ShellFolderView_SetPoints_hwnd, _pdtobj) (void) SHShellFolderView_Message(_hwnd, SFVM_SETPOINTS, (LPARAM) (_pdtobj))
+#define ShellFolderView_UpdateObject_hwnd, _ppidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_UPDATEOBJECT, (LPARAM) (_ppidl))
+#define SHFOLDERAPI EXTERN_C DECLSPEC_IMPORT HRESULT STDAPICALLTYPE
+#define SHSTDDOCAPI 0
+#define SHSTDDOCAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
+
+typedef struct IActiveDesktopPVtbl IActiveDesktopPVtbl;
+
+typedef struct IADesktopP2Vtbl IADesktopP2Vtbl;
+
+typedef struct IBanneredBarVtbl IBanneredBarVtbl;
+
+typedef struct IColumnProviderVtbl IColumnProviderVtbl;
+
+#pragma pack(push, 1)
+struct IColumnProvider
+{
+    struct IColumnProviderVtbl *lpVtbl;
+};
+#pragma pack(pop)
+
+typedef struct ICopyHookAVtbl ICopyHookAVtbl;
+
+#pragma pack(push, 1)
+struct ICopyHookA
+{
+    struct ICopyHookAVtbl *lpVtbl;
+};
+#pragma pack(pop)
+
+typedef struct ICopyHookWVtbl ICopyHookWVtbl;
+
+#pragma pack(push, 1)
+struct ICopyHookW
+{
+    struct ICopyHookWVtbl *lpVtbl;
+};
+#pragma pack(pop)
+
+typedef struct ICurrentWorkingDirectoryVtbl ICurrentWorkingDirectoryVtbl;
+
+typedef struct IDeskBarClientVtbl IDeskBarClientVtbl;
+
+typedef struct IDockingWindowFrameVtbl IDockingWindowFrameVtbl;
+
+typedef struct IDocViewSiteVtbl IDocViewSiteVtbl;
+
+#pragma pack(push, 1)
+struct IDocViewSite
+{
+    struct IDocViewSiteVtbl *lpVtbl;
+};
+#pragma pack(pop)
+
+typedef struct IInitializeObjectVtbl IInitializeObjectVtbl;
+
+typedef struct INewShortcutHookAVtbl INewShortcutHookAVtbl;
+
+typedef struct INewShortcutHookWVtbl INewShortcutHookWVtbl;
+
+typedef struct IShellFolderBandVtbl IShellFolderBandVtbl;
+
+typedef struct IThumbnailCaptureVtbl IThumbnailCaptureVtbl;
+
+#pragma pack(push, 1)
+struct IThumbnailCapture
+{
+    struct IThumbnailCaptureVtbl *lpVtbl;
+};
+#pragma pack(pop)
+
+typedef ICopyHookA *LPCOPYHOOKA;
+
+typedef ICopyHookW *LPCOPYHOOKW;
+
+typedef const SHCOLUMNDATA *LPCSHCOLUMNDATA;
+
+typedef const SHCOLUMNINFO *LPCSHCOLUMNINFO;
+
+typedef const SHCOLUMNINIT *LPCSHCOLUMNINIT;
+
+typedef SFV_SETITEMPOS *LPSFV_SETITEMPOS;
+
+typedef IThumbnailCapture *LPTHUMBNAILCAPTURE;
+
+typedef const SFV_SETITEMPOS *PCSFV_SETITEMPOS;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+BOOL WINAPI ImportPrivacySettings(PCWSTR pszFilename, BOOL *pfParsePrivacyPreferences, BOOL *pfParsePerSiteRules);
+
+/* TODO: LiberNT does not implement the functions below yet */
+HRESULT DoPrivacyDlg(HWND hwndOwner, PCWSTR pszUrl, IEnumPrivacyRecords *pPrivacyEnum, BOOL fReportAllSites);
+void PerUserInit(void);
+DWORD SoftwareUpdateMessageBox(HWND hWnd, PCWSTR pszDistUnit, DWORD dwFlags, LPSOFTDISTINFO psdi);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define BROWSEUIAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
+#define ShellFolderView_AddObject_hwnd, _pidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_ADDOBJECT, (LPARAM) (_pidl))
+#define ShellFolderView_GetSelectedObjects_hwnd, ppidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_GETSELECTEDOBJECTS, (LPARAM) (ppidl))
+#define ShellFolderView_ReArrange_hwnd, _lparam) (BOOL) SHShellFolderView_Message(_hwnd, SFVM_REARRANGE, _lparam)
+#define ShellFolderView_RemoveObject_hwnd, _pidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_REMOVEOBJECT, (LPARAM) (_pidl))
+#define ShellFolderView_SetClipboard_hwnd, _dwEffect) (void) SHShellFolderView_Message(_hwnd, SFVM_SETCLIPBOARD, (LPARAM) (DWORD) (_dwEffect))
+#define ShellFolderView_SetPoints_hwnd, _pdtobj) (void) SHShellFolderView_Message(_hwnd, SFVM_SETPOINTS, (LPARAM) (_pdtobj))
+#define ShellFolderView_UpdateObject_hwnd, _ppidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_UPDATEOBJECT, (LPARAM) (_ppidl))
+#define SHSTDDOCAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
+
+#define BROWSEUIAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
+#define ShellFolderView_AddObject_hwnd, _pidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_ADDOBJECT, (LPARAM) (_pidl))
+#define ShellFolderView_GetSelectedObjects_hwnd, ppidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_GETSELECTEDOBJECTS, (LPARAM) (ppidl))
+#define ShellFolderView_ReArrange_hwnd, _lparam) (BOOL) SHShellFolderView_Message(_hwnd, SFVM_REARRANGE, _lparam)
+#define ShellFolderView_RemoveObject_hwnd, _pidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_REMOVEOBJECT, (LPARAM) (_pidl))
+#define ShellFolderView_SetClipboard_hwnd, _dwEffect) (void) SHShellFolderView_Message(_hwnd, SFVM_SETCLIPBOARD, (LPARAM) (DWORD) (_dwEffect))
+#define ShellFolderView_SetPoints_hwnd, _pdtobj) (void) SHShellFolderView_Message(_hwnd, SFVM_SETPOINTS, (LPARAM) (_pdtobj))
+#define ShellFolderView_UpdateObject_hwnd, _ppidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_UPDATEOBJECT, (LPARAM) (_ppidl))
+#define SHSTDDOCAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
 
 #endif /* __WINE_SHLOBJ_H */

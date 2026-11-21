@@ -215,25 +215,6 @@ typedef ACPI_ENUM_CHILDREN_OUTPUT_BUFFER UNALIGNED *PACPI_ENUM_CHILDREN_OUTPUT_B
 #ifdef __cplusplus
 }
 #endif
-
-typedef struct _ACPI_EVAL_INPUT_BUFFER_V2_EX {
-  ULONG Signature;
-  CHAR MethodName[256];
-} ACPI_EVAL_INPUT_BUFFER_V2_EX, *PACPI_EVAL_INPUT_BUFFER_V2_EX;
-
-typedef struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V2_EX {
-  ULONG Signature;
-  CHAR MethodName[256];
-  ULONG64 IntegerArgument;
-} ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V2_EX, *PACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V2_EX;
-
-typedef struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V2_EX {
-  ULONG Signature;
-  CHAR MethodName[256];
-  ULONG StringLength;
-  UCHAR String[1];
-} ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V2_EX, *PACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V2_EX;
-
 typedef struct _ACPI_DEVICE_INFORMATION_OUTPUT_BUFFER {
   ULONG Signature;
   USHORT Size;
@@ -254,10 +235,311 @@ typedef struct _ACPI_DEVICE_INFORMATION_OUTPUT_BUFFER {
   USHORT SubClassCode;
 } ACPI_DEVICE_INFORMATION_OUTPUT_BUFFER, *PACPI_DEVICE_INFORMATION_OUTPUT_BUFFER;
 
+typedef struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V2_EX {
+  ULONG Signature;
+  CHAR MethodName[256];
+  ULONG64 IntegerArgument;
+} ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V2_EX, *PACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V2_EX;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V2_EX {
+  ULONG Signature;
+  CHAR MethodName[256];
+  ULONG StringLength;
+  UCHAR String[1];
+} ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V2_EX, *PACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V2_EX;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_V2_EX {
+  ULONG Signature;
+  CHAR MethodName[256];
+} ACPI_EVAL_INPUT_BUFFER_V2_EX, *PACPI_EVAL_INPUT_BUFFER_V2_EX;
+
 typedef struct _ACPI_GET_DEVICE_SPECIFIC_DATA {
   ULONG Signature;
   GUID Section;
   ULONG PropertyNameLength;
   UCHAR PropertyName[1];
 } ACPI_GET_DEVICE_SPECIFIC_DATA, *PACPI_GET_DEVICE_SPECIFIC_DATA;
+
+#define ACPI_EVAL_INPUT_BUFFER_COMPLEX_SIGNATURE_V2 0x4E696541
+#define ACPI_EVAL_INPUT_BUFFER_COMPLEX_SIGNATURE_V2_EX 0x52696541
+#define ACPI_EVAL_INPUT_BUFFER_SIGNATURE_V2 0x4B696541
+#define ACPI_EVAL_INPUT_BUFFER_SIGNATURE_V2_EX 0x4F696541
+#define ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_SIGNATURE_V2 0x4C696541
+#define ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_SIGNATURE_V2_EX 0x50696541
+#define ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_SIGNATURE_V2 0x4D696541
+#define ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_SIGNATURE_V2_EX 0x51696541
+#define ACPI_EVAL_OUTPUT_BUFFER_SIGNATURE_V2 0x4B6F6541
+#define ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENT_LENGTHEvalOutputBuffer) (EvalOutputBuffer -> Length - FIELD_OFFSET(ACPI_EVAL_OUTPUT_BUFFER_V2, Argument))
+#define ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENTS_BEGINEvalOutputBuffer) ((PACPI_METHOD_ARGUMENT_V2) EvalOutputBuffer -> Argument)
+#define ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENTS_ENDEvalOutputBuffer) (PACPI_METHOD_ARGUMENT_V2) ((PUCHAR) EvalOutputBuffer -> Argument + ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENT_LENGTH(EvalOutputBuffer))
+#define ACPI_METHOD_ARGUMENT_V2_LENGTHDataLength) (FIELD_OFFSET(ACPI_METHOD_ARGUMENT_V2, Data) + max(sizeof (ULONG), DataLength))
+#define ACPI_METHOD_ARGUMENT_V2_LENGTH_FROM_ARGUMENTArgument) (ACPI_METHOD_ARGUMENT_V2_LENGTH(((PACPI_METHOD_ARGUMENT_V2) Argument) -> DataLength))
+#define ACPI_METHOD_NEXT_ARGUMENT_V2Argument) (PACPI_METHOD_ARGUMENT_V2) ((PUCHAR) Argument + ACPI_METHOD_ARGUMENT_V2_LENGTH_FROM_ARGUMENT(Argument))
+#define ACPI_METHOD_SET_ARGUMENT_BUFFER_V2Argument, BuffData, BuffLength) { Argument -> Type = ACPI_METHOD_ARGUMENT_BUFFER; Argument -> DataLength = BuffLength; memcpy_s(& Argument -> Data [0], Argument -> DataLength, (PUCHAR) BuffData, BuffLength); }
+#define ACPI_METHOD_SET_ARGUMENT_INTEGER_V2MethodArgument, IntData) { MethodArgument -> Type = ACPI_METHOD_ARGUMENT_INTEGER; MethodArgument -> DataLength = sizeof (ULONG); MethodArgument -> Argument = IntData; }
+#define ACPI_METHOD_SET_ARGUMENT_STRING_V2Argument, StrData) { Argument -> Type = ACPI_METHOD_ARGUMENT_STRING; Argument -> DataLength = strlen((PUCHAR) StrData) + sizeof (UCHAR); memcpy_s(& Argument -> Data [0], Argument -> DataLength, (PUCHAR) StrData, Argument -> DataLength); }
+#define FOR_EACH_ACPI_METHOD_ARGUMENT_V2MethodArgument, MethodArgumentsBegin, MethodArgumentsEnd) for (PACPI_METHOD_ARGUMENT_V2 MethodArgument = (MethodArgumentsBegin); MethodArgument < (MethodArgumentsEnd); MethodArgument = ACPI_METHOD_NEXT_ARGUMENT_V2(MethodArgument))
+#define IOCTL_ACPI_ASYNC_EVAL_METHOD_V1 0x32C000
+#define IOCTL_ACPI_ASYNC_EVAL_METHOD_V1_EX 0x32C01C
+#define IOCTL_ACPI_ASYNC_EVAL_METHOD_V2 0x32C040
+#define IOCTL_ACPI_ASYNC_EVAL_METHOD_V2_EX 0x32C048
+#define IOCTL_ACPI_EVAL_METHOD_V1 0x32C004
+#define IOCTL_ACPI_EVAL_METHOD_V1_EX 0x32C018
+#define IOCTL_ACPI_EVAL_METHOD_V2 0x32C03C
+#define IOCTL_ACPI_EVAL_METHOD_V2_EX 0x32C044
+#define IOCTL_ACPI_GET_DEVICE_INFORMATION 0x32C028
+#define IOCTL_ACPI_GET_DEVICE_INFORMATION_SIGNATURE 0x4A696541
+#define IOCTL_ACPI_GET_DEVICE_SPECIFIC_DATA 0x32C038
+#define IOCTL_ACPI_GET_DEVICE_SPECIFIC_DATA_SIGNATURE 0x48696541
+
+struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V1
+{
+    ULONG Signature;
+    union
+    {
+        UCHAR MethodName[4];
+        ULONG MethodNameAsUlong;
+    };
+    ULONG IntegerArgument;
+};
+
+struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V1_EX
+{
+    ULONG Signature;
+    CHAR MethodName[256];
+    ULONG64 IntegerArgument;
+};
+
+struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V2
+{
+    ULONG Signature;
+    union
+    {
+        UCHAR MethodName[4];
+        ULONG MethodNameAsUlong;
+    };
+    ULONG IntegerArgument;
+};
+
+struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V1
+{
+    ULONG Signature;
+    union
+    {
+        UCHAR MethodName[4];
+        ULONG MethodNameAsUlong;
+    };
+    ULONG StringLength;
+    UCHAR String[1];
+};
+
+struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V1_EX
+{
+    ULONG Signature;
+    CHAR MethodName[256];
+    ULONG StringLength;
+    UCHAR String[1];
+};
+
+struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V2
+{
+    ULONG Signature;
+    union
+    {
+        UCHAR MethodName[4];
+        ULONG MethodNameAsUlong;
+    };
+    ULONG StringLength;
+    UCHAR String[1];
+};
+
+struct _ACPI_EVAL_INPUT_BUFFER_V1
+{
+    ULONG Signature;
+    union
+    {
+        UCHAR MethodName[4];
+        ULONG MethodNameAsUlong;
+    };
+};
+
+struct _ACPI_EVAL_INPUT_BUFFER_V1_EX
+{
+    ULONG Signature;
+    CHAR MethodName[256];
+};
+
+struct _ACPI_EVAL_INPUT_BUFFER_V2
+{
+    ULONG Signature;
+    union
+    {
+        UCHAR MethodName[4];
+        ULONG MethodNameAsUlong;
+    };
+};
+
+struct _ACPI_METHOD_ARGUMENT_V1
+{
+    USHORT Type;
+    USHORT DataLength;
+    union
+    {
+        ULONG Argument;
+        UCHAR Data[1];
+    };
+};
+
+struct _ACPI_METHOD_ARGUMENT_V2
+{
+    USHORT Type;
+    ULONG DataLength;
+    union
+    {
+        ULONG Argument;
+        UCHAR Data[1];
+    };
+};
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V1 ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V1;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V1_EX ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V1_EX;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V2 ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V2;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V1 ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V1;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V1_EX ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V1_EX;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V2 ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V2;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_V1 ACPI_EVAL_INPUT_BUFFER_V1;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_V1_EX ACPI_EVAL_INPUT_BUFFER_V1_EX;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_V2 ACPI_EVAL_INPUT_BUFFER_V2;
+
+typedef struct _ACPI_METHOD_ARGUMENT_V1 ACPI_METHOD_ARGUMENT_V1;
+
+struct _ACPI_EVAL_INPUT_BUFFER_COMPLEX_V1
+{
+    ULONG Signature;
+    union
+    {
+        UCHAR MethodName[4];
+        ULONG MethodNameAsUlong;
+    };
+    ULONG Size;
+    ULONG ArgumentCount;
+    ACPI_METHOD_ARGUMENT_V1 Argument[1];
+};
+
+struct _ACPI_EVAL_INPUT_BUFFER_COMPLEX_V1_EX
+{
+    ULONG Signature;
+    CHAR MethodName[256];
+    ULONG Size;
+    ULONG ArgumentCount;
+    ACPI_METHOD_ARGUMENT_V1 Argument[1];
+};
+
+struct _ACPI_EVAL_OUTPUT_BUFFER_V1
+{
+    ULONG Signature;
+    ULONG Length;
+    ULONG Count;
+    ACPI_METHOD_ARGUMENT_V1 Argument[1];
+};
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_COMPLEX_V1 ACPI_EVAL_INPUT_BUFFER_COMPLEX_V1;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_COMPLEX_V1_EX ACPI_EVAL_INPUT_BUFFER_COMPLEX_V1_EX;
+
+typedef struct _ACPI_EVAL_OUTPUT_BUFFER_V1 ACPI_EVAL_OUTPUT_BUFFER_V1;
+
+typedef struct _ACPI_METHOD_ARGUMENT_V2 ACPI_METHOD_ARGUMENT_V2;
+
+struct _ACPI_EVAL_INPUT_BUFFER_COMPLEX_V2
+{
+    ULONG Signature;
+    union
+    {
+        UCHAR MethodName[4];
+        ULONG MethodNameAsUlong;
+    };
+    ULONG Size;
+    ULONG ArgumentCount;
+    ACPI_METHOD_ARGUMENT_V2 Argument[1];
+};
+
+struct _ACPI_EVAL_INPUT_BUFFER_COMPLEX_V2_EX
+{
+    ULONG Signature;
+    CHAR MethodName[256];
+    ULONG Size;
+    ULONG ArgumentCount;
+    ACPI_METHOD_ARGUMENT_V2 Argument[1];
+};
+
+struct _ACPI_EVAL_OUTPUT_BUFFER_V2
+{
+    ULONG Signature;
+    ULONG Length;
+    ULONG Count;
+    ACPI_METHOD_ARGUMENT_V2 Argument[1];
+};
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_COMPLEX_V2 ACPI_EVAL_INPUT_BUFFER_COMPLEX_V2;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_COMPLEX_V2_EX ACPI_EVAL_INPUT_BUFFER_COMPLEX_V2_EX;
+
+typedef struct _ACPI_EVAL_OUTPUT_BUFFER_V2 ACPI_EVAL_OUTPUT_BUFFER_V2;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_COMPLEX_V1 *PACPI_EVAL_INPUT_BUFFER_COMPLEX_V1;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_COMPLEX_V1_EX *PACPI_EVAL_INPUT_BUFFER_COMPLEX_V1_EX;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_COMPLEX_V2 *PACPI_EVAL_INPUT_BUFFER_COMPLEX_V2;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_COMPLEX_V2_EX *PACPI_EVAL_INPUT_BUFFER_COMPLEX_V2_EX;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V1 *PACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V1;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V1_EX *PACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V1_EX;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V2 *PACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V2;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V1 *PACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V1;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V1_EX *PACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V1_EX;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V2 *PACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V2;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_V1 *PACPI_EVAL_INPUT_BUFFER_V1;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_V1_EX *PACPI_EVAL_INPUT_BUFFER_V1_EX;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_V2 *PACPI_EVAL_INPUT_BUFFER_V2;
+
+typedef __unaligned ACPI_EVAL_OUTPUT_BUFFER_V1 *PACPI_EVAL_OUTPUT_BUFFER_V1;
+
+typedef __unaligned ACPI_EVAL_OUTPUT_BUFFER_V2 *PACPI_EVAL_OUTPUT_BUFFER_V2;
+
+typedef __unaligned ACPI_METHOD_ARGUMENT_V1 *PACPI_METHOD_ARGUMENT_V1;
+
+typedef __unaligned ACPI_METHOD_ARGUMENT_V2 *PACPI_METHOD_ARGUMENT_V2;
+
+#define ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENTS_BEGINEvalOutputBuffer) ((PACPI_METHOD_ARGUMENT_V2) EvalOutputBuffer -> Argument)
+#define ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENTS_ENDEvalOutputBuffer) (PACPI_METHOD_ARGUMENT_V2) ((PUCHAR) EvalOutputBuffer -> Argument + ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENT_LENGTH(EvalOutputBuffer))
+#define ACPI_METHOD_SET_ARGUMENT_BUFFER_V2Argument, BuffData, BuffLength) { Argument -> Type = ACPI_METHOD_ARGUMENT_BUFFER; Argument -> DataLength = BuffLength; memcpy_s(& Argument -> Data [0], Argument -> DataLength, (PUCHAR) BuffData, BuffLength); }
+#define ACPI_METHOD_SET_ARGUMENT_INTEGER_V2MethodArgument, IntData) { MethodArgument -> Type = ACPI_METHOD_ARGUMENT_INTEGER; MethodArgument -> DataLength = sizeof (ULONG); MethodArgument -> Argument = IntData; }
+#define ACPI_METHOD_SET_ARGUMENT_STRING_V2Argument, StrData) { Argument -> Type = ACPI_METHOD_ARGUMENT_STRING; Argument -> DataLength = strlen((PUCHAR) StrData) + sizeof (UCHAR); memcpy_s(& Argument -> Data [0], Argument -> DataLength, (PUCHAR) StrData, Argument -> DataLength); }
+#define FOR_EACH_ACPI_METHOD_ARGUMENT_V2MethodArgument, MethodArgumentsBegin, MethodArgumentsEnd) for (PACPI_METHOD_ARGUMENT_V2 MethodArgument = (MethodArgumentsBegin); MethodArgument < (MethodArgumentsEnd); MethodArgument = ACPI_METHOD_NEXT_ARGUMENT_V2(MethodArgument))
+
+#define ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENTS_BEGINEvalOutputBuffer) ((PACPI_METHOD_ARGUMENT_V2) EvalOutputBuffer -> Argument)
+#define ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENTS_ENDEvalOutputBuffer) (PACPI_METHOD_ARGUMENT_V2) ((PUCHAR) EvalOutputBuffer -> Argument + ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENT_LENGTH(EvalOutputBuffer))
+#define ACPI_METHOD_SET_ARGUMENT_BUFFER_V2Argument, BuffData, BuffLength) { Argument -> Type = ACPI_METHOD_ARGUMENT_BUFFER; Argument -> DataLength = BuffLength; memcpy_s(& Argument -> Data [0], Argument -> DataLength, (PUCHAR) BuffData, BuffLength); }
+#define ACPI_METHOD_SET_ARGUMENT_INTEGER_V2MethodArgument, IntData) { MethodArgument -> Type = ACPI_METHOD_ARGUMENT_INTEGER; MethodArgument -> DataLength = sizeof (ULONG); MethodArgument -> Argument = IntData; }
+#define ACPI_METHOD_SET_ARGUMENT_STRING_V2Argument, StrData) { Argument -> Type = ACPI_METHOD_ARGUMENT_STRING; Argument -> DataLength = strlen((PUCHAR) StrData) + sizeof (UCHAR); memcpy_s(& Argument -> Data [0], Argument -> DataLength, (PUCHAR) StrData, Argument -> DataLength); }
+#define FOR_EACH_ACPI_METHOD_ARGUMENT_V2MethodArgument, MethodArgumentsBegin, MethodArgumentsEnd) for (PACPI_METHOD_ARGUMENT_V2 MethodArgument = (MethodArgumentsBegin); MethodArgument < (MethodArgumentsEnd); MethodArgument = ACPI_METHOD_NEXT_ARGUMENT_V2(MethodArgument))
 

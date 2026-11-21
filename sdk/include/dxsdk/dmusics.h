@@ -234,4 +234,12 @@ DECLARE_INTERFACE_(IDirectMusicSynthSink,IUnknown)
 #define IDirectMusicSynthSink_GetDesiredBufferSize(p,a)  (p)->lpVtbl->GetDesiredBufferSize(p,a)
 #endif
 
+#define _DMUSICS_ 0
+
+typedef struct IDirectMusicSynth8Vtbl IDirectMusicSynth8Vtbl;
+
+typedef struct IDirectMusicSynthSinkVtbl IDirectMusicSynthSinkVtbl;
+
+typedef struct IDirectMusicSynthVtbl IDirectMusicSynthVtbl;
+
 #endif /* __WINE_DMUSIC_SOFTWARESYNTH_H */

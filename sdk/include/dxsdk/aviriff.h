@@ -86,6 +86,40 @@ typedef struct _aviextheader
 
 #ifndef ckidSTREAMHEADER
 #define ckidSTREAMHEADER FCC('s','t','r','h')
+
+#define Valid_SUPERINDEXpi) (* (DWORD *) (& ((pi) -> wLongsPerEntry)) == (4 | (AVI_INDEX_OF_INDEXES << 24)))
+
+#pragma pack(push, 2)
+struct _avitcdlindex
+{
+    FOURCC fcc;
+    UINT cb;
+    WORD wLongsPerEntry;
+    BYTE bIndexSubType;
+    BYTE bIndexType;
+    DWORD nEntriesInUse;
+    DWORD dwChunkId;
+    DWORD dwReserved[3];
+    AVITCDLINDEX_ENTRY aIndex[584];
+    DWORD adwTrailingFill[3512];
+};
+#pragma pack(pop)
+
+#pragma pack(push, 2)
+struct _avitcdlindex_entry
+{
+    DWORD dwTick;
+    TIMECODE time;
+    DWORD dwSMPTEflags;
+    DWORD dwUser;
+    TCHAR szReelId[12];
+};
+#pragma pack(pop)
+
+#define Valid_SUPERINDEXpi) (* (DWORD *) (& ((pi) -> wLongsPerEntry)) == (4 | (AVI_INDEX_OF_INDEXES << 24)))
+
+#define Valid_SUPERINDEXpi) (* (DWORD *) (& ((pi) -> wLongsPerEntry)) == (4 | (AVI_INDEX_OF_INDEXES << 24)))
+
 #endif
 
 #ifndef streamtypeVIDEO

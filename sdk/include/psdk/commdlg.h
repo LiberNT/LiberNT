@@ -732,13 +732,13 @@ typedef PRINTDLGEXA PRINTDLGEX, *LPPRINTDLGEX;
 #define TYPE1_FONTTYPE 0x40000
 #endif
 
-typedef OFNOTIFYEXA OFNOTIFYEX;
 typedef LPOFNOTIFYEXA LPOFNOTIFYEX;
+typedef OFNOTIFYEXA OFNOTIFYEX;
 typedef const CHOOSEFONTA * PCCHOOSEFONTA;
-typedef const CHOOSEFONTW * PCCHOOSEFONTW;
 typedef PCCHOOSEFONTA PCCHOOSEFONT;
-typedef const PRINTPAGERANGE * PCPRINTPAGERANGE;
+typedef const CHOOSEFONTW * PCCHOOSEFONTW;
 typedef const DEVNAMES * PCDEVNAMES;
+typedef const PRINTPAGERANGE * PCPRINTPAGERANGE;
 
 typedef struct tagOFN_NT4A {
   DWORD lStructSize;
@@ -785,5 +785,58 @@ typedef struct tagOFN_NT4W {
   LPOFNHOOKPROC lpfnHook;
   LPCWSTR lpTemplateName;
 } OPENFILENAME_NT4W, *LPOPENFILENAME_NT4W;
+
+#define _INC_COMMDLG 0
+#define CommDlg_FindReplace_SendCustomResult_hdlg, _psz) (void) SNDMSG(_hdlg, FRM_SETOPERATIONRESULTTEXT, 0, (LPARAM) (LPSTR) (_psz))
+#define CommDlg_FindReplace_SendResult_hdlg, _flags, _fr) (void) SNDMSG(_hdlg, FRM_SETOPERATIONRESULT, (WPARAM) (_flags), (LPARAM) (_fr))
+#define FRM_FIRST (WM_USER + 100)
+#define FRM_LAST 0x4C8
+#define FRM_SETOPERATIONRESULT 0x464
+#define FRM_SETOPERATIONRESULTTEXT 0x465
+#define PD_EXCL_COPIESANDCOLLATE 0x8100
+
+typedef struct IPrintDialogCallbackVtbl IPrintDialogCallbackVtbl;
+
+typedef struct IPrintDialogServicesVtbl IPrintDialogServicesVtbl;
+
+typedef LPOPENFILENAME_NT4A LPOPENFILENAME_NT4;
+
+typedef OPENFILENAME_NT4A OPENFILENAME_NT4;
+
+struct tagFINDREPLACEA
+{
+    DWORD lStructSize;
+    HWND hwndOwner;
+    HINSTANCE hInstance;
+    DWORD Flags;
+    LPSTR lpstrFindWhat;
+    LPSTR lpstrReplaceWith;
+    WORD wFindWhatLen;
+    WORD wReplaceWithLen;
+    LPARAM lCustData;
+    LPFRHOOKPROC lpfnHook;
+    LPCSTR lpTemplateName;
+};
+
+struct tagFINDREPLACEW
+{
+    DWORD lStructSize;
+    HWND hwndOwner;
+    HINSTANCE hInstance;
+    DWORD Flags;
+    LPWSTR lpstrFindWhat;
+    LPWSTR lpstrReplaceWith;
+    WORD wFindWhatLen;
+    WORD wReplaceWithLen;
+    LPARAM lCustData;
+    LPFRHOOKPROC lpfnHook;
+    LPCWSTR lpTemplateName;
+};
+
+#define CommDlg_FindReplace_SendCustomResult_hdlg, _psz) (void) SNDMSG(_hdlg, FRM_SETOPERATIONRESULTTEXT, 0, (LPARAM) (LPSTR) (_psz))
+#define CommDlg_FindReplace_SendResult_hdlg, _flags, _fr) (void) SNDMSG(_hdlg, FRM_SETOPERATIONRESULT, (WPARAM) (_flags), (LPARAM) (_fr))
+
+#define CommDlg_FindReplace_SendCustomResult_hdlg, _psz) (void) SNDMSG(_hdlg, FRM_SETOPERATIONRESULTTEXT, 0, (LPARAM) (LPSTR) (_psz))
+#define CommDlg_FindReplace_SendResult_hdlg, _flags, _fr) (void) SNDMSG(_hdlg, FRM_SETOPERATIONRESULT, (WPARAM) (_flags), (LPARAM) (_fr))
 
 #endif

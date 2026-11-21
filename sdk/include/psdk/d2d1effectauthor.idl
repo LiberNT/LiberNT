@@ -621,3 +621,13 @@ interface ID2D1EffectImpl : IUnknown
 cpp_quote("#ifndef D2D1_APPEND_ALIGNED_ELEMENT")
 cpp_quote("#define D2D1_APPEND_ALIGNED_ELEMENT 0xffffffff")
 cpp_quote("#endif")
+
+cpp_quote("struct D2D1_FEATURE_DATA_D3D10_X_HARDWARE_OPTIONS")
+cpp_quote("{")
+cpp_quote("    BOOL computeShaders_Plus_RawAndStructuredBuffers_Via_Shader_4_x;")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("struct D2D1_FEATURE_DATA_DOUBLES")
+cpp_quote("{")
+cpp_quote("    BOOL doublePrecisionFloatShaderOps;")
+cpp_quote("};")

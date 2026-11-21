@@ -49,4 +49,6 @@ struct _DMUS_EVENTHEADER {
 };
 #pragma pack(pop)
 
+#define _DMusBuff_ 0
+
 #endif /* __WINE_DMUSIC_BUFFER_H */

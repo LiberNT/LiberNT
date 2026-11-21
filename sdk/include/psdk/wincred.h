@@ -154,7 +154,9 @@ typedef enum _CRED_MARSHAL_TYPE
 {
     CertCredential = 1,
     UsernameTargetCredential,
-    BinaryBlobCredential
+    BinaryBlobCredential,
+    UsernameForPackedCredentials = 4,
+    BinaryBlobForSystem = 5,
 } CRED_MARSHAL_TYPE, *PCRED_MARSHAL_TYPE;
 
 #define CERT_HASH_LENGTH    20
@@ -585,5 +587,164 @@ typedef enum _CRED_PROTECTION_TYPE {
 } CRED_PROTECTION_TYPE, *PCRED_PROTECTION_TYPE;
 
 typedef struct _USERNAME_TARGET_CREDENTIAL_INFO * PUSERNAME_TARGET_CREDENTIAL_INFO;
+
+#define CRED_ALLOW_NAME_RESOLUTION 0x1
+#define CRED_CACHE_TARGET_INFORMATION 0x1
+#define CRED_ENUMERATE_ALL_CREDENTIALS 0x1
+#define CRED_LOGON_TYPES_MASK 0xF000
+#define CRED_PROTECT_AS_SELF 0x1
+#define CRED_PROTECT_VALID_FLAGS 3
+#define CRED_SESSION_WILDCARD_NAME 0
+#define CRED_SESSION_WILDCARD_NAME_A "*Session"
+#define CRED_SESSION_WILDCARD_NAME_LENGTH 8
+#define CRED_SESSION_WILDCARD_NAME_W 0
+#define CRED_TARGETNAME_ATTRIBUTE_BATCH CRED_TARGETNAME_ATTRIBUTE_BATCH_A
+#define CRED_TARGETNAME_ATTRIBUTE_BATCH_A "batch"
+#define CRED_TARGETNAME_ATTRIBUTE_BATCH_LENGTH (sizeof (CRED_TARGETNAME_ATTRIBUTE_BATCH_A) - 1)
+#define CRED_TARGETNAME_ATTRIBUTE_BATCH_W 0
+#define CRED_TARGETNAME_ATTRIBUTE_CACHEDINTERACTIVE CRED_TARGETNAME_ATTRIBUTE_CACHEDINTERACTIVE_A
+#define CRED_TARGETNAME_ATTRIBUTE_CACHEDINTERACTIVE_A "cachedinteractive"
+#define CRED_TARGETNAME_ATTRIBUTE_CACHEDINTERACTIVE_LENGTH (sizeof (CRED_TARGETNAME_ATTRIBUTE_CACHEDINTERACTIVE_A) - 1)
+#define CRED_TARGETNAME_ATTRIBUTE_CACHEDINTERACTIVE_W 0
+#define CRED_TARGETNAME_ATTRIBUTE_INTERACTIVE CRED_TARGETNAME_ATTRIBUTE_INTERACTIVE_A
+#define CRED_TARGETNAME_ATTRIBUTE_INTERACTIVE_A "interactive"
+#define CRED_TARGETNAME_ATTRIBUTE_INTERACTIVE_LENGTH (sizeof (CRED_TARGETNAME_ATTRIBUTE_INTERACTIVE_A) - 1)
+#define CRED_TARGETNAME_ATTRIBUTE_INTERACTIVE_W 0
+#define CRED_TARGETNAME_ATTRIBUTE_NAME CRED_TARGETNAME_ATTRIBUTE_NAME_A
+#define CRED_TARGETNAME_ATTRIBUTE_NAME_A "name"
+#define CRED_TARGETNAME_ATTRIBUTE_NAME_LENGTH (sizeof (CRED_TARGETNAME_ATTRIBUTE_NAME_A) - 1)
+#define CRED_TARGETNAME_ATTRIBUTE_NAME_W 0
+#define CRED_TARGETNAME_ATTRIBUTE_NETWORK CRED_TARGETNAME_ATTRIBUTE_NETWORK_A
+#define CRED_TARGETNAME_ATTRIBUTE_NETWORK_A "network"
+#define CRED_TARGETNAME_ATTRIBUTE_NETWORK_LENGTH (sizeof (CRED_TARGETNAME_ATTRIBUTE_NETWORK_A) - 1)
+#define CRED_TARGETNAME_ATTRIBUTE_NETWORK_W 0
+#define CRED_TARGETNAME_ATTRIBUTE_NETWORKCLEARTEXT CRED_TARGETNAME_ATTRIBUTE_NETWORKCLEARTEXT_A
+#define CRED_TARGETNAME_ATTRIBUTE_NETWORKCLEARTEXT_A "networkcleartext"
+#define CRED_TARGETNAME_ATTRIBUTE_NETWORKCLEARTEXT_LENGTH (sizeof (CRED_TARGETNAME_ATTRIBUTE_NETWORKCLEARTEXT_A) - 1)
+#define CRED_TARGETNAME_ATTRIBUTE_NETWORKCLEARTEXT_W 0
+#define CRED_TARGETNAME_ATTRIBUTE_REMOTEINTERACTIVE CRED_TARGETNAME_ATTRIBUTE_REMOTEINTERACTIVE_A
+#define CRED_TARGETNAME_ATTRIBUTE_REMOTEINTERACTIVE_A "remoteinteractive"
+#define CRED_TARGETNAME_ATTRIBUTE_REMOTEINTERACTIVE_LENGTH (sizeof (CRED_TARGETNAME_ATTRIBUTE_REMOTEINTERACTIVE_A) - 1)
+#define CRED_TARGETNAME_ATTRIBUTE_REMOTEINTERACTIVE_W 0
+#define CRED_TARGETNAME_ATTRIBUTE_SEPERATOR = CRED_TARGETNAME_ATTRIBUTE_SEPERATOR_A
+#define CRED_TARGETNAME_ATTRIBUTE_SEPERATOR_A 0x3D
+#define CRED_TARGETNAME_ATTRIBUTE_SEPERATOR_W 0x3D
+#define CRED_TARGETNAME_ATTRIBUTE_SERVICE CRED_TARGETNAME_ATTRIBUTE_SERVICE_A
+#define CRED_TARGETNAME_ATTRIBUTE_SERVICE_A "service"
+#define CRED_TARGETNAME_ATTRIBUTE_SERVICE_LENGTH (sizeof (CRED_TARGETNAME_ATTRIBUTE_SERVICE_A) - 1)
+#define CRED_TARGETNAME_ATTRIBUTE_SERVICE_W 0
+#define CRED_TARGETNAME_ATTRIBUTE_TARGET CRED_TARGETNAME_ATTRIBUTE_TARGET_A
+#define CRED_TARGETNAME_ATTRIBUTE_TARGET_A "target"
+#define CRED_TARGETNAME_ATTRIBUTE_TARGET_LENGTH (sizeof (CRED_TARGETNAME_ATTRIBUTE_TARGET_A) - 1)
+#define CRED_TARGETNAME_ATTRIBUTE_TARGET_W 0
+#define CRED_TARGETNAME_DOMAIN_EXTENDED_USERNAME_SEPARATOR_A 0x7C
+#define CRED_TARGETNAME_DOMAIN_EXTENDED_USERNAME_SEPARATOR_W 0x7C
+#define CRED_TARGETNAME_DOMAIN_NAMESPACE CRED_TARGETNAME_DOMAIN_NAMESPACE_A
+#define CRED_TARGETNAME_DOMAIN_NAMESPACE_A "Domain"
+#define CRED_TARGETNAME_DOMAIN_NAMESPACE_LENGTH (sizeof (CRED_TARGETNAME_DOMAIN_NAMESPACE_A) - 1)
+#define CRED_TARGETNAME_DOMAIN_NAMESPACE_W 0
+#define CRED_TARGETNAME_LEGACYGENERIC_NAMESPACE_A "LegacyGeneric"
+#define CRED_TARGETNAME_LEGACYGENERIC_NAMESPACE_LENGTH (sizeof (CRED_TARGETNAME_LEGACYGENERIC_NAMESPACE_A) - 1)
+#define CRED_TARGETNAME_LEGACYGENERIC_NAMESPACE_W 0
+#define CRED_TARGETNAME_NAMESPACE_SEPERATOR = CRED_TARGETNAME_NAMESPACE_SEPERATOR_A
+#define CRED_TARGETNAME_NAMESPACE_SEPERATOR_A 0x3A
+#define CRED_TARGETNAME_NAMESPACE_SEPERATOR_W 0x3A
+#define CRED_UNIVERSAL_WILDCARD = CRED_UNIVERSAL_WILDCARD_A
+#define CRED_UNIVERSAL_WILDCARD_A 0x2A
+#define CRED_UNIVERSAL_WILDCARD_W 0x2A
+#define CRED_UNPROTECT_AS_SELF 0x1
+#define CRED_UNPROTECT_VALID_FLAGS 3
+#define CredAppendLogonTypeToFlagsFlags, LogonType) (Flags) |= ((LogonType) << 12)
+#ifdef UNICODE
+#define CredFindBestCredential CredFindBestCredentialW
+#else
+#define CredFindBestCredential CredFindBestCredentialA
+#endif
+#define CredGetLogonTypeFromFlagsFlags) ((SECURITY_LOGON_TYPE) (((Flags) & CRED_LOGON_TYPES_MASK) >> 12))
+#define CredGetTargetInfo 0
+#ifdef UNICODE
+#define CredIsProtected CredIsProtectedW
+#else
+#define CredIsProtected CredIsProtectedA
+#endif
+#ifdef UNICODE
+#define CredPackAuthenticationBuffer CredPackAuthenticationBufferW
+#else
+#define CredPackAuthenticationBuffer CredPackAuthenticationBufferA
+#endif
+#define CredProtect 0
+#define CredRemoveLogonTypeFromFlagsFlags) (Flags) &= ~CRED_LOGON_TYPES_MASK
+#define CREDUI_FLAGS_PROMPT_VALID 0x1E5FDF
+#define CREDUI_MAX_CREDENTIALS_BLOB_SIZE (MAXUSHORT)
+#define CREDUI_MAX_PACKED_CREDENTIALS_LENGTH 0
+#define CREDUIAPI EXTERN_C DECLSPEC_IMPORT
+#define CREDUIP_IS_DOWNGRADE_ERROR_Status) ((_Status) == ERROR_DOWNGRADE_DETECTED || (_Status) == __HRESULT_FROM_WIN32(ERROR_DOWNGRADE_DETECTED) || (_Status) == STATUS_DOWNGRADE_DETECTED || (_Status) == HRESULT_FROM_NT(STATUS_DOWNGRADE_DETECTED) || (_Status) == SEC_E_DOWNGRADE_DETECTED \
+)
+#define CREDUIP_IS_EXPIRED_ERROR_Status) ((_Status) == ERROR_PASSWORD_EXPIRED || (_Status) == __HRESULT_FROM_WIN32(ERROR_PASSWORD_EXPIRED) || (_Status) == STATUS_PASSWORD_EXPIRED || (_Status) == HRESULT_FROM_NT(STATUS_PASSWORD_EXPIRED) || (_Status) == ERROR_PASSWORD_MUST_CHANGE || (_Status) == __HRESULT_FROM_WIN32(ERROR_PASSWORD_MUST_CHANGE) || (_Status) == STATUS_PASSWORD_MUST_CHANGE || (_Status) == HRESULT_FROM_NT(STATUS_PASSWORD_MUST_CHANGE) || (_Status) == NERR_PasswordExpired || (_Status) == __HRESULT_FROM_WIN32(NERR_PasswordExpired) \
+)
+#ifdef UNICODE
+#define CredUIPromptForWindowsCredentials CredUIPromptForWindowsCredentialsW
+#else
+#define CredUIPromptForWindowsCredentials CredUIPromptForWindowsCredentialsA
+#endif
+#define CREDUIWIN_VALID_FLAGS 0x90043333
+#ifdef UNICODE
+#define CredUnPackAuthenticationBuffer CredUnPackAuthenticationBufferW
+#else
+#define CredUnPackAuthenticationBuffer CredUnPackAuthenticationBufferA
+#endif
+#define CredUnprotect 0
+#ifdef UNICODE
+#define CredWriteDomainCredentials CredWriteDomainCredentialsW
+#else
+#define CredWriteDomainCredentials CredWriteDomainCredentialsA
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+BOOL WINAPI CredPackAuthenticationBufferW(DWORD dwFlags, LPWSTR pszUserName, LPWSTR pszPassword, PBYTE pPackedCredentials, DWORD *pcbPackedCredentials);
+DWORD WINAPI CredUIPromptForWindowsCredentialsW(PCREDUI_INFOW pUiInfo, DWORD dwAuthError, ULONG *pulAuthPackage, LPCVOID pvInAuthBuffer, ULONG ulInAuthBufferSize, LPVOID *ppvOutAuthBuffer, ULONG *pulOutAuthBufferSize, BOOL *pfSave, DWORD dwFlags);
+BOOL WINAPI CredUnPackAuthenticationBufferW(DWORD dwFlags, PVOID pAuthBuffer, DWORD cbAuthBuffer, LPWSTR pszUserName, DWORD *pcchMaxUserName, LPWSTR pszDomainName, DWORD *pcchMaxDomainName, LPWSTR pszPassword, DWORD *pcchMaxPassword);
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL CredFindBestCredentialA(LPCSTR TargetName, DWORD Type, DWORD Flags, PCREDENTIALA *Credential);
+BOOL CredFindBestCredentialW(LPCWSTR TargetName, DWORD Type, DWORD Flags, PCREDENTIALW *Credential);
+BOOL CredGetTargetInfoA(LPCSTR TargetName, DWORD Flags, PCREDENTIAL_TARGET_INFORMATIONA *TargetInfo);
+BOOL CredGetTargetInfoW(LPCWSTR TargetName, DWORD Flags, PCREDENTIAL_TARGET_INFORMATIONW *TargetInfo);
+BOOL CredIsProtectedA(LPSTR pszProtectedCredentials, CRED_PROTECTION_TYPE *pProtectionType);
+BOOL CredIsProtectedW(LPWSTR pszProtectedCredentials, CRED_PROTECTION_TYPE *pProtectionType);
+BOOL CredPackAuthenticationBufferA(DWORD dwFlags, LPSTR pszUserName, LPSTR pszPassword, PBYTE pPackedCredentials, DWORD *pcbPackedCredentials);
+BOOL CredProtectA(BOOL fAsSelf, LPSTR pszCredentials, DWORD cchCredentials, LPSTR pszProtectedCredentials, DWORD *pcchMaxChars, CRED_PROTECTION_TYPE *ProtectionType);
+BOOL CredProtectEx(ULONG Flags, LPWSTR pszCredentials, DWORD cchCredentials, LPWSTR pszProtectedCredentials, DWORD *pcchMaxChars, CRED_PROTECTION_TYPE *ProtectionType);
+BOOL CredProtectW(BOOL fAsSelf, LPWSTR pszCredentials, DWORD cchCredentials, LPWSTR pszProtectedCredentials, DWORD *pcchMaxChars, CRED_PROTECTION_TYPE *ProtectionType);
+DWORD CredUIPromptForWindowsCredentialsA(PCREDUI_INFOA pUiInfo, DWORD dwAuthError, ULONG *pulAuthPackage, LPCVOID pvInAuthBuffer, ULONG ulInAuthBufferSize, LPVOID *ppvOutAuthBuffer, ULONG *pulOutAuthBufferSize, BOOL *pfSave, DWORD dwFlags);
+BOOL CredUnPackAuthenticationBufferA(DWORD dwFlags, PVOID pAuthBuffer, DWORD cbAuthBuffer, LPSTR pszUserName, DWORD *pcchlMaxUserName, LPSTR pszDomainName, DWORD *pcchMaxDomainName, LPSTR pszPassword, DWORD *pcchMaxPassword);
+BOOL CredUnprotectA(BOOL fAsSelf, LPSTR pszProtectedCredentials, DWORD cchProtectedCredentials, LPSTR pszCredentials, DWORD *pcchMaxChars);
+BOOL CredUnprotectEx(ULONG Flags, LPWSTR pszProtectedCredentials, DWORD cchProtectedCredentials, LPWSTR pszCredentials, DWORD *pcchMaxChars);
+BOOL CredUnprotectW(BOOL fAsSelf, LPWSTR pszProtectedCredentials, DWORD cchProtectedCredentials, LPWSTR pszCredentials, DWORD *pcchMaxChars);
+BOOL CredWriteDomainCredentialsA(PCREDENTIAL_TARGET_INFORMATIONA TargetInfo, PCREDENTIALA Credential, DWORD Flags);
+BOOL CredWriteDomainCredentialsW(PCREDENTIAL_TARGET_INFORMATIONW TargetInfo, PCREDENTIALW Credential, DWORD Flags);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define CredAppendLogonTypeToFlagsFlags, LogonType) (Flags) |= ((LogonType) << 12)
+#define CredGetLogonTypeFromFlagsFlags) ((SECURITY_LOGON_TYPE) (((Flags) & CRED_LOGON_TYPES_MASK) >> 12))
+#define CredRemoveLogonTypeFromFlagsFlags) (Flags) &= ~CRED_LOGON_TYPES_MASK
+#define CREDUIP_IS_DOWNGRADE_ERROR_Status) ((_Status) == ERROR_DOWNGRADE_DETECTED || (_Status) == __HRESULT_FROM_WIN32(ERROR_DOWNGRADE_DETECTED) || (_Status) == STATUS_DOWNGRADE_DETECTED || (_Status) == HRESULT_FROM_NT(STATUS_DOWNGRADE_DETECTED) || (_Status) == SEC_E_DOWNGRADE_DETECTED \
+)
+#define CREDUIP_IS_EXPIRED_ERROR_Status) ((_Status) == ERROR_PASSWORD_EXPIRED || (_Status) == __HRESULT_FROM_WIN32(ERROR_PASSWORD_EXPIRED) || (_Status) == STATUS_PASSWORD_EXPIRED || (_Status) == HRESULT_FROM_NT(STATUS_PASSWORD_EXPIRED) || (_Status) == ERROR_PASSWORD_MUST_CHANGE || (_Status) == __HRESULT_FROM_WIN32(ERROR_PASSWORD_MUST_CHANGE) || (_Status) == STATUS_PASSWORD_MUST_CHANGE || (_Status) == HRESULT_FROM_NT(STATUS_PASSWORD_MUST_CHANGE) || (_Status) == NERR_PasswordExpired || (_Status) == __HRESULT_FROM_WIN32(NERR_PasswordExpired) \
+)
+
+#define CredAppendLogonTypeToFlagsFlags, LogonType) (Flags) |= ((LogonType) << 12)
+#define CredGetLogonTypeFromFlagsFlags) ((SECURITY_LOGON_TYPE) (((Flags) & CRED_LOGON_TYPES_MASK) >> 12))
+#define CredRemoveLogonTypeFromFlagsFlags) (Flags) &= ~CRED_LOGON_TYPES_MASK
+#define CREDUIP_IS_DOWNGRADE_ERROR_Status) ((_Status) == ERROR_DOWNGRADE_DETECTED || (_Status) == __HRESULT_FROM_WIN32(ERROR_DOWNGRADE_DETECTED) || (_Status) == STATUS_DOWNGRADE_DETECTED || (_Status) == HRESULT_FROM_NT(STATUS_DOWNGRADE_DETECTED) || (_Status) == SEC_E_DOWNGRADE_DETECTED \
+)
+#define CREDUIP_IS_EXPIRED_ERROR_Status) ((_Status) == ERROR_PASSWORD_EXPIRED || (_Status) == __HRESULT_FROM_WIN32(ERROR_PASSWORD_EXPIRED) || (_Status) == STATUS_PASSWORD_EXPIRED || (_Status) == HRESULT_FROM_NT(STATUS_PASSWORD_EXPIRED) || (_Status) == ERROR_PASSWORD_MUST_CHANGE || (_Status) == __HRESULT_FROM_WIN32(ERROR_PASSWORD_MUST_CHANGE) || (_Status) == STATUS_PASSWORD_MUST_CHANGE || (_Status) == HRESULT_FROM_NT(STATUS_PASSWORD_MUST_CHANGE) || (_Status) == NERR_PasswordExpired || (_Status) == __HRESULT_FROM_WIN32(NERR_PasswordExpired) \
+)
 
 #endif /* _WINCRED_H_ */

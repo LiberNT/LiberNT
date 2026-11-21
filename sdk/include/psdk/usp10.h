@@ -671,4 +671,38 @@ ScriptString_pSize(
 #define UNISCRIBE_OPENTYPE 0x0100
 #endif
 
+struct opentype_feature_record
+{
+    OPENTYPE_TAG tagFeature;
+    LONG lParameter;
+};
+
+struct script_charprop
+{
+    WORD fCanGlyphAlone : 1;
+    WORD reserved : 15;
+};
+
+struct script_glyphprop
+{
+    SCRIPT_VISATTR sva;
+    WORD reserved;
+};
+
+struct textrange_properties
+{
+    OPENTYPE_FEATURE_RECORD *potfRecords;
+    int cotfRecords;
+};
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+HRESULT WINAPI ScriptGetFontAlternateGlyphs(HDC hdc, SCRIPT_CACHE *psc, SCRIPT_ANALYSIS *psa, OPENTYPE_TAG tagScript, OPENTYPE_TAG tagLangSys, OPENTYPE_TAG tagFeature, WORD wGlyphId, int cMaxAlternates, WORD *pAlternateGlyphs, int *pcAlternates);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* __USP10_H */

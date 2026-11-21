@@ -2254,9 +2254,175 @@ HRESULT WINAPI Direct3DCreate9Ex(UINT sdk_version, IDirect3D9Ex **d3d9ex);
 #endif
 
 typedef struct IDirect3DDevice9 * PDIRECT3DDEVICE9;
+typedef struct IDirect3DPixelShader9 * PDIRECT3DPIXELSHADER9;
 typedef struct IDirect3DStateBlock9 * PDIRECT3DSTATEBLOCK9;
 typedef struct IDirect3DVertexDeclaration9 * PDIRECT3DVERTEXDECLARATION9;
 typedef struct IDirect3DVertexShader9 * PDIRECT3DVERTEXSHADER9;
-typedef struct IDirect3DPixelShader9 * PDIRECT3DPIXELSHADER9;
+
+#define D3DAPI 0
+#define IDirect3D9ExOverlayExtension_AddRefp) (p) -> lpVtbl -> AddRef(p)
+#define IDirect3D9ExOverlayExtension_CheckDeviceOverlayTypep, a, b, c, d, e, f, g, h) (p) -> lpVtbl -> CheckDeviceOverlayType(p, a, b, c, d, e, f, g, h)
+#define IDirect3D9ExOverlayExtension_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
+#define IDirect3D9ExOverlayExtension_Releasep) (p) -> lpVtbl -> Release(p)
+#define IDirect3DAuthenticatedChannel9_AddRefp) (p) -> lpVtbl -> AddRef(p)
+#define IDirect3DAuthenticatedChannel9_Configurep, a, b, c) (p) -> lpVtbl -> Configure(p, a, b, c)
+#define IDirect3DAuthenticatedChannel9_GetCertificatep, a, b) (p) -> lpVtbl -> GetCertificate(p, a, b)
+#define IDirect3DAuthenticatedChannel9_GetCertificateSizep, a) (p) -> lpVtbl -> GetCertificateSize(p, a)
+#define IDirect3DAuthenticatedChannel9_NegotiateKeyExchangep, a, b) (p) -> lpVtbl -> NegotiateKeyExchange(p, a, b)
+#define IDirect3DAuthenticatedChannel9_Queryp, a, b, c, d) (p) -> lpVtbl -> Query(p, a, b, c, d)
+#define IDirect3DAuthenticatedChannel9_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
+#define IDirect3DAuthenticatedChannel9_Releasep) (p) -> lpVtbl -> Release(p)
+#define IDirect3DCryptoSession9_AddRefp) (p) -> lpVtbl -> AddRef(p)
+#define IDirect3DCryptoSession9_DecryptionBltp, a, b, c, d, e, f) (p) -> lpVtbl -> DecryptionBlt(p, a, b, c, d, e, f)
+#define IDirect3DCryptoSession9_EncryptionBltp, a, b, c, d) (p) -> lpVtbl -> EncryptionBlt(p, a, b, c, d)
+#define IDirect3DCryptoSession9_FinishSessionKeyRefreshp) (p) -> lpVtbl -> FinishSessionKeyRefresh(p)
+#define IDirect3DCryptoSession9_GetCertificatep, a, b) (p) -> lpVtbl -> GetCertificate(p, a, b)
+#define IDirect3DCryptoSession9_GetCertificateSizep, a) (p) -> lpVtbl -> GetCertificateSize(p, a)
+#define IDirect3DCryptoSession9_GetEncryptionBltKeyp, a, b) (p) -> lpVtbl -> GetEncryptionBltKey(p, a, b)
+#define IDirect3DCryptoSession9_GetSurfacePitchp, a, b) (p) -> lpVtbl -> GetSurfacePitch(p, a, b)
+#define IDirect3DCryptoSession9_NegotiateKeyExchangep, a, b) (p) -> lpVtbl -> NegotiateKeyExchange(p, a, b)
+#define IDirect3DCryptoSession9_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
+#define IDirect3DCryptoSession9_Releasep) (p) -> lpVtbl -> Release(p)
+#define IDirect3DCryptoSession9_StartSessionKeyRefreshp, a, b) (p) -> lpVtbl -> StartSessionKeyRefresh(p, a, b)
+#define IDirect3DDevice9Video_AddRefp) (p) -> lpVtbl -> AddRef(p)
+#define IDirect3DDevice9Video_CreateAuthenticatedChannelp, a, b, c) (p) -> lpVtbl -> CreateAuthenticatedChannel(p, a, b, c)
+#define IDirect3DDevice9Video_CreateCryptoSessionp, a, b, c, d) (p) -> lpVtbl -> CreateCryptoSession(p, a, b, c, d)
+#define IDirect3DDevice9Video_GetContentProtectionCapsp, a, b, c) (p) -> lpVtbl -> GetContentProtectionCaps(p, a, b, c)
+#define IDirect3DDevice9Video_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
+#define IDirect3DDevice9Video_Releasep) (p) -> lpVtbl -> Release(p)
+
+typedef struct IDirect3D9ExOverlayExtension IDirect3D9ExOverlayExtension;
+
+typedef struct IDirect3D9ExOverlayExtensionVtbl IDirect3D9ExOverlayExtensionVtbl;
+
+typedef struct IDirect3D9ExVtbl IDirect3D9ExVtbl;
+
+typedef struct IDirect3D9Vtbl IDirect3D9Vtbl;
+
+typedef struct IDirect3DAuthenticatedChannel9 IDirect3DAuthenticatedChannel9;
+
+typedef struct IDirect3DAuthenticatedChannel9Vtbl IDirect3DAuthenticatedChannel9Vtbl;
+
+typedef struct IDirect3DBaseTexture9Vtbl IDirect3DBaseTexture9Vtbl;
+
+typedef struct IDirect3DCryptoSession9 IDirect3DCryptoSession9;
+
+typedef struct IDirect3DCryptoSession9Vtbl IDirect3DCryptoSession9Vtbl;
+
+typedef struct IDirect3DCubeTexture9Vtbl IDirect3DCubeTexture9Vtbl;
+
+typedef struct IDirect3DDevice9ExVtbl IDirect3DDevice9ExVtbl;
+
+typedef struct IDirect3DDevice9Video IDirect3DDevice9Video;
+
+typedef struct IDirect3DDevice9VideoVtbl IDirect3DDevice9VideoVtbl;
+
+typedef struct IDirect3DDevice9Vtbl IDirect3DDevice9Vtbl;
+
+typedef struct IDirect3DIndexBuffer9Vtbl IDirect3DIndexBuffer9Vtbl;
+
+typedef struct IDirect3DPixelShader9Vtbl IDirect3DPixelShader9Vtbl;
+
+typedef struct IDirect3DQuery9Vtbl IDirect3DQuery9Vtbl;
+
+typedef struct IDirect3DResource9Vtbl IDirect3DResource9Vtbl;
+
+typedef struct IDirect3DStateBlock9Vtbl IDirect3DStateBlock9Vtbl;
+
+typedef struct IDirect3DSurface9Vtbl IDirect3DSurface9Vtbl;
+
+typedef struct IDirect3DSwapChain9ExVtbl IDirect3DSwapChain9ExVtbl;
+
+typedef struct IDirect3DSwapChain9Vtbl IDirect3DSwapChain9Vtbl;
+
+typedef struct IDirect3DTexture9Vtbl IDirect3DTexture9Vtbl;
+
+typedef struct IDirect3DVertexBuffer9Vtbl IDirect3DVertexBuffer9Vtbl;
+
+typedef struct IDirect3DVertexDeclaration9Vtbl IDirect3DVertexDeclaration9Vtbl;
+
+typedef struct IDirect3DVertexShader9Vtbl IDirect3DVertexShader9Vtbl;
+
+typedef struct IDirect3DVolume9Vtbl IDirect3DVolume9Vtbl;
+
+typedef struct IDirect3DVolumeTexture9Vtbl IDirect3DVolumeTexture9Vtbl;
+
+typedef struct IDirect3D9ExOverlayExtension *LPDIRECT3D9EXOVERLAYEXTENSION;
+
+typedef struct IDirect3DAuthenticatedChannel9 *LPDIRECT3DAUTHENTICATEDCHANNEL9;
+
+typedef struct IDirect3DCryptoSession9 *LPDIRECT3DCRYPTOSESSION9;
+
+typedef struct IDirect3DDevice9Video *LPDIRECT3DDEVICE9VIDEO;
+
+typedef struct IDirect3D9ExOverlayExtension *PDIRECT3D9EXOVERLAYEXTENSION;
+
+typedef struct IDirect3DAuthenticatedChannel9 *PDIRECT3DAUTHENTICATEDCHANNEL9;
+
+typedef struct IDirect3DCryptoSession9 *PDIRECT3DCRYPTOSESSION9;
+
+typedef struct IDirect3DDevice9Video *PDIRECT3DDEVICE9VIDEO;
+
+#define IDirect3D9ExOverlayExtension_AddRefp) (p) -> lpVtbl -> AddRef(p)
+#define IDirect3D9ExOverlayExtension_CheckDeviceOverlayTypep, a, b, c, d, e, f, g, h) (p) -> lpVtbl -> CheckDeviceOverlayType(p, a, b, c, d, e, f, g, h)
+#define IDirect3D9ExOverlayExtension_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
+#define IDirect3D9ExOverlayExtension_Releasep) (p) -> lpVtbl -> Release(p)
+#define IDirect3DAuthenticatedChannel9_AddRefp) (p) -> lpVtbl -> AddRef(p)
+#define IDirect3DAuthenticatedChannel9_Configurep, a, b, c) (p) -> lpVtbl -> Configure(p, a, b, c)
+#define IDirect3DAuthenticatedChannel9_GetCertificatep, a, b) (p) -> lpVtbl -> GetCertificate(p, a, b)
+#define IDirect3DAuthenticatedChannel9_GetCertificateSizep, a) (p) -> lpVtbl -> GetCertificateSize(p, a)
+#define IDirect3DAuthenticatedChannel9_NegotiateKeyExchangep, a, b) (p) -> lpVtbl -> NegotiateKeyExchange(p, a, b)
+#define IDirect3DAuthenticatedChannel9_Queryp, a, b, c, d) (p) -> lpVtbl -> Query(p, a, b, c, d)
+#define IDirect3DAuthenticatedChannel9_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
+#define IDirect3DAuthenticatedChannel9_Releasep) (p) -> lpVtbl -> Release(p)
+#define IDirect3DCryptoSession9_AddRefp) (p) -> lpVtbl -> AddRef(p)
+#define IDirect3DCryptoSession9_DecryptionBltp, a, b, c, d, e, f) (p) -> lpVtbl -> DecryptionBlt(p, a, b, c, d, e, f)
+#define IDirect3DCryptoSession9_EncryptionBltp, a, b, c, d) (p) -> lpVtbl -> EncryptionBlt(p, a, b, c, d)
+#define IDirect3DCryptoSession9_FinishSessionKeyRefreshp) (p) -> lpVtbl -> FinishSessionKeyRefresh(p)
+#define IDirect3DCryptoSession9_GetCertificatep, a, b) (p) -> lpVtbl -> GetCertificate(p, a, b)
+#define IDirect3DCryptoSession9_GetCertificateSizep, a) (p) -> lpVtbl -> GetCertificateSize(p, a)
+#define IDirect3DCryptoSession9_GetEncryptionBltKeyp, a, b) (p) -> lpVtbl -> GetEncryptionBltKey(p, a, b)
+#define IDirect3DCryptoSession9_GetSurfacePitchp, a, b) (p) -> lpVtbl -> GetSurfacePitch(p, a, b)
+#define IDirect3DCryptoSession9_NegotiateKeyExchangep, a, b) (p) -> lpVtbl -> NegotiateKeyExchange(p, a, b)
+#define IDirect3DCryptoSession9_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
+#define IDirect3DCryptoSession9_Releasep) (p) -> lpVtbl -> Release(p)
+#define IDirect3DCryptoSession9_StartSessionKeyRefreshp, a, b) (p) -> lpVtbl -> StartSessionKeyRefresh(p, a, b)
+#define IDirect3DDevice9Video_AddRefp) (p) -> lpVtbl -> AddRef(p)
+#define IDirect3DDevice9Video_CreateAuthenticatedChannelp, a, b, c) (p) -> lpVtbl -> CreateAuthenticatedChannel(p, a, b, c)
+#define IDirect3DDevice9Video_CreateCryptoSessionp, a, b, c, d) (p) -> lpVtbl -> CreateCryptoSession(p, a, b, c, d)
+#define IDirect3DDevice9Video_GetContentProtectionCapsp, a, b, c) (p) -> lpVtbl -> GetContentProtectionCaps(p, a, b, c)
+#define IDirect3DDevice9Video_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
+#define IDirect3DDevice9Video_Releasep) (p) -> lpVtbl -> Release(p)
+
+#define IDirect3D9ExOverlayExtension_AddRefp) (p) -> lpVtbl -> AddRef(p)
+#define IDirect3D9ExOverlayExtension_CheckDeviceOverlayTypep, a, b, c, d, e, f, g, h) (p) -> lpVtbl -> CheckDeviceOverlayType(p, a, b, c, d, e, f, g, h)
+#define IDirect3D9ExOverlayExtension_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
+#define IDirect3D9ExOverlayExtension_Releasep) (p) -> lpVtbl -> Release(p)
+#define IDirect3DAuthenticatedChannel9_AddRefp) (p) -> lpVtbl -> AddRef(p)
+#define IDirect3DAuthenticatedChannel9_Configurep, a, b, c) (p) -> lpVtbl -> Configure(p, a, b, c)
+#define IDirect3DAuthenticatedChannel9_GetCertificatep, a, b) (p) -> lpVtbl -> GetCertificate(p, a, b)
+#define IDirect3DAuthenticatedChannel9_GetCertificateSizep, a) (p) -> lpVtbl -> GetCertificateSize(p, a)
+#define IDirect3DAuthenticatedChannel9_NegotiateKeyExchangep, a, b) (p) -> lpVtbl -> NegotiateKeyExchange(p, a, b)
+#define IDirect3DAuthenticatedChannel9_Queryp, a, b, c, d) (p) -> lpVtbl -> Query(p, a, b, c, d)
+#define IDirect3DAuthenticatedChannel9_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
+#define IDirect3DAuthenticatedChannel9_Releasep) (p) -> lpVtbl -> Release(p)
+#define IDirect3DCryptoSession9_AddRefp) (p) -> lpVtbl -> AddRef(p)
+#define IDirect3DCryptoSession9_DecryptionBltp, a, b, c, d, e, f) (p) -> lpVtbl -> DecryptionBlt(p, a, b, c, d, e, f)
+#define IDirect3DCryptoSession9_EncryptionBltp, a, b, c, d) (p) -> lpVtbl -> EncryptionBlt(p, a, b, c, d)
+#define IDirect3DCryptoSession9_FinishSessionKeyRefreshp) (p) -> lpVtbl -> FinishSessionKeyRefresh(p)
+#define IDirect3DCryptoSession9_GetCertificatep, a, b) (p) -> lpVtbl -> GetCertificate(p, a, b)
+#define IDirect3DCryptoSession9_GetCertificateSizep, a) (p) -> lpVtbl -> GetCertificateSize(p, a)
+#define IDirect3DCryptoSession9_GetEncryptionBltKeyp, a, b) (p) -> lpVtbl -> GetEncryptionBltKey(p, a, b)
+#define IDirect3DCryptoSession9_GetSurfacePitchp, a, b) (p) -> lpVtbl -> GetSurfacePitch(p, a, b)
+#define IDirect3DCryptoSession9_NegotiateKeyExchangep, a, b) (p) -> lpVtbl -> NegotiateKeyExchange(p, a, b)
+#define IDirect3DCryptoSession9_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
+#define IDirect3DCryptoSession9_Releasep) (p) -> lpVtbl -> Release(p)
+#define IDirect3DCryptoSession9_StartSessionKeyRefreshp, a, b) (p) -> lpVtbl -> StartSessionKeyRefresh(p, a, b)
+#define IDirect3DDevice9Video_AddRefp) (p) -> lpVtbl -> AddRef(p)
+#define IDirect3DDevice9Video_CreateAuthenticatedChannelp, a, b, c) (p) -> lpVtbl -> CreateAuthenticatedChannel(p, a, b, c)
+#define IDirect3DDevice9Video_CreateCryptoSessionp, a, b, c, d) (p) -> lpVtbl -> CreateCryptoSession(p, a, b, c, d)
+#define IDirect3DDevice9Video_GetContentProtectionCapsp, a, b, c) (p) -> lpVtbl -> GetContentProtectionCaps(p, a, b, c)
+#define IDirect3DDevice9Video_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
+#define IDirect3DDevice9Video_Releasep) (p) -> lpVtbl -> Release(p)
 
 #endif /* _D3D9_H_ */

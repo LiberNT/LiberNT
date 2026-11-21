@@ -330,3 +330,10 @@ typedef enum _CHANGER_DEVICE_PROBLEM_TYPE {
 #ifdef __cplusplus
 }
 #endif
+
+struct _READ_ELEMENT_ADDRESS_INFO
+{
+    ULONG NumberOfElements;
+    CHANGER_ELEMENT_STATUS ElementStatus[1];
+};
+

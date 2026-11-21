@@ -39,4 +39,20 @@ HRESULT WINAPI WerReportHang(HWND,PCWSTR);
 #ifdef __cplusplus
 }
 #endif
+
+#ifdef UNICODE
+#define pfn_ADDEREXCLUDEDAPPLICATION pfn_ADDEREXCLUDEDAPPLICATIONW
+#else
+#define pfn_ADDEREXCLUDEDAPPLICATION pfn_ADDEREXCLUDEDAPPLICATIONA
+#endif
+
+typedef EFaultRepRetVal (WINAPI *pfn_ADDEREXCLUDEDAPPLICATIONA)(LPCSTR);
+
+typedef EFaultRepRetVal (WINAPI *pfn_ADDEREXCLUDEDAPPLICATIONW)(LPCWSTR);
+
+enum tagEFaultRepRetVal
+{
+
+};
+
 #endif

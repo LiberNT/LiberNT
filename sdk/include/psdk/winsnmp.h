@@ -328,4 +328,25 @@ SNMPAPI_STATUS WINSNMPAPI SnmpPasswordToKey(smiLPOCTETS,smiINT32,smiLPOCTETS);
 #define SNMPLISTEN_USEENTITY_ADDR 0
 #endif
 
+#define _INC_WINSNMP 0
+#define SNMP_SYNTAX_UNSIGNED32 0x42
+#define SNMPAPI_CALL 0
+
+typedef SNMPAPI_STATUS (*PFNSNMPCLEANUPEX)(void);
+
+typedef SNMPAPI_STATUS (*PFNSNMPSTARTUPEX)(smiLPUINT32, smiLPUINT32, smiLPUINT32, smiLPUINT32, smiLPUINT32);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+SNMPAPI_STATUS SnmpCleanupEx(void);
+SNMPAPI_STATUS SnmpListenEx(HSNMP_ENTITY hEntity, SNMPAPI_STATUS lStatus, smiUINT32 nUseEntityAddr);
+SNMPAPI_STATUS SnmpStartupEx(smiLPUINT32 nMajorVersion, smiLPUINT32 nMinorVersion, smiLPUINT32 nLevel, smiLPUINT32 nTranslateMode, smiLPUINT32 nRetransmitMode);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

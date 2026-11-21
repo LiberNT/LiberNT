@@ -60,6 +60,11 @@ typedef enum _MINIDUMP_TYPE
     MiniDumpWithAvxXStateContext           = 0x00200000,
     MiniDumpWithIptTrace                   = 0x00400000,
     MiniDumpValidTypeFlags                 = 0x007fffff,
+    MiniDumpScanInaccessiblePartialPages = 0x800000,
+    MiniDumpFilterWriteCombinedMemory = 0x1000000,
+    MiniDumpWithMemoryCompressed = 0x4000000,
+    MiniDumpNoIgnoreInaccessibleMemory = 0x2000000,
+    MiniDumpValidTypeFlagsEx = 0x7FFFFFF,
 } MINIDUMP_TYPE;
 
 typedef enum _MINIDUMP_SECONDARY_FLAGS
@@ -729,6 +734,8 @@ typedef enum _MINIDUMP_CALLBACK_TYPE
     VmQueryCallback,
     VmPreReadCallback,
     VmPostReadCallback,
+    CompressedMemoryStreamStartCallback = 0x15,
+    CompressedMemoryStreamFinishCallback = 0x16,
 } MINIDUMP_CALLBACK_TYPE;
 
 #if defined(__GNUC__) && !defined(__clang__)
@@ -945,7 +952,22 @@ typedef enum _MINIDUMP_STREAM_TYPE
     IptTraceStream              = 23,
     ThreadNamesStream           = 24,
 
-    LastReservedStream          = 0xffff
+    LastReservedStream          = 0xffff,
+    CompressedMemoryStream = 0x19,
+    CompressedMemoryStreamSQL = 0x7000,
+    ceStreamNull = 0x8000,
+    ceStreamSystemInfo = 0x8001,
+    ceStreamException = 0x8002,
+    ceStreamModuleList = 0x8003,
+    ceStreamProcessList = 0x8004,
+    ceStreamThreadList = 0x8005,
+    ceStreamThreadContextList = 0x8006,
+    ceStreamThreadCallStackList = 0x8007,
+    ceStreamMemoryVirtualList = 0x8008,
+    ceStreamMemoryPhysicalList = 0x8009,
+    ceStreamBucketParameters = 0x800A,
+    ceStreamProcessModuleMap = 0x800B,
+    ceStreamDiagnosisList = 0x800C,
 } MINIDUMP_STREAM_TYPE;
 
 BOOL WINAPI MiniDumpWriteDump(HANDLE process, DWORD pid, HANDLE hfile, MINIDUMP_TYPE dumptype,
@@ -981,29 +1003,28 @@ typedef enum _MINIDUMP_HANDLE_OBJECT_INFORMATION_TYPE {
 } MINIDUMP_HANDLE_OBJECT_INFORMATION_TYPE;
 
 typedef MINIDUMP_HANDLE_DESCRIPTOR_2 MINIDUMP_HANDLE_DESCRIPTOR_N;
-typedef MINIDUMP_HANDLE_DESCRIPTOR_N * PMINIDUMP_HANDLE_DESCRIPTOR_N;
 typedef MINIDUMP_MISC_INFO_5 MINIDUMP_MISC_INFO_N;
-typedef MINIDUMP_MISC_INFO_N * PMINIDUMP_MISC_INFO_N;
 typedef MINIDUMP_PROCESS_VM_COUNTERS_2 MINIDUMP_PROCESS_VM_COUNTERS_N;
+typedef MINIDUMP_HANDLE_DESCRIPTOR_N * PMINIDUMP_HANDLE_DESCRIPTOR_N;
+typedef MINIDUMP_MISC_INFO_N * PMINIDUMP_MISC_INFO_N;
 typedef MINIDUMP_PROCESS_VM_COUNTERS_N * PMINIDUMP_PROCESS_VM_COUNTERS_N;
 
 #pragma pack(push, 4)
-typedef struct _MINIDUMP_THREAD_EX {
-  ULONG32 ThreadId;
-  ULONG32 SuspendCount;
-  ULONG32 PriorityClass;
-  ULONG32 Priority;
-  ULONG64 Teb;
-  MINIDUMP_MEMORY_DESCRIPTOR Stack;
-  MINIDUMP_LOCATION_DESCRIPTOR ThreadContext;
-  MINIDUMP_MEMORY_DESCRIPTOR BackingStore;
-} MINIDUMP_THREAD_EX, *PMINIDUMP_THREAD_EX;
+typedef struct _MINIDUMP_COMPRESSED_MEMORY_STREAM_FINISH_CALLBACK {
+  ULONG64 CompressedStreamSize;
+  ULONG32 StreamCompressionRate;
+} MINIDUMP_COMPRESSED_MEMORY_STREAM_FINISH_CALLBACK, *PMINIDUMP_COMPRESSED_MEMORY_STREAM_FINISH_CALLBACK;
 #pragma pack(pop)
 
-typedef struct _MINIDUMP_THREAD_EX_LIST {
-  ULONG32 NumberOfThreads;
-  MINIDUMP_THREAD_EX Threads[0];
-} MINIDUMP_THREAD_EX_LIST, *PMINIDUMP_THREAD_EX_LIST;
+#pragma pack(push, 4)
+typedef struct _MINIDUMP_COMPRESSED_MEMORY_STREAM_START_CALLBACK {
+  ULONG MaxParallelism;
+  ULONG MaxTransferSize;
+  PNUMA_NODE_RELATIONSHIP NumaNodeInfoArray;
+  ULONG NumaNodeInfoArraySize;
+  ULONG Reserved;
+} MINIDUMP_COMPRESSED_MEMORY_STREAM_START_CALLBACK, *PMINIDUMP_COMPRESSED_MEMORY_STREAM_START_CALLBACK;
+#pragma pack(pop)
 
 typedef struct _MINIDUMP_HANDLE_OPERATION_LIST {
   ULONG32 SizeOfHeader;
@@ -1108,26 +1129,27 @@ typedef struct _MINIDUMP_SYSTEM_MEMORY_INFO_2 {
   MINIDUMP_SYSTEM_PERFORMANCE_INFORMATION_2 PerfInfo;
 } MINIDUMP_SYSTEM_MEMORY_INFO_2, *PMINIDUMP_SYSTEM_MEMORY_INFO_2;
 
+#pragma pack(push, 4)
+typedef struct _MINIDUMP_THREAD_EX {
+  ULONG32 ThreadId;
+  ULONG32 SuspendCount;
+  ULONG32 PriorityClass;
+  ULONG32 Priority;
+  ULONG64 Teb;
+  MINIDUMP_MEMORY_DESCRIPTOR Stack;
+  MINIDUMP_LOCATION_DESCRIPTOR ThreadContext;
+  MINIDUMP_MEMORY_DESCRIPTOR BackingStore;
+} MINIDUMP_THREAD_EX, *PMINIDUMP_THREAD_EX;
+#pragma pack(pop)
+
+typedef struct _MINIDUMP_THREAD_EX_LIST {
+  ULONG32 NumberOfThreads;
+  MINIDUMP_THREAD_EX Threads[0];
+} MINIDUMP_THREAD_EX_LIST, *PMINIDUMP_THREAD_EX_LIST;
+
 typedef struct _MINIDUMP_USER_RECORD {
   ULONG32 Type;
   MINIDUMP_LOCATION_DESCRIPTOR Memory;
 } MINIDUMP_USER_RECORD, *PMINIDUMP_USER_RECORD;
-
-#pragma pack(push, 4)
-typedef struct _MINIDUMP_COMPRESSED_MEMORY_STREAM_START_CALLBACK {
-  ULONG MaxParallelism;
-  ULONG MaxTransferSize;
-  PNUMA_NODE_RELATIONSHIP NumaNodeInfoArray;
-  ULONG NumaNodeInfoArraySize;
-  ULONG Reserved;
-} MINIDUMP_COMPRESSED_MEMORY_STREAM_START_CALLBACK, *PMINIDUMP_COMPRESSED_MEMORY_STREAM_START_CALLBACK;
-#pragma pack(pop)
-
-#pragma pack(push, 4)
-typedef struct _MINIDUMP_COMPRESSED_MEMORY_STREAM_FINISH_CALLBACK {
-  ULONG64 CompressedStreamSize;
-  ULONG32 StreamCompressionRate;
-} MINIDUMP_COMPRESSED_MEMORY_STREAM_FINISH_CALLBACK, *PMINIDUMP_COMPRESSED_MEMORY_STREAM_FINISH_CALLBACK;
-#pragma pack(pop)
 
 #endif  /* __WINE_MINIDUMP_H */

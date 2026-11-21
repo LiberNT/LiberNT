@@ -73,6 +73,20 @@ DEFINE_GUID(CLSID_FXEcho, 0x5039d740, 0xf736, 0x449a, 0x84, 0xd3, 0xa5, 0x62, 0x
 #endif
 
 #pragma pack(push, 1)
+typedef struct FXECHO_INITDATA {
+  float MaxDelay;
+} FXECHO_INITDATA;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct FXECHO_PARAMETERS {
+  float WetDryMix;
+  float Feedback;
+  float Delay;
+} FXECHO_PARAMETERS;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
 typedef struct FXEQ_PARAMETERS {
   float FrequencyCenter0;
   float Gain0;
@@ -103,18 +117,47 @@ typedef struct FXREVERB_PARAMETERS {
 } FXREVERB_PARAMETERS;
 #pragma pack(pop)
 
-#pragma pack(push, 1)
-typedef struct FXECHO_INITDATA {
-  float MaxDelay;
-} FXECHO_INITDATA;
-#pragma pack(pop)
+#define FX_API_type) STDAPIV_(type)
+#define FXECHO_DEFAULT_DELAY 0x1F4
+#define FXECHO_DEFAULT_FEEDBACK 0
+#define FXECHO_DEFAULT_WETDRYMIX 0
+#define FXECHO_MAX_DELAY 0x7D0
+#define FXECHO_MAX_FEEDBACK 1
+#define FXECHO_MAX_WETDRYMIX 1
+#define FXECHO_MIN_DELAY 1
+#define FXECHO_MIN_FEEDBACK 0
+#define FXECHO_MIN_WETDRYMIX 0
+#define FXEQ_DEFAULT_BANDWIDTH 1
+#define FXEQ_DEFAULT_FREQUENCY_CENTER_0 0x64
+#define FXEQ_DEFAULT_FREQUENCY_CENTER_1 0x320
+#define FXEQ_DEFAULT_FREQUENCY_CENTER_2 0x7D0
+#define FXEQ_DEFAULT_FREQUENCY_CENTER_3 0x2710
+#define FXEQ_DEFAULT_GAIN 1
+#define FXEQ_MAX_BANDWIDTH 2
+#define FXEQ_MAX_FREQUENCY_CENTER 0x4E20
+#define FXEQ_MAX_GAIN 7
+#define FXEQ_MIN_BANDWIDTH 0
+#define FXEQ_MIN_FREQUENCY_CENTER 0x14
+#define FXEQ_MIN_GAIN 0
+#define FXREVERB_DEFAULT_DIFFUSION 0
+#define FXREVERB_DEFAULT_ROOMSIZE 0
+#define FXREVERB_MAX_DIFFUSION 1
+#define FXREVERB_MAX_ROOMSIZE 1
+#define FXREVERB_MIN_DIFFUSION 0
+#define FXREVERB_MIN_ROOMSIZE 0
 
-#pragma pack(push, 1)
-typedef struct FXECHO_PARAMETERS {
-  float WetDryMix;
-  float Feedback;
-  float Delay;
-} FXECHO_PARAMETERS;
-#pragma pack(pop)
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+HRESULT __cdecl CreateFX(const IID *const clsid, IUnknown **pEffect, const void *pInitDat, UINT32 InitDataByteSize);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define FX_API_type) STDAPIV_(type)
+
+#define FX_API_type) STDAPIV_(type)
 
 #endif

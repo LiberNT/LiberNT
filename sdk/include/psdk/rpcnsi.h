@@ -116,4 +116,31 @@ RPC_STATUS RPC_ENTRY RpcNsBindingImportBeginW(unsigned long,unsigned short*,RPC_
 #ifdef __cplusplus
 }
 #endif
+
+#define RPC_C_PROFILE_ALL_ELTS 1
+#ifdef UNICODE
+#define RpcNsBindingExportPnP RpcNsBindingExportPnPW
+#else
+#define RpcNsBindingExportPnP RpcNsBindingExportPnPA
+#endif
+#ifdef UNICODE
+#define RpcNsBindingUnexportPnP RpcNsBindingUnexportPnPW
+#else
+#define RpcNsBindingUnexportPnP RpcNsBindingUnexportPnPA
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+RPC_STATUS WINAPI RpcNsBindingExportPnPA(unsigned long EntryNameSyntax, RPC_CSTR EntryName, RPC_IF_HANDLE IfSpec, UUID_VECTOR *ObjectVector);
+RPC_STATUS WINAPI RpcNsBindingExportPnPW(unsigned long EntryNameSyntax, RPC_WSTR EntryName, RPC_IF_HANDLE IfSpec, UUID_VECTOR *ObjectVector);
+RPC_STATUS WINAPI RpcNsBindingUnexportPnPA(unsigned long EntryNameSyntax, RPC_CSTR EntryName, RPC_IF_HANDLE IfSpec, UUID_VECTOR *ObjectVector);
+RPC_STATUS WINAPI RpcNsBindingUnexportPnPW(unsigned long EntryNameSyntax, RPC_WSTR EntryName, RPC_IF_HANDLE IfSpec, UUID_VECTOR *ObjectVector);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

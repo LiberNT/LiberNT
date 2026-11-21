@@ -520,4 +520,7 @@ StreamClassStreamNotification(
   _In_ PHW_STREAM_OBJECT StreamObject,
   ...);
 
+#define DebugLevelAlways 0
+#define MP_UNINITIALIZED_VALUE ((ULONG)0xFFFFFFFF)
+
 #endif /* _STREAM_H */

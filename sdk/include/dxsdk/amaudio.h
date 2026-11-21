@@ -31,4 +31,18 @@ DECLARE_INTERFACE_(IAMDirectSound,IUnknown)
 #ifdef __cplusplus
 }
 #endif
+
+typedef struct IAMDirectSoundVtbl IAMDirectSoundVtbl;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+HRESULT AMValidateAndFixWaveFormatEx(WAVEFORMATEX *pwfx, DWORD cb);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

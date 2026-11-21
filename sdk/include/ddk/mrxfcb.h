@@ -265,4 +265,37 @@ RxAcquireExclusiveFcbResourceInMRx(
 #define VNETROOT_FLAG_NOT_FINALIZED 0x00000008
 #endif
 
+#define MRX_NET_ROOT_STATE_CONNECTED ((UCHAR)4)
+#define MRX_NET_ROOT_STATE_DISCONNECTED ((UCHAR)2)
+#define MRX_NET_ROOT_STATE_ERROR ((UCHAR)3)
+#define MRX_NET_ROOT_STATE_PAUSED ((UCHAR)1)
+#define MRX_NET_ROOT_STATE_RECONN ((UCHAR)5)
+#define MRX_PURGE_SAME_NETROOT ((UCHAR)0)
+#define MRX_PURGE_SAME_SRVCALL ((UCHAR)1)
+#define MRX_PURGE_SYNC_AT_NETROOT ((UCHAR)0)
+#define MRX_PURGE_SYNC_AT_SRVCALL ((UCHAR)1)
+#define NET_ROOT_COMM ((UCHAR)2)
+#define RxInitializeNetRootThrottlingParameters__tp, __incr, __maxdelay) { PNETROOT_THROTTLING_PARAMETERS tp = (__tp); tp -> Increment = (__incr); tp -> MaximumDelay = (__maxdelay); \
+}
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+NTSTATUS RxAcquireSharedFcbResourceInMRx(PMRX_FCB Fcb);
+NTSTATUS RxAcquireSharedFcbResourceInMRxEx(PRX_CONTEXT pRxContext, PMRX_FCB Fcb);
+void RxReleaseFcbResourceForThreadInMRx(PRX_CONTEXT pRxContext, PMRX_FCB MrxFcb, ERESOURCE_THREAD ResourceThreadId);
+void RxReleaseFcbResourceInMRx(PMRX_FCB Fcb);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define RxInitializeNetRootThrottlingParameters__tp, __incr, __maxdelay) { PNETROOT_THROTTLING_PARAMETERS tp = (__tp); tp -> Increment = (__incr); tp -> MaximumDelay = (__maxdelay); \
+}
+
+#define RxInitializeNetRootThrottlingParameters__tp, __incr, __maxdelay) { PNETROOT_THROTTLING_PARAMETERS tp = (__tp); tp -> Increment = (__incr); tp -> MaximumDelay = (__maxdelay); \
+}
+
 #endif

@@ -1142,12 +1142,11 @@ DnsWriteQuestionToBuffer_UTF8(
 #define INTERNET_DEFAULT_DOT_PORT 853
 #endif
 
-typedef enum DNS_PROXY_INFORMATION_TYPE {
-    DNS_PROXY_INFORMATION_DIRECT = 0,
-    DNS_PROXY_INFORMATION_DEFAULT_SETTINGS = 1,
-    DNS_PROXY_INFORMATION_PROXY_NAME = 2,
-    DNS_PROXY_INFORMATION_DOES_NOT_EXIST = 3
-} DNS_PROXY_INFORMATION_TYPE;
+typedef enum _DNS_CONNECTION_PROXY_INFO_SWITCH {
+    DNS_CONNECTION_PROXY_INFO_SWITCH_CONFIG = 0,
+    DNS_CONNECTION_PROXY_INFO_SWITCH_SCRIPT = 1,
+    DNS_CONNECTION_PROXY_INFO_SWITCH_WPAD = 2
+} DNS_CONNECTION_PROXY_INFO_SWITCH;
 
 typedef enum _DNS_CONNECTION_PROXY_TYPE {
     DNS_CONNECTION_PROXY_TYPE_NULL = 0,
@@ -1157,41 +1156,23 @@ typedef enum _DNS_CONNECTION_PROXY_TYPE {
     DNS_CONNECTION_PROXY_TYPE_SOCKS5 = 5
 } DNS_CONNECTION_PROXY_TYPE;
 
-typedef enum _DNS_CONNECTION_PROXY_INFO_SWITCH {
-    DNS_CONNECTION_PROXY_INFO_SWITCH_CONFIG = 0,
-    DNS_CONNECTION_PROXY_INFO_SWITCH_SCRIPT = 1,
-    DNS_CONNECTION_PROXY_INFO_SWITCH_WPAD = 2
-} DNS_CONNECTION_PROXY_INFO_SWITCH;
-
 typedef enum DNS_CONNECTION_POLICY_TAG {
     TAG_DNS_CONNECTION_POLICY_TAG_DEFAULT = 0,
     TAG_DNS_CONNECTION_POLICY_TAG_CONNECTION_MANAGER = 1,
     TAG_DNS_CONNECTION_POLICY_TAG_WWWPT = 2
 } DNS_CONNECTION_POLICY_TAG;
 
-typedef struct DNS_PROXY_INFORMATION {
-  ULONG version;
-  DNS_PROXY_INFORMATION_TYPE proxyInformationType;
-  PWSTR proxyName;
-} DNS_PROXY_INFORMATION;
+typedef enum DNS_PROXY_INFORMATION_TYPE {
+    DNS_PROXY_INFORMATION_DIRECT = 0,
+    DNS_PROXY_INFORMATION_DEFAULT_SETTINGS = 1,
+    DNS_PROXY_INFORMATION_PROXY_NAME = 2,
+    DNS_PROXY_INFORMATION_DOES_NOT_EXIST = 3
+} DNS_PROXY_INFORMATION_TYPE;
 
 typedef struct _DNS_APPLICATION_SETTINGS {
   ULONG Version;
   ULONG64 Flags;
 } DNS_APPLICATION_SETTINGS;
-
-typedef struct _DNS_QUERY_RAW_CANCEL {
-  CHAR reserved[32];
-} DNS_QUERY_RAW_CANCEL;
-
-typedef struct _DNS_CONNECTION_NAME {
-  WCHAR wszName[65];
-} DNS_CONNECTION_NAME;
-
-typedef struct _DNS_CONNECTION_NAME_LIST {
-  DWORD cNames;
-  DNS_CONNECTION_NAME * pNames;
-} DNS_CONNECTION_NAME_LIST;
 
 typedef struct _DNS_CONNECTION_IFINDEX_ENTRY {
   PCWSTR pwszConnectionName;
@@ -1202,6 +1183,15 @@ typedef struct _DNS_CONNECTION_IFINDEX_LIST {
   DNS_CONNECTION_IFINDEX_ENTRY * pConnectionIfIndexEntries;
   DWORD nEntries;
 } DNS_CONNECTION_IFINDEX_LIST;
+
+typedef struct _DNS_CONNECTION_NAME {
+  WCHAR wszName[65];
+} DNS_CONNECTION_NAME;
+
+typedef struct _DNS_CONNECTION_NAME_LIST {
+  DWORD cNames;
+  DNS_CONNECTION_NAME * pNames;
+} DNS_CONNECTION_NAME_LIST;
 
 typedef struct _DNS_CONNECTION_POLICY_ENTRY {
   PCWSTR pwszHost;
@@ -1217,6 +1207,10 @@ typedef struct _DNS_CONNECTION_POLICY_ENTRY_LIST {
   DNS_CONNECTION_POLICY_ENTRY * pPolicyEntries;
   DWORD nEntries;
 } DNS_CONNECTION_POLICY_ENTRY_LIST;
+
+typedef struct _DNS_QUERY_RAW_CANCEL {
+  CHAR reserved[32];
+} DNS_QUERY_RAW_CANCEL;
 
 typedef struct _DNS_SERVICE_INSTANCE {
   LPWSTR pszInstanceName;
@@ -1239,5 +1233,239 @@ typedef struct _MDNS_QUERY_HANDLE {
   PVOID pWnfCallbackParams;
   ULONG stateNameData[2];
 } MDNS_QUERY_HANDLE, *PMDNS_QUERY_HANDLE;
+
+typedef struct DNS_PROXY_INFORMATION {
+  ULONG version;
+  DNS_PROXY_INFORMATION_TYPE proxyInformationType;
+  PWSTR proxyName;
+} DNS_PROXY_INFORMATION;
+
+#define DNS_IP4_REVERSE_DOMAIN_STRING 0
+#define DNS_IP4_REVERSE_DOMAIN_STRING_A 0
+#define DNS_IP4_REVERSE_DOMAIN_STRING_W (L"in-addr.arpa.")
+#define DNS_IP6_REVERSE_DOMAIN_STRING DNS_IP6_REVERSE_DOMAIN_STRING_A
+#define DNS_IP6_REVERSE_DOMAIN_STRING_A 0
+#define DNS_IP6_REVERSE_DOMAIN_STRING_W (L"ip6.arpa.")
+#define DNS_MAX_IP4_REVERSE_NAME_BUFFER_LENGTH DNS_MAX_IP4_REVERSE_NAME_LENGTH
+#define DNS_MAX_IP4_REVERSE_NAME_LENGTH (IP4_ADDRESS_STRING_LENGTH + 15)
+#define DNS_MAX_IP6_REVERSE_NAME_BUFFER_LENGTH 0x4B
+#define DNS_MAX_REVERSE_NAME_BUFFER_LENGTH 0x4B
+#define DNS_MAX_REVERSE_NAME_LENGTH 0x4B
+#define DNS_OFFSET_TO_QUESTION_NAME 0xC
+#define DNS_QUERY_CACHE_ONLY 0x10
+#define DNS_QUESTION_NAME_FROM_HEADER_pHeader_) ((PCHAR) ((PDNS_HEADER) (_pHeader_) + 1))
+#define DNS_VALSVR_ERROR_INVALID_ADDR 0x01
+#define DnsFreeRecordListDeep 1
+#define DnsRecordCopypRR) DnsRecordCopyEx((pRR), DnsCharSetAnsi, DnsCharSetAnsi)
+#define DnsRecordSetCopypRR) DnsRecordSetCopyEx((pRR), DnsCharSetAnsi, DnsCharSetAnsi)
+#define INLINE_DWORD_FLIPout, in) { DWORD _in = (in); (out) = ((_in << 8) & 0x00ff0000) | (_in << 24) | ((_in >> 8) & 0x0000ff00) | (_in >> 24); }
+#define INLINE_HTONLout, in) INLINE_DWORD_FLIP(out, in)
+#define INLINE_NTOHLout, in) INLINE_DWORD_FLIP(out, in)
+#define INLINE_WRITE_FLIPPED_DWORDpout, in) INLINE_DWORD_FLIP(* ((UNALIGNED DWORD *) (pout)), in)
+#define INLINE_WRITE_FLIPPED_WORDpout, in) INLINE_WORD_FLIP(* ((UNALIGNED WORD *) (pout)), in)
+#define INTERNET_DEFAULT_DNS_PORT 0x35
+#define IS_DWORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 3))
+#define IS_QWORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 7))
+#define IS_WORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 1))
+
+struct _DNS_QUERY_RAW_RESULT
+{
+    ULONG version;
+    DNS_STATUS queryStatus;
+    ULONG64 queryOptions;
+    ULONG64 queryRawOptions;
+    ULONG64 responseFlags;
+    ULONG queryRawResponseSize;
+    BYTE *queryRawResponse;
+    PDNS_RECORD queryRecords;
+    ULONG protocol;
+    union
+    {
+        CHAR maxSa[32];
+    };
+};
+
+typedef void (WINAPI *DNS_PROXY_COMPLETION_ROUTINE)(void *, DNS_STATUS);
+
+typedef struct _DNS_QUERY_RAW_RESULT DNS_QUERY_RAW_RESULT;
+
+typedef void (WINAPI *DNS_QUERY_RAW_COMPLETION_ROUTINE)(void *, DNS_QUERY_RAW_RESULT *);
+
+typedef void WINAPI DNS_SERVICE_REGISTER_COMPLETE(DWORD, PVOID, PDNS_SERVICE_INSTANCE);
+
+typedef void WINAPI DNS_SERVICE_RESOLVE_COMPLETE(DWORD, PVOID, PDNS_SERVICE_INSTANCE);
+
+typedef void WINAPI MDNS_QUERY_CALLBACK(PVOID, PMDNS_QUERY_HANDLE, PDNS_QUERY_RESULT);
+
+typedef DNS_SERVICE_REGISTER_COMPLETE *PDNS_SERVICE_REGISTER_COMPLETE;
+
+struct _DNS_SERVICE_REGISTER_REQUEST
+{
+    ULONG Version;
+    ULONG InterfaceIndex;
+    PDNS_SERVICE_INSTANCE pServiceInstance;
+    PDNS_SERVICE_REGISTER_COMPLETE pRegisterCompletionCallback;
+    PVOID pQueryContext;
+    HANDLE hCredentials;
+    BOOL unicastEnabled;
+};
+
+typedef struct _DNS_SERVICE_REGISTER_REQUEST DNS_SERVICE_REGISTER_REQUEST;
+
+typedef struct _DNS_SERVICE_REGISTER_REQUEST *PDNS_SERVICE_REGISTER_REQUEST;
+
+typedef DNS_SERVICE_RESOLVE_COMPLETE *PDNS_SERVICE_RESOLVE_COMPLETE;
+
+struct _DNS_SERVICE_RESOLVE_REQUEST
+{
+    ULONG Version;
+    ULONG InterfaceIndex;
+    PWSTR QueryName;
+    PDNS_SERVICE_RESOLVE_COMPLETE pResolveCompletionCallback;
+    PVOID pQueryContext;
+};
+
+typedef struct _DNS_SERVICE_RESOLVE_REQUEST DNS_SERVICE_RESOLVE_REQUEST;
+
+typedef struct _DNS_SERVICE_RESOLVE_REQUEST *PDNS_SERVICE_RESOLVE_REQUEST;
+
+typedef MDNS_QUERY_CALLBACK *PMDNS_QUERY_CALLBACK;
+
+struct _MDNS_QUERY_REQUEST
+{
+    ULONG Version;
+    ULONG ulRefCount;
+    PCWSTR Query;
+    WORD QueryType;
+    ULONG64 QueryOptions;
+    ULONG InterfaceIndex;
+    PMDNS_QUERY_CALLBACK pQueryCallback;
+    PVOID pQueryContext;
+    BOOL fAnswerReceived;
+    ULONG ulResendCount;
+};
+
+typedef struct _MDNS_QUERY_REQUEST MDNS_QUERY_REQUEST;
+
+typedef struct _MDNS_QUERY_REQUEST *PMDNS_QUERY_REQUEST;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+DNS_STATUS WINAPI DnsCancelQueryRaw(DNS_QUERY_RAW_CANCEL *cancelHandle);
+DWORD DnsConnectionDeletePolicyEntries(DNS_CONNECTION_POLICY_TAG PolicyEntryTag);
+DWORD DnsConnectionDeleteProxyInfo(PCWSTR pwszConnectionName, DNS_CONNECTION_PROXY_TYPE Type);
+void DnsConnectionFreeNameList(DNS_CONNECTION_NAME_LIST *pNameList);
+DWORD DnsConnectionGetNameList(DNS_CONNECTION_NAME_LIST *pNameList);
+DWORD DnsConnectionSetPolicyEntries(DNS_CONNECTION_POLICY_TAG PolicyEntryTag, DNS_CONNECTION_POLICY_ENTRY_LIST *pPolicyEntryList);
+DWORD DnsConnectionUpdateIfIndexTable(DNS_CONNECTION_IFINDEX_LIST *pConnectionIfIndexEntries);
+void DnsFreeProxyName(PWSTR proxyName);
+DWORD WINAPI DnsGetProxyInformation(PCWSTR hostName, DNS_PROXY_INFORMATION *proxyInformation, DNS_PROXY_INFORMATION *defaultProxyInformation, DNS_PROXY_COMPLETION_ROUTINE completionRoutine, void *completionContext);
+DNS_STATUS WINAPI DnsIsFlatRecord(PDNS_RECORD pRecord, ULONG64 ullFlags, BOOL *pfFlat);
+BOOL WINAPI DnsIsZtEnabled(void);
+void DnsQueryRawResultFree(DNS_QUERY_RAW_RESULT *queryResults);
+DNS_STATUS WINAPI DnsServiceBrowseCancel(PDNS_SERVICE_CANCEL pCancelHandle);
+PDNS_SERVICE_INSTANCE WINAPI DnsServiceConstructInstance(PCWSTR pServiceName, PCWSTR pHostName, PIP4_ADDRESS pIp4, PIP6_ADDRESS pIp6, WORD wPort, WORD wPriority, WORD wWeight, DWORD dwPropertiesCount, PCWSTR *keys, PCWSTR *values);
+PDNS_SERVICE_INSTANCE WINAPI DnsServiceCopyInstance(PDNS_SERVICE_INSTANCE pOrig);
+DWORD WINAPI DnsServiceDeRegister(PDNS_SERVICE_REGISTER_REQUEST pRequest, PDNS_SERVICE_CANCEL pCancel);
+void DnsServiceFreeInstance(PDNS_SERVICE_INSTANCE pInstance);
+DWORD WINAPI DnsServiceRegister(PDNS_SERVICE_REGISTER_REQUEST pRequest, PDNS_SERVICE_CANCEL pCancel);
+DWORD WINAPI DnsServiceRegisterCancel(PDNS_SERVICE_CANCEL pCancelHandle);
+DNS_STATUS WINAPI DnsServiceResolve(PDNS_SERVICE_RESOLVE_REQUEST pRequest, PDNS_SERVICE_CANCEL pCancel);
+DNS_STATUS WINAPI DnsServiceResolveCancel(PDNS_SERVICE_CANCEL pCancelHandle);
+DNS_STATUS WINAPI DnsStartMulticastQuery(PMDNS_QUERY_REQUEST pQueryRequest, PMDNS_QUERY_HANDLE pHandle);
+DNS_STATUS WINAPI DnsStopMulticastQuery(PMDNS_QUERY_HANDLE pHandle);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define DNS_QUESTION_NAME_FROM_HEADER_pHeader_) ((PCHAR) ((PDNS_HEADER) (_pHeader_) + 1))
+#define DnsRecordCopypRR) DnsRecordCopyEx((pRR), DnsCharSetAnsi, DnsCharSetAnsi)
+#define DnsRecordSetCopypRR) DnsRecordSetCopyEx((pRR), DnsCharSetAnsi, DnsCharSetAnsi)
+#define INLINE_HTONLout, in) INLINE_DWORD_FLIP(out, in)
+#define INLINE_NTOHLout, in) INLINE_DWORD_FLIP(out, in)
+#define INLINE_WRITE_FLIPPED_DWORDpout, in) INLINE_DWORD_FLIP(* ((UNALIGNED DWORD *) (pout)), in)
+#define INLINE_WRITE_FLIPPED_WORDpout, in) INLINE_WORD_FLIP(* ((UNALIGNED WORD *) (pout)), in)
+#define IS_DWORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 3))
+#define IS_QWORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 7))
+#define IS_WORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 1))
+
+struct _DNS_CONNECTION_PROXY_INFO
+{
+    DWORD Version;
+    WCHAR *pwszFriendlyName;
+    DWORD Flags;
+    DNS_CONNECTION_PROXY_INFO_SWITCH Switch;
+    union
+    {
+        struct _DNS_CONNECTION_PROXY_INFO_CONFIG Config;
+        struct _DNS_CONNECTION_PROXY_INFO_SCRIPT Script;
+    };
+};
+
+typedef struct _DNS_CONNECTION_PROXY_ELEMENT DNS_CONNECTION_PROXY_ELEMENT;
+
+struct _DNS_CONNECTION_PROXY_LIST
+{
+    DWORD cProxies;
+    DNS_CONNECTION_PROXY_ELEMENT *pProxies;
+};
+
+typedef struct _DNS_CONNECTION_PROXY_INFO DNS_CONNECTION_PROXY_INFO;
+
+struct _DNS_CONNECTION_PROXY_ELEMENT
+{
+    DNS_CONNECTION_PROXY_TYPE Type;
+    DNS_CONNECTION_PROXY_INFO Info;
+};
+
+struct _DNS_CONNECTION_PROXY_INFO_EX
+{
+    DNS_CONNECTION_PROXY_INFO ProxyInfo;
+    DWORD dwInterfaceIndex;
+    WCHAR *pwszConnectionName;
+    BOOL fDirectConfiguration;
+    HANDLE hConnection;
+};
+
+typedef struct _DNS_CONNECTION_PROXY_INFO_EX DNS_CONNECTION_PROXY_INFO_EX;
+
+typedef struct _DNS_CONNECTION_PROXY_LIST DNS_CONNECTION_PROXY_LIST;
+
+typedef struct _DNS_CONNECTION_PROXY_INFO *PDNS_CONNECTION_PROXY_INFO;
+
+typedef struct _DNS_CONNECTION_PROXY_INFO_EX *PDNS_CONNECTION_PROXY_INFO_EX;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+void DnsConnectionFreeProxyInfo(DNS_CONNECTION_PROXY_INFO *pProxyInfo);
+void DnsConnectionFreeProxyInfoEx(DNS_CONNECTION_PROXY_INFO_EX *pProxyInfoEx);
+void DnsConnectionFreeProxyList(DNS_CONNECTION_PROXY_LIST *pProxyList);
+DWORD DnsConnectionGetProxyInfo(PCWSTR pwszConnectionName, DNS_CONNECTION_PROXY_TYPE Type, DNS_CONNECTION_PROXY_INFO *pProxyInfo);
+DWORD DnsConnectionGetProxyInfoForHostUrl(PCWSTR pwszHostUrl, BYTE *pSelectionContext, DWORD dwSelectionContextLength, DWORD dwExplicitInterfaceIndex, DNS_CONNECTION_PROXY_INFO_EX *pProxyInfoEx);
+DWORD DnsConnectionGetProxyInfoForHostUrlEx(PCWSTR pwszHostUrl, BYTE *pSelectionContext, DWORD dwSelectionContextLength, DWORD dwExplicitInterfaceIndex, PCWSTR pwszConnectionName, DNS_CONNECTION_PROXY_INFO_EX *pProxyInfoEx);
+DWORD DnsConnectionGetProxyList(PCWSTR pwszConnectionName, DNS_CONNECTION_PROXY_LIST *pProxyList);
+DWORD DnsConnectionSetProxyInfo(PCWSTR pwszConnectionName, DNS_CONNECTION_PROXY_TYPE Type, const DNS_CONNECTION_PROXY_INFO *pProxyInfo);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define DNS_QUESTION_NAME_FROM_HEADER_pHeader_) ((PCHAR) ((PDNS_HEADER) (_pHeader_) + 1))
+#define DnsRecordCopypRR) DnsRecordCopyEx((pRR), DnsCharSetAnsi, DnsCharSetAnsi)
+#define DnsRecordSetCopypRR) DnsRecordSetCopyEx((pRR), DnsCharSetAnsi, DnsCharSetAnsi)
+#define INLINE_HTONLout, in) INLINE_DWORD_FLIP(out, in)
+#define INLINE_NTOHLout, in) INLINE_DWORD_FLIP(out, in)
+#define INLINE_WRITE_FLIPPED_DWORDpout, in) INLINE_DWORD_FLIP(* ((UNALIGNED DWORD *) (pout)), in)
+#define INLINE_WRITE_FLIPPED_WORDpout, in) INLINE_WORD_FLIP(* ((UNALIGNED WORD *) (pout)), in)
+#define IS_DWORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 3))
+#define IS_QWORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 7))
+#define IS_WORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 1))
 
 #endif /* _WINDNS_INCLUDED_ */

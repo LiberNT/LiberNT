@@ -6747,6 +6747,15 @@ typedef struct _ProcessorPerformance {
 
 #ifndef COMMIT_POLICY_OUT_Status_ID
 #define COMMIT_POLICY_OUT_Status_ID 1
+typedef struct _COMMIT_POLICY_OUT {
+  ULONG Status;
+} COMMIT_POLICY_OUT, *PCOMMIT_POLICY_OUT;
+
+typedef struct _CounterCorruptionStatus {
+  ULONG ProfileSource;
+  ULONGLONG LastKnownGoodTimestamp;
+} CounterCorruptionStatus, *PCounterCorruptionStatus;
+
 typedef struct _GET_ALL_POLICY_OUT {
   ULONG Status;
   ULONG Count;
@@ -6762,43 +6771,6 @@ typedef struct _GET_SINGLE_POLICY_OUT {
   ULONG Status;
   ULONG Value;
 } GET_SINGLE_POLICY_OUT, *PGET_SINGLE_POLICY_OUT;
-
-typedef struct _SET_SINGLE_POLICY_IN {
-  ULONG Type;
-  ULONG Value;
-} SET_SINGLE_POLICY_IN, *PSET_SINGLE_POLICY_IN;
-
-typedef struct _SET_SINGLE_POLICY_OUT {
-  ULONG Status;
-} SET_SINGLE_POLICY_OUT, *PSET_SINGLE_POLICY_OUT;
-
-typedef struct _COMMIT_POLICY_OUT {
-  ULONG Status;
-} COMMIT_POLICY_OUT, *PCOMMIT_POLICY_OUT;
-
-typedef struct _RESET_POLICY_OUT {
-  ULONG Status;
-} RESET_POLICY_OUT, *PRESET_POLICY_OUT;
-
-typedef struct _WHEA_PLUGIN_CTL_INTERFACE_IN {
-  ULONG InputLength;
-  UCHAR InputBuffer[1];
-} WHEA_PLUGIN_CTL_INTERFACE_IN, *PWHEA_PLUGIN_CTL_INTERFACE_IN;
-
-typedef struct _WHEA_PLUGIN_CTL_INTERFACE_OUT {
-  ULONG Status;
-  ULONG OutputLength;
-  UCHAR OutputBuffer[1];
-} WHEA_PLUGIN_CTL_INTERFACE_OUT, *PWHEA_PLUGIN_CTL_INTERFACE_OUT;
-
-typedef struct _WHEA_PAGE_OFFLINING_INTERFACE_IN {
-  ULONG InputLength;
-  UCHAR InputBuffer[1];
-} WHEA_PAGE_OFFLINING_INTERFACE_IN, *PWHEA_PAGE_OFFLINING_INTERFACE_IN;
-
-typedef struct _WHEA_PAGE_OFFLINING_INTERFACE_OUT {
-  ULONG Status;
-} WHEA_PAGE_OFFLINING_INTERFACE_OUT, *PWHEA_PAGE_OFFLINING_INTERFACE_OUT;
 
 typedef struct _MSNdis_NetworkDirectState {
   BOOLEAN Enabled;
@@ -6856,10 +6828,130 @@ typedef struct _MSNdis_StatusExternalConnectivityChange {
   ULONG NdisMediaConnectStatus;
 } MSNdis_StatusExternalConnectivityChange, *PMSNdis_StatusExternalConnectivityChange;
 
-typedef struct _CounterCorruptionStatus {
-  ULONG ProfileSource;
-  ULONGLONG LastKnownGoodTimestamp;
-} CounterCorruptionStatus, *PCounterCorruptionStatus;
+typedef struct _RESET_POLICY_OUT {
+  ULONG Status;
+} RESET_POLICY_OUT, *PRESET_POLICY_OUT;
+
+typedef struct _SET_SINGLE_POLICY_IN {
+  ULONG Type;
+  ULONG Value;
+} SET_SINGLE_POLICY_IN, *PSET_SINGLE_POLICY_IN;
+
+typedef struct _SET_SINGLE_POLICY_OUT {
+  ULONG Status;
+} SET_SINGLE_POLICY_OUT, *PSET_SINGLE_POLICY_OUT;
+
+typedef struct _WHEA_PAGE_OFFLINING_INTERFACE_IN {
+  ULONG InputLength;
+  UCHAR InputBuffer[1];
+} WHEA_PAGE_OFFLINING_INTERFACE_IN, *PWHEA_PAGE_OFFLINING_INTERFACE_IN;
+
+typedef struct _WHEA_PAGE_OFFLINING_INTERFACE_OUT {
+  ULONG Status;
+} WHEA_PAGE_OFFLINING_INTERFACE_OUT, *PWHEA_PAGE_OFFLINING_INTERFACE_OUT;
+
+typedef struct _WHEA_PLUGIN_CTL_INTERFACE_IN {
+  ULONG InputLength;
+  UCHAR InputBuffer[1];
+} WHEA_PLUGIN_CTL_INTERFACE_IN, *PWHEA_PLUGIN_CTL_INTERFACE_IN;
+
+typedef struct _WHEA_PLUGIN_CTL_INTERFACE_OUT {
+  ULONG Status;
+  ULONG OutputLength;
+  UCHAR OutputBuffer[1];
+} WHEA_PLUGIN_CTL_INTERFACE_OUT, *PWHEA_PLUGIN_CTL_INTERFACE_OUT;
+
+#define _wmidata_h_ 0
+#define COMMIT_POLICY_OUT_SIZE 4
+#define COMMIT_POLICY_OUT_Status_SIZE 4
+#define CounterCorruptionStatus_LastKnownGoodTimestamp_SIZE 8
+#define CounterCorruptionStatus_ProfileSource_ID 1
+#define CounterCorruptionStatus_ProfileSource_SIZE sizeof (ULONG)
+#define CounterCorruptionStatus_SIZE 0x10
+#define CounterCorruptionStatusGuid 0
+#define GET_ALL_POLICY_OUT_Count_SIZE 4
+#define GET_ALL_POLICY_OUT_Length_SIZE 4
+#define GET_ALL_POLICY_OUT_Status_SIZE 4
+#define GET_SINGLE_POLICY_IN_SIZE 4
+#define GET_SINGLE_POLICY_IN_Type_SIZE 4
+#define GET_SINGLE_POLICY_OUT_SIZE 8
+#define GET_SINGLE_POLICY_OUT_Status_SIZE 4
+#define GET_SINGLE_POLICY_OUT_Value_SIZE 4
+#define MSNdis_NetworkDirectAdapterCapabilities_MaxCqCount_SIZE 4
+#define MSNdis_NetworkDirectAdapterCapabilities_MaxInboundReadLimit_SIZE 4
+#define MSNdis_NetworkDirectAdapterCapabilities_MaxMrCount_SIZE 4
+#define MSNdis_NetworkDirectAdapterCapabilities_MaxMwCount_SIZE 4
+#define MSNdis_NetworkDirectAdapterCapabilities_MaxOutboundReadLimit_SIZE 4
+#define MSNdis_NetworkDirectAdapterCapabilities_MaxPdCount_SIZE 4
+#define MSNdis_NetworkDirectAdapterCapabilities_MaxQpCount_ID 1
+#define MSNdis_NetworkDirectAdapterCapabilities_MaxQpCount_SIZE sizeof (ULONG)
+#define MSNdis_NetworkDirectAdapterCapabilities_MaxSrqCount_SIZE 4
+#define MSNdis_NetworkDirectAdapterCapabilities_MissingCounterMask_SIZE 8
+#define MSNdis_NetworkDirectAdapterCapabilities_NdAdapterInfo_SIZE 0x60
+#define MSNdis_NetworkDirectAdapterCapabilities_SIZE 0x88
+#define MSNdis_NetworkDirectAdapterCapabilitiesGuid 0
+#define MSNdis_NetworkDirectAdapterInfo_DeviceId_SIZE 4
+#define MSNdis_NetworkDirectAdapterInfo_FRMRPageCount_SIZE 4
+#define MSNdis_NetworkDirectAdapterInfo_InOrderDMA_SIZE 1
+#define MSNdis_NetworkDirectAdapterInfo_LargeRequestThreshold_SIZE 4
+#define MSNdis_NetworkDirectAdapterInfo_MaxCalleeData_SIZE 4
+#define MSNdis_NetworkDirectAdapterInfo_MaxCallerData_SIZE 4
+#define MSNdis_NetworkDirectAdapterInfo_MaxCqDepth_SIZE 4
+#define MSNdis_NetworkDirectAdapterInfo_MaxInboundReadLimit_SIZE 4
+#define MSNdis_NetworkDirectAdapterInfo_MaxInitiatorQueueDepth_SIZE 4
+#define MSNdis_NetworkDirectAdapterInfo_MaxInitiatorRequestSge_SIZE 4
+#define MSNdis_NetworkDirectAdapterInfo_MaxInlineDataSize_SIZE 4
+#define MSNdis_NetworkDirectAdapterInfo_MaxOutboundReadLimit_SIZE 4
+#define MSNdis_NetworkDirectAdapterInfo_MaxReadRequestSge_SIZE 4
+#define MSNdis_NetworkDirectAdapterInfo_MaxReceiveQueueDepth_SIZE 4
+#define MSNdis_NetworkDirectAdapterInfo_MaxReceiveRequestSge_SIZE 4
+#define MSNdis_NetworkDirectAdapterInfo_MaxRegistrationSize_SIZE 8
+#define MSNdis_NetworkDirectAdapterInfo_MaxSrqDepth_SIZE 4
+#define MSNdis_NetworkDirectAdapterInfo_MaxTransferLength_SIZE 4
+#define MSNdis_NetworkDirectAdapterInfo_MaxWindowSize_SIZE 8
+#define MSNdis_NetworkDirectAdapterInfo_SIZE 0x5F
+#define MSNdis_NetworkDirectAdapterInfo_SupportsCQResize_SIZE 1
+#define MSNdis_NetworkDirectAdapterInfo_SupportsLoopbackConnections_SIZE 1
+#define MSNdis_NetworkDirectAdapterInfo_VendorId_SIZE 4
+#define MSNdis_NetworkDirectAdapterInfo_Version_ID 1
+#define MSNdis_NetworkDirectAdapterInfo_Version_SIZE sizeof (MSNdis_NetworkDirectVersion)
+#define MSNdis_NetworkDirectAdapterInfoGuid 0
+#define MSNdis_NetworkDirectCapabilities_NdCapabilities_ID 1
+#define MSNdis_NetworkDirectCapabilities_NdCapabilities_SIZE sizeof (MSNdis_NetworkDirectAdapterCapabilities)
+#define MSNdis_NetworkDirectCapabilities_SIZE 0x88
+#define MSNdis_NetworkDirectCapabilitiesGuid 0
+#define MSNdis_NetworkDirectState_Enabled_ID 1
+#define MSNdis_NetworkDirectState_Enabled_SIZE sizeof (BOOLEAN)
+#define MSNdis_NetworkDirectState_SIZE 1
+#define MSNdis_NetworkDirectStateGuid 0
+#define MSNdis_NetworkDirectVersion_MajorVersionNumber_ID 1
+#define MSNdis_NetworkDirectVersion_MajorVersionNumber_SIZE sizeof (USHORT)
+#define MSNdis_NetworkDirectVersion_MinorVersionNumber_SIZE 2
+#define MSNdis_NetworkDirectVersion_SIZE 4
+#define MSNdis_NetworkDirectVersionGuid 0
+#define MSNdis_StatusExternalConnectivityChange_NdisMediaConnectStatus_ID 1
+#define MSNdis_StatusExternalConnectivityChange_NdisMediaConnectStatus_SIZE sizeof (ULONG)
+#define MSNdis_StatusExternalConnectivityChange_SIZE 4
+#define MSNdis_StatusExternalConnectivityChangeGuid 0
+#define RESET_POLICY_OUT_SIZE 4
+#define RESET_POLICY_OUT_Status_SIZE 4
+#define SET_SINGLE_POLICY_IN_SIZE 8
+#define SET_SINGLE_POLICY_IN_Type_SIZE 4
+#define SET_SINGLE_POLICY_IN_Value_SIZE 4
+#define SET_SINGLE_POLICY_OUT_SIZE 4
+#define SET_SINGLE_POLICY_OUT_Status_SIZE 4
+#define WHEA_PAGE_OFFLINING_INTERFACE_IN_InputLength_SIZE 4
+#define WHEA_PAGE_OFFLINING_INTERFACE_OUT_SIZE 4
+#define WHEA_PAGE_OFFLINING_INTERFACE_OUT_Status_SIZE 4
+#define WHEA_PLUGIN_CTL_INTERFACE_IN_InputLength_SIZE 4
+#define WHEA_PLUGIN_CTL_INTERFACE_OUT_OutputLength_SIZE 4
+#define WHEA_PLUGIN_CTL_INTERFACE_OUT_Status_SIZE 4
+#define WheaGetAllPolicyRtn 1
+#define WheaPageOfflineInterfaceRtn 1
+#define WHEAPageOfflineMethodsGuid 0
+#define WheaPluginCtlInterfaceRtn 1
+#define WHEAPluginCtlMethodsGuid 0
+#define WHEAPolicyManagementMethodsGuid 0
 
 #endif
 #ifndef CounterCorruptionStatus_LastKnownGoodTimestamp_ID

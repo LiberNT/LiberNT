@@ -58,5 +58,8 @@ typedef NEWCPLINFOA NEWCPLINFO,*LPNEWCPLINFO;
 }
 #endif
 #pragma pack(pop)
+
+#define _INC_CPL 0
+
 #endif
 

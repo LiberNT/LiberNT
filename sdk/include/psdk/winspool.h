@@ -1865,8 +1865,8 @@ typedef enum PRINT_EXECUTION_CONTEXT {
 } PRINT_EXECUTION_CONTEXT;
 
 typedef struct _FORM_INFO_2A * LPFORM_INFO_2A;
-typedef struct _FORM_INFO_2W * LPFORM_INFO_2W;
 typedef LPFORM_INFO_2A LPFORM_INFO_2;
+typedef struct _FORM_INFO_2W * LPFORM_INFO_2W;
 
 typedef struct _JOB_INFO_4A {
   DWORD JobId;
@@ -1922,16 +1922,6 @@ typedef struct _JOB_INFO_4W {
   LONG SizeHigh;
 } JOB_INFO_4W, *PJOB_INFO_4W, *LPJOB_INFO_4W;
 
-typedef struct _PRINTER_OPTIONSA {
-  UINT cbSize;
-  DWORD dwFlags;
-} PRINTER_OPTIONSA, *PPRINTER_OPTIONSA, *LPPRINTER_OPTIONSA;
-
-typedef struct _PRINTER_OPTIONSW {
-  UINT cbSize;
-  DWORD dwFlags;
-} PRINTER_OPTIONSW, *PPRINTER_OPTIONSW, *LPPRINTER_OPTIONSW;
-
 typedef struct _PRINTER_CONNECTION_INFO_1A {
   DWORD dwFlags;
   LPSTR pszDriverName;
@@ -1942,9 +1932,92 @@ typedef struct _PRINTER_CONNECTION_INFO_1W {
   LPWSTR pszDriverName;
 } PRINTER_CONNECTION_INFO_1W, *PPRINTER_CONNECTION_INFO_1W;
 
+typedef struct _PRINTER_OPTIONSA {
+  UINT cbSize;
+  DWORD dwFlags;
+} PRINTER_OPTIONSA, *PPRINTER_OPTIONSA, *LPPRINTER_OPTIONSA;
+
+typedef struct _PRINTER_OPTIONSW {
+  UINT cbSize;
+  DWORD dwFlags;
+} PRINTER_OPTIONSW, *PPRINTER_OPTIONSW, *LPPRINTER_OPTIONSW;
+
 typedef struct PRINT_EXECUTION_DATA {
   PRINT_EXECUTION_CONTEXT context;
   DWORD clientAppPID;
 } PRINT_EXECUTION_DATA;
+
+#define BIDI_ACTION_GET_WITH_ARGUMENT L"GetWithArgument"
+#ifdef UNICODE
+#define CorePrinterDriverInstalled CorePrinterDriverInstalledW
+#else
+#define CorePrinterDriverInstalled CorePrinterDriverInstalledA
+#endif
+#define ERROR_BIDI_DEVICE_CONFIG_UNCHANGED 0x32D6
+#define ERROR_BIDI_GET_ARGUMENT_NOT_SUPPORTED 0x32D4
+#define ERROR_BIDI_GET_MISSING_ARGUMENT 0x32D5
+#define ERROR_BIDI_GET_REQUIRES_ARGUMENT 0x32D3
+#define ERROR_BIDI_NO_BIDI_SCHEMA_EXTENSIONS 0x32D8
+#define ERROR_BIDI_NO_LOCALIZED_RESOURCES 0x32D7
+#define ERROR_BIDI_SCHEMA_WRITE_ONLY 0x32D2
+#define ERROR_BIDI_SET_DIFFERENT_TYPE 0x32CE
+#define ERROR_BIDI_SET_INVALID_SCHEMAPATH 0x32D0
+#define ERROR_BIDI_SET_MULTIPLE_SCHEMAPATH 0x32CF
+#define ERROR_BIDI_SET_UNKNOWN_FAILURE 0x32D1
+#define ERROR_BIDI_UNSUPPORTED_CLIENT_LANGUAGE 0x32D9
+#define ERROR_BIDI_UNSUPPORTED_RESOURCE_FORMAT 0x32DA
+#define InstallPrinterDriverFromPackage 0
+#define IPDFP_COPY_ALL_FILES 0x00000001
+#define MAX_FORM_KEYWORD_LENGTH 0x40
+#define MS_PRINT_JOB_OUTPUT_FILE L"MsPrintJobOutputFile"
+#define PPCAPS_DONT_SEND_EXTRA_PAGES_FOR_DUPLEX 2
+#define PPCAPS_DOWN_THEN_LEFT 8
+#define PPCAPS_DOWN_THEN_RIGHT 2
+#define PPCAPS_LEFT_THEN_DOWN 4
+#define SPLDS_PRINT_IPP_COMPRESSION_SUPPORTED TEXT("ippCompressionSupported")
+#define SPLREG_PRINT_DRIVER_ISOLATION_EXECUTION_POLICY TEXT("PrintDriverIsolationExecutionPolicy")
+#define SPLREG_PRINT_DRIVER_ISOLATION_GROUPS 0
+#define SPLREG_PRINT_DRIVER_ISOLATION_GROUPS_SEPARATOR L'\\'
+#define SPLREG_PRINT_DRIVER_ISOLATION_IDLE_TIMEOUT TEXT("PrintDriverIsolationIdleTimeout")
+#define SPLREG_PRINT_DRIVER_ISOLATION_MAX_OBJECTS_BEFORE_RECYCLE TEXT("PrintDriverIsolationMaxobjsBeforeRecycle")
+#define SPLREG_PRINT_DRIVER_ISOLATION_OVERRIDE_POLICY TEXT("PrintDriverIsolationOverrideCompat")
+#define SPLREG_PRINT_DRIVER_ISOLATION_TIME_BEFORE_RECYCLE TEXT("PrintDriverIsolationTimeBeforeRecycle")
+#define SPLREG_PRINT_QUEUE_V4_DRIVER_DIRECTORY TEXT("PrintQueueV4DriverDirectory")
+#define UPDP_SILENT_UPLOAD 0x00000001
+
+typedef JOB_INFO_4A JOB_INFO_4;
+
+typedef LPJOB_INFO_4A LPJOB_INFO_4;
+
+typedef LPPRINTER_OPTIONSA LPPRINTER_OPTIONS;
+
+typedef PJOB_INFO_4A PJOB_INFO_4;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+HRESULT WINAPI CorePrinterDriverInstalledA(LPCSTR pszServer, LPCSTR pszEnvironment, GUID CoreDriverGUID, FILETIME ftDriverDate, DWORDLONG dwlDriverVersion, BOOL *pbDriverInstalled);
+HRESULT WINAPI CorePrinterDriverInstalledW(LPCWSTR pszServer, LPCWSTR pszEnvironment, GUID CoreDriverGUID, FILETIME ftDriverDate, DWORDLONG dwlDriverVersion, BOOL *pbDriverInstalled);
+DWORD WINAPI DeleteJobNamedProperty(HANDLE hPrinter, DWORD JobId, PCWSTR pszName);
+DWORD WINAPI EnumJobNamedProperties(HANDLE hPrinter, DWORD JobId, DWORD *pcProperties, PrintNamedProperty **ppProperties);
+void WINAPI FreePrintNamedPropertyArray(DWORD cProperties, PrintNamedProperty **ppProperties);
+void WINAPI FreePrintPropertyValue(PrintPropertyValue *pValue);
+DWORD WINAPI GetJobNamedPropertyValue(HANDLE hPrinter, DWORD JobId, PCWSTR pszName, PrintPropertyValue *pValue);
+BOOL WINAPI GetPrintExecutionData(PRINT_EXECUTION_DATA *pData);
+HRESULT WINAPI GetPrintOutputInfo(HWND hWnd, PCWSTR pszPrinter, HANDLE *phFile, PWSTR *ppszOutputFile);
+HRESULT WINAPI InstallPrinterDriverFromPackageA(LPCSTR pszServer, LPCSTR pszInfPath, LPCSTR pszDriverName, LPCSTR pszEnvironment, DWORD dwFlags);
+HRESULT WINAPI InstallPrinterDriverFromPackageW(LPCWSTR pszServer, LPCWSTR pszInfPath, LPCWSTR pszDriverName, LPCWSTR pszEnvironment, DWORD dwFlags);
+DWORD WINAPI SetJobNamedProperty(HANDLE hPrinter, DWORD JobId, const PrintNamedProperty *pProperty);
+
+#ifdef __cplusplus
+}
+#endif
+
+enum _PRINTER_OPTION_FLAGS
+{
+    PRINTER_OPTION_NO_CLIENT_DATA = 8,
+};
 
 #endif

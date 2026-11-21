@@ -67,23 +67,23 @@ extern "C++" template<typename T> void **IID_PPV_ARGS_Helper(T **obj)
 }
 #endif
 
-typedef enum tagCOINITBASE {
-    COINITBASE_MULTITHREADED = 0
-} COINITBASE;
-
 typedef enum CWMO_FLAGS {
     CWMO_DEFAULT = 0,
     CWMO_DISPATCH_CALLS = 1,
     CWMO_DISPATCH_WINDOW_MESSAGES = 2
 } CWMO_FLAGS;
 
+typedef enum tagCOINITBASE {
+    COINITBASE_MULTITHREADED = 0
+} COINITBASE;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-HRESULT WINAPI CoGetDefaultContext(APTTYPE aptType, const IID *const riid, void ** ppv);
-HRESULT WINAPI CoDisconnectContext(DWORD dwTimeout);
 HRESULT WINAPI CoCreateInstanceFromApp(const IID *const Clsid, IUnknown * punkOuter, DWORD dwClsCtx, PVOID reserved, DWORD dwCount, MULTI_QI * pResults);
+HRESULT WINAPI CoDisconnectContext(DWORD dwTimeout);
 HRESULT WINAPI CoGetCancelObject(DWORD dwThreadId, const IID *const iid, void ** ppUnk);
+HRESULT WINAPI CoGetDefaultContext(APTTYPE aptType, const IID *const riid, void ** ppv);
 #ifdef __cplusplus
 }
 #endif
@@ -91,6 +91,43 @@ HRESULT WINAPI CoGetCancelObject(DWORD dwThreadId, const IID *const iid, void **
 typedef struct CO_DEVICE_CATALOG_COOKIE__ {
   int unused;
 } *CO_DEVICE_CATALOG_COOKIE;
+
+#define _CO_DEVICE_CATALOG_ 0
+#define _CRT_INTERNAL_COMBASE_SYMBOL_PREFIX 0
+#define DECLARE_INTERFACE_IIDiface, iid) DECLARE_INTERFACE(iface)
+
+struct CO_MTA_USAGE_COOKIE__
+{
+    int unused;
+};
+
+typedef HRESULT (WINAPI *LPFNCANUNLOADNOW)(void);
+
+typedef HRESULT (WINAPI *LPFNGETCLASSOBJECT)(const IID *const , const IID *const , LPVOID *);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+HRESULT WINAPI CLSIDFromProgIDEx(LPCOLESTR lpszProgID, LPCLSID lpclsid);
+HRESULT WINAPI CoGetCallerTID(LPDWORD lpdwTID);
+
+/* TODO: LiberNT does not implement the functions below yet */
+HRESULT CoAllowUnmarshalerCLSID(const IID *const clsid);
+HRESULT CoInvalidateRemoteMachineBindings(LPOLESTR pszMachineName);
+HRESULT CoRegisterDeviceCatalog(PCWSTR deviceInstanceId, CO_DEVICE_CATALOG_COOKIE *cookie);
+HRESULT CoRevokeDeviceCatalog(CO_DEVICE_CATALOG_COOKIE cookie);
+HRESULT CoSetCancelObject(IUnknown *pUnk);
+HRESULT CoTestCancel(void);
+HRESULT CoWaitForMultipleObjects(DWORD dwFlags, DWORD dwTimeout, ULONG cHandles, const HANDLE *pHandles, LPDWORD lpdwindex);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define DECLARE_INTERFACE_IIDiface, iid) DECLARE_INTERFACE(iface)
+
+#define DECLARE_INTERFACE_IIDiface, iid) DECLARE_INTERFACE(iface)
 
 #endif /* _COMBASEAPI_H_ */
 

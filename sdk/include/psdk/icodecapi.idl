@@ -61,3 +61,25 @@ interface ICodecAPI : IUnknown
 
     HRESULT SetAllSettingsWithNotify([in] IStream* stream, [out, size_is(,*count)] GUID **param, [out] ULONG *count);
 }
+
+cpp_quote("struct ICodecAPIVtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ICodecAPI *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ICodecAPI *);")
+cpp_quote("    ULONG (WINAPI *Release)(ICodecAPI *);")
+cpp_quote("    HRESULT (WINAPI *IsSupported)(ICodecAPI *, const GUID *);")
+cpp_quote("    HRESULT (WINAPI *IsModifiable)(ICodecAPI *, const GUID *);")
+cpp_quote("    HRESULT (WINAPI *GetParameterRange)(ICodecAPI *, const GUID *, VARIANT *, VARIANT *, VARIANT *);")
+cpp_quote("    HRESULT (WINAPI *GetParameterValues)(ICodecAPI *, const GUID *, VARIANT **, ULONG *);")
+cpp_quote("    HRESULT (WINAPI *GetDefaultValue)(ICodecAPI *, const GUID *, VARIANT *);")
+cpp_quote("    HRESULT (WINAPI *GetValue)(ICodecAPI *, const GUID *, VARIANT *);")
+cpp_quote("    HRESULT (WINAPI *SetValue)(ICodecAPI *, const GUID *, VARIANT *);")
+cpp_quote("    HRESULT (WINAPI *RegisterForEvent)(ICodecAPI *, const GUID *, LONG_PTR);")
+cpp_quote("    HRESULT (WINAPI *UnregisterForEvent)(ICodecAPI *, const GUID *);")
+cpp_quote("    HRESULT (WINAPI *SetAllDefaults)(ICodecAPI *);")
+cpp_quote("    HRESULT (WINAPI *SetValueWithNotify)(ICodecAPI *, const GUID *, VARIANT *, GUID **, ULONG *);")
+cpp_quote("    HRESULT (WINAPI *SetAllDefaultsWithNotify)(ICodecAPI *, GUID **, ULONG *);")
+cpp_quote("    HRESULT (WINAPI *GetAllSettings)(ICodecAPI *, IStream *);")
+cpp_quote("    HRESULT (WINAPI *SetAllSettings)(ICodecAPI *, IStream *);")
+cpp_quote("    HRESULT (WINAPI *SetAllSettingsWithNotify)(ICodecAPI *, IStream *, GUID **, ULONG *);")
+cpp_quote("};")

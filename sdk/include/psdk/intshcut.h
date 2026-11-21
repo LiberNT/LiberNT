@@ -41,7 +41,10 @@ typedef enum iurl_seturl_flags {
 typedef enum iurl_invokecommand_flags {
     IURL_INVOKECOMMAND_FL_ALLOW_UI=1,
     IURL_INVOKECOMMAND_FL_USE_DEFAULT_VERB,
-    ALL_IURL_INVOKECOMMAND_FLAGS=(IURL_INVOKECOMMAND_FL_ALLOW_UI|IURL_INVOKECOMMAND_FL_USE_DEFAULT_VERB)
+    ALL_IURL_INVOKECOMMAND_FLAGS=(IURL_INVOKECOMMAND_FL_ALLOW_UI|IURL_INVOKECOMMAND_FL_USE_DEFAULT_VERB),
+    IURL_INVOKECOMMAND_FL_DDEWAIT = 4,
+    IURL_INVOKECOMMAND_FL_ASYNCOK = 8,
+    IURL_INVOKECOMMAND_FL_LOG_USAGE = 0x10,
 } IURL_INVOKECOMMAND_FLAGS;
 
 typedef struct urlinvokecommandinfoA {
@@ -111,17 +114,52 @@ BOOL    WINAPI InetIsOffline(DWORD);
 }
 #endif
 
+typedef enum mimeassociationdialog_in_flags {
+    MIMEASSOCDLG_FL_REGISTER_ASSOC = 1
+} MIMEASSOCIATIONDIALOG_IN_FLAGS;
+
 typedef enum urlassociationdialog_in_flags {
     URLASSOCDLG_FL_USE_DEFAULT_NAME = 1,
     URLASSOCDLG_FL_REGISTER_ASSOC = 2
 } URLASSOCIATIONDIALOG_IN_FLAGS;
 
-typedef enum mimeassociationdialog_in_flags {
-    MIMEASSOCDLG_FL_REGISTER_ASSOC = 1
-} MIMEASSOCIATIONDIALOG_IN_FLAGS;
-
-typedef IUniformResourceLocatorA * PIUniformResourceLocator;
 typedef const IUniformResourceLocatorA CIUniformResourceLocator;
 typedef const IUniformResourceLocatorA * PCIUniformResourceLocator;
+typedef IUniformResourceLocatorA * PIUniformResourceLocator;
+
+#ifdef UNICODE
+#define IUniformResourceLocator IUniformResourceLocatorW
+#else
+#define IUniformResourceLocator IUniformResourceLocatorA
+#endif
+#define IUniformResourceLocatorVtbl IUniformResourceLocatorAVtbl
+#ifdef UNICODE
+#define MIMEAssociationDialog MIMEAssociationDialogW
+#else
+#define MIMEAssociationDialog MIMEAssociationDialogA
+#endif
+#ifdef UNICODE
+#define URLAssociationDialog URLAssociationDialogW
+#else
+#define URLAssociationDialog URLAssociationDialogA
+#endif
+
+typedef struct IUniformResourceLocatorAVtbl IUniformResourceLocatorAVtbl;
+
+typedef struct IUniformResourceLocatorWVtbl IUniformResourceLocatorWVtbl;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+HRESULT MIMEAssociationDialogA(HWND hwndParent, DWORD dwInFlags, PCSTR pcszFile, PCSTR pcszMIMEContentType, PSTR pszAppBuf, UINT ucAppBufLen);
+HRESULT MIMEAssociationDialogW(HWND hwndParent, DWORD dwInFlags, PCWSTR pcszFile, PCWSTR pcszMIMEContentType, PWSTR pszAppBuf, UINT ucAppBufLen);
+HRESULT URLAssociationDialogA(HWND hwndParent, DWORD dwInFlags, PCSTR pcszFile, PCSTR pcszURL, PSTR pszAppBuf, UINT ucAppBufLen);
+HRESULT URLAssociationDialogW(HWND hwndParent, DWORD dwInFlags, PCWSTR pcszFile, PCWSTR pcszURL, PWSTR pszAppBuf, UINT ucAppBufLen);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif  /* __WINE_INTSHCUT_H */

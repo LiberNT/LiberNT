@@ -2063,7 +2063,28 @@ D3DParseUnknownCommand (
 #endif
 
 typedef LPVOID CSECT_HANDLE;
-typedef DDHAL_DDVIDEOPORTCALLBACKS * LPDDHAL_DDVIDEOPORTCALLBACKS;
 typedef DDHAL_DDCOLORCONTROLCALLBACKS * LPDDHAL_DDCOLORCONTROLCALLBACKS;
+typedef DDHAL_DDVIDEOPORTCALLBACKS * LPDDHAL_DDVIDEOPORTCALLBACKS;
+
+#define DDRAW_DLL_UNLOADED 1
+#define EXTERN_DDAPI WINAPI
+#define IS_32 0
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL DDHAL_SetInfo(LPDDHALINFO lpDDHALInfo, BOOL reset);
+FLATPTR DDHAL_VidMemAlloc(LPDDRAWI_DIRECTDRAW_GBL lpDD, int heap, DWORD dwWidth, DWORD dwHeight);
+void DDHAL_VidMemFree(LPDDRAWI_DIRECTDRAW_GBL lpDD, int heap, FLATPTR fpMem);
+
+#ifdef __cplusplus
+}
+#endif
+
+typedef CRITICAL_SECTION CSECT;
+
+typedef CSECT *LPCSECT;
 
 #endif /* __DDRAWI_INCLUDED__ */

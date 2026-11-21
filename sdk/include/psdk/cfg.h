@@ -207,6 +207,7 @@ typedef enum _PNP_VETO_TYPE {
   PNP_VetoNonDisableable,
   PNP_VetoLegacyDriver,
   PNP_VetoInsufficientRights,
+  PNP_VetoAlreadyRemoved = 0xD,
 } PNP_VETO_TYPE, *PPNP_VETO_TYPE;
 
 #ifdef __cplusplus
@@ -215,6 +216,11 @@ typedef enum _PNP_VETO_TYPE {
 
 #ifndef CM_DEVICE_PANEL_EDGE_BOTTOM
 #define CM_DEVICE_PANEL_EDGE_BOTTOM 0x00000002
+
+#define DN_DEVICE_DISCONNECTED 0x2000000
+#define DN_QUERY_REMOVE_ACTIVE 0x20000
+#define DN_QUERY_REMOVE_PENDING 0x10000
+
 #endif
 #ifndef CM_DEVICE_PANEL_EDGE_LEFT
 #define CM_DEVICE_PANEL_EDGE_LEFT 0x00000003

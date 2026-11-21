@@ -16,6 +16,42 @@ typedef enum _PMTUD_STATE {
     IP_PMTUDISC_MAX = 4
 } PMTUD_STATE, *PPMTUD_STATE;
 
+#define IN6ADDR_6BONETESTPREFIX_INIT { 0x3f, 0xfe }
+#define IN6ADDR_SITELOCALPREFIX_INIT { 0xfe, 0xc0 }
+#define IN6ADDR_ULAPREFIX_INIT { 0xfc }
+
+struct in6_pktinfo_ex
+{
+    IN6_PKTINFO pkt_info;
+    int scope_id;
+};
+
+typedef struct in6_pktinfo_ex IN6_PKTINFO_EX;
+
+struct in_pktinfo_ex
+{
+    IN_PKTINFO pkt_info;
+    int scope_id;
+};
+
+typedef struct in_pktinfo_ex IN_PKTINFO_EX;
+
+struct in_recverr
+{
+    int protocol;
+    ULONG info;
+    UINT8 type;
+    UINT8 code;
+};
+
+typedef struct in_recverr IN_RECVERR;
+
+typedef struct in6_pktinfo_ex *PIN6_PKTINFO_EX;
+
+typedef struct in_pktinfo_ex *PIN_PKTINFO_EX;
+
+typedef struct in_recverr *PIN_RECVERR;
+
 #endif
 
 #ifdef _MSC_VER

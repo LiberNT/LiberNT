@@ -203,4 +203,13 @@ DECLARE_INTERFACE_(IDsObjectPicker,IUnknown)
 #define DSOP_SCOPE_FLAG_DEFAULT_FILTER_SERVICE_ACCOUNTS 0x00000400
 #endif
 
+typedef struct IDsObjectPickerCredentialsVtbl IDsObjectPickerCredentialsVtbl;
+
+struct IDsObjectPickerCredentials
+{
+    struct IDsObjectPickerCredentialsVtbl *lpVtbl;
+};
+
+typedef struct IDsObjectPickerVtbl IDsObjectPickerVtbl;
+
 #endif /* __OBJSEL_H_ */

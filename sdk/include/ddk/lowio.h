@@ -73,4 +73,15 @@ VOID
 RxInitializeLowIoPerFcbInfo(
     _Inout_ PLOWIO_PER_FCB_INFO LowIoPerFcbInfo);
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+PVOID NTAPI RxLowIoGetBufferAddress(PRX_CONTEXT RxContext);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

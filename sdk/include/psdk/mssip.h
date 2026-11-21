@@ -242,4 +242,19 @@ typedef struct MS_ADDINFO_DETACHEDSIG_ {
   BYTE * pbSignatureObject;
 } MS_ADDINFO_DETACHEDSIG, *PMS_ADDINFO_DETACHEDSIG;
 
+#define SPC_MARKER_CHECK_CURRENTLY_SUPPORTED_FLAGS 1
+
+typedef BOOL (WINAPI *pCryptSIPGetSealedDigest)(SIP_SUBJECTINFO *, const BYTE *, DWORD, BYTE *, DWORD *);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL WINAPI CryptSIPGetSealedDigest(SIP_SUBJECTINFO *pSubjectInfo, const BYTE *pSig, DWORD dwSig, BYTE *pbDigest, DWORD *pcbDigest);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif  /* __WINE_MSSIP_H */

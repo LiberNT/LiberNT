@@ -153,6 +153,7 @@ typedef enum _POWER_DATA_ACCESSOR {
     ACCESS_PROFILE,
     ACCESS_OVERLAY_SCHEME,
     ACCESS_ACTIVE_OVERLAY_SCHEME,
+    ACCESS_POWER_MODE = 0x1A,
 } POWER_DATA_ACCESSOR, *PPOWER_DATA_ACCESSOR;
 
 typedef BOOLEAN (CALLBACK* PWRSCHEMESENUMPROC)(UINT, DWORD, LPWSTR, DWORD, LPWSTR, PPOWER_POLICY, LPARAM);
@@ -306,5 +307,60 @@ typedef struct _THERMAL_EVENT {
   ULONG TripPointTemperature;
   LPWSTR Initiator;
 } THERMAL_EVENT, *PTHERMAL_EVENT;
+
+typedef ULONG WINAPI DEVICE_NOTIFY_CALLBACK_ROUTINE(PVOID, ULONG, PVOID);
+
+typedef DEVICE_NOTIFY_CALLBACK_ROUTINE *PDEVICE_NOTIFY_CALLBACK_ROUTINE;
+
+struct _DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS
+{
+    PDEVICE_NOTIFY_CALLBACK_ROUTINE Callback;
+    PVOID Context;
+};
+
+typedef struct _DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS;
+
+typedef struct _DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS *PDEVICE_NOTIFY_SUBSCRIBE_PARAMETERS;
+
+typedef BOOLEAN WINAPI PWRSCHEMESENUMPROC_V1(UINT, DWORD, LPTSTR, DWORD, LPTSTR, PPOWER_POLICY, LPARAM);
+
+typedef BOOLEAN WINAPI PWRSCHEMESENUMPROC_V2(UINT, DWORD, LPWSTR, DWORD, LPWSTR, PPOWER_POLICY, LPARAM);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOLEAN DevicePowerClose(void);
+BOOLEAN DevicePowerEnumDevices(ULONG QueryIndex, ULONG QueryInterpretationFlags, ULONG QueryFlags, PBYTE pReturnBuffer, PULONG pBufferSize);
+BOOLEAN DevicePowerOpen(ULONG DebugMask);
+DWORD DevicePowerSetDeviceState(LPCWSTR DeviceDescription, ULONG SetFlags, PVOID SetData);
+DWORD PowerCanRestoreIndividualDefaultPowerScheme(const GUID *SchemeGuid);
+DWORD PowerGetUserConfiguredACPowerMode(GUID *PowerModeGuid);
+DWORD PowerGetUserConfiguredDCPowerMode(GUID *PowerModeGuid);
+DWORD PowerImportPowerScheme(HKEY RootPowerKey, LPCWSTR ImportFileNamePath, GUID **DestinationSchemeGuid);
+BOOLEAN PowerIsSettingRangeDefined(const GUID *SubKeyGuid, const GUID *SettingGuid);
+DWORD PowerOpenSystemPowerKey(HKEY *phSystemPowerKey, REGSAM Access, BOOL OpenExisting);
+DWORD PowerOpenUserPowerKey(HKEY *phUserPowerKey, REGSAM Access, BOOL OpenExisting);
+DWORD PowerReadIconResourceSpecifier(HKEY RootPowerKey, const GUID *SchemeGuid, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, PUCHAR Buffer, LPDWORD BufferSize);
+DWORD PowerReadPossibleDescription(HKEY RootPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, ULONG PossibleSettingIndex, PUCHAR Buffer, LPDWORD BufferSize);
+DWORD PowerReadPossibleFriendlyName(HKEY RootPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, ULONG PossibleSettingIndex, PUCHAR Buffer, LPDWORD BufferSize);
+DWORD PowerReadPossibleValue(HKEY RootPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, PULONG Type, ULONG PossibleSettingIndex, PUCHAR Buffer, LPDWORD BufferSize);
+DWORD PowerReadSettingAttributes(const GUID *SubGroupGuid, const GUID *PowerSettingGuid);
+DWORD PowerReadValueIncrement(HKEY RootPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, LPDWORD ValueIncrement);
+DWORD PowerReadValueMax(HKEY RootPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, LPDWORD ValueMaximum);
+DWORD PowerReadValueMin(HKEY RootPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, LPDWORD ValueMinimum);
+DWORD PowerReadValueUnitsSpecifier(HKEY RootPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, UCHAR *Buffer, LPDWORD BufferSize);
+DWORD PowerReplaceDefaultPowerSchemes(void);
+DWORD PowerReportThermalEvent(PTHERMAL_EVENT Event);
+DWORD PowerRestoreDefaultPowerSchemes(void);
+DWORD PowerRestoreIndividualDefaultPowerScheme(const GUID *SchemeGuid);
+DWORD PowerSetUserConfiguredACPowerMode(const GUID *PowerModeGuid);
+DWORD PowerSetUserConfiguredDCPowerMode(const GUID *PowerModeGuid);
+DWORD PowerWriteIconResourceSpecifier(HKEY RootPowerKey, const GUID *SchemeGuid, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, UCHAR *Buffer, DWORD BufferSize);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _POWRPROF_H */

@@ -156,4 +156,6 @@ typedef struct tagSQLGUID{
 }
 #endif
 
+typedef SQLULEN SQLROWSETSIZE;
+
 #endif /* __SQLTYPES */

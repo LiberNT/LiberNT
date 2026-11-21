@@ -85,4 +85,6 @@ typedef struct _MOUNTDEV_UNIQUE_ID_CHANGE_NOTIFY_OUTPUT {
 } /* extern "C" */
 #endif
 
+#define IOCTL_MOUNTDEV_QUERY_INTERFACE_NAME 0x4D001C
+
 #endif /* _MOUNTDEV_ */

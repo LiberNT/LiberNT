@@ -293,4 +293,6 @@ typedef struct MapiFileTagExt {
   LPBYTE lpEncoding;
 } MapiFileTagExt, *lpMapiFileTagExt;
 
+#define MAPI_DIALOG_MODELESS 0xC
+
 #endif /* MAPI_H */

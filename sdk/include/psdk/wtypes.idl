@@ -363,6 +363,11 @@ typedef enum tagCLSCTX {
   CLSCTX_RESERVED6              = 0x01000000,
   CLSCTX_ACTIVATE_ARM32_SERVER  = 0x02000000,
   CLSCTX_PS_DLL                 = 0x80000000,
+  CLSCTX_RESERVED1 = 0x40,
+  CLSCTX_RESERVED2 = 0x80,
+  CLSCTX_RESERVED3 = 0x100,
+  CLSCTX_RESERVED4 = 0x200,
+  CLSCTX_RESERVED5 = 0x800,
 } CLSCTX;
 
 cpp_quote("#define CLSCTX_INPROC (CLSCTX_INPROC_SERVER | CLSCTX_INPROC_HANDLER)")
@@ -373,7 +378,11 @@ typedef enum tagMSHLFLAGS {
   MSHLFLAGS_NORMAL      = 0,
   MSHLFLAGS_TABLESTRONG = 1,
   MSHLFLAGS_TABLEWEAK   = 2,
-  MSHLFLAGS_NOPING      = 4
+  MSHLFLAGS_NOPING      = 4,
+  MSHLFLAGS_RESERVED1 = 8,
+  MSHLFLAGS_RESERVED2 = 0x10,
+  MSHLFLAGS_RESERVED3 = 0x20,
+  MSHLFLAGS_RESERVED4 = 0x40,
 } MSHLFLAGS;
 
 typedef enum tagMSHCTX {
@@ -848,3 +857,15 @@ cpp_quote("#endif /*PROPERTYKEY_DEFINED*/")
 cpp_quote("#ifndef __REQUIRED_RPCSAL_H_VERSION__")
 cpp_quote("#define __REQUIRED_RPCSAL_H_VERSION__ 100")
 cpp_quote("#endif")
+
+cpp_quote("typedef void *HCONTEXT;")
+cpp_quote("")
+cpp_quote("struct tagRemBRUSH")
+cpp_quote("{")
+cpp_quote("    ULONG cbData;")
+cpp_quote("    byte data[1];")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("typedef struct tagRemBRUSH RemHBRUSH;")
+cpp_quote("")
+cpp_quote("typedef RemotableHandle *wireHRGN;")

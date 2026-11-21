@@ -1635,13 +1635,12 @@ WinHttpWriteProxySettings(
 #define WINHTTP_SERVER_CERT_CHAIN_REVOCATION_CHECK_CACHE_ONLY 0x80000000
 #endif
 
-typedef enum _WINHTTP_SECURE_DNS_SETTING {
-    WinHttpSecureDnsSettingDefault = 0,
-    WinHttpSecureDnsSettingForcePlaintext = 1,
-    WinHttpSecureDnsSettingRequireEncryption = 2,
-    WinHttpSecureDnsSettingTryEncryptionWithFallback = 3,
-    WinHttpSecureDnsSettingMax = 4
-} WINHTTP_SECURE_DNS_SETTING;
+typedef enum _WINHTTP_FAST_FORWARDING_STATE {
+    WinHttpFastForwardingStateInProgress = 0,
+    WinHttpFastForwardingStateSucceeded = 1,
+    WinHttpFastForwardingStateClientSideFailed = 2,
+    WinHttpFastForwardingStateServerSideFailed = 3
+} WINHTTP_FAST_FORWARDING_STATE, *PWINHTTP_FAST_FORWARDING_STATE;
 
 typedef enum _WINHTTP_PROTOCOL_OPERATION {
     WINHTTP_PROTOCOL_SEND_OPERATION = 0,
@@ -1655,24 +1654,62 @@ typedef enum _WINHTTP_PROXY_SETTINGS_TYPE {
     WinHttpProxySettingsTypeXBox = 3
 } WINHTTP_PROXY_SETTINGS_TYPE, *PWINHTTP_PROXY_SETTINGS_TYPE;
 
-typedef enum _WINHTTP_FAST_FORWARDING_STATE {
-    WinHttpFastForwardingStateInProgress = 0,
-    WinHttpFastForwardingStateSucceeded = 1,
-    WinHttpFastForwardingStateClientSideFailed = 2,
-    WinHttpFastForwardingStateServerSideFailed = 3
-} WINHTTP_FAST_FORWARDING_STATE, *PWINHTTP_FAST_FORWARDING_STATE;
+typedef enum _WINHTTP_SECURE_DNS_SETTING {
+    WinHttpSecureDnsSettingDefault = 0,
+    WinHttpSecureDnsSettingForcePlaintext = 1,
+    WinHttpSecureDnsSettingRequireEncryption = 2,
+    WinHttpSecureDnsSettingTryEncryptionWithFallback = 3,
+    WinHttpSecureDnsSettingMax = 4
+} WINHTTP_SECURE_DNS_SETTING;
 
 typedef PVOID WINHTTP_PROXY_CHANGE_REGISTRATION_HANDLE;
+
+typedef struct _WINHTTP_CONNECTION_GROUP {
+  ULONG cConnections;
+  GUID guidGroup;
+} WINHTTP_CONNECTION_GROUP, *PWINHTTP_CONNECTION_GROUP;
+
+typedef struct _WINHTTP_FAILED_CONNECTION_RETRIES {
+  DWORD dwMaxRetries;
+  DWORD dwAllowedRetryConditions;
+} WINHTTP_FAILED_CONNECTION_RETRIES, *PWINHTTP_FAILED_CONNECTION_RETRIES;
+
+typedef union _WINHTTP_HEADER_NAME {
+  PCWSTR pwszName;
+  PCSTR pszName;
+} WINHTTP_HEADER_NAME, *PWINHTTP_HEADER_NAME;
+
+typedef struct _WINHTTP_HOST_CONNECTION_GROUP {
+  PCWSTR pwszHost;
+  ULONG cConnectionGroups;
+  PWINHTTP_CONNECTION_GROUP pConnectionGroups;
+} WINHTTP_HOST_CONNECTION_GROUP, *PWINHTTP_HOST_CONNECTION_GROUP;
+
+typedef struct _WINHTTP_HTTP2_RECEIVE_WINDOW {
+  ULONG ulStreamWindow;
+  ULONG ulStreamWindowUpdateDelta;
+} WINHTTP_HTTP2_RECEIVE_WINDOW, *PWINHTTP_HTTP2_RECEIVE_WINDOW;
 
 typedef struct _WINHTTP_MATCH_CONNECTION_GUID {
   GUID ConnectionGuid;
   ULONGLONG ullFlags;
 } WINHTTP_MATCH_CONNECTION_GUID, *PWINHTTP_MATCH_CONNECTION_GUID;
 
-typedef union _WINHTTP_HEADER_NAME {
-  PCWSTR pwszName;
-  PCSTR pszName;
-} WINHTTP_HEADER_NAME, *PWINHTTP_HEADER_NAME;
+typedef struct _WINHTTP_PROTOCOL_ASYNC_RESULT {
+  WINHTTP_ASYNC_RESULT AsyncResult;
+  WINHTTP_PROTOCOL_OPERATION Operation;
+} WINHTTP_PROTOCOL_ASYNC_RESULT;
+
+typedef struct _WINHTTP_PROXY_SETTINGS_PARAM {
+  ULONGLONG ullFlags;
+  PCWSTR pcwszConnectionName;
+  PCWSTR pcwszProbeHost;
+} WINHTTP_PROXY_SETTINGS_PARAM, *PWINHTTP_PROXY_SETTINGS_PARAM;
+
+typedef struct _WINHTTP_QUERY_CONNECTION_GROUP_RESULT {
+  ULONG cHosts;
+  PWINHTTP_HOST_CONNECTION_GROUP pHostConnectionGroups;
+} WINHTTP_QUERY_CONNECTION_GROUP_RESULT, *PWINHTTP_QUERY_CONNECTION_GROUP_RESULT;
 
 typedef struct _WINHTTP_RESOLVER_CACHE_CONFIG {
   ULONG ulMaxResolverCacheEntries;
@@ -1682,32 +1719,6 @@ typedef struct _WINHTTP_RESOLVER_CACHE_CONFIG {
   ULONGLONG ullConnResolutionWaitTime;
   ULONGLONG ullFlags;
 } WINHTTP_RESOLVER_CACHE_CONFIG, *PWINHTTP_RESOLVER_CACHE_CONFIG;
-
-typedef struct _WINHTTP_CONNECTION_GROUP {
-  ULONG cConnections;
-  GUID guidGroup;
-} WINHTTP_CONNECTION_GROUP, *PWINHTTP_CONNECTION_GROUP;
-
-typedef struct _WINHTTP_HOST_CONNECTION_GROUP {
-  PCWSTR pwszHost;
-  ULONG cConnectionGroups;
-  PWINHTTP_CONNECTION_GROUP pConnectionGroups;
-} WINHTTP_HOST_CONNECTION_GROUP, *PWINHTTP_HOST_CONNECTION_GROUP;
-
-typedef struct _WINHTTP_QUERY_CONNECTION_GROUP_RESULT {
-  ULONG cHosts;
-  PWINHTTP_HOST_CONNECTION_GROUP pHostConnectionGroups;
-} WINHTTP_QUERY_CONNECTION_GROUP_RESULT, *PWINHTTP_QUERY_CONNECTION_GROUP_RESULT;
-
-typedef struct _WINHTTP_HTTP2_RECEIVE_WINDOW {
-  ULONG ulStreamWindow;
-  ULONG ulStreamWindowUpdateDelta;
-} WINHTTP_HTTP2_RECEIVE_WINDOW, *PWINHTTP_HTTP2_RECEIVE_WINDOW;
-
-typedef struct _WINHTTP_FAILED_CONNECTION_RETRIES {
-  DWORD dwMaxRetries;
-  DWORD dwAllowedRetryConditions;
-} WINHTTP_FAILED_CONNECTION_RETRIES, *PWINHTTP_FAILED_CONNECTION_RETRIES;
 
 typedef struct tagWINHTTP_CREDS {
   LPSTR lpszUserName;
@@ -1728,15 +1739,168 @@ typedef struct tagWINHTTP_CREDS_EX {
   LPSTR lpszUrl;
 } WINHTTP_CREDS_EX, *PWINHTTP_CREDS_EX;
 
-typedef struct _WINHTTP_PROTOCOL_ASYNC_RESULT {
-  WINHTTP_ASYNC_RESULT AsyncResult;
-  WINHTTP_PROTOCOL_OPERATION Operation;
-} WINHTTP_PROTOCOL_ASYNC_RESULT;
+#define _HTTP_VERSION_INFO_ 0
+#define _INTERNET_SCHEME_
+#define _URL_COMPONENTS_ 0
+#define SECURITY_FLAG_IGNORE_ALL_CERT_ERRORS 0x3300
+#define WINHTTP_AUTOLOGON_SECURITY_LEVEL_MAX 3
+#define WINHTTP_CONNECTION_RETRY_CONDITION_MASK 7
+#define WINHTTP_MATCH_CONNECTION_GUID_FLAGS_MASK 1
+#define WINHTTP_QUERY_EX_ALL_HEADERS 0x15
 
-typedef struct _WINHTTP_PROXY_SETTINGS_PARAM {
-  ULONGLONG ullFlags;
-  PCWSTR pcwszConnectionName;
-  PCWSTR pcwszProbeHost;
-} WINHTTP_PROXY_SETTINGS_PARAM, *PWINHTTP_PROXY_SETTINGS_PARAM;
+struct _HTTP_VERSION_INFO
+{
+    DWORD dwMajorVersion;
+    DWORD dwMinorVersion;
+};
+
+struct _WINHTTP_ASYNC_RESULT
+{
+    DWORD_PTR dwResult;
+    DWORD dwError;
+};
+
+struct _WINHTTP_AUTOPROXY_OPTIONS
+{
+    DWORD dwFlags;
+    DWORD dwAutoDetectFlags;
+    LPCWSTR lpszAutoConfigUrl;
+    LPVOID lpvReserved;
+    DWORD dwReserved;
+    BOOL fAutoLogonIfChallenged;
+};
+
+struct _WINHTTP_CERTIFICATE_INFO
+{
+    FILETIME ftExpiry;
+    FILETIME ftStart;
+    LPWSTR lpszSubjectInfo;
+    LPWSTR lpszIssuerInfo;
+    LPWSTR lpszProtocolName;
+    LPWSTR lpszSignatureAlgName;
+    LPWSTR lpszEncryptionAlgName;
+    DWORD dwKeySize;
+};
+
+struct _WINHTTP_CURRENT_USER_IE_PROXY_CONFIG
+{
+    BOOL fAutoDetect;
+    LPWSTR lpszAutoConfigUrl;
+    LPWSTR lpszProxy;
+    LPWSTR lpszProxyBypass;
+};
+
+struct _WINHTTP_EXTENDED_HEADER
+{
+    union
+    {
+        PCWSTR pwszName;
+        PCSTR pszName;
+    };
+    union
+    {
+        PCWSTR pwszValue;
+        PCSTR pszValue;
+    };
+};
+
+struct _WINHTTP_PROXY_INFO
+{
+    DWORD dwAccessType;
+    LPWSTR lpszProxy;
+    LPWSTR lpszProxyBypass;
+};
+
+struct _WINHTTP_URL_COMPONENTS
+{
+    DWORD dwStructSize;
+    LPWSTR lpszScheme;
+    DWORD dwSchemeLength;
+    INTERNET_SCHEME nScheme;
+    LPWSTR lpszHostName;
+    DWORD dwHostNameLength;
+    INTERNET_PORT nPort;
+    LPWSTR lpszUserName;
+    DWORD dwUserNameLength;
+    LPWSTR lpszPassword;
+    DWORD dwPasswordLength;
+    LPWSTR lpszUrlPath;
+    DWORD dwUrlPathLength;
+    LPWSTR lpszExtraInfo;
+    DWORD dwExtraInfoLength;
+};
+
+typedef struct _WINHTTP_ASYNC_RESULT *PWINHTTP_ASYNC_RESULT;
+
+typedef struct _WINHTTP_AUTOPROXY_OPTIONS *PWINHTTP_AUTOPROXY_OPTIONS;
+
+typedef struct _WINHTTP_CERTIFICATE_INFO *PWINHTTP_CERTIFICATE_INFO;
+
+typedef struct _WINHTTP_CURRENT_USER_IE_PROXY_CONFIG *PWINHTTP_CURRENT_USER_IE_PROXY_CONFIG;
+
+typedef struct _WINHTTP_EXTENDED_HEADER *PWINHTTP_EXTENDED_HEADER;
+
+typedef struct _WINHTTP_PROXY_INFO *PWINHTTP_PROXY_INFO;
+
+typedef struct _WINHTTP_EXTENDED_HEADER WINHTTP_EXTENDED_HEADER;
+
+typedef void (WINAPI *WINHTTP_PROXY_CHANGE_CALLBACK)(ULONGLONG, PVOID);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void WINAPI WinHttpFreeProxySettings(WINHTTP_PROXY_SETTINGS *pWinHttpProxySettings);
+
+/* TODO: LiberNT does not implement the functions below yet */
+DWORD WinHttpAddRequestHeadersEx(HINTERNET hRequest, DWORD dwModifiers, ULONGLONG ullFlags, ULONGLONG ullExtra, DWORD cHeaders, WINHTTP_EXTENDED_HEADER *pHeaders);
+DWORD WinHttpFreeProxySettingsEx(WINHTTP_PROXY_SETTINGS_TYPE ProxySettingsType, PVOID pProxySettingsEx);
+void WinHttpFreeQueryConnectionGroupResult(WINHTTP_QUERY_CONNECTION_GROUP_RESULT *pResult);
+DWORD WinHttpGetProxySettingsEx(HINTERNET hResolver, WINHTTP_PROXY_SETTINGS_TYPE ProxySettingsType, PWINHTTP_PROXY_SETTINGS_PARAM pProxySettingsParam, DWORD_PTR pContext);
+DWORD WinHttpGetProxySettingsResultEx(HINTERNET hResolver, PVOID pProxySettingsEx);
+HINTERNET WinHttpProtocolCompleteUpgrade(HINTERNET hRequest, DWORD_PTR dwContext);
+DWORD WinHttpProtocolReceive(HINTERNET ProtocolHandle, ULONGLONG Flags, PVOID pvBuffer, DWORD dwBufferLength, DWORD *pdwBytesRead);
+DWORD WinHttpProtocolSend(HINTERNET ProtocolHandle, ULONGLONG Flags, PVOID pvBuffer, DWORD dwBufferLength);
+DWORD WinHttpQueryConnectionGroup(HINTERNET hInternet, const GUID *pGuidConnection, ULONGLONG ullFlags, PWINHTTP_QUERY_CONNECTION_GROUP_RESULT *ppResult);
+DWORD WinHttpQueryHeadersEx(HINTERNET hRequest, DWORD dwInfoLevel, ULONGLONG ullFlags, UINT uiCodePage, PDWORD pdwIndex, PWINHTTP_HEADER_NAME pHeaderName, PVOID pBuffer, PDWORD pdwBufferLength, PWINHTTP_EXTENDED_HEADER *ppHeaders, PDWORD pdwHeadersCount);
+DWORD WinHttpReadDataEx(HINTERNET hRequest, LPVOID lpBuffer, DWORD dwNumberOfBytesToRead, LPDWORD lpdwNumberOfBytesRead, ULONGLONG ullFlags, DWORD cbProperty, PVOID pvProperty);
+DWORD WinHttpRegisterProxyChangeNotification(ULONGLONG ullFlags, WINHTTP_PROXY_CHANGE_CALLBACK pfnCallback, PVOID pvContext, WINHTTP_PROXY_CHANGE_REGISTRATION_HANDLE *hRegistration);
+DWORD WinHttpSetProxySettingsPerUser(BOOL fProxySettingsPerUser);
+DWORD WinHttpUnregisterProxyChangeNotification(WINHTTP_PROXY_CHANGE_REGISTRATION_HANDLE hRegistration);
+
+#ifdef __cplusplus
+}
+#endif
+
+struct _WINHTTP_FAST_FORWARDING_STATUS
+{
+    WINHTTP_FAST_FORWARDING_STATE TransferState;
+    LONG NtStatus;
+    DWORD dwError;
+    ULONGLONG ullBytesTransferred;
+};
+
+struct _WINHTTP_PROXY_SETTINGS_EX
+{
+    ULONGLONG ullGenerationId;
+    ULONGLONG ullFlags;
+    PCWSTR pcwszAutoconfigUrl;
+    PCWSTR pcwszProxy;
+    PCWSTR pcwszSecureProxy;
+    DWORD cProxyBypasses;
+    PCWSTR *rgpcwszProxyBypasses;
+    DWORD dwInterfaceIndex;
+    PCWSTR pcwszConnectionName;
+};
+
+typedef struct _HTTP_VERSION_INFO *PHTTP_VERSION_INFO;
+
+typedef struct _WINHTTP_FAST_FORWARDING_STATUS *PWINHTTP_FAST_FORWARDING_STATUS;
+
+typedef struct _WINHTTP_PROXY_SETTINGS_EX *PWINHTTP_PROXY_SETTINGS_EX;
+
+typedef struct _WINHTTP_FAST_FORWARDING_STATUS WINHTTP_FAST_FORWARDING_STATUS;
+
+typedef struct _WINHTTP_PROXY_SETTINGS_EX WINHTTP_PROXY_SETTINGS_EX;
 
 #endif  /* __WINE_WINHTTP_H */

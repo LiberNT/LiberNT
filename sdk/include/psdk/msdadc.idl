@@ -90,3 +90,24 @@ interface IDCInfo : IUnknown
     HRESULT SetInfo([in] ULONG cInfo,
                     [in, size_is(cInfo)] DCINFO prgInfo[]);
 };
+
+cpp_quote("#define OLEDBDECLSPEC 0")
+cpp_quote("")
+cpp_quote("struct IDataConvertVtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(IDataConvert *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(IDataConvert *);")
+cpp_quote("    ULONG (WINAPI *Release)(IDataConvert *);")
+cpp_quote("    HRESULT (WINAPI *DataConvert)(IDataConvert *, DBTYPE, DBTYPE, DBLENGTH, DBLENGTH *, void *, void *, DBLENGTH, DBSTATUS, DBSTATUS *, BYTE, BYTE, DBDATACONVERT);")
+cpp_quote("    HRESULT (WINAPI *CanConvert)(IDataConvert *, DBTYPE, DBTYPE);")
+cpp_quote("    HRESULT (WINAPI *GetConversionSize)(IDataConvert *, DBTYPE, DBTYPE, DBLENGTH *, DBLENGTH *, void *);")
+cpp_quote("};")
+cpp_quote("")
+cpp_quote("struct IDCInfoVtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(IDCInfo *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(IDCInfo *);")
+cpp_quote("    ULONG (WINAPI *Release)(IDCInfo *);")
+cpp_quote("    HRESULT (WINAPI *GetInfo)(IDCInfo *, ULONG, DCINFOTYPE [], DCINFO **);")
+cpp_quote("    HRESULT (WINAPI *SetInfo)(IDCInfo *, ULONG, DCINFO []);")
+cpp_quote("};")

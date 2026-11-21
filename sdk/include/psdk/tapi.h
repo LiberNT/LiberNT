@@ -2001,10 +2001,10 @@ DWORD WINAPI tapiRequestMakeCallA(LPCSTR,LPCSTR,LPCSTR,LPCSTR);
 #define TAPIMAXDEVICEIDSIZE 40L
 #endif
 
-typedef DWORD HAGENTSESSION;
-typedef HAGENTSESSION * LPHAGENTSESSION;
 typedef DWORD HAGENT;
+typedef DWORD HAGENTSESSION;
 typedef HAGENT * LPHAGENT;
+typedef HAGENTSESSION * LPHAGENTSESSION;
 typedef HICON * LPHICON;
 
 #pragma pack(push, 1)
@@ -2047,6 +2047,18 @@ typedef struct lineagentcaps_tag {
 #pragma pack(pop)
 
 #pragma pack(push, 1)
+typedef struct lineagententry_tag {
+  HAGENT hAgent;
+  DWORD dwNameSize;
+  DWORD dwNameOffset;
+  DWORD dwIDSize;
+  DWORD dwIDOffset;
+  DWORD dwPINSize;
+  DWORD dwPINOffset;
+} LINEAGENTENTRY, *LPLINEAGENTENTRY;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
 typedef struct lineagentgrouplist_tag {
   DWORD dwTotalSize;
   DWORD dwNeededSize;
@@ -2055,6 +2067,77 @@ typedef struct lineagentgrouplist_tag {
   DWORD dwListSize;
   DWORD dwListOffset;
 } LINEAGENTGROUPLIST, *LPLINEAGENTGROUPLIST;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct lineagentinfo_tag {
+  DWORD dwTotalSize;
+  DWORD dwNeededSize;
+  DWORD dwUsedSize;
+  DWORD dwAgentState;
+  DWORD dwNextAgentState;
+  DWORD dwMeasurementPeriod;
+  CURRENCY cyOverallCallRate;
+  DWORD dwNumberOfACDCalls;
+  DWORD dwNumberOfIncomingCalls;
+  DWORD dwNumberOfOutgoingCalls;
+  DWORD dwTotalACDTalkTime;
+  DWORD dwTotalACDCallTime;
+  DWORD dwTotalACDWrapUpTime;
+} LINEAGENTINFO, *LPLINEAGENTINFO;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct lineagentlist_tag {
+  DWORD dwTotalSize;
+  DWORD dwNeededSize;
+  DWORD dwUsedSize;
+  DWORD dwNumEntries;
+  DWORD dwListSize;
+  DWORD dwListOffset;
+} LINEAGENTLIST, *LPLINEAGENTLIST;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct lineagentsession_tag {
+  HAGENTSESSION hAgentSession;
+  HAGENT hAgent;
+  GUID GroupID;
+  DWORD dwWorkingAddressID;
+} LINEAGENTSESSIONENTRY, *LPLINEAGENTSESSIONENTRY;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct lineagentsessioninfo_tag {
+  DWORD dwTotalSize;
+  DWORD dwNeededSize;
+  DWORD dwUsedSize;
+  DWORD dwAgentSessionState;
+  DWORD dwNextAgentSessionState;
+  DATE dateSessionStartTime;
+  DWORD dwSessionDuration;
+  DWORD dwNumberOfCalls;
+  DWORD dwTotalTalkTime;
+  DWORD dwAverageTalkTime;
+  DWORD dwTotalCallTime;
+  DWORD dwAverageCallTime;
+  DWORD dwTotalWrapUpTime;
+  DWORD dwAverageWrapUpTime;
+  CURRENCY cyACDCallRate;
+  DWORD dwLongestTimeToAnswer;
+  DWORD dwAverageTimeToAnswer;
+} LINEAGENTSESSIONINFO, *LPLINEAGENTSESSIONINFO;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct lineagentsessionlist_tag {
+  DWORD dwTotalSize;
+  DWORD dwNeededSize;
+  DWORD dwUsedSize;
+  DWORD dwNumEntries;
+  DWORD dwListSize;
+  DWORD dwListOffset;
+} LINEAGENTSESSIONLIST, *LPLINEAGENTSESSIONLIST;
 #pragma pack(pop)
 
 #pragma pack(push, 1)
@@ -2092,86 +2175,30 @@ typedef struct lineappinfo_tag {
 #pragma pack(pop)
 
 #pragma pack(push, 1)
-typedef struct lineagententry_tag {
-  HAGENT hAgent;
-  DWORD dwNameSize;
-  DWORD dwNameOffset;
-  DWORD dwIDSize;
-  DWORD dwIDOffset;
-  DWORD dwPINSize;
-  DWORD dwPINOffset;
-} LINEAGENTENTRY, *LPLINEAGENTENTRY;
+typedef struct linecalltreatmententry_tag {
+  DWORD dwCallTreatmentID;
+  DWORD dwCallTreatmentNameSize;
+  DWORD dwCallTreatmentNameOffset;
+} LINECALLTREATMENTENTRY, *LPLINECALLTREATMENTENTRY;
 #pragma pack(pop)
 
 #pragma pack(push, 1)
-typedef struct lineagentlist_tag {
+typedef struct lineproviderentry_tag {
+  DWORD dwPermanentProviderID;
+  DWORD dwProviderFilenameSize;
+  DWORD dwProviderFilenameOffset;
+} LINEPROVIDERENTRY, *LPLINEPROVIDERENTRY;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct lineproxyrequestlist_tag {
   DWORD dwTotalSize;
   DWORD dwNeededSize;
   DWORD dwUsedSize;
   DWORD dwNumEntries;
   DWORD dwListSize;
   DWORD dwListOffset;
-} LINEAGENTLIST, *LPLINEAGENTLIST;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct lineagentinfo_tag {
-  DWORD dwTotalSize;
-  DWORD dwNeededSize;
-  DWORD dwUsedSize;
-  DWORD dwAgentState;
-  DWORD dwNextAgentState;
-  DWORD dwMeasurementPeriod;
-  CURRENCY cyOverallCallRate;
-  DWORD dwNumberOfACDCalls;
-  DWORD dwNumberOfIncomingCalls;
-  DWORD dwNumberOfOutgoingCalls;
-  DWORD dwTotalACDTalkTime;
-  DWORD dwTotalACDCallTime;
-  DWORD dwTotalACDWrapUpTime;
-} LINEAGENTINFO, *LPLINEAGENTINFO;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct lineagentsession_tag {
-  HAGENTSESSION hAgentSession;
-  HAGENT hAgent;
-  GUID GroupID;
-  DWORD dwWorkingAddressID;
-} LINEAGENTSESSIONENTRY, *LPLINEAGENTSESSIONENTRY;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct lineagentsessionlist_tag {
-  DWORD dwTotalSize;
-  DWORD dwNeededSize;
-  DWORD dwUsedSize;
-  DWORD dwNumEntries;
-  DWORD dwListSize;
-  DWORD dwListOffset;
-} LINEAGENTSESSIONLIST, *LPLINEAGENTSESSIONLIST;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct lineagentsessioninfo_tag {
-  DWORD dwTotalSize;
-  DWORD dwNeededSize;
-  DWORD dwUsedSize;
-  DWORD dwAgentSessionState;
-  DWORD dwNextAgentSessionState;
-  DATE dateSessionStartTime;
-  DWORD dwSessionDuration;
-  DWORD dwNumberOfCalls;
-  DWORD dwTotalTalkTime;
-  DWORD dwAverageTalkTime;
-  DWORD dwTotalCallTime;
-  DWORD dwAverageCallTime;
-  DWORD dwTotalWrapUpTime;
-  DWORD dwAverageWrapUpTime;
-  CURRENCY cyACDCallRate;
-  DWORD dwLongestTimeToAnswer;
-  DWORD dwAverageTimeToAnswer;
-} LINEAGENTSESSIONINFO, *LPLINEAGENTSESSIONINFO;
+} LINEPROXYREQUESTLIST, *LPLINEPROXYREQUESTLIST;
 #pragma pack(pop)
 
 #pragma pack(push, 1)
@@ -2180,17 +2207,6 @@ typedef struct linequeueentry_tag {
   DWORD dwNameSize;
   DWORD dwNameOffset;
 } LINEQUEUEENTRY, *LPLINEQUEUEENTRY;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct linequeuelist_tag {
-  DWORD dwTotalSize;
-  DWORD dwNeededSize;
-  DWORD dwUsedSize;
-  DWORD dwNumEntries;
-  DWORD dwListSize;
-  DWORD dwListOffset;
-} LINEQUEUELIST, *LPLINEQUEUELIST;
 #pragma pack(pop)
 
 #pragma pack(push, 1)
@@ -2212,30 +2228,14 @@ typedef struct linequeueinfo_tag {
 #pragma pack(pop)
 
 #pragma pack(push, 1)
-typedef struct lineproxyrequestlist_tag {
+typedef struct linequeuelist_tag {
   DWORD dwTotalSize;
   DWORD dwNeededSize;
   DWORD dwUsedSize;
   DWORD dwNumEntries;
   DWORD dwListSize;
   DWORD dwListOffset;
-} LINEPROXYREQUESTLIST, *LPLINEPROXYREQUESTLIST;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct linecalltreatmententry_tag {
-  DWORD dwCallTreatmentID;
-  DWORD dwCallTreatmentNameSize;
-  DWORD dwCallTreatmentNameOffset;
-} LINECALLTREATMENTENTRY, *LPLINECALLTREATMENTENTRY;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct lineproviderentry_tag {
-  DWORD dwPermanentProviderID;
-  DWORD dwProviderFilenameSize;
-  DWORD dwProviderFilenameOffset;
-} LINEPROVIDERENTRY, *LPLINEPROVIDERENTRY;
+} LINEQUEUELIST, *LPLINEQUEUELIST;
 #pragma pack(pop)
 
 typedef struct linereqmakecall_tag {
@@ -2291,5 +2291,258 @@ typedef struct linetermcaps_tag {
   DWORD dwTermSharing;
 } LINETERMCAPS, *LPLINETERMCAPS;
 #pragma pack(pop)
+
+#define DECLARE_OPAQUE32name) typedef DWORD name
+#define lineCreateAgent 0
+#ifdef UNICODE
+#define lineCreateAgentSession lineCreateAgentSessionW
+#else
+#define lineCreateAgentSession lineCreateAgentSessionA
+#endif
+#ifdef UNICODE
+#define lineGetAgentActivityList lineGetAgentActivityListW
+#else
+#define lineGetAgentActivityList lineGetAgentActivityListA
+#endif
+#ifdef UNICODE
+#define lineGetAgentCaps lineGetAgentCapsW
+#else
+#define lineGetAgentCaps lineGetAgentCapsA
+#endif
+#ifdef UNICODE
+#define lineGetAgentGroupList lineGetAgentGroupListW
+#else
+#define lineGetAgentGroupList lineGetAgentGroupListA
+#endif
+#ifdef UNICODE
+#define lineGetAgentStatus lineGetAgentStatusW
+#else
+#define lineGetAgentStatus lineGetAgentStatusA
+#endif
+#ifdef UNICODE
+#define lineGetGroupList lineGetGroupListW
+#else
+#define lineGetGroupList lineGetGroupListA
+#endif
+#ifdef UNICODE
+#define lineGetQueueList lineGetQueueListW
+#else
+#define lineGetQueueList lineGetQueueListA
+#endif
+#ifdef UNICODE
+#define phoneInitializeEx phoneInitializeExW
+#else
+#define phoneInitializeEx phoneInitializeExA
+#endif
+#define TAPI_REPLY 0x463
+#define TAPIERROR_FORMATMESSAGE__ErrCode__) (((__ErrCode__) > 0xFFFF0000) ? ((__ErrCode__) & 0x0000FFFF) : (((__ErrCode__) & 0x10000000) ? ((__ErrCode__) - 0x90000000 + 0xF000) : ((__ErrCode__) - 0x80000000 + 0xE000)))
+
+#pragma pack(push, 1)
+struct lineagentgroupentry_tag
+{
+    struct
+    {
+        DWORD dwGroupID1;
+        DWORD dwGroupID2;
+        DWORD dwGroupID3;
+        DWORD dwGroupID4;
+    } GroupID;
+    DWORD dwNameSize;
+    DWORD dwNameOffset;
+};
+#pragma pack(pop)
+
+typedef struct lineagentgroupentry_tag LINEAGENTGROUPENTRY;
+
+#pragma pack(push, 1)
+struct lineproxyrequest_tag
+{
+    DWORD dwSize;
+    DWORD dwClientMachineNameSize;
+    DWORD dwClientMachineNameOffset;
+    DWORD dwClientUserNameSize;
+    DWORD dwClientUserNameOffset;
+    DWORD dwClientAppAPIVersion;
+    DWORD dwRequestType;
+    union
+    {
+        struct
+        {
+            DWORD dwAddressID;
+            LINEAGENTGROUPLIST GroupList;
+        } SetAgentGroup;
+        struct
+        {
+            DWORD dwAddressID;
+            DWORD dwAgentState;
+            DWORD dwNextAgentState;
+        } SetAgentState;
+        struct
+        {
+            DWORD dwAddressID;
+            DWORD dwActivityID;
+        } SetAgentActivity;
+        struct
+        {
+            DWORD dwAddressID;
+            LINEAGENTCAPS AgentCaps;
+        } GetAgentCaps;
+        struct
+        {
+            DWORD dwAddressID;
+            LINEAGENTSTATUS AgentStatus;
+        } GetAgentStatus;
+        struct
+        {
+            DWORD dwAddressID;
+            DWORD dwAgentExtensionIDIndex;
+            DWORD dwSize;
+            BYTE Params[1];
+        } AgentSpecific;
+        struct
+        {
+            DWORD dwAddressID;
+            LINEAGENTACTIVITYLIST ActivityList;
+        } GetAgentActivityList;
+        struct
+        {
+            DWORD dwAddressID;
+            LINEAGENTGROUPLIST GroupList;
+        } GetAgentGroupList;
+        struct
+        {
+            HAGENT hAgent;
+            DWORD dwAgentIDSize;
+            DWORD dwAgentIDOffset;
+            DWORD dwAgentPINSize;
+            DWORD dwAgentPINOffset;
+        } CreateAgent;
+        struct
+        {
+            HAGENT hAgent;
+            DWORD dwAgentState;
+            DWORD dwNextAgentState;
+        } SetAgentStateEx;
+        struct
+        {
+            HAGENT hAgent;
+            DWORD dwMeasurementPeriod;
+        } SetAgentMeasurementPeriod;
+        struct
+        {
+            HAGENT hAgent;
+            LINEAGENTINFO AgentInfo;
+        } GetAgentInfo;
+        struct
+        {
+            HAGENTSESSION hAgentSession;
+            DWORD dwAgentPINSize;
+            DWORD dwAgentPINOffset;
+            HAGENT hAgent;
+            GUID GroupID;
+            DWORD dwWorkingAddressID;
+        } CreateAgentSession;
+        struct
+        {
+            HAGENT hAgent;
+            LINEAGENTSESSIONLIST SessionList;
+        } GetAgentSessionList;
+        struct
+        {
+            HAGENTSESSION hAgentSession;
+            LINEAGENTSESSIONINFO SessionInfo;
+        } GetAgentSessionInfo;
+        struct
+        {
+            HAGENTSESSION hAgentSession;
+            DWORD dwAgentSessionState;
+            DWORD dwNextAgentSessionState;
+        } SetAgentSessionState;
+        struct
+        {
+            GUID GroupID;
+            LINEQUEUELIST QueueList;
+        } GetQueueList;
+        struct
+        {
+            DWORD dwQueueID;
+            DWORD dwMeasurementPeriod;
+        } SetQueueMeasurementPeriod;
+        struct
+        {
+            DWORD dwQueueID;
+            LINEQUEUEINFO QueueInfo;
+        } GetQueueInfo;
+        struct
+        {
+            LINEAGENTGROUPLIST GroupList;
+        } GetGroupList;
+    };
+};
+#pragma pack(pop)
+
+typedef struct lineproxyrequest_tag LINEPROXYREQUEST;
+
+typedef struct lineagentgroupentry_tag *LPLINEAGENTGROUPENTRY;
+
+typedef struct lineproxyrequest_tag *LPLINEPROXYREQUEST;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+LONG WINAPI lineGetMessage(HLINEAPP hLineApp, LPLINEMESSAGE lpMessage, DWORD dwTimeout);
+LONG WINAPI phoneGetMessage(HPHONEAPP hPhoneApp, LPPHONEMESSAGE lpMessage, DWORD dwTimeout);
+LONG WINAPI phoneInitializeExA(LPHPHONEAPP lphPhoneApp, HINSTANCE hInstance, PHONECALLBACK lpfnCallback, LPCSTR lpszFriendlyAppName, LPDWORD lpdwNumDevs, LPDWORD lpdwAPIVersion, LPPHONEINITIALIZEEXPARAMS lpPhoneInitializeExParams);
+LONG WINAPI phoneInitializeExW(LPHPHONEAPP lphPhoneApp, HINSTANCE hInstance, PHONECALLBACK lpfnCallback, LPCWSTR lpszFriendlyAppName, LPDWORD lpdwNumDevs, LPDWORD lpdwAPIVersion, LPPHONEINITIALIZEEXPARAMS lpPhoneInitializeExParams);
+
+/* TODO: LiberNT does not implement the functions below yet */
+LONG WINAPI lineAgentSpecific(HLINE hLine, DWORD dwAddressID, DWORD dwAgentExtensionIDIndex, LPVOID lpParams, DWORD dwSize);
+LONG WINAPI lineCreateAgentA(HLINE hLine, LPCSTR lpszAgentID, LPCSTR lpszAgentPIN, LPHAGENT lphAgent);
+LONG WINAPI lineCreateAgentSessionA(HLINE hLine, HAGENT hAgent, LPCSTR lpszAgentPIN, DWORD dwWorkingAddressID, LPGUID lpGroupID, LPHAGENTSESSION lphAgentSession);
+LONG WINAPI lineCreateAgentSessionW(HLINE hLine, HAGENT hAgent, LPCWSTR lpszAgentPIN, DWORD dwWorkingAddressID, LPGUID lpGroupID, LPHAGENTSESSION lphAgentSession);
+LONG WINAPI lineCreateAgentW(HLINE hLine, LPCWSTR lpszAgentID, LPCWSTR lpszAgentPIN, LPHAGENT lphAgent);
+LONG WINAPI lineGetAgentActivityListA(HLINE hLine, DWORD dwAddressID, LPLINEAGENTACTIVITYLIST lpAgentActivityList);
+LONG WINAPI lineGetAgentActivityListW(HLINE hLine, DWORD dwAddressID, LPLINEAGENTACTIVITYLIST lpAgentActivityList);
+LONG WINAPI lineGetAgentCapsA(HLINEAPP hLineApp, DWORD dwDeviceID, DWORD dwAddressID, DWORD dwAppAPIVersion, LPLINEAGENTCAPS lpAgentCaps);
+LONG WINAPI lineGetAgentCapsW(HLINEAPP hLineApp, DWORD dwDeviceID, DWORD dwAddressID, DWORD dwAppAPIVersion, LPLINEAGENTCAPS lpAgentCaps);
+LONG WINAPI lineGetAgentGroupListA(HLINE hLine, DWORD dwAddressID, LPLINEAGENTGROUPLIST lpAgentGroupList);
+LONG WINAPI lineGetAgentGroupListW(HLINE hLine, DWORD dwAddressID, LPLINEAGENTGROUPLIST lpAgentGroupList);
+LONG WINAPI lineGetAgentInfo(HLINE hLine, HAGENT hAgent, LPLINEAGENTINFO lpAgentInfo);
+LONG WINAPI lineGetAgentSessionInfo(HLINE hLine, HAGENTSESSION hAgentSession, LPLINEAGENTSESSIONINFO lpAgentSessionInfo);
+LONG WINAPI lineGetAgentSessionList(HLINE hLine, HAGENT hAgent, LPLINEAGENTSESSIONLIST lpAgentSessionList);
+LONG WINAPI lineGetAgentStatusA(HLINE hLine, DWORD dwAddressID, LPLINEAGENTSTATUS lpAgentStatus);
+LONG WINAPI lineGetAgentStatusW(HLINE hLine, DWORD dwAddressID, LPLINEAGENTSTATUS lpAgentStatus);
+LONG WINAPI lineGetGroupListA(HLINE hLine, LPLINEAGENTGROUPLIST lpGroupList);
+LONG WINAPI lineGetGroupListW(HLINE hLine, LPLINEAGENTGROUPLIST lpGroupList);
+LONG WINAPI lineGetProxyStatus(HLINEAPP hLineApp, DWORD dwDeviceID, DWORD dwAppAPIVersion, LPLINEPROXYREQUESTLIST lpLineProxyReqestList);
+LONG WINAPI lineGetQueueInfo(HLINE hLine, DWORD dwQueueID, LPLINEQUEUEINFO lpLineQueueInfo);
+LONG WINAPI lineGetQueueListA(HLINE hLine, LPGUID lpGroupID, LPLINEQUEUELIST lpQueueList);
+LONG WINAPI lineGetQueueListW(HLINE hLine, LPGUID lpGroupID, LPLINEQUEUELIST lpQueueList);
+LONG WINAPI lineProxyMessage(HLINE hLine, HCALL hCall, DWORD dwMsg, DWORD dwParam1, DWORD dwParam2, DWORD dwParam3);
+LONG WINAPI lineProxyResponse(HLINE hLine, LPLINEPROXYREQUEST lpProxyRequest, DWORD dwResult);
+LONG WINAPI lineSetAgentActivity(HLINE hLine, DWORD dwAddressID, DWORD dwActivityID);
+LONG WINAPI lineSetAgentGroup(HLINE hLine, DWORD dwAddressID, LPLINEAGENTGROUPLIST lpAgentGroupList);
+LONG WINAPI lineSetAgentMeasurementPeriod(HLINE hLine, HAGENT hAgent, DWORD dwMeasurementPeriod);
+LONG WINAPI lineSetAgentSessionState(HLINE hLine, HAGENTSESSION hAgentSession, DWORD dwAgentSessionState, DWORD dwNextAgentSessionState);
+LONG WINAPI lineSetAgentState(HLINE hLine, DWORD dwAddressID, DWORD dwAgentState, DWORD dwNextAgentState);
+LONG WINAPI lineSetAgentStateEx(HLINE hLine, HAGENT hAgent, DWORD dwAgentState, DWORD dwNextAgentState);
+LONG WINAPI lineSetCallData(HCALL hCall, LPVOID lpCallData, DWORD dwSize);
+LONG WINAPI lineSetCallQualityOfService(HCALL hCall, LPVOID lpSendingFlowspec, DWORD dwSendingFlowspecSize, LPVOID lpReceivingFlowspec, DWORD dwReceivingFlowspecSize);
+LONG WINAPI lineSetCallTreatment(HCALL hCall, DWORD dwTreatment);
+LONG WINAPI lineSetLineDevStatus(HLINE hLine, DWORD dwStatusToChange, DWORD fStatus);
+LONG WINAPI lineSetQueueMeasurementPeriod(HLINE hLine, DWORD dwQueueID, DWORD dwMeasurementPeriod);
+LONG WINAPI tapiRequestDrop(HWND hwnd, WPARAM wRequestID);
+LONG WINAPI tapiRequestMediaCall(HWND hwnd, WPARAM wRequestID, LPCSTR lpszDeviceClass, LPCSTR lpDeviceID, DWORD dwSize, DWORD dwSecure, LPCSTR lpszDestAddress, LPCSTR lpszAppName, LPCSTR lpszCalledParty, LPCSTR lpszComment);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define DECLARE_OPAQUE32name) typedef DWORD name
+#define TAPIERROR_FORMATMESSAGE__ErrCode__) (((__ErrCode__) > 0xFFFF0000) ? ((__ErrCode__) & 0x0000FFFF) : (((__ErrCode__) & 0x10000000) ? ((__ErrCode__) - 0x90000000 + 0xF000) : ((__ErrCode__) - 0x80000000 + 0xE000)))
+
+#define DECLARE_OPAQUE32name) typedef DWORD name
+#define TAPIERROR_FORMATMESSAGE__ErrCode__) (((__ErrCode__) > 0xFFFF0000) ? ((__ErrCode__) & 0x0000FFFF) : (((__ErrCode__) & 0x10000000) ? ((__ErrCode__) - 0x90000000 + 0xF000) : ((__ErrCode__) - 0x80000000 + 0xE000)))
 
 #endif /* __WINE_TAPI_H */

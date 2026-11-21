@@ -5772,47 +5772,23 @@ typedef enum EC_SEARCHWEB_ENTRYPOINT {
 
 typedef struct tagNMBCDROPDOWN * LPNMBCDROPDOWN;
 
-typedef struct tagNMCUSTOMTEXT {
+typedef struct NMSEARCHWEB {
   NMHDR hdr;
-  HDC hDC;
-  LPCWSTR lpString;
-  int nCount;
-  LPRECT lpRect;
-  UINT uFormat;
-  BOOL fLink;
-} NMCUSTOMTEXT, *LPNMCUSTOMTEXT;
+  EC_SEARCHWEB_ENTRYPOINT entrypoint;
+  BOOL hasQueryText;
+  BOOL invokeSucceeded;
+} NMSEARCHWEB;
 
-typedef struct tagNMCUSTOMSPLITRECTINFO {
-  NMHDR hdr;
-  RECT rcClient;
+typedef struct tagDATETIMEPICKERINFO {
+  DWORD cbSize;
+  RECT rcCheck;
+  DWORD stateCheck;
   RECT rcButton;
-  RECT rcSplit;
-} NMCUSTOMSPLITRECTINFO, *LPNMCUSTOMSPLITRECTINFO;
-
-typedef struct tagNMREBARSPLITTER {
-  NMHDR hdr;
-  RECT rcSizing;
-} NMREBARSPLITTER, *LPNMREBARSPLITTER;
-
-typedef struct tagTRBTHUMBPOSCHANGING {
-  NMHDR hdr;
-  DWORD dwPos;
-  int nReason;
-} NMTRBTHUMBPOSCHANGING;
-
-typedef struct tagNMLVLINK {
-  NMHDR hdr;
-  LITEM link;
-  int iItem;
-  int iSubItem;
-} NMLVLINK, *PNMLVLINK;
-
-typedef struct tagNMTVSTATEIMAGECHANGING {
-  NMHDR hdr;
-  HTREEITEM hti;
-  int iOldStateImageIndex;
-  int iNewStateImageIndex;
-} NMTVSTATEIMAGECHANGING, *LPNMTVSTATEIMAGECHANGING;
+  DWORD stateButton;
+  HWND hwndEdit;
+  HWND hwndUD;
+  HWND hwndDropDown;
+} DATETIMEPICKERINFO, *LPDATETIMEPICKERINFO;
 
 typedef struct tagMCGRIDINFO {
   UINT cbSize;
@@ -5829,28 +5805,314 @@ typedef struct tagMCGRIDINFO {
   size_t cchName;
 } MCGRIDINFO, *PMCGRIDINFO;
 
+typedef struct tagNMCUSTOMSPLITRECTINFO {
+  NMHDR hdr;
+  RECT rcClient;
+  RECT rcButton;
+  RECT rcSplit;
+} NMCUSTOMSPLITRECTINFO, *LPNMCUSTOMSPLITRECTINFO;
+
+typedef struct tagNMCUSTOMTEXT {
+  NMHDR hdr;
+  HDC hDC;
+  LPCWSTR lpString;
+  int nCount;
+  LPRECT lpRect;
+  UINT uFormat;
+  BOOL fLink;
+} NMCUSTOMTEXT, *LPNMCUSTOMTEXT;
+
+typedef struct tagNMLVLINK {
+  NMHDR hdr;
+  LITEM link;
+  int iItem;
+  int iSubItem;
+} NMLVLINK, *PNMLVLINK;
+
+typedef struct tagNMREBARSPLITTER {
+  NMHDR hdr;
+  RECT rcSizing;
+} NMREBARSPLITTER, *LPNMREBARSPLITTER;
+
+typedef struct tagNMTVSTATEIMAGECHANGING {
+  NMHDR hdr;
+  HTREEITEM hti;
+  int iOldStateImageIndex;
+  int iNewStateImageIndex;
+} NMTVSTATEIMAGECHANGING, *LPNMTVSTATEIMAGECHANGING;
+
 typedef struct tagNMVIEWCHANGE {
   NMHDR nmhdr;
   DWORD dwOldView;
   DWORD dwNewView;
 } NMVIEWCHANGE, *LPNMVIEWCHANGE;
 
-typedef struct tagDATETIMEPICKERINFO {
-  DWORD cbSize;
-  RECT rcCheck;
-  DWORD stateCheck;
-  RECT rcButton;
-  DWORD stateButton;
-  HWND hwndEdit;
-  HWND hwndUD;
-  HWND hwndDropDown;
-} DATETIMEPICKERINFO, *LPDATETIMEPICKERINFO;
-
-typedef struct NMSEARCHWEB {
+typedef struct tagTRBTHUMBPOSCHANGING {
   NMHDR hdr;
-  EC_SEARCHWEB_ENTRYPOINT entrypoint;
-  BOOL hasQueryText;
-  BOOL invokeSucceeded;
-} NMSEARCHWEB;
+  DWORD dwPos;
+  int nReason;
+} NMTRBTHUMBPOSCHANGING;
+
+#define ACM_ISPLAYING 0x468
+#define Animate_IsPlayinghwnd) (BOOL) SNDMSG(hwnd, ACM_ISPLAYING, 0, 0)
+#ifdef _WIN64
+#define BCCL_NOGLYPH (-1)
+#else
+#define BCCL_NOGLYPH 0xFFFFFFFF
+#endif
+#define Button_GetNotehwnd, psz, pcc) (BOOL) SNDMSG((hwnd), BCM_GETNOTE, (WPARAM) pcc, (LPARAM) psz)
+#define Button_GetNoteLengthhwnd) (LRESULT) SNDMSG((hwnd), BCM_GETNOTELENGTH, 0, 0)
+#define Button_GetSplitInfohwnd, pInfo) (BOOL) SNDMSG((hwnd), BCM_GETSPLITINFO, 0, (LPARAM) (pInfo))
+#define Button_SetDropDownStatehwnd, fDropDown) (BOOL) SNDMSG((hwnd), BCM_SETDROPDOWNSTATE, (WPARAM) (fDropDown), 0)
+#define Button_SetNotehwnd, psz) (BOOL) SNDMSG((hwnd), BCM_SETNOTE, 0, (LPARAM) (psz))
+#define Button_SetSplitInfohwnd, pInfo) (BOOL) SNDMSG((hwnd), BCM_SETSPLITINFO, 0, (LPARAM) (pInfo))
+#define CB_GETCUEBANNER 0x1704
+#define CB_SETCUEBANNER 0x1703
+#define ComboBox_GetCueBannerTexthwnd, lpwText, cchText) (BOOL) SNDMSG((hwnd), CB_GETCUEBANNER, (WPARAM) (lpwText), (LPARAM) (cchText))
+#define ComboBox_SetCueBannerTexthwnd, lpcwText) (BOOL) SNDMSG((hwnd), CB_SETCUEBANNER, 0, (LPARAM) (lpcwText))
+#define DateTime_CloseMonthCalhdp) SNDMSG(hdp, DTM_CLOSEMONTHCAL, 0, 0)
+#define DateTime_GetDateTimePickerInfohdp, pdtpi) SNDMSG(hdp, DTM_GETDATETIMEPICKERINFO, 0, (LPARAM) (pdtpi))
+#define DateTime_GetIdealSizehdp, psize) (BOOL) SNDMSG((hdp), DTM_GETIDEALSIZE, 0, (LPARAM) (psize))
+#define DateTime_GetMonthCalStylehdp) SNDMSG(hdp, DTM_GETMCSTYLE, 0, 0)
+#define DateTime_SetMonthCalStylehdp, dwStyle) SNDMSG(hdp, DTM_SETMCSTYLE, 0, (LPARAM) dwStyle)
+#define DTM_CLOSEMONTHCAL 0x100D
+#define DTM_GETDATETIMEPICKERINFO 0x100E
+#define DTM_GETMCSTYLE 0x100C
+#define DTM_SETMCSTYLE 0x100B
+#define Edit_EnableSearchWebhwndCtl, enable) (BOOL) SNDMSG((hwndCtl), EM_ENABLESEARCHWEB, (WPARAM) (enable), 0)
+#define Edit_GetCaretIndexhwndCtl) (DWORD) SNDMSG((hwndCtl), EM_GETCARETINDEX, 0, 0)
+#define Edit_GetEndOfLinehwndCtl) (EC_ENDOFLINE) SNDMSG((hwndCtl), EM_GETENDOFLINE, 0, 0)
+#define Edit_GetExtendedStylehwndCtl) (DWORD) SNDMSG((hwndCtl), EM_GETEXTENDEDSTYLE, 0, 0)
+#define Edit_GetFileLinehwndCtl, lineNumber, textBuffer) (DWORD) SNDMSG((hwndCtl), EM_GETFILELINE, (WPARAM) (lineNumber), (LPARAM) (textBuffer))
+#define Edit_GetFileLineCounthwndCtl) (DWORD) SNDMSG((hwndCtl), EM_GETFILELINECOUNT, 0, 0)
+#define Edit_GetFileLineFromCharhwndCtl, characterIndex) (DWORD) SNDMSG((hwndCtl), EM_FILELINEFROMCHAR, (WPARAM) (characterIndex), 0)
+#define Edit_GetFileLineIndexhwndCtl, lineNumber) (DWORD) SNDMSG((hwndCtl), EM_FILELINEINDEX, (WPARAM) (lineNumber), 0)
+#define Edit_GetFileLineLengthhwndCtl, characterIndex) (DWORD) SNDMSG((hwndCtl), EM_FILELINELENGTH, (WPARAM) (characterIndex), 0)
+#define Edit_GetHilitehwndCtl) ((DWORD) SNDMSG((hwndCtl), EM_GETHILITE, 0L, 0L))
+#define Edit_GetZoomhwndCtl, numerator, denominator) (BOOL) SNDMSG((hwndCtl), EM_GETZOOM, (WPARAM) (numerator), (LPARAM) (denominator))
+#define Edit_NoSetFocushwndCtl) ((DWORD) SNDMSG((hwndCtl), EM_NOSETFOCUS, 0L, 0L))
+#define Edit_SearchWebhwndCtl) (BOOL) SNDMSG((hwndCtl), EM_SEARCHWEB, 0, 0)
+#define Edit_SetCueBannerTextFocusedhwnd, lpcwText, fDrawFocused) (BOOL) SNDMSG((hwnd), EM_SETCUEBANNER, (WPARAM) fDrawFocused, (LPARAM) lpcwText)
+#define Edit_SetEndOfLinehwndCtl, eolType) (DWORD) SNDMSG((hwndCtl), EM_SETENDOFLINE, (eolType), 0)
+#define Edit_SetExtendedStylehwndCtl, dw, dwMask) (DWORD) SNDMSG((hwndCtl), EM_SETEXTENDEDSTYLE, (dwMask), (dw))
+#define Edit_SetHilitehwndCtl, ichStart, ichEnd) ((void) SNDMSG((hwndCtl), EM_SETHILITE, (ichStart), (ichEnd)))
+#define Edit_SetZoomhwndCtl, numerator, denominator) (BOOL) SNDMSG((hwndCtl), EM_SETZOOM, (WPARAM) (numerator), (LPARAM) (denominator))
+#define Edit_TakeFocushwndCtl) ((DWORD) SNDMSG((hwndCtl), EM_TAKEFOCUS, 0L, 0L))
+#define EM_ENABLESEARCHWEB 0x150E
+#define EM_FILELINEFROMCHAR 0x1513
+#define EM_FILELINEINDEX 0x1514
+#define EM_FILELINELENGTH 0x1515
+#define EM_GETCARETINDEX 0x1512
+#define EM_GETENDOFLINE 0x150D
+#define EM_GETEXTENDEDSTYLE 0x150B
+#define EM_GETFILELINE 0x1516
+#define EM_GETFILELINECOUNT 0x1517
+#define EM_GETHILITE 0x1506
+#define EM_NOSETFOCUS 0x1507
+#define EM_SEARCHWEB 0x150F
+#define EM_SETCARETINDEX 0x1511
+#define EM_SETENDOFLINE 0x150C
+#define EM_SETEXTENDEDSTYLE 0x150A
+#define EM_SETHILITE 0x1505
+#define EM_TAKEFOCUS 0x1508
+#define EN_FIRST 0xFFFFFA10
+#define EN_LAST 0xFFFFF9FC
+#define EN_SEARCHWEB 0xFFFFFA10
+#define ES_EX_ALLOWEOL_ALL 3
+#define ES_EX_ALLOWEOL_CR 0x0001L
+#ifdef _WIN64
+#define HBITMAP_CALLBACK (-1)
+#else
+#define HBITMAP_CALLBACK 0xFFFFFFFF
+#endif
+#define HDM_GETFOCUSEDITEM 0x121B
+#define HDM_GETITEMDROPDOWNRECT (HDM_FIRST + 25)
+#define HDM_GETOVERFLOWRECT 0x121A
+#define HDM_SETFOCUSEDITEM 0x121C
+#define HDM_TRANSLATEACCELERATOR 0
+#define HDSIL_NORMAL 0
+#define Header_GetFocusedItemhwnd) (int) SNDMSG((hwnd), HDM_GETFOCUSEDITEM, (WPARAM) (0), (LPARAM) (0))
+#define Header_GetItemDropDownRecthwnd, iItem, lprc) (BOOL) SNDMSG((hwnd), HDM_GETITEMDROPDOWNRECT, (WPARAM) (iItem), (LPARAM) (lprc))
+#define Header_GetOverflowRecthwnd, lprc) (BOOL) SNDMSG((hwnd), HDM_GETOVERFLOWRECT, 0, (LPARAM) (lprc))
+#define Header_GetStateImageListhwnd) (HIMAGELIST) SNDMSG((hwnd), HDM_GETIMAGELIST, HDSIL_STATE, 0)
+#define Header_SetFocusedItemhwnd, iItem) (BOOL) SNDMSG((hwnd), HDM_SETFOCUSEDITEM, (WPARAM) (0), (LPARAM) (iItem))
+#define Header_SetStateImageListhwnd, himl) (HIMAGELIST) SNDMSG((hwnd), HDM_SETIMAGELIST, HDSIL_STATE, (LPARAM) (himl))
+#define IImageListToHIMAGELISThiml) ((HIMAGELIST) (himl))
+#define ListView_HitTestExhwndLV, pinfo) (int) SNDMSG((hwndLV), LVM_HITTEST, (WPARAM) - 1, (LPARAM) (LV_HITTESTINFO *) (pinfo))
+#define ListView_SubItemHitTestExhwnd, plvhti) (int) SNDMSG((hwnd), LVM_SUBITEMHITTEST, (WPARAM) - 1, (LPARAM) (LPLVHITTESTINFO) (plvhti))
+#ifdef _WIN64
+#define LVITEM_V5_SIZE 0x48
+#else
+#define LVITEM_V5_SIZE 0x34
+#endif
+#ifdef _WIN64
+#define LVITEMA_V5_SIZE 0x48
+#else
+#define LVITEMA_V5_SIZE 0x34
+#endif
+#ifdef _WIN64
+#define LVITEMW_V5_SIZE 0x48
+#else
+#define LVITEMW_V5_SIZE 0x34
+#endif
+#define LVN_INCREMENTALSEARCH 0xFFFFFF5E
+#define LVNI_DIRECTIONMASK 0xF00
+#define LVNI_STATEMASK 0xF
+#define LVNSCH_DEFAULT - 1
+#ifdef _WIN64
+#define LVTILEINFO_V5_SIZE 0x18
+#else
+#define LVTILEINFO_V5_SIZE 0x10
+#endif
+#define MCHT_CALENDARDATEMAX 0x20005
+#define MCHT_CALENDARDATEMIN 0x20004
+#define MCM_GETCALENDARGRIDINFO 0x1018
+#define MCM_GETCALID 0x101B
+#define MCM_SETCALID 0x101C
+#define MCM_SETCURRENTVIEW 0x1020
+#define MCMV_MAX 3
+#define MonthCal_GetCalendarBorderhmc) (int) SNDMSG(hmc, MCM_GETCALENDARBORDER, 0, 0)
+#define MonthCal_GetCalendarGridInfohmc, pmcGridInfo) (BOOL) SNDMSG(hmc, MCM_GETCALENDARGRIDINFO, 0, (LPARAM) (PMCGRIDINFO) (pmcGridInfo))
+#define MonthCal_GetCALIDhmc) (CALID) SNDMSG(hmc, MCM_GETCALID, 0, 0)
+#define MonthCal_SetCalendarBorderhmc, fset, xyborder) SNDMSG(hmc, MCM_SETCALENDARBORDER, (WPARAM) (fset), (LPARAM) (xyborder))
+#define MonthCal_SetCALIDhmc, calid) SNDMSG(hmc, MCM_SETCALID, (WPARAM) (calid), 0)
+#define MonthCal_SetCurrentViewhmc, dwNewView) (BOOL) SNDMSG(hmc, MCM_SETCURRENTVIEW, 0, (LPARAM) (dwNewView))
+#define NM_CUSTOMTEXT 0xFFFFFFE8
+#define NM_FONTCHANGED 0xFFFFFFE9
+#define NM_GETCUSTOMSPLITRECT 0xFFFFFB21
+#define NM_TVSTATEIMAGECHANGING 0xFFFFFFE8
+#define Pager_SetScrollInfohwnd, cTimeOut, cLinesPer, cPixelsPerLine) (void) SNDMSG((hwnd), PGM_SETSCROLLINFO, cTimeOut, MAKELONG(cLinesPer, cPixelsPerLine))
+#define PGM_SETSCROLLINFO 0x140D
+#define RB_GETEXTENDEDSTYLE 0x42A
+#define RB_SETBANDWIDTH 0x42C
+#define RB_SETEXTENDEDSTYLE 0x429
+#define RBN_SPLITTERDRAG 0xFFFFFCB6
+#ifdef _WIN64
+#define REBARBANDINFO_V6_SIZE 0x6C
+#else
+#define REBARBANDINFO_V6_SIZE 0x50
+#endif
+#define TB_GETITEMDROPDOWNRECT 0x467
+#define TB_GETPRESSEDIMAGELIST 0x469
+#define TB_SETPRESSEDIMAGELIST 0x468
+#define TBM_SETPOSNOTIFY 0x422
+#define TRBN_FIRST 0xFFFFFA23
+#define TRBN_LAST 0xFFFFFA11
+#define TRBN_THUMBPOSCHANGING 0xFFFFFA22
+#define TreeView_GetNextSelectedhwnd, hitem) TreeView_GetNextItem(hwnd, hitem, TVGN_NEXTSELECTED)
+#define TVN_ITEMCHANGED 0xFFFFFE5E
+#define TVN_ITEMCHANGING 0xFFFFFE60
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+HRESULT WINAPI TaskDialog(HWND hwndOwner, HINSTANCE hInstance, PCWSTR pszWindowTitle, PCWSTR pszMainInstruction, PCWSTR pszContent, TASKDIALOG_COMMON_BUTTON_FLAGS dwCommonButtons, PCWSTR pszIcon, int *pnButton);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define Animate_IsPlayinghwnd) (BOOL) SNDMSG(hwnd, ACM_ISPLAYING, 0, 0)
+#define Button_GetNotehwnd, psz, pcc) (BOOL) SNDMSG((hwnd), BCM_GETNOTE, (WPARAM) pcc, (LPARAM) psz)
+#define Button_GetNoteLengthhwnd) (LRESULT) SNDMSG((hwnd), BCM_GETNOTELENGTH, 0, 0)
+#define Button_GetSplitInfohwnd, pInfo) (BOOL) SNDMSG((hwnd), BCM_GETSPLITINFO, 0, (LPARAM) (pInfo))
+#define Button_SetDropDownStatehwnd, fDropDown) (BOOL) SNDMSG((hwnd), BCM_SETDROPDOWNSTATE, (WPARAM) (fDropDown), 0)
+#define Button_SetNotehwnd, psz) (BOOL) SNDMSG((hwnd), BCM_SETNOTE, 0, (LPARAM) (psz))
+#define Button_SetSplitInfohwnd, pInfo) (BOOL) SNDMSG((hwnd), BCM_SETSPLITINFO, 0, (LPARAM) (pInfo))
+#define ComboBox_GetCueBannerTexthwnd, lpwText, cchText) (BOOL) SNDMSG((hwnd), CB_GETCUEBANNER, (WPARAM) (lpwText), (LPARAM) (cchText))
+#define ComboBox_SetCueBannerTexthwnd, lpcwText) (BOOL) SNDMSG((hwnd), CB_SETCUEBANNER, 0, (LPARAM) (lpcwText))
+#define DateTime_CloseMonthCalhdp) SNDMSG(hdp, DTM_CLOSEMONTHCAL, 0, 0)
+#define DateTime_GetDateTimePickerInfohdp, pdtpi) SNDMSG(hdp, DTM_GETDATETIMEPICKERINFO, 0, (LPARAM) (pdtpi))
+#define DateTime_GetIdealSizehdp, psize) (BOOL) SNDMSG((hdp), DTM_GETIDEALSIZE, 0, (LPARAM) (psize))
+#define DateTime_GetMonthCalStylehdp) SNDMSG(hdp, DTM_GETMCSTYLE, 0, 0)
+#define DateTime_SetMonthCalStylehdp, dwStyle) SNDMSG(hdp, DTM_SETMCSTYLE, 0, (LPARAM) dwStyle)
+#define Edit_EnableSearchWebhwndCtl, enable) (BOOL) SNDMSG((hwndCtl), EM_ENABLESEARCHWEB, (WPARAM) (enable), 0)
+#define Edit_GetCaretIndexhwndCtl) (DWORD) SNDMSG((hwndCtl), EM_GETCARETINDEX, 0, 0)
+#define Edit_GetEndOfLinehwndCtl) (EC_ENDOFLINE) SNDMSG((hwndCtl), EM_GETENDOFLINE, 0, 0)
+#define Edit_GetExtendedStylehwndCtl) (DWORD) SNDMSG((hwndCtl), EM_GETEXTENDEDSTYLE, 0, 0)
+#define Edit_GetFileLinehwndCtl, lineNumber, textBuffer) (DWORD) SNDMSG((hwndCtl), EM_GETFILELINE, (WPARAM) (lineNumber), (LPARAM) (textBuffer))
+#define Edit_GetFileLineCounthwndCtl) (DWORD) SNDMSG((hwndCtl), EM_GETFILELINECOUNT, 0, 0)
+#define Edit_GetFileLineFromCharhwndCtl, characterIndex) (DWORD) SNDMSG((hwndCtl), EM_FILELINEFROMCHAR, (WPARAM) (characterIndex), 0)
+#define Edit_GetFileLineIndexhwndCtl, lineNumber) (DWORD) SNDMSG((hwndCtl), EM_FILELINEINDEX, (WPARAM) (lineNumber), 0)
+#define Edit_GetFileLineLengthhwndCtl, characterIndex) (DWORD) SNDMSG((hwndCtl), EM_FILELINELENGTH, (WPARAM) (characterIndex), 0)
+#define Edit_GetHilitehwndCtl) ((DWORD) SNDMSG((hwndCtl), EM_GETHILITE, 0L, 0L))
+#define Edit_GetZoomhwndCtl, numerator, denominator) (BOOL) SNDMSG((hwndCtl), EM_GETZOOM, (WPARAM) (numerator), (LPARAM) (denominator))
+#define Edit_NoSetFocushwndCtl) ((DWORD) SNDMSG((hwndCtl), EM_NOSETFOCUS, 0L, 0L))
+#define Edit_SearchWebhwndCtl) (BOOL) SNDMSG((hwndCtl), EM_SEARCHWEB, 0, 0)
+#define Edit_SetCueBannerTextFocusedhwnd, lpcwText, fDrawFocused) (BOOL) SNDMSG((hwnd), EM_SETCUEBANNER, (WPARAM) fDrawFocused, (LPARAM) lpcwText)
+#define Edit_SetEndOfLinehwndCtl, eolType) (DWORD) SNDMSG((hwndCtl), EM_SETENDOFLINE, (eolType), 0)
+#define Edit_SetExtendedStylehwndCtl, dw, dwMask) (DWORD) SNDMSG((hwndCtl), EM_SETEXTENDEDSTYLE, (dwMask), (dw))
+#define Edit_SetHilitehwndCtl, ichStart, ichEnd) ((void) SNDMSG((hwndCtl), EM_SETHILITE, (ichStart), (ichEnd)))
+#define Edit_SetZoomhwndCtl, numerator, denominator) (BOOL) SNDMSG((hwndCtl), EM_SETZOOM, (WPARAM) (numerator), (LPARAM) (denominator))
+#define Edit_TakeFocushwndCtl) ((DWORD) SNDMSG((hwndCtl), EM_TAKEFOCUS, 0L, 0L))
+#define Header_GetFocusedItemhwnd) (int) SNDMSG((hwnd), HDM_GETFOCUSEDITEM, (WPARAM) (0), (LPARAM) (0))
+#define Header_GetItemDropDownRecthwnd, iItem, lprc) (BOOL) SNDMSG((hwnd), HDM_GETITEMDROPDOWNRECT, (WPARAM) (iItem), (LPARAM) (lprc))
+#define Header_GetOverflowRecthwnd, lprc) (BOOL) SNDMSG((hwnd), HDM_GETOVERFLOWRECT, 0, (LPARAM) (lprc))
+#define Header_GetStateImageListhwnd) (HIMAGELIST) SNDMSG((hwnd), HDM_GETIMAGELIST, HDSIL_STATE, 0)
+#define Header_SetFocusedItemhwnd, iItem) (BOOL) SNDMSG((hwnd), HDM_SETFOCUSEDITEM, (WPARAM) (0), (LPARAM) (iItem))
+#define Header_SetStateImageListhwnd, himl) (HIMAGELIST) SNDMSG((hwnd), HDM_SETIMAGELIST, HDSIL_STATE, (LPARAM) (himl))
+#define IImageListToHIMAGELISThiml) ((HIMAGELIST) (himl))
+#define ListView_HitTestExhwndLV, pinfo) (int) SNDMSG((hwndLV), LVM_HITTEST, (WPARAM) - 1, (LPARAM) (LV_HITTESTINFO *) (pinfo))
+#define ListView_SubItemHitTestExhwnd, plvhti) (int) SNDMSG((hwnd), LVM_SUBITEMHITTEST, (WPARAM) - 1, (LPARAM) (LPLVHITTESTINFO) (plvhti))
+#define MonthCal_GetCalendarBorderhmc) (int) SNDMSG(hmc, MCM_GETCALENDARBORDER, 0, 0)
+#define MonthCal_GetCalendarGridInfohmc, pmcGridInfo) (BOOL) SNDMSG(hmc, MCM_GETCALENDARGRIDINFO, 0, (LPARAM) (PMCGRIDINFO) (pmcGridInfo))
+#define MonthCal_GetCALIDhmc) (CALID) SNDMSG(hmc, MCM_GETCALID, 0, 0)
+#define MonthCal_SetCalendarBorderhmc, fset, xyborder) SNDMSG(hmc, MCM_SETCALENDARBORDER, (WPARAM) (fset), (LPARAM) (xyborder))
+#define MonthCal_SetCALIDhmc, calid) SNDMSG(hmc, MCM_SETCALID, (WPARAM) (calid), 0)
+#define MonthCal_SetCurrentViewhmc, dwNewView) (BOOL) SNDMSG(hmc, MCM_SETCURRENTVIEW, 0, (LPARAM) (dwNewView))
+#define Pager_SetScrollInfohwnd, cTimeOut, cLinesPer, cPixelsPerLine) (void) SNDMSG((hwnd), PGM_SETSCROLLINFO, cTimeOut, MAKELONG(cLinesPer, cPixelsPerLine))
+#define TreeView_GetNextSelectedhwnd, hitem) TreeView_GetNextItem(hwnd, hitem, TVGN_NEXTSELECTED)
+
+#define Animate_IsPlayinghwnd) (BOOL) SNDMSG(hwnd, ACM_ISPLAYING, 0, 0)
+#define Button_GetNotehwnd, psz, pcc) (BOOL) SNDMSG((hwnd), BCM_GETNOTE, (WPARAM) pcc, (LPARAM) psz)
+#define Button_GetNoteLengthhwnd) (LRESULT) SNDMSG((hwnd), BCM_GETNOTELENGTH, 0, 0)
+#define Button_GetSplitInfohwnd, pInfo) (BOOL) SNDMSG((hwnd), BCM_GETSPLITINFO, 0, (LPARAM) (pInfo))
+#define Button_SetDropDownStatehwnd, fDropDown) (BOOL) SNDMSG((hwnd), BCM_SETDROPDOWNSTATE, (WPARAM) (fDropDown), 0)
+#define Button_SetNotehwnd, psz) (BOOL) SNDMSG((hwnd), BCM_SETNOTE, 0, (LPARAM) (psz))
+#define Button_SetSplitInfohwnd, pInfo) (BOOL) SNDMSG((hwnd), BCM_SETSPLITINFO, 0, (LPARAM) (pInfo))
+#define ComboBox_GetCueBannerTexthwnd, lpwText, cchText) (BOOL) SNDMSG((hwnd), CB_GETCUEBANNER, (WPARAM) (lpwText), (LPARAM) (cchText))
+#define ComboBox_SetCueBannerTexthwnd, lpcwText) (BOOL) SNDMSG((hwnd), CB_SETCUEBANNER, 0, (LPARAM) (lpcwText))
+#define DateTime_CloseMonthCalhdp) SNDMSG(hdp, DTM_CLOSEMONTHCAL, 0, 0)
+#define DateTime_GetDateTimePickerInfohdp, pdtpi) SNDMSG(hdp, DTM_GETDATETIMEPICKERINFO, 0, (LPARAM) (pdtpi))
+#define DateTime_GetIdealSizehdp, psize) (BOOL) SNDMSG((hdp), DTM_GETIDEALSIZE, 0, (LPARAM) (psize))
+#define DateTime_GetMonthCalStylehdp) SNDMSG(hdp, DTM_GETMCSTYLE, 0, 0)
+#define DateTime_SetMonthCalStylehdp, dwStyle) SNDMSG(hdp, DTM_SETMCSTYLE, 0, (LPARAM) dwStyle)
+#define Edit_EnableSearchWebhwndCtl, enable) (BOOL) SNDMSG((hwndCtl), EM_ENABLESEARCHWEB, (WPARAM) (enable), 0)
+#define Edit_GetCaretIndexhwndCtl) (DWORD) SNDMSG((hwndCtl), EM_GETCARETINDEX, 0, 0)
+#define Edit_GetEndOfLinehwndCtl) (EC_ENDOFLINE) SNDMSG((hwndCtl), EM_GETENDOFLINE, 0, 0)
+#define Edit_GetExtendedStylehwndCtl) (DWORD) SNDMSG((hwndCtl), EM_GETEXTENDEDSTYLE, 0, 0)
+#define Edit_GetFileLinehwndCtl, lineNumber, textBuffer) (DWORD) SNDMSG((hwndCtl), EM_GETFILELINE, (WPARAM) (lineNumber), (LPARAM) (textBuffer))
+#define Edit_GetFileLineCounthwndCtl) (DWORD) SNDMSG((hwndCtl), EM_GETFILELINECOUNT, 0, 0)
+#define Edit_GetFileLineFromCharhwndCtl, characterIndex) (DWORD) SNDMSG((hwndCtl), EM_FILELINEFROMCHAR, (WPARAM) (characterIndex), 0)
+#define Edit_GetFileLineIndexhwndCtl, lineNumber) (DWORD) SNDMSG((hwndCtl), EM_FILELINEINDEX, (WPARAM) (lineNumber), 0)
+#define Edit_GetFileLineLengthhwndCtl, characterIndex) (DWORD) SNDMSG((hwndCtl), EM_FILELINELENGTH, (WPARAM) (characterIndex), 0)
+#define Edit_GetHilitehwndCtl) ((DWORD) SNDMSG((hwndCtl), EM_GETHILITE, 0L, 0L))
+#define Edit_GetZoomhwndCtl, numerator, denominator) (BOOL) SNDMSG((hwndCtl), EM_GETZOOM, (WPARAM) (numerator), (LPARAM) (denominator))
+#define Edit_NoSetFocushwndCtl) ((DWORD) SNDMSG((hwndCtl), EM_NOSETFOCUS, 0L, 0L))
+#define Edit_SearchWebhwndCtl) (BOOL) SNDMSG((hwndCtl), EM_SEARCHWEB, 0, 0)
+#define Edit_SetCueBannerTextFocusedhwnd, lpcwText, fDrawFocused) (BOOL) SNDMSG((hwnd), EM_SETCUEBANNER, (WPARAM) fDrawFocused, (LPARAM) lpcwText)
+#define Edit_SetEndOfLinehwndCtl, eolType) (DWORD) SNDMSG((hwndCtl), EM_SETENDOFLINE, (eolType), 0)
+#define Edit_SetExtendedStylehwndCtl, dw, dwMask) (DWORD) SNDMSG((hwndCtl), EM_SETEXTENDEDSTYLE, (dwMask), (dw))
+#define Edit_SetHilitehwndCtl, ichStart, ichEnd) ((void) SNDMSG((hwndCtl), EM_SETHILITE, (ichStart), (ichEnd)))
+#define Edit_SetZoomhwndCtl, numerator, denominator) (BOOL) SNDMSG((hwndCtl), EM_SETZOOM, (WPARAM) (numerator), (LPARAM) (denominator))
+#define Edit_TakeFocushwndCtl) ((DWORD) SNDMSG((hwndCtl), EM_TAKEFOCUS, 0L, 0L))
+#define Header_GetFocusedItemhwnd) (int) SNDMSG((hwnd), HDM_GETFOCUSEDITEM, (WPARAM) (0), (LPARAM) (0))
+#define Header_GetItemDropDownRecthwnd, iItem, lprc) (BOOL) SNDMSG((hwnd), HDM_GETITEMDROPDOWNRECT, (WPARAM) (iItem), (LPARAM) (lprc))
+#define Header_GetOverflowRecthwnd, lprc) (BOOL) SNDMSG((hwnd), HDM_GETOVERFLOWRECT, 0, (LPARAM) (lprc))
+#define Header_GetStateImageListhwnd) (HIMAGELIST) SNDMSG((hwnd), HDM_GETIMAGELIST, HDSIL_STATE, 0)
+#define Header_SetFocusedItemhwnd, iItem) (BOOL) SNDMSG((hwnd), HDM_SETFOCUSEDITEM, (WPARAM) (0), (LPARAM) (iItem))
+#define Header_SetStateImageListhwnd, himl) (HIMAGELIST) SNDMSG((hwnd), HDM_SETIMAGELIST, HDSIL_STATE, (LPARAM) (himl))
+#define IImageListToHIMAGELISThiml) ((HIMAGELIST) (himl))
+#define ListView_HitTestExhwndLV, pinfo) (int) SNDMSG((hwndLV), LVM_HITTEST, (WPARAM) - 1, (LPARAM) (LV_HITTESTINFO *) (pinfo))
+#define ListView_SubItemHitTestExhwnd, plvhti) (int) SNDMSG((hwnd), LVM_SUBITEMHITTEST, (WPARAM) - 1, (LPARAM) (LPLVHITTESTINFO) (plvhti))
+#define MonthCal_GetCalendarBorderhmc) (int) SNDMSG(hmc, MCM_GETCALENDARBORDER, 0, 0)
+#define MonthCal_GetCalendarGridInfohmc, pmcGridInfo) (BOOL) SNDMSG(hmc, MCM_GETCALENDARGRIDINFO, 0, (LPARAM) (PMCGRIDINFO) (pmcGridInfo))
+#define MonthCal_GetCALIDhmc) (CALID) SNDMSG(hmc, MCM_GETCALID, 0, 0)
+#define MonthCal_SetCalendarBorderhmc, fset, xyborder) SNDMSG(hmc, MCM_SETCALENDARBORDER, (WPARAM) (fset), (LPARAM) (xyborder))
+#define MonthCal_SetCALIDhmc, calid) SNDMSG(hmc, MCM_SETCALID, (WPARAM) (calid), 0)
+#define MonthCal_SetCurrentViewhmc, dwNewView) (BOOL) SNDMSG(hmc, MCM_SETCURRENTVIEW, 0, (LPARAM) (dwNewView))
+#define Pager_SetScrollInfohwnd, cTimeOut, cLinesPer, cPixelsPerLine) (void) SNDMSG((hwnd), PGM_SETSCROLLINFO, cTimeOut, MAKELONG(cLinesPer, cPixelsPerLine))
+#define TreeView_GetNextSelectedhwnd, hitem) TreeView_GetNextItem(hwnd, hitem, TVGN_NEXTSELECTED)
 
 #endif /* _INC_COMMCTRL */

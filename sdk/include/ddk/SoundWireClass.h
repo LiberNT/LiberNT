@@ -22,7 +22,8 @@ typedef enum _SDCA_POSTURE
     SdcaPostureOrientationRotated90DegreesCounterClockwise,
     SdcaPostureOrientationRotated180DegreesCounterClockwise,
     SdcaPostureOrientationRotated270DegreesCounterClockwise,
-    SdcaPostureLidClosed
+    SdcaPostureLidClosed,
+    SdcaPostureCount = 5,
 } SDCA_POSTURE, *PSDCA_POSTURE;
 
 typedef struct _SDCA_NOTIFICATION_POSTURE

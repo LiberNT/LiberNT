@@ -106,7 +106,9 @@ typedef enum _WTS_TYPE_CLASS
 {
     WTSTypeProcessInfoLevel0,
     WTSTypeProcessInfoLevel1,
-    WTSTypeSessionInfoLevel1
+    WTSTypeSessionInfoLevel1,
+    WTSTypeCloudAuthServerNonce = 3,
+    WTSTypeSerializedUserCredential = 4,
 } WTS_TYPE_CLASS;
 
 typedef struct _WTS_PROCESS_INFOA
@@ -451,121 +453,90 @@ typedef enum _WTS_CONFIG_SOURCE {
 #ifdef __cplusplus
 extern "C" {
 #endif
-HANDLE WINAPI WTSOpenServerExW(LPWSTR pServerName);
 HANDLE WINAPI WTSOpenServerExA(LPSTR pServerName);
+HANDLE WINAPI WTSOpenServerExW(LPWSTR pServerName);
 BOOL WINAPI WTSVirtualChannelPurgeInput(HANDLE hChannelHandle);
 BOOL WINAPI WTSVirtualChannelPurgeOutput(HANDLE hChannelHandle);
 #ifdef __cplusplus
 }
 #endif
 
-typedef struct _WTSCONFIGINFOW {
-  ULONG version;
-  ULONG fConnectClientDrivesAtLogon;
-  ULONG fConnectPrinterAtLogon;
-  ULONG fDisablePrinterRedirection;
-  ULONG fDisableDefaultMainClientPrinter;
-  ULONG ShadowSettings;
-  WCHAR LogonUserName[21];
-  WCHAR LogonDomain[18];
-  WCHAR WorkDirectory[261];
-  WCHAR InitialProgram[261];
-  WCHAR ApplicationName[261];
-} WTSCONFIGINFOW, *PWTSCONFIGINFOW;
+typedef struct _WTS_CLIENT_ADDRESS {
+  DWORD AddressFamily;
+  BYTE Address[20];
+} WTS_CLIENT_ADDRESS, *PWTS_CLIENT_ADDRESS;
 
-typedef struct _WTSCONFIGINFOA {
-  ULONG version;
-  ULONG fConnectClientDrivesAtLogon;
-  ULONG fConnectPrinterAtLogon;
-  ULONG fDisablePrinterRedirection;
-  ULONG fDisableDefaultMainClientPrinter;
-  ULONG ShadowSettings;
-  CHAR LogonUserName[21];
-  CHAR LogonDomain[18];
-  CHAR WorkDirectory[261];
-  CHAR InitialProgram[261];
-  CHAR ApplicationName[261];
-} WTSCONFIGINFOA, *PWTSCONFIGINFOA;
+typedef struct _WTS_CLIENT_DISPLAY {
+  DWORD HorizontalResolution;
+  DWORD VerticalResolution;
+  DWORD ColorDepth;
+} WTS_CLIENT_DISPLAY, *PWTS_CLIENT_DISPLAY;
 
-typedef struct _WTSINFOEX_LEVEL1_W {
-  ULONG SessionId;
-  WTS_CONNECTSTATE_CLASS SessionState;
-  LONG SessionFlags;
-  WCHAR WinStationName[33];
-  WCHAR UserName[21];
-  WCHAR DomainName[18];
-  LARGE_INTEGER LogonTime;
-  LARGE_INTEGER ConnectTime;
-  LARGE_INTEGER DisconnectTime;
-  LARGE_INTEGER LastInputTime;
-  LARGE_INTEGER CurrentTime;
-  DWORD IncomingBytes;
-  DWORD OutgoingBytes;
-  DWORD IncomingFrames;
-  DWORD OutgoingFrames;
-  DWORD IncomingCompressedBytes;
-  DWORD OutgoingCompressedBytes;
-} WTSINFOEX_LEVEL1_W, *PWTSINFOEX_LEVEL1_W;
+typedef struct _WTS_PROCESS_INFO_EXA {
+  DWORD SessionId;
+  DWORD ProcessId;
+  LPSTR pProcessName;
+  PSID pUserSid;
+  DWORD NumberOfThreads;
+  DWORD HandleCount;
+  DWORD PagefileUsage;
+  DWORD PeakPagefileUsage;
+  DWORD WorkingSetSize;
+  DWORD PeakWorkingSetSize;
+  LARGE_INTEGER UserTime;
+  LARGE_INTEGER KernelTime;
+} WTS_PROCESS_INFO_EXA, *PWTS_PROCESS_INFO_EXA;
 
-typedef struct _WTSINFOEX_LEVEL1_A {
-  ULONG SessionId;
-  WTS_CONNECTSTATE_CLASS SessionState;
-  LONG SessionFlags;
-  CHAR WinStationName[33];
-  CHAR UserName[21];
-  CHAR DomainName[18];
-  LARGE_INTEGER LogonTime;
-  LARGE_INTEGER ConnectTime;
-  LARGE_INTEGER DisconnectTime;
-  LARGE_INTEGER LastInputTime;
-  LARGE_INTEGER CurrentTime;
-  DWORD IncomingBytes;
-  DWORD OutgoingBytes;
-  DWORD IncomingFrames;
-  DWORD OutgoingFrames;
-  DWORD IncomingCompressedBytes;
-  DWORD OutgoingCompressedBytes;
-} WTSINFOEX_LEVEL1_A, *PWTSINFOEX_LEVEL1_A;
+typedef struct _WTS_PROCESS_INFO_EXW {
+  DWORD SessionId;
+  DWORD ProcessId;
+  LPWSTR pProcessName;
+  PSID pUserSid;
+  DWORD NumberOfThreads;
+  DWORD HandleCount;
+  DWORD PagefileUsage;
+  DWORD PeakPagefileUsage;
+  DWORD WorkingSetSize;
+  DWORD PeakWorkingSetSize;
+  LARGE_INTEGER UserTime;
+  LARGE_INTEGER KernelTime;
+} WTS_PROCESS_INFO_EXW, *PWTS_PROCESS_INFO_EXW;
 
-typedef union _WTSINFOEX_LEVEL_W {
-  WTSINFOEX_LEVEL1_W WTSInfoExLevel1;
-} WTSINFOEX_LEVEL_W, *PWTSINFOEX_LEVEL_W;
+typedef struct _WTS_PRODUCT_INFOA {
+  CHAR CompanyName[256];
+  CHAR ProductID[4];
+} PRODUCT_INFOA;
 
-typedef union _WTSINFOEX_LEVEL_A {
-  WTSINFOEX_LEVEL1_A WTSInfoExLevel1;
-} WTSINFOEX_LEVEL_A, *PWTSINFOEX_LEVEL_A;
+typedef struct _WTS_PRODUCT_INFOW {
+  WCHAR CompanyName[256];
+  WCHAR ProductID[4];
+} PRODUCT_INFOW;
 
-typedef struct _WTSINFOEXW {
-  DWORD Level;
-  WTSINFOEX_LEVEL_W Data;
-} WTSINFOEXW, *PWTSINFOEXW;
+typedef struct _WTS_SERIALIZED_USER_CREDENTIAL {
+  ULONG SerializationLength;
+  BYTE * Serialization;
+} WTS_SERIALIZED_USER_CREDENTIAL, *PWTS_SERIALIZED_USER_CREDENTIAL, WRDS_SERIALIZED_USER_CREDENTIAL, *PWRDS_SERIALIZED_USER_CREDENTIAL;
 
-typedef struct _WTSINFOEXA {
-  DWORD Level;
-  WTSINFOEX_LEVEL_A Data;
-} WTSINFOEXA, *PWTSINFOEXA;
+typedef struct _WTS_SESSION_ADDRESS {
+  DWORD AddressFamily;
+  BYTE Address[20];
+} WTS_SESSION_ADDRESS, *PWTS_SESSION_ADDRESS;
 
-typedef struct _WTSCLIENTW {
-  WCHAR ClientName[21];
-  WCHAR Domain[18];
-  WCHAR UserName[21];
-  WCHAR WorkDirectory[261];
-  WCHAR InitialProgram[261];
-  BYTE EncryptionLevel;
-  ULONG ClientAddressFamily;
-  USHORT ClientAddress[31];
-  USHORT HRes;
-  USHORT VRes;
-  USHORT ColorDepth;
-  WCHAR ClientDirectory[261];
-  ULONG ClientBuildNumber;
-  ULONG ClientHardwareId;
-  USHORT ClientProductId;
-  USHORT OutBufCountHost;
-  USHORT OutBufCountClient;
-  USHORT OutBufLength;
-  WCHAR DeviceId[261];
-} WTSCLIENTW, *PWTSCLIENTW;
+typedef struct _WTS_VALIDATION_INFORMATIONA {
+  PRODUCT_INFOA ProductInfo;
+  BYTE License[16384];
+  DWORD LicenseLength;
+  BYTE HardwareID[20];
+  DWORD HardwareIDLength;
+} WTS_VALIDATION_INFORMATIONA, *PWTS_VALIDATION_INFORMATIONA;
+
+typedef struct _WTS_VALIDATION_INFORMATIONW {
+  PRODUCT_INFOW ProductInfo;
+  BYTE License[16384];
+  DWORD LicenseLength;
+  BYTE HardwareID[20];
+  DWORD HardwareIDLength;
+} WTS_VALIDATION_INFORMATIONW, *PWTS_VALIDATION_INFORMATIONW;
 
 typedef struct _WTSCLIENTA {
   CHAR ClientName[21];
@@ -589,42 +560,181 @@ typedef struct _WTSCLIENTA {
   CHAR DeviceId[261];
 } WTSCLIENTA, *PWTSCLIENTA;
 
-typedef struct _WTS_PRODUCT_INFOA {
-  CHAR CompanyName[256];
-  CHAR ProductID[4];
-} PRODUCT_INFOA;
+typedef struct _WTSCLIENTW {
+  WCHAR ClientName[21];
+  WCHAR Domain[18];
+  WCHAR UserName[21];
+  WCHAR WorkDirectory[261];
+  WCHAR InitialProgram[261];
+  BYTE EncryptionLevel;
+  ULONG ClientAddressFamily;
+  USHORT ClientAddress[31];
+  USHORT HRes;
+  USHORT VRes;
+  USHORT ColorDepth;
+  WCHAR ClientDirectory[261];
+  ULONG ClientBuildNumber;
+  ULONG ClientHardwareId;
+  USHORT ClientProductId;
+  USHORT OutBufCountHost;
+  USHORT OutBufCountClient;
+  USHORT OutBufLength;
+  WCHAR DeviceId[261];
+} WTSCLIENTW, *PWTSCLIENTW;
 
-typedef struct _WTS_PRODUCT_INFOW {
-  WCHAR CompanyName[256];
-  WCHAR ProductID[4];
-} PRODUCT_INFOW;
+typedef struct _WTSCONFIGINFOA {
+  ULONG version;
+  ULONG fConnectClientDrivesAtLogon;
+  ULONG fConnectPrinterAtLogon;
+  ULONG fDisablePrinterRedirection;
+  ULONG fDisableDefaultMainClientPrinter;
+  ULONG ShadowSettings;
+  CHAR LogonUserName[21];
+  CHAR LogonDomain[18];
+  CHAR WorkDirectory[261];
+  CHAR InitialProgram[261];
+  CHAR ApplicationName[261];
+} WTSCONFIGINFOA, *PWTSCONFIGINFOA;
 
-typedef struct _WTS_VALIDATION_INFORMATIONA {
-  PRODUCT_INFOA ProductInfo;
-  BYTE License[16384];
-  DWORD LicenseLength;
-  BYTE HardwareID[20];
-  DWORD HardwareIDLength;
-} WTS_VALIDATION_INFORMATIONA, *PWTS_VALIDATION_INFORMATIONA;
+typedef struct _WTSCONFIGINFOW {
+  ULONG version;
+  ULONG fConnectClientDrivesAtLogon;
+  ULONG fConnectPrinterAtLogon;
+  ULONG fDisablePrinterRedirection;
+  ULONG fDisableDefaultMainClientPrinter;
+  ULONG ShadowSettings;
+  WCHAR LogonUserName[21];
+  WCHAR LogonDomain[18];
+  WCHAR WorkDirectory[261];
+  WCHAR InitialProgram[261];
+  WCHAR ApplicationName[261];
+} WTSCONFIGINFOW, *PWTSCONFIGINFOW;
 
-typedef struct _WTS_VALIDATION_INFORMATIONW {
-  PRODUCT_INFOW ProductInfo;
-  BYTE License[16384];
-  DWORD LicenseLength;
-  BYTE HardwareID[20];
-  DWORD HardwareIDLength;
-} WTS_VALIDATION_INFORMATIONW, *PWTS_VALIDATION_INFORMATIONW;
+typedef struct _WTSINFOEX_LEVEL1_A {
+  ULONG SessionId;
+  WTS_CONNECTSTATE_CLASS SessionState;
+  LONG SessionFlags;
+  CHAR WinStationName[33];
+  CHAR UserName[21];
+  CHAR DomainName[18];
+  LARGE_INTEGER LogonTime;
+  LARGE_INTEGER ConnectTime;
+  LARGE_INTEGER DisconnectTime;
+  LARGE_INTEGER LastInputTime;
+  LARGE_INTEGER CurrentTime;
+  DWORD IncomingBytes;
+  DWORD OutgoingBytes;
+  DWORD IncomingFrames;
+  DWORD OutgoingFrames;
+  DWORD IncomingCompressedBytes;
+  DWORD OutgoingCompressedBytes;
+} WTSINFOEX_LEVEL1_A, *PWTSINFOEX_LEVEL1_A;
 
-typedef struct _WTS_CLIENT_ADDRESS {
-  DWORD AddressFamily;
-  BYTE Address[20];
-} WTS_CLIENT_ADDRESS, *PWTS_CLIENT_ADDRESS;
+typedef struct _WTSINFOEX_LEVEL1_W {
+  ULONG SessionId;
+  WTS_CONNECTSTATE_CLASS SessionState;
+  LONG SessionFlags;
+  WCHAR WinStationName[33];
+  WCHAR UserName[21];
+  WCHAR DomainName[18];
+  LARGE_INTEGER LogonTime;
+  LARGE_INTEGER ConnectTime;
+  LARGE_INTEGER DisconnectTime;
+  LARGE_INTEGER LastInputTime;
+  LARGE_INTEGER CurrentTime;
+  DWORD IncomingBytes;
+  DWORD OutgoingBytes;
+  DWORD IncomingFrames;
+  DWORD OutgoingFrames;
+  DWORD IncomingCompressedBytes;
+  DWORD OutgoingCompressedBytes;
+} WTSINFOEX_LEVEL1_W, *PWTSINFOEX_LEVEL1_W;
 
-typedef struct _WTS_CLIENT_DISPLAY {
-  DWORD HorizontalResolution;
-  DWORD VerticalResolution;
-  DWORD ColorDepth;
-} WTS_CLIENT_DISPLAY, *PWTS_CLIENT_DISPLAY;
+typedef union _WTSINFOEX_LEVEL_A {
+  WTSINFOEX_LEVEL1_A WTSInfoExLevel1;
+} WTSINFOEX_LEVEL_A, *PWTSINFOEX_LEVEL_A;
+
+typedef union _WTSINFOEX_LEVEL_W {
+  WTSINFOEX_LEVEL1_W WTSInfoExLevel1;
+} WTSINFOEX_LEVEL_W, *PWTSINFOEX_LEVEL_W;
+
+typedef struct _WTSINFOEXA {
+  DWORD Level;
+  WTSINFOEX_LEVEL_A Data;
+} WTSINFOEXA, *PWTSINFOEXA;
+
+typedef struct _WTSINFOEXW {
+  DWORD Level;
+  WTSINFOEX_LEVEL_W Data;
+} WTSINFOEXW, *PWTSINFOEXW;
+
+typedef struct _WTSLISTENERCONFIGA {
+  ULONG version;
+  ULONG fEnableListener;
+  ULONG MaxConnectionCount;
+  ULONG fPromptForPassword;
+  ULONG fInheritColorDepth;
+  ULONG ColorDepth;
+  ULONG fInheritBrokenTimeoutSettings;
+  ULONG BrokenTimeoutSettings;
+  ULONG fDisablePrinterRedirection;
+  ULONG fDisableDriveRedirection;
+  ULONG fDisableComPortRedirection;
+  ULONG fDisableLPTPortRedirection;
+  ULONG fDisableClipboardRedirection;
+  ULONG fDisableAudioRedirection;
+  ULONG fDisablePNPRedirection;
+  ULONG fDisableDefaultMainClientPrinter;
+  ULONG LanAdapter;
+  ULONG PortNumber;
+  ULONG fInheritShadowSettings;
+  ULONG ShadowSettings;
+  ULONG TimeoutSettingsConnection;
+  ULONG TimeoutSettingsDisconnection;
+  ULONG TimeoutSettingsIdle;
+  ULONG SecurityLayer;
+  ULONG MinEncryptionLevel;
+  ULONG UserAuthentication;
+  CHAR Comment[61];
+  CHAR LogonUserName[21];
+  CHAR LogonDomain[18];
+  CHAR WorkDirectory[261];
+  CHAR InitialProgram[261];
+} WTSLISTENERCONFIGA, *PWTSLISTENERCONFIGA;
+
+typedef struct _WTSLISTENERCONFIGW {
+  ULONG version;
+  ULONG fEnableListener;
+  ULONG MaxConnectionCount;
+  ULONG fPromptForPassword;
+  ULONG fInheritColorDepth;
+  ULONG ColorDepth;
+  ULONG fInheritBrokenTimeoutSettings;
+  ULONG BrokenTimeoutSettings;
+  ULONG fDisablePrinterRedirection;
+  ULONG fDisableDriveRedirection;
+  ULONG fDisableComPortRedirection;
+  ULONG fDisableLPTPortRedirection;
+  ULONG fDisableClipboardRedirection;
+  ULONG fDisableAudioRedirection;
+  ULONG fDisablePNPRedirection;
+  ULONG fDisableDefaultMainClientPrinter;
+  ULONG LanAdapter;
+  ULONG PortNumber;
+  ULONG fInheritShadowSettings;
+  ULONG ShadowSettings;
+  ULONG TimeoutSettingsConnection;
+  ULONG TimeoutSettingsDisconnection;
+  ULONG TimeoutSettingsIdle;
+  ULONG SecurityLayer;
+  ULONG MinEncryptionLevel;
+  ULONG UserAuthentication;
+  WCHAR Comment[61];
+  WCHAR LogonUserName[21];
+  WCHAR LogonDomain[18];
+  WCHAR WorkDirectory[261];
+  WCHAR InitialProgram[261];
+} WTSLISTENERCONFIGW, *PWTSLISTENERCONFIGW;
 
 typedef struct _WTSUSERCONFIGA {
   DWORD Source;
@@ -668,116 +778,216 @@ typedef struct _WTSUSERCONFIGW {
   WCHAR TerminalServerHomeDirDrive[4];
 } WTSUSERCONFIGW, *PWTSUSERCONFIGW;
 
-typedef struct _WTS_SESSION_ADDRESS {
-  DWORD AddressFamily;
-  BYTE Address[20];
-} WTS_SESSION_ADDRESS, *PWTS_SESSION_ADDRESS;
-
-typedef struct _WTS_PROCESS_INFO_EXW {
-  DWORD SessionId;
-  DWORD ProcessId;
-  LPWSTR pProcessName;
-  PSID pUserSid;
-  DWORD NumberOfThreads;
-  DWORD HandleCount;
-  DWORD PagefileUsage;
-  DWORD PeakPagefileUsage;
-  DWORD WorkingSetSize;
-  DWORD PeakWorkingSetSize;
-  LARGE_INTEGER UserTime;
-  LARGE_INTEGER KernelTime;
-} WTS_PROCESS_INFO_EXW, *PWTS_PROCESS_INFO_EXW;
-
-typedef struct _WTS_PROCESS_INFO_EXA {
-  DWORD SessionId;
-  DWORD ProcessId;
-  LPSTR pProcessName;
-  PSID pUserSid;
-  DWORD NumberOfThreads;
-  DWORD HandleCount;
-  DWORD PagefileUsage;
-  DWORD PeakPagefileUsage;
-  DWORD WorkingSetSize;
-  DWORD PeakWorkingSetSize;
-  LARGE_INTEGER UserTime;
-  LARGE_INTEGER KernelTime;
-} WTS_PROCESS_INFO_EXA, *PWTS_PROCESS_INFO_EXA;
-
-typedef struct _WTSLISTENERCONFIGW {
-  ULONG version;
-  ULONG fEnableListener;
-  ULONG MaxConnectionCount;
-  ULONG fPromptForPassword;
-  ULONG fInheritColorDepth;
-  ULONG ColorDepth;
-  ULONG fInheritBrokenTimeoutSettings;
-  ULONG BrokenTimeoutSettings;
-  ULONG fDisablePrinterRedirection;
-  ULONG fDisableDriveRedirection;
-  ULONG fDisableComPortRedirection;
-  ULONG fDisableLPTPortRedirection;
-  ULONG fDisableClipboardRedirection;
-  ULONG fDisableAudioRedirection;
-  ULONG fDisablePNPRedirection;
-  ULONG fDisableDefaultMainClientPrinter;
-  ULONG LanAdapter;
-  ULONG PortNumber;
-  ULONG fInheritShadowSettings;
-  ULONG ShadowSettings;
-  ULONG TimeoutSettingsConnection;
-  ULONG TimeoutSettingsDisconnection;
-  ULONG TimeoutSettingsIdle;
-  ULONG SecurityLayer;
-  ULONG MinEncryptionLevel;
-  ULONG UserAuthentication;
-  WCHAR Comment[61];
-  WCHAR LogonUserName[21];
-  WCHAR LogonDomain[18];
-  WCHAR WorkDirectory[261];
-  WCHAR InitialProgram[261];
-} WTSLISTENERCONFIGW, *PWTSLISTENERCONFIGW;
-
-typedef struct _WTSLISTENERCONFIGA {
-  ULONG version;
-  ULONG fEnableListener;
-  ULONG MaxConnectionCount;
-  ULONG fPromptForPassword;
-  ULONG fInheritColorDepth;
-  ULONG ColorDepth;
-  ULONG fInheritBrokenTimeoutSettings;
-  ULONG BrokenTimeoutSettings;
-  ULONG fDisablePrinterRedirection;
-  ULONG fDisableDriveRedirection;
-  ULONG fDisableComPortRedirection;
-  ULONG fDisableLPTPortRedirection;
-  ULONG fDisableClipboardRedirection;
-  ULONG fDisableAudioRedirection;
-  ULONG fDisablePNPRedirection;
-  ULONG fDisableDefaultMainClientPrinter;
-  ULONG LanAdapter;
-  ULONG PortNumber;
-  ULONG fInheritShadowSettings;
-  ULONG ShadowSettings;
-  ULONG TimeoutSettingsConnection;
-  ULONG TimeoutSettingsDisconnection;
-  ULONG TimeoutSettingsIdle;
-  ULONG SecurityLayer;
-  ULONG MinEncryptionLevel;
-  ULONG UserAuthentication;
-  CHAR Comment[61];
-  CHAR LogonUserName[21];
-  CHAR LogonDomain[18];
-  CHAR WorkDirectory[261];
-  CHAR InitialProgram[261];
-} WTSLISTENERCONFIGA, *PWTSLISTENERCONFIGA;
-
 typedef struct WTS_CLOUD_AUTH_HANDLE__ {
   int unused;
 } *WTS_CLOUD_AUTH_HANDLE;
 
-typedef struct _WTS_SERIALIZED_USER_CREDENTIAL {
-  ULONG SerializationLength;
-  BYTE * Serialization;
-} WTS_SERIALIZED_USER_CREDENTIAL, *PWTS_SERIALIZED_USER_CREDENTIAL, WRDS_SERIALIZED_USER_CREDENTIAL, *PWRDS_SERIALIZED_USER_CREDENTIAL;
+#ifdef UNICODE
+#define PRODUCT_INFO PRODUCT_INFOW
+#else
+#define PRODUCT_INFO PRODUCT_INFOA
+#endif
+#ifdef UNICODE
+#define PWTS_PROCESS_INFO_EX PWTS_PROCESS_INFO_EXW
+#else
+#define PWTS_PROCESS_INFO_EX PWTS_PROCESS_INFO_EXA
+#endif
+#ifdef UNICODE
+#define PWTS_VALIDATION_INFORMATION PWTS_VALIDATION_INFORMATIONW
+#else
+#define PWTS_VALIDATION_INFORMATION PWTS_VALIDATION_INFORMATIONA
+#endif
+#ifdef UNICODE
+#define PWTSCLIENT PWTSCLIENTW
+#else
+#define PWTSCLIENT PWTSCLIENTA
+#endif
+#ifdef UNICODE
+#define PWTSCONFIGINFO PWTSCONFIGINFOW
+#else
+#define PWTSCONFIGINFO PWTSCONFIGINFOA
+#endif
+#ifdef UNICODE
+#define PWTSINFOEX PWTSINFOEXW
+#else
+#define PWTSINFOEX PWTSINFOEXA
+#endif
+#define PWTSINFOEX_LEVEL PWTSINFOEX_LEVEL_A
+#define PWTSINFOEX_LEVEL1 PWTSINFOEX_LEVEL1_A
+#ifdef UNICODE
+#define PWTSLISTENERCONFIG PWTSLISTENERCONFIGW
+#else
+#define PWTSLISTENERCONFIG PWTSLISTENERCONFIGA
+#endif
+#ifdef UNICODE
+#define PWTSLISTENERNAME PWTSLISTENERNAMEW
+#else
+#define PWTSLISTENERNAME PWTSLISTENERNAMEA
+#endif
+#ifdef UNICODE
+#define PWTSUSERCONFIG PWTSUSERCONFIGW
+#else
+#define PWTSUSERCONFIG PWTSUSERCONFIGA
+#endif
+#define WTS_CHANNEL_OPTION_DYNAMIC 0x00000001
+#define WTS_CURRENT_SERVER ((HANDLE) NULL)
+#define WTS_CURRENT_SERVER_NAME 0
+#define WTS_EVENT_NONE 0x00000000
+#define WTS_PROCESS_INFO_EX 0
+#define WTS_PROTOCOL_TYPE_CONSOLE 0
+#define WTS_SECURITY_ALL_ACCESS (STANDARD_RIGHTS_REQUIRED | WTS_SECURITY_QUERY_INFORMATION | WTS_SECURITY_SET_INFORMATION | WTS_SECURITY_RESET | WTS_SECURITY_VIRTUAL_CHANNELS | WTS_SECURITY_REMOTE_CONTROL | WTS_SECURITY_LOGON | WTS_SECURITY_MESSAGE | WTS_SECURITY_CONNECT | WTS_SECURITY_DISCONNECT)
+#define WTS_SECURITY_CURRENT_GUEST_ACCESS 0x48
+#define WTS_SECURITY_CURRENT_USER_ACCESS 6
+#define WTS_SECURITY_GUEST_ACCESS 0x20
+#define WTS_SECURITY_USER_ACCESS 0x149
+#ifdef UNICODE
+#define WTS_VALIDATION_INFORMATION WTS_VALIDATION_INFORMATIONW
+#else
+#define WTS_VALIDATION_INFORMATION WTS_VALIDATION_INFORMATIONA
+#endif
+#ifdef UNICODE
+#define WTSCLIENT WTSCLIENTW
+#else
+#define WTSCLIENT WTSCLIENTA
+#endif
+#define WTSCONFIGINFO 0
+#ifdef UNICODE
+#define WTSCreateListener WTSCreateListenerW
+#else
+#define WTSCreateListener WTSCreateListenerA
+#endif
+#ifdef UNICODE
+#define WTSEnumerateListeners WTSEnumerateListenersW
+#else
+#define WTSEnumerateListeners WTSEnumerateListenersA
+#endif
+#ifdef UNICODE
+#define WTSEnumerateProcessesEx WTSEnumerateProcessesExW
+#else
+#define WTSEnumerateProcessesEx WTSEnumerateProcessesExA
+#endif
+#ifdef UNICODE
+#define WTSEnumerateSessionsEx WTSEnumerateSessionsExW
+#else
+#define WTSEnumerateSessionsEx WTSEnumerateSessionsExA
+#endif
+#ifdef UNICODE
+#define WTSFreeMemoryEx WTSFreeMemoryExW
+#else
+#define WTSFreeMemoryEx WTSFreeMemoryExA
+#endif
+#ifdef UNICODE
+#define WTSGetListenerSecurity WTSGetListenerSecurityW
+#else
+#define WTSGetListenerSecurity WTSGetListenerSecurityA
+#endif
+#ifdef UNICODE
+#define WTSINFOEX WTSINFOEXW
+#else
+#define WTSINFOEX WTSINFOEXA
+#endif
+#define WTSINFOEX_LEVEL WTSINFOEX_LEVEL_A
+#define WTSINFOEX_LEVEL1 WTSINFOEX_LEVEL1_A
+#ifdef UNICODE
+#define WTSLISTENERCONFIG WTSLISTENERCONFIGW
+#else
+#define WTSLISTENERCONFIG WTSLISTENERCONFIGA
+#endif
+#ifdef UNICODE
+#define WTSLISTENERNAME WTSLISTENERNAMEW
+#else
+#define WTSLISTENERNAME WTSLISTENERNAMEA
+#endif
+#ifdef UNICODE
+#define WTSOpenServerEx WTSOpenServerExW
+#else
+#define WTSOpenServerEx WTSOpenServerExA
+#endif
+#ifdef UNICODE
+#define WTSQueryListenerConfig WTSQueryListenerConfigW
+#else
+#define WTSQueryListenerConfig WTSQueryListenerConfigA
+#endif
+#ifdef UNICODE
+#define WTSSendMessage WTSSendMessageW
+#else
+#define WTSSendMessage WTSSendMessageA
+#endif
+#ifdef UNICODE
+#define WTSSetListenerSecurity WTSSetListenerSecurityW
+#else
+#define WTSSetListenerSecurity WTSSetListenerSecurityA
+#endif
+#ifdef UNICODE
+#define WTSSetUserConfig WTSSetUserConfigW
+#else
+#define WTSSetUserConfig WTSSetUserConfigA
+#endif
+#ifdef UNICODE
+#define WTSUSERCONFIG WTSUSERCONFIGW
+#else
+#define WTSUSERCONFIG WTSUSERCONFIGA
+#endif
+
+typedef CHAR WTSLISTENERNAMEA[33];
+
+typedef WTSLISTENERNAMEA *PWTSLISTENERNAMEA;
+
+typedef WCHAR WTSLISTENERNAMEW[33];
+
+typedef WTSLISTENERNAMEW *PWTSLISTENERNAMEW;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+BOOL WINAPI WTSEnumerateProcessesExA(HANDLE hServer, DWORD *pLevel, DWORD SessionId, LPSTR *ppProcessInfo, DWORD *pCount);
+BOOL WINAPI WTSEnumerateProcessesExW(HANDLE hServer, DWORD *pLevel, DWORD SessionId, LPWSTR *ppProcessInfo, DWORD *pCount);
+BOOL WINAPI WTSEnumerateSessionsExA(HANDLE hServer, DWORD *pLevel, DWORD Filter, PWTS_SESSION_INFO_1A *ppSessionInfo, DWORD *pCount);
+BOOL WINAPI WTSEnumerateSessionsExW(HANDLE hServer, DWORD *pLevel, DWORD Filter, PWTS_SESSION_INFO_1W *ppSessionInfo, DWORD *pCount);
+BOOL WINAPI WTSFreeMemoryExA(WTS_TYPE_CLASS WTSTypeClass, PVOID pMemory, ULONG NumberOfEntries);
+BOOL WINAPI WTSFreeMemoryExW(WTS_TYPE_CLASS WTSTypeClass, PVOID pMemory, ULONG NumberOfEntries);
+BOOL WINAPI WTSLogoffSession(HANDLE hServer, DWORD SessionId, BOOL bWait);
+BOOL WINAPI WTSSendMessageA(HANDLE hServer, DWORD SessionId, LPSTR pTitle, DWORD TitleLength, LPSTR pMessage, DWORD MessageLength, DWORD Style, DWORD Timeout, DWORD *pResponse, BOOL bWait);
+BOOL WINAPI WTSSendMessageW(HANDLE hServer, DWORD SessionId, LPWSTR pTitle, DWORD TitleLength, LPWSTR pMessage, DWORD MessageLength, DWORD Style, DWORD Timeout, DWORD *pResponse, BOOL bWait);
+BOOL WINAPI WTSSetUserConfigA(LPSTR pServerName, LPSTR pUserName, WTS_CONFIG_CLASS WTSConfigClass, LPSTR pBuffer, DWORD DataLength);
+BOOL WINAPI WTSSetUserConfigW(LPWSTR pServerName, LPWSTR pUserName, WTS_CONFIG_CLASS WTSConfigClass, LPWSTR pBuffer, DWORD DataLength);
+BOOL WINAPI WTSShutdownSystem(HANDLE hServer, DWORD ShutdownFlag);
+HANDLE WINAPI WTSVirtualChannelOpen(HANDLE hServer, DWORD SessionId, LPSTR pVirtualName);
+HANDLE WINAPI WTSVirtualChannelOpenEx(DWORD SessionId, LPSTR pVirtualName, DWORD flags);
+BOOL WINAPI WTSVirtualChannelQuery(HANDLE hChannelHandle, WTS_VIRTUAL_CLASS, PVOID *ppBuffer, DWORD *pBytesReturned);
+BOOL WINAPI WTSVirtualChannelRead(HANDLE hChannelHandle, ULONG TimeOut, PCHAR Buffer, ULONG BufferSize, PULONG pBytesRead);
+BOOL WINAPI WTSVirtualChannelWrite(HANDLE hChannelHandle, PCHAR Buffer, ULONG Length, PULONG pBytesWritten);
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL WINAPI WTSActiveSessionExists(PBOOL pbActiveSessionExists);
+void WINAPI WTSCloudAuthClose(WTS_CLOUD_AUTH_HANDLE cloudAuthHandle);
+BOOL WINAPI WTSCloudAuthConvertAssertionToSerializedUserCredential(WTS_CLOUD_AUTH_HANDLE cloudAuthHandle, PCSTR assertion, ULONG assertionLength, PCWSTR resourceId, WTS_SERIALIZED_USER_CREDENTIAL **userCredential);
+BOOL WINAPI WTSCloudAuthDuplicateSerializedUserCredential(const WTS_SERIALIZED_USER_CREDENTIAL *userCredential, WTS_SERIALIZED_USER_CREDENTIAL **duplicatedUserCredential);
+BOOL WINAPI WTSCloudAuthGetServerNonce(WTS_CLOUD_AUTH_HANDLE cloudAuthHandle, PWSTR *serverNonce);
+BOOL WINAPI WTSCloudAuthNetworkLogonWithSerializedCredential(WTS_CLOUD_AUTH_HANDLE cloudAuthHandle, WTS_SERIALIZED_USER_CREDENTIAL *userCredential, HANDLE *token);
+WTS_CLOUD_AUTH_HANDLE WINAPI WTSCloudAuthOpen(const GUID *activityId);
+BOOL WINAPI WTSCreateListenerA(HANDLE hServer, PVOID pReserved, DWORD Reserved, LPSTR pListenerName, PWTSLISTENERCONFIGA pBuffer, DWORD flag);
+BOOL WINAPI WTSCreateListenerW(HANDLE hServer, PVOID pReserved, DWORD Reserved, LPWSTR pListenerName, PWTSLISTENERCONFIGW pBuffer, DWORD flag);
+BOOL WINAPI WTSEnumerateListenersA(HANDLE hServer, PVOID pReserved, DWORD Reserved, PWTSLISTENERNAMEA pListeners, DWORD *pCount);
+BOOL WINAPI WTSEnumerateListenersW(HANDLE hServer, PVOID pReserved, DWORD Reserved, PWTSLISTENERNAMEW pListeners, DWORD *pCount);
+BOOL WTSGetChildSessionId(PULONG pSessionId);
+BOOL WINAPI WTSGetListenerSecurityA(HANDLE hServer, PVOID pReserved, DWORD Reserved, LPSTR pListenerName, SECURITY_INFORMATION SecurityInformation, PSECURITY_DESCRIPTOR pSecurityDescriptor, DWORD nLength, LPDWORD lpnLengthNeeded);
+BOOL WINAPI WTSGetListenerSecurityW(HANDLE hServer, PVOID pReserved, DWORD Reserved, LPWSTR pListenerName, SECURITY_INFORMATION SecurityInformation, PSECURITY_DESCRIPTOR pSecurityDescriptor, DWORD nLength, LPDWORD lpnLengthNeeded);
+BOOL WTSIsChildSessionsEnabled(PBOOL pbEnabled);
+BOOL WINAPI WTSQueryListenerConfigA(HANDLE hServer, PVOID pReserved, DWORD Reserved, LPSTR pListenerName, PWTSLISTENERCONFIGA pBuffer);
+BOOL WINAPI WTSQueryListenerConfigW(HANDLE hServer, PVOID pReserved, DWORD Reserved, LPWSTR pListenerName, PWTSLISTENERCONFIGW pBuffer);
+BOOL WINAPI WTSSetListenerSecurityA(HANDLE hServer, PVOID pReserved, DWORD Reserved, LPSTR pListenerName, SECURITY_INFORMATION SecurityInformation, PSECURITY_DESCRIPTOR pSecurityDescriptor);
+BOOL WINAPI WTSSetListenerSecurityW(HANDLE hServer, PVOID pReserved, DWORD Reserved, LPWSTR pListenerName, SECURITY_INFORMATION SecurityInformation, PSECURITY_DESCRIPTOR pSecurityDescriptor);
+
+#ifdef __cplusplus
+}
+#endif
+
+enum _WTS_INFO_CLASS
+{
+    WTSSessionActivityId = 0x1E,
+    WTSCapabilityCheck = 0x1F,
+};
 
 #endif

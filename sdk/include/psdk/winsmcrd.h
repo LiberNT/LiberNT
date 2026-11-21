@@ -239,6 +239,9 @@ typedef struct _SCARD_T1_REQUEST
 #ifdef __cplusplus
 }
 #endif
+
+#define _NTDDSCRD_H2_ 0
+
 #endif /* __WINSMCRD_H */
 
 /* EOF */

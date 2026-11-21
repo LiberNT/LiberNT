@@ -182,4 +182,21 @@ typedef struct _D3D_SHADER_DATA {
   SIZE_T BytecodeLength;
 } D3D_SHADER_DATA;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+HRESULT WINAPI D3DCompressShaders(UINT uNumShaders, D3D_SHADER_DATA *pShaderData, UINT uFlags, ID3DBlob **ppCompressedData);
+HRESULT WINAPI D3DDecompressShaders(LPCVOID pSrcData, SIZE_T SrcDataSize, UINT uNumShaders, UINT uStartIndex, UINT *pIndices, UINT uFlags, ID3DBlob **ppShaders, UINT *pTotalShaders);
+HRESULT WINAPI D3DDisassemble10Effect(struct ID3D10Effect *pEffect, UINT Flags, ID3DBlob **ppDisassembly);
+HRESULT WINAPI D3DDisassembleRegion(LPCVOID pSrcData, SIZE_T SrcDataSize, UINT Flags, LPCSTR szComments, SIZE_T StartByteOffset, SIZE_T NumInsts, SIZE_T *pFinishByteOffset, ID3DBlob **ppDisassembly);
+HRESULT WINAPI D3DGetTraceInstructionOffsets(LPCVOID pSrcData, SIZE_T SrcDataSize, UINT Flags, SIZE_T StartInstIndex, SIZE_T NumInsts, SIZE_T *pOffsets, SIZE_T *pTotalInsts);
+HRESULT WINAPI D3DReflectLibrary(LPCVOID pSrcData, SIZE_T SrcDataSize, const IID *const riid, LPVOID *ppReflector);
+HRESULT WINAPI D3DSetBlobPart(LPCVOID pSrcData, SIZE_T SrcDataSize, D3D_BLOB_PART Part, UINT Flags, LPCVOID pPart, SIZE_T PartSize, ID3DBlob **ppNewShader);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

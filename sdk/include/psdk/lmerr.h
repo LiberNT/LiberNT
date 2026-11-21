@@ -314,4 +314,33 @@
 #define NERR_PasswordNotComplexEnough (NERR_BASE+604)
 #define NERR_PasswordFilterError (NERR_BASE+605)
 #define MAX_NERR (NERR_BASE+899)
+
+#define NERR_AccountReuseBlockedByPolicy 0xAAC
+#define NERR_AlreadyCloudDomainJoined 0xA8C
+#define NERR_BadDomainJoinInfo 0xA98
+#define NERR_BadOfflineJoinInfo 0xA96
+#define NERR_CannotUnjoinAadDomain 0xAA7
+#define NERR_CannotUpdateAadHostName 0xAA8
+#define NERR_CantCreateJoinInfo 0xA97
+#define NERR_CantLoadOfflineHive 0xA9D
+#define NERR_CantVerifyHostname 0xA9C
+#define NERR_ConnectionInsecure 0xA9E
+#define NERR_DS8DCNotFound 0xAA2
+#define NERR_DS8DCRequired 0xAA0
+#define NERR_DS9DCNotFound 0xAA5
+#define NERR_DuplicateHostName 0xAA9
+#define NERR_HostNameTooLong 0xAAA
+#define NERR_InvalidMachineNameForJoin 0xAA4
+#define NERR_JoinPerformedMustRestart 0xA99
+#define NERR_LDAPCapableDCRequired 0xAA1
+#define NERR_NoJoinPending 0xA9A
+#define NERR_NoOfflineJoinInfo 0xA95
+#define NERR_PlainTextSecretsRequired 0xAA6
+#define NERR_ProvisioningBlobUnsupported 0xA9F
+#define NERR_SameAsComputerName 0x8CD
+#define NERR_SetupCheckDNSConfig 0xA8B
+#define NERR_TargetVersionUnsupported 0xAA3
+#define NERR_TooManyHostNames 0xAAB
+#define NERR_ValuesNotSet 0xA9B
+
 #endif

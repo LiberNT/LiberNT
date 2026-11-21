@@ -43,6 +43,7 @@ typedef enum tagMSICOSTTREE
     MSICOSTTREE_CHILDREN = 1,
     MSICOSTTREE_PARENTS  = 2,
     MSICOSTTREE_PRODUCT  = 3,
+    MSICOSTTREE_RESERVED = 3,
 } MSICOSTTREE;
 
 typedef enum tagMSIMODIFY
@@ -351,6 +352,17 @@ MSIHANDLE WINAPI MsiGetLastErrorRecord(void);
 
 #ifndef INSTALLMESSAGE_TYPEMASK
 #define INSTALLMESSAGE_TYPEMASK 0xFF000000L
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+UINT WINAPI MsiVerifyDiskSpace(MSIHANDLE hInstall);
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif /* __WINE_MSIQUERY_H */

@@ -315,4 +315,25 @@ typedef struct _RECORDER_LOG_CREATE_PARAMS_V1 {
   CHAR LogIdentifier[16];
 } RECORDER_LOG_CREATE_PARAMS_V1, *PRECORDER_LOG_CREATE_PARAMS_V1;
 
+struct RECORDER_LOG__
+{
+    int unused;
+};
+
+struct WPP_RECORDER_COUNTER__
+{
+    int unused;
+};
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+void RECORDER_LOG_CREATE_PARAMS_INIT_APPEND_POINTER(PRECORDER_LOG_CREATE_PARAMS Params, PCSTR LogIdentifier, const void *LogIdentifierAppendPointer);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

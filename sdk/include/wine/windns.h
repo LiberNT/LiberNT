@@ -127,7 +127,8 @@ typedef enum _DNS_NAME_FORMAT
     DnsNameHostnameFull,
     DnsNameHostnameLabel,
     DnsNameWildcard,
-    DnsNameSrvRecord
+    DnsNameSrvRecord,
+    DnsNameValidateTld = 6,
 } DNS_NAME_FORMAT;
 
 typedef enum _DNS_FREE_TYPE
@@ -169,7 +170,8 @@ typedef enum _DNS_CONFIG_TYPE
     /* These are undocumented and return a DNS_ADDR_ARRAY */
     DnsConfigDnsServersUnspec = 4144,
     DnsConfigDnsServersIpv4,
-    DnsConfigDnsServersIpv6
+    DnsConfigDnsServersIpv6,
+    DnsConfigNameServer = 0x12,
 } DNS_CONFIG_TYPE;
 
 typedef enum _DnsSection

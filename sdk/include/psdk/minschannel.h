@@ -120,4 +120,6 @@ typedef struct _SecPkgCred_SessionTicketKeys {
   PSecPkgCred_SessionTicketKey pSessionTicketKeys;
 } SecPkgCred_SessionTicketKeys, *PSecPkgCred_SessionTicketKeys;
 
+#define SESSION_TICKET_INFO_VERSION 0
+
 #endif /* __WINE_MINSCHANNEL_H__ */

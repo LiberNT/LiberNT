@@ -396,17 +396,6 @@ typedef struct tagDDEML_MSG_HOOK_DATA {
   DWORD Data[8];
 } DDEML_MSG_HOOK_DATA, *PDDEML_MSG_HOOK_DATA;
 
-typedef struct tagMONMSGSTRUCT {
-  UINT cb;
-  HWND hwndTo;
-  DWORD dwTime;
-  HANDLE hTask;
-  UINT wMsg;
-  WPARAM wParam;
-  LPARAM lParam;
-  DDEML_MSG_HOOK_DATA dmhd;
-} MONMSGSTRUCT, *PMONMSGSTRUCT;
-
 typedef struct tagMONCBSTRUCT {
   UINT cb;
   DWORD dwTime;
@@ -424,6 +413,24 @@ typedef struct tagMONCBSTRUCT {
   DWORD cbData;
   DWORD Data[8];
 } MONCBSTRUCT, *PMONCBSTRUCT;
+
+typedef struct tagMONCONVSTRUCT {
+  UINT cb;
+  BOOL fConnect;
+  DWORD dwTime;
+  HANDLE hTask;
+  HSZ hszSvc;
+  HSZ hszTopic;
+  HCONV hConvClient;
+  HCONV hConvServer;
+} MONCONVSTRUCT, *PMONCONVSTRUCT;
+
+typedef struct tagMONERRSTRUCT {
+  UINT cb;
+  UINT wLastError;
+  DWORD dwTime;
+  HANDLE hTask;
+} MONERRSTRUCT, *PMONERRSTRUCT;
 
 typedef struct tagMONHSZSTRUCTA {
   UINT cb;
@@ -443,13 +450,6 @@ typedef struct tagMONHSZSTRUCTW {
   WCHAR str[1];
 } MONHSZSTRUCTW, *PMONHSZSTRUCTW;
 
-typedef struct tagMONERRSTRUCT {
-  UINT cb;
-  UINT wLastError;
-  DWORD dwTime;
-  HANDLE hTask;
-} MONERRSTRUCT, *PMONERRSTRUCT;
-
 typedef struct tagMONLINKSTRUCT {
   UINT cb;
   DWORD dwTime;
@@ -465,15 +465,45 @@ typedef struct tagMONLINKSTRUCT {
   HCONV hConvClient;
 } MONLINKSTRUCT, *PMONLINKSTRUCT;
 
-typedef struct tagMONCONVSTRUCT {
+typedef struct tagMONMSGSTRUCT {
   UINT cb;
-  BOOL fConnect;
+  HWND hwndTo;
   DWORD dwTime;
   HANDLE hTask;
-  HSZ hszSvc;
-  HSZ hszTopic;
-  HCONV hConvClient;
-  HCONV hConvServer;
-} MONCONVSTRUCT, *PMONCONVSTRUCT;
+  UINT wMsg;
+  WPARAM wParam;
+  LPARAM lParam;
+  DDEML_MSG_HOOK_DATA dmhd;
+} MONMSGSTRUCT, *PMONMSGSTRUCT;
+
+#define _INC_DDEMLH 0
+#define CP_WINNEUTRAL 0x3EC
+#define MH_CREATE 1
+
+typedef HDDEDATA WINAPI FNCALLBACK(UINT, UINT, HCONV, HSZ, HSZ, HDDEDATA, ULONG_PTR, ULONG_PTR);
+
+struct HCONV__
+{
+    int unused;
+};
+
+struct HCONVLIST__
+{
+    int unused;
+};
+
+struct HDDEDATA__
+{
+    int unused;
+};
+
+struct HSZ__
+{
+    int unused;
+};
+
+typedef MONHSZSTRUCTA MONHSZSTRUCT;
+
+typedef PMONHSZSTRUCTA PMONHSZSTRUCT;
 
 #endif  /* __WINE_DDEML_H */

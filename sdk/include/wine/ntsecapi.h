@@ -221,7 +221,9 @@ typedef enum
 	PolicyModificationInformation,
 	PolicyAuditFullSetInformation,
 	PolicyAuditFullQueryInformation,
-	PolicyDnsDomainInformation
+	PolicyDnsDomainInformation,
+	PolicyMachineAccountInformation = 0xF,
+	PolicyMachineAccountInformation2 = 0x10,
 } POLICY_INFORMATION_CLASS, *PPOLICY_INFORMATION_CLASS;
 
 typedef ULONG POLICY_AUDIT_EVENT_OPTIONS, *PPOLICY_AUDIT_EVENT_OPTIONS;
@@ -374,7 +376,9 @@ typedef enum _TRUSTED_INFORMATION_CLASS
     TrustedDomainInformationBasic,
     TrustedDomainInformationEx,
     TrustedDomainAuthInformation,
-    TrustedDomainFullInformation
+    TrustedDomainFullInformation,
+    TrustedDomainAuthInformationInternalAes = 0xE,
+    TrustedDomainFullInformationInternalAes = 0xF,
 } TRUSTED_INFORMATION_CLASS, *PTRUSTED_INFORMATION_CLASS;
 
 typedef enum _POLICY_NOTIFICATION_INFORMATION_CLASS
@@ -385,7 +389,9 @@ typedef enum _POLICY_NOTIFICATION_INFORMATION_CLASS
     PolicyNotifyDnsDomainInformation,
     PolicyNotifyDomainEfsInformation,
     PolicyNotifyDomainKerberosTicketInformation,
-    PolicyNotifyMachineAccountPasswordInformation
+    PolicyNotifyMachineAccountPasswordInformation,
+    PolicyNotifyGlobalSaclInformation = 8,
+    PolicyNotifyMax = 9,
 } POLICY_NOTIFICATION_INFORMATION_CLASS, *PPOLICY_NOTIFICATION_INFORMATION_CLASS;
 
 typedef struct _AUDIT_POLICY_INFORMATION
@@ -473,7 +479,14 @@ typedef enum _KERB_PROTOCOL_MESSAGE_TYPE
     KerbQueryBindingCacheMessage,
     KerbPurgeBindingCacheMessage,
     KerbQueryDomainExtendedPoliciesMessage,
-    KerbQueryS4U2ProxyCacheMessage
+    KerbQueryS4U2ProxyCacheMessage,
+    KerbPinKdcMessage = 0x1E,
+    KerbUnpinAllKdcsMessage = 0x1F,
+    KerbRetrieveKeyTabMessage = 0x22,
+    KerbRefreshPolicyMessage = 0x23,
+    KerbPrintCloudKerberosDebugMessage = 0x24,
+    KerbNetworkTicketLogonMessage = 0x25,
+    KerbNlChangeMachinePasswordMessage = 0x26,
 } KERB_PROTOCOL_MESSAGE_TYPE, *PKERB_PROTOCOL_MESSAGE_TYPE;
 
 typedef struct _KERB_TICKET_CACHE_INFO

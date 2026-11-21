@@ -1650,6 +1650,24 @@ typedef struct _SPLCLIENT_INFO_INTERNAL {
   DWORD dwSessionId;
 } SPLCLIENT_INFO_INTERNAL;
 
+typedef SPLCLIENT_INFO_INTERNAL *LPSPLCLIENT_INFO_INTERNAL;
+
+typedef SPLCLIENT_INFO_INTERNAL *PSPLCLIENT_INFO_INTERNAL;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+HRESULT WINAPI AddPrintDeviceObject(HANDLE hPrinter, HANDLE *phDeviceObject);
+DWORD WINAPI LogJobInfoForBranchOffice(HANDLE hPrinter, PBranchOfficeJobDataContainer pJobDataContainer);
+HRESULT WINAPI RemovePrintDeviceObject(HANDLE hDeviceObject);
+HRESULT WINAPI UpdatePrintDeviceObject(HANDLE hPrinter, HANDLE hDeviceObject);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* _WINSPLP_ */
 
 #ifndef DOC_INFO_INTERNAL_LEVEL

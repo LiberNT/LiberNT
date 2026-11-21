@@ -66,5 +66,11 @@ typedef struct _MIB_IFTABLE
     MIB_IFROW table[1];
 } MIB_IFTABLE, *PMIB_IFTABLE;
 
+#define _IFMIB_ 0
+#define SIZEOF_IFTABLEX) (FIELD_OFFSET(MIB_IFTABLE, table [0]) + ((X) * sizeof (MIB_IFROW)) + ALIGN_SIZE)
+
+#define SIZEOF_IFTABLEX) (FIELD_OFFSET(MIB_IFTABLE, table [0]) + ((X) * sizeof (MIB_IFROW)) + ALIGN_SIZE)
+
+#define SIZEOF_IFTABLEX) (FIELD_OFFSET(MIB_IFTABLE, table [0]) + ((X) * sizeof (MIB_IFROW)) + ALIGN_SIZE)
 
 #endif /* __WINE_IFMIB_H */

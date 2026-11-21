@@ -74,4 +74,8 @@ BOOL WINAPI SfpVerifyFile(LPCSTR, LPSTR, DWORD);
 #define SFC_SCAN_ONCE 2
 #endif
 
+#define _SFC_ 0
+#define SFC_IDLE_TRIGGER 0
+#define SFC_QUOTA_ALL_FILES ((ULONG)0xFFFFFFFF)
+
 #endif

@@ -237,6 +237,33 @@ typedef enum VDM_INFO_TYPE {
     VDM_SET_NEXT_TIMER0_COUNT = 4
 } VDM_INFO_TYPE;
 
+#define VDM_TRACEType, wData, lData) VdmTraceEvent(Type, wData, lData)
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+SHORT VDDAllocateDosHandle(ULONG pPDB, PVOID *ppSFT, PVOID *ppJFT);
+void VDDAssociateNtHandle(PVOID pSFT, HANDLE h32File, WORD wAccess);
+void VDDBlockUserHook(void);
+void VDDCreateUserHook(USHORT DosPDB);
+BOOL VDDReleaseDosHandle(ULONG pPDB, SHORT hFile);
+void VDDResumeUserHook(void);
+HANDLE VDDRetrieveNtHandle(ULONG pPDB, SHORT hFile, PVOID *ppSFT, PVOID *ppJFT);
+void VDDTerminateUserHook(USHORT DosPDB);
+VDM_INFO_TYPE VdmGetParametersInfoError(void);
+BOOL VdmParametersInfo(VDM_INFO_TYPE infotype, PVOID pBuffer, ULONG cbBufferSize);
+void VdmTraceEvent(USHORT Type, USHORT wData, ULONG lData);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define VDM_TRACEType, wData, lData) VdmTraceEvent(Type, wData, lData)
+
+#define VDM_TRACEType, wData, lData) VdmTraceEvent(Type, wData, lData)
+
 #endif
 
 #define getMODE() ((getMSW() & MSW_PE) ? VDM_PM : VDM_V86)

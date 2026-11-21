@@ -7,3 +7,15 @@
 
 /* Fiber and FLS declarations are shared with the legacy umbrella header. */
 #include <winbase.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+PVOID FlsGetValue2(DWORD dwTlsIndex);
+
+#ifdef __cplusplus
+}
+#endif
+

@@ -660,4 +660,37 @@ DWORD WINAPI WNetGetResourceParentW(LPNETRESOURCEW lpNetResource, LPVOID lpBuffe
 }
 #endif
 
+#define WN_CONNECTED_OTHER_PASSWORD 0x83C
+#define WN_CONNECTED_OTHER_PASSWORD_DEFAULT 0x83D
+#ifdef UNICODE
+#define WNetAddConnection4 WNetAddConnection4W
+#else
+#define WNetAddConnection4 WNetAddConnection4A
+#endif
+#ifdef UNICODE
+#define WNetGetResourceParent WNetGetResourceParentW
+#else
+#define WNetGetResourceParent WNetGetResourceParentA
+#endif
+#ifdef UNICODE
+#define WNetUseConnection4 WNetUseConnection4W
+#else
+#define WNetUseConnection4 WNetUseConnection4A
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+DWORD WINAPI WNetAddConnection4A(HWND hwndOwner, LPNETRESOURCEA lpNetResource, PVOID pAuthBuffer, DWORD cbAuthBuffer, DWORD dwFlags, PBYTE lpUseOptions, DWORD cbUseOptions);
+DWORD WINAPI WNetAddConnection4W(HWND hwndOwner, LPNETRESOURCEW lpNetResource, PVOID pAuthBuffer, DWORD cbAuthBuffer, DWORD dwFlags, PBYTE lpUseOptions, DWORD cbUseOptions);
+DWORD WINAPI WNetRestoreSingleConnectionW(HWND hwndParent, LPCWSTR lpDevice, BOOL fUseUI);
+DWORD WINAPI WNetUseConnection4A(HWND hwndOwner, LPNETRESOURCEA lpNetResource, PVOID pAuthBuffer, DWORD cbAuthBuffer, DWORD dwFlags, PBYTE lpUseOptions, DWORD cbUseOptions, LPSTR lpAccessName, LPDWORD lpBufferSize, LPDWORD lpResult);
+DWORD WINAPI WNetUseConnection4W(HWND hwndOwner, LPNETRESOURCEW lpNetResource, PVOID pAuthBuffer, DWORD cbAuthBuffer, DWORD dwFlags, PBYTE lpUseOptions, DWORD cbUseOptions, LPWSTR lpAccessName, LPDWORD lpBufferSize, LPDWORD lpResult);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* _WINNETWK_ */

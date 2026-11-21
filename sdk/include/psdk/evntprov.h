@@ -57,7 +57,8 @@ typedef enum _EVENT_INFO_CLASS {
   EventProviderSetReserved1,
   EventProviderSetTraits,
   EventProviderUseDescriptorType,
-  MaxEventInfo
+  MaxEventInfo,
+  EventProviderSetReserved2 = 4,
 } EVENT_INFO_CLASS;
 
 typedef struct _EVENT_DATA_DESCRIPTOR {
@@ -397,6 +398,9 @@ typedef struct _EVENT_FILTER_LEVEL_KW {
   UCHAR Level;
   BOOLEAN FilterIn;
 } EVENT_FILTER_LEVEL_KW, *PEVENT_FILTER_LEVEL_KW;
+
+#define EVENT_DESCRIPTOR_DEF 0
+#define EVNTPROV_PFORCEINLINE PFORCEINLINE
 
 #endif
 #ifndef EVENT_DATA_DESCRIPTOR_TYPE_NONE
