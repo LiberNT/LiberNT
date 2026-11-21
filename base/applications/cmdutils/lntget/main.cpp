@@ -8,6 +8,9 @@
 #define NOMINMAX
 #include <windows.h>
 
+#include "arp.hpp"
+#include "portable.hpp"
+#include "dependencies.hpp"
 #include "hash.hpp"
 #include "installer.hpp"
 #include "manifest.hpp"
@@ -32,6 +35,8 @@ struct CommandOptions
     SearchField field = SearchField::Any;
     bool exact = false;
     std::size_t count = 20;
+    bool hasCount = false;
+    bool all = false;
     SelectionOptions selection;
     bool hasDownloadDirectory = false;
     std::wstring downloadDirectory;
@@ -46,6 +51,9 @@ void PrintHelp()
         "  lntget show <query> [--id <id>] [-e]\n"
         "  lntget download <query> [--id <id>] [--architecture <arch>]\n"
         "  lntget install <query> [--id <id>] [--architecture <arch>] [--silent|--interactive]\n"
+        "  lntget list [[-q] <query>] [--id|--name <value>] [-e] [-n <count>]\n"
+        "  lntget upgrade [[-q] <query>] [--id <id>] [-e] [--all] [--silent|--interactive]\n"
+        "  lntget uninstall <query> [--id <id>] [--name <name>] [--product-code <code>] [-e] [--silent|--interactive]\n"
         "  lntget source list|update|import <source2.msix>\n"
         "  lntget gui [[-q] <query>]\n"
         "  lntget selftest\n\n"
@@ -58,6 +66,7 @@ void PrintHelp()
         "  --command <command>       Match only provided commands\n"
         "  -e, --exact               Use an exact match\n"
         "  -n, --count <count>       Limit search results (1-1000)\n"
+        "  -r, --all                 Upgrade every package that has an available upgrade\n"
         "  -s, --source winget       Select the community source\n"
         "  --architecture <arch>     x86, x64, arm, or arm64\n"
         "  --installer-type <type>   Require an installer type\n"
@@ -124,6 +133,14 @@ Status ParseOptions(const std::vector<std::string> &arguments, std::size_t first
             if (!status) return status;
             options.query = *value;
         }
+        else if (argument == "--product-code")
+        {
+            const std::string *value = next();
+            if (!value) return Status::Fail(ERROR_INVALID_PARAMETER, "--product-code requires a value");
+            Status status = selectField(SearchField::ProductCode);
+            if (!status) return status;
+            options.query = *value;
+        }
         else if (argument == "-e" || argument == "--exact")
         {
             options.exact = true;
@@ -134,6 +151,11 @@ Status ParseOptions(const std::vector<std::string> &arguments, std::size_t first
             if (!value) return Status::Fail(ERROR_INVALID_PARAMETER, argument + " requires a value");
             Status status = ParseCount(*value, options.count);
             if (!status) return status;
+            options.hasCount = true;
+        }
+        else if (argument == "-r" || argument == "--all" || argument == "--recurse")
+        {
+            options.all = true;
         }
         else if (argument == "--architecture")
         {
@@ -289,7 +311,13 @@ void PrintPackage(const PackageRecord &package, const Manifest &manifest, const 
     std::printf("Version:        %s\n", package.version.c_str());
     std::printf("Source:         winget\n");
     std::printf("Architecture:   %s\n", installer.architecture.c_str());
-    std::printf("Installer type: %s\n", installer.type.c_str());
+    if (installer.nestedType.empty())
+        std::printf("Installer type: %s\n", installer.type.c_str());
+    else
+        std::printf("Installer type: %s (%s)\n", installer.type.c_str(), installer.nestedType.c_str());
+    for (const PackageDependency &dependency : installer.packageDependencies)
+        std::printf("Dependency:     %s%s%s\n", dependency.id.c_str(), dependency.minimumVersion.empty() ? "" : " >= ",
+                    dependency.minimumVersion.c_str());
     std::printf("Installer URL:  %s\n", installer.url.c_str());
     std::printf("Installer SHA:  %s\n", installer.sha256.c_str());
     std::printf("Manifest:       %s %s (%Iu installer%s)\n", manifest.id.c_str(), manifest.version.c_str(), manifest.installers.size(), manifest.installers.size() == 1 ? "" : "s");
@@ -344,6 +372,12 @@ Status DownloadOrInstallCommand(SourceManager &source, const CommandOptions &opt
     if (!status)
         return status;
     PrintPackage(package, manifest, installer);
+    if (install)
+    {
+        status = InstallPackageDependencies(source, installer, selection);
+        if (!status)
+            return status;
+    }
 
     InstallerService service;
     std::wstring path;
@@ -358,11 +392,243 @@ Status DownloadOrInstallCommand(SourceManager &source, const CommandOptions &opt
     }
 
     DWORD exitCode = 0;
-    status = service.Install(installer, path, selection.mode, exitCode);
+    TrackedPackage tracked;
+    status = service.Install(package, installer, path, selection.mode, exitCode, &tracked);
     if (!status)
         return status;
     std::printf("Successfully installed %s.\n", package.name.c_str());
-    std::printf("LNTGET_INSTALL_DONE id=%s exit=%lu\n", package.id.c_str(), exitCode);
+    for (const std::string &identity : tracked.arpIdentities)
+        std::printf("Registered as:  %s\n", identity.c_str());
+    std::printf("LNTGET_INSTALL_DONE id=%s exit=%lu registered=%Iu\n", package.id.c_str(), exitCode, tracked.arpIdentities.size());
+    return Status::Ok();
+}
+
+struct InstalledGroup
+{
+    std::string id;
+    std::string name;
+    std::string installerType;
+    std::string available;
+    std::vector<const InstalledPackage *> entries;
+};
+
+Status ValidateInstalledField(const CommandOptions &options)
+{
+    if (options.field == SearchField::Any || options.field == SearchField::Id || options.field == SearchField::Name ||
+        options.field == SearchField::ProductCode)
+        return Status::Ok();
+    return Status::Fail(ERROR_NOT_SUPPORTED, "installed packages can only be matched by query, --id, --name, or --product-code");
+}
+
+bool InstalledMatches(const InstalledPackage &package, const CommandOptions &options)
+{
+    if (options.query.empty())
+        return true;
+    const auto match = [&options](const std::string &value) {
+        if (value.empty()) return false;
+        return options.exact ? value == options.query : AsciiContains(value, options.query);
+    };
+    const std::string identity = package.entry.Identity();
+    const std::string name = Utf8FromWide(package.entry.name);
+    if (options.field == SearchField::Id)
+        return match(package.packageId) || match(identity);
+    if (options.field == SearchField::Name)
+        return match(name);
+    if (options.field == SearchField::ProductCode)
+        return _wcsicmp(package.entry.keyName.c_str(), WideFromUtf8(options.query).c_str()) == 0;
+    return match(package.packageId) || match(identity) || match(name) || match(package.packageName);
+}
+
+std::string InstalledId(const InstalledPackage &package)
+{
+    return package.correlated ? package.packageId : package.entry.Identity();
+}
+
+std::vector<InstalledGroup> GroupInstalled(const std::vector<InstalledPackage> &packages, const CommandOptions &options)
+{
+    std::vector<InstalledGroup> groups;
+    for (const InstalledPackage &package : packages)
+    {
+        if (!InstalledMatches(package, options))
+            continue;
+        const std::string id = InstalledId(package);
+        auto group = std::find_if(groups.begin(), groups.end(),
+                                  [&id](const InstalledGroup &candidate) { return AsciiEquals(candidate.id, id); });
+        if (group == groups.end())
+        {
+            groups.push_back(InstalledGroup());
+            group = groups.end() - 1;
+            group->id = id;
+            group->name = Utf8FromWide(package.entry.name);
+            group->installerType = package.installerType;
+        }
+        if (!package.available.empty())
+            group->available = package.available;
+        group->entries.push_back(&package);
+    }
+    return groups;
+}
+
+Status CollectInstalled(SourceManager &source, std::vector<InstalledPackage> &packages)
+{
+    const Status status = CollectInstalledPackages(&source, packages);
+    if (!status)
+        std::fprintf(stderr, "lntget: installed packages are shown without the winget source: %s\n", status.message.c_str());
+    return Status::Ok();
+}
+
+Status ListCommand(SourceManager &source, const CommandOptions &options, bool upgradesOnly)
+{
+    Status status = ValidateInstalledField(options);
+    if (!status)
+        return status;
+    std::vector<InstalledPackage> packages;
+    CollectInstalled(source, packages);
+    std::vector<const InstalledPackage *> rows;
+    for (const InstalledPackage &package : packages)
+    {
+        if (InstalledMatches(package, options) && (!upgradesOnly || !package.available.empty()))
+            rows.push_back(&package);
+    }
+    if (options.hasCount && rows.size() > options.count)
+        rows.resize(options.count);
+    if (rows.empty())
+    {
+        if (upgradesOnly)
+        {
+            std::printf("No installed package has an available upgrade.\n");
+            std::printf("LNTGET_UPGRADE_LIST_DONE count=0\n");
+            return Status::Ok();
+        }
+        return Status::Fail(ERROR_NOT_FOUND, "no installed package found matching input criteria");
+    }
+
+    std::size_t nameWidth = 4;
+    std::size_t idWidth = 2;
+    std::size_t versionWidth = 7;
+    std::size_t availableWidth = 9;
+    for (const InstalledPackage *package : rows)
+    {
+        nameWidth = std::min<std::size_t>(40, std::max(nameWidth, Utf8FromWide(package->entry.name).size()));
+        idWidth = std::min<std::size_t>(48, std::max(idWidth, InstalledId(*package).size()));
+        versionWidth = std::min<std::size_t>(20, std::max(versionWidth, Utf8FromWide(package->entry.version).size()));
+        availableWidth = std::min<std::size_t>(20, std::max(availableWidth, package->available.size()));
+    }
+    std::printf("%-*s  %-*s  %-*s  %-*s  Source\n", static_cast<int>(nameWidth), "Name", static_cast<int>(idWidth), "Id",
+                static_cast<int>(versionWidth), "Version", static_cast<int>(availableWidth), "Available");
+    std::printf("%s  %s  %s  %s  ------\n", std::string(nameWidth, '-').c_str(), std::string(idWidth, '-').c_str(),
+                std::string(versionWidth, '-').c_str(), std::string(availableWidth, '-').c_str());
+    for (const InstalledPackage *package : rows)
+    {
+        const std::string name = Utf8FromWide(package->entry.name);
+        const std::string version = package->entry.version.empty() ? std::string("Unknown") : Utf8FromWide(package->entry.version);
+        std::printf("%-*.*s  %-*.*s  %-*.*s  %-*.*s  %s\n", static_cast<int>(nameWidth), static_cast<int>(nameWidth), name.c_str(),
+                    static_cast<int>(idWidth), static_cast<int>(idWidth), InstalledId(*package).c_str(),
+                    static_cast<int>(versionWidth), static_cast<int>(versionWidth), version.c_str(),
+                    static_cast<int>(availableWidth), static_cast<int>(availableWidth), package->available.c_str(),
+                    package->correlated ? "winget" : "");
+    }
+    std::printf("LNTGET_%s_DONE count=%Iu\n", upgradesOnly ? "UPGRADE_LIST" : "LIST", rows.size());
+    return Status::Ok();
+}
+
+Status SelectInstalledGroup(const std::vector<InstalledGroup> &groups, InstalledGroup &selected)
+{
+    if (groups.empty())
+        return Status::Fail(ERROR_NOT_FOUND, "no installed package found matching input criteria");
+    if (groups.size() > 1)
+    {
+        std::printf("Multiple installed packages match:\n");
+        for (const InstalledGroup &group : groups)
+            std::printf("  %s [%s]\n", group.name.c_str(), group.id.c_str());
+        return Status::Fail(ERROR_MORE_DATA, "multiple installed packages match; refine the query or use --id with -e");
+    }
+    selected = groups[0];
+    return Status::Ok();
+}
+
+Status UninstallCommand(SourceManager &source, const CommandOptions &options)
+{
+    if (options.query.empty())
+        return Status::Fail(ERROR_INVALID_PARAMETER, "a package query or --id is required");
+    Status status = ValidateInstalledField(options);
+    if (!status)
+        return status;
+    std::vector<InstalledPackage> packages;
+    CollectInstalled(source, packages);
+    InstalledGroup group;
+    status = SelectInstalledGroup(GroupInstalled(packages, options), group);
+    if (!status)
+        return status;
+
+    std::printf("Found %s [%s]\n", group.name.c_str(), group.id.c_str());
+    std::printf("Starting package uninstall...\n");
+    bool tracked = false;
+    for (const InstalledPackage *package : group.entries)
+    {
+        DWORD exitCode = 0;
+        status = UninstallArpEntry(package->entry, package->installerType, options.selection.mode, exitCode);
+        if (!status)
+            return status;
+        tracked = tracked || !package->installerType.empty();
+        std::printf("Removed %s\n", package->entry.Identity().c_str());
+    }
+    if (tracked)
+    {
+        status = RemoveTrackedPackage(group.id);
+        if (!status)
+            std::fprintf(stderr, "lntget: %s\n", status.message.c_str());
+    }
+    std::printf("Successfully uninstalled %s.\n", group.name.c_str());
+    std::printf("LNTGET_UNINSTALL_DONE id=%s entries=%Iu\n", group.id.c_str(), group.entries.size());
+    return Status::Ok();
+}
+
+Status UpgradeCommand(SourceManager &source, const CommandOptions &options)
+{
+    if (options.query.empty() && !options.all)
+        return ListCommand(source, options, true);
+    Status status = ValidateInstalledField(options);
+    if (!status)
+        return status;
+    std::vector<InstalledPackage> packages;
+    CollectInstalled(source, packages);
+    std::vector<InstalledGroup> groups = GroupInstalled(packages, options);
+    if (options.all)
+    {
+        std::size_t upgraded = 0;
+        for (const InstalledGroup &group : groups)
+        {
+            if (group.available.empty())
+                continue;
+            CommandOptions install = options;
+            install.query = group.id;
+            install.field = SearchField::Id;
+            install.exact = true;
+            status = DownloadOrInstallCommand(source, install, true);
+            if (!status)
+                return status;
+            ++upgraded;
+        }
+        std::printf("LNTGET_UPGRADE_DONE count=%Iu\n", upgraded);
+        return Status::Ok();
+    }
+
+    InstalledGroup group;
+    status = SelectInstalledGroup(groups, group);
+    if (!status)
+        return status;
+    if (group.available.empty())
+        return Status::Fail(ERROR_NOT_FOUND, "no applicable upgrade found for " + group.name);
+    std::printf("Upgrading %s [%s] to %s\n", group.name.c_str(), group.id.c_str(), group.available.c_str());
+    CommandOptions install = options;
+    install.query = group.id;
+    install.field = SearchField::Id;
+    install.exact = true;
+    status = DownloadOrInstallCommand(source, install, true);
+    if (!status)
+        return status;
+    std::printf("LNTGET_UPGRADE_DONE count=1\n");
     return Status::Ok();
 }
 
@@ -381,6 +647,12 @@ Status SelfTestCommand()
     if (!status)
         return status;
     status = RunInstallerSelfTests();
+    if (!status)
+        return status;
+    status = RunArpSelfTests();
+    if (!status)
+        return status;
+    status = RunPortableSelfTests();
     if (!status)
         return status;
     std::size_t count = 0;
@@ -460,6 +732,9 @@ int Main(const std::vector<std::string> &arguments)
     if (arguments[1] == "show") return Report(ShowCommand(source, options));
     if (arguments[1] == "download") return Report(DownloadOrInstallCommand(source, options, false));
     if (arguments[1] == "install") return Report(DownloadOrInstallCommand(source, options, true));
+    if (arguments[1] == "list" || arguments[1] == "ls") return Report(ListCommand(source, options, false));
+    if (arguments[1] == "upgrade" || arguments[1] == "update") return Report(UpgradeCommand(source, options));
+    if (arguments[1] == "uninstall" || arguments[1] == "remove" || arguments[1] == "rm") return Report(UninstallCommand(source, options));
     return Report(Status::Fail(ERROR_INVALID_PARAMETER, "unknown command: " + arguments[1]));
 }
 

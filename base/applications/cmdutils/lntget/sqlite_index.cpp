@@ -603,6 +603,32 @@ Status RunSQLiteIndexSelfTests()
     return Status::Ok();
 }
 
+Status SQLiteIndex::LoadArpCorrelation(std::map<std::string, PackageRecord> &productCodes,
+                                       std::map<std::string, PackageRecord> &packages) const
+{
+    productCodes.clear();
+    packages.clear();
+    std::map<int64_t, PackageRecord> rows;
+    Status status = ForEachPackage([&rows, &packages](int64_t rowid, PackageRecord &package) {
+        rows[rowid] = package;
+        packages[AsciiLower(package.id)] = package;
+        return Status::Ok();
+    });
+    if (!status)
+        return status;
+    const uint32_t root = Root("productcodes2");
+    if (!root)
+        return Status::Ok();
+    return ScanIndex(root, [&productCodes, &rows](int64_t, const std::vector<Value> &values) {
+        if (values.size() < 2 || values[0].kind != Value::Kind::Text || values[1].kind != Value::Kind::Integer)
+            return Status::Ok();
+        const auto package = rows.find(values[1].integer);
+        if (package != rows.end())
+            productCodes.emplace(AsciiLower(values[0].text), package->second);
+        return Status::Ok();
+    });
+}
+
 Status SQLiteIndex::LoadCatalog(Catalog &catalog) const
 {
     catalog.entries.clear();

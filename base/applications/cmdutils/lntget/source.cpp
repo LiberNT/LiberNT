@@ -461,6 +461,13 @@ Status SourceManager::Resolve(const PackageQuery &query, PackageRecord &package)
     return Status::Ok();
 }
 
+Status SourceManager::LoadArpCorrelation(std::map<std::string, PackageRecord> &productCodes,
+                                         std::map<std::string, PackageRecord> &packages)
+{
+    Status status = EnsureReady();
+    return status ? index_.LoadArpCorrelation(productCodes, packages) : status;
+}
+
 Status SourceManager::FetchInstallerManifest(const PackageRecord &package, std::string &yaml)
 {
     Status status = EnsureReady();

@@ -13,6 +13,7 @@
 #include "category.hpp"
 #include "details.hpp"
 #include "gui.hpp"
+#include "dependencies.hpp"
 #include "http.hpp"
 #include "installed.hpp"
 #include "installer.hpp"
@@ -625,6 +626,18 @@ private:
             return;
         }
 
+        if (install)
+        {
+            status = InstallPackageDependencies(*source_, installer, options);
+            if (!status)
+            {
+                update.stage = OperationStage::Failed;
+                update.error = status.message;
+                PostOperation(update);
+                return;
+            }
+        }
+
         OperationCallbacks callbacks(*this, update);
 
         InstallerService service;
@@ -643,7 +656,7 @@ private:
             update.stage = OperationStage::Installing;
             PostOperation(update);
             DWORD exitCode = 0;
-            status = service.Install(installer, path, InstallMode::Default, exitCode);
+            status = service.Install(package, installer, path, InstallMode::Default, exitCode);
             update.exitCode = exitCode;
             if (!status)
             {
