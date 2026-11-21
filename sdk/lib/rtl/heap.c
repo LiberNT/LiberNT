@@ -1462,6 +1462,7 @@ RtlCreateHeap(ULONG Flags,
             DPRINT1("Enabling page heap failed\n");
     }
 
+    /* TODO: HEAP_CREATE_SEGMENT_HEAP and HEAP_CREATE_HARDENED are accepted, but no segment heap exists; an NT heap is created */
     /* Check validation flags */
     if (!(Flags & HEAP_SKIP_VALIDATION_CHECKS) && (Flags & ~HEAP_CREATE_VALID_MASK))
     {
@@ -2482,7 +2483,7 @@ RtlpIsValidBusyEntry(PHEAP Heap, PHEAP_ENTRY HeapEntry)
     return Valid;
 }
 
-BOOLEAN NTAPI RtlFreeHeap(
+LOGICAL NTAPI RtlFreeHeap(
    HANDLE HeapPtr, /* [in] Handle of heap */
    ULONG Flags,   /* [in] Heap freeing flags */
    PVOID Ptr     /* [in] Address of memory to free */

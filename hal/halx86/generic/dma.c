@@ -351,7 +351,8 @@ HalpFreeCommonBufferVector(
 
 
 static DMA_OPERATIONS HalpDmaOperations = {
-   sizeof(DMA_OPERATIONS),
+   /* TODO: CreateCommonBufferFromMdl is not implemented; report the table up to it */
+   FIELD_OFFSET(DMA_OPERATIONS, CreateCommonBufferFromMdl),
    (PPUT_DMA_ADAPTER)HalPutDmaAdapter,
    (PALLOCATE_COMMON_BUFFER)HalAllocateCommonBuffer,
    (PFREE_COMMON_BUFFER)HalFreeCommonBuffer,

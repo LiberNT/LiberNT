@@ -1875,7 +1875,7 @@ ChpeRtlRandom(PULONG Seed)
     return RtlRandom(Seed);
 }
 
-BOOLEAN NTAPI
+LOGICAL NTAPI
 ChpeRtlFreeHeap(HANDLE HeapHandle, ULONG Flags, PVOID Pointer)
 {
     return RtlFreeHeap(HeapHandle, Flags, Pointer);

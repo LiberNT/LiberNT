@@ -1235,14 +1235,6 @@ typedef struct _NFS_OPEN_ECP_CONTEXT {
   PSOCKADDR_STORAGE_NFS ClientSocketAddress;
 } NFS_OPEN_ECP_CONTEXT, *PNFS_OPEN_ECP_CONTEXT, **PPNFS_OPEN_ECP_CONTEXT;
 
-typedef struct _SRV_OPEN_ECP_CONTEXT {
-  PUNICODE_STRING ShareName;
-  PSOCKADDR_STORAGE_NFS SocketAddress;
-  BOOLEAN OplockBlockState;
-  BOOLEAN OplockAppState;
-  BOOLEAN OplockFinalState;
-} SRV_OPEN_ECP_CONTEXT, *PSRV_OPEN_ECP_CONTEXT;
-
 #define SRV_OPEN_ECP_CONTEXT_VERSION_2  2
 
 typedef enum _SRV_INSTANCE_TYPE {
@@ -1250,8 +1242,21 @@ typedef enum _SRV_INSTANCE_TYPE {
   SrvInstanceTypePrimary,
   SrvInstanceTypeCsv,
   SrvInstanceTypeSBL,
-  SrvInstanceTypeSR
-} SRV_INSTANCE_TYPE;
+  SrvInstanceTypeSR,
+  SrvInstanceTypeVSMB
+} SRV_INSTANCE_TYPE, *PSRV_INSTANCE_TYPE;
+
+typedef struct _SRV_OPEN_ECP_CONTEXT {
+  PUNICODE_STRING ShareName;
+  PSOCKADDR_STORAGE_NFS SocketAddress;
+  BOOLEAN OplockBlockState;
+  BOOLEAN OplockAppState;
+  BOOLEAN OplockFinalState;
+#if (NTDDI_VERSION >= NTDDI_WIN10_RS2)
+  USHORT Version;
+  SRV_INSTANCE_TYPE InstanceType;
+#endif
+} SRV_OPEN_ECP_CONTEXT, *PSRV_OPEN_ECP_CONTEXT;
 
 #endif /* (NTDDI_VERSION >= NTDDI_WIN7) */
 
@@ -1275,14 +1280,22 @@ typedef struct _QUERY_PATH_REQUEST {
   WCHAR FilePathName[1];
 } QUERY_PATH_REQUEST, *PQUERY_PATH_REQUEST;
 
+#if (NTDDI_VERSION >= NTDDI_VISTA)
 typedef struct _QUERY_PATH_REQUEST_EX {
   PIO_SECURITY_CONTEXT pSecurityContext;
   ULONG EaLength;
   PVOID pEaBuffer;
   UNICODE_STRING PathName;
   UNICODE_STRING DomainServiceName;
-  ULONG_PTR Reserved[ 3 ];
+  PECP_LIST EcpList;
+#if (NTDDI_VERSION >= NTDDI_WIN10_RS1)
+  PESILO Silo;
+  ULONG_PTR Reserved;
+#else
+  ULONG_PTR Reserved[2];
+#endif
 } QUERY_PATH_REQUEST_EX, *PQUERY_PATH_REQUEST_EX;
+#endif
 
 typedef struct _QUERY_PATH_RESPONSE {
   ULONG LengthAccepted;

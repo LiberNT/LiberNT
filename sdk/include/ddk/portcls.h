@@ -3452,4 +3452,6 @@ typedef IMiniportStreamAudioEngineNode2 *PIMINIPORTStreamAudioEngineNode2;
 
 #endif
 
+#undef INTERFACE
+
 #endif /* PORTCLS_H */

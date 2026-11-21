@@ -1109,7 +1109,8 @@ typedef struct _ACCESS_REASONS {
 
 #define SE_SECURITY_DESCRIPTOR_FLAG_NO_OWNER_ACE 0x00000001
 #define SE_SECURITY_DESCRIPTOR_FLAG_NO_LABEL_ACE 0x00000002
-#define SE_SECURITY_DESCRIPTOR_VALID_FLAGS       0x00000003
+#define SE_SECURITY_DESCRIPTOR_FLAG_NO_ACCESS_FILTER_ACE 0x00000004
+#define SE_SECURITY_DESCRIPTOR_VALID_FLAGS       0x00000007
 
 typedef struct _SE_SECURITY_DESCRIPTOR {
   $ULONG Size;
@@ -1216,7 +1217,9 @@ typedef enum _TOKEN_INFORMATION_CLASS {
   TokenChildProcessFlags,
   TokenIsLessPrivilegedAppContainer,
   TokenIsSandboxed,
-  TokenOriginatingProcessTrustLevel,
+  TokenIsAppSilo,
+  TokenLoggingInformation,
+  TokenLearningMode,
   MaxTokenInfoClass
 } TOKEN_INFORMATION_CLASS, *PTOKEN_INFORMATION_CLASS;
 
@@ -1294,7 +1297,7 @@ typedef struct _TOKEN_APPCONTAINER_INFORMATION {
 #define TOKEN_MANDATORY_POLICY_VALID_MASK (TOKEN_MANDATORY_POLICY_NO_WRITE_UP | \
                                            TOKEN_MANDATORY_POLICY_NEW_PROCESS_MIN)
 
-#define POLICY_AUDIT_SUBCATEGORY_COUNT (56)
+#define POLICY_AUDIT_SUBCATEGORY_COUNT (60)
 
 typedef struct _TOKEN_AUDIT_POLICY {
   $UCHAR PerUserPolicy[((POLICY_AUDIT_SUBCATEGORY_COUNT) >> 1) + 1];
@@ -1307,7 +1310,6 @@ typedef struct _TOKEN_SOURCE {
   LUID SourceIdentifier;
 } TOKEN_SOURCE, *PTOKEN_SOURCE;
 
-#pragma pack(push, 4)
 typedef struct _TOKEN_STATISTICS {
   LUID TokenId;
   LUID AuthenticationId;
@@ -1320,7 +1322,6 @@ typedef struct _TOKEN_STATISTICS {
   $ULONG PrivilegeCount;
   LUID ModifiedId;
 } TOKEN_STATISTICS, *PTOKEN_STATISTICS;
-#pragma pack(pop)
 
 typedef struct _TOKEN_CONTROL {
   LUID TokenId;

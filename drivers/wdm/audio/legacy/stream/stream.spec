@@ -4,6 +4,6 @@
 @ stdcall StreamClassReenumerateStreams(ptr long)
 @ stdcall StreamClassDebugAssert(long long ptr long)
 @ varargs StreamClassDebugPrint(long str)
-@ cdecl StreamClassDeviceNotification(long ptr)
+@ varargs StreamClassDeviceNotification(long ptr)
 @ stdcall StreamClassGetDmaBuffer(ptr)
 @ stdcall StreamClassReadWriteConfig(ptr long ptr long long)

@@ -528,7 +528,7 @@ IntToUnicodeEx(UINT wVirtKey,
                 if (wchDead && cchBuff > iRet)
                     pwszBuff[iRet++] = wchDead;
                 wchDead = 0;
-                for (i = 0; i < pKbdTbl->nLgMaxd && cchBuff > iRet; i++)
+                for (i = 0; i < pKbdTbl->nLgMax && cchBuff > iRet; i++)
                 {
                     if (pLigature->wch[i] == WCH_NONE || !pLigature->wch[i])
                         break;

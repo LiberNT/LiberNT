@@ -101,6 +101,53 @@ typedef struct _WHEA_PROCESSOR_GENERIC_ERROR_SECTION
 
 #pragma pack(pop)
 
+typedef enum _WHEA_RECOVERY_CONTEXT_ACTION_TAKEN {
+    WheaRecoveryContextActionTakenNone = 0,
+    WheaRecoveryContextActionTakenOfflineDemotion,
+    WheaRecoveryContextActionTakenPageNotReplaced,
+    WheaRecoveryContextActionTakenPageReplaced,
+    WheaRecoveryContextActionTakenMax
+} WHEA_RECOVERY_CONTEXT_ACTION_TAKEN, *PWHEA_RECOVERY_CONTEXT_ACTION_TAKEN;
+
+#pragma pack(push, 1)
+typedef union _WHEA_RECOVERY_CONTEXT_ACTION_TAKEN_ADDITIONAL_INFO {
+    struct {
+        ULONG64 Reserved:64;
+    } Bits;
+    ULONG64 AsULONG64;
+} WHEA_RECOVERY_CONTEXT_ACTION_TAKEN_ADDITIONAL_INFO, *PWHEA_RECOVERY_CONTEXT_ACTION_TAKEN_ADDITIONAL_INFO;
+#pragma pack(pop)
+
+typedef union _WHEA_IN_USE_PAGE_NOTIFY_FLAGS {
+    struct {
+        UCHAR PlatformDirected:1;
+        UCHAR PageSwapped:1;
+        UCHAR PageDemoted:1;
+        UCHAR Reserved:3;
+        UCHAR NotifyAllOfflines:1;
+        UCHAR PageOfflined:1;
+    } Bits;
+    UINT8 AsUCHAR;
+} WHEA_IN_USE_PAGE_NOTIFY_FLAGS, *PWHEA_IN_USE_PAGE_NOTIFY_FLAGS;
+
+typedef enum _WHEA_RECOVERY_CONTEXT_ERROR_TYPE {
+    WheaRecoveryContextErrorTypeMemory = 1,
+    WheaRecoveryContextErrorTypePmem,
+    WheaRecoveryContextErrorTypeMax
+} WHEA_RECOVERY_CONTEXT_ERROR_TYPE, *PWHEA_RECOVERY_CONTEXT_ERROR_TYPE;
+
+#define WHEA_PFA_PAGE_RANGE_MAX 256
+
+typedef struct _WHEA_RECOVERY_CONTEXT_PAGE_INFO {
+    ULONG ComponentTag;
+    NTSTATUS PageStatus;
+    WHEA_RECOVERY_CONTEXT_ACTION_TAKEN ActionTaken;
+    WHEA_IN_USE_PAGE_NOTIFY_FLAGS NotifyFlags;
+    BOOLEAN ImmediateSuccess;
+    UINT16 Reserved;
+    WHEA_RECOVERY_CONTEXT_ACTION_TAKEN_ADDITIONAL_INFO ActionTakenAdditionalInfo;
+} WHEA_RECOVERY_CONTEXT_PAGE_INFO, *PWHEA_RECOVERY_CONTEXT_PAGE_INFO;
+
 typedef struct _WHEA_RECOVERY_CONTEXT
 {
     union {
@@ -110,10 +157,17 @@ typedef struct _WHEA_RECOVERY_CONTEXT
             UINT16 ErrorCode;
             BOOLEAN ErrorIpValid;
             BOOLEAN RestartIpValid;
+            BOOLEAN ClearPoison;
         } MemoryError;
+        struct {
+            ULONG_PTR PmemErrInfo;
+        } PmemError;
     };
     UINT64 PartitionId;
     UINT32 VpIndex;
+    WHEA_RECOVERY_CONTEXT_ERROR_TYPE ErrorType;
+    ULONG PageCount;
+    WHEA_RECOVERY_CONTEXT_PAGE_INFO PageInfo[WHEA_PFA_PAGE_RANGE_MAX];
 } WHEA_RECOVERY_CONTEXT, *PWHEA_RECOVERY_CONTEXT;
 
 #pragma pack(push, 1)
@@ -143,6 +197,13 @@ typedef enum _WHEA_ERROR_SOURCE_TYPE {
     WheaErrSrcTypeIPFMCA,
     WheaErrSrcTypeIPFCMC,
     WheaErrSrcTypeIPFCPE,
+    WheaErrSrcTypeGenericV2,
+    WheaErrSrcTypeSCIGenericV2,
+    WheaErrSrcTypeBMC,
+    WheaErrSrcTypePMEM,
+    WheaErrSrcTypeDeviceDriver,
+    WheaErrSrcTypeSea,
+    WheaErrSrcTypeSei,
     WheaErrSrcTypeMax
 } WHEA_ERROR_SOURCE_TYPE, *PWHEA_ERROR_SOURCE_TYPE;
 

@@ -933,6 +933,10 @@ FltpPreFsFilterOperation(
                 Data->Parameters.AcquireForSectionSynchronization.PageProtection;
             IrpCtrl->Iopb.Parameters.AcquireForSectionSynchronization.OutputInformation =
                 Data->Parameters.AcquireForSectionSynchronization.OutputInformation;
+            IrpCtrl->Iopb.Parameters.AcquireForSectionSynchronization.Flags =
+                Data->Parameters.AcquireForSectionSynchronization.Flags;
+            IrpCtrl->Iopb.Parameters.AcquireForSectionSynchronization.AllocationAttributes =
+                Data->Parameters.AcquireForSectionSynchronization.AllocationAttributes;
             break;
 
         case FS_FILTER_ACQUIRE_FOR_MOD_WRITE:

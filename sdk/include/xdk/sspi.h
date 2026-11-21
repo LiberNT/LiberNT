@@ -1239,14 +1239,14 @@ SspiMarshalAuthIdentity(
 SECURITY_STATUS
 SEC_ENTRY
 SspiUnmarshalAuthIdentity(
-    _In_ PULONG AuthIdentityLength,
+    _In_ ULONG AuthIdentityLength,
     _In_reads_bytes_(AuthIdentityLength) PCHAR AuthIdentityByteArray,
     _Outptr_ PSEC_WINNT_AUTH_IDENTITY_OPAQUE* ppAuthIdentity);
 
 BOOLEAN
 SEC_ENTRY
 SspiIsPromptingNeeded(
-    _In_ PULONG ErrorOrNtStatus);
+    _In_ ULONG ErrorOrNtStatus);
 
 SECURITY_STATUS
 SEC_ENTRY

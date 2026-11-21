@@ -12,7 +12,8 @@ $if (_WDMDDK_)
 #define CONNECT_LINE_BASED              0x2
 #define CONNECT_MESSAGE_BASED           0x3
 #define CONNECT_FULLY_SPECIFIED_GROUP   0x4
-#define CONNECT_CURRENT_VERSION         0x4
+#define CONNECT_MESSAGE_BASED_PASSIVE   0x5
+#define CONNECT_CURRENT_VERSION         0x5
 
 #define POOL_QUOTA_FAIL_INSTEAD_OF_RAISE    0x8
 #define POOL_RAISE_IF_ALLOCATION_FAILURE    0x10
@@ -1342,6 +1343,13 @@ typedef enum _FILE_INFORMATION_CLASS {
   FileCaseSensitiveInformationForceAccessCheck,
   FileKnownFolderInformation,
 #endif
+  FileStatBasicInformation,
+  FileId64ExtdDirectoryInformation,
+  FileId64ExtdBothDirectoryInformation,
+  FileIdAllExtdDirectoryInformation,
+  FileIdAllExtdBothDirectoryInformation,
+  FileStreamReservationInformation,
+  FileMupProviderInfo,
   FileMaximumInformation
 } FILE_INFORMATION_CLASS, *PFILE_INFORMATION_CLASS;
 
@@ -1420,6 +1428,8 @@ typedef enum _FSINFOCLASS {
   FileFsSectorSizeInformation,
   FileFsDataCopyInformation,
   FileFsMetadataSizeInformation,
+  FileFsFullSizeInformationEx,
+  FileFsGuidInformation,
   FileFsMaximumInformation
 } FS_INFORMATION_CLASS, *PFS_INFORMATION_CLASS;
 
@@ -1806,6 +1816,7 @@ typedef struct _SECTION_OBJECT_POINTERS {
 typedef struct _IO_COMPLETION_CONTEXT {
   PVOID Port;
   PVOID Key;
+  LONG_PTR UsageCount;
 } IO_COMPLETION_CONTEXT, *PIO_COMPLETION_CONTEXT;
 
 /* FILE_OBJECT.Flags */
@@ -2086,6 +2097,7 @@ typedef enum _DMA_WIDTH {
   Width16Bits,
   Width32Bits,
   Width64Bits,
+  WidthNoWrap,
   MaximumDmaWidth
 } DMA_WIDTH, *PDMA_WIDTH;
 
@@ -2131,6 +2143,7 @@ typedef struct _DEVICE_DESCRIPTION {
 } DEVICE_DESCRIPTION, *PDEVICE_DESCRIPTION;
 
 #define DMA_ADAPTER_INFO_VERSION1   1
+#define DMA_ADAPTER_INFO_VERSION_CRASHDUMP  MAXULONG
 
 #define ADAPTER_INFO_SYNCHRONOUS_CALLBACK             0x0001
 #define ADAPTER_INFO_API_BYPASS                       0x0002
@@ -2144,12 +2157,27 @@ typedef struct _DMA_ADAPTER_INFO_V1
   ULONG MinimumTransferUnit;
 } DMA_ADAPTER_INFO_V1, *PDMA_ADAPTER_INFO_V1;
 
-typedef struct _DMA_ADAPTER_INFO
+typedef struct _DMA_ADAPTER_INFO_CRASHDUMP
 {
-  ULONG Version;
-  union
+  DEVICE_DESCRIPTION DeviceDescription;
+  SIZE_T DeviceIdSize;
+  PVOID DeviceId;
+} DMA_ADAPTER_INFO_CRASHDUMP, *PDMA_ADAPTER_INFO_CRASHDUMP;
+
+typedef union _DMA_ADAPTER_INFO
+{
+  struct
   {
+    ULONG Version;
     DMA_ADAPTER_INFO_V1 V1;
+  };
+  struct
+  {
+    ULONGLONG Reserved;
+    union
+    {
+      DMA_ADAPTER_INFO_CRASHDUMP Crashdump;
+    };
   };
 } DMA_ADAPTER_INFO, *PDMA_ADAPTER_INFO;
 
@@ -2706,6 +2734,50 @@ typedef VOID
   _In_ PDMA_ADAPTER DmaAdapter,
   _In_ PDMA_COMMON_BUFFER_VECTOR Vector);
 
+typedef enum _DMA_COMMON_BUFFER_EXTENDED_CONFIGURATION_TYPE
+{
+  CommonBufferConfigTypeLogicalAddressLimits,
+  CommonBufferConfigTypeSubSection,
+  CommonBufferConfigTypeHardwareAccessPermissions,
+  CommonBufferConfigTypeMax
+} DMA_COMMON_BUFFER_EXTENDED_CONFIGURATION_TYPE, *PDMA_COMMON_BUFFER_EXTENDED_CONFIGURATION_TYPE;
+
+typedef enum _DMA_COMMON_BUFFER_EXTENDED_CONFIGURATION_ACCESS_TYPE
+{
+  CommonBufferHardwareAccessReadOnly,
+  CommonBufferHardwareAccessWriteOnly,
+  CommonBufferHardwareAccessReadWrite,
+  CommonBufferHardwareAccessMax
+} DMA_COMMON_BUFFER_EXTENDED_CONFIGURATION_ACCESS_TYPE, *PDMA_COMMON_BUFFER_EXTENDED_CONFIGURATION_ACCESS_TYPE;
+
+typedef struct _DMA_COMMON_BUFFER_EXTENDED_CONFIGURATION
+{
+  DMA_COMMON_BUFFER_EXTENDED_CONFIGURATION_TYPE ConfigType;
+  union
+  {
+    struct
+    {
+      PHYSICAL_ADDRESS MinimumAddress;
+      PHYSICAL_ADDRESS MaximumAddress;
+    } LogicalAddressLimits;
+    struct
+    {
+      ULONGLONG Offset;
+      ULONG Length;
+    } SubSection;
+    DMA_COMMON_BUFFER_EXTENDED_CONFIGURATION_ACCESS_TYPE HardwareAccessType;
+    ULONGLONG Reserved[4];
+  };
+} DMA_COMMON_BUFFER_EXTENDED_CONFIGURATION, *PDMA_COMMON_BUFFER_EXTENDED_CONFIGURATION;
+
+typedef NTSTATUS
+(NTAPI *PCREATE_COMMON_BUFFER_FROM_MDL)(
+  _In_ PDMA_ADAPTER DmaAdapter,
+  _In_ PMDL Mdl,
+  _In_reads_opt_(ExtendedConfigsCount) PDMA_COMMON_BUFFER_EXTENDED_CONFIGURATION ExtendedConfigs,
+  _In_ ULONG ExtendedConfigsCount,
+  _Out_ PPHYSICAL_ADDRESS LogicalAddress);
+
 typedef struct _DMA_OPERATIONS {
   ULONG Size;
   PPUT_DMA_ADAPTER PutDmaAdapter;
@@ -2746,6 +2818,7 @@ typedef struct _DMA_OPERATIONS {
   PGET_COMMON_BUFFER_FROM_VECTOR_BY_INDEX GetCommonBufferFromVectorByIndex;
   PFREE_COMMON_BUFFER_FROM_VECTOR FreeCommonBufferFromVector;
   PFREE_COMMON_BUFFER_VECTOR FreeCommonBufferVector;
+  PCREATE_COMMON_BUFFER_FROM_MDL CreateCommonBufferFromMdl;
 } DMA_OPERATIONS, *PDMA_OPERATIONS;
 
 typedef struct _IOMMU_DMA_DOMAIN IOMMU_DMA_DOMAIN, *PIOMMU_DMA_DOMAIN;
@@ -2756,6 +2829,123 @@ typedef struct _DOMAIN_CONFIGURATION DOMAIN_CONFIGURATION,
   *PDOMAIN_CONFIGURATION;
 typedef struct _DEVICE_FAULT_CONFIGURATION DEVICE_FAULT_CONFIGURATION,
   *PDEVICE_FAULT_CONFIGURATION;
+
+typedef enum _FAULT_INFORMATION_ARCH
+{
+  FaultInformationInvalid,
+  FaultInformationArm64,
+  FaultInformationX64
+} FAULT_INFORMATION_ARCH, *PFAULT_INFORMATION_ARCH;
+
+typedef enum _FAULT_INFORMATION_ARM64_TYPE
+{
+  UnsupportedUpstreamTransaction,
+  AddressSizeFault,
+  TlbMatchConflict,
+  ExternalFault,
+  PermissionFault,
+  AccessFlagFault,
+  TranslationFault,
+  MaxFaultType
+} FAULT_INFORMATION_ARM64_TYPE, *PFAULT_INFORMATION_ARM64_TYPE;
+
+typedef enum _FAULT_INFORMATION_ARM64_TYPE FAULT_INFORMATION_X64_TYPE, *PFAULT_INFORMATION_X64_TYPE;
+
+typedef struct _FAULT_INFORMATION_X64_FLAGS
+{
+  ULONG FaultAddressValid:1;
+  ULONG Reserved:31;
+} FAULT_INFORMATION_X64_FLAGS, *PFAULT_INFORMATION_X64_FLAGS;
+
+typedef struct _FAULT_INFORMATION_ARM64_FLAGS
+{
+  ULONG WriteNotRead:1;
+  ULONG InstructionNotData:1;
+  ULONG Privileged:1;
+  ULONG FaultAddressValid:1;
+  ULONG Reserved:28;
+} FAULT_INFORMATION_ARM64_FLAGS, *PFAULT_INFORMATION_ARM64_FLAGS;
+
+typedef struct _FAULT_INFORMATION_X64
+{
+  PVOID DomainHandle;
+  PVOID FaultAddress;
+  FAULT_INFORMATION_X64_FLAGS Flags;
+  FAULT_INFORMATION_X64_TYPE Type;
+  ULONG64 IommuBaseAddress;
+  ULONG PciSegment;
+} FAULT_INFORMATION_X64, *PFAULT_INFORMATION_X64;
+
+typedef struct _FAULT_INFORMATION_ARM64
+{
+  PVOID DomainHandle;
+  PVOID FaultAddress;
+  PDEVICE_OBJECT PhysicalDeviceObject;
+  ULONG InputMappingId;
+  FAULT_INFORMATION_ARM64_FLAGS Flags;
+  FAULT_INFORMATION_ARM64_TYPE Type;
+  ULONG64 IommuBaseAddress;
+} FAULT_INFORMATION_ARM64, *PFAULT_INFORMATION_ARM64;
+
+typedef struct _FAULT_INFORMATION
+{
+  FAULT_INFORMATION_ARCH Type;
+  BOOLEAN IsStage1;
+  union
+  {
+    FAULT_INFORMATION_ARM64 Arm64;
+    FAULT_INFORMATION_X64 X64;
+  };
+} FAULT_INFORMATION, *PFAULT_INFORMATION;
+
+typedef enum _DOMAIN_CONFIGURATION_ARCH
+{
+  DomainConfigurationArm64,
+  DomainConfigurationX64,
+  DomainConfigurationInvalid
+} DOMAIN_CONFIGURATION_ARCH, *PDOMAIN_CONFIGURATION_ARCH;
+
+typedef struct _DOMAIN_CONFIGURATION_ARM64
+{
+  PHYSICAL_ADDRESS Ttbr0;
+  PHYSICAL_ADDRESS Ttbr1;
+  ULONG Mair0;
+  ULONG Mair1;
+  UCHAR InputSize0;
+  UCHAR InputSize1;
+  BOOLEAN CoherentTableWalks;
+  BOOLEAN TranslationEnabled;
+} DOMAIN_CONFIGURATION_ARM64, *PDOMAIN_CONFIGURATION_ARM64;
+
+typedef struct _DOMAIN_CONFIGURATION_X64
+{
+  PHYSICAL_ADDRESS FirstLevelPageTableRoot;
+  BOOLEAN TranslationEnabled;
+} DOMAIN_CONFIGURATION_X64, *PDOMAIN_CONFIGURATION_X64;
+
+struct _DOMAIN_CONFIGURATION
+{
+  DOMAIN_CONFIGURATION_ARCH Type;
+  union
+  {
+    DOMAIN_CONFIGURATION_ARM64 Arm64;
+    DOMAIN_CONFIGURATION_X64 X64;
+  };
+};
+
+typedef _IRQL_requires_max_(PASSIVE_LEVEL)
+VOID
+NTAPI
+IOMMU_DEVICE_FAULT_HANDLER(
+  _In_ PVOID Context,
+  _In_ PFAULT_INFORMATION FaultInformation);
+typedef IOMMU_DEVICE_FAULT_HANDLER *PIOMMU_DEVICE_FAULT_HANDLER;
+
+struct _DEVICE_FAULT_CONFIGURATION
+{
+  PIOMMU_DEVICE_FAULT_HANDLER FaultHandler;
+  PVOID FaultContext;
+};
 
 typedef ULONGLONG IOMMU_DMA_LOGICAL_ADDRESS, *PIOMMU_DMA_LOGICAL_ADDRESS;
 
@@ -4416,7 +4606,9 @@ typedef struct _PCI_PMC {
 
 typedef struct _PCI_PMCSR {
   USHORT PowerState:2;
-  USHORT Rsvd1:6;
+  USHORT Rsvd1:1;
+  USHORT NoSoftReset:1;
+  USHORT Rsvd2:4;
   USHORT PMEEnable:1;
   USHORT DataSelect:4;
   USHORT DataScale:2;
@@ -5877,6 +6069,79 @@ typedef union _PCI_EXPRESS_ROOT_STATUS_REGISTER {
   ULONG AsULONG;
 } PCI_EXPRESS_ROOT_STATUS_REGISTER, *PPCI_EXPRESS_ROOT_STATUS_REGISTER;
 
+typedef union _PCI_EXPRESS_DEVICE_CAPABILITIES_2_REGISTER {
+  _ANONYMOUS_STRUCT struct {
+    ULONG CompletionTimeoutRangesSupported:4;
+    ULONG CompletionTimeoutDisableSupported:1;
+    ULONG AriForwardingSupported:1;
+    ULONG AtomicOpRoutingSupported:1;
+    ULONG AtomicOpCompleterSupported32Bit:1;
+    ULONG AtomicOpCompleterSupported64Bit:1;
+    ULONG CASCompleterSupported128Bit:1;
+    ULONG NoROEnabledPRPRPassing:1;
+    ULONG LTRMechanismSupported:1;
+    ULONG TPHCompleterSupported:2;
+    ULONG Rsvd:4;
+    ULONG OBFFSupported:2;
+    ULONG ExtendedFmtFieldSuported:1;
+    ULONG EndEndTLPPrefixSupported:1;
+    ULONG MaxEndEndTLPPrefixes:2;
+    ULONG Rsvd2:4;
+    ULONG DmwrCompleterSupported:1;
+    ULONG DmwrLengthsSupported:2;
+    ULONG Rsvd3:1;
+  } DUMMYSTRUCTNAME;
+  ULONG AsULONG;
+} PCI_EXPRESS_DEVICE_CAPABILITIES_2_REGISTER, *PPCI_EXPRESS_DEVICE_CAPABILITIES_2_REGISTER;
+
+typedef union _PCI_EXPRESS_DEVICE_CONTROL_2_REGISTER {
+  _ANONYMOUS_STRUCT struct {
+    USHORT CompletionTimeoutValue:4;
+    USHORT CompletionTimeoutDisable:1;
+    USHORT AriForwardingEnable:1;
+    USHORT AtomicOpRequesterEnable:1;
+    USHORT AtomicOpEgresBlocking:1;
+    USHORT IDORequestEnable:1;
+    USHORT IDOCompletionEnable:1;
+    USHORT LTRMechanismEnable:1;
+    USHORT Rsvd:2;
+    USHORT OBFFEnable:2;
+    USHORT EndEndTLPPrefixBlocking:1;
+  } DUMMYSTRUCTNAME;
+  USHORT AsUSHORT;
+} PCI_EXPRESS_DEVICE_CONTROL_2_REGISTER, *PPCI_EXPRESS_DEVICE_CONTROL_2_REGISTER;
+
+typedef union _PCI_EXPRESS_DEVICE_STATUS_2_REGISTER {
+  _ANONYMOUS_STRUCT struct {
+    USHORT Rsvd:16;
+  } DUMMYSTRUCTNAME;
+  USHORT AsUSHORT;
+} PCI_EXPRESS_DEVICE_STATUS_2_REGISTER, *PPCI_EXPRESS_DEVICE_STATUS_2_REGISTER;
+
+typedef union _PCI_EXPRESS_LINK_CAPABILITIES_2_REGISTER {
+  _ANONYMOUS_STRUCT struct {
+    ULONG Rsvd0:1;
+    ULONG SupportedLinkSpeedsVector:7;
+    ULONG Rsvd8_31:24;
+  } DUMMYSTRUCTNAME;
+  ULONG AsULONG;
+} PCI_EXPRESS_LINK_CAPABILITIES_2_REGISTER, *PPCI_EXPRESS_LINK_CAPABILITIES_2_REGISTER;
+
+typedef union _PCI_EXPRESS_LINK_CONTROL_2_REGISTER {
+  _ANONYMOUS_STRUCT struct {
+    USHORT TargetLinkSpeed:4;
+    USHORT Rsvd4_15:12;
+  } DUMMYSTRUCTNAME;
+  USHORT AsUSHORT;
+} PCI_EXPRESS_LINK_CONTROL_2_REGISTER, *PPCI_EXPRESS_LINK_CONTROL_2_REGISTER;
+
+typedef union _PCI_EXPRESS_LINK_STATUS_2_REGISTER {
+  _ANONYMOUS_STRUCT struct {
+    USHORT Rsvd0_15:16;
+  } DUMMYSTRUCTNAME;
+  USHORT AsUSHORT;
+} PCI_EXPRESS_LINK_STATUS_2_REGISTER, *PPCI_EXPRESS_LINK_STATUS_2_REGISTER;
+
 typedef struct _PCI_EXPRESS_CAPABILITY {
   PCI_CAPABILITIES_HEADER Header;
   PCI_EXPRESS_CAPABILITIES_REGISTER ExpressCapabilities;
@@ -5892,6 +6157,12 @@ typedef struct _PCI_EXPRESS_CAPABILITY {
   PCI_EXPRESS_ROOT_CONTROL_REGISTER RootControl;
   PCI_EXPRESS_ROOT_CAPABILITIES_REGISTER RootCapabilities;
   PCI_EXPRESS_ROOT_STATUS_REGISTER RootStatus;
+  PCI_EXPRESS_DEVICE_CAPABILITIES_2_REGISTER DeviceCapabilities2;
+  PCI_EXPRESS_DEVICE_CONTROL_2_REGISTER DeviceControl2;
+  PCI_EXPRESS_DEVICE_STATUS_2_REGISTER DeviceStatus2;
+  PCI_EXPRESS_LINK_CAPABILITIES_2_REGISTER LinkCapabilities2;
+  PCI_EXPRESS_LINK_CONTROL_2_REGISTER LinkControl2;
+  PCI_EXPRESS_LINK_STATUS_2_REGISTER LinkStatus2;
 } PCI_EXPRESS_CAPABILITY, *PPCI_EXPRESS_CAPABILITY;
 
 typedef enum {
@@ -5984,19 +6255,41 @@ typedef enum _PHYSICAL_COUNTER_RESOURCE_DESCRIPTOR_TYPE {
   ResourceTypeRange,
   ResourceTypeExtendedCounterConfiguration,
   ResourceTypeOverflow,
+  ResourceTypeEventBuffer,
+  ResourceTypeIdenitificationTag,
   ResourceTypeMax
 } PHYSICAL_COUNTER_RESOURCE_DESCRIPTOR_TYPE;
+
+typedef VOID
+(*PPHYSICAL_COUNTER_OVERFLOW_HANDLER)(
+  _In_ ULONGLONG OverflowBits,
+  _In_ HANDLE OwningHandle);
+
+typedef VOID
+(*PPHYSICAL_COUNTER_EVENT_BUFFER_OVERFLOW_HANDLER)(
+  _In_ PVOID EventBuffer,
+  _In_ SIZE_T EntrySize,
+  _In_ SIZE_T NumberOfEntries,
+  _In_ HANDLE OwningHandle);
+
+typedef struct _PHYSICAL_COUNTER_EVENT_BUFFER_CONFIGURATION {
+  PPHYSICAL_COUNTER_EVENT_BUFFER_OVERFLOW_HANDLER OverflowHandler;
+  ULONG CustomEventBufferEntrySize;
+  ULONG EventThreshold;
+} PHYSICAL_COUNTER_EVENT_BUFFER_CONFIGURATION, *PPHYSICAL_COUNTER_EVENT_BUFFER_CONFIGURATION;
 
 typedef struct _PHYSICAL_COUNTER_RESOURCE_DESCRIPTOR {
   PHYSICAL_COUNTER_RESOURCE_DESCRIPTOR_TYPE Type;
   ULONG Flags;
   union {
     ULONG CounterIndex;
-    ULONG ExtendedRegisterAddress;
     struct {
       ULONG Begin;
       ULONG End;
     } Range;
+    PPHYSICAL_COUNTER_OVERFLOW_HANDLER OverflowHandler;
+    PHYSICAL_COUNTER_EVENT_BUFFER_CONFIGURATION EventBufferConfiguration;
+    ULONG IdentificationTag;
   } u;
 } PHYSICAL_COUNTER_RESOURCE_DESCRIPTOR, *PPHYSICAL_COUNTER_RESOURCE_DESCRIPTOR;
 
@@ -6045,35 +6338,50 @@ typedef struct _PCIBUSDATA {
 #ifndef _PCIINTRF_X_
 #define _PCIINTRF_X_
 
+_Function_class_(PCI_READ_WRITE_CONFIG)
+_IRQL_requires_max_(HIGH_LEVEL)
 typedef ULONG
-(NTAPI *PCI_READ_WRITE_CONFIG)(
+(NTAPI PCI_READ_WRITE_CONFIG)(
   _In_ PVOID Context,
   _In_ ULONG BusOffset,
   _In_ ULONG Slot,
   _In_reads_bytes_(Length) PVOID Buffer,
   _In_ ULONG Offset,
   _In_ ULONG Length);
+typedef PCI_READ_WRITE_CONFIG *PPCI_READ_WRITE_CONFIG;
 
+_Function_class_(PCI_PIN_TO_LINE)
+_IRQL_requires_max_(DISPATCH_LEVEL)
 typedef VOID
-(NTAPI *PCI_PIN_TO_LINE)(
+(NTAPI PCI_PIN_TO_LINE)(
   _In_ PVOID Context,
   _In_ PPCI_COMMON_CONFIG PciData);
+typedef PCI_PIN_TO_LINE *PPCI_PIN_TO_LINE;
 
+_Function_class_(PCI_LINE_TO_PIN)
+_IRQL_requires_max_(DISPATCH_LEVEL)
 typedef VOID
-(NTAPI *PCI_LINE_TO_PIN)(
+(NTAPI PCI_LINE_TO_PIN)(
   _In_ PVOID Context,
   _In_ PPCI_COMMON_CONFIG PciNewData,
   _In_ PPCI_COMMON_CONFIG PciOldData);
+typedef PCI_LINE_TO_PIN *PPCI_LINE_TO_PIN;
 
+_Function_class_(PCI_ROOT_BUS_CAPABILITY)
+_IRQL_requires_(PASSIVE_LEVEL)
 typedef VOID
-(NTAPI *PCI_ROOT_BUS_CAPABILITY)(
+(NTAPI PCI_ROOT_BUS_CAPABILITY)(
   _In_ PVOID Context,
   _Out_ PPCI_ROOT_BUS_HARDWARE_CAPABILITY HardwareCapability);
+typedef PCI_ROOT_BUS_CAPABILITY *PPCI_ROOT_BUS_CAPABILITY;
 
+_Function_class_(PCI_EXPRESS_WAKE_CONTROL)
+_IRQL_requires_max_(DISPATCH_LEVEL)
 typedef VOID
-(NTAPI *PCI_EXPRESS_WAKE_CONTROL)(
+(NTAPI PCI_EXPRESS_WAKE_CONTROL)(
   _In_ PVOID Context,
   _In_ BOOLEAN EnableWake);
+typedef PCI_EXPRESS_WAKE_CONTROL *PPCI_EXPRESS_WAKE_CONTROL;
 
 _Function_class_(PCI_PREPARE_MULTISTAGE_RESUME)
 _IRQL_requires_max_(HIGH_LEVEL)
@@ -6088,12 +6396,12 @@ typedef struct _PCI_BUS_INTERFACE_STANDARD {
   PVOID Context;
   PINTERFACE_REFERENCE InterfaceReference;
   PINTERFACE_DEREFERENCE InterfaceDereference;
-  PCI_READ_WRITE_CONFIG ReadConfig;
-  PCI_READ_WRITE_CONFIG WriteConfig;
-  PCI_PIN_TO_LINE PinToLine;
-  PCI_LINE_TO_PIN LineToPin;
-  PCI_ROOT_BUS_CAPABILITY RootBusCapability;
-  PCI_EXPRESS_WAKE_CONTROL ExpressWakeControl;
+  PPCI_READ_WRITE_CONFIG ReadConfig;
+  PPCI_READ_WRITE_CONFIG WriteConfig;
+  PPCI_PIN_TO_LINE PinToLine;
+  PPCI_LINE_TO_PIN LineToPin;
+  PPCI_ROOT_BUS_CAPABILITY RootBusCapability;
+  PPCI_EXPRESS_WAKE_CONTROL ExpressWakeControl;
   PPCI_PREPARE_MULTISTAGE_RESUME PrepareMultistageResume;
 } PCI_BUS_INTERFACE_STANDARD, *PPCI_BUS_INTERFACE_STANDARD;
 
@@ -6131,7 +6439,9 @@ typedef struct _PCI_BUS_INTERFACE_STANDARD {
                                          FILE_READ_ONLY_DEVICE | \
                                          FILE_FLOPPY_DISKETTE  | \
                                          FILE_WRITE_ONCE_MEDIA | \
-                                         FILE_DEVICE_SECURE_OPEN)
+                                         FILE_DEVICE_SECURE_OPEN | \
+                                         FILE_CHARACTERISTIC_CSV | \
+                                         FILE_PORTABLE_DEVICE)
 
 typedef struct _FILE_ALIGNMENT_INFORMATION {
   ULONG AlignmentRequirement;
@@ -7042,6 +7352,15 @@ typedef struct _NTFS_EXTENDED_VOLUME_DATA {
   ULONG ByteCount;
   USHORT MajorVersion;
   USHORT MinorVersion;
+  ULONG BytesPerPhysicalSector;
+  USHORT LfsMajorVersion;
+  USHORT LfsMinorVersion;
+#if (_WIN32_WINNT >= _WIN32_WINNT_WINTHRESHOLD)
+  ULONG MaxDeviceTrimExtentCount;
+  ULONG MaxDeviceTrimByteCount;
+  ULONG MaxVolumeTrimExtentCount;
+  ULONG MaxVolumeTrimByteCount;
+#endif
 } NTFS_EXTENDED_VOLUME_DATA, *PNTFS_EXTENDED_VOLUME_DATA;
 
 typedef struct _STARTING_LCN_INPUT_BUFFER {
@@ -7115,25 +7434,56 @@ typedef struct _FIND_BY_SID_OUTPUT {
   WCHAR FileName[1];
 } FIND_BY_SID_OUTPUT, *PFIND_BY_SID_OUTPUT;
 
-typedef struct _MFT_ENUM_DATA {
+typedef struct _MFT_ENUM_DATA_V0 {
   ULONGLONG StartFileReferenceNumber;
   USN LowUsn;
   USN HighUsn;
-} MFT_ENUM_DATA, *PMFT_ENUM_DATA;
+} MFT_ENUM_DATA_V0, *PMFT_ENUM_DATA_V0;
+
+typedef struct _MFT_ENUM_DATA_V1 {
+  ULONGLONG StartFileReferenceNumber;
+  USN LowUsn;
+  USN HighUsn;
+  USHORT MinMajorVersion;
+  USHORT MaxMajorVersion;
+} MFT_ENUM_DATA_V1, *PMFT_ENUM_DATA_V1;
+
+#if (NTDDI_VERSION >= NTDDI_WIN8)
+typedef MFT_ENUM_DATA_V1 MFT_ENUM_DATA, *PMFT_ENUM_DATA;
+#else
+typedef MFT_ENUM_DATA_V0 MFT_ENUM_DATA, *PMFT_ENUM_DATA;
+#endif
 
 typedef struct _CREATE_USN_JOURNAL_DATA {
   ULONGLONG MaximumSize;
   ULONGLONG AllocationDelta;
 } CREATE_USN_JOURNAL_DATA, *PCREATE_USN_JOURNAL_DATA;
 
-typedef struct _READ_USN_JOURNAL_DATA {
+typedef struct _READ_USN_JOURNAL_DATA_V0 {
   USN StartUsn;
   ULONG ReasonMask;
   ULONG ReturnOnlyOnClose;
   ULONGLONG Timeout;
   ULONGLONG BytesToWaitFor;
   ULONGLONG UsnJournalID;
-} READ_USN_JOURNAL_DATA, *PREAD_USN_JOURNAL_DATA;
+} READ_USN_JOURNAL_DATA_V0, *PREAD_USN_JOURNAL_DATA_V0;
+
+typedef struct _READ_USN_JOURNAL_DATA_V1 {
+  USN StartUsn;
+  ULONG ReasonMask;
+  ULONG ReturnOnlyOnClose;
+  ULONGLONG Timeout;
+  ULONGLONG BytesToWaitFor;
+  ULONGLONG UsnJournalID;
+  USHORT MinMajorVersion;
+  USHORT MaxMajorVersion;
+} READ_USN_JOURNAL_DATA_V1, *PREAD_USN_JOURNAL_DATA_V1;
+
+#if (NTDDI_VERSION >= NTDDI_WIN8)
+typedef READ_USN_JOURNAL_DATA_V1 READ_USN_JOURNAL_DATA, *PREAD_USN_JOURNAL_DATA;
+#else
+typedef READ_USN_JOURNAL_DATA_V0 READ_USN_JOURNAL_DATA, *PREAD_USN_JOURNAL_DATA;
+#endif
 
 typedef struct _USN_RECORD {
   ULONG RecordLength;
@@ -7177,7 +7527,7 @@ typedef struct _USN_RECORD {
 #define USN_REASON_TRANSACTED_CHANGE     (0x00400000)
 #define USN_REASON_CLOSE                 (0x80000000)
 
-typedef struct _USN_JOURNAL_DATA {
+typedef struct _USN_JOURNAL_DATA_V0 {
   ULONGLONG UsnJournalID;
   USN FirstUsn;
   USN NextUsn;
@@ -7185,7 +7535,40 @@ typedef struct _USN_JOURNAL_DATA {
   USN MaxUsn;
   ULONGLONG MaximumSize;
   ULONGLONG AllocationDelta;
-} USN_JOURNAL_DATA, *PUSN_JOURNAL_DATA;
+} USN_JOURNAL_DATA_V0, *PUSN_JOURNAL_DATA_V0;
+
+typedef struct _USN_JOURNAL_DATA_V1 {
+  ULONGLONG UsnJournalID;
+  USN FirstUsn;
+  USN NextUsn;
+  USN LowestValidUsn;
+  USN MaxUsn;
+  ULONGLONG MaximumSize;
+  ULONGLONG AllocationDelta;
+  USHORT MinSupportedMajorVersion;
+  USHORT MaxSupportedMajorVersion;
+} USN_JOURNAL_DATA_V1, *PUSN_JOURNAL_DATA_V1;
+
+typedef struct _USN_JOURNAL_DATA_V2 {
+  ULONGLONG UsnJournalID;
+  USN FirstUsn;
+  USN NextUsn;
+  USN LowestValidUsn;
+  USN MaxUsn;
+  ULONGLONG MaximumSize;
+  ULONGLONG AllocationDelta;
+  USHORT MinSupportedMajorVersion;
+  USHORT MaxSupportedMajorVersion;
+  ULONG Flags;
+  ULONGLONG RangeTrackChunkSize;
+  LONGLONG RangeTrackFileSizeThreshold;
+} USN_JOURNAL_DATA_V2, *PUSN_JOURNAL_DATA_V2;
+
+#if (NTDDI_VERSION >= NTDDI_WIN8)
+typedef USN_JOURNAL_DATA_V1 USN_JOURNAL_DATA, *PUSN_JOURNAL_DATA;
+#else
+typedef USN_JOURNAL_DATA_V0 USN_JOURNAL_DATA, *PUSN_JOURNAL_DATA;
+#endif
 
 typedef struct _DELETE_USN_JOURNAL_DATA {
   ULONGLONG UsnJournalID;
@@ -7367,7 +7750,7 @@ typedef struct _FILE_QUERY_ON_DISK_VOL_INFO_BUFFER {
 #define SET_REPAIR_DELETE_CROSSLINK                             (0x00000004)
 #define SET_REPAIR_WARN_ABOUT_DATA_LOSS                         (0x00000008)
 #define SET_REPAIR_DISABLED_AND_BUGCHECK_ON_CORRUPT             (0x00000010)
-#define SET_REPAIR_VALID_MASK                                   (0x0000001F)
+#define SET_REPAIR_VALID_MASK                                   (0x00000019)
 
 typedef enum _SHRINK_VOLUME_REQUEST_TYPES {
   ShrinkPrepare = 1,
@@ -7691,6 +8074,8 @@ typedef struct _REQUEST_OPLOCK_OUTPUT_BUFFER {
 } REQUEST_OPLOCK_OUTPUT_BUFFER, *PREQUEST_OPLOCK_OUTPUT_BUFFER;
 
 #define SD_GLOBAL_CHANGE_TYPE_MACHINE_SID   1
+#define SD_GLOBAL_CHANGE_TYPE_QUERY_STATS   (1 << 16)
+#define SD_GLOBAL_CHANGE_TYPE_ENUM_SDS      (2 << 16)
 
 typedef struct _SD_CHANGE_MACHINE_SID_INPUT {
   USHORT CurrentMachineSIDOffset;
@@ -7709,11 +8094,48 @@ typedef struct _SD_CHANGE_MACHINE_SID_OUTPUT {
   ULONGLONG NumMftSDTotal;
 } SD_CHANGE_MACHINE_SID_OUTPUT, *PSD_CHANGE_MACHINE_SID_OUTPUT;
 
+typedef struct _SD_QUERY_STATS_INPUT {
+  ULONG Reserved;
+} SD_QUERY_STATS_INPUT, *PSD_QUERY_STATS_INPUT;
+
+typedef struct _SD_QUERY_STATS_OUTPUT {
+  ULONGLONG SdsStreamSize;
+  ULONGLONG SdsAllocationSize;
+  ULONGLONG SiiStreamSize;
+  ULONGLONG SiiAllocationSize;
+  ULONGLONG SdhStreamSize;
+  ULONGLONG SdhAllocationSize;
+  ULONGLONG NumSDTotal;
+  ULONGLONG NumSDUnused;
+} SD_QUERY_STATS_OUTPUT, *PSD_QUERY_STATS_OUTPUT;
+
+typedef struct _SD_ENUM_SDS_INPUT {
+  ULONGLONG StartingOffset;
+  ULONGLONG MaxSDEntriesToReturn;
+} SD_ENUM_SDS_INPUT, *PSD_ENUM_SDS_INPUT;
+
+typedef struct _SD_ENUM_SDS_ENTRY {
+  ULONG Hash;
+  ULONG SecurityId;
+  ULONGLONG Offset;
+  ULONG Length;
+  UCHAR Descriptor[1];
+} SD_ENUM_SDS_ENTRY, *PSD_ENUM_SDS_ENTRY;
+
+typedef struct _SD_ENUM_SDS_OUTPUT {
+  ULONGLONG NextOffset;
+  ULONGLONG NumSDEntriesReturned;
+  ULONGLONG NumSDBytesReturned;
+  SD_ENUM_SDS_ENTRY SDEntry[1];
+} SD_ENUM_SDS_OUTPUT, *PSD_ENUM_SDS_OUTPUT;
+
 typedef struct _SD_GLOBAL_CHANGE_INPUT {
   ULONG Flags;
   ULONG ChangeType;
   _ANONYMOUS_UNION union {
     SD_CHANGE_MACHINE_SID_INPUT SdChange;
+    SD_QUERY_STATS_INPUT SdQueryStats;
+    SD_ENUM_SDS_INPUT SdEnumSds;
   } DUMMYUNIONNAME;
 } SD_GLOBAL_CHANGE_INPUT, *PSD_GLOBAL_CHANGE_INPUT;
 
@@ -7722,6 +8144,8 @@ typedef struct _SD_GLOBAL_CHANGE_OUTPUT {
   ULONG ChangeType;
   _ANONYMOUS_UNION union {
     SD_CHANGE_MACHINE_SID_OUTPUT SdChange;
+    SD_QUERY_STATS_OUTPUT SdQueryStats;
+    SD_ENUM_SDS_OUTPUT SdEnumSds;
   } DUMMYUNIONNAME;
 } SD_GLOBAL_CHANGE_OUTPUT, *PSD_GLOBAL_CHANGE_OUTPUT;
 
@@ -7960,6 +8384,7 @@ typedef struct _NTFS_STATISTICS {
     ULONG CacheMiss;
     ULONG CacheMissClusters;
   } Allocate;
+  ULONG DiskResourcesExhausted;
 } NTFS_STATISTICS, *PNTFS_STATISTICS;
 
 #endif /* _FILESYSTEMFSCTL_ */
@@ -8011,7 +8436,8 @@ typedef struct _REPARSE_GUID_DATA_BUFFER {
 /* Reserved reparse tags */
 #define IO_REPARSE_TAG_RESERVED_ZERO            (0)
 #define IO_REPARSE_TAG_RESERVED_ONE             (1)
-#define IO_REPARSE_TAG_RESERVED_RANGE           IO_REPARSE_TAG_RESERVED_ONE
+#define IO_REPARSE_TAG_RESERVED_TWO             (2)
+#define IO_REPARSE_TAG_RESERVED_RANGE           IO_REPARSE_TAG_RESERVED_TWO
 
 #define IsReparseTagMicrosoft(_tag)             (((_tag) & 0x80000000))
 #define IsReparseTagNameSurrogate(_tag)         (((_tag) & 0x20000000))
@@ -8169,6 +8595,10 @@ typedef enum _FS_FILTER_SECTION_SYNC_TYPE {
 #define FS_FILTER_SECTION_SYNC_SUPPORTS_ASYNC_PARALLEL_IO         (0x00000001)
 #define FS_FILTER_SECTION_SYNC_SUPPORTS_DIRECT_MAP_DATA           (0x00000002)
 #define FS_FILTER_SECTION_SYNC_SUPPORTS_DIRECT_MAP_IMAGE          (0x00000004)
+#define FS_FILTER_SECTION_SYNC_IMAGE_EXTENTS_ARE_NOT_RVA          (0x00000008)
+
+#define FS_FILTER_SECTION_SYNC_IN_FLAG_DONT_UPDATE_LAST_ACCESS    (0x00000001)
+#define FS_FILTER_SECTION_SYNC_IN_FLAG_DONT_UPDATE_LAST_WRITE     (0x00000002)
 
 typedef struct _FS_FILTER_SECTION_SYNC_OUTPUT {
   ULONG StructureSize;
@@ -8194,6 +8624,8 @@ typedef union _FS_FILTER_PARAMETERS {
     FS_FILTER_SECTION_SYNC_TYPE SyncType;
     ULONG PageProtection;
     PFS_FILTER_SECTION_SYNC_OUTPUT OutputInformation;
+    ULONG Flags;
+    ULONG AllocationAttributes;
   } AcquireForSectionSynchronization;
   struct {
     FS_FILTER_STREAM_FO_NOTIFICATION_TYPE NotificationType;

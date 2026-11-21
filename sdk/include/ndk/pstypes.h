@@ -1212,6 +1212,20 @@ typedef enum _APPCOMPAT_USERFLAGS_HIGHPART
     GdiDPIScalingForceDisable = 0x40000000,
 } APPCOMPAT_USERFLAGS_HIGHPART;
 
+typedef struct _GROUP_AFFINITY32
+{
+    ULONG Mask;
+    USHORT Group;
+    USHORT Reserved[3];
+} GROUP_AFFINITY32, *PGROUP_AFFINITY32;
+
+typedef struct _GROUP_AFFINITY64
+{
+    ULONG64 Mask;
+    USHORT Group;
+    USHORT Reserved[3];
+} GROUP_AFFINITY64, *PGROUP_AFFINITY64;
+
 //
 // Process Environment Block (PEB)
 // Thread Environment Block (TEB)

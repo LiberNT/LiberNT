@@ -609,7 +609,12 @@ typedef struct SRB_ALIGN _SRBEX_DATA_IO_INFO {
   ULONG RWLength;
   BOOLEAN IsWriteRequest;
   UCHAR CachePriority;
+#if (NTDDI_VERSION >= NTDDI_WIN11_GE)
+  UCHAR IoPriorityLevel;
+  UCHAR Reserved;
+#else
   UCHAR Reserved[2];
+#endif
   ULONG Reserved1[2];
 } SRBEX_DATA_IO_INFO, *PSRBEX_DATA_IO_INFO;
 
