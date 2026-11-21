@@ -91,6 +91,7 @@ list(APPEND SOURCE
     CommandLine.c
     ExitFlush.c
     ieee.c
+    onexit_export.c
     popen.c
     splitpath.c
     testlist.c)

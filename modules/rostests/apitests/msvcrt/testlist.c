@@ -39,6 +39,7 @@ extern void func_log(void);
 extern void func_log10(void);
 extern void func_mbstowcs(void);
 extern void func_mbtowc(void);
+extern void func_onexit_export(void);
 extern void func_rand_s(void);
 extern void func_setjmp(void);
 extern void func_sin(void);
@@ -107,6 +108,7 @@ const struct test winetest_testlist[] =
     { "log10", func_log10 },
     { "mbstowcs", func_mbstowcs },
     { "mbtowc", func_mbtowc },
+    { "onexit_export", func_onexit_export },
     { "rand_s", func_rand_s },
     { "setjmp", func_setjmp },
     { "sin", func_sin },

@@ -118,7 +118,7 @@
 @ cdecl __current_exception_context()
 @ cdecl __daylight()
 @ cdecl __dcrt_get_wide_environment_from_os() # FIXME: params
-@ cdecl __dcrt_initial_narrow_environment()
+@ extern __dcrt_initial_narrow_environment
 @ cdecl __doserrno()
 @ cdecl __dstbias()
 @ cdecl __fpe_flt_rounds()
