@@ -58,6 +58,7 @@ list(APPEND SOURCE
     EmulatedProcess.c
     DispatcherStress.c
     ProcessorGroups.c
+    CreateSymbolicLink.c
     dosdev.c
     ExportStubs.c
     DirectoryEntryUpdates.c

@@ -166,7 +166,8 @@ CreateSymbolicLinkW(IN LPCWSTR lpSymlinkFileName,
     ULONG Privilege = SE_CREATE_SYMBOLIC_LINK_PRIVILEGE;
     PVOID PrivilegeState = NULL;
 
-    if(!lpSymlinkFileName || !lpTargetFileName || (dwFlags | SYMBOLIC_LINK_FLAG_DIRECTORY) != SYMBOLIC_LINK_FLAG_DIRECTORY)
+    /* FIXME: SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE does not lift the privilege requirement in Developer Mode */
+    if(!lpSymlinkFileName || !lpTargetFileName)
     {
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
