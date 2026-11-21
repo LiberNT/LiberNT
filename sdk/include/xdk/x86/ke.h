@@ -46,6 +46,7 @@ typedef struct _KFLOATING_SAVE {
 extern NTKERNELAPI volatile KSYSTEM_TIME KeTickCount;
 
 #define YieldProcessor _mm_pause
+#define ReadTimeStampCounter() ((ULONG64)__rdtsc())
 
 FORCEINLINE
 VOID
