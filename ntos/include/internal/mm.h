@@ -703,6 +703,11 @@ MmSessionDelete(
 
 NTSTATUS
 NTAPI
+MmSessionAddDriver(
+    _In_ PVOID DriverObject);
+
+NTSTATUS
+NTAPI
 MmSetProcessSession(
     _In_ PEPROCESS Process,
     _In_ ULONG SessionId);

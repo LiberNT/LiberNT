@@ -903,9 +903,10 @@ IopLoadDriverForPnp(
 
 NTSTATUS
 NTAPI
-IoCreateDriver(
+IopCreateDriver(
     _In_opt_ PUNICODE_STRING DriverName,
-    _In_ PDRIVER_INITIALIZE InitializationFunction)
+    _In_ PDRIVER_INITIALIZE InitializationFunction,
+    _Out_opt_ PDRIVER_OBJECT *CreatedDriver)
 {
     PEXTENDED_DRIVER_EXTENSION Extension;
     OBJECT_ATTRIBUTES ObjectAttributes;
@@ -1023,7 +1024,39 @@ IoCreateDriver(
 
     IopReadyDeviceObjects(DriverObject);
 
+    if (CreatedDriver != NULL)
+    {
+        ObReferenceObject(DriverObject);
+        *CreatedDriver = DriverObject;
+    }
     return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
+IoCreateDriver(
+    _In_opt_ PUNICODE_STRING DriverName,
+    _In_ PDRIVER_INITIALIZE InitializationFunction)
+{
+    PAGED_CODE();
+
+    return IopCreateDriver(DriverName, InitializationFunction, NULL);
+}
+
+VOID
+NTAPI
+IoUnloadSessionDriver(
+    _In_ PVOID Driver)
+{
+    PDRIVER_OBJECT DriverObject = Driver;
+
+    PAGED_CODE();
+    ASSERT(DriverObject != NULL && DriverObject->Type == IO_TYPE_DRIVER);
+
+    if (DriverObject->DriverUnload != NULL)
+        DriverObject->DriverUnload(DriverObject);
+    IoDeleteDriver(DriverObject);
+    ObDereferenceObject(DriverObject);
 }
 
 VOID

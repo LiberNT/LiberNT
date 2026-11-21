@@ -379,6 +379,7 @@ ExpExtendServiceTable(
 {
     PKTHREAD Thread = KeGetCurrentThread();
     KPROCESSOR_MODE CallerMode;
+    PDRIVER_OBJECT DriverObject = NULL;
     PLDR_DATA_TABLE_ENTRY Entry;
     PVOID ModuleObject = NULL;
     PVOID ImageBase = NULL;
@@ -425,13 +426,23 @@ ExpExtendServiceTable(
     /* A driver starts as a call from the kernel, though the session's process asked for it */
     CallerMode = Thread->PreviousMode;
     Thread->PreviousMode = KernelMode;
-    Status = IoCreateDriver(NULL, (PDRIVER_INITIALIZE)Entry->EntryPoint);
+    Status = IopCreateDriver(NULL, (PDRIVER_INITIALIZE)Entry->EntryPoint, &DriverObject);
     Thread->PreviousMode = CallerMode;
 
     if (!NT_SUCCESS(Status))
     {
         MmUnloadSystemImage(ModuleObject);
+        return Status;
     }
+
+    Status = MmSessionAddDriver(DriverObject);
+    if (Status == STATUS_NOT_FOUND)
+    {
+        ObDereferenceObject(DriverObject);
+        return STATUS_SUCCESS;
+    }
+    if (!NT_SUCCESS(Status))
+        IoUnloadSessionDriver(DriverObject);
 
     return Status;
 }

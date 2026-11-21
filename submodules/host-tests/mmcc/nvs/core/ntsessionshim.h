@@ -50,7 +50,15 @@ struct _EPROCESS_HOST
     SESSION_TEST_RUNDOWN RundownProtect;
 };
 
+typedef struct _SESSION_TEST_UNLOAD
+{
+    volatile LONG Count;
+    PVOID LastDriver;
+    PEPROCESS LastProcess;
+} SESSION_TEST_UNLOAD;
+
 extern PMI_SYSTEM MiSessionTestSystem;
+extern SESSION_TEST_UNLOAD MiSessionTestUnload;
 extern _Thread_local PEPROCESS MiSessionTestCurrent;
 extern volatile LONG MiSessionTestAllocations;
 extern volatile LONG MiSessionTestFailAllocate;
@@ -104,6 +112,12 @@ static inline VOID KeStackAttachProcess(SESSION_TEST_KPROCESS *Process, PKAPC_ST
     MiSessionTestCurrent = Process->Owner;
 }
 static inline VOID KeUnstackDetachProcess(PKAPC_STATE State) { MiSessionTestCurrent = State->Process; }
+static inline VOID NTAPI IoUnloadSessionDriver(PVOID Driver)
+{
+    InterlockedIncrement(&MiSessionTestUnload.Count);
+    MiSessionTestUnload.LastDriver = Driver;
+    MiSessionTestUnload.LastProcess = MiSessionTestCurrent;
+}
 
 NTSTATUS NTAPI MmSessionCreate(PULONG SessionId);
 NTSTATUS NTAPI MmSessionDelete(ULONG SessionId);
@@ -120,3 +134,6 @@ PVOID NTAPI MmGetNextSession(PVOID SessionEntry);
 VOID NTAPI MmQuitNextSession(PVOID SessionEntry);
 VOID MiSessionAddProcess(PEPROCESS Process);
 VOID MiSessionRemoveProcess(PEPROCESS Process);
+VOID MiSessionProcessCleaned(PEPROCESS Process);
+PMI_ADDRESS_SPACE MiSessionSpaceOfProcess(PEPROCESS Process);
+NTSTATUS NTAPI MmSessionAddDriver(PVOID DriverObject);

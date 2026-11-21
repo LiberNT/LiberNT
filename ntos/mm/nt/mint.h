@@ -211,4 +211,5 @@ NTSTATUS MiQuerySectionName(_In_ HANDLE ProcessHandle, _In_ PVOID BaseAddress, _
                             _In_ SIZE_T MemoryInformationLength, _Out_opt_ PSIZE_T ReturnLength);
 VOID MiSessionAddProcess(_Inout_ PEPROCESS NewProcess);
 VOID MiSessionRemoveProcess(_Inout_ PEPROCESS Process);
+VOID MiSessionProcessCleaned(_Inout_ PEPROCESS Process);
 VOID MiSignalMemoryAvailable(VOID);

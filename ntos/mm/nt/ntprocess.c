@@ -460,6 +460,7 @@ MmCleanProcessAddressSpace(
     if (Native == NULL || Process == PsInitialSystemProcess || Native == MI_PROCESS_OF(PsInitialSystemProcess))
         return;
 
+    MiSessionProcessCleaned(Process);
     MiProcessQueryCounters(Native, &(MI_PROCESS_COUNTERS){0});
     MiSecureRangePurgeProcess(Process);
     MiCleanAddressSpace(&Native->Space);
