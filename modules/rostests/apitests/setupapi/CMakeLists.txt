@@ -11,6 +11,7 @@ list(APPEND SOURCE
     DriverPackageSignerScore.c
     HalDeviceIds.c
     DevicePdoName.c
+    DisableableParents.c
     DevicePowerOnDisable.c
     DeviceRemoveVeto.c
     HostBridgeStart.c

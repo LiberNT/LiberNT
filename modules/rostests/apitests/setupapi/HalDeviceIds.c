@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT API tests
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Test the identifiers and the installed description of the HAL's reported computer device
+ * PURPOSE:     Test the identifiers, the installed description and the status of the HAL's reported computer device
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
@@ -68,6 +68,7 @@ START_TEST(HalDeviceIds)
     SYSTEM_INFO Info;
     DEVINST Instance;
     CONFIGRET Result;
+    ULONG Status, Problem;
 
     GetNativeSystemInfo(&Info);
     if (Info.wProcessorArchitecture != PROCESSOR_ARCHITECTURE_AMD64)
@@ -89,4 +90,11 @@ START_TEST(HalDeviceIds)
     CheckString(Instance, &DEVPKEY_Device_DriverInfPath, L"hal.inf", "DriverInfPath");
     CheckString(Instance, &DEVPKEY_Device_DriverInfSection, L"ACPI_AMD64_HAL", "DriverInfSection");
     CheckString(Instance, &DEVPKEY_Device_Manufacturer, L"(Standard computers)", "Manufacturer");
+    CheckString(Instance, &DEVPKEY_Device_Service, L"\\Driver\\ACPI_HAL", "Service");
+
+    Result = CM_Get_DevNode_Status(&Status, &Problem, Instance, 0);
+    ok(Result == CR_SUCCESS, "CM_Get_DevNode_Status returned %lu\n", Result);
+    ok(Status == (DN_NT_DRIVER | DN_NT_ENUMERATOR | DN_STARTED | DN_DRIVER_LOADED | DN_ROOT_ENUMERATED),
+       "status 0x%08lx\n", Status);
+    ok(Problem == 0, "problem %lu\n", Problem);
 }
