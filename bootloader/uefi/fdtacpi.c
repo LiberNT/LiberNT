@@ -55,6 +55,8 @@ DBG_DEFAULT_CHANNEL(WINDOWS);
 
 #define FDTACPI_MAX_DEPTH                   16
 #define FDTACPI_MAX_INTERRUPT_HOPS          8
+#define FDTACPI_MAX_MSI_FRAMES              4
+#define FDTACPI_MSI_FRAME_SPI_OVERRIDE      0x00000001
 #define FDTACPI_ALIGNMENT                   16
 
 #define FDTACPI_AML_SCOPE_OP                0x10
@@ -72,6 +74,7 @@ C_ASSERT(sizeof(FADT) == 276);
 C_ASSERT(sizeof(ARM64_ACPI_MADT_GENERIC_INTERRUPT) == 80);
 C_ASSERT(sizeof(ARM64_ACPI_MADT_GENERIC_DISTRIBUTOR) == 24);
 C_ASSERT(sizeof(ARM64_ACPI_MADT_GENERIC_REDISTRIBUTOR) == 16);
+C_ASSERT(sizeof(ARM64_ACPI_MADT_GENERIC_MSI_FRAME) == 24);
 C_ASSERT(sizeof(ARM64_ACPI_GTDT) == 96);
 C_ASSERT(sizeof(ARM64_ACPI_SPCR) == 80);
 C_ASSERT(FIELD_OFFSET(FADT, arm_boot_arch) == 129);
@@ -91,6 +94,10 @@ typedef struct _FDTACPI_PLATFORM
     ULONGLONG GiccBase;
     ULONGLONG GicrBase;
     ULONGLONG GicrLength;
+    ULONG MsiFrameCount;
+    ULONGLONG MsiFrameBase[FDTACPI_MAX_MSI_FRAMES];
+    USHORT MsiSpiBase[FDTACPI_MAX_MSI_FRAMES];
+    USHORT MsiSpiCount[FDTACPI_MAX_MSI_FRAMES];
     BOOLEAN PsciCompliant;
     BOOLEAN PsciUseHvc;
     BOOLEAN TimerPresent;
@@ -122,6 +129,12 @@ static const CHAR *const FdtAcpiGicV2Compatible[] =
 static const CHAR *const FdtAcpiGicV3Compatible[] =
 {
     "arm,gic-v3",
+    NULL
+};
+
+static const CHAR *const FdtAcpiGicV2mCompatible[] =
+{
+    "arm,gic-v2m-frame",
     NULL
 };
 
@@ -379,6 +392,39 @@ FdtAcpiLocateGic(
     return FALSE;
 }
 
+/* The GICv2m frames (ARM SBSA, GICv2m) are children of the GIC node; a frame without both SPI properties reports them in MSI_TYPER. */
+static
+VOID
+FdtAcpiDescribeMsiFrames(
+    _Inout_ PFDTACPI_PLATFORM Platform)
+{
+    ULONGLONG Base, Size;
+    ULONG Node, SpiBase, SpiCount;
+
+    for (Node = FdtFirstChild(&Platform->Fdt, Platform->Gic);
+         Node != FDT_NO_NODE && Platform->MsiFrameCount < FDTACPI_MAX_MSI_FRAMES;
+         Node = FdtNextSibling(&Platform->Fdt, Node))
+    {
+        if (!FdtAcpiIsCompatible(&Platform->Fdt, Node, FdtAcpiGicV2mCompatible) ||
+            !FdtAcpiIsEnabled(&Platform->Fdt, Node) ||
+            !FdtReadReg(&Platform->Fdt, Node, Platform->Gic, 0, &Base, &Size) ||
+            Base == 0)
+        {
+            continue;
+        }
+
+        Platform->MsiFrameBase[Platform->MsiFrameCount] = Base;
+        if (FdtReadU32(&Platform->Fdt, Node, "arm,msi-base-spi", &SpiBase) &&
+            FdtReadU32(&Platform->Fdt, Node, "arm,msi-num-spis", &SpiCount) &&
+            SpiBase <= MAXUSHORT && SpiCount != 0 && SpiCount <= MAXUSHORT)
+        {
+            Platform->MsiSpiBase[Platform->MsiFrameCount] = (USHORT)SpiBase;
+            Platform->MsiSpiCount[Platform->MsiFrameCount] = (USHORT)SpiCount;
+        }
+        Platform->MsiFrameCount++;
+    }
+}
+
 static
 BOOLEAN
 FdtAcpiDescribeGic(
@@ -407,7 +453,11 @@ FdtAcpiDescribeGic(
         return TRUE;
     }
 
-    return FdtReadReg(&Platform->Fdt, Platform->Gic, Parent, 1, &Platform->GiccBase, &Size);
+    if (!FdtReadReg(&Platform->Fdt, Platform->Gic, Parent, 1, &Platform->GiccBase, &Size))
+        return FALSE;
+
+    FdtAcpiDescribeMsiFrames(Platform);
+    return TRUE;
 }
 
 static
@@ -885,7 +935,7 @@ FdtAcpiMadtLength(
     if (Platform->GicVersion == 3)
         Length += sizeof(ARM64_ACPI_MADT_GENERIC_REDISTRIBUTOR);
 
-    return Length;
+    return Length + Platform->MsiFrameCount * sizeof(ARM64_ACPI_MADT_GENERIC_MSI_FRAME);
 }
 
 static
@@ -897,6 +947,7 @@ FdtAcpiBuildMadt(
     PARM64_ACPI_MADT_GENERIC_INTERRUPT Gicc;
     PARM64_ACPI_MADT_GENERIC_DISTRIBUTOR Gicd;
     PARM64_ACPI_MADT_GENERIC_REDISTRIBUTOR Gicr;
+    PARM64_ACPI_MADT_GENERIC_MSI_FRAME Frame;
     ULONG Length = FdtAcpiMadtLength(Platform);
     ULONG Node;
     ULONG Index = 0;
@@ -937,6 +988,25 @@ FdtAcpiBuildMadt(
         Gicr->Header.Length = sizeof(*Gicr);
         Gicr->BaseAddress = Platform->GicrBase;
         Gicr->Length = (ULONG)Platform->GicrLength;
+        Frame = (PARM64_ACPI_MADT_GENERIC_MSI_FRAME)(Gicr + 1);
+    }
+    else
+    {
+        Frame = (PARM64_ACPI_MADT_GENERIC_MSI_FRAME)(Gicd + 1);
+    }
+
+    for (Index = 0; Index < Platform->MsiFrameCount; Index++, Frame++)
+    {
+        Frame->Header.Type = ARM64_ACPI_MADT_TYPE_GENERIC_MSI_FRAME;
+        Frame->Header.Length = sizeof(*Frame);
+        Frame->MsiFrameId = Index;
+        Frame->BaseAddress = Platform->MsiFrameBase[Index];
+        if (Platform->MsiSpiCount[Index] != 0)
+        {
+            Frame->Flags = FDTACPI_MSI_FRAME_SPI_OVERRIDE;
+            Frame->SpiCount = Platform->MsiSpiCount[Index];
+            Frame->SpiBase = Platform->MsiSpiBase[Index];
+        }
     }
 }
 
