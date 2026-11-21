@@ -166,7 +166,7 @@ KiArmInterruptDispatch(
         {
             Pcr->Prcb.InterruptCount++;
             if (Vector == HAL_ARM64_SGI_IPI)
-                KiIpiProcessRequests();
+                KiArmServiceIpi(TrapFrame);
             else if ((Vector >= 16) && ((Vector != KI_ARM_CLOCK_VECTOR) || !KiArmClockInterrupt(TrapFrame, OldIrql)))
                 KiArmServiceInterruptVector(Vector, TrapFrame);
             HalEndSystemInterrupt(OldIrql, TrapFrame);

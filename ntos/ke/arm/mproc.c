@@ -68,6 +68,7 @@ static volatile LONG KiArmGenericCount;
 static volatile LONG KiArmGenericArrived;
 static volatile LONG KiArmGenericDeparted;
 static volatile LONG KiArmGenericRound;
+static PKTRAP_FRAME KiArmIpiTrapFrame[MAXIMUM_PROCESSORS];
 
 /* Startup block physical addresses by core number, for firmware spin loops that pass only the core. */
 ULONG KiArmSpinStartupBlocks[KI_ARM_SPIN_STARTUP_BLOCKS];
@@ -451,15 +452,52 @@ KiArmFreezeTarget(
     _In_ PKPRCB Prcb)
 {
     PKPRCB Owner = KiArmFreezeOwner;
+    PKTRAP_FRAME TrapFrame = KiArmIpiTrapFrame[Prcb->Number];
+    PCONTEXT Context = &Prcb->ProcessorState.ContextFrame;
+    CONTEXT Saved;
 
     if (!Owner || (Owner == Prcb))
         return;
 
-    /* TODO: save the frozen context so the debugger can switch to this processor */
+    /* What this processor was doing goes where the debugger looks for it, before the processor counts as frozen. */
+    Context->ContextFlags = CONTEXT_FULL;
+    if (TrapFrame)
+        KeTrapFrameToContext(TrapFrame, NULL, Context);
+    else
+        RtlCaptureContext(Context);
+    KiSaveProcessorControlState(&Prcb->ProcessorState);
+    Saved = *Context;
+    KeMemoryBarrier();
+
     InterlockedExchange((PLONG)&Prcb->IpiFrozen, KI_ARM_FROZEN);
     while (!KiArmThawRequested)
         YieldProcessor();
+
+    /* Registers the debugger changed while it looked at this processor are the ones it resumes with. */
+    if (TrapFrame && !RtlEqualMemory(&Saved, Context, sizeof(Saved)))
+    {
+        KeContextToTrapFrame(Context, NULL, TrapFrame, CONTEXT_FULL,
+                             KiIsUserModeTrap(TrapFrame) ? UserMode : KernelMode);
+    }
     InterlockedExchange((PLONG)&Prcb->IpiFrozen, 0);
+}
+
+/* The inter-processor interrupt: what it interrupted is kept at hand for a freeze request to save. */
+VOID
+NTAPI
+KiArmServiceIpi(
+    _In_ PKTRAP_FRAME TrapFrame)
+{
+    ULONG Number = KeGetCurrentPrcb()->Number;
+    PKTRAP_FRAME Outer;
+
+    ASSERT(Number < MAXIMUM_PROCESSORS);
+    ASSERT(KeGetCurrentIrql() >= IPI_LEVEL);
+
+    Outer = KiArmIpiTrapFrame[Number];
+    KiArmIpiTrapFrame[Number] = TrapFrame;
+    KiIpiProcessRequests();
+    KiArmIpiTrapFrame[Number] = Outer;
 }
 
 VOID

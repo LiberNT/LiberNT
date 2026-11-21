@@ -83,6 +83,7 @@ VOID NTAPI KiArmConsoleWrite(_In_reads_bytes_(Length) PCCH Buffer, _In_ SIZE_T L
 BOOLEAN NTAPI KiArmConsoleGetByte(_Out_ PUCHAR Byte);
 ULONG NTAPI KiArmConsoleInterface(VOID);
 VOID NTAPI KiArmIdentifyProcessor(_Inout_ PKPRCB Prcb);
+VOID NTAPI KiArmServiceIpi(_In_ PKTRAP_FRAME TrapFrame);
 NTSTATUS NTAPI KiArmEmulateUnalignedAccess(_Inout_ PKTRAP_FRAME TrapFrame, _Inout_ PULONG FaultAddress, _Out_ PBOOLEAN Write);
 VOID NTAPI KiArmInitializeVectors(VOID);
 VOID NTAPI KiArmInitializePcr(_Out_ PKIPCR Pcr, _In_ PKTHREAD Thread, _In_ ULONG Number, _In_ PVOID DpcStack, _In_ PVOID PanicStack);
