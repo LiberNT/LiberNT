@@ -1771,15 +1771,21 @@ KdbpEditMemory(
 
     for (Index = 2; Index < Argc; Index++)
     {
-        ULONG_PTR Value = 0;
+        ULONGLONG Value = 0;
         ULONG_PTR At = Address + ((ULONG_PTR)(Index - 2) * Width);
 
-        if (!KdbpGetAddressExpression(Argv[Index], &Value))
+        /* A value is as wide as the widest unit, whatever the width of an address */
+        if (!KdbpRpnEvaluateExpression(Argv[Index], KdbpContext(), &Value, &ErrorOffset, ErrorMessage))
+        {
+            KdbpPrint("%s at offset %ld\n", ErrorMessage, ErrorOffset);
             return TRUE;
 
+        CHAR ErrorMessage[128];
+        LONG ErrorOffset = 0;
         if (!NT_SUCCESS(KdbpSafeWriteMemory((PVOID)At, &Value, Width)))
         {
             KdbpPrint("%p cannot be written\n", (PVOID)At);
+        }
             return TRUE;
         }
     }
