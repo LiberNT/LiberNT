@@ -75,6 +75,9 @@ typedef struct _MI_PROCESS_REFERENCE
 
 NTSTATUS MiReferenceTargetProcess(_In_ HANDLE ProcessHandle, _In_ ACCESS_MASK Access,
                                   _Out_ PMI_PROCESS_REFERENCE Reference);
+NTSTATUS MiReferenceTargetProcessForQuery(_In_ HANDLE ProcessHandle, _Out_ PMI_PROCESS_REFERENCE Reference);
+NTSTATUS MiReferenceProcessHandleForQuery(_In_ HANDLE ProcessHandle, _In_ KPROCESSOR_MODE PreviousMode,
+                                          _Out_ PEPROCESS *Process);
 VOID MiReleaseTargetProcess(_Inout_ PMI_PROCESS_REFERENCE Reference);
 
 #define MI_PROCESS_OF(Process)  ((PMI_PROCESS)(Process)->Vm.Instance.VmWorkingSetList)

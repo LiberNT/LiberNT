@@ -60,6 +60,7 @@ list(APPEND SOURCE
     ProcessorGroups.c
     dosdev.c
     DateTimeFormatFlags.c
+    WriteProcessMemoryAccess.c
     EnumDateTimeFormats.c
     EnumSystemCodePages.c
     FindActCtxSectionStringW.c
