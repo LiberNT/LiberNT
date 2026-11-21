@@ -93,6 +93,7 @@ extern void func_ModernUser32(void);
 extern void func_NestedActivation(void);
 extern void func_NestedWindowPos(void);
 extern void func_NcPaintRgn(void);
+extern void func_PrintWindowContent(void);
 extern void func_NestedDialogKeys(void);
 extern void func_NextDlgItem(void);
 extern void func_NonClientPaint(void);
@@ -247,6 +248,7 @@ const struct test winetest_testlist[] =
     { "NestedActivation", func_NestedActivation },
     { "NestedWindowPos", func_NestedWindowPos },
     { "NcPaintRgn", func_NcPaintRgn },
+    { "PrintWindowContent", func_PrintWindowContent },
     { "NestedDialogKeys", func_NestedDialogKeys },
     { "NextDlgItem", func_NextDlgItem },
     { "NonClientPaint", func_NonClientPaint },
