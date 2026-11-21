@@ -52,6 +52,10 @@
 #pragma warning( push)
 
 #define ACPI_MACHINE_WIDTH      32
+
+#if defined(__REACTOS__) && defined(_M_ARM)
+#define ACPI_MISALIGNMENT_NOT_SUPPORTED
+#endif
 #define ACPI_USE_NATIVE_DIVIDE
 #define ACPI_USE_NATIVE_MATH64
 
