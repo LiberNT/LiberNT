@@ -422,7 +422,7 @@ typedef struct {
 	DWORD_PTR		dwInstance;
 	DWORD_PTR		dnDevNode;
         DWORD          		cIds;
-        MIDIOPENSTRMID 		rgIds;
+        MIDIOPENSTRMID 		rgIds[1];
 } MIDIOPENDESC, *LPMIDIOPENDESC;
 
 typedef struct tMIXEROPENDESC
