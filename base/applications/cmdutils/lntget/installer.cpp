@@ -68,7 +68,19 @@ std::string InstallerArguments(const InstallerEntry &installer, InstallMode mode
     if (AsciiEquals(installer.type, "inno")) return "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-";
     if (AsciiEquals(installer.type, "nullsoft")) return "/S";
     if (AsciiEquals(installer.type, "burn")) return "/quiet /norestart";
+    if (AsciiEquals(installer.type, "wix") || AsciiEquals(installer.type, "msi")) return "/quiet /norestart";
     return std::string();
+}
+
+std::string InstallerCommandArguments(const InstallerEntry &installer, InstallMode mode)
+{
+    std::string arguments = InstallerArguments(installer, mode);
+    if (!installer.switches.custom.empty())
+    {
+        if (!arguments.empty()) arguments.push_back(' ');
+        arguments += installer.switches.custom;
+    }
+    return arguments;
 }
 
 void TrackInstalledPackage(const PackageRecord &package, const InstallerEntry &installer, const ArpSnapshot &before,
@@ -386,19 +398,12 @@ Status InstallerService::Install(const PackageRecord &package, const InstallerEn
     }
 
     std::wstring commandLine;
-    std::string arguments = InstallerArguments(effective, mode);
-    if (!effective.switches.custom.empty())
-    {
-        if (!arguments.empty()) arguments.push_back(' ');
-        arguments += effective.switches.custom;
-    }
+    const std::string arguments = InstallerCommandArguments(effective, mode);
 
     if (AsciiEquals(effective.type, "wix") || AsciiEquals(effective.type, "msi"))
     {
         commandLine = L"msiexec.exe /i ";
         commandLine += QuoteCommandArgument(installerPath);
-        if (mode != InstallMode::Interactive && arguments.empty())
-            arguments = "/quiet /norestart";
     }
     else
     {
@@ -447,6 +452,13 @@ Status RunInstallerSelfTests()
     installer.switches.interactive = "/interactive";
     if (InstallerArguments(installer, InstallMode::Interactive) != "/interactive")
         return Status::Fail(ERROR_ASSERTION_FAILURE, "interactive installer mode self-test failed");
+    InstallerEntry msi;
+    msi.type = "wix";
+    msi.switches.custom = "ADD_CMAKE_TO_PATH=System";
+    if (InstallerCommandArguments(msi, InstallMode::Silent) != "/quiet /norestart ADD_CMAKE_TO_PATH=System" ||
+        InstallerCommandArguments(msi, InstallMode::Default) != "/quiet /norestart ADD_CMAKE_TO_PATH=System" ||
+        InstallerCommandArguments(msi, InstallMode::Interactive) != "ADD_CMAKE_TO_PATH=System")
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "MSI custom switch self-test failed");
     return Status::Ok();
 }
 
