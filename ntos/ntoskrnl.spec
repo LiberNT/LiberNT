@@ -740,12 +740,12 @@
 @ stdcall KeRemoveQueueDpc(ptr)
 @ stdcall KeRemoveSystemServiceTable(long)
 @ stdcall KeResetEvent(ptr)
-@ stdcall -arch=i386 KeRestoreFloatingPointState(ptr)
+@ stdcall -arch=i386,ppc KeRestoreFloatingPointState(ptr)
 @ stdcall -arch=arm KeRestoreFloatingPointState(ptr) KiArmRestoreFloatingPointState
 @ stdcall -arch=win64 KeRestoreFloatingPointState(ptr) KxRestoreFloatingPointState
 @ stdcall KeRevertToUserAffinityThread()
 @ stdcall KeRundownQueue(ptr)
-@ stdcall -arch=i386 KeSaveFloatingPointState(ptr)
+@ stdcall -arch=i386,ppc KeSaveFloatingPointState(ptr)
 @ stdcall -arch=arm KeSaveFloatingPointState(ptr) KiArmSaveFloatingPointState
 @ stdcall -arch=win64 KeSaveFloatingPointState(ptr) KxSaveFloatingPointState
 @ cdecl KeSaveStateForHibernate(ptr)
