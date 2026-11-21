@@ -1083,12 +1083,13 @@ FreeFontSupport(VOID)
     PFONTSUBST_ENTRY pSubstEntry;
     PFONT_ENTRY pFontEntry;
 
+    IntLockFreeType();
+
     // Free font cache list
     pHead = &g_FontCacheListHead;
     while (!IsListEmpty(pHead))
     {
-        pEntry = RemoveHeadList(pHead);
-        pFontCache = CONTAINING_RECORD(pEntry, FONT_CACHE_ENTRY, ListEntry);
+        pFontCache = CONTAINING_RECORD(pHead->Flink, FONT_CACHE_ENTRY, ListEntry);
         RemoveCachedEntry(pFontCache);
     }
 
@@ -1108,7 +1109,9 @@ FreeFontSupport(VOID)
     {
         pEntry = RemoveHeadList(pHead);
         pFontEntry = CONTAINING_RECORD(pEntry, FONT_ENTRY, ListEntry);
+        IntUnLockFreeType();
         CleanupFontEntry(pFontEntry);
+        IntLockFreeType();
     }
 
     FontLink_DeleteEntries();
@@ -1119,6 +1122,7 @@ FreeFontSupport(VOID)
         g_FreeTypeLibrary = NULL;
     }
 
+    IntUnLockFreeType();
     ExFreePoolWithTag(g_FreeTypeLock, TAG_INTERNAL_SYNC);
     g_FreeTypeLock = NULL;
 }
