@@ -1862,8 +1862,9 @@ static inline BOOL is_hard_error(RPC_STATUS status)
 /***********************************************************************
  *           I_RpcReceive [RPCRT4.@]
  */
-RPC_STATUS WINAPI I_RpcReceive(PRPC_MESSAGE pMsg)
+RPC_STATUS WINAPI I_RpcReceive(PRPC_MESSAGE pMsg, unsigned int Size)
 {
+  /* TODO: Size is not used */
   RpcBinding* bind = pMsg->Handle;
   RPC_STATUS status;
   RpcPktHdr *hdr = NULL;
@@ -1936,7 +1937,7 @@ RPC_STATUS WINAPI I_RpcSendReceive(PRPC_MESSAGE pMsg)
   original_buffer = pMsg->Buffer;
   status = I_RpcSend(pMsg);
   if (status == RPC_S_OK)
-    status = I_RpcReceive(pMsg);
+    status = I_RpcReceive(pMsg, 0);
   /* free the buffer replaced by a new buffer in I_RpcReceive */
   if (status == RPC_S_OK)
     I_RpcFree(original_buffer);

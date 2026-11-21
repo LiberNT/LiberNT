@@ -70,7 +70,7 @@
 @ stub I_RpcPauseExecution
 @ stub I_RpcProxyNewConnection
 @ stub I_RpcReallocPipeBuffer
-@ stdcall I_RpcReceive(ptr)
+@ stdcall I_RpcReceive(ptr long)
 @ stub I_RpcRecordCalloutFailure
 @ stub I_RpcReplyToClientWithStatus
 @ stub I_RpcRequestMutex
