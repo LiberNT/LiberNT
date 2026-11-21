@@ -170,89 +170,76 @@ __FuncEndLabel SETS ""
 
 #else
 
-/* Compatibility define */
 #define EQU .equ
 
-.macro IMPORT Name
-    /* Ignore */
+.macro IMPORT Name:vararg
 .endm
 
 .macro EXPORT Name
-    .global &Name
+    .global \Name
+.endm
+
+.macro END
 .endm
 
 .macro TEXTAREA
-    .section .text, "rx"
-#if defined(_CONTROL_FLOW_GUARD)
-    .align 4
-#else
+    .syntax unified
+    .thumb
+    .text
     .align 2
-#endif
 .endm
 
 .macro DATAAREA
-    .section .data, "rw"
+    .data
 .endm
 
 .macro RODATAAREA
-    .section .rdata, "rw"
+    .section .rdata, "dr"
 .endm
 
-.macro NESTED_ENTRY Name
-FuncName    .equ    &Name
-PrologName  .equ    &Name&_Prolog
-FuncEndName .equ    &Name&_end
-    .global &FuncName
+.macro LEAF_ENTRY Name, AreaName
+    .global \Name
     .align 2
-    .func &FuncName
-    &FuncName:
+    .thumb_func
+\Name:
 .endm
 
-// FIXME: should go to kxarmunw.h
+.macro LEAF_END Name
+.endm
+
+.macro NESTED_ENTRY Name, AreaName
+    LEAF_ENTRY \Name
+.endm
+
 .macro PROLOG_END
-    \PrologName:
 .endm
 
 .macro NESTED_END Name
-    &FuncEndName:
-   .endfunc
 .endm
-
-.macro LEAF_ENTRY $FuncName, $AreaName
-    NESTED_ENTRY $FuncName, $AreaName
-.endm
-
-.macro LEAF_END $FuncName
-    NESTED_END $FuncName
-.endm
-
-
-/* Some "intrinsics", see http://codemachine.com/article_armasm.html */
 
 .macro __debugbreak
-    DCD 0xDEFE
+    .inst.n 0xDEFE
 .endm
 
 .macro __assertfail
-    DCD 0xDEFC
+    .inst.n 0xDEFC
 .endm
 
 .macro __fastfail
-    DCD 0xDEFB
+    .inst.n 0xDEFB
 .endm
 
 .macro __rdpmccntr64
-    DCD 0xDEFA
+    .inst.n 0xDEFA
 .endm
 
 .macro __debugservice
-    DCD 0xDEFD
+    .inst.n 0xDEFD
 .endm
 
 .macro __brkdiv0
-    DCD 0xDEF9
+    .inst.n 0xDEF9
 .endm
-
 
 #endif
 

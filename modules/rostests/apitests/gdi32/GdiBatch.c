@@ -85,6 +85,39 @@ QueueText(
     return TRUE;
 }
 
+static
+VOID
+TestOddLengthText(
+    _In_ HDC Dc,
+    _In_ HDC Target,
+    _In_ const DWORD *Bits)
+{
+    PTEB Teb = NtCurrentTeb();
+    PGDIBSTEXTOUT First = (PGDIBSTEXTOUT)Teb->GdiTebBatch.Buffer;
+    PGDIBSTEXTOUT Second;
+
+    ok(PatBlt(Dc, 0, 0, TEST_SIZE, TEST_SIZE, WHITENESS), "PatBlt failed, error %lu\n", GetLastError());
+    GdiFlush();
+
+    ok(ExtTextOutW(Dc, 2, 2, 0, NULL, L"WMW", 3, NULL), "ExtTextOutW failed, error %lu\n", GetLastError());
+    ok(ExtTextOutW(Dc, 2, 48, 0, NULL, L"M", 1, NULL), "ExtTextOutW failed, error %lu\n", GetLastError());
+    if (Teb->GdiBatchCount != 2 || First->gbHdr.Cmd != GdiBCTextOut)
+    {
+        GdiFlush();
+        skip("ExtTextOutW was not queued in the LiberNT batch format\n");
+        return;
+    }
+
+    ok((First->gbHdr.Size % sizeof(ULONG_PTR)) == 0, "The 3-character entry is %d bytes\n", First->gbHdr.Size);
+    ok((Teb->GdiTebBatch.Offset % sizeof(ULONG_PTR)) == 0, "The batch offset %lu is not pointer aligned\n",
+       (ULONG)Teb->GdiTebBatch.Offset);
+    Second = (PGDIBSTEXTOUT)((PUCHAR)First + First->gbHdr.Size);
+    ok(Second->gbHdr.Cmd == GdiBCTextOut && Second->cbCount == 1, "The second entry is not the 1-character text\n");
+    ok(CountInk(Dc, Target, Bits) != 0, "The batched text drew nothing\n");
+    ok_long(Teb->GdiBatchCount, 0);
+    ok_long(Teb->GdiTebBatch.Offset, 0);
+}
+
 START_TEST(GdiBatch)
 {
     static const struct
@@ -142,6 +175,8 @@ START_TEST(GdiBatch)
         else
             ok(Ink == 0, "Case %lu: the malformed batched text drew %lu pixels\n", Index, Ink);
     }
+
+    TestOddLengthText(Dc, Target, Bits);
 
     SelectObject(Dc, OldFont);
     SelectObject(Target, OldTargetBitmap);

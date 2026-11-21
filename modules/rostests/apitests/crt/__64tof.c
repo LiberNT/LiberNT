@@ -51,43 +51,43 @@ START_TEST(__64tof)
 {
     I64TOD_TEST_DATA i64tod[] =
     {
-        { 1383034209LL, 1383034209.0 }, /* test 32bit number */
-        { -1383034209LL, -1383034209.0 }, /* test negative 32bit number */
-        { 354056757614LL, 354056757614.0 }, /* test 64bit int */
-        { -354056757614LL, -354056757614.0 }, /* test negative 64bit int */
-        { 18446744073709550000LL, -1616.0 }, /* test 20bit in float */
-        { 0x8000000000000000LL, -9223372036854775800.0 }, /* test big 64bit int */
-        { 0xFFFFFFFFFFFFFFFFLL, -1.0 }, /* test -1 */
-        { 0LL, +0.0 }, /* test 0 */
+        { 1383034209LL, { 1383034209.0 } }, /* test 32bit number */
+        { -1383034209LL, { -1383034209.0 } }, /* test negative 32bit number */
+        { 354056757614LL, { 354056757614.0 } }, /* test 64bit int */
+        { -354056757614LL, { -354056757614.0 } }, /* test negative 64bit int */
+        { 18446744073709550000ULL, { -1616.0 } }, /* test 20bit in float */
+        { 0x8000000000000000LL, { -9223372036854775800.0 } }, /* test big 64bit int */
+        { 0xFFFFFFFFFFFFFFFFLL, { -1.0 } }, /* test -1 */
+        { 0LL, { +0.0 } }, /* test 0 */
     };
     U64TOD_TEST_DATA u64tod[] =
     {
-        { 1383034209ULL, 1383034209.0 }, /* test 32bit number */
-        { 354056757614ULL, 354056757614.0 }, /* test 64bit int */
-        { 18445937028656326656ULL, 18445937028656326656.0 }, /* test unsigned 64bit */
-        { 18446744073709550000ULL, 18446744073709550000.0 }, /* test 20bit in float */
-        { 18446744073709551615ULL, 18446744073709552000.0 }, /* test big 64bit number */
-        { 0ULL, +0.0 }, /* test 0 */
+        { 1383034209ULL, { 1383034209.0 } }, /* test 32bit number */
+        { 354056757614ULL, { 354056757614.0 } }, /* test 64bit int */
+        { 18445937028656326656ULL, { 18445937028656326656.0 } }, /* test unsigned 64bit */
+        { 18446744073709550000ULL, { 18446744073709550000.0 } }, /* test 20bit in float */
+        { 18446744073709551615ULL, { 18446744073709552000.0 } }, /* test big 64bit number */
+        { 0ULL, { +0.0 } }, /* test 0 */
     };
     I64TOS_TEST_DATA i64tos[] =
     {
-        { 1383034LL, 1383034.0f }, /* test 32bit number */
-        { -1383034LL, -1383034.0f }, /* test negative 32bit number */
-        { 354056765440LL, 354056765440.0f }, /* test 64bit int */
-        { -354056765440LL, -354056765440.0f }, /* test negative 64bit int */
-        { 18446744073709550000LL, -1616.0f }, /* test 20bit in float */
-        { 0x8000000000000000LL, -9223372036854775800.0f }, /* test big 64bit int */
-        { 0xFFFFFFFFFFFFFFFFLL, -1.0f }, /* test -1 */
-        { 0LL, +0.0f }, /* test 0 */
+        { 1383034LL, { 1383034.0f } }, /* test 32bit number */
+        { -1383034LL, { -1383034.0f } }, /* test negative 32bit number */
+        { 354056765440LL, { 354056765440.0f } }, /* test 64bit int */
+        { -354056765440LL, { -354056765440.0f } }, /* test negative 64bit int */
+        { 18446744073709550000ULL, { -1616.0f } }, /* test 20bit in float */
+        { 0x8000000000000000LL, { -9223372036854775800.0f } }, /* test big 64bit int */
+        { 0xFFFFFFFFFFFFFFFFLL, { -1.0f } }, /* test -1 */
+        { 0LL, { +0.0f } }, /* test 0 */
     };
     U64TOS_TEST_DATA u64tos[] =
     {
-        { 1383034ULL, 1383034.0f }, /* test 32bit number */
-        { 354056765440ULL, 354056765440.0f }, /* test 64bit int */
-        { 18445937032174764032ULL, 18445937032174764032.0f }, /* test unsigned 64bit */
-        { 18446744073709550000ULL, 18446744073709550000.0f }, /* test 20bit in float */
-        { 18446744073709551615ULL, 18446744073709552000.0f }, /* test big 64bit number */
-        { 0ULL, +0.0f }, /* test 0 */
+        { 1383034ULL, { 1383034.0f } }, /* test 32bit number */
+        { 354056765440ULL, { 354056765440.0f } }, /* test 64bit int */
+        { 18445937032174764032ULL, { 18445937032174764032.0f } }, /* test unsigned 64bit */
+        { 18446744073709550000ULL, { 18446744073709550000.0f } }, /* test 20bit in float */
+        { 18446744073709551615ULL, { 18446744073709552000.0f } }, /* test big 64bit number */
+        { 0ULL, { +0.0f } }, /* test 0 */
     };
 
     unsigned int i;

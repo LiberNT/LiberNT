@@ -111,6 +111,112 @@ MiAdoptTable(
     }
 }
 
+typedef struct _MI_BOOT_RUN
+{
+    ULONG64 Start;
+    ULONG64 End;
+    BOOLEAN Open;
+} MI_BOOT_RUN, *PMI_BOOT_RUN;
+
+static
+NTSTATUS
+MiBootRunFlush(
+    _Inout_ PMI_ADDRESS_SPACE Space,
+    _Inout_ PMI_BOOT_RUN Run)
+{
+    PMI_VAD Vad;
+
+    if (!Run->Open)
+        return STATUS_SUCCESS;
+
+    MI_ASSERT(Run->End >= Run->Start);
+    Run->Open = FALSE;
+
+    Vad = MI_ALLOCATE(sizeof(*Vad));
+    if (Vad == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    RtlZeroMemory(Vad, sizeof(*Vad));
+    Vad->Type = MiVadSystem;
+    Vad->Protection = MI_PROT_EXECUTE_READWRITE;
+    Vad->Node.StartingVpn = Run->Start >> PAGE_SHIFT;
+    Vad->Node.EndingVpn = Run->End >> PAGE_SHIFT;
+
+    if (!MiVadInsert(&Space->VadRoot, &Vad->Node))
+    {
+        MI_FREE(Vad);
+        return STATUS_CONFLICTING_ADDRESSES;
+    }
+
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+MiBootRunAdd(
+    _Inout_ PMI_ADDRESS_SPACE Space,
+    _Inout_ PMI_BOOT_RUN Run,
+    _In_ ULONG64 Base,
+    _In_ ULONG64 Span)
+{
+    NTSTATUS Status;
+
+    MI_ASSERT(Span != 0 && Base + (Span - 1) >= Base);
+    MI_ASSERT(!Run->Open || Base > Run->End);
+
+    if (Run->Open && Run->End + 1 == Base)
+    {
+        Run->End = Base + (Span - 1);
+        return STATUS_SUCCESS;
+    }
+
+    Status = MiBootRunFlush(Space, Run);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Run->Start = Base;
+    Run->End = Base + (Span - 1);
+    Run->Open = TRUE;
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+MiReserveBootTable(
+    _Inout_ PMI_ADDRESS_SPACE Space,
+    _Inout_ PMI_BOOT_RUN Run,
+    _In_ ULONG64 Frame,
+    _In_ LONG Level,
+    _In_ ULONG64 Base)
+{
+    PMI_SYSTEM System = Space->System;
+    const MI_ARCH_DESCRIPTOR *Arch = System->Arch;
+    ULONG64 Span = 1ULL << Arch->Level[Level].Shift;
+    NTSTATUS Status = STATUS_SUCCESS;
+    PMI_PTE Table;
+    ULONG Index;
+
+    MI_ASSERT(Level >= 1 && (ULONG)Level + 1 < Arch->PagingLevels);
+    MI_ASSERT(MiPfnTracked(&System->Pfn, Frame));
+
+    Table = MiArchMapFrame(Frame);
+    for (Index = 0; Index < Arch->Level[Level].EntryCount && NT_SUCCESS(Status); Index++)
+    {
+        MI_PTE Pte = MiArchPteRead(&Table[Index]);
+        ULONG64 Va = Base + (ULONG64)Index * Span;
+
+        if (!MiArchPteIsValid(Pte))
+            Status = MiBootRunFlush(Space, Run);
+        else if (Level == 1 || MiArchPteIsBlock(Pte, (ULONG)Level) || !MiPfnTracked(&System->Pfn, MiArchPteFrame(Pte)))
+            Status = MiBootRunAdd(Space, Run, Va, Span);
+        else
+            Status = MiReserveBootTable(Space, Run, MiArchPteFrame(Pte), Level - 1, Va);
+    }
+    MiArchUnmapFrame(Table);
+
+    return Status;
+}
+
 NTSTATUS
 MiSystemAdoptBootMappings(
     _Inout_ PMI_SYSTEM System)
@@ -122,41 +228,40 @@ MiSystemAdoptBootMappings(
     PMI_PTE Root = MiArchMapFrame(Space->RootFrame);
     ULONG First = (ULONG)((Arch->SystemAddressStart >> Arch->Level[Top].Shift) & Arch->Level[Top].IndexMask);
     ULONG Last = (ULONG)((Arch->SystemAddressEnd >> Arch->Level[Top].Shift) & Arch->Level[Top].IndexMask);
+    MI_BOOT_RUN Run = { 0 };
+    NTSTATUS Status;
     ULONG Index;
 
+    MI_ASSERT((Arch->SystemAddressStart & (Span - 1)) == 0);
+
+    /* Reserve the spans the boot tables map down to leaf-table granularity, not whole top-level entries. */
     for (Index = First; Index <= Last; Index++)
     {
         MI_PTE Pte = MiArchPteRead(&Root[Index]);
         ULONG64 Base = Arch->SystemAddressStart + (ULONG64)(Index - First) * Span;
-        PMI_VAD Vad;
+        BOOLEAN Table;
 
         if (!MiArchPteIsValid(Pte))
+        {
+            Status = MiBootRunFlush(Space, &Run);
+            if (!NT_SUCCESS(Status))
+                return Status;
             continue;
-
-        Vad = MI_ALLOCATE(sizeof(*Vad));
-        if (Vad == NULL)
-            return STATUS_INSUFFICIENT_RESOURCES;
-
-        RtlZeroMemory(Vad, sizeof(*Vad));
-        Vad->Type = MiVadSystem;
-        Vad->Protection = MI_PROT_EXECUTE_READWRITE;
-        Vad->Node.StartingVpn = Base >> PAGE_SHIFT;
-        Vad->Node.EndingVpn = ((Base + Span - 1) >> PAGE_SHIFT);
-
-        if (!MiVadInsert(&Space->VadRoot, &Vad->Node))
-        {
-            MI_FREE(Vad);
-            return STATUS_CONFLICTING_ADDRESSES;
         }
 
-        if (!MiArchPteIsBlock(Pte, (ULONG)Top) && MiPfnTracked(&System->Pfn, MiArchPteFrame(Pte)) &&
-            !(MI_PFN_FLAGS(&System->Pfn.Pfn[MiArchPteFrame(Pte)]) & MI_PFN_FLAG_PAGE_TABLE))
-        {
+        Table = !MiArchPteIsBlock(Pte, (ULONG)Top) && MiPfnTracked(&System->Pfn, MiArchPteFrame(Pte));
+        if (Table && Top > 1)
+            Status = MiReserveBootTable(Space, &Run, MiArchPteFrame(Pte), Top - 1, Base);
+        else
+            Status = MiBootRunAdd(Space, &Run, Base, Span);
+        if (!NT_SUCCESS(Status))
+            return Status;
+
+        if (Table && !(MI_PFN_FLAGS(&System->Pfn.Pfn[MiArchPteFrame(Pte)]) & MI_PFN_FLAG_PAGE_TABLE))
             MiAdoptTable(Space, (ULONG)MiArchPteFrame(Pte), Space->RootFrame, Index, Top - 1);
-        }
     }
 
-    return STATUS_SUCCESS;
+    return MiBootRunFlush(Space, &Run);
 }
 
 NTSTATUS
@@ -217,7 +322,11 @@ MiSystemReserveSessionRange(
 {
     PMI_ADDRESS_SPACE Space = &System->SystemSpace;
     const MI_ARCH_DESCRIPTOR *Arch = System->Arch;
+    LONG Top = Arch->PagingLevels - 1;
+    LONG Level;
     ULONG64 SpanPages;
+    ULONG64 RangePages;
+    ULONG64 AlignPages;
     ULONG64 Vpn;
     PMI_VAD Vad;
 
@@ -227,7 +336,14 @@ MiSystemReserveSessionRange(
     if (Arch->SessionTopLevelEntries == 0)
         return STATUS_SUCCESS;
 
-    SpanPages = 1ULL << (Arch->Level[Arch->PagingLevels - 1].Shift - PAGE_SHIFT);
+    Level = MiSessionLevel(Arch);
+    SpanPages = MiSessionSpan(Arch) >> PAGE_SHIFT;
+    RangePages = SpanPages * Arch->SessionTopLevelEntries;
+
+    /* A range below the top level must sit in one top-level entry, whose table each session copies. */
+    AlignPages = (Level == Top) ? SpanPages : RangePages;
+    MI_ASSERT(Level == Top || (((RangePages & (RangePages - 1)) == 0) &&
+                               ((RangePages << PAGE_SHIFT) <= (1ULL << Arch->Level[Top].Shift))));
 
     Vad = MI_ALLOCATE(sizeof(*Vad));
     if (Vad == NULL)
@@ -237,14 +353,14 @@ MiSystemReserveSessionRange(
     Vad->Type = MiVadSystem;
     Vad->Protection = MI_PROT_NOACCESS;
 
-    if (!MiVadFindEmptyRange(&Space->VadRoot, SpanPages * Arch->SessionTopLevelEntries, SpanPages, &Vpn))
+    if (!MiVadFindEmptyRange(&Space->VadRoot, RangePages, AlignPages, &Vpn))
     {
         MI_FREE(Vad);
         return STATUS_NO_MEMORY;
     }
 
     Vad->Node.StartingVpn = Vpn;
-    Vad->Node.EndingVpn = Vpn + SpanPages * Arch->SessionTopLevelEntries - 1;
+    Vad->Node.EndingVpn = Vpn + RangePages - 1;
     if (!MiVadInsert(&Space->VadRoot, &Vad->Node))
     {
         MI_FREE(Vad);
@@ -254,21 +370,38 @@ MiSystemReserveSessionRange(
     System->SessionStart = Vad->Node.StartingVpn << PAGE_SHIFT;
     System->SessionEnd = (Vad->Node.EndingVpn << PAGE_SHIFT) + PAGE_SIZE - 1;
 
-    MI_ASSERT((Vad->Node.StartingVpn & (SpanPages - 1)) == 0);
+    MI_ASSERT((Vad->Node.StartingVpn & (AlignPages - 1)) == 0);
     MI_ASSERT(System->SessionStart >= Arch->SystemAddressStart && System->SessionEnd <= Arch->SystemAddressEnd);
-    MI_ASSERT(System->SessionEnd - System->SessionStart + 1 ==
-              (SpanPages * Arch->SessionTopLevelEntries) << PAGE_SHIFT);
+    MI_ASSERT(System->SessionEnd - System->SessionStart + 1 == RangePages << PAGE_SHIFT);
     MI_ASSERT(MiVadFind(&Space->VadRoot, Vad->Node.StartingVpn) == &Vad->Node);
     {
         PMI_PTE Root = MiArchMapFrame(Space->RootFrame);
-        LONG Top = Arch->PagingLevels - 1;
+        ULONG FirstTop = (ULONG)((System->SessionStart >> Arch->Level[Top].Shift) & Arch->Level[Top].IndexMask);
+        ULONG LastTop = (ULONG)((System->SessionEnd >> Arch->Level[Top].Shift) & Arch->Level[Top].IndexMask);
         ULONG Index;
 
-        for (Index = (ULONG)((System->SessionStart >> Arch->Level[Top].Shift) & Arch->Level[Top].IndexMask);
-             Index <= (ULONG)((System->SessionEnd >> Arch->Level[Top].Shift) & Arch->Level[Top].IndexMask);
-             Index++)
+        if (Level == Top)
         {
-            MI_ASSERT(!MiArchPteIsValid(MiArchPteRead(&Root[Index])));
+            for (Index = FirstTop; Index <= LastTop; Index++)
+                MI_ASSERT(!MiArchPteIsValid(MiArchPteRead(&Root[Index])));
+        }
+        else
+        {
+            MI_PTE TopEntry = MiArchPteRead(&Root[FirstTop]);
+
+            MI_ASSERT(FirstTop == LastTop);
+            if (MiArchPteIsValid(TopEntry) && !MiArchPteIsBlock(TopEntry, (ULONG)Top))
+            {
+                PMI_PTE Table = MiArchMapFrame(MiArchPteFrame(TopEntry));
+
+                for (Index = (ULONG)((System->SessionStart >> Arch->Level[Level].Shift) & Arch->Level[Level].IndexMask);
+                     Index <= (ULONG)((System->SessionEnd >> Arch->Level[Level].Shift) & Arch->Level[Level].IndexMask);
+                     Index++)
+                {
+                    MI_ASSERT(!MiArchPteIsValid(MiArchPteRead(&Table[Index])));
+                }
+                MiArchUnmapFrame(Table);
+            }
         }
         MiArchUnmapFrame(Root);
     }
@@ -296,7 +429,7 @@ MiSystemPopulateTopLevel(
         if (MiArchPteRead(&Root[Index]) != 0)
             continue;
 
-        if (System->SessionEnd > System->SessionStart &&
+        if (System->SessionEnd > System->SessionStart && MiSessionLevel(Arch) == Top &&
             Index >= ((System->SessionStart >> Arch->Level[Top].Shift) & Arch->Level[Top].IndexMask) &&
             Index <= ((System->SessionEnd >> Arch->Level[Top].Shift) & Arch->Level[Top].IndexMask))
         {
@@ -313,6 +446,26 @@ MiSystemPopulateTopLevel(
         System->Pfn.Pfn[Table].PageTableOwner = Space;
         MiArchPteWrite(&Root[Index], MiArchPteMakeTable(Table, 0));
         MI_ATOMIC_ADD64(&Space->PageTablePages, 1);
+    }
+
+    if (System->SessionEnd > System->SessionStart && MiSessionLevel(Arch) != Top)
+    {
+        ULONG64 TopSpan = 1ULL << Arch->Level[Top].Shift;
+        ULONG64 Base = System->SessionStart & ~(TopSpan - 1);
+        ULONG64 Span = MiSessionSpan(Arch);
+        ULONG64 Va;
+        NTSTATUS Status;
+
+        /* Sessions copy this top-level entry's table: its other entries must never change after this. */
+        for (Va = Base; Va < Base + TopSpan; Va += Span)
+        {
+            if (Va >= System->SessionStart && Va <= System->SessionEnd)
+                continue;
+
+            Status = MiPtPinRange(Space, Va, PAGE_SIZE);
+            if (!NT_SUCCESS(Status))
+                return Status;
+        }
     }
 
     return STATUS_SUCCESS;

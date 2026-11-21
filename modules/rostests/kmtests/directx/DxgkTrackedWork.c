@@ -251,7 +251,11 @@ static VOID DxgkTrackedWorkTestReservationDrainInvariant(VOID)
 {
     LONG ActiveReservations = 0;
     BOOLEAN ChangeEvent;
+    KSPIN_LOCK Lock;
+    KIRQL OldIrql;
 
+    KeInitializeSpinLock(&Lock);
+    KeAcquireSpinLock(&Lock, &OldIrql);
     ok_bool_true(DxgkSubmitReservationCoreIsDrainedLocked(&ActiveReservations), "zero reservations begin drained");
     ok_bool_true(DxgkSubmitReservationCoreTryAcquireLocked(&ActiveReservations, FALSE, &ChangeEvent), "first reservation is admitted");
     ok_bool_true(ChangeEvent, "zero-to-one transition clears the drained event");
@@ -273,6 +277,7 @@ static VOID DxgkTrackedWorkTestReservationDrainInvariant(VOID)
     ok_bool_false(DxgkSubmitReservationCoreReleaseLocked(&ActiveReservations, &ChangeEvent), "reservation count cannot underflow");
     ok_bool_false(ChangeEvent, "underflow rejection leaves the event unchanged");
     ok_eq_long(ActiveReservations, 0);
+    KeReleaseSpinLock(&Lock, OldIrql);
 }
 
 static VOID DxgkTrackedWorkTestSubmissionAccounting(VOID)
@@ -282,7 +287,11 @@ static VOID DxgkTrackedWorkTestSubmissionAccounting(VOID)
     LONG DeviceCount;
     LONG OtherDeviceCount;
     LONG ProcessCount;
+    KSPIN_LOCK Lock;
+    KIRQL OldIrql;
 
+    KeInitializeSpinLock(&Lock);
+    KeAcquireSpinLock(&Lock, &OldIrql);
     DeviceCount = 0;
     ProcessCount = 0;
     DxgkSubmissionAccountingInitialize(&Accounting);
@@ -338,6 +347,7 @@ static VOID DxgkTrackedWorkTestSubmissionAccounting(VOID)
     ok_bool_true(DxgkSubmissionAccountingRelease(&Accounting, &DeviceCount, &ProcessCount), "process-wide charge releases exactly once");
     ok_eq_long(DeviceCount, 0);
     ok_eq_long(ProcessCount, 1);
+    KeReleaseSpinLock(&Lock, OldIrql);
 }
 
 static VOID DxgkTrackedWorkTestSubmissionResidencyPin(VOID)

@@ -1152,7 +1152,7 @@
 @ stdcall RtlLookupElementGenericTableAvl(ptr ptr)
 @ stdcall RtlLookupElementGenericTableFull(ptr ptr ptr long)
 @ stdcall RtlLookupElementGenericTableFullAvl(ptr ptr ptr long)
-@ stdcall -arch=win64,ppc RtlLookupFunctionEntry(long ptr ptr)
+@ stdcall -arch=win64,ppc,arm RtlLookupFunctionEntry(long ptr ptr)
 @ stdcall -arch=win64,ppc RtlLookupFunctionTable(int64 ptr ptr)
 @ stdcall RtlMakeSelfRelativeSD(ptr ptr ptr)
 @ stdcall RtlMapGenericMask(long ptr)
@@ -1249,7 +1249,7 @@
 @ stdcall -stub -version=0x600+ RtlResetMemoryZone(long)
 @ stdcall -version=0x600+ RtlResetNtUserPfn()
 @ stdcall RtlResetRtlTranslations(ptr)
-@ stdcall -arch=win64,ppc RtlRestoreContext(ptr ptr)
+@ stdcall -arch=win64,ppc,arm RtlRestoreContext(ptr ptr)
 @ stdcall RtlRestoreLastWin32Error(long) RtlSetLastWin32Error
 @ stdcall -version=0x600+ RtlRetrieveNtUserPfn(ptr ptr ptr)
 @ stdcall RtlRevertMemoryStream(ptr)
@@ -1365,7 +1365,7 @@
 @ stdcall -stub -version=0x600+ RtlUnlockMemoryZone(long)
 @ stdcall -stub -version=0x600+ RtlUnlockModuleSection(long)
 @ stdcall -register RtlUnwind(ptr ptr ptr ptr)
-@ stdcall -arch=win64,ppc RtlUnwindEx(ptr ptr ptr ptr ptr ptr)
+@ stdcall -arch=win64,ppc,arm RtlUnwindEx(ptr ptr ptr ptr ptr ptr)
 @ stdcall RtlUnregisterCfgTargetRange(ptr)
 @ stdcall RtlUpcaseUnicodeChar(long)
 @ stdcall RtlUpcaseUnicodeString(ptr ptr long)
@@ -1381,9 +1381,8 @@
 @ stdcall RtlUpperChar(long)
 @ stdcall RtlUpperString(ptr ptr)
 @ stdcall -version=0x502 RtlUsageHeap(ptr long ptr)
-@ stdcall -stub -version=0x600+ -arch=arm RtlUserThreadStart(long long)
 @ stdcall -version=0x600+ -arch=i386,arm64 RtlUserThreadStart(long long)
-@ stdcall -version=0x600+ -arch=x86_64,riscv64,ppc RtlUserThreadStart(ptr ptr) RtlpUserThreadStart
+@ stdcall -version=0x600+ -arch=x86_64,riscv64,ppc,arm RtlUserThreadStart(ptr ptr) RtlpUserThreadStart
 @ stdcall RtlValidAcl(ptr)
 @ stdcall RtlValidRelativeSecurityDescriptor(ptr long long)
 @ stdcall RtlValidSecurityDescriptor(ptr)
@@ -1393,6 +1392,7 @@
 @ stdcall RtlValidateUnicodeString(long ptr)
 @ stdcall RtlVerifyVersionInfo(ptr long double)
 @ stdcall -arch=win64,ppc RtlVirtualUnwind(long int64 int64 ptr ptr ptr ptr ptr)
+@ stdcall -arch=arm RtlVirtualUnwind(long long long ptr ptr ptr ptr ptr)
 @ stdcall -arch=win64 RtlVirtualUnwind2(long int64 int64 ptr ptr ptr ptr ptr ptr ptr ptr ptr long)
 @ stdcall -version=0x602+ RtlWaitOnAddress(ptr ptr long ptr)
 @ stdcall -version=0x600+ RtlWakeAllConditionVariable(ptr)
@@ -1978,7 +1978,8 @@
 @ cdecl -arch=i386 _aullshr()
 @ extern -arch=i386 _chkstk
 @ cdecl -private _errno()
-@ cdecl -arch=i386,arm,win64 _fltused()
+@ cdecl -arch=i386,win64 _fltused()
+@ extern -arch=arm _fltused
 @ cdecl -arch=i386 -ret64 _ftol()
 @ cdecl _i64toa(double ptr long)
 @ cdecl _i64tow(double ptr long)

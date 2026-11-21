@@ -1,30 +1,32 @@
 /*
- * PROJECT:     ReactOS CRT library
- * LICENSE:     BSD - See COPYING.ARM in the top level directory
- * PURPOSE:     Implementation of _chkstk and _alloca_probe
- * COPYRIGHT:   Copyright 2014 Timo Kreuzer (timo.kreuzer@reactos.org)
- *              Copyright 2014 Yuntian Zhang (yuntian.zh@gmail.com)
- *              Copyright 2019 Mohamed Mediouni (mmediouni@gmx.fr)
- *
- * REFERENCES:  https://github.com/wine-mirror/wine/commit/2b095beace7b457586bd33b3b1c81df116215193
+ * PROJECT:     LiberNT CRT
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     __chkstk for ARM (Thumb-2)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
-/* INCLUDES ******************************************************************/
+    .syntax unified
+    .thumb
+    .text
+    .align 2
 
-#include <kxarm.h>
-
-/* CODE **********************************************************************/
-    TEXTAREA
-
-    LEAF_ENTRY __chkstk
+/*
+ * Windows on ARM: r4 holds the frame size in words and returns it in bytes;
+ * every page between sp and the new stack bottom is touched in order, so the
+ * guard page grows the stack. Only r4 and r12 change.
+ */
+    .global __chkstk
+    .thumb_func
+__chkstk:
     lsl r4, r4, #2
+    push {r5, r6}
+    add r5, sp, #8
+    sub r6, r5, r4
+1:  sub r5, r5, #0x1000
+    cmp r5, r6
+    blo 2f
+    ldr r12, [r5]
+    b 1b
+2:  ldr r12, [r6]
+    pop {r5, r6}
     bx lr
-    LEAF_END __chkstk
-
-    LEAF_ENTRY __alloca_probe
-    __assertfail
-    bx lr
-    LEAF_END __alloca_probe
-
-    END
-/* EOF */

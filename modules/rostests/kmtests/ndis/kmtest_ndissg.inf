@@ -9,12 +9,15 @@ DriverVer=11/05/2026,1.0.0.0
 CatalogFile=kmtest_ndissg.cat
 
 [Manufacturer]
-%Provider%=Models,NTx86,NTamd64,NTarm64,NTriscv64
+%Provider%=Models,NTx86,NTamd64,NTarm,NTarm64,NTriscv64
 
 [Models.NTx86]
 %Device%=Miniport,PCI\VEN_1234&DEV_11E8
 
 [Models.NTamd64]
+%Device%=Miniport,PCI\VEN_1234&DEV_11E8
+
+[Models.NTarm]
 %Device%=Miniport,PCI\VEN_1234&DEV_11E8
 
 [Models.NTarm64]

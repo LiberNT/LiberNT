@@ -60,6 +60,7 @@ typedef struct _OFW_DISK
 typedef VOID (*POFW_APPLICATION_ENTRY)(PVOID Argument);
 
 const USHORT FwApplicationSubsystem = IMAGE_SUBSYSTEM_NATIVE;
+const USHORT FwApplicationMachine = IMAGE_FILE_MACHINE_NATIVE;
 
 POFW_APPLICATION_PARAMETERS OfwParameters;
 OFW_MACHINE_INFO OfwMachine;

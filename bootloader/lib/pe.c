@@ -306,6 +306,13 @@ PeRelocateImage(
                 case IMAGE_REL_BASED_DIR64:
                     Width = sizeof(ULONGLONG);
                     break;
+                case IMAGE_REL_BASED_ARM_MOV32:
+                case IMAGE_REL_BASED_THUMB_MOV32:
+                    /* A MOVW/MOVT pair; these type numbers mean other fixups on other machines. */
+                    if (NtHeaders->FileHeader.Machine != IMAGE_FILE_MACHINE_ARMNT)
+                        return FALSE;
+                    Width = 2 * sizeof(ULONG);
+                    break;
                 default:
                     return FALSE;
             }
@@ -533,6 +540,15 @@ PeFindExport(
     }
 
     return PeFindExport(ModuleListHead, Target, Dot + 1, 0, Depth - 1);
+}
+
+PVOID
+PeGetExport(
+    _In_ PLIST_ENTRY ModuleListHead,
+    _In_ PLDR_DATA_TABLE_ENTRY Module,
+    _In_ PCSTR Name)
+{
+    return PeFindExport(ModuleListHead, Module, Name, 0, PE_MAX_FORWARD_DEPTH);
 }
 
 BOOLEAN

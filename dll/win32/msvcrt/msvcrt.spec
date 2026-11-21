@@ -186,7 +186,6 @@
 @ cdecl -norelay __CxxFrameHandler(ptr ptr ptr ptr)
 @ cdecl -arch=i386 -norelay __CxxFrameHandler2(ptr ptr ptr ptr) __CxxFrameHandler
 @ cdecl -version=0x600+ -arch=win64 -norelay __CxxFrameHandler2(ptr ptr ptr ptr) __CxxFrameHandler
-@ cdecl -arch=arm -norelay __CxxFrameHandler3(ptr ptr ptr ptr)
 @ cdecl -version=0x600+ -norelay __CxxFrameHandler3(ptr ptr ptr ptr) __CxxFrameHandler
 @ stdcall -arch=i386 __CxxLongjmpUnwind(ptr)
 @ cdecl -arch=i386 __CxxQueryExceptionSize()
@@ -856,7 +855,7 @@
 # stub -version=0x600+ -arch=win64 _msize_dbg(ptr long)
 @ cdecl _nextafter(double double) nextafter
 @ cdecl -arch=win64 _nextafterf(float float) nextafterf
-@ extern _onexit # Declaring it as extern let us use the symbol from msvcrtex while having the __imp_ symbol defined in the import lib
+@ cdecl -impdata _onexit(ptr) # Only the __imp_ symbol goes in the import lib, so that msvcrtex provides _onexit
 @ varargs _open(str long)
 @ cdecl _open_osfhandle(long long)
 @ extern _osplatform MSVCRT__osplatform

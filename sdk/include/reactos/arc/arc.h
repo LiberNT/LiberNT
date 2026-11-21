@@ -351,6 +351,15 @@ typedef struct _BOOT_DRIVER_LIST_ENTRY
     struct _LDR_DATA_TABLE_ENTRY *LdrEntry;
 } BOOT_DRIVER_LIST_ENTRY, *PBOOT_DRIVER_LIST_ENTRY;
 
+/* FIXME: Windows does not publish the entries of HalExtensionModuleList; this layout is LiberNT's. */
+typedef struct _HAL_EXTENSION_MODULE_ENTRY
+{
+    LIST_ENTRY Link;
+    struct _LDR_DATA_TABLE_ENTRY *LdrEntry;
+    PVOID InitializeRoutine;
+    PVOID Phase1InitializeRoutine;
+} HAL_EXTENSION_MODULE_ENTRY, *PHAL_EXTENSION_MODULE_ENTRY;
+
 typedef struct _ARC_DISK_SIGNATURE
 {
     LIST_ENTRY ListEntry;
@@ -830,23 +839,33 @@ typedef struct _PPC_LOADER_BLOCK
 #endif
 } PPC_LOADER_BLOCK, *PPPC_LOADER_BLOCK;
 
+#define ARM_LOADER_BLOCK_VERSION          1
+#define ARM_LOADER_KSEG0_BASE             0x80000000UL
+#define ARM_LOADER_KSEG0_SIZE             0x3C000000UL
+#define ARM_LOADER_DEVICE_WINDOW_BASE     0xBC000000UL
+#define ARM_LOADER_DEVICE_WINDOW_SIZE     0x04000000UL
+
+#define ARM_EARLY_UART_NONE               0
+#define ARM_EARLY_UART_PL011              1
+
 typedef struct _ARM_LOADER_BLOCK
 {
 #ifdef _ARM_
-    ULONG InterruptStack;
-    ULONG FirstLevelDcacheSize;
-    ULONG FirstLevelDcacheFillSize;
-    ULONG FirstLevelIcacheSize;
-    ULONG FirstLevelIcacheFillSize;
-    ULONG GpBase;
-    ULONG PanicStack;
+    ULONG Version;
+    ULONG Size;
+    ULONGLONG Kseg0PhysicalBase;
+    ULONGLONG PageTableRoot;
     ULONG PcrPage;
-    ULONG PdrPage;
-    ULONG SecondLevelDcacheSize;
-    ULONG SecondLevelDcacheFillSize;
-    ULONG SecondLevelIcacheSize;
-    ULONG SecondLevelIcacheFillSize;
-    ULONG PcrPage2;
+    ULONG InterruptStack;
+    ULONG PanicStack;
+    ULONG DpcStack;
+    ULONGLONG SharedUserDataPage;
+    ULONGLONG EarlyUartPhysical;
+    ULONG EarlyUartAddress;
+    ULONG EarlyUartInterface;
+    ULONGLONG DeviceTree;
+    ULONG DeviceTreeSize;
+    ULONG DeviceWindowUsed;
 #else
     ULONG PlaceHolder;
 #endif

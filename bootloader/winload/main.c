@@ -498,6 +498,8 @@ OslMain(VOID)
         return;
     }
 
+    OslLoadHalExtensions(LoaderBlock, &OsDevice, Directory);
+
     OslTrace("OS loader: loading the NLS files");
     if (!OslLoadNlsData(LoaderBlock, &OsDevice, SystemRoot))
     {
@@ -528,11 +530,11 @@ OslMain(VOID)
     }
 
     OslTrace("OS loader: handing over, boot device %s, hal device %s",
-             LoaderBlock->ArcBootDeviceName ? LoaderBlock->ArcBootDeviceName : "(none)",
-             LoaderBlock->ArcHalDeviceName ? LoaderBlock->ArcHalDeviceName : "(none)");
+             LoaderBlock->ArcBootDeviceName ? (PCSTR)VaToPa(LoaderBlock->ArcBootDeviceName) : "(none)",
+             LoaderBlock->ArcHalDeviceName ? (PCSTR)VaToPa(LoaderBlock->ArcHalDeviceName) : "(none)");
     OslTrace("OS loader: nt path %s, options %s",
-             LoaderBlock->NtBootPathName ? LoaderBlock->NtBootPathName : "(none)",
-             LoaderBlock->LoadOptions ? LoaderBlock->LoadOptions : "(none)");
+             LoaderBlock->NtBootPathName ? (PCSTR)VaToPa(LoaderBlock->NtBootPathName) : "(none)",
+             LoaderBlock->LoadOptions ? (PCSTR)VaToPa(LoaderBlock->LoadOptions) : "(none)");
     OslTrace("OS loader: entry %p, loader block %p, arc disks %p, registry %lu bytes at %p",
              Kernel->EntryPoint,
              PaToVa(LoaderBlock),

@@ -94,6 +94,7 @@ enum
     FL_IMPSYM = 128,
     FL_CONSTANT = 256,
     FL_THUNK = 512,
+    FL_IMPDATA = 1024,
 };
 
 enum
@@ -1024,7 +1025,7 @@ OutputLine_def(FILE *fileDest, EXPORT *pexp)
     }
 
     if (gbImportLib && gbForwardResolution &&
-        !(pexp->uFlags & FL_PRIVATE) && (pexp->nCallingConvention != CC_EXTERN))
+        !(pexp->uFlags & (FL_PRIVATE | FL_IMPDATA)) && (pexp->nCallingConvention != CC_EXTERN))
         return 1;
 
     /* Handle import symbols */
@@ -1092,12 +1093,19 @@ OutputLine_def(FILE *fileDest, EXPORT *pexp)
     {
         fprintf(fileDest, " PRIVATE");
     }
-    else if ((pexp->nCallingConvention == CC_EXTERN) && !gbForwardResolution)
+    else if (((pexp->nCallingConvention == CC_EXTERN) || (gbImportLib && (pexp->uFlags & FL_IMPDATA))) &&
+             !gbForwardResolution)
     {
         if (gbImportLib && (pexp->uFlags & FL_CONSTANT))
             fprintf(fileDest, " CONSTANT");
         else
             fprintf(fileDest, " DATA");
+    }
+    else if (!gbImportLib && !gbMSComp && (giArch == ARCH_ARM) && pexp->strTarget.buf &&
+             ScanToken(pexp->strTarget.buf, '.'))
+    {
+        /* lld sets the Thumb bit on an ARM forwarder whose name is also defined in the module, unless it is DATA */
+        fprintf(fileDest, " DATA");
     }
 
     fprintf(fileDest, "\n");
@@ -1481,6 +1489,10 @@ ParseFile(char* pcStart, unsigned *cExports)
             else if (CompareToken(pc, "-impsym"))
             {
                 exp.uFlags |= FL_IMPSYM;
+            }
+            else if (CompareToken(pc, "-impdata"))
+            {
+                exp.uFlags |= FL_IMPDATA;
             }
             else if (CompareToken(pc, "-ordinal"))
             {

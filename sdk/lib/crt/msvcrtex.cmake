@@ -73,28 +73,9 @@ elseif(ARCH STREQUAL "amd64")
         except/amd64/chkstk_ms.s)
 elseif(ARCH STREQUAL "arm")
     list(APPEND MSVCRTEX_SOURCE
-        math/arm/__rt_sdiv.c
-        math/arm/__rt_sdiv64_worker.c
-        math/arm/__rt_udiv.c
-        math/arm/__rt_udiv64_worker.c
-        math/arm/__rt_div_worker.h
-        math/arm/__dtoi64.c
-        math/arm/__dtou64.c
-        math/arm/__stoi64.c
-        math/arm/__stou64.c
-        math/arm/__fto64.h
-        math/arm/__i64tod.c
-        math/arm/__u64tod.c
-        math/arm/__i64tos.c
-        math/arm/__u64tos.c
-        math/arm/__64tof.h
-    )
+        math/arm/rt_srsh.c)
     list(APPEND MSVCRTEX_ASM_SOURCE
-        except/arm/chkstk_asm.s
-        math/arm/__rt_sdiv64.s
-        math/arm/__rt_srsh.s
-        math/arm/__rt_udiv64.s
-    )
+        except/arm/chkstk_asm.s)
 endif()
 
 set_source_files_properties(${MSVCRTEX_ASM_SOURCE} PROPERTIES COMPILE_DEFINITIONS "_DLL;_MSVCRTEX_")

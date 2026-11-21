@@ -1,7 +1,11 @@
 $if (_WDMDDK_)
-/** Kernel definitions for ARM **/
+/*
+ * PROJECT:     LiberNT SDK
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     ARM (Thumb-2) kernel definitions, from the WDK 10.0.16299 wdm.h ARM section
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
 
-/* Interrupt request levels */
 #define PASSIVE_LEVEL           0
 #define LOW_LEVEL               0
 #define APC_LEVEL               1
@@ -13,7 +17,8 @@ $if (_WDMDDK_)
 #define PROFILE_LEVEL           15
 #define HIGH_LEVEL              15
 
-#define KIP0PCRADDRESS          0xFFDFF000
+extern NTKERNELAPI volatile KSYSTEM_TIME KeTickCount;
+
 #define KI_USER_SHARED_DATA     0xFFFF9000
 #define SharedUserData          ((KUSER_SHARED_DATA * const)KI_USER_SHARED_DATA)
 
@@ -22,29 +27,14 @@ $if (_WDMDDK_)
 
 typedef struct _KFLOATING_SAVE
 {
-    ULONG Reserved;
+    ULONG Dummy;
 } KFLOATING_SAVE, *PKFLOATING_SAVE;
 
-extern NTKERNELAPI volatile KSYSTEM_TIME KeTickCount;
+#define YieldProcessor          __yield
 
 FORCEINLINE
 VOID
-YieldProcessor(
-    VOID)
-{
-    __dmb(_ARM_BARRIER_ISHST);
-    __yield();
-}
-
-#define MemoryBarrier()         __dmb(_ARM_BARRIER_SY)
-#define PreFetchCacheLine(l,a)  __prefetch((const void *) (a))
-#define PrefetchForWrite(p)     __prefetch((const void *) (p))
-#define ReadForWriteAccess(p)   (*(p))
-
-FORCEINLINE
-VOID
-KeMemoryBarrier(
-    VOID)
+KeMemoryBarrier(VOID)
 {
     _ReadWriteBarrier();
     MemoryBarrier();
@@ -52,13 +42,23 @@ KeMemoryBarrier(
 
 #define KeMemoryBarrierWithoutFence() _ReadWriteBarrier()
 
+/* The generic timer's virtual count (CNTVCT) is readable at every privilege level. */
+FORCEINLINE
+ULONG64
+ReadTimeStampCounter(VOID)
+{
+    ULONG Low, High;
+
+    __asm__ __volatile__("isb\n\tmrrc p15, 1, %0, %1, c14" : "=r"(Low), "=r"(High) :: "memory");
+    return ((ULONG64)High << 32) | Low;
+}
+
 _IRQL_requires_max_(HIGH_LEVEL)
 _IRQL_saves_
 NTHALAPI
 KIRQL
 NTAPI
-KeGetCurrentIrql(
-    VOID);
+KeGetCurrentIrql(VOID);
 
 _IRQL_requires_max_(HIGH_LEVEL)
 NTHALAPI
@@ -81,12 +81,12 @@ KfRaiseIrql(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 _IRQL_saves_
 _IRQL_raises_(DISPATCH_LEVEL)
-NTHALAPI
+NTKERNELAPI
 KIRQL
 NTAPI
 KeRaiseIrqlToDpcLevel(VOID);
 
-NTHALAPI
+NTKERNELAPI
 KIRQL
 NTAPI
 KeRaiseIrqlToSynchLevel(VOID);
@@ -96,54 +96,49 @@ _Acquires_lock_(*SpinLock)
 _IRQL_requires_max_(DISPATCH_LEVEL)
 _IRQL_saves_
 _IRQL_raises_(DISPATCH_LEVEL)
-NTHALAPI
+NTKERNELAPI
 KIRQL
-FASTCALL
-KfAcquireSpinLock(
-  _Inout_ PKSPIN_LOCK SpinLock);
-#define KeAcquireSpinLock(a,b) *(b) = KfAcquireSpinLock(a)
+NTAPI
+KeAcquireSpinLockRaiseToDpc(
+    _Inout_ PKSPIN_LOCK SpinLock);
+#define KeAcquireSpinLock(SpinLock, OldIrql) *(OldIrql) = KeAcquireSpinLockRaiseToDpc(SpinLock)
 
 _Requires_lock_held_(*SpinLock)
 _Releases_lock_(*SpinLock)
 _IRQL_requires_(DISPATCH_LEVEL)
-NTHALAPI
+NTKERNELAPI
 VOID
-FASTCALL
-KfReleaseSpinLock(
-  _Inout_ PKSPIN_LOCK SpinLock,
-  _In_ _IRQL_restores_ KIRQL NewIrql);
-#define KeReleaseSpinLock(a,b) KfReleaseSpinLock(a,b)
+NTAPI
+KeReleaseSpinLock(
+    _Inout_ PKSPIN_LOCK SpinLock,
+    _In_ _IRQL_restores_ KIRQL NewIrql);
 
 _Requires_lock_not_held_(*SpinLock)
 _Acquires_lock_(*SpinLock)
 _IRQL_requires_min_(DISPATCH_LEVEL)
 NTKERNELAPI
 VOID
-FASTCALL
-KefAcquireSpinLockAtDpcLevel(
-  _Inout_ PKSPIN_LOCK SpinLock);
-#define KeAcquireSpinLockAtDpcLevel(SpinLock) KefAcquireSpinLockAtDpcLevel(SpinLock)
+NTAPI
+KeAcquireSpinLockAtDpcLevel(
+    _Inout_ PKSPIN_LOCK SpinLock);
 
 _Requires_lock_held_(*SpinLock)
 _Releases_lock_(*SpinLock)
 _IRQL_requires_min_(DISPATCH_LEVEL)
 NTKERNELAPI
 VOID
-FASTCALL
-KefReleaseSpinLockFromDpcLevel(
-  _Inout_ PKSPIN_LOCK SpinLock);
-#define KeReleaseSpinLockFromDpcLevel(SpinLock) KefReleaseSpinLockFromDpcLevel(SpinLock)
+NTAPI
+KeReleaseSpinLockFromDpcLevel(
+    _Inout_ PKSPIN_LOCK SpinLock);
 
 NTSYSAPI
-PKTHREAD
+struct _KTHREAD *
 NTAPI
 KeGetCurrentThread(VOID);
 
-_Always_(_Post_satisfies_(return<=0))
 _Must_inspect_result_
 _IRQL_requires_max_(DISPATCH_LEVEL)
-_Kernel_float_saved_
-_At_(*FloatSave, _Kernel_requires_resource_not_held_(FloatState) _Kernel_acquires_resource_(FloatState))
+_When_(return>=0, _Kernel_float_saved_)
 FORCEINLINE
 NTSTATUS
 KeSaveFloatingPointState(
@@ -154,8 +149,8 @@ KeSaveFloatingPointState(
 }
 
 _Success_(1)
+_IRQL_requires_max_(DISPATCH_LEVEL)
 _Kernel_float_restored_
-_At_(*FloatSave, _Kernel_requires_resource_held_(FloatState) _Kernel_releases_resource_(FloatState))
 FORCEINLINE
 NTSTATUS
 KeRestoreFloatingPointState(
@@ -165,7 +160,11 @@ KeRestoreFloatingPointState(
     return STATUS_SUCCESS;
 }
 
+#define KeGetDcacheFillSize() 1L
+
+NTKERNELAPI
 VOID
+NTAPI
 KeFlushIoBuffers(
     _In_ PMDL Mdl,
     _In_ BOOLEAN ReadOperation,
@@ -173,32 +172,35 @@ KeFlushIoBuffers(
 
 #define DbgRaiseAssertionFailure() __emit(0xdefc)
 
-FORCEINLINE
-VOID
-_KeQueryTickCount(
-  OUT PLARGE_INTEGER CurrentCount)
-{
-  for (;;) {
-#ifdef NONAMELESSUNION
-    CurrentCount->s.HighPart = KeTickCount.High1Time;
-    CurrentCount->s.LowPart = KeTickCount.LowPart;
-    if (CurrentCount->s.HighPart == KeTickCount.High2Time) break;
-#else
-    CurrentCount->HighPart = KeTickCount.High1Time;
-    CurrentCount->LowPart = KeTickCount.LowPart;
-    if (CurrentCount->HighPart == KeTickCount.High2Time) break;
-#endif
-    YieldProcessor();
-  }
+/* KeTickCount is declared NTKERNELAPI here, so its address is the variable itself, not an import slot. */
+#define KeQueryTickCount(CurrentCount) { \
+    KSYSTEM_TIME volatile *_TickCount = &KeTickCount; \
+    for (;;) { \
+        (CurrentCount)->HighPart = _TickCount->High1Time; \
+        (CurrentCount)->LowPart = _TickCount->LowPart; \
+        if ((CurrentCount)->HighPart == _TickCount->High2Time) break; \
+        YieldProcessor(); \
+    } \
 }
-#define KeQueryTickCount(CurrentCount) _KeQueryTickCount(CurrentCount)
 
-#define CP15_PMSELR     15, 0,  9, 12, 5 /* Event Counter Selection Register */
-#define CP15_PMXEVCNTR  15, 0,  9, 13, 2 /* Event Count Register */
-#define CP15_TPIDRURW   15, 0, 13,  0, 2 /* Software Thread ID Register, UsRW */
-#define CP15_TPIDRURO   15, 0, 13,  0, 3 /* Software Thread ID Register, UsRO */
-#define CP15_TPIDRPRW   15, 0, 13,  0, 4 /* Software Thread ID Register, Kernel */
+typedef union _ARM_IDCODE
+{
+    ULONG Ulong;
+    struct
+    {
+        ULONG MinorRevision : 4;
+        ULONG Model : 12;
+        ULONG Architecture : 4;
+        ULONG Revision : 4;
+        ULONG Implementer : 8;
+    };
+} ARM_IDCODE, *PARM_IDCODE;
 
+#define CP15_PMSELR     15, 0,  9, 12, 5
+#define CP15_PMXEVCNTR  15, 0,  9, 13, 2
+#define CP15_TPIDRURW   15, 0, 13,  0, 2
+#define CP15_TPIDRURO   15, 0, 13,  0, 3
+#define CP15_TPIDRPRW   15, 0, 13,  0, 4
 $endif (_WDMDDK_)
 $if (_NTDDK_)
 
@@ -207,23 +209,31 @@ $if (_NTDDK_)
 #ifndef KERNEL_STACK_SCALE
 #define KERNEL_STACK_SCALE 1
 #endif
-#define KERNEL_STACK_SIZE         (0x3000 * KERNEL_STACK_SCALE)
-#define KERNEL_LARGE_STACK_SIZE   (0xF000 * KERNEL_STACK_SCALE)
-#define KERNEL_LARGE_STACK_COMMIT KERNEL_STACK_SIZE
-
+#define KERNEL_STACK_SIZE               (0x3000 * KERNEL_STACK_SCALE)
+#define KERNEL_LARGE_STACK_SIZE         (0xF000 * KERNEL_STACK_SCALE)
+#define KERNEL_LARGE_STACK_COMMIT       KERNEL_STACK_SIZE
 #define KERNEL_MCA_EXCEPTION_STACK_SIZE 0x2000
 
 #define EXCEPTION_READ_FAULT    0
 #define EXCEPTION_WRITE_FAULT   1
 #define EXCEPTION_EXECUTE_FAULT 8
 
-/* The following flags control the contents of the CONTEXT structure. */
-#define CONTEXT_ARM             0x200000L
-#define CONTEXT_CONTROL         (CONTEXT_ARM | 0x00000001L)
-#define CONTEXT_INTEGER         (CONTEXT_ARM | 0x00000002L)
-#define CONTEXT_FLOATING_POINT  (CONTEXT_ARM | 0x00000004L)
-#define CONTEXT_DEBUG_REGISTERS (CONTEXT_ARM | 0x00000008L)
+#define CONTEXT_ARM             0x00200000L
+#define CONTEXT_CONTROL         (CONTEXT_ARM | 0x1L)
+#define CONTEXT_INTEGER         (CONTEXT_ARM | 0x2L)
+#define CONTEXT_FLOATING_POINT  (CONTEXT_ARM | 0x4L)
+#define CONTEXT_DEBUG_REGISTERS (CONTEXT_ARM | 0x8L)
 #define CONTEXT_FULL            (CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_FLOATING_POINT)
+#define CONTEXT_ALL             (CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_FLOATING_POINT | CONTEXT_DEBUG_REGISTERS)
+
+#define CONTEXT_EXCEPTION_ACTIVE 0x8000000
+#define CONTEXT_SERVICE_ACTIVE 0x10000000
+#define CONTEXT_EXCEPTION_REQUEST 0x40000000
+#define CONTEXT_EXCEPTION_REPORTING 0x80000000
+#define CONTEXT_UNWOUND_TO_CALL     0x20000000
+
+#define ARM_MAX_BREAKPOINTS 8
+#define ARM_MAX_WATCHPOINTS 1
 
 typedef struct _NEON128
 {
@@ -231,30 +241,9 @@ typedef struct _NEON128
     LONGLONG High;
 } NEON128, *PNEON128;
 
-#define ARM_MAX_BREAKPOINTS 8
-#define ARM_MAX_WATCHPOINTS 1
-
-typedef struct _CONTEXT
+typedef struct DECLSPEC_ALIGN(8) _CONTEXT
 {
-    /* The flags values within this flag control the contents of
-       a CONTEXT record.
-
-       If the context record is used as an input parameter, then
-       for each portion of the context record controlled by a flag
-       whose value is set, it is assumed that that portion of the
-       context record contains valid context. If the context record
-       is being used to modify a thread's context, then only that
-       portion of the threads context will be modified.
-
-       If the context record is used as an IN OUT parameter to capture
-       the context of a thread, then only those portions of the thread's
-       context corresponding to set flags will be returned.
-
-       The context record is never used as an OUT only parameter. */
     ULONG ContextFlags;
-
-    /* This section is specified/returned if the ContextFlags word contains
-       the flag CONTEXT_INTEGER. */
     ULONG R0;
     ULONG R1;
     ULONG R2;
@@ -268,13 +257,10 @@ typedef struct _CONTEXT
     ULONG R10;
     ULONG R11;
     ULONG R12;
-
     ULONG Sp;
     ULONG Lr;
     ULONG Pc;
     ULONG Cpsr;
-
-    /* Floating Point/NEON Registers */
     ULONG Fpscr;
     ULONG Padding;
     union
@@ -283,13 +269,10 @@ typedef struct _CONTEXT
         ULONGLONG D[32];
         ULONG S[32];
     } DUMMYUNIONNAME;
-
-    /* Debug registers */
     ULONG Bvr[ARM_MAX_BREAKPOINTS];
     ULONG Bcr[ARM_MAX_BREAKPOINTS];
     ULONG Wvr[ARM_MAX_WATCHPOINTS];
     ULONG Wcr[ARM_MAX_WATCHPOINTS];
-
     ULONG Padding2[2];
 } CONTEXT;
 
@@ -298,10 +281,10 @@ typedef struct _CONTEXT
 
 typedef struct _KPCR
 {
-    _ANONYMOUS_UNION union
+    union
     {
         NT_TIB NtTib;
-        _ANONYMOUS_STRUCT struct
+        struct
         {
             ULONG TibPad0[2];
             PVOID Spare1;
@@ -320,13 +303,13 @@ typedef struct _KPCR
     PVOID Unused1[3];
     ULONG KernelReserved[15];
     ULONG SecondLevelCacheSize;
-    _ANONYMOUS_UNION union
+    union
     {
-        USHORT SoftwareInterruptPending; // Software Interrupt Pending Flag
+        USHORT SoftwareInterruptPending;
         struct
         {
-            UCHAR ApcInterrupt;          // 0x01 if APC int pending
-            UCHAR DispatchInterrupt;     // 0x01 if dispatch int pending
+            UCHAR ApcInterrupt;
+            UCHAR DispatchInterrupt;
         };
     };
     USHORT InterruptPad;
@@ -346,13 +329,84 @@ KeGetPcr(VOID)
     return (PKPCR)KIPCR();
 }
 
+/* The processor index is Prcb.Number, at PCR + 0x594 (WDK 16299 KeGetCurrentProcessorIndex). */
+FORCEINLINE
+ULONG
+KeGetCurrentProcessorIndex(VOID)
+{
+    return *(PULONG)(KIPCR() + 0x594);
+}
+
 #if (NTDDI_VERSION < NTDDI_WIN7) || !defined(NT_PROCESSOR_GROUPS)
 FORCEINLINE
 ULONG
 KeGetCurrentProcessorNumber(VOID)
 {
-    return (ULONG)*((PUCHAR)KIPCR() + 0x580);
+    return *(PULONG)(KIPCR() + 0x594);
 }
-#endif /* (NTDDI_VERSION < NTDDI_WIN7) || !defined(NT_PROCESSOR_GROUPS) */
+#endif
 
+typedef struct _KEXCEPTION_FRAME
+{
+    ULONG Param5;
+    ULONG TrapFrame;
+    ULONG OutputBuffer;
+    ULONG OutputLength;
+    ULONG Pad;
+    ULONG R4;
+    ULONG R5;
+    ULONG R6;
+    ULONG R7;
+    ULONG R8;
+    ULONG R9;
+    ULONG R10;
+    ULONG R11;
+    ULONG Return;
+} KEXCEPTION_FRAME, *PKEXCEPTION_FRAME;
+
+typedef struct _KARM_VFP_STATE
+{
+    struct _KARM_VFP_STATE *Link;
+    ULONG Fpscr;
+    ULONG Reserved;
+    ULONG Reserved2;
+    ULONGLONG VfpD[32];
+} KARM_VFP_STATE, *PKARM_VFP_STATE;
+
+#define KTRAP_FRAME_ARGUMENTS (14 * 4)
+
+typedef struct _KTRAP_FRAME
+{
+    ULONG Arg3;
+    ULONG FaultStatus;
+    union
+    {
+        ULONG FaultAddress;
+        ULONG TrapFrame;
+    };
+    ULONG Reserved;
+    UCHAR ExceptionActive;
+    UCHAR ContextFromKFramesUnwound;
+    UCHAR DebugRegistersValid;
+    union
+    {
+        KPROCESSOR_MODE PreviousMode;
+        KIRQL PreviousIrql;
+    };
+    PKARM_VFP_STATE VfpState;
+    ULONG Bvr[ARM_MAX_BREAKPOINTS];
+    ULONG Bcr[ARM_MAX_BREAKPOINTS];
+    ULONG Wvr[ARM_MAX_WATCHPOINTS];
+    ULONG Wcr[ARM_MAX_WATCHPOINTS];
+    ULONG R0;
+    ULONG R1;
+    ULONG R2;
+    ULONG R3;
+    ULONG R12;
+    ULONG Sp;
+    ULONG Lr;
+    ULONG R11;
+    ULONG Pc;
+    ULONG Cpsr;
+} KTRAP_FRAME, *PKTRAP_FRAME;
 $endif (_NTDDK_)

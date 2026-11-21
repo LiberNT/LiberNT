@@ -22,9 +22,60 @@ if((ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64") AND CMAKE_C_COMPILER_ID STRE
     set_property(SOURCE ${REACTOS_SOURCE_DIR}/ntos/ke/crash.c APPEND PROPERTY COMPILE_OPTIONS -Xclang -fasync-exceptions)
 endif()
 
-if(ARCH STREQUAL "arm64")
-    set_property(SOURCE ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/irql.c ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/spinlock.c ${REACTOS_SOURCE_DIR}/ntos/ke/spinlock.c PROPERTY SKIP_PRECOMPILE_HEADERS ON)
-    set_property(SOURCE ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/irql.c ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/spinlock.c ${REACTOS_SOURCE_DIR}/ntos/ke/spinlock.c APPEND PROPERTY COMPILE_DEFINITIONS _NTHALDLL_)
+if(ARCH STREQUAL "arm" OR ARCH STREQUAL "arm64")
+    # The HAL is part of the kernel.
+    add_definitions(-D_NTHALDLL_)
+endif()
+
+if(ARCH STREQUAL "arm" OR ARCH STREQUAL "arm64")
+    set(_arm_hal_common_dir ${REACTOS_SOURCE_DIR}/ntos/hal/armcommon)
+    set(_arm_hal_arch_dir ${REACTOS_SOURCE_DIR}/ntos/hal/${ARCH})
+    set(_arm_hal_sources
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/acpi/halacpi.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/acpi/halpnpdd.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/acpi/tables.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/acpi/acpival.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/acpi/acpifault.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/display.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/efi.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/fdtpnp.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/inttarget.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/memory.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/misc.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/secondary.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/sysinfo_stubs.c
+        ${_arm_hal_common_dir}/acpi/halacpi.c
+        ${_arm_hal_common_dir}/acpi/halpnpdd.c
+        ${_arm_hal_common_dir}/acpi/arm64.c
+        ${_arm_hal_common_dir}/halarm64.c
+        ${_arm_hal_common_dir}/halarm64_acpi_int.c
+        ${_arm_hal_common_dir}/halext.c
+        ${_arm_hal_common_dir}/sysinfo.c
+        ${_arm_hal_common_dir}/devtree.c
+        ${_arm_hal_common_dir}/smp.c
+        ${_arm_hal_arch_dir}/psci.c
+        ${_arm_hal_arch_dir}/start.c
+        ${_arm_hal_common_dir}/kernstubs.c
+        ${_arm_hal_common_dir}/gic/gic_common.c
+        ${_arm_hal_common_dir}/gic/gic_init.c
+        ${_arm_hal_common_dir}/gic/gic_its.c
+        ${_arm_hal_common_dir}/gic/gic_redist.c
+        ${_arm_hal_common_dir}/gic/gicv2.c
+        ${_arm_hal_common_dir}/gic/gicv3.c)
+    if(ARCH STREQUAL "arm")
+        list(APPEND _arm_hal_sources ${_arm_hal_arch_dir}/pciconfig.c)
+    endif()
+    set_property(SOURCE ${_arm_hal_sources} PROPERTY SKIP_PRECOMPILE_HEADERS ON)
+    set_property(SOURCE ${_arm_hal_sources} APPEND PROPERTY COMPILE_DEFINITIONS _NTHAL_)
+    set_property(SOURCE ${_arm_hal_sources} APPEND PROPERTY INCLUDE_DIRECTORIES
+        ${_arm_hal_arch_dir}
+        ${_arm_hal_common_dir}
+        ${_arm_hal_common_dir}/include
+        ${_arm_hal_common_dir}/gic
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/include
+        ${REACTOS_BINARY_DIR}/hal/arch/common)
+    set_source_files_properties(${_arm_hal_common_dir}/acpi/halacpi.c PROPERTIES
+        OBJECT_DEPENDS "${REACTOS_BINARY_DIR}/hal/arch/common/pci_classes.h;${REACTOS_BINARY_DIR}/hal/arch/common/pci_vendors.h")
 endif()
 
 list(APPEND SOURCE
@@ -449,9 +500,14 @@ elseif(ARCH STREQUAL "arm64")
         ${REACTOS_SOURCE_DIR}/ntos/rtl/arm64/ehandler_asm.S
         ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/strcpy.S
         ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/wcscmp.S)
+    list(APPEND ASM_SOURCE
+        ${REACTOS_SOURCE_DIR}/ntos/hal/arm64/smp_trampoline.S)
     if(MSVC)
-        list(APPEND ASM_SOURCE ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/msvc.S)
+        list(APPEND ASM_SOURCE
+            ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/msvc.S
+            ${REACTOS_SOURCE_DIR}/ntos/hal/arm64/psci.S)
     endif()
+    list(APPEND SOURCE ${_arm_hal_sources})
     list(APPEND SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/config/arm64/cmhardwr.c
         ${REACTOS_SOURCE_DIR}/ntos/ex/arm64/init.c
@@ -528,6 +584,29 @@ elseif(ARCH STREQUAL "riscv64")
         ${REACTOS_SOURCE_DIR}/ntos/ps/riscv64/psctx.c
         ${REACTOS_SOURCE_DIR}/ntos/rtl/riscv64/rtlexcpt.c
         ${REACTOS_SOURCE_DIR}/ntos/rtl/riscv64/slist.c)
+elseif(ARCH STREQUAL "arm")
+    list(APPEND ASM_SOURCE
+        ${REACTOS_SOURCE_DIR}/ntos/ke/arm/trap.S)
+    list(APPEND SOURCE ${_arm_hal_sources})
+    list(APPEND SOURCE
+        ${REACTOS_SOURCE_DIR}/ntos/config/arm/cmhardwr.c
+        ${REACTOS_SOURCE_DIR}/ntos/kd64/arm/kdarm.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/dispint.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/idleloop.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/arm/console.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/arm/context.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/arm/cpu.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/arm/interrupt.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/arm/irql.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/arm/kiinit.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/arm/mproc.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/arm/services.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/arm/syscall.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/arm/thrdini.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/arm/trapc.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/arm/usercall.c
+        ${REACTOS_SOURCE_DIR}/ntos/ps/arm/psctx.c
+        ${REACTOS_SOURCE_DIR}/ntos/rtl/arm/rtlexcpt.c)
 elseif(ARCH STREQUAL "ppc")
     list(APPEND ASM_SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/ke/ppc/ctxswitch.S
@@ -562,14 +641,14 @@ elseif(ARCH STREQUAL "ppc")
         ${REACTOS_SOURCE_DIR}/ntos/rtl/ppc/rtlexcpt.c)
 endif()
 
-if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64")
+if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64" OR ARCH STREQUAL "arm")
     list(APPEND SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/ke/callout.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/excdispatch.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/intobj.c)
 endif()
 
-if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64" OR ARCH STREQUAL "riscv64")
+if(NOT ARCH STREQUAL "ppc")
     list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kd64/kdbus.c)
 endif()
 
@@ -583,7 +662,7 @@ if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")
         ${REACTOS_SOURCE_DIR}/ntos/kd64/i386/kdx86common.c)
 endif()
 
-if(ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64")
+if(ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64" OR ARCH STREQUAL "arm")
     list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/ke/spinlock.c)
 endif()
 
@@ -606,6 +685,12 @@ endif()
         endif()
     elseif(ARCH STREQUAL "ppc")
         list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kd/ppc/kdserial.c)
+    elseif(ARCH STREQUAL "arm")
+        list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kd/arm/kdserial.c)
+        if(KDBG)
+            list(APPEND ASM_SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/arm/kdb_help.S)
+            list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kdbg/arm/kdbregs.c)
+        endif()
     elseif(ARCH STREQUAL "riscv64")
         list(APPEND SOURCE ${REACTOS_SOURCE_DIR}/ntos/kd/riscv64/kdserial.c)
         if(KDBG)

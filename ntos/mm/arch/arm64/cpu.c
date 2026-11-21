@@ -158,6 +158,12 @@ MiArchPteWrite(
     }
 }
 
+VOID
+MiArchPteReplaceTable(_Inout_ PMI_PTE Slot, _In_ MI_PTE Value)
+{
+    MiArchPteWrite(Slot, Value);
+}
+
 BOOLEAN
 MiArchPteCompareExchange(
     _Inout_ PMI_PTE Slot,

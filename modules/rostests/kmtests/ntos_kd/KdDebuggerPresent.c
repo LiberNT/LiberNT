@@ -140,7 +140,7 @@ TestBugCheckCallbackList(VOID)
         return;
     }
 
-    Head = (PLIST_ENTRY)(ULONG_PTR)Data->KeBugCheckCallbackListHead;
+    Head = (PLIST_ENTRY)(ULONG_PTR)*(PULONG64)&Data->KeBugCheckCallbackListHead;
     ok(Head != NULL, "KeBugCheckCallbackListHead is NULL\n");
     for (Entry = (Head != NULL) ? Head->Flink : NULL; (Entry != NULL) && (Entry != Head); Entry = Entry->Flink)
     {

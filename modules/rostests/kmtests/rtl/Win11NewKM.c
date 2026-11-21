@@ -39,14 +39,14 @@ NTSYSAPI ULONGLONG NTAPI
 RtlCrc64(const void *, SIZE_T, ULONGLONG);
 
 /* Secure CRT (*_s) exports (sdk/lib/crt/arm64_win11compat.c). */
-int __cdecl memcpy_s(void *, SIZE_T, const void *, SIZE_T);
-int __cdecl strcpy_s(char *, SIZE_T, const char *);
-int __cdecl strcat_s(char *, SIZE_T, const char *);
-int __cdecl sprintf_s(char *, SIZE_T, const char *, ...);
-int __cdecl _snprintf_s(char *, SIZE_T, SIZE_T, const char *, ...);
-int __cdecl swprintf_s(WCHAR *, SIZE_T, const WCHAR *, ...);
+int __cdecl memcpy_s(void *, size_t, const void *, size_t);
+int __cdecl strcpy_s(char *, size_t, const char *);
+int __cdecl strcat_s(char *, size_t, const char *);
+int __cdecl sprintf_s(char *, size_t, const char *, ...);
+int __cdecl _snprintf_s(char *, size_t, size_t, const char *, ...);
+int __cdecl swprintf_s(WCHAR *, size_t, const WCHAR *, ...);
 
-/* HAL processor queries (hal/halarm64/kernstubs.c, forwarded by ntoskrnl). */
+/* HAL processor queries (ntos/hal/armcommon/kernstubs.c). */
 NTSYSAPI ULONG NTAPI HalQueryMaximumProcessorCount(VOID);
 NTSYSAPI BOOLEAN NTAPI HalIsHyperThreadingEnabled(VOID);
 NTSYSAPI NTSTATUS NTAPI

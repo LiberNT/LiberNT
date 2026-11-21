@@ -59,6 +59,13 @@ static const struct context_copy_range RtlpCopyRangesArm64[] =
     {0x4, 0x1}, {0x8, 0x2}, {0x98, 0x10}, {0xa0, 0x2}, {0xf0, 0x1}, {0x110, 0x4},
     {0x318, 0x8}, {0x390, 0}
 };
+
+/* ARM CONTEXT (winnt.h): R0-R12, Sp/Lr/Pc/Cpsr, Fpscr and D0-D31, debug registers; 0x1a0 bytes. */
+#define RTLP_CONTEXT_ARM 0x00200000
+static const struct context_copy_range RtlpCopyRangesArm[] =
+{
+    {0x4, 0x2}, {0x38, 0x1}, {0x48, 0x4}, {0x150, 0x8}, {0x198, 0}, {0x1a0, 0}
+};
 #endif
 
 static const struct context_parameters
@@ -107,6 +114,17 @@ static const struct context_parameters
         TYPE_ALIGNMENT(ARM64_NT_CONTEXT) - 1,
         FIELD_OFFSET(ARM64_NT_CONTEXT, ContextFlags),
         RtlpCopyRangesArm64
+    },
+    {
+        RTLP_CONTEXT_ARM,
+        0xf8000000 | RTLP_CONTEXT_ARM | 0xf,
+        0x1a0,
+        0x1a0,
+        0x18,
+        7,
+        7,
+        0,
+        RtlpCopyRangesArm
     }
 #endif
 };
@@ -445,8 +463,10 @@ RtlCopyContext(PCONTEXT Destination,
     ULONG ArchFlag, ContextSize, FlagsOffset, DestinationFlags, SourceFlags;
 
 #ifdef __REACTOS__
-    if (ContextFlags & CONTEXT_ARM64)
+    if (ContextFlags & (CONTEXT_ARM64 | RTLP_CONTEXT_ARM))
     {
+        const ULONG ArmMask = ArchMask | CONTEXT_ARM64 | RTLP_CONTEXT_ARM;
+
         Parameters = RtlpGetContextParameters(ContextFlags);
         if (!Parameters)
             return STATUS_INVALID_PARAMETER;
@@ -455,8 +475,8 @@ RtlCopyContext(PCONTEXT Destination,
 
         DestinationFlags = *(PULONG)(DestinationBytes + Parameters->flags_offset);
         SourceFlags = *(PULONG)(SourceBytes + Parameters->flags_offset);
-        if ((DestinationFlags & (ArchMask | CONTEXT_ARM64)) != CONTEXT_ARM64 ||
-            (SourceFlags & (ArchMask | CONTEXT_ARM64)) != CONTEXT_ARM64)
+        if ((DestinationFlags & ArmMask) != Parameters->arch_flag ||
+            (SourceFlags & ArmMask) != Parameters->arch_flag)
             return STATUS_INVALID_PARAMETER;
 
         ContextFlags &= SourceFlags & ~(CONTEXT_EXCEPTION_ACTIVE | CONTEXT_SERVICE_ACTIVE | CONTEXT_EXCEPTION_REPORTING);

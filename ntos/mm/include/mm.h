@@ -14,6 +14,24 @@
 #include <mm/include/mivad.h>
 #include <mm/include/miasync.h>
 
+/* Session space is SessionTopLevelEntries entries of the level SessionLevelDepth below the top. */
+FORCEINLINE
+LONG
+MiSessionLevel(
+    _In_ const MI_ARCH_DESCRIPTOR *Arch)
+{
+    MI_ASSERT(Arch->SessionLevelDepth <= 1 && Arch->SessionLevelDepth < Arch->PagingLevels);
+    return (LONG)Arch->PagingLevels - 1 - (LONG)Arch->SessionLevelDepth;
+}
+
+FORCEINLINE
+ULONG64
+MiSessionSpan(
+    _In_ const MI_ARCH_DESCRIPTOR *Arch)
+{
+    return 1ULL << Arch->Level[MiSessionLevel(Arch)].Shift;
+}
+
 struct _MI_SYSTEM;
 struct _MI_SECTION_VIEW;
 

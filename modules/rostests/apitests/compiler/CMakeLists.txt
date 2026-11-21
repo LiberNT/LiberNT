@@ -10,6 +10,7 @@ list(APPEND SOURCE
     pseh.c
     pseh_cpp.cpp
     psehtest2.c
+    seh_context.c
     testlist.c)
 
 add_executable(compiler_apitest ${SOURCE})

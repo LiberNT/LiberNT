@@ -211,12 +211,12 @@ TestLegacyView(_In_ WORD GroupCount, _In_reads_(GroupCount) const DWORD *GroupSi
     Success = GetProcessAffinityMask(GetCurrentProcess(), &ProcessMask, &SystemMask);
     ok(Success, "GetProcessAffinityMask failed: %lu\n", GetLastError());
     ok(SystemMask != 0 && (ProcessMask & ~SystemMask) == 0,
-       "Process mask 0x%Ix is not within the system mask 0x%Ix\n", ProcessMask, SystemMask);
-    ok(SystemMask == (GroupSizes[Affinity.Group] == 64 ? ~(DWORD_PTR)0 : ((DWORD_PTR)1 << GroupSizes[Affinity.Group]) - 1),
+       "Process mask 0x%Ix is not within the system mask 0x%Ix\n", (size_t)ProcessMask, (size_t)SystemMask);
+    ok(SystemMask == (GroupSizes[Affinity.Group] >= sizeof(DWORD_PTR) * 8 ? ~(DWORD_PTR)0 : ((DWORD_PTR)1 << GroupSizes[Affinity.Group]) - 1),
        "The system mask is 0x%Ix, the thread's group %u has %lu processors\n",
-       SystemMask, Affinity.Group, GroupSizes[Affinity.Group]);
+       (size_t)SystemMask, Affinity.Group, GroupSizes[Affinity.Group]);
     trace("PROCESSOR_GROUPS thread_group=%u thread_mask=0x%Ix system_mask=0x%Ix\n",
-          Affinity.Group, (DWORD_PTR)Affinity.Mask, SystemMask);
+          Affinity.Group, (size_t)Affinity.Mask, (size_t)SystemMask);
 }
 
 static VOID
@@ -261,7 +261,7 @@ TestVisitEveryProcessor(_In_ WORD GroupCount, _In_reads_(GroupCount) const DWORD
             Success = GetThreadGroupAffinity(GetCurrentThread(), &Readback);
             ok(Success && Readback.Group == Group && Readback.Mask == Affinity.Mask,
                "Set (%u, 0x%Ix), read back (%u, 0x%Ix)\n",
-               Group, (DWORD_PTR)Affinity.Mask, Readback.Group, (DWORD_PTR)Readback.Mask);
+               Group, (size_t)Affinity.Mask, Readback.Group, (size_t)Readback.Mask);
             Visited++;
         }
     }

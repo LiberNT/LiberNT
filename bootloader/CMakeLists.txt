@@ -53,7 +53,19 @@ function(bootloader_efi_application _target _entry)
         set_subsystem(${_target} 10)
     endif()
 
-    set_entrypoint(${_target} ${_entry})
+    if(ARCH STREQUAL "arm")
+        add_asm_files(${_target}_entry_asm ${REACTOS_SOURCE_DIR}/bootloader/arch/arm/efientry.S)
+        target_sources(${_target} PRIVATE ${${_target}_entry_asm})
+        target_compile_definitions(${_target} PRIVATE ARM_EFI_ENTRY=${_entry})
+        set_entrypoint(${_target} ArmEfiEntry)
+    else()
+        set_entrypoint(${_target} ${_entry})
+    endif()
+    if(ARCH STREQUAL "arm")
+        add_custom_command(TARGET ${_target} POST_BUILD
+            COMMAND native-pefixup --efi $<TARGET_FILE:${_target}>)
+        set_property(TARGET ${_target} APPEND PROPERTY LINK_DEPENDS $<TARGET_PROPERTY:native-pefixup,IMPORTED_LOCATION>)
+    endif()
     target_link_libraries(${_target} bootlib blcmlib blrtl libcntpr)
     if(RUNTIME_CHECKS)
         target_link_libraries(${_target} runtmchk)
@@ -110,6 +122,8 @@ elseif(ARCH STREQUAL "arm64")
     list(APPEND BOOTLIB_SOURCE arch/arm64/stubs.c)
 elseif(ARCH STREQUAL "ppc")
     list(APPEND BOOTLIB_SOURCE arch/ppc/stubs.c)
+elseif(ARCH STREQUAL "arm")
+    list(APPEND BOOTLIB_SOURCE arch/arm/stubs.c)
 elseif(ARCH STREQUAL "amd64" OR ARCH STREQUAL "i386")
     list(APPEND BOOTLIB_SOURCE arch/x86/comport.c)
 endif()
@@ -229,7 +243,7 @@ if(ARCH STREQUAL "arm64")
         arch/arm64/applesmbios.c
         arch/arm64/archmm.c
         arch/arm64/early_uart.c
-        arch/arm64/fdtacpi.c
+        uefi/fdtacpi.c
         arch/arm64/gic.c
         arch/arm64/macharm64.c
         arch/arm64/mmu_v2.c
@@ -238,6 +252,13 @@ if(ARCH STREQUAL "arm64")
         arch/arm64/uefitrap.c
         arch/arm64/watchdog.c
         arch/arm64/winldr.c)
+elseif(ARCH STREQUAL "arm")
+    list(APPEND WINLOAD_ASM_SOURCE
+        arch/arm/uefiasm.S)
+
+    list(APPEND WINLOAD_SOURCE
+        arch/arm/archosl.c
+        uefi/fdtacpi.c)
 elseif(ARCH STREQUAL "riscv64")
     list(APPEND WINLOAD_ASM_SOURCE
         arch/riscv64/uefiasm.S)

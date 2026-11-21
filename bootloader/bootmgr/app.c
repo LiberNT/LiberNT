@@ -106,7 +106,8 @@ BmStartApplication(
     }
 
     if (!NT_SUCCESS(RtlImageNtHeaderEx(0, Image, Size, &NtHeaders)) ||
-        NtHeaders->FileHeader.Machine != IMAGE_FILE_MACHINE_NATIVE ||
+        ((NtHeaders->FileHeader.Machine != IMAGE_FILE_MACHINE_NATIVE) &&
+         (NtHeaders->FileHeader.Machine != FwApplicationMachine)) ||
         BmImageChecksum(Image, Size, NtHeaders->OptionalHeader.CheckSum) !=
             NtHeaders->OptionalHeader.CheckSum)
     {

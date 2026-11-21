@@ -345,7 +345,7 @@ TestDeviceCreated(
 
     /* Check the device object members */
     ok(DeviceObject->Type == 3, "Expected Type = 3, got %x\n", DeviceObject->Type);
-#ifdef _M_IX86
+#ifndef _WIN64
     ok(DeviceObject->Size == 0xb8, "Expected Size = 0xb8, got 0x%x\n", DeviceObject->Size);
 #else
     ok(DeviceObject->Size == 0x150, "Expected Size = 0x150, got 0x%x\n", DeviceObject->Size);
@@ -399,7 +399,7 @@ TestDeviceDeletion(
 
     /* Check the device object members */
     ok(DeviceObject->Type == 3, "Expected Type = 3, got %d\n", DeviceObject->Type);
-#ifdef _M_IX86
+#ifndef _WIN64
     ok(DeviceObject->Size == 0xb8, "Expected Size = 0xb8, got 0x%x\n", DeviceObject->Size);
 #else
     ok(DeviceObject->Size == 0x150, "Expected Size = 0x150, got 0x%x\n", DeviceObject->Size);

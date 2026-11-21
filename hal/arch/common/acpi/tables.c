@@ -571,6 +571,18 @@ HaliGetCachedAcpiTable(
     return TableHeader;
 }
 
+/*
+ * The boot loader describes a platform that only has a device tree with ACPI
+ * tables of its own: processors, interrupt controller and timers, no devices.
+ */
+BOOLEAN
+NTAPI
+HalpAcpiFirmwareDescribesDevices(VOID)
+{
+    return HalAcpiGetTable(NULL, FADT_SIGNATURE) != NULL &&
+           HaliGetCachedAcpiTable(FADT_SIGNATURE, "LBRNT", "DTPLATFM") == NULL;
+}
+
 static
 NTSTATUS
 HalpAcpiFindRsdtPhase0(IN PLOADER_PARAMETER_BLOCK LoaderBlock,

@@ -9,9 +9,11 @@
 #include <apitest.h>
 
 extern void func_FdtPnp(void);
+extern void func_FdtTranslate(void);
 
 const struct test winetest_testlist[] =
 {
     { "FdtPnp", func_FdtPnp },
+    { "FdtTranslate", func_FdtTranslate },
     { 0, 0 }
 };

@@ -55,6 +55,10 @@ if(NVS)
         ${REACTOS_SOURCE_DIR}/ntos/cc/api/*.c
         ${REACTOS_SOURCE_DIR}/ntos/cc/backing/*.c)
 
+    if(ARCH STREQUAL "arm")
+        # ARMv7 LPAE descriptors use the arm64 4K-granule format.
+        list(APPEND NVS_SOURCE ${REACTOS_SOURCE_DIR}/ntos/mm/arch/arm64/pte.c)
+    endif()
     list(APPEND SOURCE ${NVS_SOURCE})
     include(mm/check-standalone.cmake)
     nvs_assert_standalone(${SOURCE} ${ASM_SOURCE})
@@ -125,7 +129,13 @@ if(ARCH STREQUAL "arm64")
     target_link_libraries(ntoskrnl rtl_kernel_context)
 endif()
 
-source_group(TREE ${REACTOS_SOURCE_DIR}/ntos PREFIX "Source Files" FILES ${NTOSKRNL_SOURCE})
+if(ARCH STREQUAL "arm" OR ARCH STREQUAL "arm64")
+    target_link_libraries(ntoskrnl halcommon)
+endif()
+
+set(_ntoskrnl_tree_source ${NTOSKRNL_SOURCE})
+list(FILTER _ntoskrnl_tree_source INCLUDE REGEX "^${REACTOS_SOURCE_DIR}/ntos/")
+source_group(TREE ${REACTOS_SOURCE_DIR}/ntos PREFIX "Source Files" FILES ${_ntoskrnl_tree_source})
 
 target_link_libraries(ntoskrnl cportlib csq ${PSEH_LIB} apisets arblib cmlib ntlsalib rtl cryptlib symz libcntpr setjmp wdmguid poguid ioevent)
 
@@ -139,7 +149,12 @@ if(STACK_PROTECTOR)
     target_link_libraries(ntoskrnl gcc_ssp_nt)
 endif()
 
-add_importlibs(ntoskrnl hal kdcom bootvid)
+if(ARCH STREQUAL "arm" OR ARCH STREQUAL "arm64")
+    # The ARM HALs are part of the kernel; hal.dll forwards to them.
+    add_importlibs(ntoskrnl kdcom bootvid)
+else()
+    add_importlibs(ntoskrnl hal kdcom bootvid)
+endif()
 if(NOT (CMAKE_C_COMPILER_ID STREQUAL "GNU" AND ARCH STREQUAL "i386"))
     add_pch(ntoskrnl ${REACTOS_SOURCE_DIR}/ntos/include/ntoskrnl.h "${PCH_SKIP_SOURCE}")
 endif()

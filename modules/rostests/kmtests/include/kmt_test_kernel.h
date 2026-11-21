@@ -140,6 +140,10 @@ BOOLEAN KmtAreInterruptsEnabled(VOID)
     __asm__ __volatile__("mrs %0, daif" : "=r"(Daif));
     return (Daif & 0x80) == 0;
 #endif
+#elif defined(_M_ARM)
+    ULONG Cpsr;
+    __asm__ __volatile__("mrs %0, cpsr" : "=r"(Cpsr));
+    return (Cpsr & 0x80) == 0;
 #elif defined(_M_RISCV64)
     ULONG_PTR Status;
     __asm__ __volatile__("csrr %0, sstatus" : "=r"(Status));
