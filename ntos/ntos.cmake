@@ -28,8 +28,9 @@ if(ARCH STREQUAL "arm" OR ARCH STREQUAL "arm64")
 endif()
 
 if(ARCH STREQUAL "arm64")
-    set(_arm64_hal_dir ${REACTOS_SOURCE_DIR}/ntos/hal/arm64)
-    set(_arm64_hal_sources
+    set(_arm_hal_common_dir ${REACTOS_SOURCE_DIR}/ntos/hal/armcommon)
+    set(_arm_hal_arch_dir ${REACTOS_SOURCE_DIR}/ntos/hal/${ARCH})
+    set(_arm_hal_sources
         ${REACTOS_SOURCE_DIR}/hal/arch/common/acpi/halacpi.c
         ${REACTOS_SOURCE_DIR}/hal/arch/common/acpi/halpnpdd.c
         ${REACTOS_SOURCE_DIR}/hal/arch/common/acpi/tables.c
@@ -43,33 +44,34 @@ if(ARCH STREQUAL "arm64")
         ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/misc.c
         ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/secondary.c
         ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/sysinfo_stubs.c
-        ${_arm64_hal_dir}/acpi/halacpi.c
-        ${_arm64_hal_dir}/acpi/halpnpdd.c
-        ${_arm64_hal_dir}/acpi/arm64.c
-        ${_arm64_hal_dir}/halarm64.c
-        ${_arm64_hal_dir}/halarm64_acpi_int.c
-        ${_arm64_hal_dir}/halext.c
-        ${_arm64_hal_dir}/sysinfo.c
-        ${_arm64_hal_dir}/devtree.c
-        ${_arm64_hal_dir}/smp.c
-        ${_arm64_hal_dir}/arch/${ARCH}/psci.c
-        ${_arm64_hal_dir}/arch/${ARCH}/start.c
-        ${_arm64_hal_dir}/kernstubs.c
-        ${_arm64_hal_dir}/gic/gic_common.c
-        ${_arm64_hal_dir}/gic/gic_init.c
-        ${_arm64_hal_dir}/gic/gic_its.c
-        ${_arm64_hal_dir}/gic/gic_redist.c
-        ${_arm64_hal_dir}/gic/gicv2.c
-        ${_arm64_hal_dir}/gic/gicv3.c)
-    set_property(SOURCE ${_arm64_hal_sources} PROPERTY SKIP_PRECOMPILE_HEADERS ON)
-    set_property(SOURCE ${_arm64_hal_sources} APPEND PROPERTY COMPILE_DEFINITIONS _NTHAL_)
-    set_property(SOURCE ${_arm64_hal_sources} APPEND PROPERTY INCLUDE_DIRECTORIES
-        ${_arm64_hal_dir}/arch/${ARCH}
-        ${_arm64_hal_dir}/include
-        ${_arm64_hal_dir}/gic
+        ${_arm_hal_common_dir}/acpi/halacpi.c
+        ${_arm_hal_common_dir}/acpi/halpnpdd.c
+        ${_arm_hal_common_dir}/acpi/arm64.c
+        ${_arm_hal_common_dir}/halarm64.c
+        ${_arm_hal_common_dir}/halarm64_acpi_int.c
+        ${_arm_hal_common_dir}/halext.c
+        ${_arm_hal_common_dir}/sysinfo.c
+        ${_arm_hal_common_dir}/devtree.c
+        ${_arm_hal_common_dir}/smp.c
+        ${_arm_hal_arch_dir}/psci.c
+        ${_arm_hal_arch_dir}/start.c
+        ${_arm_hal_common_dir}/kernstubs.c
+        ${_arm_hal_common_dir}/gic/gic_common.c
+        ${_arm_hal_common_dir}/gic/gic_init.c
+        ${_arm_hal_common_dir}/gic/gic_its.c
+        ${_arm_hal_common_dir}/gic/gic_redist.c
+        ${_arm_hal_common_dir}/gic/gicv2.c
+        ${_arm_hal_common_dir}/gic/gicv3.c)
+    set_property(SOURCE ${_arm_hal_sources} PROPERTY SKIP_PRECOMPILE_HEADERS ON)
+    set_property(SOURCE ${_arm_hal_sources} APPEND PROPERTY COMPILE_DEFINITIONS _NTHAL_)
+    set_property(SOURCE ${_arm_hal_sources} APPEND PROPERTY INCLUDE_DIRECTORIES
+        ${_arm_hal_arch_dir}
+        ${_arm_hal_common_dir}
+        ${_arm_hal_common_dir}/include
+        ${_arm_hal_common_dir}/gic
         ${REACTOS_SOURCE_DIR}/hal/arch/common/include
         ${REACTOS_BINARY_DIR}/hal/arch/common)
-    set_source_files_properties(${_arm64_hal_dir}/acpi/halacpi.c PROPERTIES
+    set_source_files_properties(${_arm_hal_common_dir}/acpi/halacpi.c PROPERTIES
         OBJECT_DEPENDS "${REACTOS_BINARY_DIR}/hal/arch/common/pci_classes.h;${REACTOS_BINARY_DIR}/hal/arch/common/pci_vendors.h")
 endif()
 
@@ -496,13 +498,13 @@ elseif(ARCH STREQUAL "arm64")
         ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/strcpy.S
         ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/wcscmp.S)
     list(APPEND ASM_SOURCE
-        ${REACTOS_SOURCE_DIR}/ntos/hal/arm64/arch/arm64/smp_trampoline.S)
+        ${REACTOS_SOURCE_DIR}/ntos/hal/arm64/smp_trampoline.S)
     if(MSVC)
         list(APPEND ASM_SOURCE
             ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/msvc.S
-            ${REACTOS_SOURCE_DIR}/ntos/hal/arm64/arch/arm64/psci.S)
+            ${REACTOS_SOURCE_DIR}/ntos/hal/arm64/psci.S)
     endif()
-    list(APPEND SOURCE ${_arm64_hal_sources})
+    list(APPEND SOURCE ${_arm_hal_sources})
     list(APPEND SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/config/arm64/cmhardwr.c
         ${REACTOS_SOURCE_DIR}/ntos/ex/arm64/init.c

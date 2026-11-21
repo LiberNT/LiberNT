@@ -2,7 +2,7 @@
 add_definitions(-D_NTHAL_)
 
 include_directories(
-    ${REACTOS_SOURCE_DIR}/ntos/hal/arm64/include
+    ${REACTOS_SOURCE_DIR}/ntos/hal/armcommon/include
     ${REACTOS_SOURCE_DIR}/hal/arch/common/include)
 
 add_library(halextlib STATIC lib/halextlib.c)
