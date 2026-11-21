@@ -418,7 +418,7 @@ HeldCallback(
     if (InterlockedIncrement(&HeldCallbackCalls) != 1)
         return;
     KeSetEvent(&HeldCallbackEntered, IO_NO_INCREMENT, FALSE);
-    for (Waited = 0; Waited < 200000 && ReadAcquire(&HeldCallbackRelease) == 0; Waited += 10)
+    for (Waited = 0; Waited < 2000000 && ReadAcquire(&HeldCallbackRelease) == 0; Waited += 10)
         KeStallExecutionProcessor(10);
     WriteRelease(&HeldCallbackDone, 1);
 }
@@ -507,7 +507,10 @@ TestDeleteWaitsForEarlierExpiry(VOID)
         KeDelayExecutionThread(KernelMode, FALSE, &Timeout);
     Timeout.QuadPart = -10 * 1000 * 20;
     KeDelayExecutionThread(KernelMode, FALSE, &Timeout);
-    ok_eq_long(ReadAcquire(&DeleterReturned), 0);
+    if (ReadAcquire(&HeldCallbackDone) == 0)
+        ok_eq_long(ReadAcquire(&DeleterReturned), 0);
+    else
+        skip(FALSE, "the callback stopped holding before the delete could be observed waiting\n");
 
     WriteRelease(&HeldCallbackRelease, 1);
     Timeout.QuadPart = -10 * 1000 * 1000;
