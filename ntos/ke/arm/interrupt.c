@@ -18,7 +18,16 @@
 #define CNT_CTL_ENABLE  0x1
 #define CNT_CTL_ISTATUS 0x4
 
-static PKINTERRUPT KiArmInterruptChain[KI_ARM_INTERRUPT_VECTORS];
+#define KI_ARM_INTERRUPT_TABLE_TAG 'tnIK'
+
+/*
+ * An interrupt object belongs to one processor, so every processor has its own
+ * table of chains. A table is published once and never freed; a chain is
+ * changed on its processor with interrupts masked, where its dispatcher cannot
+ * be walking it.
+ */
+static PKINTERRUPT *KiArmInterruptTable[MAXIMUM_PROCESSORS];
+static USHORT KiArmInterruptConnections[KI_ARM_INTERRUPT_VECTORS];
 static KSPIN_LOCK KiArmInterruptLock;
 static ULONG KiArmTimerReload;
 static ULONGLONG KiArmClockDeadline[MAXIMUM_PROCESSORS];
@@ -67,6 +76,17 @@ KiArmClockInterrupt(
     return TRUE;
 }
 
+FORCEINLINE
+PKINTERRUPT
+KiArmInterruptHead(
+    _In_ ULONG Vector)
+{
+    PKINTERRUPT *Table = KiArmInterruptTable[KeGetCurrentProcessorNumber()];
+
+    ASSERT(Vector < KI_ARM_INTERRUPT_VECTORS);
+    return Table ? Table[Vector] : NULL;
+}
+
 /* Run every interrupt object connected to a vector; the IRQL is already raised. */
 static
 VOID
@@ -83,7 +103,7 @@ KiArmServiceInterruptVector(
     if (Vector >= KI_ARM_INTERRUPT_VECTORS)
         return;
 
-    Head = KiArmInterruptChain[Vector];
+    Head = KiArmInterruptHead(Vector);
     if (!Head)
         return;
 
@@ -136,7 +156,7 @@ KiArmInterruptDispatch(
         }
         else
         {
-            Head = KiArmInterruptChain[Vector];
+            Head = KiArmInterruptHead(Vector);
             Irql = Head ? Head->Irql : DISPATCH_LEVEL;
         }
 
@@ -165,9 +185,11 @@ NTAPI
 KeConnectInterrupt(
     _Inout_ PKINTERRUPT Interrupt)
 {
+    PKINTERRUPT *Table, *NewTable = NULL;
     PKINTERRUPT Head;
-    BOOLEAN Connected = FALSE;
-    ULONG Vector;
+    KAFFINITY PreviousAffinity = 0;
+    BOOLEAN Connected, Enabled, RestoreAffinity = FALSE;
+    ULONG Vector, Cpu;
     KIRQL OldIrql;
 
     if (!Interrupt || !Interrupt->ServiceRoutine || (Interrupt->Vector < 16))
@@ -177,7 +199,8 @@ KeConnectInterrupt(
         return KiConnectPassiveInterrupt(Interrupt);
 
     Vector = Interrupt->Vector;
-    if ((Vector < 16) || (Vector >= KI_ARM_INTERRUPT_VECTORS) ||
+    Cpu = (UCHAR)Interrupt->Number;
+    if ((Vector >= KI_ARM_INTERRUPT_VECTORS) || (Cpu >= MAXIMUM_PROCESSORS) ||
         (Interrupt->Irql <= DISPATCH_LEVEL) ||
         (Interrupt->SynchronizeIrql < Interrupt->Irql) ||
         (Interrupt->SynchronizeIrql > HIGH_LEVEL))
@@ -185,18 +208,52 @@ KeConnectInterrupt(
         return FALSE;
     }
 
+    if (!KiArmInterruptTable[Cpu])
+    {
+        NewTable = ExAllocatePoolZero(NonPagedPool,
+                                      KI_ARM_INTERRUPT_VECTORS * sizeof(PKINTERRUPT),
+                                      KI_ARM_INTERRUPT_TABLE_TAG);
+        if (!NewTable)
+            return FALSE;
+    }
+
+    if (KeGetCurrentIrql() < DISPATCH_LEVEL)
+    {
+        PreviousAffinity = KeSetSystemAffinityThreadEx((KAFFINITY)1 << Cpu);
+        RestoreAffinity = TRUE;
+    }
+    else if (Cpu != KeGetCurrentProcessorNumber())
+    {
+        if (NewTable)
+            ExFreePoolWithTag(NewTable, KI_ARM_INTERRUPT_TABLE_TAG);
+        return FALSE;
+    }
+
     KeAcquireSpinLock(&KiArmInterruptLock, &OldIrql);
+    ASSERT(KeGetCurrentProcessorNumber() == Cpu);
+    if (!KiArmInterruptTable[Cpu])
+    {
+        KeMemoryBarrier();
+        KiArmInterruptTable[Cpu] = NewTable;
+        NewTable = NULL;
+    }
+
+    Table = KiArmInterruptTable[Cpu];
     if (!Interrupt->Connected)
     {
-        Head = KiArmInterruptChain[Vector];
+        Head = Table[Vector];
         if (!Head)
         {
             InitializeListHead(&Interrupt->InterruptListEntry);
             HalArm64ConnectInterrupt(Vector);
-            if (HalEnableSystemInterrupt(Vector, Interrupt->Irql, Interrupt->Mode))
+            if (((Vector >= 32) && (KiArmInterruptConnections[Vector] != 0)) ||
+                HalEnableSystemInterrupt(Vector, Interrupt->Irql, Interrupt->Mode))
             {
+                ASSERT(KiArmInterruptConnections[Vector] != MAXUSHORT);
+                KiArmInterruptConnections[Vector]++;
                 Interrupt->Connected = TRUE;
-                KiArmInterruptChain[Vector] = Interrupt;
+                KeMemoryBarrier();
+                Table[Vector] = Interrupt;
             }
             else
             {
@@ -206,12 +263,19 @@ KeConnectInterrupt(
         else if (Interrupt->ShareVector && Head->ShareVector &&
                  (Interrupt->Mode == Head->Mode) && (Interrupt->Irql == Head->Irql))
         {
+            Enabled = KeDisableInterrupts();
             InsertTailList(&Head->InterruptListEntry, &Interrupt->InterruptListEntry);
             Interrupt->Connected = TRUE;
+            KeRestoreInterrupts(Enabled);
         }
     }
     Connected = Interrupt->Connected;
     KeReleaseSpinLock(&KiArmInterruptLock, OldIrql);
+
+    if (RestoreAffinity)
+        KeRevertToUserAffinityThreadEx(PreviousAffinity);
+    if (NewTable)
+        ExFreePoolWithTag(NewTable, KI_ARM_INTERRUPT_TABLE_TAG);
     return Connected;
 }
 
@@ -220,9 +284,11 @@ NTAPI
 KeDisconnectInterrupt(
     _Inout_ PKINTERRUPT Interrupt)
 {
+    PKINTERRUPT *Table;
     PKINTERRUPT Head;
-    BOOLEAN Connected;
-    ULONG Vector;
+    KAFFINITY PreviousAffinity = 0;
+    BOOLEAN Connected, Enabled, RestoreAffinity = FALSE;
+    ULONG Vector, Cpu;
     KIRQL OldIrql;
 
     if (Interrupt && (Interrupt->Irql == PASSIVE_LEVEL))
@@ -232,31 +298,55 @@ KeDisconnectInterrupt(
         return FALSE;
 
     Vector = Interrupt->Vector;
+    Cpu = (UCHAR)Interrupt->Number;
+    if ((Cpu >= MAXIMUM_PROCESSORS) || !KiArmInterruptTable[Cpu])
+        return FALSE;
+
+    if (KeGetCurrentIrql() < DISPATCH_LEVEL)
+    {
+        PreviousAffinity = KeSetSystemAffinityThreadEx((KAFFINITY)1 << Cpu);
+        RestoreAffinity = TRUE;
+    }
+    else if (Cpu != KeGetCurrentProcessorNumber())
+    {
+        return FALSE;
+    }
+
     KeAcquireSpinLock(&KiArmInterruptLock, &OldIrql);
+    ASSERT(KeGetCurrentProcessorNumber() == Cpu);
+    Table = KiArmInterruptTable[Cpu];
     Connected = Interrupt->Connected;
-    Head = KiArmInterruptChain[Vector];
+    Head = Table[Vector];
     if (Connected && Head)
     {
+        Enabled = KeDisableInterrupts();
         if (IsListEmpty(&Head->InterruptListEntry))
         {
             ASSERT(Head == Interrupt);
+            ASSERT(KiArmInterruptConnections[Vector] != 0);
+            Table[Vector] = NULL;
+            KiArmInterruptConnections[Vector]--;
             HalArm64DisconnectInterrupt(Vector);
-            HalDisableSystemInterrupt(Vector, Interrupt->Irql);
-            KiArmInterruptChain[Vector] = NULL;
+            if ((Vector < 32) || (KiArmInterruptConnections[Vector] == 0))
+                HalDisableSystemInterrupt(Vector, Interrupt->Irql);
         }
         else
         {
             if (Head == Interrupt)
             {
-                KiArmInterruptChain[Vector] = CONTAINING_RECORD(Interrupt->InterruptListEntry.Flink,
-                                                                KINTERRUPT, InterruptListEntry);
+                Table[Vector] = CONTAINING_RECORD(Interrupt->InterruptListEntry.Flink,
+                                                  KINTERRUPT, InterruptListEntry);
             }
             RemoveEntryList(&Interrupt->InterruptListEntry);
         }
         InitializeListHead(&Interrupt->InterruptListEntry);
         Interrupt->Connected = FALSE;
+        KeRestoreInterrupts(Enabled);
     }
     KeReleaseSpinLock(&KiArmInterruptLock, OldIrql);
+
+    if (RestoreAffinity)
+        KeRevertToUserAffinityThreadEx(PreviousAffinity);
     return Connected;
 }
 
@@ -328,7 +418,7 @@ KeDispatchSecondaryInterrupt(
         OldIrql = KfRaiseIrql(DISPATCH_LEVEL);
         Raised = TRUE;
     }
-    Connected = KiArmInterruptChain[Vector] != NULL;
+    Connected = KiArmInterruptHead(Vector) != NULL;
     if (Connected)
         KiArmServiceInterruptVector(Vector, NULL);
     if (Raised)
