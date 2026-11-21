@@ -963,4 +963,12 @@ typedef struct _HTTP_REQUEST_V1 * PHTTP_REQUEST_V1;
 typedef ULONG HTTP_SERVICE_CONFIG_CACHE_PARAM;
 typedef ULONG * PHTTP_SERVICE_CONFIG_CACHE_PARAM;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+ULONG WINAPI HttpShutdownRequestQueue(HANDLE RequestQueueHandle);
+#ifdef __cplusplus
+}
+#endif
+
 #endif  /* __WINE_HTTP_H */

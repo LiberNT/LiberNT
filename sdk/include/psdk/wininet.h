@@ -2877,4 +2877,12 @@ typedef enum WPAD_CACHE_DELETE {
     WPAD_CACHE_DELETE_ALL = 1
 } WPAD_CACHE_DELETE;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+BOOL WINAPI DeleteWpadCacheForNetworks(WPAD_CACHE_DELETE);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* _WINE_WININET_H_ */

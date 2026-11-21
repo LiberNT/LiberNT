@@ -1064,4 +1064,16 @@ HRESULT WINAPI SHGetStockIconInfo(SHSTOCKICONID siid, UINT uFlags, _Inout_ SHSTO
 #define SHGNLI_USEURLEXT 0x000000020
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+HICON WINAPI DuplicateIcon(HINSTANCE hInst, HICON hIcon);
+HRESULT WINAPI SHLoadNonloadedIconOverlayIdentifiers(void);
+HRESULT WINAPI SHIsFileAvailableOffline(PCWSTR pwszPath, DWORD * pdwStatus);
+BOOL WINAPI IsLFNDriveA(LPCSTR pszPath);
+BOOL WINAPI IsLFNDriveW(LPCWSTR pszPath);
+#ifdef __cplusplus
+}
+#endif
+
 #endif

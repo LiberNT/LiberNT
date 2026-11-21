@@ -651,4 +651,13 @@ typedef REMOTE_NAME_INFOA REMOTE_NAME_INFO,*LPREMOTE_NAME_INFO;
 #define RESOURCEDISPLAYTYPE_NDSCONTAINER 0x0000000B
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+DWORD WINAPI WNetGetResourceParentA(LPNETRESOURCEA lpNetResource, LPVOID lpBuffer, LPDWORD lpcbBuffer);
+DWORD WINAPI WNetGetResourceParentW(LPNETRESOURCEW lpNetResource, LPVOID lpBuffer, LPDWORD lpcbBuffer);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* _WINNETWK_ */

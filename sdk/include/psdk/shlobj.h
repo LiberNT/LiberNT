@@ -3009,4 +3009,12 @@ enum {
     DBCID_UPDATESIZE = 5
 };
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+void WINAPI PathQualify(PWSTR psz);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* __WINE_SHLOBJ_H */

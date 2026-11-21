@@ -136,4 +136,17 @@ BOOL WINAPI GetModuleHandleExW(DWORD,LPCWSTR,HMODULE*);
 #define SUPPORT_LANG_NUMBER 32
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+BOOL WINAPI EnumResourceLanguagesExA(HMODULE hModule, LPCSTR lpType, LPCSTR lpName, ENUMRESLANGPROCA lpEnumFunc, LONG_PTR lParam, DWORD dwFlags, LANGID LangId);
+BOOL WINAPI EnumResourceLanguagesExW(HMODULE hModule, LPCWSTR lpType, LPCWSTR lpName, ENUMRESLANGPROCW lpEnumFunc, LONG_PTR lParam, DWORD dwFlags, LANGID LangId);
+BOOL WINAPI EnumResourceNamesExA(HMODULE hModule, LPCSTR lpType, ENUMRESNAMEPROCA lpEnumFunc, LONG_PTR lParam, DWORD dwFlags, LANGID LangId);
+BOOL WINAPI EnumResourceNamesExW(HMODULE hModule, LPCWSTR lpType, ENUMRESNAMEPROCW lpEnumFunc, LONG_PTR lParam, DWORD dwFlags, LANGID LangId);
+BOOL WINAPI EnumResourceTypesExA(HMODULE hModule, ENUMRESTYPEPROCA lpEnumFunc, LONG_PTR lParam, DWORD dwFlags, LANGID LangId);
+BOOL WINAPI EnumResourceTypesExW(HMODULE hModule, ENUMRESTYPEPROCW lpEnumFunc, LONG_PTR lParam, DWORD dwFlags, LANGID LangId);
+#ifdef __cplusplus
+}
+#endif
+
 #endif  /* _APISETLIBLOADER_ */

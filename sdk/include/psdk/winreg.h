@@ -619,4 +619,12 @@ typedef VALENTA VALENT,*PVALENT;
 #define SHUTDOWN_VAIL_CONTAINER 0x00008000
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+LSTATUS WINAPI RegOpenUserClassesRoot(HANDLE hToken, DWORD dwOptions, REGSAM samDesired, PHKEY phkResult);
+#ifdef __cplusplus
+}
+#endif
+
 #endif

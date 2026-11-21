@@ -452,6 +452,19 @@ typedef PVOID WHEA_ERROR_HANDLE;
 typedef struct _WHEA_ERROR_SOURCE_DESCRIPTOR WHEA_ERROR_SOURCE_DESCRIPTOR;
 typedef struct _WHEA_ERROR_RECORD WHEA_ERROR_RECORD;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+BOOLEAN NTAPI RtlSuffixUnicodeString(PCUNICODE_STRING String1, PCUNICODE_STRING String2, BOOLEAN CaseInSensitive);
+BOOLEAN NTAPI RtlIsStateSeparationEnabled(void);
+BOOLEAN NTAPI RtlIsZeroMemory(PVOID Buffer, SIZE_T Length);
+NTSTATUS NTAPI RtlGetSystemGlobalData(RTL_SYSTEM_GLOBAL_DATA_ID DataId, PVOID Buffer, ULONG Size);
+PPHYSICAL_MEMORY_RANGE NTAPI MmGetPhysicalMemoryRangesEx(PVOID PartitionObject);
+PVOID NTAPI PsGetThreadProperty(PETHREAD Thread, ULONG_PTR Key, ULONG Flags);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* _NTLSA_AUDIT_ */
 #endif /* _NTLSA_IFS_ */
 

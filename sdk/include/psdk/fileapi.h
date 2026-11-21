@@ -43,4 +43,14 @@ typedef enum DIRECTORY_FLAGS {
     DIRECTORY_FLAGS_DISALLOW_PATH_REDIRECTS = 1
 } DIRECTORY_FLAGS;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+BOOL WINAPI GetVolumeInformationByHandleW(HANDLE hFile, LPWSTR lpVolumeNameBuffer, DWORD nVolumeNameSize, LPDWORD lpVolumeSerialNumber, LPDWORD lpMaximumComponentLength, LPDWORD lpFileSystemFlags, LPWSTR lpFileSystemNameBuffer, DWORD nFileSystemNameSize);
+DWORD WINAPI GetTempPath2W(DWORD BufferLength, LPWSTR Buffer);
+DWORD WINAPI GetTempPath2A(DWORD BufferLength, LPSTR Buffer);
+#ifdef __cplusplus
+}
+#endif
+
 #endif  /* __WINE_FILEAPI_H */

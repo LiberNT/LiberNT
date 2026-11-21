@@ -77,6 +77,17 @@ typedef enum CWMO_FLAGS {
     CWMO_DISPATCH_WINDOW_MESSAGES = 2
 } CWMO_FLAGS;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+HRESULT WINAPI CoGetDefaultContext(APTTYPE aptType, const IID *const riid, void ** ppv);
+HRESULT WINAPI CoDisconnectContext(DWORD dwTimeout);
+HRESULT WINAPI CoCreateInstanceFromApp(const IID *const Clsid, IUnknown * punkOuter, DWORD dwClsCtx, PVOID reserved, DWORD dwCount, MULTI_QI * pResults);
+HRESULT WINAPI CoGetCancelObject(DWORD dwThreadId, const IID *const iid, void ** ppUnk);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* _COMBASEAPI_H_ */
 
 #ifndef COM_RIGHTS_ACTIVATE_LOCAL

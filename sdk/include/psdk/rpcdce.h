@@ -766,4 +766,14 @@ typedef enum _RPC_HTTP_REDIRECTOR_STAGE {
     RPCHTTP_RS_INTERFACE = 5
 } RPC_HTTP_REDIRECTOR_STAGE;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+void WINAPI RpcSsDontSerializeContext(void);
+RPC_STATUS WINAPI RpcMgmtInqServerPrincNameA(RPC_BINDING_HANDLE Binding, unsigned long AuthnSvc, RPC_CSTR * ServerPrincName);
+RPC_STATUS WINAPI RpcMgmtInqServerPrincNameW(RPC_BINDING_HANDLE Binding, unsigned long AuthnSvc, RPC_WSTR * ServerPrincName);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /*__WINE_RPCDCE_H */
