@@ -31,13 +31,16 @@
 #define ARM_PTE_HANDOFF      (ARM_PTE_VALID | ARM_PTE_PAGE | ARM_PTE_ATTR_NORMAL | ARM_PTE_SH_INNER | \
                               ARM_PTE_AF)
 #define ARM_PTE_TABLE_ENTRY  (ARM_PTE_VALID | ARM_PTE_TABLE)
+#define ARM_BLOCK_SIZE       0x200000UL
+#define ARM_BLOCK_DATA       (ARM_PTE_DATA & ~ARM_PTE_PAGE)
+#define ARM_BLOCK_DEVICE     (ARM_PTE_DEVICE & ~ARM_PTE_PAGE)
 
 #define ARM_ROOT_ENTRIES     4
 #define ARM_TABLE_ENTRIES    512
 #define ARM_KSEG0_PAGES      (ARM_LOADER_KSEG0_SIZE >> MM_PAGE_SHIFT)
 #define ARM_KSEG0_ALIGNMENT  0x200000ULL
 #define ARM_MAX_PHYSICAL     0x100000000ULL
-#define ARM_EXTRA_TABLES     16
+#define ARM_EXTRA_TABLES     18
 
 #define ARM_MAIR             0x444400FFUL
 #define ARM_TTBCR            0x80803500UL
@@ -520,6 +523,51 @@ ArmMapHandoff(VOID)
     return ArmMapPages((ULONG)Start, Start, (ULONG)((End - Start) >> MM_PAGE_SHIFT), ARM_PTE_HANDOFF);
 }
 
+/* Until the HAL has mapped its devices and firmware tables it reaches them at their physical addresses. */
+static
+BOOLEAN
+ArmMapIdentity(VOID)
+{
+    PPAGE_LOOKUP_TABLE_ITEM Lookup;
+    PULONGLONG Entry, Table;
+    PFN_NUMBER Count, Page, First;
+    ULONG Address;
+    BOOLEAN Ram;
+
+    Lookup = MmGetMemoryMap(&Count);
+    if (!Lookup)
+        return FALSE;
+
+    for (Address = 0; Address < ARM_LOADER_KSEG0_BASE; Address += ARM_BLOCK_SIZE)
+    {
+        Entry = &ArmLoader.Root[Address >> 30];
+        if (!(*Entry & ARM_PTE_VALID))
+        {
+            Table = ArmAllocateTable();
+            if (!Table)
+                return FALSE;
+            *Entry = ARM_PTE_TABLE_ENTRY | ((ULONG_PTR)Table & ARM_PTE_FRAME);
+        }
+
+        ASSERT((*Entry & (ARM_PTE_VALID | ARM_PTE_TABLE)) == ARM_PTE_TABLE_ENTRY);
+        Table = (PULONGLONG)(ULONG_PTR)(*Entry & ARM_PTE_FRAME);
+        Entry = &Table[(Address >> 21) & (ARM_TABLE_ENTRIES - 1)];
+        if (*Entry & ARM_PTE_VALID)
+            continue;
+
+        Ram = FALSE;
+        First = Address >> MM_PAGE_SHIFT;
+        for (Page = First; !Ram && Page < First + (ARM_BLOCK_SIZE >> MM_PAGE_SHIFT); Page++)
+        {
+            Ram = Page >= MmLowestPhysicalPage && Page - MmLowestPhysicalPage < Count &&
+                  ArmIsRamType(Lookup[Page - MmLowestPhysicalPage].PageAllocated);
+        }
+        *Entry = (Ram ? ARM_BLOCK_DATA : ARM_BLOCK_DEVICE) | Address;
+    }
+
+    return TRUE;
+}
+
 static
 VOID
 ArmCleanRange(
@@ -557,8 +605,11 @@ OslArchPrepareHandoff(
 {
     WinLdrSetupMachineDependent(LoaderBlock);
 
-    if (!ArmLoader.Ready || !WinLdrSetupMemoryLayout(LoaderBlock) || !ArmMapKseg0() || !ArmMapHandoff())
+    if (!ArmLoader.Ready || !WinLdrSetupMemoryLayout(LoaderBlock) || !ArmMapKseg0() || !ArmMapHandoff() ||
+        !ArmMapIdentity())
+    {
         return FALSE;
+    }
 
     ArmCleanLoadedImages(LoaderBlock);
     FwExitBootServices();
