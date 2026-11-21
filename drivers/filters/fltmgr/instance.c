@@ -345,8 +345,12 @@ FltpAutoAttach(
     _In_ PFLT_VOLUME Volume,
     _In_ FLT_INSTANCE_SETUP_FLAGS SetupFlags)
 {
-    UCHAR Buffer[sizeof(KEY_BASIC_INFORMATION) + INSTANCE_NAME_MAX_BYTES];
-    PKEY_BASIC_INFORMATION Information = (PKEY_BASIC_INFORMATION)Buffer;
+    union
+    {
+        KEY_BASIC_INFORMATION Information;
+        UCHAR Bytes[sizeof(KEY_BASIC_INFORMATION) + INSTANCE_NAME_MAX_BYTES];
+    } Buffer;
+    PKEY_BASIC_INFORMATION Information = &Buffer.Information;
     UNICODE_STRING Name, Altitude;
     ULONG Index, Length, Flags;
     HANDLE Key;
