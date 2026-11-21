@@ -83,6 +83,10 @@ KdpScanCodeToChar(
     _In_ UCHAR ScanCode,
     _In_ BOOLEAN Shift);
 
+CHAR
+KdpControlChar(
+    _In_ CHAR Char);
+
 BOOLEAN
 KdpUsbKeyboardChordHeld(VOID);
 
