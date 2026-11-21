@@ -1027,6 +1027,21 @@ TCPSetKeepAliveValues(
 }
 
 NTSTATUS
+TCPSetKeepAliveCount(
+    PCONNECTION_ENDPOINT Connection,
+    ULONG KeepAliveCount)
+{
+    if (!Connection)
+        return STATUS_UNSUCCESSFUL;
+
+    if (Connection->SocketContext == NULL)
+        return STATUS_UNSUCCESSFUL;
+
+    LibTcpSetKeepAliveCount(Connection->SocketContext, KeepAliveCount);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
 TCPGetSocketStatus(
     PCONNECTION_ENDPOINT Connection,
     PULONG State)
