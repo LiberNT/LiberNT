@@ -16,7 +16,7 @@
 
 [![Build](https://img.shields.io/github/actions/workflow/status/LiberNT/LiberNT/build.yml?branch=master&label=Build&style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/LiberNT/LiberNT/actions/workflows/build.yml)
 [![License: GPL 3.0](https://img.shields.io/badge/License-GPL_3.0-0161B6?style=for-the-badge&logo=gnu&logoColor=white)](#licencia)
-[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/NjGjzDevEG)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/ETvp4kxHDZ)
 [![Matrix](https://img.shields.io/badge/Matrix-%23libernt-000000?style=for-the-badge&logo=matrix&logoColor=white)](https://matrix.to/#/#libernt:matrix.org)
 
 <img src="https://img.shields.io/github/repo-size/LiberNT/LiberNT?style=flat-square&color=blue" alt="Repo Size">
@@ -269,7 +269,7 @@ LiberNT/
 
 Informa de errores y propón funciones en [Issues](https://github.com/LiberNT/LiberNT/issues), y encuentra guías y notas en la [Wiki](https://github.com/LiberNT/LiberNT/wiki).
 
-Consulta [CONTRIBUTING.md](CONTRIBUTING.md) y [PULL_REQUEST_MANAGEMENT.md](PULL_REQUEST_MANAGEMENT.md). Si planeas un cambio grande, pregunta antes en [Issues](https://github.com/LiberNT/LiberNT/issues) o en [Discord](https://discord.gg/NjGjzDevEG).
+Consulta [CONTRIBUTING.md](CONTRIBUTING.md) y [PULL_REQUEST_MANAGEMENT.md](PULL_REQUEST_MANAGEMENT.md). Si planeas un cambio grande, pregunta antes en [Issues](https://github.com/LiberNT/LiberNT/issues) o en [Discord](https://discord.gg/ETvp4kxHDZ).
 
 > [!WARNING]
 > **Aviso legal:** si has visto código fuente propietario de Microsoft Windows (incluido, entre otros, el código filtrado de Windows NT 3.5, NT 4 y 2000, y el Windows Research Kernel), tu contribución no se aceptará por una posible infracción de derechos de autor.
@@ -312,4 +312,4 @@ LiberNT lo construyen los **colaboradores de LiberNT**; lo inició [Ahmed Arif](
 - [Sitio web](https://libernt.com)
 - [Descarga la última compilación](https://github.com/LiberNT/LiberNT/releases)
 - [Wiki](https://github.com/LiberNT/LiberNT/wiki)
-- Chatea en [Discord](https://discord.gg/NjGjzDevEG) o en [Matrix](https://matrix.to/#/#libernt:matrix.org)
+- Chatea en [Discord](https://discord.gg/ETvp4kxHDZ) o en [Matrix](https://matrix.to/#/#libernt:matrix.org)

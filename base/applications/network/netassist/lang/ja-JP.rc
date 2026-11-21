@@ -17,7 +17,7 @@ BEGIN
     LTEXT "", IDC_DETAIL, 12, 40, 240, 82
     EDITTEXT IDC_KEY, 12, 126, 240, 14, ES_CENTER | ES_READONLY | ES_AUTOHSCROLL
     PUSHBUTTON "キーをコピー(&C)", IDC_COPY, 12, 146, 64, 14
-    CONTROL "まずチームに連絡してください: <a href=""https://discord.gg/NjGjzDevEG"">Discord</a> または <a href=""https://matrix.to/#/#libernt:matrix.org"">Matrix</a>。", IDC_LINKS, "SysLink", WS_TABSTOP, 12, 168, 240, 10
+    CONTROL "まずチームに連絡してください: <a href=""https://discord.gg/ETvp4kxHDZ"">Discord</a> または <a href=""https://matrix.to/#/#libernt:matrix.org"">Matrix</a>。", IDC_LINKS, "SysLink", WS_TABSTOP, 12, 168, 240, 10
     DEFPUSHBUTTON "閉じる", IDCANCEL, 188, 182, 64, 14
 END
 

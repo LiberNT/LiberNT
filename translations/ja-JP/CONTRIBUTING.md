@@ -37,7 +37,7 @@ LiberNT はクリーンルームで開発されています。Windows SDK と WD
 
 ### 新しい機能を実装する
 
-互換性の基準は Windows 11 です。大きな作業を始める前に、すでに誰かが取り組んでいないか [Issues](https://github.com/LiberNT/LiberNT/issues) または [Discord](https://discord.gg/NjGjzDevEG) で確認してください。
+互換性の基準は Windows 11 です。大きな作業を始める前に、すでに誰かが取り組んでいないか [Issues](https://github.com/LiberNT/LiberNT/issues) または [Discord](https://discord.gg/ETvp4kxHDZ) で確認してください。
 
 ### ドキュメントを書く
 
@@ -83,7 +83,7 @@ AI ツールを使ってもかまいません。どの部分で助けを借り�
 - *送る前に似たプルリクエストを探してください。* 似たプルリクエストや Issue がすでに開かれているかもしれません。その場合は、そちらにコメントやレビューをしてください。
 - *貢献は小さく、テーマに絞ってください。* 途中で見つけた無関係な問題を直したくなっても我慢し、代わりに Issue を開いてください。
 - *__[コーディングスタイル]__を守ってください。*
-- *質問をためらわないでください。* [Discord](https://discord.gg/NjGjzDevEG) または [Matrix](https://matrix.to/#/#libernt:matrix.org) でチームに聞いてください。
+- *質問をためらわないでください。* [Discord](https://discord.gg/ETvp4kxHDZ) または [Matrix](https://matrix.to/#/#libernt:matrix.org) でチームに聞いてください。
 
 ## 著作権とライセンス
 
@@ -102,7 +102,7 @@ LiberNT と ReactOS を支える人々については [CREDITS.md](../../CREDITS
 - オープンな [Issues](https://github.com/LiberNT/LiberNT/issues) を見てください。
 - 失敗しているテストを見つけ、Windows 11 と比較して、通るようにしてください。
 - ガイドや設計メモは [Wiki](https://github.com/LiberNT/LiberNT/wiki) で読めます。
-- [Discord](https://discord.gg/NjGjzDevEG) または [Matrix](https://matrix.to/#/#libernt:matrix.org) で助けを求めてください。
+- [Discord](https://discord.gg/ETvp4kxHDZ) または [Matrix](https://matrix.to/#/#libernt:matrix.org) で助けを求めてください。
 
   [クリーンルームのリバースエンジニアリング]:                     https://en.wikipedia.org/wiki/Clean_room_design
   [プルリクエスト]:                                              https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/about-pull-requests

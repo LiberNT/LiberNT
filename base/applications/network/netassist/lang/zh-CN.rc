@@ -17,7 +17,7 @@ BEGIN
     LTEXT "", IDC_DETAIL, 12, 40, 240, 82
     EDITTEXT IDC_KEY, 12, 126, 240, 14, ES_CENTER | ES_READONLY | ES_AUTOHSCROLL
     PUSHBUTTON "复制密钥(&C)", IDC_COPY, 12, 146, 64, 14
-    CONTROL "请先联系团队: <a href=""https://discord.gg/NjGjzDevEG"">Discord</a> 或 <a href=""https://matrix.to/#/#libernt:matrix.org"">Matrix</a>。", IDC_LINKS, "SysLink", WS_TABSTOP, 12, 168, 240, 10
+    CONTROL "请先联系团队: <a href=""https://discord.gg/ETvp4kxHDZ"">Discord</a> 或 <a href=""https://matrix.to/#/#libernt:matrix.org"">Matrix</a>。", IDC_LINKS, "SysLink", WS_TABSTOP, 12, 168, 240, 10
     DEFPUSHBUTTON "关闭", IDCANCEL, 188, 182, 64, 14
 END
 

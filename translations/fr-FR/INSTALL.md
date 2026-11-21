@@ -26,4 +26,4 @@ Le disque préinstallé contient aussi l'installation de LiberNT. Lancez `C:\<ar
 
 ## Aide
 
-En cas de problème, signalez-le dans les [Issues](https://github.com/LiberNT/LiberNT/issues) en précisant l'architecture, le type de compilation, le commit que vous avez compilé et les étapes qui mènent au problème. Les guides et les notes se trouvent dans le [Wiki](https://github.com/LiberNT/LiberNT/wiki), et vous pouvez interroger l'équipe sur [Discord](https://discord.gg/NjGjzDevEG) ou sur [Matrix](https://matrix.to/#/#libernt:matrix.org).
+En cas de problème, signalez-le dans les [Issues](https://github.com/LiberNT/LiberNT/issues) en précisant l'architecture, le type de compilation, le commit que vous avez compilé et les étapes qui mènent au problème. Les guides et les notes se trouvent dans le [Wiki](https://github.com/LiberNT/LiberNT/wiki), et vous pouvez interroger l'équipe sur [Discord](https://discord.gg/ETvp4kxHDZ) ou sur [Matrix](https://matrix.to/#/#libernt:matrix.org).

@@ -37,7 +37,7 @@ Run LiberNT in a virtual machine or on real hardware and report what breaks. Rea
 
 ### Implement new things
 
-Windows 11 is the compatibility reference. Before starting a larger piece of work, ask in [Issues](https://github.com/LiberNT/LiberNT/issues) or on [Discord](https://discord.gg/NjGjzDevEG) whether someone is already working on it.
+Windows 11 is the compatibility reference. Before starting a larger piece of work, ask in [Issues](https://github.com/LiberNT/LiberNT/issues) or on [Discord](https://discord.gg/ETvp4kxHDZ) whether someone is already working on it.
 
 ### Write documentation
 
@@ -83,7 +83,7 @@ You may use AI tools. Tell us in the pull request which parts they helped with a
 - *Search for similar pull requests before submitting.* It may be that a similar pull request or issue was opened previously. Comment and review on that one instead.
 - *Keep your contribution small and focused on the topic.* Resist the temptation to fix unrelated issues as you come across them; open an issue for them instead.
 - *Respect our __[Coding Style]__.*
-- *Do not be afraid to ask questions.* Ask the team on [Discord](https://discord.gg/NjGjzDevEG) or [Matrix](https://matrix.to/#/#libernt:matrix.org).
+- *Do not be afraid to ask questions.* Ask the team on [Discord](https://discord.gg/ETvp4kxHDZ) or [Matrix](https://matrix.to/#/#libernt:matrix.org).
 
 ## Copyright and Licences
 
@@ -102,7 +102,7 @@ See [CREDITS.md](CREDITS.md) for the people behind LiberNT and ReactOS.
 - Look at the open [Issues](https://github.com/LiberNT/LiberNT/issues).
 - Find a test that fails, compare it with Windows 11, and make it pass.
 - Read the [Wiki](https://github.com/LiberNT/LiberNT/wiki) for guides and design notes.
-- Ask for help on [Discord](https://discord.gg/NjGjzDevEG) or [Matrix](https://matrix.to/#/#libernt:matrix.org).
+- Ask for help on [Discord](https://discord.gg/ETvp4kxHDZ) or [Matrix](https://matrix.to/#/#libernt:matrix.org).
 
   [clean room reverse engineering]:                              https://en.wikipedia.org/wiki/Clean_room_design
   [pull request]:                                                https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/about-pull-requests

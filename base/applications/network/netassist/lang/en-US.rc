@@ -17,7 +17,7 @@ BEGIN
     LTEXT "", IDC_DETAIL, 12, 40, 240, 82
     EDITTEXT IDC_KEY, 12, 126, 240, 14, ES_CENTER | ES_READONLY | ES_AUTOHSCROLL
     PUSHBUTTON "&Copy key", IDC_COPY, 12, 146, 64, 14
-    CONTROL "Contact the team first: <a href=""https://discord.gg/NjGjzDevEG"">Discord</a> or <a href=""https://matrix.to/#/#libernt:matrix.org"">Matrix</a>.", IDC_LINKS, "SysLink", WS_TABSTOP, 12, 168, 240, 10
+    CONTROL "Contact the team first: <a href=""https://discord.gg/ETvp4kxHDZ"">Discord</a> or <a href=""https://matrix.to/#/#libernt:matrix.org"">Matrix</a>.", IDC_LINKS, "SysLink", WS_TABSTOP, 12, 168, 240, 10
     DEFPUSHBUTTON "Close", IDCANCEL, 188, 182, 64, 14
 END
 
