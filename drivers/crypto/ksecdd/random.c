@@ -241,8 +241,7 @@ KsecReadMachineSpecificCounters(
     }
 #endif
 #elif defined(_M_ARM)
-    /* Read the Cycle Counter Register */
-    MachineSpecificCounters->Ccr = _MoveFromCoprocessor(CP15_PMCCNTR);
+    MachineSpecificCounters->Ccr = (ULONG)ReadTimeStampCounter();
 #elif defined(_M_ARM64) || defined(__aarch64__)
     {
         ULONG64 cntvct;
