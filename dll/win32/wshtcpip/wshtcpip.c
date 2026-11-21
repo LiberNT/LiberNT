@@ -531,6 +531,19 @@ WSHGetSocketInformation(
                 return WSAENOPROTOOPT;
         }
     }
+    if (Level == IPPROTO_TCP && (OptionName == TCP_KEEPALIVE || OptionName == TCP_KEEPINTVL || OptionName == TCP_KEEPCNT))
+    {
+        if (Context->SocketType != SOCK_STREAM)
+            return WSAEINVAL;
+        if (!OptionLength || !OptionValue || *OptionLength < sizeof(DWORD))
+            return WSAEFAULT;
+        if (OptionName == TCP_KEEPCNT)
+            *(DWORD *)OptionValue = Context->KeepAliveCount;
+        else
+            *(DWORD *)OptionValue = (OptionName == TCP_KEEPALIVE ? Context->KeepAliveTime : Context->KeepAliveInterval) / 1000;
+        *OptionLength = sizeof(DWORD);
+        return NO_ERROR;
+    }
     if (Level == IPPROTO_IP || Level == IPPROTO_TCP || Level == IPPROTO_IPV6)
         return WSAENOPROTOOPT;
 
@@ -1532,6 +1545,9 @@ WSHOpenSocket2(
     Context->MulticastTTL  = 1;
     Context->Ttl           = 128;
     Context->V6Only        = TRUE;
+    Context->KeepAliveTime     = 7200 * 1000;
+    Context->KeepAliveInterval = 1000;
+    Context->KeepAliveCount    = 10;
 
     *HelperDllSocketContext = Context;
     *NotificationEvents = WSH_NOTIFY_CLOSE | WSH_NOTIFY_BIND;
@@ -1578,6 +1594,97 @@ static INT ValidateMulticastInterface(ULONG Selector)
     tdiFreeThingSet(Entities);
     closeTcpFile(TcpFile);
     return Result;
+}
+
+static INT SubmitConnectionRequest(PSOCKET_CONTEXT Context, HANDLE TdiAddressObjectHandle, ULONG TdiId, PVOID Buffer, ULONG BufferSize)
+{
+    PTCP_REQUEST_SET_INFORMATION_EX Info;
+    PQUEUED_REQUEST Request, Last;
+    INT Status;
+
+    Info = HeapAlloc(GetProcessHeap(), 0, sizeof(*Info) + BufferSize);
+    if (!Info)
+        return WSAENOBUFS;
+
+    Info->ID.toi_entity.tei_entity = Context->AddrFileEntityType;
+    Info->ID.toi_entity.tei_instance = Context->AddrFileInstance;
+    Info->ID.toi_class = INFO_CLASS_PROTOCOL;
+    Info->ID.toi_type = INFO_TYPE_CONNECTION;
+    Info->ID.toi_id = TdiId;
+    Info->BufferSize = BufferSize;
+    memcpy(Info->Buffer, Buffer, BufferSize);
+
+    if (Context->SocketState != SocketStateCreated)
+    {
+        Status = SendRequest(Info, sizeof(*Info) + Info->BufferSize, IOCTL_TCP_SET_INFORMATION_EX, TdiAddressObjectHandle);
+        HeapFree(GetProcessHeap(), 0, Info);
+        return Status;
+    }
+
+    Request = HeapAlloc(GetProcessHeap(), 0, sizeof(*Request));
+    if (!Request)
+    {
+        HeapFree(GetProcessHeap(), 0, Info);
+        return WSAENOBUFS;
+    }
+    Request->Info = Info;
+    Request->Next = NULL;
+
+    if (!Context->RequestQueue)
+    {
+        Context->RequestQueue = Request;
+        return NO_ERROR;
+    }
+    Last = Context->RequestQueue;
+    while (Last->Next)
+        Last = Last->Next;
+    Last->Next = Request;
+    return NO_ERROR;
+}
+
+static INT SetKeepAliveValue(PSOCKET_CONTEXT Context, HANDLE TdiAddressObjectHandle, INT OptionName, PCHAR OptionValue, INT OptionLength)
+{
+    struct tcp_keepalive Values;
+    DWORD Value;
+    INT Status;
+
+    ASSERT(OptionName == TCP_KEEPALIVE || OptionName == TCP_KEEPINTVL || OptionName == TCP_KEEPCNT);
+
+    if (Context->SocketType != SOCK_STREAM)
+        return WSAEINVAL;
+    if (!OptionValue || OptionLength < (INT)sizeof(DWORD))
+        return WSAEFAULT;
+    memcpy(&Value, OptionValue, sizeof(Value));
+
+    if (OptionName == TCP_KEEPCNT)
+    {
+        if (Value > 255)
+            return WSAEINVAL;
+        /* FIXME: the probe count is not passed to the stack, which always sends 10 probes */
+        Context->KeepAliveCount = Value;
+        return NO_ERROR;
+    }
+
+    if (Value == 0)
+        return WSAEINVAL;
+
+    Values.onoff = Context->KeepAlive ? 1 : 0;
+    Values.keepalivetime = Context->KeepAliveTime;
+    Values.keepaliveinterval = Context->KeepAliveInterval;
+    if (OptionName == TCP_KEEPALIVE)
+        Values.keepalivetime = (ULONG)min((ULONGLONG)Value * 1000, MAXULONG);
+    else
+        Values.keepaliveinterval = (ULONG)min((ULONGLONG)Value * 1000, MAXULONG);
+    ASSERT(Values.keepalivetime != 0);
+    ASSERT(Values.keepaliveinterval != 0);
+
+    Status = SubmitConnectionRequest(Context, TdiAddressObjectHandle, TCP_SOCKET_KEEPALIVEVALS, &Values, sizeof(Values));
+    if (Status != NO_ERROR)
+        return Status;
+
+    Context->KeepAliveTime = Values.keepalivetime;
+    Context->KeepAliveInterval = Values.keepaliveinterval;
+    return NO_ERROR;
 }
 
 INT
@@ -1731,6 +1838,11 @@ WSHSetSocketInformation(
                         return WSAEFAULT;
                     }
                     break;
+
+                case TCP_KEEPALIVE:
+                case TCP_KEEPINTVL:
+                case TCP_KEEPCNT:
+                    return SetKeepAliveValue(Context, TdiAddressObjectHandle, OptionName, OptionValue, OptionLength);
 
                 default:
                     /* Invalid option */

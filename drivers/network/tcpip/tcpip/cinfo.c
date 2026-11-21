@@ -15,15 +15,16 @@ typedef struct tcp_keepalive {
   ULONG keepaliveinterval;
 } TCP_KEEPALIVE;
 
-TDI_STATUS SetConnectionInfo(TDIObjectID *ID,
-                             PADDRESS_FILE AddressFile,
-                             PVOID Buffer,
-                             UINT BufferSize)
+static TDI_STATUS SetConnectionInfoLocked(TDIObjectID *ID,
+                                          PADDRESS_FILE AddressFile,
+                                          PVOID Buffer,
+                                          UINT BufferSize)
 {
     NTSTATUS Status;
     PCONNECTION_ENDPOINT Connection = AddressFile->Connection;
     BOOLEAN Deferred = (Connection == NULL) || (Connection->SocketContext == NULL);
 
+    ASSERT_TCPIP_OBJECT_LOCKED(AddressFile);
     ASSERT(ID->toi_type == INFO_TYPE_CONNECTION);
     switch (ID->toi_id)
     {
@@ -65,6 +66,9 @@ TDI_STATUS SetConnectionInfo(TDIObjectID *ID,
             {
                 AddressFile->PendingKeepAlive = (Set.onoff != 0);
                 AddressFile->PendingKeepAliveSet = TRUE;
+                AddressFile->PendingKeepAliveTime = Set.keepalivetime;
+                AddressFile->PendingKeepAliveInterval = Set.keepaliveinterval;
+                AddressFile->PendingKeepAliveValuesSet = TRUE;
                 return TDI_SUCCESS;
             }
             Status = TCPSetKeepAlive(Connection, Set.onoff);
@@ -78,4 +82,20 @@ TDI_STATUS SetConnectionInfo(TDIObjectID *ID,
     }
 
     return TDI_INVALID_PARAMETER;
+}
+
+TDI_STATUS SetConnectionInfo(TDIObjectID *ID,
+                             PADDRESS_FILE AddressFile,
+                             PVOID Buffer,
+                             UINT BufferSize)
+{
+    TDI_STATUS Status;
+
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+
+    LockObject(AddressFile);
+    Status = SetConnectionInfoLocked(ID, AddressFile, Buffer, BufferSize);
+    UnlockObject(AddressFile);
+
+    return Status;
 }

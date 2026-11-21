@@ -156,6 +156,9 @@ extern "C" {
 #define TCP_OFFLOAD_PREFERENCE   11
 #define TCP_CONGESTION_ALGORITHM 12
 #define TCP_DELAY_FIN_ACK        13
+#define TCP_KEEPCNT              16
+#define TCP_KEEPIDLE             TCP_KEEPALIVE
+#define TCP_KEEPINTVL            17
 
 struct sockaddr_in6_old {
   SHORT sin6_family;

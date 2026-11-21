@@ -31,6 +31,7 @@ list(APPEND SOURCE
     recv.c
     send.c
     sendto_neighbor.c
+    tcp_keepalive.c
     udp_connreset.c
     udp_queue.c
     udp_quic.c
