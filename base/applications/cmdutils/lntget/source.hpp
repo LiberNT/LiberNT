@@ -40,4 +40,6 @@ private:
     bool ready_ = false;
 };
 
+Status RunSourceSelfTests();
+
 } // namespace lntget

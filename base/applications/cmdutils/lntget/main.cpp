@@ -652,6 +652,9 @@ Status SelfTestCommand()
     status = RunArpSelfTests();
     if (!status)
         return status;
+    status = RunSourceSelfTests();
+    if (!status)
+        return status;
     status = RunPortableSelfTests();
     if (!status)
         return status;
