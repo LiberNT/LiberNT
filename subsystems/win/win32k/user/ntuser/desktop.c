@@ -290,6 +290,7 @@ InitDesktopImpl(VOID)
     return STATUS_SUCCESS;
 }
 
+#if DBG
 static VOID
 IntQueryNetworkAssistanceKey(OUT PWSTR pwszText,
                              IN SIZE_T cchText)
@@ -329,6 +330,7 @@ IntQueryNetworkAssistanceKey(OUT PWSTR pwszText,
         pwszText[0] = UNICODE_NULL;
     }
 }
+#endif
 
 #if DBG
 #define LIBERNT_BUILD_FLAVOUR L"debug"
@@ -1933,7 +1935,9 @@ static BOOL
 IntPaintDesktopContent(HDC hDC)
 {
     static WCHAR s_wszSafeMode[] = L"Safe Mode"; // FIXME: Localize!
+#if DBG
     static WCHAR s_wszAssistance[64];
+#endif
 
     RECTL Rect;
     HBRUSH DesktopBrush, PreviousBrush;
@@ -2183,11 +2187,17 @@ IntPaintDesktopContent(HDC hDC)
     /*
      * Display the system version on the desktop background
      */
+#if DBG
     /* TODO: a key that appears after the desktop was painted shows at the next paint, nothing asks for one */
     if (!*s_wszAssistance && KD_DEBUGGER_ENABLED)
         IntQueryNetworkAssistanceKey(s_wszAssistance, ARRAYSIZE(s_wszAssistance));
+#endif
 
+#if DBG
     if (InSafeMode || g_AlwaysDisplayVersion || g_PaintDesktopVersion || *s_wszAssistance)
+#else
+    if (InSafeMode || g_AlwaysDisplayVersion || g_PaintDesktopVersion)
+#endif
     {
         NTSTATUS Status;
         static WCHAR wszzVersion[1024] = L"\0";
@@ -2274,11 +2284,13 @@ IntPaintDesktopContent(HDC hDC)
                     VerStrs[i].lpstr = pstr;
                     pstr += (VerStrs[i].n + 1);
                 }
+#if DBG
                 if (*s_wszAssistance)
                 {
                     VerStrs[i].n = lstrlenW(s_wszAssistance);
                     VerStrs[i].lpstr = s_wszAssistance;
                 }
+#endif
             }
         }
         else
@@ -2341,6 +2353,7 @@ IntPaintDesktopContent(HDC hDC)
 
                 IntGdiSetTextAlign(hDC, TA_CENTER | TA_TOP);
                 GreExtTextOutW(hDC, (Rect.right + Rect.left)/2, Rect.top + 3, 0, NULL, wszzVersion, len, NULL, 0);
+#if DBG
                 if (*s_wszAssistance)
                 {
                     SIZE Size = {0, 0};
@@ -2349,6 +2362,7 @@ IntPaintDesktopContent(HDC hDC)
                     GreExtTextOutW(hDC, (Rect.right + Rect.left)/2, Rect.top + 3 + Size.cy, 0, NULL,
                                    s_wszAssistance, lstrlenW(s_wszAssistance), NULL, 0);
                 }
+#endif
             }
         }
 

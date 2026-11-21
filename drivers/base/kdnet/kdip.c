@@ -47,6 +47,7 @@
 #define DHCP_OPTION_CLIENT_ID   61
 #define DHCP_OPTION_END         255
 
+#if DBG
 #define DNS_PORT                53
 #define DNS_HEADER_SIZE         12
 #define DNS_FLAG_RESPONSE       0x8000
@@ -56,6 +57,7 @@
 #define DNS_CLASS_IN            1
 #define DNS_RETRY               (2 * KDNET_SECOND)
 #define DNS_REFRESH             (300 * KDNET_SECOND)
+#endif
 
 typedef enum _KDNET_DHCP_STATE
 {
@@ -92,10 +94,12 @@ static ULONG64 KdpDhcpRenew;
 static ULONG64 KdpDhcpExpire;
 static ULONG KdpDhcpBackoff;
 
+#if DBG
 static ULONG KdpDnsServer;
 static USHORT KdpDnsIdentifier;
 static USHORT KdpDnsPort;
 static ULONG64 KdpDnsNext;
+#endif
 
 static
 USHORT
@@ -382,8 +386,11 @@ KdpDhcpSend(
 {
     static const UCHAR Parameters[] =
     {
-        DHCP_OPTION_MASK, DHCP_OPTION_ROUTER, DHCP_OPTION_DNS, DHCP_OPTION_LEASE, DHCP_OPTION_SERVER,
-        DHCP_OPTION_RENEWAL
+        DHCP_OPTION_MASK, DHCP_OPTION_ROUTER,
+#if DBG
+        DHCP_OPTION_DNS,
+#endif
+        DHCP_OPTION_LEASE, DHCP_OPTION_SERVER, DHCP_OPTION_RENEWAL
     };
     UCHAR Value[1 + MAC_ADDRESS_SIZE];
     PUCHAR Frame, Udp, Dhcp, Cursor;
@@ -444,7 +451,10 @@ KdpDhcpInput(
     _In_reads_bytes_(Length) PUCHAR Dhcp,
     _In_ ULONG Length)
 {
-    ULONG Offered, Server = 0, Mask = 0, Router = 0, Lease = 0, Renewal = 0, Dns = 0, Position;
+    ULONG Offered, Server = 0, Mask = 0, Router = 0, Lease = 0, Renewal = 0, Position;
+#if DBG
+    ULONG Dns = 0;
+#endif
     ULONG64 Now = KdNetTime();
     UCHAR Type = 0, Option, Size;
 
@@ -481,8 +491,10 @@ KdpDhcpInput(
             Mask = KdNetGet32(Dhcp + Position);
         else if (Option == DHCP_OPTION_ROUTER && Size >= 4)
             Router = KdNetGet32(Dhcp + Position);
+#if DBG
         else if (Option == DHCP_OPTION_DNS && Size >= 4)
             Dns = KdNetGet32(Dhcp + Position);
+#endif
         else if (Option == DHCP_OPTION_LEASE && Size >= 4)
             Lease = KdNetGet32(Dhcp + Position);
         else if (Option == DHCP_OPTION_RENEWAL && Size >= 4)
@@ -510,7 +522,9 @@ KdpDhcpInput(
         KdIpAddress = Offered;
         KdIpMask = Mask ? Mask : KDNET_IP(255, 255, 255, 0);
         KdIpGateway = Router;
+#if DBG
         KdpDnsServer = Dns;
+#endif
         KdpDhcpState = DhcpBound;
         KdpDhcpRenew = Now + (ULONG64)Renewal * KDNET_SECOND;
         KdpDhcpExpire = Now + (ULONG64)Lease * KDNET_SECOND;
@@ -523,6 +537,7 @@ KdpDhcpInput(
     }
 }
 
+#if DBG
 static
 VOID
 KdpDnsSend(VOID)
@@ -641,6 +656,7 @@ KdpDnsTimer(
     KdpDnsNext = Now + DNS_RETRY;
     KdpDnsSend();
 }
+#endif
 
 static
 VOID
@@ -747,12 +763,14 @@ KdIpInput(
     if (!KdIpAddress || DestinationIp != KdIpAddress)
         return;
 
+#if DBG
     if (KdpDnsPort && DestinationPort == KdpDnsPort && SourceIp == KdpDnsServer &&
         KdNetGet16(Udp) == DNS_PORT)
     {
         KdpDnsInput(Udp + UDP_HEADER_SIZE, UdpLength - UDP_HEADER_SIZE);
         return;
     }
+#endif
 
     if (DestinationPort != KdNetOptions.HostPort)
         return;
@@ -767,7 +785,9 @@ KdIpTimer(
     if (!KdNicLinkState || KdNetOptions.Broadcast)
         return;
 
+#if DBG
     KdpDnsTimer(Now);
+#endif
     switch (KdpDhcpState)
     {
         case DhcpInit:
