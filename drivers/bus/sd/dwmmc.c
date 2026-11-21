@@ -54,6 +54,43 @@ DwMmcPollClear(_In_ PFDO_EXTENSION FdoExtension, _In_ ULONG Register, _In_ ULONG
     }
 }
 
+static ULONG
+DwMmcIdstsRegister(_In_ PFDO_EXTENSION FdoExtension)
+{
+    return FdoExtension->DwMmcIdmac64 ? DWMMC_IDSTS64 : DWMMC_IDSTS32;
+}
+
+static ULONG
+DwMmcIdintenRegister(_In_ PFDO_EXTENSION FdoExtension)
+{
+    return FdoExtension->DwMmcIdmac64 ? DWMMC_IDINTEN64 : DWMMC_IDINTEN32;
+}
+
+static ULONG
+DwMmcDescriptorControl(_In_ PFDO_EXTENSION FdoExtension, _In_ ULONG Index)
+{
+    ASSERT(Index < DWMMC_IDMAC_DESCRIPTORS);
+
+    if (FdoExtension->DwMmcIdmac64)
+        return ReadULongAcquire(&((PDWMMC_IDMAC_DESC64)FdoExtension->DwMmcDescriptors + Index)->Des0);
+    return ReadULongAcquire(&((PDWMMC_IDMAC_DESC32)FdoExtension->DwMmcDescriptors + Index)->Des0);
+}
+
+static VOID
+DwMmcStopDma(_In_ PFDO_EXTENSION FdoExtension)
+{
+    ASSERT(FdoExtension->DwMmcIdmac);
+
+    DwMmcWrite(FdoExtension, DWMMC_CTRL,
+               (DwMmcRead(FdoExtension, DWMMC_CTRL) & ~(DWMMC_CTRL_USE_IDMAC | DWMMC_CTRL_DMA_ENABLE)) |
+                   DWMMC_CTRL_DMA_RESET);
+    (VOID)DwMmcPollClear(FdoExtension, DWMMC_CTRL, DWMMC_CTRL_DMA_RESET, SD_CMD_TIMEOUT_MS);
+    DwMmcWrite(FdoExtension, DWMMC_BMOD,
+               (DwMmcRead(FdoExtension, DWMMC_BMOD) & ~(DWMMC_BMOD_DE | DWMMC_BMOD_FB)) | DWMMC_BMOD_SWR);
+    (VOID)DwMmcPollClear(FdoExtension, DWMMC_BMOD, DWMMC_BMOD_SWR, SD_CMD_TIMEOUT_MS);
+    DwMmcWrite(FdoExtension, DwMmcIdstsRegister(FdoExtension), DWMMC_IDSTS_ALL);
+}
+
 static NTSTATUS
 DwMmcErrorToStatus(_In_ ULONG Interrupts)
 {
@@ -142,6 +179,67 @@ DwMmcSetBusWidth(_In_ PFDO_EXTENSION FdoExtension, _In_ UCHAR BusWidth)
     FdoExtension->CurrentBusWidth = (BusWidth == 8 || BusWidth == 4) ? BusWidth : 1;
 }
 
+static VOID
+DwMmcInitializeIdmac(_In_ PFDO_EXTENSION FdoExtension)
+{
+    DEVICE_DESCRIPTION Description;
+    PDMA_ADAPTER Adapter;
+    ULONG Hcon, Length;
+    BOOLEAN Address64;
+
+    if (FdoExtension->DwMmcIdmac)
+    {
+        ASSERT(FdoExtension->DmaAdapter != NULL);
+        ASSERT(FdoExtension->DwMmcDescriptors != NULL);
+        DwMmcStopDma(FdoExtension);
+        return;
+    }
+
+    Hcon = DwMmcRead(FdoExtension, DWMMC_HCON);
+    if (DWMMC_HCON_DMA_INTERFACE(Hcon) != DWMMC_HCON_DMA_IDMAC)
+        return;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(FdoExtension->DmaAdapter == NULL);
+    ASSERT(FdoExtension->DwMmcDescriptors == NULL);
+
+    Address64 = (Hcon & DWMMC_HCON_ADDR_64BIT) != 0;
+    RtlZeroMemory(&Description, sizeof(Description));
+    Description.Version = DEVICE_DESCRIPTION_VERSION;
+    Description.Master = TRUE;
+    Description.ScatterGather = TRUE;
+    Description.Dma32BitAddresses = TRUE;
+    Description.Dma64BitAddresses = Address64;
+    Description.InterfaceType = (FdoExtension->BusInterfaceType == InterfaceTypeUndefined)
+                                    ? Internal : FdoExtension->BusInterfaceType;
+    Description.BusNumber = FdoExtension->BusNumber;
+    Description.DmaWidth = Width32Bits;
+    Description.DmaSpeed = Compatible;
+    Description.MaximumLength = DWMMC_IDMAC_DESCRIPTORS * DWMMC_IDMAC_BUFFER_MAX;
+
+    Adapter = IoGetDmaAdapter(FdoExtension->PhysicalDevice, &Description, &FdoExtension->DmaMapRegisters);
+    if (Adapter == NULL)
+    {
+        FdoExtension->DmaMapRegisters = 0;
+        return;
+    }
+    FdoExtension->DmaAdapter = Adapter;
+
+    Length = DWMMC_IDMAC_DESCRIPTORS * (Address64 ? sizeof(DWMMC_IDMAC_DESC64) : sizeof(DWMMC_IDMAC_DESC32));
+    FdoExtension->DwMmcDescriptors =
+        Adapter->DmaOperations->AllocateCommonBuffer(Adapter, Length, &FdoExtension->DwMmcDescriptorsLogical, FALSE);
+    if (FdoExtension->DwMmcDescriptors == NULL)
+        return;
+    ASSERT((FdoExtension->DwMmcDescriptorsLogical.QuadPart & (sizeof(ULONG64) - 1)) == 0);
+    ASSERT(Address64 || (ULONG64)FdoExtension->DwMmcDescriptorsLogical.QuadPart + Length - 1 <= MAXULONG);
+
+    RtlZeroMemory(FdoExtension->DwMmcDescriptors, Length);
+    FdoExtension->DwMmcDescriptorsLength = Length;
+    FdoExtension->DwMmcIdmac64 = Address64;
+    FdoExtension->DwMmcIdmac = TRUE;
+    DwMmcStopDma(FdoExtension);
+}
+
 NTSTATUS
 DwMmcInitializeController(_In_ PFDO_EXTENSION FdoExtension)
 {
@@ -151,7 +249,6 @@ DwMmcInitializeController(_In_ PFDO_EXTENSION FdoExtension)
         return STATUS_DEVICE_CONFIGURATION_ERROR;
 
     FdoExtension->SpecVersion = SDHCI_SPEC_300;
-    /* FIXME: no high-speed while reads are polled: a full FIFO stops the card clock mid-block, which corrupts high-speed blocks */
     FdoExtension->HostCapabilities = SDHCI_CAP_VOLTAGE_330 |
                                      ((FdoExtension->DwMmcBusHz / 1000000) << SDHCI_CAP_BASE_CLK_SHIFT);
     if (FdoExtension->DwMmcBusWidth == 8)
@@ -172,7 +269,8 @@ DwMmcInitializeController(_In_ PFDO_EXTENSION FdoExtension)
 
     DwMmcWrite(FdoExtension, DWMMC_RINTSTS, DWMMC_INT_ALL);
     DwMmcWrite(FdoExtension, DWMMC_INTMASK, 0);
-    DwMmcWrite(FdoExtension, DWMMC_CTRL, DwMmcRead(FdoExtension, DWMMC_CTRL) & ~DWMMC_CTRL_INT_ENABLE);
+    DwMmcWrite(FdoExtension, DWMMC_CTRL, DwMmcRead(FdoExtension, DWMMC_CTRL) &
+                                         ~(DWMMC_CTRL_INT_ENABLE | DWMMC_CTRL_DMA_ENABLE | DWMMC_CTRL_USE_IDMAC));
     DwMmcWrite(FdoExtension, DWMMC_TMOUT, DWMMC_TMOUT_MAX);
 
     Version = DwMmcRead(FdoExtension, DWMMC_VERID) & 0xFFFF;
@@ -188,6 +286,11 @@ DwMmcInitializeController(_In_ PFDO_EXTENSION FdoExtension)
     DwMmcWrite(FdoExtension, DWMMC_CTYPE, DWMMC_CTYPE_1BIT);
     FdoExtension->DwMmcNeedInit = TRUE;
 
+    DwMmcInitializeIdmac(FdoExtension);
+    /* High speed only with the internal DMA: PIO at 49.5 MHz stops the card clock mid-block and takes data CRC errors */
+    if (FdoExtension->DwMmcIdmac)
+        FdoExtension->HostCapabilities |= SDHCI_CAP_HIGH_SPEED;
+
     DPRINT1("[DWMMC] version 0x%04lx, %lu Hz controller clock, FIFO %lu words\n",
             Version, FdoExtension->DwMmcBusHz, FdoExtension->DwMmcFifoDepth);
     return DwMmcSetClock(FdoExtension, SD_INIT_CLOCK_KHZ);
@@ -198,6 +301,8 @@ DwMmcReset(_In_ PFDO_EXTENSION FdoExtension)
 {
     LONG ClockKhz;
 
+    if (FdoExtension->DwMmcIdmac)
+        DwMmcStopDma(FdoExtension);
     DwMmcWrite(FdoExtension, DWMMC_CTRL, DwMmcRead(FdoExtension, DWMMC_CTRL) | DWMMC_CTRL_FIFO_RESET |
                                          DWMMC_CTRL_DMA_RESET);
     if (!DwMmcPollClear(FdoExtension, DWMMC_CTRL, DWMMC_CTRL_FIFO_RESET | DWMMC_CTRL_DMA_RESET, SD_CMD_TIMEOUT_MS) ||
@@ -424,7 +529,9 @@ DwMmcExecuteDataCommand(
         return STATUS_INVALID_PARAMETER;
 
     RtlZeroMemory(LocalResponse, sizeof(LocalResponse));
-    DwMmcWrite(FdoExtension, DWMMC_CTRL, DwMmcRead(FdoExtension, DWMMC_CTRL) | DWMMC_CTRL_FIFO_RESET);
+    DwMmcWrite(FdoExtension, DWMMC_CTRL,
+               (DwMmcRead(FdoExtension, DWMMC_CTRL) & ~(DWMMC_CTRL_DMA_ENABLE | DWMMC_CTRL_USE_IDMAC)) |
+                   DWMMC_CTRL_FIFO_RESET);
     if (!DwMmcPollClear(FdoExtension, DWMMC_CTRL, DWMMC_CTRL_FIFO_RESET, SD_CMD_TIMEOUT_MS))
         return STATUS_IO_TIMEOUT;
     DwMmcWrite(FdoExtension, DWMMC_RINTSTS, DWMMC_INT_ALL);
@@ -462,6 +569,278 @@ DwMmcExecuteDataCommand(
     return Status;
 }
 
+typedef struct _DWMMC_DMA_MAP
+{
+    KEVENT Event;
+    PSCATTER_GATHER_LIST List;
+} DWMMC_DMA_MAP, *PDWMMC_DMA_MAP;
+
+static VOID
+NTAPI
+DwMmcDmaListReady(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP Irp,
+    _In_ PSCATTER_GATHER_LIST ScatterGather,
+    _In_ PVOID Context)
+{
+    PDWMMC_DMA_MAP Map = (PDWMMC_DMA_MAP)Context;
+
+    UNREFERENCED_PARAMETER(DeviceObject);
+    UNREFERENCED_PARAMETER(Irp);
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    ASSERT(ScatterGather != NULL);
+    ASSERT(Map->List == NULL);
+
+    Map->List = ScatterGather;
+    KeSetEvent(&Map->Event, IO_NO_INCREMENT, FALSE);
+}
+
+static VOID
+DwMmcSetDescriptor(
+    _In_ PFDO_EXTENSION FdoExtension,
+    _In_ ULONG Index,
+    _In_ ULONG Control,
+    _In_ ULONG Length,
+    _In_ ULONG64 Buffer,
+    _In_ ULONG64 Next)
+{
+    ASSERT(Index < DWMMC_IDMAC_DESCRIPTORS);
+    ASSERT(Length != 0);
+    ASSERT(Length <= DWMMC_IDMAC_BUFFER_MAX);
+    ASSERT((Buffer & (sizeof(ULONG) - 1)) == 0);
+
+    if (FdoExtension->DwMmcIdmac64)
+    {
+        PDWMMC_IDMAC_DESC64 Descriptor = (PDWMMC_IDMAC_DESC64)FdoExtension->DwMmcDescriptors + Index;
+
+        Descriptor->Des1 = 0;
+        Descriptor->Des2 = Length & DWMMC_DES_BS1_MASK;
+        Descriptor->Des3 = 0;
+        Descriptor->Des4 = (ULONG)Buffer;
+        Descriptor->Des5 = (ULONG)(Buffer >> 32);
+        Descriptor->Des6 = (ULONG)Next;
+        Descriptor->Des7 = (ULONG)(Next >> 32);
+        Descriptor->Des0 = Control;
+    }
+    else
+    {
+        PDWMMC_IDMAC_DESC32 Descriptor = (PDWMMC_IDMAC_DESC32)FdoExtension->DwMmcDescriptors + Index;
+
+        ASSERT(Buffer + Length - 1 <= MAXULONG);
+        ASSERT(Next <= MAXULONG);
+        Descriptor->Des1 = Length & DWMMC_DES_BS1_MASK;
+        Descriptor->Des2 = (ULONG)Buffer;
+        Descriptor->Des3 = (ULONG)Next;
+        Descriptor->Des0 = Control;
+    }
+}
+
+static BOOLEAN
+DwMmcBuildDescriptors(
+    _In_ PFDO_EXTENSION FdoExtension,
+    _In_ PSCATTER_GATHER_LIST List,
+    _In_ ULONG Bytes,
+    _Out_ PULONG Count)
+{
+    ULONG64 Base = (ULONG64)FdoExtension->DwMmcDescriptorsLogical.QuadPart;
+    ULONG Size = FdoExtension->DwMmcIdmac64 ? sizeof(DWMMC_IDMAC_DESC64) : sizeof(DWMMC_IDMAC_DESC32);
+    ULONG Element, Used = 0, Remaining = Bytes;
+
+    ASSERT(Bytes != 0);
+    *Count = 0;
+
+    for (Element = 0; Element < List->NumberOfElements && Remaining != 0; ++Element)
+    {
+        ULONG64 Address = (ULONG64)List->Elements[Element].Address.QuadPart;
+        ULONG Length = min(List->Elements[Element].Length, Remaining);
+
+        if (Length == 0 || ((Address | Length) & (sizeof(ULONG) - 1)) ||
+            (!FdoExtension->DwMmcIdmac64 && Address + Length - 1 > MAXULONG))
+            return FALSE;
+
+        while (Length != 0)
+        {
+            ULONG Chunk = min(Length, DWMMC_IDMAC_BUFFER_MAX);
+
+            if (Used == DWMMC_IDMAC_DESCRIPTORS)
+                return FALSE;
+            DwMmcSetDescriptor(FdoExtension, Used,
+                               DWMMC_DES0_OWN | DWMMC_DES0_CH | DWMMC_DES0_DIC | (Used == 0 ? DWMMC_DES0_FS : 0),
+                               Chunk, Address, Base + (ULONG64)(Used + 1) * Size);
+            Address += Chunk;
+            Length -= Chunk;
+            Remaining -= Chunk;
+            Used++;
+        }
+    }
+    if (Remaining != 0 || Used == 0)
+        return FALSE;
+
+    if (FdoExtension->DwMmcIdmac64)
+    {
+        PDWMMC_IDMAC_DESC64 Last = (PDWMMC_IDMAC_DESC64)FdoExtension->DwMmcDescriptors + (Used - 1);
+
+        ASSERT(Last->Des0 & DWMMC_DES0_OWN);
+        Last->Des6 = 0;
+        Last->Des7 = 0;
+        Last->Des0 = (Last->Des0 & ~(DWMMC_DES0_CH | DWMMC_DES0_DIC)) | DWMMC_DES0_LD;
+    }
+    else
+    {
+        PDWMMC_IDMAC_DESC32 Last = (PDWMMC_IDMAC_DESC32)FdoExtension->DwMmcDescriptors + (Used - 1);
+
+        ASSERT(Last->Des0 & DWMMC_DES0_OWN);
+        Last->Des3 = 0;
+        Last->Des0 = (Last->Des0 & ~(DWMMC_DES0_CH | DWMMC_DES0_DIC)) | DWMMC_DES0_LD;
+    }
+    *Count = Used;
+    return TRUE;
+}
+
+static NTSTATUS
+DwMmcRunDma(
+    _In_ PFDO_EXTENSION FdoExtension,
+    _In_ UCHAR CommandIndex,
+    _In_ ULONG Argument,
+    _In_ USHORT CommandFlags,
+    _In_ BOOLEAN IsRead,
+    _In_ BOOLEAN SendStopCommand,
+    _In_ ULONG BlockSize,
+    _In_ ULONG BlockCount,
+    _In_ ULONG Descriptors,
+    _Out_opt_ PULONG Response)
+{
+    ULONG64 Base = (ULONG64)FdoExtension->DwMmcDescriptorsLogical.QuadPart;
+    ULONG Wanted = DWMMC_INT_DATA_OVER | (SendStopCommand ? DWMMC_INT_ACD : 0);
+    ULONG DmaDone = IsRead ? DWMMC_IDSTS_RI : DWMMC_IDSTS_TI;
+    ULONG Idsts = DwMmcIdstsRegister(FdoExtension);
+    ULONG Budget = SD_DATA_TIMEOUT_MS * 100;
+    ULONG LocalResponse[4];
+    ULONG Interrupts = 0, Dma = 0, DataFlags;
+    NTSTATUS Status;
+
+    ASSERT(Descriptors != 0);
+    ASSERT(Descriptors <= DWMMC_IDMAC_DESCRIPTORS);
+    RtlZeroMemory(LocalResponse, sizeof(LocalResponse));
+    DwMmcWrite(FdoExtension, DWMMC_CTRL,
+               DwMmcRead(FdoExtension, DWMMC_CTRL) | DWMMC_CTRL_FIFO_RESET | DWMMC_CTRL_DMA_RESET);
+    if (!DwMmcPollClear(FdoExtension, DWMMC_CTRL, DWMMC_CTRL_FIFO_RESET | DWMMC_CTRL_DMA_RESET, SD_CMD_TIMEOUT_MS))
+        return STATUS_IO_TIMEOUT;
+    DwMmcWrite(FdoExtension, DWMMC_BMOD, DWMMC_BMOD_SWR);
+    if (!DwMmcPollClear(FdoExtension, DWMMC_BMOD, DWMMC_BMOD_SWR, SD_CMD_TIMEOUT_MS))
+        return STATUS_IO_TIMEOUT;
+
+    DwMmcWrite(FdoExtension, DWMMC_RINTSTS, DWMMC_INT_ALL);
+    DwMmcWrite(FdoExtension, Idsts, DWMMC_IDSTS_ALL);
+    /* The completion bits latch in IDSTS only when enabled here; CTRL keeps the interrupt line off */
+    DwMmcWrite(FdoExtension, DwMmcIdintenRegister(FdoExtension), DWMMC_IDINTEN_COMPLETION);
+    DwMmcWrite(FdoExtension, DWMMC_DBADDR, (ULONG)Base);
+    if (FdoExtension->DwMmcIdmac64)
+        DwMmcWrite(FdoExtension, DWMMC_DBADDRU, (ULONG)(Base >> 32));
+    DwMmcWrite(FdoExtension, DWMMC_BLKSIZ, BlockSize);
+    DwMmcWrite(FdoExtension, DWMMC_BYTCNT, BlockSize * BlockCount);
+    DwMmcWrite(FdoExtension, DWMMC_CTRL,
+               DwMmcRead(FdoExtension, DWMMC_CTRL) | DWMMC_CTRL_DMA_ENABLE | DWMMC_CTRL_USE_IDMAC);
+    DwMmcWrite(FdoExtension, DWMMC_BMOD, DWMMC_BMOD_DE | DWMMC_BMOD_FB);
+    DwMmcWrite(FdoExtension, DWMMC_PLDMND, 1);
+
+    DataFlags = DWMMC_CMD_DAT_EXP | (IsRead ? 0 : DWMMC_CMD_DAT_WR) | (SendStopCommand ? DWMMC_CMD_SEND_STOP : 0);
+    Status = DwMmcIssueCommand(FdoExtension, CommandIndex, Argument, CommandFlags, DataFlags, LocalResponse);
+    if (Response != NULL)
+        Response[0] = LocalResponse[0];
+
+    /* TODO: wait on the controller interrupt instead of polling the DMA completion */
+    while (NT_SUCCESS(Status))
+    {
+        Interrupts = DwMmcRead(FdoExtension, DWMMC_RINTSTS);
+        Dma = DwMmcRead(FdoExtension, Idsts);
+        if (Interrupts & DWMMC_INT_DATA_ERRORS)
+        {
+            Status = DwMmcErrorToStatus(Interrupts & DWMMC_INT_DATA_ERRORS);
+            break;
+        }
+        if (Dma & DWMMC_IDSTS_ERRORS)
+        {
+            Status = DwMmcErrorToStatus(0);
+            break;
+        }
+        if ((Interrupts & Wanted) == Wanted &&
+            ((Dma & DmaDone) || !(DwMmcDescriptorControl(FdoExtension, Descriptors - 1) & DWMMC_DES0_OWN)))
+            break;
+        if (Budget == 0)
+        {
+            Status = STATUS_IO_TIMEOUT;
+            break;
+        }
+        KeStallExecutionProcessor(10);
+        Budget--;
+    }
+    if (NT_SUCCESS(Status) && !IsRead)
+        Status = DwMmcWaitNotBusy(FdoExtension, SD_DATA_TIMEOUT_MS);
+
+    DwMmcStopDma(FdoExtension);
+    if (!NT_SUCCESS(Status))
+    {
+        (VOID)DwMmcReset(FdoExtension);
+        if (SendStopCommand)
+        {
+            (VOID)DwMmcSendCommand(FdoExtension, SDCMD_STOP_TRANSMISSION, 0,
+                                   SDHCI_CMD_RESP_48_BUSY | SDHCI_CMD_CRC_CHECK | SDHCI_CMD_INDEX_CHECK, NULL);
+        }
+    }
+    DwMmcWrite(FdoExtension, DWMMC_RINTSTS, DWMMC_INT_ALL);
+    return Status;
+}
+
+static NTSTATUS
+DwMmcExecuteDmaRequest(
+    _In_ PFDO_EXTENSION FdoExtension,
+    _In_ UCHAR CommandIndex,
+    _In_ ULONG Argument,
+    _In_ USHORT CommandFlags,
+    _In_ BOOLEAN IsRead,
+    _In_ BOOLEAN SendStopCommand,
+    _In_ PMDL Mdl,
+    _In_ ULONG BlockSize,
+    _In_ ULONG BlockCount,
+    _Out_opt_ PULONG Response,
+    _Out_ PBOOLEAN Mapped)
+{
+    ULONG Bytes = BlockSize * BlockCount;
+    ULONG Descriptors;
+    DWMMC_DMA_MAP Map;
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    ASSERT(FdoExtension->DwMmcIdmac);
+    ASSERT(FdoExtension->DmaAdapter != NULL);
+    ASSERT(FdoExtension->DwMmcDescriptors != NULL);
+    ASSERT(Bytes != 0);
+    ASSERT(Bytes <= MmGetMdlByteCount(Mdl));
+
+    *Mapped = FALSE;
+    if (Bytes > DWMMC_IDMAC_DESCRIPTORS * DWMMC_IDMAC_BUFFER_MAX)
+        return STATUS_SUCCESS;
+
+    KeInitializeEvent(&Map.Event, NotificationEvent, FALSE);
+    Map.List = NULL;
+    Status = SdBusGetScatterGatherListAtDispatch(FdoExtension, Mdl, Bytes, !IsRead, DwMmcDmaListReady, &Map);
+    if (!NT_SUCCESS(Status))
+        return STATUS_SUCCESS;
+    (VOID)KeWaitForSingleObject(&Map.Event, Executive, KernelMode, FALSE, NULL);
+    ASSERT(Map.List != NULL);
+
+    Status = STATUS_SUCCESS;
+    if (DwMmcBuildDescriptors(FdoExtension, Map.List, Bytes, &Descriptors))
+    {
+        *Mapped = TRUE;
+        Status = DwMmcRunDma(FdoExtension, CommandIndex, Argument, CommandFlags, IsRead, SendStopCommand,
+                             BlockSize, BlockCount, Descriptors, Response);
+    }
+    SdBusPutScatterGatherListAtDispatch(FdoExtension, Map.List, !IsRead);
+    return Status;
+}
+
 NTSTATUS
 DwMmcExecuteRequest(
     _In_ PFDO_EXTENSION FdoExtension,
@@ -474,6 +853,8 @@ DwMmcExecuteRequest(
     _Out_opt_ PULONG Response)
 {
     USHORT CommandFlags = SdBusResponseTypeToFlags(CmdDesc->ResponseType);
+    BOOLEAN IsRead = (CmdDesc->TransferDirection == SDTD_READ);
+    BOOLEAN SendStop = (CmdDesc->TransferType == SDTT_MULTI_BLOCK);
     PVOID DataBuffer;
 
     if (DataLength == 0 || Mdl == NULL || CmdDesc->TransferType == SDTT_CMD_ONLY)
@@ -481,6 +862,20 @@ DwMmcExecuteRequest(
         if ((RequestFlags & SDRP_FLAG_WAIT_FOR_BUSY) && (CommandFlags & SDHCI_CMD_RESP_MASK) == SDHCI_CMD_RESP_48)
             CommandFlags = (USHORT)((CommandFlags & ~SDHCI_CMD_RESP_MASK) | SDHCI_CMD_RESP_48_BUSY);
         return DwMmcSendCommand(FdoExtension, (UCHAR)CmdDesc->Cmd, Argument, CommandFlags, Response);
+    }
+
+    if (BlockSize == 0)
+        return STATUS_INVALID_PARAMETER;
+
+    if (FdoExtension->DwMmcIdmac && DataLength / BlockSize != 0)
+    {
+        BOOLEAN Mapped;
+        NTSTATUS Status = DwMmcExecuteDmaRequest(FdoExtension, (UCHAR)CmdDesc->Cmd, Argument, CommandFlags, IsRead,
+                                                 SendStop, Mdl, BlockSize, DataLength / BlockSize, Response,
+                                                 &Mapped);
+        if (Mapped)
+            return Status;
+        /* FIXME: an unaligned or unmappable buffer falls back to PIO, which can take data CRC errors at high speed */
     }
 
     DataBuffer = MmGetSystemAddressForMdlSafe(Mdl, NormalPagePriority);

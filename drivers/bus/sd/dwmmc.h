@@ -30,6 +30,15 @@
 #define DWMMC_STATUS                    0x048
 #define DWMMC_FIFOTH                    0x04C
 #define DWMMC_VERID                     0x06C
+#define DWMMC_HCON                      0x070
+#define DWMMC_BMOD                      0x080
+#define DWMMC_PLDMND                    0x084
+#define DWMMC_DBADDR                    0x088
+#define DWMMC_DBADDRU                   0x08C
+#define DWMMC_IDSTS32                   0x08C
+#define DWMMC_IDINTEN32                 0x090
+#define DWMMC_IDSTS64                   0x090
+#define DWMMC_IDINTEN64                 0x094
 #define DWMMC_DATA_OFFSET               0x100
 #define DWMMC_DATA_240A_OFFSET          0x200
 #define DWMMC_VERSION_240A              0x240A
@@ -38,7 +47,64 @@
 #define DWMMC_CTRL_FIFO_RESET           (1UL << 1)
 #define DWMMC_CTRL_DMA_RESET            (1UL << 2)
 #define DWMMC_CTRL_INT_ENABLE           (1UL << 4)
+#define DWMMC_CTRL_DMA_ENABLE           (1UL << 5)
+#define DWMMC_CTRL_USE_IDMAC            (1UL << 25)
 #define DWMMC_CTRL_ALL_RESET            (DWMMC_CTRL_RESET | DWMMC_CTRL_FIFO_RESET | DWMMC_CTRL_DMA_RESET)
+
+#define DWMMC_HCON_DMA_INTERFACE(Hcon)  (((Hcon) >> 16) & 0x3UL)
+#define DWMMC_HCON_DMA_IDMAC            0UL
+#define DWMMC_HCON_ADDR_64BIT           (1UL << 27)
+
+#define DWMMC_BMOD_SWR                  (1UL << 0)
+#define DWMMC_BMOD_FB                   (1UL << 1)
+#define DWMMC_BMOD_DE                   (1UL << 7)
+
+#define DWMMC_IDSTS_TI                  (1UL << 0)
+#define DWMMC_IDSTS_RI                  (1UL << 1)
+#define DWMMC_IDSTS_FBE                 (1UL << 2)
+#define DWMMC_IDSTS_DU                  (1UL << 4)
+#define DWMMC_IDSTS_CES                 (1UL << 5)
+#define DWMMC_IDSTS_NIS                 (1UL << 8)
+#define DWMMC_IDSTS_AIS                 (1UL << 9)
+#define DWMMC_IDSTS_ALL                 (DWMMC_IDSTS_TI | DWMMC_IDSTS_RI | DWMMC_IDSTS_FBE | DWMMC_IDSTS_DU | \
+                                         DWMMC_IDSTS_CES | DWMMC_IDSTS_NIS | DWMMC_IDSTS_AIS)
+#define DWMMC_IDSTS_ERRORS              (DWMMC_IDSTS_FBE | DWMMC_IDSTS_DU | DWMMC_IDSTS_CES)
+#define DWMMC_IDINTEN_COMPLETION        (DWMMC_IDSTS_TI | DWMMC_IDSTS_RI | DWMMC_IDSTS_NIS)
+
+#define DWMMC_DES0_DIC                  (1UL << 1)
+#define DWMMC_DES0_LD                   (1UL << 2)
+#define DWMMC_DES0_FS                   (1UL << 3)
+#define DWMMC_DES0_CH                   (1UL << 4)
+#define DWMMC_DES0_OWN                  (1UL << 31)
+#define DWMMC_DES_BS1_MASK              0x1FFFUL
+
+#define DWMMC_IDMAC_BUFFER_MAX          4096UL
+#define DWMMC_IDMAC_DESCRIPTORS         128UL
+
+typedef struct _DWMMC_IDMAC_DESC32
+{
+    ULONG Des0;
+    ULONG Des1;
+    ULONG Des2;
+    ULONG Des3;
+} DWMMC_IDMAC_DESC32, *PDWMMC_IDMAC_DESC32;
+
+typedef struct _DWMMC_IDMAC_DESC64
+{
+    ULONG Des0;
+    ULONG Des1;
+    ULONG Des2;
+    ULONG Des3;
+    ULONG Des4;
+    ULONG Des5;
+    ULONG Des6;
+    ULONG Des7;
+} DWMMC_IDMAC_DESC64, *PDWMMC_IDMAC_DESC64;
+
+C_ASSERT(sizeof(DWMMC_IDMAC_DESC32) == 16);
+C_ASSERT(sizeof(DWMMC_IDMAC_DESC64) == 32);
+C_ASSERT(DWMMC_IDMAC_BUFFER_MAX <= DWMMC_DES_BS1_MASK);
+C_ASSERT(DWMMC_IDMAC_DESCRIPTORS * sizeof(DWMMC_IDMAC_DESC64) <= PAGE_SIZE);
 
 #define DWMMC_CLKEN_ENABLE              (1UL << 0)
 #define DWMMC_TMOUT_MAX                 0xFFFFFFFFUL
