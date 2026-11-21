@@ -1740,6 +1740,15 @@ HalpArm64QueryMsiRoute(
         }
     }
 
+    /* A GICv2m frame turns the SPI number written to SETSPI into that interrupt: the route of its vectors needs no record. */
+    if (!HalpGicItsPresent && HalpGicMsiPresent &&
+        (Vector >= HalpGicMsiSpiBase) && (Vector - HalpGicMsiSpiBase < HalpGicMsiSpiCount))
+    {
+        *Address = HalpGicMsiFrameBase + HAL_ARM64_GICV2M_SETSPI;
+        *Data = Vector;
+        return STATUS_SUCCESS;
+    }
+
     return STATUS_NOT_FOUND;
 }
 
