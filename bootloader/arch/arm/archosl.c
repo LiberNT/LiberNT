@@ -531,7 +531,7 @@ ArmMapIdentity(VOID)
     PPAGE_LOOKUP_TABLE_ITEM Lookup;
     PULONGLONG Entry, Table;
     PFN_NUMBER Count, Page, First;
-    ULONG Address;
+    ULONG Address, Index;
     BOOLEAN Ram;
 
     Lookup = MmGetMemoryMap(&Count);
@@ -552,7 +552,7 @@ ArmMapIdentity(VOID)
         ASSERT((*Entry & (ARM_PTE_VALID | ARM_PTE_TABLE)) == ARM_PTE_TABLE_ENTRY);
         Table = (PULONGLONG)(ULONG_PTR)(*Entry & ARM_PTE_FRAME);
         Entry = &Table[(Address >> 21) & (ARM_TABLE_ENTRIES - 1)];
-        if (*Entry & ARM_PTE_VALID)
+        if ((*Entry & (ARM_PTE_VALID | ARM_PTE_TABLE)) == ARM_PTE_VALID)
             continue;
 
         Ram = FALSE;
@@ -562,7 +562,19 @@ ArmMapIdentity(VOID)
             Ram = Page >= MmLowestPhysicalPage && Page - MmLowestPhysicalPage < Count &&
                   ArmIsRamType(Lookup[Page - MmLowestPhysicalPage].PageAllocated);
         }
-        *Entry = (Ram ? ARM_BLOCK_DATA : ARM_BLOCK_DEVICE) | Address;
+
+        if (!(*Entry & ARM_PTE_VALID))
+        {
+            *Entry = (Ram ? ARM_BLOCK_DATA : ARM_BLOCK_DEVICE) | Address;
+            continue;
+        }
+
+        Table = (PULONGLONG)(ULONG_PTR)(*Entry & ARM_PTE_FRAME);
+        for (Index = 0; Index < ARM_TABLE_ENTRIES; Index++)
+        {
+            if (!(Table[Index] & ARM_PTE_VALID))
+                Table[Index] = (Ram ? ARM_PTE_DATA : ARM_PTE_DEVICE) | (Address + (Index << MM_PAGE_SHIFT));
+        }
     }
 
     return TRUE;
