@@ -17,7 +17,7 @@ add_library(windows_storage MODULE
 set_target_properties(windows_storage PROPERTIES OUTPUT_NAME "windows.storage")
 file(GLOB windows_storage_rc_deps ${CMAKE_CURRENT_SOURCE_DIR}/lang/*.rc ${CMAKE_CURRENT_SOURCE_DIR}/res/rgs/*.rgs)
 list(APPEND windows_storage_rc_deps ${CMAKE_CURRENT_SOURCE_DIR}/storage.rgs ${REACTOS_SOURCE_DIR}/dll/win32/shell32/shresdef.h
-     ${REACTOS_SOURCE_DIR}/dll/cpl/usrmgr/resources/user.ico)
+     ${CMAKE_CURRENT_SOURCE_DIR}/res/usersfiles.ico)
 add_rc_deps(windows.storage.rc ${windows_storage_rc_deps})
 set_source_files_properties(windows.storage.rc PROPERTIES INCLUDE_DIRECTORIES ${REACTOS_SOURCE_DIR}/dll/win32/shell32)
 add_idl_reg_scripts(windows_storage winrt classes.idl)

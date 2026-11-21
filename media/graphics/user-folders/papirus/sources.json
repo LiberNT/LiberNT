@@ -96,6 +96,36 @@
   "sha256": "b9bd1ebaada73ee31e0a01551b07edce28703eee2ab291e062b870562e4f4f08"
  },
  {
+  "name": "user-yellow-home",
+  "size": "22x22",
+  "file": "22x22/places/user-yellow-home.svg",
+  "sha256": "fa9a3919aa7da12be6f40d2d7d1412c640448f1d2760478f9db40a0f48b97165"
+ },
+ {
+  "name": "user-yellow-home",
+  "size": "24x24",
+  "file": "24x24/places/user-yellow-home.svg",
+  "sha256": "3f6e70a38d2713bade2c6498882ac93d464f8c5e7f343462c209167e29893dbc"
+ },
+ {
+  "name": "user-yellow-home",
+  "size": "32x32",
+  "file": "32x32/places/user-yellow-home.svg",
+  "sha256": "9399249906e19b68003abb0f2a2ab06f11e71f86cfa143a62649a5587b9743d0"
+ },
+ {
+  "name": "user-yellow-home",
+  "size": "48x48",
+  "file": "48x48/places/user-yellow-home.svg",
+  "sha256": "a94236e754dade954941110414146d19d34a1880edfa06796358d0e0060cd382"
+ },
+ {
+  "name": "user-yellow-home",
+  "size": "64x64",
+  "file": "64x64/places/user-yellow-home.svg",
+  "sha256": "2b6dd09643c281c2c456ca74efb10d2b48f7a2937ae60de939c7867eb3e4c981"
+ },
+ {
   "name": "folder-blue-documents",
   "size": "22x22",
   "file": "22x22/places/folder-blue-documents.svg",

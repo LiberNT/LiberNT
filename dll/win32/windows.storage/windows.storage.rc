@@ -24,7 +24,7 @@ IDR_APPLICATIONDOCUMENTLISTS REGISTRY "res/rgs/applicationdocumentlists.rgs"
 IDR_APPLICATIONDESTINATIONS REGISTRY "res/rgs/applicationdestinations.rgs"
 IDR_USERSFILES REGISTRY "res/rgs/usersfiles.rgs"
 
-IDI_USERSFILES ICON "../../cpl/usrmgr/resources/user.ico"
+IDI_USERSFILES ICON "res/usersfiles.ico"
 
 #ifdef LANGUAGE_EN_GB
     #include "lang/en-GB.rc"

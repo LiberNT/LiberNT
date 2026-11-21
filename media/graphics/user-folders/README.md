@@ -17,6 +17,7 @@ records the icon name, design size, file and SHA-256 of each one.
 | Network Places | `places/network-workgroup` | shell32.dll, -18 |
 | Recycle Bin, empty and full | `places/user-trash`, `places/user-trash-full` | shell32.dll, -32 and -33 |
 | Desktop | `places/user-teal-home` | shell32.dll, -35 |
+| User's Files | `places/user-yellow-home` | windows.storage.dll, -123 |
 | Control Panel | `places/folder-blue-development` | shell32.dll, -137 |
 | Read Me | `mimetypes/text-x-readme` | shell32.dll, -152 |
 | Documents | `places/folder-blue-documents` | shell32.dll, -235; mydocs.dll, 100 |
