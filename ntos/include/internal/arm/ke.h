@@ -22,6 +22,8 @@
 /* The switch backend completes the outgoing-thread handoff on the new stack. */
 #define KI_ARCH_THREAD_HANDOFF_USES_RUNNING 1
 
+#define KiPrcbTimerTableLockQueue(Prcb, Index) (&(Prcb)->TimerTableLockQueue[(Index)])
+
 #undef SYNCH_LEVEL
 #define SYNCH_LEVEL 12
 
@@ -117,6 +119,7 @@ VOID NTAPI KiArmSetPriorityMask(_In_ KIRQL Irql);
 BOOLEAN NTAPI KiArmDispatchDeviceInterrupt(_Inout_ PKTRAP_FRAME TrapFrame);
 BOOLEAN NTAPI KiArmPlatformInitialized(VOID);
 BOOLEAN NTAPI KiArmPsciConduitIsSmc(VOID);
+VOID NTAPI KiArmInitializeTimeBase(VOID);
 BOOLEAN NTAPI KiArmFindDevice(_In_ const CHAR * const *Compatible, _In_ ULONG RegIndex, _Out_ PPHYSICAL_ADDRESS Address, _Out_opt_ PULONG Length);
 BOOLEAN NTAPI KiArmEnableInterruptLine(_In_ ULONG Vector, _In_ KIRQL Irql, _In_ KINTERRUPT_MODE Mode);
 VOID NTAPI KiArmDisableInterruptLine(_In_ ULONG Vector);
@@ -141,6 +144,9 @@ KiGetUserModeStackAddress(VOID)
 {
     return (PULONG_PTR)&KeGetCurrentThread()->TrapFrame->Sp;
 }
+
+VOID NTAPI KiArmPrepareUserBreakpoint(_Inout_ PEXCEPTION_RECORD ExceptionRecord, _Inout_ PKTRAP_FRAME TrapFrame);
+#define KiArchPrepareUserBreakpoint(ExceptionRecord, TrapFrame) KiArmPrepareUserBreakpoint(ExceptionRecord, TrapFrame)
 
 #define KiIsUserModeTrap(TrapFrame) (((TrapFrame)->Cpsr & CPSR_MODE_MASK) == CPSR_MODE_USER)
 

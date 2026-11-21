@@ -292,3 +292,20 @@ KiArmUnimplemented(
     DbgPrint("ARM: %s is not implemented\n", Routine);
     KeBugCheckEx(UNEXPECTED_KERNEL_MODE_TRAP, 0x41524D00, (ULONG_PTR)Routine, 0, 0);
 }
+
+/* A resumed user breakpoint continues after its UDF, as after an x86 int3. */
+VOID
+NTAPI
+KiArmPrepareUserBreakpoint(
+    _Inout_ PEXCEPTION_RECORD ExceptionRecord,
+    _Inout_ PKTRAP_FRAME TrapFrame)
+{
+    ASSERT(ExceptionRecord->ExceptionCode == STATUS_BREAKPOINT);
+
+    if ((ExceptionRecord->NumberParameters == 1) &&
+        !(ExceptionRecord->ExceptionFlags & EXCEPTION_SOFTWARE_ORIGINATE) &&
+        ((ULONG_PTR)ExceptionRecord->ExceptionAddress == (ULONG_PTR)TrapFrame->Pc))
+    {
+        TrapFrame->Pc += KD_BREAKPOINT_SIZE;
+    }
+}

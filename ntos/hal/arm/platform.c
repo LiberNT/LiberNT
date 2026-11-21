@@ -331,13 +331,9 @@ KiArmInitializePlatform(
     KiArmSetPriorityMask(KeGetCurrentIrql());
     KiArmGiccWrite(GICC_CTLR, 1);
 
-    KiArmTimerFrequency = KiArmReadCp15(14, 0, 0, 0);
-    if (!KiArmTimerFrequency)
-        KeBugCheckEx(HAL_INITIALIZATION_FAILED, 0x41524D03, 0, 0, 0);
-    KiArmTimerReload = (ULONG)(((ULONGLONG)KiArmTimerFrequency * KI_ARM_CLOCK_INCREMENT) / 10000000ULL);
+    ASSERT(KiArmTimerFrequency != 0 && KiArmTimerReload != 0);
     KiArmTimerInterrupt = KiArmFindTimerInterrupt();
 
-    KeSetTimeIncrement(KI_ARM_CLOCK_INCREMENT, KI_ARM_CLOCK_INCREMENT);
     KiArmPlatformReady = TRUE;
     KiArmEnableInterruptLine(KiArmTimerInterrupt, CLOCK_LEVEL, LevelSensitive);
     KiArmProgramTimer();
@@ -387,6 +383,17 @@ HalGetInterruptSource(VOID)
 BOOLEAN
 NTAPI
 KiArmPsciConduitIsSmc(VOID)
+VOID
+NTAPI
+KiArmInitializeTimeBase(VOID)
+{
+    KiArmTimerFrequency = KiArmReadCp15(14, 0, 0, 0);
+    if (!KiArmTimerFrequency)
+        KeBugCheckEx(HAL_INITIALIZATION_FAILED, 0x41524D03, 0, 0, 0);
+    KiArmTimerReload = (ULONG)(((ULONGLONG)KiArmTimerFrequency * KI_ARM_CLOCK_INCREMENT) / 10000000ULL);
+    KeSetTimeIncrement(KI_ARM_CLOCK_INCREMENT, KI_ARM_CLOCK_INCREMENT);
+}
+
 {
     static const CHAR * const Psci[] = { "arm,psci-1.0", "arm,psci-0.2", "arm,psci", NULL };
     const CHAR *Method;

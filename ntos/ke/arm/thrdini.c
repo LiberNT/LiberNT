@@ -255,8 +255,10 @@ KiArmExitToUserMode(
         if (!Thread->ApcState.UserApcPending)
             break;
         _enable();
+        KfRaiseIrql(APC_LEVEL);
         KiDeliverApc(UserMode, &KI_ARM_TRAP_RECORD(TrapFrame)->ExceptionFrame, TrapFrame);
     }
+        KfLowerIrql(PASSIVE_LEVEL);
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
 }
 

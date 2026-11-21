@@ -609,7 +609,7 @@
 @ cdecl -arch=win64,ppc KeAcquireQueuedSpinLockRaiseToSynch(long)
 @ stdcall KeAcquireSpinLockAtDpcLevel(ptr)
 @ fastcall KeAcquireSpinLockForDpc(ptr)
-@ stdcall -arch=win64,ppc KeAcquireSpinLockRaiseToDpc(ptr)
+@ stdcall -arch=win64,ppc,arm KeAcquireSpinLockRaiseToDpc(ptr)
 @ stdcall -arch=win64,ppc KeAcquireSpinLockRaiseToSynch(ptr)
 @ stdcall KeAddSystemServiceTable(ptr ptr long ptr long)
 @ stdcall KeAreAllApcsDisabled()
@@ -2629,7 +2629,7 @@
 @ stdcall KeInitializeTriageDumpDataArray(ptr long)
 @ stdcall -arch=win64 KeInterlockedClearProcessorAffinityEx(ptr long)
 @ stdcall -arch=win64 KeInterlockedSetProcessorAffinityEx(ptr long)
-@ fastcall -arch=!arm KeInvalidateRangeAllCaches(ptr long)
+@ fastcall KeInvalidateRangeAllCaches(ptr long)
 @ stub -arch=arm64 KeInvalidateRangeAllCachesNoIpi
 @ stdcall -arch=win64 KeIsEmptyAffinityEx(ptr)
 @ stdcall -arch=win64 KeIsEqualAffinityEx(ptr ptr)
@@ -2683,10 +2683,10 @@
 @ stdcall -arch=win64 KeSetHardwareCounterConfiguration(ptr long)
 @ stdcall -arch=win64 KeSetHeteroCpuPolicyThread(ptr long long)
 @ stdcall -arch=win64 KeSetSelectedCpuSetsThread(ptr long ptr)
-@ stdcall -arch=win64 KeSetSystemGroupAffinityThread(ptr ptr)
+@ stdcall -arch=win64,arm KeSetSystemGroupAffinityThread(ptr ptr)
 @ stdcall KeSetTargetProcessorDpcEx(ptr ptr)
 @ stdcall -version=0x603+ -arch=arm64 KeSetTimer2(ptr int64 int64 ptr)
-@ stdcall -arch=win64 KeShouldYieldProcessor()
+@ stdcall -arch=win64,arm KeShouldYieldProcessor()
 @ stdcall -arch=win64 KeSizeOfAffinityEx(long)
 @ stub -arch=win64 KeSrcuAllocate
 @ stub -arch=win64 KeSrcuFree
@@ -2739,7 +2739,7 @@
 @ stub -arch=win64 MmGetPhysicalMemoryRangesEx2
 @ stub -arch=win64 MmGetSectionInformation
 @ stub -arch=win64 MmIsDriverSuspectForVerifier
-@ stdcall -arch=win64 MmIsDriverVerifyingByAddress(ptr)
+@ stdcall -arch=win64,arm MmIsDriverVerifyingByAddress(ptr)
 @ stub -arch=win64 MmIsFileSectionActive
 @ stub -arch=arm64 MmLockPreChargedPagedPool
 @ stdcall -arch=win64 MmMapIoSpaceEx(long long long long)
