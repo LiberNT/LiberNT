@@ -24,12 +24,12 @@
 #define ARM_PTE_FRAME        0x000000FFFFFFF000ULL
 
 #define ARM_PTE_KERNEL       (ARM_PTE_VALID | ARM_PTE_PAGE | ARM_PTE_ATTR_NORMAL | ARM_PTE_SH_INNER | \
-                              ARM_PTE_AF | ARM_PTE_XN | ARM_PTE_SW_WRITE)
-#define ARM_PTE_DATA         (ARM_PTE_KERNEL | ARM_PTE_PXN)
+                              ARM_PTE_AF | ARM_PTE_SW_WRITE)
+#define ARM_PTE_DATA         (ARM_PTE_KERNEL | ARM_PTE_XN | ARM_PTE_PXN)
 #define ARM_PTE_DEVICE       (ARM_PTE_VALID | ARM_PTE_PAGE | ARM_PTE_ATTR_DEVICE | ARM_PTE_AF | \
                               ARM_PTE_XN | ARM_PTE_PXN | ARM_PTE_SW_WRITE)
 #define ARM_PTE_HANDOFF      (ARM_PTE_VALID | ARM_PTE_PAGE | ARM_PTE_ATTR_NORMAL | ARM_PTE_SH_INNER | \
-                              ARM_PTE_AF | ARM_PTE_XN)
+                              ARM_PTE_AF)
 #define ARM_PTE_TABLE_ENTRY  (ARM_PTE_VALID | ARM_PTE_TABLE)
 
 #define ARM_ROOT_ENTRIES     4
@@ -539,13 +539,12 @@ VOID
 ArmCleanLoadedImages(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
+    PLIST_ENTRY Head = VaToPa(&LoaderBlock->LoadOrderListHead);
     PLIST_ENTRY Entry;
 
-    for (Entry = LoaderBlock->LoadOrderListHead.Flink;
-         Entry != &LoaderBlock->LoadOrderListHead;
-         Entry = Entry->Flink)
+    for (Entry = VaToPa(Head->Flink); Entry != Head; Entry = VaToPa(Entry->Flink))
     {
-        PLDR_DATA_TABLE_ENTRY Module = CONTAINING_RECORD(VaToPa(Entry), LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+        PLDR_DATA_TABLE_ENTRY Module = CONTAINING_RECORD(Entry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
 
         ArmCleanRange((ULONG_PTR)VaToPa(Module->DllBase), Module->SizeOfImage);
     }

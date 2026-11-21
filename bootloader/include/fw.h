@@ -8,6 +8,7 @@
 #pragma once
 
 extern const USHORT FwApplicationSubsystem;
+extern const USHORT FwApplicationMachine;
 
 typedef enum _FW_VOLUME_SCAN_STATE
 {
