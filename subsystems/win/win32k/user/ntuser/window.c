@@ -5315,15 +5315,42 @@ NtUserGetWindowDisplayAffinity(
 /* FIXME: WDA_EXCLUDEFROMCAPTURE windows come out black like WDA_MONITOR ones instead of being left out of the capture */
 /* FIXME: another process reading a protected window through that window's own DC still gets its content */
 /* TODO: DXGI desktop duplication, Windows.Graphics.Capture and the AlphaBlend, TransparentBlt and PlgBlt screen reads do not exclude protected windows */
+/* Another process reading a protected window through a DC of that window gets none of its content (documented-safe:
+   the window is protected from capture by public APIs); the owning process still reads its own window */
+static
 PREGION
-FASTCALL
-UserCaptureExcludedRegion(
+UserCaptureForeignWindowRegion(
     _In_ HDC hdcSrc)
+{
+    PREGION prgn = NULL;
+    PWND pwnd, pwndRoot;
+    HWND hwnd;
+
+    UserEnterShared();
+    hwnd = IntWindowFromDC(hdcSrc);
+    pwnd = (hwnd != NULL) ? ValidateHwndNoErr(hwnd) : NULL;
+    pwndRoot = (pwnd != NULL) ? UserGetAncestor(pwnd, GA_ROOT) : NULL;
+    if (pwndRoot != NULL && pwndRoot != UserGetDesktopWindow() && pwndRoot->head.pti != NULL &&
+        pwndRoot->head.pti->ppi->peProcess != PsGetCurrentProcess() &&
+        IntGetWindowDisplayAffinity(pwndRoot) != WDA_NONE)
+    {
+        prgn = IntSysCreateRectpRgn(-MAXLONG / 2, -MAXLONG / 2, MAXLONG / 2, MAXLONG / 2);
+    }
+    UserLeave();
+    return prgn;
+}
+
+static
+PREGION
+UserCaptureAffinityRegion(
+    _In_ HDC hdcSrc,
+    _In_ BOOL ExcludeFromCaptureOnly)
 {
     PREGION prgnExcluded = NULL, prgnVis;
     PWND pwndDesktop, pwnd;
     PDC pdc;
     BOOL Screen;
+    BOOL Direct;
 
     if (hdcSrc == NULL || ExGetPreviousMode() != UserMode || UserIsEntered() || IntCompositionIsAttachedProcess())
         return NULL;
@@ -5333,15 +5360,17 @@ UserCaptureExcludedRegion(
         return NULL;
     Screen = pdc->dctype == DCTYPE_DIRECT && pdc->ppdev != NULL &&
              pdc->dclevel.pSurface != NULL && pdc->dclevel.pSurface == pdc->ppdev->pSurface;
+    Direct = (pdc->dctype == DCTYPE_DIRECT);
     DC_UnlockDc(pdc);
     if (!Screen)
-        return NULL;
+        return (Direct && !ExcludeFromCaptureOnly) ? UserCaptureForeignWindowRegion(hdcSrc) : NULL;
 
     UserEnterShared();
     pwndDesktop = UserGetDesktopWindow();
     for (pwnd = pwndDesktop ? pwndDesktop->spwndChild : NULL; pwnd != NULL; pwnd = pwnd->spwndNext)
     {
-        if (IntGetWindowDisplayAffinity(pwnd) == WDA_NONE)
+        if (IntGetWindowDisplayAffinity(pwnd) == WDA_NONE ||
+            (ExcludeFromCaptureOnly && IntGetWindowDisplayAffinity(pwnd) != WDA_EXCLUDEFROMCAPTURE))
             continue;
         prgnVis = VIS_ComputeVisibleRegion(pwnd, FALSE, FALSE, TRUE);
         if (prgnVis == NULL)
@@ -5357,6 +5386,133 @@ UserCaptureExcludedRegion(
     UserLeave();
 
     return prgnExcluded;
+}
+
+PREGION
+FASTCALL
+UserCaptureExcludedRegion(
+    _In_ HDC hdcSrc)
+{
+    return UserCaptureAffinityRegion(hdcSrc, FALSE);
+}
+
+/* Screen reads show what lies under a WDA_EXCLUDEFROMCAPTURE window, which only the windows' own backings hold */
+PREGION
+FASTCALL
+UserCaptureExcludeFromCaptureRegion(
+    _In_ HDC hdcSrc)
+{
+    if (!IntCompositionIsEnabled())
+        return NULL;
+    return UserCaptureAffinityRegion(hdcSrc, TRUE);
+}
+
+/* Paints the parts of prgnRestore inside the source rectangle from the windows under the excluded ones, bottom up */
+VOID
+FASTCALL
+UserCaptureRestoreExcluded(
+    _In_ HDC hdcDest,
+    _In_ const RECTL *prclSource,
+    _In_ PREGION prgnRestore,
+    _In_ PUSER_CAPTURE_MAP_RECT MapRect,
+    _In_ PVOID Context)
+{
+    PWND pwndDesktop, pwnd;
+    RECTL rclWindow, rcl, rclDest;
+    HDC hdcWindow;
+    DWORD Affinity;
+    ULONG Index;
+
+    ASSERT(prgnRestore != NULL);
+    ASSERT(prgnRestore->rdh.nCount == 0 || prgnRestore->Buffer != NULL);
+    if (UserIsEntered())
+        return;
+
+    UserEnterExclusive();
+    pwndDesktop = UserGetDesktopWindow();
+    for (pwnd = pwndDesktop ? pwndDesktop->spwndChild : NULL; pwnd != NULL && pwnd->spwndNext != NULL; pwnd = pwnd->spwndNext)
+        ;
+
+    /* FIXME: windows under an excluded one are copied as rectangles, without their window region or DWM effects */
+    for (; pwnd != NULL; pwnd = pwnd->spwndPrev)
+    {
+        if (!(pwnd->style & WS_VISIBLE) || (pwnd->style & WS_MINIMIZE))
+            continue;
+        Affinity = IntGetWindowDisplayAffinity(pwnd);
+        if (Affinity == WDA_EXCLUDEFROMCAPTURE)
+            continue;
+
+        if (!RECTL_bIntersectRect(&rclWindow, &pwnd->rcWindow, prclSource))
+            continue;
+
+        hdcWindow = NULL;
+        for (Index = 0; Index < prgnRestore->rdh.nCount; Index++)
+        {
+            if (!RECTL_bIntersectRect(&rcl, &prgnRestore->Buffer[Index], &rclWindow))
+                continue;
+            if (!MapRect(Context, &rcl, &rclDest))
+                continue;
+
+            if (Affinity == WDA_MONITOR)
+            {
+                NtGdiPatBlt(hdcDest, rclDest.left, rclDest.top, rclDest.right - rclDest.left,
+                            rclDest.bottom - rclDest.top, BLACKNESS);
+                continue;
+            }
+
+            if (hdcWindow == NULL)
+                hdcWindow = UserGetDCEx(pwnd, NULL, DCX_CACHE | DCX_WINDOW);
+            if (hdcWindow == NULL)
+                break;
+            NtGdiStretchBlt(hdcDest, rclDest.left, rclDest.top, rclDest.right - rclDest.left, rclDest.bottom - rclDest.top,
+                            hdcWindow, rcl.left - pwnd->rcWindow.left, rcl.top - pwnd->rcWindow.top,
+                            rcl.right - rcl.left, rcl.bottom - rcl.top, SRCCOPY, CLR_INVALID);
+        }
+        if (hdcWindow != NULL)
+            UserReleaseDC(pwnd, hdcWindow, FALSE);
+    }
+    UserLeave();
+}
+
+/* The pixel at a screen point under a WDA_EXCLUDEFROMCAPTURE window: the topmost window there that is not excluded */
+COLORREF
+FASTCALL
+UserCaptureExcludedPixel(
+    _In_ LONG x,
+    _In_ LONG y)
+{
+    PWND pwndDesktop, pwnd;
+    COLORREF Color = RGB(0, 0, 0);
+    HDC hdcWindow;
+    DWORD Affinity;
+
+    if (UserIsEntered())
+        return Color;
+
+    UserEnterExclusive();
+    pwndDesktop = UserGetDesktopWindow();
+    for (pwnd = pwndDesktop ? pwndDesktop->spwndChild : NULL; pwnd != NULL; pwnd = pwnd->spwndNext)
+    {
+        if (!(pwnd->style & WS_VISIBLE) || (pwnd->style & WS_MINIMIZE))
+            continue;
+        if (x < pwnd->rcWindow.left || x >= pwnd->rcWindow.right || y < pwnd->rcWindow.top || y >= pwnd->rcWindow.bottom)
+            continue;
+        Affinity = IntGetWindowDisplayAffinity(pwnd);
+        if (Affinity == WDA_EXCLUDEFROMCAPTURE)
+            continue;
+        if (Affinity == WDA_MONITOR)
+            break;
+
+        hdcWindow = UserGetDCEx(pwnd, NULL, DCX_CACHE | DCX_WINDOW);
+        if (hdcWindow != NULL)
+        {
+            Color = NtGdiGetPixel(hdcWindow, x - pwnd->rcWindow.left, y - pwnd->rcWindow.top);
+            UserReleaseDC(pwnd, hdcWindow, FALSE);
+        }
+        break;
+    }
+    UserLeave();
+    return Color;
 }
 
 /* EOF */
