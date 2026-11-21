@@ -1233,9 +1233,19 @@ static VOID CheckDriverReload(DEVINST Bus)
     ok(ChildStarted(Bus, 1000), "The bus did not start again with its driver loaded again\n");
 }
 
+/* Without PAE an x86 kernel maps 32-bit physical addresses only; the memory windows of three checks are above 4 GB */
+static BOOL HighMemoryReachable(VOID)
+{
+#ifdef _M_IX86
+    return IsProcessorFeaturePresent(PF_PAE_ENABLED);
+#else
+    return TRUE;
+#endif
+}
+
 static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath)
 {
-    BOOL Success, Staged, Reboot = FALSE;
+    BOOL Success, Staged, HighMemory, Reboot = FALSE;
     WCHAR OemInf[MAX_PATH];
     PWSTR OemName = NULL;
 
@@ -1272,10 +1282,15 @@ static VOID RunFixture(HDEVINFO Devices, PSP_DEVINFO_DATA Device, PCWSTR InfPath
         CheckFailedStack(Device->DevInst);
         CheckTargetRemoval(Device->DevInst);
         CheckApplicationRemoval(Device->DevInst);
-        CheckLargeMemory(Device->DevInst);
+        HighMemory = HighMemoryReachable();
+        if (!skip(HighMemory, "No physical address space above 4 GB\n"))
+            CheckLargeMemory(Device->DevInst);
         CheckNoRequirements(Device->DevInst);
-        CheckOccupiedMemory(Device->DevInst);
-        CheckBootSetting(Device->DevInst);
+        if (HighMemory)
+        {
+            CheckOccupiedMemory(Device->DevInst);
+            CheckBootSetting(Device->DevInst);
+        }
         CheckNullChild(Device->DevInst);
         CheckEject(Device->DevInst);
         CheckFailed(Device->DevInst);

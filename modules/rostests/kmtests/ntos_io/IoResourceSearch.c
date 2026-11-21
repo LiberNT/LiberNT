@@ -333,6 +333,12 @@ START_TEST(IoResourceSearch)
     ULONGLONG Start;
     NTSTATUS Status;
 
+#ifdef _M_IX86
+    /* Without PAE the kernel maps 32-bit physical addresses only, and every window used here is above 4 GB */
+    if (skip(ExIsProcessorFeaturePresent(PF_PAE_ENABLED), "No physical address space above 4 GB\n"))
+        return;
+#endif
+
     /* The search takes the highest aligned candidate */
     DescribeMemory(&Requirement, 0x700001001ULL, 0x7000FFFFFULL, 0x1000, 0x1000);
     ok_once(Assign(&Requirement, &Start), STATUS_SUCCESS);
