@@ -527,11 +527,11 @@ typedef [restricted, hidden] struct SPPHRASEREPLACEMENT
     ULONG        ulCountOfElements;
 } SPPHRASEREPLACEMENT;
 
-typedef [restricted, hidden] struct SPPHRASE
+typedef [restricted, hidden] struct SPPHRASE_50
 {
     ULONG                   cbSize;
     LANGID                  LangID;
-    WORD                    wReserved;
+    WORD                    wHomophoneGroupId;
     ULONGLONG               ullGrammarID;
     ULONGLONG               ftStartTime;
     ULONGLONG               ullAudioStreamPosition;
@@ -546,6 +546,73 @@ typedef [restricted, hidden] struct SPPHRASE
     GUID                    SREngineID;
     ULONG                   ulSREnginePrivateDataSize;
     const BYTE             *pSREnginePrivateData;
+} SPPHRASE_50;
+cpp_quote("#define SP_SPPHRASESIZE_500 sizeof(SPPHRASE_50)")
+
+typedef [restricted, hidden] struct SPSEMANTICERRORINFO
+{
+    ULONG ulLineNumber;
+    LPWSTR pszScriptLine;
+    LPWSTR pszSource;
+    LPWSTR pszDescription;
+    HRESULT hrResultCode;
+} SPSEMANTICERRORINFO;
+
+typedef enum SPSEMANTICFORMAT
+{
+    SPSMF_SAPI_PROPERTIES = 0,
+    SPSMF_SRGS_SEMANTICINTERPRETATION_MS = 1,
+    SPSMF_SRGS_SAPIPROPERTIES = 2,
+    SPSMF_UPS = 4,
+    SPSMF_SRGS_SEMANTICINTERPRETATION_W3C = 8
+} SPSEMANTICFORMAT;
+
+typedef [restricted, hidden] struct SPPHRASE_53
+{
+    ULONG                   cbSize;
+    LANGID                  LangID;
+    WORD                    wHomophoneGroupId;
+    ULONGLONG               ullGrammarID;
+    ULONGLONG               ftStartTime;
+    ULONGLONG               ullAudioStreamPosition;
+    ULONG                   ulAudioSizeBytes;
+    ULONG                   ulRetainedSizeBytes;
+    ULONG                   ulAudioSizeTime;
+    SPPHRASERULE            Rule;
+    const SPPHRASEPROPERTY *pProperties;
+    const SPPHRASEELEMENT  *pElements;
+    ULONG                   cReplacements;
+    const SPPHRASEREPLACEMENT *pReplacements;
+    GUID                    SREngineID;
+    ULONG                   ulSREnginePrivateDataSize;
+    const BYTE             *pSREnginePrivateData;
+    LPWSTR                  pSML;
+    SPSEMANTICERRORINFO    *pSemanticErrorInfo;
+} SPPHRASE_53;
+cpp_quote("#define SP_SPPHRASESIZE_530 sizeof(SPPHRASE_53)")
+
+typedef [restricted, hidden] struct SPPHRASE
+{
+    ULONG                   cbSize;
+    LANGID                  LangID;
+    WORD                    wHomophoneGroupId;
+    ULONGLONG               ullGrammarID;
+    ULONGLONG               ftStartTime;
+    ULONGLONG               ullAudioStreamPosition;
+    ULONG                   ulAudioSizeBytes;
+    ULONG                   ulRetainedSizeBytes;
+    ULONG                   ulAudioSizeTime;
+    SPPHRASERULE            Rule;
+    const SPPHRASEPROPERTY *pProperties;
+    const SPPHRASEELEMENT  *pElements;
+    ULONG                   cReplacements;
+    const SPPHRASEREPLACEMENT *pReplacements;
+    GUID                    SREngineID;
+    ULONG                   ulSREnginePrivateDataSize;
+    const BYTE             *pSREnginePrivateData;
+    LPWSTR                  pSML;
+    SPSEMANTICERRORINFO    *pSemanticErrorInfo;
+    SPSEMANTICFORMAT        SemanticTagFormat;
 } SPPHRASE;
 
 typedef [restricted, hidden] struct SPSERIALIZEDPHRASE
