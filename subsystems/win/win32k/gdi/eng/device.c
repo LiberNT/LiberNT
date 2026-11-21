@@ -52,6 +52,19 @@ InitDeviceImpl(
     return STATUS_SUCCESS;
 }
 
+VOID
+NTAPI
+FreeDeviceImpl(VOID)
+{
+    ASSERT(gpGraphicsDeviceFirst == NULL);
+    ASSERT(IsListEmpty(&gGraphicsDeviceNotifyList));
+    if (ghsemGraphicsDeviceList)
+    {
+        EngDeleteSemaphore(ghsemGraphicsDeviceList);
+        ghsemGraphicsDeviceList = NULL;
+    }
+}
+
 static
 BOOLEAN
 EngpHasVgaDriver(

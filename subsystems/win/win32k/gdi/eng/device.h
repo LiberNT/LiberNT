@@ -97,3 +97,7 @@ NTAPI
 InitDeviceImpl(
     _In_ PDRIVER_OBJECT DriverObject);
 
+VOID
+NTAPI
+FreeDeviceImpl(VOID);
+
