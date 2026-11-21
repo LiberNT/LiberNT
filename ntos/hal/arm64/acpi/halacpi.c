@@ -11,6 +11,7 @@
 #include <hal.h>
 #include <acpifault.h>
 #include <halacpi_arm64.h>
+#include <halarch.h>
 #include <halpcie.h>
 #include <ntifs.h>
 #include <ndk/extypes.h>
@@ -26,9 +27,6 @@ extern VOID HalpPciLogEcamCoverage(VOID);
 
 NTSYSAPI NTSTATUS NTAPI NtShutdownSystem(_In_ SHUTDOWN_ACTION Action);
 
-#define HALP_ARM64_KSEG0_BASE 0xFFFF800000000000ULL
-#define HALP_ARM64_PHYS_MAP_BASE 0xFFFFFC0000000000ULL
-#define HALP_ARM64_PHYS_ADDR_MASK 0x0000FFFFFFFFFFFFULL
 
 /* GLOBALS ********************************************************************/
 
@@ -355,10 +353,9 @@ HalpAcpiMapCachedTable(IN PHYSICAL_ADDRESS PhysicalAddress,
      * alias. FFFF8000... is the public system range, not a direct map.
      */
     if ((CachedTable != NULL) &&
-        ((ULONG_PTR)CachedTable < HALP_ARM64_KSEG0_BASE))
+        ((ULONG_PTR)CachedTable < HAL_ARM64_SYSTEM_RANGE_BASE))
     {
-        CachedTable = (PVOID)(ULONG_PTR)(HALP_ARM64_PHYS_MAP_BASE |
-                                         (PhysicalAddress.QuadPart & HALP_ARM64_PHYS_ADDR_MASK));
+        CachedTable = HalpPhysicalAlias(PhysicalAddress.QuadPart);
     }
 
     return CachedTable;

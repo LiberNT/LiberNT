@@ -29,6 +29,7 @@
 #include <debug.h>
 
 #include "gic_internal.h"
+#include <halarch.h>
 
 static
 ULONG
@@ -1578,26 +1579,10 @@ HalpSetPciRoutingMap(
     }
 }
 
-#define HAL_ARM64_SYSTEM_RANGE_BASE 0xFFFF800000000000ULL
-#define HAL_ARM64_PHYS_MAP_BASE 0xFFFFFC0000000000ULL
-#define HAL_ARM64_PHYS_ADDR_MASK 0x0000FFFFFFFFFFFFULL
-
 #define HAL_ARM64_GICD_MAP_LENGTH 0x10000ULL
 #define HAL_ARM64_GICR_FRAME_LENGTH 0x20000ULL
 #define HAL_ARM64_ITS_MAP_LENGTH 0x20000ULL
 
-/*
- * PSCI (Power State Coordination Interface) definitions for ARM64.
- * These are used for SMP bring-up (CPU_ON) and power management (SYSTEM_RESET, SYSTEM_OFF).
- */
-#define PSCI_FN_CPU_ON_64           0xC4000003ULL
-#define PSCI_FN_SYSTEM_OFF          0x84000008UL
-#define PSCI_FN_SYSTEM_RESET        0x84000009UL
-#define PSCI_SUCCESS                0
-#define PSCI_E_INVALID_PARAMS       (-2)
-#define PSCI_E_DENIED               (-3)
-#define PSCI_E_ALREADY_ON           (-4)
-#define PSCI_E_ON_PENDING           (-5)
 #define PSCI_E_INTERNAL_FAILURE     (-6)
 #define PSCI_E_NOT_PRESENT          (-7)
 #define PSCI_E_DISABLED             (-8)
@@ -1697,9 +1682,7 @@ HalpArm64FlushMdlDcacheRange(_In_ PMDL Mdl,
 
         PhysicalAddress.QuadPart = ((ULONGLONG)PfnArray[PageIndex] << PAGE_SHIFT) +
                                    PageOffset;
-        AliasVa = (PVOID)(ULONG_PTR)(HAL_ARM64_PHYS_MAP_BASE |
-                                      (PhysicalAddress.QuadPart &
-                                       HAL_ARM64_PHYS_ADDR_MASK));
+        AliasVa = HalpPhysicalAlias(PhysicalAddress.QuadPart);
 
         if (WriteToDevice)
             HalpArm64CleanDcacheRange(AliasVa, ChunkLength);
@@ -1713,7 +1696,6 @@ HalpArm64FlushMdlDcacheRange(_In_ PMDL Mdl,
 
     return TRUE;
 }
-
 
 #define HALP_ARM64_MSI_ROUTE_CACHE_SIZE 64
 
@@ -2034,8 +2016,7 @@ static __inline PVOID HalpPhysToKseg0(ULONGLONG Physical)
     if (HalpUseIdentityMapping)
         return (PVOID)(ULONG_PTR)Physical;
 
-    return (PVOID)(ULONG_PTR)(HAL_ARM64_PHYS_MAP_BASE |
-                              (Physical & HAL_ARM64_PHYS_ADDR_MASK));
+    return HalpPhysicalAlias(Physical);
 }
 
 PVOID
@@ -2109,7 +2090,7 @@ volatile ULONG *HalpMmio(ULONG_PTR Base, ULONG Offset)
         return (volatile ULONG *)(Va + Offset);
 
     /* After boot, convert to the private physical alias via TTBR1 */
-    Va = HAL_ARM64_PHYS_MAP_BASE | (Va & HAL_ARM64_PHYS_ADDR_MASK);
+    Va = (ULONG_PTR)HalpPhysicalAlias(Va);
     return (volatile ULONG *)(Va + Offset);
 }
 
@@ -2264,7 +2245,6 @@ HalpMapGicv3RuntimeMmioWindows(VOID)
 
     return TRUE;
 }
-
 
 /*
  * Per-CPU active interrupt ID tracking (stored as intid + 1).
@@ -2528,82 +2508,7 @@ HalpGicv3SendSgi(
     _In_ KAFFINITY TargetSet,
     _In_ ULONG SgiId);
 
-/*
- * PSCI call helper functions.
- * These invoke SMC or HVC based on the FADT ARM_BOOT_ARCH flags.
- * The choice is indicated by HalpArm64PsciInfo.UseHvc.
- */
-#if defined(_MSC_VER) && !defined(__clang__)
 LONG
-HalpArm64PsciSmc(
-    _In_ ULONGLONG FunctionId,
-    _In_ ULONGLONG Arg0,
-    _In_ ULONGLONG Arg1,
-    _In_ ULONGLONG Arg2);
-
-LONG
-HalpArm64PsciHvc(
-    _In_ ULONGLONG FunctionId,
-    _In_ ULONGLONG Arg0,
-    _In_ ULONGLONG Arg1,
-    _In_ ULONGLONG Arg2);
-#endif
-
-static LONG
-HalpPsciCallSmc(
-    _In_ ULONGLONG FunctionId,
-    _In_ ULONGLONG Arg0,
-    _In_ ULONGLONG Arg1,
-    _In_ ULONGLONG Arg2)
-{
-#if defined(_MSC_VER) && !defined(__clang__)
-    return HalpArm64PsciSmc(FunctionId, Arg0, Arg1, Arg2);
-#else
-    register ULONGLONG x0 __asm__("x0") = FunctionId;
-    register ULONGLONG x1 __asm__("x1") = Arg0;
-    register ULONGLONG x2 __asm__("x2") = Arg1;
-    register ULONGLONG x3 __asm__("x3") = Arg2;
-
-    __asm__ __volatile__(
-        "smc #0"
-        : "+r"(x0), "+r"(x1), "+r"(x2), "+r"(x3)
-        :
-        : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11",
-          "x12", "x13", "x14", "x15", "x16", "x17", "memory"
-    );
-
-    return (LONG)x0;
-#endif
-}
-
-static LONG
-HalpPsciCallHvc(
-    _In_ ULONGLONG FunctionId,
-    _In_ ULONGLONG Arg0,
-    _In_ ULONGLONG Arg1,
-    _In_ ULONGLONG Arg2)
-{
-#if defined(_MSC_VER) && !defined(__clang__)
-    return HalpArm64PsciHvc(FunctionId, Arg0, Arg1, Arg2);
-#else
-    register ULONGLONG x0 __asm__("x0") = FunctionId;
-    register ULONGLONG x1 __asm__("x1") = Arg0;
-    register ULONGLONG x2 __asm__("x2") = Arg1;
-    register ULONGLONG x3 __asm__("x3") = Arg2;
-
-    __asm__ __volatile__(
-        "hvc #0"
-        : "+r"(x0), "+r"(x1), "+r"(x2), "+r"(x3)
-        :
-        : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11",
-          "x12", "x13", "x14", "x15", "x16", "x17", "memory"
-    );
-
-    return (LONG)x0;
-#endif
-}
-
-static LONG
 HalpPsciCall(
     _In_ ULONGLONG FunctionId,
     _In_ ULONGLONG Arg0,
@@ -2622,47 +2527,6 @@ HalpPsciCall(
     {
         return HalpPsciCallSmc(FunctionId, Arg0, Arg1, Arg2);
     }
-}
-
-/*
- * PSCI CPU_ON - wake a secondary processor.
- * Parameters:
- *   TargetMpidr - MPIDR of the target CPU
- *   EntryPoint  - Physical address of the entry point
- *   ContextId   - Context ID passed to the entry point (typically processor number)
- * Returns:
- *   PSCI return code (0 = success, negative = error)
- */
-static LONG
-HalpPsciCpuOn(
-    _In_ ULONGLONG TargetMpidr,
-    _In_ ULONGLONG EntryPoint,
-    _In_ ULONGLONG ContextId)
-{
-    LONG Result;
-    ULONGLONG PendingIsr;
-
-    ARM64_DSB(SY);
-    PendingIsr = ARM64_READ_SYSREG(ISR_EL1);
-    if (PendingIsr & (1ULL << 8))
-    {
-        DPRINT1("[arm64][HAL] PSCI CPU_ON aborted: SError pending (ISR_EL1=0x%llx)\n",
-                PendingIsr);
-        return -1;
-    }
-
-    DPRINT("[arm64][HAL] PSCI CPU_ON: target=0x%llx entry=0x%llx ctx=0x%llx %s\n",
-            TargetMpidr, EntryPoint, ContextId,
-            HalpArm64PsciInfo.UseHvc ? "HVC" : "SMC");
-
-    Result = HalpPsciCall(PSCI_FN_CPU_ON_64, TargetMpidr, EntryPoint, ContextId);
-
-    if (Result != PSCI_SUCCESS)
-    {
-        DPRINT1("[arm64][HAL] PSCI CPU_ON failed: %ld\n", Result);
-    }
-
-    return Result;
 }
 
 /*
@@ -2714,7 +2578,6 @@ HalpPsciSystemOff(VOID)
         ARM64_WFI();
     }
 }
-
 
 /* HALDISPATCH HalGetDmaAdapter factory; wired up in HalInitSystem (see below). */
 static PDMA_ADAPTER NTAPI
@@ -2986,7 +2849,7 @@ HalRequestSoftwareInterrupt(
 
     Daif = ARM64_READ_SYSREG(DAIF);
     ARM64_DAIFSET(3);
-    Pcr = KeGetPcr();
+    Pcr = (PKIPCR)KeGetPcr();
 
     if (SoftwareInterruptRequested == APC_LEVEL)
     {
@@ -3666,7 +3529,7 @@ HalClearSoftwareInterrupt(
 
     Daif = ARM64_READ_SYSREG(DAIF);
     ARM64_DAIFSET(3);
-    Pcr = KeGetPcr();
+    Pcr = (PKIPCR)KeGetPcr();
 
     if (Request == APC_LEVEL)
     {
@@ -6541,152 +6404,6 @@ HalSetTimeIncrement(
     return Increment;
 }
 
-BOOLEAN
-NTAPI
-HalStartNextProcessor(
-    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock,
-    _In_ PKPROCESSOR_STATE ProcessorState)
-{
-    ULONG ProcessorNumber;
-    ULONGLONG TargetMpidr;
-    UINT64 TrampolinePhys;
-    LONG PsciResult;
-
-    /*
-     * ARM64 SMP bring-up using PSCI CPU_ON with proper AP trampoline.
-     *
-     * The boot sequence is:
-     * 1. Use the AP trampoline reserved during phase-zero initialization
-     * 2. Prepare AP data structure with page tables and entry point
-     * 3. Call PSCI CPU_ON with trampoline physical address
-     * 4. AP wakes at trampoline, enables MMU, jumps to kernel entry
-     * 5. Wait for AP to signal synchronization
-     */
-
-    if (!LoaderBlock || !ProcessorState)
-    {
-        DPRINT1("[arm64][HAL] HalStartNextProcessor: invalid parameters\n");
-        return FALSE;
-    }
-
-    /*
-     * Determine which processor to start next, skipping over any MADT GICC
-     * entries whose enabled flag is clear. Advancing past disabled cores (rather
-     * than returning FALSE on the first one) lets a system with a disabled core
-     * in the middle of the MADT still bring up every later enabled core. Logical
-     * CPU numbers stay contiguous because they are assigned by the AP itself
-     * (KeNumberProcessors), independent of this MADT index.
-     */
-    while ((HalpStartedProcessorCount < HalpArm64GicInfo.GiccEntryCount) &&
-           !(HalpArm64GicInfo.GiccEntries[HalpStartedProcessorCount].Flags & 0x1))
-    {
-        DPRINT1("[arm64][HAL] HalStartNextProcessor: skipping disabled CPU %lu (MPIDR 0x%llx)\n",
-                HalpStartedProcessorCount,
-                HalpArm64GicInfo.GiccEntries[HalpStartedProcessorCount].Mpidr);
-        HalpStartedProcessorCount++;
-    }
-
-    ProcessorNumber = HalpStartedProcessorCount;
-
-    /* Check if we have more processors to start from MADT GICC entries */
-    if (ProcessorNumber >= HalpArm64GicInfo.GiccEntryCount)
-    {
-        DPRINT1("[arm64][HAL] HalStartNextProcessor: no more processors (started=%lu, available=%lu)\n",
-                ProcessorNumber, HalpArm64GicInfo.GiccEntryCount);
-        return FALSE;
-    }
-
-    /* Get the MPIDR of the target processor from MADT GICC entries */
-    TargetMpidr = HalpArm64GicInfo.GiccEntries[ProcessorNumber].Mpidr;
-
-    DPRINT("[arm64][HAL] HalStartNextProcessor: starting CPU %lu (MPIDR 0x%llx)\n",
-            ProcessorNumber, TargetMpidr);
-
-    /* The loader-backed startup pages must have been reserved in phase 0. */
-    if (!HalpArm64IsTrampolineInitialized())
-    {
-        DPRINT1("[arm64][HAL] HalStartNextProcessor: phase-0 trampoline unavailable\n");
-        return FALSE;
-    }
-
-    /* Get trampoline physical address */
-    TrampolinePhys = HalpArm64GetTrampolinePhysicalAddress();
-    if (TrampolinePhys == 0)
-    {
-        DPRINT1("[arm64][HAL] HalStartNextProcessor: trampoline not ready\n");
-        return FALSE;
-    }
-
-    /*
-     * Prepare AP data with page tables and entry point. GICR setup is
-     * deliberately left to HalInitializeProcessor after the AP reaches the HAL.
-     */
-    HalpArm64PrepareApData(
-        ProcessorNumber,
-        (UINT64)ProcessorState->ContextFrame.Pc,
-        (UINT64)ProcessorState->ContextFrame.Sp,
-        (UINT64)LoaderBlock
-    );
-
-    ARM64_DSB(SY);
-    ARM64_ISB();
-
-    /* Check if PSCI is available */
-    if (HalpArm64ReleaseSpinTableCpu(ProcessorNumber, TrampolinePhys))
-    {
-        if (!HalpArm64WaitForApSync(5000))
-        {
-            DPRINT1("[arm64][HAL] HalStartNextProcessor: CPU %lu did not leave its spin table\n", ProcessorNumber);
-            return FALSE;
-        }
-        HalpStartedProcessorCount++;
-        return TRUE;
-    }
-
-    if (!HalpArm64PsciInfo.Present)
-    {
-        DPRINT1("[arm64][HAL] HalStartNextProcessor: PSCI unavailable, trying parking\n");
-        if (HalpArm64WakeParkedCpu(ProcessorNumber, TrampolinePhys, ProcessorNumber))
-        {
-            if (HalpArm64WaitForApSync(5000))
-            {
-                DPRINT1("[arm64][HAL] HalStartNextProcessor: CPU %lu started via parking\n",
-                        ProcessorNumber);
-                HalpStartedProcessorCount++;
-                return TRUE;
-            }
-        }
-        DPRINT1("[arm64][HAL] HalStartNextProcessor: no method to start CPU %lu\n",
-                ProcessorNumber);
-        return FALSE;
-    }
-
-    /* Call PSCI CPU_ON with trampoline address */
-    PsciResult = HalpPsciCpuOn(TargetMpidr, TrampolinePhys, (ULONGLONG)ProcessorNumber);
-
-    if (PsciResult == PSCI_SUCCESS || PsciResult == PSCI_E_ALREADY_ON)
-    {
-        if (HalpArm64WaitForApSync(5000))
-        {
-            DPRINT("[arm64][HAL] HalStartNextProcessor: CPU %lu started and synced\n",
-                    ProcessorNumber);
-        }
-        else
-        {
-            DPRINT1("[arm64][HAL] HalStartNextProcessor: CPU %lu started (sync timeout)\n",
-                    ProcessorNumber);
-        }
-        HalpStartedProcessorCount++;
-        return TRUE;
-    }
-    else
-    {
-        DPRINT1("[arm64][HAL] HalStartNextProcessor: PSCI CPU_ON failed, err=%ld\n",
-                PsciResult);
-        return FALSE;
-    }
-}
-
 VOID
 NTAPI
 HalStartProfileInterrupt(
@@ -7117,7 +6834,7 @@ IoMapTransfer(
             return (PHYSICAL_ADDRESS){0};
         }
 
-        OriginalKernelVa = (PVOID)(HAL_ARM64_PHYS_MAP_BASE | (PhysicalAddress.QuadPart & HAL_ARM64_PHYS_ADDR_MASK));
+        OriginalKernelVa = HalpPhysicalAlias(PhysicalAddress.QuadPart);
 
         /* For write to device, copy data to bounce buffer */
         if (WriteToDevice)
@@ -7163,8 +6880,7 @@ IoMapTransfer(
      */
     if (!NeedsBounceBuffer && !HalpArm64DmaCoherent(AdapterObject) && TransferLength > 0)
     {
-        ULONG_PTR KsegVa = HAL_ARM64_PHYS_MAP_BASE |
-                            (PhysicalAddress.QuadPart & HAL_ARM64_PHYS_ADDR_MASK);
+        ULONG_PTR KsegVa = (ULONG_PTR)HalpPhysicalAlias(PhysicalAddress.QuadPart);
         ULONG_PTR Aligned = KsegVa & ~63ULL;
         ULONG_PTR End = KsegVa + TransferLength;
 
