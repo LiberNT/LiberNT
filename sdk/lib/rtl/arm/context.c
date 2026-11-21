@@ -7,6 +7,16 @@
 
 #include <rtl.h>
 
+/* The ARM copy ranges of RtlCopyContext (ntdll xstate_wow64.c) are written against this layout. */
+C_ASSERT(CONTEXT_ARM == 0x00200000);
+C_ASSERT(FIELD_OFFSET(CONTEXT, R0) == 0x4);
+C_ASSERT(FIELD_OFFSET(CONTEXT, Sp) == 0x38);
+C_ASSERT(FIELD_OFFSET(CONTEXT, Fpscr) == 0x48);
+C_ASSERT(FIELD_OFFSET(CONTEXT, Bvr) == 0x150);
+C_ASSERT(FIELD_OFFSET(CONTEXT, Padding2) == 0x198);
+C_ASSERT(sizeof(CONTEXT) == 0x1a0);
+C_ASSERT(TYPE_ALIGNMENT(CONTEXT) == 8);
+
 typedef PVOID (CALLBACK *PRTL_CONSOLIDATE_CALLBACK)(
     _In_ PEXCEPTION_RECORD ExceptionRecord);
 
