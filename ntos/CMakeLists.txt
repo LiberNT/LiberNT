@@ -126,7 +126,7 @@ if(ENABLE_KERNEL_UBSAN)
 endif()
 
 if(ARCH STREQUAL "arm64")
-    target_link_libraries(ntoskrnl rtl_kernel_context)
+    target_link_libraries(ntoskrnl rtl_kernel_context halcommon)
 endif()
 
 set(_ntoskrnl_tree_source ${NTOSKRNL_SOURCE})
@@ -145,8 +145,8 @@ if(STACK_PROTECTOR)
     target_link_libraries(ntoskrnl gcc_ssp_nt)
 endif()
 
-if(ARCH STREQUAL "arm")
-    # The ARMv7 HAL is part of the kernel; hal.dll forwards to it.
+if(ARCH STREQUAL "arm" OR ARCH STREQUAL "arm64")
+    # The ARM HALs are part of the kernel; hal.dll forwards to them.
     add_importlibs(ntoskrnl kdcom bootvid)
 else()
     add_importlibs(ntoskrnl hal kdcom bootvid)

@@ -1,4 +1,4 @@
-# The ARMv7 HAL lives in the kernel: hal.dll only forwards its exports to ntoskrnl.exe.
+# The ARM HALs live in the kernel: hal.dll only forwards their exports to ntoskrnl.exe.
 spec2def(hal.dll halarm.spec ADD_IMPORTLIB)
 
 add_library(hal MODULE ${CMAKE_CURRENT_BINARY_DIR}/hal.def)

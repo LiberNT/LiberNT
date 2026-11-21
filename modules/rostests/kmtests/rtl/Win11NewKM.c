@@ -46,7 +46,7 @@ int __cdecl sprintf_s(char *, SIZE_T, const char *, ...);
 int __cdecl _snprintf_s(char *, SIZE_T, SIZE_T, const char *, ...);
 int __cdecl swprintf_s(WCHAR *, SIZE_T, const WCHAR *, ...);
 
-/* HAL processor queries (hal/halarm64/kernstubs.c, forwarded by ntoskrnl). */
+/* HAL processor queries (ntos/hal/arm64/kernstubs.c). */
 NTSYSAPI ULONG NTAPI HalQueryMaximumProcessorCount(VOID);
 NTSYSAPI BOOLEAN NTAPI HalIsHyperThreadingEnabled(VOID);
 NTSYSAPI NTSTATUS NTAPI

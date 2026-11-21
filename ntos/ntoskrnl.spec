@@ -702,7 +702,7 @@
 ;@ cdecl -arch=x86_64,arm64 KeQueryPrcbAddress
 @ stdcall KeQueryPriorityThread(ptr)
 @ stdcall KeQueryRuntimeThread(ptr ptr)
-@ stdcall -arch=win64 KeQueryPerformanceCounter(ptr) hal.KeQueryPerformanceCounter
+@ stdcall -arch=x86_64,riscv64 KeQueryPerformanceCounter(ptr) hal.KeQueryPerformanceCounter
 @ stdcall -arch=win32,riscv64 KeQuerySystemTime(ptr)
 @ stdcall -version=0x602+ KeQuerySystemTimePrecise(ptr)
 @ stdcall -arch=win32,riscv64 KeQueryTickCount(ptr)
@@ -773,7 +773,7 @@
 @ stdcall KeSignalCallDpcDone(ptr)
 @ stdcall KeSignalCallDpcSynchronize(ptr)
 @ stdcall KeStackAttachProcess(ptr ptr)
-@ stdcall -arch=win64 KeStallExecutionProcessor(long) hal.KeStallExecutionProcessor
+@ stdcall -arch=x86_64,riscv64 KeStallExecutionProcessor(long) hal.KeStallExecutionProcessor
 @ stdcall KeSynchronizeExecution(ptr ptr ptr)
 @ stdcall KeTerminateThread(long)
 @ fastcall KeTestSpinLock(ptr)
@@ -1837,76 +1837,7 @@
 # ==========================================================================
 # Win11 ARM64 export parity (arm64 only). Generated batch; see commit msg.
 # ==========================================================================
-# --- HAL functions re-exported by the kernel (forwarded to hal.dll, real impls) ---
-@ stdcall -arch=arm64 HalAcpiGetTableEx() hal.HalAcpiGetTableEx
-@ stdcall -arch=arm64 HalAllProcessorsStarted() hal.HalAllProcessorsStarted
-@ stdcall -arch=arm64 HalAllocateCrashDumpRegisters() hal.HalAllocateCrashDumpRegisters
-@ stdcall -arch=arm64 HalAllocateHardwareCounters() hal.HalAllocateHardwareCounters
-@ stdcall -arch=arm64 HalBeginSystemInterruptUnspecified() hal.HalBeginSystemInterruptUnspecified
-@ stdcall -arch=arm64 HalBugCheckSystem() hal.HalBugCheckSystem
-@ stdcall -arch=arm64 HalCalibratePerformanceCounter() hal.HalCalibratePerformanceCounter
-@ stdcall -arch=arm64 HalConvertDeviceIdtToIrql(long) hal.HalConvertDeviceIdtToIrql
-@ stdcall -arch=arm64 HalDisableInterrupt(ptr) hal.HalDisableInterrupt
-@ stdcall -arch=arm64 HalDmaAllocateCrashDumpRegistersEx() hal.HalDmaAllocateCrashDumpRegistersEx
-@ stdcall -arch=arm64 HalDmaFreeCrashDumpRegistersEx() hal.HalDmaFreeCrashDumpRegistersEx
-@ stdcall -arch=arm64 HalEnableInterrupt(ptr) hal.HalEnableInterrupt
-@ stdcall -arch=arm64 HalEndSystemInterrupt() hal.HalEndSystemInterrupt
-@ stdcall -arch=arm64 HalEnumerateEnvironmentVariablesEx() hal.HalEnumerateEnvironmentVariablesEx
-@ stdcall -arch=arm64 HalEnumerateProcessors() hal.HalEnumerateProcessors
-@ stdcall -arch=arm64 HalFreeHardwareCounters(ptr) hal.HalFreeHardwareCounters
-@ stdcall -arch=arm64 HalGetBusDataByOffset() hal.HalGetBusDataByOffset
-@ stdcall -arch=arm64 HalGetEnvironmentVariable() hal.HalGetEnvironmentVariable
-@ stdcall -arch=arm64 HalGetEnvironmentVariableEx() hal.HalGetEnvironmentVariableEx
-@ stdcall -arch=arm64 HalGetInterruptTargetInformation(ptr) hal.HalGetInterruptTargetInformation
-@ stdcall -arch=arm64 HalGetMemoryCachingRequirements() hal.HalGetMemoryCachingRequirements
-@ stdcall -arch=arm64 HalGetMessageRoutingInfo(ptr) hal.HalGetMessageRoutingInfo
-@ stdcall -arch=arm64 HalGetProcessorIdByNtNumber() hal.HalGetProcessorIdByNtNumber
-@ stdcall -arch=arm64 HalGetVectorInput() hal.HalGetVectorInput
-@ stdcall -arch=arm64 HalInitSystem() hal.HalInitSystem
-@ stdcall -arch=arm64 HalInitializeOnResume(ptr) hal.HalInitializeOnResume
-@ stdcall -arch=arm64 HalInitializeProcessor() hal.HalInitializeProcessor
-@ stdcall -arch=arm64,riscv64 HalIsHyperThreadingEnabled() hal.HalIsHyperThreadingEnabled
-@ stdcall -arch=arm64 HalProcessorIdle() hal.HalProcessorIdle
-@ stdcall -arch=arm64 HalQueryEnvironmentVariableInfoEx() hal.HalQueryEnvironmentVariableInfoEx
-@ stdcall -arch=arm64 HalQueryMaximumProcessorCount() hal.HalQueryMaximumProcessorCount
-@ stdcall -arch=arm64 HalQueryRealTimeClock(ptr) hal.HalQueryRealTimeClock
-@ stdcall -arch=arm64 HalRegisterDynamicProcessor() hal.HalRegisterDynamicProcessor
-@ stdcall -arch=arm64 HalRegisterErrataCallbacks(ptr) hal.HalRegisterErrataCallbacks
-@ stdcall -arch=arm64 HalReportResourceUsage() hal.HalReportResourceUsage
-@ stdcall -arch=arm64 HalRequestClockInterrupt(long) hal.HalRequestClockInterrupt
-@ stdcall -arch=arm64 HalRequestDeferredRecoveryServiceInterrupt() hal.HalRequestDeferredRecoveryServiceInterrupt
-@ stdcall -arch=arm64 HalRequestIpi(long ptr) hal.HalRequestIpi
-@ stdcall -arch=arm64 HalRequestIpiSpecifyVector(long ptr long) hal.HalRequestIpiSpecifyVector
-@ fastcall -arch=arm64 HalRequestSoftwareInterrupt(long) hal.HalRequestSoftwareInterrupt
-@ stdcall -arch=arm64 HalReturnToFirmware(long) hal.HalReturnToFirmware
-@ stdcall -arch=arm64 HalSendSoftwareInterrupt() hal.HalSendSoftwareInterrupt
-@ stdcall -arch=arm64 HalSetBusDataByOffset() hal.HalSetBusDataByOffset
-@ stdcall -arch=arm64 HalSetEnvironmentVariable() hal.HalSetEnvironmentVariable
-@ stdcall -arch=arm64 HalSetEnvironmentVariableEx() hal.HalSetEnvironmentVariableEx
-@ stdcall -arch=arm64 HalSetMpam0(int64) hal.HalSetMpam0
-@ stdcall -arch=arm64 HalSetProfileInterval(long) hal.HalSetProfileInterval
-@ stdcall -arch=arm64 HalSetRealTimeClock(ptr) hal.HalSetRealTimeClock
-@ stdcall -arch=arm64 HalStartDynamicProcessor() hal.HalStartDynamicProcessor
-@ stdcall -arch=arm64 HalStartNextProcessor() hal.HalStartNextProcessor
-@ stdcall -arch=arm64 HalStartProfileInterrupt(long) hal.HalStartProfileInterrupt
-@ stdcall -arch=arm64 HalStopProfileInterrupt(long) hal.HalStopProfileInterrupt
-@ stdcall -arch=arm64 HalTranslateBusAddress() hal.HalTranslateBusAddress
-@ stdcall -arch=arm64 HalWheaHandleSea(ptr) hal.HalWheaHandleSea
-@ stdcall -arch=arm64 HalWheaHandleSei(ptr) hal.HalWheaHandleSei
-@ stdcall -arch=arm64 HalWheaUpdateCmciPolicy(ptr) hal.HalWheaUpdateCmciPolicy
-@ stdcall -arch=arm64 KeFlushWriteBuffer() hal.KeFlushWriteBuffer
-@ stdcall -arch=arm64 READ_PORT_BUFFER_UCHAR() hal.READ_PORT_BUFFER_UCHAR
-@ stdcall -arch=arm64 READ_PORT_BUFFER_ULONG() hal.READ_PORT_BUFFER_ULONG
-@ stdcall -arch=arm64 READ_PORT_BUFFER_USHORT() hal.READ_PORT_BUFFER_USHORT
-@ stdcall -arch=arm64 READ_PORT_UCHAR(ptr) hal.READ_PORT_UCHAR
-@ stdcall -arch=arm64 READ_PORT_ULONG(ptr) hal.READ_PORT_ULONG
-@ stdcall -arch=arm64 READ_PORT_USHORT(ptr) hal.READ_PORT_USHORT
-@ stdcall -arch=arm64 WRITE_PORT_BUFFER_UCHAR() hal.WRITE_PORT_BUFFER_UCHAR
-@ stdcall -arch=arm64 WRITE_PORT_BUFFER_ULONG() hal.WRITE_PORT_BUFFER_ULONG
-@ stdcall -arch=arm64 WRITE_PORT_BUFFER_USHORT() hal.WRITE_PORT_BUFFER_USHORT
-@ stdcall -arch=arm64 WRITE_PORT_UCHAR() hal.WRITE_PORT_UCHAR
-@ stdcall -arch=arm64 WRITE_PORT_ULONG() hal.WRITE_PORT_ULONG
-@ stdcall -arch=arm64 WRITE_PORT_USHORT() hal.WRITE_PORT_USHORT
+@ stdcall -arch=riscv64 HalIsHyperThreadingEnabled() hal.HalIsHyperThreadingEnabled
 # --- Already-implemented ntoskrnl functions, now exported on arm64 ---
 @ stdcall -arch=win64 ExBlockPushLock()
 @ stdcall -arch=win64 ExTimedWaitForUnblockPushLock()
@@ -3609,113 +3540,154 @@
 @ stdcall -arch=win64 ZwCreateUserProcess(ptr ptr long long ptr ptr long long ptr ptr ptr)
 @ stdcall -arch=win64 ZwPlugPlayControl(long ptr long)
 
-# ARMv7: the HAL lives in the kernel; hal.dll forwards these exports here.
+# ARM: the HAL lives in the kernel; hal.dll forwards these exports here.
 @ fastcall -arch=arm ExAcquireFastMutex(ptr)
 @ fastcall -arch=arm ExReleaseFastMutex(ptr)
 @ fastcall -arch=arm ExTryToAcquireFastMutex(ptr)
-@ stdcall -arch=arm HalAcquireDisplayOwnership(ptr)
-@ stdcall -arch=arm HalAdjustResourceList(ptr)
-@ stdcall -arch=arm HalAllProcessorsStarted()
-@ stdcall -arch=arm HalAllocateAdapterChannel(ptr ptr long ptr)
-@ stdcall -arch=arm HalAllocateCommonBuffer(ptr long ptr long)
-@ stdcall -arch=arm HalAllocateCrashDumpRegisters(ptr ptr)
-@ stdcall -arch=arm -version=0x0601+ HalAllocateHardwareCounters(ptr long ptr ptr)
-@ stdcall -arch=arm -version=0x0601+ HalFreeHardwareCounters(ptr)
-@ stdcall -arch=arm -version=0x0601+ HalEnumerateEnvironmentVariablesEx(long ptr ptr)
-@ stdcall -arch=arm -version=0x0601+ HalSetEnvironmentVariableEx(ptr ptr ptr long long)
-@ stdcall -arch=arm -version=0x0601+ HalQueryEnvironmentVariableInfoEx(long ptr ptr ptr)
-@ stdcall -arch=arm -version=0x0601+ HalBugCheckSystem(ptr ptr)
-@ stdcall -arch=arm HalAssignSlotResources(ptr ptr ptr ptr long long long ptr)
-@ stdcall -arch=arm HalBeginSystemInterrupt(long long ptr)
-@ stdcall -arch=arm HalCalibratePerformanceCounter(ptr long long)
-@ fastcall -arch=arm HalClearSoftwareInterrupt(long)
-@ stdcall -arch=arm -version=0x0601+ HalDisableInterrupt(ptr)
-@ stdcall -arch=arm HalDisableSystemInterrupt(long long)
-@ stdcall -arch=arm HalDisplayString(str)
-@ stdcall -arch=arm -version=0x0601+ HalEnableInterrupt(ptr)
-@ stdcall -arch=arm HalEnableSystemInterrupt(long long long)
-@ stdcall -arch=arm HalEndSystemInterrupt(long long)
-@ stdcall -arch=arm HalFlushCommonBuffer(long long long long long)
-@ stdcall -arch=arm HalFreeCommonBuffer(ptr long long long ptr long)
-@ stdcall -arch=arm HalGetAdapter(ptr ptr)
-@ stdcall -arch=arm HalGetBusData(long long long ptr long)
-@ stdcall -arch=arm HalGetBusDataByOffset(long long long ptr long long)
-@ stdcall -arch=arm -version=0x0601+ HalGetEnvironmentVariableEx(ptr ptr ptr ptr ptr)
-@ stdcall -arch=arm -version=0x0601+ HalGetInterruptTargetInformation(ptr)
-@ stdcall -arch=arm HalGetEnvironmentVariable(str long str)
-@ fastcall -arch=arm HalGetInterruptSource()
-@ stdcall -arch=arm HalGetInterruptVector(long long long long ptr ptr)
-@ stdcall -arch=arm -version=0x0601+ HalGetVectorInput(long ptr ptr ptr ptr)
-@ stdcall -arch=arm -version=0x0601+ HalGetMemoryCachingRequirements(int64 long ptr)
-@ stdcall -arch=arm -version=0x0601+ HalGetMessageRoutingInfo(ptr)
-@ stdcall -arch=arm -version=0x0601+ HalGetProcessorIdByNtNumber(long ptr)
-@ stdcall -arch=arm HalInitSystem(long ptr)
-@ stdcall -arch=arm HalInitializeProcessor(long ptr)
-@ stdcall -arch=arm HalMakeBeep(long)
-@ stdcall -arch=arm HalProcessorIdle()
-@ stdcall -arch=arm HalQueryDisplayParameters(ptr ptr ptr ptr)
-@ stdcall -arch=arm HalQueryRealTimeClock(ptr)
-@ stdcall -arch=arm HalReadDmaCounter(ptr)
-@ stdcall -arch=arm HalReportResourceUsage()
-@ fastcall -arch=arm HalRequestSoftwareInterrupt(long)
-@ stdcall -arch=arm HalReturnToFirmware(long)
-@ stdcall -arch=arm HalSetBusData(long long long ptr long)
-@ stdcall -arch=arm HalSetBusDataByOffset(long long long ptr long long)
-@ stdcall -arch=arm HalSetDisplayParameters(long long)
-@ stdcall -arch=arm HalSetEnvironmentVariable(str str)
-@ stdcall -arch=arm HalSetProfileInterval(long)
-@ stdcall -arch=arm HalSetRealTimeClock(ptr)
-@ stdcall -arch=arm HalSetTimeIncrement(long)
-@ stdcall -arch=arm HalStartNextProcessor(ptr ptr)
-@ stdcall -arch=arm HalStartProfileInterrupt(long)
-@ stdcall -arch=arm HalStopProfileInterrupt(long)
-@ fastcall -arch=arm HalSweepIcache()
-@ fastcall -arch=arm HalSweepDcache()
-@ fastcall -arch=arm HalSystemVectorDispatchEntry(long long long)
-@ stdcall -arch=arm HalTranslateBusAddress(long long long long ptr ptr)
-@ stdcall -arch=arm -version=0x0601+ HalConvertDeviceIdtToIrql(long)
-@ stdcall -arch=arm HalpConfigurePciRootBridge(ptr)
-@ stdcall -arch=arm HalpAcpiQueryFaults(ptr long ptr)
-@ stdcall -arch=arm HalpRegisterPciRouteQuery(ptr)
-@ stdcall -arch=arm HalpSetPciRoutingMap(ptr long)
-@ stdcall -arch=arm HalpRecordPciMaxGsi(ptr)
-@ stdcall -arch=arm HalpGetMessageRoutingInfo(ptr)
-@ stdcall -arch=arm IoFlushAdapterBuffers(ptr ptr ptr ptr long long)
-@ stdcall -arch=arm IoFreeAdapterChannel(ptr)
-@ stdcall -arch=arm IoFreeMapRegisters(ptr ptr long)
-@ stdcall -arch=arm IoMapTransfer(ptr ptr ptr ptr ptr long)
+@ stdcall -arch=arm,arm64 HalAcquireDisplayOwnership(ptr)
+@ stdcall -arch=arm,arm64 HalAdjustResourceList(ptr)
+@ stdcall -arch=arm,arm64 HalAllProcessorsStarted()
+@ stdcall -arch=arm,arm64 HalAllocateAdapterChannel(ptr ptr long ptr)
+@ stdcall -arch=arm,arm64 HalAllocateCommonBuffer(ptr long ptr long)
+@ stdcall -arch=arm,arm64 HalAllocateCrashDumpRegisters(ptr ptr)
+@ stdcall -arch=arm,arm64 -version=0x0601+ HalAllocateHardwareCounters(ptr long ptr ptr)
+@ stdcall -arch=arm,arm64 -version=0x0601+ HalFreeHardwareCounters(ptr)
+@ stdcall -arch=arm,arm64 -version=0x0601+ HalEnumerateEnvironmentVariablesEx(long ptr ptr)
+@ stdcall -arch=arm,arm64 -version=0x0601+ HalSetEnvironmentVariableEx(ptr ptr ptr long long)
+@ stdcall -arch=arm,arm64 -version=0x0601+ HalQueryEnvironmentVariableInfoEx(long ptr ptr ptr)
+@ stdcall -arch=arm,arm64 -version=0x0601+ HalBugCheckSystem(ptr ptr)
+@ stdcall -arch=arm,arm64 HalAssignSlotResources(ptr ptr ptr ptr long long long ptr)
+@ stdcall -arch=arm,arm64 HalBeginSystemInterrupt(long long ptr)
+@ stdcall -arch=arm,arm64 HalCalibratePerformanceCounter(ptr long long)
+@ fastcall -arch=arm,arm64 HalClearSoftwareInterrupt(long)
+@ stdcall -arch=arm,arm64 -version=0x0601+ HalDisableInterrupt(ptr)
+@ stdcall -arch=arm,arm64 HalDisableSystemInterrupt(long long)
+@ stdcall -arch=arm,arm64 HalDisplayString(str)
+@ stdcall -arch=arm,arm64 -version=0x0601+ HalEnableInterrupt(ptr)
+@ stdcall -arch=arm,arm64 HalEnableSystemInterrupt(long long long)
+@ stdcall -arch=arm,arm64 HalEndSystemInterrupt(long long)
+@ stdcall -arch=arm,arm64 HalFlushCommonBuffer(long long long long long)
+@ stdcall -arch=arm,arm64 HalFreeCommonBuffer(ptr long long long ptr long)
+@ stdcall -arch=arm,arm64 HalGetAdapter(ptr ptr)
+@ stdcall -arch=arm,arm64 HalGetBusData(long long long ptr long)
+@ stdcall -arch=arm,arm64 HalGetBusDataByOffset(long long long ptr long long)
+@ stdcall -arch=arm,arm64 -version=0x0601+ HalGetEnvironmentVariableEx(ptr ptr ptr ptr ptr)
+@ stdcall -arch=arm,arm64 -version=0x0601+ HalGetInterruptTargetInformation(ptr)
+@ stdcall -arch=arm,arm64 HalGetEnvironmentVariable(str long str)
+@ fastcall -arch=arm,arm64 HalGetInterruptSource()
+@ stdcall -arch=arm,arm64 HalGetInterruptVector(long long long long ptr ptr)
+@ stdcall -arch=arm,arm64 -version=0x0601+ HalGetVectorInput(long ptr ptr ptr ptr)
+@ stdcall -arch=arm,arm64 -version=0x0601+ HalGetMemoryCachingRequirements(int64 long ptr)
+@ stdcall -arch=arm,arm64 -version=0x0601+ HalGetMessageRoutingInfo(ptr)
+@ stdcall -arch=arm,arm64 -version=0x0601+ HalGetProcessorIdByNtNumber(long ptr)
+@ stdcall -arch=arm,arm64 HalInitSystem(long ptr)
+@ stdcall -arch=arm,arm64 HalInitializeProcessor(long ptr)
+@ stdcall -arch=arm,arm64 HalMakeBeep(long)
+@ stdcall -arch=arm,arm64 HalProcessorIdle()
+@ stdcall -arch=arm,arm64 HalQueryDisplayParameters(ptr ptr ptr ptr)
+@ stdcall -arch=arm,arm64 HalQueryRealTimeClock(ptr)
+@ stdcall -arch=arm,arm64 HalReadDmaCounter(ptr)
+@ stdcall -arch=arm,arm64 HalReportResourceUsage()
+@ fastcall -arch=arm,arm64 HalRequestSoftwareInterrupt(long)
+@ stdcall -arch=arm,arm64 HalReturnToFirmware(long)
+@ stdcall -arch=arm,arm64 HalSetBusData(long long long ptr long)
+@ stdcall -arch=arm,arm64 HalSetBusDataByOffset(long long long ptr long long)
+@ stdcall -arch=arm,arm64 HalSetDisplayParameters(long long)
+@ stdcall -arch=arm,arm64 HalSetEnvironmentVariable(str str)
+@ stdcall -arch=arm,arm64 HalSetProfileInterval(long)
+@ stdcall -arch=arm,arm64 HalSetRealTimeClock(ptr)
+@ stdcall -arch=arm,arm64 HalSetTimeIncrement(long)
+@ stdcall -arch=arm,arm64 HalStartNextProcessor(ptr ptr)
+@ stdcall -arch=arm,arm64 HalStartProfileInterrupt(long)
+@ stdcall -arch=arm,arm64 HalStopProfileInterrupt(long)
+@ fastcall -arch=arm,arm64 HalSweepIcache()
+@ fastcall -arch=arm,arm64 HalSweepDcache()
+@ fastcall -arch=arm,arm64 HalSystemVectorDispatchEntry(long long long)
+@ stdcall -arch=arm,arm64 HalTranslateBusAddress(long long long long ptr ptr)
+@ stdcall -arch=arm,arm64 -version=0x0601+ HalConvertDeviceIdtToIrql(long)
+@ stdcall -arch=arm,arm64 HalpConfigurePciRootBridge(ptr)
+@ stdcall -arch=arm,arm64 HalpAcpiQueryFaults(ptr long ptr)
+@ stdcall -arch=arm,arm64 HalpRegisterPciRouteQuery(ptr)
+@ stdcall -arch=arm,arm64 HalpSetPciRoutingMap(ptr long)
+@ stdcall -arch=arm,arm64 HalpRecordPciMaxGsi(ptr)
+@ stdcall -arch=arm,arm64 HalpGetMessageRoutingInfo(ptr)
+@ stdcall -arch=arm,arm64 IoFlushAdapterBuffers(ptr ptr ptr ptr long long)
+@ stdcall -arch=arm,arm64 IoFreeAdapterChannel(ptr)
+@ stdcall -arch=arm,arm64 IoFreeMapRegisters(ptr ptr long)
+@ stdcall -arch=arm,arm64 IoMapTransfer(ptr ptr ptr ptr ptr long)
 @ fastcall -arch=arm KeAcquireInStackQueuedSpinLock(ptr ptr)
 @ fastcall -arch=arm KeAcquireInStackQueuedSpinLockRaiseToSynch(ptr ptr)
 @ fastcall -arch=arm KeAcquireQueuedSpinLock(ptr)
 @ fastcall -arch=arm KeAcquireQueuedSpinLockRaiseToSynch(ptr)
 @ stdcall -arch=arm KeAcquireSpinLock(ptr ptr)
 @ fastcall -arch=arm KeAcquireSpinLockRaiseToSynch(ptr)
-@ stdcall -arch=arm KeFlushWriteBuffer()
+@ stdcall -arch=arm,arm64 KeFlushWriteBuffer()
 @ stdcall -arch=arm KeGetCurrentIrql()
 @ stdcall -arch=arm KeLowerIrql(long)
-@ stdcall -arch=arm KeQueryPerformanceCounter(ptr)
+@ stdcall -arch=arm,arm64 KeQueryPerformanceCounter(ptr)
 @ stdcall -arch=arm KeRaiseIrql(long ptr)
 @ stdcall -arch=arm KeRaiseIrqlToDpcLevel()
 @ stdcall -arch=arm KeRaiseIrqlToSynchLevel()
 @ fastcall -arch=arm KeReleaseInStackQueuedSpinLock(ptr)
 @ fastcall -arch=arm KeReleaseQueuedSpinLock(ptr long)
 @ stdcall -arch=arm KeReleaseSpinLock(ptr long)
-@ stdcall -arch=arm KeStallExecutionProcessor(long)
+@ stdcall -arch=arm,arm64 KeStallExecutionProcessor(long)
 @ fastcall -arch=arm KeTryToAcquireQueuedSpinLock(long ptr)
 @ fastcall -arch=arm KeTryToAcquireQueuedSpinLockRaiseToSynch(long ptr)
 @ fastcall -arch=arm KfAcquireSpinLock(ptr)
 @ fastcall -arch=arm KfLowerIrql(long)
 @ fastcall -arch=arm KfRaiseIrql(long)
 @ fastcall -arch=arm KfReleaseSpinLock(ptr long)
-@ stdcall -arch=arm READ_PORT_BUFFER_UCHAR(ptr ptr long)
-@ stdcall -arch=arm READ_PORT_BUFFER_ULONG(ptr ptr long)
-@ stdcall -arch=arm READ_PORT_BUFFER_USHORT(ptr ptr long)
-@ stdcall -arch=arm READ_PORT_UCHAR(ptr)
-@ stdcall -arch=arm READ_PORT_ULONG(ptr)
-@ stdcall -arch=arm READ_PORT_USHORT(ptr)
-@ stdcall -arch=arm WRITE_PORT_BUFFER_UCHAR(ptr ptr long)
-@ stdcall -arch=arm WRITE_PORT_BUFFER_ULONG(ptr ptr long)
-@ stdcall -arch=arm WRITE_PORT_BUFFER_USHORT(ptr ptr long)
-@ stdcall -arch=arm WRITE_PORT_UCHAR(ptr long)
-@ stdcall -arch=arm WRITE_PORT_ULONG(ptr long)
-@ stdcall -arch=arm WRITE_PORT_USHORT(ptr long)
+@ stdcall -arch=arm,arm64 READ_PORT_BUFFER_UCHAR(ptr ptr long)
+@ stdcall -arch=arm,arm64 READ_PORT_BUFFER_ULONG(ptr ptr long)
+@ stdcall -arch=arm,arm64 READ_PORT_BUFFER_USHORT(ptr ptr long)
+@ stdcall -arch=arm,arm64 READ_PORT_UCHAR(ptr)
+@ stdcall -arch=arm,arm64 READ_PORT_ULONG(ptr)
+@ stdcall -arch=arm,arm64 READ_PORT_USHORT(ptr)
+@ stdcall -arch=arm,arm64 WRITE_PORT_BUFFER_UCHAR(ptr ptr long)
+@ stdcall -arch=arm,arm64 WRITE_PORT_BUFFER_ULONG(ptr ptr long)
+@ stdcall -arch=arm,arm64 WRITE_PORT_BUFFER_USHORT(ptr ptr long)
+@ stdcall -arch=arm,arm64 WRITE_PORT_UCHAR(ptr long)
+@ stdcall -arch=arm,arm64 WRITE_PORT_ULONG(ptr long)
+@ stdcall -arch=arm,arm64 WRITE_PORT_USHORT(ptr long)
+@ stdcall -arch=arm64 HalGetPciConfigDataByOffset(long long long ptr long long)
+@ stdcall -arch=arm64 HalFreeMsiMessageAddressEx(long)
+@ stdcall -arch=arm64 HalGetMsiMessageAddressEx(long int64 int64 long long ptr ptr ptr)
+@ stdcall -arch=arm64 HalQueryPciBusRange(ptr ptr)
+@ stdcall -arch=arm64 HalQueryPciMsiSupport(long long ptr ptr ptr ptr ptr)
+@ stdcall -arch=arm64 HalQueryPciRoutedInterrupt(long long long long long ptr)
+@ stdcall -arch=arm64 HalRequestDebugWakeIpi(long)
+@ stdcall -arch=arm64 HalArm64DbgGicState(long ptr ptr ptr ptr)
+@ stdcall -arch=arm64 HalArm64DbgPendInterrupt(long)
+@ stdcall -arch=arm64 HalArm64ProfileSample(long)
+@ stdcall -arch=arm64 HalArm64ConnectInterrupt(long)
+@ stdcall -arch=arm64 HalArm64TranslateDeviceTreeInterrupt(ptr long ptr long ptr ptr)
+@ stdcall -arch=arm64 HalArm64DisconnectInterrupt(long)
+@ stdcall -arch=arm64 HalRequestIpi(long ptr)
+@ stdcall -arch=arm64 HalSendSoftwareInterrupt(int64 long)
+@ stdcall -arch=arm64 HalSetPciConfigDataByOffset(long long long ptr long long)
+@ stdcall -arch=arm64 HalpConfigureDmaAdapter(ptr ptr long)
+@ stdcall -arch=arm64 HalpSetDmaAdapterCoherency(ptr long)
+@ stdcall -arch=arm64 HalpKdReadPciConfig(long long ptr long long)
+@ stdcall -arch=arm64 HalpGetInterruptTargetInformation(ptr)
+@ fastcall -arch=arm64 HalSetGicPriorityMask(long)
+@ fastcall -arch=arm64 HalGetGicPriorityMask()
+@ stdcall -arch=arm64 HalPerformEndOfInterrupt()
+@ stdcall -arch=arm64 HalDmaAllocateCrashDumpRegistersEx(ptr long long ptr ptr)
+@ stdcall -arch=arm64 HalDmaFreeCrashDumpRegistersEx(ptr long)
+@ stdcall -arch=arm64 HalEnumerateProcessors(ptr ptr)
+@ stdcall -arch=arm64 HalQueryMaximumProcessorCount()
+@ stdcall -arch=arm64 HalRegisterDynamicProcessor(ptr ptr)
+@ stdcall -arch=arm64 HalStartDynamicProcessor(ptr ptr)
+@ stdcall -arch=arm64 HalIsHyperThreadingEnabled()
+@ stdcall -arch=arm64 HalBeginSystemInterruptUnspecified(long ptr)
+@ stdcall -arch=arm64 HalRequestClockInterrupt(long)
+@ stdcall -arch=arm64 HalRequestDeferredRecoveryServiceInterrupt()
+@ stdcall -arch=arm64 HalRequestIpiSpecifyVector(long ptr long)
+@ stdcall -arch=arm64 HalSetMpam0(int64)
+@ stdcall -arch=arm64 HalAcpiGetTableEx(ptr long)
+@ stdcall -arch=arm64 HalInitializeOnResume(ptr)
+@ stdcall -arch=arm64 HalRegisterErrataCallbacks(ptr)
+@ stdcall -arch=arm64 HalWheaHandleSea(ptr)
+@ stdcall -arch=arm64 HalWheaHandleSei(ptr)
+@ stdcall -arch=arm64 HalWheaUpdateCmciPolicy(ptr)

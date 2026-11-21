@@ -1,6 +1,3 @@
-@ fastcall -arch=arm ExAcquireFastMutex(ptr)
-@ fastcall -arch=arm ExReleaseFastMutex(ptr)
-@ fastcall -arch=arm ExTryToAcquireFastMutex(ptr)
 @ fastcall -arch=i386 ExAcquireFastMutex(ptr) ntoskrnl.ExiAcquireFastMutex
 @ fastcall -arch=i386 ExReleaseFastMutex(ptr) ntoskrnl.ExiReleaseFastMutex
 @ fastcall -arch=i386 ExTryToAcquireFastMutex(ptr) ntoskrnl.ExiTryToAcquireFastMutex
@@ -20,7 +17,7 @@
 @ stdcall -version=0x0601+ HalQueryEnvironmentVariableInfoEx(long ptr ptr ptr)
 @ stdcall -version=0x0601+ HalBugCheckSystem(ptr ptr)
 @ stdcall HalAssignSlotResources(ptr ptr ptr ptr long long long ptr)
-@ stdcall -arch=i386,arm,win64 HalBeginSystemInterrupt(long long ptr)
+@ stdcall -arch=i386,win64 HalBeginSystemInterrupt(long long ptr)
 @ stdcall HalCalibratePerformanceCounter(ptr long long)
 ;@ stdcall -arch=x86_64 HalCallBios()
 @ fastcall HalClearSoftwareInterrupt(long)
@@ -29,19 +26,15 @@
 @ stdcall HalDisplayString(str)
 @ stdcall -version=0x0601+ HalEnableInterrupt(ptr)
 @ stdcall HalEnableSystemInterrupt(long long long)
-@ stdcall -arch=i386,arm,win64 HalEndSystemInterrupt(long long)
+@ stdcall -arch=i386,win64 HalEndSystemInterrupt(long long)
 @ stdcall HalFlushCommonBuffer(long long long long long)
 @ stdcall HalFreeCommonBuffer(ptr long long long ptr long)
 @ stdcall HalGetAdapter(ptr ptr)
 @ stdcall HalGetBusData(long long long ptr long)
 @ stdcall HalGetBusDataByOffset(long long long ptr long long)
-@ stdcall -arch=arm64 HalGetPciConfigDataByOffset(long long long ptr long long)
 @ stdcall -version=0x0601+ HalGetEnvironmentVariableEx(ptr ptr ptr ptr ptr)
 @ stdcall -version=0x0601+ HalGetInterruptTargetInformation(ptr)
 @ stdcall HalGetEnvironmentVariable(str long str)
-@ stdcall -arch=arm64 HalFreeMsiMessageAddressEx(long)
-@ stdcall -arch=arm64 HalGetMsiMessageAddressEx(long int64 int64 long long ptr ptr ptr)
-@ fastcall -arch=arm HalGetInterruptSource()
 @ stdcall HalGetInterruptVector(long long long long ptr ptr)
 @ stdcall -version=0x0601+ HalGetVectorInput(long ptr ptr ptr ptr)
 @ stdcall -version=0x0601+ HalGetMemoryCachingRequirements(int64 long ptr)
@@ -56,21 +49,12 @@
 @ stdcall HalMakeBeep(long)
 @ stdcall HalProcessorIdle()
 @ stdcall HalQueryDisplayParameters(ptr ptr ptr ptr)
-@ stdcall -arch=arm64 HalQueryPciBusRange(ptr ptr)
-@ stdcall -arch=arm64,riscv64,ppc HalQueryPciMsiSupport(long long ptr ptr ptr ptr ptr)
-@ stdcall -arch=i386,x86_64,arm64,riscv64,ppc HalQueryPciRoutedInterrupt(long long long long long ptr)
+@ stdcall -arch=riscv64,ppc HalQueryPciMsiSupport(long long ptr ptr ptr ptr ptr)
+@ stdcall -arch=i386,x86_64,riscv64,ppc HalQueryPciRoutedInterrupt(long long long long long ptr)
 @ stdcall HalQueryRealTimeClock(ptr)
 @ stdcall HalReadDmaCounter(ptr)
 @ stdcall HalReportResourceUsage()
-@ stdcall -arch=arm64 HalRequestDebugWakeIpi(long)
-@ stdcall -arch=arm64 HalArm64DbgGicState(long ptr ptr ptr ptr)
-@ stdcall -arch=arm64 HalArm64DbgPendInterrupt(long)
-@ stdcall -arch=arm64 HalArm64ProfileSample(long)
-@ stdcall -arch=arm64 HalArm64ConnectInterrupt(long)
-@ stdcall -arch=arm64 HalArm64TranslateDeviceTreeInterrupt(ptr long ptr long ptr ptr)
-@ stdcall -arch=arm64 HalArm64DisconnectInterrupt(long)
 @ stdcall -arch=!arm64 HalRequestIpi(long)
-@ stdcall -arch=arm64 HalRequestIpi(long ptr)
 @ fastcall HalRequestSoftwareInterrupt(long)
 @ stdcall HalReturnToFirmware(long)
 @ stdcall -arch=x86_64 HalpRequestIpi(long int64)
@@ -80,7 +64,6 @@
 @ stdcall -arch=win64 HalSendSoftwareInterrupt(int64 long)
 @ stdcall HalSetBusData(long long long ptr long)
 @ stdcall HalSetBusDataByOffset(long long long ptr long long)
-@ stdcall -arch=arm64 HalSetPciConfigDataByOffset(long long long ptr long long)
 @ stdcall HalSetDisplayParameters(long long)
 @ stdcall HalSetEnvironmentVariable(str str)
 @ stdcall HalSetProfileInterval(long)
@@ -89,15 +72,11 @@
 @ stdcall HalStartNextProcessor(ptr ptr)
 @ stdcall HalStartProfileInterrupt(long)
 @ stdcall HalStopProfileInterrupt(long)
-@ fastcall -arch=arm HalSweepIcache()
-@ fastcall -arch=arm HalSweepDcache()
 @ fastcall HalSystemVectorDispatchEntry(long long long)
 @ stdcall HalTranslateBusAddress(long long long long ptr ptr)
 @ stdcall -version=0x0601+ HalConvertDeviceIdtToIrql(long)
 @ stdcall HalpConfigurePciRootBridge(ptr)
 @ stdcall HalpAcpiQueryFaults(ptr long ptr)
-@ stdcall -arch=arm64 HalpConfigureDmaAdapter(ptr ptr long)
-@ stdcall -arch=arm64 HalpSetDmaAdapterCoherency(ptr long)
 @ stdcall HalpRegisterPciRouteQuery(ptr)
 @ stdcall HalpSetPciRoutingMap(ptr long)
 @ stdcall HalpRecordPciMaxGsi(ptr)
@@ -113,12 +92,12 @@
 @ stdcall -arch=i386,x86_64 IoSetPartitionInformation(ptr long long long) HalpSetPartitionInformation
 @ stdcall -arch=i386,x86_64 IoWritePartitionTable(ptr long long long ptr) HalpWritePartitionTable
 @ extern -constant KdComPortInUse ntoskrnl.KdComPortInUse
-@ fastcall -arch=i386,arm KeAcquireInStackQueuedSpinLock(ptr ptr)
-@ fastcall -arch=i386,arm KeAcquireInStackQueuedSpinLockRaiseToSynch(ptr ptr)
-@ fastcall -arch=i386,arm KeAcquireQueuedSpinLock(ptr)
-@ fastcall -arch=i386,arm KeAcquireQueuedSpinLockRaiseToSynch(ptr)
-@ stdcall -arch=i386,arm KeAcquireSpinLock(ptr ptr)
-@ fastcall -arch=i386,arm KeAcquireSpinLockRaiseToSynch(ptr)
+@ fastcall -arch=i386 KeAcquireInStackQueuedSpinLock(ptr ptr)
+@ fastcall -arch=i386 KeAcquireInStackQueuedSpinLockRaiseToSynch(ptr ptr)
+@ fastcall -arch=i386 KeAcquireQueuedSpinLock(ptr)
+@ fastcall -arch=i386 KeAcquireQueuedSpinLockRaiseToSynch(ptr)
+@ stdcall -arch=i386 KeAcquireSpinLock(ptr ptr)
+@ fastcall -arch=i386 KeAcquireSpinLockRaiseToSynch(ptr)
 @ stdcall -arch=win64 KeAcquireInStackQueuedSpinLock(ptr ptr) ntoskrnl.KeAcquireInStackQueuedSpinLock
 @ stdcall -arch=win64 KeAcquireInStackQueuedSpinLockRaiseToSynch(ptr ptr) ntoskrnl.KeAcquireInStackQueuedSpinLockRaiseToSynch
 @ stdcall -arch=win64 KeAcquireQueuedSpinLock(ptr) ntoskrnl.KeAcquireQueuedSpinLock
@@ -126,36 +105,36 @@
 @ stdcall -arch=x86_64 KeAcquireSpinLock(ptr ptr)
 @ stdcall -arch=win64 KeAcquireSpinLockRaiseToSynch(ptr) ntoskrnl.KeAcquireSpinLockRaiseToSynch
 @ stdcall KeFlushWriteBuffer()
-@ stdcall -arch=i386,arm KeGetCurrentIrql()
+@ stdcall -arch=i386 KeGetCurrentIrql()
 @ stdcall -arch=x86_64 KeGetCurrentIrql()
-@ stdcall -arch=arm64,riscv64 KeGetCurrentIrql() ntoskrnl.KeGetCurrentIrql
-@ stdcall -arch=i386,arm KeLowerIrql(long)
+@ stdcall -arch=riscv64 KeGetCurrentIrql() ntoskrnl.KeGetCurrentIrql
+@ stdcall -arch=i386 KeLowerIrql(long)
 @ stdcall -arch=win64 KeLowerIrql(long) ntoskrnl.KeLowerIrql
 @ stdcall KeQueryPerformanceCounter(ptr)
-@ stdcall -arch=i386,arm KeRaiseIrql(long ptr)
+@ stdcall -arch=i386 KeRaiseIrql(long ptr)
 @ stdcall -arch=x86_64 KeRaiseIrql(long ptr)
-@ stdcall -arch=i386,arm KeRaiseIrqlToDpcLevel()
+@ stdcall -arch=i386 KeRaiseIrqlToDpcLevel()
 @ stdcall -arch=win64 KeRaiseIrqlToDpcLevel() ntoskrnl.KeRaiseIrqlToDpcLevel
-@ stdcall -arch=i386,arm KeRaiseIrqlToSynchLevel()
+@ stdcall -arch=i386 KeRaiseIrqlToSynchLevel()
 @ stdcall -arch=x86_64 KeRaiseIrqlToSynchLevel()
-@ fastcall -arch=i386,arm KeReleaseInStackQueuedSpinLock(ptr)
-@ fastcall -arch=i386,arm KeReleaseQueuedSpinLock(ptr long)
-@ stdcall -arch=i386,arm KeReleaseSpinLock(ptr long)
+@ fastcall -arch=i386 KeReleaseInStackQueuedSpinLock(ptr)
+@ fastcall -arch=i386 KeReleaseQueuedSpinLock(ptr long)
+@ stdcall -arch=i386 KeReleaseSpinLock(ptr long)
 @ stdcall -arch=win64 KeReleaseInStackQueuedSpinLock(ptr) ntoskrnl.KeReleaseInStackQueuedSpinLock
 @ stdcall -arch=win64 KeReleaseQueuedSpinLock(ptr long) ntoskrnl.KeReleaseQueuedSpinLock
 @ stdcall -arch=win64 KeReleaseSpinLock(ptr long) ntoskrnl.KeReleaseSpinLock
 @ stdcall KeStallExecutionProcessor(long)
-@ fastcall -arch=i386,arm KeTryToAcquireQueuedSpinLock(long ptr)
-@ fastcall -arch=i386,arm KeTryToAcquireQueuedSpinLockRaiseToSynch(long ptr)
+@ fastcall -arch=i386 KeTryToAcquireQueuedSpinLock(long ptr)
+@ fastcall -arch=i386 KeTryToAcquireQueuedSpinLockRaiseToSynch(long ptr)
 @ stdcall -arch=win64 KeTryToAcquireQueuedSpinLock(long ptr) ntoskrnl.KeTryToAcquireQueuedSpinLock
 @ stdcall -arch=win64 KeTryToAcquireQueuedSpinLockRaiseToSynch(long ptr) ntoskrnl.KeTryToAcquireQueuedSpinLockRaiseToSynch
-@ fastcall -arch=i386,arm KfAcquireSpinLock(ptr)
-@ fastcall -arch=i386,arm KfLowerIrql(long)
-@ fastcall -arch=i386,arm KfRaiseIrql(long)
-@ fastcall -arch=i386,arm KfReleaseSpinLock(ptr long)
+@ fastcall -arch=i386 KfAcquireSpinLock(ptr)
+@ fastcall -arch=i386 KfLowerIrql(long)
+@ fastcall -arch=i386 KfRaiseIrql(long)
+@ fastcall -arch=i386 KfReleaseSpinLock(ptr long)
 @ stdcall -arch=x86_64 KfAcquireSpinLock(ptr)
 @ stdcall -arch=x86_64 KfLowerIrql(long)
-@ stdcall -arch=arm64,riscv64 KfLowerIrql(long) ntoskrnl.KfLowerIrql
+@ stdcall -arch=riscv64 KfLowerIrql(long) ntoskrnl.KfLowerIrql
 @ stdcall -arch=win64 KfRaiseIrql(long) ntoskrnl.KfRaiseIrql
 @ stdcall -arch=x86_64 KfReleaseSpinLock(ptr long)
 @ stdcall READ_PORT_BUFFER_UCHAR(ptr ptr long)
@@ -182,12 +161,6 @@
 @ stdcall -version=0x0600+ -arch=i386,x86_64 x86BiosWriteMemory(long long ptr long)
 
 ; ARM64 HAL exports
-@ fastcall -arch=arm64 HalSweepIcache()
-@ fastcall -arch=arm64 HalSweepDcache()
-@ fastcall -arch=arm64 HalSetGicPriorityMask(long)
-@ fastcall -arch=arm64 HalGetGicPriorityMask()
-@ fastcall -arch=arm64 HalGetInterruptSource()
-@ stdcall -arch=arm64 HalPerformEndOfInterrupt()
 
 ; Win11 hal.dll ABI export-table parity (name-set match with Win11 ARM64 hal.dll).
 ; In Win11 these names are FORWARDERS to ntoskrnl (HAL merged into the kernel
@@ -195,29 +168,11 @@
 ; local stubs (kernstubs.c; HalDma*CrashDumpRegistersEx in common sysinfo_stubs.c)
 ; and exported here by bare name. Pure ABI-completeness exports: none are invoked
 ; on the ARM64 boot path, so they are boot-neutral.
-@ stdcall -arch=arm64 HalDmaAllocateCrashDumpRegistersEx(ptr long long ptr ptr)
-@ stdcall -arch=arm64 HalDmaFreeCrashDumpRegistersEx(ptr long)
-@ stdcall -arch=arm64 HalEnumerateProcessors(ptr ptr)
-@ stdcall -arch=arm64,riscv64,x86_64 HalQueryMaximumProcessorCount()
-@ stdcall -arch=arm64 HalRegisterDynamicProcessor(ptr ptr)
-@ stdcall -arch=arm64 HalStartDynamicProcessor(ptr ptr)
-@ stdcall -arch=arm64,riscv64,x86_64 HalIsHyperThreadingEnabled()
-@ stdcall -arch=arm64 HalBeginSystemInterruptUnspecified(long ptr)
-@ stdcall -arch=arm64 HalRequestClockInterrupt(long)
-@ stdcall -arch=arm64 HalRequestDeferredRecoveryServiceInterrupt()
-@ stdcall -arch=arm64 HalRequestIpiSpecifyVector(long ptr long)
-@ stdcall -arch=arm64 HalSetMpam0(int64)
-@ stdcall -arch=arm64 HalAcpiGetTableEx(ptr long)
-@ stdcall -arch=arm64 HalInitializeOnResume(ptr)
-@ stdcall -arch=arm64 HalRegisterErrataCallbacks(ptr)
-@ stdcall -arch=arm64 HalWheaHandleSea(ptr)
-@ stdcall -arch=arm64 HalWheaHandleSei(ptr)
-@ stdcall -arch=arm64 HalWheaUpdateCmciPolicy(ptr)
+@ stdcall -arch=riscv64,x86_64 HalQueryMaximumProcessorCount()
+@ stdcall -arch=riscv64,x86_64 HalIsHyperThreadingEnabled()
 @ extern -constant KdHvComPortInUse ntoskrnl.KdHvComPortInUse
 
 ; Internal kernel entry points needed by early ARM64 HAL code.
-@ stdcall -arch=arm64 KxSaveFloatingPointState(ptr) ntoskrnl.KxSaveFloatingPointState
-@ stdcall -arch=arm64 KxRestoreFloatingPointState(ptr) ntoskrnl.KxRestoreFloatingPointState
 
 
 ; ReactOS-private kernel/HAL bridge on RISC-V.

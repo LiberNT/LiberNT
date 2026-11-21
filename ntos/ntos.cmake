@@ -22,15 +22,59 @@ if((ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64") AND CMAKE_C_COMPILER_ID STRE
     set_property(SOURCE ${REACTOS_SOURCE_DIR}/ntos/ke/crash.c APPEND PROPERTY COMPILE_OPTIONS -Xclang -fasync-exceptions)
 endif()
 
-if(ARCH STREQUAL "arm")
-    set(_arm_hal_sources ${REACTOS_SOURCE_DIR}/ntos/ke/arm/irql.c ${REACTOS_SOURCE_DIR}/ntos/ke/arm/interrupt.c ${REACTOS_SOURCE_DIR}/ntos/hal/arm/platform.c ${REACTOS_SOURCE_DIR}/ntos/hal/arm/gicv2.c ${REACTOS_SOURCE_DIR}/ntos/hal/arm/bcm2836.c ${REACTOS_SOURCE_DIR}/ntos/hal/arm/hal.c ${REACTOS_SOURCE_DIR}/ntos/ke/spinlock.c ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/inttarget.c ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/sysinfo_stubs.c)
-    set_property(SOURCE ${_arm_hal_sources} PROPERTY SKIP_PRECOMPILE_HEADERS ON)
-    set_property(SOURCE ${_arm_hal_sources} APPEND PROPERTY COMPILE_DEFINITIONS _NTHALDLL_)
+if(ARCH STREQUAL "arm" OR ARCH STREQUAL "arm64")
+    # The HAL is part of the kernel.
+    add_definitions(-D_NTHALDLL_)
 endif()
 
 if(ARCH STREQUAL "arm64")
-    set_property(SOURCE ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/irql.c ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/spinlock.c ${REACTOS_SOURCE_DIR}/ntos/ke/spinlock.c PROPERTY SKIP_PRECOMPILE_HEADERS ON)
-    set_property(SOURCE ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/irql.c ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/spinlock.c ${REACTOS_SOURCE_DIR}/ntos/ke/spinlock.c APPEND PROPERTY COMPILE_DEFINITIONS _NTHALDLL_)
+    set(_arm64_hal_dir ${REACTOS_SOURCE_DIR}/ntos/hal/arm64)
+    set(_arm64_hal_sources
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/acpi/halacpi.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/acpi/halpnpdd.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/acpi/tables.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/acpi/acpival.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/acpi/acpifault.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/display.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/efi.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/fdtpnp.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/inttarget.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/memory.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/misc.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/secondary.c
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/sysinfo_stubs.c
+        ${_arm64_hal_dir}/acpi/halacpi.c
+        ${_arm64_hal_dir}/acpi/halpnpdd.c
+        ${_arm64_hal_dir}/acpi/arm64.c
+        ${_arm64_hal_dir}/halarm64.c
+        ${_arm64_hal_dir}/halarm64_acpi_int.c
+        ${_arm64_hal_dir}/halext.c
+        ${_arm64_hal_dir}/sysinfo.c
+        ${_arm64_hal_dir}/bcm2711_pci.c
+        ${_arm64_hal_dir}/bcm2711_vc.c
+        ${_arm64_hal_dir}/bcm2712_pci.c
+        ${_arm64_hal_dir}/bcm2837_intc.c
+        ${_arm64_hal_dir}/apple_aic.c
+        ${_arm64_hal_dir}/apple_wdt.c
+        ${_arm64_hal_dir}/apple_idle.c
+        ${_arm64_hal_dir}/devtree.c
+        ${_arm64_hal_dir}/smp.c
+        ${_arm64_hal_dir}/kernstubs.c
+        ${_arm64_hal_dir}/gic/gic_common.c
+        ${_arm64_hal_dir}/gic/gic_init.c
+        ${_arm64_hal_dir}/gic/gic_its.c
+        ${_arm64_hal_dir}/gic/gic_redist.c
+        ${_arm64_hal_dir}/gic/gicv2.c
+        ${_arm64_hal_dir}/gic/gicv3.c)
+    set_property(SOURCE ${_arm64_hal_sources} PROPERTY SKIP_PRECOMPILE_HEADERS ON)
+    set_property(SOURCE ${_arm64_hal_sources} APPEND PROPERTY COMPILE_DEFINITIONS _NTHAL_)
+    set_property(SOURCE ${_arm64_hal_sources} APPEND PROPERTY INCLUDE_DIRECTORIES
+        ${_arm64_hal_dir}/include
+        ${_arm64_hal_dir}/gic
+        ${REACTOS_SOURCE_DIR}/hal/arch/common/include
+        ${REACTOS_BINARY_DIR}/hal/arch/common)
+    set_source_files_properties(${_arm64_hal_dir}/acpi/halacpi.c PROPERTIES
+        OBJECT_DEPENDS "${REACTOS_BINARY_DIR}/hal/arch/common/pci_classes.h;${REACTOS_BINARY_DIR}/hal/arch/common/pci_vendors.h")
 endif()
 
 list(APPEND SOURCE
@@ -455,9 +499,15 @@ elseif(ARCH STREQUAL "arm64")
         ${REACTOS_SOURCE_DIR}/ntos/rtl/arm64/ehandler_asm.S
         ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/strcpy.S
         ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/wcscmp.S)
+    list(APPEND ASM_SOURCE
+        ${REACTOS_SOURCE_DIR}/ntos/hal/arm64/apple_idle.S
+        ${REACTOS_SOURCE_DIR}/ntos/hal/arm64/smp_trampoline.S)
     if(MSVC)
-        list(APPEND ASM_SOURCE ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/msvc.S)
+        list(APPEND ASM_SOURCE
+            ${REACTOS_SOURCE_DIR}/ntos/ke/arm64/msvc.S
+            ${REACTOS_SOURCE_DIR}/ntos/hal/arm64/psci.S)
     endif()
+    list(APPEND SOURCE ${_arm64_hal_sources})
     list(APPEND SOURCE
         ${REACTOS_SOURCE_DIR}/ntos/config/arm64/cmhardwr.c
         ${REACTOS_SOURCE_DIR}/ntos/ex/arm64/init.c
