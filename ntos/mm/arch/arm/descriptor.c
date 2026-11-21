@@ -53,7 +53,8 @@ static MI_ARCH_DESCRIPTOR MiArchDescriptor =
     FALSE,
     MI_ARM_DIRECT_PAGES,
     FALSE,
-    0
+    64,
+    1
 };
 
 VOID

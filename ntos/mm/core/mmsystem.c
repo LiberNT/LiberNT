@@ -236,7 +236,7 @@ MiSessionSpaceUnpinTops(
     _In_ ULONG64 Limit)
 {
     PMI_SYSTEM System = Space->System;
-    ULONG64 Span = 1ULL << System->Arch->Level[System->Arch->PagingLevels - 1].Shift;
+    ULONG64 Span = MiSessionSpan(System->Arch);
     ULONG64 Va;
 
     for (Va = System->SessionStart; Va < Limit && Va <= System->SessionEnd; Va += Span)
@@ -247,13 +247,124 @@ MiSessionSpaceUnpinTops(
     }
 }
 
+/* Index in the root of the top-level entry that holds a session range below the top level. */
+static
+ULONG
+MiSessionTopIndex(
+    _In_ PMI_SYSTEM System)
+{
+    const MI_ARCH_DESCRIPTOR *Arch = System->Arch;
+    LONG Top = Arch->PagingLevels - 1;
+
+    MI_ASSERT(MiSessionLevel(Arch) != Top);
+    MI_ASSERT((System->SessionStart >> Arch->Level[Top].Shift) == (System->SessionEnd >> Arch->Level[Top].Shift));
+    return (ULONG)((System->SessionStart >> Arch->Level[Top].Shift) & Arch->Level[Top].IndexMask);
+}
+
+/*
+ * A session range below the top level shares its top-level entry with system
+ * space. The session gets its own copy of that entry's table: the system
+ * entries are copied (they are pinned and never change), the session ones
+ * start empty and are filled in the copy only.
+ */
+static
+NTSTATUS
+MiSessionCopyTopTable(
+    _Inout_ PMI_ADDRESS_SPACE Space)
+{
+    PMI_SYSTEM System = Space->System;
+    const MI_ARCH_DESCRIPTOR *Arch = System->Arch;
+    LONG Level = MiSessionLevel(Arch);
+    ULONG TopIndex = MiSessionTopIndex(System);
+    ULONG First = (ULONG)((System->SessionStart >> Arch->Level[Level].Shift) & Arch->Level[Level].IndexMask);
+    ULONG Last = (ULONG)((System->SessionEnd >> Arch->Level[Level].Shift) & Arch->Level[Level].IndexMask);
+    PMI_PTE Root;
+    PMI_PTE From;
+    PMI_PTE To;
+    MI_PTE TopEntry;
+    ULONG Copy;
+    ULONG Index;
+    LONG Used = 0;
+
+    MI_ASSERT(Level == (LONG)Arch->PagingLevels - 2);
+
+    Root = MiArchMapFrame(System->SystemSpace.RootFrame);
+    TopEntry = MiArchPteRead(&Root[TopIndex]);
+    MiArchUnmapFrame(Root);
+    MI_ASSERT(MiArchPteIsValid(TopEntry) && !MiArchPteIsBlock(TopEntry, (ULONG)Level + 1));
+
+    Copy = MiPfnAllocatePage(&System->Pfn, MI_ALLOCATE_ZEROED);
+    if (Copy == MI_FRAME_INVALID)
+        return STATUS_NO_MEMORY;
+
+    From = MiArchMapFrame(MiArchPteFrame(TopEntry));
+    To = MiArchMapFrame(Copy);
+    for (Index = 0; Index < Arch->Level[Level].EntryCount; Index++)
+    {
+        MI_PTE Entry = MiArchPteRead(&From[Index]);
+
+        if (Index >= First && Index <= Last)
+        {
+            MI_ASSERT(!MiArchPteIsValid(Entry));
+            continue;
+        }
+
+        MI_ASSERT(MiArchPteIsValid(Entry));
+        MiArchPteWrite(&To[Index], Entry);
+        Used++;
+    }
+    MiArchUnmapFrame(To);
+    MiArchUnmapFrame(From);
+
+    MiPfnInitializePage(&System->Pfn, Copy, ((ULONG64)Space->RootFrame << PAGE_SHIFT) +
+                                            (ULONG64)TopIndex * sizeof(MI_PTE),
+                        Space->RootFrame, 0, MI_PFN_FLAG_PAGE_TABLE | MI_PFN_FLAG_PINNED);
+    System->Pfn.Pfn[Copy].PageTableOwner = Space;
+    System->Pfn.Pfn[Copy].UsedEntries = Used;
+
+    Root = MiArchMapFrame(Space->RootFrame);
+    MI_ASSERT(!MiArchPteIsValid(MiArchPteRead(&Root[TopIndex])));
+    MiArchPteWrite(&Root[TopIndex], MiArchPteMakeTable(Copy, 0));
+    MiArchUnmapFrame(Root);
+    MI_ATOMIC_ADD32(&System->Pfn.Pfn[Space->RootFrame].UsedEntries, 1);
+    MI_ATOMIC_ADD64(&Space->PageTablePages, 1);
+    return STATUS_SUCCESS;
+}
+
+static
+VOID
+MiSessionFreeTopTable(
+    _Inout_ PMI_ADDRESS_SPACE Space)
+{
+    PMI_SYSTEM System = Space->System;
+    ULONG TopIndex = MiSessionTopIndex(System);
+    PMI_PTE Root = MiArchMapFrame(Space->RootFrame);
+    MI_PTE TopEntry = MiArchPteRead(&Root[TopIndex]);
+    ULONG Copy;
+
+    if (MiArchPteIsValid(TopEntry))
+    {
+        Copy = (ULONG)MiArchPteFrame(TopEntry);
+        MI_ASSERT(System->Pfn.Pfn[Copy].PageTableOwner == Space);
+        MiArchPteWrite(&Root[TopIndex], 0);
+        MI_ATOMIC_ADD32(&System->Pfn.Pfn[Space->RootFrame].UsedEntries, -1);
+        MI_ATOMIC_ADD64(&Space->PageTablePages, -1);
+        MI_ATOMIC_AND8(&System->Pfn.Pfn[Copy].Flags, (UCHAR)~MI_PFN_FLAG_PINNED);
+        System->Pfn.Pfn[Copy].UsedEntries = 0;
+        MiArchTlbInvalidateAll(TRUE);
+        MiPfnShareDecrement(&System->Pfn, Copy, TRUE);
+    }
+
+    MiArchUnmapFrame(Root);
+}
+
 NTSTATUS
 MiSessionSpaceCreate(
     _Inout_ PMI_SYSTEM System,
     _Out_ PMI_ADDRESS_SPACE Space)
 {
     const MI_ARCH_DESCRIPTOR *Arch = System->Arch;
-    ULONG64 Span = 1ULL << Arch->Level[Arch->PagingLevels - 1].Shift;
+    ULONG64 Span = MiSessionSpan(Arch);
     NTSTATUS Status;
     ULONG64 Va;
 
@@ -274,12 +385,24 @@ MiSessionSpaceCreate(
     MiVadRootInitialize(&Space->VadRoot, Space->LowestVa >> PAGE_SHIFT, Space->HighestVa >> PAGE_SHIFT);
     MiVadRootInitialize(&Space->CloneRoot, Space->LowestVa >> PAGE_SHIFT, Space->HighestVa >> PAGE_SHIFT);
 
+    if (MiSessionLevel(Arch) != (LONG)Arch->PagingLevels - 1)
+    {
+        Status = MiSessionCopyTopTable(Space);
+        if (!NT_SUCCESS(Status))
+        {
+            MiAddressSpaceDestroy(Space);
+            return Status;
+        }
+    }
+
     for (Va = System->SessionStart; Va <= System->SessionEnd; Va += Span)
     {
         Status = MiPtPinRange(Space, Va, PAGE_SIZE);
         if (!NT_SUCCESS(Status))
         {
             MiSessionSpaceUnpinTops(Space, Va + PAGE_SIZE);
+            if (MiSessionLevel(Arch) != (LONG)Arch->PagingLevels - 1)
+                MiSessionFreeTopTable(Space);
             MiAddressSpaceDestroy(Space);
             return Status;
         }
@@ -297,10 +420,14 @@ VOID
 MiSessionSpaceDestroy(
     _Inout_ PMI_ADDRESS_SPACE Space)
 {
+    const MI_ARCH_DESCRIPTOR *Arch = Space->System->Arch;
+
     MI_ASSERT(Space->IsSystem && Space->IsSession && Space->RootFrame != 0);
     MI_ASSERT(Space != &Space->System->SystemSpace);
     MiCleanAddressSpace(Space);
     MiSessionSpaceUnpinTops(Space, Space->HighestVa);
+    if (MiSessionLevel(Arch) != (LONG)Arch->PagingLevels - 1)
+        MiSessionFreeTopTable(Space);
     MiAddressSpaceDestroy(Space);
 }
 
@@ -327,18 +454,33 @@ MiSessionSpaceLink(
     From = MiArchMapFrame(Session->RootFrame);
     To = MiArchMapFrame(Process->RootFrame);
 
-    for (Index = First; Index <= Last; Index++)
+    if (MiSessionLevel(Arch) == Top)
     {
-        MI_ASSERT(MiArchPteIsValid(MiArchPteRead(&From[Index])));
-        MI_ASSERT(Link ? (MiArchPteRead(&To[Index]) == 0) :
-                         (MiArchPteRead(&To[Index]) == MiArchPteRead(&From[Index])));
-        MiArchPteWrite(&To[Index], Link ? MiArchPteRead(&From[Index]) : 0);
+        for (Index = First; Index <= Last; Index++)
+        {
+            MI_ASSERT(MiArchPteIsValid(MiArchPteRead(&From[Index])));
+            MI_ASSERT(Link ? (MiArchPteRead(&To[Index]) == 0) :
+                             (MiArchPteRead(&To[Index]) == MiArchPteRead(&From[Index])));
+            MiArchPteWrite(&To[Index], Link ? MiArchPteRead(&From[Index]) : 0);
+        }
+    }
+    else
+    {
+        /* The process swaps the shared top-level entry for the session's copy of it. */
+        PMI_PTE SystemRoot = MiArchMapFrame(System->SystemSpace.RootFrame);
+        MI_PTE Shared = MiArchPteRead(&SystemRoot[First]);
+
+        MI_ASSERT(First == Last && MiArchPteIsValid(MiArchPteRead(&From[First])));
+        MI_ASSERT(Link ? (MiArchPteRead(&To[First]) == Shared) :
+                         (MiArchPteRead(&To[First]) == MiArchPteRead(&From[First])));
+        MiArchPteReplaceTable(&To[First], Link ? MiArchPteRead(&From[First]) : Shared);
+        MiArchUnmapFrame(SystemRoot);
     }
 
     MiArchUnmapFrame(To);
     MiArchUnmapFrame(From);
 
-    if (!Link)
+    if (!Link || MiSessionLevel(Arch) != Top)
         MiArchTlbInvalidateAll(TRUE);
 }
 

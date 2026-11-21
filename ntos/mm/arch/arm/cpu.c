@@ -96,6 +96,18 @@ MiArchPteWrite(
     __asm__ __volatile__("dsb ishst\n\tisb" ::: "memory");
 }
 
+/* The old and new tables agree wherever the old one maps, so the swap needs no break. */
+VOID
+MiArchPteReplaceTable(
+    _Inout_ PMI_PTE Slot,
+    _In_ MI_PTE Value)
+{
+    MI_ASSERT((Value & MI_ARM_VALID) && (MiArchPteRead(Slot) & MI_ARM_VALID));
+    __atomic_store_n((volatile ULONG64 *)Slot, Value, __ATOMIC_RELEASE);
+    __asm__ __volatile__("dsb ishst\n\tisb" ::: "memory");
+    MiArchInvalidateTlbAll(MiTlbAllProcessors);
+}
+
 BOOLEAN
 MiArchPteCompareExchange(
     _Inout_ PMI_PTE Slot,
