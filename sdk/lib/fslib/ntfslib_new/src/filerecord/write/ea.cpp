@@ -1073,15 +1073,14 @@ FileRecord::ReplaceListedExtendedAttributes(
     }
 
     Status = SetStandardEaFlag(FinalInformation->PackedEASize != 0);
-    if (!NT_SUCCESS(Status))
-        goto RestoreBase;
-    Status = SynchronizeFileNameInformation(
-        NTFS_FILE_NAME_UPDATE_EA_SIZE,
-        0,
-        0,
-        NtfsMakeFileNameEaInformation(FinalInformation->PackedEASize, FinalInformation->UnpackedEASize),
-        0,
-        0);
+    if (NT_SUCCESS(Status))
+        Status = SynchronizeFileNameInformation(
+            NTFS_FILE_NAME_UPDATE_EA_SIZE,
+            0,
+            0,
+            NtfsMakeFileNameEaInformation(FinalInformation->PackedEASize, FinalInformation->UnpackedEASize),
+            0,
+            0);
     if (!NT_SUCCESS(Status))
         goto RestoreBase;
     Status = PrepareAutomaticTimestamps(
@@ -1601,15 +1600,14 @@ FileRecord::UpdateExtendedAttributes(
     }
 
     Status = SetStandardEaFlag(FinalInformation.PackedEASize != 0);
-    if (!NT_SUCCESS(Status))
-        goto Restore;
-    Status = SynchronizeFileNameInformation(
-        NTFS_FILE_NAME_UPDATE_EA_SIZE,
-        0,
-        0,
-        NtfsMakeFileNameEaInformation(FinalInformation.PackedEASize, FinalInformation.UnpackedEASize),
-        0,
-        0);
+    if (NT_SUCCESS(Status))
+        Status = SynchronizeFileNameInformation(
+            NTFS_FILE_NAME_UPDATE_EA_SIZE,
+            0,
+            0,
+            NtfsMakeFileNameEaInformation(FinalInformation.PackedEASize, FinalInformation.UnpackedEASize),
+            0,
+            0);
     if (!NT_SUCCESS(Status))
         goto Restore;
 
