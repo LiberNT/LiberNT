@@ -919,39 +919,40 @@ NtSetSecurityObject(
         return STATUS_INVALID_PARAMETER;
     }
 
+    if (SecurityDescriptor == NULL) return STATUS_ACCESS_VIOLATION;
+
+    Status = ObReferenceObjectByHandle(Handle,
+                                       ObpAccessForSettingSecurity(SecurityInformation),
+                                       NULL,
+                                       PreviousMode,
+                                       &Object,
+                                       NULL);
+    if (!NT_SUCCESS(Status)) return Status;
+
     Status = SeCaptureSecurityDescriptor(SecurityDescriptor,
                                          PreviousMode,
                                          PagedPool,
                                          FALSE,
                                          &Captured);
-    if (!NT_SUCCESS(Status)) return Status;
-    if (Captured == NULL) return STATUS_INVALID_SECURITY_DESCR;
-
-    Status = ObpCheckDescriptorCompleteness(SecurityInformation, Captured);
-    if (NT_SUCCESS(Status))
-    {
-        Status = ObReferenceObjectByHandle(Handle,
-                                           ObpAccessForSettingSecurity(SecurityInformation),
-                                           NULL,
-                                           PreviousMode,
-                                           &Object,
-                                           NULL);
-    }
-
     if (!NT_SUCCESS(Status))
     {
-        SeReleaseSecurityDescriptor(Captured, PreviousMode, FALSE);
+        ObDereferenceObject(Object);
         return Status;
     }
+    ASSERT(Captured != NULL);
+
+    Status = ObpCheckDescriptorCompleteness(SecurityInformation, Captured);
 
     /* Raising a label above the caller's own integrity is a privileged act */
-    if ((SecurityInformation & LABEL_SECURITY_INFORMATION) &&
+    if (NT_SUCCESS(Status) &&
+        (SecurityInformation & LABEL_SECURITY_INFORMATION) &&
         !ObpLabelWithinCallerIntegrity(Captured) &&
         !SeSinglePrivilegeCheck(SeRelabelPrivilege, PreviousMode))
     {
         Status = STATUS_INVALID_LABEL;
     }
-    else
+
+    if (NT_SUCCESS(Status))
     {
         Status = ObSetSecurityObjectByPointer(Object,
                                               SecurityInformation,

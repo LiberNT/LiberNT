@@ -198,18 +198,18 @@ SepNewDescriptor(
 
 /* Every part a descriptor names has to be a part of its kind */
 static
-BOOLEAN
-SepPartsAreWellFormed(
+NTSTATUS
+SepCheckParts(
     _In_ const SEP_SD_PARTS *Parts)
 {
-    if (Parts->Owner != NULL && !RtlValidSid(Parts->Owner)) return FALSE;
-    if (Parts->Group != NULL && !RtlValidSid(Parts->Group)) return FALSE;
-    if (Parts->DaclPresent && Parts->Dacl != NULL && !RtlValidAcl(Parts->Dacl))
-        return FALSE;
     if (Parts->SaclPresent && Parts->Sacl != NULL && !RtlValidAcl(Parts->Sacl))
-        return FALSE;
+        return STATUS_INVALID_ACL;
+    if (Parts->DaclPresent && Parts->Dacl != NULL && !RtlValidAcl(Parts->Dacl))
+        return STATUS_INVALID_ACL;
+    if (Parts->Owner != NULL && !RtlValidSid(Parts->Owner)) return STATUS_INVALID_SID;
+    if (Parts->Group != NULL && !RtlValidSid(Parts->Group)) return STATUS_INVALID_SID;
 
-    return TRUE;
+    return STATUS_SUCCESS;
 }
 
 /* A part that lives in the caller's own memory is read where it stands */
@@ -581,8 +581,9 @@ SeCaptureSecurityDescriptor(
         if (FromUser && !(Parts.Control & SE_SELF_RELATIVE))
             SepProbeParts(&Parts);
 
-        if (!SepPartsAreWellFormed(&Parts))
-            _SEH2_YIELD(return STATUS_INVALID_SECURITY_DESCR);
+        Status = SepCheckParts(&Parts);
+        if (!NT_SUCCESS(Status))
+            _SEH2_YIELD(return Status);
 
         Control = Parts.Control & ~SE_SELF_RELATIVE;
         if (Parts.DaclPresent) Control |= SE_DACL_PRESENT;
