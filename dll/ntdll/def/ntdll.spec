@@ -1978,7 +1978,7 @@
 @ cdecl -arch=i386 _aullshr()
 @ extern -arch=i386 _chkstk
 @ cdecl -private _errno()
-@ cdecl -arch=i386,arm,win64 _fltused()
+@ extern -arch=i386,arm,win64 _fltused
 @ cdecl -arch=i386 -ret64 _ftol()
 @ cdecl _i64toa(double ptr long)
 @ cdecl _i64tow(double ptr long)

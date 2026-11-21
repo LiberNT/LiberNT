@@ -856,7 +856,7 @@
 # stub -version=0x600+ -arch=win64 _msize_dbg(ptr long)
 @ cdecl _nextafter(double double) nextafter
 @ cdecl -arch=win64 _nextafterf(float float) nextafterf
-@ extern _onexit # Declaring it as extern let us use the symbol from msvcrtex while having the __imp_ symbol defined in the import lib
+@ cdecl -impdata _onexit(ptr) # Only the __imp_ symbol goes in the import lib, so that msvcrtex provides _onexit
 @ varargs _open(str long)
 @ cdecl _open_osfhandle(long long)
 @ extern _osplatform MSVCRT__osplatform
