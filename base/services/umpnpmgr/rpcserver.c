@@ -3655,6 +3655,7 @@ SetupDeviceInstance(
     if (ulMinorAction & ~CM_SETUP_BITS)
         return CR_INVALID_FLAG;
 
+    /* FIXME: CM_SETUP_DEVNODE_RESET and the CM_SETUP_DEVNODE_CONFIG* actions are handled as CM_SETUP_DEVNODE_READY */
     if ((ulMinorAction == CM_SETUP_DOWNLOAD) ||
         (ulMinorAction == CM_SETUP_WRITE_LOG_CONFS))
         return CR_SUCCESS;
