@@ -106,25 +106,17 @@ these steps:
 MessageId=0x82
 Severity=Warning
 Facility=System
-SymbolicName=BUGCODE_PSS_MESSAGE
+SymbolicName=DFS_FILE_SYSTEM
 Language=English
-Check to make sure any new hardware or software is properly installed.
-If this is a new installation, ask your hardware or software manufacturer
-for any LiberNT updates you might need.
-
-If problems continue, disable or remove any newly installed hardware
-or software. Disable BIOS memory options such as caching or shadowing.
-If you need to use Safe Mode to remove or disable components, restart
-your computer, press F8 to select Advanced Startup Options, and then
-select Safe Mode.
+DFS_FILE_SYSTEM
 .
 
 MessageId=0x83
 Severity=Warning
 Facility=System
-SymbolicName=BUGCHECK_TECH_INFO
+SymbolicName=OFS_FILE_SYSTEM
 Language=English
-Technical information:
+OFS_FILE_SYSTEM
 .
 
 MessageId=0x0
@@ -362,9 +354,9 @@ PFN_REFERENCE_COUNT
 MessageId=0x1D
 Severity=Success
 Facility=System
-SymbolicName=NO_SPINLOCK_AVAILABLE
+SymbolicName=NO_SPIN_LOCK_AVAILABLE
 Language=English
-NO_SPINLOCK_AVAILABLE
+NO_SPIN_LOCK_AVAILABLE
 .
 
 MessageId=0x1E
@@ -803,9 +795,9 @@ XNS_INTERNAL_ERROR
 MessageId=0x58
 Severity=Success
 Facility=System
-SymbolicName=FTDISK_INTERNAL_ERROR
+SymbolicName=VOLMGRX_INTERNAL_ERROR
 Language=English
-FTDISK_INTERNAL_ERROR
+VOLMGRX_INTERNAL_ERROR
 .
 
 MessageId=0x59
@@ -979,33 +971,33 @@ SESSION1_INITIALIZATION_FAILED
 MessageId=0x6E
 Severity=Success
 Facility=System
-SymbolicName=SESSION2_INITIALIZATION_FAILED
+SymbolicName=BOOTPROC_INITIALIZATION_FAILED
 Language=English
-SESSION2_INITIALIZATION_FAILED
+BOOTPROC_INITIALIZATION_FAILED
 .
 
 MessageId=0x6F
 Severity=Success
 Facility=System
-SymbolicName=SESSION3_INITIALIZATION_FAILED
+SymbolicName=VSL_INITIALIZATION_FAILED
 Language=English
-SESSION3_INITIALIZATION_FAILED
+VSL_INITIALIZATION_FAILED
 .
 
 MessageId=0x70
 Severity=Success
 Facility=System
-SymbolicName=SESSION4_INITIALIZATION_FAILED
+SymbolicName=SOFT_RESTART_FATAL_ERROR
 Language=English
-SESSION4_INITIALIZATION_FAILED
+SOFT_RESTART_FATAL_ERROR
 .
 
 MessageId=0x71
 Severity=Success
 Facility=System
-SymbolicName=SESSION5_INITIALIZATION_FAILED
+SymbolicName=SOFT_RESTART_LIVE_DUMP
 Language=English
-SESSION5_INITIALIZATION_FAILED
+SOFT_RESTART_LIVE_DUMP
 .
 
 MessageId=0x72
@@ -1214,15 +1206,9 @@ INVALID_WORK_QUEUE_ITEM
 MessageId=0x9A
 Severity=Success
 Facility=System
-SymbolicName=MORAL_EXCEPTION_ERROR
+SymbolicName=SYSTEM_LICENSE_VIOLATION
 Language=English
-An attempt was made to execute a proprietary machine code instruction.
-The system has been shut down to prevent damage to your conscience.
-
-If this is the first time you have seen this error screen, read
-<http://www.gnu.org/philosophy/free-sw.html>.
-
-If problems continue, remove all nonfree software from your computer.
+SYSTEM_LICENSE_VIOLATION
 .
 
 MessageId=0x9C
@@ -1349,13 +1335,9 @@ BAD_POOL_CALLER
 MessageId=0xC3
 Severity=Success
 Facility=System
-SymbolicName=BUGCODE_PSS_MESSAGE_SIGNATURE
+SymbolicName=SYSTEM_IMAGE_BAD_SIGNATURE
 Language=English
-A system file that is owned by LiberNT was replaced by an application
-running on your system.  The operating system detected this and tried to
-verify the validity of the file's signature.  The operating system found that
-the file signature is not valid and put the original, correct file back
-so that your operating system will continue to function properly.
+SYSTEM_IMAGE_BAD_SIGNATURE
 .
 
 MessageId=0xC4
@@ -4456,154 +4438,23 @@ Language=English
 SAVER_WAITFORSHELLREADY
 .
 
-MessageId=0x20001
-Severity=Success
-Facility=System
-SymbolicName=HYPERVISOR_ERROR
-Language=English
-HYPERVISOR_ERROR
-.
-
-MessageId=0x30006
-Severity=Success
-Facility=System
-SymbolicName=XBOX_MANUALLY_INITIATED_CRASH
-Language=English
-XBOX_MANUALLY_INITIATED_CRASH
-.
-
-MessageId=0x10000050
-Severity=Success
-Facility=System
-SymbolicName=PAGE_FAULT_IN_NONPAGED_AREA_M
-Language=English
-PAGE_FAULT_IN_NONPAGED_AREA_M
-.
-
-MessageId=0x1000007E
-Severity=Success
-Facility=System
-SymbolicName=SYSTEM_THREAD_EXCEPTION_NOT_HANDLED_M
-Language=English
-SYSTEM_THREAD_EXCEPTION_NOT_HANDLED_M
-.
-
-MessageId=0x1000007F
-Severity=Success
-Facility=System
-SymbolicName=UNEXPECTED_KERNEL_MODE_TRAP_M
-Language=English
-UNEXPECTED_KERNEL_MODE_TRAP_M
-.
-
-MessageId=0x1000008E
-Severity=Success
-Facility=System
-SymbolicName=KERNEL_MODE_EXCEPTION_NOT_HANDLED_M
-Language=English
-KERNEL_MODE_EXCEPTION_NOT_HANDLED_M
-.
-
-MessageId=0x100000D6
-Severity=Success
-Facility=System
-SymbolicName=DRIVER_PAGE_FAULT_BEYOND_END_OF_ALLOCATION_M
-Language=English
-DRIVER_PAGE_FAULT_BEYOND_END_OF_ALLOCATION_M
-.
-
-MessageId=0x100000EA
-Severity=Success
-Facility=System
-SymbolicName=THREAD_STUCK_IN_DEVICE_DRIVER_M
-Language=English
-THREAD_STUCK_IN_DEVICE_DRIVER_M
-.
-
-MessageId=0x4000009E
-Severity=Success
-Facility=System
-SymbolicName=WINDOWS_NT_RC_STRING
-Language=English
-WINDOWS_NT_RC_STRING
-.
-
-MessageId=0x400000AD
-Severity=Success
-Facility=System
-SymbolicName=VIDEO_DRIVER_DEBUG_REPORT_REQUEST
-Language=English
-VIDEO_DRIVER_DEBUG_REPORT_REQUEST
-.
-
-MessageId=0x400001EE
-Severity=Success
-Facility=System
-SymbolicName=MPSDRV_QUERY_USER
-Language=English
-MPSDRV_QUERY_USER
-.
-
-MessageId=0x400001EF
-Severity=Success
-Facility=System
-SymbolicName=VMBUS_LIVEDUMP
-Language=English
-VMBUS_LIVEDUMP
-.
-
-MessageId=0x40000209
-Severity=Success
-Facility=System
-SymbolicName=STORVSP_LIVEDUMP
-Language=English
-STORVSP_LIVEDUMP
-.
-
-MessageId=0x40010002
-Severity=Success
-Facility=System
-SymbolicName=HARDWARE_PROFILE_DOCKED_STRING
-Language=English
-HARDWARE_PROFILE_DOCKED_STRING
-.
-
-MessageId=0x40010003
-Severity=Success
-Facility=System
-SymbolicName=HARDWARE_PROFILE_UNKNOWN_STRING
-Language=English
-HARDWARE_PROFILE_UNKNOWN_STRING
-.
-
-MessageId=0x534D4244
-Severity=Success
-Facility=System
-SymbolicName=SMBD_BUGCHECK_CODE
-Language=English
-SMBD_BUGCHECK_CODE
-.
-
-MessageId=0x80000000
-Severity=Success
-Facility=System
-SymbolicName=BUGCHECK_CONTEXT_MODIFIER
-Language=English
-BUGCHECK_CONTEXT_MODIFIER
-.
-
-MessageId=0xC000021A
-Severity=Success
-Facility=System
-SymbolicName=WINLOGON_FATAL_ERROR
-Language=English
-WINLOGON_FATAL_ERROR
-.
-
-MessageId=0xDEADDEAD
-Severity=Success
-Facility=System
-SymbolicName=MANUALLY_INITIATED_CRASH1
-Language=English
-MANUALLY_INITIATED_CRASH1
-.
+;#define HYPERVISOR_ERROR ((ULONG)0x00020001L)
+;#define XBOX_MANUALLY_INITIATED_CRASH ((ULONG)0x00030006L)
+;#define PAGE_FAULT_IN_NONPAGED_AREA_M ((ULONG)0x10000050L)
+;#define SYSTEM_THREAD_EXCEPTION_NOT_HANDLED_M ((ULONG)0x1000007EL)
+;#define UNEXPECTED_KERNEL_MODE_TRAP_M ((ULONG)0x1000007FL)
+;#define KERNEL_MODE_EXCEPTION_NOT_HANDLED_M ((ULONG)0x1000008EL)
+;#define DRIVER_PAGE_FAULT_BEYOND_END_OF_ALLOCATION_M ((ULONG)0x100000D6L)
+;#define THREAD_STUCK_IN_DEVICE_DRIVER_M ((ULONG)0x100000EAL)
+;#define WINDOWS_NT_RC_STRING ((ULONG)0x4000009EL)
+;#define VIDEO_DRIVER_DEBUG_REPORT_REQUEST ((ULONG)0x400000ADL)
+;#define MPSDRV_QUERY_USER ((ULONG)0x400001EEL)
+;#define VMBUS_LIVEDUMP ((ULONG)0x400001EFL)
+;#define STORVSP_LIVEDUMP ((ULONG)0x40000209L)
+;#define HARDWARE_PROFILE_UNDOCKED_STRING ((ULONG)0x40010001L)
+;#define HARDWARE_PROFILE_DOCKED_STRING ((ULONG)0x40010002L)
+;#define HARDWARE_PROFILE_UNKNOWN_STRING ((ULONG)0x40010003L)
+;#define SMBD_BUGCHECK_CODE ((ULONG)0x534D4244L)
+;#define BUGCHECK_CONTEXT_MODIFIER ((ULONG)0x80000000L)
+;#define WINLOGON_FATAL_ERROR ((ULONG)0xC000021AL)
+;#define MANUALLY_INITIATED_CRASH1 ((ULONG)0xDEADDEADL)
