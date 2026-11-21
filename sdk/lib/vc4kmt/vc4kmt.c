@@ -16,7 +16,7 @@
 #include <wingdi.h>
 #include <d3dkmthk.h>
 #include <d3dumddi.h>
-#include <reactos/vc4kmt.h>
+#include <libernt/vc4kmt.h>
 
 #ifndef NT_SUCCESS
 #define NT_SUCCESS(Status) (((NTSTATUS)(Status)) >= 0)

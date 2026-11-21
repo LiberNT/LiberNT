@@ -8,7 +8,7 @@
  */
 
 #include <mm/nt/mint.h>
-#include <reactos/ci.h>
+#include <libernt/ci.h>
 #include "catalog.h"
 
 #define TAG_CODE_INTEGRITY 'gImM'

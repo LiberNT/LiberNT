@@ -13,7 +13,7 @@
 #include "mesa_tile_variants.h"
 #include "platform_diag.h"
 #if defined(__aarch64__)
-#include <reactos/arm64/sysreg.h>
+#include <libernt/arm64/sysreg.h>
 #endif
 
 static ULONG ArenaBytes = 32u * 1024u * 1024u;

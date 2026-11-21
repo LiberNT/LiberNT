@@ -9,7 +9,7 @@
  */
 
 #include <kmt_test.h>
-#include <reactos/drivers/directx/dxgmms2.h>
+#include <libernt/drivers/directx/dxgmms2.h>
 #include "scheduler_core.h"
 
 #define TAG_DXGMMS2_SCHED_TEST 'sS2D'

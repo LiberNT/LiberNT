@@ -1063,7 +1063,7 @@ TestMisalignedVectors(VOID)
 }
 
 #if defined(_M_AMD64) || defined(__x86_64__)
-#include <reactos/emuhost.h>
+#include <libernt/emuhost.h>
 #include "rv64xtest.h"
 
 #define RV64X_STRING2(Value) #Value

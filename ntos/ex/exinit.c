@@ -7,10 +7,10 @@
 
 #include <ntoskrnl.h>
 #include <ntos/inbv/logo.h>
-#include <reactos/smpdbg.h>
+#include <libernt/smpdbg.h>
 #define NDEBUG
 #include <debug.h>
-#include <reactos/buildno.h>
+#include <libernt/buildno.h>
 
 /* GLOBALS ********************************************************************/
 

@@ -6,7 +6,7 @@
  */
 
 #include "settings.h"
-#include <reactos/dwmframe.h>
+#include <libernt/dwmframe.h>
 
 static const struct
 {

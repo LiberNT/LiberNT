@@ -1,5 +1,5 @@
 #include "precomp.h"
-#include <reactos/wow64shared.h>
+#include <libernt/wow64shared.h>
 
 #ifdef _M_IX86
 #define EXPLICIT_64BIT

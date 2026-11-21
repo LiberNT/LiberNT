@@ -1,6 +1,6 @@
 
 include_directories(
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/drivers)
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/drivers)
 
 spec2def(msafd.dll msafd.spec)
 

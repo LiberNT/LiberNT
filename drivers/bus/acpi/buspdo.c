@@ -4,8 +4,8 @@
 #include <initguid.h>
 #include <devpkey.h>
 #include <poclass.h>
-#include <reactos/drivers/reshubio.h>
-#include <reactos/drivers/inteli2c.h>
+#include <libernt/drivers/reshubio.h>
+#include <libernt/drivers/inteli2c.h>
 #include <wdmguid.h>
 
 #define NDEBUG

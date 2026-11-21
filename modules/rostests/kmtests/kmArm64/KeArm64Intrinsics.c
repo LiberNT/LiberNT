@@ -9,7 +9,7 @@
  */
 
 #include <kmt_test.h>
-#include <reactos/unaligned.h>
+#include <libernt/unaligned.h>
 
 VOID Test_KeArm64Intrinsics(VOID);
 

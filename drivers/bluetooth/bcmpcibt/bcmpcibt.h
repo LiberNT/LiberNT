@@ -12,9 +12,9 @@
 #include <wdmguid.h>
 #include <ntstrsafe.h>
 #include <bthxddi.h>
-#include <reactos/drivers/fdtdrv.h>
-#include <reactos/drivers/appledart.h>
-#include <reactos/drivers/applepcie.h>
+#include <libernt/drivers/fdtdrv.h>
+#include <libernt/drivers/appledart.h>
+#include <libernt/drivers/applepcie.h>
 #include "proto.h"
 
 #define BCMBT_TAG                       'tBcB'

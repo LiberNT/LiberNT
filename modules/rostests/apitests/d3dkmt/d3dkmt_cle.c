@@ -10,7 +10,7 @@
  */
 
 #include "precomp.h"
-#include <reactos/vc4cle.h>
+#include <libernt/vc4cle.h>
 
 START_TEST(cle)
 {

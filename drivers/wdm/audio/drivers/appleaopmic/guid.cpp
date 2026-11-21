@@ -8,4 +8,4 @@
 #include <initguid.h>
 #include <portcls.h>
 #include <ksmedia.h>
-#include <reactos/drivers/appleaop.h>
+#include <libernt/drivers/appleaop.h>

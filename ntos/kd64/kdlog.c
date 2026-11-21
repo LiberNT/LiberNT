@@ -9,7 +9,7 @@
 #include <ntdddisk.h>
 #define NDEBUG
 #include <debug.h>
-#include <reactos/drivers/dumpstor.h>
+#include <libernt/drivers/dumpstor.h>
 
 #define KDP_BOOT_LOG_CHUNK_SIZE (64 * 1024)
 #define KDP_BOOT_LOG_POLL_MS 250

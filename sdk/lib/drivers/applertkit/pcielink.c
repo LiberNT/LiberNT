@@ -8,7 +8,7 @@
 #ifndef UNIT_TEST
 #include <ntddk.h>
 #endif
-#include <reactos/drivers/applepcielink.h>
+#include <libernt/drivers/applepcielink.h>
 
 #define LINKCAP_ASPM(Value)         (((Value) >> 10) & 3)
 #define LINKCAP_L0S_EXIT(Value)     (((Value) >> 12) & 7)

@@ -8,8 +8,8 @@
 #include <ntifs.h>
 #include <ndk/exfuncs.h>
 #include <ntstrsafe.h>
-#include <reactos/arm64/sysreg.h>
-#include <reactos/drivers/fdtdrv.h>
+#include <libernt/arm64/sysreg.h>
+#include <libernt/drivers/fdtdrv.h>
 #include "governor.h"
 
 #define CPUFREQ_FAILURES_LOGGED     3

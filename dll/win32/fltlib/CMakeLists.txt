@@ -3,7 +3,7 @@ add_definitions(-D__WINESRC__)
 spec2def(fltlib.dll fltlib.spec ADD_IMPORTLIB)
 
 include_directories(
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/drivers/fltmgr
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/drivers/fltmgr
     ${REACTOS_SOURCE_DIR}/sdk/include/wine
     includes)
 

@@ -8,7 +8,7 @@
 #include "precomp.h"
 
 #include <poclass.h>
-#include <reactos/drivers/acpi/acpithermal.h>
+#include <libernt/drivers/acpi/acpithermal.h>
 
 #define NDEBUG
 #include <debug.h>

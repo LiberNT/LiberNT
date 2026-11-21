@@ -7,9 +7,9 @@
 
 #pragma once
 
-#include <reactos/drivers/applertkit.h>
-#include <reactos/drivers/appledart.h>
-#include <reactos/drivers/fdtdrv.h>
+#include <libernt/drivers/applertkit.h>
+#include <libernt/drivers/appledart.h>
+#include <libernt/drivers/fdtdrv.h>
 
 #define APPLE_DCP_TAG                       'pcDA'
 #define APPLE_DCP_WORKING_SURFACE_COUNT     12UL

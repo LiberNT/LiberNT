@@ -8,7 +8,7 @@
 #include "cyw43455.h"
 #include <devpkey.h>
 #include <initguid.h>
-#include <reactos/drivers/cyw43455sdio.h>
+#include <libernt/drivers/cyw43455sdio.h>
 
 #define NDEBUG
 #include <debug.h>

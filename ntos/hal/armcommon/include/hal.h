@@ -13,9 +13,9 @@
 #include <halfuncs.h>
 #include <ndk/iofuncs.h>
 #include <ndk/kefuncs.h>
-#include <reactos/hal/acpi_pci.h>
-#include <reactos/hal/acpi_cstate.h>
-#include <reactos/drivers/acpi/acpi.h>
+#include <libernt/hal/acpi_pci.h>
+#include <libernt/hal/acpi_cstate.h>
+#include <libernt/drivers/acpi/acpi.h>
 #include <bugcodes.h>
 #include <halacpip.h>
 #include <halirq.h>

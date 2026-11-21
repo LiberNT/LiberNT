@@ -8,7 +8,7 @@
 
 #include <win32k.h>
 #include <immdev.h>
-#include <reactos/dwmframe.h>
+#include <libernt/dwmframe.h>
 DBG_DEFAULT_CHANNEL(UserWinpos);
 
 /* GLOBALS *******************************************************************/

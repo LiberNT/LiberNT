@@ -15,7 +15,7 @@
 #include <setupapi.h>
 #include <cfgmgr32.h>
 #include <newdev.h>
-#include <reactos/dll/devmgr/devmgr.h>
+#include <libernt/dll/devmgr/devmgr.h>
 #include <cpl.h>
 
 #define NDEBUG

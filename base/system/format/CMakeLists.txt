@@ -1,5 +1,5 @@
 
-include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/fmifs)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/libernt/libs/fmifs)
 
 add_executable(format format.c format.rc)
 set_module_type(format win32cui UNICODE)

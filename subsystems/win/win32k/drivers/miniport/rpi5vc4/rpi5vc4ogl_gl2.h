@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <reactos/rpi5vc4_xpdm.h>
+#include <libernt/rpi5vc4_xpdm.h>
 
 #include "rpi5vc4ogl_buffer.h"
 

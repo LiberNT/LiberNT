@@ -10,7 +10,7 @@
  */
 
 #include <kmt_test.h>
-#include <reactos/drivers/directx/dxgmms2.h>
+#include <libernt/drivers/directx/dxgmms2.h>
 #include "vidmm_core.h"
 
 #define TAG_DXGMMS2_VIDMM_TEST 'mV2D'

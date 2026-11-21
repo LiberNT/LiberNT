@@ -41,7 +41,7 @@ TODO:
 #include <perhist.h>
 #include <vssym32.h>
 #include <shdispid.h>
-#include <reactos/dwmsettings.h>
+#include <libernt/dwmsettings.h>
 
 WINE_DEFAULT_DEBUG_CHANNEL(shell);
 

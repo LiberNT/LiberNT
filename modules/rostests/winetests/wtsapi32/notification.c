@@ -3,7 +3,7 @@
 #include <wtsapi32.h>
 #include <wine/test.h>
 #ifdef __REACTOS__
-#include <reactos/wtssession.h>
+#include <libernt/wtssession.h>
 #endif
 
 START_TEST(notification)

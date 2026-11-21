@@ -13,7 +13,7 @@
 #include <ntstatus.h>
 #include <ndk/ntndk.h>
 #include <pseh/pseh2.h>
-#include <reactos/wow64shared.h>
+#include <libernt/wow64shared.h>
 #include "../amd64emu/felix86/bridge.h"
 
 #define FELIX_TLS_THREAD     2

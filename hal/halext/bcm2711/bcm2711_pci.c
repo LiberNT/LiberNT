@@ -19,8 +19,8 @@
 #include <ndk/kefuncs.h>
 #include <ioaccess.h>
 #include <halfuncs.h>
-#include <reactos/hal/acpi_pci.h>
-#include <reactos/drivers/acpi/acpi.h>
+#include <libernt/hal/acpi_pci.h>
+#include <libernt/drivers/acpi/acpi.h>
 #include <halacpi.h>
 #include <hal.h>
 #include <reactos/hal/halext.h>

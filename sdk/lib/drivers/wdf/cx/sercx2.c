@@ -9,7 +9,7 @@
 #include <ntddser.h>
 #include <SerCx.h>
 #include <initguid.h>
-#include <reactos/drivers/reshubio.h>
+#include <libernt/drivers/reshubio.h>
 
 #define NDEBUG
 #include <debug.h>

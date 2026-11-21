@@ -8,13 +8,13 @@
 #pragma once
 
 #include <ntddk.h>
-#include <reactos/drivers/appleadt.h>
-#include <reactos/drivers/applertkit.h>
-#include <reactos/drivers/appleuat.h>
-#include <reactos/drivers/appleagx.h>
-#include <reactos/drivers/appleagxinit.h>
-#include <reactos/drivers/appleagxfw.h>
-#include <reactos/drivers/fdtdrv.h>
+#include <libernt/drivers/appleadt.h>
+#include <libernt/drivers/applertkit.h>
+#include <libernt/drivers/appleuat.h>
+#include <libernt/drivers/appleagx.h>
+#include <libernt/drivers/appleagxinit.h>
+#include <libernt/drivers/appleagxfw.h>
+#include <libernt/drivers/fdtdrv.h>
 
 #define AGX_REGION_CONTEXTS         0
 #define AGX_REGION_KERNEL_ROOT      1

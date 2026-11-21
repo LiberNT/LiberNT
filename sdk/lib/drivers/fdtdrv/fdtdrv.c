@@ -10,7 +10,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #endif
-#include <reactos/drivers/fdtdrv.h>
+#include <libernt/drivers/fdtdrv.h>
 
 #define FDT_DRIVER_TAG 'vDdF'
 

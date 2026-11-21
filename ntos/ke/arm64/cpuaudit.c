@@ -6,7 +6,7 @@
  */
 
 #include <ntoskrnl.h>
-#include <reactos/cpuaudit.h>
+#include <libernt/cpuaudit.h>
 
 volatile LONG KiCpuAuditActive;
 CPU_AUDIT_IRQ KiCpuAuditIrqs[CPU_AUDIT_CPUS][CPU_AUDIT_IRQS];

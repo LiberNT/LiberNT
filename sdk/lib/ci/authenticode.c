@@ -8,7 +8,7 @@
  * RSA and certificate-chain validation are provided by Mbed TLS.
  */
 
-#include <reactos/ci.h>
+#include <libernt/ci.h>
 #include <string.h>
 #include <mbedtls/md.h>
 #include <mbedtls/oid.h>

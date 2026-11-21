@@ -26,7 +26,7 @@
 #include <shlwapi.h>
 #include <wincon.h>
 #include <shlobj.h>
-#include <reactos/debug.h>
+#include <libernt/debug.h>
 #include <shellutils.h>
 #include <shellapi.h>
 #include <msxml2.h>

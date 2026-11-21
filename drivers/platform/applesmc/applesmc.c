@@ -6,10 +6,10 @@
  */
 
 #include <ntifs.h>
-#include <reactos/drivers/fdtdrv.h>
-#include <reactos/drivers/applertkit.h>
-#include <reactos/drivers/applesmc.h>
-#include <reactos/drivers/applespmi.h>
+#include <libernt/drivers/fdtdrv.h>
+#include <libernt/drivers/applertkit.h>
+#include <libernt/drivers/applesmc.h>
+#include <libernt/drivers/applespmi.h>
 #include <initguid.h>
 #include <poclass.h>
 

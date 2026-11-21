@@ -7,7 +7,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <reactos/drivers/appleagxfw.h>
+#include <libernt/drivers/appleagxfw.h>
 
 static unsigned Checks, Failures;
 

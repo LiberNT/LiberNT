@@ -18,7 +18,7 @@
 
 #include "msvideo_private.h"
 
-#include <reactos/manifest_dll.rc>
+#include <libernt/manifest_dll.rc>
 
 /* UTF-8 */
 #pragma code_page(65001)

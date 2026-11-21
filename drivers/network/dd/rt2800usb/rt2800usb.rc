@@ -9,4 +9,4 @@
 #define REACTOS_STR_FILE_DESCRIPTION  "LiberNT Ralink RT2870/RT2770 USB WiFi Driver"
 #define REACTOS_STR_INTERNAL_NAME     "rt2800usb"
 #define REACTOS_STR_ORIGINAL_FILENAME "rt2800usb.sys"
-#include <reactos/version.rc>
+#include <libernt/version.rc>

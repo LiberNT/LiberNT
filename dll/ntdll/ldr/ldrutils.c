@@ -11,7 +11,7 @@
 
 #include <ntdll.h>
 #if defined(_M_ARM64)
-#include <reactos/chpe.h>
+#include <libernt/chpe.h>
 #endif
 
 #define NDEBUG

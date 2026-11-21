@@ -55,7 +55,7 @@ IDI_MOUSE_R_ACTIVE_L_DOWN ICON "resources/mouse/left_down_right_active.ico"
 
 IDR_SYSTRAY REGISTRY "resources/rgs/systray.rgs"
 
-#include <reactos/manifest_dll.rc>
+#include <libernt/manifest_dll.rc>
 
 /* UTF-8 */
 #pragma code_page(65001)

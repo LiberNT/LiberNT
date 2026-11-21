@@ -12,7 +12,7 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 #define REACTOS_STR_ORIGINAL_FILENAME "netshell.dll"
 #define REACTOS_STR_PRODUCT_VERSION   "5.1.2600.3264"
 #define REACTOS_STR_FILE_VERSION      "5.1.2600.3264"
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
 IDI_SHELL_NETWORK_FOLDER ICON "res/netshell.ico"
 IDI_NET_ERROR ICON "res/neterror.ico"
@@ -45,7 +45,7 @@ IDI_NET_TRAY_WIRED_X_LIGHT ICON "res/tray/wired_x_light.ico"
 
 IDR_NETSHELL REGISTRY "res/netshell.rgs"
 
-#include <reactos/manifest_dll.rc>
+#include <libernt/manifest_dll.rc>
 
 /* UTF-8 */
 #pragma code_page(65001)

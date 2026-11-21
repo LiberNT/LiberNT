@@ -36,7 +36,7 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 
 #include <wine/wine_common_ver.rc>
 
-#include <reactos/manifest_dll.rc>
+#include <libernt/manifest_dll.rc>
 
 /* UTF-8 */
 #pragma code_page(65001)

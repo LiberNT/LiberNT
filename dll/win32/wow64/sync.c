@@ -26,7 +26,7 @@
 #include "winbase.h"
 #include "winnt.h"
 #include "winternl.h"
-#include <reactos/subsys/csr/csrwow64.h>
+#include <libernt/subsys/csr/csrwow64.h>
 #include "wow64_private.h"
 #include "wine/debug.h"
 

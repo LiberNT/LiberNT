@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <reactos/drivers/applepmgr.h>
+#include <libernt/drivers/applepmgr.h>
 
 #define PMGR_RESET              0x80000000
 #define PMGR_AUTO_ENABLE        0x10000000

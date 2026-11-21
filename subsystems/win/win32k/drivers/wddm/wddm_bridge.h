@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <reactos/rddm/rxgkinterface.h>
+#include <libernt/rddm/rxgkinterface.h>
 
 /* Bridge lifecycle */
 NTSTATUS WddmBridgeInit(VOID);

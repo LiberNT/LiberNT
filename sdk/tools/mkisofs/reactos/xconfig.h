@@ -216,7 +216,7 @@
 #define NO_FPRFORMAT
 
 /* For a nice "mkisofs -version" :) */
-#include <reactos/buildno.h>
+#include <libernt/buildno.h>
 #define HOST_CPU "ReactOS"
 #define HOST_VENDOR KERNEL_VERSION_BUILD_STR
 #define HOST_OS REACTOS_COMPILER_NAME "-" REACTOS_COMPILER_VERSION

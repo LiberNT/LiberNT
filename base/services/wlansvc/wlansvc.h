@@ -57,14 +57,14 @@
 #endif
 
 /*
- * <reactos/nwifi_ioctl.h> pulls in <windot11.h>, whose dot11 types the MIDL
+ * <libernt/nwifi_ioctl.h> pulls in <windot11.h>, whose dot11 types the MIDL
  * stub has already defined; predefining its include guard suppresses the
  * duplicate body.  The dot11 macros lost this way are restated above.
  */
 #ifndef __WINDOT11_H__
 #define __WINDOT11_H__
 #endif
-#include <reactos/nwifi_ioctl.h>
+#include <libernt/nwifi_ioctl.h>
 
 /*
  * Service-local working limits.  The wire structs are variable-length (IEs

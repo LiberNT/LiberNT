@@ -10,7 +10,7 @@
 #include <hidclass.h>
 #include <hidpi.h>
 #include <ntddvdeo.h>
-#include <reactos/rddm/rxgkmonitor.h>
+#include <libernt/rddm/rxgkmonitor.h>
 
 DBG_DEFAULT_CHANNEL(UserInput);
 

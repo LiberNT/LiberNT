@@ -15,7 +15,7 @@ add_definitions(
 
 include_directories(
     BEFORE include
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/subsys
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/subsys
     ${REACTOS_SOURCE_DIR}/sdk/lib/3rdparty/symcrypt/inc)
 
 add_library(rtl_um OBJECT

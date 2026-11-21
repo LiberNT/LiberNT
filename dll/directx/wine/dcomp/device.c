@@ -31,7 +31,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(dcomp);
 #ifdef __REACTOS__
 
 #include "dcomp_private.h"
-#include "reactos/dxgi_dcomp.h"
+#include "libernt/dxgi_dcomp.h"
 #include "wine/list.h"
 #include "d3d11.h"
 #include "d2d1_1.h"

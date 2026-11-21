@@ -7,7 +7,7 @@
 
 #include "precomp.h"
 #include <winioctl.h>
-#include <reactos/rddm/rxgkioctl.h>
+#include <libernt/rddm/rxgkioctl.h>
 
 #define IOCTL_DXGKRNL_GET_LEGACY_FULL_INIT_ENTRY 0x23003F
 #define IOCTL_DXGKRNL_GET_DOD_INIT_ENTRY 0x230043

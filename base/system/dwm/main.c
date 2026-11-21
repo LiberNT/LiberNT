@@ -11,7 +11,7 @@
 #include <windows.h>
 #include <objbase.h>
 #include <d3dkmthk.h>
-#include <reactos/dwmcore.h>
+#include <libernt/dwmcore.h>
 
 typedef struct _DWM_APP_HOST
 {

@@ -91,7 +91,7 @@ packaged binary; it does not add a new hardware performance measurement.
 ## Shared DWM surfaces (September 8 bring-up)
 
 The packaged ICD now includes `wglBindSharedTextureROS` and
-`wglUpdateSharedTextureROS`, matching `sdk/include/reactos/dwmgpuinterop.h`.
+`wglUpdateSharedTextureROS`, matching `sdk/include/libernt/dwmgpuinterop.h`.
 DWM imports shared window allocations instead of uploading CPU snapshots.
 Publication IDs avoid repeated linear-to-tiled GPU conversions for unchanged
 content. This still permits GPU conversions on content changes; it is not a
@@ -119,7 +119,7 @@ escape ABI (`ESCAPE_PACKET_MAGIC_V2` `0x32454756`, `RESOURCE_LIST_MAGIC_V3`
 `0x3352474c`, `RPI3VC4_ESCAPE_INFO` 96 bytes, `RPI3VC4KMT_SUBMIT_CL` 160
 bytes). That ABI was introduced by commit `0b59cb64953`.
 
-**Changing `sdk/include/reactos/rpi3vc4kmt.h` or
+**Changing `sdk/include/libernt/rpi3vc4kmt.h` or
 `sdk/lib/rpi3vc4kmt/rpi3vc4kmt.c` requires rebuilding this binary.**
 
 ## Source rebuild / overriding

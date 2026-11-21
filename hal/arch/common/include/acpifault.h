@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <reactos/hal/acpifault.h>
+#include <libernt/hal/acpifault.h>
 
 VOID
 HalpAcpiRecordFault(

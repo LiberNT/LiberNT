@@ -8,7 +8,7 @@
 #ifndef UNIT_TEST
 #include <ntddk.h>
 #endif
-#include <reactos/drivers/applemca.h>
+#include <libernt/drivers/applemca.h>
 
 #define MCA_CLUSTER_STRIDE          0x4000
 #define MCA_SWITCH_STRIDE           0x8000

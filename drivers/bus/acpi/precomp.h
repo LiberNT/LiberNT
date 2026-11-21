@@ -16,10 +16,10 @@
 #include <wdmguid.h>
 #include <acpiioct.h>
 #include <ntintsafe.h>
-#include <reactos/hal/acpi_pci.h>
-#include <reactos/drivers/acpi/acpipci.h>
-#include <reactos/drivers/acpi/acpisystem.h>
-#include <reactos/drivers/acpi/acpipm.h>
+#include <libernt/hal/acpi_pci.h>
+#include <libernt/drivers/acpi/acpipci.h>
+#include <libernt/drivers/acpi/acpisystem.h>
+#include <libernt/drivers/acpi/acpipm.h>
 
 BOOLEAN
 OslInitializeExecQueue(VOID);

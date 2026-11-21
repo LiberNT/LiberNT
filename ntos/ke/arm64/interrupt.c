@@ -12,12 +12,12 @@
 
 #include <ntoskrnl.h>
 #if defined(_M_ARM64)
-#include <reactos/cpuaudit.h>
+#include <libernt/cpuaudit.h>
 #endif
 #define NDEBUG
 #include <debug.h>
 #include <arm64pl011.h>
-#include <reactos/smpdbg.h>
+#include <libernt/smpdbg.h>
 
 /* HAL extension: not yet declared in public headers for ARM64 */
 extern ULONG FASTCALL HalGetInterruptSource(VOID);

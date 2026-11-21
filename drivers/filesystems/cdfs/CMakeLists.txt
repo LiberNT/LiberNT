@@ -1,5 +1,5 @@
 
-include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/drivers)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/libernt/drivers)
 
 list(APPEND SOURCE
     allocsup.c

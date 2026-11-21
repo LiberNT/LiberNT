@@ -6,7 +6,7 @@
  */
 
 #include <ntoskrnl.h>
-#include <reactos/smpdbg.h>
+#include <libernt/smpdbg.h>
 #define NDEBUG
 #include <debug.h>
 

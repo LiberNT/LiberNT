@@ -10,7 +10,7 @@
 #include <gpioclx.h>
 #include <acpiioct.h>
 #include <initguid.h>
-#include <reactos/drivers/reshubio.h>
+#include <libernt/drivers/reshubio.h>
 #include <ndk/haltypes.h>
 
 #define GPIOCLX_MAX_CONNECTION_PINS 64

@@ -8,9 +8,9 @@
 #ifndef UNIT_TEST
 #include <ntddk.h>
 #endif
-#include <reactos/drivers/applepmgr.h>
-#include <reactos/drivers/applegpio.h>
-#include <reactos/drivers/appleadmac.h>
+#include <libernt/drivers/applepmgr.h>
+#include <libernt/drivers/applegpio.h>
+#include <libernt/drivers/appleadmac.h>
 
 #define GPIO_DATA           0x00000001
 #define GPIO_MODE           0x0000000e

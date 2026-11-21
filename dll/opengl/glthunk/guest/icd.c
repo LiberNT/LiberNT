@@ -8,7 +8,7 @@
 #include <windef.h>
 #include <winbase.h>
 #include <wingdi.h>
-#include <reactos/emuhost.h>
+#include <libernt/emuhost.h>
 #include "../glthunk.h"
 
 #define GLTHUNK_STRING2(Value) #Value

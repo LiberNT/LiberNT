@@ -8,7 +8,7 @@
 #include <ntddk.h>
 #include <wdmguid.h>
 #include <acpiioct.h>
-#include <reactos/drivers/acpipagr.h>
+#include <libernt/drivers/acpipagr.h>
 
 #define NDEBUG
 #include <debug.h>

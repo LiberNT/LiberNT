@@ -10,7 +10,7 @@
  */
 
 #include "precomp.h"
-#include <reactos/drivers/directx/softgpu_2d_shared.h>
+#include <libernt/drivers/directx/softgpu_2d_shared.h>
 
 /*
  * Positive presents use the software/VC4 miniports' linear surface contract.

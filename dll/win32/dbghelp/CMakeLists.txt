@@ -8,7 +8,7 @@ if(CMAKE_CROSSCOMPILING)
 
     include_directories(
         BEFORE ${REACTOS_SOURCE_DIR}/sdk/include/wine
-        ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/zlib)
+        ${REACTOS_SOURCE_DIR}/sdk/include/libernt/libs/zlib)
 
     spec2def(dbghelp.dll dbghelp.spec ADD_IMPORTLIB)
 

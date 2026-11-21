@@ -8,7 +8,7 @@
 #include "classlibrary.h"
 #include <spbcx.h>
 #include <initguid.h>
-#include <reactos/drivers/reshubio.h>
+#include <libernt/drivers/reshubio.h>
 
 typedef struct _SPBCX_TRANSFER
 {

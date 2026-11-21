@@ -6,7 +6,7 @@
  */
 
 #include <ntdll.h>
-#include <reactos/emulation.h>
+#include <libernt/emulation.h>
 
 #define NDEBUG
 #include <debug.h>

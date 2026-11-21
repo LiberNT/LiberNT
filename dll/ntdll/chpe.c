@@ -12,8 +12,8 @@
  */
 
 #include <ntdll.h>
-#include <reactos/chpe.h>
-#include <reactos/arm64/sysreg.h>
+#include <libernt/chpe.h>
+#include <libernt/arm64/sysreg.h>
 
 #define NDEBUG
 #include <debug.h>

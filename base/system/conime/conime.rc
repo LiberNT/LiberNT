@@ -12,7 +12,7 @@
 #define REACTOS_STR_INTERNAL_NAME      "conime"
 #define REACTOS_STR_ORIGINAL_FILENAME  "conime.exe"
 #define REACTOS_STR_ORIGINAL_COPYRIGHT "(C) 2026 Katayama Hirofumi MZ"
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
 #pragma code_page(65001) // UTF-8
 

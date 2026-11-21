@@ -6,7 +6,7 @@
  */
 #include <apitest.h>
 #include <windows.h>
-#include <reactos/dwmframe.h>
+#include <libernt/dwmframe.h>
 #include "../../../../base/system/dwm/dxformat.h"
 
 static void

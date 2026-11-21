@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <reactos/drivers/applei2c.h>
+#include <libernt/drivers/applei2c.h>
 
 #define TAS2764_DVC_MUTE            0xc9
 #define TAS2764_DVC_MINIMUM         0xc8

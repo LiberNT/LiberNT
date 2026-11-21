@@ -1,5 +1,5 @@
 
-include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/subsys)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/libernt/subsys)
 
 spec2def(csrsrv.dll csrsrv.spec ADD_IMPORTLIB)
 

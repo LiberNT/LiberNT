@@ -1,7 +1,7 @@
 
 include_directories(
     BEFORE .
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/drivers)
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/drivers)
 
 list(APPEND SOURCE
     afunix.c

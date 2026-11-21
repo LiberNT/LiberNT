@@ -20,6 +20,6 @@
 #include <shlguid.h>
 #include <shlobj.h>
 #include <commoncontrols.h>
-#include <reactos/undocshell.h>
+#include <libernt/undocshell.h>
 
 #endif /* !_SHELL32_WINETEST_PRECOMP_H_ */

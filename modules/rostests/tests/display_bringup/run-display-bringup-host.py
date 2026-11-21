@@ -201,8 +201,8 @@ def main():
         subprocess.run(compiler + [
             "-std=gnu11", "-O1", "-g", "-fsanitize=address,undefined",
             "-fno-omit-frame-pointer", "-Wno-everything",
-            "-I", str(work), "-I", str(root / "sdk/include/reactos/drivers/directx"),
-            "-I", str(root / "sdk/include/reactos"),
+            "-I", str(work), "-I", str(root / "sdk/include/libernt/drivers/directx"),
+            "-I", str(root / "sdk/include/libernt"),
             str(here / "display_bringup_host.c"), "-o", str(executable),
         ], check=True)
         sys.exit(subprocess.run([str(executable)]).returncode)

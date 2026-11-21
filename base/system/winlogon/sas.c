@@ -20,7 +20,7 @@
 #include <userenv.h>
 #include <ndk/setypes.h>
 #include <ndk/sefuncs.h>
-#include <reactos/desktopready.h>
+#include <libernt/desktopready.h>
 
 /* GLOBALS ******************************************************************/
 

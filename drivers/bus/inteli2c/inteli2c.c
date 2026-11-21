@@ -6,7 +6,7 @@
 
 #include <ntddk.h>
 #include <initguid.h>
-#include <reactos/drivers/inteli2c.h>
+#include <libernt/drivers/inteli2c.h>
 
 #define NDEBUG
 #include <debug.h>

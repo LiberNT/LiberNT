@@ -4,8 +4,8 @@ spec2def(ws2_32.dll ws2_32.spec ADD_IMPORTLIB)
 
 include_directories(
     inc
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/drivers
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/winsock)
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/drivers
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/winsock)
 
 add_library(ws2_32_inaddr STATIC src/inaddr.c)
 add_dependencies(ws2_32_inaddr psdk)

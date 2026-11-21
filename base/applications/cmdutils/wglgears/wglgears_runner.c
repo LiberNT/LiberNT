@@ -10,7 +10,7 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
-#include <reactos/dwmprof.h>
+#include <libernt/dwmprof.h>
 
 #define WGLGEARS_SAMPLE_COUNT 3
 #define WGLGEARS_TIMEOUT_MILLISECONDS 30000

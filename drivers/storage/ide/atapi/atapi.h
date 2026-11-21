@@ -26,9 +26,9 @@
 #include <sptilib.h>
 #include <section_attribs.h>
 #include <debug/driverdbg.h>
-#include <reactos/drivers/ata/ata_shared.h>
-#include <reactos/drivers/ata/ata_user.h>
-#include <reactos/drivers/ata/identify_funcs.h>
+#include <libernt/drivers/ata/ata_shared.h>
+#include <libernt/drivers/ata/ata_user.h>
+#include <libernt/drivers/ata/identify_funcs.h>
 
 typedef struct _ATAPORT_CHANNEL_EXTENSION ATAPORT_CHANNEL_EXTENSION, *PATAPORT_CHANNEL_EXTENSION;
 typedef struct _ATAPORT_DEVICE_EXTENSION ATAPORT_DEVICE_EXTENSION, *PATAPORT_DEVICE_EXTENSION;

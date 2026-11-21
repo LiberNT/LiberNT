@@ -33,7 +33,7 @@
 #include <triangle.h>
 #include <vb.h>
 #include <xform.h>
-#include <reactos/rpi5vc4_xpdm.h>
+#include <libernt/rpi5vc4_xpdm.h>
 
 #include "rpi5vc4ogl_buffer.h"
 #include "rpi5vc4ogl_fbo.h"

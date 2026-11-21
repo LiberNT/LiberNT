@@ -10,4 +10,4 @@
 #define REACTOS_STR_INTERNAL_NAME       "softgpuum\0"
 #define REACTOS_STR_ORIGINAL_FILENAME   "softgpuum.dll\0"
 
-#include <reactos/version.rc>
+#include <libernt/version.rc>

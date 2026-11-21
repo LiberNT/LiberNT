@@ -7,8 +7,8 @@
 
 #include <ntoskrnl.h>
 #include <initguid.h>
-#include <reactos/drivers/acpi/acpi.h>
-#include <reactos/drivers/acpi/acpisystem.h>
+#include <libernt/drivers/acpi/acpi.h>
+#include <libernt/drivers/acpi/acpisystem.h>
 #define NDEBUG
 #include <debug.h>
 

@@ -6,9 +6,9 @@
 
 #include <ntddk.h>
 #include <intrin.h>
-#include <reactos/drivers/acpi/acpisystem.h>
+#include <libernt/drivers/acpi/acpisystem.h>
 #include <initguid.h>
-#include <reactos/drivers/intelpmc.h>
+#include <libernt/drivers/intelpmc.h>
 
 #define NDEBUG
 #include <debug.h>

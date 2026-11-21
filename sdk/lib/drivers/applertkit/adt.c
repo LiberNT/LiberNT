@@ -8,7 +8,7 @@
 #ifndef UNIT_TEST
 #include <ntddk.h>
 #endif
-#include <reactos/drivers/appleadt.h>
+#include <libernt/drivers/appleadt.h>
 
 #define ADT_HEADER_SIZE             8
 #define ADT_PROPERTY_HEADER_SIZE    (APPLE_ADT_NAME_LENGTH + sizeof(ULONG))

@@ -15,7 +15,7 @@
 #define REACTOS_STR_INTERNAL_NAME     "mspaint"
 #define REACTOS_STR_ORIGINAL_FILENAME "mspaint.exe"
 
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
 /* Icons */
 

@@ -8,7 +8,7 @@
 #include "hardware.h"
 
 #include <acpiioct.h>
-#include <reactos/drivers/fdtdrv.h>
+#include <libernt/drivers/fdtdrv.h>
 
 #define NDEBUG
 #include <debug.h>

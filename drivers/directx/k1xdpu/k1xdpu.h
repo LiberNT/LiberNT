@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <reactos/powervr_umd.h>
+#include <libernt/powervr_umd.h>
 
 #include "glue/powervr_glue.h"
 #include "pvr_k1.h"

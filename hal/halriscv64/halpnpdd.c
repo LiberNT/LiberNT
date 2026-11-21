@@ -14,7 +14,7 @@
 #include <initguid.h>
 #include <wdmguid.h>
 #include <acpiioct.h>
-#include <reactos/drivers/reshubio.h>
+#include <libernt/drivers/reshubio.h>
 #include <libernt/fdtlib.h>
 #include "halp.h"
 

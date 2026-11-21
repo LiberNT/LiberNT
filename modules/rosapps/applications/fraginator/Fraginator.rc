@@ -42,7 +42,7 @@ BEGIN
     END
 END
 
-#include <reactos/manifest_exe.rc>
+#include <libernt/manifest_exe.rc>
 
 /* UTF-8 */
 #pragma code_page(65001)

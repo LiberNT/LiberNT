@@ -7,8 +7,8 @@
 
 #include <kmt_test.h>
 #include <acpiioct.h>
-#include <reactos/drivers/acpi/acpipci.h>
-#include <reactos/rddm/rxgkmonitor.h>
+#include <libernt/drivers/acpi/acpipci.h>
+#include <libernt/rddm/rxgkmonitor.h>
 
 /* The panel's adapter carries BKEY(Code), which raises Notify(<panel output>, Code); the harness SSDT provides it */
 #define KEY_METHOD 'YEKB'

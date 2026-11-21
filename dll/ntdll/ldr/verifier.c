@@ -8,7 +8,7 @@
 
 
 #include <ntdll.h>
-#include <reactos/verifier.h>
+#include <libernt/verifier.h>
 
 #define NDEBUG
 #include <debug.h>

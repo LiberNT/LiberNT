@@ -60,12 +60,12 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 # Versioning
-include(sdk/include/reactos/version.cmake)
+include(sdk/include/libernt/version.cmake)
 
 # Build stamp: the branch, commit and time the build was made from. It is
 # written once here so the first compile has it, and again at every build so a
 # tree that moved is stamped with where it moved to.
-set(LIBERNT_BUILDSTAMP_HEADER "${REACTOS_BINARY_DIR}/sdk/include/reactos/buildstamp.h")
+set(LIBERNT_BUILDSTAMP_HEADER "${REACTOS_BINARY_DIR}/sdk/include/libernt/buildstamp.h")
 execute_process(COMMAND ${CMAKE_COMMAND}
     -DSOURCE_DIR=${REACTOS_SOURCE_DIR}
     -DOUTPUT=${LIBERNT_BUILDSTAMP_HEADER}
@@ -387,16 +387,16 @@ Enable this if the module uses typeid or dynamic_cast. You will probably need to
         sdk/include/ddk
         sdk/include/ndk
         sdk/include/psdk
-        sdk/include/reactos
-        sdk/include/reactos/libs
+        sdk/include/libernt
+        sdk/include/libernt/libs
         sdk/include/vcruntime
         sdk/include/winrt
         ${REACTOS_BINARY_DIR}/sdk/include
         ${REACTOS_BINARY_DIR}/sdk/include/psdk
         ${REACTOS_BINARY_DIR}/sdk/include/ddk
         ${REACTOS_BINARY_DIR}/sdk/include/dxsdk
-        ${REACTOS_BINARY_DIR}/sdk/include/reactos
-        ${REACTOS_BINARY_DIR}/sdk/include/reactos/mc
+        ${REACTOS_BINARY_DIR}/sdk/include/libernt
+        ${REACTOS_BINARY_DIR}/sdk/include/libernt/mc
         sdk/include/dxsdk
         sdk/lib/pseh/include
     )
@@ -457,7 +457,7 @@ Enable this if the module uses typeid or dynamic_cast. You will probably need to
     # Create {bootcd, livecd, preinstall}.lst
     create_iso_lists()
 
-    file(MAKE_DIRECTORY ${REACTOS_BINARY_DIR}/sdk/include/reactos)
+    file(MAKE_DIRECTORY ${REACTOS_BINARY_DIR}/sdk/include/libernt)
 
     add_dependency_footer()
 endif()

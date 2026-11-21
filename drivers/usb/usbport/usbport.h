@@ -23,8 +23,8 @@
 #include <usbdlib.h>
 #include <usbuser.h>
 #include <drivers/usbport/usbmport.h>
-#include <reactos/drivers/dumpstor.h>
-#include <reactos/drivers/usbcapability.h>
+#include <libernt/drivers/dumpstor.h>
+#include <libernt/drivers/usbcapability.h>
 
 #if DBG
 #define USBPORT_LOG_IRQL(Tag)                                                      \

@@ -8,9 +8,9 @@
  */
 
 #include <win32k.h>
-#include <reactos/dwmframe.h>
-#include <reactos/usertouch.h>
-#include <reactos/wtssession.h>
+#include <libernt/dwmframe.h>
+#include <libernt/usertouch.h>
+#include <libernt/wtssession.h>
 
 DBG_DEFAULT_CHANNEL(UserMisc);
 

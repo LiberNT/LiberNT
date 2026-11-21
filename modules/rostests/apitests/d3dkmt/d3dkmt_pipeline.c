@@ -22,7 +22,7 @@
  */
 
 #include "precomp.h"
-#include <reactos/rpi5vc4_umd.h>
+#include <libernt/rpi5vc4_umd.h>
 
 /* Driver-private contracts, mirrored from drivers/directx/rpi5vc4 and
  * drivers/directx/dxgkrnl (the test IS the second implementer). */

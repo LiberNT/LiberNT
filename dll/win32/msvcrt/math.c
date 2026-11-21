@@ -54,7 +54,7 @@
 #include "wine/asm.h"
 #include "wine/debug.h"
 #if defined(__REACTOS__) && defined(__aarch64__)
-#include <reactos/arm64/sysreg.h>
+#include <libernt/arm64/sysreg.h>
 #endif
 
 WINE_DEFAULT_DEBUG_CHANNEL(msvcrt);

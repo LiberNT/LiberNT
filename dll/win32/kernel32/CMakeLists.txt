@@ -37,7 +37,7 @@ set_source_files_properties(${KERNEL32_API_SOURCE} PROPERTIES SKIP_PRECOMPILE_HE
 set_source_files_properties(client/firmware.c PROPERTIES COMPILE_DEFINITIONS NTDDI_VERSION=${REACTOS_TARGET_NTDDI})
 
 add_definitions(-D_KERNEL32_)
-include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/subsys)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/libernt/subsys)
 spec2def(kernel32.dll kernel32.spec ADD_IMPORTLIB)
 
 add_library(kernel32_shared

@@ -8,7 +8,7 @@ include_directories(
     BEFORE include
     ../afd/include
     ../tdihelpers/include
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/drivers)
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/drivers)
 
 list(APPEND SOURCE
     netio.c

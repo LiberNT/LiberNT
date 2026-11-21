@@ -8,7 +8,7 @@
 #define REACTOS_STR_ORIGINAL_FILENAME "lsasrv.dll"
 #define REACTOS_FILEVERSION           5,1,2600,0
 #define REACTOS_STR_FILE_VERSION      "5.1.2600"
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 

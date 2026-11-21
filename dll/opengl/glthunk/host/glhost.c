@@ -13,7 +13,7 @@
 #undef WIN32_NO_STATUS
 #include <ntstatus.h>
 #include <ndk/ntndk.h>
-#include <reactos/emuhost.h>
+#include <libernt/emuhost.h>
 #include "glthunk.h"
 #include "glsig.h"
 

@@ -8,9 +8,9 @@
 #ifndef UNIT_TEST
 #include <ntddk.h>
 #endif
-#include <reactos/drivers/appledwc3host.h>
-#include <reactos/drivers/applepmgr.h>
-#include <reactos/drivers/appleatcphy.h>
+#include <libernt/drivers/appledwc3host.h>
+#include <libernt/drivers/applepmgr.h>
+#include <libernt/drivers/appleatcphy.h>
 
 #define DWC3_GCTL                   0xC110
 #define DWC3_GCTL_PRTCAP_MASK       (3UL << 12)

@@ -4,4 +4,4 @@
 #define REACTOS_STR_INTERNAL_NAME "smsc95xx"
 #define REACTOS_STR_ORIGINAL_FILENAME "smsc95xx.sys"
 
-#include <reactos/version.rc>
+#include <libernt/version.rc>

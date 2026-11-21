@@ -6,6 +6,6 @@
 #include <hubbusif.h>
 #include <usbbusif.h>
 #include <usbdlib.h>
-#include <reactos/drivers/usbcapability.h>
+#include <libernt/drivers/usbcapability.h>
 
 /* NO CODE HERE, THIS IS JUST REQUIRED FOR THE GUID DEFINITIONS */

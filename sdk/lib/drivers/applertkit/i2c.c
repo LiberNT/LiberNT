@@ -8,9 +8,9 @@
 #ifndef UNIT_TEST
 #include <ntddk.h>
 #endif
-#include <reactos/drivers/applepmgr.h>
-#include <reactos/drivers/applegpio.h>
-#include <reactos/drivers/applei2c.h>
+#include <libernt/drivers/applepmgr.h>
+#include <libernt/drivers/applegpio.h>
+#include <libernt/drivers/applei2c.h>
 
 #define I2C_TX_FIFO             0x00
 #define I2C_RX_FIFO             0x04

@@ -7,7 +7,7 @@
 #ifndef _DXGKRNL_DXGMMS2_CLIENT_H_
 #define _DXGKRNL_DXGMMS2_CLIENT_H_
 
-#include <reactos/drivers/directx/dxgmms2.h>
+#include <libernt/drivers/directx/dxgmms2.h>
 
 NTSTATUS DxgkpMms2Initialize(VOID);
 NTSTATUS DxgkpMms2Uninitialize(VOID);

@@ -8,7 +8,7 @@
 #include <ntddk.h>
 #include <ntddsd.h>
 #include <initguid.h>
-#include <reactos/drivers/cyw43455sdio.h>
+#include <libernt/drivers/cyw43455sdio.h>
 
 #define NDEBUG
 #include <debug.h>

@@ -33,8 +33,8 @@
 #include "wingdi.h"
 #include "winuser.h"
 #ifdef __REACTOS__
-#include <reactos/user32_compat.h>
-#include <reactos/dwmframe.h>
+#include <libernt/user32_compat.h>
+#include <libernt/dwmframe.h>
 #endif
 #include "dwmapi.h"
 #include "wine/debug.h"

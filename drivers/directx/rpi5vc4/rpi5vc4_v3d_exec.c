@@ -22,7 +22,7 @@
 #include "rpi5vc4_hvs.h"
 #include "rpi5vc4_crtc.h"
 #include "rpi5vc4_v3d_terrain_shaders.h"
-#include <reactos/unaligned.h>
+#include <libernt/unaligned.h>
 #include <initguid.h>
 #include <poclass.h>
 #include <acpiioct.h>

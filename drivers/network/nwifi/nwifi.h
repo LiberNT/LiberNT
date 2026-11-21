@@ -13,7 +13,7 @@
 
 #include <ndis.h>
 #include <windot11.h>
-#include <reactos/nwifi_ioctl.h>
+#include <libernt/nwifi_ioctl.h>
 
 #define NWIFI_TAG  'FIWN'   /* 'NWIF' */
 #define NWIFI_BSS_LIST_ATTEMPTS 3

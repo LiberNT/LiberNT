@@ -6,7 +6,7 @@
 #define REACTOS_STR_FILE_DESCRIPTION  "LiberNT Multimedia Player"
 #define REACTOS_STR_INTERNAL_NAME     "mplay32"
 #define REACTOS_STR_ORIGINAL_FILENAME "mplay32.exe"
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 
@@ -23,7 +23,7 @@ IDB_SEEKFORWICON BITMAP "resources/seekforw.bmp"
 IDB_FORWARDICON BITMAP "resources/forward.bmp"
 IDB_PAUSEICON BITMAP "resources/pause.bmp"
 
-#include <reactos/manifest_exe.rc>
+#include <libernt/manifest_exe.rc>
 
 /* UTF-8 */
 #pragma code_page(65001)

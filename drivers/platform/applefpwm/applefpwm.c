@@ -6,8 +6,8 @@
  */
 
 #include <ntddk.h>
-#include <reactos/drivers/fdtdrv.h>
-#include <reactos/drivers/applepmgr.h>
+#include <libernt/drivers/fdtdrv.h>
+#include <libernt/drivers/applepmgr.h>
 #include "fpwm.h"
 
 #define FPWM_MAX_LEDS 4

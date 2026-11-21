@@ -6,7 +6,7 @@
  */
 
 #include <ntoskrnl.h>
-#include <reactos/drivers/acpipagr.h>
+#include <libernt/drivers/acpipagr.h>
 #define NDEBUG
 #include <debug.h>
 

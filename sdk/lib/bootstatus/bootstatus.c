@@ -10,7 +10,7 @@
 #include <wingdi.h>
 #include <winuser.h>
 
-#include <reactos/bootstatus.h>
+#include <libernt/bootstatus.h>
 
 #include <debug.h>
 

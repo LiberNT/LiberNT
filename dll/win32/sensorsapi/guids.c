@@ -10,4 +10,4 @@
 #include <propsys.h>
 #include <initguid.h>
 #include <sensors.h>
-#include <reactos/drivers/sensorprovider.h>
+#include <libernt/drivers/sensorprovider.h>

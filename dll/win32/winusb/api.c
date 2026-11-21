@@ -15,7 +15,7 @@
 #undef WIN32_NO_STATUS
 #include <ntstatus.h>
 #include <winusb.h>
-#include <reactos/drivers/lntwinusb.h>
+#include <libernt/drivers/lntwinusb.h>
 
 #define WINUSB_HANDLE_MAGIC 0x42535557
 #define WINUSB_INFORMATION_SIZE (FIELD_OFFSET(LNT_WINUSB_INFORMATION, Configuration) + 0x10000)

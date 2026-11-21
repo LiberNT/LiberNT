@@ -16,8 +16,8 @@
 #include <ntddsd.h>
 
 /* Pull in internal SD and SDHCI definitions */
-#include <reactos/drivers/sd/sddef.h>
-#include <reactos/drivers/sd/sdhci.h>
+#include <libernt/drivers/sd/sddef.h>
+#include <libernt/drivers/sd/sdhci.h>
 
 /* Pool tag: 'SDBu' */
 #define TAG_SDBUS 'uBDS'

@@ -14,7 +14,7 @@
 #include <usbioctl.h>
 #include <usbbusif.h>
 #include <winusbio.h>
-#include <reactos/drivers/lntwinusb.h>
+#include <libernt/drivers/lntwinusb.h>
 
 #define WINUSB_TAG 'BSUW'
 #define WINUSB_MAX_PIPES 32

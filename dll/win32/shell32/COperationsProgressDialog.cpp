@@ -7,7 +7,7 @@
 #include "precomp.h"
 #include "operationsprogress.h"
 #include <vssym32.h>
-#include <reactos/dwmsettings.h>
+#include <libernt/dwmsettings.h>
 
 #define WM_OP_REFRESH (WM_APP + 30)
 #define WM_OP_CLOSE (WM_APP + 31)

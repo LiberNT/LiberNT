@@ -28,7 +28,7 @@ static ULONG TrapDisplayY;
  * The early_uart.h provides EarlyUartPutc/EarlyUartPuts/EarlyUartPutHex
  * that use the platform-detected UART address.
  */
-#include <reactos/arm64/early_uart.h>
+#include <libernt/arm64/early_uart.h>
 
 /*
  * Trap UART output macros - use the runtime-detected early UART.

@@ -6,7 +6,7 @@
  */
 
 #include <ntoskrnl.h>
-#include <reactos/drivers/cmreslist.h>
+#include <libernt/drivers/cmreslist.h>
 #define NDEBUG
 #include <debug.h>
 

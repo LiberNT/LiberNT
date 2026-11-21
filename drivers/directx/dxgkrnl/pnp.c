@@ -26,9 +26,9 @@
 #include "hotplug_work_core.h"
 #include "child_core.h"
 #include <ntstrsafe.h>
-#include <reactos/rddm/rxgkmonitor.h>
+#include <libernt/rddm/rxgkmonitor.h>
 #include <acpiioct.h>
-#include <reactos/drivers/acpi/acpipci.h>
+#include <libernt/drivers/acpi/acpipci.h>
 
 static CONST GUID DxgkpGuidDevinterfaceBrightness =
     { 0xFDE5BBA4, 0xB3F9, 0x46FB, { 0xBD, 0xAA, 0x07, 0x28, 0xCE, 0x31, 0x00, 0xB4 } };

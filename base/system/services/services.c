@@ -21,7 +21,7 @@ int WINAPI RegisterServicesProcess(DWORD ServicesProcessId);
 
 /* GLOBALS ******************************************************************/
 
-/* Defined in include/reactos/services/services.h */
+/* Defined in include/libernt/services/services.h */
 // #define SCM_START_EVENT             L"SvcctrlStartEvent_A3752DX"
 #define SCM_AUTOSTARTCOMPLETE_EVENT L"SC_AutoStartComplete"
 

@@ -16,7 +16,7 @@
 #include <ntifs.h>
 #include <ndk/extypes.h>
 #include <ndk/kefuncs.h>
-#include <reactos/hal/acpi_cstate.h>
+#include <libernt/hal/acpi_cstate.h>
 #include <stdarg.h>
 #include <ntstrsafe.h>
 #define NDEBUG

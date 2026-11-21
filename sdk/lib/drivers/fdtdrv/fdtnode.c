@@ -8,7 +8,7 @@
 #ifndef UNIT_TEST
 #include <ntddk.h>
 #endif
-#include <reactos/drivers/fdtdrv.h>
+#include <libernt/drivers/fdtdrv.h>
 
 ULONG
 NTAPI

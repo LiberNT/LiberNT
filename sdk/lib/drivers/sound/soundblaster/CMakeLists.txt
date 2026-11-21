@@ -1,5 +1,5 @@
 
-include_directories(BEFORE ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/sound)
+include_directories(BEFORE ${REACTOS_SOURCE_DIR}/sdk/include/libernt/libs/sound)
 
 list(APPEND SOURCE
     dsp_io.c

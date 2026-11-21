@@ -7,7 +7,7 @@
 #include <setupapi.h>
 #include <stdio.h>
 #include <initguid.h>
-#include <reactos/drivers/intelpmc.h>
+#include <libernt/drivers/intelpmc.h>
 
 static
 HANDLE

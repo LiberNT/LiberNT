@@ -7,6 +7,6 @@
 
 #pragma once
 
-#include <reactos/dump.h>
+#include <libernt/dump.h>
 
 NTSTATUS NTAPI KeInitializeCrashDumpHeader(_In_ ULONG Type, _In_ ULONG Flags, _Out_writes_bytes_(BufferSize) PVOID Buffer, _In_ ULONG BufferSize, _Out_opt_ PULONG BufferNeeded);

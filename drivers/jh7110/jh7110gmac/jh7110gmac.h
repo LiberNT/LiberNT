@@ -13,7 +13,7 @@
 #include <ipifcons.h>
 
 #define NDEBUG
-#include <reactos/debug.h>
+#include <libernt/debug.h>
 
 #ifndef ETH_LENGTH_OF_ADDRESS
 #define ETH_LENGTH_OF_ADDRESS 6

@@ -11,8 +11,8 @@
 #include <tlhelp32.h>
 #include <d3dkmthk.h>
 #include <GL/gl.h>
-#include <reactos/dwmframe.h>
-#include <reactos/dwmprof.h>
+#include <libernt/dwmframe.h>
+#include <libernt/dwmprof.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>

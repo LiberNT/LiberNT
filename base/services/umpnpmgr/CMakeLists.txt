@@ -1,6 +1,6 @@
 
-include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl)
-add_rpc_files(server ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/pnp.idl ${REACTOS_SOURCE_DIR}/sdk/include/wine/plugplay.idl)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl)
+add_rpc_files(server ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl/pnp.idl ${REACTOS_SOURCE_DIR}/sdk/include/wine/plugplay.idl)
 spec2def(umpnpmgr.dll umpnpmgr.spec ADD_IMPORTLIB)
 
 add_library(umpnpmgr MODULE

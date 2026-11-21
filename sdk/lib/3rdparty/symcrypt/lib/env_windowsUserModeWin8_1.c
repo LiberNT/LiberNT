@@ -12,7 +12,7 @@
 #include <windows.h>
 #pragma warning(pop)
 #ifdef __REACTOS__
-#include <reactos/kernel32_compat.h>
+#include <libernt/kernel32_compat.h>
 #endif
 #include "symcrypt.h"
 #include "sc_lib.h"

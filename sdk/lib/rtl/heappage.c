@@ -15,7 +15,7 @@
 
 #include <rtl.h>
 #include <heap.h>
-#include <reactos/verifier.h>
+#include <libernt/verifier.h>
 
 #define NDEBUG
 #include <debug.h>

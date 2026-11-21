@@ -16,8 +16,8 @@
 
 #include "cdd.h"
 #define DPT_KERNEL
-#include <reactos/dwmpresenttrace.h>
-#include <reactos/rpi5vc4_xpdm.h>
+#include <libernt/dwmpresenttrace.h>
+#include <libernt/rpi5vc4_xpdm.h>
 
 #define CDD_OPENGL_ICD_VERSION 1
 #define CDD_OPENGL_ICD_DRIVER_VERSION 1

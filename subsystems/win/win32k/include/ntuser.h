@@ -1209,7 +1209,7 @@ typedef struct _SHAREDINFO
     WNDMSG DefWindowSpecMsgs;
 } SHAREDINFO, *PSHAREDINFO;
 
-/* See also the USERSRV_API_CONNECTINFO #define in include/reactos/subsys/win/winmsg.h */
+/* See also the USERSRV_API_CONNECTINFO #define in include/libernt/subsys/win/winmsg.h */
 typedef struct _USERCONNECT
 {
     ULONG ulVersion;

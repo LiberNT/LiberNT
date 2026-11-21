@@ -8,7 +8,7 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 #define REACTOS_STR_INTERNAL_NAME       "wlanconf"
 #define REACTOS_STR_ORIGINAL_FILENAME   "wlanconf.exe"
 #define REACTOS_STR_ORIGINAL_COPYRIGHT  "Cameron Gutman (cameron.gutman@reactos.org)"
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
 /* UTF-8 */
 #pragma code_page(65001)

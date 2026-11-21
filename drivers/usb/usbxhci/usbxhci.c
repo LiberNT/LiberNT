@@ -6,7 +6,7 @@
 
 #include "usbxhci.h"
 #if defined(_M_ARM64)
-#include <reactos/arm64/sysreg.h>
+#include <libernt/arm64/sysreg.h>
 #endif
 
 /*

@@ -26,7 +26,7 @@
  * debug.h (legacy NDIS_DbgPrint helper) that would otherwise win
  * the include search. */
 #define NDEBUG
-#include <reactos/debug.h>
+#include <libernt/debug.h>
 
 /* Include compatibility layer for missing NDIS 6.x APIs */
 #include "ndis6_compat.h"
@@ -34,7 +34,7 @@
 /* Include hardware definitions */
 #include "e1000hw.h"
 
-/* DPRINT/DPRINT1 already provided by <reactos/debug.h> above. The
+/* DPRINT/DPRINT1 already provided by <libernt/debug.h> above. The
  * legacy local debug.h (NDIS_DbgPrint helper) is intentionally not
  * included — it lives in drivers/network/dd/e1000/ for the NDIS 5.0
  * variant only. */

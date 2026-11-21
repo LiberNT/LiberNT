@@ -13,7 +13,7 @@
 #include <win32k.h>
 #include "composition.h"
 #include "dcomposition.h"
-#include <reactos/dwmframe.h>
+#include <libernt/dwmframe.h>
 #include "captioncache.h"
 #if defined(REACTOS_GRAPHICS_DRIVER_MODEL_WDDM)
 #include "drivers/wddm/wddm_bridge.h"

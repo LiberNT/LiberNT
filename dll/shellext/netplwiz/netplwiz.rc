@@ -11,9 +11,9 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 #define REACTOS_STR_INTERNAL_NAME       "netplwiz.dll"
 #define REACTOS_STR_ORIGINAL_FILENAME   "netplwiz.dll"
 
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
-#include <reactos/manifest_hosted.rc>
+#include <libernt/manifest_hosted.rc>
 
 /* Icons */
 IDI_DISCONNECT_NET_DRIVES ICON "res/4400.ico"

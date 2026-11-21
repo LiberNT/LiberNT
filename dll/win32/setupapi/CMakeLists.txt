@@ -1,7 +1,7 @@
 
 include_directories(
     ${REACTOS_SOURCE_DIR}/sdk/include/wine
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl
     ${CMAKE_CURRENT_BINARY_DIR})
 
 add_definitions(

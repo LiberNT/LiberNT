@@ -20,7 +20,7 @@
 
 #include <windows.h>
 #ifdef __REACTOS__
-#include <reactos/user32_compat.h>
+#include <libernt/user32_compat.h>
 #endif
 #include <advpub.h>
 #include <ole2.h>

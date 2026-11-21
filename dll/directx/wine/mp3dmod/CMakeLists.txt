@@ -1,5 +1,5 @@
 
-include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/libmpg123)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/libernt/libs/libmpg123)
 spec2def(mp3dmod.dll mp3dmod.spec)
 
 add_library(mp3dmod MODULE

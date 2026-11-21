@@ -30,8 +30,8 @@
 #include <ntifs.h>
 #include <windef.h>
 #include <d3dkmthk.h>
-#include <reactos/rddm/rxgkinterface.h>
-#include <reactos/rddm/rxgkioctl.h>
+#include <libernt/rddm/rxgkinterface.h>
+#include <libernt/rddm/rxgkioctl.h>
 #include "wddm_bridge.h"
 #define NDEBUG
 #include <debug.h>

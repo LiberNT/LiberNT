@@ -11,7 +11,7 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 #define REACTOS_STR_INTERNAL_NAME     "hdwwiz"
 #define REACTOS_STR_ORIGINAL_FILENAME "hdwwiz.cpl"
 
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
 IDI_CPLICON ICON "resources/applet.ico"
 IDI_WARNINGICON ICON "resources/warning.ico"
@@ -20,7 +20,7 @@ IDI_SEARCHICON ICON "resources/search.ico"
 IDB_WATERMARK BITMAP "resources/watermark.bmp"
 IDB_HEADER BITMAP "resources/header.bmp"
 
-#include <reactos/manifest_hosted.rc>
+#include <libernt/manifest_hosted.rc>
 
 /* UTF-8 */
 #pragma code_page(65001)

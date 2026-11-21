@@ -8,8 +8,8 @@
 #include "precomp.h"
 #include <udmihelp.h>
 #include <winreg.h>
-#include <reactos/buildno.h>
-#include <reactos/stubs.h>
+#include <libernt/buildno.h>
+#include <libernt/stubs.h>
 
 static const char* Exception2Str(DWORD code)
 {

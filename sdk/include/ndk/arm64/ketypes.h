@@ -1088,7 +1088,7 @@ KeGetCurrentPrcb(VOID)
 #endif
 #endif
 #if defined(_MSC_VER) && !defined(__clang__)
-#include <reactos/arm64/sysreg.h>
+#include <libernt/arm64/sysreg.h>
 #define _KeGetCurrentThread() ((PKTHREAD)__readx18qword(ARM64_KPCR_PRCB_CURRENT_THREAD))
 #define _KeGetPreviousMode() (_KeGetCurrentThread()->PreviousMode)
 FORCEINLINE

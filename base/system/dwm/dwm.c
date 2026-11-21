@@ -3,7 +3,7 @@
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
  * PURPOSE:     User-mode compositor: pulls frame metadata from win32k, maps
  *              the per-window section surfaces read-only and composes them
- *              into the primary. See sdk/include/reactos/dwmframe.h.
+ *              into the primary. See sdk/include/libernt/dwmframe.h.
  */
 
 #include <ntstatus.h>
@@ -11,9 +11,9 @@
 #include <windows.h>
 #include <math.h>
 #include <stdio.h>
-#include <reactos/dwmcore.h>
-#include <reactos/dwmframe.h>
-#include <reactos/ntdcomp.h>
+#include <libernt/dwmcore.h>
+#include <libernt/dwmframe.h>
+#include <libernt/ntdcomp.h>
 
 #include "dxsurface.h"
 #include "framebuttons.h"

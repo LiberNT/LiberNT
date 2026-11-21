@@ -16,7 +16,7 @@ extern "C"
 }
 #include <wlanapi.h>
 #include <secext.h>
-#include <reactos/dwmsettings.h>
+#include <libernt/dwmsettings.h>
 #include <algorithm>
 
 using namespace ShellFrame;

@@ -25,7 +25,7 @@
 #include "wined3d_vk.h"
 
 #ifdef __REACTOS__
-#include "reactos/undocuser.h"
+#include "libernt/undocuser.h"
 #endif
 
 WINE_DEFAULT_DEBUG_CHANNEL(d3d);

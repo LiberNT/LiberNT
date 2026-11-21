@@ -11,7 +11,7 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 #define REACTOS_STR_INTERNAL_NAME     "sysdm"
 #define REACTOS_STR_ORIGINAL_FILENAME "sysdm.cpl"
 #define REACTOS_STR_PRODUCT_NAME      "LiberNT"
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
 IDI_CPLSYSTEM ICON "resources/applet.ico"
 IDI_USERPROF ICON "resources/devmgr.ico"
@@ -26,7 +26,7 @@ IDB_ROSMASK BITMAP "resources/rosbitmap_mask.bmp"
 
 RC_LICENSE RTDATA "resources/gpl.txt"
 
-#include <reactos/manifest_hosted.rc>
+#include <libernt/manifest_hosted.rc>
 
 /* UTF-8 */
 #pragma code_page(65001)

@@ -10,7 +10,7 @@
 #include <ntifs.h>
 #include <wmistr.h>
 #include <wmilib.h>
-#include <reactos/rddm/rxgkmonitor.h>
+#include <libernt/rddm/rxgkmonitor.h>
 
 #define MONITOR_TAG 'noMM'
 

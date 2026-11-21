@@ -71,7 +71,7 @@
  * argument struct, the WDDM2 DDI typedefs and the DxgkInitialize prototype.
  * It is the same header dxgkrnl is built against, guaranteeing matching ABI. */
 #include <dispmprt.h>
-#include <reactos/rddm/rxgkpresent.h>
+#include <libernt/rddm/rxgkpresent.h>
 
 /* ---- Debug helpers ------------------------------------------------------- */
 #define NDEBUG

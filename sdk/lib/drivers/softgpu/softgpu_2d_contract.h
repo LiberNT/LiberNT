@@ -6,4 +6,4 @@
 
 #pragma once
 
-#include <reactos/drivers/directx/softgpu_2d_shared.h>
+#include <libernt/drivers/directx/softgpu_2d_shared.h>

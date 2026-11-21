@@ -7,9 +7,9 @@
 
 #ifndef UNIT_TEST
 #include <ntddk.h>
-#include <reactos/arm64/sysreg.h>
+#include <libernt/arm64/sysreg.h>
 #endif
-#include <reactos/drivers/appleuat.h>
+#include <libernt/drivers/appleuat.h>
 
 #define UAT_TAG                     'tUpA'
 #define UAT_TYPE_MASK               0x3ULL

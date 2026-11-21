@@ -8,7 +8,7 @@
 #include <ntddk.h>
 #include <hidport.h>
 #include <initguid.h>
-#include <reactos/drivers/appleaop.h>
+#include <libernt/drivers/appleaop.h>
 
 #define SENSOR_TAG 'sOpA'
 

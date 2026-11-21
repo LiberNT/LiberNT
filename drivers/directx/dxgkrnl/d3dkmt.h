@@ -107,8 +107,8 @@ typedef struct _D3DKMT_SEGMENTSIZEINFO
  * All use METHOD_BUFFERED for safe user/kernel data transfer.
  * ====================================================================== */
 
-#include <reactos/rddm/rxgkinterface.h>
-#include <reactos/rddm/rxgkioctl.h>
+#include <libernt/rddm/rxgkinterface.h>
+#include <libernt/rddm/rxgkioctl.h>
 
 #define IOCTL_D3DKMT_ENUMADAPTERS \
     CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x100, METHOD_BUFFERED, FILE_ANY_ACCESS)

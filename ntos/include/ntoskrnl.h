@@ -107,7 +107,7 @@ C_ASSERT(MAX_WIN32_PATH == MAX_PATH);
 
 #include "config.h"
 #include "internal/ntoskrnl.h"
-#include <reactos/probe.h>
+#include <libernt/probe.h>
 #include "internal/probe.h"
 #include "resource.h"
 #include "internal/ps_i.h"

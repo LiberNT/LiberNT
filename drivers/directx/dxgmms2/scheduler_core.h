@@ -12,7 +12,7 @@
 #pragma once
 
 #include <ntddk.h>
-#include <reactos/drivers/directx/dxgmms2.h>
+#include <libernt/drivers/directx/dxgmms2.h>
 
 #define DXGMMS2_SCHED_MAX_PACKETS   512
 /* Keep scheduling decisions in the kernel instead of filling a miniport

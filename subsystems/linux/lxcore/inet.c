@@ -10,7 +10,7 @@
 #define _INC_WINDOWS
 #include <winsock2.h>
 #include <tdi.h>
-#include <reactos/drivers/afd/shared.h>
+#include <libernt/drivers/afd/shared.h>
 
 #define NDEBUG
 #include <debug.h>

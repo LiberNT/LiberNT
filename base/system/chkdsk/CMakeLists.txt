@@ -1,5 +1,5 @@
 
-include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/fmifs)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/libernt/libs/fmifs)
 
 add_executable(chkdsk chkdsk.c chkdsk.rc)
 set_module_type(chkdsk win32cui UNICODE)

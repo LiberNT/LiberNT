@@ -1,7 +1,7 @@
 add_definitions(-DWIN32)
 
 include_directories(
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/libmpg123)
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/libs/libmpg123)
 
 spec2def(l3codeca.acm l3codeca.acm.spec)
 

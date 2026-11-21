@@ -61,7 +61,7 @@
 #include "presenttrace.h"
 #include "debug.h"
 #include <ndk/psfuncs.h>
-#include <reactos/dwmframe.h>
+#include <libernt/dwmframe.h>
 
 #define NDEBUG
 #include <debug.h>

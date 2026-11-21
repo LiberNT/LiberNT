@@ -6,7 +6,7 @@
  */
 
 #include "amd64emu.h"
-#include <reactos/wow64shared.h>
+#include <libernt/wow64shared.h>
 #include "felix86/bridge.h"
 
 #define EMU_PROCESS_UNINITIALIZED 0

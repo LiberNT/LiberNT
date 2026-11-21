@@ -21,7 +21,7 @@
  * - Platform identification (EarlyUartPlatformId)
  * - Inline functions for UART I/O (EarlyUartPutc, EarlyUartPuts, etc.)
  */
-#include <reactos/arm64/early_uart.h>
+#include <libernt/arm64/early_uart.h>
 
 /*
  * Legacy constants for backward compatibility.

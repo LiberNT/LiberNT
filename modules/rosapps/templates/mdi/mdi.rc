@@ -5,7 +5,7 @@
 #define REACTOS_STR_INTERNAL_NAME       "mdi"
 #define REACTOS_STR_ORIGINAL_FILENAME   "mdi.exe"
 #define REACTOS_STR_ORIGINAL_COPYRIGHT  "Copyright © 2002 Robert Dickenson"
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 

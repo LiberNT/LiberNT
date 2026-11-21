@@ -2,7 +2,7 @@ project(rapps)
 
 include_directories(
     ${REACTOS_SOURCE_DIR}/sdk/lib/cryptlib
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/zlib)
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/libs/zlib)
 include_directories(SYSTEM ${REACTOS_SOURCE_DIR}/sdk/lib/3rdparty/zlib/contrib)
 include_directories(include)
 

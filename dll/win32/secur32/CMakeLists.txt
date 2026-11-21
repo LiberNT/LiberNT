@@ -1,8 +1,8 @@
 
 add_definitions(-D__SECUR32__)
 include_directories(
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/subsys
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/mbedtls)
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/subsys
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/libs/mbedtls)
 spec2def(secur32.dll secur32.spec ADD_IMPORTLIB)
 
 list(APPEND SOURCE

@@ -1,6 +1,6 @@
 # GIP host protocol library
 
-This library and its public header (`sdk/include/reactos/libs/gip/gip.h`) are
+This library and its public header (`sdk/include/libernt/libs/gip/gip.h`) are
 MIT-licensed; see `LICENSE`. The implementation is independent of USB, HID,
 Windows kernel types, and controller-driver lifetime management.
 

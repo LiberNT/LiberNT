@@ -8,7 +8,7 @@
 #pragma once
 
 #include <windows.h>
-#include <reactos/dwmsettings.h>
+#include <libernt/dwmsettings.h>
 
 #define DWM_SETTINGS_KEY REACTOS_DWM_SETTINGS_KEY
 #define DWM_SETTINGS_CLASS L"ReactOS.Dwm.Settings"

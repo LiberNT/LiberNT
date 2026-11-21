@@ -7,9 +7,9 @@
 
 #include <ntifs.h>
 #include <initguid.h>
-#include <reactos/drivers/appleaop.h>
+#include <libernt/drivers/appleaop.h>
 #include "appleaop.h"
-#include <reactos/drivers/applepmgr.h>
+#include <libernt/drivers/applepmgr.h>
 
 #define AOP_DART_WINDOW                 0x40000000ULL
 #define AOP_DMA_ALIGN                   0x4000

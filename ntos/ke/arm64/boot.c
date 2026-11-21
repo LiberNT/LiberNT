@@ -8,7 +8,7 @@
 
 #include <ntoskrnl.h>
 #include <ntstrsafe.h>
-#include <reactos/drivers/acpi/acpi.h>
+#include <libernt/drivers/acpi/acpi.h>
 #define NDEBUG
 #include <debug.h>
 #include <arm64pl011.h>

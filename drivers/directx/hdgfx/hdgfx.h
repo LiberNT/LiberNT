@@ -11,8 +11,8 @@
 #include <ntddk.h>
 #include <windef.h>
 #include <dispmprt.h>
-#include <reactos/drivers/directx/softgpu_2d_shared.h>
-#include <reactos/drivers/directx/hdgfx_umd.h>
+#include <libernt/drivers/directx/softgpu_2d_shared.h>
+#include <libernt/drivers/directx/hdgfx_umd.h>
 
 #define NDEBUG
 #include <debug.h>

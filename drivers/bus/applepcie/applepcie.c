@@ -8,9 +8,9 @@
 #include <ntddk.h>
 #include <initguid.h>
 #include <wdmguid.h>
-#include <reactos/drivers/fdtdrv.h>
-#include <reactos/drivers/applepcie.h>
-#include <reactos/drivers/applesmc.h>
+#include <libernt/drivers/fdtdrv.h>
+#include <libernt/drivers/applepcie.h>
+#include <libernt/drivers/applesmc.h>
 
 #define APPLE_PCIE_SMC_WAIT_MS      30000
 #define APPLE_PCIE_SMC_STEP_MS      50

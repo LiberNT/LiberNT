@@ -6,7 +6,7 @@
  */
 
 #include "sdbus.h"
-#include <reactos/drivers/dumpstor.h>
+#include <libernt/drivers/dumpstor.h>
 
 #define NDEBUG
 #include <debug.h>

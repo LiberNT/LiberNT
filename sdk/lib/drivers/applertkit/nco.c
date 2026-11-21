@@ -8,7 +8,7 @@
 #ifndef UNIT_TEST
 #include <ntddk.h>
 #endif
-#include <reactos/drivers/applenco.h>
+#include <libernt/drivers/applenco.h>
 
 #define NCO_CHANNEL_STRIDE      0x4000
 #define NCO_CHANNEL_SPAN        0x14

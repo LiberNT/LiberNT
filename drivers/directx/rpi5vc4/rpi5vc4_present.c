@@ -13,7 +13,7 @@
 #include "rpi5vc4_crtc.h"
 
 #define NDEBUG
-#include <reactos/debug.h>
+#include <libernt/debug.h>
 
 /*
  * Kernel VA of the surface the HVS is currently scanning: the firmware

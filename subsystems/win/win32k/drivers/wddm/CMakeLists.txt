@@ -38,7 +38,7 @@ target_include_directories(wddm_bridge PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../..           # win32ss root  -> pch.h / win32k.h
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include   # subsystems/win/win32k/include -> ntwin32.h, ntusrtyp.h
     ${REACTOS_SOURCE_DIR}/ntos/include
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/drivers)
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/drivers)
 
 # win32k already imports ntoskrnl; the static lib is linked into win32k so it
 # picks up all ntoskrnl symbols through win32k's import table.

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include <apitest.h>
 #include <windows.h>
-#include <reactos/dwmframe.h>
+#include <libernt/dwmframe.h>
 #include "../../../../base/system/dwm/gpugeometry.h"
 #include "../../../../base/system/dwm/gpublurdamage.h"
 #include "../../../../base/system/dwm/gpuscenecache.h"

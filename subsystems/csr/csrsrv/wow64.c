@@ -10,9 +10,9 @@
 #include <wingdi.h>
 #include <wincon.h>
 #include <wincon_undoc.h>
-#include <reactos/subsys/csr/csrwow64.h>
-#include <reactos/subsys/win/basemsg.h>
-#include <reactos/subsys/win/winmsg.h>
+#include <libernt/subsys/csr/csrwow64.h>
+#include <libernt/subsys/win/basemsg.h>
+#include <libernt/subsys/win/winmsg.h>
 
 #define NDEBUG
 #include <debug.h>

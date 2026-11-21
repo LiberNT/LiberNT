@@ -7,9 +7,9 @@
 
 #include <win32k.h>
 #include "drivers/wddm/wddm_bridge.h"
-#include <reactos/rddm/rxgkinterface.h>
-#include <reactos/rddm/rxgkioctl.h>
-#include <reactos/rddm/rxgkntgdi.h>
+#include <libernt/rddm/rxgkinterface.h>
+#include <libernt/rddm/rxgkioctl.h>
+#include <libernt/rddm/rxgkntgdi.h>
 #include <debug.h>
 
 #define IOCTL_RXGK_OPENADAPTERFROMGDIDISPLAYNAME CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x111, METHOD_BUFFERED, FILE_ANY_ACCESS)

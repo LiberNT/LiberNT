@@ -72,9 +72,9 @@
 #include <wdmguid.h>
 #include <drivers/acpi/acpi.h>
 #include <drivers/acpi/acpisystem.h>
-#include <reactos/arc/arc.h>
-#include <reactos/drivers/acpi/acpipci.h>
-#include <reactos/drivers/cmreslist.h>
+#include <libernt/arc/arc.h>
+#include <libernt/drivers/acpi/acpipci.h>
+#include <libernt/drivers/cmreslist.h>
 #define DXGKP_BUGCHECK_VIDEO_DXGKRNL_FATAL_ERROR 0x113
 #define DXGKP_FATAL_SURPRISE_REMOVAL_SUBTYPE 0x19
 #define DXGKP_FATAL_MMS2_LIFECYCLE_SUBTYPE 0x1A

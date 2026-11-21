@@ -9,7 +9,7 @@
 /* INCLUDES *******************************************************************/
 
 #include "smss.h"
-#include <reactos/dump.h>
+#include <libernt/dump.h>
 
 #define NDEBUG
 #include <debug.h>

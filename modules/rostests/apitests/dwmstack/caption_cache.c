@@ -5,7 +5,7 @@
  */
 #include <apitest.h>
 #include <windows.h>
-#include <reactos/dwmframe.h>
+#include <libernt/dwmframe.h>
 #include "../../../../subsystems/win/win32k/user/ntuser/captioncache.h"
 
 START_TEST(caption_cache)

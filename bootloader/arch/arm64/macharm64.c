@@ -8,7 +8,7 @@
 #include <bl.h>
 #include <arm64.h>
 #include <blefi.h>
-#include <reactos/arm64/early_uart.h>
+#include <libernt/arm64/early_uart.h>
 
 /* External UEFI globals */
 extern EFI_SYSTEM_TABLE* GlobalSystemTable;

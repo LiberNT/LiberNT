@@ -9,7 +9,7 @@
 #define REACTOS_STR_INTERNAL_NAME       "libernt"
 #define REACTOS_STR_ORIGINAL_FILENAME   "libernt.exe"
 #endif
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 

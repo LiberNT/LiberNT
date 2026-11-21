@@ -21,7 +21,7 @@
 #include <winbase.h>
 #include <winnls.h>
 #include <windns.h>
-#include <reactos/windns_undoc.h>
+#include <libernt/windns_undoc.h>
 #define NTOS_MODE_USER
 #include <ndk/rtlfuncs.h>
 

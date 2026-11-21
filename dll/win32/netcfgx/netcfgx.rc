@@ -13,9 +13,9 @@ LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 #define REACTOS_STR_ORIGINAL_FILENAME "netcfgx.dll"
 #define REACTOS_STR_PRODUCT_VERSION   "5.1.2600.3264"
 #define REACTOS_STR_FILE_VERSION      "5.1.2600.3264"
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
-#include <reactos/manifest_dll.rc>
+#include <libernt/manifest_dll.rc>
 
 IDI_NETWORK ICON "res/network.ico"
 IDI_INTERNET ICON "res/internet.ico"

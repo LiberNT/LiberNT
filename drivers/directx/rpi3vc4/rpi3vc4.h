@@ -9,7 +9,7 @@
 
 #include "softgpu.h"
 #include "rpi3vc4_damage.h"
-#include <reactos/rpi3vc4_umd.h>
+#include <libernt/rpi3vc4_umd.h>
 
 #define RPI3VC4_POOL_TAG                  '3cVR'
 

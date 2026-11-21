@@ -16,7 +16,7 @@
 #include <winioctl.h>
 #include <winreg.h>
 #include <wchar.h>
-#include <reactos/dwmframe.h>
+#include <libernt/dwmframe.h>
 
 #ifndef STATUS_INVALID_HANDLE
 #define STATUS_INVALID_HANDLE           ((NTSTATUS)0xC0000008L)

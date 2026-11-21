@@ -2,6 +2,6 @@
 #define REACTOS_STR_INTERNAL_NAME     "mshta"
 #define REACTOS_STR_ORIGINAL_FILENAME "mshta.exe"
 
-#include <reactos/version.rc>
+#include <libernt/version.rc>
 
 1 ICON "mshta.ico"

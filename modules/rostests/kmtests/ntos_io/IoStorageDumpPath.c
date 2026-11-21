@@ -7,7 +7,7 @@
 
 #include <kmt_test.h>
 #include <ntdddisk.h>
-#include <reactos/drivers/dumpstor.h>
+#include <libernt/drivers/dumpstor.h>
 
 /* The test writes raw sectors: it only touches a disk whose last sector carries this text. */
 #define TEST_MARKER         "LIBERNT DUMP TEST DISK"

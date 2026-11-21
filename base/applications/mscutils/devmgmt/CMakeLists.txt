@@ -1,5 +1,5 @@
 
-include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/dll/devmgr)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/libernt/dll/devmgr)
 
 add_executable(devmgmt devmgmt.c devmgmt.rc)
 add_rc_deps(devmgmt.rc ${CMAKE_CURRENT_SOURCE_DIR}/devmgmt.ico)

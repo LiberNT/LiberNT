@@ -48,7 +48,7 @@ THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR I
  * remove the following line (or comment it out):
  * Note that DPRINT1() is always printed to the debugger. */
 #define NDEBUG
-#include <reactos/debug.h>
+#include <libernt/debug.h>
 
 #include <tdi.h>
 #include <tcpioctl.h>

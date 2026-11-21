@@ -14,8 +14,8 @@
 #include <arm64.h>
 #include <blefi.h>
 #include <drivers/acpi/acpi.h>
-#include <reactos/arm64/acpi.h>
-#include <reactos/arm64/early_uart.h>
+#include <libernt/arm64/acpi.h>
+#include <libernt/arm64/early_uart.h>
 #include <Fdt.h>
 #include <libernt/fdtlib.h>
 extern EFI_SYSTEM_TABLE *GlobalSystemTable;

@@ -6,7 +6,7 @@ target_include_directories(wificx PRIVATE
     ${REACTOS_SOURCE_DIR}/sdk/include/psdk/netcx/shared/1.0
     ${REACTOS_SOURCE_DIR}/sdk/include/ddk/wificx/1.2
     ${REACTOS_SOURCE_DIR}/drivers/network/netadaptercx/inc
-    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/drivers/ndis
+    ${REACTOS_SOURCE_DIR}/sdk/include/libernt/drivers/ndis
     ${REACTOS_SOURCE_DIR}/sdk/lib/drivers/wdf
     ${REACTOS_SOURCE_DIR}/sdk/lib/drivers/wdf/kmdf/inc/private)
 target_compile_definitions(wificx PRIVATE

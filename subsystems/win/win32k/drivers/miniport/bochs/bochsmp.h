@@ -14,7 +14,7 @@
 #include <video.h>
 #include <devioctl.h>
 #include <section_attribs.h>
-#include <reactos/loader_framebuffer.h>
+#include <libernt/loader_framebuffer.h>
 
 #define VBE_EDID_SIZE                        0x80
 

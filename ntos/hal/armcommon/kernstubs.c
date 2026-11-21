@@ -6,7 +6,7 @@
 
 #include <ntddk.h>
 #include <halacpi_arm64.h>
-#include <reactos/hal/msi.h>
+#include <libernt/hal/msi.h>
 #define NDEBUG
 #include <debug.h>
 

@@ -6,7 +6,7 @@
  */
 
 #include <ntoskrnl.h>
-#include <reactos/arm64/earlyfont.h>
+#include <libernt/arm64/earlyfont.h>
 
 #define KI_EARLY_SCREEN_CELL_HEIGHT   14
 #define KI_EARLY_SCREEN_CACHE_LINE    64

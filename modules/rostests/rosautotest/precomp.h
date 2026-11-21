@@ -32,7 +32,7 @@ using namespace std;
 #include <winreg.h>
 
 #include <ndk/rtlfuncs.h>
-#include <reactos/buildno.h>
+#include <libernt/buildno.h>
 
 /* Class includes */
 #include "auto_array_ptr.h"

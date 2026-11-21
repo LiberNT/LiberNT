@@ -1,7 +1,7 @@
 
 add_definitions(-D_NTSYSTEM_)
 
-include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/subsys/csr)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/libernt/subsys/csr)
 
 list(APPEND SOURCE
     api.c

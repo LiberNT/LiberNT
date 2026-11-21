@@ -20,8 +20,8 @@
  */
 
 #include "framebuf.h"
-#include <reactos/rpi5vc4_xpdm.h>
-#include <reactos/dwmframe.h>
+#include <libernt/rpi5vc4_xpdm.h>
+#include <libernt/dwmframe.h>
 
 #define FRAMEBUF_OPENGL_ICD_VERSION 1
 #define FRAMEBUF_OPENGL_ICD_DRIVER_VERSION 1

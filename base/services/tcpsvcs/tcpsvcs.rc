@@ -2,4 +2,4 @@
 #define REACTOS_STR_INTERNAL_NAME      "tcpsvcs"
 #define REACTOS_STR_ORIGINAL_FILENAME  "tcpsvcs.exe"
 #define REACTOS_STR_ORIGINAL_COPYRIGHT "Ged Murphy (gedmurphy@gmail.com)"
-#include <reactos/version.rc>
+#include <libernt/version.rc>

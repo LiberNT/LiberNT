@@ -1,4 +1,4 @@
-include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/zlib)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/libernt/libs/zlib)
 
 spec2def(opcservices.dll opcservices.spec ADD_IMPORTLIB)
 

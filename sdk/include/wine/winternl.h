@@ -399,7 +399,7 @@ typedef struct _TEB_FLS_DATA
     void          **fls_data_chunks[8];
 } TEB_FLS_DATA, *PTEB_FLS_DATA;
 
-#include <reactos/wow64shared.h>
+#include <libernt/wow64shared.h>
 
 typedef struct _CHPE_V2_CPU_AREA_INFO
 {
@@ -4477,7 +4477,7 @@ typedef struct _KCONTINUE_ARGUMENT
 #define KCONTINUE_FLAG_TEST_ALERT  0x01
 #define KCONTINUE_FLAG_DELIVER_APC 0x02
 
-#include <reactos/alpc.h>
+#include <libernt/alpc.h>
 
 #ifndef NT_SUCCESS
 #define NT_SUCCESS(status) (((NTSTATUS)(status)) >= 0)

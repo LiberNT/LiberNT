@@ -8,8 +8,8 @@
 #include <usbbusif.h>
 #include <usbdlib.h>
 #include <classpnp.h>
-#include <reactos/drivers/dumpstor.h>
-#include <reactos/drivers/dumpscsi.h>
+#include <libernt/drivers/dumpstor.h>
+#include <libernt/drivers/dumpscsi.h>
 
 #define USB_STOR_TAG 'sbsu'
 

@@ -6,7 +6,7 @@
  */
 
 #include <ntoskrnl.h>
-#include <reactos/smpdbg.h>
+#include <libernt/smpdbg.h>
 
 #define MAX_SYSCALL_PARAMS 16
 #define KI_REGISTER_PARAMS 4

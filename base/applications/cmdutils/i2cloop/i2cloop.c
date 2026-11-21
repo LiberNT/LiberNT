@@ -13,7 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <initguid.h>
-#include <reactos/drivers/inteli2c.h>
+#include <libernt/drivers/inteli2c.h>
 
 #define I2CLOOP_I2C2_DEVICE_ID 0x54ea
 #define I2CLOOP_I2C3_DEVICE_ID 0x54eb

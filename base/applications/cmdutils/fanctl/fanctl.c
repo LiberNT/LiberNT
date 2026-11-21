@@ -11,7 +11,7 @@
 #include <initguid.h>
 #include <poclass.h>
 #include <acpiioct.h>
-#include <reactos/drivers/acpi/acpithermal.h>
+#include <libernt/drivers/acpi/acpithermal.h>
 #include <stdio.h>
 #include <stdlib.h>
 

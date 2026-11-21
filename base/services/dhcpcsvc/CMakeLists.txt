@@ -1,8 +1,8 @@
 
-include_directories(include ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl)
+include_directories(include ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl)
 
-add_rpc_file(client ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/dhcpcsvc.idl PREFIX_CLIENT Client_ PREFIX_SERVER Server_)
-add_rpc_file(server ${REACTOS_SOURCE_DIR}/sdk/include/reactos/idl/dhcpcsvc.idl PREFIX_CLIENT Client_ PREFIX_SERVER Server_)
+add_rpc_file(client ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl/dhcpcsvc.idl PREFIX_CLIENT Client_ PREFIX_SERVER Server_)
+add_rpc_file(server ${REACTOS_SOURCE_DIR}/sdk/include/libernt/idl/dhcpcsvc.idl PREFIX_CLIENT Client_ PREFIX_SERVER Server_)
 
 spec2def(dhcpcsvc.dll dhcpcsvc.spec ADD_IMPORTLIB)
 

@@ -8,7 +8,7 @@
 #pragma once
 
 #include <ntddk.h>
-#include <reactos/arc/arc.h>
+#include <libernt/arc/arc.h>
 
 #ifdef __cplusplus
 extern "C" {
