@@ -221,6 +221,7 @@ VOID MiPtUnpinRange(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress
 #define MI_MEM_RESERVE_PLACEHOLDER  0x00080000
 #define MI_MEM_REPLACE_PLACEHOLDER  0x02000000
 #define MI_MEM_WRITE_WATCH          0x04000000
+#define MI_MEM_NO_EXECUTE_IMAGE     0x08000000
 #define MI_MEM_COALESCE_PLACEHOLDERS 0x00000001
 #define MI_MEM_PRESERVE_PLACEHOLDER 0x00000002
 
@@ -254,6 +255,7 @@ typedef struct _MI_VAD
     BOOLEAN Placeholder;
     BOOLEAN FromPlaceholder;
     BOOLEAN StaleView;
+    BOOLEAN NoExecuteImage;
     volatile LONG PteTouched;
     struct _MI_SEGMENT *Segment;
     ULONG64 SegmentPageOffset;
@@ -321,6 +323,7 @@ typedef struct _MI_MEMORY_INFORMATION
     ULONG State;
     ULONG Protect;
     ULONG Type;
+    BOOLEAN NoExecuteImage;
 } MI_MEMORY_INFORMATION, *PMI_MEMORY_INFORMATION;
 
 typedef struct _MI_WORKING_SET_EX_INFORMATION

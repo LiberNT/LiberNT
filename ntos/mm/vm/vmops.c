@@ -1708,7 +1708,10 @@ MiQueryVirtualMemory(
     MiPageStatus(Space, Vad, Start, TRUE, &Committed, &Protection);
     Information->BaseAddress = Start;
     Information->AllocationBase = MI_VAD_START(Vad);
-    Information->AllocationProtect = (Vad->Type == MiVadImage) ? MI_PROT_EXECUTE_WRITECOPY : Vad->Protection;
+    Information->AllocationProtect = (Vad->Type == MiVadImage)
+                                         ? (Vad->NoExecuteImage ? MI_PROT_READONLY : MI_PROT_EXECUTE_WRITECOPY)
+                                         : Vad->Protection;
+    Information->NoExecuteImage = Vad->NoExecuteImage;
     Information->State = Committed ? MI_MEM_COMMIT : MI_MEM_RESERVE;
     Information->Protect = Protection;
     Information->Type = (Vad->Type == MiVadPrivate || (Vad->Type == MiVadLarge && Vad->Segment == NULL) ||
