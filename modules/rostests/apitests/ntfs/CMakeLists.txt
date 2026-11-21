@@ -6,6 +6,7 @@ list(APPEND SOURCE
     FreeClusters.c
     ConcurrentIo.c
     DirectIo.c
+    CreateSecurity.c
     testlist.c)
 
 add_executable(ntfs_apitest ${SOURCE})

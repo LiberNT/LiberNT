@@ -160,7 +160,7 @@ ValidateAcl(_In_ const UCHAR* Descriptor,
     return AceOffset <= AclSize;
 }
 
-static BOOLEAN
+BOOLEAN
 ValidateSecurityDescriptor(_In_ const UCHAR* Descriptor,
                            _In_ ULONG DescriptorLength)
 {

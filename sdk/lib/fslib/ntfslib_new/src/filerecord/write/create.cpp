@@ -14,8 +14,12 @@ FileRecord::InitializeNewFileRecord(
     _In_ ULONG NameLength,
     _In_ BOOLEAN IsDirectory,
     _In_ ULONG FileAttributes,
-    _Out_ PFileNameEx* CreatedName)
+    _Out_ PFileNameEx* CreatedName,
+    _In_opt_ const UCHAR* SecurityDescriptor,
+    _In_ ULONG SecurityDescriptorLength)
 {
+    const UCHAR* InlineDescriptor = NULL;
+    ULONG InlineLength = 0;
     const ULONG StandardInformationV1Length =
         FIELD_OFFSET(StandardInformationEx, OwnerId);
     PAttribute Attribute;
@@ -107,53 +111,82 @@ FileRecord::InitializeNewFileRecord(
     ParentReference =
         MakeFileReference(Parent);
 
-    ParentSecurity = Parent->GetAttribute(
-        TypeSecurityDescriptor,
-        NULL);
-    SecurityLength = 0;
-    if (ParentSecurity &&
-        Parent->ReadSecurityDescriptor(NULL, &SecurityLength) ==
-            STATUS_BUFFER_TOO_SMALL &&
-        SecurityLength != 0)
+    if (SecurityDescriptor)
     {
-        ParentDescriptor =
-            new(PagedPool, TAG_FILE_RECORD)
-                UCHAR[SecurityLength];
-        if (!ParentDescriptor)
+        if (SecurityDescriptorLength == 0 ||
+            !ValidateSecurityDescriptor(SecurityDescriptor, SecurityDescriptorLength))
         {
-            Status = STATUS_INSUFFICIENT_RESOURCES;
+            Status = STATUS_INVALID_PARAMETER;
             goto Done;
         }
-        Status = Parent->ReadSecurityDescriptor(
-            ParentDescriptor,
-            &SecurityLength);
-        if (!NT_SUCCESS(Status))
-            goto Done;
+        DiskVolume->InvalidateRecordDescriptor(RecordNumber);
         Status = DiskVolume->AssignSecurityId(
-            ParentDescriptor,
-            SecurityLength,
+            SecurityDescriptor,
+            SecurityDescriptorLength,
             &SecurityId);
         if (Status == STATUS_NOT_IMPLEMENTED)
-            SecurityId = 0;
-        else if (!NT_SUCCESS(Status))
-            goto Done;
-    }
-    else if (!ParentSecurity)
-    {
-        ParentStandard = Parent->GetAttribute(
-            TypeStandardInformation,
-            NULL);
-        if (ParentStandard &&
-            !ParentStandard->IsNonResident &&
-            ParentStandard->Resident.DataLength >=
-                FIELD_OFFSET(StandardInformationEx, SecurityId) +
-                    sizeof(ULONG))
         {
-            SecurityId =
-                reinterpret_cast<PStandardInformationEx>(
-                    GetResidentDataPointer(ParentStandard))->
-                        SecurityId;
+            SecurityId = 0;
+            InlineDescriptor = SecurityDescriptor;
+            InlineLength = SecurityDescriptorLength;
         }
+        else if (!NT_SUCCESS(Status))
+        {
+            goto Done;
+        }
+    }
+    else
+    {
+        ParentSecurity = Parent->GetAttribute(
+            TypeSecurityDescriptor,
+            NULL);
+        SecurityLength = 0;
+        if (ParentSecurity &&
+            Parent->ReadSecurityDescriptor(NULL, &SecurityLength) ==
+                STATUS_BUFFER_TOO_SMALL &&
+            SecurityLength != 0)
+        {
+            ParentDescriptor =
+                new(PagedPool, TAG_FILE_RECORD)
+                    UCHAR[SecurityLength];
+            if (!ParentDescriptor)
+            {
+                Status = STATUS_INSUFFICIENT_RESOURCES;
+                goto Done;
+            }
+            Status = Parent->ReadSecurityDescriptor(
+                ParentDescriptor,
+                &SecurityLength);
+            if (!NT_SUCCESS(Status))
+                goto Done;
+            Status = DiskVolume->AssignSecurityId(
+                ParentDescriptor,
+                SecurityLength,
+                &SecurityId);
+            if (Status == STATUS_NOT_IMPLEMENTED)
+                SecurityId = 0;
+            else if (!NT_SUCCESS(Status))
+                goto Done;
+        }
+        else if (!ParentSecurity)
+        {
+            ParentStandard = Parent->GetAttribute(
+                TypeStandardInformation,
+                NULL);
+            if (ParentStandard &&
+                !ParentStandard->IsNonResident &&
+                ParentStandard->Resident.DataLength >=
+                    FIELD_OFFSET(StandardInformationEx, SecurityId) +
+                        sizeof(ULONG))
+            {
+                SecurityId =
+                    reinterpret_cast<PStandardInformationEx>(
+                        GetResidentDataPointer(ParentStandard))->
+                            SecurityId;
+            }
+        }
+        InlineDescriptor = ParentDescriptor;
+        InlineLength = SecurityLength;
     }
 
     Status = InsertResidentAttribute(
@@ -213,7 +246,7 @@ FileRecord::InitializeNewFileRecord(
         goto Done;
     Attribute->Resident.IndexedFlag = 1;
 
-    if (SecurityId == 0 && ParentDescriptor)
+    if (SecurityId == 0 && InlineDescriptor)
     {
         Status = InsertResidentAttribute(
             TypeSecurityDescriptor,
@@ -223,8 +256,8 @@ FileRecord::InitializeNewFileRecord(
         {
             Status = ReplaceResidentData(
                 Attribute,
-                ParentDescriptor,
-                SecurityLength);
+                InlineDescriptor,
+                InlineLength);
         }
         if (!NT_SUCCESS(Status))
             goto Done;

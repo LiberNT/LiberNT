@@ -7,6 +7,7 @@
 #include "ntfslib_new.h"
 #include "ntfslib_new_internal.h"
 
+
 static BOOLEAN
 IsFileNameCharacterValid(_In_ WCHAR Character)
 {
@@ -324,7 +325,9 @@ MasterFileTable::CreateFile(
     _In_ ULONG FileAttributes,
     _Out_ PFileRecord* File,
     _In_opt_ PCWSTR ShortName,
-    _In_ ULONG ShortNameLength)
+    _In_ ULONG ShortNameLength,
+    _In_opt_ const UCHAR* SecurityDescriptor,
+    _In_ ULONG SecurityDescriptorLength)
 {
     PFileRecord Parent = NULL;
     PWCHAR Name;
@@ -354,7 +357,9 @@ MasterFileTable::CreateFile(
             FALSE,
             File,
             ShortName,
-            ShortNameLength);
+            ShortNameLength,
+            SecurityDescriptor,
+            SecurityDescriptorLength);
     }
     delete Parent;
     return Status;
@@ -370,7 +375,9 @@ MasterFileTable::CreateFileInDirectory(
     _In_ BOOLEAN NameKnownMissing,
     _Out_ PFileRecord* File,
     _In_opt_ PCWSTR PreferredShortName,
-    _In_ ULONG PreferredShortNameLength)
+    _In_ ULONG PreferredShortNameLength,
+    _In_opt_ const UCHAR* SecurityDescriptor,
+    _In_ ULONG SecurityDescriptorLength)
 {
     Directory ParentIndex(DiskVolume);
     PFileRecord NewFile = NULL;
@@ -458,7 +465,9 @@ MasterFileTable::CreateFileInDirectory(
         NameLength,
         IsDirectory,
         FileAttributes,
-        &FileName);
+        &FileName,
+        SecurityDescriptor,
+        SecurityDescriptorLength);
     if (!NT_SUCCESS(Status))
         goto Rollback;
 
