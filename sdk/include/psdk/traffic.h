@@ -67,4 +67,11 @@ ULONG WINAPI TcRegisterClient(ULONG,HANDLE,PTCI_CLIENT_FUNC_LIST,PHANDLE);
 #define TC_NOTIFY_PARAM_CHANGED 4
 #endif
 
+typedef struct _TC_GEN_FILTER {
+  USHORT AddressType;
+  ULONG PatternSize;
+  PVOID Pattern;
+  PVOID Mask;
+} TC_GEN_FILTER, *PTC_GEN_FILTER;
+
 #endif /* __WINE_TRAFFIC_H */

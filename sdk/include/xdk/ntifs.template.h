@@ -287,6 +287,1475 @@ typedef ULONG FSRTL_UNC_HARDENING_CAPABILITIES;
 typedef ULONG NETWORK_OPEN_IN_FLAGS;
 typedef ULONG NETWORK_OPEN_OUT_FLAGS;
 
+typedef struct _ATTRIBUTES_AND_SID {
+  UINT32 Attributes;
+  ULONG SidStart;
+} ATTRIBUTES_AND_SID, *PATTRIBUTES_AND_SID;
+
+typedef struct _SECURITY_OBJECT_AI_PARAMS {
+  ULONG Size;
+  ULONG ConstraintMask;
+} SECURITY_OBJECT_AI_PARAMS, *PSECURITY_OBJECT_AI_PARAMS;
+
+typedef struct _TOKEN_USER_CLAIMS {
+  PCLAIMS_BLOB UserClaims;
+} TOKEN_USER_CLAIMS, *PTOKEN_USER_CLAIMS;
+
+typedef struct _TOKEN_DEVICE_CLAIMS {
+  PCLAIMS_BLOB DeviceClaims;
+} TOKEN_DEVICE_CLAIMS, *PTOKEN_DEVICE_CLAIMS;
+
+typedef struct _TOKEN_SID_INFORMATION {
+  PSID Sid;
+} TOKEN_SID_INFORMATION, *PTOKEN_SID_INFORMATION;
+
+typedef struct _RTL_HEAP_MEMORY_LIMIT_DATA {
+  SIZE_T CommitLimitBytes;
+  ULONG_PTR CommitLimitFailureCode;
+  SIZE_T MaxAllocationSizeBytes;
+  ULONG_PTR AllocationLimitFailureCode;
+} RTL_HEAP_MEMORY_LIMIT_DATA, *PRTL_HEAP_MEMORY_LIMIT_DATA;
+
+typedef struct _RTL_HEAP_MEMORY_LIMIT_INFO {
+  ULONG Version;
+  RTL_HEAP_MEMORY_LIMIT_DATA Data;
+} RTL_HEAP_MEMORY_LIMIT_INFO, *PRTL_HEAP_MEMORY_LIMIT_INFO;
+
+typedef struct _MSV1_0_CREDENTIAL_KEY {
+  UCHAR Data[20];
+} MSV1_0_CREDENTIAL_KEY, *PMSV1_0_CREDENTIAL_KEY;
+
+typedef struct _MSV1_0_SUPPLEMENTAL_CREDENTIAL_V2 {
+  ULONG Version;
+  ULONG Flags;
+  UCHAR NtPassword[16];
+  MSV1_0_CREDENTIAL_KEY CredentialKey;
+} MSV1_0_SUPPLEMENTAL_CREDENTIAL_V2, *PMSV1_0_SUPPLEMENTAL_CREDENTIAL_V2;
+
+typedef struct _MSV1_0_SUPPLEMENTAL_CREDENTIAL_V3 {
+  ULONG Version;
+  ULONG Flags;
+  MSV1_0_CREDENTIAL_KEY_TYPE CredentialKeyType;
+  UCHAR NtPassword[16];
+  MSV1_0_CREDENTIAL_KEY CredentialKey;
+  UCHAR ShaPassword[20];
+} MSV1_0_SUPPLEMENTAL_CREDENTIAL_V3, *PMSV1_0_SUPPLEMENTAL_CREDENTIAL_V3;
+
+typedef struct _MSV1_0_IUM_SUPPLEMENTAL_CREDENTIAL {
+  ULONG Version;
+  ULONG EncryptedCredsSize;
+  UCHAR EncryptedCreds[1];
+} MSV1_0_IUM_SUPPLEMENTAL_CREDENTIAL, *PMSV1_0_IUM_SUPPLEMENTAL_CREDENTIAL;
+
+#pragma pack(push, 1)
+typedef struct _MSV1_0_REMOTE_SUPPLEMENTAL_CREDENTIAL {
+  ULONG Version;
+  ULONG Flags;
+  MSV1_0_CREDENTIAL_KEY CredentialKey;
+  MSV1_0_CREDENTIAL_KEY_TYPE CredentialKeyType;
+  ULONG EncryptedCredsSize;
+  UCHAR EncryptedCreds[1];
+} MSV1_0_REMOTE_SUPPLEMENTAL_CREDENTIAL, *PMSV1_0_REMOTE_SUPPLEMENTAL_CREDENTIAL;
+#pragma pack(pop)
+
+typedef struct _FILE_INFORMATION_DEFINITION {
+  FILE_INFORMATION_CLASS Class;
+  ULONG NextEntryOffset;
+  ULONG FileNameOffset;
+  ULONG FileNameLengthOffset;
+} FILE_INFORMATION_DEFINITION, *PFILE_INFORMATION_DEFINITION;
+
+typedef struct _FILE_ID_64_EXTD_DIR_INFORMATION {
+  ULONG NextEntryOffset;
+  ULONG FileIndex;
+  LARGE_INTEGER CreationTime;
+  LARGE_INTEGER LastAccessTime;
+  LARGE_INTEGER LastWriteTime;
+  LARGE_INTEGER ChangeTime;
+  LARGE_INTEGER EndOfFile;
+  LARGE_INTEGER AllocationSize;
+  ULONG FileAttributes;
+  ULONG FileNameLength;
+  ULONG EaSize;
+  ULONG ReparsePointTag;
+  LARGE_INTEGER FileId;
+  WCHAR FileName[1];
+} FILE_ID_64_EXTD_DIR_INFORMATION, *PFILE_ID_64_EXTD_DIR_INFORMATION;
+
+typedef struct _FILE_ID_64_EXTD_BOTH_DIR_INFORMATION {
+  ULONG NextEntryOffset;
+  ULONG FileIndex;
+  LARGE_INTEGER CreationTime;
+  LARGE_INTEGER LastAccessTime;
+  LARGE_INTEGER LastWriteTime;
+  LARGE_INTEGER ChangeTime;
+  LARGE_INTEGER EndOfFile;
+  LARGE_INTEGER AllocationSize;
+  ULONG FileAttributes;
+  ULONG FileNameLength;
+  ULONG EaSize;
+  ULONG ReparsePointTag;
+  LARGE_INTEGER FileId;
+  CCHAR ShortNameLength;
+  WCHAR ShortName[12];
+  WCHAR FileName[1];
+} FILE_ID_64_EXTD_BOTH_DIR_INFORMATION, *PFILE_ID_64_EXTD_BOTH_DIR_INFORMATION;
+
+typedef struct _FILE_KNOWN_FOLDER_INFORMATION {
+  FILE_KNOWN_FOLDER_TYPE Type;
+} FILE_KNOWN_FOLDER_INFORMATION, *PFILE_KNOWN_FOLDER_INFORMATION;
+
+typedef struct _FILE_STREAM_RESERVATION_INFORMATION {
+  LONGLONG TrackedReservation;
+  LONGLONG EnforcedReservation;
+} FILE_STREAM_RESERVATION_INFORMATION, *PFILE_STREAM_RESERVATION_INFORMATION;
+
+typedef struct _MUP_PROVIDER_INFORMATION {
+  ULONG Level;
+  PVOID Buffer;
+  PULONG BufferSize;
+} MUP_PROVIDER_INFORMATION, *PMUP_PROVIDER_INFORMATION;
+
+typedef struct _FILE_VOLUME_NAME_INFORMATION {
+  ULONG DeviceNameLength;
+  WCHAR DeviceName[1];
+} FILE_VOLUME_NAME_INFORMATION, *PFILE_VOLUME_NAME_INFORMATION;
+
+typedef struct _FILE_FS_DATA_COPY_INFORMATION {
+  ULONG NumberOfCopies;
+} FILE_FS_DATA_COPY_INFORMATION, *PFILE_FS_DATA_COPY_INFORMATION;
+
+typedef struct _FILE_FS_GUID_INFORMATION {
+  GUID FsGuid;
+} FILE_FS_GUID_INFORMATION, *PFILE_FS_GUID_INFORMATION;
+
+typedef struct _FILE_END_OF_FILE_INFORMATION_EX {
+  LARGE_INTEGER EndOfFile;
+  LARGE_INTEGER PagingFileSizeInMM;
+  LARGE_INTEGER PagingFileMaxSize;
+  ULONG Flags;
+} FILE_END_OF_FILE_INFORMATION_EX, *PFILE_END_OF_FILE_INFORMATION_EX;
+
+typedef struct REFS_VOLUME_DATA_BUFFER {
+  ULONG ByteCount;
+  ULONG MajorVersion;
+  ULONG MinorVersion;
+  ULONG BytesPerPhysicalSector;
+  LARGE_INTEGER VolumeSerialNumber;
+  LARGE_INTEGER NumberSectors;
+  LARGE_INTEGER TotalClusters;
+  LARGE_INTEGER FreeClusters;
+  LARGE_INTEGER TotalReserved;
+  ULONG BytesPerSector;
+  ULONG BytesPerCluster;
+  LARGE_INTEGER MaximumSizeOfResidentFile;
+  USHORT FastTierDataFillRatio;
+  USHORT SlowTierDataFillRatio;
+  ULONG DestagesFastTierToSlowTierRate;
+  USHORT MetadataChecksumType;
+  UCHAR Reserved0[6];
+  ULONG DriverMajorVersion;
+  ULONG DriverMinorVersion;
+  LARGE_INTEGER Reserved[7];
+} REFS_VOLUME_DATA_BUFFER, *PREFS_VOLUME_DATA_BUFFER;
+
+typedef struct STARTING_LCN_INPUT_BUFFER_EX {
+  LARGE_INTEGER StartingLcn;
+  ULONG Flags;
+} STARTING_LCN_INPUT_BUFFER_EX, *PSTARTING_LCN_INPUT_BUFFER_EX;
+
+typedef struct RETRIEVAL_POINTER_COUNT {
+  ULONG ExtentCount;
+} RETRIEVAL_POINTER_COUNT, *PRETRIEVAL_POINTER_COUNT;
+
+typedef struct READ_FILE_USN_DATA {
+  USHORT MinMajorVersion;
+  USHORT MaxMajorVersion;
+} READ_FILE_USN_DATA, *PREAD_FILE_USN_DATA;
+
+typedef struct USN_TRACK_MODIFIED_RANGES {
+  ULONG Flags;
+  ULONG Unused;
+  ULONGLONG ChunkSize;
+  LONGLONG FileSizeThreshold;
+} USN_TRACK_MODIFIED_RANGES, *PUSN_TRACK_MODIFIED_RANGES;
+
+typedef struct USN_RANGE_TRACK_OUTPUT {
+  USN Usn;
+} USN_RANGE_TRACK_OUTPUT, *PUSN_RANGE_TRACK_OUTPUT;
+
+typedef struct USN_RECORD_V2 {
+  ULONG RecordLength;
+  USHORT MajorVersion;
+  USHORT MinorVersion;
+  ULONGLONG FileReferenceNumber;
+  ULONGLONG ParentFileReferenceNumber;
+  USN Usn;
+  LARGE_INTEGER TimeStamp;
+  ULONG Reason;
+  ULONG SourceInfo;
+  ULONG SecurityId;
+  ULONG FileAttributes;
+  USHORT FileNameLength;
+  USHORT FileNameOffset;
+  WCHAR FileName[1];
+} USN_RECORD_V2, *PUSN_RECORD_V2;
+
+typedef struct USN_RECORD_COMMON_HEADER {
+  ULONG RecordLength;
+  USHORT MajorVersion;
+  USHORT MinorVersion;
+} USN_RECORD_COMMON_HEADER, *PUSN_RECORD_COMMON_HEADER;
+
+typedef struct USN_RECORD_EXTENT {
+  LONGLONG Offset;
+  LONGLONG Length;
+} USN_RECORD_EXTENT, *PUSN_RECORD_EXTENT;
+
+typedef struct _FILESYSTEM_STATISTICS_EX {
+  USHORT FileSystemType;
+  USHORT Version;
+  ULONG SizeOfCompleteStructure;
+  ULONGLONG UserFileReads;
+  ULONGLONG UserFileReadBytes;
+  ULONGLONG UserDiskReads;
+  ULONGLONG UserFileWrites;
+  ULONGLONG UserFileWriteBytes;
+  ULONGLONG UserDiskWrites;
+  ULONGLONG MetaDataReads;
+  ULONGLONG MetaDataReadBytes;
+  ULONGLONG MetaDataDiskReads;
+  ULONGLONG MetaDataWrites;
+  ULONGLONG MetaDataWriteBytes;
+  ULONGLONG MetaDataDiskWrites;
+} FILESYSTEM_STATISTICS_EX, *PFILESYSTEM_STATISTICS_EX;
+
+typedef struct _FILE_ZERO_DATA_INFORMATION_EX {
+  LARGE_INTEGER FileOffset;
+  LARGE_INTEGER BeyondFinalZero;
+  ULONG Flags;
+} FILE_ZERO_DATA_INFORMATION_EX, *PFILE_ZERO_DATA_INFORMATION_EX;
+
+typedef struct _FILE_INITIATE_REPAIR_OUTPUT_BUFFER {
+  ULONGLONG Hint1;
+  ULONGLONG Hint2;
+  CLSN Clsn;
+  NTSTATUS Status;
+} FILE_INITIATE_REPAIR_OUTPUT_BUFFER, *PFILE_INITIATE_REPAIR_OUTPUT_BUFFER;
+
+typedef struct _CSV_MGMT_LOCK {
+  ULONG Flags;
+} CSV_MGMT_LOCK, *PCSV_MGMT_LOCK;
+
+typedef struct _CSV_QUERY_REDIRECT_STATE {
+  ULONG MdsNodeId;
+  ULONG DsNodeId;
+  BOOLEAN FileRedirected;
+} CSV_QUERY_REDIRECT_STATE, *PCSV_QUERY_REDIRECT_STATE;
+
+typedef struct _CSV_QUERY_MDS_PATH {
+  ULONG MdsNodeId;
+  ULONG DsNodeId;
+  ULONG PathLength;
+  WCHAR Path[1];
+} CSV_QUERY_MDS_PATH, *PCSV_QUERY_MDS_PATH;
+
+typedef struct _CSV_QUERY_VOLUME_REDIRECT_STATE {
+  ULONG MdsNodeId;
+  ULONG DsNodeId;
+  BOOLEAN IsDiskConnected;
+  BOOLEAN ClusterEnableDirectIo;
+  CSVFS_DISK_CONNECTIVITY DiskConnectivity;
+} CSV_QUERY_VOLUME_REDIRECT_STATE, *PCSV_QUERY_VOLUME_REDIRECT_STATE;
+
+typedef struct _CSV_QUERY_MDS_PATH_V2 {
+  LONGLONG Version;
+  ULONG RequiredSize;
+  ULONG MdsNodeId;
+  ULONG DsNodeId;
+  ULONG Flags;
+  CSVFS_DISK_CONNECTIVITY DiskConnectivity;
+  GUID VolumeId;
+  ULONG IpAddressOffset;
+  ULONG IpAddressLength;
+  ULONG PathOffset;
+  ULONG PathLength;
+} CSV_QUERY_MDS_PATH_V2, *PCSV_QUERY_MDS_PATH_V2;
+
+typedef struct _CSV_SET_VOLUME_ID {
+  GUID VolumeId;
+} CSV_SET_VOLUME_ID, *PCSV_SET_VOLUME_ID;
+
+typedef struct _CSV_QUERY_VOLUME_ID {
+  GUID VolumeId;
+} CSV_QUERY_VOLUME_ID, *PCSV_QUERY_VOLUME_ID;
+
+typedef struct _LMR_QUERY_INFO_PARAM {
+  LMR_QUERY_INFO_CLASS Operation;
+} LMR_QUERY_INFO_PARAM, *PLMR_QUERY_INFO_PARAM;
+
+typedef struct _LMR_QUERY_SESSION_INFO {
+  UINT64 SessionId;
+} LMR_QUERY_SESSION_INFO, *PLMR_QUERY_SESSION_INFO;
+
+typedef struct _CSV_QUERY_VETO_FILE_DIRECT_IO_OUTPUT {
+  ULONGLONG VetoedFromAltitudeIntegral;
+  ULONGLONG VetoedFromAltitudeDecimal;
+  WCHAR Reason[256];
+} CSV_QUERY_VETO_FILE_DIRECT_IO_OUTPUT, *PCSV_QUERY_VETO_FILE_DIRECT_IO_OUTPUT;
+
+typedef struct _CSV_IS_OWNED_BY_CSVFS {
+  BOOLEAN OwnedByCSVFS;
+} CSV_IS_OWNED_BY_CSVFS, *PCSV_IS_OWNED_BY_CSVFS;
+
+typedef struct _FILE_LEVEL_TRIM_RANGE {
+  ULONGLONG Offset;
+  ULONGLONG Length;
+} FILE_LEVEL_TRIM_RANGE, *PFILE_LEVEL_TRIM_RANGE;
+
+typedef struct _FILE_LEVEL_TRIM {
+  ULONG Key;
+  ULONG NumRanges;
+  FILE_LEVEL_TRIM_RANGE Ranges[1];
+} FILE_LEVEL_TRIM, *PFILE_LEVEL_TRIM;
+
+typedef struct _FILE_LEVEL_TRIM_OUTPUT {
+  ULONG NumRangesProcessed;
+} FILE_LEVEL_TRIM_OUTPUT, *PFILE_LEVEL_TRIM_OUTPUT;
+
+typedef struct _CLUSTER_RANGE {
+  LARGE_INTEGER StartingCluster;
+  LARGE_INTEGER ClusterCount;
+} CLUSTER_RANGE, *PCLUSTER_RANGE;
+
+typedef struct _FILE_REFERENCE_RANGE {
+  ULONGLONG StartingFileReferenceNumber;
+  ULONGLONG EndingFileReferenceNumber;
+} FILE_REFERENCE_RANGE, *PFILE_REFERENCE_RANGE;
+
+typedef struct _QUERY_FILE_LAYOUT_OUTPUT {
+  ULONG FileEntryCount;
+  ULONG FirstFileOffset;
+  ULONG Flags;
+  ULONG Reserved;
+} QUERY_FILE_LAYOUT_OUTPUT, *PQUERY_FILE_LAYOUT_OUTPUT;
+
+typedef struct _FILE_LAYOUT_ENTRY {
+  ULONG Version;
+  ULONG NextFileOffset;
+  ULONG Flags;
+  ULONG FileAttributes;
+  ULONGLONG FileReferenceNumber;
+  ULONG FirstNameOffset;
+  ULONG FirstStreamOffset;
+  ULONG ExtraInfoOffset;
+  ULONG ExtraInfoLength;
+} FILE_LAYOUT_ENTRY, *PFILE_LAYOUT_ENTRY;
+
+typedef struct _FILE_LAYOUT_NAME_ENTRY {
+  ULONG NextNameOffset;
+  ULONG Flags;
+  ULONGLONG ParentFileReferenceNumber;
+  ULONG FileNameLength;
+  ULONG Reserved;
+  WCHAR FileName[1];
+} FILE_LAYOUT_NAME_ENTRY, *PFILE_LAYOUT_NAME_ENTRY;
+
+typedef struct _STREAM_LAYOUT_ENTRY {
+  ULONG Version;
+  ULONG NextStreamOffset;
+  ULONG Flags;
+  ULONG ExtentInformationOffset;
+  LARGE_INTEGER AllocationSize;
+  LARGE_INTEGER EndOfFile;
+  ULONG StreamInformationOffset;
+  ULONG AttributeTypeCode;
+  ULONG AttributeFlags;
+  ULONG StreamIdentifierLength;
+  WCHAR StreamIdentifier[1];
+} STREAM_LAYOUT_ENTRY, *PSTREAM_LAYOUT_ENTRY;
+
+typedef struct _FSCTL_SET_INTEGRITY_INFORMATION_BUFFER_EX {
+  UCHAR EnableIntegrity;
+  UCHAR KeepIntegrityStateUnchanged;
+  USHORT Reserved;
+  ULONG Flags;
+  UCHAR Version;
+  UCHAR Reserved2[7];
+} FSCTL_SET_INTEGRITY_INFORMATION_BUFFER_EX, *PFSCTL_SET_INTEGRITY_INFORMATION_BUFFER_EX;
+
+typedef struct _FSCTL_OFFLOAD_READ_INPUT {
+  ULONG Size;
+  ULONG Flags;
+  ULONG TokenTimeToLive;
+  ULONG Reserved;
+  ULONGLONG FileOffset;
+  ULONGLONG CopyLength;
+} FSCTL_OFFLOAD_READ_INPUT, *PFSCTL_OFFLOAD_READ_INPUT;
+
+typedef struct _FSCTL_OFFLOAD_READ_OUTPUT {
+  ULONG Size;
+  ULONG Flags;
+  ULONGLONG TransferLength;
+  UCHAR Token[512];
+} FSCTL_OFFLOAD_READ_OUTPUT, *PFSCTL_OFFLOAD_READ_OUTPUT;
+
+typedef struct _FSCTL_OFFLOAD_WRITE_INPUT {
+  ULONG Size;
+  ULONG Flags;
+  ULONGLONG FileOffset;
+  ULONGLONG CopyLength;
+  ULONGLONG TransferOffset;
+  UCHAR Token[512];
+} FSCTL_OFFLOAD_WRITE_INPUT, *PFSCTL_OFFLOAD_WRITE_INPUT;
+
+typedef struct _FSCTL_OFFLOAD_WRITE_OUTPUT {
+  ULONG Size;
+  ULONG Flags;
+  ULONGLONG LengthWritten;
+} FSCTL_OFFLOAD_WRITE_OUTPUT, *PFSCTL_OFFLOAD_WRITE_OUTPUT;
+
+typedef struct _REPAIR_COPIES_INPUT {
+  ULONG Size;
+  ULONG Flags;
+  LARGE_INTEGER FileOffset;
+  ULONG Length;
+  ULONG SourceCopy;
+  ULONG NumberOfRepairCopies;
+  ULONG RepairCopies[1];
+} REPAIR_COPIES_INPUT, *PREPAIR_COPIES_INPUT;
+
+typedef struct _REPAIR_COPIES_OUTPUT {
+  ULONG Size;
+  NTSTATUS Status;
+  LARGE_INTEGER ResumeFileOffset;
+} REPAIR_COPIES_OUTPUT, *PREPAIR_COPIES_OUTPUT;
+
+typedef struct _FILE_REGION_INFO {
+  LONGLONG FileOffset;
+  LONGLONG Length;
+  ULONG Usage;
+  ULONG Reserved;
+} FILE_REGION_INFO, *PFILE_REGION_INFO;
+
+typedef struct _FILE_REGION_OUTPUT {
+  ULONG Flags;
+  ULONG TotalRegionEntryCount;
+  ULONG RegionEntryCount;
+  ULONG Reserved;
+  FILE_REGION_INFO Region[1];
+} FILE_REGION_OUTPUT, *PFILE_REGION_OUTPUT;
+
+typedef struct _FILE_REGION_INPUT {
+  LONGLONG FileOffset;
+  LONGLONG Length;
+  ULONG DesiredUsage;
+} FILE_REGION_INPUT, *PFILE_REGION_INPUT;
+
+typedef struct _WRITE_USN_REASON_INPUT {
+  ULONG Flags;
+  ULONG UsnReasonToWrite;
+} WRITE_USN_REASON_INPUT, *PWRITE_USN_REASON_INPUT;
+
+typedef struct _FILE_STORAGE_TIER {
+  GUID Id;
+  WCHAR Name[256];
+  WCHAR Description[256];
+  ULONGLONG Flags;
+  ULONGLONG ProvisionedCapacity;
+  FILE_STORAGE_TIER_MEDIA_TYPE MediaType;
+  FILE_STORAGE_TIER_CLASS Class;
+} FILE_STORAGE_TIER, *PFILE_STORAGE_TIER;
+
+typedef struct _FSCTL_QUERY_STORAGE_CLASSES_OUTPUT {
+  ULONG Version;
+  ULONG Size;
+  ULONG Flags;
+  ULONG TotalNumberOfTiers;
+  ULONG NumberOfTiersReturned;
+  FILE_STORAGE_TIER Tiers[1];
+} FSCTL_QUERY_STORAGE_CLASSES_OUTPUT, *PFSCTL_QUERY_STORAGE_CLASSES_OUTPUT;
+
+typedef struct _FSCTL_QUERY_REGION_INFO_INPUT {
+  ULONG Version;
+  ULONG Size;
+  ULONG Flags;
+  ULONG NumberOfTierIds;
+  GUID TierIds[1];
+} FSCTL_QUERY_REGION_INFO_INPUT, *PFSCTL_QUERY_REGION_INFO_INPUT;
+
+typedef struct _FILE_STORAGE_TIER_REGION {
+  GUID TierId;
+  ULONGLONG Offset;
+  ULONGLONG Length;
+} FILE_STORAGE_TIER_REGION, *PFILE_STORAGE_TIER_REGION;
+
+typedef struct _FSCTL_QUERY_REGION_INFO_OUTPUT {
+  ULONG Version;
+  ULONG Size;
+  ULONG Flags;
+  ULONG Reserved;
+  ULONGLONG Alignment;
+  ULONG TotalNumberOfRegions;
+  ULONG NumberOfRegionsReturned;
+  FILE_STORAGE_TIER_REGION Regions[1];
+} FSCTL_QUERY_REGION_INFO_OUTPUT, *PFSCTL_QUERY_REGION_INFO_OUTPUT;
+
+typedef struct _FILE_DESIRED_STORAGE_CLASS_INFORMATION {
+  FILE_STORAGE_TIER_CLASS Class;
+  ULONG Flags;
+} FILE_DESIRED_STORAGE_CLASS_INFORMATION, *PFILE_DESIRED_STORAGE_CLASS_INFORMATION;
+
+typedef struct _DUPLICATE_EXTENTS_DATA_EX {
+  SIZE_T Size;
+  HANDLE FileHandle;
+  LARGE_INTEGER SourceFileOffset;
+  LARGE_INTEGER TargetFileOffset;
+  LARGE_INTEGER ByteCount;
+  ULONG Flags;
+} DUPLICATE_EXTENTS_DATA_EX, *PDUPLICATE_EXTENTS_DATA_EX;
+
+typedef struct _ASYNC_DUPLICATE_EXTENTS_STATUS {
+  ULONG Version;
+  DUPLICATE_EXTENTS_STATE State;
+  ULONGLONG SourceFileOffset;
+  ULONGLONG TargetFileOffset;
+  ULONGLONG ByteCount;
+  ULONGLONG BytesDuplicated;
+} ASYNC_DUPLICATE_EXTENTS_STATUS, *PASYNC_DUPLICATE_EXTENTS_STATUS;
+
+typedef struct _REFS_SMR_VOLUME_INFO_OUTPUT {
+  ULONG Version;
+  ULONG Flags;
+  LARGE_INTEGER SizeOfRandomlyWritableTier;
+  LARGE_INTEGER FreeSpaceInRandomlyWritableTier;
+  LARGE_INTEGER SizeofSMRTier;
+  LARGE_INTEGER FreeSpaceInSMRTier;
+  LARGE_INTEGER UsableFreeSpaceInSMRTier;
+  REFS_SMR_VOLUME_GC_STATE VolumeGcState;
+  NTSTATUS VolumeGcLastStatus;
+  ULONG CurrentGcBandFillPercentage;
+  ULONGLONG Unused[6];
+} REFS_SMR_VOLUME_INFO_OUTPUT, *PREFS_SMR_VOLUME_INFO_OUTPUT;
+
+typedef struct _REFS_SMR_VOLUME_GC_PARAMETERS {
+  ULONG Version;
+  ULONG Flags;
+  REFS_SMR_VOLUME_GC_ACTION Action;
+  REFS_SMR_VOLUME_GC_METHOD Method;
+  ULONG IoGranularity;
+  ULONG CompressionFormat;
+  ULONGLONG Unused[8];
+} REFS_SMR_VOLUME_GC_PARAMETERS, *PREFS_SMR_VOLUME_GC_PARAMETERS;
+
+typedef struct _STREAMS_QUERY_PARAMETERS_OUTPUT_BUFFER {
+  ULONG OptimalWriteSize;
+  ULONG StreamGranularitySize;
+  ULONG StreamIdMin;
+  ULONG StreamIdMax;
+} STREAMS_QUERY_PARAMETERS_OUTPUT_BUFFER, *PSTREAMS_QUERY_PARAMETERS_OUTPUT_BUFFER;
+
+typedef struct _STREAMS_ASSOCIATE_ID_INPUT_BUFFER {
+  ULONG Flags;
+  ULONG StreamId;
+} STREAMS_ASSOCIATE_ID_INPUT_BUFFER, *PSTREAMS_ASSOCIATE_ID_INPUT_BUFFER;
+
+typedef struct _STREAMS_QUERY_ID_OUTPUT_BUFFER {
+  ULONG StreamId;
+} STREAMS_QUERY_ID_OUTPUT_BUFFER, *PSTREAMS_QUERY_ID_OUTPUT_BUFFER;
+
+typedef struct _QUERY_BAD_RANGES_INPUT_RANGE {
+  ULONGLONG StartOffset;
+  ULONGLONG LengthInBytes;
+} QUERY_BAD_RANGES_INPUT_RANGE, *PQUERY_BAD_RANGES_INPUT_RANGE;
+
+typedef struct _QUERY_BAD_RANGES_INPUT {
+  ULONG Flags;
+  ULONG NumRanges;
+  QUERY_BAD_RANGES_INPUT_RANGE Ranges[1];
+} QUERY_BAD_RANGES_INPUT, *PQUERY_BAD_RANGES_INPUT;
+
+typedef struct _QUERY_BAD_RANGES_OUTPUT_RANGE {
+  ULONG Flags;
+  ULONG Reserved;
+  ULONGLONG StartOffset;
+  ULONGLONG LengthInBytes;
+} QUERY_BAD_RANGES_OUTPUT_RANGE, *PQUERY_BAD_RANGES_OUTPUT_RANGE;
+
+typedef struct _QUERY_BAD_RANGES_OUTPUT {
+  ULONG Flags;
+  ULONG NumBadRanges;
+  ULONGLONG NextOffsetToLookUp;
+  QUERY_BAD_RANGES_OUTPUT_RANGE BadRanges[1];
+} QUERY_BAD_RANGES_OUTPUT, *PQUERY_BAD_RANGES_OUTPUT;
+
+typedef struct _SET_DAX_ALLOC_ALIGNMENT_HINT_INPUT {
+  ULONG Flags;
+  ULONG AlignmentShift;
+  ULONGLONG FileOffsetToAlign;
+  ULONG FallbackAlignmentShift;
+} SET_DAX_ALLOC_ALIGNMENT_HINT_INPUT, *PSET_DAX_ALLOC_ALIGNMENT_HINT_INPUT;
+
+typedef struct _VIRTUAL_STORAGE_SET_BEHAVIOR_INPUT {
+  ULONG Size;
+  VIRTUAL_STORAGE_BEHAVIOR_CODE BehaviorCode;
+} VIRTUAL_STORAGE_SET_BEHAVIOR_INPUT, *PVIRTUAL_STORAGE_SET_BEHAVIOR_INPUT;
+
+typedef struct _ENCRYPTION_KEY_CTRL_INPUT {
+  ULONG HeaderSize;
+  ULONG StructureSize;
+  USHORT KeyOffset;
+  USHORT KeySize;
+  ULONG DplLock;
+  ULONGLONG DplUserId;
+  ULONGLONG DplCredentialId;
+} ENCRYPTION_KEY_CTRL_INPUT, *PENCRYPTION_KEY_CTRL_INPUT;
+
+typedef struct _WOF_EXTERNAL_INFO {
+  ULONG Version;
+  ULONG Provider;
+} WOF_EXTERNAL_INFO, *PWOF_EXTERNAL_INFO;
+
+typedef struct _WOF_VERSION_INFO {
+  ULONG WofVersion;
+} WOF_VERSION_INFO, *PWOF_VERSION_INFO;
+
+typedef struct _WIM_PROVIDER_EXTERNAL_INFO {
+  ULONG Version;
+  ULONG Flags;
+  LARGE_INTEGER DataSourceId;
+  UCHAR ResourceHash[20];
+} WIM_PROVIDER_EXTERNAL_INFO, *PWIM_PROVIDER_EXTERNAL_INFO;
+
+typedef struct _WIM_PROVIDER_ADD_OVERLAY_INPUT {
+  ULONG WimType;
+  ULONG WimIndex;
+  ULONG WimFileNameOffset;
+  ULONG WimFileNameLength;
+} WIM_PROVIDER_ADD_OVERLAY_INPUT, *PWIM_PROVIDER_ADD_OVERLAY_INPUT;
+
+typedef struct _WIM_PROVIDER_UPDATE_OVERLAY_INPUT {
+  LARGE_INTEGER DataSourceId;
+  ULONG WimFileNameOffset;
+  ULONG WimFileNameLength;
+} WIM_PROVIDER_UPDATE_OVERLAY_INPUT, *PWIM_PROVIDER_UPDATE_OVERLAY_INPUT;
+
+typedef struct _WIM_PROVIDER_REMOVE_OVERLAY_INPUT {
+  LARGE_INTEGER DataSourceId;
+} WIM_PROVIDER_REMOVE_OVERLAY_INPUT, *PWIM_PROVIDER_REMOVE_OVERLAY_INPUT;
+
+typedef struct _WIM_PROVIDER_SUSPEND_OVERLAY_INPUT {
+  LARGE_INTEGER DataSourceId;
+} WIM_PROVIDER_SUSPEND_OVERLAY_INPUT, *PWIM_PROVIDER_SUSPEND_OVERLAY_INPUT;
+
+typedef struct _WIM_PROVIDER_OVERLAY_ENTRY {
+  ULONG NextEntryOffset;
+  LARGE_INTEGER DataSourceId;
+  GUID WimGuid;
+  ULONG WimFileNameOffset;
+  ULONG WimType;
+  ULONG WimIndex;
+  ULONG Flags;
+} WIM_PROVIDER_OVERLAY_ENTRY, *PWIM_PROVIDER_OVERLAY_ENTRY;
+
+typedef struct _FILE_PROVIDER_EXTERNAL_INFO_V0 {
+  ULONG Version;
+  ULONG Algorithm;
+} FILE_PROVIDER_EXTERNAL_INFO_V0, *PFILE_PROVIDER_EXTERNAL_INFO_V0;
+
+typedef struct _FILE_PROVIDER_EXTERNAL_INFO_V1 {
+  ULONG Version;
+  ULONG Algorithm;
+  ULONG Flags;
+} FILE_PROVIDER_EXTERNAL_INFO_V1, *PFILE_PROVIDER_EXTERNAL_INFO_V1;
+
+typedef struct _CONTAINER_VOLUME_STATE {
+  ULONG Flags;
+} CONTAINER_VOLUME_STATE, *PCONTAINER_VOLUME_STATE;
+
+typedef struct _CONTAINER_ROOT_INFO_INPUT {
+  ULONG Flags;
+} CONTAINER_ROOT_INFO_INPUT, *PCONTAINER_ROOT_INFO_INPUT;
+
+typedef struct _CONTAINER_ROOT_INFO_OUTPUT {
+  USHORT ContainerRootIdLength;
+  UCHAR ContainerRootId[1];
+} CONTAINER_ROOT_INFO_OUTPUT, *PCONTAINER_ROOT_INFO_OUTPUT;
+
+typedef struct _VIRTUALIZATION_INSTANCE_INFO_INPUT {
+  ULONG NumberOfWorkerThreads;
+  ULONG Flags;
+} VIRTUALIZATION_INSTANCE_INFO_INPUT, *PVIRTUALIZATION_INSTANCE_INFO_INPUT;
+
+typedef struct _VIRTUALIZATION_INSTANCE_INFO_INPUT_EX {
+  USHORT HeaderSize;
+  ULONG Flags;
+  ULONG NotificationInfoSize;
+  USHORT NotificationInfoOffset;
+  USHORT ProviderMajorVersion;
+} VIRTUALIZATION_INSTANCE_INFO_INPUT_EX, *PVIRTUALIZATION_INSTANCE_INFO_INPUT_EX;
+
+typedef struct _VIRTUALIZATION_INSTANCE_INFO_OUTPUT {
+  GUID VirtualizationInstanceID;
+} VIRTUALIZATION_INSTANCE_INFO_OUTPUT, *PVIRTUALIZATION_INSTANCE_INFO_OUTPUT;
+
+typedef struct _GET_FILTER_FILE_IDENTIFIER_INPUT {
+  USHORT AltitudeLength;
+  WCHAR Altitude[1];
+} GET_FILTER_FILE_IDENTIFIER_INPUT, *PGET_FILTER_FILE_IDENTIFIER_INPUT;
+
+typedef struct _GET_FILTER_FILE_IDENTIFIER_OUTPUT {
+  USHORT FilterFileIdentifierLength;
+  UCHAR FilterFileIdentifier[1];
+} GET_FILTER_FILE_IDENTIFIER_OUTPUT, *PGET_FILTER_FILE_IDENTIFIER_OUTPUT;
+
+typedef struct _FS_BPIO_INPUT {
+  FS_BPIO_OPERATIONS Operation;
+  FS_BPIO_INFLAGS InFlags;
+  ULONGLONG Reserved1;
+  ULONGLONG Reserved2;
+} FS_BPIO_INPUT, *PFS_BPIO_INPUT;
+
+typedef struct _FS_BPIO_RESULTS {
+  NTSTATUS OpStatus;
+  USHORT FailingDriverNameLen;
+  WCHAR FailingDriverName[32];
+  USHORT FailureReasonLen;
+  WCHAR FailureReason[128];
+} FS_BPIO_RESULTS, *PFS_BPIO_RESULTS;
+
+typedef struct _FS_BPIO_INFO {
+  ULONG ActiveBypassIoCount;
+  USHORT StorageDriverNameLen;
+  WCHAR StorageDriverName[32];
+} FS_BPIO_INFO, *PFS_BPIO_INFO;
+
+typedef struct _SCRUB_DATA_INPUT {
+  ULONG Size;
+  ULONG Flags;
+  ULONG MaximumIos;
+  ULONG ObjectId[4];
+  ULONGLONG StartingByteOffset;
+  ULONGLONG ByteCount;
+  ULONG Reserved[36];
+  UCHAR ResumeContext[1040];
+} SCRUB_DATA_INPUT, *PSCRUB_DATA_INPUT;
+
+typedef struct _SCRUB_PARITY_EXTENT {
+  LONGLONG Offset;
+  ULONGLONG Length;
+} SCRUB_PARITY_EXTENT, *PSCRUB_PARITY_EXTENT;
+
+typedef struct _SCRUB_PARITY_EXTENT_DATA {
+  USHORT Size;
+  USHORT Flags;
+  USHORT NumberOfParityExtents;
+  USHORT MaximumNumberOfParityExtents;
+  SCRUB_PARITY_EXTENT ParityExtents[1];
+} SCRUB_PARITY_EXTENT_DATA, *PSCRUB_PARITY_EXTENT_DATA;
+
+typedef struct _SCRUB_DATA_OUTPUT {
+  ULONG Size;
+  ULONG Flags;
+  ULONG Status;
+  ULONGLONG ErrorFileOffset;
+  ULONGLONG ErrorLength;
+  ULONGLONG NumberOfBytesRepaired;
+  ULONGLONG NumberOfBytesFailed;
+  ULONGLONG InternalFileReference;
+  USHORT ResumeContextLength;
+  USHORT ParityExtentDataOffset;
+  ULONGLONG NextStartingByteOffset;
+  ULONGLONG ValidDataLength;
+  ULONG Reserved[4];
+  ULONGLONG NumberOfMetadataBytesProcessed;
+  ULONGLONG NumberOfDataBytesProcessed;
+  ULONGLONG TotalNumberOfMetadataBytesInUse;
+  ULONGLONG TotalNumberOfDataBytesInUse;
+  ULONGLONG DataBytesSkippedDueToNoAllocation;
+  ULONGLONG DataBytesSkippedDueToInvalidRun;
+  ULONGLONG DataBytesSkippedDueToIntegrityStream;
+  ULONGLONG DataBytesSkippedDueToRegionBeingClean;
+  ULONGLONG DataBytesSkippedDueToLockConflict;
+  ULONGLONG DataBytesSkippedDueToNoScrubDataFlag;
+  ULONGLONG DataBytesSkippedDueToNoScrubNonIntegrityStreamFlag;
+  ULONGLONG DataBytesScrubbed;
+  UCHAR ResumeContext[1040];
+} SCRUB_DATA_OUTPUT, *PSCRUB_DATA_OUTPUT;
+
+typedef struct _SHARED_VIRTUAL_DISK_SUPPORT {
+  SharedVirtualDiskSupportType SharedVirtualDiskSupport;
+  SharedVirtualDiskHandleState HandleState;
+} SHARED_VIRTUAL_DISK_SUPPORT, *PSHARED_VIRTUAL_DISK_SUPPORT;
+
+typedef struct _REARRANGE_FILE_DATA {
+  ULONGLONG SourceStartingOffset;
+  ULONGLONG TargetOffset;
+  HANDLE SourceFileHandle;
+  ULONG Length;
+  ULONG Flags;
+} REARRANGE_FILE_DATA, *PREARRANGE_FILE_DATA;
+
+typedef struct _SHUFFLE_FILE_DATA {
+  LONGLONG StartingOffset;
+  LONGLONG Length;
+  ULONG Flags;
+} SHUFFLE_FILE_DATA, *PSHUFFLE_FILE_DATA;
+
+typedef struct _FILE_PIPE_CLIENT_PROCESS_BUFFER_V2 {
+  ULONGLONG ClientSession;
+  PVOID ClientProcess;
+} FILE_PIPE_CLIENT_PROCESS_BUFFER_V2, *PFILE_PIPE_CLIENT_PROCESS_BUFFER_V2;
+
+typedef struct _FILE_PIPE_SILO_ARRIVAL_INPUT {
+  HANDLE JobHandle;
+} FILE_PIPE_SILO_ARRIVAL_INPUT, *PFILE_PIPE_SILO_ARRIVAL_INPUT;
+
+typedef struct _FILE_PIPE_CREATE_SYMLINK_INPUT {
+  USHORT NameOffset;
+  USHORT NameLength;
+  USHORT SubstituteNameOffset;
+  USHORT SubstituteNameLength;
+  ULONG Flags;
+} FILE_PIPE_CREATE_SYMLINK_INPUT, *PFILE_PIPE_CREATE_SYMLINK_INPUT;
+
+typedef struct _FILE_PIPE_DELETE_SYMLINK_INPUT {
+  USHORT NameOffset;
+  USHORT NameLength;
+} FILE_PIPE_DELETE_SYMLINK_INPUT, *PFILE_PIPE_DELETE_SYMLINK_INPUT;
+
+typedef struct _VCN_RANGE_INPUT_BUFFER {
+  LARGE_INTEGER StartingVcn;
+  LARGE_INTEGER ClusterCount;
+} VCN_RANGE_INPUT_BUFFER, *PVCN_RANGE_INPUT_BUFFER;
+
+typedef struct _EXTENT_READ_CACHE_INFO_BUFFER {
+  LARGE_INTEGER AllocatedCache;
+  LARGE_INTEGER PopulatedCache;
+  LARGE_INTEGER InErrorCache;
+} EXTENT_READ_CACHE_INFO_BUFFER, *PEXTENT_READ_CACHE_INFO_BUFFER;
+
+typedef struct _REFS_VOLUME_COUNTER_INFO_INPUT_BUFFER {
+  BOOLEAN ResetCounters;
+} REFS_VOLUME_COUNTER_INFO_INPUT_BUFFER, *PREFS_VOLUME_COUNTER_INFO_INPUT_BUFFER;
+
+typedef struct _VOLUME_REFS_INFO_BUFFER {
+  LARGE_INTEGER CacheSizeInBytes;
+  LARGE_INTEGER AllocatedCacheInBytes;
+  LARGE_INTEGER PopulatedCacheInBytes;
+  LARGE_INTEGER InErrorCacheInBytes;
+  LARGE_INTEGER MemoryUsedForCacheMetadata;
+  ULONG CacheLineSize;
+  LONG CacheTransactionsOutstanding;
+  LONG CacheLinesFree;
+  LONG CacheLinesInError;
+  LARGE_INTEGER CacheHitsInBytes;
+  LARGE_INTEGER CacheMissesInBytes;
+  LARGE_INTEGER CachePopulationUpdatesInBytes;
+  LARGE_INTEGER CacheWriteThroughUpdatesInBytes;
+  LARGE_INTEGER CacheInvalidationsInBytes;
+  LARGE_INTEGER CacheOverReadsInBytes;
+  LARGE_INTEGER MetadataWrittenBytes;
+  LONG CacheHitCounter;
+  LONG CacheMissCounter;
+  LONG CacheLineAllocationCounter;
+  LONG CacheInvalidationsCounter;
+  LONG CachePopulationUpdatesCounter;
+  LONG CacheWriteThroughUpdatesCounter;
+  LONG MaxCacheTransactionsOutstanding;
+  LONGLONG DataWritesReallocationCount;
+  LONGLONG DataInPlaceWriteCount;
+  LONGLONG MetadataAllocationsFastTierCount;
+  LONGLONG MetadataAllocationsSlowTierCount;
+  LONGLONG DataAllocationsFastTierCount;
+  LONGLONG DataAllocationsSlowTierCount;
+  LONGLONG DestagesSlowTierToFastTier;
+  LONGLONG DestagesFastTierToSlowTier;
+  LONG SlowTierDataFillRatio;
+  LONG FastTierDataFillRatio;
+  LONG SlowTierMetadataFillRatio;
+  LONG FastTierMetadataFillRatio;
+  LONGLONG SlowToFastDestageReadLatency;
+  LONG SlowToFastDestageReadLatencyBase;
+  LONGLONG SlowToFastDestageWriteLatency;
+  LONG SlowToFastDestageWriteLatencyBase;
+  LONGLONG FastToSlowDestageReadLatency;
+  LONG FastToSlowDestageReadLatencyBase;
+  LONGLONG FastToSlowDestageWriteLatency;
+  LONG FastToSlowDestageWriteLatencyBase;
+  LONGLONG SlowTierContainerFillRatio;
+  LONG SlowTierContainerFillRatioBase;
+  LONGLONG FastTierContainerFillRatio;
+  LONG FastTierContainerFillRatioBase;
+  LONG Unused1;
+  LONG Unused2;
+  LONG Unused3;
+  LONG Unused4;
+  LONGLONG TreeUpdateCount;
+  LONGLONG CheckpointCount;
+  LONGLONG LogWriteCount;
+  LONG LogFillRatio;
+  LONG ReadCacheInvalidationsForOverwrite;
+  LONG ReadCacheInvalidationsForReuse;
+  LONG ReadCacheInvalidationsGeneral;
+  LONG ReadCacheChecksOnMount;
+  LONG ReadCacheIssuesOnMount;
+  LONGLONG TrimLatency;
+  LONG TrimLatencyBase;
+  LONGLONG DataCompactionCount;
+  LONGLONG CompactionReadLatency;
+  LONG CompactionReadLatencyBase;
+  LONGLONG CompactionWriteLatency;
+  LONG CompactionWriteLatencyBase;
+  LARGE_INTEGER DataInPlaceWriteClusterCount;
+  LONG CompactionFailedDueToIneligibleContainer;
+  LONG CompactionFailedDueToMaxFragmentation;
+  LONGLONG CompactedContainerFillRatio;
+  LONG CompactedContainerFillRatioBase;
+  LONG ContainerMoveRetryCount;
+  LONG ContainerMoveFailedDueToIneligibleContainer;
+  LONG CompactionFailureCount;
+  LONG ContainerMoveFailureCount;
+  LARGE_INTEGER NumberOfDirtyMetadataPages;
+  LONG NumberOfDirtyTableListEntries;
+  LONG NumberOfDeleteQueueEntries;
+  LONG MAAFilteredViewSize;
+  LONG MAAFilteredViewInsertions;
+  LONG MAAFilteredViewDeletions;
+  LONG MAAFilteredViewCollisions;
+  LONG MAAFilteredViewPurges;
+  LONGLONG MAARegionsVisitedPerAllocationSum;
+  LONG MAARegionsVisitedPerAllocationBase;
+  LONG MAAMaxRegionsVisitedPerAllocation;
+  LONGLONG TreeUpdateLatencyExclusive;
+  LONGLONG TreeUpdateLatencyTotal;
+  LONG TreeUpdateLatencyBase;
+  LONGLONG CheckpointLatencyTreeUpdateExclusive;
+  LONGLONG CheckpointLatencyTreeUpdateTotal;
+  LONG CheckpointLatencyTreeUpdateBase;
+  LONGLONG CheckpointLatencyTotal;
+  LONG CheckpointLatencyTotalBase;
+} VOLUME_REFS_INFO_BUFFER, *PVOLUME_REFS_INFO_BUFFER;
+
+typedef struct _QUERY_DIRECT_ACCESS_EXTENTS {
+  LONGLONG FileOffset;
+  LONGLONG Length;
+  ULONG Flags;
+  ULONG Reserved;
+} QUERY_DIRECT_ACCESS_EXTENTS, *PQUERY_DIRECT_ACCESS_EXTENTS;
+
+typedef struct _FSCTL_GHOST_FILE_EXTENTS_INPUT_BUFFER {
+  LARGE_INTEGER FileOffset;
+  LARGE_INTEGER ByteCount;
+  GUID RecallOwnerGuid;
+  ULONG RecallMetadataBufferSize;
+  UCHAR RecallMetadataBuffer[1];
+} FSCTL_GHOST_FILE_EXTENTS_INPUT_BUFFER, *PFSCTL_GHOST_FILE_EXTENTS_INPUT_BUFFER;
+
+typedef struct _FSCTL_QUERY_GHOSTED_FILE_EXTENTS_INPUT_RANGE {
+  LARGE_INTEGER FileOffset;
+  LARGE_INTEGER ByteCount;
+} FSCTL_QUERY_GHOSTED_FILE_EXTENTS_INPUT_RANGE, *PFSCTL_QUERY_GHOSTED_FILE_EXTENTS_INPUT_RANGE;
+
+typedef struct _GHOSTED_FILE_EXTENT {
+  LARGE_INTEGER FileOffset;
+  LARGE_INTEGER ByteCount;
+  GUID RecallOwnerGuid;
+  ULONG NextEntryOffset;
+  ULONG RecallMetadataBufferSize;
+  UCHAR RecallMetadataBuffer[1];
+} GHOSTED_FILE_EXTENT, *PGHOSTED_FILE_EXTENT;
+
+typedef struct _FSCTL_QUERY_GHOSTED_FILE_EXTENTS_OUTPUT {
+  ULONG ExtentCount;
+  ULONG TotalExtentCount;
+  UCHAR Extents[1];
+} FSCTL_QUERY_GHOSTED_FILE_EXTENTS_OUTPUT, *PFSCTL_QUERY_GHOSTED_FILE_EXTENTS_OUTPUT;
+
+typedef struct _FSCTL_UNMAP_SPACE_INPUT_BUFFER {
+  LARGE_INTEGER BytesToUnmap;
+} FSCTL_UNMAP_SPACE_INPUT_BUFFER, *PFSCTL_UNMAP_SPACE_INPUT_BUFFER;
+
+typedef struct _FSCTL_UNMAP_SPACE_OUTPUT {
+  LARGE_INTEGER BytesUnmapped;
+} FSCTL_UNMAP_SPACE_OUTPUT, *PFSCTL_UNMAP_SPACE_OUTPUT;
+
+typedef struct _FSCTL_QUERY_VOLUME_NUMA_INFO_OUTPUT {
+  ULONG NumaNode;
+} FSCTL_QUERY_VOLUME_NUMA_INFO_OUTPUT, *PFSCTL_QUERY_VOLUME_NUMA_INFO_OUTPUT;
+
+typedef struct _REFS_DEALLOCATE_RANGES_RANGE {
+  ULONGLONG StartOfRange;
+  ULONGLONG CountOfRange;
+} REFS_DEALLOCATE_RANGES_RANGE, *PREFS_DEALLOCATE_RANGES_RANGE;
+
+typedef struct _REFS_DEALLOCATE_RANGES_INPUT_BUFFER {
+  ULONG RangeCount;
+  REFS_DEALLOCATE_RANGES_RANGE Ranges[1];
+} REFS_DEALLOCATE_RANGES_INPUT_BUFFER, *PREFS_DEALLOCATE_RANGES_INPUT_BUFFER;
+
+typedef struct _REFS_DEALLOCATE_RANGES_INPUT_BUFFER_EX {
+  ULONG RangeCount;
+  REFS_DEALLOCATE_RANGES_ALLOCATOR Allocator;
+  LONGLONG StreamReserveUpdateCount;
+  ULONG OffsetToRanges;
+  ULONG OffsetToLeakCounts;
+  ULONGLONG Reserved[2];
+} REFS_DEALLOCATE_RANGES_INPUT_BUFFER_EX, *PREFS_DEALLOCATE_RANGES_INPUT_BUFFER_EX;
+
+typedef struct _REFS_REMOVE_HARDLINK_BACKPOINTER {
+  ULONGLONG ParentDirectory;
+  ULONGLONG Reserved;
+  WCHAR FileName[1];
+} REFS_REMOVE_HARDLINK_BACKPOINTER, *PREFS_REMOVE_HARDLINK_BACKPOINTER;
+
+typedef struct _REFS_STREAM_EXTENT {
+  LONGLONG Vcn;
+  LONGLONG Lcn;
+  LONGLONG Length;
+  REFS_STREAM_EXTENT_PROPERTIES Properties;
+} REFS_STREAM_EXTENT, *PREFS_STREAM_EXTENT;
+
+typedef struct _REFS_STREAM_SNAPSHOT_MANAGEMENT_INPUT_BUFFER {
+  REFS_STREAM_SNAPSHOT_OPERATION Operation;
+  USHORT SnapshotNameLength;
+  USHORT OperationInputBufferLength;
+  ULONGLONG Reserved[2];
+  USHORT NameAndInputBuffer[1];
+} REFS_STREAM_SNAPSHOT_MANAGEMENT_INPUT_BUFFER, *PREFS_STREAM_SNAPSHOT_MANAGEMENT_INPUT_BUFFER;
+
+typedef struct _REFS_STREAM_SNAPSHOT_LIST_OUTPUT_BUFFER_ENTRY {
+  ULONG NextEntryOffset;
+  USHORT SnapshotNameLength;
+  ULONGLONG SnapshotCreationTime;
+  ULONGLONG StreamSize;
+  ULONGLONG StreamAllocationSize;
+  ULONGLONG Reserved[2];
+  WCHAR SnapshotName[1];
+} REFS_STREAM_SNAPSHOT_LIST_OUTPUT_BUFFER_ENTRY, *PREFS_STREAM_SNAPSHOT_LIST_OUTPUT_BUFFER_ENTRY;
+
+typedef struct _REFS_STREAM_SNAPSHOT_LIST_OUTPUT_BUFFER {
+  ULONG EntryCount;
+  ULONG BufferSizeRequiredForQuery;
+  ULONG Reserved[2];
+  REFS_STREAM_SNAPSHOT_LIST_OUTPUT_BUFFER_ENTRY Entries[1];
+} REFS_STREAM_SNAPSHOT_LIST_OUTPUT_BUFFER, *PREFS_STREAM_SNAPSHOT_LIST_OUTPUT_BUFFER;
+
+typedef struct _REFS_STREAM_SNAPSHOT_QUERY_DELTAS_INPUT_BUFFER {
+  LONGLONG StartingVcn;
+  ULONG Flags;
+  ULONG Reserved;
+} REFS_STREAM_SNAPSHOT_QUERY_DELTAS_INPUT_BUFFER, *PREFS_STREAM_SNAPSHOT_QUERY_DELTAS_INPUT_BUFFER;
+
+typedef struct _REFS_STREAM_SNAPSHOT_QUERY_DELTAS_OUTPUT_BUFFER {
+  ULONG ExtentCount;
+  ULONG Reserved[2];
+  REFS_STREAM_EXTENT Extents[1];
+} REFS_STREAM_SNAPSHOT_QUERY_DELTAS_OUTPUT_BUFFER, *PREFS_STREAM_SNAPSHOT_QUERY_DELTAS_OUTPUT_BUFFER;
+
+typedef struct _DUPLICATE_CLUSTER_DATA {
+  LONGLONG SourceLcn;
+  LONGLONG TargetLcn;
+  LARGE_INTEGER TargetFileOffset;
+  ULONG DuplicationLimit;
+  ULONG Reserved;
+} DUPLICATE_CLUSTER_DATA, *PDUPLICATE_CLUSTER_DATA;
+
+typedef struct _LCN_WEAK_REFERENCE_BUFFER {
+  LONGLONG Lcn;
+  LONGLONG LengthInClusters;
+  ULONG ReferenceCount;
+  LCN_WEAK_REFERENCE_STATE State;
+} LCN_WEAK_REFERENCE_BUFFER, *PLCN_WEAK_REFERENCE_BUFFER;
+
+typedef struct _LCN_WEAK_REFERENCE_CREATE_INPUT_BUFFER {
+  LONGLONG Offset;
+  LONGLONG Length;
+  ULONG Flags;
+  ULONG Reserved;
+} LCN_WEAK_REFERENCE_CREATE_INPUT_BUFFER, *PLCN_WEAK_REFERENCE_CREATE_INPUT_BUFFER;
+
+typedef struct _LCN_WEAK_REFERENCE_VCN_MAPPING {
+  LONGLONG Vcn;
+  LONGLONG Lcn;
+  LONGLONG CountOfRange;
+} LCN_WEAK_REFERENCE_VCN_MAPPING, *PLCN_WEAK_REFERENCE_VCN_MAPPING;
+
+typedef struct _LCN_WEAK_REFERENCE_CREATE_OUTPUT_BUFFER {
+  ULONG MappingCount;
+  LCN_WEAK_REFERENCE_VCN_MAPPING VcnLcnMappings[1];
+} LCN_WEAK_REFERENCE_CREATE_OUTPUT_BUFFER, *PLCN_WEAK_REFERENCE_CREATE_OUTPUT_BUFFER;
+
+typedef struct _LCN_WEAK_REFERENCE_RANGE {
+  LONGLONG StartOfRange;
+  LONGLONG CountOfRange;
+} LCN_WEAK_REFERENCE_RANGE, *PLCN_WEAK_REFERENCE_RANGE;
+
+typedef struct _LCN_WEAK_REFERENCE_CLEAR_INPUT_BUFFER {
+  ULONG RangeCount;
+  LCN_WEAK_REFERENCE_RANGE Ranges[1];
+} LCN_WEAK_REFERENCE_CLEAR_INPUT_BUFFER, *PLCN_WEAK_REFERENCE_CLEAR_INPUT_BUFFER;
+
+typedef struct _REFS_VOLUME_DEDUP_INFO_INPUT_BUFFER {
+  ULONG Version;
+  BOOLEAN SetDedupState;
+  BOOLEAN Enable;
+  BOOLEAN SetWeakRefState;
+  BOOLEAN EnableWeakRef;
+  BOOLEAN SetDirtyRangeTrackingState;
+  BOOLEAN EnableDirtyRangeTracking;
+  BOOLEAN SetWeakRefInconsistentState;
+  BOOLEAN SetWeakRefInconsistent;
+} REFS_VOLUME_DEDUP_INFO_INPUT_BUFFER, *PREFS_VOLUME_DEDUP_INFO_INPUT_BUFFER;
+
+typedef struct _REFS_VOLUME_DEDUP_INFO_OUTPUT_BUFFER {
+  ULONG Version;
+  BOOLEAN Enabled;
+  BOOLEAN EnabledWeakRef;
+  BOOLEAN EnabledDirtyRangeTracking;
+  BOOLEAN WeakRefInconsistent;
+  BOOLEAN IsClustered;
+  ULONG VolumeIdHash;
+  GUID VolumeGuid;
+  GUID VolumeUniqueGuid;
+} REFS_VOLUME_DEDUP_INFO_OUTPUT_BUFFER, *PREFS_VOLUME_DEDUP_INFO_OUTPUT_BUFFER;
+
+typedef struct _REFS_QUERY_VOLUME_TOTAL_SHARED_LCNS_OUTPUT_BUFFER {
+  ULONG Version;
+  ULONGLONG TotalSharedLcns;
+} REFS_QUERY_VOLUME_TOTAL_SHARED_LCNS_OUTPUT_BUFFER, *PREFS_QUERY_VOLUME_TOTAL_SHARED_LCNS_OUTPUT_BUFFER;
+
+typedef struct _SET_CACHED_RUNS_STATE_INPUT_BUFFER {
+  BOOLEAN Enable;
+} SET_CACHED_RUNS_STATE_INPUT_BUFFER, *PSET_CACHED_RUNS_STATE_INPUT_BUFFER;
+
+typedef struct _REFS_SET_VOLUME_COMPRESSION_INFO_INPUT_BUFFER {
+  ULONG Version;
+  REFS_COMPRESSION_FORMATS CompressionFormat;
+  SHORT CompressionLevel;
+  ULONG CompressionChunkSizeBytes;
+  ULONG Flags;
+  ULONG CompressionTuning;
+  ULONG RecompressionTuning;
+  ULONG DecompressionTuning;
+  ULONG Reserved[6];
+} REFS_SET_VOLUME_COMPRESSION_INFO_INPUT_BUFFER, *PREFS_SET_VOLUME_COMPRESSION_INFO_INPUT_BUFFER;
+
+typedef struct _REFS_QUERY_VOLUME_COMPRESSION_INFO_OUTPUT_BUFFER {
+  ULONG Version;
+  REFS_COMPRESSION_FORMATS DefaultCompressionFormat;
+  SHORT DefaultCompressionLevel;
+  ULONG DefaultCompressionChunkSizeBytes;
+  ULONG VolumeClusterSizeBytes;
+  ULONGLONG TotalVolumeClusters;
+  ULONGLONG TotalAllocatedClusters;
+  ULONGLONG TotalCompressibleClustersAllocated;
+  ULONGLONG TotalCompressibleClustersInUse;
+  ULONGLONG TotalCompressedClusters;
+  ULONG Flags;
+  ULONG CompressionTuning;
+  ULONG RecompressionTuning;
+  ULONG DecompressionTuning;
+  NTSTATUS LastCompressionStatus;
+  ULONG Reserved[8];
+} REFS_QUERY_VOLUME_COMPRESSION_INFO_OUTPUT_BUFFER, *PREFS_QUERY_VOLUME_COMPRESSION_INFO_OUTPUT_BUFFER;
+
+typedef struct _REFS_SET_VOLUME_IO_METRICS_INFO_INPUT_BUFFER {
+  ULONG Version;
+  ULONG GlobalSecondsToTrack;
+  ULONG MetricsPeriodicitySeconds;
+  ULONG MetricsGenerationsPerContainer;
+  ULONG Reserved[8];
+} REFS_SET_VOLUME_IO_METRICS_INFO_INPUT_BUFFER, *PREFS_SET_VOLUME_IO_METRICS_INFO_INPUT_BUFFER;
+
+typedef struct _REFS_QUERY_VOLUME_IO_METRICS_METRICS_DATA {
+  ULONGLONG PlaceHolder;
+} REFS_QUERY_VOLUME_IO_METRICS_METRICS_DATA, *PREFS_QUERY_VOLUME_IO_METRICS_METRICS_DATA;
+
+typedef struct _REFS_SET_ROLLBACK_PROTECTION_INFO_INPUT_BUFFER {
+  ULONG Version;
+  BOOLEAN FailMountOnMismatch;
+  ULONG CustomPayloadLength;
+  ULONG CustomPayloadOffset;
+  BOOLEAN EnableRollbackProtection;
+} REFS_SET_ROLLBACK_PROTECTION_INFO_INPUT_BUFFER, *PREFS_SET_ROLLBACK_PROTECTION_INFO_INPUT_BUFFER;
+
+typedef struct _REFS_QUERY_ROLLBACK_PROTECTION_INFO_OUTPUT_BUFFER {
+  ULONG Version;
+  GUID VolumeGuid;
+  GUID RollbackProtectionGuid;
+  BOOLEAN FailMountOnMismatch;
+  ULONGLONG FrozenVirtualClock;
+  ULONGLONG CurrentVirtualClock;
+  USHORT ChecksumType;
+  ULONG ChecksumLength;
+  ULONG ChecksumOffset;
+  ULONG CustomPayloadLength;
+  ULONG CustomPayloadOffset;
+} REFS_QUERY_ROLLBACK_PROTECTION_INFO_OUTPUT_BUFFER, *PREFS_QUERY_ROLLBACK_PROTECTION_INFO_OUTPUT_BUFFER;
+
+typedef struct _FILE_STORAGE_RESERVE_ID_INFORMATION {
+  STORAGE_RESERVE_ID StorageReserveId;
+} FILE_STORAGE_RESERVE_ID_INFORMATION, *PFILE_STORAGE_RESERVE_ID_INFORMATION;
+
+typedef struct _NETWORK_APP_INSTANCE_EA {
+  GUID AppInstanceID;
+  ULONG CsvFlags;
+} NETWORK_APP_INSTANCE_EA, *PNETWORK_APP_INSTANCE_EA;
+
+typedef struct _SMB_SHARE_FLUSH_AND_PURGE_INPUT {
+  USHORT Version;
+} SMB_SHARE_FLUSH_AND_PURGE_INPUT, *PSMB_SHARE_FLUSH_AND_PURGE_INPUT;
+
+typedef struct _SMB_SHARE_FLUSH_AND_PURGE_OUTPUT {
+  ULONG cEntriesPurged;
+} SMB_SHARE_FLUSH_AND_PURGE_OUTPUT, *PSMB_SHARE_FLUSH_AND_PURGE_OUTPUT;
+
+typedef struct _SOV_RANGE_CHECK_DATA {
+  BOOLEAN RemoveZone;
+  ULONGLONG InRange[2];
+  GUID ZidForRemoval;
+  ULONGLONG Reserved1;
+  ULONGLONG Reserved2;
+} SOV_RANGE_CHECK_DATA, *PSOV_RANGE_CHECK_DATA;
+
+typedef struct _IO_CREATE_STREAM_FILE_OPTIONS {
+  USHORT Size;
+  USHORT Flags;
+  PDEVICE_OBJECT TargetDeviceObject;
+} IO_CREATE_STREAM_FILE_OPTIONS, *PIO_CREATE_STREAM_FILE_OPTIONS;
+
+typedef struct _DUAL_OPLOCK_KEY_ECP_CONTEXT {
+  GUID ParentOplockKey;
+  GUID TargetOplockKey;
+  BOOLEAN ParentOplockKeySet;
+  BOOLEAN TargetOplockKeySet;
+} DUAL_OPLOCK_KEY_ECP_CONTEXT, *PDUAL_OPLOCK_KEY_ECP_CONTEXT;
+
+typedef struct _NETWORK_APP_INSTANCE_ECP_CONTEXT {
+  USHORT Size;
+  USHORT Reserved;
+  GUID AppInstanceID;
+} NETWORK_APP_INSTANCE_ECP_CONTEXT, *PNETWORK_APP_INSTANCE_ECP_CONTEXT;
+
+typedef struct _NETWORK_APP_INSTANCE_VERSION_ECP_CONTEXT {
+  USHORT Size;
+  USHORT Reserved;
+  UINT64 VersionHigh;
+  UINT64 VersionLow;
+} NETWORK_APP_INSTANCE_VERSION_ECP_CONTEXT, *PNETWORK_APP_INSTANCE_VERSION_ECP_CONTEXT;
+
+typedef struct _RKF_BYPASS_ECP_CONTEXT {
+  INT Reserved;
+  INT Version;
+} RKF_BYPASS_ECP_CONTEXT, *PRKF_BYPASS_ECP_CONTEXT;
+
+typedef struct _IO_DEVICE_HINT_ECP_CONTEXT {
+  PDEVICE_OBJECT TargetDevice;
+  UNICODE_STRING RemainingName;
+} IO_DEVICE_HINT_ECP_CONTEXT, *PIO_DEVICE_HINT_ECP_CONTEXT;
+
+typedef struct _CSV_DOWN_LEVEL_OPEN_ECP_CONTEXT {
+  ULONG Version;
+  BOOLEAN IsResume;
+  CSV_DOWN_LEVEL_FILE_TYPE FileType;
+  ULONG SourceNodeId;
+  ULONG DestinationNodeId;
+} CSV_DOWN_LEVEL_OPEN_ECP_CONTEXT, *PCSV_DOWN_LEVEL_OPEN_ECP_CONTEXT;
+
+typedef struct _CSV_SET_HANDLE_PROPERTIES_ECP_CONTEXT {
+  SIZE_T Size;
+  ULONG PauseTimeoutInSeconds;
+  ULONG Flags;
+} CSV_SET_HANDLE_PROPERTIES_ECP_CONTEXT, *PCSV_SET_HANDLE_PROPERTIES_ECP_CONTEXT;
+
+typedef struct _FILE_TIMESTAMPS {
+  LARGE_INTEGER CreationTime;
+  LARGE_INTEGER LastAccessTime;
+  LARGE_INTEGER LastWriteTime;
+  LARGE_INTEGER ChangeTime;
+} FILE_TIMESTAMPS, *PFILE_TIMESTAMPS;
+
+typedef struct _ECP_OPEN_PARAMETERS {
+  USHORT Size;
+  USHORT Reserved;
+  ULONG Flags;
+} ECP_OPEN_PARAMETERS, *PECP_OPEN_PARAMETERS;
+
+typedef struct _OPLOCK_NOTIFY_PARAMS {
+  OPLOCK_NOTIFY_REASON NotifyReason;
+  PVOID NotifyContext;
+  PIRP Irp;
+  NTSTATUS Status;
+} OPLOCK_NOTIFY_PARAMS, *POPLOCK_NOTIFY_PARAMS;
+
+typedef struct _QUERY_ON_CREATE_FILE_STAT_INFORMATION {
+  LARGE_INTEGER FileId;
+  LARGE_INTEGER CreationTime;
+  LARGE_INTEGER LastAccessTime;
+  LARGE_INTEGER LastWriteTime;
+  LARGE_INTEGER ChangeTime;
+  LARGE_INTEGER AllocationSize;
+  LARGE_INTEGER EndOfFile;
+  ULONG FileAttributes;
+  ULONG ReparseTag;
+  ULONG NumberOfLinks;
+} QUERY_ON_CREATE_FILE_STAT_INFORMATION, *PQUERY_ON_CREATE_FILE_STAT_INFORMATION;
+
+typedef struct _QUERY_ON_CREATE_FILE_LX_INFORMATION {
+  ACCESS_MASK EffectiveAccess;
+  ULONG LxFlags;
+  ULONG LxUid;
+  ULONG LxGid;
+  ULONG LxMode;
+  ULONG LxDeviceIdMajor;
+  ULONG LxDeviceIdMinor;
+} QUERY_ON_CREATE_FILE_LX_INFORMATION, *PQUERY_ON_CREATE_FILE_LX_INFORMATION;
+
+typedef struct _QUERY_ON_CREATE_EA_INFORMATION {
+  ULONG EaBufferSize;
+  PFILE_FULL_EA_INFORMATION EaBuffer;
+} QUERY_ON_CREATE_EA_INFORMATION, *PQUERY_ON_CREATE_EA_INFORMATION;
+
+typedef struct _QUERY_ON_CREATE_SECURITY_INFORMATION {
+  ULONG Reserved;
+  ULONG SecurityDescriptorSize;
+  PSECURITY_DESCRIPTOR SecurityDescriptor;
+} QUERY_ON_CREATE_SECURITY_INFORMATION, *PQUERY_ON_CREATE_SECURITY_INFORMATION;
+
+typedef struct _VETO_BINDING_ECP_CONTEXT {
+  BOOLEAN ShouldVetoBinding;
+} VETO_BINDING_ECP_CONTEXT, *PVETO_BINDING_ECP_CONTEXT;
+
+typedef struct _READ_AHEAD_PARAMETERS {
+  CSHORT NodeByteSize;
+  ULONG Granularity;
+  ULONG PipelinedRequestSize;
+  ULONG ReadAheadGrowthPercentage;
+} READ_AHEAD_PARAMETERS, *PREAD_AHEAD_PARAMETERS;
+
+typedef struct _CC_ERROR_CALLBACK_CONTEXT {
+  CSHORT NodeByteSize;
+  NTSTATUS ErrorCode;
+} CC_ERROR_CALLBACK_CONTEXT, *PCC_ERROR_CALLBACK_CONTEXT;
+
+typedef struct _CC_DIRTY_PAGES_INFO {
+  ULONG Version;
+  LONGLONG DirtyPageThreshold;
+  LONGLONG DirtyPageTarget;
+  LONGLONG CleanLockedCachedPagesThreshold;
+  LONGLONG CleanLockedCachedPagesTarget;
+  LONGLONG CurrentDirtyPages;
+  LONGLONG CurrentCleanLockedCachedPages;
+  LONGLONG CurrentPagesQueuedForWriting;
+} CC_DIRTY_PAGES_INFO, *PCC_DIRTY_PAGES_INFO;
+
+typedef struct _SEC_CHANNEL_BINDINGS_EX {
+  unsigned long magicNumber;
+  unsigned long flags;
+  unsigned long cbHeaderLength;
+  unsigned long cbStructureLength;
+  unsigned long dwInitiatorAddrType;
+  unsigned long cbInitiatorLength;
+  unsigned long dwInitiatorOffset;
+  unsigned long dwAcceptorAddrType;
+  unsigned long cbAcceptorLength;
+  unsigned long dwAcceptorOffset;
+  unsigned long cbApplicationDataLength;
+  unsigned long dwApplicationDataOffset;
+} SEC_CHANNEL_BINDINGS_EX, *PSEC_CHANNEL_BINDINGS_EX;
+
+typedef struct _SEC_CHANNEL_BINDINGS_RESULT {
+  unsigned long flags;
+} SEC_CHANNEL_BINDINGS_RESULT, *PSEC_CHANNEL_BINDINGS_RESULT;
+
+typedef struct _SEC_SRTP_PROTECTION_PROFILES {
+  unsigned short ProfilesSize;
+  unsigned short ProfilesList[1];
+} SEC_SRTP_PROTECTION_PROFILES, *PSEC_SRTP_PROTECTION_PROFILES;
+
+typedef struct _SEC_SRTP_MASTER_KEY_IDENTIFIER {
+  unsigned char MasterKeyIdentifierSize;
+  unsigned char MasterKeyIdentifier[1];
+} SEC_SRTP_MASTER_KEY_IDENTIFIER, *PSEC_SRTP_MASTER_KEY_IDENTIFIER;
+
+typedef struct _SEC_TOKEN_BINDING {
+  unsigned char MajorVersion;
+  unsigned char MinorVersion;
+  unsigned short KeyParametersSize;
+  unsigned char KeyParameters[1];
+} SEC_TOKEN_BINDING, *PSEC_TOKEN_BINDING;
+
+typedef struct _SEC_PRESHAREDKEY {
+  unsigned short KeySize;
+  unsigned char Key[1];
+} SEC_PRESHAREDKEY, *PSEC_PRESHAREDKEY;
+
+typedef struct _SEC_PRESHAREDKEY_IDENTITY {
+  unsigned short KeyIdentitySize;
+  unsigned char KeyIdentity[1];
+} SEC_PRESHAREDKEY_IDENTITY, *PSEC_PRESHAREDKEY_IDENTITY;
+
+typedef struct _SEC_DTLS_MTU {
+  unsigned short PathMTU;
+} SEC_DTLS_MTU, *PSEC_DTLS_MTU;
+
+typedef struct _SEC_FLAGS {
+  unsigned long long Flags;
+} SEC_FLAGS, *PSEC_FLAGS;
+
+typedef struct _SEC_CERTIFICATE_REQUEST_CONTEXT {
+  unsigned char cbCertificateRequestContext;
+  unsigned char rgCertificateRequestContext[1];
+} SEC_CERTIFICATE_REQUEST_CONTEXT, *PSEC_CERTIFICATE_REQUEST_CONTEXT;
+
+typedef struct _SEC_APP_SESSION_STATE {
+  unsigned short AppSessionStateSize;
+  unsigned char AppSessionState[1];
+} SEC_APP_SESSION_STATE, *PSEC_APP_SESSION_STATE;
+
+typedef struct _SEC_SESSION_TICKET {
+  unsigned short SessionTicketSize;
+  unsigned char SessionTicket[1];
+} SEC_SESSION_TICKET, *PSEC_SESSION_TICKET;
+
+typedef struct _SEC_TRAFFIC_SECRETS {
+  wchar_t SymmetricAlgId[64];
+  wchar_t ChainingMode[64];
+  wchar_t HashAlgId[64];
+  unsigned short KeySize;
+  unsigned short IvSize;
+  unsigned short MsgSequenceStart;
+  unsigned short MsgSequenceEnd;
+  SEC_TRAFFIC_SECRET_TYPE TrafficSecretType;
+  unsigned short TrafficSecretSize;
+  unsigned char TrafficSecret[1];
+} SEC_TRAFFIC_SECRETS, *PSEC_TRAFFIC_SECRETS;
+
+typedef struct _SecPkgCredentials_KdcProxySettingsW {
+  ULONG Version;
+  ULONG Flags;
+  USHORT ProxyServerOffset;
+  USHORT ProxyServerLength;
+  USHORT ClientTlsCredOffset;
+  USHORT ClientTlsCredLength;
+} SecPkgCredentials_KdcProxySettingsW, *PSecPkgCredentials_KdcProxySettingsW;
+
+typedef struct _SecPkgCredentials_KdcNetworkSettingsW {
+  ULONG Version;
+  ULONG Flags;
+  USHORT ProxyServerOffset;
+  USHORT ProxyServerLength;
+  USHORT ClientTlsCredOffset;
+  USHORT ClientTlsCredLength;
+  ULONG DcDiscoveryFlags;
+} SecPkgCredentials_KdcNetworkSettingsW, *PSecPkgCredentials_KdcNetworkSettingsW;
+
+typedef struct _SecPkgCredentials_Cert {
+  unsigned long EncodedCertSize;
+  unsigned char * EncodedCert;
+} SecPkgCredentials_Cert, *PSecPkgCredentials_Cert;
+
 #endif
 
 #ifndef BooleanFlagOn

@@ -249,4 +249,30 @@ typedef struct DRIVER_VER_INFO_
 #define CCPI_RESULT_DENY 2
 #endif
 
+typedef struct CONFIG_CI_PROV_INFO_RESULT_ {
+  HRESULT hr;
+  DWORD dwResult;
+  DWORD dwPolicyIndex;
+  BOOLEAN fIsExplicitDeny;
+} CONFIG_CI_PROV_INFO_RESULT;
+
+typedef struct CONFIG_CI_PROV_INFO_RESULT2_ {
+  DWORD cbSize;
+  HRESULT hr;
+  DWORD dwResult;
+  DWORD dwPolicyIndex;
+  BOOLEAN fIsExplicitDeny;
+  DWORD cbCalculatedFileHash;
+  BYTE * pbCalculatedFileHash;
+} CONFIG_CI_PROV_INFO_RESULT2;
+
+typedef struct CONFIG_CI_PROV_INFO_ {
+  DWORD cbSize;
+  DWORD dwPolicies;
+  CRYPT_DATA_BLOB * pPolicies;
+  CONFIG_CI_PROV_INFO_RESULT result;
+  DWORD dwScenario;
+  CONFIG_CI_PROV_INFO_RESULT2 * result2;
+} CONFIG_CI_PROV_INFO;
+
 #endif /* __WINE_SOFTPUB_H */

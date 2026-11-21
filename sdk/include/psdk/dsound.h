@@ -1907,4 +1907,14 @@ typedef struct IDirectSoundFXCompressor * LPDIRECTSOUNDFXCOMPRESSOR;
 typedef struct IDirectSoundFXParamEq * LPDIRECTSOUNDFXPARAMEQ;
 typedef struct IDirectSoundFXWavesReverb * LPDIRECTSOUNDFXWAVESREVERB;
 
+typedef struct _DSCFXAec {
+  BOOL fEnable;
+  BOOL fNoiseFill;
+  DWORD dwMode;
+} DSCFXAec, *LPDSCFXAec;
+
+typedef struct _DSCFXNoiseSuppress {
+  BOOL fEnable;
+} DSCFXNoiseSuppress, *LPDSCFXNoiseSuppress;
+
 #endif /* __DSOUND_INCLUDED__ */

@@ -557,4 +557,443 @@ typedef enum _DS_REPL_OP_TYPE {
     DS_REPL_OP_TYPE_UPDATE_REFS = 4
 } DS_REPL_OP_TYPE;
 
+typedef struct DS_REPSYNCALL_SYNCA {
+  LPSTR pszSrcId;
+  LPSTR pszDstId;
+  LPSTR pszNC;
+  GUID * pguidSrc;
+  GUID * pguidDst;
+} DS_REPSYNCALL_SYNCA, *PDS_REPSYNCALL_SYNCA;
+
+typedef struct DS_REPSYNCALL_SYNCW {
+  LPWSTR pszSrcId;
+  LPWSTR pszDstId;
+  LPWSTR pszNC;
+  GUID * pguidSrc;
+  GUID * pguidDst;
+} DS_REPSYNCALL_SYNCW, *PDS_REPSYNCALL_SYNCW;
+
+typedef struct DS_REPSYNCALL_ERRINFOA {
+  LPSTR pszSvrId;
+  DS_REPSYNCALL_ERROR error;
+  DWORD dwWin32Err;
+  LPSTR pszSrcId;
+} DS_REPSYNCALL_ERRINFOA, *PDS_REPSYNCALL_ERRINFOA;
+
+typedef struct DS_REPSYNCALL_ERRINFOW {
+  LPWSTR pszSvrId;
+  DS_REPSYNCALL_ERROR error;
+  DWORD dwWin32Err;
+  LPWSTR pszSrcId;
+} DS_REPSYNCALL_ERRINFOW, *PDS_REPSYNCALL_ERRINFOW;
+
+typedef struct DS_REPSYNCALL_UPDATEA {
+  DS_REPSYNCALL_EVENT event;
+  DS_REPSYNCALL_ERRINFOA * pErrInfo;
+  DS_REPSYNCALL_SYNCA * pSync;
+} DS_REPSYNCALL_UPDATEA, *PDS_REPSYNCALL_UPDATEA;
+
+typedef struct DS_REPSYNCALL_UPDATEW {
+  DS_REPSYNCALL_EVENT event;
+  DS_REPSYNCALL_ERRINFOW * pErrInfo;
+  DS_REPSYNCALL_SYNCW * pSync;
+} DS_REPSYNCALL_UPDATEW, *PDS_REPSYNCALL_UPDATEW;
+
+typedef struct DS_SITE_COST_INFO {
+  DWORD errorCode;
+  DWORD cost;
+} DS_SITE_COST_INFO, *PDS_SITE_COST_INFO;
+
+typedef struct DS_SCHEMA_GUID_MAPA {
+  GUID guid;
+  DWORD guidType;
+  LPSTR pName;
+} DS_SCHEMA_GUID_MAPA, *PDS_SCHEMA_GUID_MAPA;
+
+typedef struct DS_SCHEMA_GUID_MAPW {
+  GUID guid;
+  DWORD guidType;
+  LPWSTR pName;
+} DS_SCHEMA_GUID_MAPW, *PDS_SCHEMA_GUID_MAPW;
+
+typedef struct DS_DOMAIN_CONTROLLER_INFO_1A {
+  LPSTR NetbiosName;
+  LPSTR DnsHostName;
+  LPSTR SiteName;
+  LPSTR ComputerObjectName;
+  LPSTR ServerObjectName;
+  BOOL fIsPdc;
+  BOOL fDsEnabled;
+} DS_DOMAIN_CONTROLLER_INFO_1A, *PDS_DOMAIN_CONTROLLER_INFO_1A;
+
+typedef struct DS_DOMAIN_CONTROLLER_INFO_1W {
+  LPWSTR NetbiosName;
+  LPWSTR DnsHostName;
+  LPWSTR SiteName;
+  LPWSTR ComputerObjectName;
+  LPWSTR ServerObjectName;
+  BOOL fIsPdc;
+  BOOL fDsEnabled;
+} DS_DOMAIN_CONTROLLER_INFO_1W, *PDS_DOMAIN_CONTROLLER_INFO_1W;
+
+typedef struct DS_DOMAIN_CONTROLLER_INFO_2A {
+  LPSTR NetbiosName;
+  LPSTR DnsHostName;
+  LPSTR SiteName;
+  LPSTR SiteObjectName;
+  LPSTR ComputerObjectName;
+  LPSTR ServerObjectName;
+  LPSTR NtdsDsaObjectName;
+  BOOL fIsPdc;
+  BOOL fDsEnabled;
+  BOOL fIsGc;
+  GUID SiteObjectGuid;
+  GUID ComputerObjectGuid;
+  GUID ServerObjectGuid;
+  GUID NtdsDsaObjectGuid;
+} DS_DOMAIN_CONTROLLER_INFO_2A, *PDS_DOMAIN_CONTROLLER_INFO_2A;
+
+typedef struct DS_DOMAIN_CONTROLLER_INFO_2W {
+  LPWSTR NetbiosName;
+  LPWSTR DnsHostName;
+  LPWSTR SiteName;
+  LPWSTR SiteObjectName;
+  LPWSTR ComputerObjectName;
+  LPWSTR ServerObjectName;
+  LPWSTR NtdsDsaObjectName;
+  BOOL fIsPdc;
+  BOOL fDsEnabled;
+  BOOL fIsGc;
+  GUID SiteObjectGuid;
+  GUID ComputerObjectGuid;
+  GUID ServerObjectGuid;
+  GUID NtdsDsaObjectGuid;
+} DS_DOMAIN_CONTROLLER_INFO_2W, *PDS_DOMAIN_CONTROLLER_INFO_2W;
+
+typedef struct DS_DOMAIN_CONTROLLER_INFO_3A {
+  LPSTR NetbiosName;
+  LPSTR DnsHostName;
+  LPSTR SiteName;
+  LPSTR SiteObjectName;
+  LPSTR ComputerObjectName;
+  LPSTR ServerObjectName;
+  LPSTR NtdsDsaObjectName;
+  BOOL fIsPdc;
+  BOOL fDsEnabled;
+  BOOL fIsGc;
+  BOOL fIsRodc;
+  GUID SiteObjectGuid;
+  GUID ComputerObjectGuid;
+  GUID ServerObjectGuid;
+  GUID NtdsDsaObjectGuid;
+} DS_DOMAIN_CONTROLLER_INFO_3A, *PDS_DOMAIN_CONTROLLER_INFO_3A;
+
+typedef struct DS_DOMAIN_CONTROLLER_INFO_3W {
+  LPWSTR NetbiosName;
+  LPWSTR DnsHostName;
+  LPWSTR SiteName;
+  LPWSTR SiteObjectName;
+  LPWSTR ComputerObjectName;
+  LPWSTR ServerObjectName;
+  LPWSTR NtdsDsaObjectName;
+  BOOL fIsPdc;
+  BOOL fDsEnabled;
+  BOOL fIsGc;
+  BOOL fIsRodc;
+  GUID SiteObjectGuid;
+  GUID ComputerObjectGuid;
+  GUID ServerObjectGuid;
+  GUID NtdsDsaObjectGuid;
+} DS_DOMAIN_CONTROLLER_INFO_3W, *PDS_DOMAIN_CONTROLLER_INFO_3W;
+
+typedef struct _DS_REPL_NEIGHBORW {
+  LPWSTR pszNamingContext;
+  LPWSTR pszSourceDsaDN;
+  LPWSTR pszSourceDsaAddress;
+  LPWSTR pszAsyncIntersiteTransportDN;
+  DWORD dwReplicaFlags;
+  DWORD dwReserved;
+  UUID uuidNamingContextObjGuid;
+  UUID uuidSourceDsaObjGuid;
+  UUID uuidSourceDsaInvocationID;
+  UUID uuidAsyncIntersiteTransportObjGuid;
+  USN usnLastObjChangeSynced;
+  USN usnAttributeFilter;
+  FILETIME ftimeLastSyncSuccess;
+  FILETIME ftimeLastSyncAttempt;
+  DWORD dwLastSyncResult;
+  DWORD cNumConsecutiveSyncFailures;
+} DS_REPL_NEIGHBORW;
+
+typedef struct _DS_REPL_NEIGHBORW_BLOB {
+  DWORD oszNamingContext;
+  DWORD oszSourceDsaDN;
+  DWORD oszSourceDsaAddress;
+  DWORD oszAsyncIntersiteTransportDN;
+  DWORD dwReplicaFlags;
+  DWORD dwReserved;
+  UUID uuidNamingContextObjGuid;
+  UUID uuidSourceDsaObjGuid;
+  UUID uuidSourceDsaInvocationID;
+  UUID uuidAsyncIntersiteTransportObjGuid;
+  USN usnLastObjChangeSynced;
+  USN usnAttributeFilter;
+  FILETIME ftimeLastSyncSuccess;
+  FILETIME ftimeLastSyncAttempt;
+  DWORD dwLastSyncResult;
+  DWORD cNumConsecutiveSyncFailures;
+} DS_REPL_NEIGHBORW_BLOB;
+
+typedef struct _DS_REPL_NEIGHBORSW {
+  DWORD cNumNeighbors;
+  DWORD dwReserved;
+  DS_REPL_NEIGHBORW rgNeighbor[1];
+} DS_REPL_NEIGHBORSW;
+
+typedef struct _DS_REPL_CURSOR {
+  UUID uuidSourceDsaInvocationID;
+  USN usnAttributeFilter;
+} DS_REPL_CURSOR;
+
+typedef struct _DS_REPL_CURSOR_2 {
+  UUID uuidSourceDsaInvocationID;
+  USN usnAttributeFilter;
+  FILETIME ftimeLastSyncSuccess;
+} DS_REPL_CURSOR_2;
+
+typedef struct _DS_REPL_CURSOR_3W {
+  UUID uuidSourceDsaInvocationID;
+  USN usnAttributeFilter;
+  FILETIME ftimeLastSyncSuccess;
+  LPWSTR pszSourceDsaDN;
+} DS_REPL_CURSOR_3W;
+
+typedef struct _DS_REPL_CURSOR_BLOB {
+  UUID uuidSourceDsaInvocationID;
+  USN usnAttributeFilter;
+  FILETIME ftimeLastSyncSuccess;
+  DWORD oszSourceDsaDN;
+} DS_REPL_CURSOR_BLOB;
+
+typedef struct _DS_REPL_CURSORS {
+  DWORD cNumCursors;
+  DWORD dwReserved;
+  DS_REPL_CURSOR rgCursor[1];
+} DS_REPL_CURSORS;
+
+typedef struct _DS_REPL_CURSORS_2 {
+  DWORD cNumCursors;
+  DWORD dwEnumerationContext;
+  DS_REPL_CURSOR_2 rgCursor[1];
+} DS_REPL_CURSORS_2;
+
+typedef struct _DS_REPL_CURSORS_3W {
+  DWORD cNumCursors;
+  DWORD dwEnumerationContext;
+  DS_REPL_CURSOR_3W rgCursor[1];
+} DS_REPL_CURSORS_3W;
+
+typedef struct _DS_REPL_ATTR_META_DATA {
+  LPWSTR pszAttributeName;
+  DWORD dwVersion;
+  FILETIME ftimeLastOriginatingChange;
+  UUID uuidLastOriginatingDsaInvocationID;
+  USN usnOriginatingChange;
+  USN usnLocalChange;
+} DS_REPL_ATTR_META_DATA;
+
+typedef struct _DS_REPL_ATTR_META_DATA_2 {
+  LPWSTR pszAttributeName;
+  DWORD dwVersion;
+  FILETIME ftimeLastOriginatingChange;
+  UUID uuidLastOriginatingDsaInvocationID;
+  USN usnOriginatingChange;
+  USN usnLocalChange;
+  LPWSTR pszLastOriginatingDsaDN;
+} DS_REPL_ATTR_META_DATA_2;
+
+typedef struct _DS_REPL_ATTR_META_DATA_BLOB {
+  DWORD oszAttributeName;
+  DWORD dwVersion;
+  FILETIME ftimeLastOriginatingChange;
+  UUID uuidLastOriginatingDsaInvocationID;
+  USN usnOriginatingChange;
+  USN usnLocalChange;
+  DWORD oszLastOriginatingDsaDN;
+} DS_REPL_ATTR_META_DATA_BLOB;
+
+typedef struct _DS_REPL_OBJ_META_DATA {
+  DWORD cNumEntries;
+  DWORD dwReserved;
+  DS_REPL_ATTR_META_DATA rgMetaData[1];
+} DS_REPL_OBJ_META_DATA;
+
+typedef struct _DS_REPL_OBJ_META_DATA_2 {
+  DWORD cNumEntries;
+  DWORD dwReserved;
+  DS_REPL_ATTR_META_DATA_2 rgMetaData[1];
+} DS_REPL_OBJ_META_DATA_2;
+
+typedef struct _DS_REPL_KCC_DSA_FAILUREW {
+  LPWSTR pszDsaDN;
+  UUID uuidDsaObjGuid;
+  FILETIME ftimeFirstFailure;
+  DWORD cNumFailures;
+  DWORD dwLastResult;
+} DS_REPL_KCC_DSA_FAILUREW;
+
+typedef struct _DS_REPL_KCC_DSA_FAILUREW_BLOB {
+  DWORD oszDsaDN;
+  UUID uuidDsaObjGuid;
+  FILETIME ftimeFirstFailure;
+  DWORD cNumFailures;
+  DWORD dwLastResult;
+} DS_REPL_KCC_DSA_FAILUREW_BLOB;
+
+typedef struct _DS_REPL_KCC_DSA_FAILURESW {
+  DWORD cNumEntries;
+  DWORD dwReserved;
+  DS_REPL_KCC_DSA_FAILUREW rgDsaFailure[1];
+} DS_REPL_KCC_DSA_FAILURESW;
+
+typedef struct _DS_REPL_OPW {
+  FILETIME ftimeEnqueued;
+  ULONG ulSerialNumber;
+  ULONG ulPriority;
+  DS_REPL_OP_TYPE OpType;
+  ULONG ulOptions;
+  LPWSTR pszNamingContext;
+  LPWSTR pszDsaDN;
+  LPWSTR pszDsaAddress;
+  UUID uuidNamingContextObjGuid;
+  UUID uuidDsaObjGuid;
+} DS_REPL_OPW;
+
+typedef struct _DS_REPL_OPW_BLOB {
+  FILETIME ftimeEnqueued;
+  ULONG ulSerialNumber;
+  ULONG ulPriority;
+  DS_REPL_OP_TYPE OpType;
+  ULONG ulOptions;
+  DWORD oszNamingContext;
+  DWORD oszDsaDN;
+  DWORD oszDsaAddress;
+  UUID uuidNamingContextObjGuid;
+  UUID uuidDsaObjGuid;
+} DS_REPL_OPW_BLOB;
+
+typedef struct _DS_REPL_PENDING_OPSW {
+  FILETIME ftimeCurrentOpStarted;
+  DWORD cNumPendingOps;
+  DS_REPL_OPW rgPendingOp[1];
+} DS_REPL_PENDING_OPSW;
+
+typedef struct _DS_REPL_VALUE_META_DATA {
+  LPWSTR pszAttributeName;
+  LPWSTR pszObjectDn;
+  DWORD cbData;
+  BYTE * pbData;
+  FILETIME ftimeDeleted;
+  FILETIME ftimeCreated;
+  DWORD dwVersion;
+  FILETIME ftimeLastOriginatingChange;
+  UUID uuidLastOriginatingDsaInvocationID;
+  USN usnOriginatingChange;
+  USN usnLocalChange;
+} DS_REPL_VALUE_META_DATA;
+
+typedef struct _DS_REPL_VALUE_META_DATA_2 {
+  LPWSTR pszAttributeName;
+  LPWSTR pszObjectDn;
+  DWORD cbData;
+  BYTE * pbData;
+  FILETIME ftimeDeleted;
+  FILETIME ftimeCreated;
+  DWORD dwVersion;
+  FILETIME ftimeLastOriginatingChange;
+  UUID uuidLastOriginatingDsaInvocationID;
+  USN usnOriginatingChange;
+  USN usnLocalChange;
+  LPWSTR pszLastOriginatingDsaDN;
+} DS_REPL_VALUE_META_DATA_2;
+
+typedef struct _DS_REPL_VALUE_META_DATA_EXT {
+  LPWSTR pszAttributeName;
+  LPWSTR pszObjectDn;
+  DWORD cbData;
+  BYTE * pbData;
+  FILETIME ftimeDeleted;
+  FILETIME ftimeCreated;
+  DWORD dwVersion;
+  FILETIME ftimeLastOriginatingChange;
+  UUID uuidLastOriginatingDsaInvocationID;
+  USN usnOriginatingChange;
+  USN usnLocalChange;
+  LPWSTR pszLastOriginatingDsaDN;
+  DWORD dwUserIdentifier;
+  DWORD dwPriorLinkState;
+  DWORD dwCurrentLinkState;
+} DS_REPL_VALUE_META_DATA_EXT;
+
+typedef struct _DS_REPL_VALUE_META_DATA_BLOB {
+  DWORD oszAttributeName;
+  DWORD oszObjectDn;
+  DWORD cbData;
+  DWORD obData;
+  FILETIME ftimeDeleted;
+  FILETIME ftimeCreated;
+  DWORD dwVersion;
+  FILETIME ftimeLastOriginatingChange;
+  UUID uuidLastOriginatingDsaInvocationID;
+  USN usnOriginatingChange;
+  USN usnLocalChange;
+  DWORD oszLastOriginatingDsaDN;
+} DS_REPL_VALUE_META_DATA_BLOB;
+
+typedef struct _DS_REPL_VALUE_META_DATA_BLOB_EXT {
+  DWORD oszAttributeName;
+  DWORD oszObjectDn;
+  DWORD cbData;
+  DWORD obData;
+  FILETIME ftimeDeleted;
+  FILETIME ftimeCreated;
+  DWORD dwVersion;
+  FILETIME ftimeLastOriginatingChange;
+  UUID uuidLastOriginatingDsaInvocationID;
+  USN usnOriginatingChange;
+  USN usnLocalChange;
+  DWORD oszLastOriginatingDsaDN;
+  DWORD dwUserIdentifier;
+  DWORD dwPriorLinkState;
+  DWORD dwCurrentLinkState;
+} DS_REPL_VALUE_META_DATA_BLOB_EXT;
+
+typedef struct _DS_REPL_ATTR_VALUE_META_DATA {
+  DWORD cNumEntries;
+  DWORD dwEnumerationContext;
+  DS_REPL_VALUE_META_DATA rgMetaData[1];
+} DS_REPL_ATTR_VALUE_META_DATA;
+
+typedef struct _DS_REPL_ATTR_VALUE_META_DATA_2 {
+  DWORD cNumEntries;
+  DWORD dwEnumerationContext;
+  DS_REPL_VALUE_META_DATA_2 rgMetaData[1];
+} DS_REPL_ATTR_VALUE_META_DATA_2;
+
+typedef struct _DS_REPL_ATTR_VALUE_META_DATA_EXT {
+  DWORD cNumEntries;
+  DWORD dwEnumerationContext;
+  DS_REPL_VALUE_META_DATA_EXT rgMetaData[1];
+} DS_REPL_ATTR_VALUE_META_DATA_EXT;
+
+typedef struct _DS_REPL_QUEUE_STATISTICSW {
+  FILETIME ftimeCurrentOpStarted;
+  DWORD cNumPendingOps;
+  FILETIME ftimeOldestSync;
+  FILETIME ftimeOldestAdd;
+  FILETIME ftimeOldestMod;
+  FILETIME ftimeOldestDel;
+  FILETIME ftimeOldestUpdRefs;
+} DS_REPL_QUEUE_STATISTICSW, DS_REPL_QUEUE_STATISTICSW_BLOB;
+
 #endif /* __WINE_NTDSAPI_H */

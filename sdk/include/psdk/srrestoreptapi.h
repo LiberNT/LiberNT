@@ -148,4 +148,14 @@ DWORD WINAPI SRRemoveRestorePoint(DWORD);
 #define WINDOWS_UPDATE 17
 #endif
 
+#pragma pack(push, 1)
+typedef struct _RESTOREPTINFOEX {
+  FILETIME ftCreation;
+  DWORD dwEventType;
+  DWORD dwRestorePtType;
+  DWORD dwRPNum;
+  WCHAR szDescription[256];
+} RESTOREPOINTINFOEX, *PRESTOREPOINTINFOEX;
+#pragma pack(pop)
+
 #endif

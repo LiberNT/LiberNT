@@ -370,4 +370,57 @@ typedef enum TA_TIMINGFUNCTION_TYPE {
     TTFT_CUBIC_BEZIER = 1
 } TA_TIMINGFUNCTION_TYPE;
 
+typedef struct TA_TRANSFORM {
+  TA_TRANSFORM_TYPE eTransformType;
+  DWORD dwTimingFunctionId;
+  DWORD dwStartTime;
+  DWORD dwDurationTime;
+  TA_TRANSFORM_FLAG eFlags;
+} TA_TRANSFORM, *PTA_TRANSFORM;
+
+typedef struct TA_TRANSFORM_2D {
+  TA_TRANSFORM header;
+  float rX;
+  float rY;
+  float rInitialX;
+  float rInitialY;
+  float rOriginX;
+  float rOriginY;
+} TA_TRANSFORM_2D, *PTA_TRANSFORM_2D;
+
+typedef struct TA_TRANSFORM_OPACITY {
+  TA_TRANSFORM header;
+  float rOpacity;
+  float rInitialOpacity;
+} TA_TRANSFORM_OPACITY, *PTA_TRANSFORM_OPACITY;
+
+typedef struct TA_TRANSFORM_CLIP {
+  TA_TRANSFORM header;
+  float rLeft;
+  float rTop;
+  float rRight;
+  float rBottom;
+  float rInitialLeft;
+  float rInitialTop;
+  float rInitialRight;
+  float rInitialBottom;
+} TA_TRANSFORM_CLIP, *PTA_TRANSFORM_CLIP;
+
+typedef struct TA_TIMINGFUNCTION {
+  TA_TIMINGFUNCTION_TYPE eTimingFunctionType;
+} TA_TIMINGFUNCTION, *PTA_TIMINGFUNCTION;
+
+typedef struct TA_CUBIC_BEZIER {
+  TA_TIMINGFUNCTION header;
+  float rX0;
+  float rY0;
+  float rX1;
+  float rY1;
+} TA_CUBIC_BEZIER, *PTA_CUBIC_BEZIER;
+
+typedef struct _WTA_OPTIONS {
+  DWORD dwFlags;
+  DWORD dwMask;
+} WTA_OPTIONS, *PWTA_OPTIONS;
+
 #endif

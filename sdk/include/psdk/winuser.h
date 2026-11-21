@@ -7464,4 +7464,119 @@ BOOL WINAPI IsWow64Message(void);
 }
 #endif
 
+typedef struct SHELLHOOKINFO {
+  HWND hwnd;
+  RECT rc;
+} SHELLHOOKINFO, *LPSHELLHOOKINFO;
+
+typedef struct FRAME_MARGIN {
+  short left;
+  short right;
+  short top;
+  short bottom;
+} FRAME_MARGIN;
+
+typedef struct tagGETCLIPBMETADATA {
+  UINT Version;
+  BOOL IsDelayRendered;
+  BOOL IsSynthetic;
+} GETCLIPBMETADATA, *PGETCLIPBMETADATA;
+
+typedef struct tagUSAGE_PROPERTIES {
+  USHORT level;
+  USHORT page;
+  USHORT usage;
+  INT32 logicalMinimum;
+  INT32 logicalMaximum;
+  USHORT unit;
+  USHORT exponent;
+  BYTE count;
+  INT32 physicalMinimum;
+  INT32 physicalMaximum;
+} USAGE_PROPERTIES, *PUSAGE_PROPERTIES;
+
+typedef struct tagINPUT_INJECTION_VALUE {
+  USHORT page;
+  USHORT usage;
+  INT32 value;
+  USHORT index;
+} INPUT_INJECTION_VALUE, *PINPUT_INJECTION_VALUE;
+
+typedef struct tagTouchPredictionParameters {
+  UINT cbSize;
+  UINT dwLatency;
+  UINT dwSampleTime;
+  UINT bUseHWTimeStamp;
+} TOUCHPREDICTIONPARAMETERS, *PTOUCHPREDICTIONPARAMETERS;
+
+typedef struct tagPOINTER_DEVICE_PROPERTY {
+  INT32 logicalMin;
+  INT32 logicalMax;
+  INT32 physicalMin;
+  INT32 physicalMax;
+  UINT32 unit;
+  UINT32 unitExponent;
+  USHORT usagePageId;
+  USHORT usageId;
+} POINTER_DEVICE_PROPERTY;
+
+typedef struct tagPOINTER_DEVICE_CURSOR_INFO {
+  UINT32 cursorId;
+  POINTER_DEVICE_CURSOR_TYPE cursor;
+} POINTER_DEVICE_CURSOR_INFO;
+
+typedef struct TOUCHPAD_PARAMETERS_V1 {
+  UINT versionNumber;
+  UINT maxSupportedContacts;
+  LEGACY_TOUCHPAD_FEATURES legacyTouchpadFeatures;
+  BOOL touchpadPresent : 1;
+  BOOL legacyTouchpadPresent : 1;
+  BOOL externalMousePresent : 1;
+  BOOL touchpadEnabled : 1;
+  BOOL touchpadActive : 1;
+  BOOL feedbackSupported : 1;
+  BOOL clickForceSupported : 1;
+  BOOL Reserved1 : 25;
+  BOOL allowActiveWhenMousePresent : 1;
+  BOOL feedbackEnabled : 1;
+  BOOL tapEnabled : 1;
+  BOOL tapAndDragEnabled : 1;
+  BOOL twoFingerTapEnabled : 1;
+  BOOL rightClickZoneEnabled : 1;
+  BOOL mouseAccelSettingHonored : 1;
+  BOOL panEnabled : 1;
+  BOOL zoomEnabled : 1;
+  BOOL scrollDirectionReversed : 1;
+  BOOL Reserved2 : 22;
+  TOUCHPAD_SENSITIVITY_LEVEL sensitivityLevel;
+  UINT cursorSpeed;
+  UINT feedbackIntensity;
+  UINT clickForceSensitivity;
+  UINT rightClickZoneWidth;
+  UINT rightClickZoneHeight;
+} TOUCHPAD_PARAMETERS_V1, *PTOUCHPAD_PARAMETERS_V1;
+
+typedef struct tagGESTURENOTIFYSTRUCT {
+  UINT cbSize;
+  DWORD dwFlags;
+  HWND hwndTarget;
+  POINTS ptsLocation;
+  DWORD dwInstanceID;
+} GESTURENOTIFYSTRUCT, *PGESTURENOTIFYSTRUCT;
+
+typedef struct _WINDOW_ACTION {
+  WINDOW_ACTION_KINDS kinds;
+  WINDOW_ACTION_MODIFIERS modifiers;
+  BOOL visible;
+  POINT position;
+  SIZE size;
+  HWND insertAfter;
+  WINDOW_PLACEMENT_STATE placementState;
+  RECT normalRect;
+  RECT workArea;
+  UINT dpi;
+  POINT pointOnMonitor;
+  UINT monitorTopologyId;
+} WINDOW_ACTION, *PWINDOW_ACTION;
+
 #endif

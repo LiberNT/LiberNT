@@ -3947,6 +3947,327 @@ typedef BOOL * PKSPROPERTY_COMPOSIT_ON;
 typedef LONG KS_AM_MaxFullDataRate;
 typedef DWORD KS_AM_Step;
 
+typedef struct _KSAUDIO_PACKETSIZE_CONSTRAINTS {
+  ULONG MinPacketPeriodInHns;
+  ULONG PacketSizeFileAlignment;
+  ULONG Reserved;
+  ULONG NumProcessingModeConstraints;
+  KSAUDIO_PACKETSIZE_PROCESSINGMODE_CONSTRAINT ProcessingModeConstraints[1];
+} KSAUDIO_PACKETSIZE_CONSTRAINTS;
+
+typedef struct KSDS3D_BUFFER_CONE_ANGLES {
+  ULONG InsideConeAngle;
+  ULONG OutsideConeAngle;
+} KSDS3D_BUFFER_CONE_ANGLES, *PKSDS3D_BUFFER_CONE_ANGLES;
+
+typedef struct KSDS3D_HRTF_FILTER_FORMAT_MSG {
+  KSDS3D_HRTF_FILTER_METHOD FilterMethod;
+  KSDS3D_HRTF_COEFF_FORMAT CoeffFormat;
+  KSDS3D_HRTF_FILTER_VERSION Version;
+  ULONG Reserved;
+} KSDS3D_HRTF_FILTER_FORMAT_MSG, *PKSDS3D_HRTF_FILTER_FORMAT_MSG;
+
+typedef struct KSAUDIO_DYNAMIC_RANGE {
+  ULONG QuietCompression;
+  ULONG LoudCompression;
+} KSAUDIO_DYNAMIC_RANGE, *PKSAUDIO_DYNAMIC_RANGE;
+
+typedef struct KSAUDIO_POSITIONEX {
+  LARGE_INTEGER TimerFrequency;
+  LARGE_INTEGER TimeStamp1;
+  KSAUDIO_POSITION Position;
+  LARGE_INTEGER TimeStamp2;
+} KSAUDIO_POSITIONEX, *PKSAUDIO_POSITIONEX;
+
+typedef struct _tagKSTELEPHONY_CALLCONTROL {
+  TELEPHONY_CALLTYPE CallType;
+  TELEPHONY_CALLCONTROLOP CallControlOp;
+} KSTELEPHONY_CALLCONTROL, *PKSTELEPHONY_CALLCONTROL;
+
+typedef struct _tagKSTELEPHONY_PROVIDERCHANGE {
+  TELEPHONY_CALLTYPE CallType;
+  TELEPHONY_PROVIDERCHANGEOP ProviderChangeOp;
+} KSTELEPHONY_PROVIDERCHANGE, *PKSTELEPHONY_PROVIDERCHANGE;
+
+typedef struct _tagKSTELEPHONY_CALLINFO {
+  TELEPHONY_CALLTYPE CallType;
+  TELEPHONY_CALLSTATE CallState;
+} KSTELEPHONY_CALLINFO, *PKSTELEPHONY_CALLINFO;
+
+typedef struct _tagKSTOPOLOGY_ENDPOINTID {
+  WCHAR TopologyName[260];
+  ULONG PinId;
+} KSTOPOLOGY_ENDPOINTID, *PKSTOPOLOGY_ENDPOINTID;
+
+typedef struct _tagKSTOPOLOGY_ENDPOINTIDPAIR {
+  KSTOPOLOGY_ENDPOINTID RenderEndpoint;
+  KSTOPOLOGY_ENDPOINTID CaptureEndpoint;
+} KSTOPOLOGY_ENDPOINTIDPAIR, *PKSTOPOLOGY_ENDPOINTIDPAIR;
+
+typedef struct KSWAVE_COMPATCAPS {
+  ULONG ulDeviceType;
+} KSWAVE_COMPATCAPS, *PKSWAVE_COMPATCAPS;
+
+typedef struct KSWAVE_INPUT_CAPABILITIES {
+  ULONG MaximumChannelsPerConnection;
+  ULONG MinimumBitsPerSample;
+  ULONG MaximumBitsPerSample;
+  ULONG MinimumSampleFrequency;
+  ULONG MaximumSampleFrequency;
+  ULONG TotalConnections;
+  ULONG ActiveConnections;
+} KSWAVE_INPUT_CAPABILITIES, *PKSWAVE_INPUT_CAPABILITIES;
+
+typedef struct KSWAVE_OUTPUT_CAPABILITIES {
+  ULONG MaximumChannelsPerConnection;
+  ULONG MinimumBitsPerSample;
+  ULONG MaximumBitsPerSample;
+  ULONG MinimumSampleFrequency;
+  ULONG MaximumSampleFrequency;
+  ULONG TotalConnections;
+  ULONG StaticConnections;
+  ULONG StreamingConnections;
+  ULONG ActiveConnections;
+  ULONG ActiveStaticConnections;
+  ULONG ActiveStreamingConnections;
+  ULONG Total3DConnections;
+  ULONG Static3DConnections;
+  ULONG Streaming3DConnections;
+  ULONG Active3DConnections;
+  ULONG ActiveStatic3DConnections;
+  ULONG ActiveStreaming3DConnections;
+  ULONG TotalSampleMemory;
+  ULONG FreeSampleMemory;
+  ULONG LargestFreeContiguousSampleMemory;
+} KSWAVE_OUTPUT_CAPABILITIES, *PKSWAVE_OUTPUT_CAPABILITIES;
+
+typedef struct KSWAVE_VOLUME {
+  LONG LeftAttenuation;
+  LONG RightAttenuation;
+} KSWAVE_VOLUME, *PKSWAVE_VOLUME;
+
+typedef struct KSWAVE_BUFFER {
+  ULONG Attributes;
+  ULONG BufferSize;
+  PVOID BufferAddress;
+} KSWAVE_BUFFER, *PKSWAVE_BUFFER;
+
+typedef struct KSMUSICFORMAT {
+  ULONG TimeDeltaMs;
+  ULONG ByteCount;
+} KSMUSICFORMAT, *PKSMUSICFORMAT;
+
+typedef struct _KSMPEGVID_RECT {
+  ULONG StartX;
+  ULONG StartY;
+  ULONG EndX;
+  ULONG EndY;
+} KSMPEGVID_RECT, *PKSMPEGVID_RECT;
+
+typedef struct KSAC3_BIT_STREAM_MODE {
+  LONG BitStreamMode;
+} KSAC3_BIT_STREAM_MODE, *PKSAC3_BIT_STREAM_MODE;
+
+typedef struct KSAC3_DIALOGUE_LEVEL {
+  ULONG DialogueLevel;
+} KSAC3_DIALOGUE_LEVEL, *PKSAC3_DIALOGUE_LEVEL;
+
+typedef struct _KS_DVD_YCrCb {
+  UCHAR Reserved;
+  UCHAR Y;
+  UCHAR Cr;
+  UCHAR Cb;
+} KS_DVD_YCrCb, *PKS_DVD_YCrCb;
+
+typedef struct _KS_DVD_YUV {
+  UCHAR Reserved;
+  UCHAR Y;
+  UCHAR V;
+  UCHAR U;
+} KS_DVD_YUV, *PKS_DVD_YUV;
+
+typedef struct _KSPROPERTY_SPPAL {
+  KS_DVD_YUV sppal[16];
+} KSPROPERTY_SPPAL, *PKSPROPERTY_SPPAL;
+
+typedef struct _KS_COLCON {
+  UCHAR emph1col : 4;
+  UCHAR emph2col : 4;
+  UCHAR backcol : 4;
+  UCHAR patcol : 4;
+  UCHAR emph1con : 4;
+  UCHAR emph2con : 4;
+  UCHAR backcon : 4;
+  UCHAR patcon : 4;
+} KS_COLCON, *PKS_COLCON;
+
+typedef struct _KSPROPERTY_SPHLI {
+  USHORT HLISS;
+  USHORT Reserved;
+  ULONG StartPTM;
+  ULONG EndPTM;
+  USHORT StartX;
+  USHORT StartY;
+  USHORT StopX;
+  USHORT StopY;
+  KS_COLCON ColCon;
+} KSPROPERTY_SPHLI, *PKSPROPERTY_SPHLI;
+
+typedef struct _KS_DVDCOPY_REGION {
+  UCHAR Reserved;
+  UCHAR RegionData;
+  UCHAR Reserved2[2];
+} KS_DVDCOPY_REGION, *PKS_DVDCOPY_REGION;
+
+typedef struct _KS_DVDCOPY_TITLEKEY {
+  ULONG KeyFlags;
+  ULONG ReservedNT[2];
+  UCHAR TitleKey[6];
+  UCHAR Reserved[2];
+} KS_DVDCOPY_TITLEKEY, *PKS_DVDCOPY_TITLEKEY;
+
+typedef struct _KS_COPY_MACROVISION {
+  ULONG MACROVISIONLevel;
+} KS_COPY_MACROVISION, *PKS_COPY_MACROVISION;
+
+typedef struct _KS_DVDCOPY_SET_COPY_STATE {
+  ULONG DVDCopyState;
+} KS_DVDCOPY_SET_COPY_STATE, *PKS_DVDCOPY_SET_COPY_STATE;
+
+typedef struct _NABTSFEC_BUFFER {
+  ULONG dataSize;
+  USHORT groupID;
+  USHORT Reserved;
+  UCHAR data[448];
+} NABTSFEC_BUFFER, *PNABTSFEC_BUFFER;
+
+typedef struct KSPROPERTY_ALLOCATOR_CONTROL_SURFACE_SIZE_S {
+  ULONG CX;
+  ULONG CY;
+} KSPROPERTY_ALLOCATOR_CONTROL_SURFACE_SIZE_S, *PKSPROPERTY_ALLOCATOR_CONTROL_SURFACE_SIZE_S;
+
+typedef struct KSPROPERTY_ALLOCATOR_CONTROL_CAPTURE_CAPS_S {
+  ULONG InterleavedCapSupported;
+} KSPROPERTY_ALLOCATOR_CONTROL_CAPTURE_CAPS_S, *PKSPROPERTY_ALLOCATOR_CONTROL_CAPTURE_CAPS_S;
+
+typedef struct KSPROPERTY_ALLOCATOR_CONTROL_CAPTURE_INTERLEAVE_S {
+  ULONG InterleavedCapPossible;
+} KSPROPERTY_ALLOCATOR_CONTROL_CAPTURE_INTERLEAVE_S, *PKSPROPERTY_ALLOCATOR_CONTROL_CAPTURE_INTERLEAVE_S;
+
+typedef struct TUNER_ANALOG_CAPS_S {
+  ULONG Mode;
+  ULONG StandardsSupported;
+  ULONG MinFrequency;
+  ULONG MaxFrequency;
+  ULONG TuningGranularity;
+  ULONG SettlingTime;
+  ULONG ScanSensingRange;
+  ULONG FineTuneSensingRange;
+} TUNER_ANALOG_CAPS_S, *PTUNER_ANALOG_CAPS_S;
+
+typedef struct KSCAMERA_PERFRAMESETTING_CUSTOM_ITEM {
+  ULONG Size;
+  ULONG Reserved;
+  GUID Id;
+} KSCAMERA_PERFRAMESETTING_CUSTOM_ITEM, *PKSCAMERA_PERFRAMESETTING_CUSTOM_ITEM;
+
+typedef struct _WNF_KSCAMERA_STREAMSTATE_INFO {
+  ULONG ProcessId;
+  ULONG SessionId;
+  ULONG StreamState;
+  ULONG Reserved;
+} WNF_KSCAMERA_STREAMSTATE_INFO, *PWNF_KSCAMERA_STREAMSTATE_INFO;
+
+typedef struct tagTRANSPORTSTATUS {
+  LONG Mode;
+  LONG LastError;
+  LONG RecordInhibit;
+  LONG ServoLock;
+  LONG MediaPresent;
+  LONG MediaLength;
+  LONG MediaSize;
+  LONG MediaTrackCount;
+  LONG MediaTrackLength;
+  LONG MediaTrackSide;
+  LONG MediaType;
+  LONG LinkMode;
+  LONG NotifyOn;
+} TRANSPORTSTATUS, *PTRANSPORTSTATUS;
+
+typedef struct tagTRANSPORTBASICPARMS {
+  LONG TimeFormat;
+  LONG TimeReference;
+  LONG Superimpose;
+  LONG EndStopAction;
+  LONG RecordFormat;
+  LONG StepFrames;
+  LONG SetpField;
+  LONG Preroll;
+  LONG RecPreroll;
+  LONG Postroll;
+  LONG EditDelay;
+  LONG PlayTCDelay;
+  LONG RecTCDelay;
+  LONG EditField;
+  LONG FrameServo;
+  LONG ColorFrameServo;
+  LONG ServoRef;
+  LONG WarnGenlock;
+  LONG SetTracking;
+  TCHAR VolumeName[40];
+  LONG Ballistic[20];
+  LONG Speed;
+  LONG CounterFormat;
+  LONG TunerChannel;
+  LONG TunerNumber;
+  LONG TimerEvent;
+  LONG TimerStartDay;
+  LONG TimerStartTime;
+  LONG TimerStopDay;
+  LONG TimerStopTime;
+} TRANSPORTBASICPARMS, *PTRANSPORTBASICPARMS;
+
+typedef struct tagTRANSPORTVIDEOPARMS {
+  LONG OutputMode;
+  LONG Input;
+} TRANSPORTVIDEOPARMS, *PTRANSPORTVIDEOPARMS;
+
+typedef struct tagTRANSPORTAUDIOPARMS {
+  LONG EnableOutput;
+  LONG EnableRecord;
+  LONG EnableSelsync;
+  LONG Input;
+  LONG MonitorSource;
+} TRANSPORTAUDIOPARMS, *PTRANSPORTAUDIOPARMS;
+
+typedef struct TRANSPORT_STATE {
+  ULONG Mode;
+  ULONG State;
+} TRANSPORT_STATE, *PTRANSPORT_STATE;
+
+typedef struct KSDISPLAYCHANGE {
+  ULONG PelsWidth;
+  ULONG PelsHeight;
+  ULONG BitsPerPel;
+  WCHAR DeviceID[1];
+} KSDISPLAYCHANGE, *PKSDISPLAYCHANGE;
+
+typedef struct KS_AM_SimpleRateChange {
+  REFERENCE_TIME StartTime;
+  LONG Rate;
+} KS_AM_SimpleRateChange, *PKS_AM_SimpleRateChange;
+
+typedef struct KS_AM_ExactRateChange {
+  REFERENCE_TIME OutputZeroTime;
+  LONG Rate;
+} KS_AM_ExactRateChange, *PKS_AM_ExactRateChange;
+
+typedef struct _tagKSAUDIOENGINE_VOLUMELEVEL {
+  LONG TargetVolume;
+  AUDIO_CURVE_TYPE CurveType;
+  ULONGLONG CurveDuration;
+} KSAUDIOENGINE_VOLUMELEVEL, *PKSAUDIOENGINE_VOLUMELEVEL;
+
 #endif
 
 #ifndef CC_MAX_HW_DECODE_LINES

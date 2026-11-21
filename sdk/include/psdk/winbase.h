@@ -4364,4 +4364,35 @@ BOOL WINAPI CopyContext(PCONTEXT Destination, DWORD ContextFlags, PCONTEXT Sourc
 }
 #endif
 
+typedef struct _JIT_DEBUG_INFO {
+  DWORD dwSize;
+  DWORD dwProcessorArchitecture;
+  DWORD dwThreadID;
+  DWORD dwReserved0;
+  ULONG64 lpExceptionAddress;
+  ULONG64 lpExceptionRecord;
+  ULONG64 lpContextRecord;
+} JIT_DEBUG_INFO, *LPJIT_DEBUG_INFO;
+
+typedef struct _COPYFILE2_CREATE_OPLOCK_KEYS {
+  GUID ParentOplockKey;
+  GUID TargetOplockKey;
+} COPYFILE2_CREATE_OPLOCK_KEYS, *PCOPYFILE2_CREATE_OPLOCK_KEYS;
+
+typedef struct _OPERATION_START_PARAMETERS {
+  ULONG Version;
+  OPERATION_ID OperationId;
+  ULONG Flags;
+} OPERATION_START_PARAMETERS, *POPERATION_START_PARAMETERS;
+
+typedef struct _OPERATION_END_PARAMETERS {
+  ULONG Version;
+  OPERATION_ID OperationId;
+  ULONG Flags;
+} OPERATION_END_PARAMETERS, *POPERATION_END_PARAMETERS;
+
+typedef struct _FILE_CASE_SENSITIVE_INFO {
+  ULONG Flags;
+} FILE_CASE_SENSITIVE_INFO, *PFILE_CASE_SENSITIVE_INFO;
+
 #endif /* _WINBASE_ */

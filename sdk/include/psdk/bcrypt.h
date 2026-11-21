@@ -784,4 +784,142 @@ typedef enum BCRYPT_MULTI_OPERATION_TYPE {
     BCRYPT_OPERATION_TYPE_HASH = 1
 } BCRYPT_MULTI_OPERATION_TYPE;
 
+typedef struct _BCRYPT_OID {
+  ULONG cbOID;
+  PUCHAR pbOID;
+} BCRYPT_OID;
+
+typedef struct _BCRYPT_OID_LIST {
+  ULONG dwOIDCount;
+  BCRYPT_OID * pOIDs;
+} BCRYPT_OID_LIST;
+
+typedef struct _BCRYPT_PKCS11_RSA_AES_WRAP_BLOB {
+  ULONG dwMagic;
+  ULONG cbKey;
+  ULONG cbPaddingAlgId;
+  ULONG cbPaddingLabel;
+} BCRYPT_PKCS11_RSA_AES_WRAP_BLOB, *PBCRYPT_PKCS11_RSA_AES_WRAP_BLOB;
+
+typedef struct _SSL_ECCKEY_BLOB {
+  ULONG dwCurveType;
+  ULONG cbKey;
+} SSL_ECCKEY_BLOB, *PSSL_ECCKEY_BLOB;
+
+typedef struct TLS_KEM_CIPHERTEXT_BLOB {
+  ULONG dwMagic;
+  ULONG cbLength;
+} TLS_KEM_CIPHERTEXT_BLOB, *PTLS_KEM_CIPHERTEXT_BLOB;
+
+typedef struct TLS_HYBRID_KEYEXCHANGE_BLOB {
+  ULONG dwMagic;
+  ULONG dwKeyType;
+  UCHAR NumBlobs;
+  PCWSTR rgwszBlobTypes[4];
+  PUCHAR rgbBlobs[4];
+} TLS_HYBRID_KEYEXCHANGE_BLOB, *PTLS_HYBRID_KEYEXCHANGE_BLOB;
+
+typedef struct _BCRYPT_ECCFULLKEY_BLOB {
+  ULONG dwMagic;
+  ULONG dwVersion;
+  ECC_CURVE_TYPE_ENUM dwCurveType;
+  ECC_CURVE_ALG_ID_ENUM dwCurveGenerationAlgId;
+  ULONG cbFieldLength;
+  ULONG cbSubgroupOrder;
+  ULONG cbCofactor;
+  ULONG cbSeed;
+} BCRYPT_ECCFULLKEY_BLOB, *PBCRYPT_ECCFULLKEY_BLOB;
+
+typedef struct _BCRYPT_DSA_PARAMETER_HEADER {
+  ULONG cbLength;
+  ULONG dwMagic;
+  ULONG cbKeyLength;
+  UCHAR Count[4];
+  UCHAR Seed[20];
+  UCHAR q[20];
+} BCRYPT_DSA_PARAMETER_HEADER;
+
+typedef struct _BCRYPT_DSA_PARAMETER_HEADER_V2 {
+  ULONG cbLength;
+  ULONG dwMagic;
+  ULONG cbKeyLength;
+  HASHALGORITHM_ENUM hashAlgorithm;
+  DSAFIPSVERSION_ENUM standardVersion;
+  ULONG cbSeedLength;
+  ULONG cbGroupSize;
+  UCHAR Count[4];
+} BCRYPT_DSA_PARAMETER_HEADER_V2;
+
+typedef struct _BCRYPT_ECC_CURVE_NAMES {
+  ULONG dwEccCurveNames;
+  LPWSTR * pEccCurveNames;
+} BCRYPT_ECC_CURVE_NAMES;
+
+typedef struct _BCRYPT_MULTI_HASH_OPERATION {
+  ULONG iHash;
+  BCRYPT_HASH_OPERATION_TYPE hashOperation;
+  PUCHAR pbBuffer;
+  ULONG cbBuffer;
+} BCRYPT_MULTI_HASH_OPERATION;
+
+typedef struct _BCRYPT_MULTI_OBJECT_LENGTH_STRUCT {
+  ULONG cbPerObject;
+  ULONG cbPerElement;
+} BCRYPT_MULTI_OBJECT_LENGTH_STRUCT;
+
+typedef struct _BCRYPT_PROVIDER_NAME {
+  LPWSTR pszProviderName;
+} BCRYPT_PROVIDER_NAME;
+
+typedef struct _BCRYPT_INTERFACE_VERSION {
+  USHORT MajorVersion;
+  USHORT MinorVersion;
+} BCRYPT_INTERFACE_VERSION, *PBCRYPT_INTERFACE_VERSION;
+
+typedef struct _CRYPT_PROVIDERS {
+  ULONG cProviders;
+  PWSTR * rgpszProviders;
+} CRYPT_PROVIDERS, *PCRYPT_PROVIDERS;
+
+typedef struct _CRYPT_CONTEXT_CONFIG {
+  ULONG dwFlags;
+  ULONG dwReserved;
+} CRYPT_CONTEXT_CONFIG, *PCRYPT_CONTEXT_CONFIG;
+
+typedef struct _CRYPT_CONTEXT_FUNCTION_CONFIG {
+  ULONG dwFlags;
+  ULONG dwReserved;
+} CRYPT_CONTEXT_FUNCTION_CONFIG, *PCRYPT_CONTEXT_FUNCTION_CONFIG;
+
+typedef struct _CRYPT_CONTEXT_FUNCTION_PROVIDERS {
+  ULONG cProviders;
+  PWSTR * rgpszProviders;
+} CRYPT_CONTEXT_FUNCTION_PROVIDERS, *PCRYPT_CONTEXT_FUNCTION_PROVIDERS;
+
+typedef struct _CRYPT_PROPERTY_REF {
+  PWSTR pszProperty;
+  ULONG cbValue;
+  PUCHAR pbValue;
+} CRYPT_PROPERTY_REF, *PCRYPT_PROPERTY_REF;
+
+typedef struct _CRYPT_IMAGE_REF {
+  PWSTR pszImage;
+  ULONG dwFlags;
+} CRYPT_IMAGE_REF, *PCRYPT_IMAGE_REF;
+
+typedef struct _CRYPT_PROVIDER_REF {
+  ULONG dwInterface;
+  PWSTR pszFunction;
+  PWSTR pszProvider;
+  ULONG cProperties;
+  PCRYPT_PROPERTY_REF * rgpProperties;
+  PCRYPT_IMAGE_REF pUM;
+  PCRYPT_IMAGE_REF pKM;
+} CRYPT_PROVIDER_REF, *PCRYPT_PROVIDER_REF;
+
+typedef struct _CRYPT_PROVIDER_REFS {
+  ULONG cProviders;
+  PCRYPT_PROVIDER_REF * rgpProviders;
+} CRYPT_PROVIDER_REFS, *PCRYPT_PROVIDER_REFS;
+
 #endif  /* __WINE_BCRYPT_H */

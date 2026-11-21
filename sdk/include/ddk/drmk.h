@@ -115,4 +115,9 @@ typedef IDrmAudioStream *PDRMAUDIOSTREAM;
     _In_ ULONG ContentId,                 \
     _In_ PCDRMRIGHTS DrmRights);
 
+typedef struct KSDRMAUDIOSTREAM_CONTENTID {
+  ULONG ContentId;
+  DRMRIGHTS DrmRights;
+} KSDRMAUDIOSTREAM_CONTENTID, *PKSDRMAUDIOSTREAM_CONTENTID;
+
 #endif /* DRMK_H */

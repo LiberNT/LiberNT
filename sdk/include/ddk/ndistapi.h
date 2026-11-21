@@ -1305,4 +1305,31 @@ typedef struct _CO_AF_TAPI_MAKE_CALL_PARAMETERS {
 }
 #endif
 
+typedef struct _NDISTAPI_CHARACTERISTICS {
+  PVOID RequestProc;
+  GUID Guid;
+  NDIS_WAN_MEDIUM_SUBTYPE MediaType;
+} NDISTAPI_CHARACTERISTICS, *PNDISTAPI_CHARACTERISTICS;
+
+typedef struct _NDIS_TAPI_GATHER_DIGITS {
+  ULONG ulRequestID;
+  HDRV_CALL hdCall;
+  ULONG ulEndToEndID;
+  ULONG ulDigitModes;
+  LPWSTR lpsOrigDigitsBuffer;
+  ULONG ulDigitsBufferOffset;
+  ULONG ulNumDigitsNeeded;
+  ULONG ulNumDigitsRead;
+  ULONG ulTickCount;
+  ULONG ulTerminationReason;
+  ULONG ulTerminationDigitsMask;
+  ULONG ulFirstDigitTimeout;
+  ULONG ulInterDigitTimeout;
+} NDIS_TAPI_GATHER_DIGITS, *PNDIS_TAPI_GATHER_DIGITS;
+
+typedef struct _NDIS_TAPI_MONITOR_DIGITS {
+  HDRV_CALL hdCall;
+  ULONG ulDigitModes;
+} NDIS_TAPI_MONITOR_DIGITS, *PNDIS_TAPI_MONITOR_DIGITS;
+
 #endif /* _NDIS_TAPI_ */

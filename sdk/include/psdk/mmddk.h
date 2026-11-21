@@ -530,4 +530,31 @@ DWORD   WINAPI mmGetCurrentTask(void);
 
 typedef struct tMIXEROPENDESC * PMIXEROPENDESC;
 
+#pragma pack(push, 1)
+typedef struct MDEVICECAPSEX {
+  DWORD cbSize;
+  LPVOID pCaps;
+} MDEVICECAPSEX;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct timerevent_tag {
+  WORD wDelay;
+  WORD wResolution;
+  LPTIMECALLBACK lpFunction;
+  DWORD dwUser;
+  WORD wFlags;
+  WORD wReserved1;
+} TIMEREVENT;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct MCI_OPEN_DRIVER_PARMS {
+  MCIDEVICEID wDeviceID;
+  LPCWSTR lpstrParams;
+  UINT wCustomCommandTable;
+  UINT wType;
+} MCI_OPEN_DRIVER_PARMS;
+#pragma pack(pop)
+
 #endif /* __MMDDK_H */

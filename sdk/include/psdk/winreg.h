@@ -627,4 +627,24 @@ LSTATUS WINAPI RegOpenUserClassesRoot(HANDLE hToken, DWORD dwOptions, REGSAM sam
 }
 #endif
 
+typedef struct val_context {
+  int valuelen;
+  LPVOID value_context;
+  LPVOID val_buff_ptr;
+} *PVALCONTEXT;
+
+typedef struct pvalueA {
+  LPSTR pv_valuename;
+  int pv_valuelen;
+  LPVOID pv_value_context;
+  DWORD pv_type;
+} PVALUEA, *PPVALUEA;
+
+typedef struct pvalueW {
+  LPWSTR pv_valuename;
+  int pv_valuelen;
+  LPVOID pv_value_context;
+  DWORD pv_type;
+} PVALUEW, *PPVALUEW;
+
 #endif

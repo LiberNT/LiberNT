@@ -1076,4 +1076,20 @@ BOOL WINAPI IsLFNDriveW(LPCWSTR pszPath);
 }
 #endif
 
+typedef struct _OPEN_PRINTER_PROPS_INFOA {
+  DWORD dwSize;
+  LPSTR pszSheetName;
+  UINT uSheetIndex;
+  DWORD dwFlags;
+  BOOL bModal;
+} OPEN_PRINTER_PROPS_INFOA, *POPEN_PRINTER_PROPS_INFOA;
+
+typedef struct _OPEN_PRINTER_PROPS_INFOW {
+  DWORD dwSize;
+  LPWSTR pszSheetName;
+  UINT uSheetIndex;
+  DWORD dwFlags;
+  BOOL bModal;
+} OPEN_PRINTER_PROPS_INFOW, *POPEN_PRINTER_PROPS_INFOW;
+
 #endif

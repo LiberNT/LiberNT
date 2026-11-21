@@ -35,4 +35,16 @@ typedef struct _NLSTABLEINFO {
 }
 #endif
 
+typedef struct _RTL_NLS_STATE {
+  CPTABLEINFO DefaultAcpTableInfo;
+  CPTABLEINFO DefaultOemTableInfo;
+  PUSHORT ActiveCodePageData;
+  PUSHORT OemCodePageData;
+  PUSHORT LeadByteInfo;
+  PUSHORT OemLeadByteInfo;
+  PUSHORT CaseMappingData;
+  PUSHORT UnicodeUpcaseTable844;
+  PUSHORT UnicodeLowercaseTable844;
+} RTL_NLS_STATE, *PRTL_NLS_STATE;
+
 #endif /* _NTNLS_ */

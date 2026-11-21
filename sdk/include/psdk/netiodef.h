@@ -1317,4 +1317,24 @@ typedef enum FALLBACK_INDEX {
     FallbackIndexMax = 1
 } FALLBACK_INDEX;
 
+typedef struct nd_opt_rdnss {
+  UINT8 nd_opt_rdnss_type;
+  UINT8 nd_opt_rdnss_len;
+  UINT16 nd_opt_rdnss_reserved;
+  UINT32 nd_opt_rdnss_lifetime;
+} ND_OPTION_RDNSS, *PND_OPTION_RDNSS;
+
+typedef struct nd_opt_dnssl {
+  UINT8 nd_opt_dnssl_type;
+  UINT8 nd_opt_dnssl_len;
+  UINT16 nd_opt_dnssl_reserved;
+  UINT32 nd_opt_dnssl_lifetime;
+} ND_OPTION_DNSSL, *PND_OPTION_DNSSL;
+
+typedef struct tcp_opt_fastopen {
+  UINT8 Kind;
+  UINT8 Length;
+  UINT8 Cookie[0];
+} TCP_OPT_FASTOPEN;
+
 #endif /* _NETIODEF_ */

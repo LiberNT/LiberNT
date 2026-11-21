@@ -495,4 +495,237 @@ BOOL WINAPI SslEmptyCacheW(LPWSTR pszTargetName, DWORD dwFlags);
 }
 #endif
 
+typedef struct _SecPkgContext_RemoteCredentialInfo {
+  DWORD cbCertificateChain;
+  PBYTE pbCertificateChain;
+  DWORD cCertificates;
+  DWORD fFlags;
+  DWORD dwBits;
+} SecPkgContext_RemoteCredentialInfo, *PSecPkgContext_RemoteCredentialInfo;
+
+typedef struct _SecPkgContext_LocalCredentialInfo {
+  DWORD cbCertificateChain;
+  PBYTE pbCertificateChain;
+  DWORD cCertificates;
+  DWORD fFlags;
+  DWORD dwBits;
+} SecPkgContext_LocalCredentialInfo, *PSecPkgContext_LocalCredentialInfo;
+
+typedef struct _SecPkgContext_ClientCertPolicyResult {
+  HRESULT dwPolicyResult;
+  GUID guidPolicyId;
+} SecPkgContext_ClientCertPolicyResult, *PSecPkgContext_ClientCertPolicyResult;
+
+typedef struct _SecPkgContext_ConnectionInfoEx {
+  DWORD dwVersion;
+  DWORD dwProtocol;
+  WCHAR szCipher[64];
+  DWORD dwCipherStrength;
+  WCHAR szHash[64];
+  DWORD dwHashStrength;
+  WCHAR szExchange[64];
+  DWORD dwExchStrength;
+} SecPkgContext_ConnectionInfoEx, *PSecPkgContext_ConnectionInfoEx;
+
+typedef struct _SecPkgContext_EapKeyBlock {
+  BYTE rgbKeys[128];
+  BYTE rgbIVs[64];
+} SecPkgContext_EapKeyBlock, *PSecPkgContext_EapKeyBlock;
+
+typedef struct _SecPkgContext_MappedCredAttr {
+  DWORD dwAttribute;
+  PVOID pvBuffer;
+} SecPkgContext_MappedCredAttr, *PSecPkgContext_MappedCredAttr;
+
+typedef struct _SecPkgContext_SessionInfo {
+  DWORD dwFlags;
+  DWORD cbSessionId;
+  BYTE rgbSessionId[32];
+} SecPkgContext_SessionInfo, *PSecPkgContext_SessionInfo;
+
+typedef struct _SecPkgContext_SessionAppData {
+  DWORD dwFlags;
+  DWORD cbAppData;
+  PBYTE pbAppData;
+} SecPkgContext_SessionAppData, *PSecPkgContext_SessionAppData;
+
+typedef struct _SecPkgContext_EapPrfInfo {
+  DWORD dwVersion;
+  DWORD cbPrfData;
+  PBYTE pbPrfData;
+} SecPkgContext_EapPrfInfo, *PSecPkgContext_EapPrfInfo;
+
+typedef struct _SecPkgContext_SupportedSignatures {
+  WORD cSignatureAndHashAlgorithms;
+  WORD * pSignatureAndHashAlgorithms;
+} SecPkgContext_SupportedSignatures, *PSecPkgContext_SupportedSignatures;
+
+typedef struct _SecPkgContext_Certificates {
+  DWORD cCertificates;
+  DWORD cbCertificateChain;
+  PBYTE pbCertificateChain;
+} SecPkgContext_Certificates, *PSecPkgContext_Certificates;
+
+typedef struct _SecPkgContext_CertInfo {
+  DWORD dwVersion;
+  DWORD cbSubjectName;
+  LPWSTR pwszSubjectName;
+  DWORD cbIssuerName;
+  LPWSTR pwszIssuerName;
+  DWORD dwKeySize;
+} SecPkgContext_CertInfo, *PSecPkgContext_CertInfo;
+
+typedef struct _SecPkgContext_UiInfo {
+  HWND hParentWindow;
+} SecPkgContext_UiInfo, *PSecPkgContext_UiInfo;
+
+typedef struct _SecPkgContext_EarlyStart {
+  DWORD dwEarlyStartFlags;
+} SecPkgContext_EarlyStart, *PSecPkgContext_EarlyStart;
+
+typedef struct _SecPkgContext_KeyingMaterialInfo {
+  WORD cbLabel;
+  LPSTR pszLabel;
+  WORD cbContextValue;
+  PBYTE pbContextValue;
+  DWORD cbKeyingMaterial;
+} SecPkgContext_KeyingMaterialInfo, *PSecPkgContext_KeyingMaterialInfo;
+
+typedef struct _SecPkgContext_KeyingMaterial {
+  DWORD cbKeyingMaterial;
+  PBYTE pbKeyingMaterial;
+} SecPkgContext_KeyingMaterial, *PSecPkgContext_KeyingMaterial;
+
+typedef struct _SecPkgContext_KeyingMaterial_Inproc {
+  WORD cbLabel;
+  LPSTR pszLabel;
+  WORD cbContextValue;
+  PBYTE pbContextValue;
+  DWORD cbKeyingMaterial;
+  PBYTE pbKeyingMaterial;
+} SecPkgContext_KeyingMaterial_Inproc, *PSecPkgContext_KeyingMaterial_Inproc;
+
+typedef struct _SecPkgContext_SrtpParameters {
+  WORD ProtectionProfile;
+  BYTE MasterKeyIdentifierSize;
+  PBYTE MasterKeyIdentifier;
+} SecPkgContext_SrtpParameters, *PSecPkgContext_SrtpParameters;
+
+typedef struct _SecPkgContext_TokenBinding {
+  BYTE MajorVersion;
+  BYTE MinorVersion;
+  WORD KeyParametersSize;
+  PBYTE KeyParameters;
+} SecPkgContext_TokenBinding, *PSecPkgContext_TokenBinding;
+
+typedef struct _SecPkgContext_CertificateValidationResult {
+  DWORD dwChainErrorStatus;
+  HRESULT hrVerifyChainStatus;
+} SecPkgContext_CertificateValidationResult, *PSecPkgContext_CertificateValidationResult;
+
+typedef struct _SEND_GENERIC_TLS_EXTENSION {
+  WORD ExtensionType;
+  WORD HandshakeType;
+  DWORD Flags;
+  WORD BufferSize;
+  UCHAR Buffer[1];
+} SEND_GENERIC_TLS_EXTENSION, *PSEND_GENERIC_TLS_EXTENSION;
+
+typedef struct _TLS_EXTENSION_SUBSCRIPTION {
+  WORD ExtensionType;
+  WORD HandshakeType;
+} TLS_EXTENSION_SUBSCRIPTION, *PTLS_EXTENSION_SUBSCRIPTION;
+
+typedef struct _SUBSCRIBE_GENERIC_TLS_EXTENSION {
+  DWORD Flags;
+  DWORD SubscriptionsCount;
+  TLS_EXTENSION_SUBSCRIPTION Subscriptions[1];
+} SUBSCRIBE_GENERIC_TLS_EXTENSION, *PSUBSCRIBE_GENERIC_TLS_EXTENSION;
+
+typedef struct _SCHANNEL_CERT_HASH {
+  DWORD dwLength;
+  DWORD dwFlags;
+  HCRYPTPROV hProv;
+  BYTE ShaHash[20];
+} SCHANNEL_CERT_HASH, *PSCHANNEL_CERT_HASH;
+
+typedef struct _SCHANNEL_CERT_HASH_STORE {
+  DWORD dwLength;
+  DWORD dwFlags;
+  HCRYPTPROV hProv;
+  BYTE ShaHash[20];
+  WCHAR pwszStoreName[128];
+} SCHANNEL_CERT_HASH_STORE, *PSCHANNEL_CERT_HASH_STORE;
+
+typedef struct _SCHANNEL_SESSION_TOKEN {
+  DWORD dwTokenType;
+  DWORD dwFlags;
+} SCHANNEL_SESSION_TOKEN;
+
+typedef struct _SCHANNEL_CLIENT_SIGNATURE {
+  DWORD cbLength;
+  ALG_ID aiHash;
+  DWORD cbHash;
+  BYTE HashValue[36];
+  BYTE CertThumbprint[20];
+} SCHANNEL_CLIENT_SIGNATURE, *PSCHANNEL_CLIENT_SIGNATURE;
+
+typedef struct _SSL_CREDENTIAL_CERTIFICATE {
+  DWORD cbPrivateKey;
+  PBYTE pPrivateKey;
+  DWORD cbCertificate;
+  PBYTE pCertificate;
+  PSTR pszPassword;
+} SSL_CREDENTIAL_CERTIFICATE, *PSSL_CREDENTIAL_CERTIFICATE;
+
+typedef struct _SCH_CRED {
+  DWORD dwVersion;
+  DWORD cCreds;
+  PVOID * paSecret;
+  PVOID * paPublic;
+  DWORD cMappers;
+  struct _HMAPPER ** aphMappers;
+} SCH_CRED, *PSCH_CRED;
+
+typedef struct _SCH_CRED_SECRET_CAPI {
+  DWORD dwType;
+  HCRYPTPROV hProv;
+} SCH_CRED_SECRET_CAPI, *PSCH_CRED_SECRET_CAPI;
+
+typedef struct _SCH_CRED_SECRET_PRIVKEY {
+  DWORD dwType;
+  PBYTE pPrivateKey;
+  DWORD cbPrivateKey;
+  PSTR pszPassword;
+} SCH_CRED_SECRET_PRIVKEY, *PSCH_CRED_SECRET_PRIVKEY;
+
+typedef struct _SCH_CRED_PUBLIC_CERTCHAIN {
+  DWORD dwType;
+  DWORD cbCertChain;
+  PBYTE pCertChain;
+} SCH_CRED_PUBLIC_CERTCHAIN, *PSCH_CRED_PUBLIC_CERTCHAIN;
+
+typedef struct _PctPublicKey {
+  DWORD Type;
+  DWORD cbKey;
+  UCHAR pKey[1];
+} PctPublicKey;
+
+typedef struct _X509Certificate {
+  DWORD Version;
+  DWORD SerialNumber[4];
+  ALG_ID SignatureAlgorithm;
+  FILETIME ValidFrom;
+  FILETIME ValidUntil;
+  PSTR pszIssuer;
+  PSTR pszSubject;
+  PctPublicKey * pPublicKey;
+} X509Certificate, *PX509Certificate;
+
+typedef struct _SCH_EXTENSION_DATA {
+  WORD ExtensionType;
+  const BYTE * pExtData;
+  DWORD cbExtData;
+} SCH_EXTENSION_DATA;
+
 #endif /* __SCHANNEL_H__ */

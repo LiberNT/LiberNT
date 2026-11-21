@@ -1346,4 +1346,756 @@ typedef enum _NFIT_CONTROL_REGION_FLAG {
     NfitControlRegionFlagBufferBlockDataWindow = 1
 } NFIT_CONTROL_REGION_FLAG, *PNFIT_CONTROL_REGION_FLAG;
 
+typedef struct _MEMORY_POWER_STATE {
+  UCHAR PowerStateValue;
+  UCHAR PowerStateInformationIndex;
+} MEMORY_POWER_STATE, *PMEMORY_POWER_STATE;
+
+#pragma pack(push, 1)
+typedef struct _MEMORY_POWER_NODE {
+  UCHAR Flag;
+  UCHAR Reserved1;
+  USHORT MpnId;
+  ULONG Length;
+  ULONG BaseAddressLow;
+  ULONG BaseAddressHigh;
+  ULONG LengthLow;
+  ULONG LengthHigh;
+  ULONG PowerStateCount;
+  ULONG PhysicalComponentCount;
+  MEMORY_POWER_STATE MpState;
+} MEMORY_POWER_NODE, *PMEMORY_POWER_NODE;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _MEMORY_COOLING_REGION {
+  ULONG PowerCommandRegister;
+  ULONG PowerStatusRegister;
+  ULONG PowerStateId;
+  ULONG MpnId;
+  ULONGLONG EnergyConsumed;
+  ULONGLONG ExpectedPowerConsumed;
+} MEMORY_COOLING_REGION, *PMEMORY_COOLING_REGION;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _ACPI_MSCT_ENTRY {
+  UCHAR Revision;
+  UCHAR Length;
+  ULONG DomainIdRangeLow;
+  ULONG DomainIdRangeHigh;
+  ULONG ProcessorCapacity;
+  ULONG64 MemoryCapacity;
+} ACPI_MSCT_ENTRY, *PACPI_MSCT_ENTRY;
+#pragma pack(pop)
+
+typedef struct _APICTABLE {
+  UCHAR Type;
+  UCHAR Length;
+} APICTABLE;
+
+#pragma pack(push, 1)
+typedef struct _PROCLOCALAPIC {
+  UCHAR Type;
+  UCHAR Length;
+  UCHAR ACPIProcessorID;
+  UCHAR APICID;
+  ULONG Flags;
+} PROCLOCALAPIC;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _ISA_VECTOR {
+  UCHAR Type;
+  UCHAR Length;
+  UCHAR Bus;
+  UCHAR Source;
+  ULONG GlobalSystemInterruptVector;
+  USHORT Flags;
+} ISA_VECTOR;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IO_NMISOURCE {
+  UCHAR Type;
+  UCHAR Length;
+  USHORT Flags;
+  ULONG GlobalSystemInterruptVector;
+} IO_NMISOURCE;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _LOCAL_NMISOURCE {
+  UCHAR Type;
+  UCHAR Length;
+  UCHAR ProcessorID;
+  USHORT Flags;
+  UCHAR LINTIN;
+} LOCAL_NMISOURCE;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _PROCLOCALSAPIC {
+  UCHAR Type;
+  UCHAR Length;
+  UCHAR ACPIProcessorID;
+  UCHAR APICID;
+  UCHAR APICEID;
+  UCHAR Reserved[3];
+  ULONG Flags;
+  ULONG ACPIProcessorUIDInteger;
+  CHAR ACPIProcessorUIDString[1];
+} PROCLOCALSAPIC;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IOSAPIC {
+  UCHAR Type;
+  UCHAR Length;
+  UCHAR IOSAPICID;
+  UCHAR Reserved;
+  ULONG SystemVectorBase;
+  ULONG_PTR IOSAPICAddress;
+} IOSAPIC;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _PLATFORM_INTERRUPT {
+  UCHAR Type;
+  UCHAR Length;
+  USHORT Flags;
+  UCHAR InterruptType;
+  UCHAR APICID;
+  UCHAR ACPIEID;
+  UCHAR IOSAPICVector;
+  ULONG GlobalVector;
+  ULONG Reserved;
+} PLATFORM_INTERRUPT;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _PROCLOCALX2APIC {
+  UCHAR Type;
+  UCHAR Length;
+  USHORT Reserved;
+  ULONG APICID;
+  ULONG Flags;
+  ULONG ACPIProcessorID;
+} PROCLOCALX2APIC;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _LOCAL_X2APIC_NMISOURCE {
+  UCHAR Type;
+  UCHAR Length;
+  USHORT Flags;
+  ULONG ProcessorID;
+  UCHAR LINTIN;
+  UCHAR Reserved[3];
+} LOCAL_X2APIC_NMISOURCE;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _PROCLOCALGIC {
+  UCHAR Type;
+  UCHAR Length;
+  USHORT Reserved;
+  ULONG Identifier;
+  ULONG AcpiProcessorId;
+  ULONG Flags;
+  ULONG ParkingProtocolVersion;
+  ULONG PerformanceInterruptGsi;
+  ULONGLONG ParkedPhysicalAddress;
+  ULONGLONG ControllerPhysicalAddress;
+  ULONGLONG Gicv;
+  ULONGLONG Gich;
+  ULONG VgicMaintenanceInterrupt;
+  ULONGLONG GicrBaseAddress;
+  ULONGLONG Mpidr;
+  UCHAR ProcessorPowerEfficiencyClass;
+  UCHAR Reserved77;
+  USHORT SpeInterruptGsi;
+} PROCLOCALGIC;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _GIC_DISTRIBUTOR {
+  UCHAR Type;
+  UCHAR Length;
+  USHORT Reserved1;
+  ULONG Identifier;
+  ULONGLONG ControllerPhysicalAddress;
+  ULONG GsivBase;
+  UCHAR Version;
+  UCHAR Reserved[3];
+} GIC_DISTRIBUTOR;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _GIC_MSIFRAME_ENTRY {
+  UCHAR Type;
+  UCHAR Length;
+  USHORT Reserved1;
+  ULONG Identifier;
+  ULONGLONG PhysicalAddress;
+  ULONG Flags;
+  USHORT SpiCount;
+  USHORT SpiBase;
+} GIC_MSIFRAME_ENTRY;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _GIC_REDISTRIBUTOR {
+  UCHAR Type;
+  UCHAR Length;
+  USHORT Reserved;
+  ULONGLONG DiscoveryRangeBaseAddress;
+  ULONG DiscoveryRangeLength;
+} GIC_REDISTRIBUTOR;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _GIC_ITS {
+  UCHAR Type;
+  UCHAR Length;
+  USHORT Reserved1;
+  ULONG Identifier;
+  ULONGLONG PhysicalAddress;
+  ULONG Reserved2;
+} GIC_ITS;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _DEBUG_DEVICE_INFORMATION_V2 {
+  UCHAR Revision;
+  USHORT Length;
+  UCHAR BaseAddressRegisterCount;
+  USHORT NameSpaceStringLength;
+  USHORT NameSpaceStringOffset;
+  USHORT OemDataLength;
+  USHORT OemDataOffset;
+  USHORT PortType;
+  USHORT PortSubtype;
+  USHORT Reserved;
+  USHORT BaseAddressRegisterOffset;
+  USHORT AddressSizeOffset;
+} DEBUG_DEVICE_INFORMATION_V2, *PDEBUG_DEVICE_INFORMATION_V2;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _MCFG_TABLE_ENTRY {
+  ULONGLONG BaseAddress;
+  USHORT SegmentNumber;
+  UCHAR StartBusNumber;
+  UCHAR EndBusNumber;
+  ULONG Reserved;
+} MCFG_TABLE_ENTRY, *PMCFG_TABLE_ENTRY;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IORT_NODE_HEADER {
+  UCHAR Type;
+  USHORT Length;
+  UCHAR Revision;
+  ULONG Identifier;
+  ULONG IdMappingCount;
+  ULONG IdMappingArrayOffset;
+} IORT_NODE_HEADER, *PIORT_NODE_HEADER;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IORT_ITS_GROUP_NODE {
+  IORT_NODE_HEADER Header;
+  ULONG ItsCount;
+  ULONG ItsArray[1];
+} IORT_ITS_GROUP_NODE, *PIORT_ITS_GROUP_NODE;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IORT_MEMORY_RANGE_DESCRIPTOR {
+  ULONG PhysicalRangeOffset;
+  ULONG PhysicalRangeLength;
+  UCHAR Reserved[4];
+} IORT_MEMORY_RANGE_DESCRIPTOR, *PIORT_MEMORY_RANGE_DESCRIPTOR;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _RHSA {
+  USHORT Type;
+  USHORT Length;
+  ULONG ReservedZ;
+  ULONGLONG RegisterBaseAddress;
+  ULONG ProximityDomain;
+} RHSA, *PRHSA;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IVRS_BLOCK_HEADER {
+  UINT8 Type;
+  UINT8 Flags;
+  UINT16 Length;
+} IVRS_BLOCK_HEADER, *PIVRS_BLOCK_HEADER;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _SDEV_ENTRY_HEADER {
+  UCHAR Type;
+  UCHAR Flags;
+  USHORT Length;
+} SDEV_ENTRY_HEADER, *PSDEV_ENTRY_HEADER;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _SDEV_SECURE_PCI_INFO_ENTRY {
+  SDEV_ENTRY_HEADER Header;
+  USHORT PciSegmentNumber;
+  USHORT StartBusNumber;
+  USHORT PciPathOffset;
+  USHORT PciPathLength;
+  USHORT VendorInfoOffset;
+  USHORT VendorInfoLength;
+} SDEV_SECURE_PCI_INFO_ENTRY, *PSDEV_SECURE_PCI_INFO_ENTRY;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _SDEV_SECURE_ACPI_INFO_ENTRY {
+  SDEV_ENTRY_HEADER Header;
+  USHORT IdentifierOffset;
+  USHORT IdentifierLength;
+  USHORT VendorInfoOffset;
+  USHORT VendorInfoLength;
+  USHORT SecureResourcesOffset;
+  USHORT SecureResourcesLength;
+} SDEV_SECURE_ACPI_INFO_ENTRY, *PSDEV_SECURE_ACPI_INFO_ENTRY;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _SDEV_SECURE_RESOURCE_ID_ENTRY {
+  SDEV_ENTRY_HEADER Header;
+  USHORT HardwareIdentifierOffset;
+  USHORT HardwareIdentifierLength;
+  USHORT SubsystemIdentifierOffset;
+  USHORT SubsystemIdentifierLength;
+  USHORT HardwareRevision;
+  UCHAR HardwareRevisionPresent;
+} SDEV_SECURE_RESOURCE_ID_ENTRY, *PSDEV_SECURE_RESOURCE_ID_ENTRY;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _SDEV_SECURE_RESOURCE_MEMORY_ENTRY {
+  SDEV_ENTRY_HEADER Header;
+  ULONG Reserved;
+  ULONGLONG MemoryAddressBase;
+  ULONGLONG MemoryAddressLength;
+} SDEV_SECURE_RESOURCE_MEMORY_ENTRY, *PSDEV_SECURE_RESOURCE_MEMORY_ENTRY;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _PRM_HANDLER_INFORMATION {
+  USHORT Revision;
+  USHORT Length;
+  GUID Identifier;
+  ULONG64 PhysicalAddress;
+  ULONG64 StaticBufferPhysicalAddress;
+  ULONG64 AcpiParameterPhysicalAddress;
+} PRM_HANDLER_INFORMATION, *PPRM_HANDLER_INFORMATION;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _PRM_MODULE_INFORMATION {
+  USHORT Revision;
+  USHORT Length;
+  GUID Identifier;
+  USHORT MajorVersion;
+  USHORT MinorVersion;
+  USHORT HandlerCount;
+  ULONG HandlerOffset;
+  ULONG64 MmioRangesPhysicalAddress;
+} PRM_MODULE_INFORMATION, *PPRM_MODULE_INFORMATION;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _CSRT_RESOURCE_GROUP_HEADER {
+  UINT32 Length;
+  UINT32 VendorId;
+  UINT32 SubvendorId;
+  UINT16 DeviceId;
+  UINT16 SubdeviceId;
+  UINT16 Revision;
+  UINT16 Instance;
+  UINT32 SharedInfoLength;
+} CSRT_RESOURCE_GROUP_HEADER, *PCSRT_RESOURCE_GROUP_HEADER;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _CSRT_RESOURCE_DESCRIPTOR_HEADER {
+  UINT32 Length;
+  UINT16 Type;
+  UINT16 Subtype;
+  UINT32 Uid;
+} CSRT_RESOURCE_DESCRIPTOR_HEADER, *PCSRT_RESOURCE_DESCRIPTOR_HEADER;
+#pragma pack(pop)
+
+typedef struct _PCC_SUBSPACE_HEADER {
+  UCHAR Type;
+  UCHAR Length;
+} PCC_SUBSPACE_HEADER, *PPCC_SUBSPACE_HEADER;
+
+#pragma pack(push, 1)
+typedef struct _GTDT_PLATFORM_TIMER_HEADER {
+  UCHAR Type;
+  USHORT Length;
+} GTDT_PLATFORM_TIMER_HEADER, *PGTDT_PLATFORM_TIMER_HEADER;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _GTDT_PLATFORM_GT_BLOCK {
+  GTDT_PLATFORM_TIMER_HEADER Header;
+  UCHAR Reserved;
+  ULONGLONG CntCtlBasePhysicalAddress;
+  ULONG BlockTimerCount;
+  ULONG BlockTimerOffset;
+} GTDT_PLATFORM_GT_BLOCK, *PGTDT_PLATFORM_GT_BLOCK;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _GTDT_PLATFORM_GT_INSTANCE {
+  UCHAR FrameNumber;
+  UCHAR Reserved[3];
+  ULONGLONG CntBasePhysicalAddress;
+  ULONGLONG CntEL0BasePhysicalAddress;
+  ULONG PhysicalTimerGsiv;
+  ULONG PhysicalTimerFlags;
+  ULONG VirtualTimerGsiv;
+  ULONG VirtualTimerFlags;
+  ULONG CommonFlags;
+} GTDT_PLATFORM_GT_INSTANCE, *PGTDT_PLATFORM_GT_INSTANCE;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _GTDT_PLATFORM_WATCHDOG_BLOCK {
+  GTDT_PLATFORM_TIMER_HEADER Header;
+  UCHAR Reserved;
+  ULONGLONG RefreshFramePhysicalAddress;
+  ULONGLONG ControlFramePhysicalAddress;
+  ULONG WatchdogTimerGsiv;
+  ULONG WatchdogTimerFlags;
+} GTDT_PLATFORM_WATCHDOG_BLOCK, *PGTDT_PLATFORM_WATCHDOG_BLOCK;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _FIRMWARE_S3_PERFORMANCE_TABLE {
+  ULONG Signature;
+  ULONG Length;
+} FIRMWARE_S3_PERFORMANCE_TABLE, *PFIRMWARE_S3_PERFORMANCE_TABLE;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _S3PT_RECORD_HEADER {
+  USHORT RecordSubtype;
+  CHAR RecordLength;
+  CHAR Revision;
+} S3PT_RECORD_HEADER, *PS3PT_RECORD_HEADER;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _FIRMWARE_BOOT_PERFORMANCE_TABLE {
+  ULONG Signature;
+  ULONG Length;
+} FIRMWARE_BOOT_PERFORMANCE_TABLE, *PFIRMWARE_BOOT_PERFORMANCE_TABLE;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _FBPT_RECORD_HEADER {
+  USHORT RecordSubtype;
+  CHAR RecordLength;
+  CHAR Revision;
+} FBPT_RECORD_HEADER, *PFBPT_RECORD_HEADER;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _FBPT_RECORD {
+  FBPT_RECORD_HEADER RecordHeader;
+  ULONG Reserved;
+  ULONGLONG ResetEnd;
+  ULONGLONG LoadImageStart;
+  ULONGLONG StartImageStart;
+  ULONGLONG ExitBootServicesEntry;
+  ULONGLONG ExitBootServicesExit;
+} FBPT_RECORD, *PFBPT_RECORD;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _FPDT_RECORD_HEADER {
+  USHORT RecordType;
+  CHAR RecordLength;
+  CHAR Revision;
+  ULONG Reserved;
+} FPDT_RECORD_HEADER, *PFPDT_RECORD_HEADER;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _MHSP_CHANNEL {
+  UINT64 ChannelBaseAddress;
+  UINT64 RequestDoorbellAddress;
+  UINT64 ReplyDoorbellAddress;
+  UINT32 ChannelSize;
+  UINT32 IrqResource;
+  UINT32 ChannelParameters[2];
+} MHSP_CHANNEL, *PMHSP_CHANNEL;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _ACPI_PLD_JOINT_BUFFER {
+  UINT32 Revision : 5;
+  UINT32 JointType : 4;
+  UINT32 SourceEdge : 3;
+  UINT32 TargetCabinetNumber : 8;
+  UINT32 TargetPanel : 3;
+  UINT32 TargetEdge : 3;
+  UINT32 Reserved1 : 5;
+  UINT32 MovementOrientation : 1;
+  UINT32 ForwardMovementRange : 16;
+  UINT32 BackwardMovementRange : 16;
+  UINT32 HorizontalOffset : 16;
+  UINT32 VerticalOffset : 16;
+  UINT32 GapOffset : 16;
+  UINT32 Rotation : 9;
+  UINT32 Reserved2 : 7;
+} ACPI_PLD_JOINT_BUFFER, *PACPI_PLD_JOINT_BUFFER;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _ACPI_PLD_SPATIAL_BUFFER {
+  UINT32 Revision : 5;
+  UINT32 RollRotation : 9;
+  UINT32 PitchRotation : 9;
+  UINT32 YawRotation : 9;
+  UINT32 Width : 16;
+  UINT32 Height : 16;
+  UINT32 Length : 16;
+  UINT32 HorizontalOffset : 16;
+  UINT32 VerticalOffset : 16;
+  UINT32 DepthOffset : 16;
+} ACPI_PLD_SPATIAL_BUFFER, *PACPI_PLD_SPATIAL_BUFFER;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _ACPI_PLD_INTERFACE_CLASS_BUFFER {
+  GUID ClassGuid;
+} ACPI_PLD_INTERFACE_CLASS_BUFFER, *PACPI_PLD_INTERFACE_CLASS_BUFFER;
+#pragma pack(pop)
+
+typedef struct _ACPI_PLD_INTERFACE_INSTANCE_ANSI_BUFFER {
+  CHAR ReferenceString[16];
+} ACPI_PLD_INTERFACE_INSTANCE_ANSI_BUFFER, *PACPI_PLD_INTERFACE_INSTANCE_ANSI_BUFFER;
+
+#pragma pack(push, 1)
+typedef struct _ACPI_PLD_INTERFACE_INSTANCE_UNICODE_BUFFER {
+  WCHAR ReferenceString[8];
+} ACPI_PLD_INTERFACE_INSTANCE_UNICODE_BUFFER, *PACPI_PLD_INTERFACE_INSTANCE_UNICODE_BUFFER;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _ACPI_PLD_INTERFACE_INSTANCE_GUID_BUFFER {
+  GUID ReferenceGuid;
+} ACPI_PLD_INTERFACE_INSTANCE_GUID_BUFFER, *PACPI_PLD_INTERFACE_INSTANCE_GUID_BUFFER;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _ACPI_PLD_CONTAINER_BUFFER {
+  GUID ContainerId;
+} ACPI_PLD_CONTAINER_BUFFER, *PACPI_PLD_CONTAINER_BUFFER;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _NFIT_STRUCT_HEADER {
+  USHORT Type;
+  USHORT Length;
+} NFIT_STRUCT_HEADER, *PNFIT_STRUCT_HEADER;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _NFIT_SYSTEM_PHYSICAL_ADDRESS_RANGE {
+  NFIT_STRUCT_HEADER Header;
+  USHORT SPARangeIndex;
+  USHORT Flags;
+  UCHAR Reserved[4];
+  ULONG ProximityDomain;
+  GUID AddressRangeType;
+  ULONG64 SPARangeBase;
+  ULONG64 SPARangeLength;
+  ULONG64 AddressRangeMappingAttribute;
+} NFIT_SYSTEM_PHYSICAL_ADDRESS_RANGE, *PNFIT_SYSTEM_PHYSICAL_ADDRESS_RANGE;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _NFIT_INTERLEAVE {
+  NFIT_STRUCT_HEADER Header;
+  USHORT InterleaveIndex;
+  UCHAR Reserved[2];
+  ULONG LinesDescribed;
+  ULONG LineSize;
+  ULONG LineOffsets[1];
+} NFIT_INTERLEAVE, *PNFIT_INTERLEAVE;
+#pragma pack(pop)
+
+typedef struct _NFIT_SMBIOS_MANAGEMENT_INFO {
+  NFIT_STRUCT_HEADER Header;
+  UCHAR Reserved[4];
+  UCHAR Data[1];
+} NFIT_SMBIOS_MANAGEMENT_INFO, *PNFIT_SMBIOS_MANAGEMENT_INFO;
+
+#pragma pack(push, 1)
+typedef struct _NFIT_BLOCK_DATA_WINDOW_REGION {
+  NFIT_STRUCT_HEADER Header;
+  USHORT NvdimmControlRegionIndex;
+  USHORT BlockDataWindowCount;
+  ULONG64 BlockDataWindowOffset;
+  ULONG64 BlockDataWindowSize;
+  ULONG64 BlockAccessibleCapacity;
+  ULONG64 FirstAccessibleBlockAddress;
+} NFIT_BLOCK_DATA_WINDOW_REGION, *PNFIT_BLOCK_DATA_WINDOW_REGION;
+#pragma pack(pop)
+
+typedef struct _PDTT_PCC_SUBCHANNEL_INDENTIFIER {
+  UCHAR SubChannelId;
+  UCHAR Runtime : 1;
+  UCHAR WaitCompletion : 1;
+  UCHAR Reserved : 6;
+} PDTT_PCC_SUBCHANNEL_INDENTIFIER, *PPDTT_PCC_SUBCHANNEL_INDENTIFIER;
+
+#pragma pack(push, 1)
+typedef struct _ASPT_ENTRY_HEADER {
+  UINT16 Type;
+  UINT16 Length;
+} ASPT_ENTRY_HEADER, *PASPT_ENTRY_HEADER;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _ASPT_ENTRY_ASP_GLOBAL_REGISTERS_V1 {
+  ASPT_ENTRY_HEADER Header;
+  UINT32 Reserved;
+  UINT64 FeatureRegisterAddress;
+  UINT64 InterruptEnableRegisterAddress;
+  UINT64 InterruptStatusRegisterAddress;
+} ASPT_ENTRY_ASP_GLOBAL_REGISTERS_V1, *PASPT_ENTRY_ASP_GLOBAL_REGISTERS_V1;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _ASPT_ENTRY_SEV_MAILBOX_REGISTERS_V1 {
+  ASPT_ENTRY_HEADER Header;
+  UINT8 MailboxInterruptId;
+  UINT8 Reserved[3];
+  UINT64 CmdRespRegisterAddress;
+  UINT64 CmdBufAddrLoRegisterAddress;
+  UINT64 CmdBufAddrHiRegisterAddress;
+} ASPT_ENTRY_SEV_MAILBOX_REGISTERS_V1, *PASPT_ENTRY_SEV_MAILBOX_REGISTERS_V1;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _ASPT_ENTRY_ACPI_MAILBOX_REGISTERS_V1 {
+  ASPT_ENTRY_HEADER Header;
+  UINT32 Reserved1;
+  UINT64 CmdRespRegisterAddress;
+  UINT64 Reserved2[2];
+} ASPT_ENTRY_ACPI_MAILBOX_REGISTERS_V1, *PASPT_ENTRY_ACPI_MAILBOX_REGISTERS_V1;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _ASPT_ENTRY_ASP_GLOBAL_REGISTERS_V2 {
+  ASPT_ENTRY_HEADER Header;
+  UINT32 Reserved;
+  UINT32 FeatureRegisterOffset;
+  UINT32 InterruptEnableRegisterOffset;
+  UINT32 InterruptStatusRegisterOffset;
+} ASPT_ENTRY_ASP_GLOBAL_REGISTERS_V2, *PASPT_ENTRY_ASP_GLOBAL_REGISTERS_V2;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _ASPT_ENTRY_SEV_MAILBOX_REGISTERS_V2 {
+  ASPT_ENTRY_HEADER Header;
+  UINT8 MailboxInterruptId;
+  UINT8 Reserved[3];
+  UINT32 CmdRespRegisterOffset;
+  UINT32 CmdBufAddrLoRegisterOffset;
+  UINT32 CmdBufAddrHiRegisterOffset;
+} ASPT_ENTRY_SEV_MAILBOX_REGISTERS_V2, *PASPT_ENTRY_SEV_MAILBOX_REGISTERS_V2;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _ASPT_ENTRY_ACPI_MAILBOX_REGISTERS_V2 {
+  ASPT_ENTRY_HEADER Header;
+  UINT32 Reserved1;
+  UINT32 CmdRespRegisterOffset;
+  UINT64 Reserved2;
+} ASPT_ENTRY_ACPI_MAILBOX_REGISTERS_V2, *PASPT_ENTRY_ACPI_MAILBOX_REGISTERS_V2;
+#pragma pack(pop)
+
+typedef union _ASPT_ENTRY {
+  ASPT_ENTRY_HEADER Header;
+  ASPT_ENTRY_ASP_GLOBAL_REGISTERS_V1 AspGlobalRegistersV1;
+  ASPT_ENTRY_SEV_MAILBOX_REGISTERS_V1 SevMailboxRegistersV1;
+  ASPT_ENTRY_ACPI_MAILBOX_REGISTERS_V1 AcpiMailboxRegistersV1;
+  ASPT_ENTRY_ASP_GLOBAL_REGISTERS_V2 AspGlobalRegistersV2;
+  ASPT_ENTRY_SEV_MAILBOX_REGISTERS_V2 SevMailboxRegistersV2;
+  ASPT_ENTRY_ACPI_MAILBOX_REGISTERS_V2 AcpiMailboxRegistersV2;
+} ASPT_ENTRY, *PASPT_ENTRY;
+
+#pragma pack(push, 1)
+typedef struct _MPAM_FUNCTIONAL_DEPENDENCY_DESCRIPTOR {
+  UINT32 Producer;
+  UINT32 Reserved0;
+} MPAM_FUNCTIONAL_DEPENDENCY_DESCRIPTOR;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _MPAM_INTERCONNECT_DESCRIPTOR {
+  UINT32 SourceId;
+  UINT32 DestinationId;
+  UINT8 LinkType;
+  UINT8 Reserved[3];
+} MPAM_INTERCONNECT_DESCRIPTOR;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _MPAM_INTERCONNECT_DESCRIPTOR_TABLE {
+  UINT8 Signature[16];
+  UINT32 DescriptorCount;
+  MPAM_INTERCONNECT_DESCRIPTOR Descriptors[1];
+} MPAM_INTERCONNECT_DESCRIPTOR_TABLE;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _TPR_REGISTERS {
+  UINT64 BaseAddress;
+  UINT64 Limit;
+} TPR_REGISTERS, *PTPR_REGISTERS;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _TPR_INSTANCE {
+  UINT32 Flags;
+  UINT32 TprCount;
+  PHYSICAL_ADDRESS TprArray[1];
+} TPR_INSTANCE, *PTPR_INSTANCE;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _DTPR_TABLE {
+  UINT32 Signature;
+  UINT32 Length;
+  UINT8 Revision;
+  UINT8 Checksum;
+  UINT8 OEMID[6];
+  UINT8 OEMTableID[8];
+  UINT32 OEMRevision;
+  UINT32 CreatorID;
+  UINT32 CreatorRevision;
+  UINT32 Flags;
+  UINT32 TprInstanceCount;
+  TPR_INSTANCE TprInstanceArray[1];
+} DTPR, *PDTPR;
+#pragma pack(pop)
+
 #endif

@@ -213,4 +213,52 @@ BOOL WINAPI DevQueryPrintEx(PDEVQUERYPRINT_INFO);
 #define QCP_SOURCEPROFILE 0x0001
 #endif
 
+typedef struct _DRIVER_UPGRADE_INFO_1 {
+  LPTSTR pPrinterName;
+  LPTSTR pOldDriverDirectory;
+} DRIVER_UPGRADE_INFO_1, *PDRIVER_UPGRADE_INFO_1;
+
+typedef struct _DRIVER_UPGRADE_INFO_2 {
+  LPTSTR pPrinterName;
+  LPTSTR pOldDriverDirectory;
+  DWORD cVersion;
+  LPTSTR pName;
+  LPTSTR pEnvironment;
+  LPTSTR pDriverPath;
+  LPTSTR pDataFile;
+  LPTSTR pConfigFile;
+  LPTSTR pHelpFile;
+  LPTSTR pDependentFiles;
+  LPTSTR pMonitorName;
+  LPTSTR pDefaultDataType;
+  LPTSTR pszzPreviousNames;
+} DRIVER_UPGRADE_INFO_2, *PDRIVER_UPGRADE_INFO_2;
+
+typedef struct _PRINTER_EVENT_ATTRIBUTES_INFO {
+  DWORD cbSize;
+  DWORD dwOldAttributes;
+  DWORD dwNewAttributes;
+} PRINTER_EVENT_ATTRIBUTES_INFO, *PPRINTER_EVENT_ATTRIBUTES_INFO;
+
+typedef struct _ATTRIBUTE_INFO_1 {
+  DWORD dwJobNumberOfPagesPerSide;
+  DWORD dwDrvNumberOfPagesPerSide;
+  DWORD dwNupBorderFlags;
+  DWORD dwJobPageOrderFlags;
+  DWORD dwDrvPageOrderFlags;
+  DWORD dwJobNumberOfCopies;
+  DWORD dwDrvNumberOfCopies;
+} ATTRIBUTE_INFO_1, *PATTRIBUTE_INFO_1;
+
+typedef struct _ATTRIBUTE_INFO_2 {
+  DWORD dwJobNumberOfPagesPerSide;
+  DWORD dwDrvNumberOfPagesPerSide;
+  DWORD dwNupBorderFlags;
+  DWORD dwJobPageOrderFlags;
+  DWORD dwDrvPageOrderFlags;
+  DWORD dwJobNumberOfCopies;
+  DWORD dwDrvNumberOfCopies;
+  DWORD dwColorOptimization;
+} ATTRIBUTE_INFO_2, *PATTRIBUTE_INFO_2;
+
 #endif /* __WINE_WINDDIUI_H */

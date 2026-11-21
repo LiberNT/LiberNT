@@ -1231,4 +1231,13 @@ NTSTATUS NTAPI TdiDeregisterNotificationHandler(HANDLE BindingHandle);
 }
 #endif
 
+typedef struct _TDI_NCPA_BINDING_INFO {
+  PUNICODE_STRING TdiClientName;
+  PUNICODE_STRING TdiProviderName;
+  PUNICODE_STRING BindList;
+  PVOID ReconfigBuffer;
+  unsigned int ReconfigBufferSize;
+  TDI_PNP_OPCODE PnpOpcode;
+} TDI_NCPA_BINDING_INFO, *PTDI_NCPA_BINDING_INFO;
+
 #endif /* __TDIKRNL_H */

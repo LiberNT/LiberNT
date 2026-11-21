@@ -285,6 +285,23 @@ LONG WINAPI GetCurrentPackageInfo(const UINT32 flags, UINT32 * bufferLength, BYT
 }
 #endif
 
+#pragma pack(push, 4)
+typedef struct PACKAGE_INFO {
+  UINT32 reserved;
+  UINT32 flags;
+  PWSTR path;
+  PWSTR packageFullName;
+  PWSTR packageFamilyName;
+  PACKAGE_ID packageId;
+} PACKAGE_INFO;
+#pragma pack(pop)
+
+typedef struct FindPackageDependencyCriteria {
+  PSID User;
+  BOOL ScopeIsSystem;
+  PCWSTR PackageFamilyName;
+} FindPackageDependencyCriteria;
+
 #endif
 #ifndef PACKAGE_FILTER_ALL_LOADED
 #define PACKAGE_FILTER_ALL_LOADED 0

@@ -859,4 +859,173 @@ typedef enum _DSI_CONTROL_TRANSMISSION_MODE {
     DCT_FORCE_HIGH_PERFORMANCE = 2
 } DSI_CONTROL_TRANSMISSION_MODE;
 
+typedef struct _VIDEO_COLOR_LUT_DATA {
+  ULONG Length;
+  ULONG LutDataFormat;
+  UCHAR LutData[1];
+} VIDEO_COLOR_LUT_DATA, *PVIDEO_COLOR_LUT_DATA;
+
+typedef struct _VIDEO_LUT_RGB256WORDS {
+  USHORT Red[256];
+  USHORT Green[256];
+  USHORT Blue[256];
+} VIDEO_LUT_RGB256WORDS, *PVIDEO_LUT_RGB256WORDS;
+
+typedef struct _BANK_POSITION {
+  ULONG ReadBankPosition;
+  ULONG WriteBankPosition;
+} BANK_POSITION, *PBANK_POSITION;
+
+typedef struct _VGA_CHAR {
+  CHAR Char;
+  CHAR Attributes;
+} VGA_CHAR, *PVGA_CHAR;
+
+typedef struct _FSVIDEO_MODE_INFORMATION {
+  VIDEO_MODE_INFORMATION VideoMode;
+  VIDEO_MEMORY_INFORMATION VideoMemory;
+} FSVIDEO_MODE_INFORMATION, *PFSVIDEO_MODE_INFORMATION;
+
+typedef struct _FSVIDEO_CURSOR_POSITION {
+  VIDEO_CURSOR_POSITION Coord;
+  ULONG dwType;
+} FSVIDEO_CURSOR_POSITION, *PFSVIDEO_CURSOR_POSITION;
+
+typedef struct _VIDEO_PERFORMANCE_COUNTER {
+  UINT64 NbOfAllocationEvicted[10];
+  UINT64 NbOfAllocationMarked[10];
+  UINT64 NbOfAllocationRestored[10];
+  UINT64 KBytesEvicted[10];
+  UINT64 KBytesMarked[10];
+  UINT64 KBytesRestored[10];
+  UINT64 NbProcessCommited;
+  UINT64 NbAllocationCommited;
+  UINT64 NbAllocationMarked;
+  UINT64 KBytesAllocated;
+  UINT64 KBytesAvailable;
+  UINT64 KBytesCurMarked;
+  UINT64 Reference;
+  UINT64 Unreference;
+  UINT64 TrueReference;
+  UINT64 NbOfPageIn;
+  UINT64 KBytesPageIn;
+  UINT64 NbOfPageOut;
+  UINT64 KBytesPageOut;
+  UINT64 NbOfRotateOut;
+  UINT64 KBytesRotateOut;
+} VIDEO_PERFORMANCE_COUNTER, *PVIDEO_PERFORMANCE_COUNTER;
+
+typedef struct _VIDEO_QUERY_PERFORMANCE_COUNTER {
+  ULONG BufferSize;
+  PVIDEO_PERFORMANCE_COUNTER Buffer;
+} VIDEO_QUERY_PERFORMANCE_COUNTER, *PVIDEO_QUERY_PERFORMANCE_COUNTER;
+
+typedef struct _BRIGHTNESS_LEVEL {
+  UCHAR Count;
+  UCHAR Level[103];
+} BRIGHTNESS_LEVEL, *PBRIGHTNESS_LEVEL;
+
+typedef struct _BRIGHTNESS_NIT_RANGE {
+  ULONG MinLevelInMillinit;
+  ULONG MaxLevelInMillinit;
+  ULONG StepSizeInMillinit;
+} BRIGHTNESS_NIT_RANGE, *PBRIGHTNESS_NIT_RANGE;
+
+typedef struct BRIGHTNESS_NIT_RANGES {
+  ULONG NormalRangeCount;
+  ULONG RangeCount;
+  ULONG PreferredMaximumBrightness;
+  BRIGHTNESS_NIT_RANGE SupportedRanges[16];
+} BRIGHTNESS_NIT_RANGES, *PBRIGHTNESS_NIT_RANGES;
+
+typedef struct _CHROMATICITY_COORDINATE {
+  float x;
+  float y;
+} CHROMATICITY_COORDINATE;
+
+typedef struct _PANEL_SET_BACKLIGHT_OPTIMIZATION {
+  BACKLIGHT_OPTIMIZATION_LEVEL Level;
+} PANEL_SET_BACKLIGHT_OPTIMIZATION, *PPANEL_SET_BACKLIGHT_OPTIMIZATION;
+
+typedef struct _BACKLIGHT_REDUCTION_GAMMA_RAMP {
+  USHORT R[256];
+  USHORT G[256];
+  USHORT B[256];
+} BACKLIGHT_REDUCTION_GAMMA_RAMP;
+
+typedef struct _PANEL_GET_BACKLIGHT_REDUCTION {
+  USHORT BacklightUsersetting;
+  USHORT BacklightEffective;
+  BACKLIGHT_REDUCTION_GAMMA_RAMP GammaRamp;
+} PANEL_GET_BACKLIGHT_REDUCTION, *PPANEL_GET_BACKLIGHT_REDUCTION;
+
+typedef struct _COLORSPACE_SCALAR_MULTIPLIER_CAPS {
+  BOOLEAN Valid;
+  float NumericRangeMin;
+  float NumericRangeMax;
+} COLORSPACE_SCALAR_MULTIPLIER_CAPS;
+
+typedef struct _GAMMA_RAMP_RGB256x3x16 {
+  USHORT Red[256];
+  USHORT Green[256];
+  USHORT Blue[256];
+} GAMMA_RAMP_RGB256x3x16;
+
+typedef struct _GAMMA_RAMP_RGB {
+  float Red;
+  float Green;
+  float Blue;
+} GAMMA_RAMP_RGB;
+
+typedef struct _GAMMA_RAMP_DXGI_1 {
+  GAMMA_RAMP_RGB Scale;
+  GAMMA_RAMP_RGB Offset;
+  GAMMA_RAMP_RGB GammaCurve[1025];
+} GAMMA_RAMP_DXGI_1;
+
+typedef struct _COLORSPACE_TRANSFORM_3x4 {
+  float ColorMatrix3x4[3][4];
+  float ScalarMultiplier;
+  GAMMA_RAMP_RGB LookupTable1D[4096];
+} COLORSPACE_TRANSFORM_3x4, *PCOLORSPACE_TRANSFORM_3x4;
+
+typedef struct _OUTPUT_WIRE_FORMAT {
+  OUTPUT_COLOR_ENCODING ColorEncoding;
+  UINT32 BitsPerPixel;
+} OUTPUT_WIRE_FORMAT;
+
+typedef struct _COLORSPACE_TRANSFORM_MATRIX_V2 {
+  COLORSPACE_TRANSFORM_STAGE_CONTROL StageControlLookupTable1DDegamma;
+  GAMMA_RAMP_RGB LookupTable1DDegamma[4096];
+  COLORSPACE_TRANSFORM_STAGE_CONTROL StageControlColorMatrix3x3;
+  float ColorMatrix3x3[3][3];
+  COLORSPACE_TRANSFORM_STAGE_CONTROL StageControlLookupTable1DRegamma;
+  GAMMA_RAMP_RGB LookupTable1DRegamma[4096];
+} COLORSPACE_TRANSFORM_MATRIX_V2, *PCOLORSPACE_TRANSFORM_MATRIX_V2;
+
+typedef struct _SET_ACTIVE_COLOR_PROFILE_NAME {
+  WCHAR ColorProfileName[1];
+} SET_ACTIVE_COLOR_PROFILE_NAME, *PSET_ACTIVE_COLOR_PROFILE_NAME;
+
+typedef struct _MIPI_DSI_CAPS {
+  UCHAR DSITypeMajor;
+  UCHAR DSITypeMinor;
+  UCHAR SpecVersionMajor;
+  UCHAR SpecVersionMinor;
+  UCHAR SpecVersionPatch;
+  USHORT TargetMaximumReturnPacketSize;
+  UCHAR ResultCodeFlags;
+  UCHAR ResultCodeStatus;
+  UCHAR Revision;
+  UCHAR Level;
+  UCHAR DeviceClassHi;
+  UCHAR DeviceClassLo;
+  UCHAR ManufacturerHi;
+  UCHAR ManufacturerLo;
+  UCHAR ProductHi;
+  UCHAR ProductLo;
+  UCHAR LengthHi;
+  UCHAR LengthLo;
+} MIPI_DSI_CAPS, *PMIPI_DSI_CAPS;
+
 #endif /* _NTDDVDEO_ */

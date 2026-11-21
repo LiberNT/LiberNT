@@ -809,4 +809,19 @@ RxCancelRoutine(
     !BooleanFlagOn((S)->Flags, SRVOPEN_FLAG_DONTUSE_WRITE_CACHING))
 #endif
 
+typedef union _UCHAR1 {
+  UCHAR Uchar[1];
+  UCHAR ForceAlignment;
+} UCHAR1, *PUCHAR1;
+
+typedef union _UCHAR2 {
+  UCHAR Uchar[2];
+  USHORT ForceAlignment;
+} UCHAR2, *PUCHAR2;
+
+typedef union _UCHAR4 {
+  UCHAR Uchar[4];
+  ULONG ForceAlignment;
+} UCHAR4, *PUCHAR4;
+
 #endif

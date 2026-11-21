@@ -67,6 +67,17 @@ typedef struct _WSA_COMPATIBILITY_MODE {
 
 #ifndef RIO_CORRUPT_CQ
 #define RIO_CORRUPT_CQ 0xFFFFFFFF
+typedef struct _RIORESULT {
+  LONG Status;
+  ULONG BytesTransferred;
+  ULONGLONG SocketContext;
+  ULONGLONG RequestContext;
+} RIORESULT, *PRIORESULT;
+
+typedef struct _RIO_CMSG_BUFFER {
+  ULONG TotalLength;
+} RIO_CMSG_BUFFER, *PRIO_CMSG_BUFFER;
+
 #endif
 #ifndef RIO_MAX_CQ_SIZE
 #define RIO_MAX_CQ_SIZE 0x8000000

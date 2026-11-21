@@ -1327,4 +1327,67 @@ typedef struct _settextex {
 #define SPF_SETDEFAULT 0x0004
 #endif
 
+typedef struct _tableRowParms {
+  BYTE cbRow;
+  BYTE cbCell;
+  BYTE cCell;
+  BYTE cRow;
+  LONG dxCellMargin;
+  LONG dxIndent;
+  LONG dyHeight;
+  DWORD nAlignment : 3;
+  DWORD fRTL : 1;
+  DWORD fKeep : 1;
+  DWORD fKeepFollow : 1;
+  DWORD fWrap : 1;
+  DWORD fIdentCells : 1;
+  LONG cpStartRow;
+  BYTE bTableLevel;
+  BYTE iCell;
+} TABLEROWPARMS;
+
+typedef struct _tableCellParms {
+  LONG dxWidth;
+  WORD nVertAlign : 2;
+  WORD fMergeTop : 1;
+  WORD fMergePrev : 1;
+  WORD fVertical : 1;
+  WORD fMergeStart : 1;
+  WORD fMergeCont : 1;
+  WORD wShading;
+  SHORT dxBrdrLeft;
+  SHORT dyBrdrTop;
+  SHORT dxBrdrRight;
+  SHORT dyBrdrBottom;
+  COLORREF crBrdrLeft;
+  COLORREF crBrdrTop;
+  COLORREF crBrdrRight;
+  COLORREF crBrdrBottom;
+  COLORREF crBackPat;
+  COLORREF crForePat;
+} TABLECELLPARMS;
+
+#pragma pack(push, 4)
+typedef struct _endcomposition {
+  NMHDR nmhdr;
+  DWORD dwCode;
+} ENDCOMPOSITIONNOTIFY;
+#pragma pack(pop)
+
+#pragma pack(push, 4)
+typedef struct _grouptypingchange {
+  NMHDR nmhdr;
+  BOOL fGroupTyping;
+} GROUPTYPINGCHANGE;
+#pragma pack(pop)
+
+#pragma pack(push, 4)
+typedef struct _getcontextmenuex {
+  CHARRANGE chrg;
+  DWORD dwFlags;
+  POINT pt;
+  void * pvReserved;
+} GETCONTEXTMENUEX;
+#pragma pack(pop)
+
 #endif /* __WINE_RICHEDIT_H */

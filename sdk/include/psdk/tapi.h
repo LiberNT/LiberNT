@@ -2007,4 +2007,289 @@ typedef DWORD HAGENT;
 typedef HAGENT * LPHAGENT;
 typedef HICON * LPHICON;
 
+#pragma pack(push, 1)
+typedef struct lineagentactivityentry_tag {
+  DWORD dwID;
+  DWORD dwNameSize;
+  DWORD dwNameOffset;
+} LINEAGENTACTIVITYENTRY, *LPLINEAGENTACTIVITYENTRY;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct lineagentactivitylist_tag {
+  DWORD dwTotalSize;
+  DWORD dwNeededSize;
+  DWORD dwUsedSize;
+  DWORD dwNumEntries;
+  DWORD dwListSize;
+  DWORD dwListOffset;
+} LINEAGENTACTIVITYLIST, *LPLINEAGENTACTIVITYLIST;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct lineagentcaps_tag {
+  DWORD dwTotalSize;
+  DWORD dwNeededSize;
+  DWORD dwUsedSize;
+  DWORD dwAgentHandlerInfoSize;
+  DWORD dwAgentHandlerInfoOffset;
+  DWORD dwCapsVersion;
+  DWORD dwFeatures;
+  DWORD dwStates;
+  DWORD dwNextStates;
+  DWORD dwMaxNumGroupEntries;
+  DWORD dwAgentStatusMessages;
+  DWORD dwNumAgentExtensionIDs;
+  DWORD dwAgentExtensionIDListSize;
+  DWORD dwAgentExtensionIDListOffset;
+  GUID ProxyGUID;
+} LINEAGENTCAPS, *LPLINEAGENTCAPS;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct lineagentgrouplist_tag {
+  DWORD dwTotalSize;
+  DWORD dwNeededSize;
+  DWORD dwUsedSize;
+  DWORD dwNumEntries;
+  DWORD dwListSize;
+  DWORD dwListOffset;
+} LINEAGENTGROUPLIST, *LPLINEAGENTGROUPLIST;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct lineagentstatus_tag {
+  DWORD dwTotalSize;
+  DWORD dwNeededSize;
+  DWORD dwUsedSize;
+  DWORD dwNumEntries;
+  DWORD dwGroupListSize;
+  DWORD dwGroupListOffset;
+  DWORD dwState;
+  DWORD dwNextState;
+  DWORD dwActivityID;
+  DWORD dwActivitySize;
+  DWORD dwActivityOffset;
+  DWORD dwAgentFeatures;
+  DWORD dwValidStates;
+  DWORD dwValidNextStates;
+} LINEAGENTSTATUS, *LPLINEAGENTSTATUS;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct lineappinfo_tag {
+  DWORD dwMachineNameSize;
+  DWORD dwMachineNameOffset;
+  DWORD dwUserNameSize;
+  DWORD dwUserNameOffset;
+  DWORD dwModuleFilenameSize;
+  DWORD dwModuleFilenameOffset;
+  DWORD dwFriendlyNameSize;
+  DWORD dwFriendlyNameOffset;
+  DWORD dwMediaModes;
+  DWORD dwAddressID;
+} LINEAPPINFO, *LPLINEAPPINFO;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct lineagententry_tag {
+  HAGENT hAgent;
+  DWORD dwNameSize;
+  DWORD dwNameOffset;
+  DWORD dwIDSize;
+  DWORD dwIDOffset;
+  DWORD dwPINSize;
+  DWORD dwPINOffset;
+} LINEAGENTENTRY, *LPLINEAGENTENTRY;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct lineagentlist_tag {
+  DWORD dwTotalSize;
+  DWORD dwNeededSize;
+  DWORD dwUsedSize;
+  DWORD dwNumEntries;
+  DWORD dwListSize;
+  DWORD dwListOffset;
+} LINEAGENTLIST, *LPLINEAGENTLIST;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct lineagentinfo_tag {
+  DWORD dwTotalSize;
+  DWORD dwNeededSize;
+  DWORD dwUsedSize;
+  DWORD dwAgentState;
+  DWORD dwNextAgentState;
+  DWORD dwMeasurementPeriod;
+  CURRENCY cyOverallCallRate;
+  DWORD dwNumberOfACDCalls;
+  DWORD dwNumberOfIncomingCalls;
+  DWORD dwNumberOfOutgoingCalls;
+  DWORD dwTotalACDTalkTime;
+  DWORD dwTotalACDCallTime;
+  DWORD dwTotalACDWrapUpTime;
+} LINEAGENTINFO, *LPLINEAGENTINFO;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct lineagentsession_tag {
+  HAGENTSESSION hAgentSession;
+  HAGENT hAgent;
+  GUID GroupID;
+  DWORD dwWorkingAddressID;
+} LINEAGENTSESSIONENTRY, *LPLINEAGENTSESSIONENTRY;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct lineagentsessionlist_tag {
+  DWORD dwTotalSize;
+  DWORD dwNeededSize;
+  DWORD dwUsedSize;
+  DWORD dwNumEntries;
+  DWORD dwListSize;
+  DWORD dwListOffset;
+} LINEAGENTSESSIONLIST, *LPLINEAGENTSESSIONLIST;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct lineagentsessioninfo_tag {
+  DWORD dwTotalSize;
+  DWORD dwNeededSize;
+  DWORD dwUsedSize;
+  DWORD dwAgentSessionState;
+  DWORD dwNextAgentSessionState;
+  DATE dateSessionStartTime;
+  DWORD dwSessionDuration;
+  DWORD dwNumberOfCalls;
+  DWORD dwTotalTalkTime;
+  DWORD dwAverageTalkTime;
+  DWORD dwTotalCallTime;
+  DWORD dwAverageCallTime;
+  DWORD dwTotalWrapUpTime;
+  DWORD dwAverageWrapUpTime;
+  CURRENCY cyACDCallRate;
+  DWORD dwLongestTimeToAnswer;
+  DWORD dwAverageTimeToAnswer;
+} LINEAGENTSESSIONINFO, *LPLINEAGENTSESSIONINFO;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct linequeueentry_tag {
+  DWORD dwQueueID;
+  DWORD dwNameSize;
+  DWORD dwNameOffset;
+} LINEQUEUEENTRY, *LPLINEQUEUEENTRY;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct linequeuelist_tag {
+  DWORD dwTotalSize;
+  DWORD dwNeededSize;
+  DWORD dwUsedSize;
+  DWORD dwNumEntries;
+  DWORD dwListSize;
+  DWORD dwListOffset;
+} LINEQUEUELIST, *LPLINEQUEUELIST;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct linequeueinfo_tag {
+  DWORD dwTotalSize;
+  DWORD dwNeededSize;
+  DWORD dwUsedSize;
+  DWORD dwMeasurementPeriod;
+  DWORD dwTotalCallsQueued;
+  DWORD dwCurrentCallsQueued;
+  DWORD dwTotalCallsAbandoned;
+  DWORD dwTotalCallsFlowedIn;
+  DWORD dwTotalCallsFlowedOut;
+  DWORD dwLongestEverWaitTime;
+  DWORD dwCurrentLongestWaitTime;
+  DWORD dwAverageWaitTime;
+  DWORD dwFinalDisposition;
+} LINEQUEUEINFO, *LPLINEQUEUEINFO;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct lineproxyrequestlist_tag {
+  DWORD dwTotalSize;
+  DWORD dwNeededSize;
+  DWORD dwUsedSize;
+  DWORD dwNumEntries;
+  DWORD dwListSize;
+  DWORD dwListOffset;
+} LINEPROXYREQUESTLIST, *LPLINEPROXYREQUESTLIST;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct linecalltreatmententry_tag {
+  DWORD dwCallTreatmentID;
+  DWORD dwCallTreatmentNameSize;
+  DWORD dwCallTreatmentNameOffset;
+} LINECALLTREATMENTENTRY, *LPLINECALLTREATMENTENTRY;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct lineproviderentry_tag {
+  DWORD dwPermanentProviderID;
+  DWORD dwProviderFilenameSize;
+  DWORD dwProviderFilenameOffset;
+} LINEPROVIDERENTRY, *LPLINEPROVIDERENTRY;
+#pragma pack(pop)
+
+typedef struct linereqmakecall_tag {
+  char szDestAddress[80];
+  char szAppName[40];
+  char szCalledParty[40];
+  char szComment[80];
+} LINEREQMAKECALL, *LPLINEREQMAKECALL;
+
+#pragma pack(push, 1)
+typedef struct linereqmakecallW_tag {
+  WCHAR szDestAddress[80];
+  WCHAR szAppName[40];
+  WCHAR szCalledParty[40];
+  WCHAR szComment[80];
+} LINEREQMAKECALLW, *LPLINEREQMAKECALLW;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct linereqmediacall_tag {
+  HWND hWnd;
+  WPARAM wRequestID;
+  char szDeviceClass[40];
+  unsigned char ucDeviceID[40];
+  DWORD dwSize;
+  DWORD dwSecure;
+  char szDestAddress[80];
+  char szAppName[40];
+  char szCalledParty[40];
+  char szComment[80];
+} LINEREQMEDIACALL, *LPLINEREQMEDIACALL;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct linereqmediacallW_tag {
+  HWND hWnd;
+  WPARAM wRequestID;
+  WCHAR szDeviceClass[40];
+  unsigned char ucDeviceID[40];
+  DWORD dwSize;
+  DWORD dwSecure;
+  WCHAR szDestAddress[80];
+  WCHAR szAppName[40];
+  WCHAR szCalledParty[40];
+  WCHAR szComment[80];
+} LINEREQMEDIACALLW, *LPLINEREQMEDIACALLW;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct linetermcaps_tag {
+  DWORD dwTermDev;
+  DWORD dwTermModes;
+  DWORD dwTermSharing;
+} LINETERMCAPS, *LPLINETERMCAPS;
+#pragma pack(pop)
+
 #endif /* __WINE_TAPI_H */

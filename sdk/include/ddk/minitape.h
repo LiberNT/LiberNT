@@ -936,4 +936,466 @@ typedef enum _TAPE_ALERT_INFO_TYPE {
     TapeAlertInfoLogPage = 2
 } TAPE_ALERT_INFO_TYPE;
 
+typedef struct _TAPE_WMI_OPERATIONS {
+  ULONG Method;
+  ULONG DataBufferSize;
+  PVOID DataBuffer;
+} TAPE_WMI_OPERATIONS, *PTAPE_WMI_OPERATIONS;
+
+typedef struct _SUPPORTED_SECURITY_PROTOCOLS_PARAMETER_DATA {
+  UCHAR Reserved1[6];
+  UCHAR SupportedSecurityListLength[2];
+  UCHAR SupportedSecurityProtocol[0];
+} SUPPORTED_SECURITY_PROTOCOLS_PARAMETER_DATA, *PSUPPORTED_SECURITY_PROTOCOLS_PARAMETER_DATA;
+
+typedef struct PRI_FULL_STATUS_DESCRIPTOR_HEADER {
+  UCHAR ReservationKey[8];
+  UCHAR Reserved[4];
+  UCHAR ReservationHolder : 1;
+  UCHAR AllTargetPorts : 1;
+  UCHAR Reserved1 : 6;
+  UCHAR Type : 4;
+  UCHAR Scope : 4;
+  UCHAR Reserved2[4];
+  UCHAR RelativeTargetPortIdentifier[2];
+  UCHAR AdditionalDescriptorLength[4];
+} PRI_FULL_STATUS_DESCRIPTOR_HEADER, *PPRI_FULL_STATUS_DESCRIPTOR_HEADER;
+
+typedef struct PRI_FULL_STATUS_DESCRIPTOR {
+  PRI_FULL_STATUS_DESCRIPTOR_HEADER Header;
+  UCHAR TransportID[1];
+} PRI_FULL_STATUS_DESCRIPTOR, *PPRI_FULL_STATUS_DESCRIPTOR;
+
+typedef struct PRI_FULL_STATUS_LIST_HEADER {
+  UCHAR Generation[4];
+  UCHAR AdditionalLength[4];
+} PRI_FULL_STATUS_LIST_HEADER, *PPRI_FULL_STATUS_LIST_HEADER;
+
+typedef struct PRI_FULL_STATUS_LIST {
+  UCHAR Generation[4];
+  UCHAR AdditionalLength[4];
+  PRI_FULL_STATUS_DESCRIPTOR_HEADER FullStatusDescriptors[1];
+} PRI_FULL_STATUS_LIST, *PPRI_FULL_STATUS_LIST;
+
+typedef struct PRI_REPORT_CAPABILITIES {
+  UCHAR Length[2];
+  UCHAR PersistThroughPowerLossCapable : 1;
+  UCHAR Reserved : 1;
+  UCHAR AllTargetPortsCapable : 1;
+  UCHAR SpecifyInitiatorPortsCapable : 1;
+  UCHAR CompatibleReservationHandling : 1;
+  UCHAR Reserved1 : 2;
+  UCHAR ReplaceLostReservationCapable : 1;
+  UCHAR PersistThroughPowerLossActivated : 1;
+  UCHAR Reserved2 : 3;
+  UCHAR AllowCommands : 3;
+  UCHAR TypeMaskValid : 1;
+  UCHAR Reserved3 : 1;
+  UCHAR WriteExclusive : 1;
+  UCHAR Reserved4 : 1;
+  UCHAR ExclusiveAccess : 1;
+  UCHAR Reserved5 : 1;
+  UCHAR WriteExclusiveRegistrantsOnly : 1;
+  UCHAR ExclusiveAccessRegistrantsOnly : 1;
+  UCHAR WriteExclusiveAllRegistrants : 1;
+  UCHAR ExclusiveAccessAllRegistrants : 1;
+  UCHAR Reserved6 : 7;
+  UCHAR Reserved7[2];
+} PRI_REPORT_CAPABILITIES, *PPRI_REPORT_CAPABILITIES;
+
+typedef struct RT_PARAMETER_DATA {
+  UCHAR ParameterDataLength[2];
+  UCHAR Origin : 3;
+  UCHAR Reserved1 : 5;
+  UCHAR Reserved2;
+  UCHAR Timestamp[6];
+  UCHAR Reserved3[2];
+} RT_PARAMETER_DATA, *PRT_PARAMETER_DATA;
+
+typedef struct ST_PARAMETER_DATA {
+  UCHAR Reserved1[4];
+  UCHAR Timestamp[6];
+  UCHAR Reserved2[2];
+} ST_PARAMETER_DATA, *PST_PARAMETER_DATA;
+
+typedef struct RS_COMMAND_TIMEOUTS_DESCRIPTOR {
+  UCHAR DescriptorLength[2];
+  UCHAR Reserved;
+  UCHAR CommandSpecific;
+  UCHAR NominalCommandProcessingTimeoutInSec[4];
+  UCHAR RecommendedCommandTimeoutInSec[4];
+} RS_COMMAND_TIMEOUTS_DESCRIPTOR, *PRS_COMMAND_TIMEOUTS_DESCRIPTOR;
+
+typedef struct RS_ONE_COMMAND_PARAMETER_DATA {
+  UCHAR ReadWriteCommandDurationLimitsPage : 1;
+  UCHAR Reserved : 7;
+  UCHAR Support : 3;
+  UCHAR CommandDurationLimitPage : 2;
+  UCHAR MultipleLogicalUnits : 2;
+  UCHAR CommandTimeoutsDescriptorPresent : 1;
+  UCHAR CdbSize[2];
+  UCHAR CdbUsageData[1];
+} RS_ONE_COMMAND_PARAMETER_DATA, *PRS_ONE_COMMAND_PARAMETER_DATA;
+
+typedef struct RS_COMMAND_DESCRIPTOR {
+  UCHAR OperationCode;
+  UCHAR Reserved;
+  UCHAR ServiceAction[2];
+  UCHAR Reserved1;
+  UCHAR ServiceActionValid : 1;
+  UCHAR CommandTimeoutsDescriptorPresent : 1;
+  UCHAR CommandDurationLimitPage : 2;
+  UCHAR MultipleLogicalUnits : 2;
+  UCHAR ReadWriteCommandDurationLimitsPage : 1;
+  UCHAR Reserved2 : 1;
+  UCHAR CdbLength[2];
+} RS_COMMAND_DESCRIPTOR, *PRS_COMMAND_DESCRIPTOR;
+
+typedef struct RS_ALL_COMMANDS_PARAMETER_DATA {
+  UCHAR CommandDataLength[4];
+  RS_COMMAND_DESCRIPTOR CommandDescriptor[1];
+} RS_ALL_COMMANDS_PARAMETER_DATA, *PRS_ALL_COMMANDS_PARAMETER_DATA;
+
+typedef struct _OVERWRITE_PARAMETER_LIST {
+  UCHAR OverWriteCount : 5;
+  UCHAR Test : 2;
+  UCHAR Invert : 1;
+  UCHAR Reserved1;
+  UCHAR InitializationPatternLength[2];
+  UCHAR InitializationPattern[1];
+} OVERWRITE_PARAMETER_LIST, *POVERWRITE_PARAMETER_LIST;
+
+typedef struct _ZONE_DESCRIPTIOR {
+  UCHAR ZoneType : 4;
+  UCHAR Reserved1 : 4;
+  UCHAR Reset : 1;
+  UCHAR Non_Seq : 1;
+  UCHAR Reserved2 : 2;
+  UCHAR ZoneCondition : 4;
+  UCHAR Reserved3[6];
+  UCHAR ZoneLength[8];
+  UCHAR ZoneStartLBA[8];
+  UCHAR WritePointerLBA[8];
+  UCHAR Reserved4[32];
+} ZONE_DESCRIPTIOR, *PZONE_DESCRIPTIOR;
+
+typedef struct _REPORT_ZONES_DATA {
+  UCHAR ZoneListLength[4];
+  UCHAR Same : 4;
+  UCHAR Reserved1 : 4;
+  UCHAR Reserved2[3];
+  UCHAR MaxLBA[8];
+  UCHAR Reserved3[48];
+  ZONE_DESCRIPTIOR ZoneDescriptors[1];
+} REPORT_ZONES_DATA, *PREPORT_ZONES_DATA;
+
+typedef struct _MODE_CACHING_PAGE_EX {
+  UCHAR PageCode : 6;
+  UCHAR SubPageFormat : 1;
+  UCHAR PageSavable : 1;
+  UCHAR PageLength;
+  UCHAR ReadDisableCache : 1;
+  UCHAR MultiplicationFactor : 1;
+  UCHAR WriteCacheEnable : 1;
+  UCHAR SizeEnable : 1;
+  UCHAR Discontinuity : 1;
+  UCHAR CachingAnalysisPermitted : 1;
+  UCHAR AbortPreFetch : 1;
+  UCHAR InitiatorControl : 1;
+  UCHAR WriteRetensionPriority : 4;
+  UCHAR ReadRetensionPriority : 4;
+  UCHAR DisablePrefetchTransfer[2];
+  UCHAR MinimumPrefetch[2];
+  UCHAR MaximumPrefetch[2];
+  UCHAR MaximumPrefetchCeiling[2];
+  UCHAR NvCacheDisable : 1;
+  UCHAR SyncCacheProgress : 2;
+  UCHAR VendorSpecific : 2;
+  UCHAR DisableReadAhead : 1;
+  UCHAR LogicalBlockCacheSegmentSize : 1;
+  UCHAR ForceSequentialWrite : 1;
+  UCHAR NumberOfCacheSegments;
+  UCHAR CacheSegmentSize[2];
+  UCHAR Reserved[4];
+} MODE_CACHING_PAGE_EX, *PMODE_CACHING_PAGE_EX;
+
+typedef struct _MODE_PAGE_SUBPAGE_HEADER {
+  UCHAR PageCode : 6;
+  UCHAR SubPageFormat : 1;
+  UCHAR PageSavable : 1;
+  UCHAR SubPageCode;
+  UCHAR PageLength[2];
+} MODE_PAGE_SUBPAGE_HEADER, *PMODE_PAGE_SUBPAGE_HEADER;
+
+typedef struct _T2_COMMAND_DURATION_LIMIT_DESCRIPTOR {
+  UCHAR T2CDLUNITS : 4;
+  UCHAR Reserved : 4;
+  UCHAR Reserved1;
+  UCHAR MAX_INACTIVE_TIME[2];
+  UCHAR MAX_ACTIVE_TIME[2];
+  UCHAR MAX_ACTIVE_TIME_POLICY : 4;
+  UCHAR MAX_INACTIVE_TIME_POLICY : 4;
+  UCHAR Reserved2[3];
+  UCHAR COMMAND_DURATION_GUIDELINE[2];
+  UCHAR Reserved3[2];
+  UCHAR COMMAND_DURATION_GUIDELINE_POLICY : 4;
+  UCHAR Reserved4 : 4;
+  UCHAR BypassSequestration : 1;
+  UCHAR Reserved5 : 7;
+  UCHAR Reserved6[16];
+} T2_COMMAND_DURATION_LIMIT_DESCRIPTOR, *PT2_COMMAND_DURATION_LIMIT_DESCRIPTOR;
+
+typedef struct _MODE_COMMAND_DURATION_LIMIT_PAGE_T2A_SUBPAGE {
+  UCHAR PageCode : 6;
+  UCHAR SubPageFormat : 1;
+  UCHAR PageSavable : 1;
+  UCHAR SubPageCode;
+  UCHAR PageLength[2];
+  UCHAR Reserved[3];
+  UCHAR Reserved1 : 4;
+  UCHAR PerfvsCommandDurationGuidelines : 4;
+  T2_COMMAND_DURATION_LIMIT_DESCRIPTOR T2CommandDurationLimitDescriptors[7];
+} MODE_COMMAND_DURATION_LIMIT_PAGE_T2A_SUBPAGE, *PMODE_COMMAND_DURATION_LIMIT_PAGE_T2A_SUBPAGE;
+
+typedef struct _MODE_COMMAND_DURATION_LIMIT_PAGE_T2B_SUBPAGE {
+  UCHAR PageCode : 6;
+  UCHAR SubPageFormat : 1;
+  UCHAR PageSavable : 1;
+  UCHAR SubPageCode;
+  UCHAR PageLength[2];
+  UCHAR Reserved[3];
+  UCHAR Reserved1 : 4;
+  UCHAR PerfvsLatencyControls : 4;
+  T2_COMMAND_DURATION_LIMIT_DESCRIPTOR T2CommandDurationLimitDescriptors[7];
+} MODE_COMMAND_DURATION_LIMIT_PAGE_T2B_SUBPAGE, *PMODE_COMMAND_DURATION_LIMIT_PAGE_T2B_SUBPAGE;
+
+typedef struct _SES_DIAGNOSTIC_PAGE {
+  UCHAR PageCode;
+  UCHAR Reserved;
+  UCHAR PageLength[2];
+  UCHAR PageData[1];
+} SES_DIAGNOSTIC_PAGE, *PSES_DIAGNOSTIC_PAGE;
+
+typedef struct _SES_TYPE_DESCRIPTOR_HEADER {
+  UCHAR ElementType;
+  UCHAR NumberOfPossibleElements;
+  UCHAR SubEnclosureId;
+  UCHAR TypeDescriptorTextLength;
+} SES_TYPE_DESCRIPTOR_HEADER, *PSES_TYPE_DESCRIPTOR_HEADER;
+
+typedef struct _SES_ENCLOSURE_DESCRIPTOR {
+  UCHAR NumberOfEnclosureServices : 3;
+  UCHAR Reserved1 : 1;
+  UCHAR RelativeEnclosureServicesId : 3;
+  UCHAR Reserved2 : 1;
+  UCHAR SubEnclosureId;
+  UCHAR NumberOfTypeDescriptorHeaders;
+  UCHAR EnclosureDescriptorLength;
+  UCHAR Identifier[8];
+  UCHAR VendorId[8];
+  UCHAR ProductId[16];
+  UCHAR ProductRevisionLevel[4];
+  UCHAR VendorSpecific[1];
+} SES_ENCLOSURE_DESCRIPTOR, *PSES_ENCLOSURE_DESCRIPTOR;
+
+typedef struct _SES_CONFIGURATION_DIAGNOSTIC_PAGE {
+  UCHAR PageCode;
+  UCHAR NumberOfSecondarySubEnclosures;
+  UCHAR PageLength[2];
+  UCHAR GenerationCode[4];
+  SES_ENCLOSURE_DESCRIPTOR Descriptors[1];
+} SES_CONFIGURATION_DIAGNOSTIC_PAGE, *PSES_CONFIGURATION_DIAGNOSTIC_PAGE;
+
+typedef struct _SES_PHY_DESCRIPTOR {
+  UCHAR Reserved1 : 4;
+  UCHAR DeviceType : 3;
+  UCHAR Reserved3 : 1;
+  UCHAR Reserved4;
+  UCHAR Reserved5 : 1;
+  UCHAR SmpInitiatorPort : 1;
+  UCHAR StpInitiatorPort : 1;
+  UCHAR SspInitiatorPort : 1;
+  UCHAR Reserved6 : 4;
+  UCHAR SataDevice : 1;
+  UCHAR SmpTargetPort : 1;
+  UCHAR StpTargetPort : 1;
+  UCHAR SspTargetPort : 1;
+  UCHAR Reserved7 : 3;
+  UCHAR SataPortSelector : 1;
+  UCHAR AttachedSASAddress[8];
+  UCHAR SASAddress[8];
+  UCHAR PhyIdentifier;
+  UCHAR Reserved2[7];
+} SES_PHY_DESCRIPTOR, *PSES_PHY_DESCRIPTOR;
+
+typedef struct _SES_SAS_SLOT_INFORMATION {
+  UCHAR NumberOfPhyDescriptors;
+  UCHAR NotAllPhys : 1;
+  UCHAR Reserved1 : 5;
+  UCHAR Type : 2;
+  UCHAR Reserved2;
+  UCHAR DeviceSlotNumber;
+  SES_PHY_DESCRIPTOR PhyDescriptors[1];
+} SES_SAS_SLOT_INFORMATION, *PSES_SAS_SLOT_INFORMATION;
+
+typedef union _SES_PROTOCOL_INFORMATION {
+  SES_SAS_SLOT_INFORMATION SasSlot;
+} SES_PROTOCOL_INFORMATION, *PSES_PROTOCOL_INFORMATION;
+
+typedef struct _SES_ADDITIONAL_ELEMENT_STATUS_DESCRIPTOR {
+  UCHAR ProtocolIdentifier : 4;
+  UCHAR EIP : 1;
+  UCHAR Reserved1 : 2;
+  UCHAR Invalid : 1;
+  UCHAR Length;
+  UCHAR Reserved2;
+  UCHAR ElementIndex;
+  SES_PROTOCOL_INFORMATION ProtocolInfo;
+} SES_ADDITIONAL_ELEMENT_STATUS_DESCRIPTOR, *PSES_ADDITIONAL_ELEMENT_STATUS_DESCRIPTOR;
+
+typedef struct _SES_ADDITIONAL_ELEMENT_STATUS_DIAGNOSTIC_PAGE {
+  UCHAR PageCode;
+  UCHAR Reserved;
+  UCHAR PageLength[2];
+  UCHAR GenerationCode[4];
+  SES_ADDITIONAL_ELEMENT_STATUS_DESCRIPTOR Descriptors[1];
+} SES_ADDITIONAL_ELEMENT_STATUS_DIAGNOSTIC_PAGE, *PSES_ADDITIONAL_ELEMENT_STATUS_DIAGNOSTIC_PAGE;
+
+typedef struct _SES_DOWNLOAD_MICROCODE_STATUS_DESCRIPTOR {
+  UCHAR Reserved1;
+  UCHAR SubEnclosureId;
+  UCHAR Status;
+  UCHAR AdditionalStatus;
+  UCHAR MaximumImageSize[4];
+  UCHAR Reserved2[3];
+  UCHAR ExpectedBufferId;
+  UCHAR ExpectedBufferOffset;
+} SES_DOWNLOAD_MICROCODE_STATUS_DESCRIPTOR, *PSES_DOWNLOAD_MICROCODE_STATUS_DESCRIPTOR;
+
+typedef struct _SES_DOWNLOAD_MICROCODE_STATUS_DIAGNOSTIC_PAGE {
+  UCHAR PageCode;
+  UCHAR NumberOfSecondarySubEnclosures;
+  UCHAR PageLength[2];
+  UCHAR GenerationCode[4];
+  SES_DOWNLOAD_MICROCODE_STATUS_DESCRIPTOR Descriptors[1];
+} SES_DOWNLOAD_MICROCODE_STATUS_DIAGNOSTIC_PAGE, *PSES_DOWNLOAD_MICROCODE_STATUS_DIAGNOSTIC_PAGE;
+
+typedef struct _SES_DOWNLOAD_MICROCODE_CONTROL_DIAGNOSTIC_PAGE {
+  UCHAR PageCode;
+  UCHAR SubEnclosureId;
+  UCHAR PageLength[2];
+  UCHAR ExpectedGenerationCode[4];
+  UCHAR Mode;
+  UCHAR Reserved[2];
+  UCHAR BufferID;
+  UCHAR BufferOffset[4];
+  UCHAR ImageLength[4];
+  UCHAR DataLength[4];
+  UCHAR Data[1];
+} SES_DOWNLOAD_MICROCODE_CONTROL_DIAGNOSTIC_PAGE, *PSES_DOWNLOAD_MICROCODE_CONTROL_DIAGNOSTIC_PAGE;
+
+typedef struct _SAVED_INTERNAL_STATUS_PARAMETER_DATA {
+  UCHAR Reserved0[4];
+  UCHAR IEEECompanyId[4];
+  UCHAR SavedInternalStatusDataSetOneLength[2];
+  UCHAR SavedInternalStatusDataSetTwoLength[2];
+  UCHAR SavedInternalStatusDataSetThreeLength[2];
+  UCHAR SavedInternalStatusDataSetFourLength[4];
+  UCHAR Reserved1[364];
+  UCHAR NewSavedDataAvailable;
+  UCHAR SavedDataGenerationNumber;
+  UCHAR SavedReasonIdentifier[128];
+  UCHAR SavedInternalStatusData[1];
+} SAVED_INTERNAL_STATUS_PARAMETER_DATA, *PSAVED_INTERNAL_STATUS_PARAMETER_DATA;
+
+typedef struct _MODE_DEVICE_CONFIGURATION_PAGE {
+  UCHAR PageCode : 6;
+  UCHAR Reserved1 : 1;
+  UCHAR PS : 1;
+  UCHAR PageLength;
+  UCHAR ActiveFormat : 5;
+  UCHAR CAFBit : 1;
+  UCHAR CAPBit : 1;
+  UCHAR Reserved2 : 1;
+  UCHAR ActivePartition;
+  UCHAR WriteBufferFullRatio;
+  UCHAR ReadBufferEmptyRatio;
+  UCHAR WriteDelayTime[2];
+  UCHAR REW : 1;
+  UCHAR RBO : 1;
+  UCHAR SOCF : 2;
+  UCHAR AVC : 1;
+  UCHAR RSmk : 1;
+  UCHAR BIS : 1;
+  UCHAR DBR : 1;
+  UCHAR GapSize;
+  UCHAR Reserved3 : 3;
+  UCHAR SEW : 1;
+  UCHAR EEG : 1;
+  UCHAR EODdefined : 3;
+  UCHAR BufferSize[3];
+  UCHAR DCAlgorithm;
+  UCHAR Reserved4;
+} MODE_DEVICE_CONFIGURATION_PAGE, *PMODE_DEVICE_CONFIGURATION_PAGE;
+
+typedef struct _MODE_MEDIUM_PARTITION_PAGE {
+  UCHAR PageCode : 6;
+  UCHAR Reserved1 : 1;
+  UCHAR PSBit : 1;
+  UCHAR PageLength;
+  UCHAR MaximumAdditionalPartitions;
+  UCHAR AdditionalPartitionDefined;
+  UCHAR Reserved2 : 3;
+  UCHAR PSUMBit : 2;
+  UCHAR IDPBit : 1;
+  UCHAR SDPBit : 1;
+  UCHAR FDPBit : 1;
+  UCHAR MediumFormatRecognition;
+  UCHAR Reserved3[2];
+  UCHAR Partition0Size[2];
+  UCHAR Partition1Size[2];
+} MODE_MEDIUM_PARTITION_PAGE, *PMODE_MEDIUM_PARTITION_PAGE;
+
+typedef struct _MODE_DATA_COMPRESSION_PAGE {
+  UCHAR PageCode : 6;
+  UCHAR Reserved1 : 2;
+  UCHAR PageLength;
+  UCHAR Reserved2 : 6;
+  UCHAR DCC : 1;
+  UCHAR DCE : 1;
+  UCHAR Reserved3 : 5;
+  UCHAR RED : 2;
+  UCHAR DDE : 1;
+  UCHAR CompressionAlgorithm[4];
+  UCHAR DecompressionAlgorithm[4];
+  UCHAR Reserved4[4];
+} MODE_DATA_COMPRESSION_PAGE, *PMODE_DATA_COMPRESSION_PAGE;
+
+typedef struct _TAPE_INIT_DATA_EX {
+  ULONG InitDataSize;
+  TAPE_VERIFY_INQUIRY_ROUTINE VerifyInquiry;
+  BOOLEAN QueryModeCapabilitiesPage;
+  ULONG MinitapeExtensionSize;
+  TAPE_EXTENSION_INIT_ROUTINE ExtensionInit;
+  ULONG DefaultTimeOutValue;
+  TAPE_ERROR_ROUTINE TapeError;
+  ULONG CommandExtensionSize;
+  TAPE_PROCESS_COMMAND_ROUTINE CreatePartition;
+  TAPE_PROCESS_COMMAND_ROUTINE Erase;
+  TAPE_PROCESS_COMMAND_ROUTINE GetDriveParameters;
+  TAPE_PROCESS_COMMAND_ROUTINE GetMediaParameters;
+  TAPE_PROCESS_COMMAND_ROUTINE GetPosition;
+  TAPE_PROCESS_COMMAND_ROUTINE GetStatus;
+  TAPE_PROCESS_COMMAND_ROUTINE Prepare;
+  TAPE_PROCESS_COMMAND_ROUTINE SetDriveParameters;
+  TAPE_PROCESS_COMMAND_ROUTINE SetMediaParameters;
+  TAPE_PROCESS_COMMAND_ROUTINE SetPosition;
+  TAPE_PROCESS_COMMAND_ROUTINE WriteMarks;
+  TAPE_PROCESS_COMMAND_ROUTINE PreProcessReadWrite;
+  TAPE_PROCESS_COMMAND_ROUTINE TapeGetMediaTypes;
+  ULONG MediaTypesSupported;
+  TAPE_PROCESS_COMMAND_ROUTINE TapeWMIOperations;
+  ULONG Reserved[2];
+} TAPE_INIT_DATA_EX, *PTAPE_INIT_DATA_EX;
+
 #endif /* _MINITAPE_ */

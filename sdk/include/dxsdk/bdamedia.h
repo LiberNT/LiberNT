@@ -718,4 +718,21 @@ typedef enum KSMETHOD_BDA_USERACTIVITY_SERVICE {
     KSMETHOD_BDA_USERACTIVITY_DETECTED = 2
 } KSMETHOD_BDA_USERACTIVITY_SERVICE;
 
+typedef struct _ChannelChangeInfo {
+  ChannelChangeSpanningEvent_State state;
+  ULONGLONG TimeStamp;
+} ChannelChangeInfo;
+
+typedef struct _LanguageInfo {
+  LANGID LangID;
+  LONG lISOLangCode;
+} LanguageInfo;
+
+typedef struct _DualMonoInfo {
+  LANGID LangID1;
+  LANGID LangID2;
+  LONG lISOLangCode1;
+  LONG lISOLangCode2;
+} DualMonoInfo;
+
 #endif /* _BDAMEDIA_ */

@@ -1558,6 +1558,141 @@ typedef enum TCP_ICW_LEVEL {
     TCP_ICW_LEVEL_MAX = 255
 } TCP_ICW_LEVEL, *PTCP_ICW_LEVEL;
 
+typedef struct TRANSPORT_SETTING_ID {
+  GUID Guid;
+} TRANSPORT_SETTING_ID, *PTRANSPORT_SETTING_ID;
+
+typedef struct _REAL_TIME_NOTIFICATION_SETTING_INPUT {
+  TRANSPORT_SETTING_ID TransportSettingId;
+  GUID BrokerEventGuid;
+} REAL_TIME_NOTIFICATION_SETTING_INPUT, *PREAL_TIME_NOTIFICATION_SETTING_INPUT;
+
+typedef struct _REAL_TIME_NOTIFICATION_SETTING_INPUT_EX {
+  TRANSPORT_SETTING_ID TransportSettingId;
+  GUID BrokerEventGuid;
+  BOOLEAN Unmark;
+} REAL_TIME_NOTIFICATION_SETTING_INPUT_EX, *PREAL_TIME_NOTIFICATION_SETTING_INPUT_EX;
+
+typedef struct _REAL_TIME_NOTIFICATION_SETTING_OUTPUT {
+  CONTROL_CHANNEL_TRIGGER_STATUS ChannelStatus;
+} REAL_TIME_NOTIFICATION_SETTING_OUTPUT, *PREAL_TIME_NOTIFICATION_SETTING_OUTPUT;
+
+typedef struct _ASSOCIATE_NAMERES_CONTEXT_INPUT {
+  TRANSPORT_SETTING_ID TransportSettingId;
+  UINT64 Handle;
+} ASSOCIATE_NAMERES_CONTEXT_INPUT, *PASSOCIATE_NAMERES_CONTEXT_INPUT;
+
+typedef struct _TIMESTAMPING_CONFIG {
+  ULONG Flags;
+  USHORT TxTimestampsBuffered;
+} TIMESTAMPING_CONFIG, *PTIMESTAMPING_CONFIG;
+
+typedef struct _PRIORITY_STATUS {
+  SOCKET_PRIORITY_HINT Sender;
+  SOCKET_PRIORITY_HINT Receiver;
+} PRIORITY_STATUS, *PPRIORITY_STATUS;
+
+typedef struct _TCP_INITIAL_RTO_PARAMETERS {
+  USHORT Rtt;
+  UCHAR MaxSynRetransmissions;
+} TCP_INITIAL_RTO_PARAMETERS, *PTCP_INITIAL_RTO_PARAMETERS;
+
+typedef struct _TCP_ICW_PARAMETERS {
+  TCP_ICW_LEVEL Level;
+} TCP_ICW_PARAMETERS, *PTCP_ICW_PARAMETERS;
+
+typedef struct _TCP_ACK_FREQUENCY_PARAMETERS {
+  UCHAR TcpDelayedAckFrequency;
+} TCP_ACK_FREQUENCY_PARAMETERS, *PTCP_ACK_FREQUENCY_PARAMETERS;
+
+typedef struct _TCP_INFO_v0 {
+  TCPSTATE State;
+  ULONG Mss;
+  ULONG64 ConnectionTimeMs;
+  BOOLEAN TimestampsEnabled;
+  ULONG RttUs;
+  ULONG MinRttUs;
+  ULONG BytesInFlight;
+  ULONG Cwnd;
+  ULONG SndWnd;
+  ULONG RcvWnd;
+  ULONG RcvBuf;
+  ULONG64 BytesOut;
+  ULONG64 BytesIn;
+  ULONG BytesReordered;
+  ULONG BytesRetrans;
+  ULONG FastRetrans;
+  ULONG DupAcksIn;
+  ULONG TimeoutEpisodes;
+  UCHAR SynRetrans;
+} TCP_INFO_v0, *PTCP_INFO_v0;
+
+typedef struct _TCP_INFO_v1 {
+  TCPSTATE State;
+  ULONG Mss;
+  ULONG64 ConnectionTimeMs;
+  BOOLEAN TimestampsEnabled;
+  ULONG RttUs;
+  ULONG MinRttUs;
+  ULONG BytesInFlight;
+  ULONG Cwnd;
+  ULONG SndWnd;
+  ULONG RcvWnd;
+  ULONG RcvBuf;
+  ULONG64 BytesOut;
+  ULONG64 BytesIn;
+  ULONG BytesReordered;
+  ULONG BytesRetrans;
+  ULONG FastRetrans;
+  ULONG DupAcksIn;
+  ULONG TimeoutEpisodes;
+  UCHAR SynRetrans;
+  ULONG SndLimTransRwin;
+  ULONG SndLimTimeRwin;
+  ULONG64 SndLimBytesRwin;
+  ULONG SndLimTransCwnd;
+  ULONG SndLimTimeCwnd;
+  ULONG64 SndLimBytesCwnd;
+  ULONG SndLimTransSnd;
+  ULONG SndLimTimeSnd;
+  ULONG64 SndLimBytesSnd;
+} TCP_INFO_v1, *PTCP_INFO_v1;
+
+typedef struct _TCP_INFO_v2 {
+  TCPSTATE State;
+  ULONG Mss;
+  ULONG64 ConnectionTimeMs;
+  BOOLEAN TimestampsEnabled;
+  ULONG RttUs;
+  ULONG MinRttUs;
+  ULONG BytesInFlight;
+  ULONG Cwnd;
+  ULONG SndWnd;
+  ULONG RcvWnd;
+  ULONG RcvBuf;
+  ULONG64 BytesOut;
+  ULONG64 BytesIn;
+  ULONG BytesReordered;
+  ULONG BytesRetrans;
+  ULONG FastRetrans;
+  ULONG DupAcksIn;
+  ULONG TimeoutEpisodes;
+  UCHAR SynRetrans;
+  ULONG SndLimTransRwin;
+  ULONG SndLimTimeRwin;
+  ULONG64 SndLimBytesRwin;
+  ULONG SndLimTransCwnd;
+  ULONG SndLimTimeCwnd;
+  ULONG64 SndLimBytesCwnd;
+  ULONG SndLimTransSnd;
+  ULONG SndLimTimeSnd;
+  ULONG64 SndLimBytesSnd;
+  ULONG OutOfOrderPktsIn;
+  BOOLEAN EcnNegotiated;
+  ULONG EceAcksIn;
+  ULONG PtoEpisodes;
+} TCP_INFO_v2, *PTCP_INFO_v2;
+
 #endif /* __IP2STRING__ */
 
 #ifdef __cplusplus

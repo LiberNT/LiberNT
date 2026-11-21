@@ -455,4 +455,20 @@ typedef struct tagHH_GLOBAL_PROPERTY
 
 typedef struct tagHH_SET_INFOTYPE * PHH_SET_INFOTYPE;
 
+typedef struct tagHHN_NOTIFY {
+  NMHDR hdr;
+  PCSTR pszUrl;
+} HHN_NOTIFY;
+
+typedef struct tagHH_AKLINK {
+  int cbStruct;
+  BOOL fReserved;
+  LPCTSTR pszKeywords;
+  LPCTSTR pszUrl;
+  LPCTSTR pszMsgText;
+  LPCTSTR pszMsgTitle;
+  LPCTSTR pszWindow;
+  BOOL fIndexOnFail;
+} HH_AKLINK;
+
 #endif /* __HTMLHELP_H__ */

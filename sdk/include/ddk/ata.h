@@ -1525,4 +1525,79 @@ typedef struct _ATA_GET_PHYSICAL_ELEMENT_STATUS_PARAMETER_DATA {
 #define ZM_ACTION_RESET_WRITE_POINTER 0x04
 #endif
 
+#pragma pack(push, 1)
+typedef struct _REGISTER_FIS {
+  UCHAR FisType;
+  UCHAR Reserved0 : 7;
+  UCHAR CmdReg : 1;
+  UCHAR Command;
+  UCHAR Features;
+  UCHAR SectorNumber;
+  UCHAR CylinderLow;
+  UCHAR CylinderHigh;
+  UCHAR DeviceHead;
+  UCHAR SectorNumberExp;
+  UCHAR CylinderLowExp;
+  UCHAR CylinderHighExp;
+  UCHAR FeaturesExp;
+  UCHAR SectorCount;
+  UCHAR SectorCountExp;
+  UCHAR Reserved2;
+  UCHAR Control;
+  ULONG Reserved3;
+} REGISTER_FIS, *PREGISTER_FIS;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _SAVED_DEVICE_INTERNAL_STATUS_LOG {
+  UCHAR LogAddress;
+  UCHAR Reserved0[3];
+  ULONG OrganizationID;
+  USHORT Area1LastLogPage;
+  USHORT Area2LastLogPage;
+  USHORT Area3LastLogPage;
+  UCHAR Reserved2[368];
+  UCHAR SavedDataAvailable;
+  UCHAR GenerationNumber;
+  UCHAR ReasonIdentifier[128];
+} SAVED_DEVICE_INTERNAL_STATUS_LOG, *PSAVED_DEVICE_INTERNAL_STATUS_LOG;
+#pragma pack(pop)
+
+typedef struct _GP_LOG_SUPPORTED_DEVICE_STATISTICS {
+  DEVICE_STATISTICS_LOG_PAGE_HEADER Header;
+  UCHAR NumberOfEntries;
+  UCHAR LogPageNumbers[503];
+} GP_LOG_SUPPORTED_DEVICE_STATISTICS, *PGP_LOG_SUPPORTED_DEVICE_STATISTICS;
+
+#pragma pack(push, 1)
+typedef struct _REPORT_ZONES_EXT_DATA {
+  ULONG ZoneListLength;
+  UCHAR SAME : 4;
+  UCHAR Reserved0 : 4;
+  UCHAR Reserved1[3];
+  ULONGLONG MaxLBA : 48;
+  ULONGLONG Reserved2 : 16;
+  UCHAR Reserved3[48];
+} REPORT_ZONES_EXT_DATA, *PREPORT_ZONES_EXT_DATA;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _ATA_ZONE_DESCRIPTOR {
+  UCHAR ZoneType : 4;
+  UCHAR Reserved0 : 4;
+  UCHAR Reset : 1;
+  UCHAR NonSeq : 1;
+  UCHAR Reserved1 : 2;
+  UCHAR ZoneCondition : 4;
+  UCHAR Reserved2[6];
+  ULONGLONG ZoneLength : 48;
+  ULONGLONG Reserved3 : 16;
+  ULONGLONG ZoneStartLBA : 48;
+  ULONGLONG Reserved4 : 16;
+  ULONGLONG WritePointerLBA : 48;
+  ULONGLONG Reserved5 : 16;
+  UCHAR Reserved6[32];
+} ATA_ZONE_DESCRIPTOR, *PATA_ZONE_DESCRIPTOR;
+#pragma pack(pop)
+
 #endif

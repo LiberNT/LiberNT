@@ -5772,4 +5772,85 @@ typedef enum EC_SEARCHWEB_ENTRYPOINT {
 
 typedef struct tagNMBCDROPDOWN * LPNMBCDROPDOWN;
 
+typedef struct tagNMCUSTOMTEXT {
+  NMHDR hdr;
+  HDC hDC;
+  LPCWSTR lpString;
+  int nCount;
+  LPRECT lpRect;
+  UINT uFormat;
+  BOOL fLink;
+} NMCUSTOMTEXT, *LPNMCUSTOMTEXT;
+
+typedef struct tagNMCUSTOMSPLITRECTINFO {
+  NMHDR hdr;
+  RECT rcClient;
+  RECT rcButton;
+  RECT rcSplit;
+} NMCUSTOMSPLITRECTINFO, *LPNMCUSTOMSPLITRECTINFO;
+
+typedef struct tagNMREBARSPLITTER {
+  NMHDR hdr;
+  RECT rcSizing;
+} NMREBARSPLITTER, *LPNMREBARSPLITTER;
+
+typedef struct tagTRBTHUMBPOSCHANGING {
+  NMHDR hdr;
+  DWORD dwPos;
+  int nReason;
+} NMTRBTHUMBPOSCHANGING;
+
+typedef struct tagNMLVLINK {
+  NMHDR hdr;
+  LITEM link;
+  int iItem;
+  int iSubItem;
+} NMLVLINK, *PNMLVLINK;
+
+typedef struct tagNMTVSTATEIMAGECHANGING {
+  NMHDR hdr;
+  HTREEITEM hti;
+  int iOldStateImageIndex;
+  int iNewStateImageIndex;
+} NMTVSTATEIMAGECHANGING, *LPNMTVSTATEIMAGECHANGING;
+
+typedef struct tagMCGRIDINFO {
+  UINT cbSize;
+  DWORD dwPart;
+  DWORD dwFlags;
+  int iCalendar;
+  int iRow;
+  int iCol;
+  BOOL bSelected;
+  SYSTEMTIME stStart;
+  SYSTEMTIME stEnd;
+  RECT rc;
+  PWSTR pszName;
+  size_t cchName;
+} MCGRIDINFO, *PMCGRIDINFO;
+
+typedef struct tagNMVIEWCHANGE {
+  NMHDR nmhdr;
+  DWORD dwOldView;
+  DWORD dwNewView;
+} NMVIEWCHANGE, *LPNMVIEWCHANGE;
+
+typedef struct tagDATETIMEPICKERINFO {
+  DWORD cbSize;
+  RECT rcCheck;
+  DWORD stateCheck;
+  RECT rcButton;
+  DWORD stateButton;
+  HWND hwndEdit;
+  HWND hwndUD;
+  HWND hwndDropDown;
+} DATETIMEPICKERINFO, *LPDATETIMEPICKERINFO;
+
+typedef struct NMSEARCHWEB {
+  NMHDR hdr;
+  EC_SEARCHWEB_ENTRYPOINT entrypoint;
+  BOOL hasQueryText;
+  BOOL invokeSucceeded;
+} NMSEARCHWEB;
+
 #endif /* _INC_COMMCTRL */

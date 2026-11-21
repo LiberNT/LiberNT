@@ -1169,4 +1169,75 @@ typedef enum DNS_CONNECTION_POLICY_TAG {
     TAG_DNS_CONNECTION_POLICY_TAG_WWWPT = 2
 } DNS_CONNECTION_POLICY_TAG;
 
+typedef struct DNS_PROXY_INFORMATION {
+  ULONG version;
+  DNS_PROXY_INFORMATION_TYPE proxyInformationType;
+  PWSTR proxyName;
+} DNS_PROXY_INFORMATION;
+
+typedef struct _DNS_APPLICATION_SETTINGS {
+  ULONG Version;
+  ULONG64 Flags;
+} DNS_APPLICATION_SETTINGS;
+
+typedef struct _DNS_QUERY_RAW_CANCEL {
+  CHAR reserved[32];
+} DNS_QUERY_RAW_CANCEL;
+
+typedef struct _DNS_CONNECTION_NAME {
+  WCHAR wszName[65];
+} DNS_CONNECTION_NAME;
+
+typedef struct _DNS_CONNECTION_NAME_LIST {
+  DWORD cNames;
+  DNS_CONNECTION_NAME * pNames;
+} DNS_CONNECTION_NAME_LIST;
+
+typedef struct _DNS_CONNECTION_IFINDEX_ENTRY {
+  PCWSTR pwszConnectionName;
+  DWORD dwIfIndex;
+} DNS_CONNECTION_IFINDEX_ENTRY;
+
+typedef struct _DNS_CONNECTION_IFINDEX_LIST {
+  DNS_CONNECTION_IFINDEX_ENTRY * pConnectionIfIndexEntries;
+  DWORD nEntries;
+} DNS_CONNECTION_IFINDEX_LIST;
+
+typedef struct _DNS_CONNECTION_POLICY_ENTRY {
+  PCWSTR pwszHost;
+  PCWSTR pwszAppId;
+  DWORD cbAppSid;
+  PBYTE pbAppSid;
+  DWORD nConnections;
+  PCWSTR * ppwszConnections;
+  DWORD dwPolicyEntryFlags;
+} DNS_CONNECTION_POLICY_ENTRY, *PDNS_CONNECTION_POLICY_ENTRY;
+
+typedef struct _DNS_CONNECTION_POLICY_ENTRY_LIST {
+  DNS_CONNECTION_POLICY_ENTRY * pPolicyEntries;
+  DWORD nEntries;
+} DNS_CONNECTION_POLICY_ENTRY_LIST;
+
+typedef struct _DNS_SERVICE_INSTANCE {
+  LPWSTR pszInstanceName;
+  LPWSTR pszHostName;
+  IP4_ADDRESS * ip4Address;
+  IP6_ADDRESS * ip6Address;
+  WORD wPort;
+  WORD wPriority;
+  WORD wWeight;
+  DWORD dwPropertyCount;
+  PWSTR * keys;
+  PWSTR * values;
+  DWORD dwInterfaceIndex;
+} DNS_SERVICE_INSTANCE, *PDNS_SERVICE_INSTANCE;
+
+typedef struct _MDNS_QUERY_HANDLE {
+  WCHAR nameBuf[256];
+  WORD wType;
+  PVOID pSubscription;
+  PVOID pWnfCallbackParams;
+  ULONG stateNameData[2];
+} MDNS_QUERY_HANDLE, *PMDNS_QUERY_HANDLE;
+
 #endif /* _WINDNS_INCLUDED_ */

@@ -354,4 +354,46 @@ typedef struct ID3D11ShaderReflectionVariable * LPD3D11SHADERREFLECTIONVARIABLE;
 typedef struct ID3D11ShaderReflectionConstantBuffer * LPD3D11SHADERREFLECTIONCONSTANTBUFFER;
 typedef struct ID3D11ShaderReflection * LPD3D11SHADERREFLECTION;
 
+typedef struct _D3D11_LIBRARY_DESC {
+  LPCSTR Creator;
+  UINT Flags;
+  UINT FunctionCount;
+} D3D11_LIBRARY_DESC;
+
+typedef struct _D3D11_FUNCTION_DESC {
+  UINT Version;
+  LPCSTR Creator;
+  UINT Flags;
+  UINT ConstantBuffers;
+  UINT BoundResources;
+  UINT InstructionCount;
+  UINT TempRegisterCount;
+  UINT TempArrayCount;
+  UINT DefCount;
+  UINT DclCount;
+  UINT TextureNormalInstructions;
+  UINT TextureLoadInstructions;
+  UINT TextureCompInstructions;
+  UINT TextureBiasInstructions;
+  UINT TextureGradientInstructions;
+  UINT FloatInstructionCount;
+  UINT IntInstructionCount;
+  UINT UintInstructionCount;
+  UINT StaticFlowControlCount;
+  UINT DynamicFlowControlCount;
+  UINT MacroInstructionCount;
+  UINT ArrayInstructionCount;
+  UINT MovInstructionCount;
+  UINT MovcInstructionCount;
+  UINT ConversionInstructionCount;
+  UINT BitwiseInstructionCount;
+  D3D_FEATURE_LEVEL MinFeatureLevel;
+  UINT64 RequiredFeatureFlags;
+  LPCSTR Name;
+  INT FunctionParameterCount;
+  BOOL HasReturn;
+  BOOL Has10Level9VertexShader;
+  BOOL Has10Level9PixelShader;
+} D3D11_FUNCTION_DESC;
+
 #endif

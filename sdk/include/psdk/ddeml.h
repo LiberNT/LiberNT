@@ -389,4 +389,91 @@ UINT      WINAPI DdeQueryConvInfo(HCONV,DWORD,PCONVINFO);
 #define MH_KEEP 2
 #endif
 
+typedef struct tagDDEML_MSG_HOOK_DATA {
+  UINT_PTR uiLo;
+  UINT_PTR uiHi;
+  DWORD cbData;
+  DWORD Data[8];
+} DDEML_MSG_HOOK_DATA, *PDDEML_MSG_HOOK_DATA;
+
+typedef struct tagMONMSGSTRUCT {
+  UINT cb;
+  HWND hwndTo;
+  DWORD dwTime;
+  HANDLE hTask;
+  UINT wMsg;
+  WPARAM wParam;
+  LPARAM lParam;
+  DDEML_MSG_HOOK_DATA dmhd;
+} MONMSGSTRUCT, *PMONMSGSTRUCT;
+
+typedef struct tagMONCBSTRUCT {
+  UINT cb;
+  DWORD dwTime;
+  HANDLE hTask;
+  DWORD dwRet;
+  UINT wType;
+  UINT wFmt;
+  HCONV hConv;
+  HSZ hsz1;
+  HSZ hsz2;
+  HDDEDATA hData;
+  ULONG_PTR dwData1;
+  ULONG_PTR dwData2;
+  CONVCONTEXT cc;
+  DWORD cbData;
+  DWORD Data[8];
+} MONCBSTRUCT, *PMONCBSTRUCT;
+
+typedef struct tagMONHSZSTRUCTA {
+  UINT cb;
+  BOOL fsAction;
+  DWORD dwTime;
+  HSZ hsz;
+  HANDLE hTask;
+  CHAR str[1];
+} MONHSZSTRUCTA, *PMONHSZSTRUCTA;
+
+typedef struct tagMONHSZSTRUCTW {
+  UINT cb;
+  BOOL fsAction;
+  DWORD dwTime;
+  HSZ hsz;
+  HANDLE hTask;
+  WCHAR str[1];
+} MONHSZSTRUCTW, *PMONHSZSTRUCTW;
+
+typedef struct tagMONERRSTRUCT {
+  UINT cb;
+  UINT wLastError;
+  DWORD dwTime;
+  HANDLE hTask;
+} MONERRSTRUCT, *PMONERRSTRUCT;
+
+typedef struct tagMONLINKSTRUCT {
+  UINT cb;
+  DWORD dwTime;
+  HANDLE hTask;
+  BOOL fEstablished;
+  BOOL fNoData;
+  HSZ hszSvc;
+  HSZ hszTopic;
+  HSZ hszItem;
+  UINT wFmt;
+  BOOL fServer;
+  HCONV hConvServer;
+  HCONV hConvClient;
+} MONLINKSTRUCT, *PMONLINKSTRUCT;
+
+typedef struct tagMONCONVSTRUCT {
+  UINT cb;
+  BOOL fConnect;
+  DWORD dwTime;
+  HANDLE hTask;
+  HSZ hszSvc;
+  HSZ hszTopic;
+  HCONV hConvClient;
+  HCONV hConvServer;
+} MONCONVSTRUCT, *PMONCONVSTRUCT;
+
 #endif  /* __WINE_DDEML_H */

@@ -987,4 +987,147 @@ typedef MINIDUMP_MISC_INFO_N * PMINIDUMP_MISC_INFO_N;
 typedef MINIDUMP_PROCESS_VM_COUNTERS_2 MINIDUMP_PROCESS_VM_COUNTERS_N;
 typedef MINIDUMP_PROCESS_VM_COUNTERS_N * PMINIDUMP_PROCESS_VM_COUNTERS_N;
 
+#pragma pack(push, 4)
+typedef struct _MINIDUMP_THREAD_EX {
+  ULONG32 ThreadId;
+  ULONG32 SuspendCount;
+  ULONG32 PriorityClass;
+  ULONG32 Priority;
+  ULONG64 Teb;
+  MINIDUMP_MEMORY_DESCRIPTOR Stack;
+  MINIDUMP_LOCATION_DESCRIPTOR ThreadContext;
+  MINIDUMP_MEMORY_DESCRIPTOR BackingStore;
+} MINIDUMP_THREAD_EX, *PMINIDUMP_THREAD_EX;
+#pragma pack(pop)
+
+typedef struct _MINIDUMP_THREAD_EX_LIST {
+  ULONG32 NumberOfThreads;
+  MINIDUMP_THREAD_EX Threads[0];
+} MINIDUMP_THREAD_EX_LIST, *PMINIDUMP_THREAD_EX_LIST;
+
+typedef struct _MINIDUMP_HANDLE_OPERATION_LIST {
+  ULONG32 SizeOfHeader;
+  ULONG32 SizeOfEntry;
+  ULONG32 NumberOfEntries;
+  ULONG32 Reserved;
+} MINIDUMP_HANDLE_OPERATION_LIST, *PMINIDUMP_HANDLE_OPERATION_LIST;
+
+#pragma pack(push, 4)
+typedef struct _MINIDUMP_SYSTEM_PERFORMANCE_INFORMATION_2 {
+  ULONG64 IdleProcessTime;
+  ULONG64 IoReadTransferCount;
+  ULONG64 IoWriteTransferCount;
+  ULONG64 IoOtherTransferCount;
+  ULONG IoReadOperationCount;
+  ULONG IoWriteOperationCount;
+  ULONG IoOtherOperationCount;
+  ULONG AvailablePages;
+  ULONG CommittedPages;
+  ULONG CommitLimit;
+  ULONG PeakCommitment;
+  ULONG PageFaultCount;
+  ULONG CopyOnWriteCount;
+  ULONG TransitionCount;
+  ULONG CacheTransitionCount;
+  ULONG DemandZeroCount;
+  ULONG PageReadCount;
+  ULONG PageReadIoCount;
+  ULONG CacheReadCount;
+  ULONG CacheIoCount;
+  ULONG DirtyPagesWriteCount;
+  ULONG DirtyWriteIoCount;
+  ULONG MappedPagesWriteCount;
+  ULONG MappedWriteIoCount;
+  ULONG PagedPoolPages;
+  ULONG NonPagedPoolPages;
+  ULONG PagedPoolAllocs;
+  ULONG PagedPoolFrees;
+  ULONG NonPagedPoolAllocs;
+  ULONG NonPagedPoolFrees;
+  ULONG FreeSystemPtes;
+  ULONG ResidentSystemCodePage;
+  ULONG TotalSystemDriverPages;
+  ULONG TotalSystemCodePages;
+  ULONG NonPagedPoolLookasideHits;
+  ULONG PagedPoolLookasideHits;
+  ULONG AvailablePagedPoolPages;
+  ULONG ResidentSystemCachePage;
+  ULONG ResidentPagedPoolPage;
+  ULONG ResidentSystemDriverPage;
+  ULONG CcFastReadNoWait;
+  ULONG CcFastReadWait;
+  ULONG CcFastReadResourceMiss;
+  ULONG CcFastReadNotPossible;
+  ULONG CcFastMdlReadNoWait;
+  ULONG CcFastMdlReadWait;
+  ULONG CcFastMdlReadResourceMiss;
+  ULONG CcFastMdlReadNotPossible;
+  ULONG CcMapDataNoWait;
+  ULONG CcMapDataWait;
+  ULONG CcMapDataNoWaitMiss;
+  ULONG CcMapDataWaitMiss;
+  ULONG CcPinMappedDataCount;
+  ULONG CcPinReadNoWait;
+  ULONG CcPinReadWait;
+  ULONG CcPinReadNoWaitMiss;
+  ULONG CcPinReadWaitMiss;
+  ULONG CcCopyReadNoWait;
+  ULONG CcCopyReadWait;
+  ULONG CcCopyReadNoWaitMiss;
+  ULONG CcCopyReadWaitMiss;
+  ULONG CcMdlReadNoWait;
+  ULONG CcMdlReadWait;
+  ULONG CcMdlReadNoWaitMiss;
+  ULONG CcMdlReadWaitMiss;
+  ULONG CcReadAheadIos;
+  ULONG CcLazyWriteIos;
+  ULONG CcLazyWritePages;
+  ULONG CcDataFlushes;
+  ULONG CcDataPages;
+  ULONG ContextSwitches;
+  ULONG FirstLevelTbFills;
+  ULONG SecondLevelTbFills;
+  ULONG SystemCalls;
+  ULONG64 CcTotalDirtyPages;
+  ULONG64 CcDirtyPageThreshold;
+  LONG64 ResidentAvailablePages;
+  ULONG64 SharedCommittedPages;
+  ULONGLONG MdlPagesAllocated;
+  ULONGLONG PfnDatabaseCommittedPages;
+  ULONGLONG SystemPageTableCommittedPages;
+  ULONGLONG ContiguousPagesAllocated;
+} MINIDUMP_SYSTEM_PERFORMANCE_INFORMATION_2, *PMINIDUMP_SYSTEM_PERFORMANCE_INFORMATION_2;
+#pragma pack(pop)
+
+typedef struct _MINIDUMP_SYSTEM_MEMORY_INFO_2 {
+  USHORT Revision;
+  USHORT Flags;
+  MINIDUMP_SYSTEM_BASIC_INFORMATION BasicInfo;
+  MINIDUMP_SYSTEM_FILECACHE_INFORMATION FileCacheInfo;
+  MINIDUMP_SYSTEM_BASIC_PERFORMANCE_INFORMATION BasicPerfInfo;
+  MINIDUMP_SYSTEM_PERFORMANCE_INFORMATION_2 PerfInfo;
+} MINIDUMP_SYSTEM_MEMORY_INFO_2, *PMINIDUMP_SYSTEM_MEMORY_INFO_2;
+
+typedef struct _MINIDUMP_USER_RECORD {
+  ULONG32 Type;
+  MINIDUMP_LOCATION_DESCRIPTOR Memory;
+} MINIDUMP_USER_RECORD, *PMINIDUMP_USER_RECORD;
+
+#pragma pack(push, 4)
+typedef struct _MINIDUMP_COMPRESSED_MEMORY_STREAM_START_CALLBACK {
+  ULONG MaxParallelism;
+  ULONG MaxTransferSize;
+  PNUMA_NODE_RELATIONSHIP NumaNodeInfoArray;
+  ULONG NumaNodeInfoArraySize;
+  ULONG Reserved;
+} MINIDUMP_COMPRESSED_MEMORY_STREAM_START_CALLBACK, *PMINIDUMP_COMPRESSED_MEMORY_STREAM_START_CALLBACK;
+#pragma pack(pop)
+
+#pragma pack(push, 4)
+typedef struct _MINIDUMP_COMPRESSED_MEMORY_STREAM_FINISH_CALLBACK {
+  ULONG64 CompressedStreamSize;
+  ULONG32 StreamCompressionRate;
+} MINIDUMP_COMPRESSED_MEMORY_STREAM_FINISH_CALLBACK, *PMINIDUMP_COMPRESSED_MEMORY_STREAM_FINISH_CALLBACK;
+#pragma pack(pop)
+
 #endif  /* __WINE_MINIDUMP_H */

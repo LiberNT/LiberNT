@@ -2885,4 +2885,42 @@ BOOL WINAPI DeleteWpadCacheForNetworks(WPAD_CACHE_DELETE);
 }
 #endif
 
+typedef struct IncomingCookieState {
+  int cSession;
+  int cPersistent;
+  int cAccepted;
+  int cLeashed;
+  int cDowngraded;
+  int cBlocked;
+  const char * pszLocation;
+} IncomingCookieState;
+
+typedef struct OutgoingCookieState {
+  int cSent;
+  int cSuppressed;
+  const char * pszLocation;
+} OutgoingCookieState;
+
+typedef struct InternetCookieHistory {
+  BOOL fAccepted;
+  BOOL fLeashed;
+  BOOL fDowngraded;
+  BOOL fRejected;
+} InternetCookieHistory;
+
+typedef struct CookieDecision {
+  DWORD dwCookieState;
+  BOOL fAllowSession;
+} CookieDecision;
+
+typedef struct INTERNET_COOKIE2 {
+  PWSTR pwszName;
+  PWSTR pwszValue;
+  PWSTR pwszDomain;
+  PWSTR pwszPath;
+  DWORD dwFlags;
+  FILETIME ftExpires;
+  BOOL fExpiresSet;
+} INTERNET_COOKIE2;
+
 #endif /* _WINE_WININET_H_ */

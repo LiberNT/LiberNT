@@ -2693,4 +2693,10 @@ capGetDriverDescriptionW(
 
 typedef IAVIStreaming * PAVISTREAMING;
 
+typedef struct tagCapInfoChunk {
+  FOURCC fccInfoID;
+  LPVOID lpData;
+  LONG cbData;
+} CAPINFOCHUNK, *PCAPINFOCHUNK, *LPCAPINFOCHUNK;
+
 #endif /* __WINE_VFW_H */

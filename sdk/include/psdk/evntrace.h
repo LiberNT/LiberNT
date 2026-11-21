@@ -76,6 +76,35 @@ typedef ULONG64 PROCESSTRACE_HANDLE;
 typedef ULONG64 CONTROLTRACE_ID;
 typedef ULONG64 TRACELOGGER_HANDLE;
 
+typedef struct _PROFILE_SOURCE_INFO {
+  ULONG NextEntryOffset;
+  ULONG Source;
+  ULONG MinInterval;
+  ULONG MaxInterval;
+  ULONG64 Reserved;
+  WCHAR Description[1];
+} PROFILE_SOURCE_INFO, *PPROFILE_SOURCE_INFO;
+
+typedef struct _ETW_PMC_COUNTER_OWNER {
+  ETW_PMC_COUNTER_OWNER_TYPE OwnerType;
+  ULONG ProfileSource;
+  ULONG OwnerTag;
+} ETW_PMC_COUNTER_OWNER, *PETW_PMC_COUNTER_OWNER;
+
+typedef struct _ETW_PMC_COUNTER_OWNERSHIP_STATUS {
+  ULONG ProcessorNumber;
+  ULONG NumberOfCounters;
+  ETW_PMC_COUNTER_OWNER CounterOwners[1];
+} ETW_PMC_COUNTER_OWNERSHIP_STATUS, *PETW_PMC_COUNTER_OWNERSHIP_STATUS;
+
+typedef struct ETW_PMC_SESSION_INFO {
+  ULONG NextEntryOffset;
+  USHORT LoggerId;
+  USHORT Reserved;
+  ULONG ProfileSourceCount;
+  ULONG HookIdCount;
+} ETW_PMC_SESSION_INFO;
+
 #endif
 
 #define SYSTEM_EVENT_TYPE                   1

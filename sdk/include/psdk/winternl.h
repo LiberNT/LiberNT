@@ -737,4 +737,18 @@ RtlUniform(
 }
 #endif
 
+typedef struct _SYSTEM_BASICPROCESS_INFORMATION {
+  ULONG NextEntryOffset;
+  HANDLE UniqueProcessId;
+  HANDLE InheritedFromUniqueProcessId;
+  ULONG64 SequenceNumber;
+  UNICODE_STRING ImageName;
+} SYSTEM_BASICPROCESS_INFORMATION, *PSYSTEM_BASICPROCESS_INFORMATION;
+
+typedef struct _SYSTEM_HANDLECOUNT_INFORMATION {
+  ULONG ProcessCount;
+  ULONG ThreadCount;
+  ULONG HandleCount;
+} SYSTEM_HANDLECOUNT_INFORMATION, *PSYSTEM_HANDLECOUNT_INFORMATION;
+
 #endif /* _WINTERNL_ */

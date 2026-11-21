@@ -202,4 +202,21 @@ typedef ICMPV6_ECHO_REPLY_LH *PICMPV6_ECHO_REPLY;
 
 typedef struct in6_addr IPv6Addr;
 
+typedef struct arp_send_reply {
+  IPAddr DestAddress;
+  IPAddr SrcAddress;
+} ARP_SEND_REPLY, *PARP_SEND_REPLY;
+
+typedef struct tcp_reserve_port_range {
+  USHORT UpperRange;
+  USHORT LowerRange;
+} TCP_RESERVE_PORT_RANGE, *PTCP_RESERVE_PORT_RANGE;
+
+typedef struct _IP_MCAST_COUNTER_INFO {
+  ULONG64 InMcastOctets;
+  ULONG64 OutMcastOctets;
+  ULONG64 InMcastPkts;
+  ULONG64 OutMcastPkts;
+} IP_MCAST_COUNTER_INFO, *PIP_MCAST_COUNTER_INFO;
+
 #endif /* __WINE_IPEXPORT_H */

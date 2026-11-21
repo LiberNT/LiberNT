@@ -208,4 +208,8 @@ typedef enum
 #define WNODE_FLAG_VERSIONED_PROPERTIES 0x00800000
 #endif
 
+typedef struct tagWNODE_EVENT_ITEM {
+  struct _WNODE_HEADER WnodeHeader;
+} WNODE_EVENT_ITEM, *PWNODE_EVENT_ITEM;
+
 #endif /* _WMISTR_ */

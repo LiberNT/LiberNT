@@ -46,4 +46,33 @@ typedef struct _IPX_ADDRESS_DATA {
     ULONG linkspeed;
 } IPX_ADDRESS_DATA, *PIPX_ADDRESS_DATA;
 
+typedef struct _IPX_NETNUM_DATA {
+  UCHAR netnum[4];
+  USHORT hopcount;
+  USHORT netdelay;
+  INT cardnum;
+  UCHAR router[6];
+} IPX_NETNUM_DATA, *PIPX_NETNUM_DATA;
+
+typedef struct _IPX_SPXCONNSTATUS_DATA {
+  UCHAR ConnectionState;
+  UCHAR WatchDogActive;
+  USHORT LocalConnectionId;
+  USHORT RemoteConnectionId;
+  USHORT LocalSequenceNumber;
+  USHORT LocalAckNumber;
+  USHORT LocalAllocNumber;
+  USHORT RemoteAckNumber;
+  USHORT RemoteAllocNumber;
+  USHORT LocalSocket;
+  UCHAR ImmediateAddress[6];
+  UCHAR RemoteNetwork[4];
+  UCHAR RemoteNode[6];
+  USHORT RemoteSocket;
+  USHORT RetransmissionCount;
+  USHORT EstimatedRoundTripDelay;
+  USHORT RetransmittedPackets;
+  USHORT SuppressedPacket;
+} IPX_SPXCONNSTATUS_DATA, *PIPX_SPXCONNSTATUS_DATA;
+
 #endif /* _WSNWLINK_ */

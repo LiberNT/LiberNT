@@ -196,4 +196,70 @@ typedef enum _CSV_FILECACHE_IO_TYPE {
 typedef GUID FILE_SIG_T;
 typedef GUID VOLUME_SIG_T;
 
+typedef struct _VOLUME_GET_BC_PROPERTIES_INPUT {
+  ULONG Version;
+  ULONG Reserved1;
+  ULONGLONG LowestByteOffset;
+  ULONGLONG HighestByteOffset;
+  ULONG AccessType;
+  ULONG AccessMode;
+} VOLUME_GET_BC_PROPERTIES_INPUT, *PVOLUME_GET_BC_PROPERTIES_INPUT;
+
+typedef struct _VOLUME_GET_BC_PROPERTIES_OUTPUT {
+  ULONG MaximumRequestsPerPeriod;
+  ULONG MinimumPeriod;
+  ULONGLONG MaximumRequestSize;
+  ULONG EstimatedTimePerRequest;
+  ULONG NumOutStandingRequests;
+  ULONGLONG RequestSize;
+} VOLUME_GET_BC_PROPERTIES_OUTPUT, *PVOLUME_GET_BC_PROPERTIES_OUTPUT;
+
+typedef struct _VOLUME_ALLOCATE_BC_STREAM_INPUT {
+  ULONG Version;
+  ULONG RequestsPerPeriod;
+  ULONG Period;
+  BOOLEAN RetryFailures;
+  BOOLEAN Discardable;
+  BOOLEAN Reserved1[2];
+  ULONGLONG LowestByteOffset;
+  ULONGLONG HighestByteOffset;
+  ULONG AccessType;
+  ULONG AccessMode;
+} VOLUME_ALLOCATE_BC_STREAM_INPUT, *PVOLUME_ALLOCATE_BC_STREAM_INPUT;
+
+typedef struct _VOLUME_ALLOCATE_BC_STREAM_OUTPUT {
+  ULONGLONG RequestSize;
+  ULONG NumOutStandingRequests;
+} VOLUME_ALLOCATE_BC_STREAM_OUTPUT, *PVOLUME_ALLOCATE_BC_STREAM_OUTPUT;
+
+typedef struct _FILE_EXTENT {
+  ULONGLONG VolumeOffset;
+  ULONGLONG ExtentLength;
+} FILE_EXTENT, *PFILE_EXTENT;
+
+typedef struct _VOLUME_CRITICAL_IO {
+  ULONG AccessType;
+  ULONG ExtentsCount;
+  FILE_EXTENT Extents[1];
+} VOLUME_CRITICAL_IO, *PVOLUME_CRITICAL_IO;
+
+typedef struct _VOLUME_ALLOCATION_HINT_INPUT {
+  ULONG ClusterSize;
+  ULONG NumberOfClusters;
+  LONGLONG StartingClusterNumber;
+} VOLUME_ALLOCATION_HINT_INPUT, *PVOLUME_ALLOCATION_HINT_INPUT;
+
+typedef struct _VOLUME_ALLOCATION_HINT_OUTPUT {
+  ULONG Bitmap[1];
+} VOLUME_ALLOCATION_HINT_OUTPUT, *PVOLUME_ALLOCATION_HINT_OUTPUT;
+
+typedef struct _VOLUME_SHRINK_INFO {
+  ULONGLONG VolumeSize;
+} VOLUME_SHRINK_INFO, *PVOLUME_SHRINK_INFO;
+
+typedef struct _CSV_FILECACHE_IO_RANGE {
+  ULONGLONG Offset;
+  ULONG Length;
+} CSV_FILECACHE_IO_RANGE;
+
 #endif /* _NTDDVOL_ */

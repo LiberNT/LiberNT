@@ -6747,6 +6747,120 @@ typedef struct _ProcessorPerformance {
 
 #ifndef COMMIT_POLICY_OUT_Status_ID
 #define COMMIT_POLICY_OUT_Status_ID 1
+typedef struct _GET_ALL_POLICY_OUT {
+  ULONG Status;
+  ULONG Count;
+  ULONG Length;
+  UCHAR Values[1];
+} GET_ALL_POLICY_OUT, *PGET_ALL_POLICY_OUT;
+
+typedef struct _GET_SINGLE_POLICY_IN {
+  ULONG Type;
+} GET_SINGLE_POLICY_IN, *PGET_SINGLE_POLICY_IN;
+
+typedef struct _GET_SINGLE_POLICY_OUT {
+  ULONG Status;
+  ULONG Value;
+} GET_SINGLE_POLICY_OUT, *PGET_SINGLE_POLICY_OUT;
+
+typedef struct _SET_SINGLE_POLICY_IN {
+  ULONG Type;
+  ULONG Value;
+} SET_SINGLE_POLICY_IN, *PSET_SINGLE_POLICY_IN;
+
+typedef struct _SET_SINGLE_POLICY_OUT {
+  ULONG Status;
+} SET_SINGLE_POLICY_OUT, *PSET_SINGLE_POLICY_OUT;
+
+typedef struct _COMMIT_POLICY_OUT {
+  ULONG Status;
+} COMMIT_POLICY_OUT, *PCOMMIT_POLICY_OUT;
+
+typedef struct _RESET_POLICY_OUT {
+  ULONG Status;
+} RESET_POLICY_OUT, *PRESET_POLICY_OUT;
+
+typedef struct _WHEA_PLUGIN_CTL_INTERFACE_IN {
+  ULONG InputLength;
+  UCHAR InputBuffer[1];
+} WHEA_PLUGIN_CTL_INTERFACE_IN, *PWHEA_PLUGIN_CTL_INTERFACE_IN;
+
+typedef struct _WHEA_PLUGIN_CTL_INTERFACE_OUT {
+  ULONG Status;
+  ULONG OutputLength;
+  UCHAR OutputBuffer[1];
+} WHEA_PLUGIN_CTL_INTERFACE_OUT, *PWHEA_PLUGIN_CTL_INTERFACE_OUT;
+
+typedef struct _WHEA_PAGE_OFFLINING_INTERFACE_IN {
+  ULONG InputLength;
+  UCHAR InputBuffer[1];
+} WHEA_PAGE_OFFLINING_INTERFACE_IN, *PWHEA_PAGE_OFFLINING_INTERFACE_IN;
+
+typedef struct _WHEA_PAGE_OFFLINING_INTERFACE_OUT {
+  ULONG Status;
+} WHEA_PAGE_OFFLINING_INTERFACE_OUT, *PWHEA_PAGE_OFFLINING_INTERFACE_OUT;
+
+typedef struct _MSNdis_NetworkDirectState {
+  BOOLEAN Enabled;
+} MSNdis_NetworkDirectState, *PMSNdis_NetworkDirectState;
+
+typedef struct _MSNdis_NetworkDirectVersion {
+  USHORT MajorVersionNumber;
+  USHORT MinorVersionNumber;
+} MSNdis_NetworkDirectVersion, *PMSNdis_NetworkDirectVersion;
+
+typedef struct _MSNdis_NetworkDirectAdapterInfo {
+  MSNdis_NetworkDirectVersion Version;
+  ULONG VendorId;
+  ULONG DeviceId;
+  ULONGLONG MaxRegistrationSize;
+  ULONGLONG MaxWindowSize;
+  ULONG FRMRPageCount;
+  ULONG MaxInitiatorRequestSge;
+  ULONG MaxReceiveRequestSge;
+  ULONG MaxReadRequestSge;
+  ULONG MaxTransferLength;
+  ULONG MaxInlineDataSize;
+  ULONG MaxInboundReadLimit;
+  ULONG MaxOutboundReadLimit;
+  ULONG MaxReceiveQueueDepth;
+  ULONG MaxInitiatorQueueDepth;
+  ULONG MaxSrqDepth;
+  ULONG MaxCqDepth;
+  ULONG LargeRequestThreshold;
+  ULONG MaxCallerData;
+  ULONG MaxCalleeData;
+  BOOLEAN InOrderDMA;
+  BOOLEAN SupportsCQResize;
+  BOOLEAN SupportsLoopbackConnections;
+} MSNdis_NetworkDirectAdapterInfo, *PMSNdis_NetworkDirectAdapterInfo;
+
+typedef struct _MSNdis_NetworkDirectAdapterCapabilities {
+  ULONG MaxQpCount;
+  ULONG MaxCqCount;
+  ULONG MaxMrCount;
+  ULONG MaxPdCount;
+  ULONG MaxInboundReadLimit;
+  ULONG MaxOutboundReadLimit;
+  ULONG MaxMwCount;
+  ULONG MaxSrqCount;
+  ULONGLONG MissingCounterMask;
+  MSNdis_NetworkDirectAdapterInfo NdAdapterInfo;
+} MSNdis_NetworkDirectAdapterCapabilities, *PMSNdis_NetworkDirectAdapterCapabilities;
+
+typedef struct _MSNdis_NetworkDirectCapabilities {
+  MSNdis_NetworkDirectAdapterCapabilities NdCapabilities;
+} MSNdis_NetworkDirectCapabilities, *PMSNdis_NetworkDirectCapabilities;
+
+typedef struct _MSNdis_StatusExternalConnectivityChange {
+  ULONG NdisMediaConnectStatus;
+} MSNdis_StatusExternalConnectivityChange, *PMSNdis_StatusExternalConnectivityChange;
+
+typedef struct _CounterCorruptionStatus {
+  ULONG ProfileSource;
+  ULONGLONG LastKnownGoodTimestamp;
+} CounterCorruptionStatus, *PCounterCorruptionStatus;
+
 #endif
 #ifndef CounterCorruptionStatus_LastKnownGoodTimestamp_ID
 #define CounterCorruptionStatus_LastKnownGoodTimestamp_ID 2

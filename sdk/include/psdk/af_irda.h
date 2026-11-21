@@ -231,4 +231,15 @@ typedef struct _WINDOWS_IAS_QUERY * LPWINDOWS_IAS_QUERY;
 typedef WINDOWS_IAS_SET * LPIASSET;
 typedef WINDOWS_IAS_QUERY * LPIASQUERY;
 
+typedef struct _WCE_IRDA_DEVICE_INFO {
+  u_char irdaDeviceID[4];
+  char irdaDeviceName[22];
+  u_char Reserved[2];
+} WCE_IRDA_DEVICE_INFO, *PWCE_IRDA_DEVICE_INFO;
+
+typedef struct _WCE_DEVICELIST {
+  ULONG numDevice;
+  WCE_IRDA_DEVICE_INFO Device[1];
+} WCE_DEVICELIST, *PWCE_DEVICELIST;
+
 #endif /* __AF_IRDA_H */

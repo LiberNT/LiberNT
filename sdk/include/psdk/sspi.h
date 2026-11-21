@@ -1085,4 +1085,31 @@ SECURITY_STATUS WINAPI DeleteSecurityPackageW(LPWSTR pszPackageName);
 }
 #endif
 
+typedef struct _SecPkgCredentials_SSIProviderA {
+  SEC_CHAR * sProviderName;
+  unsigned long ProviderInfoLength;
+  char * ProviderInfo;
+} SecPkgCredentials_SSIProviderA, *PSecPkgCredentials_SSIProviderA;
+
+typedef struct _SecPkgContext_LastClientTokenStatus {
+  SECPKG_ATTR_LCT_STATUS LastClientTokenStatus;
+} SecPkgContext_LastClientTokenStatus, *PSecPkgContext_LastClientTokenStatus;
+
+typedef struct _SecPkgContext_ClientSpecifiedTarget {
+  SEC_WCHAR * sTargetName;
+} SecPkgContext_ClientSpecifiedTarget, *PSecPkgContext_ClientSpecifiedTarget;
+
+typedef struct _SecPkgContext_NegotiatedTlsExtensions {
+  unsigned long ExtensionsCount;
+  unsigned short * Extensions;
+} SecPkgContext_NegotiatedTlsExtensions, *PSecPkgContext_NegotiatedTlsExtensions;
+
+typedef struct _SECPKG_APP_MODE_INFO {
+  ULONG UserFunction;
+  ULONG_PTR Argument1;
+  ULONG_PTR Argument2;
+  SecBuffer UserData;
+  BOOLEAN ReturnToLsa;
+} SECPKG_APP_MODE_INFO, *PSECPKG_APP_MODE_INFO;
+
 #endif /* ndef __WINE_SSPI_H__ */

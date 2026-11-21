@@ -363,4 +363,105 @@ HRESULT WINAPI WerUnregisterCustomMetadata(PCWSTR key);
 }
 #endif
 
+typedef struct _WER_REPORT_INFORMATION_V3 {
+  DWORD dwSize;
+  HANDLE hProcess;
+  WCHAR wzConsentKey[64];
+  WCHAR wzFriendlyEventName[128];
+  WCHAR wzApplicationName[128];
+  WCHAR wzApplicationPath[260];
+  WCHAR wzDescription[512];
+  HWND hwndParent;
+  WCHAR wzNamespacePartner[64];
+  WCHAR wzNamespaceGroup[64];
+} WER_REPORT_INFORMATION_V3, *PWER_REPORT_INFORMATION_V3;
+
+typedef struct _WER_DUMP_CUSTOM_OPTIONS_V2 {
+  DWORD dwSize;
+  DWORD dwMask;
+  DWORD dwDumpFlags;
+  BOOL bOnlyThisThread;
+  DWORD dwExceptionThreadFlags;
+  DWORD dwOtherThreadFlags;
+  DWORD dwExceptionThreadExFlags;
+  DWORD dwOtherThreadExFlags;
+  DWORD dwPreferredModuleFlags;
+  DWORD dwOtherModuleFlags;
+  WCHAR wzPreferredModuleList[256];
+  DWORD dwPreferredModuleResetFlags;
+  DWORD dwOtherModuleResetFlags;
+} WER_DUMP_CUSTOM_OPTIONS_V2, *PWER_DUMP_CUSTOM_OPTIONS_V2;
+
+typedef struct _WER_REPORT_INFORMATION_V4 {
+  DWORD dwSize;
+  HANDLE hProcess;
+  WCHAR wzConsentKey[64];
+  WCHAR wzFriendlyEventName[128];
+  WCHAR wzApplicationName[128];
+  WCHAR wzApplicationPath[260];
+  WCHAR wzDescription[512];
+  HWND hwndParent;
+  WCHAR wzNamespacePartner[64];
+  WCHAR wzNamespaceGroup[64];
+  BYTE rgbApplicationIdentity[16];
+  HANDLE hSnapshot;
+  HANDLE hDeleteFilesImpersonationToken;
+} WER_REPORT_INFORMATION_V4, *PWER_REPORT_INFORMATION_V4;
+
+typedef struct _WER_REPORT_INFORMATION_V5 {
+  DWORD dwSize;
+  HANDLE hProcess;
+  WCHAR wzConsentKey[64];
+  WCHAR wzFriendlyEventName[128];
+  WCHAR wzApplicationName[128];
+  WCHAR wzApplicationPath[260];
+  WCHAR wzDescription[512];
+  HWND hwndParent;
+  WCHAR wzNamespacePartner[64];
+  WCHAR wzNamespaceGroup[64];
+  BYTE rgbApplicationIdentity[16];
+  HANDLE hSnapshot;
+  HANDLE hDeleteFilesImpersonationToken;
+  WER_SUBMIT_RESULT submitResultMax;
+} WER_REPORT_INFORMATION_V5, *PWER_REPORT_INFORMATION_V5;
+
+typedef struct _WER_DUMP_CUSTOM_OPTIONS_V3 {
+  DWORD dwSize;
+  DWORD dwMask;
+  DWORD dwDumpFlags;
+  BOOL bOnlyThisThread;
+  DWORD dwExceptionThreadFlags;
+  DWORD dwOtherThreadFlags;
+  DWORD dwExceptionThreadExFlags;
+  DWORD dwOtherThreadExFlags;
+  DWORD dwPreferredModuleFlags;
+  DWORD dwOtherModuleFlags;
+  WCHAR wzPreferredModuleList[256];
+  DWORD dwPreferredModuleResetFlags;
+  DWORD dwOtherModuleResetFlags;
+  PVOID pvDumpKey;
+  HANDLE hSnapshot;
+  DWORD dwThreadID;
+} WER_DUMP_CUSTOM_OPTIONS_V3, *PWER_DUMP_CUSTOM_OPTIONS_V3;
+
+typedef struct _WER_REPORT_METADATA_V3 {
+  WER_REPORT_SIGNATURE Signature;
+  GUID BucketId;
+  GUID ReportId;
+  FILETIME CreationTime;
+  ULONGLONG SizeInBytes;
+  WCHAR CabId[260];
+  DWORD ReportStatus;
+  GUID ReportIntegratorId;
+  DWORD NumberOfFiles;
+  DWORD SizeOfFileNames;
+  WCHAR * FileNames;
+  WCHAR FriendlyEventName[128];
+  WCHAR ApplicationName[128];
+  WCHAR ApplicationPath[260];
+  WCHAR Description[512];
+  WCHAR BucketIdString[260];
+  ULONGLONG LegacyBucketId;
+} WER_REPORT_METADATA_V3, *PWER_REPORT_METADATA_V3;
+
 #endif /* __WINE_WERAPI_H */

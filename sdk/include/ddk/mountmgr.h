@@ -202,4 +202,8 @@ typedef struct _MOUNTMGR_SET_AUTO_MOUNT {
 } /* extern "C" */
 #endif
 
+typedef struct _MOUNTMGR_SILO_ARRIVAL_INPUT {
+  HANDLE JobHandle;
+} MOUNTMGR_SILO_ARRIVAL_INPUT, *PMOUNTMGR_SILO_ARRIVAL_INPUT;
+
 #endif /* _MOUNTMGR_ */

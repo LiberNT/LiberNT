@@ -58,4 +58,26 @@ typedef enum IORING_REF_KIND {
     IORING_REF_REGISTERED = 1
 } IORING_REF_KIND;
 
+typedef struct HIORING__ {
+  int unused;
+} *HIORING;
+
+typedef struct IORING_CREATE_FLAGS {
+  IORING_CREATE_REQUIRED_FLAGS Required;
+  IORING_CREATE_ADVISORY_FLAGS Advisory;
+} IORING_CREATE_FLAGS;
+
+typedef struct IORING_INFO {
+  IORING_VERSION IoRingVersion;
+  IORING_CREATE_FLAGS Flags;
+  UINT32 SubmissionQueueSize;
+  UINT32 CompletionQueueSize;
+} IORING_INFO;
+
+typedef struct IORING_CQE {
+  UINT_PTR UserData;
+  HRESULT ResultCode;
+  ULONG_PTR Information;
+} IORING_CQE;
+
 #endif

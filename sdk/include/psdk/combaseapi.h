@@ -88,6 +88,10 @@ HRESULT WINAPI CoGetCancelObject(DWORD dwThreadId, const IID *const iid, void **
 }
 #endif
 
+typedef struct CO_DEVICE_CATALOG_COOKIE__ {
+  int unused;
+} *CO_DEVICE_CATALOG_COOKIE;
+
 #endif /* _COMBASEAPI_H_ */
 
 #ifndef COM_RIGHTS_ACTIVATE_LOCAL

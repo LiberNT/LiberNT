@@ -886,6 +886,266 @@ typedef enum _PO_CS_DEVICE_NOTIFICATION_TYPE {
     PoCsDeviceNotificationMaximum = 5
 } PO_CS_DEVICE_NOTIFICATION_TYPE;
 
+typedef struct _PROCESSOR_IDLE_STATE {
+  UCHAR StateType;
+  ULONG StateFlags;
+  ULONG HardwareLatency;
+  ULONG Power;
+  ULONG_PTR Context;
+  PPROCESSOR_IDLE_HANDLER Handler;
+} PROCESSOR_IDLE_STATE, *PPROCESSOR_IDLE_STATE;
+
+typedef struct _PROCESSOR_IDLE_STATES {
+  ULONG Size;
+  ULONG Revision;
+  ULONG Count;
+  ULONG Type;
+  KAFFINITY TargetProcessors;
+  PROCESSOR_IDLE_STATE State[1];
+} PROCESSOR_IDLE_STATES, *PPROCESSOR_IDLE_STATES;
+
+typedef struct PPM_WMI_LEGACY_PERFSTATE {
+  ULONG Frequency;
+  ULONG Flags;
+  ULONG PercentFrequency;
+} PPM_WMI_LEGACY_PERFSTATE, *PPPM_WMI_LEGACY_PERFSTATE;
+
+typedef struct PPM_WMI_IDLE_STATE {
+  ULONG Latency;
+  ULONG Power;
+  ULONG TimeCheck;
+  UCHAR PromotePercent;
+  UCHAR DemotePercent;
+  UCHAR StateType;
+  UCHAR Reserved;
+  ULONG StateFlags;
+  ULONG Context;
+  ULONG IdleHandler;
+  ULONG Reserved1;
+} PPM_WMI_IDLE_STATE, *PPPM_WMI_IDLE_STATE;
+
+typedef struct PPM_WMI_IDLE_STATES {
+  ULONG Type;
+  ULONG Count;
+  ULONG TargetState;
+  ULONG OldState;
+  ULONG64 TargetProcessors;
+  PPM_WMI_IDLE_STATE State[1];
+} PPM_WMI_IDLE_STATES, *PPPM_WMI_IDLE_STATES;
+
+typedef struct PPM_WMI_IDLE_STATES_EX {
+  ULONG Type;
+  ULONG Count;
+  ULONG TargetState;
+  ULONG OldState;
+  PVOID TargetProcessors;
+  PPM_WMI_IDLE_STATE State[1];
+} PPM_WMI_IDLE_STATES_EX, *PPPM_WMI_IDLE_STATES_EX;
+
+typedef struct PPM_WMI_PERF_STATE {
+  ULONG Frequency;
+  ULONG Power;
+  UCHAR PercentFrequency;
+  UCHAR IncreaseLevel;
+  UCHAR DecreaseLevel;
+  UCHAR Type;
+  ULONG IncreaseTime;
+  ULONG DecreaseTime;
+  ULONG64 Control;
+  ULONG64 Status;
+  ULONG HitCount;
+  ULONG Reserved1;
+  ULONG64 Reserved2;
+  ULONG64 Reserved3;
+} PPM_WMI_PERF_STATE, *PPPM_WMI_PERF_STATE;
+
+typedef struct PPM_WMI_PERF_STATES {
+  ULONG Count;
+  ULONG MaxFrequency;
+  ULONG CurrentState;
+  ULONG MaxPerfState;
+  ULONG MinPerfState;
+  ULONG LowestPerfState;
+  ULONG ThermalConstraint;
+  UCHAR BusyAdjThreshold;
+  UCHAR PolicyType;
+  UCHAR Type;
+  UCHAR Reserved;
+  ULONG TimerInterval;
+  ULONG64 TargetProcessors;
+  ULONG PStateHandler;
+  ULONG PStateContext;
+  ULONG TStateHandler;
+  ULONG TStateContext;
+  ULONG FeedbackHandler;
+  ULONG Reserved1;
+  ULONG64 Reserved2;
+  PPM_WMI_PERF_STATE State[1];
+} PPM_WMI_PERF_STATES, *PPPM_WMI_PERF_STATES;
+
+typedef struct PPM_WMI_PERF_STATES_EX {
+  ULONG Count;
+  ULONG MaxFrequency;
+  ULONG CurrentState;
+  ULONG MaxPerfState;
+  ULONG MinPerfState;
+  ULONG LowestPerfState;
+  ULONG ThermalConstraint;
+  UCHAR BusyAdjThreshold;
+  UCHAR PolicyType;
+  UCHAR Type;
+  UCHAR Reserved;
+  ULONG TimerInterval;
+  PVOID TargetProcessors;
+  ULONG PStateHandler;
+  ULONG PStateContext;
+  ULONG TStateHandler;
+  ULONG TStateContext;
+  ULONG FeedbackHandler;
+  ULONG Reserved1;
+  ULONG64 Reserved2;
+  PPM_WMI_PERF_STATE State[1];
+} PPM_WMI_PERF_STATES_EX, *PPPM_WMI_PERF_STATES_EX;
+
+typedef struct PPM_IDLE_STATE_ACCOUNTING {
+  ULONG IdleTransitions;
+  ULONG FailedTransitions;
+  ULONG InvalidBucketIndex;
+  ULONG64 TotalTime;
+  ULONG IdleTimeBuckets[6];
+} PPM_IDLE_STATE_ACCOUNTING, *PPPM_IDLE_STATE_ACCOUNTING;
+
+typedef struct PPM_IDLE_ACCOUNTING {
+  ULONG StateCount;
+  ULONG TotalTransitions;
+  ULONG ResetCount;
+  ULONG64 StartTime;
+  PPM_IDLE_STATE_ACCOUNTING State[1];
+} PPM_IDLE_ACCOUNTING, *PPPM_IDLE_ACCOUNTING;
+
+typedef struct PPM_IDLE_STATE_BUCKET_EX {
+  ULONG64 TotalTimeUs;
+  ULONG MinTimeUs;
+  ULONG MaxTimeUs;
+  ULONG Count;
+} PPM_IDLE_STATE_BUCKET_EX, *PPPM_IDLE_STATE_BUCKET_EX;
+
+typedef struct PPM_IDLE_STATE_ACCOUNTING_EX {
+  ULONG64 TotalTime;
+  ULONG IdleTransitions;
+  ULONG FailedTransitions;
+  ULONG InvalidBucketIndex;
+  ULONG MinTimeUs;
+  ULONG MaxTimeUs;
+  ULONG CancelledTransitions;
+  PPM_IDLE_STATE_BUCKET_EX IdleTimeBuckets[16];
+} PPM_IDLE_STATE_ACCOUNTING_EX, *PPPM_IDLE_STATE_ACCOUNTING_EX;
+
+typedef struct PPM_IDLE_ACCOUNTING_EX {
+  ULONG StateCount;
+  ULONG TotalTransitions;
+  ULONG ResetCount;
+  ULONG AbortCount;
+  ULONG64 StartTime;
+  PPM_IDLE_STATE_ACCOUNTING_EX State[1];
+} PPM_IDLE_ACCOUNTING_EX, *PPPM_IDLE_ACCOUNTING_EX;
+
+typedef struct PPM_PERFSTATE_EVENT {
+  ULONG State;
+  ULONG Status;
+  ULONG Latency;
+  ULONG Speed;
+  ULONG Processor;
+} PPM_PERFSTATE_EVENT, *PPPM_PERFSTATE_EVENT;
+
+typedef struct PPM_PERFSTATE_DOMAIN_EVENT {
+  ULONG State;
+  ULONG Latency;
+  ULONG Speed;
+  ULONG64 Processors;
+} PPM_PERFSTATE_DOMAIN_EVENT, *PPPM_PERFSTATE_DOMAIN_EVENT;
+
+typedef struct PPM_IDLESTATE_EVENT {
+  ULONG NewState;
+  ULONG OldState;
+  ULONG64 Processors;
+} PPM_IDLESTATE_EVENT, *PPPM_IDLESTATE_EVENT;
+
+typedef struct PPM_THERMALCHANGE_EVENT {
+  ULONG ThermalConstraint;
+  ULONG64 Processors;
+} PPM_THERMALCHANGE_EVENT, *PPPM_THERMALCHANGE_EVENT;
+
+typedef struct PPM_THERMAL_POLICY_EVENT {
+  UCHAR Mode;
+  ULONG64 Processors;
+} PPM_THERMAL_POLICY_EVENT, *PPPM_THERMAL_POLICY_EVENT;
+
+typedef struct PROCESSOR_IDLESTATE_INFO {
+  ULONG TimeCheck;
+  UCHAR DemotePercent;
+  UCHAR PromotePercent;
+  UCHAR Spare[2];
+} PROCESSOR_IDLESTATE_INFO, *PPROCESSOR_IDLESTATE_INFO;
+
+typedef struct _HIBERFILE_BUCKET {
+  ULONG64 MaxPhysicalMemory;
+  ULONG PhysicalMemoryPercent[3];
+} HIBERFILE_BUCKET, *PHIBERFILE_BUCKET;
+
+typedef struct _SYSTEM_POWER_SOURCE_STATE {
+  SYSTEM_BATTERY_STATE BatteryState;
+  ULONG InstantaneousPeakPower;
+  ULONG InstantaneousPeakPeriod;
+  ULONG SustainablePeakPower;
+  ULONG SustainablePeakPeriod;
+  ULONG PeakPower;
+  ULONG MaxOutputPower;
+  ULONG MaxInputPower;
+  LONG BatteryRateInCurrent;
+  ULONG BatteryVoltage;
+} SYSTEM_POWER_SOURCE_STATE, *PSYSTEM_POWER_SOURCE_STATE;
+
+typedef struct _SYSTEM_HIBERFILE_INFORMATION {
+  ULONG NumberOfMcbPairs;
+  LARGE_INTEGER Mcb[1];
+} SYSTEM_HIBERFILE_INFORMATION, *PSYSTEM_HIBERFILE_INFORMATION;
+
+typedef struct _PO_WAKE_SOURCE_HEADER {
+  PO_WAKE_SOURCE_TYPE Type;
+  ULONG Size;
+} PO_WAKE_SOURCE_HEADER, *PPO_WAKE_SOURCE_HEADER;
+
+typedef struct _PO_WAKE_SOURCE_DEVICE {
+  PO_WAKE_SOURCE_HEADER Header;
+  WCHAR InstancePath[1];
+} PO_WAKE_SOURCE_DEVICE, *PPO_WAKE_SOURCE_DEVICE;
+
+typedef struct _PO_WAKE_SOURCE_FIXED {
+  PO_WAKE_SOURCE_HEADER Header;
+  PO_FIXED_WAKE_SOURCE_TYPE FixedWakeSourceType;
+} PO_WAKE_SOURCE_FIXED, *PPO_WAKE_SOURCE_FIXED;
+
+typedef struct _PO_WAKE_SOURCE_INTERNAL {
+  PO_WAKE_SOURCE_HEADER Header;
+  PO_INTERNAL_WAKE_SOURCE_TYPE InternalWakeSourceType;
+} PO_WAKE_SOURCE_INTERNAL, *PPO_WAKE_SOURCE_INTERNAL;
+
+typedef struct _PO_WAKE_SOURCE_INFO {
+  ULONG Count;
+  ULONG Offsets[1];
+} PO_WAKE_SOURCE_INFO, *PPO_WAKE_SOURCE_INFO;
+
+typedef struct _PO_WAKE_SOURCE_HISTORY {
+  ULONG Count;
+  ULONG Offsets[1];
+} PO_WAKE_SOURCE_HISTORY, *PPO_WAKE_SOURCE_HISTORY;
+
+typedef struct _PO_SPR_ACTIVE_SESSION_DATA {
+  BOOLEAN Start;
+  GUID ActiveSessionGuid;
+} PO_SPR_ACTIVE_SESSION_DATA, *PPO_SPR_ACTIVE_SESSION_DATA;
+
 #endif /* __NTPOAPI_H */
 
 #ifndef ACPI_PPM_HARDWARE_ALL

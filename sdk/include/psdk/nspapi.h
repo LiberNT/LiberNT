@@ -258,4 +258,90 @@ INT WINAPI GetTypeByNameW(LPWSTR lpServiceName, LPGUID lpServiceType);
 }
 #endif
 
+typedef struct _NS_INFOA {
+  DWORD dwNameSpace;
+  DWORD dwNameSpaceFlags;
+  LPSTR lpNameSpace;
+} NS_INFOA, *PNS_INFOA, *LPNS_INFOA;
+
+typedef struct _NS_INFOW {
+  DWORD dwNameSpace;
+  DWORD dwNameSpaceFlags;
+  LPWSTR lpNameSpace;
+} NS_INFOW, *PNS_INFOW, *LPNS_INFOW;
+
+typedef struct _SERVICE_TYPE_VALUE {
+  DWORD dwNameSpace;
+  DWORD dwValueType;
+  DWORD dwValueSize;
+  DWORD dwValueNameOffset;
+  DWORD dwValueOffset;
+} SERVICE_TYPE_VALUE, *PSERVICE_TYPE_VALUE, *LPSERVICE_TYPE_VALUE;
+
+typedef struct _SERVICE_TYPE_VALUE_ABSA {
+  DWORD dwNameSpace;
+  DWORD dwValueType;
+  DWORD dwValueSize;
+  LPSTR lpValueName;
+  PVOID lpValue;
+} SERVICE_TYPE_VALUE_ABSA, *PSERVICE_TYPE_VALUE_ABSA, *LPSERVICE_TYPE_VALUE_ABSA;
+
+typedef struct _SERVICE_TYPE_VALUE_ABSW {
+  DWORD dwNameSpace;
+  DWORD dwValueType;
+  DWORD dwValueSize;
+  LPWSTR lpValueName;
+  PVOID lpValue;
+} SERVICE_TYPE_VALUE_ABSW, *PSERVICE_TYPE_VALUE_ABSW, *LPSERVICE_TYPE_VALUE_ABSW;
+
+typedef struct _SERVICE_TYPE_INFO {
+  DWORD dwTypeNameOffset;
+  DWORD dwValueCount;
+  SERVICE_TYPE_VALUE Values[1];
+} SERVICE_TYPE_INFO, *PSERVICE_TYPE_INFO, *LPSERVICE_TYPE_INFO;
+
+typedef struct _SERVICE_TYPE_INFO_ABSA {
+  LPSTR lpTypeName;
+  DWORD dwValueCount;
+  SERVICE_TYPE_VALUE_ABSA Values[1];
+} SERVICE_TYPE_INFO_ABSA, *PSERVICE_TYPE_INFO_ABSA, *LPSERVICE_TYPE_INFO_ABSA;
+
+typedef struct _SERVICE_TYPE_INFO_ABSW {
+  LPWSTR lpTypeName;
+  DWORD dwValueCount;
+  SERVICE_TYPE_VALUE_ABSW Values[1];
+} SERVICE_TYPE_INFO_ABSW, *PSERVICE_TYPE_INFO_ABSW, *LPSERVICE_TYPE_INFO_ABSW;
+
+typedef struct _NS_SERVICE_INFOA {
+  DWORD dwNameSpace;
+  SERVICE_INFOA ServiceInfo;
+} NS_SERVICE_INFOA, *PNS_SERVICE_INFOA, *LPNS_SERVICE_INFOA;
+
+typedef struct _NS_SERVICE_INFOW {
+  DWORD dwNameSpace;
+  SERVICE_INFOW ServiceInfo;
+} NS_SERVICE_INFOW, *PNS_SERVICE_INFOW, *LPNS_SERVICE_INFOW;
+
+typedef struct _PROTOCOL_INFOA {
+  DWORD dwServiceFlags;
+  INT iAddressFamily;
+  INT iMaxSockAddr;
+  INT iMinSockAddr;
+  INT iSocketType;
+  INT iProtocol;
+  DWORD dwMessageSize;
+  LPSTR lpProtocol;
+} PROTOCOL_INFOA, *PPROTOCOL_INFOA, *LPPROTOCOL_INFOA;
+
+typedef struct _PROTOCOL_INFOW {
+  DWORD dwServiceFlags;
+  INT iAddressFamily;
+  INT iMaxSockAddr;
+  INT iMinSockAddr;
+  INT iSocketType;
+  INT iProtocol;
+  DWORD dwMessageSize;
+  LPWSTR lpProtocol;
+} PROTOCOL_INFOW, *PPROTOCOL_INFOW, *LPPROTOCOL_INFOW;
+
 #endif /* _NSPAPI_H */

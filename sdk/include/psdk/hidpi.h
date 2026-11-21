@@ -664,4 +664,9 @@ HidP_UsageListDifference(
 }
 #endif
 
+typedef struct _HIDP_BUTTON_ARRAY_DATA {
+  USHORT ArrayIndex;
+  BOOLEAN On;
+} HIDP_BUTTON_ARRAY_DATA, *PHIDP_BUTTON_ARRAY_DATA;
+
 #endif /* __HIDPI_H__ */
