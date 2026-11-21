@@ -7,6 +7,7 @@
 
 #include <ntoskrnl.h>
 #include <reactos/hal/halext.h>
+#include <reactos/arm64/sysreg.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -20,14 +21,16 @@
 static PKINTERRUPT KiArmInterruptChain[KI_ARM_INTERRUPT_VECTORS];
 static KSPIN_LOCK KiArmInterruptLock;
 static ULONG KiArmTimerReload;
+static ULONGLONG KiArmClockDeadline[MAXIMUM_PROCESSORS];
 static BOOLEAN KiArmSecondaryInterruptServices;
 
 static
 VOID
-KiArmProgramTimer(VOID)
+KiArmProgramTimer(
+    _In_ ULONGLONG Deadline)
 {
-    KiArmWriteCp15(14, 0, 3, 0, KiArmTimerReload);
-    KiArmWriteCp15(14, 0, 3, 1, CNT_CTL_ENABLE);
+    ARM64_WRITE_SYSREG(CNTV_CVAL_EL0, Deadline);
+    ARM64_WRITE_SYSREG(CNTV_CTL_EL0, CNT_CTL_ENABLE);
     KiArmIsb();
 }
 
@@ -37,11 +40,30 @@ KiArmClockInterrupt(
     _In_ PKTRAP_FRAME TrapFrame,
     _In_ KIRQL OldIrql)
 {
+    ULONG Number = KeGetCurrentProcessorNumber();
+    ULONGLONG Now, Deadline, Periods;
+
     if (!(KiArmReadCp15(14, 0, 3, 1) & CNT_CTL_ISTATUS))
         return FALSE;
 
-    KiArmProgramTimer();
-    KeUpdateSystemTime(TrapFrame, KeMaximumIncrement, OldIrql);
+    ASSERT(Number < MAXIMUM_PROCESSORS);
+    ASSERT(KiArmTimerReload != 0);
+
+    /* The deadlines stay on the counter's own grid, so a late interrupt loses no time: it reports every period that passed. */
+    Now = ARM64_READ_SYSREG(CNTVCT_EL0);
+    Deadline = KiArmClockDeadline[Number];
+    ASSERT(Now >= Deadline);
+    Periods = min((Now - Deadline) / KiArmTimerReload + 1, MAXULONG / KeMaximumIncrement);
+    Deadline += Periods * KiArmTimerReload;
+    if (Deadline <= Now)
+        Deadline = Now + KiArmTimerReload;
+    KiArmClockDeadline[Number] = Deadline;
+    KiArmProgramTimer(Deadline);
+
+    if (Number == 0)
+        KeUpdateSystemTime(TrapFrame, (ULONG)Periods * KeMaximumIncrement, OldIrql);
+    else
+        KeUpdateRunTime(TrapFrame, OldIrql);
     return TRUE;
 }
 
@@ -244,6 +266,7 @@ NTAPI
 KiArmStartClock(VOID)
 {
     ULONG Frequency = KiArmReadCp15(14, 0, 0, 0);
+    ULONGLONG Deadline;
 
     ASSERT(KiArmHalInitialized);
     ASSERT(KeMaximumIncrement != 0);
@@ -254,7 +277,9 @@ KiArmStartClock(VOID)
     ASSERT(KiArmTimerReload != 0);
     if (!HalEnableSystemInterrupt(KI_ARM_CLOCK_VECTOR, CLOCK_LEVEL, LevelSensitive))
         KeBugCheckEx(HAL_INITIALIZATION_FAILED, 0x41524D04, KI_ARM_CLOCK_VECTOR, 0, 0);
-    KiArmProgramTimer();
+    Deadline = ARM64_READ_SYSREG(CNTVCT_EL0) + KiArmTimerReload;
+    KiArmClockDeadline[KeGetCurrentProcessorNumber()] = Deadline;
+    KiArmProgramTimer(Deadline);
 }
 
 /* HAL phase 1 moved the interrupt controller to its kernel mappings: IRQL now reaches it, and interrupts open. */
