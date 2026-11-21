@@ -76,6 +76,11 @@ typedef enum _NDIS_802_11_AUTHENTICATION_MODE
     Ndis802_11AuthModeWPANone,
     Ndis802_11AuthModeWPA2,
     Ndis802_11AuthModeWPA2PSK,
+    Ndis802_11AuthModeWPA3,
+    Ndis802_11AuthModeWPA3Ent192 = Ndis802_11AuthModeWPA3,
+    Ndis802_11AuthModeWPA3SAE,
+    Ndis802_11AuthModeOWE,
+    Ndis802_11AuthModeWPA3Ent,
     Ndis802_11AuthModeMax
 } NDIS_802_11_AUTHENTICATION_MODE, *PNDIS_802_11_AUTHENTICATION_MODE;
 

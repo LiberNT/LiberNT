@@ -9,6 +9,8 @@ extern "C"
 #ifndef _LMCONS_H
 #include <lmcons.h>
 #endif
+#include <inaddr.h>
+#include <in6addr.h>
 
 /* TODO
 include <basetsd.h> from winnt.h so that this typedef is not necessary
@@ -19,6 +21,26 @@ typedef unsigned long ULONG_PTR, *PULONG_PTR;
 
 #pragma pack(push, 4)
 
+#if (WINVER >= 0x600)
+typedef struct in_addr RASIPV4ADDR;
+typedef struct in6_addr RASIPV6ADDR;
+#endif
+
+#if (WINVER >= 0x601)
+#define RASTUNNELENDPOINT_UNKNOWN 0
+#define RASTUNNELENDPOINT_IPv4    1
+#define RASTUNNELENDPOINT_IPv6    2
+
+typedef struct tagRASTUNNELENDPOINT {
+    DWORD dwType;
+    union {
+        RASIPV4ADDR ipv4;
+        RASIPV6ADDR ipv6;
+    };
+} RASTUNNELENDPOINT;
+#endif
+
+#define RAS_MaxIDSize         256
 #define RAS_MaxDeviceType     16
 #define RAS_MaxPhoneNumber    128
 #define RAS_MaxIpAddress      15
@@ -231,6 +253,17 @@ typedef enum tagRASCONNSTATE {
       RASCS_Disconnected
 }  RASCONNSTATE, *LPRASCONNSTATE;
 
+#if (WINVER >= 0x601)
+#define RASCSS_DONE 0x2000
+
+typedef enum tagRASCONNSUBSTATE {
+    RASCSS_None = 0,
+    RASCSS_Dormant,
+    RASCSS_Reconnecting,
+    RASCSS_Reconnected = RASCSS_DONE
+} RASCONNSUBSTATE, *LPRASCONNSUBSTATE;
+#endif
+
 typedef enum tagRASPROJECTION {
     RASP_Amb =      0x10000,
     RASP_PppNbf =   0x803F,
@@ -262,9 +295,11 @@ typedef struct tagRASCONNW {
     GUID guidEntry;
 #endif
 #if (WINVER >= 0x501)
-    DWORD dwSessionId;
     DWORD dwFlags;
     LUID luid;
+#endif
+#if (WINVER >= 0x600)
+    GUID guidCorrelationId;
 #endif
 } RASCONNW, *LPRASCONNW;
 
@@ -284,9 +319,11 @@ typedef struct tagRASCONNA {
     GUID guidEntry;
 #endif
 #if (WINVER >= 0x501)
-    DWORD dwSessionId;
     DWORD dwFlags;
     LUID luid;
+#endif
+#if (WINVER >= 0x600)
+    GUID guidCorrelationId;
 #endif
 } RASCONNA, *LPRASCONNA;
 
@@ -299,6 +336,11 @@ typedef struct tagRASCONNSTATUSW {
 #if (WINVER >= 0x401)
     WCHAR szPhoneNumber[RAS_MaxPhoneNumber + 1];
 #endif
+#if (WINVER >= 0x601)
+    RASTUNNELENDPOINT localEndPoint;
+    RASTUNNELENDPOINT remoteEndPoint;
+    RASCONNSUBSTATE rasconnsubstate;
+#endif
 } RASCONNSTATUSW, *LPRASCONNSTATUSW;
 
 typedef struct tagRASCONNSTATUSA {
@@ -309,6 +351,11 @@ typedef struct tagRASCONNSTATUSA {
     CHAR szDeviceName[RAS_MaxDeviceName + 1];
 #if (WINVER >= 0x401)
     CHAR szPhoneNumber[RAS_MaxPhoneNumber + 1];
+#endif
+#if (WINVER >= 0x601)
+    RASTUNNELENDPOINT localEndPoint;
+    RASTUNNELENDPOINT remoteEndPoint;
+    RASCONNSUBSTATE rasconnsubstate;
 #endif
 } RASCONNSTATUSA, *LPRASCONNSTATUSA;
 
@@ -324,6 +371,12 @@ typedef struct tagRASDIALPARAMSW {
     DWORD dwSubEntry;
     ULONG_PTR dwCallbackId;
 #endif
+#if (WINVER >= 0x601)
+    DWORD dwIfIndex;
+#endif
+#if (WINVER >= 0x602)
+    LPWSTR szEncPassword;
+#endif
 } RASDIALPARAMSW, *LPRASDIALPARAMSW;
 
 typedef struct tagRASDIALPARAMSA {
@@ -338,6 +391,12 @@ typedef struct tagRASDIALPARAMSA {
     DWORD dwSubEntry;
     ULONG_PTR dwCallbackId;
 #endif
+#if (WINVER >= 0x601)
+    DWORD dwIfIndex;
+#endif
+#if (WINVER >= 0x602)
+    LPSTR szEncPassword;
+#endif
 } RASDIALPARAMSA, *LPRASDIALPARAMSA;
 
 #if (WINVER >= 0x500)
@@ -347,6 +406,29 @@ typedef struct tagRASEAPINFO {
 } RASEAPINFO;
 #endif
 
+#if (WINVER >= 0x601)
+typedef struct tagRASDEVSPECIFICINFO {
+    DWORD dwSize;
+    BYTE *pbDevSpecificInfo;
+} RASDEVSPECIFICINFO, *PRASDEVSPECIFICINFO;
+#endif
+
+typedef enum _IKEV2_ID_PAYLOAD_TYPE {
+    IKEV2_ID_PAYLOAD_TYPE_INVALID = 0,
+    IKEV2_ID_PAYLOAD_TYPE_IPV4_ADDR = 1,
+    IKEV2_ID_PAYLOAD_TYPE_FQDN = 2,
+    IKEV2_ID_PAYLOAD_TYPE_RFC822_ADDR = 3,
+    IKEV2_ID_PAYLOAD_TYPE_RESERVED1 = 4,
+    IKEV2_ID_PAYLOAD_TYPE_ID_IPV6_ADDR = 5,
+    IKEV2_ID_PAYLOAD_TYPE_RESERVED2 = 6,
+    IKEV2_ID_PAYLOAD_TYPE_RESERVED3 = 7,
+    IKEV2_ID_PAYLOAD_TYPE_RESERVED4 = 8,
+    IKEV2_ID_PAYLOAD_TYPE_DER_ASN1_DN = 9,
+    IKEV2_ID_PAYLOAD_TYPE_DER_ASN1_GN = 10,
+    IKEV2_ID_PAYLOAD_TYPE_KEY_ID = 11,
+    IKEV2_ID_PAYLOAD_TYPE_MAX
+} IKEV2_ID_PAYLOAD_TYPE;
+
 typedef struct tagRASDIALEXTENSIONS {
     DWORD dwSize;
     DWORD dwfOptions;
@@ -355,6 +437,10 @@ typedef struct tagRASDIALEXTENSIONS {
 #if (WINVER >= 0x500)
     ULONG_PTR reserved1;
     RASEAPINFO RasEapInfo;
+#endif
+#if (WINVER >= 0x601)
+    BOOL fSkipPppAuth;
+    RASDEVSPECIFICINFO RasDevSpecificInfo;
 #endif
 } RASDIALEXTENSIONS, *LPRASDIALEXTENSIONS;
 
@@ -584,6 +670,25 @@ typedef struct tagRASENTRYW {
     DWORD       dwRedialCount;
     DWORD       dwRedialPause;
 #endif /*(WINVER >= 0x501)*/
+#if (WINVER >= 0x600)
+    RASIPV6ADDR ipv6addrDns;
+    RASIPV6ADDR ipv6addrDnsAlt;
+    DWORD       dwIPv4InterfaceMetric;
+    DWORD       dwIPv6InterfaceMetric;
+#endif
+#if (WINVER >= 0x601)
+    RASIPV6ADDR ipv6addr;
+    DWORD       dwIPv6PrefixLength;
+    DWORD       dwNetworkOutageTime;
+#endif
+#if (WINVER >= 0xA00)
+    WCHAR       szIDi[RAS_MaxIDSize + 1];
+    WCHAR       szIDr[RAS_MaxIDSize + 1];
+    BOOL        fIsImsConfig;
+    IKEV2_ID_PAYLOAD_TYPE IdiType;
+    IKEV2_ID_PAYLOAD_TYPE IdrType;
+    BOOL        fDisableIKEv2Fragmentation;
+#endif
 } RASENTRYW, *LPRASENTRYW;
 
 typedef struct tagRASENTRYA {
@@ -641,6 +746,25 @@ typedef struct tagRASENTRYA {
     DWORD       dwRedialCount;
     DWORD       dwRedialPause;
 #endif /*(WINVER >= 0x501)*/
+#if (WINVER >= 0x600)
+    RASIPV6ADDR ipv6addrDns;
+    RASIPV6ADDR ipv6addrDnsAlt;
+    DWORD       dwIPv4InterfaceMetric;
+    DWORD       dwIPv6InterfaceMetric;
+#endif
+#if (WINVER >= 0x601)
+    RASIPV6ADDR ipv6addr;
+    DWORD       dwIPv6PrefixLength;
+    DWORD       dwNetworkOutageTime;
+#endif
+#if (WINVER >= 0xA00)
+    CHAR        szIDi[RAS_MaxIDSize + 1];
+    CHAR        szIDr[RAS_MaxIDSize + 1];
+    BOOL        fIsImsConfig;
+    IKEV2_ID_PAYLOAD_TYPE IdiType;
+    IKEV2_ID_PAYLOAD_TYPE IdrType;
+    BOOL        fDisableIKEv2Fragmentation;
+#endif
 } RASENTRYA, *LPRASENTRYA;
 
 

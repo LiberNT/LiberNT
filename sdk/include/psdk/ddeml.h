@@ -310,12 +310,13 @@ typedef struct tagCONVCONTEXT
     INT   iCodePage;
     DWORD   dwLangID;
     DWORD   dwSecurity;
+    SECURITY_QUALITY_OF_SERVICE qos;
 } CONVCONTEXT, *PCONVCONTEXT;
 
 typedef struct tagCONVINFO
 {
     DWORD		cb;
-    DWORD 		hUser;
+    DWORD_PTR		hUser;
     HCONV		hConvPartner;
     HSZ			hszSvcPartner;
     HSZ			hszServiceReq;
@@ -365,7 +366,7 @@ LPBYTE    WINAPI DdeAccessData(HDDEDATA,LPDWORD);
 BOOL      WINAPI DdeUnaccessData(HDDEDATA);
 BOOL      WINAPI DdeEnableCallback(DWORD,HCONV,UINT);
 INT       WINAPI DdeCmpStringHandles(HSZ,HSZ);
-BOOL      WINAPI DdeSetUserHandle(HCONV,DWORD,DWORD);
+BOOL      WINAPI DdeSetUserHandle(HCONV,DWORD,DWORD_PTR);
 
 HDDEDATA  WINAPI DdeNameService(DWORD,HSZ,HSZ,UINT);
 UINT      WINAPI DdeGetLastError(DWORD);

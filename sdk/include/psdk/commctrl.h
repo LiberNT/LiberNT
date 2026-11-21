@@ -233,12 +233,14 @@ extern "C" {
 #define TBN_LAST (0U-720U)
 
 #define UDN_FIRST (0U-721U)
-#define UDN_LAST (0U-740U)
+#define UDN_LAST (0U-729U)
 
-#define MCN_FIRST (0U-750U)
-#define MCN_LAST (0U-759U)
-#define DTN_FIRST (0U-760U)
-#define DTN_LAST (0U-799U)
+#define DTN_FIRST (0U-740U)
+#define DTN_LAST (0U-745U)
+#define MCN_FIRST (0U-746U)
+#define MCN_LAST (0U-752U)
+#define DTN_FIRST2 (0U-753U)
+#define DTN_LAST2 (0U-799U)
 #define CBEN_FIRST (0U-800U)
 #define CBEN_LAST (0U-830U)
 #define RBN_FIRST (0U-831U)
@@ -687,6 +689,9 @@ extern "C" {
     int iOrder;
     UINT type;
     void  *pvFilter;
+#if (_WIN32_WINNT >= 0x0600)
+    UINT state;
+#endif
   } HDITEMA,*LPHDITEMA;
 
 #define HDITEMA_V1_SIZE CCSIZEOF_STRUCT(HDITEMA,lParam)
@@ -704,6 +709,9 @@ extern "C" {
     int iOrder;
     UINT type;
     void *pvFilter;
+#if (_WIN32_WINNT >= 0x0600)
+    UINT state;
+#endif
   } HDITEMW,*LPHDITEMW;
 
 #define HDITEM __MINGW_NAME_AW(HDITEM)
@@ -1545,6 +1553,10 @@ typedef struct tagNMBCDROPDOWN {
     UINT cxIdeal;
     LPARAM lParam;
     UINT cxHeader;
+#if (_WIN32_WINNT >= 0x0600)
+    RECT rcChevronLocation;
+    UINT uChevronState;
+#endif
   } REBARBANDINFOA,*LPREBARBANDINFOA;
   typedef REBARBANDINFOA CONST *LPCREBARBANDINFOA;
 
@@ -1574,6 +1586,10 @@ typedef struct tagNMBCDROPDOWN {
     UINT cxIdeal;
     LPARAM lParam;
     UINT cxHeader;
+#if (_WIN32_WINNT >= 0x0600)
+    RECT rcChevronLocation;
+    UINT uChevronState;
+#endif
   } REBARBANDINFOW,*LPREBARBANDINFOW;
 
   typedef REBARBANDINFOW CONST *LPCREBARBANDINFOW;
@@ -2370,6 +2386,10 @@ typedef struct tagNMBCDROPDOWN {
     int iGroupId;
     UINT cColumns;
     PUINT puColumns;
+#if (_WIN32_WINNT >= 0x0600)
+    int *piColFmt;
+    int iGroup;
+#endif
   } LVITEMA,*LPLVITEMA;
 
   typedef struct tagLVITEMW
@@ -2387,6 +2407,10 @@ typedef struct tagNMBCDROPDOWN {
     int iGroupId;
     UINT cColumns;
     PUINT puColumns;
+#if (_WIN32_WINNT >= 0x0600)
+    int *piColFmt;
+    int iGroup;
+#endif
   } LVITEMW,*LPLVITEMW;
 
 #define LVITEM __MINGW_NAME_AW(LVITEM)
@@ -2589,6 +2613,11 @@ typedef struct tagNMBCDROPDOWN {
     int iSubItem;
     int iImage;
     int iOrder;
+#if (_WIN32_WINNT >= 0x0600)
+    int cxMin;
+    int cxDefault;
+    int cxIdeal;
+#endif
   } LVCOLUMNA,*LPLVCOLUMNA;
 
   typedef struct tagLVCOLUMNW {
@@ -3047,6 +3076,9 @@ typedef struct tagNMBCDROPDOWN {
     int iItem;
     UINT cColumns;
     PUINT puColumns;
+#if (_WIN32_WINNT >= 0x0600)
+    int *piColFmt;
+#endif
   } LVTILEINFO,*PLVTILEINFO;
 
 #define LVM_SETTILEVIEWINFO (LVM_FIRST+162)
@@ -3196,7 +3228,7 @@ typedef struct tagNMBCDROPDOWN {
 #define LVKF_CONTROL 0x2
 #define LVKF_SHIFT 0x4
 
-#define NMLVCUSTOMDRAW_V3_SIZE CCSIZEOF_STRUCT(NMLVCUSTOMDRW,clrTextBk)
+#define NMLVCUSTOMDRAW_V3_SIZE CCSIZEOF_STRUCT(NMLVCUSTOMDRAW,clrTextBk)
 
   typedef struct tagNMLVCUSTOMDRAW {
     NMCUSTOMDRAW nmcd;
@@ -4504,7 +4536,7 @@ typedef struct {
     SYSTEMTIME stSelEnd;
   } NMSELCHANGE,*LPNMSELCHANGE;
 
-#define MCN_SELCHANGE (MCN_FIRST+1)
+#define MCN_SELCHANGE (MCN_FIRST - 3)
 
   typedef struct tagNMDAYSTATE {
     NMHDR nmhdr;
@@ -4514,11 +4546,12 @@ typedef struct {
     LPMONTHDAYSTATE prgDayState;
   } NMDAYSTATE,*LPNMDAYSTATE;
 
-#define MCN_GETDAYSTATE (MCN_FIRST+3)
+#define MCN_GETDAYSTATE (MCN_FIRST - 1)
 
   typedef NMSELCHANGE NMSELECT,*LPNMSELECT;
 
-#define MCN_SELECT (MCN_FIRST+4)
+#define MCN_SELECT (MCN_FIRST)
+#define MCN_VIEWCHANGE (MCN_FIRST - 4)
 
 #define MCS_DAYSTATE           0x0001
 #define MCS_MULTISELECT        0x0002
@@ -4580,15 +4613,15 @@ typedef struct {
 #define DTS_APPCANPARSE 0x10
 #define DTS_RIGHTALIGN 0x20
 
-#define DTN_DATETIMECHANGE (DTN_FIRST+1)
+#define DTN_DATETIMECHANGE (DTN_FIRST2 - 6)
   typedef struct tagNMDATETIMECHANGE {
     NMHDR nmhdr;
     DWORD dwFlags;
     SYSTEMTIME st;
   } NMDATETIMECHANGE,*LPNMDATETIMECHANGE;
 
-#define DTN_USERSTRINGA (DTN_FIRST+2)
-#define DTN_USERSTRINGW (DTN_FIRST+15)
+#define DTN_USERSTRINGA (DTN_FIRST2 - 5)
+#define DTN_USERSTRINGW (DTN_FIRST - 5)
   typedef struct tagNMDATETIMESTRINGA {
     NMHDR nmhdr;
     LPCSTR pszUserString;
@@ -4607,8 +4640,8 @@ typedef struct {
 #define NMDATETIMESTRING __MINGW_NAME_AW(NMDATETIMESTRING)
 #define LPNMDATETIMESTRING __MINGW_NAME_AW(LPNMDATETIMESTRING)
 
-#define DTN_WMKEYDOWNA (DTN_FIRST+3)
-#define DTN_WMKEYDOWNW (DTN_FIRST+16)
+#define DTN_WMKEYDOWNA (DTN_FIRST2 - 4)
+#define DTN_WMKEYDOWNW (DTN_FIRST - 4)
   typedef struct tagNMDATETIMEWMKEYDOWNA {
     NMHDR nmhdr;
     int nVirtKey;
@@ -4627,8 +4660,8 @@ typedef struct {
 #define NMDATETIMEWMKEYDOWN __MINGW_NAME_AW(NMDATETIMEWMKEYDOWN)
 #define LPNMDATETIMEWMKEYDOWN __MINGW_NAME_AW(LPNMDATETIMEWMKEYDOWN)
 
-#define DTN_FORMATA (DTN_FIRST+4)
-#define DTN_FORMATW (DTN_FIRST+17)
+#define DTN_FORMATA (DTN_FIRST2 - 3)
+#define DTN_FORMATW (DTN_FIRST - 3)
   typedef struct tagNMDATETIMEFORMATA {
     NMHDR nmhdr;
     LPCSTR pszFormat;
@@ -4649,8 +4682,8 @@ typedef struct {
 #define NMDATETIMEFORMAT __MINGW_NAME_AW(NMDATETIMEFORMAT)
 #define LPNMDATETIMEFORMAT __MINGW_NAME_AW(LPNMDATETIMEFORMAT)
 
-#define DTN_FORMATQUERYA (DTN_FIRST+5)
-#define DTN_FORMATQUERYW (DTN_FIRST+18)
+#define DTN_FORMATQUERYA (DTN_FIRST2 - 2)
+#define DTN_FORMATQUERYW (DTN_FIRST - 2)
   typedef struct tagNMDATETIMEFORMATQUERYA {
     NMHDR nmhdr;
     LPCSTR pszFormat;
@@ -4667,8 +4700,8 @@ typedef struct {
 #define NMDATETIMEFORMATQUERY __MINGW_NAME_AW(NMDATETIMEFORMATQUERY)
 #define LPNMDATETIMEFORMATQUERY __MINGW_NAME_AW(LPNMDATETIMEFORMATQUERY)
 
-#define DTN_DROPDOWN (DTN_FIRST+6)
-#define DTN_CLOSEUP (DTN_FIRST+7)
+#define DTN_DROPDOWN (DTN_FIRST2 - 1)
+#define DTN_CLOSEUP (DTN_FIRST2)
 
 #define GDTR_MIN 0x1
 #define GDTR_MAX 0x2

@@ -81,13 +81,13 @@ typedef _Return_type_success_(return==ERROR_SUCCESS) LONG LSTATUS;
 typedef struct value_entA {
 	LPSTR ve_valuename;
 	DWORD ve_valuelen;
-	DWORD ve_valueptr;
+	DWORD_PTR ve_valueptr;
 	DWORD ve_type;
 } VALENTA,*PVALENTA;
 typedef struct value_entW {
 	LPWSTR ve_valuename;
 	DWORD ve_valuelen;
-	DWORD ve_valueptr;
+	DWORD_PTR ve_valueptr;
 	DWORD ve_type;
 } VALENTW,*PVALENTW;
 

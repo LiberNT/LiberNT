@@ -144,7 +144,7 @@ typedef struct _MINIDUMP_MEMORY_DESCRIPTOR
 typedef struct _MINIDUMP_MEMORY_LIST
 {
     ULONG32 NumberOfMemoryRanges;
-    MINIDUMP_MEMORY_DESCRIPTOR  MemoryRanges[1]; /* FIXME: 0-sized array not supported */
+    MINIDUMP_MEMORY_DESCRIPTOR  MemoryRanges[0];
 } MINIDUMP_MEMORY_LIST, *PMINIDUMP_MEMORY_LIST;
 
 typedef struct _MINIDUMP_MEMORY_DESCRIPTOR64
@@ -157,7 +157,7 @@ typedef struct _MINIDUMP_MEMORY64_LIST
 {
     ULONG64 NumberOfMemoryRanges;
     RVA64 BaseRva;
-    MINIDUMP_MEMORY_DESCRIPTOR64 MemoryRanges[1]; /* FIXME: 0-sized array not supported */
+    MINIDUMP_MEMORY_DESCRIPTOR64 MemoryRanges[0];
 } MINIDUMP_MEMORY64_LIST, *PMINIDUMP_MEMORY64_LIST;
 
 typedef struct _XSTATE_CONFIG_FEATURE_MSC_INFO
@@ -286,13 +286,13 @@ typedef struct _MINIDUMP_MODULE
 typedef struct _MINIDUMP_MODULE_LIST
 {
     ULONG32 NumberOfModules;
-    MINIDUMP_MODULE Modules[1]; /* FIXME: 0-sized array not supported */
+    MINIDUMP_MODULE Modules[0];
 } MINIDUMP_MODULE_LIST, *PMINIDUMP_MODULE_LIST;
 
 typedef struct _MINIDUMP_STRING
 {
     ULONG32 Length;
-    WCHAR Buffer[1]; /* FIXME: O-sized array not supported */
+    WCHAR Buffer[0];
 } MINIDUMP_STRING, *PMINIDUMP_STRING;
 
 typedef union _CPU_INFORMATION
@@ -357,7 +357,7 @@ typedef struct _MINIDUMP_THREAD
 typedef struct _MINIDUMP_THREAD_LIST
 {
     ULONG32 NumberOfThreads;
-    MINIDUMP_THREAD Threads[1]; /* FIXME: no support of 0 sized array */
+    MINIDUMP_THREAD Threads[0];
 } MINIDUMP_THREAD_LIST, *PMINIDUMP_THREAD_LIST;
 
 typedef struct _MINIDUMP_USER_STREAM
@@ -504,7 +504,7 @@ typedef struct _MINIDUMP_THREAD_NAME
 typedef struct _MINIDUMP_THREAD_NAME_LIST
 {
     ULONG NumberOfThreadNames;
-    MINIDUMP_THREAD_NAME ThreadNames[1]; /* FIXME: 0-sized array not supported */
+    MINIDUMP_THREAD_NAME ThreadNames[0];
 } MINIDUMP_THREAD_NAME_LIST, *PMINIDUMP_THREAD_NAME_LIST;
 
 typedef struct _MINIDUMP_TOKEN_INFO_HEADER

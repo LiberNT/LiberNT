@@ -27,11 +27,13 @@ extern "C" {
 
 #define PHYSICAL_MONITOR_DESCRIPTION_SIZE 128
 
+#pragma pack(push, 1)
 typedef struct _PHYSICAL_MONITOR
 {
     HANDLE hPhysicalMonitor;
     WCHAR szPhysicalMonitorDescription[PHYSICAL_MONITOR_DESCRIPTION_SIZE];
 } PHYSICAL_MONITOR, *LPPHYSICAL_MONITOR;
+#pragma pack(pop)
 
 #ifdef __cplusplus
 }

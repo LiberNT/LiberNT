@@ -317,6 +317,30 @@ typedef enum _USBD_ENDPOINT_OFFLOAD_MODE {
 } USBD_ENDPOINT_OFFLOAD_MODE;
 
 #pragma pack(push, 1)
+typedef struct _USBD_ENDPOINT_OFFLOAD_INFORMATION_V1 {
+  ULONG Size;
+  USHORT EndpointAddress;
+  ULONG ResourceId;
+  USBD_ENDPOINT_OFFLOAD_MODE Mode;
+  ULONG RootHubPortNumber:8;
+  ULONG RouteString:20;
+  ULONG Speed:4;
+  ULONG UsbDeviceAddress:8;
+  ULONG SlotId:8;
+  ULONG MultiTT:1;
+  ULONG LSOrFSDeviceConnectedToTTHub:1;
+  ULONG Reserved0:14;
+  PHYSICAL_ADDRESS TransferSegmentLA;
+  PVOID TransferSegmentVA;
+  SIZE_T TransferRingSize;
+  ULONG TransferRingInitialCycleBit;
+  ULONG MessageNumber;
+  PHYSICAL_ADDRESS EventRingSegmentLA;
+  PVOID EventRingSegmentVA;
+  SIZE_T EventRingSize;
+  ULONG EventRingInitialCycleBit;
+} USBD_ENDPOINT_OFFLOAD_INFORMATION_V1, *PUSBD_ENDPOINT_OFFLOAD_INFORMATION_V1;
+
 typedef struct _USBD_ENDPOINT_OFFLOAD_INFORMATION {
   ULONG Size;
   USHORT EndpointAddress;
@@ -328,7 +352,8 @@ typedef struct _USBD_ENDPOINT_OFFLOAD_INFORMATION {
   ULONG UsbDeviceAddress:8;
   ULONG SlotId:8;
   ULONG MultiTT:1;
-  ULONG Reserved0:15;
+  ULONG LSOrFSDeviceConnectedToTTHub:1;
+  ULONG Reserved0:14;
   PHYSICAL_ADDRESS TransferSegmentLA;
   PVOID TransferSegmentVA;
   SIZE_T TransferRingSize;
@@ -338,7 +363,14 @@ typedef struct _USBD_ENDPOINT_OFFLOAD_INFORMATION {
   PVOID EventRingSegmentVA;
   SIZE_T EventRingSize;
   ULONG EventRingInitialCycleBit;
-} USBD_ENDPOINT_OFFLOAD_INFORMATION, *PUSBD_ENDPOINT_OFFLOAD_INFORMATION;
+  PHYSICAL_ADDRESS ClientTransferRingSegmentPAIn;
+  SIZE_T ClientTransferRingSizeIn;
+  PHYSICAL_ADDRESS ClientDataBufferPAIn;
+  SIZE_T ClientDataBufferSizeIn;
+  PHYSICAL_ADDRESS ClientDataBufferLAOut;
+  PVOID ClientDataBufferVAOut;
+} USBD_ENDPOINT_OFFLOAD_INFORMATION, *PUSBD_ENDPOINT_OFFLOAD_INFORMATION,
+  USBD_ENDPOINT_OFFLOAD_INFORMATION_V2, *PUSBD_ENDPOINT_OFFLOAD_INFORMATION_V2;
 #pragma pack(pop)
 
 typedef struct _USBD_INTERFACE_INFORMATION {

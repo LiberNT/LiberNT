@@ -23,12 +23,14 @@
 extern "C" {
 #endif
 
+#pragma pack(push, 1)
 typedef struct _MC_TIMING_REPORT
 {
-    BYTE bTimingStatusByte;
     DWORD dwHorizontalFrequencyInHZ;
     DWORD dwVerticalFrequencyInHZ;
+    BYTE bTimingStatusByte;
 } MC_TIMING_REPORT, *LPMC_TIMING_REPORT;
+#pragma pack(pop)
 
 typedef enum _MC_VCP_CODE_TYPE
 {

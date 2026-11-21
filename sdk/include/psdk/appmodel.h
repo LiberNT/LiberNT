@@ -42,6 +42,7 @@ typedef enum AppPolicyMediaFoundationCodecLoading
     AppPolicyMediaFoundationCodecLoading_All = 0,
 } AppPolicyMediaFoundationCodecLoading;
 
+#pragma pack(push, 4)
 typedef struct PACKAGE_VERSION
 {
     union
@@ -67,6 +68,7 @@ typedef struct PACKAGE_ID
     PWSTR resourceId;
     PWSTR publisherId;
 } PACKAGE_ID;
+#pragma pack(pop)
 
 #define PACKAGE_PROPERTY_FRAMEWORK          0x00000001
 #define PACKAGE_PROPERTY_RESOURCE           0x00000002

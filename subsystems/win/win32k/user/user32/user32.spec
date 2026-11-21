@@ -143,7 +143,7 @@
 @ stdcall DdeQueryStringW(long long ptr long long)
 @ stdcall DdeReconnect(long)
 @ stdcall DdeSetQualityOfService(long ptr ptr) ; Direct call NtUserDdeSetQualityOfService
-@ stdcall DdeSetUserHandle (long long long)
+@ stdcall DdeSetUserHandle (long long ptr)
 @ stdcall DdeUnaccessData(long)
 @ stdcall DdeUninitialize(long)
 @ stdcall DefDlgProcA(long long long long)

@@ -518,7 +518,12 @@ typedef struct _DRIVEROBJ {
 #define INDEX_DrvEndDxInterop            100L
 #define INDEX_DrvLockDisplayArea         101L
 #define INDEX_DrvUnlockDisplayArea       102L
+#if (NTDDI_VERSION >= NTDDI_WIN10_RS1)
+#define INDEX_DrvSurfaceComplete         103L
+#define INDEX_LAST                       104L
+#else
 #define INDEX_LAST                       103L
+#endif
 #else /* (NTDDI_VERSION >= NTDDI_WIN7) */
 #define INDEX_LAST                        94L
 #endif /* (NTDDI_VERSION >= NTDDI_WIN7) */
@@ -932,7 +937,7 @@ typedef struct _GDIINFO {
                                           |PD_ENDSUBPATH \
                                           |PD_RESETSTYLE \
                                           |PD_CLOSEFIGURE \
-                                          PD_BEZIERS)
+                                          |PD_BEZIERS)
 
 typedef struct _PATHDATA {
   FLONG  flags;
@@ -4375,6 +4380,7 @@ typedef struct tagCDDDXGK_REDIRBITMAPPRESENTINFO
     PRECT DirtyRect;
     UINT NumContexts;
     HANDLE hContext[WINDDI_MAX_BROADCAST_CONTEXT+1];
+    BOOLEAN bDoNotSynchronizeWithDxContent;
 } CDDDXGK_REDIRBITMAPPRESENTINFO;
 
 typedef BOOL

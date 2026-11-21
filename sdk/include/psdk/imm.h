@@ -724,7 +724,7 @@ ImmNotifyIME(
     _In_ HIMC hIMC,
     _In_ DWORD dwAction,
     _In_ DWORD dwIndex,
-    _In_ DWORD_PTR dwValue);
+    _In_ DWORD dwValue);
 
 BOOL
 WINAPI
