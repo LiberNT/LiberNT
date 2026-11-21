@@ -77,12 +77,11 @@ KeFlushIoBuffers(
     _In_ BOOLEAN DmaOperation)
 {
     ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
-    ASSERT(Mdl != NULL);
 
     /* Snooping keeps the data cache coherent with DMA; order the accesses.
      * A read may have delivered code through another alias. */
     __asm__ __volatile__("sync" ::: "memory");
-    if (ReadOperation && Mdl->ByteCount && !DmaOperation)
+    if (Mdl != NULL && ReadOperation && Mdl->ByteCount && !DmaOperation)
         KeSweepICache(NULL, 0);
 }
 

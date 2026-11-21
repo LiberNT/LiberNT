@@ -10,9 +10,8 @@
 #include <mm/nt/mint.h>
 #include "hardware.h"
 
-/* 64-bit entries are updated with interrupts off: the real-mode reload runs
- * on this processor and reads only the low word, which a single store
- * publishes last. */
+/* Entries are updated with interrupts off: the real-mode reload runs on
+ * this processor. */
 
 VOID
 NTAPI
@@ -113,15 +112,9 @@ static
 VOID
 MiPpcStorePte(_Inout_ PMI_PTE Slot, _In_ MI_PTE Value)
 {
-    volatile ULONG *Words = (volatile ULONG *)Slot;
+    C_ASSERT(sizeof(MI_PTE) == sizeof(ULONG));
 
-    /* Invalidate the low word first so the reload never pairs a new high
-     * word with a stale valid low word, then publish the low word last. */
-    Words[0] = 0;
-    __asm__ __volatile__("eieio" ::: "memory");
-    Words[1] = (ULONG)(Value >> 32);
-    __asm__ __volatile__("eieio" ::: "memory");
-    Words[0] = (ULONG)Value;
+    *(volatile MI_PTE *)Slot = Value;
     __asm__ __volatile__("sync" ::: "memory");
 }
 
@@ -142,8 +135,11 @@ MiArchPteWrite(_Inout_ PMI_PTE Slot, _In_ MI_PTE Value)
 {
     BOOLEAN Interrupts = KeDisableInterrupts();
     MI_PTE Old = *(volatile MI_PTE *)Slot;
+    ULONG_PTR Root = KeGetPcr()->PageTableRoot;
 
     MiPpcStorePte(Slot, Value);
+    if (((ULONG_PTR)Slot & ~(ULONG_PTR)(PAGE_SIZE - 1)) == PPC_LOADER_KSEG0_BASE + Root)
+        KiPpcLoadSessionSegment(Root);
     KeRestoreInterrupts(Interrupts);
     MiPpcCheckInstructionSync(Old, Value);
 }

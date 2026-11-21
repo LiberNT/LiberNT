@@ -121,17 +121,6 @@ if(SPACEMIT_K1_SUPPORT)
     file(CONFIGURE OUTPUT "${FREELDR_PREINSTALL_INI}" CONTENT "${_contents}" @ONLY)
 endif()
 
-# The supported Open Firmware machines have too little memory to expand the
-# live image into RAM, so their boot media start the entry that runs from it.
-if(FREELDR_HAS_OFW_BOOT)
-    set(_source "${FREELDR_BOOTCD_INI}")
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_source}")
-    file(READ "${_source}" _contents)
-    string(REGEX REPLACE "DefaultOS=[^\r\n]*" "DefaultOS=LiveImg_Debug" _contents "${_contents}")
-    set(FREELDR_BOOTCD_INI "${CMAKE_CURRENT_BINARY_DIR}/bootdata/bootcd_ofw.ini")
-    file(CONFIGURE OUTPUT "${FREELDR_BOOTCD_INI}" CONTENT "${_contents}" @ONLY)
-endif()
-
 # EFI platform ID - Used for naming the EFI boot image on supported platforms.
 if(ARCH STREQUAL "i386")
     if(NOT (SARCH STREQUAL "pc98" OR SARCH STREQUAL "xbox"))
@@ -491,7 +480,7 @@ set(_preinstall_vhdx_file ${REACTOS_BINARY_DIR}/LiberNT.vhdx)
 # MBR follows the active flag and loads its FAT32 boot sector. The Raspberry Pi
 # 1-3 boot ROM only scans for FAT MBR ids and skips 0xEF, so the Raspberry Pi
 # images mark the same volume as FAT32 LBA instead; UEFI mounts it by content.
-if(RPI_SUPPORT OR ARCH STREQUAL "arm" OR FREELDR_HAS_OFW_BOOT)
+if(RPI_SUPPORT OR ARCH STREQUAL "arm" OR BOOTLOADER_OFW)
     set(_preinstall_boot_partition_type 0c)
 else()
     set(_preinstall_boot_partition_type ef)
@@ -749,7 +738,7 @@ set(_preinstall_boot_partition_files
     -add ${FREELDR_PREINSTALL_INI} freeldr.ini)
 set(_preinstall_rpi_firmware)
 set(_preinstall_rpi_overlays)
-if(NOT SPACEMIT_K1_SUPPORT AND NOT STARFIVE_JH7110_SUPPORT AND NOT FREELDR_HAS_OFW_BOOT)
+if(NOT SPACEMIT_K1_SUPPORT AND NOT STARFIVE_JH7110_SUPPORT AND NOT BOOTLOADER_OFW)
     file(GLOB _preinstall_rpi_firmware ${REACTOS_SOURCE_DIR}/media/boot/rpi/*)
     file(GLOB _preinstall_rpi_overlays ${REACTOS_SOURCE_DIR}/media/boot/rpi/overlays/*)
 endif()
@@ -834,21 +823,16 @@ macro(libernt_standard_disk_ids)
     set_property(GLOBAL PROPERTY LIBERNT_STANDARD_OPTIONS "${FREELDR_PREINSTALL_OPTIONS}")
 endmacro()
 
-if(FREELDR_HAS_OFW_BOOT)
+if(BOOTLOADER_OFW)
     # The firmware boot partition is advertised as FAT32 LBA (0x0c).
     set(_preinstall_boot_partition_fs fat32)
-    set(_ofw_boot_file ${CMAKE_CURRENT_BINARY_DIR}/freeldr/freeldr/ppcboot.bin)
-    list(APPEND _preinstall_boot_partition_files -add ${_ofw_boot_file} ppcboot.bin)
-    list(APPEND _preinstall_partition_deps ppcboot)
-    add_dependencies(bootcd ppcboot)
-    if(EXISTS "${REACTOS_SOURCE_DIR}/bootloader/arch/${ARCH}")
-        list(APPEND _preinstall_boot_partition_files
-            -mkdir Boot
-            -add ${REACTOS_BINARY_DIR}/bootloader/bootmgr.bin bootmgr.bin
-            -add ${REACTOS_BINARY_DIR}/bootloader/image/standard/BCD Boot/BCD)
-        list(APPEND _preinstall_partition_deps bootmgrppc bootloaderstandardbcd)
-        libernt_standard_disk_ids()
-    endif()
+    list(APPEND _preinstall_boot_partition_files
+        -mkdir Boot
+        -add ${REACTOS_BINARY_DIR}/bootloader/bootmgr.bin bootmgr.bin
+        -add ${REACTOS_BINARY_DIR}/bootloader/image/standard/BCD Boot/BCD)
+    list(APPEND _preinstall_partition_deps bootmgrppc bootloaderstandardbcd)
+    libernt_standard_disk_ids()
+    # TODO: boot the PowerPC boot CD; bootmgr reads no ISO 9660 and bootcd.iso carries no BCD
 endif()
 if(FREELDR_HAS_BIOS_BOOT)
     set(_dosmbr_file ${CMAKE_CURRENT_BINARY_DIR}/freeldr/bootsect/dosmbr.bin)

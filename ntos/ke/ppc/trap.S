@@ -140,21 +140,15 @@ KiPpcVectorBlob:
  * access is retried; otherwise KiPpcReloadFail takes the slow path.
  */
 KiPpcHashReload:
-    /* Root entry: VA[31:30]. Every table is physical memory. */
+    /* Root entry: VA[31:22]. Every table is physical memory. */
     lwz 4, PcPageTableRoot(1)
-    rlwinm 6, 3, 5, 27, 28
+    rlwinm 6, 3, 12, 20, 29
     lwzx 4, 4, 6
     andi. 6, 4, 1
     beq KiPpcReloadFail
     rlwinm 4, 4, 0, 0, 19
-    /* Middle entry: VA[29:21]. */
-    rlwinm 6, 3, 14, 20, 28
-    lwzx 4, 4, 6
-    andi. 6, 4, 1
-    beq KiPpcReloadFail
-    rlwinm 4, 4, 0, 0, 19
-    /* Leaf entry: VA[20:12]. r7 keeps its address for the A/D update. */
-    rlwinm 6, 3, 23, 20, 28
+    /* Leaf entry: VA[21:12]. r7 keeps its address for the A/D update. */
+    rlwinm 6, 3, 22, 20, 29
     add 7, 4, 6
     lwz 4, 0(7)
     andi. 6, 4, 1

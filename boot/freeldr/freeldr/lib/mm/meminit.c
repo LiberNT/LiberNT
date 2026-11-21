@@ -249,7 +249,7 @@ static
 VOID
 MmCheckFreeldrImageFile(VOID)
 {
-#if !defined(UEFIBOOT) && !defined(OFWBOOT)
+#ifndef UEFIBOOT
     PIMAGE_NT_HEADERS NtHeaders;
     PIMAGE_FILE_HEADER FileHeader;
     PIMAGE_OPTIONAL_HEADER OptionalHeader;
