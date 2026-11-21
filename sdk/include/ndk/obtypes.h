@@ -407,6 +407,8 @@ typedef struct _OBJECT_TYPE_INFORMATION
     ULONG ValidAccessMask;
     BOOLEAN SecurityRequired;
     BOOLEAN MaintainHandleCount;
+    UCHAR TypeIndex;
+    CHAR ReservedByte;
     ULONG PoolType;
     ULONG DefaultPagedPoolCharge;
     ULONG DefaultNonPagedPoolCharge;

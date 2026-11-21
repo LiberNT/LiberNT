@@ -70,6 +70,7 @@ ExpWriteHandleEntry(
 {
     PEXP_HANDLE_WALK Walk = Context;
     POBJECT_HEADER Header;
+    POBJECT_TYPE ObjectType;
     ULONG Needed;
 
     Header = (POBJECT_HEADER)((ULONG_PTR)HandleTableEntry->Object &
@@ -78,6 +79,10 @@ ExpWriteHandleEntry(
     {
         return FALSE;
     }
+
+    /* The header keeps its type index encoded; callers get the index ObjectTypesInformation reports */
+    ObjectType = ObpGetObjectTypeFromHeader(Header);
+    ASSERT(ObjectType != NULL);
 
     Needed = Walk->Extended ?
         (ULONG)sizeof(SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX) :
@@ -104,7 +109,7 @@ ExpWriteHandleEntry(
         Info->GrantedAccess = HandleTableEntry->GrantedAccess &
                               ~ObpAccessProtectCloseBit;
         Info->CreatorBackTraceIndex = 0;
-        Info->ObjectTypeIndex = Header->TypeIndex;
+        Info->ObjectTypeIndex = ObjectType->Index;
         Info->HandleAttributes = ExpHandleAttributes(HandleTableEntry);
         Info->Reserved = 0;
     }
@@ -116,7 +121,7 @@ ExpWriteHandleEntry(
 
         Info->UniqueProcessId = (USHORT)Walk->UniqueProcessId;
         Info->CreatorBackTraceIndex = 0;
-        Info->ObjectTypeIndex = Header->TypeIndex;
+        Info->ObjectTypeIndex = ObjectType->Index;
         Info->HandleAttributes = ExpHandleAttributes(HandleTableEntry);
         Info->HandleValue = (USHORT)(ULONG_PTR)Handle;
         Info->Object = &Header->Body;

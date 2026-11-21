@@ -184,6 +184,7 @@ list(APPEND SOURCE
     ProcessPoolQuota.c
     ProcessUserModeIopl.c
     ObjectQuotaLimit.c
+    ObjectTypeIndex.c
     ObHandleRace.c
     LinkReparseLimit.c
     RtlWnfAndSqm.c
