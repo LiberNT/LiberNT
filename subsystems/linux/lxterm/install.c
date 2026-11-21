@@ -30,6 +30,10 @@
 #define LX_HTTP_CHUNK       (64 * 1024)
 #define LX_PATH_CHARS       32768
 #define LX_TAR_NAME         4096
+#define LX_TAR_XATTR_MAX    0xFFFF
+#define LX_TAR_XATTR_PREFIX "SCHILY.xattr."
+#define LX_XATTR_NAME_MAX   255
+#define LX_XATTR_EA_NAME    "$LXXATTR"
 #define LX_SUMS_MAX         (1024 * 1024)
 #define LX_PROGRESS_TICKS   250
 #define LX_PROBE_TAIL       (64 * 1024)
@@ -56,6 +60,9 @@ typedef struct _LX_TAR_ENTRY
     ULONG Major;
     ULONG Minor;
     CHAR Type;
+    PUCHAR Xattr;
+    ULONG XattrLength;
+    BOOLEAN XattrOverflow;
 } LX_TAR_ENTRY, *PLX_TAR_ENTRY;
 
 typedef struct _LX_TAR_OVERRIDE
@@ -72,6 +79,9 @@ typedef struct _LX_TAR_OVERRIDE
     BOOLEAN HasMtime;
     BOOLEAN HasUid;
     BOOLEAN HasGid;
+    BOOLEAN XattrOverflow;
+    ULONG XattrLength;
+    UCHAR Xattr[LX_TAR_XATTR_MAX];
 } LX_TAR_OVERRIDE, *PLX_TAR_OVERRIDE;
 
 typedef struct _LX_EXTRACT
@@ -767,6 +777,35 @@ LxSetAttributes(
 }
 
 static
+NTSTATUS
+LxSetXattrs(
+    _In_ HANDLE Handle,
+    _In_ PLX_TAR_ENTRY Entry)
+{
+    ULONG NameLength = sizeof(LX_XATTR_EA_NAME) - 1, Size;
+    PFILE_FULL_EA_INFORMATION Ea;
+    IO_STATUS_BLOCK Iosb;
+    NTSTATUS Status;
+
+    if (Entry->XattrOverflow)
+        return STATUS_EA_TOO_LARGE;
+    if (Entry->XattrLength == 0)
+        return STATUS_SUCCESS;
+    ASSERT(Entry->XattrLength <= LX_TAR_XATTR_MAX);
+    Size = (FIELD_OFFSET(FILE_FULL_EA_INFORMATION, EaName) + NameLength + 1 + Entry->XattrLength + 3) & ~3UL;
+    Ea = calloc(1, Size);
+    if (Ea == NULL)
+        return STATUS_NO_MEMORY;
+    Ea->EaNameLength = (UCHAR)NameLength;
+    Ea->EaValueLength = (USHORT)Entry->XattrLength;
+    memcpy(Ea->EaName, LX_XATTR_EA_NAME, NameLength);
+    memcpy(Ea->EaName + NameLength + 1, Entry->Xattr, Entry->XattrLength);
+    Status = NtSetEaFile(Handle, &Iosb, Ea, Size);
+    free(Ea);
+    return Status;
+}
+
+static
 VOID
 LxSetTimes(
     _In_ HANDLE Handle,
@@ -1004,6 +1043,32 @@ LxTarNormalize(
 
 static
 VOID
+LxTarAddXattr(
+    _Inout_ PLX_TAR_OVERRIDE Override,
+    _In_z_ PCSTR Name,
+    _In_reads_bytes_(ValueLength) PCSTR Value,
+    _In_ ULONG ValueLength)
+{
+    ULONG NameLength = (ULONG)strlen(Name);
+    USHORT Lengths[2];
+
+    ASSERT(Override->XattrLength <= LX_TAR_XATTR_MAX);
+    if ((NameLength == 0) || (NameLength > LX_XATTR_NAME_MAX) ||
+        (4 + NameLength + ValueLength > LX_TAR_XATTR_MAX - Override->XattrLength))
+    {
+        Override->XattrOverflow = TRUE;
+        return;
+    }
+    Lengths[0] = (USHORT)NameLength;
+    Lengths[1] = (USHORT)ValueLength;
+    memcpy(Override->Xattr + Override->XattrLength, Lengths, sizeof(Lengths));
+    memcpy(Override->Xattr + Override->XattrLength + 4, Name, NameLength);
+    memcpy(Override->Xattr + Override->XattrLength + 4 + NameLength, Value, ValueLength);
+    Override->XattrLength += 4 + NameLength + ValueLength;
+}
+
+static
+VOID
 LxTarParsePax(
     _In_ PLX_EXTRACT Extract,
     _Inout_updates_(Length) PCHAR Data,
@@ -1014,7 +1079,7 @@ LxTarParsePax(
 
     while (Position < Length)
     {
-        ULONG RecordLength = 0, Start = Position;
+        ULONG RecordLength = 0, Start = Position, ValueLength;
         PCHAR Key, Value;
 
         while ((Position < Length) && (Data[Position] >= '0') && (Data[Position] <= '9'))
@@ -1031,8 +1096,13 @@ LxTarParsePax(
         if (Value == NULL)
             continue;
         *Value++ = '\0';
+        ValueLength = (ULONG)(Data + Start + RecordLength - 1 - Value);
 
-        if ((strcmp(Key, "path") == 0) && (strlen(Value) < LX_TAR_NAME))
+        if (strncmp(Key, LX_TAR_XATTR_PREFIX, sizeof(LX_TAR_XATTR_PREFIX) - 1) == 0)
+        {
+            LxTarAddXattr(Override, Key + sizeof(LX_TAR_XATTR_PREFIX) - 1, Value, ValueLength);
+        }
+        else if ((strcmp(Key, "path") == 0) && (strlen(Value) < LX_TAR_NAME))
         {
             strcpy(Override->Name, Value);
             Override->HasName = TRUE;
@@ -1107,6 +1177,8 @@ LxWriteRegular(
         if (NT_SUCCESS(Status))
             Status = LxSetAttributes(Handle, LX_S_IFREG | (Entry->Mode & 07777), Entry->Uid, Entry->Gid, 0, 0);
         if (NT_SUCCESS(Status))
+            Status = LxSetXattrs(Handle, Entry);
+        if (NT_SUCCESS(Status))
             LxSetTimes(Handle, Entry->Mtime, 0);
         NtClose(Handle);
     }
@@ -1127,6 +1199,8 @@ LxWriteDirectory(
     if (!NT_SUCCESS(Status))
         return Status;
     Status = LxSetAttributes(Handle, LX_S_IFDIR | (Entry->Mode & 07777), Entry->Uid, Entry->Gid, 0, 0);
+    if (NT_SUCCESS(Status))
+        Status = LxSetXattrs(Handle, Entry);
     NtClose(Handle);
     return Status;
 }
@@ -1153,6 +1227,8 @@ LxWriteNode(
         Status = LxSetAttributes(Handle, Type | (Entry->Mode & 07777), Entry->Uid, Entry->Gid, Entry->Major,
                                  Entry->Minor);
     }
+    if (NT_SUCCESS(Status))
+        Status = LxSetXattrs(Handle, Entry);
     if (NT_SUCCESS(Status))
         LxSetTimes(Handle, Entry->Mtime, FILE_ATTRIBUTE_SYSTEM);
     NtClose(Handle);
@@ -1297,8 +1373,13 @@ LxExtract(
         Entry->Mtime = Override->HasMtime ? Override->Mtime : LxTarNumber(Header + 136, 12);
         Entry->Major = (ULONG)LxTarNumber(Header + 329, 8);
         Entry->Minor = (ULONG)LxTarNumber(Header + 337, 8);
+        Entry->Xattr = Override->Xattr;
+        Entry->XattrLength = Override->XattrLength;
+        Entry->XattrOverflow = Override->XattrOverflow;
         Override->HasName = Override->HasLink = Override->HasSize = FALSE;
         Override->HasMtime = Override->HasUid = Override->HasGid = FALSE;
+        Override->XattrOverflow = FALSE;
+        Override->XattrLength = 0;
 
         if (!LxTarNormalize(Entry->Name) || ((Type == '1') && !LxTarNormalize(Entry->Link)))
         {
