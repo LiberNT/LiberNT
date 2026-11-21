@@ -3233,6 +3233,7 @@ DxgkProcessCleanup(
      * before exit, and MmMapLockedPagesSpecifyCache(UserMode) uses dedicated
      * VADs for those mappings.
      */
+    DxgkDisplayWin32kProcessCleanup(Process);
     DxgkAdapterProcessCleanup(Process);
     DxgkVidMmProcessCleanup(Process);
     DxgkD3dkmtProcessCleanup(Process);
