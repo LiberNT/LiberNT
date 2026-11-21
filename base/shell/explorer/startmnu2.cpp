@@ -40,6 +40,7 @@ enum SM2RCMD
 enum
 {
     SM2_TIMER_ANIM = 1,
+    SM2_TIMER_WARM = 2,
     SM2_IDC_SEARCH = 1000,
     SM2_CONTEXT_FIRST = 1,
     SM2_CONTEXT_LAST = 0x6FFF,
@@ -228,6 +229,7 @@ struct SM2ITEM
     CStringW szPath;
     CStringW szTargetPath;
     ULONGLONG Created;
+    ULONGLONG Written;
     BOOL bFolder;
     BOOL bExpanded;
     HICON hSmallIcon;
@@ -236,7 +238,7 @@ struct SM2ITEM
     BOOL bTargetTried;
     CAtlArray<SM2ITEM*> Children;
 
-    SM2ITEM() : Created(0), bFolder(FALSE), bExpanded(FALSE), hSmallIcon(NULL), hLargeIcon(NULL),
+    SM2ITEM() : Created(0), Written(0), bFolder(FALSE), bExpanded(FALSE), hSmallIcon(NULL), hLargeIcon(NULL),
                 bSmallTried(FALSE), bTargetTried(FALSE) {}
 
     ~SM2ITEM()
@@ -350,6 +352,8 @@ SM2EnumFolder(LPCWSTR pszDir, SM2ITEM *pParent, BOOL bFilesOnly)
             pItem->szPath = szFull;
             pItem->Created = ((ULONGLONG)wfd.ftCreationTime.dwHighDateTime << 32) |
                              wfd.ftCreationTime.dwLowDateTime;
+            pItem->Written = ((ULONGLONG)wfd.ftLastWriteTime.dwHighDateTime << 32) |
+                             wfd.ftLastWriteTime.dwLowDateTime;
             pParent->Children.Add(pItem);
         }
     } while (FindNextFileW(hFind, &wfd));
@@ -389,6 +393,41 @@ SM2FlattenTree(SM2ITEM *pParent, CAtlArray<SM2ITEM*> &Flat)
             SM2FlattenTree(p, Flat);
         else
             Flat.Add(p);
+    }
+}
+
+static VOID
+SM2AdoptCaches(const CAtlArray<SM2ITEM*> &Flat, const CAtlArray<SM2ITEM*> &Old)
+{
+    SIZE_T Next = 0;
+
+    for (SIZE_T i = 0; i < Flat.GetCount() && Old.GetCount(); i++)
+    {
+        SM2ITEM *pItem = Flat[i];
+        SM2ITEM *pOld = NULL;
+
+        for (SIZE_T n = 0; n < Old.GetCount(); n++)
+        {
+            SIZE_T k = (Next + n) % Old.GetCount();
+            if (Old[k]->Written == pItem->Written && !Old[k]->szPath.CompareNoCase(pItem->szPath))
+            {
+                pOld = Old[k];
+                Next = k + 1;
+                break;
+            }
+        }
+        if (!pOld)
+            continue;
+
+        ATLASSERT(!pItem->bFolder && !pOld->bFolder);
+        ATLASSERT(!pItem->hSmallIcon && !pItem->hLargeIcon && !pItem->bTargetTried);
+        pItem->szTargetPath = pOld->szTargetPath;
+        pItem->bTargetTried = pOld->bTargetTried;
+        pItem->bSmallTried = pOld->bSmallTried;
+        pItem->hSmallIcon = pOld->hSmallIcon;
+        pItem->hLargeIcon = pOld->hLargeIcon;
+        pOld->hSmallIcon = NULL;
+        pOld->hLargeIcon = NULL;
     }
 }
 
@@ -1192,6 +1231,8 @@ public:
     CStartMenu2UserPic m_UserPic;
     HWND m_hwndFlyout;
     ULONGLONG m_LastDismiss;
+    SIZE_T m_WarmNext;
+    BOOL m_bWarmTree;
     UINT m_uPosition;
     WCHAR m_szUser[128];
     BOOL m_bTracking;
@@ -1207,7 +1248,7 @@ public:
         m_bScrollVis(FALSE), m_bDragScroll(FALSE), m_nDragOff(0),
         m_iHot(-1), m_iSel(-1), m_iPressed(-1),
         m_AnimPhase(SM2A_NONE), m_AnimT0(0), m_dxSlide(0), m_dySlide(0),
-        m_hwndFlyout(NULL), m_LastDismiss(0), m_uPosition(ABE_BOTTOM),
+        m_hwndFlyout(NULL), m_LastDismiss(0), m_WarmNext(0), m_bWarmTree(FALSE), m_uPosition(ABE_BOTTOM),
         m_bTracking(FALSE), m_bInContextMenu(FALSE)
     {
         ZeroMemory(&m_HotIn, sizeof(m_HotIn));
@@ -1502,8 +1543,11 @@ public:
         RegCloseKey(hKey);
     }
 
-    VOID RebuildData()
+    VOID RebuildTree()
     {
+        SM2ITEM Old;
+        CAtlArray<SM2ITEM*> OldFlat;
+
         ClearHotAnims();
         ClearViewAnim();
         ClearRecentExecutables();
@@ -1513,8 +1557,47 @@ public:
         m_TreeVis.SetCount(0);
         m_TreeDepth.SetCount(0);
         m_Rows.SetCount(0);
+
+        /* Shortcuts whose file did not change keep their resolved target and icons */
+        for (SIZE_T i = 0; i < m_Root.Children.GetCount(); i++)
+            Old.Children.Add(m_Root.Children[i]);
+        m_Root.Children.SetCount(0);
+        SM2FlattenTree(&Old, OldFlat);
+
         SM2BuildTree(&m_Root);
         SM2FlattenTree(&m_Root, m_Flat);
+        SM2AdoptCaches(m_Flat, OldFlat);
+    }
+
+    VOID WarmStep()
+    {
+        if (IsWindowVisible())
+        {
+            KillTimer(SM2_TIMER_WARM);
+            return;
+        }
+
+        if (!m_bWarmTree)
+        {
+            RebuildTree();
+            m_bWarmTree = TRUE;
+            m_WarmNext = 0;
+            SetTimer(SM2_TIMER_WARM, 15, NULL);
+        }
+
+        for (UINT n = 0; n < 8 && m_WarmNext < m_Flat.GetCount(); n++, m_WarmNext++)
+            SM2GetTargetPath(m_Flat[m_WarmNext]);
+
+        if (m_WarmNext >= m_Flat.GetCount())
+        {
+            KillTimer(SM2_TIMER_WARM);
+            RebuildData();
+        }
+    }
+
+    VOID RebuildData()
+    {
+        RebuildTree();
         AddRecentlyAddedList();
         AddRecentlyAdded();
         AddRecentExecutables();
@@ -2175,7 +2258,7 @@ public:
         LayoutRows();
 
         m_AnimPhase = SM2A_OPEN;
-        m_AnimT0 = now;
+        m_AnimT0 = GetTickCount64();
 
         SetLayeredWindowAttributes(m_hWnd, 0, 0, LWA_ALPHA);
         SetWindowPos(HWND_TOPMOST, x + m_dxSlide, y + m_dySlide, w, h,
@@ -2862,12 +2945,14 @@ public:
         m_UserPic.Create(m_hWnd, CWindow::rcDefault, NULL);
 #endif
 
+        SetTimer(SM2_TIMER_WARM, 2000, NULL);
         return 0;
     }
 
     LRESULT OnDestroy(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
     {
         KillTimer(SM2_TIMER_ANIM);
+        KillTimer(SM2_TIMER_WARM);
         CloseFlyout();
         if (m_hwndEdit)
         {
@@ -2900,6 +2985,11 @@ public:
 
     LRESULT OnTimer(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled)
     {
+        if (wParam == SM2_TIMER_WARM)
+        {
+            WarmStep();
+            return 0;
+        }
         if (wParam != SM2_TIMER_ANIM)
             return 0;
 
