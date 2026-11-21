@@ -52,6 +52,8 @@ HalInitSystem(
         KeGetPcr()->StallScaleFactor = 1;
         return TRUE;
     }
+        if (KeGetCurrentProcessorNumber() == 0)
+            KiArmInitializeTimeBase();
 
     if (BootPhase == 1)
     {

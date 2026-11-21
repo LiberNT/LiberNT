@@ -764,7 +764,7 @@ typedef ULONG64 KSPIN_LOCK_QUEUE_NUMBER;
 #define LockQueueTimerTableLock 17
 #define LockQueueMaximumLock (LockQueueTimerTableLock + LOCK_QUEUE_TIMER_TABLE_LOCKS)
 
-#elif defined(_ARM64_) || defined(_RISCV64_)
+#elif defined(_ARM64_) || defined(_RISCV64_) || defined(_ARM_)
 
 typedef enum _KSPIN_LOCK_QUEUE_NUMBER {
   LockQueueDispatcherLock,

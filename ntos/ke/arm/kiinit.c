@@ -141,7 +141,10 @@ KiArmSystemStartup(
 
     Prcb = KeGetCurrentPrcb();
     KiProcessorBlock[0] = Prcb;
+    ASSERT(KeProcessorCount == 0 && Prcb->Number == 0);
     KiArmIdentifyProcessor(Prcb);
+    KeMemoryBarrier();
+    KiSetProcessorCount(1);
     KeProcessorArchitecture = PROCESSOR_ARCHITECTURE_ARM;
     KeProcessorLevel = (USHORT)Prcb->ProcessorModel;
     KeProcessorRevision = Prcb->ProcessorRevision;
@@ -186,6 +189,9 @@ KiArmSystemStartup(
     Prcb->IdleThread = InitialThread;
 
     KdInitSystem(0, LoaderBlock);
+    HalInitializeProcessor(0, LoaderBlock);
+    KiActivateProcessor(Prcb);
+
     ExpInitializeExecutive(0, LoaderBlock);
 
     KfRaiseIrql(DISPATCH_LEVEL);
@@ -217,11 +223,11 @@ KiInitMachineDependent(VOID)
     }
 
     /* ARMv7-A with VFPv3-D32 and NEON is the minimum this port boots on. */
-    SharedUserData->ProcessorFeatures[PF_ARM_VFP_32_REGISTERS_AVAILABLE] = TRUE;
-    SharedUserData->ProcessorFeatures[PF_ARM_NEON_INSTRUCTIONS_AVAILABLE] = TRUE;
-    SharedUserData->ProcessorFeatures[PF_FLOATING_POINT_EMULATED] = FALSE;
-    SharedUserData->ProcessorFeatures[PF_COMPARE_EXCHANGE_DOUBLE] = TRUE;
-    SharedUserData->ProcessorFeatures[PF_FASTFAIL_AVAILABLE] = TRUE;
+    MmWriteableSharedUserData->ProcessorFeatures[PF_ARM_VFP_32_REGISTERS_AVAILABLE] = TRUE;
+    MmWriteableSharedUserData->ProcessorFeatures[PF_ARM_NEON_INSTRUCTIONS_AVAILABLE] = TRUE;
+    MmWriteableSharedUserData->ProcessorFeatures[PF_FLOATING_POINT_EMULATED] = FALSE;
+    MmWriteableSharedUserData->ProcessorFeatures[PF_COMPARE_EXCHANGE_DOUBLE] = TRUE;
+    MmWriteableSharedUserData->ProcessorFeatures[PF_FASTFAIL_AVAILABLE] = TRUE;
     if (KeGetCurrentPrcb()->FeatureBits & KI_ARM_FEATURE_DIVIDE)
-        SharedUserData->ProcessorFeatures[PF_ARM_DIVIDE_INSTRUCTION_AVAILABLE] = TRUE;
+        MmWriteableSharedUserData->ProcessorFeatures[PF_ARM_DIVIDE_INSTRUCTION_AVAILABLE] = TRUE;
 }

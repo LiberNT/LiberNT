@@ -313,3 +313,4 @@ KiCallbackReturn:
     vpop {d8-d15}
     mov r0, r1
     bx lr
+    sub sp, sp, #KI_REC_SIZE

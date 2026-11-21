@@ -397,17 +397,6 @@ VOID NTAPI WRITE_REGISTER_BUFFER_UCHAR(_In_ volatile UCHAR *Register, _In_reads_
 VOID NTAPI WRITE_REGISTER_BUFFER_USHORT(_In_ volatile USHORT *Register, _In_reads_(Count) PUSHORT Buffer, _In_ ULONG Count) { KiArmDsb(); while (Count--) *Register = *Buffer++; }
 VOID NTAPI WRITE_REGISTER_BUFFER_ULONG(_In_ volatile ULONG *Register, _In_reads_(Count) PULONG Buffer, _In_ ULONG Count) { KiArmDsb(); while (Count--) *Register = *Buffer++; }
 
-/* Compiler intrinsics clang provides on the other Windows targets but not on ARM. */
-LONG _InterlockedAdd(_Inout_ LONG volatile *Addend, _In_ LONG Value)
-{
-    return __atomic_add_fetch(Addend, Value, __ATOMIC_SEQ_CST);
-}
-
-LONG64 _InterlockedAdd64(_Inout_ LONG64 volatile *Addend, _In_ LONG64 Value)
-{
-    return __atomic_add_fetch(Addend, Value, __ATOMIC_SEQ_CST);
-}
-
 /* Every trap saves the whole VFP bank, so kernel floating point needs no saving (WDK 16299 inline forms). */
 NTSTATUS
 NTAPI

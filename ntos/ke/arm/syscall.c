@@ -129,10 +129,13 @@ KiArmCompleteService(
     PKTHREAD Thread = KeGetCurrentThread();
 
     TrapFrame->R0 = Result;
-    if (KeGetCurrentIrql() != PASSIVE_LEVEL)
-        KeBugCheckEx(IRQL_GT_ZERO_AT_SYSTEM_SERVICE, TrapFrame->R12, KeGetCurrentIrql(), 0, 0);
-    if ((Thread->ApcStateIndex != OriginalApcEnvironment) || Thread->CombinedApcDisable)
-        KeBugCheckEx(APC_INDEX_MISMATCH, TrapFrame->R12, Thread->ApcStateIndex, Thread->CombinedApcDisable, 0);
+    if (KiIsUserModeTrap(TrapFrame))
+    {
+        if (KeGetCurrentIrql() != PASSIVE_LEVEL)
+            KeBugCheckEx(IRQL_GT_ZERO_AT_SYSTEM_SERVICE, TrapFrame->R12, KeGetCurrentIrql(), 0, 0);
+        if ((Thread->ApcStateIndex != OriginalApcEnvironment) || Thread->CombinedApcDisable)
+            KeBugCheckEx(APC_INDEX_MISMATCH, TrapFrame->R12, Thread->ApcStateIndex, Thread->CombinedApcDisable, 0);
+    }
 }
 
 /*

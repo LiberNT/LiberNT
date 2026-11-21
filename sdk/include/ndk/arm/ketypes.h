@@ -621,7 +621,11 @@ typedef struct _KPRCB
     {
         struct
         {
-        KTIMER_TABLE TimerTable;
+        union
+        {
+            KTIMER_TABLE TimerTable;
+            KSPIN_LOCK_QUEUE TimerTableLockQueue[LOCK_QUEUE_TIMER_TABLE_LOCKS];
+        };
         SINGLE_LIST_ENTRY AbSelfIoBoostsList;
         SINGLE_LIST_ENTRY AbPropagateBoostsList;
         KDPC AbDpc;

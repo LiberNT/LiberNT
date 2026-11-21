@@ -172,8 +172,9 @@ KeFlushIoBuffers(
 
 #define DbgRaiseAssertionFailure() __emit(0xdefc)
 
+/* KeTickCount is declared NTKERNELAPI here, so its address is the variable itself, not an import slot. */
 #define KeQueryTickCount(CurrentCount) { \
-    KSYSTEM_TIME volatile *_TickCount = *((PKSYSTEM_TIME *)(&KeTickCount)); \
+    KSYSTEM_TIME volatile *_TickCount = &KeTickCount; \
     for (;;) { \
         (CurrentCount)->HighPart = _TickCount->High1Time; \
         (CurrentCount)->LowPart = _TickCount->LowPart; \
