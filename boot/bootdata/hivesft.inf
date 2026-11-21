@@ -370,6 +370,13 @@ HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Control Panel\Extended Propertie
 ; Cursors Schemes
 HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Control Panel\Cursors\Schemes","LiberNT Default",0x00020000,""",,,,,,,,,,,,,"""
 
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FolderDescriptions\{B4BFCC3A-DB2C-424C-B029-7FE99A87C641}\PropertyBag","ThisPCPolicy",0x00000000,"Hide"
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FolderDescriptions\{F42EE2D3-909F-4907-8871-4C22FC0BF756}\PropertyBag","ThisPCPolicy",0x00000000,"Hide"
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FolderDescriptions\{7D83EE9B-2244-4E70-B1F5-5393042AF1E4}\PropertyBag","ThisPCPolicy",0x00000000,"Hide"
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FolderDescriptions\{A0C69A99-21C8-4671-8703-7934162FCF1D}\PropertyBag","ThisPCPolicy",0x00000000,"Hide"
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FolderDescriptions\{0DDD015D-B06C-45D5-8C4C-F59713854639}\PropertyBag","ThisPCPolicy",0x00000000,"Hide"
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FolderDescriptions\{35286A68-3C57-41A1-BBB1-0EAE73D76C95}\PropertyBag","ThisPCPolicy",0x00000000,"Hide"
+
 ; Advanced
 HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\KindMap",".3ds",0x00000000,"picture"
 HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\KindMap",".3g2",0x00000000,"video"
