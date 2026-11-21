@@ -44,7 +44,15 @@ __C_specific_handler(
         if (ExceptionRecord->ExceptionFlags & (EXCEPTION_UNWINDING | EXCEPTION_EXIT_UNWIND))
         {
             if (ScopeTable->ScopeRecord[Index].JumpTarget)
+            {
+                /* The __except block the unwind ends at: the scopes around it are not left. */
+                if ((ExceptionRecord->ExceptionFlags & EXCEPTION_TARGET_UNWIND) &&
+                    (TargetPc == ImageBase + ScopeTable->ScopeRecord[Index].JumpTarget))
+                {
+                    break;
+                }
                 continue;
+            }
             if ((ExceptionRecord->ExceptionFlags & EXCEPTION_TARGET_UNWIND) &&
                 (TargetPc >= ImageBase + ScopeTable->ScopeRecord[Index].BeginAddress) &&
                 (TargetPc < ImageBase + ScopeTable->ScopeRecord[Index].EndAddress))
