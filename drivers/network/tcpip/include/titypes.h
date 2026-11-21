@@ -153,6 +153,8 @@ typedef struct _ADDRESS_FILE {
     BOOLEAN PendingKeepAliveValuesSet;
     ULONG PendingKeepAliveTime;
     ULONG PendingKeepAliveInterval;
+    BOOLEAN PendingKeepAliveCountSet;
+    ULONG PendingKeepAliveCount;
     BOOLEAN PendingNoDelaySet;
     BOOLEAN PendingNoDelay;
     struct _CONNECTION_ENDPOINT *Listener;

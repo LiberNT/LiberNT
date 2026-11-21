@@ -77,6 +77,20 @@ static TDI_STATUS SetConnectionInfoLocked(TDIObjectID *ID,
 
             return TCPSetKeepAliveValues(Connection, Set.keepalivetime, Set.keepaliveinterval);
         }
+        case TCP_SOCKET_KEEPALIVECOUNT:
+        {
+            ULONG Count;
+            if (BufferSize < sizeof(ULONG))
+                return TDI_INVALID_PARAMETER;
+            Count = *(ULONG*)Buffer;
+            if (Deferred)
+            {
+                AddressFile->PendingKeepAliveCount = Count;
+                AddressFile->PendingKeepAliveCountSet = TRUE;
+                return TDI_SUCCESS;
+            }
+            return TCPSetKeepAliveCount(Connection, Count);
+        }
         default:
             DbgPrint("TCPIP: Unknown connection info ID: %u.\n", ID->toi_id);
     }
@@ -143,6 +157,10 @@ TDI_STATUS SetConnectionEndpointInfo(TDIObjectID *ID,
             Status = TCPSetKeepAlive(Connection, Set.onoff != 0);
             if (NT_SUCCESS(Status))
                 Status = TCPSetKeepAliveValues(Connection, Set.keepalivetime, Set.keepaliveinterval);
+            break;
+
+        case TCP_SOCKET_KEEPALIVECOUNT:
+            Status = (BufferSize < sizeof(ULONG)) ? TDI_INVALID_PARAMETER : TCPSetKeepAliveCount(Connection, *(ULONG *)Buffer);
             break;
 
         default:

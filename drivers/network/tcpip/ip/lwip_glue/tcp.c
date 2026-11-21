@@ -1264,7 +1264,14 @@ LibTcpSetKeepAliveValues(
 {
     pcb->keep_idle = KeepAliveTime;
     pcb->keep_intvl = KeepAliveInterval;
-    pcb->keep_cnt = 10;
+}
+
+void
+LibTcpSetKeepAliveCount(
+    PTCP_PCB pcb,
+    u32_t KeepAliveCount)
+{
+    pcb->keep_cnt = KeepAliveCount;
 }
 
 void

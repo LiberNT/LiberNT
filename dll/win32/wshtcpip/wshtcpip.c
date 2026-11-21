@@ -1681,7 +1681,10 @@ static INT SetKeepAliveValue(PSOCKET_CONTEXT Context, HANDLE TdiAddressObjectHan
     {
         if (Value > 255)
             return WSAEINVAL;
-        /* FIXME: the probe count is not passed to the stack, which always sends 10 probes */
+        Status = SubmitConnectionRequest(Context, TdiAddressObjectHandle, TdiConnectionObjectHandle,
+                                         TCP_SOCKET_KEEPALIVECOUNT, &Value, sizeof(Value));
+        if (Status != NO_ERROR)
+            return Status;
         Context->KeepAliveCount = Value;
         return NO_ERROR;
     }

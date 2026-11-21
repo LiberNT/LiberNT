@@ -435,6 +435,9 @@ NTSTATUS DispTdiAssociateAddress(
       if (AddrFile->PendingKeepAliveValuesSet)
           TCPSetKeepAliveValues(Connection, AddrFile->PendingKeepAliveTime, AddrFile->PendingKeepAliveInterval);
 
+      if (AddrFile->PendingKeepAliveCountSet)
+          TCPSetKeepAliveCount(Connection, AddrFile->PendingKeepAliveCount);
+
       if (AddrFile->PendingNoDelaySet)
           TCPSetNoDelay(Connection, AddrFile->PendingNoDelay);
   }

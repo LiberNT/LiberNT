@@ -130,6 +130,7 @@ void        LibTCPDrainPendingAccept(PCONNECTION_ENDPOINT Connection);
 void        LibTCPSetNoDelay(PTCP_PCB pcb, BOOLEAN Set);
 void        LibTCPSetKeepAlive(PTCP_PCB pcb, BOOLEAN Set);
 void        LibTcpSetKeepAliveValues(PTCP_PCB pcb, u32_t KeepAliveTime, u32_t KeepAliveInterval);
+void        LibTcpSetKeepAliveCount(PTCP_PCB pcb, u32_t KeepAliveCount);
 void        LibTCPGetSocketStatus(PTCP_PCB pcb, PULONG State);
 VOID        LibTCPPathMtuExceeded(PIP_INTERFACE Interface, ULONG Source, ULONG Destination, USHORT SourcePort,
                                   USHORT DestinationPort, ULONG Sequence, ULONG Mtu);
