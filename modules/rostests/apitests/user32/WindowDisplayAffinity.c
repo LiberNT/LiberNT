@@ -64,6 +64,38 @@ ScreenBlt(INT x, INT y, BOOL Stretch)
     return Color;
 }
 
+enum
+{
+    READ_ALPHABLEND,
+    READ_TRANSPARENTBLT,
+    READ_PLGBLT
+};
+
+static COLORREF
+ScreenRead(INT x, INT y, INT Mode, BOOL *Ret)
+{
+    static const BLENDFUNCTION Blend = { AC_SRC_OVER, 0, 255, 0 };
+    POINT Target[3] = { { 1, 0 }, { 5, 0 }, { 0, 4 } };
+    HDC hdcScreen = GetDC(NULL), hdcMem = CreateCompatibleDC(hdcScreen);
+    HBITMAP hbm = CreateCompatibleBitmap(hdcScreen, 8, 8), hbmOld = SelectObject(hdcMem, hbm);
+    RECT rc = { 0, 0, 8, 8 };
+    COLORREF Color;
+
+    FillRect(hdcMem, &rc, GetStockObject(WHITE_BRUSH));
+    if (Mode == READ_ALPHABLEND)
+        *Ret = GdiAlphaBlend(hdcMem, 0, 0, 4, 4, hdcScreen, x, y, 4, 4, Blend);
+    else if (Mode == READ_TRANSPARENTBLT)
+        *Ret = GdiTransparentBlt(hdcMem, 0, 0, 4, 4, hdcScreen, x, y, 4, 4, RGB(1, 2, 3));
+    else
+        *Ret = PlgBlt(hdcMem, Target, hdcScreen, x, y, 4, 4, NULL, 0, 0);
+    Color = GetPixel(hdcMem, Mode == READ_PLGBLT ? 2 : 1, 2);
+    SelectObject(hdcMem, hbmOld);
+    DeleteObject(hbm);
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdcScreen);
+    return Color;
+}
+
 static COLORREF
 ScreenGetPixel(INT x, INT y)
 {
@@ -143,12 +175,30 @@ TestWithoutComposition(HWND hWnd)
 }
 
 static void
+CheckScreenReads(COLORREF Expected, PCSTR What)
+{
+    static const PCSTR Names[] = { "AlphaBlend", "TransparentBlt", "PlgBlt" };
+    COLORREF Color;
+    BOOL Ret;
+    INT Mode;
+
+    for (Mode = READ_ALPHABLEND; Mode <= READ_PLGBLT; Mode++)
+    {
+        Ret = FALSE;
+        Color = ScreenRead(150, 150, Mode, &Ret);
+        ok(Ret, "%s of %s failed\n", Names[Mode], What);
+        ok(Color == Expected, "%s of %s reads 0x%06lx\n", Names[Mode], What, Color);
+    }
+}
+
+static void
 TestCapture(HWND hWnd, HWND hOther)
 {
     const COLORREF Green = RGB(0, 200, 0), Red = RGB(200, 0, 0);
     DWORD Affinity;
 
     ok(ScreenBlt(150, 150, FALSE) == Green, "Unprotected window reads 0x%06lx\n", ScreenBlt(150, 150, FALSE));
+    CheckScreenReads(Green, "the unprotected window");
     ok(PrintedPixel(hWnd) == Green, "Unprotected window prints 0x%06lx\n", PrintedPixel(hWnd));
 
     ok(SetWindowDisplayAffinity(hWnd, WDA_MONITOR), "WDA_MONITOR failed: %lu\n", GetLastError());
@@ -158,6 +208,7 @@ TestCapture(HWND hWnd, HWND hOther)
     ok(ScreenBlt(150, 150, FALSE) == RGB(0, 0, 0), "BitBlt of a WDA_MONITOR window reads 0x%06lx\n", ScreenBlt(150, 150, FALSE));
     ok(ScreenBlt(150, 150, TRUE) == RGB(0, 0, 0), "StretchBlt of a WDA_MONITOR window reads 0x%06lx\n", ScreenBlt(150, 150, TRUE));
     ok(ScreenGetPixel(150, 150) == RGB(0, 0, 0), "GetPixel of a WDA_MONITOR window reads 0x%06lx\n", ScreenGetPixel(150, 150));
+    CheckScreenReads(RGB(0, 0, 0), "a WDA_MONITOR window");
     ok(PrintedPixel(hWnd) == RGB(0, 0, 0), "A WDA_MONITOR window prints 0x%06lx\n", PrintedPixel(hWnd));
     ok(ScreenBlt(350, 150, FALSE) == Red, "The unprotected neighbour reads 0x%06lx\n", ScreenBlt(350, 150, FALSE));
 

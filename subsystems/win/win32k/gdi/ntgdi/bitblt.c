@@ -108,8 +108,111 @@ IntGdiBlackOutExcluded(
     }
 }
 
-BOOL APIENTRY
-NtGdiAlphaBlend(
+static
+LONG
+IntMapPlgCoordinate(
+    _In_ LONG Origin,
+    _In_ LONG AxisU,
+    _In_ LONG AxisV,
+    _In_ LONGLONG U,
+    _In_ LONGLONG Width,
+    _In_ LONGLONG V,
+    _In_ LONGLONG Height)
+{
+    LONGLONG Value = Origin + (U * AxisU) / Width + (V * AxisV) / Height;
+
+    ASSERT(Width != 0);
+    ASSERT(Height != 0);
+    return (LONG)max(min(Value, (LONGLONG)MAXLONG), -(LONGLONG)MAXLONG - 1);
+}
+
+/* PlgBlt maps the source rectangle onto a parallelogram, so each excluded rectangle becomes one too */
+static
+VOID
+IntGdiBlackOutExcludedPlg(
+    _In_ HDC hdcDest,
+    _In_reads_(3) const POINTL *Target,
+    _In_ HDC hdcSrc,
+    _In_ INT xSrc,
+    _In_ INT ySrc,
+    _In_ INT cxSrc,
+    _In_ INT cySrc,
+    _In_ PREGION prgnExcluded)
+{
+    static const ULONG Count = 4;
+    POINTL aptSrc[2];
+    POINT Corners[4];
+    RECTL rclSrc, rcl;
+    LONGLONG Width, Height;
+    HBRUSH hbrBlack = StockObjects[BLACK_BRUSH];
+    HRGN hrgn;
+    PDC pdcSrc;
+    ULONG Index;
+
+    ASSERT(prgnExcluded != NULL);
+    ASSERT(Target != NULL);
+    if (cxSrc == 0 || cySrc == 0)
+        return;
+
+    pdcSrc = DC_LockDc(hdcSrc);
+    if (pdcSrc == NULL)
+        return;
+    aptSrc[0].x = xSrc;
+    aptSrc[0].y = ySrc;
+    aptSrc[1].x = xSrc + cxSrc;
+    aptSrc[1].y = ySrc + cySrc;
+    IntLPtoDP(pdcSrc, aptSrc, 2);
+    for (Index = 0; Index < RTL_NUMBER_OF(aptSrc); Index++)
+    {
+        aptSrc[Index].x += pdcSrc->ptlDCOrig.x;
+        aptSrc[Index].y += pdcSrc->ptlDCOrig.y;
+    }
+    DC_UnlockDc(pdcSrc);
+
+    Width = (LONGLONG)aptSrc[1].x - aptSrc[0].x;
+    Height = (LONGLONG)aptSrc[1].y - aptSrc[0].y;
+    if (Width == 0 || Height == 0)
+        return;
+    rclSrc.left = aptSrc[0].x;
+    rclSrc.top = aptSrc[0].y;
+    rclSrc.right = aptSrc[1].x;
+    rclSrc.bottom = aptSrc[1].y;
+    RECTL_vMakeWellOrdered(&rclSrc);
+
+    ASSERT(prgnExcluded->rdh.nCount == 0 || prgnExcluded->Buffer != NULL);
+    for (Index = 0; Index < prgnExcluded->rdh.nCount; Index++)
+    {
+        LONGLONG U[4], V[4];
+        ULONG Corner;
+
+        if (!RECTL_bIntersectRect(&rcl, &prgnExcluded->Buffer[Index], &rclSrc))
+            continue;
+
+        U[0] = U[3] = (LONGLONG)rcl.left - aptSrc[0].x;
+        U[1] = U[2] = (LONGLONG)rcl.right - aptSrc[0].x;
+        V[0] = V[1] = (LONGLONG)rcl.top - aptSrc[0].y;
+        V[2] = V[3] = (LONGLONG)rcl.bottom - aptSrc[0].y;
+        for (Corner = 0; Corner < Count; Corner++)
+        {
+            Corners[Corner].x = IntMapPlgCoordinate(Target[0].x, Target[1].x - Target[0].x, Target[2].x - Target[0].x,
+                                                    U[Corner], Width, V[Corner], Height);
+            Corners[Corner].y = IntMapPlgCoordinate(Target[0].y, Target[1].y - Target[0].y, Target[2].y - Target[0].y,
+                                                    U[Corner], Width, V[Corner], Height);
+        }
+
+        hrgn = GreCreatePolyPolygonRgn(Corners, &Count, 1, ALTERNATE);
+        if (hrgn == NULL)
+            continue;
+        NtGdiFillRgn(hdcDest, hrgn, hbrBlack);
+        /* The polygon fill leaves out its right and bottom edges */
+        NtGdiFrameRgn(hdcDest, hrgn, hbrBlack, 1, 1);
+        GreDeleteObject(hrgn);
+    }
+}
+
+static
+BOOL
+IntGdiAlphaBlend(
     HDC hDCDest,
     LONG XOriginDest,
     LONG YOriginDest,
@@ -290,6 +393,36 @@ unlock:
     return bResult;
 }
 
+
+BOOL APIENTRY
+NtGdiAlphaBlend(
+    HDC hDCDest,
+    LONG XOriginDest,
+    LONG YOriginDest,
+    LONG WidthDest,
+    LONG HeightDest,
+    HDC hDCSrc,
+    LONG XOriginSrc,
+    LONG YOriginSrc,
+    LONG WidthSrc,
+    LONG HeightSrc,
+    BLENDFUNCTION BlendFunc,
+    HANDLE hcmXform)
+{
+    PREGION prgnExcluded = UserCaptureExcludedRegion(hDCSrc);
+    BOOL Ret;
+
+    Ret = IntGdiAlphaBlend(hDCDest, XOriginDest, YOriginDest, WidthDest, HeightDest,
+                           hDCSrc, XOriginSrc, YOriginSrc, WidthSrc, HeightSrc, BlendFunc, hcmXform);
+    if (prgnExcluded != NULL)
+    {
+        if (Ret)
+            IntGdiBlackOutExcluded(hDCDest, XOriginDest, YOriginDest, WidthDest, HeightDest,
+                                   hDCSrc, XOriginSrc, YOriginSrc, WidthSrc, HeightSrc, prgnExcluded);
+        REGION_Delete(prgnExcluded);
+    }
+    return Ret;
+}
 BOOL APIENTRY
 NtGdiBitBlt(
     HDC hDCDest,
@@ -355,8 +488,9 @@ NtGdiBitBlt(
                         crBackColor);
 }
 
-BOOL APIENTRY
-NtGdiTransparentBlt(
+static
+BOOL
+IntGdiTransparentBlt(
     HDC hdcDst,
     INT xDst,
     INT yDst,
@@ -466,6 +600,33 @@ done:
     GDIOBJ_vUnlockObject(&DCDest->BaseObject);
     GDIOBJ_vUnlockObject(&DCSrc->BaseObject);
 
+    return Ret;
+}
+
+BOOL APIENTRY
+NtGdiTransparentBlt(
+    HDC hdcDst,
+    INT xDst,
+    INT yDst,
+    INT cxDst,
+    INT cyDst,
+    HDC hdcSrc,
+    INT xSrc,
+    INT ySrc,
+    INT cxSrc,
+    INT cySrc,
+    COLORREF TransColor)
+{
+    PREGION prgnExcluded = UserCaptureExcludedRegion(hdcSrc);
+    BOOL Ret;
+
+    Ret = IntGdiTransparentBlt(hdcDst, xDst, yDst, cxDst, cyDst, hdcSrc, xSrc, ySrc, cxSrc, cySrc, TransColor);
+    if (prgnExcluded != NULL)
+    {
+        if (Ret)
+            IntGdiBlackOutExcluded(hdcDst, xDst, yDst, cxDst, cyDst, hdcSrc, xSrc, ySrc, cxSrc, cySrc, prgnExcluded);
+        REGION_Delete(prgnExcluded);
+    }
     return Ret;
 }
 
@@ -739,11 +900,11 @@ NtGdiMaskBlt(
     return Ret;
 }
 
+static
 BOOL
-APIENTRY
-NtGdiPlgBlt(
+IntGdiPlgBlt(
     IN HDC hdcTrg,
-    IN LPPOINT pptlTrg,
+    IN const POINTL *pptlTrg,
     IN HDC hdcSrc,
     IN INT xSrc,
     IN INT ySrc,
@@ -802,17 +963,7 @@ NtGdiPlgBlt(
     SourcePoints[1].x = (LONG)SourceRight;
     SourcePoints[2].y = (LONG)SourceBottom;
 
-    _SEH2_TRY
-    {
-        ProbeForRead(pptlTrg, sizeof(TargetLogical), 1);
-        RtlCopyMemory(TargetLogical, pptlTrg, sizeof(TargetLogical));
-    }
-    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
-    {
-        EngSetLastError(ERROR_INVALID_PARAMETER);
-        _SEH2_YIELD(return FALSE);
-    }
-    _SEH2_END;
+    RtlCopyMemory(TargetLogical, pptlTrg, sizeof(TargetLogical));
 
     if (hbmMask != NULL)
     {
@@ -1023,6 +1174,52 @@ Cleanup:
     if (BitmapMask != NULL)
         SURFACE_ShareUnlockSurface(BitmapMask);
     return Result;
+}
+
+/* The target points are read from the caller once, so the black-out covers what was drawn */
+BOOL
+APIENTRY
+NtGdiPlgBlt(
+    IN HDC hdcTrg,
+    IN LPPOINT pptlTrg,
+    IN HDC hdcSrc,
+    IN INT xSrc,
+    IN INT ySrc,
+    IN INT cxSrc,
+    IN INT cySrc,
+    IN HBITMAP hbmMask,
+    IN INT xMask,
+    IN INT yMask,
+    IN DWORD crBackColor)
+{
+    POINTL Target[3];
+    PREGION prgnExcluded;
+    BOOL Ret;
+
+    if (pptlTrg == NULL)
+        return IntGdiPlgBlt(hdcTrg, NULL, hdcSrc, xSrc, ySrc, cxSrc, cySrc, hbmMask, xMask, yMask, crBackColor);
+
+    _SEH2_TRY
+    {
+        ProbeForRead(pptlTrg, sizeof(Target), 1);
+        RtlCopyMemory(Target, pptlTrg, sizeof(Target));
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        EngSetLastError(ERROR_INVALID_PARAMETER);
+        _SEH2_YIELD(return FALSE);
+    }
+    _SEH2_END;
+
+    prgnExcluded = UserCaptureExcludedRegion(hdcSrc);
+    Ret = IntGdiPlgBlt(hdcTrg, Target, hdcSrc, xSrc, ySrc, cxSrc, cySrc, hbmMask, xMask, yMask, crBackColor);
+    if (prgnExcluded != NULL)
+    {
+        if (Ret)
+            IntGdiBlackOutExcludedPlg(hdcTrg, Target, hdcSrc, xSrc, ySrc, cxSrc, cySrc, prgnExcluded);
+        REGION_Delete(prgnExcluded);
+    }
+    return Ret;
 }
 
 BOOL
