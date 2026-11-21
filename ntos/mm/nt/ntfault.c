@@ -472,6 +472,7 @@ MmCopyMemory(
         ULONG64 Physical;
         SIZE_T Chunk;
         PVOID Mapping;
+        BOOLEAN Tracked;
 
         if (Flags & MM_COPY_MEMORY_PHYSICAL)
         {
@@ -487,11 +488,17 @@ MmCopyMemory(
         if (Chunk > NumberOfBytes - Done)
             Chunk = NumberOfBytes - Done;
 
-        Mapping = MiArchMapFrame(Physical >> PAGE_SHIFT);
+        Tracked = MiPfnTracked(&MiSystem.Pfn, Physical >> PAGE_SHIFT);
+        Mapping = Tracked ? MiPfnMapFrame(&MiSystem.Pfn, (ULONG)(Physical >> PAGE_SHIFT))
+                          : MiArchMapFrame(Physical >> PAGE_SHIFT);
         if (Mapping == NULL)
             break;
         RtlCopyMemory((PUCHAR)TargetAddress + Done,
                       (PUCHAR)Mapping + (Physical & (PAGE_SIZE - 1)), Chunk);
+        if (Tracked)
+            MiPfnUnmapFrame(&MiSystem.Pfn, Mapping);
+        else
+            MiArchUnmapFrame(Mapping);
         Done += Chunk;
     }
 
