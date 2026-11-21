@@ -138,6 +138,7 @@ KiPpcSystemStartup(_Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
     KiPpcStartupPrintHex((ULONG_PTR)&__ImageBase);
     KiPpcConsoleWrite("\n", 1);
 
+    LoaderBlock->Process = (ULONG_PTR)&KiInitialProcess.Pcb;
     InitialProcess = (PKPROCESS)LoaderBlock->Process;
     InitialThread = (PKTHREAD)LoaderBlock->Thread;
     InitialThread->ApcState.Process = InitialProcess;
