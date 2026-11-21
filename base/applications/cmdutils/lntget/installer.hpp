@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include "arp.hpp"
 #include "http.hpp"
 
 namespace lntget
@@ -33,7 +34,8 @@ class InstallerService
 public:
     Status Download(const PackageRecord &package, const InstallerEntry &installer, const std::wstring *directory,
                     std::wstring &path, DownloadProgressCallback *progress = nullptr, InstallerStageCallback *stage = nullptr);
-    Status Install(const InstallerEntry &installer, const std::wstring &path, InstallMode mode, DWORD &exitCode);
+    Status Install(const PackageRecord &package, const InstallerEntry &installer, const std::wstring &path, InstallMode mode,
+                   DWORD &exitCode, TrackedPackage *tracked = nullptr);
 
 private:
     std::wstring DefaultPackageDirectory(const PackageRecord &package) const;
@@ -42,6 +44,8 @@ private:
     HttpClient http_;
 };
 
+Status ExtractArchiveInto(const std::wstring &archivePath, const std::wstring &destination);
+void DeleteDirectoryTree(const std::wstring &directory);
 Status RunInstallerSelfTests();
 
 } // namespace lntget

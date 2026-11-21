@@ -13,6 +13,7 @@
 #include "category.hpp"
 #include "details.hpp"
 #include "gui.hpp"
+#include "dependencies.hpp"
 #include "http.hpp"
 #include "installed.hpp"
 #include "installer.hpp"
@@ -625,6 +626,18 @@ private:
             return;
         }
 
+        if (install)
+        {
+            status = InstallPackageDependencies(*source_, installer, options);
+            if (!status)
+            {
+                update.stage = OperationStage::Failed;
+                update.error = status.message;
+                PostOperation(update);
+                return;
+            }
+        }
+
         OperationCallbacks callbacks(*this, update);
 
         InstallerService service;
@@ -643,7 +656,7 @@ private:
             update.stage = OperationStage::Installing;
             PostOperation(update);
             DWORD exitCode = 0;
-            status = service.Install(installer, path, InstallMode::Default, exitCode);
+            status = service.Install(package, installer, path, InstallMode::Default, exitCode);
             update.exitCode = exitCode;
             if (!status)
             {
@@ -2656,10 +2669,6 @@ Status RunCatalogGui(SourceManager &source, const std::string &initialQuery)
     UpdateWindow(window);
     UpdateStatusBar(state);
 
-    MessageBoxW(window,
-                L"The winget catalog contains applications published for Windows. Some packages may not install or run correctly on LiberNT yet.",
-                L"lntget compatibility notice", MB_OK | MB_ICONWARNING);
-
     if (!state.worker.Start(window, &source))
     {
         DestroyWindow(window);
@@ -2668,6 +2677,10 @@ Status RunCatalogGui(SourceManager &source, const std::string &initialQuery)
     ShowBackgroundProgress(state, L"Loading winget catalog", L"Opening the signed package index…");
     state.worker.RequestCatalog(false);
     UpdateActionButtons(state);
+
+    MessageBoxW(window,
+                L"The winget catalog contains applications published for Windows. Some packages may not install or run correctly on LiberNT yet.",
+                L"lntget compatibility notice", MB_OK | MB_ICONWARNING);
 
     MSG message{};
     while (GetMessageW(&message, nullptr, 0, 0) > 0)

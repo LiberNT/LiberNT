@@ -10,7 +10,13 @@
 
 #include "installer.hpp"
 #include "hash.hpp"
+#include "manifest.hpp"
+#include "portable.hpp"
 #include "util.hpp"
+
+#include "minizip/ioapi.h"
+#include "minizip/iowin32.h"
+#include "minizip/unzip.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -22,6 +28,8 @@ namespace
 {
 
 constexpr unsigned VerifiedDownloadAttempts = 2;
+constexpr unsigned long long MaximumExtractedBytes = 8ull * 1024 * 1024 * 1024;
+constexpr unsigned long MaximumArchiveEntries = 200000;
 
 void TraceInstaller(const std::string &message)
 {
@@ -60,10 +68,210 @@ std::string InstallerArguments(const InstallerEntry &installer, InstallMode mode
     if (AsciiEquals(installer.type, "inno")) return "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-";
     if (AsciiEquals(installer.type, "nullsoft")) return "/S";
     if (AsciiEquals(installer.type, "burn")) return "/quiet /norestart";
+    if (AsciiEquals(installer.type, "wix") || AsciiEquals(installer.type, "msi")) return "/quiet /norestart";
     return std::string();
 }
 
+std::string InstallerCommandArguments(const InstallerEntry &installer, InstallMode mode)
+{
+    std::string arguments = InstallerArguments(installer, mode);
+    if (!installer.switches.custom.empty())
+    {
+        if (!arguments.empty()) arguments.push_back(' ');
+        arguments += installer.switches.custom;
+    }
+    return arguments;
+}
+
+void TrackInstalledPackage(const PackageRecord &package, const InstallerEntry &installer, const ArpSnapshot &before,
+                           TrackedPackage *tracked)
+{
+    TrackedPackage record;
+    record.id = package.id;
+    record.version = package.version;
+    record.installerType = installer.type;
+    record.arpIdentities = ChangedArpIdentities(before, TakeArpSnapshot());
+    if (record.arpIdentities.empty())
+    {
+        for (const TrackedPackage &previous : LoadTrackedPackages())
+        {
+            if (AsciiEquals(previous.id, package.id))
+                record.arpIdentities = previous.arpIdentities;
+        }
+    }
+    if (record.arpIdentities.empty())
+    {
+        TraceInstaller("the installer registered no installed application for " + package.id);
+        return;
+    }
+    for (const std::string &identity : record.arpIdentities)
+        TraceInstaller("installed " + package.id + " as " + identity);
+    const Status status = RecordTrackedPackage(record);
+    if (!status)
+    {
+        std::fprintf(stderr, "lntget: %s\n", status.message.c_str());
+        return;
+    }
+    if (tracked)
+        *tracked = record;
+}
+
+bool SafeRelativeArchivePath(const std::string &name, std::wstring &relative)
+{
+    std::wstring path = WideFromUtf8(name);
+    std::replace(path.begin(), path.end(), L'/', L'\\');
+    while (path.size() >= 2 && path[0] == L'.' && path[1] == L'\\')
+        path.erase(0, 2);
+    if (path.empty() || path[0] == L'\\' || path.find(L':') != std::wstring::npos)
+        return false;
+    std::size_t start = 0;
+    for (;;)
+    {
+        const std::size_t end = path.find(L'\\', start);
+        const std::wstring component = path.substr(start, end == std::wstring::npos ? std::wstring::npos : end - start);
+        if (component == L".." || (component.empty() && end != std::wstring::npos && end + 1 < path.size()))
+            return false;
+        if (end == std::wstring::npos)
+            break;
+        start = end + 1;
+    }
+    relative = path;
+    return true;
+}
+
+Status EnsureDirectoryTree(const std::wstring &root, const std::wstring &relativeDirectory)
+{
+    std::wstring current = root;
+    std::size_t start = 0;
+    while (start < relativeDirectory.size())
+    {
+        const std::size_t end = relativeDirectory.find(L'\\', start);
+        const std::wstring component = relativeDirectory.substr(start, end == std::wstring::npos ? std::wstring::npos : end - start);
+        if (!component.empty())
+        {
+            current = JoinPath(current, component);
+            Status status = EnsureDirectory(current);
+            if (!status) return status;
+        }
+        if (end == std::wstring::npos) break;
+        start = end + 1;
+    }
+    return Status::Ok();
+}
+
+void DeleteTree(const std::wstring &directory)
+{
+    WIN32_FIND_DATAW data{};
+    HANDLE find = FindFirstFileW(JoinPath(directory, L"*").c_str(), &data);
+    if (find != INVALID_HANDLE_VALUE)
+    {
+        do
+        {
+            const std::wstring name = data.cFileName;
+            if (name == L"." || name == L"..") continue;
+            const std::wstring child = JoinPath(directory, name);
+            if ((data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && !(data.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
+                DeleteTree(child);
+            else
+            {
+                SetFileAttributesW(child.c_str(), FILE_ATTRIBUTE_NORMAL);
+                DeleteFileW(child.c_str());
+            }
+        } while (FindNextFileW(find, &data));
+        FindClose(find);
+    }
+    RemoveDirectoryW(directory.c_str());
+}
+
+Status ExtractArchive(const std::wstring &archivePath, const std::wstring &destination)
+{
+    DeleteTree(destination);
+    Status status = EnsureDirectory(destination);
+    if (!status) return status;
+    zlib_filefunc64_def functions{};
+    fill_win32_filefunc64W(&functions);
+    unzFile archive = unzOpen2_64(archivePath.c_str(), &functions);
+    if (!archive)
+        return Status::Fail(ERROR_BAD_FORMAT, "the downloaded archive is not a valid zip file");
+
+    unsigned long long total = 0;
+    unsigned long entries = 0;
+    int result = unzGoToFirstFile(archive);
+    while (result == UNZ_OK)
+    {
+        char name[1024]{};
+        unz_file_info64 information{};
+        if (unzGetCurrentFileInfo64(archive, &information, name, sizeof(name) - 1, nullptr, 0, nullptr, 0) != UNZ_OK ||
+            ++entries > MaximumArchiveEntries)
+        {
+            unzClose(archive);
+            return Status::Fail(ERROR_BAD_FORMAT, "the downloaded archive has an invalid entry");
+        }
+        std::wstring relative;
+        if (!SafeRelativeArchivePath(name, relative))
+        {
+            unzClose(archive);
+            return Status::Fail(ERROR_BAD_FORMAT, std::string("the downloaded archive contains an unsafe path: ") + name);
+        }
+        total += information.uncompressed_size;
+        if (total > MaximumExtractedBytes)
+        {
+            unzClose(archive);
+            return Status::Fail(ERROR_FILE_TOO_LARGE, "the downloaded archive expands beyond 8 GiB");
+        }
+        if (relative[relative.size() - 1] == L'\\')
+        {
+            status = EnsureDirectoryTree(destination, relative);
+        }
+        else
+        {
+            const std::size_t slash = relative.rfind(L'\\');
+            status = slash == std::wstring::npos ? Status::Ok() : EnsureDirectoryTree(destination, relative.substr(0, slash));
+            if (status)
+            {
+                if (unzOpenCurrentFile(archive) != UNZ_OK)
+                    status = Status::Fail(ERROR_BAD_COMPRESSION_BUFFER, std::string("cannot decompress ") + name);
+                else
+                {
+                    std::vector<uint8_t> bytes;
+                    bytes.reserve(static_cast<std::size_t>(information.uncompressed_size));
+                    uint8_t buffer[64 * 1024];
+                    int read = 0;
+                    while ((read = unzReadCurrentFile(archive, buffer, sizeof(buffer))) > 0)
+                        bytes.insert(bytes.end(), buffer, buffer + read);
+                    const int closed = unzCloseCurrentFile(archive);
+                    if (read < 0 || closed != UNZ_OK || bytes.size() != information.uncompressed_size)
+                        status = Status::Fail(ERROR_CRC, std::string("archive entry failed decompression or CRC validation: ") + name);
+                    else
+                        status = WriteFileBytes(JoinPath(destination, relative), bytes);
+                }
+            }
+        }
+        if (!status)
+        {
+            unzClose(archive);
+            return status;
+        }
+        result = unzGoToNextFile(archive);
+    }
+    unzClose(archive);
+    if (result != UNZ_END_OF_LIST_OF_FILE)
+        return Status::Fail(ERROR_BAD_FORMAT, "the downloaded archive directory is corrupt");
+    TraceInstaller("extracted " + DecimalString(entries) + " archive entries, " + DecimalString(total) + " bytes");
+    return Status::Ok();
+}
+
 } // namespace
+
+Status ExtractArchiveInto(const std::wstring &archivePath, const std::wstring &destination)
+{
+    return ExtractArchive(archivePath, destination);
+}
+
+void DeleteDirectoryTree(const std::wstring &directory)
+{
+    DeleteTree(directory);
+}
 
 std::wstring InstallerService::DefaultPackageDirectory(const PackageRecord &package) const
 {
@@ -78,6 +286,12 @@ Status InstallerService::Download(const PackageRecord &package, const InstallerE
     if (!status)
         return status;
     path = JoinPath(targetDirectory, FileNameFromUrl(installer.url));
+    if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES && VerifyFileSha256(path, installer.sha256))
+    {
+        std::printf("Using the verified installer already downloaded for %s %s.\n", package.name.c_str(), package.version.c_str());
+        if (stage) stage->Stage(InstallerDownloadStage::Verified);
+        return Status::Ok();
+    }
     for (unsigned attempt = 0; attempt < VerifiedDownloadAttempts; ++attempt)
     {
         std::printf("Downloading %s %s [%s]\n", package.name.c_str(), package.version.c_str(), installer.architecture.c_str());
@@ -125,7 +339,8 @@ Status InstallerService::Execute(const std::wstring &commandLine, const std::wst
     return Status::Ok();
 }
 
-Status InstallerService::Install(const InstallerEntry &installer, const std::wstring &path, InstallMode mode, DWORD &exitCode)
+Status InstallerService::Install(const PackageRecord &package, const InstallerEntry &installer, const std::wstring &path,
+                                 InstallMode mode, DWORD &exitCode, TrackedPackage *tracked)
 {
     const std::wstring ownedPath(path);
     HANDLE lockedInstaller = CreateFileW(ownedPath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
@@ -142,24 +357,57 @@ Status InstallerService::Install(const InstallerEntry &installer, const std::wst
         return Status::Fail(status.code, "installer changed after download verification: " + status.message);
     }
 
-    std::wstring commandLine;
-    std::string arguments = InstallerArguments(installer, mode);
-    if (!installer.switches.custom.empty())
+    if (AsciiEquals(EffectiveInstallerType(installer), "portable"))
     {
-        if (!arguments.empty()) arguments.push_back(' ');
-        arguments += installer.switches.custom;
+        /* FIXME: portable packages always install for the current user; --scope machine is not honored */
+        std::printf("Installing portable package...\n");
+        const ArpSnapshot before = TakeArpSnapshot();
+        status = InstallPortable(package, installer, path, false);
+        CloseHandle(lockedInstaller);
+        if (!status)
+            return status;
+        TrackInstalledPackage(package, installer, before, tracked);
+        return Status::Ok();
     }
 
-    if (AsciiEquals(installer.type, "wix") || AsciiEquals(installer.type, "msi"))
+    InstallerEntry effective(installer);
+    std::wstring installerPath(path);
+    if (AsciiEquals(installer.type, "zip"))
+    {
+        std::wstring relative;
+        if (installer.nestedFiles.size() != 1 || !SafeRelativeArchivePath(installer.nestedFiles[0].relativePath, relative))
+        {
+            CloseHandle(lockedInstaller);
+            return Status::Fail(ERROR_BAD_FORMAT, "the manifest names an invalid nested installer");
+        }
+        const std::wstring extracted = path + L".extracted";
+        std::printf("Extracting archive...\n");
+        status = ExtractArchive(path, extracted);
+        if (!status)
+        {
+            CloseHandle(lockedInstaller);
+            return status;
+        }
+        installerPath = JoinPath(extracted, relative);
+        if (GetFileAttributesW(installerPath.c_str()) == INVALID_FILE_ATTRIBUTES)
+        {
+            CloseHandle(lockedInstaller);
+            return Status::Fail(ERROR_FILE_NOT_FOUND, "the archive does not contain " + installer.nestedFiles[0].relativePath);
+        }
+        effective.type = installer.nestedType;
+    }
+
+    std::wstring commandLine;
+    const std::string arguments = InstallerCommandArguments(effective, mode);
+
+    if (AsciiEquals(effective.type, "wix") || AsciiEquals(effective.type, "msi"))
     {
         commandLine = L"msiexec.exe /i ";
-        commandLine += QuoteCommandArgument(path);
-        if (mode != InstallMode::Interactive && arguments.empty())
-            arguments = "/quiet /norestart";
+        commandLine += QuoteCommandArgument(installerPath);
     }
     else
     {
-        commandLine = QuoteCommandArgument(path);
+        commandLine = QuoteCommandArgument(installerPath);
     }
     if (!arguments.empty())
     {
@@ -167,8 +415,9 @@ Status InstallerService::Install(const InstallerEntry &installer, const std::wst
         commandLine += WideFromUtf8(arguments);
     }
 
-    std::printf("Starting installer (%s, %s)...\n", installer.type.c_str(), installer.architecture.c_str());
-    status = Execute(commandLine, ParentPath(path), exitCode);
+    std::printf("Starting installer (%s, %s)...\n", effective.type.c_str(), installer.architecture.c_str());
+    const ArpSnapshot before = TakeArpSnapshot();
+    status = Execute(commandLine, ParentPath(installerPath), exitCode);
     CloseHandle(lockedInstaller);
     if (!status)
         return status;
@@ -179,11 +428,20 @@ Status InstallerService::Install(const InstallerEntry &installer, const std::wst
         const std::string response = expected == installer.expectedReturnCodes.end() ? std::string() : " (" + expected->second + ")";
         return Status::Fail(exitCode, "installer returned exit code " + DecimalString(exitCode) + response);
     }
+    TrackInstalledPackage(package, effective, before, tracked);
     return Status::Ok();
 }
 
 Status RunInstallerSelfTests()
 {
+    std::wstring relative;
+    if (!SafeRelativeArchivePath(".\\HxDSetup.exe", relative) || relative != L"HxDSetup.exe" ||
+        !SafeRelativeArchivePath("bin/tool.exe", relative) || relative != L"bin\\tool.exe" ||
+        !SafeRelativeArchivePath("docs/", relative) || relative != L"docs\\" ||
+        SafeRelativeArchivePath("../evil.exe", relative) || SafeRelativeArchivePath("a\\..\\..\\b", relative) ||
+        SafeRelativeArchivePath("C:\\Windows\\x.dll", relative) || SafeRelativeArchivePath("/etc/x", relative) ||
+        SafeRelativeArchivePath("a//b", relative))
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "archive path validation self-test failed");
     InstallerEntry installer;
     installer.type = "exe";
     installer.switches.silent = "/quiet";
@@ -194,6 +452,13 @@ Status RunInstallerSelfTests()
     installer.switches.interactive = "/interactive";
     if (InstallerArguments(installer, InstallMode::Interactive) != "/interactive")
         return Status::Fail(ERROR_ASSERTION_FAILURE, "interactive installer mode self-test failed");
+    InstallerEntry msi;
+    msi.type = "wix";
+    msi.switches.custom = "ADD_CMAKE_TO_PATH=System";
+    if (InstallerCommandArguments(msi, InstallMode::Silent) != "/quiet /norestart ADD_CMAKE_TO_PATH=System" ||
+        InstallerCommandArguments(msi, InstallMode::Default) != "/quiet /norestart ADD_CMAKE_TO_PATH=System" ||
+        InstallerCommandArguments(msi, InstallMode::Interactive) != "ADD_CMAKE_TO_PATH=System")
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "MSI custom switch self-test failed");
     return Status::Ok();
 }
 

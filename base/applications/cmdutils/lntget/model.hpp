@@ -83,6 +83,18 @@ struct InstallerSwitches
     std::string custom;
 };
 
+struct NestedInstallerFile
+{
+    std::string relativePath;
+    std::string portableCommandAlias;
+};
+
+struct PackageDependency
+{
+    std::string id;
+    std::string minimumVersion;
+};
+
 struct InstallerEntry
 {
     std::string architecture;
@@ -92,12 +104,16 @@ struct InstallerEntry
     std::string scope;
     std::string locale;
     std::string minimumOsVersion;
+    std::string nestedType;
+    std::vector<NestedInstallerFile> nestedFiles;
+    std::vector<std::string> commands;
+    std::vector<PackageDependency> packageDependencies;
     InstallerSwitches switches;
     std::vector<std::string> unsupportedOsArchitectures;
     std::vector<std::string> installModes;
     std::vector<DWORD> successCodes;
     std::map<DWORD, std::string> expectedReturnCodes;
-    bool hasDependencies = false;
+    bool hasUnsupportedDependencies = false;
     bool hasAuthentication = false;
     bool hasMarketRestrictions = false;
     bool downloadCommandProhibited = false;
@@ -126,7 +142,7 @@ struct Manifest
     std::vector<std::string> defaultInstallModes;
     std::vector<DWORD> defaultSuccessCodes;
     std::map<DWORD, std::string> defaultExpectedReturnCodes;
-    bool defaultHasDependencies = false;
+    bool defaultHasUnsupportedDependencies = false;
     bool defaultHasAuthentication = false;
     bool defaultHasMarketRestrictions = false;
     bool defaultDownloadCommandProhibited = false;

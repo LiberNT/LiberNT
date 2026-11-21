@@ -29,9 +29,11 @@ enum class NestedSection
     Switches,
     UnsupportedArchitectures,
     InstallModes,
+    Commands,
     SuccessCodes,
     ExpectedReturnCodes,
     Dependencies,
+    NestedFiles,
     Authentication,
     Markets,
 };
@@ -141,6 +143,19 @@ std::string FoldBlock(const std::vector<std::string> &lines, bool folded, bool k
     return text;
 }
 
+enum class DependencyKind
+{
+    None,
+    Package,
+    Other,
+};
+
+void SetNestedFileProperty(NestedInstallerFile &file, const std::string &key, const std::string &value)
+{
+    if (key == "RelativeFilePath") file.relativePath = value;
+    else if (key == "PortableCommandAlias") file.portableCommandAlias = value;
+}
+
 void SetSwitch(InstallerSwitches &switches, const std::string &key, const std::string &value)
 {
     if (key == "Silent") switches.silent = value;
@@ -158,11 +173,18 @@ NestedSection SetInstallerProperty(InstallerEntry &installer, const std::string 
     else if (key == "Scope") installer.scope = value;
     else if (key == "InstallerLocale") installer.locale = value;
     else if (key == "MinimumOSVersion") installer.minimumOsVersion = value;
+    else if (key == "NestedInstallerType") installer.nestedType = value;
+    else if (key == "NestedInstallerFiles") return NestedSection::NestedFiles;
     else if (key == "InstallerSwitches") return NestedSection::Switches;
     else if (key == "UnsupportedOSArchitectures")
     {
         installer.unsupportedOsArchitectures = ParseInlineList(value);
         return NestedSection::UnsupportedArchitectures;
+    }
+    else if (key == "Commands")
+    {
+        installer.commands = ParseInlineList(value);
+        return NestedSection::Commands;
     }
     else if (key == "InstallModes")
     {
@@ -181,7 +203,7 @@ NestedSection SetInstallerProperty(InstallerEntry &installer, const std::string 
     else if (key == "ExpectedReturnCodes") return NestedSection::ExpectedReturnCodes;
     else if (key == "Dependencies")
     {
-        installer.hasDependencies = !value.empty();
+        installer.hasUnsupportedDependencies = !value.empty();
         return NestedSection::Dependencies;
     }
     else if (key == "Authentication")
@@ -216,15 +238,19 @@ void InheritInstaller(InstallerEntry &installer, const InstallerEntry &defaults)
     InheritString(installer.scope, defaults.scope);
     InheritString(installer.locale, defaults.locale);
     InheritString(installer.minimumOsVersion, defaults.minimumOsVersion);
+    InheritString(installer.nestedType, defaults.nestedType);
+    if (installer.nestedFiles.empty()) installer.nestedFiles = defaults.nestedFiles;
+    if (installer.packageDependencies.empty()) installer.packageDependencies = defaults.packageDependencies;
     InheritString(installer.switches.silent, defaults.switches.silent);
     InheritString(installer.switches.silentWithProgress, defaults.switches.silentWithProgress);
     InheritString(installer.switches.interactive, defaults.switches.interactive);
     InheritString(installer.switches.custom, defaults.switches.custom);
     if (installer.unsupportedOsArchitectures.empty()) installer.unsupportedOsArchitectures = defaults.unsupportedOsArchitectures;
     if (installer.installModes.empty()) installer.installModes = defaults.installModes;
+    if (installer.commands.empty()) installer.commands = defaults.commands;
     if (installer.successCodes.empty()) installer.successCodes = defaults.successCodes;
     if (installer.expectedReturnCodes.empty()) installer.expectedReturnCodes = defaults.expectedReturnCodes;
-    installer.hasDependencies = installer.hasDependencies || defaults.hasDependencies;
+    installer.hasUnsupportedDependencies = installer.hasUnsupportedDependencies || defaults.hasUnsupportedDependencies;
     installer.hasAuthentication = installer.hasAuthentication || defaults.hasAuthentication;
     installer.hasMarketRestrictions = installer.hasMarketRestrictions || defaults.hasMarketRestrictions;
     installer.downloadCommandProhibited = installer.downloadCommandProhibited || defaults.downloadCommandProhibited;
@@ -267,8 +293,22 @@ int TypeRank(const std::string &type)
 {
     if (AsciiEquals(type, "wix") || AsciiEquals(type, "msi")) return 0;
     if (AsciiEquals(type, "inno") || AsciiEquals(type, "nullsoft") || AsciiEquals(type, "burn")) return 1;
-    if (AsciiEquals(type, "exe")) return 2;
+    if (AsciiEquals(type, "exe") || AsciiEquals(type, "portable")) return 2;
     return -1;
+}
+
+int InstallerTypeRank(const InstallerEntry &installer)
+{
+    if (!AsciiEquals(installer.type, "zip"))
+        return TypeRank(installer.type);
+    if (installer.nestedFiles.empty() || (!AsciiEquals(installer.nestedType, "portable") && installer.nestedFiles.size() != 1))
+        return -1;
+    for (const NestedInstallerFile &file : installer.nestedFiles)
+    {
+        if (file.relativePath.empty())
+            return -1;
+    }
+    return TypeRank(installer.nestedType);
 }
 
 bool ContainsCaseInsensitive(const std::vector<std::string> &values, const std::string &wanted)
@@ -283,8 +323,9 @@ bool ContainsCaseInsensitive(const std::vector<std::string> &values, const std::
 
 bool HasNonInteractiveArguments(const InstallerEntry &installer, InstallMode mode)
 {
-    if (AsciiEquals(installer.type, "msi") || AsciiEquals(installer.type, "wix") ||
-        AsciiEquals(installer.type, "inno") || AsciiEquals(installer.type, "nullsoft") || AsciiEquals(installer.type, "burn"))
+    const std::string type = EffectiveInstallerType(installer);
+    if (AsciiEquals(type, "msi") || AsciiEquals(type, "wix") || AsciiEquals(type, "inno") ||
+        AsciiEquals(type, "nullsoft") || AsciiEquals(type, "burn") || AsciiEquals(type, "portable"))
         return true;
     if (mode == InstallMode::Silent)
         return !installer.switches.silent.empty();
@@ -488,13 +529,13 @@ Status SelectInstallerForMachine(const Manifest &manifest, const SelectionOption
             else if (AsciiEquals(candidate.architecture, "neutral")) architectureRank = 1;
             else architectureRank = -1;
         }
-        const int typeRank = TypeRank(candidate.type);
+        const int typeRank = InstallerTypeRank(candidate);
         unsupportedType = unsupportedType || typeRank < 0;
         if (architectureRank < 0 || typeRank < 0 || candidate.url.empty() || !IsSha256(candidate.sha256) ||
             (options.hasInstallerType && !AsciiEquals(candidate.type, options.installerType)))
             continue;
         if (ContainsCaseInsensitive(candidate.unsupportedOsArchitectures, ArchitectureName(machine)) ||
-            !MeetsMinimumOsVersion(candidate.minimumOsVersion) || candidate.hasDependencies ||
+            !MeetsMinimumOsVersion(candidate.minimumOsVersion) || candidate.hasUnsupportedDependencies ||
             candidate.hasAuthentication || candidate.hasMarketRestrictions ||
             (options.hasScope && !AsciiEquals(candidate.scope, options.scope)) ||
             (options.hasLocale && !AsciiEquals(candidate.locale, options.locale)) ||
@@ -538,6 +579,7 @@ Status ParseInstallerManifest(const std::string &yaml, Manifest &manifest)
     InstallerEntry *sectionTarget = nullptr;
     bool hasExpectedCode = false;
     DWORD expectedCode = 0;
+    DependencyKind dependencyKind = DependencyKind::None;
 
     std::size_t offset = 0;
     while (offset <= yaml.size())
@@ -584,6 +626,7 @@ Status ParseInstallerManifest(const std::string &yaml, Manifest &manifest)
             const std::string item = UnquoteYaml(content.substr(2));
             if (section == NestedSection::UnsupportedArchitectures) sectionTarget->unsupportedOsArchitectures.push_back(item);
             else if (section == NestedSection::InstallModes) sectionTarget->installModes.push_back(item);
+            else if (section == NestedSection::Commands) sectionTarget->commands.push_back(item);
             else if (section == NestedSection::SuccessCodes)
             {
                 DWORD code = 0;
@@ -603,7 +646,29 @@ Status ParseInstallerManifest(const std::string &yaml, Manifest &manifest)
                     sectionTarget->expectedReturnCodes[code] = "expected installer response";
                 }
             }
-            else if (section == NestedSection::Dependencies) sectionTarget->hasDependencies = true;
+            else if (section == NestedSection::Dependencies)
+            {
+                std::string key;
+                std::string value;
+                if (dependencyKind == DependencyKind::Package && SplitProperty(content.substr(2), key, value) &&
+                    key == "PackageIdentifier")
+                {
+                    sectionTarget->packageDependencies.push_back(PackageDependency());
+                    sectionTarget->packageDependencies.back().id = value;
+                }
+                else if (dependencyKind != DependencyKind::Package)
+                {
+                    sectionTarget->hasUnsupportedDependencies = true;
+                }
+            }
+            else if (section == NestedSection::NestedFiles)
+            {
+                sectionTarget->nestedFiles.push_back(NestedInstallerFile());
+                std::string key;
+                std::string value;
+                if (SplitProperty(content.substr(2), key, value))
+                    SetNestedFileProperty(sectionTarget->nestedFiles.back(), key, value);
+            }
             else if (section == NestedSection::Authentication) sectionTarget->hasAuthentication = true;
             else if (section == NestedSection::Markets) sectionTarget->hasMarketRestrictions = true;
             continue;
@@ -619,13 +684,33 @@ Status ParseInstallerManifest(const std::string &yaml, Manifest &manifest)
             if (section == NestedSection::Switches) SetSwitch(sectionTarget->switches, key, value);
             else if (section == NestedSection::ExpectedReturnCodes && key == "ReturnResponse" && hasExpectedCode)
                 sectionTarget->expectedReturnCodes[expectedCode] = value;
-            else if (section == NestedSection::Dependencies) sectionTarget->hasDependencies = true;
+            else if (section == NestedSection::Dependencies)
+            {
+                if (key == "PackageDependencies")
+                {
+                    dependencyKind = DependencyKind::Package;
+                }
+                else if (key == "MinimumVersion" && dependencyKind == DependencyKind::Package &&
+                         !sectionTarget->packageDependencies.empty())
+                {
+                    sectionTarget->packageDependencies.back().minimumVersion = value;
+                }
+                else if (key != "PackageIdentifier")
+                {
+                    dependencyKind = DependencyKind::Other;
+                    if (!value.empty() && value != "[]")
+                        sectionTarget->hasUnsupportedDependencies = true;
+                }
+            }
+            else if (section == NestedSection::NestedFiles && !sectionTarget->nestedFiles.empty())
+                SetNestedFileProperty(sectionTarget->nestedFiles.back(), key, value);
             else if (section == NestedSection::Authentication) sectionTarget->hasAuthentication = true;
             else if (section == NestedSection::Markets) sectionTarget->hasMarketRestrictions = true;
             continue;
         }
 
         section = NestedSection::None;
+        dependencyKind = DependencyKind::None;
         sectionTarget = nullptr;
         hasExpectedCode = false;
         if (indent == 0 && key == "Installers")
@@ -680,7 +765,7 @@ Status ParseInstallerManifest(const std::string &yaml, Manifest &manifest)
     manifest.defaultInstallModes = defaults.installModes;
     manifest.defaultSuccessCodes = defaults.successCodes;
     manifest.defaultExpectedReturnCodes = defaults.expectedReturnCodes;
-    manifest.defaultHasDependencies = defaults.hasDependencies;
+    manifest.defaultHasUnsupportedDependencies = defaults.hasUnsupportedDependencies;
     manifest.defaultHasAuthentication = defaults.hasAuthentication;
     manifest.defaultHasMarketRestrictions = defaults.hasMarketRestrictions;
     manifest.defaultDownloadCommandProhibited = defaults.downloadCommandProhibited;
@@ -955,6 +1040,11 @@ std::string ArchitectureName(MachineArchitecture architecture)
     }
 }
 
+std::string EffectiveInstallerType(const InstallerEntry &installer)
+{
+    return AsciiEquals(installer.type, "zip") ? installer.nestedType : installer.type;
+}
+
 Status SelectInstaller(const Manifest &manifest, const SelectionOptions &options, InstallerEntry &installer)
 {
     return SelectInstallerForMachine(manifest, options, CurrentMachineArchitecture(), installer);
@@ -1065,6 +1155,42 @@ Status RunManifestSelfTests()
         return Status::Fail(ERROR_ASSERTION_FAILURE, "package agreement parser self-test failed");
     if (UrlEncodePath("manifests/a/A+B/1.0/A+B.yaml") != L"manifests/a/A%2BB/1.0/A%2BB.yaml")
         return Status::Fail(ERROR_ASSERTION_FAILURE, "URL encoder self-test failed");
+
+    static constexpr char NestedFixture[] =
+        "PackageIdentifier: Example.Zip\n"
+        "PackageVersion: \"2.5\"\n"
+        "InstallerType: zip\n"
+        "NestedInstallerType: inno\n"
+        "NestedInstallerFiles:\n"
+        "- RelativeFilePath: .\\Setup.exe\n"
+        "Dependencies:\n"
+        "  PackageDependencies:\n"
+        "  - PackageIdentifier: Microsoft.VCRedist.2015+.x64\n"
+        "    MinimumVersion: 14.0\n"
+        "Installers:\n"
+        "- Architecture: neutral\n"
+        "  InstallerUrl: https://example.test/setup.zip\n"
+        "  InstallerSha256: 5555555555555555555555555555555555555555555555555555555555555555\n"
+        "- Architecture: x64\n"
+        "  InstallerUrl: https://example.test/setup-x64.zip\n"
+        "  InstallerSha256: 6666666666666666666666666666666666666666666666666666666666666666\n"
+        "  Dependencies:\n"
+        "    WindowsFeatures:\n"
+        "    - IIS-WebServer\n";
+    Manifest nested;
+    status = ParseInstallerManifest(NestedFixture, nested);
+    if (!status || nested.installers.size() != 2 || nested.installers[0].nestedType != "inno" ||
+        nested.installers[0].nestedFiles.size() != 1 || nested.installers[0].nestedFiles[0].relativePath != ".\\Setup.exe" ||
+        nested.installers[0].packageDependencies.size() != 1 ||
+        nested.installers[0].packageDependencies[0].id != "Microsoft.VCRedist.2015+.x64" ||
+        nested.installers[0].packageDependencies[0].minimumVersion != "14.0" ||
+        nested.installers[0].hasUnsupportedDependencies || !nested.installers[1].hasUnsupportedDependencies ||
+        EffectiveInstallerType(nested.installers[0]) != "inno")
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "nested installer and dependency parser self-test failed");
+    InstallerEntry nestedSelection;
+    status = SelectInstallerForMachine(nested, SelectionOptions(), MachineArchitecture::X64, nestedSelection);
+    if (!status || nestedSelection.url != "https://example.test/setup.zip")
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "nested installer selection self-test failed");
     return Status::Ok();
 }
 

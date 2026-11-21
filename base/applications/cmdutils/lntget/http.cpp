@@ -159,6 +159,174 @@ std::wstring UniquePartialPath(const std::wstring &destination)
     return path;
 }
 
+
+constexpr unsigned long long DownloadCheckpointBytes = 8ull << 20;
+
+struct PartialDownload
+{
+    HANDLE file = INVALID_HANDLE_VALUE;
+    std::wstring path;
+    std::wstring checkpoint;
+    unsigned long long length = 0;
+};
+
+bool ParseContentRangeStart(const std::wstring &value, unsigned long long &start)
+{
+    static const wchar_t Prefix[] = L"bytes ";
+    const std::size_t prefixLength = (sizeof(Prefix) / sizeof(Prefix[0])) - 1;
+    if (value.compare(0, prefixLength, Prefix) != 0)
+        return false;
+    const wchar_t *digits = value.c_str() + prefixLength;
+    if (*digits < L'0' || *digits > L'9')
+        return false;
+    wchar_t *end = nullptr;
+    start = _wcstoui64(digits, &end, 10);
+    return end && end != digits && *end == L'-';
+}
+
+std::wstring QueryContentRange(HINTERNET request)
+{
+    wchar_t text[128] = L"Content-Range";
+    DWORD size = sizeof(text) - sizeof(wchar_t);
+    if (!HttpQueryInfoW(request, HTTP_QUERY_CUSTOM, text, &size, nullptr))
+        return std::wstring();
+    text[std::min<std::size_t>(size / sizeof(wchar_t), (sizeof(text) / sizeof(text[0])) - 1)] = L'\0';
+    return text;
+}
+
+unsigned long long ReadDownloadCheckpoint(const std::wstring &path)
+{
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE)
+        return 0;
+    char text[32]{};
+    DWORD read = 0;
+    const BOOL ok = ReadFile(file, text, sizeof(text) - 1, &read, nullptr);
+    CloseHandle(file);
+    if (!ok || !read)
+        return 0;
+    text[read] = '\0';
+    char *end = nullptr;
+    const unsigned long long length = _strtoui64(text, &end, 10);
+    return end && end != text && !*end ? length : 0;
+}
+
+void WriteDownloadCheckpoint(const std::wstring &path, unsigned long long length)
+{
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE)
+        return;
+    const std::string text = DecimalString(length);
+    DWORD written = 0;
+    WriteFile(file, text.data(), static_cast<DWORD>(text.size()), &written, nullptr);
+    FlushFileBuffers(file);
+    CloseHandle(file);
+}
+
+Status SetPartialLength(PartialDownload &partial, unsigned long long length)
+{
+    LARGE_INTEGER position{};
+    position.QuadPart = static_cast<LONGLONG>(length);
+    if (!SetFilePointerEx(partial.file, position, nullptr, FILE_BEGIN) || !SetEndOfFile(partial.file))
+    {
+        const DWORD error = GetLastError();
+        return Status::Fail(error, "cannot size download file: " + WindowsErrorMessage(error));
+    }
+    partial.length = length;
+    if (!partial.checkpoint.empty() && !length)
+        DeleteFileW(partial.checkpoint.c_str());
+    return Status::Ok();
+}
+
+/* The bytes resumed are the ones a checkpoint saw reach the disk, whatever size the file shows after a power cut */
+Status OpenPartialDownload(const std::wstring &destination, PartialDownload &partial)
+{
+    partial.path = destination + L".partial";
+    partial.checkpoint = partial.path + L".length";
+    partial.file = CreateFileW(partial.path.c_str(), GENERIC_WRITE, 0, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (partial.file == INVALID_HANDLE_VALUE && GetLastError() == ERROR_SHARING_VIOLATION)
+    {
+        partial.path = UniquePartialPath(destination);
+        partial.checkpoint.clear();
+        partial.file = CreateFileW(partial.path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+    }
+    if (partial.file == INVALID_HANDLE_VALUE)
+    {
+        const DWORD error = GetLastError();
+        return Status::Fail(error, "cannot create download file: " + WindowsErrorMessage(error));
+    }
+    LARGE_INTEGER size{};
+    unsigned long long length = 0;
+    if (!partial.checkpoint.empty() && GetFileSizeEx(partial.file, &size))
+        length = std::min<unsigned long long>(static_cast<unsigned long long>(size.QuadPart), ReadDownloadCheckpoint(partial.checkpoint));
+    Status status = SetPartialLength(partial, length);
+    if (!status)
+    {
+        CloseHandle(partial.file);
+        partial.file = INVALID_HANDLE_VALUE;
+    }
+    return status;
+}
+
+void ClosePartialDownload(PartialDownload &partial, bool keep)
+{
+    if (partial.file != INVALID_HANDLE_VALUE)
+    {
+        CloseHandle(partial.file);
+        partial.file = INVALID_HANDLE_VALUE;
+    }
+    if (keep)
+        return;
+    DeleteFileW(partial.path.c_str());
+    if (!partial.checkpoint.empty())
+        DeleteFileW(partial.checkpoint.c_str());
+}
+
+Status ReceiveDownload(HINTERNET request, PartialDownload &partial, unsigned long long maximumBytes,
+                       unsigned long long expected, DownloadProgressCallback *progress, bool &complete)
+{
+    uint8_t buffer[64 * 1024]{};
+    unsigned long long checkpointed = partial.length;
+
+    complete = false;
+    for (;;)
+    {
+        DWORD read = 0;
+        if (!InternetReadFile(request, buffer, static_cast<DWORD>(sizeof(buffer)), &read))
+        {
+            const DWORD error = GetLastError();
+            TraceInternetFailure("InternetReadFile(download)", error);
+            return Status::Fail(error, "download read failed: " + WindowsErrorMessage(error));
+        }
+        if (!read)
+            break;
+        if (partial.length > maximumBytes || static_cast<unsigned long long>(read) > maximumBytes - partial.length)
+            return Status::Fail(ERROR_FILE_TOO_LARGE, "download exceeds its permitted size");
+        DWORD written = 0;
+        if (!WriteFile(partial.file, buffer, read, &written, nullptr) || written != read)
+        {
+            const DWORD error = GetLastError();
+            return Status::Fail(error, "download write failed: " + WindowsErrorMessage(error));
+        }
+        partial.length += read;
+        TraceHttp("download received=" + DecimalString(partial.length) + " chunk=" + DecimalString(read));
+        if (!partial.checkpoint.empty() && partial.length - checkpointed >= DownloadCheckpointBytes &&
+            FlushFileBuffers(partial.file))
+        {
+            WriteDownloadCheckpoint(partial.checkpoint, partial.length);
+            checkpointed = partial.length;
+        }
+        if (progress) progress->Progress(partial.length, expected);
+    }
+    if (!FlushFileBuffers(partial.file))
+    {
+        const DWORD error = GetLastError();
+        return Status::Fail(error, "cannot flush download file: " + WindowsErrorMessage(error));
+    }
+    complete = true;
+    return Status::Ok();
+}
+
 } // namespace
 
 HttpClient::HttpClient()
@@ -289,12 +457,21 @@ Status HttpClient::Download(const std::wstring &url, const std::wstring &destina
     Status status = EnsureDirectory(ParentPath(destination));
     if (!status) return status;
 
+    PartialDownload partial;
+    status = OpenPartialDownload(destination, partial);
+    if (!status) return status;
+    if (partial.length)
+        TraceHttp("resuming download at " + DecimalString(partial.length) + " bytes");
+
     Status last = Status::Fail(ERROR_RETRY, "download retries exhausted");
     for (unsigned attempt = 0; attempt < MaximumAttempts; ++attempt)
     {
         TraceHttp("download attempt " + DecimalString(attempt + 1) + "/" + DecimalString(MaximumAttempts) + " destination=" + Utf8FromWide(destination));
+        std::wstring requestHeaders(headers);
+        if (partial.length)
+            requestHeaders += L"Range: bytes=" + DecimalWideString(partial.length) + L"-\r\n";
         InternetRequest request;
-        last = OpenRequest(static_cast<HINTERNET>(session_), url, headers, request);
+        last = OpenRequest(static_cast<HINTERNET>(session_), url, requestHeaders, request);
         if (!last)
         {
             if (attempt + 1 < MaximumAttempts && IsTransientInternetError(last.code))
@@ -302,93 +479,101 @@ Status HttpClient::Download(const std::wstring &url, const std::wstring &destina
                 WaitBeforeRetry(attempt);
                 continue;
             }
-            return last;
+            break;
         }
         DWORD statusCode = 0;
         last = QueryStatusCode(request.Get(), statusCode);
-        if (!last) return last;
+        if (!last) break;
         TraceHttp("download HTTP status=" + DecimalString(statusCode));
         if (IsTransientHttpStatus(statusCode) && attempt + 1 < MaximumAttempts)
         {
             WaitBeforeRetry(attempt, request.Get());
             continue;
         }
+
+        unsigned long long rangeStart = 0;
+        const bool resumed = partial.length && statusCode == 206 &&
+                             ParseContentRangeStart(QueryContentRange(request.Get()), rangeStart) &&
+                             rangeStart == partial.length;
+        if (partial.length && !resumed)
+        {
+            TraceHttp("server did not resume at " + DecimalString(partial.length) + "; starting over");
+            last = SetPartialLength(partial, 0);
+            if (!last) break;
+            if (statusCode != 200)
+                continue;
+        }
         if (statusCode < 200 || statusCode >= 300)
-            return Status::Fail(ERROR_INVALID_DATA, "HTTP server returned status " + DecimalString(statusCode));
+        {
+            last = Status::Fail(ERROR_INVALID_DATA, "HTTP server returned status " + DecimalString(statusCode));
+            break;
+        }
 
-        const unsigned long long expected = QueryContentLength(request.Get());
-        TraceHttp("download content-length=" + DecimalString(expected));
+        const unsigned long long remaining = QueryContentLength(request.Get());
+        const unsigned long long expected = remaining ? partial.length + remaining : 0;
+        TraceHttp("download content-length=" + DecimalString(remaining) + " expected=" + DecimalString(expected));
         if (expected && expected > maximumBytes)
-            return Status::Fail(ERROR_FILE_TOO_LARGE, "download exceeds its permitted size");
-        if (progress) progress->Progress(0, expected);
-
-        const std::wstring partial = UniquePartialPath(destination);
-        HANDLE file = CreateFileW(partial.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (file == INVALID_HANDLE_VALUE)
         {
-            const DWORD error = GetLastError();
-            return Status::Fail(error, "cannot create download file: " + WindowsErrorMessage(error));
+            last = Status::Fail(ERROR_FILE_TOO_LARGE, "download exceeds its permitted size");
+            break;
         }
+        if (progress) progress->Progress(partial.length, expected);
 
-        uint8_t buffer[64 * 1024]{};
-        unsigned long long total = 0;
         bool complete = false;
-        for (;;)
-        {
-            DWORD read = 0;
-            if (!InternetReadFile(request.Get(), buffer, static_cast<DWORD>(sizeof(buffer)), &read))
-            {
-                const DWORD error = GetLastError();
-                TraceInternetFailure("InternetReadFile(download)", error);
-                last = Status::Fail(error, "download read failed: " + WindowsErrorMessage(error));
-                break;
-            }
-            if (!read)
-            {
-                complete = true;
-                break;
-            }
-            if (total > maximumBytes || static_cast<unsigned long long>(read) > maximumBytes - total)
-            {
-                last = Status::Fail(ERROR_FILE_TOO_LARGE, "download exceeds its permitted size");
-                break;
-            }
-            DWORD written = 0;
-            if (!WriteFile(file, buffer, read, &written, nullptr) || written != read)
-            {
-                const DWORD error = GetLastError();
-                last = Status::Fail(error, "download write failed: " + WindowsErrorMessage(error));
-                break;
-            }
-            total += read;
-            TraceHttp("download received=" + DecimalString(total) + " chunk=" + DecimalString(read));
-            if (progress) progress->Progress(total, expected);
-        }
-        if (complete && !FlushFileBuffers(file))
-        {
-            const DWORD error = GetLastError();
-            last = Status::Fail(error, "cannot flush download file: " + WindowsErrorMessage(error));
-            complete = false;
-        }
-        CloseHandle(file);
+        last = ReceiveDownload(request.Get(), partial, maximumBytes, expected, progress, complete);
         if (!complete)
         {
-            DeleteFileW(partial.c_str());
             if (attempt + 1 < MaximumAttempts && IsTransientInternetError(last.code))
             {
                 WaitBeforeRetry(attempt);
                 continue;
             }
-            return last;
+            break;
         }
-        status = AtomicReplaceFile(partial, destination, "download");
+
+        const unsigned long long total = partial.length;
+        ClosePartialDownload(partial, true);
+        if (!partial.checkpoint.empty())
+            DeleteFileW(partial.checkpoint.c_str());
+        status = AtomicReplaceFile(partial.path, destination, "download");
         if (!status) return status;
         if (progress) progress->Progress(total, expected ? expected : total);
         std::printf("Downloaded %llu bytes.\n", total);
         TraceHttp("download complete bytes=" + DecimalString(total));
         return Status::Ok();
     }
+
+    /* A download cut off by the network keeps its bytes for the next run to resume */
+    ClosePartialDownload(partial, IsTransientInternetError(last.code) && !partial.checkpoint.empty());
     return last;
+}
+
+Status RunHttpSelfTests()
+{
+    static const struct
+    {
+        const wchar_t *value;
+        bool valid;
+        unsigned long long start;
+    } Cases[] = {
+        {L"bytes 100-199/200", true, 100},
+        {L"bytes 0-0/1", true, 0},
+        {L"bytes 328400896-401234567/401234568", true, 328400896},
+        {L"bytes 7-9/*", true, 7},
+        {L"bytes */200", false, 0},
+        {L"items 1-2/3", false, 0},
+        {L"bytes 12a-20/30", false, 0},
+        {L"bytes -5/10", false, 0},
+        {L"", false, 0},
+    };
+    for (const auto &test : Cases)
+    {
+        unsigned long long start = ~0ull;
+        const bool valid = ParseContentRangeStart(test.value, start);
+        if (valid != test.valid || (valid && start != test.start))
+            return Status::Fail(ERROR_ASSERTION_FAILURE, "Content-Range self-test failed for " + Utf8FromWide(test.value));
+    }
+    return Status::Ok();
 }
 
 } // namespace lntget

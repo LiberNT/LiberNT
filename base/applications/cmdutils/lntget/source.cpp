@@ -321,14 +321,25 @@ Status ParseVersionData(const std::string &yaml, const std::string &wantedVersio
 
 bool ValidPackageIdentifier(const std::string &id)
 {
-    if (id.empty())
+    if (id.empty() || id.size() > 128)
         return false;
+    std::size_t segments = 1;
+    std::size_t segmentLength = 0;
     for (const unsigned char character : id)
     {
-        if (!(isalnum(character) || character == '.' || character == '-' || character == '_'))
+        if (character == '.')
+        {
+            if (!segmentLength)
+                return false;
+            ++segments;
+            segmentLength = 0;
+            continue;
+        }
+        if (character <= 0x20 || character == 0x7f || std::strchr("\\/:*?\"<>|", character))
             return false;
+        ++segmentLength;
     }
-    return true;
+    return segmentLength && segments >= 2 && segments <= 8;
 }
 
 } // namespace
@@ -461,6 +472,13 @@ Status SourceManager::Resolve(const PackageQuery &query, PackageRecord &package)
     return Status::Ok();
 }
 
+Status SourceManager::LoadArpCorrelation(std::map<std::string, PackageRecord> &productCodes,
+                                         std::map<std::string, PackageRecord> &packages)
+{
+    Status status = EnsureReady();
+    return status ? index_.LoadArpCorrelation(productCodes, packages) : status;
+}
+
 Status SourceManager::FetchInstallerManifest(const PackageRecord &package, std::string &yaml)
 {
     Status status = EnsureReady();
@@ -512,6 +530,23 @@ Status SourceManager::FetchInstallerManifest(const PackageRecord &package, std::
     if (std::memcmp(actualManifestHash, expectedManifestHash, sizeof(actualManifestHash)) != 0)
         return Status::Fail(ERROR_CRC, "downloaded manifest does not match the signed version metadata hash");
     yaml.assign(reinterpret_cast<const char *>(response.body.data()), response.body.size());
+    return Status::Ok();
+}
+
+Status RunSourceSelfTests()
+{
+    static const char *const Valid[] = {"7zip.7zip", "Notepad++.Notepad++", "Mozilla.Firefox.ESR", "Microsoft.VCRedist.2015+.x64"};
+    static const char *const Invalid[] = {"", "Single", "a..b", "a.b.", ".a.b", "a/b.c", "a\\b.c", "a b.c", "a.b:c", "a.b.c.d.e.f.g.h.i"};
+    for (const char *id : Valid)
+    {
+        if (!ValidPackageIdentifier(id))
+            return Status::Fail(ERROR_ASSERTION_FAILURE, std::string("package identifier self-test rejected ") + id);
+    }
+    for (const char *id : Invalid)
+    {
+        if (ValidPackageIdentifier(id))
+            return Status::Fail(ERROR_ASSERTION_FAILURE, std::string("package identifier self-test accepted ") + id);
+    }
     return Status::Ok();
 }
 
