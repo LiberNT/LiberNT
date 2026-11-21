@@ -188,7 +188,7 @@ typedef struct {
 
 #define SNMP_MAX_OID_LEN 128
 
-#define SNMP_MEM_ALLOC_ERROR          0
+#define SNMP_MEM_ALLOC_ERROR          1
 #define SNMP_BERAPI_INVALID_LENGTH    10
 #define SNMP_BERAPI_INVALID_TAG       11
 #define SNMP_BERAPI_OVERFLOW          12

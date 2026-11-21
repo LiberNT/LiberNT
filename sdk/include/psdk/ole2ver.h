@@ -39,6 +39,6 @@
 
 /* bad: we shouldn't make use of it that globally ! */
 #define rmm             23
-#define rup		824
+#define rup		639
 
 #endif  /* __WINE_OLE2VER_H */

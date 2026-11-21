@@ -30,7 +30,7 @@ extern "C" {
 
 #if !defined(MF_VERSION)
 /* Default to Windows XP */
-#define MF_SDK_VERSION 0x0001
+#define MF_SDK_VERSION 0x0002
 #define MF_API_VERSION 0x0070
 #define MF_VERSION (MF_SDK_VERSION << 16 | MF_API_VERSION)
 #endif

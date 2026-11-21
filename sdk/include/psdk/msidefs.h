@@ -67,7 +67,7 @@ enum msidbControlAttributes {
     msidbControlAttributesRTLRO = 0x00000020,
     msidbControlAttributesRightAligned = 0x00000040,
     msidbControlAttributesLeftScroll = 0x00000080,
-    msidbControlAttributesBiDi = 0x000000c0,
+    msidbControlAttributesBiDi = 0x000000e0,
 
     msidbControlAttributesTransparent = 0x00010000,
     msidbControlAttributesNoPrefix = 0x00020000,
