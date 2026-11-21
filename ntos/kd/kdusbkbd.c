@@ -13,6 +13,8 @@
 #define KDP_USB_KEYBOARD_MAX            4
 #define KDP_USB_KEY_QUEUE_SIZE          16
 #define KDP_USB_KEY_SHIFTED             0x80
+#define KDP_USB_KEY_EXTENDED            0x100
+#define KDP_USB_KEY_SCAN_MASK           0x7F
 #define KDP_USB_MODIFIER_SHIFT          0x22
 #define KDP_USB_FIRST_KEY               2
 #define KDP_USB_ERROR_ROLLOVER          0x01
@@ -21,6 +23,8 @@
 #define KDP_USB_MODIFIER_ALT            0x44
 #define KDP_USB_USAGE_B                 0x05
 #define KDP_USB_USAGE_K                 0x0E
+#define KDP_USB_USAGE_INSERT            0x49
+#define KDP_USB_USAGE_UP_ARROW          0x52
 
 typedef struct _KDP_USB_KEYBOARD
 {
@@ -44,7 +48,7 @@ static const UCHAR KdpUsbUsageToScanCode[] =
 static KDP_USB_KEYBOARD KdpUsbKeyboards[KDP_USB_KEYBOARD_MAX];
 static KSPIN_LOCK KdpUsbKeyboardLock;
 static PCALLBACK_OBJECT KdpUsbKeyboardCallback;
-static UCHAR KdpUsbKeyQueue[KDP_USB_KEY_QUEUE_SIZE];
+static USHORT KdpUsbKeyQueue[KDP_USB_KEY_QUEUE_SIZE];
 static ULONG KdpUsbKeyQueueHead;
 static ULONG KdpUsbKeyQueueTail;
 
@@ -125,7 +129,7 @@ KdpUsbKeyboardInitialize(VOID)
 
 static VOID
 KdpUsbKeyboardQueueKey(
-    _In_ UCHAR Key)
+    _In_ USHORT Key)
 {
     ULONG Next = (KdpUsbKeyQueueTail + 1) % KDP_USB_KEY_QUEUE_SIZE;
 
@@ -162,7 +166,15 @@ KdpUsbKeyboardQueueReport(
         }
 
         if ((j == ROS_USB_KEYBOARD_BOOT_REPORT_SIZE) && (KdpUsbUsageToScanCode[Usage] != 0))
-            KdpUsbKeyboardQueueKey(KdpUsbUsageToScanCode[Usage] | Shifted);
+        {
+            USHORT Key = KdpUsbUsageToScanCode[Usage] | Shifted;
+
+            /* The arrows and the keys above them map to the keypad scan codes */
+            if ((Usage >= KDP_USB_USAGE_INSERT) && (Usage <= KDP_USB_USAGE_UP_ARROW))
+                Key |= KDP_USB_KEY_EXTENDED;
+
+            KdpUsbKeyboardQueueKey(Key);
+        }
     }
 
     RtlCopyMemory(Keyboard->LastReport, Report, sizeof(Keyboard->LastReport));
@@ -172,7 +184,7 @@ static CHAR
 KdpUsbKeyboardDequeue(
     _Out_ PULONG ScanCode)
 {
-    UCHAR Key;
+    USHORT Key;
     CHAR c;
 
     while (KdpUsbKeyQueueHead != KdpUsbKeyQueueTail)
@@ -180,10 +192,14 @@ KdpUsbKeyboardDequeue(
         Key = KdpUsbKeyQueue[KdpUsbKeyQueueHead];
         KdpUsbKeyQueueHead = (KdpUsbKeyQueueHead + 1) % KDP_USB_KEY_QUEUE_SIZE;
 
-        c = KdpScanCodeToChar(Key & ~KDP_USB_KEY_SHIFTED, (Key & KDP_USB_KEY_SHIFTED) != 0);
+        if ((Key & KDP_USB_KEY_EXTENDED) != 0)
+            c = ANSI_NULL;
+        else
+            c = KdpScanCodeToChar((UCHAR)(Key & KDP_USB_KEY_SCAN_MASK), (Key & KDP_USB_KEY_SHIFTED) != 0);
+
         if (c != -1)
         {
-            *ScanCode = Key & ~KDP_USB_KEY_SHIFTED;
+            *ScanCode = Key & KDP_USB_KEY_SCAN_MASK;
             return c;
         }
     }
