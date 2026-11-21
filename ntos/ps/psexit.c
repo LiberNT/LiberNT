@@ -257,6 +257,7 @@ PspExitThread(
     PspRundownPropertySet(&Thread->PropertySet);
     PopReleaseThreadPowerObject(Thread->LegacyPowerObject);
     Thread->LegacyPowerObject = NULL;
+    PopRemoveShutdownWait(Thread);
 
     KeEnterCriticalRegion();
     ExAcquirePushLockExclusive(&Process->ProcessLock);

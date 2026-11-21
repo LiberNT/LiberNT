@@ -180,6 +180,11 @@ PoRequestShutdownWait(
 
 VOID
 NTAPI
+PopRemoveShutdownWait(
+    _In_ PETHREAD Thread);
+
+VOID
+NTAPI
 PopGracefulShutdown(
     _In_ PVOID Context);
 

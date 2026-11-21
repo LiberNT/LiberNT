@@ -252,6 +252,44 @@ PoRequestShutdownWait(
     return Status;
 }
 
+VOID
+NTAPI
+PopRemoveShutdownWait(
+    _In_ PETHREAD Thread)
+{
+    PPOP_SHUTDOWN_WAIT_ENTRY *Link;
+    PPOP_SHUTDOWN_WAIT_ENTRY Removed = NULL;
+    PPOP_SHUTDOWN_WAIT_ENTRY Entry;
+
+    PAGED_CODE();
+
+    KeAcquireGuardedMutex(&PopShutdownListMutex);
+    Link = &PopShutdownThreadList;
+    while (*Link != NULL)
+    {
+        Entry = *Link;
+        if (Entry->Thread == Thread)
+        {
+            *Link = Entry->NextEntry;
+            Entry->NextEntry = Removed;
+            Removed = Entry;
+        }
+        else
+        {
+            Link = &Entry->NextEntry;
+        }
+    }
+    KeReleaseGuardedMutex(&PopShutdownListMutex);
+
+    while (Removed != NULL)
+    {
+        Entry = Removed;
+        Removed = Entry->NextEntry;
+        ObDereferenceObject(Entry->Thread);
+        ExFreePoolWithTag(Entry, 'wPoP');
+    }
+}
+
 static
 VOID
 PopHoldUserThreads(VOID)
