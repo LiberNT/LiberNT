@@ -367,6 +367,7 @@ ArmDiscoverEarlyUart(VOID)
     Compatible = (const CHAR *)FdtGetProperty(&Fdt, Node, "compatible", &CompatibleLength);
     if (!Compatible || !FdtStringListContains(Compatible, CompatibleLength, "arm,pl011") ||
         !FdtReadReg(&Fdt, Node, Parent, 0, &Address, &Length) ||
+        !FdtTranslateAddress(&Fdt, Parent, &Address) ||
         Address + MM_PAGE_SIZE > ARM_MAX_PHYSICAL)
     {
         return;
