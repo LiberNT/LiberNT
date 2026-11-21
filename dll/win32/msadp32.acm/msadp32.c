@@ -532,7 +532,7 @@ static	LRESULT	ADPCM_FormatTagDetails(PACMFORMATTAGDETAILSW aftd, DWORD dwQuery)
         break;
     case 1:
 	aftd->dwFormatTag = WAVE_FORMAT_ADPCM;
-	aftd->cbFormatSize = sizeof(ADPCMWAVEFORMAT) + (7 - 1) * sizeof(ADPCMCOEFSET);
+	aftd->cbFormatSize = sizeof(ADPCMWAVEFORMAT) + 7 * sizeof(ADPCMCOEFSET);
 	aftd->cStandardFormats = ARRAY_SIZE(ADPCM_Formats);
         lstrcpyW(aftd->szFormatTag, L"Microsoft ADPCM");
 	break;
@@ -572,7 +572,7 @@ static	LRESULT	ADPCM_FormatDetails(PACMFORMATDETAILSW afd, DWORD dwQuery)
 	    if (afd->dwFormatIndex >= ARRAY_SIZE(ADPCM_Formats)) return ACMERR_NOTPOSSIBLE;
 #ifdef __REACTOS__
             {
-                DWORD buffer[(sizeof(ADPCMWAVEFORMAT) + (7 - 1) * sizeof(ADPCMCOEFSET) + sizeof(DWORD) - 1) / sizeof(DWORD)];
+                DWORD buffer[(sizeof(ADPCMWAVEFORMAT) + 7 * sizeof(ADPCMCOEFSET) + sizeof(DWORD) - 1) / sizeof(DWORD)];
                 ADPCMWAVEFORMAT *adpcm = (ADPCMWAVEFORMAT *)buffer;
 
                 memset(buffer, 0, sizeof(buffer));
@@ -582,10 +582,10 @@ static	LRESULT	ADPCM_FormatDetails(PACMFORMATDETAILSW afd, DWORD dwQuery)
                 adpcm->wfx.wBitsPerSample = ADPCM_Formats[afd->dwFormatIndex].nBits;
                 init_wfx_adpcm(adpcm);
                 memcpy(afd->pwfx, adpcm,
-                       min(afd->cbwfx, sizeof(ADPCMWAVEFORMAT) + (7 - 1) * sizeof(ADPCMCOEFSET)));
+                       min(afd->cbwfx, sizeof(ADPCMWAVEFORMAT) + 7 * sizeof(ADPCMCOEFSET)));
             }
 #else
-            if (afd->cbwfx < sizeof(ADPCMWAVEFORMAT) + (7 - 1) * sizeof(ADPCMCOEFSET))
+            if (afd->cbwfx < sizeof(ADPCMWAVEFORMAT) + 7 * sizeof(ADPCMCOEFSET))
                 return ACMERR_NOTPOSSIBLE;
 	    afd->pwfx->nChannels = ADPCM_Formats[afd->dwFormatIndex].nChannels;
 	    afd->pwfx->nSamplesPerSec = ADPCM_Formats[afd->dwFormatIndex].rate;
@@ -652,7 +652,7 @@ static	LRESULT	ADPCM_FormatSuggest(PACMDRVFORMATSUGGEST adfs)
         if (ADPCM_GetFormatIndex(adfs->pwfxDst) == 0xFFFFFFFF) return ACMERR_NOTPOSSIBLE;
         break;
     case WAVE_FORMAT_ADPCM:
-        if (adfs->cbwfxDst < sizeof(ADPCMWAVEFORMAT) + (7 - 1) * sizeof(ADPCMCOEFSET))
+        if (adfs->cbwfxDst < sizeof(ADPCMWAVEFORMAT) + 7 * sizeof(ADPCMCOEFSET))
             return ACMERR_NOTPOSSIBLE;
         init_wfx_adpcm((ADPCMWAVEFORMAT*)adfs->pwfxDst);
         /* check if result is ok */

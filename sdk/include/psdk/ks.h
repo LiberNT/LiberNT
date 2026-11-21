@@ -1568,10 +1568,12 @@ typedef struct {
     Properties
 */
 
+#pragma pack(push, 1)
 typedef struct {
   GUID PropertySet;
   ULONG Count;
 } KSPROPERTY_SERIALHDR, *PKSPROPERTY_SERIALHDR;
+#pragma pack(pop)
 
 typedef struct {
   KSIDENTIFIER PropTypeSet;
