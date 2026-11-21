@@ -126,8 +126,6 @@
 #elif defined(_M_AMD64)
 #include <arch/pc/machpc.h>
 #include <arch/amd64/amd64.h>
-#elif defined(_M_PPC)
-#include <arch/powerpc/hardware.h>
 #elif defined(_M_ARM)
 #include <arch/arm/hardware.h>
 #elif defined(_M_ARM64) || defined(_ARM64_) || defined(__aarch64__) || defined(__arm64__)
