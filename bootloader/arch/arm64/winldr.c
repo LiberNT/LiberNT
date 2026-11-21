@@ -965,22 +965,58 @@ Arm64AddDeviceTreeInterruptRanges(
     }
 }
 
+static
+const VOID *
+Arm64FirmwareDeviceTree(
+    _Out_ PULONG DeviceTreeSize)
+{
+    EFI_GUID DeviceTreeGuid = FDT_TABLE_GUID;
+    UINTN Index;
+
+    *DeviceTreeSize = 0;
+    if (!GlobalSystemTable || !GlobalSystemTable->ConfigurationTable)
+        return NULL;
+    for (Index = 0; Index < GlobalSystemTable->NumberOfTableEntries; ++Index)
+    {
+        EFI_CONFIGURATION_TABLE *Entry = &GlobalSystemTable->ConfigurationTable[Index];
+
+        if (!memcmp(&Entry->VendorGuid, &DeviceTreeGuid, sizeof(DeviceTreeGuid)))
+        {
+            return FdtValidateHeader(Entry->VendorTable, FDT_MAXIMUM_SIZE, DeviceTreeSize) ?
+                   Entry->VendorTable : NULL;
+        }
+    }
+    return NULL;
+}
+
+static
+BOOLEAN
+Arm64PageHoldsLoaderData(
+    _In_ TYPE_OF_MEMORY Type)
+{
+    return Type != LoaderFree && Type != LoaderFirmwareTemporary && Type != LoaderFirmwarePermanent &&
+           Type != LoaderSpecialMemory && Type != LoaderBad && Type != LoaderReserve;
+}
+
+/* Runs as soon as the memory map exists, before anything is loaded, and again after the firmware map is synchronised */
 VOID
 OslArchReserveFirmwareMemory(
-    _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
+    _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
     PPAGE_LOOKUP_TABLE_ITEM Table;
-    PFN_NUMBER Count, Page, End, Kept = 0;
+    PFN_NUMBER Count, Page, End, Kept = 0, Unmapped = 0, InUse = 0, FirstInUse = 0;
+    TYPE_OF_MEMORY FirstInUseType = LoaderFree;
     ULONGLONG Address, Size;
-    ULONG Reserved, Node, Index, Regions = 0, Length;
-    TYPE_OF_MEMORY Type;
-    ULONG_PTR Tree;
+    ULONG Reserved, Node, Index, Regions = 0, Length, TreeSize;
+    TYPE_OF_MEMORY Type, Keep;
+    BOOLEAN NoMap;
+    const VOID *Tree;
     FDT Fdt;
 
-    Tree = (ULONG_PTR)LoaderBlock->u.Arm64.DeviceTree;
-    if (Tree >= ARM64_KSEG0_BASE)
-        Tree -= ARM64_KSEG0_BASE;
-    if (!Tree || !FdtOpen((const VOID *)Tree, (ULONG)LoaderBlock->u.Arm64.DeviceTreeSize, &Fdt) ||
+    UNREFERENCED_PARAMETER(LoaderBlock);
+
+    Tree = Arm64FirmwareDeviceTree(&TreeSize);
+    if (!Tree || !FdtOpen(Tree, TreeSize, &Fdt) ||
         !FdtFindNode(&Fdt, "/reserved-memory", &Reserved, NULL))
     {
         return;
@@ -992,6 +1028,8 @@ OslArchReserveFirmwareMemory(
     {
         if (FdtGetProperty(&Fdt, Node, "reusable", &Length))
             continue;
+        NoMap = FdtGetProperty(&Fdt, Node, "no-map", &Length) != NULL;
+        Keep = NoMap ? LoaderSpecialMemory : LoaderFirmwarePermanent;
         for (Index = 0; FdtReadReg(&Fdt, Node, Reserved, Index, &Address, &Size); ++Index)
         {
             if (!Size)
@@ -1006,14 +1044,32 @@ OslArchReserveFirmwareMemory(
                 Type = Table[Page - MmLowestPhysicalPage].PageAllocated;
                 if (Type == LoaderFree || Type == LoaderFirmwareTemporary)
                 {
-                    Table[Page - MmLowestPhysicalPage].PageAllocated = LoaderFirmwarePermanent;
+                    Table[Page - MmLowestPhysicalPage].PageAllocated = Keep;
                     Kept++;
+                }
+                else if (Type == LoaderFirmwarePermanent && NoMap)
+                {
+                    Table[Page - MmLowestPhysicalPage].PageAllocated = LoaderSpecialMemory;
+                    Unmapped++;
+                }
+                else if (Arm64PageHoldsLoaderData(Type))
+                {
+                    if (InUse++ == 0)
+                    {
+                        FirstInUse = Page;
+                        FirstInUseType = Type;
+                    }
                 }
             }
         }
     }
-    DbgPrint("winload: %lu reserved-memory regions of the device tree kept, %Iu pages taken back from reuse\n",
-             Regions, Kept);
+    DbgPrint("winload: %lu reserved-memory regions of the device tree kept, %Iu pages taken back from reuse, %Iu firmware pages left unmapped\n",
+             Regions, Kept, Unmapped);
+    if (InUse != 0)
+    {
+        DbgPrint("winload: %Iu pages of that reserved memory already hold loader data, the first at %I64x (type %lu)\n",
+                 InUse, (ULONGLONG)FirstInUse << MM_PAGE_SHIFT, (ULONG)FirstInUseType);
+    }
 }
 
 static VOID

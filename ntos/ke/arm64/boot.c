@@ -19,6 +19,8 @@ typedef struct _ARM64_EARLY_GPRS
     UINT64 X1;
     UINT64 X2;
     UINT64 X3;
+    UINT64 Elr;
+    UINT64 Spsr;
     UINT64 Sp;
 } ARM64_EARLY_GPRS, *PARM64_EARLY_GPRS;
 
@@ -77,6 +79,10 @@ static UINT64 KiArm64IdentityL2Backing[ARM64_IDENTITY_L2_ENTRIES +
 
 extern const UINT64 KiArm64EarlyVectorTable[];
 VOID KiArm64EarlyScreenInitialize(_In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock);
+VOID NTAPI KiArm64EarlyScreenWrite(_In_ PCCH String, _In_ ULONG Length);
+BOOLEAN KiArm64EarlyScreenReady(VOID);
+
+static PLOADER_PARAMETER_BLOCK KiArm64EarlyLoaderBlock;
 
 static UINT64 *KiArm64IdentityL0;
 static UINT64 *KiArm64IdentityL1;
@@ -689,10 +695,7 @@ KiArm64EarlyVectorHandler(_In_ UINT64 VectorId,
                           _In_ UINT64 FaultAddress,
                           _In_opt_ PARM64_EARLY_GPRS Registers)
 {
-    UNREFERENCED_PARAMETER(VectorId);
-    UNREFERENCED_PARAMETER(ExceptionSyndrome);
-    UNREFERENCED_PARAMETER(FaultAddress);
-    UNREFERENCED_PARAMETER(Registers);
+    CHAR Report[192];
 
     /*
      * If final vectors are installed, return and let the permanent
@@ -703,6 +706,18 @@ KiArm64EarlyVectorHandler(_In_ UINT64 VectorId,
     {
         return;
     }
+
+    if (!KiArm64EarlyScreenReady())
+        KiArm64EarlyScreenInitialize(KiArm64EarlyLoaderBlock);
+
+    RtlStringCbPrintfA(Report, sizeof(Report),
+                       "\nThe kernel stopped on early vector %llu: ESR %016llx ELR %016llx FAR %016llx SPSR %016llx, KiSystemStartup at %p\n",
+                       VectorId, ExceptionSyndrome,
+                       Registers ? Registers->Elr : ARM64_READ_SYSREG(ELR_EL1),
+                       FaultAddress,
+                       Registers ? Registers->Spsr : ARM64_READ_SYSREG(SPSR_EL1),
+                       (PVOID)KiSystemStartup);
+    KiArm64EarlyScreenWrite(Report, sizeof(Report));
 
     /* Early boot only: halt so the log stays visible */
     KiArm64FatalHalt();
@@ -1016,6 +1031,7 @@ KiArm64SystemStartupC(_Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
      * early accesses cause translation faults.
      */
     KiArm64InstallEarlyExceptionVectors();
+    KiArm64EarlyLoaderBlock = LoaderBlock;
 
     BootContext.LoaderBlock = LoaderBlock;
 

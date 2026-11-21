@@ -566,6 +566,7 @@ BlMain(VOID)
         FwPrint(L"The memory map could not be read.\r\n");
         return;
     }
+    OslArchReserveFirmwareMemory(NULL);
 
     BlHeapAllocator = MmHeapAllocate;
 
