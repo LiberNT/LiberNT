@@ -124,13 +124,23 @@ HalStartNextProcessor(
     UNREFERENCED_PARAMETER(LoaderBlock);
     ASSERT(KeGetCurrentProcessorNumber() == 0);
 
-    while (KiArmEnumerateProcessor(KiArmNextProcessorIndex++, &Mpidr))
+    for (; KiArmEnumerateProcessor(KiArmNextProcessorIndex, &Mpidr); KiArmNextProcessorIndex++)
     {
         if ((Mpidr & 0x00FFFFFF) == Self)
             continue;
+        if (KiArmProcessorEnableMethodIs(KiArmNextProcessorIndex, "brcm,bcm2836-smp"))
+        {
+            if (KiArmBcm2836StartProcessor(Mpidr, ProcessorState->ContextFrame.R0))
+            {
+                KiArmNextProcessorIndex++;
+                return TRUE;
+            }
+            continue;
+        }
         if (KiArmPsciCallArguments(PSCI_CPU_ON, Mpidr, ProcessorState->ContextFrame.Pc,
                                    ProcessorState->ContextFrame.R0) == 0)
         {
+            KiArmNextProcessorIndex++;
             return TRUE;
         }
     }

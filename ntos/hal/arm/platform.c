@@ -1,34 +1,15 @@
 /*
  * PROJECT:     LiberNT Kernel
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     ARMv7 platform devices: GICv2, generic timer and device tree lookup
+ * PURPOSE:     ARMv7 platform devices: interrupt controller, generic timer and device tree lookup
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <ntoskrnl.h>
 #include <libernt/fdtlib.h>
+#include "intc.h"
 #define NDEBUG
 #include <debug.h>
-
-/* GICv2 architecture specification (IHI 0048B) register offsets. */
-#define GICD_CTLR       0x000
-#define GICD_TYPER      0x004
-#define GICD_ISENABLER  0x100
-#define GICD_ICENABLER  0x180
-#define GICD_ICPENDR    0x280
-#define GICD_ICACTIVER  0x380
-#define GICD_IPRIORITYR 0x400
-#define GICD_ITARGETSR  0x800
-#define GICD_ICFGR      0xC00
-#define GICD_SGIR       0xF00
-#define GICC_CTLR       0x000
-#define GICC_PMR        0x004
-#define GICC_BPR        0x008
-#define GICC_IAR        0x00C
-#define GICC_EOIR       0x010
-#define GICC_INTID_MASK 0x3FF
-#define GIC_SPURIOUS    1020
-#define GIC_MAX_INTID   1020
 
 /* Generic timer (ARM ARM B8): virtual timer control. */
 #define CNT_CTL_ENABLE  0x1
@@ -37,16 +18,13 @@
 
 #define KI_ARM_CLOCK_INCREMENT 100000UL
 
-static PUCHAR KiArmGicDistributor;
-static PUCHAR KiArmGicCpuInterface;
-static ULONG KiArmGicLines;
-static KIRQL KiArmInterruptIrql[GIC_MAX_INTID];
-static ULONG KiArmTimerInterrupt = 27;
+static const KI_ARM_INTERRUPT_CONTROLLER *KiArmController;
+static KIRQL KiArmInterruptIrql[KI_ARM_MAX_VECTORS];
+static ULONG KiArmTimerInterrupt;
 static ULONG KiArmTimerFrequency;
 static ULONG KiArmTimerReload;
 static BOOLEAN KiArmPlatformReady;
 static ULONG KiArmInterruptSource[MAXIMUM_PROCESSORS];
-static UCHAR KiArmGicCpuMask[MAXIMUM_PROCESSORS];
 static FDT KiArmDeviceTree;
 static BOOLEAN KiArmDeviceTreeValid;
 
@@ -115,7 +93,8 @@ KiArmFindDevice(
         return FALSE;
     Root = FdtRootNode(&KiArmDeviceTree);
     if ((Root == FDT_NO_NODE) || !KiArmFindCompatibleIn(Root, Compatible, &Node, &Parent) ||
-        !FdtReadReg(&KiArmDeviceTree, Node, Parent, RegIndex, &Base, &Size))
+        !FdtReadReg(&KiArmDeviceTree, Node, Parent, RegIndex, &Base, &Size) ||
+        !FdtTranslateAddress(&KiArmDeviceTree, Parent, &Base))
     {
         return FALSE;
     }
@@ -126,39 +105,27 @@ KiArmFindDevice(
     return TRUE;
 }
 
-static
-ULONG
-KiArmFindTimerInterrupt(VOID)
+/* The virtual timer's GIC PPI: interrupts = secure phys, non-secure phys, virtual, hypervisor; PPIs start at 16. */
+BOOLEAN
+NTAPI
+KiArmFindTimerPpi(
+    _Out_ PULONG Vector)
 {
     static const CHAR * const Timer[] = { "arm,armv7-timer", "arm,armv8-timer", NULL };
     const VOID *Property;
     ULONGLONG Type, Number;
     ULONG Node, Parent, Length;
 
-    /* interrupts = secure phys, non-secure phys, virtual, hypervisor; PPIs start at 16. */
     if (KiArmOpenDeviceTree() &&
         KiArmFindCompatibleIn(FdtRootNode(&KiArmDeviceTree), Timer, &Node, &Parent) &&
         (Property = FdtGetProperty(&KiArmDeviceTree, Node, "interrupts", &Length)) &&
         FdtReadCells(Property, Length, 6, 1, &Type) &&
         FdtReadCells(Property, Length, 7, 1, &Number) && (Type == 1))
     {
-        return (ULONG)Number + 16;
+        *Vector = (ULONG)Number + 16;
+        return TRUE;
     }
-    return 27;
-}
-
-FORCEINLINE ULONG KiArmGicdRead(ULONG Offset) { return READ_REGISTER_ULONG((PULONG)(KiArmGicDistributor + Offset)); }
-FORCEINLINE VOID KiArmGicdWrite(ULONG Offset, ULONG Value) { WRITE_REGISTER_ULONG((PULONG)(KiArmGicDistributor + Offset), Value); }
-FORCEINLINE ULONG KiArmGiccRead(ULONG Offset) { return READ_REGISTER_ULONG((PULONG)(KiArmGicCpuInterface + Offset)); }
-FORCEINLINE VOID KiArmGiccWrite(ULONG Offset, ULONG Value) { WRITE_REGISTER_ULONG((PULONG)(KiArmGicCpuInterface + Offset), Value); }
-
-/* Higher IRQL is a numerically lower GIC priority; 16 levels in the top nibble. */
-FORCEINLINE
-ULONG
-KiArmIrqlToPriority(
-    _In_ KIRQL Irql)
-{
-    return (ULONG)(HIGH_LEVEL - Irql) << 4;
+    return FALSE;
 }
 
 VOID
@@ -166,11 +133,9 @@ NTAPI
 KiArmSetPriorityMask(
     _In_ KIRQL Irql)
 {
-    if (!KiArmGicCpuInterface)
+    if (!KiArmPlatformReady)
         return;
-
-    /* Interrupts with a priority value below PMR are signalled. */
-    KiArmGiccWrite(GICC_PMR, KiArmIrqlToPriority(max(Irql, DISPATCH_LEVEL)));
+    KiArmController->SetPriorityMask(max(Irql, DISPATCH_LEVEL));
 }
 
 BOOLEAN
@@ -180,25 +145,11 @@ KiArmEnableInterruptLine(
     _In_ KIRQL Irql,
     _In_ KINTERRUPT_MODE Mode)
 {
-    ULONG Shift, Config;
-
-    if (!KiArmGicDistributor || (Vector >= KiArmGicLines) || (Vector < 16) || (Irql <= DISPATCH_LEVEL))
+    if (!KiArmController || (Vector >= KI_ARM_MAX_VECTORS) || (Vector == KI_ARM_IPI_SGI) || (Irql <= DISPATCH_LEVEL))
         return FALSE;
 
     KiArmInterruptIrql[Vector] = Irql;
-    WRITE_REGISTER_UCHAR(KiArmGicDistributor + GICD_IPRIORITYR + Vector, (UCHAR)KiArmIrqlToPriority(Irql));
-    if (Vector >= 32)
-    {
-        WRITE_REGISTER_UCHAR(KiArmGicDistributor + GICD_ITARGETSR + Vector, KiArmGicCpuMask[0]);
-        Shift = (Vector % 16) * 2;
-        Config = KiArmGicdRead(GICD_ICFGR + (Vector / 16) * 4);
-        Config &= ~(2UL << Shift);
-        if (Mode == Latched)
-            Config |= 2UL << Shift;
-        KiArmGicdWrite(GICD_ICFGR + (Vector / 16) * 4, Config);
-    }
-    KiArmGicdWrite(GICD_ISENABLER + (Vector / 32) * 4, 1UL << (Vector % 32));
-    return TRUE;
+    return KiArmController->EnableLine(Vector, Irql, Mode);
 }
 
 VOID
@@ -206,9 +157,8 @@ NTAPI
 KiArmDisableInterruptLine(
     _In_ ULONG Vector)
 {
-    if (!KiArmGicDistributor || (Vector >= KiArmGicLines))
-        return;
-    KiArmGicdWrite(GICD_ICENABLER + (Vector / 32) * 4, 1UL << (Vector % 32));
+    if (KiArmController && (Vector < KI_ARM_MAX_VECTORS))
+        KiArmController->DisableLine(Vector);
 }
 
 static
@@ -235,24 +185,20 @@ KiArmClockInterrupt(
     return TRUE;
 }
 
-/* Acknowledge, run and complete one GIC interrupt. Called with interrupts masked. */
+/* Acknowledge, run and complete one interrupt. Called with interrupts masked. */
 BOOLEAN
 NTAPI
 KiArmDispatchDeviceInterrupt(
     _Inout_ PKTRAP_FRAME TrapFrame)
 {
     PKIPCR Pcr = (PKIPCR)KeGetPcr();
-    ULONG Iar, Vector;
+    ULONG Vector, Token;
     KIRQL OldIrql, Irql;
 
-    if (!KiArmGicCpuInterface)
+    if (!KiArmPlatformReady || !KiArmController->Acknowledge(&Vector, &Token))
         return FALSE;
 
-    Iar = KiArmGiccRead(GICC_IAR);
-    Vector = Iar & GICC_INTID_MASK;
-    if (Vector >= GIC_SPURIOUS)
-        return FALSE;
-
+    ASSERT(Vector < KI_ARM_MAX_VECTORS);
     KiArmInterruptSource[Pcr->Prcb.Number % MAXIMUM_PROCESSORS] = Vector;
     OldIrql = Pcr->CurrentIrql;
     Irql = KiArmInterruptIrql[Vector];
@@ -265,7 +211,7 @@ KiArmDispatchDeviceInterrupt(
     else if ((Vector != KiArmTimerInterrupt) || !KiArmClockInterrupt(TrapFrame, OldIrql))
         KiArmServiceInterruptVector(Vector, TrapFrame);
 
-    KiArmGiccWrite(GICC_EOIR, Iar);
+    KiArmController->EndOfInterrupt(Token);
     Pcr->CurrentIrql = OldIrql;
     KiArmSetPriorityMask(OldIrql);
     return TRUE;
@@ -276,59 +222,8 @@ NTAPI
 KiArmSendInterprocessorInterrupt(
     _In_ KAFFINITY TargetProcessors)
 {
-    ULONG Number, TargetList = 0;
-    KAFFINITY Remaining;
-
-    if (!KiArmGicDistributor)
-        return;
-
-    /* SGIR names GIC CPU interfaces, which need not follow the processor numbers. */
-    for (Remaining = TargetProcessors, Number = 0; Remaining && (Number < MAXIMUM_PROCESSORS); Remaining >>= 1, Number++)
-    {
-        if (Remaining & 1)
-            TargetList |= KiArmGicCpuMask[Number];
-    }
-    if (!TargetList)
-        return;
-
-    KiArmDsbIsh();
-    KiArmGicdWrite(GICD_SGIR, ((TargetList & 0xFF) << 16) | KI_ARM_IPI_SGI);
-}
-
-/* The CPU interface mask GICD_ITARGETSR0-7 returns on the processor reading it (IHI 0048B 4.3.12). */
-static
-UCHAR
-KiArmReadOwnGicCpuMask(VOID)
-{
-    UCHAR Mask = READ_REGISTER_UCHAR(KiArmGicDistributor + GICD_ITARGETSR);
-
-    /* A uniprocessor implementation reads it as zero. */
-    return Mask ? Mask : 1;
-}
-
-/* Banked SGI and PPI state, the CPU interface and the timer of the current processor. */
-static
-VOID
-KiArmInitializeBankedInterrupts(VOID)
-{
-    ULONG Index, Number = KeGetCurrentProcessorNumber();
-
-    ASSERT(Number < MAXIMUM_PROCESSORS);
-    KiArmGicCpuMask[Number] = KiArmReadOwnGicCpuMask();
-
-    KiArmGicdWrite(GICD_ICENABLER, 0xFFFFFFFF);
-    KiArmGicdWrite(GICD_ICPENDR, 0xFFFFFFFF);
-    KiArmGicdWrite(GICD_ICACTIVER, 0xFFFFFFFF);
-    for (Index = 0; Index < 32; Index++)
-        WRITE_REGISTER_UCHAR(KiArmGicDistributor + GICD_IPRIORITYR + Index, 0xF0);
-
-    KiArmInterruptIrql[KI_ARM_IPI_SGI] = IPI_LEVEL;
-    WRITE_REGISTER_UCHAR(KiArmGicDistributor + GICD_IPRIORITYR + KI_ARM_IPI_SGI, (UCHAR)KiArmIrqlToPriority(IPI_LEVEL));
-    KiArmGicdWrite(GICD_ISENABLER, 1UL << KI_ARM_IPI_SGI);
-
-    KiArmGiccWrite(GICC_BPR, 0);
-    KiArmSetPriorityMask(KeGetCurrentIrql());
-    KiArmGiccWrite(GICC_CTLR, 1);
+    if (KiArmPlatformReady && TargetProcessors)
+        KiArmController->SendInterprocessorInterrupt(TargetProcessors);
 }
 
 VOID
@@ -338,7 +233,7 @@ KiArmInitializeProcessorInterrupts(VOID)
     ASSERT(KiArmPlatformReady);
     ASSERT(KeGetCurrentProcessorNumber() != 0);
 
-    KiArmInitializeBankedInterrupts();
+    KiArmController->InitializeProcessor(KeGetCurrentProcessorNumber());
     KiArmEnableInterruptLine(KiArmTimerInterrupt, CLOCK_LEVEL, LevelSensitive);
     KiArmProgramTimer();
 }
@@ -378,8 +273,39 @@ KiArmEnumerateProcessor(
     return FALSE;
 }
 
-static
+/* TRUE when the Index-th processor node, or failing that /cpus, names Method as its enable-method. */
+BOOLEAN
+NTAPI
+KiArmProcessorEnableMethodIs(
+    _In_ ULONG Index,
+    _In_z_ const CHAR *Method)
+{
+    const VOID *Property;
+    const CHAR *Type;
+    ULONG Cpus, Child, Length, Found = 0;
+
+    if (!KiArmOpenDeviceTree() || !FdtFindNode(&KiArmDeviceTree, "/cpus", &Cpus, NULL))
+        return FALSE;
+
+    for (Child = FdtFirstChild(&KiArmDeviceTree, Cpus);
+         Child != FDT_NO_NODE;
+         Child = FdtNextSibling(&KiArmDeviceTree, Child))
+    {
+        Type = FdtGetProperty(&KiArmDeviceTree, Child, "device_type", &Length);
+        if (!Type || (Length < 4) || strncmp(Type, "cpu", 4))
+            continue;
+        if (Found++ != Index)
+            continue;
+        Property = FdtGetProperty(&KiArmDeviceTree, Child, "enable-method", &Length);
+        if (!Property)
+            Property = FdtGetProperty(&KiArmDeviceTree, Cpus, "enable-method", &Length);
+        return Property && FdtStringListContains(Property, Length, Method);
+    }
+    return FALSE;
+}
+
 PVOID
+NTAPI
 KiArmMapDevice(
     _In_ PHYSICAL_ADDRESS Address,
     _In_ ULONG Length)
@@ -404,45 +330,32 @@ NTAPI
 KiArmInitializePlatform(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
-    static const CHAR * const Gic[] = { "arm,cortex-a15-gic", "arm,cortex-a7-gic", "arm,gic-400", "arm,cortex-a9-gic", NULL };
-    PHYSICAL_ADDRESS Distributor, CpuInterface;
-    ULONG DistributorLength, CpuLength, Index;
+    static const KI_ARM_INTERRUPT_CONTROLLER * const Controllers[] = { &KiArmGicV2Controller, &KiArmBcm2836Controller };
+    ULONG Index;
 
     UNREFERENCED_PARAMETER(LoaderBlock);
 
     if (KiArmPlatformReady)
         return;
 
-    if (!KiArmFindDevice(Gic, 0, &Distributor, &DistributorLength) ||
-        !KiArmFindDevice(Gic, 1, &CpuInterface, &CpuLength))
+    for (Index = 0; Index < RTL_NUMBER_OF(Controllers); Index++)
     {
+        if (Controllers[Index]->Initialize())
+        {
+            KiArmController = Controllers[Index];
+            break;
+        }
+    }
+    if (!KiArmController)
         KeBugCheckEx(HAL_INITIALIZATION_FAILED, 0x41524D01, 0, 0, 0);
-    }
-
-    KiArmGicDistributor = KiArmMapDevice(Distributor, DistributorLength);
-    KiArmGicCpuInterface = KiArmMapDevice(CpuInterface, CpuLength);
-    if (!KiArmGicDistributor || !KiArmGicCpuInterface)
-        KeBugCheckEx(HAL_INITIALIZATION_FAILED, 0x41524D02, Distributor.LowPart, CpuInterface.LowPart, 0);
-
-    KiArmGicLines = min(((KiArmGicdRead(GICD_TYPER) & 0x1F) + 1) * 32, GIC_MAX_INTID);
-    KiArmGicdWrite(GICD_CTLR, 0);
-    KiArmGicCpuMask[0] = KiArmReadOwnGicCpuMask();
-    for (Index = 0; Index < KiArmGicLines; Index += 32)
-    {
-        KiArmGicdWrite(GICD_ICENABLER + Index / 8, 0xFFFFFFFF);
-        KiArmGicdWrite(GICD_ICPENDR + Index / 8, 0xFFFFFFFF);
-        KiArmGicdWrite(GICD_ICACTIVER + Index / 8, 0xFFFFFFFF);
-    }
-    for (Index = 0; Index < KiArmGicLines; Index++)
-        WRITE_REGISTER_UCHAR(KiArmGicDistributor + GICD_IPRIORITYR + Index, 0xF0);
-    KiArmGicdWrite(GICD_CTLR, 1);
-
-    KiArmInitializeBankedInterrupts();
 
     ASSERT(KiArmTimerFrequency != 0 && KiArmTimerReload != 0);
-    KiArmTimerInterrupt = KiArmFindTimerInterrupt();
+    KiArmInterruptIrql[KI_ARM_IPI_SGI] = IPI_LEVEL;
+    KiArmTimerInterrupt = KiArmController->TimerVector();
+    ASSERT(KiArmTimerInterrupt < KI_ARM_MAX_VECTORS);
 
     KiArmPlatformReady = TRUE;
+    KiArmController->InitializeProcessor(0);
     KiArmEnableInterruptLine(KiArmTimerInterrupt, CLOCK_LEVEL, LevelSensitive);
     KiArmProgramTimer();
 }

@@ -115,6 +115,9 @@ VOID NTAPI KiFreezeIfRequested(VOID);
 VOID NTAPI KiIpiProcessRequests(VOID);
 VOID NTAPI KiArmSecondaryTrampoline(VOID);
 VOID NTAPI KiArmSecondaryEntry(VOID);
+VOID NTAPI KiArmSecondarySpinEntry(VOID);
+#define KI_ARM_SPIN_STARTUP_BLOCKS 8
+extern ULONG KiArmSpinStartupBlocks[KI_ARM_SPIN_STARTUP_BLOCKS];
 
 VOID FASTCALL KeUpdateSystemTime(_In_opt_ PKTRAP_FRAME TrapFrame, _In_ ULONG Increment, _In_ KIRQL OldIrql);
 
@@ -132,6 +135,8 @@ VOID NTAPI KiArmServiceInterruptVector(_In_ ULONG Vector, _In_ PKTRAP_FRAME Trap
 VOID NTAPI KiArmSendInterprocessorInterrupt(_In_ KAFFINITY TargetProcessors);
 VOID NTAPI KiArmInitializeProcessorInterrupts(VOID);
 BOOLEAN NTAPI KiArmEnumerateProcessor(_In_ ULONG Index, _Out_ PULONG Mpidr);
+BOOLEAN NTAPI KiArmProcessorEnableMethodIs(_In_ ULONG Index, _In_z_ const CHAR *Method);
+BOOLEAN NTAPI KiArmBcm2836StartProcessor(_In_ ULONG Mpidr, _In_ ULONG Context);
 VOID NTAPI KiArmFlushDmaRange(_In_ PVOID Address, _In_ SIZE_T Length, _In_ BOOLEAN Invalidate);
 VOID NTAPI KiArmCallOnStack(_In_opt_ PVOID Argument0, _In_opt_ PVOID Argument1, _In_ PVOID Routine, _In_ PVOID StackTop);
 BOOLEAN NTAPI KiArmSwapStack(_Out_ PVOID *OldStack, _In_ PVOID NewStack, _In_ PVOID Context, _In_ PVOID Resume);
