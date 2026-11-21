@@ -305,7 +305,7 @@ TestUsbResources(PHALP_FDT_DEVICE_NODE Device)
     ok_int(Descriptor[2].Flags, CM_RESOURCE_INTERRUPT_LEVEL_SENSITIVE);
     ok_int(Descriptor[2].u.Interrupt.Level, 32 + 0x43f);
     ok_int(Descriptor[2].u.Interrupt.Vector, 32 + 0x43f);
-    ok(Descriptor[2].u.Interrupt.Affinity == (KAFFINITY)-1, "Affinity %Ix\n", Descriptor[2].u.Interrupt.Affinity);
+    ok(Descriptor[2].u.Interrupt.Affinity == (KAFFINITY)-1, "Affinity %Ix\n", (size_t)Descriptor[2].u.Interrupt.Affinity);
     HeapFree(GetProcessHeap(), 0, List);
 
     Status = HalpFdtQueryRequirements(Device->Node, Device->Parent, &Requirements);

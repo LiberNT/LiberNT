@@ -543,3 +543,91 @@ FdtResolvePath(
         return FdtFindNode(Fdt, Target, Node, Parent);
     }
 }
+
+static __inline BOOLEAN
+FdtpFindParentBelow(
+    _In_ const FDT *Fdt,
+    _In_ ULONG Ancestor,
+    _In_ ULONG Target,
+    _Out_ PULONG Parent)
+{
+    ULONG Child;
+
+    for (Child = FdtFirstChild(Fdt, Ancestor); Child != FDT_NO_NODE; Child = FdtNextSibling(Fdt, Child))
+    {
+        if ((Child == Target) || FdtpFindParentBelow(Fdt, Child, Target, Parent))
+        {
+            if (Child == Target)
+                *Parent = Ancestor;
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+/* The parent of Node, found from the root; FALSE for the root itself or a node that is not in the tree. */
+static __inline BOOLEAN
+FdtParentNode(
+    _In_ const FDT *Fdt,
+    _In_ ULONG Node,
+    _Out_ PULONG Parent)
+{
+    ULONG Root = FdtRootNode(Fdt);
+
+    if ((Root == FDT_NO_NODE) || (Node == Root))
+        return FALSE;
+    return FdtpFindParentBelow(Fdt, Root, Node, Parent);
+}
+
+/*
+ * Translate an address read from a child of Bus to a CPU physical address through
+ * the "ranges" of Bus and of every bus above it (Devicetree Specification 2.3.8).
+ * An empty "ranges" is the identity; a bus without one cannot be crossed.
+ */
+static __inline BOOLEAN
+FdtTranslateAddress(
+    _In_ const FDT *Fdt,
+    _In_ ULONG Bus,
+    _Inout_ PULONGLONG Address)
+{
+    ULONG Root = FdtRootNode(Fdt);
+    ULONG Parent, ChildCells, SizeCells, ParentCells, ParentSizeCells, Length, Stride, Entry, Entries;
+    ULONGLONG ChildBase, ParentBase, Size;
+    const VOID *Ranges;
+
+    while (Bus != Root)
+    {
+        if (!FdtParentNode(Fdt, Bus, &Parent))
+            return FALSE;
+        Ranges = FdtGetProperty(Fdt, Bus, "ranges", &Length);
+        if (Ranges == NULL)
+            return FALSE;
+        if (Length != 0)
+        {
+            FdtGetCellCounts(Fdt, Bus, &ChildCells, &SizeCells);
+            FdtGetCellCounts(Fdt, Parent, &ParentCells, &ParentSizeCells);
+            Stride = ChildCells + ParentCells + SizeCells;
+            if (Stride == 0)
+                return FALSE;
+            Entries = Length / (Stride * sizeof(ULONG));
+            for (Entry = 0; Entry < Entries; ++Entry)
+            {
+                if (!FdtReadCells(Ranges, Length, Entry * Stride, ChildCells, &ChildBase) ||
+                    !FdtReadCells(Ranges, Length, Entry * Stride + ChildCells, ParentCells, &ParentBase) ||
+                    !FdtReadCells(Ranges, Length, Entry * Stride + ChildCells + ParentCells, SizeCells, &Size))
+                {
+                    return FALSE;
+                }
+                if ((*Address >= ChildBase) && (*Address - ChildBase < Size))
+                {
+                    *Address = ParentBase + (*Address - ChildBase);
+                    break;
+                }
+            }
+            if (Entry == Entries)
+                return FALSE;
+        }
+        Bus = Parent;
+    }
+    return TRUE;
+}
