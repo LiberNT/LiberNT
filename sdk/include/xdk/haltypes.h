@@ -271,6 +271,17 @@ typedef VOID
 (NTAPI *pHalSetPciErrorHandlerCallback)(
   _In_ PCI_ERROR_HANDLER_CALLBACK Callback);
 
+typedef VOID
+(*pHalGetPrmCache)(
+  _Out_ PLIST_ENTRY *FirmwareList,
+  _Out_ PLIST_ENTRY *UpdateList);
+
+typedef NTSTATUS
+(*pHalInvokePrmFwHandler)(
+  _In_ LPGUID HandlerGuid,
+  _In_ PVOID ParameterBuffer,
+  _In_ PVOID ContextBuffer);
+
 typedef struct {
   ULONG Version;
   pHalQuerySystemInformation HalQuerySystemInformation;
@@ -295,6 +306,8 @@ typedef struct {
   pHalMirrorVerify HalMirrorVerify;
   pHalGetAcpiTable HalGetCachedAcpiTable;
   pHalSetPciErrorHandlerCallback  HalSetPciErrorHandlerCallback;
+  pHalGetPrmCache HalGetPrmCache;
+  pHalInvokePrmFwHandler HalInvokePrmFwHandler;
 #if defined(_IA64_)
   pHalGetErrorCapList HalGetErrorCapList;
   pHalInjectError HalInjectError;
@@ -340,6 +353,8 @@ extern  HAL_DISPATCH    HalDispatchTable;
 #define HalMirrorVerify                 HALDISPATCH->HalMirrorVerify
 #define HalGetCachedAcpiTable           HALDISPATCH->HalGetCachedAcpiTable
 #define HalSetPciErrorHandlerCallback   HALDISPATCH->HalSetPciErrorHandlerCallback
+#define HalGetPrmCache                  HALDISPATCH->HalGetPrmCache
+#define HalInvokePrmFwHandler           HALDISPATCH->HalInvokePrmFwHandler
 #if defined(_IA64_)
 #define HalGetErrorCapList              HALDISPATCH->HalGetErrorCapList
 #define HalInjectError                  HALDISPATCH->HalInjectError

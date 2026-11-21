@@ -583,15 +583,17 @@ MmCreatePeb(
             PVOID Config = RtlImageDirectoryEntryToData(Peb->ImageBaseAddress, TRUE,
                                                         IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG, &ConfigSize);
 
-            if (Config != NULL && Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC)
+            if (Config != NULL && Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC &&
+                ConfigSize >= RTL_SIZEOF_THROUGH_FIELD(IMAGE_LOAD_CONFIG_DIRECTORY32, CSDVersion))
             {
-                ProbeForRead(Config, sizeof(IMAGE_LOAD_CONFIG_DIRECTORY32), sizeof(ULONG));
+                ProbeForRead(Config, RTL_SIZEOF_THROUGH_FIELD(IMAGE_LOAD_CONFIG_DIRECTORY32, CSDVersion), sizeof(ULONG));
                 CsdVersion = ((PIMAGE_LOAD_CONFIG_DIRECTORY32)Config)->CSDVersion;
                 AffinityMask = ((PIMAGE_LOAD_CONFIG_DIRECTORY32)Config)->ProcessAffinityMask;
             }
-            else if (Config != NULL)
+            else if (Config != NULL && Magic != IMAGE_NT_OPTIONAL_HDR32_MAGIC &&
+                     ConfigSize >= RTL_SIZEOF_THROUGH_FIELD(IMAGE_LOAD_CONFIG_DIRECTORY64, CSDVersion))
             {
-                ProbeForRead(Config, sizeof(IMAGE_LOAD_CONFIG_DIRECTORY64), sizeof(ULONG));
+                ProbeForRead(Config, RTL_SIZEOF_THROUGH_FIELD(IMAGE_LOAD_CONFIG_DIRECTORY64, CSDVersion), sizeof(ULONG));
                 CsdVersion = ((PIMAGE_LOAD_CONFIG_DIRECTORY64)Config)->CSDVersion;
                 AffinityMask = (ULONG_PTR)((PIMAGE_LOAD_CONFIG_DIRECTORY64)Config)->ProcessAffinityMask;
             }

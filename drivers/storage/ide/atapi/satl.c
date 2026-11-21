@@ -1213,7 +1213,7 @@ AtaCreateStandardInquiryData(
                           &IdentifyData->FirmwareRevision[Offset],
                           RTL_FIELD_SIZE(INQUIRYDATA, ProductRevisionLevel));
 
-    VersionDescriptor = &InquiryData->Reserved3[3];
+    VersionDescriptor = (PUCHAR)InquiryData->VersionDescriptors;
 
     /* SAM-5 (no version claimed) */
     *VersionDescriptor++ = 0x00;

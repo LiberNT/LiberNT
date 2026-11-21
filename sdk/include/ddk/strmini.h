@@ -421,12 +421,9 @@ StreamClassDebugPrint(
 VOID
 __cdecl
 StreamClassDeviceNotification(
-  IN STREAM_MINIDRIVER_DEVICE_NOTIFICATION_TYPE NotificationType,
-  IN PVOID HwDeviceExtension,
-  IN PHW_STREAM_REQUEST_BLOCK pSrb,
-  IN PKSEVENT_ENTRY EventEntry,
-  IN GUID *EventSet,
-  IN ULONG EventId);
+  _In_ STREAM_MINIDRIVER_DEVICE_NOTIFICATION_TYPE NotificationType,
+  _In_ PVOID HwDeviceExtension,
+  ...);
 
 VOID
 STREAMAPI

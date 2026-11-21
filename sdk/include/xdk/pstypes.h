@@ -327,7 +327,11 @@ typedef enum _PROCESSINFOCLASS {
   ProcessWakeInformation,
   ProcessEnergyTrackingState,
   ProcessManageWritesToExecutableMemory,
-  MaxProcessInfoClass
+  ProcessOwnerInformation = ProcessConsoleHostProcess,
+  ProcessReserved1Information = ProcessDefaultCpuSetsInformation,
+  ProcessReserved2Information = ProcessAllowedCpuSetsInformation,
+  ProcessNetworkIoCounters = 114,
+  MaxProcessInfoClass = 117
 } PROCESSINFOCLASS;
 
 typedef enum _THREADINFOCLASS {
@@ -387,7 +391,7 @@ typedef enum _THREADINFOCLASS {
   ThreadStrongerBadHandleChecks,
   ThreadEffectiveIoPriority,
   ThreadEffectivePagePriority,
-  MaxThreadInfoClass
+  MaxThreadInfoClass = 60
 } THREADINFOCLASS;
 
 typedef struct _MANAGE_WRITES_TO_EXECUTABLE_MEMORY {

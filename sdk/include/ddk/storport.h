@@ -579,7 +579,12 @@ typedef struct SRB_ALIGN _SRBEX_DATA_IO_INFO {
     ULONG RWLength;
     BOOLEAN IsWriteRequest;
     UCHAR CachePriority;
+#if (NTDDI_VERSION >= NTDDI_WIN11_GE)
+    UCHAR IoPriorityLevel;
+    UCHAR Reserved;
+#else
     UCHAR Reserved[2];
+#endif
     ULONG Reserved1[2];
 } SRBEX_DATA_IO_INFO, *PSRBEX_DATA_IO_INFO;
 
@@ -3474,7 +3479,8 @@ typedef enum _SCSI_ADAPTER_CONTROL_TYPE {
     ScsiAdapterRestoreEarlyDumpData,
     ScsiAdapterKsrPowerDown,
     ScsiAdapterPreparePLDR,
-    ScsiNvmeofAdapterOperation,
+    ScsiAdapterReserved0,
+    ScsiAdapterReserved1,
     ScsiAdapterControlMax,
     MakeAdapterControlTypeSizeOfUlong = 0xffffffff
 } SCSI_ADAPTER_CONTROL_TYPE, *PSCSI_ADAPTER_CONTROL_TYPE;
@@ -3544,6 +3550,7 @@ typedef enum _SCSI_UNIT_CONTROL_TYPE {
     ScsiUnitQueryFruId,
     ScsiUnitReportInternalData,
     ScsiUnitKsrPowerDown,
+    ScsiUnitNvmeIceInformation,
     ScsiUnitControlMax,
     MakeUnitControlTypeSizeOfUlong = 0xffffffff
 } SCSI_UNIT_CONTROL_TYPE, *PSCSI_UNIT_CONTROL_TYPE;
@@ -6077,7 +6084,11 @@ typedef enum _STORPORT_ETW_EVENT_CHANNEL{
 #define STORPORT_ETW_MAX_DESCRIPTION_LENGTH    32
 
 #endif
-#if ((NTDDI_VERSION >= NTDDI_WIN10_VB))
+#if (NTDDI_VERSION >= NTDDI_WIN11_GE)
+
+#define STORPORT_ETW_MAX_PARAM_NAME_LENGTH     64
+
+#elif ((NTDDI_VERSION >= NTDDI_WIN10_VB))
 
 #define STORPORT_ETW_MAX_PARAM_NAME_LENGTH     32
 

@@ -249,7 +249,7 @@ StreamClassDebugPrint(
     {
         va_start(ap, DebugMessage);
 
-        DbgPrint(DebugMessage, ap);
+        vDbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, DebugMessage, ap);
 
         va_end(ap);
     }
@@ -265,15 +265,16 @@ __cdecl
 StreamClassDeviceNotification(
     IN STREAM_MINIDRIVER_DEVICE_NOTIFICATION_TYPE  NotificationType,
     IN PVOID  HwDeviceExtension,
-    IN PHW_STREAM_REQUEST_BLOCK  pSrb,
-    IN PKSEVENT_ENTRY  EventEntry,
-    IN GUID  *EventSet,
-    IN ULONG  EventId)
+    ...)
 {
     PHW_STREAM_REQUEST_BLOCK_EXT RequestBlock;
+    va_list Args;
+
     if (NotificationType == DeviceRequestComplete)
     {
-        RequestBlock = (PHW_STREAM_REQUEST_BLOCK_EXT)pSrb;
+        va_start(Args, HwDeviceExtension);
+        RequestBlock = (PHW_STREAM_REQUEST_BLOCK_EXT)va_arg(Args, PHW_STREAM_REQUEST_BLOCK);
+        va_end(Args);
 
         KeSetEvent(&RequestBlock->Event, 0, FALSE);
         return;

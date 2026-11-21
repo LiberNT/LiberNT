@@ -1546,7 +1546,7 @@ typedef struct _CO_MEDIA_PARAMETERS {
   ULONG  Flags;
   ULONG  ReceivePriority;
   ULONG  ReceiveSizeHint;
-  CO_SPECIFIC_PARAMETERS  MediaSpecific;
+  CO_SPECIFIC_PARAMETERS POINTER_ALIGNMENT MediaSpecific;
 } CO_MEDIA_PARAMETERS, *PCO_MEDIA_PARAMETERS;
 
 /* CO_CALL_PARAMETERS.Flags constants */
@@ -1601,32 +1601,6 @@ typedef struct _NDIS_IPSEC_OFFLOAD_V1_NET_BUFFER_LIST_INFO {
   };
 } NDIS_IPSEC_OFFLOAD_V1_NET_BUFFER_LIST_INFO, *PNDIS_IPSEC_OFFLOAD_V1_NET_BUFFER_LIST_INFO;
 #endif
-
-/* NDIS_MAC_FRAGMENT.Errors constants */
-#define WAN_ERROR_CRC               			0x00000001
-#define WAN_ERROR_FRAMING           			0x00000002
-#define WAN_ERROR_HARDWAREOVERRUN   			0x00000004
-#define WAN_ERROR_BUFFEROVERRUN     			0x00000008
-#define WAN_ERROR_TIMEOUT           			0x00000010
-#define WAN_ERROR_ALIGNMENT         			0x00000020
-
-typedef struct _NDIS_MAC_FRAGMENT {
-  NDIS_HANDLE  NdisLinkContext;
-  ULONG  Errors;
-} NDIS_MAC_FRAGMENT, *PNDIS_MAC_FRAGMENT;
-
-typedef struct _NDIS_MAC_LINE_DOWN {
-  NDIS_HANDLE  NdisLinkContext;
-} NDIS_MAC_LINE_DOWN, *PNDIS_MAC_LINE_DOWN;
-
-typedef struct _NDIS_MAC_LINE_UP {
-  ULONG  LinkSpeed;
-  NDIS_WAN_QUALITY  Quality;
-  USHORT  SendWindow;
-  NDIS_HANDLE  ConnectionWrapperID;
-  NDIS_HANDLE  NdisLinkHandle;
-  NDIS_HANDLE  NdisLinkContext;
-} NDIS_MAC_LINE_UP, *PNDIS_MAC_LINE_UP;
 
 typedef struct _NDIS_PACKET_8021Q_INFO {
   __MINGW_EXTENSION union {
@@ -1887,20 +1861,10 @@ typedef struct _NDIS_TCP_IP_CHECKSUM_PACKET_INFO {
   };
 } NDIS_TCP_IP_CHECKSUM_PACKET_INFO, *PNDIS_TCP_IP_CHECKSUM_PACKET_INFO;
 
-typedef struct _NDIS_WAN_CO_FRAGMENT {
-  ULONG Errors;
-} NDIS_WAN_CO_FRAGMENT, *PNDIS_WAN_CO_FRAGMENT;
-
 typedef struct _NDIS_WAN_FRAGMENT {
   UCHAR RemoteAddress[6];
   UCHAR LocalAddress[6];
 } NDIS_WAN_FRAGMENT, *PNDIS_WAN_FRAGMENT;
-
-typedef struct _WAN_CO_LINKPARAMS {
-  ULONG TransmitSpeed;
-  ULONG ReceiveSpeed;
-  ULONG SendWindow;
-} WAN_CO_LINKPARAMS, *PWAN_CO_LINKPARAMS;
 
 typedef struct _NDIS_WAN_GET_STATS {
   UCHAR LocalAddress[6];
@@ -6928,7 +6892,7 @@ struct _NET_BUFFER_LIST_CONTEXT {
   PNET_BUFFER_LIST_CONTEXT Next;
   USHORT                   Size;
   USHORT                   Offset;
-  DECLSPEC_ALIGN(MEMORY_ALLOCATION_ALIGNMENT) UCHAR ContextData[1];
+  DECLSPEC_ALIGN(MEMORY_ALLOCATION_ALIGNMENT) UCHAR ContextData[];
 };
 
 typedef struct _NET_BUFFER_LIST_DATA {
@@ -8339,11 +8303,21 @@ typedef struct _NDIS_SG_DMA_DESCRIPTION {
   MINIPORT_PROCESS_SG_LIST_HANDLER              ProcessSGListHandler;
   MINIPORT_ALLOCATE_SHARED_MEM_COMPLETE_HANDLER SharedMemAllocateCompleteHandler;
   ULONG                                         ScatterGatherListSize;
+#if NDIS_SUPPORT_NDIS685
+  DEVICE_OBJECT                                 *PdoOverride;
+#endif
 } NDIS_SG_DMA_DESCRIPTION, *PNDIS_SG_DMA_DESCRIPTION;
 #define NDIS_SG_DMA_DESCRIPTION_REVISION_1 1
+#if NDIS_SUPPORT_NDIS685
+#define NDIS_SG_DMA_DESCRIPTION_REVISION_2 2
+#endif
 #define NDIS_SG_DMA_DESCRIPTION_DEFINED    1
 #define NDIS_SIZEOF_SG_DMA_DESCRIPTION_REVISION_1 \
   RTL_SIZEOF_THROUGH_FIELD(NDIS_SG_DMA_DESCRIPTION, ScatterGatherListSize)
+#if NDIS_SUPPORT_NDIS685
+#define NDIS_SIZEOF_SG_DMA_DESCRIPTION_REVISION_2 \
+  RTL_SIZEOF_THROUGH_FIELD(NDIS_SG_DMA_DESCRIPTION, PdoOverride)
+#endif
 
 /* NDIS 6 connect type — line/level interrupts vs MSI/MSI-X. WDK enum:
  * LINE_BASED is 1, not 0 — stock Win7 binaries test these values. */

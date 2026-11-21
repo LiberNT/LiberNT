@@ -1008,7 +1008,7 @@ RtlExtendHeap(
 
 _Success_(return != 0)
 NTSYSAPI
-BOOLEAN
+LOGICAL
 NTAPI
 RtlFreeHeap(
     _In_ HANDLE HeapHandle,

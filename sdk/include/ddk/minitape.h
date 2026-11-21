@@ -74,6 +74,8 @@ typedef enum _TAPE_STATUS {
 #ifndef _INQUIRYDATA_DEFINED /* also in scsi.h */
 #define _INQUIRYDATA_DEFINED
 
+typedef USHORT VERSION_DESCRIPTOR, *PVERSION_DESCRIPTOR;
+
 typedef struct _INQUIRYDATA {
   UCHAR DeviceType:5;
   UCHAR DeviceTypeQualifier:3;
@@ -114,7 +116,9 @@ typedef struct _INQUIRYDATA {
   UCHAR ProductId[16];
   UCHAR ProductRevisionLevel[4];
   UCHAR VendorSpecific[20];
-  UCHAR Reserved3[40];
+  UCHAR Reserved3[2];
+  VERSION_DESCRIPTOR VersionDescriptors[8];
+  UCHAR Reserved4[30];
 } INQUIRYDATA, *PINQUIRYDATA;
 
 #endif /* _INQUIRYDATA_DEFINED */

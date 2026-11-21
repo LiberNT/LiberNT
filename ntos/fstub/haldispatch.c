@@ -384,6 +384,7 @@ HAL_DISPATCH HalDispatchTable =
     .HalEndMirroring = xHalEndMirroring,
     .HalMirrorPhysicalMemory = xHalMirrorPhysicalMemory,
     .HalEndOfBoot = xHalEndOfBoot
+    /* TODO: HalGetPrmCache and HalInvokePrmFwHandler (Platform Runtime Mechanism) are not implemented; the entries stay NULL */
 };
 
 HAL_PRIVATE_DISPATCH HalPrivateDispatchTable =

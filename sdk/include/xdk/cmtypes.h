@@ -91,6 +91,7 @@ typedef int CM_RESOURCE_TYPE;
 #define REG_OPTION_CREATE_LINK      (0x00000002L)
 #define REG_OPTION_BACKUP_RESTORE   (0x00000004L)
 #define REG_OPTION_OPEN_LINK        (0x00000008L)
+#define REG_OPTION_DONT_VIRTUALIZE  (0x00000010L)
 
 #define REG_LEGAL_OPTION            \
                 (REG_OPTION_RESERVED            |\
@@ -98,12 +99,14 @@ typedef int CM_RESOURCE_TYPE;
                  REG_OPTION_VOLATILE            |\
                  REG_OPTION_CREATE_LINK         |\
                  REG_OPTION_BACKUP_RESTORE      |\
-                 REG_OPTION_OPEN_LINK)
+                 REG_OPTION_OPEN_LINK           |\
+                 REG_OPTION_DONT_VIRTUALIZE)
 
 #define REG_OPEN_LEGAL_OPTION       \
                 (REG_OPTION_RESERVED            |\
                  REG_OPTION_BACKUP_RESTORE      |\
-                 REG_OPTION_OPEN_LINK)
+                 REG_OPTION_OPEN_LINK           |\
+                 REG_OPTION_DONT_VIRTUALIZE)
 
 #define REG_STANDARD_FORMAT            1
 #define REG_LATEST_FORMAT              2
@@ -140,7 +143,8 @@ typedef int CM_RESOURCE_TYPE;
                 (REG_NOTIFY_CHANGE_NAME          |\
                  REG_NOTIFY_CHANGE_ATTRIBUTES    |\
                  REG_NOTIFY_CHANGE_LAST_SET      |\
-                 REG_NOTIFY_CHANGE_SECURITY)
+                 REG_NOTIFY_CHANGE_SECURITY      |\
+                 REG_NOTIFY_THREAD_AGNOSTIC)
 
 #pragma pack(push, 4)
 typedef struct _CM_PARTIAL_RESOURCE_DESCRIPTOR {
@@ -541,6 +545,8 @@ typedef enum _KEY_INFORMATION_CLASS {
   KeyFlagsInformation,
   KeyVirtualizationInformation,
   KeyHandleTagsInformation,
+  KeyTrustInformation,
+  KeyLayerInformation,
   MaxKeyInfoClass
 } KEY_INFORMATION_CLASS;
 
@@ -589,6 +595,7 @@ typedef enum _KEY_SET_INFORMATION_CLASS {
   KeySetVirtualizationInformation,
   KeySetDebugInformation,
   KeySetHandleTagsInformation,
+  KeySetLayerInformation,
   MaxKeySetInfoClass
 } KEY_SET_INFORMATION_CLASS;
 
@@ -716,6 +723,10 @@ typedef enum _REG_NOTIFY_CLASS {
   RegNtPostSaveKey,
   RegNtPreReplaceKey,
   RegNtPostReplaceKey,
+  RegNtPreQueryKeyName,
+  RegNtPostQueryKeyName,
+  RegNtPreSaveMergedKey,
+  RegNtPostSaveMergedKey,
   MaxRegNtNotifyClass
 } REG_NOTIFY_CLASS, *PREG_NOTIFY_CLASS;
 
@@ -995,12 +1006,19 @@ typedef struct _REG_REPLACE_KEY_INFORMATION {
 #define SERVICE_WIN32                  (SERVICE_WIN32_OWN_PROCESS | \
                                         SERVICE_WIN32_SHARE_PROCESS)
 
+#define SERVICE_USER_SERVICE           0x00000040
+#define SERVICE_USERSERVICE_INSTANCE   0x00000080
+
 #define SERVICE_INTERACTIVE_PROCESS    0x00000100
+#define SERVICE_PKG_SERVICE            0x00000200
 
 #define SERVICE_TYPE_ALL               (SERVICE_WIN32  | \
                                         SERVICE_ADAPTER | \
                                         SERVICE_DRIVER  | \
-                                        SERVICE_INTERACTIVE_PROCESS)
+                                        SERVICE_INTERACTIVE_PROCESS | \
+                                        SERVICE_USER_SERVICE | \
+                                        SERVICE_USERSERVICE_INSTANCE | \
+                                        SERVICE_PKG_SERVICE)
 
 /* Service Start Types */
 #define SERVICE_BOOT_START             0x00000000

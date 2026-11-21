@@ -441,6 +441,7 @@ VOID
 NTAPI
 SeExamineSacl(
   _In_ PACL Sacl,
+  _In_ PACL ResourceSacl,
   _In_ PACCESS_TOKEN Token,
   _In_ ACCESS_MASK DesiredAccess,
   _In_ BOOLEAN AccessGranted,
@@ -515,6 +516,13 @@ NTKERNELAPI
 BOOLEAN
 NTAPI
 SeAuditingAnyFileEventsWithContext(
+  _In_ PSECURITY_DESCRIPTOR SecurityDescriptor,
+  _In_opt_ PSECURITY_SUBJECT_CONTEXT SubjectSecurityContext);
+
+NTKERNELAPI
+BOOLEAN
+NTAPI
+SeAuditingAnyFileEventsWithContextEx(
   _In_ PSECURITY_DESCRIPTOR SecurityDescriptor,
   _In_opt_ PSECURITY_SUBJECT_CONTEXT SubjectSecurityContext,
   _Out_opt_ PBOOLEAN StagingEnabled);

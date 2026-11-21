@@ -131,6 +131,8 @@ extern "C" {
 #define HEAP_TAIL_CHECKING_ENABLED                          0x00000020
 #define HEAP_FREE_CHECKING_ENABLED                          0x00000040
 #define HEAP_DISABLE_COALESCE_ON_FREE                       0x00000080
+#define HEAP_CREATE_SEGMENT_HEAP                            0x00000100
+#define HEAP_CREATE_HARDENED                                0x00000200
 #define HEAP_CREATE_ALIGN_16                                0x00010000
 #define HEAP_CREATE_ENABLE_TRACING                          0x00020000
 #define HEAP_CREATE_ENABLE_EXECUTE                          0x00040000
@@ -183,9 +185,11 @@ extern "C" {
      HEAP_CLASS_MASK                |                       \
      HEAP_CREATE_ALIGN_16           |                       \
      HEAP_CREATE_ENABLE_TRACING     |                       \
-     HEAP_CREATE_ENABLE_EXECUTE)
+     HEAP_CREATE_ENABLE_EXECUTE     |                       \
+     HEAP_CREATE_SEGMENT_HEAP       |                       \
+     HEAP_CREATE_HARDENED)
 #ifdef C_ASSERT
-C_ASSERT(HEAP_CREATE_VALID_MASK == 0x0007F0FF);
+C_ASSERT(HEAP_CREATE_VALID_MASK == 0x0007F3FF);
 #endif
 
 //

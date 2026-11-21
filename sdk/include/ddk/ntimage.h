@@ -143,7 +143,14 @@ typedef struct _IMAGE_RESOURCE_DATA_ENTRY {
 //
 // Load Configuration Directory Entry Format
 //
-typedef struct {
+typedef struct _IMAGE_LOAD_CONFIG_CODE_INTEGRITY {
+  USHORT Flags;
+  USHORT Catalog;
+  ULONG CatalogOffset;
+  ULONG Reserved;
+} IMAGE_LOAD_CONFIG_CODE_INTEGRITY, *PIMAGE_LOAD_CONFIG_CODE_INTEGRITY;
+
+typedef struct _IMAGE_LOAD_CONFIG_DIRECTORY32 {
   ULONG Size;
   ULONG TimeDateStamp;
   USHORT MajorVersion;
@@ -164,9 +171,39 @@ typedef struct {
   ULONG SecurityCookie;
   ULONG SEHandlerTable;
   ULONG SEHandlerCount;
+  ULONG GuardCFCheckFunctionPointer;
+  ULONG GuardCFDispatchFunctionPointer;
+  ULONG GuardCFFunctionTable;
+  ULONG GuardCFFunctionCount;
+  ULONG GuardFlags;
+  IMAGE_LOAD_CONFIG_CODE_INTEGRITY CodeIntegrity;
+  ULONG GuardAddressTakenIatEntryTable;
+  ULONG GuardAddressTakenIatEntryCount;
+  ULONG GuardLongJumpTargetTable;
+  ULONG GuardLongJumpTargetCount;
+  ULONG DynamicValueRelocTable;
+  ULONG CHPEMetadataPointer;
+  ULONG GuardRFFailureRoutine;
+  ULONG GuardRFFailureRoutineFunctionPointer;
+  ULONG DynamicValueRelocTableOffset;
+  USHORT DynamicValueRelocTableSection;
+  USHORT Reserved2;
+  ULONG GuardRFVerifyStackPointerFunctionPointer;
+  ULONG HotPatchTableOffset;
+  ULONG Reserved3;
+  ULONG EnclaveConfigurationPointer;
+  ULONG VolatileMetadataPointer;
+  ULONG GuardEHContinuationTable;
+  ULONG GuardEHContinuationCount;
+  ULONG GuardXFGCheckFunctionPointer;
+  ULONG GuardXFGDispatchFunctionPointer;
+  ULONG GuardXFGTableDispatchFunctionPointer;
+  ULONG CastGuardOsDeterminedFailureMode;
+  ULONG GuardMemcpyFunctionPointer;
+  ULONG UmaFunctionPointers;
 } IMAGE_LOAD_CONFIG_DIRECTORY32, *PIMAGE_LOAD_CONFIG_DIRECTORY32;
 
-typedef struct {
+typedef struct _IMAGE_LOAD_CONFIG_DIRECTORY64 {
   ULONG Size;
   ULONG TimeDateStamp;
   USHORT MajorVersion;
@@ -187,6 +224,36 @@ typedef struct {
   ULONGLONG SecurityCookie;
   ULONGLONG SEHandlerTable;
   ULONGLONG SEHandlerCount;
+  ULONGLONG GuardCFCheckFunctionPointer;
+  ULONGLONG GuardCFDispatchFunctionPointer;
+  ULONGLONG GuardCFFunctionTable;
+  ULONGLONG GuardCFFunctionCount;
+  ULONG GuardFlags;
+  IMAGE_LOAD_CONFIG_CODE_INTEGRITY CodeIntegrity;
+  ULONGLONG GuardAddressTakenIatEntryTable;
+  ULONGLONG GuardAddressTakenIatEntryCount;
+  ULONGLONG GuardLongJumpTargetTable;
+  ULONGLONG GuardLongJumpTargetCount;
+  ULONGLONG DynamicValueRelocTable;
+  ULONGLONG CHPEMetadataPointer;
+  ULONGLONG GuardRFFailureRoutine;
+  ULONGLONG GuardRFFailureRoutineFunctionPointer;
+  ULONG DynamicValueRelocTableOffset;
+  USHORT DynamicValueRelocTableSection;
+  USHORT Reserved2;
+  ULONGLONG GuardRFVerifyStackPointerFunctionPointer;
+  ULONG HotPatchTableOffset;
+  ULONG Reserved3;
+  ULONGLONG EnclaveConfigurationPointer;
+  ULONGLONG VolatileMetadataPointer;
+  ULONGLONG GuardEHContinuationTable;
+  ULONGLONG GuardEHContinuationCount;
+  ULONGLONG GuardXFGCheckFunctionPointer;
+  ULONGLONG GuardXFGDispatchFunctionPointer;
+  ULONGLONG GuardXFGTableDispatchFunctionPointer;
+  ULONGLONG CastGuardOsDeterminedFailureMode;
+  ULONGLONG GuardMemcpyFunctionPointer;
+  ULONGLONG UmaFunctionPointers;
 } IMAGE_LOAD_CONFIG_DIRECTORY64, *PIMAGE_LOAD_CONFIG_DIRECTORY64;
 
 #ifdef _WIN64

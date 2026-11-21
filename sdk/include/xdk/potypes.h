@@ -124,6 +124,9 @@ typedef enum _POWER_INFORMATION_LEVEL {
   EnergyTrackerQuery,
   UpdateBlackBoxRecorder,
   SessionAllowExternalDmaDevices,
+  SendSuspendResumeNotification,
+  BlackBoxRecorderDirectAccessBuffer,
+  SystemPowerSourceState,
   PowerInformationLevelMaximum
 } POWER_INFORMATION_LEVEL;
 
@@ -224,7 +227,7 @@ typedef enum {
 #define DIAGNOSTIC_REASON_SIMPLE_STRING          0x00000001
 #define DIAGNOSTIC_REASON_DETAILED_STRING        0x00000002
 #define DIAGNOSTIC_REASON_NOT_SPECIFIED          0x80000000
-#define DIAGNOSTIC_REASON_INVALID_FLAGS          (~0x80000003)
+#define DIAGNOSTIC_REASON_INVALID_FLAGS          (~0x80000007)
 #endif
 
 #define POWER_REQUEST_CONTEXT_VERSION            0
@@ -341,7 +344,8 @@ typedef struct {
 #define CORE_PARKING_POLICY_CHANGE_IDEAL         0
 #define CORE_PARKING_POLICY_CHANGE_SINGLE        1
 #define CORE_PARKING_POLICY_CHANGE_ROCKET        2
-#define CORE_PARKING_POLICY_CHANGE_MAX           CORE_PARKING_POLICY_CHANGE_ROCKET
+#define CORE_PARKING_POLICY_CHANGE_MULTISTEP     3
+#define CORE_PARKING_POLICY_CHANGE_MAX           CORE_PARKING_POLICY_CHANGE_MULTISTEP
 
 #define PERFSTATE_POLICY_CHANGE_IDEAL            0
 #define PERFSTATE_POLICY_CHANGE_SINGLE           1
