@@ -465,7 +465,7 @@ RtlCopyContext(PCONTEXT Destination,
 #ifdef __REACTOS__
     if (ContextFlags & (CONTEXT_ARM64 | RTLP_CONTEXT_ARM))
     {
-        static const ULONG ArmMask = ArchMask | CONTEXT_ARM64 | RTLP_CONTEXT_ARM;
+        const ULONG ArmMask = ArchMask | CONTEXT_ARM64 | RTLP_CONTEXT_ARM;
 
         Parameters = RtlpGetContextParameters(ContextFlags);
         if (!Parameters)
