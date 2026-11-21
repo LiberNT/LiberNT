@@ -329,7 +329,8 @@ SepSidInTokenEx(
          * The first entry of the groups is the token's own user, which it
          * always carries; the others answer for how they are set.
          */
-        if (SidSet == SEP_SID_SET_GROUPS && Index == 0) return TRUE;
+        if (SidSet == SEP_SID_SET_GROUPS && Index == 0)
+            return Deny || !(Entries[Index].Attributes & SE_GROUP_USE_FOR_DENY_ONLY);
 
         if (Entries[Index].Attributes & SE_GROUP_ENABLED) return TRUE;
 

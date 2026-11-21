@@ -114,6 +114,16 @@ CheckTokenMembershipEx(
 
 BOOL
 WINAPI
+CheckTokenMembership(
+    _In_opt_ HANDLE TokenHandle,
+    _In_ PSID SidToCheck,
+    _Out_ PBOOL IsMember)
+{
+    return CheckTokenMembershipEx(TokenHandle, SidToCheck, 0, IsMember);
+}
+
+BOOL
+WINAPI
 CheckTokenCapability(
     _In_opt_ HANDLE TokenHandle,
     _In_ PSID CapabilitySidToCheck,
