@@ -18,10 +18,24 @@
 
 import "wtypes.idl";
 import "objidl.idl";
+import "propidl.idl";
 
 interface IEnumWIA_DEV_INFO;
 interface IWiaItem;
 interface IWiaEventCallback;
+interface IWiaPropertyStorage;
+interface IEnumWiaItem;
+interface IEnumWIA_DEV_CAPS;
+
+typedef struct _WIA_DEV_CAP
+{
+    GUID guid;
+    ULONG ulFlags;
+    BSTR bstrName;
+    BSTR bstrDescription;
+    BSTR bstrIcon;
+    BSTR bstrCommandline;
+} WIA_DEV_CAP, *PWIA_DEV_CAP, WIA_EVENT_HANDLER, *PWIA_EVENT_HANDLER;
 
 cpp_quote("DEFINE_GUID(CLSID_WiaDevMgr, 0xa1f4e726,0x8cf1,0x11d1,0xbf,0x92,0x00,0x60,0x08,0x1e,0xd8,0x11);")
 
@@ -97,7 +111,21 @@ interface IWiaDevMgr : IUnknown
 ]
 interface IEnumWIA_DEV_INFO : IUnknown
 {
-    /* fill in */
+    HRESULT Next(
+        [in] ULONG celt,
+        [out, size_is(celt), length_is(*pceltFetched)] IWiaPropertyStorage **rgelt,
+        [in, out, unique] ULONG *pceltFetched);
+
+    HRESULT Skip(
+        [in] ULONG celt);
+
+    HRESULT Reset();
+
+    HRESULT Clone(
+        [out] IEnumWIA_DEV_INFO **ppIEnum);
+
+    HRESULT GetCount(
+        [out] ULONG *celt);
 }
 
 [
@@ -106,7 +134,183 @@ interface IEnumWIA_DEV_INFO : IUnknown
 ]
 interface IWiaItem : IUnknown
 {
-    /* FIXME: fill in */
+    HRESULT GetItemType(
+        [out] LONG *pItemType);
+
+    HRESULT AnalyzeItem(
+        [in] LONG lFlags);
+
+    HRESULT EnumChildItems(
+        [out] IEnumWiaItem **ppIEnumWiaItem);
+
+    HRESULT DeleteItem(
+        [in] LONG lFlags);
+
+    HRESULT CreateChildItem(
+        [in] LONG lFlags,
+        [in] BSTR bstrItemName,
+        [in] BSTR bstrFullItemName,
+        [out] IWiaItem **ppIWiaItem);
+
+    HRESULT EnumRegisterEventInfo(
+        [in] LONG lFlags,
+        [in] const GUID *pEventGUID,
+        [out] IEnumWIA_DEV_CAPS **ppIEnum);
+
+    HRESULT FindItemByName(
+        [in] LONG lFlags,
+        [in] BSTR bstrFullItemName,
+        [out] IWiaItem **ppIWiaItem);
+
+    HRESULT DeviceDlg(
+        [in] HWND hwndParent,
+        [in] LONG lFlags,
+        [in] LONG lIntent,
+        [out] LONG *plItemCount,
+        [out] IWiaItem ***ppIWiaItem);
+
+    HRESULT DeviceCommand(
+        [in] LONG lFlags,
+        [in] const GUID *pCmdGUID,
+        [in, out] IWiaItem **pIWiaItem);
+
+    HRESULT GetRootItem(
+        [out] IWiaItem **ppIWiaItem);
+
+    HRESULT EnumDeviceCapabilities(
+        [in] LONG lFlags,
+        [out] IEnumWIA_DEV_CAPS **ppIEnumWIA_DEV_CAPS);
+
+    HRESULT DumpItemData(
+        [out] BSTR *bstrData);
+
+    HRESULT DumpDrvItemData(
+        [out] BSTR *bstrData);
+
+    HRESULT DumpTreeItemData(
+        [out] BSTR *bstrData);
+
+    HRESULT Diagnostic(
+        [in] ULONG ulSize,
+        [in, size_is(ulSize)] BYTE *pBuffer);
+}
+
+[
+    object,
+    uuid(98b5e8a0-29cc-491a-aac0-e6db4fdcceb6)
+]
+interface IWiaPropertyStorage : IUnknown
+{
+    HRESULT ReadMultiple(
+        [in] ULONG cpspec,
+        [in, size_is(cpspec)] const PROPSPEC rgpspec[],
+        [out, size_is(cpspec)] PROPVARIANT rgpropvar[]);
+
+    HRESULT WriteMultiple(
+        [in] ULONG cpspec,
+        [in, size_is(cpspec)] const PROPSPEC rgpspec[],
+        [in, size_is(cpspec)] const PROPVARIANT rgpropvar[],
+        [in] PROPID propidNameFirst);
+
+    HRESULT DeleteMultiple(
+        [in] ULONG cpspec,
+        [in, size_is(cpspec)] const PROPSPEC rgpspec[]);
+
+    HRESULT ReadPropertyNames(
+        [in] ULONG cpropid,
+        [in, size_is(cpropid)] const PROPID rgpropid[],
+        [out, size_is(cpropid)] LPOLESTR rglpwstrName[]);
+
+    HRESULT WritePropertyNames(
+        [in] ULONG cpropid,
+        [in, size_is(cpropid)] const PROPID rgpropid[],
+        [in, size_is(cpropid)] const LPOLESTR rglpwstrName[]);
+
+    HRESULT DeletePropertyNames(
+        [in] ULONG cpropid,
+        [in, size_is(cpropid)] const PROPID rgpropid[]);
+
+    HRESULT Commit(
+        [in] DWORD grfCommitFlags);
+
+    HRESULT Revert();
+
+    HRESULT Enum(
+        [out] IEnumSTATPROPSTG **ppenum);
+
+    HRESULT SetTimes(
+        [in] const FILETIME *pctime,
+        [in] const FILETIME *patime,
+        [in] const FILETIME *pmtime);
+
+    HRESULT SetClass(
+        [in] REFCLSID clsid);
+
+    HRESULT Stat(
+        [out] STATPROPSETSTG *pstatpsstg);
+
+    HRESULT GetPropertyAttributes(
+        [in] ULONG cpspec,
+        [in, size_is(cpspec)] PROPSPEC rgpspec[],
+        [out, size_is(cpspec)] ULONG rgflags[],
+        [out, size_is(cpspec)] PROPVARIANT rgpropvar[]);
+
+    HRESULT GetCount(
+        [out] ULONG *pulNumProps);
+
+    HRESULT GetPropertyStream(
+        [out] GUID *pCompatibilityId,
+        [out] IStream **ppIStream);
+
+    HRESULT SetPropertyStream(
+        [in] GUID *pCompatibilityId,
+        [in, unique] IStream *pIStream);
+}
+
+[
+    object,
+    uuid(5e8383fc-3391-11d2-9a33-00c04fa36145)
+]
+interface IEnumWiaItem : IUnknown
+{
+    HRESULT Next(
+        [in] ULONG celt,
+        [out, size_is(celt), length_is(*pceltFetched)] IWiaItem **ppIWiaItem,
+        [in, out, unique] ULONG *pceltFetched);
+
+    HRESULT Skip(
+        [in] ULONG celt);
+
+    HRESULT Reset();
+
+    HRESULT Clone(
+        [out] IEnumWiaItem **ppIEnum);
+
+    HRESULT GetCount(
+        [out] ULONG *celt);
+}
+
+[
+    object,
+    uuid(1fcc4287-aca6-11d2-a093-00c04f72dc3c)
+]
+interface IEnumWIA_DEV_CAPS : IUnknown
+{
+    HRESULT Next(
+        [in] ULONG celt,
+        [out, size_is(celt), length_is(*pceltFetched)] WIA_DEV_CAP *rgelt,
+        [in, out, unique] ULONG *pceltFetched);
+
+    HRESULT Skip(
+        [in] ULONG celt);
+
+    HRESULT Reset();
+
+    HRESULT Clone(
+        [out] IEnumWIA_DEV_CAPS **ppIEnum);
+
+    HRESULT GetCount(
+        [out] ULONG *pcelt);
 }
 
 [

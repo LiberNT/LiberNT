@@ -78,7 +78,7 @@ typedef [public] enum tagAutomaticUpdatesScheduledInstallationDay
 
 typedef [public] enum tagDownloadPhase
 {
-    dphInitializing,
+    dphInitializing = 1,
     dphDownloading,
     dphVerifying,
 } DownloadPhase;

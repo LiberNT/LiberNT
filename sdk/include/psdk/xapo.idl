@@ -53,6 +53,8 @@ cpp_quote("#else")
 cpp_quote("#include <mmreg.h>")
 cpp_quote("#endif")
 
+cpp_quote("#include <pshpack1.h>")
+
 typedef struct XAPO_REGISTRATION_PROPERTIES
 {
     CLSID clsid;
@@ -152,3 +154,5 @@ interface IXAPOParameters : IUnknown
 
 /* XAudio2 2.7 version of IXAPOParameters is identical to 2.8 */
 cpp_quote("DEFINE_GUID(IID_IXAPO27Parameters, 0xa90bc001, 0xe897, 0xe897, 0x55, 0xe4, 0x9e, 0x47, 0x00, 0x00, 0x00, 0x01);")
+
+cpp_quote("#include <poppack.h>")

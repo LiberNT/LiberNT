@@ -244,7 +244,7 @@ interface IBindStatusCallback : IUnknown
 	BINDSTATUS_ENDSYNCOPERATION,
 	BINDSTATUS_BEGINUPLOADDATA,
 	BINDSTATUS_UPLOADINGDATA,
-	BINDSTATUS_ENDUPLOADINGDATA,
+	BINDSTATUS_ENDUPLOADDATA,
 	BINDSTATUS_PROTOCOLCLASSID,
 	BINDSTATUS_ENCODING,
 	BINDSTATUS_VERIFIEDMIMETYPEAVAILABLE,
@@ -293,7 +293,18 @@ interface IBindStatusCallback : IUnknown
         BINDSTATUS_RESERVED_7 = (BINDSTATUS_RESERVED_6+1),
         BINDSTATUS_RESERVED_8 = (BINDSTATUS_RESERVED_7+1),
         BINDSTATUS_RESERVED_9 = (BINDSTATUS_RESERVED_8+1),
-        BINDSTATUS_LAST_PRIVATE = BINDSTATUS_RESERVED_9
+        BINDSTATUS_RESERVED_A = (BINDSTATUS_RESERVED_9+1),
+        BINDSTATUS_RESERVED_B = (BINDSTATUS_RESERVED_A+1),
+        BINDSTATUS_RESERVED_C = (BINDSTATUS_RESERVED_B+1),
+        BINDSTATUS_RESERVED_D = (BINDSTATUS_RESERVED_C+1),
+        BINDSTATUS_RESERVED_E = (BINDSTATUS_RESERVED_D+1),
+        BINDSTATUS_RESERVED_F = (BINDSTATUS_RESERVED_E+1),
+        BINDSTATUS_RESERVED_10 = (BINDSTATUS_RESERVED_F+1),
+        BINDSTATUS_RESERVED_11 = (BINDSTATUS_RESERVED_10+1),
+        BINDSTATUS_RESERVED_12 = (BINDSTATUS_RESERVED_11+1),
+        BINDSTATUS_RESERVED_13 = (BINDSTATUS_RESERVED_12+1),
+        BINDSTATUS_RESERVED_14 = (BINDSTATUS_RESERVED_13+1),
+        BINDSTATUS_LAST_PRIVATE = BINDSTATUS_RESERVED_14
     } BINDSTATUS;
 
 
@@ -1096,6 +1107,12 @@ interface IInternetSession : IUnknown
         [in] LPVOID pBuffer,
         [in] DWORD dwBufferLength,
         [in] DWORD dwReserved);
+
+    HRESULT GetSessionOption(
+        [in] DWORD dwOption,
+        [in, out] LPVOID pBuffer,
+        [in, out] DWORD *pdwBufferLength,
+        [in] DWORD dwReserved);
 }
 
 /*****************************************************************************
@@ -1323,47 +1340,82 @@ cpp_quote("#define URLACTION_DOWNLOAD_UNSIGNED_ACTIVEX  0x00001004")
 cpp_quote("#define URLACTION_DOWNLOAD_CURR_MAX          0x00001004")
 cpp_quote("#define URLACTION_DOWNLOAD_MAX               0x000011ff")
 
-cpp_quote("#define URLACTION_ACTIVEX_MIN                     0x00001200")
-cpp_quote("#define URLACTION_ACTIVEX_RUN                     0x00001200")
-cpp_quote("#define URLPOLICY_ACTIVEX_CHECK_LIST              0x00010000")
-cpp_quote("#define URLACTION_ACTIVEX_OVERRIDE_OBJECT_SAFETY  0x00001201")
-cpp_quote("#define URLACTION_ACTIVEX_OVERRIDE_DATA_SAFETY    0x00001202")
-cpp_quote("#define URLACTION_ACTIVEX_OVERRIDE_SCRIPT_SAFETY  0x00001203")
-cpp_quote("#define URLACTION_SCRIPT_OVERRIDE_SAFETY          0x00001401")
-cpp_quote("#define URLACTION_ACTIVEX_CONFIRM_NOOBJECTSAFETY  0x00001204")
-cpp_quote("#define URLACTION_ACTIVEX_TREATASUNTRUSTED        0x00001205")
-cpp_quote("#define URLACTION_ACTIVEX_CURR_MAX                0x00001205")
-cpp_quote("#define URLACTION_ACTIVEX_MAX                     0x000013ff")
+cpp_quote("#define URLACTION_ACTIVEX_MIN                          0x00001200")
+cpp_quote("#define URLACTION_ACTIVEX_RUN                          0x00001200")
+cpp_quote("#define URLPOLICY_ACTIVEX_CHECK_LIST                   0x00010000")
+cpp_quote("#define URLACTION_ACTIVEX_OVERRIDE_OBJECT_SAFETY       0x00001201")
+cpp_quote("#define URLACTION_ACTIVEX_OVERRIDE_DATA_SAFETY         0x00001202")
+cpp_quote("#define URLACTION_ACTIVEX_OVERRIDE_SCRIPT_SAFETY       0x00001203")
+cpp_quote("#define URLACTION_SCRIPT_OVERRIDE_SAFETY               0x00001401")
+cpp_quote("#define URLACTION_ACTIVEX_CONFIRM_NOOBJECTSAFETY       0x00001204")
+cpp_quote("#define URLACTION_ACTIVEX_TREATASUNTRUSTED             0x00001205")
+cpp_quote("#define URLACTION_ACTIVEX_NO_WEBOC_SCRIPT              0x00001206")
+cpp_quote("#define URLACTION_ACTIVEX_OVERRIDE_REPURPOSEDETECTION  0x00001207")
+cpp_quote("#define URLACTION_ACTIVEX_OVERRIDE_OPTIN               0x00001208")
+cpp_quote("#define URLACTION_ACTIVEX_SCRIPTLET_RUN                0x00001209")
+cpp_quote("#define URLACTION_ACTIVEX_DYNSRC_VIDEO_AND_ANIMATION   0x0000120a")
+cpp_quote("#define URLACTION_ACTIVEX_OVERRIDE_DOMAINLIST          0x0000120b")
+cpp_quote("#define URLACTION_ACTIVEX_ALLOW_TDC                    0x0000120c")
+cpp_quote("#define URLACTION_ACTIVEX_CURR_MAX                     0x0000120c")
+cpp_quote("#define URLACTION_ACTIVEX_MAX                          0x000013ff")
 
-cpp_quote("#define URLACTION_SCRIPT_MIN           0x00001400")
-cpp_quote("#define URLACTION_SCRIPT_RUN           0x00001400")
-cpp_quote("#define URLACTION_SCRIPT_JAVA_USE      0x00001402")
-cpp_quote("#define URLACTION_SCRIPT_SAFE_ACTIVEX  0x00001405")
-cpp_quote("#define URLACTION_CROSS_DOMAIN_DATA    0x00001406")
-cpp_quote("#define URLACTION_SCRIPT_PASTE         0x00001407")
-cpp_quote("#define URLACTION_SCRIPT_CURR_MAX      0x00001407")
-cpp_quote("#define URLACTION_SCRIPT_MAX           0x000015ff")
+cpp_quote("#define URLACTION_SCRIPT_MIN                     0x00001400")
+cpp_quote("#define URLACTION_SCRIPT_RUN                     0x00001400")
+cpp_quote("#define URLACTION_SCRIPT_JAVA_USE                0x00001402")
+cpp_quote("#define URLACTION_SCRIPT_SAFE_ACTIVEX            0x00001405")
+cpp_quote("#define URLACTION_CROSS_DOMAIN_DATA              0x00001406")
+cpp_quote("#define URLACTION_SCRIPT_PASTE                   0x00001407")
+cpp_quote("#define URLACTION_ALLOW_XDOMAIN_SUBFRAME_RESIZE  0x00001408")
+cpp_quote("#define URLACTION_SCRIPT_XSSFILTER               0x00001409")
+cpp_quote("#define URLACTION_SCRIPT_NAVIGATE                0x0000140a")
+cpp_quote("#define URLACTION_PLUGGABLE_PROTOCOL_XHR         0x0000140b")
+cpp_quote("#define URLACTION_ALLOW_VBSCRIPT_IE              0x0000140c")
+cpp_quote("#define URLACTION_ALLOW_JSCRIPT_IE               0x0000140d")
+cpp_quote("#define URLACTION_SCRIPT_CURR_MAX                0x0000140d")
+cpp_quote("#define URLACTION_SCRIPT_MAX                     0x000015ff")
 
-cpp_quote("#define URLACTION_HTML_MIN                0x00001600")
-cpp_quote("#define URLACTION_HTML_SUBMIT_FORMS       0x00001601")
-cpp_quote("#define URLACTION_HTML_SUBMIT_FORMS_FROM  0x00001602")
-cpp_quote("#define URLACTION_HTML_SUBMIT_FORMS_TO    0x00001603")
-cpp_quote("#define URLACTION_HTML_FONT_DOWNLOAD      0x00001604")
-cpp_quote("#define URLACTION_HTML_JAVA_RUN           0x00001605")
-cpp_quote("#define URLACTION_HTML_USERDATA_SAVE      0x00001606")
-cpp_quote("#define URLACTION_HTML_SUBFRAME_NAVIGATE  0x00001607")
-cpp_quote("#define URLACTION_HTML_META_REFRESH       0x00001608")
-cpp_quote("#define URLACTION_HTML_MIXED_CONTENT      0x00001609")
-cpp_quote("#define URLACTION_HTML_MAX                0x000017ff")
+cpp_quote("#define URLACTION_HTML_MIN                             0x00001600")
+cpp_quote("#define URLACTION_HTML_SUBMIT_FORMS                    0x00001601")
+cpp_quote("#define URLACTION_HTML_SUBMIT_FORMS_FROM               0x00001602")
+cpp_quote("#define URLACTION_HTML_SUBMIT_FORMS_TO                 0x00001603")
+cpp_quote("#define URLACTION_HTML_FONT_DOWNLOAD                   0x00001604")
+cpp_quote("#define URLACTION_HTML_JAVA_RUN                        0x00001605")
+cpp_quote("#define URLACTION_HTML_USERDATA_SAVE                   0x00001606")
+cpp_quote("#define URLACTION_HTML_SUBFRAME_NAVIGATE               0x00001607")
+cpp_quote("#define URLACTION_HTML_META_REFRESH                    0x00001608")
+cpp_quote("#define URLACTION_HTML_MIXED_CONTENT                   0x00001609")
+cpp_quote("#define URLACTION_HTML_INCLUDE_FILE_PATH               0x0000160a")
+cpp_quote("#define URLACTION_HTML_ALLOW_INJECTED_DYNAMIC_HTML     0x0000160b")
+cpp_quote("#define URLACTION_HTML_REQUIRE_UTF8_DOCUMENT_CODEPAGE  0x0000160c")
+cpp_quote("#define URLACTION_HTML_ALLOW_CROSS_DOMAIN_CANVAS       0x0000160d")
+cpp_quote("#define URLACTION_HTML_ALLOW_WINDOW_CLOSE              0x0000160e")
+cpp_quote("#define URLACTION_HTML_ALLOW_CROSS_DOMAIN_WEBWORKER    0x0000160f")
+cpp_quote("#define URLACTION_HTML_ALLOW_CROSS_DOMAIN_TEXTTRACK    0x00001610")
+cpp_quote("#define URLACTION_HTML_ALLOW_INDEXEDDB                 0x00001611")
+cpp_quote("#define URLACTION_HTML_MAX                             0x000017ff")
 
-cpp_quote("#define URLACTION_SHELL_MIN              0x00001800")
-cpp_quote("#define URLACTION_SHELL_INSTALL_DTITEMS  0x00001800")
-cpp_quote("#define URLACTION_SHELL_MOVE_OR_COPY     0x00001802")
-cpp_quote("#define URLACTION_SHELL_FILE_DOWNLOAD    0x00001803")
-cpp_quote("#define URLACTION_SHELL_VERB             0x00001804")
-cpp_quote("#define URLACTION_SHELL_WEBVIEW_VERB     0x00001805")
-cpp_quote("#define URLACTION_SHELL_CURR_MAX         0x00001805")
-cpp_quote("#define URLACTION_SHELL_MAX              0x000019ff")
+cpp_quote("#define URLACTION_SHELL_MIN                         0x00001800")
+cpp_quote("#define URLACTION_SHELL_INSTALL_DTITEMS             0x00001800")
+cpp_quote("#define URLACTION_SHELL_MOVE_OR_COPY                0x00001802")
+cpp_quote("#define URLACTION_SHELL_FILE_DOWNLOAD               0x00001803")
+cpp_quote("#define URLACTION_SHELL_VERB                        0x00001804")
+cpp_quote("#define URLACTION_SHELL_WEBVIEW_VERB                0x00001805")
+cpp_quote("#define URLACTION_SHELL_SHELLEXECUTE                0x00001806")
+cpp_quote("#define URLACTION_SHELL_EXECUTE_HIGHRISK            0x00001806")
+cpp_quote("#define URLACTION_SHELL_EXECUTE_MODRISK             0x00001807")
+cpp_quote("#define URLACTION_SHELL_EXECUTE_LOWRISK             0x00001808")
+cpp_quote("#define URLACTION_SHELL_POPUPMGR                    0x00001809")
+cpp_quote("#define URLACTION_SHELL_RTF_OBJECTS_LOAD            0x0000180a")
+cpp_quote("#define URLACTION_SHELL_ENHANCED_DRAGDROP_SECURITY  0x0000180b")
+cpp_quote("#define URLACTION_SHELL_EXTENSIONSECURITY           0x0000180c")
+cpp_quote("#define URLACTION_SHELL_SECURE_DRAGSOURCE           0x0000180d")
+cpp_quote("#define URLACTION_SHELL_REMOTEQUERY                 0x0000180e")
+cpp_quote("#define URLACTION_SHELL_PREVIEW                     0x0000180f")
+cpp_quote("#define URLACTION_SHELL_SHARE                       0x00001810")
+cpp_quote("#define URLACTION_SHELL_ALLOW_CROSS_SITE_SHARE      0x00001811")
+cpp_quote("#define URLACTION_SHELL_TOCTOU_RISK                 0x00001812")
+cpp_quote("#define URLACTION_SHELL_CURR_MAX                    0x00001812")
+cpp_quote("#define URLACTION_SHELL_MAX                         0x000019ff")
 
 cpp_quote("#define URLACTION_NETWORK_MIN                  0x00001a00")
 cpp_quote("#define URLACTION_CREDENTIALS_USE              0x00001a00")
@@ -2210,19 +2262,36 @@ cpp_quote("#define INET_E_USE_DEFAULT_PROTOCOLHANDLER _HRESULT_TYPEDEF_(0x800C00
 cpp_quote("#define INET_E_USE_DEFAULT_SETTING       _HRESULT_TYPEDEF_(0x800C0012L)")
 cpp_quote("#define INET_E_DEFAULT_ACTION            INET_E_USE_DEFAULT_PROTOCOLHANDLER")
 cpp_quote("#define INET_E_QUERYOPTION_UNKNOWN       _HRESULT_TYPEDEF_(0x800C0013)")
+cpp_quote("#define INET_E_REDIRECTING               _HRESULT_TYPEDEF_(0x800C0014)")
 cpp_quote("#define INET_E_REDIRECT_FAILED           _HRESULT_TYPEDEF_(0x800C0014)")
 cpp_quote("#define INET_E_REDIRECT_TO_DIR           _HRESULT_TYPEDEF_(0x800C0015)")
 cpp_quote("#define INET_E_CANNOT_LOCK_REQUEST       _HRESULT_TYPEDEF_(0x800C0016)")
-cpp_quote("#define INET_E_USE_EXTENDED_BINDING      _HRESULT_TYPEDEF_(0x800C0017)")
+cpp_quote("#define INET_E_USE_EXTEND_BINDING        _HRESULT_TYPEDEF_(0x800C0017)")
 cpp_quote("#define INET_E_TERMINATED_BIND           _HRESULT_TYPEDEF_(0x800C0018)")
 cpp_quote("#define INET_E_INVALID_CERTIFICATE       _HRESULT_TYPEDEF_(0x800C0019)")
+cpp_quote("#define INET_E_RESERVED_1                   _HRESULT_TYPEDEF_(0x800C001A)")
+cpp_quote("#define INET_E_BLOCKED_REDIRECT_XSECURITYID _HRESULT_TYPEDEF_(0x800C001B)")
+cpp_quote("#define INET_E_DOMINJECTIONVALIDATION       _HRESULT_TYPEDEF_(0x800C001C)")
+cpp_quote("#define INET_E_VTAB_SWITCH_FORCE_ENGINE     _HRESULT_TYPEDEF_(0x800C001D)")
+cpp_quote("#define INET_E_HSTS_CERTIFICATE_ERROR       _HRESULT_TYPEDEF_(0x800C001E)")
+cpp_quote("#define INET_E_RESERVED_2                   _HRESULT_TYPEDEF_(0x800C001F)")
+cpp_quote("#define INET_E_RESERVED_3                   _HRESULT_TYPEDEF_(0x800C0020)")
+cpp_quote("#define INET_E_RESERVED_4                   _HRESULT_TYPEDEF_(0x800C0021)")
+cpp_quote("#define INET_E_RESERVED_5                   _HRESULT_TYPEDEF_(0x800C0022)")
 cpp_quote("#define INET_E_CODE_DOWNLOAD_DECLINED    _HRESULT_TYPEDEF_(0x800C0100)")
 cpp_quote("#define INET_E_RESULT_DISPATCHED         _HRESULT_TYPEDEF_(0x800C0200)")
 cpp_quote("#define INET_E_CANNOT_REPLACE_SFP_FILE   _HRESULT_TYPEDEF_(0x800C0300)")
 cpp_quote("#define INET_E_CODE_INSTALL_SUPPRESSED   _HRESULT_TYPEDEF_(0x800C0400)")
 cpp_quote("#define INET_E_CODE_INSTALL_BLOCKED_BY_HASH_POLICY  _HRESULT_TYPEDEF_(0x800C0500)")
 cpp_quote("#define INET_E_DOWNLOAD_BLOCKED_BY_INPRIVATE        _HRESULT_TYPEDEF_(0x800C0501)")
-cpp_quote("#define INET_E_ERROR_LAST                INET_E_DOWNLOAD_BLOCKED_BY_INPRIVATE")
+cpp_quote("#define INET_E_CODE_INSTALL_BLOCKED_IMMERSIVE       _HRESULT_TYPEDEF_(0x800C0502)")
+cpp_quote("#define INET_E_FORBIDFRAMING                        _HRESULT_TYPEDEF_(0x800C0503)")
+cpp_quote("#define INET_E_CODE_INSTALL_BLOCKED_ARM             _HRESULT_TYPEDEF_(0x800C0504)")
+cpp_quote("#define INET_E_BLOCKED_PLUGGABLE_PROTOCOL           _HRESULT_TYPEDEF_(0x800C0505)")
+cpp_quote("#define INET_E_BLOCKED_ENHANCEDPROTECTEDMODE        _HRESULT_TYPEDEF_(0x800C0506)")
+cpp_quote("#define INET_E_CODE_INSTALL_BLOCKED_BITNESS         _HRESULT_TYPEDEF_(0x800C0507)")
+cpp_quote("#define INET_E_DOWNLOAD_BLOCKED_BY_CSP              _HRESULT_TYPEDEF_(0x800C0508)")
+cpp_quote("#define INET_E_ERROR_LAST                INET_E_DOWNLOAD_BLOCKED_BY_CSP")
 
 cpp_quote("HRESULT WINAPI CoGetClassObjectFromURL(REFCLSID, LPCWSTR, DWORD, DWORD, LPCWSTR, LPBINDCTX, DWORD, LPVOID, REFIID, LPVOID*);")
 cpp_quote("HRESULT WINAPI CreateURLMoniker(IMoniker *pmkContext, LPCWSTR szURL, IMoniker **ppmk);")

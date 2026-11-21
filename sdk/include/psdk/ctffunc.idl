@@ -146,10 +146,21 @@ interface ITfCandidateString : IUnknown
 
 [
   object,
+  uuid(db593490-098f-11d3-8df0-00105a2799b5),
+  pointer_default(unique)
+]
+interface ITfFunction : IUnknown
+{
+    HRESULT GetDisplayName(
+        [out] BSTR *pbstrName);
+}
+
+[
+  object,
   uuid(3527268b-7d53-4dd9-92b7-7296ae461249),
   pointer_default(unique)
 ]
-interface ITfFnAdviseText : IUnknown
+interface ITfFnAdviseText : ITfFunction
 {
     HRESULT OnTextUpdate(
         [in] ITfRange    *pRange,
@@ -179,7 +190,7 @@ interface ITfFnBalloon : IUnknown
   uuid(88f567c6-1757-49f8-a1b2-89234c1eeff9),
   pointer_default(unique)
 ]
-interface ITfFnConfigure : IUnknown
+interface ITfFnConfigure : ITfFunction
 {
     HRESULT Show(
         [in] HWND    hwndParent,
@@ -192,7 +203,7 @@ interface ITfFnConfigure : IUnknown
   uuid(b5e26ff5-d7ad-4304-913f-21a2ed95a1b0),
   pointer_default(unique)
 ]
-interface ITfFnConfigureRegisterEudc : IUnknown
+interface ITfFnConfigureRegisterEudc : ITfFunction
 {
     HRESULT Show(
         [in] HWND    hwndParent,
@@ -206,24 +217,13 @@ interface ITfFnConfigureRegisterEudc : IUnknown
   uuid(bb95808a-6d8f-4bca-8400-5390b586aedf),
   pointer_default(unique)
 ]
-interface ITfFnConfigureRegisterWord : IUnknown
+interface ITfFnConfigureRegisterWord : ITfFunction
 {
     HRESULT Show(
         [in] HWND    hwndParent,
         [in] LANGID  langid,
         [in] REFGUID rguidProfile,
         [in] BSTR    bstrRegistered);
-}
-
-[
-  object,
-  uuid(db593490-098f-11d3-8df0-00105a2799b5),
-  pointer_default(unique)
-]
-interface ITfFunction : IUnknown
-{
-    HRESULT GetDisplayName(
-        [out] BSTR *pbstrName);
 }
 
 [
@@ -262,7 +262,7 @@ interface ITfFnGetPreferredTouchKeyboardLayout : ITfFunction
   uuid(5c0ab7ea-167d-4f59-bfb5-4693755e90ca),
   pointer_default(unique)
 ]
-interface ITfFnGetSAPIObject : IUnknown
+interface ITfFnGetSAPIObject : ITfFunction
 {
     HRESULT Get(
         [in]  TfSapiObject sObj,
@@ -271,21 +271,10 @@ interface ITfFnGetSAPIObject : IUnknown
 
 [
   object,
-  uuid(04b825b1-ac9a-4f7b-b5ad-c7168f1ee445),
-  pointer_default(unique)
-]
-interface ITfFnLMInternal : IUnknown
-{
-    HRESULT ProcessLattice(
-        [in] ITfRange *pRange);
-}
-
-[
-  object,
   uuid(7afbf8e7-ac4b-4082-b058-890899d3a010),
   pointer_default(unique)
 ]
-interface ITfFnLMProcessor : IUnknown
+interface ITfFnLMProcessor : ITfFunction
 {
     HRESULT QueryRange(
         [in]  ITfRange *pRange,
@@ -321,10 +310,21 @@ interface ITfFnLMProcessor : IUnknown
 
 [
   object,
+  uuid(04b825b1-ac9a-4f7b-b5ad-c7168f1ee445),
+  pointer_default(unique)
+]
+interface ITfFnLMInternal : ITfFnLMProcessor
+{
+    HRESULT ProcessLattice(
+        [in] ITfRange *pRange);
+}
+
+[
+  object,
   uuid(a87a8574-a6c1-4e15-99f0-3d3965f548eb),
   pointer_default(unique)
 ]
-interface ITfFnLangProfileUtil : IUnknown
+interface ITfFnLangProfileUtil : ITfFunction
 {
     HRESULT RegisterActiveProfiles(void);
 
@@ -338,7 +338,7 @@ interface ITfFnLangProfileUtil : IUnknown
   uuid(a3a416a4-0f64-11d3-b5b7-00c04fc324a1),
   pointer_default(unique)
 ]
-interface ITfFnPlayBack : IUnknown
+interface ITfFnPlayBack : ITfFunction
 {
     HRESULT QueryRange(
         [in]  ITfRange *pRange,
@@ -354,7 +354,7 @@ interface ITfFnPlayBack : IUnknown
   uuid(2338ac6e-2b9d-44c0-a75e-ee64f256b3bd),
   pointer_default(unique)
 ]
-interface ITfFnPropertyUIStatus : IUnknown
+interface ITfFnPropertyUIStatus : ITfFunction
 {
     HRESULT GetStatus(
         [in]  REFGUID refguidProp,
@@ -391,7 +391,7 @@ interface ITfFnReconversion : ITfFunction
   uuid(87a2ad8f-f27b-4920-8501-67602280175d),
   pointer_default(unique)
 ]
-interface ITfFnSearchCandidateProvider : IUnknown
+interface ITfFnSearchCandidateProvider : ITfFunction
 {
     HRESULT GetSearchCandidates(
         [in]  BSTR             bstrQuery,
@@ -409,7 +409,7 @@ interface ITfFnSearchCandidateProvider : IUnknown
   uuid(5ab1d30c-094d-4c29-8ea5-0bf59be87bf3),
   pointer_default(unique)
 ]
-interface ITfFnShowHelp : IUnknown
+interface ITfFnShowHelp : ITfFunction
 {
     HRESULT Show(
         [in] HWND hwndParent);
