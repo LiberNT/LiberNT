@@ -3049,6 +3049,15 @@ IntGdiCleanupPrivateFontsForProcess(VOID)
     PFONT_ENTRY_COLL_MEM EntryCollection;
 
     DPRINT("IntGdiCleanupPrivateFontsForProcess()\n");
+
+    /* A process that dies before font support starts cannot own private fonts. */
+    if (g_FreeTypeLock == NULL)
+    {
+        ASSERT(IsListEmpty(&Win32Process->PrivateMemFontListHead));
+        ASSERT(IsListEmpty(&Win32Process->PrivateFontListHead));
+        return;
+    }
+
     do {
         Entry = NULL;
         EntryCollection = NULL;
