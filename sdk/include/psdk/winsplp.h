@@ -712,8 +712,6 @@ typedef struct _PRINTPROVIDOR {
     _In_ LPBIDI_REQUEST_CONTAINER pReqData,
     _Outptr_ LPBIDI_RESPONSE_CONTAINER *ppResData);
 
-  BOOL (WINAPI *fpAddDriverCatalog)(HANDLE hPrinter, DWORD dwLevel,
-                                    VOID *pvDriverInfCatInfo, DWORD dwCatalogCopyFlags);
   BOOL (*fpAddPrinterConnection2)(_In_ LPCWSTR pName, _In_ DWORD dwLevel, _In_ PVOID pInfo);
   HRESULT (*fpGetPrintClassObject)(_In_ PCWSTR pszPrinterName, _In_ const IID *riid, _Outptr_ VOID **ppv);
   HRESULT (*fpReportJobProcessingProgress)(_In_ HANDLE hPrinter, _In_ ULONG jobId, _In_ EPrintXPSJobOperation jobOperation, _In_ EPrintXPSJobProgress jobProgress);

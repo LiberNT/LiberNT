@@ -117,7 +117,6 @@ static const PRINTPROVIDOR _PrintProviderFunctions = {
     LocalCloseSpoolFileHandle,                  // fpCloseSpoolFileHandle
     NULL,                                       // fpFlushPrinter
     NULL,                                       // fpSendRecvBidiData
-    NULL,                                       // fpAddDriverCatalog
 };
 
 static BOOL
