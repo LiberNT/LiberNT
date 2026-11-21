@@ -1763,7 +1763,7 @@ LONG WINAPI /* DECLSPEC_HOTPATCH */ GetPackageFamilyName( HANDLE process, UINT32
  *         GetPackagesByPackageFamily   (kernelbase.@)
  */
 LONG WINAPI DECLSPEC_HOTPATCH GetPackagesByPackageFamily(const WCHAR *family_name, UINT32 *count,
-                                                         WCHAR *full_names, UINT32 *buffer_len, WCHAR *buffer)
+                                                         WCHAR **full_names, UINT32 *buffer_len, WCHAR *buffer)
 {
     FIXME( "(%s %p %p %p %p): stub\n", debugstr_w(family_name), count, full_names, buffer_len, buffer );
 
