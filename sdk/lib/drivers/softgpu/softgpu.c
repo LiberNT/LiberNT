@@ -455,6 +455,8 @@ DriverEntry(
     InitData.DxgkDdiSetPointerShape                 = SoftGpuDdiSetPointerShape;
     InitData.DxgkDdiSetPalette                      = SoftGpuDdiSetPalette;
     InitData.DxgkDdiGetScanLine                     = SoftGpuDdiGetScanLine;
+    InitData.DxgkDdiSystemDisplayEnable             = SoftGpuDdiSystemDisplayEnable;
+    InitData.DxgkDdiSystemDisplayWrite              = SoftGpuDdiSystemDisplayWrite;
 #if defined(SOFTGPU_PLATFORM_HARDWARE_OVERLAY)
     InitData.DxgkDdiCreateOverlay                   =
         SoftGpuPlatformCreateOverlay;
@@ -1254,6 +1256,7 @@ SoftGpuStartDevice(
     Device->CurrentMode = PlatformConfig.CurrentMode;
     Device->PreferredMode = PlatformConfig.CurrentMode;
     Device->PlatformSetMode = PlatformConfig.SetMode;
+    Device->PlatformSystemDisplay = PlatformConfig.SystemDisplayDirect;
     RtlCopyMemory(Device->Modes, PlatformConfig.Modes, sizeof(Device->Modes));
     RtlCopyMemory(Device->Edid, PlatformConfig.Edid, sizeof(Device->Edid));
     Device->EdidLength = min(PlatformConfig.EdidLength, (ULONG)sizeof(Device->Edid));

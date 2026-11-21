@@ -9,6 +9,7 @@
 @ stdcall VidRenderStatusText(str ptr long long)
 @ stdcall VidResetDisplay(long)
 @ stdcall VidScreenToBufferBlt(ptr long long long long long)
+@ stdcall VidSetDisplayWriteRoutine(ptr)
 @ stdcall VidSetScrollRegion(long long long long)
 @ stdcall VidSetTextColor(long)
 @ stdcall VidSetVirtualFrameBuffer(ptr)

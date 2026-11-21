@@ -64,8 +64,10 @@
 #include <ndk/exfuncs.h>
 #include <ndk/mmfuncs.h>
 #include "adapter_start_core.h"
+#include "stopscreen_core.h"
 
 #include <ndk/inbvfuncs.h>
+#include <drivers/bootvid/bootvid.h>
 #include <ntpoapi.h>
 #include <wdmguid.h>
 #include <drivers/acpi/acpi.h>
@@ -111,6 +113,11 @@ NTSTATUS
 NTAPI
 InbvSetVirtualFrameBuffer(
     _In_opt_ PVOID VirtualFrameBuffer);
+
+NTSTATUS
+NTAPI
+InbvSetDisplayWriteRoutine(
+    _In_opt_ PVID_DISPLAY_WRITE_ROUTINE Routine);
 
 /* ========================================================================
  * POST (boot) display ownership
@@ -1008,6 +1015,95 @@ DxgkpRemoveMiniportDevice(
 
 static KBUGCHECK_CALLBACK_RECORD g_DxgkBugCheckRecord;
 
+#define DXGK_STOP_SCREEN_ROW_PIXELS 4096
+
+static PDXGKDDI_SYSTEM_DISPLAY_WRITE g_DxgkStopScreenWrite;
+static PVOID g_DxgkStopScreenDevice;
+static DXGK_STOP_SCREEN_FORMAT g_DxgkStopScreenFormat;
+static LONG g_DxgkStopScreenOriginX;
+static LONG g_DxgkStopScreenOriginY;
+static ULONG g_DxgkStopScreenWidth;
+static ULONG g_DxgkStopScreenHeight;
+static ULONG g_DxgkStopScreenRow[DXGK_STOP_SCREEN_ROW_PIXELS];
+
+static VOID
+NTAPI
+DxgkpStopScreenWrite(
+    _In_ PVOID Pixels,
+    _In_ ULONG Stride,
+    _In_ ULONG Left,
+    _In_ ULONG Top,
+    _In_ ULONG Width,
+    _In_ ULONG Height)
+{
+    ULONG BytesPerPixel = g_DxgkStopScreenFormat.BytesPerPixel;
+    ULONG FirstLeft = Left;
+    ULONG FirstTop = Top;
+    ULONG PositionX;
+    ULONG PositionY;
+    ULONG Row;
+    ULONG Done;
+    ULONG Count;
+    const UCHAR *Line;
+
+    ASSERT(g_DxgkStopScreenWrite != NULL);
+    ASSERT(BytesPerPixel >= 2 && BytesPerPixel <= 4);
+    ASSERT(Stride >= Width * BytesPerPixel);
+
+    if (!DxgkStopScreenCoreClip(g_DxgkStopScreenOriginX, g_DxgkStopScreenWidth, &Left, &Width, &PositionX) ||
+        !DxgkStopScreenCoreClip(g_DxgkStopScreenOriginY, g_DxgkStopScreenHeight, &Top, &Height, &PositionY))
+    {
+        return;
+    }
+
+    Line = (const UCHAR *)Pixels + (SIZE_T)(Top - FirstTop) * Stride + (SIZE_T)(Left - FirstLeft) * BytesPerPixel;
+    for (Row = 0; Row < Height; Row++, Line += Stride)
+    {
+        for (Done = 0; Done < Width; Done += Count)
+        {
+            Count = min(Width - Done, (ULONG)DXGK_STOP_SCREEN_ROW_PIXELS);
+            DxgkStopScreenCoreConvertRow(&g_DxgkStopScreenFormat,
+                                         Line + (SIZE_T)Done * BytesPerPixel,
+                                         Count,
+                                         g_DxgkStopScreenRow);
+            g_DxgkStopScreenWrite(g_DxgkStopScreenDevice,
+                                  g_DxgkStopScreenRow,
+                                  Count,
+                                  1,
+                                  Count * sizeof(ULONG),
+                                  PositionX + Done,
+                                  PositionY + Row);
+        }
+    }
+}
+
+static VOID
+DxgkpStartStopScreen(
+    _In_ PVOID MiniportDeviceContext,
+    _In_ PDXGKDDI_SYSTEM_DISPLAY_WRITE PfnWrite,
+    _In_ UINT Width,
+    _In_ UINT Height)
+{
+    LOADER_PARAMETER_FRAMEBUFFER Fb;
+
+    if (Width == 0 || Height == 0 ||
+        !InbvIsBootDriverInstalled() ||
+        !InbvGetGopFrameBufferInfo(&Fb) ||
+        Fb.HorizontalResolution == 0 || Fb.VerticalResolution == 0 ||
+        !DxgkStopScreenCoreInitFormat(&g_DxgkStopScreenFormat, Fb.PixelFormat, Fb.RedMask, Fb.GreenMask, Fb.BlueMask))
+    {
+        return;
+    }
+
+    g_DxgkStopScreenWrite = PfnWrite;
+    g_DxgkStopScreenDevice = MiniportDeviceContext;
+    g_DxgkStopScreenWidth = Width;
+    g_DxgkStopScreenHeight = Height;
+    g_DxgkStopScreenOriginX = DxgkStopScreenCoreOrigin(Fb.HorizontalResolution, Width);
+    g_DxgkStopScreenOriginY = DxgkStopScreenCoreOrigin(Fb.VerticalResolution, Height);
+    (VOID)InbvSetDisplayWriteRoutine(DxgkpStopScreenWrite);
+}
+
 static VOID
 NTAPI
 DxgkpBugCheckCallback(
@@ -1016,7 +1112,9 @@ DxgkpBugCheckCallback(
 {
     PDXGKRNL_ADAPTER Owner;
     PDXGKDDI_SYSTEM_DISPLAY_ENABLE PfnEnable;
+    PDXGKDDI_SYSTEM_DISPLAY_WRITE PfnWrite;
     DXGKARG_SYSTEM_DISPLAY_ENABLE_FLAGS Flags;
+    NTSTATUS Status;
     UINT Width = 0;
     UINT Height = 0;
     D3DDDIFORMAT ColorFormat = D3DDDIFMT_UNKNOWN;
@@ -1048,8 +1146,10 @@ DxgkpBugCheckCallback(
         goto ReleaseLock;
 
     RtlZeroMemory(&Flags, sizeof(Flags));
-    (VOID)PfnEnable(Owner->MiniportDeviceContext, 0, &Flags, &Width, &Height, &ColorFormat);
-    /* TODO: write the stop screen with DxgkDdiSystemDisplayWrite; a detached boot screen draws to its copy and shows nothing */
+    Status = PfnEnable(Owner->MiniportDeviceContext, 0, &Flags, &Width, &Height, &ColorFormat);
+    PfnWrite = DXGK_CB(Owner, DxgkDdiSystemDisplayWrite);
+    if (NT_SUCCESS(Status) && PfnWrite != NULL)
+        DxgkpStartStopScreen(Owner->MiniportDeviceContext, PfnWrite, Width, Height);
 
 ReleaseLock:
     if (LockAtDpcLevel)

@@ -549,8 +549,9 @@ CywMsgbufSendMailbox(
     return STATUS_SUCCESS;
 }
 
+static
 NTSTATUS
-CywMsgbufIoctl(
+CywMsgbufIoctlSubmit(
     _In_ PCYW_ADAPTER Adapter,
     _In_ ULONG Cmd,
     _In_ BOOLEAN Set,
@@ -584,6 +585,10 @@ CywMsgbufIoctl(
     }
 
     KeClearEvent(&Pcie->IoctlEvent);
+    if (InterlockedCompareExchange(&Pcie->IoctlAborted, 0, 0) != 0)
+    {
+        return STATUS_DEVICE_NOT_READY;
+    }
     Pcie->IoctlTransId++;
     Pcie->IoctlFirmwareStatus = 0;
     Pcie->IoctlResponseLength = 0;
@@ -614,6 +619,10 @@ CywMsgbufIoctl(
     Timeout.QuadPart = -(LONGLONG)CYW_IOCTL_RESP_TIMEOUT_MS * 10000LL;
     Status = KeWaitForSingleObject(&Pcie->IoctlEvent, Executive, KernelMode, FALSE, &Timeout);
     InterlockedExchange(&Pcie->IoctlPending, 0);
+    if (InterlockedCompareExchange(&Pcie->IoctlAborted, 0, 0) != 0)
+    {
+        return STATUS_DEVICE_NOT_READY;
+    }
     if (Status != STATUS_SUCCESS)
     {
         DPRINT1("CYW: IOCTL %lu timed out\n", Cmd);
@@ -642,6 +651,28 @@ CywMsgbufIoctl(
         }
     }
     return STATUS_SUCCESS;
+}
+
+NTSTATUS
+CywMsgbufIoctl(
+    _In_ PCYW_ADAPTER Adapter,
+    _In_ ULONG Cmd,
+    _In_ BOOLEAN Set,
+    _Inout_updates_bytes_opt_(Length) PVOID Data,
+    _In_ ULONG Length)
+{
+    PCYW_PCIE Pcie = Adapter->Pcie;
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() < DISPATCH_LEVEL);
+
+    if (!ExAcquireRundownProtection(&Pcie->IoctlRundown))
+    {
+        return STATUS_DEVICE_NOT_READY;
+    }
+    Status = CywMsgbufIoctlSubmit(Adapter, Cmd, Set, Data, Length);
+    ExReleaseRundownProtection(&Pcie->IoctlRundown);
+    return Status;
 }
 
 static
@@ -1033,7 +1064,7 @@ CywMsgbufInitialize(
     NTSTATUS Status;
 
     Pcie->RxPostTarget = min((ULONG)Pcie->MaxRxBufPost, CYW_RX_SLOTS);
-    KeInitializeEvent(&Pcie->IoctlEvent, NotificationEvent, FALSE);
+    ASSERT(InterlockedCompareExchange(&Pcie->IoctlPending, 0, 0) == 0);
 
     Status = CywRingsInitialize(Adapter);
     if (!NT_SUCCESS(Status))

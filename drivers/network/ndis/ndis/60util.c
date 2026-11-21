@@ -742,6 +742,27 @@ Ndis6ResetMiniportComplete(
     }
 }
 
+VOID
+Ndis6IndicateResetStatus(
+    _In_ PLOGICAL_ADAPTER Adapter,
+    _In_ NDIS_STATUS StatusCode)
+{
+    NDIS_STATUS_INDICATION Indication;
+
+    ASSERT(Adapter != NULL && Adapter->IsNdis6);
+    ASSERT(StatusCode == NDIS_STATUS_RESET_START || StatusCode == NDIS_STATUS_RESET_END);
+    ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
+
+    RtlZeroMemory(&Indication, sizeof(Indication));
+    Indication.Header.Type = NDIS_OBJECT_TYPE_STATUS_INDICATION;
+    Indication.Header.Revision = NDIS_STATUS_INDICATION_REVISION_1;
+    Indication.Header.Size = NDIS_SIZEOF_STATUS_INDICATION_REVISION_1;
+    Indication.SourceHandle = Adapter;
+    Indication.PortNumber = NDIS_DEFAULT_PORT_NUMBER;
+    Indication.StatusCode = StatusCode;
+    NdisMIndicateStatusEx(Adapter, &Indication);
+}
+
 static VOID NTAPI
 Ndis6ResetWorker(
     _In_ PVOID Context)
@@ -759,8 +780,7 @@ Ndis6ResetWorker(
     Adapter->NdisMiniportBlock.ResetStatus = NDIS_STATUS_PENDING;
     KeReleaseSpinLock(&Adapter->NdisMiniportBlock.Lock, OldIrql);
 
-    NdisMIndicateStatus(Adapter, NDIS_STATUS_RESET_START, NULL, 0);
-    NdisMIndicateStatusComplete(Adapter);
+    Ndis6IndicateResetStatus(Adapter, NDIS_STATUS_RESET_START);
 
     Status = Ndis6CallResetHandlerEx(Adapter, &AddressingReset);
     if (Status != NDIS_STATUS_PENDING)

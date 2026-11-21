@@ -2421,6 +2421,7 @@
 @ stub -arch=win64 HvlUpdatePerformanceStateCountersForLp
 @ stdcall InbvNotifyDisplayOwnershipChange(long)
 @ stdcall InbvSetVirtualFrameBuffer(ptr)
+@ stdcall InbvSetDisplayWriteRoutine(ptr)
 @ stdcall InbvQueryBootScreen(ptr long ptr ptr)
 @ stdcall InbvDiscardBootScreen()
 @ stdcall InbvCopyBootScreen(ptr long long long)
