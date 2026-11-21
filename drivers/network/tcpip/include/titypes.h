@@ -150,6 +150,9 @@ typedef struct _ADDRESS_FILE {
     /* Associated connection or NULL if no associated connection exist */
     BOOLEAN PendingKeepAliveSet;
     BOOLEAN PendingKeepAlive;
+    BOOLEAN PendingKeepAliveValuesSet;
+    ULONG PendingKeepAliveTime;
+    ULONG PendingKeepAliveInterval;
     BOOLEAN PendingNoDelaySet;
     BOOLEAN PendingNoDelay;
     struct _CONNECTION_ENDPOINT *Listener;
