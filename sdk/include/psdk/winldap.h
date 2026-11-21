@@ -226,6 +226,7 @@ typedef struct ldap
     ULONG ld_cldaptimeout;
     ULONG ld_refhoplimit;
     ULONG ld_options;
+    ULONG ld_anonymousmaxvalrange;
 } LDAP, *PLDAP;
 
 #define LDAP_MOD_ADD        0x00

@@ -160,6 +160,21 @@ typedef struct _PPP_EAP_PACKET
 
 #define PPP_EAP_PACKET_HDR_LEN (sizeof(PPP_EAP_PACKET) - 1)
 
+#ifndef _NGCTICKETCONTEXT_
+#define _NGCTICKETCONTEXT_
+#ifndef NCRYPT_PIN_CACHE_PIN_BYTE_LENGTH
+#define NCRYPT_PIN_CACHE_PIN_BYTE_LENGTH 90
+#endif
+#define NGC_TICKET_PROPERTY_STRING_LENGTH (NCRYPT_PIN_CACHE_PIN_BYTE_LENGTH / sizeof(WCHAR))
+
+typedef struct _NgcTicketContext
+{
+    WCHAR wszTicket[NGC_TICKET_PROPERTY_STRING_LENGTH];
+    ULONG_PTR hKey;
+    HANDLE hImpersonateToken;
+} NgcTicketContext;
+#endif
+
 typedef struct _PPP_EAP_INPUT
 {
     DWORD dwSizeInBytes;
@@ -181,6 +196,8 @@ typedef struct _PPP_EAP_INPUT
     OPTIONAL PBYTE pUserData;
     DWORD dwSizeOfUserData;
     HANDLE hReserved;
+    GUID guidConnectionId;
+    BOOL isVpn;
 }PPP_EAP_INPUT, *PPPP_EAP_INPUT;
 
 typedef enum _PPP_EAP_ACTION
@@ -211,6 +228,8 @@ typedef struct _PPP_EAP_OUTPUT
     BOOL fSaveUserData;
     OPTIONAL PBYTE pUserData;
     DWORD dwSizeOfUserData;
+    NgcTicketContext *pNgcKerbTicket;
+    BOOL fSaveToCredMan;
 }PPP_EAP_OUTPUT, *PPPP_EAP_OUTPUT;
 
 typedef struct _PPP_EAP_INFO
