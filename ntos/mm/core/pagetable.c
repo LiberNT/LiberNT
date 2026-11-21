@@ -349,6 +349,48 @@ MiPtReleaseTable(
     }
 }
 
+static
+VOID
+MiPtReleaseEmptyLevel(
+    _Inout_ PMI_ADDRESS_SPACE Space,
+    _In_ ULONG64 Start,
+    _In_ ULONG64 End,
+    _In_ LONG Level)
+{
+    ULONG64 Span = 1ULL << Space->System->Arch->Level[Level + 1].Shift;
+    ULONG64 Va = Start & ~(Span - 1);
+
+    MI_ASSERT(Level >= 0 && Start <= End);
+    for (;;)
+    {
+        ULONG Frame;
+
+        if (MiPtLookupLevel(Space, Va, (ULONG)Level, &Frame) != NULL)
+        {
+            if (Level > 0)
+                MiPtReleaseEmptyLevel(Space, Va < Start ? Start : Va, Va + Span - 1 > End ? End : Va + Span - 1,
+                                      Level - 1);
+            if (MiPtLookupLevel(Space, Va, (ULONG)Level, &Frame) != NULL)
+                MiPtReleaseTable(Space, Frame, Va);
+        }
+        if (Va + Span - 1 >= End || Va + Span < Va)
+            break;
+        Va += Span;
+    }
+}
+
+VOID
+MiPtReleaseEmptyRange(
+    _Inout_ PMI_ADDRESS_SPACE Space,
+    _In_ ULONG64 Start,
+    _In_ ULONG64 End)
+{
+    LONG Top = (LONG)Space->System->Arch->PagingLevels - 2;
+
+    if (Top >= 0)
+        MiPtReleaseEmptyLevel(Space, Start, End, Top);
+}
+
 VOID
 MiPtFlushEmpty(PMI_ADDRESS_SPACE Space)
 {

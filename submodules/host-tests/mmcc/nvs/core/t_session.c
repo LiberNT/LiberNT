@@ -402,6 +402,50 @@ SessionSetBeforeAnySession(void)
 }
 
 static void
+SessionCreateOutOfFrames(void)
+{
+    PMI_SYSTEM System = MiSessionTestSystem;
+    struct _EPROCESS_HOST Leader;
+    MI_PROCESS Native;
+    static ULONG Held[4096];
+    ULONG Count, Free, Id, Frame, i;
+    BOOLEAN Created = FALSE;
+
+    SessionProcessInitialize(&Leader, &Native);
+    MiSessionTestCurrent = &Leader;
+    for (Free = 0; Free < 32 && !Created; Free++)
+    {
+        ULONG64 Available;
+        NTSTATUS Status;
+
+        Count = 0;
+        while (Count < RTL_NUMBER_OF(Held) && (Frame = MiPfnAllocatePage(&System->Pfn, 0)) != MI_FRAME_INVALID)
+            Held[Count++] = Frame;
+        CHECK(Count > Free);
+        for (i = 0; i < Free; i++)
+            MiPfnShareDecrement(&System->Pfn, Held[--Count], TRUE);
+        Available = MiPfnAvailablePages(&System->Pfn);
+        Status = MmSessionCreate(&Id);
+        if (NT_SUCCESS(Status))
+        {
+            Created = TRUE;
+            CHECK(MmSessionDelete(Id) == STATUS_SUCCESS);
+        }
+        else
+        {
+            CHECK(Status == STATUS_NO_MEMORY);
+            CHECK(Leader.Session == NULL && MiPfnAvailablePages(&System->Pfn) == Available);
+        }
+        while (Count != 0)
+            MiPfnShareDecrement(&System->Pfn, Held[--Count], TRUE);
+    }
+    CHECK(Created);
+    MiSessionRemoveProcess(&Leader);
+    CHECK(MiSessionTestAllocations == 0);
+    MiSessionTestCurrent = NULL;
+}
+
+static void
 SessionMoveLastProcess(void)
 {
     struct _EPROCESS_HOST Leader, Keeper, Mover, Caller;
@@ -608,6 +652,7 @@ TestSession(void)
     SessionSetKeepsProcess();
     SessionMoveProcess();
     SessionDriverUnload();
+    SessionCreateOutOfFrames();
     SessionMoveLastProcess();
     SessionNext();
     SessionSpaceRelease(&World.System);
