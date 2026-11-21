@@ -1479,4 +1479,15 @@ typedef LPNUMBERFMTA LPNUMBERFMT;
 #define SORTING_PARADIGM_NLS 0x00000000
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+int WINAPI GetCalendarInfoEx(LPCWSTR lpLocaleName, CALID Calendar, LPCWSTR lpReserved, CALTYPE CalType, LPWSTR lpCalData, int cchData, LPDWORD lpValue);
+int WINAPI GetNumberFormatEx(LPCWSTR lpLocaleName, DWORD dwFlags, LPCWSTR lpValue, const NUMBERFMTW * lpFormat, LPWSTR lpNumberStr, int cchNumber);
+int WINAPI GetCurrencyFormatEx(LPCWSTR lpLocaleName, DWORD dwFlags, LPCWSTR lpValue, const CURRENCYFMTW * lpFormat, LPWSTR lpCurrencyStr, int cchCurrency);
+DWORD WINAPI IsValidNLSVersion(NLS_FUNCTION function, LPCWSTR lpLocaleName, LPNLSVERSIONINFOEX lpVersionInformation);
+#ifdef __cplusplus
+}
+#endif
+
 #endif

@@ -231,4 +231,30 @@ typedef DWORD (APIENTRY *PF_CancelConnectNotify)(LPNOTIFYINFO lpNotifyInfo,
 #define WNNC_ENUM_SHAREABLE 0x00000008
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+DWORD WINAPI NPAddConnection(LPNETRESOURCEW lpNetResource, LPWSTR lpPassword, LPWSTR lpUserName);
+DWORD WINAPI NPAddConnection3(HWND hwndOwner, LPNETRESOURCEW lpNetResource, LPWSTR lpPassword, LPWSTR lpUserName, DWORD dwFlags);
+DWORD WINAPI NPCancelConnection(LPWSTR lpName, BOOL fForce);
+DWORD WINAPI NPGetConnection(LPWSTR lpLocalName, LPWSTR lpRemoteName, LPDWORD lpnBufferLen);
+DWORD WINAPI NPGetUniversalName(LPCWSTR lpLocalPath, DWORD dwInfoLevel, LPVOID lpBuffer, LPDWORD lpBufferSize);
+DWORD WINAPI NPOpenEnum(DWORD dwScope, DWORD dwType, DWORD dwUsage, LPNETRESOURCEW lpNetResource, LPHANDLE lphEnum);
+DWORD WINAPI NPEnumResource(HANDLE hEnum, LPDWORD lpcCount, LPVOID lpBuffer, LPDWORD lpBufferSize);
+DWORD WINAPI NPCloseEnum(HANDLE hEnum);
+DWORD WINAPI NPGetCaps(DWORD ndex);
+DWORD WINAPI NPGetUser(LPWSTR lpName, LPWSTR lpUserName, LPDWORD lpnBufferLen);
+DWORD WINAPI NPGetResourceParent(LPNETRESOURCEW lpNetResource, LPVOID lpBuffer, LPDWORD lpBufferSize);
+DWORD WINAPI NPGetResourceInformation(LPNETRESOURCEW lpNetResource, LPVOID lpBuffer, LPDWORD lpBufferSize, LPWSTR * lplpSystem);
+DWORD WINAPI NPFormatNetworkName(LPWSTR lpRemoteName, LPWSTR lpFormattedName, LPDWORD lpnLength, DWORD dwFlags, DWORD dwAveCharPerLine);
+DWORD WINAPI NPGetPropertyText(DWORD iButton, DWORD nPropSel, LPWSTR lpName, LPWSTR lpButtonName, DWORD nButtonNameLen, DWORD nType);
+DWORD WINAPI NPPropertyDialog(HWND hwndParent, DWORD iButtonDlg, DWORD nPropSel, LPWSTR lpFileName, DWORD nType);
+DWORD WINAPI NPGetDirectoryType(LPWSTR lpName, LPINT lpType, BOOL bFlushCache);
+DWORD WINAPI NPDirectoryNotify(HWND hwnd, LPWSTR lpDir, DWORD dwOper);
+DWORD WINAPI NPLogonNotify(PLUID lpLogonId, LPCWSTR lpAuthentInfoType, LPVOID lpAuthentInfo, LPCWSTR lpPreviousAuthentInfoType, LPVOID lpPreviousAuthentInfo, LPWSTR lpStationName, LPVOID StationHandle, LPWSTR * lpLogonScript);
+DWORD WINAPI NPPasswordChangeNotify(LPCWSTR lpAuthentInfoType, LPVOID lpAuthentInfo, LPCWSTR lpPreviousAuthentInfoType, LPVOID lpPreviousAuthentInfo, LPWSTR lpStationName, LPVOID StationHandle, DWORD dwChangeInfo);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* ndef __WINE_NPAPI_H__ */

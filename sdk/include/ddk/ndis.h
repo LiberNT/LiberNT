@@ -11779,6 +11779,20 @@ typedef PCUNICODE_STRING PCNDIS_STRING;
 typedef struct _NDIS_RW_LOCK_EX NDIS_RW_LOCK_EX;
 typedef ULONG IPSEC_OFFLOAD_V2_SPI_TYPE;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+ULONG NTAPI NdisCurrentProcessorIndex(void);
+void NTAPI NdisGetSystemUpTimeEx(PLARGE_INTEGER pSystemUpTime);
+void NTAPI NdisCompleteDmaTransfer(PNDIS_STATUS Status, NDIS_HANDLE NdisDmaHandle, PNDIS_BUFFER Buffer, ULONG Offset, ULONG Length, BOOLEAN WriteToDevice);
+NDIS_STATUS NTAPI NdisMRegisterDmaChannel(PNDIS_HANDLE MiniportDmaHandle, NDIS_HANDLE MiniportAdapterHandle, UINT DmaChannel, BOOLEAN Dma32BitAddresses, PNDIS_DMA_DESCRIPTION DmaDescription, ULONG MaximumLength);
+void NTAPI NdisMDeregisterDmaChannel(NDIS_HANDLE MiniportDmaHandle);
+ULONG NTAPI NdisMReadDmaCounter(NDIS_HANDLE MiniportDmaHandle);
+ULONG NTAPI NdisMGetDmaAlignment(NDIS_HANDLE MiniportAdapterHandle);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* _NDIS_ */
 
 /* EOF */

@@ -1292,4 +1292,15 @@ typedef PPARSEDURLA PPARSEDURL;
 typedef const QITAB * LPCQITAB;
 typedef DWORD SHCT_FLAGS;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+int WINAPI SHAnsiToAnsi(PCSTR pszSrc, PSTR pszDst, int cchBuf);
+LRESULT WINAPI SHSendMessageBroadcastA(UINT uMsg, WPARAM wParam, LPARAM lParam);
+void WINAPI SetProcessReference(IUnknown * punk);
+HRESULT WINAPI GetProcessReference(IUnknown ** punk);
+#ifdef __cplusplus
+}
+#endif
+
 #endif // _INC_SHLWAPI

@@ -190,4 +190,12 @@ CRYPTCATSTORE     * WINAPI CryptCATStoreFromHandle(HANDLE);
 #define CRYPTCAT_MAX_MEMBERTAG 128
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+BOOL WINAPI IsCatalogFile(HANDLE hFile, WCHAR * pwszFileName);
+#ifdef __cplusplus
+}
+#endif
+
 #endif

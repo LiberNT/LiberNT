@@ -303,6 +303,14 @@ typedef enum _PROCESS_MEMORY_EXHAUSTION_TYPE {
 
 typedef struct _PROCESS_POWER_THROTTLING_STATE * PPROCESS_POWER_THROTTLING_STATE;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+BOOL WINAPI GetSystemCpuSetInformation(PSYSTEM_CPU_SET_INFORMATION Information, ULONG BufferLength, PULONG ReturnedLength, HANDLE Process, ULONG Flags);
+#ifdef __cplusplus
+}
+#endif
+
 #endif
 
 #define THREAD_POWER_THROTTLING_EXECUTION_SPEED 0x1

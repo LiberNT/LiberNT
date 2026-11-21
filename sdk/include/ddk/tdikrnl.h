@@ -1223,4 +1223,12 @@ typedef TDI_CMSGHDR *PTDI_CMSGHDR;
 #define TDI_DIRECT_ACCEPT 0x2A
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+NTSTATUS NTAPI TdiDeregisterNotificationHandler(HANDLE BindingHandle);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* __TDIKRNL_H */

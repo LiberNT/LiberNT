@@ -1257,4 +1257,13 @@ typedef enum _PKU2U_LOGON_SUBMIT_TYPE {
     Pku2uCertificateS4ULogon = 14
 } PKU2U_LOGON_SUBMIT_TYPE, *PPKU2U_LOGON_SUBMIT_TYPE;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+NTSTATUS WINAPI LsaQueryForestTrustInformation(LSA_HANDLE PolicyHandle, PLSA_UNICODE_STRING TrustedDomainName, PLSA_FOREST_TRUST_INFORMATION * ForestTrustInfo);
+NTSTATUS WINAPI LsaSetForestTrustInformation(LSA_HANDLE PolicyHandle, PLSA_UNICODE_STRING TrustedDomainName, PLSA_FOREST_TRUST_INFORMATION ForestTrustInfo, BOOLEAN CheckOnly, PLSA_FOREST_TRUST_COLLISION_INFORMATION * CollisionInfo);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* _NTSECAPI_H */

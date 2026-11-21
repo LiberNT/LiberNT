@@ -3122,4 +3122,14 @@ typedef PSP_INF_SIGNER_INFO_V2_A PSP_INF_SIGNER_INFO_V2;
 typedef SP_INF_SIGNER_INFO_V2 SP_INF_SIGNER_INFO;
 typedef PSP_INF_SIGNER_INFO_V2 PSP_INF_SIGNER_INFO;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+BOOL WINAPI SetupGetFileQueueFlags(HSPFILEQ FileQueue, PDWORD Flags);
+BOOL WINAPI SetupSetFileQueueFlags(HSPFILEQ FileQueue, DWORD FlagMask, DWORD Flags);
+BOOL WINAPI SetupGetNonInteractiveMode(void);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* _SETUPAPI_H_ */

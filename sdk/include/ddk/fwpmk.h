@@ -27,6 +27,15 @@
 
 #ifndef _KRPCENV_
 #define _KRPCENV_ 1
+#ifdef __cplusplus
+extern "C" {
+#endif
+NTSTATUS NTAPI IPsecSaContextDeleteById0(HANDLE engineHandle, UINT64 id);
+NTSTATUS NTAPI IPsecSaDestroyEnumHandle0(HANDLE engineHandle, HANDLE enumHandle);
+#ifdef __cplusplus
+}
+#endif
+
 #endif
 
 #include <fwpmtypes.h>

@@ -33,10 +33,6 @@ NTSYSAPI NTSTATUS NTAPI
 RtlEthernetStringToAddressA(PCSTR, PCSTR *, KMT_DL_EUI48 *);
 NTSYSAPI NTSTATUS NTAPI
 RtlStringFromGUIDEx(REFGUID, PUNICODE_STRING, BOOLEAN);
-NTSYSAPI ULONG NTAPI
-RtlCrc32(const void *, SIZE_T, ULONG);
-NTSYSAPI ULONGLONG NTAPI
-RtlCrc64(const void *, SIZE_T, ULONGLONG);
 
 /* Secure CRT (*_s) exports (sdk/lib/crt/arm64_win11compat.c). */
 int __cdecl memcpy_s(void *, size_t, const void *, size_t);

@@ -370,4 +370,14 @@ typedef enum _EVT_EVENT_PROPERTY_ID {
 
 typedef HANDLE EVT_OBJECT_ARRAY_PROPERTY_HANDLE;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+EVT_HANDLE WINAPI EvtQuery(EVT_HANDLE Session, LPCWSTR Path, LPCWSTR Query, DWORD Flags);
+EVT_HANDLE WINAPI EvtOpenLog(EVT_HANDLE Session, LPCWSTR Path, DWORD Flags);
+EVT_HANDLE WINAPI EvtOpenChannelEnum(EVT_HANDLE Session, DWORD Flags);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* __WINE_WINEVT_H */

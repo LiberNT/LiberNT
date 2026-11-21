@@ -1076,4 +1076,13 @@ typedef enum _SecDelegationType {
     SecObject = 4
 } SecDelegationType, *PSecDelegationType;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+SECURITY_STATUS WINAPI DeleteSecurityPackageA(LPSTR pszPackageName);
+SECURITY_STATUS WINAPI DeleteSecurityPackageW(LPWSTR pszPackageName);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* ndef __WINE_SSPI_H__ */

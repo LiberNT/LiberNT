@@ -243,4 +243,13 @@ typedef enum WIN32_MEMORY_PARTITION_INFORMATION_CLASS {
     MemoryPartitionDedicatedMemoryInfo = 1
 } WIN32_MEMORY_PARTITION_INFORMATION_CLASS;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+DWORD WINAPI DiscardVirtualMemory(PVOID VirtualAddress, SIZE_T Size);
+HANDLE WINAPI CreateFileMapping2(HANDLE File, SECURITY_ATTRIBUTES * SecurityAttributes, ULONG DesiredAccess, ULONG PageProtection, ULONG AllocationAttributes, ULONG64 MaximumSize, PCWSTR Name, MEM_EXTENDED_PARAMETER * ExtendedParameters, ULONG ParameterCount);
+#ifdef __cplusplus
+}
+#endif
+
 #endif
