@@ -251,7 +251,7 @@ TestCreateSection(
         }
         else
         {
-#ifdef _M_IX86
+#ifndef _WIN64
             PointerCount1 = 31;
             PointerCount2 = 33;
 #else
@@ -1107,7 +1107,7 @@ START_TEST(MmSection)
     ok(FileHandle1 != NULL, "FileHandle1 is NULL\n");
     if (GetNTVersion() < _WIN32_WINNT_WIN8)
         CheckObject(FileHandle1, 2L, 1L);
-#ifdef _M_IX86
+#ifndef _WIN64
     else
         CheckObject(FileHandle1, 33L, 1L);
 #else
@@ -1131,7 +1131,7 @@ START_TEST(MmSection)
         ok(FileObject1 != NULL, "FileObject1 is NULL\n");
         if (GetNTVersion() < _WIN32_WINNT_WIN8)
             CheckObject(FileHandle1, 3L, 1L);
-#ifdef _M_IX86
+#ifndef _WIN64
         else
             CheckObject(FileHandle1, 32L, 1L);
 #else
