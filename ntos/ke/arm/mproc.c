@@ -68,6 +68,9 @@ static volatile LONG KiArmGenericCount;
 static volatile LONG KiArmGenericArrived;
 static volatile LONG KiArmGenericDeparted;
 
+/* Startup block physical addresses by core number, for firmware spin loops that pass only the core. */
+ULONG KiArmSpinStartupBlocks[KI_ARM_SPIN_STARTUP_BLOCKS];
+
 static PKPRCB volatile KiArmFreezeOwner;
 static volatile LONG KiArmThawRequested;
 static KAFFINITY KiArmFrozenSet;

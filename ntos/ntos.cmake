@@ -23,7 +23,7 @@ if((ARCH STREQUAL "amd64" OR ARCH STREQUAL "arm64") AND CMAKE_C_COMPILER_ID STRE
 endif()
 
 if(ARCH STREQUAL "arm")
-    set(_arm_hal_sources ${REACTOS_SOURCE_DIR}/ntos/ke/arm/irql.c ${REACTOS_SOURCE_DIR}/ntos/ke/arm/interrupt.c ${REACTOS_SOURCE_DIR}/ntos/hal/arm/platform.c ${REACTOS_SOURCE_DIR}/ntos/hal/arm/hal.c ${REACTOS_SOURCE_DIR}/ntos/ke/spinlock.c ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/inttarget.c ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/sysinfo_stubs.c)
+    set(_arm_hal_sources ${REACTOS_SOURCE_DIR}/ntos/ke/arm/irql.c ${REACTOS_SOURCE_DIR}/ntos/ke/arm/interrupt.c ${REACTOS_SOURCE_DIR}/ntos/hal/arm/platform.c ${REACTOS_SOURCE_DIR}/ntos/hal/arm/gicv2.c ${REACTOS_SOURCE_DIR}/ntos/hal/arm/bcm2836.c ${REACTOS_SOURCE_DIR}/ntos/hal/arm/hal.c ${REACTOS_SOURCE_DIR}/ntos/ke/spinlock.c ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/inttarget.c ${REACTOS_SOURCE_DIR}/hal/arch/common/generic/sysinfo_stubs.c)
     set_property(SOURCE ${_arm_hal_sources} PROPERTY SKIP_PRECOMPILE_HEADERS ON)
     set_property(SOURCE ${_arm_hal_sources} APPEND PROPERTY COMPILE_DEFINITIONS _NTHALDLL_)
 endif()
@@ -553,6 +553,8 @@ elseif(ARCH STREQUAL "arm")
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/kiinit.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/mproc.c
         ${REACTOS_SOURCE_DIR}/ntos/hal/arm/platform.c
+        ${REACTOS_SOURCE_DIR}/ntos/hal/arm/gicv2.c
+        ${REACTOS_SOURCE_DIR}/ntos/hal/arm/bcm2836.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/services.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/syscall.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/thrdini.c

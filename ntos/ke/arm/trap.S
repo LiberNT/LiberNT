@@ -212,6 +212,23 @@ KiArmSecondaryTrampoline:
     mov r0, r4
     bx r5
 
+/*
+ * KiArmSecondarySpinEntry: entry from a firmware spin loop that passes the core
+ * number in r0 (MPIDR.Aff0) with the MMU off. The core's startup block address
+ * comes from KiArmSpinStartupBlocks, reached relative to this code.
+ */
+    .global KiArmSecondarySpinEntry
+    .thumb_func
+KiArmSecondarySpinEntry:
+    cpsid if
+    adr r1, 2f
+    ldr r2, [r1]
+    add r1, r1, r2
+    ldr r0, [r1, r0, lsl #2]
+    b KiArmSecondaryTrampoline
+    .balign 4
+2:  .word KiArmSpinStartupBlocks - 2b
+
 /* KiArmSecondaryEntry(PKI_ARM_STARTUP_BLOCK Block): MMU on, at the kernel address. */
     .global KiArmSecondaryEntry
     .thumb_func
