@@ -12,6 +12,8 @@
 #define LFH_TEST_ROUNDS 20000
 #define LFH_TEST_MAX_SIZE 1000
 #define LFH_LARGE_BLOCKS 24
+#define LFH_REUSE_LIVE 64
+#define LFH_REUSE_TRIALS 64
 
 static HANDLE TestHeap;
 static PVOID volatile Slots[LFH_TEST_SLOTS];
@@ -345,6 +347,79 @@ TestLargestSizeClasses(VOID)
 
 static
 VOID
+TestFreedSlots(
+    _In_ HANDLE Heap,
+    _In_ SIZE_T Size)
+{
+    PUCHAR Live[LFH_REUSE_LIVE], Old, First, Second;
+    ULONG Index, Trial, Offset, Missing = 0, Changed = 0, Reused = 0;
+    UCHAR Pattern;
+
+    for (Index = 0; Index < LFH_REUSE_LIVE; Index++)
+    {
+        Live[Index] = HeapAlloc(Heap, 0, Size);
+        if (Live[Index])
+            FillMemory(Live[Index], Size, (UCHAR)(0xA0 + (Index & 15)));
+        else
+            Missing++;
+    }
+    ok(Missing == 0, "%lu of %u %Iu-byte allocations failed\n", Missing, LFH_REUSE_LIVE, (size_t)Size);
+
+    for (Trial = 0; Trial < LFH_REUSE_TRIALS && !Missing; Trial++)
+    {
+        Index = 20 + (Trial * 7) % (LFH_REUSE_LIVE - 20);
+        Old = Live[Index];
+        Pattern = (UCHAR)(0xA0 + (Index & 15));
+        ok(HeapFree(Heap, 0, Old), "HeapFree failed: %lu\n", GetLastError());
+        for (Offset = 0; Offset < Size && Old[Offset] == Pattern; Offset++);
+        Changed += (Offset != Size);
+
+        First = HeapAlloc(Heap, 0, Size);
+        Second = HeapAlloc(Heap, 0, Size);
+        ok(First != NULL && Second != NULL, "HeapAlloc(%Iu) failed: %lu\n", (size_t)Size, GetLastError());
+        Reused += (First == Old);
+        if (Second)
+            HeapFree(Heap, 0, Second);
+        if (First)
+            FillMemory(First, Size, Pattern);
+        Live[Index] = First;
+    }
+
+    ok(Changed == 0, "%lu of %u freed %Iu-byte blocks changed\n", Changed, LFH_REUSE_TRIALS, (size_t)Size);
+    ok(Reused <= LFH_REUSE_TRIALS / 4, "%lu of %u allocations returned the %Iu-byte block freed just before\n",
+       Reused, LFH_REUSE_TRIALS, (size_t)Size);
+    for (Index = 0; Index < LFH_REUSE_LIVE; Index++)
+    {
+        if (Live[Index])
+            HeapFree(Heap, 0, Live[Index]);
+    }
+}
+
+static
+VOID
+TestFreedSlotsUntouched(VOID)
+{
+    ULONG Compatibility = 2;
+    HANDLE Heap;
+
+    Heap = HeapCreate(0, 0, 0);
+    ok(Heap != NULL, "HeapCreate failed: %lu\n", GetLastError());
+    if (!Heap) return;
+    ok(HeapSetInformation(Heap, HeapCompatibilityInformation, &Compatibility, sizeof(Compatibility)),
+       "HeapSetInformation failed: %lu\n", GetLastError());
+
+    TestFreedSlots(Heap, 24);
+    TestFreedSlots(Heap, 40);
+    TestFreedSlots(Heap, 200);
+    ok(HeapValidate(Heap, 0, NULL), "HeapValidate failed after the reuse checks\n");
+    ok(HeapDestroy(Heap), "HeapDestroy failed: %lu\n", GetLastError());
+
+    TestFreedSlots(GetProcessHeap(), 24);
+    TestFreedSlots(GetProcessHeap(), 56);
+}
+
+static
+VOID
 TestRefillCost(VOID)
 {
     double Small = BestReallocationCost(16384), Large = BestReallocationCost(262144);
@@ -402,6 +477,7 @@ START_TEST(HeapLowFragmentation)
         HeapFree(TestHeap, 0, Warm[Index]);
     ok(HeapDestroy(TestHeap), "HeapDestroy failed: %lu\n", GetLastError());
 
+    TestFreedSlotsUntouched();
     TestRefillCost();
     TestChurnCommit();
     TestLargestSizeClasses();

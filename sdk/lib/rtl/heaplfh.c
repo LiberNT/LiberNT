@@ -20,9 +20,12 @@
 #define RTLP_LFH_USAGE_MASK 0x1F
 #define RTLP_LFH_USAGE_LIMIT 0x10
 #define RTLP_LFH_USAGE_MAX 0xFFDE
-#define RTLP_LFH_NO_SLOT 0xFFFFFFFF
 #define RTLP_LFH_AFFINITY_SLOTS 16
 #define RTLP_LFH_AFFINITY_CONTENTION 64
+#define RTLP_LFH_MAX_SLOTS 256
+#define RTLP_LFH_FREE_MASK 0xFFFF
+#define RTLP_LFH_CURSOR_SHIFT 16
+#define RTLP_LFH_PROBES 4
 
 typedef struct _RTLP_LFH_USER_BLOCK
 {
@@ -32,11 +35,17 @@ typedef struct _RTLP_LFH_USER_BLOCK
     ULONG SlotCount;
     PHEAP Heap;
     LIST_ENTRY Link;
-    DECLSPEC_ALIGN(8) volatile LONGLONG FreeState;
+    volatile LONG SlotState;
+    volatile LONG BusyBitmap[RTLP_LFH_MAX_SLOTS / 32];
     PUCHAR FirstSlot;
     struct _RTLP_LFH_USER_BLOCK *NextPartial;
     volatile LONG Listed;
 } RTLP_LFH_USER_BLOCK, *PRTLP_LFH_USER_BLOCK;
+
+C_ASSERT(RTLP_LFH_USER_BLOCK_BYTES / ROUND_UP(1 + HEAP_LFH_OVERHEAD, HEAP_ENTRY_SIZE) <= RTLP_LFH_MAX_SLOTS);
+C_ASSERT(RTLP_LFH_MIN_SLOTS <= RTLP_LFH_MAX_SLOTS);
+C_ASSERT(RTLP_LFH_MAX_SLOTS <= RTLP_LFH_FREE_MASK);
+C_ASSERT(RTLP_LFH_MAX_SLOTS % 32 == 0);
 
 typedef union _RTLP_LFH_ENTRY_HEADER
 {
@@ -159,24 +168,96 @@ RtlpLfhSetSlotOffset(PRTLP_LFH_USER_BLOCK Block, PHEAP_ENTRY Entry)
 }
 
 static
-LONGLONG
-RtlpLfhReadFreeState(PRTLP_LFH_USER_BLOCK Block)
+ULONG
+RtlpLfhFreeCount(LONG State)
 {
-    return ReadAcquire64(&Block->FreeState);
-}
-
-static
-LONGLONG
-RtlpLfhNextFreeState(LONGLONG State, ULONG Head)
-{
-    return (LONGLONG)(((((ULONGLONG)State >> 32) + 1) << 32) | Head);
+    return (ULONG)State & RTLP_LFH_FREE_MASK;
 }
 
 static
 BOOLEAN
 RtlpLfhHasFreeSlot(PRTLP_LFH_USER_BLOCK Block)
 {
-    return (ULONG)RtlpLfhReadFreeState(Block) != RTLP_LFH_NO_SLOT;
+    return RtlpLfhFreeCount(ReadAcquire(&Block->SlotState)) != 0;
+}
+
+static
+ULONG
+RtlpLfhSpreadCursor(ULONG Cursor, ULONG SlotCount)
+{
+    ULONG Mixed = Cursor * 0x9E3779B1;
+
+    Mixed ^= Mixed >> 15;
+    Mixed *= 0x85EBCA6B;
+    Mixed ^= Mixed >> 13;
+    return (ULONG)(((ULONGLONG)Mixed * SlotCount) >> 32);
+}
+
+static
+BOOLEAN
+RtlpLfhReserveSlot(PRTLP_LFH_USER_BLOCK Block, PULONG Cursor, PULONG Free, PULONG Collisions)
+{
+    LONG Old, New, Observed;
+
+    Old = ReadNoFence(&Block->SlotState);
+    for (;;)
+    {
+        if (!RtlpLfhFreeCount(Old))
+            return FALSE;
+        *Cursor = (((ULONG)Old >> RTLP_LFH_CURSOR_SHIFT) + 1) & RTLP_LFH_FREE_MASK;
+        New = (LONG)((*Cursor << RTLP_LFH_CURSOR_SHIFT) | (RtlpLfhFreeCount(Old) - 1));
+        Observed = InterlockedCompareExchange(&Block->SlotState, New, Old);
+        if (Observed == Old)
+            break;
+        Old = Observed;
+        (*Collisions)++;
+    }
+
+    *Free = RtlpLfhFreeCount(Old);
+    ASSERT(*Free <= Block->SlotCount);
+    return TRUE;
+}
+
+static
+ULONG
+RtlpLfhClaimSlot(PRTLP_LFH_USER_BLOCK Block, ULONG Cursor, ULONG Free, PULONG Collisions)
+{
+    ULONG Words = Block->SlotCount / 32 + ((Block->SlotCount % 32) != 0);
+    ULONG Probes = (Free * 2 >= Block->SlotCount) ? RTLP_LFH_PROBES : 1;
+    ULONG Probe, Start = 0, Word, Mask, Clear, Bit = 0;
+
+    ASSERT(Words <= RTLP_LFH_MAX_SLOTS / 32);
+    ASSERT(Free != 0);
+    for (Probe = 0; Probe < Probes; ++Probe)
+    {
+        Start = RtlpLfhSpreadCursor(Cursor * RTLP_LFH_PROBES + Probe, Block->SlotCount);
+        ASSERT(Start < Block->SlotCount);
+        if ((ULONG)ReadNoFence(&Block->BusyBitmap[Start / 32]) & (1UL << (Start % 32)))
+            continue;
+        if (!InterlockedBitTestAndSet(&Block->BusyBitmap[Start / 32], (LONG)(Start % 32)))
+            return Start;
+        (*Collisions)++;
+    }
+
+    Word = Start / 32;
+    Mask = MAXULONG << (Start % 32);
+    for (;;)
+    {
+        Clear = ~(ULONG)ReadNoFence(&Block->BusyBitmap[Word]) & Mask;
+        if (Clear)
+        {
+            BitScanForward(&Bit, Clear);
+            if (!InterlockedBitTestAndSet(&Block->BusyBitmap[Word], (LONG)Bit))
+                break;
+            (*Collisions)++;
+            continue;
+        }
+        Mask = MAXULONG;
+        Word = (Word + 1 < Words) ? Word + 1 : 0;
+    }
+
+    ASSERT(Word * 32 + Bit < Block->SlotCount);
+    return Word * 32 + Bit;
 }
 
 static
@@ -409,13 +490,14 @@ RtlpLfhCreateUserBlock(PHEAP Heap, ULONG Bucket, SIZE_T SlotSize)
 {
     PRTLP_LFH_USER_BLOCK Block;
     SIZE_T Header, Bytes, Count;
-    ULONG Index;
+    ULONG Index, Busy;
     PHEAP_ENTRY Entry;
 
     Header = ROUND_UP(sizeof(RTLP_LFH_USER_BLOCK), HEAP_ENTRY_SIZE);
     Count = (RTLP_LFH_USER_BLOCK_BYTES - Header) / SlotSize;
     if (Count < RTLP_LFH_MIN_SLOTS)
         Count = RTLP_LFH_MIN_SLOTS;
+    ASSERT(Count <= RTLP_LFH_MAX_SLOTS);
     Bytes = Header + Count * SlotSize + HEAP_ENTRY_SIZE;
 
     /* The refill holds the heap lock; HEAP_NO_SERIALIZE keeps the block itself out of the front end. */
@@ -428,7 +510,18 @@ RtlpLfhCreateUserBlock(PHEAP Heap, ULONG Bucket, SIZE_T SlotSize)
     Block->SlotCount = (ULONG)Count;
     Block->Heap = Heap;
     Block->FirstSlot = (PUCHAR)Block + Header;
-    Block->FreeState = 0;
+    Block->SlotState = (LONG)(((((ULONG)((ULONG_PTR)Block >> HEAP_ENTRY_SHIFT)) & RTLP_LFH_FREE_MASK) << RTLP_LFH_CURSOR_SHIFT) |
+                              (ULONG)Count);
+    for (Index = 0; Index < RTLP_LFH_MAX_SLOTS / 32; ++Index)
+    {
+        if ((Index + 1) * 32 <= Count)
+            Busy = 0;
+        else if (Index * 32 >= Count)
+            Busy = MAXULONG;
+        else
+            Busy = MAXULONG << (Count % 32);
+        Block->BusyBitmap[Index] = (LONG)Busy;
+    }
     Block->NextPartial = NULL;
     Block->Listed = 0;
 
@@ -439,9 +532,6 @@ RtlpLfhCreateUserBlock(PHEAP Heap, ULONG Bucket, SIZE_T SlotSize)
         RtlpLfhSetSlotOffset(Block, Entry);
     }
 
-    for (Index = 0; Index < Count; ++Index)
-        *(PULONG)(RtlpLfhSlotEntry(Block, Index) + 1) = (Index + 1 < Count) ? Index + 1 : RTLP_LFH_NO_SLOT;
-
     Block->Signature = RTLP_LFH_BLOCK_SIGNATURE;
     return Block;
 }
@@ -451,22 +541,12 @@ PVOID
 RtlpLfhPopSlot(PRTLP_LFH_USER_BLOCK Block, SIZE_T Size, ULONG Flags, PULONG Collisions)
 {
     PHEAP_ENTRY Entry;
-    LONGLONG Old, New;
-    ULONG Head;
+    ULONG Cursor, Free;
 
-    for (;;)
-    {
-        Old = RtlpLfhReadFreeState(Block);
-        Head = (ULONG)Old;
-        if (Head == RTLP_LFH_NO_SLOT)
-            return NULL;
-        New = RtlpLfhNextFreeState(Old, *(volatile ULONG *)(RtlpLfhSlotEntry(Block, Head) + 1));
-        if (InterlockedCompareExchange64(&Block->FreeState, New, Old) == Old)
-            break;
-        (*Collisions)++;
-    }
+    if (!RtlpLfhReserveSlot(Block, &Cursor, &Free, Collisions))
+        return NULL;
 
-    Entry = RtlpLfhSlotEntry(Block, Head);
+    Entry = RtlpLfhSlotEntry(Block, RtlpLfhClaimSlot(Block, Cursor, Free, Collisions));
     Entry->Flags = HEAP_ENTRY_BUSY | (UCHAR)((Flags & HEAP_SETTABLE_USER_FLAGS) >> 4);
     Entry->SmallTagIndex = 0;
     Entry->UnusedBytes = (UCHAR)(RtlpLfhUsableSize(Block) - Size);
@@ -684,23 +764,22 @@ RtlpLfhFree(PVOID Ptr, PRTLP_LFH_SLOT Slot)
     PRTLP_LFH_HEAP Lfh = Block->Heap->FrontEndHeap;
     PHEAP_ENTRY Entry = (PHEAP_ENTRY)Ptr - 1;
     ULONG Index = Slot->Index;
-    LONGLONG Old, New;
+    ULONG Free;
 
-    if (!RtlpLfhReleaseEntry(Entry))
+    ASSERT(Index < Block->SlotCount);
+    if (!RtlpLfhReleaseEntry(Entry) ||
+        !InterlockedBitTestAndReset(&Block->BusyBitmap[Index / 32], (LONG)(Index % 32)))
     {
         RtlSetLastWin32ErrorAndNtStatusFromNtStatus(STATUS_INVALID_PARAMETER);
         return FALSE;
     }
 
-    do
-    {
-        Old = RtlpLfhReadFreeState(Block);
-        *(volatile ULONG *)Ptr = (ULONG)Old;
-        New = RtlpLfhNextFreeState(Old, Index);
-    } while (InterlockedCompareExchange64(&Block->FreeState, New, Old) != Old);
+    Free = RtlpLfhFreeCount(InterlockedIncrement(&Block->SlotState));
+    ASSERT(Free != 0);
+    ASSERT(Free <= Block->SlotCount);
 
     /* FIXME: emptied user blocks are kept until the heap is destroyed; releasing them needs safe reclamation */
-    if ((ULONG)Old == RTLP_LFH_NO_SLOT)
+    if (Free == 1)
         RtlpLfhListPartial(&Lfh->Buckets[Block->Bucket], Block);
 
     return TRUE;
