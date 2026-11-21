@@ -1186,17 +1186,22 @@ NtfsIsFileRecordOpen(_In_ PVolumeContextBlock VolCB,
     PLIST_ENTRY Bucket = NtfsStreamHashBucket(VolCB, RecordNumber);
     BOOLEAN Open = FALSE;
 
+    ASSERT(ExIsResourceAcquiredExclusiveLite(&VolCB->MetadataResource));
     ExAcquireFastMutex(&VolCB->StreamListMutex);
     for (Entry = Bucket->Flink; Entry != Bucket; Entry = Entry->Flink)
     {
         PStreamContextBlock StreamCB = CONTAINING_RECORD(Entry, StreamContextBlock, HashEntry);
 
-        if ((StreamCB->FileReference & 0x0000FFFFFFFFFFFFULL) == RecordNumber &&
-            StreamCB->ShareAccess.OpenCount != 0)
+        if ((StreamCB->FileReference & 0x0000FFFFFFFFFFFFULL) != RecordNumber)
+            continue;
+        if (StreamCB->ShareAccess.OpenCount || StreamCB->DirectExtending ||
+            ExIsResourceAcquiredSharedLite(&StreamCB->PagingIoResource) ||
+            !ExAcquireResourceExclusiveLite(&StreamCB->PagingIoResource, FALSE))
         {
             Open = TRUE;
             break;
         }
+        ExReleaseResourceLite(&StreamCB->PagingIoResource);
     }
     ExReleaseFastMutex(&VolCB->StreamListMutex);
     return Open;
@@ -3212,7 +3217,7 @@ NtfsFsdSetInformation(_In_ PDEVICE_OBJECT VolumeDeviceObject,
             if (!NT_SUCCESS(Status))
                 goto Complete;
         }
-        Status = NtfsPersistPendingSize(VolCB, FileCB);
+        Status = NtfsPersistPendingSize(VolCB, FileCB, FALSE);
         if (!NT_SUCCESS(Status))
             goto Complete;
     }
@@ -3523,6 +3528,11 @@ NtfsFsdSetInformation(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         NtfsRefreshFileSizes(VolCB,
                              FileCB,
                              FileObject);
+        if (AllocationRequest && FileCB->StreamCB && FileCB->RequestedType == TypeData)
+        {
+            InterlockedExchange(&FileCB->StreamCB->TrimOnClose,
+                                RequestedSize.QuadPart > NtfsGetCommonFcbHeader(FileCB)->FileSize.QuadPart);
+        }
         NtfsPurgeStreamCache(FileCB, FileObject, NULL, 0);
         FileObject->Flags |=
             FO_FILE_MODIFIED |

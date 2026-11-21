@@ -160,6 +160,7 @@ NtfsUpdateReparsePoint(
     KeEnterCriticalRegion();
     ExAcquireResourceExclusiveLite(NtfsGetMainResource(FileCB), TRUE);
     ResourceAcquired = TRUE;
+    ExAcquireResourceExclusiveLite(NtfsGetPagingIoResource(FileCB), TRUE);
     NtfsAcquireMetadata(VolCB);
     Status = NtfsRefreshDirectoryRecord(VolCB, FileCB);
     if (NT_SUCCESS(Status))
@@ -177,6 +178,7 @@ NtfsUpdateReparsePoint(
             InterlockedIncrement(&VolCB->DirGeneration);
     }
     NtfsReleaseMetadata(VolCB);
+    ExReleaseResourceLite(NtfsGetPagingIoResource(FileCB));
     if (NT_SUCCESS(Status))
         FileObject->Flags |= FO_FILE_MODIFIED;
 
@@ -495,6 +497,7 @@ NtfsSetSparse(_In_ PDEVICE_OBJECT VolumeDeviceObject,
 
     KeEnterCriticalRegion();
     ExAcquireResourceExclusiveLite(NtfsGetMainResource(FileCB), TRUE);
+    ExAcquireResourceExclusiveLite(NtfsGetPagingIoResource(FileCB), TRUE);
     NtfsAcquireMetadata(VolCB);
     Status = NtfsFileRecordSetSparse(
         FileCB->FileRec,
@@ -504,6 +507,7 @@ NtfsSetSparse(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     if (NT_SUCCESS(Status))
         InterlockedIncrement(&VolCB->DirGeneration);
     NtfsReleaseMetadata(VolCB);
+    ExReleaseResourceLite(NtfsGetPagingIoResource(FileCB));
     if (NT_SUCCESS(Status))
     {
         NtfsRefreshFileSizes(VolCB,
@@ -626,10 +630,11 @@ NtfsSetCompression(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                 goto Done;
             }
         }
-        Status = NtfsPersistPendingSize(VolCB, FileCB);
+        Status = NtfsPersistPendingSize(VolCB, FileCB, FALSE);
         if (!NT_SUCCESS(Status))
             goto Done;
     }
+    ExAcquireResourceExclusiveLite(NtfsGetPagingIoResource(FileCB), TRUE);
     NtfsAcquireMetadata(VolCB);
     Status = NtfsFileRecordSetCompression(
         FileCB->FileRec,
@@ -638,6 +643,7 @@ NtfsSetCompression(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     if (NT_SUCCESS(Status))
         InterlockedIncrement(&VolCB->DirGeneration);
     NtfsReleaseMetadata(VolCB);
+    ExReleaseResourceLite(NtfsGetPagingIoResource(FileCB));
     if (NT_SUCCESS(Status))
     {
         if (!IsDirectory)
@@ -737,9 +743,10 @@ NtfsSetZeroData(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         }
     }
 
-    Status = NtfsPersistPendingSize(VolCB, FileCB);
+    Status = NtfsPersistPendingSize(VolCB, FileCB, FALSE);
     if (!NT_SUCCESS(Status))
         goto Done;
+    ExAcquireResourceExclusiveLite(NtfsGetPagingIoResource(FileCB), TRUE);
     NtfsAcquireMetadata(VolCB);
     Status = NtfsFileRecordSetZeroData(
         FileCB->FileRec,
@@ -751,6 +758,7 @@ NtfsSetZeroData(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     if (NT_SUCCESS(Status))
         InterlockedIncrement(&VolCB->DirGeneration);
     NtfsReleaseMetadata(VolCB);
+    ExReleaseResourceLite(NtfsGetPagingIoResource(FileCB));
     if (NT_SUCCESS(Status))
     {
         NtfsRefreshFileSizes(VolCB,
@@ -1501,7 +1509,7 @@ NtfsPersistStreamSize(
     {
         KeEnterCriticalRegion();
         ExAcquireResourceExclusiveLite(NtfsGetMainResource(FileCB), TRUE);
-        Status = NtfsPersistPendingSize(VolCB, FileCB);
+        Status = NtfsPersistPendingSize(VolCB, FileCB, FALSE);
         ExReleaseResourceLite(NtfsGetMainResource(FileCB));
         KeLeaveCriticalRegion();
     }
@@ -1722,6 +1730,7 @@ NtfsDismountVolume(
     if (!NT_SUCCESS(Status))
         return Status;
 
+    ExWaitForRundownProtectionRelease(&VolCB->FileWrites);
     FsRtlNotifyVolumeEvent(FileObject,
                            FSRTL_VOLUME_DISMOUNT);
 
@@ -1736,6 +1745,16 @@ NtfsDismountVolume(
     KeLeaveCriticalRegion();
 
     Status = NtfsFlushVolume(VolCB, TRUE);
+
+    if (NT_SUCCESS(Status))
+    {
+        ExWaitForRundownProtectionRelease(&VolCB->PagingWrites);
+        Status = NtfsDiskFlushVolumeKm(VolCB->StorageDevice);
+        if (!NT_SUCCESS(Status))
+            ExReInitializeRundownProtection(&VolCB->PagingWrites);
+    }
+    if (!NT_SUCCESS(Status))
+        ExReInitializeRundownProtection(&VolCB->FileWrites);
 
     ExAcquireFastMutex(&VolCB->VolumeStateMutex);
     if (NT_SUCCESS(Status))
@@ -2258,6 +2277,8 @@ NtfsMoveFile(
     Status = NtfsRefreshDirectoryRecord(VolCB, FileCB);
     if (NT_SUCCESS(Status))
     {
+        if (IsDirectory || NtfsFileRecordGetNumber(FileCB->FileRec) <= NTFS_LAST_RESERVED_FILE_RECORD)
+            ++VolCB->MetadataMoveGeneration;
         Status = NtfsFileRecordMoveClusters(FileCB->FileRec,
                                             RequestedType,
                                             RequestedStream,
@@ -2621,7 +2642,7 @@ NtfsFsdFlushBuffers(_In_ PDEVICE_OBJECT VolumeDeviceObject,
         Status = IoStatus.Status;
     }
     if (NT_SUCCESS(Status))
-        Status = NtfsPersistPendingSize((PVolumeContextBlock)VolumeDeviceObject->DeviceExtension, FileCB);
+        Status = NtfsPersistPendingSize((PVolumeContextBlock)VolumeDeviceObject->DeviceExtension, FileCB, FALSE);
 
     /* Metadata the library is holding back has to reach the disk too. */
     if (NT_SUCCESS(Status))

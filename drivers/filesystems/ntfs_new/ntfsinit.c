@@ -464,7 +464,7 @@ NtfsFinalizePendingDelete(_In_ PVolumeContextBlock VolCB,
                  FileCB->RequestedStream && FileCB->RequestedStream[0];
     if (FileCB->StreamCB != BaseStream)
         ExAcquireResourceExclusiveLite(NtfsGetMainResource(FileCB), TRUE);
-    DeleteStatus = DeleteLink ? NtfsPersistPendingSize(VolCB, FileCB) : STATUS_SUCCESS;
+    DeleteStatus = DeleteLink ? NtfsPersistPendingSize(VolCB, FileCB, FALSE) : STATUS_SUCCESS;
     if (FileCB->StreamCB != BaseStream)
         ExReleaseResourceLite(NtfsGetMainResource(FileCB));
     if (!NT_SUCCESS(DeleteStatus))
@@ -1004,12 +1004,12 @@ NtfsFsdCleanup(_In_ PDEVICE_OBJECT VolumeDeviceObject,
             KeLeaveCriticalRegion();
         }
 
-        if (FileCB->StreamCB && FileCB->StreamCB->SizePending &&
+        if (FileCB->StreamCB && (FileCB->StreamCB->SizePending || (LastHandle && ReadAcquire(&FileCB->StreamCB->TrimOnClose))) &&
             !FileCB->DeletePending && !(FileCB->CreateOptions & FILE_DELETE_ON_CLOSE))
         {
             KeEnterCriticalRegion();
             ExAcquireResourceExclusiveLite(NtfsGetMainResource(FileCB), TRUE);
-            NtfsPersistPendingSize(VolCB, FileCB);
+            NtfsPersistPendingSize(VolCB, FileCB, LastHandle);
             ExReleaseResourceLite(NtfsGetMainResource(FileCB));
             KeLeaveCriticalRegion();
         }

@@ -17,7 +17,7 @@ static WCHAR VolumeRoot[] = L"?:\\";
 
 static
 BOOL
-FindTestVolume(VOID)
+FindTestVolume(_In_ BOOL AllowSystemVolume)
 {
     WCHAR Label[MAX_PATH + 1];
     WCHAR FileSystem[MAX_PATH + 1];
@@ -36,7 +36,7 @@ FindTestVolume(VOID)
         }
     }
 
-    if (GetSystemDirectoryW(System, ARRAYSIZE(System)) == 0)
+    if (!AllowSystemVolume || GetSystemDirectoryW(System, ARRAYSIZE(System)) == 0)
         return FALSE;
     VolumeRoot[0] = System[0];
     return GetVolumeInformationW(VolumeRoot, NULL, 0, NULL, NULL, NULL, FileSystem, ARRAYSIZE(FileSystem)) &&
@@ -195,6 +195,34 @@ TestFragmentedTransfers(
     CloseHandle(FileA);
 
     CheckContents(PathA, 300, Buffer);
+    FileA = CreateFileW(PathA, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_WRITE_THROUGH, NULL);
+    ok(FileA != INVALID_HANDLE_VALUE, "reopening fragmented file: %lu\n", GetLastError());
+    if (FileA != INVALID_HANDLE_VALUE)
+    {
+        for (Chunk = 0; Chunk < CHUNK_COUNT; ++Chunk)
+            Fill(Buffer + Chunk * CHUNK_SIZE, CHUNK_SIZE, 500 + Chunk);
+        ok(SetFilePointer(FileA, 1, NULL, FILE_BEGIN) == 1 &&
+           WriteFile(FileA, Buffer + 1, CHUNK_SIZE * CHUNK_COUNT - 2, &Done, NULL) && Done == CHUNK_SIZE * CHUNK_COUNT - 2,
+           "unaligned write over multiple extents: %lu\n", GetLastError());
+        CloseHandle(FileA);
+        FileA = CreateFileW(PathA, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_NO_BUFFERING, NULL);
+        ok(FileA != INVALID_HANDLE_VALUE, "reopening fragmented file for verification: %lu\n", GetLastError());
+        if (FileA != INVALID_HANDLE_VALUE)
+        {
+            ok(ReadFile(FileA, Buffer, CHUNK_SIZE * CHUNK_COUNT, &Done, NULL) && Done == CHUNK_SIZE * CHUNK_COUNT,
+               "reading fragmented data: %lu\n", GetLastError());
+            ok(Buffer[0] == (UCHAR)(300 * 131), "first neighbor changed\n");
+            ok(Buffer[CHUNK_SIZE * CHUNK_COUNT - 1] == (UCHAR)((300 + CHUNK_COUNT - 1) * 131 +
+               (CHUNK_SIZE - 1) * 7 + ((CHUNK_SIZE - 1) >> 9)), "last neighbor changed\n");
+            Buffer[0] = (UCHAR)(500 * 131);
+            Buffer[CHUNK_SIZE * CHUNK_COUNT - 1] = (UCHAR)((500 + CHUNK_COUNT - 1) * 131 +
+                                                    (CHUNK_SIZE - 1) * 7 + ((CHUNK_SIZE - 1) >> 9));
+            for (Chunk = 0; Chunk < CHUNK_COUNT; ++Chunk)
+                ok(Matches(Buffer + Chunk * CHUNK_SIZE, CHUNK_SIZE, 500 + Chunk), "fragmented payload chunk %lu\n", Chunk);
+            CloseHandle(FileA);
+        }
+    }
+
     CheckContents(PathB, 200, Buffer);
     ok(DeleteFileW(PathA), "Deleting %ls failed: %lu\n", PathA, GetLastError());
     ok(DeleteFileW(PathB), "Deleting %ls failed: %lu\n", PathB, GetLastError());
@@ -311,7 +339,7 @@ START_TEST(DirectIo)
 {
     PUCHAR Buffer;
 
-    if (!FindTestVolume())
+    if (!FindTestVolume(TRUE))
     {
         skip("No NTFS volume to test on\n");
         return;
@@ -326,4 +354,244 @@ START_TEST(DirectIo)
     TestFragmentedTransfers(Buffer);
     TestPastValidData(Buffer);
     VirtualFree(Buffer, 0, MEM_RELEASE);
+}
+
+#define WRITE_WAIT_MS 10000
+#define THROUGH_FILE_SIZE (3 * 1024 * 1024)
+
+typedef struct
+{
+    HANDLE File;
+    PUCHAR Data;
+    DWORD Length;
+} TEST_WRITE;
+
+static DWORD WINAPI
+WriteTestData(PVOID Parameter)
+{
+    TEST_WRITE *Write = Parameter;
+    DWORD Done;
+
+    if (!WriteFile(Write->File, Write->Data, Write->Length, &Done, NULL))
+        return GetLastError();
+    return Done == Write->Length ? ERROR_SUCCESS : ERROR_WRITE_FAULT;
+}
+
+static BOOL
+WriteAt(HANDLE File, DWORD Offset, PUCHAR Data, DWORD Length)
+{
+    DWORD Done;
+
+    return SetFilePointer(File, Offset, NULL, FILE_BEGIN) == Offset &&
+           WriteFile(File, Data, Length, &Done, NULL) && Done == Length;
+}
+
+static VOID
+WriteUnalignedRanges(HANDLE File, PUCHAR Expected, PUCHAR Data)
+{
+    static const struct { DWORD Offset, Length; } Ranges[] =
+    {
+        {0x583c4, 65536}, {511, 1}, {513, 13}, {1024, 700}, {2047, 1025}, {0x583c4, 2 * 1024 * 1024}
+    };
+    DWORD Index;
+
+    for (Index = 0; Index < ARRAYSIZE(Ranges); ++Index)
+    {
+        Fill(Data, Ranges[Index].Length, 87 + Index);
+        ok(WriteAt(File, Ranges[Index].Offset, Data, Ranges[Index].Length), "range %lu failed: %lu\n",
+           Index, GetLastError());
+        memcpy(Expected + Ranges[Index].Offset, Data, Ranges[Index].Length);
+    }
+}
+
+static VOID
+RaceSameSector(PCWSTR Path, HANDLE File, PUCHAR Expected, PUCHAR Data)
+{
+    TEST_WRITE Write = { File, Data, 127 };
+    HANDLE Second;
+    HANDLE Thread;
+    DWORD Error;
+    DWORD Base;
+    DWORD Index;
+
+    Second = CreateFileW(Path, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
+                         FILE_FLAG_WRITE_THROUGH, NULL);
+    ok(Second != INVALID_HANDLE_VALUE, "opening second writer: %lu\n", GetLastError());
+    if (Second == INVALID_HANDLE_VALUE)
+        return;
+    for (Index = 0; Index < 4; ++Index)
+    {
+        Base = 16384 + Index * 4096;
+        Fill(Data, 256, 211 + Index);
+        if (SetFilePointer(File, Base + 19, NULL, FILE_BEGIN) != Base + 19)
+        {
+            ok(FALSE, "seeking first writer: %lu\n", GetLastError());
+            break;
+        }
+        Thread = CreateThread(NULL, 0, WriteTestData, &Write, 0, NULL);
+        ok(Thread != NULL, "starting same-sector writer: %lu\n", GetLastError());
+        if (!Thread)
+            break;
+        ok(WriteAt(Second, Base + 321, Data + 129, 127), "second writer: %lu\n", GetLastError());
+        Error = ERROR_TIMEOUT;
+        ok(WaitForSingleObject(Thread, WRITE_WAIT_MS) == WAIT_OBJECT_0, "first writer did not finish\n");
+        GetExitCodeThread(Thread, &Error);
+        CloseHandle(Thread);
+        ok(Error == ERROR_SUCCESS, "first writer: %lu\n", Error);
+        memcpy(Expected + Base + 19, Data, 127);
+        memcpy(Expected + Base + 321, Data + 129, 127);
+    }
+    CloseHandle(Second);
+}
+
+static VOID
+CheckPersisted(PCWSTR Path, const UCHAR *Expected, PUCHAR Data, DWORD Length)
+{
+    LARGE_INTEGER Size;
+    HANDLE File;
+    DWORD Done;
+
+    File = CreateFileW(Path, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_FLAG_NO_BUFFERING, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "reopening file: %lu\n", GetLastError());
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+    ok(GetFileSizeEx(File, &Size) && Size.QuadPart == Length, "wrong size on reopen\n");
+    ok(ReadFile(File, Data, Length, &Done, NULL) && Done == Length, "reading persisted data: %lu\n", GetLastError());
+    ok(!memcmp(Expected, Data, Length), "persisted payload or neighboring bytes differ\n");
+    CloseHandle(File);
+}
+
+static VOID
+TestUnalignedWriteThrough(PCWSTR Path, PUCHAR Expected, PUCHAR Data)
+{
+    HANDLE File;
+    DWORD Done;
+
+    File = CreateFileW(Path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
+                       FILE_FLAG_WRITE_THROUGH, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "opening write-through file: %lu\n", GetLastError());
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+    Fill(Expected, THROUGH_FILE_SIZE, 17);
+    if (!WriteFile(File, Expected, THROUGH_FILE_SIZE, &Done, NULL) || Done != THROUGH_FILE_SIZE || !FlushFileBuffers(File))
+    {
+        ok(FALSE, "initializing test file: %lu\n", GetLastError());
+        CloseHandle(File);
+        return;
+    }
+    WriteUnalignedRanges(File, Expected, Data + 1);
+    RaceSameSector(Path, File, Expected, Data + 1);
+    CloseHandle(File);
+    CheckPersisted(Path, Expected, Data, THROUGH_FILE_SIZE);
+}
+
+START_TEST(UnalignedWriteThrough)
+{
+    WCHAR Path[MAX_PATH];
+    PUCHAR Expected;
+    PUCHAR Data;
+
+    if (!FindTestVolume(FALSE))
+    {
+        skip("No NTFSTEST volume\n");
+        return;
+    }
+    if (!GetTempFileNameW(VolumeRoot, L"wt", 0, Path))
+    {
+        ok(FALSE, "creating test file: %lu\n", GetLastError());
+        return;
+    }
+    Expected = VirtualAlloc(NULL, THROUGH_FILE_SIZE, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    Data = VirtualAlloc(NULL, THROUGH_FILE_SIZE, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    ok(Expected && Data, "allocating buffers: %lu\n", GetLastError());
+    if (Expected && Data)
+        TestUnalignedWriteThrough(Path, Expected, Data);
+    if (Data)
+        VirtualFree(Data, 0, MEM_RELEASE);
+    if (Expected)
+        VirtualFree(Expected, 0, MEM_RELEASE);
+    DeleteFileW(Path);
+}
+
+static VOID
+CheckPromoted(PCWSTR Path, DWORD Offset, DWORD Length, PUCHAR Data)
+{
+    LARGE_INTEGER Size;
+    HANDLE File;
+    DWORD Done;
+
+    File = CreateFileW(Path, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_FLAG_NO_BUFFERING, NULL);
+    ok(File != INVALID_HANDLE_VALUE && GetFileSizeEx(File, &Size) && Size.QuadPart == Offset + Length,
+       "wrong EOF on reopen\n");
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+    memset(Data, 0xcc, Offset + Length);
+    ok(ReadFile(File, Data, Offset + Length, &Done, NULL) && Done == Offset + Length, "reading promoted file: %lu\n",
+       GetLastError());
+    if (Offset)
+        ok(Matches(Data, 137, 5) && IsZero(Data + 137, Offset - 137), "resident prefix or gap changed\n");
+    ok(Matches(Data + Offset, Length, 23), "promoted data differs\n");
+    CloseHandle(File);
+}
+
+static VOID
+TestResidentWrite(_In_ PCWSTR Path, _In_ DWORD Offset, _In_ DWORD Length, _In_ DWORD Flags, _Inout_ PUCHAR Data)
+{
+    HANDLE File;
+    DWORD Done;
+
+    File = CreateFileW(Path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_FLAG_WRITE_THROUGH, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "creating resident file: %lu\n", GetLastError());
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+    if (Offset)
+    {
+        Fill(Data, 137, 5);
+        ok(WriteFile(File, Data, 137, &Done, NULL) && Done == 137, "seeding resident prefix: %lu\n", GetLastError());
+    }
+    CloseHandle(File);
+    File = CreateFileW(Path, GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_NO_BUFFERING | Flags, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "opening unbuffered writer: %lu\n", GetLastError());
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+    Fill(Data, Length, 23);
+    ok(WriteAt(File, Offset, Data, Length), "first write at %lu with flags %#lx failed: %lu\n", Offset, Flags,
+       GetLastError());
+    CloseHandle(File);
+    CheckPromoted(Path, Offset, Length, Data);
+}
+
+START_TEST(ResidentWrite)
+{
+    DWORD Sectors, SectorSize, Free, Total, Length, Offset;
+    WCHAR Path[MAX_PATH];
+    PUCHAR Data;
+
+    if (!FindTestVolume(FALSE))
+    {
+        skip("No NTFSTEST volume\n");
+        return;
+    }
+    if (!GetDiskFreeSpaceW(VolumeRoot, &Sectors, &SectorSize, &Free, &Total))
+    {
+        ok(FALSE, "reading sector size: %lu\n", GetLastError());
+        return;
+    }
+    Length = 64 * 1024 + 3 * SectorSize;
+    Offset = max(4096UL, SectorSize);
+    if (!GetTempFileNameW(VolumeRoot, L"rp", 0, Path))
+    {
+        ok(FALSE, "creating test file: %lu\n", GetLastError());
+        return;
+    }
+    Data = VirtualAlloc(NULL, Length + Offset, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    ok(Data != NULL, "allocating aligned buffer: %lu\n", GetLastError());
+    if (Data)
+    {
+        TestResidentWrite(Path, 0, Length, FILE_FLAG_WRITE_THROUGH, Data);
+        TestResidentWrite(Path, Offset, Length, FILE_FLAG_WRITE_THROUGH, Data);
+        TestResidentWrite(Path, Offset, Length, 0, Data);
+        VirtualFree(Data, 0, MEM_RELEASE);
+    }
+    DeleteFileW(Path);
 }

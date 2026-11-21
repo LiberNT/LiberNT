@@ -447,3 +447,110 @@ START_TEST(ConcurrentIo)
     MeasureVolume(TRUE, FALSE);
     MeasureVolume(FALSE, TRUE);
 }
+
+#define RACE_FILES 16
+#define RACE_WAIT_MS 10000
+
+typedef struct
+{
+    PCWSTR Directory;
+    HANDLE Start;
+    HANDLE Ready;
+    BYTE Id;
+    DWORD Results[RACE_FILES];
+} CREATE_WORKER;
+
+static DWORD WINAPI
+CreateSameNames(PVOID Context)
+{
+    CREATE_WORKER *Worker = Context;
+    WCHAR Path[MAX_PATH];
+    DWORD i, Bytes;
+
+    SetEvent(Worker->Ready);
+    if (WaitForSingleObject(Worker->Start, RACE_WAIT_MS) != WAIT_OBJECT_0)
+        return ERROR_TIMEOUT;
+    for (i = 0; i < RACE_FILES; ++i)
+    {
+        HANDLE File;
+        StringCchPrintfW(Path, ARRAYSIZE(Path), L"%ls\\%u.bin", Worker->Directory, i);
+        File = CreateFileW(Path, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_NEW, 0, NULL);
+        if (File == INVALID_HANDLE_VALUE)
+        {
+            Worker->Results[i] = GetLastError();
+            continue;
+        }
+        Worker->Results[i] = WriteFile(File, &Worker->Id, 1, &Bytes, NULL) && Bytes == 1 ? ERROR_SUCCESS : ERROR_WRITE_FAULT;
+        CloseHandle(File);
+    }
+    return 0;
+}
+
+START_TEST(CreateRace)
+{
+    WCHAR Directory[MAX_PATH], Path[MAX_PATH];
+    CREATE_WORKER Workers[2] = {0};
+    HANDLE Threads[2] = {NULL}, Ready[2] = {NULL}, Start;
+    DWORD i, Bytes, Count = 0;
+
+    if (!FindTestVolume())
+    {
+        skip("no NTFS volume\n");
+        return;
+    }
+    if (!GetTempFileNameW(VolumeRoot, L"mft", 0, Directory) || !DeleteFileW(Directory) || !CreateDirectoryW(Directory, NULL))
+    {
+        ok(FALSE, "creating test directory failed: %lu\n", GetLastError());
+        return;
+    }
+    Start = CreateEventW(NULL, TRUE, FALSE, NULL);
+    ok(Start != NULL, "creating start event failed\n");
+    for (i = 0; Start && i < ARRAYSIZE(Workers); ++i)
+    {
+        Workers[i].Id = (BYTE)(i + 1);
+        Workers[i].Directory = Directory;
+        Workers[i].Start = Start;
+        Ready[i] = Workers[i].Ready = CreateEventW(NULL, TRUE, FALSE, NULL);
+        if (!Ready[i])
+            break;
+        Threads[i] = CreateThread(NULL, 0, CreateSameNames, &Workers[i], 0, NULL);
+        if (!Threads[i])
+            break;
+        ++Count;
+    }
+    ok(Count == 2, "started %lu creators\n", Count);
+    if (Count)
+    {
+        ok(WaitForMultipleObjects(Count, Ready, TRUE, RACE_WAIT_MS) == WAIT_OBJECT_0, "creators did not start\n");
+        SetEvent(Start);
+        ok(WaitForMultipleObjects(Count, Threads, TRUE, RACE_WAIT_MS) == WAIT_OBJECT_0, "creators did not finish\n");
+    }
+    for (i = 0; Count && i < RACE_FILES; ++i)
+    {
+        HANDLE File;
+        BYTE Data[2];
+        DWORD Winner = Workers[0].Results[i] == ERROR_SUCCESS ? 0 : 1;
+        StringCchPrintfW(Path, ARRAYSIZE(Path), L"%ls\\%u.bin", Directory, i);
+        if (Count == 2)
+        {
+            ok(Workers[Winner].Results[i] == ERROR_SUCCESS && Workers[1 - Winner].Results[i] == ERROR_FILE_EXISTS,
+               "file %lu create results %lu/%lu\n", i, Workers[0].Results[i], Workers[1].Results[i]);
+            File = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+            ok(File != INVALID_HANDLE_VALUE, "reopening file %lu failed: %lu\n", i, GetLastError());
+            if (File != INVALID_HANDLE_VALUE)
+            {
+                ok(ReadFile(File, Data, sizeof(Data), &Bytes, NULL) && Bytes == 1 && Data[0] == Workers[Winner].Id,
+                   "file %lu lost its creator's data\n", i);
+                CloseHandle(File);
+            }
+        }
+        DeleteFileW(Path);
+    }
+    for (i = 0; i < ARRAYSIZE(Workers); ++i)
+    {
+        if (Threads[i]) CloseHandle(Threads[i]);
+        if (Ready[i]) CloseHandle(Ready[i]);
+    }
+    if (Start) CloseHandle(Start);
+    ok(RemoveDirectoryW(Directory), "removing test directory failed: %lu\n", GetLastError());
+}

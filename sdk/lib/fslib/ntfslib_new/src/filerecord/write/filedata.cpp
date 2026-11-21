@@ -863,7 +863,8 @@ WriteRunBytes(_In_ PVolume DiskVolume,
               _In_ PDataRun Runs,
               _In_ ULONGLONG Offset,
               _In_ PUCHAR Buffer,
-              _In_ ULONG Length)
+              _In_ ULONG Length,
+              _In_ NTFS_WRITE_VOLUME_ROUTINE *Write = NtfsWriteVolumeContext)
 {
     ULONGLONG TotalBytes;
     ULONGLONG BytesInRun;
@@ -899,10 +900,9 @@ WriteRunBytes(_In_ PVolume DiskVolume,
         ULONG Chunk = (ULONG)min(
             (ULONGLONG)(Length - Written),
             BytesInRun - Offset);
-        Status = DiskVolume->WriteVolume(
-            GetOffset(Run->LCN) + Offset,
-            Chunk,
-            Buffer + Written);
+        if (Run->LCN > (~(ULONGLONG)0 - Offset) / BytesPerCluster(DiskVolume))
+            return STATUS_FILE_CORRUPT_ERROR;
+        Status = DiskVolume->WriteVolume(GetOffset(Run->LCN) + Offset, Chunk, Buffer + Written, Write);
         if (!NT_SUCCESS(Status))
             return Status;
         Written += Chunk;
@@ -918,7 +918,8 @@ static NTSTATUS
 ZeroRunBytes(_In_ PVolume DiskVolume,
              _In_ PDataRun Runs,
              _In_ ULONGLONG Offset,
-             _In_ ULONGLONG Length)
+             _In_ ULONGLONG Length,
+             _In_ NTFS_WRITE_VOLUME_ROUTINE *Write = NtfsWriteVolumeContext)
 {
     PUCHAR ZeroBuffer;
     NTSTATUS Status = STATUS_SUCCESS;
@@ -938,11 +939,14 @@ ZeroRunBytes(_In_ PVolume DiskVolume,
             Length,
             (ULONGLONG)NTFS_ZERO_CHUNK_SIZE);
 
+        ULONG Misalignment = (ULONG)(Offset % DiskVolume->BytesPerSector);
+        if (Misalignment)
+            Chunk = min(Chunk, DiskVolume->BytesPerSector - Misalignment);
         Status = WriteRunBytes(DiskVolume,
                                Runs,
                                Offset,
                                ZeroBuffer,
-                               Chunk);
+                               Chunk, Write);
         if (!NT_SUCCESS(Status))
             break;
         Offset += Chunk;
@@ -950,6 +954,30 @@ ZeroRunBytes(_In_ PVolume DiskVolume,
     }
 
     delete[] ZeroBuffer;
+    return Status;
+}
+
+PDataRun
+NtfsFileRecordSnapshotRuns(_In_ NtfsFileRecord *Record, _In_ PAttribute Attribute)
+{
+    ASSERT(Attribute->IsNonResident);
+    ASSERT(Attribute->Flags == 0);
+    return reinterpret_cast<PFileRecord>(Record)->FindNonResidentData(Attribute);
+}
+
+NTSTATUS
+NtfsWriteAndFreeRunSnapshot(_In_ NtfsVolume *Volume, _In_ PDataRun Runs, _In_ ULONGLONG Valid,
+                            _In_ ULONGLONG Offset, _In_reads_bytes_(Length) PUCHAR Data, _In_ ULONG Length,
+                            _In_opt_ NTFS_WRITE_VOLUME_ROUTINE *Write)
+{
+    PVolume DiskVolume = reinterpret_cast<PVolume>(Volume);
+    ASSERT(Runs != NULL);
+    ASSERT(Valid <= Offset);
+    ASSERT(Length != 0);
+    NTSTATUS Status = ZeroRunBytes(DiskVolume, Runs, Valid, Offset - Valid);
+    if (NT_SUCCESS(Status))
+        Status = WriteRunBytes(DiskVolume, Runs, Offset, Data, Length, Write ? Write : NtfsWriteVolumeContext);
+    FreeDataRun(Runs);
     return Status;
 }
 
@@ -2969,7 +2997,7 @@ RestoreResident:
             return STATUS_FILE_CORRUPT_ERROR;
         }
 
-        if (MetadataChanged &&
+        if (EndOffset > OldDataSize &&
             AttrType == TypeData &&
             TargetAttribute->NameLength == 0)
         {
@@ -3028,7 +3056,8 @@ RestoreResident:
 NTSTATUS
 FileRecord::SetFileDataSize(_In_ AttributeType AttrType,
                             _In_opt_ PWSTR StreamName,
-                            _In_ ULONGLONG NewSize)
+                            _In_ ULONGLONG NewSize,
+                            _In_ ULONGLONG AllocationFloor)
 {
     PAttribute StandardAttribute;
     PAttribute TargetAttribute;
@@ -3124,9 +3153,8 @@ FileRecord::SetFileDataSize(_In_ AttributeType AttrType,
             return ResizeSparseData(TargetAttribute,
                                     NewSize);
         }
-        Status = AttributeOwner->
-            ResizeNonResidentData(TargetAttribute,
-                                  NewSize);
+        ULONGLONG Allocation = NewSize < AllocationFloor ? AllocationFloor : NewSize;
+        Status = AttributeOwner->ResizeNonResidentStream(TargetAttribute, NewSize, Allocation);
         if (NT_SUCCESS(Status) &&
             AttributeOwner != this &&
             Unnamed)
@@ -4579,16 +4607,64 @@ Done:
 }
 
 NTSTATUS
+NtfsWriteReservedRuns(_In_ NtfsVolume *Volume, _In_ PDataRun Runs,
+                      _In_opt_ PUCHAR Prefix, _In_ ULONG PrefixLength, _In_ ULONGLONG Offset,
+                      _In_reads_bytes_(Length) PUCHAR Buffer, _In_ ULONG Length, _In_ NTFS_WRITE_VOLUME_ROUTINE *Write)
+{
+    PVolume Disk = reinterpret_cast<PVolume>(Volume);
+    ASSERT(Runs && Write && Length);
+    ASSERT(PrefixLength <= Offset);
+    NTSTATUS Status = WriteRunBytes(Disk, Runs, 0, Prefix, PrefixLength, Write);
+    if (NT_SUCCESS(Status))
+        Status = ZeroRunBytes(Disk, Runs, PrefixLength, Offset - PrefixLength, Write);
+    if (NT_SUCCESS(Status))
+        Status = WriteRunBytes(Disk, Runs, Offset, Buffer, Length, Write);
+    return Status;
+}
+
+NTSTATUS
+NtfsFileRecordWriteResident(_In_ NtfsFileRecord *File, _In_ PUCHAR Buffer, _In_ ULONG Length, _In_ ULONGLONG Offset,
+                            _In_ NTFS_TRANSFER_RESIDENT_WRITE *Transfer, _In_ void *Context, _Out_ PBOOLEAN Handled)
+{
+    return reinterpret_cast<PFileRecord>(File)->WriteResident(Buffer, Length, Offset, Transfer, Context, Handled);
+}
+
+NTSTATUS
+FileRecord::WriteResident(_In_ PUCHAR Buffer, _In_ ULONG Length, _In_ ULONGLONG Offset,
+                          _In_ NTFS_TRANSFER_RESIDENT_WRITE *Transfer, _In_ void *Context, _Out_ PBOOLEAN Handled)
+{
+    *Handled = FALSE;
+    ASSERT(Length && Buffer && Transfer);
+    if (Offset > ((~(ULONGLONG)0) >> 1) - Length || Offset + Length <= RecordBufferSize ||
+        (Header->Flags & FR_IS_DIRECTORY) || Header->BaseFileRecord != 0)
+        return STATUS_SUCCESS;
+    PAttribute Attribute = FindAttributeInRecord(TypeData, NULL, NULL);
+    if (!Attribute || Attribute->Flags || Attribute->IsNonResident || GetAttribute(TypeReparsePoint, NULL))
+        return STATUS_SUCCESS;
+    *Handled = TRUE;
+    NTSTATUS Status = PromoteResidentData(Attribute, Buffer, Length, Offset, Offset + Length, Offset + Length, Transfer, Context);
+    if (Status == STATUS_BUFFER_TOO_SMALL || Status == STATUS_RETRY)
+    {
+        *Handled = FALSE;
+        return STATUS_SUCCESS;
+    }
+    return Status;
+}
+
+NTSTATUS
 FileRecord::PromoteResidentData(
     _In_ PAttribute TargetAttribute,
     _In_opt_ PUCHAR Buffer,
     _In_ ULONG Length,
     _In_ ULONGLONG Offset,
     _In_ ULONGLONG NewDataSize,
-    _In_ ULONGLONG RequestedAllocationSize)
+    _In_ ULONGLONG RequestedAllocationSize,
+    _In_opt_ NTFS_TRANSFER_RESIDENT_WRITE *Transfer, _In_opt_ void *Context)
 {
     PDataRun AllocatedRuns = NULL;
-    PUCHAR OldData = NULL;
+    PUCHAR InitialData = NULL;
+    ULONG InitialLength;
+    BOOLEAN WholePrefix;
     PUCHAR RecordBackup = NULL;
     ULONGLONG ClusterSize;
     ULONGLONG AllocatedSize;
@@ -4599,6 +4675,7 @@ FileRecord::PromoteResidentData(
     ULONG ClusterCount;
     ULONG MaxRuns;
     ULONG OldDataLength;
+    BOOLEAN NameSizesAttempted = FALSE;
     BOOLEAN WriteAttempted = FALSE;
     BOOLEAN Restored = TRUE;
     NTSTATUS Status;
@@ -4680,18 +4757,29 @@ FileRecord::PromoteResidentData(
     if (MaxRuns == 0)
         MaxRuns = 1;
 
-    if (OldDataLength != 0)
+    InitialLength = (ULONG)min(ClusterSize, (ULONGLONG)NTFS_METADATA_BLOCK_SIZE);
+    WholePrefix = NewInitializedSize != 0 && NewInitializedSize <= InitialLength;
+    if (!WholePrefix)
+        InitialLength = OldDataLength;
+    if (Transfer)
     {
-        OldData =
-            new(PagedPool, TAG_NTFS)
-                UCHAR[OldDataLength];
-        if (!OldData)
+        ASSERT(NewDataSize == EndOffset && OldDataLength < EndOffset);
+        InitialLength = (ULONG)min(Offset, (ULONGLONG)OldDataLength);
+    }
+    if (InitialLength)
+    {
+        InitialData = new(PagedPool, TAG_NTFS) UCHAR[InitialLength];
+        if (!InitialData)
             return STATUS_INSUFFICIENT_RESOURCES;
-        RtlCopyMemory(
-            OldData,
-            reinterpret_cast<PUCHAR>(TargetAttribute) +
-                TargetAttribute->Resident.DataOffset,
-            OldDataLength);
+        RtlCopyMemory(InitialData, reinterpret_cast<PUCHAR>(TargetAttribute) + TargetAttribute->Resident.DataOffset, min(InitialLength, OldDataLength));
+        if (!Transfer && WholePrefix)
+        {
+            ASSERT(InitialLength <= AllocatedSize);
+            ASSERT(OldDataLength <= InitialLength);
+            RtlZeroMemory(InitialData + OldDataLength, InitialLength - OldDataLength);
+            if (Length)
+                RtlCopyMemory(InitialData + (ULONG)Offset, Buffer, Length);
+        }
     }
 
     RecordBackup =
@@ -4702,7 +4790,6 @@ FileRecord::PromoteResidentData(
         Status = STATUS_INSUFFICIENT_RESOURCES;
         goto Done;
     }
-    RtlCopyMemory(RecordBackup, Data, RecordBufferSize);
 
     Status = DiskVolume->AllocateClusters(0,
                                           ClusterCount,
@@ -4711,6 +4798,31 @@ FileRecord::PromoteResidentData(
     if (!NT_SUCCESS(Status))
         goto Done;
 
+    if (Transfer)
+    {
+        Status = Transfer(Context, AllocatedRuns, InitialData, InitialLength);
+        if (!NT_SUCCESS(Status))
+            goto ReleaseAllocation;
+        TargetAttribute = FindAttributeInRecord(TypeData, NULL, NULL);
+        ULONG CurrentLength;
+        if (!TargetAttribute || TargetAttribute->Flags || TargetAttribute->IsNonResident || GetAttribute(TypeReparsePoint, NULL))
+        {
+            Status = STATUS_RETRY;
+            goto ReleaseAllocation;
+        }
+        Status = ValidateResidentAttributeForUpdate(TargetAttribute, &CurrentLength);
+        if (!NT_SUCCESS(Status))
+            goto ReleaseAllocation;
+        if (CurrentLength != OldDataLength ||
+            (InitialLength && RtlCompareMemory(reinterpret_cast<PUCHAR>(TargetAttribute) + TargetAttribute->Resident.DataOffset,
+                                               InitialData, InitialLength) != InitialLength))
+        {
+            Status = STATUS_RETRY;
+            goto ReleaseAllocation;
+        }
+    }
+
+    RtlCopyMemory(RecordBackup, Data, RecordBufferSize);
     Status = ConvertResidentToNonResident(
         TargetAttribute,
         AllocatedRuns,
@@ -4720,17 +4832,17 @@ FileRecord::PromoteResidentData(
     if (!NT_SUCCESS(Status))
         goto Rollback;
 
-    if (OldDataLength != 0)
+    if (!Transfer && InitialLength != 0)
     {
         Status = WriteRunBytes(DiskVolume,
                                AllocatedRuns,
                                0,
-                               OldData,
-                               OldDataLength);
+                               InitialData,
+                               InitialLength);
         if (!NT_SUCCESS(Status))
             goto Rollback;
     }
-    if (Length != 0 &&
+    if (!Transfer && !WholePrefix && Length != 0 &&
         Offset > OldDataLength)
     {
         Status = ZeroRunBytes(
@@ -4741,7 +4853,7 @@ FileRecord::PromoteResidentData(
         if (!NT_SUCCESS(Status))
             goto Rollback;
     }
-    if (Length != 0)
+    if (!Transfer && !WholePrefix && Length != 0)
     {
         Status = WriteRunBytes(DiskVolume,
                                AllocatedRuns,
@@ -4755,6 +4867,7 @@ FileRecord::PromoteResidentData(
     if (TargetAttribute->AttributeType == TypeData &&
         TargetAttribute->NameLength == 0)
     {
+        NameSizesAttempted = TRUE;
         Status = SynchronizeFileNameSizes(AllocatedSize,
                                           NewDataSize);
         if (!NT_SUCCESS(Status))
@@ -4780,6 +4893,12 @@ Rollback:
     RtlCopyMemory(Data, RecordBackup, RecordBufferSize);
     Header = reinterpret_cast<PFileRecordHeader>(Data);
     ClearDataRunCache();
+    if (NameSizesAttempted)
+    {
+        NTSTATUS RestoreStatus = SynchronizeFileNameSizes(0, OldDataLength);
+        if (!NT_SUCCESS(RestoreStatus))
+            Status = RestoreStatus;
+    }
     if (WriteAttempted)
     {
         NTSTATUS RestoreStatus = DiskVolume->MFT->WriteFileRecordToMFT(this);
@@ -4789,24 +4908,19 @@ Rollback:
             Status = RestoreStatus;
         }
     }
-    if (AllocatedRuns && Restored)
-        (void)DiskVolume->ReleaseClusters(AllocatedRuns);
+ReleaseAllocation:
+    if (Restored)
+    {
+        NTSTATUS ReleaseStatus = DiskVolume->ReleaseClusters(AllocatedRuns);
+        if (!NT_SUCCESS(ReleaseStatus))
+            Status = ReleaseStatus;
+    }
 
 Done:
     FreeDataRun(AllocatedRuns);
     NtfsReleaseRecordScratch(DiskVolume, RecordBackup, RecordBufferSize);
-    delete[] OldData;
+    delete[] InitialData;
     return Status;
-}
-
-NTSTATUS
-FileRecord::ResizeNonResidentData(
-    _In_ PAttribute TargetAttribute,
-    _In_ ULONGLONG NewDataSize)
-{
-    return ResizeNonResidentStream(TargetAttribute,
-                                   NewDataSize,
-                                   NewDataSize);
 }
 
 NTSTATUS

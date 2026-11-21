@@ -2225,6 +2225,7 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     BOOLEAN StreamExisted = TRUE;
     BOOLEAN StreamCreated = FALSE;
     BOOLEAN SharedOpen = FALSE;
+    BOOLEAN PreparedAllocation = FALSE;
 
     if (VolumeDeviceObject == NtfsDiskFileSystemDeviceObject)
     {
@@ -2342,6 +2343,7 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     }
     KeEnterCriticalRegion();
     NtfsAcquireCreateMetadata(VolCB, SharedOpen);
+LookupName:
     if (!(CreateOptions & FILE_OPEN_BY_FILE_ID))
     {
         Status = NtfsCheckTraverseAccess(Mft, &FileObject->FileName,
@@ -2722,6 +2724,32 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
     else
     {
         // The file was not found.
+
+        if (Status == STATUS_OBJECT_NAME_NOT_FOUND && !OpenTargetDirectory && !CurrentFile && !CachedRecord &&
+            !PreparedAllocation && (Disposition == FILE_CREATE || Disposition == FILE_OPEN_IF ||
+                                    Disposition == FILE_OVERWRITE_IF || Disposition == FILE_SUPERSEDE))
+        {
+            ULONGLONG Offset;
+            ULONG Size;
+
+            ASSERT(!SharedOpen);
+            PreparedAllocation = TRUE;
+            if (NtfsGetAllocationRecordOffset(Mft, &Offset, &Size) && NtfsReadAheadMetadata(VolCB, Offset, Size))
+            {
+                ExAcquireFastMutex(&VolCB->VolumeStateMutex);
+                Status = (VolCB->Dismounted || VolCB->Dismounting) ? STATUS_VOLUME_DISMOUNTED :
+                         VolCB->VolumeLockOwner ? STATUS_ACCESS_DENIED : STATUS_SUCCESS;
+                ExReleaseFastMutex(&VolCB->VolumeStateMutex);
+                if (!NT_SUCCESS(Status))
+                {
+                    NtfsReleaseMetadata(VolCB);
+                    KeLeaveCriticalRegion();
+                    return NtfsCompleteCreate(Irp, Status, 0);
+                }
+                RemainingNameLength = 0;
+                goto LookupName;
+            }
+        }
 
         FileExisted = FALSE;
         if (Status == STATUS_OBJECT_PATH_NOT_FOUND || Status == STATUS_OBJECT_NAME_INVALID)
@@ -3643,6 +3671,7 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
          Disposition == FILE_OVERWRITE_IF))
     {
         KeEnterCriticalRegion();
+        ExAcquireResourceExclusiveLite(NtfsGetPagingIoResource(FileCB), TRUE);
         NtfsAcquireMetadata(VolCB);
         Status = NtfsFileRecordSetFileDataSize(FileCB->FileRec, FileCB->RequestedType, FileCB->RequestedStream, 0);
         if (NT_SUCCESS(Status) && !FileCB->RequestedStream)
@@ -3655,6 +3684,7 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
             Status = NtfsFileRecordSetBasicInformation(FileCB->FileRec, &OverwriteBasic);
         }
         NtfsReleaseMetadata(VolCB);
+        ExReleaseResourceLite(NtfsGetPagingIoResource(FileCB));
         KeLeaveCriticalRegion();
         if (!NT_SUCCESS(Status))
         {

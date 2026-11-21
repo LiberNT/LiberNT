@@ -984,8 +984,7 @@ FileRecord::GetAllocationSignature()
 }
 
 NTSTATUS
-FileRecord::GetRecordDiskRange(_Out_ PULONGLONG Offset,
-                               _Out_ PULONG Length)
+FileRecord::GetRecordDiskRange(_Out_ PULONGLONG Offset, _Out_ PULONG Length, _In_opt_ PAttribute Target)
 {
     if (!Header || !DiskVolume || !DiskVolume->MFT ||
         Header->BaseFileRecord != 0)
@@ -993,6 +992,9 @@ FileRecord::GetRecordDiskRange(_Out_ PULONGLONG Offset,
         return STATUS_NOT_IMPLEMENTED;
     }
 
+    FileRecord *Owner = Target ? GetAttributeOwner(Target) : this;
+    if (!Owner)
+        return STATUS_FILE_CORRUPT_ERROR;
     *Length = DiskVolume->MFT->FileRecordSize;
-    return DiskVolume->MFT->GetFileRecordDiskOffset(RecordNumber, Offset);
+    return DiskVolume->MFT->GetFileRecordDiskOffset(Owner->RecordNumber, Offset);
 }

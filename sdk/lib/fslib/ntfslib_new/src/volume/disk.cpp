@@ -34,9 +34,8 @@ Volume::ReadVolume(_In_    ULONGLONG Offset,
 }
 
 NTSTATUS
-Volume::WriteVolume(_In_    ULONGLONG Offset,
-                    _In_    ULONG Length,
-                    _Inout_ PUCHAR Buffer)
+Volume::WriteVolume(_In_ ULONGLONG Offset, _In_ ULONG Length, _Inout_ PUCHAR Buffer,
+                    _In_ NTFS_WRITE_VOLUME_ROUTINE *Write)
 {
     ULONGLONG VolumeBytes;
 
@@ -50,11 +49,7 @@ Volume::WriteVolume(_In_    ULONGLONG Offset,
     if (Offset > VolumeBytes || Length > VolumeBytes - Offset)
         return STATUS_DISK_FULL;
 
-    return NtfsWriteVolumeContext(IoContext,
-                                  BytesPerSector,
-                                  Offset,
-                                  Length,
-                                  Buffer);
+    return Write(IoContext, BytesPerSector, Offset, Length, Buffer);
 }
 
 NTSTATUS

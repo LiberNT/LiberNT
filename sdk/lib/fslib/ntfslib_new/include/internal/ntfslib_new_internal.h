@@ -271,6 +271,7 @@ struct _BTreeKey
 };
 
 /* Private macros */
+#define NTFS_METADATA_BLOCK_SIZE 4096u
 #define BytesPerCluster(Volume) (Volume->BytesPerSector * Volume->SectorsPerCluster)
 
 #define FileRef(Key) ((Key)->Entry->Data.Directory.IndexedFile)
@@ -809,9 +810,8 @@ public:
      * @return
      * STATUS_SUCCESS if successful.
      */
-    NTSTATUS WriteVolume(_In_    ULONGLONG Offset,
-                         _In_    ULONG Length,
-                         _Inout_ PUCHAR Buffer);
+    NTSTATUS WriteVolume(_In_ ULONGLONG Offset, _In_ ULONG Length, _Inout_ PUCHAR Buffer,
+                         _In_ NTFS_WRITE_VOLUME_ROUTINE *Write = NtfsWriteVolumeContext);
 
     NTSTATUS FlushVolume();
 
@@ -1088,7 +1088,8 @@ public:
     NTSTATUS
     SetFileDataSize(_In_ AttributeType AttrType,
                     _In_opt_ PWSTR StreamName,
-                    _In_ ULONGLONG NewSize);
+                    _In_ ULONGLONG NewSize,
+                    _In_ ULONGLONG AllocationFloor = 0);
 
     NTSTATUS SetFileValidDataLength(_In_ AttributeType AttrType, _In_opt_ PWSTR StreamName, _In_ ULONGLONG NewValidDataLength);
 
@@ -1143,6 +1144,10 @@ public:
         _Inout_ PULONG StreamCount);
 
     NTSTATUS
+    WriteResident(_In_ PUCHAR Buffer, _In_ ULONG Length, _In_ ULONGLONG Offset,
+                  _In_ NTFS_TRANSFER_RESIDENT_WRITE *Transfer, _In_ void *Context, _Out_ PBOOLEAN Handled);
+
+    NTSTATUS
     UpdateResidentData(_In_ PAttribute TargetAttribute,
                        _In_ PUCHAR Buffer,
                        _In_ PULONG Length,
@@ -1165,8 +1170,7 @@ public:
     GetAllocationSignature();
 
     NTSTATUS
-    GetRecordDiskRange(_Out_ PULONGLONG Offset,
-                       _Out_ PULONG Length);
+    GetRecordDiskRange(_Out_ PULONGLONG Offset, _Out_ PULONG Length, _In_opt_ PAttribute Target = NULL);
 
 private:
     friend class Directory;
@@ -1428,7 +1432,8 @@ private:
                         _In_ ULONG Length,
                         _In_ ULONGLONG Offset,
                         _In_ ULONGLONG NewDataSize,
-                        _In_ ULONGLONG RequestedAllocationSize);
+                        _In_ ULONGLONG RequestedAllocationSize,
+                        _In_opt_ NTFS_TRANSFER_RESIDENT_WRITE *Transfer = NULL, _In_opt_ void *Context = NULL);
 
     NTSTATUS
     ExtendNonResidentData(_In_ PAttribute TargetAttribute,
@@ -1436,9 +1441,6 @@ private:
                           _In_ ULONG Length,
                           _In_ ULONGLONG Offset);
 
-    NTSTATUS
-    ResizeNonResidentData(_In_ PAttribute TargetAttribute,
-                          _In_ ULONGLONG NewDataSize);
 
     NTSTATUS
     ResizeSparseData(_In_ PAttribute TargetAttribute,
@@ -1854,6 +1856,9 @@ public:
 
     NTSTATUS
     WriteFileRecordToMFT(_In_ PFileRecord File);
+
+    NTSTATUS
+    FindAllocationCandidate(_Out_ PULONGLONG Number);
 
     NTSTATUS
     GetFileRecordDiskOffset(_In_ ULONGLONG RecordNumber,
