@@ -68,6 +68,7 @@ PFS_MOUNT FileSystems[] =
     NtfsMount,
     ExtMount,
 #endif
+    F2FsMount,
 #if defined(_M_IX86) || defined(_M_AMD64)
 #ifndef UEFIBOOT
     PxeMount,
@@ -590,6 +591,9 @@ FsGetVolumeSize(
     else
     if (!_wcsicmp(ServiceName, L"btrfs"))
         pFsGetVolumeSize = BtrFsGetVolumeSize;
+    else
+    if (!_wcsicmp(ServiceName, L"f2fs"))
+        pFsGetVolumeSize = F2FsGetVolumeSize;
     else
 #ifndef _M_ARM
     if (!_wcsicmp(ServiceName, L"ntfs"))

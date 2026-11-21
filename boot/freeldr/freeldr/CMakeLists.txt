@@ -48,6 +48,8 @@ list(APPEND FREELDR_BOOTLIB_SOURCE
     lib/fs/btrfs.c
     lib/fs/exfat.c
     lib/fs/ext.c
+    lib/fs/f2fs.c
+    lib/fs/f2fs_boot.c
     lib/fs/fat.c
     lib/fs/fs.c
     lib/fs/iso.c
