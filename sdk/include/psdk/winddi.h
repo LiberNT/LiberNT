@@ -4454,10 +4454,6 @@ extern FN_DrvUnlockDisplayArea DrvUnlockDisplayArea;
 #define MS_REUSEDDEVICEBITMAP 0x0008
 #endif
 
-#define SURFOBJ_GET_DHPDEVpso) ((pso) -> dhpdev)
-#define SURFOBJ_GET_HDEVpso) ((pso) -> hdev)
-#define SURFOBJ_SET_DHPDEVpso, dhpdevNew) ((pso) -> dhpdev = (dhpdevNew))
-#define SURFOBJ_SET_HDEVpso, hdevNew) ((pso) -> hdev = (hdevNew))
 
 struct DHPDEV__
 {
@@ -4528,19 +4524,9 @@ BOOL EngFntCacheFlush(PVOID OffsetBuffer, BOOL DiscardContent);
 }
 #endif
 
-#define SURFOBJ_GET_DHPDEVpso) ((pso) -> dhpdev)
-#define SURFOBJ_GET_HDEVpso) ((pso) -> hdev)
-#define SURFOBJ_SET_DHPDEVpso, dhpdevNew) ((pso) -> dhpdev = (dhpdevNew))
-#define SURFOBJ_SET_HDEVpso, hdevNew) ((pso) -> hdev = (hdevNew))
-
-#define SURFOBJ_GET_DHPDEVpso) ((pso) -> dhpdev)
-#define SURFOBJ_GET_HDEVpso) ((pso) -> hdev)
-#define SURFOBJ_SET_DHPDEVpso, dhpdevNew) ((pso) -> dhpdev = (dhpdevNew))
-#define SURFOBJ_SET_HDEVpso, hdevNew) ((pso) -> hdev = (hdevNew))
-
-#define SURFOBJ_GET_DHPDEVpso) ((pso) -> dhpdev)
-#define SURFOBJ_GET_HDEVpso) ((pso) -> hdev)
-#define SURFOBJ_SET_DHPDEVpso, dhpdevNew) ((pso) -> dhpdev = (dhpdevNew))
-#define SURFOBJ_SET_HDEVpso, hdevNew) ((pso) -> hdev = (hdevNew))
+#define SURFOBJ_GET_DHPDEV(pso) ((pso) -> dhpdev)
+#define SURFOBJ_GET_HDEV(pso) ((pso) -> hdev)
+#define SURFOBJ_SET_DHPDEV(pso, dhpdevNew) ((pso) -> dhpdev = (dhpdevNew))
+#define SURFOBJ_SET_HDEV(pso, hdevNew) ((pso) -> hdev = (hdevNew))
 
 #endif /* _WINDDI_ */

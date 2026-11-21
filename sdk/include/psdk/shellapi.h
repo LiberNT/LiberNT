@@ -1093,41 +1093,63 @@ typedef struct _OPEN_PRINTER_PROPS_INFOW {
   BOOL bModal;
 } OPEN_PRINTER_PROPS_INFOW, *POPEN_PRINTER_PROPS_INFOW;
 
-#define EIRESIDx) (- 1 * (int) (x))
+#ifdef UNICODE
+#define ExtractAssociatedIconEx ExtractAssociatedIconExW
+#else
 #ifdef UNICODE
 #define ExtractAssociatedIconEx ExtractAssociatedIconExW
 #else
 #define ExtractAssociatedIconEx ExtractAssociatedIconExA
 #endif
+#endif
+#ifdef UNICODE
+#define IsLFNDrive IsLFNDriveW
+#else
 #ifdef UNICODE
 #define IsLFNDrive IsLFNDriveW
 #else
 #define IsLFNDrive IsLFNDriveA
 #endif
+#endif
 #define PRINT_PROP_FORCE_NAME 0x01
 #define SHDOCAPI EXTERN_C DECLSPEC_IMPORT HRESULT STDAPICALLTYPE
-#define SHDOCAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
+#ifdef UNICODE
+#define SHEnumerateUnreadMailAccounts SHEnumerateUnreadMailAccountsW
+#else
 #ifdef UNICODE
 #define SHEnumerateUnreadMailAccounts SHEnumerateUnreadMailAccountsW
 #else
 #define SHEnumerateUnreadMailAccounts SHEnumerateUnreadMailAccountsA
 #endif
+#endif
 #define SHGetDiskFreeSpace 0
+#ifdef UNICODE
+#define SHGetDiskFreeSpaceEx SHGetDiskFreeSpaceExW
+#else
 #ifdef UNICODE
 #define SHGetDiskFreeSpaceEx SHGetDiskFreeSpaceExW
 #else
 #define SHGetDiskFreeSpaceEx SHGetDiskFreeSpaceExA
 #endif
+#endif
+#ifdef UNICODE
+#define SHGetUnreadMailCount SHGetUnreadMailCountW
+#else
 #ifdef UNICODE
 #define SHGetUnreadMailCount SHGetUnreadMailCountW
 #else
 #define SHGetUnreadMailCount SHGetUnreadMailCountA
 #endif
+#endif
 #define SHInvokePrinterCommand 0
 #ifdef UNICODE
 #define SHSetUnreadMailCount SHSetUnreadMailCountW
 #else
+#ifdef UNICODE
+#define SHSetUnreadMailCount SHSetUnreadMailCountW
+#else
 #define SHSetUnreadMailCount SHSetUnreadMailCountA
+#endif
 #endif
 
 struct HDROP__
@@ -1163,13 +1185,7 @@ HRESULT SHSetUnreadMailCountA(LPCSTR pszMailAddress, DWORD dwCount, LPCSTR pszSh
 }
 #endif
 
-#define EIRESIDx) (- 1 * (int) (x))
-#define SHDOCAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
-
-#define EIRESIDx) (- 1 * (int) (x))
-#define SHDOCAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
-
-#define EIRESIDx) (- 1 * (int) (x))
-#define SHDOCAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
+#define EIRESID(x) (- 1 * (int) (x))
+#define SHDOCAPI_(type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
 
 #endif

@@ -1317,7 +1317,7 @@ typedef enum _FILE_INFORMATION_CLASS {
 #if (NTDDI_VERSION >= NTDDI_WIN7)
   FileIdGlobalTxDirectoryInformation,
   FileIsRemoteDeviceInformation,
-  FileAttributeCacheInformation,
+  FileUnusedInformation,
   FileNumaNodeInformation,
   FileStandardLinkInformation,
   FileRemoteProtocolInformation,

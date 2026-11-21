@@ -7042,22 +7042,11 @@
 #define DISPID_WEBGEOPOSITION_ERROR 0x3E8
 #define DISPID_WEBSOCKET 0x3E8
 #define DISPID_XMLDECL 0x3E8
-#define IsExpandoDispiddispid) (DISPID_EXPANDO_BASE <= dispid && dispid <= DISPID_EXPANDO_MAX)
-#define IsPeerDispiddispid) (DISPID_PEER_HOLDER_BASE <= dispid)
-#define IsStandardDispiddispid) (dispid <= 0)
 #define STDPROPID_IE3XOBJ_OBJECTALIGN (DISPID_XOBJ_BASE + 0x1)
 #define WEBOC_DISPIDMAX (WEBOC_DISPIDBASE + 100)
 
-#define IsExpandoDispiddispid) (DISPID_EXPANDO_BASE <= dispid && dispid <= DISPID_EXPANDO_MAX)
-#define IsPeerDispiddispid) (DISPID_PEER_HOLDER_BASE <= dispid)
-#define IsStandardDispiddispid) (dispid <= 0)
-
-#define IsExpandoDispiddispid) (DISPID_EXPANDO_BASE <= dispid && dispid <= DISPID_EXPANDO_MAX)
-#define IsPeerDispiddispid) (DISPID_PEER_HOLDER_BASE <= dispid)
-#define IsStandardDispiddispid) (dispid <= 0)
-
-#define IsExpandoDispiddispid) (DISPID_EXPANDO_BASE <= dispid && dispid <= DISPID_EXPANDO_MAX)
-#define IsPeerDispiddispid) (DISPID_PEER_HOLDER_BASE <= dispid)
-#define IsStandardDispiddispid) (dispid <= 0)
+#define IsExpandoDispid(dispid) (DISPID_EXPANDO_BASE <= dispid && dispid <= DISPID_EXPANDO_MAX)
+#define IsPeerDispid(dispid) (DISPID_PEER_HOLDER_BASE <= dispid)
+#define IsStandardDispid(dispid) (dispid <= 0)
 
 #endif /* __MSHTMDID_H__ */

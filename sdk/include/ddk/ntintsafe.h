@@ -730,6 +730,8 @@ NTSTATUS RtlUShortToUInt8(USHORT usOperand, UINT8 *pui8Result);
 }
 #endif
 
+#define __RtlpUnsignedMultiply128 0
+
 #endif // !_NTINTSAFE_H_INCLUDED_
 
 #ifndef _ARM64_MULT_INTRINS_SUPPORTED

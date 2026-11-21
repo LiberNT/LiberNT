@@ -120,7 +120,6 @@ typedef struct KSDRMAUDIOSTREAM_CONTENTID {
   DRMRIGHTS DrmRights;
 } KSDRMAUDIOSTREAM_CONTENTID, *PKSDRMAUDIOSTREAM_CONTENTID;
 
-#define DEFINE_DRMRIGHTS_DEFAULTDrmRights) const DRMRIGHTS DrmRights = { FALSE, 0, FALSE }
 
 typedef struct IDrmAudioStreamVtbl IDrmAudioStreamVtbl;
 
@@ -168,10 +167,6 @@ struct tagDRMRIGHTS
     BOOL DigitalOutputDisable;
 };
 
-#define DEFINE_DRMRIGHTS_DEFAULTDrmRights) const DRMRIGHTS DrmRights = { FALSE, 0, FALSE }
-
-#define DEFINE_DRMRIGHTS_DEFAULTDrmRights) const DRMRIGHTS DrmRights = { FALSE, 0, FALSE }
-
-#define DEFINE_DRMRIGHTS_DEFAULTDrmRights) const DRMRIGHTS DrmRights = { FALSE, 0, FALSE }
+#define DEFINE_DRMRIGHTS_DEFAULT(DrmRights) const DRMRIGHTS DrmRights = { FALSE, 0, FALSE }
 
 #endif /* DRMK_H */

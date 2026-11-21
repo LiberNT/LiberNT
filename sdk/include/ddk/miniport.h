@@ -383,24 +383,15 @@ typedef struct _PCI_VENDOR_SPECIFIC_CAPABILITY {
 #define _DBGRAISEASSERTIONFAILURE_ 0
 #define ASAN_WARNING_DISABLE_4714_POP
 #define ASAN_WARNING_DISABLE_4714_PUSH
-#define CacheLineFlushAddress) _mm_clflush(Address)
 #define CFORCEINLINE FORCEINLINE
-#define COMPILETIME_OR_6FLAGSa, b, c, d, e, f) ((UINT) (a) | (UINT) (b) | (UINT) (c) | (UINT) (d) | (UINT) (e) | (UINT) (f))
 #define CpuIdEx __cpuidex
 #define DECLSPEC_CHPE_GUEST
 #define DECLSPEC_CHPE_PATCHABLE DECLSPEC_NOINLINE
 #define DECLSPEC_NOSANITIZEADDRESS
 #define DECLSPEC_RESTRICT __declspec(restrict)
 #define DEPRECATED_NO_MESSAGE_STDAPI EXTERN_C __declspec(deprecated) HRESULT STDAPICALLTYPE
-#define DEPRECATED_NO_MESSAGE_STDAPI_type) EXTERN_C __declspec(deprecated) type STDAPICALLTYPE
 #define DEPRECATED_NO_MESSAGE_STDAPIV EXTERN_C __declspec(deprecated) HRESULT STDAPIVCALLTYPE
-#define DEPRECATED_NO_MESSAGE_STDAPIV_type) EXTERN_C __declspec(deprecated) type STDAPIVCALLTYPE
-#define DEPRECATED_STDAPImessage) EXTERN_C __declspec(deprecated(message)) HRESULT STDAPICALLTYPE
-#define DEPRECATED_STDAPI_type, message) EXTERN_C __declspec(deprecated(message)) type STDAPICALLTYPE
-#define DEPRECATED_STDAPIVmessage) EXTERN_C __declspec(deprecated(message)) HRESULT STDAPIVCALLTYPE
-#define DEPRECATED_STDAPIV_type, message) EXTERN_C __declspec(deprecated(message)) type STDAPIVCALLTYPE
 #define DUMMYSTRUCTNAME6
-#define GetCallersEflags) __getcallerseflags()
 #define GetSegmentLimit __segmentlimit
 #define InterlockedCompareExchangeAcquire128 _InterlockedCompareExchange128
 #define InterlockedCompareExchangeNoFence128 _InterlockedCompareExchange128
@@ -418,7 +409,6 @@ typedef struct _PCI_VENDOR_SPECIFIC_CAPABILITY {
 #define ShiftRight128 __shiftright128
 #define SpeculationFence LoadFence
 #define STDAPI_CHPE_PATCHABLE EXTERN_C DECLSPEC_CHPE_PATCHABLE HRESULT STDAPICALLTYPE
-#define STDAPI_CHPE_PATCHABLE_type) EXTERN_C DECLSPEC_CHPE_PATCHABLE type STDAPICALLTYPE
 #define STKFORCEINLINE FORCEINLINE
 #define WIN_NOEXCEPT
 #define WIN_NOEXCEPT_PFN
@@ -1073,36 +1063,19 @@ void FASTCALL WriteUInt32Release(volatile UINT32 *Destination, UINT32 Value);
 }
 #endif
 
-#define CacheLineFlushAddress) _mm_clflush(Address)
-#define COMPILETIME_OR_6FLAGSa, b, c, d, e, f) ((UINT) (a) | (UINT) (b) | (UINT) (c) | (UINT) (d) | (UINT) (e) | (UINT) (f))
 #define DECLSPEC_SAFEBUFFERS 0
-#define DEPRECATED_NO_MESSAGE_STDAPI_type) EXTERN_C __declspec(deprecated) type STDAPICALLTYPE
-#define DEPRECATED_NO_MESSAGE_STDAPIV_type) EXTERN_C __declspec(deprecated) type STDAPIVCALLTYPE
-#define DEPRECATED_STDAPImessage) EXTERN_C __declspec(deprecated(message)) HRESULT STDAPICALLTYPE
-#define DEPRECATED_STDAPI_type, message) EXTERN_C __declspec(deprecated(message)) type STDAPICALLTYPE
-#define DEPRECATED_STDAPIVmessage) EXTERN_C __declspec(deprecated(message)) HRESULT STDAPIVCALLTYPE
-#define DEPRECATED_STDAPIV_type, message) EXTERN_C __declspec(deprecated(message)) type STDAPIVCALLTYPE
-#define STDAPI_CHPE_PATCHABLE_type) EXTERN_C DECLSPEC_CHPE_PATCHABLE type STDAPICALLTYPE
 
-#define CacheLineFlushAddress) _mm_clflush(Address)
-#define COMPILETIME_OR_6FLAGSa, b, c, d, e, f) ((UINT) (a) | (UINT) (b) | (UINT) (c) | (UINT) (d) | (UINT) (e) | (UINT) (f))
 #define DECLSPEC_GUARDNOCF 0
-#define DEPRECATED_NO_MESSAGE_STDAPI_type) EXTERN_C __declspec(deprecated) type STDAPICALLTYPE
-#define DEPRECATED_NO_MESSAGE_STDAPIV_type) EXTERN_C __declspec(deprecated) type STDAPIVCALLTYPE
-#define DEPRECATED_STDAPImessage) EXTERN_C __declspec(deprecated(message)) HRESULT STDAPICALLTYPE
-#define DEPRECATED_STDAPI_type, message) EXTERN_C __declspec(deprecated(message)) type STDAPICALLTYPE
-#define DEPRECATED_STDAPIVmessage) EXTERN_C __declspec(deprecated(message)) HRESULT STDAPIVCALLTYPE
-#define DEPRECATED_STDAPIV_type, message) EXTERN_C __declspec(deprecated(message)) type STDAPIVCALLTYPE
-#define STDAPI_CHPE_PATCHABLE_type) EXTERN_C DECLSPEC_CHPE_PATCHABLE type STDAPICALLTYPE
 
-#define CacheLineFlushAddress) _mm_clflush(Address)
-#define COMPILETIME_OR_6FLAGSa, b, c, d, e, f) ((UINT) (a) | (UINT) (b) | (UINT) (c) | (UINT) (d) | (UINT) (e) | (UINT) (f))
-#define DEPRECATED_NO_MESSAGE_STDAPI_type) EXTERN_C __declspec(deprecated) type STDAPICALLTYPE
-#define DEPRECATED_NO_MESSAGE_STDAPIV_type) EXTERN_C __declspec(deprecated) type STDAPIVCALLTYPE
-#define DEPRECATED_STDAPImessage) EXTERN_C __declspec(deprecated(message)) HRESULT STDAPICALLTYPE
-#define DEPRECATED_STDAPI_type, message) EXTERN_C __declspec(deprecated(message)) type STDAPICALLTYPE
-#define DEPRECATED_STDAPIVmessage) EXTERN_C __declspec(deprecated(message)) HRESULT STDAPIVCALLTYPE
-#define DEPRECATED_STDAPIV_type, message) EXTERN_C __declspec(deprecated(message)) type STDAPIVCALLTYPE
-#define STDAPI_CHPE_PATCHABLE_type) EXTERN_C DECLSPEC_CHPE_PATCHABLE type STDAPICALLTYPE
+#define CacheLineFlush(Address) _mm_clflush(Address)
+#define COMPILETIME_OR_6FLAGS(a, b, c, d, e, f) ((UINT) (a) | (UINT) (b) | (UINT) (c) | (UINT) (d) | (UINT) (e) | (UINT) (f))
+#define DEPRECATED_NO_MESSAGE_STDAPI_(type) EXTERN_C __declspec(deprecated) type STDAPICALLTYPE
+#define DEPRECATED_NO_MESSAGE_STDAPIV_(type) EXTERN_C __declspec(deprecated) type STDAPIVCALLTYPE
+#define DEPRECATED_STDAPI(message) EXTERN_C __declspec(deprecated(message)) HRESULT STDAPICALLTYPE
+#define DEPRECATED_STDAPI_(type, message) EXTERN_C __declspec(deprecated(message)) type STDAPICALLTYPE
+#define DEPRECATED_STDAPIV(message) EXTERN_C __declspec(deprecated(message)) HRESULT STDAPIVCALLTYPE
+#define DEPRECATED_STDAPIV_(type, message) EXTERN_C __declspec(deprecated(message)) type STDAPIVCALLTYPE
+#define GetCallersEflags() __getcallerseflags()
+#define STDAPI_CHPE_PATCHABLE_(type) EXTERN_C DECLSPEC_CHPE_PATCHABLE type STDAPICALLTYPE
 
 #endif /* __MINIPORT_H */

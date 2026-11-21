@@ -1496,13 +1496,6 @@ typedef struct HSAVEDUILANGUAGES__ {
 
 #define DEPRECATED (x)
 #define DISABLE_NLS_DEPRECATION
-#define FILEMUIINFO_GET_CULTUREpInfo) ((LPWSTR) ((pInfo -> dwLanguageNameOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwLanguageNameOffset : NULL))
-#define FILEMUIINFO_GET_MAIN_TYPEIDpInfo, iType) (((iType < pInfo -> dwTypeIDMainSize) && (pInfo -> dwTypeIDMainOffset > 0)) ? * ((DWORD *) ((ULONG_PTR) pInfo + pInfo -> dwTypeIDMainOffset) + iType) : 0)
-#define FILEMUIINFO_GET_MAIN_TYPEIDSpInfo) ((DWORD *) ((pInfo -> dwTypeIDMainOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeIDMainOffset : NULL))
-#define FILEMUIINFO_GET_MAIN_TYPENAMESpInfo) ((LPWSTR) ((pInfo -> dwTypeNameMainOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeNameMainOffset : NULL))
-#define FILEMUIINFO_GET_MUI_TYPEIDpInfo, iType) (((iType < pInfo -> dwTypeIDMUISize) && (pInfo -> dwTypeIDMUIOffset > 0)) ? * ((DWORD *) ((ULONG_PTR) pInfo + pInfo -> dwTypeIDMUIOffset) + iType) : 0)
-#define FILEMUIINFO_GET_MUI_TYPEIDSpInfo) ((DWORD *) ((pInfo -> dwTypeIDMUIOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeIDMUIOffset : NULL))
-#define FILEMUIINFO_GET_MUI_TYPENAMESpInfo) ((LPWSTR) ((pInfo -> dwTypeNameMUIOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeNameMUIOffset : NULL))
 #define GEO_NAME_USER_DEFAULT 0
 #define LOCALE_SLANGDISPLAYNAME 0x6F
 #define MUI_CALLBACK_ALL_FLAGS 0
@@ -1530,33 +1523,18 @@ BOOL SetThreadPreferredUILanguages2(ULONG flags, PCZZWSTR languages, PULONG numL
 }
 #endif
 
-#define FILEMUIINFO_GET_CULTUREpInfo) ((LPWSTR) ((pInfo -> dwLanguageNameOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwLanguageNameOffset : NULL))
-#define FILEMUIINFO_GET_MAIN_TYPEIDpInfo, iType) (((iType < pInfo -> dwTypeIDMainSize) && (pInfo -> dwTypeIDMainOffset > 0)) ? * ((DWORD *) ((ULONG_PTR) pInfo + pInfo -> dwTypeIDMainOffset) + iType) : 0)
-#define FILEMUIINFO_GET_MAIN_TYPEIDSpInfo) ((DWORD *) ((pInfo -> dwTypeIDMainOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeIDMainOffset : NULL))
-#define FILEMUIINFO_GET_MAIN_TYPENAMESpInfo) ((LPWSTR) ((pInfo -> dwTypeNameMainOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeNameMainOffset : NULL))
-#define FILEMUIINFO_GET_MUI_TYPEIDpInfo, iType) (((iType < pInfo -> dwTypeIDMUISize) && (pInfo -> dwTypeIDMUIOffset > 0)) ? * ((DWORD *) ((ULONG_PTR) pInfo + pInfo -> dwTypeIDMUIOffset) + iType) : 0)
-#define FILEMUIINFO_GET_MUI_TYPEIDSpInfo) ((DWORD *) ((pInfo -> dwTypeIDMUIOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeIDMUIOffset : NULL))
-#define FILEMUIINFO_GET_MUI_TYPENAMESpInfo) ((LPWSTR) ((pInfo -> dwTypeNameMUIOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeNameMUIOffset : NULL))
 
 enum SYSNLS_FUNCTION
 {
 
 };
 
-#define FILEMUIINFO_GET_CULTUREpInfo) ((LPWSTR) ((pInfo -> dwLanguageNameOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwLanguageNameOffset : NULL))
-#define FILEMUIINFO_GET_MAIN_TYPEIDpInfo, iType) (((iType < pInfo -> dwTypeIDMainSize) && (pInfo -> dwTypeIDMainOffset > 0)) ? * ((DWORD *) ((ULONG_PTR) pInfo + pInfo -> dwTypeIDMainOffset) + iType) : 0)
-#define FILEMUIINFO_GET_MAIN_TYPEIDSpInfo) ((DWORD *) ((pInfo -> dwTypeIDMainOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeIDMainOffset : NULL))
-#define FILEMUIINFO_GET_MAIN_TYPENAMESpInfo) ((LPWSTR) ((pInfo -> dwTypeNameMainOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeNameMainOffset : NULL))
-#define FILEMUIINFO_GET_MUI_TYPEIDpInfo, iType) (((iType < pInfo -> dwTypeIDMUISize) && (pInfo -> dwTypeIDMUIOffset > 0)) ? * ((DWORD *) ((ULONG_PTR) pInfo + pInfo -> dwTypeIDMUIOffset) + iType) : 0)
-#define FILEMUIINFO_GET_MUI_TYPEIDSpInfo) ((DWORD *) ((pInfo -> dwTypeIDMUIOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeIDMUIOffset : NULL))
-#define FILEMUIINFO_GET_MUI_TYPENAMESpInfo) ((LPWSTR) ((pInfo -> dwTypeNameMUIOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeNameMUIOffset : NULL))
-
-#define FILEMUIINFO_GET_CULTUREpInfo) ((LPWSTR) ((pInfo -> dwLanguageNameOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwLanguageNameOffset : NULL))
-#define FILEMUIINFO_GET_MAIN_TYPEIDpInfo, iType) (((iType < pInfo -> dwTypeIDMainSize) && (pInfo -> dwTypeIDMainOffset > 0)) ? * ((DWORD *) ((ULONG_PTR) pInfo + pInfo -> dwTypeIDMainOffset) + iType) : 0)
-#define FILEMUIINFO_GET_MAIN_TYPEIDSpInfo) ((DWORD *) ((pInfo -> dwTypeIDMainOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeIDMainOffset : NULL))
-#define FILEMUIINFO_GET_MAIN_TYPENAMESpInfo) ((LPWSTR) ((pInfo -> dwTypeNameMainOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeNameMainOffset : NULL))
-#define FILEMUIINFO_GET_MUI_TYPEIDpInfo, iType) (((iType < pInfo -> dwTypeIDMUISize) && (pInfo -> dwTypeIDMUIOffset > 0)) ? * ((DWORD *) ((ULONG_PTR) pInfo + pInfo -> dwTypeIDMUIOffset) + iType) : 0)
-#define FILEMUIINFO_GET_MUI_TYPEIDSpInfo) ((DWORD *) ((pInfo -> dwTypeIDMUIOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeIDMUIOffset : NULL))
-#define FILEMUIINFO_GET_MUI_TYPENAMESpInfo) ((LPWSTR) ((pInfo -> dwTypeNameMUIOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeNameMUIOffset : NULL))
+#define FILEMUIINFO_GET_CULTURE(pInfo) ((LPWSTR) ((pInfo -> dwLanguageNameOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwLanguageNameOffset : NULL))
+#define FILEMUIINFO_GET_MAIN_TYPEID(pInfo, iType) (((iType < pInfo -> dwTypeIDMainSize) && (pInfo -> dwTypeIDMainOffset > 0)) ? * ((DWORD *) ((ULONG_PTR) pInfo + pInfo -> dwTypeIDMainOffset) + iType) : 0)
+#define FILEMUIINFO_GET_MAIN_TYPEIDS(pInfo) ((DWORD *) ((pInfo -> dwTypeIDMainOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeIDMainOffset : NULL))
+#define FILEMUIINFO_GET_MAIN_TYPENAMES(pInfo) ((LPWSTR) ((pInfo -> dwTypeNameMainOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeNameMainOffset : NULL))
+#define FILEMUIINFO_GET_MUI_TYPEID(pInfo, iType) (((iType < pInfo -> dwTypeIDMUISize) && (pInfo -> dwTypeIDMUIOffset > 0)) ? * ((DWORD *) ((ULONG_PTR) pInfo + pInfo -> dwTypeIDMUIOffset) + iType) : 0)
+#define FILEMUIINFO_GET_MUI_TYPEIDS(pInfo) ((DWORD *) ((pInfo -> dwTypeIDMUIOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeIDMUIOffset : NULL))
+#define FILEMUIINFO_GET_MUI_TYPENAMES(pInfo) ((LPWSTR) ((pInfo -> dwTypeNameMUIOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeNameMUIOffset : NULL))
 
 #endif

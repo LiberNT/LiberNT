@@ -5528,7 +5528,11 @@ typedef struct tagEMRTRANSPARENTBLT {
 #ifdef UNICODE
 #define CreateColorSpace CreateColorSpaceW
 #else
+#ifdef UNICODE
+#define CreateColorSpace CreateColorSpaceW
+#else
 #define CreateColorSpace CreateColorSpaceA
+#endif
 #endif
 #define GDI_MAX_OBJ_TYPE 0xE
 #define GDI_MIN_OBJ_TYPE 1

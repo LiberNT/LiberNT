@@ -1511,10 +1511,6 @@ cpp_quote("#define ISIOI_ICONINDEX  0x00000002")
 #ifndef MAX_PATH
 #define MAX_PATH 260
 
-cpp_quote("#define ISDBLCLICKx) (NSTCECT_DBLCLICK == ((x) & NSTCECT_DBLCLICK))")
-cpp_quote("#define ISLBUTTONx) (NSTCECT_LBUTTON == ((x) & NSTCECT_BUTTON))")
-cpp_quote("#define ISMBUTTONx) (NSTCECT_MBUTTON == ((x) & NSTCECT_BUTTON))")
-cpp_quote("#define ISRBUTTONx) (NSTCECT_RBUTTON == ((x) & NSTCECT_BUTTON))")
 cpp_quote("#define NSTCS2_ALLMASK (NSTCS2_INTERRUPTNOTIFICATIONS | NSTCS2_SHOWNULLSPACEMENU | NSTCS2_DISPLAYPADDING)")
 cpp_quote("#define PROPSTR_EXTENSIONCOMPLETIONSTATE 0")
 cpp_quote("#define SHPWHF_NORECOMPRESS 0x00000001")
@@ -2303,23 +2299,18 @@ cpp_quote("#ifdef __cplusplus")
 cpp_quote("}")
 cpp_quote("#endif")
 
-cpp_quote("#define ISDBLCLICKx) (NSTCECT_DBLCLICK == ((x) & NSTCECT_DBLCLICK))")
-cpp_quote("#define ISLBUTTONx) (NSTCECT_LBUTTON == ((x) & NSTCECT_BUTTON))")
-cpp_quote("#define ISMBUTTONx) (NSTCECT_MBUTTON == ((x) & NSTCECT_BUTTON))")
-cpp_quote("#define ISRBUTTONx) (NSTCECT_RBUTTON == ((x) & NSTCECT_BUTTON))")
 cpp_quote("#define SID_WebWizardHost 0")
 
-cpp_quote("#define ISDBLCLICKx) (NSTCECT_DBLCLICK == ((x) & NSTCECT_DBLCLICK))")
-cpp_quote("#define ISLBUTTONx) (NSTCECT_LBUTTON == ((x) & NSTCECT_BUTTON))")
-cpp_quote("#define ISMBUTTONx) (NSTCECT_MBUTTON == ((x) & NSTCECT_BUTTON))")
-cpp_quote("#define ISRBUTTONx) (NSTCECT_RBUTTON == ((x) & NSTCECT_BUTTON))")
 cpp_quote("#define SID_CDWizardHost 0")
 
-cpp_quote("#define ISDBLCLICKx) (NSTCECT_DBLCLICK == ((x) & NSTCECT_DBLCLICK))")
-cpp_quote("#define ISLBUTTONx) (NSTCECT_LBUTTON == ((x) & NSTCECT_BUTTON))")
-cpp_quote("#define ISMBUTTONx) (NSTCECT_MBUTTON == ((x) & NSTCECT_BUTTON))")
-cpp_quote("#define ISRBUTTONx) (NSTCECT_RBUTTON == ((x) & NSTCECT_BUTTON))")
 cpp_quote("#define SID_EnumerableView 0")
+
+cpp_quote("#define SID_PublishingWizard 0")
+
+cpp_quote("#define ISDBLCLICK(x) (NSTCECT_DBLCLICK == ((x) & NSTCECT_DBLCLICK))")
+cpp_quote("#define ISLBUTTON(x) (NSTCECT_LBUTTON == ((x) & NSTCECT_BUTTON))")
+cpp_quote("#define ISMBUTTON(x) (NSTCECT_MBUTTON == ((x) & NSTCECT_BUTTON))")
+cpp_quote("#define ISRBUTTON(x) (NSTCECT_RBUTTON == ((x) & NSTCECT_BUTTON))")
 
 #endif
 
@@ -6904,10 +6895,6 @@ cpp_quote("#ifndef SHPWHF_VALIDATEVIAWEBFOLDERS")
 cpp_quote("#define SHPWHF_VALIDATEVIAWEBFOLDERS 0x00010000")
 cpp_quote("#endif")
 
-cpp_quote("#define ISDBLCLICKx) (NSTCECT_DBLCLICK == ((x) & NSTCECT_DBLCLICK))")
-cpp_quote("#define ISLBUTTONx) (NSTCECT_LBUTTON == ((x) & NSTCECT_BUTTON))")
-cpp_quote("#define ISMBUTTONx) (NSTCECT_MBUTTON == ((x) & NSTCECT_BUTTON))")
-cpp_quote("#define ISRBUTTONx) (NSTCECT_RBUTTON == ((x) & NSTCECT_BUTTON))")
 cpp_quote("#define NSTCS2_ALLMASK (NSTCS2_INTERRUPTNOTIFICATIONS | NSTCS2_SHOWNULLSPACEMENU | NSTCS2_DISPLAYPADDING)")
 cpp_quote("#define PROPSTR_EXTENSIONCOMPLETIONSTATE 0")
 cpp_quote("#define SHPWHF_NORECOMPRESS 0x00000001")

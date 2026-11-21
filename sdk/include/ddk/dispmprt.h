@@ -4743,8 +4743,6 @@ typedef enum _DEBUG_LEVEL
 #define DXGK_I2C_INTERFACE_VERSION_2 0x02
 #endif
 
-#define _Field_size_bytes_DXGK_param)
-#define DlDebugPrintExarg) DlDebugPrint arg
 
 struct DXGK_DEBUG_REPORT_HANDLE__
 {
@@ -4820,13 +4818,9 @@ VP_STATUS DlWaitForSingleObject(PVOID DeviceHandle, PVOID pEvent, PLARGE_INTEGER
 }
 #endif
 
-#define _Field_size_bytes_DXGK_param)
-#define DlDebugPrintExarg) DlDebugPrint arg
+#define _Field_size_bytes_DXGK_(param)
+#define DlDebugPrintEx(arg) DlDebugPrint arg
 
-#define _Field_size_bytes_DXGK_param)
-#define DlDebugPrintExarg) DlDebugPrint arg
-
-#define _Field_size_bytes_DXGK_param)
-#define DlDebugPrintExarg) DlDebugPrint arg
+/* TODO: DXGK_DISPLAY_CORE_INTERFACE and DXGKDDI_QUERY_MONITOR_DESCRIPTOR, which need INOUT_DXGK_MONITOR_DESCRIPTOR */
 
 #endif /* _DISPMPRT_H_ */

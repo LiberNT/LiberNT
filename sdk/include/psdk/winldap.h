@@ -830,9 +830,16 @@ ULONG __cdecl ldap_set_dbg_flags(ULONG NewFlags);
 #define LDAP_CONTROL_REFERRALS_W L"1.2.840.113556.1.4.616"
 #define LDAP_CONTROL_VLVREQUEST "2.16.840.1.113730.3.4.9"
 #define LDAP_CONTROL_VLVREQUEST_W L"2.16.840.1.113730.3.4.9"
-#define LDAP_IS_CLDAPld) ((ld) -> ld_sb . sb_naddr > 0)
+#ifdef UNICODE
+#define ldap_rename ldap_rename_extW
+#else
 #define ldap_rename ldap_rename_extA
+#endif
+#ifdef UNICODE
+#define ldap_rename_s ldap_rename_ext_sW
+#else
 #define ldap_rename_s ldap_rename_ext_sA
+#endif
 #define LDAP_SERVER_SORT_OID "1.2.840.113556.1.4.473"
 #define LDAP_SERVER_SORT_OID_W L"1.2.840.113556.1.4.473"
 #define LDAP_START_TLS_OID "1.3.6.1.4.1.1466.20037"
@@ -844,7 +851,6 @@ ULONG __cdecl ldap_set_dbg_flags(ULONG NewFlags);
 #define LDAP_VENDOR_NAME_W L"Microsoft Corporation."
 #define mod_bvalues mod_vals . modv_bvals
 #define mod_values mod_vals . modv_strvals
-#define NAME_ERRORn) ((n & 0xf0) == 0x20)
 #define NULLBER ((BerElement *) 0)
 #define WINLDAPAPI 0
 
@@ -881,13 +887,7 @@ void ldap_set_dbg_routine(DBGPRINT DebugPrintRoutine);
 }
 #endif
 
-#define LDAP_IS_CLDAPld) ((ld) -> ld_sb . sb_naddr > 0)
-#define NAME_ERRORn) ((n & 0xf0) == 0x20)
-
-#define LDAP_IS_CLDAPld) ((ld) -> ld_sb . sb_naddr > 0)
-#define NAME_ERRORn) ((n & 0xf0) == 0x20)
-
-#define LDAP_IS_CLDAPld) ((ld) -> ld_sb . sb_naddr > 0)
-#define NAME_ERRORn) ((n & 0xf0) == 0x20)
+#define LDAP_IS_CLDAP(ld) ((ld) -> ld_sb . sb_naddr > 0)
+#define NAME_ERROR(n) ((n & 0xf0) == 0x20)
 
 #endif  /* __WINE_WINLDAP_H */

@@ -261,7 +261,11 @@ DWORD WINAPI XInputGetStateEx(DWORD, XINPUT_STATE*);
 #define XINPUT_DEVSUBTYPE_UNKNOWN 0x00
 #endif
 
+#ifdef UNICODE
+#define XINPUT_DLL XINPUT_DLL_W
+#else
 #define XINPUT_DLL XINPUT_DLL_A
+#endif
 #define XINPUT_DLL_A 0
 #define XINPUT_DLL_W L"xinput1_4.dll"
 

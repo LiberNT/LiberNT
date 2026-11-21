@@ -1306,63 +1306,95 @@ LRESULT WINAPI SHSendMessageBroadcastA(UINT uMsg, WPARAM wParam, LPARAM lParam);
 #ifdef UNICODE
 #define PathIsHTMLFile PathIsHTMLFileW
 #else
+#ifdef UNICODE
+#define PathIsHTMLFile PathIsHTMLFileW
+#else
 #define PathIsHTMLFile PathIsHTMLFileA
 #endif
-#define PathIsHTMLFileApszPath) PathIsContentTypeA(pszPath, SZ_CONTENTTYPE_HTMLA)
-#define PathIsHTMLFileWpszPath) PathIsContentTypeW(pszPath, SZ_CONTENTTYPE_HTMLW)
-#define QITABENTMULTI2Cthis, Ifoo, Iimpl) { (IID *) & Ifoo, OFFSETOFCLASS(Iimpl, Cthis) }
-#define SHAnsiToTCharszSrc, szDest, cchSize) SHAnsiToAnsi(szSrc, szDest, cchSize)
+#endif
 #define SHFormatDateTime 0
+#ifdef UNICODE
+#define SHMessageBoxCheck SHMessageBoxCheckW
+#else
 #ifdef UNICODE
 #define SHMessageBoxCheck SHMessageBoxCheckW
 #else
 #define SHMessageBoxCheck SHMessageBoxCheckA
 #endif
+#endif
+#ifdef UNICODE
+#define SHSendMessageBroadcast SHSendMessageBroadcastW
+#else
 #ifdef UNICODE
 #define SHSendMessageBroadcast SHSendMessageBroadcastW
 #else
 #define SHSendMessageBroadcast SHSendMessageBroadcastA
 #endif
+#endif
+#ifdef UNICODE
+#define SHStripMneumonic SHStripMneumonicW
+#else
 #ifdef UNICODE
 #define SHStripMneumonic SHStripMneumonicW
 #else
 #define SHStripMneumonic SHStripMneumonicA
 #endif
-#define SHTCharToAnsiszSrc, szDest, cchSize) SHAnsiToAnsi(szSrc, szDest, cchSize)
-#define SHTCharToUnicodeszSrc, wzDest, cchSize) SHAnsiToUnicode(szSrc, wzDest, cchSize)
-#define SHUnicodeToTCharwzSrc, szDest, cchSize) SHUnicodeToAnsi(wzSrc, szDest, cchSize)
-#define STATIC_CASTtyp) static_cast < typ >
+#endif
+#ifdef UNICODE
+#define StrCmpC StrCmpCW
+#else
 #ifdef UNICODE
 #define StrCmpC StrCmpCW
 #else
 #define StrCmpC StrCmpCA
 #endif
+#endif
+#ifdef UNICODE
+#define StrCmpIC StrCmpICW
+#else
 #ifdef UNICODE
 #define StrCmpIC StrCmpICW
 #else
 #define StrCmpIC StrCmpICA
 #endif
+#endif
+#ifdef UNICODE
+#define StrCmpNC StrCmpNCW
+#else
 #ifdef UNICODE
 #define StrCmpNC StrCmpNCW
 #else
 #define StrCmpNC StrCmpNCA
 #endif
+#endif
+#ifdef UNICODE
+#define StrCmpNIC StrCmpNICW
+#else
 #ifdef UNICODE
 #define StrCmpNIC StrCmpNICW
 #else
 #define StrCmpNIC StrCmpNICA
 #endif
+#endif
+#ifdef UNICODE
+#define SZ_CONTENTTYPE_CDF SZ_CONTENTTYPE_CDFW
+#else
 #ifdef UNICODE
 #define SZ_CONTENTTYPE_CDF SZ_CONTENTTYPE_CDFW
 #else
 #define SZ_CONTENTTYPE_CDF SZ_CONTENTTYPE_CDFA
+#endif
 #endif
 #define SZ_CONTENTTYPE_CDFA "application/x-cdf"
 #define SZ_CONTENTTYPE_CDFW L"application/x-cdf"
 #ifdef UNICODE
 #define SZ_CONTENTTYPE_HTML SZ_CONTENTTYPE_HTMLW
 #else
+#ifdef UNICODE
+#define SZ_CONTENTTYPE_HTML SZ_CONTENTTYPE_HTMLW
+#else
 #define SZ_CONTENTTYPE_HTML SZ_CONTENTTYPE_HTMLA
+#endif
 #endif
 #define SZ_CONTENTTYPE_HTMLA "text/html"
 #define SZ_CONTENTTYPE_HTMLW L"text/html"
@@ -1414,23 +1446,75 @@ PWSTR StrChrNIW(PCWSTR pszStart, WCHAR wMatch, UINT cchMax);
 }
 #endif
 
-#define QITABENTMULTI2Cthis, Ifoo, Iimpl) { (IID *) & Ifoo, OFFSETOFCLASS(Iimpl, Cthis) }
-#define SHAnsiToTCharszSrc, szDest, cchSize) SHAnsiToAnsi(szSrc, szDest, cchSize)
-#define SHTCharToAnsiszSrc, szDest, cchSize) SHAnsiToAnsi(szSrc, szDest, cchSize)
-#define SHTCharToUnicodeszSrc, wzDest, cchSize) SHAnsiToUnicode(szSrc, wzDest, cchSize)
-#define SHUnicodeToTCharwzSrc, szDest, cchSize) SHUnicodeToAnsi(wzSrc, szDest, cchSize)
-#define STATIC_CASTtyp) static_cast < typ >
 
-#define QITABENTMULTI2Cthis, Ifoo, Iimpl) { (IID *) & Ifoo, OFFSETOFCLASS(Iimpl, Cthis) }
-#define SHAnsiToTCharszSrc, szDest, cchSize) SHAnsiToAnsi(szSrc, szDest, cchSize)
-#define SHTCharToAnsiszSrc, szDest, cchSize) SHAnsiToAnsi(szSrc, szDest, cchSize)
-#define SHTCharToUnicodeszSrc, wzDest, cchSize) SHAnsiToUnicode(szSrc, wzDest, cchSize)
-#define SHUnicodeToTCharwzSrc, szDest, cchSize) SHUnicodeToAnsi(wzSrc, szDest, cchSize)
-#define STATIC_CASTtyp) static_cast < typ >
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef enum
+{
+    GLOBALCOUNTER_SEARCHMANAGER = 0,
+    GLOBALCOUNTER_SEARCHOPTIONS = 1,
+    GLOBALCOUNTER_FOLDERSETTINGSCHANGE = 2,
+    GLOBALCOUNTER_RATINGS = 3,
+    GLOBALCOUNTER_APPROVEDSITES = 4,
+    GLOBALCOUNTER_RESTRICTIONS = 5,
+    GLOBALCOUNTER_SHELLSETTINGSCHANGED = 6,
+    GLOBALCOUNTER_SYSTEMPIDLCHANGE = 7,
+    GLOBALCOUNTER_OVERLAYMANAGER = 8,
+    GLOBALCOUNTER_QUERYASSOCIATIONS = 9,
+    GLOBALCOUNTER_IESESSIONS = 0xA,
+    GLOBALCOUNTER_IEONLY_SESSIONS = 0xB,
+    GLOBALCOUNTER_APPLICATION_DESTINATIONS = 0xC,
+    __UNUSED_RECYCLE_WAS_GLOBALCOUNTER_CSCSYNCINPROGRESS = 0xD,
+    GLOBALCOUNTER_BITBUCKETNUMDELETERS = 0xE,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_SHARES = 0xF,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_A = 0x10,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_B = 0x11,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_C = 0x12,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_D = 0x13,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_E = 0x14,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_F = 0x15,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_G = 0x16,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_H = 0x17,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_I = 0x18,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_J = 0x19,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_K = 0x1A,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_L = 0x1B,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_M = 0x1C,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_N = 0x1D,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_O = 0x1E,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_P = 0x1F,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_Q = 0x20,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_R = 0x21,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_S = 0x22,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_T = 0x23,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_U = 0x24,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_V = 0x25,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_W = 0x26,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_X = 0x27,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_Y = 0x28,
+    GLOBALCOUNTER_RECYCLEDIRTYCOUNT_DRIVE_Z = 0x29,
+    __UNUSED_RECYCLE_WAS_GLOBALCOUNTER_RECYCLEDIRTYCOUNT_SERVERDRIVE = 0x2A,
+    __UNUSED_RECYCLE_WAS_GLOBALCOUNTER_RECYCLEGLOBALDIRTYCOUNT = 0x2B,
+    GLOBALCOUNTER_RECYCLEBINENUM = 0x2C,
+    GLOBALCOUNTER_RECYCLEBINCORRUPTED = 0x2D,
+    GLOBALCOUNTER_RATINGS_STATECOUNTER = 0x2E,
+    GLOBALCOUNTER_PRIVATE_PROFILE_CACHE = 0x2F,
+    GLOBALCOUNTER_INTERNETTOOLBAR_LAYOUT = 0x30,
+    GLOBALCOUNTER_FOLDERDEFINITION_CACHE = 0x31,
+    GLOBALCOUNTER_COMMONPLACES_LIST_CACHE = 0x32,
+    GLOBALCOUNTER_PRIVATE_PROFILE_CACHE_MACHINEWIDE = 0x33,
+    GLOBALCOUNTER_ASSOCCHANGED = 0x34,
+    GLOBALCOUNTER_APP_ITEMS_STATE_STORE_CACHE = 0x35,
+    GLOBALCOUNTER_SETTINGSYNC_ENABLED = 0x36,
+    GLOBALCOUNTER_APPSFOLDER_FILETYPEASSOCIATION_COUNTER = 0x37,
+    GLOBALCOUNTER_USERINFOCHANGED = 0x38,
+    GLOBALCOUNTER_SYNC_ENGINE_INFORMATION_CACHE_MACHINEWIDE = 0x39,
+    GLOBALCOUNTER_BANNERS_DATAMODEL_CACHE_MACHINEWIDE = 0x3A,
+    GLOBALCOUNTER_MAXIMUMVALUE = 0x3B,
+} SHGLOBALCOUNTER;
 
 long WINAPI SHGlobalCounterDecrement(const SHGLOBALCOUNTER id);
 LSTATUS WINAPI SHRegGetValueFromHKCUHKLM(PCWSTR pwszKey, PCWSTR pwszValue, SRRF srrfFlags, DWORD *pdwType, void *pvData, DWORD *pcbData);
@@ -1440,11 +1524,11 @@ LSTATUS WINAPI SHRegSetValue(HKEY hkey, LPCWSTR pszSubKey, LPCWSTR pszValue, SRR
 }
 #endif
 
-#define QITABENTMULTI2Cthis, Ifoo, Iimpl) { (IID *) & Ifoo, OFFSETOFCLASS(Iimpl, Cthis) }
-#define SHAnsiToTCharszSrc, szDest, cchSize) SHAnsiToAnsi(szSrc, szDest, cchSize)
-#define SHTCharToAnsiszSrc, szDest, cchSize) SHAnsiToAnsi(szSrc, szDest, cchSize)
-#define SHTCharToUnicodeszSrc, wzDest, cchSize) SHAnsiToUnicode(szSrc, wzDest, cchSize)
-#define SHUnicodeToTCharwzSrc, szDest, cchSize) SHUnicodeToAnsi(wzSrc, szDest, cchSize)
-#define STATIC_CASTtyp) static_cast < typ >
+#define QITABENTMULTI2(Cthis, Ifoo, Iimpl) { (IID *) & Ifoo, OFFSETOFCLASS(Iimpl, Cthis) }
+#define SHAnsiToTChar(szSrc, szDest, cchSize) SHAnsiToAnsi(szSrc, szDest, cchSize)
+#define SHTCharToAnsi(szSrc, szDest, cchSize) SHAnsiToAnsi(szSrc, szDest, cchSize)
+#define SHTCharToUnicode(szSrc, wzDest, cchSize) SHAnsiToUnicode(szSrc, wzDest, cchSize)
+#define SHUnicodeToTChar(wzSrc, szDest, cchSize) SHUnicodeToAnsi(wzSrc, szDest, cchSize)
+#define STATIC_CAST(typ) static_cast < typ >
 
 #endif // _INC_SHLWAPI

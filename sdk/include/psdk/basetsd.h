@@ -231,22 +231,28 @@ typedef KAFFINITY *PKAFFINITY;
 #endif
 #endif /* !RC_INVOKED */
 
-#define Handle64ToHandleh) (Ptr64ToPtr(h))
-#define HandleToHandle64h) (PtrToPtr64(h))
 #define MAXDWORD32 ((DWORD32) ~((DWORD32) 0))
 #define MAXDWORD64 ((DWORD64)(-1))
 #define MAXINT ((INT) (MAXUINT >> 1))
 #define MININT ((INT) ~MAXINT)
-#define Ptr64ToPtrp) ((void *) p)
-#define PtrToPtr64p) ((void * POINTER_64) p)
 
-#define Handle64ToHandleh) (Ptr64ToPtr(h))
-#define HandleToHandle64h) (PtrToPtr64(h))
+#define Handle64ToHandle(h) (Ptr64ToPtr(h))
+#define HandleToHandle64(h) (PtrToPtr64(h))
+#define Ptr64ToPtr(p) ((void *) p)
+#define PtrToPtr64(p) ((void * POINTER_64) p)
 
-#define Handle64ToHandleh) (Ptr64ToPtr(h))
-#define HandleToHandle64h) (PtrToPtr64(h))
+#define HandleToHandle32(h) (PtrToPtr32(h))
 
-#define Handle64ToHandleh) (Ptr64ToPtr(h))
-#define HandleToHandle64h) (PtrToPtr64(h))
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+void * Ptr32ToPtr(const void *POINTER_SIGNED POINTER_32 p);
+void *POINTER_SIGNED POINTER_32  PtrToPtr32(const void *p);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _BASETSD_H_ */

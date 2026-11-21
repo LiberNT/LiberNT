@@ -787,8 +787,6 @@ typedef struct tagOFN_NT4W {
 } OPENFILENAME_NT4W, *LPOPENFILENAME_NT4W;
 
 #define _INC_COMMDLG 0
-#define CommDlg_FindReplace_SendCustomResult_hdlg, _psz) (void) SNDMSG(_hdlg, FRM_SETOPERATIONRESULTTEXT, 0, (LPARAM) (LPSTR) (_psz))
-#define CommDlg_FindReplace_SendResult_hdlg, _flags, _fr) (void) SNDMSG(_hdlg, FRM_SETOPERATIONRESULT, (WPARAM) (_flags), (LPARAM) (_fr))
 #define FRM_FIRST (WM_USER + 100)
 #define FRM_LAST 0x4C8
 #define FRM_SETOPERATIONRESULT 0x464
@@ -833,13 +831,7 @@ struct tagFINDREPLACEW
     LPCWSTR lpTemplateName;
 };
 
-#define CommDlg_FindReplace_SendCustomResult_hdlg, _psz) (void) SNDMSG(_hdlg, FRM_SETOPERATIONRESULTTEXT, 0, (LPARAM) (LPSTR) (_psz))
-#define CommDlg_FindReplace_SendResult_hdlg, _flags, _fr) (void) SNDMSG(_hdlg, FRM_SETOPERATIONRESULT, (WPARAM) (_flags), (LPARAM) (_fr))
-
-#define CommDlg_FindReplace_SendCustomResult_hdlg, _psz) (void) SNDMSG(_hdlg, FRM_SETOPERATIONRESULTTEXT, 0, (LPARAM) (LPSTR) (_psz))
-#define CommDlg_FindReplace_SendResult_hdlg, _flags, _fr) (void) SNDMSG(_hdlg, FRM_SETOPERATIONRESULT, (WPARAM) (_flags), (LPARAM) (_fr))
-
-#define CommDlg_FindReplace_SendCustomResult_hdlg, _psz) (void) SNDMSG(_hdlg, FRM_SETOPERATIONRESULTTEXT, 0, (LPARAM) (LPSTR) (_psz))
-#define CommDlg_FindReplace_SendResult_hdlg, _flags, _fr) (void) SNDMSG(_hdlg, FRM_SETOPERATIONRESULT, (WPARAM) (_flags), (LPARAM) (_fr))
+#define CommDlg_FindReplace_SendCustomResult(_hdlg, _psz) (void) SNDMSG(_hdlg, FRM_SETOPERATIONRESULTTEXT, 0, (LPARAM) (LPSTR) (_psz))
+#define CommDlg_FindReplace_SendResult(_hdlg, _flags, _fr) (void) SNDMSG(_hdlg, FRM_SETOPERATIONRESULT, (WPARAM) (_flags), (LPARAM) (_fr))
 
 #endif

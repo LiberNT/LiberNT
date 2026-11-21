@@ -20,10 +20,6 @@ typedef struct _THROTTLING_STATE
     }                                                  \
 }
 
-#define RxInitializeBackoffPackage)
-#define RxTerminateThrottlingpBP) ((pBP) -> CurrentIncrement = 0)
-#define RxUninitializeBackoffPackage)
-#define RxUninitializeBackPackpBP) ()
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,13 +33,9 @@ BOOLEAN RxShouldRequestBeThrottled(PTHROTTLING_STATE pBP);
 }
 #endif
 
-#define RxTerminateThrottlingpBP) ((pBP) -> CurrentIncrement = 0)
-#define RxUninitializeBackPackpBP) ()
-
-#define RxTerminateThrottlingpBP) ((pBP) -> CurrentIncrement = 0)
-#define RxUninitializeBackPackpBP) ()
-
-#define RxTerminateThrottlingpBP) ((pBP) -> CurrentIncrement = 0)
-#define RxUninitializeBackPackpBP) ()
+#define RxInitializeBackoffPackage()
+#define RxTerminateThrottling(pBP) ((pBP) -> CurrentIncrement = 0)
+#define RxUninitializeBackoffPackage()
+#define RxUninitializeBackPack(pBP) ()
 
 #endif

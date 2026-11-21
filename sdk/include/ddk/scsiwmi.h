@@ -212,7 +212,6 @@ ScsiPortWmiFireLogicalUnitEvent(
 }
 #endif
 
-#define ScsiPortWmiIsQueryAllDataRequestContext) ((RequestContext) -> MinorFunction == WMI_GET_ALL_DATA)
 
 #ifdef __cplusplus
 extern "C" {
@@ -228,11 +227,7 @@ PWCHAR ScsiPortWmiSetInstanceName(PSCSIWMI_REQUEST_CONTEXT RequestContext, ULONG
 }
 #endif
 
-#define ScsiPortWmiIsQueryAllDataRequestContext) ((RequestContext) -> MinorFunction == WMI_GET_ALL_DATA)
-
-#define ScsiPortWmiIsQueryAllDataRequestContext) ((RequestContext) -> MinorFunction == WMI_GET_ALL_DATA)
-
-#define ScsiPortWmiIsQueryAllDataRequestContext) ((RequestContext) -> MinorFunction == WMI_GET_ALL_DATA)
+#define ScsiPortWmiIsQueryAllData(RequestContext) ((RequestContext) -> MinorFunction == WMI_GET_ALL_DATA)
 
 #endif /* _SCSIWMI_ */
 

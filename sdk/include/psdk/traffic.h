@@ -79,24 +79,40 @@ typedef struct _TC_GEN_FILTER {
 #ifdef UNICODE
 #define TcGetFlowName TcGetFlowNameW
 #else
+#ifdef UNICODE
+#define TcGetFlowName TcGetFlowNameW
+#else
 #define TcGetFlowName TcGetFlowNameA
+#endif
 #endif
 #define tcIcmpCode S_un . S_un_icmp . s_code
 #define tcIcmpType S_un . S_un_icmp . s_type
 #ifdef UNICODE
 #define TcOpenInterface TcOpenInterfaceW
 #else
+#ifdef UNICODE
+#define TcOpenInterface TcOpenInterfaceW
+#else
 #define TcOpenInterface TcOpenInterfaceA
 #endif
+#endif
+#ifdef UNICODE
+#define TcQueryFlow TcQueryFlowW
+#else
 #ifdef UNICODE
 #define TcQueryFlow TcQueryFlowW
 #else
 #define TcQueryFlow TcQueryFlowA
 #endif
+#endif
+#ifdef UNICODE
+#define TcSetFlow TcSetFlowW
+#else
 #ifdef UNICODE
 #define TcSetFlow TcSetFlowW
 #else
 #define TcSetFlow TcSetFlowA
+#endif
 #endif
 #define tcSpi S_un . S_Spi
 #define tcSrcPort 0

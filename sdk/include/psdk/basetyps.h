@@ -88,24 +88,9 @@ typedef unsigned short wchar_t;
 #define _WCHAR_T_DEFINED
 #endif
 
-#define IFACEMETHODmethod) __override STDMETHOD(method)
-#define IFACEMETHOD_type, method) __override STDMETHOD_(type, method)
-#define IFACEMETHODVmethod) __override STDMETHODV(method)
-#define IFACEMETHODV_type, method) __override STDMETHODV_(type, method)
-
-#define IFACEMETHODmethod) __override STDMETHOD(method)
-#define IFACEMETHOD_type, method) __override STDMETHOD_(type, method)
-#define IFACEMETHODVmethod) __override STDMETHODV(method)
-#define IFACEMETHODV_type, method) __override STDMETHODV_(type, method)
-
-#define IFACEMETHODmethod) __override STDMETHOD(method)
-#define IFACEMETHOD_type, method) __override STDMETHOD_(type, method)
-#define IFACEMETHODVmethod) __override STDMETHODV(method)
-#define IFACEMETHODV_type, method) __override STDMETHODV_(type, method)
-
-#define IFACEMETHODmethod) __override STDMETHOD(method)
-#define IFACEMETHOD_type, method) __override STDMETHOD_(type, method)
-#define IFACEMETHODVmethod) __override STDMETHODV(method)
-#define IFACEMETHODV_type, method) __override STDMETHODV_(type, method)
+#define IFACEMETHOD(method) __override STDMETHOD(method)
+#define IFACEMETHOD_(type, method) __override STDMETHOD_(type, method)
+#define IFACEMETHODV(method) __override STDMETHODV(method)
+#define IFACEMETHODV_(type, method) __override STDMETHODV_(type, method)
 
 #endif /* _BASETYPS_H_ */

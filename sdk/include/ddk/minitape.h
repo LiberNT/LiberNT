@@ -1401,14 +1401,10 @@ typedef struct ST_PARAMETER_DATA {
 #define _NTDDTAPE_WINNT_
 #define OFFSET_VER_DESCRIPTOR_EIGHT 0x4A
 #define OFFSET_VER_DESCRIPTOR_ONE 0x3A
-#define REVERSE_BYTES_6Destination, Source) { PEIGHT_BYTE d = (PEIGHT_BYTE) (Destination); PEIGHT_BYTE s = (PEIGHT_BYTE) (Source); d -> Byte5 = s -> Byte0; d -> Byte4 = s -> Byte1; d -> Byte3 = s -> Byte2; d -> Byte2 = s -> Byte3; d -> Byte1 = s -> Byte4; d -> Byte0 = s -> Byte5; \
-}
-#define REVERSE_LONGLONGLonglong) { UCHAR tmp; PEIGHT_BYTE q = (PEIGHT_BYTE) (Longlong); tmp = q -> Byte7; q -> Byte7 = q -> Byte0; q -> Byte0 = tmp; tmp = q -> Byte6; q -> Byte6 = q -> Byte1; q -> Byte1 = tmp; tmp = q -> Byte5; q -> Byte5 = q -> Byte2; q -> Byte2 = tmp; tmp = q -> Byte4; q -> Byte4 = q -> Byte3; q -> Byte3 = tmp; }
 #define SRBEX_DATA_MINIPORT_PASSTHROUGH_LENGTH 0x10
 #define SRBEX_DATA_NVME_COMMAND_LENGTH 0x64
 #define SRBEX_DATA_NVMEOF_OPERATION_LENGTH 0xC
 #define STOR_ADDRESS_TYPE_NVME 0x2
-#define SupportsDeviceSharingBusType) ((BusType == BusTypeScsi) || (BusType == BusTypeFibre) || (BusType == BusTypeiScsi) || (BusType == BusTypeSas) || (BusType == BusTypeSpaces))
 
 struct _SES_CONTROL_DESCRIPTOR
 {
@@ -1812,16 +1808,48 @@ void TapeDebugPrint(ULONG DebugPrintLevel, PCCHAR DebugMessage, ...);
 }
 #endif
 
-#define REVERSE_BYTES_6Destination, Source) { PEIGHT_BYTE d = (PEIGHT_BYTE) (Destination); PEIGHT_BYTE s = (PEIGHT_BYTE) (Source); d -> Byte5 = s -> Byte0; d -> Byte4 = s -> Byte1; d -> Byte3 = s -> Byte2; d -> Byte2 = s -> Byte3; d -> Byte1 = s -> Byte4; d -> Byte0 = s -> Byte5; \
-}
-#define REVERSE_LONGLONGLonglong) { UCHAR tmp; PEIGHT_BYTE q = (PEIGHT_BYTE) (Longlong); tmp = q -> Byte7; q -> Byte7 = q -> Byte0; q -> Byte0 = tmp; tmp = q -> Byte6; q -> Byte6 = q -> Byte1; q -> Byte1 = tmp; tmp = q -> Byte5; q -> Byte5 = q -> Byte2; q -> Byte2 = tmp; tmp = q -> Byte4; q -> Byte4 = q -> Byte3; q -> Byte3 = tmp; }
-#define SupportsDeviceSharingBusType) ((BusType == BusTypeScsi) || (BusType == BusTypeFibre) || (BusType == BusTypeiScsi) || (BusType == BusTypeSas) || (BusType == BusTypeSpaces))
 
 #pragma pack(push, 1)
 union _CDB32
 {
-    struct _CDB32GENERIC CDB32GENERIC;
-    struct _XDWRITEREAD32 XDWRITEREAD32;
+    struct _CDB32GENERIC
+    {
+        UCHAR OperationCode;
+        UCHAR Control;
+        UCHAR Reserved1[4];
+        UCHAR Group : 5;
+        UCHAR Reserved2 : 3;
+        UCHAR AdditionalCDBLength;
+        UCHAR ServiceAction[2];
+        UCHAR Reserved3;
+        UCHAR DurationLimitDescriptor0 : 1;
+        UCHAR DurationLimitDescriptor1 : 1;
+        UCHAR DurationLimitDescriptor2 : 1;
+        UCHAR Reserved4 : 5;
+        UCHAR LogicalBlock[8];
+        UCHAR Reserved5[8];
+        UCHAR TransferLength[4];
+    } CDB32GENERIC;
+    struct _XDWRITEREAD32
+    {
+        UCHAR OperationCode;
+        UCHAR Control;
+        UCHAR Reserved1[4];
+        UCHAR Group : 5;
+        UCHAR Reserved2 : 3;
+        UCHAR AdditionalCDBLength;
+        UCHAR ServiceAction[2];
+        UCHAR XorProtectionInfo : 1;
+        UCHAR Reservede : 1;
+        UCHAR DisableWrite : 1;
+        UCHAR ForceUnitAccess : 1;
+        UCHAR DisablePageOut : 1;
+        UCHAR WriteProtect : 1;
+        UCHAR Reserved4;
+        UCHAR LogicalBlock[8];
+        UCHAR Reserved5[8];
+        UCHAR TransferLength[4];
+    } XDWRITEREAD32;
     ULONG AsUlong[8];
     UCHAR AsByte[32];
 };
@@ -1831,10 +1859,6 @@ typedef union _CDB32 CDB32;
 
 typedef union _CDB32 *PCDB32;
 
-#define REVERSE_BYTES_6Destination, Source) { PEIGHT_BYTE d = (PEIGHT_BYTE) (Destination); PEIGHT_BYTE s = (PEIGHT_BYTE) (Source); d -> Byte5 = s -> Byte0; d -> Byte4 = s -> Byte1; d -> Byte3 = s -> Byte2; d -> Byte2 = s -> Byte3; d -> Byte1 = s -> Byte4; d -> Byte0 = s -> Byte5; \
-}
-#define REVERSE_LONGLONGLonglong) { UCHAR tmp; PEIGHT_BYTE q = (PEIGHT_BYTE) (Longlong); tmp = q -> Byte7; q -> Byte7 = q -> Byte0; q -> Byte0 = tmp; tmp = q -> Byte6; q -> Byte6 = q -> Byte1; q -> Byte1 = tmp; tmp = q -> Byte5; q -> Byte5 = q -> Byte2; q -> Byte2 = tmp; tmp = q -> Byte4; q -> Byte4 = q -> Byte3; q -> Byte3 = tmp; }
-#define SupportsDeviceSharingBusType) ((BusType == BusTypeScsi) || (BusType == BusTypeFibre) || (BusType == BusTypeiScsi) || (BusType == BusTypeSas) || (BusType == BusTypeSpaces))
 
 struct _MODE_CAP_PAGE
 {
@@ -1921,9 +1945,8 @@ typedef struct _MODE_MEDIUM_PART_PAGE_PLUS *PMODE_MEDIUM_PART_PAGE_PLUS;
 
 typedef struct _MODE_TAPE_MEDIA_INFORMATION *PMODE_TAPE_MEDIA_INFORMATION;
 
-#define REVERSE_BYTES_6Destination, Source) { PEIGHT_BYTE d = (PEIGHT_BYTE) (Destination); PEIGHT_BYTE s = (PEIGHT_BYTE) (Source); d -> Byte5 = s -> Byte0; d -> Byte4 = s -> Byte1; d -> Byte3 = s -> Byte2; d -> Byte2 = s -> Byte3; d -> Byte1 = s -> Byte4; d -> Byte0 = s -> Byte5; \
-}
-#define REVERSE_LONGLONGLonglong) { UCHAR tmp; PEIGHT_BYTE q = (PEIGHT_BYTE) (Longlong); tmp = q -> Byte7; q -> Byte7 = q -> Byte0; q -> Byte0 = tmp; tmp = q -> Byte6; q -> Byte6 = q -> Byte1; q -> Byte1 = tmp; tmp = q -> Byte5; q -> Byte5 = q -> Byte2; q -> Byte2 = tmp; tmp = q -> Byte4; q -> Byte4 = q -> Byte3; q -> Byte3 = tmp; }
-#define SupportsDeviceSharingBusType) ((BusType == BusTypeScsi) || (BusType == BusTypeFibre) || (BusType == BusTypeiScsi) || (BusType == BusTypeSas) || (BusType == BusTypeSpaces))
+#define REVERSE_BYTES_6(Destination, Source) { PEIGHT_BYTE d = (PEIGHT_BYTE) (Destination); PEIGHT_BYTE s = (PEIGHT_BYTE) (Source); d -> Byte5 = s -> Byte0; d -> Byte4 = s -> Byte1; d -> Byte3 = s -> Byte2; d -> Byte2 = s -> Byte3; d -> Byte1 = s -> Byte4; d -> Byte0 = s -> Byte5; }
+#define REVERSE_LONGLONG(Longlong) { UCHAR tmp; PEIGHT_BYTE q = (PEIGHT_BYTE) (Longlong); tmp = q -> Byte7; q -> Byte7 = q -> Byte0; q -> Byte0 = tmp; tmp = q -> Byte6; q -> Byte6 = q -> Byte1; q -> Byte1 = tmp; tmp = q -> Byte5; q -> Byte5 = q -> Byte2; q -> Byte2 = tmp; tmp = q -> Byte4; q -> Byte4 = q -> Byte3; q -> Byte3 = tmp; }
+#define SupportsDeviceSharing(BusType) ((BusType == BusTypeScsi) || (BusType == BusTypeFibre) || (BusType == BusTypeiScsi) || (BusType == BusTypeSas) || (BusType == BusTypeSpaces))
 
 #endif /* _MINITAPE_ */

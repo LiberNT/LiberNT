@@ -81,10 +81,6 @@ typedef struct IORING_INFO {
 } IORING_INFO;
 
 #define _APISET_IORING_ 0
-#define IoRingBufferRefFromIndexAndOffseti, o) { IORING_REF_REGISTERED, { . IndexAndOffset = { (i), (o) } } }
-#define IoRingBufferRefFromPointerp) { IORING_REF_RAW, { . Address = p } }
-#define IoRingHandleRefFromHandleh) { IORING_REF_RAW, { . Handle = h } }
-#define IoRingHandleRefFromIndexi) { IORING_REF_REGISTERED, { . Index = i } }
 
 #ifdef __cplusplus
 extern "C" {
@@ -103,21 +99,25 @@ HRESULT SubmitIoRing(HIORING ioRing, UINT32 waitOperations, UINT32 milliseconds,
 }
 #endif
 
-#define IoRingBufferRefFromIndexAndOffseti, o) { IORING_REF_REGISTERED, { . IndexAndOffset = { (i), (o) } } }
-#define IoRingBufferRefFromPointerp) { IORING_REF_RAW, { . Address = p } }
-#define IoRingHandleRefFromHandleh) { IORING_REF_RAW, { . Handle = h } }
-#define IoRingHandleRefFromIndexi) { IORING_REF_REGISTERED, { . Index = i } }
 
 struct IORING_BUFFER_REF
 {
     IORING_REF_KIND Kind;
-    union BufferUnion Buffer;
+    union BufferUnion
+    {
+        void *Address;
+        IORING_REGISTERED_BUFFER IndexAndOffset;
+    } Buffer;
 };
 
 struct IORING_HANDLE_REF
 {
     IORING_REF_KIND Kind;
-    union HandleUnion Handle;
+    union HandleUnion
+    {
+        HANDLE Handle;
+        UINT32 Index;
+    } Handle;
 };
 
 #ifdef __cplusplus
@@ -136,14 +136,44 @@ HRESULT BuildIoRingWriteFileGather(HIORING ioRing, IORING_HANDLE_REF fileRef, UI
 }
 #endif
 
-#define IoRingBufferRefFromIndexAndOffseti, o) { IORING_REF_REGISTERED, { . IndexAndOffset = { (i), (o) } } }
-#define IoRingBufferRefFromPointerp) { IORING_REF_RAW, { . Address = p } }
-#define IoRingHandleRefFromHandleh) { IORING_REF_RAW, { . Handle = h } }
-#define IoRingHandleRefFromIndexi) { IORING_REF_REGISTERED, { . Index = i } }
 
-#define IoRingBufferRefFromIndexAndOffseti, o) { IORING_REF_REGISTERED, { . IndexAndOffset = { (i), (o) } } }
-#define IoRingBufferRefFromPointerp) { IORING_REF_RAW, { . Address = p } }
-#define IoRingHandleRefFromHandleh) { IORING_REF_RAW, { . Handle = h } }
-#define IoRingHandleRefFromIndexi) { IORING_REF_REGISTERED, { . Index = i } }
+
+
+
+enum IORING_OP_CODE
+{
+    IORING_OP_NOP = 0,
+    IORING_OP_READ = 1,
+    IORING_OP_REGISTER_FILES = 2,
+    IORING_OP_REGISTER_BUFFERS = 3,
+    IORING_OP_CANCEL = 4,
+    IORING_OP_WRITE = 5,
+    IORING_OP_FLUSH = 6,
+    IORING_OP_READ_SCATTER = 7,
+    IORING_OP_WRITE_GATHER = 8,
+};
+
+struct IORING_BUFFER_INFO
+{
+    void *Address;
+    UINT32 Length;
+};
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+HRESULT BuildIoRingRegisterBuffers(HIORING ioRing, UINT32 count, const IORING_BUFFER_INFO buffers[], UINT_PTR userData);
+BOOL IsIoRingOpSupported(HIORING ioRing, IORING_OP_CODE op);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define IoRingBufferRefFromIndexAndOffset(i, o) { IORING_REF_REGISTERED, { . IndexAndOffset = { (i), (o) } } }
+#define IoRingBufferRefFromPointer(p) { IORING_REF_RAW, { . Address = p } }
+#define IoRingHandleRefFromHandle(h) { IORING_REF_RAW, { . Handle = h } }
+#define IoRingHandleRefFromIndex(i) { IORING_REF_REGISTERED, { . Index = i } }
 
 #endif

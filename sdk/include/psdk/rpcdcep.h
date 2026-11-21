@@ -346,18 +346,30 @@ typedef struct _RPC_TRANSFER_SYNTAX {
 #ifdef UNICODE
 #define I_RpcBindingInqDynamicEndpoint I_RpcBindingInqDynamicEndpointW
 #else
+#ifdef UNICODE
+#define I_RpcBindingInqDynamicEndpoint I_RpcBindingInqDynamicEndpointW
+#else
 #define I_RpcBindingInqDynamicEndpoint I_RpcBindingInqDynamicEndpointA
+#endif
 #endif
 #define I_RpcNsBindingSetEntryName 0
 #ifdef UNICODE
 #define I_RpcServerUseProtseq2 I_RpcServerUseProtseq2W
 #else
+#ifdef UNICODE
+#define I_RpcServerUseProtseq2 I_RpcServerUseProtseq2W
+#else
 #define I_RpcServerUseProtseq2 I_RpcServerUseProtseq2A
+#endif
 #endif
 #ifdef UNICODE
 #define I_RpcServerUseProtseqEp2 I_RpcServerUseProtseqEp2W
 #else
+#ifdef UNICODE
+#define I_RpcServerUseProtseqEp2 I_RpcServerUseProtseqEp2W
+#else
 #define I_RpcServerUseProtseqEp2 I_RpcServerUseProtseqEp2A
+#endif
 #endif
 #define I_RRPCUNINITIALIZENDROLE_EXPORT_NAME 0x3E8
 

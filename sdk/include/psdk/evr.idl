@@ -330,7 +330,6 @@ cpp_quote("#ifndef MFEVRDLL")
 cpp_quote("#define MFEVRDLL 0")
 cpp_quote("#endif")
 
-cpp_quote("#define EVRPUBLICfunc) STDAPI func")
 cpp_quote("")
 cpp_quote("enum _EVRFilterConfig_Prefs")
 cpp_quote("{")
@@ -501,9 +500,5 @@ cpp_quote("    ULONG (WINAPI *Release)(IMFVideoRenderer *);")
 cpp_quote("    HRESULT (WINAPI *InitializeRenderer)(IMFVideoRenderer *, IMFTransform *, IMFVideoPresenter *);")
 cpp_quote("};")
 
-cpp_quote("#define EVRPUBLICfunc) STDAPI func")
-
-cpp_quote("#define EVRPUBLICfunc) STDAPI func")
-
-cpp_quote("#define EVRPUBLICfunc) STDAPI func")
+cpp_quote("#define EVRPUBLIC(func) STDAPI func")
 

@@ -404,3 +404,14 @@ cpp_quote("    HRESULT (WINAPI *GetPreviousProgram)(ITuneRequestInfo *, ITuneReq
 cpp_quote("    HRESULT (WINAPI *GetNextLocator)(ITuneRequestInfo *, ITuneRequest *, ITuneRequest **);")
 cpp_quote("    HRESULT (WINAPI *GetPreviousLocator)(ITuneRequestInfo *, ITuneRequest *, ITuneRequest **);")
 cpp_quote("};")
+
+cpp_quote("typedef struct IDVB_EIT2 IDVB_EIT2;")
+cpp_quote("")
+cpp_quote("struct ISIInbandEPGEventVtbl")
+cpp_quote("{")
+cpp_quote("    HRESULT (WINAPI *QueryInterface)(ISIInbandEPGEvent *, const IID *const , void **);")
+cpp_quote("    ULONG (WINAPI *AddRef)(ISIInbandEPGEvent *);")
+cpp_quote("    ULONG (WINAPI *Release)(ISIInbandEPGEvent *);")
+cpp_quote("    HRESULT (WINAPI *SIObjectEvent)(ISIInbandEPGEvent *, IDVB_EIT2 *, DWORD, DWORD);")
+cpp_quote("};")
+

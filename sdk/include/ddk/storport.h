@@ -7396,11 +7396,6 @@ typedef struct _STORPORT_LIVEDUMP_DEVICE_TELEMETRY_LOG {
 #define STOR_POFX_PERF_STATE_SIZE 0x18
 #define STOR_REQUEST_INFO_VER 2
 #define STOR_SERIAL_NUMBER_MAX_SIZE 0x100
-#define StorPortConvertPhysicalAddressToULong64Address) ((Address) . QuadPart)
-#define StorPortReadRegisterBufferUlong64h, r, b, c) READ_REGISTER_BUFFER_ULONG64(r, b, c)
-#define StorPortReadRegisterUlong64h, r) READ_REGISTER_ULONG64(r)
-#define StorPortWriteRegisterBufferUlong64h, r, b, c) WRITE_REGISTER_BUFFER_ULONG64(r, b, c)
-#define StorPortWriteRegisterUlong64h, r, v) WRITE_REGISTER_ULONG64(r, v)
 
 struct _SRBEX_DATA_NVME_COMMAND
 {
@@ -7880,11 +7875,6 @@ ULONG StorPortUpdatePortConfigMaxIOInfo(PVOID HwDeviceExtension, ULONG MaxIoCoun
 }
 #endif
 
-#define StorPortConvertPhysicalAddressToULong64Address) ((Address) . QuadPart)
-#define StorPortReadRegisterBufferUlong64h, r, b, c) READ_REGISTER_BUFFER_ULONG64(r, b, c)
-#define StorPortReadRegisterUlong64h, r) READ_REGISTER_ULONG64(r)
-#define StorPortWriteRegisterBufferUlong64h, r, b, c) WRITE_REGISTER_BUFFER_ULONG64(r, b, c)
-#define StorPortWriteRegisterUlong64h, r, v) WRITE_REGISTER_ULONG64(r, v)
 
 typedef struct _NVME_ICE_ENTRY *PNVME_ICE_ENTRY;
 
@@ -7910,11 +7900,6 @@ ULONG StorPortQueryNvmeIceSupport(PVOID HwDeviceExtension, ULONG SegmentAndBus, 
 }
 #endif
 
-#define StorPortConvertPhysicalAddressToULong64Address) ((Address) . QuadPart)
-#define StorPortReadRegisterBufferUlong64h, r, b, c) READ_REGISTER_BUFFER_ULONG64(r, b, c)
-#define StorPortReadRegisterUlong64h, r) READ_REGISTER_ULONG64(r)
-#define StorPortWriteRegisterBufferUlong64h, r, b, c) WRITE_REGISTER_BUFFER_ULONG64(r, b, c)
-#define StorPortWriteRegisterUlong64h, r, v) WRITE_REGISTER_ULONG64(r, v)
 
 struct DECLSPEC_ALIGN(8) _SRBEX_DATA_NVMEOF_OPERATION
 {
@@ -7926,11 +7911,11 @@ struct DECLSPEC_ALIGN(8) _SRBEX_DATA_NVMEOF_OPERATION
     ULONG FunctionType;
 };
 
-#define StorPortConvertPhysicalAddressToULong64Address) ((Address) . QuadPart)
-#define StorPortReadRegisterBufferUlong64h, r, b, c) READ_REGISTER_BUFFER_ULONG64(r, b, c)
-#define StorPortReadRegisterUlong64h, r) READ_REGISTER_ULONG64(r)
-#define StorPortWriteRegisterBufferUlong64h, r, b, c) WRITE_REGISTER_BUFFER_ULONG64(r, b, c)
-#define StorPortWriteRegisterUlong64h, r, v) WRITE_REGISTER_ULONG64(r, v)
+#define StorPortConvertPhysicalAddressToULong64(Address) ((Address) . QuadPart)
+#define StorPortReadRegisterBufferUlong64(h, r, b, c) READ_REGISTER_BUFFER_ULONG64(r, b, c)
+#define StorPortReadRegisterUlong64(h, r) READ_REGISTER_ULONG64(r)
+#define StorPortWriteRegisterBufferUlong64(h, r, b, c) WRITE_REGISTER_BUFFER_ULONG64(r, b, c)
+#define StorPortWriteRegisterUlong64(h, r, v) WRITE_REGISTER_ULONG64(r, v)
 
 #endif /* _NTSTORPORT_ */
 

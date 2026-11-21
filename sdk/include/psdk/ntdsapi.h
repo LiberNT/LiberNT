@@ -1020,17 +1020,29 @@ typedef struct DS_SITE_COST_INFO {
 #ifdef UNICODE
 #define DS_DOMAIN_CONTROLLER_INFO_1 DS_DOMAIN_CONTROLLER_INFO_1W
 #else
+#ifdef UNICODE
+#define DS_DOMAIN_CONTROLLER_INFO_1 DS_DOMAIN_CONTROLLER_INFO_1W
+#else
 #define DS_DOMAIN_CONTROLLER_INFO_1 DS_DOMAIN_CONTROLLER_INFO_1A
 #endif
+#endif
+#ifdef UNICODE
+#define DS_DOMAIN_CONTROLLER_INFO_2 DS_DOMAIN_CONTROLLER_INFO_2W
+#else
 #ifdef UNICODE
 #define DS_DOMAIN_CONTROLLER_INFO_2 DS_DOMAIN_CONTROLLER_INFO_2W
 #else
 #define DS_DOMAIN_CONTROLLER_INFO_2 DS_DOMAIN_CONTROLLER_INFO_2A
 #endif
+#endif
+#ifdef UNICODE
+#define DS_DOMAIN_CONTROLLER_INFO_3 DS_DOMAIN_CONTROLLER_INFO_3W
+#else
 #ifdef UNICODE
 #define DS_DOMAIN_CONTROLLER_INFO_3 DS_DOMAIN_CONTROLLER_INFO_3W
 #else
 #define DS_DOMAIN_CONTROLLER_INFO_3 DS_DOMAIN_CONTROLLER_INFO_3A
+#endif
 #endif
 #define DS_DOMAIN_SIMPLE_NAME 8
 #define DS_ENTERPRISE_SIMPLE_NAME 8
@@ -1048,18 +1060,30 @@ typedef struct DS_SITE_COST_INFO {
 #ifdef UNICODE
 #define DS_REPSYNCALL_ERRINFO DS_REPSYNCALL_ERRINFOW
 #else
+#ifdef UNICODE
+#define DS_REPSYNCALL_ERRINFO DS_REPSYNCALL_ERRINFOW
+#else
 #define DS_REPSYNCALL_ERRINFO DS_REPSYNCALL_ERRINFOA
+#endif
 #endif
 #define DS_REPSYNCALL_NO_OPTIONS 0x00000000
 #ifdef UNICODE
 #define DS_REPSYNCALL_SYNC DS_REPSYNCALL_SYNCW
 #else
+#ifdef UNICODE
+#define DS_REPSYNCALL_SYNC DS_REPSYNCALL_SYNCW
+#else
 #define DS_REPSYNCALL_SYNC DS_REPSYNCALL_SYNCA
+#endif
 #endif
 #ifdef UNICODE
 #define DS_REPSYNCALL_UPDATE DS_REPSYNCALL_UPDATEW
 #else
+#ifdef UNICODE
+#define DS_REPSYNCALL_UPDATE DS_REPSYNCALL_UPDATEW
+#else
 #define DS_REPSYNCALL_UPDATE DS_REPSYNCALL_UPDATEA
+#endif
 #endif
 #define DS_ROLE_SCHEMA_OWNER 0
 #define DS_SCHEMA_GUID_MAP 0
@@ -1070,145 +1094,252 @@ typedef struct DS_SITE_COST_INFO {
 #ifdef UNICODE
 #define DsBind DsBindW
 #else
+#ifdef UNICODE
+#define DsBind DsBindW
+#else
 #define DsBind DsBindA
 #endif
+#endif
+#ifdef UNICODE
+#define DsBindByInstance DsBindByInstanceW
+#else
 #ifdef UNICODE
 #define DsBindByInstance DsBindByInstanceW
 #else
 #define DsBindByInstance DsBindByInstanceA
 #endif
+#endif
+#ifdef UNICODE
+#define DsBindToISTG DsBindToISTGW
+#else
 #ifdef UNICODE
 #define DsBindToISTG DsBindToISTGW
 #else
 #define DsBindToISTG DsBindToISTGA
 #endif
+#endif
+#ifdef UNICODE
+#define DsBindWithCred DsBindWithCredW
+#else
 #ifdef UNICODE
 #define DsBindWithCred DsBindWithCredW
 #else
 #define DsBindWithCred DsBindWithCredA
 #endif
+#endif
+#ifdef UNICODE
+#define DsBindWithSpn DsBindWithSpnW
+#else
 #ifdef UNICODE
 #define DsBindWithSpn DsBindWithSpnW
 #else
 #define DsBindWithSpn DsBindWithSpnA
 #endif
+#endif
+#ifdef UNICODE
+#define DsBindWithSpnEx DsBindWithSpnExW
+#else
 #ifdef UNICODE
 #define DsBindWithSpnEx DsBindWithSpnExW
 #else
 #define DsBindWithSpnEx DsBindWithSpnExA
 #endif
+#endif
+#ifdef UNICODE
+#define DsFreeDomainControllerInfo DsFreeDomainControllerInfoW
+#else
 #ifdef UNICODE
 #define DsFreeDomainControllerInfo DsFreeDomainControllerInfoW
 #else
 #define DsFreeDomainControllerInfo DsFreeDomainControllerInfoA
 #endif
+#endif
+#ifdef UNICODE
+#define DsFreeNameResult DsFreeNameResultW
+#else
 #ifdef UNICODE
 #define DsFreeNameResult DsFreeNameResultW
 #else
 #define DsFreeNameResult DsFreeNameResultA
+#endif
 #endif
 #define DsFreePasswordCredentialsA DsFreePasswordCredentials
 #define DsFreePasswordCredentialsW DsFreePasswordCredentials
 #ifdef UNICODE
 #define DsFreeSchemaGuidMap DsFreeSchemaGuidMapW
 #else
+#ifdef UNICODE
+#define DsFreeSchemaGuidMap DsFreeSchemaGuidMapW
+#else
 #define DsFreeSchemaGuidMap DsFreeSchemaGuidMapA
 #endif
+#endif
+#ifdef UNICODE
+#define DsFreeSpnArray DsFreeSpnArrayW
+#else
 #ifdef UNICODE
 #define DsFreeSpnArray DsFreeSpnArrayW
 #else
 #define DsFreeSpnArray DsFreeSpnArrayA
 #endif
+#endif
+#ifdef UNICODE
+#define DsGetDomainControllerInfo DsGetDomainControllerInfoW
+#else
 #ifdef UNICODE
 #define DsGetDomainControllerInfo DsGetDomainControllerInfoW
 #else
 #define DsGetDomainControllerInfo DsGetDomainControllerInfoA
 #endif
+#endif
+#ifdef UNICODE
+#define DsGetSpn DsGetSpnW
+#else
 #ifdef UNICODE
 #define DsGetSpn DsGetSpnW
 #else
 #define DsGetSpn DsGetSpnA
 #endif
+#endif
+#ifdef UNICODE
+#define DsInheritSecurityIdentity DsInheritSecurityIdentityW
+#else
 #ifdef UNICODE
 #define DsInheritSecurityIdentity DsInheritSecurityIdentityW
 #else
 #define DsInheritSecurityIdentity DsInheritSecurityIdentityA
 #endif
+#endif
+#ifdef UNICODE
+#define DsListDomainsInSite DsListDomainsInSiteW
+#else
 #ifdef UNICODE
 #define DsListDomainsInSite DsListDomainsInSiteW
 #else
 #define DsListDomainsInSite DsListDomainsInSiteA
+#endif
 #endif
 #define DsListInfoForServer 0
 #define DsListRoles 0
 #ifdef UNICODE
 #define DsListServersForDomainInSite DsListServersForDomainInSiteW
 #else
+#ifdef UNICODE
+#define DsListServersForDomainInSite DsListServersForDomainInSiteW
+#else
 #define DsListServersForDomainInSite DsListServersForDomainInSiteA
 #endif
+#endif
+#ifdef UNICODE
+#define DsListServersInSite DsListServersInSiteW
+#else
 #ifdef UNICODE
 #define DsListServersInSite DsListServersInSiteW
 #else
 #define DsListServersInSite DsListServersInSiteA
 #endif
+#endif
+#ifdef UNICODE
+#define DsListSites DsListSitesW
+#else
 #ifdef UNICODE
 #define DsListSites DsListSitesW
 #else
 #define DsListSites DsListSitesA
 #endif
+#endif
+#ifdef UNICODE
+#define DsMakePasswordCredentials DsMakePasswordCredentialsW
+#else
 #ifdef UNICODE
 #define DsMakePasswordCredentials DsMakePasswordCredentialsW
 #else
 #define DsMakePasswordCredentials DsMakePasswordCredentialsA
 #endif
+#endif
+#ifdef UNICODE
+#define DsMapSchemaGuids DsMapSchemaGuidsW
+#else
 #ifdef UNICODE
 #define DsMapSchemaGuids DsMapSchemaGuidsW
 #else
 #define DsMapSchemaGuids DsMapSchemaGuidsA
 #endif
+#endif
+#ifdef UNICODE
+#define DsQuerySitesByCost DsQuerySitesByCostW
+#else
 #ifdef UNICODE
 #define DsQuerySitesByCost DsQuerySitesByCostW
 #else
 #define DsQuerySitesByCost DsQuerySitesByCostA
 #endif
+#endif
+#ifdef UNICODE
+#define DsRemoveDsDomain DsRemoveDsDomainW
+#else
 #ifdef UNICODE
 #define DsRemoveDsDomain DsRemoveDsDomainW
 #else
 #define DsRemoveDsDomain DsRemoveDsDomainA
 #endif
+#endif
+#ifdef UNICODE
+#define DsRemoveDsServer DsRemoveDsServerW
+#else
 #ifdef UNICODE
 #define DsRemoveDsServer DsRemoveDsServerW
 #else
 #define DsRemoveDsServer DsRemoveDsServerA
 #endif
+#endif
+#ifdef UNICODE
+#define DsReplicaDel DsReplicaDelW
+#else
 #ifdef UNICODE
 #define DsReplicaDel DsReplicaDelW
 #else
 #define DsReplicaDel DsReplicaDelA
 #endif
+#endif
+#ifdef UNICODE
+#define DsReplicaSync DsReplicaSyncW
+#else
 #ifdef UNICODE
 #define DsReplicaSync DsReplicaSyncW
 #else
 #define DsReplicaSync DsReplicaSyncA
 #endif
+#endif
 #define DsReplicaSyncAll 0
+#ifdef UNICODE
+#define DsReplicaUpdateRefs DsReplicaUpdateRefsW
+#else
 #ifdef UNICODE
 #define DsReplicaUpdateRefs DsReplicaUpdateRefsW
 #else
 #define DsReplicaUpdateRefs DsReplicaUpdateRefsA
 #endif
+#endif
 #define DsReplicaVerifyObjects 0
+#ifdef UNICODE
+#define DsUnBind DsUnBindW
+#else
 #ifdef UNICODE
 #define DsUnBind DsUnBindW
 #else
 #define DsUnBind DsUnBindA
 #endif
+#endif
+#ifdef UNICODE
+#define DsWriteAccountSpn DsWriteAccountSpnW
+#else
 #ifdef UNICODE
 #define DsWriteAccountSpn DsWriteAccountSpnW
 #else
 #define DsWriteAccountSpn DsWriteAccountSpnA
 #endif
-#define FRSCONN_GET_PRIORITY_options_) (((((_options_) & FRSCONN_PRIORITY_MASK) >> 28) != 0) ? (((_options_) & FRSCONN_PRIORITY_MASK) >> 28) : FRSCONN_MAX_PRIORITY)
+#endif
 #define GUID_COMPUTRS_CONTAINER_A "aa312825768811d1aded00c04fd8d5cd"
 #define GUID_COMPUTRS_CONTAINER_BYTE "\xaa\x31\x28\x25\x76\x88\x11\xd1\xad\xed\x00\xc0\x4f\xd8\xd5\xcd"
 #define GUID_COMPUTRS_CONTAINER_W L"aa312825768811d1aded00c04fd8d5cd"
@@ -1256,7 +1387,6 @@ typedef struct DS_SITE_COST_INFO {
 #define NTDSAPI 0
 #define NTDSAPI_BIND_ALLOW_DELEGATION (0x00000001)
 #define NTDSAPI_POSTXP DECLSPEC_IMPORT
-#define NTDSCONN_IGNORE_SCHEDULE_options_) (((_options_) & NTDSCONN_OPT_IGNORE_SCHEDULE_MASK) >> 31)
 #define NTDSCONN_KCC_GC_TOPOLOGY 1
 #define NTDSCONN_KCC_INTERSITE_GC_TOPOLOGY 0x20
 #define NTDSCONN_KCC_INTERSITE_TOPOLOGY 0x40
@@ -1305,37 +1435,65 @@ typedef struct DS_SITE_COST_INFO {
 #ifdef UNICODE
 #define PDS_DOMAIN_CONTROLLER_INFO_1 PDS_DOMAIN_CONTROLLER_INFO_1W
 #else
+#ifdef UNICODE
+#define PDS_DOMAIN_CONTROLLER_INFO_1 PDS_DOMAIN_CONTROLLER_INFO_1W
+#else
 #define PDS_DOMAIN_CONTROLLER_INFO_1 PDS_DOMAIN_CONTROLLER_INFO_1A
 #endif
+#endif
+#ifdef UNICODE
+#define PDS_DOMAIN_CONTROLLER_INFO_2 PDS_DOMAIN_CONTROLLER_INFO_2W
+#else
 #ifdef UNICODE
 #define PDS_DOMAIN_CONTROLLER_INFO_2 PDS_DOMAIN_CONTROLLER_INFO_2W
 #else
 #define PDS_DOMAIN_CONTROLLER_INFO_2 PDS_DOMAIN_CONTROLLER_INFO_2A
 #endif
+#endif
+#ifdef UNICODE
+#define PDS_DOMAIN_CONTROLLER_INFO_3 PDS_DOMAIN_CONTROLLER_INFO_3W
+#else
 #ifdef UNICODE
 #define PDS_DOMAIN_CONTROLLER_INFO_3 PDS_DOMAIN_CONTROLLER_INFO_3W
 #else
 #define PDS_DOMAIN_CONTROLLER_INFO_3 PDS_DOMAIN_CONTROLLER_INFO_3A
 #endif
+#endif
+#ifdef UNICODE
+#define PDS_REPSYNCALL_ERRINFO PDS_REPSYNCALL_ERRINFOW
+#else
 #ifdef UNICODE
 #define PDS_REPSYNCALL_ERRINFO PDS_REPSYNCALL_ERRINFOW
 #else
 #define PDS_REPSYNCALL_ERRINFO PDS_REPSYNCALL_ERRINFOA
 #endif
+#endif
+#ifdef UNICODE
+#define PDS_REPSYNCALL_SYNC PDS_REPSYNCALL_SYNCW
+#else
 #ifdef UNICODE
 #define PDS_REPSYNCALL_SYNC PDS_REPSYNCALL_SYNCW
 #else
 #define PDS_REPSYNCALL_SYNC PDS_REPSYNCALL_SYNCA
 #endif
+#endif
+#ifdef UNICODE
+#define PDS_REPSYNCALL_UPDATE PDS_REPSYNCALL_UPDATEW
+#else
 #ifdef UNICODE
 #define PDS_REPSYNCALL_UPDATE PDS_REPSYNCALL_UPDATEW
 #else
 #define PDS_REPSYNCALL_UPDATE PDS_REPSYNCALL_UPDATEA
 #endif
+#endif
+#ifdef UNICODE
+#define PDS_SCHEMA_GUID_MAP PDS_SCHEMA_GUID_MAPW
+#else
 #ifdef UNICODE
 #define PDS_SCHEMA_GUID_MAP PDS_SCHEMA_GUID_MAPW
 #else
 #define PDS_SCHEMA_GUID_MAP PDS_SCHEMA_GUID_MAPA
+#endif
 #endif
 
 #ifdef __cplusplus
@@ -1421,14 +1579,12 @@ DWORD DsWriteAccountSpnW(HANDLE hDS, DS_SPN_WRITE_OP Operation, LPCWSTR pszAccou
 #endif
 
 #define DsReplicaAdd 0
-#define FRSCONN_GET_PRIORITY_options_) (((((_options_) & FRSCONN_PRIORITY_MASK) >> 28) != 0) ? (((_options_) & FRSCONN_PRIORITY_MASK) >> 28) : FRSCONN_MAX_PRIORITY)
-#define NTDSCONN_IGNORE_SCHEDULE_options_) (((_options_) & NTDSCONN_OPT_IGNORE_SCHEDULE_MASK) >> 31)
 
 #define DsReplicaModify 0
-#define FRSCONN_GET_PRIORITY_options_) (((((_options_) & FRSCONN_PRIORITY_MASK) >> 28) != 0) ? (((_options_) & FRSCONN_PRIORITY_MASK) >> 28) : FRSCONN_MAX_PRIORITY)
-#define NTDSCONN_IGNORE_SCHEDULE_options_) (((_options_) & NTDSCONN_OPT_IGNORE_SCHEDULE_MASK) >> 31)
 
-#define FRSCONN_GET_PRIORITY_options_) (((((_options_) & FRSCONN_PRIORITY_MASK) >> 28) != 0) ? (((_options_) & FRSCONN_PRIORITY_MASK) >> 28) : FRSCONN_MAX_PRIORITY)
-#define NTDSCONN_IGNORE_SCHEDULE_options_) (((_options_) & NTDSCONN_OPT_IGNORE_SCHEDULE_MASK) >> 31)
+#define FRSCONN_GET_PRIORITY(_options_) (((((_options_) & FRSCONN_PRIORITY_MASK) >> 28) != 0) ? (((_options_) & FRSCONN_PRIORITY_MASK) >> 28) : FRSCONN_MAX_PRIORITY)
+#define NTDSCONN_IGNORE_SCHEDULE(_options_) (((_options_) & NTDSCONN_OPT_IGNORE_SCHEDULE_MASK) >> 31)
+
+/* TODO: DsReplicaAddA/W and DsReplicaModifyA/W, which need SCHEDULE from schedule.h */
 
 #endif /* __WINE_NTDSAPI_H */

@@ -1025,10 +1025,7 @@ typedef struct tagWPD_COMMAND_ACCESS_LOOKUP_ENTRY {
   PROPERTYKEY AccessProperty;
 } WPD_COMMAND_ACCESS_LOOKUP_ENTRY;
 
-#define BEGIN_WPD_COMMAND_ACCESS_MAPx) static WPD_COMMAND_ACCESS_LOOKUP_ENTRY x [] = {
 #define END_WPD_COMMAND_ACCESS_MAP 0
-#define WPD_COMMAND_ACCESS_ENTRYWpdCommand, WpdCommandAccessType) { WpdCommand, WpdCommandAccessType, WPD_PROPERTY_NULL },
-#define WPD_COMMAND_ACCESS_PROPERTY_ENTRYWpdCommand, WpdCommandAccessType, WpdAccessProperty) { WpdCommand, WpdCommandAccessType, WpdAccessProperty },
 
 #ifdef __cplusplus
 extern "C" {
@@ -1041,19 +1038,16 @@ void FreePortableDevicePnPIDs(LPWSTR *pPnPIDs, DWORD cPnPIDs);
 }
 #endif
 
-#define BEGIN_WPD_COMMAND_ACCESS_MAPx) static WPD_COMMAND_ACCESS_LOOKUP_ENTRY x [] = {
 #define DECLARE_WPD_STANDARD_COMMAND_ACCESS_ENTRIES 0
-#define WPD_COMMAND_ACCESS_ENTRYWpdCommand, WpdCommandAccessType) { WpdCommand, WpdCommandAccessType, WPD_PROPERTY_NULL },
-#define WPD_COMMAND_ACCESS_PROPERTY_ENTRYWpdCommand, WpdCommandAccessType, WpdAccessProperty) { WpdCommand, WpdCommandAccessType, WpdAccessProperty },
 
-#define BEGIN_WPD_COMMAND_ACCESS_MAPx) static WPD_COMMAND_ACCESS_LOOKUP_ENTRY x [] = {
 #define IS_COMMAND_IN_WPD_COMMAND_ACCESS_MAP 0
-#define WPD_COMMAND_ACCESS_ENTRYWpdCommand, WpdCommandAccessType) { WpdCommand, WpdCommandAccessType, WPD_PROPERTY_NULL },
-#define WPD_COMMAND_ACCESS_PROPERTY_ENTRYWpdCommand, WpdCommandAccessType, WpdAccessProperty) { WpdCommand, WpdCommandAccessType, WpdAccessProperty },
 
-#define BEGIN_WPD_COMMAND_ACCESS_MAPx) static WPD_COMMAND_ACCESS_LOOKUP_ENTRY x [] = {
 #define DECLARE_VERIFY_WPD_COMMAND_ACCESS 0
-#define WPD_COMMAND_ACCESS_ENTRYWpdCommand, WpdCommandAccessType) { WpdCommand, WpdCommandAccessType, WPD_PROPERTY_NULL },
-#define WPD_COMMAND_ACCESS_PROPERTY_ENTRYWpdCommand, WpdCommandAccessType, WpdAccessProperty) { WpdCommand, WpdCommandAccessType, WpdAccessProperty },
+
+#define VERIFY_WPD_COMMAND_ACCESS 0
+
+#define BEGIN_WPD_COMMAND_ACCESS_MAP(x) static WPD_COMMAND_ACCESS_LOOKUP_ENTRY x [] = {
+#define WPD_COMMAND_ACCESS_ENTRY(WpdCommand, WpdCommandAccessType) { WpdCommand, WpdCommandAccessType, WPD_PROPERTY_NULL },
+#define WPD_COMMAND_ACCESS_PROPERTY_ENTRY(WpdCommand, WpdCommandAccessType, WpdAccessProperty) { WpdCommand, WpdCommandAccessType, WpdAccessProperty },
 
 #endif /* PORTABLEDEVICE_H */

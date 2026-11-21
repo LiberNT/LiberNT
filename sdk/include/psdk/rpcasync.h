@@ -276,7 +276,11 @@ typedef struct _RPC_CALL_LOCAL_ADDRESS_V1 {
 #ifdef UNICODE
 #define RpcServerInqCallAttributes RpcServerInqCallAttributesW
 #else
+#ifdef UNICODE
+#define RpcServerInqCallAttributes RpcServerInqCallAttributesW
+#else
 #define RpcServerInqCallAttributes RpcServerInqCallAttributesA
+#endif
 #endif
 
 #ifdef __cplusplus

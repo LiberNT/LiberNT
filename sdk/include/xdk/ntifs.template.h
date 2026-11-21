@@ -1769,7 +1769,6 @@ typedef struct USN_TRACK_MODIFIED_RANGES {
 #define EA_NAME_NETWORK_OPEN_ECP_INTEGRITY_U L"ECP{c584edbf-00df-4d28-00b8-8435baca8911e8}-INTEGRITY"
 #define EA_NAME_NETWORK_OPEN_ECP_PRIVACY 0
 #define EA_NAME_NETWORK_OPEN_ECP_PRIVACY_U L"ECP{c584edbf-00df-4d28-00b8-8435baca8911e8}-PRIVACY"
-#define FILE_ID_IS_INVALIDFID) ((FID) . QuadPart == FILE_INVALID_FILE_ID)
 #define FILE_PIPE_SYMLINK_VALID_FLAGS 3
 #define FILE_REGION_USAGE_QUERY_ALIGNMENT (FILE_REGION_USAGE_LARGE_PAGE_ALIGNMENT | FILE_REGION_USAGE_HUGE_PAGE_ALIGNMENT)
 #define FileBothDirectoryInformationDefinition { FileBothDirectoryInformation, FIELD_OFFSET(FILE_BOTH_DIR_INFORMATION, NextEntryOffset), FIELD_OFFSET(FILE_BOTH_DIR_INFORMATION, FileName), FIELD_OFFSET(FILE_BOTH_DIR_INFORMATION, FileNameLength) \
@@ -1848,21 +1847,12 @@ typedef struct USN_TRACK_MODIFIED_RANGES {
 #define FSRTL_ASYNC_CACHED_READ_TOP_LEVEL_IRP ((LONG_PTR)7)
 #define FSRTL_UNC_REGISTRATION_CURRENT_VERSION 0x201
 #define FSRTL_VOLSNAP_TOP_LEVEL_IRP ((LONG_PTR)8)
-#define FsRtlGetBypassIoOpenCount_fo) (((FsRtlGetPerStreamContextPointer(_fo) != NULL) && (FsRtlGetPerStreamContextPointer(_fo) -> Version >= FSRTL_FCB_HEADER_V4)) ? FsRtlGetPerStreamContextPointer(_fo) -> BypassIoOpenCount : 0)
-#define FsRtlGetBypassIoOpenCountPtr_fo) (((FsRtlGetPerStreamContextPointer(_fo) != NULL) && (FsRtlGetPerStreamContextPointer(_fo) -> Version >= FSRTL_FCB_HEADER_V4)) ? & FsRtlGetPerStreamContextPointer(_fo) -> BypassIoOpenCount : NULL)
-#define FsRtlSetupAdvancedHeaderEx2_advhdr, _fmutx, _fctxptr, _aepushlock) \
-{ FsRtlSetupAdvancedHeaderEx(_advhdr, _fmutx, _fctxptr); if ((_aepushlock) != NULL) { (_advhdr) -> AePushLock = (_aepushlock); } \
-}
-#define GHOSTED_FILE_EXTENTS_OUTPUT_SIZECount, MaxRecallMetadataBufferSize) FIELD_OFFSET(FSCTL_QUERY_GHOSTED_FILE_EXTENTS_OUTPUT, Extents) + ALIGN_UP((FIELD_OFFSET(GHOSTED_FILE_EXTENT, RecallMetadataBuffer) + MaxRecallMetadataBufferSize), 8) * (Count)
 #define GUID_ECP_WCIFS_REDIRECTION 0
 #define IRP_EXT_TRACK_OFFSET_HEADER_VALIDATION_VALUE 'TO'
-#define IsReparseTagReserved_tag) (((_tag) & 0x40000000))
-#define IsVirtualDiskFileSharedHandleState) (((HandleState) & SharedVirtualDiskHandleStateFileShared) != 0)
 #define KAPC_STATE_ANY_USER_APC_PENDING_MASK 3
 #define KAPC_STATE_NORMAL_USER_APC_PENDING_MASK 1
 #define KAPC_STATE_SPECIAL_USER_APC_PENDING_MASK 2
 #define KDC_PROXY_SETTINGS_V1 1
-#define MSV1_0_IUM_SUPPLEMENTAL_CREDENTIAL_SIZECreds) (FIELD_OFFSET(MSV1_0_IUM_SUPPLEMENTAL_CREDENTIAL, EncryptedCreds) + (Creds) -> EncryptedCredsSize)
 #define NT_RTL_COMPRESS_API 0
 #define OPLOCK_FS_FILTER_FLAGS_MASK 8
 #define PHCM_APPLICATION_DEFAULT ((CHAR)0)
@@ -1898,13 +1888,15 @@ typedef struct USN_TRACK_MODIFIED_RANGES {
 #else
 #define QUERY_ON_CREATE_ECP_CONTEXT_USN_INFO_END ((ULONG)0xA0)
 #endif
-#define QUERY_TYPE_ULONGTokenInformationClass) (TokenInformationClass == TokenIntegrityLevel || TokenInformationClass == TokenIsAppContainer || TokenInformationClass == TokenVirtualizationAllowed || TokenInformationClass == TokenVirtualizationEnabled || TokenInformationClass == TokenUIAccess || TokenInformationClass == TokenSessionId || TokenInformationClass == TokenHasRestrictions || TokenInformationClass == TokenAppContainerNumber || TokenInformationClass == TokenIsAppSilo || TokenInformationClass == TokenLearningMode || TokenInformationClass == TokenPrivateNameSpace)
+#ifdef UNICODE
+#define QueryCredentialsAttributesEx QueryCredentialsAttributesExW
+#else
 #ifdef UNICODE
 #define QueryCredentialsAttributesEx QueryCredentialsAttributesExW
 #else
 #define QueryCredentialsAttributesEx QueryCredentialsAttributesExA
 #endif
-#define REFS_VOLUME_DATA_BUFFER_CONTAINS_DRIVER_VERSIONVOLUME_DATA_BUFFER) ((VOLUME_DATA_BUFFER) -> ByteCount >= RTL_SIZEOF_THROUGH_FIELD(REFS_VOLUME_DATA_BUFFER, DriverMinorVersion))
+#endif
 #define REPARSE_DATA_BUFFER_EX_HEADER_SIZE 0x28
 #define REPARSE_GUID_DATA_BUFFER_EX_HEADER_SIZE 0x38
 #define RTL_SEGHEAP_MEM_SOURCE_ANY_NODE ((ULONG)0xFFFFFFFF)
@@ -2614,30 +2606,50 @@ NTSTATUS SeUnregisterLogonSessionTerminatedRoutineEx(PSE_LOGON_SESSION_TERMINATE
 }
 #endif
 
-#define FILE_ID_IS_INVALIDFID) ((FID) . QuadPart == FILE_INVALID_FILE_ID)
 #define FileIdExtdDirectoryInformationDefinition 0
-#define FsRtlGetBypassIoOpenCount_fo) (((FsRtlGetPerStreamContextPointer(_fo) != NULL) && (FsRtlGetPerStreamContextPointer(_fo) -> Version >= FSRTL_FCB_HEADER_V4)) ? FsRtlGetPerStreamContextPointer(_fo) -> BypassIoOpenCount : 0)
-#define FsRtlGetBypassIoOpenCountPtr_fo) (((FsRtlGetPerStreamContextPointer(_fo) != NULL) && (FsRtlGetPerStreamContextPointer(_fo) -> Version >= FSRTL_FCB_HEADER_V4)) ? & FsRtlGetPerStreamContextPointer(_fo) -> BypassIoOpenCount : NULL)
-#define FsRtlSetupAdvancedHeaderEx2_advhdr, _fmutx, _fctxptr, _aepushlock) \
-{ FsRtlSetupAdvancedHeaderEx(_advhdr, _fmutx, _fctxptr); if ((_aepushlock) != NULL) { (_advhdr) -> AePushLock = (_aepushlock); } \
-}
-#define GHOSTED_FILE_EXTENTS_OUTPUT_SIZECount, MaxRecallMetadataBufferSize) FIELD_OFFSET(FSCTL_QUERY_GHOSTED_FILE_EXTENTS_OUTPUT, Extents) + ALIGN_UP((FIELD_OFFSET(GHOSTED_FILE_EXTENT, RecallMetadataBuffer) + MaxRecallMetadataBufferSize), 8) * (Count)
-#define IsReparseTagReserved_tag) (((_tag) & 0x40000000))
-#define IsVirtualDiskFileSharedHandleState) (((HandleState) & SharedVirtualDiskHandleStateFileShared) != 0)
-#define MSV1_0_IUM_SUPPLEMENTAL_CREDENTIAL_SIZECreds) (FIELD_OFFSET(MSV1_0_IUM_SUPPLEMENTAL_CREDENTIAL, EncryptedCreds) + (Creds) -> EncryptedCredsSize)
-#define QUERY_TYPE_ULONGTokenInformationClass) (TokenInformationClass == TokenIntegrityLevel || TokenInformationClass == TokenIsAppContainer || TokenInformationClass == TokenVirtualizationAllowed || TokenInformationClass == TokenVirtualizationEnabled || TokenInformationClass == TokenUIAccess || TokenInformationClass == TokenSessionId || TokenInformationClass == TokenHasRestrictions || TokenInformationClass == TokenAppContainerNumber || TokenInformationClass == TokenIsAppSilo || TokenInformationClass == TokenLearningMode || TokenInformationClass == TokenPrivateNameSpace)
-#define REFS_VOLUME_DATA_BUFFER_CONTAINS_DRIVER_VERSIONVOLUME_DATA_BUFFER) ((VOLUME_DATA_BUFFER) -> ByteCount >= RTL_SIZEOF_THROUGH_FIELD(REFS_VOLUME_DATA_BUFFER, DriverMinorVersion))
+#ifdef UNICODE
+#define SspiAcquireCredentialsHandleAsync SspiAcquireCredentialsHandleAsyncW
+#else
 #ifdef UNICODE
 #define SspiAcquireCredentialsHandleAsync SspiAcquireCredentialsHandleAsyncW
 #else
 #define SspiAcquireCredentialsHandleAsync SspiAcquireCredentialsHandleAsyncA
+#endif
 #endif
 
 struct _STREAM_INFORMATION_ENTRY
 {
     ULONG Version;
     ULONG Flags;
-    union _StreamInformation StreamInformation;
+    union _StreamInformation
+    {
+        struct _DesiredStorageClass
+        {
+            FILE_STORAGE_TIER_CLASS Class;
+            ULONG Flags;
+        } DesiredStorageClass;
+        struct _DataStream
+        {
+            USHORT Length;
+            USHORT Flags;
+            ULONG Reserved;
+            ULONGLONG Vdl;
+        } DataStream;
+        struct _Reparse
+        {
+            USHORT Length;
+            USHORT Flags;
+            ULONG ReparseDataSize;
+            ULONG ReparseDataOffset;
+        } Reparse;
+        struct _Ea
+        {
+            USHORT Length;
+            USHORT Flags;
+            ULONG EaSize;
+            ULONG EaInformationOffset;
+        } Ea;
+    } StreamInformation;
 };
 
 typedef struct _STREAM_INFORMATION_ENTRY *PSTREAM_INFORMATION_ENTRY;
@@ -2672,24 +2684,12 @@ SECURITY_STATUS SspiSetAsyncNotifyCallback(SspiAsyncContext *Context, SspiAsyncN
 #endif
 
 #define _WCIFS_REDIRECTION_ECP_CONTEXT _CREATE_REDIRECTION_ECP_CONTEXT
-#define FILE_ID_IS_INVALIDFID) ((FID) . QuadPart == FILE_INVALID_FILE_ID)
 #define FileIdAllExtdBothDirectoryInformationDefinition { FileIdAllExtdBothDirectoryInformation, FIELD_OFFSET(FILE_ID_ALL_EXTD_BOTH_DIR_INFORMATION, NextEntryOffset), FIELD_OFFSET(FILE_ID_ALL_EXTD_BOTH_DIR_INFORMATION, FileName), FIELD_OFFSET(FILE_ID_ALL_EXTD_BOTH_DIR_INFORMATION, FileNameLength) \
 }
 #define FileIdAllExtdDirectoryInformationDefinition { FileIdAllExtdDirectoryInformation, FIELD_OFFSET(FILE_ID_ALL_EXTD_DIR_INFORMATION, NextEntryOffset), FIELD_OFFSET(FILE_ID_ALL_EXTD_DIR_INFORMATION, FileName), FIELD_OFFSET(FILE_ID_ALL_EXTD_DIR_INFORMATION, FileNameLength) \
 }
 #define FileIdExtdBothDirectoryInformationDefinition 0
-#define FsRtlGetBypassIoOpenCount_fo) (((FsRtlGetPerStreamContextPointer(_fo) != NULL) && (FsRtlGetPerStreamContextPointer(_fo) -> Version >= FSRTL_FCB_HEADER_V4)) ? FsRtlGetPerStreamContextPointer(_fo) -> BypassIoOpenCount : 0)
-#define FsRtlGetBypassIoOpenCountPtr_fo) (((FsRtlGetPerStreamContextPointer(_fo) != NULL) && (FsRtlGetPerStreamContextPointer(_fo) -> Version >= FSRTL_FCB_HEADER_V4)) ? & FsRtlGetPerStreamContextPointer(_fo) -> BypassIoOpenCount : NULL)
-#define FsRtlSetupAdvancedHeaderEx2_advhdr, _fmutx, _fctxptr, _aepushlock) \
-{ FsRtlSetupAdvancedHeaderEx(_advhdr, _fmutx, _fctxptr); if ((_aepushlock) != NULL) { (_advhdr) -> AePushLock = (_aepushlock); } \
-}
-#define GHOSTED_FILE_EXTENTS_OUTPUT_SIZECount, MaxRecallMetadataBufferSize) FIELD_OFFSET(FSCTL_QUERY_GHOSTED_FILE_EXTENTS_OUTPUT, Extents) + ALIGN_UP((FIELD_OFFSET(GHOSTED_FILE_EXTENT, RecallMetadataBuffer) + MaxRecallMetadataBufferSize), 8) * (Count)
-#define IsReparseTagReserved_tag) (((_tag) & 0x40000000))
-#define IsVirtualDiskFileSharedHandleState) (((HandleState) & SharedVirtualDiskHandleStateFileShared) != 0)
-#define MSV1_0_IUM_SUPPLEMENTAL_CREDENTIAL_SIZECreds) (FIELD_OFFSET(MSV1_0_IUM_SUPPLEMENTAL_CREDENTIAL, EncryptedCreds) + (Creds) -> EncryptedCredsSize)
 #define PWCIFS_REDIRECTION_ECP_CONTEXT PCREATE_REDIRECTION_ECP_CONTEXT
-#define QUERY_TYPE_ULONGTokenInformationClass) (TokenInformationClass == TokenIntegrityLevel || TokenInformationClass == TokenIsAppContainer || TokenInformationClass == TokenVirtualizationAllowed || TokenInformationClass == TokenVirtualizationEnabled || TokenInformationClass == TokenUIAccess || TokenInformationClass == TokenSessionId || TokenInformationClass == TokenHasRestrictions || TokenInformationClass == TokenAppContainerNumber || TokenInformationClass == TokenIsAppSilo || TokenInformationClass == TokenLearningMode || TokenInformationClass == TokenPrivateNameSpace)
-#define REFS_VOLUME_DATA_BUFFER_CONTAINS_DRIVER_VERSIONVOLUME_DATA_BUFFER) ((VOLUME_DATA_BUFFER) -> ByteCount >= RTL_SIZEOF_THROUGH_FIELD(REFS_VOLUME_DATA_BUFFER, DriverMinorVersion))
 #define WCIFS_REDIRECTION_ECP_CONTEXT CREATE_REDIRECTION_ECP_CONTEXT
 
 struct _ATOMIC_CREATE_ECP_CONTEXT
@@ -3075,18 +3075,16 @@ NTSTATUS NTAPI GetSecurityUserInfo(PLUID LogonId, ULONG Flags, PSecurityUserData
 }
 #endif
 
-#define FILE_ID_IS_INVALIDFID) ((FID) . QuadPart == FILE_INVALID_FILE_ID)
-#define FsRtlGetBypassIoOpenCount_fo) (((FsRtlGetPerStreamContextPointer(_fo) != NULL) && (FsRtlGetPerStreamContextPointer(_fo) -> Version >= FSRTL_FCB_HEADER_V4)) ? FsRtlGetPerStreamContextPointer(_fo) -> BypassIoOpenCount : 0)
-#define FsRtlGetBypassIoOpenCountPtr_fo) (((FsRtlGetPerStreamContextPointer(_fo) != NULL) && (FsRtlGetPerStreamContextPointer(_fo) -> Version >= FSRTL_FCB_HEADER_V4)) ? & FsRtlGetPerStreamContextPointer(_fo) -> BypassIoOpenCount : NULL)
-#define FsRtlSetupAdvancedHeaderEx2_advhdr, _fmutx, _fctxptr, _aepushlock) \
-{ FsRtlSetupAdvancedHeaderEx(_advhdr, _fmutx, _fctxptr); if ((_aepushlock) != NULL) { (_advhdr) -> AePushLock = (_aepushlock); } \
-}
-#define GHOSTED_FILE_EXTENTS_OUTPUT_SIZECount, MaxRecallMetadataBufferSize) FIELD_OFFSET(FSCTL_QUERY_GHOSTED_FILE_EXTENTS_OUTPUT, Extents) + ALIGN_UP((FIELD_OFFSET(GHOSTED_FILE_EXTENT, RecallMetadataBuffer) + MaxRecallMetadataBufferSize), 8) * (Count)
-#define IsReparseTagReserved_tag) (((_tag) & 0x40000000))
-#define IsVirtualDiskFileSharedHandleState) (((HandleState) & SharedVirtualDiskHandleStateFileShared) != 0)
-#define MSV1_0_IUM_SUPPLEMENTAL_CREDENTIAL_SIZECreds) (FIELD_OFFSET(MSV1_0_IUM_SUPPLEMENTAL_CREDENTIAL, EncryptedCreds) + (Creds) -> EncryptedCredsSize)
-#define QUERY_TYPE_ULONGTokenInformationClass) (TokenInformationClass == TokenIntegrityLevel || TokenInformationClass == TokenIsAppContainer || TokenInformationClass == TokenVirtualizationAllowed || TokenInformationClass == TokenVirtualizationEnabled || TokenInformationClass == TokenUIAccess || TokenInformationClass == TokenSessionId || TokenInformationClass == TokenHasRestrictions || TokenInformationClass == TokenAppContainerNumber || TokenInformationClass == TokenIsAppSilo || TokenInformationClass == TokenLearningMode || TokenInformationClass == TokenPrivateNameSpace)
-#define REFS_VOLUME_DATA_BUFFER_CONTAINS_DRIVER_VERSIONVOLUME_DATA_BUFFER) ((VOLUME_DATA_BUFFER) -> ByteCount >= RTL_SIZEOF_THROUGH_FIELD(REFS_VOLUME_DATA_BUFFER, DriverMinorVersion))
+#define FILE_ID_IS_INVALID(FID) ((FID) . QuadPart == FILE_INVALID_FILE_ID)
+#define FsRtlGetBypassIoOpenCount(_fo) (((FsRtlGetPerStreamContextPointer(_fo) != NULL) && (FsRtlGetPerStreamContextPointer(_fo) -> Version >= FSRTL_FCB_HEADER_V4)) ? FsRtlGetPerStreamContextPointer(_fo) -> BypassIoOpenCount : 0)
+#define FsRtlGetBypassIoOpenCountPtr(_fo) (((FsRtlGetPerStreamContextPointer(_fo) != NULL) && (FsRtlGetPerStreamContextPointer(_fo) -> Version >= FSRTL_FCB_HEADER_V4)) ? & FsRtlGetPerStreamContextPointer(_fo) -> BypassIoOpenCount : NULL)
+#define FsRtlSetupAdvancedHeaderEx2(_advhdr, _fmutx, _fctxptr, _aepushlock) { FsRtlSetupAdvancedHeaderEx(_advhdr, _fmutx, _fctxptr); if ((_aepushlock) != NULL) { (_advhdr) -> AePushLock = (_aepushlock); } }
+#define GHOSTED_FILE_EXTENTS_OUTPUT_SIZE(Count, MaxRecallMetadataBufferSize) FIELD_OFFSET(FSCTL_QUERY_GHOSTED_FILE_EXTENTS_OUTPUT, Extents) + ALIGN_UP((FIELD_OFFSET(GHOSTED_FILE_EXTENT, RecallMetadataBuffer) + MaxRecallMetadataBufferSize), 8) * (Count)
+#define IsReparseTagReserved(_tag) (((_tag) & 0x40000000))
+#define IsVirtualDiskFileShared(HandleState) (((HandleState) & SharedVirtualDiskHandleStateFileShared) != 0)
+#define MSV1_0_IUM_SUPPLEMENTAL_CREDENTIAL_SIZE(Creds) (FIELD_OFFSET(MSV1_0_IUM_SUPPLEMENTAL_CREDENTIAL, EncryptedCreds) + (Creds) -> EncryptedCredsSize)
+#define QUERY_TYPE_ULONG(TokenInformationClass) (TokenInformationClass == TokenIntegrityLevel || TokenInformationClass == TokenIsAppContainer || TokenInformationClass == TokenVirtualizationAllowed || TokenInformationClass == TokenVirtualizationEnabled || TokenInformationClass == TokenUIAccess || TokenInformationClass == TokenSessionId || TokenInformationClass == TokenHasRestrictions || TokenInformationClass == TokenAppContainerNumber || TokenInformationClass == TokenIsAppSilo || TokenInformationClass == TokenLearningMode || TokenInformationClass == TokenPrivateNameSpace)
+#define REFS_VOLUME_DATA_BUFFER_CONTAINS_DRIVER_VERSION(VOLUME_DATA_BUFFER) ((VOLUME_DATA_BUFFER) -> ByteCount >= RTL_SIZEOF_THROUGH_FIELD(REFS_VOLUME_DATA_BUFFER, DriverMinorVersion))
 
 #endif
 

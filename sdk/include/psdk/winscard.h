@@ -235,23 +235,38 @@ typedef struct READER_SEL_RESPONSE {
 #ifdef UNICODE
 #define GetOpenCardName GetOpenCardNameW
 #else
+#ifdef UNICODE
+#define GetOpenCardName GetOpenCardNameW
+#else
 #define GetOpenCardName GetOpenCardNameA
+#endif
 #endif
 #define LPOCNCONNPROC 0
 #define LPOPENCARDNAME_A LPOPENCARDNAMEA
 #define LPOPENCARDNAME_W LPOPENCARDNAMEW
+#ifdef UNICODE
+#define LPOPENCARDNAMEA_EX LPOPENCARDNAME_EXW
+#else
 #define LPOPENCARDNAMEA_EX LPOPENCARDNAME_EXA
+#endif
 #define LPOPENCARDNAMEW_EX LPOPENCARDNAME_EXW
 #define LPSCARD_READERSTATE_A LPSCARD_READERSTATEA
 #define LPSCARD_READERSTATE_W LPSCARD_READERSTATEW
 #define OPENCARDNAME_A OPENCARDNAMEA
 #define OPENCARDNAME_W OPENCARDNAMEW
+#ifdef UNICODE
+#define OPENCARDNAMEA_EX OPENCARDNAME_EXW
+#else
 #define OPENCARDNAMEA_EX OPENCARDNAME_EXA
+#endif
 #define OPENCARDNAMEW_EX OPENCARDNAME_EXW
-#define PCSCardIntroduceCardTypehContext, szCardName, pbAtr, pbAtrMask, cbAtrLen, pguidPrimaryProvider, rgguidInterfaces, dwInterfaceCount) SCardIntroduceCardType(hContext, szCardName, pguidPrimaryProvider, rgguidInterfaces, dwInterfaceCount, pbAtr, pbAtrMask, cbAtrLen)
 #define POPENCARDNAME_A POPENCARDNAMEA
 #define POPENCARDNAME_W POPENCARDNAMEW
+#ifdef UNICODE
+#define POPENCARDNAMEA_EX POPENCARDNAME_EXW
+#else
 #define POPENCARDNAMEA_EX POPENCARDNAME_EXA
+#endif
 #define POPENCARDNAMEW_EX POPENCARDNAME_EXW
 #define PSCARD_READERSTATE_A PSCARD_READERSTATEA
 #define PSCARD_READERSTATE_W PSCARD_READERSTATEW
@@ -267,36 +282,60 @@ typedef struct READER_SEL_RESPONSE {
 #ifdef UNICODE
 #define SCardGetDeviceTypeId SCardGetDeviceTypeIdW
 #else
+#ifdef UNICODE
+#define SCardGetDeviceTypeId SCardGetDeviceTypeIdW
+#else
 #define SCardGetDeviceTypeId SCardGetDeviceTypeIdA
+#endif
 #endif
 #define SCardGetReaderCapabilities SCardGetAttrib
 #ifdef UNICODE
 #define SCardGetReaderDeviceInstanceId SCardGetReaderDeviceInstanceIdW
 #else
+#ifdef UNICODE
+#define SCardGetReaderDeviceInstanceId SCardGetReaderDeviceInstanceIdW
+#else
 #define SCardGetReaderDeviceInstanceId SCardGetReaderDeviceInstanceIdA
 #endif
+#endif
+#ifdef UNICODE
+#define SCardGetReaderIcon SCardGetReaderIconW
+#else
 #ifdef UNICODE
 #define SCardGetReaderIcon SCardGetReaderIconW
 #else
 #define SCardGetReaderIcon SCardGetReaderIconA
 #endif
+#endif
 #define SCardListCardTypes SCardListCards
+#ifdef UNICODE
+#define SCardListReadersWithDeviceInstanceId SCardListReadersWithDeviceInstanceIdW
+#else
 #ifdef UNICODE
 #define SCardListReadersWithDeviceInstanceId SCardListReadersWithDeviceInstanceIdW
 #else
 #define SCardListReadersWithDeviceInstanceId SCardListReadersWithDeviceInstanceIdA
 #endif
+#endif
+#ifdef UNICODE
+#define SCardReadCache SCardReadCacheW
+#else
 #ifdef UNICODE
 #define SCardReadCache SCardReadCacheW
 #else
 #define SCardReadCache SCardReadCacheA
+#endif
 #endif
 #define SCardSetReaderCapabilities SCardSetAttrib
 #define SCardUIDlgSelectCard 0
 #ifdef UNICODE
 #define SCardWriteCache SCardWriteCacheW
 #else
+#ifdef UNICODE
+#define SCardWriteCache SCardWriteCacheW
+#else
 #define SCardWriteCache SCardWriteCacheA
+#endif
 #endif
 
 typedef BOOL (WINAPI *LPOCNCHKPROC)(SCARDCONTEXT, SCARDHANDLE, PVOID);
@@ -538,10 +577,6 @@ LONG WINAPI SCardWriteCacheW(SCARDCONTEXT hContext, UUID *CardIdentifier, DWORD 
 }
 #endif
 
-#define PCSCardIntroduceCardTypehContext, szCardName, pbAtr, pbAtrMask, cbAtrLen, pguidPrimaryProvider, rgguidInterfaces, dwInterfaceCount) SCardIntroduceCardType(hContext, szCardName, pguidPrimaryProvider, rgguidInterfaces, dwInterfaceCount, pbAtr, pbAtrMask, cbAtrLen)
-
-#define PCSCardIntroduceCardTypehContext, szCardName, pbAtr, pbAtrMask, cbAtrLen, pguidPrimaryProvider, rgguidInterfaces, dwInterfaceCount) SCardIntroduceCardType(hContext, szCardName, pguidPrimaryProvider, rgguidInterfaces, dwInterfaceCount, pbAtr, pbAtrMask, cbAtrLen)
-
-#define PCSCardIntroduceCardTypehContext, szCardName, pbAtr, pbAtrMask, cbAtrLen, pguidPrimaryProvider, rgguidInterfaces, dwInterfaceCount) SCardIntroduceCardType(hContext, szCardName, pguidPrimaryProvider, rgguidInterfaces, dwInterfaceCount, pbAtr, pbAtrMask, cbAtrLen)
+#define PCSCardIntroduceCardType(hContext, szCardName, pbAtr, pbAtrMask, cbAtrLen, pguidPrimaryProvider, rgguidInterfaces, dwInterfaceCount) SCardIntroduceCardType(hContext, szCardName, pguidPrimaryProvider, rgguidInterfaces, dwInterfaceCount, pbAtr, pbAtrMask, cbAtrLen)
 
 #endif  /* __WINE_WINSCARD_H */

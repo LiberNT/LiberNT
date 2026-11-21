@@ -130,18 +130,30 @@ typedef IUniformResourceLocatorA * PIUniformResourceLocator;
 #ifdef UNICODE
 #define IUniformResourceLocator IUniformResourceLocatorW
 #else
+#ifdef UNICODE
+#define IUniformResourceLocator IUniformResourceLocatorW
+#else
 #define IUniformResourceLocator IUniformResourceLocatorA
+#endif
 #endif
 #define IUniformResourceLocatorVtbl IUniformResourceLocatorAVtbl
 #ifdef UNICODE
 #define MIMEAssociationDialog MIMEAssociationDialogW
 #else
+#ifdef UNICODE
+#define MIMEAssociationDialog MIMEAssociationDialogW
+#else
 #define MIMEAssociationDialog MIMEAssociationDialogA
+#endif
 #endif
 #ifdef UNICODE
 #define URLAssociationDialog URLAssociationDialogW
 #else
+#ifdef UNICODE
+#define URLAssociationDialog URLAssociationDialogW
+#else
 #define URLAssociationDialog URLAssociationDialogA
+#endif
 #endif
 
 typedef struct IUniformResourceLocatorAVtbl IUniformResourceLocatorAVtbl;

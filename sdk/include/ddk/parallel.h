@@ -674,8 +674,6 @@ typedef struct _PARPORT_REMOVAL_RELATIONS {
 #define PAR_LEGACY_ZIP_DRIVE ((ULONG)4)
 #define PAR_LEGACY_ZIP_DRIVE_EPP_MODE ((ULONG)0x20)
 #define PAR_LEGACY_ZIP_DRIVE_STD_MODE ((ULONG)0x10)
-#define SET_DCRb5, b4, b3, b2, b1, b0) ((UCHAR) ((b5 == ACTIVE ? BIT_5_SET : 0) | (b4 == ACTIVE ? BIT_4_SET : 0) | (b3 == ACTIVE ? 0 : BIT_3_SET) | (b2 == ACTIVE ? BIT_2_SET : 0) | (b1 == ACTIVE ? 0 : BIT_1_SET) | (b0 == ACTIVE ? 0 : BIT_0_SET)))
-#define TEST_ECR_FIFOregisterValue, testValue) (((registerValue) & ECR_FIFO_MASK) == testValue)
 #define TFIFO_OFFSET 0x400
 
 typedef NTSTATUS (*PPARCHIP_SET_CHIP_MODE)(PVOID, UCHAR);
@@ -695,13 +693,7 @@ typedef struct _PARALLEL_PARCHIP_INFO PARALLEL_PARCHIP_INFO;
 
 typedef struct _PARALLEL_PARCHIP_INFO *PPARALLEL_PARCHIP_INFO;
 
-#define SET_DCRb5, b4, b3, b2, b1, b0) ((UCHAR) ((b5 == ACTIVE ? BIT_5_SET : 0) | (b4 == ACTIVE ? BIT_4_SET : 0) | (b3 == ACTIVE ? 0 : BIT_3_SET) | (b2 == ACTIVE ? BIT_2_SET : 0) | (b1 == ACTIVE ? 0 : BIT_1_SET) | (b0 == ACTIVE ? 0 : BIT_0_SET)))
-#define TEST_ECR_FIFOregisterValue, testValue) (((registerValue) & ECR_FIFO_MASK) == testValue)
-
-#define SET_DCRb5, b4, b3, b2, b1, b0) ((UCHAR) ((b5 == ACTIVE ? BIT_5_SET : 0) | (b4 == ACTIVE ? BIT_4_SET : 0) | (b3 == ACTIVE ? 0 : BIT_3_SET) | (b2 == ACTIVE ? BIT_2_SET : 0) | (b1 == ACTIVE ? 0 : BIT_1_SET) | (b0 == ACTIVE ? 0 : BIT_0_SET)))
-#define TEST_ECR_FIFOregisterValue, testValue) (((registerValue) & ECR_FIFO_MASK) == testValue)
-
-#define SET_DCRb5, b4, b3, b2, b1, b0) ((UCHAR) ((b5 == ACTIVE ? BIT_5_SET : 0) | (b4 == ACTIVE ? BIT_4_SET : 0) | (b3 == ACTIVE ? 0 : BIT_3_SET) | (b2 == ACTIVE ? BIT_2_SET : 0) | (b1 == ACTIVE ? 0 : BIT_1_SET) | (b0 == ACTIVE ? 0 : BIT_0_SET)))
-#define TEST_ECR_FIFOregisterValue, testValue) (((registerValue) & ECR_FIFO_MASK) == testValue)
+#define SET_DCR(b5, b4, b3, b2, b1, b0) ((UCHAR) ((b5 == ACTIVE ? BIT_5_SET : 0) | (b4 == ACTIVE ? BIT_4_SET : 0) | (b3 == ACTIVE ? 0 : BIT_3_SET) | (b2 == ACTIVE ? BIT_2_SET : 0) | (b1 == ACTIVE ? 0 : BIT_1_SET) | (b0 == ACTIVE ? 0 : BIT_0_SET)))
+#define TEST_ECR_FIFO(registerValue, testValue) (((registerValue) & ECR_FIFO_MASK) == testValue)
 
 #endif /* __PARALLEL_H */

@@ -117,7 +117,6 @@ typedef struct FXREVERB_PARAMETERS {
 } FXREVERB_PARAMETERS;
 #pragma pack(pop)
 
-#define FX_API_type) STDAPIV_(type)
 #define FXECHO_DEFAULT_DELAY 0x1F4
 #define FXECHO_DEFAULT_FEEDBACK 0
 #define FXECHO_DEFAULT_WETDRYMIX 0
@@ -156,10 +155,6 @@ HRESULT __cdecl CreateFX(const IID *const clsid, IUnknown **pEffect, const void 
 }
 #endif
 
-#define FX_API_type) STDAPIV_(type)
-
-#define FX_API_type) STDAPIV_(type)
-
-#define FX_API_type) STDAPIV_(type)
+#define FX_API_(type) STDAPIV_(type)
 
 #endif

@@ -11888,31 +11888,7 @@ typedef struct NDIS_PD_FILTER_HANDLE__ {
   int unused;
 } *NDIS_PD_FILTER_HANDLE;
 
-#define DECLARE_NDIS_HANDLEhandle) typedef PVOID handle;
-#define NDIS_API_VERSION_AVAILABLEmajor, minor) NDIS_DETAIL_NDIS_API_VERSION_AVAILABLE_(major, minor)
 #define NDIS_CURRENT_PROCESSOR_NUMBER 0
-#define NDIS_DECLARE_CO_CL_AF_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cl-af")
-#define NDIS_DECLARE_CO_CL_VC_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cl-vc")
-#define NDIS_DECLARE_CO_CM_AF_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cm-af")
-#define NDIS_DECLARE_CO_CM_VC_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cm-vc")
-#define NDIS_DECLARE_CO_MINIPORT_VC_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-miniport-vc")
-#define NDIS_DECLARE_FILTER_DRIVER_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-filter-driver")
-#define NDIS_DECLARE_MINIPORT_ADDDEVICE_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-miniport-adddevice")
-#define NDIS_DECLARE_MINIPORT_INTERRUPT_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-miniport-interrupt")
-#define NDIS_DECLARE_MINIPORT_SGLIST_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-miniport-sglist")
-#define NDIS_DECLARE_MINIPORT_SHARED_DMA_ASYNC_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-miniport-shdma")
-#define NDIS_DECLARE_PROTOCOL_DRIVER_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-protocol-driver")
-#define NDIS_DECLARE_SHARED_MEMORY_ALLOCATION_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-shm-block")
-#define NDIS_DECLARE_SHARED_MEMORY_PROVIDER_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-shm-provider")
-#define NDIS_DECLARE_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE_ContextName, _ExtensionId) extern NDIS_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE_INFO _ContextName = \
-{ { NDIS_OBJECT_TYPE_DEFAULT, NDIS_SIZEOF_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE_INFO_REVISION_1, NDIS_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE_INFO_REVISION_1, }, # _ContextName, _ExtensionId \
-};
-#define NDIS_DETAIL_NDIS_API_VERSION_AVAILABLE_major, minor) ((((0x ## major) << 8) + (0x ## minor)) >= NDIS_MIN_API)
-#define NDIS_GET_NET_BUFFER_LIST_GFT_OFFLOAD_FLAGS_NBL) ((* ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation))) . Flags)
-#define NDIS_GET_NET_BUFFER_LIST_GFT_OFFLOAD_VPORT_ID_NBL) ((* ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation))) . VPortId)
-#define NDIS_GET_NET_BUFFER_LIST_IM_RESERVED_NBL) (NET_BUFFER_LIST_INFO(_NBL, IMReserved))
-#define NDIS_GET_NET_BUFFER_LIST_VIRTUAL_SUBNET_ID_NBL) ((* ((NDIS_NET_BUFFER_LIST_VIRTUAL_SUBNET_INFO *) & NET_BUFFER_LIST_INFO((_NBL), VirtualSubnetInfo))) . VirtualSubnetId)
-#define NDIS_MAKE_RID_Segment, _Bus, _Function) (((_Segment) << 16) | ((_Bus) << 8) | (_Function))
 #ifdef _WIN64
 #define NDIS_MAX_EVENT_LOG_DATA_SIZE 0xC4
 #else
@@ -11941,10 +11917,6 @@ typedef struct NDIS_PD_FILTER_HANDLE__ {
 #define NDIS_RUNTIME_VERSION_687 0x60057
 #define NDIS_RUNTIME_VERSION_688 0x60058
 #define NDIS_RUNTIME_VERSION_689 0x60059
-#define NDIS_SET_NET_BUFFER_LIST_GFT_OFFLOAD_FLAGS_NBL, _Flags) ((* ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation))) . Flags = (_Flags))
-#define NDIS_SET_NET_BUFFER_LIST_GFT_OFFLOAD_VPORT_ID_NBL, _VPortId) ((* ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation))) . VPortId = (_VPortId))
-#define NDIS_SET_NET_BUFFER_LIST_IM_RESERVED_NBL, _Val) NET_BUFFER_LIST_INFO(_NBL, IMReserved) = (_Val)
-#define NDIS_SET_NET_BUFFER_LIST_VIRTUAL_SUBNET_ID_NBL, _VirtualSubnetId) ((* ((NDIS_NET_BUFFER_LIST_VIRTUAL_SUBNET_INFO *) & NET_BUFFER_LIST_INFO((_NBL), VirtualSubnetInfo))) . VirtualSubnetId = (_VirtualSubnetId))
 #define NDIS_SHARED_MEM_HANDLE_HAL_ALLOCATED 0
 #ifdef _WIN64
 #define NDIS_SIZEOF_CO_CALL_MANAGER_OPTIONAL_HANDLERS_REVISION_1 0x88
@@ -12153,9 +12125,6 @@ typedef struct NDIS_PD_FILTER_HANDLE__ {
 #define NDIS_STATUS_GFT_OFFLOAD_CURRENT_CONFIG ((NDIS_STATUS)0x40020302)
 #define NDIS_STATUS_GFT_OFFLOAD_HARDWARE_CAPABILITIES ((NDIS_STATUS)0x40020301)
 #define NDIS_STATUS_INCOMPATIBLE_QOS ((NDIS_STATUS)(-1073676249))
-#define NDIS_STATUS_INDICATION_CLEAR_FLAG_StatusIndication, _F) ((_StatusIndication) -> Flags &= ~(_F))
-#define NDIS_STATUS_INDICATION_SET_FLAG_StatusIndication, _F) ((_StatusIndication) -> Flags |= (_F))
-#define NDIS_STATUS_INDICATION_TEST_FLAG_StatusIndication, _F) (((_StatusIndication) -> Flags & (_F)) != 0)
 #define NDIS_STATUS_ISOLATION_PARAMETERS_CHANGE ((NDIS_STATUS)0x40020080)
 #define NDIS_STATUS_NIC_SWITCH_CURRENT_CAPABILITIES ((NDIS_STATUS)0x40020040)
 #define NDIS_STATUS_NIC_SWITCH_HARDWARE_CAPABILITIES ((NDIS_STATUS)0x40020050)
@@ -12216,31 +12185,6 @@ typedef struct NDIS_PD_FILTER_HANDLE__ {
 #define NDIS_STATUS_WWAN_UICC_TERMINAL_CAPABILITY_INFO ((NDIS_STATUS)0x40041038)
 #define NDIS_STATUS_WWAN_USSD ((NDIS_STATUS)0x40041020)
 #define NDIS_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE 0
-#define NdisInterlockedAddLargeStatistic_Addend, _Increment) ExInterlockedAddLargeStatistic((PLARGE_INTEGER) _Addend, _Increment)
-#define NdisMCmAddPartyComplete_S_, _H_, _C_, _P_) NdisCmAddPartyComplete(_S_, _H_, _C_, _P_)
-#define NdisMCmCloseAddressFamilyComplete_S_, _H_) NdisCmCloseAddressFamilyComplete(_S_, _H_)
-#define NdisMCmCloseCallComplete_S_, _VH_, _PH_) NdisCmCloseCallComplete(_S_, _VH_, _PH_)
-#define NdisMCmDeregisterSapComplete_S_, _H_) NdisCmDeregisterSapComplete(_S_, _H_)
-#define NdisMCmDispatchCallConnected_H_) NdisCmDispatchCallConnected(_H_)
-#define NdisMCmDispatchIncomingCall_SH_, _VH_, _CP_) NdisCmDispatchIncomingCall(_SH_, _VH_, _CP_)
-#define NdisMCmDispatchIncomingCallQoSChange_H_, _P_) NdisCmDispatchIncomingCallQoSChange(_H_, _P_)
-#define NdisMCmDispatchIncomingCloseCall_S_, _H_, _B_, _Z_) NdisCmDispatchIncomingCloseCall(_S_, _H_, _B_, _Z_)
-#define NdisMCmDispatchIncomingDropParty_S_, _H_, _B_, _Z_) NdisCmDispatchIncomingDropParty(_S_, _H_, _B_, _Z_)
-#define NdisMCmDropPartyComplete_S_, _H_) NdisCmDropPartyComplete(_S_, _H_)
-#define NdisMCmMakeCallComplete_S_, _VH_, _PH_, _CC_, _CP_) NdisCmMakeCallComplete(_S_, _VH_, _PH_, _CC_, _CP_)
-#define NdisMCmModifyCallQoSComplete_S_, _H_, _P_) NdisCmModifyCallQoSComplete(_S_, _H_, _P_)
-#define NdisMCmNotifyCloseAddressFamily_AH_) NdisCmNotifyCloseAddressFamily(_AH_)
-#define NdisMCmOidRequestComplete_AH_, _VH_, _PH_, _R_, _S_) NdisCoOidRequestComplete(_AH_, _VH_, _PH_, _R_, _S_)
-#define NdisMCmOpenAddressFamilyComplete_S_, _H_, _C_) NdisCmOpenAddressFamilyComplete(_S_, _H_, _C_)
-#define NdisMCmRegisterSapComplete_S_, _H_, _C_) NdisCmRegisterSapComplete(_S_, _H_, _C_)
-#define NdisMCompleteDmaTransfer_S, _H, _B, _O, _L, _M_) NdisCompleteDmaTransfer(_S, _H, _B, _O, _L, _M_)
-#define NdisMSetupDmaTransfer_S, _H, _B, _O, _L, _M_) NdisSetupDmaTransfer(_S, _H, _B, _O, _L, _M_)
-#define NET_BUFFER_LIST_GFT_OFFLOAD_INFO_NBL) ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & (NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation)))
-#define NET_BUFFER_LIST_RECEIVE_FILTER_VPORT_ID_NBL) (((PNDIS_NET_BUFFER_LIST_FILTERING_INFO) & NET_BUFFER_LIST_INFO(_NBL, NetBufferListFilteringInfo)) -> FilteringInfo . QueueVPortInfo . VPortId)
-#define NET_BUFFER_LIST_SWITCH_FORWARDING_DETAIL_CLEAR_NBL) (_NBL) -> NetBufferListInfo [SwitchForwardingDetail] = 0
-#define WanMiniportSendStatus, NdisBindingHandle, NdisLinkHandle, WanPacket) \
-{ * (Status) = ((((PNDIS_OPEN_BLOCK) (NdisBindingHandle)) -> WanSendHandler)) (((PNDIS_OPEN_BLOCK) (NdisBindingHandle)) -> BindingHandle, (NdisLinkHandle), (PNDIS_PACKET) (WanPacket)); \
-}
 
 struct _IPSEC_OFFLOAD_V2_ADD_SA_EX
 {
@@ -12763,117 +12707,7 @@ NDIS_STATUS NdisUnbindAdapter(NDIS_HANDLE NdisBindingHandle);
 }
 #endif
 
-#define DECLARE_NDIS_HANDLEhandle) typedef PVOID handle;
-#define NDIS_API_VERSION_AVAILABLEmajor, minor) NDIS_DETAIL_NDIS_API_VERSION_AVAILABLE_(major, minor)
-#define NDIS_DECLARE_CO_CL_AF_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cl-af")
-#define NDIS_DECLARE_CO_CL_VC_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cl-vc")
-#define NDIS_DECLARE_CO_CM_AF_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cm-af")
-#define NDIS_DECLARE_CO_CM_VC_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cm-vc")
-#define NDIS_DECLARE_CO_MINIPORT_VC_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-miniport-vc")
-#define NDIS_DECLARE_FILTER_DRIVER_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-filter-driver")
-#define NDIS_DECLARE_MINIPORT_ADDDEVICE_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-miniport-adddevice")
-#define NDIS_DECLARE_MINIPORT_INTERRUPT_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-miniport-interrupt")
-#define NDIS_DECLARE_MINIPORT_SGLIST_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-miniport-sglist")
-#define NDIS_DECLARE_MINIPORT_SHARED_DMA_ASYNC_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-miniport-shdma")
-#define NDIS_DECLARE_PROTOCOL_DRIVER_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-protocol-driver")
-#define NDIS_DECLARE_SHARED_MEMORY_ALLOCATION_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-shm-block")
-#define NDIS_DECLARE_SHARED_MEMORY_PROVIDER_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-shm-provider")
-#define NDIS_DECLARE_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE_ContextName, _ExtensionId) extern NDIS_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE_INFO _ContextName = \
-{ { NDIS_OBJECT_TYPE_DEFAULT, NDIS_SIZEOF_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE_INFO_REVISION_1, NDIS_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE_INFO_REVISION_1, }, # _ContextName, _ExtensionId \
-};
-#define NDIS_GET_NET_BUFFER_LIST_GFT_OFFLOAD_FLAGS_NBL) ((* ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation))) . Flags)
-#define NDIS_GET_NET_BUFFER_LIST_GFT_OFFLOAD_VPORT_ID_NBL) ((* ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation))) . VPortId)
-#define NDIS_GET_NET_BUFFER_LIST_IM_RESERVED_NBL) (NET_BUFFER_LIST_INFO(_NBL, IMReserved))
-#define NDIS_GET_NET_BUFFER_LIST_VIRTUAL_SUBNET_ID_NBL) ((* ((NDIS_NET_BUFFER_LIST_VIRTUAL_SUBNET_INFO *) & NET_BUFFER_LIST_INFO((_NBL), VirtualSubnetInfo))) . VirtualSubnetId)
-#define NDIS_MAKE_RID_Segment, _Bus, _Function) (((_Segment) << 16) | ((_Bus) << 8) | (_Function))
-#define NDIS_SET_NET_BUFFER_LIST_GFT_OFFLOAD_FLAGS_NBL, _Flags) ((* ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation))) . Flags = (_Flags))
-#define NDIS_SET_NET_BUFFER_LIST_GFT_OFFLOAD_VPORT_ID_NBL, _VPortId) ((* ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation))) . VPortId = (_VPortId))
-#define NDIS_SET_NET_BUFFER_LIST_IM_RESERVED_NBL, _Val) NET_BUFFER_LIST_INFO(_NBL, IMReserved) = (_Val)
-#define NDIS_SET_NET_BUFFER_LIST_VIRTUAL_SUBNET_ID_NBL, _VirtualSubnetId) ((* ((NDIS_NET_BUFFER_LIST_VIRTUAL_SUBNET_INFO *) & NET_BUFFER_LIST_INFO((_NBL), VirtualSubnetInfo))) . VirtualSubnetId = (_VirtualSubnetId))
-#define NDIS_STATUS_INDICATION_CLEAR_FLAG_StatusIndication, _F) ((_StatusIndication) -> Flags &= ~(_F))
-#define NDIS_STATUS_INDICATION_SET_FLAG_StatusIndication, _F) ((_StatusIndication) -> Flags |= (_F))
-#define NDIS_STATUS_INDICATION_TEST_FLAG_StatusIndication, _F) (((_StatusIndication) -> Flags & (_F)) != 0)
-#define NdisInterlockedAddLargeStatistic_Addend, _Increment) ExInterlockedAddLargeStatistic((PLARGE_INTEGER) _Addend, _Increment)
-#define NdisMCmAddPartyComplete_S_, _H_, _C_, _P_) NdisCmAddPartyComplete(_S_, _H_, _C_, _P_)
-#define NdisMCmCloseAddressFamilyComplete_S_, _H_) NdisCmCloseAddressFamilyComplete(_S_, _H_)
-#define NdisMCmCloseCallComplete_S_, _VH_, _PH_) NdisCmCloseCallComplete(_S_, _VH_, _PH_)
-#define NdisMCmDeregisterSapComplete_S_, _H_) NdisCmDeregisterSapComplete(_S_, _H_)
-#define NdisMCmDispatchCallConnected_H_) NdisCmDispatchCallConnected(_H_)
-#define NdisMCmDispatchIncomingCall_SH_, _VH_, _CP_) NdisCmDispatchIncomingCall(_SH_, _VH_, _CP_)
-#define NdisMCmDispatchIncomingCallQoSChange_H_, _P_) NdisCmDispatchIncomingCallQoSChange(_H_, _P_)
-#define NdisMCmDispatchIncomingCloseCall_S_, _H_, _B_, _Z_) NdisCmDispatchIncomingCloseCall(_S_, _H_, _B_, _Z_)
-#define NdisMCmDispatchIncomingDropParty_S_, _H_, _B_, _Z_) NdisCmDispatchIncomingDropParty(_S_, _H_, _B_, _Z_)
-#define NdisMCmDropPartyComplete_S_, _H_) NdisCmDropPartyComplete(_S_, _H_)
-#define NdisMCmMakeCallComplete_S_, _VH_, _PH_, _CC_, _CP_) NdisCmMakeCallComplete(_S_, _VH_, _PH_, _CC_, _CP_)
-#define NdisMCmModifyCallQoSComplete_S_, _H_, _P_) NdisCmModifyCallQoSComplete(_S_, _H_, _P_)
-#define NdisMCmNotifyCloseAddressFamily_AH_) NdisCmNotifyCloseAddressFamily(_AH_)
-#define NdisMCmOidRequestComplete_AH_, _VH_, _PH_, _R_, _S_) NdisCoOidRequestComplete(_AH_, _VH_, _PH_, _R_, _S_)
-#define NdisMCmOpenAddressFamilyComplete_S_, _H_, _C_) NdisCmOpenAddressFamilyComplete(_S_, _H_, _C_)
-#define NdisMCmRegisterSapComplete_S_, _H_, _C_) NdisCmRegisterSapComplete(_S_, _H_, _C_)
-#define NdisMCompleteDmaTransfer_S, _H, _B, _O, _L, _M_) NdisCompleteDmaTransfer(_S, _H, _B, _O, _L, _M_)
-#define NdisMSetupDmaTransfer_S, _H, _B, _O, _L, _M_) NdisSetupDmaTransfer(_S, _H, _B, _O, _L, _M_)
-#define NET_BUFFER_LIST_GFT_OFFLOAD_INFO_NBL) ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & (NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation)))
-#define NET_BUFFER_LIST_RECEIVE_FILTER_VPORT_ID_NBL) (((PNDIS_NET_BUFFER_LIST_FILTERING_INFO) & NET_BUFFER_LIST_INFO(_NBL, NetBufferListFilteringInfo)) -> FilteringInfo . QueueVPortInfo . VPortId)
-#define NET_BUFFER_LIST_SWITCH_FORWARDING_DETAIL_CLEAR_NBL) (_NBL) -> NetBufferListInfo [SwitchForwardingDetail] = 0
-#define WanMiniportSendStatus, NdisBindingHandle, NdisLinkHandle, WanPacket) \
-{ * (Status) = ((((PNDIS_OPEN_BLOCK) (NdisBindingHandle)) -> WanSendHandler)) (((PNDIS_OPEN_BLOCK) (NdisBindingHandle)) -> BindingHandle, (NdisLinkHandle), (PNDIS_PACKET) (WanPacket)); \
-}
 
-#define DECLARE_NDIS_HANDLEhandle) typedef PVOID handle;
-#define NDIS_API_VERSION_AVAILABLEmajor, minor) NDIS_DETAIL_NDIS_API_VERSION_AVAILABLE_(major, minor)
-#define NDIS_DECLARE_CO_CL_AF_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cl-af")
-#define NDIS_DECLARE_CO_CL_VC_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cl-vc")
-#define NDIS_DECLARE_CO_CM_AF_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cm-af")
-#define NDIS_DECLARE_CO_CM_VC_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cm-vc")
-#define NDIS_DECLARE_CO_MINIPORT_VC_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-miniport-vc")
-#define NDIS_DECLARE_FILTER_DRIVER_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-filter-driver")
-#define NDIS_DECLARE_MINIPORT_ADDDEVICE_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-miniport-adddevice")
-#define NDIS_DECLARE_MINIPORT_INTERRUPT_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-miniport-interrupt")
-#define NDIS_DECLARE_MINIPORT_SGLIST_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-miniport-sglist")
-#define NDIS_DECLARE_MINIPORT_SHARED_DMA_ASYNC_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-miniport-shdma")
-#define NDIS_DECLARE_PROTOCOL_DRIVER_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-protocol-driver")
-#define NDIS_DECLARE_SHARED_MEMORY_ALLOCATION_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-shm-block")
-#define NDIS_DECLARE_SHARED_MEMORY_PROVIDER_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-shm-provider")
-#define NDIS_DECLARE_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE_ContextName, _ExtensionId) extern NDIS_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE_INFO _ContextName = \
-{ { NDIS_OBJECT_TYPE_DEFAULT, NDIS_SIZEOF_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE_INFO_REVISION_1, NDIS_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE_INFO_REVISION_1, }, # _ContextName, _ExtensionId \
-};
-#define NDIS_GET_NET_BUFFER_LIST_GFT_OFFLOAD_FLAGS_NBL) ((* ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation))) . Flags)
-#define NDIS_GET_NET_BUFFER_LIST_GFT_OFFLOAD_VPORT_ID_NBL) ((* ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation))) . VPortId)
-#define NDIS_GET_NET_BUFFER_LIST_IM_RESERVED_NBL) (NET_BUFFER_LIST_INFO(_NBL, IMReserved))
-#define NDIS_GET_NET_BUFFER_LIST_VIRTUAL_SUBNET_ID_NBL) ((* ((NDIS_NET_BUFFER_LIST_VIRTUAL_SUBNET_INFO *) & NET_BUFFER_LIST_INFO((_NBL), VirtualSubnetInfo))) . VirtualSubnetId)
-#define NDIS_MAKE_RID_Segment, _Bus, _Function) (((_Segment) << 16) | ((_Bus) << 8) | (_Function))
-#define NDIS_SET_NET_BUFFER_LIST_GFT_OFFLOAD_FLAGS_NBL, _Flags) ((* ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation))) . Flags = (_Flags))
-#define NDIS_SET_NET_BUFFER_LIST_GFT_OFFLOAD_VPORT_ID_NBL, _VPortId) ((* ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation))) . VPortId = (_VPortId))
-#define NDIS_SET_NET_BUFFER_LIST_IM_RESERVED_NBL, _Val) NET_BUFFER_LIST_INFO(_NBL, IMReserved) = (_Val)
-#define NDIS_SET_NET_BUFFER_LIST_VIRTUAL_SUBNET_ID_NBL, _VirtualSubnetId) ((* ((NDIS_NET_BUFFER_LIST_VIRTUAL_SUBNET_INFO *) & NET_BUFFER_LIST_INFO((_NBL), VirtualSubnetInfo))) . VirtualSubnetId = (_VirtualSubnetId))
-#define NDIS_STATUS_INDICATION_CLEAR_FLAG_StatusIndication, _F) ((_StatusIndication) -> Flags &= ~(_F))
-#define NDIS_STATUS_INDICATION_SET_FLAG_StatusIndication, _F) ((_StatusIndication) -> Flags |= (_F))
-#define NDIS_STATUS_INDICATION_TEST_FLAG_StatusIndication, _F) (((_StatusIndication) -> Flags & (_F)) != 0)
-#define NdisInterlockedAddLargeStatistic_Addend, _Increment) ExInterlockedAddLargeStatistic((PLARGE_INTEGER) _Addend, _Increment)
-#define NdisMCmAddPartyComplete_S_, _H_, _C_, _P_) NdisCmAddPartyComplete(_S_, _H_, _C_, _P_)
-#define NdisMCmCloseAddressFamilyComplete_S_, _H_) NdisCmCloseAddressFamilyComplete(_S_, _H_)
-#define NdisMCmCloseCallComplete_S_, _VH_, _PH_) NdisCmCloseCallComplete(_S_, _VH_, _PH_)
-#define NdisMCmDeregisterSapComplete_S_, _H_) NdisCmDeregisterSapComplete(_S_, _H_)
-#define NdisMCmDispatchCallConnected_H_) NdisCmDispatchCallConnected(_H_)
-#define NdisMCmDispatchIncomingCall_SH_, _VH_, _CP_) NdisCmDispatchIncomingCall(_SH_, _VH_, _CP_)
-#define NdisMCmDispatchIncomingCallQoSChange_H_, _P_) NdisCmDispatchIncomingCallQoSChange(_H_, _P_)
-#define NdisMCmDispatchIncomingCloseCall_S_, _H_, _B_, _Z_) NdisCmDispatchIncomingCloseCall(_S_, _H_, _B_, _Z_)
-#define NdisMCmDispatchIncomingDropParty_S_, _H_, _B_, _Z_) NdisCmDispatchIncomingDropParty(_S_, _H_, _B_, _Z_)
-#define NdisMCmDropPartyComplete_S_, _H_) NdisCmDropPartyComplete(_S_, _H_)
-#define NdisMCmMakeCallComplete_S_, _VH_, _PH_, _CC_, _CP_) NdisCmMakeCallComplete(_S_, _VH_, _PH_, _CC_, _CP_)
-#define NdisMCmModifyCallQoSComplete_S_, _H_, _P_) NdisCmModifyCallQoSComplete(_S_, _H_, _P_)
-#define NdisMCmNotifyCloseAddressFamily_AH_) NdisCmNotifyCloseAddressFamily(_AH_)
-#define NdisMCmOidRequestComplete_AH_, _VH_, _PH_, _R_, _S_) NdisCoOidRequestComplete(_AH_, _VH_, _PH_, _R_, _S_)
-#define NdisMCmOpenAddressFamilyComplete_S_, _H_, _C_) NdisCmOpenAddressFamilyComplete(_S_, _H_, _C_)
-#define NdisMCmRegisterSapComplete_S_, _H_, _C_) NdisCmRegisterSapComplete(_S_, _H_, _C_)
-#define NdisMCompleteDmaTransfer_S, _H, _B, _O, _L, _M_) NdisCompleteDmaTransfer(_S, _H, _B, _O, _L, _M_)
-#define NdisMSetupDmaTransfer_S, _H, _B, _O, _L, _M_) NdisSetupDmaTransfer(_S, _H, _B, _O, _L, _M_)
-#define NET_BUFFER_LIST_GFT_OFFLOAD_INFO_NBL) ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & (NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation)))
-#define NET_BUFFER_LIST_RECEIVE_FILTER_VPORT_ID_NBL) (((PNDIS_NET_BUFFER_LIST_FILTERING_INFO) & NET_BUFFER_LIST_INFO(_NBL, NetBufferListFilteringInfo)) -> FilteringInfo . QueueVPortInfo . VPortId)
-#define NET_BUFFER_LIST_SWITCH_FORWARDING_DETAIL_CLEAR_NBL) (_NBL) -> NetBufferListInfo [SwitchForwardingDetail] = 0
-#define WanMiniportSendStatus, NdisBindingHandle, NdisLinkHandle, WanPacket) \
-{ * (Status) = ((((PNDIS_OPEN_BLOCK) (NdisBindingHandle)) -> WanSendHandler)) (((PNDIS_OPEN_BLOCK) (NdisBindingHandle)) -> BindingHandle, (NdisLinkHandle), (PNDIS_PACKET) (WanPacket)); \
-}
 
 struct _NDIS_MINIPORT_ADAPTER_NDK_ATTRIBUTES
 {
@@ -12958,61 +12792,156 @@ NDIS_STATUS NTAPI NdisGetProcessorInformation(PNDIS_SYSTEM_PROCESSOR_INFO System
 }
 #endif
 
-#define DECLARE_NDIS_HANDLEhandle) typedef PVOID handle;
-#define NDIS_API_VERSION_AVAILABLEmajor, minor) NDIS_DETAIL_NDIS_API_VERSION_AVAILABLE_(major, minor)
-#define NDIS_DECLARE_CO_CL_AF_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cl-af")
-#define NDIS_DECLARE_CO_CL_VC_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cl-vc")
-#define NDIS_DECLARE_CO_CM_AF_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cm-af")
-#define NDIS_DECLARE_CO_CM_VC_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cm-vc")
-#define NDIS_DECLARE_CO_MINIPORT_VC_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-miniport-vc")
-#define NDIS_DECLARE_FILTER_DRIVER_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-filter-driver")
-#define NDIS_DECLARE_MINIPORT_ADDDEVICE_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-miniport-adddevice")
-#define NDIS_DECLARE_MINIPORT_INTERRUPT_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-miniport-interrupt")
-#define NDIS_DECLARE_MINIPORT_SGLIST_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-miniport-sglist")
-#define NDIS_DECLARE_MINIPORT_SHARED_DMA_ASYNC_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-miniport-shdma")
-#define NDIS_DECLARE_PROTOCOL_DRIVER_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-protocol-driver")
-#define NDIS_DECLARE_SHARED_MEMORY_ALLOCATION_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-shm-block")
-#define NDIS_DECLARE_SHARED_MEMORY_PROVIDER_CONTEXTtype) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-shm-provider")
-#define NDIS_DECLARE_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE_ContextName, _ExtensionId) extern NDIS_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE_INFO _ContextName = \
-{ { NDIS_OBJECT_TYPE_DEFAULT, NDIS_SIZEOF_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE_INFO_REVISION_1, NDIS_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE_INFO_REVISION_1, }, # _ContextName, _ExtensionId \
+
+
+
+typedef ULONG NDIS_GFP_PROFILE_ID;
+
+struct _NDIS_PD_FILTER_PARAMETERS
+{
+    NDIS_OBJECT_HEADER Header;
+    ULONG Flags;
+    NDIS_GFP_PROFILE_ID MatchProfileId;
+    ULONG Priority;
+    NDIS_PD_COUNTER_HANDLE CounterHandle;
+    NDIS_PD_QUEUE *TargetReceiveQueue;
+    ULONG64 RxFilterContext;
+    PUCHAR HeaderGroupMatchArray;
+    ULONG HeaderGroupMatchArrayNumElements;
+    ULONG HeaderGroupMatchArrayElementSize;
+    ULONG HeaderGroupMatchArrayTotalSize;
 };
-#define NDIS_GET_NET_BUFFER_LIST_GFT_OFFLOAD_FLAGS_NBL) ((* ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation))) . Flags)
-#define NDIS_GET_NET_BUFFER_LIST_GFT_OFFLOAD_VPORT_ID_NBL) ((* ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation))) . VPortId)
-#define NDIS_GET_NET_BUFFER_LIST_IM_RESERVED_NBL) (NET_BUFFER_LIST_INFO(_NBL, IMReserved))
-#define NDIS_GET_NET_BUFFER_LIST_VIRTUAL_SUBNET_ID_NBL) ((* ((NDIS_NET_BUFFER_LIST_VIRTUAL_SUBNET_INFO *) & NET_BUFFER_LIST_INFO((_NBL), VirtualSubnetInfo))) . VirtualSubnetId)
-#define NDIS_MAKE_RID_Segment, _Bus, _Function) (((_Segment) << 16) | ((_Bus) << 8) | (_Function))
-#define NDIS_SET_NET_BUFFER_LIST_GFT_OFFLOAD_FLAGS_NBL, _Flags) ((* ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation))) . Flags = (_Flags))
-#define NDIS_SET_NET_BUFFER_LIST_GFT_OFFLOAD_VPORT_ID_NBL, _VPortId) ((* ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation))) . VPortId = (_VPortId))
-#define NDIS_SET_NET_BUFFER_LIST_IM_RESERVED_NBL, _Val) NET_BUFFER_LIST_INFO(_NBL, IMReserved) = (_Val)
-#define NDIS_SET_NET_BUFFER_LIST_VIRTUAL_SUBNET_ID_NBL, _VirtualSubnetId) ((* ((NDIS_NET_BUFFER_LIST_VIRTUAL_SUBNET_INFO *) & NET_BUFFER_LIST_INFO((_NBL), VirtualSubnetInfo))) . VirtualSubnetId = (_VirtualSubnetId))
-#define NDIS_STATUS_INDICATION_CLEAR_FLAG_StatusIndication, _F) ((_StatusIndication) -> Flags &= ~(_F))
-#define NDIS_STATUS_INDICATION_SET_FLAG_StatusIndication, _F) ((_StatusIndication) -> Flags |= (_F))
-#define NDIS_STATUS_INDICATION_TEST_FLAG_StatusIndication, _F) (((_StatusIndication) -> Flags & (_F)) != 0)
-#define NdisInterlockedAddLargeStatistic_Addend, _Increment) ExInterlockedAddLargeStatistic((PLARGE_INTEGER) _Addend, _Increment)
-#define NdisMCmAddPartyComplete_S_, _H_, _C_, _P_) NdisCmAddPartyComplete(_S_, _H_, _C_, _P_)
-#define NdisMCmCloseAddressFamilyComplete_S_, _H_) NdisCmCloseAddressFamilyComplete(_S_, _H_)
-#define NdisMCmCloseCallComplete_S_, _VH_, _PH_) NdisCmCloseCallComplete(_S_, _VH_, _PH_)
-#define NdisMCmDeregisterSapComplete_S_, _H_) NdisCmDeregisterSapComplete(_S_, _H_)
-#define NdisMCmDispatchCallConnected_H_) NdisCmDispatchCallConnected(_H_)
-#define NdisMCmDispatchIncomingCall_SH_, _VH_, _CP_) NdisCmDispatchIncomingCall(_SH_, _VH_, _CP_)
-#define NdisMCmDispatchIncomingCallQoSChange_H_, _P_) NdisCmDispatchIncomingCallQoSChange(_H_, _P_)
-#define NdisMCmDispatchIncomingCloseCall_S_, _H_, _B_, _Z_) NdisCmDispatchIncomingCloseCall(_S_, _H_, _B_, _Z_)
-#define NdisMCmDispatchIncomingDropParty_S_, _H_, _B_, _Z_) NdisCmDispatchIncomingDropParty(_S_, _H_, _B_, _Z_)
-#define NdisMCmDropPartyComplete_S_, _H_) NdisCmDropPartyComplete(_S_, _H_)
-#define NdisMCmMakeCallComplete_S_, _VH_, _PH_, _CC_, _CP_) NdisCmMakeCallComplete(_S_, _VH_, _PH_, _CC_, _CP_)
-#define NdisMCmModifyCallQoSComplete_S_, _H_, _P_) NdisCmModifyCallQoSComplete(_S_, _H_, _P_)
-#define NdisMCmNotifyCloseAddressFamily_AH_) NdisCmNotifyCloseAddressFamily(_AH_)
-#define NdisMCmOidRequestComplete_AH_, _VH_, _PH_, _R_, _S_) NdisCoOidRequestComplete(_AH_, _VH_, _PH_, _R_, _S_)
-#define NdisMCmOpenAddressFamilyComplete_S_, _H_, _C_) NdisCmOpenAddressFamilyComplete(_S_, _H_, _C_)
-#define NdisMCmRegisterSapComplete_S_, _H_, _C_) NdisCmRegisterSapComplete(_S_, _H_, _C_)
-#define NdisMCompleteDmaTransfer_S, _H, _B, _O, _L, _M_) NdisCompleteDmaTransfer(_S, _H, _B, _O, _L, _M_)
-#define NdisMSetupDmaTransfer_S, _H, _B, _O, _L, _M_) NdisSetupDmaTransfer(_S, _H, _B, _O, _L, _M_)
-#define NET_BUFFER_LIST_GFT_OFFLOAD_INFO_NBL) ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & (NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation)))
-#define NET_BUFFER_LIST_RECEIVE_FILTER_VPORT_ID_NBL) (((PNDIS_NET_BUFFER_LIST_FILTERING_INFO) & NET_BUFFER_LIST_INFO(_NBL, NetBufferListFilteringInfo)) -> FilteringInfo . QueueVPortInfo . VPortId)
-#define NET_BUFFER_LIST_SWITCH_FORWARDING_DETAIL_CLEAR_NBL) (_NBL) -> NetBufferListInfo [SwitchForwardingDetail] = 0
-#define WanMiniportSendStatus, NdisBindingHandle, NdisLinkHandle, WanPacket) \
-{ * (Status) = ((((PNDIS_OPEN_BLOCK) (NdisBindingHandle)) -> WanSendHandler)) (((PNDIS_OPEN_BLOCK) (NdisBindingHandle)) -> BindingHandle, (NdisLinkHandle), (PNDIS_PACKET) (WanPacket)); \
+
+typedef struct _NDIS_PD_FILTER_PARAMETERS NDIS_PD_FILTER_PARAMETERS;
+
+typedef struct _NDIS_PD_OPEN_PROVIDER_PARAMETERS NDIS_PD_OPEN_PROVIDER_PARAMETERS;
+
+typedef struct _NDIS_PD_PROVIDER_DISPATCH NDIS_PD_PROVIDER_DISPATCH;
+
+struct _NDIS_PD_OPEN_PROVIDER_PARAMETERS
+{
+    NDIS_OBJECT_HEADER Header;
+    ULONG Flags;
+    NDIS_PD_PROVIDER_HANDLE ProviderHandle;
+    const NDIS_PD_PROVIDER_DISPATCH *ProviderDispatch;
+};
+
+typedef NTSTATUS NDIS_PD_SET_RECEIVE_FILTER(NDIS_PD_PROVIDER_HANDLE, const NDIS_PD_FILTER_PARAMETERS *, NDIS_PD_FILTER_HANDLE *);
+
+typedef NDIS_PD_SET_RECEIVE_FILTER *NDIS_PD_SET_RECEIVE_FILTER_HANDLER;
+
+struct _NDIS_PD_PROVIDER_DISPATCH
+{
+    NDIS_OBJECT_HEADER Header;
+    ULONG Flags;
+    NDIS_PD_ALLOCATE_QUEUE_HANDLER NdisPDAllocateQueue;
+    NDIS_PD_FREE_QUEUE_HANDLER NdisPDFreeQueue;
+    NDIS_PD_ACQUIRE_RECEIVE_QUEUES_HANDLER NdisPDAcquireReceiveQueues;
+    NDIS_PD_RELEASE_RECEIVE_QUEUES_HANDLER NdisPDReleaseReceiveQueues;
+    NDIS_PD_ALLOCATE_COUNTER_HANDLER NdisPDAllocateCounter;
+    NDIS_PD_FREE_COUNTER_HANDLER NdisPDFreeCounter;
+    NDIS_PD_QUERY_COUNTER_HANDLER NdisPDQueryCounter;
+    NDIS_PD_SET_RECEIVE_FILTER_HANDLER NdisPDSetReceiveFilter;
+    NDIS_PD_CLEAR_RECEIVE_FILTER_HANDLER NdisPDClearReceiveFilter;
+    NDIS_PD_REQUEST_DRAIN_NOTIFICATION_HANDLER NdisPDRequestDrainNotification;
+    NDIS_PD_QUEUE_CONTROL_HANDLER NdisPDQueueControl;
+    NDIS_PD_PROVIDER_CONTROL_HANDLER NdisPDProviderControl;
+};
+
+typedef ULONG_PTR *PNDIS_GFT_FLOW_ENTRY_ID;
+
+
+struct _NDIS_SYSTEM_PROCESSOR_INFO_EX
+{
+    NDIS_OBJECT_HEADER Header;
+    ULONG Flags;
+    NDIS_PROCESSOR_VENDOR ProcessorVendor;
+    ULONG NumSockets;
+    ULONG NumCores;
+    ULONG NumCoresPerSocket;
+    ULONG MaxHyperThreadingProcsPerCore;
+    ULONG ProcessorInfoOffset;
+    ULONG NumberOfProcessors;
+    ULONG ProcessorInfoEntrySize;
+};
+
+struct icmp_error_info
+{
+    SOCKADDR_INET srcaddress;
+    IPPROTO protocol;
+    UINT8 type;
+    UINT8 code;
+};
+
+typedef struct icmp_error_info ICMP_ERROR_INFO;
+
+typedef struct _NDIS_SYSTEM_PROCESSOR_INFO_EX *PNDIS_SYSTEM_PROCESSOR_INFO_EX;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+NDIS_STATUS NTAPI NdisGetProcessorInformationEx(NDIS_HANDLE NdisHandle, PNDIS_SYSTEM_PROCESSOR_INFO_EX SystemProcessorInfo, PSIZE_T Size);
+
+#ifdef __cplusplus
 }
+#endif
+
+#define DECLARE_NDIS_HANDLE(handle) typedef PVOID handle;
+#define NDIS_API_VERSION_AVAILABLE(major, minor) NDIS_DETAIL_NDIS_API_VERSION_AVAILABLE_(major, minor)
+#define NDIS_DECLARE_CO_CL_AF_CONTEXT(type) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cl-af")
+#define NDIS_DECLARE_CO_CL_VC_CONTEXT(type) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cl-vc")
+#define NDIS_DECLARE_CO_CM_AF_CONTEXT(type) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cm-af")
+#define NDIS_DECLARE_CO_CM_VC_CONTEXT(type) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cm-vc")
+#define NDIS_DECLARE_CO_MINIPORT_VC_CONTEXT(type) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-miniport-vc")
+#define NDIS_DECLARE_FILTER_DRIVER_CONTEXT(type) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-filter-driver")
+#define NDIS_DECLARE_MINIPORT_ADDDEVICE_CONTEXT(type) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-miniport-adddevice")
+#define NDIS_DECLARE_MINIPORT_INTERRUPT_CONTEXT(type) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-miniport-interrupt")
+#define NDIS_DECLARE_MINIPORT_SGLIST_CONTEXT(type) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-miniport-sglist")
+#define NDIS_DECLARE_MINIPORT_SHARED_DMA_ASYNC_CONTEXT(type) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-miniport-shdma")
+#define NDIS_DECLARE_PROTOCOL_DRIVER_CONTEXT(type) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-protocol-driver")
+#define NDIS_DECLARE_SHARED_MEMORY_ALLOCATION_CONTEXT(type) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-shm-block")
+#define NDIS_DECLARE_SHARED_MEMORY_PROVIDER_CONTEXT(type) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-shm-provider")
+#define NDIS_DECLARE_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE(_ContextName, _ExtensionId) extern NDIS_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE_INFO _ContextName = { { NDIS_OBJECT_TYPE_DEFAULT, NDIS_SIZEOF_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE_INFO_REVISION_1, NDIS_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE_INFO_REVISION_1, }, # _ContextName, _ExtensionId };
+#define NDIS_DETAIL_NDIS_API_VERSION_AVAILABLE_(major, minor) ((((0x ## major) << 8) + (0x ## minor)) >= NDIS_MIN_API)
+#define NDIS_GET_NET_BUFFER_LIST_GFT_OFFLOAD_FLAGS(_NBL) ((* ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation))) . Flags)
+#define NDIS_GET_NET_BUFFER_LIST_GFT_OFFLOAD_VPORT_ID(_NBL) ((* ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation))) . VPortId)
+#define NDIS_GET_NET_BUFFER_LIST_IM_RESERVED(_NBL) (NET_BUFFER_LIST_INFO(_NBL, IMReserved))
+#define NDIS_GET_NET_BUFFER_LIST_VIRTUAL_SUBNET_ID(_NBL) ((* ((NDIS_NET_BUFFER_LIST_VIRTUAL_SUBNET_INFO *) & NET_BUFFER_LIST_INFO((_NBL), VirtualSubnetInfo))) . VirtualSubnetId)
+#define NDIS_MAKE_RID(_Segment, _Bus, _Function) (((_Segment) << 16) | ((_Bus) << 8) | (_Function))
+#define NDIS_SET_NET_BUFFER_LIST_GFT_OFFLOAD_FLAGS(_NBL, _Flags) ((* ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation))) . Flags = (_Flags))
+#define NDIS_SET_NET_BUFFER_LIST_GFT_OFFLOAD_VPORT_ID(_NBL, _VPortId) ((* ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation))) . VPortId = (_VPortId))
+#define NDIS_SET_NET_BUFFER_LIST_IM_RESERVED(_NBL, _Val) NET_BUFFER_LIST_INFO(_NBL, IMReserved) = (_Val)
+#define NDIS_SET_NET_BUFFER_LIST_VIRTUAL_SUBNET_ID(_NBL, _VirtualSubnetId) ((* ((NDIS_NET_BUFFER_LIST_VIRTUAL_SUBNET_INFO *) & NET_BUFFER_LIST_INFO((_NBL), VirtualSubnetInfo))) . VirtualSubnetId = (_VirtualSubnetId))
+#define NDIS_STATUS_INDICATION_CLEAR_FLAG(_StatusIndication, _F) ((_StatusIndication) -> Flags &= ~(_F))
+#define NDIS_STATUS_INDICATION_SET_FLAG(_StatusIndication, _F) ((_StatusIndication) -> Flags |= (_F))
+#define NDIS_STATUS_INDICATION_TEST_FLAG(_StatusIndication, _F) (((_StatusIndication) -> Flags & (_F)) != 0)
+#define NdisInterlockedAddLargeStatistic(_Addend, _Increment) ExInterlockedAddLargeStatistic((PLARGE_INTEGER) _Addend, _Increment)
+#define NdisMCmAddPartyComplete(_S_, _H_, _C_, _P_) NdisCmAddPartyComplete(_S_, _H_, _C_, _P_)
+#define NdisMCmCloseAddressFamilyComplete(_S_, _H_) NdisCmCloseAddressFamilyComplete(_S_, _H_)
+#define NdisMCmCloseCallComplete(_S_, _VH_, _PH_) NdisCmCloseCallComplete(_S_, _VH_, _PH_)
+#define NdisMCmDeregisterSapComplete(_S_, _H_) NdisCmDeregisterSapComplete(_S_, _H_)
+#define NdisMCmDispatchCallConnected(_H_) NdisCmDispatchCallConnected(_H_)
+#define NdisMCmDispatchIncomingCall(_SH_, _VH_, _CP_) NdisCmDispatchIncomingCall(_SH_, _VH_, _CP_)
+#define NdisMCmDispatchIncomingCallQoSChange(_H_, _P_) NdisCmDispatchIncomingCallQoSChange(_H_, _P_)
+#define NdisMCmDispatchIncomingCloseCall(_S_, _H_, _B_, _Z_) NdisCmDispatchIncomingCloseCall(_S_, _H_, _B_, _Z_)
+#define NdisMCmDispatchIncomingDropParty(_S_, _H_, _B_, _Z_) NdisCmDispatchIncomingDropParty(_S_, _H_, _B_, _Z_)
+#define NdisMCmDropPartyComplete(_S_, _H_) NdisCmDropPartyComplete(_S_, _H_)
+#define NdisMCmMakeCallComplete(_S_, _VH_, _PH_, _CC_, _CP_) NdisCmMakeCallComplete(_S_, _VH_, _PH_, _CC_, _CP_)
+#define NdisMCmModifyCallQoSComplete(_S_, _H_, _P_) NdisCmModifyCallQoSComplete(_S_, _H_, _P_)
+#define NdisMCmNotifyCloseAddressFamily(_AH_) NdisCmNotifyCloseAddressFamily(_AH_)
+#define NdisMCmOidRequestComplete(_AH_, _VH_, _PH_, _R_, _S_) NdisCoOidRequestComplete(_AH_, _VH_, _PH_, _R_, _S_)
+#define NdisMCmOpenAddressFamilyComplete(_S_, _H_, _C_) NdisCmOpenAddressFamilyComplete(_S_, _H_, _C_)
+#define NdisMCmRegisterSapComplete(_S_, _H_, _C_) NdisCmRegisterSapComplete(_S_, _H_, _C_)
+#define NdisMCompleteDmaTransfer(_S, _H, _B, _O, _L, _M_) NdisCompleteDmaTransfer(_S, _H, _B, _O, _L, _M_)
+#define NdisMSetupDmaTransfer(_S, _H, _B, _O, _L, _M_) NdisSetupDmaTransfer(_S, _H, _B, _O, _L, _M_)
+#define NET_BUFFER_LIST_GFT_OFFLOAD_FLOW_ENTRY_ID(_NBL) ((PNDIS_GFT_FLOW_ENTRY_ID) & (NET_BUFFER_LIST_INFO((_NBL), GftFlowEntryId)))
+#define NET_BUFFER_LIST_GFT_OFFLOAD_INFO(_NBL) ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & (NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation)))
+#define NET_BUFFER_LIST_RECEIVE_FILTER_VPORT_ID(_NBL) (((PNDIS_NET_BUFFER_LIST_FILTERING_INFO) & NET_BUFFER_LIST_INFO(_NBL, NetBufferListFilteringInfo)) -> FilteringInfo . QueueVPortInfo . VPortId)
+#define NET_BUFFER_LIST_SWITCH_FORWARDING_DETAIL_CLEAR(_NBL) (_NBL) -> NetBufferListInfo [SwitchForwardingDetail] = 0
+#define WanMiniportSend(Status, NdisBindingHandle, NdisLinkHandle, WanPacket) { * (Status) = ((((PNDIS_OPEN_BLOCK) (NdisBindingHandle)) -> WanSendHandler)) (((PNDIS_OPEN_BLOCK) (NdisBindingHandle)) -> BindingHandle, (NdisLinkHandle), (PNDIS_PACKET) (WanPacket)); }
+
+/* TODO: NdisGetHypervisorInfo and NDIS_HYPERVISOR_INFO */
 
 #endif /* _NDIS_ */
 

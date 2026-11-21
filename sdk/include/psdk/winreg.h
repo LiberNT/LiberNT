@@ -664,22 +664,38 @@ typedef struct val_context {
 #ifdef UNICODE
 #define RegConnectRegistryEx RegConnectRegistryExW
 #else
+#ifdef UNICODE
+#define RegConnectRegistryEx RegConnectRegistryExW
+#else
 #define RegConnectRegistryEx RegConnectRegistryExA
 #endif
+#endif
+#ifdef UNICODE
+#define RegCreateKeyTransacted RegCreateKeyTransactedW
+#else
 #ifdef UNICODE
 #define RegCreateKeyTransacted RegCreateKeyTransactedW
 #else
 #define RegCreateKeyTransacted RegCreateKeyTransactedA
 #endif
+#endif
+#ifdef UNICODE
+#define RegDeleteKeyTransacted RegDeleteKeyTransactedW
+#else
 #ifdef UNICODE
 #define RegDeleteKeyTransacted RegDeleteKeyTransactedW
 #else
 #define RegDeleteKeyTransacted RegDeleteKeyTransactedA
 #endif
+#endif
+#ifdef UNICODE
+#define RegOpenKeyTransacted RegOpenKeyTransactedW
+#else
 #ifdef UNICODE
 #define RegOpenKeyTransacted RegOpenKeyTransactedW
 #else
 #define RegOpenKeyTransacted RegOpenKeyTransactedA
+#endif
 #endif
 #define WIN31_CLASS 0
 

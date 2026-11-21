@@ -411,7 +411,6 @@ typedef struct _SOCKET_PROCESSOR_AFFINITY {
   USHORT Reserved;
 } SOCKET_PROCESSOR_AFFINITY, *PSOCKET_PROCESSOR_AFFINITY;
 
-#define _WINSOCK_DEPRECATED_BYreplacement) __declspec(deprecated("Use " replacement " instead or define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings"))
 #define IP6T_SO_ORIGINAL_DST 0x300F
 #define SIO_QUERY_RSS_PROCESSOR_INFO 0x48000025
 #define SOL_IP 0xFFFB
@@ -608,11 +607,7 @@ typedef struct addrinfoex6 *PADDRINFOEX6;
 
 typedef struct addrinfoex7 *PADDRINFOEX7;
 
-#define _WINSOCK_DEPRECATED_BYreplacement) __declspec(deprecated("Use " replacement " instead or define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings"))
-
-#define _WINSOCK_DEPRECATED_BYreplacement) __declspec(deprecated("Use " replacement " instead or define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings"))
-
-#define _WINSOCK_DEPRECATED_BYreplacement) __declspec(deprecated("Use " replacement " instead or define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings"))
+#define _WINSOCK_DEPRECATED_BY(replacement) __declspec(deprecated("Use " replacement " instead or define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings"))
 
 #endif /* __CSADDR_DEFINED__ */
 

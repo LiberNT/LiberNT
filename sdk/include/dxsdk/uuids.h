@@ -20,25 +20,10 @@
 #define OUR_GUID_ENTRY(name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8) \
            DEFINE_GUID(name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8);
 
-#define MEDIASUBTYPE_D3D_DX7_RTmt) (((mt) . subtype == MEDIASUBTYPE_ARGB32_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB4444_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB1555_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_RGB32_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_RGB16_D3D_DX7_RT))
-#define MEDIASUBTYPE_D3D_DX9_RTmt) (((mt) . subtype == MEDIASUBTYPE_ARGB32_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB4444_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB1555_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_RGB32_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_RGB16_D3D_DX9_RT))
-#define MEDIASUBTYPE_HASALPHA7mt) (((mt) . subtype == MEDIASUBTYPE_ARGB32_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB4444_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB1555_D3D_DX7_RT))
-#define MEDIASUBTYPE_HASALPHA9mt) (((mt) . subtype == MEDIASUBTYPE_ARGB32_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB4444_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB1555_D3D_DX9_RT))
-
-#define MEDIASUBTYPE_D3D_DX7_RTmt) (((mt) . subtype == MEDIASUBTYPE_ARGB32_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB4444_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB1555_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_RGB32_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_RGB16_D3D_DX7_RT))
-#define MEDIASUBTYPE_D3D_DX9_RTmt) (((mt) . subtype == MEDIASUBTYPE_ARGB32_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB4444_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB1555_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_RGB32_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_RGB16_D3D_DX9_RT))
-#define MEDIASUBTYPE_HASALPHA7mt) (((mt) . subtype == MEDIASUBTYPE_ARGB32_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB4444_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB1555_D3D_DX7_RT))
-#define MEDIASUBTYPE_HASALPHA9mt) (((mt) . subtype == MEDIASUBTYPE_ARGB32_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB4444_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB1555_D3D_DX9_RT))
-
-#define MEDIASUBTYPE_D3D_DX7_RTmt) (((mt) . subtype == MEDIASUBTYPE_ARGB32_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB4444_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB1555_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_RGB32_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_RGB16_D3D_DX7_RT))
-#define MEDIASUBTYPE_D3D_DX9_RTmt) (((mt) . subtype == MEDIASUBTYPE_ARGB32_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB4444_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB1555_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_RGB32_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_RGB16_D3D_DX9_RT))
-#define MEDIASUBTYPE_HASALPHA7mt) (((mt) . subtype == MEDIASUBTYPE_ARGB32_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB4444_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB1555_D3D_DX7_RT))
-#define MEDIASUBTYPE_HASALPHA9mt) (((mt) . subtype == MEDIASUBTYPE_ARGB32_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB4444_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB1555_D3D_DX9_RT))
-
-#define MEDIASUBTYPE_D3D_DX7_RTmt) (((mt) . subtype == MEDIASUBTYPE_ARGB32_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB4444_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB1555_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_RGB32_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_RGB16_D3D_DX7_RT))
-#define MEDIASUBTYPE_D3D_DX9_RTmt) (((mt) . subtype == MEDIASUBTYPE_ARGB32_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB4444_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB1555_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_RGB32_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_RGB16_D3D_DX9_RT))
-#define MEDIASUBTYPE_HASALPHA7mt) (((mt) . subtype == MEDIASUBTYPE_ARGB32_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB4444_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB1555_D3D_DX7_RT))
-#define MEDIASUBTYPE_HASALPHA9mt) (((mt) . subtype == MEDIASUBTYPE_ARGB32_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB4444_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB1555_D3D_DX9_RT))
+#define MEDIASUBTYPE_D3D_DX7_RT(mt) (((mt) . subtype == MEDIASUBTYPE_ARGB32_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB4444_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB1555_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_RGB32_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_RGB16_D3D_DX7_RT))
+#define MEDIASUBTYPE_D3D_DX9_RT(mt) (((mt) . subtype == MEDIASUBTYPE_ARGB32_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB4444_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB1555_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_RGB32_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_RGB16_D3D_DX9_RT))
+#define MEDIASUBTYPE_HASALPHA7(mt) (((mt) . subtype == MEDIASUBTYPE_ARGB32_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB4444_D3D_DX7_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB1555_D3D_DX7_RT))
+#define MEDIASUBTYPE_HASALPHA9(mt) (((mt) . subtype == MEDIASUBTYPE_ARGB32_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB4444_D3D_DX9_RT) || ((mt) . subtype == MEDIASUBTYPE_ARGB1555_D3D_DX9_RT))
 
 #endif
 

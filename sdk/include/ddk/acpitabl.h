@@ -2099,17 +2099,11 @@ typedef struct _TPR_REGISTERS {
 #pragma pack(pop)
 
 #define ACPI_HARDWARE_NOT_PRESENT 0x100000
-#define ACPI_IS_VALID_TABLE_ENTRYEntry, Type, TableEnd) ((((PUCHAR) (Entry)) + RTL_SIZEOF_THROUGH_FIELD(Type, Length) <= (PUCHAR) (TableEnd)) && (((Type *) (Entry)) -> Length >= RTL_SIZEOF_THROUGH_FIELD(Type, Length)) && (((PUCHAR) (Entry)) + ((Type *) (Entry)) -> Length <= (PUCHAR) (TableEnd)))
 #define ACPI_MSCT_MINIMUM_LENGTH 0x38
-#define ACPI_PLD_COLOR_BLUEc) ((BYTE) (((c) >> 16) & 0xFF))
-#define ACPI_PLD_COLOR_GREENc) ((BYTE) (((c) >> 8) & 0xFF))
-#define ACPI_PLD_COLOR_REDc) ((BYTE) (((c) >> 0) & 0xFF))
-#define ACPI_PLD_MAKE_COLORr, g, b) ((UINT32) (((r) & 0xFF) | (((g) & 0xFF) << 8) | (((b) & 0xFF) << 16)))
 #define AOAC_CAPABLE_PLATFORM 0x200000
 #define ARM_BOOT_ARCH_PSCI_COMPLIANT 1
 #define ARM_BOOT_ARCH_PSCI_USE_HVC 2
 #define ASPM_NOT_SUPPORTED 0x10
-#define BGRT_STATUS_GET_DISPLAY_ROTATION_Status_) ((UCHAR) ((ULONG) ((_Status_) & BGRT_STATUS_DISPLAY_ROTATION) >> 1))
 #define CMOS_RTC_NOT_PRESENT 0x20
 #define CPU_SW_SLP_CAP 0x2000
 #define CSRT_SIGNATURE ((ULONG)0x54525343)
@@ -2133,7 +2127,6 @@ typedef struct _TPR_REGISTERS {
 #define GL_PENDING 1
 #define HEADLESS_CAP 0x1000
 #define HMAT_ENTRY_HEADER_LENGTH 8
-#define HMAT_ENTRY_LENGTH_Type) RTL_SIZEOF_THROUGH_FIELD(HMAT_ENTRY, _Type);
 #define I8042 2
 #define IORT_NAMED_COMPONENT_NODE_REVISION_MAX 4
 #define IORT_NAMED_COMPONENT_NODE_REVISION_MIN 0
@@ -2148,7 +2141,6 @@ typedef struct _TPR_REGISTERS {
 #define IORT_SMMUV3_NODE_REVISION_MIN 0
 #define IORT_TABLE_REVISION_MAX 6
 #define IORT_TABLE_REVISION_MIN 0
-#define IVHD_DEVICE_ENTRY_TYPE_TO_SIZE_Type_) ((ULONG_PTR) (1ULL << (((_Type_) >> 6) + 2)))
 #define LEGACY_DEVICES 1
 #define MHSP_TABLE_SIGNATURE 0x5053484D
 #define MSI_NOT_SUPPORTED 8
@@ -2156,8 +2148,6 @@ typedef struct _TPR_REGISTERS {
 #define NFIT_VALID_NVDIMM_STATE_FLAGS 0x7F
 #define NFIT_VALID_SPA_RANGE_FLAGS 3
 #define NFIT_VALID_SPA_RANGE_MEMORY_MAP_ATTRIBUTES 0x1F01F
-#define NumTableEntriesFromRSDTPointerp) (p -> Header . Length - min(p -> Header . Length, sizeof (DESCRIPTION_HEADER))) / sizeof (ULONG)
-#define NumTableEntriesFromXSDTPointerp) (p -> Header . Length - min(p -> Header . Length, sizeof (DESCRIPTION_HEADER))) / sizeof (PHYSICAL_ADDRESS)
 #define NVDIMM_CONTROL_REGION_BASE_SIZE 0x20
 #define NVDIMM_CONTROL_REGION_EXTENDED_SIZE 0x50
 #define P_LVL2_UP_ONLY 8
@@ -2168,15 +2158,11 @@ typedef struct _TPR_REGISTERS {
 #define PLGF_MAINT_INTERRUPT_EDGE_TRIGGERED 4
 #define PLGF_PERF_INTERRUPT_EDGE_TRIGGERED 2
 #define PRMT_SIGNATURE ((ULONG)0x544D5250)
-#define PROC_TOPOLOGY_NODE_CACHE_TYPE_DATACacheType) (CacheType == 0)
-#define PROC_TOPOLOGY_NODE_CACHE_TYPE_INSTRUCTIONCacheType) (CacheType == 1)
-#define PROC_TOPOLOGY_NODE_CACHE_TYPE_UNIFIEDCacheType) ((CacheType == 2) || (CacheType == 3))
 #define PROCESSOR_LOCAL_GIC_LENGTH 0x28
 #define PROCESSOR_LOCAL_GIC_LENGTH_THROUGH_EFFICIENCY_CLASS 0x4D
 #define PROCESSOR_LOCAL_GIC_LENGTH_THROUGH_MPIDR 0x4C
 #define PROCESSOR_LOCAL_GIC_LENGTH_THROUGH_RESERVED77 0x4E
 #define PROCESSOR_LOCAL_GIC_LENGTH_THROUGH_SPE_GSI 0x50
-#define PROXIMITY_DOMAIN_1SratEntry) (SratEntry) -> ApicAffinity . ProximityDomainLow
 #define PWR_BUTTON_GENERIC 0x10
 #define REMOTE_POWER_ON_CAPABLE 0x20000
 #define RESET_CAP 0x400
@@ -2199,9 +2185,6 @@ typedef struct _TPR_REGISTERS {
 #define SYSTEM_SUPPORTS_C1 4
 #define TMR_VAL_EXT 0x100
 #define TPM20_TABLE_SIGNATURE 0x324D5054
-#define UNCOMPRESS_MPIDR_COMPRESSED_, _MPIDR_) \
-{ (_MPIDR_) = (ULONGLONG) (_COMPRESSED_) & 0x00FFFFFFULL; (_MPIDR_) |= ((ULONGLONG) (_COMPRESSED_) & 0xFF000000ULL) << 8; \
-}
 #define USE_PLATFORM_CLOCK 0x8000
 #define VGA_NOT_PRESENT 4
 #define WAET_DEV_PMTMR_GOOD 2
@@ -3783,41 +3766,7 @@ typedef struct _WSMT *PWSMT;
 
 typedef struct _WSMT WSMT;
 
-#define ACPI_IS_VALID_TABLE_ENTRYEntry, Type, TableEnd) ((((PUCHAR) (Entry)) + RTL_SIZEOF_THROUGH_FIELD(Type, Length) <= (PUCHAR) (TableEnd)) && (((Type *) (Entry)) -> Length >= RTL_SIZEOF_THROUGH_FIELD(Type, Length)) && (((PUCHAR) (Entry)) + ((Type *) (Entry)) -> Length <= (PUCHAR) (TableEnd)))
-#define ACPI_PLD_COLOR_BLUEc) ((BYTE) (((c) >> 16) & 0xFF))
-#define ACPI_PLD_COLOR_GREENc) ((BYTE) (((c) >> 8) & 0xFF))
-#define ACPI_PLD_COLOR_REDc) ((BYTE) (((c) >> 0) & 0xFF))
-#define ACPI_PLD_MAKE_COLORr, g, b) ((UINT32) (((r) & 0xFF) | (((g) & 0xFF) << 8) | (((b) & 0xFF) << 16)))
-#define BGRT_STATUS_GET_DISPLAY_ROTATION_Status_) ((UCHAR) ((ULONG) ((_Status_) & BGRT_STATUS_DISPLAY_ROTATION) >> 1))
-#define HMAT_ENTRY_LENGTH_Type) RTL_SIZEOF_THROUGH_FIELD(HMAT_ENTRY, _Type);
-#define IVHD_DEVICE_ENTRY_TYPE_TO_SIZE_Type_) ((ULONG_PTR) (1ULL << (((_Type_) >> 6) + 2)))
-#define NumTableEntriesFromRSDTPointerp) (p -> Header . Length - min(p -> Header . Length, sizeof (DESCRIPTION_HEADER))) / sizeof (ULONG)
-#define NumTableEntriesFromXSDTPointerp) (p -> Header . Length - min(p -> Header . Length, sizeof (DESCRIPTION_HEADER))) / sizeof (PHYSICAL_ADDRESS)
-#define PROC_TOPOLOGY_NODE_CACHE_TYPE_DATACacheType) (CacheType == 0)
-#define PROC_TOPOLOGY_NODE_CACHE_TYPE_INSTRUCTIONCacheType) (CacheType == 1)
-#define PROC_TOPOLOGY_NODE_CACHE_TYPE_UNIFIEDCacheType) ((CacheType == 2) || (CacheType == 3))
-#define PROXIMITY_DOMAIN_1SratEntry) (SratEntry) -> ApicAffinity . ProximityDomainLow
-#define UNCOMPRESS_MPIDR_COMPRESSED_, _MPIDR_) \
-{ (_MPIDR_) = (ULONGLONG) (_COMPRESSED_) & 0x00FFFFFFULL; (_MPIDR_) |= ((ULONGLONG) (_COMPRESSED_) & 0xFF000000ULL) << 8; \
-}
 
-#define ACPI_IS_VALID_TABLE_ENTRYEntry, Type, TableEnd) ((((PUCHAR) (Entry)) + RTL_SIZEOF_THROUGH_FIELD(Type, Length) <= (PUCHAR) (TableEnd)) && (((Type *) (Entry)) -> Length >= RTL_SIZEOF_THROUGH_FIELD(Type, Length)) && (((PUCHAR) (Entry)) + ((Type *) (Entry)) -> Length <= (PUCHAR) (TableEnd)))
-#define ACPI_PLD_COLOR_BLUEc) ((BYTE) (((c) >> 16) & 0xFF))
-#define ACPI_PLD_COLOR_GREENc) ((BYTE) (((c) >> 8) & 0xFF))
-#define ACPI_PLD_COLOR_REDc) ((BYTE) (((c) >> 0) & 0xFF))
-#define ACPI_PLD_MAKE_COLORr, g, b) ((UINT32) (((r) & 0xFF) | (((g) & 0xFF) << 8) | (((b) & 0xFF) << 16)))
-#define BGRT_STATUS_GET_DISPLAY_ROTATION_Status_) ((UCHAR) ((ULONG) ((_Status_) & BGRT_STATUS_DISPLAY_ROTATION) >> 1))
-#define HMAT_ENTRY_LENGTH_Type) RTL_SIZEOF_THROUGH_FIELD(HMAT_ENTRY, _Type);
-#define IVHD_DEVICE_ENTRY_TYPE_TO_SIZE_Type_) ((ULONG_PTR) (1ULL << (((_Type_) >> 6) + 2)))
-#define NumTableEntriesFromRSDTPointerp) (p -> Header . Length - min(p -> Header . Length, sizeof (DESCRIPTION_HEADER))) / sizeof (ULONG)
-#define NumTableEntriesFromXSDTPointerp) (p -> Header . Length - min(p -> Header . Length, sizeof (DESCRIPTION_HEADER))) / sizeof (PHYSICAL_ADDRESS)
-#define PROC_TOPOLOGY_NODE_CACHE_TYPE_DATACacheType) (CacheType == 0)
-#define PROC_TOPOLOGY_NODE_CACHE_TYPE_INSTRUCTIONCacheType) (CacheType == 1)
-#define PROC_TOPOLOGY_NODE_CACHE_TYPE_UNIFIEDCacheType) ((CacheType == 2) || (CacheType == 3))
-#define PROXIMITY_DOMAIN_1SratEntry) (SratEntry) -> ApicAffinity . ProximityDomainLow
-#define UNCOMPRESS_MPIDR_COMPRESSED_, _MPIDR_) \
-{ (_MPIDR_) = (ULONGLONG) (_COMPRESSED_) & 0x00FFFFFFULL; (_MPIDR_) |= ((ULONGLONG) (_COMPRESSED_) & 0xFF000000ULL) << 8; \
-}
 
 #pragma pack(push, 1)
 struct _ACPI_MPST
@@ -4376,22 +4325,20 @@ struct _WATCHDOG_TIMER_ACTION_TABLE
 
 typedef struct _WATCHDOG_TIMER_RESOURCE_TABLE WATCHDOG_TIMER_RESOURCE_TABLE;
 
-#define ACPI_IS_VALID_TABLE_ENTRYEntry, Type, TableEnd) ((((PUCHAR) (Entry)) + RTL_SIZEOF_THROUGH_FIELD(Type, Length) <= (PUCHAR) (TableEnd)) && (((Type *) (Entry)) -> Length >= RTL_SIZEOF_THROUGH_FIELD(Type, Length)) && (((PUCHAR) (Entry)) + ((Type *) (Entry)) -> Length <= (PUCHAR) (TableEnd)))
-#define ACPI_PLD_COLOR_BLUEc) ((BYTE) (((c) >> 16) & 0xFF))
-#define ACPI_PLD_COLOR_GREENc) ((BYTE) (((c) >> 8) & 0xFF))
-#define ACPI_PLD_COLOR_REDc) ((BYTE) (((c) >> 0) & 0xFF))
-#define ACPI_PLD_MAKE_COLORr, g, b) ((UINT32) (((r) & 0xFF) | (((g) & 0xFF) << 8) | (((b) & 0xFF) << 16)))
-#define BGRT_STATUS_GET_DISPLAY_ROTATION_Status_) ((UCHAR) ((ULONG) ((_Status_) & BGRT_STATUS_DISPLAY_ROTATION) >> 1))
-#define HMAT_ENTRY_LENGTH_Type) RTL_SIZEOF_THROUGH_FIELD(HMAT_ENTRY, _Type);
-#define IVHD_DEVICE_ENTRY_TYPE_TO_SIZE_Type_) ((ULONG_PTR) (1ULL << (((_Type_) >> 6) + 2)))
-#define NumTableEntriesFromRSDTPointerp) (p -> Header . Length - min(p -> Header . Length, sizeof (DESCRIPTION_HEADER))) / sizeof (ULONG)
-#define NumTableEntriesFromXSDTPointerp) (p -> Header . Length - min(p -> Header . Length, sizeof (DESCRIPTION_HEADER))) / sizeof (PHYSICAL_ADDRESS)
-#define PROC_TOPOLOGY_NODE_CACHE_TYPE_DATACacheType) (CacheType == 0)
-#define PROC_TOPOLOGY_NODE_CACHE_TYPE_INSTRUCTIONCacheType) (CacheType == 1)
-#define PROC_TOPOLOGY_NODE_CACHE_TYPE_UNIFIEDCacheType) ((CacheType == 2) || (CacheType == 3))
-#define PROXIMITY_DOMAIN_1SratEntry) (SratEntry) -> ApicAffinity . ProximityDomainLow
-#define UNCOMPRESS_MPIDR_COMPRESSED_, _MPIDR_) \
-{ (_MPIDR_) = (ULONGLONG) (_COMPRESSED_) & 0x00FFFFFFULL; (_MPIDR_) |= ((ULONGLONG) (_COMPRESSED_) & 0xFF000000ULL) << 8; \
-}
+#define ACPI_IS_VALID_TABLE_ENTRY(Entry, Type, TableEnd) ((((PUCHAR) (Entry)) + RTL_SIZEOF_THROUGH_FIELD(Type, Length) <= (PUCHAR) (TableEnd)) && (((Type *) (Entry)) -> Length >= RTL_SIZEOF_THROUGH_FIELD(Type, Length)) && (((PUCHAR) (Entry)) + ((Type *) (Entry)) -> Length <= (PUCHAR) (TableEnd)))
+#define ACPI_PLD_COLOR_BLUE(c) ((BYTE) (((c) >> 16) & 0xFF))
+#define ACPI_PLD_COLOR_GREEN(c) ((BYTE) (((c) >> 8) & 0xFF))
+#define ACPI_PLD_COLOR_RED(c) ((BYTE) (((c) >> 0) & 0xFF))
+#define ACPI_PLD_MAKE_COLOR(r, g, b) ((UINT32) (((r) & 0xFF) | (((g) & 0xFF) << 8) | (((b) & 0xFF) << 16)))
+#define BGRT_STATUS_GET_DISPLAY_ROTATION(_Status_) ((UCHAR) ((ULONG) ((_Status_) & BGRT_STATUS_DISPLAY_ROTATION) >> 1))
+#define HMAT_ENTRY_LENGTH(_Type) RTL_SIZEOF_THROUGH_FIELD(HMAT_ENTRY, _Type);
+#define IVHD_DEVICE_ENTRY_TYPE_TO_SIZE(_Type_) ((ULONG_PTR) (1ULL << (((_Type_) >> 6) + 2)))
+#define NumTableEntriesFromRSDTPointer(p) (p -> Header . Length - min(p -> Header . Length, sizeof (DESCRIPTION_HEADER))) / sizeof (ULONG)
+#define NumTableEntriesFromXSDTPointer(p) (p -> Header . Length - min(p -> Header . Length, sizeof (DESCRIPTION_HEADER))) / sizeof (PHYSICAL_ADDRESS)
+#define PROC_TOPOLOGY_NODE_CACHE_TYPE_DATA(CacheType) (CacheType == 0)
+#define PROC_TOPOLOGY_NODE_CACHE_TYPE_INSTRUCTION(CacheType) (CacheType == 1)
+#define PROC_TOPOLOGY_NODE_CACHE_TYPE_UNIFIED(CacheType) ((CacheType == 2) || (CacheType == 3))
+#define PROXIMITY_DOMAIN_1(SratEntry) (SratEntry) -> ApicAffinity . ProximityDomainLow
+#define UNCOMPRESS_MPIDR(_COMPRESSED_, _MPIDR_) { (_MPIDR_) = (ULONGLONG) (_COMPRESSED_) & 0x00FFFFFFULL; (_MPIDR_) |= ((ULONGLONG) (_COMPRESSED_) & 0xFF000000ULL) << 8; }
 
 #endif

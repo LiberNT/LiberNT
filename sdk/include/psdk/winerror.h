@@ -8253,8 +8253,6 @@ static inline HRESULT HRESULT_FROM_WIN32(unsigned int x)
 #define ERROR_VID_PARTITION_INVARIANTS_MISMATCH _NDIS_ERROR_TYPEDEF_(0xC0370031L)
 #define ERROR_VID_PARTITION_NOT_HIERARCHICAL_HOST _NDIS_ERROR_TYPEDEF_(0xC0370049L)
 #define HNS_NETWORK_NOT_FOUND _HRESULT_TYPEDEF_(0xC03B0001L)
-#define IS_CAMERA_ERROR_CODExhr) ((xhr) >= E_CAMERA_ERROR_MIN && (xhr) <= E_CAMERA_ERROR_MAX)
-#define PropagateResulthrPrevious, scBase) ((HRESULT) scBase)
 #define SEC_E_NO_SPM (-2146893052)
 #define SEC_E_NOT_SUPPORTED (-2146893054)
 
@@ -8269,13 +8267,7 @@ HRESULT HRESULT_FROM_SETUPAPI(unsigned long x);
 }
 #endif
 
-#define IS_CAMERA_ERROR_CODExhr) ((xhr) >= E_CAMERA_ERROR_MIN && (xhr) <= E_CAMERA_ERROR_MAX)
-#define PropagateResulthrPrevious, scBase) ((HRESULT) scBase)
-
-#define IS_CAMERA_ERROR_CODExhr) ((xhr) >= E_CAMERA_ERROR_MIN && (xhr) <= E_CAMERA_ERROR_MAX)
-#define PropagateResulthrPrevious, scBase) ((HRESULT) scBase)
-
-#define IS_CAMERA_ERROR_CODExhr) ((xhr) >= E_CAMERA_ERROR_MIN && (xhr) <= E_CAMERA_ERROR_MAX)
-#define PropagateResulthrPrevious, scBase) ((HRESULT) scBase)
+#define IS_CAMERA_ERROR_CODE(xhr) ((xhr) >= E_CAMERA_ERROR_MIN && (xhr) <= E_CAMERA_ERROR_MAX)
+#define PropagateResult(hrPrevious, scBase) ((HRESULT) scBase)
 
 #endif  /* __WINE_WINERROR_H */

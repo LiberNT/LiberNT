@@ -8,7 +8,11 @@
 #endif
 
 #define MICROSOFT_KERBEROS_NAME MICROSOFT_KERBEROS_NAME_W
+#ifdef UNICODE
+#define NEGOSSP_NAME NEGOSSP_NAME_W
+#else
 #define NEGOSSP_NAME NEGOSSP_NAME_A
+#endif
 #define NEGOSSP_NAME_A "Negotiate"
 #define NEGOSSP_NAME_W L"Negotiate"
 #define NTLMSP_NAME L"NTLM"

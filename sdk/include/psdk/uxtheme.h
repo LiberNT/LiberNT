@@ -424,7 +424,6 @@ typedef struct TA_TRANSFORM_OPACITY {
 } TA_TRANSFORM_OPACITY, *PTA_TRANSFORM_OPACITY;
 
 #define BPBF_COMPOSITED 2
-#define BufferedPaintMakeOpaquehBufferedPaint, prc) BufferedPaintSetAlpha(hBufferedPaint, prc, 255)
 #define DTBG_VALIDBITS 0x7F
 #define DTT_FLAGS2VALIDBITS 1
 #define GBF_VALIDBITS 3
@@ -449,10 +448,6 @@ BOOL UpdatePanningFeedback(HWND hwnd, LONG lTotalOverpanOffsetX, LONG lTotalOver
 }
 #endif
 
-#define BufferedPaintMakeOpaquehBufferedPaint, prc) BufferedPaintSetAlpha(hBufferedPaint, prc, 255)
-
-#define BufferedPaintMakeOpaquehBufferedPaint, prc) BufferedPaintSetAlpha(hBufferedPaint, prc, 255)
-
-#define BufferedPaintMakeOpaquehBufferedPaint, prc) BufferedPaintSetAlpha(hBufferedPaint, prc, 255)
+#define BufferedPaintMakeOpaque(hBufferedPaint, prc) BufferedPaintSetAlpha(hBufferedPaint, prc, 255)
 
 #endif

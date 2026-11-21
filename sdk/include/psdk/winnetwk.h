@@ -665,17 +665,29 @@ DWORD WINAPI WNetGetResourceParentW(LPNETRESOURCEW lpNetResource, LPVOID lpBuffe
 #ifdef UNICODE
 #define WNetAddConnection4 WNetAddConnection4W
 #else
+#ifdef UNICODE
+#define WNetAddConnection4 WNetAddConnection4W
+#else
 #define WNetAddConnection4 WNetAddConnection4A
 #endif
+#endif
+#ifdef UNICODE
+#define WNetGetResourceParent WNetGetResourceParentW
+#else
 #ifdef UNICODE
 #define WNetGetResourceParent WNetGetResourceParentW
 #else
 #define WNetGetResourceParent WNetGetResourceParentA
 #endif
+#endif
+#ifdef UNICODE
+#define WNetUseConnection4 WNetUseConnection4W
+#else
 #ifdef UNICODE
 #define WNetUseConnection4 WNetUseConnection4W
 #else
 #define WNetUseConnection4 WNetUseConnection4A
+#endif
 #endif
 
 #ifdef __cplusplus

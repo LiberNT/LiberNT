@@ -2184,7 +2184,6 @@ typedef struct ANON_OBJECT_HEADER_V2 {
   ULONG MetaDataOffset;
 } ANON_OBJECT_HEADER_V2;
 
-#define EXT_IMM64Value, Address, Size, InstPos, ValPos) /* Intel-IA64-Filler */ Value |= (((ULONGLONG) ((* (Address) >> InstPos) & (((ULONGLONG) 1 << Size) - 1))) << ValPos)
 #define IMAGE_ARCHIVE_HYBRIDMAP_MEMBER "/<HYBRIDMAP>/   "
 #define IMAGE_DEBUG_TYPE_BBT 0xA
 #define IMAGE_DEBUG_TYPE_REPRO 0x10
@@ -2203,7 +2202,6 @@ typedef struct ANON_OBJECT_HEADER_V2 {
 #define IMAGE_ENCLAVE_SHORT_ID_LENGTH 0x10
 #define IMAGE_REL_ARM64_ADDR32 1
 #define IMAGE_SYM_SECTION_MAX_EX 0x7FFFFFFF
-#define INS_IMM64Value, Address, Size, InstPos, ValPos) /* Intel-IA64-Filler */ * (PULONG) Address = (* (PULONG) Address & ~(((1 << Size) - 1) << InstPos)) | /* Intel-IA64-Filler */ ((ULONG) ((((ULONGLONG) Value >> ValPos) & (((ULONGLONG) 1 << Size) - 1))) << InstPos)
 #define PATCH_MAIN_CALLOUT_FUNCTION_NAME 0
 
 union _IMAGE_AUX_SYMBOL_EX
@@ -2415,11 +2413,7 @@ typedef __unaligned IMAGE_SYMBOL_EX *PIMAGE_SYMBOL_EX;
 
 typedef __unaligned IMAGE_OS2_HEADER *PUIMAGE_OS2_HEADER;
 
-#define EXT_IMM64Value, Address, Size, InstPos, ValPos) /* Intel-IA64-Filler */ Value |= (((ULONGLONG) ((* (Address) >> InstPos) & (((ULONGLONG) 1 << Size) - 1))) << ValPos)
-#define INS_IMM64Value, Address, Size, InstPos, ValPos) /* Intel-IA64-Filler */ * (PULONG) Address = (* (PULONG) Address & ~(((1 << Size) - 1) << InstPos)) | /* Intel-IA64-Filler */ ((ULONG) ((((ULONGLONG) Value >> ValPos) & (((ULONGLONG) 1 << Size) - 1))) << InstPos)
 
-#define EXT_IMM64Value, Address, Size, InstPos, ValPos) /* Intel-IA64-Filler */ Value |= (((ULONGLONG) ((* (Address) >> InstPos) & (((ULONGLONG) 1 << Size) - 1))) << ValPos)
-#define INS_IMM64Value, Address, Size, InstPos, ValPos) /* Intel-IA64-Filler */ * (PULONG) Address = (* (PULONG) Address & ~(((1 << Size) - 1) << InstPos)) | /* Intel-IA64-Filler */ ((ULONG) ((((ULONGLONG) Value >> ValPos) & (((ULONGLONG) 1 << Size) - 1))) << InstPos)
 
 typedef _IMAGE_RUNTIME_FUNCTION_ENTRY IMAGE_IA64_RUNTIME_FUNCTION_ENTRY;
 
@@ -2427,7 +2421,7 @@ typedef const IMAGE_BOUND_FORWARDER_REF *PCIMAGE_BOUND_FORWARDER_REF;
 
 typedef const IMAGE_BOUND_IMPORT_DESCRIPTOR *PCIMAGE_BOUND_IMPORT_DESCRIPTOR;
 
-#define EXT_IMM64Value, Address, Size, InstPos, ValPos) /* Intel-IA64-Filler */ Value |= (((ULONGLONG) ((* (Address) >> InstPos) & (((ULONGLONG) 1 << Size) - 1))) << ValPos)
-#define INS_IMM64Value, Address, Size, InstPos, ValPos) /* Intel-IA64-Filler */ * (PULONG) Address = (* (PULONG) Address & ~(((1 << Size) - 1) << InstPos)) | /* Intel-IA64-Filler */ ((ULONG) ((((ULONGLONG) Value >> ValPos) & (((ULONGLONG) 1 << Size) - 1))) << InstPos)
+#define EXT_IMM64(Value, Address, Size, InstPos, ValPos) /* Intel-IA64-Filler */ Value |= (((ULONGLONG) ((* (Address) >> InstPos) & (((ULONGLONG) 1 << Size) - 1))) << ValPos)
+#define INS_IMM64(Value, Address, Size, InstPos, ValPos) /* Intel-IA64-Filler */ * (PULONG) Address = (* (PULONG) Address & ~(((1 << Size) - 1) << InstPos)) | /* Intel-IA64-Filler */ ((ULONG) ((((ULONGLONG) Value >> ValPos) & (((ULONGLONG) 1 << Size) - 1))) << InstPos)
 
 #endif /* _NTIMAGE_ */

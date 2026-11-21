@@ -264,7 +264,6 @@ DEFINE_GUIDSTRUCT("c096df9e-fb09-11d1-81b0-0060083316c1", IID_IMXF);
 #define SET_PACKAGE_EVT(evt)    ((evt)->usFlags |= DMUS_KEF_PACKAGE_EVENT)
 #define CLEAR_PACKAGE_EVT(evt)  ((evt)->usFlags &= (~DMUS_KEF_PACKAGE_EVENT))
 
-#define DEFINE_ABSTRACT_MXF) STDMETHOD_(NTSTATUS, SetState) (THIS_ _In_ KSSTATE State) PURE; STDMETHOD_(NTSTATUS, PutMessage) (THIS_ _In_ PDMUS_KERNEL_EVENT pDMKEvt) PURE; STDMETHOD_(NTSTATUS, ConnectOutput) (THIS_ _In_ PMXF sinkMXF) PURE; STDMETHOD_(NTSTATUS, DisconnectOutput) (THIS_ _In_ PMXF sinkMXF) PURE;
 #define IID_ISynthSinkDMus 0
 #define STATIC_CLSID_MiniportDriverDMusUART 0xd3f0ce1c, 0xfffc, 0x11d1, 0x81, 0xb0, 0x00, 0x60, 0x08, 0x33, 0x16, 0xc1
 #define STATIC_CLSID_MiniportDriverDMusUARTCapture 0xd3f0ce1d, 0xfffc, 0x11d1, 0x81, 0xb0, 0x00, 0x60, 0x08, 0x33, 0x16, 0xc1
@@ -293,5 +292,7 @@ struct ISynthSinkDMus
 #define IMP_ISynthSinkDMus 0
 
 typedef ISynthSinkDMus *PSYNTHSINKDMUS;
+
+#define DEFINE_ABSTRACT_MXF() STDMETHOD_(NTSTATUS, SetState) (THIS_ _In_ KSSTATE State) PURE; STDMETHOD_(NTSTATUS, PutMessage) (THIS_ _In_ PDMUS_KERNEL_EVENT pDMKEvt) PURE; STDMETHOD_(NTSTATUS, ConnectOutput) (THIS_ _In_ PMXF sinkMXF) PURE; STDMETHOD_(NTSTATUS, DisconnectOutput) (THIS_ _In_ PMXF sinkMXF) PURE;
 
 #endif /* _DMUSICKS_ */

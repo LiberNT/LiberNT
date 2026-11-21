@@ -603,39 +603,67 @@ struct WCS_DEVICE_VCGT_CAPABILITIES {
 #ifdef UNICODE
 #define COLORMATCHSETUP COLORMATCHSETUPW
 #else
+#ifdef UNICODE
+#define COLORMATCHSETUP COLORMATCHSETUPW
+#else
 #define COLORMATCHSETUP COLORMATCHSETUPA
 #endif
+#endif
+#ifdef UNICODE
+#define ENUMTYPE ENUMTYPEW
+#else
 #ifdef UNICODE
 #define ENUMTYPE ENUMTYPEW
 #else
 #define ENUMTYPE ENUMTYPEA
 #endif
+#endif
+#ifdef UNICODE
+#define LPCOLORMATCHSETUP LPCOLORMATCHSETUPW
+#else
 #ifdef UNICODE
 #define LPCOLORMATCHSETUP LPCOLORMATCHSETUPW
 #else
 #define LPCOLORMATCHSETUP LPCOLORMATCHSETUPA
 #endif
+#endif
+#ifdef UNICODE
+#define PCMSCALLBACK PCMSCALLBACKW
+#else
 #ifdef UNICODE
 #define PCMSCALLBACK PCMSCALLBACKW
 #else
 #define PCMSCALLBACK PCMSCALLBACKA
 #endif
+#endif
+#ifdef UNICODE
+#define PCOLORMATCHSETUP PCOLORMATCHSETUPW
+#else
 #ifdef UNICODE
 #define PCOLORMATCHSETUP PCOLORMATCHSETUPW
 #else
 #define PCOLORMATCHSETUP PCOLORMATCHSETUPA
 #endif
+#endif
+#ifdef UNICODE
+#define PENUMTYPE PENUMTYPEW
+#else
 #ifdef UNICODE
 #define PENUMTYPE PENUMTYPEW
 #else
 #define PENUMTYPE PENUMTYPEA
+#endif
 #endif
 #define WCS_EMBEDDED_TAG_SIGNATURE 0x4D533030
 #define WCS_EMBEDDED_TAG_TYPE_SIGNATURE 0x4D533130
 #ifdef UNICODE
 #define WcsOpenColorProfile WcsOpenColorProfileW
 #else
+#ifdef UNICODE
+#define WcsOpenColorProfile WcsOpenColorProfileW
+#else
 #define WcsOpenColorProfile WcsOpenColorProfileA
+#endif
 #endif
 
 #ifdef __cplusplus

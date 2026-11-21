@@ -8,11 +8,5 @@ DEFINE_GUID(PARTITION_LDM_METADATA_GUID,  0x5808C8AA, 0x7E8F, 0x42E0, 0x85, 0xD2
 DEFINE_GUID(PARTITION_LDM_DATA_GUID,      0xAF9B60A0, 0x1431, 0x4F62, 0xBC, 0x68, 0x33, 0x11, 0x71, 0x4A, 0x69, 0xAD);    // Logical Disk Manager data partition
 #endif
 
-#define IsEqualPartitionType_a, _b) IsEqualGUID(& (_a), & (_b))
-
-#define IsEqualPartitionType_a, _b) IsEqualGUID(& (_a), & (_b))
-
-#define IsEqualPartitionType_a, _b) IsEqualGUID(& (_a), & (_b))
-
-#define IsEqualPartitionType_a, _b) IsEqualGUID(& (_a), & (_b))
+#define IsEqualPartitionType(_a, _b) IsEqualGUID(& (_a), & (_b))
 

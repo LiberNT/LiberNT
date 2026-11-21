@@ -165,17 +165,29 @@ typedef struct tagENUMUILANG {
 #ifdef UNICODE
 #define EnumResourceLanguagesEx EnumResourceLanguagesExW
 #else
+#ifdef UNICODE
+#define EnumResourceLanguagesEx EnumResourceLanguagesExW
+#else
 #define EnumResourceLanguagesEx EnumResourceLanguagesExA
 #endif
+#endif
+#ifdef UNICODE
+#define EnumResourceNamesEx EnumResourceNamesExW
+#else
 #ifdef UNICODE
 #define EnumResourceNamesEx EnumResourceNamesExW
 #else
 #define EnumResourceNamesEx EnumResourceNamesExA
 #endif
+#endif
+#ifdef UNICODE
+#define EnumResourceTypesEx EnumResourceTypesExW
+#else
 #ifdef UNICODE
 #define EnumResourceTypesEx EnumResourceTypesExW
 #else
 #define EnumResourceTypesEx EnumResourceTypesExA
+#endif
 #endif
 #define PGET_MODULE_HANDLE_EX 0
 

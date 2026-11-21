@@ -1115,7 +1115,11 @@ typedef struct _SecPkgCredentials_SSIProviderA {
 #ifdef UNICODE
 #define DeleteSecurityPackage DeleteSecurityPackageW
 #else
+#ifdef UNICODE
+#define DeleteSecurityPackage DeleteSecurityPackageW
+#else
 #define DeleteSecurityPackage DeleteSecurityPackageA
+#endif
 #endif
 #define SEC_WINNT_AUTH_IDENTITY_FLAGS_SSPIPFC_SAVE_CRED_BY_CALLER 0x80000000
 #define SEC_WINNT_AUTH_IDENTITY_FLAGS_VALID_SSPIPFC_FLAGS 0xF0000000

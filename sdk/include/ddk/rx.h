@@ -43,16 +43,7 @@
 #include "buffring.h"
 #endif
 
-#define MAKE_RESOURCE_OWNERX) (((ERESOURCE_THREAD) (X)) | 0x3)
-#define RESOURCE_OWNER_SETX) (((X) & 0x3) == 0x3)
-
-#define MAKE_RESOURCE_OWNERX) (((ERESOURCE_THREAD) (X)) | 0x3)
-#define RESOURCE_OWNER_SETX) (((X) & 0x3) == 0x3)
-
-#define MAKE_RESOURCE_OWNERX) (((ERESOURCE_THREAD) (X)) | 0x3)
-#define RESOURCE_OWNER_SETX) (((X) & 0x3) == 0x3)
-
-#define MAKE_RESOURCE_OWNERX) (((ERESOURCE_THREAD) (X)) | 0x3)
-#define RESOURCE_OWNER_SETX) (((X) & 0x3) == 0x3)
+#define MAKE_RESOURCE_OWNER(X) (((ERESOURCE_THREAD) (X)) | 0x3)
+#define RESOURCE_OWNER_SET(X) (((X) & 0x3) == 0x3)
 
 #endif

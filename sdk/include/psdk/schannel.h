@@ -728,7 +728,11 @@ typedef struct _X509Certificate {
   PctPublicKey * pPublicKey;
 } X509Certificate, *PX509Certificate;
 
+#ifdef UNICODE
+#define DEFAULT_TLS_SSP_NAME DEFAULT_TLS_SSP_NAME_W
+#else
 #define DEFAULT_TLS_SSP_NAME DEFAULT_TLS_SSP_NAME_A
+#endif
 #define DEFAULT_TLS_SSP_NAME_A "Default TLS SSP"
 #define DEFAULT_TLS_SSP_NAME_W L"Default TLS SSP"
 #define SCHANNEL_SECRET_TYPE_CAPI 0x00000001
@@ -741,7 +745,11 @@ typedef struct _X509Certificate {
 #ifdef UNICODE
 #define SslEmptyCache SslEmptyCacheW
 #else
+#ifdef UNICODE
+#define SslEmptyCache SslEmptyCacheW
+#else
 #define SslEmptyCache SslEmptyCacheA
+#endif
 #endif
 
 typedef SecPkgContext_LocalCredentialInfo *PSecPkgContext_LocalCredenitalInfo;

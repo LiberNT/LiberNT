@@ -199,9 +199,6 @@ typedef struct _SID_INFO_LIST {
 
 #define ACLUIAPI 0
 #define CFSTR_ACLUI_SID_INFO_LIST TEXT("CFSTR_ACLUI_SID_INFO_LIST")
-#define COMBINE_PAGE_ACTIVATIONX, Y) (UINT) (((Y) << 16) | X)
-#define GET_ACTIVATION_TYPEY) (UINT) (((Y) >> 16) & 0x0000ffff)
-#define GET_PAGE_TYPEX) (UINT) ((X) & 0x0000ffff)
 #define PSPCB_SI_INITDIALOG 0x401
 #define SECURITY_OBJECT_ID_OBJECT_SD 1
 
@@ -251,17 +248,9 @@ HRESULT EditSecurityAdvanced(HWND hwndOwner, LPSECURITYINFO psi, SI_PAGE_TYPE uS
 }
 #endif
 
-#define COMBINE_PAGE_ACTIVATIONX, Y) (UINT) (((Y) << 16) | X)
-#define GET_ACTIVATION_TYPEY) (UINT) (((Y) >> 16) & 0x0000ffff)
-#define GET_PAGE_TYPEX) (UINT) ((X) & 0x0000ffff)
-
-#define COMBINE_PAGE_ACTIVATIONX, Y) (UINT) (((Y) << 16) | X)
-#define GET_ACTIVATION_TYPEY) (UINT) (((Y) >> 16) & 0x0000ffff)
-#define GET_PAGE_TYPEX) (UINT) ((X) & 0x0000ffff)
-
-#define COMBINE_PAGE_ACTIVATIONX, Y) (UINT) (((Y) << 16) | X)
-#define GET_ACTIVATION_TYPEY) (UINT) (((Y) >> 16) & 0x0000ffff)
-#define GET_PAGE_TYPEX) (UINT) ((X) & 0x0000ffff)
+#define COMBINE_PAGE_ACTIVATION(X, Y) (UINT) (((Y) << 16) | X)
+#define GET_ACTIVATION_TYPE(Y) (UINT) (((Y) >> 16) & 0x0000ffff)
+#define GET_PAGE_TYPE(X) (UINT) ((X) & 0x0000ffff)
 
 #endif /* __ACLUI_H */
 

@@ -3705,7 +3705,11 @@ typedef ENUMRESTYPEPROCA ENUMRESTYPEPROC;
 #define ObjectPrivilegeAuditAlarm ObjectPrivilegeAuditAlarmA
 #define OpenBackupEventLog OpenBackupEventLogA
 #define OpenEvent OpenEventA
+#ifdef UNICODE
+#define OpenEncryptedFileRaw OpenEncryptedFileRawW
+#else
 #define OpenEncryptedFileRaw OpenEncryptedFileRawA
+#endif
 #define OpenEventLog OpenEventLogA
 #define OpenFileMapping OpenFileMappingA
 #define OpenMutex OpenMutexA
@@ -4406,49 +4410,85 @@ typedef struct _OPERATION_START_PARAMETERS {
 #ifdef UNICODE
 #define CopyFileTransacted CopyFileTransactedW
 #else
+#ifdef UNICODE
+#define CopyFileTransacted CopyFileTransactedW
+#else
 #define CopyFileTransacted CopyFileTransactedA
+#endif
 #endif
 #define CopyVolatileMemory RtlCopyVolatileMemory
 #ifdef UNICODE
 #define CreateDirectoryTransacted CreateDirectoryTransactedW
 #else
+#ifdef UNICODE
+#define CreateDirectoryTransacted CreateDirectoryTransactedW
+#else
 #define CreateDirectoryTransacted CreateDirectoryTransactedA
 #endif
+#endif
+#ifdef UNICODE
+#define CreateFileMappingNuma CreateFileMappingNumaW
+#else
 #ifdef UNICODE
 #define CreateFileMappingNuma CreateFileMappingNumaW
 #else
 #define CreateFileMappingNuma CreateFileMappingNumaA
 #endif
+#endif
+#ifdef UNICODE
+#define CreateFileTransacted CreateFileTransactedW
+#else
 #ifdef UNICODE
 #define CreateFileTransacted CreateFileTransactedW
 #else
 #define CreateFileTransacted CreateFileTransactedA
 #endif
+#endif
+#ifdef UNICODE
+#define CreateHardLinkTransacted CreateHardLinkTransactedW
+#else
 #ifdef UNICODE
 #define CreateHardLinkTransacted CreateHardLinkTransactedW
 #else
 #define CreateHardLinkTransacted CreateHardLinkTransactedA
 #endif
+#endif
+#ifdef UNICODE
+#define CreateSemaphoreEx CreateSemaphoreExW
+#else
 #ifdef UNICODE
 #define CreateSemaphoreEx CreateSemaphoreExW
 #else
 #define CreateSemaphoreEx CreateSemaphoreExA
 #endif
+#endif
 #define CreateSymbolicLink 0
+#ifdef UNICODE
+#define CreateSymbolicLinkTransacted CreateSymbolicLinkTransactedW
+#else
 #ifdef UNICODE
 #define CreateSymbolicLinkTransacted CreateSymbolicLinkTransactedW
 #else
 #define CreateSymbolicLinkTransacted CreateSymbolicLinkTransactedA
 #endif
+#endif
+#ifdef UNICODE
+#define CreateWaitableTimerEx CreateWaitableTimerExW
+#else
 #ifdef UNICODE
 #define CreateWaitableTimerEx CreateWaitableTimerExW
 #else
 #define CreateWaitableTimerEx CreateWaitableTimerExA
 #endif
+#endif
+#ifdef UNICODE
+#define DeleteFileTransacted DeleteFileTransactedW
+#else
 #ifdef UNICODE
 #define DeleteFileTransacted DeleteFileTransactedW
 #else
 #define DeleteFileTransacted DeleteFileTransactedA
+#endif
 #endif
 #define EFS_USE_RECOVERY_KEYS (0x1)
 #define EXPAND_LOCAL_DRIVES
@@ -4457,7 +4497,11 @@ typedef struct _OPERATION_START_PARAMETERS {
 #ifdef UNICODE
 #define FindFirstFileTransacted FindFirstFileTransactedW
 #else
+#ifdef UNICODE
+#define FindFirstFileTransacted FindFirstFileTransactedW
+#else
 #define FindFirstFileTransacted FindFirstFileTransactedA
+#endif
 #endif
 #define FS_FILE_ENCRYPTION 0x20000
 #define GET_SYSTEM_WOW64_DIRECTORY_NAME_A_A "GetSystemWow64DirectoryA"
@@ -4472,52 +4516,86 @@ typedef struct _OPERATION_START_PARAMETERS {
 #ifdef UNICODE
 #define GetCompressedFileSizeTransacted GetCompressedFileSizeTransactedW
 #else
+#ifdef UNICODE
+#define GetCompressedFileSizeTransacted GetCompressedFileSizeTransactedW
+#else
 #define GetCompressedFileSizeTransacted GetCompressedFileSizeTransactedA
+#endif
 #endif
 #define GetCurrentHwProfile 0
 #ifdef UNICODE
 #define GetFileAttributesTransacted GetFileAttributesTransactedW
 #else
+#ifdef UNICODE
+#define GetFileAttributesTransacted GetFileAttributesTransactedW
+#else
 #define GetFileAttributesTransacted GetFileAttributesTransactedA
 #endif
+#endif
+#ifdef UNICODE
+#define GetFullPathNameTransacted GetFullPathNameTransactedW
+#else
 #ifdef UNICODE
 #define GetFullPathNameTransacted GetFullPathNameTransactedW
 #else
 #define GetFullPathNameTransacted GetFullPathNameTransactedA
 #endif
+#endif
+#ifdef UNICODE
+#define GetLongPathNameTransacted GetLongPathNameTransactedW
+#else
 #ifdef UNICODE
 #define GetLongPathNameTransacted GetLongPathNameTransactedW
 #else
 #define GetLongPathNameTransacted GetLongPathNameTransactedA
 #endif
+#endif
+#ifdef UNICODE
+#define GlobalAddAtomEx GlobalAddAtomExW
+#else
 #ifdef UNICODE
 #define GlobalAddAtomEx GlobalAddAtomExW
 #else
 #define GlobalAddAtomEx GlobalAddAtomExA
 #endif
-#define GlobalLRUNewesth) ((HANDLE) (h))
-#define GlobalLRUOldesth) ((HANDLE) (h))
+#endif
+#ifdef UNICODE
+#define LookupAccountNameLocal LookupAccountNameLocalW
+#else
 #ifdef UNICODE
 #define LookupAccountNameLocal LookupAccountNameLocalW
 #else
 #define LookupAccountNameLocal LookupAccountNameLocalA
 #endif
+#endif
+#ifdef UNICODE
+#define LookupAccountSidLocal LookupAccountSidLocalW
+#else
 #ifdef UNICODE
 #define LookupAccountSidLocal LookupAccountSidLocalW
 #else
 #define LookupAccountSidLocal LookupAccountSidLocalA
 #endif
+#endif
 #define MICROSOFT_WINDOWS_WINBASE_H_DEFINE_INTERLOCKED_CPLUSPLUS_OVERLOADS 1
+#ifdef UNICODE
+#define MoveFileTransacted MoveFileTransactedW
+#else
 #ifdef UNICODE
 #define MoveFileTransacted MoveFileTransactedW
 #else
 #define MoveFileTransacted MoveFileTransactedA
 #endif
+#endif
 #define MoveVolatileMemory RtlMoveVolatileMemory
 #ifdef UNICODE
 #define OpenWaitableTimer OpenWaitableTimerW
 #else
+#ifdef UNICODE
+#define OpenWaitableTimer OpenWaitableTimerW
+#else
 #define OpenWaitableTimer OpenWaitableTimerA
+#endif
 #endif
 #define PROC_THREAD_ATTRIBUTE_CONTAINMENT_CONFIGURATION 0x20020
 #define PROC_THREAD_ATTRIBUTE_SVE_VECTOR_LENGTH 0x2001E
@@ -4601,7 +4679,11 @@ typedef struct _OPERATION_START_PARAMETERS {
 #ifdef UNICODE
 #define RemoveDirectoryTransacted RemoveDirectoryTransactedW
 #else
+#ifdef UNICODE
+#define RemoveDirectoryTransacted RemoveDirectoryTransactedW
+#else
 #define RemoveDirectoryTransacted RemoveDirectoryTransactedA
+#endif
 #endif
 #ifdef _WIN64
 #define SCS_THIS_PLATFORM_BINARY 6
@@ -4612,12 +4694,20 @@ typedef struct _OPERATION_START_PARAMETERS {
 #ifdef UNICODE
 #define SetEnvironmentStrings SetEnvironmentStringsW
 #else
+#ifdef UNICODE
+#define SetEnvironmentStrings SetEnvironmentStringsW
+#else
 #define SetEnvironmentStrings SetEnvironmentStringsA
+#endif
 #endif
 #ifdef UNICODE
 #define SetFileAttributesTransacted SetFileAttributesTransactedW
 #else
+#ifdef UNICODE
+#define SetFileAttributesTransacted SetFileAttributesTransactedW
+#else
 #define SetFileAttributesTransacted SetFileAttributesTransactedA
+#endif
 #endif
 #define UMS_VERSION 0x100
 #define ZeroDeviceMemory RtlZeroDeviceMemory
@@ -4807,12 +4897,8 @@ BOOLEAN WTSIsServerContainer(void);
 #endif
 
 #define GetNamedPipeClientComputerName 0
-#define GlobalLRUNewesth) ((HANDLE) (h))
-#define GlobalLRUOldesth) ((HANDLE) (h))
 
 #define AccessCheckByTypeAndAuditAlarm 0
-#define GlobalLRUNewesth) ((HANDLE) (h))
-#define GlobalLRUOldesth) ((HANDLE) (h))
 
 struct COPYFILE2_EXTENDED_PARAMETERS_V2
 {
@@ -4851,7 +4937,13 @@ BOOL SetUmsThreadInformation(PUMS_CONTEXT UmsThread, UMS_THREAD_INFO_CLASS UmsTh
 #endif
 
 #define AccessCheckByTypeResultListAndAuditAlarm 0
-#define GlobalLRUNewesth) ((HANDLE) (h))
-#define GlobalLRUOldesth) ((HANDLE) (h))
+
+#define AccessCheckByTypeResultListAndAuditAlarmByHandle 0
+#define ACTIVATION_CONTEXT_BASIC_INFORMATION_DEFINED 1
+
+#define OpenJobObject 0
+
+#define GlobalLRUNewest(h) ((HANDLE) (h))
+#define GlobalLRUOldest(h) ((HANDLE) (h))
 
 #endif /* _WINBASE_ */

@@ -1601,21 +1601,32 @@ typedef struct KERB_CRYPTO_KEY32 {
 #ifdef UNICODE
 #define AuditLookupSubCategoryName AuditLookupSubCategoryNameW
 #else
+#ifdef UNICODE
+#define AuditLookupSubCategoryName AuditLookupSubCategoryNameW
+#else
 #define AuditLookupSubCategoryName AuditLookupSubCategoryNameA
 #endif
+#endif
+#ifdef UNICODE
+#define AuditQueryGlobalSacl AuditQueryGlobalSaclW
+#else
 #ifdef UNICODE
 #define AuditQueryGlobalSacl AuditQueryGlobalSaclW
 #else
 #define AuditQueryGlobalSacl AuditQueryGlobalSaclA
 #endif
+#endif
+#ifdef UNICODE
+#define AuditSetGlobalSacl AuditSetGlobalSaclW
+#else
 #ifdef UNICODE
 #define AuditSetGlobalSacl AuditSetGlobalSaclW
 #else
 #define AuditSetGlobalSacl AuditSetGlobalSaclA
 #endif
+#endif
 #define AUTH_REQ_PER_USER_FLAGS 0x4F
 #define CENTRAL_ACCESS_POLICY_VALID_FLAG_MASK 0x10101
-#define KERB_IS_MS_PRINCIPAL_x_) (((_x_) <= KRB_NT_MS_PRINCIPAL) || ((_x_) >= KRB_NT_ENTERPRISE_PRINCIPAL))
 #define KRB_ANONYMOUS_STRING L"ANONYMOUS"
 #define KRB_WELLKNOWN_STRING 0
 #define LSA_SCANNER_INFO_ADMIN_ALL_FLAGS 1
@@ -1625,7 +1636,6 @@ typedef struct KERB_CRYPTO_KEY32 {
 #define PKU2U_PACKAGE_NAME L"pku2u"
 #define PKU2U_PACKAGE_NAME_A "pku2u"
 #define PKU2U_PACKAGE_NAME_W PKU2U_PACKAGE_NAME
-#define STAGING_FLAGEffective) ((Effective & 0xF) << 8)
 #define VALID_PER_USER_AUDIT_POLICY_FLAG 0x1F
 
 struct _LSA_FOREST_TRUST_RECORD2
@@ -1697,11 +1707,7 @@ NTSTATUS WINAPI LsaSetForestTrustInformation2(LSA_HANDLE PolicyHandle, PLSA_UNIC
 }
 #endif
 
-#define KERB_IS_MS_PRINCIPAL_x_) (((_x_) <= KRB_NT_MS_PRINCIPAL) || ((_x_) >= KRB_NT_ENTERPRISE_PRINCIPAL))
-#define STAGING_FLAGEffective) ((Effective & 0xF) << 8)
 
-#define KERB_IS_MS_PRINCIPAL_x_) (((_x_) <= KRB_NT_MS_PRINCIPAL) || ((_x_) >= KRB_NT_ENTERPRISE_PRINCIPAL))
-#define STAGING_FLAGEffective) ((Effective & 0xF) << 8)
 
 struct _KERB_ADD_BINDING_CACHE_ENTRY_EX_REQUEST
 {
@@ -2099,7 +2105,7 @@ BOOLEAN WINAPI AuditSetSystemPolicy(PCAUDIT_POLICY_INFORMATION pAuditPolicy, ULO
 }
 #endif
 
-#define KERB_IS_MS_PRINCIPAL_x_) (((_x_) <= KRB_NT_MS_PRINCIPAL) || ((_x_) >= KRB_NT_ENTERPRISE_PRINCIPAL))
-#define STAGING_FLAGEffective) ((Effective & 0xF) << 8)
+#define KERB_IS_MS_PRINCIPAL(_x_) (((_x_) <= KRB_NT_MS_PRINCIPAL) || ((_x_) >= KRB_NT_ENTERPRISE_PRINCIPAL))
+#define STAGING_FLAG(Effective) ((Effective & 0xF) << 8)
 
 #endif /* _NTSECAPI_H */

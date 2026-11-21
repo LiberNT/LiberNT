@@ -3542,6 +3542,10 @@ typedef struct _LOG_PARAMETER {
       UCHAR Reserved[3];
       UCHAR PercentageUsed;
     } SOLID_STATE_MEDIA;
+    struct _WORKLOAD_UTILIZATION
+    {
+        UCHAR WorkloadUtilization[2];
+    } WORKLOAD_UTILIZATION;
 
     struct _BACKGROUND_SCAN_STATUS {
       UCHAR PowerOnMinutes[4];

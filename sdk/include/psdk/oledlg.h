@@ -1558,35 +1558,59 @@ INT  __cdecl OleUIPromptUserW(INT,HWND, ...);
 #ifdef UNICODE
 #define tagOLEUICONVERT tagOLEUICONVERTW
 #else
+#ifdef UNICODE
+#define tagOLEUICONVERT tagOLEUICONVERTW
+#else
 #define tagOLEUICONVERT tagOLEUICONVERTA
 #endif
+#endif
+#ifdef UNICODE
+#define tagOLEUIEDITLINKS tagOLEUIEDITLINKSW
+#else
 #ifdef UNICODE
 #define tagOLEUIEDITLINKS tagOLEUIEDITLINKSW
 #else
 #define tagOLEUIEDITLINKS tagOLEUIEDITLINKSA
 #endif
+#endif
+#ifdef UNICODE
+#define tagOLEUIGNRLPROPS tagOLEUIGNRLPROPSW
+#else
 #ifdef UNICODE
 #define tagOLEUIGNRLPROPS tagOLEUIGNRLPROPSW
 #else
 #define tagOLEUIGNRLPROPS tagOLEUIGNRLPROPSA
 #endif
+#endif
+#ifdef UNICODE
+#define tagOLEUIINSERTOBJECT tagOLEUIINSERTOBJECTW
+#else
 #ifdef UNICODE
 #define tagOLEUIINSERTOBJECT tagOLEUIINSERTOBJECTW
 #else
 #define tagOLEUIINSERTOBJECT tagOLEUIINSERTOBJECTA
 #endif
+#endif
 #define tagOLEUILINKPROPS 0
 #ifdef UNICODE
 #define tagOLEUIOBJECTPROPS tagOLEUIOBJECTPROPSW
 #else
+#ifdef UNICODE
+#define tagOLEUIOBJECTPROPS tagOLEUIOBJECTPROPSW
+#else
 #define tagOLEUIOBJECTPROPS tagOLEUIOBJECTPROPSA
+#endif
 #endif
 #define tagOLEUIPASTEENTRY 0
 #define tagOLEUIPASTESPECIAL 0
 #ifdef UNICODE
 #define tagOLEUIVIEWPROPS tagOLEUIVIEWPROPSW
 #else
+#ifdef UNICODE
+#define tagOLEUIVIEWPROPS tagOLEUIVIEWPROPSW
+#else
 #define tagOLEUIVIEWPROPS tagOLEUIVIEWPROPSA
+#endif
 #endif
 
 typedef struct IOleUILinkContainerAVtbl IOleUILinkContainerAVtbl;

@@ -1858,3 +1858,7 @@ cpp_quote("#define IID_IDebugDocumentHelper 0")
 
 cpp_quote("#define IID_IProcessDebugManager 0")
 
+cpp_quote("#define IID_IDebugThreadCall 0")
+
+cpp_quote("#define CLSID_MachineDebugManager 0")
+

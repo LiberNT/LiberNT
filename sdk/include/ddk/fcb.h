@@ -721,9 +721,6 @@ typedef enum _FCB_CONDITION {
 
 typedef NODE_TYPE_CODE TYPE_OF_OPEN;
 
-#define FILESIZE_LOCK_DISABLEDx)
-#define RxReferenceSrvCallAtDpcSrvCall) RxpTrackReference(RDBSS_REF_TRACK_SRVCALL, __FILE__, __LINE__, SrvCall); ASSERT(SrvCall -> NodeReferenceCount > 1); InterlockedIncrement(& SrvCall -> NodeReferenceCount)
-#define RxWriteCachingAllowedFCB, SRVOPEN) (FlagOn((FCB) -> FcbState, FCB_STATE_WRITECACHING_ENABLED) && !FlagOn((SRVOPEN) -> Flags, SRVOPEN_FLAG_DONTUSE_WRITE_CACHING))
 
 #ifdef __cplusplus
 extern "C" {
@@ -737,16 +734,26 @@ BOOLEAN RxLoudFcbMsg(PUCHAR msg, PUNICODE_STRING Name);
 }
 #endif
 
-#define FILESIZE_LOCK_DISABLEDx)
-#define RxReferenceSrvCallAtDpcSrvCall) RxpTrackReference(RDBSS_REF_TRACK_SRVCALL, __FILE__, __LINE__, SrvCall); ASSERT(SrvCall -> NodeReferenceCount > 1); InterlockedIncrement(& SrvCall -> NodeReferenceCount)
-#define RxWriteCachingAllowedFCB, SRVOPEN) (FlagOn((FCB) -> FcbState, FCB_STATE_WRITECACHING_ENABLED) && !FlagOn((SRVOPEN) -> Flags, SRVOPEN_FLAG_DONTUSE_WRITE_CACHING))
 
-#define FILESIZE_LOCK_DISABLEDx)
-#define RxReferenceSrvCallAtDpcSrvCall) RxpTrackReference(RDBSS_REF_TRACK_SRVCALL, __FILE__, __LINE__, SrvCall); ASSERT(SrvCall -> NodeReferenceCount > 1); InterlockedIncrement(& SrvCall -> NodeReferenceCount)
-#define RxWriteCachingAllowedFCB, SRVOPEN) (FlagOn((FCB) -> FcbState, FCB_STATE_WRITECACHING_ENABLED) && !FlagOn((SRVOPEN) -> Flags, SRVOPEN_FLAG_DONTUSE_WRITE_CACHING))
 
-#define FILESIZE_LOCK_DISABLEDx)
-#define RxReferenceSrvCallAtDpcSrvCall) RxpTrackReference(RDBSS_REF_TRACK_SRVCALL, __FILE__, __LINE__, SrvCall); ASSERT(SrvCall -> NodeReferenceCount > 1); InterlockedIncrement(& SrvCall -> NodeReferenceCount)
-#define RxWriteCachingAllowedFCB, SRVOPEN) (FlagOn((FCB) -> FcbState, FCB_STATE_WRITECACHING_ENABLED) && !FlagOn((SRVOPEN) -> Flags, SRVOPEN_FLAG_DONTUSE_WRITE_CACHING))
+
+
+
+
+typedef TDI_CONNECTION_INFORMATION RXCE_CONNECTION_INFORMATION;
+
+typedef RXCE_CONNECTION_INFORMATION *PRXCE_CONNECTION_INFORMATION;
+
+
+typedef NTSTATUS (*PRXCE_IND_DATA_READY)(PVOID, PMDL, ULONG, NTSTATUS);
+
+typedef NTSTATUS (*PRXCE_IND_RECEIVE_DATAGRAM)(PVOID, int, PVOID, int, PVOID, ULONG, ULONG, ULONG, ULONG *, PVOID, PMDL *, PULONG);
+
+#define FILESIZE_LOCK_DISABLED(x)
+#define RxReferenceSrvCallAtDpc(SrvCall) RxpTrackReference(RDBSS_REF_TRACK_SRVCALL, __FILE__, __LINE__, SrvCall); ASSERT(SrvCall -> NodeReferenceCount > 1); InterlockedIncrement(& SrvCall -> NodeReferenceCount)
+#define RxWriteCachingAllowed(FCB, SRVOPEN) (FlagOn((FCB) -> FcbState, FCB_STATE_WRITECACHING_ENABLED) && !FlagOn((SRVOPEN) -> Flags, SRVOPEN_FLAG_DONTUSE_WRITE_CACHING))
+
+#define RxDbgTrace(INDENT, CONTROLPOINTNUM, Z) { NOTHING; }
+#define RxWaitForStableSrvCall_Async(SRVCALL, RXCONTEXT, PNTSTATUS) { RxDbgTrace(0, Dbg, ("RxWaitForStableSrvCall -- %lx\n", (SRVCALL))); RxWaitForStableCondition(& (SRVCALL) -> Condition, & (SRVCALL) -> TransitionWaitList, (RXCONTEXT), (PNTSTATUS)); }
 
 #endif

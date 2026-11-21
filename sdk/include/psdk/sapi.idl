@@ -1501,7 +1501,6 @@ cpp_quote("#define SPDUI_ShareData L\"ShareData\"")
 cpp_quote("#define SPDUI_Tutorial L\"Tutorial\"")
 cpp_quote("#define SPDUI_UserEnrollment L\"UserEnrollment\"")
 cpp_quote("#define SPDUI_UserTraining L\"UserTraining\"")
-cpp_quote("#define SPFEISPEI_ord) ((1ui64 << SPEI_ord) | SPFEI_FLAGCHECK)")
 cpp_quote("#define SPFEI_ALL_EVENTS (-1152921504606846977LL)")
 cpp_quote("#define SPFEI_ALL_SR_EVENTS 0x3FFFFE40000000ULL")
 cpp_quote("#define SPFEI_ALL_TTS_EVENTS 0x24000FFFEULL")
@@ -3976,9 +3975,5 @@ cpp_quote("    HRESULT (WINAPI *GetGenerationChange)(ISpLexicon *, DWORD, DWORD 
 cpp_quote("    HRESULT (WINAPI *GetWords)(ISpLexicon *, DWORD, DWORD *, DWORD *, SPWORDLIST *);")
 cpp_quote("};")
 
-cpp_quote("#define SPFEISPEI_ord) ((1ui64 << SPEI_ord) | SPFEI_FLAGCHECK)")
-
-cpp_quote("#define SPFEISPEI_ord) ((1ui64 << SPEI_ord) | SPFEI_FLAGCHECK)")
-
-cpp_quote("#define SPFEISPEI_ord) ((1ui64 << SPEI_ord) | SPFEI_FLAGCHECK)")
+cpp_quote("#define SPFEI(SPEI_ord) ((1ui64 << SPEI_ord) | SPFEI_FLAGCHECK)")
 

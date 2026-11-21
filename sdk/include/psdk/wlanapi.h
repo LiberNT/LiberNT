@@ -852,10 +852,7 @@ typedef struct WLAN_STATISTICS {
 
 #define WFD_API_SUPPORTED 0
 #define WFD_API_VERSION WFD_API_VERSION_1_0
-#define WLAN_API_MAKE_VERSION_major, _minor) (((DWORD) (_minor)) << 16 | (_major))
 #define WLAN_API_VERSION 2
-#define WLAN_API_VERSION_MAJOR_v) ((_v) & 0xffff)
-#define WLAN_API_VERSION_MINOR_v) (((DWORD) (_v)) >> 16)
 #define WLAN_NOTIFICATION_SOURCE_DEVICE_SERVICE 0x800
 #define WLAN_REASON_CODE_AC_END 0x2FFFF
 #define WLAN_REASON_CODE_ADHOC_SECURITY_FAILURE 0x3800A
@@ -1065,16 +1062,8 @@ DWORD WINAPI WlanUIEditProfile(DWORD dwClientVersion, LPCWSTR wstrProfileName, G
 }
 #endif
 
-#define WLAN_API_MAKE_VERSION_major, _minor) (((DWORD) (_minor)) << 16 | (_major))
-#define WLAN_API_VERSION_MAJOR_v) ((_v) & 0xffff)
-#define WLAN_API_VERSION_MINOR_v) (((DWORD) (_v)) >> 16)
-
-#define WLAN_API_MAKE_VERSION_major, _minor) (((DWORD) (_minor)) << 16 | (_major))
-#define WLAN_API_VERSION_MAJOR_v) ((_v) & 0xffff)
-#define WLAN_API_VERSION_MINOR_v) (((DWORD) (_v)) >> 16)
-
-#define WLAN_API_MAKE_VERSION_major, _minor) (((DWORD) (_minor)) << 16 | (_major))
-#define WLAN_API_VERSION_MAJOR_v) ((_v) & 0xffff)
-#define WLAN_API_VERSION_MINOR_v) (((DWORD) (_v)) >> 16)
+#define WLAN_API_MAKE_VERSION(_major, _minor) (((DWORD) (_minor)) << 16 | (_major))
+#define WLAN_API_VERSION_MAJOR(_v) ((_v) & 0xffff)
+#define WLAN_API_VERSION_MINOR(_v) (((DWORD) (_v)) >> 16)
 
 #endif  // _WLANAPI_H

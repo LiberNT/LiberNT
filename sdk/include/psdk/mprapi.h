@@ -1050,7 +1050,6 @@ typedef struct RAS_UPDATE_CONNECTION_ {
 #define MPRET_Vpn 2
 #define MPRIDS_Disabled 0xFFFFFFFF
 #define MPRIDS_UseGlobalValue 0
-#define MprInfoBlockExistsh, t) (MprInfoBlockFind((h), (t), NULL, NULL, NULL) == NO_ERROR)
 #define MPRIO_DisableLcpExtensions 0x20
 #define MPRIO_IpHeaderCompression 8
 #define MPRIO_NetworkLogon 0x2000
@@ -1465,7 +1464,6 @@ DWORD WINAPI MprSetupIpInIpInterfaceFriendlyNameFree(LPVOID lpBuffer);
 }
 #endif
 
-#define MprInfoBlockExistsh, t) (MprInfoBlockFind((h), (t), NULL, NULL, NULL) == NO_ERROR)
 
 enum _RAS_PORT_CONDITION
 {
@@ -1474,8 +1472,6 @@ enum _RAS_PORT_CONDITION
 
 typedef enum _RAS_PORT_CONDITION RAS_PORT_CONDITION;
 
-#define MprInfoBlockExistsh, t) (MprInfoBlockFind((h), (t), NULL, NULL, NULL) == NO_ERROR)
-
-#define MprInfoBlockExistsh, t) (MprInfoBlockFind((h), (t), NULL, NULL, NULL) == NO_ERROR)
+#define MprInfoBlockExists(h, t) (MprInfoBlockFind((h), (t), NULL, NULL, NULL) == NO_ERROR)
 
 #endif /* __WINE_MPRAPI_H */

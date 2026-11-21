@@ -1673,17 +1673,9 @@ cpp_quote("#define DWRITE_ERR_BASE 0x5000")
 cpp_quote("#define MAKE_DWRITE_HR(severity, code) MAKE_HRESULT(severity, FACILITY_DWRITE, (DWRITE_ERR_BASE + code))")
 cpp_quote("#define MAKE_DWRITE_HR_ERR(code) MAKE_DWRITE_HR(SEVERITY_ERROR, code)")
 
-cpp_quote("#define DWRITE_BEGIN_INTERFACEname, iid) interface DWRITE_DECLARE_INTERFACE(iid) name")
-cpp_quote("#define DWRITE_DECLARE_INTERFACEiid) DECLSPEC_UUID(iid) DECLSPEC_NOVTABLE")
 cpp_quote("#define DWRITE_EXPORT 0")
-cpp_quote("#define DWRITE_MAKE_FONT_FEATURE_TAGa, b, c, d) (static_cast < DWRITE_FONT_FEATURE_TAG > (DWRITE_MAKE_OPENTYPE_TAG(a, b, c, d)))")
 
-cpp_quote("#define DWRITE_BEGIN_INTERFACEname, iid) interface DWRITE_DECLARE_INTERFACE(iid) name")
-cpp_quote("#define DWRITE_MAKE_FONT_FEATURE_TAGa, b, c, d) (static_cast < DWRITE_FONT_FEATURE_TAG > (DWRITE_MAKE_OPENTYPE_TAG(a, b, c, d)))")
-
-cpp_quote("#define DWRITE_BEGIN_INTERFACEname, iid) interface DWRITE_DECLARE_INTERFACE(iid) name")
-cpp_quote("#define DWRITE_MAKE_FONT_FEATURE_TAGa, b, c, d) (static_cast < DWRITE_FONT_FEATURE_TAG > (DWRITE_MAKE_OPENTYPE_TAG(a, b, c, d)))")
-
-cpp_quote("#define DWRITE_BEGIN_INTERFACEname, iid) interface DWRITE_DECLARE_INTERFACE(iid) name")
-cpp_quote("#define DWRITE_MAKE_FONT_FEATURE_TAGa, b, c, d) (static_cast < DWRITE_FONT_FEATURE_TAG > (DWRITE_MAKE_OPENTYPE_TAG(a, b, c, d)))")
+cpp_quote("#define DWRITE_BEGIN_INTERFACE(name, iid) interface DWRITE_DECLARE_INTERFACE(iid) name")
+cpp_quote("#define DWRITE_DECLARE_INTERFACE(iid) DECLSPEC_UUID(iid) DECLSPEC_NOVTABLE")
+cpp_quote("#define DWRITE_MAKE_FONT_FEATURE_TAG(a, b, c, d) (static_cast < DWRITE_FONT_FEATURE_TAG > (DWRITE_MAKE_OPENTYPE_TAG(a, b, c, d)))")
 

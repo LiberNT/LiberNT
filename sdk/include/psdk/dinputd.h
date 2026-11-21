@@ -430,99 +430,102 @@ typedef struct DIPOVCALIBRATION {
 #ifdef UNICODE
 #define DIRECTINPUT_NOTIFICATION_MSGSTRING DIRECTINPUT_NOTIFICATION_MSGSTRINGW
 #else
+#ifdef UNICODE
+#define DIRECTINPUT_NOTIFICATION_MSGSTRING DIRECTINPUT_NOTIFICATION_MSGSTRINGW
+#else
 #define DIRECTINPUT_NOTIFICATION_MSGSTRING DIRECTINPUT_NOTIFICATION_MSGSTRINGA
+#endif
 #endif
 #define DIRECTINPUT_NOTIFICATION_MSGSTRINGA "DIRECTINPUT_NOTIFICATION_MSGSTRING"
 #define DIRECTINPUT_NOTIFICATION_MSGSTRINGW L"DIRECTINPUT_NOTIFICATION_MSGSTRING"
 #ifdef UNICODE
 #define DIRECTINPUT_REGSTR_KEY_LASTAPP DIRECTINPUT_REGSTR_KEY_LASTAPPW
 #else
+#ifdef UNICODE
+#define DIRECTINPUT_REGSTR_KEY_LASTAPP DIRECTINPUT_REGSTR_KEY_LASTAPPW
+#else
 #define DIRECTINPUT_REGSTR_KEY_LASTAPP DIRECTINPUT_REGSTR_KEY_LASTAPPA
+#endif
 #endif
 #define DIRECTINPUT_REGSTR_KEY_LASTAPPA "MostRecentApplication"
 #define DIRECTINPUT_REGSTR_KEY_LASTAPPW L"MostRecentApplication"
 #ifdef UNICODE
 #define DIRECTINPUT_REGSTR_KEY_LASTMAPAPP DIRECTINPUT_REGSTR_KEY_LASTMAPAPPW
 #else
+#ifdef UNICODE
+#define DIRECTINPUT_REGSTR_KEY_LASTMAPAPP DIRECTINPUT_REGSTR_KEY_LASTMAPAPPW
+#else
 #define DIRECTINPUT_REGSTR_KEY_LASTMAPAPP DIRECTINPUT_REGSTR_KEY_LASTMAPAPPA
+#endif
 #endif
 #define DIRECTINPUT_REGSTR_KEY_LASTMAPAPPA "MostRecentMapperApplication"
 #define DIRECTINPUT_REGSTR_KEY_LASTMAPAPPW L"MostRecentMapperApplication"
 #ifdef UNICODE
 #define DIRECTINPUT_REGSTR_VAL_APPIDFLAG DIRECTINPUT_REGSTR_VAL_APPIDFLAGW
 #else
+#ifdef UNICODE
+#define DIRECTINPUT_REGSTR_VAL_APPIDFLAG DIRECTINPUT_REGSTR_VAL_APPIDFLAGW
+#else
 #define DIRECTINPUT_REGSTR_VAL_APPIDFLAG DIRECTINPUT_REGSTR_VAL_APPIDFLAGA
+#endif
 #endif
 #define DIRECTINPUT_REGSTR_VAL_APPIDFLAGA 0
 #define DIRECTINPUT_REGSTR_VAL_APPIDFLAGW L"AppIdFlag"
 #ifdef UNICODE
 #define DIRECTINPUT_REGSTR_VAL_ID DIRECTINPUT_REGSTR_VAL_IDW
 #else
+#ifdef UNICODE
+#define DIRECTINPUT_REGSTR_VAL_ID DIRECTINPUT_REGSTR_VAL_IDW
+#else
 #define DIRECTINPUT_REGSTR_VAL_ID DIRECTINPUT_REGSTR_VAL_IDA
+#endif
 #endif
 #define DIRECTINPUT_REGSTR_VAL_IDA "Id"
 #define DIRECTINPUT_REGSTR_VAL_IDW L"Id"
 #ifdef UNICODE
 #define DIRECTINPUT_REGSTR_VAL_LASTSTART DIRECTINPUT_REGSTR_VAL_LASTSTARTW
 #else
+#ifdef UNICODE
+#define DIRECTINPUT_REGSTR_VAL_LASTSTART DIRECTINPUT_REGSTR_VAL_LASTSTARTW
+#else
 #define DIRECTINPUT_REGSTR_VAL_LASTSTART DIRECTINPUT_REGSTR_VAL_LASTSTARTA
+#endif
 #endif
 #define DIRECTINPUT_REGSTR_VAL_LASTSTARTA "MostRecentStart"
 #define DIRECTINPUT_REGSTR_VAL_LASTSTARTW L"MostRecentStart"
 #ifdef UNICODE
 #define DIRECTINPUT_REGSTR_VAL_MAPPER DIRECTINPUT_REGSTR_VAL_MAPPERW
 #else
+#ifdef UNICODE
+#define DIRECTINPUT_REGSTR_VAL_MAPPER DIRECTINPUT_REGSTR_VAL_MAPPERW
+#else
 #define DIRECTINPUT_REGSTR_VAL_MAPPER DIRECTINPUT_REGSTR_VAL_MAPPERA
+#endif
 #endif
 #define DIRECTINPUT_REGSTR_VAL_MAPPERA "UsesMapper"
 #define DIRECTINPUT_REGSTR_VAL_MAPPERW L"UsesMapper"
 #ifdef UNICODE
 #define DIRECTINPUT_REGSTR_VAL_NAME DIRECTINPUT_REGSTR_VAL_NAMEW
 #else
+#ifdef UNICODE
+#define DIRECTINPUT_REGSTR_VAL_NAME DIRECTINPUT_REGSTR_VAL_NAMEW
+#else
 #define DIRECTINPUT_REGSTR_VAL_NAME DIRECTINPUT_REGSTR_VAL_NAMEA
+#endif
 #endif
 #define DIRECTINPUT_REGSTR_VAL_NAMEA "Name"
 #define DIRECTINPUT_REGSTR_VAL_NAMEW L"Name"
 #ifdef UNICODE
 #define DIRECTINPUT_REGSTR_VAL_VERSION DIRECTINPUT_REGSTR_VAL_VERSIONW
 #else
+#ifdef UNICODE
+#define DIRECTINPUT_REGSTR_VAL_VERSION DIRECTINPUT_REGSTR_VAL_VERSIONW
+#else
 #define DIRECTINPUT_REGSTR_VAL_VERSION DIRECTINPUT_REGSTR_VAL_VERSIONA
+#endif
 #endif
 #define DIRECTINPUT_REGSTR_VAL_VERSIONA "Version"
 #define DIRECTINPUT_REGSTR_VAL_VERSIONW L"Version"
-#define IDirectInputEffectDriver_AddRefp) (p) -> lpVtbl -> AddRef(p)
-#define IDirectInputEffectDriver_DestroyEffectp, a, b) (p) -> lpVtbl -> DestroyEffect(p, a, b)
-#define IDirectInputEffectDriver_DeviceIDp, a, b, c, d, e) (p) -> lpVtbl -> DeviceID(p, a, b, c, d, e)
-#define IDirectInputEffectDriver_DownloadEffectp, a, b, c, d, e) (p) -> lpVtbl -> DownloadEffect(p, a, b, c, d, e)
-#define IDirectInputEffectDriver_Escapep, a, b, c) (p) -> lpVtbl -> Escape(p, a, b, c)
-#define IDirectInputEffectDriver_GetEffectStatusp, a, b, c) (p) -> lpVtbl -> GetEffectStatus(p, a, b, c)
-#define IDirectInputEffectDriver_GetForceFeedbackStatep, a, b) (p) -> lpVtbl -> GetForceFeedbackState(p, a, b)
-#define IDirectInputEffectDriver_GetVersionsp, a) (p) -> lpVtbl -> GetVersions(p, a)
-#define IDirectInputEffectDriver_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
-#define IDirectInputEffectDriver_Releasep) (p) -> lpVtbl -> Release(p)
-#define IDirectInputEffectDriver_SendForceFeedbackCommandp, a, b) (p) -> lpVtbl -> SendForceFeedbackCommand(p, a, b)
-#define IDirectInputEffectDriver_SetGainp, a, b) (p) -> lpVtbl -> SetGain(p, a, b)
-#define IDirectInputEffectDriver_StartEffectp, a, b, c, d) (p) -> lpVtbl -> StartEffect(p, a, b, c, d)
-#define IDirectInputEffectDriver_StopEffectp, a, b) (p) -> lpVtbl -> StopEffect(p, a, b)
-#define IDirectInputJoyConfig_Acquirep) (p) -> lpVtbl -> Acquire(p)
-#define IDirectInputJoyConfig_AddNewHardwarep, a, b) (p) -> lpVtbl -> AddNewHardware(p, a, b)
-#define IDirectInputJoyConfig_AddRefp) (p) -> lpVtbl -> AddRef(p)
-#define IDirectInputJoyConfig_DeleteConfigp, a) (p) -> lpVtbl -> DeleteConfig(p, a)
-#define IDirectInputJoyConfig_DeleteTypep, a) (p) -> lpVtbl -> DeleteType(p, a)
-#define IDirectInputJoyConfig_EnumTypesp, a, b) (p) -> lpVtbl -> EnumTypes(p, a, b)
-#define IDirectInputJoyConfig_GetConfigp, a, b, c) (p) -> lpVtbl -> GetConfig(p, a, b, c)
-#define IDirectInputJoyConfig_GetTypeInfop, a, b, c) (p) -> lpVtbl -> GetTypeInfo(p, a, b, c)
-#define IDirectInputJoyConfig_GetUserValuesp, a, b) (p) -> lpVtbl -> GetUserValues(p, a, b)
-#define IDirectInputJoyConfig_OpenConfigKeyp, a, b, c) (p) -> lpVtbl -> OpenConfigKey(p, a, b, c)
-#define IDirectInputJoyConfig_OpenTypeKeyp, a, b, c) (p) -> lpVtbl -> OpenTypeKey(p, a, b, c)
-#define IDirectInputJoyConfig_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
-#define IDirectInputJoyConfig_Releasep) (p) -> lpVtbl -> Release(p)
-#define IDirectInputJoyConfig_SendNotifyp) (p) -> lpVtbl -> SendNotify(p)
-#define IDirectInputJoyConfig_SetConfigp, a, b, c) (p) -> lpVtbl -> SetConfig(p, a, b, c)
-#define IDirectInputJoyConfig_SetCooperativeLevelp, a, b) (p) -> lpVtbl -> SetCooperativeLevel(p, a, b)
-#define IDirectInputJoyConfig_SetTypeInfop, a, b, c) (p) -> lpVtbl -> SetTypeInfo(p, a, b, c)
-#define IDirectInputJoyConfig_SetUserValuesp, a, b) (p) -> lpVtbl -> SetUserValues(p, a, b)
-#define IDirectInputJoyConfig_Unacquirep) (p) -> lpVtbl -> Unacquire(p)
 
 typedef struct IDirectInputEffectDriverVtbl IDirectInputEffectDriverVtbl;
 
@@ -558,106 +561,38 @@ typedef struct IDirectInputEffectDriver *LPDIRECTINPUTEFFECTDRIVER;
 
 typedef struct IDirectInputJoyConfig *LPDIRECTINPUTJOYCONFIG;
 
-#define IDirectInputEffectDriver_AddRefp) (p) -> lpVtbl -> AddRef(p)
-#define IDirectInputEffectDriver_DestroyEffectp, a, b) (p) -> lpVtbl -> DestroyEffect(p, a, b)
-#define IDirectInputEffectDriver_DeviceIDp, a, b, c, d, e) (p) -> lpVtbl -> DeviceID(p, a, b, c, d, e)
-#define IDirectInputEffectDriver_DownloadEffectp, a, b, c, d, e) (p) -> lpVtbl -> DownloadEffect(p, a, b, c, d, e)
-#define IDirectInputEffectDriver_Escapep, a, b, c) (p) -> lpVtbl -> Escape(p, a, b, c)
-#define IDirectInputEffectDriver_GetEffectStatusp, a, b, c) (p) -> lpVtbl -> GetEffectStatus(p, a, b, c)
-#define IDirectInputEffectDriver_GetForceFeedbackStatep, a, b) (p) -> lpVtbl -> GetForceFeedbackState(p, a, b)
-#define IDirectInputEffectDriver_GetVersionsp, a) (p) -> lpVtbl -> GetVersions(p, a)
-#define IDirectInputEffectDriver_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
-#define IDirectInputEffectDriver_Releasep) (p) -> lpVtbl -> Release(p)
-#define IDirectInputEffectDriver_SendForceFeedbackCommandp, a, b) (p) -> lpVtbl -> SendForceFeedbackCommand(p, a, b)
-#define IDirectInputEffectDriver_SetGainp, a, b) (p) -> lpVtbl -> SetGain(p, a, b)
-#define IDirectInputEffectDriver_StartEffectp, a, b, c, d) (p) -> lpVtbl -> StartEffect(p, a, b, c, d)
-#define IDirectInputEffectDriver_StopEffectp, a, b) (p) -> lpVtbl -> StopEffect(p, a, b)
-#define IDirectInputJoyConfig_Acquirep) (p) -> lpVtbl -> Acquire(p)
-#define IDirectInputJoyConfig_AddNewHardwarep, a, b) (p) -> lpVtbl -> AddNewHardware(p, a, b)
-#define IDirectInputJoyConfig_AddRefp) (p) -> lpVtbl -> AddRef(p)
-#define IDirectInputJoyConfig_DeleteConfigp, a) (p) -> lpVtbl -> DeleteConfig(p, a)
-#define IDirectInputJoyConfig_DeleteTypep, a) (p) -> lpVtbl -> DeleteType(p, a)
-#define IDirectInputJoyConfig_EnumTypesp, a, b) (p) -> lpVtbl -> EnumTypes(p, a, b)
-#define IDirectInputJoyConfig_GetConfigp, a, b, c) (p) -> lpVtbl -> GetConfig(p, a, b, c)
-#define IDirectInputJoyConfig_GetTypeInfop, a, b, c) (p) -> lpVtbl -> GetTypeInfo(p, a, b, c)
-#define IDirectInputJoyConfig_GetUserValuesp, a, b) (p) -> lpVtbl -> GetUserValues(p, a, b)
-#define IDirectInputJoyConfig_OpenConfigKeyp, a, b, c) (p) -> lpVtbl -> OpenConfigKey(p, a, b, c)
-#define IDirectInputJoyConfig_OpenTypeKeyp, a, b, c) (p) -> lpVtbl -> OpenTypeKey(p, a, b, c)
-#define IDirectInputJoyConfig_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
-#define IDirectInputJoyConfig_Releasep) (p) -> lpVtbl -> Release(p)
-#define IDirectInputJoyConfig_SendNotifyp) (p) -> lpVtbl -> SendNotify(p)
-#define IDirectInputJoyConfig_SetConfigp, a, b, c) (p) -> lpVtbl -> SetConfig(p, a, b, c)
-#define IDirectInputJoyConfig_SetCooperativeLevelp, a, b) (p) -> lpVtbl -> SetCooperativeLevel(p, a, b)
-#define IDirectInputJoyConfig_SetTypeInfop, a, b, c) (p) -> lpVtbl -> SetTypeInfo(p, a, b, c)
-#define IDirectInputJoyConfig_SetUserValuesp, a, b) (p) -> lpVtbl -> SetUserValues(p, a, b)
-#define IDirectInputJoyConfig_Unacquirep) (p) -> lpVtbl -> Unacquire(p)
-
-#define IDirectInputEffectDriver_AddRefp) (p) -> lpVtbl -> AddRef(p)
-#define IDirectInputEffectDriver_DestroyEffectp, a, b) (p) -> lpVtbl -> DestroyEffect(p, a, b)
-#define IDirectInputEffectDriver_DeviceIDp, a, b, c, d, e) (p) -> lpVtbl -> DeviceID(p, a, b, c, d, e)
-#define IDirectInputEffectDriver_DownloadEffectp, a, b, c, d, e) (p) -> lpVtbl -> DownloadEffect(p, a, b, c, d, e)
-#define IDirectInputEffectDriver_Escapep, a, b, c) (p) -> lpVtbl -> Escape(p, a, b, c)
-#define IDirectInputEffectDriver_GetEffectStatusp, a, b, c) (p) -> lpVtbl -> GetEffectStatus(p, a, b, c)
-#define IDirectInputEffectDriver_GetForceFeedbackStatep, a, b) (p) -> lpVtbl -> GetForceFeedbackState(p, a, b)
-#define IDirectInputEffectDriver_GetVersionsp, a) (p) -> lpVtbl -> GetVersions(p, a)
-#define IDirectInputEffectDriver_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
-#define IDirectInputEffectDriver_Releasep) (p) -> lpVtbl -> Release(p)
-#define IDirectInputEffectDriver_SendForceFeedbackCommandp, a, b) (p) -> lpVtbl -> SendForceFeedbackCommand(p, a, b)
-#define IDirectInputEffectDriver_SetGainp, a, b) (p) -> lpVtbl -> SetGain(p, a, b)
-#define IDirectInputEffectDriver_StartEffectp, a, b, c, d) (p) -> lpVtbl -> StartEffect(p, a, b, c, d)
-#define IDirectInputEffectDriver_StopEffectp, a, b) (p) -> lpVtbl -> StopEffect(p, a, b)
-#define IDirectInputJoyConfig_Acquirep) (p) -> lpVtbl -> Acquire(p)
-#define IDirectInputJoyConfig_AddNewHardwarep, a, b) (p) -> lpVtbl -> AddNewHardware(p, a, b)
-#define IDirectInputJoyConfig_AddRefp) (p) -> lpVtbl -> AddRef(p)
-#define IDirectInputJoyConfig_DeleteConfigp, a) (p) -> lpVtbl -> DeleteConfig(p, a)
-#define IDirectInputJoyConfig_DeleteTypep, a) (p) -> lpVtbl -> DeleteType(p, a)
-#define IDirectInputJoyConfig_EnumTypesp, a, b) (p) -> lpVtbl -> EnumTypes(p, a, b)
-#define IDirectInputJoyConfig_GetConfigp, a, b, c) (p) -> lpVtbl -> GetConfig(p, a, b, c)
-#define IDirectInputJoyConfig_GetTypeInfop, a, b, c) (p) -> lpVtbl -> GetTypeInfo(p, a, b, c)
-#define IDirectInputJoyConfig_GetUserValuesp, a, b) (p) -> lpVtbl -> GetUserValues(p, a, b)
-#define IDirectInputJoyConfig_OpenConfigKeyp, a, b, c) (p) -> lpVtbl -> OpenConfigKey(p, a, b, c)
-#define IDirectInputJoyConfig_OpenTypeKeyp, a, b, c) (p) -> lpVtbl -> OpenTypeKey(p, a, b, c)
-#define IDirectInputJoyConfig_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
-#define IDirectInputJoyConfig_Releasep) (p) -> lpVtbl -> Release(p)
-#define IDirectInputJoyConfig_SendNotifyp) (p) -> lpVtbl -> SendNotify(p)
-#define IDirectInputJoyConfig_SetConfigp, a, b, c) (p) -> lpVtbl -> SetConfig(p, a, b, c)
-#define IDirectInputJoyConfig_SetCooperativeLevelp, a, b) (p) -> lpVtbl -> SetCooperativeLevel(p, a, b)
-#define IDirectInputJoyConfig_SetTypeInfop, a, b, c) (p) -> lpVtbl -> SetTypeInfo(p, a, b, c)
-#define IDirectInputJoyConfig_SetUserValuesp, a, b) (p) -> lpVtbl -> SetUserValues(p, a, b)
-#define IDirectInputJoyConfig_Unacquirep) (p) -> lpVtbl -> Unacquire(p)
-
-#define IDirectInputEffectDriver_AddRefp) (p) -> lpVtbl -> AddRef(p)
-#define IDirectInputEffectDriver_DestroyEffectp, a, b) (p) -> lpVtbl -> DestroyEffect(p, a, b)
-#define IDirectInputEffectDriver_DeviceIDp, a, b, c, d, e) (p) -> lpVtbl -> DeviceID(p, a, b, c, d, e)
-#define IDirectInputEffectDriver_DownloadEffectp, a, b, c, d, e) (p) -> lpVtbl -> DownloadEffect(p, a, b, c, d, e)
-#define IDirectInputEffectDriver_Escapep, a, b, c) (p) -> lpVtbl -> Escape(p, a, b, c)
-#define IDirectInputEffectDriver_GetEffectStatusp, a, b, c) (p) -> lpVtbl -> GetEffectStatus(p, a, b, c)
-#define IDirectInputEffectDriver_GetForceFeedbackStatep, a, b) (p) -> lpVtbl -> GetForceFeedbackState(p, a, b)
-#define IDirectInputEffectDriver_GetVersionsp, a) (p) -> lpVtbl -> GetVersions(p, a)
-#define IDirectInputEffectDriver_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
-#define IDirectInputEffectDriver_Releasep) (p) -> lpVtbl -> Release(p)
-#define IDirectInputEffectDriver_SendForceFeedbackCommandp, a, b) (p) -> lpVtbl -> SendForceFeedbackCommand(p, a, b)
-#define IDirectInputEffectDriver_SetGainp, a, b) (p) -> lpVtbl -> SetGain(p, a, b)
-#define IDirectInputEffectDriver_StartEffectp, a, b, c, d) (p) -> lpVtbl -> StartEffect(p, a, b, c, d)
-#define IDirectInputEffectDriver_StopEffectp, a, b) (p) -> lpVtbl -> StopEffect(p, a, b)
-#define IDirectInputJoyConfig_Acquirep) (p) -> lpVtbl -> Acquire(p)
-#define IDirectInputJoyConfig_AddNewHardwarep, a, b) (p) -> lpVtbl -> AddNewHardware(p, a, b)
-#define IDirectInputJoyConfig_AddRefp) (p) -> lpVtbl -> AddRef(p)
-#define IDirectInputJoyConfig_DeleteConfigp, a) (p) -> lpVtbl -> DeleteConfig(p, a)
-#define IDirectInputJoyConfig_DeleteTypep, a) (p) -> lpVtbl -> DeleteType(p, a)
-#define IDirectInputJoyConfig_EnumTypesp, a, b) (p) -> lpVtbl -> EnumTypes(p, a, b)
-#define IDirectInputJoyConfig_GetConfigp, a, b, c) (p) -> lpVtbl -> GetConfig(p, a, b, c)
-#define IDirectInputJoyConfig_GetTypeInfop, a, b, c) (p) -> lpVtbl -> GetTypeInfo(p, a, b, c)
-#define IDirectInputJoyConfig_GetUserValuesp, a, b) (p) -> lpVtbl -> GetUserValues(p, a, b)
-#define IDirectInputJoyConfig_OpenConfigKeyp, a, b, c) (p) -> lpVtbl -> OpenConfigKey(p, a, b, c)
-#define IDirectInputJoyConfig_OpenTypeKeyp, a, b, c) (p) -> lpVtbl -> OpenTypeKey(p, a, b, c)
-#define IDirectInputJoyConfig_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
-#define IDirectInputJoyConfig_Releasep) (p) -> lpVtbl -> Release(p)
-#define IDirectInputJoyConfig_SendNotifyp) (p) -> lpVtbl -> SendNotify(p)
-#define IDirectInputJoyConfig_SetConfigp, a, b, c) (p) -> lpVtbl -> SetConfig(p, a, b, c)
-#define IDirectInputJoyConfig_SetCooperativeLevelp, a, b) (p) -> lpVtbl -> SetCooperativeLevel(p, a, b)
-#define IDirectInputJoyConfig_SetTypeInfop, a, b, c) (p) -> lpVtbl -> SetTypeInfo(p, a, b, c)
-#define IDirectInputJoyConfig_SetUserValuesp, a, b) (p) -> lpVtbl -> SetUserValues(p, a, b)
-#define IDirectInputJoyConfig_Unacquirep) (p) -> lpVtbl -> Unacquire(p)
+#define IDirectInputEffectDriver_AddRef(p) (p) -> lpVtbl -> AddRef(p)
+#define IDirectInputEffectDriver_DestroyEffect(p, a, b) (p) -> lpVtbl -> DestroyEffect(p, a, b)
+#define IDirectInputEffectDriver_DeviceID(p, a, b, c, d, e) (p) -> lpVtbl -> DeviceID(p, a, b, c, d, e)
+#define IDirectInputEffectDriver_DownloadEffect(p, a, b, c, d, e) (p) -> lpVtbl -> DownloadEffect(p, a, b, c, d, e)
+#define IDirectInputEffectDriver_Escape(p, a, b, c) (p) -> lpVtbl -> Escape(p, a, b, c)
+#define IDirectInputEffectDriver_GetEffectStatus(p, a, b, c) (p) -> lpVtbl -> GetEffectStatus(p, a, b, c)
+#define IDirectInputEffectDriver_GetForceFeedbackState(p, a, b) (p) -> lpVtbl -> GetForceFeedbackState(p, a, b)
+#define IDirectInputEffectDriver_GetVersions(p, a) (p) -> lpVtbl -> GetVersions(p, a)
+#define IDirectInputEffectDriver_QueryInterface(p, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
+#define IDirectInputEffectDriver_Release(p) (p) -> lpVtbl -> Release(p)
+#define IDirectInputEffectDriver_SendForceFeedbackCommand(p, a, b) (p) -> lpVtbl -> SendForceFeedbackCommand(p, a, b)
+#define IDirectInputEffectDriver_SetGain(p, a, b) (p) -> lpVtbl -> SetGain(p, a, b)
+#define IDirectInputEffectDriver_StartEffect(p, a, b, c, d) (p) -> lpVtbl -> StartEffect(p, a, b, c, d)
+#define IDirectInputEffectDriver_StopEffect(p, a, b) (p) -> lpVtbl -> StopEffect(p, a, b)
+#define IDirectInputJoyConfig_Acquire(p) (p) -> lpVtbl -> Acquire(p)
+#define IDirectInputJoyConfig_AddNewHardware(p, a, b) (p) -> lpVtbl -> AddNewHardware(p, a, b)
+#define IDirectInputJoyConfig_AddRef(p) (p) -> lpVtbl -> AddRef(p)
+#define IDirectInputJoyConfig_DeleteConfig(p, a) (p) -> lpVtbl -> DeleteConfig(p, a)
+#define IDirectInputJoyConfig_DeleteType(p, a) (p) -> lpVtbl -> DeleteType(p, a)
+#define IDirectInputJoyConfig_EnumTypes(p, a, b) (p) -> lpVtbl -> EnumTypes(p, a, b)
+#define IDirectInputJoyConfig_GetConfig(p, a, b, c) (p) -> lpVtbl -> GetConfig(p, a, b, c)
+#define IDirectInputJoyConfig_GetTypeInfo(p, a, b, c) (p) -> lpVtbl -> GetTypeInfo(p, a, b, c)
+#define IDirectInputJoyConfig_GetUserValues(p, a, b) (p) -> lpVtbl -> GetUserValues(p, a, b)
+#define IDirectInputJoyConfig_OpenConfigKey(p, a, b, c) (p) -> lpVtbl -> OpenConfigKey(p, a, b, c)
+#define IDirectInputJoyConfig_OpenTypeKey(p, a, b, c) (p) -> lpVtbl -> OpenTypeKey(p, a, b, c)
+#define IDirectInputJoyConfig_QueryInterface(p, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)
+#define IDirectInputJoyConfig_Release(p) (p) -> lpVtbl -> Release(p)
+#define IDirectInputJoyConfig_SendNotify(p) (p) -> lpVtbl -> SendNotify(p)
+#define IDirectInputJoyConfig_SetConfig(p, a, b, c) (p) -> lpVtbl -> SetConfig(p, a, b, c)
+#define IDirectInputJoyConfig_SetCooperativeLevel(p, a, b) (p) -> lpVtbl -> SetCooperativeLevel(p, a, b)
+#define IDirectInputJoyConfig_SetTypeInfo(p, a, b, c) (p) -> lpVtbl -> SetTypeInfo(p, a, b, c)
+#define IDirectInputJoyConfig_SetUserValues(p, a, b) (p) -> lpVtbl -> SetUserValues(p, a, b)
+#define IDirectInputJoyConfig_Unacquire(p) (p) -> lpVtbl -> Unacquire(p)
 
 #endif /* __DINPUTD_INCLUDED__ */

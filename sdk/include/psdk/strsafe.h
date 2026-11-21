@@ -2068,8 +2068,16 @@ STRSAFE_INLINE_API StringGetsExWorkerW(STRSAFE_LPWSTR pszDest,size_t cchDest,siz
 
 #define STRSAFE_MAX_LENGTH 0x7FFFFFFE
 #define STRSAFEWORKERAPI static STRSAFEAPI
+#ifdef UNICODE
+#define UnalignedStringCbLength StringCbLengthW
+#else
 #define UnalignedStringCbLength StringCbLengthA
+#endif
+#ifdef UNICODE
+#define UnalignedStringCchLength StringCchLengthW
+#else
 #define UnalignedStringCchLength StringCchLengthA
+#endif
 
 typedef const __unaligned wchar_t *STRSAFE_LPCUWSTR;
 

@@ -44,32 +44,7 @@ enum {
     MidlWinrtTypeSerializationInfoVersionOne = 1
 };
 
-#define _midl_addpp, n) (p += n)
-#define _midl_advmpmp) * (* (unsigned long * *) & mp) ++
-#define _midl_fa2p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 1) & ~0x1))
-#define _midl_fa4p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 3) & ~0x3))
-#define _midl_fa8p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 7) & ~0x7))
-#define _midl_ma1p, cast) * (* (cast * *) & p) ++
-#define _midl_ma2p, cast) * (* (cast * *) & p) ++
-#define _midl_ma4p, cast) * (* (cast * *) & p) ++
-#define _midl_ma8p, cast) * (* (cast * *) & p) ++
-#define _midl_marsh_lhsp, cast) * (* (cast * *) & p) ++
-#define _midl_marsh_upmp, p) * (* (unsigned long * *) & mp) ++ = (unsigned long) p
-#define _midl_unma1p, cast) * ((cast *) p) ++
-#define _midl_unma2p, cast) * ((cast *) p) ++
-#define _midl_unma3p, cast) * ((cast *) p) ++
-#define _midl_unma4p, cast) * ((cast *) p) ++
-#define _midl_unmarsh_upp) (* (* (unsigned long * *) & p) ++)
-#define boolean_from_ndrsource, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
-#define byte_from_ndrsource, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
 #define MIDL_WINRT_TYPE_SERIALIZATION_INFO_CURRENT_VERSION 1
-#define NdrFieldOffsets, f) (LONG_PTR) (& (((s *) 0) -> f))
-#define NdrFieldPads, f, p, t) ((unsigned long) (NdrFieldOffset(s, f) - NdrFieldOffset(s, p)) - sizeof (t))
-#define NdrMarshCCtxtHdlpc, p) (NDRCContextMarshall((NDR_CCONTEXT) pc, p), p + 20)
-#define NdrMarshConfStringHdrp, s, l) (_midl_ma4(p, unsigned long) = s, _midl_ma4(p, unsigned long) = 0, _midl_ma4(p, unsigned long) = l)
-#define NdrUnMarshConfStringHdrp, s, l) ((s = _midl_unma4(p, unsigned long), (_midl_addp(p, 4)), (l = _midl_unma4(p, unsigned long))
-#define small_from_ndrsource, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
-#define small_from_ndr_tempsource, target, format) { * (target) = * (* (char * *) (source)) ++; }
 
 typedef unsigned short *PARAM_OFFSETTABLE;
 
@@ -226,54 +201,12 @@ void WINAPI RpcUserFree(handle_t AsyncHandle, void *pBuffer);
 }
 #endif
 
-#define _midl_advmpmp) * (* (unsigned long * *) & mp) ++
-#define _midl_fa2p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 1) & ~0x1))
-#define _midl_fa4p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 3) & ~0x3))
-#define _midl_fa8p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 7) & ~0x7))
-#define _midl_ma1p, cast) * (* (cast * *) & p) ++
-#define _midl_ma2p, cast) * (* (cast * *) & p) ++
-#define _midl_ma8p, cast) * (* (cast * *) & p) ++
-#define _midl_marsh_lhsp, cast) * (* (cast * *) & p) ++
-#define _midl_marsh_upmp, p) * (* (unsigned long * *) & mp) ++ = (unsigned long) p
-#define _midl_unma1p, cast) * ((cast *) p) ++
-#define _midl_unma2p, cast) * ((cast *) p) ++
-#define _midl_unma3p, cast) * ((cast *) p) ++
-#define _midl_unmarsh_upp) (* (* (unsigned long * *) & p) ++)
-#define boolean_from_ndrsource, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
-#define byte_from_ndrsource, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
-#define NdrFieldPads, f, p, t) ((unsigned long) (NdrFieldOffset(s, f) - NdrFieldOffset(s, p)) - sizeof (t))
-#define NdrMarshCCtxtHdlpc, p) (NDRCContextMarshall((NDR_CCONTEXT) pc, p), p + 20)
-#define NdrMarshConfStringHdrp, s, l) (_midl_ma4(p, unsigned long) = s, _midl_ma4(p, unsigned long) = 0, _midl_ma4(p, unsigned long) = l)
-#define NdrUnMarshConfStringHdrp, s, l) ((s = _midl_unma4(p, unsigned long), (_midl_addp(p, 4)), (l = _midl_unma4(p, unsigned long))
-#define small_from_ndrsource, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
-#define small_from_ndr_tempsource, target, format) { * (target) = * (* (char * *) (source)) ++; }
 
 enum _USER_MARSHAL_CB_TYPE
 {
 
 };
 
-#define _midl_advmpmp) * (* (unsigned long * *) & mp) ++
-#define _midl_fa2p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 1) & ~0x1))
-#define _midl_fa4p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 3) & ~0x3))
-#define _midl_fa8p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 7) & ~0x7))
-#define _midl_ma1p, cast) * (* (cast * *) & p) ++
-#define _midl_ma2p, cast) * (* (cast * *) & p) ++
-#define _midl_ma8p, cast) * (* (cast * *) & p) ++
-#define _midl_marsh_lhsp, cast) * (* (cast * *) & p) ++
-#define _midl_marsh_upmp, p) * (* (unsigned long * *) & mp) ++ = (unsigned long) p
-#define _midl_unma1p, cast) * ((cast *) p) ++
-#define _midl_unma2p, cast) * ((cast *) p) ++
-#define _midl_unma3p, cast) * ((cast *) p) ++
-#define _midl_unmarsh_upp) (* (* (unsigned long * *) & p) ++)
-#define boolean_from_ndrsource, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
-#define byte_from_ndrsource, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
-#define NdrFieldPads, f, p, t) ((unsigned long) (NdrFieldOffset(s, f) - NdrFieldOffset(s, p)) - sizeof (t))
-#define NdrMarshCCtxtHdlpc, p) (NDRCContextMarshall((NDR_CCONTEXT) pc, p), p + 20)
-#define NdrMarshConfStringHdrp, s, l) (_midl_ma4(p, unsigned long) = s, _midl_ma4(p, unsigned long) = 0, _midl_ma4(p, unsigned long) = l)
-#define NdrUnMarshConfStringHdrp, s, l) ((s = _midl_unma4(p, unsigned long), (_midl_addp(p, 4)), (l = _midl_unma4(p, unsigned long))
-#define small_from_ndrsource, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
-#define small_from_ndr_tempsource, target, format) { * (target) = * (* (char * *) (source)) ++; }
 
 struct _MIDL_INTERCEPTION_INFO
 {
@@ -303,27 +236,31 @@ typedef struct _MIDL_INTERCEPTION_INFO *PMIDL_INTERCEPTION_INFO;
 
 typedef struct _MIDL_WINRT_TYPE_SERIALIZATION_INFO *PMIDL_WINRT_TYPE_SERIALIZATION_INFO;
 
-#define _midl_advmpmp) * (* (unsigned long * *) & mp) ++
-#define _midl_fa2p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 1) & ~0x1))
-#define _midl_fa4p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 3) & ~0x3))
-#define _midl_fa8p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 7) & ~0x7))
-#define _midl_ma1p, cast) * (* (cast * *) & p) ++
-#define _midl_ma2p, cast) * (* (cast * *) & p) ++
-#define _midl_ma8p, cast) * (* (cast * *) & p) ++
-#define _midl_marsh_lhsp, cast) * (* (cast * *) & p) ++
-#define _midl_marsh_upmp, p) * (* (unsigned long * *) & mp) ++ = (unsigned long) p
-#define _midl_unma1p, cast) * ((cast *) p) ++
-#define _midl_unma2p, cast) * ((cast *) p) ++
-#define _midl_unma3p, cast) * ((cast *) p) ++
-#define _midl_unmarsh_upp) (* (* (unsigned long * *) & p) ++)
-#define boolean_from_ndrsource, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
-#define byte_from_ndrsource, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
-#define NdrFieldPads, f, p, t) ((unsigned long) (NdrFieldOffset(s, f) - NdrFieldOffset(s, p)) - sizeof (t))
-#define NdrMarshCCtxtHdlpc, p) (NDRCContextMarshall((NDR_CCONTEXT) pc, p), p + 20)
-#define NdrMarshConfStringHdrp, s, l) (_midl_ma4(p, unsigned long) = s, _midl_ma4(p, unsigned long) = 0, _midl_ma4(p, unsigned long) = l)
-#define NdrUnMarshConfStringHdrp, s, l) ((s = _midl_unma4(p, unsigned long), (_midl_addp(p, 4)), (l = _midl_unma4(p, unsigned long))
-#define small_from_ndrsource, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
-#define small_from_ndr_tempsource, target, format) { * (target) = * (* (char * *) (source)) ++; }
+#define _midl_addp(p, n) (p += n)
+#define _midl_advmp(mp) * (* (unsigned long * *) & mp) ++
+#define _midl_fa2(p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 1) & ~0x1))
+#define _midl_fa4(p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 3) & ~0x3))
+#define _midl_fa8(p) (p = (RPC_BUFPTR) ((ULONG_PTR) (p + 7) & ~0x7))
+#define _midl_ma1(p, cast) * (* (cast * *) & p) ++
+#define _midl_ma2(p, cast) * (* (cast * *) & p) ++
+#define _midl_ma4(p, cast) * (* (cast * *) & p) ++
+#define _midl_ma8(p, cast) * (* (cast * *) & p) ++
+#define _midl_marsh_lhs(p, cast) * (* (cast * *) & p) ++
+#define _midl_marsh_up(mp, p) * (* (unsigned long * *) & mp) ++ = (unsigned long) p
+#define _midl_unma1(p, cast) * ((cast *) p) ++
+#define _midl_unma2(p, cast) * ((cast *) p) ++
+#define _midl_unma3(p, cast) * ((cast *) p) ++
+#define _midl_unma4(p, cast) * ((cast *) p) ++
+#define _midl_unmarsh_up(p) (* (* (unsigned long * *) & p) ++)
+#define boolean_from_ndr(source, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
+#define byte_from_ndr(source, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
+#define NdrFieldOffset(s, f) (LONG_PTR) (& (((s *) 0) -> f))
+#define NdrFieldPad(s, f, p, t) ((unsigned long) (NdrFieldOffset(s, f) - NdrFieldOffset(s, p)) - sizeof (t))
+#define NdrMarshCCtxtHdl(pc, p) (NDRCContextMarshall((NDR_CCONTEXT) pc, p), p + 20)
+#define NdrMarshConfStringHdr(p, s, l) (_midl_ma4(p, unsigned long) = s, _midl_ma4(p, unsigned long) = 0, _midl_ma4(p, unsigned long) = l)
+#define NdrUnMarshConfStringHdr(p, s, l) ((s = _midl_unma4(p, unsigned long), (_midl_addp(p, 4)), (l = _midl_unma4(p, unsigned long))
+#define small_from_ndr(source, target) { * (target) = * (* (char * *) & (source) -> Buffer) ++; }
+#define small_from_ndr_temp(source, target, format) { * (target) = * (* (char * *) (source)) ++; }
 
 #endif
 

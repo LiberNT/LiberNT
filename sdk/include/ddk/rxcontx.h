@@ -549,8 +549,6 @@ RxRemoveOperationFromBlockingQueue(
 #else
 #define MRX_CONTEXT_SIZE 0x10
 #endif
-#define RxSynchronizeBlockingOperationsRXCONTEXT, FCB, IOQUEUE) __RxSynchronizeBlockingOperations(RXCONTEXT, FCB, IOQUEUE, FALSE)
-#define RxSynchronizeBlockingOperationsAndDropFcbLockRXCONTEXT, FCB, IOQUEUE) __RxSynchronizeBlockingOperations(RXCONTEXT, FCB, IOQUEUE, TRUE)
 
 #ifdef __cplusplus
 extern "C" {
@@ -564,13 +562,7 @@ NTSTATUS NTAPI RxSetMinirdrCancelRoutine(PRX_CONTEXT RxContext, PMRX_CALLDOWN MR
 }
 #endif
 
-#define RxSynchronizeBlockingOperationsRXCONTEXT, FCB, IOQUEUE) __RxSynchronizeBlockingOperations(RXCONTEXT, FCB, IOQUEUE, FALSE)
-#define RxSynchronizeBlockingOperationsAndDropFcbLockRXCONTEXT, FCB, IOQUEUE) __RxSynchronizeBlockingOperations(RXCONTEXT, FCB, IOQUEUE, TRUE)
-
-#define RxSynchronizeBlockingOperationsRXCONTEXT, FCB, IOQUEUE) __RxSynchronizeBlockingOperations(RXCONTEXT, FCB, IOQUEUE, FALSE)
-#define RxSynchronizeBlockingOperationsAndDropFcbLockRXCONTEXT, FCB, IOQUEUE) __RxSynchronizeBlockingOperations(RXCONTEXT, FCB, IOQUEUE, TRUE)
-
-#define RxSynchronizeBlockingOperationsRXCONTEXT, FCB, IOQUEUE) __RxSynchronizeBlockingOperations(RXCONTEXT, FCB, IOQUEUE, FALSE)
-#define RxSynchronizeBlockingOperationsAndDropFcbLockRXCONTEXT, FCB, IOQUEUE) __RxSynchronizeBlockingOperations(RXCONTEXT, FCB, IOQUEUE, TRUE)
+#define RxSynchronizeBlockingOperations(RXCONTEXT, FCB, IOQUEUE) __RxSynchronizeBlockingOperations(RXCONTEXT, FCB, IOQUEUE, FALSE)
+#define RxSynchronizeBlockingOperationsAndDropFcbLock(RXCONTEXT, FCB, IOQUEUE) __RxSynchronizeBlockingOperations(RXCONTEXT, FCB, IOQUEUE, TRUE)
 
 #endif

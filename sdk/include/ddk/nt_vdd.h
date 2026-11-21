@@ -237,7 +237,6 @@ typedef enum VDM_INFO_TYPE {
     VDM_SET_NEXT_TIMER0_COUNT = 4
 } VDM_INFO_TYPE;
 
-#define VDM_TRACEType, wData, lData) VdmTraceEvent(Type, wData, lData)
 
 #ifdef __cplusplus
 extern "C" {
@@ -260,11 +259,7 @@ void VdmTraceEvent(USHORT Type, USHORT wData, ULONG lData);
 }
 #endif
 
-#define VDM_TRACEType, wData, lData) VdmTraceEvent(Type, wData, lData)
-
-#define VDM_TRACEType, wData, lData) VdmTraceEvent(Type, wData, lData)
-
-#define VDM_TRACEType, wData, lData) VdmTraceEvent(Type, wData, lData)
+#define VDM_TRACE(Type, wData, lData) VdmTraceEvent(Type, wData, lData)
 
 #endif
 

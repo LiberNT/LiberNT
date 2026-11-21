@@ -883,8 +883,6 @@ cpp_quote("#define D3D_SHADER_FEATURE_WRITEABLE_MSAA_TEXTURES 0x40000000")
 cpp_quote("#endif")
 
 cpp_quote("#define D3D_COMPONENT_MASK_X 1")
-cpp_quote("#define D3D_SET_OBJECT_NAME_ApObject, pName) D3D_SET_OBJECT_NAME_N_A(pObject, lstrlenA(pName), pName)")
-cpp_quote("#define D3D_SET_OBJECT_NAME_N_ApObject, Chars, pName) (pObject) -> SetPrivateData(WKPDID_D3DDebugObjectName, Chars, pName)")
 cpp_quote("")
 cpp_quote("enum D3D_FORMAT_COMPONENT_INTERPRETATION")
 cpp_quote("{")
@@ -942,14 +940,12 @@ cpp_quote("};")
 cpp_quote("")
 cpp_quote("typedef struct ID3DIncludeVtbl ID3DIncludeVtbl;")
 
-cpp_quote("#define D3D_SET_OBJECT_NAME_ApObject, pName) D3D_SET_OBJECT_NAME_N_A(pObject, lstrlenA(pName), pName)")
 cpp_quote("")
 cpp_quote("enum _D3D_CBUFFER_TYPE")
 cpp_quote("{")
 cpp_quote("")
 cpp_quote("};")
 
-cpp_quote("#define D3D_SET_OBJECT_NAME_ApObject, pName) D3D_SET_OBJECT_NAME_N_A(pObject, lstrlenA(pName), pName)")
-
-cpp_quote("#define D3D_SET_OBJECT_NAME_ApObject, pName) D3D_SET_OBJECT_NAME_N_A(pObject, lstrlenA(pName), pName)")
+cpp_quote("#define D3D_SET_OBJECT_NAME_A(pObject, pName) D3D_SET_OBJECT_NAME_N_A(pObject, lstrlenA(pName), pName)")
+cpp_quote("#define D3D_SET_OBJECT_NAME_N_A(pObject, Chars, pName) (pObject) -> SetPrivateData(WKPDID_D3DDebugObjectName, Chars, pName)")
 

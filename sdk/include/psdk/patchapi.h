@@ -207,17 +207,29 @@ typedef struct _PATCH_OLD_FILE_INFO_W {
 #ifdef UNICODE
 #define CreatePatchFile CreatePatchFileW
 #else
+#ifdef UNICODE
+#define CreatePatchFile CreatePatchFileW
+#else
 #define CreatePatchFile CreatePatchFileA
 #endif
+#endif
+#ifdef UNICODE
+#define CreatePatchFileEx CreatePatchFileExW
+#else
 #ifdef UNICODE
 #define CreatePatchFileEx CreatePatchFileExW
 #else
 #define CreatePatchFileEx CreatePatchFileExA
 #endif
+#endif
+#ifdef UNICODE
+#define ExtractPatchHeaderToFile ExtractPatchHeaderToFileW
+#else
 #ifdef UNICODE
 #define ExtractPatchHeaderToFile ExtractPatchHeaderToFileW
 #else
 #define ExtractPatchHeaderToFile ExtractPatchHeaderToFileA
+#endif
 #endif
 #define PATCHAPI 0
 

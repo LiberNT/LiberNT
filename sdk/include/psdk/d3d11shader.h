@@ -396,9 +396,6 @@ typedef struct _D3D11_LIBRARY_DESC {
   UINT FunctionCount;
 } D3D11_LIBRARY_DESC;
 
-#define D3D11_SHVER_GET_MAJOR_Version) (((_Version) >> 4) & 0xf)
-#define D3D11_SHVER_GET_MINOR_Version) (((_Version) >> 0) & 0xf)
-#define D3D11_SHVER_GET_TYPE_Version) (((_Version) >> 16) & 0xffff)
 
 typedef struct ID3D11FunctionLinkingGraphVtbl ID3D11FunctionLinkingGraphVtbl;
 
@@ -436,16 +433,8 @@ typedef struct ID3D11FunctionReflection *LPD3D11FUNCTIONREFLECTION;
 
 typedef struct ID3D11LibraryReflection *LPD3D11LIBRARYREFLECTION;
 
-#define D3D11_SHVER_GET_MAJOR_Version) (((_Version) >> 4) & 0xf)
-#define D3D11_SHVER_GET_MINOR_Version) (((_Version) >> 0) & 0xf)
-#define D3D11_SHVER_GET_TYPE_Version) (((_Version) >> 16) & 0xffff)
-
-#define D3D11_SHVER_GET_MAJOR_Version) (((_Version) >> 4) & 0xf)
-#define D3D11_SHVER_GET_MINOR_Version) (((_Version) >> 0) & 0xf)
-#define D3D11_SHVER_GET_TYPE_Version) (((_Version) >> 16) & 0xffff)
-
-#define D3D11_SHVER_GET_MAJOR_Version) (((_Version) >> 4) & 0xf)
-#define D3D11_SHVER_GET_MINOR_Version) (((_Version) >> 0) & 0xf)
-#define D3D11_SHVER_GET_TYPE_Version) (((_Version) >> 16) & 0xffff)
+#define D3D11_SHVER_GET_MAJOR(_Version) (((_Version) >> 4) & 0xf)
+#define D3D11_SHVER_GET_MINOR(_Version) (((_Version) >> 0) & 0xf)
+#define D3D11_SHVER_GET_TYPE(_Version) (((_Version) >> 16) & 0xffff)
 
 #endif

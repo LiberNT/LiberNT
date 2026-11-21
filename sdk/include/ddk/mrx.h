@@ -450,8 +450,6 @@ typedef enum _MINIRDR_BUFSTATE_COMMANDS {
 } MINIRDR_BUFSTATE_COMMANDS;
 
 #define MINIRDR_BUFSTATE_COMMAND_MASK 1
-#define RxFillAndInstallFastIoDispatch__devobj, __fastiodisp) { __RxFillAndInstallFastIoDispatch(& __devobj -> RxDeviceObject, & __fastiodisp, sizeof (__fastiodisp)); }
-#define RxGetIoStatusInfoRXCONTEXT) ((RXCONTEXT) -> CurrentIrp -> IoStatus . Information)
 
 typedef void (NTAPI *PMRX_NEWSTATE_CALLDOWN)(PVOID);
 
@@ -471,13 +469,7 @@ NTSTATUS RxSetDomainForMailslotBroadcast(PUNICODE_STRING DomainName);
 }
 #endif
 
-#define RxFillAndInstallFastIoDispatch__devobj, __fastiodisp) { __RxFillAndInstallFastIoDispatch(& __devobj -> RxDeviceObject, & __fastiodisp, sizeof (__fastiodisp)); }
-#define RxGetIoStatusInfoRXCONTEXT) ((RXCONTEXT) -> CurrentIrp -> IoStatus . Information)
-
-#define RxFillAndInstallFastIoDispatch__devobj, __fastiodisp) { __RxFillAndInstallFastIoDispatch(& __devobj -> RxDeviceObject, & __fastiodisp, sizeof (__fastiodisp)); }
-#define RxGetIoStatusInfoRXCONTEXT) ((RXCONTEXT) -> CurrentIrp -> IoStatus . Information)
-
-#define RxFillAndInstallFastIoDispatch__devobj, __fastiodisp) { __RxFillAndInstallFastIoDispatch(& __devobj -> RxDeviceObject, & __fastiodisp, sizeof (__fastiodisp)); }
-#define RxGetIoStatusInfoRXCONTEXT) ((RXCONTEXT) -> CurrentIrp -> IoStatus . Information)
+#define RxFillAndInstallFastIoDispatch(__devobj, __fastiodisp) { __RxFillAndInstallFastIoDispatch(& __devobj -> RxDeviceObject, & __fastiodisp, sizeof (__fastiodisp)); }
+#define RxGetIoStatusInfo(RXCONTEXT) ((RXCONTEXT) -> CurrentIrp -> IoStatus . Information)
 
 #endif
