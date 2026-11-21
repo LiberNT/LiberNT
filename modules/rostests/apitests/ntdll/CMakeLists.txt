@@ -183,6 +183,7 @@ list(APPEND SOURCE
     RtlDetermineDosPathNameType.c
     ProcessPoolQuota.c
     ProcessUserModeIopl.c
+    MemoryImageInformation.c
     ObjectQuotaLimit.c
     ObHandleRace.c
     LinkReparseLimit.c

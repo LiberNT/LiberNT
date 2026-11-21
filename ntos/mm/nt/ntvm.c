@@ -1115,6 +1115,94 @@ MiQueryRegionInformation(
     return Status;
 }
 
+/* An address in an image view reports the view; any other allocated address reports zeros (measured on Windows 11) */
+static
+NTSTATUS
+MiQueryImageInformation(
+    _In_ HANDLE ProcessHandle,
+    _In_ PVOID BaseAddress,
+    _Out_ PVOID MemoryInformation,
+    _In_ SIZE_T MemoryInformationLength,
+    _Out_opt_ PSIZE_T ReturnLength)
+{
+    KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
+    MEMORY_IMAGE_INFORMATION Image;
+    MI_PROCESS_REFERENCE Target;
+    MI_MEMORY_INFORMATION Info;
+    PMI_ADDRESS_SPACE Space;
+    ULONG64 AllocationBase;
+    ULONG64 Query;
+    NTSTATUS Status;
+
+    C_ASSERT(sizeof(MEMORY_IMAGE_INFORMATION) == 3 * sizeof(PVOID));
+
+    if (MemoryInformationLength < sizeof(Image))
+        return STATUS_INFO_LENGTH_MISMATCH;
+
+    _SEH2_TRY
+    {
+        if (PreviousMode != KernelMode)
+        {
+            ProbeForWrite(MemoryInformation, sizeof(Image), sizeof(ULONG_PTR));
+            if (ReturnLength != NULL)
+                ProbeForWriteSize_t(ReturnLength);
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    Status = MiReferenceTargetProcessForQuery(ProcessHandle, &Target);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    RtlZeroMemory(&Image, sizeof(Image));
+    Space = MiSpaceOfProcess(Target.Process);
+    Status = MiQueryVirtualMemory(Space, (ULONG64)(ULONG_PTR)BaseAddress, &Info);
+    if (NT_SUCCESS(Status) && Info.State == MI_MEM_FREE)
+        Status = STATUS_INVALID_ADDRESS;
+
+    if (NT_SUCCESS(Status) && Info.Type == MI_MEM_IMAGE)
+    {
+        AllocationBase = Info.AllocationBase;
+        Image.ImageBase = (PVOID)(ULONG_PTR)AllocationBase;
+
+        Query = AllocationBase;
+        while (NT_SUCCESS(MiQueryVirtualMemory(Space, Query, &Info)) &&
+               Info.State != MI_MEM_FREE &&
+               Info.AllocationBase == AllocationBase &&
+               Info.RegionSize != 0)
+        {
+            ASSERT(Info.Type == MI_MEM_IMAGE);
+            Image.SizeOfImage += (SIZE_T)Info.RegionSize;
+            Query = Info.BaseAddress + Info.RegionSize;
+        }
+        ASSERT(Image.SizeOfImage != 0);
+        /* TODO: ImageNotExecutable needs SEC_IMAGE_NO_EXECUTE image views and ImageSigningLevel code integrity signing levels; both report 0 */
+    }
+
+    MiReleaseTargetProcess(&Target);
+
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    _SEH2_TRY
+    {
+        RtlCopyMemory(MemoryInformation, &Image, sizeof(Image));
+        if (ReturnLength != NULL)
+            *ReturnLength = sizeof(Image);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+
+    return Status;
+}
+
 #define MI_WS_EX_CHUNK            64
 #define MI_WS_EX_VALID            0x00000001
 #define MI_WS_EX_SHARE_SHIFT      1
@@ -1363,6 +1451,12 @@ NtQueryVirtualMemory(
     {
         return MiQueryRegionInformation(ProcessHandle, BaseAddress, MemoryInformation, MemoryInformationLength,
                                         ReturnLength);
+    }
+
+    if (MemoryInformationClass == MemoryImageInformation)
+    {
+        return MiQueryImageInformation(ProcessHandle, BaseAddress, MemoryInformation, MemoryInformationLength,
+                                       ReturnLength);
     }
 
     if (MemoryInformationClass == MemoryWorkingSetExList)
