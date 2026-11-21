@@ -69,7 +69,7 @@ static BOOL ReadDacl(PCWSTR Path, DACL_STATE *State)
     PACE_HEADER Ace;
 
     ZeroMemory(State, sizeof(*State));
-    if (GetNamedSecurityInfoW(Path, SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, NULL, NULL, &Dacl, NULL, &Descriptor))
+    if (GetNamedSecurityInfoW((LPWSTR)Path, SE_FILE_OBJECT, DACL_SECURITY_INFORMATION, NULL, NULL, &Dacl, NULL, &Descriptor))
         return FALSE;
     GetSecurityDescriptorControl(Descriptor, &State->Control, &Revision);
     for (Index = 0; Dacl && Index < Dacl->AceCount; Index++)
