@@ -2860,7 +2860,7 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                                 &LeafString,
                                 &Tunnel);
                             Status =
-                                NtfsMasterFileTableCreateFileInDirectory(
+                                NtfsMasterFileTableCreateFileInDirectoryEx(
                                     Mft,
                                     VolCB->CachedLookupParent,
                                     LeafName,
@@ -2871,6 +2871,8 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                                     TRUE,
                                     Tunnel.Valid ? Tunnel.ShortBuffer : NULL,
                                     Tunnel.ShortName.Length / sizeof(WCHAR),
+                                    (const UCHAR*)NewDescriptor,
+                                    NewDescriptor ? RtlLengthSecurityDescriptor(NewDescriptor) : 0,
                                     &CurrentFile);
                         }
                     }
@@ -2888,32 +2890,16 @@ NtfsCommonCreate(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                         &NewDescriptor);
                     if (NT_SUCCESS(Status))
                     {
-                        Status = NtfsMasterFileTableCreateFile(
+                        Status = NtfsMasterFileTableCreateFileEx(
                             Mft,
                             FileObject->FileName.Buffer,
                             FileObject->FileName.Length / sizeof(WCHAR),
                             !!(IrpSp->Parameters.Create.Options &
                                FILE_DIRECTORY_FILE),
                             FileAttributes,
+                            (const UCHAR*)NewDescriptor,
+                            NewDescriptor ? RtlLengthSecurityDescriptor(NewDescriptor) : 0,
                             &CurrentFile);
-                    }
-                }
-                if (NT_SUCCESS(Status) && NewDescriptor)
-                {
-                    Status = NtfsFileRecordSetSecurityDescriptor(
-                        CurrentFile,
-                        (const UCHAR*)NewDescriptor,
-                        RtlLengthSecurityDescriptor(NewDescriptor));
-                    if (!NT_SUCCESS(Status))
-                    {
-                        NtfsMasterFileTableDeleteFile(
-                            Mft,
-                            FileObject->FileName.Buffer,
-                            FileObject->FileName.Length / sizeof(WCHAR),
-                            !!(IrpSp->Parameters.Create.Options &
-                               FILE_DIRECTORY_FILE));
-                        NtfsFileRecordDestroy(CurrentFile);
-                        CurrentFile = NULL;
                     }
                 }
                 if (NewDescriptor)

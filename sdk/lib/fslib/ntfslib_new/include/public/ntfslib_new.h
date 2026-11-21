@@ -847,6 +847,21 @@ NtfsMasterFileTableCreateFile(
     _Out_ PNtfsFileRecord* File);
 
 /*
+ * As NtfsMasterFileTableCreateFile, with the new file's security descriptor
+ * applied while its record is built instead of inherited from the parent.
+ */
+NTSTATUS
+NtfsMasterFileTableCreateFileEx(
+    _In_ PNtfsMasterFileTable Mft,
+    _In_reads_(QueryLength) PWCHAR Query,
+    _In_ ULONG QueryLength,
+    _In_ BOOLEAN IsDirectory,
+    _In_ ULONG FileAttributes,
+    _In_opt_ const UCHAR* SecurityDescriptor,
+    _In_ ULONG SecurityDescriptorLength,
+    _Out_ PNtfsFileRecord* File);
+
+/*
  * Creates one entry in a directory whose record the caller already holds.
  * Name is one counted path component. NameKnownMissing may be TRUE only when
  * the caller has just checked the same parent while serializing namespace
@@ -863,6 +878,25 @@ NtfsMasterFileTableCreateFileInDirectory(
     _In_ BOOLEAN NameKnownMissing,
     _In_opt_ PCWSTR ShortName,
     _In_ ULONG ShortNameLength,
+    _Out_ PNtfsFileRecord* File);
+
+/*
+ * As NtfsMasterFileTableCreateFileInDirectory, with the new file's security
+ * descriptor applied while its record is built.
+ */
+NTSTATUS
+NtfsMasterFileTableCreateFileInDirectoryEx(
+    _In_ PNtfsMasterFileTable Mft,
+    _In_ PNtfsFileRecord Parent,
+    _In_reads_(NameLength) PWCHAR Name,
+    _In_ ULONG NameLength,
+    _In_ BOOLEAN IsDirectory,
+    _In_ ULONG FileAttributes,
+    _In_ BOOLEAN NameKnownMissing,
+    _In_opt_ PCWSTR ShortName,
+    _In_ ULONG ShortNameLength,
+    _In_opt_ const UCHAR* SecurityDescriptor,
+    _In_ ULONG SecurityDescriptorLength,
     _Out_ PNtfsFileRecord* File);
 
 /*

@@ -14,6 +14,7 @@ extern void func_FullBaseGrowth(void);
 extern void func_FreeClusters(void);
 extern void func_ConcurrentIo(void);
 extern void func_DirectIo(void);
+extern void func_CreateSecurity(void);
 
 const struct test winetest_testlist[] =
 {
@@ -23,5 +24,6 @@ const struct test winetest_testlist[] =
     { "FreeClusters", func_FreeClusters },
     { "ConcurrentIo", func_ConcurrentIo },
     { "DirectIo", func_DirectIo },
+    { "CreateSecurity", func_CreateSecurity },
     { 0, 0 }
 };

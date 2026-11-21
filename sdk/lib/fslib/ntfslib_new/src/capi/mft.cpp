@@ -165,6 +165,20 @@ NtfsMasterFileTableCreateFile(
     _In_ ULONG FileAttributes,
     _Out_ PNtfsFileRecord* File)
 {
+    return NtfsMasterFileTableCreateFileEx(Mft, Query, QueryLength, IsDirectory, FileAttributes, NULL, 0, File);
+}
+
+NTSTATUS
+NtfsMasterFileTableCreateFileEx(
+    _In_ PNtfsMasterFileTable Mft,
+    _In_reads_(QueryLength) PWCHAR Query,
+    _In_ ULONG QueryLength,
+    _In_ BOOLEAN IsDirectory,
+    _In_ ULONG FileAttributes,
+    _In_opt_ const UCHAR* SecurityDescriptor,
+    _In_ ULONG SecurityDescriptorLength,
+    _Out_ PNtfsFileRecord* File)
+{
     PWCHAR TerminatedQuery;
     NTSTATUS Status;
 
@@ -184,7 +198,11 @@ NtfsMasterFileTableCreateFile(
                 TerminatedQuery,
                 IsDirectory,
                 FileAttributes,
-                reinterpret_cast<PFileRecord*>(File));
+                reinterpret_cast<PFileRecord*>(File),
+                NULL,
+                0,
+                SecurityDescriptor,
+                SecurityDescriptorLength);
     delete[] TerminatedQuery;
     return Status;
 }
@@ -202,6 +220,25 @@ NtfsMasterFileTableCreateFileInDirectory(
     _In_ ULONG ShortNameLength,
     _Out_ PNtfsFileRecord* File)
 {
+    return NtfsMasterFileTableCreateFileInDirectoryEx(Mft, Parent, Name, NameLength, IsDirectory, FileAttributes,
+                                                      NameKnownMissing, ShortName, ShortNameLength, NULL, 0, File);
+}
+
+NTSTATUS
+NtfsMasterFileTableCreateFileInDirectoryEx(
+    _In_ PNtfsMasterFileTable Mft,
+    _In_ PNtfsFileRecord Parent,
+    _In_reads_(NameLength) PWCHAR Name,
+    _In_ ULONG NameLength,
+    _In_ BOOLEAN IsDirectory,
+    _In_ ULONG FileAttributes,
+    _In_ BOOLEAN NameKnownMissing,
+    _In_opt_ PCWSTR ShortName,
+    _In_ ULONG ShortNameLength,
+    _In_opt_ const UCHAR* SecurityDescriptor,
+    _In_ ULONG SecurityDescriptorLength,
+    _Out_ PNtfsFileRecord* File)
+{
     if (!Mft || !Parent || !File)
         return STATUS_INVALID_PARAMETER;
     *File = NULL;
@@ -215,7 +252,9 @@ NtfsMasterFileTableCreateFileInDirectory(
             NameKnownMissing,
             reinterpret_cast<PFileRecord*>(File),
             ShortName,
-            ShortNameLength);
+            ShortNameLength,
+            SecurityDescriptor,
+            SecurityDescriptorLength);
 }
 
 NTSTATUS
