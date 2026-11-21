@@ -14,7 +14,7 @@
 #include <reactos/drivers/acpi/acpi.h>
 #include <halacpi.h>
 #include <hal.h>
-#include "halext.h"
+#include <reactos/hal/halext.h>
 #include "bcm2712_pci.h"
 
 #define NDEBUG
@@ -31,6 +31,7 @@ Bcm2712PciAccessConfigSpace(
     _In_ ULONG Offset,
     _In_ ULONG Length)
 {
+    HAL_ACPI_MCFG_RANGE Range;
     ULONG Index;
 
     UNREFERENCED_PARAMETER(Offset);
@@ -38,17 +39,15 @@ Bcm2712PciAccessConfigSpace(
     if (Slot.u.bits.DeviceNumber == 0 && Slot.u.bits.FunctionNumber == 0)
         return FALSE;
 
-    for (Index = 0; Index < HalpAcpiMcfgAllocationCount; Index++)
+    for (Index = 0; HalpArm64GetMcfgRange(Index, &Range); Index++)
     {
-        const HALP_ACPI_MCFG_ALLOCATION *Allocation = &HalpAcpiMcfgAllocations[Index];
-
-        if (Segment != HALP_ACPI_SEGMENT_ANY && Allocation->PciSegment != Segment)
+        if (Segment != HALP_ACPI_SEGMENT_ANY && Range.PciSegment != Segment)
             continue;
 
-        if (Bus < Allocation->StartBusNumber || Bus > Allocation->EndBusNumber)
+        if (Bus < Range.StartBusNumber || Bus > Range.EndBusNumber)
             continue;
 
-        if (Allocation->StartBusNumber != Allocation->EndBusNumber)
+        if (Range.StartBusNumber != Range.EndBusNumber)
             return FALSE;
 
         if (!Write)

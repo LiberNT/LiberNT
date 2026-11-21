@@ -424,13 +424,6 @@ HalpQueryDeviceTree(
     return HalpArm64GetDeviceTree(Blob, Size);
 }
 
-static const CHAR *const HalpAppleAicCompatibles[] =
-{
-    "apple,aic",
-    "apple,aic2",
-    "apple,t8122-aic3",
-};
-
 static const CHAR *const HalpGicCompatibles[] =
 {
     "arm,gic-v3",
@@ -473,36 +466,18 @@ HalpTranslateDeviceTreeInterrupt(
     _Out_ PULONG Gsi,
     _Out_ PBOOLEAN EdgeTriggered)
 {
-    ULONG Die = 0, Number, Flags, PerDie;
-
     *Gsi = 0;
     *EdgeTriggered = FALSE;
 
-    if (HalpCompatibleListContains(Compatible, CompatibleLength, HalpAppleAicCompatibles,
-                                   RTL_NUMBER_OF(HalpAppleAicCompatibles)))
+    if (HalpArm64InterruptController &&
+        HalpArm64InterruptController->TranslateDeviceTreeInterrupt &&
+        HalpArm64InterruptController->TranslateDeviceTreeInterrupt(Compatible,
+                                                                   CompatibleLength,
+                                                                   Cells,
+                                                                   CellCount,
+                                                                   Gsi,
+                                                                   EdgeTriggered))
     {
-        if (CellCount == 3)
-        {
-            Number = Cells[1];
-            Flags = Cells[2];
-        }
-        else if (CellCount == 4)
-        {
-            Die = Cells[1];
-            Number = Cells[2];
-            Flags = Cells[3];
-        }
-        else
-        {
-            return FALSE;
-        }
-        if (Cells[0] != 0)
-            return FALSE;
-        PerDie = HalpAppleAicIrqsPerDie();
-        if (Die && !PerDie)
-            return FALSE;
-        *Gsi = 32 + Die * PerDie + Number;
-        *EdgeTriggered = (Flags & 0x3) != 0;
         return TRUE;
     }
 

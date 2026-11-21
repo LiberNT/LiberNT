@@ -8,8 +8,7 @@
 #include <ntifs.h>
 #include <arc/arc.h>
 #include <ioaccess.h>
-#include "halext.h"
-#include "devtree.h"
+#include <reactos/hal/halext.h>
 #include "apple_aic.h"
 
 #define NDEBUG

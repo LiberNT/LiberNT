@@ -20,7 +20,7 @@
 #include <ioaccess.h>
 #include <halfuncs.h>
 #include <hal.h>
-#include "halext.h"
+#include <reactos/hal/halext.h>
 #include "bcm2711_pci.h"
 #include "bcm2711_vc.h"
 

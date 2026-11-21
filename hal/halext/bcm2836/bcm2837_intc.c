@@ -44,7 +44,7 @@
 #include <reactos/drivers/acpi/acpi.h>
 #include <halacpi.h>
 #include <reactos/arm64/sysreg.h>
-#include "halext.h"
+#include <reactos/hal/halext.h>
 #include "bcm2837.h"
 
 #define NDEBUG

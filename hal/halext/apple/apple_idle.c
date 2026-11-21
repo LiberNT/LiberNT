@@ -10,8 +10,7 @@
 #include <ioaccess.h>
 #include <reactos/arm64/sysreg.h>
 #include <pseh/pseh2.h>
-#include "halext.h"
-#include "devtree.h"
+#include <reactos/hal/halext.h>
 #include "apple_aic.h"
 
 #define NDEBUG

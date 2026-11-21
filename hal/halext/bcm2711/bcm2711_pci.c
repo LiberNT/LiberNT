@@ -23,14 +23,13 @@
 #include <reactos/drivers/acpi/acpi.h>
 #include <halacpi.h>
 #include <hal.h>
-#include "halext.h"
+#include <reactos/hal/halext.h>
 #include "bcm2711_pci.h"
 
 #define NDEBUG
 #include <debug.h>
 
 /* ACPI _PRT callback from halarm64.c — used for InterruptLine patching */
-extern PHAL_ACPI_PCI_ROUTE_QUERY HalpArm64PciRouteQueryCallback;
 
 /* ================================================================== */
 /*  Single-controller runtime state                                   */
@@ -497,8 +496,7 @@ Bcm2711PciAccessConfigSpace(
      * register unprogrammed.  The ACPI _PRT carries the real GSI; patch the
      * read buffer so pci.sys sees a valid line without common-code changes.
      */
-    if (!Write && Offset <= 0x3C && (Offset + Length) > 0x3D &&
-        HalpArm64PciRouteQueryCallback)
+    if (!Write && Offset <= 0x3C && (Offset + Length) > 0x3D)
     {
         PUCHAR ByteBuffer = (PUCHAR)Buffer;
         ULONG LineOffset = 0x3C - Offset;
@@ -527,7 +525,7 @@ Bcm2711PciAccessConfigSpace(
 
             for (QuerySeg = 0; QuerySeg < 2 && !Found; QuerySeg++)
             {
-                Found = HalpArm64PciRouteQueryCallback(
+                Found = HalpArm64QueryPciRoute(
                             QuerySeg, QueryBus, QueryDev, 0, QueryPin,
                             &Gsi, &Polarity, &TriggerMode);
             }

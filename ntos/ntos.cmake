@@ -50,13 +50,6 @@ if(ARCH STREQUAL "arm64")
         ${_arm64_hal_dir}/halarm64_acpi_int.c
         ${_arm64_hal_dir}/halext.c
         ${_arm64_hal_dir}/sysinfo.c
-        ${_arm64_hal_dir}/bcm2711_pci.c
-        ${_arm64_hal_dir}/bcm2711_vc.c
-        ${_arm64_hal_dir}/bcm2712_pci.c
-        ${_arm64_hal_dir}/bcm2837_intc.c
-        ${_arm64_hal_dir}/apple_aic.c
-        ${_arm64_hal_dir}/apple_wdt.c
-        ${_arm64_hal_dir}/apple_idle.c
         ${_arm64_hal_dir}/devtree.c
         ${_arm64_hal_dir}/smp.c
         ${_arm64_hal_dir}/kernstubs.c
@@ -500,7 +493,6 @@ elseif(ARCH STREQUAL "arm64")
         ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/strcpy.S
         ${REACTOS_SOURCE_DIR}/sdk/lib/crt/string/arm64/wcscmp.S)
     list(APPEND ASM_SOURCE
-        ${REACTOS_SOURCE_DIR}/ntos/hal/arm64/apple_idle.S
         ${REACTOS_SOURCE_DIR}/ntos/hal/arm64/smp_trampoline.S)
     if(MSVC)
         list(APPEND ASM_SOURCE

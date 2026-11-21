@@ -11,8 +11,7 @@
 #include <ioaccess.h>
 #include <halfuncs.h>
 #include <reactos/arm64/sysreg.h>
-#include "devtree.h"
-#include "halext.h"
+#include <reactos/hal/halext.h>
 #include "apple_aic.h"
 #include <reactos/drivers/applepcie.h>
 
@@ -404,10 +403,52 @@ AppleAicSetInterruptPriority(
         AppleAicDevicePriority[IntId - AIC_FIRST_DEVICE_INTID] = (UCHAR)Priority;
 }
 
-ULONG
-HalpAppleAicIrqsPerDie(VOID)
+static
+BOOLEAN
+AppleAicTranslateDeviceTreeInterrupt(
+    _In_reads_bytes_(CompatibleLength) const CHAR *Compatible,
+    _In_ ULONG CompatibleLength,
+    _In_reads_(CellCount) const ULONG *Cells,
+    _In_ ULONG CellCount,
+    _Out_ PULONG Gsi,
+    _Out_ PBOOLEAN EdgeTriggered)
 {
-    return AppleAicMaxIrq;
+    static const PCSTR Compatibles[] = { "apple,aic", "apple,aic2", "apple,t8122-aic3" };
+    ULONG Die = 0, Number, Flags, Index;
+
+    *Gsi = 0;
+    *EdgeTriggered = FALSE;
+
+    for (Index = 0; Index < RTL_NUMBER_OF(Compatibles); Index++)
+    {
+        if (FdtStringListContains(Compatible, CompatibleLength, Compatibles[Index]))
+            break;
+    }
+    if (Index == RTL_NUMBER_OF(Compatibles))
+        return FALSE;
+
+    if (CellCount == 3)
+    {
+        Number = Cells[1];
+        Flags = Cells[2];
+    }
+    else if (CellCount == 4)
+    {
+        Die = Cells[1];
+        Number = Cells[2];
+        Flags = Cells[3];
+    }
+    else
+    {
+        return FALSE;
+    }
+    if (Cells[0] != 0)
+        return FALSE;
+    if (Die && !AppleAicMaxIrq)
+        return FALSE;
+    *Gsi = 32 + Die * AppleAicMaxIrq + Number;
+    *EdgeTriggered = (Flags & 0x3) != 0;
+    return TRUE;
 }
 
 static
@@ -623,6 +664,7 @@ static const HAL_ARM64_INTERRUPT_CONTROLLER AppleAicInterruptOps =
     AppleAicInitializeProcessor,
     AppleAicPhase0Initialize,
     AppleAicPhase1MapRuntimeMmio,
+    AppleAicTranslateDeviceTreeInterrupt,
     AIC_FIRST_DEVICE_INTID + AIC_MAX_DEVICE_IRQS,
     TRUE,
 };
