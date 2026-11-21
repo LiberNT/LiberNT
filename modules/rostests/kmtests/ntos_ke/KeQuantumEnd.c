@@ -38,7 +38,7 @@ START_TEST(KeQuantumEnd)
     LONG RanDuringSpin = 0;
 
     RtlZeroMemory(&Context, sizeof(Context));
-    Processor = KeGetCurrentProcessorNumber();
+    Processor = KeGetCurrentProcessorNumberEx(NULL);
     Context.Processor = (KAFFINITY)1 << Processor;
 
     PreviousAffinity = KeSetSystemAffinityThreadEx(Context.Processor);
@@ -53,7 +53,7 @@ START_TEST(KeQuantumEnd)
         while (KeQueryInterruptTime() < Deadline)
             KeStallExecutionProcessor(10);
         RanDuringSpin = Context.Ran;
-        ok_eq_ulong(KeGetCurrentProcessorNumber(), Processor);
+        ok_eq_ulong(KeGetCurrentProcessorNumberEx(NULL), Processor);
         ok_eq_long(KeQueryPriorityThread(KeGetCurrentThread()), HIGH_PRIORITY);
     }
 

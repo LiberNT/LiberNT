@@ -94,6 +94,20 @@ TestSynchronizeExecution(VOID)
     }
 }
 
+static KSERVICE_ROUTINE TestServiceRoutine;
+
+static
+BOOLEAN
+NTAPI
+TestServiceRoutine(
+    _In_ PKINTERRUPT Interrupt,
+    _In_opt_ PVOID ServiceContext)
+{
+    UNREFERENCED_PARAMETER(Interrupt);
+    UNREFERENCED_PARAMETER(ServiceContext);
+    return FALSE;
+}
+
 static
 VOID
 TestConnectInterrupt(VOID)
@@ -110,7 +124,7 @@ TestConnectInterrupt(VOID)
 
     /* Test for invalid interrupt */
     Status = IoConnectInterrupt(&InterruptObject,
-                                (PKSERVICE_ROUTINE)TestConnectInterrupt,
+                                TestServiceRoutine,
                                 NULL,
                                 NULL,
                                 0,

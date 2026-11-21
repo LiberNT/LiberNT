@@ -58,7 +58,7 @@ static VOID NTAPI RemoveDpcRoutine(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
-    Context->CallbackCpu = KeGetCurrentProcessorNumber();
+    Context->CallbackCpu = KeGetCurrentProcessorNumberEx(NULL);
     Context->CallbackIrql = KeGetCurrentIrql();
     Context->CallbackInterruptsEnabled = KmtAreInterruptsEnabled();
     Context->CallbackDpcData = Dpc->DpcData;
@@ -134,7 +134,7 @@ static VOID NTAPI RemoveDpcWaitThread(_In_ PVOID Parameter)
 
     if (Context->WaitRaiseIrql > PASSIVE_LEVEL)
         KeRaiseIrql(Context->WaitRaiseIrql, &OldIrql);
-    Context->WaitCpu = KeGetCurrentProcessorNumber();
+    Context->WaitCpu = KeGetCurrentProcessorNumberEx(NULL);
     Context->WaitIrql = KeGetCurrentIrql();
     Context->WaitInterruptsBefore = KmtAreInterruptsEnabled();
     InterlockedExchange(&Context->WaitStarted, 1);
@@ -167,7 +167,7 @@ static VOID NTAPI RemoveDpcSelfRoutine(
     UNREFERENCED_PARAMETER(SystemArgument1);
     UNREFERENCED_PARAMETER(SystemArgument2);
 
-    Context->CallbackCpu = KeGetCurrentProcessorNumber();
+    Context->CallbackCpu = KeGetCurrentProcessorNumberEx(NULL);
     Context->CallbackIrql = KeGetCurrentIrql();
     Context->CallbackDpcData = Dpc->DpcData;
     Context->CallbackHistory = Dpc->ProcessorHistory;
@@ -334,7 +334,7 @@ static VOID RemoveQueueDpcExCheck(VOID)
     ok_eq_ulonglong(Context.Dpc.ProcessorHistory, 0);
 
     KeSetSystemAffinityThread((KAFFINITY)1);
-    ok_eq_ulong(KeGetCurrentProcessorNumber(), 0);
+    ok_eq_ulong(KeGetCurrentProcessorNumberEx(NULL), 0);
     QueuedDpcRemovalCheck(RemoveQueueDpcEx, FALSE);
     QueuedDpcRemovalCheck(RemoveQueueDpcEx, TRUE);
 

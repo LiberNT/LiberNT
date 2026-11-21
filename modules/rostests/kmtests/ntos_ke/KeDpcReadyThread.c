@@ -56,7 +56,7 @@ WaiterThread(
     KeSetEvent(&Context->Ready, IO_NO_INCREMENT, FALSE);
     KeWaitForSingleObject(&Context->Wake, Executive, KernelMode, FALSE, NULL);
     Context->WakeTime = KeQueryPerformanceCounter(NULL).QuadPart;
-    Context->WakeCpu = KeGetCurrentProcessorNumber();
+    Context->WakeCpu = KeGetCurrentProcessorNumberEx(NULL);
 }
 
 START_TEST(KeDpcReadyThread)

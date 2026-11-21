@@ -58,7 +58,7 @@ START_TEST(KePriorityRaise)
     LONG RanAfterRaise = -1;
 
     RtlZeroMemory(&Context, sizeof(Context));
-    Processor = KeGetCurrentProcessorNumber();
+    Processor = KeGetCurrentProcessorNumberEx(NULL);
     Context.Processor = (KAFFINITY)1 << Processor;
 
     PreviousAffinity = KeSetSystemAffinityThreadEx(Context.Processor);

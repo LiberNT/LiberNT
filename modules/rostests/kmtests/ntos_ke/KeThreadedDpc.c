@@ -153,7 +153,7 @@ SampleRoutine(
     UNREFERENCED_PARAMETER(SystemArgument2);
 
     Sample.Irql = KeGetCurrentIrql();
-    Sample.Cpu = KeGetCurrentProcessorNumber();
+    Sample.Cpu = KeGetCurrentProcessorNumberEx(NULL);
     Sample.Thread = KeGetCurrentThread();
     Sample.Process = PsGetCurrentProcess();
     Sample.Priority = KeQueryPriorityThread(Sample.Thread);
@@ -268,7 +268,7 @@ NormalRoutine(
     UNREFERENCED_PARAMETER(SystemArgument2);
 
     NormalIrql = KeGetCurrentIrql();
-    NormalCpu = KeGetCurrentProcessorNumber();
+    NormalCpu = KeGetCurrentProcessorNumberEx(NULL);
     InterlockedExchange(&NormalRan, 1);
 }
 
@@ -280,7 +280,7 @@ PreemptRoutine(
     _In_opt_ PVOID SystemArgument2)
 {
     KeInitializeDpc(&NormalDpc, NormalRoutine, NULL);
-    KeSetTargetProcessorDpc(&NormalDpc, (CCHAR)KeGetCurrentProcessorNumber());
+    KeSetTargetProcessorDpc(&NormalDpc, (CCHAR)KeGetCurrentProcessorNumberEx(NULL));
     KeInsertQueueDpc(&NormalDpc, NULL, NULL);
     NormalRanBeforeReturn = NormalRan;
     SampleRoutine(Dpc, DeferredContext, SystemArgument1, SystemArgument2);
@@ -596,7 +596,7 @@ RequeueRoutine(
 
     if (KeGetCurrentIrql() != PASSIVE_LEVEL)
         InterlockedIncrement(&RequeueBadIrql);
-    if (KeGetCurrentProcessorNumber() != Cpu)
+    if (KeGetCurrentProcessorNumberEx(NULL) != Cpu)
         InterlockedIncrement(&RequeueBadCpu);
     if (InterlockedIncrement(&RequeueCount) >= TDPC_REQUEUE)
     {
@@ -671,7 +671,7 @@ StressRoutine(
 
     if (KeGetCurrentIrql() != PASSIVE_LEVEL)
         InterlockedIncrement(&Stress->BadIrql);
-    if (KeGetCurrentProcessorNumber() != (ULONG)(ULONG_PTR)SystemArgument1)
+    if (KeGetCurrentProcessorNumberEx(NULL) != (ULONG)(ULONG_PTR)SystemArgument1)
         InterlockedIncrement(&Stress->BadCpu);
     if (!InterlockedDecrement(&Stress->Remaining))
         KeSetEvent(&Stress->Done, IO_NO_INCREMENT, FALSE);

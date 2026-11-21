@@ -45,7 +45,7 @@ PoolFreeRaceThread(
 
     for (i = Context->Index; i < Context->BlockCount; i += POOL_FREE_RACE_THREADS)
     {
-        Context->ProcessorMask |= (KAFFINITY)1 << KeGetCurrentProcessorNumber();
+        Context->ProcessorMask |= (KAFFINITY)1 << KeGetCurrentProcessorNumberEx(NULL);
         ExFreePoolWithTag(Context->Blocks[i], TAG_TEST);
         Context->Freed++;
     }
