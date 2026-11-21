@@ -125,6 +125,7 @@ KdpScreenJoin(VOID)
 
 static
 VOID
+NTAPI
 KdpScreenPrintCallback(
     _In_ PSTRING Output,
     _In_ ULONG ComponentId,

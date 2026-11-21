@@ -222,6 +222,7 @@ DbgCapLocateKernelLog(VOID)
 
 static
 VOID
+NTAPI
 DbgCapPrintCallback(
     _In_ PSTRING Output,
     _In_ ULONG ComponentId,

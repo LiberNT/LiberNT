@@ -83,7 +83,7 @@ DbgSetDebugFilterState(
 #if (NTDDI_VERSION >= NTDDI_VISTA)
 
 typedef VOID
-(*PDEBUG_PRINT_CALLBACK)(
+(NTAPI *PDEBUG_PRINT_CALLBACK)(
   _In_ PSTRING Output,
   _In_ ULONG ComponentId,
   _In_ ULONG Level);
