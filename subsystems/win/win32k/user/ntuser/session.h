@@ -22,6 +22,7 @@ typedef struct _USER_SESSION
     HANDLE DesktopSwitchEventHandle;
     struct _THREADINFO *DesktopThread;
     KEVENT DesktopThreadStarted;
+    BOOLEAN Ending;
 } USER_SESSION, *PUSER_SESSION;
 
 extern PUSER_SESSION gpDisplaySession;
@@ -31,6 +32,8 @@ PUSER_SESSION FASTCALL UserFindSession(ULONG SessionId);
 PUSER_SESSION FASTCALL UserGetProcessSession(PEPROCESS Process);
 PUSER_SESSION FASTCALL UserGetCurrentSession(VOID);
 NTSTATUS FASTCALL UserCreateSession(ULONG SessionId, PUSER_SESSION *Session);
+VOID FASTCALL UserBeginSessionsEnd(VOID);
+VOID FASTCALL UserReleaseSessions(VOID);
 PUNICODE_STRING FASTCALL UserGetWinStaDirName(PEPROCESS Process);
 struct _WINSTATION_OBJECT *FASTCALL UserGetInputWindowStation(PEPROCESS Process);
 struct _WINSTATION_OBJECT *FASTCALL UserGetDisplayInputWindowStation(VOID);

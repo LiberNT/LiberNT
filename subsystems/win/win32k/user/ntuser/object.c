@@ -179,6 +179,8 @@ void FreeProcMarkObject(
 
     UserHeapFree(Object);
 
+    if (ppi == NULL)
+        return;
     ppi->UserHandleCount--;
     IntDereferenceProcessInfo(ppi);
 }
@@ -683,6 +685,36 @@ UserSetProcMarkObjectOwner(
         IntDereferenceProcessInfo(ppiOld);
     }
     UserDomainUnlockExclusive(DLT_HANDLEMANAGER, bDom4);
+}
+
+VOID
+FASTCALL
+UserClearProcMarkObjectOwner(
+    _Inout_ PVOID Object)
+{
+    PPROCMARKHEAD ObjHead = Object;
+    PPROCESSINFO ppiOld = ObjHead->ppi;
+    PUSER_HANDLE_ENTRY entry;
+    BOOLEAN bDom;
+
+    ASSERT(UserIsEnteredExclusive());
+    if (!ppiOld)
+        return;
+
+    bDom = UserDomainLockExclusive(DLT_HANDLEMANAGER);
+    entry = handle_to_entry(gHandleTable, ObjHead->h);
+    ASSERT(entry != NULL && entry->ptr == Object && entry->pi == ppiOld);
+    if (entry && entry->ptr == Object && entry->pi == ppiOld)
+    {
+#if DBG
+        ppiOld->DbgHandleCount[entry->type]--;
+#endif
+        entry->pi = NULL;
+        ObjHead->ppi = NULL;
+        ppiOld->UserHandleCount--;
+        IntDereferenceProcessInfo(ppiOld);
+    }
+    UserDomainUnlockExclusive(DLT_HANDLEMANAGER, bDom);
 }
 
 BOOL
