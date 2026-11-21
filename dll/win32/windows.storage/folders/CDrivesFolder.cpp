@@ -741,11 +741,123 @@ HRESULT CDrivesExtractIcon_CreateInstance(IShellFolder * psf, LPCITEMIDLIST pidl
     return initIcon->QueryInterface(riid, ppvOut);
 }
 
+
+/* LIBERNT_KNOWN_FOLDERS_V2: six direct children of My Computer.
+ * Virtual item IDs are never drive-rooted filesystem PIDLs. */
+static const BYTE s_KnownFolderPidlTag = 0xFD;
+
+struct KnownFolderEntry
+{
+    const GUID *id;
+    const WCHAR *name;
+};
+
+static const KnownFolderEntry s_KnownFolders[] =
+{
+    { &FOLDERID_Desktop,   L"Desktop" },
+    { &FOLDERID_Documents, L"Documents" },
+    { &FOLDERID_Downloads, L"Downloads" },
+    { &FOLDERID_Music,     L"Music" },
+    { &FOLDERID_Pictures,  L"Pictures" },
+    { &FOLDERID_Videos,    L"Videos" },
+};
+
+static const KnownFolderEntry *FindKnownFolderById(REFGUID id)
+{
+    for (UINT i = 0; i < _countof(s_KnownFolders); ++i)
+        if (IsEqualGUID(id, *s_KnownFolders[i].id))
+            return &s_KnownFolders[i];
+    return NULL;
+}
+
+static const KnownFolderEntry *GetKnownFolderChild(PCUIDLIST_RELATIVE pidl)
+{
+    if (!pidl || pidl->mkid.cb != sizeof(USHORT) + 1 + sizeof(GUID) ||
+        pidl->mkid.abID[0] != s_KnownFolderPidlTag || !_ILIsPidlSimple(pidl))
+        return NULL;
+    GUID id;
+    memcpy(&id, pidl->mkid.abID + 1, sizeof(id));
+    return FindKnownFolderById(id);
+}
+
+static PIDLIST_RELATIVE CreateKnownFolderChild(REFGUID id)
+{
+    if (!FindKnownFolderById(id))
+        return NULL;
+    const USHORT size = sizeof(USHORT) + 1 + sizeof(GUID);
+    BYTE *bytes = static_cast<BYTE *>(CoTaskMemAlloc(size + sizeof(USHORT)));
+    if (!bytes)
+        return NULL;
+    memset(bytes, 0, size + sizeof(USHORT));
+    memcpy(bytes, &size, sizeof(size));
+    bytes[sizeof(USHORT)] = s_KnownFolderPidlTag;
+    memcpy(bytes + sizeof(USHORT) + 1, &id, sizeof(GUID));
+    return reinterpret_cast<PIDLIST_RELATIVE>(bytes);
+}
+
+static HRESULT GetKnownFolderAbsolute(REFGUID id, PIDLIST_ABSOLUTE *absolute)
+{
+    return SHGetKnownFolderIDList(id, KF_FLAG_CREATE, NULL, absolute);
+}
+
+static HRESULT KnownFolderUIObject(HWND hwndOwner, REFGUID id, REFIID riid,
+                                   UINT *flags, void **result)
+{
+    PIDLIST_ABSOLUTE absolute = NULL;
+    HRESULT hr = GetKnownFolderAbsolute(id, &absolute);
+    if (FAILED(hr))
+        return hr;
+    CComPtr<IShellFolder> parent;
+    PCUITEMID_CHILD child = NULL;
+    hr = SHBindToParent(absolute, IID_PPV_ARG(IShellFolder, &parent), &child);
+    if (SUCCEEDED(hr))
+        hr = parent->GetUIObjectOf(hwndOwner, 1, &child, riid, flags, result);
+    ILFree(absolute);
+    return hr;
+}
+
+/* LIBERNT_KNOWN_FOLDERS_V9_BEGIN */
+/* Recognize only the four affected known folders as simple filesystem PIDLs.
+ * These items must never be interpreted as drive PIDLs. */
+static const KnownFolderEntry *V9KnownPhysicalChild(PCUIDLIST_RELATIVE pidl)
+{
+    if (!pidl || pidl->mkid.cb < 3 || !_ILIsPidlSimple(pidl) ||
+        pidl->mkid.abID[0] != PT_FOLDER || !_ILIsFolder(pidl))
+        return NULL;
+    WCHAR name[MAX_PATH] = {0};
+    if (!_ILSimpleGetTextW(pidl, name, _countof(name)))
+        return NULL;
+    for (UINT i = 0; i < _countof(s_KnownFolders); ++i)
+    {
+        const KnownFolderEntry *entry = &s_KnownFolders[i];
+        if (IsEqualGUID(*entry->id, FOLDERID_Desktop) ||
+            IsEqualGUID(*entry->id, FOLDERID_Documents))
+            continue;
+        if (!lstrcmpiW(name, entry->name))
+            return entry;
+    }
+    return NULL;
+}
+/* LIBERNT_KNOWN_FOLDERS_V9_END */
+
 class CDrivesFolderEnum :
     public CEnumIDListBase
 {
     HRESULT AddKnownFolder(HWND hwndOwner, CDrivesFolder *folder, REFKNOWNFOLDERID folderId)
     {
+        if (FindKnownFolderById(folderId))
+        {
+            PIDLIST_RELATIVE child = CreateKnownFolderChild(folderId);
+            if (!child)
+                return E_OUTOFMEMORY;
+            if (!AddToEnumList(child))
+            {
+                ILFree(child);
+                return E_OUTOFMEMORY;
+            }
+            return S_OK;
+        }
+
         PIDLIST_ABSOLUTE absolute = NULL;
         HRESULT hr = SHGetKnownFolderIDList(folderId, KF_FLAG_CREATE, NULL, &absolute);
         if (FAILED(hr))
@@ -763,6 +875,7 @@ class CDrivesFolderEnum :
         hr = folder->ParseDisplayName(hwndOwner, NULL, path, NULL, &pidl, NULL);
         if (FAILED(hr))
             return hr;
+
         if (!AddToEnumList(pidl))
         {
             ILFree(pidl);
@@ -978,6 +1091,7 @@ HRESULT WINAPI CDrivesFolder::ParseDisplayName(HWND hwndOwner, LPBC pbc, LPOLEST
     if (!lpszDisplayName)
         return hr;
 
+
     /* handle CLSID paths */
     if (lpszDisplayName[0] == L':' && lpszDisplayName[1] == L':')
     {
@@ -1074,11 +1188,86 @@ HRESULT WINAPI CDrivesFolder::BindToObject(PCUIDLIST_RELATIVE pidl, LPBC pbcRese
     if (!pidl)
         return E_INVALIDARG;
 
+
+    if (const KnownFolderEntry *entry = GetKnownFolderChild(pidl))
+    {
+        if (!ppvOut)
+            return E_POINTER;
+        *ppvOut = NULL;
+        /* LIBERNT_KNOWN_FOLDERS_V3: property interfaces are served by
+         * the same filesystem property-store factory used for drives.
+         * The shell-folder binding path remains unchanged. */
+        PIDLIST_ABSOLUTE absolute = NULL;
+        HRESULT hr = GetKnownFolderAbsolute(*entry->id, &absolute);
+        if (FAILED(hr))
+        {
+            return hr;
+        }
+
+        if (IsEqualIID(riid, IID_IPropertyStoreFactory) ||
+            IsEqualIID(riid, IID_IPropertyStore))
+        {
+            WCHAR path[MAX_PATH] = {0};
+            if (!SHGetPathFromIDListW(absolute, path))
+            {
+                ILFree(absolute);
+                return E_FAIL;
+            }
+            hr = CFSPropertyStoreFactory_CreateInstance(
+                pidlRoot, this, pidl, path, riid, ppvOut);
+        }
+        else
+        {
+            hr = SHBindToObject(NULL, absolute, pbcReserved, riid, ppvOut);
+        }
+        ILFree(absolute);
+        return hr;
+    }
+
     if (IShellFolder *pDelegate = FindDelegate(pidl))
         return pDelegate->BindToObject(pidl, pbcReserved, riid, ppvOut);
 
     if (_ILIsSpecialFolder(pidl))
         return m_regFolder->BindToObject(pidl, pbcReserved, riid, ppvOut);
+
+    /* LIBERNT_KNOWN_FOLDERS_V6_BEGIN */
+    /* A narrow fallback for simple filesystem-folder PIDLs that arrive at
+     * My Computer instead of their filesystem parent. Do not reinterpret
+     * arbitrary PT_FOLDER items as drives. */
+    if (ppvOut && pidl && pidl->mkid.cb >= 3 &&
+        _ILIsPidlSimple(pidl) && pidl->mkid.abID[0] == PT_FOLDER)
+    {
+        /* Reuse the same physical-child classifier used by CompareIDs,
+         * GetAttributesOf and GetDisplayNameOf. */
+        if (const KnownFolderEntry *matched = V9KnownPhysicalChild(pidl))
+        {
+            PIDLIST_ABSOLUTE target = NULL;
+            HRESULT v6hr = GetKnownFolderAbsolute(*matched->id, &target);
+            if (SUCCEEDED(v6hr) && target)
+            {
+                CComPtr<IShellFolder> physicalParent;
+                PCUITEMID_CHILD physicalChild = NULL;
+                v6hr = SHBindToParent(target, IID_PPV_ARG(IShellFolder, &physicalParent),
+                                      &physicalChild);
+                if (SUCCEEDED(v6hr) && physicalParent && physicalChild)
+                {
+                    *ppvOut = NULL;
+                    v6hr = physicalParent->BindToObject(physicalChild, pbcReserved,
+                                                        riid, ppvOut);
+                }
+                ILFree(target);
+                return v6hr;
+            }
+            if (target)
+                ILFree(target);
+            return FAILED(v6hr) ? v6hr : E_FAIL;
+        }
+    }
+    /* LIBERNT_KNOWN_FOLDERS_V6_END */
+    if (!_ILIsDrive(pidl))
+    {
+        return E_INVALIDARG;
+    }
 
     CHAR* pchDrive = _ILGetDataPointer(pidl)->u.drive.szDriveName;
 
@@ -1133,10 +1322,36 @@ HRESULT WINAPI CDrivesFolder::CompareIDs(LPARAM lParam, PCUIDLIST_RELATIVE pidl1
         return E_INVALIDARG;
     }
 
+    /* Group all six known folders ahead of drives, in the same stable order. */
+    const KnownFolderEntry *known1 = GetKnownFolderChild(pidl1);
+    const KnownFolderEntry *known2 = GetKnownFolderChild(pidl2);
+    if (known1 || known2)
+    {
+        if (!known1 || !known2)
+            return MAKE_COMPARE_HRESULT(known1 ? -1 : 1);
+        INT index1 = 0, index2 = 0;
+        for (UINT i = 0; i < _countof(s_KnownFolders); ++i)
+        {
+            if (known1 == &s_KnownFolders[i]) index1 = i;
+            if (known2 == &s_KnownFolders[i]) index2 = i;
+        }
+        return MAKE_COMPARE_HRESULT(index1 - index2);
+    }
+
     const INT type1 = IsFileSystemFolderItem(pidl1) ? 0 : IsSimpleDriveItem(pidl1) ? 1 : IsRegItem(pidl1) ? 2 :
                       IsDelegateItem(pidl1) ? 3 : -1;
     const INT type2 = IsFileSystemFolderItem(pidl2) ? 0 : IsSimpleDriveItem(pidl2) ? 1 : IsRegItem(pidl2) ? 2 :
                       IsDelegateItem(pidl2) ? 3 : -1;
+    /* LIBERNT_KNOWN_FOLDERS_V9_COMPARE */
+    const KnownFolderEntry *v9_1 = V9KnownPhysicalChild(pidl1);
+    const KnownFolderEntry *v9_2 = V9KnownPhysicalChild(pidl2);
+    if (v9_1 || v9_2)
+    {
+        /* Do not read a PT_FOLDER as the drive structure below. */
+        if (v9_1 && v9_2)
+            return MAKE_COMPARE_HRESULT(lstrcmpiW(v9_1->name, v9_2->name));
+        return MAKE_COMPARE_HRESULT(v9_1 ? -1 : 1);
+    }
     if (type1 < 0 && FAILED_UNEXPECTEDLY(E_INVALIDARG))
         return E_INVALIDARG;
     if (type2 < 0 && FAILED_UNEXPECTEDLY(E_INVALIDARG))
@@ -1325,7 +1540,18 @@ HRESULT WINAPI CDrivesFolder::GetAttributesOf(UINT cidl, PCUITEMID_CHILD_ARRAY a
     {
         for (UINT i = 0; i < cidl; ++i)
         {
-            if (IShellFolder *pDelegate = FindDelegate(apidl[i]))
+            /* LIBERNT_KNOWN_FOLDERS_V9_ATTRIBUTES */
+            if (V9KnownPhysicalChild(apidl[i]))
+            {
+                *rgfInOut &= (SFGAO_FOLDER | SFGAO_FILESYSTEM | SFGAO_HASSUBFOLDER |
+                               SFGAO_BROWSABLE | SFGAO_DROPTARGET | SFGAO_CANCOPY);
+            }
+            else if (GetKnownFolderChild(apidl[i]))
+            {
+                *rgfInOut &= (SFGAO_FOLDER | SFGAO_FILESYSTEM | SFGAO_HASSUBFOLDER |
+                               SFGAO_BROWSABLE | SFGAO_DROPTARGET | SFGAO_CANCOPY);
+            }
+            else if (IShellFolder *pDelegate = FindDelegate(apidl[i]))
             {
                 if (FAILED(pDelegate->GetAttributesOf(1, &apidl[i], rgfInOut)))
                     *rgfInOut = 0;
@@ -1398,6 +1624,12 @@ HRESULT WINAPI CDrivesFolder::GetUIObjectOf(HWND hwndOwner,
 
     *ppvOut = NULL;
 
+    if (cidl == 1 && apidl)
+    {
+        if (const KnownFolderEntry *entry = GetKnownFolderChild(apidl[0]))
+            return KnownFolderUIObject(hwndOwner, *entry->id, riid, prgfInOut, ppvOut);
+    }
+
     if (cidl >= 1 && apidl)
     {
         if (IShellFolder *pDelegate = FindDelegate(apidl[0]))
@@ -1459,8 +1691,40 @@ HRESULT WINAPI CDrivesFolder::GetDisplayNameOf(PCUITEMID_CHILD pidl, DWORD dwFla
     TRACE("(%p)->(pidl=%p,0x%08x,%p)\n", this, pidl, dwFlags, strRet);
     pdump (pidl);
 
+
     if (!strRet)
         return E_INVALIDARG;
+
+    /* LIBERNT_KNOWN_FOLDERS_V9_DISPLAY */
+    if (const KnownFolderEntry *v9_entry = V9KnownPhysicalChild(pidl))
+    {
+        if (dwFlags & SHGDN_FORPARSING)
+        {
+            PIDLIST_ABSOLUTE v9_abs = NULL;
+            HRESULT v9_hr = GetKnownFolderAbsolute(*v9_entry->id, &v9_abs);
+            if (FAILED(v9_hr)) return v9_hr;
+            WCHAR v9_path[MAX_PATH] = {0};
+            BOOL v9_ok = SHGetPathFromIDListW(v9_abs, v9_path);
+            ILFree(v9_abs);
+            return v9_ok ? SHSetStrRet(strRet, v9_path) : E_FAIL;
+        }
+        return SHSetStrRet(strRet, v9_entry->name);
+    }
+    if (const KnownFolderEntry *entry = GetKnownFolderChild(pidl))
+    {
+        if (dwFlags & SHGDN_FORPARSING)
+        {
+            PIDLIST_ABSOLUTE absolute = NULL;
+            HRESULT hr = GetKnownFolderAbsolute(*entry->id, &absolute);
+            if (FAILED(hr))
+                return hr;
+            WCHAR path[MAX_PATH];
+            BOOL ok = SHGetPathFromIDListW(absolute, path);
+            ILFree(absolute);
+            return ok ? SHSetStrRet(strRet, path) : E_FAIL;
+        }
+        return SHSetStrRet(strRet, entry->name);
+    }
 
     if (IShellFolder *pDelegate = FindDelegate(pidl))
     {
@@ -1667,6 +1931,12 @@ HRESULT WINAPI CDrivesFolder::GetDetailsOf(PCUITEMID_CHILD pidl, UINT iColumn, S
         if (SUCCEEDED(hr))
             hr = pDelegate2->GetDetailsOf(pidl, iColumn, psd);
         return hr;
+    }
+    else if (GetKnownFolderChild(pidl))
+    {
+        if (MyComputerSFHeader[iColumn].colnameid == IDS_SHV_COLUMN_NAME)
+            return GetDisplayNameOf(pidl, SHGDN_NORMAL | SHGDN_INFOLDER, &psd->str);
+        return SHSetStrRetEmpty(&psd->str);
     }
     else if (IsFileSystemFolderItem(pidl))
     {
