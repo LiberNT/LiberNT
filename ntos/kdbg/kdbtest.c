@@ -1174,6 +1174,19 @@ KdbpTestControl(VOID)
 
     /* gu runs to where this function returns, once the stack is back above it */
     Caller = *KdbCurrentTrapFrame;
+    /* Only a breakpoint under the program counter is stepped over when the machine runs again */
+    KdbpTestFormat(Line, "g 0x%p", Target);
+    KdbpTestRun(Line, &Resumed);
+    Number = KdbpTestNewBreakPoint();
+    Caller = *KdbCurrentTrapFrame;
+    KeSetContextPc(&Caller, (ULONG_PTR)Target);
+    KdbpTestCheck((Number >= 0) && KdbpStandsOnBreakPoint(Number, &Caller),
+                  "the breakpoint the machine stands on is stepped over");
+    KeSetContextPc(&Caller, (ULONG_PTR)Target + sizeof(KD_BREAKPOINT_TYPE));
+    KdbpTestCheck((Number >= 0) && !KdbpStandsOnBreakPoint(Number, &Caller),
+                  "a breakpoint the machine does not stand on stays in memory");
+    KdbpTestRestore();
+
     if (KiUnwindFrame(&Caller, FALSE))
     {
         KdbpTestRun("gu", &Resumed);

@@ -305,6 +305,11 @@ BOOLEAN
 KdbpSetBreakPointInternal(
     _In_ LONG BreakPointNr);
 
+BOOLEAN
+KdbpStandsOnBreakPoint(
+    _In_ LONG BreakPointNr,
+    _In_ PCONTEXT Context);
+
 /* The most a breakpoint's commands may be */
 #define KDB_BREAKPOINT_COMMANDS_MAX 256
 
