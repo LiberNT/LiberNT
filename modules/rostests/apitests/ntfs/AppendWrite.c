@@ -251,10 +251,66 @@ TestInterleavedAppenders(
     CloseHandle(Reader);
 }
 
+static
+VOID
+TestAppendOnlyFlushReachesDisk(
+    _In_ PCWSTR Path)
+{
+    UCHAR Line[LINE_SIZE];
+    PUCHAR Disk;
+    HANDLE Append;
+    HANDLE Raw;
+    DWORD Done;
+    ULONG i;
+
+    Append = CreateFileW(Path, FILE_APPEND_DATA | SYNCHRONIZE, FILE_SHARE_READ, NULL, CREATE_ALWAYS,
+                         FILE_ATTRIBUTE_NORMAL, NULL);
+    ok(Append != INVALID_HANDLE_VALUE, "append create failed: %lu\n", GetLastError());
+    if (Append == INVALID_HANDLE_VALUE)
+        return;
+
+    for (i = 0; i < 40; i++)
+    {
+        FillLine(Line, 200 + i);
+        Done = 0;
+        ok(WriteFile(Append, Line, LINE_SIZE, &Done, NULL), "append %lu failed: %lu\n", i, GetLastError());
+        ok_long(Done, LINE_SIZE);
+    }
+    ok(FlushFileBuffers(Append), "flush through the append-only handle failed: %lu\n", GetLastError());
+    ok_eq_longlong(SizeOf(Append), 40 * LINE_SIZE);
+    CloseHandle(Append);
+
+    Disk = VirtualAlloc(NULL, 8192, MEM_COMMIT, PAGE_READWRITE);
+    ok(Disk != NULL, "VirtualAlloc failed: %lu\n", GetLastError());
+    Raw = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_NO_BUFFERING, NULL);
+    ok(Raw != INVALID_HANDLE_VALUE, "unbuffered open failed: %lu\n", GetLastError());
+    if (Disk == NULL || Raw == INVALID_HANDLE_VALUE)
+    {
+        if (Raw != INVALID_HANDLE_VALUE)
+            CloseHandle(Raw);
+        if (Disk != NULL)
+            VirtualFree(Disk, 0, MEM_RELEASE);
+        return;
+    }
+
+    ok_eq_longlong(SizeOf(Raw), 40 * LINE_SIZE);
+    Done = 0;
+    ok(ReadFile(Raw, Disk, 8192, &Done, NULL), "unbuffered read failed: %lu\n", GetLastError());
+    ok_long(Done, 40 * LINE_SIZE);
+    for (i = 0; i < 40; i++)
+    {
+        FillLine(Line, 200 + i);
+        ok(!memcmp(Disk + i * LINE_SIZE, Line, LINE_SIZE), "line %lu on disk differs after the flush\n", i);
+    }
+    CloseHandle(Raw);
+    VirtualFree(Disk, 0, MEM_RELEASE);
+}
+
 START_TEST(AppendWrite)
 {
     WCHAR Path[MAX_PATH];
     WCHAR Path2[MAX_PATH];
+    WCHAR Path3[MAX_PATH];
 
     if (!FindTestVolume())
     {
@@ -264,11 +320,14 @@ START_TEST(AppendWrite)
 
     StringCchPrintfW(Path, ARRAYSIZE(Path), L"%sAppendWrite.tmp", VolumeRoot);
     StringCchPrintfW(Path2, ARRAYSIZE(Path2), L"%sAppendWrite2.tmp", VolumeRoot);
+    StringCchPrintfW(Path3, ARRAYSIZE(Path3), L"%sAppendWrite3.tmp", VolumeRoot);
 
     TestAppendOnlyHandle(Path);
     TestEndOfFileOffset(Path);
     TestInterleavedAppenders(Path2);
+    TestAppendOnlyFlushReachesDisk(Path3);
 
     ok(DeleteFileW(Path), "delete failed: %lu\n", GetLastError());
     ok(DeleteFileW(Path2), "delete failed: %lu\n", GetLastError());
+    ok(DeleteFileW(Path3), "delete failed: %lu\n", GetLastError());
 }
