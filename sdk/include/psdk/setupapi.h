@@ -607,7 +607,7 @@ extern "C" {
 #define SPINST_PROFILEITEMS	0x00000100
 #if (_SETUPAPI_VER >= 0x0501)
 #define SPINST_COPYINF	0x00000200
-#define SPINST_ALL	0x000003ff
+#define SPINST_ALL	0x000007ff
 #else
 #define SPINST_ALL	0x000001ff
 #endif

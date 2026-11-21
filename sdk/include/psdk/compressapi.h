@@ -44,8 +44,8 @@ typedef struct
 
 /**********************************************************************/
 
-#define COMPRESS_ALGORITHM_NULL         0
-#define COMPRESS_ALGORITHM_INVALID      1
+#define COMPRESS_ALGORITHM_INVALID      0
+#define COMPRESS_ALGORITHM_NULL         1
 #define COMPRESS_ALGORITHM_MSZIP        2
 #define COMPRESS_ALGORITHM_XPRESS       3
 #define COMPRESS_ALGORITHM_XPRESS_HUFF  4

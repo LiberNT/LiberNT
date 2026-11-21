@@ -17,7 +17,7 @@
 extern "C" {
 #endif
 
-#define	HSE_VERSION_MAJOR	2
+#define	HSE_VERSION_MAJOR	8
 #define	HSE_VERSION_MINOR	0
 #define	HSE_LOG_BUFFER_LEN	80
 #define	HSE_MAX_EXT_DLL_NAME_LEN	256
