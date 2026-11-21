@@ -288,7 +288,7 @@ NtfsPurgeStreamCache(_In_ struct _FCB* FileCB,
 
 NTSTATUS
 NtfsPersistPendingSize(_In_ struct _VolumeContextBlock* VolCB,
-                       _In_ struct _FCB* FileCB);
+                       _In_ struct _FCB* FileCB, _In_ BOOLEAN LastHandle);
 
 NTSTATUS
 NtfsCommitFileRange(_In_ struct _VolumeContextBlock* VolCB,

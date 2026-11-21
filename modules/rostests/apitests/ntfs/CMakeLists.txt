@@ -4,6 +4,7 @@ list(APPEND SOURCE
     IndexMetadata.c
     FullBaseGrowth.c
     FreeClusters.c
+    PagingWriteGap.c
     ConcurrentIo.c
     DirectIo.c
     CreateSecurity.c

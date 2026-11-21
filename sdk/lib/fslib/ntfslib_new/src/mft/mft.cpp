@@ -586,49 +586,17 @@ ExtendMftDataToAllocation(
 }
 
 NTSTATUS
-MasterFileTable::AllocateFileRecord(
-    _In_ ULONGLONG BaseFileReference,
-    _In_ BOOLEAN IsDirectory,
-    _Out_ PFileRecord* File)
+MasterFileTable::FindAllocationCandidate(_Out_ PULONGLONG Number)
 {
     PAttribute BitmapAttribute;
-    PFileRecord NewFile = NULL;
-    PUCHAR BitmapBuffer = NULL;
-    ULONGLONG BitmapDataLength;
-    ULONGLONG BitmapByteCount;
-    ULONGLONG ByteOffset;
-    ULONGLONG Candidate = 0;
-    ULONGLONG RecordCount;
-    ULONGLONG RequiredBitmapLength;
-    ULONG ChunkLength;
-    ULONG ReadLength;
-    USHORT SequenceNumber = 1;
+    PUCHAR BitmapBuffer;
+    ULONGLONG BitmapDataLength, BitmapByteCount, ByteOffset, Candidate = 0;
+    ULONG ChunkLength, ReadLength;
     BOOLEAN Found = FALSE;
-    BOOLEAN RecordWritten = FALSE;
-    UCHAR BitmapByte;
-    UCHAR BitMask;
     NTSTATUS Status;
 
-    if (!File)
-        return STATUS_INVALID_PARAMETER;
-    *File = NULL;
-    if (!DiskVolume || DiskVolume->IsReadOnly ||
-        !MFTFile || !MFTDataAttr ||
-        !MFTDataAttr->IsNonResident ||
-        FileRecordSize == 0)
-    {
+    if (!MFTFile || !MFTDataAttr || !MFTDataAttr->IsNonResident || !FileRecordSize)
         return STATUS_INVALID_DEVICE_STATE;
-    }
-    if (BaseFileReference != 0 &&
-        (GetSequenceFromFileRef(
-             BaseFileReference) == 0 ||
-         GetFRNFromFileRef(
-             BaseFileReference) == _MFT ||
-         GetFRNFromFileRef(
-             BaseFileReference) > MAXULONG))
-    {
-        return STATUS_INVALID_PARAMETER;
-    }
     if (MFTDataAttr->NonResident.DataSize <
             FileRecordSize ||
         MFTDataAttr->NonResident.DataSize %
@@ -637,7 +605,7 @@ MasterFileTable::AllocateFileRecord(
         return STATUS_FILE_CORRUPT_ERROR;
     }
 
-    RecordCount =
+    const ULONGLONG RecordCount =
         MFTDataAttr->NonResident.DataSize /
         FileRecordSize;
     if (RecordCount <
@@ -659,7 +627,7 @@ MasterFileTable::AllocateFileRecord(
     {
         AllocationScanBuffer =
             new(PagedPool, TAG_MFT)
-                UCHAR[MFT_ALLOCATION_BITMAP_CHUNK_SIZE];
+                UCHAR[NTFS_METADATA_BLOCK_SIZE];
     }
     BitmapBuffer = AllocationScanBuffer;
     if (!BitmapBuffer)
@@ -686,8 +654,7 @@ ScanAgain:
     {
         ChunkLength = (ULONG)min(
             BitmapByteCount - ByteOffset,
-            (ULONGLONG)
-                MFT_ALLOCATION_BITMAP_CHUNK_SIZE);
+            NTFS_METADATA_BLOCK_SIZE - ByteOffset % NTFS_METADATA_BLOCK_SIZE);
         ReadLength = ChunkLength;
         Status = MFTFile->CopyData(
             BitmapAttribute,
@@ -698,7 +665,7 @@ ScanAgain:
         {
             if (NT_SUCCESS(Status))
                 Status = STATUS_END_OF_FILE;
-            goto Done;
+            return Status;
         }
 
         for (ULONG Index = 0;
@@ -755,12 +722,62 @@ ScanAgain:
         goto ScanAgain;
     }
 
-    if (Found)
+    *Number = Found ? Candidate : RecordCount;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+MasterFileTable::AllocateFileRecord(
+    _In_ ULONGLONG BaseFileReference,
+    _In_ BOOLEAN IsDirectory,
+    _Out_ PFileRecord* File)
+{
+    PAttribute BitmapAttribute;
+    PFileRecord NewFile = NULL;
+    ULONGLONG BitmapDataLength;
+    ULONGLONG ByteOffset;
+    ULONGLONG Candidate = 0;
+    ULONGLONG RecordCount;
+    ULONGLONG RequiredBitmapLength;
+    ULONG ReadLength;
+    USHORT SequenceNumber = 1;
+    BOOLEAN RecordWritten = FALSE;
+    UCHAR BitmapByte;
+    UCHAR BitMask;
+    NTSTATUS Status;
+
+    if (!File)
+        return STATUS_INVALID_PARAMETER;
+    *File = NULL;
+    if (!DiskVolume || DiskVolume->IsReadOnly ||
+        !MFTFile || !MFTDataAttr ||
+        !MFTDataAttr->IsNonResident ||
+        FileRecordSize == 0)
+    {
+        return STATUS_INVALID_DEVICE_STATE;
+    }
+    if (BaseFileReference != 0 &&
+        (GetSequenceFromFileRef(
+             BaseFileReference) == 0 ||
+         GetFRNFromFileRef(
+             BaseFileReference) == _MFT ||
+         GetFRNFromFileRef(
+             BaseFileReference) > MAXULONG))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    Status = FindAllocationCandidate(&Candidate);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    RecordCount = MFTDataAttr->NonResident.DataSize / FileRecordSize;
+    BitmapAttribute = MFTFile->GetAttribute(TypeBitmap, NULL);
+    ASSERT(BitmapAttribute != NULL);
+    BitmapDataLength = GetAttributeDataSize(BitmapAttribute);
+    if (Candidate < RecordCount)
         FreeRecordHint = Candidate + 1;
 
-    if (!Found)
+    else
     {
-        Candidate = RecordCount;
         if (Candidate > MAXULONG ||
             Candidate >
                 NTFS_MAX_SIGNED_OFFSET /
@@ -1012,7 +1029,6 @@ Done:
         (void)WriteFileRecordToMFT(NewFile);
     }
     delete NewFile;
-    /* BitmapBuffer is the table's persistent scratch; it stays. */
     return Status;
 }
 

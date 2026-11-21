@@ -12,6 +12,19 @@
 extern "C" {
 #endif
 
+BOOLEAN
+NtfsGetAllocationRecordOffset(_In_ PNtfsMasterFileTable Mft, _Out_ PULONGLONG Offset, _Out_ PULONG Size)
+{
+    PMasterFileTable Table = reinterpret_cast<PMasterFileTable>(Mft);
+    ULONGLONG Number;
+    if (!NT_SUCCESS(Table->FindAllocationCandidate(&Number)) ||
+        !NT_SUCCESS(Table->GetFileRecordDiskOffset(Number, Offset)))
+        return FALSE;
+    Table->FreeRecordHint = Number;
+    *Size = Table->FileRecordSize;
+    return TRUE;
+}
+
 NTSTATUS
 NtfsMasterFileTableGetFileRecordFromQuery(
     _In_ PNtfsMasterFileTable Mft,

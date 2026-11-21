@@ -31,6 +31,9 @@ typedef struct _VolumeContextBlock
     PFILE_OBJECT StreamFileObject;
     ERESOURCE MetadataResource;
     EX_PUSH_LOCK MetadataGate;
+    ULONGLONG MetadataMoveGeneration;
+    EX_RUNDOWN_REF FileWrites;
+    EX_RUNDOWN_REF PagingWrites;
     FAST_MUTEX VolumeStateMutex;
     SHARE_ACCESS VolumeShareAccess;
     LONG OpenHandleCount;
@@ -332,6 +335,7 @@ typedef struct _SCB
     SHARE_ACCESS ShareAccess;
     SECTION_OBJECT_POINTERS SectionObjectPointers;
     BOOLEAN SizePending;
+    LONG TrimOnClose;
     BOOLEAN Deleted;
     BOOLEAN DeletePending;
     BOOLEAN Unlinked;
@@ -724,6 +728,25 @@ NtfsReleaseMetadata(_In_ PVolumeContextBlock VolCB)
     ExReleaseResourceLite(&VolCB->MetadataResource);
     if (Last)
         ExfReleasePushLockExclusive(&VolCB->MetadataGate);
+}
+
+static inline
+BOOLEAN
+NtfsReadAheadMetadata(_In_ PVolumeContextBlock VolCB, _In_ ULONGLONG Offset, _In_ ULONG Length)
+{
+    NTFS_BLOCK_READ *Read;
+
+    ASSERT(ExIsResourceAcquiredExclusiveLite(&VolCB->MetadataResource));
+    if (ExIsResourceAcquiredSharedLite(&VolCB->MetadataResource) != 1)
+        return FALSE;
+    Read = NtfsPrepareBlockReadKm(VolCB->StorageDevice, Offset, Length);
+    if (!Read)
+        return FALSE;
+
+    NtfsReleaseMetadata(VolCB);
+    NtfsFetchBlockKm(Read);
+    NtfsAcquireMetadata(VolCB);
+    return TRUE;
 }
 
 static inline

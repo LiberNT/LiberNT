@@ -182,6 +182,14 @@ endif()
 
 if(BUILD_TESTING AND NTFSLIB_BUILD_FUSE)
     find_program(MKNTFS_EXECUTABLE NAMES mkntfs mkfs.ntfs)
+    if(MKNTFS_EXECUTABLE)
+        add_executable(ntfslib_resident_promotion_test tests/resident_promotion.cpp)
+        target_link_libraries(ntfslib_resident_promotion_test PRIVATE ntfslib_linux)
+        target_link_options(ntfslib_resident_promotion_test PRIVATE -Wl,--wrap=NtfsWriteVolumeContext)
+        add_test(NAME ntfslib_linux_resident_promotion COMMAND /bin/sh
+            "${CMAKE_CURRENT_LIST_DIR}/tests/resident_promotion.sh" "$<TARGET_FILE:ntfslib_fuse>"
+            "$<TARGET_FILE:ntfslib_resident_promotion_test>" "${MKNTFS_EXECUTABLE}")
+    endif()
     find_program(NTFSCP_EXECUTABLE NAMES ntfscp)
     find_program(NTFSTRUNCATE_EXECUTABLE NAMES ntfstruncate)
     find_program(NTFSLS_EXECUTABLE NAMES ntfsls)

@@ -154,7 +154,12 @@ NtfsSubmitDirectIo(
 
     NT_ASSERT(ReadContext.IoStatus.Status != STATUS_PENDING);
     Irp->IoStatus = ReadContext.IoStatus;
-    return ReadContext.IoStatus.Status;
+    if (NT_SUCCESS(Irp->IoStatus.Status) && Irp->IoStatus.Information != Length)
+    {
+        Irp->IoStatus.Status = STATUS_DATA_ERROR;
+        Irp->IoStatus.Information = 0;
+    }
+    return Irp->IoStatus.Status;
 }
 
 static
@@ -337,6 +342,8 @@ NtfsMapDirectIo(
     Map->TransferLength = Length;
     Map->ValidLength = Length;
     Map->DataLength = Length;
+    if (FileCB->StreamCB && FileCB->StreamCB->Deleted)
+        return STATUS_SUCCESS;
     if (!Irp->MdlAddress &&
         !Irp->AssociatedIrp.SystemBuffer)
     {

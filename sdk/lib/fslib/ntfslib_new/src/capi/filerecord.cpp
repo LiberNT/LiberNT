@@ -472,6 +472,13 @@ NtfsFileRecordSetFileDataSize(
         NewSize);
 }
 
+NTSTATUS
+NtfsFileRecordSetWriteSize(_In_ PNtfsFileRecord File, _In_ AttributeType Type,
+                           _In_opt_ PWSTR Name, _In_ ULONGLONG EndOffset, _In_ ULONGLONG AllocationFloor)
+{
+    return reinterpret_cast<PFileRecord>(File)->SetFileDataSize(Type, Name, EndOffset, AllocationFloor);
+}
+
 ULONGLONG
 NtfsFileRecordGetAllocationSignature(
     _In_ PNtfsFileRecord Fr)
@@ -479,6 +486,13 @@ NtfsFileRecordGetAllocationSignature(
     if (!Fr)
         return 0;
     return reinterpret_cast<PFileRecord>(Fr)->GetAllocationSignature();
+}
+
+NTSTATUS
+NtfsGetAttributeRecordRange(_In_ PNtfsFileRecord File, _In_ PAttribute Attribute,
+                            _Out_ PULONGLONG Offset, _Out_ PULONG Length)
+{
+    return reinterpret_cast<PFileRecord>(File)->GetRecordDiskRange(Offset, Length, Attribute);
 }
 
 NTSTATUS

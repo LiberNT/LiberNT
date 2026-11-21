@@ -499,6 +499,8 @@ NtfsMountVolume(IN PDEVICE_OBJECT TargetDeviceObject,
         IoDeleteDevice(FSDeviceObject);
         goto Cleanup;
     }
+    ExInitializeRundownProtection(&VolCB->FileWrites);
+    ExInitializeRundownProtection(&VolCB->PagingWrites);
     ExInitializeFastMutex(&VolCB->VolumeStateMutex);
     ExInitializeFastMutex(&VolCB->StreamListMutex);
     ExInitializeFastMutex(&VolCB->MissingNameMutex);
