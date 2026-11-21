@@ -1928,7 +1928,7 @@ RPC_STATUS NdrpCompleteAsyncClientCall(RPC_ASYNC_STATE *pAsync, void *Reply)
 #endif
     else
     {
-        status = I_RpcReceive(pStubMsg->RpcMsg);
+        status = I_RpcReceive(pStubMsg->RpcMsg, 0);
         if (status != RPC_S_OK)
             goto cleanup;
         pStubMsg->BufferLength = pStubMsg->RpcMsg->BufferLength;

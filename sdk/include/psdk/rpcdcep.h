@@ -80,7 +80,7 @@ typedef struct _RPC_MESSAGE
 #define RPCFLG_NON_NDR              0x80000000
 
 typedef void  (__RPC_STUB *RPC_DISPATCH_FUNCTION)(PRPC_MESSAGE Message);
-typedef RPC_STATUS (RPC_ENTRY *RPC_FORWARD_FUNCTION)(UUID *InterfaceId, RPC_VERSION *InterfaceVersion, UUID *ObjectId, unsigned char *Rpcpro, void **ppDestEndpoint);
+typedef RPC_STATUS RPC_ENTRY RPC_FORWARD_FUNCTION(UUID *InterfaceId, RPC_VERSION *InterfaceVersion, UUID *ObjectId, unsigned char *Rpcpro, void **ppDestEndpoint);
 
 typedef struct
 {
@@ -150,7 +150,7 @@ RPCRTAPI RPC_STATUS RPC_ENTRY
 RPCRTAPI RPC_STATUS RPC_ENTRY
   I_RpcSend( RPC_MESSAGE* Message );
 RPCRTAPI RPC_STATUS RPC_ENTRY
-  I_RpcReceive( RPC_MESSAGE* Message );
+  I_RpcReceive( RPC_MESSAGE* Message, unsigned int Size );
 
 RPCRTAPI void* RPC_ENTRY
   I_RpcAllocate( unsigned int Size );
