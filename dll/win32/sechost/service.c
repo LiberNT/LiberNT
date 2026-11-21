@@ -2308,8 +2308,18 @@ HDEVNOTIFY WINAPI I_ScRegisterDeviceNotification( HANDLE handle, DEV_BROADCAST_H
 
     if (filter->dbch_devicetype == DBT_DEVTYP_HANDLE)
     {
+#ifdef __REACTOS__
+        /* NtQueryObject probes its buffer for the alignment of the structure, which an array of WCHAR need not have. */
+        union
+        {
+            OBJECT_NAME_INFORMATION info;
+            WCHAR chars[sizeof(OBJECT_NAME_INFORMATION) + MAX_PATH + 1];
+        } buffer;
+        OBJECT_NAME_INFORMATION *info = &buffer.info;
+#else
         WCHAR buffer[sizeof(OBJECT_NAME_INFORMATION) + MAX_PATH + 1];
         OBJECT_NAME_INFORMATION *info = (OBJECT_NAME_INFORMATION*)&buffer;
+#endif
         DEV_BROADCAST_HANDLE *handle = (DEV_BROADCAST_HANDLE *)filter;
         NTSTATUS status;
         ULONG dummy;
