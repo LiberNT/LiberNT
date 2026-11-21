@@ -805,6 +805,7 @@ IntWin32PowerManagementCleanup(VOID)
      * apart during Win32k cleanup, so future power callouts would not
      * be allowed anyway, therefore we are safe.
      */
+    IntAcquirePowerCalloutLock();
     while ((pWin32PwrCallout = IntGetNextPowerCallout(NULL)) != NULL)
     {
         if (pWin32PwrCallout->Type == POWER_CALLOUT_STATE)
@@ -816,6 +817,7 @@ IntWin32PowerManagementCleanup(VOID)
 
         ExFreePoolWithTag(pWin32PwrCallout, USERTAG_POWER);
     }
+    IntReleasePowerCalloutLock();
 
     /* Tear apart the power callout lock mutex */
     ExFreePoolWithTag(gpPowerCalloutMutexLock, USERTAG_POWER);
