@@ -63,6 +63,24 @@ MsqInitializeImpl(VOID)
    return(STATUS_SUCCESS);
 }
 
+VOID
+NTAPI
+MsqFreeImpl(VOID)
+{
+    if (pgMessageLookasideList != NULL)
+    {
+        ExDeletePagedLookasideList(pgMessageLookasideList);
+        ExFreePoolWithTag(pgMessageLookasideList, TAG_USRMSG);
+        pgMessageLookasideList = NULL;
+    }
+    if (pgSendMsgLookasideList != NULL)
+    {
+        ExDeletePagedLookasideList(pgSendMsgLookasideList);
+        ExFreePoolWithTag(pgSendMsgLookasideList, TAG_USRMSG);
+        pgSendMsgLookasideList = NULL;
+    }
+}
+
 PWND FASTCALL
 IntTopLevelWindowFromPoint(INT x, INT y)
 {

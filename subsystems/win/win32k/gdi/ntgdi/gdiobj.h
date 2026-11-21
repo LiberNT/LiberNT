@@ -78,6 +78,10 @@ NTSTATUS
 NTAPI
 InitGdiHandleTable(VOID);
 
+VOID
+NTAPI
+FreeGdiLookasideLists(VOID);
+
 BOOL
 NTAPI
 GreIsHandleValid(

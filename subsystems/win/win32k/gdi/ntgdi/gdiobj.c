@@ -309,7 +309,7 @@ InitGdiHandleTable(void)
     GdiHandleTable = (PVOID)gpentHmgr;
 
     /* Initialize the lookaside lists */
-    gpaLookasideList = ExAllocatePoolWithTag(NonPagedPool,
+    gpaLookasideList = ExAllocatePoolZero(NonPagedPool,
                            GDIObjTypeTotal * sizeof(PAGED_LOOKASIDE_LIST),
                            TAG_GDIHNDTBLE);
     if(!gpaLookasideList)
@@ -326,6 +326,23 @@ InitGdiHandleTable(void)
     InitLookasideList(GDIObjType_BRUSH_TYPE, sizeof(BRUSH));
 
     return STATUS_SUCCESS;
+}
+
+VOID
+NTAPI
+FreeGdiLookasideLists(VOID)
+{
+    UCHAR objt;
+
+    if (gpaLookasideList == NULL)
+        return;
+    for (objt = 0; objt < GDIObjTypeTotal; objt++)
+    {
+        if (gpaLookasideList[objt].L.Allocate != NULL)
+            ExDeletePagedLookasideList(&gpaLookasideList[objt]);
+    }
+    ExFreePoolWithTag(gpaLookasideList, TAG_GDIHNDTBLE);
+    gpaLookasideList = NULL;
 }
 
 FORCEINLINE
