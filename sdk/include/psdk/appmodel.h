@@ -182,12 +182,6 @@ AppPolicyGetMediaFoundationCodecLoading(
 
 #ifndef PACKAGE_DEPENDENCY_RANK_DEFAULT
 #define PACKAGE_DEPENDENCY_RANK_DEFAULT 0
-#endif
-#ifndef PACKAGE_FILTER_ALL_LOADED
-#define PACKAGE_FILTER_ALL_LOADED 0
-#endif
-#ifndef PACKAGE_PROPERTY_HOSTRUNTIME
-#define PACKAGE_PROPERTY_HOSTRUNTIME 0x00200000
 typedef enum PackagePathType {
     PackagePathType_Install = 0,
     PackagePathType_Mutable = 1,
@@ -273,4 +267,10 @@ typedef enum AppPolicyCreateFileAccess {
     AppPolicyCreateFileAccess_Limited = 1
 } AppPolicyCreateFileAccess;
 
+#endif
+#ifndef PACKAGE_FILTER_ALL_LOADED
+#define PACKAGE_FILTER_ALL_LOADED 0
+#endif
+#ifndef PACKAGE_PROPERTY_HOSTRUNTIME
+#define PACKAGE_PROPERTY_HOSTRUNTIME 0x00200000
 #endif

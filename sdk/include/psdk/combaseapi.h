@@ -67,6 +67,16 @@ extern "C++" template<typename T> void **IID_PPV_ARGS_Helper(T **obj)
 }
 #endif
 
+typedef enum tagCOINITBASE {
+    COINITBASE_MULTITHREADED = 0
+} COINITBASE;
+
+typedef enum CWMO_FLAGS {
+    CWMO_DEFAULT = 0,
+    CWMO_DISPATCH_CALLS = 1,
+    CWMO_DISPATCH_WINDOW_MESSAGES = 2
+} CWMO_FLAGS;
+
 #endif /* _COMBASEAPI_H_ */
 
 #ifndef COM_RIGHTS_ACTIVATE_LOCAL
@@ -92,14 +102,4 @@ extern "C++" template<typename T> void **IID_PPV_ARGS_Helper(T **obj)
 #endif
 #ifndef CWMO_MAX_HANDLES
 #define CWMO_MAX_HANDLES 56
-typedef enum tagCOINITBASE {
-    COINITBASE_MULTITHREADED = 0
-} COINITBASE;
-
-typedef enum CWMO_FLAGS {
-    CWMO_DEFAULT = 0,
-    CWMO_DISPATCH_CALLS = 1,
-    CWMO_DISPATCH_WINDOW_MESSAGES = 2
-} CWMO_FLAGS;
-
 #endif

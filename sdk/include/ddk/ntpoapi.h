@@ -833,6 +833,59 @@ typedef struct _POWER_ACTION_POLICY {
 }
 #endif
 
+typedef enum _HIBERFILE_BUCKET_SIZE {
+    HiberFileBucket1GB = 0,
+    HiberFileBucket2GB = 1,
+    HiberFileBucket4GB = 2,
+    HiberFileBucket8GB = 3,
+    HiberFileBucket16GB = 4,
+    HiberFileBucket32GB = 5,
+    HiberFileBucketUnlimited = 6,
+    HiberFileBucketMax = 7
+} HIBERFILE_BUCKET_SIZE, *PHIBERFILE_BUCKET_SIZE;
+
+typedef enum _REQUESTER_TYPE {
+    KernelRequester = 0,
+    UserProcessRequester = 1,
+    UserSharedServiceRequester = 2
+} REQUESTER_TYPE, *PREQUESTER_TYPE;
+
+typedef enum PO_WAKE_SOURCE_TYPE {
+    DeviceWakeSourceType = 0,
+    FixedWakeSourceType = 1,
+    TimerWakeSourceType = 2,
+    TimerPresumedWakeSourceType = 3,
+    InternalWakeSourceType = 4
+} PO_WAKE_SOURCE_TYPE, *PPO_WAKE_SOURCE_TYPE;
+
+typedef enum PO_FIXED_WAKE_SOURCE_TYPE {
+    FixedWakeSourcePowerButton = 0,
+    FixedWakeSourceSleepButton = 1,
+    FixedWakeSourceRtc = 2,
+    FixedWakeSourceDozeToHibernate = 3
+} PO_FIXED_WAKE_SOURCE_TYPE, *PPO_FIXED_WAKE_SOURCE_TYPE;
+
+typedef enum PO_INTERNAL_WAKE_SOURCE_TYPE {
+    InternalWakeSourceDozeToHibernate = 0,
+    InternalWakeSourcePredictedUserPresence = 1,
+    InternalWakeSourceTimerOverride = 2
+} PO_INTERNAL_WAKE_SOURCE_TYPE, *PPO_INTERNAL_WAKE_SOURCE_TYPE;
+
+typedef enum _PO_HIBER_FORCE_DISABLE_REASON {
+    PoHiberForceDisableReasonPolicy = 0,
+    PoHiberForceDisableReasonGuardedHost = 1,
+    PoHiberForceDisableReasonMax = 2
+} PO_HIBER_FORCE_DISABLE_REASON, *PPO_HIBER_FORCE_DISABLE_REASON;
+
+typedef enum _PO_CS_DEVICE_NOTIFICATION_TYPE {
+    PoCsDeviceNotificationStorage = 0,
+    PoCsDeviceNotificationWiFi = 1,
+    PoCsDeviceNotificationMbn = 2,
+    PoCsDeviceNotificationAudio = 3,
+    PoCsDeviceNotificationEthernet = 4,
+    PoCsDeviceNotificationMaximum = 5
+} PO_CS_DEVICE_NOTIFICATION_TYPE;
+
 #endif /* __NTPOAPI_H */
 
 #ifndef ACPI_PPM_HARDWARE_ALL
@@ -1140,57 +1193,4 @@ typedef struct _POWER_ACTION_POLICY {
 #endif
 #ifndef THERMAL_EVENT_UNSPECIFIED
 #define THERMAL_EVENT_UNSPECIFIED 0xffffffff
-typedef enum _HIBERFILE_BUCKET_SIZE {
-    HiberFileBucket1GB = 0,
-    HiberFileBucket2GB = 1,
-    HiberFileBucket4GB = 2,
-    HiberFileBucket8GB = 3,
-    HiberFileBucket16GB = 4,
-    HiberFileBucket32GB = 5,
-    HiberFileBucketUnlimited = 6,
-    HiberFileBucketMax = 7
-} HIBERFILE_BUCKET_SIZE, *PHIBERFILE_BUCKET_SIZE;
-
-typedef enum _REQUESTER_TYPE {
-    KernelRequester = 0,
-    UserProcessRequester = 1,
-    UserSharedServiceRequester = 2
-} REQUESTER_TYPE, *PREQUESTER_TYPE;
-
-typedef enum PO_WAKE_SOURCE_TYPE {
-    DeviceWakeSourceType = 0,
-    FixedWakeSourceType = 1,
-    TimerWakeSourceType = 2,
-    TimerPresumedWakeSourceType = 3,
-    InternalWakeSourceType = 4
-} PO_WAKE_SOURCE_TYPE, *PPO_WAKE_SOURCE_TYPE;
-
-typedef enum PO_FIXED_WAKE_SOURCE_TYPE {
-    FixedWakeSourcePowerButton = 0,
-    FixedWakeSourceSleepButton = 1,
-    FixedWakeSourceRtc = 2,
-    FixedWakeSourceDozeToHibernate = 3
-} PO_FIXED_WAKE_SOURCE_TYPE, *PPO_FIXED_WAKE_SOURCE_TYPE;
-
-typedef enum PO_INTERNAL_WAKE_SOURCE_TYPE {
-    InternalWakeSourceDozeToHibernate = 0,
-    InternalWakeSourcePredictedUserPresence = 1,
-    InternalWakeSourceTimerOverride = 2
-} PO_INTERNAL_WAKE_SOURCE_TYPE, *PPO_INTERNAL_WAKE_SOURCE_TYPE;
-
-typedef enum _PO_HIBER_FORCE_DISABLE_REASON {
-    PoHiberForceDisableReasonPolicy = 0,
-    PoHiberForceDisableReasonGuardedHost = 1,
-    PoHiberForceDisableReasonMax = 2
-} PO_HIBER_FORCE_DISABLE_REASON, *PPO_HIBER_FORCE_DISABLE_REASON;
-
-typedef enum _PO_CS_DEVICE_NOTIFICATION_TYPE {
-    PoCsDeviceNotificationStorage = 0,
-    PoCsDeviceNotificationWiFi = 1,
-    PoCsDeviceNotificationMbn = 2,
-    PoCsDeviceNotificationAudio = 3,
-    PoCsDeviceNotificationEthernet = 4,
-    PoCsDeviceNotificationMaximum = 5
-} PO_CS_DEVICE_NOTIFICATION_TYPE;
-
 #endif
