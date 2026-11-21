@@ -33,6 +33,8 @@ jobs:
             arch: arm64
             profile: profile_raspberry
           - compiler: clang
+            arch: arm
+          - compiler: clang
             arch: riscv64
             profile: profile_spacemit_k1
           - compiler: clang
