@@ -201,15 +201,15 @@ C_ASSERT_FIELD(KTHREAD, 0x490, SchedulerAssistLastYieldBoostTime)
 /* FIXME: KTHREAD.Padding is at 0x498 on Windows 11 */
 
 /* KPCR */
-/* FIXME: sizeof(KPCR) is 0xD080 on Windows 11 */
-/* FIXME: KPCR.NtTib is at 0x000 on Windows 11 */
-/* FIXME: KPCR.GdtBase is at 0x000 on Windows 11 */
-/* FIXME: KPCR.TssBase is at 0x008 on Windows 11 */
-/* FIXME: KPCR.UserRsp is at 0x010 on Windows 11 */
-/* FIXME: KPCR.Self is at 0x018 on Windows 11 */
-/* FIXME: KPCR.CurrentPrcb is at 0x020 on Windows 11 */
-/* FIXME: KPCR.LockArray is at 0x028 on Windows 11 */
-/* FIXME: KPCR.Used_Self is at 0x030 on Windows 11 */
+C_ASSERT(sizeof(KIPCR) == 0xD080);
+C_ASSERT_FIELD(KPCR, 0x000, NtTib)
+C_ASSERT_FIELD(KPCR, 0x000, GdtBase)
+C_ASSERT_FIELD(KPCR, 0x008, TssBase)
+C_ASSERT_FIELD(KPCR, 0x010, UserRsp)
+C_ASSERT_FIELD(KPCR, 0x018, Self)
+C_ASSERT_FIELD(KPCR, 0x020, CurrentPrcb)
+C_ASSERT_FIELD(KPCR, 0x028, LockArray)
+C_ASSERT_FIELD(KPCR, 0x030, Used_Self)
 C_ASSERT_FIELD(KPCR, 0x038, IdtBase)
 C_ASSERT_FIELD(KPCR, 0x040, Unused)
 C_ASSERT_FIELD(KPCR, 0x050, Irql)
@@ -228,7 +228,7 @@ C_ASSERT_FIELD(KPCR, 0x100, Unused2)
 C_ASSERT_FIELD(KPCR, 0x108, KdVersionBlock)
 C_ASSERT_FIELD(KPCR, 0x110, Unused3)
 C_ASSERT_FIELD(KPCR, 0x118, PcrAlign1)
-/* FIXME: KPCR.Prcb is at 0x180 on Windows 11 */
+C_ASSERT(FIELD_OFFSET(KIPCR, Prcb) == 0x180);
 
 /* KPRCB */
 C_ASSERT(sizeof(KPRCB) == 0xCF00);
