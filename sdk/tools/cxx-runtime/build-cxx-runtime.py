@@ -167,10 +167,11 @@ def main():
         '-G', 'Ninja', f'-DCMAKE_TOOLCHAIN_FILE={toolchain_file}',
         '-DCMAKE_BUILD_TYPE=Release', f'-DCMAKE_INSTALL_PREFIX={prefix}',
         '-DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON', '-DCOMPILER_RT_INCLUDE_TESTS=OFF',
-        '-DCOMPILER_RT_BUILD_CRT=OFF', '-DCOMPILER_RT_BUILTINS_ENABLE_PIC=OFF',
-        '-DCOMPILER_RT_EXCLUDE_EMUTLS=ON', *builtins_options)
+        '-DCOMPILER_RT_BUILD_CRT=OFF', '-DCOMPILER_RT_BUILTINS_ENABLE_PIC=OFF', *builtins_options)
     run('cmake', '--build', builtins, '--parallel', args.jobs)
     run('cmake', '--install', builtins)
+    # compiler-rt always builds emutls.c for Windows; its CRT imports break modules that pull it in through its weak memcpy.
+    run(toolchain / 'bin' / f'llvm-ar{exe}', 'd', prefix / f'lib/windows/libclang_rt.builtins-{builtins_name}.a', 'emutls.c.obj')
     manifest = {'compiler': compiler, 'llvm_source': str(llvm), 'flags': flags,
                 'recipe': recipe, 'include_names': names,
                 'inputs': {str(path): digest(path) for path in outputs},
