@@ -183,7 +183,7 @@ if(NOT CMAKE_CROSSCOMPILING)
     add_subdirectory(sdk/tools)
     add_subdirectory(sdk/lib)
 
-    set(NATIVE_TARGETS asmpp bin2c gas2armasm widl gendib cabman fatten hpp mkhive mkisofs obj2bin spec2def geninc mkshelllink utf16le windmc xml2sdb)
+    set(NATIVE_TARGETS armefi asmpp bin2c gas2armasm widl gendib cabman fatten hpp mkhive mkisofs obj2bin spec2def geninc mkshelllink utf16le windmc xml2sdb)
     if(NOT CMAKE_HOST_WIN32)
         list(APPEND NATIVE_TARGETS ntfsimg)
     endif()

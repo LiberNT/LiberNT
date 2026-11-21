@@ -50,8 +50,7 @@ enum fixup_mode
     MODE_WDMDRIVER,
     MODE_KERNELDLL,
     MODE_KERNEL,
-    MODE_CHECKSUM,
-    MODE_EFI
+    MODE_CHECKSUM
 };
 
 void *rva_to_ptr(unsigned char *buffer, PIMAGE_NT_HEADERS nt_header, DWORD rva)
@@ -394,7 +393,6 @@ print_usage(void)
            "  --kerneldll           Fix code, data and resource sections for Kernel-Mode DLLs;\n"
            "  --kernel              Fix code, data and resource sections for kernels;\n"
            "  --checksum            Compute the PE image checksum;\n"
-           "  --efi                 Set the machine UEFI requires for Thumb-2 images;\n"
            "\n"
            "and/or a combination of the following ones:\n"
            "  --section:name[=newname][,[[!]{CDEIKOMPRSUW}][A{1248PTSX}]]\n"
@@ -460,12 +458,6 @@ int main(int argc, char **argv)
             if (mode != MODE_NONE)
                 goto mode_error;
             mode = MODE_CHECKSUM;
-        }
-        else if (strcmp(&argv[i][2], "efi") == 0)
-        {
-            if (mode != MODE_NONE)
-                goto mode_error;
-            mode = MODE_EFI;
         }
         else if (strncmp(&argv[i][2], "section:", 8) == 0)
         {
@@ -540,12 +532,7 @@ int main(int argc, char **argv)
     result = 0;
 
     /* Apply mode fixups */
-    if (mode == MODE_EFI)
-    {
-        if (nt_header->FileHeader.Machine == IMAGE_FILE_MACHINE_ARMNT)
-            nt_header->FileHeader.Machine = IMAGE_FILE_MACHINE_THUMB;
-    }
-    else if (mode != MODE_NONE && mode != MODE_CHECKSUM)
+    if (mode != MODE_NONE && mode != MODE_CHECKSUM)
     {
         if (mode == MODE_LOADCONFIG)
             result = add_loadconfig(buffer, nt_header);

@@ -38,6 +38,7 @@ if(NOT CMAKE_HOST_WIN32)
     target_link_libraries(windmc PRIVATE Iconv::Iconv)
 endif()
 
+add_subdirectory(armefi)
 add_subdirectory(asmpp)
 add_subdirectory(cabman)
 add_subdirectory(fatten)
