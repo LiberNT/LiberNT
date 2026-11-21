@@ -13,6 +13,7 @@ extern void func_IndexMetadata(void);
 extern void func_FullBaseGrowth(void);
 extern void func_FreeClusters(void);
 extern void func_ConcurrentIo(void);
+extern void func_DirectIo(void);
 
 const struct test winetest_testlist[] =
 {
@@ -21,5 +22,6 @@ const struct test winetest_testlist[] =
     { "FullBaseGrowth", func_FullBaseGrowth },
     { "FreeClusters", func_FreeClusters },
     { "ConcurrentIo", func_ConcurrentIo },
+    { "DirectIo", func_DirectIo },
     { 0, 0 }
 };

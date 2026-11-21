@@ -612,6 +612,20 @@ NtfsCancelShrink(_In_ PVolumeContextBlock VolCB,
  * so the two are separate calls. The caller keeps the file's own resource for
  * the whole request, which is what stops the mapping moving in between.
  */
+#define NTFS_DIRECT_IO_RUNS 16
+
+typedef struct _NTFS_DIRECT_IO_RUN
+{
+    ULONGLONG DiskOffset;
+    ULONG Length;
+} NTFS_DIRECT_IO_RUN, *PNTFS_DIRECT_IO_RUN;
+
+typedef struct _NTFS_DIRECT_IO_MAP
+{
+    ULONG RunCount;
+    NTFS_DIRECT_IO_RUN Runs[NTFS_DIRECT_IO_RUNS];
+} NTFS_DIRECT_IO_MAP, *PNTFS_DIRECT_IO_MAP;
+
 NTSTATUS
 NtfsMapDirectIo(_In_ PVolumeContextBlock VolCB,
                 _In_ PFileContextBlock FileCB,
@@ -620,7 +634,7 @@ NtfsMapDirectIo(_In_ PVolumeContextBlock VolCB,
                 _In_ ULONG Length,
                 _In_ LOCK_OPERATION Operation,
                 _In_ BOOLEAN AllowExtend,
-                _Out_ PULONGLONG MappedOffset,
+                _Out_ PNTFS_DIRECT_IO_MAP Map,
                 _Out_ PBOOLEAN Handled);
 
 NTSTATUS
@@ -629,6 +643,20 @@ NtfsSubmitDirectIo(_In_ PVolumeContextBlock VolCB,
                    _In_ UCHAR MajorFunction,
                    _In_ ULONGLONG DiskOffset,
                    _In_ ULONG Length);
+
+NTSTATUS
+NtfsFlushDirectIoMap(_In_ PVolumeContextBlock VolCB,
+                     _In_ PNTFS_DIRECT_IO_MAP Map);
+
+VOID
+NtfsDropDirectIoMap(_In_ PVolumeContextBlock VolCB,
+                    _In_ PNTFS_DIRECT_IO_MAP Map);
+
+NTSTATUS
+NtfsSubmitDirectIoMap(_In_ PVolumeContextBlock VolCB,
+                      _Inout_ PIRP Irp,
+                      _In_ UCHAR MajorFunction,
+                      _In_ PNTFS_DIRECT_IO_MAP Map);
 
 NTSTATUS
 NtfsLockTransferBuffer(_Inout_ PIRP Irp,
