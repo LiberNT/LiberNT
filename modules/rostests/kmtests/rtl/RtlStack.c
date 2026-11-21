@@ -24,7 +24,7 @@ TestStackWalk4(VOID)
     ULONG Hash;
     ULONG ExpectedHash;
     ULONG i;
-    const ULONG FunctionSizeGuess = 0x1000;
+    const ULONG FunctionSizeGuess = 0x2000;
     NTSTATUS ExceptionStatus = STATUS_SUCCESS;
 
     ReturnAddresses[3] = _ReturnAddress();
