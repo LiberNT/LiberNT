@@ -55,6 +55,7 @@ typedef struct _VolumeContextBlock
     FAST_MUTEX MissingNameMutex;
     LIST_ENTRY MissingNameList;
     LIST_ENTRY MissingNameHash[256];
+    LIST_ENTRY MissingNameLeafHash[256];
     ULONG MissingNameCount;
 
     /* Parsed file records kept past their last handle, most recent first. */
@@ -131,6 +132,7 @@ typedef struct _NtfsMissingName
 {
     LIST_ENTRY Link;
     LIST_ENTRY HashLink;
+    LIST_ENTRY LeafLink;
     ULONG Hash;
     ULONG LeafHash;
     USHORT Length;
