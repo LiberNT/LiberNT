@@ -648,6 +648,49 @@ MiImageWindowFor(
     return Window;
 }
 
+/* A MOVW/MOVT pair (PE/COFF IMAGE_REL_BASED_ARM_MOV32, IMAGE_REL_BASED_THUMB_MOV32) moved by Delta. */
+static
+BOOLEAN
+MiRelocateArmMov32(
+    _In_ BOOLEAN Thumb,
+    _Inout_ PULONGLONG Pair,
+    _In_ ULONG Delta)
+{
+    ULONG Movw = (ULONG)*Pair;
+    ULONG Movt = (ULONG)(*Pair >> 32);
+    ULONG Low, High, Value;
+
+    if (Thumb)
+    {
+        if (((Movw & 0xFBF0) != 0xF240) || ((Movt & 0xFBF0) != 0xF2C0))
+            return FALSE;
+        Low = ((Movw & 0xF) << 12) | (((Movw >> 10) & 1) << 11) | (((Movw >> 28) & 7) << 8) | ((Movw >> 16) & 0xFF);
+        High = ((Movt & 0xF) << 12) | (((Movt >> 10) & 1) << 11) | (((Movt >> 28) & 7) << 8) | ((Movt >> 16) & 0xFF);
+        Value = ((High << 16) | Low) + Delta;
+        Low = Value & 0xFFFF;
+        High = Value >> 16;
+        Movw = (Movw & ~0x70FF040FUL) | ((Low >> 12) & 0xF) | (((Low >> 11) & 1) << 10) |
+               (((Low >> 8) & 7) << 28) | ((Low & 0xFF) << 16);
+        Movt = (Movt & ~0x70FF040FUL) | ((High >> 12) & 0xF) | (((High >> 11) & 1) << 10) |
+               (((High >> 8) & 7) << 28) | ((High & 0xFF) << 16);
+    }
+    else
+    {
+        if (((Movw & 0x0FF00000) != 0x03000000) || ((Movt & 0x0FF00000) != 0x03400000))
+            return FALSE;
+        Low = ((Movw >> 4) & 0xF000) | (Movw & 0xFFF);
+        High = ((Movt >> 4) & 0xF000) | (Movt & 0xFFF);
+        Value = ((High << 16) | Low) + Delta;
+        Low = Value & 0xFFFF;
+        High = Value >> 16;
+        Movw = (Movw & ~0x000F0FFFUL) | ((Low & 0xF000) << 4) | (Low & 0xFFF);
+        Movt = (Movt & ~0x000F0FFFUL) | ((High & 0xF000) << 4) | (High & 0xFFF);
+    }
+
+    *Pair = ((ULONGLONG)Movt << 32) | Movw;
+    return TRUE;
+}
+
 static
 NTSTATUS
 MiRelocateImageControlArea(
@@ -814,6 +857,15 @@ MiRelocateImageControlArea(
                 case IMAGE_REL_BASED_DIR64:
                     Bytes = sizeof(ULONGLONG);
                     break;
+                case IMAGE_REL_BASED_ARM_MOV32:
+                case IMAGE_REL_BASED_THUMB_MOV32:
+                    if (Information->Machine != IMAGE_FILE_MACHINE_ARMNT)
+                    {
+                        Unsupported = TRUE;
+                        goto Done;
+                    }
+                    Bytes = 2 * sizeof(ULONG);
+                    break;
                 default:
                     Unsupported = TRUE;
                     goto Done;
@@ -824,7 +876,15 @@ MiRelocateImageControlArea(
                 Invalid = (BOOLEAN)(Status == STATUS_INVALID_IMAGE_FORMAT || Status == STATUS_ACCESS_VIOLATION);
                 goto Done;
             }
-            if (Type == IMAGE_REL_BASED_HIGH)
+            if (Type == IMAGE_REL_BASED_ARM_MOV32 || Type == IMAGE_REL_BASED_THUMB_MOV32)
+            {
+                if (!MiRelocateArmMov32(Type == IMAGE_REL_BASED_THUMB_MOV32, &Value, (ULONG)Delta))
+                {
+                    Invalid = TRUE;
+                    goto Done;
+                }
+            }
+            else if (Type == IMAGE_REL_BASED_HIGH)
                 Value = ((Value << 16) + Delta) >> 16;
             else if (Type == IMAGE_REL_BASED_LOW)
                 Value += (USHORT)Delta;
