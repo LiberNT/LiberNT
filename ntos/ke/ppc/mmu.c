@@ -7,9 +7,10 @@
  * real-mode reload in trap.S). Its entries are big-endian, so with
  * little-endian data accesses every word is byte-swapped. Changing or removing a software entry must
  * remove the matching hashed entry and the TLB entry. User segments 0-7 carry
- * per-process VSIDs, supervisor segments 8-15 the fixed PPC_KERNEL_VSID
- * values, so entries of other address spaces never match and a process
- * switch reloads only the user segment registers.
+ * per-process VSIDs, the session segment a per-session VSID and the other
+ * supervisor segments the fixed PPC_KERNEL_VSID values, so entries of other
+ * address spaces never match and a process switch reloads only the user and
+ * session segment registers.
  */
 
 #include <ntoskrnl.h>
@@ -61,7 +62,7 @@ KiPpcFlushTranslation(_In_ PVOID Address)
     ULONG Ea = (ULONG_PTR)Address & ~(PAGE_SIZE - 1);
     ULONG Segment, Vsid, Api, Hash, Pass, Index;
 
-    if (Ea < PPC_LOADER_KSEG0_BASE)
+    if (Ea < PPC_LOADER_KSEG0_BASE || (Ea - (ULONG_PTR)MmSessionBase < MmSessionSize))
         KiPpcAddressSpacesStale = TRUE;
 
     __asm__ __volatile__("mfsrin %0, %1" : "=r"(Segment) : "r"(Ea));
@@ -107,6 +108,34 @@ KiPpcFlushAllTranslations(VOID)
 
 VOID
 NTAPI
+KiPpcLoadSessionSegment(
+    _In_ ULONG_PTR DirectoryTableBase)
+{
+    ULONG_PTR Base = (ULONG_PTR)MmSessionBase;
+    ULONG Segment = Base >> 28;
+    PULONG Root;
+    ULONG Entry, Vsid;
+
+    ASSERT((KiPpcReadMsr() & MSR_EE) == 0);
+    if (MmSessionSize == 0)
+        return;
+
+    ASSERT((Base & 0x0FFFFFFF) == 0);
+    ASSERT(MmSessionSize == 0x10000000);
+    ASSERT(Segment >= 8);
+    ASSERT((DirectoryTableBase & (PAGE_SIZE - 1)) == 0);
+    ASSERT(DirectoryTableBase < PPC_LOADER_KSEG0_SIZE);
+
+    Root = (PULONG)(PPC_LOADER_KSEG0_BASE + DirectoryTableBase);
+    Entry = Root[Base >> MI_PPC_ROOT_SHIFT];
+    Vsid = (Entry & MI_PPC_PTE_VALID) ? ((((Entry & MI_PPC_PTE_FRAME_MASK) >> MI_PPC_PTE_FRAME_SHIFT) << 4) | Segment)
+                                      : PPC_KERNEL_VSID(Segment);
+    ASSERT(Vsid != PPC_KERNEL_VSID(Segment) || !(Entry & MI_PPC_PTE_VALID));
+    __asm__ __volatile__("mtsrin %0, %1\n\tisync" :: "r"(PPC_SR_KP | (Vsid & PPC_SR_VSID_MASK)), "r"(Base) : "memory");
+}
+
+VOID
+NTAPI
 KiPpcLoadAddressSpace(
     _In_ ULONG_PTR DirectoryTableBase,
     _In_ ULONG VsidBase)
@@ -129,6 +158,7 @@ KiPpcLoadAddressSpace(
         __asm__ __volatile__("mtsrin %0, %1" :: "r"(PPC_SR_KP | (Vsid & PPC_SR_VSID_MASK)), "r"(Segment << 28) : "memory");
     }
     __asm__ __volatile__("isync" ::: "memory");
+    KiPpcLoadSessionSegment(DirectoryTableBase);
     KeRestoreInterrupts(Interrupts);
 }
 

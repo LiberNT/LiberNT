@@ -260,6 +260,7 @@ DECLSPEC_NORETURN VOID KiExceptionExit(PKTRAP_FRAME TrapFrame, PKEXCEPTION_FRAME
 VOID NTAPI KiPpcFlushTranslation(_In_ PVOID Address);
 VOID NTAPI KiPpcFlushAllTranslations(VOID);
 VOID NTAPI KiPpcLoadAddressSpace(_In_ ULONG_PTR DirectoryTableBase, _In_ ULONG VsidBase);
+VOID NTAPI KiPpcLoadSessionSegment(_In_ ULONG_PTR DirectoryTableBase);
 PKTRAP_FRAME NTAPI KeGetTrapFrame(_In_ PKTHREAD Thread);
 PKEXCEPTION_FRAME NTAPI KeGetExceptionFrame(_In_ PKTHREAD Thread);
 ULONG_PTR NTAPI KeGetTrapFramePc(_In_ PKTRAP_FRAME TrapFrame);

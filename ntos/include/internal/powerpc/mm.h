@@ -11,7 +11,7 @@
 extern "C" {
 #endif
 
-#define _MI_PAGING_LEVELS 3
+#define _MI_PAGING_LEVELS 2
 #define _MI_HAS_NO_EXECUTE 0
 
 typedef MMPTE MMPDE, *PMMPDE;
@@ -37,27 +37,24 @@ typedef MMPTE MMPPE, *PMMPPE;
 #define MI_IS_WRITE_ACCESS(Code) BooleanFlagOn((Code), MI_PPC_FAULT_WRITE)
 #define MI_IS_INSTRUCTION_FETCH(Code) BooleanFlagOn((Code), MI_PPC_FAULT_EXECUTE)
 
-/* Software page-table entries: the i386 PAE layout. The real-mode reload
- * reads only the low word, so every bit it needs lives there. */
-#define MI_PPC_PTE_VALID         0x001ULL
-#define MI_PPC_PTE_WRITE         0x002ULL
-#define MI_PPC_PTE_OWNER         0x004ULL
-#define MI_PPC_PTE_WRITETHROUGH  0x008ULL
-#define MI_PPC_PTE_CACHEDISABLE  0x010ULL
-#define MI_PPC_PTE_ACCESSED      0x020ULL
-#define MI_PPC_PTE_DIRTY         0x040ULL
-#define MI_PPC_PTE_LARGE         0x080ULL
-#define MI_PPC_PTE_GLOBAL        0x100ULL
-#define MI_PPC_PTE_COPYONWRITE   0x200ULL
-#define MI_PPC_PTE_FRAME_MASK    0x00000000FFFFF000ULL
+/* Software page-table entries: the i386 layout. */
+#define MI_PPC_PTE_VALID         0x001UL
+#define MI_PPC_PTE_WRITE         0x002UL
+#define MI_PPC_PTE_OWNER         0x004UL
+#define MI_PPC_PTE_WRITETHROUGH  0x008UL
+#define MI_PPC_PTE_CACHEDISABLE  0x010UL
+#define MI_PPC_PTE_ACCESSED      0x020UL
+#define MI_PPC_PTE_DIRTY         0x040UL
+#define MI_PPC_PTE_LARGE         0x080UL
+#define MI_PPC_PTE_GLOBAL        0x100UL
+#define MI_PPC_PTE_COPYONWRITE   0x200UL
+#define MI_PPC_PTE_FRAME_MASK    0xFFFFF000UL
 #define MI_PPC_PTE_FRAME_SHIFT   12
 
-/* Level geometry: 4-entry root (VA[31:30]), 512-entry middle (VA[29:21]),
- * 512-entry leaf (VA[20:12]). */
-#define MI_PPC_ROOT_SHIFT        30
-#define MI_PPC_MIDDLE_SHIFT      21
-#define MI_PPC_ROOT_ENTRIES      4
-#define MI_PPC_ROOT_KERNEL_INDEX 2
+/* Level geometry: 1024-entry root (VA[31:22]), 1024-entry leaf (VA[21:12]). */
+#define MI_PPC_ROOT_SHIFT        22
+#define MI_PPC_ROOT_ENTRIES      1024
+#define MI_PPC_ROOT_KERNEL_INDEX 512
 
 /* KSEG0 reaches every RAM page and every page table. */
 #define MI_PPC_PFN_TO_VA(Pfn) \
@@ -72,6 +69,9 @@ typedef struct _MI_PPC_PAGE_WALK
     PHYSICAL_ADDRESS PhysicalAddress;
     ULONG Level;
 } MI_PPC_PAGE_WALK, *PMI_PPC_PAGE_WALK;
+
+extern PVOID MmSessionBase;
+extern SIZE_T MmSessionSize;
 
 NTSTATUS NTAPI MiPpcWalkPageTables(_In_ PFN_NUMBER RootPageFrame, _In_ ULONG_PTR VirtualAddress, _Out_ PMI_PPC_PAGE_WALK Result);
 NTSTATUS NTAPI MiPpcWalkCurrentPageTables(_In_ PVOID Address, _Out_ PMI_PPC_PAGE_WALK Result);

@@ -17,8 +17,8 @@ MiPpcWalkPageTables(
     _In_ ULONG_PTR VirtualAddress,
     _Out_ PMI_PPC_PAGE_WALK Result)
 {
-    static const UCHAR Shift[3] = { MI_ARCH_L0_SHIFT, MI_ARCH_L1_SHIFT, MI_ARCH_L2_SHIFT };
-    static const ULONG Mask[3] = { 511, 511, 3 };
+    static const UCHAR Shift[MI_ARCH_PAGING_LEVELS] = { MI_ARCH_L0_SHIFT, MI_ARCH_L1_SHIFT };
+    static const ULONG Mask[MI_ARCH_PAGING_LEVELS] = { (1UL << MI_ARCH_L0_BITS) - 1, (1UL << MI_ARCH_L1_BITS) - 1 };
     PFN_NUMBER TablePageFrame = RootPageFrame;
     ULONG Level = MI_ARCH_PAGING_LEVELS;
 

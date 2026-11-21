@@ -9,19 +9,17 @@
 #include <ofw.h>
 #include "../../winload/winload.h"
 
-#define PPC_PTE_VALID          0x001ULL
-#define PPC_PTE_WRITE          0x002ULL
-#define PPC_PTE_ACCESSED       0x020ULL
-#define PPC_PTE_DIRTY          0x040ULL
-#define PPC_PTE_FRAME_MASK     0x000000FFFFFFF000ULL
+#define PPC_PTE_VALID          0x001UL
+#define PPC_PTE_WRITE          0x002UL
+#define PPC_PTE_ACCESSED       0x020UL
+#define PPC_PTE_DIRTY          0x040UL
+#define PPC_PTE_FRAME_MASK     0xFFFFF000UL
 #define PPC_PTE_TABLE          (PPC_PTE_VALID | PPC_PTE_WRITE)
 #define PPC_PTE_KERNEL_LEAF    (PPC_PTE_VALID | PPC_PTE_WRITE | PPC_PTE_ACCESSED | PPC_PTE_DIRTY)
 
-#define PPC_TABLE_ENTRIES      512
-#define PPC_ROOT_SHIFT         30
-#define PPC_L1_SHIFT           21
+#define PPC_TABLE_ENTRIES      1024
+#define PPC_ROOT_SHIFT         22
 #define PPC_L0_SHIFT           12
-#define PPC_BOOT_ROOT_INDEX    (PPC_LOADER_KSEG0_BASE >> PPC_ROOT_SHIFT)
 #define PPC_TABLE_SLACK        6
 
 #define PPC_HTAB_SIZE          0x40000UL
@@ -68,8 +66,7 @@ C_ASSERT(sizeof(PPC_HANDOFF) == 152);
 
 typedef struct _PPC_LOADER_STATE
 {
-    PULONGLONG RootTable;
-    PULONGLONG BootL1Table;
+    PULONG RootTable;
     PUCHAR TablePool;
     ULONG TablesAvailable;
     ULONG TablesUsed;
@@ -132,35 +129,37 @@ PpcAllocateResident(
 }
 
 static
-PULONGLONG
+PULONG
 PpcAllocateTable(VOID)
 {
-    PULONGLONG Table;
+    PULONG Table;
 
     if (PpcLoaderState.TablesUsed >= PpcLoaderState.TablesAvailable)
         return NULL;
 
-    Table = (PULONGLONG)(PpcLoaderState.TablePool + PpcLoaderState.TablesUsed * MM_PAGE_SIZE);
+    Table = (PULONG)(PpcLoaderState.TablePool + PpcLoaderState.TablesUsed * MM_PAGE_SIZE);
     PpcLoaderState.TablesUsed++;
     RtlZeroMemory(Table, MM_PAGE_SIZE);
     return Table;
 }
 
 static
-PULONGLONG
+PULONG
 PpcGetLeafSlot(
     _In_ ULONG VirtualAddress,
     _In_ BOOLEAN Create)
 {
     ULONG RootIndex = VirtualAddress >> PPC_ROOT_SHIFT;
-    ULONG L1Index = (VirtualAddress >> PPC_L1_SHIFT) & (PPC_TABLE_ENTRIES - 1);
     ULONG L0Index = (VirtualAddress >> PPC_L0_SHIFT) & (PPC_TABLE_ENTRIES - 1);
-    PULONGLONG L0Table;
+    PULONG L0Table;
 
-    if (RootIndex != PPC_BOOT_ROOT_INDEX || !PpcLoaderState.BootL1Table)
+    if (VirtualAddress < PPC_LOADER_KSEG0_BASE || VirtualAddress >= PPC_LOADER_SYSTEM_SLOT_END ||
+        !PpcLoaderState.RootTable)
+    {
         return NULL;
+    }
 
-    if (!(PpcLoaderState.BootL1Table[L1Index] & PPC_PTE_VALID))
+    if (!(PpcLoaderState.RootTable[RootIndex] & PPC_PTE_VALID))
     {
         if (!Create)
             return NULL;
@@ -169,10 +168,10 @@ PpcGetLeafSlot(
         if (!L0Table)
             return NULL;
 
-        PpcLoaderState.BootL1Table[L1Index] = ((ULONG_PTR)L0Table & PPC_PTE_FRAME_MASK) | PPC_PTE_TABLE;
+        PpcLoaderState.RootTable[RootIndex] = ((ULONG_PTR)L0Table & PPC_PTE_FRAME_MASK) | PPC_PTE_TABLE;
     }
 
-    L0Table = (PULONGLONG)(ULONG_PTR)(PpcLoaderState.BootL1Table[L1Index] & PPC_PTE_FRAME_MASK);
+    L0Table = (PULONG)(ULONG_PTR)(PpcLoaderState.RootTable[RootIndex] & PPC_PTE_FRAME_MASK);
     return &L0Table[L0Index];
 }
 
@@ -182,12 +181,12 @@ PpcMapPage(
     _In_ ULONG VirtualAddress,
     _In_ ULONG PhysicalAddress)
 {
-    PULONGLONG Slot = PpcGetLeafSlot(VirtualAddress, TRUE);
+    PULONG Slot = PpcGetLeafSlot(VirtualAddress, TRUE);
 
     if (!Slot)
         return FALSE;
 
-    *Slot = ((ULONGLONG)PhysicalAddress & PPC_PTE_FRAME_MASK) | PPC_PTE_KERNEL_LEAF;
+    *Slot = (PhysicalAddress & PPC_PTE_FRAME_MASK) | PPC_PTE_KERNEL_LEAF;
     return TRUE;
 }
 
@@ -393,7 +392,7 @@ WinLdrSetupMachineDependent(
     RtlZeroMemory(&PpcLoaderState, sizeof(PpcLoaderState));
 
     TablesNeeded = (ULONG)((MmGetHighestPhysicalPage() + PPC_TABLE_ENTRIES - 1) / PPC_TABLE_ENTRIES);
-    TablesNeeded = min(TablesNeeded, PPC_LOADER_KSEG0_SIZE >> PPC_L1_SHIFT) + PPC_TABLE_SLACK;
+    TablesNeeded = min(TablesNeeded, PPC_LOADER_KSEG0_SIZE >> PPC_ROOT_SHIFT) + PPC_TABLE_SLACK;
 
     PpcLoaderState.TablePool = PpcAllocateResident(TablesNeeded * MM_PAGE_SIZE, LoaderMemoryData);
     if (!PpcLoaderState.TablePool)
@@ -401,12 +400,8 @@ WinLdrSetupMachineDependent(
 
     PpcLoaderState.TablesAvailable = TablesNeeded;
     PpcLoaderState.RootTable = PpcAllocateTable();
-    PpcLoaderState.BootL1Table = PpcAllocateTable();
-    if (!PpcLoaderState.RootTable || !PpcLoaderState.BootL1Table)
+    if (!PpcLoaderState.RootTable)
         return;
-
-    PpcLoaderState.RootTable[PPC_BOOT_ROOT_INDEX] =
-        ((ULONG_PTR)PpcLoaderState.BootL1Table & PPC_PTE_FRAME_MASK) | PPC_PTE_TABLE;
 
     HtabRaw = (ULONG_PTR)PpcAllocateResident(2 * PPC_HTAB_SIZE, LoaderMemoryData);
     if (!HtabRaw)
