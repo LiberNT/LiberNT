@@ -95,3 +95,10 @@ cpp_quote("#define IDirect3DDevice9On12_Releasep) (p) -> lpVtbl -> Release(p)")
 cpp_quote("#define IDirect3DDevice9On12_ReturnUnderlyingResourcep, a, b, c, d) (p) -> lpVtbl -> ReturnUnderlyingResource(p, a, b, c, d)")
 cpp_quote("#define IDirect3DDevice9On12_UnwrapUnderlyingResourcep, a, b, c, d) (p) -> lpVtbl -> UnwrapUnderlyingResource(p, a, b, c, d)")
 
+cpp_quote("#define IDirect3DDevice9On12_AddRefp) (p) -> lpVtbl -> AddRef(p)")
+cpp_quote("#define IDirect3DDevice9On12_GetD3D12Devicep, a, b) (p) -> lpVtbl -> GetD3D12Device(p, a, b)")
+cpp_quote("#define IDirect3DDevice9On12_QueryInterfacep, a, b) (p) -> lpVtbl -> QueryInterface(p, a, b)")
+cpp_quote("#define IDirect3DDevice9On12_Releasep) (p) -> lpVtbl -> Release(p)")
+cpp_quote("#define IDirect3DDevice9On12_ReturnUnderlyingResourcep, a, b, c, d) (p) -> lpVtbl -> ReturnUnderlyingResource(p, a, b, c, d)")
+cpp_quote("#define IDirect3DDevice9On12_UnwrapUnderlyingResourcep, a, b, c, d) (p) -> lpVtbl -> UnwrapUnderlyingResource(p, a, b, c, d)")
+

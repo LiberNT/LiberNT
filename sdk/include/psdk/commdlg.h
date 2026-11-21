@@ -839,4 +839,7 @@ struct tagFINDREPLACEW
 #define CommDlg_FindReplace_SendCustomResult_hdlg, _psz) (void) SNDMSG(_hdlg, FRM_SETOPERATIONRESULTTEXT, 0, (LPARAM) (LPSTR) (_psz))
 #define CommDlg_FindReplace_SendResult_hdlg, _flags, _fr) (void) SNDMSG(_hdlg, FRM_SETOPERATIONRESULT, (WPARAM) (_flags), (LPARAM) (_fr))
 
+#define CommDlg_FindReplace_SendCustomResult_hdlg, _psz) (void) SNDMSG(_hdlg, FRM_SETOPERATIONRESULTTEXT, 0, (LPARAM) (LPSTR) (_psz))
+#define CommDlg_FindReplace_SendResult_hdlg, _flags, _fr) (void) SNDMSG(_hdlg, FRM_SETOPERATIONRESULT, (WPARAM) (_flags), (LPARAM) (_fr))
+
 #endif

@@ -952,3 +952,5 @@ cpp_quote("#define ROOM_PROFILE_KEY_GUID 0")
 
 cpp_quote("#define CROSSOVER_FREQ_KEY_GUID 0")
 
+cpp_quote("#define FULL_RANGE_SPEAKERS_KEY_GUID 0")
+

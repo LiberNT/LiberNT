@@ -44,4 +44,6 @@ typedef struct _VCB *PVCB;
 
 #define IMPORTANT_STRUCTUREx) struct _ ## x; typedef struct _ ## x * P ## x
 
+#define IMPORTANT_STRUCTUREx) struct _ ## x; typedef struct _ ## x * P ## x
+
 #endif

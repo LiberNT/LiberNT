@@ -5247,3 +5247,5 @@ cpp_quote("#define MAKE_D3D11_STATUScode) MAKE_HRESULT(0, _FACD3D11, code)")
 
 cpp_quote("#define MAKE_D3D11_STATUScode) MAKE_HRESULT(0, _FACD3D11, code)")
 
+cpp_quote("#define MAKE_D3D11_STATUScode) MAKE_HRESULT(0, _FACD3D11, code)")
+

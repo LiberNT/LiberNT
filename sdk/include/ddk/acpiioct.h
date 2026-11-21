@@ -543,3 +543,10 @@ typedef __unaligned ACPI_METHOD_ARGUMENT_V2 *PACPI_METHOD_ARGUMENT_V2;
 #define ACPI_METHOD_SET_ARGUMENT_STRING_V2Argument, StrData) { Argument -> Type = ACPI_METHOD_ARGUMENT_STRING; Argument -> DataLength = strlen((PUCHAR) StrData) + sizeof (UCHAR); memcpy_s(& Argument -> Data [0], Argument -> DataLength, (PUCHAR) StrData, Argument -> DataLength); }
 #define FOR_EACH_ACPI_METHOD_ARGUMENT_V2MethodArgument, MethodArgumentsBegin, MethodArgumentsEnd) for (PACPI_METHOD_ARGUMENT_V2 MethodArgument = (MethodArgumentsBegin); MethodArgument < (MethodArgumentsEnd); MethodArgument = ACPI_METHOD_NEXT_ARGUMENT_V2(MethodArgument))
 
+#define ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENTS_BEGINEvalOutputBuffer) ((PACPI_METHOD_ARGUMENT_V2) EvalOutputBuffer -> Argument)
+#define ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENTS_ENDEvalOutputBuffer) (PACPI_METHOD_ARGUMENT_V2) ((PUCHAR) EvalOutputBuffer -> Argument + ACPI_EVAL_OUTPUT_BUFFER_V2_ARGUMENT_LENGTH(EvalOutputBuffer))
+#define ACPI_METHOD_SET_ARGUMENT_BUFFER_V2Argument, BuffData, BuffLength) { Argument -> Type = ACPI_METHOD_ARGUMENT_BUFFER; Argument -> DataLength = BuffLength; memcpy_s(& Argument -> Data [0], Argument -> DataLength, (PUCHAR) BuffData, BuffLength); }
+#define ACPI_METHOD_SET_ARGUMENT_INTEGER_V2MethodArgument, IntData) { MethodArgument -> Type = ACPI_METHOD_ARGUMENT_INTEGER; MethodArgument -> DataLength = sizeof (ULONG); MethodArgument -> Argument = IntData; }
+#define ACPI_METHOD_SET_ARGUMENT_STRING_V2Argument, StrData) { Argument -> Type = ACPI_METHOD_ARGUMENT_STRING; Argument -> DataLength = strlen((PUCHAR) StrData) + sizeof (UCHAR); memcpy_s(& Argument -> Data [0], Argument -> DataLength, (PUCHAR) StrData, Argument -> DataLength); }
+#define FOR_EACH_ACPI_METHOD_ARGUMENT_V2MethodArgument, MethodArgumentsBegin, MethodArgumentsEnd) for (PACPI_METHOD_ARGUMENT_V2 MethodArgument = (MethodArgumentsBegin); MethodArgument < (MethodArgumentsEnd); MethodArgument = ACPI_METHOD_NEXT_ARGUMENT_V2(MethodArgument))
+

@@ -2905,4 +2905,6 @@ DEFINE_PROPERTYKEY(PKEY_Volume_IsRoot, 0x9b174b35,0x40ff,0x11d2,0xa2,0x7e,0x00,0
 
 #define DEFINE_API_PKEYname, managed_name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8, pid) DEFINE_PROPERTYKEY(name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8, pid)
 
+#define DEFINE_API_PKEYname, managed_name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8, pid) DEFINE_PROPERTYKEY(name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8, pid)
+
 #endif /*_INC_PROPKEY*/

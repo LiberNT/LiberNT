@@ -745,4 +745,8 @@ BOOLEAN RxLoudFcbMsg(PUCHAR msg, PUNICODE_STRING Name);
 #define RxReferenceSrvCallAtDpcSrvCall) RxpTrackReference(RDBSS_REF_TRACK_SRVCALL, __FILE__, __LINE__, SrvCall); ASSERT(SrvCall -> NodeReferenceCount > 1); InterlockedIncrement(& SrvCall -> NodeReferenceCount)
 #define RxWriteCachingAllowedFCB, SRVOPEN) (FlagOn((FCB) -> FcbState, FCB_STATE_WRITECACHING_ENABLED) && !FlagOn((SRVOPEN) -> Flags, SRVOPEN_FLAG_DONTUSE_WRITE_CACHING))
 
+#define FILESIZE_LOCK_DISABLEDx)
+#define RxReferenceSrvCallAtDpcSrvCall) RxpTrackReference(RDBSS_REF_TRACK_SRVCALL, __FILE__, __LINE__, SrvCall); ASSERT(SrvCall -> NodeReferenceCount > 1); InterlockedIncrement(& SrvCall -> NodeReferenceCount)
+#define RxWriteCachingAllowedFCB, SRVOPEN) (FlagOn((FCB) -> FcbState, FCB_STATE_WRITECACHING_ENABLED) && !FlagOn((SRVOPEN) -> Flags, SRVOPEN_FLAG_DONTUSE_WRITE_CACHING))
+
 #endif

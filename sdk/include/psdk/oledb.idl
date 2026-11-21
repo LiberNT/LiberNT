@@ -2579,3 +2579,6 @@ cpp_quote("};")
 cpp_quote("#define IsEqualGuidBaserguid1, rguid2) (!memcmp(& ((rguid1) . Data2), & ((rguid2) . Data2), sizeof (GUID) - sizeof ((rguid1) . Data1)))")
 cpp_quote("#define MDAXISINFO_GETATrgAxisInfo, iAxis) (* PMDAXISINFO_GETAT((rgAxisInfo), (iAxis)))")
 
+cpp_quote("#define IsEqualGuidBaserguid1, rguid2) (!memcmp(& ((rguid1) . Data2), & ((rguid2) . Data2), sizeof (GUID) - sizeof ((rguid1) . Data1)))")
+cpp_quote("#define MDAXISINFO_GETATrgAxisInfo, iAxis) (* PMDAXISINFO_GETAT((rgAxisInfo), (iAxis)))")
+

@@ -4850,4 +4850,8 @@ BOOL SetUmsThreadInformation(PUMS_CONTEXT UmsThread, UMS_THREAD_INFO_CLASS UmsTh
 }
 #endif
 
+#define AccessCheckByTypeResultListAndAuditAlarm 0
+#define GlobalLRUNewesth) ((HANDLE) (h))
+#define GlobalLRUOldesth) ((HANDLE) (h))
+
 #endif /* _WINBASE_ */

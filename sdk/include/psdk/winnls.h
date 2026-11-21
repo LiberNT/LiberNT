@@ -1551,4 +1551,12 @@ enum SYSNLS_FUNCTION
 #define FILEMUIINFO_GET_MUI_TYPEIDSpInfo) ((DWORD *) ((pInfo -> dwTypeIDMUIOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeIDMUIOffset : NULL))
 #define FILEMUIINFO_GET_MUI_TYPENAMESpInfo) ((LPWSTR) ((pInfo -> dwTypeNameMUIOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeNameMUIOffset : NULL))
 
+#define FILEMUIINFO_GET_CULTUREpInfo) ((LPWSTR) ((pInfo -> dwLanguageNameOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwLanguageNameOffset : NULL))
+#define FILEMUIINFO_GET_MAIN_TYPEIDpInfo, iType) (((iType < pInfo -> dwTypeIDMainSize) && (pInfo -> dwTypeIDMainOffset > 0)) ? * ((DWORD *) ((ULONG_PTR) pInfo + pInfo -> dwTypeIDMainOffset) + iType) : 0)
+#define FILEMUIINFO_GET_MAIN_TYPEIDSpInfo) ((DWORD *) ((pInfo -> dwTypeIDMainOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeIDMainOffset : NULL))
+#define FILEMUIINFO_GET_MAIN_TYPENAMESpInfo) ((LPWSTR) ((pInfo -> dwTypeNameMainOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeNameMainOffset : NULL))
+#define FILEMUIINFO_GET_MUI_TYPEIDpInfo, iType) (((iType < pInfo -> dwTypeIDMUISize) && (pInfo -> dwTypeIDMUIOffset > 0)) ? * ((DWORD *) ((ULONG_PTR) pInfo + pInfo -> dwTypeIDMUIOffset) + iType) : 0)
+#define FILEMUIINFO_GET_MUI_TYPEIDSpInfo) ((DWORD *) ((pInfo -> dwTypeIDMUIOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeIDMUIOffset : NULL))
+#define FILEMUIINFO_GET_MUI_TYPENAMESpInfo) ((LPWSTR) ((pInfo -> dwTypeNameMUIOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwTypeNameMUIOffset : NULL))
+
 #endif

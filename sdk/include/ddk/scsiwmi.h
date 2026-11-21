@@ -232,6 +232,8 @@ PWCHAR ScsiPortWmiSetInstanceName(PSCSIWMI_REQUEST_CONTEXT RequestContext, ULONG
 
 #define ScsiPortWmiIsQueryAllDataRequestContext) ((RequestContext) -> MinorFunction == WMI_GET_ALL_DATA)
 
+#define ScsiPortWmiIsQueryAllDataRequestContext) ((RequestContext) -> MinorFunction == WMI_GET_ALL_DATA)
+
 #endif /* _SCSIWMI_ */
 
 #ifndef WMIREG_FLAG_CALL_BY_NAME

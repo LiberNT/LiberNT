@@ -2890,4 +2890,6 @@ typedef LONG USAGE_VALUE;
 
 #define HID_USAGE_BUTTON_IDid) ((USAGE) id)
 
+#define HID_USAGE_BUTTON_IDid) ((USAGE) id)
+
 #endif /* __HIDUSAGE_H */

@@ -3219,4 +3219,6 @@ __inline NTSTATUS_FROM_WIN32(long x) { return x <= 0 ? (NTSTATUS)x : (NTSTATUS) 
 
 #define IS_CAMERA_NTSTATUSx) (((x) & 0x0FFF0000) == (FACILITY_CAMERA << 16))
 
+#define IS_CAMERA_NTSTATUSx) (((x) & 0x0FFF0000) == (FACILITY_CAMERA << 16))
+
 #endif /* _NTSTATUS_ */

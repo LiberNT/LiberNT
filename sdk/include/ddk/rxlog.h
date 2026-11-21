@@ -87,4 +87,6 @@ void RxUninitializeLog(void);
 
 #define RxDbgPrintArgs) DbgPrint ## Args
 
+#define RxDbgPrintArgs) DbgPrint ## Args
+
 #endif

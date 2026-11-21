@@ -1992,3 +1992,7 @@ cpp_quote("    tomCellStructureChangeOnly = 1,")
 cpp_quote("    tomRowHeightActual = 0x80B,")
 cpp_quote("};")
 
+cpp_quote("typedef enum __MIDL___MIDL_itf_tom_0000_0000_0003 MANCODE;")
+cpp_quote("")
+cpp_quote("typedef enum __MIDL___MIDL_itf_tom_0000_0000_0002 OBJECTTYPE;")
+

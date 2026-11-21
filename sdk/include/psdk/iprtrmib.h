@@ -262,4 +262,8 @@ typedef struct _MIB_PROXYARP *PMIB_PROXYARP;
 
 typedef struct _MIB_ROUTESTATE *PMIB_ROUTESTATE;
 
+#define CAST_MIB_INFOX, Y, Z) Z = (Y) (X -> rgbyData)
+#define MIB_INFO_SIZE_IN_DWORDSS) ((MIB_INFO_SIZE(S)) / sizeof (DWORD) + 1)
+#define SIZEOF_BOUNDARY_TABLEX) (FIELD_OFFSET(MIB_IPMCAST_BOUNDARY_TABLE, table [0]) + ((X) * sizeof (MIB_IPMCAST_BOUNDARY)) + ALIGN_SIZE)
+
 #endif /* WINE_IPRTRMIB_H__ */

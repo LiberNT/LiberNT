@@ -74,4 +74,6 @@ typedef enum _AUDIO_STREAM_CATEGORY
 
 #define MIDL_SIZE_ISx)
 
+#define MIDL_SIZE_ISx)
+
 #endif

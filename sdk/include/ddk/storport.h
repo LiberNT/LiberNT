@@ -7926,6 +7926,12 @@ struct DECLSPEC_ALIGN(8) _SRBEX_DATA_NVMEOF_OPERATION
     ULONG FunctionType;
 };
 
+#define StorPortConvertPhysicalAddressToULong64Address) ((Address) . QuadPart)
+#define StorPortReadRegisterBufferUlong64h, r, b, c) READ_REGISTER_BUFFER_ULONG64(r, b, c)
+#define StorPortReadRegisterUlong64h, r) READ_REGISTER_ULONG64(r)
+#define StorPortWriteRegisterBufferUlong64h, r, b, c) WRITE_REGISTER_BUFFER_ULONG64(r, b, c)
+#define StorPortWriteRegisterUlong64h, r, v) WRITE_REGISTER_ULONG64(r, v)
+
 #endif /* _NTSTORPORT_ */
 
 #ifndef ATTRIBUTE_VM_PASSTHROUGH_LUN

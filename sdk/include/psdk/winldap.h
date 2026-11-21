@@ -887,4 +887,7 @@ void ldap_set_dbg_routine(DBGPRINT DebugPrintRoutine);
 #define LDAP_IS_CLDAPld) ((ld) -> ld_sb . sb_naddr > 0)
 #define NAME_ERRORn) ((n & 0xf0) == 0x20)
 
+#define LDAP_IS_CLDAPld) ((ld) -> ld_sb . sb_naddr > 0)
+#define NAME_ERRORn) ((n & 0xf0) == 0x20)
+
 #endif  /* __WINE_WINLDAP_H */

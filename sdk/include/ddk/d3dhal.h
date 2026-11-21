@@ -1404,4 +1404,13 @@ typedef HRESULT (WINAPI *PFND3DPARSEUNKNOWNCOMMAND)(LPVOID, LPVOID *);
 #define D3DVS_GETSWIZZLEtoken) (token & D3DVS_SWIZZLE_MASK)
 #define D3DVS_GETSWIZZLECOMPsource, component) (source >> ((component << 1) + 16) & 0x3)
 
+#define D3DSI_GETOPCODEcommand) (command & D3DSI_OPCODE_MASK)
+#define D3DSI_GETREGNUMtoken) (token & D3DSP_REGNUM_MASK)
+#define D3DSI_GETREGTYPEtoken) ((D3DSHADER_PARAM_REGISTER_TYPE) (token & D3DSP_REGTYPE_MASK))
+#define D3DSI_GETWRITEMASKtoken) (token & D3DSP_WRITEMASK_ALL)
+#define D3DVS_GETADDRESSMODEtoken) (token & D3DVS_ADDRESSMODE_MASK)
+#define D3DVS_GETSRCMODIFIERtoken) (token & D3DSP_SRCMOD_MASK)
+#define D3DVS_GETSWIZZLEtoken) (token & D3DVS_SWIZZLE_MASK)
+#define D3DVS_GETSWIZZLECOMPsource, component) (source >> ((component << 1) + 16) & 0x3)
+
 #endif /* _D3DHAL_H_ */

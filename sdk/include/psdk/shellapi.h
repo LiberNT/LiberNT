@@ -1169,4 +1169,7 @@ HRESULT SHSetUnreadMailCountA(LPCSTR pszMailAddress, DWORD dwCount, LPCSTR pszSh
 #define EIRESIDx) (- 1 * (int) (x))
 #define SHDOCAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
 
+#define EIRESIDx) (- 1 * (int) (x))
+#define SHDOCAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
+
 #endif

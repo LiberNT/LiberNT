@@ -401,4 +401,23 @@ typedef struct _MODEMSETTINGS {
 #define MDM_SET_PROTOCOLID_dwOptions, _prot) (((_dwOptions) &= ~MDM_MASK_PROTOCOLID), ((_dwOptions) |= (((_prot) << MDM_SHIFT_PROTOCOLID) & MDM_MASK_PROTOCOLID)))
 #define MDM_SET_PROTOCOLINFO_dwOptions, _pinfo) (((_dwOptions) &= ~MDM_MASK_PROTOCOLINFO), ((_dwOptions) |= ((_pinfo) & MDM_MASK_PROTOCOLINFO)))
 
+#define MDM_GEN_ANALOG_PROTOCOL_DATA_rlp) (_rlp)
+#define MDM_GEN_AUTO_PROTOCOL_DATA_speed, _ml) ((((_speed) << MDM_SHIFT_AUTO_SPEED) & MDM_MASK_AUTO_SPEED) | (((_ml) << MDM_SHIFT_AUTO_ML) & MDM_MASK_AUTO_ML))
+#define MDM_GEN_EXTENDEDINFO_bearermode, _pinfo) (((_pinfo) & MDM_MASK_PROTOCOLINFO) | (((_bearermode) << MDM_SHIFT_BEARERMODE) & MDM_MASK_BEARERMODE))
+#define MDM_GEN_HDLCPPP_PROTOCOL_DATA_speed, _auth, _ml) ((((_speed) << MDM_SHIFT_HDLCPPP_SPEED) & MDM_MASK_HDLCPPP_SPEED) | (((_auth) << MDM_SHIFT_HDLCPPP_AUTH) & MDM_MASK_HDLCPPP_AUTH) | (((_ml) << MDM_SHIFT_HDLCPPP_ML) & MDM_MASK_HDLCPPP_ML))
+#define MDM_GEN_PROTOCOLINFO_pid, _pdata) ((((_pid) << MDM_SHIFT_PROTOCOLID) & MDM_MASK_PROTOCOLID) | (((_pdata) << MDM_SHIFT_PROTOCOLDATA) & MDM_MASK_PROTOCOLDATA))
+#define MDM_GEN_V110_PROTOCOL_DATA_data) (((_data) << MDM_SHIFT_V110_SPEED) & MDM_MASK_V110_SPEED)
+#define MDM_GEN_V120_PROTOCOL_DATA_speed, _ml) ((((_speed) << MDM_SHIFT_V120_SPEED) & MDM_MASK_V120_SPEED) | (((_ml) << MDM_SHIFT_V120_ML) & MDM_MASK_V120_ML))
+#define MDM_GEN_X75_PROTOCOL_DATA_data) (((_data) << MDM_SHIFT_X75_DATA) & MDM_MASK_X75_DATA)
+#define MDM_GET_BEARERMODE_dwOptions) (((_dwOptions) & MDM_MASK_BEARERMODE) >> MDM_SHIFT_BEARERMODE)
+#define MDM_GET_EXTENDEDINFO_dwOptions) ((_dwOptions) & MDM_MASK_EXTENDEDINFO)
+#define MDM_GET_PROTOCOLDATA_dwOptions) (((_dwOptions) & MDM_MASK_PROTOCOLDATA) >> MDM_SHIFT_PROTOCOLDATA)
+#define MDM_GET_PROTOCOLID_dwOptions) (((_dwOptions) & MDM_MASK_PROTOCOLID) >> MDM_SHIFT_PROTOCOLID)
+#define MDM_GET_PROTOCOLINFO_dwOptions) ((_dwOptions) & MDM_MASK_PROTOCOLINFO)
+#define MDM_SET_BEARERMODE_dwOptions, _bm) (((_dwOptions) &= ~MDM_MASK_BEARERMODE), ((_dwOptions) |= (((_bm) << MDM_SHIFT_BEARERMODE) & MDM_MASK_BEARERMODE)))
+#define MDM_SET_EXTENDEDINFO_dwOptions, _extinfo) (((_dwOptions) &= ~MDM_MASK_EXTENDEDINFO), ((_dwOptions) |= ((_extinfo) & MDM_MASK_EXTENDEDINFO)))
+#define MDM_SET_PROTOCOLDATA_dwOptions, _pd) (((_dwOptions) &= ~MDM_MASK_PROTOCOLDATA), ((_dwOptions) |= (((_pd) << MDM_SHIFT_PROTOCOLDATA) & MDM_MASK_PROTOCOLDATA)))
+#define MDM_SET_PROTOCOLID_dwOptions, _prot) (((_dwOptions) &= ~MDM_MASK_PROTOCOLID), ((_dwOptions) |= (((_prot) << MDM_SHIFT_PROTOCOLID) & MDM_MASK_PROTOCOLID)))
+#define MDM_SET_PROTOCOLINFO_dwOptions, _pinfo) (((_dwOptions) &= ~MDM_MASK_PROTOCOLINFO), ((_dwOptions) |= ((_pinfo) & MDM_MASK_PROTOCOLINFO)))
+
 #endif /* _MCX_H */

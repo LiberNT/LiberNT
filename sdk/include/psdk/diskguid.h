@@ -14,3 +14,5 @@ DEFINE_GUID(PARTITION_LDM_DATA_GUID,      0xAF9B60A0, 0x1431, 0x4F62, 0xBC, 0x68
 
 #define IsEqualPartitionType_a, _b) IsEqualGUID(& (_a), & (_b))
 
+#define IsEqualPartitionType_a, _b) IsEqualGUID(& (_a), & (_b))
+

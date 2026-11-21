@@ -109,5 +109,11 @@ DECLARE_INTERFACE_ (IDirectDrawSurfaceKernel, IUnknown) {
 #define IDirectDrawSurfaceKernel_GetKernelHandlep, a) (p) -> lpVtbl -> GetKernelHandle(p, a)
 #define IDirectDrawSurfaceKernel_ReleaseKernelHandlep) (p) -> lpVtbl -> ReleaseKernelHandle(p)
 
+#define IDirectDrawKernel_GetCapsp, a) (p) -> lpVtbl -> GetCaps(p, a)
+#define IDirectDrawKernel_GetKernelHandlep, a) (p) -> lpVtbl -> GetKernelHandle(p, a)
+#define IDirectDrawKernel_ReleaseKernelHandlep) (p) -> lpVtbl -> ReleaseKernelHandle(p)
+#define IDirectDrawSurfaceKernel_GetKernelHandlep, a) (p) -> lpVtbl -> GetKernelHandle(p, a)
+#define IDirectDrawSurfaceKernel_ReleaseKernelHandlep) (p) -> lpVtbl -> ReleaseKernelHandle(p)
+
 #endif
 

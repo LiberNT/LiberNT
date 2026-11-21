@@ -6015,4 +6015,58 @@ void WINAPI KsTerminateDevice(PDEVICE_OBJECT DeviceObject);
 }
 #endif
 
+#define DEFINE_KSAUTOMATION_METHODStable) SIZEOF_ARRAY(table), sizeof (KSMETHOD_ITEM), table
+#define DEFINE_KSCREATE_DISPATCH_TABLEtablename) KSOBJECT_CREATE_ITEM tablename [] =
+#define DEFINE_KSCREATE_ITEMDispatchCreate, TypeName, Context) \
+{ (DispatchCreate), (PVOID) (Context), { sizeof (TypeName) - sizeof (UNICODE_NULL), sizeof (TypeName), (PWCHAR) (TypeName) }, NULL, 0 \
+}
+#define DEFINE_KSCREATE_ITEMEXDispatchCreate, TypeName, Context, Flags) \
+{ (DispatchCreate), (PVOID) (Context), { sizeof (TypeName) - sizeof (UNICODE_NULL), sizeof (TypeName), (PWCHAR) (TypeName) }, NULL, (Flags) \
+}
+#define DEFINE_KSCREATE_ITEMNULLDispatchCreate, Context) \
+{ DispatchCreate, Context, { 0, 0, NULL, }, NULL, 0 \
+}
+#define DEFINE_KSDISPATCH_TABLEtablename, DeviceIoControl, Read, Write, Flush, Close, QuerySecurity, SetSecurity, FastDeviceIoControl, FastRead, FastWrite) const KSDISPATCH_TABLE tablename = { DeviceIoControl, Read, Write, Flush, Close, QuerySecurity, SetSecurity, FastDeviceIoControl, FastRead, FastWrite, }
+#define DEFINE_KSFASTPROPERTY_ITEMPropertyId, GetHandler, SetHandler) \
+{ PropertyId, (PFNKSFASTHANDLER) GetHandler, (PFNKSFASTHANDLER) SetHandler, 0 \
+}
+#define DEFINE_KSMETHOD_ALLOCATORSETAllocatorSet, MethodAlloc, MethodFree) DEFINE_KSMETHOD_TABLE(AllocatorSet) { DEFINE_KSMETHOD_ITEM_STREAMALLOCATOR_ALLOC(MethodAlloc), DEFINE_KSMETHOD_ITEM_STREAMALLOCATOR_FREE(MethodFree) \
+}
+#define DEFINE_KSMETHOD_ITEM_STREAMIO_READHandler) DEFINE_KSMETHOD_ITEM(KSMETHOD_STREAMIO_READ, KSMETHOD_TYPE_WRITE, (Handler), sizeof (KSMETHOD), 0, NULL)
+#define DEFINE_KSMETHOD_ITEM_STREAMIO_WRITEHandler) DEFINE_KSMETHOD_ITEM(KSMETHOD_STREAMIO_WRITE, KSMETHOD_TYPE_READ, (Handler), sizeof (KSMETHOD), 0, NULL)
+#define DEFINE_KSMETHOD_SET_TABLEtablename) const KSMETHOD_SET tablename [] =
+#define DEFINE_KSPIN_DESCRIPTOR_ITEMInterfacesCount, Interfaces, MediumsCount, Mediums, DataRangesCount, DataRanges, DataFlow, Communication) \
+{ InterfacesCount, Interfaces, MediumsCount, Mediums, DataRangesCount, DataRanges, DataFlow, Communication, NULL, NULL, 0 \
+}
+#define DEFINE_KSPIN_DESCRIPTOR_ITEMEXInterfacesCount, Interfaces, MediumsCount, Mediums, DataRangesCount, DataRanges, DataFlow, Communication, Category, Name) \
+{ InterfacesCount, Interfaces, MediumsCount, Mediums, DataRangesCount, DataRanges, DataFlow, Communication, Category, Name, 0 \
+}
+#define DEFINE_KSPIN_DESCRIPTOR_TABLEtablename) const KSPIN_DESCRIPTOR tablename [] =
+#define DEFINE_KSPIN_INTERFACE_TABLEtablename) const KSPIN_INTERFACE tablename [] =
+#define DEFINE_KSPIN_MEDIUM_ITEMguid, medium) DEFINE_KSPIN_INTERFACE_ITEM(guid, medium)
+#define DEFINE_KSPIN_MEDIUM_TABLEtablename) const KSPIN_MEDIUM tablename [] =
+#define DEFINE_KSPROPERTY_ALLOCATORSETAllocatorSet, PropFunctionTable, PropStatus) DEFINE_KSPROPERTY_TABLE(AllocatorSet) { DEFINE_KSPROPERTY_ITEM_STREAMALLOCATOR_STATUS(PropStatus), DEFINE_KSPROPERTY_ITEM_STREAMALLOCATOR_FUNCTIONTABLE(PropFunctionTable) \
+}
+#define DEFINE_KSPROPERTY_ITEM_CONNECTION_MDLCACHINGSetHandler) DEFINE_KSPROPERTY_ITEM(KSPROPERTY_ALLOCATOR_CLEANUP_CACHEDMDLPAGES, NULL, sizeof (KSPROPERTY), sizeof (KSPIN_MDL_CACHING_NOTIFICATION), (SetHandler), NULL, 0, NULL, NULL, 0)
+#define DEFINE_KSPROPERTY_ITEM_MEMORY_TRANSPORTSetHandler) DEFINE_KSPROPERTY_ITEM(KSPROPERTY_MEMORY_TRANSPORT, NULL, sizeof (KSPROPERTY), sizeof (BOOL), (SetHandler), NULL, 0, NULL, NULL, 0)
+#define DEFINE_KSPROPERTY_ITEM_QUALITY_ERRORGetHandler, SetHandler) DEFINE_KSPROPERTY_ITEM(KSPROPERTY_QUALITY_ERROR, (GetHandler), sizeof (KSPROPERTY), sizeof (KSERROR), (SetHandler), NULL, 0, NULL, NULL, 0)
+#define DEFINE_KSPROPERTY_ITEM_QUALITY_REPORTGetHandler, SetHandler) DEFINE_KSPROPERTY_ITEM(KSPROPERTY_QUALITY_REPORT, (GetHandler), sizeof (KSPROPERTY), sizeof (KSQUALITY), (SetHandler), NULL, 0, NULL, NULL, 0)
+#define DEFINE_KSPROPERTY_STREAMINTERFACESETStreamInterfaceSet, HeaderSizeHandler) DEFINE_KSPROPERTY_TABLE(StreamInterfaceSet) { DEFINE_KSPROPERTY_ITEM_STREAMINTERFACE_HEADERSIZE(HeaderSizeHandler) \
+}
+#define DEFINE_NODE_DESCRIPTORautomation, type, name) { (automation), (type), (name) }
+#define DENY_USERMODE_ACCESSpIrp, CompleteRequest) if (pIrp -> RequestorMode != KernelMode) { pIrp -> IoStatus . Information = 0; pIrp -> IoStatus . Status = STATUS_INVALID_DEVICE_REQUEST; if (CompleteRequest) IoCompleteRequest(pIrp, IO_NO_INCREMENT); return STATUS_INVALID_DEVICE_REQUEST; \
+}
+#define KsEditSizedObject, PointerToPointer, NewSize, OldSize, Tag) _KsEdit((Object) -> Bag, (PVOID *) (PointerToPointer), (NewSize), (OldSize), (Tag))
+#define MF_SET_SHARED_MDLHANDLEa, b, c, d) { d . combined . phandle = (ULONG32) a; d . combined . fhandle = (ULONG32) b; d . combined . upayload = (ULONG64) c; \
+}
+#define SetDefaultKsCompressionKsCompressionPointer) \
+{ KsCompressionPointer -> RatioNumerator = 1; KsCompressionPointer -> RatioDenominator = 1; KsCompressionPointer -> RatioConstantMargin = 0; \
+}
+#define SetDontCareKsFramingRangeKsFramingRangePointer) \
+{ KsFramingRangePointer -> MinFrameSize = 0; KsFramingRangePointer -> MaxFrameSize = (ULONG) - 1; KsFramingRangePointer -> Stepping = 1; \
+}
+#define SetKsFramingRangeKsFramingRangePointer, P_MinFrameSize, P_MaxFrameSize) \
+{ KsFramingRangePointer -> MinFrameSize = P_MinFrameSize; KsFramingRangePointer -> MaxFrameSize = P_MaxFrameSize; KsFramingRangePointer -> Stepping = 1; \
+}
+
 #endif /* _KS_ */

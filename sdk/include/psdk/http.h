@@ -1631,4 +1631,15 @@ ULONG HttpWaitForDisconnectEx(HANDLE RequestQueueHandle, HTTP_CONNECTION_ID Conn
 #define HTTPAPI_GREATER_VERSIONversion, major, minor) ((version) . HttpApiMajorVersion > (major) || ((version) . HttpApiMajorVersion == (major) && (version) . HttpApiMinorVersion > (minor)))
 #define HTTPAPI_VERSION_GREATER_OR_EQUALversion, major, minor) (!HTTPAPI_LESS_VERSION(version, major, minor))
 
+#define HTTP_GREATER_EQUAL_VERSIONversion, major, minor) (!HTTP_LESS_VERSION(version, major, minor))
+#define HTTP_IS_NULL_IDpid) (HTTP_NULL_ID == * (pid))
+#define HTTP_LESS_EQUAL_VERSIONversion, major, minor) (!HTTP_GREATER_VERSION(version, major, minor))
+#define HTTP_NOT_EQUAL_VERSIONversion, major, minor) (!HTTP_EQUAL_VERSION(version, major, minor))
+#define HTTP_SET_NULL_IDpid) (* (pid) = HTTP_NULL_ID)
+#define HTTP_SET_VERSIONversion, major, minor) do { (version) . MajorVersion = (major); (version) . MinorVersion = (minor); \
+} while (0)
+#define HTTPAPI_EQUAL_VERSIONversion, major, minor) ((version) . HttpApiMajorVersion == (major) && (version) . HttpApiMinorVersion == (minor))
+#define HTTPAPI_GREATER_VERSIONversion, major, minor) ((version) . HttpApiMajorVersion > (major) || ((version) . HttpApiMajorVersion == (major) && (version) . HttpApiMinorVersion > (minor)))
+#define HTTPAPI_VERSION_GREATER_OR_EQUALversion, major, minor) (!HTTPAPI_LESS_VERSION(version, major, minor))
+
 #endif  /* __WINE_HTTP_H */

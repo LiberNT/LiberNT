@@ -2910,4 +2910,8 @@ struct _STORAGE_CRYPTO_DESCRIPTOR
 
 typedef struct _STORAGE_CRYPTO_DESCRIPTOR STORAGE_CRYPTO_DESCRIPTOR;
 
+#define DEVICE_DSM_ROUND_DN_a, _b) (((_a)) / (_b) * (_b))
+#define DEVICE_DSM_ROUND_UP_a, _b) (((_a) + ((_b) - 1)) / (_b) * (_b))
+#define GET_REPAIR_TOPOLOGY_IDR) RtlOffsetToPointer(R, ALIGN_UP_BY(FIELD_OFFSET(DEVICE_DATA_SET_REPAIR_PARAMETERS, RepairCopies) + sizeof (ULONG) * R -> NumberOfRepairCopies, 8))
+
 #endif /* _NTDDSTOR_H_ */

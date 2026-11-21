@@ -462,4 +462,6 @@ typedef const struct _WNF_STATE_NAME * PCWNF_STATE_NAME;
 
 #define UNREFERENCED_VARIABLEV) (& V)
 
+#define UNREFERENCED_VARIABLEV) (& V)
+
 #endif /* _NTDEF_ */

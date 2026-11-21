@@ -259,6 +259,10 @@ HRESULT EditSecurityAdvanced(HWND hwndOwner, LPSECURITYINFO psi, SI_PAGE_TYPE uS
 #define GET_ACTIVATION_TYPEY) (UINT) (((Y) >> 16) & 0x0000ffff)
 #define GET_PAGE_TYPEX) (UINT) ((X) & 0x0000ffff)
 
+#define COMBINE_PAGE_ACTIVATIONX, Y) (UINT) (((Y) << 16) | X)
+#define GET_ACTIVATION_TYPEY) (UINT) (((Y) >> 16) & 0x0000ffff)
+#define GET_PAGE_TYPEX) (UINT) ((X) & 0x0000ffff)
+
 #endif /* __ACLUI_H */
 
 /* EOF */

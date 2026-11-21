@@ -141,4 +141,9 @@ HRESULT BuildIoRingWriteFileGather(HIORING ioRing, IORING_HANDLE_REF fileRef, UI
 #define IoRingHandleRefFromHandleh) { IORING_REF_RAW, { . Handle = h } }
 #define IoRingHandleRefFromIndexi) { IORING_REF_REGISTERED, { . Index = i } }
 
+#define IoRingBufferRefFromIndexAndOffseti, o) { IORING_REF_REGISTERED, { . IndexAndOffset = { (i), (o) } } }
+#define IoRingBufferRefFromPointerp) { IORING_REF_RAW, { . Address = p } }
+#define IoRingHandleRefFromHandleh) { IORING_REF_RAW, { . Handle = h } }
+#define IoRingHandleRefFromIndexi) { IORING_REF_REGISTERED, { . Index = i } }
+
 #endif

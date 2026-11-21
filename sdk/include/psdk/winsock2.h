@@ -52,6 +52,10 @@ UINT32 SocketNotificationRetrieveEvents(OVERLAPPED_ENTRY *notification);
 #define _WS2_32_WINSOCK_SWAP_LONGLONGl) ((((l) >> 56) & 0x00000000000000FFLL) | (((l) >> 40) & 0x000000000000FF00LL) | (((l) >> 24) & 0x0000000000FF0000LL) | (((l) >> 8) & 0x00000000FF000000LL) | (((l) << 8) & 0x000000FF00000000LL) | (((l) << 24) & 0x0000FF0000000000LL) | (((l) << 40) & 0x00FF000000000000LL) | (((l) << 56) & 0xFF00000000000000LL))
 #define SOMAXCONN_HINTb) (- (b))
 
+#define _WS2_32_WINSOCK_SWAP_LONGl) ((((l) >> 24) & 0x000000FFL) | (((l) >> 8) & 0x0000FF00L) | (((l) << 8) & 0x00FF0000L) | (((l) << 24) & 0xFF000000L))
+#define _WS2_32_WINSOCK_SWAP_LONGLONGl) ((((l) >> 56) & 0x00000000000000FFLL) | (((l) >> 40) & 0x000000000000FF00LL) | (((l) >> 24) & 0x0000000000FF0000LL) | (((l) >> 8) & 0x00000000FF000000LL) | (((l) << 8) & 0x000000FF00000000LL) | (((l) << 24) & 0x0000FF0000000000LL) | (((l) << 40) & 0x00FF000000000000LL) | (((l) << 56) & 0xFF00000000000000LL))
+#define SOMAXCONN_HINTb) (- (b))
+
 #endif
 
 #ifndef INCL_WINSOCK_API_TYPEDEFS

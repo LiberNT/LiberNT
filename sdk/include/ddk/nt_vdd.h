@@ -264,6 +264,8 @@ void VdmTraceEvent(USHORT Type, USHORT wData, ULONG lData);
 
 #define VDM_TRACEType, wData, lData) VdmTraceEvent(Type, wData, lData)
 
+#define VDM_TRACEType, wData, lData) VdmTraceEvent(Type, wData, lData)
+
 #endif
 
 #define getMODE() ((getMSW() & MSW_PE) ? VDM_PM : VDM_V86)

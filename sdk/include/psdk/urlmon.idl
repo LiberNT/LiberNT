@@ -3636,3 +3636,7 @@ cpp_quote("};")
 
 cpp_quote("#define LPOINETPROTOCOLSINKSTACKABLE 0")
 
+cpp_quote("#define IID_IOInetBindInfoEx 0")
+cpp_quote("")
+cpp_quote("typedef enum __MIDL_IInternetSecurityManager_0002 PUAFOUT;")
+

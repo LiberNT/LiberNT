@@ -951,3 +951,5 @@ cpp_quote("};")
 
 cpp_quote("#define D3D_SET_OBJECT_NAME_ApObject, pName) D3D_SET_OBJECT_NAME_N_A(pObject, lstrlenA(pName), pName)")
 
+cpp_quote("#define D3D_SET_OBJECT_NAME_ApObject, pName) D3D_SET_OBJECT_NAME_N_A(pObject, lstrlenA(pName), pName)")
+

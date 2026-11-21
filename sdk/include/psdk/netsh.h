@@ -322,4 +322,7 @@ typedef NS_DLL_STOP_FN *PNS_DLL_STOP_FN;
 #define NUM_TAGS_IN_TABLETagsArray) sizeof (TagsArray) / sizeof (TAG_TYPE)
 #define NUM_TOKENS_IN_TABLETokenArray) sizeof (TokenArray) / sizeof (TOKEN_VALUE)
 
+#define NUM_TAGS_IN_TABLETagsArray) sizeof (TagsArray) / sizeof (TAG_TYPE)
+#define NUM_TOKENS_IN_TABLETokenArray) sizeof (TokenArray) / sizeof (TOKEN_VALUE)
+
 #endif /* _NETSH_H_ */

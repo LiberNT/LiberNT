@@ -701,4 +701,7 @@ typedef struct _PARALLEL_PARCHIP_INFO *PPARALLEL_PARCHIP_INFO;
 #define SET_DCRb5, b4, b3, b2, b1, b0) ((UCHAR) ((b5 == ACTIVE ? BIT_5_SET : 0) | (b4 == ACTIVE ? BIT_4_SET : 0) | (b3 == ACTIVE ? 0 : BIT_3_SET) | (b2 == ACTIVE ? BIT_2_SET : 0) | (b1 == ACTIVE ? 0 : BIT_1_SET) | (b0 == ACTIVE ? 0 : BIT_0_SET)))
 #define TEST_ECR_FIFOregisterValue, testValue) (((registerValue) & ECR_FIFO_MASK) == testValue)
 
+#define SET_DCRb5, b4, b3, b2, b1, b0) ((UCHAR) ((b5 == ACTIVE ? BIT_5_SET : 0) | (b4 == ACTIVE ? BIT_4_SET : 0) | (b3 == ACTIVE ? 0 : BIT_3_SET) | (b2 == ACTIVE ? BIT_2_SET : 0) | (b1 == ACTIVE ? 0 : BIT_1_SET) | (b0 == ACTIVE ? 0 : BIT_0_SET)))
+#define TEST_ECR_FIFOregisterValue, testValue) (((registerValue) & ECR_FIFO_MASK) == testValue)
+
 #endif /* __PARALLEL_H */

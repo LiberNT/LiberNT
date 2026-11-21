@@ -162,4 +162,6 @@ typedef struct IDxDiagProviderVtbl IDxDiagProviderVtbl;
 
 #define IDxDiagContainer_EnumPropsp, a, b) (p) -> lpVtbl -> EnumProps(p, a, b, c)
 
+#define IDxDiagContainer_EnumPropsp, a, b) (p) -> lpVtbl -> EnumProps(p, a, b, c)
+
 #endif

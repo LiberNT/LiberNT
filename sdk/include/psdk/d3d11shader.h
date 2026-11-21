@@ -444,4 +444,8 @@ typedef struct ID3D11LibraryReflection *LPD3D11LIBRARYREFLECTION;
 #define D3D11_SHVER_GET_MINOR_Version) (((_Version) >> 0) & 0xf)
 #define D3D11_SHVER_GET_TYPE_Version) (((_Version) >> 16) & 0xffff)
 
+#define D3D11_SHVER_GET_MAJOR_Version) (((_Version) >> 4) & 0xf)
+#define D3D11_SHVER_GET_MINOR_Version) (((_Version) >> 0) & 0xf)
+#define D3D11_SHVER_GET_TYPE_Version) (((_Version) >> 16) & 0xffff)
+
 #endif

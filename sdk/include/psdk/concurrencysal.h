@@ -73,6 +73,13 @@
 #define CSALCAT1x, y)
 #define CSALCAT2x, y)
 
+#define _Detaches_lock_detached, lock)
+#define _Moves_lock_target, source)
+#define _Replaces_lock_target, source)
+#define _Swaps_locks_left, right)
+#define CSALCAT1x, y)
+#define CSALCAT2x, y)
+
 #endif
 #define _Internal_lock_level_order_(a,b)
 #define _Lock_level_order_(a,b)

@@ -859,4 +859,17 @@ typedef const PROPSHEETPAGEW_V3 *LPCPROPSHEETPAGEW_V3;
 #define PropSheet_SetNextTexthDlg, lpszText) SNDMSG(hDlg, PSM_SETNEXTTEXT, 0, (LPARAM) (lpszText))
 #define PropSheet_ShowWizButtonshDlg, dwFlag, dwButton) PSTMSG(hDlg, PSM_SHOWWIZBUTTONS, (WPARAM) (dwFlag), (LPARAM) (dwButton))
 
+#define PropSheet_EnableWizButtonshDlg, dwState, dwMask) PSTMSG(hDlg, PSM_ENABLEWIZBUTTONS, (WPARAM) (dwState), (LPARAM) (dwMask))
+#define PropSheet_IdToIndexhDlg, id) (int) SNDMSG(hDlg, PSM_IDTOINDEX, 0, (LPARAM) (id))
+#define PropSheet_IndexToHwndhDlg, i) (HWND) SNDMSG(hDlg, PSM_INDEXTOHWND, (WPARAM) (i), 0)
+#define PropSheet_IndexToIdhDlg, i) SNDMSG(hDlg, PSM_INDEXTOID, (WPARAM) (i), 0)
+#define PropSheet_IndexToPagehDlg, i) (HPROPSHEETPAGE) SNDMSG(hDlg, PSM_INDEXTOPAGE, (WPARAM) (i), 0)
+#define PropSheet_InsertPagehDlg, index, hpage) SNDMSG(hDlg, PSM_INSERTPAGE, (WPARAM) (index), (LPARAM) (hpage))
+#define PropSheet_PageToIndexhDlg, hpage) (int) SNDMSG(hDlg, PSM_PAGETOINDEX, 0, (LPARAM) (hpage))
+#define PropSheet_SetButtonTexthDlg, dwButton, lpszText) SNDMSG(hDlg, PSM_SETBUTTONTEXT, (WPARAM) (dwButton), (LPARAM) (lpszText))
+#define PropSheet_SetHeaderSubTitlehDlg, index, lpszText) SNDMSG(hDlg, PSM_SETHEADERSUBTITLE, (WPARAM) (index), (LPARAM) (lpszText))
+#define PropSheet_SetHeaderTitlehDlg, index, lpszText) SNDMSG(hDlg, PSM_SETHEADERTITLE, (WPARAM) (index), (LPARAM) (lpszText))
+#define PropSheet_SetNextTexthDlg, lpszText) SNDMSG(hDlg, PSM_SETNEXTTEXT, 0, (LPARAM) (lpszText))
+#define PropSheet_ShowWizButtonshDlg, dwFlag, dwButton) PSTMSG(hDlg, PSM_SHOWWIZBUTTONS, (WPARAM) (dwFlag), (LPARAM) (dwButton))
+
 #endif

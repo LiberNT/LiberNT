@@ -2427,4 +2427,7 @@ typedef const IMAGE_BOUND_FORWARDER_REF *PCIMAGE_BOUND_FORWARDER_REF;
 
 typedef const IMAGE_BOUND_IMPORT_DESCRIPTOR *PCIMAGE_BOUND_IMPORT_DESCRIPTOR;
 
+#define EXT_IMM64Value, Address, Size, InstPos, ValPos) /* Intel-IA64-Filler */ Value |= (((ULONGLONG) ((* (Address) >> InstPos) & (((ULONGLONG) 1 << Size) - 1))) << ValPos)
+#define INS_IMM64Value, Address, Size, InstPos, ValPos) /* Intel-IA64-Filler */ * (PULONG) Address = (* (PULONG) Address & ~(((1 << Size) - 1) << InstPos)) | /* Intel-IA64-Filler */ ((ULONG) ((((ULONGLONG) Value >> ValPos) & (((ULONGLONG) 1 << Size) - 1))) << InstPos)
+
 #endif /* _NTIMAGE_ */

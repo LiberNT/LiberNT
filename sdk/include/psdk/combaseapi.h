@@ -129,6 +129,8 @@ HRESULT CoWaitForMultipleObjects(DWORD dwFlags, DWORD dwTimeout, ULONG cHandles,
 
 #define DECLARE_INTERFACE_IIDiface, iid) DECLARE_INTERFACE(iface)
 
+#define DECLARE_INTERFACE_IIDiface, iid) DECLARE_INTERFACE(iface)
+
 #endif /* _COMBASEAPI_H_ */
 
 #ifndef COM_RIGHTS_ACTIVATE_LOCAL

@@ -7056,4 +7056,8 @@
 #define IsPeerDispiddispid) (DISPID_PEER_HOLDER_BASE <= dispid)
 #define IsStandardDispiddispid) (dispid <= 0)
 
+#define IsExpandoDispiddispid) (DISPID_EXPANDO_BASE <= dispid && dispid <= DISPID_EXPANDO_MAX)
+#define IsPeerDispiddispid) (DISPID_PEER_HOLDER_BASE <= dispid)
+#define IsStandardDispiddispid) (dispid <= 0)
+
 #endif /* __MSHTMDID_H__ */

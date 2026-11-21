@@ -3204,4 +3204,14 @@ DWORD SoftwareUpdateMessageBox(HWND hWnd, PCWSTR pszDistUnit, DWORD dwFlags, LPS
 #define ShellFolderView_UpdateObject_hwnd, _ppidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_UPDATEOBJECT, (LPARAM) (_ppidl))
 #define SHSTDDOCAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
 
+#define BROWSEUIAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
+#define ShellFolderView_AddObject_hwnd, _pidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_ADDOBJECT, (LPARAM) (_pidl))
+#define ShellFolderView_GetSelectedObjects_hwnd, ppidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_GETSELECTEDOBJECTS, (LPARAM) (ppidl))
+#define ShellFolderView_ReArrange_hwnd, _lparam) (BOOL) SHShellFolderView_Message(_hwnd, SFVM_REARRANGE, _lparam)
+#define ShellFolderView_RemoveObject_hwnd, _pidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_REMOVEOBJECT, (LPARAM) (_pidl))
+#define ShellFolderView_SetClipboard_hwnd, _dwEffect) (void) SHShellFolderView_Message(_hwnd, SFVM_SETCLIPBOARD, (LPARAM) (DWORD) (_dwEffect))
+#define ShellFolderView_SetPoints_hwnd, _pdtobj) (void) SHShellFolderView_Message(_hwnd, SFVM_SETPOINTS, (LPARAM) (_pdtobj))
+#define ShellFolderView_UpdateObject_hwnd, _ppidl) (LPARAM) SHShellFolderView_Message(_hwnd, SFVM_UPDATEOBJECT, (LPARAM) (_ppidl))
+#define SHSTDDOCAPI_type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
+
 #endif /* __WINE_SHLOBJ_H */

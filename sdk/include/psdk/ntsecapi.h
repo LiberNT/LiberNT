@@ -2099,4 +2099,7 @@ BOOLEAN WINAPI AuditSetSystemPolicy(PCAUDIT_POLICY_INFORMATION pAuditPolicy, ULO
 }
 #endif
 
+#define KERB_IS_MS_PRINCIPAL_x_) (((_x_) <= KRB_NT_MS_PRINCIPAL) || ((_x_) >= KRB_NT_ENTERPRISE_PRINCIPAL))
+#define STAGING_FLAGEffective) ((Effective & 0xF) << 8)
+
 #endif /* _NTSECAPI_H */

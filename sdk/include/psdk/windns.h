@@ -1468,4 +1468,15 @@ DWORD DnsConnectionSetProxyInfo(PCWSTR pwszConnectionName, DNS_CONNECTION_PROXY_
 #define IS_QWORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 7))
 #define IS_WORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 1))
 
+#define DNS_QUESTION_NAME_FROM_HEADER_pHeader_) ((PCHAR) ((PDNS_HEADER) (_pHeader_) + 1))
+#define DnsRecordCopypRR) DnsRecordCopyEx((pRR), DnsCharSetAnsi, DnsCharSetAnsi)
+#define DnsRecordSetCopypRR) DnsRecordSetCopyEx((pRR), DnsCharSetAnsi, DnsCharSetAnsi)
+#define INLINE_HTONLout, in) INLINE_DWORD_FLIP(out, in)
+#define INLINE_NTOHLout, in) INLINE_DWORD_FLIP(out, in)
+#define INLINE_WRITE_FLIPPED_DWORDpout, in) INLINE_DWORD_FLIP(* ((UNALIGNED DWORD *) (pout)), in)
+#define INLINE_WRITE_FLIPPED_WORDpout, in) INLINE_WORD_FLIP(* ((UNALIGNED WORD *) (pout)), in)
+#define IS_DWORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 3))
+#define IS_QWORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 7))
+#define IS_WORD_ALIGNEDp) (!((UINT_PTR) (p) & (UINT_PTR) 1))
+
 #endif /* _WINDNS_INCLUDED_ */

@@ -1558,6 +1558,10 @@ NTSTATUS ClassModeSenseTranslate(PDEVICE_OBJECT DeviceObject, PMODE_PARAMETER_HE
 #define SET_FLAG_NOFENCEFlags, Bit) WriteUShortNoFence(& (Flags), (ReadUShortNoFence(& (Flags)) | (Bit)))
 #define TEST_FLAG_NOFENCEFlags, Bit) (((ReadUShortNoFence(& (Flags))) & (Bit)) != 0)
 
+#define CLEAR_FLAG_NOFENCEFlags, Bit) WriteUShortNoFence(& (Flags), (ReadUShortNoFence(& (Flags)) & ~(Bit)))
+#define SET_FLAG_NOFENCEFlags, Bit) WriteUShortNoFence(& (Flags), (ReadUShortNoFence(& (Flags)) | (Bit)))
+#define TEST_FLAG_NOFENCEFlags, Bit) (((ReadUShortNoFence(& (Flags))) & (Bit)) != 0)
+
 #endif
 #ifndef DEV_FORWARD_IO
 #define DEV_FORWARD_IO 0x00000040

@@ -160,4 +160,6 @@ HRESULT __cdecl CreateFX(const IID *const clsid, IUnknown **pEffect, const void 
 
 #define FX_API_type) STDAPIV_(type)
 
+#define FX_API_type) STDAPIV_(type)
+
 #endif

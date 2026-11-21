@@ -2691,3 +2691,5 @@ cpp_quote("#define MAKE_WINCODECHR_ERRcode) MAKE_WINCODECHR(1, code)")
 
 cpp_quote("#define MAKE_WINCODECHR_ERRcode) MAKE_WINCODECHR(1, code)")
 
+cpp_quote("#define MAKE_WINCODECHR_ERRcode) MAKE_WINCODECHR(1, code)")
+

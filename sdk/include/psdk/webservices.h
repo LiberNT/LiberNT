@@ -3532,4 +3532,8 @@ typedef struct _WS_NCRYPT_ASYMMETRIC_SECURITY_KEY_HANDLE WS_NCRYPT_ASYMMETRIC_SE
 
 typedef struct _WS_XML_DECIMAL_TEXT WS_XML_DECIMAL_TEXT;
 
+#define WS_XML_STRING_DICTIONARY_VALUES, D, I) { sizeof (S) - 1, (BYTE *) RTL_CONST_CAST(char *) (S), RTL_CONST_CAST(WS_XML_DICTIONARY *) (D), I }
+#define WsCountOfarrayValue) RTL_NUMBER_OF(arrayValue)
+#define WsOffsetOftype, field) FIELD_OFFSET(type, field)
+
 #endif /* __WINE_WEBSERVICES_H */

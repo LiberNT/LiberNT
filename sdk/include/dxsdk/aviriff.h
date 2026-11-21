@@ -120,6 +120,8 @@ struct _avitcdlindex_entry
 
 #define Valid_SUPERINDEXpi) (* (DWORD *) (& ((pi) -> wLongsPerEntry)) == (4 | (AVI_INDEX_OF_INDEXES << 24)))
 
+#define Valid_SUPERINDEXpi) (* (DWORD *) (& ((pi) -> wLongsPerEntry)) == (4 | (AVI_INDEX_OF_INDEXES << 24)))
+
 #endif
 
 #ifndef streamtypeVIDEO

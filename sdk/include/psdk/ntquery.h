@@ -405,4 +405,7 @@ HRESULT SetCatalogState(const WCHAR *pwcsCat, const WCHAR *pwcsMachine, DWORD dw
 #define QUERY_FILL_STATUSx) ((x) & 0x7)
 #define QUERY_RELIABILITY_STATUSx) ((x) & 0xFFF8)
 
+#define QUERY_FILL_STATUSx) ((x) & 0x7)
+#define QUERY_RELIABILITY_STATUSx) ((x) & 0xFFF8)
+
 #endif

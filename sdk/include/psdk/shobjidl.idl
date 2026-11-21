@@ -2315,6 +2315,12 @@ cpp_quote("#define ISMBUTTONx) (NSTCECT_MBUTTON == ((x) & NSTCECT_BUTTON))")
 cpp_quote("#define ISRBUTTONx) (NSTCECT_RBUTTON == ((x) & NSTCECT_BUTTON))")
 cpp_quote("#define SID_CDWizardHost 0")
 
+cpp_quote("#define ISDBLCLICKx) (NSTCECT_DBLCLICK == ((x) & NSTCECT_DBLCLICK))")
+cpp_quote("#define ISLBUTTONx) (NSTCECT_LBUTTON == ((x) & NSTCECT_BUTTON))")
+cpp_quote("#define ISMBUTTONx) (NSTCECT_MBUTTON == ((x) & NSTCECT_BUTTON))")
+cpp_quote("#define ISRBUTTONx) (NSTCECT_RBUTTON == ((x) & NSTCECT_BUTTON))")
+cpp_quote("#define SID_EnumerableView 0")
+
 #endif
 
 

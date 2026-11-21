@@ -2606,6 +2606,26 @@ NTSTATUS ExGetSystemFirmwareTable(ULONG FirmwareTableProviderSignature, ULONG Fi
 }
 #endif
 
+#define IMAGE_POLICY_ANSI_STRING_PolicyId_, _Value_) { ImagePolicyEntryTypeAnsiString, _PolicyId_, _Value_ },
+#define IMAGE_POLICY_BOOL_PolicyId_, _Value_) { ImagePolicyEntryTypeBool, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_INT16_PolicyId_, _Value_) { ImagePolicyEntryTypeInt16, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_INT32_PolicyId_, _Value_) { ImagePolicyEntryTypeInt32, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_INT64_PolicyId_, _Value_) { ImagePolicyEntryTypeInt64, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_INT8_PolicyId_, _Value_) { ImagePolicyEntryTypeInt8, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_OVERRIDE_PolicyId_) { ImagePolicyEntryTypeOverride, _PolicyId_, 0 },
+#define IMAGE_POLICY_UINT16_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt16, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_UINT32_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt32, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_UINT64_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt64, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_UINT8_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt8, _PolicyId_, (const VOID *) _Value_ },
+#define IMAGE_POLICY_UNICODE_STRING_PolicyId_, _Value_) { ImagePolicyEntryTypeUnicodeString, _PolicyId_, _Value_ },
+#define IoGetDriverProxyWrapperFromEndpointDriverProxyExtension, Endpoint, Wrapper) __pragma(warning(push)) __pragma(warning(disable : 28024)) do { IofGetDriverProxyWrapperFromEndpoint((DriverProxyExtension), (PDRIVER_PROXY_ENDPOINT_FUNCTION) (Endpoint), (PDRIVER_PROXY_WRAPPED_ENDPOINT_FUNCTION *) (Wrapper)); } while (0) __pragma(warning(pop))
+#define Iosb64ToIosb_iosb, _iosb64) { (_iosb) = (_iosb64); \
+}
+#define IosbToIosb64_iosb64, _iosb) { (_iosb64) = (_iosb); \
+}
+#define IS_VALIDATION_ENABLEDC, L) ((L) & (C))
+#define WriteCR8Data) __writecr8(Data)
+
 #endif /* !_WDMDDK_ */
 
 #ifndef ADAPTER_INFO_HYBRID_PASSTHROUGH

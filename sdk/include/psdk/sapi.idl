@@ -3980,3 +3980,5 @@ cpp_quote("#define SPFEISPEI_ord) ((1ui64 << SPEI_ord) | SPFEI_FLAGCHECK)")
 
 cpp_quote("#define SPFEISPEI_ord) ((1ui64 << SPEI_ord) | SPFEI_FLAGCHECK)")
 
+cpp_quote("#define SPFEISPEI_ord) ((1ui64 << SPEI_ord) | SPFEI_FLAGCHECK)")
+

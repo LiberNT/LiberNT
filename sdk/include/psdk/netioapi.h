@@ -782,4 +782,6 @@ NTSTATUS WINAPI ResolveIpNetEntry2(PMIB_IPNET_ROW2 Row, const SOCKADDR_INET *Sou
 }
 #endif
 
+#define NETIO_SUCCESSx) NT_SUCCESS(x)
+
 #endif /* __WINE_NETIOAPI_H */
