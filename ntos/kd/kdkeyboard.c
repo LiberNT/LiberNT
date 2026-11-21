@@ -90,6 +90,8 @@ static BOOLEAN KdpKeyboardShift = FALSE;
 
 static BOOLEAN KdpKeyboardExtended = FALSE;
 
+static BOOLEAN KdpKeyboardCtrl = FALSE;
+
 static UCHAR KdpKeyboardChord = 0;
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -110,6 +112,20 @@ KdpScanCodeToChar(
         return KdpShiftedScanCodeTable[ScanCode];
 
     return KdpScanCodeTable[ScanCode];
+}
+
+/*
+ * What a character becomes with Ctrl held: a letter gives its control
+ * character, as a terminal sends it.
+ */
+CHAR
+KdpControlChar(
+    _In_ CHAR Char)
+{
+    if (((Char >= 'a') && (Char <= 'z')) || ((Char >= 'A') && (Char <= 'Z')))
+        return (CHAR)(Char & 0x1F);
+
+    return Char;
 }
 
 /*
@@ -179,6 +195,15 @@ KdbpTryGetCharKeyboard(
             if (!Extended && ((Code == KDP_SCAN_LEFT_SHIFT) || (Code == KDP_SCAN_RIGHT_SHIFT)))
                 KdpKeyboardShift = FALSE;
 
+            if (Code == KDP_SCAN_CTRL)
+                KdpKeyboardCtrl = FALSE;
+
+            continue;
+        }
+
+        if (Code == KDP_SCAN_CTRL)
+        {
+            KdpKeyboardCtrl = TRUE;
             continue;
         }
 
@@ -195,6 +220,9 @@ KdbpTryGetCharKeyboard(
         /* Behind the prefix, the keypad codes are the arrows and the keys above them */
         if (Extended && (Code >= KDP_SCAN_KEYPAD_FIRST) && (Code <= KDP_SCAN_KEYPAD_LAST))
             return ANSI_NULL;
+
+        if (KdpKeyboardCtrl)
+            return KdpControlChar(KdpScanCodeToChar(Code, KdpKeyboardShift));
 
         return KdpScanCodeToChar(Code, KdpKeyboardShift);
     }
@@ -236,6 +264,10 @@ KdpKeyboardChordHeld(VOID)
             KdpKeyboardChord &= ~Key;
         else
             KdpKeyboardChord |= Key;
+
+        /* A Ctrl let go of while the machine ran must not stay held at the next prompt */
+        if (Code == (KDP_SCAN_CTRL | KDP_KBD_BREAK_FLAG))
+            KdpKeyboardCtrl = FALSE;
     }
 
     return (KdpKeyboardChord == KDP_CHORD_ALL);

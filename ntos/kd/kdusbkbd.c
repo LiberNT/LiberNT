@@ -14,6 +14,7 @@
 #define KDP_USB_KEY_QUEUE_SIZE          16
 #define KDP_USB_KEY_SHIFTED             0x80
 #define KDP_USB_KEY_EXTENDED            0x100
+#define KDP_USB_KEY_CTRL                0x200
 #define KDP_USB_KEY_SCAN_MASK           0x7F
 #define KDP_USB_MODIFIER_SHIFT          0x22
 #define KDP_USB_FIRST_KEY               2
@@ -146,6 +147,7 @@ KdpUsbKeyboardQueueReport(
     _In_reads_bytes_(ROS_USB_KEYBOARD_BOOT_REPORT_SIZE) PUCHAR Report)
 {
     UCHAR Shifted;
+    USHORT Ctrl;
     UCHAR Usage;
     ULONG i, j;
 
@@ -153,6 +155,7 @@ KdpUsbKeyboardQueueReport(
         return;
 
     Shifted = (Report[0] & KDP_USB_MODIFIER_SHIFT) ? KDP_USB_KEY_SHIFTED : 0;
+    Ctrl = (Report[0] & KDP_USB_MODIFIER_CTRL) ? KDP_USB_KEY_CTRL : 0;
     for (i = KDP_USB_FIRST_KEY; i < ROS_USB_KEYBOARD_BOOT_REPORT_SIZE; i++)
     {
         Usage = Report[i];
@@ -167,7 +170,7 @@ KdpUsbKeyboardQueueReport(
 
         if ((j == ROS_USB_KEYBOARD_BOOT_REPORT_SIZE) && (KdpUsbUsageToScanCode[Usage] != 0))
         {
-            USHORT Key = KdpUsbUsageToScanCode[Usage] | Shifted;
+            USHORT Key = KdpUsbUsageToScanCode[Usage] | Shifted | Ctrl;
 
             /* The arrows and the keys above them map to the keypad scan codes */
             if ((Usage >= KDP_USB_USAGE_INSERT) && (Usage <= KDP_USB_USAGE_UP_ARROW))
@@ -196,6 +199,9 @@ KdpUsbKeyboardDequeue(
             c = ANSI_NULL;
         else
             c = KdpScanCodeToChar((UCHAR)(Key & KDP_USB_KEY_SCAN_MASK), (Key & KDP_USB_KEY_SHIFTED) != 0);
+
+        if ((Key & KDP_USB_KEY_CTRL) != 0)
+            c = KdpControlChar(c);
 
         if (c != -1)
         {

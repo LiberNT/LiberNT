@@ -82,7 +82,7 @@ KdpReplaceLine(
 
 /*
  * Reads one line from the terminal. Returns how much was typed, with the line
- * terminated; a line the person gave up on comes back empty.
+ * terminated.
  */
 SIZE_T
 KdIoReadLine(
@@ -141,15 +141,14 @@ KdIoReadLine(
             continue;
         }
 
-        /* Ctrl-C gives up on the line */
+        /* Ctrl-C clears the line; an empty line would repeat the last command */
         if (Char == 0x03)
         {
             Length = KdpReplaceLine(Buffer, Size, Length, NULL);
-
-            if ((KdbDebugState & KD_DEBUG_KDNOECHO) == 0)
-                KdIoPuts("\n");
-
-            return 0;
+#ifdef KDBG
+            HistoryIndex = -1;
+#endif
+            continue;
         }
 
         /* Anything that is not printable has no place on the line */
