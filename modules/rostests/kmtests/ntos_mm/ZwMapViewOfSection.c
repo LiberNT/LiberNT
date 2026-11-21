@@ -273,6 +273,9 @@ AdvancedErrorChecks(HANDLE FileHandleReadOnly, HANDLE FileHandleWriteOnly)
     //Bypassing Zw function calls mean bypassing the alignment checks which are not crucial for the branches being tested here
 
     //test first conditional branch
+    /* A view of every address cannot fit anywhere; the base is given so that no search for one decides the status. */
+    BaseAddress = (PVOID)(ULONG_PTR)0x10000000;
+    SectionOffset.QuadPart = 0;
     ViewSize = -1;
 #ifndef _WIN64
     NTSTATUS MapStatus;
