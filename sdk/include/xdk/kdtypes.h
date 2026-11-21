@@ -49,12 +49,18 @@ typedef enum {
 #if (NTDDI_VERSION >= NTDDI_WIN10)
 typedef struct _DEBUG_TRANSPORT_DATA {
   ULONG HwContextSize;
+  ULONG SharedVisibleDataSize;
   BOOLEAN UseSerialFraming;
 #if (NTDDI_VERSION >= NTDDI_WIN10_RS5)
   BOOLEAN ValidUSBCoreId;
   UCHAR USBCoreId;
 #endif
 } DEBUG_TRANSPORT_DATA, *PDEBUG_TRANSPORT_DATA;
+
+typedef struct _DEBUG_IOMMU_EFI_DATA {
+  PVOID PciIoProtocolHandle;
+  PVOID Mapping;
+} DEBUG_EFI_IOMMU_DATA, *PDEBUG_EFI_IOMMU_DATA;
 #endif
 
 #define MAXIMUM_DEBUG_BARS 6
@@ -120,6 +126,7 @@ typedef struct _DEBUG_DEVICE_DESCRIPTOR {
 #if (NTDDI_VERSION >= NTDDI_WIN10)
   ULONG TransportType;
   DEBUG_TRANSPORT_DATA TransportData;
+  DEBUG_EFI_IOMMU_DATA EfiIoMmuData;
 #endif
 } DEBUG_DEVICE_DESCRIPTOR, *PDEBUG_DEVICE_DESCRIPTOR;
 

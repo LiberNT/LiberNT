@@ -547,6 +547,13 @@ typedef enum _FILE_INFORMATION_CLASS
 #if (NTDDI_VERSION >= NTDDI_WIN11) || defined(__REACTOS__) // 10.0.20150.1000
     FileKnownFolderInformation = 76,
 #endif
+    FileStatBasicInformation,
+    FileId64ExtdDirectoryInformation,
+    FileId64ExtdBothDirectoryInformation,
+    FileIdAllExtdDirectoryInformation,
+    FileIdAllExtdBothDirectoryInformation,
+    FileStreamReservationInformation,
+    FileMupProviderInfo,
     FileMaximumInformation
 } FILE_INFORMATION_CLASS, *PFILE_INFORMATION_CLASS;
 
@@ -568,6 +575,8 @@ typedef enum _FSINFOCLASS
     FileFsSectorSizeInformation,
     FileFsDataCopyInformation,
     FileFsMetadataSizeInformation,
+    FileFsFullSizeInformationEx,
+    FileFsGuidInformation,
     FileFsMaximumInformation
 } FS_INFORMATION_CLASS, *PFS_INFORMATION_CLASS;
 

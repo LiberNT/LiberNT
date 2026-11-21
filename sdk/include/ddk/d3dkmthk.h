@@ -575,6 +575,8 @@ typedef struct _D3DKMT_FLIPMANAGER_AUXILIARYPRESENTINFO
     // than the previous present
     BOOL customDurationChanged;
 
+    void* pFlipManagerProcessedEvent;
+
     // out: The adapter LUID/VidPn source of the flip output
     LUID FlipAdapterLuid;
     D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId;
@@ -869,6 +871,7 @@ typedef struct _D3DKMT_CANCEL_PRESENTS
     D3DKMT_ALIGN64 UINT64               CancelFromPresentId;
     LUID                                CompSurfaceLuid;
     D3DKMT_ALIGN64 UINT64               BindId;
+    HANDLE                              hFlipManagerProcessedEvent;
 }D3DKMT_CANCEL_PRESENTS;
 #endif
 
@@ -1733,6 +1736,7 @@ typedef struct _D3DKMT_OPENNATIVEFENCEFROMNTHANDLE
     D3DDDI_SYNCHRONIZATIONOBJECT_FLAGS  Flags;              // in: Flags.
     D3DKMT_HANDLE                       hSyncObject;        // out: Handle to the opened fence object
     D3DDDI_NATIVEFENCEMAPPING           NativeFenceMapping; // out: process mapping information for the fence object
+    BYTE                                PrivateDriverData[D3DDDI_NATIVE_FENCE_PDD_SIZE];
     BYTE                                Reserved[32];
 } D3DKMT_OPENNATIVEFENCEFROMNTHANDLE;
 

@@ -4946,7 +4946,8 @@ HalpArm64InitializeDmaOperations(VOID)
     if (InterlockedCompareExchange(&HalpArm64DmaOperationsState, 1, 0) == 0)
     {
         RtlZeroMemory(&HalpArm64DmaOperations, sizeof(HalpArm64DmaOperations));
-        HalpArm64DmaOperations.Size = sizeof(DMA_OPERATIONS);
+        /* TODO: CreateCommonBufferFromMdl is not implemented; report the table up to it */
+        HalpArm64DmaOperations.Size = FIELD_OFFSET(DMA_OPERATIONS, CreateCommonBufferFromMdl);
         HalpArm64DmaOperations.PutDmaAdapter = HalpArm64PutDmaAdapter;
         HalpArm64DmaOperations.AllocateCommonBuffer = HalpArm64AllocateCommonBuffer;
         HalpArm64DmaOperations.FreeCommonBuffer = HalpArm64FreeCommonBuffer;

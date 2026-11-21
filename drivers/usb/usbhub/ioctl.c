@@ -1710,7 +1710,7 @@ USBH_IoctlGetDescriptor(IN PUSBHUB_FDO_EXTENSION HubExtension,
                       &PortExtension->ConfigDescriptor,
                       sizeof(USB_CONFIGURATION_DESCRIPTOR));
 
-        Irp->IoStatus.Information = sizeof(USB_DESCRIPTOR_REQUEST) - sizeof(UCHAR) +
+        Irp->IoStatus.Information = FIELD_OFFSET(USB_DESCRIPTOR_REQUEST, Data) +
                                     sizeof(USB_CONFIGURATION_DESCRIPTOR);
         goto Exit;
     }
@@ -1742,7 +1742,7 @@ USBH_IoctlGetDescriptor(IN PUSBHUB_FDO_EXTENSION HubExtension,
     Status = USBH_SyncSubmitUrb(PortExtension->Common.SelfDevice,
                                 (PURB)Urb);
 
-    Irp->IoStatus.Information = (sizeof(USB_DESCRIPTOR_REQUEST) - sizeof(UCHAR)) +
+    Irp->IoStatus.Information = FIELD_OFFSET(USB_DESCRIPTOR_REQUEST, Data) +
                                 Urb->TransferBufferLength;
 
     ExFreePoolWithTag(Urb, USB_HUB_TAG);

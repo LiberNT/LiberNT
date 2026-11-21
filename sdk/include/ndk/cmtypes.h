@@ -199,6 +199,8 @@ typedef enum _KEY_INFORMATION_CLASS
     KeyFlagsInformation,
     KeyVirtualizationInformation,
     KeyHandleTagsInformation,
+    KeyTrustInformation,
+    KeyLayerInformation,
     MaxKeyInfoClass
 } KEY_INFORMATION_CLASS;
 
@@ -220,6 +222,7 @@ typedef enum _KEY_SET_INFORMATION_CLASS
     KeySetVirtualizationInformation,
     KeySetDebugInformation,
     KeySetHandleTagsInformation,
+    KeySetLayerInformation,
     MaxKeySetInfoClass
 } KEY_SET_INFORMATION_CLASS;
 

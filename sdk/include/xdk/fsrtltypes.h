@@ -45,8 +45,16 @@ typedef struct _FSRTL_ADVANCED_FCB_HEADER {
     PVOID ReservedForRemote;
   };
 #endif
-#if (NTDDI_VERSION >= NTDDI_WINBLUE)
-  PVOID ReservedContext;
+#if (NTDDI_VERSION >= NTDDI_WIN10_MN)
+  PVOID AePushLock;
+#elif (NTDDI_VERSION >= NTDDI_WINBLUE)
+  PVOID ReservedContextLegacy;
+#endif
+#if (NTDDI_VERSION >= NTDDI_WIN10_CO)
+  ULONG BypassIoOpenCount;
+#endif
+#if (NTDDI_VERSION >= NTDDI_WIN10_NI)
+  struct _FSRTL_PER_STREAM_CONTEXT *ReservedContext;
 #endif
 } FSRTL_ADVANCED_FCB_HEADER, *PFSRTL_ADVANCED_FCB_HEADER;
 
@@ -54,6 +62,8 @@ typedef struct _FSRTL_ADVANCED_FCB_HEADER {
 #define FSRTL_FCB_HEADER_V1             (0x01)
 #define FSRTL_FCB_HEADER_V2             (0x02)
 #define FSRTL_FCB_HEADER_V3             (0x03)
+#define FSRTL_FCB_HEADER_V4             (0x04)
+#define FSRTL_FCB_HEADER_V5             (0x05)
 
 #define FSRTL_FLAG_FILE_MODIFIED        (0x01)
 #define FSRTL_FLAG_FILE_LENGTH_CHANGED  (0x02)

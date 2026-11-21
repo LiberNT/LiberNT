@@ -329,6 +329,36 @@ NTSTATUS
     _In_ PWSK_SOCKET Socket,
     _In_ PWSK_DATA_INDICATION DataIndication);
 
+typedef
+NTSTATUS
+(WSKAPI * PFN_WSK_CONNECT_EX)(
+    _In_ PWSK_SOCKET Socket,
+    _In_ PSOCKADDR RemoteAddress,
+    _In_opt_ PWSK_BUF Buffer,
+    _Reserved_ ULONG Flags,
+    _Inout_ PIRP Irp);
+
+typedef
+NTSTATUS
+(WSKAPI * PFN_WSK_SEND_EX)(
+    _In_ PWSK_SOCKET Socket,
+    _In_ PWSK_BUF Buffer,
+    _In_ ULONG Flags,
+    _In_ ULONG ControlInfoLength,
+    _In_reads_bytes_opt_(ControlInfoLength) PCMSGHDR ControlInfo,
+    _Inout_ PIRP Irp);
+
+typedef
+NTSTATUS
+(WSKAPI * PFN_WSK_RECEIVE_EX)(
+    _In_ PWSK_SOCKET Socket,
+    _In_ PWSK_BUF Buffer,
+    _In_ ULONG Flags,
+    _Inout_opt_ PULONG ControlInfoLength,
+    _Out_writes_bytes_opt_(*ControlInfoLength) PCMSGHDR ControlInfo,
+    _Reserved_ PULONG ControlFlags,
+    _Inout_ PIRP Irp);
+
 typedef struct _WSK_PROVIDER_CONNECTION_DISPATCH
 {
 #ifdef __cplusplus
@@ -344,6 +374,9 @@ typedef struct _WSK_PROVIDER_CONNECTION_DISPATCH
     PFN_WSK_RECEIVE WskReceive;
     PFN_WSK_DISCONNECT WskDisconnect;
     PFN_WSK_RELEASE_DATA_INDICATION_LIST WskRelease;
+    PFN_WSK_CONNECT_EX WskConnectEx;
+    PFN_WSK_SEND_EX WskSendEx;
+    PFN_WSK_RECEIVE_EX WskReceiveEx;
 } WSK_PROVIDER_CONNECTION_DISPATCH, *PWSK_PROVIDER_CONNECTION_DISPATCH;
 
 typedef
@@ -625,16 +658,6 @@ WskDeregister(
 /* WSK_BUF_LIST and PFN_WSK_SEND_MESSAGES are declared with the rest of the
  * core surface above, under the NTDDI_WIN8 guard. */
 
-/* PFN_WSK_CONNECT_EX — Win7 addition: connect with initial send data */
-typedef
-_Must_inspect_result_
-NTSTATUS
-(WSKAPI * PFN_WSK_CONNECT_EX)(
-    _In_ PWSK_SOCKET Socket,
-    _In_ PSOCKADDR RemoteAddress,
-    _In_opt_ PWSK_BUF Buffer,
-    _In_opt_ ULONG Flags,
-    _Inout_ PIRP Irp);
 
 #ifdef __cplusplus
 }

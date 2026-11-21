@@ -335,7 +335,12 @@ typedef struct STRUCT(_TEB)
   #ifdef _STRUCT64
     ULONG                  TxFsContext;
     UCHAR                  InstrumentationCallbackDisabled;
+#if (NTDDI_VERSION >= NTDDI_WIN11_GE)
+    UCHAR                  UnalignedLoadStoreExceptions;
+    UCHAR                  Padding1[2];
+#else
     UCHAR                  Padding1[3];
+#endif
   #else
     UCHAR                  InstrumentationCallbackDisabled;
     UCHAR                  SpareBytes[23];
@@ -551,6 +556,16 @@ typedef struct STRUCT(_TEB)
 #if (NTDDI_VERSION >= NTDDI_WIN10)
     ULONG64 ReservedForCrt;
     GUID EffectiveContainerId;
+#endif
+
+#if (NTDDI_VERSION >= NTDDI_WIN11_GE)
+    ULONG64 LastSleepCounter;
+    ULONG SpinCallCount;
+    ULONG64 ExtendedFeatureDisableMask;
+    PTR(PVOID) SchedulerSharedDataSlot;
+    PTR(PVOID) HeapWalkContext;
+    STRUCT(GROUP_AFFINITY) PrimaryGroupAffinity;
+    ULONG Rcu[2];
 #endif
 
 } STRUCT(TEB), *STRUCT(PTEB);

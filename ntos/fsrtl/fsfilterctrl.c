@@ -547,6 +547,7 @@ FsRtlAcquireFileExclusiveCommon(
     Data.Parameters.AcquireForSectionSynchronization.SyncType = SyncType;
     Data.Parameters.AcquireForSectionSynchronization.PageProtection =
         PageProtection;
+    /* TODO: AllocationAttributes and Flags are not supplied by the section creator; filters see zero */
 
     Status = FsFilterPerformCallbacks(&Data, &Stack);
 

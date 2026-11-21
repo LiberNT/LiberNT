@@ -37,7 +37,7 @@ extern "C" {
 
 
 typedef struct _TDI_REQUEST_KERNEL {
-  ULONG RequestFlags;
+  ULONG_PTR RequestFlags;
   PTDI_CONNECTION_INFORMATION RequestConnectionInformation;
   PTDI_CONNECTION_INFORMATION ReturnConnectionInformation;
   PVOID RequestSpecific;
@@ -862,11 +862,25 @@ typedef enum _TDI_PNP_OPCODE {
 #define TDI_PNP_CONTEXT_TYPE_PDO                0x3
 #define TDI_PNP_CONTEXT_TYPE_FIRST_OR_LAST_IF   0x4
 
-typedef struct _TDI_PNP_CONTEXT {
-  USHORT  ContextSize;
-  USHORT  ContextType;
-  UCHAR  ContextData[1];
-} TDI_PNP_CONTEXT, *PTDI_PNP_CONTEXT;
+typedef struct _TDI_PNP_CONTEXT_WIN2K {
+  USHORT ContextSize;
+  USHORT ContextType;
+  UCHAR POINTER_ALIGNMENT ContextData[1];
+} TDI_PNP_CONTEXT_WIN2K, *PTDI_PNP_CONTEXT_WIN2K;
+
+typedef struct _TDI_PNP_CONTEXT_XP {
+  USHORT ContextSize;
+  USHORT ContextType;
+  UCHAR POINTER_ALIGNMENT ContextData[1];
+} TDI_PNP_CONTEXT_XP, *PTDI_PNP_CONTEXT_XP;
+
+#if (NTDDI_VERSION >= NTDDI_WINXP)
+typedef TDI_PNP_CONTEXT_XP TDI_PNP_CONTEXT;
+#else
+typedef TDI_PNP_CONTEXT_WIN2K TDI_PNP_CONTEXT;
+#endif
+
+typedef TDI_PNP_CONTEXT *PTDI_PNP_CONTEXT;
 
 typedef VOID
 (NTAPI *TDI_ADD_ADDRESS_HANDLER)(

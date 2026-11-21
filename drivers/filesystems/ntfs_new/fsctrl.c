@@ -1373,6 +1373,7 @@ NtfsGetNtfsVolumeData(
             Information.MajorVersion;
         Extended->MinorVersion =
             Information.MinorVersion;
+        /* TODO: BytesPerPhysicalSector, the LFS version and the trim limits are not reported; they stay zero */
         Irp->IoStatus.Information +=
             sizeof(*Extended);
     }
