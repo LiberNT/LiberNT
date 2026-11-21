@@ -268,10 +268,9 @@ IoAllocateErrorLogEntry(
     KIRQL OldIrql;
 
     if (IoObject == NULL) return NULL;
-    if (EntrySize < sizeof(IO_ERROR_LOG_PACKET)) return NULL;
+    if ((EntrySize < sizeof(IO_ERROR_LOG_PACKET)) || (EntrySize > ERROR_LOG_MAXIMUM_SIZE)) return NULL;
 
     TotalSize = (ULONG)sizeof(ERROR_LOG_ENTRY) + EntrySize;
-    if (TotalSize > ERROR_LOG_MAXIMUM_SIZE) return NULL;
 
     KeAcquireSpinLock(&IopLogListLock, &OldIrql);
 
