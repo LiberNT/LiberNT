@@ -359,6 +359,7 @@ KMT_TESTFUNC Test_KeSpinLock;
 KMT_TESTFUNC Test_KeThreadedDpc;
 KMT_TESTFUNC Test_KeTime;
 KMT_TESTFUNC Test_KeTimer2KM;
+KMT_TESTFUNC Test_KeUnalignedAccess;
 KMT_TESTFUNC Test_MmSecureKM;
 KMT_TESTFUNC Test_KeTimer;
 KMT_TESTFUNC Test_KeWaitMultiple;
@@ -819,6 +820,7 @@ const KMT_TEST TestList[] =
     { "KeTime",                             Test_KeTime },
     { "KeTimer",                            Test_KeTimer },
     { "KeTimer2KM",                         Test_KeTimer2KM },
+    { "KeUnalignedAccess",                  Test_KeUnalignedAccess },
     { "KeWaitMultiple",                     Test_KeWaitMultiple },
     { "KernelType",                         Test_KernelType },
     { "MmAllocateContiguousNode",           Test_MmAllocateContiguousNode },

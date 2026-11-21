@@ -70,6 +70,20 @@ KiArmHandleAbort(
 
     if (Fsr == FSR_ALIGNMENT)
     {
+        if (!Instruction)
+        {
+            if (!(TrapFrame->Cpsr & CPSR_IRQ_DISABLE))
+                _enable();
+
+            Result = KiArmEmulateUnalignedAccess(TrapFrame, &Address, &Write);
+            if (NT_SUCCESS(Result))
+                return;
+            if ((Result != STATUS_NOT_SUPPORTED) && (Result != STATUS_DATATYPE_MISALIGNMENT))
+            {
+                KiArmRaiseException(TrapFrame, Result, 2, Write ? 1 : 0, Address, 0);
+                return;
+            }
+        }
         KiArmRaiseException(TrapFrame, STATUS_DATATYPE_MISALIGNMENT, 0, 0, 0, 0);
         return;
     }

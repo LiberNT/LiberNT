@@ -593,6 +593,7 @@ elseif(ARCH STREQUAL "arm")
         ${REACTOS_SOURCE_DIR}/ntos/kd64/arm/kdarm.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/dispint.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/idleloop.c
+        ${REACTOS_SOURCE_DIR}/ntos/ke/arm/align.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/console.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/context.c
         ${REACTOS_SOURCE_DIR}/ntos/ke/arm/cpu.c
