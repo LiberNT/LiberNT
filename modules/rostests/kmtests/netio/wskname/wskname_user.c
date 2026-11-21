@@ -13,11 +13,18 @@
 
 #include "wskname.h"
 
-static HANDLE ResolverDevice = INVALID_HANDLE_VALUE;
-static HANDLE ResolverThread;
-static HANDLE ResolverReady;
+typedef struct _RESOLVER
+{
+    HANDLE Device;
+    HANDLE Thread;
+    HANDLE Ready;
+    BOOL Declines;
+    volatile LONG Served;
+} RESOLVER, *PRESOLVER;
+
+static RESOLVER Declining = { INVALID_HANDLE_VALUE, NULL, NULL, TRUE, 0 };
+static RESOLVER Answering = { INVALID_HANDLE_VALUE, NULL, NULL, FALSE, 0 };
 static volatile LONG ResolverStopping;
-static volatile LONG ResolverServed;
 
 /* The same two IOCTLs the DNS Client service pumps, so the contract is the one it uses. */
 static
@@ -26,16 +33,15 @@ WINAPI
 ResolverRoutine(
     _In_ LPVOID Parameter)
 {
+    PRESOLVER Resolver = Parameter;
     WSKNAME_REQUEST Request;
     WSKNAME_REPLY Reply;
     DWORD Returned;
 
-    UNREFERENCED_PARAMETER(Parameter);
-
     while (InterlockedCompareExchange(&ResolverStopping, 0, 0) == 0)
     {
-        SetEvent(ResolverReady);
-        if (!DeviceIoControl(ResolverDevice, IOCTL_WSKNAME_GET_REQUEST, NULL, 0, &Request, sizeof(Request),
+        SetEvent(Resolver->Ready);
+        if (!DeviceIoControl(Resolver->Device, IOCTL_WSKNAME_GET_REQUEST, NULL, 0, &Request, sizeof(Request),
                              &Returned, NULL))
         {
             break;
@@ -47,7 +53,11 @@ ResolverRoutine(
         Reply.Id = Request.Id;
         Reply.Status = STATUS_OBJECT_NAME_NOT_FOUND;
 
-        if (Request.Operation == WskNameAddressInfo && wcscmp(Request.Node, WSKNAME_TEST_NODE) == 0)
+        if (Resolver->Declines)
+        {
+            /* This one has no answer for any name, so the kernel has to go on to the next resolver. */
+        }
+        else if (Request.Operation == WskNameAddressInfo && wcscmp(Request.Node, WSKNAME_TEST_NODE) == 0)
         {
             /* The name the driver asks for is answered here, so no real lookup decides the result. */
             Reply.AddressCount = 1;
@@ -95,8 +105,8 @@ ResolverRoutine(
             }
         }
 
-        InterlockedIncrement(&ResolverServed);
-        DeviceIoControl(ResolverDevice, IOCTL_WSKNAME_COMPLETE_REQUEST, &Reply, sizeof(Reply), NULL, 0, &Returned,
+        InterlockedIncrement(&Resolver->Served);
+        DeviceIoControl(Resolver->Device, IOCTL_WSKNAME_COMPLETE_REQUEST, &Reply, sizeof(Reply), NULL, 0, &Returned,
                         NULL);
     }
     return 0;
@@ -104,59 +114,57 @@ ResolverRoutine(
 
 static
 BOOL
-StartResolver(VOID)
+StartResolver(
+    _Inout_ PRESOLVER Resolver)
 {
-    WSADATA Data;
-
-    if (WSAStartup(MAKEWORD(2, 2), &Data) != 0)
-        return FALSE;
-
-    ResolverDevice = CreateFileW(L"\\\\.\\NetioNameResolver", GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
-                                 0, NULL);
-    if (ResolverDevice == INVALID_HANDLE_VALUE)
+    Resolver->Device = CreateFileW(L"\\\\.\\NetioNameResolver", GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
+                                   0, NULL);
+    if (Resolver->Device == INVALID_HANDLE_VALUE)
     {
         trace("NETIO has no name resolver device (%lu)\n", GetLastError());
         return FALSE;
     }
 
-    ResolverReady = CreateEventW(NULL, TRUE, FALSE, NULL);
-    ResolverThread = ResolverReady != NULL ? CreateThread(NULL, 0, ResolverRoutine, NULL, 0, NULL) : NULL;
-    if (ResolverThread == NULL)
+    Resolver->Ready = CreateEventW(NULL, TRUE, FALSE, NULL);
+    Resolver->Thread = Resolver->Ready != NULL ? CreateThread(NULL, 0, ResolverRoutine, Resolver, 0, NULL) : NULL;
+    if (Resolver->Thread == NULL)
     {
-        if (ResolverReady != NULL)
-            CloseHandle(ResolverReady);
-        CloseHandle(ResolverDevice);
-        ResolverDevice = INVALID_HANDLE_VALUE;
+        if (Resolver->Ready != NULL)
+            CloseHandle(Resolver->Ready);
+        CloseHandle(Resolver->Device);
+        Resolver->Device = INVALID_HANDLE_VALUE;
         return FALSE;
     }
 
     /* The driver counts a handle as a server once its first request is in, so let that one land. */
-    WaitForSingleObject(ResolverReady, 5000);
+    WaitForSingleObject(Resolver->Ready, 5000);
     Sleep(50);
     return TRUE;
 }
 
 static
 VOID
-StopResolver(VOID)
+StopResolver(
+    _Inout_ PRESOLVER Resolver)
 {
-    if (ResolverDevice == INVALID_HANDLE_VALUE)
+    if (Resolver->Device == INVALID_HANDLE_VALUE)
         return;
 
     InterlockedExchange(&ResolverStopping, 1);
-    CancelIoEx(ResolverDevice, NULL);
-    WaitForSingleObject(ResolverThread, 5000);
-    CloseHandle(ResolverThread);
-    CloseHandle(ResolverReady);
-    CloseHandle(ResolverDevice);
-    ResolverReady = NULL;
-    ResolverThread = NULL;
-    ResolverDevice = INVALID_HANDLE_VALUE;
+    CancelIoEx(Resolver->Device, NULL);
+    WaitForSingleObject(Resolver->Thread, 5000);
+    CloseHandle(Resolver->Thread);
+    CloseHandle(Resolver->Ready);
+    CloseHandle(Resolver->Device);
+    Resolver->Ready = NULL;
+    Resolver->Thread = NULL;
+    Resolver->Device = INVALID_HANDLE_VALUE;
 }
 
 START_TEST(WskName)
 {
     BOOL Serving;
+    WSADATA Data;
     DWORD Error;
 
     Error = KmtLoadAndOpenDriver(L"WskName", TRUE);
@@ -166,17 +174,20 @@ START_TEST(WskName)
         return;
     }
 
-    Serving = StartResolver();
-    ok(Serving, "The test resolver did not open the NETIO device\n");
+    /* The resolver that answers no name waits first, so a request reaches it before the one that answers. */
+    Serving = WSAStartup(MAKEWORD(2, 2), &Data) == 0 && StartResolver(&Declining) && StartResolver(&Answering);
+    ok(Serving, "The test resolvers did not open the NETIO device\n");
 
     Error = KmtSendToDriver(IOCTL_WSKNAME_RUN);
     ok_eq_int(Error, ERROR_SUCCESS);
 
     if (Serving)
     {
-        ok(ResolverServed > 0, "The kernel asked the resolver nothing\n");
-        StopResolver();
+        ok(Answering.Served > 0, "The kernel asked the resolver nothing\n");
+        ok(Declining.Served > 0, "The kernel did not ask the resolver that answers no name\n");
     }
+    StopResolver(&Answering);
+    StopResolver(&Declining);
 
     KmtCloseDriver();
     KmtUnloadDriver();

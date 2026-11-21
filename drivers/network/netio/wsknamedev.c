@@ -19,6 +19,7 @@
 typedef struct _WSKNAME_FILE
 {
     BOOLEAN Serving;
+    ULONG ServerBit;
 } WSKNAME_FILE, *PWSKNAME_FILE;
 
 typedef struct _WSKNAME_PENDING
@@ -26,6 +27,8 @@ typedef struct _WSKNAME_PENDING
     LIST_ENTRY Link;
     ULONG Id;
     BOOLEAN Dispatched;
+    BOOLEAN Answered;
+    ULONG Declined;
     PFILE_OBJECT Server;
     NTSTATUS Status;
     KEVENT Done;
@@ -43,18 +46,26 @@ static PDRIVER_DISPATCH WskNameNext[IRP_MJ_MAXIMUM_FUNCTION + 1];
 
 static
 PIRP
-WskNameTakeWaiterLocked(VOID)
+WskNameTakeWaiterLocked(
+    _In_ PWSKNAME_PENDING Pending)
 {
-    PLIST_ENTRY Entry;
+    PLIST_ENTRY Entry, Next;
+    PWSKNAME_FILE File;
     PIRP Irp;
 
     ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    ASSERT(!Pending->Dispatched);
 
-    while (!IsListEmpty(&WskNameWaiters))
+    for (Entry = WskNameWaiters.Flink; Entry != &WskNameWaiters; Entry = Next)
     {
-        Entry = RemoveHeadList(&WskNameWaiters);
-        InitializeListHead(Entry);
+        Next = Entry->Flink;
         Irp = CONTAINING_RECORD(Entry, IRP, Tail.Overlay.ListEntry);
+        File = IoGetCurrentIrpStackLocation(Irp)->FileObject->FsContext;
+        ASSERT(File->Serving);
+        if (Pending->Declined & File->ServerBit)
+            continue;
+        RemoveEntryList(Entry);
+        InitializeListHead(Entry);
         if (IoSetCancelRoutine(Irp, NULL) != NULL)
             return Irp;
     }
@@ -63,17 +74,19 @@ WskNameTakeWaiterLocked(VOID)
 
 static
 PWSKNAME_PENDING
-WskNameNextUndispatchedLocked(VOID)
+WskNameNextUndispatchedLocked(
+    _In_ PWSKNAME_FILE File)
 {
     PLIST_ENTRY Entry;
     PWSKNAME_PENDING Pending;
 
     ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    ASSERT(File->Serving);
 
     for (Entry = WskNamePending.Flink; Entry != &WskNamePending; Entry = Entry->Flink)
     {
         Pending = CONTAINING_RECORD(Entry, WSKNAME_PENDING, Link);
-        if (!Pending->Dispatched)
+        if (!Pending->Dispatched && !(Pending->Declined & File->ServerBit))
             return Pending;
     }
     return NULL;
@@ -88,6 +101,7 @@ WskNameHandOutLocked(
     PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
 
     ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    ASSERT(!Pending->Dispatched);
 
     Pending->Dispatched = TRUE;
     Pending->Server = Stack->FileObject;
@@ -125,7 +139,7 @@ WskNameForward(
         return STATUS_NO_MATCH;
     }
     InsertTailList(&WskNamePending, &Pending->Link);
-    Irp = WskNameTakeWaiterLocked();
+    Irp = WskNameTakeWaiterLocked(Pending);
     if (Irp != NULL)
         WskNameHandOutLocked(Pending, Irp);
     KeReleaseSpinLock(&WskNameLock, Irql);
@@ -181,11 +195,19 @@ WskNameGetRequest(
     KeAcquireSpinLock(&WskNameLock, &Irql);
     if (!File->Serving)
     {
+        ULONG Free = ~WskNameServers;
+
+        if (Free == 0)
+        {
+            KeReleaseSpinLock(&WskNameLock, Irql);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
+        File->ServerBit = Free & (0 - Free);
         File->Serving = TRUE;
-        WskNameServers++;
+        WskNameServers |= File->ServerBit;
     }
 
-    Pending = WskNameNextUndispatchedLocked();
+    Pending = WskNameNextUndispatchedLocked(File);
     if (Pending != NULL)
     {
         WskNameHandOutLocked(Pending, Irp);
@@ -212,8 +234,11 @@ WskNameCompleteRequest(
     _In_reads_bytes_(InputLength) const WSKNAME_REPLY *Reply,
     _In_ ULONG InputLength)
 {
+    PWSKNAME_FILE File = FileObject->FsContext;
     PWSKNAME_PENDING Pending = NULL;
+    BOOLEAN Done = TRUE;
     PLIST_ENTRY Entry;
+    PIRP Irp = NULL;
     KIRQL Irql;
 
     if (InputLength != sizeof(WSKNAME_REPLY) || Reply->AddressCount > WSKNAME_MAX_REPLY_ADDRESSES)
@@ -232,17 +257,37 @@ WskNameCompleteRequest(
     }
     if (Pending != NULL)
     {
-        RemoveEntryList(&Pending->Link);
+        ASSERT(File->Serving);
         RtlCopyMemory(&Pending->Reply, Reply, sizeof(*Reply));
         Pending->Reply.Name[WSKNAME_MAX_HOST - 1] = UNICODE_NULL;
         Pending->Status = STATUS_SUCCESS;
+        Pending->Answered = TRUE;
+        Pending->Declined |= File->ServerBit;
+
+        /* A resolver with no answer leaves the request to the ones not asked yet; the last such answer stands if none has one */
+        if (!NT_SUCCESS(Reply->Status) && (WskNameServers & ~Pending->Declined) != 0)
+        {
+            Pending->Dispatched = FALSE;
+            Pending->Server = NULL;
+            Irp = WskNameTakeWaiterLocked(Pending);
+            if (Irp != NULL)
+                WskNameHandOutLocked(Pending, Irp);
+            Done = FALSE;
+        }
+        else
+        {
+            RemoveEntryList(&Pending->Link);
+        }
     }
     KeReleaseSpinLock(&WskNameLock, Irql);
 
     if (Pending == NULL)
         return STATUS_NOT_FOUND;
 
-    KeSetEvent(&Pending->Done, IO_NETWORK_INCREMENT, FALSE);
+    if (Irp != NULL)
+        IoCompleteRequest(Irp, IO_NETWORK_INCREMENT);
+    if (Done)
+        KeSetEvent(&Pending->Done, IO_NETWORK_INCREMENT, FALSE);
     return STATUS_SUCCESS;
 }
 
@@ -252,18 +297,23 @@ WskNameCleanup(
     _In_ PFILE_OBJECT FileObject,
     _In_ PWSKNAME_FILE File)
 {
-    LIST_ENTRY Cancelled, Failed;
+    LIST_ENTRY Cancelled, Failed, HandedOut;
     PLIST_ENTRY Entry, Next;
+    ULONG ServerBit = 0;
     KIRQL Irql;
 
     InitializeListHead(&Cancelled);
     InitializeListHead(&Failed);
+    InitializeListHead(&HandedOut);
 
     KeAcquireSpinLock(&WskNameLock, &Irql);
     if (File->Serving)
     {
+        ASSERT((WskNameServers & File->ServerBit) != 0);
+        ServerBit = File->ServerBit;
         File->Serving = FALSE;
-        WskNameServers--;
+        File->ServerBit = 0;
+        WskNameServers &= ~ServerBit;
     }
 
     for (Entry = WskNameWaiters.Flink; Entry != &WskNameWaiters; Entry = Next)
@@ -284,15 +334,40 @@ WskNameCleanup(
         PWSKNAME_PENDING Pending = CONTAINING_RECORD(Entry, WSKNAME_PENDING, Link);
 
         Next = Entry->Flink;
-        if ((Pending->Dispatched && Pending->Server == FileObject) ||
-            (!Pending->Dispatched && WskNameServers == 0))
+        Pending->Declined &= ~ServerBit;
+        if (Pending->Dispatched && Pending->Server == FileObject)
         {
-            RemoveEntryList(Entry);
-            Pending->Status = STATUS_NO_MATCH;
-            InsertTailList(&Failed, Entry);
+            Pending->Dispatched = FALSE;
+            Pending->Server = NULL;
         }
+        if (Pending->Dispatched)
+            continue;
+
+        if ((WskNameServers & ~Pending->Declined) != 0)
+        {
+            PIRP Irp = WskNameTakeWaiterLocked(Pending);
+
+            if (Irp != NULL)
+            {
+                WskNameHandOutLocked(Pending, Irp);
+                InsertTailList(&HandedOut, &Irp->Tail.Overlay.ListEntry);
+            }
+            continue;
+        }
+
+        RemoveEntryList(Entry);
+        if (!Pending->Answered)
+            Pending->Status = STATUS_NO_MATCH;
+        InsertTailList(&Failed, Entry);
     }
     KeReleaseSpinLock(&WskNameLock, Irql);
+
+    while (!IsListEmpty(&HandedOut))
+    {
+        PIRP Irp = CONTAINING_RECORD(RemoveHeadList(&HandedOut), IRP, Tail.Overlay.ListEntry);
+
+        IoCompleteRequest(Irp, IO_NETWORK_INCREMENT);
+    }
 
     while (!IsListEmpty(&Cancelled))
     {
