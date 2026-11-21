@@ -59,6 +59,7 @@ list(APPEND SOURCE
     DispatcherStress.c
     ProcessorGroups.c
     dosdev.c
+    DirectoryEntryUpdates.c
     DateTimeFormatFlags.c
     WriteProcessMemoryAccess.c
     EnumDateTimeFormats.c
