@@ -2349,6 +2349,7 @@ MiMapViewInternal(
     Vad->Protection = Protection;
     Vad->MaximumProtection = (UCHAR)(MaximumProtection & MI_PROT_ACCESS_MASK);
     Vad->Type = (Segment->Kind == MiSegmentImage) ? MiVadImage : MiVadMapped;
+    Vad->NoExecuteImage = (BOOLEAN)(Vad->Type == MiVadImage && (AllocationType & MI_MEM_NO_EXECUTE_IMAGE));
     Vad->CopyOnWrite = (BOOLEAN)MI_PROT_IS_COPY(Protection);
     Vad->Inherit = Inherit;
     Vad->CacheView = CacheView;
@@ -2369,6 +2370,25 @@ MiMapViewInternal(
         MiAdjustSegmentCount(&Segment->TruncationViews, 1);
     if (Vad->WritableUser)
         MiAdjustSegmentCount(&Segment->WritableUserViews, 1);
+
+    if (Vad->NoExecuteImage)
+    {
+        /* A SEC_IMAGE_NO_EXECUTE view keeps the image layout with every page read-only (measured on Windows 11) */
+        NTSTATUS Status = MiSetMappedViewProtection(Space, Vad, Start, Start + Size, MI_PROT_READONLY);
+
+        if (!NT_SUCCESS(Status))
+        {
+            PMI_SEGMENT Detached = MiDetachMappedView(Space, Vad, FALSE, FALSE);
+
+            MI_ASSERT(Detached == Segment);
+            if (Placeholder != NULL)
+                MiVadInsert(&Space->VadRoot, &Placeholder->Node);
+            MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
+            MI_FREE(Vad);
+            MiSegmentDereference(Detached);
+            return Status;
+        }
+    }
     MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
 
     if (Placeholder != NULL)

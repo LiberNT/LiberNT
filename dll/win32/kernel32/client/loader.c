@@ -309,7 +309,7 @@ BasepLoadLibraryAsDatafile(PWSTR Path, LPCWSTR Name, DWORD Flags, HMODULE *hModu
     if (hFile == INVALID_HANDLE_VALUE) return NtCurrentTeb()->LastStatusValue;
 
     if (Flags & LOAD_LIBRARY_AS_IMAGE_RESOURCE)
-        Protect |= SEC_IMAGE;
+        Protect |= SEC_IMAGE_NO_EXECUTE;
 
     /* Create file mapping */
     hMapping = CreateFileMappingW(hFile, NULL, Protect, 0, 0, NULL);

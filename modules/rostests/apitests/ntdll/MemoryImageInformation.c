@@ -38,9 +38,10 @@ ImageSize(
 
 static
 void
-CheckImage(
+CheckImageEx(
     _In_ PVOID Address,
     _In_ PVOID Base,
+    _In_ ULONG NotExecutable,
     _In_ PCSTR What)
 {
     MEMORY_IMAGE_INFORMATION Image;
@@ -53,7 +54,85 @@ CheckImage(
     ok(Image.ImageBase == Base, "%s: base %p, expected %p\n", What, Image.ImageBase, Base);
     ok(Image.SizeOfImage == ImageSize(Base), "%s: size 0x%Ix, expected 0x%Ix\n", What, Image.SizeOfImage, ImageSize(Base));
     ok(Image.ImagePartialMap == 0, "%s: partial map\n", What);
-    ok(Image.ImageNotExecutable == 0, "%s: not executable\n", What);
+    ok(Image.ImageNotExecutable == NotExecutable, "%s: not executable %lu, expected %lu\n", What,
+       (ULONG)Image.ImageNotExecutable, NotExecutable);
+}
+
+static
+void
+CheckImage(
+    _In_ PVOID Address,
+    _In_ PVOID Base,
+    _In_ PCSTR What)
+{
+    CheckImageEx(Address, Base, 0, What);
+}
+
+static
+void
+CheckSectionProtections(
+    _In_ PVOID Base,
+    _In_ BOOLEAN NoExecute,
+    _In_ PCSTR What)
+{
+    PIMAGE_NT_HEADERS Nt = (PIMAGE_NT_HEADERS)((PUCHAR)Base + ((PIMAGE_DOS_HEADER)Base)->e_lfanew);
+    PIMAGE_SECTION_HEADER Section = IMAGE_FIRST_SECTION(Nt);
+    MEMORY_BASIC_INFORMATION Basic;
+    WORD Index;
+
+    ok(VirtualQuery(Base, &Basic, sizeof(Basic)) == sizeof(Basic), "%s: VirtualQuery failed\n", What);
+    ok(Basic.Type == MEM_IMAGE, "%s: type 0x%lx\n", What, Basic.Type);
+    ok(Basic.Protect == PAGE_READONLY, "%s: header protect 0x%lx\n", What, Basic.Protect);
+    ok(Basic.AllocationProtect == (NoExecute ? PAGE_READONLY : PAGE_EXECUTE_WRITECOPY), "%s: allocation protect 0x%lx\n",
+       What, Basic.AllocationProtect);
+    for (Index = 0; Index < Nt->FileHeader.NumberOfSections; Index++)
+    {
+        ULONG Expected = PAGE_READONLY;
+
+        if (Section[Index].Misc.VirtualSize == 0)
+            continue;
+        if (!NoExecute && (Section[Index].Characteristics & IMAGE_SCN_MEM_EXECUTE))
+            Expected = PAGE_EXECUTE_READ;
+        else if (!NoExecute && (Section[Index].Characteristics & IMAGE_SCN_MEM_WRITE))
+            Expected = PAGE_WRITECOPY;
+        if (VirtualQuery((PUCHAR)Base + Section[Index].VirtualAddress, &Basic, sizeof(Basic)) != sizeof(Basic))
+            continue;
+        ok(Basic.Protect == Expected, "%s: section %.8s protect 0x%lx, expected 0x%lx\n", What, Section[Index].Name,
+           Basic.Protect, Expected);
+    }
+}
+
+static
+void
+TestImageView(
+    _In_ ULONG Attributes,
+    _In_ PCSTR What)
+{
+    WCHAR Path[MAX_PATH];
+    HANDLE File, Mapping;
+    PVOID View;
+
+    GetSystemDirectoryW(Path, RTL_NUMBER_OF(Path));
+    wcscat(Path, L"\\shell32.dll");
+    File = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "%s: CreateFileW failed with %lu\n", What, GetLastError());
+    if (File == INVALID_HANDLE_VALUE)
+        return;
+    Mapping = CreateFileMappingW(File, NULL, PAGE_READONLY | Attributes, 0, 0, NULL);
+    ok(Mapping != NULL, "%s: CreateFileMappingW failed with %lu\n", What, GetLastError());
+    if (Mapping != NULL)
+    {
+        View = MapViewOfFile(Mapping, FILE_MAP_READ, 0, 0, 0);
+        ok(View != NULL, "%s: MapViewOfFile failed with %lu\n", What, GetLastError());
+        if (View != NULL)
+        {
+            CheckImageEx(View, View, (Attributes == SEC_IMAGE_NO_EXECUTE) ? 1 : 0, What);
+            CheckSectionProtections(View, (BOOLEAN)(Attributes == SEC_IMAGE_NO_EXECUTE), What);
+            UnmapViewOfFile(View);
+        }
+        CloseHandle(Mapping);
+    }
+    CloseHandle(File);
 }
 
 static
@@ -143,4 +222,18 @@ START_TEST(MemoryImageInformation)
         CheckNotImage(Data, "data file");
         FreeLibrary(Data);
     }
+
+    Data = LoadLibraryExW(L"shell32.dll", NULL, LOAD_LIBRARY_AS_IMAGE_RESOURCE | LOAD_LIBRARY_AS_DATAFILE);
+    ok(Data != NULL, "LoadLibraryExW image resource failed with %lu\n", GetLastError());
+    if (Data != NULL)
+    {
+        PVOID Base = (PVOID)((ULONG_PTR)Data & ~(ULONG_PTR)3);
+
+        CheckImageEx(Base, Base, 1, "image resource");
+        CheckSectionProtections(Base, TRUE, "image resource");
+        FreeLibrary(Data);
+    }
+
+    TestImageView(SEC_IMAGE, "image view");
+    TestImageView(SEC_IMAGE_NO_EXECUTE, "no-execute image view");
 }

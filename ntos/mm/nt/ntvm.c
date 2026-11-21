@@ -1168,6 +1168,7 @@ MiQueryImageInformation(
     {
         AllocationBase = Info.AllocationBase;
         Image.ImageBase = (PVOID)(ULONG_PTR)AllocationBase;
+        Image.ImageNotExecutable = Info.NoExecuteImage;
 
         Query = AllocationBase;
         while (NT_SUCCESS(MiQueryVirtualMemory(Space, Query, &Info)) &&
@@ -1180,7 +1181,7 @@ MiQueryImageInformation(
             Query = Info.BaseAddress + Info.RegionSize;
         }
         ASSERT(Image.SizeOfImage != 0);
-        /* TODO: ImageNotExecutable needs SEC_IMAGE_NO_EXECUTE image views and ImageSigningLevel code integrity signing levels; both report 0 */
+        /* TODO: ImageSigningLevel needs code integrity signing levels; it reports 0 */
     }
 
     MiReleaseTargetProcess(&Target);

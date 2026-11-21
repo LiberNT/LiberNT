@@ -1582,7 +1582,8 @@ MiCreateSectionWithMode(
     if ((AllocationAttributes & (SEC_COMMIT | SEC_RESERVE)) == (SEC_COMMIT | SEC_RESERVE))
         return STATUS_INVALID_PARAMETER_6;
 
-    if ((AllocationAttributes & SEC_IMAGE) && (AllocationAttributes & (SEC_COMMIT | SEC_RESERVE | SEC_NOCACHE)))
+    /* SEC_IMAGE_NO_EXECUTE is SEC_IMAGE | SEC_NOCACHE */
+    if ((AllocationAttributes & SEC_IMAGE) && (AllocationAttributes & (SEC_COMMIT | SEC_RESERVE)))
         return STATUS_INVALID_PARAMETER_6;
 
     if (AllocationAttributes & SEC_LARGE_PAGES)
@@ -1922,6 +1923,7 @@ MiMapSectionView(
     ULONG Attempts = 0;
     ULONG Protection;
     NTSTATUS Status;
+    BOOLEAN NoExecute = (BOOLEAN)(Control->Image && (Section->AllocationAttributes & SEC_NOCACHE));
 
     if (!MiProtectionFromWin32(Win32Protect, &Protection))
     {
@@ -2015,7 +2017,8 @@ MiMapSectionView(
         Status = MiMapViewEx(Space, Control->Segment, &TryBase, Offset, &TrySize, Protection,
                              (AllocationType & (MEM_TOP_DOWN | MEM_RESERVE | MEM_LARGE_PAGES)) |
                              ((AllocationType & MEM_REPLACE_PLACEHOLDER) ? MI_MEM_REPLACE_PLACEHOLDER : 0) |
-                             ((AllocationType & MEM_DOS_LIM) ? MI_MEM_PAGE_GRANULAR : 0),
+                             ((AllocationType & MEM_DOS_LIM) ? MI_MEM_PAGE_GRANULAR : 0) |
+                             (NoExecute ? MI_MEM_NO_EXECUTE_IMAGE : 0),
                              Highest, Control->Image ? 0 : Section->Protection, Inherit);
 
         if (NT_SUCCESS(Status))
