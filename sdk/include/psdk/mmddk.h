@@ -312,12 +312,12 @@ typedef struct joyreghwconfig_tag {
 
 /* joystick calibration info structure */
 typedef struct joycalibrate_tag {
-    UINT    wXbase;
-    UINT    wXdelta;
-    UINT    wYbase;
-    UINT    wYdelta;
-    UINT    wZbase;
-    UINT    wZdelta;
+    WORD    wXbase;
+    WORD    wXdelta;
+    WORD    wYbase;
+    WORD    wYdelta;
+    WORD    wZbase;
+    WORD    wZdelta;
 } JOYCALIBRATE;
 typedef JOYCALIBRATE *LPJOYCALIBRATE;
 
@@ -373,7 +373,7 @@ typedef JOYDEVMSGPROC *LPJOYDEVMSGPROC;
 #define MCI_INTEGER_RETURNED        0x00080000  /* integer conversion needed */
 #define MCI_RESOURCE_DRIVER         0x00100000  /* driver owns returned resource */
 
-#define MCI_NO_COMMAND_TABLE    0xFFFF
+#define MCI_NO_COMMAND_TABLE    ((UINT)(-1))
 
 #define MCI_COMMAND_HEAD        0
 #define MCI_STRING              1
@@ -413,7 +413,7 @@ typedef struct {
 
 typedef struct {
         DWORD  			dwStreamID;
-        WORD   			wDeviceID;
+        UINT   			uDeviceID;
 } MIDIOPENSTRMID;
 
 typedef struct {

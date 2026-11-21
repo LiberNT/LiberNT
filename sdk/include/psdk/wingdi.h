@@ -2410,6 +2410,15 @@ typedef struct tagEXTLOGPEN {
 	DWORD elpNumEntries;
 	DWORD elpStyleEntry[1];
 } EXTLOGPEN,*PEXTLOGPEN,*LPEXTLOGPEN,*NPEXTLOGPEN;
+typedef struct tagEXTLOGPEN32 {
+	DWORD elpPenStyle;
+	DWORD elpWidth;
+	UINT elpBrushStyle;
+	COLORREF elpColor;
+	ULONG elpHatch;
+	DWORD elpNumEntries;
+	DWORD elpStyleEntry[1];
+} EXTLOGPEN32,*PEXTLOGPEN32,*NPEXTLOGPEN32,*LPEXTLOGPEN32;
 typedef struct tagEMREXTCREATEPEN {
 	EMR emr;
 	DWORD ihPen;
@@ -2417,7 +2426,7 @@ typedef struct tagEMREXTCREATEPEN {
 	DWORD cbBmi;
 	DWORD offBits;
 	DWORD cbBits;
-	EXTLOGPEN elp;
+	EXTLOGPEN32 elp;
 } EMREXTCREATEPEN,*PEMREXTCREATEPEN;
 typedef struct tagEMREXTFLOODFILL {
 	EMR emr;

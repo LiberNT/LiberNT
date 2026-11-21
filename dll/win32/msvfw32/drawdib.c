@@ -528,7 +528,7 @@ BOOL VFWAPI DrawDibTime(HDRAWDIB hdd, LPDRAWDIBTIME lpddtime)
 /***********************************************************************
  *              DrawDibProfileDisplay          [MSVFW32.@]
  */
-DWORD VFWAPI DrawDibProfileDisplay(LPBITMAPINFOHEADER lpbi)
+LRESULT VFWAPI DrawDibProfileDisplay(LPBITMAPINFOHEADER lpbi)
 {
     FIXME("(%p) stub\n", lpbi);
 

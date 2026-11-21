@@ -354,11 +354,16 @@ extern "C" {
 /* Actually it should be > 0x0500, since this is not present in Windows 2000;
  * however we keep >= 0x0500 for compatibility with MS PSDK. */
 
-#define GPT_ATTRIBUTE_PLATFORM_REQUIRED          0x00000001
-#define GPT_BASIC_DATA_ATTRIBUTE_READ_ONLY       0x10000000
-#define GPT_BASIC_DATA_ATTRIBUTE_SHADOW_COPY     0x20000000
-#define GPT_BASIC_DATA_ATTRIBUTE_HIDDEN          0x40000000
-#define GPT_BASIC_DATA_ATTRIBUTE_NO_DRIVE_LETTER 0x80000000
+#define GPT_ATTRIBUTE_PLATFORM_REQUIRED          (0x0000000000000001)
+#define GPT_ATTRIBUTE_NO_BLOCK_IO_PROTOCOL       (0x0000000000000002)
+#define GPT_ATTRIBUTE_LEGACY_BIOS_BOOTABLE       (0x0000000000000004)
+#define GPT_BASIC_DATA_ATTRIBUTE_NO_DRIVE_LETTER (0x8000000000000000)
+#define GPT_BASIC_DATA_ATTRIBUTE_HIDDEN          (0x4000000000000000)
+#define GPT_BASIC_DATA_ATTRIBUTE_SHADOW_COPY     (0x2000000000000000)
+#define GPT_BASIC_DATA_ATTRIBUTE_READ_ONLY       (0x1000000000000000)
+#define GPT_BASIC_DATA_ATTRIBUTE_OFFLINE         (0x0800000000000000)
+#define GPT_BASIC_DATA_ATTRIBUTE_DAX             (0x0400000000000000)
+#define GPT_BASIC_DATA_ATTRIBUTE_SERVICE         (0x0200000000000000)
 #endif
 
 #define WMI_DISK_GEOMETRY_GUID \
@@ -644,11 +649,13 @@ typedef struct _REASSIGN_BLOCKS {
   ULONG  BlockNumber[1];
 } REASSIGN_BLOCKS, *PREASSIGN_BLOCKS;
 
+#pragma pack(push, 1)
 typedef struct _REASSIGN_BLOCKS_EX {
   USHORT Reserved;
   USHORT Count;
   LARGE_INTEGER BlockNumber[1];
 } REASSIGN_BLOCKS_EX, *PREASSIGN_BLOCKS_EX;
+#pragma pack(pop)
 
 typedef struct _VERIFY_INFORMATION {
   LARGE_INTEGER  StartingOffset;
@@ -660,6 +667,7 @@ typedef struct _VERIFY_INFORMATION {
 #define CAP_ATAPI_ID_CMD                  2
 #define CAP_SMART_CMD                     4
 
+#pragma pack(push, 1)
 typedef struct _GETVERSIONINPARAMS {
     UCHAR  bVersion;
     UCHAR  bRevision;
@@ -668,6 +676,7 @@ typedef struct _GETVERSIONINPARAMS {
     ULONG  fCapabilities;
     ULONG  dwReserved[4];
 } GETVERSIONINPARAMS, *PGETVERSIONINPARAMS, *LPGETVERSIONINPARAMS;
+#pragma pack(pop)
 
 /* IDEREGS.bCommandReg constants */
 #define ATAPI_ID_CMD                      0xA1
@@ -719,12 +728,14 @@ typedef struct _SENDCMDINPARAMS {
 #define SMART_SHORT_SELFTEST_CAPTIVE      129
 #define SMART_EXTENDED_SELFTEST_CAPTIVE   130
 
+#pragma pack(push, 1)
 typedef struct _DRIVERSTATUS {
     UCHAR  bDriverError;
     UCHAR  bIDEError;
     UCHAR  bReserved[2];
     ULONG  dwReserved[2];
 } DRIVERSTATUS, *PDRIVERSTATUS, *LPDRIVERSTATUS;
+#pragma pack(pop)
 
 #define READ_ATTRIBUTE_BUFFER_SIZE        512
 #define IDENTIFY_BUFFER_SIZE              512

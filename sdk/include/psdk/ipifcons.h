@@ -191,7 +191,7 @@
 #define IF_TYPE_POS                              171
 #define IF_TYPE_DVB_ASI_IN                       172
 #define IF_TYPE_DVB_ASI_OUT                      173
-#define IF_TYPE_PLC                              175
+#define IF_TYPE_PLC                              174
 #define IF_TYPE_NFAS                             175
 #define IF_TYPE_TR008                            176
 #define IF_TYPE_GR303_RDT                        177
@@ -217,7 +217,9 @@
 #define IF_TYPE_IEEE80216_WANN                   237
 #define IF_TYPE_WWANPP                           243
 #define IF_TYPE_WWANPP2                          244
-#define MAX_IF_TYPE                              244
+#define IF_TYPE_IEEE802154                       259
+#define IF_TYPE_XBOX_WIRELESS                    281
+#define MAX_IF_TYPE                              281
 
 #define MIB_IF_TYPE_OTHER               1
 #define MIB_IF_TYPE_ETHERNET            6

@@ -1421,7 +1421,7 @@ static INT_PTR CALLBACK AVISaveOptionsDlgProc(HWND hWnd, UINT uMsg,
 /***********************************************************************
  *		AVISaveOptions		(AVIFIL32.@)
  */
-BOOL WINAPI AVISaveOptions(HWND hWnd, UINT uFlags, INT nStreams,
+INT_PTR WINAPI AVISaveOptions(HWND hWnd, UINT uFlags, INT nStreams,
 			   PAVISTREAM *ppavi, LPAVICOMPRESSOPTIONS *ppOptions)
 {
   LPAVICOMPRESSOPTIONS pSavedOptions = NULL;

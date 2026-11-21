@@ -129,7 +129,7 @@ Imm32MakeIMENotify(
     _In_ HWND hwnd,
     _In_ DWORD dwAction,
     _In_ DWORD dwIndex,
-    _Inout_opt_ DWORD_PTR dwValue,
+    _Inout_opt_ DWORD dwValue,
     _In_ DWORD dwCommand,
     _Inout_opt_ DWORD_PTR dwData);
 

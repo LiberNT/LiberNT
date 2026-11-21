@@ -27,7 +27,7 @@ extern "C" {
 #endif
 
 #ifndef _RICHEDIT_VER
-#define _RICHEDIT_VER   0x0300
+#define _RICHEDIT_VER   0x0810
 #endif /* _RICHEDIT_VER */
 
 #define cchTextLimitDefault 0x7fff
@@ -206,6 +206,9 @@ static const WCHAR RICHEDIT_CLASS20W[] = { 'R','i','c','h','E','d','i','t','2','
 #define EN_LOWFIRTF                     0x070f
 #define EN_ALIGNLTR			0x0710
 #define EN_ALIGNRTL			0x0711
+#define EN_CLIPFORMAT                   0x0712
+#define EN_STARTCOMPOSITION             0x0713
+#define EN_ENDCOMPOSITION               0x0714
 
 
 typedef DWORD (CALLBACK * EDITSTREAMCALLBACK)( DWORD_PTR, LPBYTE, LONG, LONG * );
@@ -228,7 +231,7 @@ typedef DWORD (CALLBACK * EDITSTREAMCALLBACK)( DWORD_PTR, LPBYTE, LONG, LONG * )
 #define ES_NOIME              0x00080000
 #define ES_VERTICAL           0x00400000
 #define ES_SELECTIONBAR       0x01000000
-#define ES_EX_NOCALLOLEINIT   0x01000000
+#define ES_EX_NOCALLOLEINIT   0x00000000
 
 /* the character formatting options */
 #define SCF_DEFAULT           0x00000000
@@ -353,6 +356,7 @@ DECL_WINELIB_TYPE_AW(CHARFORMAT2)
 #define CFM_SPACING           0x00200000
 #define CFM_WEIGHT            0x00400000
 #define CFM_UNDERLINETYPE     0x00800000
+#define CFM_COOKIE            0x01000000
 #define CFM_LCID              0x02000000
 #define CFM_BACKCOLOR         0x04000000
 #define CFM_CHARSET           0x08000000
@@ -390,6 +394,20 @@ DECL_WINELIB_TYPE_AW(CHARFORMAT2)
                                CFM_OFFSET | \
                                CFM_CHARSET)
 
+#if (_RICHEDIT_VER >= 0x0600)
+#define CFM_ALL2              (CFM_ALL | \
+                               CFM_EFFECTS2 | \
+                               CFM_BACKCOLOR | \
+                               CFM_LCID | \
+                               CFM_UNDERLINETYPE | \
+                               CFM_WEIGHT | \
+                               CFM_REVAUTHOR | \
+                               CFM_SPACING | \
+                               CFM_KERNING | \
+                               CFM_STYLE | \
+                               CFM_ANIMATION | \
+                               CFM_COOKIE)
+#else
 #define CFM_ALL2              (CFM_ALL | \
                                CFM_EFFECTS2 | \
                                CFM_BACKCOLOR | \
@@ -401,6 +419,7 @@ DECL_WINELIB_TYPE_AW(CHARFORMAT2)
                                CFM_KERNING | \
                                CFM_STYLE | \
                                CFM_ANIMATION)
+#endif
 
 /* CHARFORMAT effects */
 #define CFE_BOLD              0x00000001
@@ -923,10 +942,10 @@ void WINAPI HyphenateProc(WCHAR*, LANGID, LONG, HYPHRESULT*);
 #define PFA_CENTER            0x00000003
 #define PFA_JUSTIFY           0x00000004
 #define PFA_FULL_INTERWORD    0x00000004
-#define PFA_FULL_INTERLETTER  0x00000005
-#define PFA_FULL_SCALED       0x00000006
-#define PFA_FULL_GLYPHS       0x00000007
-#define PFA_SNAP_GRID         0x00000008
+#define PFA_FULL_NEWSPAPER    0x00000005
+#define PFA_FULL_INTERLETTER  0x00000006
+#define PFA_FULL_SCALED       0x00000007
+#define PFA_FULL_GLYPHS       0x00000008
 
 /* paragraph effects */
 #define PFE_RTLPARA           0x00000001

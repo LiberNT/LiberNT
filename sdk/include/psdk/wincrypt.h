@@ -788,7 +788,7 @@ typedef struct _CRYPT_X942_OTHER_INFO {
 typedef struct _CRYPT_RC2_CBC_PARAMETERS {
     DWORD    dwVersion;
     BOOL     fIV;
-    BYTE     rgbIV[4];
+    BYTE     rgbIV[8];
 } CRYPT_RC2_CBC_PARAMETERS, *PCRYPT_RC2_CBC_PARAMETERS;
 
 #define CRYPT_RC2_40BIT_VERSION    160
@@ -1058,6 +1058,8 @@ struct _CERT_CHAIN_CONTEXT {
     PCCERT_CHAIN_CONTEXT *rgpLowerQualityChainContext;
     BOOL                  fHasRevocationFreshnessTime;
     DWORD                 dwRevocationFreshnessTime;
+    DWORD                 dwCreateFlags;
+    GUID                  ChainId;
 };
 
 typedef struct _CERT_CHAIN_POLICY_PARA {
@@ -1088,8 +1090,8 @@ typedef struct _CERT_CHAIN_POLICY_STATUS {
 #define CERT_CHAIN_POLICY_IGNORE_INVALID_BASIC_CONSTRAINTS_FLAG 0x00000008
 
 #define CERT_CHAIN_POLICY_IGNORE_ALL_NOT_TIME_VALID_FLAGS ( \
- CERT_CHAIN_POLICY_IGNORE_NOT_TIME_VALID_FLAG \
- CERT_CHAIN_POLICY_IGNORE_CTL_NOT_TIME_VALID_FLAG \
+ CERT_CHAIN_POLICY_IGNORE_NOT_TIME_VALID_FLAG | \
+ CERT_CHAIN_POLICY_IGNORE_CTL_NOT_TIME_VALID_FLAG | \
  CERT_CHAIN_POLICY_IGNORE_NOT_TIME_NESTED_FLAG )
 
 #define CERT_CHAIN_POLICY_ALLOW_UNKNOWN_CA_FLAG                 0x00000010
@@ -1562,10 +1564,18 @@ typedef BOOL (WINAPI *PFN_CERT_STORE_PROV_GET_CTL_PROPERTY)(
  DWORD dwFlags, void *pvData);
 #endif
 
+typedef BOOL (WINAPI *PFN_CERT_CREATE_CONTEXT_SORT_FUNC)(
+    DWORD cbTotalEncoded,
+    DWORD cbRemainEncoded,
+    DWORD cEntry,
+    void *pvSort);
+
 typedef struct _CERT_CREATE_CONTEXT_PARA {
     DWORD          cbSize;
     PFN_CRYPT_FREE pfnFree;
     void          *pvFree;
+    PFN_CERT_CREATE_CONTEXT_SORT_FUNC pfnSort;
+    void          *pvSort;
 } CERT_CREATE_CONTEXT_PARA, *PCERT_CREATE_CONTEXT_PARA;
 
 typedef struct _CRYPT_OID_FUNC_ENTRY {
@@ -1669,7 +1679,7 @@ typedef struct _CRYPT_SIGN_MESSAGE_PARA {
 #define CRYPT_MESSAGE_BARE_CONTENT_OUT_FLAG         0x00000001
 #define CRYPT_MESSAGE_ENCAPSULATED_CONTENT_OUT_FLAG 0x00000002
 #define CRYPT_MESSAGE_KEYID_SIGNER_FLAG             0x00000004
-#define CRYPT_MESSAGE_SILENT_KEYSET_FLAG            0x00000008
+#define CRYPT_MESSAGE_SILENT_KEYSET_FLAG            0x00000040
 
 #ifdef __REACTOS__
 typedef PCCERT_CONTEXT
@@ -1724,10 +1734,14 @@ typedef struct _CRYPT_HASH_MESSAGE_PARA {
 typedef struct _CRYPT_KEY_SIGN_MESSAGE_PARA {
     DWORD                      cbSize;
     DWORD                      dwMsgAndCertEncodingType;
-    HCRYPTPROV                 hCryptProv;
+    union {
+        HCRYPTPROV             hCryptProv;
+        NCRYPT_KEY_HANDLE      hNCryptKey;
+    } DUMMYUNIONNAME;
     DWORD                      dwKeySpec;
     CRYPT_ALGORITHM_IDENTIFIER HashAlgorithm;
     void *                     pvHashAuxInfo;
+    CRYPT_ALGORITHM_IDENTIFIER PubKeyAlgorithm;
 } CRYPT_KEY_SIGN_MESSAGE_PARA, *PCRYPT_KEY_SIGN_MESSAGE_PARA;
 
 typedef struct _CRYPT_KEY_VERIFY_MESSAGE_PARA {
@@ -1946,7 +1960,8 @@ typedef const CERT_CRL_CONTEXT_PAIR *PCCERT_CRL_CONTEXT_PAIR;
 #define CRYPT_ENHKEY_USAGE_OID_GROUP_ID 7
 #define CRYPT_POLICY_OID_GROUP_ID       8
 #define CRYPT_TEMPLATE_OID_GROUP_ID     9
-#define CRYPT_LAST_OID_GROUP_ID         9
+#define CRYPT_KDF_OID_GROUP_ID          10
+#define CRYPT_LAST_OID_GROUP_ID         10
 
 #define CRYPT_FIRST_ALG_OID_GROUP_ID CRYPT_HASH_ALG_OID_GROUP_ID
 #define CRYPT_LAST_ALG_OID_GROUP_ID  CRYPT_SIGN_ALG_OID_GROUP_ID
@@ -2096,7 +2111,7 @@ typedef const CERT_CRL_CONTEXT_PAIR *PCCERT_CRL_CONTEXT_PAIR;
 #define CALG_AES                  (ALG_CLASS_DATA_ENCRYPT | ALG_TYPE_BLOCK         | ALG_SID_AES)
 #define CALG_RC4                  (ALG_CLASS_DATA_ENCRYPT | ALG_TYPE_STREAM        | ALG_SID_RC4)
 #define CALG_SEAL                 (ALG_CLASS_DATA_ENCRYPT | ALG_TYPE_STREAM        | ALG_SID_SEAL)
-#define CALG_RC5                  (ALG_CLASS_DATA_ENCRYPT | ALG_TYPE_STREAM        | ALG_SID_RC5)
+#define CALG_RC5                  (ALG_CLASS_DATA_ENCRYPT | ALG_TYPE_BLOCK         | ALG_SID_RC5)
 #define CALG_SKIPJACK             (ALG_CLASS_DATA_ENCRYPT | ALG_TYPE_BLOCK         | ALG_SID_SKIPJACK)
 #define CALG_TEK                  (ALG_CLASS_DATA_ENCRYPT | ALG_TYPE_BLOCK         | ALG_SID_TEK)
 #define CALG_CYLINK_MEK           (ALG_CLASS_DATA_ENCRYPT | ALG_TYPE_BLOCK         | ALG_SID_CYLINK_MEK)
@@ -2899,7 +2914,7 @@ static const WCHAR CERT_PHYSICAL_STORE_AUTH_ROOT_NAME[] =
 #define CERT_NOT_BEFORE_FILETIME_PROP_ID           126
 #define CERT_NOT_BEFORE_ENHKEY_USAGE_PROP_ID       127
 
-#define CERT_FIRST_RESERVED_PROP_ID                85
+#define CERT_FIRST_RESERVED_PROP_ID                130
 #define CERT_LAST_RESERVED_PROP_ID                 0x00007fff
 #define CERT_FIRST_USER_PROP_ID                    0x00008000
 #define CERT_LAST_USER_PROP_ID                     0x0000ffff
@@ -2951,9 +2966,9 @@ static const WCHAR CERT_PHYSICAL_STORE_AUTH_ROOT_NAME[] =
 /* CERT_RDN attribute dwValueType flags */
 #define CERT_RDN_FLAGS_MASK 0xff000000
 #define CERT_RDN_ENABLE_T61_UNICODE_FLAG  0x80000000
-#define CERT_RDN_DISABLE_CHECK_TYPE_FLAG  0x4000000
-#define CERT_RDN_ENABLE_UTF8_UNICODE_FLAG 0x2000000
-#define CERT_RDN_DISABLE_IE4_UTF8_FLAG    0x0100000
+#define CERT_RDN_DISABLE_CHECK_TYPE_FLAG  0x40000000
+#define CERT_RDN_ENABLE_UTF8_UNICODE_FLAG 0x20000000
+#define CERT_RDN_DISABLE_IE4_UTF8_FLAG    0x01000000
 
 #define IS_CERT_RDN_CHAR_STRING(x) \
  (((x) & CERT_RDN_TYPE_MASK) >= CERT_RDN_NUMERIC_STRING)
@@ -4185,6 +4200,7 @@ typedef struct _CMSG_KEY_TRANS_RECIPIENT_INFO {
 typedef struct _CMSG_RECIPIENT_ENCRYPTED_KEY_INFO {
     CERT_ID                     RecipientId;
     CRYPT_DATA_BLOB             EncryptedKey;
+    FILETIME                    Date;
     PCRYPT_ATTRIBUTE_TYPE_VALUE pOtherAttr;
 } CMSG_RECIPIENT_ENCRYPTED_KEY_INFO, *PCMSG_RECIPIENT_ENCRYPTED_KEY_INFO;
 
@@ -4195,7 +4211,8 @@ typedef struct _CMSG_KEY_AGREE_RECIPIENT_INFO {
         CERT_ID              OriginatorCertId;
         CERT_PUBLIC_KEY_INFO OriginatorPublicKeyInfo;
     } DUMMYUNIONNAME;
-    CRYPT_ALGORITHM_IDENTIFIER          UserKeyingMaterial;
+    CRYPT_DATA_BLOB                     UserKeyingMaterial;
+    CRYPT_ALGORITHM_IDENTIFIER          KeyEncryptionAlgorithm;
     DWORD                               cRecipientEncryptedKeys;
     PCMSG_RECIPIENT_ENCRYPTED_KEY_INFO *rgpRecipientEncryptedKeys;
 } CMSG_KEY_AGREE_RECIPIENT_INFO, *PCMSG_KEY_AGREE_RECIPIENT_INFO;
@@ -4235,7 +4252,7 @@ typedef void   (WINAPI *PFN_CMSG_FREE)(void *pv);
 
 typedef struct _CMSG_CONTENT_ENCRYPT_INFO {
     DWORD                       cbSize;
-    HCRYPTPROV                  hCryptProv;
+    HCRYPTPROV_LEGACY           hCryptProv;
     CRYPT_ALGORITHM_IDENTIFIER  ContentEncryptionAlgorithm;
     void                       *pvEncryptionAuxInfo;
     DWORD                       cRecipients;
@@ -4243,8 +4260,15 @@ typedef struct _CMSG_CONTENT_ENCRYPT_INFO {
     PFN_CMSG_ALLOC              pfnAlloc;
     PFN_CMSG_FREE               pfnFree;
     DWORD                       dwEncryptFlags;
-    HCRYPTKEY                   hContentEncryptKey;
+    union {
+        HCRYPTKEY               hContentEncryptKey;
+        BCRYPT_KEY_HANDLE       hCNGContentEncryptKey;
+    } DUMMYUNIONNAME;
     DWORD                       dwFlags;
+    BOOL                        fCNG;
+    BYTE                       *pbCNGContentEncryptKeyObject;
+    BYTE                       *pbContentEncryptKey;
+    DWORD                       cbContentEncryptKey;
 } CMSG_CONTENT_ENCRYPT_INFO, *PCMSG_CONTENT_ENCRYPT_INFO;
 
 typedef struct _CMSG_KEY_TRANS_ENCRYPT_INFO {

@@ -139,7 +139,7 @@ capCreateCaptureWindowA(LPCSTR lpszWindowName,
  */
 BOOL
 VFWAPI
-capGetDriverDescriptionW(WORD wDriverIndex,
+capGetDriverDescriptionW(UINT wDriverIndex,
                          LPWSTR lpszName,
                          INT cbName,
                          LPWSTR lpszVer,
@@ -263,7 +263,7 @@ capGetDriverDescriptionW(WORD wDriverIndex,
  */
 BOOL
 VFWAPI
-capGetDriverDescriptionA(WORD wDriverIndex,
+capGetDriverDescriptionA(UINT wDriverIndex,
                          LPSTR lpszName,
                          INT cbName,
                          LPSTR lpszVer,
