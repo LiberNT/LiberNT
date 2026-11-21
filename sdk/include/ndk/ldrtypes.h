@@ -188,12 +188,55 @@ typedef struct _LDR_DATA_TABLE_ENTRY
 } LDR_DATA_TABLE_ENTRY, *PLDR_DATA_TABLE_ENTRY;
 
 //
+// Kernel Loader Data Table Entry
+//
+typedef struct _KLDR_DATA_TABLE_ENTRY
+{
+    LIST_ENTRY InLoadOrderLinks;
+    PVOID ExceptionTable;
+    ULONG ExceptionTableSize;
+    PVOID GpValue;
+    struct _NON_PAGED_DEBUG_INFO *NonPagedDebugInfo;
+    PVOID DllBase;
+    PVOID EntryPoint;
+    ULONG SizeOfImage;
+    UNICODE_STRING FullDllName;
+    UNICODE_STRING BaseDllName;
+    ULONG Flags;
+    USHORT LoadCount;
+    union
+    {
+        struct
+        {
+            USHORT SignatureLevel : 4;
+            USHORT SignatureType : 3;
+            USHORT Frozen : 2;
+            USHORT HotPatch : 1;
+            USHORT Unused : 6;
+        };
+        USHORT EntireField;
+    } u1;
+    PVOID SectionPointer;
+    ULONG CheckSum;
+    ULONG CoverageSectionSize;
+    PVOID CoverageSection;
+    PVOID LoadedImports;
+    union
+    {
+        PVOID Spare;
+        struct _KLDR_DATA_TABLE_ENTRY *NtDataTableEntry;
+    };
+    ULONG SizeOfImageNotRounded;
+    ULONG TimeDateStamp;
+} KLDR_DATA_TABLE_ENTRY, *PKLDR_DATA_TABLE_ENTRY;
+
+//
 // Loaded Imports Reference Counting in Kernel
 //
 typedef struct _LOAD_IMPORTS
 {
     SIZE_T Count;
-    PLDR_DATA_TABLE_ENTRY Entry[1];
+    PKLDR_DATA_TABLE_ENTRY Entry[1];
 } LOAD_IMPORTS, *PLOAD_IMPORTS;
 
 //

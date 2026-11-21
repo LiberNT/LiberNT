@@ -348,7 +348,7 @@ typedef struct _BOOT_DRIVER_LIST_ENTRY
     LIST_ENTRY Link;
     UNICODE_STRING FilePath;
     UNICODE_STRING RegistryPath;
-    struct _LDR_DATA_TABLE_ENTRY *LdrEntry;
+    struct _KLDR_DATA_TABLE_ENTRY *LdrEntry;
 } BOOT_DRIVER_LIST_ENTRY, *PBOOT_DRIVER_LIST_ENTRY;
 
 /* FIXME: Windows does not publish the entries of HalExtensionModuleList; this layout is LiberNT's. */

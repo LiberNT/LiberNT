@@ -187,7 +187,7 @@ MiReportBootImages(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
     PLIST_ENTRY Head = &LoaderBlock->LoadOrderListHead;
-    PLDR_DATA_TABLE_ENTRY First, Second;
+    PKLDR_DATA_TABLE_ENTRY First, Second;
     PLIST_ENTRY Entry;
     ULONG Count = 0;
 
@@ -197,8 +197,8 @@ MiReportBootImages(
     if (Count < 2)
         return;
 
-    First = CONTAINING_RECORD(Head->Flink, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
-    Second = CONTAINING_RECORD(Head->Flink->Flink, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+    First = CONTAINING_RECORD(Head->Flink, KLDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+    Second = CONTAINING_RECORD(Head->Flink->Flink, KLDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
     DbgPrint("Boot images: %wZ at %p-%p, %wZ at %p-%p, %lu loaded\n", &First->BaseDllName, First->DllBase,
              (PUCHAR)First->DllBase + First->SizeOfImage - 1, &Second->BaseDllName, Second->DllBase,
              (PUCHAR)Second->DllBase + Second->SizeOfImage - 1, Count);

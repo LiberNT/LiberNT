@@ -169,8 +169,8 @@ KdpPublishVersion(
 
     if ((LoaderBlock != NULL) && !IsListEmpty(&LoaderBlock->LoadOrderListHead))
     {
-        PLDR_DATA_TABLE_ENTRY Kernel = CONTAINING_RECORD(LoaderBlock->LoadOrderListHead.Flink,
-                                                         LDR_DATA_TABLE_ENTRY,
+        PKLDR_DATA_TABLE_ENTRY Kernel = CONTAINING_RECORD(LoaderBlock->LoadOrderListHead.Flink,
+                                                         KLDR_DATA_TABLE_ENTRY,
                                                          InLoadOrderLinks);
 
         KernelBase = (ULONG_PTR)Kernel->DllBase;

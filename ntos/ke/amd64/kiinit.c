@@ -391,13 +391,13 @@ KiInitializeKernelMachineDependent(
 #endif
 }
 
-static LDR_DATA_TABLE_ENTRY LdrCoreEntries[3];
+static KLDR_DATA_TABLE_ENTRY LdrCoreEntries[3];
 
 void
 KiInitModuleList(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
-    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    PKLDR_DATA_TABLE_ENTRY LdrEntry;
     PLIST_ENTRY Entry;
     ULONG i;
 
@@ -408,7 +408,7 @@ KiInitModuleList(
          Entry = Entry->Flink, i++)
     {
         LdrEntry = CONTAINING_RECORD(Entry,
-                                     LDR_DATA_TABLE_ENTRY,
+                                     KLDR_DATA_TABLE_ENTRY,
                                      InLoadOrderLinks);
 
         LdrCoreEntries[i] = *LdrEntry;

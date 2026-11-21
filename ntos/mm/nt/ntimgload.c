@@ -171,7 +171,7 @@ MiLoadImageSection(_Inout_ PSECTION *SectionPtr,
                    _Out_ PVOID *ImageBase,
                    _In_ PUNICODE_STRING FileName,
                    _In_ BOOLEAN SessionLoad,
-                   _In_ PLDR_DATA_TABLE_ENTRY LdrEntry)
+                   _In_ PKLDR_DATA_TABLE_ENTRY LdrEntry)
 {
     SECTION_IMAGE_INFORMATION ImageInformation;
     PSECTION Section = *SectionPtr;
@@ -342,7 +342,7 @@ MiWriteProtectSystemImage(
 static
 VOID
 MiInitializeImageCookie(
-    _In_ PLDR_DATA_TABLE_ENTRY Entry)
+    _In_ PKLDR_DATA_TABLE_ENTRY Entry)
 {
     PIMAGE_LOAD_CONFIG_DIRECTORY Config;
     ULONG_PTR Offset, Value;
@@ -517,7 +517,7 @@ Fail:
 }
 
 static
-PLDR_DATA_TABLE_ENTRY
+PKLDR_DATA_TABLE_ENTRY
 MiCreateImageEntry(
     _In_ PVOID ImageBase,
     _In_ ULONG ImageSize,
@@ -526,7 +526,7 @@ MiCreateImageEntry(
     _In_opt_ PSECTION Section)
 {
     PIMAGE_NT_HEADERS Headers = RtlImageNtHeader(ImageBase);
-    PLDR_DATA_TABLE_ENTRY Entry;
+    PKLDR_DATA_TABLE_ENTRY Entry;
 
     ASSERT(Headers != NULL);
 
@@ -567,7 +567,7 @@ MiCreateImageEntry(
 static
 VOID
 MiFreeImageEntry(
-    _In_ PLDR_DATA_TABLE_ENTRY Entry)
+    _In_ PKLDR_DATA_TABLE_ENTRY Entry)
 {
     ASSERT(Entry->InLoadOrderLinks.Flink == NULL);
 
@@ -583,7 +583,7 @@ MiFreeImageEntry(
 static
 VOID
 MiAnnounceSystemImage(
-    _In_ PLDR_DATA_TABLE_ENTRY Entry,
+    _In_ PKLDR_DATA_TABLE_ENTRY Entry,
     _In_ PUNICODE_STRING FileName,
     _In_ PCUNICODE_STRING FullName)
 {
@@ -631,7 +631,7 @@ MiAnnounceSystemImage(
 static
 NTSTATUS
 MiSessionLoadExistingImage(
-    _In_ PLDR_DATA_TABLE_ENTRY LdrEntry,
+    _In_ PKLDR_DATA_TABLE_ENTRY LdrEntry,
     _In_ PUNICODE_STRING BaseDirectory)
 {
     PEPROCESS Process = PsGetCurrentProcess();
@@ -733,7 +733,7 @@ MmLoadSystemImageEx(
 {
     BOOLEAN SessionLoad = (BOOLEAN)(Flags != 0);
     UNICODE_STRING Directory, BaseName, FullName;
-    PLDR_DATA_TABLE_ENTRY Entry;
+    PKLDR_DATA_TABLE_ENTRY Entry;
     MM_PREPARED_SYSTEM_IMAGE Prepared = { NULL, NULL };
     PIMAGE_NT_HEADERS Headers;
     PWCHAR PrefixedBuffer = NULL;
@@ -922,7 +922,7 @@ NTAPI
 MmUnloadSystemImage(
     _In_ PVOID ImageHandle)
 {
-    PLDR_DATA_TABLE_ENTRY Entry = ImageHandle;
+    PKLDR_DATA_TABLE_ENTRY Entry = ImageHandle;
     BOOLEAN Published;
     ANSI_STRING Name;
     PVOID Imports;

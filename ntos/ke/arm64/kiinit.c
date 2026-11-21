@@ -1492,8 +1492,8 @@ KiInitializeSystem(_Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
         /* Pre-seed core modules for KD banner parity (mirror amd64 minimal) */
         {
             PLIST_ENTRY Entry;
-            PLDR_DATA_TABLE_ENTRY LdrEntry;
-            static LDR_DATA_TABLE_ENTRY LdrCoreCopy[3];
+            PKLDR_DATA_TABLE_ENTRY LdrEntry;
+            static KLDR_DATA_TABLE_ENTRY LdrCoreCopy[3];
             ULONG i = 0;
 
             InitializeListHead(&PsLoadedModuleList);
@@ -1501,7 +1501,7 @@ KiInitializeSystem(_Inout_ PLOADER_PARAMETER_BLOCK LoaderBlock)
                  Entry != &LoaderBlock->LoadOrderListHead && i < 3;
                  Entry = Entry->Flink, ++i)
             {
-                LdrEntry = CONTAINING_RECORD(Entry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+                LdrEntry = CONTAINING_RECORD(Entry, KLDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
                 LdrCoreCopy[i] = *LdrEntry;
                 InsertTailList(&PsLoadedModuleList, &LdrCoreCopy[i].InLoadOrderLinks);
             }

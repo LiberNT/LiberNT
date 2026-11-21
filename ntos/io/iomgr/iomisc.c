@@ -445,7 +445,7 @@ IopOpenDriverImageDirectory(
     _In_ PDRIVER_OBJECT DriverObject,
     _Out_ PHANDLE DriverDirectoryHandle)
 {
-    PLDR_DATA_TABLE_ENTRY Entry = DriverObject->DriverSection;
+    PKLDR_DATA_TABLE_ENTRY Entry = DriverObject->DriverSection;
     OBJECT_ATTRIBUTES ObjectAttributes;
     IO_STATUS_BLOCK IoStatusBlock;
     UNICODE_STRING Directory;
@@ -635,7 +635,7 @@ IoQueryFullDriverPath(
     _In_ PDRIVER_OBJECT DriverObject,
     _Out_ PUNICODE_STRING FullPath)
 {
-    PLDR_DATA_TABLE_ENTRY Entry;
+    PKLDR_DATA_TABLE_ENTRY Entry;
     PWCHAR Buffer;
 
     PAGED_CODE();

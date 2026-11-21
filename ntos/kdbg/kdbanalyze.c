@@ -76,7 +76,7 @@ KdbpAddressHasSymbol(
     CHAR Module[64];
     CHAR Function[128];
     ULONG_PTR Displacement;
-    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    PKLDR_DATA_TABLE_ENTRY LdrEntry;
     BOOLEAN InKernel;
 
     if ((Address == 0) ||

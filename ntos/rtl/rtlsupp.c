@@ -377,7 +377,7 @@ RtlPcToFileHeader(
     _In_ PVOID PcValue,
     _Out_ PVOID *BaseOfImage)
 {
-    PLDR_DATA_TABLE_ENTRY Entry;
+    PKLDR_DATA_TABLE_ENTRY Entry;
     BOOLEAN InSystem;
     KIRQL OldIrql;
 

@@ -424,7 +424,7 @@ IopBuildDriverRegistryPath(
 
 NTSTATUS
 IopInitializeDriverModule(
-    _In_ PLDR_DATA_TABLE_ENTRY ModuleObject,
+    _In_ PKLDR_DATA_TABLE_ENTRY ModuleObject,
     _In_ HANDLE ServiceHandle,
     _Out_ PDRIVER_OBJECT *DriverObject,
     _Out_ NTSTATUS *DriverEntryStatus,
@@ -607,7 +607,7 @@ IopLoadServiceModule(
     _Out_ PDRIVER_OBJECT *DriverObject)
 {
     PKEY_VALUE_FULL_INFORMATION Information = NULL;
-    PLDR_DATA_TABLE_ENTRY ModuleObject = NULL;
+    PKLDR_DATA_TABLE_ENTRY ModuleObject = NULL;
     UNICODE_STRING ServiceName;
     UNICODE_STRING ImagePath;
     UNICODE_STRING DriverName;
@@ -725,9 +725,9 @@ IopLoadServiceModule(
 
 NTSTATUS
 LdrProcessDriverModule(
-    _In_ PLDR_DATA_TABLE_ENTRY LdrEntry,
+    _In_ PKLDR_DATA_TABLE_ENTRY LdrEntry,
     _In_ PUNICODE_STRING FileName,
-    _Out_ PLDR_DATA_TABLE_ENTRY *ModuleObject)
+    _Out_ PKLDR_DATA_TABLE_ENTRY *ModuleObject)
 {
     PVOID ImageBase = NULL;
     NTSTATUS Status;

@@ -1107,7 +1107,7 @@ PVOID
 NTAPI
 KiPcToFileHeader(
     _In_ PVOID Pc,
-    _Out_ PLDR_DATA_TABLE_ENTRY *LdrEntry,
+    _Out_ PKLDR_DATA_TABLE_ENTRY *LdrEntry,
     _In_ BOOLEAN DriversOnly,
     _Out_ PBOOLEAN InKernel);
 

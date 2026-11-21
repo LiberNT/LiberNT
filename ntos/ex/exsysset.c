@@ -61,7 +61,7 @@ ExpLoadGdiDriver(
     UNICODE_STRING Name;
     PVOID ModuleObject = NULL;
     PVOID ImageBase = NULL;
-    PLDR_DATA_TABLE_ENTRY Entry;
+    PKLDR_DATA_TABLE_ENTRY Entry;
     ULONG ExportSize = 0;
     NTSTATUS Status;
 
@@ -379,7 +379,7 @@ ExpExtendServiceTable(
 {
     PKTHREAD Thread = KeGetCurrentThread();
     KPROCESSOR_MODE CallerMode;
-    PLDR_DATA_TABLE_ENTRY Entry;
+    PKLDR_DATA_TABLE_ENTRY Entry;
     PVOID ModuleObject = NULL;
     PVOID ImageBase = NULL;
     UNICODE_STRING Name;

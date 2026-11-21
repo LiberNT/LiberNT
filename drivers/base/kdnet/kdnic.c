@@ -280,7 +280,7 @@ KdpFindExtension(
 {
     UNICODE_STRING Name;
     PLIST_ENTRY Entry;
-    PLDR_DATA_TABLE_ENTRY Module;
+    PKLDR_DATA_TABLE_ENTRY Module;
     PIMAGE_EXPORT_DIRECTORY Exports;
     PULONG Names, Functions;
     PUSHORT Ordinals;
@@ -292,7 +292,7 @@ KdpFindExtension(
          Entry != &LoaderBlock->LoadOrderListHead;
          Entry = Entry->Flink)
     {
-        Module = CONTAINING_RECORD(Entry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+        Module = CONTAINING_RECORD(Entry, KLDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
         if (!RtlEqualUnicodeString(&Module->BaseDllName, &Name, TRUE))
             continue;
 

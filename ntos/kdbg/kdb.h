@@ -130,7 +130,7 @@ KdbSymzPrepareImage(
 
 BOOLEAN
 KdbpSymzEnumerate(
-    _In_ PLDR_DATA_TABLE_ENTRY LdrEntry,
+    _In_ PKLDR_DATA_TABLE_ENTRY LdrEntry,
     _In_ PSYMZ_ENUM_ROUTINE Routine,
     _In_ PVOID Context);
 
@@ -404,7 +404,7 @@ BOOLEAN
 KdbpSymFindModule(
     _In_opt_ PVOID Address,
     _In_opt_ INT Index,
-    _Out_ PLDR_DATA_TABLE_ENTRY* pLdrEntry);
+    _Out_ PKLDR_DATA_TABLE_ENTRY* pLdrEntry);
 
 BOOLEAN
 KdbSymDescribeAddress(
@@ -420,7 +420,7 @@ KdbSymDescribeAddress(
 
 BOOLEAN
 KdbpSymzDescribe(
-    _In_ PLDR_DATA_TABLE_ENTRY LdrEntry,
+    _In_ PKLDR_DATA_TABLE_ENTRY LdrEntry,
     _In_ ULONG_PTR RelativeAddress,
     _Out_writes_z_(FunctionNameLength) PCHAR FunctionName,
     _In_ ULONG FunctionNameLength,
