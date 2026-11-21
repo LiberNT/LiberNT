@@ -401,10 +401,6 @@ Enable this if the module uses typeid or dynamic_cast. You will probably need to
         sdk/lib/pseh/include
     )
 
-    if(ARCH STREQUAL "arm")
-        include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/arm)
-    endif()
-
     add_dependency_header()
 
     add_subdirectory(sdk/include)
