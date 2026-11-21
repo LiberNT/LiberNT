@@ -72,14 +72,14 @@ DWORD WINAPI DsGetDcOpenW(LPCWSTR domain, ULONG flags, LPCWSTR site,
 NET_API_STATUS WINAPI NetValidatePasswordPolicy(
     LPCWSTR servername,
     LPVOID qualifier,
-    DWORD validation_type,
+    NET_VALIDATE_PASSWORD_TYPE validation_type,
     LPVOID input_arg,
     LPVOID *output_arg)
 {
     NET_API_STATUS status;
     NET_VALIDATE_OUTPUT_ARG *out = NULL;
 
-    FIXME("(%s, %p, %lu, %p, %p) stub!\n",
+    FIXME("(%s, %p, %u, %p, %p) stub!\n",
           debugstr_w(servername), qualifier, validation_type, input_arg, output_arg);
 
     if (!output_arg)

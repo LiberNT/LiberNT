@@ -287,12 +287,12 @@ BOOL WINAPI DeleteColorTransform( HTRANSFORM handle )
  */
 BOOL WINAPI TranslateBitmapBits( HTRANSFORM handle, PVOID srcbits, BMFORMAT input,
     DWORD width, DWORD height, DWORD inputstride, PVOID destbits, BMFORMAT output,
-    DWORD outputstride, PBMCALLBACKFN callback, ULONG data )
+    DWORD outputstride, PBMCALLBACKFN callback, LPARAM data )
 {
     BOOL ret;
     struct transform *transform = (struct transform *)grab_object( handle, OBJECT_TYPE_TRANSFORM );
 
-    TRACE( "( %p, %p, %#x, %lu, %lu, %lu, %p, %#x, %lu, %p, %#lx )\n",
+    TRACE( "( %p, %p, %#x, %lu, %lu, %lu, %p, %#x, %lu, %p, %#Ix )\n",
            handle, srcbits, input, width, height, inputstride, destbits, output,
            outputstride, callback, data );
 

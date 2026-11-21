@@ -1,6 +1,12 @@
 #ifndef _LMACCESS_H
 #define _LMACCESS_H
 
+typedef enum _NET_VALIDATE_PASSWORD_TYPE {
+    NetValidateAuthentication = 1,
+    NetValidatePasswordChange = 2,
+    NetValidatePasswordReset = 3
+} NET_VALIDATE_PASSWORD_TYPE, *PNET_VALIDATE_PASSWORD_TYPE;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -668,7 +674,7 @@ NET_API_STATUS WINAPI NetQueryDisplayInformation(LPCWSTR,DWORD,DWORD,DWORD,DWORD
 NET_API_STATUS WINAPI NetGetDisplayInformationIndex(LPCWSTR,DWORD,LPCWSTR,PDWORD);
 NET_API_STATUS WINAPI NetGetDCName(LPCWSTR,LPCWSTR,PBYTE*);
 NET_API_STATUS WINAPI NetGetAnyDCName(LPCWSTR,LPCWSTR,PBYTE*);
-NET_API_STATUS WINAPI NetValidatePasswordPolicy(LPCWSTR, LPVOID, DWORD, LPVOID, LPVOID*);
+NET_API_STATUS WINAPI NetValidatePasswordPolicy(LPCWSTR, LPVOID, NET_VALIDATE_PASSWORD_TYPE, LPVOID, LPVOID*);
 NET_API_STATUS WINAPI NetValidatePasswordPolicyFree(LPVOID*);
 NET_API_STATUS WINAPI I_NetLogonControl(LPCWSTR,DWORD,DWORD,PBYTE*);
 NET_API_STATUS WINAPI I_NetLogonControl2(LPCWSTR,DWORD,DWORD,PBYTE,PBYTE*);
@@ -796,11 +802,5 @@ typedef enum _MSA_INFO_STATE {
     MsaInfoCanInstall = 4,
     MsaInfoInstalled = 5
 } MSA_INFO_STATE, *PMSA_INFO_STATE;
-
-typedef enum _NET_VALIDATE_PASSWORD_TYPE {
-    NetValidateAuthentication = 1,
-    NetValidatePasswordChange = 2,
-    NetValidatePasswordReset = 3
-} NET_VALIDATE_PASSWORD_TYPE, *PNET_VALIDATE_PASSWORD_TYPE;
 
 #endif
