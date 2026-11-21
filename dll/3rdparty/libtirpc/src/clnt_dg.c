@@ -55,7 +55,7 @@
 //#include <err.h>
 #include "rpc_com.h"
 
-#ifdef IP_RECVERR
+#if defined(IP_RECVERR) && defined(__linux__)
 #include <asm/types.h>
 #include <linux/errqueue.h>
 #include <sys/uio.h>
@@ -274,7 +274,7 @@ clnt_dg_create(fd, svcaddr, program, version, sendsz, recvsz)
 #if 0
 	(void)bindresvport_sa(fd, (struct sockaddr *)svcaddr->buf);
 #endif
-#ifdef IP_RECVERR
+#if defined(IP_RECVERR) && defined(__linux__)
 	{
 	int on = 1;
 	setsockopt(fd, SOL_IP, IP_RECVERR, &on, sizeof(on));
@@ -444,7 +444,7 @@ get_reply:
 #ifndef __REACTOS__
                 switch (poll(&fd, 1, tv)) {
 #else
-#ifdef IP_RECVERR
+#if defined(IP_RECVERR) && defined(__linux__)
 #error Not supported!
 #endif
                 /* ReactOS: use select instead of poll */
@@ -469,7 +469,7 @@ get_reply:
                 }
                 break;
         }
-#ifdef IP_RECVERR
+#if defined(IP_RECVERR) && defined(__linux__)
       if (fd.revents & POLLERR)
 	{
 	  struct msghdr msg;
