@@ -73,7 +73,7 @@ elseif(ARCH STREQUAL "amd64")
         dispatch/amd64/dispatch.S
         compat/amd64/msys2.S)
 elseif(ARCH STREQUAL "arm")
-    list(APPEND ASM_SOURCE dispatch/arm/stubs_asm.s)
+    list(APPEND ASM_SOURCE dispatch/arm/dispatch.S)
 elseif(ARCH STREQUAL "arm64")
     list(APPEND ASM_SOURCE
         dispatch/arm64/dispatch.S
