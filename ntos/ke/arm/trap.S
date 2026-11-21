@@ -66,9 +66,20 @@ KiArmFiqVector:
     TRAP_STUB KiArmDataAbortVector, 8, KI_VECTOR_DABORT
     TRAP_STUB KiArmIrqVector, 4, KI_VECTOR_IRQ
 
-/* r0 = vector, sp = record base, original r0 saved; every other register live. */
+/*
+ * r0 = vector, sp = record base, original r0 saved; every other register live.
+ * The unwind codes describe the record from the call below: r4 holds its base,
+ * the exception frame restores r4-r11 and the trap frame the interrupted state.
+ */
+    .seh_proc KiArmTrapSave
     .thumb_func
 KiArmTrapSave:
+    .seh_custom 0xee, 0x03
+    .seh_stackalloc (KI_EF_SIZE - KI_EF_R11 - 4)
+    .seh_save_regs_w {r4-r11}
+    .seh_stackalloc (KI_REC_EF + KI_EF_R4)
+    .seh_save_sp r4
+    .seh_endprologue_fragment
     str r1, [sp, #(KI_REC_TF + KI_TF_R0 + 4)]
     strd r2, r3, [sp, #(KI_REC_TF + KI_TF_R2)]
     str r12, [sp, #(KI_REC_TF + KI_TF_R12)]
@@ -107,6 +118,7 @@ KiArmTrapSave:
     bl KiArmTrapDispatch
     mov sp, r4
     b KiArmTrapExitRecord
+    .seh_endproc
 
 /* sp = record base. Restores every register the record holds and returns. */
     .thumb_func
