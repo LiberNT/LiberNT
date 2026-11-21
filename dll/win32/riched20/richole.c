@@ -4694,6 +4694,42 @@ static HRESULT WINAPI ITextDocument2Old_fnNotify(ITextDocument2Old *iface, LONG 
     return E_NOTIMPL;
 }
 
+static HRESULT WINAPI ITextDocument2Old_fnGetDocumentFont(ITextDocument2Old *iface, ITextFont **font)
+{
+    struct text_services *services = impl_from_ITextDocument2Old(iface);
+
+    FIXME("(%p)->(%p): stub\n", services, font);
+
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI ITextDocument2Old_fnGetDocumentPara(ITextDocument2Old *iface, ITextPara **para)
+{
+    struct text_services *services = impl_from_ITextDocument2Old(iface);
+
+    FIXME("(%p)->(%p): stub\n", services, para);
+
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI ITextDocument2Old_fnGetCallManager(ITextDocument2Old *iface, IUnknown **manager)
+{
+    struct text_services *services = impl_from_ITextDocument2Old(iface);
+
+    FIXME("(%p)->(%p): stub\n", services, manager);
+
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI ITextDocument2Old_fnReleaseCallManager(ITextDocument2Old *iface, IUnknown *manager)
+{
+    struct text_services *services = impl_from_ITextDocument2Old(iface);
+
+    FIXME("(%p)->(%p): stub\n", services, manager);
+
+    return E_NOTIMPL;
+}
+
 const ITextDocument2OldVtbl text_doc2old_vtbl =
 {
     ITextDocument2Old_fnQueryInterface,
@@ -4742,7 +4778,11 @@ const ITextDocument2OldVtbl text_doc2old_vtbl =
     ITextDocument2Old_fnIMEInProgress,
     ITextDocument2Old_fnSysBeep,
     ITextDocument2Old_fnUpdate,
-    ITextDocument2Old_fnNotify
+    ITextDocument2Old_fnNotify,
+    ITextDocument2Old_fnGetDocumentFont,
+    ITextDocument2Old_fnGetDocumentPara,
+    ITextDocument2Old_fnGetCallManager,
+    ITextDocument2Old_fnReleaseCallManager
 };
 
 /* ITextSelection */

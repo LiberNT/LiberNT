@@ -1653,6 +1653,21 @@ static HRESULT WINAPI list_manager_GetConnectivity(
     return S_OK;
 }
 
+static HRESULT WINAPI list_manager_SetSimulatedProfileInfo(
+    INetworkListManager *iface,
+    NLM_SIMULATED_PROFILE_INFO *pSimulatedInfo )
+{
+    FIXME( "%p, %p\n", iface, pSimulatedInfo );
+    return E_NOTIMPL;
+}
+
+static HRESULT WINAPI list_manager_ClearSimulatedProfileInfo(
+    INetworkListManager *iface )
+{
+    FIXME( "%p\n", iface );
+    return E_NOTIMPL;
+}
+
 static const INetworkListManagerVtbl list_manager_vtbl =
 {
     list_manager_QueryInterface,
@@ -1668,7 +1683,9 @@ static const INetworkListManagerVtbl list_manager_vtbl =
     list_manager_GetNetworkConnection,
     list_manager_IsConnectedToInternet,
     list_manager_IsConnected,
-    list_manager_GetConnectivity
+    list_manager_GetConnectivity,
+    list_manager_SetSimulatedProfileInfo,
+    list_manager_ClearSimulatedProfileInfo
 };
 
 static HRESULT WINAPI ConnectionPointContainer_QueryInterface(IConnectionPointContainer *iface,
