@@ -956,22 +956,15 @@ typedef struct _SYNCH_COUNTERS
 //
 // PRCB DPC Data
 //
-// On arm64 the layout is fixed to the Win11 shape (sizeof == 0x30) for any NTDDI_VERSION
 typedef struct _KDPC_DATA
 {
     KDPC_LIST DpcList;
     ULONG_PTR DpcLock;
-#if defined(_M_AMD64) || defined(_M_ARM)
     volatile LONG DpcQueueDepth;
-#else
-    volatile ULONG DpcQueueDepth;
-#endif
     ULONG DpcCount;
     PKDPC ActiveDpc;
-#if defined(_M_ARM64)
     ULONG LongDpcPresent;
     ULONG Padding;
-#endif
 } KDPC_DATA, *PKDPC_DATA;
 
 //
