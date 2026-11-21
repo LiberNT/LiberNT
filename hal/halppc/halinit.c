@@ -62,6 +62,7 @@ HalInitSystem(
     }
     KeSetDmaIoCoherency(1);
     HalInitPnpDriver = HaliInitPnpDriver;
+    HalGetDmaAdapter = HalpPpcGetDmaAdapter;
     KeSetTimeIncrement(PPC_HAL_MAXIMUM_INCREMENT, PPC_HAL_MINIMUM_INCREMENT);
     HalpPpcInitializationPhase = 1;
     return TRUE;
