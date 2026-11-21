@@ -198,12 +198,20 @@ KiUnwindFrame(
     _In_ BOOLEAN CallerFrame)
 {
     PRUNTIME_FUNCTION FunctionEntry;
+    PLDR_DATA_TABLE_ENTRY LdrEntry;
     ULONG ImageBase, EstablisherFrame, ControlPc;
-    PVOID HandlerData;
+    PVOID HandlerData, Base;
+    BOOLEAN InKernel;
 
     ControlPc = Context->Pc & ~1UL;
     if (CallerFrame)
         ControlPc -= 2;
+
+    /* The function table of an image this address space does not map, such as a session image seen from another process, cannot be read. */
+    Base = KiPcToFileHeader((PVOID)(ULONG_PTR)ControlPc, &LdrEntry, FALSE, &InKernel);
+    if (!Base || MmIsSessionAddress(Base) || !MmIsAddressValid(Base))
+        return KiUnwindFrameRecord(Context);
+
     FunctionEntry = RtlLookupFunctionEntry(ControlPc, &ImageBase, NULL);
     if (!FunctionEntry && ((Context->Lr & ~1UL) == (Context->Pc & ~1UL)))
         return FALSE;
