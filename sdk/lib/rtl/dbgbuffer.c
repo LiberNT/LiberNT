@@ -213,7 +213,7 @@ RtlpQueryRemoteModules(
         Module->ImageBase = Entry.DllBase;
         Module->ImageSize = Entry.SizeOfImage;
         Module->Flags = Entry.Flags;
-        Module->LoadCount = (USHORT)Entry.LoadCount;
+        Module->LoadCount = (USHORT)Entry.ObsoleteLoadCount;
         Module->LoadOrderIndex = (USHORT)Count;
 
         UnicodePath.Length = min(Entry.FullDllName.Length, (USHORT)(sizeof(Path) - sizeof(WCHAR)));

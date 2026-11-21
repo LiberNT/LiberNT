@@ -1225,7 +1225,7 @@ LdrpFindReferencedForwarder(
             DllPath = LdrpGetModuleLoadPath(OwnerBase);
         if (LdrpFindLoadedForwarder(DllPath, DllName, Redirected, &LdrEntry) &&
             LdrpIsModuleReady(LdrEntry) &&
-            ((*(volatile USHORT *)&LdrEntry->LoadCount == 0xFFFF) ||
+            ((*(volatile USHORT *)&LdrEntry->ObsoleteLoadCount == 0xFFFF) ||
              LdrpIsForwarderReferenced(OwnerBase, LdrEntry->DllBase)))
         {
             *TargetBase = LdrEntry->DllBase;
@@ -1266,7 +1266,7 @@ LdrpReferenceLoadedDll(
         if (LdrpFindLoadedForwarder(DllPath, DllName, Redirected, &LdrEntry) &&
             LdrpIsModuleInitialized(LdrEntry))
         {
-            if (*(volatile USHORT *)&LdrEntry->LoadCount == 0xFFFF)
+            if (*(volatile USHORT *)&LdrEntry->ObsoleteLoadCount == 0xFFFF)
                 Referenced = TRUE;
             else if ((SetReady = LdrpAllocateWalkSet(&Set)))
                 Referenced = LdrpTryReferenceModule(LdrEntry, FALSE, &Walk);

@@ -3086,7 +3086,7 @@ LdrpInitializeProcess(IN PCONTEXT Context,
 
     /* Set it up */
     LdrpImageEntry->EntryPoint = LdrpFetchAddressOfEntryPoint(LdrpImageEntry->DllBase);
-    LdrpImageEntry->LoadCount = -1;
+    LdrpImageEntry->ObsoleteLoadCount = -1;
     LdrpImageEntry->EntryPointActivationContext = 0;
     LdrpImageEntry->FullDllName = ImageFileName;
 
@@ -3144,7 +3144,7 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     }
     NtLdrEntry->Flags = LDRP_IMAGE_DLL;
     NtLdrEntry->EntryPoint = LdrpFetchAddressOfEntryPoint(NtLdrEntry->DllBase);
-    NtLdrEntry->LoadCount = -1;
+    NtLdrEntry->ObsoleteLoadCount = -1;
     NtLdrEntry->EntryPointActivationContext = 0;
 
     NtLdrEntry->FullDllName.Length = FullPath.Length;
@@ -3378,7 +3378,7 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     while (ListHead != NextEntry)
     {
         NtLdrEntry = CONTAINING_RECORD(NextEntry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
-        NtLdrEntry->LoadCount = -1;
+        NtLdrEntry->ObsoleteLoadCount = -1;
         NextEntry = NextEntry->Flink;
     }
 

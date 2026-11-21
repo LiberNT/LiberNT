@@ -200,13 +200,13 @@ LdrpUpdateImportLoadCount(
     switch (Flags)
     {
     case LDRP_UPDATE_REFCOUNT:
-        InterlockedIncrement16((PSHORT)&Entry->LoadCount);
+        InterlockedIncrement16((PSHORT)&Entry->ObsoleteLoadCount);
         break;
     case LDRP_UPDATE_DEREFCOUNT:
-        InterlockedDecrement16((PSHORT)&Entry->LoadCount);
+        InterlockedDecrement16((PSHORT)&Entry->ObsoleteLoadCount);
         break;
     case LDRP_UPDATE_PIN:
-        Entry->LoadCount = 0xFFFF;
+        Entry->ObsoleteLoadCount = 0xFFFF;
         break;
     }
 }
@@ -333,7 +333,7 @@ LdrpUpdateLoadCount3(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
                 {
                     if (LdrpWalkFindImport(LdrEntry->DllBase, RedirectedImportName, RedirectedDll, Visited, &Entry))
                     {
-                        if (Entry->LoadCount != 0xFFFF)
+                        if (Entry->ObsoleteLoadCount != 0xFFFF)
                         {
                             /* Perform the required action */
                             LdrpUpdateImportLoadCount(Entry, Flags);
@@ -341,7 +341,7 @@ LdrpUpdateLoadCount3(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
                             /* Show snaps */
                             if (ShowSnaps)
                             {
-                                DPRINT1("LDR: Flags %lu  %wZ (%lx)\n", Flags, RedirectedImportName, Entry->LoadCount);
+                                DPRINT1("LDR: Flags %lu  %wZ (%lx)\n", Flags, RedirectedImportName, Entry->ObsoleteLoadCount);
                             }
                         }
 
@@ -390,7 +390,7 @@ LdrpUpdateLoadCount3(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
                     {
                         if (LdrpWalkFindImport(LdrEntry->DllBase, RedirectedImportName, RedirectedDll, Visited, &Entry))
                         {
-                            if (Entry->LoadCount != 0xFFFF)
+                            if (Entry->ObsoleteLoadCount != 0xFFFF)
                             {
                                 /* Perform the required action */
                                 LdrpUpdateImportLoadCount(Entry, Flags);
@@ -398,7 +398,7 @@ LdrpUpdateLoadCount3(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
                                 /* Show snaps */
                                 if (ShowSnaps)
                                 {
-                                    DPRINT1("LDR: Flags %lu  %wZ (%lx)\n", Flags, RedirectedImportName, Entry->LoadCount);
+                                    DPRINT1("LDR: Flags %lu  %wZ (%lx)\n", Flags, RedirectedImportName, Entry->ObsoleteLoadCount);
                                 }
                             }
 
@@ -472,7 +472,7 @@ LdrpUpdateLoadCount3(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
                 {
                     if (LdrpWalkFindImport(LdrEntry->DllBase, RedirectedImportName, RedirectedDll, Visited, &Entry))
                     {
-                        if (Entry->LoadCount != 0xFFFF)
+                        if (Entry->ObsoleteLoadCount != 0xFFFF)
                         {
                             /* Perform the required action */
                             LdrpUpdateImportLoadCount(Entry, Flags);
@@ -480,7 +480,7 @@ LdrpUpdateLoadCount3(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
                             /* Show snaps */
                             if (ShowSnaps)
                             {
-                                DPRINT1("LDR: Flags %lu  %wZ (%lx)\n", Flags, RedirectedImportName, Entry->LoadCount);
+                                DPRINT1("LDR: Flags %lu  %wZ (%lx)\n", Flags, RedirectedImportName, Entry->ObsoleteLoadCount);
                             }
                         }
 
@@ -571,12 +571,12 @@ LdrpTryReferenceModule(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
     *Walk = FALSE;
     do
     {
-        Count = *(volatile USHORT *)&LdrEntry->LoadCount;
+        Count = *(volatile USHORT *)&LdrEntry->ObsoleteLoadCount;
         if (Count == 0xFFFF)
             return TRUE;
         if (Release ? (Count < 2) : (Count == 0))
             return FALSE;
-    } while ((USHORT)InterlockedCompareExchange16((PSHORT)&LdrEntry->LoadCount,
+    } while ((USHORT)InterlockedCompareExchange16((PSHORT)&LdrEntry->ObsoleteLoadCount,
                                                   (SHORT)(Release ? Count - 1 : Count + 1),
                                                   (SHORT)Count) != Count);
 
@@ -1659,7 +1659,7 @@ SkipCheck:
     /* Setup the entry */
     LdrEntry->Flags = Static ? LDRP_STATIC_LINK : 0;
     if (Redirect) LdrEntry->Flags |= LDRP_REDIRECTED;
-    LdrEntry->LoadCount = 0;
+    LdrEntry->ObsoleteLoadCount = 0;
     LdrEntry->FullDllName = FullDllName;
     LdrEntry->BaseDllName = BaseDllName;
     LdrEntry->EntryPoint = LdrpFetchAddressOfEntryPoint(LdrEntry->DllBase);
@@ -2036,7 +2036,6 @@ LdrpAllocateDataTableEntry(IN PVOID BaseAddress)
             LdrEntry->DllBase = BaseAddress;
             LdrEntry->SizeOfImage = NtHeader->OptionalHeader.SizeOfImage;
             LdrEntry->TimeDateStamp = NtHeader->FileHeader.TimeDateStamp;
-            LdrEntry->PatchInformation = NULL;
         }
     }
 
@@ -3127,7 +3126,7 @@ LdrpLoadDll(IN BOOLEAN Redirected,
                 }
 
                 /* Update load count, unless it's locked */
-                if (LdrEntry->LoadCount != 0xFFFF) LdrEntry->LoadCount++;
+                if (LdrEntry->ObsoleteLoadCount != 0xFFFF) LdrEntry->ObsoleteLoadCount++;
                 LdrpUpdateLoadCount2(LdrEntry, LDRP_UPDATE_REFCOUNT);
 
                 /* Check if we failed */
@@ -3155,10 +3154,10 @@ LdrpLoadDll(IN BOOLEAN Redirected,
                     goto Done;
                 }
             }
-            else if (LdrEntry->LoadCount != 0xFFFF)
+            else if (LdrEntry->ObsoleteLoadCount != 0xFFFF)
             {
                 /* Increase load count */
-                LdrEntry->LoadCount++;
+                LdrEntry->ObsoleteLoadCount++;
             }
 
             if (!(LdrEntry->Flags & LDRP_LOAD_NOTIFICATIONS_SENT))
@@ -3211,10 +3210,10 @@ LdrpLoadDll(IN BOOLEAN Redirected,
                 DPRINT1("LDR: CHPE failed to register existing image code ranges for %wZ\n", &LdrEntry->BaseDllName);
 #endif
 
-            if ((LdrEntry->Flags & LDRP_IMAGE_DLL) && (LdrEntry->LoadCount != 0xFFFF))
+            if ((LdrEntry->Flags & LDRP_IMAGE_DLL) && (LdrEntry->ObsoleteLoadCount != 0xFFFF))
             {
                 /* Increase load count */
-                InterlockedIncrement16((PSHORT)&LdrEntry->LoadCount);
+                InterlockedIncrement16((PSHORT)&LdrEntry->ObsoleteLoadCount);
                 LdrpUpdateLoadCount2(LdrEntry, LDRP_UPDATE_REFCOUNT);
 
                 /* Clear the load in progress */
@@ -3223,7 +3222,7 @@ LdrpLoadDll(IN BOOLEAN Redirected,
             else
             {
                 /* Not a DLL, just increase the load count */
-                if (LdrEntry->LoadCount != 0xFFFF) InterlockedIncrement16((PSHORT)&LdrEntry->LoadCount);
+                if (LdrEntry->ObsoleteLoadCount != 0xFFFF) InterlockedIncrement16((PSHORT)&LdrEntry->ObsoleteLoadCount);
             }
         }
 

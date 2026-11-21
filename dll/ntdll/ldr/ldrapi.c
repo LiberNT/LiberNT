@@ -883,20 +883,20 @@ Quickie:
     if ((LdrEntry) && (NT_SUCCESS(Status)))
     {
         /* Check if the DLL is locked */
-        if ((LdrEntry->LoadCount != 0xFFFF) &&
+        if ((LdrEntry->ObsoleteLoadCount != 0xFFFF) &&
             !(Flags & LDR_GET_DLL_HANDLE_EX_UNCHANGED_REFCOUNT))
         {
             /* Check what to do with the load count */
             if (Flags & LDR_GET_DLL_HANDLE_EX_PIN)
             {
                 /* Pin it */
-                LdrEntry->LoadCount = 0xFFFF;
+                LdrEntry->ObsoleteLoadCount = 0xFFFF;
                 LoadFlag = LDRP_UPDATE_PIN;
             }
             else
             {
                 /* Increase the load count */
-                InterlockedIncrement16((PSHORT)&LdrEntry->LoadCount);
+                InterlockedIncrement16((PSHORT)&LdrEntry->ObsoleteLoadCount);
                 LoadFlag = LDRP_UPDATE_REFCOUNT;
             }
 
@@ -1237,7 +1237,7 @@ LdrQueryProcessModuleInformationEx(
                 ModulePtr->ImageBase = Module->DllBase;
                 ModulePtr->ImageSize = Module->SizeOfImage;
                 ModulePtr->Flags = Module->Flags;
-                ModulePtr->LoadCount = Module->LoadCount;
+                ModulePtr->LoadCount = Module->ObsoleteLoadCount;
                 ModulePtr->MappedBase = NULL;
                 ModulePtr->InitOrderIndex = 0;
                 ModulePtr->LoadOrderIndex = ModuleInformation->NumberOfModules;
@@ -1475,19 +1475,19 @@ LdrAddRefDll(
         }
 
         /* If this is not a pinned module */
-        if (LdrEntry->LoadCount != 0xFFFF)
+        if (LdrEntry->ObsoleteLoadCount != 0xFFFF)
         {
             /* Update its load count */
             if (Flags & LDR_ADDREF_DLL_PIN)
             {
                 /* Pin it by setting load count to -1 */
-                LdrEntry->LoadCount = 0xFFFF;
+                LdrEntry->ObsoleteLoadCount = 0xFFFF;
                 LdrpUpdateLoadCount2(LdrEntry, LDRP_UPDATE_PIN);
             }
             else
             {
                 /* Increase its load count by one */
-                InterlockedIncrement16((PSHORT)&LdrEntry->LoadCount);
+                InterlockedIncrement16((PSHORT)&LdrEntry->ObsoleteLoadCount);
                 LdrpUpdateLoadCount2(LdrEntry, LDRP_UPDATE_REFCOUNT);
             }
 
@@ -1547,7 +1547,7 @@ LdrUnloadDll(
         RtlAcquireSRWLockShared(&LdrpModuleDatatableLock);
         if (LdrpCheckForLoadedDllHandle(BaseAddress, &LdrEntry))
         {
-            if (*(volatile USHORT *)&LdrEntry->LoadCount == 0xFFFF)
+            if (*(volatile USHORT *)&LdrEntry->ObsoleteLoadCount == 0xFFFF)
                 Released = TRUE;
             else if ((SetReady = LdrpAllocateWalkSet(&Set)))
                 Released = LdrpTryReferenceModule(LdrEntry, TRUE, &Walk);
@@ -1580,10 +1580,10 @@ LdrUnloadDll(
     }
 
     /* Check the current Load Count */
-    if (LdrEntry->LoadCount != 0xFFFF)
+    if (LdrEntry->ObsoleteLoadCount != 0xFFFF)
     {
         /* Decrease it */
-        InterlockedDecrement16((PSHORT)&LdrEntry->LoadCount);
+        InterlockedDecrement16((PSHORT)&LdrEntry->ObsoleteLoadCount);
 
         /* If it's a dll */
         if (LdrEntry->Flags & LDRP_IMAGE_DLL)
@@ -1633,7 +1633,7 @@ LdrUnloadDll(
         LdrEntry->Flags &= ~LDRP_UNLOAD_IN_PROGRESS;
 
         /* If the load count is now 0 */
-        if (!LdrEntry->LoadCount)
+        if (!LdrEntry->ObsoleteLoadCount)
         {
             /* Show message */
             if (ShowSnaps)
@@ -1642,7 +1642,7 @@ LdrUnloadDll(
                         LdrpActiveUnloadCount,
                         LdrEntry->BaseDllName.Buffer,
                         LdrEntry->FullDllName.Buffer,
-                        (ULONG)LdrEntry->LoadCount,
+                        (ULONG)LdrEntry->ObsoleteLoadCount,
                         LdrEntry->EntryPoint);
             }
 
@@ -1804,12 +1804,7 @@ LdrUnloadDll(
         /* Unload the alternate resource module, if any */
         LdrUnloadAlternateResourceModule(CurrentEntry->DllBase);
 
-        /* Check if a Hotpatch is active */
-        if (LdrEntry->PatchInformation)
-        {
-            /* FIXME */
-            DPRINT1("We don't support Hotpatching yet\n");
-        }
+        /* TODO: hot patching is not implemented: nothing sets ActivePatchImageBase or HotPatchState, so there is no patch image to unload */
 
         /* Deallocate the Entry */
         LdrpFinalizeAndDeallocateDataTableEntry(CurrentEntry);
@@ -1957,9 +1952,9 @@ LdrGetDllHandleByName(
         if (FullDllName && !RtlEqualUnicodeString(FullDllName, &LdrEntry->FullDllName, TRUE))
             continue;
 
-        if (LdrEntry->LoadCount != 0xFFFF)
+        if (LdrEntry->ObsoleteLoadCount != 0xFFFF)
         {
-            InterlockedIncrement16((PSHORT)&LdrEntry->LoadCount);
+            InterlockedIncrement16((PSHORT)&LdrEntry->ObsoleteLoadCount);
             LdrpUpdateLoadCount2(LdrEntry, LDRP_UPDATE_REFCOUNT);
             LdrpClearLoadInProgress();
         }

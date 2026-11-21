@@ -153,7 +153,7 @@ static const KDB_TYPE_FIELD KdbpLoaderEntryFields[] =
     KDB_FIELD(LDR_DATA_TABLE_ENTRY, FullDllName, "UNICODE_STRING", KdbFieldUnicode),
     KDB_FIELD(LDR_DATA_TABLE_ENTRY, BaseDllName, "UNICODE_STRING", KdbFieldUnicode),
     KDB_FIELD(LDR_DATA_TABLE_ENTRY, Flags, "ULONG", KdbFieldValue),
-    KDB_FIELD(LDR_DATA_TABLE_ENTRY, LoadCount, "USHORT", KdbFieldValue)
+    KDB_FIELD(LDR_DATA_TABLE_ENTRY, ObsoleteLoadCount, "USHORT", KdbFieldValue)
 };
 
 static const KDB_TYPE_FIELD KdbpDriverObjectFields[] =
