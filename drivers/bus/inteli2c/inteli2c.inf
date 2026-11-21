@@ -15,6 +15,7 @@ DefaultDestDir = 12
 %LiberNT% = LiberNT,NTx86,NTamd64,NTarm64
 
 [LiberNT.NTx86]
+%IntelI2c.DeviceDesc% = IntelI2c_Inst,ACPI\AMDI0010
 %IntelI2c.DeviceDesc% = IntelI2c_Inst,PCI\VEN_8086&DEV_02E8
 %IntelI2c.DeviceDesc% = IntelI2c_Inst,PCI\VEN_8086&DEV_02E9
 %IntelI2c.DeviceDesc% = IntelI2c_Inst,PCI\VEN_8086&DEV_02EA
@@ -201,6 +202,7 @@ DefaultDestDir = 12
 %IntelI2c.DeviceDesc% = IntelI2c_Inst,PCI\VEN_8086&DEV_E47B
 
 [LiberNT.NTamd64]
+%IntelI2c.DeviceDesc% = IntelI2c_Inst,ACPI\AMDI0010
 %IntelI2c.DeviceDesc% = IntelI2c_Inst,PCI\VEN_8086&DEV_02E8
 %IntelI2c.DeviceDesc% = IntelI2c_Inst,PCI\VEN_8086&DEV_02E9
 %IntelI2c.DeviceDesc% = IntelI2c_Inst,PCI\VEN_8086&DEV_02EA
@@ -387,6 +389,7 @@ DefaultDestDir = 12
 %IntelI2c.DeviceDesc% = IntelI2c_Inst,PCI\VEN_8086&DEV_E47B
 
 [LiberNT.NTarm64]
+%IntelI2c.DeviceDesc% = IntelI2c_Inst,ACPI\AMDI0010
 %IntelI2c.DeviceDesc% = IntelI2c_Inst,PCI\VEN_8086&DEV_02E8
 %IntelI2c.DeviceDesc% = IntelI2c_Inst,PCI\VEN_8086&DEV_02E9
 %IntelI2c.DeviceDesc% = IntelI2c_Inst,PCI\VEN_8086&DEV_02EA

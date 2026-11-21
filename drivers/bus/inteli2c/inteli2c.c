@@ -106,6 +106,7 @@ typedef struct _INTELI2C_PCI_ID
     USHORT DeviceId;
     UCHAR ControllerIndex;
     const INTELI2C_PROFILE *Profile;
+    BOOLEAN Lpss;
 } INTELI2C_PCI_ID;
 
 typedef struct _INTELI2C_DEVICE_EXTENSION
@@ -132,6 +133,7 @@ typedef struct _INTELI2C_DEVICE_EXTENSION
     ULONG TargetResponseOffset;
     BOOLEAN Started;
     BOOLEAN TargetActive;
+    BOOLEAN Lpss;
     INTELI2C_TARGET_STATUS TargetStatus;
     UCHAR TargetResponse[INTELI2C_TARGET_BUFFER_SIZE];
 } INTELI2C_DEVICE_EXTENSION, *PINTELI2C_DEVICE_EXTENSION;
@@ -142,193 +144,194 @@ static const INTELI2C_PROFILE IntelI2cAplProfile = {133000000, 207, 171, 208};
 static const INTELI2C_PROFILE IntelI2cGlkProfile = {133000000, 313, 171, 290};
 static const INTELI2C_PROFILE IntelI2cCnlProfile = {216000000, 230, 300, 300};
 static const INTELI2C_PROFILE IntelI2cEhlProfile = {100000000, 42, 171, 208};
+static const INTELI2C_PROFILE IntelI2cAmdProfile = {133000000, 300, 300, 300};
 
 static const INTELI2C_PCI_ID IntelI2cPciIds[] =
 {
-    {0x02e8, 0, &IntelI2cCnlProfile},
-    {0x02e9, 1, &IntelI2cCnlProfile},
-    {0x02ea, 2, &IntelI2cCnlProfile},
-    {0x02eb, 3, &IntelI2cCnlProfile},
-    {0x02c5, 4, &IntelI2cCnlProfile},
-    {0x02c6, 5, &IntelI2cCnlProfile},
-    {0x06e8, 0, &IntelI2cCnlProfile},
-    {0x06e9, 1, &IntelI2cCnlProfile},
-    {0x06ea, 2, &IntelI2cCnlProfile},
-    {0x06eb, 3, &IntelI2cCnlProfile},
-    {0x0aac, 0, &IntelI2cBxtProfile},
-    {0x0aae, 1, &IntelI2cBxtProfile},
-    {0x0ab0, 2, &IntelI2cBxtProfile},
-    {0x0ab2, 3, &IntelI2cBxtProfile},
-    {0x0ab4, 4, &IntelI2cBxtProfile},
-    {0x0ab6, 5, &IntelI2cBxtProfile},
-    {0x0ab8, 6, &IntelI2cBxtProfile},
-    {0x0aba, 7, &IntelI2cBxtProfile},
-    {0x1aac, 0, &IntelI2cBxtProfile},
-    {0x1aae, 1, &IntelI2cBxtProfile},
-    {0x1ab0, 2, &IntelI2cBxtProfile},
-    {0x1ab2, 3, &IntelI2cBxtProfile},
-    {0x1ab4, 4, &IntelI2cBxtProfile},
-    {0x1ab6, 5, &IntelI2cBxtProfile},
-    {0x1ab8, 6, &IntelI2cBxtProfile},
-    {0x1aba, 7, &IntelI2cBxtProfile},
-    {0x31ac, 0, &IntelI2cGlkProfile},
-    {0x31ae, 1, &IntelI2cGlkProfile},
-    {0x31b0, 2, &IntelI2cGlkProfile},
-    {0x31b2, 3, &IntelI2cGlkProfile},
-    {0x31b4, 4, &IntelI2cGlkProfile},
-    {0x31b6, 5, &IntelI2cGlkProfile},
-    {0x31b8, 6, &IntelI2cGlkProfile},
-    {0x31ba, 7, &IntelI2cGlkProfile},
-    {0x34e8, 0, &IntelI2cBxtProfile},
-    {0x34e9, 1, &IntelI2cBxtProfile},
-    {0x34ea, 2, &IntelI2cBxtProfile},
-    {0x34eb, 3, &IntelI2cBxtProfile},
-    {0x34c5, 4, &IntelI2cBxtProfile},
-    {0x34c6, 5, &IntelI2cBxtProfile},
-    {0x43e8, 0, &IntelI2cBxtProfile},
-    {0x43e9, 1, &IntelI2cBxtProfile},
-    {0x43ea, 2, &IntelI2cBxtProfile},
-    {0x43eb, 3, &IntelI2cBxtProfile},
-    {0x43ad, 4, &IntelI2cBxtProfile},
-    {0x43ae, 5, &IntelI2cBxtProfile},
-    {0x43d8, 6, &IntelI2cBxtProfile},
-    {0x4b44, 0, &IntelI2cEhlProfile},
-    {0x4b45, 1, &IntelI2cEhlProfile},
-    {0x4b4b, 2, &IntelI2cEhlProfile},
-    {0x4b4c, 3, &IntelI2cEhlProfile},
-    {0x4b78, 4, &IntelI2cEhlProfile},
-    {0x4b79, 5, &IntelI2cEhlProfile},
-    {0x4b7a, 6, &IntelI2cEhlProfile},
-    {0x4b7b, 7, &IntelI2cEhlProfile},
-    {0x4d50, 0, &IntelI2cEhlProfile},
-    {0x4d51, 1, &IntelI2cEhlProfile},
-    {0x4d78, 2, &IntelI2cEhlProfile},
-    {0x4d79, 3, &IntelI2cEhlProfile},
-    {0x4d7a, 4, &IntelI2cEhlProfile},
-    {0x4d7b, 5, &IntelI2cEhlProfile},
-    {0x4de8, 0, &IntelI2cBxtProfile},
-    {0x4de9, 1, &IntelI2cBxtProfile},
-    {0x4dea, 2, &IntelI2cBxtProfile},
-    {0x4deb, 3, &IntelI2cBxtProfile},
-    {0x4dc5, 4, &IntelI2cBxtProfile},
-    {0x4dc6, 5, &IntelI2cBxtProfile},
-    {0x51e8, 0, &IntelI2cBxtProfile},
-    {0x51e9, 1, &IntelI2cBxtProfile},
-    {0x51ea, 2, &IntelI2cBxtProfile},
-    {0x51eb, 3, &IntelI2cBxtProfile},
-    {0x51c5, 4, &IntelI2cBxtProfile},
-    {0x51c6, 5, &IntelI2cBxtProfile},
-    {0x51d8, 6, &IntelI2cBxtProfile},
-    {0x51d9, 7, &IntelI2cBxtProfile},
-    {0x54e8, 0, &IntelI2cBxtProfile},
-    {0x54e9, 1, &IntelI2cBxtProfile},
-    {0x54ea, 2, &IntelI2cBxtProfile},
-    {0x54eb, 3, &IntelI2cBxtProfile},
-    {0x54c5, 4, &IntelI2cBxtProfile},
-    {0x54c6, 5, &IntelI2cBxtProfile},
-    {0x5aac, 0, &IntelI2cAplProfile},
-    {0x5aae, 1, &IntelI2cAplProfile},
-    {0x5ab0, 2, &IntelI2cAplProfile},
-    {0x5ab2, 3, &IntelI2cAplProfile},
-    {0x5ab4, 4, &IntelI2cAplProfile},
-    {0x5ab6, 5, &IntelI2cAplProfile},
-    {0x5ab8, 6, &IntelI2cAplProfile},
-    {0x5aba, 7, &IntelI2cAplProfile},
-    {0x6e4c, 0, &IntelI2cEhlProfile},
-    {0x6e4d, 1, &IntelI2cEhlProfile},
-    {0x6e4e, 2, &IntelI2cEhlProfile},
-    {0x6e4f, 3, &IntelI2cEhlProfile},
-    {0x6e7a, 4, &IntelI2cEhlProfile},
-    {0x6e7b, 5, &IntelI2cEhlProfile},
-    {0x7750, 0, &IntelI2cBxtProfile},
-    {0x7751, 1, &IntelI2cBxtProfile},
-    {0x7778, 2, &IntelI2cBxtProfile},
-    {0x7779, 3, &IntelI2cBxtProfile},
-    {0x777a, 4, &IntelI2cBxtProfile},
-    {0x777b, 5, &IntelI2cBxtProfile},
-    {0x7a4c, 0, &IntelI2cBxtProfile},
-    {0x7a4d, 1, &IntelI2cBxtProfile},
-    {0x7a4e, 2, &IntelI2cBxtProfile},
-    {0x7a4f, 3, &IntelI2cBxtProfile},
-    {0x7a7c, 4, &IntelI2cBxtProfile},
-    {0x7a7d, 5, &IntelI2cBxtProfile},
-    {0x7acc, 0, &IntelI2cBxtProfile},
-    {0x7acd, 1, &IntelI2cBxtProfile},
-    {0x7ace, 2, &IntelI2cBxtProfile},
-    {0x7acf, 3, &IntelI2cBxtProfile},
-    {0x7afc, 4, &IntelI2cBxtProfile},
-    {0x7afd, 5, &IntelI2cBxtProfile},
-    {0x7e50, 0, &IntelI2cBxtProfile},
-    {0x7e51, 1, &IntelI2cBxtProfile},
-    {0x7e78, 2, &IntelI2cBxtProfile},
-    {0x7e79, 3, &IntelI2cBxtProfile},
-    {0x7e7a, 4, &IntelI2cBxtProfile},
-    {0x7e7b, 5, &IntelI2cBxtProfile},
-    {0x7f4c, 0, &IntelI2cBxtProfile},
-    {0x7f4d, 1, &IntelI2cBxtProfile},
-    {0x7f4e, 2, &IntelI2cBxtProfile},
-    {0x7f4f, 3, &IntelI2cBxtProfile},
-    {0x7f7a, 4, &IntelI2cBxtProfile},
-    {0x7f7b, 5, &IntelI2cBxtProfile},
-    {0x98e8, 0, &IntelI2cBxtProfile},
-    {0x98e9, 1, &IntelI2cBxtProfile},
-    {0x98ea, 2, &IntelI2cBxtProfile},
-    {0x98eb, 3, &IntelI2cBxtProfile},
-    {0x98c5, 4, &IntelI2cBxtProfile},
-    {0x98c6, 5, &IntelI2cBxtProfile},
-    {0x9d60, 0, &IntelI2cSptProfile},
-    {0x9d61, 1, &IntelI2cSptProfile},
-    {0x9d62, 2, &IntelI2cSptProfile},
-    {0x9d63, 3, &IntelI2cSptProfile},
-    {0x9d64, 4, &IntelI2cSptProfile},
-    {0x9d65, 5, &IntelI2cSptProfile},
-    {0x9de8, 0, &IntelI2cCnlProfile},
-    {0x9de9, 1, &IntelI2cCnlProfile},
-    {0x9dea, 2, &IntelI2cCnlProfile},
-    {0x9deb, 3, &IntelI2cCnlProfile},
-    {0x9dc5, 4, &IntelI2cCnlProfile},
-    {0x9dc6, 5, &IntelI2cCnlProfile},
-    {0xa0e8, 0, &IntelI2cSptProfile},
-    {0xa0e9, 1, &IntelI2cSptProfile},
-    {0xa0ea, 2, &IntelI2cSptProfile},
-    {0xa0eb, 3, &IntelI2cSptProfile},
-    {0xa0c5, 4, &IntelI2cSptProfile},
-    {0xa0c6, 5, &IntelI2cSptProfile},
-    {0xa0d8, 6, &IntelI2cSptProfile},
-    {0xa0d9, 7, &IntelI2cSptProfile},
-    {0xa160, 0, &IntelI2cSptProfile},
-    {0xa161, 1, &IntelI2cSptProfile},
-    {0xa162, 2, &IntelI2cSptProfile},
-    {0xa2e0, 0, &IntelI2cSptProfile},
-    {0xa2e1, 1, &IntelI2cSptProfile},
-    {0xa2e2, 2, &IntelI2cSptProfile},
-    {0xa2e3, 3, &IntelI2cSptProfile},
-    {0xa368, 0, &IntelI2cCnlProfile},
-    {0xa369, 1, &IntelI2cCnlProfile},
-    {0xa36a, 2, &IntelI2cCnlProfile},
-    {0xa36b, 3, &IntelI2cCnlProfile},
-    {0xa3e0, 0, &IntelI2cSptProfile},
-    {0xa3e1, 1, &IntelI2cSptProfile},
-    {0xa3e2, 2, &IntelI2cSptProfile},
-    {0xa3e3, 3, &IntelI2cSptProfile},
-    {0xa850, 0, &IntelI2cEhlProfile},
-    {0xa851, 1, &IntelI2cEhlProfile},
-    {0xa878, 2, &IntelI2cEhlProfile},
-    {0xa879, 3, &IntelI2cEhlProfile},
-    {0xa87a, 4, &IntelI2cEhlProfile},
-    {0xa87b, 5, &IntelI2cEhlProfile},
-    {0xe350, 0, &IntelI2cEhlProfile},
-    {0xe351, 1, &IntelI2cEhlProfile},
-    {0xe378, 2, &IntelI2cEhlProfile},
-    {0xe379, 3, &IntelI2cEhlProfile},
-    {0xe37a, 4, &IntelI2cEhlProfile},
-    {0xe37b, 5, &IntelI2cEhlProfile},
-    {0xe450, 0, &IntelI2cEhlProfile},
-    {0xe451, 1, &IntelI2cEhlProfile},
-    {0xe478, 2, &IntelI2cEhlProfile},
-    {0xe479, 3, &IntelI2cEhlProfile},
-    {0xe47a, 4, &IntelI2cEhlProfile},
-    {0xe47b, 5, &IntelI2cEhlProfile},
+    {0x02e8, 0, &IntelI2cCnlProfile, TRUE},
+    {0x02e9, 1, &IntelI2cCnlProfile, TRUE},
+    {0x02ea, 2, &IntelI2cCnlProfile, TRUE},
+    {0x02eb, 3, &IntelI2cCnlProfile, TRUE},
+    {0x02c5, 4, &IntelI2cCnlProfile, TRUE},
+    {0x02c6, 5, &IntelI2cCnlProfile, TRUE},
+    {0x06e8, 0, &IntelI2cCnlProfile, TRUE},
+    {0x06e9, 1, &IntelI2cCnlProfile, TRUE},
+    {0x06ea, 2, &IntelI2cCnlProfile, TRUE},
+    {0x06eb, 3, &IntelI2cCnlProfile, TRUE},
+    {0x0aac, 0, &IntelI2cBxtProfile, TRUE},
+    {0x0aae, 1, &IntelI2cBxtProfile, TRUE},
+    {0x0ab0, 2, &IntelI2cBxtProfile, TRUE},
+    {0x0ab2, 3, &IntelI2cBxtProfile, TRUE},
+    {0x0ab4, 4, &IntelI2cBxtProfile, TRUE},
+    {0x0ab6, 5, &IntelI2cBxtProfile, TRUE},
+    {0x0ab8, 6, &IntelI2cBxtProfile, TRUE},
+    {0x0aba, 7, &IntelI2cBxtProfile, TRUE},
+    {0x1aac, 0, &IntelI2cBxtProfile, TRUE},
+    {0x1aae, 1, &IntelI2cBxtProfile, TRUE},
+    {0x1ab0, 2, &IntelI2cBxtProfile, TRUE},
+    {0x1ab2, 3, &IntelI2cBxtProfile, TRUE},
+    {0x1ab4, 4, &IntelI2cBxtProfile, TRUE},
+    {0x1ab6, 5, &IntelI2cBxtProfile, TRUE},
+    {0x1ab8, 6, &IntelI2cBxtProfile, TRUE},
+    {0x1aba, 7, &IntelI2cBxtProfile, TRUE},
+    {0x31ac, 0, &IntelI2cGlkProfile, TRUE},
+    {0x31ae, 1, &IntelI2cGlkProfile, TRUE},
+    {0x31b0, 2, &IntelI2cGlkProfile, TRUE},
+    {0x31b2, 3, &IntelI2cGlkProfile, TRUE},
+    {0x31b4, 4, &IntelI2cGlkProfile, TRUE},
+    {0x31b6, 5, &IntelI2cGlkProfile, TRUE},
+    {0x31b8, 6, &IntelI2cGlkProfile, TRUE},
+    {0x31ba, 7, &IntelI2cGlkProfile, TRUE},
+    {0x34e8, 0, &IntelI2cBxtProfile, TRUE},
+    {0x34e9, 1, &IntelI2cBxtProfile, TRUE},
+    {0x34ea, 2, &IntelI2cBxtProfile, TRUE},
+    {0x34eb, 3, &IntelI2cBxtProfile, TRUE},
+    {0x34c5, 4, &IntelI2cBxtProfile, TRUE},
+    {0x34c6, 5, &IntelI2cBxtProfile, TRUE},
+    {0x43e8, 0, &IntelI2cBxtProfile, TRUE},
+    {0x43e9, 1, &IntelI2cBxtProfile, TRUE},
+    {0x43ea, 2, &IntelI2cBxtProfile, TRUE},
+    {0x43eb, 3, &IntelI2cBxtProfile, TRUE},
+    {0x43ad, 4, &IntelI2cBxtProfile, TRUE},
+    {0x43ae, 5, &IntelI2cBxtProfile, TRUE},
+    {0x43d8, 6, &IntelI2cBxtProfile, TRUE},
+    {0x4b44, 0, &IntelI2cEhlProfile, TRUE},
+    {0x4b45, 1, &IntelI2cEhlProfile, TRUE},
+    {0x4b4b, 2, &IntelI2cEhlProfile, TRUE},
+    {0x4b4c, 3, &IntelI2cEhlProfile, TRUE},
+    {0x4b78, 4, &IntelI2cEhlProfile, TRUE},
+    {0x4b79, 5, &IntelI2cEhlProfile, TRUE},
+    {0x4b7a, 6, &IntelI2cEhlProfile, TRUE},
+    {0x4b7b, 7, &IntelI2cEhlProfile, TRUE},
+    {0x4d50, 0, &IntelI2cEhlProfile, TRUE},
+    {0x4d51, 1, &IntelI2cEhlProfile, TRUE},
+    {0x4d78, 2, &IntelI2cEhlProfile, TRUE},
+    {0x4d79, 3, &IntelI2cEhlProfile, TRUE},
+    {0x4d7a, 4, &IntelI2cEhlProfile, TRUE},
+    {0x4d7b, 5, &IntelI2cEhlProfile, TRUE},
+    {0x4de8, 0, &IntelI2cBxtProfile, TRUE},
+    {0x4de9, 1, &IntelI2cBxtProfile, TRUE},
+    {0x4dea, 2, &IntelI2cBxtProfile, TRUE},
+    {0x4deb, 3, &IntelI2cBxtProfile, TRUE},
+    {0x4dc5, 4, &IntelI2cBxtProfile, TRUE},
+    {0x4dc6, 5, &IntelI2cBxtProfile, TRUE},
+    {0x51e8, 0, &IntelI2cBxtProfile, TRUE},
+    {0x51e9, 1, &IntelI2cBxtProfile, TRUE},
+    {0x51ea, 2, &IntelI2cBxtProfile, TRUE},
+    {0x51eb, 3, &IntelI2cBxtProfile, TRUE},
+    {0x51c5, 4, &IntelI2cBxtProfile, TRUE},
+    {0x51c6, 5, &IntelI2cBxtProfile, TRUE},
+    {0x51d8, 6, &IntelI2cBxtProfile, TRUE},
+    {0x51d9, 7, &IntelI2cBxtProfile, TRUE},
+    {0x54e8, 0, &IntelI2cBxtProfile, TRUE},
+    {0x54e9, 1, &IntelI2cBxtProfile, TRUE},
+    {0x54ea, 2, &IntelI2cBxtProfile, TRUE},
+    {0x54eb, 3, &IntelI2cBxtProfile, TRUE},
+    {0x54c5, 4, &IntelI2cBxtProfile, TRUE},
+    {0x54c6, 5, &IntelI2cBxtProfile, TRUE},
+    {0x5aac, 0, &IntelI2cAplProfile, TRUE},
+    {0x5aae, 1, &IntelI2cAplProfile, TRUE},
+    {0x5ab0, 2, &IntelI2cAplProfile, TRUE},
+    {0x5ab2, 3, &IntelI2cAplProfile, TRUE},
+    {0x5ab4, 4, &IntelI2cAplProfile, TRUE},
+    {0x5ab6, 5, &IntelI2cAplProfile, TRUE},
+    {0x5ab8, 6, &IntelI2cAplProfile, TRUE},
+    {0x5aba, 7, &IntelI2cAplProfile, TRUE},
+    {0x6e4c, 0, &IntelI2cEhlProfile, TRUE},
+    {0x6e4d, 1, &IntelI2cEhlProfile, TRUE},
+    {0x6e4e, 2, &IntelI2cEhlProfile, TRUE},
+    {0x6e4f, 3, &IntelI2cEhlProfile, TRUE},
+    {0x6e7a, 4, &IntelI2cEhlProfile, TRUE},
+    {0x6e7b, 5, &IntelI2cEhlProfile, TRUE},
+    {0x7750, 0, &IntelI2cBxtProfile, TRUE},
+    {0x7751, 1, &IntelI2cBxtProfile, TRUE},
+    {0x7778, 2, &IntelI2cBxtProfile, TRUE},
+    {0x7779, 3, &IntelI2cBxtProfile, TRUE},
+    {0x777a, 4, &IntelI2cBxtProfile, TRUE},
+    {0x777b, 5, &IntelI2cBxtProfile, TRUE},
+    {0x7a4c, 0, &IntelI2cBxtProfile, TRUE},
+    {0x7a4d, 1, &IntelI2cBxtProfile, TRUE},
+    {0x7a4e, 2, &IntelI2cBxtProfile, TRUE},
+    {0x7a4f, 3, &IntelI2cBxtProfile, TRUE},
+    {0x7a7c, 4, &IntelI2cBxtProfile, TRUE},
+    {0x7a7d, 5, &IntelI2cBxtProfile, TRUE},
+    {0x7acc, 0, &IntelI2cBxtProfile, TRUE},
+    {0x7acd, 1, &IntelI2cBxtProfile, TRUE},
+    {0x7ace, 2, &IntelI2cBxtProfile, TRUE},
+    {0x7acf, 3, &IntelI2cBxtProfile, TRUE},
+    {0x7afc, 4, &IntelI2cBxtProfile, TRUE},
+    {0x7afd, 5, &IntelI2cBxtProfile, TRUE},
+    {0x7e50, 0, &IntelI2cBxtProfile, TRUE},
+    {0x7e51, 1, &IntelI2cBxtProfile, TRUE},
+    {0x7e78, 2, &IntelI2cBxtProfile, TRUE},
+    {0x7e79, 3, &IntelI2cBxtProfile, TRUE},
+    {0x7e7a, 4, &IntelI2cBxtProfile, TRUE},
+    {0x7e7b, 5, &IntelI2cBxtProfile, TRUE},
+    {0x7f4c, 0, &IntelI2cBxtProfile, TRUE},
+    {0x7f4d, 1, &IntelI2cBxtProfile, TRUE},
+    {0x7f4e, 2, &IntelI2cBxtProfile, TRUE},
+    {0x7f4f, 3, &IntelI2cBxtProfile, TRUE},
+    {0x7f7a, 4, &IntelI2cBxtProfile, TRUE},
+    {0x7f7b, 5, &IntelI2cBxtProfile, TRUE},
+    {0x98e8, 0, &IntelI2cBxtProfile, TRUE},
+    {0x98e9, 1, &IntelI2cBxtProfile, TRUE},
+    {0x98ea, 2, &IntelI2cBxtProfile, TRUE},
+    {0x98eb, 3, &IntelI2cBxtProfile, TRUE},
+    {0x98c5, 4, &IntelI2cBxtProfile, TRUE},
+    {0x98c6, 5, &IntelI2cBxtProfile, TRUE},
+    {0x9d60, 0, &IntelI2cSptProfile, TRUE},
+    {0x9d61, 1, &IntelI2cSptProfile, TRUE},
+    {0x9d62, 2, &IntelI2cSptProfile, TRUE},
+    {0x9d63, 3, &IntelI2cSptProfile, TRUE},
+    {0x9d64, 4, &IntelI2cSptProfile, TRUE},
+    {0x9d65, 5, &IntelI2cSptProfile, TRUE},
+    {0x9de8, 0, &IntelI2cCnlProfile, TRUE},
+    {0x9de9, 1, &IntelI2cCnlProfile, TRUE},
+    {0x9dea, 2, &IntelI2cCnlProfile, TRUE},
+    {0x9deb, 3, &IntelI2cCnlProfile, TRUE},
+    {0x9dc5, 4, &IntelI2cCnlProfile, TRUE},
+    {0x9dc6, 5, &IntelI2cCnlProfile, TRUE},
+    {0xa0e8, 0, &IntelI2cSptProfile, TRUE},
+    {0xa0e9, 1, &IntelI2cSptProfile, TRUE},
+    {0xa0ea, 2, &IntelI2cSptProfile, TRUE},
+    {0xa0eb, 3, &IntelI2cSptProfile, TRUE},
+    {0xa0c5, 4, &IntelI2cSptProfile, TRUE},
+    {0xa0c6, 5, &IntelI2cSptProfile, TRUE},
+    {0xa0d8, 6, &IntelI2cSptProfile, TRUE},
+    {0xa0d9, 7, &IntelI2cSptProfile, TRUE},
+    {0xa160, 0, &IntelI2cSptProfile, TRUE},
+    {0xa161, 1, &IntelI2cSptProfile, TRUE},
+    {0xa162, 2, &IntelI2cSptProfile, TRUE},
+    {0xa2e0, 0, &IntelI2cSptProfile, TRUE},
+    {0xa2e1, 1, &IntelI2cSptProfile, TRUE},
+    {0xa2e2, 2, &IntelI2cSptProfile, TRUE},
+    {0xa2e3, 3, &IntelI2cSptProfile, TRUE},
+    {0xa368, 0, &IntelI2cCnlProfile, TRUE},
+    {0xa369, 1, &IntelI2cCnlProfile, TRUE},
+    {0xa36a, 2, &IntelI2cCnlProfile, TRUE},
+    {0xa36b, 3, &IntelI2cCnlProfile, TRUE},
+    {0xa3e0, 0, &IntelI2cSptProfile, TRUE},
+    {0xa3e1, 1, &IntelI2cSptProfile, TRUE},
+    {0xa3e2, 2, &IntelI2cSptProfile, TRUE},
+    {0xa3e3, 3, &IntelI2cSptProfile, TRUE},
+    {0xa850, 0, &IntelI2cEhlProfile, TRUE},
+    {0xa851, 1, &IntelI2cEhlProfile, TRUE},
+    {0xa878, 2, &IntelI2cEhlProfile, TRUE},
+    {0xa879, 3, &IntelI2cEhlProfile, TRUE},
+    {0xa87a, 4, &IntelI2cEhlProfile, TRUE},
+    {0xa87b, 5, &IntelI2cEhlProfile, TRUE},
+    {0xe350, 0, &IntelI2cEhlProfile, TRUE},
+    {0xe351, 1, &IntelI2cEhlProfile, TRUE},
+    {0xe378, 2, &IntelI2cEhlProfile, TRUE},
+    {0xe379, 3, &IntelI2cEhlProfile, TRUE},
+    {0xe37a, 4, &IntelI2cEhlProfile, TRUE},
+    {0xe37b, 5, &IntelI2cEhlProfile, TRUE},
+    {0xe450, 0, &IntelI2cEhlProfile, TRUE},
+    {0xe451, 1, &IntelI2cEhlProfile, TRUE},
+    {0xe478, 2, &IntelI2cEhlProfile, TRUE},
+    {0xe479, 3, &IntelI2cEhlProfile, TRUE},
+    {0xe47a, 4, &IntelI2cEhlProfile, TRUE},
+    {0xe47b, 5, &IntelI2cEhlProfile, TRUE},
 };
 
 static
@@ -392,9 +395,104 @@ IntelI2cParseDeviceId(
 }
 
 static
-const INTELI2C_PCI_ID *
+BOOLEAN
+IntelI2cIsAmdSerialI2c(
+    _In_reads_(CharacterCount) PCWSTR Buffer,
+    _In_ ULONG CharacterCount)
+{
+    static const WCHAR AmdI2cId[] = L"AMDI0010";
+    ULONG Index;
+    ULONG Digit;
+
+    for (Index = 0; Index + RTL_NUMBER_OF(AmdI2cId) - 1 <= CharacterCount; Index++)
+    {
+        for (Digit = 0; Digit < RTL_NUMBER_OF(AmdI2cId) - 1; Digit++)
+        {
+            if (Buffer[Index + Digit] != AmdI2cId[Digit])
+                break;
+        }
+        if (Digit == RTL_NUMBER_OF(AmdI2cId) - 1)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static
+NTSTATUS
+NTAPI
+IntelI2cQueryIdCompletion(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ PIRP Irp,
+    _In_reads_opt_(_Inexpressible_("varies")) PVOID Context)
+{
+    UNREFERENCED_PARAMETER(DeviceObject);
+    UNREFERENCED_PARAMETER(Irp);
+    KeSetEvent((PKEVENT)Context, IO_NO_INCREMENT, FALSE);
+    return STATUS_MORE_PROCESSING_REQUIRED;
+}
+
+static
+NTSTATUS
+IntelI2cQueryControllerIndex(
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
+    _Out_ PUCHAR ControllerIndex)
+{
+    KEVENT Event;
+    PIRP Irp;
+    PIO_STACK_LOCATION Stack;
+    NTSTATUS Status;
+    PWSTR InstanceId;
+    PWCHAR Char;
+    ULONG Value;
+
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoAllocateIrp((CCHAR)(PhysicalDeviceObject->StackSize + 1), FALSE);
+    if (!Irp)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
+    Irp->IoStatus.Information = 0;
+    Stack = IoGetNextIrpStackLocation(Irp);
+    Stack->MajorFunction = IRP_MJ_PNP;
+    Stack->MinorFunction = IRP_MN_QUERY_ID;
+    Stack->Parameters.QueryId.IdType = BusQueryInstanceID;
+    IoSetCompletionRoutine(Irp, IntelI2cQueryIdCompletion, &Event, TRUE, TRUE, TRUE);
+    Status = IoCallDriver(PhysicalDeviceObject, Irp);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+    }
+    Status = Irp->IoStatus.Status;
+    if (NT_SUCCESS(Status))
+    {
+        InstanceId = (PWSTR)Irp->IoStatus.Information;
+        Value = 0;
+        for (Char = InstanceId; *Char >= L'0' && *Char <= L'9'; Char++)
+            Value = Value * 10 + (ULONG)(*Char - L'0');
+        if (Char == InstanceId || *Char || Value >= 8)
+        {
+            Status = STATUS_DEVICE_CONFIGURATION_ERROR;
+        }
+        else
+        {
+            *ControllerIndex = (UCHAR)Value;
+            Status = STATUS_SUCCESS;
+        }
+        DPRINT("INTELI2C: ACPI instance id %S -> index %lu (0x%08lx)\n", InstanceId, Value, Status);
+        ExFreePool(InstanceId);
+    }
+    else
+    {
+        DPRINT1("INTELI2C: instance id query failed 0x%08lx\n", Status);
+    }
+    IoFreeIrp(Irp);
+    return Status;
+}
+
+static
+BOOLEAN
 IntelI2cIdentifyController(
-    _In_ PDEVICE_OBJECT PhysicalDeviceObject)
+    _In_ PDEVICE_OBJECT PhysicalDeviceObject,
+    _Out_ INTELI2C_PCI_ID *Controller)
 {
     WCHAR HardwareIds[256];
     ULONG RequiredLength = 0;
@@ -402,16 +500,28 @@ IntelI2cIdentifyController(
     ULONG Index;
 
     if (!NT_SUCCESS(IoGetDeviceProperty(PhysicalDeviceObject, DevicePropertyHardwareID, sizeof(HardwareIds), HardwareIds, &RequiredLength)))
-        return NULL;
+        return FALSE;
     RequiredLength = min(RequiredLength, (ULONG)sizeof(HardwareIds));
+    DPRINT("INTELI2C: hardware ids %S\n", HardwareIds);
+    if (IntelI2cIsAmdSerialI2c(HardwareIds, RequiredLength / sizeof(WCHAR)))
+    {
+        Controller->DeviceId = 0;
+        Controller->Profile = &IntelI2cAmdProfile;
+        Controller->Lpss = FALSE;
+        DPRINT("INTELI2C: AMD serial I/O controller\n");
+        return NT_SUCCESS(IntelI2cQueryControllerIndex(PhysicalDeviceObject, &Controller->ControllerIndex));
+    }
     if (!IntelI2cParseDeviceId(HardwareIds, RequiredLength / sizeof(WCHAR), &DeviceId))
-        return NULL;
+        return FALSE;
     for (Index = 0; Index < RTL_NUMBER_OF(IntelI2cPciIds); Index++)
     {
         if (IntelI2cPciIds[Index].DeviceId == DeviceId)
-            return &IntelI2cPciIds[Index];
+        {
+            *Controller = IntelI2cPciIds[Index];
+            return TRUE;
+        }
     }
-    return NULL;
+    return FALSE;
 }
 
 static
@@ -1070,7 +1180,8 @@ IntelI2cStopHardware(
     if (DeviceExtension->Registers)
     {
         IntelI2cDisable(DeviceExtension, IntelI2cDeadline(100));
-        IntelI2cWrite32(DeviceExtension, LPSS_PRIV_RESETS, 0);
+        if (DeviceExtension->Lpss)
+            IntelI2cWrite32(DeviceExtension, LPSS_PRIV_RESETS, 0);
         MmUnmapIoSpace(DeviceExtension->Registers, DeviceExtension->RegisterLength);
         DeviceExtension->Registers = NULL;
         DeviceExtension->RegisterLength = 0;
@@ -1111,13 +1222,17 @@ IntelI2cStartHardware(
     if (!DeviceExtension->Registers)
         return STATUS_DEVICE_CONFIGURATION_ERROR;
 
-    IntelI2cWrite32(DeviceExtension, LPSS_PRIV_RESETS, 0);
-    KeStallExecutionProcessor(10);
-    IntelI2cWrite32(DeviceExtension, LPSS_PRIV_RESETS, LPSS_PRIV_RESETS_FUNC | LPSS_PRIV_RESETS_IDMA);
-    IntelI2cWrite32(DeviceExtension, LPSS_PRIV_REMAP_ADDR_LOW, DeviceExtension->RegisterAddress.LowPart);
-    IntelI2cWrite32(DeviceExtension, LPSS_PRIV_REMAP_ADDR_HIGH, DeviceExtension->RegisterAddress.HighPart);
-    Capabilities = IntelI2cRead32(DeviceExtension, LPSS_PRIV_CAPS);
-    if ((Capabilities & LPSS_PRIV_CAPS_TYPE_MASK) != LPSS_PRIV_CAPS_TYPE_I2C || IntelI2cRead32(DeviceExtension, DW_IC_COMP_TYPE) != DW_IC_COMP_TYPE_VALUE)
+    Capabilities = 0;
+    if (DeviceExtension->Lpss)
+    {
+        IntelI2cWrite32(DeviceExtension, LPSS_PRIV_RESETS, 0);
+        KeStallExecutionProcessor(10);
+        IntelI2cWrite32(DeviceExtension, LPSS_PRIV_RESETS, LPSS_PRIV_RESETS_FUNC | LPSS_PRIV_RESETS_IDMA);
+        IntelI2cWrite32(DeviceExtension, LPSS_PRIV_REMAP_ADDR_LOW, DeviceExtension->RegisterAddress.LowPart);
+        IntelI2cWrite32(DeviceExtension, LPSS_PRIV_REMAP_ADDR_HIGH, DeviceExtension->RegisterAddress.HighPart);
+        Capabilities = IntelI2cRead32(DeviceExtension, LPSS_PRIV_CAPS);
+    }
+    if ((DeviceExtension->Lpss && (Capabilities & LPSS_PRIV_CAPS_TYPE_MASK) != LPSS_PRIV_CAPS_TYPE_I2C) || IntelI2cRead32(DeviceExtension, DW_IC_COMP_TYPE) != DW_IC_COMP_TYPE_VALUE)
     {
         DPRINT1("INTELI2C%lu: unsupported controller caps=0x%08lx component=0x%08lx\n", DeviceExtension->ControllerIndex, Capabilities, IntelI2cRead32(DeviceExtension, DW_IC_COMP_TYPE));
         IntelI2cStopHardware(DeviceExtension);
@@ -1376,12 +1491,15 @@ IntelI2cAddDevice(
 {
     PINTELI2C_DEVICE_EXTENSION DeviceExtension;
     PDEVICE_OBJECT DeviceObject;
-    const INTELI2C_PCI_ID *Controller;
+    INTELI2C_PCI_ID Controller;
     NTSTATUS Status;
 
-    Controller = IntelI2cIdentifyController(PhysicalDeviceObject);
-    if (!Controller)
+    DPRINT("INTELI2C: AddDevice %p\n", PhysicalDeviceObject);
+    if (!IntelI2cIdentifyController(PhysicalDeviceObject, &Controller))
+    {
+        DPRINT1("INTELI2C: controller not identified\n");
         return STATUS_NOT_SUPPORTED;
+    }
     Status = IoCreateDevice(DriverObject, sizeof(INTELI2C_DEVICE_EXTENSION), NULL, FILE_DEVICE_CONTROLLER, FILE_DEVICE_SECURE_OPEN, FALSE, &DeviceObject);
     if (!NT_SUCCESS(Status))
         return Status;
@@ -1389,9 +1507,10 @@ IntelI2cAddDevice(
     RtlZeroMemory(DeviceExtension, sizeof(*DeviceExtension));
     DeviceExtension->Self = DeviceObject;
     DeviceExtension->PhysicalDevice = PhysicalDeviceObject;
-    DeviceExtension->ControllerIndex = Controller->ControllerIndex;
-    DeviceExtension->PciDeviceId = Controller->DeviceId;
-    DeviceExtension->Profile = Controller->Profile;
+    DeviceExtension->ControllerIndex = Controller.ControllerIndex;
+    DeviceExtension->PciDeviceId = Controller.DeviceId;
+    DeviceExtension->Profile = Controller.Profile;
+    DeviceExtension->Lpss = Controller.Lpss;
     DeviceExtension->LowerDevice = IoAttachDeviceToDeviceStack(DeviceObject, PhysicalDeviceObject);
     if (!DeviceExtension->LowerDevice)
     {
