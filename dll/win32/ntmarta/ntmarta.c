@@ -1087,6 +1087,38 @@ Cleanup:
 }
 
 static NTSTATUS
+AccpSetProtectedFileDacl(HANDLE Handle,
+                         SECURITY_INFORMATION Information,
+                         PSECURITY_DESCRIPTOR Descriptor)
+{
+    SECURITY_DESCRIPTOR Result;
+    SECURITY_DESCRIPTOR_CONTROL Control;
+    BOOLEAN Present, Defaulted;
+    ULONG Revision;
+    NTSTATUS Status;
+
+    ASSERT(Information & DACL_SECURITY_INFORMATION);
+    ASSERT(Information & PROTECTED_DACL_SECURITY_INFORMATION);
+    Status = RtlCreateSecurityDescriptor(&Result, SECURITY_DESCRIPTOR_REVISION);
+    if (!NT_SUCCESS(Status)) return Status;
+    Status = RtlGetControlSecurityDescriptor(Descriptor, &Control, &Revision);
+    if (!NT_SUCCESS(Status)) return Status;
+    Result.Control = (Control & ~SE_SELF_RELATIVE) |
+                     SE_DACL_AUTO_INHERIT_REQ | SE_DACL_AUTO_INHERITED | SE_DACL_PROTECTED;
+    Result.Sbz1 = ((PISECURITY_DESCRIPTOR)Descriptor)->Sbz1;
+    Status = RtlGetOwnerSecurityDescriptor(Descriptor, &Result.Owner, &Defaulted);
+    if (!NT_SUCCESS(Status)) return Status;
+    Status = RtlGetGroupSecurityDescriptor(Descriptor, &Result.Group, &Defaulted);
+    if (!NT_SUCCESS(Status)) return Status;
+    Status = RtlGetDaclSecurityDescriptor(Descriptor, &Present, &Result.Dacl, &Defaulted);
+    if (!NT_SUCCESS(Status)) return Status;
+    Status = RtlGetSaclSecurityDescriptor(Descriptor, &Present, &Result.Sacl, &Defaulted);
+    if (!NT_SUCCESS(Status)) return Status;
+    ASSERT(Result.Control & SE_DACL_PRESENT);
+    return NtSetSecurityObject(Handle, Information, &Result);
+}
+
+static NTSTATUS
 AccpSetFileSecurity(HANDLE Handle,
                    SECURITY_INFORMATION Information,
                    PSECURITY_DESCRIPTOR Descriptor)
@@ -1146,31 +1178,12 @@ AccpSetFileSecurity(HANDLE Handle,
         Descriptor = &Published;
     }
 
-    if (!(Information & DACL_SECURITY_INFORMATION))
+    if (!(Information & DACL_SECURITY_INFORMATION) ||
+        (Information & PROTECTED_DACL_SECURITY_INFORMATION))
     {
-        Status = NtSetSecurityObject(Handle, Information, Descriptor);
-        goto Cleanup;
-    }
-
-    if (Information & PROTECTED_DACL_SECURITY_INFORMATION)
-    {
-        Status = RtlCreateSecurityDescriptor(&Result, SECURITY_DESCRIPTOR_REVISION);
-        if (!NT_SUCCESS(Status)) goto Cleanup;
-        Status = RtlGetControlSecurityDescriptor(Descriptor, &Control, &Revision);
-        if (!NT_SUCCESS(Status)) goto Cleanup;
-        Result.Control = (Control & ~SE_SELF_RELATIVE) |
-                         SE_DACL_AUTO_INHERIT_REQ | SE_DACL_AUTO_INHERITED | SE_DACL_PROTECTED;
-        Result.Sbz1 = ((PISECURITY_DESCRIPTOR)Descriptor)->Sbz1;
-        Status = RtlGetOwnerSecurityDescriptor(Descriptor, &Result.Owner, &Defaulted);
-        if (!NT_SUCCESS(Status)) goto Cleanup;
-        Status = RtlGetGroupSecurityDescriptor(Descriptor, &Result.Group, &Defaulted);
-        if (!NT_SUCCESS(Status)) goto Cleanup;
-        Status = RtlGetDaclSecurityDescriptor(Descriptor, &Present, &Result.Dacl, &Defaulted);
-        if (!NT_SUCCESS(Status)) goto Cleanup;
-        Status = RtlGetSaclSecurityDescriptor(Descriptor, &Present, &Result.Sacl, &Defaulted);
-        if (!NT_SUCCESS(Status)) goto Cleanup;
-        ASSERT(Result.Control & SE_DACL_PRESENT);
-        Status = NtSetSecurityObject(Handle, Information, &Result);
+        Status = (Information & DACL_SECURITY_INFORMATION) ?
+                 AccpSetProtectedFileDacl(Handle, Information, Descriptor) :
+                 NtSetSecurityObject(Handle, Information, Descriptor);
         goto Cleanup;
     }
 
