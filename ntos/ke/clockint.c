@@ -753,6 +753,65 @@ KiTickClockOwner(
  * it is how the period is charged to the right account. The caller keeps the
  * IRQL it raised.
  */
+static ULONGLONG KiClockCatchUpCounter;
+static LONGLONG KiClockCatchUpStopped;
+static LONGLONG KiClockCatchUpOwed;
+
+/*
+ * A clock interrupt that came due while the previous one was still pending
+ * was merged into it. The clock owner measures the time since its last update
+ * on the performance counter, leaves out what the debugger held the machine
+ * for, and adds the whole periods that were missed.
+ */
+static
+ULONG
+KiClockCatchUp(
+    _In_ ULONG Increment)
+{
+    LARGE_INTEGER Frequency;
+    ULONGLONG Now, Ticks, Elapsed, Periods;
+    LONGLONG Stopped, Debugger;
+
+    ASSERT(KeGetCurrentIrql() >= CLOCK_LEVEL);
+    ASSERT(KeGetCurrentPrcb() == KiClockOwnerPrcb);
+    ASSERT(Increment != 0);
+
+    Now = (ULONGLONG)KeQueryPerformanceCounter(&Frequency).QuadPart;
+    Debugger = KdTimerDifference.QuadPart;
+    Stopped = Debugger - KiClockCatchUpStopped;
+    KiClockCatchUpStopped = Debugger;
+
+    if ((KiClockCatchUpCounter == 0) || (Now < KiClockCatchUpCounter) || (Frequency.QuadPart <= 0))
+    {
+        KiClockCatchUpCounter = Now;
+        KiClockCatchUpOwed = 0;
+        return 0;
+    }
+
+    Ticks = Now - KiClockCatchUpCounter;
+    KiClockCatchUpCounter = Now;
+    if (Stopped > 0)
+        Ticks = ((ULONGLONG)Stopped < Ticks) ? (Ticks - (ULONGLONG)Stopped) : 0;
+
+    Elapsed = (Ticks / (ULONGLONG)Frequency.QuadPart) * 10000000ULL +
+              (Ticks % (ULONGLONG)Frequency.QuadPart) * 10000000ULL / (ULONGLONG)Frequency.QuadPart;
+    KiClockCatchUpOwed += (LONGLONG)Elapsed - (LONGLONG)Increment;
+    if (KiClockCatchUpOwed < (LONGLONG)Increment)
+    {
+        if (KiClockCatchUpOwed < -(LONGLONG)Increment)
+            KiClockCatchUpOwed = -(LONGLONG)Increment;
+        return 0;
+    }
+
+    Periods = (ULONGLONG)KiClockCatchUpOwed / Increment;
+    Periods = min(Periods, (ULONGLONG)((MAXULONG - Increment) / Increment));
+    KiClockCatchUpOwed -= (LONGLONG)(Periods * Increment);
+
+    ASSERT(KiClockCatchUpOwed >= 0);
+    ASSERT(Periods * Increment <= MAXULONG - Increment);
+    return (ULONG)(Periods * Increment);
+}
+
 VOID
 FASTCALL
 KeUpdateSystemTime(
@@ -777,6 +836,8 @@ KeUpdateSystemTime(
     }
 
     ClockOwner = (Prcb == KiClockOwnerPrcb);
+    if (ClockOwner)
+        Increment += KiClockCatchUp(Increment);
 
     InterruptTime = KiUpdateSharedTime(Increment, ClockOwner);
 

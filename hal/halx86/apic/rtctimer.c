@@ -33,12 +33,6 @@ static ULONG HalpNextTimeIncrement;
 
 static LONG HalpClockIpiTickOffset;
 
-/* A gap longer than this is a stopped machine, such as a debugger break, and is not counted as clock time */
-#define HALP_CLOCK_CATCH_UP_LIMIT 16
-
-static ULONG64 HalpClockLastCounter;
-static LONG64 HalpClockOwed;
-
 BOOLEAN HalpApicTimerClock = FALSE;
 static ULONG64 HalpApicTimerFrequency;
 
@@ -301,51 +295,6 @@ HalpRestoreClock(VOID)
     HalpReleaseCmosSpinLock();
 }
 
-/*
- * A clock interrupt that comes due while the previous one is still pending is
- * merged into it, so the periods in between are measured on the performance
- * counter and added to this interrupt's increment.
- */
-static
-ULONG
-HalpClockCatchUp(
-    _In_ ULONG Increment)
-{
-    ULONG64 Now = (ULONG64)KeQueryPerformanceCounter(NULL).QuadPart;
-    ULONG64 Elapsed;
-    ULONG Missed = 0;
-
-    ASSERT(KeGetCurrentIrql() >= CLOCK_LEVEL);
-    ASSERT(HalpCurrentTimeIncrement != 0);
-
-    if ((HalpClockLastCounter == 0) || (Now < HalpClockLastCounter))
-    {
-        HalpClockLastCounter = Now;
-        HalpClockOwed = 0;
-        return 0;
-    }
-
-    Elapsed = Now - HalpClockLastCounter;
-    HalpClockLastCounter = Now;
-    if (Elapsed > (ULONG64)HalpCurrentTimeIncrement * HALP_CLOCK_CATCH_UP_LIMIT)
-    {
-        HalpClockOwed = 0;
-        return 0;
-    }
-
-    HalpClockOwed += (LONG64)Elapsed - (LONG64)Increment;
-    while (HalpClockOwed >= (LONG64)HalpCurrentTimeIncrement)
-    {
-        Missed += HalpCurrentTimeIncrement;
-        HalpClockOwed -= HalpCurrentTimeIncrement;
-    }
-    if (HalpClockOwed < -(LONG64)HalpCurrentTimeIncrement)
-        HalpClockOwed = -(LONG64)HalpCurrentTimeIncrement;
-
-    ASSERT(Missed <= HalpCurrentTimeIncrement * HALP_CLOCK_CATCH_UP_LIMIT);
-    return Missed;
-}
-
 VOID
 FASTCALL
 HalpClockInterruptHandler(IN PKTRAP_FRAME TrapFrame)
@@ -388,8 +337,6 @@ HalpClockInterruptHandler(IN PKTRAP_FRAME TrapFrame)
         LastIncrement++;
         HalpRunningFraction -= 1000;
     }
-
-    LastIncrement += HalpClockCatchUp(LastIncrement);
 
     /* Check if someone changed the time rate */
     if (HalpSetClockRate)

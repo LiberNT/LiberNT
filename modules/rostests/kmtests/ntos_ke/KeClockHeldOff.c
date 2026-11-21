@@ -19,29 +19,29 @@ ElapsedTime(
 
 START_TEST(KeClockHeldOff)
 {
+    static const ULONG Periods[] = { 4, 17 };
     KAFFINITY PreviousAffinity;
     LARGE_INTEGER Frequency, Start, Now;
     ULONGLONG InterruptStart, InterruptEnd, Elapsed;
     ULONG Increment = KeQueryTimeIncrement();
-    ULONG Processor;
+    ULONG Index;
     KIRQL OldIrql;
 
     ok(Increment != 0, "No clock increment\n");
     if (Increment == 0)
         return;
 
+    /* Only the processor that takes the clock interrupt is checked: on the others Windows 11 leaves interrupt time several periods stale */
     PreviousAffinity = KeSetSystemAffinityThreadEx(1);
-    for (Processor = 0; Processor < (ULONG)KeNumberProcessors; Processor++)
+    for (Index = 0; Index < RTL_NUMBER_OF(Periods); Index++)
     {
-        KeSetSystemAffinityThreadEx((KAFFINITY)1 << Processor);
-
         KeRaiseIrql(HIGH_LEVEL, &OldIrql);
         InterruptStart = KeQueryInterruptTime();
         Start = KeQueryPerformanceCounter(&Frequency);
         do
         {
             Now = KeQueryPerformanceCounter(NULL);
-        } while (ElapsedTime(Start, Now, Frequency) < 4ULL * Increment);
+        } while (ElapsedTime(Start, Now, Frequency) < (ULONGLONG)Periods[Index] * Increment);
         KeLowerIrql(OldIrql);
 
         KeStallExecutionProcessor(100);
@@ -50,11 +50,11 @@ START_TEST(KeClockHeldOff)
         Elapsed = ElapsedTime(Start, Now, Frequency);
 
         ok(InterruptEnd - InterruptStart + 2ULL * Increment >= Elapsed,
-           "Processor %lu: interrupt time moved %I64u while %I64u passed\n",
-           Processor, InterruptEnd - InterruptStart, Elapsed);
+           "%lu periods held: interrupt time moved %I64u while %I64u passed\n",
+           Periods[Index], InterruptEnd - InterruptStart, Elapsed);
         ok(InterruptEnd - InterruptStart <= Elapsed + Increment,
-           "Processor %lu: interrupt time moved %I64u, ahead of the %I64u that passed\n",
-           Processor, InterruptEnd - InterruptStart, Elapsed);
+           "%lu periods held: interrupt time moved %I64u, ahead of the %I64u that passed\n",
+           Periods[Index], InterruptEnd - InterruptStart, Elapsed);
     }
     KeRevertToUserAffinityThreadEx(PreviousAffinity);
 }
