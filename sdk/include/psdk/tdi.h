@@ -608,4 +608,53 @@ typedef TDI_REQUEST_CONNECT * PTDI_REQUEST_USER_CONNECT;
 typedef TDI_REQUEST_QUERY_INFORMATION TDI_REQUEST_USER_QUERY_INFO;
 typedef TDI_REQUEST_QUERY_INFORMATION * PTDI_REQUEST_USER_QUERY_INFO;
 
+#pragma pack(push, 1)
+typedef struct _TDI_ADDRESS_NETBIOS_UNICODE_EX_XP {
+  USHORT NetbiosNameType;
+  enum eNameBufferType NameBufferType;
+  UNICODE_STRING EndpointName;
+  UNICODE_STRING RemoteName;
+  WCHAR EndpointBuffer[17];
+  WCHAR RemoteNameBuffer[1];
+} TDI_ADDRESS_NETBIOS_UNICODE_EX_XP, *PTDI_ADDRESS_NETBIOS_UNICODE_EX_XP;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _TA_ADDRESS_NETBIOS_UNICODE_EX_XP {
+  LONG TAAddressCount;
+  struct _AddrNetbiosWCharEx Address[1];
+} TA_NETBIOS_UNICODE_EX_ADDRESS_XP, *PTA_NETBIOS_UNICODE_EX_ADDRESS_XP;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _TDI_ADDRESS_IP6_WIN2K {
+  USHORT sin6_port;
+  ULONG sin6_flowinfo;
+  UCHAR sin6_addr[16];
+} TDI_ADDRESS_IP6_WIN2K, *PTDI_ADDRESS_IP6_WIN2K;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _TDI_ADDRESS_IP6_XP {
+  USHORT sin6_port;
+  ULONG sin6_flowinfo;
+  USHORT sin6_addr[8];
+  ULONG sin6_scope_id;
+} TDI_ADDRESS_IP6_XP, *PTDI_ADDRESS_IP6_XP;
+#pragma pack(pop)
+
+typedef struct _TDI_ROUTING_INFO_WS03 {
+  ULONG Protocol;
+  ULONG InterfaceId;
+  ULONG LinkId;
+  TRANSPORT_ADDRESS Address;
+} TDI_ROUTING_INFO_WS03, *PTDI_ROUTING_INFO_WS03;
+
+typedef struct _STREAMS_TDI_ACTION {
+  TDI_ACTION_HEADER Header;
+  BOOLEAN DatagramOption;
+  ULONG BufferLength;
+  CHAR Buffer[1];
+} STREAMS_TDI_ACTION, *PSTREAMS_TDI_ACTION;
+
 #endif /* __TDI_H */

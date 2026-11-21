@@ -1490,4 +1490,8 @@ DWORD WINAPI IsValidNLSVersion(NLS_FUNCTION function, LPCWSTR lpLocaleName, LPNL
 }
 #endif
 
+typedef struct HSAVEDUILANGUAGES__ {
+  int unused;
+} *HSAVEDUILANGUAGES;
+
 #endif

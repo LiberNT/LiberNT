@@ -177,4 +177,9 @@ HRESULT WINAPI D3DLoadModule(const void *data, SIZE_T size, ID3D11Module **modul
 #define D3D_GET_INST_OFFSETS_INCLUDE_NON_EXECUTABLE 0x00000001
 #endif
 
+typedef struct _D3D_SHADER_DATA {
+  LPCVOID pBytecode;
+  SIZE_T BytecodeLength;
+} D3D_SHADER_DATA;
+
 #endif

@@ -370,4 +370,59 @@ DECLARE_INTERFACE_(IDirectInputJoyConfig8, IUnknown)
 #define JOY_US_RESERVED 0x80000000l
 #endif
 
+typedef struct DIOBJECTATTRIBUTES {
+  DWORD dwFlags;
+  WORD wUsagePage;
+  WORD wUsage;
+} DIOBJECTATTRIBUTES, *LPDIOBJECTATTRIBUTES;
+
+typedef struct DIFFOBJECTATTRIBUTES {
+  DWORD dwFFMaxForce;
+  DWORD dwFFForceResolution;
+} DIFFOBJECTATTRIBUTES, *LPDIFFOBJECTATTRIBUTES;
+
+typedef struct DIOBJECTCALIBRATION {
+  LONG lMin;
+  LONG lCenter;
+  LONG lMax;
+} DIOBJECTCALIBRATION, *LPDIOBJECTCALIBRATION;
+
+typedef struct DIPOVCALIBRATION {
+  LONG lMin[5];
+  LONG lMax[5];
+} DIPOVCALIBRATION, *LPDIPOVCALIBRATION;
+
+typedef struct DIEFFECTATTRIBUTES {
+  DWORD dwEffectId;
+  DWORD dwEffType;
+  DWORD dwStaticParams;
+  DWORD dwDynamicParams;
+  DWORD dwCoords;
+} DIEFFECTATTRIBUTES, *LPDIEFFECTATTRIBUTES;
+
+typedef struct DIFFDEVICEATTRIBUTES {
+  DWORD dwFlags;
+  DWORD dwFFSamplePeriod;
+  DWORD dwFFMinTimeResolution;
+} DIFFDEVICEATTRIBUTES, *LPDIFFDEVICEATTRIBUTES;
+
+typedef struct DIDRIVERVERSIONS {
+  DWORD dwSize;
+  DWORD dwFirmwareRevision;
+  DWORD dwHardwareRevision;
+  DWORD dwFFDriverVersion;
+} DIDRIVERVERSIONS, *LPDIDRIVERVERSIONS;
+
+typedef struct DIDEVICESTATE {
+  DWORD dwSize;
+  DWORD dwState;
+  DWORD dwLoad;
+} DIDEVICESTATE, *LPDIDEVICESTATE;
+
+typedef struct DIHIDFFINITINFO {
+  DWORD dwSize;
+  LPWSTR pwszDeviceInterface;
+  GUID GuidInstance;
+} DIHIDFFINITINFO, *LPDIHIDFFINITINFO;
+
 #endif /* __DINPUTD_INCLUDED__ */

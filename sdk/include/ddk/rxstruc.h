@@ -148,4 +148,9 @@ RxUnregisterMinirdr(
     }
 }
 
+typedef struct _MRX_CALLDOWN_COMPLETION_CONTEXT_ {
+  LONG WaitCount;
+  KEVENT Event;
+} MRX_CALLDOWN_COMPLETION_CONTEXT, *PMRX_CALLDOWN_COMPLETION_CONTEXT;
+
 #endif

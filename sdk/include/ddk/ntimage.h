@@ -1817,4 +1817,371 @@ typedef const IMAGE_TLS_DIRECTORY64 * PCIMAGE_TLS_DIRECTORY64;
 typedef const IMAGE_EXPORT_DIRECTORY * PCIMAGE_EXPORT_DIRECTORY;
 typedef const IMAGE_SECTION_HEADER * PCIMAGE_SECTION_HEADER;
 
+typedef struct ANON_OBJECT_HEADER {
+  USHORT Sig1;
+  USHORT Sig2;
+  USHORT Version;
+  USHORT Machine;
+  ULONG TimeDateStamp;
+  CLSID ClassID;
+  ULONG SizeOfData;
+} ANON_OBJECT_HEADER;
+
+typedef struct ANON_OBJECT_HEADER_V2 {
+  USHORT Sig1;
+  USHORT Sig2;
+  USHORT Version;
+  USHORT Machine;
+  ULONG TimeDateStamp;
+  CLSID ClassID;
+  ULONG SizeOfData;
+  ULONG Flags;
+  ULONG MetaDataSize;
+  ULONG MetaDataOffset;
+} ANON_OBJECT_HEADER_V2;
+
+typedef struct ANON_OBJECT_HEADER_BIGOBJ {
+  USHORT Sig1;
+  USHORT Sig2;
+  USHORT Version;
+  USHORT Machine;
+  ULONG TimeDateStamp;
+  CLSID ClassID;
+  ULONG SizeOfData;
+  ULONG Flags;
+  ULONG MetaDataSize;
+  ULONG MetaDataOffset;
+  ULONG NumberOfSections;
+  ULONG PointerToSymbolTable;
+  ULONG NumberOfSymbols;
+} ANON_OBJECT_HEADER_BIGOBJ;
+
+typedef struct _IMAGE_DYNAMIC_RELOCATION_TABLE {
+  ULONG Version;
+  ULONG Size;
+} IMAGE_DYNAMIC_RELOCATION_TABLE, *PIMAGE_DYNAMIC_RELOCATION_TABLE;
+
+#pragma pack(push, 1)
+typedef struct _IMAGE_DYNAMIC_RELOCATION32 {
+  ULONG Symbol;
+  ULONG BaseRelocSize;
+} IMAGE_DYNAMIC_RELOCATION32, *PIMAGE_DYNAMIC_RELOCATION32;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IMAGE_DYNAMIC_RELOCATION64 {
+  ULONGLONG Symbol;
+  ULONG BaseRelocSize;
+} IMAGE_DYNAMIC_RELOCATION64, *PIMAGE_DYNAMIC_RELOCATION64;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IMAGE_DYNAMIC_RELOCATION32_V2 {
+  ULONG HeaderSize;
+  ULONG FixupInfoSize;
+  ULONG Symbol;
+  ULONG SymbolGroup;
+  ULONG Flags;
+} IMAGE_DYNAMIC_RELOCATION32_V2, *PIMAGE_DYNAMIC_RELOCATION32_V2;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IMAGE_DYNAMIC_RELOCATION64_V2 {
+  ULONG HeaderSize;
+  ULONG FixupInfoSize;
+  ULONGLONG Symbol;
+  ULONG SymbolGroup;
+  ULONG Flags;
+} IMAGE_DYNAMIC_RELOCATION64_V2, *PIMAGE_DYNAMIC_RELOCATION64_V2;
+#pragma pack(pop)
+
+typedef struct _IMAGE_PROLOGUE_DYNAMIC_RELOCATION_HEADER {
+  UCHAR PrologueByteCount;
+} IMAGE_PROLOGUE_DYNAMIC_RELOCATION_HEADER;
+
+#pragma pack(push, 1)
+typedef struct _IMAGE_EPILOGUE_DYNAMIC_RELOCATION_HEADER {
+  ULONG EpilogueCount;
+  UCHAR EpilogueByteCount;
+  UCHAR BranchDescriptorElementSize;
+  USHORT BranchDescriptorCount;
+} IMAGE_EPILOGUE_DYNAMIC_RELOCATION_HEADER;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IMAGE_IMPORT_CONTROL_TRANSFER_DYNAMIC_RELOCATION {
+  ULONG PageRelativeOffset : 12;
+  ULONG IndirectCall : 1;
+  ULONG IATIndex : 19;
+} IMAGE_IMPORT_CONTROL_TRANSFER_DYNAMIC_RELOCATION;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IMAGE_IMPORT_CONTROL_TRANSFER_ARM64_RELOCATION {
+  ULONG PageRelativeOffset : 10;
+  ULONG IndirectCall : 1;
+  ULONG RegisterIndex : 5;
+  ULONG ImportType : 1;
+  ULONG IATIndex : 15;
+} IMAGE_IMPORT_CONTROL_TRANSFER_ARM64_RELOCATION;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IMAGE_INDIR_CONTROL_TRANSFER_DYNAMIC_RELOCATION {
+  USHORT PageRelativeOffset : 12;
+  USHORT IndirectCall : 1;
+  USHORT RexWPrefix : 1;
+  USHORT CfgCheck : 1;
+  USHORT Reserved : 1;
+} IMAGE_INDIR_CONTROL_TRANSFER_DYNAMIC_RELOCATION;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IMAGE_SWITCHTABLE_BRANCH_DYNAMIC_RELOCATION {
+  USHORT PageRelativeOffset : 12;
+  USHORT RegisterNumber : 4;
+} IMAGE_SWITCHTABLE_BRANCH_DYNAMIC_RELOCATION;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IMAGE_FUNCTION_OVERRIDE_HEADER {
+  ULONG FuncOverrideSize;
+} IMAGE_FUNCTION_OVERRIDE_HEADER;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IMAGE_FUNCTION_OVERRIDE_DYNAMIC_RELOCATION {
+  ULONG OriginalRva;
+  ULONG BDDOffset;
+  ULONG RvaSize;
+  ULONG BaseRelocSize;
+} IMAGE_FUNCTION_OVERRIDE_DYNAMIC_RELOCATION;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IMAGE_BDD_INFO {
+  ULONG Version;
+  ULONG BDDSize;
+} IMAGE_BDD_INFO;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _IMAGE_BDD_DYNAMIC_RELOCATION {
+  USHORT Left;
+  USHORT Right;
+  ULONG Value;
+} IMAGE_BDD_DYNAMIC_RELOCATION;
+#pragma pack(pop)
+
+typedef struct _IMAGE_CHPE_METADATA_X86 {
+  ULONG Version;
+  ULONG CHPECodeAddressRangeOffset;
+  ULONG CHPECodeAddressRangeCount;
+  ULONG WowA64ExceptionHandlerFunctionPointer;
+  ULONG WowA64DispatchCallFunctionPointer;
+  ULONG WowA64DispatchIndirectCallFunctionPointer;
+  ULONG WowA64DispatchIndirectCallCfgFunctionPointer;
+  ULONG WowA64DispatchRetFunctionPointer;
+  ULONG WowA64DispatchRetLeafFunctionPointer;
+  ULONG WowA64DispatchJumpFunctionPointer;
+  ULONG CompilerIATPointer;
+  ULONG WowA64RdtscFunctionPointer;
+} IMAGE_CHPE_METADATA_X86, *PIMAGE_CHPE_METADATA_X86;
+
+typedef struct _IMAGE_ARM64EC_METADATA {
+  ULONG Version;
+  ULONG CodeMap;
+  ULONG CodeMapCount;
+  ULONG CodeRangesToEntryPoints;
+  ULONG RedirectionMetadata;
+  ULONG tbd__os_arm64x_dispatch_call_no_redirect;
+  ULONG tbd__os_arm64x_dispatch_ret;
+  ULONG tbd__os_arm64x_dispatch_call;
+  ULONG tbd__os_arm64x_dispatch_icall;
+  ULONG tbd__os_arm64x_dispatch_icall_cfg;
+  ULONG AlternateEntryPoint;
+  ULONG AuxiliaryIAT;
+  ULONG CodeRangesToEntryPointsCount;
+  ULONG RedirectionMetadataCount;
+  ULONG GetX64InformationFunctionPointer;
+  ULONG SetX64InformationFunctionPointer;
+  ULONG ExtraRFETable;
+  ULONG ExtraRFETableSize;
+  ULONG __os_arm64x_dispatch_fptr;
+  ULONG AuxiliaryIATCopy;
+} IMAGE_ARM64EC_METADATA;
+
+typedef struct _IMAGE_ARM64EC_METADATA_V2 {
+  ULONG Version;
+  ULONG CodeMap;
+  ULONG CodeMapCount;
+  ULONG CodeRangesToEntryPoints;
+  ULONG RedirectionMetadata;
+  ULONG tbd__os_arm64x_dispatch_call_no_redirect;
+  ULONG tbd__os_arm64x_dispatch_ret;
+  ULONG tbd__os_arm64x_dispatch_call;
+  ULONG tbd__os_arm64x_dispatch_icall;
+  ULONG tbd__os_arm64x_dispatch_icall_cfg;
+  ULONG AlternateEntryPoint;
+  ULONG AuxiliaryIAT;
+  ULONG CodeRangesToEntryPointsCount;
+  ULONG RedirectionMetadataCount;
+  ULONG GetX64InformationFunctionPointer;
+  ULONG SetX64InformationFunctionPointer;
+  ULONG ExtraRFETable;
+  ULONG ExtraRFETableSize;
+  ULONG __os_arm64x_dispatch_fptr;
+  ULONG AuxiliaryIATCopy;
+  ULONG AuxDelayloadIAT;
+  ULONG AuxDelayloadIATCopy;
+  ULONG ReservedBitField;
+} IMAGE_ARM64EC_METADATA_V2;
+
+typedef struct _IMAGE_ARM64EC_REDIRECTION_ENTRY {
+  ULONG Source;
+  ULONG Destination;
+} IMAGE_ARM64EC_REDIRECTION_ENTRY;
+
+typedef struct _IMAGE_ARM64EC_CODE_RANGE_ENTRY_POINT {
+  ULONG StartRva;
+  ULONG EndRva;
+  ULONG EntryPoint;
+} IMAGE_ARM64EC_CODE_RANGE_ENTRY_POINT;
+
+typedef struct _IMAGE_DVRT_ARM64X_FIXUP_RECORD {
+  USHORT Offset : 12;
+  USHORT Type : 2;
+  USHORT Size : 2;
+} IMAGE_DVRT_ARM64X_FIXUP_RECORD, *PIMAGE_DVRT_ARM64X_FIXUP_RECORD;
+
+typedef struct _IMAGE_DVRT_ARM64X_DELTA_FIXUP_RECORD {
+  USHORT Offset : 12;
+  USHORT Type : 2;
+  USHORT Sign : 1;
+  USHORT Scale : 1;
+} IMAGE_DVRT_ARM64X_DELTA_FIXUP_RECORD, *PIMAGE_DVRT_ARM64X_DELTA_FIXUP_RECORD;
+
+typedef struct _IMAGE_HOT_PATCH_INFO {
+  ULONG Version;
+  ULONG Size;
+  ULONG SequenceNumber;
+  ULONG BaseImageList;
+  ULONG BaseImageCount;
+  ULONG BufferOffset;
+  ULONG ExtraPatchSize;
+  ULONG MinSequenceNumber;
+  ULONG Flags;
+} IMAGE_HOT_PATCH_INFO, *PIMAGE_HOT_PATCH_INFO;
+
+typedef struct _IMAGE_HOT_PATCH_BASE {
+  ULONG SequenceNumber;
+  ULONG Flags;
+  ULONG OriginalTimeDateStamp;
+  ULONG OriginalCheckSum;
+  ULONG CodeIntegrityInfo;
+  ULONG CodeIntegritySize;
+  ULONG PatchTable;
+  ULONG BufferOffset;
+} IMAGE_HOT_PATCH_BASE, *PIMAGE_HOT_PATCH_BASE;
+
+typedef struct _IMAGE_HOT_PATCH_HASHES {
+  UCHAR SHA256[32];
+  UCHAR SHA1[20];
+} IMAGE_HOT_PATCH_HASHES, *PIMAGE_HOT_PATCH_HASHES;
+
+typedef struct _IMAGE_CE_RUNTIME_FUNCTION_ENTRY {
+  ULONG FuncStart;
+  ULONG PrologLen : 8;
+  ULONG FuncLen : 22;
+  ULONG ThirtyTwoBit : 1;
+  ULONG ExceptionFlag : 1;
+} IMAGE_CE_RUNTIME_FUNCTION_ENTRY, *PIMAGE_CE_RUNTIME_FUNCTION_ENTRY;
+
+#pragma pack(push, 4)
+typedef struct _IMAGE_ALPHA64_RUNTIME_FUNCTION_ENTRY {
+  ULONGLONG BeginAddress;
+  ULONGLONG EndAddress;
+  ULONGLONG ExceptionHandler;
+  ULONGLONG HandlerData;
+  ULONGLONG PrologEndAddress;
+} IMAGE_ALPHA64_RUNTIME_FUNCTION_ENTRY, *PIMAGE_ALPHA64_RUNTIME_FUNCTION_ENTRY;
+#pragma pack(pop)
+
+typedef struct _IMAGE_ALPHA_RUNTIME_FUNCTION_ENTRY {
+  ULONG BeginAddress;
+  ULONG EndAddress;
+  ULONG ExceptionHandler;
+  ULONG HandlerData;
+  ULONG PrologEndAddress;
+} IMAGE_ALPHA_RUNTIME_FUNCTION_ENTRY, *PIMAGE_ALPHA_RUNTIME_FUNCTION_ENTRY;
+
+typedef struct _IMAGE_ENCLAVE_CONFIG32 {
+  ULONG Size;
+  ULONG MinimumRequiredConfigSize;
+  ULONG PolicyFlags;
+  ULONG NumberOfImports;
+  ULONG ImportList;
+  ULONG ImportEntrySize;
+  UCHAR FamilyID[16];
+  UCHAR ImageID[16];
+  ULONG ImageVersion;
+  ULONG SecurityVersion;
+  ULONG EnclaveSize;
+  ULONG NumberOfThreads;
+  ULONG EnclaveFlags;
+} IMAGE_ENCLAVE_CONFIG32, *PIMAGE_ENCLAVE_CONFIG32;
+
+#pragma pack(push, 4)
+typedef struct _IMAGE_ENCLAVE_CONFIG64 {
+  ULONG Size;
+  ULONG MinimumRequiredConfigSize;
+  ULONG PolicyFlags;
+  ULONG NumberOfImports;
+  ULONG ImportList;
+  ULONG ImportEntrySize;
+  UCHAR FamilyID[16];
+  UCHAR ImageID[16];
+  ULONG ImageVersion;
+  ULONG SecurityVersion;
+  ULONGLONG EnclaveSize;
+  ULONG NumberOfThreads;
+  ULONG EnclaveFlags;
+} IMAGE_ENCLAVE_CONFIG64, *PIMAGE_ENCLAVE_CONFIG64;
+#pragma pack(pop)
+
+typedef struct _IMAGE_ENCLAVE_IMPORT {
+  ULONG MatchType;
+  ULONG MinimumSecurityVersion;
+  UCHAR UniqueOrAuthorID[32];
+  UCHAR FamilyID[16];
+  UCHAR ImageID[16];
+  ULONG ImportName;
+  ULONG Reserved;
+} IMAGE_ENCLAVE_IMPORT, *PIMAGE_ENCLAVE_IMPORT;
+
+#pragma pack(push, 4)
+typedef struct _NON_PAGED_DEBUG_INFO {
+  USHORT Signature;
+  USHORT Flags;
+  ULONG Size;
+  USHORT Machine;
+  USHORT Characteristics;
+  ULONG TimeDateStamp;
+  ULONG CheckSum;
+  ULONG SizeOfImage;
+  ULONGLONG ImageBase;
+} NON_PAGED_DEBUG_INFO, *PNON_PAGED_DEBUG_INFO;
+#pragma pack(pop)
+
+typedef struct _ImageArchitectureEntry {
+  ULONG FixupInstRVA;
+  ULONG NewInst;
+} IMAGE_ARCHITECTURE_ENTRY, *PIMAGE_ARCHITECTURE_ENTRY;
+
+typedef struct _PATCH_MAIN_CALLOUT_PARAMS {
+  ULONG Version;
+  ULONG PatchPhase;
+  ULONG Flags;
+} PATCH_MAIN_CALLOUT_PARAMS, *PPATCH_MAIN_CALLOUT_PARAMS;
+
 #endif /* _NTIMAGE_ */

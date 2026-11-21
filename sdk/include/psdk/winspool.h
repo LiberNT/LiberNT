@@ -1868,4 +1868,83 @@ typedef struct _FORM_INFO_2A * LPFORM_INFO_2A;
 typedef struct _FORM_INFO_2W * LPFORM_INFO_2W;
 typedef LPFORM_INFO_2A LPFORM_INFO_2;
 
+typedef struct _JOB_INFO_4A {
+  DWORD JobId;
+  LPSTR pPrinterName;
+  LPSTR pMachineName;
+  LPSTR pUserName;
+  LPSTR pDocument;
+  LPSTR pNotifyName;
+  LPSTR pDatatype;
+  LPSTR pPrintProcessor;
+  LPSTR pParameters;
+  LPSTR pDriverName;
+  LPDEVMODEA pDevMode;
+  LPSTR pStatus;
+  PSECURITY_DESCRIPTOR pSecurityDescriptor;
+  DWORD Status;
+  DWORD Priority;
+  DWORD Position;
+  DWORD StartTime;
+  DWORD UntilTime;
+  DWORD TotalPages;
+  DWORD Size;
+  SYSTEMTIME Submitted;
+  DWORD Time;
+  DWORD PagesPrinted;
+  LONG SizeHigh;
+} JOB_INFO_4A, *PJOB_INFO_4A, *LPJOB_INFO_4A;
+
+typedef struct _JOB_INFO_4W {
+  DWORD JobId;
+  LPWSTR pPrinterName;
+  LPWSTR pMachineName;
+  LPWSTR pUserName;
+  LPWSTR pDocument;
+  LPWSTR pNotifyName;
+  LPWSTR pDatatype;
+  LPWSTR pPrintProcessor;
+  LPWSTR pParameters;
+  LPWSTR pDriverName;
+  LPDEVMODEW pDevMode;
+  LPWSTR pStatus;
+  PSECURITY_DESCRIPTOR pSecurityDescriptor;
+  DWORD Status;
+  DWORD Priority;
+  DWORD Position;
+  DWORD StartTime;
+  DWORD UntilTime;
+  DWORD TotalPages;
+  DWORD Size;
+  SYSTEMTIME Submitted;
+  DWORD Time;
+  DWORD PagesPrinted;
+  LONG SizeHigh;
+} JOB_INFO_4W, *PJOB_INFO_4W, *LPJOB_INFO_4W;
+
+typedef struct _PRINTER_OPTIONSA {
+  UINT cbSize;
+  DWORD dwFlags;
+} PRINTER_OPTIONSA, *PPRINTER_OPTIONSA, *LPPRINTER_OPTIONSA;
+
+typedef struct _PRINTER_OPTIONSW {
+  UINT cbSize;
+  DWORD dwFlags;
+} PRINTER_OPTIONSW, *PPRINTER_OPTIONSW, *LPPRINTER_OPTIONSW;
+
+typedef struct _PRINTER_CONNECTION_INFO_1A {
+  DWORD dwFlags;
+  LPSTR pszDriverName;
+} PRINTER_CONNECTION_INFO_1A, *PPRINTER_CONNECTION_INFO_1A;
+
+typedef struct _PRINTER_CONNECTION_INFO_1W {
+  DWORD dwFlags;
+  LPWSTR pszDriverName;
+} PRINTER_CONNECTION_INFO_1W, *PPRINTER_CONNECTION_INFO_1W;
+
+typedef struct PRINT_EXECUTION_DATA {
+  PRINT_EXECUTION_CONTEXT context;
+  DWORD clientAppPID;
+} PRINT_EXECUTION_DATA;
+
 #endif

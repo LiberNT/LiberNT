@@ -793,6 +793,86 @@ BOOL WINAPI FaxStartPrintJobW(LPCWSTR PrinterName, CONST FAX_PRINT_INFOW *PrintI
 #define FEI_SENDING 0x00000002
 #endif
 
+typedef struct _FAX_COVERPAGE_INFOA {
+  DWORD SizeOfStruct;
+  LPCSTR CoverPageName;
+  BOOL UseServerCoverPage;
+  LPCSTR RecName;
+  LPCSTR RecFaxNumber;
+  LPCSTR RecCompany;
+  LPCSTR RecStreetAddress;
+  LPCSTR RecCity;
+  LPCSTR RecState;
+  LPCSTR RecZip;
+  LPCSTR RecCountry;
+  LPCSTR RecTitle;
+  LPCSTR RecDepartment;
+  LPCSTR RecOfficeLocation;
+  LPCSTR RecHomePhone;
+  LPCSTR RecOfficePhone;
+  LPCSTR SdrName;
+  LPCSTR SdrFaxNumber;
+  LPCSTR SdrCompany;
+  LPCSTR SdrAddress;
+  LPCSTR SdrTitle;
+  LPCSTR SdrDepartment;
+  LPCSTR SdrOfficeLocation;
+  LPCSTR SdrHomePhone;
+  LPCSTR SdrOfficePhone;
+  LPCSTR Note;
+  LPCSTR Subject;
+  SYSTEMTIME TimeSent;
+  DWORD PageCount;
+} FAX_COVERPAGE_INFOA, *PFAX_COVERPAGE_INFOA;
+
+typedef struct _FAX_COVERPAGE_INFOW {
+  DWORD SizeOfStruct;
+  LPCWSTR CoverPageName;
+  BOOL UseServerCoverPage;
+  LPCWSTR RecName;
+  LPCWSTR RecFaxNumber;
+  LPCWSTR RecCompany;
+  LPCWSTR RecStreetAddress;
+  LPCWSTR RecCity;
+  LPCWSTR RecState;
+  LPCWSTR RecZip;
+  LPCWSTR RecCountry;
+  LPCWSTR RecTitle;
+  LPCWSTR RecDepartment;
+  LPCWSTR RecOfficeLocation;
+  LPCWSTR RecHomePhone;
+  LPCWSTR RecOfficePhone;
+  LPCWSTR SdrName;
+  LPCWSTR SdrFaxNumber;
+  LPCWSTR SdrCompany;
+  LPCWSTR SdrAddress;
+  LPCWSTR SdrTitle;
+  LPCWSTR SdrDepartment;
+  LPCWSTR SdrOfficeLocation;
+  LPCWSTR SdrHomePhone;
+  LPCWSTR SdrOfficePhone;
+  LPCWSTR Note;
+  LPCWSTR Subject;
+  SYSTEMTIME TimeSent;
+  DWORD PageCount;
+} FAX_COVERPAGE_INFOW, *PFAX_COVERPAGE_INFOW;
+
+typedef struct _FAX_EVENTA {
+  DWORD SizeOfStruct;
+  FILETIME TimeStamp;
+  DWORD DeviceId;
+  DWORD EventId;
+  DWORD JobId;
+} FAX_EVENTA, *PFAX_EVENTA;
+
+typedef struct _FAX_EVENTW {
+  DWORD SizeOfStruct;
+  FILETIME TimeStamp;
+  DWORD DeviceId;
+  DWORD EventId;
+  DWORD JobId;
+} FAX_EVENTW, *PFAX_EVENTW;
+
 #endif /* __WINFAX_H */
 
 /* EOF */

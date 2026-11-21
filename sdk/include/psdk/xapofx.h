@@ -72,4 +72,49 @@ DEFINE_GUID(CLSID_FXEcho, 0x5039d740, 0xf736, 0x449a, 0x84, 0xd3, 0xa5, 0x62, 0x
 #define FXMASTERINGLIMITER_MIN_RELEASE 1
 #endif
 
+#pragma pack(push, 1)
+typedef struct FXEQ_PARAMETERS {
+  float FrequencyCenter0;
+  float Gain0;
+  float Bandwidth0;
+  float FrequencyCenter1;
+  float Gain1;
+  float Bandwidth1;
+  float FrequencyCenter2;
+  float Gain2;
+  float Bandwidth2;
+  float FrequencyCenter3;
+  float Gain3;
+  float Bandwidth3;
+} FXEQ_PARAMETERS;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct FXMASTERINGLIMITER_PARAMETERS {
+  UINT32 Release;
+  UINT32 Loudness;
+} FXMASTERINGLIMITER_PARAMETERS;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct FXREVERB_PARAMETERS {
+  float Diffusion;
+  float RoomSize;
+} FXREVERB_PARAMETERS;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct FXECHO_INITDATA {
+  float MaxDelay;
+} FXECHO_INITDATA;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct FXECHO_PARAMETERS {
+  float WetDryMix;
+  float Feedback;
+  float Delay;
+} FXECHO_PARAMETERS;
+#pragma pack(pop)
+
 #endif

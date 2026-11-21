@@ -2,6 +2,34 @@
 
 #ifndef DECLSPEC_EXPORT
 #define DECLSPEC_EXPORT __declspec(dllexport)
+typedef struct USBDI_HANDLE__ {
+  int unused;
+} *USBDI_HANDLE;
+
+typedef struct _COMPOSITE_DEVICE_CAPABILITIES {
+  ULONG CapabilityFunctionSuspend : 1;
+  ULONG Reserved : 31;
+} COMPOSITE_DEVICE_CAPABILITIES, *PCOMPOSITE_DEVICE_CAPABILITIES;
+
+typedef struct _REGISTER_COMPOSITE_DEVICE {
+  USHORT Version;
+  USHORT Size;
+  USBDI_HANDLE Reserved;
+  COMPOSITE_DEVICE_CAPABILITIES CapabilityFlags;
+  ULONG FunctionCount;
+} REGISTER_COMPOSITE_DEVICE, *PREGISTER_COMPOSITE_DEVICE;
+
+typedef struct USBD_FUNCTION_HANDLE__ {
+  int unused;
+} *USBD_FUNCTION_HANDLE;
+
+typedef struct _REQUEST_REMOTE_WAKE_NOTIFICATION {
+  USHORT Version;
+  USHORT Size;
+  USBD_FUNCTION_HANDLE UsbdFunctionHandle;
+  ULONG Interface;
+} REQUEST_REMOTE_WAKE_NOTIFICATION, *PREQUEST_REMOTE_WAKE_NOTIFICATION;
+
 #endif
 
 typedef struct _USBD_INTERFACE_LIST_ENTRY {

@@ -168,6 +168,35 @@ typedef enum _SI_PAGE_ACTIVATED {
     SI_SHOW_CENTRAL_POLICY_ACTIVATED = 6
 } SI_PAGE_ACTIVATED;
 
+typedef struct _SID_INFO {
+  PSID pSid;
+  PWSTR pwzCommonName;
+  PWSTR pwzClass;
+  PWSTR pwzUPN;
+} SID_INFO, *PSID_INFO;
+
+typedef struct _SID_INFO_LIST {
+  ULONG cItems;
+  SID_INFO aSidInfo[1];
+} SID_INFO_LIST, *PSID_INFO_LIST;
+
+typedef struct _SECURITY_OBJECT {
+  PWSTR pwszName;
+  PVOID pData;
+  DWORD cbData;
+  PVOID pData2;
+  DWORD cbData2;
+  DWORD Id;
+  BOOLEAN fWellKnown;
+} SECURITY_OBJECT, *PSECURITY_OBJECT;
+
+typedef struct _EFFPERM_RESULT_LIST {
+  BOOLEAN fEvaluated;
+  ULONG cObjectTypeListLength;
+  OBJECT_TYPE_LIST * pObjectTypeList;
+  ACCESS_MASK * pGrantedAccessList;
+} EFFPERM_RESULT_LIST, *PEFFPERM_RESULT_LIST;
+
 #endif /* __ACLUI_H */
 
 /* EOF */

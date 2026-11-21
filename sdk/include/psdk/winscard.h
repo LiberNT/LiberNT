@@ -225,4 +225,11 @@ typedef enum READER_SEL_REQUEST_MATCH_TYPE {
     RSR_MATCH_TYPE_ALL_CARDS = 3
 } READER_SEL_REQUEST_MATCH_TYPE;
 
+typedef struct READER_SEL_RESPONSE {
+  DWORD cbReaderNameOffset;
+  DWORD cchReaderNameLength;
+  DWORD cbCardNameOffset;
+  DWORD cchCardNameLength;
+} READER_SEL_RESPONSE, *PREADER_SEL_RESPONSE;
+
 #endif  /* __WINE_WINSCARD_H */

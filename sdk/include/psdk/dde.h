@@ -96,4 +96,22 @@ LPARAM      WINAPI ReuseDDElParam(LPARAM,UINT,UINT,UINT_PTR,UINT_PTR);
 }
 #endif
 
+typedef struct DDELN {
+  unsigned short unused : 13;
+  unsigned short fRelease : 1;
+  unsigned short fDeferUpd : 1;
+  unsigned short fAckReq : 1;
+  short cfFormat;
+} DDELN;
+
+typedef struct DDEUP {
+  unsigned short unused : 12;
+  unsigned short fAck : 1;
+  unsigned short fRelease : 1;
+  unsigned short fReserved : 1;
+  unsigned short fAckReq : 1;
+  short cfFormat;
+  BYTE rgb[1];
+} DDEUP;
+
 #endif /* __WINE_DDE_H */

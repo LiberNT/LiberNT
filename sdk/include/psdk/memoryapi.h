@@ -252,4 +252,24 @@ HANDLE WINAPI CreateFileMapping2(HANDLE File, SECURITY_ATTRIBUTES * SecurityAttr
 }
 #endif
 
+typedef struct WIN32_MEMORY_PARTITION_INFORMATION {
+  ULONG Flags;
+  ULONG NumaNode;
+  ULONG Channel;
+  ULONG NumberOfNumaNodes;
+  ULONG64 ResidentAvailablePages;
+  ULONG64 CommittedPages;
+  ULONG64 CommitLimit;
+  ULONG64 PeakCommitment;
+  ULONG64 TotalNumberOfPages;
+  ULONG64 AvailablePages;
+  ULONG64 ZeroPages;
+  ULONG64 FreePages;
+  ULONG64 StandbyPages;
+  ULONG64 Reserved[16];
+  ULONG64 MaximumCommitLimit;
+  ULONG64 Reserved2;
+  ULONG PartitionId;
+} WIN32_MEMORY_PARTITION_INFORMATION;
+
 #endif

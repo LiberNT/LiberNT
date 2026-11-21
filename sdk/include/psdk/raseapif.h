@@ -309,5 +309,27 @@ RasEapGetIdentity(IN DWORD dwEapTypeId,
 #define RAS_EAP_FLAG_SERVER_VALIDATION_REQUIRED 0x02000000
 #endif
 
+typedef struct _LEGACY_IDENTITY_UI_PARAMS {
+  DWORD eapType;
+  DWORD dwFlags;
+  DWORD dwSizeofConnectionData;
+  BYTE * pConnectionData;
+  DWORD dwSizeofUserData;
+  BYTE * pUserData;
+  DWORD dwSizeofUserDataOut;
+  BYTE * pUserDataOut;
+  LPWSTR pwszIdentity;
+  DWORD dwError;
+} LEGACY_IDENTITY_UI_PARAMS;
+
+typedef struct _LEGACY_INTERACTIVE_UI_PARAMS {
+  DWORD eapType;
+  DWORD dwSizeofContextData;
+  BYTE * pContextData;
+  DWORD dwSizeofInteractiveUIData;
+  BYTE * pInteractiveUIData;
+  DWORD dwError;
+} LEGACY_INTERACTIVE_UI_PARAMS;
+
 #endif /* _RASEAPIF_ */
 

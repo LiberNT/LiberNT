@@ -285,4 +285,12 @@ MAPISENDMAILW MAPISendMailW;
 #define MAPI_UNREAD_ONLY 0x00000020
 #endif
 
+typedef struct MapiFileTagExt {
+  ULONG ulReserved;
+  ULONG cbTag;
+  LPBYTE lpTag;
+  ULONG cbEncoding;
+  LPBYTE lpEncoding;
+} MapiFileTagExt, *lpMapiFileTagExt;
+
 #endif /* MAPI_H */

@@ -235,4 +235,11 @@ BOOL WINAPI CryptSIPGetCaps(SIP_SUBJECTINFO *,SIP_CAP_SET *);
 #define SPC_RELAXED_PE_MARKER_CHECK 0x800
 #endif
 
+typedef struct MS_ADDINFO_DETACHEDSIG_ {
+  DWORD cbStruct;
+  HANDLE hSignatureFile;
+  DWORD cbSignatureObject;
+  BYTE * pbSignatureObject;
+} MS_ADDINFO_DETACHEDSIG, *PMS_ADDINFO_DETACHEDSIG;
+
 #endif  /* __WINE_MSSIP_H */

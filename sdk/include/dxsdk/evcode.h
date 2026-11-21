@@ -137,4 +137,9 @@
 #define VMR_RENDER_DEVICE_VIDMEM 0x02
 #endif
 
+typedef struct AM_WMT_EVENT_DATA {
+  HRESULT hrStatus;
+  void * pData;
+} AM_WMT_EVENT_DATA;
+
 #endif /* __WINE_EVCODE_H */

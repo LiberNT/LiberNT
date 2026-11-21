@@ -337,4 +337,25 @@ PDH_STATUS WINAPI PdhConnectMachineA(LPCSTR szMachineName);
 }
 #endif
 
+typedef struct _PDH_STATISTICS {
+  DWORD dwFormat;
+  DWORD count;
+  PDH_FMT_COUNTERVALUE min;
+  PDH_FMT_COUNTERVALUE max;
+  PDH_FMT_COUNTERVALUE mean;
+} PDH_STATISTICS, *PPDH_STATISTICS;
+
+typedef struct _PDH_TIME_INFO {
+  LONGLONG StartTime;
+  LONGLONG EndTime;
+  DWORD SampleCount;
+} PDH_TIME_INFO, *PPDH_TIME_INFO;
+
+typedef struct _PDH_RAW_LOG_RECORD {
+  DWORD dwStructureSize;
+  DWORD dwRecordType;
+  DWORD dwItems;
+  UCHAR RawBytes[1];
+} PDH_RAW_LOG_RECORD, *PPDH_RAW_LOG_RECORD;
+
 #endif /* _PDH_H_ */

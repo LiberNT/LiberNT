@@ -1270,4 +1270,51 @@ typedef struct _D3DHAL_DRAWPRIMITIVESDATA D3DHAL_DRAWPRIMITIVESDATA;
 typedef struct _D3DHAL_CLEAR2DATA D3DHAL_CLEAR2DATA;
 typedef struct _D3DHAL_VALIDATETEXTURESTAGESTATEDATA D3DHAL_VALIDATETEXTURESTAGESTATEDATA;
 
+typedef struct _D3DHAL_D3DDX6EXTENDEDCAPS {
+  DWORD dwSize;
+  DWORD dwMinTextureWidth;
+  DWORD dwMaxTextureWidth;
+  DWORD dwMinTextureHeight;
+  DWORD dwMaxTextureHeight;
+  DWORD dwMinStippleWidth;
+  DWORD dwMaxStippleWidth;
+  DWORD dwMinStippleHeight;
+  DWORD dwMaxStippleHeight;
+  DWORD dwMaxTextureRepeat;
+  DWORD dwMaxTextureAspectRatio;
+  DWORD dwMaxAnisotropy;
+  D3DVALUE dvGuardBandLeft;
+  D3DVALUE dvGuardBandTop;
+  D3DVALUE dvGuardBandRight;
+  D3DVALUE dvGuardBandBottom;
+  D3DVALUE dvExtentsAdjust;
+  DWORD dwStencilCaps;
+  DWORD dwFVFCaps;
+  DWORD dwTextureOpCaps;
+  WORD wMaxTextureBlendStages;
+  WORD wMaxSimultaneousTextures;
+} D3DHAL_D3DDX6EXTENDEDCAPS;
+
+typedef struct _D3DHAL_DRAWPRIMCOUNTS {
+  WORD wNumStateChanges;
+  WORD wPrimitiveType;
+  WORD wVertexType;
+  WORD wNumVertices;
+} D3DHAL_DRAWPRIMCOUNTS, *LPD3DHAL_DRAWPRIMCOUNTS;
+
+typedef struct _D3DHAL_DP2SETCLIPPLANE {
+  DWORD dwIndex;
+  D3DVALUE plane[4];
+} D3DHAL_DP2SETCLIPPLANE;
+
+typedef struct _D3DHAL_DP2MULTIPLYTRANSFORM {
+  D3DTRANSFORMSTATETYPE xfrmType;
+  D3DMATRIX matrix;
+} D3DHAL_DP2MULTIPLYTRANSFORM;
+
+typedef struct _D3DHAL_DP2EXT {
+  DWORD dwExtToken;
+  DWORD dwSize;
+} D3DHAL_DP2EXT;
+
 #endif /* _D3DHAL_H_ */

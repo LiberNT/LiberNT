@@ -51,4 +51,8 @@ int         WINAPI DCICreatePrimary(HDC,LPDCISURFACEINFO*);
 #define WINWATCHNOTIFY_STOP 1
 #endif
 
+typedef struct HWINWATCH__ {
+  int unused;
+} *HWINWATCH;
+
 #endif /* _INC_DCIMAN */

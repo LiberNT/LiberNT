@@ -806,4 +806,43 @@ typedef enum _MSA_INFO_STATE {
     MsaInfoInstalled = 5
 } MSA_INFO_STATE, *PMSA_INFO_STATE;
 
+typedef struct _USER_INFO_24 {
+  BOOL usri24_internet_identity;
+  DWORD usri24_flags;
+  LPWSTR usri24_internet_provider_name;
+  LPWSTR usri24_internet_principal_name;
+  PSID usri24_user_sid;
+} USER_INFO_24, *PUSER_INFO_24, *LPUSER_INFO_24;
+
+typedef struct _MSA_INFO_0 {
+  MSA_INFO_STATE State;
+} MSA_INFO_0, *PMSA_INFO_0, *LPMSA_INFO_0;
+
+typedef struct _MSA_INFO_1 {
+  MSA_INFO_STATE State;
+  MSA_INFO_ACCOUNT_TYPE AccountType;
+} MSA_INFO_1, *PMSA_INFO_1, *LPMSA_INFO_1;
+
+typedef struct _NET_VALIDATE_AUTHENTICATION_INPUT_ARG {
+  NET_VALIDATE_PERSISTED_FIELDS InputPersistedFields;
+  BOOLEAN PasswordMatched;
+} NET_VALIDATE_AUTHENTICATION_INPUT_ARG, *PNET_VALIDATE_AUTHENTICATION_INPUT_ARG;
+
+typedef struct _NET_VALIDATE_PASSWORD_CHANGE_INPUT_ARG {
+  NET_VALIDATE_PERSISTED_FIELDS InputPersistedFields;
+  LPWSTR ClearPassword;
+  LPWSTR UserAccountName;
+  NET_VALIDATE_PASSWORD_HASH HashedPassword;
+  BOOLEAN PasswordMatch;
+} NET_VALIDATE_PASSWORD_CHANGE_INPUT_ARG, *PNET_VALIDATE_PASSWORD_CHANGE_INPUT_ARG;
+
+typedef struct _NET_VALIDATE_PASSWORD_RESET_INPUT_ARG {
+  NET_VALIDATE_PERSISTED_FIELDS InputPersistedFields;
+  LPWSTR ClearPassword;
+  LPWSTR UserAccountName;
+  NET_VALIDATE_PASSWORD_HASH HashedPassword;
+  BOOLEAN PasswordMustChangeAtNextLogon;
+  BOOLEAN ClearLockout;
+} NET_VALIDATE_PASSWORD_RESET_INPUT_ARG, *PNET_VALIDATE_PASSWORD_RESET_INPUT_ARG;
+
 #endif

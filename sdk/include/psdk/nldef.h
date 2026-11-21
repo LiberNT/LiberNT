@@ -186,5 +186,19 @@ typedef enum _NL_NETWORK_CONNECTIVITY_COST_HINT {
     NetworkConnectivityCostHintVariable = 3
 } NL_NETWORK_CONNECTIVITY_COST_HINT;
 
+typedef struct _NL_NETWORK_CONNECTIVITY_HINT {
+  NL_NETWORK_CONNECTIVITY_LEVEL_HINT ConnectivityLevel;
+  NL_NETWORK_CONNECTIVITY_COST_HINT ConnectivityCost;
+  BOOLEAN ApproachingDataLimit;
+  BOOLEAN OverDataLimit;
+  BOOLEAN Roaming;
+} NL_NETWORK_CONNECTIVITY_HINT;
+
+typedef struct _NL_BANDWIDTH_INFORMATION {
+  ULONG64 Bandwidth;
+  ULONG64 Instability;
+  BOOLEAN BandwidthPeaked;
+} NL_BANDWIDTH_INFORMATION, *PNL_BANDWIDTH_INFORMATION;
+
 #endif /* _NLDEF_ */
 

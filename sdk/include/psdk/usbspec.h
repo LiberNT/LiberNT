@@ -225,4 +225,19 @@
 #define USB_STATUS_PORT_STATUS 0x00
 #endif
 
+typedef struct _USB_DEVICE_CAPABILITY_DESCRIPTOR {
+  UCHAR bLength;
+  UCHAR bDescriptorType;
+  UCHAR bDevCapabilityType;
+} USB_DEVICE_CAPABILITY_DESCRIPTOR, *PUSB_DEVICE_CAPABILITY_DESCRIPTOR;
+
+#pragma pack(push, 1)
+typedef struct _EUSB2_ISOCH_ENDPOINT_COMPANION_DESCRIPTOR {
+  UCHAR bLength;
+  UCHAR bDescriptorType;
+  USHORT wMaxPacketSize;
+  ULONG dwBytesPerInterval;
+} EUSB2_ISOCH_ENDPOINT_COMPANION_DESCRIPTOR, *PEUSB2_ISOCH_ENDPOINT_COMPANION_DESCRIPTOR;
+#pragma pack(pop)
+
 #endif

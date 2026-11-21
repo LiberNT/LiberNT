@@ -1322,4 +1322,74 @@ typedef enum _RASPROJECTION_INFO_TYPE {
     PROJECTION_INFO_TYPE_IKEv2 = 2
 } RASPROJECTION_INFO_TYPE;
 
+struct tagRASPPPIPXA {
+  DWORD dwSize;
+  DWORD dwError;
+  CHAR szIpxAddress[22];
+};
+
+struct tagRASPPPIPV6 {
+  DWORD dwSize;
+  DWORD dwError;
+  BYTE bLocalInterfaceIdentifier[8];
+  BYTE bPeerInterfaceIdentifier[8];
+  BYTE bLocalCompressionProtocol[2];
+  BYTE bPeerCompressionProtocol[2];
+};
+
+typedef struct _RASPPP_PROJECTION_INFO {
+  DWORD dwIPv4NegotiationError;
+  RASIPV4ADDR ipv4Address;
+  RASIPV4ADDR ipv4ServerAddress;
+  DWORD dwIPv4Options;
+  DWORD dwIPv4ServerOptions;
+  DWORD dwIPv6NegotiationError;
+  BYTE bInterfaceIdentifier[8];
+  BYTE bServerInterfaceIdentifier[8];
+  BOOL fBundled;
+  BOOL fMultilink;
+  DWORD dwAuthenticationProtocol;
+  DWORD dwAuthenticationData;
+  DWORD dwServerAuthenticationProtocol;
+  DWORD dwServerAuthenticationData;
+  DWORD dwEapTypeId;
+  DWORD dwServerEapTypeId;
+  DWORD dwLcpOptions;
+  DWORD dwLcpServerOptions;
+  DWORD dwCcpError;
+  DWORD dwCcpCompressionAlgorithm;
+  DWORD dwCcpServerCompressionAlgorithm;
+  DWORD dwCcpOptions;
+  DWORD dwCcpServerOptions;
+} RASPPP_PROJECTION_INFO, *PRASPPP_PROJECTION_INFO;
+
+#pragma pack(push, 4)
+typedef struct _RASIKEV2_PROJECTION_INFO {
+  DWORD dwIPv4NegotiationError;
+  RASIPV4ADDR ipv4Address;
+  RASIPV4ADDR ipv4ServerAddress;
+  DWORD dwIPv6NegotiationError;
+  RASIPV6ADDR ipv6Address;
+  RASIPV6ADDR ipv6ServerAddress;
+  DWORD dwPrefixLength;
+  DWORD dwAuthenticationProtocol;
+  DWORD dwEapTypeId;
+  DWORD dwFlags;
+  DWORD dwEncryptionMethod;
+  DWORD numIPv4ServerAddresses;
+  RASIPV4ADDR * ipv4ServerAddresses;
+  DWORD numIPv6ServerAddresses;
+  RASIPV6ADDR * ipv6ServerAddresses;
+} RASIKEV2_PROJECTION_INFO, *PRASIKEV2_PROJECTION_INFO;
+#pragma pack(pop)
+
+struct tagRASUPDATECONN {
+  enum RASAPIVERSION version;
+  DWORD dwSize;
+  DWORD dwFlags;
+  DWORD dwIfIndex;
+  struct tagRASTUNNELENDPOINT localEndPoint;
+  struct tagRASTUNNELENDPOINT remoteEndPoint;
+};
+
 #endif /* _RAS_H */

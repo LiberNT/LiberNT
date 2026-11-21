@@ -1623,4 +1623,394 @@ typedef BYTE * LPDXVA_DPXD;
 typedef WORD DXVA_DCCMD;
 typedef WORD * LPDXVA_DCCMD;
 
+#pragma pack(push, 1)
+typedef struct _DXVA_ConnectMode {
+  GUID guidMode;
+  WORD wRestrictedMode;
+} DXVA_ConnectMode, *LPDXVA_ConnectMode;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _DXVA_EncryptProtocolHeader {
+  DXVA_EncryptProtocolFunc dwFunction;
+  DWORD ReservedBits[3];
+  GUID guidEncryptProtocol;
+} DXVA_EncryptProtocolHeader, *LPDXVA_EncryptProtocolHeader;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _DXVA_ConfigPictureDecode {
+  DXVA_ConfigQueryOrReplyFunc dwFunction;
+  DWORD dwReservedBits[3];
+  GUID guidConfigBitstreamEncryption;
+  GUID guidConfigMBcontrolEncryption;
+  GUID guidConfigResidDiffEncryption;
+  BYTE bConfigBitstreamRaw;
+  BYTE bConfigMBcontrolRasterOrder;
+  BYTE bConfigResidDiffHost;
+  BYTE bConfigSpatialResid8;
+  BYTE bConfigResid8Subtraction;
+  BYTE bConfigSpatialHost8or9Clipping;
+  BYTE bConfigSpatialResidInterleaved;
+  BYTE bConfigIntraResidUnsigned;
+  BYTE bConfigResidDiffAccelerator;
+  BYTE bConfigHostInverseScan;
+  BYTE bConfigSpecificIDCT;
+  BYTE bConfig4GroupedCoefs;
+} DXVA_ConfigPictureDecode, *LPDXVA_ConfigPictureDecode;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _DXVA_PicResample {
+  WORD wPicResampleSourcePicIndex;
+  WORD wPicResampleDestPicIndex;
+  WORD wPicResampleRcontrol;
+  BYTE bPicResampleExtrapWidth;
+  BYTE bPicResampleExtrapHeight;
+  DWORD dwPicResampleSourceWidth;
+  DWORD dwPicResampleSourceHeight;
+  DWORD dwPicResampleDestWidth;
+  DWORD dwPicResampleDestHeight;
+  DWORD dwPicResampleFullDestWidth;
+  DWORD dwPicResampleFullDestHeight;
+} DXVA_PicResample, *LPDXVA_PicResample;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _DXVA_BufferDescription {
+  DWORD dwTypeIndex;
+  DWORD dwBufferIndex;
+  DWORD dwDataOffset;
+  DWORD dwDataSize;
+  DWORD dwFirstMBaddress;
+  DWORD dwNumMBsInBuffer;
+  DWORD dwWidth;
+  DWORD dwHeight;
+  DWORD dwStride;
+  DWORD dwReservedBits;
+} DXVA_BufferDescription, *LPDXVA_BufferDescription;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _DXVA_TCoef4Group {
+  BYTE TCoefIDX[4];
+  SHORT TCoefValue[4];
+} DXVA_TCoef4Group, *LPDXVA_TCoef4Group;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _DXVA_TCoefSingle {
+  WORD wIndexWithEOB;
+  SHORT TCoefValue;
+} DXVA_TCoefSingle, *LPDXVA_TCoefSingle;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _DXVA_MVvalue {
+  SHORT horz;
+  SHORT vert;
+} DXVA_MVvalue, *LPDXVA_MVvalue;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _DXVA_MBctrl_I_HostResidDiff_1 {
+  WORD wMBaddress;
+  WORD wMBtype;
+  DWORD dwMB_SNL;
+  WORD wPatternCode;
+  WORD wPC_Overflow;
+  DWORD dwReservedBits2;
+} DXVA_MBctrl_I_HostResidDiff_1;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _DXVA_MBctrl_I_OffHostIDCT_1 {
+  WORD wMBaddress;
+  WORD wMBtype;
+  DWORD dwMB_SNL;
+  WORD wPatternCode;
+  BYTE bNumCoef[6];
+} DXVA_MBctrl_I_OffHostIDCT_1;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _DXVA_MBctrl_P_HostResidDiff_1 {
+  WORD wMBaddress;
+  WORD wMBtype;
+  DWORD dwMB_SNL;
+  WORD wPatternCode;
+  WORD wPC_Overflow;
+  DWORD dwReservedBits2;
+  DXVA_MVvalue MVector[4];
+} DXVA_MBctrl_P_HostResidDiff_1;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _DXVA_MBctrl_P_OffHostIDCT_1 {
+  WORD wMBaddress;
+  WORD wMBtype;
+  DWORD dwMB_SNL;
+  WORD wPatternCode;
+  BYTE bNumCoef[6];
+  DXVA_MVvalue MVector[4];
+} DXVA_MBctrl_P_OffHostIDCT_1;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _DXVA_ConfigAlphaLoad {
+  DXVA_ConfigQueryOrReplyFunc dwFunction;
+  DWORD dwReservedBits[3];
+  BYTE bConfigDataType;
+} DXVA_ConfigAlphaLoad, *LPDXVA_ConfigAlphaLoad;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _DXVA_ConfigAlphaCombine {
+  DXVA_ConfigQueryOrReplyFunc dwFunction;
+  DWORD dwReservedBits[3];
+  BYTE bConfigBlendType;
+  BYTE bConfigPictureResizing;
+  BYTE bConfigOnlyUsePicDestRectArea;
+  BYTE bConfigGraphicResizing;
+  BYTE bConfigWholePlaneAlpha;
+} DXVA_ConfigAlphaCombine, *LPDXVA_ConfigAlphaCombine;
+#pragma pack(pop)
+
+typedef struct _DXVA_AYUVsample2 {
+  BYTE bCrValue;
+  BYTE bCbValue;
+  BYTE bY_Value;
+  BYTE bSampleAlpha8;
+} DXVA_AYUVsample2, *LPDXVA_AYUVsample2;
+
+#pragma pack(push, 1)
+typedef struct _DXVA_Highlight {
+  WORD wHighlightActive;
+  WORD wHighlightIndices;
+  WORD wHighlightAlphas;
+  RECT HighlightRect;
+} DXVA_Highlight, *LPDXVA_Highlight;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _DXVA_BlendCombination {
+  WORD wPictureSourceIndex;
+  WORD wBlendedDestinationIndex;
+  RECT PictureSourceRect16thPel;
+  RECT PictureDestinationRect;
+  RECT GraphicSourceRect;
+  RECT GraphicDestinationRect;
+  WORD wBlendDelay;
+  BYTE bBlendOn;
+  BYTE bWholePlaneAlpha;
+  DXVA_AYUVsample2 OutsideYUVcolor;
+} DXVA_BlendCombination, *LPDXVA_BlendCombination;
+#pragma pack(pop)
+
+typedef struct _DXVA_DeblockIndexAB_H264 {
+  UCHAR bIndexAinternal;
+  UCHAR bIndexBinternal;
+  UCHAR bIndexAleft0;
+  UCHAR bIndexBleft0;
+  UCHAR bIndexAleft1;
+  UCHAR bIndexBleft1;
+  UCHAR bIndexAtop0;
+  UCHAR bIndexBtop0;
+  UCHAR bIndexAtop1;
+  UCHAR bIndexBtop1;
+} DXVA_DeblockIndexAB_H264, *LPDXVA_DeblockIndexAB_H264;
+
+#pragma pack(push, 1)
+typedef struct _DXVA_Status_VC1 {
+  USHORT StatusReportFeedbackNumber;
+  WORD wDecodedPictureIndex;
+  WORD wDeblockedPictureIndex;
+  UCHAR bPicStructure;
+  UCHAR bBufType;
+  UCHAR bStatus;
+  UCHAR bReserved8Bits;
+  USHORT wNumMbsAffected;
+} DXVA_Status_VC1, *LPDXVA_Status_VC1;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _DXVA_Status_HEVC {
+  USHORT StatusReportFeedbackNumber;
+  DXVA_PicEntry_HEVC CurrPic;
+  UCHAR bBufType;
+  UCHAR bStatus;
+  UCHAR bReserved8Bits;
+  USHORT wNumMbsAffected;
+} DXVA_Status_HEVC, *LPDXVA_Status_HEVC;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _DXVA_PicParams_MJPEG {
+  UINT width;
+  UINT height;
+  UCHAR numComponents;
+  UCHAR bitDepth;
+  USHORT reserved16Bits;
+  UCHAR quantizationTableSelector[4];
+  UINT scanOffset[4];
+  UINT scanSize[4];
+  UCHAR componentIdentifier[4];
+  USHORT restartInterval;
+  USHORT reserved16Bits2;
+  UINT reserved32Bits;
+  UINT statusReportFeedbackNumber;
+} DXVA_PicParams_MJPEG, *LPDXVA_PicParams_MJPEG;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct _DXVA_QMatrix_MJPEG {
+  UINT16 quantvals[4][64];
+} DXVA_QMatrix_MJPEG, *LPDXVA_QMatrix_MJPEG;
+#pragma pack(pop)
+
+typedef struct _DXVA_HuffmanTable_MJPEG {
+  UINT8 bits_ac[4][16];
+  UINT8 table_ac[4][256];
+  UINT8 bits_dc[4][16];
+  UINT8 table_dc[4][256];
+} DXVA_HuffmanTable_MJPEG, *LPDXVA_HuffmanTable_MJPEG;
+
+typedef struct _DXVA_Qmatrix_APV {
+  UCHAR NumComponents;
+  UINT qmatrix_reserved_zero_32bits;
+  UCHAR QMatrix[4][8][8];
+  UINT64 qmatrix_reserved_zero_64bits;
+} DXVA_Qmatrix_APV, *LPDXVA_Qmatrix_APV;
+
+typedef struct _DXVA_Tile_APV {
+  UINT tile_data_offset;
+  UINT tile_total_size;
+  UINT tile_data_reserved_zero_32bits;
+  USHORT tile_index;
+  UINT32 tile_header_reserved_zero_32bits;
+  USHORT tile_header_size;
+  UINT tile_component_data_size[4];
+  UCHAR tile_component_qp[4];
+  UINT tile_component_qp_zero_32bits;
+} DXVA_Tile_APV, *LPDXVA_Tile_APV;
+
+typedef struct _DXVA_Frequency {
+  DWORD Numerator;
+  DWORD Denominator;
+} DXVA_Frequency;
+
+typedef struct _DXVA_DeinterlaceQueryAvailableModes {
+  DWORD Size;
+  DWORD NumGuids;
+  GUID Guids[32];
+} DXVA_DeinterlaceQueryAvailableModes;
+
+typedef struct _DXVA_VideoPropertyRange {
+  FLOAT MinValue;
+  FLOAT MaxValue;
+  FLOAT DefaultValue;
+  FLOAT StepSize;
+} DXVA_VideoPropertyRange, *LPDXVA_VideoPropertyRange;
+
+typedef struct _DXVA_ProcAmpControlBlt {
+  DWORD Size;
+  RECT DstRect;
+  RECT SrcRect;
+  FLOAT Alpha;
+  FLOAT Brightness;
+  FLOAT Contrast;
+  FLOAT Hue;
+  FLOAT Saturation;
+} DXVA_ProcAmpControlBlt;
+
+typedef struct _DXVA_COPPSignature {
+  UCHAR Signature[256];
+} DXVA_COPPSignature, *LPDXVA_COPPSignature;
+
+typedef struct _DXVA_COPPCommand {
+  GUID macKDI;
+  GUID guidCommandID;
+  ULONG dwSequence;
+  ULONG cbSizeData;
+  UCHAR CommandData[4056];
+} DXVA_COPPCommand, *LPDXVA_COPPCommand;
+
+typedef struct _DXVA_COPPSetProtectionLevelCmdData {
+  ULONG ProtType;
+  ULONG ProtLevel;
+  ULONG ExtendedInfoChangeMask;
+  ULONG ExtendedInfoData;
+} DXVA_COPPSetProtectionLevelCmdData;
+
+typedef struct _DXVA_COPPSetSignalingCmdData {
+  ULONG ActiveTVProtectionStandard;
+  ULONG AspectRatioChangeMask1;
+  ULONG AspectRatioData1;
+  ULONG AspectRatioChangeMask2;
+  ULONG AspectRatioData2;
+  ULONG AspectRatioChangeMask3;
+  ULONG AspectRatioData3;
+  ULONG ExtendedInfoChangeMask[4];
+  ULONG ExtendedInfoData[4];
+  ULONG Reserved;
+} DXVA_COPPSetSignalingCmdData;
+
+typedef struct _DXVA_COPPStatusInput {
+  GUID rApp;
+  GUID guidStatusRequestID;
+  ULONG dwSequence;
+  ULONG cbSizeData;
+  UCHAR StatusData[4056];
+} DXVA_COPPStatusInput, *LPDXVA_COPPStatusInput;
+
+typedef struct _DXVA_COPPStatusOutput {
+  GUID macKDI;
+  ULONG cbSizeData;
+  UCHAR COPPStatus[4076];
+} DXVA_COPPStatusOutput, *LPDXVA_COPPStatusOutput;
+
+typedef struct _DXVA_COPPStatusData {
+  GUID rApp;
+  ULONG dwFlags;
+  ULONG dwData;
+  ULONG ExtendedInfoValidMask;
+  ULONG ExtendedInfoData;
+} DXVA_COPPStatusData;
+
+typedef struct _DXVA_COPPStatusDisplayData {
+  GUID rApp;
+  ULONG dwFlags;
+  ULONG DisplayWidth;
+  ULONG DisplayHeight;
+  ULONG Format;
+  ULONG d3dFormat;
+  ULONG FreqNumerator;
+  ULONG FreqDenominator;
+} DXVA_COPPStatusDisplayData;
+
+typedef struct _DXVA_COPPStatusHDCPKeyData {
+  GUID rApp;
+  ULONG dwFlags;
+  ULONG dwHDCPFlags;
+  GUID BKey;
+  GUID Reserved1;
+  GUID Reserved2;
+} DXVA_COPPStatusHDCPKeyData;
+
+typedef struct _DXVA_COPPStatusSignalingCmdData {
+  GUID rApp;
+  ULONG dwFlags;
+  ULONG AvailableTVProtectionStandards;
+  ULONG ActiveTVProtectionStandard;
+  ULONG TVType;
+  ULONG AspectRatioValidMask1;
+  ULONG AspectRatioData1;
+  ULONG AspectRatioValidMask2;
+  ULONG AspectRatioData2;
+  ULONG AspectRatioValidMask3;
+  ULONG AspectRatioData3;
+  ULONG ExtendedInfoValidMask[4];
+  ULONG ExtendedInfoData[4];
+} DXVA_COPPStatusSignalingCmdData;
+
 #endif /* __WINE_DXVA_H */

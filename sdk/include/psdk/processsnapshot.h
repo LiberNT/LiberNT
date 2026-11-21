@@ -372,4 +372,91 @@ typedef enum PSS_THREAD_FLAGS {
     PSS_THREAD_FLAGS_TERMINATED = 1
 } PSS_THREAD_FLAGS;
 
+typedef struct HPSSWALK__ {
+  int unused;
+} *HPSSWALK;
+
+typedef struct PSS_AUXILIARY_PAGES_INFORMATION {
+  DWORD AuxPagesCaptured;
+} PSS_AUXILIARY_PAGES_INFORMATION;
+
+typedef struct PSS_VA_SPACE_INFORMATION {
+  DWORD RegionCount;
+} PSS_VA_SPACE_INFORMATION;
+
+typedef struct PSS_HANDLE_INFORMATION {
+  DWORD HandlesCaptured;
+} PSS_HANDLE_INFORMATION;
+
+typedef struct PSS_HANDLE_TRACE_INFORMATION {
+  HANDLE SectionHandle;
+  DWORD Size;
+} PSS_HANDLE_TRACE_INFORMATION;
+
+typedef struct PSS_PERFORMANCE_COUNTERS {
+  UINT64 TotalCycleCount;
+  UINT64 TotalWallClockPeriod;
+  UINT64 VaCloneCycleCount;
+  UINT64 VaCloneWallClockPeriod;
+  UINT64 VaSpaceCycleCount;
+  UINT64 VaSpaceWallClockPeriod;
+  UINT64 AuxPagesCycleCount;
+  UINT64 AuxPagesWallClockPeriod;
+  UINT64 HandlesCycleCount;
+  UINT64 HandlesWallClockPeriod;
+  UINT64 ThreadsCycleCount;
+  UINT64 ThreadsWallClockPeriod;
+} PSS_PERFORMANCE_COUNTERS;
+
+typedef struct PSS_AUXILIARY_PAGE_ENTRY {
+  void * Address;
+  MEMORY_BASIC_INFORMATION BasicInformation;
+  FILETIME CaptureTime;
+  void * PageContents;
+  DWORD PageSize;
+} PSS_AUXILIARY_PAGE_ENTRY;
+
+typedef struct PSS_VA_SPACE_ENTRY {
+  void * BaseAddress;
+  void * AllocationBase;
+  DWORD AllocationProtect;
+  ULONG_PTR RegionSize;
+  DWORD State;
+  DWORD Protect;
+  DWORD Type;
+  DWORD TimeDateStamp;
+  DWORD SizeOfImage;
+  void * ImageBase;
+  DWORD CheckSum;
+  WORD MappedFileNameLength;
+  const wchar_t * MappedFileName;
+} PSS_VA_SPACE_ENTRY;
+
+typedef struct PSS_THREAD_ENTRY {
+  DWORD ExitStatus;
+  void * TebBaseAddress;
+  DWORD ProcessId;
+  DWORD ThreadId;
+  ULONG_PTR AffinityMask;
+  int Priority;
+  int BasePriority;
+  void * LastSyscallFirstArgument;
+  WORD LastSyscallNumber;
+  FILETIME CreateTime;
+  FILETIME ExitTime;
+  FILETIME KernelTime;
+  FILETIME UserTime;
+  void * Win32StartAddress;
+  FILETIME CaptureTime;
+  PSS_THREAD_FLAGS Flags;
+  WORD SuspendCount;
+  WORD SizeOfContextRecord;
+  PCONTEXT ContextRecord;
+} PSS_THREAD_ENTRY;
+
+typedef struct PSS_THREAD_NAME {
+  WORD ThreadNameSize;
+  const wchar_t * ThreadName;
+} PSS_THREAD_NAME;
+
 #endif

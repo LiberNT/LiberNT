@@ -53,4 +53,29 @@ DWORD WINAPI GetTempPath2A(DWORD BufferLength, LPSTR Buffer);
 }
 #endif
 
+typedef struct DISK_SPACE_INFORMATION {
+  ULONGLONG ActualTotalAllocationUnits;
+  ULONGLONG ActualAvailableAllocationUnits;
+  ULONGLONG ActualPoolUnavailableAllocationUnits;
+  ULONGLONG CallerTotalAllocationUnits;
+  ULONGLONG CallerAvailableAllocationUnits;
+  ULONGLONG CallerPoolUnavailableAllocationUnits;
+  ULONGLONG UsedAllocationUnits;
+  ULONGLONG TotalReservedAllocationUnits;
+  ULONGLONG VolumeStorageReserveAllocationUnits;
+  ULONGLONG AvailableCommittedAllocationUnits;
+  ULONGLONG PoolAvailableAllocationUnits;
+  DWORD SectorsPerAllocationUnit;
+  DWORD BytesPerSector;
+} DISK_SPACE_INFORMATION;
+
+typedef struct _CREATEFILE3_EXTENDED_PARAMETERS {
+  DWORD dwSize;
+  DWORD dwFileAttributes;
+  DWORD dwFileFlags;
+  DWORD dwSecurityQosFlags;
+  LPSECURITY_ATTRIBUTES lpSecurityAttributes;
+  HANDLE hTemplateFile;
+} CREATEFILE3_EXTENDED_PARAMETERS, *PCREATEFILE3_EXTENDED_PARAMETERS, *LPCREATEFILE3_EXTENDED_PARAMETERS;
+
 #endif  /* __WINE_FILEAPI_H */

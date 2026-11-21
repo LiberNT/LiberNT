@@ -177,4 +177,31 @@ INT WINAPI NormalizeFileForPatchSignature(PVOID, ULONG, ULONG, PATCH_OPTION_DATA
 #define PATCH_TRANSFORM_PE_RESOURCE_2 0x00000100
 #endif
 
+typedef struct _PATCH_OLD_FILE_INFO_A {
+  ULONG SizeOfThisStruct;
+  LPCSTR OldFileName;
+  ULONG IgnoreRangeCount;
+  PPATCH_IGNORE_RANGE IgnoreRangeArray;
+  ULONG RetainRangeCount;
+  PPATCH_RETAIN_RANGE RetainRangeArray;
+} PATCH_OLD_FILE_INFO_A, *PPATCH_OLD_FILE_INFO_A;
+
+typedef struct _PATCH_OLD_FILE_INFO_W {
+  ULONG SizeOfThisStruct;
+  LPCWSTR OldFileName;
+  ULONG IgnoreRangeCount;
+  PPATCH_IGNORE_RANGE IgnoreRangeArray;
+  ULONG RetainRangeCount;
+  PPATCH_RETAIN_RANGE RetainRangeArray;
+} PATCH_OLD_FILE_INFO_W, *PPATCH_OLD_FILE_INFO_W;
+
+typedef struct _PATCH_OLD_FILE_INFO_H {
+  ULONG SizeOfThisStruct;
+  HANDLE OldFileHandle;
+  ULONG IgnoreRangeCount;
+  PPATCH_IGNORE_RANGE IgnoreRangeArray;
+  ULONG RetainRangeCount;
+  PPATCH_RETAIN_RANGE RetainRangeArray;
+} PATCH_OLD_FILE_INFO_H, *PPATCH_OLD_FILE_INFO_H;
+
 #endif /* _PATCHAPI_H_ */

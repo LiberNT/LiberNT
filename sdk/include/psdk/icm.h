@@ -584,4 +584,17 @@ typedef PBMCALLBACKFN LPBMCALLBACKFN;
 typedef HANDLE HCMTRANSFORM;
 typedef PVOID LPDEVCHARACTER;
 
+struct WCS_DEVICE_VCGT_CAPABILITIES {
+  UINT Size;
+  BOOL SupportsVcgt;
+};
+
+struct WCS_DEVICE_MHC2_CAPABILITIES {
+  UINT Size;
+  BOOL SupportsMhc2;
+  UINT RegammaLutEntryCount;
+  UINT CscXyzMatrixRows;
+  UINT CscXyzMatrixColumns;
+};
+
 #endif /* __WINE_ICM_H */

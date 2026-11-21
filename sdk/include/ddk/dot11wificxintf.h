@@ -1551,4 +1551,10 @@ Wdi_NdisMIndicateStatusEx(
 #endif
 #pragma endregion
 
+typedef struct _MLO_LINK_INFO {
+  UINT32 LinkID;
+  WDI_MAC_ADDRESS StaLinkAddress;
+  WDI_MAC_ADDRESS APLinkAddress;
+} MLO_LINK_INFO, *PMLO_LINK_INFO;
+
 #endif

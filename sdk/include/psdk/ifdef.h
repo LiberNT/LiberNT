@@ -242,4 +242,9 @@ typedef struct _NDIS_INTERFACE_INFORMATION {
 typedef UINT32 NET_IF_COMPARTMENT_SCOPE;
 typedef UINT32 * PNET_IF_COMPARTMENT_SCOPE;
 
+typedef struct _NET_IF_ALIAS_LH {
+  USHORT ifAliasLength;
+  USHORT ifAliasOffset;
+} NET_IF_ALIAS_LH, *PNET_IF_ALIAS_LH;
+
 #endif /* WINE_IFDEF_H*/

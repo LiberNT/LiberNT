@@ -180,4 +180,8 @@ typedef struct _PCMCIA_INTERFACE_STANDARD {
 }
 #endif
 
+typedef struct _PCMCIA_SOCKET_REQUEST {
+  USHORT Socket;
+} PCMCIA_SOCKET_REQUEST, *PPCMCIA_SOCKET_REQUEST;
+
 #endif /* _NTDDPCMH_ */

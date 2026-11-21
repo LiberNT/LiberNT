@@ -149,4 +149,16 @@ BOOL WINAPI EnumResourceTypesExW(HMODULE hModule, ENUMRESTYPEPROCW lpEnumFunc, L
 }
 #endif
 
+typedef struct tagENUMUILANG {
+  ULONG NumOfEnumUILang;
+  ULONG SizeOfEnumUIBuffer;
+  LANGID * pEnumUIBuffer;
+} ENUMUILANG, *PENUMUILANG;
+
+typedef struct _REDIRECTION_FUNCTION_DESCRIPTOR {
+  PCSTR DllName;
+  PCSTR FunctionName;
+  PVOID RedirectionTarget;
+} REDIRECTION_FUNCTION_DESCRIPTOR, *PREDIRECTION_FUNCTION_DESCRIPTOR;
+
 #endif  /* _APISETLIBLOADER_ */

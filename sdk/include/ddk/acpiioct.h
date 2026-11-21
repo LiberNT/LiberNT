@@ -215,3 +215,49 @@ typedef ACPI_ENUM_CHILDREN_OUTPUT_BUFFER UNALIGNED *PACPI_ENUM_CHILDREN_OUTPUT_B
 #ifdef __cplusplus
 }
 #endif
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_V2_EX {
+  ULONG Signature;
+  CHAR MethodName[256];
+} ACPI_EVAL_INPUT_BUFFER_V2_EX, *PACPI_EVAL_INPUT_BUFFER_V2_EX;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V2_EX {
+  ULONG Signature;
+  CHAR MethodName[256];
+  ULONG64 IntegerArgument;
+} ACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V2_EX, *PACPI_EVAL_INPUT_BUFFER_SIMPLE_INTEGER_V2_EX;
+
+typedef struct _ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V2_EX {
+  ULONG Signature;
+  CHAR MethodName[256];
+  ULONG StringLength;
+  UCHAR String[1];
+} ACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V2_EX, *PACPI_EVAL_INPUT_BUFFER_SIMPLE_STRING_V2_EX;
+
+typedef struct _ACPI_DEVICE_INFORMATION_OUTPUT_BUFFER {
+  ULONG Signature;
+  USHORT Size;
+  UCHAR Revision;
+  UCHAR Reserved0;
+  USHORT VendorIdStringOffset;
+  USHORT VendorStringLength;
+  USHORT DeviceIdStringOffset;
+  USHORT SubSystemIdStringOffset;
+  USHORT SubSystemStringLength;
+  USHORT SubDeviceIdStringOffset;
+  USHORT InstanceIdLength;
+  USHORT InstanceIdOffset;
+  USHORT BaseClassCode;
+  USHORT HardwareRevision;
+  UCHAR ProgrammingInterface;
+  UCHAR Reserved1;
+  USHORT SubClassCode;
+} ACPI_DEVICE_INFORMATION_OUTPUT_BUFFER, *PACPI_DEVICE_INFORMATION_OUTPUT_BUFFER;
+
+typedef struct _ACPI_GET_DEVICE_SPECIFIC_DATA {
+  ULONG Signature;
+  GUID Section;
+  ULONG PropertyNameLength;
+  UCHAR PropertyName[1];
+} ACPI_GET_DEVICE_SPECIFIC_DATA, *PACPI_GET_DEVICE_SPECIFIC_DATA;
+

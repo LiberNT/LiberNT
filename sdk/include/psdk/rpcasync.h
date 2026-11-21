@@ -264,4 +264,11 @@ typedef enum _RPC_NOTIFICATIONS {
     RpcNotificationCallCancel = 2
 } RPC_NOTIFICATIONS;
 
+typedef struct _RPC_CALL_LOCAL_ADDRESS_V1 {
+  unsigned int Version;
+  void * Buffer;
+  unsigned long BufferSize;
+  RpcLocalAddressFormat AddressFormat;
+} RPC_CALL_LOCAL_ADDRESS_V1, *PRPC_CALL_LOCAL_ADDRESS_V1;
+
 #endif

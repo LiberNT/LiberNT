@@ -79,4 +79,14 @@
 
 typedef SCODE * PSCODE;
 
+typedef struct _WORD_BLOB {
+  ULONG clSize;
+  unsigned short asData[1];
+} WORD_BLOB;
+
+typedef struct _DWORD_BLOB {
+  ULONG clSize;
+  ULONG alData[1];
+} DWORD_BLOB;
+
 #endif /* _WTYPESBASE_H_ */

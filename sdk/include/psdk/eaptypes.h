@@ -391,4 +391,127 @@ typedef enum _EapCredentialType {
 
 typedef DWORD EAP_SESSIONID;
 
+typedef struct _EAP_ERROR {
+  DWORD dwWinError;
+  EAP_METHOD_TYPE type;
+  DWORD dwReasonCode;
+  GUID rootCauseGuid;
+  GUID repairGuid;
+  GUID helpLinkGuid;
+  LPWSTR pRootCauseString;
+  LPWSTR pRepairString;
+} EAP_ERROR;
+
+typedef struct _EAP_ATTRIBUTE {
+  EAP_ATTRIBUTE_TYPE eaType;
+  DWORD dwLength;
+  BYTE * pValue;
+} EAP_ATTRIBUTE, EapAttribute;
+
+typedef struct _EAP_ATTRIBUTES {
+  DWORD dwNumberOfAttributes;
+  EAP_ATTRIBUTE * pAttribs;
+} EAP_ATTRIBUTES, EapAttributes;
+
+typedef struct _EAP_CONFIG_INPUT_FIELD_DATA {
+  DWORD dwSize;
+  EAP_CONFIG_INPUT_FIELD_TYPE Type;
+  DWORD dwFlagProps;
+  LPWSTR pwszLabel;
+  LPWSTR pwszData;
+  DWORD dwMinDataLength;
+  DWORD dwMaxDataLength;
+} EAP_CONFIG_INPUT_FIELD_DATA, *PEAP_CONFIG_INPUT_FIELD_DATA;
+
+typedef struct _EAP_CONFIG_INPUT_FIELD_ARRAY {
+  DWORD dwVersion;
+  DWORD dwNumberOfFields;
+  EAP_CONFIG_INPUT_FIELD_DATA * pFields;
+} EAP_CONFIG_INPUT_FIELD_ARRAY, *PEAP_CONFIG_INPUT_FIELD_ARRAY;
+
+typedef struct _EAP_CRED_EXPIRY_REQ {
+  EAP_CONFIG_INPUT_FIELD_ARRAY curCreds;
+  EAP_CONFIG_INPUT_FIELD_ARRAY newCreds;
+} EAP_CRED_EXPIRY_REQ, EAP_CRED_EXPIRY_RESP;
+
+typedef struct _EAP_METHOD_PROPERTY_VALUE_BOOL {
+  DWORD length;
+  BOOL value;
+} EAP_METHOD_PROPERTY_VALUE_BOOL;
+
+typedef struct _EAP_METHOD_PROPERTY_VALUE_DWORD {
+  DWORD length;
+  DWORD value;
+} EAP_METHOD_PROPERTY_VALUE_DWORD;
+
+typedef struct _EAP_METHOD_PROPERTY_VALUE_STRING {
+  DWORD length;
+  BYTE * value;
+} EAP_METHOD_PROPERTY_VALUE_STRING;
+
+typedef union _EAP_METHOD_PROPERTY_VALUE {
+  EAP_METHOD_PROPERTY_VALUE_BOOL empvBool;
+  EAP_METHOD_PROPERTY_VALUE_DWORD empvDword;
+  EAP_METHOD_PROPERTY_VALUE_STRING empvString;
+} EAP_METHOD_PROPERTY_VALUE;
+
+typedef struct _EAP_METHOD_PROPERTY {
+  EAP_METHOD_PROPERTY_TYPE eapMethodPropertyType;
+  EAP_METHOD_PROPERTY_VALUE_TYPE eapMethodPropertyValueType;
+  EAP_METHOD_PROPERTY_VALUE eapMethodPropertyValue;
+} EAP_METHOD_PROPERTY;
+
+typedef struct _EAP_METHOD_PROPERTY_ARRAY {
+  DWORD dwNumberOfProperties;
+  EAP_METHOD_PROPERTY * pMethodProperty;
+} EAP_METHOD_PROPERTY_ARRAY;
+
+typedef struct _EAPHOST_IDENTITY_UI_PARAMS {
+  EAP_METHOD_TYPE eapMethodType;
+  DWORD dwFlags;
+  DWORD dwSizeofConnectionData;
+  BYTE * pConnectionData;
+  DWORD dwSizeofUserData;
+  BYTE * pUserData;
+  DWORD dwSizeofUserDataOut;
+  BYTE * pUserDataOut;
+  LPWSTR pwszIdentity;
+  DWORD dwError;
+  EAP_ERROR * pEapError;
+} EAPHOST_IDENTITY_UI_PARAMS;
+
+typedef struct _EAPHOST_INTERACTIVE_UI_PARAMS {
+  DWORD dwSizeofContextData;
+  BYTE * pContextData;
+  DWORD dwSizeofInteractiveUIData;
+  BYTE * pInteractiveUIData;
+  DWORD dwError;
+  EAP_ERROR * pEapError;
+} EAPHOST_INTERACTIVE_UI_PARAMS;
+
+typedef struct _EapUsernamePasswordCredential {
+  LPWSTR username;
+  LPWSTR password;
+} EapUsernamePasswordCredential;
+
+typedef struct _EapCertificateCredential {
+  BYTE certHash[20];
+  LPWSTR password;
+} EapCertificateCredential;
+
+typedef struct _EapSimCredential {
+  LPWSTR iccID;
+} EapSimCredential;
+
+typedef union EapCredentialTypeData {
+  EapUsernamePasswordCredential username_password;
+  EapCertificateCredential certificate;
+  EapSimCredential sim;
+} EapCredentialTypeData;
+
+typedef struct _EapCredential {
+  EapCredentialType credType;
+  EapCredentialTypeData credData;
+} EapCredential;
+
 #endif

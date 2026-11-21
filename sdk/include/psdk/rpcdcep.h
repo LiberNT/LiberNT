@@ -331,4 +331,16 @@ RPC_STATUS WINAPI I_RpcOpenClientProcess(RPC_BINDING_HANDLE Binding, unsigned lo
 }
 #endif
 
+typedef struct _RPC_SEC_CONTEXT_KEY_INFO {
+  unsigned long EncryptAlgorithm;
+  unsigned long KeySize;
+  unsigned long SignatureAlgorithm;
+} RPC_SEC_CONTEXT_KEY_INFO, *PRPC_SEC_CONTEXT_KEY_INFO;
+
+typedef struct _RPC_TRANSFER_SYNTAX {
+  UUID Uuid;
+  unsigned short VersMajor;
+  unsigned short VersMinor;
+} RPC_TRANSFER_SYNTAX;
+
 #endif /*__WINE_RPCDCEP_H */

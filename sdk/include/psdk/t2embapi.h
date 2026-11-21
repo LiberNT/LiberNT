@@ -316,4 +316,24 @@ TTGetNewFontName(HANDLE* phFontReference,
 #define TTLOAD_PRIVATE 0x00000001
 #endif
 
+typedef struct TTVALIDATIONTESTSPARAMS {
+  unsigned long ulStructSize;
+  long lTestFromSize;
+  long lTestToSize;
+  unsigned long ulCharSet;
+  unsigned short usReserved1;
+  unsigned short usCharCodeCount;
+  unsigned short * pusCharCodeSet;
+} TTVALIDATIONTESTSPARAMS;
+
+typedef struct TTVALIDATIONTESTSPARAMSEX {
+  unsigned long ulStructSize;
+  long lTestFromSize;
+  long lTestToSize;
+  unsigned long ulCharSet;
+  unsigned short usReserved1;
+  unsigned short usCharCodeCount;
+  unsigned long * pulCharCodeSet;
+} TTVALIDATIONTESTSPARAMSEX;
+
 #endif /* __T2EMBED_API_H */

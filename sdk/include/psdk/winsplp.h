@@ -1614,6 +1614,42 @@ BOOL WINAPI InstallPrintProcessor(HWND hWnd);
 #endif
 
 
+typedef struct _DOC_INFO_INTERNAL {
+  LPTSTR pDocName;
+  LPTSTR pOutputFile;
+  LPTSTR pDatatype;
+  BOOL bLowILJob;
+  HANDLE hTokenLowIL;
+} DOC_INFO_INTERNAL, *PDOC_INFO_INTERNAL, *LPDOC_INFO_INTERNAL;
+
+typedef struct _SPLCLIENT_INFO_3_VISTA {
+  UINT cbSize;
+  DWORD dwFlags;
+  DWORD dwSize;
+  PWSTR pMachineName;
+  PWSTR pUserName;
+  DWORD dwBuildNum;
+  DWORD dwMajorVersion;
+  DWORD dwMinorVersion;
+  WORD wProcessorArchitecture;
+  UINT64 hSplPrinter;
+} SPLCLIENT_INFO_3_VISTA;
+
+typedef struct _SPLCLIENT_INFO_INTERNAL {
+  UINT cbSize;
+  DWORD dwFlags;
+  DWORD dwSize;
+  PWSTR pMachineName;
+  PWSTR pUserName;
+  DWORD dwBuildNum;
+  DWORD dwMajorVersion;
+  DWORD dwMinorVersion;
+  WORD wProcessorArchitecture;
+  UINT64 hSplPrinter;
+  DWORD dwProcessId;
+  DWORD dwSessionId;
+} SPLCLIENT_INFO_INTERNAL;
+
 #endif /* _WINSPLP_ */
 
 #ifndef DOC_INFO_INTERNAL_LEVEL

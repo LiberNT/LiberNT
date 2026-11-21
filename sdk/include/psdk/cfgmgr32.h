@@ -3357,6 +3357,22 @@ CMP_WaitNoPendingInstallEvents(
 }
 #endif
 
+#pragma pack(push, 1)
+typedef struct Connection_Des_s {
+  DWORD COND_Type;
+  DWORD COND_Flags;
+  BYTE COND_Class;
+  BYTE COND_ClassType;
+  BYTE COND_Reserved1;
+  BYTE COND_Reserved2;
+  LARGE_INTEGER COND_Id;
+} CONNECTION_DES, *PCONNECTION_DES;
+#pragma pack(pop)
+
+typedef struct Connection_Resource_s {
+  CONNECTION_DES Connection_Header;
+} CONNECTION_RESOURCE, *PCONNECTION_RESOURCE;
+
 #endif /* _CFGMGR32_H_ */
 
 #ifndef CM_DEVCAP_SECUREDEVICE

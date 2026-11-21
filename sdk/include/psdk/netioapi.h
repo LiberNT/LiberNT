@@ -528,4 +528,168 @@ typedef enum _NET_FL_ISOLATION_MODE {
     NetFlIsolationModeVsid = 2
 } NET_FL_ISOLATION_MODE;
 
+typedef struct _MIB_IFSTACK_ROW {
+  NET_IFINDEX HigherLayerInterfaceIndex;
+  NET_IFINDEX LowerLayerInterfaceIndex;
+} MIB_IFSTACK_ROW, *PMIB_IFSTACK_ROW;
+
+typedef struct _MIB_INVERTEDIFSTACK_ROW {
+  NET_IFINDEX LowerLayerInterfaceIndex;
+  NET_IFINDEX HigherLayerInterfaceIndex;
+} MIB_INVERTEDIFSTACK_ROW, *PMIB_INVERTEDIFSTACK_ROW;
+
+typedef struct _MIB_IFSTACK_TABLE {
+  ULONG NumEntries;
+  MIB_IFSTACK_ROW Table[1];
+} MIB_IFSTACK_TABLE, *PMIB_IFSTACK_TABLE;
+
+typedef struct _MIB_INVERTEDIFSTACK_TABLE {
+  ULONG NumEntries;
+  MIB_INVERTEDIFSTACK_ROW Table[1];
+} MIB_INVERTEDIFSTACK_TABLE, *PMIB_INVERTEDIFSTACK_TABLE;
+
+typedef struct _MIB_MULTICASTIPADDRESS_ROW {
+  SOCKADDR_INET Address;
+  NET_IFINDEX InterfaceIndex;
+  NET_LUID InterfaceLuid;
+  SCOPE_ID ScopeId;
+} MIB_MULTICASTIPADDRESS_ROW, *PMIB_MULTICASTIPADDRESS_ROW;
+
+typedef struct _MIB_MULTICASTIPADDRESS_TABLE {
+  ULONG NumEntries;
+  MIB_MULTICASTIPADDRESS_ROW Table[1];
+} MIB_MULTICASTIPADDRESS_TABLE, *PMIB_MULTICASTIPADDRESS_TABLE;
+
+typedef struct _DNS_SETTINGS {
+  ULONG Version;
+  ULONG64 Flags;
+  PWSTR Hostname;
+  PWSTR Domain;
+  PWSTR SearchList;
+} DNS_SETTINGS;
+
+typedef struct _DNS_SETTINGS2 {
+  ULONG Version;
+  ULONG64 Flags;
+  PWSTR Hostname;
+  PWSTR Domain;
+  PWSTR SearchList;
+  ULONG64 SettingFlags;
+} DNS_SETTINGS2;
+
+typedef struct _DNS_DOH_SERVER_SETTINGS {
+  PWSTR Template;
+  ULONG64 Flags;
+} DNS_DOH_SERVER_SETTINGS;
+
+typedef struct _DNS_DOT_SERVER_SETTINGS {
+  PWSTR Hostname;
+  ULONG64 Flags;
+  USHORT Port;
+} DNS_DOT_SERVER_SETTINGS;
+
+typedef union _DNS_SERVER_PROPERTY_TYPES {
+  DNS_DOH_SERVER_SETTINGS * DohSettings;
+  DNS_DOT_SERVER_SETTINGS * DotSettings;
+} DNS_SERVER_PROPERTY_TYPES;
+
+typedef struct _DNS_SERVER_PROPERTY {
+  ULONG Version;
+  ULONG ServerIndex;
+  DNS_SERVER_PROPERTY_TYPE Type;
+  DNS_SERVER_PROPERTY_TYPES Property;
+} DNS_SERVER_PROPERTY;
+
+typedef struct _DNS_INTERFACE_SETTINGS {
+  ULONG Version;
+  ULONG64 Flags;
+  PWSTR Domain;
+  PWSTR NameServer;
+  PWSTR SearchList;
+  ULONG RegistrationEnabled;
+  ULONG RegisterAdapterName;
+  ULONG EnableLLMNR;
+  ULONG QueryAdapterName;
+  PWSTR ProfileNameServer;
+} DNS_INTERFACE_SETTINGS;
+
+typedef struct _DNS_INTERFACE_SETTINGS_EX {
+  DNS_INTERFACE_SETTINGS SettingsV1;
+  ULONG DisableUnconstrainedQueries;
+  PWSTR SupplementalSearchList;
+} DNS_INTERFACE_SETTINGS_EX;
+
+typedef struct _DNS_INTERFACE_SETTINGS3 {
+  ULONG Version;
+  ULONG64 Flags;
+  PWSTR Domain;
+  PWSTR NameServer;
+  PWSTR SearchList;
+  ULONG RegistrationEnabled;
+  ULONG RegisterAdapterName;
+  ULONG EnableLLMNR;
+  ULONG QueryAdapterName;
+  PWSTR ProfileNameServer;
+  ULONG DisableUnconstrainedQueries;
+  PWSTR SupplementalSearchList;
+  ULONG cServerProperties;
+  DNS_SERVER_PROPERTY * ServerProperties;
+  ULONG cProfileServerProperties;
+  DNS_SERVER_PROPERTY * ProfileServerProperties;
+} DNS_INTERFACE_SETTINGS3;
+
+typedef struct _DNS_INTERFACE_SETTINGS4 {
+  ULONG Version;
+  ULONG64 Flags;
+  PWSTR Domain;
+  PWSTR NameServer;
+  PWSTR SearchList;
+  ULONG RegistrationEnabled;
+  ULONG RegisterAdapterName;
+  ULONG EnableLLMNR;
+  ULONG QueryAdapterName;
+  PWSTR ProfileNameServer;
+  ULONG DisableUnconstrainedQueries;
+  PWSTR SupplementalSearchList;
+  ULONG cServerProperties;
+  DNS_SERVER_PROPERTY * ServerProperties;
+  ULONG cProfileServerProperties;
+  DNS_SERVER_PROPERTY * ProfileServerProperties;
+  ULONG EncryptedDnsAdapterFlags;
+} DNS_INTERFACE_SETTINGS4;
+
+typedef struct _MIB_FL_VIRTUAL_INTERFACE_ROW {
+  ADDRESS_FAMILY Family;
+  IF_LUID IfLuid;
+  ULONG VirtualIfId;
+  GUID CompartmentGuid;
+  NET_FL_ISOLATION_MODE IsolationMode;
+  NET_FL_VIRTUAL_INTERFACE_ORIGIN Origin;
+  IF_LUID VirtualIfLuid;
+  IF_INDEX VirtualIfIndex;
+  BOOLEAN AllowLocalNd;
+  ULONG AttachedFlsnpiClients;
+  ULONG FlsnpiClientConfigErrors;
+  ULONG64 FlsnpiClientInjectErrors;
+  ULONG64 FlsnpiClientCloneErrors;
+  ULONG64 InFlsnpiIndicatedPackets;
+  ULONG64 InFlsnpiClientReturnedPackets;
+  ULONG64 InFlsnpiClientSilentlyDroppedPackets;
+  ULONG64 InFlsnpiClientDroppedPackets;
+  ULONG64 InFlsnpiClientInjectedPackets;
+  ULONG64 InFlsnpiClientClonedPackets;
+  ULONG64 OutFlsnpiIndicatedPackets;
+  ULONG64 OutFlsnpiClientReturnedPackets;
+  ULONG64 OutFlsnpiClientDroppedPackets;
+  ULONG64 OutFlsnpiClientSilentlyDroppedPackets;
+  ULONG64 OutFlsnpiClientInjectedPackets;
+  ULONG64 OutFlsnpiClientClonedPackets;
+  ULONG64 OutFlsnpiClientClonedPacketsForNbSplit;
+} MIB_FL_VIRTUAL_INTERFACE_ROW, *PMIB_FL_VIRTUAL_INTERFACE_ROW;
+
+typedef struct _MIB_FL_VIRTUAL_INTERFACE_TABLE {
+  ULONG NumEntries;
+  MIB_FL_VIRTUAL_INTERFACE_ROW Table[1];
+} MIB_FL_VIRTUAL_INTERFACE_TABLE, *PMIB_FL_VIRTUAL_INTERFACE_TABLE;
+
 #endif /* __WINE_NETIOAPI_H */

@@ -3132,4 +3132,24 @@ BOOL WINAPI SetupGetNonInteractiveMode(void);
 }
 #endif
 
+typedef struct _FILEPATHS_SIGNERINFO_A {
+  PCSTR Target;
+  PCSTR Source;
+  UINT Win32Error;
+  DWORD Flags;
+  PCSTR DigitalSigner;
+  PCSTR Version;
+  PCSTR CatalogFile;
+} FILEPATHS_SIGNERINFO_A, *PFILEPATHS_SIGNERINFO_A;
+
+typedef struct _FILEPATHS_SIGNERINFO_W {
+  PCWSTR Target;
+  PCWSTR Source;
+  UINT Win32Error;
+  DWORD Flags;
+  PCWSTR DigitalSigner;
+  PCWSTR Version;
+  PCWSTR CatalogFile;
+} FILEPATHS_SIGNERINFO_W, *PFILEPATHS_SIGNERINFO_W;
+
 #endif /* _SETUPAPI_H_ */

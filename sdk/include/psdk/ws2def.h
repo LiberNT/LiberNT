@@ -405,6 +405,12 @@ typedef struct _CSADDR_INFO {
   INT iProtocol;
 } CSADDR_INFO, *PCSADDR_INFO, FAR *LPCSADDR_INFO ;
 
+typedef struct _SOCKET_PROCESSOR_AFFINITY {
+  PROCESSOR_NUMBER Processor;
+  USHORT NumaNodeId;
+  USHORT Reserved;
+} SOCKET_PROCESSOR_AFFINITY, *PSOCKET_PROCESSOR_AFFINITY;
+
 #endif /* __CSADDR_DEFINED__ */
 
 typedef struct sockaddr_storage {

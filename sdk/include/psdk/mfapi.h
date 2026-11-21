@@ -769,4 +769,206 @@ typedef enum _MFVideoSrcContentHintFlags {
     MFVideoSrcContentHintFlag_235_1 = 2
 } MFVideoSrcContentHintFlags;
 
+typedef struct _MOVE_RECT {
+  POINT SourcePoint;
+  RECT DestRect;
+} MOVE_RECT;
+
+typedef struct _DIRTYRECT_INFO {
+  UINT FrameNumber;
+  UINT NumDirtyRects;
+  RECT DirtyRects[1];
+} DIRTYRECT_INFO;
+
+typedef struct _MOVEREGION_INFO {
+  UINT FrameNumber;
+  UINT NumMoveRegions;
+  MOVE_RECT MoveRegions[1];
+} MOVEREGION_INFO;
+
+typedef struct _ROI_AREA {
+  RECT rect;
+  INT32 QPDelta;
+} ROI_AREA, *PROI_AREA;
+
+typedef struct _MACROBLOCK_DATA {
+  UINT32 flags;
+  INT16 motionVectorX;
+  INT16 motionVectorY;
+  INT32 QPDelta;
+} MACROBLOCK_DATA;
+
+typedef struct _MFSampleExtensionPsnrYuv {
+  FLOAT psnrY;
+  FLOAT psnrU;
+  FLOAT psnrV;
+} MFSampleExtensionPsnrYuv;
+
+typedef struct _inputQPSettings {
+  UINT32 minBlockSize;
+  UINT32 maxBlockSize;
+  UINT32 stepsBlockSize;
+  eAVEncVideoQPMapElementDataType dataType;
+  INT16 minValue;
+  INT16 maxValue;
+  UINT16 step;
+} InputQPSettings;
+
+typedef struct tagDigitalWindowSetting {
+  double OriginX;
+  double OriginY;
+  double WindowSize;
+} DigitalWindowSetting;
+
+typedef struct tagFaceRectInfoBlobHeader {
+  ULONG Size;
+  ULONG Count;
+} FaceRectInfoBlobHeader;
+
+typedef struct tagFaceRectInfo {
+  RECT Region;
+  LONG confidenceLevel;
+} FaceRectInfo;
+
+typedef struct tagFaceCharacterizationBlobHeader {
+  ULONG Size;
+  ULONG Count;
+} FaceCharacterizationBlobHeader;
+
+typedef struct tagFaceCharacterization {
+  ULONG BlinkScoreLeft;
+  ULONG BlinkScoreRight;
+  ULONG FacialExpression;
+  ULONG FacialExpressionScore;
+} FaceCharacterization;
+
+typedef struct tagCapturedMetadataExposureCompensation {
+  UINT64 Flags;
+  INT32 Value;
+} CapturedMetadataExposureCompensation;
+
+typedef struct tagCapturedMetadataISOGains {
+  FLOAT AnalogGain;
+  FLOAT DigitalGain;
+} CapturedMetadataISOGains;
+
+typedef struct tagCapturedMetadataWhiteBalanceGains {
+  FLOAT R;
+  FLOAT G;
+  FLOAT B;
+} CapturedMetadataWhiteBalanceGains;
+
+typedef struct tagMetadataTimeStamps {
+  ULONG Flags;
+  LONGLONG Device;
+  LONGLONG Presentation;
+} MetadataTimeStamps;
+
+typedef struct tagHistogramGrid {
+  ULONG Width;
+  ULONG Height;
+  RECT Region;
+} HistogramGrid;
+
+typedef struct tagHistogramBlobHeader {
+  ULONG Size;
+  ULONG Histograms;
+} HistogramBlobHeader;
+
+typedef struct tagHistogramHeader {
+  ULONG Size;
+  ULONG Bins;
+  ULONG FourCC;
+  ULONG ChannelMasks;
+  HistogramGrid Grid;
+} HistogramHeader;
+
+typedef struct tagHistogramDataHeader {
+  ULONG Size;
+  ULONG ChannelMask;
+  ULONG Linear;
+} HistogramDataHeader;
+
+typedef struct _MFFOLDDOWN_MATRIX {
+  UINT32 cbSize;
+  UINT32 cSrcChannels;
+  UINT32 cDstChannels;
+  UINT32 dwChannelMask;
+  LONG Coeff[64];
+} MFFOLDDOWN_MATRIX;
+
+typedef struct _MT_CUSTOM_VIDEO_PRIMARIES {
+  float fRx;
+  float fRy;
+  float fGx;
+  float fGy;
+  float fBx;
+  float fBy;
+  float fWx;
+  float fWy;
+} MT_CUSTOM_VIDEO_PRIMARIES;
+
+typedef struct _MT_ARBITRARY_HEADER {
+  GUID majortype;
+  GUID subtype;
+  BOOL bFixedSizeSamples;
+  BOOL bTemporalCompression;
+  ULONG lSampleSize;
+  GUID formattype;
+} MT_ARBITRARY_HEADER;
+
+typedef struct _MF_FLOAT2 {
+  FLOAT x;
+  FLOAT y;
+} MF_FLOAT2;
+
+typedef struct _MF_FLOAT3 {
+  FLOAT x;
+  FLOAT y;
+  FLOAT z;
+} MF_FLOAT3;
+
+typedef struct _MF_QUATERNION {
+  FLOAT x;
+  FLOAT y;
+  FLOAT z;
+  FLOAT w;
+} MF_QUATERNION;
+
+typedef struct _MFCameraExtrinsic_CalibratedTransform {
+  GUID CalibrationId;
+  MF_FLOAT3 Position;
+  MF_QUATERNION Orientation;
+} MFCameraExtrinsic_CalibratedTransform;
+
+typedef struct _MFCameraExtrinsics {
+  UINT32 TransformCount;
+  MFCameraExtrinsic_CalibratedTransform CalibratedTransforms[1];
+} MFCameraExtrinsics;
+
+typedef struct _MFCameraIntrinsic_PinholeCameraModel {
+  MF_FLOAT2 FocalLength;
+  MF_FLOAT2 PrincipalPoint;
+} MFCameraIntrinsic_PinholeCameraModel;
+
+typedef struct _MFCameraIntrinsic_DistortionModel {
+  FLOAT Radial_k1;
+  FLOAT Radial_k2;
+  FLOAT Radial_k3;
+  FLOAT Tangential_p1;
+  FLOAT Tangential_p2;
+} MFCameraIntrinsic_DistortionModel;
+
+typedef struct _MFPinholeCameraIntrinsic_IntrinsicModel {
+  UINT32 Width;
+  UINT32 Height;
+  MFCameraIntrinsic_PinholeCameraModel CameraModel;
+  MFCameraIntrinsic_DistortionModel DistortionModel;
+} MFPinholeCameraIntrinsic_IntrinsicModel;
+
+typedef struct _MFPinholeCameraIntrinsics {
+  UINT32 IntrinsicModelCount;
+  MFPinholeCameraIntrinsic_IntrinsicModel IntrinsicModels[1];
+} MFPinholeCameraIntrinsics;
+
 #endif /* __WINE_MFAPI_H */

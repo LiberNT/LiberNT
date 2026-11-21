@@ -3017,4 +3017,49 @@ void WINAPI PathQualify(PWSTR psz);
 }
 #endif
 
+#pragma pack(push, 1)
+typedef struct SHCOLUMNINFO {
+  SHCOLUMNID scid;
+  VARTYPE vt;
+  DWORD fmt;
+  UINT cChars;
+  DWORD csFlags;
+  WCHAR wszTitle[80];
+  WCHAR wszDescription[128];
+} SHCOLUMNINFO, *LPSHCOLUMNINFO;
+#pragma pack(pop)
+
+typedef struct SHCOLUMNINIT {
+  ULONG dwFlags;
+  ULONG dwReserved;
+  WCHAR wszFolder[260];
+} SHCOLUMNINIT, *LPSHCOLUMNINIT;
+
+typedef struct SHCOLUMNDATA {
+  ULONG dwFlags;
+  DWORD dwFileAttributes;
+  ULONG dwReserved;
+  WCHAR * pwszExt;
+  WCHAR wszFile[260];
+} SHCOLUMNDATA, *LPSHCOLUMNDATA;
+
+typedef struct _SFV_SETITEMPOS {
+  LPCITEMIDLIST pidl;
+  POINT pt;
+} SFV_SETITEMPOS;
+
+typedef struct tagAAMENUFILENAME {
+  SHORT cbTotal;
+  BYTE rgbReserved[12];
+  WCHAR szFileName[1];
+} AASHELLMENUFILENAME, *LPAASHELLMENUFILENAME;
+
+typedef struct tagAASHELLMENUITEM {
+  void * lpReserved1;
+  int iReserved;
+  UINT uiReserved;
+  LPAASHELLMENUFILENAME lpName;
+  LPWSTR psz;
+} AASHELLMENUITEM, *LPAASHELLMENUITEM;
+
 #endif /* __WINE_SHLOBJ_H */

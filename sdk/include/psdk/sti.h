@@ -322,4 +322,44 @@ DECLARE_INTERFACE_(IStillImageW, IUnknown)
 
 typedef DWORD STI_RAW_CONTROL_CODE;
 
+typedef struct _STI_WIA_DEVICE_INFORMATIONW {
+  DWORD dwSize;
+  STI_DEVICE_TYPE DeviceType;
+  WCHAR szDeviceInternalName[128];
+  STI_DEV_CAPS DeviceCapabilitiesA;
+  DWORD dwHardwareConfiguration;
+  LPWSTR pszVendorDescription;
+  LPWSTR pszDeviceDescription;
+  LPWSTR pszPortName;
+  LPWSTR pszPropProvider;
+  LPWSTR pszLocalName;
+  LPWSTR pszUiDll;
+  LPWSTR pszServer;
+} STI_WIA_DEVICE_INFORMATIONW, *PSTI_WIA_DEVICE_INFORMATIONW;
+
+typedef struct _STI_DEVICE_STATUS {
+  DWORD dwSize;
+  DWORD StatusMask;
+  DWORD dwOnlineState;
+  DWORD dwHardwareStatusCode;
+  DWORD dwEventHandlingState;
+  DWORD dwPollingInterval;
+} STI_DEVICE_STATUS, *PSTI_DEVICE_STATUS;
+
+typedef struct _ERROR_INFOW {
+  DWORD dwSize;
+  DWORD dwGenericError;
+  DWORD dwVendorError;
+  WCHAR szExtendedErrorText[255];
+} STI_ERROR_INFOW, *PSTI_ERROR_INFOW;
+
+typedef struct _STISUBSCRIBE {
+  DWORD dwSize;
+  DWORD dwFlags;
+  DWORD dwFilter;
+  HWND hWndNotify;
+  HANDLE hEvent;
+  UINT uiNotificationMessage;
+} STISUBSCRIBE, *LPSTISUBSCRIBE;
+
 #endif /* __WINE_STI_H */

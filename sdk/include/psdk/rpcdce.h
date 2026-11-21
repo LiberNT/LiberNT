@@ -776,4 +776,58 @@ RPC_STATUS WINAPI RpcMgmtInqServerPrincNameW(RPC_BINDING_HANDLE Binding, unsigne
 }
 #endif
 
+typedef struct _RPC_HTTP_TRANSPORT_CREDENTIALS_V3_W {
+  RPC_AUTH_IDENTITY_HANDLE TransportCredentials;
+  unsigned long Flags;
+  unsigned long AuthenticationTarget;
+  unsigned long NumberOfAuthnSchemes;
+  unsigned long * AuthnSchemes;
+  unsigned short * ServerCertificateSubject;
+  RPC_AUTH_IDENTITY_HANDLE ProxyCredentials;
+  unsigned long NumberOfProxyAuthnSchemes;
+  unsigned long * ProxyAuthnSchemes;
+} RPC_HTTP_TRANSPORT_CREDENTIALS_V3_W, *PRPC_HTTP_TRANSPORT_CREDENTIALS_V3_W;
+
+typedef struct _RPC_HTTP_TRANSPORT_CREDENTIALS_V3_A {
+  RPC_AUTH_IDENTITY_HANDLE TransportCredentials;
+  unsigned long Flags;
+  unsigned long AuthenticationTarget;
+  unsigned long NumberOfAuthnSchemes;
+  unsigned long * AuthnSchemes;
+  unsigned char * ServerCertificateSubject;
+  RPC_AUTH_IDENTITY_HANDLE ProxyCredentials;
+  unsigned long NumberOfProxyAuthnSchemes;
+  unsigned long * ProxyAuthnSchemes;
+} RPC_HTTP_TRANSPORT_CREDENTIALS_V3_A, *PRPC_HTTP_TRANSPORT_CREDENTIALS_V3_A;
+
+typedef struct _RPC_BINDING_HANDLE_OPTIONS_V1 {
+  unsigned long Version;
+  unsigned long Flags;
+  unsigned long ComTimeout;
+  unsigned long CallTimeout;
+} RPC_BINDING_HANDLE_OPTIONS_V1, *PRPC_BINDING_HANDLE_OPTIONS_V1;
+
+typedef struct RPC_CLIENT_INFORMATION1 {
+  unsigned char * UserName;
+  unsigned char * ComputerName;
+  unsigned short Privilege;
+  unsigned long AuthFlags;
+} RPC_CLIENT_INFORMATION1, *PRPC_CLIENT_INFORMATION1;
+
+typedef struct RPC_ENDPOINT_TEMPLATEW {
+  unsigned long Version;
+  RPC_WSTR ProtSeq;
+  RPC_WSTR Endpoint;
+  void * SecurityDescriptor;
+  unsigned long Backlog;
+} RPC_ENDPOINT_TEMPLATEW, *PRPC_ENDPOINT_TEMPLATEW;
+
+typedef struct RPC_ENDPOINT_TEMPLATEA {
+  unsigned long Version;
+  RPC_CSTR ProtSeq;
+  RPC_CSTR Endpoint;
+  void * SecurityDescriptor;
+  unsigned long Backlog;
+} RPC_ENDPOINT_TEMPLATEA, *PRPC_ENDPOINT_TEMPLATEA;
+
 #endif /*__WINE_RPCDCE_H */

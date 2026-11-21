@@ -470,4 +470,105 @@ typedef enum BDA_DISCOVERY_STATE {
 
 typedef LONG PBDARESULT;
 
+typedef struct _BDA_DRM_DRMSTATUS {
+  PBDARESULT lResult;
+  GUID DRMuuid;
+  ULONG ulDrmUuidListStringSize;
+  GUID argbDrmUuidListString[1];
+} BDA_DRM_DRMSTATUS, *PBDA_DRM_DRMSTATUS;
+
+typedef struct _BDA_WMDRM_STATUS {
+  PBDARESULT lResult;
+  ULONG ulMaxCaptureTokenSize;
+  ULONG uMaxStreamingPid;
+  ULONG ulMaxLicense;
+  ULONG ulMinSecurityLevel;
+  ULONG ulRevInfoSequenceNumber;
+  ULONGLONG ulRevInfoIssuedTime;
+  ULONG ulRevListVersion;
+  ULONG ulRevInfoTTL;
+  ULONG ulState;
+} BDA_WMDRM_STATUS, *PBDA_WMDRM_STATUS;
+
+typedef struct _BDA_WMDRM_KEYINFOLIST {
+  PBDARESULT lResult;
+  ULONG ulKeyuuidBufferLen;
+  GUID argKeyuuidBuffer[1];
+} BDA_WMDRM_KEYINFOLIST, *PBDA_WMDRM_KEYINFOLIST;
+
+typedef struct _BDA_WMDRMTUNER_PIDPROTECTION {
+  PBDARESULT lResult;
+  GUID uuidKeyID;
+} BDA_WMDRMTUNER_PIDPROTECTION, *PBDA_WMDRMTUNER_PIDPROTECTION;
+
+typedef struct _BDA_TUNER_DIAGNOSTICS {
+  PBDARESULT lResult;
+  ULONG ulSignalLevel;
+  ULONG ulSignalLevelQuality;
+  ULONG ulSignalNoiseRatio;
+} BDA_TUNER_DIAGNOSTICS, *PBDA_TUNER_DIAGNOSTICS;
+
+typedef struct _BDA_SCAN_CAPABILTIES {
+  PBDARESULT lResult;
+  UINT64 ul64AnalogStandardsSupported;
+} BDA_SCAN_CAPABILTIES, *PBDA_SCAN_CAPABILTIES;
+
+typedef struct _BDA_SCAN_STATE {
+  PBDARESULT lResult;
+  ULONG ulSignalLock;
+  ULONG ulSecondsLeft;
+  ULONG ulCurrentFrequency;
+} BDA_SCAN_STATE, *PBDA_SCAN_STATE;
+
+typedef struct _BDA_SCAN_START {
+  PBDARESULT lResult;
+  ULONG LowerFrequency;
+  ULONG HigerFrequency;
+} BDA_SCAN_START, *PBDA_SCAN_START;
+
+typedef struct _BDA_GDDS_DATATYPE {
+  PBDARESULT lResult;
+  GUID uuidDataType;
+} BDA_GDDS_DATATYPE, *P_BDA_GDDS_DATATYPE;
+
+typedef struct _BDA_USERACTIVITY_INTERVAL {
+  PBDARESULT lResult;
+  ULONG ulActivityInterval;
+} BDA_USERACTIVITY_INTERVAL, *P_BDA_USERACTIVITY_INTERVAL;
+
+typedef struct _BDA_CAS_CHECK_ENTITLEMENTTOKEN {
+  PBDARESULT lResult;
+  ULONG ulDescrambleStatus;
+} BDA_CAS_CHECK_ENTITLEMENTTOKEN, *PBDA_CAS_CHECK_ENTITLEMENTTOKEN;
+
+typedef struct _BDA_CAS_CLOSE_MMIDIALOG {
+  PBDARESULT lResult;
+  ULONG SessionResult;
+} BDA_CAS_CLOSE_MMIDIALOG, *PBDA_CAS_CLOSE_MMIDIALOG;
+
+typedef struct _BDA_CAS_REQUESTTUNERDATA {
+  UCHAR ucRequestPriority;
+  UCHAR ucRequestReason;
+  UCHAR ucRequestConsequences;
+  ULONG ulEstimatedTime;
+} BDA_CAS_REQUESTTUNERDATA, *PBDA_CAS_REQUESTTUNERDATA;
+
+typedef struct _BDA_CAS_CLOSEMMIDATA {
+  ULONG ulDialogNumber;
+} BDA_CAS_CLOSEMMIDATA, *PBDA_CAS_CLOSEMMIDATA;
+
+#pragma pack(push, 2)
+typedef struct _BDA_MUX_PIDLISTITEM {
+  USHORT usPIDNumber;
+  USHORT usProgramNumber;
+  MUX_PID_TYPE ePIDType;
+} BDA_MUX_PIDLISTITEM, *PBDA_MUX_PIDLISTITEM;
+#pragma pack(pop)
+
+typedef struct _BDA_SIGNAL_TIMEOUTS {
+  ULONG ulCarrierTimeoutMs;
+  ULONG ulScanningTimeoutMs;
+  ULONG ulTuningTimeoutMs;
+} BDA_SIGNAL_TIMEOUTS, *PBDA_SIGNAL_TIMEOUTS;
+
 #endif /* _BDATYPES_ */

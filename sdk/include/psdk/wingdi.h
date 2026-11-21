@@ -5452,4 +5452,76 @@ typedef struct _OUTLINETEXTMETRICA * NPOUTLINETEXTMETRICA;
 typedef struct _OUTLINETEXTMETRICW * NPOUTLINETEXTMETRICW;
 typedef NPOUTLINETEXTMETRICA NPOUTLINETEXTMETRIC;
 
+typedef struct _PSINJECTDATA {
+  DWORD DataBytes;
+  WORD InjectionPoint;
+  WORD PageNumber;
+} PSINJECTDATA, *PPSINJECTDATA;
+
+typedef struct _PSFEATURE_OUTPUT {
+  BOOL bPageIndependent;
+  BOOL bSetPageDevice;
+} PSFEATURE_OUTPUT, *PPSFEATURE_OUTPUT;
+
+typedef struct _PSFEATURE_CUSTPAPER {
+  LONG lOrientation;
+  LONG lWidth;
+  LONG lHeight;
+  LONG lWidthOffset;
+  LONG lHeightOffset;
+} PSFEATURE_CUSTPAPER, *PPSFEATURE_CUSTPAPER;
+
+typedef struct tagEMREXTESCAPE {
+  EMR emr;
+  INT iEscape;
+  INT cbEscData;
+  BYTE EscData[1];
+} EMREXTESCAPE, *PEMREXTESCAPE, EMRDRAWESCAPE, *PEMRDRAWESCAPE;
+
+typedef struct tagEMRSETICMPROFILE {
+  EMR emr;
+  DWORD dwFlags;
+  DWORD cbName;
+  DWORD cbData;
+  BYTE Data[1];
+} EMRSETICMPROFILE, *PEMRSETICMPROFILE, EMRSETICMPROFILEA, *PEMRSETICMPROFILEA, EMRSETICMPROFILEW, *PEMRSETICMPROFILEW;
+
+typedef struct tagCOLORMATCHTOTARGET {
+  EMR emr;
+  DWORD dwAction;
+  DWORD dwFlags;
+  DWORD cbName;
+  DWORD cbData;
+  BYTE Data[1];
+} EMRCOLORMATCHTOTARGET, *PEMRCOLORMATCHTOTARGET;
+
+typedef struct tagCOLORCORRECTPALETTE {
+  EMR emr;
+  DWORD ihPalette;
+  DWORD nFirstEntry;
+  DWORD nPalEntries;
+  DWORD nReserved;
+} EMRCOLORCORRECTPALETTE, *PEMRCOLORCORRECTPALETTE;
+
+typedef struct tagEMRTRANSPARENTBLT {
+  EMR emr;
+  RECTL rclBounds;
+  LONG xDest;
+  LONG yDest;
+  LONG cxDest;
+  LONG cyDest;
+  DWORD dwRop;
+  LONG xSrc;
+  LONG ySrc;
+  XFORM xformSrc;
+  COLORREF crBkColorSrc;
+  DWORD iUsageSrc;
+  DWORD offBmiSrc;
+  DWORD cbBmiSrc;
+  DWORD offBitsSrc;
+  DWORD cbBitsSrc;
+  LONG cxSrc;
+  LONG cySrc;
+} EMRTRANSPARENTBLT, *PEMRTRANSPARENTBLT;
+
 #endif // _WINGDI_H

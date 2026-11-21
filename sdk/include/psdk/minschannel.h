@@ -96,4 +96,28 @@
 #define SESSION_TICKET_INFO_V0 0
 #endif
 
+typedef struct _SecPkgCred_ClientCertPolicy {
+  DWORD dwFlags;
+  GUID guidPolicyId;
+  DWORD dwCertFlags;
+  DWORD dwUrlRetrievalTimeout;
+  BOOL fCheckRevocationFreshnessTime;
+  DWORD dwRevocationFreshnessTime;
+  BOOL fOmitUsageCheck;
+  LPWSTR pwszSslCtlStoreName;
+  LPWSTR pwszSslCtlIdentifier;
+} SecPkgCred_ClientCertPolicy, *PSecPkgCred_ClientCertPolicy;
+
+typedef struct _SecPkgCred_SessionTicketKey {
+  DWORD TicketInfoVersion;
+  BYTE KeyId[16];
+  BYTE KeyingMaterial[64];
+  BYTE KeyingMaterialSize;
+} SecPkgCred_SessionTicketKey, *PSecPkgCred_SessionTicketKey;
+
+typedef struct _SecPkgCred_SessionTicketKeys {
+  DWORD cSessionTicketKeys;
+  PSecPkgCred_SessionTicketKey pSessionTicketKeys;
+} SecPkgCred_SessionTicketKeys, *PSecPkgCred_SessionTicketKeys;
+
 #endif /* __WINE_MINSCHANNEL_H__ */

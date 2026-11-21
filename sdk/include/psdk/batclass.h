@@ -401,6 +401,48 @@ typedef enum BATTERY_CHARGING_STATE {
     BatteryAdequatePowerSupply = 2
 } BATTERY_CHARGING_STATE;
 
+typedef struct _ADAPTER_NOTIFY {
+  UCHAR Version;
+  UCHAR Reserved[3];
+  ULONG PeakPowerThreshold;
+} ADAPTER_NOTIFY, *PADAPTER_NOTIFY;
+
+typedef struct _BATTERY_NOTIFY_V2 {
+  ULONG PowerState;
+  ULONG LowCapacity;
+  ULONG HighCapacity;
+  UCHAR Version;
+  UCHAR Reserved[3];
+  ULONG BatteryPresentRateThreshold;
+} BATTERY_NOTIFY_V2, *PBATTERY_NOTIFY_V2;
+
+typedef struct _BATTERY_PEAK_POWER {
+  UCHAR Version;
+  UCHAR Reserved[3];
+  ULONG InstantaneousPeakPower;
+  ULONG InstantaneousPeakPeriod;
+  ULONG SustainablePeakPower;
+  ULONG SustainablePeakPeriod;
+} BATTERY_PEAK_POWER, *PBATTERY_PEAK_POWER;
+
+typedef struct _BATTERY_PEAK_POWER_THRESHOLDS {
+  UCHAR Version;
+  UCHAR Reserved[3];
+  ULONG InstantaneousPeakPowerThreshold;
+  ULONG SustainablePeakPowerThreshold;
+} BATTERY_PEAK_POWER_THRESHOLDS, *PBATTERY_PEAK_POWER_THRESHOLDS;
+
+typedef struct _BATTERY_NON_CATASTROPHIC_EVENT {
+  ULONG BatteryChargeLimitState : 1;
+  ULONG BatteryChargingState : 2;
+  ULONG Reserved : 29;
+} BATTERY_NON_CATASTROPHIC_EVENT, *PBATTERY_NON_CATASTROPHIC_EVENT;
+
+typedef struct _BATTERY_MINIPORT_UPDATE_DATA {
+  ULONG Version;
+  BATTERY_NON_CATASTROPHIC_EVENT NotifyEvent;
+} BATTERY_MINIPORT_UPDATE_DATA, *PBATTERY_MINIPORT_UPDATE_DATA;
+
 #endif /* _BATCLASS_ */
 
 #if !defined(_WINDOWS_)
