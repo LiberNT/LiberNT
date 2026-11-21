@@ -231,4 +231,16 @@ MapUserPhysicalPages(
 #define MEHC_PATROL_SCRUBBER_PRESENT 0x1
 #endif
 
+typedef enum OFFER_PRIORITY {
+    VmOfferPriorityVeryLow = 1,
+    VmOfferPriorityLow = 2,
+    VmOfferPriorityBelowNormal = 3,
+    VmOfferPriorityNormal = 4
+} OFFER_PRIORITY;
+
+typedef enum WIN32_MEMORY_PARTITION_INFORMATION_CLASS {
+    MemoryPartitionInfo = 0,
+    MemoryPartitionDedicatedMemoryInfo = 1
+} WIN32_MEMORY_PARTITION_INFORMATION_CLASS;
+
 #endif

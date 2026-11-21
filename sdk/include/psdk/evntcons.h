@@ -141,4 +141,18 @@ typedef const EVENT_RECORD *PCEVENT_RECORD;
 #define EVENT_HEADER_FLAG_RESERVED1 0x0400
 #endif
 
+typedef enum ETW_PROVIDER_TRAIT_TYPE {
+    EtwProviderTraitTypeGroup = 1,
+    EtwProviderTraitDecodeGuid = 2,
+    EtwProviderTraitTypeMax = 3
+} ETW_PROVIDER_TRAIT_TYPE;
+
+typedef enum EVENTSECURITYOPERATION {
+    EventSecuritySetDACL = 0,
+    EventSecuritySetSACL = 1,
+    EventSecurityAddDACL = 2,
+    EventSecurityAddSACL = 3,
+    EventSecurityMax = 4
+} EVENTSECURITYOPERATION;
+
 #endif /* _EVNTCONS_H_ */

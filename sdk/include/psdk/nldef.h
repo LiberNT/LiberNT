@@ -162,5 +162,29 @@ typedef enum _NL_NETWORK_CATEGORY {
 
 #define NET_IF_CURRENT_SESSION ((ULONG)-1)
 
+typedef enum _NL_INTERFACE_NETWORK_CATEGORY_STATE {
+    NlincCategoryUnknown = 0,
+    NlincPublic = 1,
+    NlincPrivate = 2,
+    NlincDomainAuthenticated = 3,
+    NlincCategoryStateMax = 4
+} NL_INTERFACE_NETWORK_CATEGORY_STATE, *PNL_INTERFACE_NETWORK_CATEGORY_STATE;
+
+typedef enum _NL_NETWORK_CONNECTIVITY_LEVEL_HINT {
+    NetworkConnectivityLevelHintUnknown = 0,
+    NetworkConnectivityLevelHintNone = 1,
+    NetworkConnectivityLevelHintLocalAccess = 2,
+    NetworkConnectivityLevelHintInternetAccess = 3,
+    NetworkConnectivityLevelHintConstrainedInternetAccess = 4,
+    NetworkConnectivityLevelHintHidden = 5
+} NL_NETWORK_CONNECTIVITY_LEVEL_HINT;
+
+typedef enum _NL_NETWORK_CONNECTIVITY_COST_HINT {
+    NetworkConnectivityCostHintUnknown = 0,
+    NetworkConnectivityCostHintUnrestricted = 1,
+    NetworkConnectivityCostHintFixed = 2,
+    NetworkConnectivityCostHintVariable = 3
+} NL_NETWORK_CONNECTIVITY_COST_HINT;
+
 #endif /* _NLDEF_ */
 

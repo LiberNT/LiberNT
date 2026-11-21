@@ -101,4 +101,11 @@ typedef struct _TCP_REQUEST_SET_INFORMATION_EX {
 }
 #endif
 
+typedef enum TDI_TL_IO_CONTROL_TYPE {
+    EndpointIoControlType = 0,
+    SetSockOptIoControlType = 1,
+    GetSockOptIoControlType = 2,
+    SocketIoControlType = 3
+} TDI_TL_IO_CONTROL_TYPE, *PTDI_TL_IO_CONTROL_TYPE;
+
 #endif /* __TDIINFO_H */

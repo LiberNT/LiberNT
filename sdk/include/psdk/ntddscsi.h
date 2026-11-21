@@ -794,4 +794,23 @@ typedef struct _STORAGE_FIRMWARE_INFO_V2 {
 #endif
 #ifndef STORAGE_FIRMWARE_INFO_STRUCTURE_VERSION
 #define STORAGE_FIRMWARE_INFO_STRUCTURE_VERSION 0x1
+typedef enum _NV_SEP_WRITE_CACHE_TYPE {
+    NVSEPWriteCacheTypeUnknown = 0,
+    NVSEPWriteCacheTypeNone = 1,
+    NVSEPWriteCacheTypeWriteBack = 2,
+    NVSEPWriteCacheTypeWriteThrough = 3
+} NV_SEP_WRITE_CACHE_TYPE, *PNV_SEP_WRITE_CACHE_TYPE;
+
+typedef enum _MP_STORAGE_DIAGNOSTIC_LEVEL {
+    MpStorageDiagnosticLevelDefault = 0,
+    MpStorageDiagnosticLevelMax = 1
+} MP_STORAGE_DIAGNOSTIC_LEVEL, *PMP_STORAGE_DIAGNOSTIC_LEVEL;
+
+typedef enum _MP_STORAGE_DIAGNOSTIC_TARGET_TYPE {
+    MpStorageDiagnosticTargetTypeUndefined = 0,
+    MpStorageDiagnosticTargetTypeMiniport = 2,
+    MpStorageDiagnosticTargetTypeHbaFirmware = 3,
+    MpStorageDiagnosticTargetTypeMax = 4
+} MP_STORAGE_DIAGNOSTIC_TARGET_TYPE, *PMP_STORAGE_DIAGNOSTIC_TARGET_TYPE;
+
 #endif

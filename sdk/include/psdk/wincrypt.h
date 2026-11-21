@@ -8553,4 +8553,16 @@ HRESULT WINAPI FindCertsByIssuer(PCERT_CHAIN pCertChains, DWORD *pcbCertChains,
 #define cPRIV_KEY_CACHE_PURGE_INTERVAL_SECONDS_DEFAULT 86400
 #endif
 
+typedef enum CertKeyType {
+    KeyTypeOther = 0,
+    KeyTypeVirtualSmartCard = 1,
+    KeyTypePhysicalSmartCard = 2,
+    KeyTypePassport = 3,
+    KeyTypePassportRemote = 4,
+    KeyTypePassportSmartCard = 5,
+    KeyTypeHardware = 6,
+    KeyTypeSoftware = 7,
+    KeyTypeSelfSigned = 8
+} CertKeyType;
+
 #endif

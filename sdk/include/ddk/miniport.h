@@ -282,4 +282,39 @@ typedef VOID
 #define PCI_VIRTUAL_RESOURCE_COUNT 0x8
 #endif
 
+typedef enum _PCI_OSC_CONTROL_BITS {
+    PciOscControlBitExpressNativeHotPlug = 1,
+    PciOscControlBitShpcNativeHotPlug = 2,
+    PciOscControlBitExpressNativePME = 4,
+    PciOscControlBitExpressAdvancedErrorReporting = 8,
+    PciOscControlBitExpressCapabilityStructure = 16,
+    PciOscControlBitLatencyToleranceReporting = 32,
+    PciOscControlBitAllOnesMmioInvalidToDrivers = 64,
+    PciOscControlBitDownstreamPortContainment = 128,
+    PciOscControlBitCompletionTimeout = 0x100,
+    PciOscControlBitFirmwareIntermediaryConfig = 0x200
+} PCI_OSC_CONTROL_BITS, *PPCI_OSC_CONTROL_BITS;
+
+typedef enum PCI_EXPRESS_RCB {
+    RCB64Bytes = 0,
+    RCB128Bytes = 1
+} PCI_EXPRESS_RCB;
+
+typedef enum PCI_EXPRESS_LINK_SUBSTATE {
+    PciExpressPciPmLinkSubState_L11_BitIndex = 0,
+    PciExpressPciPmLinkSubState_L12_BitIndex = 1,
+    PciExpressASPMLinkSubState_L11_BitIndex = 2,
+    PciExpressASPMLinkSubState_L12_BitIndex = 3
+} PCI_EXPRESS_LINK_SUBSTATE;
+
+typedef enum PCI_DEVICE_D3COLD_STATE_REASON {
+    PciDeviceD3Cold_State_Disabled_BitIndex = 1,
+    PciDeviceD3Cold_State_Enabled_BitIndex = 2,
+    PciDeviceD3Cold_State_ParentRootPortS0WakeSupported_BitIndex = 3,
+    PciDeviceD3Cold_State_Disabled_Bridge_HackFlags_BitIndex = 4,
+    PciDeviceD3Cold_Reason_Default_State_BitIndex = 8,
+    PciDeviceD3Cold_Reason_INF_BitIndex = 9,
+    PciDeviceD3Cold_Reason_Interface_Api_BitIndex = 10
+} PCI_DEVICE_D3COLD_STATE_REASON;
+
 #endif /* __MINIPORT_H */

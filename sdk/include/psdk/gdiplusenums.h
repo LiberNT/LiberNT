@@ -810,4 +810,10 @@ typedef enum EmfPlusRecordType EmfPlusRecordType;
 #undef GDIP_WMF_RECORD_TO_EMFPLUS
 #define GDIP_WMF_RECORD_TO_EMFPLUS(x) ((EmfPlusRecordType)((x) | GDIP_WMF_RECORD_BASE))
 
+enum GenericFontFamily {
+    GenericFontFamilySerif = 0,
+    GenericFontFamilySansSerif = 1,
+    GenericFontFamilyMonospace = 2
+};
+
 #endif

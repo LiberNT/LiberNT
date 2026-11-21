@@ -1268,4 +1268,12 @@ typedef enum _AUTHENTICATION_REQUIREMENTS {
 #define VideoSourceServiceClassID_UUID16 0x1303
 #endif
 
+typedef enum _IO_CAPABILITY {
+    IoCaps_DisplayOnly = 0,
+    IoCaps_DisplayYesNo = 1,
+    IoCaps_KeyboardOnly = 2,
+    IoCaps_NoInputNoOutput = 3,
+    IoCaps_Undefined = 255
+} IO_CAPABILITY;
+
 #endif /*_INC_BTHDEF*/

@@ -876,4 +876,30 @@ RPCRTAPI RPC_STATUS RPC_ENTRY
 #define TARGET_IS_NT63_OR_LATER 1
 #endif
 
+typedef enum _system_handle_t {
+    SYSTEM_HANDLE_FILE = 0,
+    SYSTEM_HANDLE_SEMAPHORE = 1,
+    SYSTEM_HANDLE_EVENT = 2,
+    SYSTEM_HANDLE_MUTEX = 3,
+    SYSTEM_HANDLE_PROCESS = 4,
+    SYSTEM_HANDLE_TOKEN = 5,
+    SYSTEM_HANDLE_SECTION = 6,
+    SYSTEM_HANDLE_REG_KEY = 7,
+    SYSTEM_HANDLE_THREAD = 8,
+    SYSTEM_HANDLE_COMPOSITION_OBJECT = 9,
+    SYSTEM_HANDLE_SOCKET = 10,
+    SYSTEM_HANDLE_JOB = 11,
+    SYSTEM_HANDLE_PIPE = 12,
+    SYSTEM_HANDLE_MAX = 12,
+    SYSTEM_HANDLE_INVALID = 255
+} system_handle_t;
+
+enum {
+    MidlInterceptionInfoVersionOne = 1
+};
+
+enum {
+    MidlWinrtTypeSerializationInfoVersionOne = 1
+};
+
 #endif /*__WINE_RPCNDR_H */

@@ -879,4 +879,61 @@ typedef struct _TAPE_PHYS_POSITION {
 #define ZONE_TYPE_SEQUENTIAL_WRITE_REQUIRED 0x2
 #endif
 
+typedef enum _SES_ELEMENT_TYPE {
+    SesElementTypeUnknown = 0,
+    SesElementTypeDeviceSlot = 1,
+    SesElementTypePowerSupply = 2,
+    SesElementTypeCooling = 3,
+    SesElementTypeTemperatureSensor = 4,
+    SesElementTypeDoor = 5,
+    SesElementTypeAudibleAlarm = 6,
+    SesElementTypeController = 7,
+    SesElementTypeScsiController = 8,
+    SesElementTypeNonVolatileCache = 9,
+    SesElementTypeInvalidOperationReason = 10,
+    SesElementTypeUps = 11,
+    SesElementTypeDisplay = 12,
+    SesElementTypeKeypad = 13,
+    SesElementTypeEnclosure = 14,
+    SesElementTypeScsiPort = 15,
+    SesElementTypeLanguage = 16,
+    SesElementTypeCommunicationPort = 17,
+    SesElementTypeVoltageSensor = 18,
+    SesElementTypeCurrentSensor = 19,
+    SesElementTypeScsiTargetPort = 20,
+    SesElementTypeScsiInitiatorPort = 21,
+    SesElementTypeSubEnclosure = 22,
+    SesElementTypeArrayDeviceSlot = 23,
+    SesElementTypeSasExpander = 24,
+    SesElementTypeSasConnector = 25,
+    SesElementTypeMax = 26
+} SES_ELEMENT_TYPE, *PSES_ELEMENT_TYPE;
+
+typedef enum _SES_ELEMENT_STATE {
+    SesElementStateNotReported = 0,
+    SesElementStateOkay = 1,
+    SesElementStateCritical = 2,
+    SesElementStateNonCritical = 3,
+    SesElementStateUnrecoverable = 4,
+    SesElementStateNotInstalled = 5,
+    SesElementStateUnknown = 6,
+    SesElementStateNotAvailable = 7,
+    SesElementStateNoAccessAllowed = 8,
+    SesElementStateMax = 9
+} SES_ELEMENT_STATE, *PSES_ELEMENT_STATE;
+
+typedef enum _SES_DOWNLOAD_MICROCODE_STATE {
+    SesDownloadMcStateNoneInProgress = 0,
+    SesDownloadMcStateInProgress = 1,
+    SesDownloadMcStateCompletedPendingReset = 17,
+    SesDownloadMcStateCompletedPendingPowerOn = 18,
+    SesDownloadMcStateCompletedPendingActivation = 19
+} SES_DOWNLOAD_MICROCODE_STATE, *PSES_DOWNLOAD_MICROCODE_STATE;
+
+typedef enum _TAPE_ALERT_INFO_TYPE {
+    TapeAlertInfoNone = 0,
+    TapeAlertInfoRequestSense = 1,
+    TapeAlertInfoLogPage = 2
+} TAPE_ALERT_INFO_TYPE;
+
 #endif /* _MINITAPE_ */

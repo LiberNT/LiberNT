@@ -1148,4 +1148,202 @@ typedef ACPI_PLD_ROTATION AcpiPldRotation;
 #define WSMT_SIGNATURE 0x544D5357
 #endif
 
+typedef enum _ACPI_GENERIC_ADDRESS_TYPE {
+    AcpiGenericSpaceMemory = 0,
+    AcpiGenericSpaceIO = 1,
+    AcpiGenericSpacePciConfig = 2,
+    AcpiGenericSpaceEC = 3,
+    AcpiGenericSpaceSMBus = 4,
+    AcpiGenericSpacePcc = 10,
+    AcpiGenericSpaceFixedFunction = 127
+} ACPI_GENERIC_ADDRESS_TYPE, *PACPI_GENERIC_ADDRESS_TYPE;
+
+typedef enum _ACPI_GENERIC_ACCESS_SIZE {
+    AcpiGenericAccessSizeLegacy = 0,
+    AcpiGenericAccessSizeByte = 1,
+    AcpiGenericAccessSizeWord = 2,
+    AcpiGenericAccessSizeDWord = 3,
+    AcpiGenericAccessSizeQWord = 4
+} ACPI_GENERIC_ACCESS_SIZE, *PACPI_GENERIC_ACCESS_SIZE;
+
+typedef enum _ACPI_SRAT_DEVICE_HANDLE_TYPE {
+    AcpiSrat_ACPIDeviceHandle = 0,
+    AcpiSrat_PCIDeviceHandle = 1
+} ACPI_SRAT_DEVICE_HANDLE_TYPE, *PACI_SRAT_DEVICE_HANDLE_TYPE;
+
+typedef enum SRAT_ENTRY_TYPE {
+    SratProcessorLocalAPIC = 0,
+    SratMemory = 1,
+    SratProcessorLocalX2APIC = 2,
+    SratGicc = 3,
+    SratGicIts = 4,
+    SratGenericInitiator = 5,
+    SratGenericPort = 6
+} SRAT_ENTRY_TYPE;
+
+typedef enum _IVRS_BLOCK_TYPE {
+    IommuDefinitionBlockTypeIvhd = 16,
+    IommuDefinitionBlockType11Ivhd = 17,
+    IommuDefinitionBlockTypeIvmdAll = 32,
+    IommuDefinitionBlockTypeIvmdSpecified = 33,
+    IommuDefinitionBlockTypeIvmdRange = 34,
+    IommuDefinitionBlockType40Ivhd = 64
+} IVRS_BLOCK_TYPE;
+
+typedef enum _IVHD_ENTRY_TYPE {
+    IvhdEntryTypePad4 = 0,
+    IvhdEntryTypeAll = 1,
+    IvhdEntryTypeSelect = 2,
+    IvhdEntryTypeStartRange = 3,
+    IvhdEntryTypeEndRange = 4,
+    IvhdEntryTypePad8 = 64,
+    IvhdEntryTypeAliasSelect = 66,
+    IvhdEntryTypeAliasStartRange = 67,
+    IvhdEntryTypeExtendedSelect = 70,
+    IvhdEntryTypeExtendedStartRange = 71,
+    IvhdEntryTypeSpecialDevice = 72,
+    IvhdEntryTypeAcpiDevice = 240
+} IVRS_TABLE_TYPE;
+
+typedef enum _APCI_IVHD_ENTRY_VARIETY {
+    IvhdEntryVarietyIoapic = 1,
+    IvhdEntryVarietyHpet = 2
+} IVHD_ENTRY_VARIETY;
+
+typedef enum _GTDT_PLATFORM_TIMER_BLOCK_TYPE {
+    GtdtPlatformGtBlock = 0,
+    GtdtPlatformWatchdogBlock = 1
+} GTDT_PLATFORM_TIMER_BLOCK_TYPE, *PGTDT_PLATFORM_TIMER_BLOCK_TYPE;
+
+typedef enum _FPDT_RECORD_SUBTYPE {
+    S3PTTypeResumePerformance = 0,
+    S3PTTypeSuspendPerformance = 1,
+    BasicBootPerformanceType = 2
+} FPDT_RECORD_SUBTYPE, *PFPDT_RECORD_SUBTYPE;
+
+typedef enum _FPDT_RECORD_TYPE {
+    FpdtTypeBootTablePointer = 0,
+    FpdtTypeS3TablePointer = 1
+} FPDT_RECORD_TYPE, *PFPDT_RECORD_TYPE;
+
+typedef enum _ACPI_WPBT_CONTENT_LAYOUT {
+    WpbtContentLayoutPE = 1
+} ACPI_WPBT_CONTENT_LAYOUT;
+
+typedef enum _ACPI_WPBT_CONTENT_TYPE {
+    WpbtContentTypeNative = 1
+} ACPI_WPBT_CONTENT_TYPE;
+
+typedef enum _TPM20_START_METHOD {
+    Tpm20TableStartMethodInvalid = 0,
+    Tpm20TableStartMethodSim = 1,
+    Tpm20TableStartMethodAcpi = 2,
+    Tpm20TableStartMethodTz1 = 3,
+    Tpm20TableStartMethodTz2 = 4,
+    Tpm20TableStartMethodTz3 = 5,
+    Tpm20TableStartMethodTis13 = 6,
+    Tpm20TableStartMethodCR = 7,
+    Tpm20TableStartMethodCRWithAcpi = 8,
+    Tpm20TableStartMethodCRTree = 9,
+    Tpm20TableStartMethodSpb = 10,
+    Tpm20TableStartMethodCRSmc = 11,
+    Tpm20TableStartMethodFifoI2C = 12,
+    Tpm20TableStartMethodCRHsp = 13,
+    Tpm20TableStartMethodCRSpu = 14
+} TPM20_START_METHOD, *PTPM20_START_METHOD;
+
+typedef enum _HSP_PROTOCOL_ID {
+    HspTableProtocolInvalid = 0,
+    HspTableProtocolACPI = 1
+} HSP_PROTOCOL_ID, *PHSP_PROTOCOL_ID;
+
+typedef enum _ACPI_PLD_VERTICAL_POSITION {
+    AcpiPldVPosUpper = 0,
+    AcpiPldVPosCenter = 1,
+    AcpiPldVPosLower = 2
+} ACPI_PLD_VERTICAL_POSITION, *PACPI_PLD_VERTICAL_POSITION, AcpiPldVPos;
+
+typedef enum _ACPI_PLD_HORIZONTAL_POSITION {
+    AcpiPldHPosLeft = 0,
+    AcpiPldHPosCenter = 1,
+    AcpiPldHPosRight = 2
+} ACPI_PLD_HORIZONTAL_POSITION, *PACPI_PLD_HORIZONTAL_POSITION, AcpiPldHPos;
+
+typedef enum _ACPI_PLD_SHAPE {
+    AcpiPldShapeRound = 0,
+    AcpiPldShapeOval = 1,
+    AcpiPldShapeSquare = 2,
+    AcpiPldShapeVRect = 3,
+    AcpiPldShapeHRect = 4,
+    AcpiPldShapeVTrap = 5,
+    AcpiPldShapeHTrap = 6,
+    AcpiPldShapeUnknown = 7,
+    AcpiPldShapeChamfered = 8
+} ACPI_PLD_SHAPE, *PACPI_PLD_SHAPE, AcpiPldShape;
+
+typedef enum _ACPI_PLD_ORIENTATION {
+    AcpiPldOrientationHorizontal = 0,
+    AcpiPldOrientationVertical = 1
+} ACPI_PLD_ORIENTATION, *PACPI_PLD_ORIENTATION;
+
+typedef enum _ACPI_PLD_JOINT_TYPE {
+    AcpiPldJointTypeFixed = 0,
+    AcpiPldJointTypePlanar = 1,
+    AcpiPldJointTypeHinge = 2,
+    AcpiPldJointTypePivot = 3,
+    AcpiPldJointTypeSwivel = 4
+} ACPI_PLD_JOINT_TYPE, *PACPI_PLD_JOINT_TYPE;
+
+typedef enum _ACPI_PLD_EDGE {
+    AcpiPldEdgeTop = 0,
+    AcpiPldEdgeBottom = 1,
+    AcpiPldEdgeLeft = 2,
+    AcpiPldEdgeRight = 3,
+    AcpiPldEdgeUnknown = 4
+} ACPI_PLD_EDGE, *PACPI_PLD_EDGE;
+
+typedef enum _NFIT_STRUCTURE_TYPE {
+    NfitSystemPhysicalAddressRange = 0,
+    NfitNvdimmRegionMapping = 1,
+    NfitInterleave = 2,
+    NfitSmbiosManagementInformation = 3,
+    NfitNvdimmControlRegion = 4,
+    NfitNvdimmBlockDataWindowRegion = 5,
+    NfitFlushHintAddress = 6,
+    NfitPlatformCapabilities = 7,
+    NfitMaximum = 8
+} NFIT_STRUCTURE_TYPE, *PNFIT_STRUCTURE_TYPE;
+
+typedef enum _NFIT_SPA_RANGE_FLAG {
+    NfitSpaRangeFlagManagementOnlyControlRegion = 1,
+    NfitSpaRangeFlagProximityDomainValid = 2
+} NFIT_SPA_RANGE_FLAG, *PNFIT_SPA_RANGE_FLAG;
+
+typedef enum _NFIT_SPA_RANGE_MEMORY_MAP_ATTRIBUTES {
+    NfitSpaRangeAttributeUC = 1,
+    NfitSpaRangeAttributeWC = 2,
+    NfitSpaRangeAttributeWT = 4,
+    NfitSpaRangeAttributeWB = 8,
+    NfitSpaRangeAttributeUCE = 16,
+    NfitSpaRangeAttributeWP = 0x1000,
+    NfitSpaRangeAttributeRP = 0x2000,
+    NfitSpaRangeAttributeXP = 0x4000,
+    NfitSpaRangeAttributeNV = 0x8000,
+    NfitSpaRangeAttributeMoreReliable = 0x10000
+} NFIT_SPA_RANGE_MEMORY_MAP_ATTRIBUTES, *PNFIT_SPA_RANGE_MEMORY_MAP_ATTRIBUTES;
+
+typedef enum _NFIT_NVDIMM_STATE_FLAG {
+    NfitNvdimmStateFlagSaveFail = 1,
+    NfitNvdimmStateFlagRestoreFail = 2,
+    NfitNvdimmStateFlagPlatformFlushFail = 4,
+    NfitNvdimmStateFlagNotArm = 8,
+    NfitNvdimmStateFlagHealthEvent = 16,
+    NfitNvdimmStateFlagNotifyEnabled = 32,
+    NfitNvdimmStateNoSPAMapping = 64
+} NFIT_NVDIMM_STATE_FLAG, *PNFIT_NVDIMM_STATE_FLAG;
+
+typedef enum _NFIT_CONTROL_REGION_FLAG {
+    NfitControlRegionFlagBufferBlockDataWindow = 1
+} NFIT_CONTROL_REGION_FLAG, *PNFIT_CONTROL_REGION_FLAG;
+
 #endif

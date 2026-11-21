@@ -343,4 +343,92 @@ $include(winnt_old.h)
 #endif
 #ifndef XSTATE_ARM64_SME_ZT
 #define XSTATE_ARM64_SME_ZT 5
+typedef enum _JOBOBJECT_RATE_CONTROL_TOLERANCE {
+    ToleranceLow = 1,
+    ToleranceMedium = 2,
+    ToleranceHigh = 3
+} JOBOBJECT_RATE_CONTROL_TOLERANCE, *PJOBOBJECT_RATE_CONTROL_TOLERANCE;
+
+typedef enum _JOBOBJECT_RATE_CONTROL_TOLERANCE_INTERVAL {
+    ToleranceIntervalShort = 1,
+    ToleranceIntervalMedium = 2,
+    ToleranceIntervalLong = 3
+} JOBOBJECT_RATE_CONTROL_TOLERANCE_INTERVAL, *PJOBOBJECT_RATE_CONTROL_TOLERANCE_INTERVAL;
+
+typedef enum JOB_OBJECT_NET_RATE_CONTROL_FLAGS {
+    JOB_OBJECT_NET_RATE_CONTROL_ENABLE = 1,
+    JOB_OBJECT_NET_RATE_CONTROL_MAX_BANDWIDTH = 2,
+    JOB_OBJECT_NET_RATE_CONTROL_DSCP_TAG = 4,
+    JOB_OBJECT_NET_RATE_CONTROL_VALID_FLAGS = 7
+} JOB_OBJECT_NET_RATE_CONTROL_FLAGS;
+
+typedef enum JOB_OBJECT_IO_RATE_CONTROL_FLAGS {
+    JOB_OBJECT_IO_RATE_CONTROL_ENABLE = 1,
+    JOB_OBJECT_IO_RATE_CONTROL_STANDALONE_VOLUME = 2,
+    JOB_OBJECT_IO_RATE_CONTROL_FORCE_UNIT_ACCESS_ALL = 4,
+    JOB_OBJECT_IO_RATE_CONTROL_FORCE_UNIT_ACCESS_ON_SOFT_CAP = 8,
+    JOB_OBJECT_IO_RATE_CONTROL_VALID_FLAGS = 15
+} JOB_OBJECT_IO_RATE_CONTROL_FLAGS;
+
+typedef enum JOBOBJECT_IO_ATTRIBUTION_CONTROL_FLAGS {
+    JOBOBJECT_IO_ATTRIBUTION_CONTROL_ENABLE = 1,
+    JOBOBJECT_IO_ATTRIBUTION_CONTROL_DISABLE = 2,
+    JOBOBJECT_IO_ATTRIBUTION_CONTROL_VALID_FLAGS = 3
+} JOBOBJECT_IO_ATTRIBUTION_CONTROL_FLAGS;
+
+typedef enum _SERVERSILO_STATE {
+    SERVERSILO_INITING = 0,
+    SERVERSILO_STARTED = 1,
+    SERVERSILO_SHUTTING_DOWN = 2,
+    SERVERSILO_TERMINATING = 3,
+    SERVERSILO_TERMINATED = 4
+} SERVERSILO_STATE, *PSERVERSILO_STATE;
+
+typedef enum _PROCESSOR_SHARED_COMPUTE_UNIT_TYPE {
+    SharedComputeUnitArm64SMCU = 0
+} PROCESSOR_SHARED_COMPUTE_UNIT_TYPE, *PPROCESSOR_SHARED_COMPUTE_UNIT_TYPE;
+
+typedef enum _RUNTIME_REPORT_TYPE {
+    RuntimeReportTypeDriver = 0,
+    RuntimeReportTypeCodeIntegrity = 1,
+    RuntimeReportTypeMax = 2
+} RUNTIME_REPORT_TYPE;
+
+typedef enum _IMAGE_HOTSWAP_ARM64_ENDPOINT_INFO_CC_RETURN {
+    EndpointReturnTypeNone = 0,
+    EndpointReturnTypeX0 = 1,
+    EndpointReturnTypeX0_X1 = 2,
+    EndpointReturnTypeX0_X2 = 3,
+    EndpointReturnTypeX0_X3 = 4,
+    EndpointReturnTypeQ0 = 5,
+    EndpointReturnTypeQ0_Q1 = 6,
+    EndpointReturnTypeQ0_Q2 = 7,
+    EndpointReturnTypeQ0_Q3 = 8,
+    EndpointReturnTypeX8 = 9
+} IMAGE_HOTSWAP_ARM64_ENDPOINT_INFO_CC_RETURN, *PIMAGE_HOTSWAP_ARM64_ENDPOINT_INFO_CC_RETURN;
+
+typedef enum _IMAGE_HOTSWAP_X64_ENDPOINT_INFO_CC_REG {
+    EndpointParamRegNone = 0,
+    EndpointParamRegRAX = 1,
+    EndpointParamRegRCX = 2,
+    EndpointParamRegRDX = 3,
+    EndpointParamRegR8 = 9,
+    EndpointParamRegR9 = 10,
+    EndpointParamRegXMM0 = 200,
+    EndpointParamRegXMM1 = 201,
+    EndpointParamRegXMM2 = 202,
+    EndpointParamRegXMM3 = 203
+} IMAGE_HOTSWAP_X64_ENDPOINT_INFO_CC_REG, *PIMAGE_HOTSWAP_X64_ENDPOINT_INFO_CC_REG;
+
+typedef enum _RTL_UMS_THREAD_INFO_CLASS {
+    UmsThreadInvalidInfoClass = 0,
+    UmsThreadUserContext = 1,
+    UmsThreadPriority = 2,
+    UmsThreadAffinity = 3,
+    UmsThreadTeb = 4,
+    UmsThreadIsSuspended = 5,
+    UmsThreadIsTerminated = 6,
+    UmsThreadMaxInfoClass = 7
+} RTL_UMS_THREAD_INFO_CLASS, *PRTL_UMS_THREAD_INFO_CLASS;
+
 #endif

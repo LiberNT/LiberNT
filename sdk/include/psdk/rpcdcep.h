@@ -296,4 +296,30 @@ RPCRTAPI LONG RPC_ENTRY I_RpcMapWin32Status(RPC_STATUS);
 #define RPC_SYSTEM_HANDLE_FREE_UNRETRIEVED 1
 #endif
 
+enum RPC_ADDRESS_CHANGE_TYPE {
+    PROTOCOL_NOT_LOADED = 1,
+    PROTOCOL_LOADED = 2,
+    PROTOCOL_ADDRESS_CHANGE = 3
+};
+
+typedef enum _LRPC_SYSTEM_HANDLE_MARSHAL_DIRECTION {
+    MarshalDirectionMarshal = 0,
+    MarshalDirectionUnmarshal = 1
+} LRPC_SYSTEM_HANDLE_MARSHAL_DIRECTION;
+
+typedef enum RpcProxyPerfCounters {
+    RpcCurrentUniqueUser = 1,
+    RpcBackEndConnectionAttempts = 2,
+    RpcBackEndConnectionFailed = 3,
+    RpcRequestsPerSecond = 4,
+    RpcIncomingConnections = 5,
+    RpcIncomingBandwidth = 6,
+    RpcOutgoingBandwidth = 7,
+    RpcAttemptedLbsDecisions = 8,
+    RpcFailedLbsDecisions = 9,
+    RpcAttemptedLbsMessages = 10,
+    RpcFailedLbsMessages = 11,
+    RpcLastCounter = 12
+} RpcPerfCounters;
+
 #endif /*__WINE_RPCDCEP_H */

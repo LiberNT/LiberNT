@@ -334,4 +334,12 @@ typedef PGROUP_POLICY_OBJECTA PGROUP_POLICY_OBJECT;
 #define RSOP_USER_ACCESS_DENIED 0x00000001
 #endif
 
+typedef enum _SETTINGSTATUS {
+    RSOPUnspecified = 0,
+    RSOPApplied = 1,
+    RSOPIgnored = 2,
+    RSOPFailed = 3,
+    RSOPSubsettingFailed = 4
+} SETTINGSTATUS;
+
 #endif /* _USERENV_H */

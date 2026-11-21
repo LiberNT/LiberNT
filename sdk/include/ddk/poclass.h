@@ -313,4 +313,16 @@ typedef struct _POWER_LIMIT_INTERFACE {
 #define THERMAL_WAIT_READ_TIMEOUT_NONE 0xFFFFFFFFul
 #endif
 
+typedef enum _USB_CHARGER_PORT {
+    UsbChargerPort_Legacy = 0,
+    UsbChargerPort_TypeC = 1,
+    UsbChargerPort_Max = 2
+} USB_CHARGER_PORT, *PUSB_CHARGER_PORT;
+
+typedef enum _ACPI_TIME_RESOLUTION {
+    AcpiTimeResolutionMilliseconds = 0,
+    AcpiTimeResolutionSeconds = 1,
+    AcpiTimeResolutionMax = 2
+} ACPI_TIME_RESOLUTION, *PACPI_TIME_RESOLUTION;
+
 #endif /* __POCLASS_H */

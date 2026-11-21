@@ -444,4 +444,8 @@ BOOL WINAPI WTSWaitSystemEvent(HANDLE, DWORD, DWORD*);
 #define WTS_WSD_SHUTDOWN 0x00000002
 #endif
 
+typedef enum _WTS_CONFIG_SOURCE {
+    WTSUserConfigSourceSAM = 0
+} WTS_CONFIG_SOURCE;
+
 #endif

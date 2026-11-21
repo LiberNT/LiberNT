@@ -575,4 +575,9 @@ HPROFILE   WINAPI WcsOpenColorProfileW(PROFILE*,PROFILE*,PROFILE*,DWORD,DWORD,DW
 #define WCS_ICCONLY 0x00010000L
 #endif
 
+typedef enum WCS_DEVICE_CAPABILITIES_TYPE {
+    VideoCardGammaTable = 1,
+    MicrosoftHardwareColorV2 = 2
+} WCS_DEVICE_CAPABILITIES_TYPE;
+
 #endif /* __WINE_ICM_H */

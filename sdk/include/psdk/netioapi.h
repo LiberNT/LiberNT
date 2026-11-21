@@ -505,4 +505,27 @@ IPHLPAPI_DLL_LINKAGE NET_IFINDEX NETIOAPI_API_ if_nametoindex(PCSTR);
 #define DNS_SETTING_SUPPLEMENTAL_SEARCH_LIST 0x0800
 #endif
 
+typedef enum _MIB_IF_ENTRY_LEVEL {
+    MibIfEntryNormal = 0,
+    MibIfEntryNormalWithoutStatistics = 2
+} MIB_IF_ENTRY_LEVEL, *PMIB_IF_ENTRY_LEVEL;
+
+typedef enum _DNS_SERVER_PROPERTY_TYPE {
+    DnsServerInvalidProperty = 0,
+    DnsServerDohProperty = 1,
+    DnsServerDotProperty = 2
+} DNS_SERVER_PROPERTY_TYPE;
+
+typedef enum _NET_FL_VIRTUAL_INTERFACE_ORIGIN {
+    NetFlVirtualInterfaceOriginOid = 0,
+    NetFlVirtualInterfaceOriginApi = 1,
+    NetFlVirtualInterfaceOriginDefault = 2
+} NET_FL_VIRTUAL_INTERFACE_ORIGIN;
+
+typedef enum _NET_FL_ISOLATION_MODE {
+    NetFlIsolationModeNone = 0,
+    NetFlIsolationModeVlan = 1,
+    NetFlIsolationModeVsid = 2
+} NET_FL_ISOLATION_MODE;
+
 #endif /* __WINE_NETIOAPI_H */

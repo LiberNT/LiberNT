@@ -1614,4 +1614,247 @@ typedef struct _DEVICE_DSM_NVCACHE_CHANGE_PRIORITY_PARAMETERS {
 #define TELEMETRY_COMMAND_SIZE 16
 #endif
 
+typedef enum _STORAGE_SET_TYPE {
+    PropertyStandardSet = 0,
+    PropertyExistsSet = 1,
+    PropertySetMaxDefined = 2
+} STORAGE_SET_TYPE, *PSTORAGE_SET_TYPE;
+
+typedef enum _STORAGE_RPMB_FRAME_TYPE {
+    StorageRpmbFrameTypeUnknown = 0,
+    StorageRpmbFrameTypeStandard = 1,
+    StorageRpmbFrameTypeMax = 2
+} STORAGE_RPMB_FRAME_TYPE, *PSTORAGE_RPMB_FRAME_TYPE;
+
+typedef enum _STORAGE_ICE_TYPE {
+    StorageIceTypeUnknown = 0,
+    StorageIceTypeUfs = 1,
+    StorageIceTypeNvme = 2
+} STORAGE_ICE_TYPE, *PSTORAGE_ICE_TYPE;
+
+typedef enum _STORAGE_TIER_MEDIA_TYPE {
+    StorageTierMediaTypeUnspecified = 0,
+    StorageTierMediaTypeDisk = 1,
+    StorageTierMediaTypeSsd = 2,
+    StorageTierMediaTypeScm = 4,
+    StorageTierMediaTypeMax = 5
+} STORAGE_TIER_MEDIA_TYPE, *PSTORAGE_TIER_MEDIA_TYPE;
+
+typedef enum _STORAGE_TIER_CLASS {
+    StorageTierClassUnspecified = 0,
+    StorageTierClassCapacity = 1,
+    StorageTierClassPerformance = 2,
+    StorageTierClassMax = 3
+} STORAGE_TIER_CLASS, *PSTORAGE_TIER_CLASS;
+
+typedef enum _STORAGE_PROTOCOL_NVME_DATA_TYPE {
+    NVMeDataTypeUnknown = 0,
+    NVMeDataTypeIdentify = 1,
+    NVMeDataTypeLogPage = 2,
+    NVMeDataTypeFeature = 3,
+    NVMeDataTypeLogPageEx = 4,
+    NVMeDataTypeFeatureEx = 5
+} STORAGE_PROTOCOL_NVME_DATA_TYPE, *PSTORAGE_PROTOCOL_NVME_DATA_TYPE;
+
+typedef enum _STORAGE_PROTOCOL_UFS_DATA_TYPE {
+    UfsDataTypeUnknown = 0,
+    UfsDataTypeQueryDescriptor = 1,
+    UfsDataTypeQueryAttribute = 2,
+    UfsDataTypeQueryFlag = 3,
+    UfsDataTypeQueryDmeAttribute = 4,
+    UfsDataTypeQueryDmePeerAttribute = 5,
+    UfsDataTypeMax = 6
+} STORAGE_PROTOCOL_UFS_DATA_TYPE, *PSTORAGE_PROTOCOL_UFS_DATA_TYPE;
+
+typedef enum _STORAGE_DISK_HEALTH_STATUS {
+    DiskHealthUnknown = 0,
+    DiskHealthUnhealthy = 1,
+    DiskHealthWarning = 2,
+    DiskHealthHealthy = 3,
+    DiskHealthMax = 4
+} STORAGE_DISK_HEALTH_STATUS, *PSTORAGE_DISK_HEALTH_STATUS;
+
+typedef enum _STORAGE_DISK_OPERATIONAL_STATUS {
+    DiskOpStatusNone = 0,
+    DiskOpStatusUnknown = 1,
+    DiskOpStatusOk = 2,
+    DiskOpStatusPredictingFailure = 3,
+    DiskOpStatusInService = 4,
+    DiskOpStatusHardwareError = 5,
+    DiskOpStatusNotUsable = 6,
+    DiskOpStatusTransientError = 7,
+    DiskOpStatusMissing = 8
+} STORAGE_DISK_OPERATIONAL_STATUS, *PSTORAGE_DISK_OPERATIONAL_STATUS;
+
+typedef enum _STORAGE_OPERATIONAL_STATUS_REASON {
+    DiskOpReasonUnknown = 0,
+    DiskOpReasonScsiSenseCode = 1,
+    DiskOpReasonMedia = 2,
+    DiskOpReasonIo = 3,
+    DiskOpReasonThresholdExceeded = 4,
+    DiskOpReasonLostData = 5,
+    DiskOpReasonEnergySource = 6,
+    DiskOpReasonConfiguration = 7,
+    DiskOpReasonDeviceController = 8,
+    DiskOpReasonMediaController = 9,
+    DiskOpReasonComponent = 10,
+    DiskOpReasonNVDIMM_N = 11,
+    DiskOpReasonBackgroundOperation = 12,
+    DiskOpReasonInvalidFirmware = 13,
+    DiskOpReasonHealthCheck = 14,
+    DiskOpReasonLostDataPersistence = 15,
+    DiskOpReasonDisabledByPlatform = 16,
+    DiskOpReasonLostWritePersistence = 17,
+    DiskOpReasonDataPersistenceLossImminent = 18,
+    DiskOpReasonWritePersistenceLossImminent = 19,
+    DiskOpReasonMax = 20
+} STORAGE_OPERATIONAL_STATUS_REASON, *PSTORAGE_OPERATIONAL_STATUS_REASON;
+
+typedef enum _STORAGE_ZONED_DEVICE_TYPES {
+    ZonedDeviceTypeUnknown = 0,
+    ZonedDeviceTypeHostManaged = 1,
+    ZonedDeviceTypeHostAware = 2,
+    ZonedDeviceTypeDeviceManaged = 3
+} STORAGE_ZONED_DEVICE_TYPES, *PSTORAGE_ZONED_DEVICE_TYPES;
+
+typedef enum _STORAGE_ZONE_TYPES {
+    ZoneTypeUnknown = 0,
+    ZoneTypeConventional = 1,
+    ZoneTypeSequentialWriteRequired = 2,
+    ZoneTypeSequentialWritePreferred = 3,
+    ZoneTypeMax = 4
+} STORAGE_ZONE_TYPES, *PSTORAGE_ZONE_TYPES;
+
+typedef enum _STORAGE_STACK_TYPE {
+    StorageStackTypeUnknown = 0,
+    StorageStackTypeScsi = 1,
+    StorageStackTypeNVMe = 2
+} STORAGE_STACK_TYPE, *PSTORAGE_STACK_TYPE;
+
+typedef enum _STORAGE_ENCRYPTION_TYPE {
+    StorageEncryptionTypeUnknown = 0,
+    StorageEncryptionTypeEDrive = 1,
+    StorageEncryptionTypeTcgOpal = 2
+} STORAGE_ENCRYPTION_TYPE, *PSTORAGE_ENCRYPTION_TYPE;
+
+typedef enum _STORAGE_ZONES_ATTRIBUTES {
+    ZonesAttributeTypeAndLengthMayDifferent = 0,
+    ZonesAttributeTypeSameLengthSame = 1,
+    ZonesAttributeTypeSameLastZoneLengthDifferent = 2,
+    ZonesAttributeTypeMayDifferentLengthSame = 3
+} STORAGE_ZONES_ATTRIBUTES, *PSTORAGE_ZONES_ATTRIBUTES;
+
+typedef enum _STORAGE_ZONE_CONDITION {
+    ZoneConditionConventional = 0,
+    ZoneConditionEmpty = 1,
+    ZoneConditionImplicitlyOpened = 2,
+    ZoneConditionExplicitlyOpened = 3,
+    ZoneConditionClosed = 4,
+    ZoneConditionReadOnly = 13,
+    ZoneConditionFull = 14,
+    ZoneConditionOffline = 15
+} STORAGE_ZONE_CONDITION, *PSTORAGE_ZONE_CONDITION;
+
+typedef enum _STORAGE_DIAGNOSTIC_LEVEL {
+    StorageDiagnosticLevelDefault = 0,
+    StorageDiagnosticLevelMax = 1
+} STORAGE_DIAGNOSTIC_LEVEL, *PSTORAGE_DIAGNOSTIC_LEVEL;
+
+typedef enum _STORAGE_DIAGNOSTIC_TARGET_TYPE {
+    StorageDiagnosticTargetTypeUndefined = 0,
+    StorageDiagnosticTargetTypePort = 1,
+    StorageDiagnosticTargetTypeMiniport = 2,
+    StorageDiagnosticTargetTypeHbaFirmware = 3,
+    StorageDiagnosticTargetTypeMax = 4
+} STORAGE_DIAGNOSTIC_TARGET_TYPE, *PSTORAGE_DIAGNOSTIC_TARGET_TYPE;
+
+typedef enum _DEVICE_INTERNAL_STATUS_DATA_REQUEST_TYPE {
+    DeviceInternalStatusDataRequestTypeUndefined = 0,
+    DeviceCurrentInternalStatusDataHeader = 1,
+    DeviceCurrentInternalStatusData = 2,
+    DeviceSavedInternalStatusDataHeader = 3,
+    DeviceSavedInternalStatusData = 4
+} DEVICE_INTERNAL_STATUS_DATA_REQUEST_TYPE, *PDEVICE_INTERNAL_STATUS_DATA_REQUEST_TYPE;
+
+typedef enum _DEVICE_INTERNAL_STATUS_DATA_SET {
+    DeviceStatusDataSetUndefined = 0,
+    DeviceStatusDataSet1 = 1,
+    DeviceStatusDataSet2 = 2,
+    DeviceStatusDataSet3 = 3,
+    DeviceStatusDataSet4 = 4,
+    DeviceStatusDataSetMax = 5
+} DEVICE_INTERNAL_STATUS_DATA_SET, *PDEVICE_INTERNAL_STATUS_DATA_SET;
+
+typedef enum _STORAGE_SANITIZE_METHOD {
+    StorageSanitizeMethodDefault = 0,
+    StorageSanitizeMethodBlockErase = 1,
+    StorageSanitizeMethodCryptoErase = 2
+} STORAGE_SANITIZE_METHOD, *PSTORAGE_SANITIZE_METHOD;
+
+typedef enum _DEVICEDUMP_COLLECTION_TYPE {
+    TCCollectionBugCheck = 1,
+    TCCollectionApplicationRequested = 2,
+    TCCollectionDeviceRequested = 3
+} DEVICEDUMP_COLLECTION_TYPEIDE_NOTIFICATION_TYPE, *PDEVICEDUMP_COLLECTION_TYPE;
+
+typedef enum _STORAGE_DEVICE_POWER_CAP_UNITS {
+    StorageDevicePowerCapUnitsPercent = 0,
+    StorageDevicePowerCapUnitsMilliwatts = 1
+} STORAGE_DEVICE_POWER_CAP_UNITS, *PSTORAGE_DEVICE_POWER_CAP_UNITS;
+
+typedef enum _STORAGE_RPMB_COMMAND_TYPE {
+    StorRpmbProgramAuthKey = 1,
+    StorRpmbQueryWriteCounter = 2,
+    StorRpmbAuthenticatedWrite = 3,
+    StorRpmbAuthenticatedRead = 4,
+    StorRpmbReadResultRequest = 5,
+    StorRpmbAuthenticatedDeviceConfigWrite = 6,
+    StorRpmbAuthenticatedDeviceConfigRead = 7
+} STORAGE_RPMB_COMMAND_TYPE, *PSTORAGE_RPMB_COMMAND_TYPE;
+
+typedef enum _STORAGE_COUNTER_TYPE {
+    StorageCounterTypeUnknown = 0,
+    StorageCounterTypeTemperatureCelsius = 1,
+    StorageCounterTypeTemperatureCelsiusMax = 2,
+    StorageCounterTypeReadErrorsTotal = 3,
+    StorageCounterTypeReadErrorsCorrected = 4,
+    StorageCounterTypeReadErrorsUncorrected = 5,
+    StorageCounterTypeWriteErrorsTotal = 6,
+    StorageCounterTypeWriteErrorsCorrected = 7,
+    StorageCounterTypeWriteErrorsUncorrected = 8,
+    StorageCounterTypeManufactureDate = 9,
+    StorageCounterTypeStartStopCycleCount = 10,
+    StorageCounterTypeStartStopCycleCountMax = 11,
+    StorageCounterTypeLoadUnloadCycleCount = 12,
+    StorageCounterTypeLoadUnloadCycleCountMax = 13,
+    StorageCounterTypeWearPercentage = 14,
+    StorageCounterTypeWearPercentageWarning = 15,
+    StorageCounterTypeWearPercentageMax = 16,
+    StorageCounterTypePowerOnHours = 17,
+    StorageCounterTypeReadLatency100NSMax = 18,
+    StorageCounterTypeWriteLatency100NSMax = 19,
+    StorageCounterTypeFlushLatency100NSMax = 20,
+    StorageCounterTypeMax = 21
+} STORAGE_COUNTER_TYPE, *PSTORAGE_COUNTER_TYPE;
+
+typedef enum _STORAGE_ATTRIBUTE_MGMT_ACTION {
+    StorAttributeMgmt_ClearAttribute = 0,
+    StorAttributeMgmt_SetAttribute = 1,
+    StorAttributeMgmt_ResetAttribute = 2
+} STORAGE_ATTRIBUTE_MGMT_ACTION, *PSTORAGE_ATTRIBUTE_MGMT_ACTION;
+
+typedef enum _BPIO_OPERATIONS {
+    BPIO_OP_ENABLE = 1,
+    BPIO_OP_DISABLE = 2,
+    BPIO_OP_QUERY = 3
+} BPIO_OPERATIONS;
+
+typedef enum _BPIO_INFLAGS {
+    BPIO_INFL_NONE = 0
+} BPIO_INFLAGS;
+
+typedef enum _BPIO_OUTFLAGS {
+    BPIO_OUTFL_NONE = 0
+} BPIO_OUTFLAGS;
+
 #endif /* _NTDDSTOR_H_ */

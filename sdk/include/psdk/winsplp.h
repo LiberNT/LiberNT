@@ -1527,4 +1527,13 @@ BOOL WINAPI InstallPrintProcessor(HWND hWnd);
 #endif
 #ifndef SPLCLIENT_INFO_INTERNAL_LEVEL
 #define SPLCLIENT_INFO_INTERNAL_LEVEL 100
+typedef enum EBranchOfficeJobEventType {
+    kInvalidJobState = 0,
+    kLogJobPrinted = 1,
+    kLogJobRendered = 2,
+    kLogJobError = 3,
+    kLogJobPipelineError = 4,
+    kLogOfflineFileFull = 5
+} EBranchOfficeJobEventType;
+
 #endif

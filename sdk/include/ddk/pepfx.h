@@ -1234,4 +1234,40 @@ PEP_ACPI_INITIALIZE_SPB_I2C_RESOURCE (
 #define PROCESSOR_PARK_TYPE_INTERRUPT_STEERING 0x1
 #endif
 
+typedef enum _PEP_DEVICE_ACCEPTANCE_TYPE {
+    PepDeviceNotAccepted = 0,
+    PepDeviceAccepted = 2,
+    PepDeviceAceptedMax = 3
+} PEP_DEVICE_ACCEPTANCE_TYPE, *PPEP_DEVICE_ACCEPTANCE_TYPE;
+
+typedef enum _PEP_PERF_STATE_UNIT {
+    PepPerfStateUnitOther = 0,
+    PepPerfStateUnitFrequency = 1,
+    PepPerfStateUnitBandwidth = 2,
+    PepPerfStateUnitMax = 3
+} PEP_PERF_STATE_UNIT, *PPEP_PERF_STATE_UNIT;
+
+typedef enum _PEP_PERF_STATE_TYPE {
+    PepPerfStateTypeDiscrete = 0,
+    PepPerfStateTypeRange = 1,
+    PepPerfStateTypeMax = 2
+} PEP_PERF_STATE_TYPE, *PPEP_PERF_STATE_TYPE;
+
+typedef enum _PEP_PPM_WPS_PARK_PREFERENCE {
+    NoPreference = 0,
+    PreferToPark = 1,
+    ForcePark = 2
+} PEP_PPM_WPS_PARK_PREFERENCE, *PPEP_PPM_WPS_PARK_PREFERENCE;
+
+typedef enum _PEP_WPS_PARK_PREFERENCE_REASON {
+    ParkReasonNone = 0,
+    ParkReasonPowerSaving = 1,
+    ParkReasonThermalManagement = 2,
+    ParkReasonPerformance = 4,
+    ParkReasonFwRequestStopUsingLp = 8,
+    ParkReasonLpBelowPowerConstraints = 16,
+    ParkReasonOverClockingDriver = 32,
+    ParkReasonTuning = 64
+} PEP_PPM_WPS_PARK_PREFERENCE_REASON, *PPEP_PPM_WPS_PARK_PREFERENCE_REASON;
+
 #endif

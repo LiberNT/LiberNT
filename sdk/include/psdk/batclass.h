@@ -445,4 +445,10 @@ typedef struct {
 #endif
 #ifndef CHARGE_REQUIREMENT_MAX_POWER_SOURCE_TYPES
 #define CHARGE_REQUIREMENT_MAX_POWER_SOURCE_TYPES 2
+typedef enum BATTERY_CHARGING_STATE {
+    BatteryNoPowerSupply = 0,
+    BatteryInadequatePowerSupply = 1,
+    BatteryAdequatePowerSupply = 2
+} BATTERY_CHARGING_STATE;
+
 #endif

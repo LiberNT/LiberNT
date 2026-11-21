@@ -111,4 +111,13 @@ BOOL    WINAPI InetIsOffline(DWORD);
 }
 #endif
 
+typedef enum urlassociationdialog_in_flags {
+    URLASSOCDLG_FL_USE_DEFAULT_NAME = 1,
+    URLASSOCDLG_FL_REGISTER_ASSOC = 2
+} URLASSOCIATIONDIALOG_IN_FLAGS;
+
+typedef enum mimeassociationdialog_in_flags {
+    MIMEASSOCDLG_FL_REGISTER_ASSOC = 1
+} MIMEASSOCIATIONDIALOG_IN_FLAGS;
+
 #endif  /* __WINE_INTSHCUT_H */

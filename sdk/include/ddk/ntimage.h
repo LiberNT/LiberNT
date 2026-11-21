@@ -1773,4 +1773,35 @@ typedef struct IMAGE_COR20_HEADER
 #define X3_TMPLT_SIZE_X 4
 #endif
 
+typedef enum IMAGE_AUX_SYMBOL_TYPE {
+    IMAGE_AUX_SYMBOL_TYPE_TOKEN_DEF = 1
+} IMAGE_AUX_SYMBOL_TYPE;
+
+typedef enum ARM64_FNPDATA_FLAGS {
+    PdataRefToFullXdata = 0,
+    PdataPackedUnwindFunction = 1,
+    PdataPackedUnwindFragment = 2
+} ARM64_FNPDATA_FLAGS;
+
+typedef enum ARM64_FNPDATA_CR {
+    PdataCrUnchained = 0,
+    PdataCrUnchainedSavedLr = 1,
+    PdataCrChainedWithPac = 2,
+    PdataCrChained = 3
+} ARM64_FNPDATA_CR;
+
+typedef enum IMPORT_OBJECT_TYPE {
+    IMPORT_OBJECT_CODE = 0,
+    IMPORT_OBJECT_DATA = 1,
+    IMPORT_OBJECT_CONST = 2
+} IMPORT_OBJECT_TYPE;
+
+typedef enum IMPORT_OBJECT_NAME_TYPE {
+    IMPORT_OBJECT_ORDINAL = 0,
+    IMPORT_OBJECT_NAME = 1,
+    IMPORT_OBJECT_NAME_NO_PREFIX = 2,
+    IMPORT_OBJECT_NAME_UNDECORATE = 3,
+    IMPORT_OBJECT_NAME_EXPORTAS = 4
+} IMPORT_OBJECT_NAME_TYPE;
+
 #endif /* _NTIMAGE_ */
