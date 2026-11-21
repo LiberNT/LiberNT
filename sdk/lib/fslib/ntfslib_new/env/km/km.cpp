@@ -1009,6 +1009,95 @@ NtfsFetchBlockKm(_Inout_ NTFS_BLOCK_READ *Read)
     ExFreePoolWithTag(Read, 'CftN');
 }
 
+#define NTFS_READ_AHEAD_BLOCKS 16
+
+ULONG
+NtfsCountUncachedBlocksKm(_In_ PDEVICE_OBJECT Device,
+                          _In_ ULONGLONG Offset,
+                          _In_ ULONGLONG Length,
+                          _In_ ULONG Limit)
+{
+    ULONGLONG Block;
+    ULONGLONG LastBlock;
+    ULONG Count = 0;
+
+    NT_ASSERT(Device != NULL);
+    if (!NtfsCacheReady || !Length || Offset > ~(ULONGLONG)0 - Length)
+        return 0;
+
+    LastBlock = (Offset + Length - 1) >> NTFS_CACHE_BLOCK_SHIFT;
+    ExAcquireFastMutex(&NtfsCacheMutex);
+    for (Block = Offset >> NTFS_CACHE_BLOCK_SHIFT; Block <= LastBlock && Count < Limit; Block++)
+    {
+        if (!NtfsCacheProbe(Device, Block))
+            Count++;
+    }
+    ExReleaseFastMutex(&NtfsCacheMutex);
+    NT_ASSERT(Count <= Limit);
+    return Count;
+}
+
+ULONG
+NtfsReadAheadBlocksKm(_In_ PDEVICE_OBJECT Device,
+                      _In_ ULONGLONG Offset,
+                      _In_ ULONGLONG Length,
+                      _In_ ULONG Limit)
+{
+    ULONGLONG Versions[NTFS_READ_AHEAD_BLOCKS];
+    ULONGLONG Block;
+    ULONGLONG LastBlock;
+    ULONGLONG First;
+    ULONG Count;
+    ULONG Index;
+    ULONG Read = 0;
+    PUCHAR Buffer;
+
+    NT_ASSERT(Device != NULL);
+    NT_ASSERT(KeGetCurrentIrql() < APC_LEVEL);
+    if (!NtfsCacheReady || !Length || !Limit || Offset > ~(ULONGLONG)0 - Length)
+        return 0;
+
+    Buffer = (PUCHAR)ExAllocatePoolUninitialized(NonPagedPoolNx,
+                                                NTFS_READ_AHEAD_BLOCKS * NTFS_CACHE_BLOCK_SIZE,
+                                                'CftN');
+    if (!Buffer)
+        return 0;
+
+    Block = Offset >> NTFS_CACHE_BLOCK_SHIFT;
+    LastBlock = (Offset + Length - 1) >> NTFS_CACHE_BLOCK_SHIFT;
+    while (Block <= LastBlock && Read < Limit)
+    {
+        /* Each version is taken before the read is sent, so a write that lands meanwhile rejects the fill */
+        ExAcquireFastMutex(&NtfsCacheMutex);
+        while (Block <= LastBlock && NtfsCacheProbe(Device, Block))
+            Block++;
+        First = Block;
+        Count = 0;
+        while (Block <= LastBlock &&
+               Count < NTFS_READ_AHEAD_BLOCKS &&
+               Read + Count < Limit &&
+               !NtfsCacheProbe(Device, Block))
+        {
+            Versions[Count++] = NtfsCacheWriteVersion[Block & NTFS_CACHE_SET_MASK];
+            Block++;
+        }
+        ExReleaseFastMutex(&NtfsCacheMutex);
+        if (!Count)
+            break;
+
+        NT_ASSERT(Count <= NTFS_READ_AHEAD_BLOCKS);
+        if (!NT_SUCCESS(ReadDisk(Device, First << NTFS_CACHE_BLOCK_SHIFT, Count << NTFS_CACHE_BLOCK_SHIFT, Buffer)))
+            break;
+        for (Index = 0; Index < Count; Index++)
+            NtfsCacheInstall(Device, First + Index, Buffer + ((SIZE_T)Index << NTFS_CACHE_BLOCK_SHIFT), &Versions[Index]);
+        Read += Count;
+    }
+
+    ExFreePoolWithTag(Buffer, 'CftN');
+    NT_ASSERT(Read <= Limit);
+    return Read;
+}
+
 NTSTATUS
 NtfsReadVolumeContext(_In_opt_ void* Context,
                       _In_ ULONG SectorBytes,

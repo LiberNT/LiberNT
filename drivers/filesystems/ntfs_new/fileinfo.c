@@ -3729,6 +3729,140 @@ NtfsQueryReparsePoints(_In_ PVolumeContextBlock VolCB,
     return Status;
 }
 
+#define NTFS_DIRECTORY_PREFETCH_BLOCKS 128
+#define NTFS_DIRECTORY_PREFETCH_RANGES 16
+
+typedef struct _NTFS_PREFETCH_RANGE
+{
+    ULONGLONG Offset;
+    ULONGLONG Length;
+} NTFS_PREFETCH_RANGE;
+
+static
+VOID
+NtfsCollectPrefetchRanges(_In_ PVolumeContextBlock VolCB,
+                          _In_ PFileContextBlock FileCB,
+                          _In_ AttributeType Type,
+                          _In_ ULONGLONG ClusterSize,
+                          _Inout_updates_(NTFS_DIRECTORY_PREFETCH_RANGES) NTFS_PREFETCH_RANGE *Ranges,
+                          _Inout_ PULONG RangeCount,
+                          _Inout_ PULONG Uncached)
+{
+    NtfsRetrievalExtent Extents[16];
+    ULONGLONG Vcn = 0;
+    ULONGLONG ExtentVcn;
+    ULONG Count;
+    ULONG Extent;
+    NTSTATUS Status;
+
+    ASSERT(ClusterSize != 0);
+    ASSERT(*RangeCount <= NTFS_DIRECTORY_PREFETCH_RANGES);
+    ASSERT(*Uncached <= NTFS_DIRECTORY_PREFETCH_BLOCKS);
+    do
+    {
+        Count = RTL_NUMBER_OF(Extents);
+        Status = NtfsFileRecordQueryRetrievalPointers(FileCB->FileRec,
+                                                      Type,
+                                                      (PWSTR)L"$I30",
+                                                      Vcn,
+                                                      &ExtentVcn,
+                                                      Extents,
+                                                      &Count);
+        if ((!NT_SUCCESS(Status) && Status != STATUS_BUFFER_OVERFLOW) || !Count)
+            return;
+        ASSERT(Count <= RTL_NUMBER_OF(Extents));
+        ASSERT(ExtentVcn <= Vcn);
+
+        for (Extent = 0;
+             Extent < Count && *RangeCount < NTFS_DIRECTORY_PREFETCH_RANGES && *Uncached < NTFS_DIRECTORY_PREFETCH_BLOCKS;
+             Extent++)
+        {
+            ULONGLONG Clusters;
+            ULONG Missing;
+
+            if (Extents[Extent].NextVcn <= ExtentVcn)
+                return;
+            Clusters = Extents[Extent].NextVcn - ExtentVcn;
+            if (Extents[Extent].Lcn >= 0 &&
+                (ULONGLONG)Extents[Extent].Lcn <= ~(ULONGLONG)0 / ClusterSize &&
+                Clusters <= (~(ULONGLONG)0 - (ULONGLONG)Extents[Extent].Lcn * ClusterSize) / ClusterSize)
+            {
+                Ranges[*RangeCount].Offset = (ULONGLONG)Extents[Extent].Lcn * ClusterSize;
+                Ranges[*RangeCount].Length = Clusters * ClusterSize;
+                Missing = NtfsCountUncachedBlocksKm(VolCB->StorageDevice,
+                                                    Ranges[*RangeCount].Offset,
+                                                    Ranges[*RangeCount].Length,
+                                                    NTFS_DIRECTORY_PREFETCH_BLOCKS - *Uncached);
+                if (Missing)
+                {
+                    *Uncached += Missing;
+                    (*RangeCount)++;
+                }
+            }
+            ExtentVcn = Extents[Extent].NextVcn;
+        }
+        if (Extent < Count)
+            return;
+        Vcn = Extents[Count - 1].NextVcn;
+    } while (Status == STATUS_BUFFER_OVERFLOW);
+}
+
+/* TRUE when the metadata was released to read the uncached index blocks of the directory and is held again */
+static
+BOOLEAN
+NtfsPrefetchDirectoryIndex(_In_ PVolumeContextBlock VolCB,
+                           _In_ PFileContextBlock FileCB,
+                           _In_ BOOLEAN Shared)
+{
+    NTFS_PREFETCH_RANGE Ranges[NTFS_DIRECTORY_PREFETCH_RANGES];
+    ULONGLONG ClusterSize;
+    ULONG RangeCount = 0;
+    ULONG Uncached = 0;
+    ULONG Budget;
+    ULONG Index;
+
+    ASSERT(KeAreApcsDisabled());
+    ASSERT(ExIsResourceAcquiredExclusiveLite(NtfsGetMainResource(FileCB)));
+    ASSERT(Shared || ExIsResourceAcquiredExclusiveLite(&VolCB->MetadataResource));
+    ASSERT(!Shared || !ExIsResourceAcquiredExclusiveLite(&VolCB->MetadataResource));
+    ASSERT(ExIsResourceAcquiredSharedLite(&VolCB->MetadataResource) != 0);
+    if (ExIsResourceAcquiredSharedLite(&VolCB->MetadataResource) != 1 ||
+        !VolCB->DiskVolume ||
+        !VolCB->StorageDevice ||
+        !FileCB->FileRec)
+    {
+        return FALSE;
+    }
+
+    ClusterSize = (ULONGLONG)VolCB->BytesPerSector * NtfsVolumeGetSectorsPerCluster(VolCB->DiskVolume);
+    if (!ClusterSize)
+        return FALSE;
+
+    NtfsCollectPrefetchRanges(VolCB, FileCB, TypeBitmap, ClusterSize, Ranges, &RangeCount, &Uncached);
+    NtfsCollectPrefetchRanges(VolCB, FileCB, TypeIndexAllocation, ClusterSize, Ranges, &RangeCount, &Uncached);
+
+    ASSERT(Uncached <= NTFS_DIRECTORY_PREFETCH_BLOCKS);
+    ASSERT(RangeCount <= NTFS_DIRECTORY_PREFETCH_RANGES);
+    if (!Uncached)
+        return FALSE;
+
+    if (Shared)
+        NtfsReleaseMetadataShared(VolCB);
+    else
+        NtfsReleaseMetadata(VolCB);
+    Budget = NTFS_DIRECTORY_PREFETCH_BLOCKS;
+    for (Index = 0; Index < RangeCount && Budget; Index++)
+    {
+        Budget -= NtfsReadAheadBlocksKm(VolCB->StorageDevice, Ranges[Index].Offset, Ranges[Index].Length, Budget);
+        ASSERT(Budget <= NTFS_DIRECTORY_PREFETCH_BLOCKS);
+    }
+    if (Shared)
+        NtfsAcquireMetadataShared(VolCB);
+    else
+        NtfsAcquireMetadata(VolCB);
+    return TRUE;
+}
+
 _Function_class_(IRP_MJ_DIRECTORY_CONTROL)
 _Function_class_(DRIVER_DISPATCH)
 NTSTATUS
@@ -3833,6 +3967,26 @@ NtfsFsdDirectoryControl(_In_ PDEVICE_OBJECT VolumeDeviceObject,
                     Status = NtfsRefreshDirectoryRecord(VolCB, FileCB);
                     FileCB->DirRecordCurrent = NT_SUCCESS(Status);
                     FileCB->DirRecordGeneration = VolCB->DirGeneration;
+                }
+                if (NT_SUCCESS(Status) && FileCB->FileDirDirect &&
+                    NtfsPrefetchDirectoryIndex(VolCB, FileCB, MetadataShared))
+                {
+                    ExAcquireFastMutex(&VolCB->VolumeStateMutex);
+                    Status = (VolCB->Dismounted || VolCB->Dismounting) ? STATUS_VOLUME_DISMOUNTED : STATUS_SUCCESS;
+                    ExReleaseFastMutex(&VolCB->VolumeStateMutex);
+                    if (NT_SUCCESS(Status) && MetadataShared &&
+                        FileCB->DirRecordGeneration != VolCB->DirGeneration)
+                    {
+                        NtfsReleaseMetadataShared(VolCB);
+                        NtfsAcquireMetadata(VolCB);
+                        MetadataShared = FALSE;
+                    }
+                    if (NT_SUCCESS(Status) && !MetadataShared)
+                    {
+                        Status = NtfsRefreshDirectoryRecord(VolCB, FileCB);
+                        FileCB->DirRecordCurrent = NT_SUCCESS(Status);
+                        FileCB->DirRecordGeneration = VolCB->DirGeneration;
+                    }
                 }
                 if (NT_SUCCESS(Status) && FileCB->FileDirDirect)
                 {

@@ -73,6 +73,19 @@ NtfsPrepareBlockReadKm(_In_ PDEVICE_OBJECT Device, _In_ ULONGLONG Offset, _In_ U
 VOID
 NtfsFetchBlockKm(_Inout_ NTFS_BLOCK_READ *Read);
 
+ULONG
+NtfsCountUncachedBlocksKm(_In_ PDEVICE_OBJECT Device,
+                          _In_ ULONGLONG Offset,
+                          _In_ ULONGLONG Length,
+                          _In_ ULONG Limit);
+
+/* Reads up to Limit uncached blocks of the range into the block cache; returns how many it read */
+ULONG
+NtfsReadAheadBlocksKm(_In_ PDEVICE_OBJECT Device,
+                      _In_ ULONGLONG Offset,
+                      _In_ ULONGLONG Length,
+                      _In_ ULONG Limit);
+
 
 NTSTATUS
 NtfsDiskReadKm(_In_ PDEVICE_OBJECT DeviceObject,

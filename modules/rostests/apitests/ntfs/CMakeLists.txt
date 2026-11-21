@@ -10,6 +10,7 @@ list(APPEND SOURCE
     CreateSecurity.c
     DeleteAfterChange.c
     AppendWrite.c
+    ColdDirectory.c
     testlist.c)
 
 add_executable(ntfs_apitest ${SOURCE})

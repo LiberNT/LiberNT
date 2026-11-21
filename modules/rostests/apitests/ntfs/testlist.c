@@ -22,6 +22,7 @@ extern void func_UnalignedWriteThrough(void);
 extern void func_CreateSecurity(void);
 extern void func_DeleteAfterChange(void);
 extern void func_AppendWrite(void);
+extern void func_ColdDirectory(void);
 
 const struct test winetest_testlist[] =
 {
@@ -39,5 +40,6 @@ const struct test winetest_testlist[] =
     { "CreateSecurity", func_CreateSecurity },
     { "DeleteAfterChange", func_DeleteAfterChange },
     { "AppendWrite", func_AppendWrite },
+    { "ColdDirectory", func_ColdDirectory },
     { 0, 0 }
 };
