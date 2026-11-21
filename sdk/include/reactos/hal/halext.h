@@ -101,6 +101,13 @@ typedef struct _HAL_ARM64_PROCESSOR_IDLE
     VOID (*Idle)(VOID);
 } HAL_ARM64_PROCESSOR_IDLE, *PHAL_ARM64_PROCESSOR_IDLE;
 
+/* For SoCs whose firmware starts a processor at an entry point it is handed, with no argument. */
+typedef struct _HAL_ARM64_PROCESSOR_START
+{
+    PCSTR Name;
+    BOOLEAN (*Start)(_In_ ULONG64 Mpidr, _In_ ULONG64 EntryPoint);
+} HAL_ARM64_PROCESSOR_START, *PHAL_ARM64_PROCESSOR_START;
+
 typedef struct _HAL_ACPI_MCFG_RANGE
 {
     USHORT PciSegment;
@@ -142,6 +149,7 @@ typedef struct _HAL_EXTENSION_SERVICES
         _Out_opt_ PUCHAR TriggerMode);
     ULONG (NTAPI *GetMcfgRangeCount)(VOID);
     BOOLEAN (NTAPI *GetMcfgRange)(_In_ ULONG Index, _Out_ PHAL_ACPI_MCFG_RANGE Range);
+    NTSTATUS (NTAPI *RegisterProcessorStart)(_In_ const HAL_ARM64_PROCESSOR_START *Start);
 } HAL_EXTENSION_SERVICES, *PHAL_EXTENSION_SERVICES;
 
 typedef
@@ -179,6 +187,11 @@ HalpArm64RegisterMsiDoorbell(
 NTSTATUS
 HalpArm64RegisterProcessorIdle(
     _In_ const HAL_ARM64_PROCESSOR_IDLE *Idle);
+
+/* STATUS_NOT_SUPPORTED where the HAL starts every processor itself. */
+NTSTATUS
+HalpArm64RegisterProcessorStart(
+    _In_ const HAL_ARM64_PROCESSOR_START *Start);
 
 BOOLEAN
 HalpArm64OpenDeviceTree(

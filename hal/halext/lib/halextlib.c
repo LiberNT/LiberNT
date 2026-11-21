@@ -96,6 +96,14 @@ HalpArm64RegisterProcessorIdle(
     return HalExtServices->RegisterProcessorIdle(Idle);
 }
 
+NTSTATUS
+HalpArm64RegisterProcessorStart(
+    _In_ const HAL_ARM64_PROCESSOR_START *Start)
+{
+    ASSERT(HalExtServices);
+    return HalExtServices->RegisterProcessorStart(Start);
+}
+
 BOOLEAN
 HalpArm64OpenDeviceTree(
     _In_opt_ PLOADER_PARAMETER_BLOCK LoaderBlock,
