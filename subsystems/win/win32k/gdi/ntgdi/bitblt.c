@@ -45,6 +45,38 @@ IntMapExcludedSpan(
     *High = DestOrigin + max(-IntFloorDiv(-A, DeviceExtent), -IntFloorDiv(-B, DeviceExtent));
 }
 
+typedef struct _GDI_CAPTURE_MAP
+{
+    POINTL Origin;
+    LONGLONG Width;
+    LONGLONG Height;
+    INT xDest;
+    INT yDest;
+    INT cxDest;
+    INT cyDest;
+} GDI_CAPTURE_MAP, *PGDI_CAPTURE_MAP;
+
+static
+BOOL
+IntGdiMapCaptureRect(
+    _In_ PVOID Context,
+    _In_ const RECTL *prclScreen,
+    _Out_ PRECTL prclDest)
+{
+    PGDI_CAPTURE_MAP Map = Context;
+    LONGLONG Left, Top, Right, Bottom;
+
+    IntMapExcludedSpan(prclScreen->left, prclScreen->right, Map->Origin.x, Map->Width, Map->xDest, Map->cxDest, &Left, &Right);
+    IntMapExcludedSpan(prclScreen->top, prclScreen->bottom, Map->Origin.y, Map->Height, Map->yDest, Map->cyDest, &Top, &Bottom);
+    ASSERT(Left <= Right);
+    ASSERT(Top <= Bottom);
+    prclDest->left = (LONG)Left;
+    prclDest->top = (LONG)Top;
+    prclDest->right = (LONG)Right;
+    prclDest->bottom = (LONG)Bottom;
+    return Left < Right && Top < Bottom;
+}
+
 static
 VOID
 IntGdiBlackOutExcluded(
@@ -63,6 +95,8 @@ IntGdiBlackOutExcluded(
     POINTL aptSrc[2];
     RECTL rclSrc, rcl;
     LONGLONG Width, Height, Left, Top, Right, Bottom;
+    GDI_CAPTURE_MAP Map;
+    PREGION prgnRestore;
     PDC pdcSrc;
     ULONG Index;
 
@@ -105,6 +139,21 @@ IntGdiBlackOutExcluded(
         ASSERT(Left <= Right);
         ASSERT(Top <= Bottom);
         NtGdiPatBlt(hdcDest, (INT)Left, (INT)Top, (INT)(Right - Left), (INT)(Bottom - Top), BLACKNESS);
+    }
+
+    /* A WDA_EXCLUDEFROMCAPTURE window is left out: its area shows the windows under it */
+    prgnRestore = UserCaptureExcludeFromCaptureRegion(hdcSrc);
+    if (prgnRestore != NULL)
+    {
+        Map.Origin = aptSrc[0];
+        Map.Width = Width;
+        Map.Height = Height;
+        Map.xDest = xDest;
+        Map.yDest = yDest;
+        Map.cxDest = cxDest;
+        Map.cyDest = cyDest;
+        UserCaptureRestoreExcluded(hdcDest, &rclSrc, prgnRestore, IntGdiMapCaptureRect, &Map);
+        REGION_Delete(prgnRestore);
     }
 }
 
@@ -2420,7 +2469,17 @@ NtGdiGetPixel(
         ptl.y += pdc->ptlDCOrig.y;
         DC_UnlockDc(pdc);
         if (REGION_PtInRegion(prgnExcluded, ptl.x, ptl.y))
+        {
+            PREGION prgnRestore = UserCaptureExcludeFromCaptureRegion(hdc);
+
             Color = RGB(0, 0, 0);
+            if (prgnRestore != NULL)
+            {
+                if (REGION_PtInRegion(prgnRestore, ptl.x, ptl.y))
+                    Color = UserCaptureExcludedPixel(ptl.x, ptl.y);
+                REGION_Delete(prgnRestore);
+            }
+        }
     }
     REGION_Delete(prgnExcluded);
     return Color;
