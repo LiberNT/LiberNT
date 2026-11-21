@@ -171,6 +171,7 @@ START_TEST(SetSecurityInfoAcl)
             ok(After.Explicit == Case->Explicit, "%s: %ld explicit ACEs, expected %ld\n", Case->Name, After.Explicit, Case->Explicit);
             ok(After.Inherited == 0, "%s: %ld inherited ACEs, expected none\n", Case->Name, After.Inherited);
             ok(After.Control & SE_DACL_PROTECTED, "%s: the DACL is not protected, control %04x\n", Case->Name, After.Control);
+            ok(After.Control & SE_DACL_AUTO_INHERITED, "%s: the protected DACL is not auto-inherited, control %04x\n", Case->Name, After.Control);
         }
         else
         {
