@@ -21,12 +21,25 @@
 /* PRIVATE FUNCTIONS **********************************************************/
 
 static
+VOID
+WmipWidenString(
+    _Out_ PUNICODE_STRING64 Wide,
+    _In_ PCUNICODE_STRING Native)
+{
+    Wide->Length = Native->Length;
+    Wide->MaximumLength = Native->MaximumLength;
+    Wide->Buffer = (ULONG_PTR)Native->Buffer;
+}
+
+static
 NTSTATUS
 WmipLoggerRequest(
     _In_ ULONG FunctionCode,
     _Inout_ PWMI_LOGGER_INFORMATION LoggerInformation)
 {
+    UNICODE_STRING LoggerName, LogFileName;
     ULONG Returned = 0;
+    NTSTATUS Status;
 
     PAGED_CODE();
 
@@ -37,12 +50,24 @@ WmipLoggerRequest(
         return STATUS_INVALID_PARAMETER;
     }
 
-    return ZwTraceControl(FunctionCode,
-                          LoggerInformation,
-                          sizeof(WMI_LOGGER_INFORMATION),
-                          LoggerInformation,
-                          sizeof(WMI_LOGGER_INFORMATION),
-                          &Returned);
+    /* A trace control request carries the 64-bit form of its strings; a kernel-mode caller fills the native one. */
+    LoggerName = LoggerInformation->LoggerName;
+    LogFileName = LoggerInformation->LogFileName;
+    WmipWidenString(&LoggerInformation->LoggerName64, &LoggerName);
+    WmipWidenString(&LoggerInformation->LogFileName64, &LogFileName);
+
+    Status = ZwTraceControl(FunctionCode,
+                            LoggerInformation,
+                            sizeof(WMI_LOGGER_INFORMATION),
+                            LoggerInformation,
+                            sizeof(WMI_LOGGER_INFORMATION),
+                            &Returned);
+
+    LoggerName.Length = LoggerInformation->LoggerName64.Length;
+    LogFileName.Length = LoggerInformation->LogFileName64.Length;
+    LoggerInformation->LoggerName = LoggerName;
+    LoggerInformation->LogFileName = LogFileName;
+    return Status;
 }
 
 /* Reads the pairs of address and length a message carries off a caller's list */
