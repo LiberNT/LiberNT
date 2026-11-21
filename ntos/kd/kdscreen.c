@@ -51,6 +51,13 @@ static LARGE_INTEGER KdpScreenHeldSince;
 
 #define KDP_SCREEN_HOLD_MS 50
 
+#define KDP_SCREEN_ROW_SIZE 1024
+
+/* The row being drawn, after a leading '\r' that sends the boot video driver back to its start */
+static CHAR KdpScreenRow[KDP_SCREEN_ROW_SIZE + 2] = "\r";
+static ULONG KdpScreenRowLength;
+static ULONG KdpScreenColumns;
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 static
@@ -84,6 +91,7 @@ KdpScreenSetConsole(
     ULONG Width = SCREEN_WIDTH;
     ULONG Height = SCREEN_HEIGHT;
     ULONG Right = SCREEN_WIDTH - 1;
+    ULONG Columns = 0;
 
     InbvUseCompactFont();
 
@@ -95,7 +103,11 @@ KdpScreenSetConsole(
         Width = DisplayInfo.Width;
         Height = DisplayInfo.Height;
         Right = Width - (Width % DisplayInfo.CharacterWidth) - 1;
+        Columns = (Right + 1) / DisplayInfo.CharacterWidth;
     }
+
+    /* FIXME: rows wider than KDP_SCREEN_ROW_SIZE or of unknown width are not tracked, so a backspace erases nothing there */
+    KdpScreenColumns = (Columns <= KDP_SCREEN_ROW_SIZE) ? Columns : 0;
 
     if (Clear)
     {
@@ -103,6 +115,9 @@ KdpScreenSetConsole(
         InbvSolidColorFill(0, 0, Width - 1, Height - 1, BV_COLOR_BLACK);
         InbvSetScrollRegion(0, 0, Right, Height - 1);
     }
+
+    if (Clear || (KdpScreenRowLength >= KdpScreenColumns))
+        KdpScreenRowLength = 0;
 
     InbvSetTextColor(BV_COLOR_WHITE);
     InbvInstallDisplayStringFilter(NULL);
@@ -372,6 +387,93 @@ KdpScreenHasQueued(VOID)
 
 static
 VOID
+KdpScreenTrackChar(
+    _In_ CHAR Char)
+{
+    ASSERT(KdpScreenColumns <= KDP_SCREEN_ROW_SIZE);
+
+    if ((Char == '\n') || (Char == '\r'))
+    {
+        KdpScreenRowLength = 0;
+        return;
+    }
+
+    if (KdpScreenColumns == 0)
+        return;
+
+    ASSERT(KdpScreenRowLength < KdpScreenColumns);
+
+    KdpScreenRow[KdpScreenRowLength + 1] = Char;
+    KdpScreenRowLength++;
+
+    if (KdpScreenRowLength == KdpScreenColumns)
+        KdpScreenRowLength = 0;
+}
+
+static
+VOID
+KdpScreenEraseChar(VOID)
+{
+    ASSERT(KdpScreenColumns <= KDP_SCREEN_ROW_SIZE);
+    ASSERT(KdpScreenRow[0] == '\r');
+
+    if ((KdpScreenColumns == 0) || (KdpScreenRowLength == 0))
+        return;
+
+    ASSERT(KdpScreenRowLength < KdpScreenColumns);
+
+    KdpScreenRowLength--;
+
+    if (KdpScreenRowLength == 0)
+    {
+        InbvDisplayString("\r \r");
+        return;
+    }
+
+    KdpScreenRow[KdpScreenRowLength + 1] = ANSI_NULL;
+    InbvDisplayString(KdpScreenRow);
+}
+
+/*
+ * Draws what the providers printed. The boot video driver draws a backspace as
+ * a glyph, so the row is drawn again without its last character instead.
+ */
+static
+VOID
+KdpScreenDisplay(
+    _Inout_updates_z_(Length + 1) PCHAR Text,
+    _In_ ULONG Length)
+{
+    ULONG Start = 0;
+    ULONG Index;
+
+    ASSERT(Text != NULL);
+    ASSERT(Text[Length] == ANSI_NULL);
+
+    for (Index = 0; (Index < Length) && (Text[Index] != ANSI_NULL); Index++)
+    {
+        if (Text[Index] != '\b')
+        {
+            KdpScreenTrackChar(Text[Index]);
+            continue;
+        }
+
+        Text[Index] = ANSI_NULL;
+        if (Start < Index)
+            InbvDisplayString(Text + Start);
+
+        Start = Index + 1;
+        KdpScreenEraseChar();
+    }
+
+    ASSERT(Text[Index] == ANSI_NULL);
+
+    if (Start < Index)
+        InbvDisplayString(Text + Start);
+}
+
+static
+VOID
 NTAPI
 KdpScreenDpcRoutine(
     _In_ PKDPC Dpc,
@@ -398,7 +500,7 @@ KdpScreenDpcRoutine(
         if ((Length != 0) && KdpScreenCanDraw())
         {
             KdpScreenDpcText[Length] = ANSI_NULL;
-            InbvDisplayString(KdpScreenDpcText);
+            KdpScreenDisplay(KdpScreenDpcText, Length);
         }
 
         InterlockedExchange(&KdpScreenDrawing, 0);
@@ -412,14 +514,17 @@ static
 VOID
 KdpScreenFlushStop(VOID)
 {
+    ULONG Length;
+
     if (KdpScreenStopLength == 0)
         return;
 
-    KdpScreenStopText[KdpScreenStopLength] = ANSI_NULL;
+    Length = KdpScreenStopLength;
+    KdpScreenStopText[Length] = ANSI_NULL;
     KdpScreenStopLength = 0;
 
     if (KdpScreenCanDraw())
-        InbvDisplayString(KdpScreenStopText);
+        KdpScreenDisplay(KdpScreenStopText, Length);
 }
 
 static
