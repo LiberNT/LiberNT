@@ -276,6 +276,9 @@ CheckExcludedReads(COLORREF Expected)
     Ret = FALSE;
     Color = ScreenRead(150, 150, READ_TRANSPARENTBLT, &Ret);
     ok(Ret && Color == Expected, "TransparentBlt under a WDA_EXCLUDEFROMCAPTURE window: %d, 0x%06lx\n", Ret, Color);
+    Ret = FALSE;
+    Color = ScreenRead(150, 150, READ_PLGBLT, &Ret);
+    ok(Ret && Color == Expected, "PlgBlt under a WDA_EXCLUDEFROMCAPTURE window: %d, 0x%06lx\n", Ret, Color);
 }
 
 static void

@@ -1261,6 +1261,32 @@ NtGdiPlgBlt(
     _SEH2_END;
 
     prgnExcluded = UserCaptureExcludedRegion(hdcSrc);
+    if (prgnExcluded != NULL && cxSrc > 0 && cySrc > 0)
+    {
+        /* Protected windows in the source are read through BitBlt first, which blacks out or leaves out each one */
+        HDC hdcCopy = NtGdiCreateCompatibleDC(hdcSrc);
+        HBITMAP hbmCopy = (hdcCopy != NULL) ? NtGdiCreateCompatibleBitmap(hdcSrc, cxSrc, cySrc) : NULL;
+        HBITMAP hbmOld = (hbmCopy != NULL) ? NtGdiSelectBitmap(hdcCopy, hbmCopy) : NULL;
+        BOOL Copied = FALSE;
+
+        if (hbmOld != NULL && NtGdiBitBlt(hdcCopy, 0, 0, cxSrc, cySrc, hdcSrc, xSrc, ySrc, SRCCOPY, CLR_INVALID, 0))
+        {
+            Ret = IntGdiPlgBlt(hdcTrg, Target, hdcCopy, 0, 0, cxSrc, cySrc, hbmMask, xMask, yMask, crBackColor);
+            Copied = TRUE;
+        }
+        if (hbmOld != NULL)
+            NtGdiSelectBitmap(hdcCopy, hbmOld);
+        if (hbmCopy != NULL)
+            GreDeleteObject(hbmCopy);
+        if (hdcCopy != NULL)
+            NtGdiDeleteObjectApp(hdcCopy);
+        if (Copied)
+        {
+            REGION_Delete(prgnExcluded);
+            return Ret;
+        }
+    }
+
     Ret = IntGdiPlgBlt(hdcTrg, Target, hdcSrc, xSrc, ySrc, cxSrc, cySrc, hbmMask, xMask, yMask, crBackColor);
     if (prgnExcluded != NULL)
     {
