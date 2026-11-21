@@ -92,6 +92,7 @@ enum
     FL_REGISTER = 64,
     FL_IMPSYM = 128,
     FL_CONSTANT = 256,
+    FL_THUNK = 512,
 };
 
 enum
@@ -242,6 +243,48 @@ int NeedsX86MsCxxAlias(EXPORT *pexp);
 void PrintExportName(FILE *fileDest, EXPORT *pexp, int fDeco);
 void PrintX86MsCxxAliasTarget(FILE *fileDest, EXPORT *pexp);
 
+/* A -thunk export is a function of this DLL that jumps to its forward target through the import table, as Windows exports its stubs */
+static int
+IsThunkExport(EXPORT *pexp)
+{
+    /* TODO: MSVC builds and the other architectures keep the forwarder */
+    return !gbMSComp && (pexp->uFlags & FL_THUNK) &&
+           ((giArch == ARCH_X86) || (giArch == ARCH_AMD64) || (giArch == ARCH_ARM64));
+}
+
+static void
+OutputThunk_stub(FILE *file, EXPORT *pexp)
+{
+    const char *pszFunction = ScanToken(pexp->strTarget.buf, '.') + 1;
+    int cchFunction = (int)(pexp->strTarget.buf + pexp->strTarget.len - pszFunction);
+    char szThunk[512], szImport[512];
+
+    if ((giArch == ARCH_X86) && (pexp->nCallingConvention == CC_STDCALL))
+    {
+        snprintf(szThunk, sizeof(szThunk), "___lnt_thunk_%.*s@%d", pexp->strName.len, pexp->strName.buf, pexp->nStackBytes);
+        snprintf(szImport, sizeof(szImport), "__imp__%.*s@%d", cchFunction, pszFunction, pexp->nStackBytes);
+    }
+    else if (giArch == ARCH_X86)
+    {
+        snprintf(szThunk, sizeof(szThunk), "___lnt_thunk_%.*s", pexp->strName.len, pexp->strName.buf);
+        snprintf(szImport, sizeof(szImport), "__imp__%.*s", cchFunction, pszFunction);
+    }
+    else
+    {
+        snprintf(szThunk, sizeof(szThunk), "__lnt_thunk_%.*s", pexp->strName.len, pexp->strName.buf);
+        snprintf(szImport, sizeof(szImport), "__imp_%.*s", cchFunction, pszFunction);
+    }
+
+    fprintf(file, "__asm__(\".text\\n.globl %s\\n%s:\\n", szThunk, szThunk);
+    if (giArch == ARCH_X86)
+        fprintf(file, "\\tjmp *%s\\n", szImport);
+    else if (giArch == ARCH_AMD64)
+        fprintf(file, "\\tjmp *%s(%%rip)\\n", szImport);
+    else
+        fprintf(file, "\\tadrp x16, %s\\n\\tldr x16, [x16, :lo12:%s]\\n\\tbr x16\\n", szImport, szImport);
+    fprintf(file, "\");\n\n");
+}
+
 int
 OutputLine_stub(FILE *file, EXPORT *pexp)
 {
@@ -256,6 +299,12 @@ OutputLine_stub(FILE *file, EXPORT *pexp)
         fprintf(file, "=");
         PrintX86MsCxxAliasTarget(file, pexp);
         fprintf(file, "\")\n\n");
+    }
+
+    if (IsThunkExport(pexp))
+    {
+        OutputThunk_stub(file, pexp);
+        return 1;
     }
 
     /* Workaround for forwarded externs. See here for an explanation:
@@ -868,8 +917,19 @@ OutputLine_def_GCC(FILE *fileDest, EXPORT *pexp)
     PrintExportName(fileDest, pexp, gbImportLib);
     DbgPrint("Generating def line for '%.*s'\n", pexp->strName.len, pexp->strName.buf);
 
+    if (IsThunkExport(pexp) && !gbImportLib)
+    {
+        char buf[256];
+        STRING strTarget;
+        fprintf(fileDest, "=");
+        sprintf(buf, "__lnt_thunk_%.*s", pexp->strName.len, pexp->strName.buf);
+        strTarget.buf = buf;
+        strTarget.len = pexp->strName.len + 12;
+        PrintName(fileDest, pexp, &strTarget, 1);
+        bTracing = 1;
+    }
     /* Check if this is a forwarded export */
-    if (pexp->strTarget.buf)
+    else if (pexp->strTarget.buf)
     {
         int fIsExternal = !!ScanToken(pexp->strTarget.buf, '.');
         DbgPrint("Got redirect '%.*s'\n", pexp->strTarget.len, pexp->strTarget.buf);
@@ -1397,6 +1457,10 @@ ParseFile(char* pcStart, unsigned *cExports)
             {
                 exp.uFlags |= FL_STUB;
             }
+            else if (CompareToken(pc, "-thunk"))
+            {
+                exp.uFlags |= FL_THUNK;
+            }
             else if (CompareToken(pc, "-norelay"))
             {
                 exp.uFlags |= FL_NORELAY;
@@ -1632,6 +1696,17 @@ ParseFile(char* pcStart, unsigned *cExports)
         if ((exp.uFlags & FL_IMPSYM) && (exp.strTarget.buf == NULL))
         {
             Fatal(pszSourceFileName, nLine, pcLine, pc, 1, "Import symbol without target");
+        }
+
+        if ((exp.uFlags & FL_THUNK) &&
+            ((exp.strTarget.buf == NULL) ||
+             !ScanToken(exp.strTarget.buf, '.') ||
+             IsSeparator(ScanToken(exp.strTarget.buf, '.')[1]) ||
+             ScanToken(exp.strTarget.buf, '#') ||
+             ((exp.nCallingConvention != CC_STDCALL) && (exp.nCallingConvention != CC_CDECL)) ||
+             (exp.uFlags & (FL_STUB | FL_IMPSYM))))
+        {
+            Fatal(pszSourceFileName, nLine, pcLine, pc, 1, "Thunk export needs a stdcall or cdecl function forwarded by name to another DLL");
         }
 
         /*
