@@ -531,7 +531,7 @@ function(generate_import_lib _libname _dllname _spec_file __version_arg __dbg_ar
     set_target_properties(${_libname} PROPERTIES IMPORTED_LOCATION ${LIBRARY_PRIVATE_DIR}/${_libname}.a)
     add_dependencies(${_libname} ${_libname}_implib_target)
 
-    # The data aliases the -thunk exports of other DLLs import, in their own import library linked with this one
+    # The aliases the -thunk exports of other DLLs import, in their own import library linked with this one
     add_custom_command(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${_libname}_thunks.def
         COMMAND native-spec2def ${__version_arg} ${__dbg_arg} -n=${_dllname} -a=${ARCH2} ${ARGN} --implib --thunk-imports -d=${CMAKE_CURRENT_BINARY_DIR}/${_libname}_thunks.def ${CMAKE_CURRENT_SOURCE_DIR}/${_spec_file}

@@ -1047,7 +1047,7 @@ OutputLine_def(FILE *fileDest, EXPORT *pexp)
         return 1;
     }
 
-    /* A -thunk export of another DLL imports a function through a data-only alias. The aliases get their own
+    /* A -thunk export of another DLL imports a function through an alias of its own name. The aliases get their own
        import library: next to the plain export in one def, dlltool makes the alias a weak alias of it */
     if (gbThunkImports)
     {
@@ -1061,9 +1061,9 @@ OutputLine_def(FILE *fileDest, EXPORT *pexp)
 
             /* An export the import library takes by ordinal is imported by the same ordinal */
             if (pexp->uFlags & FL_NONAME)
-                fprintf(fileDest, " @%d NONAME DATA\n", pexp->nOrdinal);
+                fprintf(fileDest, " @%d NONAME\n", pexp->nOrdinal);
             else
-                fprintf(fileDest, " == %.*s DATA\n", pexp->strName.len, pexp->strName.buf);
+                fprintf(fileDest, " == %.*s\n", pexp->strName.len, pexp->strName.buf);
         }
         return 1;
     }
@@ -1874,7 +1874,7 @@ void usage(void)
            "  -n=<name>               name of the dll\n"
            "  --version=<version>     Sets the version to create exports for\n"
            "  --implib                generate a def file for an import library\n"
-           "  --thunk-imports         with --implib, list only the data aliases -thunk exports of other DLLs import\n"
+           "  --thunk-imports         with --implib, list only the aliases -thunk exports of other DLLs import\n"
            "  --forward-resolution    with --implib, list only the private and data exports, as code\n"
            "  --no-private-warnings   suppress warnings about symbols that should be -private\n"
            "  -a=<arch>               set architecture to <arch> (i386, x86_64, arm, arm64, arm64ec, riscv64)\n"
