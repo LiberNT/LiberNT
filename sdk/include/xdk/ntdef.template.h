@@ -450,4 +450,6 @@ ListEntry64To32(
 #define VER_SUITE_MULTIUSERTS 0x00020000
 #endif
 
+typedef const struct _WNF_STATE_NAME * PCWNF_STATE_NAME;
+
 #endif /* _NTDEF_ */

@@ -368,4 +368,6 @@ typedef enum _EVT_EVENT_PROPERTY_ID {
     EvtEventPropertyIdEND = 2
 } EVT_EVENT_PROPERTY_ID;
 
+typedef HANDLE EVT_OBJECT_ARRAY_PROPERTY_HANDLE;
+
 #endif /* __WINE_WINEVT_H */

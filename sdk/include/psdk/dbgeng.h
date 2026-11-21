@@ -216,6 +216,36 @@ typedef interface IDebugClient IDebugClient;
 #ifdef __cplusplus
 interface IDebugClient;
 #endif /* __cplusplus */
+typedef struct IDebugAdvanced * PDEBUG_ADVANCED;
+typedef struct IDebugAdvanced2 * PDEBUG_ADVANCED2;
+typedef struct IDebugAdvanced3 * PDEBUG_ADVANCED3;
+typedef struct IDebugClient * PDEBUG_CLIENT;
+typedef struct IDebugClient2 * PDEBUG_CLIENT2;
+typedef struct IDebugClient3 * PDEBUG_CLIENT3;
+typedef struct IDebugClient4 * PDEBUG_CLIENT4;
+typedef struct IDebugClient5 * PDEBUG_CLIENT5;
+typedef struct IDebugClient6 * PDEBUG_CLIENT6;
+typedef struct IDebugClient7 * PDEBUG_CLIENT7;
+typedef struct IDebugControl * PDEBUG_CONTROL;
+typedef struct IDebugControl2 * PDEBUG_CONTROL2;
+typedef struct IDebugControl3 * PDEBUG_CONTROL3;
+typedef struct IDebugControl4 * PDEBUG_CONTROL4;
+typedef struct IDebugDataSpaces * PDEBUG_DATA_SPACES;
+typedef struct IDebugDataSpaces2 * PDEBUG_DATA_SPACES2;
+typedef struct IDebugEventCallbacks * PDEBUG_EVENT_CALLBACKS;
+typedef struct IDebugEventCallbacksWide * PDEBUG_EVENT_CALLBACKS_WIDE;
+typedef struct IDebugEventContextCallbacks * PDEBUG_EVENT_CONTEXT_CALLBACKS;
+typedef struct IDebugInputCallbacks * PDEBUG_INPUT_CALLBACKS;
+typedef struct IDebugOutputCallbacks * PDEBUG_OUTPUT_CALLBACKS;
+typedef struct IDebugOutputCallbacksWide * PDEBUG_OUTPUT_CALLBACKS_WIDE;
+typedef struct IDebugSymbolGroup * PDEBUG_SYMBOL_GROUP;
+typedef struct IDebugSymbols * PDEBUG_SYMBOLS;
+typedef struct IDebugSymbols2 * PDEBUG_SYMBOLS2;
+typedef struct IDebugSymbols3 * PDEBUG_SYMBOLS3;
+typedef struct IDebugSystemObjects * PDEBUG_SYSTEM_OBJECTS;
+typedef struct IDebugSystemObjects2 * PDEBUG_SYSTEM_OBJECTS2;
+typedef struct IDebugSystemObjects3 * PDEBUG_SYSTEM_OBJECTS3;
+
 #endif
 
 

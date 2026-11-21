@@ -193,4 +193,7 @@ typedef enum _CSV_FILECACHE_IO_TYPE {
     CSV_FILECACHE_IO_TYPE_PURGE = 1
 } CSV_FILECACHE_IO_TYPE;
 
+typedef GUID FILE_SIG_T;
+typedef GUID VOLUME_SIG_T;
+
 #endif /* _NTDDVOL_ */

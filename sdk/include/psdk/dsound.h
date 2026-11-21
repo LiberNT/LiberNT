@@ -1898,4 +1898,13 @@ enum
 #define DSCFX_AEC_STATUS_HISTORY_UNINITIALIZED 0x0
 #endif
 
+typedef struct IDirectSoundFXGargle * LPDIRECTSOUNDFXGARGLE;
+typedef struct IDirectSoundFXChorus * LPDIRECTSOUNDFXCHORUS;
+typedef struct IDirectSoundFXFlanger * LPDIRECTSOUNDFXFLANGER;
+typedef struct IDirectSoundFXEcho * LPDIRECTSOUNDFXECHO;
+typedef struct IDirectSoundFXDistortion * LPDIRECTSOUNDFXDISTORTION;
+typedef struct IDirectSoundFXCompressor * LPDIRECTSOUNDFXCOMPRESSOR;
+typedef struct IDirectSoundFXParamEq * LPDIRECTSOUNDFXPARAMEQ;
+typedef struct IDirectSoundFXWavesReverb * LPDIRECTSOUNDFXWAVESREVERB;
+
 #endif /* __DSOUND_INCLUDED__ */

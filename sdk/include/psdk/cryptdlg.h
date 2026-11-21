@@ -317,4 +317,6 @@ HRESULT WINAPI CertModifyCertificatesToTrust(int cCertStore,
 #define CRYPTDLG_DISABLE_AIA 0x08000000
 #endif
 
+typedef PCERT_SELECT_STRUCT_A PCERT_SELECT_STRUCT;
+
 #endif

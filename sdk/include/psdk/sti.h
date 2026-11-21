@@ -320,4 +320,6 @@ DECLARE_INTERFACE_(IStillImageW, IUnknown)
 #define WIA_INCOMPAT_XP 0x00000001
 #endif
 
+typedef DWORD STI_RAW_CONTROL_CODE;
+
 #endif /* __WINE_STI_H */

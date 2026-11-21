@@ -1278,4 +1278,9 @@ typedef enum _IO_CAPABILITY {
     IoCaps_Undefined = 255
 } IO_CAPABILITY;
 
+typedef ULONGLONG * PBTH_ADDR;
+typedef ULONG * PBTH_COD;
+typedef ULONG BTH_LAP;
+typedef ULONG * PBTH_LAP;
+
 #endif /*_INC_BTHDEF*/

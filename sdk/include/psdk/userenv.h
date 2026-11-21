@@ -342,4 +342,8 @@ typedef enum _SETTINGSTATUS {
     RSOPSubsettingFailed = 4
 } SETTINGSTATUS;
 
+typedef UINT_PTR ASYNCCOMPLETIONHANDLE;
+typedef PVOID PRSOPTOKEN;
+typedef GUID * REFGPEXTENSIONID;
+
 #endif /* _USERENV_H */

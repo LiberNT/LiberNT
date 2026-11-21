@@ -2691,4 +2691,6 @@ capGetDriverDescriptionW(
 #define VHDR_VALID 0x0000000F
 #endif
 
+typedef IAVIStreaming * PAVISTREAMING;
+
 #endif /* __WINE_VFW_H */

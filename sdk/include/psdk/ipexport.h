@@ -200,4 +200,6 @@ typedef ICMPV6_ECHO_REPLY_LH *PICMPV6_ECHO_REPLY;
 #define IP_FLAG_REVERSE 0x1
 #endif
 
+typedef struct in6_addr IPv6Addr;
+
 #endif /* __WINE_IPEXPORT_H */

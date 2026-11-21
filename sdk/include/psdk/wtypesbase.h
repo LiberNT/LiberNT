@@ -77,4 +77,6 @@
 #define ROTREGFLAGS_ALLOWANYCLIENT 0x1
 #endif
 
+typedef SCODE * PSCODE;
+
 #endif /* _WTYPESBASE_H_ */
