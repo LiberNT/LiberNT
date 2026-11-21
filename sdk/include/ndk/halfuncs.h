@@ -29,7 +29,7 @@ Author:
 
 #ifndef NTOS_MODE_USER
 
-#if defined(_M_ARM64) || defined(__aarch64__)
+#if defined(_M_ARM64) || defined(__aarch64__) || defined(_M_ARM)
 typedef struct _HAL_ARM64_TIMER_CONFIG
 {
     ULONG Vector;
@@ -388,7 +388,7 @@ HalSendSoftwareInterrupt(
 
 #endif // _WIN64
 
-#if defined(_M_ARM64) || defined(__aarch64__)
+#if defined(_M_ARM64) || defined(__aarch64__) || defined(_M_ARM)
 NTHALAPI
 VOID
 NTAPI
