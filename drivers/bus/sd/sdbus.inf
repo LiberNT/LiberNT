@@ -109,6 +109,8 @@ HKR, , SilentInstall,  0, 1
 %Broadcom_BCM2711_EMMC2.DeviceDesc% = sdbus_Inst, ACPI\BRCME88C
 %Broadcom_BCM2835_SDHOST.DeviceDesc% = sdbus_Inst, ACPI\BCM2855
 %Broadcom_BCM2836_ARASAN.DeviceDesc% = sdbus_Inst, ACPI\BCM2847
+%Broadcom_BCM2835_SDHOST.DeviceDesc% = sdbus_Inst, FDT\brcm_bcm2835-sdhost
+%Broadcom_BCM2836_ARASAN.DeviceDesc% = sdbus_Inst, FDT\brcm_bcm2835-sdhci
 %SpacemiT_K1_SD.DeviceDesc% = sdbus_Inst, FDT\spacemit_k1-x-sdhci
 %StarFive_JH7110_MMC.DeviceDesc% = sdbus_Inst, FDT\starfive_jh7110-mmc
 

@@ -903,9 +903,9 @@ SdBusHardwareAttach(
 {
     static const PCWSTR SpacemitK1Ids[] = { L"spacemit_k1-x-sdhci" };
     static const PCWSTR StarfiveJh7110Ids[] = { L"starfive_jh7110-mmc" };
-    static const PCWSTR Bcm2835SdHostIds[] = { L"BCM2855" };
+    static const PCWSTR Bcm2835SdHostIds[] = { L"BCM2855", L"brcm_bcm2835-sdhost" };
     static const PCWSTR BrcmstbIds[] = { L"BRCM5D12", L"80860F16" };
-    static const PCWSTR Bcm2847Ids[] = { L"BCM2847" };
+    static const PCWSTR Bcm2847Ids[] = { L"BCM2847", L"brcm_bcm2835-sdhci" };
     static const PCWSTR GenesysGl975xIds[] = { L"VEN_17A0&DEV_9750", L"VEN_17A0&DEV_9755" };
     PDEVICE_OBJECT Pdo;
     ULONG SupportedModes = 0;

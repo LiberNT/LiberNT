@@ -35,6 +35,7 @@ HKR, , NoInstallClass, 0, 1
 %FDT\snps_dwc3.DeviceDesc%=XHCI_Inst,FDT\snps_dwc3
 %ACPI\BCM2848.DeviceDesc%=DWC2_Inst,ACPI\BCM2848
 %ACPI\DWC_OTG.DeviceDesc%=DWC2_Inst,ACPI\DWC_OTG
+%ACPI\BCM2848.DeviceDesc%=DWC2_Inst,FDT\brcm_bcm2835-usb
 %USB\ROOT_HUB.DeviceDesc%=RootHub_Inst,USB\ROOT_HUB
 %USB\ROOT_HUB.DeviceDesc%=RootHub_Inst,USB\ROOT_HUB20
 %USB\ROOT_HUB.DeviceDesc%=RootHub_Inst,USB\ROOT_HUB30
