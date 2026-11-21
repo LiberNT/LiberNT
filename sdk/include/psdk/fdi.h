@@ -32,6 +32,13 @@ extern "C" {
 #ifndef INCLUDED_TYPES_FCI_FDI
 #define INCLUDED_TYPES_FCI_FDI 1
 
+#if !defined(_INC_WINDOWS) && !defined(_WINDOWS_)
+typedef unsigned char BYTE;
+typedef unsigned int UINT;
+typedef unsigned short USHORT;
+typedef unsigned long ULONG;
+#endif
+
 /***********************************************************************
  * Common FCI/TDI declarations
  */
