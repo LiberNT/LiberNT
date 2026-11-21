@@ -1,19 +1,4 @@
 
-#ifdef _M_ARM
-
-#include <kxarm.h>
-
-    MACRO
-    DEFINE_WRAPPER_FUNC $n, $off, $x
-        LCLS _FuncName
-_FuncName SETS "_wrapper_func_":CC:"$n"
-        NESTED_ENTRY $_FuncName
-            __assertfail
-        NESTED_END $_FuncName
-    MEND
-
-#else
-
 #include <asm.inc>
 
 .code
@@ -38,7 +23,6 @@ wrapper_func_&n&:
 #endif
 ENDM
 
-#endif
 
     DEFINE_WRAPPER_FUNC 3, 12, 24
     DEFINE_WRAPPER_FUNC 4, 16, 32

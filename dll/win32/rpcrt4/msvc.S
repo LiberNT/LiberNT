@@ -1,8 +1,6 @@
 
 #if defined(_M_IX86) || defined(_M_AMD64)
 #include <asm.inc>
-#elif defined(_M_ARM)
-#include <kxarm.h>
 #endif
 
 #ifdef _M_IX86
@@ -221,25 +219,6 @@ FUNC Ndr64AsyncClientCall
     add rsp, 28h
     ret
 ENDFUNC
-
-#elif _M_ARM
-TEXTAREA
-
-    LEAF_ENTRY call_stubless_func
-
-    /* Unimplemented */
-    __assertfail
-    bx lr
-
-    LEAF_END call_stubless_func
-
-    LEAF_ENTRY call_server_func
-
-    /* Unimplemented */
-    __assertfail
-    bx lr
-
-    LEAF_END call_server_func
 
 #elif defined(_M_ARM64)
 

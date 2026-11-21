@@ -1,13 +1,5 @@
 
-#ifdef _M_ARM
-
-#include <kxarm.h>
-
-    LEAF_ENTRY call_method
-        __assertfail
-    LEAF_END call_method
-
-#elif defined(_M_ARM64)
+#if defined(_M_ARM64)
 
     .text
 
