@@ -67,7 +67,6 @@ static ULONG_PTR volatile KiArmGenericArgument;
 static volatile LONG KiArmGenericCount;
 static volatile LONG KiArmGenericArrived;
 static volatile LONG KiArmGenericDeparted;
-static volatile LONG KiArmGenericRound;
 static PKTRAP_FRAME KiArmIpiTrapFrame[MAXIMUM_PROCESSORS];
 
 /* Startup block physical addresses by core number, for firmware spin loops that pass only the core. */
@@ -357,11 +356,9 @@ KiArmRunGenericWorker(
     _Out_opt_ PULONG_PTR Status)
 {
     LONG Count = KiArmGenericCount;
-    LONG Round = KiArmGenericRound;
     ULONG_PTR Result;
 
     ASSERT(KeGetCurrentIrql() == IPI_LEVEL);
-    ASSERT(Count >= 1);
 
     /* Every processor reaches the barrier before any of them runs the worker. */
     InterlockedIncrement(&KiArmGenericArrived);
@@ -372,18 +369,10 @@ KiArmRunGenericWorker(
     if (Status)
         *Status = Result;
 
-    /* No processor leaves IPI_LEVEL before the worker has run on all of them: the initiator ends the round once it has. */
     InterlockedIncrement(&KiArmGenericDeparted);
     if (Initiator)
     {
         while (KiArmGenericDeparted < Count)
-            YieldProcessor();
-        ASSERT(KiArmGenericRound == Round);
-        InterlockedIncrement(&KiArmGenericRound);
-    }
-    else
-    {
-        while (KiArmGenericRound == Round)
             YieldProcessor();
     }
 }

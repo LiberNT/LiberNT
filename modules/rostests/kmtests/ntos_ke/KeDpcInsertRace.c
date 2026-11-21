@@ -15,6 +15,8 @@ typedef struct _DPC_RACE_CONTEXT
     KDPC Dpc;
     volatile LONG Inserted;
     volatile LONG Ran;
+    volatile LONG Attempts;
+    LONG Processors;
 } DPC_RACE_CONTEXT, *PDPC_RACE_CONTEXT;
 
 static
@@ -46,6 +48,11 @@ RaceInsertWorker(
     if (KeInsertQueueDpc(&Context->Dpc, NULL, NULL))
         InterlockedIncrement(&Context->Inserted);
 
+    /* Each processor stays at IPI_LEVEL until the last one has tried, so the DPC cannot run and be queued again in between */
+    InterlockedIncrement(&Context->Attempts);
+    while (ReadAcquire(&Context->Attempts) != Context->Processors)
+        YieldProcessor();
+
     return 0;
 }
 
@@ -74,6 +81,8 @@ START_TEST(KeDpcInsertRace)
     {
         Context->Inserted = 0;
         Context->Ran = 0;
+        Context->Attempts = 0;
+        Context->Processors = (LONG)KeQueryActiveProcessorCount(NULL);
 
         KeIpiGenericCall(RaceInsertWorker, (ULONG_PTR)Context);
         KeFlushQueuedDpcs();
