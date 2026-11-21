@@ -267,6 +267,12 @@ BOOLEAN NTAPI KeGetTrapFrameInterruptState(_In_ PKTRAP_FRAME TrapFrame);
 BOOLEAN NTAPI KiUserTrap(_In_ PKTRAP_FRAME TrapFrame);
 #define KiIsUserModeTrap(TrapFrame) KiUserTrap(TrapFrame)
 
+#define KiArchSetGuiServiceTable(Thread) \
+    ((VOID)((Thread)->Tcb.ServiceTable = KeServiceDescriptorTableShadow))
+
+#define KiArchSetInitialServiceTable(Thread) \
+    ((VOID)((Thread)->ServiceTable = KeServiceDescriptorTable))
+
 /* The trap frame holds every register: nothing lives in an exception frame. */
 #define KI_NO_EXCEPTION_FRAME
 
