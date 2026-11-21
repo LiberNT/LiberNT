@@ -584,6 +584,7 @@ IopInitializeDriverModule(
     {
         if (HoldPnpUnloadBarrier) IopReleasePnpUnloadBarrier(Created);
 
+        IopRemoveDriverReinitialization(Created);
         Created->DriverSection = NULL;
         ObMakeTemporaryObject(Created);
         ObDereferenceObject(Created);
