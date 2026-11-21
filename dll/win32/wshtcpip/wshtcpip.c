@@ -531,6 +531,16 @@ WSHGetSocketInformation(
                 return WSAENOPROTOOPT;
         }
     }
+    if (Level == IPPROTO_TCP && OptionName == TCP_NODELAY)
+    {
+        if (Context->SocketType != SOCK_STREAM)
+            return WSAEINVAL;
+        if (!OptionLength || !OptionValue || *OptionLength < sizeof(BOOLEAN))
+            return WSAEFAULT;
+        *(BOOLEAN *)OptionValue = Context->NoDelay;
+        *OptionLength = sizeof(BOOLEAN);
+        return NO_ERROR;
+    }
     if (Level == IPPROTO_TCP && (OptionName == TCP_KEEPALIVE || OptionName == TCP_KEEPINTVL || OptionName == TCP_KEEPCNT))
     {
         if (Context->SocketType != SOCK_STREAM)
@@ -1833,6 +1843,8 @@ WSHSetSocketInformation(
             switch (OptionName)
             {
                 case TCP_NODELAY:
+                    if (Context->SocketType != SOCK_STREAM)
+                        return WSAEINVAL;
                     if (OptionLength < sizeof(CHAR))
                     {
                         return WSAEFAULT;
@@ -2007,6 +2019,8 @@ WSHSetSocketInformation(
             Context->HeaderIncl = (RecvValue != 0);
         if (Level == SOL_SOCKET && OptionName == SO_KEEPALIVE)
             Context->KeepAlive = (*(DWORD *)OptionValue != 0);
+        if (Level == IPPROTO_TCP && OptionName == TCP_NODELAY)
+            Context->NoDelay = (*(PUCHAR)OptionValue != 0);
         return 0;
     }
 
@@ -2036,6 +2050,8 @@ WSHSetSocketInformation(
         Context->HeaderIncl = (RecvValue != 0);
     if (!Status && Level == SOL_SOCKET && OptionName == SO_KEEPALIVE)
         Context->KeepAlive = (*(DWORD *)OptionValue != 0);
+    if (!Status && Level == IPPROTO_TCP && OptionName == TCP_NODELAY)
+        Context->NoDelay = (*(PUCHAR)OptionValue != 0);
 
     HeapFree(GetProcessHeap(), 0, Info);
 
