@@ -308,7 +308,7 @@ typedef struct _USBD_PIPE_INFORMATION {
 #define USBD_PF_VALID_MASK                              (USBD_PF_CHANGE_MAX_PACKET | USBD_PF_SHORT_PACKET_OPT | \
                                                          USBD_PF_ENABLE_RT_THREAD_ACCESS | USBD_PF_MAP_ADD_TRANSFERS | \
                                                          USBD_PF_VIDEO_PRIORITY | USBD_PF_VOICE_PRIORITY | \
-                                                         USBD_PF_INTERACTIVE_PRIORITY)
+                                                         USBD_PF_INTERACTIVE_PRIORITY | USBD_PF_HANDLES_SSP_HIGH_BANDWIDTH_ISOCH)
 
 typedef enum _USBD_ENDPOINT_OFFLOAD_MODE {
   UsbdEndpointOffloadModeNotSupported = 0,
