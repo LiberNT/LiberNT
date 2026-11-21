@@ -229,6 +229,37 @@ PiIsDevNodeStarted(
     }
 }
 
+/* A device that must not be disabled keeps its parent and every ancestor from being disabled
+   (PNP_DEVICE_NOT_DISABLEABLE documentation) */
+static
+BOOLEAN
+PiIsSubtreeNotDisableable(
+    _In_ PDEVICE_NODE DeviceNode)
+{
+    PDEVICE_NODE Node = DeviceNode;
+
+    if (DeviceNode->UserFlags & DNUF_NOT_DISABLEABLE) return TRUE;
+
+    while (Node != NULL)
+    {
+        if (Node->Child != NULL)
+        {
+            Node = Node->Child;
+        }
+        else
+        {
+            while (Node != DeviceNode && Node->Sibling == NULL) Node = Node->Parent;
+            if (Node == DeviceNode) return FALSE;
+            Node = Node->Sibling;
+        }
+
+        ASSERT(Node != NULL);
+        if (Node->UserFlags & DNUF_NOT_DISABLEABLE) return TRUE;
+    }
+
+    return FALSE;
+}
+
 /* The DN_ flags of cfg.h a device instance reports */
 VOID
 PiQueryDevNodeStatus(
@@ -239,6 +270,7 @@ PiQueryDevNodeStatus(
     PNP_DEVNODE_STATE State;
     ULONG Flags, UserFlags, Problem;
     BOOLEAN RootEnumerated;
+    BOOLEAN NotDisableable;
     UCHAR RemovalPolicy;
     ULONG Status;
     KIRQL OldIrql;
@@ -250,6 +282,7 @@ PiQueryDevNodeStatus(
     Problem = DeviceNode->Problem;
     RemovalPolicy = DeviceNode->RemovalPolicy;
     RootEnumerated = (DeviceNode->Parent == IopRootDeviceNode);
+    NotDisableable = PiIsSubtreeNotDisableable(DeviceNode);
     KeReleaseSpinLock(&IopDeviceTreeLock, OldIrql);
 
     Status = DN_NT_ENUMERATOR | DN_NT_DRIVER;
@@ -267,7 +300,7 @@ PiQueryDevNodeStatus(
     if (Flags & DNF_DRIVER_BLOCKED) Status |= DN_DRIVER_BLOCKED;
     if (Flags & DNF_CHILD_WITH_INVALID_ID) Status |= DN_CHILD_WITH_INVALID_ID;
 
-    if ((DeviceNode != IopRootDeviceNode) && !(UserFlags & DNUF_NOT_DISABLEABLE))
+    if ((DeviceNode != IopRootDeviceNode) && !NotDisableable)
         Status |= DN_DISABLEABLE;
 
     if ((RemovalPolicy == RemovalPolicyExpectOrderlyRemoval) ||
