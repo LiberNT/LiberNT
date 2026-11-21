@@ -249,6 +249,9 @@ Enable this if the module uses typeid or dynamic_cast. You will probably need to
     else()
         add_definitions(-DDBG=0)
     endif()
+    if(ENABLE_REMOTE_ASSISTANCE)
+        add_definitions(-DREMOTE_ASSISTANCE)
+    endif()
 
     option(PCH "Whether to use precompiled headers" OFF)
     if(ENABLE_CCACHE)

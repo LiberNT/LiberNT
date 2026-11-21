@@ -17,7 +17,7 @@ NTAPI
 KdpNetShowPrompt(
     _In_opt_z_ PCSTR Prompt);
 
-#if DBG
+#ifdef REMOTE_ASSISTANCE
 static
 VOID
 NTAPI
@@ -33,7 +33,7 @@ static BOOLEAN KdpNetConfigured;
 static BOOLEAN KdpNetPrinted;
 static CHAR KdpNetPrompt[128];
 static KDPC KdpNetPromptDpc;
-#if DBG
+#ifdef REMOTE_ASSISTANCE
 static WORK_QUEUE_ITEM KdpNetPublishItem;
 static LONG KdpNetPublishQueued;
 #endif
@@ -148,7 +148,7 @@ KdQueryTransportKey(
     return KdpNetConfigured ? KdpNetInterface.QueryKey(Buffer, Size) : 0;
 }
 
-#if DBG
+#ifdef REMOTE_ASSISTANCE
 BOOLEAN
 NTAPI
 KdDisplayTransportKey(
@@ -184,7 +184,7 @@ VOID
 KdpNetDrawPrompt(VOID)
 {
     CHAR Text[sizeof(KdpNetPrompt)];
-#if DBG
+#ifdef REMOTE_ASSISTANCE
     CHAR Key[40];
 #endif
 
@@ -195,7 +195,7 @@ KdpNetDrawPrompt(VOID)
     else
         InbvGopEraseStatus();
 
-#if DBG
+#ifdef REMOTE_ASSISTANCE
     if (!KdQueryTransportKey(Key, sizeof(Key)))
         return;
 
@@ -241,7 +241,7 @@ KdpNetShowPrompt(
         KeInsertQueueDpc(&KdpNetPromptDpc, NULL, NULL);
 }
 
-#if DBG
+#ifdef REMOTE_ASSISTANCE
 static
 VOID
 KdpNetPublishKey(VOID)
@@ -320,7 +320,7 @@ KdpNetInit(
 
         KdpNetInterface.Configure(KeLoaderBlock ? KeLoaderBlock->LoadOptions : NULL);
         KeInitializeDpc(&KdpNetPromptDpc, KdpNetPromptDpcRoutine, NULL);
-#if DBG
+#ifdef REMOTE_ASSISTANCE
         ExInitializeWorkItem(&KdpNetPublishItem, KdpNetPublishWorker, NULL);
 #endif
         KdpNetInterface.SetHost(&KdpNetHost);
@@ -347,7 +347,7 @@ KdpNetInit(
         KdpNetReady = TRUE;
         HalDisplayString("   Network debugging enabled\r\n");
         KdpNetDisplayStatus();
-#if DBG
+#ifdef REMOTE_ASSISTANCE
         KdDisplayTransportKey(FALSE);
         KdpNetPublishKey();
 #endif

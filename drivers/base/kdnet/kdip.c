@@ -47,7 +47,7 @@
 #define DHCP_OPTION_CLIENT_ID   61
 #define DHCP_OPTION_END         255
 
-#if DBG
+#ifdef REMOTE_ASSISTANCE
 #define DNS_PORT                53
 #define DNS_HEADER_SIZE         12
 #define DNS_FLAG_RESPONSE       0x8000
@@ -94,7 +94,7 @@ static ULONG64 KdpDhcpRenew;
 static ULONG64 KdpDhcpExpire;
 static ULONG KdpDhcpBackoff;
 
-#if DBG
+#ifdef REMOTE_ASSISTANCE
 static ULONG KdpDnsServer;
 static USHORT KdpDnsIdentifier;
 static USHORT KdpDnsPort;
@@ -387,7 +387,7 @@ KdpDhcpSend(
     static const UCHAR Parameters[] =
     {
         DHCP_OPTION_MASK, DHCP_OPTION_ROUTER,
-#if DBG
+#ifdef REMOTE_ASSISTANCE
         DHCP_OPTION_DNS,
 #endif
         DHCP_OPTION_LEASE, DHCP_OPTION_SERVER, DHCP_OPTION_RENEWAL
@@ -452,7 +452,7 @@ KdpDhcpInput(
     _In_ ULONG Length)
 {
     ULONG Offered, Server = 0, Mask = 0, Router = 0, Lease = 0, Renewal = 0, Position;
-#if DBG
+#ifdef REMOTE_ASSISTANCE
     ULONG Dns = 0;
 #endif
     ULONG64 Now = KdNetTime();
@@ -491,7 +491,7 @@ KdpDhcpInput(
             Mask = KdNetGet32(Dhcp + Position);
         else if (Option == DHCP_OPTION_ROUTER && Size >= 4)
             Router = KdNetGet32(Dhcp + Position);
-#if DBG
+#ifdef REMOTE_ASSISTANCE
         else if (Option == DHCP_OPTION_DNS && Size >= 4)
             Dns = KdNetGet32(Dhcp + Position);
 #endif
@@ -522,7 +522,7 @@ KdpDhcpInput(
         KdIpAddress = Offered;
         KdIpMask = Mask ? Mask : KDNET_IP(255, 255, 255, 0);
         KdIpGateway = Router;
-#if DBG
+#ifdef REMOTE_ASSISTANCE
         KdpDnsServer = Dns;
 #endif
         KdpDhcpState = DhcpBound;
@@ -537,7 +537,7 @@ KdpDhcpInput(
     }
 }
 
-#if DBG
+#ifdef REMOTE_ASSISTANCE
 static
 VOID
 KdpDnsSend(VOID)
@@ -763,7 +763,7 @@ KdIpInput(
     if (!KdIpAddress || DestinationIp != KdIpAddress)
         return;
 
-#if DBG
+#ifdef REMOTE_ASSISTANCE
     if (KdpDnsPort && DestinationPort == KdpDnsPort && SourceIp == KdpDnsServer &&
         KdNetGet16(Udp) == DNS_PORT)
     {
@@ -785,7 +785,7 @@ KdIpTimer(
     if (!KdNicLinkState || KdNetOptions.Broadcast)
         return;
 
-#if DBG
+#ifdef REMOTE_ASSISTANCE
     KdpDnsTimer(Now);
 #endif
     switch (KdpDhcpState)

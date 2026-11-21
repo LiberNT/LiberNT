@@ -31,7 +31,7 @@ enum SM2RCMD
     SM2C_COMPUTER,
     SM2C_CONTROL,
     SM2C_PRINTERS,
-#if DBG
+#ifdef REMOTE_ASSISTANCE
     SM2C_ASSIST,
 #endif
     SM2C_GAP
@@ -734,7 +734,7 @@ SM2OpenGames(VOID)
     SM2OpenCsidlFolder(CSIDL_PROGRAMS);
 }
 
-#if DBG
+#ifdef REMOTE_ASSISTANCE
 static BOOL
 SM2NetworkAssistanceEnabled(VOID)
 {
@@ -761,7 +761,7 @@ SM2ExecRightCmd(int nCmd)
         case SM2C_COMPUTER:  SM2OpenCsidlIdList(CSIDL_DRIVES); break;
         case SM2C_CONTROL:   ShellExecuteW(NULL, NULL, L"ms-settings:", NULL, NULL, SW_SHOWNORMAL); break;
         case SM2C_PRINTERS:  ShellExecuteW(NULL, NULL, L"ms-settings:devices", NULL, NULL, SW_SHOWNORMAL); break;
-#if DBG
+#ifdef REMOTE_ASSISTANCE
         case SM2C_ASSIST:    ShellExecuteW(NULL, NULL, L"netassist.exe", NULL, NULL, SW_SHOWNORMAL); break;
 #endif
     }
@@ -784,7 +784,7 @@ static const SM2RIGHTDEF g_SM2RightDefs[] =
     { 0,                       SM2C_GAP },
     { IDS_SM2_SETTINGS,        SM2C_CONTROL },
     { IDS_SM2_DEVICES,         SM2C_PRINTERS },
-#if DBG
+#ifdef REMOTE_ASSISTANCE
     { IDS_SM2_ASSIST,          SM2C_ASSIST },
 #endif
 };
@@ -1678,7 +1678,7 @@ public:
                 y += Sc(12);
                 continue;
             }
-#if DBG
+#ifdef REMOTE_ASSISTANCE
             if (g_SM2RightDefs[i].nCmd == SM2C_ASSIST && !SM2NetworkAssistanceEnabled())
                 continue;
 #endif

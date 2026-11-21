@@ -199,6 +199,14 @@ if(ARCH STREQUAL "riscv64" AND _WINKD_)
     message(FATAL_ERROR "The RISC-V external KD transport is unavailable; select KD_DEBUGGER=KDBG or NONE")
 endif()
 
+option(ENABLE_REMOTE_ASSISTANCE
+"Whether to build remote assistance: the relay mode of the network debugger, its key on the
+boot screen and the desktop, netassist.exe and the \"Remote debugging\" boot entry.
+Debug builds only; turn it on by hand for a build given to someone who needs help." OFF)
+if(ENABLE_REMOTE_ASSISTANCE AND NOT DBG)
+    message(FATAL_ERROR "ENABLE_REMOTE_ASSISTANCE needs a debug build (DBG)")
+endif()
+
 cmake_dependent_option(ISAPNP_ENABLE "Whether to enable the ISA PnP support." ON
                        "ARCH STREQUAL i386 AND NOT SARCH STREQUAL xbox" OFF)
 
