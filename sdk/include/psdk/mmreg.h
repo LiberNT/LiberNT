@@ -408,8 +408,7 @@ typedef struct adpcmwaveformat_tag {
 	WAVEFORMATEX    wfx;
 	WORD            wSamplesPerBlock;
 	WORD            wNumCoef;
-	/* FIXME: this should be aCoef[0] */
-	ADPCMCOEFSET    aCoef[1];
+	ADPCMCOEFSET    aCoef[];
 } ADPCMWAVEFORMAT;
 typedef ADPCMWAVEFORMAT *PADPCMWAVEFORMAT,
 	*NPADPCMWAVEFORMAT, *LPADPCMWAVEFORMAT;

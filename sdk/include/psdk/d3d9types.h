@@ -731,7 +731,7 @@ typedef enum _D3DCUBEMAP_FACES {
     D3DCUBEMAP_FACE_POSITIVE_Z     = 4,
     D3DCUBEMAP_FACE_NEGATIVE_Z     = 5,
 
-    D3DCUBEMAP_FACE_FORCE_DWORD    = 0xffffffff
+    D3DCUBEMAP_FACE_FORCE_DWORD    = 0x7fffffff
 } D3DCUBEMAP_FACES;
 
 typedef enum _D3DCULL {
@@ -764,7 +764,7 @@ typedef enum _D3DDEVTYPE {
     D3DDEVTYPE_SW          = 3,
     D3DDEVTYPE_NULLREF     = 4,
 
-    D3DDEVTYPE_FORCE_DWORD = 0xffffffff
+    D3DDEVTYPE_FORCE_DWORD = 0x7fffffff
 } D3DDEVTYPE;
 
 typedef enum _D3DFILLMODE {
@@ -867,7 +867,7 @@ typedef enum _D3DFORMAT {
     D3DFMT_BINARYBUFFER         = 199,
 #endif
 
-    D3DFMT_FORCE_DWORD          = 0xFFFFFFFF
+    D3DFMT_FORCE_DWORD          = 0x7fffffff
 } D3DFORMAT;
 
 typedef enum _D3DLIGHTTYPE {
@@ -1080,7 +1080,7 @@ typedef enum _D3DSTATEBLOCKTYPE {
     D3DSBT_PIXELSTATE    = 2,
     D3DSBT_VERTEXSTATE   = 3,
 
-    D3DSBT_FORCE_DWORD   = 0xffffffff
+    D3DSBT_FORCE_DWORD   = 0x7fffffff
 } D3DSTATEBLOCKTYPE;
 
 typedef enum _D3DSTENCILOP {
@@ -1104,7 +1104,7 @@ typedef enum _D3DSWAPEFFECT {
     D3DSWAPEFFECT_OVERLAY         = 4,
     D3DSWAPEFFECT_FLIPEX          = 5,
 #endif
-    D3DSWAPEFFECT_FORCE_DWORD     = 0xFFFFFFFF
+    D3DSWAPEFFECT_FORCE_DWORD     = 0x7fffffff
 } D3DSWAPEFFECT;
 
 typedef enum _D3DTEXTUREADDRESS {

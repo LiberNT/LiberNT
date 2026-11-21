@@ -87,11 +87,13 @@ typedef struct _HIDD_ATTRIBUTES {
   USHORT  VersionNumber;
 } HIDD_ATTRIBUTES, *PHIDD_ATTRIBUTES;
 
+#pragma pack(push, 4)
 typedef struct _HIDD_CONFIGURATION {
   PVOID  cookie;
   ULONG  size;
   ULONG  RingBufferSize;
 } HIDD_CONFIGURATION, *PHIDD_CONFIGURATION;
+#pragma pack(pop)
 
 _Must_inspect_result_
 HIDAPI
