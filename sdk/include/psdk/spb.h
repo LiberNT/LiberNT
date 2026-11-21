@@ -160,3 +160,10 @@ SPB_TRANSFER_LIST_INIT(
     TransferList->Size = sizeof(SPB_TRANSFER_LIST);
     TransferList->TransferCount = TransferCount;
 }
+
+typedef enum SPB_MULTI_SPI_TRANSFER_MODE {
+    SpbMultiSpiTransferModeInvalid = 0,
+    SpbMultiSpiTransferModeDualSpi = 1,
+    SpbMultiSpiTransferModeQuadSpi = 2,
+    SpbMultiSpiTransferModeMax = 3
+} SPB_MULTI_SPI_TRANSFER_MODE, *PSPB_MULTI_SPI_TRANSFER_MODE;

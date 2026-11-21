@@ -188,4 +188,89 @@ AppPolicyGetMediaFoundationCodecLoading(
 #endif
 #ifndef PACKAGE_PROPERTY_HOSTRUNTIME
 #define PACKAGE_PROPERTY_HOSTRUNTIME 0x00200000
+typedef enum PackagePathType {
+    PackagePathType_Install = 0,
+    PackagePathType_Mutable = 1,
+    PackagePathType_Effective = 2,
+    PackagePathType_MachineExternal = 3,
+    PackagePathType_UserExternal = 4,
+    PackagePathType_EffectiveExternal = 5
+} PackagePathType;
+
+typedef enum _PackageOrigin {
+    PackageOrigin_Unknown = 0,
+    PackageOrigin_Unsigned = 1,
+    PackageOrigin_Inbox = 2,
+    PackageOrigin_Store = 3,
+    PackageOrigin_DeveloperUnsigned = 4,
+    PackageOrigin_DeveloperSigned = 5,
+    PackageOrigin_LineOfBusiness = 6,
+    PackageOrigin_SignedSBOM = 7
+} PackageOrigin;
+
+typedef enum _PackageOrigin2 {
+    PackageOrigin2_Unknown = 0,
+    PackageOrigin2_Unsigned = 1,
+    PackageOrigin2_Inbox = 2,
+    PackageOrigin2_Store = 3,
+    PackageOrigin2_DeveloperUnsigned = 4,
+    PackageOrigin2_DeveloperSigned = 5,
+    PackageOrigin2_LineOfBusiness = 6,
+    PackageOrigin2_SignedSBOM = 7
+} PackageOrigin2;
+
+typedef enum AppModelPackageFeature {
+    AppModelPackageFeature_SignedSBOM = 1
+} AppModelPackageFeature;
+
+typedef enum CreatePackageDependencyOptions {
+    CreatePackageDependencyOptions_None = 0,
+    CreatePackageDependencyOptions_DoNotVerifyDependencyResolution = 1,
+    CreatePackageDependencyOptions_ScopeIsSystem = 2
+} CreatePackageDependencyOptions;
+
+typedef enum PackageDependencyLifetimeKind {
+    PackageDependencyLifetimeKind_Process = 0,
+    PackageDependencyLifetimeKind_FilePath = 1,
+    PackageDependencyLifetimeKind_RegistryKey = 2
+} PackageDependencyLifetimeKind;
+
+typedef enum AddPackageDependencyOptions {
+    AddPackageDependencyOptions_None = 0,
+    AddPackageDependencyOptions_PrependIfRankCollision = 1
+} AddPackageDependencyOptions;
+
+typedef enum AddPackageDependencyOptions2 {
+    AddPackageDependencyOptions2_None = 0,
+    AddPackageDependencyOptions2_PrependIfRankCollision = 1,
+    AddPackageDependencyOptions2_SpecifiedPackageFamilyOnly = 2
+} AddPackageDependencyOptions2;
+
+typedef enum PackageDependencyProcessorArchitectures {
+    PackageDependencyProcessorArchitectures_None = 0,
+    PackageDependencyProcessorArchitectures_Neutral = 1,
+    PackageDependencyProcessorArchitectures_X86 = 2,
+    PackageDependencyProcessorArchitectures_X64 = 4,
+    PackageDependencyProcessorArchitectures_Arm = 8,
+    PackageDependencyProcessorArchitectures_Arm64 = 16,
+    PackageDependencyProcessorArchitectures_X86A64 = 32
+} PackageDependencyProcessorArchitectures;
+
+typedef enum AppPolicyLifecycleManagement {
+    AppPolicyLifecycleManagement_Unmanaged = 0,
+    AppPolicyLifecycleManagement_Managed = 1
+} AppPolicyLifecycleManagement;
+
+typedef enum AppPolicyClrCompat {
+    AppPolicyClrCompat_Other = 0,
+    AppPolicyClrCompat_ClassicDesktop = 1,
+    AppPolicyClrCompat_Universal = 2,
+    AppPolicyClrCompat_PackagedDesktop = 3
+} AppPolicyClrCompat;
+
+typedef enum AppPolicyCreateFileAccess {
+    AppPolicyCreateFileAccess_Full = 0,
+    AppPolicyCreateFileAccess_Limited = 1
+} AppPolicyCreateFileAccess;
+
 #endif

@@ -1368,4 +1368,392 @@ IoUnregisterBootDriverCallback (
 #endif
 #ifndef XSTATE_ARM64_SVE
 #define XSTATE_ARM64_SVE 2
+typedef enum _SE_IMAGE_SIGNATURE_TYPE {
+    SeImageSignatureNone = 0,
+    SeImageSignatureEmbedded = 1,
+    SeImageSignatureCache = 2,
+    SeImageSignatureCatalogCached = 3,
+    SeImageSignatureCatalogNotCached = 4,
+    SeImageSignatureCatalogHint = 5,
+    SeImageSignaturePackageCatalog = 6,
+    SeImageSignaturePplMitigated = 7
+} SE_IMAGE_SIGNATURE_TYPE, *PSE_IMAGE_SIGNATURE_TYPE;
+
+typedef enum _STATE_LOCATION_TYPE {
+    LocationTypeRegistry = 0,
+    LocationTypeFileSystem = 1,
+    LocationTypeMaximum = 2
+} STATE_LOCATION_TYPE;
+
+typedef enum _RTL_SYSTEM_GLOBAL_DATA_ID {
+    GlobalDataIdUnknown = 0,
+    GlobalDataIdRngSeedVersion = 1,
+    GlobalDataIdInterruptTime = 2,
+    GlobalDataIdTimeZoneBias = 3,
+    GlobalDataIdImageNumberLow = 4,
+    GlobalDataIdImageNumberHigh = 5,
+    GlobalDataIdTimeZoneId = 6,
+    GlobalDataIdNtMajorVersion = 7,
+    GlobalDataIdNtMinorVersion = 8,
+    GlobalDataIdSystemExpirationDate = 9,
+    GlobalDataIdKdDebuggerEnabled = 10,
+    GlobalDataIdCyclesPerYield = 11,
+    GlobalDataIdSafeBootMode = 12,
+    GlobalDataIdLastSystemRITEventTickCount = 13,
+    GlobalDataIdConsoleSharedDataFlags = 14,
+    GlobalDataIdNtSystemRootDrive = 15,
+    GlobalDataIdQpcBypassEnabled = 16,
+    GlobalDataIdQpcData = 17,
+    GlobalDataIdQpcBias = 18
+} RTL_SYSTEM_GLOBAL_DATA_ID, *PRTL_SYSTEM_GLOBAL_DATA_ID;
+
+typedef enum _PSCREATETHREADNOTIFYTYPE {
+    PsCreateThreadNotifyNonSystem = 0,
+    PsCreateThreadNotifySubsystems = 1
+} PSCREATETHREADNOTIFYTYPE;
+
+typedef enum _HAL_DMA_CRASH_DUMP_REGISTER_TYPE {
+    HalDmaCrashDumpRegisterSet1 = 0,
+    HalDmaCrashDumpRegisterSet2 = 1,
+    HalDmaCrashDumpRegisterSetMax = 2
+} HAL_DMA_CRASH_DUMP_REGISTER_TYPE, *PHAL_DMA_CRASH_DUMP_REGISTER_TYPE;
+
+typedef enum _HAL_PMU_NOTIFICATION_TYPE {
+    HalPmuAvailableNotification = 0,
+    HalPmuReleaseNotification = 1
+} HAL_PMU_NOTIFICATION_TYPE;
+
+typedef enum _PCI_LINK_WIDTH {
+    PciLinkWidth_1x = 1,
+    PciLinkWidth_2x = 2,
+    PciLinkWidth_4x = 4,
+    PciLinkWidth_8x = 8,
+    PciLinkWidth_16x = 16,
+    PciLinkWidthMax = 32
+} PCI_LINK_WIDTH, *PPCI_LINK_WIDTH;
+
+typedef enum _PCI_LINK_SPEED {
+    PciLinkSpeed2_5Gts = 0,
+    PciLinkSpeed5_0Gts = 1,
+    PciLinkSpeed8_0Gts = 2,
+    PciLinkSpeed16_0Gts = 3,
+    PciLinkSpeed32_0Gts = 4,
+    PciLinkSpeed64_0Gts = 5,
+    PciLinkSpeedMax = 6
+} PCI_LINK_SPEED, *PPCI_LINK_SPEED;
+
+typedef enum _WHEA_ERROR_SOURCE_STATE {
+    WheaErrSrcStateStopped = 1,
+    WheaErrSrcStateStarted = 2,
+    WheaErrSrcStateRemoved = 3,
+    WheaErrSrcStateRemovePending = 4
+} WHEA_ERROR_SOURCE_STATE, *PWHEA_ERROR_SOURCE_STATE;
+
+typedef enum _IPMI_OS_SEL_RECORD_TYPE {
+    IpmiOsSelRecordTypeWhea = 0,
+    IpmiOsSelRecordTypeOther = 1,
+    IpmiOsSelRecordTypeWheaErrorXpfMca = 2,
+    IpmiOsSelRecordTypeWheaErrorPci = 3,
+    IpmiOsSelRecordTypeWheaErrorNmi = 4,
+    IpmiOsSelRecordTypeWheaErrorOther = 5,
+    IpmiOsSelRecordTypeRaw = 6,
+    IpmiOsSelRecordTypeDriver = 7,
+    IpmiOsSelRecordTypeBugcheckRecovery = 8,
+    IpmiOsSelRecordTypeBugcheckData = 9,
+    IpmiOsSelRecordTypeMax = 10
+} IPMI_OS_SEL_RECORD_TYPE, *PIPMI_OS_SEL_RECORD_TYPE;
+
+typedef enum _PAGE_OFFLINE_ERROR_TYPES {
+    BitErrorDdr4 = 0,
+    RowErrorDdr4 = 1,
+    BitErrorDdr5 = 2,
+    RowErrorDdr5 = 3
+} PAGE_OFFLINE_ERROR_TYPES, *PPAGE_OFFLINE_ERROR_TYPES;
+
+typedef enum _WHEA_MEMORY_DEFINITION {
+    WheaMemoryUndefined = 0,
+    WheaMemoryFm = 1,
+    WheaMemoryNm = 2,
+    WheaMemoryHbm = 3,
+    WheaMemoryMax = 4
+} WHEA_MEMORY_DEFINITION, *PWHEA_MEMORY_DEFINITION;
+
+typedef enum _WHEA_PCIEXPRESS_DEVICE_TYPE {
+    WheaPciExpressEndpoint = 0,
+    WheaPciExpressLegacyEndpoint = 1,
+    WheaPciExpressRootPort = 4,
+    WheaPciExpressUpstreamSwitchPort = 5,
+    WheaPciExpressDownstreamSwitchPort = 6,
+    WheaPciExpressToPciXBridge = 7,
+    WheaPciXToExpressBridge = 8,
+    WheaPciExpressRootComplexIntegratedEndpoint = 9,
+    WheaPciExpressRootComplexEventCollector = 10
+} WHEA_PCIEXPRESS_DEVICE_TYPE;
+
+typedef enum _WHEA_CPU_VENDOR {
+    WheaCpuVendorOther = 0,
+    WheaCpuVendorIntel = 1,
+    WheaCpuVendorAmd = 2
+} WHEA_CPU_VENDOR, *PWHEA_CPU_VENDOR;
+
+typedef enum _WHEA_RECOVERY_TYPE {
+    WheaRecoveryTypeActionRequired = 1,
+    WheaRecoveryTypeActionOptional = 2,
+    WheaRecoveryTypeMax = 3
+} WHEA_RECOVERY_TYPE, *PWHEA_RECOVERY_TYPE;
+
+typedef enum _WHEA_RECOVERY_FAILURE_REASON {
+    WheaRecoveryFailureReasonKernelCouldNotMarkMemoryBad = 1,
+    WheaRecoveryFailureReasonKernelMarkMemoryBadTimedOut = 2,
+    WheaRecoveryFailureReasonNoRecoveryContext = 3,
+    WheaRecoveryFailureReasonNotContinuable = 4,
+    WheaRecoveryFailureReasonPcc = 5,
+    WheaRecoveryFailureReasonOverflow = 6,
+    WheaRecoveryFailureReasonNotSupported = 7,
+    WheaRecoveryFailureReasonMiscOrAddrNotValid = 8,
+    WheaRecoveryFailureReasonInvalidAddressMode = 9,
+    WheaRecoveryFailureReasonHighIrql = 10,
+    WheaRecoveryFailureReasonInsufficientAltContextWrappers = 11,
+    WheaRecoveryFailureReasonInterruptsDisabled = 12,
+    WheaRecoveryFailureReasonSwapBusy = 13,
+    WheaRecoveryFailureReasonStackOverflow = 14,
+    WheaRecoveryFailureReasonUnexpectedFailure = 15,
+    WheaRecoveryFailureReasonKernelWillPageFaultBCAtCurrentIrql = 16,
+    WheaRecoveryFailureReasonFarNotValid = 17,
+    WheaRecoveryFailureReasonMax = 18
+} WHEA_RECOVERY_FAILURE_REASON, *PWHEA_RECOVERY_FAILURE_REASON;
+
+typedef enum _WHEA_ARM_RAS_NODE_INTERFACES {
+    WheaArmRasNodeInterfaceSystemRegister = 0,
+    WheaArmRasNodeInterfaceMmio = 1
+} WHEA_ARM_RAS_NODE_INTERFACES, *PWHEA_ARM_RAS_NODE_INTERFACES;
+
+typedef enum _WHEA_PCI_RECOVERY_SIGNAL {
+    WheaPciRecoverySignalUnknown = 0,
+    WheaPciRecoverySignalAer = 1,
+    WheaPciRecoverySignalDpc = 2
+} WHEA_PCI_RECOVERY_SIGNAL, *PWHEA_PCI_RECOVERY_SIGNAL;
+
+typedef enum _WHEA_PCI_RECOVERY_STATUS {
+    WheaPciREcoveryStatusUnknown = 0,
+    WheaPciRecoveryStatusNoError = 1,
+    WheaPciRecoveryStatusLinkDisableTimeout = 2,
+    WheaPciRecoveryStatusLinkEnableTimeout = 3,
+    WheaPciRecoveryStatusRpBusyTimeout = 4,
+    WheaPciRecoveryStatusComplexTree = 5,
+    WheaPciRecoveryStatusBusNotFound = 6,
+    WheaPciRecoveryStatusDeviceNotFound = 7,
+    WheaPciRecoveryStatusDdaAerNotRecoverable = 8,
+    WheaPciRecoveryStatusFailedRecovery = 9
+} WHEA_PCI_RECOVERY_STATUS, *PWHEA_PCI_RECOVERY_STATUS;
+
+typedef enum _WHEA_RAW_DATA_FORMAT {
+    WheaRawDataFormatIPFSalRecord = 0,
+    WheaRawDataFormatIA32MCA = 1,
+    WheaRawDataFormatIntel64MCA = 2,
+    WheaRawDataFormatAMD64MCA = 3,
+    WheaRawDataFormatMemory = 4,
+    WheaRawDataFormatPCIExpress = 5,
+    WheaRawDataFormatNMIPort = 6,
+    WheaRawDataFormatPCIXBus = 7,
+    WheaRawDataFormatPCIXDevice = 8,
+    WheaRawDataFormatGeneric = 9,
+    WheaRawDataFormatMax = 10
+} WHEA_RAW_DATA_FORMAT, *PWHEA_RAW_DATA_FORMAT;
+
+typedef enum _WHEA_EVENT_LOG_ENTRY_TYPE {
+    WheaEventLogEntryTypeInformational = 0,
+    WheaEventLogEntryTypeWarning = 1,
+    WheaEventLogEntryTypeError = 2
+} WHEA_EVENT_LOG_ENTRY_TYPE, *PWHEA_EVENT_LOG_ENTRY_TYPE;
+
+typedef enum _WHEA_EVENT_LOG_ENTRY_ID {
+    WheaEventLogEntryIdCmcPollingTimeout = (-2147483647),
+    WheaEventLogEntryIdWheaInit = (-2147483646),
+    WheaEventLogEntryIdCmcSwitchToPolling = (-2147483645),
+    WheaEventLogEntryIdDroppedCorrectedError = (-2147483644),
+    WheaEventLogEntryIdStartedReportHwError = (-2147483643),
+    WheaEventLogEntryIdPFAMemoryOfflined = (-2147483642),
+    WheaEventLogEntryIdPFAMemoryRemoveMonitor = (-2147483641),
+    WheaEventLogEntryIdPFAMemoryPolicy = (-2147483640),
+    WheaEventLogEntryIdPshedInjectError = (-2147483639),
+    WheaEventLogEntryIdOscCapabilities = (-2147483638),
+    WheaEventLogEntryIdPshedPluginRegister = (-2147483637),
+    WheaEventLogEntryIdAddRemoveErrorSource = (-2147483636),
+    WheaEventLogEntryIdWorkQueueItem = (-2147483635),
+    WheaEventLogEntryIdAttemptErrorRecovery = (-2147483634),
+    WheaEventLogEntryIdMcaFoundErrorInBank = (-2147483633),
+    WheaEventLogEntryIdMcaStuckErrorCheck = (-2147483632),
+    WheaEventLogEntryIdMcaErrorCleared = (-2147483631),
+    WheaEventLogEntryIdClearedPoison = (-2147483630),
+    WheaEventLogEntryIdProcessEINJ = (-2147483629),
+    WheaEventLogEntryIdProcessHEST = (-2147483628),
+    WheaEventLogEntryIdCreateGenericRecord = (-2147483627),
+    WheaEventLogEntryIdErrorRecord = (-2147483626),
+    WheaEventLogEntryIdErrorRecordLimit = (-2147483625),
+    WheaEventLogEntryIdAerNotGrantedToOs = (-2147483624),
+    WheaEventLogEntryIdErrSrcArrayInvalid = (-2147483623),
+    WheaEventLogEntryIdAcpiTimeOut = (-2147483622),
+    WheaEventLogCmciRestart = (-2147483621),
+    WheaEventLogCmciFinalRestart = (-2147483620),
+    WheaEventLogEntryEtwOverFlow = (-2147483619),
+    WheaEventLogAzccRootBusSearchErr = (-2147483618),
+    WheaEventLogAzccRootBusList = (-2147483617),
+    WheaEventLogEntryIdErrSrcInvalid = (-2147483616),
+    WheaEventLogEntryIdGenericErrMemMap = (-2147483615),
+    WheaEventLogEntryIdPshedCallbackCollision = (-2147483614),
+    WheaEventLogEntryIdSELBugCheckProgress = (-2147483613),
+    WheaEventLogEntryIdPshedPluginLoad = (-2147483612),
+    WheaEventLogEntryIdPshedPluginUnload = (-2147483611),
+    WheaEventLogEntryIdPshedPluginSupported = (-2147483610),
+    WheaEventLogEntryIdDeviceDriver = (-2147483609),
+    WheaEventLogEntryIdCmciImplPresent = (-2147483608),
+    WheaEventLogEntryIdCmciInitError = (-2147483607),
+    WheaEventLogEntryIdSELBugCheckRecovery = (-2147483606),
+    WheaEventLogEntryIdDrvErrSrcInvalid = (-2147483605),
+    WheaEventLogEntryIdDrvHandleBusy = (-2147483604),
+    WheaEventLogEntryIdWheaHeartbeat = (-2147483603),
+    WheaEventLogAzccRootBusPoisonSet = (-2147483602),
+    WheaEventLogEntryIdSELBugCheckInfo = (-2147483601),
+    WheaEventLogEntryIdErrDimmInfoMismatch = (-2147483600),
+    WheaEventLogEntryIdeDpcEnabled = (-2147483599),
+    WheaEventLogEntryPageOfflineDone = (-2147483598),
+    WheaEventLogEntryPageOfflinePendMax = (-2147483597),
+    WheaEventLogEntryIdBadPageLimitReached = (-2147483596),
+    WheaEventLogEntrySrarDetail = (-2147483595),
+    WheaEventLogEntryEarlyError = (-2147483594),
+    WheaEventLogEntryIdPcieOverrideInfo = (-2147483593),
+    WheaEventLogEntryIdReadPcieOverridesErr = (-2147483592),
+    WheaEventLogEntryIdPcieConfigInfo = (-2147483591),
+    WheaEventLogEntryIdPcieSummaryFailed = (-2147483584),
+    WheaEventLogEntryIdThrottleRegCorrupt = (-2147483583),
+    WheaEventLogEntryIdThrottleAddErrSrcFailed = (-2147483582),
+    WheaEventLogEntryIdThrottleRegDataIgnored = (-2147483581),
+    WheaEventLogEntryIdEnableKeyNotifFailed = (-2147483580),
+    WheaEventLogEntryIdKeyNotificationFailed = (-2147483579),
+    WheaEventLogEntryIdPcieRemoveDevice = (-2147483578),
+    WheaEventLogEntryIdPcieAddDevice = (-2147483577),
+    WheaEventLogEntryIdPcieSpuriousErrSource = (-2147483576),
+    WheaEventLogEntryIdMemoryAddDevice = (-2147483575),
+    WheaEventLogEntryIdMemoryRemoveDevice = (-2147483574),
+    WheaEventLogEntryIdMemorySummaryFailed = (-2147483573),
+    WheaEventLogEntryIdPcieDpcError = (-2147483572),
+    WheaEventLogEntryIdCpuBusesInitFailed = (-2147483571),
+    WheaEventLogEntryIdPshedPluginInitFailed = (-2147483570),
+    WheaEventLogEntryIdFailedAddToDefectList = (-2147483569),
+    WheaEventLogEntryIdDefectListFull = (-2147483568),
+    WheaEventLogEntryIdDefectListUEFIVarFailed = (-2147483567),
+    WheaEventLogEntryIdDefectListCorrupt = (-2147483566),
+    WheaEventLogEntryIdBadHestNotifyData = (-2147483565),
+    WheaEventLogEntryIdRowFailure = (-2147483564),
+    WheaEventLogEntryIdSrasTableNotFound = (-2147483563),
+    WheaEventLogEntryIdSrasTableError = (-2147483562),
+    WheaEventLogEntryIdSrasTableEntries = (-2147483561),
+    WheaEventLogEntryIdPFANotifyCallbackAction = (-2147483560),
+    WheaEventLogEntryIdSELBugCheckCpusQuiesced = (-2147483559),
+    WheaEventLogEntryIdPshedPiCpuid = (-2147483558),
+    WheaEventLogEntryIdSrasTableBadData = (-2147483557),
+    WheaEventLogEntryIdDriFsStatus = (-2147483556),
+    WheaEventLogEntryIdCpusFrozen = (-2147483552),
+    WheaEventLogEntryIdCpusFrozenNoCrashDump = (-2147483551),
+    WheaEventLogEntryIdRegNotifyPolicyChange = (-2147483550),
+    WheaEventLogEntryIdRegError = (-2147483549),
+    WheaEventLogEntryIdRowOfflineEvent = (-2147483548),
+    WheaEventLogEntryIdBitOfflineEvent = (-2147483547),
+    WheaEventLogEntryIdBadGasFields = (-2147483546),
+    WheaEventLogEntryIdCrashDumpError = (-2147483545),
+    WheaEventLogEntryIdCrashDumpCheckpoint = (-2147483544),
+    WheaEventLogEntryIdCrashDumpProgressPercent = (-2147483543),
+    WheaEventLogEntryIdPreviousCrashBugCheckProgress = (-2147483542),
+    WheaEventLogEntryIdSELBugCheckStackDump = (-2147483541),
+    WheaEventLogEntryIdPciePromotedAerErr = (-2147483540),
+    WheaEventLogEntryIdPshedPiTraceLog = (-2147221488)
+} WHEA_EVENT_LOG_ENTRY_ID, *PWHEA_EVENT_LOG_ENTRY_ID;
+
+typedef enum _WHEAP_PFA_OFFLINE_DECISION_TYPE {
+    WheapPfaOfflinePredictiveFailure = 1,
+    WheapPfaOfflineUncorrectedError = 2
+} WHEAP_PFA_OFFLINE_DECISION_TYPE, *PWHEAP_PFA_OFFLINE_DECISION_TYPE;
+
+typedef enum _WHEA_PFA_REMOVE_TRIGGER {
+    WheaPfaRemoveErrorThreshold = 1,
+    WheaPfaRemoveTimeout = 2,
+    WheaPfaRemoveCapacity = 3
+} WHEA_PFA_REMOVE_TRIGGER, *PWHEA_PFA_REMOVE_TRIGGER;
+
+typedef enum _WHEA_PSHED_PLUGIN_ENABLE_NOTIFY_ERRORS {
+    PshedPiEnableNotifyErrorCreateNotifyEvent = 1,
+    PshedPiEnableNotifyErrorCreateSystemThread = 2,
+    PshedPiEnableNotifyErrorMax = 3
+} WHEA_PSHED_PLUGIN_ENABLE_NOTIFY_ERRORS, *PWHEA_PSHED_PLUGIN_ENABLE_NOTIFY_ERRORS;
+
+typedef enum _WHEA_BUGCHECK_RECOVERY_LOG_TYPE {
+    WheaEventBugCheckRecoveryEntry = 0,
+    WheaEventBugCheckRecoveryReturn = 1,
+    WheaEventBugCheckRecoveryMax = 2
+} WHEA_BUGCHECK_RECOVERY_LOG_TYPE, *PWHEA_BUGCHECK_RECOVERY_LOG_TYPE;
+
+typedef enum _WHEAP_DPC_ERROR_EVENT_TYPE {
+    WheapDpcErrNoErr = 0,
+    WheapDpcErrBusNotFound = 1,
+    WheapDpcErrDpcedSubtree = 2,
+    WheapDpcErrDeviceIdBad = 3,
+    WheapDpcErrResetFailed = 4,
+    WheapDpcErrNoChildren = 5
+} WHEAP_DPC_ERROR_EVENT_TYPE, *PWHEAP_DPC_ERROR_EVENT_TYPE;
+
+typedef enum _PSHED_PI_ERR_READING_PCIE_OVERRIDES {
+    PshedPiErrReadingPcieOverridesNoErr = 0,
+    PshedPiErrReadingPcieOverridesNoMemory = 1,
+    PshedPiErrReadingPcieOverridesQueryErr = 2,
+    PshedPiErrReadingPcieOverridesBadSize = 3,
+    PshedPiErrReadingPcieOverridesBadSignature = 4,
+    PshedPiErrReadingPcieOverridesNoCapOffset = 5,
+    PshedPiErrReadingPcieOverridesNotBinary = 6
+} PSHED_PI_ERR_READING_PCIE_OVERRIDES, *PPSHED_PI_ERR_READING_PCIE_OVERRIDES;
+
+typedef enum _WHEA_THROTTLE_TYPE {
+    WheaPcieThrottle = 0,
+    WheaMemoryThrottle = 1
+} WHEA_THROTTLE_TYPE, *PWHEA_THROTTLE_TYPE;
+
+typedef enum _WHEA_OFFLINE_ERRS {
+    WheaOfflineNoError = 0,
+    GetMemoryDetailsErr = 1,
+    RatFailure = 2,
+    RatFailureFirstCol = 3,
+    RatFailureLastCol = 4,
+    ClosedPage = 5,
+    BadPageRange = 6,
+    InvalidData = 7,
+    NotDdr = 8,
+    UnsupportedDdrVersion = 9,
+    IncorrectDdrVersion = 10,
+    NoMemoryForWrapper = 11
+} WHEA_OFFLINE_ERRS, *PWHEA_OFFLINE_ERRS;
+
+typedef enum _WHEA_REGISTRY_ERRORS {
+    WheaRegErrNone = 0,
+    WheaRegErrFailedToCreateWheaKey = 1,
+    WheaRegErrFailedToCreatePolicyKey = 2,
+    WheaRegErrFailedToOpenHandle = 3
+} WHEA_REGISTRY_ERRORS, *PWHEA_REGISTRY_ERRORS;
+
+typedef enum _WHEA_GAS_ERRORS {
+    WheaGasErrNone = 0,
+    WheaGasErrUnexpectedAddressSpaceId = 1,
+    WheaGasErrInvalidStructFields = 2,
+    WheaGasErrInvalidAccessSize = 3
+} WHEA_GAS_ERRORS, *PWHEA_GAS_ERRORS;
+
+typedef enum _SOC_SUBSYSTEM_TYPE {
+    SOC_SUBSYS_WIRELESS_MODEM = 0,
+    SOC_SUBSYS_AUDIO_DSP = 1,
+    SOC_SUBSYS_WIRELSS_CONNECTIVITY = 2,
+    SOC_SUBSYS_SENSORS = 3,
+    SOC_SUBSYS_COMPUTE_DSP = 4,
+    SOC_SUBSYS_SECURE_PROC = 5,
+    SOC_SUBSYS_VENDOR_DEFINED = 0x10000
+} SOC_SUBSYSTEM_TYPE, *PSOC_SUBSYSTEM_TYPE;
+
 #endif

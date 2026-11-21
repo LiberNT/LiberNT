@@ -287,4 +287,38 @@ enum
 #define _WIN32_MSI 500
 #endif
 
+enum msidbClassAttributes {
+    msidbClassAttributesRelativePath = 1
+};
+
+enum msidbServiceConfigEvent {
+    msidbServiceConfigEventInstall = 1,
+    msidbServiceConfigEventUninstall = 2,
+    msidbServiceConfigEventReinstall = 4
+};
+
+enum msidbEmbeddedUIAttributes {
+    msidbEmbeddedUI = 1,
+    msidbEmbeddedHandlesBasic = 2
+};
+
+enum msirbRebootType {
+    msirbRebootImmediate = 1,
+    msirbRebootDeferred = 2
+};
+
+enum msirbRebootReason {
+    msirbRebootUndeterminedReason = 0,
+    msirbRebootInUseFilesReason = 1,
+    msirbRebootScheduleRebootReason = 2,
+    msirbRebootForceRebootReason = 3,
+    msirbRebootCustomActionReason = 4
+};
+
+enum msifiFastInstallBits {
+    msifiFastInstallNoSR = 1,
+    msifiFastInstallQuickCosting = 2,
+    msifiFastInstallLessPrgMsg = 4
+};
+
 #endif /* __WINE_MSIDEFS_H */

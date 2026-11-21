@@ -740,4 +740,211 @@ ULONG WINAPI HttpSetUrlGroupProperty(HTTP_URL_GROUP_ID id, HTTP_SERVER_PROPERTY 
 #define HTTP_SSL_CERT_STORE_NAME_LENGTH 128
 #endif
 
+typedef enum _HTTP_ENABLED_STATE {
+    HttpEnabledStateActive = 0,
+    HttpEnabledStateInactive = 1
+} HTTP_ENABLED_STATE, *PHTTP_ENABLED_STATE;
+
+typedef enum _HTTP_503_RESPONSE_VERBOSITY {
+    Http503ResponseVerbosityBasic = 0,
+    Http503ResponseVerbosityLimited = 1,
+    Http503ResponseVerbosityFull = 2
+} HTTP_503_RESPONSE_VERBOSITY, *PHTTP_503_RESPONSE_VERBOSITY;
+
+typedef enum _HTTP_QOS_SETTING_TYPE {
+    HttpQosSettingTypeBandwidth = 0,
+    HttpQosSettingTypeConnectionLimit = 1,
+    HttpQosSettingTypeFlowRate = 2
+} HTTP_QOS_SETTING_TYPE, *PHTTP_QOS_SETTING_TYPE;
+
+typedef enum _HTTP_SERVICE_CONFIG_TIMEOUT_KEY {
+    IdleConnectionTimeout = 0,
+    HeaderWaitTimeout = 1
+} HTTP_SERVICE_CONFIG_TIMEOUT_KEY, *PHTTP_SERVICE_CONFIG_TIMEOUT_KEY;
+
+typedef enum _HTTP_SERVICE_CONFIG_SETTING_KEY {
+    HttpNone = 0,
+    HttpTlsThrottle = 1
+} HTTP_SERVICE_CONFIG_SETTING_KEY, *PHTTP_SERVICE_CONFIG_SETTING_KEY;
+
+typedef enum _HTTP_SERVICE_BINDING_TYPE {
+    HttpServiceBindingTypeNone = 0,
+    HttpServiceBindingTypeW = 1,
+    HttpServiceBindingTypeA = 2
+} HTTP_SERVICE_BINDING_TYPE;
+
+typedef enum _HTTP_AUTHENTICATION_HARDENING_LEVELS {
+    HttpAuthenticationHardeningLegacy = 0,
+    HttpAuthenticationHardeningMedium = 1,
+    HttpAuthenticationHardeningStrict = 2
+} HTTP_AUTHENTICATION_HARDENING_LEVELS;
+
+typedef enum _HTTP_LOGGING_TYPE {
+    HttpLoggingTypeW3C = 0,
+    HttpLoggingTypeIIS = 1,
+    HttpLoggingTypeNCSA = 2,
+    HttpLoggingTypeRaw = 3
+} HTTP_LOGGING_TYPE, *PHTTP_LOGGING_TYPE;
+
+typedef enum _HTTP_LOGGING_ROLLOVER_TYPE {
+    HttpLoggingRolloverSize = 0,
+    HttpLoggingRolloverDaily = 1,
+    HttpLoggingRolloverWeekly = 2,
+    HttpLoggingRolloverMonthly = 3,
+    HttpLoggingRolloverHourly = 4
+} HTTP_LOGGING_ROLLOVER_TYPE, *PHTTP_LOGGING_ROLLOVER_TYPE;
+
+typedef enum _HTTP_PROTECTION_LEVEL_TYPE {
+    HttpProtectionLevelUnrestricted = 0,
+    HttpProtectionLevelEdgeRestricted = 1,
+    HttpProtectionLevelRestricted = 2
+} HTTP_PROTECTION_LEVEL_TYPE, *PHTTP_PROTECTION_LEVEL_TYPE;
+
+typedef enum _HTTP_URI_SCHEME {
+    HttpSchemeHttp = 0,
+    HttpSchemeHttps = 1,
+    HttpSchemeMaximum = 2
+} HTTP_SCHEME, *PHTTP_URI_SCHEME;
+
+typedef enum _HTTP_DELEGATE_REQUEST_PROPERTY_ID {
+    DelegateRequestReservedProperty = 0,
+    DelegateRequestDelegateUrlProperty = 1
+} HTTP_DELEGATE_REQUEST_PROPERTY_ID, *PHTTP_DELEGATE_REQUEST_PROPERTY_ID;
+
+typedef enum _HTTP_CREATE_REQUEST_QUEUE_PROPERTY_ID {
+    CreateRequestQueueExternalIdProperty = 1,
+    CreateRequestQueueMax = 2
+} HTTP_CREATE_REQUEST_QUEUE_PROPERTY_ID, *PHTTP_CREATE_REQUEST_QUEUE_PROPERTY_ID;
+
+typedef enum _HTTP_AUTH_STATUS {
+    HttpAuthStatusSuccess = 0,
+    HttpAuthStatusNotAuthenticated = 1,
+    HttpAuthStatusFailure = 2
+} HTTP_AUTH_STATUS, *PHTTP_AUTH_STATUS;
+
+typedef enum _HTTP_REQUEST_AUTH_TYPE {
+    HttpRequestAuthTypeNone = 0,
+    HttpRequestAuthTypeBasic = 1,
+    HttpRequestAuthTypeDigest = 2,
+    HttpRequestAuthTypeNTLM = 3,
+    HttpRequestAuthTypeNegotiate = 4,
+    HttpRequestAuthTypeKerberos = 5
+} HTTP_REQUEST_AUTH_TYPE, *PHTTP_REQUEST_AUTH_TYPE;
+
+typedef enum _HTTP_REQUEST_SIZING_TYPE {
+    HttpRequestSizingTypeTlsHandshakeLeg1ClientData = 0,
+    HttpRequestSizingTypeTlsHandshakeLeg1ServerData = 1,
+    HttpRequestSizingTypeTlsHandshakeLeg2ClientData = 2,
+    HttpRequestSizingTypeTlsHandshakeLeg2ServerData = 3,
+    HttpRequestSizingTypeHeaders = 4,
+    HttpRequestSizingTypeMax = 5
+} HTTP_REQUEST_SIZING_TYPE, *PHTTP_REQUEST_SIZING_TYPE;
+
+typedef enum _HTTP_REQUEST_TIMING_TYPE {
+    HttpRequestTimingTypeConnectionStart = 0,
+    HttpRequestTimingTypeDataStart = 1,
+    HttpRequestTimingTypeTlsCertificateLoadStart = 2,
+    HttpRequestTimingTypeTlsCertificateLoadEnd = 3,
+    HttpRequestTimingTypeTlsHandshakeLeg1Start = 4,
+    HttpRequestTimingTypeTlsHandshakeLeg1End = 5,
+    HttpRequestTimingTypeTlsHandshakeLeg2Start = 6,
+    HttpRequestTimingTypeTlsHandshakeLeg2End = 7,
+    HttpRequestTimingTypeTlsAttributesQueryStart = 8,
+    HttpRequestTimingTypeTlsAttributesQueryEnd = 9,
+    HttpRequestTimingTypeTlsClientCertQueryStart = 10,
+    HttpRequestTimingTypeTlsClientCertQueryEnd = 11,
+    HttpRequestTimingTypeHttp2StreamStart = 12,
+    HttpRequestTimingTypeHttp2HeaderDecodeStart = 13,
+    HttpRequestTimingTypeHttp2HeaderDecodeEnd = 14,
+    HttpRequestTimingTypeRequestHeaderParseStart = 15,
+    HttpRequestTimingTypeRequestHeaderParseEnd = 16,
+    HttpRequestTimingTypeRequestRoutingStart = 17,
+    HttpRequestTimingTypeRequestRoutingEnd = 18,
+    HttpRequestTimingTypeRequestQueuedForInspection = 19,
+    HttpRequestTimingTypeRequestDeliveredForInspection = 20,
+    HttpRequestTimingTypeRequestReturnedAfterInspection = 21,
+    HttpRequestTimingTypeRequestQueuedForDelegation = 22,
+    HttpRequestTimingTypeRequestDeliveredForDelegation = 23,
+    HttpRequestTimingTypeRequestReturnedAfterDelegation = 24,
+    HttpRequestTimingTypeRequestQueuedForIO = 25,
+    HttpRequestTimingTypeRequestDeliveredForIO = 26,
+    HttpRequestTimingTypeHttp3StreamStart = 27,
+    HttpRequestTimingTypeHttp3HeaderDecodeStart = 28,
+    HttpRequestTimingTypeHttp3HeaderDecodeEnd = 29,
+    HttpRequestTimingTypeMax = 30
+} HTTP_REQUEST_TIMING_TYPE, *PHTTP_REQUEST_TIMING_TYPE;
+
+typedef enum _HTTP_SERVICE_CONFIG_QUERY_TYPE {
+    HttpServiceConfigQueryExact = 0,
+    HttpServiceConfigQueryNext = 1,
+    HttpServiceConfigQueryMax = 2
+} HTTP_SERVICE_CONFIG_QUERY_TYPE, *PHTTP_SERVICE_CONFIG_QUERY_TYPE;
+
+typedef enum _HTTP_SSL_SERVICE_CONFIG_EX_PARAM_TYPE {
+    ExParamTypeHttp2Window = 0,
+    ExParamTypeHttp2SettingsLimits = 1,
+    ExParamTypeHttpPerformance = 2,
+    ExParamTypeTlsRestrictions = 3,
+    ExParamTypeErrorHeaders = 4,
+    ExParamTypeTlsSessionTicketKeys = 5,
+    ExParamTypeCertConfig = 6,
+    ExParamTypeMax = 7
+} HTTP_SSL_SERVICE_CONFIG_EX_PARAM_TYPE, *PHTTP_SSL_SERVICE_CONFIG_EX_PARAM_TYPE;
+
+typedef enum _HTTP_PERFORMANCE_PARAM_TYPE {
+    PerformanceParamSendBufferingFlags = 0,
+    PerformanceParamAggressiveICW = 1,
+    PerformanceParamMaxSendBufferSize = 2,
+    PerformanceParamMaxConcurrentClientStreams = 3,
+    PerformanceParamMaxReceiveBufferSize = 4,
+    PerformanceParamDecryptOnSspiThread = 5,
+    PerformanceParamMax = 6
+} HTTP_PERFORMANCE_PARAM_TYPE, *PHTTP_PERFORMANCE_PARAM_TYPE;
+
+typedef enum _HTTP_SERVICE_CONFIG_CACHE_KEY {
+    MaxCacheResponseSize = 0,
+    CacheRangeChunkSize = 1
+} HTTP_SERVICE_CONFIG_CACHE_KEY, *PHTTP_SERVICE_CONFIG_CACHE_KEY;
+
+typedef enum _HTTP_REQUEST_PROPERTY {
+    HttpRequestPropertyIsb = 0,
+    HttpRequestPropertyTcpInfoV0 = 1,
+    HttpRequestPropertyQuicStats = 2,
+    HttpRequestPropertyTcpInfoV1 = 3,
+    HttpRequestPropertySni = 4,
+    HttpRequestPropertyStreamError = 5,
+    HttpRequestPropertyWskApiTimings = 6,
+    HttpRequestPropertyQuicApiTimings = 7,
+    HttpRequestPropertyQuicStatsV2 = 8,
+    HttpRequestPropertyQuicStreamStats = 9,
+    HttpRequestPropertyTcpInfoV2 = 10,
+    HttpRequestPropertyTlsClientHello = 11,
+    HttpRequestPropertyTransportIdleConnectionTimeout = 12,
+    HttpRequestPropertyDscpTag = 13,
+    HttpRequestPropertyTlsCipherInfo = 14
+} HTTP_REQUEST_PROPERTY, *PHTTP_REQUEST_PROPERTY;
+
+typedef enum _HTTP_FEATURE_ID {
+    HttpFeatureUnknown = 0,
+    HttpFeatureResponseTrailers = 1,
+    HttpFeatureApiTimings = 2,
+    HttpFeatureDelegateEx = 3,
+    HttpFeatureHttp3 = 4,
+    HttpFeatureTlsSessionTickets = 5,
+    HttpFeatureDisableTlsSessionId = 6,
+    HttpFeatureTlsDualCerts = 7,
+    HttpFeatureAutomaticChunkedEncoding = 8,
+    HttpFeatureDedicatedReqQueueDelegationType = 9,
+    HttpFeatureFastForwardResponse = 10,
+    HttpFeatureCacheTlsClientHello = 11,
+    HttpFeatureIdleConnectionTimeoutRequestProperty = 12,
+    HttpFeatureDisableAiaFlag = 13,
+    HttpFeatureDscp = 14,
+    HttpFeatureQueryCipherInfo = 15,
+    HttpFeatureQueryInitialPacketTtl = 16,
+    HttpFeatureTlsHandshakePerformanceCounters = 17,
+    HttpFeatureLast = 18,
+    HttpFeaturemax = (-1)
+} HTTP_FEATURE_ID, *PHTTP_FEATURE_ID;
+
 #endif  /* __WINE_HTTP_H */

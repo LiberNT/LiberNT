@@ -967,4 +967,17 @@ BOOL WINAPI MiniDumpReadDumpStream(PVOID base, ULONG index, PMINIDUMP_DIRECTORY 
 #define MINIDUMP_SYSMEMINFO1_PERF_SYSTEMPAGETABLECOMMITTEDPAGES_CONTIGUOUSPAGESALLOCATED 0x0020
 #endif
 
+typedef enum _MINIDUMP_HANDLE_OBJECT_INFORMATION_TYPE {
+    MiniHandleObjectInformationNone = 0,
+    MiniThreadInformation1 = 1,
+    MiniMutantInformation1 = 2,
+    MiniMutantInformation2 = 3,
+    MiniProcessInformation1 = 4,
+    MiniProcessInformation2 = 5,
+    MiniEventInformation1 = 6,
+    MiniSectionInformation1 = 7,
+    MiniSemaphoreInformation1 = 8,
+    MiniHandleObjectInformationTypeMax = 9
+} MINIDUMP_HANDLE_OBJECT_INFORMATION_TYPE;
+
 #endif  /* __WINE_MINIDUMP_H */

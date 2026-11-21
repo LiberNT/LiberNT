@@ -1635,4 +1635,31 @@ WinHttpWriteProxySettings(
 #define WINHTTP_SERVER_CERT_CHAIN_REVOCATION_CHECK_CACHE_ONLY 0x80000000
 #endif
 
+typedef enum _WINHTTP_SECURE_DNS_SETTING {
+    WinHttpSecureDnsSettingDefault = 0,
+    WinHttpSecureDnsSettingForcePlaintext = 1,
+    WinHttpSecureDnsSettingRequireEncryption = 2,
+    WinHttpSecureDnsSettingTryEncryptionWithFallback = 3,
+    WinHttpSecureDnsSettingMax = 4
+} WINHTTP_SECURE_DNS_SETTING;
+
+typedef enum _WINHTTP_PROTOCOL_OPERATION {
+    WINHTTP_PROTOCOL_SEND_OPERATION = 0,
+    WINHTTP_PROTOCOL_RECEIVE_OPERATION = 1
+} WINHTTP_PROTOCOL_OPERATION;
+
+typedef enum _WINHTTP_PROXY_SETTINGS_TYPE {
+    WinHttpProxySettingsTypeUnknown = 0,
+    WinHttpProxySettingsTypeWsl = 1,
+    WinHttpProxySettingsTypeWsa = 2,
+    WinHttpProxySettingsTypeXBox = 3
+} WINHTTP_PROXY_SETTINGS_TYPE, *PWINHTTP_PROXY_SETTINGS_TYPE;
+
+typedef enum _WINHTTP_FAST_FORWARDING_STATE {
+    WinHttpFastForwardingStateInProgress = 0,
+    WinHttpFastForwardingStateSucceeded = 1,
+    WinHttpFastForwardingStateClientSideFailed = 2,
+    WinHttpFastForwardingStateServerSideFailed = 3
+} WINHTTP_FAST_FORWARDING_STATE, *PWINHTTP_FAST_FORWARDING_STATE;
+
 #endif  /* __WINE_WINHTTP_H */

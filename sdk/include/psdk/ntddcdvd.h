@@ -328,4 +328,11 @@ typedef struct _AACS_READ_BINDING_NONCE
   };
 } AACS_READ_BINDING_NONCE, *PAACS_READ_BINDING_NONCE;
 
+typedef enum _DISC_CONTROL_BLOCK_TYPE {
+    FormattingDiscControlBlock = 0x46444300,
+    WriteInhibitDiscControlBlock = 0x57444300,
+    SessionInfoDiscControlBlock = 0x53444300,
+    DiscControlBlockList = (-1)
+} DISC_CONTROL_BLOCK_TYPE, *PDISC_CONTROL_BLOCK_TYPE;
+
 #endif /* _NTDDCDVD_ */

@@ -713,4 +713,10 @@ RxFinalizeNetFobx(
 #define SRVOPEN_INIT_KEY 0
 #endif
 
+typedef enum _FCB_CONDITION {
+    FcbGood = 1,
+    FcbBad = 2,
+    FcbNeedsToBeVerified = 3
+} FCB_CONDITION;
+
 #endif

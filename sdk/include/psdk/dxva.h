@@ -1422,4 +1422,190 @@ typedef struct _DXVA_ExtendedFormat
 #define MAX_DEINTERLACE_SURFACES 32
 #endif
 
+typedef enum _DXVA_SampleFormat {
+    DXVA_SampleFormatMask = 255,
+    DXVA_SampleUnknown = 0,
+    DXVA_SamplePreviousFrame = 1,
+    DXVA_SampleProgressiveFrame = 2,
+    DXVA_SampleFieldInterleavedEvenFirst = 3,
+    DXVA_SampleFieldInterleavedOddFirst = 4,
+    DXVA_SampleFieldSingleEven = 5,
+    DXVA_SampleFieldSingleOdd = 6,
+    DXVA_SampleSubStream = 7
+} DXVA_SampleFormat;
+
+typedef enum _DXVA_VideoProcessCaps {
+    DXVA_VideoProcess_None = 0,
+    DXVA_VideoProcess_YUV2RGB = 1,
+    DXVA_VideoProcess_StretchX = 2,
+    DXVA_VideoProcess_StretchY = 4,
+    DXVA_VideoProcess_AlphaBlend = 8,
+    DXVA_VideoProcess_SubRects = 16,
+    DXVA_VideoProcess_SubStreams = 32,
+    DXVA_VideoProcess_SubStreamsExtended = 64,
+    DXVA_VideoProcess_YUV2RGBExtended = 128,
+    DXVA_VideoProcess_AlphaBlendExtended = 0x100
+} DXVA_VideoProcessCaps;
+
+typedef enum _DXVA_DeinterlaceTech {
+    DXVA_DeinterlaceTech_Unknown = 0,
+    DXVA_DeinterlaceTech_BOBLineReplicate = 1,
+    DXVA_DeinterlaceTech_BOBVerticalStretch = 2,
+    DXVA_DeinterlaceTech_BOBVerticalStretch4Tap = 0x100,
+    DXVA_DeinterlaceTech_MedianFiltering = 4,
+    DXVA_DeinterlaceTech_EdgeFiltering = 16,
+    DXVA_DeinterlaceTech_FieldAdaptive = 32,
+    DXVA_DeinterlaceTech_PixelAdaptive = 64,
+    DXVA_DeinterlaceTech_MotionVectorSteered = 128
+} DXVA_DeinterlaceTech;
+
+typedef enum _DXVA_SampleFlags {
+    DXVA_SampleFlagsMask = 15,
+    DXVA_SampleFlag_Palette_Changed = 1,
+    DXVA_SampleFlag_SrcRect_Changed = 2,
+    DXVA_SampleFlag_DstRect_Changed = 4,
+    DXVA_SampleFlag_ColorData_Changed = 8
+} DXVA_SampleFlags;
+
+typedef enum _DXVA_DestinationFlags {
+    DXVA_DestinationFlagMask = 15,
+    DXVA_DestinationFlag_Background_Changed = 1,
+    DXVA_DestinationFlag_TargetRect_Changed = 2,
+    DXVA_DestinationFlag_ColorData_Changed = 4,
+    DXVA_DestinationFlag_Alpha_Changed = 8
+} DXVA_DestinationFlags;
+
+typedef enum _DXVA_ProcAmpControlProp {
+    DXVA_ProcAmp_None = 0,
+    DXVA_ProcAmp_Brightness = 1,
+    DXVA_ProcAmp_Contrast = 2,
+    DXVA_ProcAmp_Hue = 4,
+    DXVA_ProcAmp_Saturation = 8
+} DXVA_ProcAmpControlProp;
+
+typedef enum _COPP_DPCP_Protection_Level {
+    COPP_DPCP_Level0 = 0,
+    COPP_DPCP_LevelMin = 0,
+    COPP_DPCP_Level1 = 1,
+    COPP_DPCP_LevelMax = 1,
+    COPP_DPCP_ForceDWORD = 0x7FFFFFFF
+} COPP_DPCP_Protection_Level;
+
+typedef enum _COPP_HDCP_Protection_Level {
+    COPP_HDCP_Level0 = 0,
+    COPP_HDCP_LevelMin = 0,
+    COPP_HDCP_Level1 = 1,
+    COPP_HDCP_LevelMax = 1,
+    COPP_HDCP_ForceDWORD = 0x7FFFFFFF
+} COPP_HDCP_Protection_Level;
+
+typedef enum _COPP_CGMSA_Protection_Level {
+    COPP_CGMSA_Disabled = 0,
+    COPP_CGMSA_LevelMin = 0,
+    COPP_CGMSA_CopyFreely = 1,
+    COPP_CGMSA_CopyNoMore = 2,
+    COPP_CGMSA_CopyOneGeneration = 3,
+    COPP_CGMSA_CopyNever = 4,
+    COPP_CGMSA_RedistributionControlRequired = 8,
+    COPP_CGMSA_LevelMax = 12,
+    COPP_CGMSA_ForceDWORD = 0x7FFFFFFF
+} COPP_CGMSA_Protection_Level;
+
+typedef enum _COPP_ACP_Protection_Level {
+    COPP_ACP_Level0 = 0,
+    COPP_ACP_LevelMin = 0,
+    COPP_ACP_Level1 = 1,
+    COPP_ACP_Level2 = 2,
+    COPP_ACP_Level3 = 3,
+    COPP_ACP_LevelMax = 3,
+    COPP_ACP_ForceDWORD = 0x7FFFFFFF
+} COPP_ACP_Protection_Level;
+
+enum {
+    COPP_ProtectionType_Unknown = (-2147483648),
+    COPP_ProtectionType_None = 0,
+    COPP_ProtectionType_HDCP = 1,
+    COPP_ProtectionType_ACP = 2,
+    COPP_ProtectionType_CGMSA = 4,
+    COPP_ProtectionType_DPCP = 16,
+    COPP_ProtectionType_Mask = (-2147483625),
+    COPP_ProtectionType_Reserved = 0x7FFFFFF8
+};
+
+typedef enum _COPP_TVProtectionStandard {
+    COPP_ProtectionStandard_Unknown = (-2147483648),
+    COPP_ProtectionStandard_None = 0,
+    COPP_ProtectionStandard_IEC61880_525i = 1,
+    COPP_ProtectionStandard_IEC61880_2_525i = 2,
+    COPP_ProtectionStandard_IEC62375_625p = 4,
+    COPP_ProtectionStandard_EIA608B_525 = 8,
+    COPP_ProtectionStandard_EN300294_625i = 16,
+    COPP_ProtectionStandard_CEA805A_TypeA_525p = 32,
+    COPP_ProtectionStandard_CEA805A_TypeA_750p = 64,
+    COPP_ProtectionStandard_CEA805A_TypeA_1125i = 128,
+    COPP_ProtectionStandard_CEA805A_TypeB_525p = 0x100,
+    COPP_ProtectionStandard_CEA805A_TypeB_750p = 0x200,
+    COPP_ProtectionStandard_CEA805A_TypeB_1125i = 0x400,
+    COPP_ProtectionStandard_ARIBTRB15_525i = 0x800,
+    COPP_ProtectionStandard_ARIBTRB15_525p = 0x1000,
+    COPP_ProtectionStandard_ARIBTRB15_750p = 0x2000,
+    COPP_ProtectionStandard_ARIBTRB15_1125i = 0x4000,
+    COPP_ProtectionStandard_Mask = (-2147450881),
+    COPP_ProtectionStandard_Reserved = 0x7FFF8000
+} COPP_TVProtectionStandard;
+
+typedef enum _COPP_ImageAspectRatio_EN300294 {
+    COPP_AspectRatio_EN300294_FullFormat4by3 = 0,
+    COPP_AspectRatio_EN300294_Box14by9Center = 1,
+    COPP_AspectRatio_EN300294_Box14by9Top = 2,
+    COPP_AspectRatio_EN300294_Box16by9Center = 3,
+    COPP_AspectRatio_EN300294_Box16by9Top = 4,
+    COPP_AspectRatio_EN300294_BoxGT16by9Center = 5,
+    COPP_AspectRatio_EN300294_FullFormat4by3ProtectedCenter = 6,
+    COPP_AspectRatio_EN300294_FullFormat16by9Anamorphic = 7,
+    COPP_AspectRatio_ForceDWORD = 0x7FFFFFFF
+} COPP_ImageAspectRatio_EN300294;
+
+typedef enum _COPP_StatusFlags {
+    COPP_StatusNormal = 0,
+    COPP_LinkLost = 1,
+    COPP_RenegotiationRequired = 2,
+    COPP_StatusFlagsReserved = (-4)
+} COPP_StatusFlags;
+
+typedef enum _COPP_StatusHDCPFlags {
+    COPP_HDCPRepeater = 1,
+    COPP_HDCPFlagsReserved = (-2)
+} COPP_StatusHDCPFlags;
+
+typedef enum _COPP_ConnectorType {
+    COPP_ConnectorType_Unknown = (-1),
+    COPP_ConnectorType_VGA = 0,
+    COPP_ConnectorType_SVideo = 1,
+    COPP_ConnectorType_CompositeVideo = 2,
+    COPP_ConnectorType_ComponentVideo = 3,
+    COPP_ConnectorType_DVI = 4,
+    COPP_ConnectorType_HDMI = 5,
+    COPP_ConnectorType_LVDS = 6,
+    COPP_ConnectorType_TMDS = 7,
+    COPP_ConnectorType_D_JPN = 8,
+    COPP_ConnectorType_SDI = 9,
+    COPP_ConnectorType_DisplayPortExternal = 10,
+    COPP_ConnectorType_DisplayPortEmbedded = 11,
+    COPP_ConnectorType_UDIExternal = 12,
+    COPP_ConnectorType_UDIEmbedded = 13,
+    COPP_ConnectorType_Internal = (-2147483648),
+    COPP_ConnectorType_ForceDWORD = 0x7FFFFFFF
+} COPP_ConnectorType;
+
+typedef enum _COPP_BusType {
+    COPP_BusType_Unknown = 0,
+    COPP_BusType_PCI = 1,
+    COPP_BusType_PCIX = 2,
+    COPP_BusType_PCIExpress = 3,
+    COPP_BusType_AGP = 4,
+    COPP_BusType_Integrated = (-2147483648),
+    COPP_BusType_ForceDWORD = 0x7FFFFFFF
+} COPP_BusType;
+
 #endif /* __WINE_DXVA_H */

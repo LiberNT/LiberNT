@@ -776,4 +776,31 @@ NTSTATUS WINAPI NetEnumerateTrustedDomains(LPWSTR,LPWSTR*);
 #define UF_USE_DES_KEY_ONLY 0x200000
 #endif
 
+typedef enum _MSA_INFO_LEVEL {
+    MsaInfoLevel0 = 0,
+    MsaInfoLevel1 = 1,
+    MsaInfoLevelMax = 2
+} MSA_INFO_LEVEL, *PMSA_INFO_LEVEL;
+
+typedef enum _MSA_INFO_ACCOUNT_TYPE {
+    MsaAccountFalse = 0,
+    StandAloneManagedServiceAccount = 1,
+    GroupManagedServiceAccount = 2,
+    DelegatedManagedServiceAccount = 3
+} MSA_INFO_ACCOUNT_TYPE, *PMSA_INFO_ACCOUNT_TYPE;
+
+typedef enum _MSA_INFO_STATE {
+    MsaInfoNotExist = 1,
+    MsaInfoNotService = 2,
+    MsaInfoCannotInstall = 3,
+    MsaInfoCanInstall = 4,
+    MsaInfoInstalled = 5
+} MSA_INFO_STATE, *PMSA_INFO_STATE;
+
+typedef enum _NET_VALIDATE_PASSWORD_TYPE {
+    NetValidateAuthentication = 1,
+    NetValidatePasswordChange = 2,
+    NetValidatePasswordReset = 3
+} NET_VALIDATE_PASSWORD_TYPE, *PNET_VALIDATE_PASSWORD_TYPE;
+
 #endif

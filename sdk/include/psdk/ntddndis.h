@@ -5336,4 +5336,134 @@ typedef ULONG NDIS_QOS_SQ_ID, *PNDIS_QOS_SQ_ID;
 #define WAN_PROTOCOL_KEEPS_STATS 0x00000001
 #endif
 
+typedef enum _NDIS_802_11_STATUS_TYPE {
+    Ndis802_11StatusType_Authentication = 0,
+    Ndis802_11StatusType_MediaStreamMode = 1,
+    Ndis802_11StatusType_PMKID_CandidateList = 2,
+    Ndis802_11StatusTypeMax = 3
+} NDIS_802_11_STATUS_TYPE, *PNDIS_802_11_STATUS_TYPE;
+
+typedef enum _NDIS_802_11_POWER_MODE {
+    Ndis802_11PowerModeCAM = 0,
+    Ndis802_11PowerModeMAX_PSP = 1,
+    Ndis802_11PowerModeFast_PSP = 2,
+    Ndis802_11PowerModeMax = 3
+} NDIS_802_11_POWER_MODE, *PNDIS_802_11_POWER_MODE;
+
+typedef enum _NDIS_802_11_PRIVACY_FILTER {
+    Ndis802_11PrivFilterAcceptAll = 0,
+    Ndis802_11PrivFilter8021xWEP = 1
+} NDIS_802_11_PRIVACY_FILTER, *PNDIS_802_11_PRIVACY_FILTER;
+
+typedef enum _NDIS_802_11_RELOAD_DEFAULTS {
+    Ndis802_11ReloadWEPKeys = 0
+} NDIS_802_11_RELOAD_DEFAULTS, *PNDIS_802_11_RELOAD_DEFAULTS;
+
+typedef enum _NDIS_802_11_MEDIA_STREAM_MODE {
+    Ndis802_11MediaStreamOff = 0,
+    Ndis802_11MediaStreamOn = 1
+} NDIS_802_11_MEDIA_STREAM_MODE, *PNDIS_802_11_MEDIA_STREAM_MODE;
+
+typedef enum _NDIS_802_11_RADIO_STATUS {
+    Ndis802_11RadioStatusOn = 0,
+    Ndis802_11RadioStatusHardwareOff = 1,
+    Ndis802_11RadioStatusSoftwareOff = 2,
+    Ndis802_11RadioStatusHardwareSoftwareOff = 3,
+    Ndis802_11RadioStatusMax = 4
+} NDIS_802_11_RADIO_STATUS, *PNDIS_802_11_RADIO_STATUS;
+
+typedef enum _OFFLOAD_CONF_ALGO {
+    OFFLOAD_IPSEC_CONF_NONE = 0,
+    OFFLOAD_IPSEC_CONF_DES = 1,
+    OFFLOAD_IPSEC_CONF_RESERVED = 2,
+    OFFLOAD_IPSEC_CONF_3_DES = 3,
+    OFFLOAD_IPSEC_CONF_MAX = 4
+} OFFLOAD_CONF_ALGO;
+
+typedef enum _OFFLOAD_INTEGRITY_ALGO {
+    OFFLOAD_IPSEC_INTEGRITY_NONE = 0,
+    OFFLOAD_IPSEC_INTEGRITY_MD5 = 1,
+    OFFLOAD_IPSEC_INTEGRITY_SHA = 2,
+    OFFLOAD_IPSEC_INTEGRITY_MAX = 3
+} OFFLOAD_INTEGRITY_ALGO;
+
+typedef enum _UDP_ENCAP_TYPE {
+    OFFLOAD_IPSEC_UDPESP_ENCAPTYPE_IKE = 0,
+    OFFLOAD_IPSEC_UDPESP_ENCAPTYPE_OTHER = 1
+} UDP_ENCAP_TYPE, *PUDP_ENCAP_TYPE;
+
+typedef enum _NDIS_FDDI_ATTACHMENT_TYPE {
+    NdisFddiTypeIsolated = 1,
+    NdisFddiTypeLocalA = 2,
+    NdisFddiTypeLocalB = 3,
+    NdisFddiTypeLocalAB = 4,
+    NdisFddiTypeLocalS = 5,
+    NdisFddiTypeWrapA = 6,
+    NdisFddiTypeWrapB = 7,
+    NdisFddiTypeWrapAB = 8,
+    NdisFddiTypeWrapS = 9,
+    NdisFddiTypeCWrapA = 10,
+    NdisFddiTypeCWrapB = 11,
+    NdisFddiTypeCWrapS = 12,
+    NdisFddiTypeThrough = 13
+} NDIS_FDDI_ATTACHMENT_TYPE, *PNDIS_FDDI_ATTACHMENT_TYPE;
+
+typedef enum _NDIS_FDDI_RING_MGT_STATE {
+    NdisFddiRingIsolated = 1,
+    NdisFddiRingNonOperational = 2,
+    NdisFddiRingOperational = 3,
+    NdisFddiRingDetect = 4,
+    NdisFddiRingNonOperationalDup = 5,
+    NdisFddiRingOperationalDup = 6,
+    NdisFddiRingDirected = 7,
+    NdisFddiRingTrace = 8
+} NDIS_FDDI_RING_MGT_STATE, *PNDIS_FDDI_RING_MGT_STATE;
+
+typedef enum _NDIS_FDDI_LCONNECTION_STATE {
+    NdisFddiStateOff = 1,
+    NdisFddiStateBreak = 2,
+    NdisFddiStateTrace = 3,
+    NdisFddiStateConnect = 4,
+    NdisFddiStateNext = 5,
+    NdisFddiStateSignal = 6,
+    NdisFddiStateJoin = 7,
+    NdisFddiStateVerify = 8,
+    NdisFddiStateActive = 9,
+    NdisFddiStateMaintenance = 10
+} NDIS_FDDI_LCONNECTION_STATE, *PNDIS_FDDI_LCONNECTION_STATE;
+
+typedef enum _NDIS_WAN_MEDIUM_SUBTYPE {
+    NdisWanMediumHub = 0,
+    NdisWanMediumX_25 = 1,
+    NdisWanMediumIsdn = 2,
+    NdisWanMediumSerial = 3,
+    NdisWanMediumFrameRelay = 4,
+    NdisWanMediumAtm = 5,
+    NdisWanMediumSonet = 6,
+    NdisWanMediumSW56K = 7,
+    NdisWanMediumPPTP = 8,
+    NdisWanMediumL2TP = 9,
+    NdisWanMediumIrda = 10,
+    NdisWanMediumParallel = 11,
+    NdisWanMediumPppoe = 12,
+    NdisWanMediumSSTP = 13,
+    NdisWanMediumAgileVPN = 14,
+    NdisWanMediumGre = 15,
+    NdisWanMediumSubTypeMax = 16
+} NDIS_WAN_MEDIUM_SUBTYPE, *PNDIS_WAN_MEDIUM_SUBTYPE;
+
+typedef enum _NDIS_WAN_HEADER_FORMAT {
+    NdisWanHeaderNative = 0,
+    NdisWanHeaderEthernet = 1
+} NDIS_WAN_HEADER_FORMAT, *PNDIS_WAN_HEADER_FORMAT;
+
+typedef enum _NDIS_802_5_RING_STATE {
+    NdisRingStateOpened = 1,
+    NdisRingStateClosed = 2,
+    NdisRingStateOpening = 3,
+    NdisRingStateClosing = 4,
+    NdisRingStateOpenFailure = 5,
+    NdisRingStateRingFailure = 6
+} NDIS_802_5_RING_STATE, *PNDIS_802_5_RING_STATE;
+
 #endif /* _NTDDNDIS_ */

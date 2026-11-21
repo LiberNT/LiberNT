@@ -1651,4 +1651,288 @@ typedef struct _DEVICE_RESET_INTERFACE_STANDARD {
 #endif
 #ifndef _STRSAFE_USE_SECURE_CRT
 #define _STRSAFE_USE_SECURE_CRT 0
+typedef enum _MEM_DEDICATED_ATTRIBUTE_TYPE {
+    MemDedicatedAttributeReadBandwidth = 0,
+    MemDedicatedAttributeReadLatency = 1,
+    MemDedicatedAttributeWriteBandwidth = 2,
+    MemDedicatedAttributeWriteLatency = 3,
+    MemDedicatedAttributeMax = 4
+} MEM_DEDICATED_ATTRIBUTE_TYPE, *PMEM_DEDICATED_ATTRIBUTE_TYPE;
+
+typedef enum MEM_SECTION_EXTENDED_PARAMETER_TYPE {
+    MemSectionExtendedParameterInvalidType = 0,
+    MemSectionExtendedParameterUserPhysicalFlags = 1,
+    MemSectionExtendedParameterNumaNode = 2,
+    MemSectionExtendedParameterSigningLevel = 3,
+    MemSectionExtendedParameterMax = 4
+} MEM_SECTION_EXTENDED_PARAMETER_TYPE, *PMEM_SECTION_EXTENDED_PARAMETER_TYPE;
+
+typedef enum _PARTITION_INFORMATION_CLASS {
+    SystemMemoryPartitionInformation = 0,
+    SystemMemoryPartitionDedicatedMemoryInformation = 9,
+    SystemMemoryPartitionOpenDedicatedMemory = 10
+} PARTITION_INFORMATION_CLASS, *PPARTITION_INFORMATION_CLASS;
+
+typedef enum _USER_ACTIVITY_PRESENCE {
+    PowerUserPresent = 0,
+    PowerUserNotPresent = 1,
+    PowerUserInactive = 2,
+    PowerUserMaximum = 3,
+    PowerUserInvalid = 3
+} USER_ACTIVITY_PRESENCE, *PUSER_ACTIVITY_PRESENCE;
+
+typedef enum _ENERGY_SAVER_STATUS {
+    ENERGY_SAVER_OFF = 0,
+    ENERGY_SAVER_STANDARD = 1,
+    ENERGY_SAVER_HIGH_SAVINGS = 2
+} ENERGY_SAVER_STATUS, *PENERGY_SAVER_STATUS;
+
+typedef enum POWER_USER_PRESENCE_TYPE {
+    UserNotPresent = 0,
+    UserPresent = 1,
+    UserUnknown = 255
+} POWER_USER_PRESENCE_TYPE, *PPOWER_USER_PRESENCE_TYPE;
+
+typedef enum POWER_MONITOR_REQUEST_REASON {
+    MonitorRequestReasonUnknown = 0,
+    MonitorRequestReasonPowerButton = 1,
+    MonitorRequestReasonRemoteConnection = 2,
+    MonitorRequestReasonScMonitorpower = 3,
+    MonitorRequestReasonUserInput = 4,
+    MonitorRequestReasonAcDcDisplayBurst = 5,
+    MonitorRequestReasonUserDisplayBurst = 6,
+    MonitorRequestReasonPoSetSystemState = 7,
+    MonitorRequestReasonSetThreadExecutionState = 8,
+    MonitorRequestReasonFullWake = 9,
+    MonitorRequestReasonSessionUnlock = 10,
+    MonitorRequestReasonScreenOffRequest = 11,
+    MonitorRequestReasonIdleTimeout = 12,
+    MonitorRequestReasonPolicyChange = 13,
+    MonitorRequestReasonSleepButton = 14,
+    MonitorRequestReasonLid = 15,
+    MonitorRequestReasonBatteryCountChange = 16,
+    MonitorRequestReasonGracePeriod = 17,
+    MonitorRequestReasonPnP = 18,
+    MonitorRequestReasonDP = 19,
+    MonitorRequestReasonSxTransition = 20,
+    MonitorRequestReasonSystemIdle = 21,
+    MonitorRequestReasonNearProximity = 22,
+    MonitorRequestReasonThermalStandby = 23,
+    MonitorRequestReasonResumePdc = 24,
+    MonitorRequestReasonResumeS4 = 25,
+    MonitorRequestReasonTerminal = 26,
+    MonitorRequestReasonPdcSignal = 27,
+    MonitorRequestReasonAcDcDisplayBurstSuppressed = 28,
+    MonitorRequestReasonSystemStateEntered = 29,
+    MonitorRequestReasonWinrt = 30,
+    MonitorRequestReasonUserInputKeyboard = 31,
+    MonitorRequestReasonUserInputMouse = 32,
+    MonitorRequestReasonUserInputTouchpad = 33,
+    MonitorRequestReasonUserInputPen = 34,
+    MonitorRequestReasonUserInputAccelerometer = 35,
+    MonitorRequestReasonUserInputHid = 36,
+    MonitorRequestReasonUserInputPoUserPresent = 37,
+    MonitorRequestReasonUserInputSessionSwitch = 38,
+    MonitorRequestReasonUserInputInitialization = 39,
+    MonitorRequestReasonPdcSignalWindowsMobilePwrNotif = 40,
+    MonitorRequestReasonPdcSignalWindowsMobileShell = 41,
+    MonitorRequestReasonPdcSignalHeyCortana = 42,
+    MonitorRequestReasonPdcSignalHolographicShell = 43,
+    MonitorRequestReasonPdcSignalFingerprint = 44,
+    MonitorRequestReasonDirectedDrips = 45,
+    MonitorRequestReasonDim = 46,
+    MonitorRequestReasonBuiltinPanel = 47,
+    MonitorRequestReasonDisplayRequiredUnDim = 48,
+    MonitorRequestReasonBatteryCountChangeSuppressed = 49,
+    MonitorRequestReasonResumeModernStandby = 50,
+    MonitorRequestReasonTerminalInit = 51,
+    MonitorRequestReasonPdcSignalSensorsHumanPresence = 52,
+    MonitorRequestReasonBatteryPreCritical = 53,
+    MonitorRequestReasonUserInputTouch = 54,
+    MonitorRequestReasonAusterityBatteryDrain = 55,
+    MonitorRequestReasonDozeRestrictedStandby = 56,
+    MonitorRequestReasonSmartRestrictedStandby = 57,
+    MonitorRequestReasonMax = 58
+} POWER_MONITOR_REQUEST_REASON;
+
+typedef enum _POWER_MONITOR_REQUEST_TYPE {
+    MonitorRequestTypeOff = 0,
+    MonitorRequestTypeOnAndPresent = 1,
+    MonitorRequestTypeToggleOn = 2
+} POWER_MONITOR_REQUEST_TYPE;
+
+typedef enum POWER_SETTING_ALTITUDE {
+    ALTITUDE_GROUP_POLICY = 0,
+    ALTITUDE_USER = 1,
+    ALTITUDE_RUNTIME_OVERRIDE = 2,
+    ALTITUDE_PROVISIONING = 3,
+    ALTITUDE_OEM_CUSTOMIZATION = 4,
+    ALTITUDE_INTERNAL_OVERRIDE = 5,
+    ALTITUDE_OS_DEFAULT = 6
+} POWER_SETTING_ALTITUDE, *PPOWER_SETTING_ALTITUDE;
+
+typedef enum _OS_DEPLOYEMENT_STATE_VALUES {
+    OS_DEPLOYMENT_STANDARD = 1,
+    OS_DEPLOYMENT_COMPACT = 2
+} OS_DEPLOYEMENT_STATE_VALUES;
+
+typedef enum _IMAGE_POLICY_ENTRY_TYPE {
+    ImagePolicyEntryTypeNone = 0,
+    ImagePolicyEntryTypeBool = 1,
+    ImagePolicyEntryTypeInt8 = 2,
+    ImagePolicyEntryTypeUInt8 = 3,
+    ImagePolicyEntryTypeInt16 = 4,
+    ImagePolicyEntryTypeUInt16 = 5,
+    ImagePolicyEntryTypeInt32 = 6,
+    ImagePolicyEntryTypeUInt32 = 7,
+    ImagePolicyEntryTypeInt64 = 8,
+    ImagePolicyEntryTypeUInt64 = 9,
+    ImagePolicyEntryTypeAnsiString = 10,
+    ImagePolicyEntryTypeUnicodeString = 11,
+    ImagePolicyEntryTypeOverride = 12,
+    ImagePolicyEntryTypeMaximum = 13
+} IMAGE_POLICY_ENTRY_TYPE;
+
+typedef enum _IMAGE_POLICY_ID {
+    ImagePolicyIdNone = 0,
+    ImagePolicyIdEtw = 1,
+    ImagePolicyIdDebug = 2,
+    ImagePolicyIdCrashDump = 3,
+    ImagePolicyIdCrashDumpKey = 4,
+    ImagePolicyIdCrashDumpKeyGuid = 5,
+    ImagePolicyIdParentSd = 6,
+    ImagePolicyIdParentSdRev = 7,
+    ImagePolicyIdSvn = 8,
+    ImagePolicyIdDeviceId = 9,
+    ImagePolicyIdCapability = 10,
+    ImagePolicyIdScenarioId = 11,
+    ImagePolicyIdCapabilityOverridable = 12,
+    ImagePolicyIdTrustletIdOverridable = 13,
+    ImagePolicyIdMaximum = 14
+} IMAGE_POLICY_ID;
+
+typedef enum _POOL_CREATE_EXTENDED_PARAMETER_TYPE {
+    PoolCreateExtendedParameterInvalidType = 0,
+    PoolCreateExtendedParameterName = 1
+} POOL_CREATE_EXTENDED_PARAMETER_TYPE, *PPOOL_CREATE_EXTENDED_PARAMETER_TYPE;
+
+typedef enum _MM_MDL_PAGE_CONTENTS_STATE {
+    MmMdlPageContentsDynamic = 0,
+    MmMdlPageContentsInvariant = 1,
+    MmMdlPageContentsQuery = 2
+} MM_MDL_PAGE_CONTENTS_STATE, PMM_MDL_PAGE_CONTENTS_STATE;
+
+typedef enum _SE_IMAGE_TYPE {
+    SeImageTypeElamDriver = 0,
+    SeImageTypeDriver = 1,
+    SeImageTypePlatformSecureFile = 2,
+    SeImageTypeDynamicCodeFile = 3,
+    SeImageTypeAll = 4,
+    SeImageTypeMax = 5
+} SE_IMAGE_TYPE, *PSE_IMAGE_TYPE;
+
+typedef enum _SE_IMAGE_VERIFICATION_CALLBACK_TYPE {
+    SeImageVerificationCallbackInformational = 0,
+    SeImageVerificationCallbackBlock = 1
+} SE_IMAGE_VERIFICATION_CALLBACK_TYPE, *PSE_IMAGE_VERIFICATION_CALLBACK_TYPE;
+
+typedef enum _DRIVER_PROXY_REGISTER_CALLBACK_PHASE {
+    DriverProxyRegisterCallbackPreProcess = 0,
+    DriverProxyRegisterCallbackProxyStalled = 1,
+    DriverProxyRegisterCallbackPostProcess = 2,
+    DriverProxyRegisterCallbackMax = 3
+} DRIVER_PROXY_REGISTER_CALLBACK_PHASE, *PDRIVER_PROXY_REGISTER_CALLBACK_PHASE;
+
+typedef enum _PCI_ACS_BIT {
+    PciAcsReserved = 0,
+    PciAcsBitEnable = 1,
+    PciAcsBitDisable = 2,
+    PciAcsBitDontCare = 3
+} PCI_ACS_BIT, *PPCI_ACS_BIT;
+
+typedef enum _NPEM_CONTROL_STANDARD_CONTROL_BIT {
+    InitiateReset = 1,
+    OkControl = 2,
+    LocateControl = 3,
+    FailControl = 4,
+    RebuildControl = 5,
+    PFAControl = 6,
+    HotSpareControl = 7,
+    InACriticalArrayControl = 8,
+    InAFailedArrayControl = 9,
+    InvalidDeviceTypeControl = 10,
+    DisabledControl = 11
+} NPEM_CONTROL_STANDARD_CONTROL_BIT, *PNPEM_CONTROL_STANDARD_CONTROL_BIT;
+
+typedef enum _PO_EFFECTIVE_POWER_MODE {
+    PoEffectivePowerModeBatterySaver = 0,
+    PoEffectivePowerModeEnergySaverHighSavings = 0,
+    PoEffectivePowerModeBetterBattery = 1,
+    PoEffectivePowerModeEnergySaverStandard = 1,
+    PoEffectivePowerModeBalanced = 2,
+    PoEffectivePowerModeHighPerformance = 3,
+    PoEffectivePowerModeMaxPerformance = 4,
+    PoEffectivePowerModeGameMode = 5,
+    PoEffectivePowerModeMixedReality = 6
+} PO_EFFECTIVE_POWER_MODE, *PPO_EFFECTIVE_POWER_MODE;
+
+typedef enum _CLS_CONTEXT_MODE {
+    ClsContextNone = 0,
+    ClsContextUndoNext = 1,
+    ClsContextPrevious = 2,
+    ClsContextForward = 3
+} CLS_CONTEXT_MODE, *PCLS_CONTEXT_MODE;
+
+typedef enum _CLFS_CONTEXT_MODE {
+    ClfsContextNone = 0,
+    ClfsContextUndoNext = 1,
+    ClfsContextPrevious = 2,
+    ClfsContextForward = 3
+} CLFS_CONTEXT_MODE, *PCLFS_CONTEXT_MODE;
+
+typedef enum _CLS_LOG_INFORMATION_CLASS {
+    ClfsLogBasicInformation = 0,
+    ClfsLogBasicInformationPhysical = 1,
+    ClfsLogPhysicalNameInformation = 2,
+    ClfsLogStreamIdentifierInformation = 3,
+    ClfsLogSystemMarkingInformation = 4,
+    ClfsLogPhysicalLsnInformation = 5
+} CLS_LOG_INFORMATION_CLASS, *PCLS_LOG_INFORMATION_CLASS, CLFS_LOG_INFORMATION_CLASS, *PCLFS_LOG_INFORMATION_CLASS;
+
+typedef enum _CLS_IOSTATS_CLASS {
+    ClsIoStatsDefault = 0,
+    ClsIoStatsMax = 0xFFFF
+} CLS_IOSTATS_CLASS, *PCLS_IOSTATS_CLASS;
+
+typedef enum _CLFS_IOSTATS_CLASS {
+    ClfsIoStatsDefault = 0,
+    ClfsIoStatsMax = 0xFFFF
+} CLFS_IOSTATS_CLASS, *PCLFS_IOSTATS_CLASS;
+
+typedef enum _CLFS_LOG_ARCHIVE_MODE {
+    ClfsLogArchiveEnabled = 1,
+    ClfsLogArchiveDisabled = 2
+} CLFS_LOG_ARCHIVE_MODE, *PCLFS_LOG_ARCHIVE_MODE;
+
+typedef enum _CLFS_MGMT_POLICY_TYPE {
+    ClfsMgmtPolicyMaximumSize = 0,
+    ClfsMgmtPolicyMinimumSize = 1,
+    ClfsMgmtPolicyNewContainerSize = 2,
+    ClfsMgmtPolicyGrowthRate = 3,
+    ClfsMgmtPolicyLogTail = 4,
+    ClfsMgmtPolicyAutoShrink = 5,
+    ClfsMgmtPolicyAutoGrow = 6,
+    ClfsMgmtPolicyNewContainerPrefix = 7,
+    ClfsMgmtPolicyNewContainerSuffix = 8,
+    ClfsMgmtPolicyNewContainerExtension = 9,
+    ClfsMgmtPolicyInvalid = 10
+} CLFS_MGMT_POLICY_TYPE, *PCLFS_MGMT_POLICY_TYPE;
+
+typedef enum _CLFS_MGMT_NOTIFICATION_TYPE {
+    ClfsMgmtAdvanceTailNotification = 0,
+    ClfsMgmtLogFullHandlerNotification = 1,
+    ClfsMgmtLogUnpinnedNotification = 2,
+    ClfsMgmtLogWriteNotification = 3
+} CLFS_MGMT_NOTIFICATION_TYPE, *PCLFS_MGMT_NOTIFICATION_TYPE;
+
 #endif

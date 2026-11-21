@@ -241,4 +241,13 @@ PSSTDAPI StgDeserializePropVariant(const SERIALIZEDPROPERTYVALUE *pprop, ULONG c
 }
 #endif
 
+typedef enum DRAWPROGRESSFLAGS {
+    DPF_NONE = 0,
+    DPF_MARQUEE = 1,
+    DPF_MARQUEE_COMPLETE = 2,
+    DPF_ERROR = 4,
+    DPF_WARNING = 8,
+    DPF_STOPPED = 16
+} DRAWPROGRESSFLAGS;
+
 #endif /* __WINE_PROPVARUTIL_H */

@@ -11743,6 +11743,34 @@ NdisIfQueryBindingIfIndex(
 #define PD_BUFFER_MIN_TX_DATA_START_ALIGNMENT 2
 #endif
 
+typedef enum NDIS_PD_CONTROL_TYPE {
+    NdisPDCTL_IN = 0,
+    NdisPDCTL_OUT = 1,
+    NdisPDCTL_INOUT = 2
+} NDIS_PD_CONTROL_TYPE;
+
+typedef enum NDIS_PD_QUEUE_CONTROL_CODE {
+    NdisPDQCTLUnknown = 0,
+    NdisPDQCTLQueueDepthThreshold = 1,
+    NdisPDQCTLModerationInterval = 2,
+    NdisPDQCTLModerationCount = 3,
+    NdisPDQCTLNotificationGroupId = 4,
+    NdisPDQCTLSchedulerQueueId = 5,
+    NdisPDQCTLMax = 6
+} NDIS_PD_QUEUE_CONTROL_CODE;
+
+typedef enum NDIS_PD_PROVIDER_CONTROL_CODE {
+    NdisPDPCTLUnknown = 0,
+    NdisPDPCTLCapabilities = 1,
+    NdisPDPCTLMax = 2
+} NDIS_PD_PROVIDER_CONTROL_CODE;
+
+typedef enum _IPSEC_OFFLOAD_V2_OPERATION {
+    IPsecOffloadV2Ah = 1,
+    IPsecOffloadV2Esp = 2,
+    IPsecOffloadV2Max = 3
+} IPSEC_OFFLOAD_V2_OPERATION, *PIPSEC_OFFLOAD_V2_OPERATION;
+
 #endif /* _NDIS_ */
 
 /* EOF */
