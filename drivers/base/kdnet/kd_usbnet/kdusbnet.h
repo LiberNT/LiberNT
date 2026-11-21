@@ -627,9 +627,11 @@ NTSTATUS
 UsbFindFunction(
     _In_ PUSBNET_ADAPTER Adapter);
 
+#if DBG
 NTSTATUS
 UsbWaitForTethering(
     _In_ PUSBNET_ADAPTER Adapter);
+#endif
 
 NTSTATUS
 UsbStartEthernet(

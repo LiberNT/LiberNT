@@ -12,6 +12,7 @@
 PKDNET_EXTENSIBILITY_IMPORTS KdNetExtensibilityImports;
 BOOLEAN UsbNetLocalBroadcast;
 
+#if DBG
 static
 BOOLEAN
 UsbNetOptionIsOne(
@@ -29,6 +30,7 @@ UsbNetOptionIsOne(
 
     return FALSE;
 }
+#endif
 
 static
 VOID
@@ -65,7 +67,11 @@ KdInitializeLibrary(
         return Status;
 
     KdNetExtensibilityImports = ImportTable;
+#if DBG
     UsbNetLocalBroadcast = UsbNetOptionIsOne(LoaderOptions, "LOCAL_BROADCAST=");
+#else
+    UsbNetLocalBroadcast = TRUE;
+#endif
     Exports->KdInitializeController = UsbNetInitializeController;
     Exports->KdShutdownController = UsbNetShutdownController;
     Exports->KdSetHibernateRange = UsbNetSetHibernateRange;

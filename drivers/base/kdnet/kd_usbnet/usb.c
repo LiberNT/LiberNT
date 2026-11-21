@@ -28,6 +28,7 @@ USBNET_PROTOCOL
 UsbClassify(
     _In_ PUSB_SCAN Scan)
 {
+#if DBG
     if ((Scan->Class == USB_CLASS_CDC && Scan->SubClass == CDC_SUBCLASS_ACM && Scan->Protocol == CDC_PROTOCOL_VENDOR) ||
         (Scan->Class == USB_CLASS_WIRELESS && Scan->SubClass == 0x01 && Scan->Protocol == 0x03) ||
         (Scan->Class == USB_CLASS_MISC && Scan->SubClass == 0x04 && Scan->Protocol == 0x01) ||
@@ -35,6 +36,7 @@ UsbClassify(
     {
         return UsbNetRndis;
     }
+#endif
 
     if (Scan->Class != USB_CLASS_CDC)
         return UsbNetNone;
@@ -51,6 +53,7 @@ UsbClassify(
     return UsbNetNone;
 }
 
+#if DBG
 static
 BOOLEAN
 UsbHasPhoneInterface(
@@ -95,6 +98,7 @@ UsbMayCarryMtp(
 
     return FALSE;
 }
+#endif
 
 static
 BOOLEAN
@@ -282,6 +286,7 @@ UsbReadDescriptor(
                        (USHORT)((Type << 8) | Index), Language, Length, Transferred);
 }
 
+#if DBG
 static
 BOOLEAN
 UsbHasMtpFunction(
@@ -337,6 +342,7 @@ UsbHasMtpFunction(
 
     return FALSE;
 }
+#endif
 
 static
 NTSTATUS
@@ -562,7 +568,10 @@ UsbProbeDevice(
     NTSTATUS Status;
     ULONG Got, Total, Configurations, i;
     USHORT MaxPacket, VendorId, ProductId;
-    BOOLEAN Phone, MayCarryMtp = FALSE;
+    BOOLEAN Phone;
+#if DBG
+    BOOLEAN MayCarryMtp = FALSE;
+#endif
 
     Status = XhciAddressDevice(Adapter, Device);
     if (!NT_SUCCESS(Status))
@@ -618,6 +627,7 @@ UsbProbeDevice(
         if (!NT_SUCCESS(Status) || Got < sizeof(USB_CONFIGURATION_DESCRIPTOR))
             continue;
 
+#if DBG
         if (UsbHasPhoneInterface(Data, Got))
         {
             Adapter->PhonePort = Device->Port;
@@ -625,6 +635,7 @@ UsbProbeDevice(
         }
 
         MayCarryMtp = MayCarryMtp || UsbMayCarryMtp(Data, Got);
+#endif
         if (!UsbFindControl(Data, Got, &Function) || !UsbFindEndpoints(Data, Got, &Function))
             continue;
 
@@ -647,6 +658,7 @@ UsbProbeDevice(
         return UsbNetStartFunction(Adapter);
     }
 
+#if DBG
     /* TODO: an iPhone (Apple's own tethering protocol) is not recognized as a phone */
     if (MayCarryMtp && !(Adapter->PhonePort == Device->Port && Adapter->PhoneRoute == Device->Route) &&
         UsbHasMtpFunction(Adapter))
@@ -654,6 +666,7 @@ UsbProbeDevice(
         Adapter->PhonePort = Device->Port;
         Adapter->PhoneRoute = Device->Route;
     }
+#endif
 
     return STATUS_NOT_SUPPORTED;
 }
@@ -838,6 +851,7 @@ UsbStartEthernet(
     return Status;
 }
 
+#if DBG
 static
 BOOLEAN
 UsbWaitPortConnected(
@@ -992,3 +1006,4 @@ UsbWaitForTethering(
     Adapter->PhoneRoute = 0;
     return STATUS_NO_SUCH_DEVICE;
 }
+#endif

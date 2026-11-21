@@ -121,6 +121,7 @@ UsbNetSetLink(
     *Adapter->KdNet->LinkState = Up && Adapter->Carrier;
 }
 
+#if DBG
 static
 VOID
 UsbNetWaitForCarrier(
@@ -153,6 +154,7 @@ UsbNetWaitForCarrier(
     UsbNetTrace("USB debugger: no Ethernet link after %lu ms, reported %lu, carrier %lu\n", Waited,
                 (ULONG)Adapter->StatusSeen, (ULONG)Adapter->Carrier);
 }
+#endif
 
 NTSTATUS
 NTAPI
@@ -190,11 +192,13 @@ UsbNetInitializeController(
 
     if (!NT_SUCCESS(Status) && (Adapter->PhonePort || Status == STATUS_DEVICE_NOT_CONNECTED))
     {
+#if DBG
         if (!UsbNetLocalBroadcast)
             Status = UsbWaitForTethering(Adapter);
         else if (Adapter->PhonePort)
             UsbNetTrace("USB debugger: the phone on root port %lu is not tethering, and this boot entry does not wait for it\n",
                         Adapter->PhonePort);
+#endif
         if (!NT_SUCCESS(Status))
             Status = UsbStartEthernet(Adapter);
     }
@@ -205,12 +209,18 @@ UsbNetInitializeController(
         return Status;
     }
 
+#if DBG
     UsbNetSetMessage(STATUS_SUCCESS, Adapter->Phone ? L"Connected to the phone" : NULL);
+#else
+    UsbNetSetMessage(STATUS_SUCCESS, NULL);
+#endif
     UsbNetTrace("USB debugger: using %04lx:%04lx on root port %lu, %lu hub(s) away, %lu Mbit/s\n",
                 (ULONG)Adapter->VendorId, (ULONG)Adapter->ProductId, Adapter->Devices[0].Port, Adapter->Tier,
                 UsbNetLinkSpeed(Adapter->Device->Speed));
+#if DBG
     if (!UsbNetLocalBroadcast)
         UsbNetWaitForCarrier(Adapter);
+#endif
 
     /* The transfer pending now reports to interrupter 0, which the OS owns once the controller is shared */
     if (Adapter->StatusActive)

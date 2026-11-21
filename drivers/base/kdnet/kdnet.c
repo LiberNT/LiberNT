@@ -18,7 +18,9 @@ KDNET_OPTIONS KdNetOptions;
 volatile BOOLEAN KdNetReady;
 BOOLEAN KdNetBroadcasting;
 
+#if DBG
 static ULONG64 KdpLinkSince;
+#endif
 static LARGE_INTEGER KdpFrequency;
 static LONGLONG KdpLastCounter;
 static ULONG64 KdpClockOffset;
@@ -87,6 +89,7 @@ KdpShowHost(VOID)
     KdNetHost.ShowPrompt(NULL);
 }
 
+#if DBG
 static
 VOID
 KdpUpdateBroadcast(
@@ -114,6 +117,7 @@ KdpUpdateBroadcast(
     if (Now - KdpLinkSince >= KDNET_ADDRESS_WAIT)
         KdNetBroadcasting = TRUE;
 }
+#endif
 
 VOID
 KdNetService(VOID)
@@ -136,7 +140,9 @@ KdNetService(VOID)
     }
 
     Now = KdNetTime();
+#if DBG
     KdpUpdateBroadcast(Now);
+#endif
     KdIpTimer(Now);
     KdSessionTimer(Now);
     KdpShowHost();
@@ -202,13 +208,21 @@ KdpParseOptions(
     ULONG Values[4], i;
     PCSTR Text;
     PCHAR Secret;
+#if DBG
     BOOLEAN NoHost;
+#endif
 
     RtlZeroMemory(&KdNetOptions, sizeof(KdNetOptions));
     KdNetOptions.HostPort = KDNET_DEFAULT_PORT;
+#if !DBG
+    /* DHCP, a host address and the relay serve remote assistance, so a release build debugs over a cable only */
+    KdNetOptions.Broadcast = TRUE;
+    KdNetBroadcasting = TRUE;
+#endif
     if (!Options)
         return;
 
+#if DBG
     NoHost = !KdpFindOption(Options, "HOST_IP");
 #ifdef REMOTE_ASSISTANCE
     NoHost = NoHost && !KdpFindOption(Options, "HOST_NAME");
@@ -228,6 +242,7 @@ KdpParseOptions(
     {
         KdNetOptions.HostIp = KDNET_IP(Values[0], Values[1], Values[2], Values[3]);
     }
+#endif
 
 #ifdef REMOTE_ASSISTANCE
     Text = KdpFindOption(Options, "HOST_NAME");
@@ -315,7 +330,9 @@ KdpTerminalInitialize(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
     NTSTATUS Status;
+#if DBG
     ULONG64 Start, Notice;
+#endif
 
     if (KdNetReady)
         return STATUS_SUCCESS;
@@ -332,6 +349,7 @@ KdpTerminalInitialize(
     KdCryptoAddEntropy(KdNicAddress, sizeof(KdNicAddress));
     KdIpInitialize();
 
+#if DBG
     Start = KdNetTime();
     Notice = Start;
     while (!KdNetOptions.Broadcast && (!KdIpAddress || KdpHostUnresolved()) &&
@@ -346,6 +364,7 @@ KdpTerminalInitialize(
         KdNetService();
         KeStallExecutionProcessor(500);
     }
+#endif
 
     KdSessionInitialize();
     KeMemoryBarrier();

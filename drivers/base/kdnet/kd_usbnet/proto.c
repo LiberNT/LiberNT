@@ -48,6 +48,7 @@ UsbNetSetAddress(
         Adapter->KdNet->TargetMacAddress[i] = Address[i];
 }
 
+#if DBG
 static
 NTSTATUS
 UsbNetRndisRequest(
@@ -143,6 +144,7 @@ UsbNetStartRndis(
     Adapter->TxHeader = RNDIS_PACKET_HEADER;
     return STATUS_SUCCESS;
 }
+#endif
 
 static
 UCHAR
@@ -366,9 +368,11 @@ UsbNetStartFunction(
 
     switch (Function->Protocol)
     {
+#if DBG
         case UsbNetRndis:
             return UsbNetStartRndis(Adapter);
 
+#endif
         case UsbNetEcm:
         case UsbNetNcm:
             UsbNetReadMacString(Adapter);
@@ -455,6 +459,7 @@ UsbNetSetFrame(
     return TRUE;
 }
 
+#if DBG
 static
 BOOLEAN
 UsbNetNextRndis(
@@ -486,6 +491,7 @@ UsbNetNextRndis(
     Adapter->RxOffset = Adapter->RxLength;
     return FALSE;
 }
+#endif
 
 static
 BOOLEAN
@@ -610,9 +616,11 @@ UsbNetNextFrame(
 {
     switch (Adapter->Function.Protocol)
     {
+#if DBG
         case UsbNetRndis:
             return UsbNetNextRndis(Adapter);
 
+#endif
         case UsbNetNcm:
             return UsbNetNextNcm(Adapter);
 
@@ -641,6 +649,7 @@ UsbNetFrameTransmit(
 
     switch (Adapter->Function.Protocol)
     {
+#if DBG
         case UsbNetRndis:
             for (i = 0; i < RNDIS_PACKET_HEADER; i++)
                 Buffer[i] = 0;
@@ -652,6 +661,7 @@ UsbNetFrameTransmit(
             UsbNetPut32(Buffer + 12, Length);
             return Total;
 
+#endif
         case UsbNetEcm:
             return Length;
 

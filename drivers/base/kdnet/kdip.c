@@ -59,6 +59,7 @@
 #define DNS_REFRESH             (300 * KDNET_SECOND)
 #endif
 
+#if DBG
 typedef enum _KDNET_DHCP_STATE
 {
     DhcpInit,
@@ -67,6 +68,7 @@ typedef enum _KDNET_DHCP_STATE
     DhcpBound,
     DhcpRenewing
 } KDNET_DHCP_STATE;
+#endif
 
 typedef struct _KDNET_ARP_ENTRY
 {
@@ -85,6 +87,7 @@ static KDNET_ARP_ENTRY KdpArp[ARP_ENTRIES];
 static ULONG KdpArpNext;
 static USHORT KdpIpIdentification;
 
+#if DBG
 static KDNET_DHCP_STATE KdpDhcpState;
 static ULONG KdpDhcpXid;
 static ULONG KdpDhcpServer;
@@ -93,6 +96,7 @@ static ULONG64 KdpDhcpNext;
 static ULONG64 KdpDhcpRenew;
 static ULONG64 KdpDhcpExpire;
 static ULONG KdpDhcpBackoff;
+#endif
 
 #ifdef REMOTE_ASSISTANCE
 static ULONG KdpDnsServer;
@@ -365,6 +369,7 @@ KdUdpEnd(
     return KdNicSend(Handle, KDNET_UDP_HEADERS + Length);
 }
 
+#if DBG
 static
 PUCHAR
 KdpDhcpOption(
@@ -536,6 +541,7 @@ KdpDhcpInput(
         KdpDhcpNext = Now + KDNET_SECOND;
     }
 }
+#endif
 
 #ifdef REMOTE_ASSISTANCE
 static
@@ -754,11 +760,13 @@ KdIpInput(
     if (KdNetOptions.Broadcast)
         return;
 
+#if DBG
     if (DestinationPort == DHCP_CLIENT_PORT)
     {
         KdpDhcpInput(Udp + UDP_HEADER_SIZE, UdpLength - UDP_HEADER_SIZE);
         return;
     }
+#endif
 
     if (!KdIpAddress || DestinationIp != KdIpAddress)
         return;
@@ -782,6 +790,7 @@ VOID
 KdIpTimer(
     _In_ ULONG64 Now)
 {
+#if DBG
     if (!KdNicLinkState || KdNetOptions.Broadcast)
         return;
 
@@ -843,12 +852,17 @@ KdIpTimer(
             KdpDhcpSend(DHCP_REQUEST);
             break;
     }
+#else
+    UNREFERENCED_PARAMETER(Now);
+#endif
 }
 
 VOID
 KdIpInitialize(VOID)
 {
     KdCryptoRandom((PUCHAR)&KdpIpIdentification, sizeof(KdpIpIdentification));
+#if DBG
     KdpDhcpState = DhcpInit;
     KdpDhcpNext = 0;
+#endif
 }
