@@ -1112,13 +1112,16 @@ DriverUnload(IN PDRIVER_OBJECT DriverObject)
 {
     // TODO: Do more cleanup!
 
+    UserEnterExclusive();
+    UserBeginSessionsEnd();
+    IntReleaseSessionCursors();
+    IntReleaseInputDesktop();
+    UserLeave();
+
     FreeFontSupport();
+    EngpReleaseAllGraphicsDevices();
     IntCompositionUnload();
-    if (gpDisplaySession)
-    {
-        ResetCsrApiPort(gpDisplaySession);
-        ResetCsrProcess(gpDisplaySession);
-    }
+    UserReleaseSessions();
     IntWin32PowerManagementCleanup();
 }
 

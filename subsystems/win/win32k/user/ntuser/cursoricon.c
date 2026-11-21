@@ -25,6 +25,7 @@ DBG_DEFAULT_CHANNEL(UserIcon);
 SYSTEM_CURSORINFO gSysCursorInfo;
 
 PCURICON_OBJECT gcurFirst = NULL; // After all is done, this should be WINLOGO!
+static PCURICON_OBJECT gpcurSmallWindowIcon = NULL;
 
 //
 //   System Cursors
@@ -401,14 +402,19 @@ IntLoadSystenIcons(HICON hcur, DWORD id)
         ppi = PsGetCurrentProcessWin32Process();
 
         if (!(ppi->W32PF_flags & W32PF_CREATEDWINORDC))
+        {
+           UserDereferenceObject(pcur);
            return;
+        }
 
         // Set Small Window Icon and do not link.
         if ( id == OIC_INTERNAL_WINSMALL )
         {
             pcur->CURSORF_flags |= CURSORF_GLOBAL;
-            UserReferenceObject(pcur);
-            pcur->head.ppi = NULL;
+            UserClearProcMarkObjectOwner(pcur);
+            if (gpcurSmallWindowIcon)
+                UserDereferenceObject(gpcurSmallWindowIcon);
+            gpcurSmallWindowIcon = pcur;
             return;
         }
 
@@ -423,13 +429,45 @@ IntLoadSystenIcons(HICON hcur, DWORD id)
                 //  The active switch between LR shared and Global public.
                 //  This is hacked around to support this while at the initial system start up.
                 //
-                pcur->head.ppi = NULL;
+                UserClearProcMarkObjectOwner(pcur);
 
                 IntInsertCursorIntoList(pcur);
                 return;
             }
         }
+        UserDereferenceObject(pcur);
     }
+}
+
+static
+VOID
+IntReleaseSystemCurIcon(
+    _Inout_ PCURICON_OBJECT *ppcur)
+{
+    PCURICON_OBJECT pcur = *ppcur;
+
+    if (!pcur)
+        return;
+    *ppcur = NULL;
+    if (!UserObjectInDestroy(UserHMGetHandle(pcur)))
+        IntDestroyCurIconObject(pcur);
+    UserDereferenceObject(pcur);
+}
+
+VOID
+FASTCALL
+IntReleaseSessionCursors(VOID)
+{
+    UINT i;
+
+    ASSERT(UserIsEnteredExclusive());
+    IntSetCurrentCursorObject(NULL);
+    for (i = 0; i < RTL_NUMBER_OF(gasyscur); i++)
+        IntReleaseSystemCurIcon(&gasyscur[i].handle);
+    for (i = 0; i < RTL_NUMBER_OF(gasysico); i++)
+        IntReleaseSystemCurIcon(&gasysico[i].handle);
+    IntReleaseSystemCurIcon(&gpcurSmallWindowIcon);
+    ASSERT(gcurFirst == NULL);
 }
 
 PSYSTEM_CURSORINFO
@@ -2758,7 +2796,7 @@ NtUserSetSystemCursor(
               {
                  gasyscur[i].handle = pcur;
                  pcur->CURSORF_flags |= CURSORF_GLOBAL;
-                 pcur->head.ppi = NULL;
+                 UserClearProcMarkObjectOwner(pcur);
                  IntInsertCursorIntoList(pcur);
                  /* The default server classes were registered before this
                   * cursor existed and could not resolve OCR_NORMAL then. */
@@ -2791,7 +2829,12 @@ NtUserSetSystemCursor(
            else
            {
                FIXME("Need to copy cursor data or do something! pcurOrig %p new pcur %p\n",pcurOrig,pcur);
+               UserDereferenceObject(pcur);
            }
+        }
+        else if (!Ret)
+        {
+           UserDereferenceObject(pcur);
         }
     }
 Exit:
