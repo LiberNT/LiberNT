@@ -57,10 +57,21 @@ KdNetTime(VOID)
 
 static
 BOOLEAN
+KdpHostUnresolved(VOID)
+{
+#if DBG
+    return KdNetOptions.HostName[0] && !KdNetOptions.HostIp;
+#else
+    return FALSE;
+#endif
+}
+
+static
+BOOLEAN
 KdpIsConnected(VOID)
 {
     /* TODO: the relay acknowledges nothing, so reaching it means having an address and the relay's resolved name */
-    return KdNetReady && KdIpAddress && (KdNetOptions.HostIp || !KdNetOptions.HostName[0]);
+    return KdNetReady && KdIpAddress && !KdpHostUnresolved();
 }
 
 static
@@ -198,13 +209,18 @@ KdpParseOptions(
     if (!Options)
         return;
 
-    NoHost = !KdpFindOption(Options, "HOST_IP") && !KdpFindOption(Options, "HOST_NAME");
+    NoHost = !KdpFindOption(Options, "HOST_IP");
+#if DBG
+    NoHost = NoHost && !KdpFindOption(Options, "HOST_NAME");
+#endif
     Text = KdpFindOption(Options, "LOCAL_BROADCAST");
     KdNetOptions.Broadcast = Text && *Text == '1';
     KdNetOptions.BroadcastFallback = NoHost && !Text;
     KdNetBroadcasting = KdNetOptions.Broadcast;
+#if DBG
     if (NoHost && !KdNetOptions.Broadcast)
         RtlCopyMemory(KdNetOptions.HostName, KDNET_DEFAULT_HOST, sizeof(KDNET_DEFAULT_HOST));
+#endif
 
     Text = KdpFindOption(Options, "HOST_IP");
     if (Text && KdpParseNumbers(Text, '.', Values, 4) &&
@@ -213,6 +229,7 @@ KdpParseOptions(
         KdNetOptions.HostIp = KDNET_IP(Values[0], Values[1], Values[2], Values[3]);
     }
 
+#if DBG
     Text = KdpFindOption(Options, "HOST_NAME");
     if (Text && !KdNetOptions.HostIp)
     {
@@ -221,6 +238,7 @@ KdpParseOptions(
 
         KdNetOptions.HostName[i] = ANSI_NULL;
     }
+#endif
 
     Text = KdpFindOption(Options, "HOST_PORT");
     if (Text && KdpParseNumbers(Text, ANSI_NULL, Values, 1) && Values[0])
@@ -316,7 +334,7 @@ KdpTerminalInitialize(
 
     Start = KdNetTime();
     Notice = Start;
-    while (!KdNetOptions.Broadcast && (!KdIpAddress || (KdNetOptions.HostName[0] && !KdNetOptions.HostIp)) &&
+    while (!KdNetOptions.Broadcast && (!KdIpAddress || KdpHostUnresolved()) &&
            KdNicLinkState && KdNetTime() - Start < KDNET_ADDRESS_WAIT)
     {
         if (KdNetTime() >= Notice)
@@ -420,13 +438,15 @@ KdpTerminalQueryStatus(
                            KdNicAddress[3], KdNicAddress[4], KdNicAddress[5],
                            KdNetOptions.BroadcastFallback ? ", broadcasts to UDP port 6666 without one" : "");
     }
-    else if (!Host && KdNetOptions.HostName[0])
+#if DBG
+    else if (KdpHostUnresolved())
     {
         Length = _snprintf(Buffer, Size,
                            "Network debugger: %lu.%lu.%lu.%lu cannot resolve %s yet",
                            KdIpAddress >> 24, (KdIpAddress >> 16) & 255, (KdIpAddress >> 8) & 255,
                            KdIpAddress & 255, KdNetOptions.HostName);
     }
+#endif
     else if (Host)
     {
         Length = _snprintf(Buffer, Size,

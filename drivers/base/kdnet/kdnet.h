@@ -22,14 +22,18 @@
 #define KDNET_TAG               'tNdK'
 
 #define KDNET_DEFAULT_PORT      50000
+#if DBG
 #define KDNET_DEFAULT_HOST      "libernt.com"
+#endif
 #define KDNET_BROADCAST_INPUT_PORT  6665
 #define KDNET_BROADCAST_OUTPUT_PORT 6666
 #define KDNET_DATAGRAM_SIZE     1200
 #define KDNET_OUTPUT_SIZE       0x400000
 #define KDNET_INPUT_SIZE        0x10000
 #define KDNET_KEY_TEXT_SIZE     96
+#if DBG
 #define KDNET_HOST_NAME_SIZE    128
+#endif
 
 #define KDNET_SECOND            1000000ULL
 #define KDNET_MILLISECOND       1000ULL
@@ -49,7 +53,9 @@ typedef struct _KDNET_OPTIONS
     BOOLEAN Broadcast;
     BOOLEAN BroadcastFallback;
     CHAR Key[KDNET_KEY_TEXT_SIZE];
+#if DBG
     CHAR HostName[KDNET_HOST_NAME_SIZE];
+#endif
 } KDNET_OPTIONS, *PKDNET_OPTIONS;
 
 extern KDNET_OPTIONS KdNetOptions;

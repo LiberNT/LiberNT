@@ -31,7 +31,9 @@ enum SM2RCMD
     SM2C_COMPUTER,
     SM2C_CONTROL,
     SM2C_PRINTERS,
+#if DBG
     SM2C_ASSIST,
+#endif
     SM2C_GAP
 };
 
@@ -732,6 +734,7 @@ SM2OpenGames(VOID)
     SM2OpenCsidlFolder(CSIDL_PROGRAMS);
 }
 
+#if DBG
 static BOOL
 SM2NetworkAssistanceEnabled(VOID)
 {
@@ -743,6 +746,7 @@ SM2NetworkAssistanceEnabled(VOID)
         RegCloseKey(hKey);
     return lError == ERROR_SUCCESS || lError == ERROR_ACCESS_DENIED;
 }
+#endif
 
 static VOID
 SM2ExecRightCmd(int nCmd)
@@ -757,7 +761,9 @@ SM2ExecRightCmd(int nCmd)
         case SM2C_COMPUTER:  SM2OpenCsidlIdList(CSIDL_DRIVES); break;
         case SM2C_CONTROL:   ShellExecuteW(NULL, NULL, L"ms-settings:", NULL, NULL, SW_SHOWNORMAL); break;
         case SM2C_PRINTERS:  ShellExecuteW(NULL, NULL, L"ms-settings:devices", NULL, NULL, SW_SHOWNORMAL); break;
+#if DBG
         case SM2C_ASSIST:    ShellExecuteW(NULL, NULL, L"netassist.exe", NULL, NULL, SW_SHOWNORMAL); break;
+#endif
     }
 }
 
@@ -778,7 +784,9 @@ static const SM2RIGHTDEF g_SM2RightDefs[] =
     { 0,                       SM2C_GAP },
     { IDS_SM2_SETTINGS,        SM2C_CONTROL },
     { IDS_SM2_DEVICES,         SM2C_PRINTERS },
+#if DBG
     { IDS_SM2_ASSIST,          SM2C_ASSIST },
+#endif
 };
 
 struct SM2ROW
@@ -1670,8 +1678,10 @@ public:
                 y += Sc(12);
                 continue;
             }
+#if DBG
             if (g_SM2RightDefs[i].nCmd == SM2C_ASSIST && !SM2NetworkAssistanceEnabled())
                 continue;
+#endif
             RECT rc = { rx, y, rw, y + RightRowH() };
             AddRow(rc, SM2R_RIGHT, NULL, g_SM2RightDefs[i].nCmd);
             y += RightRowH();

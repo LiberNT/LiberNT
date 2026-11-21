@@ -171,10 +171,12 @@ VOID
 NTAPI
 KdSystemRootAvailable(VOID);
 
+#if DBG
 BOOLEAN
 NTAPI
 KdDisplayTransportKey(
     _In_ BOOLEAN DarkPalette);
+#endif
 
 BOOLEAN
 NTAPI
