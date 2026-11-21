@@ -14,12 +14,189 @@ extern UCHAR KiArmVectorTable[];
 ULONG KiArmDcacheLineSize = 64;
 ULONG KiArmIcacheLineSize = 64;
 
+#define KI_ARM_CACHE_LEVELS 7
+#define KI_ARM_MPIDR_MP 0x80000000
+#define KI_ARM_MPIDR_MT 0x01000000
+#define KI_ARM_MPIDR_PACKAGE 0x00FF0000
+#define KI_ARM_MPIDR_CLUSTER 0x00FFFF00
+#define KI_ARM_PRIVATE_CACHE MAXULONG
+
+typedef struct _KI_ARM_PROCESSOR_CACHES
+{
+    ULONG Package;
+    ULONG Cluster;
+    ULONG SharedFloor;
+    ULONG Count;
+    CACHE_DESCRIPTOR Cache[2 * KI_ARM_CACHE_LEVELS];
+} KI_ARM_PROCESSOR_CACHES, *PKI_ARM_PROCESSOR_CACHES;
+
+static KI_ARM_PROCESSOR_CACHES KiArmProcessorCaches[MAXIMUM_PROCESSORS];
+
 VOID
 NTAPI
 KiArmInitializeVectors(VOID)
 {
     KiArmWriteCp15(12, 0, 0, 0, (ULONG_PTR)KiArmVectorTable & ~(ULONG_PTR)1);
     KiArmIsb();
+}
+
+static
+VOID
+KiArmDescribeCache(
+    _In_ ULONG Level,
+    _In_ PROCESSOR_CACHE_TYPE Type,
+    _Out_ PCACHE_DESCRIPTOR Cache)
+{
+    ULONG Ccsidr, LineSize, Ways, Sets;
+    ULONGLONG Size;
+
+    /* CSSELR (ARM ARM B4.1.41) selects the cache CCSIDR (B4.1.19) describes: level in bits 3:1, instruction side in bit 0. */
+    KiArmWriteCp15(0, 2, 0, 0, ((Level - 1) << 1) | (Type == CacheInstruction));
+    KiArmIsb();
+    Ccsidr = KiArmReadCp15(0, 1, 0, 0);
+    LineSize = 1UL << ((Ccsidr & 7) + 4);
+    Ways = ((Ccsidr >> 3) & 0x3FF) + 1;
+    Sets = ((Ccsidr >> 13) & 0x7FFF) + 1;
+    Size = (ULONGLONG)LineSize * Ways * Sets;
+
+    Cache->Level = (UCHAR)Level;
+    Cache->Associativity = (Sets == 1) ? CACHE_FULLY_ASSOCIATIVE : (UCHAR)min(Ways, CACHE_FULLY_ASSOCIATIVE - 1);
+    Cache->LineSize = (USHORT)LineSize;
+    Cache->Size = (ULONG)min(Size, MAXULONG);
+    Cache->Type = Type;
+}
+
+static
+VOID
+KiArmCaptureCaches(
+    _In_ ULONG Number)
+{
+    PKI_ARM_PROCESSOR_CACHES Caches;
+    ULONG Mpidr = KiArmReadCp15(0, 0, 0, 5);
+    ULONG Clidr = KiArmReadCp15(0, 1, 0, 1);
+    ULONG Level, Type, Unification, Deepest = 0, Count = 0;
+
+    ASSERT(Number < MAXIMUM_PROCESSORS);
+    Caches = &KiArmProcessorCaches[Number];
+
+    /* MPIDR (ARM ARM B4.1.106) holds affinity fields only in the format bit 31 marks. */
+    if (!(Mpidr & KI_ARM_MPIDR_MP))
+        Mpidr = 0;
+    Caches->Package = Mpidr & KI_ARM_MPIDR_PACKAGE;
+    Caches->Cluster = Mpidr & ((Mpidr & KI_ARM_MPIDR_MT) ? KI_ARM_MPIDR_PACKAGE : KI_ARM_MPIDR_CLUSTER);
+
+    for (Level = 1; Level <= KI_ARM_CACHE_LEVELS; Level++)
+    {
+        /* CLIDR Ctype (ARM ARM B4.1.20): 1 instruction, 2 data, 3 both, 4 unified; anything else ends the hierarchy. */
+        Type = (Clidr >> ((Level - 1) * 3)) & 7;
+        if ((Type == 0) || (Type > 4))
+            break;
+
+        if (Type == 4)
+        {
+            KiArmDescribeCache(Level, CacheUnified, &Caches->Cache[Count++]);
+        }
+        else
+        {
+            if (Type & 1)
+                KiArmDescribeCache(Level, CacheInstruction, &Caches->Cache[Count++]);
+            if (Type & 2)
+                KiArmDescribeCache(Level, CacheData, &Caches->Cache[Count++]);
+        }
+        Deepest = Level;
+    }
+    ASSERT(Count <= RTL_NUMBER_OF(Caches->Cache));
+
+    /* CLIDR LoUIS is the last level a processor keeps to itself; without it only the deepest level counts as shared. */
+    Unification = (Clidr >> 21) & 7;
+    Caches->SharedFloor = Unification ? (Unification + 1) : Deepest;
+    Caches->Count = Count;
+    KeMemoryBarrier();
+}
+
+VOID
+NTAPI
+KiQueryProcessorTopology(
+    _Out_writes_to_opt_(MaxRecords, *RecordCount) PKI_CACHE_RECORD Records,
+    _In_ ULONG MaxRecords,
+    _Out_ PULONG RecordCount,
+    _Out_writes_to_opt_(MaxSets, *SetCount) PKAFFINITY Sets,
+    _In_ ULONG MaxSets,
+    _Out_ PULONG SetCount)
+{
+    ULONG Clusters[KI_MAX_CACHE_RECORDS];
+    ULONG Packages[MAXIMUM_PROCESSORS];
+    KAFFINITY Active = KeActiveProcessors.Bitmap[0];
+    KAFFINITY Core, Members;
+    PKI_ARM_PROCESSOR_CACHES Caches;
+    PCACHE_DESCRIPTOR Cache;
+    ULONG Number, Index, Record, Set, Cluster, Count = 0, PackageCount = 0;
+
+    KeMemoryBarrier();
+    MaxRecords = Records ? min(MaxRecords, KI_MAX_CACHE_RECORDS) : 0;
+    MaxSets = Sets ? min(MaxSets, MAXIMUM_PROCESSORS) : 0;
+
+    for (Number = 0; Number < MAXIMUM_PROCESSORS; Number++)
+    {
+        if (!(Active & AFFINITY_MASK(Number)))
+            continue;
+        ASSERT(KiProcessorBlock[Number] != NULL);
+        Caches = &KiArmProcessorCaches[Number];
+        ASSERT(Caches->Count <= RTL_NUMBER_OF(Caches->Cache));
+
+        for (Set = 0; (Set < PackageCount) && (Packages[Set] != Caches->Package); Set++)
+            ;
+        if (Set < MaxSets)
+        {
+            if (Set == PackageCount)
+            {
+                Packages[PackageCount] = Caches->Package;
+                Sets[PackageCount++] = 0;
+            }
+            Sets[Set] |= AFFINITY_MASK(Number);
+        }
+
+        Core = ((KAFFINITY)KiProcessorBlock[Number]->MultiThreadProcessorSet | AFFINITY_MASK(Number)) & Active;
+        for (Index = 0; Index < Caches->Count; Index++)
+        {
+            Cache = &Caches->Cache[Index];
+            if (Cache->Level < Caches->SharedFloor)
+            {
+                /* The first processor of a core describes the caches its siblings share with it. */
+                if (Core & (AFFINITY_MASK(Number) - 1))
+                    continue;
+                Cluster = KI_ARM_PRIVATE_CACHE;
+                Members = Core;
+                Record = Count;
+            }
+            else
+            {
+                Cluster = Caches->Cluster;
+                Members = AFFINITY_MASK(Number);
+                for (Record = 0; Record < Count; Record++)
+                {
+                    if ((Clusters[Record] == Cluster) &&
+                        RtlEqualMemory(&Records[Record].Descriptor, Cache, sizeof(*Cache)))
+                    {
+                        break;
+                    }
+                }
+            }
+
+            if (Record == Count)
+            {
+                if (Count == MaxRecords)
+                    continue;
+                Records[Count].Descriptor = *Cache;
+                Records[Count].ProcessorSet = 0;
+                Clusters[Count++] = Cluster;
+            }
+            Records[Record].ProcessorSet |= Members;
+        }
+    }
+
+    *RecordCount = Count;
+    *SetCount = PackageCount;
 }
 
 VOID
@@ -49,6 +226,7 @@ KiArmIdentifyProcessor(
     Prcb->MaxWatchpoints = 0;
     Prcb->MHz = 1000;
     Prcb->CycleCounterFrequency = KiArmReadCp15(14, 0, 0, 0);
+    KiArmCaptureCaches(Prcb->Number);
 }
 
 ULONG
