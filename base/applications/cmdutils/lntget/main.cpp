@@ -658,6 +658,9 @@ Status SelfTestCommand()
     status = RunPortableSelfTests();
     if (!status)
         return status;
+    status = RunHttpSelfTests();
+    if (!status)
+        return status;
     std::size_t count = 0;
     status = ParseCount("1000", count);
     if (!status || count != 1000 || ParseCount("1001", count))

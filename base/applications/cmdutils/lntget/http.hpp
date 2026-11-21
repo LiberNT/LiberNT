@@ -45,4 +45,6 @@ private:
     void *session_ = nullptr;
 };
 
+Status RunHttpSelfTests();
+
 } // namespace lntget
