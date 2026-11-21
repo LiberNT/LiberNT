@@ -322,4 +322,13 @@ typedef enum RpcProxyPerfCounters {
     RpcLastCounter = 12
 } RpcPerfCounters;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+RPC_STATUS WINAPI I_UuidCreate(UUID * Uuid);
+RPC_STATUS WINAPI I_RpcOpenClientProcess(RPC_BINDING_HANDLE Binding, unsigned long DesiredAccess, void ** ClientProcess);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /*__WINE_RPCDCEP_H */

@@ -328,4 +328,13 @@ PDH_STATUS WINAPI PdhValidatePathExW(PDH_HLOG, LPCWSTR);
 #define PDH_REFRESHCOUNTERS 4
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+PDH_STATUS WINAPI PdhConnectMachineW(LPCWSTR szMachineName);
+PDH_STATUS WINAPI PdhConnectMachineA(LPCSTR szMachineName);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* _PDH_H_ */

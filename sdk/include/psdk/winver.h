@@ -63,4 +63,13 @@ GetFileVersionInfoSizeExW(
 }
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+BOOL WINAPI GetFileVersionInfoExA(DWORD dwFlags, LPCSTR lpwstrFilename, DWORD dwHandle, DWORD dwLen, LPVOID lpData);
+BOOL WINAPI GetFileVersionInfoExW(DWORD dwFlags, LPCWSTR lpwstrFilename, DWORD dwHandle, DWORD dwLen, LPVOID lpData);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* VER_H */

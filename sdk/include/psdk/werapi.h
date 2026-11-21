@@ -354,4 +354,13 @@ HRESULT WINAPI WerUnregisterRuntimeExceptionModule(PCWSTR callbackdll, void *con
 #define WER_MAX_FRIENDLY_EVENT_NAME_LENGTH 128
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+HRESULT WINAPI WerRegisterCustomMetadata(PCWSTR key, PCWSTR value);
+HRESULT WINAPI WerUnregisterCustomMetadata(PCWSTR key);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* __WINE_WERAPI_H */

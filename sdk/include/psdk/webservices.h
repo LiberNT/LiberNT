@@ -2446,4 +2446,12 @@ typedef enum WS_POLICY_EXTENSION_TYPE {
     WS_ENDPOINT_POLICY_EXTENSION_TYPE = 1
 } WS_POLICY_EXTENSION_TYPE;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+HRESULT WINAPI WsAbortChannel(WS_CHANNEL * channel, WS_ERROR * error);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* __WINE_WEBSERVICES_H */

@@ -486,4 +486,13 @@ typedef enum _SchGetExtensionsOptions {
     SCH_NO_RECORD_HEADER = 1
 } SchGetExtensionsOptions;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+BOOL WINAPI SslEmptyCacheA(LPSTR pszTargetName, DWORD dwFlags);
+BOOL WINAPI SslEmptyCacheW(LPWSTR pszTargetName, DWORD dwFlags);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* __SCHANNEL_H__ */

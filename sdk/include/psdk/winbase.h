@@ -4345,4 +4345,23 @@ typedef enum FILE_FLUSH_MODE {
 typedef ULONG OPERATION_ID;
 typedef struct _FILE_IO_PRIORITY_HINT_INFO * PFILE_IO_PRIORITY_HINT_INFO;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+BOOL WINAPI RequestWakeupLatency(LATENCY_TIME latency);
+EXECUTION_STATE WINAPI SetThreadExecutionState(EXECUTION_STATE esFlags);
+BOOL WINAPI RequestDeviceWakeup(HANDLE hDevice);
+BOOL WINAPI AccessCheckByTypeAndAuditAlarmA(LPCSTR SubsystemName, LPVOID HandleId, LPCSTR ObjectTypeName, LPCSTR ObjectName, PSECURITY_DESCRIPTOR SecurityDescriptor, PSID PrincipalSelfSid, DWORD DesiredAccess, AUDIT_EVENT_TYPE AuditType, DWORD Flags, POBJECT_TYPE_LIST ObjectTypeList, DWORD ObjectTypeListLength, PGENERIC_MAPPING GenericMapping, BOOL ObjectCreation, LPDWORD GrantedAccess, LPBOOL AccessStatus, LPBOOL pfGenerateOnClose);
+BOOL WINAPI LookupAccountSidLocalA(PSID Sid, LPSTR Name, LPDWORD cchName, LPSTR ReferencedDomainName, LPDWORD cchReferencedDomainName, PSID_NAME_USE peUse);
+BOOL WINAPI LookupAccountSidLocalW(PSID Sid, LPWSTR Name, LPDWORD cchName, LPWSTR ReferencedDomainName, LPDWORD cchReferencedDomainName, PSID_NAME_USE peUse);
+BOOL WINAPI CancelTimerQueueTimer(HANDLE TimerQueue, HANDLE Timer);
+HANDLE WINAPI OpenJobObjectA(DWORD dwDesiredAccess, BOOL bInheritHandle, LPCSTR lpName);
+BOOL WINAPI CreateJobSet(ULONG NumJob, PJOB_SET_ARRAY UserJobSet, ULONG Flags);
+BOOL WINAPI GetNumaProcessorNode(UCHAR Processor, PUCHAR NodeNumber);
+BOOL WINAPI GetNumaNodeProcessorMask(UCHAR Node, PULONGLONG ProcessorMask);
+BOOL WINAPI CopyContext(PCONTEXT Destination, DWORD ContextFlags, PCONTEXT Source);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* _WINBASE_ */

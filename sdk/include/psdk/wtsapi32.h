@@ -448,4 +448,15 @@ typedef enum _WTS_CONFIG_SOURCE {
     WTSUserConfigSourceSAM = 0
 } WTS_CONFIG_SOURCE;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+HANDLE WINAPI WTSOpenServerExW(LPWSTR pServerName);
+HANDLE WINAPI WTSOpenServerExA(LPSTR pServerName);
+BOOL WINAPI WTSVirtualChannelPurgeInput(HANDLE hChannelHandle);
+BOOL WINAPI WTSVirtualChannelPurgeOutput(HANDLE hChannelHandle);
+#ifdef __cplusplus
+}
+#endif
+
 #endif

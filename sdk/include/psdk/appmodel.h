@@ -267,6 +267,24 @@ typedef enum AppPolicyCreateFileAccess {
     AppPolicyCreateFileAccess_Limited = 1
 } AppPolicyCreateFileAccess;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+LONG WINAPI GetCurrentPackageId(UINT32 * bufferLength, BYTE * buffer);
+LONG WINAPI GetCurrentPackageFamilyName(UINT32 * packageFamilyNameLength, PWSTR packageFamilyName);
+LONG WINAPI GetCurrentPackagePath(UINT32 * pathLength, PWSTR path);
+LONG WINAPI GetPackageFullName(HANDLE hProcess, UINT32 * packageFullNameLength, PWSTR packageFullName);
+LONG WINAPI GetPackageFullNameFromToken(HANDLE token, UINT32 * packageFullNameLength, PWSTR packageFullName);
+LONG WINAPI GetPackageFamilyNameFromToken(HANDLE token, UINT32 * packageFamilyNameLength, PWSTR packageFamilyName);
+LONG WINAPI GetPackagePathByFullName(PCWSTR packageFullName, UINT32 * pathLength, PWSTR path);
+LONG WINAPI PackageIdFromFullName(PCWSTR packageFullName, const UINT32 flags, UINT32 * bufferLength, BYTE * buffer);
+LONG WINAPI PackageFamilyNameFromFullName(PCWSTR packageFullName, UINT32 * packageFamilyNameLength, PWSTR packageFamilyName);
+LONG WINAPI GetPackagesByPackageFamily(PCWSTR packageFamilyName, UINT32 * count, PWSTR * packageFullNames, UINT32 * bufferLength, WCHAR * buffer);
+LONG WINAPI GetCurrentPackageInfo(const UINT32 flags, UINT32 * bufferLength, BYTE * buffer, UINT32 * count);
+#ifdef __cplusplus
+}
+#endif
+
 #endif
 #ifndef PACKAGE_FILTER_ALL_LOADED
 #define PACKAGE_FILTER_ALL_LOADED 0

@@ -816,4 +816,12 @@ int CDECL LdapUTF8ToUnicode(LPCSTR,int,LPWSTR,int);
 #define LDAP_VLVINFO_VERSION 1
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+ULONG __cdecl ldap_set_dbg_flags(ULONG NewFlags);
+#ifdef __cplusplus
+}
+#endif
+
 #endif  /* __WINE_WINLDAP_H */

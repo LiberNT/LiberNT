@@ -1131,6 +1131,20 @@ typedef PVOID * PCLFS_MGMT_CLIENT;
 typedef GUID KCRM_PROTOCOL_ID;
 typedef GUID * PKCRM_PROTOCOL_ID;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+ULONG NTAPI RtlCrc32(const void * Buffer, size_t Size, ULONG InitialCrc);
+ULONGLONG NTAPI RtlCrc64(const void * Buffer, size_t Size, ULONGLONG InitialCrc);
+NTSTATUS NTAPI KeConvertAuxiliaryCounterToPerformanceCounter(ULONG64 AuxiliaryCounterValue, PULONG64 PerformanceCounterValue, PULONG64 ConversionError);
+BOOLEAN NTAPI ExIsManufacturingModeEnabled(void);
+BOOLEAN NTAPI ExIsSoftBoot(void);
+FIRMWARE_TYPE NTAPI ExGetFirmwareType(void);
+void NTAPI PoSetHiberRange(PVOID MemoryMap, ULONG Flags, PVOID Address, ULONG_PTR Length, ULONG Tag);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* !_WDMDDK_ */
 
 #ifndef ADAPTER_INFO_HYBRID_PASSTHROUGH

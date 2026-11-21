@@ -250,4 +250,13 @@ typedef enum DRAWPROGRESSFLAGS {
     DPF_STOPPED = 16
 } DRAWPROGRESSFLAGS;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+HRESULT WINAPI InitVariantFromResource(HINSTANCE hinst, UINT id, VARIANT * pvar);
+int WINAPI VariantCompare(const VARIANT *const var1, const VARIANT *const var2);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* __WINE_PROPVARUTIL_H */

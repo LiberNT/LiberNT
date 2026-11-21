@@ -7448,4 +7448,13 @@ typedef LPHELPWININFOA LPHELPWININFO;
 typedef struct tagMENUBARINFO * LPMENUBARINFO;
 typedef struct tagRAWINPUTHEADER * LPRAWINPUTHEADER;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+void WINAPI DisableProcessWindowsGhosting(void);
+BOOL WINAPI IsWow64Message(void);
+#ifdef __cplusplus
+}
+#endif
+
 #endif

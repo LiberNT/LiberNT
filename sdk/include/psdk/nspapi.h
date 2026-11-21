@@ -247,4 +247,15 @@ typedef struct _SERVICE_INFOA * PSERVICE_INFOA;
 typedef struct _SERVICE_INFOW * PSERVICE_INFOW;
 typedef PSERVICE_INFOA PSERVICE_INFO;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+INT WINAPI EnumProtocolsA(LPINT lpiProtocols, LPVOID lpProtocolBuffer, LPDWORD lpdwBufferLength);
+INT WINAPI EnumProtocolsW(LPINT lpiProtocols, LPVOID lpProtocolBuffer, LPDWORD lpdwBufferLength);
+INT WINAPI GetTypeByNameA(LPSTR lpServiceName, LPGUID lpServiceType);
+INT WINAPI GetTypeByNameW(LPWSTR lpServiceName, LPGUID lpServiceType);
+#ifdef __cplusplus
+}
+#endif
+
 #endif /* _NSPAPI_H */
