@@ -761,8 +761,7 @@ typedef ULONG64 KSPIN_LOCK_QUEUE_NUMBER;
 #define LockQueueBcbLock 14
 #define LockQueueMmNonPagedPoolLock 15
 #define LockQueueUnusedSpare16 16
-#define LockQueueTimerTableLock 17
-#define LockQueueMaximumLock (LockQueueTimerTableLock + LOCK_QUEUE_TIMER_TABLE_LOCKS)
+#define LockQueueMaximumLock 17
 
 #elif defined(_ARM64_) || defined(_RISCV64_) || defined(_ARM_)
 
@@ -807,8 +806,7 @@ typedef enum _KSPIN_LOCK_QUEUE_NUMBER {
   LockQueueBcbLock,
   LockQueueMmNonPagedPoolLock,
   LockQueueUnusedSpare16,
-  LockQueueTimerTableLock,
-  LockQueueMaximumLock = LockQueueTimerTableLock + LOCK_QUEUE_TIMER_TABLE_LOCKS
+  LockQueueMaximumLock
 } KSPIN_LOCK_QUEUE_NUMBER, *PKSPIN_LOCK_QUEUE_NUMBER;
 
 #endif /* defined(_AMD64_) */
