@@ -3948,7 +3948,7 @@ static inline HRESULT HRESULT_FROM_WIN32(unsigned int x)
 #define CO_E_RELEASED                                      _HRESULT_TYPEDEF_(0x800401FF)
 #define CO_E_LAST                                          0x800401FF
 
-#define EVENT_E_FIRST                                      0x00040200
+#define EVENT_E_FIRST                                      0x80040200
 #define EVENT_S_FIRST                                      0x00040200
 #define EVENT_S_SOME_SUBSCRIBERS_FAILED                    _HRESULT_TYPEDEF_(0x00040200)
 #define EVENT_E_ALL_SUBSCRIBERS_FAILED                     _HRESULT_TYPEDEF_(0x80040201)

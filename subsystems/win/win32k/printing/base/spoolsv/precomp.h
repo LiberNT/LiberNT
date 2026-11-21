@@ -14,6 +14,7 @@
 #include <winreg.h>
 #include <winsvc.h>
 #include <wingdi.h>
+#include <winuser.h>
 #include <winspool.h>
 #include <winsplp.h>
 #include <winspool_s.h>

@@ -1011,6 +1011,14 @@ typedef struct _MONITOR2 {
 
 #endif
 
+#if (NTDDI_VERSION >= NTDDI_WIN8)
+  DWORD
+  (WINAPI *pfnPowerEvent)(
+    _In_ HANDLE hMonitor,
+    _In_ DWORD event,
+    _In_opt_ POWERBROADCAST_SETTING *pSettings);
+#endif
+
 } MONITOR2, *LPMONITOR2, *PMONITOR2;
 
 typedef struct _MONITORUI {

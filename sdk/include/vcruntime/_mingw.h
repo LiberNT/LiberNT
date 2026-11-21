@@ -190,8 +190,10 @@ allow GCC to optimize away some EH unwind code, at least in DW2 case.  */
 #define __int16 short
 #define __int32 int
 #define __int64 long long
-# define __ptr32
-# define __ptr64
+# ifndef __clang__
+#  define __ptr32
+#  define __ptr64
+# endif
 # ifdef __cplusplus
 #  define __forceinline inline __attribute__((__always_inline__))
 # else

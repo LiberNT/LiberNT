@@ -2331,6 +2331,9 @@ static BOOL CRYPT_BuildCandidateChainFromCert(CertificateChainEngine *engine,
             chain->ref = 1;
             chain->world = world;
             chain->context.cbSize = sizeof(CERT_CHAIN_CONTEXT);
+            chain->context.dwCreateFlags = flags;
+            /* TODO: ChainId is not generated; it stays zero */
+            memset(&chain->context.ChainId, 0, sizeof(chain->context.ChainId));
             chain->context.TrustStatus = simpleChain->TrustStatus;
             chain->context.cChain = 1;
             chain->context.rgpChain = CryptMemAlloc(sizeof(PCERT_SIMPLE_CHAIN));
@@ -2450,6 +2453,8 @@ static CertificateChain *CRYPT_CopyChainToElement(CertificateChain *chain,
         copy->context.rgpLowerQualityChainContext = NULL;
         copy->context.fHasRevocationFreshnessTime = FALSE;
         copy->context.dwRevocationFreshnessTime = 0;
+        copy->context.dwCreateFlags = chain->context.dwCreateFlags;
+        copy->context.ChainId = chain->context.ChainId;
         copy->context.rgpChain = CryptMemAlloc(
          (iChain + 1) * sizeof(PCERT_SIMPLE_CHAIN));
         if (copy->context.rgpChain)

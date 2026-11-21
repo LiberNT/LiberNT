@@ -18,8 +18,8 @@ extern "C" {
 #define LOGON_GRACE_LOGON 16777216
 #define LSA_MODE_PASSWORD_PROTECTED 1
 #define LSA_MODE_INDIVIDUAL_ACCOUNTS 2
-#define LSA_MODE_MANDATORY_ACCESS 3
-#define LSA_MODE_LOG_FULL 4
+#define LSA_MODE_MANDATORY_ACCESS 4
+#define LSA_MODE_LOG_FULL 8
 #define LSA_SUCCESS(x) ((LONG)(x)>=0)
 #define MICROSOFT_KERBEROS_NAME_A "Kerberos"
 #define MICROSOFT_KERBEROS_NAME_W L"Kerberos"
@@ -32,7 +32,7 @@ extern "C" {
 #define MSV1_0_CRED_VERSION 0
 #define MSV1_0_DONT_TRY_GUEST_ACCOUNT 16
 #define MSV1_0_LANMAN_SESSION_KEY_LENGTH 8
-#define MSV1_0_MAX_NTLM3_LIFE 1800
+#define MSV1_0_MAX_NTLM3_LIFE 129600
 #define MSV1_0_MAX_AVL_SIZE 64000
 #define MSV1_0_MNS_LOGON 16777216
 #define MSV1_0_NTLM3_RESPONSE_LENGTH 16
@@ -114,7 +114,7 @@ extern "C" {
 #define TRUST_ATTRIBUTE_NON_TRANSITIVE 1
 #define TRUST_ATTRIBUTE_UPLEVEL_ONLY 2
 #define TRUST_ATTRIBUTE_TREE_PARENT 4194304
-#define TRUST_ATTRIBUTES_VALID  -16580609
+#define TRUST_ATTRIBUTES_VALID  0xFF03FFFF
 #define TRUST_AUTH_TYPE_NONE 0
 #define TRUST_AUTH_TYPE_NT4OWF 1
 #define TRUST_AUTH_TYPE_CLEAR 2
@@ -271,12 +271,7 @@ typedef enum _POLICY_AUDIT_EVENT_TYPE {
   AuditCategoryAccountLogon
 } POLICY_AUDIT_EVENT_TYPE, *PPOLICY_AUDIT_EVENT_TYPE;
 typedef enum _POLICY_DOMAIN_INFORMATION_CLASS {
-  PolicyDomainIPSecReferenceInformation = 1,
-  PolicyDomainQualityOfServiceInformation,
-  PolicyDomainEfsInformation,
-  PolicyDomainPublicKeyInformation,
-  PolicyDomainPasswordPolicyInformation,
-  PolicyDomainLockoutInformation,
+  PolicyDomainEfsInformation = 2,
   PolicyDomainKerberosTicketInformation
 } POLICY_DOMAIN_INFORMATION_CLASS, *PPOLICY_DOMAIN_INFORMATION_CLASS;
 typedef enum _POLICY_NOTIFICATION_INFORMATION_CLASS {

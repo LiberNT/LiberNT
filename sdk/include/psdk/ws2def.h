@@ -76,7 +76,12 @@ typedef USHORT ADDRESS_FAMILY;
 #define AF_MAX          33
 #else
 #define AF_LINK         33
+#if (_WIN32_WINNT < 0x0604)
 #define AF_MAX          34
+#else
+#define AF_HYPERV       34
+#define AF_MAX          35
+#endif /* (_WIN32_WINNT < 0x0604) */
 #endif /* (_WIN32_WINNT < 0x0601) */
 
 #endif /* (_WIN32_WINNT < 0x0600) */
@@ -478,7 +483,8 @@ typedef enum {
   IPPROTO_RESERVED_RAW = 257,
   IPPROTO_RESERVED_IPSEC = 258,
   IPPROTO_RESERVED_IPSECOFFLOAD = 259,
-  IPPROTO_RESERVED_MAX = 260
+  IPPROTO_RESERVED_WNV = 260,
+  IPPROTO_RESERVED_MAX = 261
 } IPPROTO, *PIPROTO;
 
 typedef enum {

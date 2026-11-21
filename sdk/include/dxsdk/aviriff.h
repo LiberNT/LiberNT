@@ -142,7 +142,7 @@ typedef struct _avioldindex
         DWORD dwFlags;
         DWORD dwOffset;
         DWORD dwSize;
-    } aIndex[ANYSIZE_ARRAY];
+    } aIndex[];
 } AVIOLDINDEX;
 
 typedef union _timecode
@@ -188,10 +188,14 @@ typedef struct _avimetaindex
     DWORD nEntriesInUse;
     DWORD dwChunkId;
     DWORD dwReserved[3];
-    DWORD adwIndex[ANYSIZE_ARRAY];
+    DWORD adwIndex[];
 } AVIMETAINDEX;
 
 #define ckidAVISUPERINDEX FCC('i','n','d','x')
+#define STDINDEXSIZE 0x4000
+#define NUMINDEX(wLongsPerEntry) ((STDINDEXSIZE-32)/4/(wLongsPerEntry))
+#define NUMINDEXFILL(wLongsPerEntry) ((STDINDEXSIZE/4) - NUMINDEX(wLongsPerEntry))
+
 typedef struct _avisuperindex {
     FOURCC fcc;
     UINT cb;
@@ -205,7 +209,7 @@ typedef struct _avisuperindex {
         DWORDLONG qwOffset;
         DWORD dwSize;
         DWORD dwDuration;
-    } aIndex[ANYSIZE_ARRAY];
+    } aIndex[NUMINDEX(4)];
 } AVISUPERINDEX;
 
 #define AVISTDINDEX_DELTAFRAME (0x80000000)
@@ -226,7 +230,7 @@ typedef struct _avistdindex {
     DWORD    dwChunkId;
     DWORDLONG qwBaseOffset;
     DWORD    dwReserved_3;
-    AVISTDINDEX_ENTRY aIndex[ANYSIZE_ARRAY];
+    AVISTDINDEX_ENTRY aIndex[NUMINDEX(2)];
 } AVISTDINDEX;
 
 typedef struct _avitimedindex_entry {
@@ -245,8 +249,8 @@ typedef struct _avitimedindex {
     DWORD dwChunkId;
     DWORDLONG qwBaseOffset;
     DWORD dwReserved_3;
-    AVITIMEDINDEX_ENTRY aIndex[ANYSIZE_ARRAY];
-    /* DWORD adwTrailingFill[ANYSIZE_ARRAY]; */
+    AVITIMEDINDEX_ENTRY aIndex[NUMINDEX(3)];
+    DWORD adwTrailingFill[NUMINDEXFILL(3)];
 } AVITIMEDINDEX;
 
 typedef struct _avitimecodeindex {
@@ -258,7 +262,7 @@ typedef struct _avitimecodeindex {
     DWORD nEntriesInUse;
     DWORD dwChunkId;
     DWORD dwReserved[3];
-    TIMECODEDATA aIndex[ANYSIZE_ARRAY];
+    TIMECODEDATA aIndex[NUMINDEX(sizeof(TIMECODEDATA)/sizeof(LONG))];
 } AVITIMECODEINDEX;
 
 typedef struct _avitcdlindex_entryA {
@@ -320,7 +324,7 @@ typedef struct _avifieldindex_chunk {
         DWORD dwOffset;
         DWORD dwSize;
         DWORD dwOffsetField2;
-    } aIndex[ANYSIZE_ARRAY];
+    } aIndex[];
 } AVIFIELDINDEX, * PAVIFIELDINDEX;
 
 #pragma pack(pop)

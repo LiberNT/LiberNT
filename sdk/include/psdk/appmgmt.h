@@ -17,7 +17,7 @@ extern "C" {
 
 typedef enum _INSTALLSPECTYPE
 {
-    APPNAME,
+    APPNAME = 1,
     FILEEXT,
     PROGID,
     COMCLASS

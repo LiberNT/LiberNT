@@ -653,7 +653,6 @@ static inline DWORD ICGetDefaultKeyFrameRate(HIC hic)
 
 /* As passed to ICM_DRAW_SUGGESTFORMAT */
 typedef struct {
-	DWORD dwFlags;
 	LPBITMAPINFOHEADER lpbiIn;
 	LPBITMAPINFOHEADER lpbiSuggest;
 	INT dxSrc;
@@ -1359,7 +1358,7 @@ AVIBuildFilterW(
 
 #define AVIBuildFilter WINELIB_NAME_AW(AVIBuildFilter)
 
-BOOL
+INT_PTR
 WINAPI
 AVISaveOptions(
   _In_ HWND hWnd,
@@ -2107,7 +2106,7 @@ BOOL VFWAPI DrawDibTime(_In_ HDRAWDIB hdd, _Out_ LPDRAWDIBTIME lpddtime);
 #define PD_STRETCHDIB_1_2_OK    0x0008
 #define PD_STRETCHDIB_1_N_OK    0x0010
 
-DWORD VFWAPI DrawDibProfileDisplay(_In_ LPBITMAPINFOHEADER lpbi);
+LRESULT VFWAPI DrawDibProfileDisplay(_In_ LPBITMAPINFOHEADER lpbi);
 
 DECLARE_HANDLE(HVIDEO);
 typedef HVIDEO *LPHVIDEO;
@@ -2471,7 +2470,7 @@ capCreateCaptureWindowW(
 BOOL
 VFWAPI
 capGetDriverDescriptionA(
-  WORD,
+  UINT,
   _Out_writes_(cbName) LPSTR,
   _In_ INT cbName,
   _Out_writes_(cbVer) LPSTR,
@@ -2480,7 +2479,7 @@ capGetDriverDescriptionA(
 BOOL
 VFWAPI
 capGetDriverDescriptionW(
-  WORD,
+  UINT,
   _Out_writes_(cbName) LPWSTR,
   _In_ INT cbName,
   _Out_writes_(cbVer) LPWSTR,

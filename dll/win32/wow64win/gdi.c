@@ -25,7 +25,6 @@
 #include "windef.h"
 #include "winbase.h"
 #include "ntgdi.h"
-#include "wingdi_compat.h"
 #include "ddk/d3dkmthk.h"
 #include "wow64win_private.h"
 #include "native_stubs.h"

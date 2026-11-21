@@ -681,7 +681,19 @@ typedef struct _STORAGE_MINIPORT_DESCRIPTOR {
 #endif
 #if (NTDDI_VERSION >= NTDDI_WINBLUE)
   BOOLEAN ExtraIoInfoSupported;
+#if (NTDDI_VERSION >= NTDDI_WIN10_FE)
+  union {
+    _ANONYMOUS_STRUCT struct {
+      UCHAR LogicalPoFxForDisk:1;
+      UCHAR ForwardIo:1;
+      UCHAR Reserved:6;
+    } DUMMYSTRUCTNAME;
+    UCHAR AsUCHAR;
+  } Flags;
+  UCHAR Reserved0[2];
+#else
   UCHAR Reserved0[3];
+#endif
   ULONG Reserved1;
 #endif
 } STORAGE_MINIPORT_DESCRIPTOR, *PSTORAGE_MINIPORT_DESCRIPTOR;

@@ -1389,7 +1389,7 @@ MMRESULT WINAPI midiStreamOpen(HMIDISTRM* lphMidiStrm, LPUINT lpuDeviceID,
 
     mosm.dwStreamID = lpMidiStrm->dwStreamID;
     /* FIXME: the correct value is not allocated yet for MAPPER */
-    mosm.wDeviceID  = *lpuDeviceID;
+    mosm.uDeviceID  = *lpuDeviceID;
     lpwm = MIDI_OutAlloc(&hMidiOut, &dwCallback, &dwInstance, &fdwOpen, 1, &mosm);
     if (!lpwm) {
 	free(lpMidiStrm);
