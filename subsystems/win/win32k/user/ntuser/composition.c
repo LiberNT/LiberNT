@@ -2537,8 +2537,10 @@ IntCompositionCancelRedirectedBltPresent(
         return STATUS_INVALID_PARAMETER;
     }
 
-    Entry->Redirect.GdiAdmittedUpdateId =
-        Entry->Redirect.GdiConsumedUpdateId;
+    /* Retire the cancelled admitted update so future GDI updates
+     * are not blocked by an issued-but-unpublished update. */
+    Entry->Redirect.GdiConsumedUpdateId = Present->UpdateId;
+    Entry->Redirect.GdiAdmittedUpdateId = Present->UpdateId;
     return STATUS_SUCCESS;
 }
 
