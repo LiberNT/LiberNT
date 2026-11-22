@@ -107,6 +107,10 @@ KiArmServiceInterruptVector(
     if (!Head)
         return;
 
+    ASSERT(KeGetCurrentIrql() > DISPATCH_LEVEL);
+
+    /* A handler runs at its own level: what outranks it, an interprocessor request included, is taken while it runs or waits for its lock. */
+    _enable();
     Interrupt = Head;
     Entry = &Head->InterruptListEntry;
     do
@@ -120,6 +124,7 @@ KiArmServiceInterruptVector(
         Entry = Entry->Flink;
         Interrupt = CONTAINING_RECORD(Entry, KINTERRUPT, InterruptListEntry);
     } while (Entry != &Head->InterruptListEntry);
+    _disable();
 }
 
 /* IRQ exception: device interrupts, then the software requests they left. */
