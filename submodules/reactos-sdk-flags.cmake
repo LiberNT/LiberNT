@@ -16,7 +16,7 @@ function(reactos_sdk_flags _prefix)
     set(_includes " -isystem ${_resource_dir}/include")
     set(_rc_includes)
     foreach(_dir "${_sdk}/ucrt" "${_sdk}/vcruntime" "${_sdk}/crt" "${_sdk}/psdk"
-                 "${_sdk}" "${_sdk}/ddk" "${_sdk}/reactos" "${_build}" "${_build}/psdk" "${_build}/ddk")
+                 "${_sdk}" "${_sdk}/ddk" "${_sdk}/libernt" "${_build}" "${_build}/psdk" "${_build}/ddk")
         string(APPEND _includes " -isystem ${_dir}")
         string(APPEND _rc_includes " -I ${_dir}")
     endforeach()
