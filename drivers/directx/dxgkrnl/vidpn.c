@@ -522,6 +522,38 @@ DxgkVidPnGetCompositorGeneration(
     return Generation;
 }
 
+/* The output size the compositor claimed with a source, which its flips on that source cover */
+BOOLEAN
+DxgkVidPnGetCompositorOutputSize(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId,
+    _Out_ PULONG Width,
+    _Out_ PULONG Height)
+{
+    PDXGKP_COMPOSITOR_SOURCE_OWNER Owner;
+    BOOLEAN Found = FALSE;
+
+    ASSERT(Adapter != NULL);
+    ASSERT(Width != NULL);
+    ASSERT(Height != NULL);
+    ASSERT(KeGetCurrentIrql() <= APC_LEVEL);
+    *Width = 0;
+    *Height = 0;
+    DxgkpEnsureSourceOwnerMutex();
+    ExAcquireFastMutex(&g_SourceOwnerMutex);
+    Owner = DxgkpFindCompositorSourceOwnerLocked(&Adapter->AdapterLuid, SourceId);
+    if (Owner != NULL)
+    {
+        ASSERT(Owner->Width != 0);
+        ASSERT(Owner->Height != 0);
+        *Width = Owner->Width;
+        *Height = Owner->Height;
+        Found = TRUE;
+    }
+    ExReleaseFastMutex(&g_SourceOwnerMutex);
+    return Found;
+}
+
 ULONG64
 DxgkVidPnCaptureCompositorGeneration(
     _In_ PDXGKRNL_ADAPTER Adapter,

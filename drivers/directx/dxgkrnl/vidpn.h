@@ -167,6 +167,13 @@ DxgkVidPnGetCompositorGeneration(
     _In_ PDXGKRNL_ADAPTER Adapter,
     _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId);
 
+BOOLEAN
+DxgkVidPnGetCompositorOutputSize(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId,
+    _Out_ PULONG Width,
+    _Out_ PULONG Height);
+
 ULONG64
 DxgkVidPnCaptureCompositorGeneration(
     _In_ PDXGKRNL_ADAPTER Adapter,
