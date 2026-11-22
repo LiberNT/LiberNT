@@ -1133,13 +1133,52 @@ KiDisplayBugCheckRegisterState(
     }
 }
 
+static
+PKPRCB
+KiArm64InterruptStackOwner(
+    _In_ ULONG64 Address)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < KeProcessorCount; Index++)
+    {
+        PKPRCB Prcb = KiProcessorBlock[Index];
+        ULONG64 Top = (Prcb != NULL) ? (ULONG64)(ULONG_PTR)Prcb->IsrStack : 0;
+
+        if ((Top != 0) && (Address < Top) && (Address >= Top - KERNEL_STACK_SIZE))
+            return Prcb;
+    }
+
+    return NULL;
+}
+
 BOOLEAN
 NTAPI
 KiUnwindFrame(
     _Inout_ PCONTEXT Context,
     _In_ BOOLEAN CallerFrame)
 {
+    ULONG64 Frame = Context->Fp;
+    ULONG64 Record[2];
+    PKPRCB Owner;
+
     UNREFERENCED_PARAMETER(CallerFrame);
 
-    return KiUnwindFrameRecord(Context);
+    if (!KiUnwindFrameRecord(Context))
+        return FALSE;
+
+    /* The frame an interrupt returns to is on the interrupted stack, which may lie below the interrupt stack */
+    if (Context->Fp == 0)
+    {
+        Owner = KiArm64InterruptStackOwner(Frame);
+        if ((Owner != NULL) &&
+            KiReadValidMemory(Record, (ULONG_PTR)Frame, sizeof(Record)) &&
+            (Record[0] != 0) &&
+            (KiArm64InterruptStackOwner(Record[0]) != Owner))
+        {
+            Context->Fp = Record[0];
+        }
+    }
+
+    return TRUE;
 }

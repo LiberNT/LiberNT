@@ -38,17 +38,15 @@
     .global KiArm64InterruptDispatchOnIsrStack
     .seh_proc KiArm64InterruptDispatchOnIsrStack
 KiArm64InterruptDispatchOnIsrStack:
-    stp x29, x30, [sp, #-16]!
-    .seh_save_fplr_x 16
-    sub sp, sp, #16
-    .seh_stackalloc 16
+    stp x29, x30, [sp, #-32]!
+    .seh_save_fplr_x 32
     mov x29, sp
     .seh_set_fp
     .seh_endprologue
 
     /* Preserve the vector and the thread-stack IRQ frame across C dispatch. */
-    str w0, [sp]
-    str x1, [sp, #8]
+    str w0, [sp, #16]
+    str x1, [sp, #24]
 
     mrs x9, tpidr_el1
     ldr x9, [x9, #PcCurrentPrcb]
@@ -73,8 +71,8 @@ KiArm64InterruptDispatchOnIsrStack:
     msr daifset, #0xF
     mov sp, x29
     mov w12, w0
-    ldr w13, [sp]
-    ldr x14, [sp, #8]
+    ldr w13, [sp, #16]
+    ldr x14, [sp, #24]
 
     mrs x9, tpidr_el1
     ldr x9, [x9, #PcCurrentPrcb]
@@ -122,8 +120,7 @@ KiArm64InterruptDispatchOnIsrStack:
     bl KiArm64InterruptDispatchExit
 
 .Ldispatch_interrupt_done:
-    add sp, sp, #16
-    ldp x29, x30, [sp], #16
+    ldp x29, x30, [sp], #32
     ret
     .seh_endproc
 

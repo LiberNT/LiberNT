@@ -40,6 +40,9 @@ KiArm64SwitchToBootStack:
     mov     sp, x0
     /* Move LoaderBlock into x0 as first argument to C wrapper */
     mov     x0, x1
+    /* The boot stack starts a frame chain of its own: nothing below it is a caller */
+    mov     x29, #0
+    mov     x30, #0
     /* Branch to C wrapper; never returns */
     b       KiArm64SystemStartupBootStack
     .seh_endproc
