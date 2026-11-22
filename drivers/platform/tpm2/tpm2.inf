@@ -5,6 +5,13 @@ ClassGUID = {D94EE5D8-D189-4994-83D2-F68D7D41B0E6}
 Provider = %LiberNT%
 DriverVer = 08/04/2026,1.0.0.0
 
+[ClassInstall32.NT]
+AddReg = SecurityDevicesClass.NT.AddReg
+
+[SecurityDevicesClass.NT.AddReg]
+; TODO: the class icon Windows 11 shows for security devices
+HKR, , , 0, %SecurityDevicesClassName%
+
 [ControlFlags]
 ExcludeFromSelect = *
 
@@ -38,3 +45,4 @@ LoadOrderGroup = Extended Base
 LiberNT = "LiberNT Project"
 Tpm2.DeviceDesc = "Trusted Platform Module 2.0"
 Tpm2.ServiceDesc = "LiberNT TPM 2.0 Driver"
+SecurityDevicesClassName = "Security devices"
