@@ -629,21 +629,32 @@ static void
 ReadPosixMetadata(PNtfsFileRecord File, NtfsPosixMetadata* Metadata)
 {
     std::vector<UCHAR> Raw;
+    const UCHAR* Data;
     ULONG Length = 0;
     ULONG Offset = 0;
     NtfsExtendedAttributeView View;
+    PAttribute Ea;
 
     memset(Metadata, 0, sizeof(*Metadata));
-    if (!NtfsFileRecordGetAttribute(File, TypeEAInformation, NULL) ||
-        NtfsFileRecordReadExtendedAttributes(File, NULL, &Length, NULL) != STATUS_BUFFER_TOO_SMALL ||
-        Length == 0)
+    if (!NtfsFileRecordGetAttribute(File, TypeEAInformation, NULL))
+        return;
+    Ea = NtfsFileRecordGetAttribute(File, TypeEA, NULL);
+    if (Ea && !Ea->IsNonResident && Ea->Resident.DataOffset <= Ea->Length &&
+        Ea->Resident.DataLength <= Ea->Length - Ea->Resident.DataOffset)
     {
-        return;
+        Data = (const UCHAR*)Ea + Ea->Resident.DataOffset;
+        Length = Ea->Resident.DataLength;
     }
-    Raw.resize(Length);
-    if (!NT_SUCCESS(NtfsFileRecordReadExtendedAttributes(File, Raw.data(), &Length, NULL)))
-        return;
-    while (NT_SUCCESS(NtfsGetNextExtendedAttribute(Raw.data(), Length, &Offset, &View)))
+    else
+    {
+        if (NtfsFileRecordReadExtendedAttributes(File, NULL, &Length, NULL) != STATUS_BUFFER_TOO_SMALL || Length == 0)
+            return;
+        Raw.resize(Length);
+        if (!NT_SUCCESS(NtfsFileRecordReadExtendedAttributes(File, Raw.data(), &Length, NULL)))
+            return;
+        Data = Raw.data();
+    }
+    while (NT_SUCCESS(NtfsGetNextExtendedAttribute(Data, Length, &Offset, &View)))
     {
         UINT32 Value;
 
