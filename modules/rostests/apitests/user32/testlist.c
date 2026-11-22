@@ -54,6 +54,7 @@ extern void func_FrameMetrics(void);
 extern void func_GetClassInfo(void);
 extern void func_GetDCEx(void);
 extern void func_GetProp(void);
+extern void func_SetWindowPlacementMaximized(void);
 extern void func_MdiCreateDelivery(void);
 extern void func_RetainedDCResize(void);
 extern void func_WindowRegionDC(void);
@@ -211,6 +212,7 @@ const struct test winetest_testlist[] =
     { "GetClassInfo", func_GetClassInfo },
     { "GetDCEx", func_GetDCEx },
     { "GetProp", func_GetProp },
+    { "SetWindowPlacementMaximized", func_SetWindowPlacementMaximized },
     { "MdiCreateDelivery", func_MdiCreateDelivery },
     { "RetainedDCResize", func_RetainedDCResize },
     { "WindowRegionDC", func_WindowRegionDC },
