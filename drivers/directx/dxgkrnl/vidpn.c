@@ -7849,6 +7849,11 @@ DxgkVidPnGetSourcePrimarySize(
             Live = TRUE;
         }
     }
+    else if (!DxgkIsDisplayAdapter(Adapter) && Adapter->VidPnCommitted)
+    {
+        /* The desktop source of an adapter that does not host the desktop is live in its committed source mode */
+        Live = DxgkpVidPnPinnedSourceSize(Adapter, VidPnSourceId, Width, Height);
+    }
     KeReleaseMutex(&Adapter->SharedPrimaryMutex, FALSE);
     return Live;
 }
