@@ -586,12 +586,76 @@ FileRecord::SynchronizeFileNameInformation(
     {
         return STATUS_FILE_CORRUPT_ERROR;
     }
+    if (Header->BaseFileRecord != 0)
+    {
+        /* An extension record holds no names; its base record carries them. */
+        ASSERT(BaseRecordOwner);
+        return BaseRecordOwner
+            ? BaseRecordOwner->SynchronizeFileNameInformation(Fields,
+                                                              AllocatedSize,
+                                                              DataSize,
+                                                              EaInformation,
+                                                              ReparseTag,
+                                                              StorageFlags)
+            : STATUS_SUCCESS;
+    }
 
     FileReference =
         ((ULONGLONG)Header->SequenceNumber << 48) |
         RecordNumber;
-    Offset = Header->AttributeOffset;
 
+    /* Names in extension records are listed; every name's parent entry carries the copy. */
+    if (FindAttributeInRecord(TypeAttributeList, NULL, NULL))
+    {
+        ULONG ListOffset = 0;
+
+        for (;;)
+        {
+            PAttribute Attribute = NULL;
+            PFileNameEx FileName;
+
+            Status = FindNextAttributeFromList(TypeFileName, &ListOffset, &Attribute);
+            if (!NT_SUCCESS(Status))
+                return Status;
+            if (!Attribute)
+                break;
+            if (Attribute->IsNonResident ||
+                Attribute->Resident.DataOffset < 0x18 ||
+                Attribute->Resident.DataOffset > Attribute->Length ||
+                Attribute->Resident.DataLength < FIELD_OFFSET(FileNameEx, Name) ||
+                Attribute->Resident.DataLength >
+                    Attribute->Length - Attribute->Resident.DataOffset)
+            {
+                return STATUS_FILE_CORRUPT_ERROR;
+            }
+            FileName = reinterpret_cast<PFileNameEx>(GetResidentDataPointer(Attribute));
+            if (FileName->NameLength * sizeof(WCHAR) >
+                Attribute->Resident.DataLength - FIELD_OFFSET(FileNameEx, Name))
+            {
+                return STATUS_FILE_CORRUPT_ERROR;
+            }
+            if (Fields & NTFS_FILE_NAME_UPDATE_BASIC)
+                ApplyBasicInformationToFileName(FileName);
+            Status = UpdateParentIndexEntry(FileName,
+                                            FileReference,
+                                            Fields,
+                                            AllocatedSize,
+                                            DataSize,
+                                            EaInformation,
+                                            ReparseTag,
+                                            StorageFlags);
+            if (!NT_SUCCESS(Status))
+                return Status;
+        }
+        return UpdateFileNameInformation(Fields,
+                                         AllocatedSize,
+                                         DataSize,
+                                         EaInformation,
+                                         ReparseTag,
+                                         StorageFlags);
+    }
+
+    Offset = Header->AttributeOffset;
     while (Offset < Header->ActualSize)
     {
         PAttribute Attribute;
