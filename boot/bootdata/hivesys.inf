@@ -1682,6 +1682,7 @@ HKLM,"SYSTEM\CurrentControlSet\Control\Windows","CSDReleaseType",0x00010001,0x00
 HKLM,"SYSTEM\CurrentControlSet\Control\Windows","CSDVersion",0x00010001,0x00000200
 
 HKLM,"SYSTEM\CurrentControlSet\Control\Terminal Server","fDenyTSConnections",0x00010001,1
+HKLM,"SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp","PortNumber",0x00010001,3389
 HKLM,"SYSTEM\CurrentControlSet\Control\Terminal Server","fSingleSessionPerUser",0x00010001,1
 HKLM,"SYSTEM\CurrentControlSet\Control\Terminal Server","TSUserEnabled",0x00010001,0
 

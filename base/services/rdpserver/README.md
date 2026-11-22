@@ -1,7 +1,8 @@
 # LiberNT RDP console server
 
-`rdpserver.exe` mirrors the interactive console desktop over RDP for a test
-LAN. FreeRDP implements the wire protocol and TLS; the server captures the
+`rdpserver.exe` mirrors the interactive console desktop over RDP. It is
+enabled like Windows Remote Desktop, or with a private test configuration
+for a test LAN. FreeRDP implements the wire protocol and TLS; the server captures the
 desktop with GDI and injects keyboard and mouse input with `SendInput` once a
 client has authenticated. It does not implement Terminal Services or create
 remote sessions. The RDP drive redirection channel also carries authenticated
@@ -43,14 +44,45 @@ The live and preinstalled images then carry `%SystemRoot%\system32\rdpserver`
 and an HKCU `Run` value that starts the server with the interactive desktop.
 `RDPSERVER_DIR` is empty by default, which leaves the server out.
 
-## Configuration
+## Enabling Remote Desktop
 
-The in-tree `rdpserver.ini` sets `enabled=0`, so the server exits at once.
-To enable it, keep a private directory outside the source tree with an
-`rdpserver.ini` and a TLS certificate/key pair, and point the build at it
-with `-DRDPSERVER_CONFIG_DIR=/path/to/private/rdpserver`. Its
+As on Windows 11, connections are denied until the Remote Desktop setting
+allows them:
+
+```bat
+reg add "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f
+```
+
+`1`, the default, denies them again. When the policy value
+`HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services\fDenyTSConnections`
+exists, it wins. A change applies at once: the server opens or closes its
+listener, and a session in progress ends when connections are denied. The
+port is `PortNumber` under
+`HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp`
+(3389).
+
+- Accounts: Windows accounts with a password that belong to Administrators
+  or Remote Desktop Users (`net localgroup "Remote Desktop Users" <user> /add`).
+  Accounts without a password are refused, as Windows does by default.
+- Certificate: a self-signed certificate named after the computer, valid for
+  180 days, is made on first use in `%ProgramData%\LiberNT\RemoteDesktop`,
+  which only SYSTEM and administrators can open, and made again when it
+  expires. Its SHA-256 fingerprint is logged on every start.
+- Client: any RDP client with TLS security, for example
+  `xfreerdp /v:<host> /u:<user> /sec:tls /cert:fingerprint:sha256:<fingerprint>`.
+  Network level authentication is not implemented yet, so turn it off in the
+  client (`enablecredsspsupport:i:0` in an `.rdp` file for mstsc).
+- The server starts with the user's session and mirrors that console
+  desktop: nothing listens before someone logs on.
+
+## Test configuration
+
+Keep a private directory outside the source tree with an `rdpserver.ini`
+that sets `enabled=1` and a TLS certificate/key pair, and point the build at
+it with `-DRDPSERVER_CONFIG_DIR=/path/to/private/rdpserver`. Its
 `rdpserver.ini`, `*.crt`, `*.key` and `*.pem` files replace the in-tree
-configuration in the images:
+configuration in the images, and the server ignores the Remote Desktop
+settings:
 
 ```ini
 [server]

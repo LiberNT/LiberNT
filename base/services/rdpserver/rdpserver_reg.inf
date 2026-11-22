@@ -1,5 +1,5 @@
-; LiberNT RDP console server: start with the interactive desktop.
-; The server exits at once unless rdpserver.ini sets enabled=1.
+; LiberNT RDP console server: start with the interactive desktop. It follows
+; the Remote Desktop settings unless rdpserver.ini sets enabled=1 (test mode).
 
 [AddReg]
 HKCU,"SOFTWARE\Microsoft\Windows\CurrentVersion\Run","LiberNTRDPServer",0x00020000,"%SystemRoot%\system32\rdpserver\rdpserver.exe %SystemRoot%\system32\rdpserver\rdpserver.ini"

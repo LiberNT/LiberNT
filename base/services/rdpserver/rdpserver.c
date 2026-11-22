@@ -1,7 +1,7 @@
 /*
  * PROJECT:     LiberNT RDP console server
  * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
- * PURPOSE:     Console desktop RDP server for an explicitly configured test LAN
+ * PURPOSE:     Console desktop RDP server, enabled like Remote Desktop or for a test LAN
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif193@gmail.com>
  */
 
@@ -9,11 +9,18 @@
  * FreeRDP implements the wire protocol and TLS. This backend captures the
  * existing interactive desktop with GDI and injects authenticated input.
  * It does not create a terminal session or replace the display driver.
+ *
+ * Without an enabled test configuration it follows the Remote Desktop
+ * settings: fDenyTSConnections (the policy value first), the RDP-Tcp port,
+ * Windows accounts of the Administrators and Remote Desktop Users groups,
+ * and a self-signed certificate made on first use.
  */
 #define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
 #include <windows.h>
 #include <iphlpapi.h>
+#include <sddl.h>
+#include <shlobj.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -27,7 +34,17 @@
 #include <winpr/ssl.h>
 #include <freerdp/channels/wtsvc.h>
 #include <freerdp/channels/channels.h>
+#include <openssl/evp.h>
+#include <openssl/pem.h>
+#include <openssl/x509.h>
+#include <openssl/x509v3.h>
+#include <openssl/bn.h>
 #include "transfer.h"
+
+#define TS_KEY "SYSTEM\\CurrentControlSet\\Control\\Terminal Server"
+#define TS_POLICY_KEY "SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services"
+#define RDP_TCP_KEY TS_KEY "\\WinStations\\RDP-Tcp"
+#define CERTIFICATE_DAYS 180
 
 typedef ULONG (__cdecl *DEBUG_PRINT)(const char *, ...);
 static DEBUG_PRINT DebugPrint;
@@ -43,6 +60,8 @@ static IPMask InterfaceMask;
 static ULONG AddressContext;
 static BOOL AddressAdded;
 static WCHAR TransferRoot[MAX_PATH];
+static BOOL RemoteDesktopMode;
+static volatile LONG ConnectionsDenied;
 
 typedef struct DESKTOP_CONTEXT
 {
@@ -249,15 +268,55 @@ static BOOL Capabilities(freerdp_peer *peer)
                                        GetSystemMetrics(SM_CYSCREEN));
 }
 
+static BOOL Utf8ToWide(const char *text, WCHAR *buffer, int count)
+{
+    return text && MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text, -1, buffer, count) > 0;
+}
+
+static BOOL TokenInAlias(HANDLE token, WELL_KNOWN_SID_TYPE alias)
+{
+    BYTE sid[SECURITY_MAX_SID_SIZE];
+    DWORD size = sizeof(sid);
+    BOOL member = FALSE;
+    return CreateWellKnownSid(alias, NULL, sid, &size) && CheckTokenMembership(token, sid, &member) && member;
+}
+
+/* Remote Desktop logons: a local or domain account with a password that is
+ * in the Administrators or Remote Desktop Users group. */
+static BOOL AuthenticateAccount(const char *user, const char *domain, const char *password)
+{
+    WCHAR wideUser[256], wideDomain[256], widePassword[256];
+    HANDLE token = NULL, identification = NULL;
+    BOOL allowed = FALSE;
+    if (!user || !*user || !password || !*password) return FALSE;
+    if (!Utf8ToWide(user, wideUser, ARRAYSIZE(wideUser)) ||
+        !Utf8ToWide(domain && *domain ? domain : ".", wideDomain, ARRAYSIZE(wideDomain)) ||
+        !Utf8ToWide(password, widePassword, ARRAYSIZE(widePassword)))
+        return FALSE;
+    if (LogonUserW(wideUser, wideDomain, widePassword, LOGON32_LOGON_NETWORK, LOGON32_PROVIDER_DEFAULT, &token) &&
+        DuplicateToken(token, SecurityIdentification, &identification))
+    {
+        allowed = TokenInAlias(identification, WinBuiltinAdministratorsSid) ||
+                  TokenInAlias(identification, WinBuiltinRemoteDesktopUsersSid);
+    }
+    SecureZeroMemory(widePassword, sizeof(widePassword));
+    if (identification) CloseHandle(identification);
+    if (token) CloseHandle(token);
+    return allowed;
+}
+
 static BOOL PostConnect(freerdp_peer *peer)
 {
     DESKTOP_CONTEXT *ctx = (DESKTOP_CONTEXT *)peer->context;
     rdpSettings *settings = ctx->rdp.settings;
     const char *user = freerdp_settings_get_string(settings, FreeRDP_Username);
     const char *password = freerdp_settings_get_string(settings, FreeRDP_Password);
-    if (!user || !password || strcmp(user, Username) || strcmp(password, Password))
+    BOOL authenticated = RemoteDesktopMode
+        ? AuthenticateAccount(user, freerdp_settings_get_string(settings, FreeRDP_Domain), password)
+        : user && password && !strcmp(user, Username) && !strcmp(password, Password);
+    if (!authenticated)
     {
-        Log("Authentication rejected for peer %s", peer->hostname);
+        Log("Authentication rejected for %s from %s", user ? user : "(none)", peer->hostname);
         return FALSE;
     }
     ctx->Authorized = TRUE;
@@ -267,7 +326,7 @@ static BOOL PostConnect(freerdp_peer *peer)
         ctx->Transfer = TransferStart(ctx->Vcm, &ctx->rdp, TransferRoot, Log);
         if (!ctx->Transfer) { Log("File transfer channel failed to start"); return FALSE; }
     }
-    Log("Authenticated peer %s; console desktop %dx%d", peer->hostname, ctx->Width, ctx->Height);
+    Log("Authenticated %s from %s; console desktop %dx%d", user, peer->hostname, ctx->Width, ctx->Height);
     return TRUE;
 }
 
@@ -412,6 +471,7 @@ static DWORD WINAPI ClientThread(void *arg)
     { freerdp_certificate_free(cert); goto cleanup; }
     if (!freerdp_settings_set_bool(settings, FreeRDP_RdpSecurity, FALSE) ||
         !freerdp_settings_set_bool(settings, FreeRDP_TlsSecurity, TRUE) ||
+        /* TODO: network level authentication (RDP-Tcp UserAuthentication); the account is checked after TLS */
         !freerdp_settings_set_bool(settings, FreeRDP_NlaSecurity, FALSE) ||
         !freerdp_settings_set_bool(settings, FreeRDP_ExtSecurity, FALSE) ||
         !freerdp_settings_set_bool(settings, FreeRDP_RemoteFxCodec, FALSE) ||
@@ -439,6 +499,7 @@ static DWORD WINAPI ClientThread(void *arg)
         if (!peer->CheckFileDescriptor(peer)) break;
         if (!WTSVirtualChannelManagerCheckFileDescriptor(ctx->Vcm)) break;
         if (!ctx->Authorized && GetTickCount() - started > 30000) break;
+        if (InterlockedCompareExchange(&ConnectionsDenied, 0, 0)) break;
         if (ctx->Active && peer->activated && GetTickCount() - lastFrame >= 100)
         {
             if (!Capture(ctx)) break;
@@ -460,13 +521,227 @@ static BOOL Accepted(freerdp_listener *listener, freerdp_peer *peer)
     struct sockaddr_in address;
     int length = sizeof(address);
     (void)listener;
-    if (getpeername((SOCKET)peer->sockfd, (struct sockaddr *)&address, &length) ||
-        address.sin_family != AF_INET || address.sin_addr.s_addr != inet_addr(AllowedPeer)) return FALSE;
+    if (!RemoteDesktopMode &&
+        (getpeername((SOCKET)peer->sockfd, (struct sockaddr *)&address, &length) ||
+         address.sin_family != AF_INET || address.sin_addr.s_addr != inet_addr(AllowedPeer))) return FALSE;
     if (InterlockedCompareExchange(&ClientConnected, 1, 0)) return FALSE;
     thread = CreateThread(NULL, 0, ClientThread, peer, 0, NULL);
     if (!thread) { InterlockedExchange(&ClientConnected, 0); return FALSE; }
     CloseHandle(thread);
     return TRUE;
+}
+
+static DWORD ReadDword(const char *path, const char *name, DWORD fallback, BOOL *found)
+{
+    HKEY key;
+    DWORD value, size = sizeof(value), type;
+    if (found) *found = FALSE;
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, path, 0, KEY_QUERY_VALUE, &key)) return fallback;
+    if (!RegQueryValueExA(key, name, NULL, &type, (BYTE *)&value, &size) && type == REG_DWORD && size == sizeof(value))
+    {
+        if (found) *found = TRUE;
+        fallback = value;
+    }
+    RegCloseKey(key);
+    return fallback;
+}
+
+/* The policy value overrides the Remote Desktop setting, as on Windows. */
+static BOOL ConnectionsAllowed(void)
+{
+    BOOL found;
+    DWORD deny = ReadDword(TS_POLICY_KEY, "fDenyTSConnections", 1, &found);
+    if (!found) deny = ReadDword(TS_KEY, "fDenyTSConnections", 1, NULL);
+    return deny == 0;
+}
+
+static UINT16 ListenPort(void)
+{
+    DWORD port = ReadDword(RDP_TCP_KEY, "PortNumber", 3389, NULL);
+    return (UINT16)(port && port <= 65535 ? port : 3389);
+}
+
+static void LogFingerprint(X509 *certificate)
+{
+    unsigned char digest[EVP_MAX_MD_SIZE];
+    char text[EVP_MAX_MD_SIZE * 3 + 1];
+    unsigned length = 0, i;
+    if (!X509_digest(certificate, EVP_sha256(), digest, &length)) return;
+    for (i = 0; i < length; ++i) sprintf(text + i * 3, "%02x%s", digest[i], i + 1 < length ? ":" : "");
+    Log("Remote Desktop certificate SHA-256 fingerprint %s", text);
+}
+
+static BOOL CertificateValid(const char *path)
+{
+    BIO *bio = BIO_new_file(path, "r");
+    X509 *certificate = bio ? PEM_read_bio_X509(bio, NULL, NULL, NULL) : NULL;
+    BOOL valid = certificate && X509_cmp_current_time(X509_get0_notAfter(certificate)) > 0;
+    if (valid) LogFingerprint(certificate);
+    X509_free(certificate);
+    BIO_free(bio);
+    return valid;
+}
+
+static BOOL AddExtension(X509 *certificate, X509V3_CTX *context, int nid, const char *value)
+{
+    X509_EXTENSION *extension = X509V3_EXT_conf_nid(NULL, context, nid, value);
+    BOOL added = extension && X509_add_ext(certificate, extension, -1);
+    X509_EXTENSION_free(extension);
+    return added;
+}
+
+static BOOL WritePem(const char *path, X509 *certificate, EVP_PKEY *key)
+{
+    BIO *bio = BIO_new_file(path, "w");
+    BOOL written = bio && (certificate ? PEM_write_bio_X509(bio, certificate)
+                                       : PEM_write_bio_PrivateKey(bio, key, NULL, NULL, 0, NULL, NULL));
+    BIO_free(bio);
+    return written;
+}
+
+/* A self-signed server certificate named after the computer, as Remote
+ * Desktop makes one when none is configured. */
+static BOOL GenerateCertificate(void)
+{
+    WCHAR computer[256];
+    char name[3 * ARRAYSIZE(computer)] = "localhost";
+    DWORD length = ARRAYSIZE(computer);
+    EVP_PKEY *key = EVP_RSA_gen(2048);
+    X509 *certificate = X509_new();
+    BIGNUM *serial = BN_new();
+    X509_NAME *subject;
+    X509V3_CTX context;
+    BOOL generated = FALSE;
+    if (GetComputerNameExW(ComputerNameDnsHostname, computer, &length))
+        WideCharToMultiByte(CP_UTF8, 0, computer, -1, name, sizeof(name), NULL, NULL);
+    if (!key || !certificate || !serial || !X509_set_version(certificate, 2) ||
+        !BN_rand(serial, 64, BN_RAND_TOP_ANY, BN_RAND_BOTTOM_ANY) ||
+        !BN_to_ASN1_INTEGER(serial, X509_get_serialNumber(certificate)) ||
+        !X509_gmtime_adj(X509_getm_notBefore(certificate), -60 * 60) ||
+        !X509_gmtime_adj(X509_getm_notAfter(certificate), CERTIFICATE_DAYS * 24L * 60 * 60) ||
+        !X509_set_pubkey(certificate, key))
+        goto cleanup;
+    subject = X509_get_subject_name(certificate);
+    if (!X509_NAME_add_entry_by_txt(subject, "CN", MBSTRING_UTF8, (const unsigned char *)name, -1, -1, 0) ||
+        !X509_set_issuer_name(certificate, subject))
+        goto cleanup;
+    X509V3_set_ctx(&context, certificate, certificate, NULL, NULL, 0);
+    if (!AddExtension(certificate, &context, NID_key_usage, "critical,keyEncipherment,dataEncipherment") ||
+        !AddExtension(certificate, &context, NID_ext_key_usage, "serverAuth") ||
+        !X509_sign(certificate, key, EVP_sha256()) ||
+        !WritePem(PrivateKey, NULL, key) || !WritePem(Certificate, certificate, NULL))
+        goto cleanup;
+    Log("Created a self-signed Remote Desktop certificate for %s", name);
+    LogFingerprint(certificate);
+    generated = TRUE;
+cleanup:
+    BN_free(serial);
+    X509_free(certificate);
+    EVP_PKEY_free(key);
+    return generated;
+}
+
+/* The key stays in a directory that only SYSTEM and administrators can open. */
+static BOOL EnsureCertificate(void)
+{
+    char data[MAX_PATH], directory[MAX_PATH];
+    SECURITY_ATTRIBUTES attributes = { sizeof(attributes), NULL, FALSE };
+    BOOL created;
+    if (!SHGetSpecialFolderPathA(NULL, data, CSIDL_COMMON_APPDATA, TRUE) ||
+        snprintf(directory, sizeof(directory), "%s\\LiberNT", data) >= (int)sizeof(directory))
+        return FALSE;
+    CreateDirectoryA(directory, NULL);
+    if (snprintf(directory, sizeof(directory), "%s\\LiberNT\\RemoteDesktop", data) >= (int)sizeof(directory) ||
+        snprintf(Certificate, sizeof(Certificate), "%s\\server.crt", directory) >= (int)sizeof(Certificate) ||
+        snprintf(PrivateKey, sizeof(PrivateKey), "%s\\server.key", directory) >= (int)sizeof(PrivateKey) ||
+        !ConvertStringSecurityDescriptorToSecurityDescriptorA("D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)", SDDL_REVISION_1,
+                                                              &attributes.lpSecurityDescriptor, NULL))
+        return FALSE;
+    created = CreateDirectoryA(directory, &attributes) || GetLastError() == ERROR_ALREADY_EXISTS;
+    LocalFree(attributes.lpSecurityDescriptor);
+    if (!created) return FALSE;
+    if (GetFileAttributesA(PrivateKey) != INVALID_FILE_ATTRIBUTES && CertificateValid(Certificate)) return TRUE;
+    return GenerateCertificate();
+}
+
+static void WatchKey(HKEY *key, HANDLE event, const char *path)
+{
+    if (!*key && RegOpenKeyExA(HKEY_LOCAL_MACHINE, path, 0, KEY_NOTIFY, key)) *key = NULL;
+    if (*key) RegNotifyChangeKeyValue(*key, TRUE, REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_LAST_SET, event, TRUE);
+}
+
+/* Follow the Remote Desktop setting: listen while connections are allowed,
+ * close the listener and the session as soon as they are denied. */
+/* TODO: run as the Remote Desktop service, so the logon screen is reachable before anyone logs on */
+/* TODO: open and close the Remote Desktop firewall rule with the setting */
+static void RunRemoteDesktop(freerdp_listener *listener)
+{
+    HKEY settingsKey = NULL, policyKey = NULL;
+    HANDLE changed = CreateEvent(NULL, FALSE, FALSE, NULL), events[34];
+    DWORD count, status, timeout;
+    UINT16 port = 0;
+    BOOL listening = FALSE, certificate = FALSE, watch = TRUE, reported = FALSE;
+    if (!changed) return;
+    Log("Remote Desktop server started");
+    for (;;)
+    {
+        BOOL allowed;
+        if (watch)
+        {
+            WatchKey(&settingsKey, changed, TS_KEY);
+            WatchKey(&policyKey, changed, "SOFTWARE\\Policies");
+            watch = FALSE;
+        }
+        allowed = ConnectionsAllowed();
+        timeout = INFINITE;
+        if (allowed && (!listening || port != ListenPort()))
+        {
+            if (listening) listener->Close(listener);
+            listening = FALSE;
+            InterlockedExchange(&ConnectionsDenied, 0);
+            port = ListenPort();
+            if (!certificate && !(certificate = EnsureCertificate()) && !reported)
+            {
+                Log("Cannot prepare the Remote Desktop certificate");
+                reported = TRUE;
+            }
+            if (certificate && listener->Open(listener, NULL, port))
+            {
+                listening = TRUE;
+                Log("Remote Desktop connections allowed; listening on port %u; TLS", port);
+            }
+            else
+                timeout = 2000;
+        }
+        else if (!allowed)
+        {
+            if (listening)
+            {
+                listener->Close(listener);
+                listening = FALSE;
+            }
+            if (!InterlockedExchange(&ConnectionsDenied, 1)) Log("Remote Desktop connections denied");
+        }
+        events[0] = StopEvent;
+        events[1] = changed;
+        count = 2;
+        if (listening) count += listener->GetEventHandles(listener, events + 2, ARRAYSIZE(events) - 2);
+        status = WaitForMultipleObjects(count, events, FALSE, timeout);
+        if (status == WAIT_OBJECT_0 || status == WAIT_FAILED) break;
+        if (status == WAIT_OBJECT_0 + 1)
+            watch = TRUE;
+        else if (status != WAIT_TIMEOUT && !listener->CheckFileDescriptor(listener))
+        {
+            listener->Close(listener);
+            listening = FALSE;
+            timeout = 2000;
+        }
+    }
+    if (listening) listener->Close(listener);
+    InterlockedExchange(&ConnectionsDenied, 1);
+    if (settingsKey) RegCloseKey(settingsKey);
+    if (policyKey) RegCloseKey(policyKey);
+    CloseHandle(changed);
 }
 
 static BOOL WINAPI Stop(DWORD event)
@@ -488,52 +763,56 @@ int main(int argc, char **argv)
     DWORD count, status;
     WSADATA winsock;
     DebugPrint = (DEBUG_PRINT)(void *)GetProcAddress(GetModuleHandleA("ntdll.dll"), "DbgPrint");
-    if (argc != 2 || !GetFullPathNameA(argv[1], sizeof(config), config, NULL))
-    { Log("Usage: rdpserver.exe path-to-test-config.ini"); return 2; }
-    if (!GetPrivateProfileIntA("server", "enabled", 0, config)) return 0;
-    GetPrivateProfileStringA("server", "bind", "", BindAddress, sizeof(BindAddress), config);
-    GetPrivateProfileStringA("server", "allow", "", AllowedPeer, sizeof(AllowedPeer), config);
-    GetPrivateProfileStringA("server", "username", "", Username, sizeof(Username), config);
-    GetPrivateProfileStringA("server", "password", "", Password, sizeof(Password), config);
-    GetPrivateProfileStringA("server", "certificate", "", Certificate, sizeof(Certificate), config);
-    GetPrivateProfileStringA("server", "privatekey", "", PrivateKey, sizeof(PrivateKey), config);
-    GetPrivateProfileStringA("server", "interface_mac", "", mac, sizeof(mac), config);
-    GetPrivateProfileStringA("server", "netmask", "", mask, sizeof(mask), config);
+    if (argc > 2 || (argc == 2 && !GetFullPathNameA(argv[1], sizeof(config), config, NULL)))
+    { Log("Usage: rdpserver.exe [path-to-test-config.ini]"); return 2; }
+    /* Without an enabled test configuration, follow the Remote Desktop settings. */
+    RemoteDesktopMode = argc != 2 || !GetPrivateProfileIntA("server", "enabled", 0, config);
+    if (!RemoteDesktopMode)
     {
-        char root[MAX_PATH];
-        GetPrivateProfileStringA("server", "transfer_root", "", root, sizeof(root), config);
-        if (*root && !MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, root, -1,
-                                         TransferRoot, MAX_PATH)) return 2;
-    }
-    if (mac[0])
-    {
-        char *entry, *next;
-        if ((InterfaceMask = inet_addr(mask)) == INADDR_NONE || !InterfaceMask)
-        { Log("Invalid test Ethernet MAC or netmask"); return 2; }
-        for (entry = mac; entry; entry = next)
+        GetPrivateProfileStringA("server", "bind", "", BindAddress, sizeof(BindAddress), config);
+        GetPrivateProfileStringA("server", "allow", "", AllowedPeer, sizeof(AllowedPeer), config);
+        GetPrivateProfileStringA("server", "username", "", Username, sizeof(Username), config);
+        GetPrivateProfileStringA("server", "password", "", Password, sizeof(Password), config);
+        GetPrivateProfileStringA("server", "certificate", "", Certificate, sizeof(Certificate), config);
+        GetPrivateProfileStringA("server", "privatekey", "", PrivateKey, sizeof(PrivateKey), config);
+        GetPrivateProfileStringA("server", "interface_mac", "", mac, sizeof(mac), config);
+        GetPrivateProfileStringA("server", "netmask", "", mask, sizeof(mask), config);
         {
-            next = strchr(entry, ',');
-            if (next) *next++ = 0;
-            if (InterfaceMacCount == MAX_INTERFACE_MACS ||
-                sscanf(entry, " %x:%x:%x:%x:%x:%x %c", &octets[0], &octets[1], &octets[2],
-                       &octets[3], &octets[4], &octets[5], &tail) != 6)
-            { Log("Invalid test Ethernet MAC or netmask"); return 2; }
-            for (i = 0; i < 6; ++i)
-            {
-                if (octets[i] > 255) return 2;
-                InterfaceMac[InterfaceMacCount][i] = (BYTE)octets[i];
-            }
-            ++InterfaceMacCount;
+            char root[MAX_PATH];
+            GetPrivateProfileStringA("server", "transfer_root", "", root, sizeof(root), config);
+            if (*root && !MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, root, -1,
+                                             TransferRoot, MAX_PATH)) return 2;
         }
-        ConfigureAddress = TRUE;
+        if (mac[0])
+        {
+            char *entry, *next;
+            if ((InterfaceMask = inet_addr(mask)) == INADDR_NONE || !InterfaceMask)
+            { Log("Invalid test Ethernet MAC or netmask"); return 2; }
+            for (entry = mac; entry; entry = next)
+            {
+                next = strchr(entry, ',');
+                if (next) *next++ = 0;
+                if (InterfaceMacCount == MAX_INTERFACE_MACS ||
+                    sscanf(entry, " %x:%x:%x:%x:%x:%x %c", &octets[0], &octets[1], &octets[2],
+                           &octets[3], &octets[4], &octets[5], &tail) != 6)
+                { Log("Invalid test Ethernet MAC or netmask"); return 2; }
+                for (i = 0; i < 6; ++i)
+                {
+                    if (octets[i] > 255) return 2;
+                    InterfaceMac[InterfaceMacCount][i] = (BYTE)octets[i];
+                }
+                ++InterfaceMacCount;
+            }
+            ConfigureAddress = TRUE;
+        }
+        if (!ConfigRelativePath(config, Certificate, sizeof(Certificate)) ||
+            !ConfigRelativePath(config, PrivateKey, sizeof(PrivateKey)))
+        { Log("Certificate or private key path is too long"); return 2; }
+        if (!Username[0] || strlen(Password) < 16 || inet_addr(BindAddress) == INADDR_NONE ||
+            inet_addr(BindAddress) == INADDR_ANY || inet_addr(AllowedPeer) == INADDR_NONE ||
+            inet_addr(AllowedPeer) == INADDR_ANY || !Certificate[0] || !PrivateKey[0])
+        { Log("Invalid configuration: explicit bind/peer IPv4, credentials and TLS files required"); return 2; }
     }
-    if (!ConfigRelativePath(config, Certificate, sizeof(Certificate)) ||
-        !ConfigRelativePath(config, PrivateKey, sizeof(PrivateKey)))
-    { Log("Certificate or private key path is too long"); return 2; }
-    if (!Username[0] || strlen(Password) < 16 || inet_addr(BindAddress) == INADDR_NONE ||
-        inet_addr(BindAddress) == INADDR_ANY || inet_addr(AllowedPeer) == INADDR_NONE ||
-        inet_addr(AllowedPeer) == INADDR_ANY || !Certificate[0] || !PrivateKey[0])
-    { Log("Invalid configuration: explicit bind/peer IPv4, credentials and TLS files required"); return 2; }
     singleton = CreateMutexA(NULL, FALSE, "Local\\LiberNT-RDPServer-Console");
     if (!singleton || GetLastError() == ERROR_ALREADY_EXISTS) { if (singleton) CloseHandle(singleton); return 1; }
     if (WSAStartup(MAKEWORD(2, 2), &winsock)) return 1;
@@ -556,6 +835,11 @@ int main(int argc, char **argv)
     if (!listener) return 1;
     listener->PeerAccepted = Accepted;
     if (!WTSRegisterWtsApiFunctionTable(FreeRDP_InitWtsApi())) return 1;
+    if (RemoteDesktopMode)
+    {
+        RunRemoteDesktop(listener);
+        goto done;
+    }
     Log("Starting console server; waiting for %s:3389", BindAddress);
     /* Autostart may run before PnP has finished configuring Ethernet. */
     while (!EnsureAddress() || !listener->Open(listener, BindAddress, 3389))
