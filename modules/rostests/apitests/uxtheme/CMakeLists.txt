@@ -9,6 +9,7 @@ list(APPEND SOURCE
     NonClientBorder.c
     NonClientCaption.c
     NonClientHitTest.c
+    PreferredAppMode.c
     SetWindowTheme.c
     TextScaling.c
     ThemeDpi.c

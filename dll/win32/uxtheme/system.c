@@ -748,10 +748,43 @@ void UXTHEME_ClearNonClientLiquidProperties(HWND hwnd)
     UXTHEME_ClearLiquidProperties(hwnd, DWM_BACKDROP_REGION_NONCLIENT);
 }
 
-static BOOL UXTHEME_UseLightClasses(LPCWSTR classList, DWORD flags)
+enum
+{
+    PreferredAppModeDefault,
+    PreferredAppModeAllowDark,
+    PreferredAppModeForceDark,
+    PreferredAppModeForceLight,
+    PreferredAppModeMax
+};
+
+BOOLEAN WINAPI ShouldAppsUseDarkMode(void);
+
+static LONG g_PreferredAppMode = PreferredAppModeDefault;
+static const WCHAR szAllowDarkModeProp[] = L"ReactOS.UxTheme.AllowDarkMode";
+
+static BOOL UXTHEME_AppUsesDarkContent(HWND hwnd)
+{
+    LONG Mode = ReadAcquire(&g_PreferredAppMode);
+    HWND Root;
+
+    if (Mode != PreferredAppModeForceDark && !(Mode == PreferredAppModeAllowDark && ShouldAppsUseDarkMode()))
+        return FALSE;
+    if (!hwnd)
+        return TRUE;
+    if (GetPropW(hwnd, szAllowDarkModeProp))
+        return TRUE;
+    Root = GetAncestor(hwnd, GA_ROOT);
+    return Root && Root != hwnd && GetPropW(Root, szAllowDarkModeProp);
+}
+
+static BOOL UXTHEME_UseLightClasses(HWND hwnd, LPCWSTR classList, DWORD flags)
 {
     if ((flags & OTD_NONCLIENT) && !lstrcmpiW(classList, L"WINDOW"))
         return DwmSettingsReadColorScheme() == DWM_COLOR_SCHEME_LIGHT;
+    if (ReadAcquire(&g_PreferredAppMode) == PreferredAppModeForceLight)
+        return TRUE;
+    if (UXTHEME_AppUsesDarkContent(hwnd))
+        return FALSE;
     return UXTHEME_UsesDefaultSysColors();
 }
 
@@ -936,7 +969,7 @@ static HTHEME open_theme_data(HWND hwnd, LPCWSTR pszClassList, DWORD flags, UINT
 #ifdef __REACTOS__
         if (pszUseClassList)
             hTheme = MSSTYLES_OpenThemeClassForApp(pszAppName,
-                                                   UXTHEME_UseLightClasses(pszUseClassList, flags) ?
+                                                   UXTHEME_UseLightClasses(hwnd, pszUseClassList, flags) ?
                                                    L"ContentLight" : NULL,
                                                    pszUseClassList, dpi);
 #else
@@ -1718,8 +1751,17 @@ BOOLEAN WINAPI ShouldAppsUseDarkMode(void)
  */
 BOOLEAN WINAPI AllowDarkModeForWindow(HWND hwnd, BOOLEAN allow)
 {
-    FIXME("%p %d: stub\n", hwnd, allow);
-    return FALSE;
+    TRACE("%p %d\n", hwnd, allow);
+
+    if (!IsWindow(hwnd))
+    {
+        SetLastError(ERROR_INVALID_WINDOW_HANDLE);
+        return FALSE;
+    }
+    if (allow)
+        return SetPropW(hwnd, szAllowDarkModeProp, (HANDLE)1);
+    RemovePropW(hwnd, szAllowDarkModeProp);
+    return TRUE;
 }
 
 /**********************************************************************
@@ -1728,8 +1770,14 @@ BOOLEAN WINAPI AllowDarkModeForWindow(HWND hwnd, BOOLEAN allow)
  */
 int WINAPI SetPreferredAppMode(int app_mode)
 {
-    FIXME("%d: stub\n", app_mode);
-    return 0;
+    TRACE("%d\n", app_mode);
+
+    if (app_mode < PreferredAppModeDefault || app_mode >= PreferredAppModeMax)
+    {
+        /* FIXME: the Windows result for an out-of-range mode is not known; the mode is kept */
+        return ReadAcquire(&g_PreferredAppMode);
+    }
+    return InterlockedExchange(&g_PreferredAppMode, app_mode);
 }
 
 /**********************************************************************
@@ -1747,8 +1795,9 @@ void WINAPI FlushMenuThemes(void)
  */
 BOOLEAN WINAPI IsDarkModeAllowedForWindow(HWND hwnd)
 {
-    FIXME("%p: stub\n", hwnd);
-    return FALSE;
+    TRACE("%p\n", hwnd);
+
+    return IsWindow(hwnd) && GetPropW(hwnd, szAllowDarkModeProp) != NULL;
 }
 
 /**********************************************************************
