@@ -17,7 +17,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <linux/aio_abi.h>
 #include <sys/mman.h>
+#include <sys/syscall.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <sys/wait.h>
@@ -1821,6 +1823,71 @@ TestGapFill()
     unlink(P("gap-other").c_str());
 }
 
+/* xfstests generic/451: buffered readers must not keep pages an asynchronous O_DIRECT write replaced. */
+static void
+TestAsyncDirectWrite()
+{
+    const size_t Size = 256 * 1024;
+    std::string Path = P("aiodirect.bin");
+    aio_context_t Context = 0;
+    void* Aligned = NULL;
+    long Stale = 0;
+    int Direct = -1;
+    int Reader = -1;
+    bool Ok = WriteFile(Path, std::vector<uint8_t>(Size, 0x55)) && posix_memalign(&Aligned, 4096, Size) == 0 &&
+              syscall(SYS_io_setup, 1, &Context) == 0;
+
+    if (Ok)
+    {
+        Direct = open(Path.c_str(), O_RDWR | O_DIRECT);
+        Reader = open(Path.c_str(), O_RDONLY);
+        Ok = Direct >= 0 && Reader >= 0;
+    }
+    for (int Round = 0; Ok && Round < 64; Round++)
+    {
+        const uint8_t Value = (uint8_t)(0x80 | Round);
+        struct iocb Block = {};
+        struct iocb* Blocks[1] = {&Block};
+        struct io_event Event = {};
+        std::atomic<bool> Done(false);
+
+        memset(Aligned, Value, Size);
+        Block.aio_fildes = (uint32_t)Direct;
+        Block.aio_lio_opcode = IOCB_CMD_PWRITE;
+        Block.aio_buf = (uint64_t)(uintptr_t)Aligned;
+        Block.aio_nbytes = Size;
+        std::thread Readers([&] {
+            char Page[4096];
+
+            while (!Done)
+            {
+                for (size_t Offset = 0; Offset < Size; Offset += sizeof(Page))
+                    (void)!pread(Reader, Page, sizeof(Page), (off_t)Offset);
+            }
+        });
+        Ok = syscall(SYS_io_submit, Context, 1, Blocks) == 1 &&
+             syscall(SYS_io_getevents, Context, 1, 1, &Event, NULL) == 1 && Event.res == (long long)Size;
+        Done = true;
+        Readers.join();
+        for (size_t Offset = 0; Ok && Offset < Size; Offset += 4096)
+        {
+            uint8_t Byte;
+
+            Ok = pread(Reader, &Byte, 1, (off_t)Offset) == 1;
+            Stale += Ok && Byte != Value;
+        }
+    }
+    if (Context)
+        syscall(SYS_io_destroy, Context);
+    if (Direct >= 0)
+        close(Direct);
+    if (Reader >= 0)
+        close(Reader);
+    free(Aligned);
+    unlink(Path.c_str());
+    CHECK("aio.direct_write_coherent", Ok && Stale == 0, "%ld stale pages (%s)", Stale, strerror(errno));
+}
+
 static void
 TestCoherence()
 {
@@ -2089,6 +2156,7 @@ main(int Argc, char** Argv)
     TestXattrs();
     TestMmap();
     TestMmapWriteRace();
+    TestAsyncDirectWrite();
     TestCoherence();
     TestGapFill();
     TestStatfs();

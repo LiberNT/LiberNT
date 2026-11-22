@@ -28,8 +28,12 @@
 #include <sys/xattr.h>
 #include <unistd.h>
 
+#include <condition_variable>
+#include <deque>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -92,6 +96,16 @@ struct NtfsFuseOpenFile
     bool SetIdChecked;
 };
 
+/* A cached-mode O_DIRECT write waiting for its pages to be dropped before its reply. */
+struct NtfsFuseDirectWrite
+{
+#if NTFSLIB_HAVE_FUSE
+    fuse_req_t Request;
+#endif
+    uint64_t Ino;
+    off_t Offset;
+    size_t Length;
+};
 
 struct NtfsFuseInode
 {
@@ -125,6 +139,12 @@ struct NtfsFuseState
     std::unordered_map<uint64_t, UINT64> PendingAccess;
     /* Attributes of removed directories the kernel still holds open, by inode. */
     std::unordered_map<uint64_t, struct stat> RemovedDirectories;
+    /* Drops pages behind O_DIRECT writes off the request thread, which readers holding those pages wait on. */
+    std::mutex DirectWriteLock;
+    std::condition_variable DirectWriteReady;
+    std::deque<NtfsFuseDirectWrite> DirectWrites;
+    std::thread DirectWriteThread;
+    bool DirectWriteStop;
 };
 
 #ifndef STATUS_INVALID_HANDLE
@@ -5501,7 +5521,36 @@ NtfsLowWrite(fuse_req_t Request,
         ReplyStatus(Request, Status);
         return;
     }
+    /* The kernel drops no cached pages after an asynchronous O_DIRECT write completes. */
+    if ((FileInfo->flags & O_DIRECT) && !State->DirectIo && State->DirectWriteThread.joinable())
+    {
+        std::lock_guard<std::mutex> Guard(State->DirectWriteLock);
+
+        State->DirectWrites.push_back(NtfsFuseDirectWrite{Request, Ino, Offset, Length});
+        State->DirectWriteReady.notify_one();
+        return;
+    }
     fuse_reply_write(Request, Length);
+}
+
+static void
+DirectWriteWorker(NtfsFuseState* State)
+{
+    std::unique_lock<std::mutex> Guard(State->DirectWriteLock);
+
+    for (;;)
+    {
+        State->DirectWriteReady.wait(Guard, [State] { return State->DirectWriteStop || !State->DirectWrites.empty(); });
+        if (State->DirectWrites.empty())
+            return;
+        NtfsFuseDirectWrite Write = State->DirectWrites.front();
+
+        State->DirectWrites.pop_front();
+        Guard.unlock();
+        fuse_lowlevel_notify_inval_inode(State->Session, Write.Ino, Write.Offset, (off_t)Write.Length);
+        fuse_reply_write(Write.Request, Write.Length);
+        Guard.lock();
+    }
 }
 
 static void
@@ -6208,7 +6257,20 @@ MountImage(int Argc, char** Argv, NtfsFuseState* State)
             if (fuse_session_mount(Session, Options.mountpoint) == 0)
             {
                 fuse_daemonize(Options.foreground);
+                State->DirectWriteStop = false;
+                if (State->Writable && !State->DirectIo)
+                    State->DirectWriteThread = std::thread(DirectWriteWorker, State);
                 Result = fuse_session_loop(Session) == 0 ? 0 : 1;
+                if (State->DirectWriteThread.joinable())
+                {
+                    {
+                        std::lock_guard<std::mutex> Guard(State->DirectWriteLock);
+
+                        State->DirectWriteStop = true;
+                        State->DirectWriteReady.notify_one();
+                    }
+                    State->DirectWriteThread.join();
+                }
                 fuse_session_unmount(Session);
             }
             fuse_remove_signal_handlers(Session);

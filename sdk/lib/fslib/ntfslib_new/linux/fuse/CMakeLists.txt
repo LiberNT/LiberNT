@@ -20,8 +20,9 @@ if(NTFSLIB_STATIC_CXX_RUNTIME AND
 endif()
 
 if(FUSE3_FOUND)
+    find_package(Threads REQUIRED)
     target_compile_definitions(ntfslib_fuse PRIVATE NTFSLIB_HAVE_FUSE=1)
-    target_link_libraries(ntfslib_fuse PRIVATE PkgConfig::FUSE3)
+    target_link_libraries(ntfslib_fuse PRIVATE PkgConfig::FUSE3 Threads::Threads)
 else()
     target_compile_definitions(ntfslib_fuse PRIVATE NTFSLIB_HAVE_FUSE=0)
     message(WARNING
