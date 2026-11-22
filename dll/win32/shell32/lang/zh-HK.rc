@@ -738,6 +738,10 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "評論"
     IDS_SHV_COLUMN_LOCATION "位置"
     IDS_SHV_COLUMN_MODEL "模型"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "裝置和磁碟機 (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "系統位置 (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s 可用，共 %s"
+    IDS_COMPUTER_FOLDERS "資料夾 (%u)"
 
     /* special folders */
     IDS_DESKTOP "桌面"
@@ -775,7 +779,7 @@ BEGIN
     IDS_DISCONNECT "中斷"
     IDS_OPENFILELOCATION "開啟檔案位置(&I)"
     IDS_SENDTO_MENU "傳送到(&N)"
-    IDS_COPYASPATHMENU "Copy as path"
+    IDS_COPYASPATHMENU "複製路徑"
 
     IDS_MOVEERRORTITLE "移動檔案或資料夾發生錯誤"
     IDS_COPYERRORTITLE "複製檔案或資料夾發生錯誤"
@@ -841,7 +845,7 @@ BEGIN
      * or it may cause problems in the system. */
     /* Shell folder path default values. See also: dll/win32/userenv/lang */
     IDS_PROGRAMS "「開始」功能表\\程式"
-    IDS_PERSONAL "我的文件"
+    IDS_PERSONAL "文件"
     IDS_FAVORITES "我的最愛"
     IDS_STARTUP "「開始」功能表\\程式\\啟動"
     IDS_RECENT "Recent"
@@ -878,6 +882,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "3.5-吋磁片"
     IDS_DRIVE_REMOVABLE "抽取式磁碟"
     IDS_FS_UNKNOWN "未知"
+    IDS_FOLDER_DOWNLOADS "下載"
+    IDS_FOLDER_MUSIC "音樂"
+    IDS_FOLDER_PICTURES "圖片"
+    IDS_FOLDER_VIDEOS "影片"
 
     /* Open With */
     IDS_OPEN_WITH "開啟檔案"
@@ -1050,7 +1058,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "檔案總管"
+    IDS_SEARCHBAND_COMMAND "搜尋"
+    IDS_FOLDERSHORTCUT_TYPE "資料夾捷徑"
 END

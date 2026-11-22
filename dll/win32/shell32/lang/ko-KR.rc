@@ -739,6 +739,10 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "Comments"
     IDS_SHV_COLUMN_LOCATION "Location"
     IDS_SHV_COLUMN_MODEL "Model"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "장치 및 드라이브 (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "시스템 위치 (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s 사용 가능, 전체 %s"
+    IDS_COMPUTER_FOLDERS "폴더 (%u)"
 
     /* special folders */
     IDS_DESKTOP "바탕 화면"
@@ -776,7 +780,7 @@ BEGIN
     IDS_DISCONNECT "연결 끊기"
     IDS_OPENFILELOCATION "Open f&ile location"
     IDS_SENDTO_MENU "Se&nd To"
-    IDS_COPYASPATHMENU "Copy as path"
+    IDS_COPYASPATHMENU "경로로 복사"
 
     IDS_MOVEERRORTITLE "Error Moving File or Folder"
     IDS_COPYERRORTITLE "Error Copying File or Folder"
@@ -840,15 +844,15 @@ BEGIN
 
     /* Shell folder path default values. See also: dll/win32/userenv/lang */
     IDS_PROGRAMS "Start Menu\\Programs"
-    IDS_PERSONAL "내 문서"
-    IDS_FAVORITES "Favorites"
+    IDS_PERSONAL "문서"
+    IDS_FAVORITES "즐겨찾기"
     IDS_STARTUP "Start Menu\\Programs\\Startup"
     IDS_RECENT "Recent"
     IDS_SENDTO "SendTo"
     IDS_STARTMENU "Start Menu"
     IDS_MYMUSIC "My Music"
     IDS_MYVIDEO "My Videos"
-    IDS_DESKTOPDIRECTORY "Desktop"
+    IDS_DESKTOPDIRECTORY "바탕 화면"
     IDS_NETHOOD "NetHood"
     IDS_TEMPLATES "Templates"
     IDS_APPDATA "Application Data"
@@ -877,6 +881,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "3.5 플로피"
     IDS_DRIVE_REMOVABLE "이동식 디스크"
     IDS_FS_UNKNOWN "Unknown"
+    IDS_FOLDER_DOWNLOADS "다운로드"
+    IDS_FOLDER_MUSIC "음악"
+    IDS_FOLDER_PICTURES "사진"
+    IDS_FOLDER_VIDEOS "동영상"
 
     /* Open With */
     IDS_OPEN_WITH "Open With"
@@ -1049,7 +1057,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "파일 탐색기"
+    IDS_SEARCHBAND_COMMAND "검색"
+    IDS_FOLDERSHORTCUT_TYPE "폴더 바로 가기"
 END

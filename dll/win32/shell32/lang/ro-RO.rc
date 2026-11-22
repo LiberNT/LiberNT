@@ -740,6 +740,10 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "Comentarii"
     IDS_SHV_COLUMN_LOCATION "Locaţie"
     IDS_SHV_COLUMN_MODEL "Model"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "Dispozitive și unități (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "Locații de sistem (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s liberi din %s"
+    IDS_COMPUTER_FOLDERS "Foldere (%u)"
 
     /* special folders */
     IDS_DESKTOP "Desktop"
@@ -841,7 +845,7 @@ BEGIN
 
     /* Shell folder path default values. See also: dll/win32/userenv/lang */
     IDS_PROGRAMS "Meniul Pornire\\Programe"
-    IDS_PERSONAL "Documentele mele"
+    IDS_PERSONAL "Documente"
     IDS_FAVORITES "Favorite"
     IDS_STARTUP "Meniul Pornire\\Programe\\Autolansate"
     IDS_RECENT "Recente"
@@ -878,6 +882,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "Dischetă de 3,5"
     IDS_DRIVE_REMOVABLE "Disc amovibil"
     IDS_FS_UNKNOWN "Nespecificat"
+    IDS_FOLDER_DOWNLOADS "Descărcări"
+    IDS_FOLDER_MUSIC "Muzică"
+    IDS_FOLDER_PICTURES "Imagini"
+    IDS_FOLDER_VIDEOS "Videoclipuri"
 
     /* Open With */
     IDS_OPEN_WITH "Deschidere cu…"
@@ -1050,7 +1058,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "Explorator fișiere"
+    IDS_SEARCHBAND_COMMAND "Căutare"
+    IDS_FOLDERSHORTCUT_TYPE "Comandă rapidă la folder"
 END

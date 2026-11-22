@@ -732,9 +732,13 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "Comments"
     IDS_SHV_COLUMN_LOCATION "Location"
     IDS_SHV_COLUMN_MODEL "Model"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "Naprave in pogoni (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "Sistemska mesta (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s prosto od %s"
+    IDS_COMPUTER_FOLDERS "Mape (%u)"
 
     /* special folders */
-    IDS_DESKTOP "Desktop"
+    IDS_DESKTOP "Namizje"
     IDS_MYCOMPUTER "My Computer"
     IDS_RECYCLEBIN_FOLDER_NAME "Recycle Bin"
     IDS_CONTROLPANEL "Control Panel"
@@ -769,7 +773,7 @@ BEGIN
     IDS_DISCONNECT "Disconnect"
     IDS_OPENFILELOCATION "Open f&ile location"
     IDS_SENDTO_MENU "Se&nd To"
-    IDS_COPYASPATHMENU "Copy as path"
+    IDS_COPYASPATHMENU "Kopiraj kot pot"
 
     IDS_MOVEERRORTITLE "Error Moving File or Folder"
     IDS_COPYERRORTITLE "Error Copying File or Folder"
@@ -833,15 +837,15 @@ BEGIN
 
     /* Shell folder path default values. See also: dll/win32/userenv/lang */
     IDS_PROGRAMS "Start Menu\\Programs"
-    IDS_PERSONAL "My Documents"
-    IDS_FAVORITES "Favorites"
+    IDS_PERSONAL "Dokumenti"
+    IDS_FAVORITES "Priljubljene"
     IDS_STARTUP "Start Menu\\Programs\\Startup"
     IDS_RECENT "Recent"
     IDS_SENDTO "SendTo"
     IDS_STARTMENU "Start Menu"
     IDS_MYMUSIC "My Music"
     IDS_MYVIDEO "My Videos"
-    IDS_DESKTOPDIRECTORY "Desktop"
+    IDS_DESKTOPDIRECTORY "Namizje"
     IDS_NETHOOD "NetHood"
     IDS_TEMPLATES "Templates"
     IDS_APPDATA "Application Data"
@@ -870,6 +874,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "3.5 Floppy"
     IDS_DRIVE_REMOVABLE "Removable Disk"
     IDS_FS_UNKNOWN "Unknown"
+    IDS_FOLDER_DOWNLOADS "Prenosi"
+    IDS_FOLDER_MUSIC "Glasba"
+    IDS_FOLDER_PICTURES "Slike"
+    IDS_FOLDER_VIDEOS "Videoposnetki"
 
     /* Open With */
     IDS_OPEN_WITH "Open With"
@@ -1042,7 +1050,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "Raziskovalec"
+    IDS_SEARCHBAND_COMMAND "Iskanje"
+    IDS_FOLDERSHORTCUT_TYPE "Bližnjica do mape"
 END

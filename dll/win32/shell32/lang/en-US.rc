@@ -839,7 +839,7 @@ BEGIN
 
     /* Shell folder path default values. See also: dll/win32/userenv/lang */
     IDS_PROGRAMS "Start Menu\\Programs"
-    IDS_PERSONAL "My Documents"
+    IDS_PERSONAL "Documents"
     IDS_FAVORITES "Favorites"
     IDS_STARTUP "Start Menu\\Programs\\Startup"
     IDS_RECENT "Recent"
@@ -876,6 +876,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "3.5 Floppy"
     IDS_DRIVE_REMOVABLE "Removable Disk"
     IDS_FS_UNKNOWN "Unknown"
+    IDS_FOLDER_DOWNLOADS "Downloads"
+    IDS_FOLDER_MUSIC "Music"
+    IDS_FOLDER_PICTURES "Pictures"
+    IDS_FOLDER_VIDEOS "Videos"
 
     /* Open With */
     IDS_OPEN_WITH "Open With"

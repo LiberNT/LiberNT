@@ -5911,6 +5911,7 @@ typedef struct
     LPCWSTR    szValueName;
     LPCWSTR    szDefaultPath; /* fallback string or resource ID */
     INT        nShell32IconIndex;
+    INT        nShell32NameId;
 } CSIDL_DATA;
 
 static const CSIDL_DATA CSIDL_Data[] =
@@ -5920,7 +5921,8 @@ static const CSIDL_DATA CSIDL_Data[] =
         CSIDL_Type_User,
         L"Desktop",
         L"Desktop",
-        0
+        0,
+        IDS_DESKTOPDIRECTORY
     },
     { /* 0x01 - CSIDL_INTERNET */
         &FOLDERID_InternetFolder,
@@ -5954,14 +5956,16 @@ static const CSIDL_DATA CSIDL_Data[] =
         CSIDL_Type_User,
         L"Personal",
         L"Documents",
-        -IDI_SHELL_MY_DOCUMENTS
+        -IDI_SHELL_MY_DOCUMENTS,
+        IDS_PERSONAL
     },
     { /* 0x06 - CSIDL_FAVORITES */
         &FOLDERID_Favorites,
         CSIDL_Type_User,
         L"Favorites",
         L"Favorites",
-        -IDI_SHELL_FAVORITES
+        -IDI_SHELL_FAVORITES,
+        IDS_FAVORITES
     },
     { /* 0x07 - CSIDL_STARTUP */
         &FOLDERID_Startup,
@@ -6007,14 +6011,16 @@ static const CSIDL_DATA CSIDL_Data[] =
         CSIDL_Type_User,
         L"My Music",
         L"Music",
-        -IDI_SHELL_MY_MUSIC
+        -IDI_SHELL_MY_MUSIC,
+        IDS_FOLDER_MUSIC
     },
     { /* 0x0e - CSIDL_MYVIDEO */
         &FOLDERID_Videos,
         CSIDL_Type_User,
         L"My Video",
         L"Videos",
-        -IDI_SHELL_MY_MOVIES
+        -IDI_SHELL_MY_MOVIES,
+        IDS_FOLDER_VIDEOS
     },
     { /* 0x0f - unassigned */
         &GUID_NULL,
@@ -6027,7 +6033,8 @@ static const CSIDL_DATA CSIDL_Data[] =
         CSIDL_Type_User,
         L"Desktop",
         L"Desktop",
-        0
+        0,
+        IDS_DESKTOPDIRECTORY
     },
     { /* 0x11 - CSIDL_DRIVES */
         &FOLDERID_ComputerFolder,
@@ -6178,7 +6185,8 @@ static const CSIDL_DATA CSIDL_Data[] =
         CSIDL_Type_User,
         L"My Pictures",
         L"Pictures",
-        -IDI_SHELL_MY_PICTURES
+        -IDI_SHELL_MY_PICTURES,
+        IDS_FOLDER_PICTURES
     },
     { /* 0x28 - CSIDL_PROFILE */
         &FOLDERID_Profile,
@@ -6380,7 +6388,8 @@ static const CSIDL_DATA CSIDL_Data[] =
         CSIDL_Type_User,
         NULL,
         L"Downloads",
-        -IDI_SHELL_DOWNLOADS
+        -IDI_SHELL_DOWNLOADS,
+        IDS_FOLDER_DOWNLOADS
     },
     { /* 0x48 */
         &FOLDERID_Games,
@@ -7566,6 +7575,8 @@ HRESULT WINAPI SHGetKnownFolderIDList(
         csidl |= CSIDL_FLAG_CREATE;
     if (dwFlags & KF_FLAG_NO_ALIAS)
         csidl |= CSIDL_FLAG_NO_ALIAS;
+    if (dwFlags & KF_FLAG_INIT)
+        csidl |= CSIDL_FLAG_PER_USER_INIT;
 
     return SHGetFolderLocation(NULL, csidl, hToken, 0, ppidl);
 }
@@ -7638,6 +7649,66 @@ cleanup:
     HeapFree(GetProcessHeap(), 0, pszSubPathW);
     return hr;
 }
+
+#ifdef __REACTOS__
+static BOOL _SHFolderHasDefaultName(DWORD folder, LPCWSTR pszFolder)
+{
+    LPCWSTR pszDefault = CSIDL_Data[folder].szDefaultPath;
+
+    if (!pszDefault || IS_INTRESOURCE(pszDefault))
+        return FALSE;
+    return !lstrcmpiW(PathFindFileNameW(pszFolder), PathFindFileNameW(pszDefault));
+}
+
+static void _SHInitFolderDesktopIni(DWORD folder, LPCWSTR pszFolder, BOOL bInit)
+{
+    WCHAR szIni[MAX_PATH], szValue[MAX_PATH];
+    DWORD dwAttributes, dwIniAttributes;
+    BOOL bExists, bIcon, bName;
+
+    if (FAILED(StringCchCopyW(szIni, _countof(szIni), pszFolder)) || !PathAppendW(szIni, L"desktop.ini"))
+        return;
+
+    dwIniAttributes = GetFileAttributesW(szIni);
+    bExists = dwIniAttributes != INVALID_FILE_ATTRIBUTES;
+    bIcon = !bExists && CSIDL_Data[folder].nShell32IconIndex;
+    bName = CSIDL_Data[folder].nShell32NameId && (!bExists || bInit);
+    if (bName && bExists)
+    {
+        bName = _SHFolderHasDefaultName(folder, pszFolder) &&
+                !GetPrivateProfileStringW(L".ShellClassInfo", L"LocalizedResourceName", L"",
+                                          szValue, _countof(szValue), szIni);
+    }
+    if (!bIcon && !bName)
+        return;
+
+    dwAttributes = GetFileAttributesW(pszFolder);
+    if (dwAttributes == INVALID_FILE_ATTRIBUTES)
+        return;
+    if (!(dwAttributes & FILE_ATTRIBUTE_READONLY))
+        SetFileAttributesW(pszFolder, dwAttributes | FILE_ATTRIBUTE_READONLY);
+
+    if (bExists)
+        SetFileAttributesW(szIni, FILE_ATTRIBUTE_NORMAL);
+    if (bIcon)
+    {
+        StringCchPrintfW(szValue, _countof(szValue), L"%%SystemRoot%%\\system32\\shell32.dll,%d",
+                         CSIDL_Data[folder].nShell32IconIndex);
+        WritePrivateProfileStringW(L".ShellClassInfo", L"IconResource", szValue, szIni);
+    }
+    if (bName)
+    {
+        StringCchPrintfW(szValue, _countof(szValue), L"@%%SystemRoot%%\\system32\\shell32.dll,-%d",
+                         CSIDL_Data[folder].nShell32NameId);
+        WritePrivateProfileStringW(L".ShellClassInfo", L"LocalizedResourceName", szValue, szIni);
+    }
+    WritePrivateProfileStringW(NULL, NULL, NULL, szIni);
+
+    dwIniAttributes = GetFileAttributesW(szIni);
+    if (dwIniAttributes != INVALID_FILE_ATTRIBUTES)
+        SetFileAttributesW(szIni, dwIniAttributes | FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_HIDDEN);
+}
+#endif
 
 /*************************************************************************
  * SHGetFolderPathAndSubDirW		[SHELL32.@]
@@ -7785,43 +7856,11 @@ HRESULT WINAPI SHGetFolderPathAndSubDirW(
 
 end:
 #ifdef __REACTOS__
-    /* create desktop.ini for custom icon */
-    if ((nFolder & CSIDL_FLAG_CREATE) &&
-        CSIDL_Data[folder].nShell32IconIndex)
+    if (hr == S_OK && (nFolder & CSIDL_FLAG_CREATE) && (!pszSubPath || !*pszSubPath) &&
+        (CSIDL_Data[folder].nShell32IconIndex || CSIDL_Data[folder].nShell32NameId))
     {
-        WCHAR szIconLocation[MAX_PATH];
-        DWORD dwAttributes;
-
-        StringCchCopyW(szIconLocation, _countof(szIconLocation), szBuildPath);
-        PathAppendW(szIconLocation, L"desktop.ini");
-        if (GetFileAttributesW(szIconLocation) != INVALID_FILE_ATTRIBUTES)
-            goto done;
-
-        /* make the directory a read-only folder */
-        dwAttributes = GetFileAttributesW(szBuildPath);
-        dwAttributes |= FILE_ATTRIBUTE_READONLY;
-        SetFileAttributesW(szBuildPath, dwAttributes);
-
-        /* build the desktop.ini file path */
-        PathAppendW(szBuildPath, L"desktop.ini");
-
-        /* build the icon location */
-        StringCchPrintfW(szIconLocation, _countof(szIconLocation),
-                         L"%%SystemRoot%%\\system32\\shell32.dll,%d",
-                         CSIDL_Data[folder].nShell32IconIndex);
-
-        /* write desktop.ini */
-        WritePrivateProfileStringW(L".ShellClassInfo", L"IconResource", szIconLocation, szBuildPath);
-
-        /* flush! */
-        WritePrivateProfileStringW(NULL, NULL, NULL, szBuildPath);
-
-        /* make the desktop.ini a system and hidden file */
-        dwAttributes = GetFileAttributesW(szBuildPath);
-        dwAttributes |= FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_HIDDEN;
-        SetFileAttributesW(szBuildPath, dwAttributes);
+        _SHInitFolderDesktopIni(folder, szBuildPath, (nFolder & CSIDL_FLAG_PER_USER_INIT) != 0);
     }
-done:
 #endif
 
     TRACE("returning 0x%08x (final path is %s)\n", hr, debugstr_w(szBuildPath));

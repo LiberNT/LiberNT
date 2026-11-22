@@ -9,6 +9,7 @@ list(APPEND SOURCE
     DefaultProperties.cpp
     ILLoadFromStreamEx.cpp
     ItemPropertyStores.cpp
+    KnownFolderName.cpp
     LocalizedName.cpp
     SHAssocEnumHandlers.cpp
     SHGetDriveMedia.cpp

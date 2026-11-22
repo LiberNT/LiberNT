@@ -732,6 +732,10 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "Kommentit"
     IDS_SHV_COLUMN_LOCATION "Location"
     IDS_SHV_COLUMN_MODEL "Model"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "Laitteet ja asemat (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "Järjestelmän sijainnit (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s vapaana, yhteensä %s"
+    IDS_COMPUTER_FOLDERS "Kansiot (%u)"
 
     /* special folders */
     IDS_DESKTOP "Työpöytä"
@@ -769,7 +773,7 @@ BEGIN
     IDS_DISCONNECT "Disconnect"
     IDS_OPENFILELOCATION "Open f&ile location"
     IDS_SENDTO_MENU "Se&nd To"
-    IDS_COPYASPATHMENU "Copy as path"
+    IDS_COPYASPATHMENU "Kopioi polkuna"
 
     IDS_MOVEERRORTITLE "Error Moving File or Folder"
     IDS_COPYERRORTITLE "Error Copying File or Folder"
@@ -833,7 +837,7 @@ BEGIN
 
     /* Shell folder path default values. See also: dll/win32/userenv/lang */
     IDS_PROGRAMS "Käynnistä Valikko\\Kaikki Ohjelmat"
-    IDS_PERSONAL "Omat tiedostot"
+    IDS_PERSONAL "Tiedostot"
     IDS_FAVORITES "Suosikit"
     IDS_STARTUP "Käynnistä Valikko\\Kaikki Ohjelmat\\Käynnistys"
     IDS_RECENT "Äskettäin käytetyt"
@@ -870,6 +874,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "3.5 Floppy"
     IDS_DRIVE_REMOVABLE "Removable Disk"
     IDS_FS_UNKNOWN "Unknown"
+    IDS_FOLDER_DOWNLOADS "Ladatut tiedostot"
+    IDS_FOLDER_MUSIC "Musiikki"
+    IDS_FOLDER_PICTURES "Kuvat"
+    IDS_FOLDER_VIDEOS "Videot"
 
     /* Open With */
     IDS_OPEN_WITH "Open With"
@@ -1042,7 +1050,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "Resurssienhallinta"
+    IDS_SEARCHBAND_COMMAND "Hae"
+    IDS_FOLDERSHORTCUT_TYPE "Kansion pikakuvake"
 END

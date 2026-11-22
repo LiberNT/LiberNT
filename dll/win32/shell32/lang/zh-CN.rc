@@ -740,6 +740,10 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "备注"
     IDS_SHV_COLUMN_LOCATION "位置"
     IDS_SHV_COLUMN_MODEL "模型"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "设备和驱动器 (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "系统位置 (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s 可用，共 %s"
+    IDS_COMPUTER_FOLDERS "文件夹 (%u)"
 
     /* special folders */
     IDS_DESKTOP "桌面"
@@ -843,7 +847,7 @@ BEGIN
     /* ATTENTION: If there is no special situation, please DO NOT change
     English folder names into Chinese, or it may cause problems in the system. */
     IDS_PROGRAMS "“开始”菜单\\程序"
-    IDS_PERSONAL "我的文档"
+    IDS_PERSONAL "文档"
     IDS_FAVORITES "收藏夹"
     IDS_STARTUP "“开始”菜单\\程序\\启动"
     IDS_RECENT "Recent"
@@ -880,6 +884,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "3.5 英寸软盘"
     IDS_DRIVE_REMOVABLE "可移动磁盘"
     IDS_FS_UNKNOWN "未知"
+    IDS_FOLDER_DOWNLOADS "下载"
+    IDS_FOLDER_MUSIC "音乐"
+    IDS_FOLDER_PICTURES "图片"
+    IDS_FOLDER_VIDEOS "视频"
 
     /* Open With */
     IDS_OPEN_WITH "打开方式"
@@ -1052,7 +1060,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "文件资源管理器"
+    IDS_SEARCHBAND_COMMAND "搜索"
+    IDS_FOLDERSHORTCUT_TYPE "文件夹快捷方式"
 END
