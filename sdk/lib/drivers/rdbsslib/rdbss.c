@@ -1165,6 +1165,7 @@ RxCancelNotifyChangeDirectoryRequestsForVNetRoot(
  * @implemented
  */
 BOOLEAN
+NTAPI
 RxCancelOperationInOverflowQueue(
     PRX_CONTEXT RxContext)
 {

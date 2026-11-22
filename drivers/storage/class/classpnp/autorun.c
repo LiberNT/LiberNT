@@ -3459,6 +3459,7 @@ ClasspMediaChangeRegistryCallBack(
 
 #if (NTDDI_VERSION >= NTDDI_WINBLUE)
 VOID
+NTAPI
 ClasspTimerTickEx(
     _In_ PEX_TIMER Timer,
     _In_opt_ PVOID Context
