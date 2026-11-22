@@ -354,6 +354,7 @@ KMT_TESTFUNC Test_KeCycleTime;
 KMT_TESTFUNC Test_KeQueryBasePriority;
 KMT_TESTFUNC Test_KeProcessor;
 KMT_TESTFUNC Test_KePriorityRaise;
+KMT_TESTFUNC Test_KeQuantumBalance;
 KMT_TESTFUNC Test_KeQuantumEnd;
 KMT_TESTFUNC Test_KeSpinLock;
 KMT_TESTFUNC Test_KeThreadedDpc;
@@ -813,6 +814,7 @@ const KMT_TEST TestList[] =
     { "KeQueryBasePriority",                Test_KeQueryBasePriority },
     { "KeProcessor",                        Test_KeProcessor },
     { "KePriorityRaise",                    Test_KePriorityRaise },
+    { "KeQuantumBalance",                   Test_KeQuantumBalance },
     { "KeQuantumEnd",                       Test_KeQuantumEnd },
     { "KeSemaphore",                        Test_KeSemaphore },
     { "KeSpinLock",                         Test_KeSpinLock },

@@ -415,24 +415,19 @@ KiQueueReadyThread(
  * the processor it displaces something on, or a place in that processor's
  * queues.
  */
+static
 VOID
-FASTCALL
-KiDeferredReadyThread(
-    _Inout_ PKTHREAD Thread)
+KiPlaceReadyThread(
+    _Inout_ PKTHREAD Thread,
+    _In_ ULONG Processor)
 {
     PKPRCB Prcb;
     PKTHREAD Current, Displaced;
-    KPRIORITY Priority;
-    ULONG Processor;
+    KPRIORITY Priority = Thread->Priority;
     BOOLEAN Wake;
 
     ASSERT(Thread->State == DeferredReady);
     ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
-
-    KiApplyThreadAdjustment(Thread);
-    Priority = Thread->Priority;
-
-    Processor = KiSelectTargetProcessor(Thread);
     ASSERT(Processor < KE_MAXIMUM_PROCESSORS);
     if ((Processor != Thread->NextProcessor) && KiDeferReadyWhileLeavingProcessor(Thread))
         return;
@@ -510,6 +505,18 @@ KiDeferredReadyThread(
      */
     if (Current == Prcb->IdleThread)
         KiRescheduleThread(TRUE, Processor);
+}
+
+VOID
+FASTCALL
+KiDeferredReadyThread(
+    _Inout_ PKTHREAD Thread)
+{
+    ASSERT(Thread->State == DeferredReady);
+    ASSERT(KeGetCurrentIrql() >= DISPATCH_LEVEL);
+
+    KiApplyThreadAdjustment(Thread);
+    KiPlaceReadyThread(Thread, KiSelectTargetProcessor(Thread));
 }
 
 /*
@@ -1495,7 +1502,8 @@ KiBalanceReadyQueues(
 
         Thread->NextProcessor = Target->Number;
         Thread->AdjustReason = AdjustNone;
-        KiDeferredReadyThread(Thread);
+        KiApplyThreadAdjustment(Thread);
+        KiPlaceReadyThread(Thread, Target->Number);
 
         Moved = TRUE;
         break;

@@ -322,6 +322,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_ke/KeQueryBasePriority.c
     ntos_ke/KeProcessor.c
     ntos_ke/KePriorityRaise.c
+    ntos_ke/KeQuantumBalance.c
     ntos_ke/KeQuantumEnd.c
     ntos_ke/KeSemaphore.c
     ntos_ke/KeSpinLock.c
