@@ -53,6 +53,7 @@ list(APPEND SOURCE
     GetClassInfo.c
     GetDCEx.c
     GetProp.c
+    MdiCreateDelivery.c
     RetainedDCResize.c
     WindowRegionDC.c
     GetIconInfo.c
