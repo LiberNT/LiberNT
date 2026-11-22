@@ -45,4 +45,15 @@ VOID
 MDEVOBJ_vDestroy(
     _Inout_ PMDEVOBJ pmdev);
 
+/* Desktop rectangle of a display of an MDEV, from its position and resolution */
+VOID
+MultiDisplayRect(
+    _In_ PPDEVOBJ ppdev,
+    _Out_ PRECTL prcl);
+
+/* The display of an MDEV at the desktop origin */
+PPDEVOBJ
+MultiPrimaryDisplay(
+    _In_ PMDEVOBJ pmdev);
+
 #endif /* !__WIN32K_MDEVOBJ_H */

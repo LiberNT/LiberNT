@@ -28,7 +28,6 @@ RegWriteDisplaySettings(HKEY hkey, PDEVMODEW pdm)
     RegWriteDWORD(hkey, L"DefaultSettings.FixedOutput", pdm->dmDisplayFixedOutput);
     RegWriteDWORD(hkey, L"Attach.RelativeX", pdm->dmPosition.x);
     RegWriteDWORD(hkey, L"Attach.RelativeY", pdm->dmPosition.y);
-//    RegWriteDWORD(hkey, L"Attach.ToDesktop, pdm->dmBitsPerPel", pdm->);
 }
 
 VOID
@@ -865,6 +864,130 @@ UserUpdateFullscreen(
         gpFullscreen = NULL;
 }
 
+static LONG
+UserStoreDisplayTopology(
+    _In_ PUNICODE_STRING pustrDevice,
+    _In_opt_ PDEVMODEW pdm,
+    _In_ BOOL bAttached,
+    _In_ DWORD flags)
+{
+    HKEY hkey;
+    NTSTATUS Status = UserOpenDisplaySettingsKey(&hkey, pustrDevice, flags & CDS_GLOBAL);
+
+    if (!NT_SUCCESS(Status))
+        return DISP_CHANGE_NOTUPDATED;
+    if (pdm != NULL)
+        RegWriteDisplaySettings(hkey, pdm);
+    RegWriteDWORD(hkey, L"Attach.ToDesktop", bAttached ? 1 : 0);
+    ZwClose(hkey);
+    return DISP_CHANGE_SUCCESSFUL;
+}
+
+/* Whether a display's stored attachment differs from the desktop's displays */
+static BOOL
+UserDisplayTopologyChanged(VOID)
+{
+    UNICODE_STRING ustrName;
+    PGRAPHICS_DEVICE pGraphicsDevice;
+    PPDEVOBJ ppdev;
+    ULONG iDevNum;
+    BOOL bChanged = FALSE;
+
+    for (iDevNum = 0; !bChanged && (pGraphicsDevice = EngpFindGraphicsDevice(NULL, iDevNum)) != NULL; iDevNum++)
+    {
+        RtlInitUnicodeString(&ustrName, pGraphicsDevice->szWinDeviceName);
+        ppdev = EngpGetPDEV(&ustrName);
+        bChanged = (ppdev != NULL) != EngpIsDisplayAttached(pGraphicsDevice);
+        if (ppdev != NULL)
+            PDEVOBJ_vRelease(ppdev);
+    }
+    return bChanged;
+}
+
+/* A detach, a display outside the desktop, or any display of a multi-display desktop.
+ * Returns FALSE for an ordinary mode change of a single-display desktop. */
+static BOOL
+UserChangeDisplayTopology(
+    _In_opt_ PUNICODE_STRING pustrDevice,
+    _In_ PDEVMODEW pdm,
+    _In_ DWORD flags,
+    _Out_ PLONG plResult)
+{
+    PGRAPHICS_DEVICE pGraphicsDevice;
+    PDEVMODEW newDevMode = NULL;
+    UNICODE_STRING ustrPrimary;
+    PPDEVOBJ ppdev;
+    BOOL bOnDesktop, bDetach, bCurrent;
+    LONG lResult;
+
+    if (gpmdev == NULL)
+        return FALSE;
+    if (pustrDevice == NULL)
+    {
+        if (gpmdev->cDev == 1)
+            return FALSE;
+        RtlInitUnicodeString(&ustrPrimary, MultiPrimaryDisplay(gpmdev)->pGraphicsDevice->szWinDeviceName);
+        pustrDevice = &ustrPrimary;
+    }
+    pGraphicsDevice = EngpFindGraphicsDevice(pustrDevice, 0);
+    if (pGraphicsDevice == NULL)
+        return FALSE;
+    ppdev = EngpGetPDEV(pustrDevice);
+    bOnDesktop = ppdev != NULL;
+    bDetach = pdm->dmPelsWidth == 0 && pdm->dmPelsHeight == 0;
+    if (!bDetach && bOnDesktop && gpmdev->cDev == 1)
+    {
+        PDEVOBJ_vRelease(ppdev);
+        return FALSE;
+    }
+
+    if (bDetach)
+    {
+        if (ppdev != NULL)
+            PDEVOBJ_vRelease(ppdev);
+        /* TODO: make another display primary when the primary display is detached */
+        if (pGraphicsDevice->StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE)
+        {
+            *plResult = DISP_CHANGE_BADPARAM;
+            return TRUE;
+        }
+        lResult = DISP_CHANGE_SUCCESSFUL;
+        if (!(flags & CDS_TEST) && (flags & CDS_UPDATEREGISTRY))
+            lResult = UserStoreDisplayTopology(pustrDevice, NULL, FALSE, flags);
+        /* FIXME: a display leaves the desktop at the next start */
+        if (lResult == DISP_CHANGE_SUCCESSFUL && !(flags & (CDS_TEST | CDS_NORESET)) && bOnDesktop)
+            lResult = DISP_CHANGE_RESTART;
+        *plResult = lResult;
+        return TRUE;
+    }
+
+    if (!LDEVOBJ_bProbeAndCaptureDevmode(pGraphicsDevice, pdm, &newDevMode, FALSE))
+    {
+        if (ppdev != NULL)
+            PDEVOBJ_vRelease(ppdev);
+        *plResult = DISP_CHANGE_BADMODE;
+        return TRUE;
+    }
+    bCurrent = ppdev != NULL && ppdev->pdmwDev != NULL &&
+               ppdev->pdmwDev->dmPelsWidth == newDevMode->dmPelsWidth &&
+               ppdev->pdmwDev->dmPelsHeight == newDevMode->dmPelsHeight &&
+               ppdev->pdmwDev->dmBitsPerPel == newDevMode->dmBitsPerPel &&
+               ppdev->pdmwDev->dmDisplayFrequency == newDevMode->dmDisplayFrequency &&
+               ppdev->pdmwDev->dmPosition.x == newDevMode->dmPosition.x &&
+               ppdev->pdmwDev->dmPosition.y == newDevMode->dmPosition.y;
+    if (ppdev != NULL)
+        PDEVOBJ_vRelease(ppdev);
+    lResult = DISP_CHANGE_SUCCESSFUL;
+    if (!(flags & CDS_TEST) && (flags & CDS_UPDATEREGISTRY))
+        lResult = UserStoreDisplayTopology(pustrDevice, newDevMode, TRUE, flags);
+    /* FIXME: a display joins a desktop, or a multi-display desktop changes, at the next start */
+    if (lResult == DISP_CHANGE_SUCCESSFUL && !(flags & (CDS_TEST | CDS_NORESET)) && !bCurrent)
+        lResult = DISP_CHANGE_RESTART;
+    ExFreePoolWithTag(newDevMode, GDITAG_DEVMODE);
+    *plResult = lResult;
+    return TRUE;
+}
+
 LONG
 APIENTRY
 UserChangeDisplaySettings(
@@ -911,6 +1034,13 @@ UserChangeDisplaySettings(
         ERR("Devmode doesn't specify the resolution.\n");
         return DISP_CHANGE_BADMODE;
     }
+
+    if (UserChangeDisplayTopology(pustrDevice, &dm, flags, &lResult))
+        return lResult;
+
+    /* FIXME: the stored displays of the desktop apply at the next start */
+    if (!pdm && !pustrDevice && UserDisplayTopologyChanged())
+        return DISP_CHANGE_RESTART;
 
     /* Get the PDEV */
     ppdev = EngpGetPDEV(pustrDevice);

@@ -40,7 +40,8 @@ BOOL FASTCALL UserIsCTFIMEEnabled(VOID)
 static INT gaiSysMetVirtual[SM_CMETRICS];
 
 static VOID
-IntInitMetricValues(_Out_writes_(SM_CMETRICS) INT *piSysMet, _In_ ULONG Width, _In_ ULONG Height, _In_ BOOL Virtual)
+IntInitMetricValues(_Out_writes_(SM_CMETRICS) INT *piSysMet, _In_ ULONG Width, _In_ ULONG Height,
+                    _In_ ULONG VirtualWidth, _In_ ULONG VirtualHeight, _In_ ULONG Monitors, _In_ BOOL Virtual)
 {
     PMONITOR pPrimary;
 
@@ -51,8 +52,8 @@ IntInitMetricValues(_Out_writes_(SM_CMETRICS) INT *piSysMet, _In_ ULONG Width, _
     piSysMet[SM_CYSCREEN] = V(Height);
     piSysMet[SM_XVIRTUALSCREEN] = 0;
     piSysMet[SM_YVIRTUALSCREEN] = 0;
-    piSysMet[SM_CXVIRTUALSCREEN] = V(Width);
-    piSysMet[SM_CYVIRTUALSCREEN] = V(Height);
+    piSysMet[SM_CXVIRTUALSCREEN] = V(VirtualWidth);
+    piSysMet[SM_CYVIRTUALSCREEN] = V(VirtualHeight);
 
     /* NC area sizes */
     piSysMet[SM_CYCAPTION] = V(gspv.ncm.iCaptionHeight) + 1;
@@ -169,7 +170,7 @@ IntInitMetricValues(_Out_writes_(SM_CMETRICS) INT *piSysMet, _In_ ULONG Width, _
     piSysMet[SM_DBCSENABLED] = NLS_MB_CODE_PAGE_TAG;
     piSysMet[SM_SHOWSOUNDS] = gspv.bShowSounds;
     piSysMet[SM_MIDEASTENABLED] = 0;
-    piSysMet[SM_CMONITORS] = 1;
+    piSysMet[SM_CMONITORS] = Monitors;
     piSysMet[SM_SAMEDISPLAYFORMAT] = 1;
     piSysMet[SM_IMMENABLED] = NLS_MB_CODE_PAGE_TAG;
 
@@ -191,7 +192,7 @@ NTAPI
 InitMetrics(VOID)
 {
     INT *piSysMet = gpsi->aiSysMet;
-    ULONG Width, Height;
+    ULONG Width, Height, VirtualWidth, VirtualHeight, Monitors = 1;
 
     /* Note: used for the SM_CLEANBOOT metric */
     DWORD dwValue = 0;
@@ -215,10 +216,20 @@ InitMetrics(VOID)
     {
         Width = gpmdev->ppdevGlobal->gdiinfo.ulHorzRes;
         Height = gpmdev->ppdevGlobal->gdiinfo.ulVertRes;
-    }
+        if (gpmdev->cDev > 1)
+        {
+            PPDEVOBJ ppdevPrimary = MultiPrimaryDisplay(gpmdev);
 
-    IntInitMetricValues(piSysMet, Width, Height, FALSE);
-    IntInitMetricValues(gaiSysMetVirtual, Width, Height, TRUE);
+            Width = ppdevPrimary->gdiinfo.ulHorzRes;
+            Height = ppdevPrimary->gdiinfo.ulVertRes;
+            Monitors = gpmdev->cDev;
+        }
+    }
+    VirtualWidth = gpmdev ? gpmdev->ppdevGlobal->gdiinfo.ulHorzRes : Width;
+    VirtualHeight = gpmdev ? gpmdev->ppdevGlobal->gdiinfo.ulVertRes : Height;
+
+    IntInitMetricValues(piSysMet, Width, Height, VirtualWidth, VirtualHeight, Monitors, FALSE);
+    IntInitMetricValues(gaiSysMetVirtual, Width, Height, VirtualWidth, VirtualHeight, Monitors, TRUE);
     gaiSysMetVirtual[SM_CLEANBOOT] = piSysMet[SM_CLEANBOOT];
 
     if (UserIsDBCSEnabled())

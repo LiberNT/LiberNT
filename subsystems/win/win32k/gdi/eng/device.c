@@ -464,6 +464,28 @@ EngpGetDisplayDriverParameters(
     return Status;
 }
 
+BOOL
+EngpIsDisplayAttached(
+    _In_ PGRAPHICS_DEVICE pGraphicsDevice)
+{
+    DWORD dwAttached = (pGraphicsDevice->StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) ? 1 : 0;
+    RTL_QUERY_REGISTRY_TABLE AttachTable[] =
+    {
+        { NULL, RTL_QUERY_REGISTRY_DIRECT, L"Attach.ToDesktop", &dwAttached, REG_NONE, NULL, 0 },
+        { 0 }
+    };
+    HKEY hKey;
+
+    hKey = EngpGetRegistryHandleFromDeviceMap(pGraphicsDevice);
+    if (hKey)
+    {
+        RtlQueryRegistryValues(RTL_REGISTRY_HANDLE, (PWSTR)hKey, AttachTable, NULL, NULL);
+        ZwClose(hKey);
+    }
+    /* The primary device always holds the desktop */
+    return dwAttached != 0 || (pGraphicsDevice->StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE);
+}
+
 DWORD
 EngpGetDisplayDriverAccelerationLevel(
     _In_ PGRAPHICS_DEVICE pGraphicsDevice)

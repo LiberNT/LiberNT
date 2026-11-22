@@ -258,9 +258,17 @@ UserUpdateMonitorSize(IN HDEV hDev)
     /* Get the size of the hdev */
     PDEVOBJ_sizl((PPDEVOBJ)hDev, &DeviceSize);
 
-    /* Update monitor size */
+    /* Update monitor size; a display of a multi-display desktop sits at its position */
     pMonitor->rcMonitor.left  = 0;
     pMonitor->rcMonitor.top   = 0;
+    if (gpmdev != NULL && gpmdev->cDev > 1 && (PPDEVOBJ)hDev != gpmdev->ppdevGlobal)
+    {
+        RECTL rclDisplay;
+
+        MultiDisplayRect((PPDEVOBJ)hDev, &rclDisplay);
+        pMonitor->rcMonitor.left = rclDisplay.left;
+        pMonitor->rcMonitor.top = rclDisplay.top;
+    }
     pMonitor->rcMonitor.right  = pMonitor->rcMonitor.left + DeviceSize.cx;
     pMonitor->rcMonitor.bottom = pMonitor->rcMonitor.top + DeviceSize.cy;
     pMonitor->rcWork = pMonitor->rcMonitor;

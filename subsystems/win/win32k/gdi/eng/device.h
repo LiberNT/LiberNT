@@ -63,6 +63,12 @@ EngpGetDisplayDriverParameters(
     _In_ PGRAPHICS_DEVICE pGraphicsDevice,
     _Out_ PDEVMODEW pdm);
 
+/* Whether a graphics device is part of the desktop: its Attach.ToDesktop setting, or by default
+ * only the primary device */
+BOOL
+EngpIsDisplayAttached(
+    _In_ PGRAPHICS_DEVICE pGraphicsDevice);
+
 /* Read acceleration level of a graphics card from registry
  * - pGraphicsDevice: instance of the graphics card
  * - Return value: acceleration level stored in registry */

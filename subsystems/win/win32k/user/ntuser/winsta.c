@@ -473,14 +473,17 @@ co_IntInitializeDesktopGraphics(VOID)
     /* Set new size of the monitor */
     UserUpdateMonitorSize((HDEV)gpmdev->ppdevGlobal);
 
-    /* Update the SERVERINFO */
-    gpsi->aiSysMet[SM_CXSCREEN] = gpmdev->ppdevGlobal->gdiinfo.ulHorzRes;
-    gpsi->aiSysMet[SM_CYSCREEN] = gpmdev->ppdevGlobal->gdiinfo.ulVertRes;
+    /* Update the SERVERINFO: InitMetrics gave the primary display's size and the whole desktop's */
+    if (gpmdev->cDev == 1)
+    {
+        gpsi->aiSysMet[SM_CXSCREEN] = gpmdev->ppdevGlobal->gdiinfo.ulHorzRes;
+        gpsi->aiSysMet[SM_CYSCREEN] = gpmdev->ppdevGlobal->gdiinfo.ulVertRes;
+    }
 
     /* A desktop made before the display existed still has the 640x480 InitMetrics gave it */
     pdesk = IntGetActiveDesktop();
     if (pdesk != NULL)
-        co_IntShowDesktop(pdesk, gpsi->aiSysMet[SM_CXSCREEN], gpsi->aiSysMet[SM_CYSCREEN], FALSE);
+        co_IntShowDesktop(pdesk, gpsi->aiSysMet[SM_CXVIRTUALSCREEN], gpsi->aiSysMet[SM_CYVIRTUALSCREEN], FALSE);
 
     gpsi->Planes        = NtGdiGetDeviceCaps(ScreenDeviceContext, PLANES);
     gpsi->BitsPixel     = NtGdiGetDeviceCaps(ScreenDeviceContext, BITSPIXEL);
@@ -502,8 +505,23 @@ co_IntInitializeDesktopGraphics(VOID)
     gpsi->ptCursor.x = gpsi->aiSysMet[SM_CXSCREEN] / 2;
     gpsi->ptCursor.y = gpsi->aiSysMet[SM_CYSCREEN] / 2;
 
-    /* Attach monitor */
-    UserAttachMonitor((HDEV)gpmdev->ppdevGlobal);
+    /* Attach the monitors, the primary display's first */
+    if (gpmdev->cDev == 1)
+    {
+        UserAttachMonitor((HDEV)gpmdev->ppdevGlobal);
+    }
+    else
+    {
+        PPDEVOBJ ppdevPrimary = MultiPrimaryDisplay(gpmdev);
+        ULONG i;
+
+        UserAttachMonitor((HDEV)ppdevPrimary);
+        for (i = 0; i < gpmdev->cDev; i++)
+        {
+            if (gpmdev->dev[i].ppdev != ppdevPrimary)
+                UserAttachMonitor((HDEV)gpmdev->dev[i].ppdev);
+        }
+    }
 
     /* Setup the cursor */
     co_IntLoadDefaultCursors();
@@ -517,7 +535,7 @@ co_IntInitializeDesktopGraphics(VOID)
     /* Show the desktop */
     pdesk = IntGetActiveDesktop();
     if (pdesk != NULL)
-        co_IntShowDesktop(pdesk, gpsi->aiSysMet[SM_CXSCREEN], gpsi->aiSysMet[SM_CYSCREEN], TRUE);
+        co_IntShowDesktop(pdesk, gpsi->aiSysMet[SM_CXVIRTUALSCREEN], gpsi->aiSysMet[SM_CYVIRTUALSCREEN], TRUE);
 
     /* HACK: display wallpaper on all secondary displays */
     {
