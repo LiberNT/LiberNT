@@ -31,7 +31,7 @@ static BOOLEAN HalpSetClockRate;
 static UCHAR HalpNextClockRate;
 static ULONG HalpNextTimeIncrement;
 
-static LONG HalpClockIpiTickOffset;
+static ULONGLONG HalpClockIpiTickOffset;
 
 BOOLEAN HalpApicTimerClock = FALSE;
 static ULONG64 HalpApicTimerFrequency;
@@ -299,6 +299,7 @@ VOID
 FASTCALL
 HalpClockInterruptHandler(IN PKTRAP_FRAME TrapFrame)
 {
+    ULONGLONG InterruptTime;
     ULONG LastIncrement;
     KIRQL Irql;
 
@@ -351,19 +352,21 @@ HalpClockInterruptHandler(IN PKTRAP_FRAME TrapFrame)
         HalpSetClockRate = FALSE;
     }
 
-    /* Update AP runtime counters at the same cadence as the boot CPU. */
-    HalpClockIpiTickOffset += (LONG)LastIncrement;
-    if (HalpClockIpiTickOffset >= (LONG)HalpMaximumTimeIncrement)
-    {
-        HalpClockIpiTickOffset -= (LONG)HalpMaximumTimeIncrement;
-        HalpBroadcastClockIpi(CLOCK_IPI_VECTOR);
-    }
-
     if (HalpApicTimerClock && HalIsProfiling)
         KeProfileInterruptWithSource(TrapFrame, ProfileTime);
 
+    InterruptTime = KeQueryInterruptTime();
+
     /* Update the system time -- on x86 the kernel will exit this trap  */
     KeUpdateSystemTime(TrapFrame, LastIncrement, Irql);
+
+    /* The other processors tick on the time the kernel counted, which holds the periods a late interrupt stood for */
+    HalpClockIpiTickOffset += KeQueryInterruptTime() - InterruptTime;
+    if (HalpClockIpiTickOffset >= HalpMaximumTimeIncrement)
+    {
+        HalpClockIpiTickOffset -= HalpMaximumTimeIncrement;
+        HalpBroadcastClockIpi(CLOCK_IPI_VECTOR);
+    }
 
     /* End the interrupt */
     KiEndInterrupt(Irql, TrapFrame);
