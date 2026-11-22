@@ -71,7 +71,7 @@ BOOLEAN
 PeLdrCheckForLoadedDll(
     _Inout_ PLIST_ENTRY ModuleListHead,
     _In_ PCSTR DllName,
-    _Out_ PLDR_DATA_TABLE_ENTRY *LoadedEntry);
+    _Out_ PKLDR_DATA_TABLE_ENTRY *LoadedEntry);
 
 VOID
 PeSetSystemRoot(
@@ -89,16 +89,16 @@ PeLdrAllocateDataTableEntry(
     _In_ PCSTR BaseDllName,
     _In_ PCSTR FullDllName,
     _In_ PVOID BaseVA,
-    _Out_ PLDR_DATA_TABLE_ENTRY *NewEntry);
+    _Out_ PKLDR_DATA_TABLE_ENTRY *NewEntry);
 
 VOID
 PeInitializeSecurityCookie(
-    _In_ PLDR_DATA_TABLE_ENTRY Entry);
+    _In_ PKLDR_DATA_TABLE_ENTRY Entry);
 
 PVOID
 PeGetExport(
     _In_ PLIST_ENTRY ModuleListHead,
-    _In_ PLDR_DATA_TABLE_ENTRY Module,
+    _In_ PKLDR_DATA_TABLE_ENTRY Module,
     _In_ PCSTR Name);
 
 BOOLEAN
@@ -106,7 +106,7 @@ PeResolveImports(
     _Inout_ PLIST_ENTRY ModuleListHead,
     _In_ PDK_DEVICE Device,
     _In_ PCSTR Directory,
-    _In_ PLDR_DATA_TABLE_ENTRY Entry);
+    _In_ PKLDR_DATA_TABLE_ENTRY Entry);
 
 BOOLEAN
 PeLoadModule(
@@ -117,7 +117,7 @@ PeLoadModule(
     _In_ PCSTR ModuleName,
     _In_ TYPE_OF_MEMORY MemoryType,
     _In_ ULONG Flags,
-    _Out_ PLDR_DATA_TABLE_ENTRY *Entry);
+    _Out_ PKLDR_DATA_TABLE_ENTRY *Entry);
 
 extern LIST_ENTRY FrLdrModuleList;
 

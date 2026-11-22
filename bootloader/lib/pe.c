@@ -56,7 +56,7 @@ PeLoadModuleFrom(
     _In_ PCSTR ModuleName,
     _In_ TYPE_OF_MEMORY MemoryType,
     _In_ ULONG Flags,
-    _Out_ PLDR_DATA_TABLE_ENTRY *Entry);
+    _Out_ PKLDR_DATA_TABLE_ENTRY *Entry);
 
 VOID
 PeSetSystemRoot(
@@ -102,7 +102,7 @@ PeNameMatches(
 }
 
 static
-PLDR_DATA_TABLE_ENTRY
+PKLDR_DATA_TABLE_ENTRY
 PeFindModule(
     _In_ PLIST_ENTRY ModuleListHead,
     _In_ PCSTR Name,
@@ -110,11 +110,11 @@ PeFindModule(
     _In_ BOOLEAN IgnoreExtension)
 {
     PLIST_ENTRY Link;
-    PLDR_DATA_TABLE_ENTRY Entry;
+    PKLDR_DATA_TABLE_ENTRY Entry;
 
     for (Link = ModuleListHead->Flink; Link != ModuleListHead; Link = Link->Flink)
     {
-        Entry = CONTAINING_RECORD(Link, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+        Entry = CONTAINING_RECORD(Link, KLDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
         if (PeNameMatches(Name, NameChars, &Entry->BaseDllName, IgnoreExtension))
             return Entry;
     }
@@ -126,7 +126,7 @@ BOOLEAN
 PeLdrCheckForLoadedDll(
     _Inout_ PLIST_ENTRY ModuleListHead,
     _In_ PCSTR DllName,
-    _Out_ PLDR_DATA_TABLE_ENTRY *LoadedEntry)
+    _Out_ PKLDR_DATA_TABLE_ENTRY *LoadedEntry)
 {
     *LoadedEntry = PeFindModule(ModuleListHead, DllName, strlen(DllName), FALSE);
     if (!*LoadedEntry)
@@ -168,10 +168,10 @@ PeLdrAllocateDataTableEntry(
     _In_ PCSTR BaseDllName,
     _In_ PCSTR FullDllName,
     _In_ PVOID BaseVA,
-    _Out_ PLDR_DATA_TABLE_ENTRY *NewEntry)
+    _Out_ PKLDR_DATA_TABLE_ENTRY *NewEntry)
 {
     PIMAGE_NT_HEADERS NtHeaders = RtlImageNtHeader(VaToPa(BaseVA));
-    PLDR_DATA_TABLE_ENTRY Entry;
+    PKLDR_DATA_TABLE_ENTRY Entry;
 
     *NewEntry = NULL;
 
@@ -201,7 +201,7 @@ PeLdrAllocateDataTableEntry(
 
 VOID
 PeInitializeSecurityCookie(
-    _In_ PLDR_DATA_TABLE_ENTRY Entry)
+    _In_ PKLDR_DATA_TABLE_ENTRY Entry)
 {
     PUCHAR Base = VaToPa(Entry->DllBase);
     PIMAGE_LOAD_CONFIG_DIRECTORY Config;
@@ -444,7 +444,7 @@ static
 PVOID
 PeFindExport(
     _In_ PLIST_ENTRY ModuleListHead,
-    _In_ PLDR_DATA_TABLE_ENTRY Module,
+    _In_ PKLDR_DATA_TABLE_ENTRY Module,
     _In_opt_ PCSTR Name,
     _In_ ULONG Ordinal,
     _In_ ULONG Depth)
@@ -453,7 +453,7 @@ PeFindExport(
     PIMAGE_EXPORT_DIRECTORY Exports;
     PULONG Names, Functions;
     PUSHORT Ordinals;
-    PLDR_DATA_TABLE_ENTRY Target;
+    PKLDR_DATA_TABLE_ENTRY Target;
     PCSTR Forwarder, Dot, ExportName, Digit;
     ULONG Size, Index, Rva;
     LONG Low, High, Middle, Compare;
@@ -545,7 +545,7 @@ PeFindExport(
 PVOID
 PeGetExport(
     _In_ PLIST_ENTRY ModuleListHead,
-    _In_ PLDR_DATA_TABLE_ENTRY Module,
+    _In_ PKLDR_DATA_TABLE_ENTRY Module,
     _In_ PCSTR Name)
 {
     return PeFindExport(ModuleListHead, Module, Name, 0, PE_MAX_FORWARD_DEPTH);
@@ -556,13 +556,13 @@ PeResolveImports(
     _Inout_ PLIST_ENTRY ModuleListHead,
     _In_ PDK_DEVICE Device,
     _In_ PCSTR Directory,
-    _In_ PLDR_DATA_TABLE_ENTRY Entry)
+    _In_ PKLDR_DATA_TABLE_ENTRY Entry)
 {
     PUCHAR Base = VaToPa(Entry->DllBase);
     PIMAGE_IMPORT_DESCRIPTOR Import;
     PIMAGE_THUNK_DATA Thunk, Lookup;
     PIMAGE_IMPORT_BY_NAME ByName;
-    PLDR_DATA_TABLE_ENTRY Module;
+    PKLDR_DATA_TABLE_ENTRY Module;
     UNICODE_STRING EntryName;
     PCSTR DllName;
     PVOID Address;
@@ -667,7 +667,7 @@ PeLoadModuleFrom(
     _In_ PCSTR ModuleName,
     _In_ TYPE_OF_MEMORY MemoryType,
     _In_ ULONG Flags,
-    _Out_ PLDR_DATA_TABLE_ENTRY *Entry)
+    _Out_ PKLDR_DATA_TABLE_ENTRY *Entry)
 {
     CHAR Path[PE_PATH_CHARS];
     PVOID Base;
@@ -695,15 +695,15 @@ VOID
 PeDiscardModulesAfter(
     _In_ PLIST_ENTRY ModuleListHead,
     _In_ PLIST_ENTRY LastModule,
-    _Out_ PLDR_DATA_TABLE_ENTRY *Entry)
+    _Out_ PKLDR_DATA_TABLE_ENTRY *Entry)
 {
     PLIST_ENTRY Link;
-    PLDR_DATA_TABLE_ENTRY Module;
+    PKLDR_DATA_TABLE_ENTRY Module;
 
     while (ModuleListHead->Blink != LastModule)
     {
         Link = RemoveTailList(ModuleListHead);
-        Module = CONTAINING_RECORD(Link, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+        Module = CONTAINING_RECORD(Link, KLDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
         MmFreeMemory(VaToPa(Module->DllBase));
     }
 
@@ -719,7 +719,7 @@ PeLoadModule(
     _In_ PCSTR ModuleName,
     _In_ TYPE_OF_MEMORY MemoryType,
     _In_ ULONG Flags,
-    _Out_ PLDR_DATA_TABLE_ENTRY *Entry)
+    _Out_ PKLDR_DATA_TABLE_ENTRY *Entry)
 {
     CHAR Fallback[PE_PATH_CHARS];
     PLIST_ENTRY LastModule = ModuleListHead->Blink;

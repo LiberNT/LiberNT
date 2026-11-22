@@ -387,7 +387,7 @@ OslLoadBootDrivers(
     PLIST_ENTRY Link, Next;
     PBOOT_DRIVER_NODE Node;
     PBOOT_DRIVER_LIST_ENTRY Driver;
-    PLDR_DATA_TABLE_ENTRY Module;
+    PKLDR_DATA_TABLE_ENTRY Module;
     PSTR FileName;
 
     OslDisableLegacyBootServices();
@@ -454,7 +454,7 @@ OslLoadHalExtensions(
 {
     PLIST_ENTRY Head = &LoaderBlock->Extension->HalExtensionModuleList;
     PHAL_EXTENSION_MODULE_ENTRY Entry;
-    PLDR_DATA_TABLE_ENTRY Module;
+    PKLDR_DATA_TABLE_ENTRY Module;
     PVOID Initialize;
     CHAR FileName[OSL_PATH_CHARS];
     PCWSTR Name, End;

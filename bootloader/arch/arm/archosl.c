@@ -630,7 +630,7 @@ ArmCleanLoadedImages(
 
     for (Entry = VaToPa(Head->Flink); Entry != Head; Entry = VaToPa(Entry->Flink))
     {
-        PLDR_DATA_TABLE_ENTRY Module = CONTAINING_RECORD(Entry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+        PKLDR_DATA_TABLE_ENTRY Module = CONTAINING_RECORD(Entry, KLDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
 
         ArmCleanRange((ULONG_PTR)VaToPa(Module->DllBase), Module->SizeOfImage);
     }

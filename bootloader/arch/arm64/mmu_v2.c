@@ -2456,8 +2456,8 @@ Arm64ApplyImageSectionProtections(VOID)
          entry != &FrLdrModuleList;
          entry = entry->Flink)
     {
-        PLDR_DATA_TABLE_ENTRY dte =
-            CONTAINING_RECORD(entry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+        PKLDR_DATA_TABLE_ENTRY dte =
+            CONTAINING_RECORD(entry, KLDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
         ULONGLONG image_base = (ULONGLONG)(ULONG_PTR)dte->DllBase;
 
         if (!image_base || dte->SizeOfImage == 0)

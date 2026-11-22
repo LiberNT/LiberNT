@@ -543,7 +543,7 @@ OslArchStartKernel(
 {
     PLOADER_PARAMETER_BLOCK Block = VaToPa(LoaderBlock);
     PULONG Descriptor = VaToPa(EntryPoint);
-    PLDR_DATA_TABLE_ENTRY Module;
+    PKLDR_DATA_TABLE_ENTRY Module;
     PLIST_ENTRY Entry;
 
     PpcLoaderState.Handoff.Entry = Descriptor[0];
@@ -555,7 +555,7 @@ OslArchStartKernel(
          Entry != &Block->LoadOrderListHead;
          Entry = VaToPa(Entry->Flink))
     {
-        Module = CONTAINING_RECORD(Entry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+        Module = CONTAINING_RECORD(Entry, KLDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
         PpcFlushCacheRange(VaToPa(Module->DllBase), Module->SizeOfImage);
     }
 
