@@ -330,7 +330,7 @@ IntGetMonitorsFromRect(OPTIONAL IN LPCRECTL pRect,
 {
     PMONITOR pMonitor, pNearestMonitor = NULL, pPrimaryMonitor = NULL;
     UINT cMonitors = 0;
-    ULONG iNearestDistance = 0xffffffff;
+    ULONGLONG iNearestDistance = MAXULONGLONG;
 
     /* Find monitors which intersects the rectangle */
     for (pMonitor = gMonitorList; pMonitor != NULL; pMonitor = pMonitor->pMonitorNext)
@@ -358,13 +358,15 @@ IntGetMonitorsFromRect(OPTIONAL IN LPCRECTL pRect,
             /* Rects did not intersect */
             if (dwFlags == MONITOR_DEFAULTTONEAREST)
             {
-                ULONG cx, cy, iDistance;
+                ULONGLONG cx, cy, iDistance;
 
                 /* Get x and y distance */
-                cx = min(abs(MonitorRect.left - pRect->right),
-                         abs(pRect->left - MonitorRect.right));
-                cy = min(abs(MonitorRect.top - pRect->bottom),
-                         abs(pRect->top - MonitorRect.bottom));
+                cx = min(llabs((LONGLONG)MonitorRect.left - pRect->right),
+                         llabs((LONGLONG)pRect->left - MonitorRect.right));
+                cy = min(llabs((LONGLONG)MonitorRect.top - pRect->bottom),
+                         llabs((LONGLONG)pRect->top - MonitorRect.bottom));
+                cx = min(cx, MAXLONG);
+                cy = min(cy, MAXLONG);
 
                 /* Calculate distance square */
                 iDistance = cx * cx + cy * cy;

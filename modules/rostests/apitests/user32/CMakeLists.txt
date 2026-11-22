@@ -92,6 +92,7 @@ list(APPEND SOURCE
     MessageStateAnalyzer.c
     MinimizedPosition.c
     ModernUser32.c
+    MonitorFromRect.c
     NestedActivation.c
     NestedWindowPos.c
     NcPaintRgn.c
