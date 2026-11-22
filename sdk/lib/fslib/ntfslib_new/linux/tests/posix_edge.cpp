@@ -1132,6 +1132,22 @@ TestWriteDropsSetId()
             close(Fd);
     }
     CHECK("write.drops_setid", Failures == 0, "%d cases wrong, last mode %04o", Failures, (unsigned)Seen);
+
+    std::string Path = P("setid/open");
+    struct stat Stat = {};
+    int Fd;
+    bool Written, Truncated;
+
+    WriteFile(Path, Pattern(5, 0, 100));
+    Fd = open(Path.c_str(), O_WRONLY);
+    Written = Fd >= 0 && pwrite(Fd, "x", 1, 0) == 1 && fchmod(Fd, 04755) == 0 && pwrite(Fd, "y", 1, 1) == 1 &&
+              fstat(Fd, &Stat) == 0 && (Stat.st_mode & 07777) == 0755;
+    CHECK("write.drops_setid_set_while_open", Written, "mode %04o", (unsigned)(Stat.st_mode & 07777));
+    Truncated = Fd >= 0 && fchmod(Fd, 04755) == 0 && ftruncate(Fd, 50) == 0 && fstat(Fd, &Stat) == 0 &&
+                (Stat.st_mode & 07777) == 0755;
+    CHECK("truncate.drops_setid", Truncated, "mode %04o", (unsigned)(Stat.st_mode & 07777));
+    if (Fd >= 0)
+        close(Fd);
 }
 
 /* A removed directory still open answers fstat with no links and lists nothing. */

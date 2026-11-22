@@ -4399,7 +4399,10 @@ NtfsLowInit(void* UserData, struct fuse_conn_info* Connection)
         Connection->want |= FUSE_CAP_CACHE_SYMLINKS;
     if (Connection->capable & FUSE_CAP_EXPORT_SUPPORT)
         Connection->want |= FUSE_CAP_EXPORT_SUPPORT;
-    if (State->Writable && (Connection->capable & FUSE_CAP_HANDLE_KILLPRIV))
+    /* With v2 the kernel stops asking for security.capability before every write; no security.* xattr is stored. */
+    if (State->Writable && (Connection->capable & FUSE_CAP_HANDLE_KILLPRIV_V2))
+        Connection->want |= FUSE_CAP_HANDLE_KILLPRIV_V2;
+    else if (State->Writable && (Connection->capable & FUSE_CAP_HANDLE_KILLPRIV))
         Connection->want |= FUSE_CAP_HANDLE_KILLPRIV;
     /* mmap of a direct-I/O file fails with ENODEV unless this capability is granted. */
 #ifdef FUSE_CAP_DIRECT_IO_ALLOW_MMAP
