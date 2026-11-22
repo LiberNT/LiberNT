@@ -21,6 +21,7 @@ typedef struct _SCHEDULER_HOLD
     volatile LONG Release;
     volatile LONG Active;
     volatile LONG Expired;
+    volatile LONG RunningPriority;
 } SCHEDULER_HOLD;
 
 typedef struct _SCHEDULER_WORKER
@@ -75,6 +76,7 @@ HoldSchedulerCpu(PKDPC Dpc, PVOID Parameter, PVOID Argument1, PVOID Argument2)
     UNREFERENCED_PARAMETER(Argument1);
     UNREFERENCED_PARAMETER(Argument2);
     Deadline = KeQueryPerformanceCounter(NULL).QuadPart + Hold->Frequency;
+    InterlockedExchange(&Hold->RunningPriority, KeQueryPriorityThread(KeGetCurrentThread()));
     InterlockedExchange(&Hold->Active, 1);
     InterlockedExchange(&Hold->Entered, 1);
     while (!Hold->Release && KeQueryPerformanceCounter(NULL).QuadPart < Deadline)
@@ -211,8 +213,12 @@ CheckSchedulerCpu(ULONG Controller, ULONG Cpu, ULONG OtherCpu, LONGLONG Frequenc
                 KeSetEvent(&Workers[1].Go, IO_NO_INCREMENT, FALSE);
                 if (Held)
                 {
-                    if (Threads[0]->State != Ready || Threads[1]->State != Standby)
+                    /* A thread the held processor already runs at the second worker's priority or above is not preempted, so that worker stays ready too */
+                    if (Threads[0]->State != Ready ||
+                        Threads[1]->State != ((Hold.RunningPriority >= 27) ? Ready : Standby))
+                    {
                         StateErrors++;
+                    }
                 }
                 else if (Threads[0]->State != Running || Threads[1]->State != Ready)
                 {
