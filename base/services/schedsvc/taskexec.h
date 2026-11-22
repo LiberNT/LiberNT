@@ -8,3 +8,4 @@
 #pragma once
 
 HRESULT TaskExecRun(const WCHAR *Xml, DWORD ArgCount, const WCHAR **Args, DWORD Flags, DWORD SessionId, GUID *Guid);
+HRESULT TaskExecLogon(const WCHAR *Xml, DWORD SessionId);

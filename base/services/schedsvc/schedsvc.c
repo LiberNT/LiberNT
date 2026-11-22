@@ -845,6 +845,55 @@ HRESULT __cdecl SchRpcStop(const WCHAR *path, DWORD flags)
     return E_NOTIMPL;
 }
 
+static void run_logon_tasks_in(const WCHAR *folder, DWORD session_id, UINT depth)
+{
+    WIN32_FIND_DATAW data;
+    WCHAR *pattern, *name, *xml;
+    SIZE_T length = lstrlenW(folder);
+    HANDLE find;
+
+    if (depth > 16) return;
+    pattern = malloc((length + 3) * sizeof(WCHAR));
+    if (!pattern) return;
+    lstrcpyW(pattern, folder);
+    lstrcatW(pattern, L"\\*");
+    find = FindFirstFileW(pattern, &data);
+    free(pattern);
+    if (find == INVALID_HANDLE_VALUE) return;
+    do
+    {
+        if (!wcscmp(data.cFileName, L".") || !wcscmp(data.cFileName, L"..")) continue;
+        name = malloc((length + lstrlenW(data.cFileName) + 2) * sizeof(WCHAR));
+        if (!name) continue;
+        lstrcpyW(name, folder);
+        lstrcatW(name, L"\\");
+        lstrcatW(name, data.cFileName);
+        if (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+            run_logon_tasks_in(name, session_id, depth + 1);
+        else if (read_xml(name, &xml) == S_OK)
+        {
+            HRESULT hr = TaskExecLogon(xml, session_id);
+            if (hr == S_OK) TRACE("logon task %s started in session %lu\n", debugstr_w(name), session_id);
+            else if (FAILED(hr)) WARN("logon task %s failed, hr %#lx\n", debugstr_w(name), hr);
+            free(xml);
+        }
+        free(name);
+    } while (FindNextFileW(find, &data));
+    FindClose(find);
+}
+
+void schedsvc_run_logon_tasks(DWORD session_id)
+{
+    WCHAR *root = get_full_name(L"", NULL);
+    SIZE_T length;
+
+    if (!root) return;
+    length = lstrlenW(root);
+    if (length && root[length - 1] == '\\') root[length - 1] = 0;
+    run_logon_tasks_in(root, session_id, 0);
+    free(root);
+}
+
 HRESULT __cdecl SchRpcRun(const WCHAR *path, DWORD n_args, const WCHAR **args, DWORD flags,
                           DWORD session_id, const WCHAR *user, GUID *guid)
 {

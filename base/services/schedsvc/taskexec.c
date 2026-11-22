@@ -13,6 +13,7 @@
 #include <wtsapi32.h>
 #include <userenv.h>
 #include <rpc.h>
+#include <sddl.h>
 #include "taskschd.h"
 #include "taskexec.h"
 #include "wine/debug.h"
@@ -21,6 +22,14 @@ WINE_DEFAULT_DEBUG_CHANNEL(schedsvc);
 
 #define TASKEXEC_MAX_DEPTH 8
 #define TASKEXEC_MAX_ARGS 33
+#define TASKEXEC_MAX_LOGON_TRIGGERS 4
+
+typedef struct _TASKEXEC_LOGON_TRIGGER
+{
+    BOOL Enabled;
+    WCHAR *UserId;
+    DWORD DelayMs;
+} TASKEXEC_LOGON_TRIGGER;
 
 typedef struct _TASKEXEC_DEFINITION
 {
@@ -31,6 +40,9 @@ typedef struct _TASKEXEC_DEFINITION
     WCHAR *Command;
     WCHAR *Arguments;
     WCHAR *WorkingDirectory;
+    WCHAR *PrincipalUserId;
+    UINT LogonTriggerCount;
+    TASKEXEC_LOGON_TRIGGER LogonTriggers[TASKEXEC_MAX_LOGON_TRIGGERS];
 } TASKEXEC_DEFINITION;
 
 static BOOL TaskExecIsPath(const WCHAR **Stack, UINT Depth, const WCHAR *Parent, const WCHAR *Leaf)
@@ -53,16 +65,56 @@ static WCHAR *TaskExecCopy(const WCHAR *Value)
     return Copy;
 }
 
+static DWORD TaskExecParseDuration(const WCHAR *Value)
+{
+    ULONGLONG Total = 0, Number = 0;
+    BOOL Time = FALSE;
+
+    if (*Value++ != 'P')
+        return 0;
+    for (; *Value; Value++)
+    {
+        if (iswdigit(*Value))
+            Number = Number * 10 + (*Value - '0');
+        else if (*Value == 'T')
+            Time = TRUE;
+        else
+        {
+            if (*Value == 'D' && !Time)
+                Total += Number * 86400000;
+            else if (*Value == 'H' && Time)
+                Total += Number * 3600000;
+            else if (*Value == 'M' && Time)
+                Total += Number * 60000;
+            else if (*Value == 'S' && Time)
+                Total += Number * 1000;
+            Number = 0;
+        }
+    }
+    return Total > MAXDWORD - 1 ? MAXDWORD - 1 : (DWORD)Total;
+}
+
 static HRESULT TaskExecStoreText(TASKEXEC_DEFINITION *Definition, const WCHAR **Stack, UINT Depth, const WCHAR *Value)
 {
     WCHAR **Target = NULL;
+    TASKEXEC_LOGON_TRIGGER *Trigger = Definition->LogonTriggerCount != 0 ?
+        &Definition->LogonTriggers[Definition->LogonTriggerCount - 1] : NULL;
 
-    if (TaskExecIsPath(Stack, Depth, L"Settings", L"Enabled"))
+    if (Trigger != NULL && TaskExecIsPath(Stack, Depth, L"LogonTrigger", L"Enabled"))
+        Trigger->Enabled = !wcscmp(Value, L"true");
+    else if (Trigger != NULL && TaskExecIsPath(Stack, Depth, L"LogonTrigger", L"Delay"))
+        Trigger->DelayMs = TaskExecParseDuration(Value);
+    else if (Trigger != NULL && TaskExecIsPath(Stack, Depth, L"LogonTrigger", L"UserId"))
+        Target = &Trigger->UserId;
+    else if (TaskExecIsPath(Stack, Depth, L"Settings", L"Enabled"))
         Definition->Enabled = !wcscmp(Value, L"true");
     else if (TaskExecIsPath(Stack, Depth, L"Settings", L"AllowStartOnDemand"))
         Definition->AllowStartOnDemand = !wcscmp(Value, L"true");
     else if (TaskExecIsPath(Stack, Depth, L"Principal", L"UserId"))
+    {
         Definition->SystemPrincipal = TaskExecIsSystemAccount(Value);
+        Target = &Definition->PrincipalUserId;
+    }
     else if (!Definition->HaveExec && TaskExecIsPath(Stack, Depth, L"Exec", L"Command"))
         Target = &Definition->Command;
     else if (!Definition->HaveExec && TaskExecIsPath(Stack, Depth, L"Exec", L"Arguments"))
@@ -92,6 +144,12 @@ static HRESULT TaskExecWalk(IXmlReader *Reader, TASKEXEC_DEFINITION *Definition)
             BOOL Empty = IXmlReader_IsEmptyElement(Reader);
 
             hr = IXmlReader_GetLocalName(Reader, &Name, NULL);
+            if (SUCCEEDED(hr) && Depth != 0 && !wcscmp(Stack[Depth - 1], L"Triggers") && !wcscmp(Name, L"LogonTrigger"))
+            {
+                /* TODO: more than TASKEXEC_MAX_LOGON_TRIGGERS logon triggers in one task */
+                if (Definition->LogonTriggerCount < TASKEXEC_MAX_LOGON_TRIGGERS)
+                    Definition->LogonTriggers[Definition->LogonTriggerCount++].Enabled = TRUE;
+            }
             if (FAILED(hr) || Empty)
                 continue;
             if (Depth == TASKEXEC_MAX_DEPTH)
@@ -158,6 +216,11 @@ static HRESULT TaskExecParse(const WCHAR *Xml, TASKEXEC_DEFINITION *Definition)
 
 static void TaskExecFree(TASKEXEC_DEFINITION *Definition)
 {
+    UINT Index;
+
+    for (Index = 0; Index < Definition->LogonTriggerCount; Index++)
+        HeapFree(GetProcessHeap(), 0, Definition->LogonTriggers[Index].UserId);
+    HeapFree(GetProcessHeap(), 0, Definition->PrincipalUserId);
     HeapFree(GetProcessHeap(), 0, Definition->Command);
     HeapFree(GetProcessHeap(), 0, Definition->Arguments);
     HeapFree(GetProcessHeap(), 0, Definition->WorkingDirectory);
@@ -300,8 +363,8 @@ static WCHAR *TaskExecDirectory(const WCHAR *Directory)
     return Expanded;
 }
 
-static HRESULT TaskExecStart(const TASKEXEC_DEFINITION *Definition, WCHAR *CommandLine, const WCHAR *Directory,
-                             DWORD Flags, DWORD SessionId)
+static HRESULT TaskExecStart(BOOL SystemPrincipal, WCHAR *CommandLine, const WCHAR *Directory, DWORD Flags,
+                             DWORD SessionId)
 {
     STARTUPINFOW Startup;
     PROCESS_INFORMATION Process;
@@ -312,7 +375,7 @@ static HRESULT TaskExecStart(const TASKEXEC_DEFINITION *Definition, WCHAR *Comma
 
     memset(&Startup, 0, sizeof(Startup));
     Startup.cb = sizeof(Startup);
-    if (Definition->SystemPrincipal)
+    if (SystemPrincipal)
     {
         Started = CreateProcessW(NULL, CommandLine, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, Directory, &Startup, &Process);
         if (!Started)
@@ -375,7 +438,7 @@ HRESULT TaskExecRun(const WCHAR *Xml, DWORD ArgCount, const WCHAR **Args, DWORD 
     if (CommandLine == NULL || (Definition.WorkingDirectory != NULL && Directory == NULL))
         hr = E_OUTOFMEMORY;
     else
-        hr = TaskExecStart(&Definition, CommandLine, Directory, Flags, SessionId);
+        hr = TaskExecStart(Definition.SystemPrincipal, CommandLine, Directory, Flags, SessionId);
     TRACE("%s -> %#lx\n", debugstr_w(CommandLine), hr);
     if (SUCCEEDED(hr) && Guid != NULL && UuidCreate(Guid) != RPC_S_OK)
         memset(Guid, 0, sizeof(*Guid));
@@ -383,4 +446,122 @@ HRESULT TaskExecRun(const WCHAR *Xml, DWORD ArgCount, const WCHAR **Args, DWORD 
     HeapFree(GetProcessHeap(), 0, Directory);
     TaskExecFree(&Definition);
     return hr;
+}
+
+typedef struct _TASKEXEC_DELAYED_START
+{
+    BOOL SystemPrincipal;
+    DWORD SessionId;
+    DWORD DelayMs;
+    WCHAR *CommandLine;
+    WCHAR *Directory;
+} TASKEXEC_DELAYED_START;
+
+static DWORD WINAPI TaskExecDelayedStart(void *Context)
+{
+    TASKEXEC_DELAYED_START *Start = Context;
+    HRESULT hr;
+
+    Sleep(Start->DelayMs);
+    hr = TaskExecStart(Start->SystemPrincipal, Start->CommandLine, Start->Directory, TASK_RUN_USE_SESSION_ID,
+                       Start->SessionId);
+    TRACE("%s -> %#lx\n", debugstr_w(Start->CommandLine), hr);
+    HeapFree(GetProcessHeap(), 0, Start->CommandLine);
+    HeapFree(GetProcessHeap(), 0, Start->Directory);
+    HeapFree(GetProcessHeap(), 0, Start);
+    return 0;
+}
+
+static BOOL TaskExecUserMatches(const WCHAR *UserId, DWORD SessionId)
+{
+    WCHAR *User = NULL, *Domain = NULL, *SidText = NULL, Qualified[512];
+    BYTE Buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+    DWORD Bytes;
+    HANDLE Token;
+    BOOL Match = FALSE;
+
+    if (WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE, SessionId, WTSUserName, &User, &Bytes) &&
+        WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE, SessionId, WTSDomainName, &Domain, &Bytes) &&
+        User[0] != 0)
+    {
+        _snwprintf(Qualified, ARRAYSIZE(Qualified), L"%s\\%s", Domain, User);
+        Qualified[ARRAYSIZE(Qualified) - 1] = 0;
+        Match = !_wcsicmp(UserId, User) || !_wcsicmp(UserId, Qualified);
+    }
+    if (User != NULL)
+        WTSFreeMemory(User);
+    if (Domain != NULL)
+        WTSFreeMemory(Domain);
+    if (Match || _wcsnicmp(UserId, L"S-1-", 4) || !WTSQueryUserToken(SessionId, &Token))
+        return Match;
+    if (GetTokenInformation(Token, TokenUser, Buffer, sizeof(Buffer), &Bytes) &&
+        ConvertSidToStringSidW(((TOKEN_USER *)Buffer)->User.Sid, &SidText))
+    {
+        Match = !_wcsicmp(UserId, SidText);
+        LocalFree(SidText);
+    }
+    CloseHandle(Token);
+    return Match;
+}
+
+HRESULT TaskExecLogon(const WCHAR *Xml, DWORD SessionId)
+{
+    TASKEXEC_DEFINITION Definition;
+    TASKEXEC_DELAYED_START *Start;
+    const TASKEXEC_LOGON_TRIGGER *Trigger = NULL;
+    HANDLE Thread;
+    UINT Index;
+    HRESULT hr;
+
+    memset(&Definition, 0, sizeof(Definition));
+    hr = TaskExecParse(Xml, &Definition);
+    for (Index = 0; SUCCEEDED(hr) && Trigger == NULL && Index < Definition.LogonTriggerCount; Index++)
+    {
+        const TASKEXEC_LOGON_TRIGGER *Candidate = &Definition.LogonTriggers[Index];
+
+        if (Candidate->Enabled && (Candidate->UserId == NULL || TaskExecUserMatches(Candidate->UserId, SessionId)))
+            Trigger = Candidate;
+    }
+    /* FIXME: a task whose principal is another user runs only when that user logs on; stored credentials are not used */
+    if (FAILED(hr) || Trigger == NULL || !Definition.Enabled || Definition.Command == NULL ||
+        (Definition.PrincipalUserId != NULL && !Definition.SystemPrincipal &&
+         !TaskExecUserMatches(Definition.PrincipalUserId, SessionId)))
+    {
+        TaskExecFree(&Definition);
+        return FAILED(hr) ? hr : S_FALSE;
+    }
+
+    Start = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*Start));
+    if (Start != NULL)
+    {
+        Start->SystemPrincipal = Definition.SystemPrincipal;
+        Start->SessionId = SessionId;
+        Start->DelayMs = Trigger->DelayMs;
+        Start->CommandLine = TaskExecCommandLine(&Definition, 0, NULL);
+        Start->Directory = TaskExecDirectory(Definition.WorkingDirectory);
+    }
+    if (Start == NULL || Start->CommandLine == NULL || (Definition.WorkingDirectory != NULL && Start->Directory == NULL))
+        hr = E_OUTOFMEMORY;
+    TaskExecFree(&Definition);
+    if (FAILED(hr))
+    {
+        if (Start != NULL)
+        {
+            HeapFree(GetProcessHeap(), 0, Start->CommandLine);
+            HeapFree(GetProcessHeap(), 0, Start->Directory);
+            HeapFree(GetProcessHeap(), 0, Start);
+        }
+        return hr;
+    }
+    Thread = CreateThread(NULL, 0, TaskExecDelayedStart, Start, 0, NULL);
+    if (Thread == NULL)
+    {
+        hr = HRESULT_FROM_WIN32(GetLastError());
+        HeapFree(GetProcessHeap(), 0, Start->CommandLine);
+        HeapFree(GetProcessHeap(), 0, Start->Directory);
+        HeapFree(GetProcessHeap(), 0, Start);
+        return hr;
+    }
+    CloseHandle(Thread);
+    return S_OK;
 }
