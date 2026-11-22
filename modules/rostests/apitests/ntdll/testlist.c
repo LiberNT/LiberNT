@@ -196,6 +196,7 @@ extern void func_RtlIntSafe(void);
 extern void func_RtlIsNameInExpression(void);
 extern void func_RtlIsNameLegalDOS8Dot3(void);
 extern void func_RtlLocale(void);
+extern void func_RtlLocateExtendedFeature(void);
 extern void func_RtlMemoryStream(void);
 extern void func_PfxPrefixTable(void);
 extern void func_RtlAddressInSectionTable(void);
@@ -453,6 +454,7 @@ const struct test winetest_testlist[] =
     { "RtlIsNameInExpression",          func_RtlIsNameInExpression},
     { "RtlIsNameLegalDOS8Dot3",         func_RtlIsNameLegalDOS8Dot3 },
     { "RtlLocale",                      func_RtlLocale },
+    { "RtlLocateExtendedFeature",       func_RtlLocateExtendedFeature },
     { "RtlMemoryStream",                func_RtlMemoryStream },
     { "PfxPrefixTable", func_PfxPrefixTable },
     { "RtlAddressInSectionTable", func_RtlAddressInSectionTable },

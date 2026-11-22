@@ -220,6 +220,7 @@ list(APPEND SOURCE
     RtlIsNameInExpression.c
     RtlIsNameLegalDOS8Dot3.c
     RtlLocale.c
+    RtlLocateExtendedFeature.c
     RtlMemoryStream.c
     PfxPrefixTable.c
     RtlAddressInSectionTable.c

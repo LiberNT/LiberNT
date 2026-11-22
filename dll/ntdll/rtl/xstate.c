@@ -71,6 +71,9 @@ RtlLocateExtendedFeature2(PVOID ContextExPointer,
         return NULL;
 
     FeatureMask = (ULONG64)1 << FeatureId;
+    if (!(FeatureMask & XStateConfiguration->EnabledFeatures))
+        return NULL;
+
     XSaveHeader = (PXSAVE_AREA_HEADER)((PUCHAR)ContextEx + ContextEx->XState.Offset);
 
     if (Length)
@@ -91,9 +94,6 @@ RtlLocateExtendedFeature2(PVOID ContextExPointer,
     }
     else
     {
-        if (!(FeatureMask & XStateConfiguration->EnabledFeatures))
-            return NULL;
-
         Offset = XStateConfiguration->Features[FeatureId].Offset - sizeof(XSAVE_FORMAT);
     }
 
