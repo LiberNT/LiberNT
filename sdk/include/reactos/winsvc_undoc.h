@@ -68,7 +68,13 @@ I_ScSendPnPMessage(
     _In_ DWORD dwEventType,
     _In_ PVOID pEventData);
 
-/* I_ScSendTSMessage */
+DWORD
+WINAPI
+I_ScSendTSMessage(
+    _In_ DWORD dwControl,
+    _In_ DWORD dwEventType,
+    _In_ DWORD dwEventSize,
+    _In_reads_bytes_opt_(dwEventSize) PVOID pEventData);
 
 BOOL
 WINAPI

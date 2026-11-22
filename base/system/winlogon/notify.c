@@ -9,6 +9,8 @@
 /* INCLUDES ******************************************************************/
 
 #include "winlogon.h"
+#include <winsvc.h>
+#include <winsvc_undoc.h>
 #include <reactos/wtssession.h>
 
 /* GLOBALS *******************************************************************/
@@ -526,7 +528,14 @@ CallNotificationDlls(
         default: break;
     }
     if (Event && ProcessIdToSessionId(GetCurrentProcessId(), &SessionId))
+    {
+        WTSSESSION_NOTIFICATION SessionNotification;
+
         NtUserCallTwoParam(Event, SessionId, ROS_WTS_NOTIFY);
+        SessionNotification.cbSize = sizeof(SessionNotification);
+        SessionNotification.dwSessionId = SessionId;
+        I_ScSendTSMessage(SERVICE_CONTROL_SESSIONCHANGE, Event, sizeof(SessionNotification), &SessionNotification);
+    }
 
     /* Set up the notification info structure template */
     Info.Size = sizeof(Info);

@@ -801,7 +801,11 @@ interface svcctl
     DWORD
     __stdcall
     RSendTSMessage(
-        [in] handle_t BindingHandle); /* FIXME */
+        [in, string, unique] SVCCTL_HANDLEW lpMachineName,
+        [in] DWORD dwControl,
+        [in] DWORD dwEventType,
+        [in, range(0, 1024)] DWORD dwEventSize,
+        [in, size_is(dwEventSize)] LPBYTE pEventData);
 
     /* Function 44 */
     DWORD
