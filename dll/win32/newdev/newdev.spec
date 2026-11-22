@@ -13,3 +13,5 @@
 @ stdcall DiInstallDriverA(ptr str long ptr)
 @ stdcall DiInstallDriverW(ptr wstr long ptr)
 @ stdcall DiShowUpdateDevice(ptr ptr ptr long ptr)
+@ stdcall DiUninstallDriverA(ptr str long ptr)
+@ stdcall DiUninstallDriverW(ptr wstr long ptr)
