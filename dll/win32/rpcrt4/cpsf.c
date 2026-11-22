@@ -174,6 +174,7 @@ static void init_psfactory( CStdPSFactoryBuffer *psfac, const ProxyFileInfo **fi
             }
 #endif
 
+            /* FIXME: an async interface stub gets the synchronous CStdStubBuffer methods; CStdAsyncStubBuffer is not implemented */
             for (k = 0; k < sizeof(IRpcStubBufferVtbl)/sizeof(void *); k++)
                 if (!pRpcStubVtbl[k]) pRpcStubVtbl[k] = pSrcRpcStubVtbl[k];
         }
