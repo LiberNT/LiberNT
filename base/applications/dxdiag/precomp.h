@@ -44,9 +44,17 @@ typedef enum
     D3DTEST_API_COUNT
 } D3DTEST_API;
 
+#define D3DTEST_STATS_MAX_ADAPTERS 4
 #define D3DTEST_STATS_MAX_NODES 16
 #define D3DTEST_STATS_LINES 4
 #define D3DTEST_STATS_LINE_LENGTH 24
+
+typedef struct
+{
+    LUID Luid;
+    UINT NodeCount;
+    ULONGLONG NodeRunning[D3DTEST_STATS_MAX_NODES];
+} D3DTEST_GPU;
 
 typedef struct
 {
@@ -58,9 +66,8 @@ typedef struct
     LONG GpuLoad;
     ULONGLONG CpuIdle;
     ULONGLONG CpuTotal;
-    LUID AdapterLuid;
-    UINT NodeCount;
-    ULONGLONG NodeRunning[D3DTEST_STATS_MAX_NODES];
+    UINT GpuCount;
+    D3DTEST_GPU Gpus[D3DTEST_STATS_MAX_ADAPTERS];
 } D3DTEST_STATS;
 
 typedef struct
@@ -114,7 +121,7 @@ VOID D3DTestButton(HWND hPage, GUID *lpDevice, D3DTEST_API Api, UINT ButtonId);
 BOOL D3D78BootTests(VOID);
 BOOL D3DTestContinue(PD3DTEST_RESULT Result, DWORD Start, DWORD *Elapsed);
 BOOL D3DTestFail(PD3DTEST_RESULT Result, PCSTR Api, PCSTR Stage, HRESULT Status);
-VOID D3DTestStatsBegin(D3DTEST_STATS *Stats, HWND hWnd);
+VOID D3DTestStatsBegin(D3DTEST_STATS *Stats);
 VOID D3DTestStatsSample(D3DTEST_STATS *Stats, DWORD Elapsed, UINT Frames);
 UINT D3DTestStatsText(const D3DTEST_RESULT *Result, CHAR Text[D3DTEST_STATS_LINES][D3DTEST_STATS_LINE_LENGTH]);
 UINT D3DTestBuildScene(PD3DTEST_VERTEX Vertices, DWORD Elapsed, UINT Width, UINT Height, PD3DTEST_RESULT Result);

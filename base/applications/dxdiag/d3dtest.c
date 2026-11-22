@@ -123,7 +123,7 @@ static BOOL D3DRunTest(GUID *lpDevice, D3DTEST_API Api, BOOL BootMode, PD3DTEST_
     ShowWindow(hWnd, SW_SHOW);
     SetForegroundWindow(hWnd);
     UpdateWindow(hWnd);
-    D3DTestStatsBegin(&Result->Stats, hWnd);
+    D3DTestStatsBegin(&Result->Stats);
     if (BootMode)
         D3DTestMarker(Api, "RENDER_BEGIN");
 
