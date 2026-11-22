@@ -10,7 +10,7 @@
 #include <ioaccess.h>
 #include <libernt/arm64/sysreg.h>
 #include <pseh/pseh2.h>
-#include <reactos/hal/halext.h>
+#include <libernt/hal/halext.h>
 #include "apple_aic.h"
 
 #define NDEBUG

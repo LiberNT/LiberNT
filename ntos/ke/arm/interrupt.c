@@ -6,8 +6,8 @@
  */
 
 #include <ntoskrnl.h>
-#include <reactos/hal/halext.h>
-#include <reactos/arm64/sysreg.h>
+#include <libernt/hal/halext.h>
+#include <libernt/arm64/sysreg.h>
 #define NDEBUG
 #include <debug.h>
 

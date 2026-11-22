@@ -11,7 +11,7 @@
 #include <ioaccess.h>
 #include <halfuncs.h>
 #include <halacpi_arm64.h>
-#include <reactos/arm64/sysreg.h>
+#include <libernt/arm64/sysreg.h>
 #include "devtree.h"
 
 #define NDEBUG

@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <reactos/hal/halext.h>
+#include <libernt/hal/halext.h>
 
 #if defined(_NTOSKRNL_) || defined(_NTSYSTEM_)
 ULONG
