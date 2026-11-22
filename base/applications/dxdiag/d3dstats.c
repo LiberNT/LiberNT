@@ -12,7 +12,7 @@
 
 #define D3DTEST_STATS_PERIOD_MS 500
 
-typedef NTSTATUS (APIENTRY *PFN_OPEN_ADAPTER_FROM_HDC)(D3DKMT_OPENADAPTERFROMHDC *);
+typedef NTSTATUS (APIENTRY *PFN_ENUM_ADAPTERS2)(D3DKMT_ENUMADAPTERS2 *);
 typedef NTSTATUS (APIENTRY *PFN_CLOSE_ADAPTER)(const D3DKMT_CLOSEADAPTER *);
 typedef NTSTATUS (APIENTRY *PFN_QUERY_STATISTICS)(const D3DKMT_QUERYSTATISTICS *);
 
@@ -39,7 +39,7 @@ static BOOL D3DTestCpuTimes(ULONGLONG *Idle, ULONGLONG *Total)
     return TRUE;
 }
 
-static BOOL D3DTestNodeRunning(const D3DTEST_STATS *Stats, UINT Node, ULONGLONG *Running)
+static BOOL D3DTestNodeRunning(const LUID *AdapterLuid, UINT Node, ULONGLONG *Running)
 {
     PFN_QUERY_STATISTICS QueryStatistics = D3DTestQueryStatistics();
     D3DKMT_QUERYSTATISTICS Query;
@@ -48,7 +48,7 @@ static BOOL D3DTestNodeRunning(const D3DTEST_STATS *Stats, UINT Node, ULONGLONG 
         return FALSE;
     ZeroMemory(&Query, sizeof(Query));
     Query.Type = D3DKMT_QUERYSTATISTICS_NODE;
-    Query.AdapterLuid = Stats->AdapterLuid;
+    Query.AdapterLuid = *AdapterLuid;
     Query.QueryNode.NodeId = Node;
     if (QueryStatistics(&Query) < 0 || Query.QueryResult.NodeInformation.GlobalInformation.RunningTime.QuadPart < 0)
         return FALSE;
@@ -56,79 +56,91 @@ static BOOL D3DTestNodeRunning(const D3DTEST_STATS *Stats, UINT Node, ULONGLONG 
     return TRUE;
 }
 
-static VOID D3DTestOpenGpu(D3DTEST_STATS *Stats, HWND hWnd)
+static BOOL D3DTestOpenGpu(D3DTEST_GPU *Gpu, const LUID *AdapterLuid)
 {
-    HMODULE Gdi32 = GetModuleHandleW(L"gdi32.dll");
-    PFN_OPEN_ADAPTER_FROM_HDC OpenAdapter;
-    PFN_CLOSE_ADAPTER CloseAdapter;
     PFN_QUERY_STATISTICS QueryStatistics = D3DTestQueryStatistics();
-    D3DKMT_OPENADAPTERFROMHDC Open;
-    D3DKMT_CLOSEADAPTER Close;
     D3DKMT_QUERYSTATISTICS Query;
     UINT Node;
 
-    if (!Gdi32 || !QueryStatistics)
-        return;
-    OpenAdapter = (PFN_OPEN_ADAPTER_FROM_HDC)GetProcAddress(Gdi32, "D3DKMTOpenAdapterFromHdc");
-    CloseAdapter = (PFN_CLOSE_ADAPTER)GetProcAddress(Gdi32, "D3DKMTCloseAdapter");
-    if (!OpenAdapter || !CloseAdapter)
-        return;
-
-    ZeroMemory(&Open, sizeof(Open));
-    Open.hDc = GetDC(hWnd);
-    if (!Open.hDc)
-        return;
-    if (OpenAdapter(&Open) < 0)
-    {
-        ReleaseDC(hWnd, Open.hDc);
-        return;
-    }
-    ReleaseDC(hWnd, Open.hDc);
-    Close.hAdapter = Open.hAdapter;
-    CloseAdapter(&Close);
-
     ZeroMemory(&Query, sizeof(Query));
     Query.Type = D3DKMT_QUERYSTATISTICS_ADAPTER;
-    Query.AdapterLuid = Open.AdapterLuid;
-    if (QueryStatistics(&Query) < 0)
-        return;
-
-    Stats->AdapterLuid = Open.AdapterLuid;
-    Stats->NodeCount = min(Query.QueryResult.AdapterInformation.NodeCount, (ULONG)D3DTEST_STATS_MAX_NODES);
-    for (Node = 0; Node < Stats->NodeCount; ++Node)
+    Query.AdapterLuid = *AdapterLuid;
+    if (!QueryStatistics || QueryStatistics(&Query) < 0)
+        return FALSE;
+    Gpu->Luid = *AdapterLuid;
+    Gpu->NodeCount = min(Query.QueryResult.AdapterInformation.NodeCount, (ULONG)D3DTEST_STATS_MAX_NODES);
+    for (Node = 0; Node < Gpu->NodeCount; ++Node)
     {
-        if (!D3DTestNodeRunning(Stats, Node, &Stats->NodeRunning[Node]))
-        {
-            Stats->NodeCount = 0;
-            return;
-        }
+        if (!D3DTestNodeRunning(&Gpu->Luid, Node, &Gpu->NodeRunning[Node]))
+            return FALSE;
+    }
+    return Gpu->NodeCount != 0;
+}
+
+/* The load shown is the busiest engine of any adapter: a test may render on another adapter than the one that
+ * drives its window. */
+static VOID D3DTestOpenGpus(D3DTEST_STATS *Stats)
+{
+    HMODULE Gdi32 = GetModuleHandleW(L"gdi32.dll");
+    PFN_ENUM_ADAPTERS2 EnumAdapters;
+    PFN_CLOSE_ADAPTER CloseAdapter;
+    D3DKMT_ADAPTERINFO Adapters[16];
+    D3DKMT_ENUMADAPTERS2 Enum;
+    D3DKMT_CLOSEADAPTER Close;
+    ULONG Index;
+
+    if (!Gdi32)
+        return;
+    EnumAdapters = (PFN_ENUM_ADAPTERS2)GetProcAddress(Gdi32, "D3DKMTEnumAdapters2");
+    CloseAdapter = (PFN_CLOSE_ADAPTER)GetProcAddress(Gdi32, "D3DKMTCloseAdapter");
+    if (!EnumAdapters || !CloseAdapter)
+        return;
+    ZeroMemory(&Enum, sizeof(Enum));
+    Enum.NumAdapters = ARRAYSIZE(Adapters);
+    Enum.pAdapters = Adapters;
+    if (EnumAdapters(&Enum) < 0)
+        return;
+    for (Index = 0; Index < Enum.NumAdapters && Index < ARRAYSIZE(Adapters); ++Index)
+    {
+        if (Stats->GpuCount < ARRAYSIZE(Stats->Gpus) &&
+            D3DTestOpenGpu(&Stats->Gpus[Stats->GpuCount], &Adapters[Index].AdapterLuid))
+            ++Stats->GpuCount;
+        Close.hAdapter = Adapters[Index].hAdapter;
+        CloseAdapter(&Close);
     }
 }
 
-VOID D3DTestStatsBegin(D3DTEST_STATS *Stats, HWND hWnd)
+VOID D3DTestStatsBegin(D3DTEST_STATS *Stats)
 {
     ZeroMemory(Stats, sizeof(*Stats));
     Stats->GpuLoad = -1;
     Stats->CpuLoad = -1;
     D3DTestCpuTimes(&Stats->CpuIdle, &Stats->CpuTotal);
-    D3DTestOpenGpu(Stats, hWnd);
+    D3DTestOpenGpus(Stats);
 }
 
 static LONG D3DTestSampleGpu(D3DTEST_STATS *Stats, DWORD Interval)
 {
     ULONGLONG Running, Busiest = 0;
-    UINT Node;
+    BOOL Sampled = FALSE;
+    UINT Gpu, Node;
 
-    if (!Stats->NodeCount || !Interval)
+    if (!Interval)
         return -1;
-    for (Node = 0; Node < Stats->NodeCount; ++Node)
+    for (Gpu = 0; Gpu < Stats->GpuCount; ++Gpu)
     {
-        if (!D3DTestNodeRunning(Stats, Node, &Running) || Running < Stats->NodeRunning[Node])
-            return -1;
-        Busiest = max(Busiest, Running - Stats->NodeRunning[Node]);
-        Stats->NodeRunning[Node] = Running;
+        D3DTEST_GPU *Adapter = &Stats->Gpus[Gpu];
+
+        for (Node = 0; Node < Adapter->NodeCount; ++Node)
+        {
+            if (!D3DTestNodeRunning(&Adapter->Luid, Node, &Running) || Running < Adapter->NodeRunning[Node])
+                continue;
+            Busiest = max(Busiest, Running - Adapter->NodeRunning[Node]);
+            Adapter->NodeRunning[Node] = Running;
+            Sampled = TRUE;
+        }
     }
-    return (LONG)min(Busiest / ((ULONGLONG)Interval * 100), 100);
+    return Sampled ? (LONG)min(Busiest / ((ULONGLONG)Interval * 100), 100) : -1;
 }
 
 VOID D3DTestStatsSample(D3DTEST_STATS *Stats, DWORD Elapsed, UINT Frames)
