@@ -271,6 +271,39 @@ NtfsMasterFileTableCreateFileInDirectoryEx(
 }
 
 NTSTATUS
+NtfsMasterFileTableCreateFileWithEas(
+    _In_ PNtfsMasterFileTable Mft,
+    _In_ PNtfsFileRecord Parent,
+    _In_reads_(NameLength) PWCHAR Name,
+    _In_ ULONG NameLength,
+    _In_ BOOLEAN IsDirectory,
+    _In_ ULONG FileAttributes,
+    _In_ BOOLEAN NameKnownMissing,
+    _In_reads_opt_(EaCount) const NtfsExtendedAttributeUpdate* Eas,
+    _In_ ULONG EaCount,
+    _Out_ PNtfsFileRecord* File)
+{
+    if (!Mft || !Parent || !File)
+        return STATUS_INVALID_PARAMETER;
+    *File = NULL;
+    return reinterpret_cast<PMasterFileTable>(Mft)->
+        CreateFileInDirectory(
+            reinterpret_cast<PFileRecord>(Parent),
+            Name,
+            NameLength,
+            IsDirectory,
+            FileAttributes,
+            NameKnownMissing,
+            reinterpret_cast<PFileRecord*>(File),
+            NULL,
+            0,
+            NULL,
+            0,
+            Eas,
+            EaCount);
+}
+
+NTSTATUS
 NtfsMasterFileTableDeleteFile(
     _In_ PNtfsMasterFileTable Mft,
     _In_reads_(QueryLength) PWCHAR Query,

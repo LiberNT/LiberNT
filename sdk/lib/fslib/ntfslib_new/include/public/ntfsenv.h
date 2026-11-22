@@ -294,6 +294,7 @@ typedef struct _FILE_ID_BOTH_DIR_INFORMATION
 #define _In_
 #define _In_opt_
 #define _In_reads_(Count)
+#define _In_reads_opt_(Count)
 #define _In_reads_bytes_(Count)
 #define _Inout_
 #define _Inout_updates_bytes_(Count)
