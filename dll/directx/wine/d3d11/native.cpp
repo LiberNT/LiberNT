@@ -8067,7 +8067,8 @@ static HRESULT APIENTRY NativePresent(HANDLE runtime_device, DXGIDDICB_PRESENT *
     context->result = swapchain->primary && status == STATUS_GRAPHICS_PRESENT_OCCLUDED
             ? DXGI_STATUS_OCCLUDED : status == STATUS_DEVICE_BUSY
             ? DXGI_ERROR_WAS_STILL_DRAWING : StatusToHresult(status);
-    return context->result;
+    /* Occlusion is the runtime's result; the driver's present itself succeeded. */
+    return context->result == DXGI_STATUS_OCCLUDED ? S_OK : context->result;
 }
 
 static DXGI_FORMAT NativePublishFormat(DXGI_FORMAT format)
