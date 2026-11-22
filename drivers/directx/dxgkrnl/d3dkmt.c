@@ -12262,6 +12262,7 @@ DxgkpDispatchBufferedIoctlWorker(
         {
             D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME *pData;
             ULONG DisplayOrdinal;
+            SIZE_T NameLength;
 
             if (InputLength < sizeof(D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME) || SystemBuffer == NULL)
                 return STATUS_BUFFER_TOO_SMALL;
@@ -12270,8 +12271,12 @@ DxgkpDispatchBufferedIoctlWorker(
 
             pData = (D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME *)SystemBuffer;
             /* win32k names the display by its device object, which knows its adapter and source */
-            if (wcsnlen(pData->DeviceName, RTL_NUMBER_OF(pData->DeviceName)) < RTL_NUMBER_OF(pData->DeviceName) &&
-                _wcsnicmp(pData->DeviceName, L"\\Device\\", 8) == 0)
+            for (NameLength = 0;
+                 NameLength < RTL_NUMBER_OF(pData->DeviceName) && pData->DeviceName[NameLength] != UNICODE_NULL;
+                 NameLength++)
+            {
+            }
+            if (NameLength < RTL_NUMBER_OF(pData->DeviceName) && _wcsnicmp(pData->DeviceName, L"\\Device\\", 8) == 0)
             {
                 Status = DxgkpOpenAdapterByDisplayDeviceName(pData->DeviceName, &pData->hAdapter, &pData->AdapterLuid,
                                                              &pData->VidPnSourceId);
