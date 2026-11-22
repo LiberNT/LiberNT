@@ -960,6 +960,13 @@ BOOLEAN
 ValidateSecurityDescriptor(_In_ const UCHAR* Descriptor,
                            _In_ ULONG DescriptorLength);
 
+/* Windows records a resident stream's allocation as its length rounded up to 8. */
+inline ULONGLONG
+NtfsResidentAllocatedSize(_In_ ULONGLONG DataLength)
+{
+    return (DataLength + 7) & ~(ULONGLONG)7;
+}
+
 typedef class FileRecord
 {
 public:
