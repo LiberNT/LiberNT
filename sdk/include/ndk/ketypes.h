@@ -2468,7 +2468,6 @@ typedef struct _KTHREAD
         {
             ULONG AutoBoostActive : 1;
             ULONG ReadyTransition : 1;
-            ULONG ProcessReadyQueue : 1;
             ULONG WaitNext : 1;
             ULONG SystemAffinityActive : 1;
             ULONG Alertable : 1;
@@ -2484,8 +2483,13 @@ typedef struct _KTHREAD
             ULONG ApcQueueable : 1;
             ULONG ReservedStackInUse : 1;
             ULONG UmsPerformingSyscall : 1;
-            ULONG DisableStackCheck : 1;
-            ULONG Reserved : 12;
+            ULONG TimerSuspended : 1;
+            ULONG SuspendedWaitMode : 1;
+            ULONG SuspendSchedulerApcWait : 1;
+            ULONG CetUserShadowStack : 1;
+            ULONG BypassProcessFreeze : 1;
+            ULONG ProcessReadyQueue : 1;             // Windows: Reserved bit 22 [ReactOS]
+            ULONG Reserved : 9;
         };
         LONG MiscFlags;
     };
@@ -2494,26 +2498,28 @@ typedef struct _KTHREAD
     {
         struct
         {
+            ULONG ThreadFlagsSpare : 2;
             ULONG AutoAlignment : 1;
             ULONG DisableBoost : 1;
-            ULONG UserAffinitySet : 1;
             ULONG AlertedByThreadId : 1;
             ULONG QuantumDonation : 1;
             ULONG EnableStackSwap : 1;
             ULONG GuiThread : 1;
             ULONG DisableQuantum : 1;
-            ULONG ChargeOnlyGroup : 1;
+            ULONG ChargeOnlySchedulingGroup : 1;
             ULONG DeferPreemption : 1;
             ULONG QueueDeferPreemption : 1;
             ULONG ForceDeferSchedule : 1;
-            ULONG ExplicitIdealProcessor : 1;
+            ULONG SharedReadyQueueAffinity : 1;
             ULONG FreezeCount : 1;
             ULONG TerminationApcRequest : 1;
             ULONG AutoBoostEntriesExhausted : 1;
             ULONG KernelStackResident : 1;
-            ULONG CommitFailTerminateRequest : 1;
+            ULONG TerminateRequestReason : 2;
             ULONG ProcessStackCountDecremented : 1;
-            ULONG ThreadFlagsSpare : 5;
+            ULONG RestrictedGuiThread : 1;
+            ULONG VpBackingThread : 1;
+            ULONG ThreadFlagsSpare2 : 1;
             ULONG EtwStackTraceApcInserted : 8;
         };
         LONG ThreadFlags;
@@ -2693,7 +2699,7 @@ typedef struct _KTHREAD
 #ifdef _WIN64
     ULONG64 NpxState;
 #else
-    ULONG Spare15;
+    ULONG ReadyTime;
 #endif
 
     union
@@ -2732,7 +2738,7 @@ typedef struct _KTHREAD
         };
         struct
         {
-            UCHAR SuspendApcFill3[FIELD_OFFSET(KAPC, SystemArgument1)]; // 32 bit:, 64 bit: 64/0x40
+            UCHAR SchedulerApcFill3[FIELD_OFFSET(KAPC, SystemArgument1)]; // 32 bit:, 64 bit: 64/0x40
             PKPRCB WaitPrcb;
         };
         struct
@@ -2760,15 +2766,19 @@ typedef struct _KTHREAD
 
     UCHAR AbEntrySummary;
     UCHAR AbWaitEntryCount;
-    USHORT Spare20;
+    UCHAR AbAllocationRegionCount;
+    CHAR SystemPriority;
 #if _WIN64
     ULONG SecureThreadCookie;
 #endif
 
-    KLOCK_ENTRY LockEntries[NUMBER_OF_LOCK_ENTRIES];
+    struct _KLOCK_ENTRY *LockEntries;
     SINGLE_LIST_ENTRY PropagateBoostsEntry;
     SINGLE_LIST_ENTRY IoSelfBoostsEntry;
     UCHAR PriorityFloorCounts[16];
+#ifndef _WIN64
+    UCHAR PriorityFloorCountsReserved[16];
+#endif
     ULONG PriorityFloorSummary;
     volatile LONG AbCompletedIoBoostCount;
     volatile LONG AbCompletedIoQoSBoostCount;
@@ -2798,14 +2808,34 @@ typedef struct _KTHREAD
     struct _KSCB *QueuedScb;
 #ifndef _WIN64
     ULONG64 NpxState;
-#endif
-#if defined(__REACTOS__) && !defined(_WIN64)
-    /* ReactOS-private state absent from the public NT10 x86 layout. */
-    KSPIN_LOCK ApcQueueLock;
-    PKAPC_STATE ApcStatePointer[2];
-    PVOID CallbackStack;
-    UCHAR LargeStack;
-    UCHAR Iopl;
+    volatile ULONG ThreadTimerDelay;
+    union
+    {
+        volatile LONG ThreadFlags3;
+        struct
+        {
+            ULONG BamQosLevel : 8;
+            ULONG PpmPolicy : 2;
+            ULONG ThreadFlags3Reserved2 : 22;
+        };
+    };
+    PVOID AbWaitObject;
+    ULONG ReservedPreviousReadyTimeValue;
+    ULONG64 KernelWaitTime;
+    ULONG64 UserWaitTime;
+    ULONG Spare29[3];
+    union
+    {
+        ULONG EndPadding[5];
+        struct
+        {
+            KSPIN_LOCK ApcQueueLock;                     // [ReactOS]
+            PKAPC_STATE ApcStatePointer[2];              // [ReactOS]
+            PVOID CallbackStack;                         // [ReactOS]
+            UCHAR LargeStack;                            // [ReactOS]
+            UCHAR Iopl;                                  // [ReactOS]
+        };
+    };
 #endif
 } KTHREAD;
 

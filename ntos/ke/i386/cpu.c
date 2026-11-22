@@ -103,33 +103,33 @@ KiGetCpuVendor(VOID)
     *(ULONG*)&Prcb->VendorString[8] = CpuInfo.Ecx;
     Prcb->VendorString[12] = 0;
 
-    if (!strcmp(Prcb->VendorString, CmpIntelID) ||
-        !strcmp(Prcb->VendorString, "GenuineIotel"))
+    if (!strcmp((PCSTR)Prcb->VendorString, CmpIntelID) ||
+        !strcmp((PCSTR)Prcb->VendorString, "GenuineIotel"))
     {
         return CPU_INTEL;
     }
-    else if (!strcmp(Prcb->VendorString, CmpAmdID) ||
-             !strcmp(Prcb->VendorString, "HygonGenuine"))
+    else if (!strcmp((PCSTR)Prcb->VendorString, CmpAmdID) ||
+             !strcmp((PCSTR)Prcb->VendorString, "HygonGenuine"))
     {
         return CPU_AMD;
     }
-    else if (!strcmp(Prcb->VendorString, CmpCyrixID))
+    else if (!strcmp((PCSTR)Prcb->VendorString, CmpCyrixID))
     {
         DPRINT1("Cyrix CPU support not fully tested!\n");
         return CPU_CYRIX;
     }
-    else if (!strcmp(Prcb->VendorString, CmpTransmetaID))
+    else if (!strcmp((PCSTR)Prcb->VendorString, CmpTransmetaID))
     {
         DPRINT1("Transmeta CPU support not fully tested!\n");
         return CPU_TRANSMETA;
     }
-    else if (!strcmp(Prcb->VendorString, CmpCentaurID) ||
-             !strcmp(Prcb->VendorString, "  Shanghai  "))
+    else if (!strcmp((PCSTR)Prcb->VendorString, CmpCentaurID) ||
+             !strcmp((PCSTR)Prcb->VendorString, "  Shanghai  "))
     {
         DPRINT1("Centaur CPU support not fully tested!\n");
         return CPU_CENTAUR;
     }
-    else if (!strcmp(Prcb->VendorString, CmpRiseID))
+    else if (!strcmp((PCSTR)Prcb->VendorString, CmpRiseID))
     {
         DPRINT1("Rise CPU support not fully tested!\n");
         return CPU_RISE;
