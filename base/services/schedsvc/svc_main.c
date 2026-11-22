@@ -22,6 +22,8 @@
 
 #include "windef.h"
 #include "winbase.h"
+#include "winuser.h"
+#include "wtsapi32.h"
 #include "winsvc.h"
 #include "rpc.h"
 #include "atsvc.h"
@@ -284,7 +286,7 @@ static void schedsvc_update_status(DWORD state)
     SERVICE_STATUS status;
 
     status.dwServiceType = SERVICE_WIN32;
-    status.dwControlsAccepted = SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN;
+    status.dwControlsAccepted = SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN | SERVICE_ACCEPT_SESSIONCHANGE;
     status.dwWin32ExitCode = 0;
     status.dwServiceSpecificExitCode = 0;
     status.dwCheckPoint = 0;
@@ -294,9 +296,78 @@ static void schedsvc_update_status(DWORD state)
     SetServiceStatus(schedsvc_handle, &status);
 }
 
-static void WINAPI schedsvc_handler(DWORD control)
+#define MAX_LOGON_SESSIONS 64
+
+static CRITICAL_SECTION logon_sessions_cs;
+static DWORD logon_sessions[MAX_LOGON_SESSIONS];
+static UINT logon_session_count;
+
+static DWORD WINAPI logon_tasks_worker(void *context)
 {
-    TRACE("%#lx\n", control);
+    schedsvc_run_logon_tasks((DWORD)(ULONG_PTR)context);
+    return 0;
+}
+
+/* Returns TRUE the first time a session's logon is seen, until that session logs off. */
+static BOOL claim_logon_session(DWORD session_id)
+{
+    BOOL claimed = TRUE;
+    UINT i;
+
+    EnterCriticalSection(&logon_sessions_cs);
+    for (i = 0; i < logon_session_count; i++)
+        if (logon_sessions[i] == session_id) claimed = FALSE;
+    if (claimed && logon_session_count < MAX_LOGON_SESSIONS)
+        logon_sessions[logon_session_count++] = session_id;
+    LeaveCriticalSection(&logon_sessions_cs);
+    return claimed;
+}
+
+static void release_logon_session(DWORD session_id)
+{
+    UINT i;
+
+    EnterCriticalSection(&logon_sessions_cs);
+    for (i = 0; i < logon_session_count; i++)
+    {
+        if (logon_sessions[i] == session_id)
+        {
+            logon_sessions[i] = logon_sessions[--logon_session_count];
+            break;
+        }
+    }
+    LeaveCriticalSection(&logon_sessions_cs);
+}
+
+static void queue_logon_tasks(DWORD session_id)
+{
+    if (!claim_logon_session(session_id)) return;
+    if (!QueueUserWorkItem(logon_tasks_worker, (void *)(ULONG_PTR)session_id, WT_EXECUTELONGFUNCTION))
+        WARN("cannot queue the logon tasks of session %lu\n", session_id);
+}
+
+/* Users who logged on before the service started still get their logon tasks. */
+static void queue_logged_on_sessions(void)
+{
+    WTS_SESSION_INFOW *sessions;
+    DWORD count, i, bytes;
+    WCHAR *user;
+
+    if (!WTSEnumerateSessionsW(WTS_CURRENT_SERVER_HANDLE, 0, 1, &sessions, &count)) return;
+    for (i = 0; i < count; i++)
+    {
+        if (!sessions[i].SessionId) continue;
+        if (!WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE, sessions[i].SessionId, WTSUserName, &user, &bytes))
+            continue;
+        if (user[0]) queue_logon_tasks(sessions[i].SessionId);
+        WTSFreeMemory(user);
+    }
+    WTSFreeMemory(sessions);
+}
+
+static DWORD WINAPI schedsvc_handler(DWORD control, DWORD event_type, void *event_data, void *context)
+{
+    TRACE("%#lx %#lx\n", control, event_type);
 
     switch (control)
     {
@@ -306,10 +377,19 @@ static void WINAPI schedsvc_handler(DWORD control)
         SetEvent(done_event);
         break;
 
+    case SERVICE_CONTROL_SESSIONCHANGE:
+        /* TODO: SessionStateChangeTrigger (lock, unlock, connect, disconnect) */
+        if (event_type == WTS_SESSION_LOGON && event_data)
+            queue_logon_tasks(((const WTSSESSION_NOTIFICATION *)event_data)->dwSessionId);
+        else if (event_type == WTS_SESSION_LOGOFF && event_data)
+            release_logon_session(((const WTSSESSION_NOTIFICATION *)event_data)->dwSessionId);
+        break;
+
     default:
         schedsvc_update_status(SERVICE_RUNNING);
         break;
     }
+    return NO_ERROR;
 }
 
 static RPC_BINDING_VECTOR *sched_bindings;
@@ -398,7 +478,8 @@ void WINAPI ServiceMain(DWORD argc, LPWSTR *argv)
 
     TRACE("starting Task Scheduler Service\n");
 
-    schedsvc_handle = RegisterServiceCtrlHandlerW(scheduleW, schedsvc_handler);
+    InitializeCriticalSection(&logon_sessions_cs);
+    schedsvc_handle = RegisterServiceCtrlHandlerExW(scheduleW, schedsvc_handler, NULL);
     if (!schedsvc_handle)
     {
         ERR("RegisterServiceCtrlHandler error %ld\n", GetLastError());
@@ -413,6 +494,7 @@ void WINAPI ServiceMain(DWORD argc, LPWSTR *argv)
     if (thread && RPC_init() == RPC_S_OK)
     {
         schedsvc_update_status(SERVICE_RUNNING);
+        queue_logged_on_sessions();
         WaitForSingleObject(thread, INFINITE);
         CloseHandle(thread);
         RPC_finish();

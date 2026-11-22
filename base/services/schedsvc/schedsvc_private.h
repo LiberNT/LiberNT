@@ -30,5 +30,6 @@ BOOL get_next_runtime(LARGE_INTEGER *rt);
 void check_task_time(void);
 void load_at_tasks(void);
 void check_missed_task_time(void);
+void schedsvc_run_logon_tasks(DWORD session_id);
 
 #endif /* __WINE_SCHEDSVC_PRIVATE_H__ */
