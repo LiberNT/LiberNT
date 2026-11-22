@@ -22,6 +22,7 @@ typedef struct _USER_SESSION
     HANDLE DesktopSwitchEventHandle;
     struct _THREADINFO *DesktopThread;
     KEVENT DesktopThreadStarted;
+    LIST_ENTRY DesktopsToDestroy;
     BOOLEAN Ending;
 } USER_SESSION, *PUSER_SESSION;
 
@@ -41,5 +42,6 @@ struct _WINSTATION_OBJECT *FASTCALL UserGetDisplayInputWindowStation(VOID);
 BOOLEAN FASTCALL UserIsCsrProcess(PEPROCESS Process);
 BOOLEAN FASTCALL UserIsLogonProcess(HANDLE ProcessId);
 BOOLEAN FASTCALL UserIsDesktopThread(struct _THREADINFO *pti);
+PUSER_SESSION FASTCALL UserGetDesktopThreadSession(struct _THREADINFO *pti);
 struct _THREADINFO *FASTCALL UserGetDesktopThread(VOID);
 VOID FASTCALL UserForEachSessionDesktop(PUSER_SESSION Session, VOID (FASTCALL *Callback)(struct _DESKTOP *Desktop));
