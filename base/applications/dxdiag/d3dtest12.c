@@ -10,7 +10,7 @@
 #define COBJMACROS
 #define WIDL_C_INLINE_WRAPPERS
 #include <d3d12.h>
-#include <dxgi1_4.h>
+#include <dxgi1_5.h>
 #include <d3dcompiler.h>
 
 #define D3D12_TEST_FRAMES 2
@@ -34,6 +34,7 @@ typedef struct
     UINT64 FenceValue;
     UINT64 FrameFence[D3D12_TEST_FRAMES];
     UINT TargetStride;
+    UINT PresentFlags;
     UINT Width;
     UINT Height;
 } D3D12_TEST;
@@ -119,6 +120,19 @@ static BOOL D3D12CreatePipeline(D3D12_TEST *Test, PD3DTEST_RESULT Result)
     return Created;
 }
 
+static VOID D3D12CheckTearing(D3D12_TEST *Test)
+{
+    IDXGIFactory5 *Factory5;
+    BOOL Tearing = FALSE;
+
+    if (FAILED(IDXGIFactory4_QueryInterface(Test->Factory, &IID_IDXGIFactory5, (void **)&Factory5)))
+        return;
+    if (SUCCEEDED(IDXGIFactory5_CheckFeatureSupport(Factory5, DXGI_FEATURE_PRESENT_ALLOW_TEARING, &Tearing, sizeof(Tearing)))
+        && Tearing)
+        Test->PresentFlags = DXGI_PRESENT_ALLOW_TEARING;
+    IDXGIFactory5_Release(Factory5);
+}
+
 static BOOL D3D12CreateTargets(D3D12_TEST *Test, HWND hWnd, PD3DTEST_RESULT Result)
 {
     D3D12_DESCRIPTOR_HEAP_DESC HeapDesc = { D3D12_DESCRIPTOR_HEAP_TYPE_RTV, D3D12_TEST_FRAMES, D3D12_DESCRIPTOR_HEAP_FLAG_NONE, 0 };
@@ -141,6 +155,8 @@ static BOOL D3D12CreateTargets(D3D12_TEST *Test, HWND hWnd, PD3DTEST_RESULT Resu
     SwapChainDesc.BufferCount = D3D12_TEST_FRAMES;
     SwapChainDesc.Scaling = DXGI_SCALING_STRETCH;
     SwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+    if (Test->PresentFlags & DXGI_PRESENT_ALLOW_TEARING)
+        SwapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
     hr = IDXGIFactory4_CreateSwapChainForHwnd(Test->Factory, (IUnknown *)Test->Queue, hWnd, &SwapChainDesc, NULL, NULL, &SwapChain);
     if (FAILED(hr))
         return D3D12Fail(Result, "create-swap-chain", hr);
@@ -186,6 +202,7 @@ static BOOL D3D12Setup(D3D12_TEST *Test, HWND hWnd, PD3DTEST_RESULT Result)
     hr = CreateDXGIFactory1(&IID_IDXGIFactory4, (void **)&Test->Factory);
     if (FAILED(hr))
         return D3D12Fail(Result, "create-factory", hr);
+    D3D12CheckTearing(Test);
     hr = D3D12CreateDevice(NULL, D3D_FEATURE_LEVEL_11_0, &IID_ID3D12Device, (void **)&Test->Device);
     if (FAILED(hr))
         return D3D12Fail(Result, "create-device", hr);
@@ -298,7 +315,7 @@ static BOOL D3D12Frame(D3D12_TEST *Test, DWORD Elapsed, PD3DTEST_RESULT Result)
         return D3D12Fail(Result, "close-command-list", hr);
 
     ID3D12CommandQueue_ExecuteCommandLists(Test->Queue, 1, (ID3D12CommandList **)&Test->List);
-    hr = IDXGISwapChain3_Present(Test->SwapChain, 0, 0);
+    hr = IDXGISwapChain3_Present(Test->SwapChain, 0, Test->PresentFlags);
     if (FAILED(hr))
         return D3D12Fail(Result, "present", hr);
     hr = ID3D12CommandQueue_Signal(Test->Queue, Test->Fence, ++Test->FenceValue);
