@@ -355,6 +355,7 @@ ROSDATA VK_TO_WCHAR_TABLE vk_to_wchar_master_table[] =
   { 0, 0, 0 }
 };
 
+#undef DEADTRANS
 #define DEADTRANS(ch, accent, comp, flags) MAKELONG(ch, accent), comp, flags //no funciona
 ROSDATA DEADKEY deadkey[] =
 {

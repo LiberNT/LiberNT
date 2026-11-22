@@ -348,6 +348,7 @@ ROSDATA DEADKEY_LPWSTR dead_key_names[] = {
     NULL
 };
 
+#undef DEADTRANS
 #define DEADTRANS(ch, accent, comp, flags) MAKELONG(ch, accent), comp, flags
 
 ROSDATA DEADKEY dead_key[] = {
