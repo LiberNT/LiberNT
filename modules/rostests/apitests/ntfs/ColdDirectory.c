@@ -7,6 +7,7 @@
 
 #define WIN32_NO_STATUS
 #include <apitest.h>
+#include <winioctl.h>
 #include <strsafe.h>
 
 #define TEST_VOLUME_LABEL L"NTFSTEST"
@@ -128,7 +129,7 @@ ListDirectory(_Out_writes_(COLD_FILES) PUCHAR Seen)
         if (swscanf(Data.cFileName, L"cold_%04lu_long_directory_entry_name.da%lc", &Index, &Tail) == 2 &&
             Tail == L't' && Index < COLD_FILES)
         {
-            if (Seen[Index] < MAXUCHAR)
+            if (Seen[Index] < MAXBYTE)
                 Seen[Index]++;
             continue;
         }
