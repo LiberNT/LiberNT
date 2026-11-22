@@ -78,7 +78,7 @@ TopLevelFilter(
 
     g_TopLevelHits++;
     g_TopLevelSameContext = !memcmp(&g_FaultContext, Pointers->ContextRecord, sizeof(CONTEXT));
-    if (!VirtualProtect((PVOID)g_FaultPage, PAGE_SIZE, PAGE_READWRITE, &OldProtect))
+    if (!VirtualProtect((PVOID)g_FaultPage, sizeof(*g_FaultPage), PAGE_READWRITE, &OldProtect))
         return EXCEPTION_CONTINUE_SEARCH;
     return EXCEPTION_CONTINUE_EXECUTION;
 }
@@ -135,7 +135,7 @@ START_TEST(seh_context)
     BOOL Handled = FALSE;
     PVOID FaultAddress = NULL;
 
-    g_FaultPage = VirtualAlloc(NULL, PAGE_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_NOACCESS);
+    g_FaultPage = VirtualAlloc(NULL, sizeof(*g_FaultPage), MEM_RESERVE | MEM_COMMIT, PAGE_NOACCESS);
     ok(g_FaultPage != NULL, "VirtualAlloc failed, error %lu\n", GetLastError());
     if (g_FaultPage == NULL)
         return;
