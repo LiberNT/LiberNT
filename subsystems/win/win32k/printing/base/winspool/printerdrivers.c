@@ -1014,3 +1014,51 @@ Cleanup:
     SetLastError(dwErrorCode);
     return (dwErrorCode == ERROR_SUCCESS);
 }
+
+HRESULT WINAPI
+DeletePrinterDriverPackageA(PCSTR pszServer, PCSTR pszInfPath, PCSTR pszEnvironment)
+{
+    TRACE("DeletePrinterDriverPackageA(%s, %s, %s)\n", debugstr_a(pszServer), debugstr_a(pszInfPath), debugstr_a(pszEnvironment));
+    /* TODO: printer driver packages are not supported yet */
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI
+DeletePrinterDriverPackageW(PCWSTR pszServer, PCWSTR pszInfPath, PCWSTR pszEnvironment)
+{
+    TRACE("DeletePrinterDriverPackageW(%S, %S, %S)\n", pszServer, pszInfPath, pszEnvironment);
+    /* TODO: printer driver packages are not supported yet */
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI
+InstallPrinterDriverFromPackageA(PCSTR pszServer, PCSTR pszInfPath, PCSTR pszDriverName, PCSTR pszEnvironment, DWORD dwFlags)
+{
+    TRACE("InstallPrinterDriverFromPackageA(%s, %s, %s, %s, %lu)\n", debugstr_a(pszServer), debugstr_a(pszInfPath), debugstr_a(pszDriverName), debugstr_a(pszEnvironment), dwFlags);
+    /* TODO: printer driver packages are not supported yet */
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI
+InstallPrinterDriverFromPackageW(PCWSTR pszServer, PCWSTR pszInfPath, PCWSTR pszDriverName, PCWSTR pszEnvironment, DWORD dwFlags)
+{
+    TRACE("InstallPrinterDriverFromPackageW(%S, %S, %S, %S, %lu)\n", pszServer, pszInfPath, pszDriverName, pszEnvironment, dwFlags);
+    /* TODO: printer driver packages are not supported yet */
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI
+UploadPrinterDriverPackageA(PCSTR pszServer, PCSTR pszInfPath, PCSTR pszEnvironment, DWORD dwFlags, HWND hwnd, PSTR pszDestInfPath, PULONG pcchDestInfPath)
+{
+    TRACE("UploadPrinterDriverPackageA(%s, %s, %s, %lu, %p, %p, %p)\n", debugstr_a(pszServer), debugstr_a(pszInfPath), debugstr_a(pszEnvironment), dwFlags, hwnd, pszDestInfPath, pcchDestInfPath);
+    /* TODO: printer driver packages are not supported yet */
+    return E_NOTIMPL;
+}
+
+HRESULT WINAPI
+UploadPrinterDriverPackageW(PCWSTR pszServer, PCWSTR pszInfPath, PCWSTR pszEnvironment, DWORD dwFlags, HWND hwnd, PWSTR pszDestInfPath, PULONG pcchDestInfPath)
+{
+    TRACE("UploadPrinterDriverPackageW(%S, %S, %S, %lu, %p, %p, %p)\n", pszServer, pszInfPath, pszEnvironment, dwFlags, hwnd, pszDestInfPath, pcchDestInfPath);
+    /* TODO: printer driver packages are not supported yet */
+    return E_NOTIMPL;
+}

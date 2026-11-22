@@ -1652,6 +1652,30 @@ WINBOOL WINAPI OpenPrinter2W(
 
 #define OpenPrinter2 __MINGW_NAME_AW(OpenPrinter2)
 
+#define IPDFP_COPY_ALL_FILES 0x00000001
+
+HRESULT WINAPI InstallPrinterDriverFromPackageA(
+  LPCSTR pszServer,
+  LPCSTR pszInfPath,
+  LPCSTR pszDriverName,
+  LPCSTR pszEnvironment,
+  DWORD dwFlags
+);
+
+HRESULT WINAPI InstallPrinterDriverFromPackageW(
+  LPCWSTR pszServer,
+  LPCWSTR pszInfPath,
+  LPCWSTR pszDriverName,
+  LPCWSTR pszEnvironment,
+  DWORD dwFlags
+);
+
+#define InstallPrinterDriverFromPackage __MINGW_NAME_AW(InstallPrinterDriverFromPackage)
+
+#define UPDP_SILENT_UPLOAD     0x00000001
+#define UPDP_UPLOAD_ALWAYS     0x00000002
+#define UPDP_CHECK_DRIVERSTORE 0x00000004
+
 HRESULT WINAPI UploadPrinterDriverPackageA(
   LPCSTR pszServer,
   LPCSTR pszInfPath,
