@@ -333,7 +333,7 @@ START_TEST(swap_chain)
     {
         Hr = Device->CheckMultisampleQualityLevels(DXGI_FORMAT_R8G8B8A8_UNORM, 4, &Levels);
         ok(Hr == S_OK, "CheckMultisampleQualityLevels: %#lx\n", Hr);
-        TestChain(Factory, Device, Context, 1, Levels == 0);
+        TestChain(Factory, Device, Context, 1, true);
         if (Levels)
             TestChain(Factory, Device, Context, 4, true);
         else
