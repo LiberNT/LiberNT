@@ -7,6 +7,8 @@ set(NTFSLIB_EXPAND_DIR "${NTFSLIB_ROOT}/../../../../base/applications/cmdutils/l
 
 add_executable(ntfslib_fuse ntfslib_fuse.cpp "${NTFSLIB_EXPAND_DIR}/expandcore.c")
 target_include_directories(ntfslib_fuse PRIVATE "${NTFSLIB_EXPAND_DIR}")
+# The full resize core: disk-level expansion and offline system-file moves.
+target_compile_definitions(ntfslib_fuse PRIVATE NTFSLIB_EXPAND_OFFLINE=1)
 target_link_libraries(ntfslib_fuse PRIVATE ntfslib_linux ntfslib_format_host)
 
 if(NTFSLIB_STATIC_CXX_RUNTIME AND

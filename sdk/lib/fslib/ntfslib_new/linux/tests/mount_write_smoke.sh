@@ -155,7 +155,9 @@ cmp "$workdir/names.actual" "$workdir/names.expected"
 if test "$have_python" -eq 1; then
     "$frontend" --ea "$image" /dir1/data.bin > "$workdir/ea.actual"
     grep -q -- "- Comment 8 7265706c61636564" "$workdir/ea.actual"
-    test "$(wc -l < "$workdir/ea.actual")" = 1
+    # Files created through the mount also carry ntfs3/WSL $LXUID/$LXGID/$LXMOD.
+    test "$(grep -vc -- ' \$LX' "$workdir/ea.actual")" = 1
+    test "$(grep -c -- ' \$LX' "$workdir/ea.actual")" = 3
 fi
 
 "$ntfs3g" "$image" "$checkpoint" -o ro
