@@ -903,7 +903,9 @@ LocalEnumPrinters(DWORD Flags, LPWSTR Name, DWORD Level, LPBYTE pPrinterEnum, DW
     *pcbNeeded = 0;
     *pcReturned = 0;
 
-    if (Flags & PRINTER_ENUM_CONNECTIONS || Flags & PRINTER_ENUM_REMOTE || Flags & PRINTER_ENUM_NETWORK)
+    /* TODO: enumerate the user's printer connections; there is no network print provider */
+    if ((Flags & PRINTER_ENUM_CONNECTIONS || Flags & PRINTER_ENUM_REMOTE || Flags & PRINTER_ENUM_NETWORK) &&
+        !(Flags & PRINTER_ENUM_LOCAL))
     {
         // If the flags for the Network Print Provider are given, bail out with ERROR_INVALID_NAME.
         // This is the internal way for a Print Provider to signal that it doesn't handle this request.
