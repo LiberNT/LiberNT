@@ -21,6 +21,13 @@ TestCompletionAlreadyRetired(VOID)
     ok_bool_false(VidSchPolicyCompletionAlreadyRetired(FALSE, 0x10, 0xFFFFFFF0), "wrapped next fence");
 }
 
+static VOID
+TestPreemptCommandIrql(VOID)
+{
+    ok_eq_uint(VidSchPolicyPreemptCommandIrql(FALSE), DISPATCH_LEVEL);
+    ok_eq_uint(VidSchPolicyPreemptCommandIrql(TRUE), PASSIVE_LEVEL);
+}
+
 START_TEST(DxgkGpuFaultPolicy)
 {
     PVOID Context = (PVOID)(ULONG_PTR)0x1111;
@@ -28,6 +35,7 @@ START_TEST(DxgkGpuFaultPolicy)
     SOFTGPU_FAULT_RETIREMENT Retirement;
 
     TestCompletionAlreadyRetired();
+    TestPreemptCommandIrql();
     ok(VidSchPolicyDependentNodes(0, 0, 4) == 0, "no dependents\n");
     ok(VidSchPolicyDependentNodes(0x1, 0, 4) == 0, "the reset node is not its own dependent\n");
     ok(VidSchPolicyDependentNodes(0x7, 1, 4) == 0x5, "dependents without the reset node\n");

@@ -4753,7 +4753,8 @@ VidSchPreemptEngine(
     KeReleaseSpinLock(&Engine->QueueLock, OldIrql);
 
     DxgkEnterSchedulerClass(Adapter);
-    KeRaiseIrql(DISPATCH_LEVEL, &CallIrql);
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    KeRaiseIrql(VidSchPolicyPreemptCommandIrql((BOOLEAN)Adapter->SchedulingCaps.LowIrqlPreemptCommand), &CallIrql);
     Status = DXGK_CB_FULL(Adapter, DxgkDdiPreemptCommand)(Adapter->MiniportDeviceContext, &PreemptArgs);
     DxgkLeaveSchedulerClass(Adapter);
     KeLowerIrql(CallIrql);

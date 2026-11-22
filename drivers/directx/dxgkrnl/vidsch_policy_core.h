@@ -134,4 +134,13 @@ VidSchPolicyResetHoldsMiniport(
     return RecoveryActive && ResetOwner != Caller;
 }
 
+/* DxgkDdiPreemptCommand runs at DISPATCH_LEVEL unless the driver set DXGK_VIDSCHCAPS.LowIrqlPreemptCommand */
+FORCEINLINE
+KIRQL
+VidSchPolicyPreemptCommandIrql(
+    _In_ BOOLEAN LowIrqlPreemptCommand)
+{
+    return LowIrqlPreemptCommand ? PASSIVE_LEVEL : DISPATCH_LEVEL;
+}
+
 #endif /* _VIDSCH_POLICY_CORE_H_ */
