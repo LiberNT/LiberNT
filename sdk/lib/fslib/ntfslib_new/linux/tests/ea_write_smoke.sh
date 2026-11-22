@@ -119,9 +119,9 @@ test "$summary" = "$(printf '%s\n%s' \
 "$ntfscat" -a 0xe0 "$image" /file.bin |
     cmp - "$expected_all"
 
-packed_size=$("$driver" --list-info "$image" / |
+ea_size=$("$driver" --list-info "$image" / |
     awk '$4 == "file.bin" { print $5 }')
-test "$packed_size" = 32793
+test "$ea_size" = 32804
 
 "$ntfsinfo" -F /file.bin "$image" >"$report"
 grep -q 'Packed EA length:[[:space:]]*32793 ' "$report"
