@@ -2077,7 +2077,7 @@ typedef struct _KTHREAD
             ULONG BypassProcessFreeze:1;
             ULONG CetKernelShadowStack:1;
             ULONG StateSaveAreaDecoupled:1;
-            ULONG MiscReserved:8;
+            ULONG Reserved:8;
         };
         LONG MiscFlags;                                  // 0x074
     };
@@ -2252,7 +2252,11 @@ typedef struct _KTHREAD
     USHORT UserAffinityPrimaryGroup;                     // 0x230
     CHAR PreviousMode;                                   // 0x232
     CHAR BasePriority;                                   // 0x233
-    CCHAR FreezeCount;                                   // 0x234 Win11 name: Spare24 [ReactOS]
+    union
+    {
+        UCHAR Spare24;                                   // 0x234
+        CCHAR FreezeCount;                               // 0x234 [ReactOS]
+    };
     UCHAR Preempted;                                     // 0x235
     UCHAR AdjustReason;                                  // 0x236
     CHAR AdjustIncrement;                                // 0x237
@@ -2343,7 +2347,11 @@ typedef struct _KTHREAD
     volatile LONG AbCompletedIoQoSBoostCount;            // 0x360
     volatile SHORT KeReferenceCount;                     // 0x364
     CHAR DecayBoost;                                     // 0x366
-    UCHAR LargeStack;                                    // 0x367 Win11 name: Spare6 [ReactOS]
+    union
+    {
+        UCHAR Spare6;                                    // 0x367
+        UCHAR LargeStack;                                // 0x367 [ReactOS]
+    };
     ULONG ForegroundLossTime;                            // 0x368
     union
     {
@@ -2408,17 +2416,22 @@ typedef struct _KTHREAD
     ULONG SchedulerAssistYieldCounter;                   // 0x488
     ULONG SchedulerAssistYieldBoostCount;                // 0x48C
     LONG64 SchedulerAssistLastYieldBoostTime;            // 0x490
-    // Win11 Padding[5] region (0x498..0x4C0): ReactOS private members
-    KSPIN_LOCK ApcQueueLock;                             // 0x498 [ReactOS]
-    PKAPC_STATE ApcStatePointer[2];                      // 0x4A0 [ReactOS]
-    PVOID CallbackStack;                                 // 0x4B0 [ReactOS]
-    ULONG64 Padding;                                     // 0x4B8
+    union
+    {
+        ULONG64 Padding[5];                              // 0x498
+        struct
+        {
+            KSPIN_LOCK ApcQueueLock;                     // 0x498 [ReactOS]
+            PKAPC_STATE ApcStatePointer[2];              // 0x4A0 [ReactOS]
+            PVOID CallbackStack;                         // 0x4B0 [ReactOS]
+        };
+    };
 } KTHREAD;                                               // sizeof 0x4C0
 
 #else
 
-#define KTHREAD_DISABLE_BOOST_BIT 1
-#define KTHREAD_AUTO_ALIGNMENT_BIT 0
+#define KTHREAD_DISABLE_BOOST_BIT 3
+#define KTHREAD_AUTO_ALIGNMENT_BIT 2
 #define KTHREAD_GROUP_AFFINITY
 
 #define NUMBER_OF_LOCK_ENTRIES 6
