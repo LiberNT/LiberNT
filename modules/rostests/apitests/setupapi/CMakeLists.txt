@@ -7,6 +7,7 @@ list(APPEND SOURCE
     DeviceDescription.c
     DeviceExtension.c
     KmdfServiceSection.c
+    PackageRootDevice.c
     DriverFeatureScore.c
     DriverFilesNeedReboot.c
     DriverPackageSignerScore.c

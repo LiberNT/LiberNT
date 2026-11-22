@@ -122,6 +122,35 @@ IsDeviceDoNotInstall(
     return Result;
 }
 
+BOOL
+QueueDeviceInstall(
+    _In_ PCWSTR DeviceId)
+{
+    DeviceInstallParams *Params;
+    SIZE_T Length;
+
+    ASSERT(DeviceId != NULL);
+    ASSERT(DeviceId[0] != UNICODE_NULL);
+
+    Length = wcslen(DeviceId);
+    ASSERT(Length < MAX_DEVICE_ID_LEN);
+
+    Params = HeapAlloc(GetProcessHeap(), 0, FIELD_OFFSET(DeviceInstallParams, DeviceIds[Length + 1]));
+    if (Params == NULL)
+        return FALSE;
+
+    Params->Arrival = FALSE;
+    wcscpy(Params->DeviceIds, DeviceId);
+
+    WaitForSingleObject(hDeviceInstallListMutex, INFINITE);
+    ResetEvent(hNoPendingInstalls);
+    InsertTailList(&DeviceInstallListHead, &Params->ListEntry);
+    ReleaseMutex(hDeviceInstallListMutex);
+
+    SetEvent(hDeviceInstallListNotEmpty);
+    return TRUE;
+}
+
 typedef enum _DEVICE_INSTALL_STATE
 {
     DeviceInstallRequired,

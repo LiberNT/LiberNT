@@ -3777,6 +3777,33 @@ EnableDeviceInstance(
 }
 
 
+/* The install thread skips the devices of the subtree that need no installation */
+static
+BOOL
+QueueSubtreeInstall(
+    _In_ PCWSTR DeviceId)
+{
+    WCHAR Child[MAX_DEVICE_ID_LEN];
+    WCHAR Next[MAX_DEVICE_ID_LEN];
+
+    if (!QueueDeviceInstall(DeviceId))
+        return FALSE;
+
+    if (GetRelatedDevice(DeviceId, PNP_GET_CHILD_DEVICE, Child, ARRAYSIZE(Child)))
+    {
+        for (;;)
+        {
+            if (!QueueSubtreeInstall(Child))
+                return FALSE;
+            if (!GetRelatedDevice(Child, PNP_GET_SIBLING_DEVICE, Next, ARRAYSIZE(Next)))
+                break;
+            wcscpy(Child, Next);
+        }
+    }
+
+    return TRUE;
+}
+
 static CONFIGRET
 ReenumerateDeviceInstance(
     _In_ LPWSTR pszDeviceInstance,
@@ -3792,11 +3819,6 @@ ReenumerateDeviceInstance(
     if (ulMinorAction & ~CM_REENUMERATE_BITS)
         return CR_INVALID_FLAG;
 
-    if (ulMinorAction & CM_REENUMERATE_RETRY_INSTALLATION)
-    {
-        DPRINT1("CM_REENUMERATE_RETRY_INSTALLATION not implemented!\n");
-    }
-
     RtlInitUnicodeString(&EnumerateDeviceData.DeviceInstance,
                          pszDeviceInstance);
     EnumerateDeviceData.Flags = 0;
@@ -3806,6 +3828,13 @@ ReenumerateDeviceInstance(
                                sizeof(PLUGPLAY_CONTROL_ENUMERATE_DEVICE_DATA));
     if (!NT_SUCCESS(Status))
         ret = NtStatusToCrError(Status);
+
+    if (ret == CR_SUCCESS &&
+        (ulMinorAction & CM_REENUMERATE_RETRY_INSTALLATION) &&
+        !QueueSubtreeInstall(pszDeviceInstance))
+    {
+        ret = CR_OUT_OF_MEMORY;
+    }
 
     return ret;
 }
