@@ -219,7 +219,6 @@ private:
     UINT m_NavigationRootCount;
     UINT m_PinnedCount;
     BOOL m_QuickAccess;
-    HICON m_PinIcon;
     HWND m_FocusSave;
     RECT m_PanelRect;
     RECT m_ViewRect;
