@@ -372,7 +372,7 @@ AcpiOsMapMemory (
 
     /* ACPI tables can reside above 4 GB on amd64, so keep the full address. */
     Address.QuadPart = (ULONGLONG)phys;
-#if defined(_M_ARM64)
+#if defined(_M_ARM64) || defined(_M_ARM)
     CacheType = MmCached;
 #else
     CacheType = MmNonCached;
@@ -389,7 +389,7 @@ AcpiOsMapMemory (
     return Ptr;
 }
 
-#if defined(_M_ARM64)
+#if defined(_M_ARM64) || defined(_M_ARM)
 void *
 AcpiOsMapOperationRegion (
     ACPI_PHYSICAL_ADDRESS   phys,

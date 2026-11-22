@@ -166,7 +166,7 @@ AcpiExSystemMemorySpaceHandler (
 
         /* Create a new mapping starting at the address given */
 
-#if defined(__REACTOS__) && defined(_M_ARM64)
+#if defined(__REACTOS__) && (defined(_M_ARM64) || defined(_M_ARM))
         /* ACPI tables are normal memory, but OperationRegions can be MMIO or
          * shared firmware buffers and must not inherit the table mapping's
          * cached ARM64 alias. MmNonCached selects Device memory for MMIO and
