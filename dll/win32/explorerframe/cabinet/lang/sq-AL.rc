@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Albanian)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_ALBANIAN, SUBLANG_NEUTRAL
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "I ri"
+    IDS_CAB_SORT "Rendit"
+    IDS_CAB_VIEW "Pamja"
+    IDS_CAB_DETAILS "Detaje"
+    IDS_CAB_SEARCH_IN "Kërko në %s"
+    IDS_CAB_ITEMS "%u artikuj"
+    IDS_CAB_ITEM "1 artikull"
+    IDS_CAB_SELECTED "%u artikuj të përzgjedhur"
+    IDS_CAB_SELECTED_ONE "1 artikull i përzgjedhur"
+    IDS_CAB_SORT_NAME "Emri"
+    IDS_CAB_SORT_DATE "Data e ndryshimit"
+    IDS_CAB_SORT_TYPE "Lloji"
+    IDS_CAB_SORT_SIZE "Madhësia"
+    IDS_CAB_SORT_ASCENDING "Rritës"
+    IDS_CAB_SORT_DESCENDING "Zbritës"
+    IDS_CAB_VIEW_XLARGE "Ikona shumë të mëdha"
+    IDS_CAB_VIEW_LARGE "Ikona të mëdha"
+    IDS_CAB_VIEW_MEDIUM "Ikona mesatare"
+    IDS_CAB_VIEW_SMALL "Ikona të vogla"
+    IDS_CAB_VIEW_LIST "Listë"
+    IDS_CAB_VIEW_DETAILS "Detaje"
+    IDS_CAB_VIEW_TILES "Pllaka"
+    IDS_CAB_VIEW_CONTENT "Përmbajtja"
+    IDS_CAB_SELECT_ALL "Përzgjidh të gjitha"
+    IDS_CAB_SELECT_NONE "Mos përzgjidh asgjë"
+    IDS_CAB_INVERT_SELECTION "Përmbys përzgjedhjen"
+    IDS_CAB_PROPERTIES "Vetitë"
+    IDS_CAB_OPTIONS "Opsionet"
+    IDS_CAB_OPEN_NEW_TAB "Hap në skedë të re"
+    IDS_CAB_OPEN_NEW_WINDOW "Hap në dritare të re"
+    IDS_CAB_CLOSE_TAB "Mbyll skedën"
+    IDS_CAB_CLOSE_OTHER_TABS "Mbyll skedat e tjera"
+    IDS_CAB_SHOW "Shfaq"
+    IDS_CAB_SHOW_NAVIGATION "Paneli i lundrimit"
+    IDS_CAB_SHOW_DETAILS "Paneli i detajeve"
+    IDS_CAB_SHOW_CHECKBOXES "Kutitë e zgjedhjes së artikujve"
+    IDS_CAB_SHOW_EXTENSIONS "Prapashtesat e emrave të skedarëve"
+    IDS_CAB_SHOW_HIDDEN "Artikujt e fshehur"
+    IDS_CAB_CUT "Prit"
+    IDS_CAB_COPY "Kopjo"
+    IDS_CAB_PASTE "Ngjit"
+    IDS_CAB_RENAME "Riemërto"
+    IDS_CAB_DELETE "Fshi"
+    IDS_CAB_BACK "Prapa"
+    IDS_CAB_FORWARD "Përpara"
+    IDS_CAB_UP "Lart"
+    IDS_CAB_REFRESH "Rifresko"
+    IDS_CAB_MORE "Shiko më shumë"
+    IDS_CAB_NEW_TAB "Skedë e re"
+    IDS_CAB_SHOW_PREVIEW "Paneli i parapamjes"
+    IDS_CAB_PREVIEW_NONE "Nuk ka parapamje të disponueshme."
+    IDS_CAB_PREVIEW_SELECT "Përzgjidhni një skedar për ta parë paraprakisht."
+    IDS_CAB_SHOW_QUICK_ACCESS "Shfaq Qasjen e shpejtë"
+    IDS_CAB_TITLE "Eksploruesi i skedarëve"
+    IDS_CAB_TITLE_FORMAT "%s - Eksploruesi i skedarëve"
+END

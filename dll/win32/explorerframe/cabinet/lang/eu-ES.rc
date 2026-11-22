@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Basque)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_BASQUE, SUBLANG_NEUTRAL
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "Berria"
+    IDS_CAB_SORT "Ordenatu"
+    IDS_CAB_VIEW "Ikusi"
+    IDS_CAB_DETAILS "Xehetasunak"
+    IDS_CAB_SEARCH_IN "Bilatu hemen: %s"
+    IDS_CAB_ITEMS "%u elementu"
+    IDS_CAB_ITEM "Elementu 1"
+    IDS_CAB_SELECTED "%u elementu hautatuta"
+    IDS_CAB_SELECTED_ONE "Elementu 1 hautatuta"
+    IDS_CAB_SORT_NAME "Izena"
+    IDS_CAB_SORT_DATE "Aldatze-data"
+    IDS_CAB_SORT_TYPE "Mota"
+    IDS_CAB_SORT_SIZE "Tamaina"
+    IDS_CAB_SORT_ASCENDING "Goranzkoa"
+    IDS_CAB_SORT_DESCENDING "Beheranzkoa"
+    IDS_CAB_VIEW_XLARGE "Ikono oso handiak"
+    IDS_CAB_VIEW_LARGE "Ikono handiak"
+    IDS_CAB_VIEW_MEDIUM "Ikono ertainak"
+    IDS_CAB_VIEW_SMALL "Ikono txikiak"
+    IDS_CAB_VIEW_LIST "Zerrenda"
+    IDS_CAB_VIEW_DETAILS "Xehetasunak"
+    IDS_CAB_VIEW_TILES "Lauzak"
+    IDS_CAB_VIEW_CONTENT "Edukia"
+    IDS_CAB_SELECT_ALL "Hautatu dena"
+    IDS_CAB_SELECT_NONE "Ez hautatu ezer"
+    IDS_CAB_INVERT_SELECTION "Alderantzikatu hautapena"
+    IDS_CAB_PROPERTIES "Propietateak"
+    IDS_CAB_OPTIONS "Aukerak"
+    IDS_CAB_OPEN_NEW_TAB "Ireki fitxa berrian"
+    IDS_CAB_OPEN_NEW_WINDOW "Ireki leiho berrian"
+    IDS_CAB_CLOSE_TAB "Itxi fitxa"
+    IDS_CAB_CLOSE_OTHER_TABS "Itxi beste fitxak"
+    IDS_CAB_SHOW "Erakutsi"
+    IDS_CAB_SHOW_NAVIGATION "Nabigazio-panela"
+    IDS_CAB_SHOW_DETAILS "Xehetasunen panela"
+    IDS_CAB_SHOW_CHECKBOXES "Elementuen kontrol-laukiak"
+    IDS_CAB_SHOW_EXTENSIONS "Fitxategi-izenen luzapenak"
+    IDS_CAB_SHOW_HIDDEN "Ezkutuko elementuak"
+    IDS_CAB_CUT "Ebaki"
+    IDS_CAB_COPY "Kopiatu"
+    IDS_CAB_PASTE "Itsatsi"
+    IDS_CAB_RENAME "Aldatu izena"
+    IDS_CAB_DELETE "Ezabatu"
+    IDS_CAB_BACK "Atzera"
+    IDS_CAB_FORWARD "Aurrera"
+    IDS_CAB_UP "Gora"
+    IDS_CAB_REFRESH "Freskatu"
+    IDS_CAB_MORE "Ikusi gehiago"
+    IDS_CAB_NEW_TAB "Fitxa berria"
+    IDS_CAB_SHOW_PREVIEW "Aurrebista-panela"
+    IDS_CAB_PREVIEW_NONE "Ez dago aurrebistarik erabilgarri."
+    IDS_CAB_PREVIEW_SELECT "Hautatu fitxategi bat aurrebista ikusteko."
+    IDS_CAB_SHOW_QUICK_ACCESS "Erakutsi Sarbide azkarra"
+    IDS_CAB_TITLE "Fitxategi-arakatzailea"
+    IDS_CAB_TITLE_FORMAT "%s - Fitxategi-arakatzailea"
+END

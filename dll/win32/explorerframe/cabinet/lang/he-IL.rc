@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Hebrew)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_HEBREW, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "חדש"
+    IDS_CAB_SORT "מיין"
+    IDS_CAB_VIEW "תצוגה"
+    IDS_CAB_DETAILS "פרטים"
+    IDS_CAB_SEARCH_IN "חפש ב-%s"
+    IDS_CAB_ITEMS "%u פריטים"
+    IDS_CAB_ITEM "פריט אחד"
+    IDS_CAB_SELECTED "%u פריטים נבחרו"
+    IDS_CAB_SELECTED_ONE "פריט אחד נבחר"
+    IDS_CAB_SORT_NAME "שם"
+    IDS_CAB_SORT_DATE "תאריך שינוי"
+    IDS_CAB_SORT_TYPE "סוג"
+    IDS_CAB_SORT_SIZE "גודל"
+    IDS_CAB_SORT_ASCENDING "סדר עולה"
+    IDS_CAB_SORT_DESCENDING "סדר יורד"
+    IDS_CAB_VIEW_XLARGE "סמלים גדולים מאוד"
+    IDS_CAB_VIEW_LARGE "סמלים גדולים"
+    IDS_CAB_VIEW_MEDIUM "סמלים בינוניים"
+    IDS_CAB_VIEW_SMALL "סמלים קטנים"
+    IDS_CAB_VIEW_LIST "רשימה"
+    IDS_CAB_VIEW_DETAILS "פרטים"
+    IDS_CAB_VIEW_TILES "אריחים"
+    IDS_CAB_VIEW_CONTENT "תוכן"
+    IDS_CAB_SELECT_ALL "בחר הכל"
+    IDS_CAB_SELECT_NONE "בטל בחירה"
+    IDS_CAB_INVERT_SELECTION "הפוך בחירה"
+    IDS_CAB_PROPERTIES "מאפיינים"
+    IDS_CAB_OPTIONS "אפשרויות"
+    IDS_CAB_OPEN_NEW_TAB "פתח בכרטיסיה חדשה"
+    IDS_CAB_OPEN_NEW_WINDOW "פתח בחלון חדש"
+    IDS_CAB_CLOSE_TAB "סגור כרטיסיה"
+    IDS_CAB_CLOSE_OTHER_TABS "סגור כרטיסיות אחרות"
+    IDS_CAB_SHOW "הצג"
+    IDS_CAB_SHOW_NAVIGATION "חלונית ניווט"
+    IDS_CAB_SHOW_DETAILS "חלונית פרטים"
+    IDS_CAB_SHOW_CHECKBOXES "תיבות סימון של פריטים"
+    IDS_CAB_SHOW_EXTENSIONS "סיומות שמות קבצים"
+    IDS_CAB_SHOW_HIDDEN "פריטים מוסתרים"
+    IDS_CAB_CUT "גזור"
+    IDS_CAB_COPY "העתק"
+    IDS_CAB_PASTE "הדבק"
+    IDS_CAB_RENAME "שנה שם"
+    IDS_CAB_DELETE "מחק"
+    IDS_CAB_BACK "הקודם"
+    IDS_CAB_FORWARD "הבא"
+    IDS_CAB_UP "למעלה"
+    IDS_CAB_REFRESH "רענן"
+    IDS_CAB_MORE "ראה עוד"
+    IDS_CAB_NEW_TAB "כרטיסיה חדשה"
+    IDS_CAB_SHOW_PREVIEW "חלונית תצוגה מקדימה"
+    IDS_CAB_PREVIEW_NONE "אין תצוגה מקדימה זמינה."
+    IDS_CAB_PREVIEW_SELECT "בחר קובץ כדי להציג תצוגה מקדימה."
+    IDS_CAB_SHOW_QUICK_ACCESS "הצג גישה מהירה"
+    IDS_CAB_TITLE "סייר הקבצים"
+    IDS_CAB_TITLE_FORMAT "%s - סייר הקבצים"
+END

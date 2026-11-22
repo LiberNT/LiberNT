@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Turkish)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_TURKISH, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "Yeni"
+    IDS_CAB_SORT "Sırala"
+    IDS_CAB_VIEW "Görünüm"
+    IDS_CAB_DETAILS "Ayrıntılar"
+    IDS_CAB_SEARCH_IN "Ara: %s"
+    IDS_CAB_ITEMS "%u öğe"
+    IDS_CAB_ITEM "1 öğe"
+    IDS_CAB_SELECTED "%u öğe seçildi"
+    IDS_CAB_SELECTED_ONE "1 öğe seçildi"
+    IDS_CAB_SORT_NAME "Ad"
+    IDS_CAB_SORT_DATE "Değiştirme tarihi"
+    IDS_CAB_SORT_TYPE "Tür"
+    IDS_CAB_SORT_SIZE "Boyut"
+    IDS_CAB_SORT_ASCENDING "Artan"
+    IDS_CAB_SORT_DESCENDING "Azalan"
+    IDS_CAB_VIEW_XLARGE "Çok büyük simgeler"
+    IDS_CAB_VIEW_LARGE "Büyük simgeler"
+    IDS_CAB_VIEW_MEDIUM "Orta boy simgeler"
+    IDS_CAB_VIEW_SMALL "Küçük simgeler"
+    IDS_CAB_VIEW_LIST "Liste"
+    IDS_CAB_VIEW_DETAILS "Ayrıntılar"
+    IDS_CAB_VIEW_TILES "Döşemeler"
+    IDS_CAB_VIEW_CONTENT "İçerik"
+    IDS_CAB_SELECT_ALL "Tümünü seç"
+    IDS_CAB_SELECT_NONE "Hiçbirini seçme"
+    IDS_CAB_INVERT_SELECTION "Seçimi ters çevir"
+    IDS_CAB_PROPERTIES "Özellikler"
+    IDS_CAB_OPTIONS "Seçenekler"
+    IDS_CAB_OPEN_NEW_TAB "Yeni sekmede aç"
+    IDS_CAB_OPEN_NEW_WINDOW "Yeni pencerede aç"
+    IDS_CAB_CLOSE_TAB "Sekmeyi kapat"
+    IDS_CAB_CLOSE_OTHER_TABS "Diğer sekmeleri kapat"
+    IDS_CAB_SHOW "Göster"
+    IDS_CAB_SHOW_NAVIGATION "Gezinti bölmesi"
+    IDS_CAB_SHOW_DETAILS "Ayrıntılar bölmesi"
+    IDS_CAB_SHOW_CHECKBOXES "Öğe onay kutuları"
+    IDS_CAB_SHOW_EXTENSIONS "Dosya adı uzantıları"
+    IDS_CAB_SHOW_HIDDEN "Gizli öğeler"
+    IDS_CAB_CUT "Kes"
+    IDS_CAB_COPY "Kopyala"
+    IDS_CAB_PASTE "Yapıştır"
+    IDS_CAB_RENAME "Yeniden adlandır"
+    IDS_CAB_DELETE "Sil"
+    IDS_CAB_BACK "Geri"
+    IDS_CAB_FORWARD "İleri"
+    IDS_CAB_UP "Yukarı"
+    IDS_CAB_REFRESH "Yenile"
+    IDS_CAB_MORE "Daha fazlasını gör"
+    IDS_CAB_NEW_TAB "Yeni sekme"
+    IDS_CAB_SHOW_PREVIEW "Önizleme bölmesi"
+    IDS_CAB_PREVIEW_NONE "Önizleme yok."
+    IDS_CAB_PREVIEW_SELECT "Önizlemek için bir dosya seçin."
+    IDS_CAB_SHOW_QUICK_ACCESS "Hızlı erişimi göster"
+    IDS_CAB_TITLE "Dosya Gezgini"
+    IDS_CAB_TITLE_FORMAT "%s - Dosya Gezgini"
+END

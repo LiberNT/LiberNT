@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Bulgarian)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_BULGARIAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "Създай"
+    IDS_CAB_SORT "Сортиране"
+    IDS_CAB_VIEW "Изглед"
+    IDS_CAB_DETAILS "Подробности"
+    IDS_CAB_SEARCH_IN "Търсене в %s"
+    IDS_CAB_ITEMS "%u елемента"
+    IDS_CAB_ITEM "1 елемент"
+    IDS_CAB_SELECTED "Избрани са %u елемента"
+    IDS_CAB_SELECTED_ONE "Избран е 1 елемент"
+    IDS_CAB_SORT_NAME "Име"
+    IDS_CAB_SORT_DATE "Дата на промяна"
+    IDS_CAB_SORT_TYPE "Тип"
+    IDS_CAB_SORT_SIZE "Размер"
+    IDS_CAB_SORT_ASCENDING "Възходящо"
+    IDS_CAB_SORT_DESCENDING "Низходящо"
+    IDS_CAB_VIEW_XLARGE "Много големи икони"
+    IDS_CAB_VIEW_LARGE "Големи икони"
+    IDS_CAB_VIEW_MEDIUM "Средни икони"
+    IDS_CAB_VIEW_SMALL "Малки икони"
+    IDS_CAB_VIEW_LIST "Списък"
+    IDS_CAB_VIEW_DETAILS "Подробности"
+    IDS_CAB_VIEW_TILES "Плочки"
+    IDS_CAB_VIEW_CONTENT "Съдържание"
+    IDS_CAB_SELECT_ALL "Избери всички"
+    IDS_CAB_SELECT_NONE "Отмени избора"
+    IDS_CAB_INVERT_SELECTION "Обърни избора"
+    IDS_CAB_PROPERTIES "Свойства"
+    IDS_CAB_OPTIONS "Опции"
+    IDS_CAB_OPEN_NEW_TAB "Отвори в нов раздел"
+    IDS_CAB_OPEN_NEW_WINDOW "Отвори в нов прозорец"
+    IDS_CAB_CLOSE_TAB "Затвори раздела"
+    IDS_CAB_CLOSE_OTHER_TABS "Затвори другите раздели"
+    IDS_CAB_SHOW "Показване"
+    IDS_CAB_SHOW_NAVIGATION "Навигационен екран"
+    IDS_CAB_SHOW_DETAILS "Екран с подробности"
+    IDS_CAB_SHOW_CHECKBOXES "Квадратчета за отметка на елементите"
+    IDS_CAB_SHOW_EXTENSIONS "Разширения на файловите имена"
+    IDS_CAB_SHOW_HIDDEN "Скрити елементи"
+    IDS_CAB_CUT "Изрежи"
+    IDS_CAB_COPY "Копирай"
+    IDS_CAB_PASTE "Постави"
+    IDS_CAB_RENAME "Преименувай"
+    IDS_CAB_DELETE "Изтрий"
+    IDS_CAB_BACK "Назад"
+    IDS_CAB_FORWARD "Напред"
+    IDS_CAB_UP "Нагоре"
+    IDS_CAB_REFRESH "Обнови"
+    IDS_CAB_MORE "Вижте още"
+    IDS_CAB_NEW_TAB "Нов раздел"
+    IDS_CAB_SHOW_PREVIEW "Екран за визуализация"
+    IDS_CAB_PREVIEW_NONE "Няма налична визуализация."
+    IDS_CAB_PREVIEW_SELECT "Изберете файл за визуализация."
+    IDS_CAB_SHOW_QUICK_ACCESS "Показване на „Бърз достъп“"
+    IDS_CAB_TITLE "Файлов изследовател"
+    IDS_CAB_TITLE_FORMAT "%s - Файлов изследовател"
+END

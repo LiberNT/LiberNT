@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Norwegian)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_NORWEGIAN, SUBLANG_NEUTRAL
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "Ny"
+    IDS_CAB_SORT "Sorter"
+    IDS_CAB_VIEW "Vis"
+    IDS_CAB_DETAILS "Detaljer"
+    IDS_CAB_SEARCH_IN "Søk i %s"
+    IDS_CAB_ITEMS "%u elementer"
+    IDS_CAB_ITEM "1 element"
+    IDS_CAB_SELECTED "%u elementer valgt"
+    IDS_CAB_SELECTED_ONE "1 element valgt"
+    IDS_CAB_SORT_NAME "Navn"
+    IDS_CAB_SORT_DATE "Endringsdato"
+    IDS_CAB_SORT_TYPE "Type"
+    IDS_CAB_SORT_SIZE "Størrelse"
+    IDS_CAB_SORT_ASCENDING "Stigende"
+    IDS_CAB_SORT_DESCENDING "Synkende"
+    IDS_CAB_VIEW_XLARGE "Ekstra store ikoner"
+    IDS_CAB_VIEW_LARGE "Store ikoner"
+    IDS_CAB_VIEW_MEDIUM "Middels store ikoner"
+    IDS_CAB_VIEW_SMALL "Små ikoner"
+    IDS_CAB_VIEW_LIST "Liste"
+    IDS_CAB_VIEW_DETAILS "Detaljer"
+    IDS_CAB_VIEW_TILES "Fliser"
+    IDS_CAB_VIEW_CONTENT "Innhold"
+    IDS_CAB_SELECT_ALL "Merk alt"
+    IDS_CAB_SELECT_NONE "Merk ingen"
+    IDS_CAB_INVERT_SELECTION "Inverter merking"
+    IDS_CAB_PROPERTIES "Egenskaper"
+    IDS_CAB_OPTIONS "Alternativer"
+    IDS_CAB_OPEN_NEW_TAB "Åpne i ny fane"
+    IDS_CAB_OPEN_NEW_WINDOW "Åpne i nytt vindu"
+    IDS_CAB_CLOSE_TAB "Lukk fane"
+    IDS_CAB_CLOSE_OTHER_TABS "Lukk andre faner"
+    IDS_CAB_SHOW "Vis"
+    IDS_CAB_SHOW_NAVIGATION "Navigasjonsrute"
+    IDS_CAB_SHOW_DETAILS "Detaljrute"
+    IDS_CAB_SHOW_CHECKBOXES "Avmerkingsbokser for elementer"
+    IDS_CAB_SHOW_EXTENSIONS "Filetternavn"
+    IDS_CAB_SHOW_HIDDEN "Skjulte elementer"
+    IDS_CAB_CUT "Klipp ut"
+    IDS_CAB_COPY "Kopier"
+    IDS_CAB_PASTE "Lim inn"
+    IDS_CAB_RENAME "Gi nytt navn"
+    IDS_CAB_DELETE "Slett"
+    IDS_CAB_BACK "Tilbake"
+    IDS_CAB_FORWARD "Frem"
+    IDS_CAB_UP "Opp"
+    IDS_CAB_REFRESH "Oppdater"
+    IDS_CAB_MORE "Se mer"
+    IDS_CAB_NEW_TAB "Ny fane"
+    IDS_CAB_SHOW_PREVIEW "Forhåndsvisningsrute"
+    IDS_CAB_PREVIEW_NONE "Ingen forhåndsvisning er tilgjengelig."
+    IDS_CAB_PREVIEW_SELECT "Velg en fil du vil forhåndsvise."
+    IDS_CAB_SHOW_QUICK_ACCESS "Vis Hurtigtilgang"
+    IDS_CAB_TITLE "Filutforsker"
+    IDS_CAB_TITLE_FORMAT "%s - Filutforsker"
+END

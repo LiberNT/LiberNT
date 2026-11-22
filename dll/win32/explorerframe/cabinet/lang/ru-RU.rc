@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Russian)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_RUSSIAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "Создать"
+    IDS_CAB_SORT "Сортировка"
+    IDS_CAB_VIEW "Вид"
+    IDS_CAB_DETAILS "Сведения"
+    IDS_CAB_SEARCH_IN "Поиск: %s"
+    IDS_CAB_ITEMS "Элементов: %u"
+    IDS_CAB_ITEM "1 элемент"
+    IDS_CAB_SELECTED "Выбрано элементов: %u"
+    IDS_CAB_SELECTED_ONE "Выбран 1 элемент"
+    IDS_CAB_SORT_NAME "Имя"
+    IDS_CAB_SORT_DATE "Дата изменения"
+    IDS_CAB_SORT_TYPE "Тип"
+    IDS_CAB_SORT_SIZE "Размер"
+    IDS_CAB_SORT_ASCENDING "По возрастанию"
+    IDS_CAB_SORT_DESCENDING "По убыванию"
+    IDS_CAB_VIEW_XLARGE "Огромные значки"
+    IDS_CAB_VIEW_LARGE "Крупные значки"
+    IDS_CAB_VIEW_MEDIUM "Обычные значки"
+    IDS_CAB_VIEW_SMALL "Мелкие значки"
+    IDS_CAB_VIEW_LIST "Список"
+    IDS_CAB_VIEW_DETAILS "Таблица"
+    IDS_CAB_VIEW_TILES "Плитка"
+    IDS_CAB_VIEW_CONTENT "Содержимое"
+    IDS_CAB_SELECT_ALL "Выделить все"
+    IDS_CAB_SELECT_NONE "Снять выделение"
+    IDS_CAB_INVERT_SELECTION "Обратить выделение"
+    IDS_CAB_PROPERTIES "Свойства"
+    IDS_CAB_OPTIONS "Параметры"
+    IDS_CAB_OPEN_NEW_TAB "Открыть в новой вкладке"
+    IDS_CAB_OPEN_NEW_WINDOW "Открыть в новом окне"
+    IDS_CAB_CLOSE_TAB "Закрыть вкладку"
+    IDS_CAB_CLOSE_OTHER_TABS "Закрыть другие вкладки"
+    IDS_CAB_SHOW "Показать"
+    IDS_CAB_SHOW_NAVIGATION "Область навигации"
+    IDS_CAB_SHOW_DETAILS "Область сведений"
+    IDS_CAB_SHOW_CHECKBOXES "Флажки элементов"
+    IDS_CAB_SHOW_EXTENSIONS "Расширения имен файлов"
+    IDS_CAB_SHOW_HIDDEN "Скрытые элементы"
+    IDS_CAB_CUT "Вырезать"
+    IDS_CAB_COPY "Копировать"
+    IDS_CAB_PASTE "Вставить"
+    IDS_CAB_RENAME "Переименовать"
+    IDS_CAB_DELETE "Удалить"
+    IDS_CAB_BACK "Назад"
+    IDS_CAB_FORWARD "Вперед"
+    IDS_CAB_UP "Вверх"
+    IDS_CAB_REFRESH "Обновить"
+    IDS_CAB_MORE "Дополнительно"
+    IDS_CAB_NEW_TAB "Новая вкладка"
+    IDS_CAB_SHOW_PREVIEW "Область просмотра"
+    IDS_CAB_PREVIEW_NONE "Предварительный просмотр недоступен."
+    IDS_CAB_PREVIEW_SELECT "Выберите файл для предварительного просмотра."
+    IDS_CAB_SHOW_QUICK_ACCESS "Показывать быстрый доступ"
+    IDS_CAB_TITLE "Проводник"
+    IDS_CAB_TITLE_FORMAT "%s - Проводник"
+END

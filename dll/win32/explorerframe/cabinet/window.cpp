@@ -1687,7 +1687,7 @@ CCabinetWindow::Open(PCIDLIST_ABSOLUTE pidl, PCUITEMID_CHILD select, int showCmd
     WNDCLASSEXW wc = { sizeof(wc) };
     WINDOWPLACEMENT placement = { sizeof(placement) };
     DWORD size = sizeof(placement);
-    WCHAR name[32];
+    WCHAR name[32], title[64];
 
     if (!GetClassInfoExW(g_hInstance, CABINET_CLASS, &wc))
     {
@@ -1700,7 +1700,8 @@ CCabinetWindow::Open(PCIDLIST_ABSOLUTE pidl, PCUITEMID_CHILD select, int showCmd
         if (!RegisterClassExW(&wc))
             return HRESULT_FROM_WIN32(GetLastError());
     }
-    if (!CreateWindowExW(WS_EX_WINDOWEDGE, CABINET_CLASS, L"File Explorer", WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
+    LoadText(IDS_CAB_TITLE, title, _countof(title));
+    if (!CreateWindowExW(WS_EX_WINDOWEDGE, CABINET_CLASS, title, WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
                          CW_USEDEFAULT, CW_USEDEFAULT, Scale(1000), Scale(680), NULL, NULL, g_hInstance, this))
         return HRESULT_FROM_WIN32(GetLastError());
     StringCchPrintfW(name, _countof(name), L"Placement%u", GetDpiForWindow(m_hwnd));
@@ -2299,7 +2300,8 @@ CCabinetWindow::UpdateTitle(CabinetTab *tab)
     if (tab == ActiveTab())
     {
         WCHAR format[64], cue[MAX_PATH + 64];
-        StringCchPrintfW(title, _countof(title), L"%s - File Explorer", tab->Title);
+        LoadText(IDS_CAB_TITLE_FORMAT, format, _countof(format));
+        StringCchPrintfW(title, _countof(title), format, tab->Title);
         SetWindowTextW(m_hwnd, title);
         LoadText(IDS_CAB_SEARCH_IN, format, _countof(format));
         StringCchPrintfW(cue, _countof(cue), format, tab->Title);

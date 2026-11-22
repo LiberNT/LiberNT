@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Dutch)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_DUTCH, SUBLANG_NEUTRAL
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "Nieuw"
+    IDS_CAB_SORT "Sorteren"
+    IDS_CAB_VIEW "Weergeven"
+    IDS_CAB_DETAILS "Details"
+    IDS_CAB_SEARCH_IN "Zoeken in %s"
+    IDS_CAB_ITEMS "%u items"
+    IDS_CAB_ITEM "1 item"
+    IDS_CAB_SELECTED "%u items geselecteerd"
+    IDS_CAB_SELECTED_ONE "1 item geselecteerd"
+    IDS_CAB_SORT_NAME "Naam"
+    IDS_CAB_SORT_DATE "Gewijzigd op"
+    IDS_CAB_SORT_TYPE "Type"
+    IDS_CAB_SORT_SIZE "Grootte"
+    IDS_CAB_SORT_ASCENDING "Oplopend"
+    IDS_CAB_SORT_DESCENDING "Aflopend"
+    IDS_CAB_VIEW_XLARGE "Extra grote pictogrammen"
+    IDS_CAB_VIEW_LARGE "Grote pictogrammen"
+    IDS_CAB_VIEW_MEDIUM "Normale pictogrammen"
+    IDS_CAB_VIEW_SMALL "Kleine pictogrammen"
+    IDS_CAB_VIEW_LIST "Lijst"
+    IDS_CAB_VIEW_DETAILS "Details"
+    IDS_CAB_VIEW_TILES "Tegels"
+    IDS_CAB_VIEW_CONTENT "Inhoud"
+    IDS_CAB_SELECT_ALL "Alles selecteren"
+    IDS_CAB_SELECT_NONE "Niets selecteren"
+    IDS_CAB_INVERT_SELECTION "Selectie omkeren"
+    IDS_CAB_PROPERTIES "Eigenschappen"
+    IDS_CAB_OPTIONS "Opties"
+    IDS_CAB_OPEN_NEW_TAB "Openen op nieuw tabblad"
+    IDS_CAB_OPEN_NEW_WINDOW "Openen in nieuw venster"
+    IDS_CAB_CLOSE_TAB "Tabblad sluiten"
+    IDS_CAB_CLOSE_OTHER_TABS "Andere tabbladen sluiten"
+    IDS_CAB_SHOW "Weergeven"
+    IDS_CAB_SHOW_NAVIGATION "Navigatiedeelvenster"
+    IDS_CAB_SHOW_DETAILS "Detailvenster"
+    IDS_CAB_SHOW_CHECKBOXES "Selectievakjes voor items"
+    IDS_CAB_SHOW_EXTENSIONS "Bestandsnaamextensies"
+    IDS_CAB_SHOW_HIDDEN "Verborgen items"
+    IDS_CAB_CUT "Knippen"
+    IDS_CAB_COPY "Kopiëren"
+    IDS_CAB_PASTE "Plakken"
+    IDS_CAB_RENAME "Naam wijzigen"
+    IDS_CAB_DELETE "Verwijderen"
+    IDS_CAB_BACK "Vorige"
+    IDS_CAB_FORWARD "Volgende"
+    IDS_CAB_UP "Omhoog"
+    IDS_CAB_REFRESH "Vernieuwen"
+    IDS_CAB_MORE "Meer weergeven"
+    IDS_CAB_NEW_TAB "Nieuw tabblad"
+    IDS_CAB_SHOW_PREVIEW "Voorbeeldvenster"
+    IDS_CAB_PREVIEW_NONE "Geen voorbeeld beschikbaar."
+    IDS_CAB_PREVIEW_SELECT "Selecteer een bestand om een voorbeeld weer te geven."
+    IDS_CAB_SHOW_QUICK_ACCESS "Snelle toegang weergeven"
+    IDS_CAB_TITLE "Verkenner"
+    IDS_CAB_TITLE_FORMAT "%s - Verkenner"
+END

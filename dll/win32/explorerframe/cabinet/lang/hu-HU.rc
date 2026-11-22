@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Hungarian)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_HUNGARIAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "Új"
+    IDS_CAB_SORT "Rendezés"
+    IDS_CAB_VIEW "Nézet"
+    IDS_CAB_DETAILS "Részletek"
+    IDS_CAB_SEARCH_IN "Keresés itt: %s"
+    IDS_CAB_ITEMS "%u elem"
+    IDS_CAB_ITEM "1 elem"
+    IDS_CAB_SELECTED "%u elem kijelölve"
+    IDS_CAB_SELECTED_ONE "1 elem kijelölve"
+    IDS_CAB_SORT_NAME "Név"
+    IDS_CAB_SORT_DATE "Módosítás dátuma"
+    IDS_CAB_SORT_TYPE "Típus"
+    IDS_CAB_SORT_SIZE "Méret"
+    IDS_CAB_SORT_ASCENDING "Növekvő"
+    IDS_CAB_SORT_DESCENDING "Csökkenő"
+    IDS_CAB_VIEW_XLARGE "Extra nagy ikonok"
+    IDS_CAB_VIEW_LARGE "Nagy ikonok"
+    IDS_CAB_VIEW_MEDIUM "Közepes ikonok"
+    IDS_CAB_VIEW_SMALL "Kis ikonok"
+    IDS_CAB_VIEW_LIST "Lista"
+    IDS_CAB_VIEW_DETAILS "Részletek"
+    IDS_CAB_VIEW_TILES "Mozaik"
+    IDS_CAB_VIEW_CONTENT "Tartalom"
+    IDS_CAB_SELECT_ALL "Az összes kijelölése"
+    IDS_CAB_SELECT_NONE "Kijelölés megszüntetése"
+    IDS_CAB_INVERT_SELECTION "Kijelölés megfordítása"
+    IDS_CAB_PROPERTIES "Tulajdonságok"
+    IDS_CAB_OPTIONS "Beállítások"
+    IDS_CAB_OPEN_NEW_TAB "Megnyitás új lapon"
+    IDS_CAB_OPEN_NEW_WINDOW "Megnyitás új ablakban"
+    IDS_CAB_CLOSE_TAB "Lap bezárása"
+    IDS_CAB_CLOSE_OTHER_TABS "Többi lap bezárása"
+    IDS_CAB_SHOW "Megjelenítés"
+    IDS_CAB_SHOW_NAVIGATION "Navigációs ablak"
+    IDS_CAB_SHOW_DETAILS "Részletek ablaktábla"
+    IDS_CAB_SHOW_CHECKBOXES "Elemek jelölőnégyzetei"
+    IDS_CAB_SHOW_EXTENSIONS "Fájlnévkiterjesztések"
+    IDS_CAB_SHOW_HIDDEN "Rejtett elemek"
+    IDS_CAB_CUT "Kivágás"
+    IDS_CAB_COPY "Másolás"
+    IDS_CAB_PASTE "Beillesztés"
+    IDS_CAB_RENAME "Átnevezés"
+    IDS_CAB_DELETE "Törlés"
+    IDS_CAB_BACK "Vissza"
+    IDS_CAB_FORWARD "Előre"
+    IDS_CAB_UP "Fel"
+    IDS_CAB_REFRESH "Frissítés"
+    IDS_CAB_MORE "Továbbiak"
+    IDS_CAB_NEW_TAB "Új lap"
+    IDS_CAB_SHOW_PREVIEW "Betekintő ablaktábla"
+    IDS_CAB_PREVIEW_NONE "Nincs elérhető előnézet."
+    IDS_CAB_PREVIEW_SELECT "Jelöljön ki egy fájlt az előnézethez."
+    IDS_CAB_SHOW_QUICK_ACCESS "Gyorselérés megjelenítése"
+    IDS_CAB_TITLE "Fájlkezelő"
+    IDS_CAB_TITLE_FORMAT "%s - Fájlkezelő"
+END

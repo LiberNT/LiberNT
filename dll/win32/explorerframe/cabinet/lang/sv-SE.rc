@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Swedish)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_SWEDISH, SUBLANG_NEUTRAL
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "Nytt"
+    IDS_CAB_SORT "Sortera"
+    IDS_CAB_VIEW "Visa"
+    IDS_CAB_DETAILS "Information"
+    IDS_CAB_SEARCH_IN "Sök i %s"
+    IDS_CAB_ITEMS "%u objekt"
+    IDS_CAB_ITEM "1 objekt"
+    IDS_CAB_SELECTED "%u objekt markerade"
+    IDS_CAB_SELECTED_ONE "1 objekt markerat"
+    IDS_CAB_SORT_NAME "Namn"
+    IDS_CAB_SORT_DATE "Senast ändrad"
+    IDS_CAB_SORT_TYPE "Typ"
+    IDS_CAB_SORT_SIZE "Storlek"
+    IDS_CAB_SORT_ASCENDING "Stigande"
+    IDS_CAB_SORT_DESCENDING "Fallande"
+    IDS_CAB_VIEW_XLARGE "Extra stora ikoner"
+    IDS_CAB_VIEW_LARGE "Stora ikoner"
+    IDS_CAB_VIEW_MEDIUM "Medelstora ikoner"
+    IDS_CAB_VIEW_SMALL "Små ikoner"
+    IDS_CAB_VIEW_LIST "Lista"
+    IDS_CAB_VIEW_DETAILS "Detaljerad lista"
+    IDS_CAB_VIEW_TILES "Paneler"
+    IDS_CAB_VIEW_CONTENT "Innehåll"
+    IDS_CAB_SELECT_ALL "Markera allt"
+    IDS_CAB_SELECT_NONE "Avmarkera allt"
+    IDS_CAB_INVERT_SELECTION "Invertera markering"
+    IDS_CAB_PROPERTIES "Egenskaper"
+    IDS_CAB_OPTIONS "Alternativ"
+    IDS_CAB_OPEN_NEW_TAB "Öppna i ny flik"
+    IDS_CAB_OPEN_NEW_WINDOW "Öppna i nytt fönster"
+    IDS_CAB_CLOSE_TAB "Stäng flik"
+    IDS_CAB_CLOSE_OTHER_TABS "Stäng övriga flikar"
+    IDS_CAB_SHOW "Visa"
+    IDS_CAB_SHOW_NAVIGATION "Navigeringsfönster"
+    IDS_CAB_SHOW_DETAILS "Informationsfönster"
+    IDS_CAB_SHOW_CHECKBOXES "Kryssrutor för objekt"
+    IDS_CAB_SHOW_EXTENSIONS "Filnamnstillägg"
+    IDS_CAB_SHOW_HIDDEN "Dolda objekt"
+    IDS_CAB_CUT "Klipp ut"
+    IDS_CAB_COPY "Kopiera"
+    IDS_CAB_PASTE "Klistra in"
+    IDS_CAB_RENAME "Byt namn"
+    IDS_CAB_DELETE "Ta bort"
+    IDS_CAB_BACK "Bakåt"
+    IDS_CAB_FORWARD "Framåt"
+    IDS_CAB_UP "Upp"
+    IDS_CAB_REFRESH "Uppdatera"
+    IDS_CAB_MORE "Visa mer"
+    IDS_CAB_NEW_TAB "Ny flik"
+    IDS_CAB_SHOW_PREVIEW "Förhandsgranskningsfönster"
+    IDS_CAB_PREVIEW_NONE "Ingen förhandsgranskning är tillgänglig."
+    IDS_CAB_PREVIEW_SELECT "Välj en fil att förhandsgranska."
+    IDS_CAB_SHOW_QUICK_ACCESS "Visa Snabbåtkomst"
+    IDS_CAB_TITLE "Utforskaren"
+    IDS_CAB_TITLE_FORMAT "%s - Utforskaren"
+END

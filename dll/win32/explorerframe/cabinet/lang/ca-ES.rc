@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Catalan)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_CATALAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "Nou"
+    IDS_CAB_SORT "Ordena"
+    IDS_CAB_VIEW "Visualitza"
+    IDS_CAB_DETAILS "Detalls"
+    IDS_CAB_SEARCH_IN "Cerca a %s"
+    IDS_CAB_ITEMS "%u elements"
+    IDS_CAB_ITEM "1 element"
+    IDS_CAB_SELECTED "%u elements seleccionats"
+    IDS_CAB_SELECTED_ONE "1 element seleccionat"
+    IDS_CAB_SORT_NAME "Nom"
+    IDS_CAB_SORT_DATE "Data de modificació"
+    IDS_CAB_SORT_TYPE "Tipus"
+    IDS_CAB_SORT_SIZE "Mida"
+    IDS_CAB_SORT_ASCENDING "Ascendent"
+    IDS_CAB_SORT_DESCENDING "Descendent"
+    IDS_CAB_VIEW_XLARGE "Icones molt grans"
+    IDS_CAB_VIEW_LARGE "Icones grans"
+    IDS_CAB_VIEW_MEDIUM "Icones mitjanes"
+    IDS_CAB_VIEW_SMALL "Icones petites"
+    IDS_CAB_VIEW_LIST "Llista"
+    IDS_CAB_VIEW_DETAILS "Detalls"
+    IDS_CAB_VIEW_TILES "Mosaics"
+    IDS_CAB_VIEW_CONTENT "Contingut"
+    IDS_CAB_SELECT_ALL "Selecciona-ho tot"
+    IDS_CAB_SELECT_NONE "No seleccionis res"
+    IDS_CAB_INVERT_SELECTION "Inverteix la selecció"
+    IDS_CAB_PROPERTIES "Propietats"
+    IDS_CAB_OPTIONS "Opcions"
+    IDS_CAB_OPEN_NEW_TAB "Obre en una pestanya nova"
+    IDS_CAB_OPEN_NEW_WINDOW "Obre en una finestra nova"
+    IDS_CAB_CLOSE_TAB "Tanca la pestanya"
+    IDS_CAB_CLOSE_OTHER_TABS "Tanca les altres pestanyes"
+    IDS_CAB_SHOW "Mostra"
+    IDS_CAB_SHOW_NAVIGATION "Subfinestra de navegació"
+    IDS_CAB_SHOW_DETAILS "Subfinestra de detalls"
+    IDS_CAB_SHOW_CHECKBOXES "Caselles de selecció d'elements"
+    IDS_CAB_SHOW_EXTENSIONS "Extensions de nom de fitxer"
+    IDS_CAB_SHOW_HIDDEN "Elements ocults"
+    IDS_CAB_CUT "Retalla"
+    IDS_CAB_COPY "Copia"
+    IDS_CAB_PASTE "Enganxa"
+    IDS_CAB_RENAME "Canvia el nom"
+    IDS_CAB_DELETE "Suprimeix"
+    IDS_CAB_BACK "Enrere"
+    IDS_CAB_FORWARD "Endavant"
+    IDS_CAB_UP "Amunt"
+    IDS_CAB_REFRESH "Actualitza"
+    IDS_CAB_MORE "Mostra'n més"
+    IDS_CAB_NEW_TAB "Pestanya nova"
+    IDS_CAB_SHOW_PREVIEW "Subfinestra de previsualització"
+    IDS_CAB_PREVIEW_NONE "No hi ha cap previsualització disponible."
+    IDS_CAB_PREVIEW_SELECT "Seleccioneu un fitxer per previsualitzar-lo."
+    IDS_CAB_SHOW_QUICK_ACCESS "Mostra l'Accés ràpid"
+    IDS_CAB_TITLE "Explorador de fitxers"
+    IDS_CAB_TITLE_FORMAT "%s - Explorador de fitxers"
+END

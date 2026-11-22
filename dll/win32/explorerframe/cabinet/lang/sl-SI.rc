@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Slovenian)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_SLOVENIAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "Novo"
+    IDS_CAB_SORT "Razvrsti"
+    IDS_CAB_VIEW "Pogled"
+    IDS_CAB_DETAILS "Podrobnosti"
+    IDS_CAB_SEARCH_IN "Išči v %s"
+    IDS_CAB_ITEMS "Elementi: %u"
+    IDS_CAB_ITEM "1 element"
+    IDS_CAB_SELECTED "Izbrani elementi: %u"
+    IDS_CAB_SELECTED_ONE "Izbran 1 element"
+    IDS_CAB_SORT_NAME "Ime"
+    IDS_CAB_SORT_DATE "Datum spremembe"
+    IDS_CAB_SORT_TYPE "Vrsta"
+    IDS_CAB_SORT_SIZE "Velikost"
+    IDS_CAB_SORT_ASCENDING "Naraščajoče"
+    IDS_CAB_SORT_DESCENDING "Padajoče"
+    IDS_CAB_VIEW_XLARGE "Zelo velike ikone"
+    IDS_CAB_VIEW_LARGE "Velike ikone"
+    IDS_CAB_VIEW_MEDIUM "Srednje ikone"
+    IDS_CAB_VIEW_SMALL "Majhne ikone"
+    IDS_CAB_VIEW_LIST "Seznam"
+    IDS_CAB_VIEW_DETAILS "Podrobnosti"
+    IDS_CAB_VIEW_TILES "Ploščice"
+    IDS_CAB_VIEW_CONTENT "Vsebina"
+    IDS_CAB_SELECT_ALL "Izberi vse"
+    IDS_CAB_SELECT_NONE "Ne izberi ničesar"
+    IDS_CAB_INVERT_SELECTION "Obrni izbor"
+    IDS_CAB_PROPERTIES "Lastnosti"
+    IDS_CAB_OPTIONS "Možnosti"
+    IDS_CAB_OPEN_NEW_TAB "Odpri na novem zavihku"
+    IDS_CAB_OPEN_NEW_WINDOW "Odpri v novem oknu"
+    IDS_CAB_CLOSE_TAB "Zapri zavihek"
+    IDS_CAB_CLOSE_OTHER_TABS "Zapri druge zavihke"
+    IDS_CAB_SHOW "Pokaži"
+    IDS_CAB_SHOW_NAVIGATION "Podokno za krmarjenje"
+    IDS_CAB_SHOW_DETAILS "Podokno s podrobnostmi"
+    IDS_CAB_SHOW_CHECKBOXES "Potrditvena polja elementov"
+    IDS_CAB_SHOW_EXTENSIONS "Pripone imen datotek"
+    IDS_CAB_SHOW_HIDDEN "Skriti elementi"
+    IDS_CAB_CUT "Izreži"
+    IDS_CAB_COPY "Kopiraj"
+    IDS_CAB_PASTE "Prilepi"
+    IDS_CAB_RENAME "Preimenuj"
+    IDS_CAB_DELETE "Izbriši"
+    IDS_CAB_BACK "Nazaj"
+    IDS_CAB_FORWARD "Naprej"
+    IDS_CAB_UP "Gor"
+    IDS_CAB_REFRESH "Osveži"
+    IDS_CAB_MORE "Pokaži več"
+    IDS_CAB_NEW_TAB "Nov zavihek"
+    IDS_CAB_SHOW_PREVIEW "Podokno za predogled"
+    IDS_CAB_PREVIEW_NONE "Predogled ni na voljo."
+    IDS_CAB_PREVIEW_SELECT "Izberite datoteko za predogled."
+    IDS_CAB_SHOW_QUICK_ACCESS "Pokaži Hitri dostop"
+    IDS_CAB_TITLE "Raziskovalec"
+    IDS_CAB_TITLE_FORMAT "%s - Raziskovalec"
+END

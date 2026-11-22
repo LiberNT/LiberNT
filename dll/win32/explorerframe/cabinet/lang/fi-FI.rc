@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Finnish)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_FINNISH, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "Uusi"
+    IDS_CAB_SORT "Lajittele"
+    IDS_CAB_VIEW "Näytä"
+    IDS_CAB_DETAILS "Tiedot"
+    IDS_CAB_SEARCH_IN "Hae kohteesta %s"
+    IDS_CAB_ITEMS "%u kohdetta"
+    IDS_CAB_ITEM "1 kohde"
+    IDS_CAB_SELECTED "%u kohdetta valittu"
+    IDS_CAB_SELECTED_ONE "1 kohde valittu"
+    IDS_CAB_SORT_NAME "Nimi"
+    IDS_CAB_SORT_DATE "Muokkauspäivä"
+    IDS_CAB_SORT_TYPE "Tyyppi"
+    IDS_CAB_SORT_SIZE "Koko"
+    IDS_CAB_SORT_ASCENDING "Nouseva"
+    IDS_CAB_SORT_DESCENDING "Laskeva"
+    IDS_CAB_VIEW_XLARGE "Erittäin suuret kuvakkeet"
+    IDS_CAB_VIEW_LARGE "Suuret kuvakkeet"
+    IDS_CAB_VIEW_MEDIUM "Keskikokoiset kuvakkeet"
+    IDS_CAB_VIEW_SMALL "Pienet kuvakkeet"
+    IDS_CAB_VIEW_LIST "Luettelo"
+    IDS_CAB_VIEW_DETAILS "Tiedot"
+    IDS_CAB_VIEW_TILES "Ruudut"
+    IDS_CAB_VIEW_CONTENT "Sisältö"
+    IDS_CAB_SELECT_ALL "Valitse kaikki"
+    IDS_CAB_SELECT_NONE "Poista valinnat"
+    IDS_CAB_INVERT_SELECTION "Käänteinen valinta"
+    IDS_CAB_PROPERTIES "Ominaisuudet"
+    IDS_CAB_OPTIONS "Asetukset"
+    IDS_CAB_OPEN_NEW_TAB "Avaa uudessa välilehdessä"
+    IDS_CAB_OPEN_NEW_WINDOW "Avaa uudessa ikkunassa"
+    IDS_CAB_CLOSE_TAB "Sulje välilehti"
+    IDS_CAB_CLOSE_OTHER_TABS "Sulje muut välilehdet"
+    IDS_CAB_SHOW "Näytä"
+    IDS_CAB_SHOW_NAVIGATION "Siirtymisruutu"
+    IDS_CAB_SHOW_DETAILS "Tietoruutu"
+    IDS_CAB_SHOW_CHECKBOXES "Kohteiden valintaruudut"
+    IDS_CAB_SHOW_EXTENSIONS "Tiedostotunnisteet"
+    IDS_CAB_SHOW_HIDDEN "Piilotetut kohteet"
+    IDS_CAB_CUT "Leikkaa"
+    IDS_CAB_COPY "Kopioi"
+    IDS_CAB_PASTE "Liitä"
+    IDS_CAB_RENAME "Nimeä uudelleen"
+    IDS_CAB_DELETE "Poista"
+    IDS_CAB_BACK "Edellinen"
+    IDS_CAB_FORWARD "Seuraava"
+    IDS_CAB_UP "Ylös"
+    IDS_CAB_REFRESH "Päivitä"
+    IDS_CAB_MORE "Näytä lisää"
+    IDS_CAB_NEW_TAB "Uusi välilehti"
+    IDS_CAB_SHOW_PREVIEW "Esikatseluruutu"
+    IDS_CAB_PREVIEW_NONE "Esikatselu ei ole käytettävissä."
+    IDS_CAB_PREVIEW_SELECT "Valitse esikatseltava tiedosto."
+    IDS_CAB_SHOW_QUICK_ACCESS "Näytä Pikakäyttö"
+    IDS_CAB_TITLE "Resurssienhallinta"
+    IDS_CAB_TITLE_FORMAT "%s - Resurssienhallinta"
+END

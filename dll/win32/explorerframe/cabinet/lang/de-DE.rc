@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (German)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_GERMAN, SUBLANG_NEUTRAL
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "Neu"
+    IDS_CAB_SORT "Sortieren"
+    IDS_CAB_VIEW "Ansicht"
+    IDS_CAB_DETAILS "Details"
+    IDS_CAB_SEARCH_IN "%s durchsuchen"
+    IDS_CAB_ITEMS "%u Elemente"
+    IDS_CAB_ITEM "1 Element"
+    IDS_CAB_SELECTED "%u Elemente ausgewählt"
+    IDS_CAB_SELECTED_ONE "1 Element ausgewählt"
+    IDS_CAB_SORT_NAME "Name"
+    IDS_CAB_SORT_DATE "Änderungsdatum"
+    IDS_CAB_SORT_TYPE "Typ"
+    IDS_CAB_SORT_SIZE "Größe"
+    IDS_CAB_SORT_ASCENDING "Aufsteigend"
+    IDS_CAB_SORT_DESCENDING "Absteigend"
+    IDS_CAB_VIEW_XLARGE "Extra große Symbole"
+    IDS_CAB_VIEW_LARGE "Große Symbole"
+    IDS_CAB_VIEW_MEDIUM "Mittelgroße Symbole"
+    IDS_CAB_VIEW_SMALL "Kleine Symbole"
+    IDS_CAB_VIEW_LIST "Liste"
+    IDS_CAB_VIEW_DETAILS "Details"
+    IDS_CAB_VIEW_TILES "Kacheln"
+    IDS_CAB_VIEW_CONTENT "Inhalt"
+    IDS_CAB_SELECT_ALL "Alles auswählen"
+    IDS_CAB_SELECT_NONE "Nichts auswählen"
+    IDS_CAB_INVERT_SELECTION "Auswahl umkehren"
+    IDS_CAB_PROPERTIES "Eigenschaften"
+    IDS_CAB_OPTIONS "Optionen"
+    IDS_CAB_OPEN_NEW_TAB "In neuer Registerkarte öffnen"
+    IDS_CAB_OPEN_NEW_WINDOW "In neuem Fenster öffnen"
+    IDS_CAB_CLOSE_TAB "Registerkarte schließen"
+    IDS_CAB_CLOSE_OTHER_TABS "Andere Registerkarten schließen"
+    IDS_CAB_SHOW "Anzeigen"
+    IDS_CAB_SHOW_NAVIGATION "Navigationsbereich"
+    IDS_CAB_SHOW_DETAILS "Detailbereich"
+    IDS_CAB_SHOW_CHECKBOXES "Elementkontrollkästchen"
+    IDS_CAB_SHOW_EXTENSIONS "Dateinamenerweiterungen"
+    IDS_CAB_SHOW_HIDDEN "Ausgeblendete Elemente"
+    IDS_CAB_CUT "Ausschneiden"
+    IDS_CAB_COPY "Kopieren"
+    IDS_CAB_PASTE "Einfügen"
+    IDS_CAB_RENAME "Umbenennen"
+    IDS_CAB_DELETE "Löschen"
+    IDS_CAB_BACK "Zurück"
+    IDS_CAB_FORWARD "Vorwärts"
+    IDS_CAB_UP "Nach oben"
+    IDS_CAB_REFRESH "Aktualisieren"
+    IDS_CAB_MORE "Mehr anzeigen"
+    IDS_CAB_NEW_TAB "Neue Registerkarte"
+    IDS_CAB_SHOW_PREVIEW "Vorschaubereich"
+    IDS_CAB_PREVIEW_NONE "Keine Vorschau verfügbar."
+    IDS_CAB_PREVIEW_SELECT "Wählen Sie eine Datei für die Vorschau aus."
+    IDS_CAB_SHOW_QUICK_ACCESS "Schnellzugriff anzeigen"
+    IDS_CAB_TITLE "Datei-Explorer"
+    IDS_CAB_TITLE_FORMAT "%s - Datei-Explorer"
+END

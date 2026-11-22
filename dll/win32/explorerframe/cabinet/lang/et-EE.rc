@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Estonian)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_ESTONIAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "Uus"
+    IDS_CAB_SORT "Sortimine"
+    IDS_CAB_VIEW "Vaade"
+    IDS_CAB_DETAILS "Üksikasjad"
+    IDS_CAB_SEARCH_IN "Otsi asukohast %s"
+    IDS_CAB_ITEMS "%u üksust"
+    IDS_CAB_ITEM "1 üksus"
+    IDS_CAB_SELECTED "%u üksust valitud"
+    IDS_CAB_SELECTED_ONE "1 üksus valitud"
+    IDS_CAB_SORT_NAME "Nimi"
+    IDS_CAB_SORT_DATE "Muutmiskuupäev"
+    IDS_CAB_SORT_TYPE "Tüüp"
+    IDS_CAB_SORT_SIZE "Suurus"
+    IDS_CAB_SORT_ASCENDING "Tõusev"
+    IDS_CAB_SORT_DESCENDING "Laskuv"
+    IDS_CAB_VIEW_XLARGE "Eriti suured ikoonid"
+    IDS_CAB_VIEW_LARGE "Suured ikoonid"
+    IDS_CAB_VIEW_MEDIUM "Keskmised ikoonid"
+    IDS_CAB_VIEW_SMALL "Väikesed ikoonid"
+    IDS_CAB_VIEW_LIST "Loend"
+    IDS_CAB_VIEW_DETAILS "Üksikasjad"
+    IDS_CAB_VIEW_TILES "Paanid"
+    IDS_CAB_VIEW_CONTENT "Sisu"
+    IDS_CAB_SELECT_ALL "Vali kõik"
+    IDS_CAB_SELECT_NONE "Tühista valik"
+    IDS_CAB_INVERT_SELECTION "Pööra valik"
+    IDS_CAB_PROPERTIES "Atribuudid"
+    IDS_CAB_OPTIONS "Suvandid"
+    IDS_CAB_OPEN_NEW_TAB "Ava uuel vahekaardil"
+    IDS_CAB_OPEN_NEW_WINDOW "Ava uues aknas"
+    IDS_CAB_CLOSE_TAB "Sule vahekaart"
+    IDS_CAB_CLOSE_OTHER_TABS "Sule teised vahekaardid"
+    IDS_CAB_SHOW "Kuva"
+    IDS_CAB_SHOW_NAVIGATION "Navigeerimispaan"
+    IDS_CAB_SHOW_DETAILS "Üksikasjapaan"
+    IDS_CAB_SHOW_CHECKBOXES "Üksuste märkeruudud"
+    IDS_CAB_SHOW_EXTENSIONS "Failinimelaiendid"
+    IDS_CAB_SHOW_HIDDEN "Peidetud üksused"
+    IDS_CAB_CUT "Lõika"
+    IDS_CAB_COPY "Kopeeri"
+    IDS_CAB_PASTE "Kleebi"
+    IDS_CAB_RENAME "Nimeta ümber"
+    IDS_CAB_DELETE "Kustuta"
+    IDS_CAB_BACK "Tagasi"
+    IDS_CAB_FORWARD "Edasi"
+    IDS_CAB_UP "Üles"
+    IDS_CAB_REFRESH "Värskenda"
+    IDS_CAB_MORE "Kuva rohkem"
+    IDS_CAB_NEW_TAB "Uus vahekaart"
+    IDS_CAB_SHOW_PREVIEW "Eelvaatepaan"
+    IDS_CAB_PREVIEW_NONE "Eelvaade pole saadaval."
+    IDS_CAB_PREVIEW_SELECT "Valige eelvaate kuvamiseks fail."
+    IDS_CAB_SHOW_QUICK_ACCESS "Kuva kiirpääs"
+    IDS_CAB_TITLE "Failihaldur"
+    IDS_CAB_TITLE_FORMAT "%s - Failihaldur"
+END

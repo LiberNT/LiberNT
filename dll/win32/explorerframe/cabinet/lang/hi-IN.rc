@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Hindi)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_HINDI, SUBLANG_HINDI_INDIA
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "नया"
+    IDS_CAB_SORT "क्रमबद्ध करें"
+    IDS_CAB_VIEW "दृश्य"
+    IDS_CAB_DETAILS "विवरण"
+    IDS_CAB_SEARCH_IN "%s में खोजें"
+    IDS_CAB_ITEMS "%u आइटम"
+    IDS_CAB_ITEM "1 आइटम"
+    IDS_CAB_SELECTED "%u आइटम चयनित"
+    IDS_CAB_SELECTED_ONE "1 आइटम चयनित"
+    IDS_CAB_SORT_NAME "नाम"
+    IDS_CAB_SORT_DATE "संशोधन दिनांक"
+    IDS_CAB_SORT_TYPE "प्रकार"
+    IDS_CAB_SORT_SIZE "आकार"
+    IDS_CAB_SORT_ASCENDING "आरोही"
+    IDS_CAB_SORT_DESCENDING "अवरोही"
+    IDS_CAB_VIEW_XLARGE "अतिरिक्त बड़े आइकन"
+    IDS_CAB_VIEW_LARGE "बड़े आइकन"
+    IDS_CAB_VIEW_MEDIUM "मध्यम आइकन"
+    IDS_CAB_VIEW_SMALL "छोटे आइकन"
+    IDS_CAB_VIEW_LIST "सूची"
+    IDS_CAB_VIEW_DETAILS "विवरण"
+    IDS_CAB_VIEW_TILES "टाइल"
+    IDS_CAB_VIEW_CONTENT "सामग्री"
+    IDS_CAB_SELECT_ALL "सभी का चयन करें"
+    IDS_CAB_SELECT_NONE "कुछ भी न चुनें"
+    IDS_CAB_INVERT_SELECTION "चयन उलटें"
+    IDS_CAB_PROPERTIES "गुण"
+    IDS_CAB_OPTIONS "विकल्प"
+    IDS_CAB_OPEN_NEW_TAB "नए टैब में खोलें"
+    IDS_CAB_OPEN_NEW_WINDOW "नई विंडो में खोलें"
+    IDS_CAB_CLOSE_TAB "टैब बंद करें"
+    IDS_CAB_CLOSE_OTHER_TABS "अन्य टैब बंद करें"
+    IDS_CAB_SHOW "दिखाएँ"
+    IDS_CAB_SHOW_NAVIGATION "नेविगेशन फलक"
+    IDS_CAB_SHOW_DETAILS "विवरण फलक"
+    IDS_CAB_SHOW_CHECKBOXES "आइटम चेक बॉक्स"
+    IDS_CAB_SHOW_EXTENSIONS "फ़ाइल नाम एक्सटेंशन"
+    IDS_CAB_SHOW_HIDDEN "छिपे हुए आइटम"
+    IDS_CAB_CUT "काटें"
+    IDS_CAB_COPY "प्रतिलिपि बनाएँ"
+    IDS_CAB_PASTE "चिपकाएँ"
+    IDS_CAB_RENAME "नाम बदलें"
+    IDS_CAB_DELETE "हटाएँ"
+    IDS_CAB_BACK "पीछे"
+    IDS_CAB_FORWARD "आगे"
+    IDS_CAB_UP "ऊपर"
+    IDS_CAB_REFRESH "ताज़ा करें"
+    IDS_CAB_MORE "और देखें"
+    IDS_CAB_NEW_TAB "नया टैब"
+    IDS_CAB_SHOW_PREVIEW "पूर्वावलोकन फलक"
+    IDS_CAB_PREVIEW_NONE "कोई पूर्वावलोकन उपलब्ध नहीं है।"
+    IDS_CAB_PREVIEW_SELECT "पूर्वावलोकन के लिए कोई फ़ाइल चुनें।"
+    IDS_CAB_SHOW_QUICK_ACCESS "त्वरित पहुँच दिखाएँ"
+    IDS_CAB_TITLE "फ़ाइल एक्सप्लोरर"
+    IDS_CAB_TITLE_FORMAT "%s - फ़ाइल एक्सप्लोरर"
+END
