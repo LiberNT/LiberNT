@@ -2586,7 +2586,7 @@
 @ stdcall KeQueryLogicalProcessorRelationship(ptr long ptr ptr)
 @ stdcall KeQueryMaximumGroupCount()
 @ stdcall KeQueryNodeActiveAffinity(long ptr ptr)
-@ stdcall KeQueryNodeActiveAffinity2(long ptr ptr)
+@ stdcall KeQueryNodeActiveAffinity2(long ptr long ptr)
 @ stdcall -arch=win64 KeQueryNodeActiveProcessorCount(long)
 @ stdcall -arch=win64 KeQueryNodeMaximumProcessorCount(long)
 @ stdcall -arch=win64 KeQueryPrcbAddress(long)

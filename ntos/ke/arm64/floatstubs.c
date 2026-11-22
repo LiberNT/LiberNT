@@ -8,7 +8,6 @@
 #include <ntoskrnl.h>
 
 #define KI_ARM64_LEGACY_XSTATE_MASK 0x3ULL
-#define INVALID_EXTENDED_PROCESSOR_STATE 0x131
 
 C_ASSERT(sizeof(KARM64_VFP_STATE) == 0x210);
 

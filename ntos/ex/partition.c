@@ -14,12 +14,6 @@
 
 /* PRIVATE DEFINITIONS *******************************************************/
 
-#define MEMORY_PARTITION_QUERY_ACCESS  0x0001
-#define MEMORY_PARTITION_MODIFY_ACCESS 0x0002
-#define MEMORY_PARTITION_ALL_ACCESS                                      \
-    (STANDARD_RIGHTS_REQUIRED | SYNCHRONIZE |                            \
-     MEMORY_PARTITION_QUERY_ACCESS | MEMORY_PARTITION_MODIFY_ACCESS)
-
 #define EXP_MEMORY_PARTITION_SIGNATURE 'traP'
 
 typedef struct _EXP_MEMORY_PARTITION

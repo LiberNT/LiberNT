@@ -26,7 +26,7 @@ RtlpCopySystemGlobalData(
 NTSTATUS
 NTAPI
 RtlGetSystemGlobalData(
-    _In_ ULONG DataId,
+    _In_ RTL_SYSTEM_GLOBAL_DATA_ID DataId,
     _Out_writes_bytes_(Size) PVOID Buffer,
     _In_ ULONG Size)
 {

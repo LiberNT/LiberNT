@@ -31,7 +31,7 @@ PWCHAR NTAPI RtlFindUnicodeSubstring(_In_ PCUNICODE_STRING String, _In_ PCUNICOD
 NTSTATUS NTAPI RtlGetMultiTimePrecise(_Out_ PTEST_RTL_MULTI_TIME_PRECISE TimeValues, _In_ ULONG RequestedValues, _Out_ PULONG ReturnedValues);
 NTSTATUS NTAPI RtlConvertHostPerfCounterToPerfCounter(_In_ ULONGLONG HostPerformanceCounter, _In_ ULONGLONG MaximumError, _Out_ PULONGLONG PerformanceCounter);
 NTSTATUS NTAPI RtlGenerateClass5Guid(_In_ REFGUID NamespaceGuid, _In_reads_bytes_(BufferSize) PVOID Buffer, _In_ ULONG BufferSize, _Out_ GUID *Guid);
-NTSTATUS NTAPI RtlGetSystemGlobalData(_In_ ULONG DataId, _Out_writes_bytes_(Size) PVOID Buffer, _In_ ULONG Size);
+NTSTATUS NTAPI RtlGetSystemGlobalData(_In_ RTL_SYSTEM_GLOBAL_DATA_ID DataId, _Out_writes_bytes_(Size) PVOID Buffer, _In_ ULONG Size);
 NTSTATUS NTAPI RtlGetThreadLangIdByIndex(_In_ ULONG Flags, _In_ ULONG Index, _Out_ PULONG LangId, _Out_opt_ PULONG LangIdCount);
 BOOLEAN NTAPI RtlIsStateSeparationEnabled(VOID);
 NTSTATUS NTAPI RtlQueryElevationFlags(_Out_ PULONG Flags);
