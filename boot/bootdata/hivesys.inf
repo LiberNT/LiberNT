@@ -413,7 +413,7 @@ HKLM,"SYSTEM\CurrentControlSet\Control\Class\{8ECC055D-047F-11D1-A537-0000F8753E
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{8ECC055D-047F-11D1-A537-0000F8753ED1}","NoDisplayClass",0x00000000,"1"
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{8ECC055D-047F-11D1-A537-0000F8753ED1}","EnumPropPages32",0x00000000,"syssetup.dll,LegacyDriverPropPageProvider"
 
-HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E97E-E325-11CE-BFC1-08002BE10318}",,0x00000000,"Other Devices"
+HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E97E-E325-11CE-BFC1-08002BE10318}",,0x00000000,"Other devices"
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E97E-E325-11CE-BFC1-08002BE10318}","Class",0x00000000,"Unknown"
 HKLM,"SYSTEM\CurrentControlSet\Control\Class\{4D36E97E-E325-11CE-BFC1-08002BE10318}","Icon",0x00000000,"-18"
 
