@@ -240,9 +240,13 @@ VOID IntCompositionDamageFromGdi(VOID);
 BOOL IntCompositionIsAttachedProcess(VOID);
 BOOL IntCompositionIsGpuOutputWindow(_In_opt_ PWND Window);
 HWND IntCompositionGetGpuOutputWindow(VOID);
+NTSTATUS D3dkmtQueryDisplayDeviceSource(_In_ PCWSTR DeviceName,
+                                        _Out_ LUID *AdapterLuid,
+                                        _Out_ ULONG *VidPnSourceId);
 BOOL IntCompositionIsGpuOutputPresent(_In_opt_ HWND Window,
                                       _In_ const RECT *SourceRect,
-                                      _In_ const RECT *DestinationRect);
+                                      _In_ const RECT *DestinationRect,
+                                      _Out_opt_ PULONG VidPnSourceId);
 
 /* BeginPaint/EndPaint bracket for redirected composition. */
 VOID IntCompositionPaintBegin(_In_ PWND Wnd);
