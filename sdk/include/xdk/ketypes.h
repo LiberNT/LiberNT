@@ -1775,7 +1775,7 @@ typedef struct _KUSER_SHARED_DATA
         struct
         {
             volatile UCHAR QpcBypassEnabled;                // 0x3c6
-            UCHAR QpcShift;                                 // 0x3c7
+            UCHAR QpcReserved;                              // 0x3c7
         };
     };
     LARGE_INTEGER TimeZoneBiasEffectiveStart;               // 0x3c8
