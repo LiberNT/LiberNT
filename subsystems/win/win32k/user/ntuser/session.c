@@ -72,6 +72,7 @@ UserCreateSession(ULONG SessionId, PUSER_SESSION *Session)
 
     NewSession->SessionId = SessionId;
     KeInitializeEvent(&NewSession->DesktopThreadStarted, SynchronizationEvent, FALSE);
+    InitializeListHead(&NewSession->DesktopsToDestroy);
     NewSession->Next = gpUserSessions;
     WritePointerRelease((PVOID volatile *)&gpUserSessions, NewSession);
     *Session = NewSession;
@@ -174,19 +175,25 @@ UserIsCsrProcess(PEPROCESS Process)
     return FALSE;
 }
 
-BOOLEAN FASTCALL
-UserIsDesktopThread(PTHREADINFO pti)
+PUSER_SESSION FASTCALL
+UserGetDesktopThreadSession(PTHREADINFO pti)
 {
     PUSER_SESSION Session;
 
     if (!pti)
-        return FALSE;
+        return NULL;
     for (Session = ReadPointerAcquire((PVOID volatile *)&gpUserSessions); Session; Session = Session->Next)
     {
         if (Session->DesktopThread == pti)
-            return TRUE;
+            return Session;
     }
-    return FALSE;
+    return NULL;
+}
+
+BOOLEAN FASTCALL
+UserIsDesktopThread(PTHREADINFO pti)
+{
+    return UserGetDesktopThreadSession(pti) != NULL;
 }
 
 PTHREADINFO FASTCALL
