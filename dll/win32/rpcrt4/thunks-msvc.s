@@ -8,16 +8,16 @@
 
 THUNK_ENTRY MACRO num:REQ
     ALIGN 4
-    PUBLIC _ObjectStublessClient&num
-    _ObjectStublessClient&num:
+    PUBLIC _ObjectStublessClient&num&@0
+    _ObjectStublessClient&num&@0:
     mov eax, num
     jmp _call_stubless_func
 ENDM
 
 THUNK_ENTRY_VTBL MACRO num:REQ
     ALIGN 4
-    PUBLIC _NdrProxyForwardingFunction&num
-    _NdrProxyForwardingFunction&num:
+    PUBLIC _NdrProxyForwardingFunction&num&@0
+    _NdrProxyForwardingFunction&num&@0:
     mov eax, [esp + 4]
     mov eax, [eax + 16]
     mov [esp + 4], eax
