@@ -100,6 +100,20 @@ bool ParseCode(const std::string &value, DWORD &code)
     return true;
 }
 
+bool ParseReturnCode(const std::string &value, DWORD &code)
+{
+    const std::string owned = Trim(value);
+    if (owned.empty() || owned[0] != '-')
+        return ParseCode(owned, code);
+    errno = 0;
+    char *end = nullptr;
+    const long long parsed = std::strtoll(owned.c_str(), &end, 0);
+    if (errno == ERANGE || !end || *end || parsed < std::numeric_limits<LONG>::min())
+        return false;
+    code = static_cast<DWORD>(static_cast<LONG>(parsed));
+    return true;
+}
+
 bool ParseBoolean(const std::string &value, bool &result)
 {
     if (AsciiEquals(value, "true"))
@@ -196,7 +210,7 @@ NestedSection SetInstallerProperty(InstallerEntry &installer, const std::string 
         for (const std::string &item : ParseInlineList(value))
         {
             DWORD code = 0;
-            if (ParseCode(item, code)) installer.successCodes.push_back(code);
+            if (ParseReturnCode(item, code)) installer.successCodes.push_back(code);
         }
         return NestedSection::SuccessCodes;
     }
@@ -630,7 +644,7 @@ Status ParseInstallerManifest(const std::string &yaml, Manifest &manifest)
             else if (section == NestedSection::SuccessCodes)
             {
                 DWORD code = 0;
-                if (!ParseCode(item, code)) return Status::Fail(ERROR_BAD_FORMAT, "InstallerSuccessCodes contains a non-numeric value");
+                if (!ParseReturnCode(item, code)) return Status::Fail(ERROR_BAD_FORMAT, "InstallerSuccessCodes contains a non-numeric value");
                 sectionTarget->successCodes.push_back(code);
             }
             else if (section == NestedSection::ExpectedReturnCodes)
@@ -640,7 +654,7 @@ Status ParseInstallerManifest(const std::string &yaml, Manifest &manifest)
                 if (SplitProperty(content.substr(2), key, value) && key == "InstallerReturnCode")
                 {
                     DWORD code = 0;
-                    if (!ParseCode(value, code)) return Status::Fail(ERROR_BAD_FORMAT, "ExpectedReturnCodes contains a non-numeric code");
+                    if (!ParseReturnCode(value, code)) return Status::Fail(ERROR_BAD_FORMAT, "ExpectedReturnCodes contains a non-numeric code");
                     hasExpectedCode = true;
                     expectedCode = code;
                     sectionTarget->expectedReturnCodes[code] = "expected installer response";
@@ -1082,6 +1096,34 @@ Status RunManifestSelfTests()
         return Status::Fail(ERROR_ASSERTION_FAILURE, "order-independent installer parser self-test failed");
     if (manifest.installers[0].expectedReturnCodes[1602] != "cancelledByUser")
         return Status::Fail(ERROR_ASSERTION_FAILURE, "expected return code parser self-test failed");
+
+    static constexpr char SignedCodeFixture[] =
+        "PackageIdentifier: Example.SignedCodes\n"
+        "PackageVersion: 1.0\n"
+        "InstallerType: exe\n"
+        "Installers:\n"
+        "- Architecture: x64\n"
+        "  InstallerUrl: https://example.test/x64.exe\n"
+        "  InstallerSha256: 4444444444444444444444444444444444444444444444444444444444444444\n"
+        "  InstallerSuccessCodes: [-2147024809]\n"
+        "  ExpectedReturnCodes:\n"
+        "  - InstallerReturnCode: -2147219440\n"
+        "    ReturnResponse: cancelledByUser\n"
+        "  - InstallerReturnCode: -2147483648\n"
+        "    ReturnResponse: contactSupport\n";
+    Manifest signedCodes;
+    status = ParseInstallerManifest(SignedCodeFixture, signedCodes);
+    if (!status || signedCodes.installers.size() != 1 || signedCodes.installers[0].successCodes.size() != 1 ||
+        signedCodes.installers[0].successCodes[0] != 0x80070057 ||
+        signedCodes.installers[0].expectedReturnCodes[0x80040810] != "cancelledByUser" ||
+        signedCodes.installers[0].expectedReturnCodes[0x80000000] != "contactSupport")
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "signed installer return code self-test failed");
+    if (ParseInstallerManifest("PackageIdentifier: Example.Bad\nPackageVersion: 1.0\nInstallerType: exe\n"
+                               "Installers:\n- Architecture: x64\n  InstallerUrl: https://example.test/x64.exe\n"
+                               "  InstallerSha256: 5555555555555555555555555555555555555555555555555555555555555555\n"
+                               "  ExpectedReturnCodes:\n  - InstallerReturnCode: -2147483649\n"
+                               "    ReturnResponse: contactSupport\n", signedCodes))
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "out-of-range installer return code self-test failed");
 
     static constexpr char NestedTailFixture[] =
         "PackageIdentifier: Example.NestedTail\n"
