@@ -590,21 +590,28 @@ UserEnumDisplaySettings(
 
     /* Ask GDI for the GRAPHICS_DEVICE */
     pGraphicsDevice = EngpFindGraphicsDevice(pustrDevice, 0);
-    ppdev = EngpGetPDEV(pustrDevice);
-
-    if (!pGraphicsDevice || !ppdev)
+    if (!pGraphicsDevice)
     {
         /* No device found */
         ERR("No device found!\n");
         return STATUS_INVALID_PARAMETER_1;
     }
 
-    /* let's politely ask the driver for an updated mode list,
-       just in case there's something new in there (vbox) */
+    ppdev = EngpGetPDEV(pustrDevice);
+    if (ppdev)
+    {
+        /* let's politely ask the driver for an updated mode list,
+           just in case there's something new in there (vbox) */
 
-    if (iModeNum == 0)
-        PDEVOBJ_vRefreshModeList(ppdev);
-    PDEVOBJ_vRelease(ppdev);
+        if (iModeNum == 0)
+            PDEVOBJ_vRefreshModeList(ppdev);
+        PDEVOBJ_vRelease(ppdev);
+    }
+    else if (!EngpBuildDetachedModeList(pGraphicsDevice, FALSE))
+    {
+        /* A display device that is not attached to the desktop still lists the modes of its output */
+        return STATUS_INVALID_PARAMETER_2;
+    }
 
     iFoundMode = 0;
     for (i = 0; i < pGraphicsDevice->cDevModes; i++)
@@ -717,7 +724,7 @@ NtUserEnumDisplaySettings(
     WCHAR awcDevice[CCHDEVICENAME];
     NTSTATUS Status;
     ULONG cbSize = 0, cbExtra = 0;
-    DEVMODEW dmReg, *pdm;
+    DEVMODEW dmReg, dmDetached, *pdm;
     POINTL ptlPosition;
     BOOL bCurrent = FALSE;
 
@@ -787,6 +794,18 @@ NtUserEnumDisplaySettings(
     {
         /* Get the current settings */
         Status = UserEnumCurrentDisplaySettings(pustrDevice, &pdm, &ptlPosition);
+        if (Status == STATUS_INVALID_PARAMETER_1 && pustrDevice && EngpFindGraphicsDevice(pustrDevice, 0))
+        {
+            /* A display device that is not attached to the desktop is current in the detached mode, at its registry position */
+            RtlZeroMemory(&dmDetached, sizeof(dmDetached));
+            dmDetached.dmSize = sizeof(dmDetached);
+            ptlPosition.x = ptlPosition.y = 0;
+            if (NT_SUCCESS(UserEnumRegistryDisplaySettings(pustrDevice, &dmReg)))
+                ptlPosition = dmReg.dmPosition;
+            dmDetached.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT;
+            pdm = &dmDetached;
+            Status = STATUS_SUCCESS;
+        }
         bCurrent = TRUE;
     }
     else
@@ -1114,12 +1133,18 @@ co_UserProcessDisplayConfigurationUpdate(VOID)
     if (InterlockedExchange(&gUserDisplayConfigurationPending, 0) == 0)
         return;
 
+    /* A source that starts driving an output has a display device that may be new to win32k */
+    EngpUpdateGraphicsDeviceList();
     for (iDevNum = 0; (pGraphicsDevice = EngpFindGraphicsDevice(NULL, iDevNum)) != NULL; ++iDevNum)
     {
         RtlInitUnicodeString(&ustrDevice, pGraphicsDevice->szWinDeviceName);
         ppdev = EngpGetPDEV(&ustrDevice);
         if (ppdev == NULL)
+        {
+            /* A detached display device lists the modes of whatever output it drives now */
+            (VOID)EngpBuildDetachedModeList(pGraphicsDevice, TRUE);
             continue;
+        }
 
         RtlZeroMemory(&ModeInfo, sizeof(ModeInfo));
         if (EngDeviceIoControl((HANDLE)pGraphicsDevice->DeviceObject,

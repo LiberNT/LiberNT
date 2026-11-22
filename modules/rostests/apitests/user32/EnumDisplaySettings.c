@@ -9,6 +9,37 @@
 #define SIZEOF_DEVMODEW_400_A 148
 #define SIZEOF_DEVMODEW_500_A 156
 
+/* A display device that is not attached to the desktop is current in the detached mode: no size */
+static void
+TestDisplayDevices(void)
+{
+    DISPLAY_DEVICEW Device;
+    DEVMODEW Mode;
+    DWORD Index;
+
+    for (Index = 0; ; Index++)
+    {
+        Device.cb = sizeof(Device);
+        if (!EnumDisplayDevicesW(NULL, Index, &Device, 0))
+            break;
+        ZeroMemory(&Mode, sizeof(Mode));
+        Mode.dmSize = sizeof(Mode);
+        ok(EnumDisplaySettingsW(Device.DeviceName, ENUM_CURRENT_SETTINGS, &Mode),
+           "%ls: no current settings (%lu)\n", Device.DeviceName, GetLastError());
+        if (Device.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP)
+        {
+            ok(Mode.dmPelsWidth != 0, "%ls: attached with width 0\n", Device.DeviceName);
+            ok(Mode.dmPelsHeight != 0, "%ls: attached with height 0\n", Device.DeviceName);
+        }
+        else
+        {
+            ok(Mode.dmPelsWidth == 0, "%ls: detached with width %lu\n", Device.DeviceName, Mode.dmPelsWidth);
+            ok(Mode.dmPelsHeight == 0, "%ls: detached with height %lu\n", Device.DeviceName, Mode.dmPelsHeight);
+        }
+    }
+    ok(Index != 0, "no display device\n");
+}
+
 START_TEST(EnumDisplaySettings)
 {
     DEVMODEW dmW;
@@ -104,4 +135,6 @@ START_TEST(EnumDisplaySettings)
     ok(dmA.dmSize == SIZEOF_DEVMODEW_300_A, "%d\n", dmA.dmSize);
 
     DeleteDC(icDisplay);
+
+    TestDisplayDevices();
 }

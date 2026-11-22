@@ -4176,6 +4176,13 @@ DxgkPresentScanOutSourcePrimary(
     _In_ ULONG Width,
     _In_ ULONG Height);
 
+BOOLEAN
+DxgkVidPnGetSourcePrimarySize(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
+    _Out_ PULONG Width,
+    _Out_ PULONG Height);
+
 VOID
 DxgkpSyncSourcePrimariesLocked(
     _In_ PDXGKRNL_ADAPTER Adapter);

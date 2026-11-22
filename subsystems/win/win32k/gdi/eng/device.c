@@ -724,6 +724,36 @@ EngpUpdateMonitorDevices(
     return STATUS_SUCCESS;
 }
 
+/* A display device without a PDEV lists the modes its driver reports; the list is built once and rebuilt only on request */
+BOOL
+NTAPI
+EngpBuildDetachedModeList(
+    _Inout_ PGRAPHICS_DEVICE pGraphicsDevice,
+    _In_ BOOL bRefresh)
+{
+    PDEVMODEINFO pdminfo, pdmiNext;
+    BOOL bResult;
+
+    EngAcquireSemaphore(ghsemGraphicsDeviceList);
+    if (bRefresh)
+    {
+        for (pdminfo = pGraphicsDevice->pdevmodeInfo; pdminfo; pdminfo = pdmiNext)
+        {
+            pdmiNext = pdminfo->pdmiNext;
+            ExFreePoolWithTag(pdminfo, GDITAG_DEVMODE);
+        }
+        pGraphicsDevice->pdevmodeInfo = NULL;
+        if (pGraphicsDevice->pDevModeList)
+            ExFreePoolWithTag(pGraphicsDevice->pDevModeList, GDITAG_GDEVICE);
+        pGraphicsDevice->pDevModeList = NULL;
+        pGraphicsDevice->cDevModes = 0;
+    }
+    bResult = LDEVOBJ_bBuildDevmodeList(pGraphicsDevice);
+    ASSERT(!bResult || pGraphicsDevice->cDevModes != 0);
+    EngReleaseSemaphore(ghsemGraphicsDeviceList);
+    return bResult;
+}
+
 BOOLEAN
 NTAPI
 EngpReferenceMonitorDevice(
