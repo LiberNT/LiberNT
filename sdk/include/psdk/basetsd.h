@@ -236,20 +236,24 @@ typedef KAFFINITY *PKAFFINITY;
 #define MAXINT ((INT) (MAXUINT >> 1))
 #define MININT ((INT) ~MAXINT)
 
+#if (defined(_WIN64)) && (!defined(__midl))
 #define Handle64ToHandle(h) (Ptr64ToPtr(h))
 #define HandleToHandle64(h) (PtrToPtr64(h))
 #define Ptr64ToPtr(p) ((void *) p)
 #define PtrToPtr64(p) ((void * POINTER_64) p)
 
 #define HandleToHandle32(h) (PtrToPtr32(h))
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
+#if (defined(_WIN64)) && (!defined(__midl))
 void * Ptr32ToPtr(const void *POINTER_SIGNED POINTER_32 p);
 void *POINTER_SIGNED POINTER_32  PtrToPtr32(const void *p);
+#endif
 
 #ifdef __cplusplus
 }

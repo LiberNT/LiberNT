@@ -2292,77 +2292,95 @@ typedef struct linetermcaps_tag {
 } LINETERMCAPS, *LPLINETERMCAPS;
 #pragma pack(pop)
 
+#if (!(defined(UNICODE)))
 #define lineCreateAgent 0
+#endif
 #ifdef UNICODE
 #define lineCreateAgentSession lineCreateAgentSessionW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define lineCreateAgentSession lineCreateAgentSessionW
 #else
 #define lineCreateAgentSession lineCreateAgentSessionA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define lineGetAgentActivityList lineGetAgentActivityListW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define lineGetAgentActivityList lineGetAgentActivityListW
 #else
 #define lineGetAgentActivityList lineGetAgentActivityListA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define lineGetAgentCaps lineGetAgentCapsW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define lineGetAgentCaps lineGetAgentCapsW
 #else
 #define lineGetAgentCaps lineGetAgentCapsA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define lineGetAgentGroupList lineGetAgentGroupListW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define lineGetAgentGroupList lineGetAgentGroupListW
 #else
 #define lineGetAgentGroupList lineGetAgentGroupListA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define lineGetAgentStatus lineGetAgentStatusW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define lineGetAgentStatus lineGetAgentStatusW
 #else
 #define lineGetAgentStatus lineGetAgentStatusA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define lineGetGroupList lineGetGroupListW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define lineGetGroupList lineGetGroupListW
 #else
 #define lineGetGroupList lineGetGroupListA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define lineGetQueueList lineGetQueueListW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define lineGetQueueList lineGetQueueListW
 #else
 #define lineGetQueueList lineGetQueueListA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define phoneInitializeEx phoneInitializeExW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define phoneInitializeEx phoneInitializeExW
 #else
 #define phoneInitializeEx phoneInitializeExA
+#endif
 #endif
 #endif
 #define TAPI_REPLY 0x463

@@ -731,7 +731,9 @@ typedef struct _X509Certificate {
 #ifdef UNICODE
 #define DEFAULT_TLS_SSP_NAME DEFAULT_TLS_SSP_NAME_W
 #else
+#if (!(defined(UNICODE)))
 #define DEFAULT_TLS_SSP_NAME DEFAULT_TLS_SSP_NAME_A
+#endif
 #endif
 #define DEFAULT_TLS_SSP_NAME_A "Default TLS SSP"
 #define DEFAULT_TLS_SSP_NAME_W L"Default TLS SSP"
@@ -740,15 +742,19 @@ typedef struct _X509Certificate {
 #define SP_PROT_TLS1_3PLUS_CLIENT 0x2000
 #define SP_PROT_TLS1_3PLUS_SERVER 0x1000
 #define SSL_CRACK_CERTIFICATE_NAME 0
+#if (!(defined(UNICODE)))
 #define SSL_EMPTY_CACHE_FN 0
+#endif
 #define SSL_FREE_CERTIFICATE_NAME TEXT("SslFreeCertificate")
 #ifdef UNICODE
 #define SslEmptyCache SslEmptyCacheW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SslEmptyCache SslEmptyCacheW
 #else
 #define SslEmptyCache SslEmptyCacheA
+#endif
 #endif
 #endif
 

@@ -47,19 +47,23 @@ DWORD WINAPI UnloadPerfCounterTextStringsW(LPCWSTR, BOOL);
 #ifdef UNICODE
 #define SetServiceAsTrusted SetServiceAsTrustedW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SetServiceAsTrusted SetServiceAsTrustedW
 #else
 #define SetServiceAsTrusted SetServiceAsTrustedA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define UpdatePerfNameFiles UpdatePerfNameFilesW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define UpdatePerfNameFiles UpdatePerfNameFilesW
 #else
 #define UpdatePerfNameFiles UpdatePerfNameFilesA
+#endif
 #endif
 #endif
 

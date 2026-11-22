@@ -1288,8 +1288,10 @@ LWSTDAPI StrFormatByteSizeEx(ULONGLONG ull, SFBS_FLAGS flags, _Out_writes_(cchBu
 
 #endif // NOSHLWAPI
 typedef const QITAB * LPCQITAB;
+#if (!(defined(UNICODE)))
 typedef PARSEDURLA PARSEDURL;
 typedef PPARSEDURLA PPARSEDURL;
+#endif
 typedef DWORD SHCT_FLAGS;
 
 #ifdef __cplusplus
@@ -1306,83 +1308,103 @@ LRESULT WINAPI SHSendMessageBroadcastA(UINT uMsg, WPARAM wParam, LPARAM lParam);
 #ifdef UNICODE
 #define PathIsHTMLFile PathIsHTMLFileW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PathIsHTMLFile PathIsHTMLFileW
 #else
 #define PathIsHTMLFile PathIsHTMLFileA
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define SHFormatDateTime 0
+#endif
 #ifdef UNICODE
 #define SHMessageBoxCheck SHMessageBoxCheckW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SHMessageBoxCheck SHMessageBoxCheckW
 #else
 #define SHMessageBoxCheck SHMessageBoxCheckA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define SHSendMessageBroadcast SHSendMessageBroadcastW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SHSendMessageBroadcast SHSendMessageBroadcastW
 #else
 #define SHSendMessageBroadcast SHSendMessageBroadcastA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define SHStripMneumonic SHStripMneumonicW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SHStripMneumonic SHStripMneumonicW
 #else
 #define SHStripMneumonic SHStripMneumonicA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define StrCmpC StrCmpCW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define StrCmpC StrCmpCW
 #else
 #define StrCmpC StrCmpCA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define StrCmpIC StrCmpICW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define StrCmpIC StrCmpICW
 #else
 #define StrCmpIC StrCmpICA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define StrCmpNC StrCmpNCW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define StrCmpNC StrCmpNCW
 #else
 #define StrCmpNC StrCmpNCA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define StrCmpNIC StrCmpNICW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define StrCmpNIC StrCmpNICW
 #else
 #define StrCmpNIC StrCmpNICA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define SZ_CONTENTTYPE_CDF SZ_CONTENTTYPE_CDFW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SZ_CONTENTTYPE_CDF SZ_CONTENTTYPE_CDFW
 #else
 #define SZ_CONTENTTYPE_CDF SZ_CONTENTTYPE_CDFA
+#endif
 #endif
 #endif
 #define SZ_CONTENTTYPE_CDFA "application/x-cdf"
@@ -1390,10 +1412,12 @@ LRESULT WINAPI SHSendMessageBroadcastA(UINT uMsg, WPARAM wParam, LPARAM lParam);
 #ifdef UNICODE
 #define SZ_CONTENTTYPE_HTML SZ_CONTENTTYPE_HTMLW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SZ_CONTENTTYPE_HTML SZ_CONTENTTYPE_HTMLW
 #else
 #define SZ_CONTENTTYPE_HTML SZ_CONTENTTYPE_HTMLA
+#endif
 #endif
 #endif
 #define SZ_CONTENTTYPE_HTMLA "text/html"
@@ -1525,10 +1549,12 @@ LSTATUS WINAPI SHRegSetValue(HKEY hkey, LPCWSTR pszSubKey, LPCWSTR pszValue, SRR
 #endif
 
 #define QITABENTMULTI2(Cthis, Ifoo, Iimpl) { (IID *) & Ifoo, OFFSETOFCLASS(Iimpl, Cthis) }
+#if (!(defined(UNICODE)))
 #define SHAnsiToTChar(szSrc, szDest, cchSize) SHAnsiToAnsi(szSrc, szDest, cchSize)
 #define SHTCharToAnsi(szSrc, szDest, cchSize) SHAnsiToAnsi(szSrc, szDest, cchSize)
 #define SHTCharToUnicode(szSrc, wzDest, cchSize) SHAnsiToUnicode(szSrc, wzDest, cchSize)
 #define SHUnicodeToTChar(wzSrc, szDest, cchSize) SHUnicodeToAnsi(wzSrc, szDest, cchSize)
+#endif
 #define STATIC_CAST(typ) static_cast < typ >
 
 #endif // _INC_SHLWAPI

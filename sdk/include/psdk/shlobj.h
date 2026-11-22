@@ -3066,21 +3066,27 @@ typedef struct tagAASHELLMENUITEM {
 #ifdef UNICODE
 #define ICopyHook ICopyHookW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define ICopyHook ICopyHookW
 #else
 #define ICopyHook ICopyHookA
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define ICopyHookVtbl ICopyHookAVtbl
 #define INewShortcutHookVtbl INewShortcutHookAVtbl
+#endif
 #ifdef UNICODE
 #define LPCOPYHOOK LPCOPYHOOKW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define LPCOPYHOOK LPCOPYHOOKW
 #else
 #define LPCOPYHOOK LPCOPYHOOKA
+#endif
 #endif
 #endif
 #define OPENPROPS_NONE 0x0000

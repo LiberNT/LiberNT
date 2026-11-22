@@ -360,13 +360,17 @@ typedef struct _POLICYSETTINGSTATUSINFO {
 #ifdef UNICODE
 #define FreeGPOList FreeGPOListW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define FreeGPOList FreeGPOListW
 #else
 #define FreeGPOList FreeGPOListA
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define GetGPOList 0
+#endif
 #define GP_DLLNAME TEXT("DllName")
 #define GP_ENABLEASYNCHRONOUSPROCESSING TEXT("EnableAsynchronousProcessing")
 #define GP_MAXNOGPOLISTCHANGESINTERVAL TEXT("MaxNoGPOListChangesInterval")

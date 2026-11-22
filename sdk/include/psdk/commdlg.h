@@ -732,10 +732,14 @@ typedef PRINTDLGEXA PRINTDLGEX, *LPPRINTDLGEX;
 #define TYPE1_FONTTYPE 0x40000
 #endif
 
+#if (!(defined(UNICODE)))
 typedef LPOFNOTIFYEXA LPOFNOTIFYEX;
 typedef OFNOTIFYEXA OFNOTIFYEX;
+#endif
 typedef const CHOOSEFONTA * PCCHOOSEFONTA;
+#if (!(defined(UNICODE)))
 typedef PCCHOOSEFONTA PCCHOOSEFONT;
+#endif
 typedef const CHOOSEFONTW * PCCHOOSEFONTW;
 typedef const DEVNAMES * PCDEVNAMES;
 typedef const PRINTPAGERANGE * PCPRINTPAGERANGE;
@@ -797,9 +801,11 @@ typedef struct IPrintDialogCallbackVtbl IPrintDialogCallbackVtbl;
 
 typedef struct IPrintDialogServicesVtbl IPrintDialogServicesVtbl;
 
+#if (!(defined(UNICODE)))
 typedef LPOPENFILENAME_NT4A LPOPENFILENAME_NT4;
 
 typedef OPENFILENAME_NT4A OPENFILENAME_NT4;
+#endif
 
 struct tagFINDREPLACEA
 {

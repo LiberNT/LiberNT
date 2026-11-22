@@ -41,7 +41,9 @@
 
 #endif
 
+#if (!defined(_M_CEE) &&      ((defined(_M_X64) && !defined(_M_ARM64EC)) ||       (defined(_ARM64_MULT_INTRINS_SUPPORTED) && _ARM64_MULT_INTRINS_SUPPORTED) ||       (defined(_M_IA64) && (_MSC_VER >= 1400))))
 #define _USE_INTRINSIC_MULTIPLY128 0
+#endif
 #define RtlDWord64Mult RtlULongLongMult
 #define RtlDWord64ToByte RtlULongLongToUInt8
 #define RtlDWord64ToChar RtlULongLongToChar
@@ -103,9 +105,11 @@
 #define RtlDWordLongToUShort RtlULongLongToUShort
 #define RtlDWordLongToWord RtlULongLongToUShort
 #define RtlDWordMult RtlULongMult
+#if (defined(_WIN64))
 #define RtlDWordPtrAdd RtlULongLongAdd
 #define RtlDWordPtrMult RtlULongLongMult
 #define RtlDWordPtrSub RtlULongLongSub
+#endif
 #define RtlDWordPtrToByte RtlULongPtrToUInt8
 #define RtlDWordPtrToChar RtlULongPtrToChar
 #define RtlDWordPtrToDWord RtlULongPtrToULong
@@ -233,21 +237,31 @@
 #define RtlIntPtrToDWord64 RtlIntPtrToULongLong
 #define RtlIntPtrToDWordLong RtlIntPtrToULongLong
 #define RtlIntPtrToDWordPtr RtlIntPtrToULongPtr
+#if (defined(_WIN64))
 #define RtlIntPtrToInt RtlLongLongToInt
+#endif
 #define RtlIntPtrToInt16 RtlIntPtrToShort
 #define RtlIntPtrToInt32 RtlIntPtrToInt
+#if (defined(_WIN64))
 #define RtlIntPtrToLong RtlLongLongToLong
+#endif
 #define RtlIntPtrToSizeT RtlIntPtrToUIntPtr
 #define RtlIntPtrToSIZET RtlIntPtrToULongPtr
+#if (defined(_WIN64))
 #define RtlIntPtrToUInt RtlLongLongToUInt
+#endif
 #define RtlIntPtrToUInt16 RtlIntPtrToUShort
 #define RtlIntPtrToUInt32 RtlIntPtrToUInt
 #define RtlIntPtrToUInt64 RtlIntPtrToULongLong
+#if (defined(_WIN64))
 #define RtlIntPtrToUIntPtr RtlLongLongToULongLong
 #define RtlIntPtrToULong RtlLongLongToULong
+#endif
 #define RtlIntPtrToULong64 RtlIntPtrToULongLong
+#if (defined(_WIN64))
 #define RtlIntPtrToULongLong RtlLongLongToULongLong
 #define RtlIntPtrToULongPtr RtlLongLongToULongLong
+#endif
 #define RtlIntPtrToWord RtlIntPtrToUShort
 #define RtlIntToByte RtlIntToUInt8
 #define RtlIntToDWord RtlIntToULong
@@ -304,13 +318,19 @@
 #define RtlLongPtrToDWord64 RtlLongPtrToULongLong
 #define RtlLongPtrToDWordLong RtlLongPtrToULongLong
 #define RtlLongPtrToDWordPtr RtlLongPtrToULongPtr
+#if (defined(_WIN64))
 #define RtlLongPtrToInt RtlLongLongToInt
+#endif
 #define RtlLongPtrToInt16 RtlLongPtrToShort
 #define RtlLongPtrToInt32 RtlLongPtrToInt
+#if (defined(_WIN64))
 #define RtlLongPtrToLong RtlLongLongToLong
+#endif
 #define RtlLongPtrToSizeT RtlLongPtrToUIntPtr
 #define RtlLongPtrToSIZET RtlLongPtrToULongPtr
+#if (defined(_WIN64))
 #define RtlLongPtrToUInt RtlLongLongToUInt
+#endif
 #define RtlLongPtrToUInt16 RtlLongPtrToUShort
 #define RtlLongPtrToUInt32 RtlLongPtrToUInt
 #define RtlLongPtrToUInt64 RtlLongPtrToULongLong
@@ -370,8 +390,10 @@
 #define RtlShortToUInt64 RtlShortToULongLong
 #define RtlShortToULong64 RtlShortToULongLong
 #define RtlShortToWord RtlShortToUShort
+#if (defined(_WIN64))
 #define RtlSIZETAdd RtlULongLongAdd
 #define RtlSIZETSub RtlULongLongSub
+#endif
 #define RtlSizeTToByte RtlUIntPtrToUInt8
 #define RtlSIZETToByte RtlULongPtrToUInt8
 #define RtlSizeTToChar RtlUIntPtrToChar
@@ -500,20 +522,28 @@
 #define RtlUInt64ToULongPtr RtlULongLongToULongPtr
 #define RtlUInt64ToUShort RtlULongLongToUShort
 #define RtlUInt64ToWord RtlULongLongToUShort
+#if (defined(_WIN64))
 #define RtlUIntPtrAdd RtlULongLongAdd
 #define RtlUIntPtrMult RtlULongLongMult
 #define RtlUIntPtrSub RtlULongLongSub
+#endif
 #define RtlUIntPtrToByte RtlUIntPtrToUInt8
 #define RtlUIntPtrToDWord RtlUIntPtrToULong
 #define RtlUIntPtrToInt32 RtlUIntPtrToInt
 #define RtlUIntPtrToInt64 RtlUIntPtrToLongLong
 #define RtlUIntPtrToLong64 RtlUIntPtrToLongLong
+#if (defined(_WIN64))
 #define RtlUIntPtrToLongLong RtlULongLongToLongLong
+#endif
 #define RtlUIntPtrToPtrdiffT RtlUIntPtrToIntPtr
 #define RtlUIntPtrToSSIZET RtlUIntPtrToLongPtr
+#if (defined(_WIN64))
 #define RtlUIntPtrToUInt RtlULongLongToUInt
+#endif
 #define RtlUIntPtrToUInt32 RtlUIntPtrToUInt
+#if (defined(_WIN64))
 #define RtlUIntPtrToULong RtlULongLongToULong
+#endif
 #define RtlUIntPtrToWord RtlUIntPtrToUShort
 #define RtlUIntToByte RtlUIntToUInt8
 #define RtlUIntToInt16 RtlUIntToShort
@@ -560,19 +590,25 @@
 #define RtlULongLongToUInt16 RtlULongLongToUShort
 #define RtlULongLongToUInt32 RtlULongLongToUInt
 #define RtlULongLongToWord RtlULongLongToUShort
+#if (defined(_WIN64))
 #define RtlULongPtrAdd RtlULongLongAdd
 #define RtlULongPtrMult RtlULongLongMult
 #define RtlULongPtrSub RtlULongLongSub
+#endif
 #define RtlULongPtrToByte RtlULongPtrToUInt8
 #define RtlULongPtrToDWord RtlULongPtrToULong
 #define RtlULongPtrToInt16 RtlULongPtrToShort
 #define RtlULongPtrToInt32 RtlULongPtrToInt
 #define RtlULongPtrToInt64 RtlULongPtrToLongLong
 #define RtlULongPtrToLong64 RtlULongPtrToLongLong
+#if (defined(_WIN64))
 #define RtlULongPtrToLongLong RtlULongLongToLongLong
+#endif
 #define RtlULongPtrToPtrdiffT RtlULongPtrToIntPtr
 #define RtlULongPtrToSSIZET RtlULongPtrToLongPtr
+#if (defined(_WIN64))
 #define RtlULongPtrToUInt RtlULongLongToUInt
+#endif
 #define RtlULongPtrToUInt16 RtlULongPtrToUShort
 #define RtlULongPtrToUInt32 RtlULongPtrToUInt
 #define RtlULongPtrToWord RtlULongPtrToUShort
@@ -619,7 +655,9 @@ NTSTATUS RtlIntToUShort(INT iOperand, USHORT *pusResult);
 NTSTATUS RtlLongLongToChar(LONGLONG llOperand, CHAR *pch);
 NTSTATUS RtlLongLongToInt(LONGLONG llOperand, INT *piResult);
 NTSTATUS RtlLongLongToInt8(LONGLONG llOperand, INT8 *pi8Result);
+#if (defined(_WIN64))
 NTSTATUS RtlLongLongToIntPtr(LONGLONG llOperand, INT_PTR *piResult);
+#endif
 NTSTATUS RtlLongLongToLong(LONGLONG llOperand, LONG *plResult);
 NTSTATUS RtlLongLongToShort(LONGLONG llOperand, SHORT *psResult);
 NTSTATUS RtlLongLongToUChar(LONGLONG llOperand, UCHAR *pch);
@@ -640,15 +678,21 @@ NTSTATUS RtlLongPtrToUShort(LONG_PTR lOperand, USHORT *pusResult);
 NTSTATUS RtlLongToChar(LONG lOperand, CHAR *pch);
 NTSTATUS RtlLongToInt(LONG lOperand, INT *piResult);
 NTSTATUS RtlLongToInt8(LONG lOperand, INT8 *pi8Result);
+#if (defined(_WIN64))
 NTSTATUS RtlLongToIntPtr(LONG lOperand, INT_PTR *piResult);
+#endif
 NTSTATUS RtlLongToShort(LONG lOperand, SHORT *psResult);
 NTSTATUS RtlLongToUChar(LONG lOperand, UCHAR *pch);
 NTSTATUS RtlLongToUInt(LONG lOperand, UINT *puResult);
 NTSTATUS RtlLongToUInt8(LONG lOperand, UINT8 *pui8Result);
+#if (defined(_WIN64))
 NTSTATUS RtlLongToUIntPtr(LONG lOperand, UINT_PTR *puResult);
+#endif
 NTSTATUS RtlLongToULong(LONG lOperand, ULONG *pulResult);
 NTSTATUS RtlLongToULongLong(LONG lOperand, ULONGLONG *pullResult);
+#if (defined(_WIN64))
 NTSTATUS RtlLongToULongPtr(LONG lOperand, ULONG_PTR *pulResult);
+#endif
 NTSTATUS RtlLongToUShort(LONG lOperand, USHORT *pusResult);
 NTSTATUS RtlShortToChar(SHORT sOperand, CHAR *pch);
 NTSTATUS RtlShortToDWordPtr(SHORT sOperand, DWORD_PTR *pdwResult);
@@ -684,9 +728,13 @@ NTSTATUS RtlUIntPtrToUShort(UINT_PTR uOperand, USHORT *pusResult);
 NTSTATUS RtlUIntToChar(UINT uOperand, CHAR *pch);
 NTSTATUS RtlUIntToInt(UINT uOperand, INT *piResult);
 NTSTATUS RtlUIntToInt8(UINT uOperand, INT8 *pi8Result);
+#if (defined(_WIN64))
 NTSTATUS RtlUIntToIntPtr(UINT uOperand, INT_PTR *piResult);
+#endif
 NTSTATUS RtlUIntToLong(UINT uOperand, LONG *plResult);
+#if (defined(_WIN64))
 NTSTATUS RtlUIntToLongPtr(UINT uOperand, LONG_PTR *plResult);
+#endif
 NTSTATUS RtlUIntToShort(UINT uOperand, SHORT *psResult);
 NTSTATUS RtlUIntToUChar(UINT uOperand, UCHAR *pch);
 NTSTATUS RtlUIntToUInt8(UINT uOperand, UINT8 *pui8Result);
@@ -713,12 +761,16 @@ NTSTATUS RtlULongPtrToUShort(ULONG_PTR ulOperand, USHORT *pusResult);
 NTSTATUS RtlULongToChar(ULONG ulOperand, CHAR *pch);
 NTSTATUS RtlULongToInt(ULONG ulOperand, INT *piResult);
 NTSTATUS RtlULongToInt8(ULONG ulOperand, INT8 *pi8Result);
+#if (defined(_WIN64))
 NTSTATUS RtlULongToIntPtr(ULONG ulOperand, INT_PTR *piResult);
+#endif
 NTSTATUS RtlULongToLong(ULONG ulOperand, LONG *plResult);
 NTSTATUS RtlULongToShort(ULONG ulOperand, SHORT *psResult);
 NTSTATUS RtlULongToUChar(ULONG ulOperand, UCHAR *pch);
 NTSTATUS RtlULongToUInt(ULONG ulOperand, UINT *puResult);
+#if (defined(_WIN64))
 NTSTATUS RtlULongToUIntPtr(ULONG ulOperand, UINT_PTR *puiResult);
+#endif
 NTSTATUS RtlULongToUShort(ULONG ulOperand, USHORT *pusResult);
 NTSTATUS RtlUShortToChar(USHORT usOperand, CHAR *pch);
 NTSTATUS RtlUShortToInt8(USHORT usOperand, INT8 *pi8Result);

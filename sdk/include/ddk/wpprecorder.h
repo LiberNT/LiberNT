@@ -322,7 +322,9 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
+#if (defined(_KERNEL_MODE))
 void RECORDER_LOG_CREATE_PARAMS_INIT_APPEND_POINTER(PRECORDER_LOG_CREATE_PARAMS Params, PCSTR LogIdentifier, const void *LogIdentifierAppendPointer);
+#endif
 
 #ifdef __cplusplus
 }

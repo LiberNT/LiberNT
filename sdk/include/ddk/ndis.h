@@ -11601,13 +11601,17 @@ NdisIfQueryBindingIfIndex(
 #define NDIS_MINIPORT_CO_CHARACTERISTICS_REVISION_1 1
 #endif
 #ifndef NDIS_MINIPORT_MINIMUM_MAJOR_VERSION
+#if ((!defined(NDIS_WRAPPER))) && ((defined(NDIS_MINIPORT_DRIVER)))
 #define NDIS_MINIPORT_MINIMUM_MAJOR_VERSION 6
+#endif
 #endif
 #ifndef NDIS_MINIPORT_MINIMUM_MINOR_VERSION
 #define NDIS_MINIPORT_MINIMUM_MINOR_VERSION 80
 #endif
 #ifndef NDIS_MIN_API
+#if ((!defined(NDIS_WRAPPER))) && ((defined(_M_IX86) || defined(_M_AMD64)))
 #define NDIS_MIN_API 0x400
+#endif
 #endif
 #ifndef NDIS_NBL_MEDIA_SPECIFIC_INFO_REVISION_1
 #define NDIS_NBL_MEDIA_SPECIFIC_INFO_REVISION_1 1
@@ -12879,7 +12883,9 @@ NDIS_STATUS NTAPI NdisGetProcessorInformationEx(NDIS_HANDLE NdisHandle, PNDIS_SY
 #endif
 
 #define DECLARE_NDIS_HANDLE(handle) typedef PVOID handle;
+#if ((!defined(NDIS_WRAPPER)))
 #define NDIS_API_VERSION_AVAILABLE(major, minor) NDIS_DETAIL_NDIS_API_VERSION_AVAILABLE_(major, minor)
+#endif
 #define NDIS_DECLARE_CO_CL_AF_CONTEXT(type) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cl-af")
 #define NDIS_DECLARE_CO_CL_VC_CONTEXT(type) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cl-vc")
 #define NDIS_DECLARE_CO_CM_AF_CONTEXT(type) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-co-cm-af")
@@ -12894,7 +12900,9 @@ NDIS_STATUS NTAPI NdisGetProcessorInformationEx(NDIS_HANDLE NdisHandle, PNDIS_SY
 #define NDIS_DECLARE_SHARED_MEMORY_ALLOCATION_CONTEXT(type) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-shm-block")
 #define NDIS_DECLARE_SHARED_MEMORY_PROVIDER_CONTEXT(type) NDIS_DECLARE_CONTEXT_INNER(type, L"ndis-shm-provider")
 #define NDIS_DECLARE_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE(_ContextName, _ExtensionId) extern NDIS_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE_INFO _ContextName = { { NDIS_OBJECT_TYPE_DEFAULT, NDIS_SIZEOF_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE_INFO_REVISION_1, NDIS_SWITCH_NET_BUFFER_LIST_CONTEXT_TYPE_INFO_REVISION_1, }, # _ContextName, _ExtensionId };
+#if ((!defined(NDIS_WRAPPER)))
 #define NDIS_DETAIL_NDIS_API_VERSION_AVAILABLE_(major, minor) ((((0x ## major) << 8) + (0x ## minor)) >= NDIS_MIN_API)
+#endif
 #define NDIS_GET_NET_BUFFER_LIST_GFT_OFFLOAD_FLAGS(_NBL) ((* ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation))) . Flags)
 #define NDIS_GET_NET_BUFFER_LIST_GFT_OFFLOAD_VPORT_ID(_NBL) ((* ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation))) . VPortId)
 #define NDIS_GET_NET_BUFFER_LIST_IM_RESERVED(_NBL) (NET_BUFFER_LIST_INFO(_NBL, IMReserved))
@@ -12929,7 +12937,9 @@ NDIS_STATUS NTAPI NdisGetProcessorInformationEx(NDIS_HANDLE NdisHandle, PNDIS_SY
 #define NET_BUFFER_LIST_GFT_OFFLOAD_FLOW_ENTRY_ID(_NBL) ((PNDIS_GFT_FLOW_ENTRY_ID) & (NET_BUFFER_LIST_INFO((_NBL), GftFlowEntryId)))
 #define NET_BUFFER_LIST_GFT_OFFLOAD_INFO(_NBL) ((PNDIS_NET_BUFFER_LIST_GFT_OFFLOAD_INFO) & (NET_BUFFER_LIST_INFO((_NBL), GftOffloadInformation)))
 #define NET_BUFFER_LIST_RECEIVE_FILTER_VPORT_ID(_NBL) (((PNDIS_NET_BUFFER_LIST_FILTERING_INFO) & NET_BUFFER_LIST_INFO(_NBL, NetBufferListFilteringInfo)) -> FilteringInfo . QueueVPortInfo . VPortId)
+#if (defined(_AMD64_) || defined(_ARM64_))
 #define NET_BUFFER_LIST_SWITCH_FORWARDING_DETAIL_CLEAR(_NBL) (_NBL) -> NetBufferListInfo [SwitchForwardingDetail] = 0
+#endif
 #define WanMiniportSend(Status, NdisBindingHandle, NdisLinkHandle, WanPacket) { * (Status) = ((((PNDIS_OPEN_BLOCK) (NdisBindingHandle)) -> WanSendHandler)) (((PNDIS_OPEN_BLOCK) (NdisBindingHandle)) -> BindingHandle, (NdisLinkHandle), (PNDIS_PACKET) (WanPacket)); }
 
 /* TODO: NdisGetHypervisorInfo and NDIS_HYPERVISOR_INFO */

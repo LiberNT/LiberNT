@@ -4128,7 +4128,9 @@ WCHAR * CDECL wine_get_dos_file_name(LPCSTR str);
 #define LPTx 0x80
 #endif
 #ifndef MICROSOFT_WINBASE_H_DEFINE_INTERLOCKED_CPLUSPLUS_OVERLOADS
+#if (!defined(MIDL_PASS))
 #define MICROSOFT_WINBASE_H_DEFINE_INTERLOCKED_CPLUSPLUS_OVERLOADS 0
+#endif
 #endif
 #ifndef OPERATION_API_VERSION
 #define OPERATION_API_VERSION 1
@@ -4410,84 +4412,104 @@ typedef struct _OPERATION_START_PARAMETERS {
 #ifdef UNICODE
 #define CopyFileTransacted CopyFileTransactedW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define CopyFileTransacted CopyFileTransactedW
 #else
 #define CopyFileTransacted CopyFileTransactedA
 #endif
 #endif
+#endif
 #define CopyVolatileMemory RtlCopyVolatileMemory
 #ifdef UNICODE
 #define CreateDirectoryTransacted CreateDirectoryTransactedW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define CreateDirectoryTransacted CreateDirectoryTransactedW
 #else
 #define CreateDirectoryTransacted CreateDirectoryTransactedA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define CreateFileMappingNuma CreateFileMappingNumaW
 #else
+#if (!defined(UNICODE))
 #ifdef UNICODE
 #define CreateFileMappingNuma CreateFileMappingNumaW
 #else
 #define CreateFileMappingNuma CreateFileMappingNumaA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define CreateFileTransacted CreateFileTransactedW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define CreateFileTransacted CreateFileTransactedW
 #else
 #define CreateFileTransacted CreateFileTransactedA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define CreateHardLinkTransacted CreateHardLinkTransactedW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define CreateHardLinkTransacted CreateHardLinkTransactedW
 #else
 #define CreateHardLinkTransacted CreateHardLinkTransactedA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define CreateSemaphoreEx CreateSemaphoreExW
 #else
+#if (!defined(UNICODE))
 #ifdef UNICODE
 #define CreateSemaphoreEx CreateSemaphoreExW
 #else
 #define CreateSemaphoreEx CreateSemaphoreExA
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define CreateSymbolicLink 0
+#endif
 #ifdef UNICODE
 #define CreateSymbolicLinkTransacted CreateSymbolicLinkTransactedW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define CreateSymbolicLinkTransacted CreateSymbolicLinkTransactedW
 #else
 #define CreateSymbolicLinkTransacted CreateSymbolicLinkTransactedA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define CreateWaitableTimerEx CreateWaitableTimerExW
 #else
+#if (!defined(UNICODE))
 #ifdef UNICODE
 #define CreateWaitableTimerEx CreateWaitableTimerExW
 #else
 #define CreateWaitableTimerEx CreateWaitableTimerExA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DeleteFileTransacted DeleteFileTransactedW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DeleteFileTransacted DeleteFileTransactedW
 #else
 #define DeleteFileTransacted DeleteFileTransactedA
+#endif
 #endif
 #endif
 #define EFS_USE_RECOVERY_KEYS (0x1)
@@ -4497,104 +4519,130 @@ typedef struct _OPERATION_START_PARAMETERS {
 #ifdef UNICODE
 #define FindFirstFileTransacted FindFirstFileTransactedW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define FindFirstFileTransacted FindFirstFileTransactedW
 #else
 #define FindFirstFileTransacted FindFirstFileTransactedA
 #endif
 #endif
+#endif
 #define FS_FILE_ENCRYPTION 0x20000
 #define GET_SYSTEM_WOW64_DIRECTORY_NAME_A_A "GetSystemWow64DirectoryA"
 #define GET_SYSTEM_WOW64_DIRECTORY_NAME_A_T TEXT("GetSystemWow64DirectoryA")
 #define GET_SYSTEM_WOW64_DIRECTORY_NAME_A_W L"GetSystemWow64DirectoryA"
+#if (!(defined(UNICODE)))
 #define GET_SYSTEM_WOW64_DIRECTORY_NAME_T_A GET_SYSTEM_WOW64_DIRECTORY_NAME_A_A
 #define GET_SYSTEM_WOW64_DIRECTORY_NAME_T_T GET_SYSTEM_WOW64_DIRECTORY_NAME_A_T
 #define GET_SYSTEM_WOW64_DIRECTORY_NAME_T_W GET_SYSTEM_WOW64_DIRECTORY_NAME_A_W
+#endif
 #define GET_SYSTEM_WOW64_DIRECTORY_NAME_W_A "GetSystemWow64DirectoryW"
 #define GET_SYSTEM_WOW64_DIRECTORY_NAME_W_T TEXT("GetSystemWow64DirectoryW")
 #define GET_SYSTEM_WOW64_DIRECTORY_NAME_W_W L"GetSystemWow64DirectoryW"
 #ifdef UNICODE
 #define GetCompressedFileSizeTransacted GetCompressedFileSizeTransactedW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define GetCompressedFileSizeTransacted GetCompressedFileSizeTransactedW
 #else
 #define GetCompressedFileSizeTransacted GetCompressedFileSizeTransactedA
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define GetCurrentHwProfile 0
+#endif
 #ifdef UNICODE
 #define GetFileAttributesTransacted GetFileAttributesTransactedW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define GetFileAttributesTransacted GetFileAttributesTransactedW
 #else
 #define GetFileAttributesTransacted GetFileAttributesTransactedA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define GetFullPathNameTransacted GetFullPathNameTransactedW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define GetFullPathNameTransacted GetFullPathNameTransactedW
 #else
 #define GetFullPathNameTransacted GetFullPathNameTransactedA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define GetLongPathNameTransacted GetLongPathNameTransactedW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define GetLongPathNameTransacted GetLongPathNameTransactedW
 #else
 #define GetLongPathNameTransacted GetLongPathNameTransactedA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define GlobalAddAtomEx GlobalAddAtomExW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define GlobalAddAtomEx GlobalAddAtomExW
 #else
 #define GlobalAddAtomEx GlobalAddAtomExA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define LookupAccountNameLocal LookupAccountNameLocalW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define LookupAccountNameLocal LookupAccountNameLocalW
 #else
 #define LookupAccountNameLocal LookupAccountNameLocalA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define LookupAccountSidLocal LookupAccountSidLocalW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define LookupAccountSidLocal LookupAccountSidLocalW
 #else
 #define LookupAccountSidLocal LookupAccountSidLocalA
 #endif
 #endif
+#endif
+#if (!defined(MIDL_PASS))
 #define MICROSOFT_WINDOWS_WINBASE_H_DEFINE_INTERLOCKED_CPLUSPLUS_OVERLOADS 1
+#endif
 #ifdef UNICODE
 #define MoveFileTransacted MoveFileTransactedW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define MoveFileTransacted MoveFileTransactedW
 #else
 #define MoveFileTransacted MoveFileTransactedA
 #endif
 #endif
+#endif
 #define MoveVolatileMemory RtlMoveVolatileMemory
 #ifdef UNICODE
 #define OpenWaitableTimer OpenWaitableTimerW
 #else
+#if (!defined(UNICODE))
 #ifdef UNICODE
 #define OpenWaitableTimer OpenWaitableTimerW
 #else
 #define OpenWaitableTimer OpenWaitableTimerA
+#endif
 #endif
 #endif
 #define PROC_THREAD_ATTRIBUTE_CONTAINMENT_CONFIGURATION 0x20020
@@ -4679,37 +4727,47 @@ typedef struct _OPERATION_START_PARAMETERS {
 #ifdef UNICODE
 #define RemoveDirectoryTransacted RemoveDirectoryTransactedW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define RemoveDirectoryTransacted RemoveDirectoryTransactedW
 #else
 #define RemoveDirectoryTransacted RemoveDirectoryTransactedA
 #endif
 #endif
+#endif
+#if (defined(_WIN64))
 #ifdef _WIN64
 #define SCS_THIS_PLATFORM_BINARY 6
 #else
 #define SCS_THIS_PLATFORM_BINARY 0
 #endif
+#endif
 #define SecureZeroMemory2 RtlSecureZeroMemory2
 #ifdef UNICODE
 #define SetEnvironmentStrings SetEnvironmentStringsW
 #else
+#if (!defined(UNICODE))
 #ifdef UNICODE
 #define SetEnvironmentStrings SetEnvironmentStringsW
 #else
 #define SetEnvironmentStrings SetEnvironmentStringsA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define SetFileAttributesTransacted SetFileAttributesTransactedW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SetFileAttributesTransacted SetFileAttributesTransactedW
 #else
 #define SetFileAttributesTransacted SetFileAttributesTransactedA
 #endif
 #endif
+#endif
+#if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
 #define UMS_VERSION 0x100
+#endif
 #define ZeroDeviceMemory RtlZeroDeviceMemory
 #define ZeroVolatileMemory RtlZeroVolatileMemory
 
@@ -4735,6 +4793,7 @@ union _PROCESS_CREATION_SVE_VECTOR_LENGTH
     };
 };
 
+#if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
 struct _UMS_SYSTEM_THREAD_INFORMATION
 {
     ULONG UmsVersion;
@@ -4748,6 +4807,7 @@ struct _UMS_SYSTEM_THREAD_INFORMATION
         ULONG ThreadUmsFlags;
     };
 };
+#endif
 
 typedef JIT_DEBUG_INFO JIT_DEBUG_INFO32;
 
@@ -4767,6 +4827,7 @@ typedef union _PROCESS_CREATION_SVE_VECTOR_LENGTH *PPROCESS_CREATION_SVE_VECTOR_
 
 typedef union _PROCESS_CREATION_SVE_VECTOR_LENGTH PROCESS_CREATION_SVE_VECTOR_LENGTH;
 
+#if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
 typedef void *PUMS_COMPLETION_LIST;
 
 typedef void *PUMS_CONTEXT;
@@ -4788,6 +4849,7 @@ typedef struct _UMS_SYSTEM_THREAD_INFORMATION *PUMS_SYSTEM_THREAD_INFORMATION;
 typedef struct _UMS_SCHEDULER_STARTUP_INFO UMS_SCHEDULER_STARTUP_INFO;
 
 typedef struct _UMS_SYSTEM_THREAD_INFORMATION UMS_SYSTEM_THREAD_INFORMATION;
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -4817,19 +4879,29 @@ BOOL CreateHardLinkTransactedA(LPCSTR lpFileName, LPCSTR lpExistingFileName, LPS
 BOOL CreateHardLinkTransactedW(LPCWSTR lpFileName, LPCWSTR lpExistingFileName, LPSECURITY_ATTRIBUTES lpSecurityAttributes, HANDLE hTransaction);
 BOOLEAN CreateSymbolicLinkTransactedA(LPCSTR lpSymlinkFileName, LPCSTR lpTargetFileName, DWORD dwFlags, HANDLE hTransaction);
 BOOLEAN CreateSymbolicLinkTransactedW(LPCWSTR lpSymlinkFileName, LPCWSTR lpTargetFileName, DWORD dwFlags, HANDLE hTransaction);
+#if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
 BOOL CreateUmsCompletionList(PUMS_COMPLETION_LIST *UmsCompletionList);
 BOOL CreateUmsThreadContext(PUMS_CONTEXT *lpUmsThread);
+#endif
 BOOL DeleteFileTransactedA(LPCSTR lpFileName, HANDLE hTransaction);
 BOOL DeleteFileTransactedW(LPCWSTR lpFileName, HANDLE hTransaction);
+#if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
 BOOL DeleteUmsCompletionList(PUMS_COMPLETION_LIST UmsCompletionList);
 BOOL DeleteUmsThreadContext(PUMS_CONTEXT UmsThread);
 BOOL DequeueUmsCompletionListItems(PUMS_COMPLETION_LIST UmsCompletionList, DWORD WaitTimeOut, PUMS_CONTEXT *UmsThreadList);
+#endif
+#if (!defined(MIDL_PASS))
 void DestroyThreadpoolEnvironment(PTP_CALLBACK_ENVIRON pcbe);
+#endif
 DWORD DisableThreadProfiling(HANDLE PerformanceDataHandle);
+#if (defined(_AMD64_) || defined(_X86_) || defined(_ARM64_))
 BOOL EnableProcessOptionalXStateFeatures(DWORD64 Features);
+#endif
 DWORD EnableThreadProfiling(HANDLE ThreadHandle, DWORD Flags, DWORD64 HardwareCounters, HANDLE *PerformanceDataHandle);
+#if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
 BOOL EnterUmsSchedulingMode(PUMS_SCHEDULER_STARTUP_INFO SchedulerStartupInfo);
 BOOL ExecuteUmsThread(PUMS_CONTEXT UmsThread);
+#endif
 HANDLE FindFirstFileNameTransactedW(LPCWSTR lpFileName, DWORD dwFlags, LPDWORD StringLength, PWSTR LinkName, HANDLE hTransaction);
 HANDLE FindFirstFileTransactedA(LPCSTR lpFileName, FINDEX_INFO_LEVELS fInfoLevelId, LPVOID lpFindFileData, FINDEX_SEARCH_OPS fSearchOp, LPVOID lpSearchFilter, DWORD dwAdditionalFlags, HANDLE hTransaction);
 HANDLE FindFirstFileTransactedW(LPCWSTR lpFileName, FINDEX_INFO_LEVELS fInfoLevelId, LPVOID lpFindFileData, FINDEX_SEARCH_OPS fSearchOp, LPVOID lpSearchFilter, DWORD dwAdditionalFlags, HANDLE hTransaction);
@@ -4837,7 +4909,9 @@ HANDLE FindFirstStreamTransactedW(LPCWSTR lpFileName, STREAM_INFO_LEVELS InfoLev
 ULONG GetCommPorts(PULONG lpPortNumbers, ULONG uPortNumbersCount, PULONG puPortNumbersFound);
 DWORD GetCompressedFileSizeTransactedA(LPCSTR lpFileName, LPDWORD lpFileSizeHigh, HANDLE hTransaction);
 DWORD GetCompressedFileSizeTransactedW(LPCWSTR lpFileName, LPDWORD lpFileSizeHigh, HANDLE hTransaction);
+#if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
 PUMS_CONTEXT GetCurrentUmsThread(void);
+#endif
 BOOL GetFileAttributesTransactedA(LPCSTR lpFileName, GET_FILEEX_INFO_LEVELS fInfoLevelId, LPVOID lpFileInformation, HANDLE hTransaction);
 BOOL GetFileAttributesTransactedW(LPCWSTR lpFileName, GET_FILEEX_INFO_LEVELS fInfoLevelId, LPVOID lpFileInformation, HANDLE hTransaction);
 BOOL WINAPI GetFileInformationByName(PCWSTR FileName, FILE_INFO_BY_NAME_CLASS FileInformationClass, PVOID FileInfoBuffer, ULONG FileInfoBufferSize);
@@ -4851,16 +4925,24 @@ BOOL GetNamedPipeClientComputerNameA(HANDLE Pipe, LPSTR ClientComputerName, ULON
 BOOL GetNamedPipeClientSessionId(HANDLE Pipe, PULONG ClientSessionId);
 BOOL GetNamedPipeServerProcessId(HANDLE Pipe, PULONG ServerProcessId);
 BOOL GetNamedPipeServerSessionId(HANDLE Pipe, PULONG ServerSessionId);
+#if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
 PUMS_CONTEXT GetNextUmsListItem(PUMS_CONTEXT UmsContext);
+#endif
 BOOL GetNumaAvailableMemoryNodeEx(USHORT Node, PULONGLONG AvailableBytes);
 BOOL GetNumaNodeNumberFromHandle(HANDLE hFile, PUSHORT NodeNumber);
 BOOL GetNumaProximityNode(ULONG ProximityId, PUCHAR NodeNumber);
+#if (defined(_AMD64_) || defined(_X86_) || defined(_ARM64_))
 DWORD64 GetThreadEnabledXStateFeatures(void);
+#endif
+#if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
 BOOL GetUmsCompletionListEvent(PUMS_COMPLETION_LIST UmsCompletionList, PHANDLE UmsCompletionEvent);
 BOOL GetUmsSystemThreadInformation(HANDLE ThreadHandle, PUMS_SYSTEM_THREAD_INFORMATION SystemThreadInfo);
+#endif
 ATOM GlobalAddAtomExA(LPCSTR lpString, DWORD Flags);
 ATOM GlobalAddAtomExW(LPCWSTR lpString, DWORD Flags);
+#if (!defined(MIDL_PASS))
 void InitializeThreadpoolEnvironment(PTP_CALLBACK_ENVIRON pcbe);
+#endif
 BOOL IsNativeVhdBoot(PBOOL NativeVhdBoot);
 BOOL IsTokenUntrusted(HANDLE TokenHandle);
 BOOL LookupAccountNameLocalA(LPCSTR lpAccountName, PSID Sid, LPDWORD cbSid, LPSTR ReferencedDomainName, LPDWORD cchReferencedDomainName, PSID_NAME_USE peUse);
@@ -4878,17 +4960,25 @@ BOOL RemoveDirectoryTransactedW(LPCWSTR lpPathName, HANDLE hTransaction);
 BOOL ReplacePartitionUnit(PWSTR TargetPartition, PWSTR SparePartition, ULONG Flags);
 BOOL SetFileAttributesTransactedA(LPCSTR lpFileName, DWORD dwFileAttributes, HANDLE hTransaction);
 BOOL SetFileAttributesTransactedW(LPCWSTR lpFileName, DWORD dwFileAttributes, HANDLE hTransaction);
+#if (!defined(MIDL_PASS))
 void SetThreadpoolCallbackCleanupGroup(PTP_CALLBACK_ENVIRON pcbe, PTP_CLEANUP_GROUP ptpcg, PTP_CLEANUP_GROUP_CANCEL_CALLBACK pfng);
 void SetThreadpoolCallbackLibrary(PTP_CALLBACK_ENVIRON pcbe, PVOID mod);
 void SetThreadpoolCallbackPersistent(PTP_CALLBACK_ENVIRON pcbe);
 void SetThreadpoolCallbackPool(PTP_CALLBACK_ENVIRON pcbe, PTP_POOL ptpp);
 void SetThreadpoolCallbackPriority(PTP_CALLBACK_ENVIRON pcbe, TP_CALLBACK_PRIORITY Priority);
 void SetThreadpoolCallbackRunsLong(PTP_CALLBACK_ENVIRON pcbe);
+#endif
+#if (defined(_AMD64_) || defined(_X86_) || defined(_ARM64_))
 BOOL SetXStateFeaturesMask(PCONTEXT Context, DWORD64 FeatureMask);
+#endif
+#if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
 BOOL UmsThreadYield(PVOID SchedulerParam);
+#endif
 HRESULT UnregisterApplicationRecoveryCallback(void);
 HRESULT UnregisterApplicationRestart(void);
+#if (!defined(MIDL_PASS))
 BOOL Wow64GetThreadSelectorEntry(HANDLE hThread, DWORD dwSelector, PWOW64_LDT_ENTRY lpSelectorEntry);
+#endif
 DWORD WTSGetServiceSessionId(void);
 BOOLEAN WTSIsServerContainer(void);
 
@@ -4915,22 +5005,30 @@ struct COPYFILE2_EXTENDED_PARAMETERS_V2
     PVOID reserved[6];
 };
 
+#if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
 typedef enum _RTL_UMS_THREAD_INFO_CLASS *PUMS_THREAD_INFO_CLASS;
 
 typedef enum _RTL_UMS_SCHEDULER_REASON UMS_SCHEDULER_REASON;
 
 typedef enum _RTL_UMS_THREAD_INFO_CLASS UMS_THREAD_INFO_CLASS;
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
+#if (defined(_AMD64_) || defined(_X86_) || defined(_ARM64_))
 BOOL GetXStateFeaturesMask(PCONTEXT Context, PDWORD64 FeatureMask);
 PVOID LocateXStateFeature(PCONTEXT Context, DWORD FeatureId, PDWORD Length);
+#endif
+#if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
 BOOL QueryUmsThreadInformation(PUMS_CONTEXT UmsThread, UMS_THREAD_INFO_CLASS UmsThreadInfoClass, PVOID UmsThreadInformation, ULONG UmsThreadInformationLength, PULONG ReturnLength);
+#endif
 DWORD ReadThreadProfilingData(HANDLE PerformanceDataHandle, DWORD Flags, PPERFORMANCE_DATA PerformanceData);
+#if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
 BOOL SetUmsThreadInformation(PUMS_CONTEXT UmsThread, UMS_THREAD_INFO_CLASS UmsThreadInfoClass, PVOID UmsThreadInformation, ULONG UmsThreadInformationLength);
+#endif
 
 #ifdef __cplusplus
 }

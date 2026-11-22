@@ -76,7 +76,9 @@ DWORD WINAPI ClusterCloseEnum(HCLUSENUM hEnum);
 #define BitlockerEncrypting 0x00000020L
 #endif
 #ifndef CA_UPGRADE_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define CA_UPGRADE_VERSION 1
+#endif
 #endif
 #ifndef CLCTL_CLUSTER_BASE
 #define CLCTL_CLUSTER_BASE 0
@@ -391,10 +393,14 @@ DWORD WINAPI ClusterCloseEnum(HCLUSENUM hEnum);
 #define CLUSTER_SET_ACCESS_TYPE_DENIED 1
 #endif
 #ifndef CLUSTER_VERSION_FLAG_MIXED_MODE
+#if (( !MIDL_PASS && !__midl ))
 #define CLUSTER_VERSION_FLAG_MIXED_MODE 0x00000001
 #endif
+#endif
 #ifndef CLUSTER_VERSION_UNKNOWN
+#if (( !MIDL_PASS && !__midl ))
 #define CLUSTER_VERSION_UNKNOWN 0xFFFFFFFF
+#endif
 #endif
 #ifndef CLUS_ACCESS_ANY
 #define CLUS_ACCESS_ANY 0
@@ -436,25 +442,37 @@ DWORD WINAPI ClusterCloseEnum(HCLUSENUM hEnum);
 #define CREATE_CLUSTER_MAJOR_VERSION_MASK 0xFFFFFF00
 #endif
 #ifndef CU_UPGRADE_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define CU_UPGRADE_VERSION 3
+#endif
 #endif
 #ifndef DNS_LENGTH
 #define DNS_LENGTH 64
 #endif
 #ifndef DT_UPGRADE_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define DT_UPGRADE_VERSION 1
 #endif
+#endif
 #ifndef FE_22H2_UPGRADE_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define FE_22H2_UPGRADE_VERSION 5
 #endif
+#endif
 #ifndef FE_UPGRADE_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define FE_UPGRADE_VERSION 4
 #endif
+#endif
 #ifndef GA_UPGRADE_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define GA_UPGRADE_VERSION 5
 #endif
+#endif
 #ifndef GE_UPGRADE_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define GE_UPGRADE_VERSION 6
+#endif
 #endif
 #ifndef GROUPSET_READY_SETTING_APPLICATION_READY
 #define GROUPSET_READY_SETTING_APPLICATION_READY 0x00000004
@@ -475,7 +493,9 @@ DWORD WINAPI ClusterCloseEnum(HCLUSENUM hEnum);
 #define GUID_PRESENT 0x1
 #endif
 #ifndef HCI_UPGRADE_BIT
+#if (( !MIDL_PASS && !__midl ))
 #define HCI_UPGRADE_BIT 0x8000
+#endif
 #endif
 #ifndef MAINTENANCE_MODE_V2_SIG
 #define MAINTENANCE_MODE_V2_SIG 0xabbaf00f
@@ -496,19 +516,29 @@ DWORD WINAPI ClusterCloseEnum(HCLUSENUM hEnum);
 #define MAX_OBJECTID 64
 #endif
 #ifndef MN_UPGRADE_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define MN_UPGRADE_VERSION 3
 #endif
+#endif
 #ifndef NINETEEN_H1_UPGRADE_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define NINETEEN_H1_UPGRADE_VERSION 1
 #endif
+#endif
 #ifndef NINETEEN_H2_UPGRADE_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define NINETEEN_H2_UPGRADE_VERSION 2
 #endif
+#endif
 #ifndef NI_UPGRADE_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define NI_UPGRADE_VERSION 2
 #endif
+#endif
 #ifndef NT10_MAJOR_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define NT10_MAJOR_VERSION 9
+#endif
 #endif
 #ifndef NT11_MAJOR_VERSION
 #define NT11_MAJOR_VERSION 10
@@ -523,40 +553,62 @@ DWORD WINAPI ClusterCloseEnum(HCLUSENUM hEnum);
 #define NT14_MAJOR_VERSION 14
 #endif
 #ifndef NT4SP4_MAJOR_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define NT4SP4_MAJOR_VERSION 2
 #endif
+#endif
 #ifndef NT4_MAJOR_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define NT4_MAJOR_VERSION 1
 #endif
+#endif
 #ifndef NT51_MAJOR_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define NT51_MAJOR_VERSION 4
 #endif
+#endif
 #ifndef NT5_MAJOR_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define NT5_MAJOR_VERSION 3
 #endif
+#endif
 #ifndef NT6_MAJOR_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define NT6_MAJOR_VERSION 5
 #endif
+#endif
 #ifndef NT7_MAJOR_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define NT7_MAJOR_VERSION 6
 #endif
+#endif
 #ifndef NT8_MAJOR_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define NT8_MAJOR_VERSION 7
 #endif
+#endif
 #ifndef NT9_MAJOR_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define NT9_MAJOR_VERSION 8
+#endif
 #endif
 #ifndef RESOURCE_FAILURE_INFO_VERSION_1
 #define RESOURCE_FAILURE_INFO_VERSION_1 0x1
 #endif
 #ifndef RS3_UPGRADE_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define RS3_UPGRADE_VERSION 1
 #endif
+#endif
 #ifndef RS4_UPGRADE_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define RS4_UPGRADE_VERSION 2
 #endif
+#endif
 #ifndef RS5_UPGRADE_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define RS5_UPGRADE_VERSION 3
+#endif
 #endif
 #ifndef RedirectedIOReasonBitLockerInitializing
 #define RedirectedIOReasonBitLockerInitializing 0x0000000000000010
@@ -580,7 +632,9 @@ DWORD WINAPI ClusterCloseEnum(HCLUSENUM hEnum);
 #define RedirectedIOReasonUserRequest 0x0000000000000001
 #endif
 #ifndef SE_UPGRADE_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define SE_UPGRADE_VERSION 2
+#endif
 #endif
 #ifndef VolumeRedirectedIOReasonMax
 #define VolumeRedirectedIOReasonMax 0x8000000000000000
@@ -595,16 +649,24 @@ DWORD WINAPI ClusterCloseEnum(HCLUSENUM hEnum);
 #define VolumeRedirectedIOReasonVolumeReplicationEnabled 0x0000000000000004
 #endif
 #ifndef WS2016_RTM_UPGRADE_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define WS2016_RTM_UPGRADE_VERSION 8
 #endif
+#endif
 #ifndef WS2016_TP4_UPGRADE_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define WS2016_TP4_UPGRADE_VERSION 6
 #endif
+#endif
 #ifndef WS2016_TP5_UPGRADE_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define WS2016_TP5_UPGRADE_VERSION 7
 #endif
+#endif
 #ifndef ZN_UPGRADE_VERSION
+#if (( !MIDL_PASS && !__midl ))
 #define ZN_UPGRADE_VERSION 4
+#endif
 #endif
 
 typedef enum _CLUSTER_CSV_VOLUME_FAULT_STATE {
@@ -2411,14 +2473,19 @@ typedef struct RESOURCE_TERMINAL_FAILURE_INFO_BUFFER {
 
 #define _CLUSTER_API_ 0
 #define _CLUSTER_API_TYPES_ 0
+#if (( !MIDL_PASS && !__midl ))
 #define BitLockerFlagsAll 0xFD
+#endif
 #define CLCTL_GLOBAL_MASK 0x800000
 #define CLCTL_INTERNAL_MASK 0x100000
 #define CLCTL_MODIFY_MASK 0x400000
 #define CLCTL_USER_BASE 0x200000
 #define CLCTL_USER_MASK 0x200000
+#if (( !MIDL_PASS && !__midl ))
 #define CLOUD_WITNESS_CONTAINER_NAME L"msft-cloud-witness"
+#endif
 #define CLUS_LEGACY_QUORUM 0x400000
+#if (( !MIDL_PASS && !__midl ))
 #define CLUS_NAME_RES_TYPE_CLUSTER_GROUPID L"ClusterGroupId"
 #define CLUS_NAME_RES_TYPE_DATA_RESID L"DataResourceId"
 #define CLUS_NAME_RES_TYPE_LOG_MULTIPLE L"LogSizeMultiple"
@@ -2488,9 +2555,13 @@ typedef struct RESOURCE_TERMINAL_FAILURE_INFO_BUFFER {
 #define CLUS_RESTYPE_NAME_VMREPLICA_COORDINATOR L"Virtual Machine Replication Coordinator"
 #define CLUS_RESTYPE_NAME_VSSTASK L"Volume Shadow Copy Service Task"
 #define CLUS_RESTYPE_NAME_WINS L"WINS Service"
+#endif
 #define CLUSAPI_ALL_ACCESS 3
+#if (( !MIDL_PASS && !__midl ))
 #define CLUSAPI_VALID_CHANGE_RESOURCE_GROUP_FLAGS 1
+#endif
 #define CLUSAPI_VERSION 0xC06
+#if (( !MIDL_PASS && !__midl ))
 #define CLUSREG_KEYNAME_OBJECTGUIDS L"ObjectGUIDs"
 #define CLUSREG_NAME_ACCELERATED_NETWORKING_ENABLED L"AcceleratedNetworkingEnabled"
 #define CLUSREG_NAME_ACCELERATED_NETWORKING_NODE_RESERVE L"AcceleratedNetworkingNodeReserve"
@@ -2796,22 +2867,30 @@ typedef struct RESOURCE_TERMINAL_FAILURE_INFO_BUFFER {
 #define CLUSREG_NAME_WINS_DATABASE_PATH L"DatabasePath"
 #define CLUSREG_NAME_WITNESS_DYNAMIC_WEIGHT L"WitnessDynamicWeight"
 #define CLUSTER_ADD_EVICT_DELAY L"AddEvictDelay"
+#endif
 #define CLUSTER_CREATE_GROUP_INFO_VERSION 1
+#if (( !MIDL_PASS && !__midl ))
 #define CLUSTER_CSA_VSS_STATE L"BackupInProgress"
 #define CLUSTER_CSV_COMPATIBLE_FILTERS L"SharedVolumeCompatibleFilters"
 #define CLUSTER_CSV_INCOMPATIBLE_FILTERS L"SharedVolumeIncompatibleFilters"
 #define CLUSTER_ENFORCED_ANTIAFFINITY L"ClusterEnforcedAntiaffinity"
+#endif
 #define CLUSTER_ENUM_ITEM_VERSION 1
 #define CLUSTER_GROUP_ENUM_ITEM_VERSION 1
+#if (( !MIDL_PASS && !__midl ))
 #define CLUSTER_GROUP_WAIT_DELAY L"ClusterGroupWaitDelay"
 #define CLUSTER_HANG_RECOVERY_ACTION_KEYNAME L"HangRecoveryAction"
 #define CLUSTER_HANG_TIMEOUT_KEYNAME L"ClusSvcHangTimeout"
+#endif
 #define CLUSTER_INSTALLED 1
+#if (( !MIDL_PASS && !__midl ))
 #define CLUSTER_NAME_AUTO_BALANCER_LEVEL L"AutoBalancerLevel"
 #define CLUSTER_NAME_AUTO_BALANCER_MODE L"AutoBalancerMode"
 #define CLUSTER_NAME_PREFERRED_SITE L"PreferredSite"
 #define CLUSTER_REQUEST_REPLY_TIMEOUT L"RequestReplyTimeout"
+#endif
 #define CLUSTER_RESOURCE_ENUM_ITEM_VERSION 1
+#if (( !MIDL_PASS && !__midl ))
 #define CLUSTER_S2D_BUS_TYPES L"S2DBusTypes"
 #define CLUSTER_S2D_CACHE_BEHAVIOR_FLAGS L"S2DCacheBehavior"
 #define CLUSTER_S2D_CACHE_DESIRED_STATE L"S2DCacheDesiredState"
@@ -2825,9 +2904,13 @@ typedef struct RESOURCE_TERMINAL_FAILURE_INFO_BUFFER {
 #define CLUSTER_SHARED_VOLUMES_ROOT L"SharedVolumesRoot"
 #define CLUSTER_WITNESS_DATABASE_WRITE_TIMEOUT L"WitnessDatabaseWriteTimeout"
 #define CLUSTER_WITNESS_FAILED_RESTART_INTERVAL L"WitnessRestartInterval"
+#endif
 #define CREATE_CLUSTER_VERSION 0x600
+#if (( !MIDL_PASS && !__midl ))
 #define ENABLE_CLUSTER_SHARED_VOLUMES L"EnableSharedVolumes"
+#endif
 #define MAX_CLUSTERNAME_LENGTH 0
+#if (( !MIDL_PASS && !__midl ))
 #define MINIMUM_NEVER_PREEMPT_PRIORITY L"MinimumNeverPreemptPriority"
 #define MINIMUM_PREEMPTOR_PRIORITY L"MinimumPreemptorPriority"
 #define SR_REPLICATED_PARTITION_DISALLOW_MULTINODE_IO 0x00000001
@@ -3191,12 +3274,14 @@ typedef struct _CLUSTER_SHARED_VOLUME_RENAME_INPUT_VOLUME *PCLUSTER_SHARED_VOLUM
 typedef BOOL (WINAPI *PCLUSTER_UPGRADE_PROGRESS_CALLBACK)(PVOID, CLUSTER_UPGRADE_PHASE);
 
 typedef DWORD (WINAPI *PCLUSAPI_CLUSTER_UPGRADE)(HCLUSTER, BOOL, PCLUSTER_UPGRADE_PROGRESS_CALLBACK, PVOID);
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
+#if (( !MIDL_PASS && !__midl ))
 DWORD WINAPI AddClusterStorageNode(HCLUSTER hCluster, PCWSTR lpszNodeName, PCLUSTER_SETUP_PROGRESS_CALLBACK pfnProgressCallback, PVOID pvCallbackArg, LPCWSTR lpszClusterStorageNodeDescription, LPCWSTR lpszClusterStorageNodeLocation);
 DWORD WINAPI BackupClusterDatabase(HCLUSTER hCluster, LPCWSTR lpszPathName);
 PCLUSAPI_REASON_HANDLER WINAPI ClusapiSetReasonHandler(PCLUSAPI_REASON_HANDLER lpHandler);
@@ -3252,6 +3337,7 @@ DWORD WINAPI RestoreClusterDatabase(LPCWSTR lpszPathName, BOOL bForce, LPCWSTR l
 DWORD WINAPI SetClusterName(HCLUSTER hCluster, LPCWSTR lpszNewClusterName);
 DWORD WINAPI SetClusterNameEx(HCLUSTER hCluster, LPCWSTR lpszNewClusterName, LPCWSTR lpszReason);
 DWORD WINAPI SetClusterServiceAccountPassword(LPCWSTR lpszClusterName, LPCWSTR lpszNewPassword, DWORD dwFlags, PCLUSTER_SET_PASSWORD_STATUS lpReturnStatusBuffer, LPDWORD lpcbReturnStatusBufferSize);
+#endif
 
 #ifdef __cplusplus
 }
@@ -3314,6 +3400,7 @@ typedef struct _HRESOURCE *HRESOURCE;
 
 typedef struct _HRESTYPEENUM *HRESTYPEENUM;
 
+#if (( !MIDL_PASS && !__midl ))
 typedef DWORD (WINAPI *PCLUSAPI_ADD_CLUSTER_GROUP_DEPENDENCY)(HGROUP, HGROUP);
 
 typedef DWORD (WINAPI *PCLUSAPI_ADD_CLUSTER_GROUP_DEPENDENCY_EX)(HGROUP, HGROUP, LPCWSTR);
@@ -3711,12 +3798,14 @@ typedef LONG (WINAPI *PCLUSTER_REG_GET_BATCH_NOTIFICATION)(HREGBATCHPORT, HREGBA
 typedef LONG (WINAPI *PCLUSTER_REG_READ_BATCH_ADD_COMMAND)(HREGREADBATCH, LPCWSTR, LPCWSTR);
 
 typedef LONG (WINAPI *PCLUSTER_REG_READ_BATCH_REPLY_NEXT_COMMAND)(HREGREADBATCHREPLY, CLUSTER_READ_BATCH_COMMAND *);
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
+#if (( !MIDL_PASS && !__midl ))
 DWORD WINAPI AddClusterGroupDependency(HGROUP hDependentGroup, HGROUP hProviderGroup);
 DWORD WINAPI AddClusterGroupDependencyEx(HGROUP hDependentGroup, HGROUP hProviderGroup, LPCWSTR lpszReason);
 DWORD WINAPI AddClusterGroupSetDependency(HGROUPSET hDependentGroupSet, HGROUPSET hProviderGroupSet);
@@ -3938,12 +4027,14 @@ DWORD WINAPI SetClusterResourceName(HRESOURCE hResource, LPCWSTR lpszResourceNam
 DWORD WINAPI SetClusterResourceNameEx(HRESOURCE hResource, LPCWSTR lpszResourceName, LPCWSTR lpszReason);
 DWORD WINAPI SetGroupDependencyExpression(HGROUP hGroup, LPCWSTR lpszDependencyExpression);
 DWORD WINAPI SetGroupDependencyExpressionEx(HGROUP hGroup, LPCWSTR lpszDependencyExpression, LPCWSTR lpszReason);
+#endif
 
 #ifdef __cplusplus
 }
 #endif
 
 
+#if (( !MIDL_PASS && !__midl ))
 struct _CLUSTER_VALIDATE_CSV_FILENAME
 {
     WCHAR szFileName[];
@@ -3979,6 +4070,7 @@ typedef struct _CLUSTER_VALIDATE_DIRECTORY *PCLUSTER_VALIDATE_DIRECTORY;
 typedef struct _CLUSTER_VALIDATE_NETNAME *PCLUSTER_VALIDATE_NETNAME;
 
 typedef struct _CLUSTER_VALIDATE_PATH *PCLUSTER_VALIDATE_PATH;
+#endif
 
 
 
@@ -4005,6 +4097,7 @@ typedef struct _CLUSTER_VALIDATE_PATH *PCLUSTER_VALIDATE_PATH;
 #define CLUSPROP_PROPERTY_NAME_DECLARE(name, cch) CLUSPROP_SZ_DECLARE(name, cch)
 #define CLUSPROP_SYNTAX_VALUE(type, format) ((DWORD) ((type << 16) | format))
 #define CLUSPROP_SZ_DECLARE(name, cch) struct { CLUSPROP_SYNTAX Syntax; DWORD cbLength; WCHAR sz [(cch + 1) & ~1]; } name
+#if (( !MIDL_PASS && !__midl ))
 #define CLUSTER_GET_MAJOR_VERSION(_ver) ((_ver) >> 16)
 #define CLUSTER_GET_MINOR_VERSION(_ver) ((_ver) & 0xFFFF)
 #define CLUSTER_GET_UPGRADE_VERSION(_ver) ((_ver) & 0xFFFF)
@@ -4030,5 +4123,6 @@ typedef struct _CLUSTER_SHARED_VOLUME_RENAME_INPUT CLUSTER_SHARED_VOLUME_RENAME_
 typedef struct _CLUSTER_SHARED_VOLUME_RENAME_GUID_INPUT *PCLUSTER_SHARED_VOLUME_RENAME_GUID_INPUT;
 
 typedef struct _CLUSTER_SHARED_VOLUME_RENAME_INPUT *PCLUSTER_SHARED_VOLUME_RENAME_INPUT;
+#endif
 
 #endif /* __WINE_CLUSAPI_H */

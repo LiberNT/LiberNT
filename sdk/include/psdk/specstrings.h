@@ -543,9 +543,12 @@ void __pfx_assume(int, const char *);
 #include <no_sal2.h>
 #endif /* !defined(_Outptr_) || _MSC_VER <= 1600 */
 
+#if (!((_MSC_VER >= 1000) && !defined(__midl) && defined(_PREFAST_)))
 #define _Kernel_entry_
 #define _Kernel_entry_always_
+#endif
 #define _User_ 0
+#if (!((_MSC_VER >= 1000) && !defined(__midl) && defined(_PREFAST_)))
 #define _User_always_
 
 #define _Accessible_bytes_(context, expr)
@@ -554,11 +557,14 @@ void __pfx_assume(int, const char *);
 #define _Memory_origin_when_(previousContext, context)
 #define _Pre_accessible_bytes_(context, expr)
 #define _Pre_accessible_bytes_when_(context, previousContext, expr)
+#endif
 #define _Reallocation_function_(after, before, size) _Success_((after) != NULL || (size) == 0) _At_((after), _Post_maybenull_ _Post_writable_byte_size_(size) _When_(((before) == NULL || (size) > 0), _Must_inspect_result_)) _At_((before), _Post_ptr_invalid_ __drv_freesMem(Mem))
 #define _Ret_reallocated_bytes_(before, size) _Reallocation_function_(_Curr_, before, size)
 #define _SAL_L_Source_(Name, args, annotes) _SA_annotes3(SAL_name, # Name, "", "2") _GrouP_(annotes _SAL_nop_impl_)
+#if (!((_MSC_VER >= 1000) && !defined(__midl) && defined(_PREFAST_)))
 #define _User_always_and_needs_probe_on_(mode)
 #define _User_on_(expr)
+#endif
 
 #endif /* #ifndef SPECSTRINGS_H */
 

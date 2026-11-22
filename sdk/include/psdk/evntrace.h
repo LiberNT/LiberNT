@@ -1600,7 +1600,9 @@ typedef struct ETW_PMC_SESSION_INFO {
   ULONG HookIdCount;
 } ETW_PMC_SESSION_INFO;
 
+#if (defined(_NTDDK_) || defined(_NTIFS_) || defined(_WMIKM_))
 #define _EVNTRACE_KERNEL_MODE
+#endif
 #define ETW_APP_DECLSPEC_DEPRECATED
 #define ETW_BUFFER_CONTEXT_DEF 0
 

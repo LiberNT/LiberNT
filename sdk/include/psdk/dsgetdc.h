@@ -265,29 +265,35 @@ DWORD WINAPI DsValidateSubnetNameW(LPCWSTR);
 #ifdef UNICODE
 #define DsDeregisterDnsHostRecords DsDeregisterDnsHostRecordsW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsDeregisterDnsHostRecords DsDeregisterDnsHostRecordsW
 #else
 #define DsDeregisterDnsHostRecords DsDeregisterDnsHostRecordsA
 #endif
 #endif
+#endif
 #define DSGETDCAPI DECLSPEC_IMPORT
 #ifdef UNICODE
 #define PDOMAIN_CONTROLLER_INFO PDOMAIN_CONTROLLER_INFOW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PDOMAIN_CONTROLLER_INFO PDOMAIN_CONTROLLER_INFOW
 #else
 #define PDOMAIN_CONTROLLER_INFO PDOMAIN_CONTROLLER_INFOA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PDS_DOMAIN_TRUSTS PDS_DOMAIN_TRUSTSW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PDS_DOMAIN_TRUSTS PDS_DOMAIN_TRUSTSW
 #else
 #define PDS_DOMAIN_TRUSTS PDS_DOMAIN_TRUSTSA
+#endif
 #endif
 #endif
 

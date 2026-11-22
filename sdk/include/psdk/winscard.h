@@ -235,13 +235,17 @@ typedef struct READER_SEL_RESPONSE {
 #ifdef UNICODE
 #define GetOpenCardName GetOpenCardNameW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define GetOpenCardName GetOpenCardNameW
 #else
 #define GetOpenCardName GetOpenCardNameA
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define LPOCNCONNPROC 0
+#endif
 #define LPOPENCARDNAME_A LPOPENCARDNAMEA
 #define LPOPENCARDNAME_W LPOPENCARDNAMEW
 #ifdef UNICODE
@@ -282,59 +286,73 @@ typedef struct READER_SEL_RESPONSE {
 #ifdef UNICODE
 #define SCardGetDeviceTypeId SCardGetDeviceTypeIdW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SCardGetDeviceTypeId SCardGetDeviceTypeIdW
 #else
 #define SCardGetDeviceTypeId SCardGetDeviceTypeIdA
 #endif
 #endif
+#endif
 #define SCardGetReaderCapabilities SCardGetAttrib
 #ifdef UNICODE
 #define SCardGetReaderDeviceInstanceId SCardGetReaderDeviceInstanceIdW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SCardGetReaderDeviceInstanceId SCardGetReaderDeviceInstanceIdW
 #else
 #define SCardGetReaderDeviceInstanceId SCardGetReaderDeviceInstanceIdA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define SCardGetReaderIcon SCardGetReaderIconW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SCardGetReaderIcon SCardGetReaderIconW
 #else
 #define SCardGetReaderIcon SCardGetReaderIconA
 #endif
 #endif
+#endif
 #define SCardListCardTypes SCardListCards
 #ifdef UNICODE
 #define SCardListReadersWithDeviceInstanceId SCardListReadersWithDeviceInstanceIdW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SCardListReadersWithDeviceInstanceId SCardListReadersWithDeviceInstanceIdW
 #else
 #define SCardListReadersWithDeviceInstanceId SCardListReadersWithDeviceInstanceIdA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define SCardReadCache SCardReadCacheW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SCardReadCache SCardReadCacheW
 #else
 #define SCardReadCache SCardReadCacheA
 #endif
 #endif
+#endif
 #define SCardSetReaderCapabilities SCardSetAttrib
+#if (!(defined(UNICODE)))
 #define SCardUIDlgSelectCard 0
+#endif
 #ifdef UNICODE
 #define SCardWriteCache SCardWriteCacheW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SCardWriteCache SCardWriteCacheW
 #else
 #define SCardWriteCache SCardWriteCacheA
+#endif
 #endif
 #endif
 
@@ -365,9 +383,11 @@ struct OPENCARD_SEARCH_CRITERIAA
 
 typedef struct OPENCARD_SEARCH_CRITERIAA *LPOPENCARD_SEARCH_CRITERIAA;
 
+#if (!(defined(UNICODE)))
 typedef LPOPENCARD_SEARCH_CRITERIAA LPOPENCARD_SEARCH_CRITERIA;
 
 typedef OPENCARD_SEARCH_CRITERIAA OPENCARD_SEARCH_CRITERIA;
+#endif
 
 struct OPENCARD_SEARCH_CRITERIAW
 {
@@ -417,9 +437,11 @@ struct OPENCARDNAMEA
 
 typedef struct OPENCARDNAMEA *LPOPENCARDNAMEA;
 
+#if (!(defined(UNICODE)))
 typedef LPOPENCARDNAMEA LPOPENCARDNAME;
 
 typedef OPENCARDNAMEA OPENCARDNAME;
+#endif
 
 struct OPENCARDNAMEW
 {
@@ -476,11 +498,13 @@ struct OPENCARDNAME_EXA
 
 typedef struct OPENCARDNAME_EXA *LPOPENCARDNAME_EXA;
 
+#if (!(defined(UNICODE)))
 typedef LPOPENCARDNAME_EXA LPOPENCARDNAME_EX;
 
 typedef OPENCARDNAME_EXA OPENCARDNAME_EX;
 
 typedef POPENCARD_SEARCH_CRITERIAA POPENCARD_SEARCH_CRITERIA;
+#endif
 
 typedef struct OPENCARD_SEARCH_CRITERIAW *POPENCARD_SEARCH_CRITERIAW;
 
@@ -510,13 +534,17 @@ typedef struct OPENCARDNAME_EXW *LPOPENCARDNAME_EXW;
 
 typedef struct OPENCARDNAME_EXA *POPENCARDNAME_EXA;
 
+#if (!(defined(UNICODE)))
 typedef POPENCARDNAME_EXA POPENCARDNAME_EX;
+#endif
 
 typedef struct OPENCARDNAME_EXW *POPENCARDNAME_EXW;
 
 typedef struct OPENCARDNAMEA *POPENCARDNAMEA;
 
+#if (!(defined(UNICODE)))
 typedef POPENCARDNAMEA POPENCARDNAME;
+#endif
 
 typedef struct OPENCARDNAMEW *POPENCARDNAMEW;
 

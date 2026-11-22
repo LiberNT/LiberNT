@@ -37,5 +37,7 @@
 #define ENUMG(g) typedef V1_ENUMG(g) enum
 #define RATATTR(x) x
 #define RATLEVEL(x) x
+#if (!(defined(__midl)))
 #define V1_ENUMG(g)
+#endif
 

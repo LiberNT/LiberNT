@@ -364,17 +364,23 @@ typedef struct _STISUBSCRIBE {
 
 #define _STICOM_ 0
 #define DLLEXP 0
+#if (!defined(MIDL_PASS)) && (defined(UNICODE) || defined(STI_UNICODE))
 #define IID_IStillImage 0
+#endif
 #ifdef UNICODE
 #define IStillImage IStillImageW
 #else
+#if (!defined(MIDL_PASS)) && (defined(UNICODE) || defined(STI_UNICODE))
 #ifdef UNICODE
 #define IStillImage IStillImageW
 #else
 #define IStillImage IStillImageA
 #endif
 #endif
+#endif
+#if (!defined(MIDL_PASS)) && (defined(UNICODE) || defined(STI_UNICODE))
 #define IStillImageVtbl IStillImageWVtbl
+#endif
 #define STI_ADD_DEVICE_BROADCAST_ACTION 0
 #define STI_ADD_DEVICE_BROADCAST_STRING "STI\\" STI_ADD_DEVICE_BROADCAST_ACTION "\\%s"
 #define STI_GENCAP_COMMON_MASK ((DWORD)0xFF)
@@ -382,6 +388,7 @@ typedef struct _STISUBSCRIBE {
 #define STI_REMOVE_DEVICE_BROADCAST_STRING "STI\\" STI_REMOVE_DEVICE_BROADCAST_ACTION "\\%s"
 #define STI_VERSION_3 0x1000003
 
+#if (!defined(MIDL_PASS))
 typedef struct IStiDeviceVtbl IStiDeviceVtbl;
 
 struct IStiDevice
@@ -392,10 +399,13 @@ struct IStiDevice
 typedef struct IStillImageWVtbl IStillImageWVtbl;
 
 typedef struct IStiDevice *LPSTILLIMAGEDEVICE;
+#endif
 
+#if (defined(UNICODE) || defined(STI_UNICODE))
 typedef PSTI_WIA_DEVICE_INFORMATIONW PSTI_WIA_DEVICE_INFORMATION;
 
 typedef STI_ERROR_INFOW STI_ERROR_INFO;
+#endif
 
 struct _STI_DIAG
 {
@@ -416,12 +426,15 @@ typedef struct _STI_DIAG STI_DIAG;
 
 typedef STI_DIAG DIAG;
 
+#if (defined(UNICODE) || defined(STI_UNICODE))
 typedef STI_WIA_DEVICE_INFORMATIONW STI_WIA_DEVICE_INFORMATION;
+#endif
 
 #define GET_STIDCOMMON_CAPS(dwGenericCaps) LOWORD(dwGenericCaps)
 #define GET_STIVENDOR_CAPS(dwGenericCaps) HIWORD(dwGenericCaps)
 #define GET_STIVER_MAJOR(dwVersion) (HIWORD(dwVersion) & ~STI_VERSION_FLAG_MASK)
 #define GET_STIVER_MINOR(dwVersion) LOWORD(dwVersion)
+#if (!defined(MIDL_PASS))
 #define IStiDevice_AddRef(p) (p) -> lpVtbl -> AddRef(p)
 #define IStiDevice_DeviceReset(p) (p) -> lpVtbl -> DeviceReset(p)
 #define IStiDevice_Diagnostic(p, a) (p) -> lpVtbl -> Diagnostic(p, a)
@@ -442,5 +455,6 @@ typedef STI_WIA_DEVICE_INFORMATIONW STI_WIA_DEVICE_INFORMATION;
 #define IStiDevice_Subscribe(p, a) (p) -> lpVtbl -> Subscribe(p, a)
 #define IStiDevice_UnLockDevice(p) (p) -> lpVtbl -> UnLockDevice(p)
 #define IStiDevice_UnSubscribe(p) (p) -> lpVtbl -> UnSubscribe(p)
+#endif
 
 #endif /* __WINE_STI_H */

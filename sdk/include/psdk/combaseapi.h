@@ -93,7 +93,9 @@ typedef struct CO_DEVICE_CATALOG_COOKIE__ {
 } *CO_DEVICE_CATALOG_COOKIE;
 
 #define _CO_DEVICE_CATALOG_ 0
+#if (defined _M_X64 || defined _M_ARM || defined _M_ARM64)
 #define _CRT_INTERNAL_COMBASE_SYMBOL_PREFIX 0
+#endif
 
 
 typedef HRESULT (WINAPI *LPFNCANUNLOADNOW)(void);

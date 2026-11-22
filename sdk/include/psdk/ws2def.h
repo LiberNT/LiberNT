@@ -1017,6 +1017,8 @@ typedef struct addrinfoex6 *PADDRINFOEX6;
 
 typedef struct addrinfoex7 *PADDRINFOEX7;
 
+#if (!(((defined(_WINSOCK_DEPRECATED_NO_WARNINGS) || defined(BUILD_WINDOWS)) && !defined(_WINSOCK_DEPRECATE_WARNINGS)) || defined(MIDL_PASS)))
 #define _WINSOCK_DEPRECATED_BY(replacement) __declspec(deprecated("Use " replacement " instead or define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings"))
+#endif
 
 #endif

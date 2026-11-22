@@ -538,10 +538,14 @@ typedef struct JOBOBJECT_NET_RATE_CONTROL_INFORMATION {
 #define CONTEXT_ARM64_FLOATING_POINT_LOW 0x400040
 #define DRIVER_REPORT_DIGEST_MAX_SIZE 0x40
 #define IMAGE_HOTSWAP_ENDPOINT_TABLE_SECTION 0
+#if (defined(_AMD64_)) && (defined(_M_AMD64) && !defined(RC_INVOKED) && !defined(MIDL_PASS))
 #define InterlockedCompareExchange8 _InterlockedCompareExchange8
+#endif
+#if (defined(_AMD64_)) && (defined(_M_AMD64) && !defined(RC_INVOKED) && !defined(MIDL_PASS)) && (!defined(_M_ARM64EC))
 #define InterlockedCompareExchangeAcquire8 _InterlockedCompareExchange8
 #define InterlockedCompareExchangeNoFence8 _InterlockedCompareExchange8
 #define InterlockedCompareExchangeRelease8 _InterlockedCompareExchange8
+#endif
 #define JOB_OBJECT_LIMIT_CPU_RATE_CONTROL 0x40000
 #define JOB_OBJECT_LIMIT_JOB_MEMORY_HIGH 0x200
 #define JOB_OBJECT_NOTIFICATION_LIMIT_VALID_FLAGS 0x1F8204
@@ -738,7 +742,9 @@ typedef struct _DRIVER_RUNTIME_REPORT DRIVER_RUNTIME_REPORT;
 
 typedef struct _ENCLAVE_INIT_INFO_VBS_BASIC ENCLAVE_INIT_INFO_VBS_BASIC;
 
+#if (!defined(SORTPP_PASS) && !defined(MIDL_PASS) && !defined(RC_INVOKED))
 typedef PVOID ENCLAVE_TARGET_FUNCTION(PVOID);
+#endif
 
 typedef struct _IMAGE_FILE_MACHINES IMAGE_FILE_MACHINES;
 
@@ -815,9 +821,11 @@ typedef struct _DRIVER_RUNTIME_REPORT *PDRIVER_RUNTIME_REPORT;
 
 typedef struct _ENCLAVE_INIT_INFO_VBS_BASIC *PENCLAVE_INIT_INFO_VBS_BASIC;
 
+#if (!defined(SORTPP_PASS) && !defined(MIDL_PASS) && !defined(RC_INVOKED))
 typedef ENCLAVE_TARGET_FUNCTION *PENCLAVE_TARGET_FUNCTION;
 
 typedef PENCLAVE_TARGET_FUNCTION LPENCLAVE_TARGET_FUNCTION;
+#endif
 
 typedef struct _JOBOBJECT_CPU_RATE_CONTROL_INFORMATION *PJOBOBJECT_CPU_RATE_CONTROL_INFORMATION;
 
@@ -869,6 +877,7 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
+#if (!defined(RC_INVOKED) && !defined(MIDL_PASS))
 LONG AddNoFence(volatile LONG *Destination, LONG Value);
 SHORT AddNoFence16(volatile SHORT *Destination, SHORT Value);
 LONG64 AddNoFence64(volatile LONG64 *Destination, LONG64 Value);
@@ -877,17 +886,21 @@ DWORD AddULongNoFence(volatile DWORD *Destination, DWORD Value);
 WORD AddUShortNoFence(volatile WORD *Destination, WORD Value);
 DWORD64 IncrementULong64NoFence(volatile DWORD64 *Destination);
 DWORD IncrementULongNoFence(volatile DWORD *Destination);
+#endif
+#if (defined(_M_AMD64) && !defined(_M_ARM64EC) && !defined(__midl)) && (!(defined(_KERNEL_MODE)))
 unsigned char NtReadCurrentTebByte(unsigned int Offset);
 void * NtReadCurrentTebPVOID(unsigned int Offset);
 unsigned int NtReadCurrentTebUlong(unsigned int Offset);
 unsigned long long NtReadCurrentTebUlonglong(unsigned int Offset);
 unsigned long long NtReadCurrentTebUlongPtr(unsigned int Offset);
 unsigned short NtReadCurrentTebUshort(unsigned int Offset);
+#endif
 DWORD WINAPI RtlConvertDeviceFamilyInfoToString(PDWORD pulDeviceFamilyBufferSize, PDWORD pulDeviceFormBufferSize, PWSTR DeviceFamily, PWSTR DeviceForm);
 DWORD RtlGetImageFileMachines(PCWSTR DosFileName, IMAGE_FILE_MACHINES *MachineTypeFlags);
 ULONG_PTR __cdecl RtlGetReturnAddressHijackTarget(void);
 PSLIST_ENTRY __cdecl RtlInterlockedPushListSListEx(PSLIST_HEADER ListHead, PSLIST_ENTRY List, PSLIST_ENTRY ListEnd, DWORD Count);
 DWORD WINAPI RtlSwitchedVVI(PRTL_OSVERSIONINFOEXW VersionInfo, DWORD TypeMask, ULONGLONG ConditionMask);
+#if (!defined(MIDL_PASS))
 void __cdecl TpDestroyCallbackEnviron(PTP_CALLBACK_ENVIRON CallbackEnviron);
 void __cdecl TpInitializeCallbackEnviron(PTP_CALLBACK_ENVIRON CallbackEnviron);
 void __cdecl TpSetCallbackActivationContext(PTP_CALLBACK_ENVIRON CallbackEnviron, struct _ACTIVATION_CONTEXT *ActivationContext);
@@ -899,6 +912,7 @@ void __cdecl TpSetCallbackPersistent(PTP_CALLBACK_ENVIRON CallbackEnviron);
 void __cdecl TpSetCallbackPriority(PTP_CALLBACK_ENVIRON CallbackEnviron, TP_CALLBACK_PRIORITY Priority);
 void __cdecl TpSetCallbackRaceWithDll(PTP_CALLBACK_ENVIRON CallbackEnviron, PVOID DllHandle);
 void __cdecl TpSetCallbackThreadpool(PTP_CALLBACK_ENVIRON CallbackEnviron, PTP_POOL Pool);
+#endif
 
 #ifdef __cplusplus
 }
@@ -1166,7 +1180,9 @@ typedef struct _PERFORMANCE_DATA *PPERFORMANCE_DATA;
 #define THREAD_DYNAMIC_CODE_ALLOW 1
 #endif
 #ifndef UNWIND_CHAIN_LIMIT
+#if (defined(_AMD64_))
 #define UNWIND_CHAIN_LIMIT 32
+#endif
 #endif
 #ifndef VBS_BASIC_PAGE_MEASURED_DATA
 #define VBS_BASIC_PAGE_MEASURED_DATA 0x00000001

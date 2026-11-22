@@ -2707,13 +2707,17 @@ typedef struct tagCapInfoChunk {
 #ifdef UNICODE
 #define CAPERRORCALLBACK CAPERRORCALLBACKW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define CAPERRORCALLBACK CAPERRORCALLBACKW
 #else
 #define CAPERRORCALLBACK CAPERRORCALLBACKA
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define CAPSTATUSCALLBACK 0
+#endif
 #define CONTROLCALLBACK_PREROLL 1
 #define FindKeyFrame FindSample
 #define ICM_COMPRESS_FRAMES 0x4047

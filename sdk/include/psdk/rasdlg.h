@@ -209,10 +209,12 @@ typedef RASNOUSERA     RASNOUSER, *LPRASNOUSER;
 #ifdef UNICODE
 #define RASPBDLGFUNC RASPBDLGFUNCW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define RASPBDLGFUNC RASPBDLGFUNCW
 #else
 #define RASPBDLGFUNC RASPBDLGFUNCA
+#endif
 #endif
 #endif
 

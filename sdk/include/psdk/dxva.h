@@ -2302,6 +2302,7 @@ struct _DXVA_PicParams_MPEG4_PART2
 };
 #pragma pack(pop)
 
+#if (defined(_WIN64))
 struct _DXVA_VideoSample32
 {
     REFERENCE_TIME rtStart;
@@ -2313,6 +2314,7 @@ struct _DXVA_VideoSample32
     RECT rcDst;
     DXVA_AYUVsample2 Palette[16];
 };
+#endif
 
 typedef struct _DXVA_Deblock_H264 DXVA_Deblock_H264;
 
@@ -2351,6 +2353,7 @@ typedef SHORT DXVA_Sample16[64];
 
 typedef signed char DXVA_Sample8[64];
 
+#if (defined(_WIN64))
 typedef struct _DXVA_VideoSample32 DXVA_VideoSample32;
 
 struct _DXVA_DeinterlaceBltEx32
@@ -2367,6 +2370,7 @@ struct _DXVA_DeinterlaceBltEx32
 };
 
 typedef struct _DXVA_DeinterlaceBltEx32 DXVA_DeinterlaceBltEx32;
+#endif
 
 typedef struct _DXVA_Deblock_H264 *LPDXVA_Deblock_H264;
 

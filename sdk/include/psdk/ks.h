@@ -5521,7 +5521,9 @@ KsFilterGetDevice(
 #endif
 
 #ifndef BUS_INTERFACE_REFERENCE_VERSION
+#if (defined(_NTDDK_))
 #define BUS_INTERFACE_REFERENCE_VERSION 0x100
+#endif
 #endif
 #ifndef KSALLOCATOR_FLAG_2D_BUFFER_REQUIRED
 #define KSALLOCATOR_FLAG_2D_BUFFER_REQUIRED 0x00008000
@@ -5566,7 +5568,9 @@ KsFilterGetDevice(
 #define KSDEVICE_FLAG_LOWPOWER_PASSTHROUGH 0x00000002
 #endif
 #ifndef KSDISPATCH_FASTIO
+#if (defined(_NTDDK_))
 #define KSDISPATCH_FASTIO 0x80000000
+#endif
 #endif
 #ifndef KSPROPERTY_TYPE_COPYPAYLOAD
 #define KSPROPERTY_TYPE_COPYPAYLOAD 0x80000000
@@ -5605,7 +5609,9 @@ KsFilterGetDevice(
 #define KSSTREAM_UVC_SECURE_ATTRIBUTE_SIZE 0x2000
 #endif
 #ifndef MIN_DEV_VER_FOR_QI
+#if (defined(_NTDDK_))
 #define MIN_DEV_VER_FOR_QI 0x100
+#endif
 #endif
 
 typedef enum KSEVENT_VOLUMELIMIT {
@@ -5617,11 +5623,13 @@ typedef enum KSMETHOD_STREAMIO {
     KSMETHOD_STREAMIO_WRITE = 1
 } KSMETHOD_STREAMIO;
 
+#if (defined(_NTDDK_))
 #define DEFINE_KSAUTOMATION_EVENTS_NULL 0
 #define DEFINE_KSAUTOMATION_PROPERTIES_NULL 0
 #define DEFINE_KSPIN_DEFAULT_INTERFACES 0
 #define DEFINE_KSPIN_DEFAULT_MEDIUMS 0
 #define GUID_BUS_INTERFACE_MEDIUMS 0
+#endif
 #define KS_TYPE_DONT_CARE 0
 #define KSCATEGORY_NETWORK_CAMERA 0
 #define KSCATEGORY_SENSOR_CAMERA 0
@@ -5661,8 +5669,10 @@ typedef enum KSMETHOD_STREAMIO {
 #define KSTIME_FORMAT_MEDIA_TIME 0
 #define KSTIME_FORMAT_NONE 0
 #define KSTIME_FORMAT_SAMPLE 0
+#if (defined(_NTDDK_))
 #define REFERENCE_BUS_INTERFACE 0
 #define STATIC_GUID_BUS_INTERFACE_MEDIUMS 0x4EC35C3EL, 0x201B, 0x11D2, 0x87, 0x45, 0x00, 0xA0, 0xC9, 0x22, 0x31, 0x96
+#endif
 #define STATIC_KSCATEGORY_NETWORK_CAMERA 0xb8238652, 0xb500, 0x41eb, 0xb4, 0xf3, 0x42, 0x34, 0xf7, 0xf5, 0xae, 0x99
 #define STATIC_KSCATEGORY_SENSOR_CAMERA 0x24e552d7, 0x6523, 0x47f7, 0xa6, 0x47, 0xd3, 0x46, 0x5b, 0xf1, 0xf5, 0xca
 #define STATIC_KSCATEGORY_SENSOR_GROUP 0x669C7214, 0x0A88, 0x4311, 0xA7, 0xF3, 0x4E, 0x79, 0x82, 0x0E, 0x33, 0xBD
@@ -5692,7 +5702,9 @@ typedef enum KSMETHOD_STREAMIO {
 #define STATIC_KSNAME_Allocator 0x642F5D00L, 0x4791, 0x11D0, 0xA5, 0xD6, 0x28, 0xDB, 0x04, 0xC1, 0x00, 0x00
 #define STATIC_KSNAME_Clock 0x53172480L, 0x4791, 0x11D0, 0xA5, 0xD6, 0x28, 0xDB, 0x04, 0xC1, 0x00, 0x00
 #define STATIC_KSNAME_TopologyNode 0x0621061AL, 0xEE75, 0x11D0, 0xB9, 0x15, 0x00, 0xA0, 0xC9, 0x22, 0x31, 0x96
+#if (defined(_NTDDK_))
 #define STATIC_KSPROPSETID_GM 0xAF627536L, 0xE719, 0x11D2, 0x8A, 0x1D, 0x00, 0x60, 0x97, 0xD2, 0xDF, 0x5D
+#endif
 #define STATIC_KSPROPSETID_Quality 0xD16AD380L, 0xAC1A, 0x11CF, 0xA5, 0xD6, 0x28, 0xDB, 0x04, 0xC1, 0x00, 0x00
 #define STATIC_KSPROPSETID_StreamInterface 0x8A
 #define STATIC_KSTIME_FORMAT_BYTE 0x7b785571L, 0x8c82, 0x11cf, 0xbc, 0x0c, 0x00, 0xaa, 0x00, 0xac, 0x74, 0xf6
@@ -5701,6 +5713,7 @@ typedef enum KSMETHOD_STREAMIO {
 #define STATIC_KSTIME_FORMAT_MEDIA_TIME 0x7b785574L, 0x8c82, 0x11cf, 0xbc, 0x0c, 0x00, 0xaa, 0x00, 0xac, 0x74, 0xf6
 #define STATIC_KSTIME_FORMAT_NONE 0
 #define STATIC_KSTIME_FORMAT_SAMPLE 0x7b785572L, 0x8c82, 0x11cf, 0xbc, 0x0c, 0x00, 0xaa, 0x00, 0xac, 0x74, 0xf6
+#if (defined(_NTDDK_))
 #define STATIC_REFERENCE_BUS_INTERFACE 0
 
 struct _KSPIN_DESCRIPTOR_EX
@@ -5728,6 +5741,7 @@ struct _KSPIN_DISPATCH
     const KSCLOCK_DISPATCH *Clock;
     const KSALLOCATOR_DISPATCH *Allocator;
 };
+#endif
 
 union _MF_MDL_SHARED_PAYLOAD_KEY
 {
@@ -5742,6 +5756,7 @@ union _MF_MDL_SHARED_PAYLOAD_KEY
 
 typedef union _MF_MDL_SHARED_PAYLOAD_KEY MF_MDL_SHARED_PAYLOAD_KEY;
 
+#if (defined(_NTDDK_))
 typedef NTSTATUS (*PFNKSFILTERFACTORYVOID)(PKSFILTERFACTORY);
 
 typedef void (*PFNKSGRAPHMANAGER_NOTIFY)(PFILE_OBJECT, ULONG, PVOID, PVOID, PVOID, ULONG);
@@ -5772,6 +5787,7 @@ typedef struct BUS_INTERFACE_MEDIUMS *PBUS_INTERFACE_MEDIUMS;
 typedef struct KSGRAPHMANAGER_FUNCTIONTABLE PKSGRAPHMANAGER_FUNCTIONTABLE;
 
 typedef struct _KSPROPERTY_GRAPHMANAGER_INTERFACE *PKSPROPERTY_GRAPHMANAGER_INTERFACE;
+#endif
 
 typedef union _MF_MDL_SHARED_PAYLOAD_KEY *PMF_MDL_SHARED_PAYLOAD_KEY;
 
@@ -5779,17 +5795,22 @@ typedef union _MF_MDL_SHARED_PAYLOAD_KEY *PMF_MDL_SHARED_PAYLOAD_KEY;
 extern "C" {
 #endif
 
+#if (defined(_NTDDK_))
 NTSTATUS WINAPI KsCreateDefaultSecurity(PSECURITY_DESCRIPTOR ParentSecurity, PSECURITY_DESCRIPTOR *DefaultSecurity);
 NTSTATUS WINAPI KsPinGetAvailableByteCount(PKSPIN Pin, PLONG InputDataBytes, PLONG OutputBufferBytes);
 void WINAPI KsPinRegisterFrameReturnCallback(PKSPIN Pin, PFNKSPINFRAMERETURN FrameReturn);
 void WINAPI KsPinRegisterIrpCompletionCallback(PKSPIN Pin, PFNKSPINIRPCOMPLETION IrpCompletion);
 BOOLEAN WINAPI KsProcessPinUpdate(PKSPROCESSPIN ProcessPin);
+#endif
 
 /* TODO: LiberNT does not implement the functions below yet */
+#if (!(defined(_NTDDK_)))
 HRESULT KsCreateAllocator2(HANDLE ConnectionHandle, PKSALLOCATOR_FRAMING AllocatorFraming, PHANDLE AllocatorHandle);
 HRESULT KsCreateClock2(HANDLE ConnectionHandle, PKSCLOCK_CREATE ClockCreate, PHANDLE ClockHandle);
 HRESULT KsCreatePin2(HANDLE FilterHandle, PKSPIN_CONNECT Connect, ACCESS_MASK DesiredAccess, PHANDLE ConnectionHandle);
 HRESULT KsCreateTopologyNode2(HANDLE ParentHandle, PKSNODE_CREATE NodeCreate, ACCESS_MASK DesiredAccess, PHANDLE NodeHandle);
+#endif
+#if (defined(_NTDDK_))
 PKSFILTER KsFilterFactoryGetFirstChildFilter(PKSFILTERFACTORY FilterFactory);
 PKSFILTERFACTORY KsFilterFactoryGetNextSiblingFilterFactory(PKSFILTERFACTORY FilterFactory);
 void KsFilterGenerateEvents(PKSFILTER Filter, const GUID *EventSet, ULONG EventId, ULONG DataSize, PVOID Data, PFNKSGENERATEEVENTCALLBACK CallBack, PVOID CallBackContext);
@@ -5805,6 +5826,7 @@ void KsPinGenerateEvents(PKSPIN Pin, const GUID *EventSet, ULONG EventId, ULONG 
 NTSTATUS KsPinHandshake(PKSPIN Pin, PKSHANDSHAKE In, PKSHANDSHAKE Out);
 void KsPinReleaseControl(PKSPIN Pin);
 NTSTATUS KsPublishDeviceProfile(PKSFILTERFACTORY FilterFactory, PKSDEVICE_PROFILE_INFO Profile);
+#endif
 
 #ifdef __cplusplus
 }
@@ -5812,12 +5834,15 @@ NTSTATUS KsPublishDeviceProfile(PKSFILTERFACTORY FilterFactory, PKSDEVICE_PROFIL
 
 
 
+#if (defined(_NTDDK_))
 typedef const KSPIN_DESCRIPTOR *PCKSPIN_DESCRIPTOR;
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#if (defined(_NTDDK_))
 void WINAPI KsAcquireDeviceSecurityLock(KSDEVICE_HEADER Header, BOOLEAN Exclusive);
 NTSTATUS WINAPI KsFilterFactoryAddCreateItem(PKSFILTERFACTORY FilterFactory, PWSTR RefString, PSECURITY_DESCRIPTOR SecurityDescriptor, ULONG CreateItemFlags);
 PKSGATE WINAPI KsFilterGetAndGate(PKSFILTER Filter);
@@ -5844,11 +5869,13 @@ NTSTATUS WINAPI KsPinSubmitFrameMdl(PKSPIN Pin, PMDL Mdl, PKSSTREAM_HEADER Strea
 NTSTATUS WINAPI KsRegisterFilterWithNoKSPins(PDEVICE_OBJECT DeviceObject, const GUID *InterfaceClassGUID, ULONG PinCount, int *PinDirection, KSPIN_MEDIUM *MediumList, GUID *CategoryList);
 void WINAPI KsReleaseDeviceSecurityLock(KSDEVICE_HEADER Header);
 void WINAPI KsTerminateDevice(PDEVICE_OBJECT DeviceObject);
+#endif
 
 #ifdef __cplusplus
 }
 #endif
 
+#if (defined(_NTDDK_))
 #define DEFINE_KSAUTOMATION_METHODS(table) SIZEOF_ARRAY(table), sizeof (KSMETHOD_ITEM), table
 #define DEFINE_KSCREATE_DISPATCH_TABLE(tablename) KSOBJECT_CREATE_ITEM tablename [] =
 #define DEFINE_KSCREATE_ITEM(DispatchCreate, TypeName, Context) { (DispatchCreate), (PVOID) (Context), { sizeof (TypeName) - sizeof (UNICODE_NULL), sizeof (TypeName), (PWCHAR) (TypeName) }, NULL, 0 }
@@ -5856,32 +5883,43 @@ void WINAPI KsTerminateDevice(PDEVICE_OBJECT DeviceObject);
 #define DEFINE_KSCREATE_ITEMNULL(DispatchCreate, Context) { DispatchCreate, Context, { 0, 0, NULL, }, NULL, 0 }
 #define DEFINE_KSDISPATCH_TABLE(tablename, DeviceIoControl, Read, Write, Flush, Close, QuerySecurity, SetSecurity, FastDeviceIoControl, FastRead, FastWrite) const KSDISPATCH_TABLE tablename = { DeviceIoControl, Read, Write, Flush, Close, QuerySecurity, SetSecurity, FastDeviceIoControl, FastRead, FastWrite, }
 #define DEFINE_KSFASTPROPERTY_ITEM(PropertyId, GetHandler, SetHandler) { PropertyId, (PFNKSFASTHANDLER) GetHandler, (PFNKSFASTHANDLER) SetHandler, 0 }
+#endif
 #define DEFINE_KSMETHOD_ALLOCATORSET(AllocatorSet, MethodAlloc, MethodFree) DEFINE_KSMETHOD_TABLE(AllocatorSet) { DEFINE_KSMETHOD_ITEM_STREAMALLOCATOR_ALLOC(MethodAlloc), DEFINE_KSMETHOD_ITEM_STREAMALLOCATOR_FREE(MethodFree) }
 #define DEFINE_KSMETHOD_ITEM_STREAMALLOCATOR_ALLOC(Handler) DEFINE_KSMETHOD_ITEM(KSMETHOD_STREAMALLOCATOR_ALLOC, KSMETHOD_TYPE_WRITE, (Handler), sizeof (KSMETHOD), sizeof (PVOID), NULL)
 #define DEFINE_KSMETHOD_ITEM_STREAMALLOCATOR_FREE(Handler) DEFINE_KSMETHOD_ITEM(KSMETHOD_STREAMALLOCATOR_FREE, KSMETHOD_TYPE_READ, (Handler), sizeof (KSMETHOD), sizeof (PVOID), NULL)
 #define DEFINE_KSMETHOD_ITEM_STREAMIO_READ(Handler) DEFINE_KSMETHOD_ITEM(KSMETHOD_STREAMIO_READ, KSMETHOD_TYPE_WRITE, (Handler), sizeof (KSMETHOD), 0, NULL)
 #define DEFINE_KSMETHOD_ITEM_STREAMIO_WRITE(Handler) DEFINE_KSMETHOD_ITEM(KSMETHOD_STREAMIO_WRITE, KSMETHOD_TYPE_READ, (Handler), sizeof (KSMETHOD), 0, NULL)
+#if (defined(_NTDDK_))
 #define DEFINE_KSMETHOD_SET_TABLE(tablename) const KSMETHOD_SET tablename [] =
 #define DEFINE_KSMETHOD_TABLE(tablename) const KSMETHOD_ITEM tablename [] =
 #define DEFINE_KSPIN_DESCRIPTOR_ITEM(InterfacesCount, Interfaces, MediumsCount, Mediums, DataRangesCount, DataRanges, DataFlow, Communication) { InterfacesCount, Interfaces, MediumsCount, Mediums, DataRangesCount, DataRanges, DataFlow, Communication, NULL, NULL, 0 }
 #define DEFINE_KSPIN_DESCRIPTOR_ITEMEX(InterfacesCount, Interfaces, MediumsCount, Mediums, DataRangesCount, DataRanges, DataFlow, Communication, Category, Name) { InterfacesCount, Interfaces, MediumsCount, Mediums, DataRangesCount, DataRanges, DataFlow, Communication, Category, Name, 0 }
 #define DEFINE_KSPIN_DESCRIPTOR_TABLE(tablename) const KSPIN_DESCRIPTOR tablename [] =
+#endif
 #define DEFINE_KSPIN_INTERFACE_ITEM(guid, interface) { STATICGUIDOF(guid), (interface), 0 }
 #define DEFINE_KSPIN_INTERFACE_TABLE(tablename) const KSPIN_INTERFACE tablename [] =
 #define DEFINE_KSPIN_MEDIUM_ITEM(guid, medium) DEFINE_KSPIN_INTERFACE_ITEM(guid, medium)
 #define DEFINE_KSPIN_MEDIUM_TABLE(tablename) const KSPIN_MEDIUM tablename [] =
+#if (defined(_NTDDK_))
 #define DEFINE_KSPROPERTY_ALLOCATORSET(AllocatorSet, PropFunctionTable, PropStatus) DEFINE_KSPROPERTY_TABLE(AllocatorSet) { DEFINE_KSPROPERTY_ITEM_STREAMALLOCATOR_STATUS(PropStatus), DEFINE_KSPROPERTY_ITEM_STREAMALLOCATOR_FUNCTIONTABLE(PropFunctionTable) }
+#endif
 #define DEFINE_KSPROPERTY_ITEM_CONNECTION_MDLCACHING(SetHandler) DEFINE_KSPROPERTY_ITEM(KSPROPERTY_ALLOCATOR_CLEANUP_CACHEDMDLPAGES, NULL, sizeof (KSPROPERTY), sizeof (KSPIN_MDL_CACHING_NOTIFICATION), (SetHandler), NULL, 0, NULL, NULL, 0)
 #define DEFINE_KSPROPERTY_ITEM_MEMORY_TRANSPORT(SetHandler) DEFINE_KSPROPERTY_ITEM(KSPROPERTY_MEMORY_TRANSPORT, NULL, sizeof (KSPROPERTY), sizeof (BOOL), (SetHandler), NULL, 0, NULL, NULL, 0)
 #define DEFINE_KSPROPERTY_ITEM_QUALITY_ERROR(GetHandler, SetHandler) DEFINE_KSPROPERTY_ITEM(KSPROPERTY_QUALITY_ERROR, (GetHandler), sizeof (KSPROPERTY), sizeof (KSERROR), (SetHandler), NULL, 0, NULL, NULL, 0)
 #define DEFINE_KSPROPERTY_ITEM_QUALITY_REPORT(GetHandler, SetHandler) DEFINE_KSPROPERTY_ITEM(KSPROPERTY_QUALITY_REPORT, (GetHandler), sizeof (KSPROPERTY), sizeof (KSQUALITY), (SetHandler), NULL, 0, NULL, NULL, 0)
+#if (defined(_NTDDK_))
 #define DEFINE_KSPROPERTY_ITEM_STREAMALLOCATOR_FUNCTIONTABLE(Handler) DEFINE_KSPROPERTY_ITEM(KSPROPERTY_STREAMALLOCATOR_FUNCTIONTABLE, (Handler), sizeof (KSPROPERTY), sizeof (KSSTREAMALLOCATOR_FUNCTIONTABLE), NULL, NULL, 0, NULL, NULL, 0)
 #define DEFINE_KSPROPERTY_ITEM_STREAMALLOCATOR_STATUS(Handler) DEFINE_KSPROPERTY_ITEM(KSPROPERTY_STREAMALLOCATOR_STATUS, (Handler), sizeof (KSPROPERTY), sizeof (KSSTREAMALLOCATOR_STATUS), NULL, NULL, 0, NULL, NULL, 0)
+#endif
 #define DEFINE_KSPROPERTY_ITEM_STREAMINTERFACE_HEADERSIZE(GetHandler) DEFINE_KSPROPERTY_ITEM(KSPROPERTY_STREAMINTERFACE_HEADERSIZE, (GetHandler), sizeof (KSPROPERTY), sizeof (ULONG), NULL, NULL, 0, NULL, NULL, 0)
 #define DEFINE_KSPROPERTY_STREAMINTERFACESET(StreamInterfaceSet, HeaderSizeHandler) DEFINE_KSPROPERTY_TABLE(StreamInterfaceSet) { DEFINE_KSPROPERTY_ITEM_STREAMINTERFACE_HEADERSIZE(HeaderSizeHandler) }
+#if (defined(_NTDDK_)) && (!(!defined(_WIN64)))
 #define DEFINE_NODE_DESCRIPTOR(automation, type, name) { (automation), (type), (name) }
+#endif
 #define DENY_USERMODE_ACCESS(pIrp, CompleteRequest) if (pIrp -> RequestorMode != KernelMode) { pIrp -> IoStatus . Information = 0; pIrp -> IoStatus . Status = STATUS_INVALID_DEVICE_REQUEST; if (CompleteRequest) IoCompleteRequest(pIrp, IO_NO_INCREMENT); return STATUS_INVALID_DEVICE_REQUEST; }
+#if (defined(_NTDDK_))
 #define KsEditSized(Object, PointerToPointer, NewSize, OldSize, Tag) _KsEdit((Object) -> Bag, (PVOID *) (PointerToPointer), (NewSize), (OldSize), (Tag))
+#endif
 #define MF_SET_SHARED_MDLHANDLE(a, b, c, d) { d . combined . phandle = (ULONG32) a; d . combined . fhandle = (ULONG32) b; d . combined . upayload = (ULONG64) c; }
 #define SetDefaultKsCompression(KsCompressionPointer) { KsCompressionPointer -> RatioNumerator = 1; KsCompressionPointer -> RatioDenominator = 1; KsCompressionPointer -> RatioConstantMargin = 0; }
 #define SetDontCareKsFramingRange(KsFramingRangePointer) { KsFramingRangePointer -> MinFrameSize = 0; KsFramingRangePointer -> MaxFrameSize = (ULONG) - 1; KsFramingRangePointer -> Stepping = 1; }

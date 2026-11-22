@@ -122,6 +122,7 @@ const char _Lock_kind_critical_section_[] = "";
 #define _Internal_set_lock_count_to_one_(lock)
 #endif // 0
 
+#if (!(!defined(__midl) && defined(_PREFAST_) && !defined(_SDV_)))
 #define BENIGN_RACE_BEGIN __pragma(warning(push))
 #define BENIGN_RACE_END __pragma(warning(pop))
 #define NO_COMPETING_THREAD_BEGIN __pragma(warning(push))
@@ -133,3 +134,4 @@ const char _Lock_kind_critical_section_[] = "";
 #define _Swaps_locks_(left, right)
 #define CSALCAT1(x, y)
 #define CSALCAT2(x, y)
+#endif

@@ -244,7 +244,9 @@ typedef SERVICE_INFOA SERVICE_INFO, *LPSERVICE_INFO;
 typedef struct _SERVICE_ADDRESS * LPSERVICE_ADDRESS;
 typedef struct _SERVICE_ADDRESS * PSERVICE_ADDRESS;
 typedef struct _SERVICE_INFOA * PSERVICE_INFOA;
+#if (!(defined(UNICODE)))
 typedef PSERVICE_INFOA PSERVICE_INFO;
+#endif
 typedef struct _SERVICE_INFOW * PSERVICE_INFOW;
 
 #ifdef __cplusplus
@@ -344,43 +346,53 @@ typedef struct _SERVICE_TYPE_INFO_ABSW {
   SERVICE_TYPE_VALUE_ABSW Values[1];
 } SERVICE_TYPE_INFO_ABSW, *PSERVICE_TYPE_INFO_ABSW, *LPSERVICE_TYPE_INFO_ABSW;
 
+#if (!(defined(UNICODE)))
 #define EnumProtocols 0
+#endif
 #ifdef UNICODE
 #define GetNameByType GetNameByTypeW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define GetNameByType GetNameByTypeW
 #else
 #define GetNameByType GetNameByTypeA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define GetTypeByName GetTypeByNameW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define GetTypeByName GetTypeByNameW
 #else
 #define GetTypeByName GetTypeByNameA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define SERVICE_TYPE_VALUE_CONN SERVICE_TYPE_VALUE_CONNW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SERVICE_TYPE_VALUE_CONN SERVICE_TYPE_VALUE_CONNW
 #else
 #define SERVICE_TYPE_VALUE_CONN SERVICE_TYPE_VALUE_CONNA
 #endif
 #endif
+#endif
 #define SERVICE_TYPE_VALUE_CONNA "ConnectionOriented"
 #define SERVICE_TYPE_VALUE_CONNW L"ConnectionOriented"
 #define SET_SERVICE_PARTIAL_SUCCESS (0x00000001)
 
+#if (!(defined(UNICODE)))
 typedef LPNS_INFOA LPNS_INFO;
 
 typedef LPNS_SERVICE_INFOA LPNS_SERVICE_INFO;
 
 typedef LPPROTOCOL_INFOA LPPROTOCOL_INFO;
+#endif
 
 typedef void (*LPSERVICE_CALLBACK_PROC)(LPARAM, HANDLE);
 
@@ -391,11 +403,13 @@ struct _SERVICE_ASYNC_INFO
     HANDLE hAsyncTaskHandle;
 };
 
+#if (!(defined(UNICODE)))
 typedef LPSERVICE_TYPE_INFO_ABSA LPSERVICE_TYPE_INFO_ABS;
 
 typedef LPSERVICE_TYPE_VALUE_ABSA LPSERVICE_TYPE_VALUE_ABS;
 
 typedef NS_INFOA NS_INFO;
+#endif
 
 struct _NETRESOURCE2A
 {
@@ -429,24 +443,33 @@ struct _NETRESOURCE2W
 
 typedef struct _NETRESOURCE2A *LPNETRESOURCE2A;
 
+#if (!(defined(UNICODE)))
 typedef LPNETRESOURCE2A LPNETRESOURCE2;
+#endif
 
 typedef struct _NETRESOURCE2W *LPNETRESOURCE2W;
 
 typedef struct _NETRESOURCE2A NETRESOURCE2A;
 
+#if (!(defined(UNICODE)))
 typedef NETRESOURCE2A NETRESOURCE2;
+#endif
 
 typedef struct _NETRESOURCE2W NETRESOURCE2W;
 
+#if (!(defined(UNICODE)))
 typedef NS_SERVICE_INFOA NS_SERVICE_INFO;
+#endif
 
 typedef struct _NETRESOURCE2A *PNETRESOURCE2A;
 
+#if (!(defined(UNICODE)))
 typedef PNETRESOURCE2A PNETRESOURCE2;
+#endif
 
 typedef struct _NETRESOURCE2W *PNETRESOURCE2W;
 
+#if (!(defined(UNICODE)))
 typedef PNS_INFOA PNS_INFO;
 
 typedef PNS_SERVICE_INFOA PNS_SERVICE_INFO;
@@ -454,18 +477,23 @@ typedef PNS_SERVICE_INFOA PNS_SERVICE_INFO;
 typedef PPROTOCOL_INFOA PPROTOCOL_INFO;
 
 typedef PROTOCOL_INFOA PROTOCOL_INFO;
+#endif
 
 typedef struct _SERVICE_ASYNC_INFO *PSERVICE_ASYNC_INFO;
 
+#if (!(defined(UNICODE)))
 typedef PSERVICE_TYPE_INFO_ABSA PSERVICE_TYPE_INFO_ABS;
 
 typedef PSERVICE_TYPE_VALUE_ABSA PSERVICE_TYPE_VALUE_ABS;
+#endif
 
 typedef struct _SERVICE_ASYNC_INFO SERVICE_ASYNC_INFO;
 
+#if (!(defined(UNICODE)))
 typedef SERVICE_TYPE_INFO_ABSA SERVICE_TYPE_INFO_ABS;
 
 typedef SERVICE_TYPE_VALUE_ABSA SERVICE_TYPE_VALUE_ABS;
+#endif
 
 #ifdef __cplusplus
 extern "C" {

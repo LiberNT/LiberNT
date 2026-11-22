@@ -7503,6 +7503,7 @@ struct _STOR_POFX_COMPONENT_PERF_SET
     } PStates;
 };
 
+#if (defined(_WIN64))
 union DECLSPEC_ALIGN(16) _STOR_SLIST_HEADER
 {
     struct
@@ -7538,6 +7539,7 @@ union DECLSPEC_ALIGN(16) _STOR_SLIST_HEADER
         ULONGLONG NextEntry : 60;
     } HeaderX64;
 };
+#endif
 
 union _STORAGE_CRYPTO_KEY_TYPE
 {
@@ -7647,7 +7649,9 @@ struct _STORMQ_MINIPORT_INTERFACE
 
 typedef struct _STOR_POFX_COMPONENT_PERF_SET *PSTOR_POFX_COMPONENT_PERF_SET;
 
+#if (defined(_WIN64))
 typedef union _STOR_SLIST_HEADER *PSTOR_SLIST_HEADER;
+#endif
 
 typedef struct _STORMQ_MINIPORT_INTERFACE *PSTORMQ_MINIPORT_INTERFACE;
 
@@ -7673,7 +7677,9 @@ typedef struct _STOR_EXT_DELETE_PARAMETERS STOR_EXT_DELETE_PARAMETERS;
 
 typedef struct _STOR_POFX_COMPONENT_PERF_SET STOR_POFX_COMPONENT_PERF_SET;
 
+#if (defined(_WIN64))
 typedef union _STOR_SLIST_HEADER STOR_SLIST_HEADER;
+#endif
 
 typedef void STOR_THREAD_START_ROUTINE(PVOID);
 
@@ -7767,6 +7773,7 @@ typedef struct _VIRTUAL_HW_INITIALIZATION_DATA *PVIRTUAL_HW_INITIALIZATION_DATA;
 
 typedef struct _VIRTUAL_HW_INITIALIZATION_DATA VIRTUAL_HW_INITIALIZATION_DATA;
 
+#if (defined(_WIN64))
 struct DECLSPEC_ALIGN(16) _STOR_SLIST_ENTRY
 {
     PSTOR_SLIST_ENTRY Next;
@@ -7775,6 +7782,7 @@ struct DECLSPEC_ALIGN(16) _STOR_SLIST_ENTRY
 typedef struct _STOR_SLIST_ENTRY *PSTOR_SLIST_ENTRY;
 
 typedef struct _STOR_SLIST_ENTRY STOR_SLIST_ENTRY;
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -7912,10 +7920,12 @@ struct DECLSPEC_ALIGN(8) _SRBEX_DATA_NVMEOF_OPERATION
 };
 
 #define StorPortConvertPhysicalAddressToULong64(Address) ((Address) . QuadPart)
+#if (defined(_WIN64))
 #define StorPortReadRegisterBufferUlong64(h, r, b, c) READ_REGISTER_BUFFER_ULONG64(r, b, c)
 #define StorPortReadRegisterUlong64(h, r) READ_REGISTER_ULONG64(r)
 #define StorPortWriteRegisterBufferUlong64(h, r, b, c) WRITE_REGISTER_BUFFER_ULONG64(r, b, c)
 #define StorPortWriteRegisterUlong64(h, r, v) WRITE_REGISTER_ULONG64(r, v)
+#endif
 
 #endif /* _NTSTORPORT_ */
 

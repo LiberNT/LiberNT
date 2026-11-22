@@ -846,7 +846,9 @@ ULONG __cdecl ldap_set_dbg_flags(ULONG NewFlags);
 #define LDAP_START_TLS_OID_W L"1.3.6.1.4.1.1466.20037"
 #define LDAP_TTL_EXTENDED_OP_OID "1.3.6.1.4.1.1466.101.119.1"
 #define LDAP_TTL_EXTENDED_OP_OID_W L"1.3.6.1.4.1.1466.101.119.1"
+#if (!(defined(UNICODE)))
 #define LDAP_UNICODE 0
+#endif
 #define LDAP_VENDOR_NAME 0
 #define LDAP_VENDOR_NAME_W L"Microsoft Corporation."
 #define mod_bvalues mod_vals . modv_bvals

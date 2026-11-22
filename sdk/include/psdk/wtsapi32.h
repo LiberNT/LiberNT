@@ -785,99 +785,123 @@ typedef struct WTS_CLOUD_AUTH_HANDLE__ {
 #ifdef UNICODE
 #define PRODUCT_INFO PRODUCT_INFOW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PRODUCT_INFO PRODUCT_INFOW
 #else
 #define PRODUCT_INFO PRODUCT_INFOA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PWTS_PROCESS_INFO_EX PWTS_PROCESS_INFO_EXW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PWTS_PROCESS_INFO_EX PWTS_PROCESS_INFO_EXW
 #else
 #define PWTS_PROCESS_INFO_EX PWTS_PROCESS_INFO_EXA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PWTS_VALIDATION_INFORMATION PWTS_VALIDATION_INFORMATIONW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PWTS_VALIDATION_INFORMATION PWTS_VALIDATION_INFORMATIONW
 #else
 #define PWTS_VALIDATION_INFORMATION PWTS_VALIDATION_INFORMATIONA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PWTSCLIENT PWTSCLIENTW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PWTSCLIENT PWTSCLIENTW
 #else
 #define PWTSCLIENT PWTSCLIENTA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PWTSCONFIGINFO PWTSCONFIGINFOW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PWTSCONFIGINFO PWTSCONFIGINFOW
 #else
 #define PWTSCONFIGINFO PWTSCONFIGINFOA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PWTSINFOEX PWTSINFOEXW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PWTSINFOEX PWTSINFOEXW
 #else
 #define PWTSINFOEX PWTSINFOEXA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PWTSINFOEX_LEVEL PWTSINFOEX_LEVEL_W
 #else
+#if (!(defined(UNICODE)))
 #define PWTSINFOEX_LEVEL PWTSINFOEX_LEVEL_A
+#endif
 #endif
 #ifdef UNICODE
 #define PWTSINFOEX_LEVEL1 PWTSINFOEX_LEVEL1_W
 #else
+#if (!(defined(UNICODE)))
 #define PWTSINFOEX_LEVEL1 PWTSINFOEX_LEVEL1_A
+#endif
 #endif
 #ifdef UNICODE
 #define PWTSLISTENERCONFIG PWTSLISTENERCONFIGW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PWTSLISTENERCONFIG PWTSLISTENERCONFIGW
 #else
 #define PWTSLISTENERCONFIG PWTSLISTENERCONFIGA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PWTSLISTENERNAME PWTSLISTENERNAMEW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PWTSLISTENERNAME PWTSLISTENERNAMEW
 #else
 #define PWTSLISTENERNAME PWTSLISTENERNAMEA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PWTSUSERCONFIG PWTSUSERCONFIGW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PWTSUSERCONFIG PWTSUSERCONFIGW
 #else
 #define PWTSUSERCONFIG PWTSUSERCONFIGA
 #endif
 #endif
+#endif
 #define WTS_CHANNEL_OPTION_DYNAMIC 0x00000001
 #define WTS_CURRENT_SERVER ((HANDLE) NULL)
 #define WTS_CURRENT_SERVER_NAME 0
 #define WTS_EVENT_NONE 0x00000000
+#if (!(defined(UNICODE)))
 #define WTS_PROCESS_INFO_EX 0
+#endif
 #define WTS_PROTOCOL_TYPE_CONSOLE 0
 #define WTS_SECURITY_ALL_ACCESS (STANDARD_RIGHTS_REQUIRED | WTS_SECURITY_QUERY_INFORMATION | WTS_SECURITY_SET_INFORMATION | WTS_SECURITY_RESET | WTS_SECURITY_VIRTUAL_CHANNELS | WTS_SECURITY_REMOTE_CONTROL | WTS_SECURITY_LOGON | WTS_SECURITY_MESSAGE | WTS_SECURITY_CONNECT | WTS_SECURITY_DISCONNECT)
 #define WTS_SECURITY_CURRENT_GUEST_ACCESS 0x48
@@ -887,165 +911,205 @@ typedef struct WTS_CLOUD_AUTH_HANDLE__ {
 #ifdef UNICODE
 #define WTS_VALIDATION_INFORMATION WTS_VALIDATION_INFORMATIONW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define WTS_VALIDATION_INFORMATION WTS_VALIDATION_INFORMATIONW
 #else
 #define WTS_VALIDATION_INFORMATION WTS_VALIDATION_INFORMATIONA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define WTSCLIENT WTSCLIENTW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define WTSCLIENT WTSCLIENTW
 #else
 #define WTSCLIENT WTSCLIENTA
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define WTSCONFIGINFO 0
+#endif
 #ifdef UNICODE
 #define WTSCreateListener WTSCreateListenerW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define WTSCreateListener WTSCreateListenerW
 #else
 #define WTSCreateListener WTSCreateListenerA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define WTSEnumerateListeners WTSEnumerateListenersW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define WTSEnumerateListeners WTSEnumerateListenersW
 #else
 #define WTSEnumerateListeners WTSEnumerateListenersA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define WTSEnumerateProcessesEx WTSEnumerateProcessesExW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define WTSEnumerateProcessesEx WTSEnumerateProcessesExW
 #else
 #define WTSEnumerateProcessesEx WTSEnumerateProcessesExA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define WTSEnumerateSessionsEx WTSEnumerateSessionsExW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define WTSEnumerateSessionsEx WTSEnumerateSessionsExW
 #else
 #define WTSEnumerateSessionsEx WTSEnumerateSessionsExA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define WTSFreeMemoryEx WTSFreeMemoryExW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define WTSFreeMemoryEx WTSFreeMemoryExW
 #else
 #define WTSFreeMemoryEx WTSFreeMemoryExA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define WTSGetListenerSecurity WTSGetListenerSecurityW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define WTSGetListenerSecurity WTSGetListenerSecurityW
 #else
 #define WTSGetListenerSecurity WTSGetListenerSecurityA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define WTSINFOEX WTSINFOEXW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define WTSINFOEX WTSINFOEXW
 #else
 #define WTSINFOEX WTSINFOEXA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define WTSINFOEX_LEVEL WTSINFOEX_LEVEL_W
 #else
+#if (!(defined(UNICODE)))
 #define WTSINFOEX_LEVEL WTSINFOEX_LEVEL_A
+#endif
 #endif
 #ifdef UNICODE
 #define WTSINFOEX_LEVEL1 WTSINFOEX_LEVEL1_W
 #else
+#if (!(defined(UNICODE)))
 #define WTSINFOEX_LEVEL1 WTSINFOEX_LEVEL1_A
+#endif
 #endif
 #ifdef UNICODE
 #define WTSLISTENERCONFIG WTSLISTENERCONFIGW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define WTSLISTENERCONFIG WTSLISTENERCONFIGW
 #else
 #define WTSLISTENERCONFIG WTSLISTENERCONFIGA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define WTSLISTENERNAME WTSLISTENERNAMEW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define WTSLISTENERNAME WTSLISTENERNAMEW
 #else
 #define WTSLISTENERNAME WTSLISTENERNAMEA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define WTSOpenServerEx WTSOpenServerExW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define WTSOpenServerEx WTSOpenServerExW
 #else
 #define WTSOpenServerEx WTSOpenServerExA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define WTSQueryListenerConfig WTSQueryListenerConfigW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define WTSQueryListenerConfig WTSQueryListenerConfigW
 #else
 #define WTSQueryListenerConfig WTSQueryListenerConfigA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define WTSSendMessage WTSSendMessageW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define WTSSendMessage WTSSendMessageW
 #else
 #define WTSSendMessage WTSSendMessageA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define WTSSetListenerSecurity WTSSetListenerSecurityW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define WTSSetListenerSecurity WTSSetListenerSecurityW
 #else
 #define WTSSetListenerSecurity WTSSetListenerSecurityA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define WTSSetUserConfig WTSSetUserConfigW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define WTSSetUserConfig WTSSetUserConfigW
 #else
 #define WTSSetUserConfig WTSSetUserConfigA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define WTSUSERCONFIG WTSUSERCONFIGW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define WTSUSERCONFIG WTSUSERCONFIGW
 #else
 #define WTSUSERCONFIG WTSUSERCONFIGA
+#endif
 #endif
 #endif
 
