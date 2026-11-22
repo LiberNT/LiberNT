@@ -775,6 +775,20 @@ WSPRecvMsg(SOCKET Handle,
 }
 
 
+static int
+MsafdSendTo(SOCKET Handle,
+            LPWSABUF lpBuffers,
+            DWORD dwBufferCount,
+            LPDWORD lpNumberOfBytesSent,
+            DWORD iFlags,
+            const struct sockaddr *SocketAddress,
+            int SocketAddressLength,
+            LPWSABUF Control,
+            LPWSAOVERLAPPED lpOverlapped,
+            LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine,
+            LPWSATHREADID lpThreadId,
+            LPINT lpErrno);
+
 INT
 PASCAL
 WSPSendMsg(SOCKET Handle,
@@ -803,19 +817,29 @@ WSPSendMsg(SOCKET Handle,
         WSASetLastError(WSAEINVAL);
         return SOCKET_ERROR;
     }
+    if (!lpMsg->Control.buf != !lpMsg->Control.len)
+    {
+        WSASetLastError(WSAEFAULT);
+        return SOCKET_ERROR;
+    }
+    if (!lpMsg->name && Socket->SharedData->State != SocketConnected)
+    {
+        WSASetLastError(WSAEINVAL);
+        return SOCKET_ERROR;
+    }
 
-    /* FIXME: the control data in lpMsg->Control is not sent */
-    Result = WSPSendTo(Handle,
-                       lpMsg->lpBuffers,
-                       lpMsg->dwBufferCount,
-                       lpNumberOfBytesSent,
-                       dwFlags,
-                       lpMsg->name,
-                       lpMsg->namelen,
-                       lpOverlapped,
-                       lpCompletionRoutine,
-                       NULL,
-                       &Errno);
+    Result = MsafdSendTo(Handle,
+                         lpMsg->lpBuffers,
+                         lpMsg->dwBufferCount,
+                         lpNumberOfBytesSent,
+                         dwFlags,
+                         lpMsg->name,
+                         lpMsg->namelen,
+                         lpMsg->Control.len ? &lpMsg->Control : NULL,
+                         lpOverlapped,
+                         lpCompletionRoutine,
+                         NULL,
+                         &Errno);
     if (Result == SOCKET_ERROR)
         WSASetLastError(Errno);
     return Result;
@@ -1014,19 +1038,19 @@ WSPSend(SOCKET Handle,
     return MsafdReturnWithErrno(Status, lpErrno, NumberOfBytesSent, lpNumberOfBytesSent);
 }
 
-int
-WSPAPI
-WSPSendTo(SOCKET Handle,
-          LPWSABUF lpBuffers,
-          DWORD dwBufferCount,
-          LPDWORD lpNumberOfBytesSent,
-          DWORD iFlags,
-          const struct sockaddr *SocketAddress,
-          int SocketAddressLength,
-          LPWSAOVERLAPPED lpOverlapped,
-          LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine,
-          LPWSATHREADID lpThreadId,
-          LPINT lpErrno)
+static int
+MsafdSendTo(SOCKET Handle,
+            LPWSABUF lpBuffers,
+            DWORD dwBufferCount,
+            LPDWORD lpNumberOfBytesSent,
+            DWORD iFlags,
+            const struct sockaddr *SocketAddress,
+            int SocketAddressLength,
+            LPWSABUF Control,
+            LPWSAOVERLAPPED lpOverlapped,
+            LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine,
+            LPWSATHREADID lpThreadId,
+            LPINT lpErrno)
 {
     PIO_STATUS_BLOCK        IOSB;
     IO_STATUS_BLOCK         DummyIOSB;
@@ -1059,7 +1083,7 @@ WSPSendTo(SOCKET Handle,
         return SOCKET_ERROR;
     }
 
-    if (!(Socket->SharedData->ServiceFlags1 & XP1_CONNECTIONLESS) || !SocketAddress)
+    if (!(Socket->SharedData->ServiceFlags1 & XP1_CONNECTIONLESS) || (!SocketAddress && !Control))
     {
         /* Use WSPSend for connection-oriented sockets */
         return WSPSend(Handle,
@@ -1103,6 +1127,11 @@ WSPSendTo(SOCKET Handle,
         }
     }
 
+    if (SocketAddress && SocketAddressLength > 128 - sizeof(TRANSPORT_ADDRESS)) {
+        *lpErrno = WSAEFAULT;
+        return SOCKET_ERROR;
+    }
+
     Status = MsafdAcquireEvent(&SockEvent, &SockEventShared);
 
     if (!NT_SUCCESS(Status))
@@ -1110,24 +1139,25 @@ WSPSendTo(SOCKET Handle,
         return SOCKET_ERROR;
     }
 
-    RemoteAddress = (PTRANSPORT_ADDRESS)Buffer;
-
-    if (SocketAddressLength > 128 - sizeof(TRANSPORT_ADDRESS)) {
-        *lpErrno = WSAEFAULT;
-        return SOCKET_ERROR;
+    RemoteAddress = NULL;
+    if (SocketAddress)
+    {
+        /* Fill TDI address */
+        RemoteAddress = (PTRANSPORT_ADDRESS)Buffer;
+        RemoteAddress->TAAddressCount = 1;
+        RemoteAddress->Address[0].AddressLength = SocketAddressLength - sizeof(SocketAddress->sa_family);
+        RtlCopyMemory(&RemoteAddress->Address[0].AddressType, SocketAddress, SocketAddressLength);
     }
 
-    /* Fill TDI address */
-    RemoteAddress->TAAddressCount = 1;
-    RemoteAddress->Address[0].AddressLength = SocketAddressLength - sizeof(SocketAddress->sa_family);
-    RtlCopyMemory(&RemoteAddress->Address[0].AddressType, SocketAddress, SocketAddressLength);
-
     /* Set up Structure */
+    RtlZeroMemory(&SendInfo, sizeof(SendInfo));
     SendInfo.BufferArray = (PAFD_WSABUF)lpBuffers;
     SendInfo.AfdFlags = Socket->SharedData->NonBlocking ? AFD_IMMEDIATE : 0;
     SendInfo.BufferCount = dwBufferCount;
     SendInfo.TdiConnection.RemoteAddress = RemoteAddress;
-    SendInfo.TdiConnection.RemoteAddressLength = Socket->HelperData->MaxTDIAddressLength;
+    SendInfo.TdiConnection.RemoteAddressLength = RemoteAddress ? Socket->HelperData->MaxTDIAddressLength : 0;
+    SendInfo.TdiConnection.Options = Control ? Control->buf : NULL;
+    SendInfo.TdiConnection.OptionsLength = Control ? (LONG)Control->len : 0;
 
     /* Verify if we should use APC */
     if (!lpOverlapped)
@@ -1233,6 +1263,34 @@ WSPSendTo(SOCKET Handle,
 
     TRACE("Leaving (%lx %ld)\n", Status, NumberOfBytesSent);
     return MsafdReturnWithErrno(Status, lpErrno, NumberOfBytesSent, lpNumberOfBytesSent);
+}
+
+int
+WSPAPI
+WSPSendTo(SOCKET Handle,
+          LPWSABUF lpBuffers,
+          DWORD dwBufferCount,
+          LPDWORD lpNumberOfBytesSent,
+          DWORD iFlags,
+          const struct sockaddr *SocketAddress,
+          int SocketAddressLength,
+          LPWSAOVERLAPPED lpOverlapped,
+          LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine,
+          LPWSATHREADID lpThreadId,
+          LPINT lpErrno)
+{
+    return MsafdSendTo(Handle,
+                       lpBuffers,
+                       dwBufferCount,
+                       lpNumberOfBytesSent,
+                       iFlags,
+                       SocketAddress,
+                       SocketAddressLength,
+                       NULL,
+                       lpOverlapped,
+                       lpCompletionRoutine,
+                       lpThreadId,
+                       lpErrno);
 }
 
 INT

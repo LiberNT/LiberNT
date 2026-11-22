@@ -503,6 +503,24 @@ BOOLEAN IsInterfaceAddress(PIP_INTERFACE Interface, PIP_ADDRESS Address)
     return Found;
 }
 
+PIP_INTERFACE IPLocateUnicastInterface(PIP_ADDRESS Address)
+{
+    PIP_INTERFACE Interface = NULL;
+    KIRQL OldIrql;
+    PIP_NTE Nte;
+
+    if (Address->Type != IP_ADDRESS_V4)
+        return NULL;
+
+    TcpipAcquireSpinLock(&NetTableListLock, &OldIrql);
+    Nte = NteFindAddress(NULL, Address->Address.IPv4Address, TRUE);
+    if (Nte && IPReferenceInterface(Nte->Interface))
+        Interface = Nte->Interface;
+    TcpipReleaseSpinLock(&NetTableListLock, OldIrql);
+
+    return Interface;
+}
+
 BOOLEAN IsInterfaceBroadcast(PIP_INTERFACE Interface, PIP_ADDRESS Address)
 {
     PLIST_ENTRY Entry;
@@ -844,7 +862,6 @@ VOID IPDeleteInterfaceAddresses(PIP_INTERFACE Interface)
     TiSignalChange();
 }
 
-static
 PIP_INTERFACE
 IPLocateInterfaceByIndex(ULONG Index)
 {
