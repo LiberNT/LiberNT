@@ -1973,6 +1973,17 @@ public:
         _In_ BOOLEAN KeepUnlinkedRecord = FALSE);
 
     NTSTATUS
+    DeleteFileInDirectory(
+        _Inout_ PFileRecord Parent,
+        _In_reads_(NameLength) PWCHAR Name,
+        _In_ ULONG NameLength,
+        _In_ BOOLEAN RemoveDirectory,
+        _In_opt_ PFileRecord CanonicalRecord,
+        _In_ BOOLEAN CanDeleteRecord,
+        _Out_opt_ PBOOLEAN RecordDeleted,
+        _In_ BOOLEAN KeepUnlinkedRecord);
+
+    NTSTATUS
     DeleteUnlinkedFile(
         _In_ ULONGLONG FileReference,
         _Out_opt_ PBOOLEAN RecordDeleted = NULL);
@@ -2055,6 +2066,26 @@ private:
         _Out_ PULONGLONG ChildReference,
         _Out_ PWCHAR* Name,
         _Out_ PULONG NameLength);
+
+    NTSTATUS
+    LookupChildInParent(
+        _In_ PFileRecord Parent,
+        _In_ PWCHAR Name,
+        _Out_ PFileRecord* Child,
+        _Out_ PULONGLONG ChildReference);
+
+    NTSTATUS
+    DeleteChild(
+        _Inout_ PFileRecord Parent,
+        _Inout_ PFileRecord Child,
+        _In_ ULONGLONG ChildReference,
+        _In_reads_(NameLength) PWCHAR Name,
+        _In_ ULONG NameLength,
+        _In_ BOOLEAN RemoveDirectory,
+        _In_opt_ PFileRecord CanonicalRecord,
+        _In_ BOOLEAN CanDeleteRecord,
+        _Out_opt_ PBOOLEAN RecordDeleted,
+        _In_ BOOLEAN KeepUnlinkedRecord);
 
     NTSTATUS
     SplitAndResolveParent(
