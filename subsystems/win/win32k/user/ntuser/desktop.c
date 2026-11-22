@@ -1460,7 +1460,9 @@ VOID NTAPI DesktopThreadMain(VOID)
         {
             IntDispatchMessage(&Msg);
         }
-        co_UserProcessDisplayConfigurationUpdate();
+        /* A display change is applied in the session that drives the display; the desktop threads of other sessions wake for their own messages */
+        if (Session == ReadPointerAcquire((PVOID volatile *)&gpDisplaySession))
+            co_UserProcessDisplayConfigurationUpdate();
         (VOID)co_MsqWaitForNewMessages(pti, NULL, 0, 0);
     }
 
