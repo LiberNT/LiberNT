@@ -523,12 +523,9 @@ OFFSET(PbDpcStack, KPRCB, DpcStack),
 OFFSET(PbMaximumDpcQueueDepth, KPRCB, MaximumDpcQueueDepth),
 OFFSET(PbDpcRequestRate, KPRCB, DpcRequestRate),
 OFFSET(PbMinimumDpcRate, KPRCB, MinimumDpcRate),
-//OFFSET(PbDpcRequestSummary, KPRCB, DpcRequestSummary),
-//OFFSET(PbNormalDpcState, KPRCB, NormalDpcState),
-OFFSET(PbDpcInterruptRequested, KPRCB, DpcInterruptRequested), // not Win 10
-OFFSET(PbDpcThreadRequested, KPRCB, DpcThreadRequested), // not Win 10
+OFFSET(PbDpcRequestSummary, KPRCB, DpcRequestSummary),
+OFFSET(PbNormalDpcState, KPRCB, NormalDpcState),
 OFFSET(PbDpcRoutineActive, KPRCB, DpcRoutineActive),
-OFFSET(PbDpcThreadActive, KPRCB, DpcThreadActive), // not Win 10
 OFFSET(PbTimerHand, KPRCB, TimerHand), // not Win 10
 OFFSET(PbTimerRequest, KPRCB, TimerRequest), // not Win 10
 OFFSET(PbTickOffset, KPRCB, TickOffset), // not Win 10

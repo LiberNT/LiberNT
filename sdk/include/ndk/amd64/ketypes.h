@@ -670,6 +670,20 @@ typedef struct _REQUEST_MAILBOX
 //
 // Processor Region Control Block
 //
+typedef union _KPRCBFLAG
+{
+    volatile LONG PrcbFlags;
+    struct
+    {
+        ULONG BamQosLevel:8;
+        ULONG PendingQosUpdate:1;
+        ULONG CacheIsolationEnabled:1;
+        ULONG TracepointActive:1;
+        ULONG LongDpcRunning:1;
+        ULONG PrcbFlagsReserved:20;
+    };
+} KPRCBFLAG, *PKPRCBFLAG;
+
 typedef struct _KPRCB
 {
     ULONG MxCsr; // 0x00000
@@ -682,7 +696,15 @@ typedef struct _KPRCB
     struct _KTHREAD * IdleThread; // 0x00018
     UCHAR NestingLevel; // 0x00020
     UCHAR ClockOwner; // 0x00021
-    UCHAR PendingTickFlags; // 0x00022
+    union
+    {
+        UCHAR PendingTickFlags; // 0x00022
+        struct
+        {
+            UCHAR PendingTick:1;
+            UCHAR PendingBackupTick:1;
+        };
+    };
     UCHAR IdleState; // 0x00023
     ULONG Number; // 0x00024
     UINT64 RspBase; // 0x00028
@@ -690,7 +712,15 @@ typedef struct _KPRCB
     PCHAR PriorityState; // 0x00038
     CHAR CpuType; // 0x00040
     CHAR CpuID; // 0x00041
-    USHORT CpuStep; // 0x00042
+    union
+    {
+        USHORT CpuStep; // 0x00042
+        struct
+        {
+            UCHAR CpuStepping;
+            UCHAR CpuModel;
+        };
+    };
     ULONG MHz; // 0x00044
     ULONGLONG HalReserved[8]; // 0x00048
     USHORT MinorVersion; // 0x00088
@@ -722,27 +752,38 @@ typedef struct _KPRCB
     ULONG ApicMask; // 0x000DC
     PVOID AcpiReserved; // 0x000E0
     ULONG CFlushSize; // 0x000E8
-    UCHAR PrcbFlags[4]; // 0x000EC _KPRCBFLAG
+    union
+    {
+        KPRCBFLAG PrcbFlags; // 0x000EC
+        ULONG PrcbFlagsReserved;
+    };
     ULONGLONG PrcbPad11[2]; // 0x000F0
     KPROCESSOR_STATE ProcessorState; // 0x00100
     struct _XSAVE_AREA_HEADER *ExtendedSupervisorState; // 0x006C0
     ULONG ProcessorSignature; // 0x006C8
     ULONG ProcessorFlags; // 0x006CC
-    ULONGLONG TrappedSecurityDomain; // 0x006D0
-    UCHAR BpbState[2]; // 0x006D8 _KPRCB_BPB_STATE
-    UCHAR BpbTrappedBpbState[2]; // 0x006DA _KPRCB_BPB_STATE
-    UCHAR BpbFeatures[1]; // 0x006DC _KPRCB_BPB_FEATURES
-    UCHAR PrcbPad12b; // 0x006DD
-    UCHAR BpbRetpolineState[1]; // 0x006DE _KPRCB_BPB_RETPOLINE_STATE
-    UCHAR BpbRetpolineStateOverflow; // 0x006DF
-    volatile SHORT PairRegister; // 0x006E0
-    USHORT BpbRetpolineExitSpecCtrl; // 0x006E2
-    USHORT BpbTrappedRetpolineExitSpecCtrl; // 0x006E4
-    USHORT BpbCurrentSpecCtrl; // 0x006E6
-    USHORT BpbKernelSpecCtrl; // 0x006E8
-    USHORT BpbNmiSpecCtrl; // 0x006EA
-    USHORT BpbUserSpecCtrl; // 0x006EC
-    USHORT PrcbPad12c[1]; // 0x006EE
+    union
+    {
+        ULONGLONG PrcbPad12a[4]; // 0x006D0
+        struct
+        {
+            ULONGLONG TrappedSecurityDomain; // 0x006D0
+            UCHAR BpbState[2]; // 0x006D8 _KPRCB_BPB_STATE
+            UCHAR BpbTrappedBpbState[2]; // 0x006DA _KPRCB_BPB_STATE
+            UCHAR BpbFeatures[1]; // 0x006DC _KPRCB_BPB_FEATURES
+            UCHAR PrcbPad12b; // 0x006DD
+            UCHAR BpbRetpolineState[1]; // 0x006DE _KPRCB_BPB_RETPOLINE_STATE
+            UCHAR BpbRetpolineStateOverflow; // 0x006DF
+            volatile SHORT PairRegister; // 0x006E0
+            USHORT BpbRetpolineExitSpecCtrl; // 0x006E2
+            USHORT BpbTrappedRetpolineExitSpecCtrl; // 0x006E4
+            USHORT BpbCurrentSpecCtrl; // 0x006E6
+            USHORT BpbKernelSpecCtrl; // 0x006E8
+            USHORT BpbNmiSpecCtrl; // 0x006EA
+            USHORT BpbUserSpecCtrl; // 0x006EC
+            USHORT PrcbPad12c[1]; // 0x006EE
+        };
+    };
     KSPIN_LOCK_QUEUE LockQueue[17]; // 0x006F0
     PP_LOOKASIDE_LIST PPLookasideList[16]; // 0x00800
     UCHAR PPNxPagedLookasideList[3072]; // 0x00900 _GENERAL_LOOKASIDE_POOL[32]
@@ -808,7 +849,31 @@ typedef struct _KPRCB
     UCHAR QuantumEnd; // 0x038B9
     UCHAR DpcRoutineActive; // 0x038BA
     UCHAR IdleSchedule; // 0x038BB
-    volatile LONG DpcRequestSummary; // 0x038BC
+    union
+    {
+        volatile LONG DpcRequestSummary; // 0x038BC
+        SHORT DpcRequestSlot[2];
+        struct
+        {
+            SHORT NormalDpcState;
+            SHORT ThreadDpcState;
+        };
+        struct
+        {
+            ULONG DpcNormalProcessingActive:1;
+            ULONG DpcNormalProcessingRequested:1;
+            ULONG DpcNormalThreadSignal:1;
+            ULONG DpcNormalTimerExpiration:1;
+            ULONG DpcNormalDpcPresent:1;
+            ULONG DpcNormalLocalInterrupt:1;
+            ULONG DpcNormalPriorityAntiStarvation:1;
+            ULONG DpcNormalSwapToDpcDelegate:1;
+            ULONG DpcNormalSpare:8;
+            ULONG DpcThreadActive:1;
+            ULONG DpcThreadRequested:1;
+            ULONG DpcThreadSpare:14;
+        };
+    };
     ULONG LastTick; // 0x038C0
     ULONG ClockInterrupts; // 0x038C4
     ULONG ReadyScanTick; // 0x038C8
@@ -832,8 +897,15 @@ typedef struct _KPRCB
     KDPC CallDpc; // 0x08360
     LONG ClockKeepAlive; // 0x083A0
     UCHAR PrcbPad60[2]; // 0x083A4
-    UCHAR NmiActive; // 0x083A6
-    UCHAR MceActive; // 0x083A7
+    union
+    {
+        USHORT CombinedNmiMceActive; // 0x083A6
+        struct
+        {
+            UCHAR NmiActive; // 0x083A6
+            UCHAR MceActive; // 0x083A7
+        };
+    };
     LONG DpcWatchdogPeriodTicks; // 0x083A8
     LONG DpcWatchdogCount; // 0x083AC
     volatile LONG KeSpinLockOrdering; // 0x083B0
@@ -871,7 +943,7 @@ typedef struct _KPRCB
     UINT64 StartCycles; // 0x08680
     ULONGLONG TaggedCycles[4]; // 0x08688
     ULONGLONG AffinitizedCycles; // 0x086A8
-    UCHAR Pad086B0[8];
+    PULONG64 CyclesByThreadType; // 0x086B0
     ULONG CpuCycleScalingFactor; // 0x086B8
     volatile USHORT PerformanceScoreByClass[8]; // 0x086BC
     volatile USHORT EfficiencyScoreByClass[8]; // 0x086CC
@@ -950,7 +1022,7 @@ typedef struct _KPRCB
     ULONG KeAlignmentFixupCount; // 0x08BB8
     ULONG PrcbPad95; // 0x08BBC
     SLIST_HEADER HypercallPageList; // 0x08BC0
-    UCHAR Pad08BD0[8];
+    PULONG64 StatisticsPage; // 0x08BD0
     ULONGLONG GenerationTarget; // 0x08BD8
     UCHAR VirtualApicAssistPage[8]; // 0x08BE0 _LARGE_INTEGER
     ULONGLONG PrcbPad85[3]; // 0x08BE8
@@ -958,12 +1030,19 @@ typedef struct _KPRCB
     PVOID VirtualApicAssist; // 0x08C08
     UCHAR PackageProcessorSet[264]; // 0x08C10 _KAFFINITY_EX
     ULONGLONG PrcbPad86[32]; // 0x08D18
-    ULONG ProcessorId; // 0x08E18
-    ULONG CoreId; // 0x08E1C
-    ULONG ModuleId; // 0x08E20
-    ULONG DieId; // 0x08E24
-    ULONG PackageId; // 0x08E28
-    ULONG ComplexId; // 0x08E2C
+    union
+    {
+        struct
+        {
+            ULONG ProcessorId; // 0x08E18
+            ULONG CoreId; // 0x08E1C
+            ULONG ModuleId; // 0x08E20
+            ULONG DieId; // 0x08E24
+            ULONG PackageId; // 0x08E28
+            ULONG ComplexId; // 0x08E2C
+        };
+        ULONG TopologyId[6]; // 0x08E18
+    };
     ULONG PrcbPad101[4]; // 0x08E30
     ULONGLONG SharedReadyQueueMask; // 0x08E40
     struct _KSHARED_READY_QUEUE *SharedReadyQueue; // 0x08E48
@@ -1022,7 +1101,7 @@ typedef struct _KPRCB
     UCHAR McheckContext[160]; // 0x09B00 _MACHINE_CHECK_CONTEXT[2]
     ULONGLONG TransitionShadowStack; // 0x09BA0
     ULONGLONG KernelShadowStackInitial; // 0x09BA8
-    UCHAR Pad09BB0[8];
+    PULONG64 IstShadowStacksTable; // 0x09BB0
     PVOID HiberSwapShadowStacks[5]; // 0x09BB8
     PVOID HiberSwapShadowStackBases[5]; // 0x09BE0
     PVOID MmFaultCompletionInfo; // 0x09C08
@@ -1071,7 +1150,6 @@ typedef struct _KPRCB
         struct // [LiberNT] state Windows does not keep in the KPRCB
         {
             KEVENT DpcEvent;
-            UCHAR DpcInterruptRequested;
             LONG DpcSetEventRequest;
             ULONG DpcTimeLimit;
             LONG DpcWatchdogPeriod;
@@ -1090,8 +1168,6 @@ typedef struct _KPRCB
             LONG TickOffset;
             UINT64 TimerHand;
             UINT64 TimerRequest;
-            UCHAR DpcThreadActive;
-            UCHAR DpcThreadRequested;
         };
     };
     REQUEST_MAILBOX RequestMailbox[1]; // 0x0CEC0
