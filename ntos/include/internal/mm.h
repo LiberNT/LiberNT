@@ -241,7 +241,8 @@ MiInitializeKernelVaLayout(
 
 NTSTATUS
 MiValidateImageSigningPolicy(
-    _In_ PFILE_OBJECT FileObject);
+    _In_ PFILE_OBJECT FileObject,
+    _Inout_ PLONG SigningState);
 
 NTSTATUS
 NTAPI

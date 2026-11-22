@@ -1761,7 +1761,7 @@ MiCreateSectionWithMode(
         Status = MiCreateImageControlAreaWaiting(File, &Control);
         if (NT_SUCCESS(Status))
         {
-            Status = MiValidateImageSigningPolicy(File);
+            Status = MiValidateImageSigningPolicy(File, &Control->SigningState);
             if (!NT_SUCCESS(Status))
                 MiDereferenceControlArea(Control);
         }

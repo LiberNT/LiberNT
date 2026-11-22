@@ -85,6 +85,18 @@ static void test_catalog_child(void)
         ok(module == NULL, "Policy accepted modified image\n");
         ok(error == ERROR_INVALID_IMAGE_HASH, "Modified image error %lu\n", error);
         if (module) FreeLibrary(module);
+
+        SetLastError(0);
+        module = LoadLibraryExW(changed, NULL, DONT_RESOLVE_DLL_REFERENCES);
+        error = GetLastError();
+        ok(module == NULL, "Policy accepted modified image on its second load\n");
+        ok(error == ERROR_INVALID_IMAGE_HASH, "Modified image second error %lu\n", error);
+        if (module) FreeLibrary(module);
+
+        ok(CopyFileW(copies[0], changed, FALSE), "Restore modified copy: %lu\n", GetLastError());
+        module = LoadLibraryExW(changed, NULL, DONT_RESOLVE_DLL_REFERENCES);
+        ok(module != NULL, "Policy rejected the restored image: %lu\n", GetLastError());
+        if (module) FreeLibrary(module);
     }
 cleanup:
     for (i = 0; i < ARRAYSIZE(images); ++i) if (copies[i][0]) DeleteFileW(copies[i]);
