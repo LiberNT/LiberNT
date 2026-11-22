@@ -7,7 +7,7 @@
 
 #include <blefi.h>
 #include <riscv64.h>
-#include <Fdt.h>
+#include <edk2/Fdt.h>
 #include <libernt/fdtlib.h>
 
 DBG_DEFAULT_CHANNEL(WARNING);

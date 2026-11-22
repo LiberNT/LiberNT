@@ -7,7 +7,7 @@
 
 #include <blefi.h>
 #include <fdtacpi.h>
-#include <Fdt.h>
+#include <edk2/Fdt.h>
 #include <libernt/fdtlib.h>
 #include "../../winload/winload.h"
 

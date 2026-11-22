@@ -9,7 +9,7 @@
 #include <arm64.h>
 #include <blefi.h>
 #include <arc/loaderblk.h>
-#include <Fdt.h>
+#include <edk2/Fdt.h>
 #include <libernt/fdtlib.h>
 
 #define SMBIOS3_ENTRY_LENGTH        0x18
