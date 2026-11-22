@@ -1139,7 +1139,7 @@ Directory::PushDownRoot(
         Status = BuildIndexBufferImage(
             Image,
             RecordSize,
-            DiskVolume->BytesPerSector,
+            DiskVolume->FixupStride ? DiskVolume->FixupStride : DiskVolume->BytesPerSector,
             0,
             ListInternal,
             List,
@@ -1358,7 +1358,7 @@ Directory::PushDownRoot(
         Status = BuildIndexBufferImage(
             Image,
             RecordSize,
-            DiskVolume->BytesPerSector,
+            DiskVolume->FixupStride ? DiskVolume->FixupStride : DiskVolume->BytesPerSector,
             Vcn,
             ListInternal,
             List,
@@ -1724,7 +1724,7 @@ Directory::SplitAndPromote(
         Status = BuildIndexBufferImage(
             SideImage,
             RecordSize,
-            DiskVolume->BytesPerSector,
+            DiskVolume->FixupStride ? DiskVolume->FixupStride : DiskVolume->BytesPerSector,
             NewVcn,
             Internal,
             Scratch + MedianOffset +
@@ -1766,7 +1766,7 @@ Directory::SplitAndPromote(
         Status = BuildIndexBufferImage(
             SideImage,
             RecordSize,
-            DiskVolume->BytesPerSector,
+            DiskVolume->FixupStride ? DiskVolume->FixupStride : DiskVolume->BytesPerSector,
             NodeVcn,
             Internal,
             Scratch,

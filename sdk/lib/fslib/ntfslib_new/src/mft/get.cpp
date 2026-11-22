@@ -20,6 +20,7 @@ IsFileRecordHeaderValid(_In_ PFileRecord File,
 {
     PFileRecordHeader Header = File->Header;
     ULONG UsaSize;
+    ULONG Stride;
 
     if (Header->AllocatedSize > FileRecordSize ||
         Header->AllocatedSize < sizeof(FileRecordHeader) ||
@@ -27,10 +28,10 @@ IsFileRecordHeaderValid(_In_ PFileRecord File,
         Header->ActualSize < sizeof(FileRecordHeader) ||
         Header->AttributeOffset < sizeof(FileRecordHeader) ||
         (Header->AttributeOffset & 7) != 0 ||
-        Header->AllocatedSize < BytesPerSector ||
-        (Header->AllocatedSize % BytesPerSector) != 0 ||
-        Header->Header.SizeOfUpdateSequence !=
-            Header->AllocatedSize / BytesPerSector + 1)
+        !NtfsGetFixupStride(Header->Header.SizeOfUpdateSequence,
+                            Header->AllocatedSize,
+                            BytesPerSector,
+                            &Stride))
     {
         return FALSE;
     }
