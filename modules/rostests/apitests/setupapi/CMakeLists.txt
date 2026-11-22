@@ -34,6 +34,7 @@ list(APPEND SOURCE
     SetupDiGetActualModelsSection.c
     SetupInstallFile.c
     SetupInstallRegisterDlls.c
+    AddRegRegistryView.c
     SetupInstallServicesFromInfSectionEx.c
     SoftwareComponent.c
     SysButtonDevices.c

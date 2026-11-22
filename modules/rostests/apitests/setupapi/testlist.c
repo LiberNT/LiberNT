@@ -38,6 +38,7 @@ extern void func_SetupDiInstallClassExA(void);
 extern void func_SetupDiOpenDeviceInterface(void);
 extern void func_SetupInstallFile(void);
 extern void func_SetupInstallRegisterDlls(void);
+extern void func_AddRegRegistryView(void);
 extern void func_SysButtonDevices(void);
 extern void func_UsbHubInformation(void);
 extern void func_UsbInterfaceIds(void);
@@ -80,6 +81,7 @@ const struct test winetest_testlist[] =
     { "SetupDiOpenDeviceInterface", func_SetupDiOpenDeviceInterface },
     { "SetupInstallFile", func_SetupInstallFile },
     { "SetupInstallRegisterDlls", func_SetupInstallRegisterDlls },
+    { "AddRegRegistryView", func_AddRegRegistryView },
     { "SysButtonDevices", func_SysButtonDevices },
     { "UsbHubInformation", func_UsbHubInformation },
     { "UsbInterfaceIds", func_UsbInterfaceIds },
