@@ -16,7 +16,7 @@
 #include <drivers/acpi/acpi.h>
 #include <libernt/arm64/acpi.h>
 #include <libernt/arm64/early_uart.h>
-#include <Fdt.h>
+#include <edk2/Fdt.h>
 #include <libernt/fdtlib.h>
 extern EFI_SYSTEM_TABLE *GlobalSystemTable;
 DBG_DEFAULT_CHANNEL(WINDOWS);

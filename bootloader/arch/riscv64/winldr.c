@@ -8,7 +8,7 @@
 #include <bl.h>
 #include <riscv64.h>
 #include <blefi.h>
-#include <Fdt.h>
+#include <edk2/Fdt.h>
 #include <RiscVBoot.h>
 #include <ndk/ketypes.h>
 #include <libernt/fdt.h>

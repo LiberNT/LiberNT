@@ -7,7 +7,7 @@
 
 #include <bl.h>
 #include <arm64.h>
-#include <Fdt.h>
+#include <edk2/Fdt.h>
 #include <libernt/fdtlib.h>
 
 #define APPLE_WDT_WD1_CUR_TIME   0x10
