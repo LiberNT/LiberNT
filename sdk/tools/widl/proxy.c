@@ -720,7 +720,8 @@ static void write_proxy(type_t *iface, unsigned int *proc_offset)
       fprintf(proxy, "};\n\n");
   }
   print_proxy( "static %sCInterfaceStubVtbl _%sStubVtbl =\n",
-               need_delegation_indirect(iface) ? "" : "const ", iface->name);
+               need_delegation_indirect(iface) || type_iface_get_async_iface(iface) == iface ? "" : "const ",
+               iface->name);
   print_proxy( "{\n");
   indent++;
   print_proxy( "{\n");
