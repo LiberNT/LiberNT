@@ -228,13 +228,14 @@ MiSystemAdoptBootMappings(
     PMI_PTE Root = MiArchMapFrame(Space->RootFrame);
     ULONG First = (ULONG)((Arch->SystemAddressStart >> Arch->Level[Top].Shift) & Arch->Level[Top].IndexMask);
     ULONG Last = (ULONG)((Arch->SystemAddressEnd >> Arch->Level[Top].Shift) & Arch->Level[Top].IndexMask);
+    BOOLEAN Descend = (MiSessionLevel(Arch) != Top) && (Top > 1);
     MI_BOOT_RUN Run = { 0 };
     NTSTATUS Status;
     ULONG Index;
 
     MI_ASSERT((Arch->SystemAddressStart & (Span - 1)) == 0);
 
-    /* Reserve the spans the boot tables map down to leaf-table granularity, not whole top-level entries. */
+    /* Where system space is carved below the top level, a top-level entry is too coarse to reserve whole. */
     for (Index = First; Index <= Last; Index++)
     {
         MI_PTE Pte = MiArchPteRead(&Root[Index]);
@@ -250,10 +251,16 @@ MiSystemAdoptBootMappings(
         }
 
         Table = !MiArchPteIsBlock(Pte, (ULONG)Top) && MiPfnTracked(&System->Pfn, MiArchPteFrame(Pte));
-        if (Table && Top > 1)
+        if (Table && Descend)
+        {
             Status = MiReserveBootTable(Space, &Run, MiArchPteFrame(Pte), Top - 1, Base);
+        }
         else
+        {
             Status = MiBootRunAdd(Space, &Run, Base, Span);
+            if (NT_SUCCESS(Status) && !Descend)
+                Status = MiBootRunFlush(Space, &Run);
+        }
         if (!NT_SUCCESS(Status))
             return Status;
 
