@@ -201,7 +201,6 @@ RtlGetVersion(IN OUT PRTL_OSVERSIONINFOW lpVersionInformation)
     lpVersionInformation->dwMinorVersion = Peb->OSMinorVersion;
     lpVersionInformation->dwBuildNumber = Peb->OSBuildNumber;
     lpVersionInformation->dwPlatformId = Peb->OSPlatformId;
-    RtlZeroMemory(lpVersionInformation->szCSDVersion, sizeof(lpVersionInformation->szCSDVersion));
 
     /* If we have a CSD version string, initialized by Application Compatibility... */
     if (Peb->CSDVersion.Length && Peb->CSDVersion.Buffer && Peb->CSDVersion.Buffer[0] != UNICODE_NULL)
@@ -228,7 +227,6 @@ RtlGetVersion(IN OUT PRTL_OSVERSIONINFOW lpVersionInformation)
         if (InfoEx->wSuiteMask & VER_SUITE_SINGLEUSERTS)
             InfoEx->wSuiteMask &= ~VER_SUITE_TERMINAL;
         InfoEx->wProductType = SharedUserData->NtProductType;
-        InfoEx->wReserved = 0;
 
         /* HACK: ReactOS specific changes, see bug-reports CORE-6611 and CORE-4620 (aka. #5003) */
         SetRosSpecificInfo(InfoEx);
