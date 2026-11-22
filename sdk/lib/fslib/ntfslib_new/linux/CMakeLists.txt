@@ -145,6 +145,18 @@ if(BUILD_TESTING)
         -Wextra
     )
 
+    add_executable(ntfslib_posix_edge
+        tests/posix_edge.cpp
+    )
+    target_compile_features(ntfslib_posix_edge PRIVATE cxx_std_17)
+    target_compile_options(ntfslib_posix_edge PRIVATE
+        -Wall
+        -Wextra
+        -Wno-unused-result
+    )
+    find_package(Threads REQUIRED)
+    target_link_libraries(ntfslib_posix_edge PRIVATE Threads::Threads)
+
     add_executable(ntfslib_resident_update_test
         tests/resident_update.cpp
     )
@@ -455,6 +467,41 @@ if(BUILD_TESTING AND NTFSLIB_BUILD_FUSE)
         set_tests_properties(
             ntfslib_linux_mount_write
             PROPERTIES SKIP_RETURN_CODE 77
+        )
+        add_test(
+            NAME ntfslib_linux_posix_edge
+            COMMAND /bin/sh
+                "${CMAKE_CURRENT_LIST_DIR}/tests/posix_edge_smoke.sh"
+                "$<TARGET_FILE:ntfslib_fuse>"
+                "$<TARGET_FILE:ntfslib_posix_edge>"
+                "${MKNTFS_EXECUTABLE}"
+                "${NTFS3G_EXECUTABLE}"
+                "${FUSERMOUNT3_EXECUTABLE}"
+                "${NTFSFIX_EXECUTABLE}"
+        )
+        set_tests_properties(
+            ntfslib_linux_posix_edge
+            PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900
+        )
+        find_program(SFDISK_EXECUTABLE NAMES sfdisk)
+        set(_ntfslib_sfdisk "")
+        if(SFDISK_EXECUTABLE)
+            set(_ntfslib_sfdisk "${SFDISK_EXECUTABLE}")
+        endif()
+        add_test(
+            NAME ntfslib_linux_resize
+            COMMAND /bin/sh
+                "${CMAKE_CURRENT_LIST_DIR}/tests/resize_smoke.sh"
+                "$<TARGET_FILE:ntfslib_fuse>"
+                "${MKNTFS_EXECUTABLE}"
+                "${NTFS3G_EXECUTABLE}"
+                "${FUSERMOUNT3_EXECUTABLE}"
+                "${NTFSFIX_EXECUTABLE}"
+                ${_ntfslib_sfdisk}
+        )
+        set_tests_properties(
+            ntfslib_linux_resize
+            PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900
         )
     endif()
     if(MKNTFS_EXECUTABLE AND
