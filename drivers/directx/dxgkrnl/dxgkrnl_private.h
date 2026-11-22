@@ -648,6 +648,20 @@ typedef struct _DXGKP_ACPI_EVENTS
  *
  * Stored in the FDO's DeviceExtension.  Lifetime: AddDevice → RemoveDevice.
  * ====================================================================== */
+#define DXGKRNL_MAX_SOURCE_PRIMARIES 16
+
+/* The primary a further source of an extended desktop scans out; the desktop source uses the adapter's shared primary */
+typedef struct _DXGKRNL_SOURCE_PRIMARY
+{
+    HANDLE                      AllocationHandle;
+    D3DKMT_HANDLE               ResourceHandle;
+    D3DKMT_HANDLE               GlobalShareHandle;
+    ULONG                       Width;
+    ULONG                       Height;
+    D3DDDIFORMAT                Format;
+    BOOLEAN                     ScannedOut;
+} DXGKRNL_SOURCE_PRIMARY, *PDXGKRNL_SOURCE_PRIMARY;
+
 struct _DXGKRNL_ADAPTER
 {
     /* Back-pointer to the per-miniport driver context. */
@@ -1173,6 +1187,8 @@ struct _DXGKRNL_ADAPTER
     ULONG                       SharedPrimaryHeight;
     D3DDDIFORMAT                SharedPrimaryFormat;
     BOOLEAN                     SharedPrimaryIsGopBacked;
+    /* Guarded by SharedPrimaryMutex */
+    DXGKRNL_SOURCE_PRIMARY      SourcePrimaries[DXGKRNL_MAX_SOURCE_PRIMARIES];
     D3DKMT_HANDLE               SharedShadowResourceHandle;
     D3DKMT_HANDLE               SharedShadowGlobalShareHandle;
     HANDLE                      SharedShadowAllocationHandle;
@@ -4150,6 +4166,18 @@ DxgkDisplayDetachWin32kSession(
 
 VOID
 DxgkDisplayPresentBootScreen(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
+NTSTATUS
+DxgkPresentScanOutSourcePrimary(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKVMM_ALLOCATION Allocation,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
+    _In_ ULONG Width,
+    _In_ ULONG Height);
+
+VOID
+DxgkpSyncSourcePrimariesLocked(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
 NTSTATUS

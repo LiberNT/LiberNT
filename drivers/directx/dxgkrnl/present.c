@@ -1412,7 +1412,9 @@ DxgkpProgramScanoutViaMpo(
     _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
     _In_ LARGE_INTEGER PrimaryAddress,
     _In_ ULONG64 PresentId,
-    _In_ D3DDDI_FLIPINTERVAL_TYPE FlipInterval)
+    _In_ D3DDDI_FLIPINTERVAL_TYPE FlipInterval,
+    _In_ ULONG Width,
+    _In_ ULONG Height)
 {
     DXGKARG_SETVIDPNSOURCEADDRESSWITHMULTIPLANEOVERLAY MpoArgs;
     DXGK_MULTIPLANE_OVERLAY_PLANE Plane;
@@ -1437,8 +1439,8 @@ DxgkpProgramScanoutViaMpo(
         Plane3.InputFlags.FlipOnNextVSync = !Plane3.InputFlags.FlipImmediate;
         Plane3.ContextCount = 1;
         Plane3.ppContextData = &PrimaryPointer;
-        Plane3.PlaneAttributes.SrcRect.right = (LONG)Adapter->CommittedWidth;
-        Plane3.PlaneAttributes.SrcRect.bottom = (LONG)Adapter->CommittedHeight;
+        Plane3.PlaneAttributes.SrcRect.right = (LONG)Width;
+        Plane3.PlaneAttributes.SrcRect.bottom = (LONG)Height;
         Plane3.PlaneAttributes.DstRect = Plane3.PlaneAttributes.SrcRect;
         Plane3.PlaneAttributes.ClipRect = Plane3.PlaneAttributes.SrcRect;
         Plane3.PlaneAttributes.Rotation = D3DDDI_ROTATION_IDENTITY;
@@ -1465,8 +1467,8 @@ DxgkpProgramScanoutViaMpo(
     PfnSetMpo = DXGK_CB_FULL(Adapter,
                              DxgkDdiSetVidPnSourceAddressWithMultiPlaneOverlay);
     if (PfnSetMpo == NULL ||
-        Adapter->CommittedWidth == 0 ||
-        Adapter->CommittedHeight == 0)
+        Width == 0 ||
+        Height == 0)
     {
         return STATUS_NOT_SUPPORTED;
     }
@@ -1477,8 +1479,8 @@ DxgkpProgramScanoutViaMpo(
     Plane.AllocationSegment = Allocation->SegmentId;
     Plane.AllocationAddress.QuadPart = PrimaryAddress.QuadPart;
     Plane.hAllocation = Allocation->MiniportHandle;
-    Plane.PlaneAttributes.SrcRect.right = (LONG)Adapter->CommittedWidth;
-    Plane.PlaneAttributes.SrcRect.bottom = (LONG)Adapter->CommittedHeight;
+    Plane.PlaneAttributes.SrcRect.right = (LONG)Width;
+    Plane.PlaneAttributes.SrcRect.bottom = (LONG)Height;
     Plane.PlaneAttributes.DstRect = Plane.PlaneAttributes.SrcRect;
     Plane.PlaneAttributes.ClipRect = Plane.PlaneAttributes.SrcRect;
     Plane.PlaneAttributes.Rotation = D3DDDI_ROTATION_IDENTITY;
@@ -1503,6 +1505,63 @@ DxgkpProgramScanoutViaMpo(
     _SEH2_END;
     DxgkReleaseKmdCall(Adapter);
 
+    return Status;
+}
+
+/* The first frame of a source outside any present: the DDI the present path would use for it, at the source's own size */
+NTSTATUS
+DxgkPresentScanOutSourcePrimary(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ PDXGKVMM_ALLOCATION Allocation,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
+    _In_ ULONG Width,
+    _In_ ULONG Height)
+{
+    DXGKARG_SETVIDPNSOURCEADDRESS *SetSourceAddress;
+    PDXGKRNL_PRESENT_QUEUE Queues;
+    LARGE_INTEGER PrimaryAddress;
+    ULONG64 PresentId = 0;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    ASSERT(Adapter != NULL);
+    ASSERT(Allocation != NULL);
+    ASSERT(Width != 0);
+    ASSERT(Height != 0);
+    if (VidPnSourceId >= Adapter->NumberOfVideoPresentSources || !DxgkpHasPrimaryScanout(Adapter))
+        return STATUS_NOT_SUPPORTED;
+    Status = DxgkVidMmEnsureAllocationApertureMapped(Allocation);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    PrimaryAddress = DxgkVidMmGetAllocationPrimaryAddress(Allocation);
+    Queues = (PDXGKRNL_PRESENT_QUEUE)Adapter->PresentQueues;
+    if (Queues != NULL && VidPnSourceId < Adapter->PresentQueueCount)
+        PresentId = (ULONG64)InterlockedIncrement64(&Queues[VidPnSourceId].NextPresentId);
+    Status = DxgkpProgramScanoutViaMpo(Adapter, Allocation, VidPnSourceId, PrimaryAddress, PresentId,
+                                       D3DDDI_FLIPINTERVAL_IMMEDIATE, Width, Height);
+    if (Status != STATUS_NOT_SUPPORTED)
+        return Status;
+    if (DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddress) == NULL)
+        return STATUS_NOT_SUPPORTED;
+
+    SetSourceAddress = ExAllocatePoolZero(NonPagedPool, sizeof(*SetSourceAddress), TAG_DXGK_PRESENT);
+    if (SetSourceAddress == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    SetSourceAddress->VidPnSourceId = VidPnSourceId;
+    SetSourceAddress->hAllocation = Allocation->MiniportHandle;
+    SetSourceAddress->PrimaryAddress = PrimaryAddress;
+    SetSourceAddress->PrimarySegment = Allocation->SegmentId;
+    SetSourceAddress->Flags.ModeChange = 1;
+    if (!DxgkAcquireKmdCall(Adapter))
+    {
+        Status = STATUS_DELETE_PENDING;
+    }
+    else
+    {
+        Status = DXGK_CB_FULL(Adapter, DxgkDdiSetVidPnSourceAddress)(Adapter->MiniportDeviceContext, SetSourceAddress);
+        DxgkReleaseKmdCall(Adapter);
+    }
+    ExFreePoolWithTag(SetSourceAddress, TAG_DXGK_PRESENT);
     return Status;
 }
 
@@ -1668,7 +1727,9 @@ DxgkpProgramSharedPrimaryScanout(
     (VOID)DxgkpApplyPendingScanoutModeChange(Adapter, VidPnSourceId, Allocation, PrimaryAddress);
 
     /* MPO-capable miniports get the flip as a one-plane configuration. */
-    Status = DxgkpProgramScanoutViaMpo(Adapter, Allocation, VidPnSourceId, PrimaryAddress, PresentId, FlipInterval);
+    /* FIXME: the plane takes the desktop source's committed size; a flip on a further source needs that source's size */
+    Status = DxgkpProgramScanoutViaMpo(Adapter, Allocation, VidPnSourceId, PrimaryAddress, PresentId, FlipInterval,
+                                       Adapter->CommittedWidth, Adapter->CommittedHeight);
 
     if (NT_SUCCESS(Status))
     {
