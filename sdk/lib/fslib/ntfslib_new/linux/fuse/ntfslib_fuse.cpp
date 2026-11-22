@@ -92,6 +92,7 @@ struct NtfsFuseOpenFile
     bool SetIdChecked;
 };
 
+
 struct NtfsFuseInode
 {
     ULONGLONG Reference;
@@ -5223,12 +5224,38 @@ NtfsLowLink(fuse_req_t Request, fuse_ino_t Ino, fuse_ino_t NewParentIno, const c
     ReplyStatus(Request, Status);
 }
 
-static void
-SetOpenCaching(NtfsFuseState* State, struct fuse_file_info* FileInfo)
+/* relatime: the access time moves when it is not newer than the last change or is a day old. */
+static bool
+AccessTimeDue(NtfsFuseState* State, NtfsFuseOpenFile* Open, PNtfsFileRecord File, UINT64* Current)
 {
+    const UINT64 Day = UINT64_C(864000000000);
+    NtfsFileBasicInformation Information;
+    struct timespec Now;
+
+    if (!NT_SUCCESS(NtfsFileRecordGetBasicInformation(File, &Information)))
+        return false;
+    auto Lazy = State->PendingAccess.find(NtfsFileRecordGetReference(File));
+    UINT64 Accessed = Open->PendingAccessTime ? Open->PendingAccessTime
+                    : Lazy != State->PendingAccess.end() ? Lazy->second
+                                                         : Information.LastAccessTime;
+    UINT64 Written = Open->PendingWriteTime ? Open->PendingWriteTime : Information.LastWriteTime;
+    UINT64 Changed = Open->PendingWriteTime ? Open->PendingWriteTime : Information.ChangeTime;
+
+    clock_gettime(CLOCK_REALTIME, &Now);
+    *Current = TimespecToNtfsTime(&Now);
+    return State->StrictAtime || Accessed <= Written || Accessed <= Changed || Accessed + Day <= *Current;
+}
+
+static void
+SetOpenCaching(NtfsFuseState* State, NtfsFuseOpenFile* Open, struct fuse_file_info* FileInfo)
+{
+    UINT64 Current;
+
     if (State->Writable && State->DirectIo)
         FileInfo->direct_io = 1;
-    else
+    /* Cached reads never reach the daemon, so an access time still due needs the first read to. */
+    else if (!State->Writable || State->NoAtime || (FileInfo->flags & O_ACCMODE) == O_WRONLY ||
+             Open->AccessChecked || !AccessTimeDue(State, Open, Open->File, &Current))
         FileInfo->keep_cache = 1;
 }
 
@@ -5280,8 +5307,10 @@ OpenRecord(NtfsFuseState* State,
             return Status;
         }
     }
+    Open = FindOpen(State, Ino);
+    assert(Open && Open->File == File);
     FileInfo->fh = (uint64_t)(uintptr_t)File;
-    SetOpenCaching(State, FileInfo);
+    SetOpenCaching(State, Open, FileInfo);
     return STATUS_SUCCESS;
 }
 
@@ -5380,31 +5409,13 @@ NtfsLowRead(fuse_req_t Request,
     if (State->Writable && !State->NoAtime)
     {
         NtfsFuseOpenFile* Open = FindOpen(State, Ino);
-        NtfsFileBasicInformation Information;
+        UINT64 Current;
 
-        if (Open && !Open->AccessChecked &&
-            NT_SUCCESS(NtfsFileRecordGetBasicInformation(File, &Information)))
+        if (Open && !Open->AccessChecked)
         {
-            const UINT64 Day = UINT64_C(864000000000);
-            auto Lazy = State->PendingAccess.find(NtfsFileRecordGetReference(File));
-            UINT64 Accessed = Open->PendingAccessTime ? Open->PendingAccessTime
-                            : Lazy != State->PendingAccess.end() ? Lazy->second
-                                                                 : Information.LastAccessTime;
-            UINT64 Written = Open->PendingWriteTime ? Open->PendingWriteTime : Information.LastWriteTime;
-            UINT64 Changed = Open->PendingWriteTime ? Open->PendingWriteTime : Information.ChangeTime;
-            struct timespec Now;
-            UINT64 Current;
-
-            clock_gettime(CLOCK_REALTIME, &Now);
-            Current = TimespecToNtfsTime(&Now);
             Open->AccessChecked = true;
-            if (State->StrictAtime ||
-                Accessed <= Written ||
-                Accessed <= Changed ||
-                Accessed + Day <= Current)
-            {
+            if (AccessTimeDue(State, Open, File, &Current))
                 Open->PendingAccessTime = Current;
-            }
         }
     }
     if (State->ReadBuffer.size() < Requested)
@@ -5486,9 +5497,11 @@ NtfsLowWrite(fuse_req_t Request,
                                              &ByteOffset);
     }
     if (!NT_SUCCESS(Status))
+    {
         ReplyStatus(Request, Status);
-    else
-        fuse_reply_write(Request, Length);
+        return;
+    }
+    fuse_reply_write(Request, Length);
 }
 
 static void

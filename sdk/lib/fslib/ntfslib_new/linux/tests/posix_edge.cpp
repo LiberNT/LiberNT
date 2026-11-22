@@ -1561,6 +1561,23 @@ TestTimes()
               Read && Stat.st_atim.tv_sec == First.tv_sec && Stat.st_atim.tv_nsec == First.tv_nsec,
               "atime moved from %lld.%09ld to %lld.%09ld", (long long)First.tv_sec, First.tv_nsec,
               (long long)Stat.st_atim.tv_sec, Stat.st_atim.tv_nsec);
+
+        /* xfstests generic/003: a read after a write moves atime even when the written pages are cached. */
+        Fd = open(Path.c_str(), O_WRONLY);
+        bool Wrote = Fd >= 0 && pwrite(Fd, "w", 1, 0) == 1;
+        if (Fd >= 0)
+            close(Fd);
+        stat(Path.c_str(), &Stat);
+        First = Stat.st_atim;
+        Fd = open(Path.c_str(), O_RDONLY);
+        Read = Fd >= 0 && pread(Fd, &Byte, 1, 0) == 1;
+        if (Fd >= 0)
+            close(Fd);
+        stat(Path.c_str(), &Stat);
+        CHECK("time.relatime_read_after_write_moves_atime",
+              Wrote && Read && (Stat.st_atim.tv_sec > First.tv_sec ||
+                                (Stat.st_atim.tv_sec == First.tv_sec && Stat.st_atim.tv_nsec > First.tv_nsec)),
+              "atime stayed %lld.%09ld", (long long)First.tv_sec, First.tv_nsec);
     }
     {
         MakeDir("tdir");
