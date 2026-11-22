@@ -17,6 +17,7 @@ extern void func_CopyImage(void);
 extern void func_CopyImage_Icon(void);
 extern void func_CursorPresentation(void);
 extern void func_CreateDialog(void);
+extern void func_DesktopCloseWindows(void);
 extern void func_DisplayChangeBroadcast(void);
 extern void func_DisplayChangeDesktops(void);
 extern void func_DisplayChangeMaximized(void);
@@ -190,6 +191,7 @@ const struct test winetest_testlist[] =
     { "CopyImage_Icon", func_CopyImage_Icon },
     { "CursorPresentation", func_CursorPresentation },
     { "CreateDialog", func_CreateDialog },
+    { "DesktopCloseWindows", func_DesktopCloseWindows },
     { "DisplayChangeBroadcast", func_DisplayChangeBroadcast },
     { "DisplayChangeDesktops", func_DisplayChangeDesktops },
     { "DisplayChangeMaximized", func_DisplayChangeMaximized },

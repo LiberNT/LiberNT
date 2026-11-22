@@ -176,6 +176,7 @@ VOID FASTCALL UserNotifyDesktopDisplayChange(PDESKTOP pdesk);
 VOID FASTCALL UserReleaseBootDisplay(VOID);
 BOOL IntRegisterShellHookWindow(HWND hWnd);
 BOOL IntDeRegisterShellHookWindow(HWND hWnd);
+VOID FASTCALL co_UserEndDesktopThread(PTHREADINFO pti);
 VOID co_IntShellHookNotify(WPARAM Message, WPARAM wParam, LPARAM lParam);
 BOOL co_IntGetShellMinRect(HWND hWnd, RECTL *prc);
 HDC FASTCALL UserGetDesktopDC(ULONG,BOOL,BOOL);

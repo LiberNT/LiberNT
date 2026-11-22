@@ -20,6 +20,7 @@ list(APPEND SOURCE
     CopyImage_Icon.c
     CursorPresentation.c
     CreateDialog.c
+    DesktopCloseWindows.c
     DisplayChangeBroadcast.c
     DisplayChangeDesktops.c
     DisplayChangeMaximized.c

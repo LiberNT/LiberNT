@@ -912,6 +912,8 @@ ExitThreadCallback(PETHREAD Thread)
 
     IsRemoveAttachThread(ptiCurrent);
 
+    co_UserEndDesktopThread(ptiCurrent);
+
     if (gpwlList)
     {
         for (pwl = gpwlList; pwl; pwl = pwlNext)
