@@ -985,6 +985,8 @@ ExitThreadCallback(PETHREAD Thread)
 
     ptiCurrent->TIF_flags |= TIF_INCLEANUP;
     ptiCurrent->pClientInfo->dwTIFlags = ptiCurrent->TIF_flags;
+    if (ptiCurrent == ptiRawInput)
+        ptiRawInput = NULL;
     IntCompositionEndThreadPaints(ptiCurrent);
 
     ppiCurrent = ptiCurrent->ppi;
