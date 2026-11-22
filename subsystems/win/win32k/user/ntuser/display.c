@@ -1681,16 +1681,11 @@ VOID
 UserQueueDisplayConfigurationWorker(VOID)
 {
     PUSER_SESSION Session;
-    PTHREADINFO DesktopThread;
 
     /* The display driver reports from any thread, and the user lock may be held by one that waits for that driver */
     Session = ReadPointerAcquire((PVOID volatile *)&gpDisplaySession);
-    if (Session == NULL)
-        return;
-
-    DesktopThread = ReadPointerAcquire((PVOID volatile *)&Session->DesktopThread);
-    if (DesktopThread != NULL)
-        KeSetEvent(DesktopThread->pEventQueueServer, IO_NO_INCREMENT, FALSE);
+    if (Session != NULL)
+        UserWakeDesktopThread(Session);
 }
 
 VOID

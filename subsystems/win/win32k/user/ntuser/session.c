@@ -71,6 +71,7 @@ UserCreateSession(ULONG SessionId, PUSER_SESSION *Session)
         return STATUS_INSUFFICIENT_RESOURCES;
 
     NewSession->SessionId = SessionId;
+    KeInitializeSpinLock(&NewSession->DesktopThreadLock);
     KeInitializeEvent(&NewSession->DesktopThreadStarted, SynchronizationEvent, FALSE);
     InitializeListHead(&NewSession->DesktopsToDestroy);
     NewSession->Next = gpUserSessions;
@@ -202,6 +203,29 @@ UserGetDesktopThread(VOID)
     PUSER_SESSION Session = UserGetCurrentSession();
 
     return Session ? Session->DesktopThread : NULL;
+}
+
+VOID FASTCALL
+UserSetDesktopThread(PUSER_SESSION Session, PTHREADINFO pti)
+{
+    KIRQL OldIrql;
+
+    ASSERT(pti == NULL || pti == PsGetCurrentThreadWin32Thread());
+    KeAcquireSpinLock(&Session->DesktopThreadLock, &OldIrql);
+    ASSERT((Session->DesktopThread == NULL) != (pti == NULL));
+    WritePointerRelease((PVOID volatile *)&Session->DesktopThread, pti);
+    KeReleaseSpinLock(&Session->DesktopThreadLock, OldIrql);
+}
+
+VOID FASTCALL
+UserWakeDesktopThread(PUSER_SESSION Session)
+{
+    KIRQL OldIrql;
+
+    KeAcquireSpinLock(&Session->DesktopThreadLock, &OldIrql);
+    if (Session->DesktopThread != NULL)
+        KeSetEvent(Session->DesktopThread->pEventQueueServer, IO_NO_INCREMENT, FALSE);
+    KeReleaseSpinLock(&Session->DesktopThreadLock, OldIrql);
 }
 
 BOOLEAN FASTCALL
