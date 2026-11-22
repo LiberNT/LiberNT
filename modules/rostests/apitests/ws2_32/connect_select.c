@@ -299,7 +299,7 @@ START_TEST(connect_select)
                    "round %lu client %lu socket %Ix: SO_ERROR query failed with %d (write %u except %u)\n",
                    Round,
                    Index,
-                   (ULONG_PTR)Clients[Index],
+                   (size_t)Clients[Index],
                    WSAGetLastError(),
                    Writable,
                    Exceptional);
@@ -307,7 +307,7 @@ START_TEST(connect_select)
                    "round %lu client %lu socket %Ix: asynchronous connect failed with %d (write %u except %u)\n",
                    Round,
                    Index,
-                   (ULONG_PTR)Clients[Index],
+                   (size_t)Clients[Index],
                    SocketError,
                    Writable,
                    Exceptional);
@@ -315,7 +315,7 @@ START_TEST(connect_select)
                    "round %lu client %lu socket %Ix: successful connect was not writable (SO_ERROR %d, except %u)\n",
                    Round,
                    Index,
-                   (ULONG_PTR)Clients[Index],
+                   (size_t)Clients[Index],
                    SocketError,
                    Exceptional);
 

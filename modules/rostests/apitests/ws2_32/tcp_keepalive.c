@@ -51,7 +51,7 @@ GetOption(
 #define expect_set(Socket, Option, Value, Length, Error) \
     do { \
         int _Error = SetOption(Socket, Option, Value, Length); \
-        ok(_Error == (Error), "option %d = %lu (length %d): got %d, expected %d\n", Option, (DWORD)(Value), Length, _Error, Error); \
+        ok(_Error == (Error), "option %d = %lu (length %d): got %d, expected %d\n", Option, (DWORD)(Value), (int)(Length), _Error, (int)(Error)); \
     } while (0)
 
 static

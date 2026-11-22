@@ -380,7 +380,7 @@ TestIdleNonBlockingAccept(void)
     Elapsed = GetTickCount() - Start;
     ok(Accepted == INVALID_SOCKET && Error == WSAEWOULDBLOCK,
        "idle nonblocking accept returned %Iu error %d\n",
-       (ULONG_PTR)Accepted,
+       (size_t)Accepted,
        Error);
     ok(Elapsed < IMMEDIATE_LIMIT_MS, "idle nonblocking accept took %lu ms\n", Elapsed);
     if (Accepted != INVALID_SOCKET)
