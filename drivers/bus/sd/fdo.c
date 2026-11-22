@@ -173,6 +173,19 @@ static VOID
 SdBusReleaseDmaAdapter(
     _In_ PFDO_EXTENSION FdoExtension)
 {
+    FdoExtension->DwMmcIdmac = FALSE;
+    if (FdoExtension->DwMmcDescriptors != NULL)
+    {
+        ASSERT(FdoExtension->DmaAdapter != NULL);
+        FdoExtension->DmaAdapter->DmaOperations->FreeCommonBuffer(FdoExtension->DmaAdapter,
+                                                                  FdoExtension->DwMmcDescriptorsLength,
+                                                                  FdoExtension->DwMmcDescriptorsLogical,
+                                                                  FdoExtension->DwMmcDescriptors,
+                                                                  FALSE);
+        FdoExtension->DwMmcDescriptors = NULL;
+        FdoExtension->DwMmcDescriptorsLength = 0;
+    }
+
     if (FdoExtension->DmaAdapter != NULL)
     {
         if (FdoExtension->DmaAdapter->DmaOperations &&

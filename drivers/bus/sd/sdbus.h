@@ -87,6 +87,11 @@ typedef struct _FDO_EXTENSION {
     ULONG DwMmcDataOffset;
     ULONG DwMmcBusWidth;
     BOOLEAN DwMmcNeedInit;
+    BOOLEAN DwMmcIdmac;
+    BOOLEAN DwMmcIdmac64;
+    PVOID DwMmcDescriptors;
+    PHYSICAL_ADDRESS DwMmcDescriptorsLogical;
+    ULONG DwMmcDescriptorsLength;
 
     /* Optional hardware-specific controller extension */
     PVOID HardwareExtension;
@@ -624,6 +629,21 @@ SdBusSendSdhciCommand(
     _In_ ULONG BlockSize,
     _In_ USHORT RequestFlags,
     _Out_opt_ PULONG Response);
+
+NTSTATUS
+SdBusGetScatterGatherListAtDispatch(
+    _In_ PFDO_EXTENSION FdoExtension,
+    _In_ PMDL Mdl,
+    _In_ ULONG DataLength,
+    _In_ BOOLEAN WriteToDevice,
+    _In_ PDRIVER_LIST_CONTROL Callback,
+    _In_ PVOID Context);
+
+VOID
+SdBusPutScatterGatherListAtDispatch(
+    _In_ PFDO_EXTENSION FdoExtension,
+    _In_ PSCATTER_GATHER_LIST ScatterGatherList,
+    _In_ BOOLEAN WriteToDevice);
 
 NTSTATUS
 SdBusInitializeRequestQueue(

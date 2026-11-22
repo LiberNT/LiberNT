@@ -541,7 +541,7 @@ SdBusAdma2ScatterGatherCallback(
  *
  * @return NTSTATUS from GetScatterGatherList.
  */
-static NTSTATUS
+NTSTATUS
 SdBusGetScatterGatherListAtDispatch(
     _In_ PFDO_EXTENSION FdoExtension,
     _In_ PMDL Mdl,
@@ -592,7 +592,7 @@ SdBusGetScatterGatherListAtDispatch(
  * @param[in] ScatterGatherList  SG list previously returned by HAL mapping.
  * @param[in] WriteToDevice      Original DMA direction used for mapping.
  */
-static VOID
+VOID
 SdBusPutScatterGatherListAtDispatch(
     _In_ PFDO_EXTENSION FdoExtension,
     _In_ PSCATTER_GATHER_LIST ScatterGatherList,
