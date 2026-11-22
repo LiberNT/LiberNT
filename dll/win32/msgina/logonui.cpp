@@ -2150,7 +2150,7 @@ RunLogon(PGINA_CONTEXT Context, LogonJob *Pending)
     Pending->Status = DoLoginTasks(Context, Pending->User, Pending->Domain, Pending->Password, &Pending->SubStatus);
     if (NT_SUCCESS(Pending->Status))
     {
-        if (!CreateProfile(Context, Pending->User, Pending->Domain, Pending->Password))
+        if (!GinaCreateProfile(Context, Pending->User, Pending->Domain, Pending->Password))
             Pending->Status = STATUS_UNSUCCESSFUL;
         SecureZeroMemory(Context->Password, sizeof(Context->Password));
     }
