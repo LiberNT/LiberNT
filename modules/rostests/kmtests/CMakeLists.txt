@@ -683,6 +683,7 @@ list(APPEND KMTEST_SOURCE
     ntos_io/IoCreateFile_user.c
     ntos_io/IoDeviceObject_user.c
     ntos_io/IoHandleAccess_user.c
+    ntos_io/IoI8042StartInformation_user.c
     ntos_io/IoIs32bitProcess_user.c
     ntos_io/IoCustomTargetEvent_user.c
     ntos_io/IoDeviceTree_user.c
@@ -774,6 +775,7 @@ add_dependencies(kmtest_drivers
     iocreatefile_drv
     iodeviceobject_drv
     iohelper_drv
+    ioi8042startinformation_drv
     ioreadwrite_drv
     ioremovechild_drv
     ioremoveunload_drv

@@ -34,6 +34,7 @@ KMT_TESTFUNC Test_HidPDescription;
 KMT_TESTFUNC Test_IoAddDeviceUnload;
 KMT_TESTFUNC Test_IoFilterRequirements;
 KMT_TESTFUNC Test_IoCreateFile;
+KMT_TESTFUNC Test_IoI8042StartInformation;
 KMT_TESTFUNC Test_IoDeviceObject;
 KMT_TESTFUNC Test_IoHandleAccess;
 KMT_TESTFUNC Test_IoIs32bitProcess;
@@ -134,6 +135,7 @@ const KMT_TEST TestList[] =
     { "IoAddDeviceUnload",            Test_IoAddDeviceUnload },
     { "IoFilterRequirements",         Test_IoFilterRequirements },
     { "IoCreateFile",                 Test_IoCreateFile },
+    { "IoI8042StartInformation",      Test_IoI8042StartInformation },
     { "IoDeviceObject",               Test_IoDeviceObject },
     { "IoHandleAccess",               Test_IoHandleAccess },
     { "IoIs32bitProcess",             Test_IoIs32bitProcess },
