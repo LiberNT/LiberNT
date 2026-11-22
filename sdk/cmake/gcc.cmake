@@ -473,7 +473,11 @@ function(add_delay_importlibs _module)
         message(FATAL_ERROR "Cannot add delay imports to a static library")
     endif()
     foreach(_lib ${ARGN})
-        get_filename_component(_basename "${_lib}" NAME_WE)
+        if("${_lib}" MATCHES "\\.(dll|drv)$")
+            get_filename_component(_basename "${_lib}" NAME_WLE)
+        else()
+            set(_basename "${_lib}")
+        endif()
         # GNU dlltool has no ARM64 delay-import backend and exits successfully
         # without creating the requested archive. Use a regular import library
         # until the GNU ARM64 PE toolchain supports delay imports.
