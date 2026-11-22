@@ -1724,6 +1724,47 @@ EnumServicesStatusExW(SC_HANDLE hSCManager,
 
 
 /**********************************************************************
+ *  I_ScSendTSMessage
+ *
+ * Undocumented
+ *
+ * @implemented
+ */
+DWORD
+WINAPI
+I_ScSendTSMessage(
+    _In_ DWORD dwControl,
+    _In_ DWORD dwEventType,
+    _In_ DWORD dwEventSize,
+    _In_reads_bytes_opt_(dwEventSize) PVOID pEventData)
+{
+    BYTE NoEventData = 0;
+    DWORD dwError;
+
+    TRACE("I_ScSendTSMessage(%lu %lu %lu %p)\n", dwControl, dwEventType, dwEventSize, pEventData);
+
+    if (dwEventSize != 0 && pEventData == NULL)
+        return ERROR_INVALID_PARAMETER;
+
+    RpcTryExcept
+    {
+        dwError = RSendTSMessage(NULL,
+                                 dwControl,
+                                 dwEventType,
+                                 dwEventSize,
+                                 dwEventSize != 0 ? pEventData : &NoEventData);
+    }
+    RpcExcept(EXCEPTION_EXECUTE_HANDLER)
+    {
+        dwError = ScmRpcStatusToWinError(RpcExceptionCode());
+    }
+    RpcEndExcept;
+
+    return dwError;
+}
+
+
+/**********************************************************************
  *  I_ScSendPnPMessage
  *
  * Undocumented

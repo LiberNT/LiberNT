@@ -6746,14 +6746,152 @@ Done:
 }
 
 
+typedef struct _SCM_SESSION_EVENT
+{
+    DWORD dwControl;
+    DWORD dwEventType;
+    DWORD dwEventSize;
+    BYTE Data[ANYSIZE_ARRAY];
+} SCM_SESSION_EVENT, *PSCM_SESSION_EVENT;
+
+static DWORD
+ScmSendServiceEvent(
+    _In_ PSERVICE pService,
+    _In_ DWORD dwControl,
+    _In_ DWORD dwEventType,
+    _In_ DWORD dwEventSize,
+    _In_reads_bytes_opt_(dwEventSize) LPBYTE pEventData);
+
+static BOOL
+ScmAcceptsSessionChange(
+    _In_ PSERVICE pService)
+{
+    return pService->lpImage != NULL &&
+           pService->Status.dwCurrentState == SERVICE_RUNNING &&
+           !(pService->Status.dwServiceType & SERVICE_DRIVER) &&
+           (pService->Status.dwControlsAccepted & SERVICE_ACCEPT_SESSIONCHANGE);
+}
+
+static DWORD WINAPI
+ScmSessionEventThread(
+    _In_ PVOID Context)
+{
+    PSCM_SESSION_EVENT Event = Context;
+    PLIST_ENTRY Entry;
+    PWSTR *Names;
+    DWORD Count = 0, Index;
+
+    ScmLockDatabaseShared();
+    for (Entry = ServiceListHead.Flink; Entry != &ServiceListHead; Entry = Entry->Flink)
+    {
+        if (ScmAcceptsSessionChange(CONTAINING_RECORD(Entry, SERVICE, ServiceListEntry)))
+            Count++;
+    }
+    Names = Count != 0 ? HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, Count * sizeof(PWSTR)) : NULL;
+    Index = 0;
+    for (Entry = ServiceListHead.Flink; Names != NULL && Entry != &ServiceListHead && Index < Count; Entry = Entry->Flink)
+    {
+        PSERVICE pService = CONTAINING_RECORD(Entry, SERVICE, ServiceListEntry);
+        SIZE_T Bytes;
+
+        if (!ScmAcceptsSessionChange(pService))
+            continue;
+        Bytes = (wcslen(pService->lpServiceName) + 1) * sizeof(WCHAR);
+        Names[Index] = HeapAlloc(GetProcessHeap(), 0, Bytes);
+        if (Names[Index] != NULL)
+            RtlCopyMemory(Names[Index], pService->lpServiceName, Bytes);
+        Index++;
+    }
+    ScmUnlockDatabase();
+
+    /* A start holds the control pipe lock until the service reports its status, which needs the database lock. */
+    for (Index = 0; Names != NULL && Index < Count; Index++)
+    {
+        PSERVICE pService;
+        BOOL Send;
+
+        if (Names[Index] == NULL)
+            continue;
+        ScmLockDatabaseShared();
+        pService = ScmGetServiceEntryByName(Names[Index]);
+        Send = pService != NULL && ScmAcceptsSessionChange(pService);
+        ScmUnlockDatabase();
+        if (Send)
+            ScmSendServiceEvent(pService, Event->dwControl, Event->dwEventType, Event->dwEventSize, Event->Data);
+        HeapFree(GetProcessHeap(), 0, Names[Index]);
+    }
+    if (Names != NULL)
+        HeapFree(GetProcessHeap(), 0, Names);
+    HeapFree(GetProcessHeap(), 0, Event);
+    return 0;
+}
+
+static BOOL
+ScmIsCallerLocalSystem(VOID)
+{
+    BOOL IsMember = FALSE;
+    HANDLE Token;
+    PSID SystemSid = NULL;
+    SID_IDENTIFIER_AUTHORITY NtAuthority = {SECURITY_NT_AUTHORITY};
+
+    if (RpcImpersonateClient(NULL) != RPC_S_OK)
+        return FALSE;
+    if (!OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, TRUE, &Token))
+    {
+        RpcRevertToSelf();
+        return FALSE;
+    }
+    RpcRevertToSelf();
+    if (AllocateAndInitializeSid(&NtAuthority, 1, SECURITY_LOCAL_SYSTEM_RID, 0, 0, 0, 0, 0, 0, 0, &SystemSid))
+    {
+        if (!CheckTokenMembership(Token, SystemSid, &IsMember))
+            IsMember = FALSE;
+        FreeSid(SystemSid);
+    }
+    CloseHandle(Token);
+    return IsMember;
+}
+
 /* Function 43 */
 DWORD
 WINAPI
 RSendTSMessage(
-    handle_t BindingHandle)  /* FIXME */
+    SVCCTL_HANDLEW lpMachineName,
+    DWORD dwControl,
+    DWORD dwEventType,
+    DWORD dwEventSize,
+    LPBYTE pEventData)
 {
-    UNIMPLEMENTED;
-    return ERROR_CALL_NOT_IMPLEMENTED;
+    PSCM_SESSION_EVENT Event;
+    HANDLE Thread;
+
+    DPRINT("RSendTSMessage(%S %lu %lu %lu %p)\n", lpMachineName, dwControl, dwEventType, dwEventSize, pEventData);
+
+    if (lpMachineName != NULL && *lpMachineName != UNICODE_NULL)
+        return ERROR_INVALID_PARAMETER;
+    if (dwControl != SERVICE_CONTROL_SESSIONCHANGE)
+        return ERROR_INVALID_SERVICE_CONTROL;
+    if (!ScmIsCallerLocalSystem())
+        return ERROR_ACCESS_DENIED;
+
+    Event = HeapAlloc(GetProcessHeap(), 0, FIELD_OFFSET(SCM_SESSION_EVENT, Data[dwEventSize]));
+    if (Event == NULL)
+        return ERROR_NOT_ENOUGH_MEMORY;
+    Event->dwControl = dwControl;
+    Event->dwEventType = dwEventType;
+    Event->dwEventSize = dwEventSize;
+    if (dwEventSize != 0)
+        RtlCopyMemory(Event->Data, pEventData, dwEventSize);
+
+    /* Session notifications are asynchronous: a slow service must not hold up the session. */
+    Thread = CreateThread(NULL, 0, ScmSessionEventThread, Event, 0, NULL);
+    if (Thread == NULL)
+    {
+        HeapFree(GetProcessHeap(), 0, Event);
+        return GetLastError();
+    }
+    CloseHandle(Thread);
+    return ERROR_SUCCESS;
 }
 
 
@@ -7175,12 +7313,8 @@ RI_ScSendPnPMessage(
     _In_ DWORD dwEventSize,
     _In_ LPBYTE pEventData)
 {
-    PSCM_CONTROL_PACKET ControlPacket;
-    DWORD PacketSize;
     PSERVICE pService;
-    ULONG_PTR Ptr;
     DWORD dwControlsAccepted, dwCurrentState;
-    DWORD dwError = ERROR_SUCCESS;
 
     DPRINT("RI_ScSendPnPMessage(%lu %lx %lu %lu %p)\n",
            hServiceStatus, dwControl, dwEventType, dwEventSize, pEventData);
@@ -7230,6 +7364,23 @@ RI_ScSendPnPMessage(
         default:
             return ERROR_INVALID_SERVICE_CONTROL;
     }
+
+    return ScmSendServiceEvent(pService, dwControl, dwEventType, dwEventSize, pEventData);
+}
+
+
+static DWORD
+ScmSendServiceEvent(
+    _In_ PSERVICE pService,
+    _In_ DWORD dwControl,
+    _In_ DWORD dwEventType,
+    _In_ DWORD dwEventSize,
+    _In_reads_bytes_opt_(dwEventSize) LPBYTE pEventData)
+{
+    PSCM_CONTROL_PACKET ControlPacket;
+    DWORD PacketSize;
+    ULONG_PTR Ptr;
+    DWORD dwError;
 
     /* Calculate the total size of the control packet:
      * initial structure, event type, event data and service name */
