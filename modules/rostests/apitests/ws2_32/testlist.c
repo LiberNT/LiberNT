@@ -41,6 +41,7 @@ extern void func_udp_quic(void);
 extern void func_WSAAsync(void);
 extern void func_WSAIoctl(void);
 extern void func_WSARecv(void);
+extern void func_WSASendMsg(void);
 extern void func_WSABufferArray(void);
 extern void func_WSAStartup(void);
 
@@ -85,6 +86,7 @@ const struct test winetest_testlist[] =
     { "WSAAsync", func_WSAAsync },
     { "WSAIoctl", func_WSAIoctl },
     { "WSARecv", func_WSARecv },
+    { "WSASendMsg", func_WSASendMsg },
     { "WSABufferArray", func_WSABufferArray },
     { "WSAStartup", func_WSAStartup },
     { 0, 0 }

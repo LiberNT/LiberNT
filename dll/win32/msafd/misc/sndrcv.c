@@ -775,6 +775,53 @@ WSPRecvMsg(SOCKET Handle,
 }
 
 
+INT
+PASCAL
+WSPSendMsg(SOCKET Handle,
+           LPWSAMSG lpMsg,
+           DWORD dwFlags,
+           LPDWORD lpNumberOfBytesSent,
+           LPWSAOVERLAPPED lpOverlapped,
+           LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine)
+{
+    PSOCKET_INFORMATION Socket = GetSocketStructure(Handle);
+    INT Errno = NO_ERROR;
+    INT Result;
+
+    if (!Socket)
+    {
+        WSASetLastError(WSAENOTSOCK);
+        return SOCKET_ERROR;
+    }
+    if (!lpMsg)
+    {
+        WSASetLastError(WSAEFAULT);
+        return SOCKET_ERROR;
+    }
+    if (!(Socket->SharedData->ServiceFlags1 & XP1_CONNECTIONLESS))
+    {
+        WSASetLastError(WSAEINVAL);
+        return SOCKET_ERROR;
+    }
+
+    /* FIXME: the control data in lpMsg->Control is not sent */
+    Result = WSPSendTo(Handle,
+                       lpMsg->lpBuffers,
+                       lpMsg->dwBufferCount,
+                       lpNumberOfBytesSent,
+                       dwFlags,
+                       lpMsg->name,
+                       lpMsg->namelen,
+                       lpOverlapped,
+                       lpCompletionRoutine,
+                       NULL,
+                       &Errno);
+    if (Result == SOCKET_ERROR)
+        WSASetLastError(Errno);
+    return Result;
+}
+
+
 int
 WSPAPI
 WSPSend(SOCKET Handle,
@@ -1012,7 +1059,7 @@ WSPSendTo(SOCKET Handle,
         return SOCKET_ERROR;
     }
 
-    if (!(Socket->SharedData->ServiceFlags1 & XP1_CONNECTIONLESS))
+    if (!(Socket->SharedData->ServiceFlags1 & XP1_CONNECTIONLESS) || !SocketAddress)
     {
         /* Use WSPSend for connection-oriented sockets */
         return WSPSend(Handle,

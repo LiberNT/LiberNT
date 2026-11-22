@@ -440,6 +440,16 @@ WSPRecvMsg(
     IN LPWSAOVERLAPPED lpOverlapped,
     IN LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine);
 
+INT
+PASCAL
+WSPSendMsg(
+    IN SOCKET Handle,
+    IN LPWSAMSG lpMsg,
+    IN DWORD dwFlags,
+    OUT LPDWORD lpNumberOfBytesSent,
+    IN LPWSAOVERLAPPED lpOverlapped,
+    IN LPWSAOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine);
+
 VOID
 WSPAPI
 WSPGetAcceptExSockaddrs(
