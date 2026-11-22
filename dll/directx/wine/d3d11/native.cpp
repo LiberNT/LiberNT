@@ -6984,6 +6984,7 @@ public:
     HRESULT PublishForeign(NativeTexture2D *);
     void DumpTrace();
     bool primary = false;
+    D3DDDI_VIDEO_PRESENT_SOURCE_ID primary_source = 0;
     bool composition = false;
     bool exclusive = false;
     D3DDDI_VIDEO_PRESENT_SOURCE_ID scanout_source = 0;
@@ -8207,6 +8208,7 @@ HRESULT NativeSwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requested)
     if (requested.BufferUsage & DXGI_USAGE_UNORDERED_ACCESS) texture_desc.BindFlags |= D3D11_BIND_UNORDERED_ACCESS;
     if (requested.Flags & DXGI_SWAP_CHAIN_FLAG_GDI_COMPATIBLE) texture_desc.MiscFlags |= D3D11_RESOURCE_MISC_GDI_COMPATIBLE;
     DXGI_DDI_PRIMARY_DESC primary_desc = {};
+    primary_desc.VidPnSourceId = primary_source;
     primary_desc.ModeDesc.Width = requested.Width;
     primary_desc.ModeDesc.Height = requested.Height;
     primary_desc.ModeDesc.Format = requested.Format;
@@ -8727,6 +8729,21 @@ HRESULT NativeSwapChain::FillScanout(NativeTexture2D *source, NativeTexture2D *t
     return FAILED(hr) ? hr : device->operation_error;
 }
 
+/* A compositor output scans out on the source of the display holding its window. */
+static D3DDDI_VIDEO_PRESENT_SOURCE_ID NativeWindowSource(HWND window)
+{
+    MONITORINFOEXW monitor = {};
+    monitor.cbSize = sizeof(monitor);
+    if (!GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTOPRIMARY), reinterpret_cast<MONITORINFO *>(&monitor))) return 0;
+    D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME open = {};
+    lstrcpynW(open.DeviceName, monitor.szDevice, ARRAYSIZE(open.DeviceName));
+    if (D3DKMTOpenAdapterFromGdiDisplayName(&open) < 0) return 0;
+    D3DKMT_CLOSEADAPTER close = {};
+    close.hAdapter = open.hAdapter;
+    D3DKMTCloseAdapter(&close);
+    return open.VidPnSourceId;
+}
+
 HRESULT STDMETHODCALLTYPE NativeDevice::create_swapchain(IDXGIFactory *factory, HWND window,
         const DXGI_SWAP_CHAIN_DESC1 *requested, const DXGI_SWAP_CHAIN_FULLSCREEN_DESC *fullscreen,
         IDXGIOutput *output, IDXGISwapChain1 **out)
@@ -8757,6 +8774,7 @@ HRESULT STDMETHODCALLTYPE NativeDevice::create_swapchain(IDXGIFactory *factory, 
         if (window) GetWindowRect(window, &swapchain->windowed_rect);
         swapchain->composition = !window;
         swapchain->primary = window && GetPropW(window, DWM_PROP_GPU_OUTPUT) != NULL;
+        if (swapchain->primary) swapchain->primary_source = NativeWindowSource(window);
         DXGI_SWAP_CHAIN_DESC1 desc = *requested;
         RECT client = {};
         hr = !window || GetClientRect(window, &client) ? S_OK : DXGI_ERROR_INVALID_CALL;
@@ -8927,8 +8945,7 @@ HRESULT NativeSwapChain::PresentMeasured(UINT interval, UINT flags, const DXGI_P
         if (!primary) return S_OK;
         D3DKMT_CHECKVIDPNEXCLUSIVEOWNERSHIP check = {};
         check.hAdapter = device->km_adapter;
-        /* Native compositor scanout currently targets the primary source. */
-        check.VidPnSourceId = 0;
+        check.VidPnSourceId = primary_source;
         NTSTATUS status = D3DKMTCheckVidPnExclusiveOwnership(&check);
         if (status == STATUS_GRAPHICS_PRESENT_OCCLUDED) return DXGI_STATUS_OCCLUDED;
         if (status == STATUS_SUCCESS) return S_OK;

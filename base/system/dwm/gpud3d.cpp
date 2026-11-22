@@ -150,10 +150,25 @@ struct RepairSet
     ULONG Count;
 };
 
+/* A monitor other than the primary one, composed from its part of the canvas. */
+struct ExtraOutput
+{
+    HWND Window;
+    IDXGISwapChain1 *SwapChain;
+    ID3D11Texture2D *BackBuffer;
+    RECT Rect;
+    ULONG PresentedBuffers;
+    BOOL Registered;
+};
+
 struct Compositor
 {
     HMODULE Runtime, Dxgi, Compiler, TraceProvider;
     HWND Window;
+    /* The primary monitor's part of the canvas, which Window, SwapChain and BackBuffer show. */
+    RECT OutputRect;
+    ExtraOutput Extras[DWM_MAX_GPU_OUTPUTS - 1];
+    ULONG ExtraCount;
     BOOL Registered, Active, FrameValid, WorkPending;
     LONG Width, Height;
     char Renderer[160];
@@ -933,14 +948,14 @@ BOOL BindOutput()
            CreateTexture(State.Canvas, State.Width, State.Height, TRUE);
 }
 
-BOOL CreateSwapChain(IDXGIAdapter1 *Adapter)
+BOOL CreateOutputSwapChain(IDXGIAdapter1 *Adapter, HWND Window, LONG Width, LONG Height, IDXGISwapChain1 **SwapChain)
 {
     IDXGIFactory2 *Factory = NULL;
     if (!Result(Adapter->GetParent(IID_IDXGIFactory2, (void **)&Factory), "GetFactory2"))
         return FALSE;
     DXGI_SWAP_CHAIN_DESC1 Desc = {};
-    Desc.Width = State.Width;
-    Desc.Height = State.Height;
+    Desc.Width = Width;
+    Desc.Height = Height;
     Desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
     Desc.SampleDesc.Count = 1;
     Desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -948,11 +963,190 @@ BOOL CreateSwapChain(IDXGIAdapter1 *Adapter)
     Desc.Scaling = DXGI_SCALING_STRETCH;
     Desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
     Desc.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
-    HRESULT Status = Factory->CreateSwapChainForHwnd(State.Device, State.Window, &Desc, NULL, NULL, &State.SwapChain);
+    HRESULT Status = Factory->CreateSwapChainForHwnd(State.Device, Window, &Desc, NULL, NULL, SwapChain);
     if (SUCCEEDED(Status))
-        Factory->MakeWindowAssociation(State.Window, DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES);
+        Factory->MakeWindowAssociation(Window, DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES);
     Release(Factory);
     return Result(Status, "CreateSwapChainForHwnd");
+}
+
+BOOL CreateSwapChain(IDXGIAdapter1 *Adapter)
+{
+    return CreateOutputSwapChain(Adapter, State.Window, State.OutputRect.right - State.OutputRect.left,
+                                 State.OutputRect.bottom - State.OutputRect.top, &State.SwapChain);
+}
+
+/* The monitors in screen and canvas coordinates, the primary one first. */
+struct MonitorLayout
+{
+    RECT Screen[DWM_MAX_GPU_OUTPUTS];
+    RECT Canvas[DWM_MAX_GPU_OUTPUTS];
+    WCHAR Device[DWM_MAX_GPU_OUTPUTS][CCHDEVICENAME];
+    ULONG Count;
+};
+
+struct MonitorScan
+{
+    MONITORINFOEXW Found[8];
+    ULONG Count;
+};
+
+static BOOL CALLBACK AddMonitor(HMONITOR Monitor, HDC, LPRECT, LPARAM Param)
+{
+    MonitorScan *Scan = (MonitorScan *)Param;
+    if (Scan->Count == ARRAYSIZE(Scan->Found))
+        return FALSE;
+    MONITORINFOEXW &Info = Scan->Found[Scan->Count];
+    ZeroMemory(&Info, sizeof(Info));
+    Info.cbSize = sizeof(Info);
+    if (GetMonitorInfoW(Monitor, (MONITORINFO *)&Info))
+        ++Scan->Count;
+    return TRUE;
+}
+
+static void AddLayoutMonitor(MonitorLayout &Layout, const MONITORINFOEXW &Info, LONG OriginX, LONG OriginY)
+{
+    RECT Canvas = Info.rcMonitor, Bounds = {0, 0, State.Width, State.Height};
+    OffsetRect(&Canvas, -OriginX, -OriginY);
+    if (Layout.Count == ARRAYSIZE(Layout.Screen) || !IntersectRect(&Canvas, &Canvas, &Bounds))
+        return;
+    Layout.Screen[Layout.Count] = Info.rcMonitor;
+    Layout.Screen[Layout.Count].right = Layout.Screen[Layout.Count].left + (Canvas.right - Canvas.left);
+    Layout.Screen[Layout.Count].bottom = Layout.Screen[Layout.Count].top + (Canvas.bottom - Canvas.top);
+    Layout.Canvas[Layout.Count] = Canvas;
+    lstrcpynW(Layout.Device[Layout.Count], Info.szDevice, CCHDEVICENAME);
+    ++Layout.Count;
+}
+
+static void ReadMonitorLayout(MonitorLayout &Layout)
+{
+    MonitorScan Scan = {};
+    LONG OriginX = 0, OriginY = 0;
+    ZeroMemory(&Layout, sizeof(Layout));
+    if (GetSystemMetrics(SM_CXVIRTUALSCREEN) == State.Width && GetSystemMetrics(SM_CYVIRTUALSCREEN) == State.Height)
+    {
+        OriginX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        OriginY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        EnumDisplayMonitors(NULL, NULL, AddMonitor, (LPARAM)&Scan);
+    }
+    for (ULONG Index = 0; Index < Scan.Count; ++Index)
+        if (Scan.Found[Index].dwFlags & MONITORINFOF_PRIMARY)
+            AddLayoutMonitor(Layout, Scan.Found[Index], OriginX, OriginY);
+    if (Layout.Count == 0)
+    {
+        /* Without the virtual screen's monitors the canvas is the primary monitor's. */
+        SetRect(&Layout.Screen[0], 0, 0, State.Width, State.Height);
+        SetRect(&Layout.Canvas[0], 0, 0, State.Width, State.Height);
+        Layout.Count = 1;
+        return;
+    }
+    for (ULONG Index = 0; Index < Scan.Count; ++Index)
+        if (!(Scan.Found[Index].dwFlags & MONITORINFOF_PRIMARY))
+            AddLayoutMonitor(Layout, Scan.Found[Index], OriginX, OriginY);
+}
+
+static void DestroyExtraOutput(ULONG Index)
+{
+    ExtraOutput &Output = State.Extras[Index];
+    if (Output.Registered)
+    {
+        DWM_GPU_OUTPUT Request = {};
+        Request.StructSize = sizeof(Request);
+        Request.Output = Index + 1;
+        NtUserCallOneParam((DWORD_PTR)&Request, DWM_ROUTINE_SETGPUOUTPUT);
+    }
+    Release(Output.BackBuffer);
+    Release(Output.SwapChain);
+    if (Output.Window != NULL)
+    {
+        RemovePropW(Output.Window, DWM_PROP_GPU_OUTPUT);
+        DestroyWindow(Output.Window);
+    }
+    ZeroMemory(&Output, sizeof(Output));
+}
+
+static void DestroyExtraOutputs()
+{
+    for (ULONG Index = 0; Index < State.ExtraCount; ++Index)
+        DestroyExtraOutput(Index);
+    State.ExtraCount = 0;
+}
+
+/* Every further monitor this adapter scans out gets its own output. */
+static void CreateExtraOutputs(IDXGIAdapter1 *Adapter, const MonitorLayout &Layout)
+{
+    for (ULONG Monitor = 1; Monitor < Layout.Count && State.ExtraCount < ARRAYSIZE(State.Extras); ++Monitor)
+    {
+        /* TODO: a monitor on another adapter needs a device of that adapter */
+        if (!ScansOutOutput(Layout.Device[Monitor], State.AdapterLuid))
+        {
+            char Message[160];
+            _snprintf(Message, sizeof(Message), "DWM: %ls is scanned out by another adapter\n", Layout.Device[Monitor]);
+            Message[sizeof(Message) - 1] = 0;
+            OutputDebugStringA(Message);
+            continue;
+        }
+        ULONG Index = State.ExtraCount;
+        ExtraOutput &Output = State.Extras[Index];
+        const RECT &Screen = Layout.Screen[Monitor];
+        LONG Width = Screen.right - Screen.left, Height = Screen.bottom - Screen.top;
+        Output.Rect = Layout.Canvas[Monitor];
+        Output.Window = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT,
+            L"DwmD3dCompositor", L"", WS_POPUP, Screen.left, Screen.top, Width, Height, NULL, NULL,
+            GetModuleHandleW(NULL), NULL);
+        DWM_GPU_OUTPUT Request = {};
+        Request.StructSize = sizeof(Request);
+        Request.Output = Index + 1;
+        Request.Window = (ULONGLONG)(ULONG_PTR)Output.Window;
+        Request.Width = Width;
+        Request.Height = Height;
+        const char *Failed = NULL;
+        LONG Claim = 0;
+        if (Output.Window == NULL || !SetPropW(Output.Window, DWM_PROP_GPU_OUTPUT, (HANDLE)1))
+            Failed = "window";
+        else if ((Claim = (LONG)NtUserCallOneParam((DWORD_PTR)&Request, DWM_ROUTINE_SETGPUOUTPUT)) < 0)
+            Failed = "claim";
+        if (Failed == NULL)
+        {
+            Output.Registered = TRUE;
+            if (!SetWindowPos(Output.Window, HWND_TOPMOST, Screen.left, Screen.top, Width, Height,
+                              SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW))
+                Failed = "position";
+            else if (!CreateOutputSwapChain(Adapter, Output.Window, Width, Height, &Output.SwapChain) ||
+                     !Result(Output.SwapChain->GetBuffer(0, IID_ID3D11Texture2D, (void **)&Output.BackBuffer),
+                             "GetBuffer"))
+                Failed = "swapchain";
+        }
+        if (Failed != NULL)
+        {
+            char Message[160];
+            _snprintf(Message, sizeof(Message), "DWM: no output for %ls: %s failed, status 0x%08lx\n",
+                      Layout.Device[Monitor], Failed, (ULONG)Claim);
+            Message[sizeof(Message) - 1] = 0;
+            OutputDebugStringA(Message);
+            DestroyExtraOutput(Index);
+            continue;
+        }
+        ++State.ExtraCount;
+        char Message[160];
+        _snprintf(Message, sizeof(Message), "DWM: output %lu composes %ls, %ldx%ld at %ld,%ld\n", Index + 1,
+                  Layout.Device[Monitor], Width, Height, Screen.left, Screen.top);
+        Message[sizeof(Message) - 1] = 0;
+        OutputDebugStringA(Message);
+    }
+}
+
+static IDXGIAdapter1 *DeviceAdapter()
+{
+    IDXGIDevice *DxgiDevice = NULL;
+    IDXGIAdapter *Adapter = NULL;
+    IDXGIAdapter1 *Adapter1 = NULL;
+    if (SUCCEEDED(State.Device->QueryInterface(IID_IDXGIDevice, (void **)&DxgiDevice)) &&
+        SUCCEEDED(DxgiDevice->GetAdapter(&Adapter)))
+        Adapter->QueryInterface(IID_IDXGIAdapter1, (void **)&Adapter1);
+    Release(Adapter);
+    Release(DxgiDevice);
+    return Adapter1;
 }
 
 Surface *FindSurface(const DWM_WIN *Window, BOOL Client)
@@ -1657,6 +1851,11 @@ DwmD3dInitialize(LONG Width, LONG Height)
         return FALSE;
     State.Width = Width;
     State.Height = Height;
+    MonitorLayout Layout;
+    ReadMonitorLayout(Layout);
+    const RECT &Primary = Layout.Screen[0];
+    const LONG OutputWidth = Primary.right - Primary.left, OutputHeight = Primary.bottom - Primary.top;
+    State.OutputRect = Layout.Canvas[0];
     WNDCLASSEXW Class = {};
     Class.cbSize = sizeof(Class);
     Class.lpfnWndProc = DefWindowProcW;
@@ -1665,14 +1864,15 @@ DwmD3dInitialize(LONG Width, LONG Height)
     if (!RegisterClassExW(&Class) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
         return FALSE;
     State.Window = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT,
-        Class.lpszClassName, L"", WS_POPUP, 0, 0, Width, Height, NULL, NULL, Class.hInstance, NULL);
+        Class.lpszClassName, L"", WS_POPUP, Primary.left, Primary.top, OutputWidth, OutputHeight, NULL, NULL,
+        Class.hInstance, NULL);
     if (State.Window == NULL)
         return FALSE;
     DWM_GPU_OUTPUT Output = {};
     Output.StructSize = sizeof(Output);
     Output.Window = (ULONGLONG)(ULONG_PTR)State.Window;
-    Output.Width = Width;
-    Output.Height = Height;
+    Output.Width = OutputWidth;
+    Output.Height = OutputHeight;
     if (!SetPropW(State.Window, DWM_PROP_GPU_OUTPUT, (HANDLE)1) ||
         (LONG)NtUserCallOneParam((DWORD_PTR)&Output, DWM_ROUTINE_SETGPUOUTPUT) < 0)
     {
@@ -1680,7 +1880,7 @@ DwmD3dInitialize(LONG Width, LONG Height)
         return FALSE;
     }
     State.Registered = TRUE;
-    if (!SetWindowPos(State.Window, HWND_TOPMOST, 0, 0, Width, Height,
+    if (!SetWindowPos(State.Window, HWND_TOPMOST, Primary.left, Primary.top, OutputWidth, OutputHeight,
         SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW))
     {
         DwmD3dShutdown();
@@ -1698,6 +1898,7 @@ DwmD3dInitialize(LONG Width, LONG Height)
         /* Without the interface every client is composed. */
         if (FAILED(State.SwapChain->QueryInterface(IID_IDwmOverlaySwapChain, (void **)&State.OverlayChain)))
             State.OverlayChain = NULL;
+        CreateExtraOutputs(Adapter, Layout);
     }
     Release(Adapter);
     if (!Success)
@@ -1727,6 +1928,7 @@ DwmD3dShutdown(void)
         State.Context->ClearState();
         State.Context->Flush();
     }
+    DestroyExtraOutputs();
     if (State.Registered)
     {
         DWM_GPU_OUTPUT Output = {};
@@ -1795,6 +1997,7 @@ DwmD3dResize(LONG Width, LONG Height)
         return TRUE;
 
     FinishGpuReads();
+    DestroyExtraOutputs();
     State.Context->ClearState();
     State.Context->Flush();
     for (ULONG Index = 0; Index < ARRAYSIZE(State.Surfaces); ++Index)
@@ -1878,22 +2081,34 @@ DwmD3dResize(LONG Width, LONG Height)
     State.ClientCopies = Kept.ClientCopies;
     State.Width = Width;
     State.Height = Height;
+    MonitorLayout Layout;
+    ReadMonitorLayout(Layout);
+    const RECT &Primary = Layout.Screen[0];
+    const LONG OutputWidth = Primary.right - Primary.left, OutputHeight = Primary.bottom - Primary.top;
+    State.OutputRect = Layout.Canvas[0];
 
     /* The output is claimed for one size: give the claim up and take it again for the new one. */
     DWM_GPU_OUTPUT Output = {};
     Output.StructSize = sizeof(Output);
     BOOL Success = (LONG)NtUserCallOneParam((DWORD_PTR)&Output, DWM_ROUTINE_SETGPUOUTPUT) >= 0 &&
-        SetWindowPos(State.Window, HWND_TOPMOST, 0, 0, Width, Height,
+        SetWindowPos(State.Window, HWND_TOPMOST, Primary.left, Primary.top, OutputWidth, OutputHeight,
                      SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
     if (Success)
     {
         Output.Window = (ULONGLONG)(ULONG_PTR)State.Window;
-        Output.Width = Width;
-        Output.Height = Height;
+        Output.Width = OutputWidth;
+        Output.Height = OutputHeight;
         State.Registered = (LONG)NtUserCallOneParam((DWORD_PTR)&Output, DWM_ROUTINE_SETGPUOUTPUT) >= 0;
         Success = State.Registered &&
-            Result(State.SwapChain->ResizeBuffers(0, Width, Height, DXGI_FORMAT_UNKNOWN, 0), "ResizeBuffers") &&
+            Result(State.SwapChain->ResizeBuffers(0, OutputWidth, OutputHeight, DXGI_FORMAT_UNKNOWN, 0), "ResizeBuffers") &&
             BindOutput();
+    }
+    if (Success)
+    {
+        IDXGIAdapter1 *Adapter = DeviceAdapter();
+        if (Adapter != NULL)
+            CreateExtraOutputs(Adapter, Layout);
+        Release(Adapter);
     }
     if (!Success)
     {
@@ -2044,8 +2259,8 @@ SelectOverlays(void)
     for (ULONG Index = 0; Index < State.Scene.Count; ++Index)
     {
         const DWM_WIN *Window = &State.Scene.Windows[Index];
-        RECT Rect;
-        if (!OverlayClient(Index, &Rect))
+        RECT Rect, Inside;
+        if (!OverlayClient(Index, &Rect) || !IntersectRect(&Inside, &Rect, &State.OutputRect) || !EqualRect(&Inside, &Rect))
             continue;
         ClientSource *Source = ImportClientSource(Window);
         Texture *Image = Import(Window, TRUE);
@@ -2563,40 +2778,97 @@ DwmD3dDrawPointer(const RECT *Rect)
                  State.InvertBlend));
 }
 
+/* A canvas part in an output's coordinates, grown to whole 64-pixel blocks. */
+static BOOL OutputBlock(const RECT &Output, RECT Part, RECT *Block)
+{
+    if (!IntersectRect(&Part, &Part, &Output))
+        return FALSE;
+    OffsetRect(&Part, -Output.left, -Output.top);
+    SetRect(Block, Part.left & ~63, Part.top & ~63, min((Part.right + 63) & ~63, Output.right - Output.left),
+            min((Part.bottom + 63) & ~63, Output.bottom - Output.top));
+    return TRUE;
+}
+
+static void CopyBlock(ID3D11Texture2D *Target, const RECT &Output, const RECT &Block)
+{
+    D3D11_BOX Box = {(UINT)(Block.left + Output.left), (UINT)(Block.top + Output.top), 0,
+                     (UINT)(Block.right + Output.left), (UINT)(Block.bottom + Output.top), 1};
+    State.Context->CopySubresourceRegion(Target, 0, Block.left, Block.top, 0, State.Canvas.Resource, 0, &Box);
+}
+
+/* The back buffer was presented two frames ago: it needs this frame's and
+ * the previous frame's repair, and each buffer of the two-buffer chain is
+ * filled whole once. The canvas holds the complete frame, so copying whole
+ * 64-pixel blocks is exact and lets tiled GPUs store whole tiles without
+ * shading or loading the destination. */
+static void CopyOutput(ID3D11Texture2D *Target, const RECT &Output, ULONG PresentedBuffers)
+{
+    RepairSet Copy = {};
+    RECT Block;
+    if (PresentedBuffers < 2)
+    {
+        SetRect(&Block, 0, 0, Output.right - Output.left, Output.bottom - Output.top);
+        AddRepair(Copy, Block);
+    }
+    for (ULONG Index = 0; Index < State.Repair.Count + State.PreviousRepair.Count; ++Index)
+    {
+        const RECT &Part = Index < State.Repair.Count ? State.Repair.Parts[Index] :
+                                                        State.PreviousRepair.Parts[Index - State.Repair.Count];
+        if (OutputBlock(Output, Part, &Block))
+            AddRepair(Copy, Block);
+    }
+    for (ULONG Index = 0; Index < Copy.Count; ++Index)
+        CopyBlock(Target, Output, Copy.Parts[Index]);
+}
+
+/* This frame's repair in an output's coordinates. */
+static void OutputDamage(const RECT &Output, RepairSet &Damage)
+{
+    Damage.Count = 0;
+    for (ULONG Index = 0; Index < State.Repair.Count; ++Index)
+    {
+        RECT Part;
+        if (!IntersectRect(&Part, &State.Repair.Parts[Index], &Output))
+            continue;
+        OffsetRect(&Part, -Output.left, -Output.top);
+        AddRepair(Damage, Part);
+    }
+}
+
+/* Further monitors show the same frame; one that refused it is repainted whole when it next accepts one. */
+static BOOL PresentExtraOutputs()
+{
+    for (ULONG Index = 0; Index < State.ExtraCount; ++Index)
+    {
+        ExtraOutput &Output = State.Extras[Index];
+        RepairSet Damage;
+        OutputDamage(Output.Rect, Damage);
+        DXGI_PRESENT_PARAMETERS Present = {};
+        Present.DirtyRectsCount = Damage.Count;
+        Present.pDirtyRects = Damage.Parts;
+        HRESULT Status = Output.SwapChain->Present1(1, 0, &Present);
+        if (Status == DXGI_ERROR_DEVICE_REMOVED || Status == DXGI_ERROR_DEVICE_RESET)
+            return Result(Status, "Present1(output)");
+        Output.PresentedBuffers = Status == S_OK ? min(Output.PresentedBuffers + 1, 2u) : 0;
+    }
+    return TRUE;
+}
+
 DWM_GPU_RESULT
 DwmD3dEnd(void)
 {
     if (!State.Active)
         return DWM_GPU_FAILED;
-    /* The back buffer was presented two frames ago: it needs this frame's
-     * and the previous frame's repair, and each buffer of the two-buffer
-     * chain is filled whole once. The canvas holds the complete frame, so
-     * copying whole 64-pixel blocks is exact and lets tiled GPUs store
-     * whole tiles without shading or loading the destination. */
-    RECT Full = {0, 0, State.Width, State.Height};
-    RepairSet Copy = {};
-    if (State.PresentedBuffers < 2)
-        AddRepair(Copy, Full);
-    for (ULONG Index = 0; Index < State.Repair.Count + State.PreviousRepair.Count; ++Index)
-    {
-        RECT Part = Index < State.Repair.Count ? State.Repair.Parts[Index] :
-                                                 State.PreviousRepair.Parts[Index - State.Repair.Count];
-        SetRect(&Part, Part.left & ~63, Part.top & ~63,
-                min((Part.right + 63) & ~63, State.Width), min((Part.bottom + 63) & ~63, State.Height));
-        AddRepair(Copy, Part);
-    }
     UnbindTextures();
-    for (ULONG Index = 0; Index < Copy.Count; ++Index)
-    {
-        const RECT &Part = Copy.Parts[Index];
-        D3D11_BOX Box = {(UINT)Part.left, (UINT)Part.top, 0, (UINT)Part.right, (UINT)Part.bottom, 1};
-        State.Context->CopySubresourceRegion(State.BackBuffer, 0, Part.left, Part.top, 0,
-                                             State.Canvas.Resource, 0, &Box);
-    }
+    CopyOutput(State.BackBuffer, State.OutputRect, State.PresentedBuffers);
+    for (ULONG Index = 0; Index < State.ExtraCount; ++Index)
+        CopyOutput(State.Extras[Index].BackBuffer, State.Extras[Index].Rect, State.Extras[Index].PresentedBuffers);
     State.WorkPending = TRUE;
+    RepairSet Damage;
+    OutputDamage(State.OutputRect, Damage);
     DXGI_PRESENT_PARAMETERS Present = {};
-    Present.DirtyRectsCount = State.Repair.Count;
-    Present.pDirtyRects = State.Repair.Parts;
+    Present.DirtyRectsCount = Damage.Count;
+    Present.pDirtyRects = Damage.Parts;
     DPT_SCOPE PresentTrace = DptBegin(&g_DwmPresentTrace, DPT_KMT_PRESENT);
     HRESULT Status = E_FAIL;
     ULONG Scanout[DWM_MAX_OVERLAY_PLANES], ScanoutCount = 0;
@@ -2609,6 +2881,7 @@ DwmD3dEnd(void)
             Planes[Index].Texture = State.Overlays[Index].Resource;
             SetRect(&Planes[Index].Source, 0, 0, Client.right - Client.left, Client.bottom - Client.top);
             Planes[Index].Destination = Client;
+            OffsetRect(&Planes[Index].Destination, -State.OutputRect.left, -State.OutputRect.top);
             Scanout[Index] = State.Overlays[Index].SurfaceId;
         }
         Status = State.OverlayChain->PresentWithOverlays(1, 0, &Present, State.OverlayCount, Planes);
@@ -2631,25 +2904,25 @@ DwmD3dEnd(void)
                 DrawLayer(State.Overlays[Index].Window, NULL, TRUE, State.Scene.Space.OriginX,
                           State.Scene.Space.OriginY, State.Overlays[Index].Image);
                 AddRepair(State.Repair, Client);
-                RECT Part;
-                SetRect(&Part, Client.left & ~63, Client.top & ~63,
-                        min((Client.right + 63) & ~63, State.Width), min((Client.bottom + 63) & ~63, State.Height));
-                D3D11_BOX Box = {(UINT)Part.left, (UINT)Part.top, 0, (UINT)Part.right, (UINT)Part.bottom, 1};
+                RECT Block;
                 UnbindTextures();
-                State.Context->CopySubresourceRegion(State.BackBuffer, 0, Part.left, Part.top, 0,
-                                                     State.Canvas.Resource, 0, &Box);
+                if (OutputBlock(State.OutputRect, Client, &Block))
+                    CopyBlock(State.BackBuffer, State.OutputRect, Block);
             }
             State.Clip = Clip;
             State.Draw = Draw;
             State.OverlayCount = 0;
-            Present.DirtyRectsCount = State.Repair.Count;
-            Present.pDirtyRects = State.Repair.Parts;
+            OutputDamage(State.OutputRect, Damage);
+            Present.DirtyRectsCount = Damage.Count;
+            Present.pDirtyRects = Damage.Parts;
             Status = State.SwapChain->Present1(1, 0, &Present);
         }
     }
     else
         Status = State.SwapChain->Present1(1, 0, &Present);
     DptEnd(&g_DwmPresentTrace, PresentTrace, SUCCEEDED(Status), 0);
+    if (!PresentExtraOutputs())
+        return DWM_GPU_FAILED;
     if (Status == S_OK)
     {
         /* Frames on overlay planes stay in use until the next flip. */

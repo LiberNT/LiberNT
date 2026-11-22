@@ -235,6 +235,32 @@ D3dkmtOpenAdapterByCapturedNtDeviceName(
     return STATUS_SUCCESS;
 }
 
+/* The adapter and source a display device scans out; a device that is not a video present source of an adapter
+ * scans out the adapter's first source */
+NTSTATUS
+D3dkmtQueryDisplayDeviceSource(
+    _In_ PCWSTR DeviceName,
+    _Out_ LUID *AdapterLuid,
+    _Out_ ULONG *VidPnSourceId)
+{
+    D3DDDI_VIDEO_PRESENT_SOURCE_ID Source;
+    D3DKMT_HANDLE Adapter;
+    NTSTATUS Status;
+
+    Status = D3dkmtOpenAdapterByDisplayDevice(DeviceName, &Adapter, AdapterLuid, &Source);
+    if (!NT_SUCCESS(Status))
+    {
+        Status = D3dkmtOpenAdapterByCapturedNtDeviceName(DeviceName, &Adapter, AdapterLuid);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Source = 0;
+    }
+    ASSERT(Adapter != 0);
+    D3dkmtCloseCapturedAdapter(Adapter);
+    *VidPnSourceId = Source;
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 APIENTRY
 D3DKMTOpenAdapterFromGdiDisplayName(
@@ -1109,13 +1135,15 @@ NtGdiDdDDIPresent(_In_ D3DKMT_PRESENT* unnamedParam1)
     }
 
     /* Mesa reports a normal windowed blit for every WGL swap. The attached
-     * compositor registers exactly one screen-sized output HWND; promote only
-     * that trusted, complete surface to a flip. dxgkrnl then retires the V3D
-     * fence before programming the allocation for scanout. */
+     * compositor registers one monitor-sized output HWND per monitor; promote
+     * only such a trusted, complete surface to a flip on that monitor's
+     * source. dxgkrnl then retires the V3D fence before programming the
+     * allocation for scanout. */
     {
+        ULONG OutputSource = 0;
         BOOL GpuOutput = IntCompositionIsGpuOutputPresent(
                              Captured.hWindow, &Captured.SrcRect,
-                             &Captured.DstRect);
+                             &Captured.DstRect, &OutputSource);
 
         if (Captured.Flags.Blt && !Captured.Flags.Flip &&
             Captured.hSource != 0 && Captured.hDestination == 0 &&
@@ -1125,7 +1153,8 @@ NtGdiDdDDIPresent(_In_ D3DKMT_PRESENT* unnamedParam1)
             Captured.Flags.Blt = 0;
             Captured.Flags.Flip = 1;
             Captured.Flags.RestrictVidPnSource = 1;
-            Captured.VidPnSourceId = 0;
+            Captured.VidPnSourceId = OutputSource;
+            Captured.DstRect = Captured.SrcRect;
         }
     }
 
@@ -2354,7 +2383,7 @@ D3dkmtMpoSubmit(
     if (!Request->HaveBase || Request->Overlays.OverlayCount == 0 || Window == NULL ||
         Request->VidPnSourceId != 0 ||
         Request->BroadcastContextCount > D3DDDI_MAX_BROADCAST_CONTEXT ||
-        !IntCompositionIsGpuOutputPresent(Window, &Request->BaseSrcRect, &Request->BaseDstRect))
+        !IntCompositionIsGpuOutputPresent(Window, &Request->BaseSrcRect, &Request->BaseDstRect, NULL))
     {
         return STATUS_INVALID_PARAMETER;
     }

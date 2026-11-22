@@ -478,13 +478,16 @@ typedef struct _DWM_ATTACH
     HANDLE hVblank;      /* out : reserved, always NULL            */
 } DWM_ATTACH, *PDWM_ATTACH;
 
-/* Registers the one full-screen swapchain whose completed GPU allocations
- * the attached compositor is allowed to flip directly to the VidPn source.
- * A zero Window unregisters it. */
+/* Registers, per output, the monitor-sized swapchain whose completed GPU
+ * allocations the attached compositor is allowed to flip directly to the
+ * VidPn source scanning that monitor out. Output 0 is the primary monitor.
+ * A zero Window unregisters the output. */
+#define DWM_MAX_GPU_OUTPUTS 4
+
 typedef struct _DWM_GPU_OUTPUT
 {
     ULONG StructSize;
-    ULONG Reserved;
+    ULONG Output;
     ULONGLONG Window;
     ULONG Width;
     ULONG Height;
