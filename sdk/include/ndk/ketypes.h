@@ -964,8 +964,11 @@ typedef struct _KDPC_DATA
     volatile LONG DpcQueueDepth;
     ULONG DpcCount;
     PKDPC ActiveDpc;
+#ifdef _WIN64
+    /* 32-bit kernels end the record at ActiveDpc */
     ULONG LongDpcPresent;
     ULONG Padding;
+#endif
 } KDPC_DATA, *PKDPC_DATA;
 
 //
