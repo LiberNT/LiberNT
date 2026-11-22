@@ -787,7 +787,7 @@ BOOLEAN
 WinLdrCheckForLoadedDll(
     IN PLOADER_PARAMETER_BLOCK LoaderBlock,
     IN PCH DllName,
-    OUT PLDR_DATA_TABLE_ENTRY *LoadedEntry)
+    OUT PKLDR_DATA_TABLE_ENTRY *LoadedEntry)
 {
     /* Delegate to the generic PE loader helper which performs
        proper case-insensitive comparison against UNICODE names. */
