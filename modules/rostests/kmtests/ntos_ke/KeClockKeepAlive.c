@@ -96,8 +96,11 @@ START_TEST(KeClockKeepAlive)
 {
     KAFFINITY PreviousAffinity;
     ULONG Processor;
-    LONG Held;
-    LONG Released;
+    ULONGLONG First, Last, Now;
+    LONG Held = 0;
+    LONG Released = 0;
+    ULONG Attempt, Step;
+    BOOLEAN Ticked;
     KIRQL OldIrql;
     PKPRCB Prcb;
 
@@ -121,18 +124,44 @@ START_TEST(KeClockKeepAlive)
     ok(!Prcb->ClockOwner, "Only the clock owner is left to hold off\n");
 #endif
 
-    KeRaiseIrql(HIGH_LEVEL, &OldIrql);
-    KeStallExecutionProcessor(100 * 1000);
-    Held = Prcb->ClockKeepAlive;
-    KeLowerIrql(OldIrql);
+    /* The clock owner can be waiting for this processor to answer it, and its first tick after a stop counts nothing: a hold is taken only if the clock went on for two periods after a tick seen during it */
+    for (Attempt = 0; Attempt < 8; Attempt++)
+    {
+        KeRaiseIrql(HIGH_LEVEL, &OldIrql);
+        First = Last = KeQueryInterruptTime();
+        Ticked = FALSE;
+        for (Step = 0; Step < 100; Step++)
+        {
+            KeStallExecutionProcessor(1000);
+            Now = KeQueryInterruptTime();
+            if (Now != Last)
+            {
+                if (!Ticked)
+                    First = Now;
+                Ticked = TRUE;
+                Last = Now;
+            }
+        }
+        Held = Prcb->ClockKeepAlive;
+        KeLowerIrql(OldIrql);
 
-    KeStallExecutionProcessor(50 * 1000);
-    Released = Prcb->ClockKeepAlive;
+        KeStallExecutionProcessor(50 * 1000);
+        Released = Prcb->ClockKeepAlive;
+        if (Last - First >= 2ULL * KeQueryTimeIncrement())
+            break;
+    }
 
     KeRevertToUserAffinityThreadEx(PreviousAffinity);
 
-    ok(Held >= 1, "Periods counted while the clock was held off: %ld\n", Held);
-    ok(Released <= 1, "Periods counted once the clock was taken again: %ld\n", Released);
+    if (Attempt == 8)
+    {
+        skip(FALSE, "The clock did not run while processor %lu was held\n", Processor);
+    }
+    else
+    {
+        ok(Held >= 1, "Periods counted while the clock was held off: %ld\n", Held);
+        ok(Released <= 1, "Periods counted once the clock was taken again: %ld\n", Released);
+    }
 
     TestSleepingWatcher();
 }
