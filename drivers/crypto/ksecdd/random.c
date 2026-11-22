@@ -241,7 +241,7 @@ KsecReadMachineSpecificCounters(
     }
 #endif
 #elif defined(_M_ARM)
-    MachineSpecificCounters->Ccr = (ULONG)ReadTimeStampCounter();
+    *MachineSpecificCounters = (ULONG)ReadTimeStampCounter();
 #elif defined(_M_ARM64) || defined(__aarch64__)
     {
         ULONG64 cntvct;
