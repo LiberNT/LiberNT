@@ -158,7 +158,7 @@ DWORD WINAPI phoneGetLamp(HPHONE hPhone, DWORD dwButtonLampID,
 /***********************************************************************
  *              phoneGetMessage (TAPI32.@)
  */
-DWORD WINAPI phoneGetMessage(HPHONEAPP hPhoneApp, LPPHONEMESSAGE lpMessage, DWORD dwTimeout)
+LONG WINAPI phoneGetMessage(HPHONEAPP hPhoneApp, LPPHONEMESSAGE lpMessage, DWORD dwTimeout)
 {
     FIXME("(%p, %p, %08lx): stub.\n", hPhoneApp, lpMessage, dwTimeout);
     return 0;
@@ -216,7 +216,7 @@ DWORD WINAPI phoneInitialize(LPHPHONEAPP lphPhoneApp, HINSTANCE hInstance, PHONE
 /***********************************************************************
  *              phoneInitializeiExA (TAPI32.@)
  */
-DWORD WINAPI phoneInitializeExA(LPHPHONEAPP lphPhoneApp, HINSTANCE hInstance, PHONECALLBACK lpfnCallback, LPCSTR lpszAppName, LPDWORD lpdwNumDevs, LPDWORD lpdwAPIVersion, LPPHONEINITIALIZEEXPARAMS lpPhoneInitializeExParams)
+LONG WINAPI phoneInitializeExA(LPHPHONEAPP lphPhoneApp, HINSTANCE hInstance, PHONECALLBACK lpfnCallback, LPCSTR lpszAppName, LPDWORD lpdwNumDevs, LPDWORD lpdwAPIVersion, LPPHONEINITIALIZEEXPARAMS lpPhoneInitializeExParams)
 {
     FIXME("(%p, %p, %p, %s, %p, %p, %p): stub.\n", lphPhoneApp, hInstance, lpfnCallback, lpszAppName, lpdwNumDevs, lpdwAPIVersion, lpPhoneInitializeExParams);
     *lpdwNumDevs = 0;
@@ -226,7 +226,7 @@ DWORD WINAPI phoneInitializeExA(LPHPHONEAPP lphPhoneApp, HINSTANCE hInstance, PH
 /***********************************************************************
  *              phoneInitializeiExW (TAPI32.@)
  */
-DWORD WINAPI phoneInitializeExW(LPHPHONEAPP lphPhoneApp, HINSTANCE hInstance, PHONECALLBACK lpfnCallback, LPCWSTR lpszAppName, LPDWORD lpdwNumDevs, LPDWORD lpdwAPIVersion, LPPHONEINITIALIZEEXPARAMS lpPhoneInitializeExParams)
+LONG WINAPI phoneInitializeExW(LPHPHONEAPP lphPhoneApp, HINSTANCE hInstance, PHONECALLBACK lpfnCallback, LPCWSTR lpszAppName, LPDWORD lpdwNumDevs, LPDWORD lpdwAPIVersion, LPPHONEINITIALIZEEXPARAMS lpPhoneInitializeExParams)
 {
     FIXME("(%p, %p, %p, %s, %p, %p, %p): stub.\n", lphPhoneApp, hInstance, lpfnCallback, debugstr_w(lpszAppName), lpdwNumDevs, lpdwAPIVersion, lpPhoneInitializeExParams);
     *lpdwNumDevs = 0;

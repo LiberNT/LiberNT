@@ -1171,7 +1171,7 @@ static const IDirect3DDeviceManager9Vtbl device_manager_vtbl =
     device_manager_GetVideoService,
 };
 
-BOOL WINAPI CapabilitiesRequestAndCapabilitiesReply( HMONITOR monitor, LPSTR buffer, DWORD length )
+BOOL WINAPI CapabilitiesRequestAndCapabilitiesReply( HANDLE monitor, LPSTR buffer, DWORD length )
 {
     FIXME("%p, %p, %ld: stub.\n", monitor, buffer, length);
 
@@ -1231,7 +1231,7 @@ done:
     return hr;
 }
 
-BOOL WINAPI DegaussMonitor( HMONITOR monitor )
+BOOL WINAPI DegaussMonitor( HANDLE monitor )
 {
     FIXME("(%p): stub\n", monitor);
 
@@ -1239,7 +1239,7 @@ BOOL WINAPI DegaussMonitor( HMONITOR monitor )
     return FALSE;
 }
 
-BOOL WINAPI DestroyPhysicalMonitor( HMONITOR monitor )
+BOOL WINAPI DestroyPhysicalMonitor( HANDLE monitor )
 {
     FIXME("(%p): stub\n", monitor);
 
@@ -1255,7 +1255,7 @@ BOOL WINAPI DestroyPhysicalMonitors( DWORD arraySize, LPPHYSICAL_MONITOR array )
     return FALSE;
 }
 
-BOOL WINAPI GetCapabilitiesStringLength( HMONITOR monitor, LPDWORD length )
+BOOL WINAPI GetCapabilitiesStringLength( HANDLE monitor, LPDWORD length )
 {
     FIXME("(%p, %p): stub\n", monitor, length);
 
@@ -1263,7 +1263,7 @@ BOOL WINAPI GetCapabilitiesStringLength( HMONITOR monitor, LPDWORD length )
     return FALSE;
 }
 
-BOOL WINAPI GetMonitorBrightness( HMONITOR monitor, LPDWORD minimum, LPDWORD current, LPDWORD maximum )
+BOOL WINAPI GetMonitorBrightness( HANDLE monitor, LPDWORD minimum, LPDWORD current, LPDWORD maximum )
 {
     FIXME("(%p, %p, %p, %p): stub\n", monitor, minimum, current, maximum);
 
@@ -1271,7 +1271,7 @@ BOOL WINAPI GetMonitorBrightness( HMONITOR monitor, LPDWORD minimum, LPDWORD cur
     return FALSE;
 }
 
-BOOL WINAPI GetMonitorCapabilities( HMONITOR monitor, LPDWORD capabilities, LPDWORD temperatures )
+BOOL WINAPI GetMonitorCapabilities( HANDLE monitor, LPDWORD capabilities, LPDWORD temperatures )
 {
     FIXME("(%p, %p, %p): stub\n", monitor, capabilities, temperatures);
 
@@ -1280,7 +1280,7 @@ BOOL WINAPI GetMonitorCapabilities( HMONITOR monitor, LPDWORD capabilities, LPDW
 }
 
 
-BOOL WINAPI GetMonitorColorTemperature( HMONITOR monitor, LPMC_COLOR_TEMPERATURE temperature )
+BOOL WINAPI GetMonitorColorTemperature( HANDLE monitor, LPMC_COLOR_TEMPERATURE temperature )
 {
     FIXME("(%p, %p): stub\n", monitor, temperature);
 
@@ -1288,7 +1288,7 @@ BOOL WINAPI GetMonitorColorTemperature( HMONITOR monitor, LPMC_COLOR_TEMPERATURE
     return FALSE;
 }
 
-BOOL WINAPI GetMonitorContrast( HMONITOR monitor, LPDWORD minimum, LPDWORD current, LPDWORD maximum )
+BOOL WINAPI GetMonitorContrast( HANDLE monitor, LPDWORD minimum, LPDWORD current, LPDWORD maximum )
 {
     FIXME("(%p, %p, %p, %p): stub\n", monitor, minimum, current, maximum);
 
@@ -1296,7 +1296,7 @@ BOOL WINAPI GetMonitorContrast( HMONITOR monitor, LPDWORD minimum, LPDWORD curre
     return FALSE;
 }
 
-BOOL WINAPI GetMonitorDisplayAreaPosition( HMONITOR monitor, MC_POSITION_TYPE type, LPDWORD minimum,
+BOOL WINAPI GetMonitorDisplayAreaPosition( HANDLE monitor, MC_POSITION_TYPE type, LPDWORD minimum,
                                            LPDWORD current, LPDWORD maximum )
 {
     FIXME("(%p, 0x%x, %p, %p, %p): stub\n", monitor, type, minimum, current, maximum);
@@ -1305,7 +1305,7 @@ BOOL WINAPI GetMonitorDisplayAreaPosition( HMONITOR monitor, MC_POSITION_TYPE ty
     return FALSE;
 }
 
-BOOL WINAPI GetMonitorDisplayAreaSize( HMONITOR monitor, MC_SIZE_TYPE type, LPDWORD minimum,
+BOOL WINAPI GetMonitorDisplayAreaSize( HANDLE monitor, MC_SIZE_TYPE type, LPDWORD minimum,
                                        LPDWORD current, LPDWORD maximum )
 {
     FIXME("(%p, 0x%x, %p, %p, %p): stub\n", monitor, type, minimum, current, maximum);
@@ -1314,7 +1314,7 @@ BOOL WINAPI GetMonitorDisplayAreaSize( HMONITOR monitor, MC_SIZE_TYPE type, LPDW
     return FALSE;
 }
 
-BOOL WINAPI GetMonitorRedGreenOrBlueDrive( HMONITOR monitor, MC_DRIVE_TYPE type, LPDWORD minimum,
+BOOL WINAPI GetMonitorRedGreenOrBlueDrive( HANDLE monitor, MC_DRIVE_TYPE type, LPDWORD minimum,
                                            LPDWORD current, LPDWORD maximum )
 {
     FIXME("(%p, 0x%x, %p, %p, %p): stub\n", monitor, type, minimum, current, maximum);
@@ -1323,7 +1323,7 @@ BOOL WINAPI GetMonitorRedGreenOrBlueDrive( HMONITOR monitor, MC_DRIVE_TYPE type,
     return FALSE;
 }
 
-BOOL WINAPI GetMonitorRedGreenOrBlueGain( HMONITOR monitor, MC_GAIN_TYPE type, LPDWORD minimum,
+BOOL WINAPI GetMonitorRedGreenOrBlueGain( HANDLE monitor, MC_GAIN_TYPE type, LPDWORD minimum,
                                           LPDWORD current, LPDWORD maximum )
 {
     FIXME("(%p, 0x%x, %p, %p, %p): stub\n", monitor, type, minimum, current, maximum);
@@ -1332,7 +1332,7 @@ BOOL WINAPI GetMonitorRedGreenOrBlueGain( HMONITOR monitor, MC_GAIN_TYPE type, L
     return FALSE;
 }
 
-BOOL WINAPI GetMonitorTechnologyType( HMONITOR monitor, LPMC_DISPLAY_TECHNOLOGY_TYPE type )
+BOOL WINAPI GetMonitorTechnologyType( HANDLE monitor, LPMC_DISPLAY_TECHNOLOGY_TYPE type )
 {
     FIXME("(%p, %p): stub\n", monitor, type);
 
@@ -1370,7 +1370,7 @@ HRESULT WINAPI GetPhysicalMonitorsFromIDirect3DDevice9( IDirect3DDevice9 *device
     return E_NOTIMPL;
 }
 
-BOOL WINAPI GetTimingReport( HMONITOR monitor, LPMC_TIMING_REPORT timingReport )
+BOOL WINAPI GetTimingReport( HANDLE monitor, LPMC_TIMING_REPORT timingReport )
 {
     FIXME("(%p, %p): stub\n", monitor, timingReport);
 
@@ -1378,7 +1378,7 @@ BOOL WINAPI GetTimingReport( HMONITOR monitor, LPMC_TIMING_REPORT timingReport )
     return FALSE;
 }
 
-BOOL WINAPI GetVCPFeatureAndVCPFeatureReply( HMONITOR monitor, BYTE vcpCode, LPMC_VCP_CODE_TYPE pvct,
+BOOL WINAPI GetVCPFeatureAndVCPFeatureReply( HANDLE monitor, BYTE vcpCode, LPMC_VCP_CODE_TYPE pvct,
                                              LPDWORD current, LPDWORD maximum )
 {
     FIXME("(%p, 0x%02x, %p, %p, %p): stub\n", monitor, vcpCode, pvct, current, maximum);
@@ -1403,7 +1403,7 @@ HRESULT WINAPI OPMGetVideoOutputsFromIDirect3DDevice9Object( IDirect3DDevice9 *d
     return E_NOTIMPL;
 }
 
-BOOL WINAPI RestoreMonitorFactoryColorDefaults( HMONITOR monitor )
+BOOL WINAPI RestoreMonitorFactoryColorDefaults( HANDLE monitor )
 {
     FIXME("(%p): stub\n", monitor);
 
@@ -1411,7 +1411,7 @@ BOOL WINAPI RestoreMonitorFactoryColorDefaults( HMONITOR monitor )
     return FALSE;
 }
 
-BOOL WINAPI RestoreMonitorFactoryDefaults( HMONITOR monitor )
+BOOL WINAPI RestoreMonitorFactoryDefaults( HANDLE monitor )
 {
     FIXME("(%p): stub\n", monitor);
 
@@ -1419,7 +1419,7 @@ BOOL WINAPI RestoreMonitorFactoryDefaults( HMONITOR monitor )
     return FALSE;
 }
 
-BOOL WINAPI SaveCurrentMonitorSettings( HMONITOR monitor )
+BOOL WINAPI SaveCurrentMonitorSettings( HANDLE monitor )
 {
     FIXME("(%p): stub\n", monitor);
 
@@ -1427,7 +1427,7 @@ BOOL WINAPI SaveCurrentMonitorSettings( HMONITOR monitor )
     return FALSE;
 }
 
-BOOL WINAPI SaveCurrentSettings( HMONITOR monitor )
+BOOL WINAPI SaveCurrentSettings( HANDLE monitor )
 {
     FIXME("(%p): stub\n", monitor);
 
@@ -1435,7 +1435,7 @@ BOOL WINAPI SaveCurrentSettings( HMONITOR monitor )
     return FALSE;
 }
 
-BOOL WINAPI SetMonitorBrightness( HMONITOR monitor, DWORD brightness )
+BOOL WINAPI SetMonitorBrightness( HANDLE monitor, DWORD brightness )
 {
     FIXME("%p, %#lx: stub.\n", monitor, brightness);
 
@@ -1443,7 +1443,7 @@ BOOL WINAPI SetMonitorBrightness( HMONITOR monitor, DWORD brightness )
     return FALSE;
 }
 
-BOOL WINAPI SetMonitorColorTemperature( HMONITOR monitor, MC_COLOR_TEMPERATURE temperature )
+BOOL WINAPI SetMonitorColorTemperature( HANDLE monitor, MC_COLOR_TEMPERATURE temperature )
 {
     FIXME("(%p, 0x%x): stub\n", monitor, temperature);
 
@@ -1451,7 +1451,7 @@ BOOL WINAPI SetMonitorColorTemperature( HMONITOR monitor, MC_COLOR_TEMPERATURE t
     return FALSE;
 }
 
-BOOL WINAPI SetMonitorContrast( HMONITOR monitor, DWORD contrast )
+BOOL WINAPI SetMonitorContrast( HANDLE monitor, DWORD contrast )
 {
     FIXME("%p, %#lx: stub.\n", monitor, contrast);
 
@@ -1459,7 +1459,7 @@ BOOL WINAPI SetMonitorContrast( HMONITOR monitor, DWORD contrast )
     return FALSE;
 }
 
-BOOL WINAPI SetMonitorDisplayAreaPosition( HMONITOR monitor, MC_POSITION_TYPE type, DWORD position )
+BOOL WINAPI SetMonitorDisplayAreaPosition( HANDLE monitor, MC_POSITION_TYPE type, DWORD position )
 {
     FIXME("%p, 0x%x, %#lx: stub.\n", monitor, type, position);
 
@@ -1467,7 +1467,7 @@ BOOL WINAPI SetMonitorDisplayAreaPosition( HMONITOR monitor, MC_POSITION_TYPE ty
     return FALSE;
 }
 
-BOOL WINAPI SetMonitorDisplayAreaSize( HMONITOR monitor, MC_SIZE_TYPE type, DWORD size )
+BOOL WINAPI SetMonitorDisplayAreaSize( HANDLE monitor, MC_SIZE_TYPE type, DWORD size )
 {
     FIXME("%p, 0x%x, %#lx: stub.\n", monitor, type, size);
 
@@ -1475,7 +1475,7 @@ BOOL WINAPI SetMonitorDisplayAreaSize( HMONITOR monitor, MC_SIZE_TYPE type, DWOR
     return FALSE;
 }
 
-BOOL WINAPI SetMonitorRedGreenOrBlueDrive( HMONITOR monitor, MC_DRIVE_TYPE type, DWORD drive )
+BOOL WINAPI SetMonitorRedGreenOrBlueDrive( HANDLE monitor, MC_DRIVE_TYPE type, DWORD drive )
 {
     FIXME("%p, 0x%x, %#lx: stub.\n", monitor, type, drive);
 
@@ -1483,7 +1483,7 @@ BOOL WINAPI SetMonitorRedGreenOrBlueDrive( HMONITOR monitor, MC_DRIVE_TYPE type,
     return FALSE;
 }
 
-BOOL WINAPI SetMonitorRedGreenOrBlueGain( HMONITOR monitor, MC_GAIN_TYPE type, DWORD gain )
+BOOL WINAPI SetMonitorRedGreenOrBlueGain( HANDLE monitor, MC_GAIN_TYPE type, DWORD gain )
 {
     FIXME("%p, 0x%x, %#lx: stub.\n", monitor, type, gain);
 
@@ -1491,7 +1491,7 @@ BOOL WINAPI SetMonitorRedGreenOrBlueGain( HMONITOR monitor, MC_GAIN_TYPE type, D
     return FALSE;
 }
 
-BOOL WINAPI SetVCPFeature( HMONITOR monitor, BYTE vcpCode, DWORD value )
+BOOL WINAPI SetVCPFeature( HANDLE monitor, BYTE vcpCode, DWORD value )
 {
     FIXME("%p, 0x%02x, %#lx: stub.\n", monitor, vcpCode, value);
 

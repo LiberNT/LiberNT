@@ -22,6 +22,7 @@
 
 #include "windef.h"
 #include "winbase.h"
+#include "winreg.h"
 #include "clusapi.h"
 #include "wine/debug.h"
 

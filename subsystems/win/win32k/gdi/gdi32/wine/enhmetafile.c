@@ -2313,7 +2313,7 @@ BOOL WINAPI PlayEnhMetaFileRecord(
 
     case EMR_NAMEDESCAPE:
     {
-        PEMRNAMEDESCAPE pemr = (PEMRNAMEDESCAPE)mr;
+        PEMRESCAPE pemr = (PEMRESCAPE)mr;
         INT rounded_size = (pemr->cjIn+3) & ~3;
         NamedEscape( hdc, (PWCHAR)&pemr->Data[rounded_size], pemr->iEsc, pemr->cjIn, (LPSTR)pemr->Data, 0, NULL );
         break;

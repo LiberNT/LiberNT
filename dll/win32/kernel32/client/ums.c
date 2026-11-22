@@ -57,7 +57,7 @@ DequeueUmsCompletionListItems(
 BOOL
 WINAPI
 EnterUmsSchedulingMode(
-    _In_ PVOID SchedulerStartupInfo)
+    _In_ PUMS_SCHEDULER_STARTUP_INFO SchedulerStartupInfo)
 {
     SetLastError(ERROR_NOT_SUPPORTED);
     return FALSE;
@@ -102,8 +102,8 @@ GetUmsCompletionListEvent(
 BOOL
 WINAPI
 QueryUmsThreadInformation(
-    _In_ PVOID UmsThread,
-    _In_ ULONG UmsThreadInfoClass,
+    _In_ PUMS_CONTEXT UmsThread,
+    _In_ UMS_THREAD_INFO_CLASS UmsThreadInfoClass,
     _Out_writes_bytes_to_(UmsThreadInformationLength, *ReturnLength) PVOID UmsThreadInformation,
     _In_ ULONG UmsThreadInformationLength,
     _Out_opt_ PULONG ReturnLength)
@@ -115,8 +115,8 @@ QueryUmsThreadInformation(
 BOOL
 WINAPI
 SetUmsThreadInformation(
-    _In_ PVOID UmsThread,
-    _In_ ULONG UmsThreadInfoClass,
+    _In_ PUMS_CONTEXT UmsThread,
+    _In_ UMS_THREAD_INFO_CLASS UmsThreadInfoClass,
     _In_ PVOID UmsThreadInformation,
     _In_ ULONG UmsThreadInformationLength)
 {

@@ -2675,12 +2675,12 @@ BOOL EMFDC_WriteEscape( WINEDC *dc_attr, INT nEscape, INT cbInput, LPSTR lpszInD
 
 BOOL EMFDC_WriteNamedEscape( WINEDC *dc_attr, PWCHAR pDriver, INT nEscape, INT cbInput, LPCSTR lpszInData)
 {
-    PEMRNAMEDESCAPE pemr;
+    PEMRESCAPE pemr;
     UINT sizestr, total, rounded_size;
     INT ret;
 
     rounded_size = (cbInput+3) & ~3;
-    total = offsetof(EMRNAMEDESCAPE,Data) + rounded_size;
+    total = offsetof(EMRESCAPE,Data) + rounded_size;
 
     total += sizestr = (UINT)((wcslen(pDriver) + 1 ) * sizeof(WCHAR));
 

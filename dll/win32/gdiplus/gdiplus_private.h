@@ -444,20 +444,7 @@ struct GpImage{
 
 #define EmfPlusObjectTableSize 64
 
-typedef enum EmfPlusObjectType
-{
-    ObjectTypeInvalid,
-    ObjectTypeBrush,
-    ObjectTypePen,
-    ObjectTypePath,
-    ObjectTypeRegion,
-    ObjectTypeImage,
-    ObjectTypeFont,
-    ObjectTypeStringFormat,
-    ObjectTypeImageAttributes,
-    ObjectTypeCustomLineCap,
-    ObjectTypeMax = ObjectTypeCustomLineCap,
-} EmfPlusObjectType;
+typedef enum ObjectType EmfPlusObjectType;
 
 /* Deserialized EmfPlusObject record. */
 struct emfplus_object {
