@@ -22,6 +22,7 @@ extern "C" {
 #endif
 
 #include <minwinbase.h>
+#include <synchapi.h>
 #include <ioapiset.h>
 #include <processthreadsapi.h>
 #include <sysinfoapi.h>
@@ -1299,7 +1300,6 @@ typedef VOID (WINAPI *PFLS_CALLBACK_FUNCTION)(PVOID);
 typedef LONG(CALLBACK *PTOP_LEVEL_EXCEPTION_FILTER)(LPEXCEPTION_POINTERS);
 typedef PTOP_LEVEL_EXCEPTION_FILTER LPTOP_LEVEL_EXCEPTION_FILTER;
 typedef void(APIENTRY *PAPCFUNC)(ULONG_PTR);
-typedef void(CALLBACK *PTIMERAPCROUTINE)(PVOID,DWORD,DWORD);
 #if (_WIN32_WINNT >= 0x0600)
 typedef DWORD (WINAPI *APPLICATION_RECOVERY_CALLBACK)(PVOID);
 #endif
@@ -3998,7 +3998,6 @@ WCHAR * CDECL wine_get_dos_file_name(LPCSTR str);
 }
 #endif
 
-#include <synchapi.h>
 #include <processthreadsapi.h>
 
 #ifndef COPYFILE2_IO_CYCLE_SIZE_MAX
