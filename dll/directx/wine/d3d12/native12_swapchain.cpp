@@ -21,6 +21,8 @@ static const GUID Native12LegacyShareGuid =
 extern "C" DWORD_PTR NTAPI NtUserCallOneParam(DWORD_PTR, DWORD);
 
 #define NATIVE12_SWAPCHAIN_BUFFERS 16
+#define NATIVE12_SWAPCHAIN_TEARING 3
+#define NATIVE12_SWAPCHAIN_SURFACES (NATIVE12_SWAPCHAIN_BUFFERS + NATIVE12_SWAPCHAIN_TEARING)
 #define NATIVE12_SWAPCHAIN_WAIT 5000
 #define NATIVE12_SWAPCHAIN_RECORDS 16
 
@@ -133,9 +135,9 @@ public:
     DXGI_SWAP_CHAIN_FULLSCREEN_DESC fullscreen_desc = {};
     DXGI_RGBA background = {};
     Native12PrivateData private_data;
-    Native12Resource *buffers[NATIVE12_SWAPCHAIN_BUFFERS] = {};
-    D3DKMT_HANDLE shares[NATIVE12_SWAPCHAIN_BUFFERS] = {};
-    HANDLE release_events[NATIVE12_SWAPCHAIN_BUFFERS] = {};
+    Native12Resource *buffers[NATIVE12_SWAPCHAIN_SURFACES] = {};
+    D3DKMT_HANDLE shares[NATIVE12_SWAPCHAIN_SURFACES] = {};
+    HANDLE release_events[NATIVE12_SWAPCHAIN_SURFACES] = {};
     DWM_DX_SURFACE_EXCHANGE publication = {};
     HANDLE completion = NULL;
     HANDLE latency = NULL;
@@ -191,9 +193,11 @@ public:
     SRWLOCK record_lock = SRWLOCK_INIT;
     HANDLE worker = NULL, worker_wake = NULL, worker_space = NULL, worker_idle = NULL, worker_stop = NULL;
     HANDLE worker_copy = NULL;
-    ID3D12Fence *release_fences[NATIVE12_SWAPCHAIN_BUFFERS] = {};
-    UINT64 release_values[NATIVE12_SWAPCHAIN_BUFFERS] = {};
-    Native12ReleaseWait release_waits[NATIVE12_SWAPCHAIN_BUFFERS] = {};
+    ID3D12Fence *release_fences[NATIVE12_SWAPCHAIN_SURFACES] = {};
+    UINT64 release_values[NATIVE12_SWAPCHAIN_SURFACES] = {};
+    Native12ReleaseWait release_waits[NATIVE12_SWAPCHAIN_SURFACES] = {};
+    HANDLE tearing_release = NULL;
+    UINT tearing_next = 0;
     SRWLOCK lock = SRWLOCK_INIT;
     UINT current = 0;
     UINT present_count = 0;
@@ -214,13 +218,14 @@ public:
         WaitForQueue();
         ReleaseForeign();
         ReleaseBuffers();
-        for (UINT i = 0; i < NATIVE12_SWAPCHAIN_BUFFERS; ++i)
+        for (UINT i = 0; i < NATIVE12_SWAPCHAIN_SURFACES; ++i)
             if (release_fences[i]) release_fences[i]->Release();
         HANDLE handles[] = {worker_wake, worker_space, worker_idle, worker_stop, worker_copy};
         for (UINT i = 0; i < ARRAYSIZE(handles); ++i)
             if (handles[i]) CloseHandle(handles[i]);
         if (completion) CloseHandle(completion);
         if (latency) CloseHandle(latency);
+        if (tearing_release) CloseHandle(tearing_release);
         factory->Release();
         queue->Release();
     }
@@ -236,7 +241,8 @@ public:
     void CloseForeignSurface();
     HRESULT RecordReadBack(UINT slot, UINT buffer);
     HRESULT OpenRecordList(UINT slot);
-    HRESULT PresentToDriver(UINT slot, UINT buffer);
+    HRESULT PresentToDriver(UINT slot, UINT buffer, ID3D12Resource *source);
+    HRESULT AcquireTearingSurface(UINT *surface);
     HRESULT WriteForeign(RECT *rect, ID3D12Resource *readback, UINT width_limit, UINT height_limit);
     HRESULT PrepareExchange(UINT slot, UINT buffer);
     HRESULT StartWorker();
@@ -696,7 +702,7 @@ static UINT32 Native12ToBgra8(DXGI_FORMAT format, const BYTE *texel)
 
 void Native12SwapChain::ReleaseBuffers()
 {
-    for (UINT i = 0; i < NATIVE12_SWAPCHAIN_BUFFERS; ++i)
+    for (UINT i = 0; i < NATIVE12_SWAPCHAIN_SURFACES; ++i)
     {
         if (buffers[i]) buffers[i]->Release();
         buffers[i] = NULL;
@@ -995,8 +1001,31 @@ HRESULT Native12SwapChain::OpenRecordList(UINT slot)
     return list->Reset(allocator, NULL);
 }
 
+static void Native12RecordCopy(ID3D12GraphicsCommandList *list, ID3D12Resource *source, ID3D12Resource *target)
+{
+    D3D12_RESOURCE_BARRIER barriers[2] = {};
+    for (UINT i = 0; i < ARRAYSIZE(barriers); ++i)
+    {
+        barriers[i].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barriers[i].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barriers[i].Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+    }
+    barriers[0].Transition.pResource = source;
+    barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+    barriers[1].Transition.pResource = target;
+    barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+    list->ResourceBarrier(ARRAYSIZE(barriers), barriers);
+    list->CopyResource(target, source);
+    for (UINT i = 0; i < ARRAYSIZE(barriers); ++i)
+    {
+        barriers[i].Transition.StateBefore = barriers[i].Transition.StateAfter;
+        barriers[i].Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+    }
+    list->ResourceBarrier(ARRAYSIZE(barriers), barriers);
+}
+
 /* A driver may render into memory the shared allocation does not name; its Present brings that allocation up to date. */
-HRESULT Native12SwapChain::PresentToDriver(UINT slot, UINT buffer)
+HRESULT Native12SwapChain::PresentToDriver(UINT slot, UINT buffer, ID3D12Resource *source)
 {
     D3D12DDI_ARG_PRESENTSURFACE surface = {};
     D3D12DDIARG_PRESENT_0001 args = {};
@@ -1005,8 +1034,16 @@ HRESULT Native12SwapChain::PresentToDriver(UINT slot, UINT buffer)
     D3D12DDI_PRESENT_HWQUEUES_0051 hw_queues = {};
     HRESULT hr;
 
-    if (!device->list_functions.pfnPresent) return S_OK;
+    if (!device->list_functions.pfnPresent && !source) return S_OK;
     if (FAILED(hr = OpenRecordList(slot))) return hr;
+    if (source) Native12RecordCopy(record_list[slot], source, buffers[buffer]);
+    if (!device->list_functions.pfnPresent)
+    {
+        if (FAILED(hr = record_list[slot]->Close())) return hr;
+        ID3D12CommandList *lists[] = {record_list[slot]};
+        queue->ExecuteCommandLists(1, lists);
+        return S_OK;
+    }
     surface.hSurface = static_cast<Native12Resource *>(buffers[buffer])->driver;
     args.phSurfacesToPresent = &surface;
     args.SurfacesToPresent = 1;
@@ -1023,7 +1060,7 @@ HRESULT Native12SwapChain::PresentToDriver(UINT slot, UINT buffer)
             queue->driver, &args, &output, &contexts, &hw_queues);
     HeapFree(GetProcessHeap(), 0, args.pPrivateDriverData);
     if (FAILED(hr = record_list[slot]->Close())) return hr;
-    if (output.AddedGpuWork)
+    if (output.AddedGpuWork || source)
     {
         ID3D12CommandList *lists[] = {record_list[slot]};
         queue->ExecuteCommandLists(1, lists);
@@ -1195,9 +1232,9 @@ void Native12SwapChain::ReleaseForeign()
 HRESULT Native12SwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requested)
 {
     foreign_known = false;
-    Native12Resource *created[NATIVE12_SWAPCHAIN_BUFFERS] = {};
-    D3DKMT_HANDLE created_shares[NATIVE12_SWAPCHAIN_BUFFERS] = {};
-    HANDLE created_events[NATIVE12_SWAPCHAIN_BUFFERS] = {};
+    Native12Resource *created[NATIVE12_SWAPCHAIN_SURFACES] = {};
+    D3DKMT_HANDLE created_shares[NATIVE12_SWAPCHAIN_SURFACES] = {};
+    HANDLE created_events[NATIVE12_SWAPCHAIN_SURFACES] = {};
     HRESULT hr = S_OK;
 
     if (requested.BufferCount < 2 || requested.BufferCount > NATIVE12_SWAPCHAIN_BUFFERS) return DXGI_ERROR_INVALID_CALL;
@@ -1233,8 +1270,10 @@ HRESULT Native12SwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requeste
     shared.desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
     shared.desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
 
-    for (UINT i = 0; i < requested.BufferCount && SUCCEEDED(hr); ++i)
+    UINT tearing = (requested.Flags & DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING) ? NATIVE12_SWAPCHAIN_TEARING : 0;
+    for (UINT n = 0; n < requested.BufferCount + tearing && SUCCEEDED(hr); ++n)
     {
+        UINT i = n < requested.BufferCount ? n : NATIVE12_SWAPCHAIN_BUFFERS + n - requested.BufferCount;
         created[i] = new Native12Resource(device);
         if (!created[i])
         {
@@ -1258,7 +1297,7 @@ HRESULT Native12SwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requeste
     {
         WARN("Failed to create %u x %u back buffers of format %#x, hr %#lx.\n", requested.Width, requested.Height,
                 requested.Format, hr);
-        for (UINT i = 0; i < NATIVE12_SWAPCHAIN_BUFFERS; ++i)
+        for (UINT i = 0; i < NATIVE12_SWAPCHAIN_SURFACES; ++i)
         {
             if (created[i]) created[i]->Release();
             if (created_events[i]) CloseHandle(created_events[i]);
@@ -1268,12 +1307,13 @@ HRESULT Native12SwapChain::AllocateBuffers(const DXGI_SWAP_CHAIN_DESC1 &requeste
 
     RetirePublication();
     ReleaseBuffers();
-    for (UINT i = 0; i < requested.BufferCount; ++i)
+    for (UINT i = 0; i < NATIVE12_SWAPCHAIN_SURFACES; ++i)
     {
+        if (!created[i]) continue;
         buffers[i] = created[i];
         shares[i] = created_shares[i];
         release_events[i] = created_events[i];
-        TRACE("Back buffer %u: resource %p, share %#x.\n", i, buffers[i], shares[i]);
+        TRACE("Surface %u: resource %p, share %#x.\n", i, buffers[i], shares[i]);
     }
     desc = requested;
     source_width = desc.Width;
@@ -1292,7 +1332,7 @@ HRESULT Native12SwapChain::RetirePublication()
     HRESULT hr = status == STATUS_NOT_FOUND ? S_OK : Native12StatusToHresult(status);
     if (SUCCEEDED(hr)) ZeroMemory(&publication, sizeof(publication));
     DWORD started = GetTickCount();
-    for (UINT i = 0; i < NATIVE12_SWAPCHAIN_BUFFERS && SUCCEEDED(hr); ++i)
+    for (UINT i = 0; i < NATIVE12_SWAPCHAIN_SURFACES && SUCCEEDED(hr); ++i)
     {
         if (!release_events[i]) continue;
         DWORD elapsed = GetTickCount() - started;
@@ -1376,7 +1416,7 @@ void Native12SwapChain::StopWorker()
     CloseHandle(worker);
     worker = NULL;
     ResetEvent(worker_stop);
-    for (UINT i = 0; i < NATIVE12_SWAPCHAIN_BUFFERS; ++i)
+    for (UINT i = 0; i < NATIVE12_SWAPCHAIN_SURFACES; ++i)
     {
         if (release_waits[i].wait) UnregisterWaitEx(release_waits[i].wait, INVALID_HANDLE_VALUE);
         release_waits[i].wait = NULL;
@@ -1497,10 +1537,48 @@ void Native12SwapChain::WorkerLoop()
     }
 }
 
+/* Tearing presents publish a copy, so the compositor never holds a back buffer and the next one is free at once. */
+HRESULT Native12SwapChain::AcquireTearingSurface(UINT *surface)
+{
+    DWORD start = GetTickCount();
+
+    for (;;)
+    {
+        for (UINT i = 0; i < NATIVE12_SWAPCHAIN_TEARING; ++i)
+        {
+            UINT index = NATIVE12_SWAPCHAIN_BUFFERS + (tearing_next + i) % NATIVE12_SWAPCHAIN_TEARING;
+            if (!buffers[index]) return DXGI_ERROR_INVALID_CALL;
+            if (!release_fences[index] || release_fences[index]->GetCompletedValue() >= release_values[index])
+            {
+                tearing_next = (index - NATIVE12_SWAPCHAIN_BUFFERS + 1) % NATIVE12_SWAPCHAIN_TEARING;
+                *surface = index;
+                return S_OK;
+            }
+        }
+        if (!tearing_release && !(tearing_release = CreateEventW(NULL, FALSE, FALSE, NULL))) break;
+        bool armed = true;
+        for (UINT i = 0; i < NATIVE12_SWAPCHAIN_TEARING && armed; ++i)
+        {
+            UINT index = NATIVE12_SWAPCHAIN_BUFFERS + i;
+            armed = SUCCEEDED(release_fences[index]->SetEventOnCompletion(release_values[index], tearing_release));
+        }
+        DWORD elapsed = GetTickCount() - start;
+        if (!armed || elapsed >= NATIVE12_SWAPCHAIN_WAIT
+                || WaitForSingleObject(tearing_release, NATIVE12_SWAPCHAIN_WAIT - elapsed) != WAIT_OBJECT_0)
+            break;
+    }
+    *surface = NATIVE12_SWAPCHAIN_BUFFERS + tearing_next;
+    tearing_next = (tearing_next + 1) % NATIVE12_SWAPCHAIN_TEARING;
+    return queue->Wait(release_fences[*surface], release_values[*surface]);
+}
+
 HRESULT STDMETHODCALLTYPE Native12SwapChain::Present1(UINT interval, UINT flags,
         const DXGI_PRESENT_PARAMETERS *)
 {
     if (interval > 4) return DXGI_ERROR_INVALID_CALL;
+    bool tearing = (flags & DXGI_PRESENT_ALLOW_TEARING) != 0;
+    if (tearing && (interval || !(desc.Flags & DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING) || !fullscreen_desc.Windowed))
+        return DXGI_ERROR_INVALID_CALL;
     if (FocusLost())
     {
         if (!(flags & DXGI_PRESENT_TEST)) SetFullscreenState(FALSE, NULL);
@@ -1520,8 +1598,15 @@ HRESULT STDMETHODCALLTYPE Native12SwapChain::Present1(UINT interval, UINT flags,
         record.source_width = source_width;
         record.source_height = source_height;
         record.foreign = ForeignAdapter();
-        hr = record.foreign ? RecordReadBack(slot, current) : PresentToDriver(slot, current);
-        if (SUCCEEDED(hr) && !record.foreign) hr = PrepareExchange(slot, current);
+        if (record.foreign) hr = RecordReadBack(slot, current);
+        else
+        {
+            UINT published = current;
+            if (tearing) hr = AcquireTearingSurface(&published);
+            if (SUCCEEDED(hr)) hr = PresentToDriver(slot, published, tearing ? buffers[current] : NULL);
+            record.buffer = published;
+            if (SUCCEEDED(hr)) hr = PrepareExchange(slot, published);
+        }
         if (SUCCEEDED(hr)) QueueRecord(slot);
         else FreeRecord(slot);
     }
