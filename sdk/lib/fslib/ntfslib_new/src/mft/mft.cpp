@@ -45,7 +45,9 @@ InitializeFileRecordBuffer(
     }
 
     UsaCount =
-        FileRecordSize / DiskVolume->BytesPerSector + 1;
+        FileRecordSize /
+            (DiskVolume->FixupStride ? DiskVolume->FixupStride : DiskVolume->BytesPerSector) +
+        1;
     if (UsaCount > MAXUSHORT ||
         UsaCount >
             (MAXULONG -
@@ -180,7 +182,13 @@ MasterFileTable::MasterFileTable(_In_ PVolume TargetVolume,
      * $MFTMirr. That descriptor is MFT record 1 in the main $MFT stream.
      */
     if (MFTFile)
+    {
         MFTDataAttr = MFTFile->GetAttribute(TypeData, NULL);
+        (void)NtfsGetFixupStride(MFTFile->Header->Header.SizeOfUpdateSequence,
+                                 MFTFile->Header->AllocatedSize,
+                                 DiskVolume->BytesPerSector,
+                                 &DiskVolume->FixupStride);
+    }
 
     // Initialize $MFTMirr
     Status = GetFileRecord(_MFTMirr, &MFTMirrFile);

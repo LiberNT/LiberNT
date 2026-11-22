@@ -231,6 +231,12 @@ NtfsApplyFixup(_Inout_ PNTFSRecordHeader Header,
                _In_ ULONG RecordSize,
                _In_ ULONG BytesPerSector);
 
+BOOLEAN
+NtfsGetFixupStride(_In_ ULONG UpdateSequenceCount,
+                   _In_ ULONG RecordSize,
+                   _In_ ULONG BytesPerSector,
+                   _Out_ PULONG Stride);
+
 NTSTATUS
 NtfsCommitFixup(_Inout_ PNTFSRecordHeader Header,
                 _In_ ULONG RecordSize,
@@ -566,6 +572,8 @@ public:
     BOOLEAN IsReadOnly = FALSE;
     BOOLEAN ShowMetadataFiles = FALSE;
     BOOLEAN Generate8dot3Names = FALSE;
+    /* Zero until $MFT record 0 is read; new records follow it. */
+    ULONG FixupStride = 0;
 
     /*
      * Where to begin the free-cluster search. Without it every allocation
