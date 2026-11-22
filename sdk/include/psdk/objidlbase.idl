@@ -771,7 +771,7 @@ interface IClientSecurity : IUnknown
     EOAC_AUTO_IMPERSONATE   = 0x400, /* CoInitializeSecurity only */
     EOAC_DEFAULT            = 0x800,
     EOAC_DISABLE_AAA        = 0x1000, /* CoInitializeSecurity only */
-    EOAC_NO_CUSTOM_MARSHAL  = 0x2000, /* CoInitializeSecurity only */,
+    EOAC_NO_CUSTOM_MARSHAL  = 0x2000, /* CoInitializeSecurity only */
     EOAC_RESERVED1 = 0x4000,
 } EOLE_AUTHENTICATION_CAPABILITIES;
 

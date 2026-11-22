@@ -395,18 +395,7 @@ DECL_WINELIB_TYPE_AW(CHARFORMAT2)
                                CFM_CHARSET)
 
 #if (_RICHEDIT_VER >= 0x0600)
-#define CFM_ALL2              (CFM_ALL | \
-                               CFM_EFFECTS2 | \
-                               CFM_BACKCOLOR | \
-                               CFM_LCID | \
-                               CFM_UNDERLINETYPE | \
-                               CFM_WEIGHT | \
-                               CFM_REVAUTHOR | \
-                               CFM_SPACING | \
-                               CFM_KERNING | \
-                               CFM_STYLE | \
-                               CFM_ANIMATION | \
-                               CFM_COOKIE)
+#define CFM_ALL2              (CFM_ALL | CFM_EFFECTS2 | CFM_BACKCOLOR | CFM_LCID | CFM_UNDERLINETYPE | CFM_WEIGHT | CFM_REVAUTHOR | CFM_SPACING | CFM_KERNING | CFM_STYLE | CFM_ANIMATION | CFM_COOKIE)
 #else
 #define CFM_ALL2              (CFM_ALL | \
                                CFM_EFFECTS2 | \

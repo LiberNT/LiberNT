@@ -1432,10 +1432,6 @@ struct _RAS_STATS
     DWORD dwConnectDuration;
 };
 
-struct HRASCONN__
-{
-    int unused;
-};
 
 typedef struct _RAS_PROJECTION_INFO *PRAS_PROJECTION_INFO;
 

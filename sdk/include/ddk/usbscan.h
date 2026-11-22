@@ -33,8 +33,6 @@ extern "C" {
 #ifndef MAX_NUM_PIPES
 #define MAX_NUM_PIPES                     8
 
-#define IOCTL_ABORT_PIPE (-2147475452)
-
 #endif
 
 #define BULKIN_FLAG                       0x80
@@ -163,3 +161,5 @@ typedef struct _USBSCAN_TIMEOUT {
 #ifdef __cplusplus
 }
 #endif
+
+#define IOCTL_ABORT_PIPE (-2147475452)

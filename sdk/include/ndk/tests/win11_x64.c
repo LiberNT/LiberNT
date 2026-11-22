@@ -8,8 +8,7 @@
 #include <ntifs.h>
 #include <ndk/ntndk.h>
 
-#define C_ASSERT_FIELD(Type, Offset, MemberName) \
-    C_ASSERT(FIELD_OFFSET(Type, MemberName) == Offset);
+#define C_ASSERT_FIELD(Type, Offset, MemberName) C_ASSERT(FIELD_OFFSET(Type, MemberName) == Offset);
 
 /* KTHREAD */
 C_ASSERT(sizeof(KTHREAD) == 0x4C0);

@@ -27,116 +27,6 @@
 
 #ifndef _KRPCENV_
 #define _KRPCENV_ 1
-#ifdef __cplusplus
-extern "C" {
-#endif
-NTSTATUS NTAPI IPsecSaContextDeleteById0(HANDLE engineHandle, UINT64 id);
-NTSTATUS NTAPI IPsecSaDestroyEnumHandle0(HANDLE engineHandle, HANDLE enumHandle);
-#ifdef __cplusplus
-}
-#endif
-
-#define FWPM_AUTO_WEIGHT_MAX 0xFFFFFFFFFFFFFFFULL
-#define FWPM_CALLOUT_EDGE_TRAVERSAL_ALE_LISTEN_V6 0
-#define FWPM_CALLOUT_EDGE_TRAVERSAL_ALE_RESOURCE_ASSIGNMENT_V6 0
-#define FWPM_CONDITION_ARRIVAL_SUB_INTERFACE_INDEX 0
-#define FWPM_CONDITION_LOCAL_INTERFACE_INDEX 0
-#define FWPM_CONDITION_LOCAL_INTERFACE_TYPE 0
-#define FWPM_CONDITION_LOCAL_TUNNEL_TYPE 0
-#define FWPM_CONDITION_VSWITCH_ICMP_CODE 0
-#define FWPM_CONDITION_VSWITCH_ICMP_TYPE 0
-#define FWPM_CONTEXT_ALE_ALLOW_AUTH_FW 0x20
-#define FWPM_CONTEXT_ALE_SET_CONNECTION_ALLOW_FIRST_INBOUND_PKT_UNENCRYPTED 0x10
-#define FWPM_CONTEXT_ALE_SET_CONNECTION_LAZY_SD_EVALUATION 4
-#define FWPM_CONTEXT_ALE_SET_CONNECTION_REQUIRE_IPSEC_ENCRYPTION 8
-#define FWPM_CONTEXT_ALE_SET_CONNECTION_REQUIRE_IPSEC_SECURITY 2
-#define FWPM_CONTEXT_IPSEC_INBOUND_PASSTHRU 1
-#define FWPM_CONTEXT_IPSEC_INBOUND_PERSIST_CONNECTION_SECURITY 2
-#define FWPM_CONTEXT_IPSEC_INBOUND_RESERVED (-72057594037927936LL)
-#define FWPM_CONTEXT_IPSEC_INBOUND_SECURITY_REALM_ID 4
-#define FWPM_CONTEXT_IPSEC_OUTBOUND_NEGOTIATE_DISCOVER 1
-#define FWPM_CONTEXT_IPSEC_OUTBOUND_SUPPRESS_NEGOTIATION 2
-#define FWPM_CONTEXT_IPSEC_OUTBOUNDBOUND_SECURITY_REALM_ID 4
-#define FWPM_CONTEXT_RPC_AUDIT_BUFFER_ENABLED 2
-#define FWPM_CONTEXT_RPC_AUDIT_ENABLED 1
-#define FWPM_CONTEXT_TCP_CHIMNEY_OFFLOAD_DISABLE 2
-#define FWPM_CONTEXT_TCP_CHIMNEY_OFFLOAD_ENABLE 1
-#define FWPM_GENERIC_ALL 0xF07FF
-#define FWPM_GENERIC_EXECUTE 0x20220
-#define FWPM_GENERIC_READ 0x201D4
-#define FWPM_GENERIC_WRITE 0x3040B
-#define FWPM_SUBLAYER_EDGE_TRAVERSAL 0
-#define FWPM_WEIGHT_RANGE_MAX 0xF
-#define IPSEC_SA_BUNDLE_UPDATE_FLAGS 4
-#define IPSEC_SA_BUNDLE_UPDATE_KEY_MODULE_STATE 0x10
-#define IPSEC_SA_BUNDLE_UPDATE_MM_SA_ID 0x40
-#define IPSEC_SA_BUNDLE_UPDATE_NAP_CONTEXT 8
-#define IPSEC_SA_BUNDLE_UPDATE_PEER_V4_PRIVATE_ADDRESS 0x20
-#define IPSEC_SA_DETAILS_UPDATE_TRAFFIC 1
-#define IPSEC_SA_DETAILS_UPDATE_UDP_ENCAPSULATION 2
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-NTSTATUS NTAPI IPsecGetStatistics0(HANDLE engineHandle, IPSEC_STATISTICS0 *ipsecStatistics);
-NTSTATUS NTAPI IPsecSaContextAddInbound1(HANDLE engineHandle, UINT64 id, const IPSEC_SA_BUNDLE1 *inboundBundle);
-NTSTATUS NTAPI IPsecSaContextAddOutbound1(HANDLE engineHandle, UINT64 id, const IPSEC_SA_BUNDLE1 *outboundBundle);
-NTSTATUS NTAPI IPsecSaContextCreate1(HANDLE engineHandle, const IPSEC_TRAFFIC1 *outboundTraffic, const IPSEC_VIRTUAL_IF_TUNNEL_INFO0 *virtualIfTunnelInfo, UINT64 *inboundFilterId, UINT64 *id);
-NTSTATUS NTAPI IPsecSaContextGetSpi1(HANDLE engineHandle, UINT64 id, const IPSEC_GETSPI1 *getSpi, IPSEC_SA_SPI *inboundSpi);
-NTSTATUS NTAPI IPsecSaContextSetSpi0(HANDLE engineHandle, UINT64 id, const IPSEC_GETSPI1 *getSpi, IPSEC_SA_SPI inboundSpi);
-
-/* TODO: LiberNT does not implement the functions below yet */
-NTSTATUS NTAPI IkeextGetStatistics0(HANDLE engineHandle, IKEEXT_STATISTICS0 *ikeextStatistics);
-NTSTATUS NTAPI IkeextGetStatistics1(HANDLE engineHandle, IKEEXT_STATISTICS1 *ikeextStatistics);
-NTSTATUS NTAPI IkeextSaCreateEnumHandle0(HANDLE engineHandle, const IKEEXT_SA_ENUM_TEMPLATE0 *enumTemplate, HANDLE *enumHandle);
-NTSTATUS NTAPI IkeextSaDbGetSecurityInfo0(HANDLE engineHandle, SECURITY_INFORMATION securityInfo, PSID *sidOwner, PSID *sidGroup, PACL *dacl, PACL *sacl, PSECURITY_DESCRIPTOR *securityDescriptor);
-NTSTATUS NTAPI IkeextSaDbSetSecurityInfo0(HANDLE engineHandle, SECURITY_INFORMATION securityInfo, const int *sidOwner, const int *sidGroup, const ACL *dacl, const ACL *sacl);
-NTSTATUS NTAPI IkeextSaDeleteById0(HANDLE engineHandle, UINT64 id);
-NTSTATUS NTAPI IkeextSaDestroyEnumHandle0(HANDLE engineHandle, HANDLE enumHandle);
-NTSTATUS NTAPI IkeextSaEnum0(HANDLE engineHandle, HANDLE enumHandle, UINT32 numEntriesRequested, IKEEXT_SA_DETAILS0 ***entries, UINT32 *numEntriesReturned);
-NTSTATUS NTAPI IkeextSaEnum1(HANDLE engineHandle, HANDLE enumHandle, UINT32 numEntriesRequested, IKEEXT_SA_DETAILS1 ***entries, UINT32 *numEntriesReturned);
-NTSTATUS NTAPI IkeextSaEnum2(HANDLE engineHandle, HANDLE enumHandle, UINT32 numEntriesRequested, IKEEXT_SA_DETAILS2 ***entries, UINT32 *numEntriesReturned);
-NTSTATUS NTAPI IkeextSaGetById0(HANDLE engineHandle, UINT64 id, IKEEXT_SA_DETAILS0 **sa);
-NTSTATUS NTAPI IkeextSaGetById1(HANDLE engineHandle, UINT64 id, GUID *saLookupContext, IKEEXT_SA_DETAILS1 **sa);
-NTSTATUS NTAPI IkeextSaGetById2(HANDLE engineHandle, UINT64 id, GUID *saLookupContext, IKEEXT_SA_DETAILS2 **sa);
-NTSTATUS NTAPI IPsecDospGetSecurityInfo0(HANDLE engineHandle, SECURITY_INFORMATION securityInfo, PSID *sidOwner, PSID *sidGroup, PACL *dacl, PACL *sacl, PSECURITY_DESCRIPTOR *securityDescriptor);
-NTSTATUS NTAPI IPsecDospGetStatistics0(HANDLE engineHandle, IPSEC_DOSP_STATISTICS0 *idpStatistics);
-NTSTATUS NTAPI IPsecDospSetSecurityInfo0(HANDLE engineHandle, SECURITY_INFORMATION securityInfo, const int *sidOwner, const int *sidGroup, const ACL *dacl, const ACL *sacl);
-NTSTATUS NTAPI IPsecDospStateCreateEnumHandle0(HANDLE engineHandle, const IPSEC_DOSP_STATE_ENUM_TEMPLATE0 *enumTemplate, HANDLE *enumHandle);
-NTSTATUS NTAPI IPsecDospStateDestroyEnumHandle0(HANDLE engineHandle, HANDLE enumHandle);
-NTSTATUS NTAPI IPsecDospStateEnum0(HANDLE engineHandle, HANDLE enumHandle, UINT32 numEntriesRequested, IPSEC_DOSP_STATE0 ***entries, UINT32 *numEntries);
-NTSTATUS NTAPI IPsecGetStatistics1(HANDLE engineHandle, IPSEC_STATISTICS1 *ipsecStatistics);
-NTSTATUS NTAPI IPsecSaContextAddInbound0(HANDLE engineHandle, UINT64 id, const IPSEC_SA_BUNDLE0 *inboundBundle);
-NTSTATUS NTAPI IPsecSaContextAddOutbound0(HANDLE engineHandle, UINT64 id, const IPSEC_SA_BUNDLE0 *outboundBundle);
-NTSTATUS NTAPI IPsecSaContextCreate0(HANDLE engineHandle, const IPSEC_TRAFFIC0 *outboundTraffic, UINT64 *inboundFilterId, UINT64 *id);
-NTSTATUS NTAPI IPsecSaContextDestroyEnumHandle0(HANDLE engineHandle, HANDLE enumHandle);
-NTSTATUS NTAPI IPsecSaContextEnum0(HANDLE engineHandle, HANDLE enumHandle, UINT32 numEntriesRequested, IPSEC_SA_CONTEXT0 ***entries, UINT32 *numEntriesReturned);
-NTSTATUS NTAPI IPsecSaContextExpire0(HANDLE engineHandle, UINT64 id);
-NTSTATUS NTAPI IPsecSaContextGetById0(HANDLE engineHandle, UINT64 id, IPSEC_SA_CONTEXT0 **saContext);
-NTSTATUS NTAPI IPsecSaContextGetById1(HANDLE engineHandle, UINT64 id, IPSEC_SA_CONTEXT1 **saContext);
-NTSTATUS NTAPI IPsecSaContextGetSpi0(HANDLE engineHandle, UINT64 id, const IPSEC_GETSPI0 *getSpi, IPSEC_SA_SPI *inboundSpi);
-NTSTATUS NTAPI IPsecSaContextUpdate0(HANDLE engineHandle, UINT64 flags, const IPSEC_SA_CONTEXT1 *newValues);
-NTSTATUS NTAPI IPsecSaDbGetSecurityInfo0(HANDLE engineHandle, SECURITY_INFORMATION securityInfo, PSID *sidOwner, PSID *sidGroup, PACL *dacl, PACL *sacl, PSECURITY_DESCRIPTOR *securityDescriptor);
-NTSTATUS NTAPI IPsecSaDbSetSecurityInfo0(HANDLE engineHandle, SECURITY_INFORMATION securityInfo, const int *sidOwner, const int *sidGroup, const ACL *dacl, const ACL *sacl);
-NTSTATUS NTAPI IPsecSaEnum0(HANDLE engineHandle, HANDLE enumHandle, UINT32 numEntriesRequested, IPSEC_SA_DETAILS0 ***entries, UINT32 *numEntriesReturned);
-
-#ifdef __cplusplus
-}
-#endif
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-NTSTATUS NTAPI IPsecSaContextCreateEnumHandle0(HANDLE engineHandle, const IPSEC_SA_CONTEXT_ENUM_TEMPLATE0 *enumTemplate, HANDLE *enumHandle);
-NTSTATUS NTAPI IPsecSaContextEnum1(HANDLE engineHandle, HANDLE enumHandle, UINT32 numEntriesRequested, IPSEC_SA_CONTEXT1 ***entries, UINT32 *numEntriesReturned);
-NTSTATUS NTAPI IPsecSaCreateEnumHandle0(HANDLE engineHandle, const IPSEC_SA_ENUM_TEMPLATE0 *enumTemplate, HANDLE *enumHandle);
-NTSTATUS NTAPI IPsecSaEnum1(HANDLE engineHandle, HANDLE enumHandle, UINT32 numEntriesRequested, IPSEC_SA_DETAILS1 ***entries, UINT32 *numEntriesReturned);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif
 
@@ -4020,4 +3910,116 @@ FwpmConnectionPolicyDeleteByKey0(
 #endif
 #ifndef FWPM_WEIGHT_RANGE_IPSEC
 #define FWPM_WEIGHT_RANGE_IPSEC 0x0
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+NTSTATUS NTAPI IPsecSaContextDeleteById0(HANDLE engineHandle, UINT64 id);
+NTSTATUS NTAPI IPsecSaDestroyEnumHandle0(HANDLE engineHandle, HANDLE enumHandle);
+#ifdef __cplusplus
+}
+#endif
+
+#define FWPM_AUTO_WEIGHT_MAX 0xFFFFFFFFFFFFFFFULL
+#define FWPM_CALLOUT_EDGE_TRAVERSAL_ALE_LISTEN_V6 0
+#define FWPM_CALLOUT_EDGE_TRAVERSAL_ALE_RESOURCE_ASSIGNMENT_V6 0
+#define FWPM_CONDITION_ARRIVAL_SUB_INTERFACE_INDEX 0
+#define FWPM_CONDITION_LOCAL_INTERFACE_INDEX 0
+#define FWPM_CONDITION_LOCAL_INTERFACE_TYPE 0
+#define FWPM_CONDITION_LOCAL_TUNNEL_TYPE 0
+#define FWPM_CONDITION_VSWITCH_ICMP_CODE 0
+#define FWPM_CONDITION_VSWITCH_ICMP_TYPE 0
+#define FWPM_CONTEXT_ALE_ALLOW_AUTH_FW 0x20
+#define FWPM_CONTEXT_ALE_SET_CONNECTION_ALLOW_FIRST_INBOUND_PKT_UNENCRYPTED 0x10
+#define FWPM_CONTEXT_ALE_SET_CONNECTION_LAZY_SD_EVALUATION 4
+#define FWPM_CONTEXT_ALE_SET_CONNECTION_REQUIRE_IPSEC_ENCRYPTION 8
+#define FWPM_CONTEXT_ALE_SET_CONNECTION_REQUIRE_IPSEC_SECURITY 2
+#define FWPM_CONTEXT_IPSEC_INBOUND_PASSTHRU 1
+#define FWPM_CONTEXT_IPSEC_INBOUND_PERSIST_CONNECTION_SECURITY 2
+#define FWPM_CONTEXT_IPSEC_INBOUND_RESERVED (-72057594037927936LL)
+#define FWPM_CONTEXT_IPSEC_INBOUND_SECURITY_REALM_ID 4
+#define FWPM_CONTEXT_IPSEC_OUTBOUND_NEGOTIATE_DISCOVER 1
+#define FWPM_CONTEXT_IPSEC_OUTBOUND_SUPPRESS_NEGOTIATION 2
+#define FWPM_CONTEXT_IPSEC_OUTBOUNDBOUND_SECURITY_REALM_ID 4
+#define FWPM_CONTEXT_RPC_AUDIT_BUFFER_ENABLED 2
+#define FWPM_CONTEXT_RPC_AUDIT_ENABLED 1
+#define FWPM_CONTEXT_TCP_CHIMNEY_OFFLOAD_DISABLE 2
+#define FWPM_CONTEXT_TCP_CHIMNEY_OFFLOAD_ENABLE 1
+#define FWPM_GENERIC_ALL 0xF07FF
+#define FWPM_GENERIC_EXECUTE 0x20220
+#define FWPM_GENERIC_READ 0x201D4
+#define FWPM_GENERIC_WRITE 0x3040B
+#define FWPM_SUBLAYER_EDGE_TRAVERSAL 0
+#define FWPM_WEIGHT_RANGE_MAX 0xF
+#define IPSEC_SA_BUNDLE_UPDATE_FLAGS 4
+#define IPSEC_SA_BUNDLE_UPDATE_KEY_MODULE_STATE 0x10
+#define IPSEC_SA_BUNDLE_UPDATE_MM_SA_ID 0x40
+#define IPSEC_SA_BUNDLE_UPDATE_NAP_CONTEXT 8
+#define IPSEC_SA_BUNDLE_UPDATE_PEER_V4_PRIVATE_ADDRESS 0x20
+#define IPSEC_SA_DETAILS_UPDATE_TRAFFIC 1
+#define IPSEC_SA_DETAILS_UPDATE_UDP_ENCAPSULATION 2
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+NTSTATUS NTAPI IPsecGetStatistics0(HANDLE engineHandle, IPSEC_STATISTICS0 *ipsecStatistics);
+NTSTATUS NTAPI IPsecSaContextAddInbound1(HANDLE engineHandle, UINT64 id, const IPSEC_SA_BUNDLE1 *inboundBundle);
+NTSTATUS NTAPI IPsecSaContextAddOutbound1(HANDLE engineHandle, UINT64 id, const IPSEC_SA_BUNDLE1 *outboundBundle);
+NTSTATUS NTAPI IPsecSaContextCreate1(HANDLE engineHandle, const IPSEC_TRAFFIC1 *outboundTraffic, const IPSEC_VIRTUAL_IF_TUNNEL_INFO0 *virtualIfTunnelInfo, UINT64 *inboundFilterId, UINT64 *id);
+NTSTATUS NTAPI IPsecSaContextGetSpi1(HANDLE engineHandle, UINT64 id, const IPSEC_GETSPI1 *getSpi, IPSEC_SA_SPI *inboundSpi);
+NTSTATUS NTAPI IPsecSaContextSetSpi0(HANDLE engineHandle, UINT64 id, const IPSEC_GETSPI1 *getSpi, IPSEC_SA_SPI inboundSpi);
+
+/* TODO: LiberNT does not implement the functions below yet */
+NTSTATUS NTAPI IkeextGetStatistics0(HANDLE engineHandle, IKEEXT_STATISTICS0 *ikeextStatistics);
+NTSTATUS NTAPI IkeextGetStatistics1(HANDLE engineHandle, IKEEXT_STATISTICS1 *ikeextStatistics);
+NTSTATUS NTAPI IkeextSaCreateEnumHandle0(HANDLE engineHandle, const IKEEXT_SA_ENUM_TEMPLATE0 *enumTemplate, HANDLE *enumHandle);
+NTSTATUS NTAPI IkeextSaDbGetSecurityInfo0(HANDLE engineHandle, SECURITY_INFORMATION securityInfo, PSID *sidOwner, PSID *sidGroup, PACL *dacl, PACL *sacl, PSECURITY_DESCRIPTOR *securityDescriptor);
+NTSTATUS NTAPI IkeextSaDbSetSecurityInfo0(HANDLE engineHandle, SECURITY_INFORMATION securityInfo, const int *sidOwner, const int *sidGroup, const ACL *dacl, const ACL *sacl);
+NTSTATUS NTAPI IkeextSaDeleteById0(HANDLE engineHandle, UINT64 id);
+NTSTATUS NTAPI IkeextSaDestroyEnumHandle0(HANDLE engineHandle, HANDLE enumHandle);
+NTSTATUS NTAPI IkeextSaEnum0(HANDLE engineHandle, HANDLE enumHandle, UINT32 numEntriesRequested, IKEEXT_SA_DETAILS0 ***entries, UINT32 *numEntriesReturned);
+NTSTATUS NTAPI IkeextSaEnum1(HANDLE engineHandle, HANDLE enumHandle, UINT32 numEntriesRequested, IKEEXT_SA_DETAILS1 ***entries, UINT32 *numEntriesReturned);
+NTSTATUS NTAPI IkeextSaEnum2(HANDLE engineHandle, HANDLE enumHandle, UINT32 numEntriesRequested, IKEEXT_SA_DETAILS2 ***entries, UINT32 *numEntriesReturned);
+NTSTATUS NTAPI IkeextSaGetById0(HANDLE engineHandle, UINT64 id, IKEEXT_SA_DETAILS0 **sa);
+NTSTATUS NTAPI IkeextSaGetById1(HANDLE engineHandle, UINT64 id, GUID *saLookupContext, IKEEXT_SA_DETAILS1 **sa);
+NTSTATUS NTAPI IkeextSaGetById2(HANDLE engineHandle, UINT64 id, GUID *saLookupContext, IKEEXT_SA_DETAILS2 **sa);
+NTSTATUS NTAPI IPsecDospGetSecurityInfo0(HANDLE engineHandle, SECURITY_INFORMATION securityInfo, PSID *sidOwner, PSID *sidGroup, PACL *dacl, PACL *sacl, PSECURITY_DESCRIPTOR *securityDescriptor);
+NTSTATUS NTAPI IPsecDospGetStatistics0(HANDLE engineHandle, IPSEC_DOSP_STATISTICS0 *idpStatistics);
+NTSTATUS NTAPI IPsecDospSetSecurityInfo0(HANDLE engineHandle, SECURITY_INFORMATION securityInfo, const int *sidOwner, const int *sidGroup, const ACL *dacl, const ACL *sacl);
+NTSTATUS NTAPI IPsecDospStateCreateEnumHandle0(HANDLE engineHandle, const IPSEC_DOSP_STATE_ENUM_TEMPLATE0 *enumTemplate, HANDLE *enumHandle);
+NTSTATUS NTAPI IPsecDospStateDestroyEnumHandle0(HANDLE engineHandle, HANDLE enumHandle);
+NTSTATUS NTAPI IPsecDospStateEnum0(HANDLE engineHandle, HANDLE enumHandle, UINT32 numEntriesRequested, IPSEC_DOSP_STATE0 ***entries, UINT32 *numEntries);
+NTSTATUS NTAPI IPsecGetStatistics1(HANDLE engineHandle, IPSEC_STATISTICS1 *ipsecStatistics);
+NTSTATUS NTAPI IPsecSaContextAddInbound0(HANDLE engineHandle, UINT64 id, const IPSEC_SA_BUNDLE0 *inboundBundle);
+NTSTATUS NTAPI IPsecSaContextAddOutbound0(HANDLE engineHandle, UINT64 id, const IPSEC_SA_BUNDLE0 *outboundBundle);
+NTSTATUS NTAPI IPsecSaContextCreate0(HANDLE engineHandle, const IPSEC_TRAFFIC0 *outboundTraffic, UINT64 *inboundFilterId, UINT64 *id);
+NTSTATUS NTAPI IPsecSaContextDestroyEnumHandle0(HANDLE engineHandle, HANDLE enumHandle);
+NTSTATUS NTAPI IPsecSaContextEnum0(HANDLE engineHandle, HANDLE enumHandle, UINT32 numEntriesRequested, IPSEC_SA_CONTEXT0 ***entries, UINT32 *numEntriesReturned);
+NTSTATUS NTAPI IPsecSaContextExpire0(HANDLE engineHandle, UINT64 id);
+NTSTATUS NTAPI IPsecSaContextGetById0(HANDLE engineHandle, UINT64 id, IPSEC_SA_CONTEXT0 **saContext);
+NTSTATUS NTAPI IPsecSaContextGetById1(HANDLE engineHandle, UINT64 id, IPSEC_SA_CONTEXT1 **saContext);
+NTSTATUS NTAPI IPsecSaContextGetSpi0(HANDLE engineHandle, UINT64 id, const IPSEC_GETSPI0 *getSpi, IPSEC_SA_SPI *inboundSpi);
+NTSTATUS NTAPI IPsecSaContextUpdate0(HANDLE engineHandle, UINT64 flags, const IPSEC_SA_CONTEXT1 *newValues);
+NTSTATUS NTAPI IPsecSaDbGetSecurityInfo0(HANDLE engineHandle, SECURITY_INFORMATION securityInfo, PSID *sidOwner, PSID *sidGroup, PACL *dacl, PACL *sacl, PSECURITY_DESCRIPTOR *securityDescriptor);
+NTSTATUS NTAPI IPsecSaDbSetSecurityInfo0(HANDLE engineHandle, SECURITY_INFORMATION securityInfo, const int *sidOwner, const int *sidGroup, const ACL *dacl, const ACL *sacl);
+NTSTATUS NTAPI IPsecSaEnum0(HANDLE engineHandle, HANDLE enumHandle, UINT32 numEntriesRequested, IPSEC_SA_DETAILS0 ***entries, UINT32 *numEntriesReturned);
+
+#ifdef __cplusplus
+}
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+NTSTATUS NTAPI IPsecSaContextCreateEnumHandle0(HANDLE engineHandle, const IPSEC_SA_CONTEXT_ENUM_TEMPLATE0 *enumTemplate, HANDLE *enumHandle);
+NTSTATUS NTAPI IPsecSaContextEnum1(HANDLE engineHandle, HANDLE enumHandle, UINT32 numEntriesRequested, IPSEC_SA_CONTEXT1 ***entries, UINT32 *numEntriesReturned);
+NTSTATUS NTAPI IPsecSaCreateEnumHandle0(HANDLE engineHandle, const IPSEC_SA_ENUM_TEMPLATE0 *enumTemplate, HANDLE *enumHandle);
+NTSTATUS NTAPI IPsecSaEnum1(HANDLE engineHandle, HANDLE enumHandle, UINT32 numEntriesRequested, IPSEC_SA_DETAILS1 ***entries, UINT32 *numEntriesReturned);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

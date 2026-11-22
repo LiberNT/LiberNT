@@ -459,9 +459,5 @@ typedef struct PSS_VA_SPACE_INFORMATION {
   DWORD RegionCount;
 } PSS_VA_SPACE_INFORMATION;
 
-struct HPSS__
-{
-    int unused;
-};
 
 #endif

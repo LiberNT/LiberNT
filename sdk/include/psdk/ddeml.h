@@ -482,25 +482,9 @@ typedef struct tagMONMSGSTRUCT {
 
 typedef HDDEDATA WINAPI FNCALLBACK(UINT, UINT, HCONV, HSZ, HSZ, HDDEDATA, ULONG_PTR, ULONG_PTR);
 
-struct HCONV__
-{
-    int unused;
-};
 
-struct HCONVLIST__
-{
-    int unused;
-};
 
-struct HDDEDATA__
-{
-    int unused;
-};
 
-struct HSZ__
-{
-    int unused;
-};
 
 typedef MONHSZSTRUCTA MONHSZSTRUCT;
 

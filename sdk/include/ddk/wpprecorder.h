@@ -315,15 +315,7 @@ typedef struct _RECORDER_LOG_CREATE_PARAMS_V1 {
   CHAR LogIdentifier[16];
 } RECORDER_LOG_CREATE_PARAMS_V1, *PRECORDER_LOG_CREATE_PARAMS_V1;
 
-struct RECORDER_LOG__
-{
-    int unused;
-};
 
-struct WPP_RECORDER_COUNTER__
-{
-    int unused;
-};
 
 #ifdef __cplusplus
 extern "C" {

@@ -307,9 +307,5 @@ SaferSetPolicyInformation(
 #define SRP_POLICY_MANAGEDINSTALLER L"MANAGEDINSTALLER"
 #define SRP_POLICY_WLDPCONFIGCI L"WLDPCONFIGCI"
 
-struct SAFER_LEVEL_HANDLE__
-{
-    int unused;
-};
 
 #endif /* _WINSAFER_H */

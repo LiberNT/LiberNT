@@ -87,10 +87,6 @@ struct _COMPRESS_ALLOCATION_ROUTINES
     PVOID UserContext;
 };
 
-struct COMPRESSOR_HANDLE__
-{
-    int unused;
-};
 
 typedef struct _COMPRESS_ALLOCATION_ROUTINES *PCOMPRESS_ALLOCATION_ROUTINES;
 
