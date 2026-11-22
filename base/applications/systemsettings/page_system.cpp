@@ -110,6 +110,137 @@ DisplayDevices(std::vector<std::wstring> &names)
     return labels;
 }
 
+struct ConnectedDisplay
+{
+    std::wstring Name;
+    bool Attached;
+    bool Primary;
+};
+
+/* Every display device something is connected to, numbered as Windows numbers them for the user */
+static std::vector<ConnectedDisplay>
+ConnectedDisplays()
+{
+    std::vector<ConnectedDisplay> displays;
+    DISPLAY_DEVICEW device = { sizeof(device) };
+
+    for (DWORD i = 0; EnumDisplayDevicesW(NULL, i, &device, 0); i++, device.cb = sizeof(device))
+    {
+        DEVMODEW mode = { };
+
+        mode.dmSize = sizeof(mode);
+        if ((device.StateFlags & DISPLAY_DEVICE_MIRRORING_DRIVER) ||
+            !EnumDisplaySettingsExW(device.DeviceName, 0, &mode, 0))
+        {
+            continue;
+        }
+        displays.push_back({ device.DeviceName, (device.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP) != 0,
+                             (device.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) != 0 });
+    }
+    return displays;
+}
+
+static bool
+StageDisplay(const std::wstring &name, bool attach, LONG x, LONG y)
+{
+    DEVMODEW mode = { };
+
+    mode.dmSize = sizeof(mode);
+    if (attach)
+    {
+        if (!EnumDisplaySettingsExW(name.c_str(), ENUM_REGISTRY_SETTINGS, &mode, 0) || mode.dmPelsWidth == 0)
+        {
+            mode = DEVMODEW();
+            mode.dmSize = sizeof(mode);
+            if (!EnumDisplaySettingsExW(name.c_str(), 0, &mode, 0))
+                return false;
+        }
+        mode.dmPosition.x = x;
+        mode.dmPosition.y = y;
+        mode.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_BITSPERPEL | DM_POSITION;
+    }
+    else
+    {
+        /* A display leaves the desktop with an empty mode */
+        mode.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_POSITION;
+    }
+    return ChangeDisplaySettingsExW(name.c_str(), &mode, NULL, CDS_UPDATEREGISTRY | CDS_NORESET, NULL) ==
+           DISP_CHANGE_SUCCESSFUL;
+}
+
+static void
+ApplyStagedDisplays(HWND owner)
+{
+    LONG result = ChangeDisplaySettingsExW(NULL, NULL, NULL, 0, NULL);
+
+    if (result == DISP_CHANGE_RESTART)
+        PromptRestart(owner, Str(IDS_RESTART_DISPLAYS));
+    else if (result != DISP_CHANGE_SUCCESSFUL)
+        ShowError(owner, ERROR_GEN_FAILURE);
+}
+
+static LRESULT CALLBACK
+IdentifyProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    if (message == WM_PAINT)
+    {
+        PAINTSTRUCT paint;
+        RECT client;
+        HDC dc = BeginPaint(window, &paint);
+        HFONT font = CreateFontW(-120, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                                 CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+        HGDIOBJ previous = SelectObject(dc, font);
+        WCHAR text[8];
+
+        GetClientRect(window, &client);
+        FillRect(dc, &client, (HBRUSH)GetStockObject(BLACK_BRUSH));
+        SetTextColor(dc, RGB(255, 255, 255));
+        SetBkMode(dc, TRANSPARENT);
+        StringCchPrintfW(text, _countof(text), L"%u", (UINT)GetWindowLongPtrW(window, GWLP_USERDATA));
+        DrawTextW(dc, text, -1, &client, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        SelectObject(dc, previous);
+        DeleteObject(font);
+        EndPaint(window, &paint);
+        return 0;
+    }
+    if (message == WM_TIMER)
+    {
+        DestroyWindow(window);
+        return 0;
+    }
+    return DefWindowProcW(window, message, wParam, lParam);
+}
+
+/* Each display shows its number in its lower left corner for a few seconds */
+static void
+IdentifyDisplays()
+{
+    std::vector<ConnectedDisplay> displays = ConnectedDisplays();
+    WNDCLASSW windowClass = { };
+
+    windowClass.lpfnWndProc = IdentifyProc;
+    windowClass.hInstance = GetModuleHandleW(NULL);
+    windowClass.lpszClassName = L"SystemSettingsIdentify";
+    RegisterClassW(&windowClass);
+    for (size_t i = 0; i < displays.size(); i++)
+    {
+        DEVMODEW mode = { };
+        HWND window;
+
+        mode.dmSize = sizeof(mode);
+        if (!displays[i].Attached || !EnumDisplaySettingsExW(displays[i].Name.c_str(), ENUM_CURRENT_SETTINGS, &mode, 0))
+            continue;
+        window = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, windowClass.lpszClassName, NULL,
+                                 WS_POPUP, mode.dmPosition.x + 48, mode.dmPosition.y + (LONG)mode.dmPelsHeight - 248,
+                                 200, 200, NULL, NULL, windowClass.hInstance, NULL);
+        if (window == NULL)
+            continue;
+        SetWindowLongPtrW(window, GWLP_USERDATA, (LONG_PTR)(i + 1));
+        SetTimer(window, 1, 3000, NULL);
+        ShowWindow(window, SW_SHOWNOACTIVATE);
+    }
+}
+
 struct KeepState
 {
     int Remaining;
@@ -209,6 +340,7 @@ BuildDisplay(PageBuilder &page)
         page.Choice(Str(IDS_SCALE), Str(IDS_SCALE_DESC), L"zoom_in_20_regular", options, -1, nullptr);
         page.Choice(Str(IDS_RESOLUTION), std::wstring(), L"desktop_20_regular", options, -1, nullptr);
         page.Choice(Str(IDS_ORIENTATION), std::wstring(), L"desktop_20_regular", options, -1, nullptr);
+        page.Choice(Str(IDS_MULTIPLE_DISPLAYS), std::wstring(), L"desktop_20_regular", options, -1, nullptr);
         page.Choice(Str(IDS_REFRESH_RATE), std::wstring(), L"desktop_pulse_20_regular", options, -1, nullptr);
         return;
     }
@@ -258,6 +390,92 @@ BuildDisplay(PageBuilder &page)
         page.Group();
         page.Choice(Str(IDS_SELECT_DISPLAY), Str(IDS_SELECT_DISPLAY_DESC), L"desktop_20_regular", labels, selected,
                     [host, names](int index) { host->Open(PageId::Display, names[index]); });
+    }
+
+    {
+        std::vector<ConnectedDisplay> displays = ConnectedDisplays();
+        size_t attached = 0, primary = 0;
+
+        for (size_t i = 0; i < displays.size(); i++)
+        {
+            attached += displays[i].Attached ? 1 : 0;
+            if (displays[i].Primary)
+                primary = i;
+        }
+        if (displays.size() > 1)
+        {
+            page.Group(Str(IDS_MULTIPLE_DISPLAYS));
+            page.Button(Str(IDS_IDENTIFY), Str(IDS_IDENTIFY_DESC), L"desktop_20_regular",
+                        Str(IDS_IDENTIFY_BUTTON), [](int) { IdentifyDisplays(); });
+
+            options.clear();
+            options.push_back(Str(IDS_EXTEND_DISPLAYS));
+            options.push_back(Format(IDS_SHOW_ONLY_ON, (int)primary + 1));
+            /* TODO: duplicating displays and showing only on a display other than the main one */
+            page.Choice(Str(IDS_MULTIPLE_DISPLAYS), Str(IDS_MULTIPLE_DISPLAYS_DESC), L"desktop_20_regular",
+                        options, attached == displays.size() ? 0 : attached == 1 ? 1 : -1,
+                        [host, displays](int index)
+                        {
+                            LONG x = GetSystemMetrics(SM_CXSCREEN);
+                            bool staged = true;
+
+                            for (size_t i = 0; i < displays.size(); i++)
+                            {
+                                DEVMODEW mode = { };
+
+                                if (displays[i].Primary)
+                                    continue;
+                                if (index == 0 && displays[i].Attached)
+                                {
+                                    mode.dmSize = sizeof(mode);
+                                    if (EnumDisplaySettingsExW(displays[i].Name.c_str(), ENUM_CURRENT_SETTINGS, &mode, 0))
+                                        x = (std::max)(x, mode.dmPosition.x + (LONG)mode.dmPelsWidth);
+                                    continue;
+                                }
+                                if (index == 0)
+                                {
+                                    staged = StageDisplay(displays[i].Name, true, x, 0) && staged;
+                                    mode.dmSize = sizeof(mode);
+                                    if (EnumDisplaySettingsExW(displays[i].Name.c_str(), 0, &mode, 0))
+                                        x += (LONG)mode.dmPelsWidth;
+                                }
+                                else if (displays[i].Attached)
+                                {
+                                    staged = StageDisplay(displays[i].Name, false, 0, 0) && staged;
+                                }
+                            }
+                            if (!staged)
+                            {
+                                ShowError(host->Window(), ERROR_GEN_FAILURE);
+                                return;
+                            }
+                            ApplyStagedDisplays(host->Window());
+                        });
+        }
+
+        for (size_t i = 0; i < displays.size(); i++)
+        {
+            if (displays[i].Name != device || displays[i].Primary || !displays[i].Attached)
+                continue;
+            options.clear();
+            options.push_back(Str(IDS_RIGHT_OF_MAIN));
+            options.push_back(Str(IDS_BELOW_MAIN));
+            /* TODO: a display left of or above the main one, which needs a desktop origin below zero */
+            page.Choice(Str(IDS_DISPLAY_POSITION), Str(IDS_DISPLAY_POSITION_DESC), L"desktop_20_regular",
+                        options, current.dmPosition.y > 0 && current.dmPosition.x == 0 ? 1 : 0,
+                        [host, device](int index)
+                        {
+                            LONG x = index == 0 ? GetSystemMetrics(SM_CXSCREEN) : 0;
+                            LONG y = index == 0 ? 0 : GetSystemMetrics(SM_CYSCREEN);
+
+                            if (!StageDisplay(device, true, x, y))
+                            {
+                                ShowError(host->Window(), ERROR_GEN_FAILURE);
+                                return;
+                            }
+                            ApplyStagedDisplays(host->Window());
+                        });
+        }
     }
 
     page.Group(Str(IDS_SCALE_LAYOUT));
