@@ -130,7 +130,6 @@ CCabinetWindow::CCabinetWindow() :
     m_NavigationRootCount(0),
     m_PinnedCount(0),
     m_QuickAccess(TRUE),
-    m_PinIcon(NULL),
     m_FocusSave(NULL),
     m_DetailsPane(FALSE),
     m_PreviewPane(FALSE),
@@ -168,8 +167,6 @@ CCabinetWindow::~CCabinetWindow()
         DeleteObject(m_DetailsBitmap);
     if (m_TitleFont)
         DeleteObject(m_TitleFont);
-    if (m_PinIcon)
-        DestroyIcon(m_PinIcon);
     for (UINT i = 0; i < m_NavigationRootCount; i++)
         m_NavigationRoots[i]->Release();
     for (UINT i = 0; i < _countof(m_Images); i++)
@@ -268,9 +265,6 @@ CCabinetWindow::RefreshGlyphs()
     m_Images[2] = CabinetGlyphImages(CommandGlyphs, _countof(CommandGlyphs), command, palette.Glyph);
     m_Images[3] = CabinetGlyphImages(CommandGlyphs, _countof(CommandGlyphs), command, palette.GlyphDisabled);
     m_Images[4] = CabinetGlyphImages(ViewGlyphs, _countof(ViewGlyphs), glyph, palette.Glyph);
-    if (m_PinIcon)
-        DestroyIcon(m_PinIcon);
-    m_PinIcon = ShellFrame::CreateGlyphIcon(L"pin_16_regular", glyph, palette.GlyphDisabled);
     if (m_NavBar)
     {
         SendMessageW(m_NavBar, TB_SETIMAGELIST, 0, (LPARAM)m_Images[0]);
@@ -2307,13 +2301,7 @@ CCabinetWindow::PaintNavigationItem(HDC dc, const RECT &rc, const NSTCCUSTOMDRAW
     }
     if (index >= m_NavigationRootCount)
         return;
-    if (index < m_PinnedCount)
-    {
-        if (m_PinIcon)
-            DrawIconEx(dc, rc.right - Scale(28), rc.top + (rc.bottom - rc.top - Scale(16)) / 2, m_PinIcon,
-                       Scale(16), Scale(16), 0, NULL, DI_NORMAL);
-    }
-    else if (index == m_PinnedCount && index)
+    if (index == m_PinnedCount && index)
     {
         RECT line = { rc.left + Scale(12), rc.top, rc.right - Scale(12), rc.top + 1 };
         HBRUSH brush;
