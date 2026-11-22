@@ -319,6 +319,10 @@ NTAPI
 PopRequestDisplayState(
     _In_ MONITOR_DISPLAY_STATE State);
 
+VOID
+NTAPI
+PopRequestModernStandby(VOID);
+
 NTSTATUS
 NTAPI
 PopRegisterTtmProvider(

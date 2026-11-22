@@ -184,6 +184,30 @@ TestDisplayStateRequests(VOID)
         ok(WaitForValue(&DisplayWatch, PowerMonitorOn, 2000), "the display did not come back on, state %ld\n", DisplayWatch.Value);
 }
 
+/* The display timeout only turns the screen off: the system keeps running, so the calling desktop application is not paused */
+static
+VOID
+TestCallerNotPaused(VOID)
+{
+    LARGE_INTEGER Interval;
+    ULONG Count = MAXULONG;
+    ULONG State = PowerMonitorOn;
+    NTSTATUS Status;
+
+    Interval.QuadPart = -10000LL * 100;
+    KeDelayExecutionThread(KernelMode, FALSE, &Interval);
+
+    Status = ZwQueryInformationThread(NtCurrentThread(), ThreadSuspendCount, &Count, sizeof(Count), NULL);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_ulong(Count, 0UL);
+
+    if (NT_SUCCESS(Status) && Count != 0)
+    {
+        SetDisplayState(&State, sizeof(State));
+        ok(WaitForValue(&DisplayWatch, PowerMonitorOn, 2000), "the display did not come back on, state %ld\n", DisplayWatch.Value);
+    }
+}
+
 START_TEST(PoDisplayStateOff)
 {
     SYSTEM_BATTERY_STATE Battery;
@@ -214,14 +238,18 @@ START_TEST(PoDisplayStateOff)
     Original = (TimeoutWatch.Count != 0) ? (ULONG)TimeoutWatch.Value : 0;
     Unwatch(TimeoutHandle);
 
+    /* A suspension of this process stays pending instead of stopping this thread in the waits below */
+    KeEnterCriticalRegion();
     Status = SetVideoTimeout(Condition, 1);
     ok_eq_hex(Status, STATUS_SUCCESS);
     if (NT_SUCCESS(Status))
     {
         ok(WaitForValue(&DisplayWatch, PowerMonitorOff, 250), "the display did not idle out, state %ld\n", DisplayWatch.Value);
         ok(WaitForValue(&MonitorWatch, 0, 250), "the monitor was not reported off, value %ld\n", MonitorWatch.Value);
+        TestCallerNotPaused();
         ok_eq_hex(SetVideoTimeout(Condition, Original), STATUS_SUCCESS);
     }
+    KeLeaveCriticalRegion();
 
     Unwatch(MonitorHandle);
     Unwatch(DisplayHandle);
