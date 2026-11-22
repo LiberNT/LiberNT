@@ -418,6 +418,16 @@ UINT32
 NtfsFileRecordGetAutomaticTimestampMask(
     _In_ NtfsFileRecord *FileRecord);
 
+/* Deferred size, EA and time copies reach the names at a flush; ending deferral flushes. */
+NTSTATUS
+NtfsFileRecordDeferFileNameUpdates(
+    _In_ NtfsFileRecord *FileRecord,
+    _In_ BOOLEAN Defer);
+
+NTSTATUS
+NtfsFileRecordFlushFileNameUpdates(
+    _In_ NtfsFileRecord *FileRecord);
+
 NTSTATUS
 NtfsFileRecordUpdateAutomaticTimestamps(
     _In_ NtfsFileRecord *FileRecord,

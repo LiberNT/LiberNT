@@ -1290,6 +1290,34 @@ TestResidentIndexSizes()
     CHECK("index.resident_sizes_setup", Ok, "%s", strerror(errno));
 }
 
+/* posix_edge_smoke.sh compares the index entries these leave after the last close. */
+static void
+TestCloseTimeNames()
+{
+    std::vector<uint8_t> Block = Pattern(43, 0, 5000);
+    std::vector<uint8_t> Whole = Pattern(43, 0, 15000);
+    const struct timespec Times[2] = {{1000000000, 0}, {1000000000, 0}};
+    bool Ok;
+    int Fd;
+
+    MakeDir("closenames");
+    Fd = open(P("closenames/a").c_str(), O_WRONLY | O_CREAT | O_EXCL, 0600);
+    Ok = Fd >= 0;
+    for (int Index = 0; Ok && Index < 3; Index++)
+        Ok = write(Fd, Block.data(), Block.size()) == (ssize_t)Block.size();
+    Ok = Ok && fchmod(Fd, 0640) == 0 && fsetxattr(Fd, "user.closenames", "v", 1, 0) == 0 &&
+         futimens(Fd, Times) == 0;
+    if (Fd >= 0)
+        close(Fd);
+    Fd = Ok ? open(P("closenames/b").c_str(), O_WRONLY | O_CREAT | O_EXCL, 0640) : -1;
+    Ok = Fd >= 0 && write(Fd, Whole.data(), Whole.size()) == (ssize_t)Whole.size() &&
+         futimens(Fd, Times) == 0;
+    if (Fd >= 0)
+        close(Fd);
+    Ok = Ok && setxattr(P("closenames/b").c_str(), "user.closenames", "v", 1, 0) == 0;
+    CHECK("names.close_time_setup", Ok, "%s", strerror(errno));
+}
+
 /* POSIX: after rewinddir, names added since opendir must be returned. */
 static void
 TestRewinddirSeesNewNames()
@@ -1968,6 +1996,7 @@ main(int Argc, char** Argv)
     TestWriteDropsSetId();
     TestRewinddirSeesNewNames();
     TestResidentIndexSizes();
+    TestCloseTimeNames();
     TestRemovedOpenDirectory();
     TestRenameExtensionData();
     TestFullBaseRecords();

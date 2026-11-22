@@ -1081,6 +1081,12 @@ public:
     UpdateAutomaticTimestamps(_In_ UINT32 Fields);
 
     NTSTATUS
+    DeferFileNameUpdates(_In_ BOOLEAN Defer);
+
+    NTSTATUS
+    FlushFileNameUpdates();
+
+    NTSTATUS
     TouchDirectory();
 
     NTSTATUS
@@ -1201,6 +1207,13 @@ private:
     ULONG AttributeListLength = 0;
     UINT32 AutomaticTimestampMask =
         NTFS_AUTOMATIC_TIMESTAMP_FIELDS;
+    BOOLEAN FileNameUpdatesDeferred = FALSE;
+    UINT32 PendingFileNameFields = 0;
+    ULONGLONG PendingAllocatedSize = 0;
+    ULONGLONG PendingDataSize = 0;
+    ULONG PendingEaInformation = 0;
+    ULONG PendingReparseTag = 0;
+    ULONG PendingStorageFlags = 0;
     UCHAR WofProbeState = 0; /* 0 unknown, 1 absent/non-file, 2 present */
     ULONG WofAlgorithm = 0;
     ULONG WofChunkSize = 0;

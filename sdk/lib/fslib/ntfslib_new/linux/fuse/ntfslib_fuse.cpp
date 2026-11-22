@@ -4284,6 +4284,8 @@ AcquireOpenFile(NtfsFuseState* State, fuse_ino_t Ino, PNtfsFileRecord File)
     if (Existing == State->OpenFiles.end())
     {
         State->OpenFiles.emplace(Ino, NtfsFuseOpenFile{File, 1u, false, false, false, 0, 0, false, false});
+        if (State->Writable)
+            (void)NtfsFileRecordDeferFileNameUpdates(File, TRUE);
         return File;
     }
     assert(Existing->second.File != File);
@@ -4324,11 +4326,13 @@ ReleaseOpenFile(NtfsFuseState* State, fuse_ino_t Ino)
     }
     if (Existing->second.Unlinked)
     {
-        NTSTATUS Status = NtfsMasterFileTableDeleteUnlinkedFile(
+        NTSTATUS Status;
+
+        (void)NtfsFileRecordDeferFileNameUpdates(File, FALSE);
+        Status = NtfsMasterFileTableDeleteUnlinkedFile(
             StateMft(State),
             NtfsFileRecordGetReference(File),
             NULL);
-
         if (!NT_SUCCESS(Status))
             fprintf(stderr, "ntfslib: deleting an unlinked file failed 0x%08" PRIx32 "\n",
                     (uint32_t)Status);
@@ -4357,6 +4361,11 @@ ReleaseOpenFile(NtfsFuseState* State, fuse_ino_t Ino)
             else if (State->Session)
                 fuse_lowlevel_notify_inval_inode(State->Session, Ino, -1, 0);
         }
+        NTSTATUS Status = NtfsFileRecordDeferFileNameUpdates(File, FALSE);
+
+        if (!NT_SUCCESS(Status))
+            fprintf(stderr, "ntfslib: updating the file names failed 0x%08" PRIx32 "\n",
+                    (uint32_t)Status);
     }
     State->OpenFiles.erase(Existing);
     NtfsFileRecordDestroy(File);
@@ -5469,7 +5478,11 @@ NtfsLowFsync(fuse_req_t Request, fuse_ino_t Ino, int DataOnly, struct fuse_file_
     UNREFERENCED_PARAMETER(FileInfo);
     if (State->Writable)
     {
-        Status = FlushPendingWriteTime(FindOpen(State, Ino));
+        NtfsFuseOpenFile* Open = FindOpen(State, Ino);
+
+        Status = FlushPendingWriteTime(Open);
+        if (NT_SUCCESS(Status) && Open)
+            Status = NtfsFileRecordFlushFileNameUpdates(Open->File);
         FlushPendingAccess(State);
         if (NT_SUCCESS(Status))
             Status = NtfsFlushVolumeContext(NULL);
@@ -6167,9 +6180,13 @@ MountImage(int Argc, char** Argv, NtfsFuseState* State)
         State->Session = NULL;
         fuse_session_destroy(Session);
     }
-    for (auto& Open : State->OpenFiles)
-        NtfsFileRecordDestroy(Open.second.File);
-    State->OpenFiles.clear();
+    while (!State->OpenFiles.empty())
+    {
+        auto Open = State->OpenFiles.begin();
+
+        Open->second.References = 1;
+        ReleaseOpenFile(State, Open->first);
+    }
     FlushPendingAccess(State);
     free(Options.mountpoint);
     fuse_opt_free_args(&Arguments);
