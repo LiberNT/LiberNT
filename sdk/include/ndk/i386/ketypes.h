@@ -19,15 +19,81 @@ Author:
 #ifndef _I386_KETYPES_H
 #define _I386_KETYPES_H
 
-#define PROCESSOR_POWER_STATE_LEGACY_AREA_SIZE 0x160
+#define _PROCESSOR_POWER_STATE_DEFINED
 #include <potypes.h>
 #ifndef NTOS_MODE_USER
+typedef struct _PROCESSOR_POWER_STATE
+{
+    union
+    {
+        struct
+        {
+            struct _PPM_IDLE_STATES *IdleStates;                    // 0x000
+            struct _PROC_IDLE_ACCOUNTING *IdleAccounting;           // 0x004
+            ULONGLONG IdleTimeLast;                                 // 0x008
+            ULONGLONG IdleTimeTotal;                                // 0x010
+            volatile ULONGLONG IdleTimeEntry;                       // 0x018
+            ULONGLONG IdleTimeExpiration;                           // 0x020
+            UCHAR NonInterruptibleTransition;                       // 0x028
+            UCHAR PepWokenTransition;                               // 0x029
+            UCHAR HvTargetState;                                    // 0x02A
+            UCHAR SoftParked;                                       // 0x02B
+            ULONG TargetIdleState;                                  // 0x02C
+            UCHAR IdlePolicy[6];                                    // 0x030 _PROC_IDLE_POLICY
+            volatile ULONG Synchronization;                         // 0x038 _PPM_IDLE_SYNCHRONIZATION_STATE
+            ULONGLONG PerfFeedback[17];                             // 0x040 _PROC_FEEDBACK
+            ULONG Hypervisor;                                       // 0x0C8 _PROC_HYPERVISOR_STATE
+            ULONG LastSysTime;                                      // 0x0CC
+            ULONG WmiDispatchPtr;                                   // 0x0D0
+            LONG WmiInterfaceEnabled;                               // 0x0D4
+            ULONGLONG FFHThrottleStateInfo[4];                      // 0x0D8 _PPM_FFH_THROTTLE_STATE_INFO
+            KDPC PerfActionDpc;                                     // 0x0F8
+            volatile LONG PerfActionMask;                           // 0x118
+            ULONGLONG HvIdleCheck[2];                               // 0x120 _PROC_IDLE_SNAP
+            ULONGLONG CheckContext[5];                              // 0x130 _PROC_PERF_CHECK_CONTEXT
+            struct _PPM_CONCURRENCY_ACCOUNTING *Concurrency;        // 0x158
+            struct _PPM_CONCURRENCY_ACCOUNTING *ClassConcurrency;   // 0x15C
+        };
+        struct
+        {
+            PROCESSOR_POWER_STATE_LEGACY_MEMBERS                    // [LiberNT]
+        };
+    };
+    UCHAR ArchitecturalEfficiencyClass;                             // 0x160
+    UCHAR PerformanceSchedulingClass;                               // 0x161
+    UCHAR EfficiencySchedulingClass;                                // 0x162
+    UCHAR Unused;                                                   // 0x163
+    UCHAR Parked;                                                   // 0x164
+    UCHAR LongPriorQosPeriod;                                       // 0x165
+    union
+    {
+        ULONGLONG SnapTimeLast;                                     // 0x168
+        ULONGLONG EnergyConsumed;                                   // 0x168
+    };
+    ULONGLONG ActiveTime;                                           // 0x170
+    ULONGLONG TotalTime;                                            // 0x178
+    struct _POP_FX_DEVICE *FxDevice;                                // 0x180
+    ULONGLONG LastQosTranstionTsc;                                  // 0x188
+    ULONGLONG QosTransitionHysteresis;                              // 0x190
+    ULONG RequestedQosClass;                                        // 0x198 _KHETERO_CPU_QOS
+    ULONG ResolvedQosClass;                                         // 0x19C _KHETERO_CPU_QOS
+    USHORT QosEquivalencyMask;                                      // 0x1A0
+    USHORT HwFeedbackTableIndex;                                    // 0x1A2
+    UCHAR HwFeedbackParkHint;                                       // 0x1A4
+    UCHAR HwFeedbackPerformanceClass;                               // 0x1A5
+    UCHAR HwFeedbackEfficiencyClass;                                // 0x1A6
+    UCHAR HeteroCoreType;                                           // 0x1A7
+} PROCESSOR_POWER_STATE, *PPROCESSOR_POWER_STATE;
+C_ASSERT(FIELD_OFFSET(PROCESSOR_POWER_STATE, ClassConcurrency) == 0x15C);
 C_ASSERT(FIELD_OFFSET(PROCESSOR_POWER_STATE, ArchitecturalEfficiencyClass) == 0x160);
+C_ASSERT(FIELD_OFFSET(PROCESSOR_POWER_STATE, HeteroCoreType) == 0x1A7);
+C_ASSERT(sizeof(PROCESSOR_POWER_STATE) == 0x1A8);
 C_ASSERT(FIELD_OFFSET(PROCESSOR_POWER_STATE, PerformanceSchedulingClass) == 0x161);
 C_ASSERT(FIELD_OFFSET(PROCESSOR_POWER_STATE, EfficiencySchedulingClass) == 0x162);
-C_ASSERT(FIELD_OFFSET(PROCESSOR_POWER_STATE, Reserved) == 0x163);
+C_ASSERT(FIELD_OFFSET(PROCESSOR_POWER_STATE, Unused) == 0x163);
 C_ASSERT(FIELD_OFFSET(PROCESSOR_POWER_STATE, Parked) == 0x164);
-/* FIXME: Win10 i386 has LongPriorQosPeriod at +0x165 and no SoftParked */
+C_ASSERT(FIELD_OFFSET(PROCESSOR_POWER_STATE, LongPriorQosPeriod) == 0x165);
+C_ASSERT(FIELD_OFFSET(PROCESSOR_POWER_STATE, SoftParked) == 0x02B);
 #endif
 
 /* Loader/kernel contract, independent of the NTDDI-selected KPRCB layout.
@@ -921,11 +987,7 @@ typedef struct _KPRCB
     LARGE_INTEGER UpdateSignature; // 0x03D58
     volatile ULONGLONG IsrTime; // 0x03D60
     ULONGLONG GenerationTarget; // 0x03D68
-    union // 0x03D70
-    {
-        UCHAR PowerStateRaw[424]; // _PROCESSOR_POWER_STATE
-        PROCESSOR_POWER_STATE PowerState; // FIXME: LiberNT layout of the Windows _PROCESSOR_POWER_STATE
-    };
+    PROCESSOR_POWER_STATE PowerState; // 0x03D70
     UCHAR ForceIdleDpc[32]; // 0x03F18 _KDPC
     ULONGLONG MsrIa32TsxCtrl; // 0x03F38
     ULONG PrcbPad91[6]; // 0x03F40
@@ -1226,7 +1288,7 @@ C_ASSERT(FIELD_OFFSET(KPRCB, FeatureBits) == 0x3D50);
 C_ASSERT(FIELD_OFFSET(KPRCB, UpdateSignature) == 0x3D58);
 C_ASSERT(FIELD_OFFSET(KPRCB, IsrTime) == 0x3D60);
 C_ASSERT(FIELD_OFFSET(KPRCB, GenerationTarget) == 0x3D68);
-C_ASSERT(FIELD_OFFSET(KPRCB, PowerStateRaw) == 0x3D70);
+C_ASSERT(FIELD_OFFSET(KPRCB, PowerState) == 0x3D70);
 C_ASSERT(FIELD_OFFSET(KPRCB, ForceIdleDpc) == 0x3F18);
 C_ASSERT(FIELD_OFFSET(KPRCB, MsrIa32TsxCtrl) == 0x3F38);
 C_ASSERT(FIELD_OFFSET(KPRCB, PrcbPad91) == 0x3F40);
