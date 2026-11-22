@@ -28,6 +28,7 @@ BOOL UXTHEME_LoadThemeHooks(void)
 static BOOL CALLBACK send_theme_changed(HWND hwnd, LPARAM enable)
 {
     SendMessageW(hwnd, WM_THEMECHANGED, enable, 0);
+    RedrawWindow(hwnd, NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE);
     return TRUE;
 }
 

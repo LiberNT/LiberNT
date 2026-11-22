@@ -12,6 +12,7 @@ list(APPEND SOURCE
     PreferredAppMode.c
     SetWindowTheme.c
     TextScaling.c
+    ThemeChangeRedraw.c
     ThemeDpi.c
     SetThemeAppProperties.c
     ThemeRendering.c
@@ -23,5 +24,5 @@ list(APPEND SOURCE
 add_executable(uxtheme_apitest ${SOURCE})
 target_link_libraries(uxtheme_apitest wine ${PSEH_LIB})
 set_module_type(uxtheme_apitest win32cui)
-add_importlibs(uxtheme_apitest uxtheme comctl32 user32 gdi32 msvcrt kernel32)
+add_importlibs(uxtheme_apitest uxtheme dwmapi comctl32 user32 gdi32 msvcrt kernel32)
 add_rostests_file(TARGET uxtheme_apitest)

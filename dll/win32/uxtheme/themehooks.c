@@ -519,7 +519,27 @@ ThemeNotifyColorScheme(HWND hWnd, LPARAM lParam)
 {
     SendNotifyMessageW(hWnd, WM_SYSCOLORCHANGE, 0, 0);
     SendNotifyMessageW(hWnd, WM_THEMECHANGED, TRUE, 0);
+    RedrawWindow(hWnd, NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE);
     return TRUE;
+}
+
+static VOID
+ThemeRedrawNonClient(HWND hWnd)
+{
+    WINDOWINFO wi = { sizeof(wi) };
+    HRGN hrgnFrame, hrgnClient;
+
+    if (!GetWindowInfo(hWnd, &wi))
+        return;
+    hrgnFrame = CreateRectRgn(wi.rcWindow.left - wi.rcClient.left, wi.rcWindow.top - wi.rcClient.top,
+                              wi.rcWindow.right - wi.rcClient.left, wi.rcWindow.bottom - wi.rcClient.top);
+    hrgnClient = CreateRectRgn(0, 0, wi.rcClient.right - wi.rcClient.left, wi.rcClient.bottom - wi.rcClient.top);
+    if (hrgnFrame && hrgnClient && CombineRgn(hrgnFrame, hrgnFrame, hrgnClient, RGN_DIFF) != ERROR)
+        RedrawWindow(hWnd, NULL, hrgnFrame, RDW_FRAME | RDW_INVALIDATE);
+    if (hrgnClient)
+        DeleteObject(hrgnClient);
+    if (hrgnFrame)
+        DeleteObject(hrgnFrame);
 }
 
 static BOOL CALLBACK
@@ -649,11 +669,10 @@ ThemePostWindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam, ULONG_PTR
             if ((style & WS_CAPTION) == WS_CAPTION)
             {
                 SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER);
-                RedrawWindow(hWnd, NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE);
             }
             else if (style & (WS_HSCROLL | WS_VSCROLL))
             {
-                RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_INVALIDATE);
+                ThemeRedrawNonClient(hWnd);
             }
             return 0;
         }

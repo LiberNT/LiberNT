@@ -258,6 +258,8 @@ dwm_set_dword_attribute(HWND hwnd, DWORD attribute, DWORD value)
 
     if (property == NULL)
         return E_INVALIDARG;
+    if ((DWORD)(ULONG_PTR)GetPropW(hwnd, property) == value)
+        return S_OK;
     if (value == 0)
     {
         RemovePropW(hwnd, property);
