@@ -293,8 +293,12 @@ KiCountClockKeepAlive(
     _In_ ULONG Ticks)
 {
     ULONG Timeout = (ULONG)(KI_CLOCK_WATCHDOG_INTERVAL / KeMaximumIncrement);
+    ULONG Missed;
 
-    if ((ULONG)InterlockedExchangeAdd(&TargetPrcb->ClockKeepAlive, (LONG)Ticks) + Ticks > Timeout)
+    ASSERT(Ticks == 1);
+    Missed = (ULONG)InterlockedExchangeAdd(&TargetPrcb->ClockKeepAlive, (LONG)Ticks);
+    ASSERT(Missed <= Timeout);
+    if (Missed + Ticks > Timeout)
     {
         KeBugCheckEx(CLOCK_WATCHDOG_TIMEOUT,
                      Timeout,
@@ -331,6 +335,7 @@ KiCheckClockWatchdog(
         return;
     }
 
+    /* One period per interrupt: ticks beyond that are time the clock itself did not tick (held off, or the virtual machine was stopped) */
     if (Prcb == OwnerPrcb)
     {
         for (Number = 0; Number < KeProcessorCount; Number++)
@@ -341,7 +346,7 @@ KiCheckClockWatchdog(
                 KiIsProcessorInSet(KeActiveProcessors.Bitmap, Number) &&
                 !KiClockTickSuspended(TargetPrcb))
             {
-                KiCountClockKeepAlive(TargetPrcb, Ticks);
+                KiCountClockKeepAlive(TargetPrcb, 1);
             }
         }
 
@@ -359,7 +364,7 @@ KiCheckClockWatchdog(
     }
 
     if (Number == Prcb->Number)
-        KiCountClockKeepAlive(OwnerPrcb, Ticks);
+        KiCountClockKeepAlive(OwnerPrcb, 1);
 }
 
 /* PUBLIC FUNCTIONS: THE CLOCK PERIOD *****************************************/
