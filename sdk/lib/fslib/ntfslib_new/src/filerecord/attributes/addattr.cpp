@@ -1250,8 +1250,7 @@ FileRecord::InsertAttributeListEntry(
             (USHORT)NewEntryLength;
         NewEntry->NameLength =
             (UCHAR)NameLength;
-        NewEntry->NameOffset =
-            NameLength != 0 ? 0x1a : 0;
+        NewEntry->NameOffset = 0x1a;
         NewEntry->FirstVCN =
             TargetFirstVcn;
         OwnerFileReference =
@@ -2205,10 +2204,7 @@ FileRecord::CreateInitialAttributeList(_In_opt_ PAttribute GrowingData)
             (USHORT)Source->RecordLength;
         Target->NameLength =
             (UCHAR)Source->NameLength;
-        Target->NameOffset =
-            Source->NameLength != 0
-            ? 0x1a
-            : 0;
+        Target->NameOffset = 0x1a;
         Target->FirstVCN =
             Source->FirstVcn;
         Target->BaseFileRef =
@@ -3433,11 +3429,15 @@ FileRecord::ReplaceNonResidentMappingPairs(
                     Update->NewList + OutputOffset);
             NewEntry->Type = Attribute->AttributeType;
             NewEntry->RecordLength = (USHORT)NewEntryLength;
+            NewEntry->NameLength = (UCHAR)NameLength;
+            NewEntry->NameOffset = 0x1a;
             NewEntry->FirstVCN = 0;
             NewEntry->BaseFileRef =
                 ((ULONGLONG)AttributeOwner->Header->SequenceNumber << 48) |
                 AttributeOwner->RecordNumber;
             NewEntry->AttributeId = Attribute->AttributeID;
+            if (NameLength != 0)
+                RtlCopyMemory(reinterpret_cast<PUCHAR>(NewEntry) + 0x1a, Update->Name, NameBytes);
             OutputOffset += NewEntryLength;
         }
         for (PNONRESIDENT_MAPPING_NEW_EXTENT Current = Update->NewExtents;
@@ -3449,11 +3449,15 @@ FileRecord::ReplaceNonResidentMappingPairs(
                     Update->NewList + OutputOffset);
             NewEntry->Type = Attribute->AttributeType;
             NewEntry->RecordLength = (USHORT)NewEntryLength;
+            NewEntry->NameLength = (UCHAR)NameLength;
+            NewEntry->NameOffset = 0x1a;
             NewEntry->FirstVCN = Current->FirstVcn;
             NewEntry->BaseFileRef =
                 ((ULONGLONG)Current->Record->Header->SequenceNumber << 48) |
                 Current->Record->RecordNumber;
             NewEntry->AttributeId = Current->Attribute->AttributeID;
+            if (NameLength != 0)
+                RtlCopyMemory(reinterpret_cast<PUCHAR>(NewEntry) + 0x1a, Update->Name, NameBytes);
             OutputOffset += NewEntryLength;
         }
         RtlCopyMemory(Update->NewList + OutputOffset,
@@ -3535,8 +3539,7 @@ FileRecord::ReplaceNonResidentMappingPairs(
                     (USHORT)NewEntryLength;
                 NewEntry->NameLength =
                     (UCHAR)NameLength;
-                NewEntry->NameOffset =
-                    NameLength ? 0x1a : 0;
+                NewEntry->NameOffset = 0x1a;
                 NewEntry->FirstVCN =
                     Current->FirstVcn;
                 NewEntry->BaseFileRef =

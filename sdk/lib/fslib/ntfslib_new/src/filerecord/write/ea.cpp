@@ -1036,6 +1036,7 @@ FileRecord::ReplaceListedExtendedAttributes(
                 TypeEAInformation;
             NewEntry->RecordLength =
                 (USHORT)NewEntryLength;
+            NewEntry->NameOffset = 0x1a;
             NewEntry->FirstVCN = 0;
             NewEntry->BaseFileRef =
                 NewOwnerReference;
@@ -1059,6 +1060,7 @@ FileRecord::ReplaceListedExtendedAttributes(
             NewEntry->Type = TypeEA;
             NewEntry->RecordLength =
                 (USHORT)NewEntryLength;
+            NewEntry->NameOffset = 0x1a;
             NewEntry->FirstVCN = 0;
             NewEntry->BaseFileRef =
                 NewOwnerReference;
