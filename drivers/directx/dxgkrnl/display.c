@@ -4171,12 +4171,16 @@ DxgkpPointerBridgeSupported(
 /* Push the tracked pointer position/visibility to the miniport. */
 static NTSTATUS
 DxgkpPointerBridgeSetPosition(
-    _In_ PDXGKRNL_ADAPTER Adapter)
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId)
 {
     PDXGKDDI_SET_POINTER_POSITION PfnSetPosition;
     DXGKARG_SETPOINTERPOSITION PositionArgs;
+    PDXGKRNL_SOURCE_POINTER Pointer;
     NTSTATUS Status = STATUS_UNSUCCESSFUL;
 
+    ASSERT(VidPnSourceId < DXGKRNL_MAX_SOURCE_PRIMARIES);
+    Pointer = &Adapter->Pointers[VidPnSourceId];
     PfnSetPosition = DXGK_CB(Adapter, DxgkDdiSetPointerPosition);
     if (PfnSetPosition == NULL)
         return STATUS_NOT_SUPPORTED;
@@ -4187,11 +4191,10 @@ DxgkpPointerBridgeSetPosition(
         return STATUS_DELETE_PENDING;
 
     RtlZeroMemory(&PositionArgs, sizeof(PositionArgs));
-    PositionArgs.VidPnSourceId = 0;
-    PositionArgs.X = Adapter->PointerX;
-    PositionArgs.Y = Adapter->PointerY;
-    PositionArgs.Flags.Visible = (Adapter->PointerVisible &&
-                                  Adapter->PointerShapeValid) ? 1 : 0;
+    PositionArgs.VidPnSourceId = VidPnSourceId;
+    PositionArgs.X = Pointer->X;
+    PositionArgs.Y = Pointer->Y;
+    PositionArgs.Flags.Visible = (Pointer->Visible && Pointer->ShapeValid) ? 1 : 0;
 
     InterlockedIncrement(&g_PointerPositionCallCount);
     _SEH2_TRY
@@ -4216,13 +4219,18 @@ DxgkpPointerBridgeSetPosition(
 static NTSTATUS
 DxgkpPointerBridgeSetShape(
     _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
     _In_reads_bytes_(AttributesSize) PVIDEO_POINTER_ATTRIBUTES Attributes,
     _In_ ULONG AttributesSize)
 {
     PDXGKDDI_SET_POINTER_SHAPE PfnSetShape;
     DXGKARG_SETPOINTERSHAPE ShapeArgs;
+    PDXGKRNL_SOURCE_POINTER Pointer;
     ULONG RequiredSize;
     NTSTATUS Status = STATUS_UNSUCCESSFUL;
+
+    ASSERT(VidPnSourceId < DXGKRNL_MAX_SOURCE_PRIMARIES);
+    Pointer = &Adapter->Pointers[VidPnSourceId];
 
     PfnSetShape = DXGK_CB(Adapter, DxgkDdiSetPointerShape);
     if (PfnSetShape == NULL)
@@ -4256,7 +4264,7 @@ DxgkpPointerBridgeSetShape(
     ShapeArgs.Width = Attributes->Width;
     ShapeArgs.Height = Attributes->Height;
     ShapeArgs.Pitch = DxgkDisplayCorePackPointerRows(Attributes->Pixels, Attributes->Width, Attributes->Height, Attributes->WidthInBytes);
-    ShapeArgs.VidPnSourceId = 0;
+    ShapeArgs.VidPnSourceId = VidPnSourceId;
     ShapeArgs.pPixels = Attributes->Pixels;
     /* The display driver already offset Column/Row by the hot spot. */
     ShapeArgs.XHot = 0;
@@ -4280,16 +4288,114 @@ DxgkpPointerBridgeSetShape(
     if (!NT_SUCCESS(Status))
     {
         InterlockedIncrement(&g_PointerFailureCount);
-        Adapter->PointerShapeValid = FALSE;
+        Pointer->ShapeValid = FALSE;
         return Status;
     }
 
-    Adapter->PointerShapeValid = TRUE;
-    Adapter->PointerX = Attributes->Column;
-    Adapter->PointerY = Attributes->Row;
-    Adapter->PointerVisible = (Attributes->Enable != 0);
+    Pointer->ShapeValid = TRUE;
+    Pointer->X = Attributes->Column;
+    Pointer->Y = Attributes->Row;
+    Pointer->Visible = (Attributes->Enable != 0);
 
-    return DxgkpPointerBridgeSetPosition(Adapter);
+    return DxgkpPointerBridgeSetPosition(Adapter, VidPnSourceId);
+}
+
+/*
+ * The pointer IOCTLs of the display device that scans out VidPnSourceId.
+ * Without a hardware pointer QUERY_POINTER_CAPABILITIES and SET_POINTER_ATTR
+ * fail and the display driver draws a software cursor.
+ */
+static NTSTATUS
+DxgkpPointerControl(
+    _In_opt_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
+    _In_ ULONG IoControlCode,
+    _Inout_opt_ PVOID Buffer,
+    _In_ ULONG InputLength,
+    _In_ ULONG OutputLength,
+    _Out_ PULONG_PTR BytesReturned)
+{
+    BOOLEAN Hardware;
+    PDXGKRNL_SOURCE_POINTER Pointer = NULL;
+
+    PAGED_CODE();
+    *BytesReturned = 0;
+    if (VidPnSourceId >= DXGKRNL_MAX_SOURCE_PRIMARIES)
+        return STATUS_NOT_SUPPORTED;
+    Hardware = Adapter != NULL && DxgkpPointerBridgeSupported(Adapter);
+    if (Hardware)
+        Pointer = &Adapter->Pointers[VidPnSourceId];
+    switch (IoControlCode)
+    {
+        case IOCTL_VIDEO_ENABLE_POINTER:
+            if (!Hardware || !Pointer->ShapeValid)
+                return STATUS_SUCCESS;
+            Pointer->Visible = TRUE;
+            return DxgkpPointerBridgeSetPosition(Adapter, VidPnSourceId);
+
+        case IOCTL_VIDEO_DISABLE_POINTER:
+            if (!Hardware || !Pointer->Visible)
+                return STATUS_SUCCESS;
+            Pointer->Visible = FALSE;
+            return DxgkpPointerBridgeSetPosition(Adapter, VidPnSourceId);
+
+        case IOCTL_VIDEO_SET_POINTER_ATTR:
+            if (!Hardware)
+                return STATUS_NOT_SUPPORTED;
+            if (Buffer == NULL || InputLength < FIELD_OFFSET(VIDEO_POINTER_ATTRIBUTES, Pixels))
+                return STATUS_BUFFER_TOO_SMALL;
+            return DxgkpPointerBridgeSetShape(Adapter, VidPnSourceId, (PVIDEO_POINTER_ATTRIBUTES)Buffer, InputLength);
+
+        case IOCTL_VIDEO_SET_POINTER_POSITION:
+        {
+            PVIDEO_POINTER_POSITION Position = (PVIDEO_POINTER_POSITION)Buffer;
+
+            if (!Hardware)
+                return STATUS_SUCCESS;
+            if (Position == NULL || InputLength < sizeof(VIDEO_POINTER_POSITION))
+                return STATUS_BUFFER_TOO_SMALL;
+            Pointer->X = Position->Column;
+            Pointer->Y = Position->Row;
+            return DxgkpPointerBridgeSetPosition(Adapter, VidPnSourceId);
+        }
+
+        case IOCTL_VIDEO_QUERY_POINTER_POSITION:
+        {
+            PVIDEO_POINTER_POSITION Position = (PVIDEO_POINTER_POSITION)Buffer;
+
+            if (!Hardware || Position == NULL || OutputLength < sizeof(VIDEO_POINTER_POSITION))
+                return STATUS_NOT_SUPPORTED;
+            Position->Column = (SHORT)Pointer->X;
+            Position->Row = (SHORT)Pointer->Y;
+            *BytesReturned = sizeof(VIDEO_POINTER_POSITION);
+            return STATUS_SUCCESS;
+        }
+
+        case IOCTL_VIDEO_QUERY_POINTER_CAPABILITIES:
+        {
+            PVIDEO_POINTER_CAPABILITIES Caps = (PVIDEO_POINTER_CAPABILITIES)Buffer;
+
+            if (!Hardware)
+            {
+                DXGKRNL_TRACE("DxgkpPointerControl: IOCTL_VIDEO_QUERY_POINTER_CAPABILITIES: no hardware pointer\n");
+                return STATUS_NOT_SUPPORTED;
+            }
+            if (Caps == NULL || OutputLength < sizeof(VIDEO_POINTER_CAPABILITIES))
+                return STATUS_BUFFER_TOO_SMALL;
+            RtlZeroMemory(Caps, sizeof(*Caps));
+            Caps->Flags = VIDEO_MODE_ASYNC_POINTER | VIDEO_MODE_COLOR_POINTER;
+            Caps->MaxWidth = Adapter->PointerMaxWidth;
+            Caps->MaxHeight = Adapter->PointerMaxHeight;
+            Caps->HWPtrBitmapStart = (ULONG)-1;
+            Caps->HWPtrBitmapEnd = (ULONG)-1;
+            *BytesReturned = sizeof(VIDEO_POINTER_CAPABILITIES);
+            return STATUS_SUCCESS;
+        }
+
+        default:
+            ASSERT(FALSE);
+            return STATUS_NOT_SUPPORTED;
+    }
 }
 
 /* DISPLAY_DEVICE.StateFlags of a monitor (wingdi.h DISPLAY_DEVICE_ACTIVE, DISPLAY_DEVICE_ATTACHED). */
@@ -5200,148 +5306,23 @@ DxgkpDisplayDispatch(
             break;
         }
 
-        /*
-         * Pointer/cursor IOCTLs.
-         *
-         * Bridged to the miniport's DxgkDdiSetPointerShape/Position when it
-         * advertises a color hardware pointer (see DxgkpPointerBridge* above).
-         * Otherwise QUERY_POINTER_CAPABILITIES / SET_POINTER_ATTR fail and
-         * win32ss falls back to GDI software cursor rendering.
-         */
+        /* Bridged to the miniport's DxgkDdiSetPointerShape/Position when it advertises a color hardware pointer */
         case IOCTL_VIDEO_ENABLE_POINTER:
-        {
-            DXGKRNL_TRACE("DxgkpDisplayDispatch: IOCTL_VIDEO_ENABLE_POINTER\n");
-            Status = STATUS_SUCCESS;
-            if (g_DisplayAdapter != NULL &&
-                DxgkpPointerBridgeSupported(g_DisplayAdapter) &&
-                g_DisplayAdapter->PointerShapeValid)
-            {
-                g_DisplayAdapter->PointerVisible = TRUE;
-                Status = DxgkpPointerBridgeSetPosition(g_DisplayAdapter);
-            }
-            break;
-        }
-
         case IOCTL_VIDEO_DISABLE_POINTER:
-        {
-            DXGKRNL_TRACE("DxgkpDisplayDispatch: IOCTL_VIDEO_DISABLE_POINTER\n");
-            Status = STATUS_SUCCESS;
-            if (g_DisplayAdapter != NULL &&
-                DxgkpPointerBridgeSupported(g_DisplayAdapter) &&
-                g_DisplayAdapter->PointerVisible)
-            {
-                g_DisplayAdapter->PointerVisible = FALSE;
-                Status = DxgkpPointerBridgeSetPosition(g_DisplayAdapter);
-            }
-            break;
-        }
-
         case IOCTL_VIDEO_SET_POINTER_ATTR:
-        {
-            PVIDEO_POINTER_ATTRIBUTES Attributes =
-                (PVIDEO_POINTER_ATTRIBUTES)Irp->AssociatedIrp.SystemBuffer;
-            ULONG InputLength =
-                Stack->Parameters.DeviceIoControl.InputBufferLength;
-
-            if (g_DisplayAdapter == NULL ||
-                !DxgkpPointerBridgeSupported(g_DisplayAdapter))
-            {
-                Status = STATUS_NOT_SUPPORTED;
-                break;
-            }
-
-            if (Attributes == NULL ||
-                InputLength < FIELD_OFFSET(VIDEO_POINTER_ATTRIBUTES, Pixels))
-            {
-                Status = STATUS_BUFFER_TOO_SMALL;
-                break;
-            }
-
-            Status = DxgkpPointerBridgeSetShape(g_DisplayAdapter,
-                                                Attributes,
-                                                InputLength);
-            break;
-        }
-
         case IOCTL_VIDEO_SET_POINTER_POSITION:
-        {
-            PVIDEO_POINTER_POSITION Position =
-                (PVIDEO_POINTER_POSITION)Irp->AssociatedIrp.SystemBuffer;
-
-            if (g_DisplayAdapter == NULL ||
-                !DxgkpPointerBridgeSupported(g_DisplayAdapter))
-            {
-                Status = STATUS_SUCCESS;
-                break;
-            }
-
-            if (Position == NULL ||
-                Stack->Parameters.DeviceIoControl.InputBufferLength <
-                    sizeof(VIDEO_POINTER_POSITION))
-            {
-                Status = STATUS_BUFFER_TOO_SMALL;
-                break;
-            }
-
-            g_DisplayAdapter->PointerX = Position->Column;
-            g_DisplayAdapter->PointerY = Position->Row;
-            Status = DxgkpPointerBridgeSetPosition(g_DisplayAdapter);
-            break;
-        }
-
         case IOCTL_VIDEO_QUERY_POINTER_POSITION:
-        {
-            PVIDEO_POINTER_POSITION Position =
-                (PVIDEO_POINTER_POSITION)Irp->AssociatedIrp.SystemBuffer;
-
-            if (g_DisplayAdapter == NULL ||
-                !DxgkpPointerBridgeSupported(g_DisplayAdapter) ||
-                Position == NULL ||
-                Stack->Parameters.DeviceIoControl.OutputBufferLength <
-                    sizeof(VIDEO_POINTER_POSITION))
-            {
-                Status = STATUS_NOT_SUPPORTED;
-                break;
-            }
-
-            Position->Column = (SHORT)g_DisplayAdapter->PointerX;
-            Position->Row = (SHORT)g_DisplayAdapter->PointerY;
-            BytesReturned = sizeof(VIDEO_POINTER_POSITION);
-            Status = STATUS_SUCCESS;
-            break;
-        }
-
         case IOCTL_VIDEO_QUERY_POINTER_CAPABILITIES:
         {
-            PVIDEO_POINTER_CAPABILITIES Caps =
-                (PVIDEO_POINTER_CAPABILITIES)Irp->AssociatedIrp.SystemBuffer;
+            ULONG_PTR PointerBytes;
 
-            if (g_DisplayAdapter == NULL ||
-                !DxgkpPointerBridgeSupported(g_DisplayAdapter))
-            {
-                DXGKRNL_TRACE("DxgkpDisplayDispatch: "
-                              "IOCTL_VIDEO_QUERY_POINTER_CAPABILITIES: "
-                              "no hardware pointer\n");
-                Status = STATUS_NOT_SUPPORTED;
-                break;
-            }
-
-            if (Caps == NULL ||
-                Stack->Parameters.DeviceIoControl.OutputBufferLength <
-                    sizeof(VIDEO_POINTER_CAPABILITIES))
-            {
-                Status = STATUS_BUFFER_TOO_SMALL;
-                break;
-            }
-
-            RtlZeroMemory(Caps, sizeof(*Caps));
-            Caps->Flags = VIDEO_MODE_ASYNC_POINTER | VIDEO_MODE_COLOR_POINTER;
-            Caps->MaxWidth = g_DisplayAdapter->PointerMaxWidth;
-            Caps->MaxHeight = g_DisplayAdapter->PointerMaxHeight;
-            Caps->HWPtrBitmapStart = (ULONG)-1;
-            Caps->HWPtrBitmapEnd = (ULONG)-1;
-            BytesReturned = sizeof(VIDEO_POINTER_CAPABILITIES);
-            Status = STATUS_SUCCESS;
+            Status = DxgkpPointerControl(g_DisplayAdapter, 0,
+                                         Stack->Parameters.DeviceIoControl.IoControlCode,
+                                         Irp->AssociatedIrp.SystemBuffer,
+                                         Stack->Parameters.DeviceIoControl.InputBufferLength,
+                                         Stack->Parameters.DeviceIoControl.OutputBufferLength,
+                                         &PointerBytes);
+            BytesReturned = (ULONG)PointerBytes;
             break;
         }
 
@@ -5802,8 +5783,16 @@ DxgkpSourceDisplayControl(
         case IOCTL_VIDEO_RESET_DEVICE:
             return STATUS_SUCCESS;
 
+        case IOCTL_VIDEO_ENABLE_POINTER:
+        case IOCTL_VIDEO_DISABLE_POINTER:
+        case IOCTL_VIDEO_SET_POINTER_ATTR:
+        case IOCTL_VIDEO_SET_POINTER_POSITION:
+        case IOCTL_VIDEO_QUERY_POINTER_POSITION:
+        case IOCTL_VIDEO_QUERY_POINTER_CAPABILITIES:
+            return DxgkpPointerControl(Adapter, Display->VidPnSourceId, IoControlCode, Buffer, InputLength, OutputLength,
+                                       BytesReturned);
+
         default:
-            /* The pointer IOCTLs fail, so the display driver draws a software cursor here */
             return STATUS_NOT_SUPPORTED;
     }
 }

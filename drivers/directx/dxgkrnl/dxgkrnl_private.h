@@ -662,6 +662,14 @@ typedef struct _DXGKRNL_SOURCE_PRIMARY
     BOOLEAN                     ScannedOut;
 } DXGKRNL_SOURCE_PRIMARY, *PDXGKRNL_SOURCE_PRIMARY;
 
+typedef struct _DXGKRNL_SOURCE_POINTER
+{
+    LONG                        X;
+    LONG                        Y;
+    BOOLEAN                     Visible;
+    BOOLEAN                     ShapeValid;
+} DXGKRNL_SOURCE_POINTER, *PDXGKRNL_SOURCE_POINTER;
+
 struct _DXGKRNL_ADAPTER
 {
     /* Back-pointer to the per-miniport driver context. */
@@ -1320,10 +1328,8 @@ struct _DXGKRNL_ADAPTER
     BOOLEAN                     PointerHwSupported;
     ULONG                       PointerMaxWidth;
     ULONG                       PointerMaxHeight;
-    LONG                        PointerX;
-    LONG                        PointerY;
-    BOOLEAN                     PointerVisible;
-    BOOLEAN                     PointerShapeValid;
+    /* One pointer per VidPn source, driven by that source's display device */
+    DXGKRNL_SOURCE_POINTER      Pointers[DXGKRNL_MAX_SOURCE_PRIMARIES];
 
     /*
      * Set when the miniport was already stopped through
