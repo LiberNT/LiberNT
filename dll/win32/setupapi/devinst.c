@@ -7856,6 +7856,14 @@ SetupDiInstallDevice(
     if (GetLastError() == ERROR_SUCCESS_REBOOT_REQUIRED)
         RebootRequired = TRUE;
 
+    strcpyW(pSectionName, L".Wdf");
+    if (!SETUPAPI_InstallWdfSection(SelectedDriver->InfFileDetails->hInf,
+                                    SectionName,
+                                    ((struct DeviceInfoSet *)DeviceInfoSet)->HKLM))
+    {
+        goto cleanup;
+    }
+
     /* Open device registry key. DDInstall.HW AddReg commonly creates
      * nested subkeys such as "Interrupt Management\\..."; KEY_SET_VALUE
      * alone cannot do that. */

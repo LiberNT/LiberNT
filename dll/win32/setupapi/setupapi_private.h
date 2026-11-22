@@ -446,6 +446,12 @@ SETUPAPI_InstallFilters(
     IN PCWSTR FiltersSection,
     IN HKEY InstanceKey);
 
+BOOL
+SETUPAPI_InstallWdfSection(
+    IN HINF hInf,
+    IN PCWSTR WdfSection,
+    IN HKEY MachineKey);
+
 /* install.c */
 
 BOOL

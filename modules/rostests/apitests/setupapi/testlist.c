@@ -8,6 +8,7 @@ extern void func_devclass(void);
 extern void func_DeviceClassName(void);
 extern void func_DeviceDescription(void);
 extern void func_DeviceExtension(void);
+extern void func_KmdfServiceSection(void);
 extern void func_DriverFeatureScore(void);
 extern void func_DriverFilesNeedReboot(void);
 extern void func_DriverPackageSignerScore(void);
@@ -48,6 +49,7 @@ const struct test winetest_testlist[] =
     { "DeviceClassName", func_DeviceClassName },
     { "DeviceDescription", func_DeviceDescription },
     { "DeviceExtension", func_DeviceExtension },
+    { "KmdfServiceSection", func_KmdfServiceSection },
     { "DriverFeatureScore", func_DriverFeatureScore },
     { "DriverFilesNeedReboot", func_DriverFilesNeedReboot },
     { "DriverPackageSignerScore", func_DriverPackageSignerScore },
