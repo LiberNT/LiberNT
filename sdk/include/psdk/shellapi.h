@@ -1152,10 +1152,6 @@ typedef struct _OPEN_PRINTER_PROPS_INFOW {
 #endif
 #endif
 
-struct HDROP__
-{
-    int unused;
-};
 
 typedef OPEN_PRINTER_PROPS_INFOA OPEN_PRINTER_PROPS_INFO;
 

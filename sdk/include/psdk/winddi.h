@@ -4455,45 +4455,13 @@ extern FN_DrvUnlockDisplayArea DrvUnlockDisplayArea;
 #endif
 
 
-struct DHPDEV__
-{
-    int unused;
-};
 
-struct DHSURF__
-{
-    int unused;
-};
 
-struct HBM__
-{
-    int unused;
-};
 
-struct HDEV__
-{
-    int unused;
-};
 
-struct HDRVOBJ__
-{
-    int unused;
-};
 
-struct HFASTMUTEX__
-{
-    int unused;
-};
 
-struct HSEMAPHORE__
-{
-    int unused;
-};
 
-struct HSURF__
-{
-    int unused;
-};
 
 typedef BOOL (WINAPI *PFN_DrvSurfaceComplete)(DHPDEV, HANDLE);
 

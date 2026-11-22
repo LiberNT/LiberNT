@@ -234,59 +234,15 @@ typedef struct _FILETIME
 
 #define WINAPI_INLINE WINAPI
 
-struct HINSTANCE__
-{
-    int unused;
-};
 
-struct HKEY__
-{
-    int unused;
-};
 
-struct HKL__
-{
-    int unused;
-};
 
-struct HLSURF__
-{
-    int unused;
-};
 
-struct HMETAFILE__
-{
-    int unused;
-};
 
-struct HRGN__
-{
-    int unused;
-};
 
-struct HRSRC__
-{
-    int unused;
-};
 
-struct HSPRITE__
-{
-    int unused;
-};
 
-struct HSTR__
-{
-    int unused;
-};
 
-struct HTASK__
-{
-    int unused;
-};
 
-struct HWINSTA__
-{
-    int unused;
-};
 
 #endif // _MINWINDEF_

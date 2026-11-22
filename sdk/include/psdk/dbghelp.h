@@ -1151,7 +1151,7 @@ typedef enum
     SYMOPT_EX_WINE_MODULE_REAL_PATH,
     /* Return the raw source file path from debug info (not always mapped to DOS) */
     SYMOPT_EX_WINE_SOURCE_ACTUAL_PATH,
-#endif,
+#endif
     SYMOPT_EX_DISALLOW_NETWORK_PATHS = 4,
 } IMAGEHLP_EXTENDED_OPTIONS;
 

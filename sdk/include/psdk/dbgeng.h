@@ -216,567 +216,6 @@ typedef interface IDebugClient IDebugClient;
 #ifdef __cplusplus
 interface IDebugClient;
 #endif /* __cplusplus */
-typedef struct IDebugAdvanced * PDEBUG_ADVANCED;
-typedef struct IDebugAdvanced2 * PDEBUG_ADVANCED2;
-typedef struct IDebugAdvanced3 * PDEBUG_ADVANCED3;
-typedef struct IDebugClient * PDEBUG_CLIENT;
-typedef struct IDebugClient2 * PDEBUG_CLIENT2;
-typedef struct IDebugClient3 * PDEBUG_CLIENT3;
-typedef struct IDebugClient4 * PDEBUG_CLIENT4;
-typedef struct IDebugClient5 * PDEBUG_CLIENT5;
-typedef struct IDebugClient6 * PDEBUG_CLIENT6;
-typedef struct IDebugClient7 * PDEBUG_CLIENT7;
-typedef struct IDebugControl * PDEBUG_CONTROL;
-typedef struct IDebugControl2 * PDEBUG_CONTROL2;
-typedef struct IDebugControl3 * PDEBUG_CONTROL3;
-typedef struct IDebugControl4 * PDEBUG_CONTROL4;
-typedef struct IDebugDataSpaces * PDEBUG_DATA_SPACES;
-typedef struct IDebugDataSpaces2 * PDEBUG_DATA_SPACES2;
-typedef struct IDebugEventCallbacks * PDEBUG_EVENT_CALLBACKS;
-typedef struct IDebugEventCallbacksWide * PDEBUG_EVENT_CALLBACKS_WIDE;
-typedef struct IDebugEventContextCallbacks * PDEBUG_EVENT_CONTEXT_CALLBACKS;
-typedef struct IDebugInputCallbacks * PDEBUG_INPUT_CALLBACKS;
-typedef struct IDebugOutputCallbacks * PDEBUG_OUTPUT_CALLBACKS;
-typedef struct IDebugOutputCallbacksWide * PDEBUG_OUTPUT_CALLBACKS_WIDE;
-typedef struct IDebugSymbolGroup * PDEBUG_SYMBOL_GROUP;
-typedef struct IDebugSymbols * PDEBUG_SYMBOLS;
-typedef struct IDebugSymbols2 * PDEBUG_SYMBOLS2;
-typedef struct IDebugSymbols3 * PDEBUG_SYMBOLS3;
-typedef struct IDebugSystemObjects * PDEBUG_SYSTEM_OBJECTS;
-typedef struct IDebugSystemObjects2 * PDEBUG_SYSTEM_OBJECTS2;
-typedef struct IDebugSystemObjects3 * PDEBUG_SYSTEM_OBJECTS3;
-
-typedef struct _DEBUG_CACHED_SYMBOL_INFO {
-  ULONG64 ModBase;
-  ULONG64 Arg1;
-  ULONG64 Arg2;
-  ULONG Id;
-  ULONG Arg3;
-} DEBUG_CACHED_SYMBOL_INFO, *PDEBUG_CACHED_SYMBOL_INFO;
-
-typedef struct _DEBUG_CLIENT_CONTEXT {
-  UINT cbSize;
-  UINT eClient;
-} DEBUG_CLIENT_CONTEXT, *PDEBUG_CLIENT_CONTEXT;
-
-typedef struct _DEBUG_CREATE_PROCESS_OPTIONS {
-  ULONG CreateFlags;
-  ULONG EngCreateFlags;
-  ULONG VerifierFlags;
-  ULONG Reserved;
-} DEBUG_CREATE_PROCESS_OPTIONS, *PDEBUG_CREATE_PROCESS_OPTIONS;
-
-typedef struct _DEBUG_EVENT_CONTEXT {
-  ULONG Size;
-  ULONG ProcessEngineId;
-  ULONG ThreadEngineId;
-  ULONG FrameEngineId;
-} DEBUG_EVENT_CONTEXT, *PDEBUG_EVENT_CONTEXT;
-
-typedef struct _DEBUG_GET_TEXT_COMPLETIONS_IN {
-  ULONG Flags;
-  ULONG MatchCountLimit;
-  ULONG64 Reserved[3];
-} DEBUG_GET_TEXT_COMPLETIONS_IN, *PDEBUG_GET_TEXT_COMPLETIONS_IN;
-
-typedef struct _DEBUG_GET_TEXT_COMPLETIONS_OUT {
-  ULONG Flags;
-  ULONG ReplaceIndex;
-  ULONG MatchCount;
-  ULONG Reserved1;
-  ULONG64 Reserved2[2];
-} DEBUG_GET_TEXT_COMPLETIONS_OUT, *PDEBUG_GET_TEXT_COMPLETIONS_OUT;
-
-typedef struct _DEBUG_HANDLE_DATA_BASIC {
-  ULONG TypeNameSize;
-  ULONG ObjectNameSize;
-  ULONG Attributes;
-  ULONG GrantedAccess;
-  ULONG HandleCount;
-  ULONG PointerCount;
-} DEBUG_HANDLE_DATA_BASIC, *PDEBUG_HANDLE_DATA_BASIC;
-
-typedef struct _DEBUG_LAST_EVENT_INFO_BREAKPOINT {
-  ULONG Id;
-} DEBUG_LAST_EVENT_INFO_BREAKPOINT, *PDEBUG_LAST_EVENT_INFO_BREAKPOINT;
-
-typedef struct _DEBUG_LAST_EVENT_INFO_EXCEPTION {
-  EXCEPTION_RECORD64 ExceptionRecord;
-  ULONG FirstChance;
-} DEBUG_LAST_EVENT_INFO_EXCEPTION, *PDEBUG_LAST_EVENT_INFO_EXCEPTION;
-
-typedef struct _DEBUG_LAST_EVENT_INFO_EXIT_PROCESS {
-  ULONG ExitCode;
-} DEBUG_LAST_EVENT_INFO_EXIT_PROCESS, *PDEBUG_LAST_EVENT_INFO_EXIT_PROCESS;
-
-typedef struct _DEBUG_LAST_EVENT_INFO_EXIT_THREAD {
-  ULONG ExitCode;
-} DEBUG_LAST_EVENT_INFO_EXIT_THREAD, *PDEBUG_LAST_EVENT_INFO_EXIT_THREAD;
-
-typedef struct _DEBUG_LAST_EVENT_INFO_LOAD_MODULE {
-  ULONG64 Base;
-} DEBUG_LAST_EVENT_INFO_LOAD_MODULE, *PDEBUG_LAST_EVENT_INFO_LOAD_MODULE;
-
-typedef struct _DEBUG_LAST_EVENT_INFO_SERVICE_EXCEPTION {
-  ULONG Kind;
-  ULONG DataSize;
-  ULONG64 Address;
-} DEBUG_LAST_EVENT_INFO_SERVICE_EXCEPTION, *PDEBUG_LAST_EVENT_INFO_SERVICE_EXCEPTION;
-
-typedef struct _DEBUG_LAST_EVENT_INFO_SYSTEM_ERROR {
-  ULONG Error;
-  ULONG Level;
-} DEBUG_LAST_EVENT_INFO_SYSTEM_ERROR, *PDEBUG_LAST_EVENT_INFO_SYSTEM_ERROR;
-
-typedef struct _DEBUG_LAST_EVENT_INFO_UNLOAD_MODULE {
-  ULONG64 Base;
-} DEBUG_LAST_EVENT_INFO_UNLOAD_MODULE, *PDEBUG_LAST_EVENT_INFO_UNLOAD_MODULE;
-
-typedef struct _DEBUG_PROCESSOR_IDENTIFICATION_ALPHA {
-  ULONG Type;
-  ULONG Revision;
-} DEBUG_PROCESSOR_IDENTIFICATION_ALPHA, *PDEBUG_PROCESSOR_IDENTIFICATION_ALPHA;
-
-typedef struct _DEBUG_PROCESSOR_IDENTIFICATION_AMD64 {
-  ULONG Family;
-  ULONG Model;
-  ULONG Stepping;
-  CHAR VendorString[16];
-} DEBUG_PROCESSOR_IDENTIFICATION_AMD64, *PDEBUG_PROCESSOR_IDENTIFICATION_AMD64;
-
-typedef struct _DEBUG_PROCESSOR_IDENTIFICATION_ARM {
-  ULONG Model;
-  ULONG Revision;
-  CHAR VendorString[16];
-} DEBUG_PROCESSOR_IDENTIFICATION_ARM, *PDEBUG_PROCESSOR_IDENTIFICATION_ARM;
-
-typedef struct _DEBUG_PROCESSOR_IDENTIFICATION_ARM64 {
-  ULONG Model;
-  ULONG Revision;
-  CHAR VendorString[16];
-} DEBUG_PROCESSOR_IDENTIFICATION_ARM64, *PDEBUG_PROCESSOR_IDENTIFICATION_ARM64;
-
-typedef struct _DEBUG_PROCESSOR_IDENTIFICATION_IA64 {
-  ULONG Model;
-  ULONG Revision;
-  ULONG Family;
-  ULONG ArchRev;
-  CHAR VendorString[16];
-} DEBUG_PROCESSOR_IDENTIFICATION_IA64, *PDEBUG_PROCESSOR_IDENTIFICATION_IA64;
-
-typedef struct _DEBUG_PROCESSOR_IDENTIFICATION_X86 {
-  ULONG Family;
-  ULONG Model;
-  ULONG Stepping;
-  CHAR VendorString[16];
-} DEBUG_PROCESSOR_IDENTIFICATION_X86, *PDEBUG_PROCESSOR_IDENTIFICATION_X86;
-
-typedef struct _DEBUG_READ_USER_MINIDUMP_STREAM {
-  ULONG StreamType;
-  ULONG Flags;
-  ULONG64 Offset;
-  PVOID Buffer;
-  ULONG BufferSize;
-  ULONG BufferUsed;
-} DEBUG_READ_USER_MINIDUMP_STREAM, *PDEBUG_READ_USER_MINIDUMP_STREAM;
-
-typedef struct _DEBUG_REGISTER_DESCRIPTION {
-  ULONG Type;
-  ULONG Flags;
-  ULONG SubregMaster;
-  ULONG SubregLength;
-  ULONG64 SubregMask;
-  ULONG SubregShift;
-  ULONG Reserved0;
-} DEBUG_REGISTER_DESCRIPTION, *PDEBUG_REGISTER_DESCRIPTION;
-
-typedef struct _DEBUG_STACK_FRAME_EX {
-  ULONG64 InstructionOffset;
-  ULONG64 ReturnOffset;
-  ULONG64 FrameOffset;
-  ULONG64 StackOffset;
-  ULONG64 FuncTableEntry;
-  ULONG64 Params[4];
-  ULONG64 Reserved[6];
-  BOOL Virtual;
-  ULONG FrameNumber;
-  ULONG InlineFrameContext;
-  ULONG FrameMachine;
-} DEBUG_STACK_FRAME_EX, *PDEBUG_STACK_FRAME_EX;
-
-typedef struct _DEBUG_THREAD_BASIC_INFORMATION {
-  ULONG Valid;
-  ULONG ExitStatus;
-  ULONG PriorityClass;
-  ULONG Priority;
-  ULONG64 CreateTime;
-  ULONG64 ExitTime;
-  ULONG64 KernelTime;
-  ULONG64 UserTime;
-  ULONG64 StartOffset;
-  ULONG64 Affinity;
-} DEBUG_THREAD_BASIC_INFORMATION, *PDEBUG_THREAD_BASIC_INFORMATION;
-
-typedef struct _PROCESS_NAME_ENTRY {
-  ULONG ProcessId;
-  ULONG NameOffset;
-  ULONG NameSize;
-  ULONG NextEntry;
-} PROCESS_NAME_ENTRY, *PPROCESS_NAME_ENTRY;
-
-typedef struct _STACK_SRC_INFO {
-  PCWSTR ImagePath;
-  PCWSTR ModuleName;
-  PCWSTR Function;
-  ULONG Displacement;
-  ULONG Row;
-  ULONG Column;
-} STACK_SRC_INFO, *PSTACK_SRC_INFO;
-
-typedef struct _STACK_SYM_FRAME_INFO {
-  DEBUG_STACK_FRAME_EX StackFrameEx;
-  STACK_SRC_INFO SrcInfo;
-} STACK_SYM_FRAME_INFO, *PSTACK_SYM_FRAME_INFO;
-
-typedef struct _SYMBOL_INFO_EX {
-  ULONG SizeOfStruct;
-  ULONG TypeOfInfo;
-  ULONG64 Offset;
-  ULONG Line;
-  ULONG Displacement;
-  ULONG Reserved[4];
-} SYMBOL_INFO_EX, *PSYMBOL_INFO_EX;
-
-#define DEBUG_CREATE_PROCESS_NO_DEBUG_HEAP 0x400
-#define DEBUG_CREATE_PROCESS_THROUGH_RTL 0x10000
-#define DEBUG_EXTENSION_CONTINUE_SEARCH (-805305743)
-#define DEBUG_EXTENSION_RELOAD_EXTENSION (-805306130)
-#define DEBUG_GET_TEXT_COMPLETIONS_NO_DOT_COMMANDS 0x00000001
-#define DEBUG_KERNEL_ACTIVE_DUMP 0x406
-#define DEBUG_KERNEL_DUMP 0x401
-#define DEBUG_KERNEL_FULL_DUMP 0x402
-#define DEBUG_KERNEL_SMALL_DUMP 0x400
-#define DEBUG_KERNEL_TRACE_LOG 0x404
-#define DEBUG_OUTCTL_AMBIENT 0xFFFFFFFF
-#define DEBUG_OUTPUT_NAME_END 0
-#define DEBUG_OUTPUT_NAME_END_T DEBUG_OUTPUT_NAME_END
-#define DEBUG_OUTPUT_NAME_END_WIDE L"**NAME**"
-#define DEBUG_OUTPUT_OFFSET_END "**OFF**"
-#define DEBUG_OUTPUT_OFFSET_END_T DEBUG_OUTPUT_OFFSET_END
-#define DEBUG_OUTPUT_OFFSET_END_WIDE L"**OFF**"
-#define DEBUG_OUTPUT_TYPE_END "**TYPE**"
-#define DEBUG_OUTPUT_TYPE_END_T DEBUG_OUTPUT_TYPE_END
-#define DEBUG_OUTPUT_TYPE_END_WIDE L"**TYPE**"
-#define DEBUG_OUTPUT_VALUE_END "**VALUE**"
-#define DEBUG_OUTPUT_VALUE_END_T DEBUG_OUTPUT_VALUE_END
-#define DEBUG_OUTPUT_VALUE_END_WIDE L"**VALUE**"
-#define DEBUG_SCOPE_GROUP_VALID_FLAGS 7
-#define DEBUG_SYMBOL_EXPANSION_LEVEL_MASK 0x0000000f
-
-union _INLINE_FRAME_CONTEXT
-{
-    DWORD ContextValue;
-    struct
-    {
-        BYTE FrameId;
-        BYTE FrameType;
-        WORD FrameSignature;
-    };
-};
-
-typedef struct IDebugAdvanced2Vtbl IDebugAdvanced2Vtbl;
-
-typedef struct IDebugAdvanced3Vtbl IDebugAdvanced3Vtbl;
-
-typedef struct IDebugAdvanced4Vtbl IDebugAdvanced4Vtbl;
-
-struct IDebugAdvanced4
-{
-    struct IDebugAdvanced4Vtbl *lpVtbl;
-};
-
-typedef struct IDebugAdvancedVtbl IDebugAdvancedVtbl;
-
-typedef struct IDebugBreakpoint2Vtbl IDebugBreakpoint2Vtbl;
-
-typedef struct IDebugBreakpoint3Vtbl IDebugBreakpoint3Vtbl;
-
-struct IDebugBreakpoint3
-{
-    struct IDebugBreakpoint3Vtbl *lpVtbl;
-};
-
-typedef struct IDebugBreakpointVtbl IDebugBreakpointVtbl;
-
-typedef struct IDebugClient2Vtbl IDebugClient2Vtbl;
-
-typedef struct IDebugClient3Vtbl IDebugClient3Vtbl;
-
-typedef struct IDebugClient4Vtbl IDebugClient4Vtbl;
-
-typedef struct IDebugClient5Vtbl IDebugClient5Vtbl;
-
-typedef struct IDebugClient6Vtbl IDebugClient6Vtbl;
-
-typedef struct IDebugClient7Vtbl IDebugClient7Vtbl;
-
-typedef struct IDebugClient8Vtbl IDebugClient8Vtbl;
-
-struct IDebugClient8
-{
-    struct IDebugClient8Vtbl *lpVtbl;
-};
-
-typedef struct IDebugClient9Vtbl IDebugClient9Vtbl;
-
-struct IDebugClient9
-{
-    struct IDebugClient9Vtbl *lpVtbl;
-};
-
-typedef struct IDebugClientVtbl IDebugClientVtbl;
-
-typedef struct IDebugControl2Vtbl IDebugControl2Vtbl;
-
-typedef struct IDebugControl3Vtbl IDebugControl3Vtbl;
-
-typedef struct IDebugControl4Vtbl IDebugControl4Vtbl;
-
-typedef struct IDebugControl5Vtbl IDebugControl5Vtbl;
-
-struct IDebugControl5
-{
-    struct IDebugControl5Vtbl *lpVtbl;
-};
-
-typedef struct IDebugControl6Vtbl IDebugControl6Vtbl;
-
-struct IDebugControl6
-{
-    struct IDebugControl6Vtbl *lpVtbl;
-};
-
-typedef struct IDebugControl7Vtbl IDebugControl7Vtbl;
-
-struct IDebugControl7
-{
-    struct IDebugControl7Vtbl *lpVtbl;
-};
-
-typedef struct IDebugControlVtbl IDebugControlVtbl;
-
-typedef struct IDebugDataSpaces2Vtbl IDebugDataSpaces2Vtbl;
-
-typedef struct IDebugDataSpaces3Vtbl IDebugDataSpaces3Vtbl;
-
-struct IDebugDataSpaces3
-{
-    struct IDebugDataSpaces3Vtbl *lpVtbl;
-};
-
-typedef struct IDebugDataSpaces4Vtbl IDebugDataSpaces4Vtbl;
-
-struct IDebugDataSpaces4
-{
-    struct IDebugDataSpaces4Vtbl *lpVtbl;
-};
-
-typedef struct IDebugDataSpacesVtbl IDebugDataSpacesVtbl;
-
-typedef struct IDebugEventCallbacksVtbl IDebugEventCallbacksVtbl;
-
-typedef struct IDebugEventCallbacksWideVtbl IDebugEventCallbacksWideVtbl;
-
-typedef struct IDebugEventContextCallbacksVtbl IDebugEventContextCallbacksVtbl;
-
-typedef struct IDebugInputCallbacksVtbl IDebugInputCallbacksVtbl;
-
-typedef struct IDebugOutputCallbacks2Vtbl IDebugOutputCallbacks2Vtbl;
-
-struct IDebugOutputCallbacks2
-{
-    struct IDebugOutputCallbacks2Vtbl *lpVtbl;
-};
-
-typedef struct IDebugOutputCallbacksVtbl IDebugOutputCallbacksVtbl;
-
-typedef struct IDebugOutputCallbacksWideVtbl IDebugOutputCallbacksWideVtbl;
-
-typedef struct IDebugOutputStreamVtbl IDebugOutputStreamVtbl;
-
-struct IDebugOutputStream
-{
-    struct IDebugOutputStreamVtbl *lpVtbl;
-};
-
-typedef struct IDebugPlmClient2Vtbl IDebugPlmClient2Vtbl;
-
-struct IDebugPlmClient2
-{
-    struct IDebugPlmClient2Vtbl *lpVtbl;
-};
-
-typedef struct IDebugPlmClient3Vtbl IDebugPlmClient3Vtbl;
-
-struct IDebugPlmClient3
-{
-    struct IDebugPlmClient3Vtbl *lpVtbl;
-};
-
-typedef struct IDebugPlmClientVtbl IDebugPlmClientVtbl;
-
-struct IDebugPlmClient
-{
-    struct IDebugPlmClientVtbl *lpVtbl;
-};
-
-typedef struct IDebugRegisters2Vtbl IDebugRegisters2Vtbl;
-
-struct IDebugRegisters2
-{
-    struct IDebugRegisters2Vtbl *lpVtbl;
-};
-
-typedef struct IDebugRegistersVtbl IDebugRegistersVtbl;
-
-struct IDebugRegisters
-{
-    struct IDebugRegistersVtbl *lpVtbl;
-};
-
-typedef struct IDebugSymbolGroup2Vtbl IDebugSymbolGroup2Vtbl;
-
-typedef struct IDebugSymbolGroupVtbl IDebugSymbolGroupVtbl;
-
-typedef struct IDebugSymbols2Vtbl IDebugSymbols2Vtbl;
-
-typedef struct IDebugSymbols3Vtbl IDebugSymbols3Vtbl;
-
-typedef struct IDebugSymbols4Vtbl IDebugSymbols4Vtbl;
-
-struct IDebugSymbols4
-{
-    struct IDebugSymbols4Vtbl *lpVtbl;
-};
-
-typedef struct IDebugSymbols5Vtbl IDebugSymbols5Vtbl;
-
-struct IDebugSymbols5
-{
-    struct IDebugSymbols5Vtbl *lpVtbl;
-};
-
-typedef struct IDebugSymbolsVtbl IDebugSymbolsVtbl;
-
-typedef struct IDebugSystemObjects2Vtbl IDebugSystemObjects2Vtbl;
-
-typedef struct IDebugSystemObjects3Vtbl IDebugSystemObjects3Vtbl;
-
-typedef struct IDebugSystemObjects4Vtbl IDebugSystemObjects4Vtbl;
-
-struct IDebugSystemObjects4
-{
-    struct IDebugSystemObjects4Vtbl *lpVtbl;
-};
-
-typedef struct IDebugSystemObjectsVtbl IDebugSystemObjectsVtbl;
-
-typedef union _INLINE_FRAME_CONTEXT INLINE_FRAME_CONTEXT;
-
-typedef struct IDebugAdvanced4 *PDEBUG_ADVANCED4;
-
-typedef struct IDebugBreakpoint3 *PDEBUG_BREAKPOINT3;
-
-typedef struct IDebugClient8 *PDEBUG_CLIENT8;
-
-typedef struct IDebugClient9 *PDEBUG_CLIENT9;
-
-typedef struct IDebugControl5 *PDEBUG_CONTROL5;
-
-typedef struct IDebugControl6 *PDEBUG_CONTROL6;
-
-typedef struct IDebugControl7 *PDEBUG_CONTROL7;
-
-typedef struct IDebugDataSpaces3 *PDEBUG_DATA_SPACES3;
-
-typedef struct IDebugDataSpaces4 *PDEBUG_DATA_SPACES4;
-
-typedef HRESULT (WINAPI *PDEBUG_EXTENSION_CALL)(PDEBUG_CLIENT, PCSTR);
-
-typedef HRESULT (WINAPI *PDEBUG_EXTENSION_CANUNLOAD)(void);
-
-typedef HRESULT (WINAPI *PDEBUG_EXTENSION_INITIALIZE)(PULONG, PULONG);
-
-typedef BOOL (WINAPI *PDEBUG_EXTENSION_ISEXTENSIONAPI)(PCSTR);
-
-typedef HRESULT (WINAPI *PDEBUG_EXTENSION_KNOWN_STRUCT)(ULONG, ULONG64, PSTR, PSTR, PULONG);
-
-typedef PDEBUG_EXTENSION_KNOWN_STRUCT PDEBUG_ENTENSION_KNOWNSTRUCT;
-
-typedef HRESULT (WINAPI *PDEBUG_EXTENSION_KNOWN_STRUCT_EX)(PDEBUG_CLIENT, ULONG, ULONG64, PCSTR, PSTR, PULONG);
-
-typedef void (WINAPI *PDEBUG_EXTENSION_NOTIFY)(ULONG, ULONG64);
-
-typedef HRESULT (WINAPI *PDEBUG_EXTENSION_PROVIDE_VALUE)(PDEBUG_CLIENT, ULONG, PCWSTR, PULONG64, PULONG64, PULONG, PULONG);
-
-typedef HRESULT (WINAPI *PDEBUG_EXTENSION_QUERY_VALUE_NAMES)(PDEBUG_CLIENT, ULONG, PWSTR, ULONG, PULONG);
-
-typedef void (WINAPI *PDEBUG_EXTENSION_UNINITIALIZE)(void);
-
-typedef void (WINAPI *PDEBUG_EXTENSION_UNLOAD)(void);
-
-typedef struct IDebugOutputCallbacks2 *PDEBUG_OUTPUT_CALLBACKS2;
-
-typedef struct IDebugOutputStream *PDEBUG_OUTPUT_STREAM;
-
-typedef struct IDebugRegisters2 *PDEBUG_REGISTERS2;
-
-typedef struct IDebugSymbols4 *PDEBUG_SYMBOLS4;
-
-typedef struct IDebugSymbols5 *PDEBUG_SYMBOLS5;
-
-typedef struct IDebugSystemObjects4 *PDEBUG_SYSTEM_OBJECTS4;
-
-typedef struct IDebugPlmClient *PIDEBUG_PLMCLIENT;
-
-typedef struct IDebugPlmClient2 *PIDEBUG_PLMCLIENT2;
-
-typedef struct IDebugPlmClient3 *PIDEBUG_PLMCLIENT3;
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-HRESULT WINAPI DebugConnect(PCSTR RemoteOptions, const IID *const InterfaceId, PVOID *Interface);
-HRESULT WINAPI DebugCreateEx(const IID *const InterfaceId, DWORD DbgEngOptions, PVOID *Interface);
-
-/* TODO: LiberNT does not implement the functions below yet */
-void DebugCommandException(ULONG Command, ULONG ArgSize, PVOID Arg);
-HRESULT DebugConnectWide(PCWSTR RemoteOptions, const IID *const InterfaceId, PVOID *Interface);
-
-#ifdef __cplusplus
-}
-#endif
-
-
-
-union _DEBUG_PROCESSOR_IDENTIFICATION_ALL
-{
-    DEBUG_PROCESSOR_IDENTIFICATION_ALPHA Alpha;
-    DEBUG_PROCESSOR_IDENTIFICATION_AMD64 Amd64;
-    DEBUG_PROCESSOR_IDENTIFICATION_IA64 Ia64;
-    DEBUG_PROCESSOR_IDENTIFICATION_X86 X86;
-    DEBUG_PROCESSOR_IDENTIFICATION_ARM Arm;
-    DEBUG_PROCESSOR_IDENTIFICATION_ARM64 Arm64;
-};
-
-typedef union _DEBUG_PROCESSOR_IDENTIFICATION_ALL DEBUG_PROCESSOR_IDENTIFICATION_ALL;
-
-typedef union _DEBUG_PROCESSOR_IDENTIFICATION_ALL *PDEBUG_PROCESSOR_IDENTIFICATION_ALL;
-
-#define DEBUG_EXTEND64(Addr) ((ULONG64) (LONG64) (LONG) (Addr))
-#define DEBUG_EXTENSION_VERSION(Major, Minor) ((((Major) & 0xffff) << 16) | ((Minor) & 0xffff))
-#define DEBUG_OUTTYPE_RECURSION_LEVEL(Max) (((Max) & 0xf) << 4)
 
 #endif
 
@@ -4863,4 +4302,567 @@ HRESULT WINAPI DebugCreate(REFIID riid, void **out);
 #endif
 #ifndef STACK_FRAME_TYPE_STACK
 #define STACK_FRAME_TYPE_STACK 0x01
+
+typedef struct IDebugAdvanced * PDEBUG_ADVANCED;
+typedef struct IDebugAdvanced2 * PDEBUG_ADVANCED2;
+typedef struct IDebugAdvanced3 * PDEBUG_ADVANCED3;
+typedef struct IDebugClient * PDEBUG_CLIENT;
+typedef struct IDebugClient2 * PDEBUG_CLIENT2;
+typedef struct IDebugClient3 * PDEBUG_CLIENT3;
+typedef struct IDebugClient4 * PDEBUG_CLIENT4;
+typedef struct IDebugClient5 * PDEBUG_CLIENT5;
+typedef struct IDebugClient6 * PDEBUG_CLIENT6;
+typedef struct IDebugClient7 * PDEBUG_CLIENT7;
+typedef struct IDebugControl * PDEBUG_CONTROL;
+typedef struct IDebugControl2 * PDEBUG_CONTROL2;
+typedef struct IDebugControl3 * PDEBUG_CONTROL3;
+typedef struct IDebugControl4 * PDEBUG_CONTROL4;
+typedef struct IDebugDataSpaces * PDEBUG_DATA_SPACES;
+typedef struct IDebugDataSpaces2 * PDEBUG_DATA_SPACES2;
+typedef struct IDebugEventCallbacks * PDEBUG_EVENT_CALLBACKS;
+typedef struct IDebugEventCallbacksWide * PDEBUG_EVENT_CALLBACKS_WIDE;
+typedef struct IDebugEventContextCallbacks * PDEBUG_EVENT_CONTEXT_CALLBACKS;
+typedef struct IDebugInputCallbacks * PDEBUG_INPUT_CALLBACKS;
+typedef struct IDebugOutputCallbacks * PDEBUG_OUTPUT_CALLBACKS;
+typedef struct IDebugOutputCallbacksWide * PDEBUG_OUTPUT_CALLBACKS_WIDE;
+typedef struct IDebugSymbolGroup * PDEBUG_SYMBOL_GROUP;
+typedef struct IDebugSymbols * PDEBUG_SYMBOLS;
+typedef struct IDebugSymbols2 * PDEBUG_SYMBOLS2;
+typedef struct IDebugSymbols3 * PDEBUG_SYMBOLS3;
+typedef struct IDebugSystemObjects * PDEBUG_SYSTEM_OBJECTS;
+typedef struct IDebugSystemObjects2 * PDEBUG_SYSTEM_OBJECTS2;
+typedef struct IDebugSystemObjects3 * PDEBUG_SYSTEM_OBJECTS3;
+
+typedef struct _DEBUG_CACHED_SYMBOL_INFO {
+  ULONG64 ModBase;
+  ULONG64 Arg1;
+  ULONG64 Arg2;
+  ULONG Id;
+  ULONG Arg3;
+} DEBUG_CACHED_SYMBOL_INFO, *PDEBUG_CACHED_SYMBOL_INFO;
+
+typedef struct _DEBUG_CLIENT_CONTEXT {
+  UINT cbSize;
+  UINT eClient;
+} DEBUG_CLIENT_CONTEXT, *PDEBUG_CLIENT_CONTEXT;
+
+typedef struct _DEBUG_CREATE_PROCESS_OPTIONS {
+  ULONG CreateFlags;
+  ULONG EngCreateFlags;
+  ULONG VerifierFlags;
+  ULONG Reserved;
+} DEBUG_CREATE_PROCESS_OPTIONS, *PDEBUG_CREATE_PROCESS_OPTIONS;
+
+typedef struct _DEBUG_EVENT_CONTEXT {
+  ULONG Size;
+  ULONG ProcessEngineId;
+  ULONG ThreadEngineId;
+  ULONG FrameEngineId;
+} DEBUG_EVENT_CONTEXT, *PDEBUG_EVENT_CONTEXT;
+
+typedef struct _DEBUG_GET_TEXT_COMPLETIONS_IN {
+  ULONG Flags;
+  ULONG MatchCountLimit;
+  ULONG64 Reserved[3];
+} DEBUG_GET_TEXT_COMPLETIONS_IN, *PDEBUG_GET_TEXT_COMPLETIONS_IN;
+
+typedef struct _DEBUG_GET_TEXT_COMPLETIONS_OUT {
+  ULONG Flags;
+  ULONG ReplaceIndex;
+  ULONG MatchCount;
+  ULONG Reserved1;
+  ULONG64 Reserved2[2];
+} DEBUG_GET_TEXT_COMPLETIONS_OUT, *PDEBUG_GET_TEXT_COMPLETIONS_OUT;
+
+typedef struct _DEBUG_HANDLE_DATA_BASIC {
+  ULONG TypeNameSize;
+  ULONG ObjectNameSize;
+  ULONG Attributes;
+  ULONG GrantedAccess;
+  ULONG HandleCount;
+  ULONG PointerCount;
+} DEBUG_HANDLE_DATA_BASIC, *PDEBUG_HANDLE_DATA_BASIC;
+
+typedef struct _DEBUG_LAST_EVENT_INFO_BREAKPOINT {
+  ULONG Id;
+} DEBUG_LAST_EVENT_INFO_BREAKPOINT, *PDEBUG_LAST_EVENT_INFO_BREAKPOINT;
+
+typedef struct _DEBUG_LAST_EVENT_INFO_EXCEPTION {
+  EXCEPTION_RECORD64 ExceptionRecord;
+  ULONG FirstChance;
+} DEBUG_LAST_EVENT_INFO_EXCEPTION, *PDEBUG_LAST_EVENT_INFO_EXCEPTION;
+
+typedef struct _DEBUG_LAST_EVENT_INFO_EXIT_PROCESS {
+  ULONG ExitCode;
+} DEBUG_LAST_EVENT_INFO_EXIT_PROCESS, *PDEBUG_LAST_EVENT_INFO_EXIT_PROCESS;
+
+typedef struct _DEBUG_LAST_EVENT_INFO_EXIT_THREAD {
+  ULONG ExitCode;
+} DEBUG_LAST_EVENT_INFO_EXIT_THREAD, *PDEBUG_LAST_EVENT_INFO_EXIT_THREAD;
+
+typedef struct _DEBUG_LAST_EVENT_INFO_LOAD_MODULE {
+  ULONG64 Base;
+} DEBUG_LAST_EVENT_INFO_LOAD_MODULE, *PDEBUG_LAST_EVENT_INFO_LOAD_MODULE;
+
+typedef struct _DEBUG_LAST_EVENT_INFO_SERVICE_EXCEPTION {
+  ULONG Kind;
+  ULONG DataSize;
+  ULONG64 Address;
+} DEBUG_LAST_EVENT_INFO_SERVICE_EXCEPTION, *PDEBUG_LAST_EVENT_INFO_SERVICE_EXCEPTION;
+
+typedef struct _DEBUG_LAST_EVENT_INFO_SYSTEM_ERROR {
+  ULONG Error;
+  ULONG Level;
+} DEBUG_LAST_EVENT_INFO_SYSTEM_ERROR, *PDEBUG_LAST_EVENT_INFO_SYSTEM_ERROR;
+
+typedef struct _DEBUG_LAST_EVENT_INFO_UNLOAD_MODULE {
+  ULONG64 Base;
+} DEBUG_LAST_EVENT_INFO_UNLOAD_MODULE, *PDEBUG_LAST_EVENT_INFO_UNLOAD_MODULE;
+
+typedef struct _DEBUG_PROCESSOR_IDENTIFICATION_ALPHA {
+  ULONG Type;
+  ULONG Revision;
+} DEBUG_PROCESSOR_IDENTIFICATION_ALPHA, *PDEBUG_PROCESSOR_IDENTIFICATION_ALPHA;
+
+typedef struct _DEBUG_PROCESSOR_IDENTIFICATION_AMD64 {
+  ULONG Family;
+  ULONG Model;
+  ULONG Stepping;
+  CHAR VendorString[16];
+} DEBUG_PROCESSOR_IDENTIFICATION_AMD64, *PDEBUG_PROCESSOR_IDENTIFICATION_AMD64;
+
+typedef struct _DEBUG_PROCESSOR_IDENTIFICATION_ARM {
+  ULONG Model;
+  ULONG Revision;
+  CHAR VendorString[16];
+} DEBUG_PROCESSOR_IDENTIFICATION_ARM, *PDEBUG_PROCESSOR_IDENTIFICATION_ARM;
+
+typedef struct _DEBUG_PROCESSOR_IDENTIFICATION_ARM64 {
+  ULONG Model;
+  ULONG Revision;
+  CHAR VendorString[16];
+} DEBUG_PROCESSOR_IDENTIFICATION_ARM64, *PDEBUG_PROCESSOR_IDENTIFICATION_ARM64;
+
+typedef struct _DEBUG_PROCESSOR_IDENTIFICATION_IA64 {
+  ULONG Model;
+  ULONG Revision;
+  ULONG Family;
+  ULONG ArchRev;
+  CHAR VendorString[16];
+} DEBUG_PROCESSOR_IDENTIFICATION_IA64, *PDEBUG_PROCESSOR_IDENTIFICATION_IA64;
+
+typedef struct _DEBUG_PROCESSOR_IDENTIFICATION_X86 {
+  ULONG Family;
+  ULONG Model;
+  ULONG Stepping;
+  CHAR VendorString[16];
+} DEBUG_PROCESSOR_IDENTIFICATION_X86, *PDEBUG_PROCESSOR_IDENTIFICATION_X86;
+
+typedef struct _DEBUG_READ_USER_MINIDUMP_STREAM {
+  ULONG StreamType;
+  ULONG Flags;
+  ULONG64 Offset;
+  PVOID Buffer;
+  ULONG BufferSize;
+  ULONG BufferUsed;
+} DEBUG_READ_USER_MINIDUMP_STREAM, *PDEBUG_READ_USER_MINIDUMP_STREAM;
+
+typedef struct _DEBUG_REGISTER_DESCRIPTION {
+  ULONG Type;
+  ULONG Flags;
+  ULONG SubregMaster;
+  ULONG SubregLength;
+  ULONG64 SubregMask;
+  ULONG SubregShift;
+  ULONG Reserved0;
+} DEBUG_REGISTER_DESCRIPTION, *PDEBUG_REGISTER_DESCRIPTION;
+
+typedef struct _DEBUG_STACK_FRAME_EX {
+  ULONG64 InstructionOffset;
+  ULONG64 ReturnOffset;
+  ULONG64 FrameOffset;
+  ULONG64 StackOffset;
+  ULONG64 FuncTableEntry;
+  ULONG64 Params[4];
+  ULONG64 Reserved[6];
+  BOOL Virtual;
+  ULONG FrameNumber;
+  ULONG InlineFrameContext;
+  ULONG FrameMachine;
+} DEBUG_STACK_FRAME_EX, *PDEBUG_STACK_FRAME_EX;
+
+typedef struct _DEBUG_THREAD_BASIC_INFORMATION {
+  ULONG Valid;
+  ULONG ExitStatus;
+  ULONG PriorityClass;
+  ULONG Priority;
+  ULONG64 CreateTime;
+  ULONG64 ExitTime;
+  ULONG64 KernelTime;
+  ULONG64 UserTime;
+  ULONG64 StartOffset;
+  ULONG64 Affinity;
+} DEBUG_THREAD_BASIC_INFORMATION, *PDEBUG_THREAD_BASIC_INFORMATION;
+
+typedef struct _PROCESS_NAME_ENTRY {
+  ULONG ProcessId;
+  ULONG NameOffset;
+  ULONG NameSize;
+  ULONG NextEntry;
+} PROCESS_NAME_ENTRY, *PPROCESS_NAME_ENTRY;
+
+typedef struct _STACK_SRC_INFO {
+  PCWSTR ImagePath;
+  PCWSTR ModuleName;
+  PCWSTR Function;
+  ULONG Displacement;
+  ULONG Row;
+  ULONG Column;
+} STACK_SRC_INFO, *PSTACK_SRC_INFO;
+
+typedef struct _STACK_SYM_FRAME_INFO {
+  DEBUG_STACK_FRAME_EX StackFrameEx;
+  STACK_SRC_INFO SrcInfo;
+} STACK_SYM_FRAME_INFO, *PSTACK_SYM_FRAME_INFO;
+
+typedef struct _SYMBOL_INFO_EX {
+  ULONG SizeOfStruct;
+  ULONG TypeOfInfo;
+  ULONG64 Offset;
+  ULONG Line;
+  ULONG Displacement;
+  ULONG Reserved[4];
+} SYMBOL_INFO_EX, *PSYMBOL_INFO_EX;
+
+#define DEBUG_CREATE_PROCESS_NO_DEBUG_HEAP 0x400
+#define DEBUG_CREATE_PROCESS_THROUGH_RTL 0x10000
+#define DEBUG_EXTENSION_CONTINUE_SEARCH (-805305743)
+#define DEBUG_EXTENSION_RELOAD_EXTENSION (-805306130)
+#define DEBUG_GET_TEXT_COMPLETIONS_NO_DOT_COMMANDS 0x00000001
+#define DEBUG_KERNEL_ACTIVE_DUMP 0x406
+#define DEBUG_KERNEL_DUMP 0x401
+#define DEBUG_KERNEL_FULL_DUMP 0x402
+#define DEBUG_KERNEL_SMALL_DUMP 0x400
+#define DEBUG_KERNEL_TRACE_LOG 0x404
+#define DEBUG_OUTCTL_AMBIENT 0xFFFFFFFF
+#define DEBUG_OUTPUT_NAME_END 0
+#define DEBUG_OUTPUT_NAME_END_T DEBUG_OUTPUT_NAME_END
+#define DEBUG_OUTPUT_NAME_END_WIDE L"**NAME**"
+#define DEBUG_OUTPUT_OFFSET_END "**OFF**"
+#define DEBUG_OUTPUT_OFFSET_END_T DEBUG_OUTPUT_OFFSET_END
+#define DEBUG_OUTPUT_OFFSET_END_WIDE L"**OFF**"
+#define DEBUG_OUTPUT_TYPE_END "**TYPE**"
+#define DEBUG_OUTPUT_TYPE_END_T DEBUG_OUTPUT_TYPE_END
+#define DEBUG_OUTPUT_TYPE_END_WIDE L"**TYPE**"
+#define DEBUG_OUTPUT_VALUE_END "**VALUE**"
+#define DEBUG_OUTPUT_VALUE_END_T DEBUG_OUTPUT_VALUE_END
+#define DEBUG_OUTPUT_VALUE_END_WIDE L"**VALUE**"
+#define DEBUG_SCOPE_GROUP_VALID_FLAGS 7
+#define DEBUG_SYMBOL_EXPANSION_LEVEL_MASK 0x0000000f
+
+union _INLINE_FRAME_CONTEXT
+{
+    DWORD ContextValue;
+    struct
+    {
+        BYTE FrameId;
+        BYTE FrameType;
+        WORD FrameSignature;
+    };
+};
+
+typedef struct IDebugAdvanced2Vtbl IDebugAdvanced2Vtbl;
+
+typedef struct IDebugAdvanced3Vtbl IDebugAdvanced3Vtbl;
+
+typedef struct IDebugAdvanced4Vtbl IDebugAdvanced4Vtbl;
+
+struct IDebugAdvanced4
+{
+    struct IDebugAdvanced4Vtbl *lpVtbl;
+};
+
+typedef struct IDebugAdvancedVtbl IDebugAdvancedVtbl;
+
+typedef struct IDebugBreakpoint2Vtbl IDebugBreakpoint2Vtbl;
+
+typedef struct IDebugBreakpoint3Vtbl IDebugBreakpoint3Vtbl;
+
+struct IDebugBreakpoint3
+{
+    struct IDebugBreakpoint3Vtbl *lpVtbl;
+};
+
+typedef struct IDebugBreakpointVtbl IDebugBreakpointVtbl;
+
+typedef struct IDebugClient2Vtbl IDebugClient2Vtbl;
+
+typedef struct IDebugClient3Vtbl IDebugClient3Vtbl;
+
+typedef struct IDebugClient4Vtbl IDebugClient4Vtbl;
+
+typedef struct IDebugClient5Vtbl IDebugClient5Vtbl;
+
+typedef struct IDebugClient6Vtbl IDebugClient6Vtbl;
+
+typedef struct IDebugClient7Vtbl IDebugClient7Vtbl;
+
+typedef struct IDebugClient8Vtbl IDebugClient8Vtbl;
+
+struct IDebugClient8
+{
+    struct IDebugClient8Vtbl *lpVtbl;
+};
+
+typedef struct IDebugClient9Vtbl IDebugClient9Vtbl;
+
+struct IDebugClient9
+{
+    struct IDebugClient9Vtbl *lpVtbl;
+};
+
+typedef struct IDebugClientVtbl IDebugClientVtbl;
+
+typedef struct IDebugControl2Vtbl IDebugControl2Vtbl;
+
+typedef struct IDebugControl3Vtbl IDebugControl3Vtbl;
+
+typedef struct IDebugControl4Vtbl IDebugControl4Vtbl;
+
+typedef struct IDebugControl5Vtbl IDebugControl5Vtbl;
+
+struct IDebugControl5
+{
+    struct IDebugControl5Vtbl *lpVtbl;
+};
+
+typedef struct IDebugControl6Vtbl IDebugControl6Vtbl;
+
+struct IDebugControl6
+{
+    struct IDebugControl6Vtbl *lpVtbl;
+};
+
+typedef struct IDebugControl7Vtbl IDebugControl7Vtbl;
+
+struct IDebugControl7
+{
+    struct IDebugControl7Vtbl *lpVtbl;
+};
+
+typedef struct IDebugControlVtbl IDebugControlVtbl;
+
+typedef struct IDebugDataSpaces2Vtbl IDebugDataSpaces2Vtbl;
+
+typedef struct IDebugDataSpaces3Vtbl IDebugDataSpaces3Vtbl;
+
+struct IDebugDataSpaces3
+{
+    struct IDebugDataSpaces3Vtbl *lpVtbl;
+};
+
+typedef struct IDebugDataSpaces4Vtbl IDebugDataSpaces4Vtbl;
+
+struct IDebugDataSpaces4
+{
+    struct IDebugDataSpaces4Vtbl *lpVtbl;
+};
+
+typedef struct IDebugDataSpacesVtbl IDebugDataSpacesVtbl;
+
+typedef struct IDebugEventCallbacksVtbl IDebugEventCallbacksVtbl;
+
+typedef struct IDebugEventCallbacksWideVtbl IDebugEventCallbacksWideVtbl;
+
+typedef struct IDebugEventContextCallbacksVtbl IDebugEventContextCallbacksVtbl;
+
+typedef struct IDebugInputCallbacksVtbl IDebugInputCallbacksVtbl;
+
+typedef struct IDebugOutputCallbacks2Vtbl IDebugOutputCallbacks2Vtbl;
+
+struct IDebugOutputCallbacks2
+{
+    struct IDebugOutputCallbacks2Vtbl *lpVtbl;
+};
+
+typedef struct IDebugOutputCallbacksVtbl IDebugOutputCallbacksVtbl;
+
+typedef struct IDebugOutputCallbacksWideVtbl IDebugOutputCallbacksWideVtbl;
+
+typedef struct IDebugOutputStreamVtbl IDebugOutputStreamVtbl;
+
+struct IDebugOutputStream
+{
+    struct IDebugOutputStreamVtbl *lpVtbl;
+};
+
+typedef struct IDebugPlmClient2Vtbl IDebugPlmClient2Vtbl;
+
+struct IDebugPlmClient2
+{
+    struct IDebugPlmClient2Vtbl *lpVtbl;
+};
+
+typedef struct IDebugPlmClient3Vtbl IDebugPlmClient3Vtbl;
+
+struct IDebugPlmClient3
+{
+    struct IDebugPlmClient3Vtbl *lpVtbl;
+};
+
+typedef struct IDebugPlmClientVtbl IDebugPlmClientVtbl;
+
+struct IDebugPlmClient
+{
+    struct IDebugPlmClientVtbl *lpVtbl;
+};
+
+typedef struct IDebugRegisters2Vtbl IDebugRegisters2Vtbl;
+
+struct IDebugRegisters2
+{
+    struct IDebugRegisters2Vtbl *lpVtbl;
+};
+
+typedef struct IDebugRegistersVtbl IDebugRegistersVtbl;
+
+struct IDebugRegisters
+{
+    struct IDebugRegistersVtbl *lpVtbl;
+};
+
+typedef struct IDebugSymbolGroup2Vtbl IDebugSymbolGroup2Vtbl;
+
+typedef struct IDebugSymbolGroupVtbl IDebugSymbolGroupVtbl;
+
+typedef struct IDebugSymbols2Vtbl IDebugSymbols2Vtbl;
+
+typedef struct IDebugSymbols3Vtbl IDebugSymbols3Vtbl;
+
+typedef struct IDebugSymbols4Vtbl IDebugSymbols4Vtbl;
+
+struct IDebugSymbols4
+{
+    struct IDebugSymbols4Vtbl *lpVtbl;
+};
+
+typedef struct IDebugSymbols5Vtbl IDebugSymbols5Vtbl;
+
+struct IDebugSymbols5
+{
+    struct IDebugSymbols5Vtbl *lpVtbl;
+};
+
+typedef struct IDebugSymbolsVtbl IDebugSymbolsVtbl;
+
+typedef struct IDebugSystemObjects2Vtbl IDebugSystemObjects2Vtbl;
+
+typedef struct IDebugSystemObjects3Vtbl IDebugSystemObjects3Vtbl;
+
+typedef struct IDebugSystemObjects4Vtbl IDebugSystemObjects4Vtbl;
+
+struct IDebugSystemObjects4
+{
+    struct IDebugSystemObjects4Vtbl *lpVtbl;
+};
+
+typedef struct IDebugSystemObjectsVtbl IDebugSystemObjectsVtbl;
+
+typedef union _INLINE_FRAME_CONTEXT INLINE_FRAME_CONTEXT;
+
+typedef struct IDebugAdvanced4 *PDEBUG_ADVANCED4;
+
+typedef struct IDebugBreakpoint3 *PDEBUG_BREAKPOINT3;
+
+typedef struct IDebugClient8 *PDEBUG_CLIENT8;
+
+typedef struct IDebugClient9 *PDEBUG_CLIENT9;
+
+typedef struct IDebugControl5 *PDEBUG_CONTROL5;
+
+typedef struct IDebugControl6 *PDEBUG_CONTROL6;
+
+typedef struct IDebugControl7 *PDEBUG_CONTROL7;
+
+typedef struct IDebugDataSpaces3 *PDEBUG_DATA_SPACES3;
+
+typedef struct IDebugDataSpaces4 *PDEBUG_DATA_SPACES4;
+
+typedef HRESULT (WINAPI *PDEBUG_EXTENSION_CALL)(PDEBUG_CLIENT, PCSTR);
+
+typedef HRESULT (WINAPI *PDEBUG_EXTENSION_CANUNLOAD)(void);
+
+typedef HRESULT (WINAPI *PDEBUG_EXTENSION_INITIALIZE)(PULONG, PULONG);
+
+typedef BOOL (WINAPI *PDEBUG_EXTENSION_ISEXTENSIONAPI)(PCSTR);
+
+typedef HRESULT (WINAPI *PDEBUG_EXTENSION_KNOWN_STRUCT)(ULONG, ULONG64, PSTR, PSTR, PULONG);
+
+typedef PDEBUG_EXTENSION_KNOWN_STRUCT PDEBUG_ENTENSION_KNOWNSTRUCT;
+
+typedef HRESULT (WINAPI *PDEBUG_EXTENSION_KNOWN_STRUCT_EX)(PDEBUG_CLIENT, ULONG, ULONG64, PCSTR, PSTR, PULONG);
+
+typedef void (WINAPI *PDEBUG_EXTENSION_NOTIFY)(ULONG, ULONG64);
+
+typedef HRESULT (WINAPI *PDEBUG_EXTENSION_PROVIDE_VALUE)(PDEBUG_CLIENT, ULONG, PCWSTR, PULONG64, PULONG64, PULONG, PULONG);
+
+typedef HRESULT (WINAPI *PDEBUG_EXTENSION_QUERY_VALUE_NAMES)(PDEBUG_CLIENT, ULONG, PWSTR, ULONG, PULONG);
+
+typedef void (WINAPI *PDEBUG_EXTENSION_UNINITIALIZE)(void);
+
+typedef void (WINAPI *PDEBUG_EXTENSION_UNLOAD)(void);
+
+typedef struct IDebugOutputCallbacks2 *PDEBUG_OUTPUT_CALLBACKS2;
+
+typedef struct IDebugOutputStream *PDEBUG_OUTPUT_STREAM;
+
+typedef struct IDebugRegisters2 *PDEBUG_REGISTERS2;
+
+typedef struct IDebugSymbols4 *PDEBUG_SYMBOLS4;
+
+typedef struct IDebugSymbols5 *PDEBUG_SYMBOLS5;
+
+typedef struct IDebugSystemObjects4 *PDEBUG_SYSTEM_OBJECTS4;
+
+typedef struct IDebugPlmClient *PIDEBUG_PLMCLIENT;
+
+typedef struct IDebugPlmClient2 *PIDEBUG_PLMCLIENT2;
+
+typedef struct IDebugPlmClient3 *PIDEBUG_PLMCLIENT3;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+HRESULT WINAPI DebugConnect(PCSTR RemoteOptions, const IID *const InterfaceId, PVOID *Interface);
+HRESULT WINAPI DebugCreateEx(const IID *const InterfaceId, DWORD DbgEngOptions, PVOID *Interface);
+
+/* TODO: LiberNT does not implement the functions below yet */
+void DebugCommandException(ULONG Command, ULONG ArgSize, PVOID Arg);
+HRESULT DebugConnectWide(PCWSTR RemoteOptions, const IID *const InterfaceId, PVOID *Interface);
+
+#ifdef __cplusplus
+}
+#endif
+
+
+
+union _DEBUG_PROCESSOR_IDENTIFICATION_ALL
+{
+    DEBUG_PROCESSOR_IDENTIFICATION_ALPHA Alpha;
+    DEBUG_PROCESSOR_IDENTIFICATION_AMD64 Amd64;
+    DEBUG_PROCESSOR_IDENTIFICATION_IA64 Ia64;
+    DEBUG_PROCESSOR_IDENTIFICATION_X86 X86;
+    DEBUG_PROCESSOR_IDENTIFICATION_ARM Arm;
+    DEBUG_PROCESSOR_IDENTIFICATION_ARM64 Arm64;
+};
+
+typedef union _DEBUG_PROCESSOR_IDENTIFICATION_ALL DEBUG_PROCESSOR_IDENTIFICATION_ALL;
+
+typedef union _DEBUG_PROCESSOR_IDENTIFICATION_ALL *PDEBUG_PROCESSOR_IDENTIFICATION_ALL;
+
+#define DEBUG_EXTEND64(Addr) ((ULONG64) (LONG64) (LONG) (Addr))
+#define DEBUG_EXTENSION_VERSION(Major, Minor) ((((Major) & 0xffff) << 16) | ((Minor) & 0xffff))
+#define DEBUG_OUTTYPE_RECURSION_LEVEL(Max) (((Max) & 0xf) << 4)
+
 #endif

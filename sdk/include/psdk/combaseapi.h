@@ -95,10 +95,6 @@ typedef struct CO_DEVICE_CATALOG_COOKIE__ {
 #define _CO_DEVICE_CATALOG_ 0
 #define _CRT_INTERNAL_COMBASE_SYMBOL_PREFIX 0
 
-struct CO_MTA_USAGE_COOKIE__
-{
-    int unused;
-};
 
 typedef HRESULT (WINAPI *LPFNCANUNLOADNOW)(void);
 

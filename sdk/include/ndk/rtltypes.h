@@ -1683,12 +1683,14 @@ typedef struct _RTL_USER_PROCESS_INFORMATION
 } RTL_USER_PROCESS_INFORMATION, *PRTL_USER_PROCESS_INFORMATION;
 
 
+#ifndef NTOS_MODE_USER
 typedef enum _RTL_UMS_SCHEDULER_REASON
 {
     UmsSchedulerStartup = 0,
     UmsSchedulerThreadBlocked = 1,
     UmsSchedulerThreadYield = 2,
 } RTL_UMS_SCHEDULER_REASON, *PRTL_UMS_SCHEDULER_REASON;
+#endif
 
 typedef enum _RTL_UMSCTX_FLAGS
 {

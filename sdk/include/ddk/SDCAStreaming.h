@@ -10,52 +10,6 @@
 #ifndef ANYSIZE_ARRAY
 #define ANYSIZE_ARRAY 1
 
-#define MAX_DATAPORT_PER_TERMINAL2 4
-#define SDCA_PATH_DESCRIPTOR2_VERSION_1 1
-
-enum _SDCA_DATAPORT_MAP
-{
-    SdcaDataPortMapIndexA = 1,
-    SdcaDataPortMapIndexB = 2,
-    SdcaDataPortMapIndexC = 4,
-    SdcaDataPortMapIndexD = 8,
-};
-
-struct _SDCA_PATH_DESCRIPTOR2
-{
-    ULONG Size;
-    UINT8 Version;
-    ULONG FunctionInformationId;
-    ULONG TerminalEntityId;
-    ULONG DataPortMap;
-    SOUNDWIRE_DATAPORT_CONFIGURATION DataPortConfig[4];
-};
-
-typedef struct _SDCA_PATH_DESCRIPTOR2 *PSDCA_PATH_DESCRIPTOR2;
-
-typedef enum _SDCA_DATAPORT_MAP SDCA_DATAPORT_MAP;
-
-typedef struct _SDCA_PATH_DESCRIPTOR2 SDCA_PATH_DESCRIPTOR2;
-
-struct _SDCA_PATH_DESCRIPTORS2
-{
-    ULONG Size;
-    UINT8 Version;
-    SDCA_PATH SdcaPath;
-    ULONG EndpointId;
-    union
-    {
-        WAVEFORMATEXTENSIBLE SpecialPathFormat;
-        BYTE Reserved[40];
-    };
-    ULONG DescriptorCount;
-    SDCA_PATH_DESCRIPTOR2 Descriptor[1];
-};
-
-typedef struct _SDCA_PATH_DESCRIPTORS2 *PSDCA_PATH_DESCRIPTORS2;
-
-typedef struct _SDCA_PATH_DESCRIPTORS2 SDCA_PATH_DESCRIPTORS2;
-
 #endif
 
 #define MAX_PATH_DESCRIPTORS 16
@@ -231,3 +185,49 @@ typedef struct _SDCA_KWS_PREPARE_PARAMS
     ULONG EndpointId;
     WAVEFORMATEXTENSIBLE DetectionFormat;
 } SDCA_KWS_PREPARE_PARAMS, *PSDCA_KWS_PREPARE_PARAMS;
+
+#define MAX_DATAPORT_PER_TERMINAL2 4
+#define SDCA_PATH_DESCRIPTOR2_VERSION_1 1
+
+enum _SDCA_DATAPORT_MAP
+{
+    SdcaDataPortMapIndexA = 1,
+    SdcaDataPortMapIndexB = 2,
+    SdcaDataPortMapIndexC = 4,
+    SdcaDataPortMapIndexD = 8,
+};
+
+struct _SDCA_PATH_DESCRIPTOR2
+{
+    ULONG Size;
+    UINT8 Version;
+    ULONG FunctionInformationId;
+    ULONG TerminalEntityId;
+    ULONG DataPortMap;
+    SOUNDWIRE_DATAPORT_CONFIGURATION DataPortConfig[4];
+};
+
+typedef struct _SDCA_PATH_DESCRIPTOR2 *PSDCA_PATH_DESCRIPTOR2;
+
+typedef enum _SDCA_DATAPORT_MAP SDCA_DATAPORT_MAP;
+
+typedef struct _SDCA_PATH_DESCRIPTOR2 SDCA_PATH_DESCRIPTOR2;
+
+struct _SDCA_PATH_DESCRIPTORS2
+{
+    ULONG Size;
+    UINT8 Version;
+    SDCA_PATH SdcaPath;
+    ULONG EndpointId;
+    union
+    {
+        WAVEFORMATEXTENSIBLE SpecialPathFormat;
+        BYTE Reserved[40];
+    };
+    ULONG DescriptorCount;
+    SDCA_PATH_DESCRIPTOR2 Descriptor[1];
+};
+
+typedef struct _SDCA_PATH_DESCRIPTORS2 *PSDCA_PATH_DESCRIPTORS2;
+
+typedef struct _SDCA_PATH_DESCRIPTORS2 SDCA_PATH_DESCRIPTORS2;

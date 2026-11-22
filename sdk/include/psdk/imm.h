@@ -859,15 +859,7 @@ typedef REGISTERWORDA REGISTERWORD;
 
 #define _IMM_ 0
 
-struct HIMC__
-{
-    int unused;
-};
 
-struct HIMCC__
-{
-    int unused;
-};
 
 struct tagCOMPOSITIONFORM
 {

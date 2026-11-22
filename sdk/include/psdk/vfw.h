@@ -2734,15 +2734,7 @@ typedef struct tagCapInfoChunk {
 #define SEARCH_NEAREST FIND_PREV
 #define VFWAPI_INLINE WINAPI_INLINE
 
-struct HIC__
-{
-    int unused;
-};
 
-struct HVIDEO__
-{
-    int unused;
-};
 
 typedef struct IAVIEditStreamVtbl IAVIEditStreamVtbl;
 

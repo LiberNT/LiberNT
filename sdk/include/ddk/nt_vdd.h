@@ -223,43 +223,6 @@ typedef enum {
 
 #ifndef MSW_PE
 #define MSW_PE 0x0001
-typedef enum VDM_ERROR_TYPE {
-    VDM_NO_ERROR = 0,
-    VDM_ERROR_INVALID_BUFFER_SIZE = 1,
-    VDM_ERROR_INVALID_FUNCTION = 2
-} VDM_ERROR_TYPE;
-
-typedef enum VDM_INFO_TYPE {
-    VDM_GET_TICK_COUNT = 0,
-    VDM_GET_TIMER0_INITIAL_COUNT = 1,
-    VDM_GET_LAST_UPDATED_TIMER0_COUNT = 2,
-    VDM_LATCH_TIMER0_COUNT = 3,
-    VDM_SET_NEXT_TIMER0_COUNT = 4
-} VDM_INFO_TYPE;
-
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/* TODO: LiberNT does not implement the functions below yet */
-SHORT VDDAllocateDosHandle(ULONG pPDB, PVOID *ppSFT, PVOID *ppJFT);
-void VDDAssociateNtHandle(PVOID pSFT, HANDLE h32File, WORD wAccess);
-void VDDBlockUserHook(void);
-void VDDCreateUserHook(USHORT DosPDB);
-BOOL VDDReleaseDosHandle(ULONG pPDB, SHORT hFile);
-void VDDResumeUserHook(void);
-HANDLE VDDRetrieveNtHandle(ULONG pPDB, SHORT hFile, PVOID *ppSFT, PVOID *ppJFT);
-void VDDTerminateUserHook(USHORT DosPDB);
-VDM_INFO_TYPE VdmGetParametersInfoError(void);
-BOOL VdmParametersInfo(VDM_INFO_TYPE infotype, PVOID pBuffer, ULONG cbBufferSize);
-void VdmTraceEvent(USHORT Type, USHORT wData, ULONG lData);
-
-#ifdef __cplusplus
-}
-#endif
-
-#define VDM_TRACE(Type, wData, lData) VdmTraceEvent(Type, wData, lData)
 
 #endif
 
@@ -350,3 +313,41 @@ VDDExcludeMem(
 #endif
 
 /* EOF */
+
+typedef enum VDM_ERROR_TYPE {
+    VDM_NO_ERROR = 0,
+    VDM_ERROR_INVALID_BUFFER_SIZE = 1,
+    VDM_ERROR_INVALID_FUNCTION = 2
+} VDM_ERROR_TYPE;
+
+typedef enum VDM_INFO_TYPE {
+    VDM_GET_TICK_COUNT = 0,
+    VDM_GET_TIMER0_INITIAL_COUNT = 1,
+    VDM_GET_LAST_UPDATED_TIMER0_COUNT = 2,
+    VDM_LATCH_TIMER0_COUNT = 3,
+    VDM_SET_NEXT_TIMER0_COUNT = 4
+} VDM_INFO_TYPE;
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+SHORT VDDAllocateDosHandle(ULONG pPDB, PVOID *ppSFT, PVOID *ppJFT);
+void VDDAssociateNtHandle(PVOID pSFT, HANDLE h32File, WORD wAccess);
+void VDDBlockUserHook(void);
+void VDDCreateUserHook(USHORT DosPDB);
+BOOL VDDReleaseDosHandle(ULONG pPDB, SHORT hFile);
+void VDDResumeUserHook(void);
+HANDLE VDDRetrieveNtHandle(ULONG pPDB, SHORT hFile, PVOID *ppSFT, PVOID *ppJFT);
+void VDDTerminateUserHook(USHORT DosPDB);
+VDM_INFO_TYPE VdmGetParametersInfoError(void);
+BOOL VdmParametersInfo(VDM_INFO_TYPE infotype, PVOID pBuffer, ULONG cbBufferSize);
+void VdmTraceEvent(USHORT Type, USHORT wData, ULONG lData);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define VDM_TRACE(Type, wData, lData) VdmTraceEvent(Type, wData, lData)

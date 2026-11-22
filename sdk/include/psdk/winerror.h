@@ -8256,16 +8256,7 @@ static inline HRESULT HRESULT_FROM_WIN32(unsigned int x)
 #define SEC_E_NO_SPM (-2146893052)
 #define SEC_E_NOT_SUPPORTED (-2146893054)
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/* TODO: LiberNT does not implement the functions below yet */
-HRESULT HRESULT_FROM_SETUPAPI(unsigned long x);
-
-#ifdef __cplusplus
-}
-#endif
+/* TODO: HRESULT_FROM_SETUPAPI */
 
 #define IS_CAMERA_ERROR_CODE(xhr) ((xhr) >= E_CAMERA_ERROR_MIN && (xhr) <= E_CAMERA_ERROR_MAX)
 #define PropagateResult(hrPrevious, scBase) ((HRESULT) scBase)

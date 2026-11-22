@@ -3580,10 +3580,6 @@ typedef struct IUnregisterPhysicalConnectionVtbl IUnregisterPhysicalConnectionVt
 
 typedef struct IUnregisterSubdeviceVtbl IUnregisterSubdeviceVtbl;
 
-struct PCSTREAMRESOURCE__
-{
-    int unused;
-};
 
 typedef EVT_PC_POST_PO_FX_REGISTER_DEVICE *PFN_PC_POST_PO_FX_REGISTER_DEVICE;
 

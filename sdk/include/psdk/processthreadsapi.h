@@ -290,93 +290,6 @@ typedef struct _PROCESS_POWER_THROTTLING_STATE
     ULONG ControlMask;
     ULONG StateMask;
 } PROCESS_POWER_THROTTLING_STATE;
-typedef enum _PROCESS_MEMORY_EXHAUSTION_TYPE {
-    PMETypeFailFastOnCommitFailure = 0,
-    PMETypeMax = 1
-} PROCESS_MEMORY_EXHAUSTION_TYPE, *PPROCESS_MEMORY_EXHAUSTION_TYPE;
-
-typedef enum _QUEUE_USER_APC_FLAGS {
-    QUEUE_USER_APC_FLAGS_NONE = 0,
-    QUEUE_USER_APC_FLAGS_SPECIAL_USER_APC = 1,
-    QUEUE_USER_APC_CALLBACK_DATA_CONTEXT = 0x10000
-} QUEUE_USER_APC_FLAGS;
-
-typedef struct _PROCESS_POWER_THROTTLING_STATE * PPROCESS_POWER_THROTTLING_STATE;
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-BOOL WINAPI GetSystemCpuSetInformation(PSYSTEM_CPU_SET_INFORMATION Information, ULONG BufferLength, PULONG ReturnedLength, HANDLE Process, ULONG Flags);
-#ifdef __cplusplus
-}
-#endif
-
-typedef struct _APC_CALLBACK_DATA {
-  ULONG_PTR Parameter;
-  PCONTEXT ContextRecord;
-  ULONG_PTR Reserved0;
-  ULONG_PTR Reserved1;
-} APC_CALLBACK_DATA, *PAPC_CALLBACK_DATA;
-
-typedef struct _APP_MEMORY_INFORMATION {
-  ULONG64 AvailableCommit;
-  ULONG64 PrivateCommitUsage;
-  ULONG64 PeakPrivateCommitUsage;
-  ULONG64 TotalCommitUsage;
-} APP_MEMORY_INFORMATION, *PAPP_MEMORY_INFORMATION;
-
-typedef struct _PROCESS_LEAP_SECOND_INFO {
-  ULONG Flags;
-  ULONG Reserved;
-} PROCESS_LEAP_SECOND_INFO, *PPROCESS_LEAP_SECOND_INFO;
-
-typedef struct _PROCESS_MEMORY_EXHAUSTION_INFO {
-  USHORT Version;
-  USHORT Reserved;
-  PROCESS_MEMORY_EXHAUSTION_TYPE Type;
-  ULONG_PTR Value;
-} PROCESS_MEMORY_EXHAUSTION_INFO, *PPROCESS_MEMORY_EXHAUSTION_INFO;
-
-typedef struct OVERRIDE_PREFETCH_PARAMETER {
-  UINT32 Value;
-} OVERRIDE_PREFETCH_PARAMETER;
-
-typedef struct PROCESS_PROTECTION_LEVEL_INFORMATION {
-  DWORD ProtectionLevel;
-} PROCESS_PROTECTION_LEVEL_INFORMATION;
-
-#define PROC_THREAD_ATTRIBUTE_REPLACE_VALUE 0x00000001
-#define PROCESS_LEAP_SECOND_INFO_VALID_FLAGS 1
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/* TODO: LiberNT does not implement the functions below yet */
-BOOL WINAPI GetProcessDefaultCpuSetMasks(HANDLE Process, PGROUP_AFFINITY CpuSetMasks, USHORT CpuSetMaskCount, PUSHORT RequiredMaskCount);
-BOOL WINAPI GetThreadSelectedCpuSetMasks(HANDLE Thread, PGROUP_AFFINITY CpuSetMasks, USHORT CpuSetMaskCount, PUSHORT RequiredMaskCount);
-BOOL IsProcessCritical(HANDLE hProcess, PBOOL Critical);
-BOOL QueryProtectedPolicy(LPCGUID PolicyGuid, PULONG_PTR PolicyValue);
-BOOL WINAPI SetProcessDefaultCpuSetMasks(HANDLE Process, PGROUP_AFFINITY CpuSetMasks, USHORT CpuSetMaskCount);
-BOOL SetProcessDynamicEHContinuationTargets(HANDLE Process, USHORT NumberOfTargets, PPROCESS_DYNAMIC_EH_CONTINUATION_TARGET Targets);
-BOOL SetProcessDynamicEnforcedCetCompatibleRanges(HANDLE Process, USHORT NumberOfRanges, PPROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGE Ranges);
-BOOL SetProtectedPolicy(LPCGUID PolicyGuid, ULONG_PTR PolicyValue, PULONG_PTR OldPolicyValue);
-BOOL WINAPI SetThreadSelectedCpuSetMasks(HANDLE Thread, PGROUP_AFFINITY CpuSetMasks, USHORT CpuSetMaskCount);
-LPVOID TlsGetValue2(DWORD dwTlsIndex);
-
-#ifdef __cplusplus
-}
-#endif
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-BOOL WINAPI QueueUserAPC2(PAPCFUNC ApcRoutine, HANDLE Thread, ULONG_PTR Data, QUEUE_USER_APC_FLAGS Flags);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif
 
@@ -468,4 +381,93 @@ SetThreadSelectedCpuSets(
 #endif
 #ifndef PROCESS_LEAP_SECOND_INFO_FLAG_ENABLE_SIXTY_SECOND
 #define PROCESS_LEAP_SECOND_INFO_FLAG_ENABLE_SIXTY_SECOND 0x1
+
+typedef enum _PROCESS_MEMORY_EXHAUSTION_TYPE {
+    PMETypeFailFastOnCommitFailure = 0,
+    PMETypeMax = 1
+} PROCESS_MEMORY_EXHAUSTION_TYPE, *PPROCESS_MEMORY_EXHAUSTION_TYPE;
+
+typedef enum _QUEUE_USER_APC_FLAGS {
+    QUEUE_USER_APC_FLAGS_NONE = 0,
+    QUEUE_USER_APC_FLAGS_SPECIAL_USER_APC = 1,
+    QUEUE_USER_APC_CALLBACK_DATA_CONTEXT = 0x10000
+} QUEUE_USER_APC_FLAGS;
+
+typedef struct _PROCESS_POWER_THROTTLING_STATE * PPROCESS_POWER_THROTTLING_STATE;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+BOOL WINAPI GetSystemCpuSetInformation(PSYSTEM_CPU_SET_INFORMATION Information, ULONG BufferLength, PULONG ReturnedLength, HANDLE Process, ULONG Flags);
+#ifdef __cplusplus
+}
+#endif
+
+typedef struct _APC_CALLBACK_DATA {
+  ULONG_PTR Parameter;
+  PCONTEXT ContextRecord;
+  ULONG_PTR Reserved0;
+  ULONG_PTR Reserved1;
+} APC_CALLBACK_DATA, *PAPC_CALLBACK_DATA;
+
+typedef struct _APP_MEMORY_INFORMATION {
+  ULONG64 AvailableCommit;
+  ULONG64 PrivateCommitUsage;
+  ULONG64 PeakPrivateCommitUsage;
+  ULONG64 TotalCommitUsage;
+} APP_MEMORY_INFORMATION, *PAPP_MEMORY_INFORMATION;
+
+typedef struct _PROCESS_LEAP_SECOND_INFO {
+  ULONG Flags;
+  ULONG Reserved;
+} PROCESS_LEAP_SECOND_INFO, *PPROCESS_LEAP_SECOND_INFO;
+
+typedef struct _PROCESS_MEMORY_EXHAUSTION_INFO {
+  USHORT Version;
+  USHORT Reserved;
+  PROCESS_MEMORY_EXHAUSTION_TYPE Type;
+  ULONG_PTR Value;
+} PROCESS_MEMORY_EXHAUSTION_INFO, *PPROCESS_MEMORY_EXHAUSTION_INFO;
+
+typedef struct OVERRIDE_PREFETCH_PARAMETER {
+  UINT32 Value;
+} OVERRIDE_PREFETCH_PARAMETER;
+
+typedef struct PROCESS_PROTECTION_LEVEL_INFORMATION {
+  DWORD ProtectionLevel;
+} PROCESS_PROTECTION_LEVEL_INFORMATION;
+
+#define PROC_THREAD_ATTRIBUTE_REPLACE_VALUE 0x00000001
+#define PROCESS_LEAP_SECOND_INFO_VALID_FLAGS 1
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* TODO: LiberNT does not implement the functions below yet */
+BOOL WINAPI GetProcessDefaultCpuSetMasks(HANDLE Process, PGROUP_AFFINITY CpuSetMasks, USHORT CpuSetMaskCount, PUSHORT RequiredMaskCount);
+BOOL WINAPI GetThreadSelectedCpuSetMasks(HANDLE Thread, PGROUP_AFFINITY CpuSetMasks, USHORT CpuSetMaskCount, PUSHORT RequiredMaskCount);
+BOOL IsProcessCritical(HANDLE hProcess, PBOOL Critical);
+BOOL QueryProtectedPolicy(LPCGUID PolicyGuid, PULONG_PTR PolicyValue);
+BOOL WINAPI SetProcessDefaultCpuSetMasks(HANDLE Process, PGROUP_AFFINITY CpuSetMasks, USHORT CpuSetMaskCount);
+BOOL SetProcessDynamicEHContinuationTargets(HANDLE Process, USHORT NumberOfTargets, PPROCESS_DYNAMIC_EH_CONTINUATION_TARGET Targets);
+BOOL SetProcessDynamicEnforcedCetCompatibleRanges(HANDLE Process, USHORT NumberOfRanges, PPROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGE Ranges);
+BOOL SetProtectedPolicy(LPCGUID PolicyGuid, ULONG_PTR PolicyValue, PULONG_PTR OldPolicyValue);
+BOOL WINAPI SetThreadSelectedCpuSetMasks(HANDLE Thread, PGROUP_AFFINITY CpuSetMasks, USHORT CpuSetMaskCount);
+LPVOID TlsGetValue2(DWORD dwTlsIndex);
+
+#ifdef __cplusplus
+}
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+BOOL WINAPI QueueUserAPC2(PAPCFUNC ApcRoutine, HANDLE Thread, ULONG_PTR Data, QUEUE_USER_APC_FLAGS Flags);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

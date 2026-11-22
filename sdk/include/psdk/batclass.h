@@ -395,6 +395,57 @@ BatteryClassUnload(
 
 #endif /* _WINDOWS_H */
 
+#endif /* _BATCLASS_ */
+
+#if !defined(_WINDOWS_)
+
+typedef struct {
+    USHORT                          MajorVersion;
+    USHORT                          MinorVersion;
+    PVOID                           Context;
+    BCLASS_QUERY_TAG                QueryTag;
+    BCLASS_QUERY_INFORMATION        QueryInformation;
+    BCLASS_SET_INFORMATION          SetInformation;
+    BCLASS_QUERY_STATUS             QueryStatus;
+    BCLASS_SET_STATUS_NOTIFY        SetStatusNotify;
+    BCLASS_DISABLE_STATUS_NOTIFY    DisableStatusNotify;
+    PDEVICE_OBJECT                  Pdo;
+    PUNICODE_STRING                 DeviceName;
+    PDEVICE_OBJECT                  Fdo;
+} BATTERY_MINIPORT_INFO_V1_1, *PBATTERY_MINIPORT_INFO_V1_1;
+
+#define BATTERY_CLASS_MINOR_VERSION_1   0x0001
+
+#endif
+
+#ifdef __cplusplus
+}
+#endif
+
+#ifndef ADAPTER_CLASS_MAJOR_VERSION
+#define ADAPTER_CLASS_MAJOR_VERSION 0x0001
+#endif
+#ifndef ADAPTER_CLASS_MINOR_VERSION
+#define ADAPTER_CLASS_MINOR_VERSION 0x0000
+#endif
+#ifndef BATTERY_CLASS_MINOR_VERSION_2
+#define BATTERY_CLASS_MINOR_VERSION_2 0x0002
+#endif
+#ifndef BATTERY_MINIPORT_UPDATE_DATA_VER_1
+#define BATTERY_MINIPORT_UPDATE_DATA_VER_1 0x00000001
+#endif
+#ifndef BATTERY_MINIPORT_UPDATE_DATA_VER_2
+#define BATTERY_MINIPORT_UPDATE_DATA_VER_2 0x00000002
+#endif
+#ifndef BATTERY_NOTIFY_VERSION_1
+#define BATTERY_NOTIFY_VERSION_1 1
+#endif
+#ifndef BATTERY_NOTIFY_VERSION_2
+#define BATTERY_NOTIFY_VERSION_2 2
+#endif
+#ifndef CHARGE_REQUIREMENT_MAX_POWER_SOURCE_TYPES
+#define CHARGE_REQUIREMENT_MAX_POWER_SOURCE_TYPES 2
+
 typedef enum BATTERY_CHARGING_STATE {
     BatteryNoPowerSupply = 0,
     BatteryInadequatePowerSupply = 1,
@@ -591,54 +642,4 @@ NTSTATUS BatteryClassUpdateData(PVOID ClassData, PBATTERY_MINIPORT_UPDATE_DATA U
 }
 #endif
 
-#endif /* _BATCLASS_ */
-
-#if !defined(_WINDOWS_)
-
-typedef struct {
-    USHORT                          MajorVersion;
-    USHORT                          MinorVersion;
-    PVOID                           Context;
-    BCLASS_QUERY_TAG                QueryTag;
-    BCLASS_QUERY_INFORMATION        QueryInformation;
-    BCLASS_SET_INFORMATION          SetInformation;
-    BCLASS_QUERY_STATUS             QueryStatus;
-    BCLASS_SET_STATUS_NOTIFY        SetStatusNotify;
-    BCLASS_DISABLE_STATUS_NOTIFY    DisableStatusNotify;
-    PDEVICE_OBJECT                  Pdo;
-    PUNICODE_STRING                 DeviceName;
-    PDEVICE_OBJECT                  Fdo;
-} BATTERY_MINIPORT_INFO_V1_1, *PBATTERY_MINIPORT_INFO_V1_1;
-
-#define BATTERY_CLASS_MINOR_VERSION_1   0x0001
-
-#endif
-
-#ifdef __cplusplus
-}
-#endif
-
-#ifndef ADAPTER_CLASS_MAJOR_VERSION
-#define ADAPTER_CLASS_MAJOR_VERSION 0x0001
-#endif
-#ifndef ADAPTER_CLASS_MINOR_VERSION
-#define ADAPTER_CLASS_MINOR_VERSION 0x0000
-#endif
-#ifndef BATTERY_CLASS_MINOR_VERSION_2
-#define BATTERY_CLASS_MINOR_VERSION_2 0x0002
-#endif
-#ifndef BATTERY_MINIPORT_UPDATE_DATA_VER_1
-#define BATTERY_MINIPORT_UPDATE_DATA_VER_1 0x00000001
-#endif
-#ifndef BATTERY_MINIPORT_UPDATE_DATA_VER_2
-#define BATTERY_MINIPORT_UPDATE_DATA_VER_2 0x00000002
-#endif
-#ifndef BATTERY_NOTIFY_VERSION_1
-#define BATTERY_NOTIFY_VERSION_1 1
-#endif
-#ifndef BATTERY_NOTIFY_VERSION_2
-#define BATTERY_NOTIFY_VERSION_2 2
-#endif
-#ifndef CHARGE_REQUIREMENT_MAX_POWER_SOURCE_TYPES
-#define CHARGE_REQUIREMENT_MAX_POWER_SOURCE_TYPES 2
 #endif
