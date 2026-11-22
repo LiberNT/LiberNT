@@ -249,31 +249,49 @@ IsPowerOfTwo(uint64_t Value)
     return Value != 0 && (Value & (Value - 1)) == 0;
 }
 
-static int
-ValidateFixup(const NTFS_RECORD_HEADER* Header, uint32_t RecordSize, uint32_t BytesPerSector)
-{
-    uint32_t UsaSize = (uint32_t)Header->SizeOfUpdateSequence * 2;
+/* Records on large sectors may use a 512-byte update-sequence stride. */
+#define MINIMUM_FIXUP_STRIDE 512u
 
-    return !(RecordSize < BytesPerSector ||
-             (RecordSize % BytesPerSector) != 0 ||
-             Header->SizeOfUpdateSequence != RecordSize / BytesPerSector + 1 ||
-             Header->UpdateSequenceOffset > RecordSize ||
-             UsaSize > RecordSize - Header->UpdateSequenceOffset);
+static uint32_t
+FixupStride(const NTFS_RECORD_HEADER* Header, uint32_t RecordSize, uint32_t BytesPerSector)
+{
+    uint32_t Count = Header->SizeOfUpdateSequence;
+    uint32_t UsaSize = Count * 2;
+    uint32_t Stride;
+
+    if (Count < 2 ||
+        RecordSize < BytesPerSector ||
+        (RecordSize % BytesPerSector) != 0 ||
+        Header->UpdateSequenceOffset > RecordSize ||
+        UsaSize > RecordSize - Header->UpdateSequenceOffset)
+    {
+        return 0;
+    }
+    Stride = RecordSize / (Count - 1);
+    if (Stride * (Count - 1) != RecordSize ||
+        Stride < MINIMUM_FIXUP_STRIDE ||
+        Stride > BytesPerSector ||
+        !IsPowerOfTwo(Stride))
+    {
+        return 0;
+    }
+    return Stride;
 }
 
 static int
 ApplyFixup(uint8_t* Record, uint32_t RecordSize, uint32_t BytesPerSector)
 {
     NTFS_RECORD_HEADER* Header = (NTFS_RECORD_HEADER*)Record;
+    uint32_t Stride = FixupStride(Header, RecordSize, BytesPerSector);
     uint16_t* Usa;
     uint8_t* SectorTail;
     uint32_t Index;
 
-    if (!ValidateFixup(Header, RecordSize, BytesPerSector))
+    if (Stride == 0)
         return 0;
 
     Usa = (uint16_t*)(Record + Header->UpdateSequenceOffset);
-    SectorTail = Record + BytesPerSector - 2;
+    SectorTail = Record + Stride - 2;
 
     for (Index = 1; Index < Header->SizeOfUpdateSequence; Index++)
     {
@@ -283,7 +301,7 @@ ApplyFixup(uint8_t* Record, uint32_t RecordSize, uint32_t BytesPerSector)
         if (Stamped != Usa[0])
             return 0;
         memcpy(SectorTail, &Usa[Index], 2);
-        SectorTail += BytesPerSector;
+        SectorTail += Stride;
     }
 
     return 1;
@@ -293,15 +311,16 @@ static int
 CommitFixup(uint8_t* Record, uint32_t RecordSize, uint32_t BytesPerSector)
 {
     NTFS_RECORD_HEADER* Header = (NTFS_RECORD_HEADER*)Record;
+    uint32_t Stride = FixupStride(Header, RecordSize, BytesPerSector);
     uint16_t* Usa;
     uint8_t* SectorTail;
     uint32_t Index;
 
-    if (!ValidateFixup(Header, RecordSize, BytesPerSector))
+    if (Stride == 0)
         return 0;
 
     Usa = (uint16_t*)(Record + Header->UpdateSequenceOffset);
-    SectorTail = Record + BytesPerSector - 2;
+    SectorTail = Record + Stride - 2;
 
     Usa[0]++;
     if (Usa[0] == 0)
@@ -311,7 +330,7 @@ CommitFixup(uint8_t* Record, uint32_t RecordSize, uint32_t BytesPerSector)
     {
         memcpy(&Usa[Index], SectorTail, 2);
         memcpy(SectorTail, &Usa[0], 2);
-        SectorTail += BytesPerSector;
+        SectorTail += Stride;
     }
 
     return 1;
