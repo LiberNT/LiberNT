@@ -55,6 +55,30 @@ DwordProperty(
 }
 
 static void
+CheckAlgorithmProperties(
+    _In_ NCRYPT_KEY_HANDLE Key,
+    _In_ const WCHAR *KeyName,
+    _In_ const WCHAR *Algorithm,
+    _In_ const WCHAR *Group)
+{
+    WCHAR Value[64];
+    SECURITY_STATUS Status;
+    DWORD Result = 0;
+
+    Status = NCryptGetProperty(Key, NCRYPT_ALGORITHM_PROPERTY, NULL, 0, &Result, 0);
+    ok(Status == ERROR_SUCCESS && Result == (wcslen(Algorithm) + 1) * sizeof(WCHAR),
+       "%ls: algorithm property size: %#lx size %lu\n", KeyName, Status, Result);
+    ok(StringProperty(Key, NCRYPT_ALGORITHM_PROPERTY, Value, ARRAYSIZE(Value)) && !wcscmp(Value, Algorithm),
+       "%ls: algorithm property %ls\n", KeyName, Value);
+    Result = 0;
+    Status = NCryptGetProperty(Key, NCRYPT_ALGORITHM_GROUP_PROPERTY, NULL, 0, &Result, 0);
+    ok(Status == ERROR_SUCCESS && Result == (wcslen(Group) + 1) * sizeof(WCHAR),
+       "%ls: algorithm group property size: %#lx size %lu\n", KeyName, Status, Result);
+    ok(StringProperty(Key, NCRYPT_ALGORITHM_GROUP_PROPERTY, Value, ARRAYSIZE(Value)) && !wcscmp(Value, Group),
+       "%ls: algorithm group property %ls\n", KeyName, Value);
+}
+
+static void
 TestProviders(void)
 {
     NCRYPT_PROV_HANDLE Provider;
@@ -208,6 +232,7 @@ TestPersistedKey(
     SECURITY_STATUS Status;
     DWORD Size = 0, CipherSize = 0, PlainSize = 0, i;
     BOOL Rsa = !wcscmp(Algorithm, NCRYPT_RSA_ALGORITHM);
+    const WCHAR *Group = Rsa ? NCRYPT_RSA_ALGORITHM_GROUP : NCRYPT_ECDSA_ALGORITHM_GROUP;
     void *PaddingInfo = Rsa ? &Padding : NULL;
     DWORD PaddingFlag = Rsa ? BCRYPT_PAD_PKCS1 : 0;
 
@@ -241,6 +266,7 @@ TestPersistedKey(
        DwordProperty(Key, NCRYPT_LENGTH_PROPERTY));
     ok(DwordProperty(Key, NCRYPT_KEY_TYPE_PROPERTY) == (Flags & NCRYPT_MACHINE_KEY_FLAG ? NCRYPT_MACHINE_KEY_FLAG : 0),
        "%ls: key type %#lx\n", KeyName, DwordProperty(Key, NCRYPT_KEY_TYPE_PROPERTY));
+    CheckAlgorithmProperties(Key, KeyName, Algorithm, Group);
 
     Size = 0;
     Status = NCryptExportKey(Key, 0, Rsa ? BCRYPT_RSAPRIVATE_BLOB : BCRYPT_ECCPRIVATE_BLOB, NULL, NULL, 0, &Size, 0);
@@ -273,6 +299,7 @@ TestPersistedKey(
         ok(Status == ERROR_SUCCESS, "%ls: reopened key does not verify the signature: %#lx\n", KeyName, Status);
         ok(DwordProperty(Key, NCRYPT_LENGTH_PROPERTY) == Length, "%ls: reopened length %lu\n", KeyName,
            DwordProperty(Key, NCRYPT_LENGTH_PROPERTY));
+        CheckAlgorithmProperties(Key, KeyName, Algorithm, Group);
         NCryptFreeObject(Key);
         Key = 0;
     }
