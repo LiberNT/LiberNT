@@ -190,6 +190,7 @@ KiSwapContextResume(
 {
     PKPRCB Prcb = KeGetCurrentPrcb();
     PKPROCESS OldProcess, NewProcess;
+    BOOLEAN Enabled;
 
     ASSERT(Prcb->CurrentThread == NewThread);
     if (Prcb->DpcRoutineActive)
@@ -212,7 +213,11 @@ KiSwapContextResume(
     Prcb->KeContextSwitches++;
     NewThread->ContextSwitches++;
 #if KI_THREAD_HANDOFF_USES_RUNNING
+    /* A holder of the locks this takes may be held in a rendezvous that waits for this processor. */
+    Enabled = KeDisableInterrupts();
+    _enable();
     KiCompleteThreadSwitch(OldThread, NewThread);
+    KeRestoreInterrupts(Enabled);
 #endif
 
     if (NewThread->ApcState.KernelApcPending)
