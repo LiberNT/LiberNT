@@ -105,20 +105,34 @@ const ULONG KdbpFloatingRegisterCount = RTL_NUMBER_OF(KdbpFloatingRegisters);
 
 /* PUBLIC FUNCTIONS ***********************************************************/
 
-/*
- * Stepping one instruction at a time is not yet driven on this architecture.
- */
+#define KDB_ARM64_PSTATE_D  0x00000200UL
+#define KDB_ARM64_PSTATE_SS 0x00200000UL
+#define KDB_ARM64_MDSCR_SS  (1ULL << 0)
+#define KDB_ARM64_MDSCR_KDE (1ULL << 13)
+
 NTSTATUS
 NTAPI
 KdbpArchSetSingleStep(
     _Inout_ PCONTEXT Context,
     _In_ BOOLEAN Enable)
 {
-    UNREFERENCED_PARAMETER(Context);
-    UNREFERENCED_PARAMETER(Enable);
+    ULONG64 Mdscr = ARM64_READ_SYSREG(MDSCR_EL1);
 
-    /* TODO: single stepping needs this architecture's own debug state */
-    return STATUS_NOT_SUPPORTED;
+    /* FIXME: MDSCR_EL1 is per processor, so the step is lost when an interrupt moves the thread to another one before it runs */
+    if (Enable)
+    {
+        Context->Cpsr = (Context->Cpsr | KDB_ARM64_PSTATE_SS) & ~KDB_ARM64_PSTATE_D;
+        Mdscr |= KDB_ARM64_MDSCR_SS | KDB_ARM64_MDSCR_KDE;
+    }
+    else
+    {
+        Context->Cpsr &= ~KDB_ARM64_PSTATE_SS;
+        Mdscr &= ~KDB_ARM64_MDSCR_SS;
+    }
+
+    ARM64_WRITE_SYSREG(MDSCR_EL1, Mdscr);
+    ARM64_ISB();
+    return STATUS_SUCCESS;
 }
 
 ULONG
