@@ -61,6 +61,10 @@ if(CLANG_NATIVE_SEH AND NOT USE_DUMMY_PSEH)
     if(ARCH STREQUAL "arm64")
         add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:SHELL:-mllvm -aarch64-enable-compress-jump-tables=false>")
     endif()
+    if(ARCH STREQUAL "arm")
+        # FIXME: at -O2 block placement asserts on functions with handlers ("Unexpected block with un-analyzable fallthrough!"); drop this with the compiler fix
+        add_compile_options("$<$<COMPILE_LANGUAGE:C,CXX>:SHELL:-mllvm -disable-block-placement>")
+    endif()
 endif()
 
 if(STACK_PROTECTOR)
