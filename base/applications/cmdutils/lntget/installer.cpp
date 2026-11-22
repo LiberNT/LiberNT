@@ -65,10 +65,12 @@ std::string InstallerArguments(const InstallerEntry &installer, InstallMode mode
         if (!installer.switches.silent.empty())
             return installer.switches.silent;
     }
-    if (AsciiEquals(installer.type, "inno")) return "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-";
+    const bool progress = mode == InstallMode::Default;
+    if (AsciiEquals(installer.type, "inno"))
+        return progress ? "/SILENT /SUPPRESSMSGBOXES /NORESTART /SP-" : "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-";
     if (AsciiEquals(installer.type, "nullsoft")) return "/S";
-    if (AsciiEquals(installer.type, "burn")) return "/quiet /norestart";
-    if (AsciiEquals(installer.type, "wix") || AsciiEquals(installer.type, "msi")) return "/quiet /norestart";
+    if (AsciiEquals(installer.type, "burn") || AsciiEquals(installer.type, "wix") || AsciiEquals(installer.type, "msi"))
+        return progress ? "/passive /norestart" : "/quiet /norestart";
     return std::string();
 }
 
@@ -456,9 +458,21 @@ Status RunInstallerSelfTests()
     msi.type = "wix";
     msi.switches.custom = "ADD_CMAKE_TO_PATH=System";
     if (InstallerCommandArguments(msi, InstallMode::Silent) != "/quiet /norestart ADD_CMAKE_TO_PATH=System" ||
-        InstallerCommandArguments(msi, InstallMode::Default) != "/quiet /norestart ADD_CMAKE_TO_PATH=System" ||
+        InstallerCommandArguments(msi, InstallMode::Default) != "/passive /norestart ADD_CMAKE_TO_PATH=System" ||
         InstallerCommandArguments(msi, InstallMode::Interactive) != "ADD_CMAKE_TO_PATH=System")
         return Status::Fail(ERROR_ASSERTION_FAILURE, "MSI custom switch self-test failed");
+    InstallerEntry typed;
+    typed.type = "inno";
+    if (InstallerArguments(typed, InstallMode::Silent) != "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" ||
+        InstallerArguments(typed, InstallMode::Default) != "/SILENT /SUPPRESSMSGBOXES /NORESTART /SP-")
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "Inno default switch self-test failed");
+    typed.type = "burn";
+    if (InstallerArguments(typed, InstallMode::Silent) != "/quiet /norestart" ||
+        InstallerArguments(typed, InstallMode::Default) != "/passive /norestart")
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "Burn default switch self-test failed");
+    typed.type = "nullsoft";
+    if (InstallerArguments(typed, InstallMode::Silent) != "/S" || InstallerArguments(typed, InstallMode::Default) != "/S")
+        return Status::Fail(ERROR_ASSERTION_FAILURE, "Nullsoft default switch self-test failed");
     return Status::Ok();
 }
 
