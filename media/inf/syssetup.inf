@@ -308,7 +308,8 @@ FontSubStr="Software\Microsoft\Windows NT\CurrentVersion\FontSubstitutes"
 Control="System\CurrentControlSet\Control"
 
 [Classes]
-HKLM,%CurrentVersion%\Installer,"InstallerLocation",,"%11%"
+HKLM,%CurrentVersion%\Installer,"InstallerLocation",,"%11%\"
+HKLM,%CurrentVersion%\Installer,"InstallerLocation",0x00004000,"%16425%\"
 
 [DestinationDirs]
 IECopy=16422,Internet Explorer
