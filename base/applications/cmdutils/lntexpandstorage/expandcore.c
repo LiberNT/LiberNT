@@ -195,6 +195,8 @@ typedef struct _NTFS_CONTEXT
     NTFS_WORKSPACE* Work;
     uint64_t PartitionStart;
     uint64_t MftLcn;
+    uint64_t MftMirrLcn;
+    uint32_t MirrorRecords;
     uint64_t OldClusters;
     uint64_t NewClusters;
     uint32_t BytesPerSector;
@@ -537,6 +539,15 @@ WriteRecord(NTFS_CONTEXT* Context, uint32_t Number, uint8_t* Record)
 
     if (!Context->Device->Write(Context->Device->Context, Offset, Context->RecordSize, Record))
         return EXPAND_IO_ERROR;
+
+    if (Number < Context->MirrorRecords)
+    {
+        Offset = Context->PartitionStart +
+                 Context->MftMirrLcn * Context->ClusterSize +
+                 (uint64_t)Number * Context->RecordSize;
+        if (!Context->Device->Write(Context->Device->Context, Offset, Context->RecordSize, Record))
+            return EXPAND_IO_ERROR;
+    }
 
     return EXPAND_OK;
 }
@@ -1609,6 +1620,11 @@ LocateRecords(NTFS_CONTEXT* Context, const NTFS_BOOT_SECTOR* BootSector)
     }
 
     Context->MftLcn = BootSector->MftLcn;
+    Context->MftMirrLcn = BootSector->MftMirrLcn;
+    /* $MFTMirr holds one cluster of records, and never fewer than four. */
+    Context->MirrorRecords = Context->ClusterSize > 4 * Context->RecordSize
+        ? Context->ClusterSize / Context->RecordSize
+        : 4;
     return EXPAND_OK;
 }
 
