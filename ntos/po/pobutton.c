@@ -103,7 +103,10 @@ PopTakeButtonAction(
         case PowerActionSleep:
             if (PopAoAc)
             {
-                PopToggleDisplay();
+                if (PopGetDisplayState() == PowerMonitorOff)
+                    PopRequestDisplayState(PowerMonitorOn);
+                else
+                    PopRequestModernStandby();
                 break;
             }
             Status = ZwInitiatePowerAction(PowerActionSleep, PowerSystemSleeping1, 0, TRUE);

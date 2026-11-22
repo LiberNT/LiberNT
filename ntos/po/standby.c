@@ -28,6 +28,8 @@ static volatile LONG PopDisplayQueued;
 static volatile LONG PopDisplayTarget = PowerMonitorOn;
 static MONITOR_DISPLAY_STATE PopDisplayState = PowerMonitorOn;
 static LIST_ENTRY PopStandbyPausedList;
+static volatile LONG PopStandbyRequested;
+static BOOLEAN PopStandbyActive;
 static KTIMER PopDisplayIdleTimer;
 static KDPC PopDisplayIdleDpc;
 static WORK_QUEUE_ITEM PopDisplayIdleWorkItem;
@@ -183,34 +185,47 @@ PopPublishDisplayState(
     }
 }
 
+/* A display timeout only turns the screen off; modern standby is entered by a sleep action and left when the display comes back on */
 static
 VOID
 PopApplyDisplayState(
     _In_ MONITOR_DISPLAY_STATE State)
 {
     MONITOR_DISPLAY_STATE Previous = PopDisplayState;
+    BOOLEAN Standby = (InterlockedExchange(&PopStandbyRequested, FALSE) != FALSE) && State == PowerMonitorOff;
 
-    if (State == Previous)
-        return;
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(PopDisplayLock.OwnerThread == KeGetCurrentThread());
+    ASSERT(!PopStandbyActive || PopAoAc);
+    ASSERT(!PopStandbyActive || Previous == PowerMonitorOff);
+    ASSERT(PopStandbyActive || IsListEmpty(&PopStandbyPausedList));
 
-    PopDisplayState = State;
-    DPRINT1("The console display is now %s\n",
-            State == PowerMonitorOff ? "off" : State == PowerMonitorDim ? "dimmed" : "on");
-
-    if (PopAoAc && Previous == PowerMonitorOff)
+    if (State != Previous)
     {
-        PopStandbyResumeDesktopApplications();
-        DPRINT1("Modern standby exited\n");
+        PopDisplayState = State;
+        DPRINT1("The console display is now %s\n",
+                State == PowerMonitorOff ? "off" : State == PowerMonitorDim ? "dimmed" : "on");
+
+        if (PopStandbyActive)
+        {
+            PopStandbyActive = FALSE;
+            PopStandbyResumeDesktopApplications();
+            DPRINT1("Modern standby exited\n");
+        }
+
+        PopPublishDisplayState(State);
     }
 
-    if (PopAoAc && State == PowerMonitorOff && PopLockConsoleOnWake())
-        PopSleepCallWin32(PowerState_NotifyWL, PowerActionSleep, PowerSystemWorking, POWER_ACTION_LOCK_CONSOLE);
-
-    PopPublishDisplayState(State);
-
-    if (PopAoAc && State == PowerMonitorOff)
+    if (Standby && !PopStandbyActive)
     {
+        ASSERT(PopAoAc);
+        ASSERT(PopDisplayState == PowerMonitorOff);
+
+        if (PopLockConsoleOnWake())
+            PopSleepCallWin32(PowerState_NotifyWL, PowerActionSleep, PowerSystemWorking, POWER_ACTION_LOCK_CONSOLE);
+
         DPRINT1("Modern standby entered\n");
+        PopStandbyActive = TRUE;
         PopStandbyPauseDesktopApplications();
     }
 }
@@ -237,6 +252,16 @@ PopRequestDisplayState(
     InterlockedExchange(&PopDisplayTarget, State);
     if (InterlockedExchange(&PopDisplayQueued, 1) == 0)
         ExQueueWorkItem(&PopDisplayWorkItem, DelayedWorkQueue);
+}
+
+VOID
+NTAPI
+PopRequestModernStandby(VOID)
+{
+    ASSERT(PopAoAc);
+
+    InterlockedExchange(&PopStandbyRequested, TRUE);
+    PopRequestDisplayState(PowerMonitorOff);
 }
 
 MONITOR_DISPLAY_STATE
@@ -319,6 +344,7 @@ PopCheckDisplayIdle(VOID)
         return;
 
     DPRINT1("The display idled out after %lu seconds\n", Timeout);
+    /* TODO: the sleep idle timeout (GUID_STANDBY_TIMEOUT), which enters modern standby on AoAc systems */
     PopRequestDisplayState(PowerMonitorOff);
 }
 
