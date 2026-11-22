@@ -1064,6 +1064,111 @@ BuildRootValueFromList(
  * already-large index. The buffer content becomes durable before the
  * root switch commits the new shape.
  */
+/* The root shrinks only after both new attributes are listed. */
+NTSTATUS
+Directory::PlaceIndexAllocationInExtension(
+    _In_ PVolume DiskVolume,
+    _In_ PFileRecord DirectoryFile,
+    _In_ PCWSTR IndexName,
+    _In_ PUCHAR Image,
+    _In_ ULONG RecordSize,
+    _In_reads_bytes_(RootValueLength) PUCHAR RootValue,
+    _In_ ULONG RootValueLength)
+{
+    const AttributeType Published[] = { TypeIndexAllocation, TypeBitmap };
+    UCHAR InitialBitmap[8] = { 1 };
+    PFileRecord Extension = NULL;
+    PFileRecord RootOwner;
+    PAttribute IndexRootAttribute;
+    PAttribute NewAttribute = NULL;
+    BOOLEAN Referenced = FALSE;
+    NTSTATUS Status;
+
+    ASSERT(DirectoryFile->FindAttributeInRecord(TypeAttributeList, NULL, NULL));
+    Status = DiskVolume->MFT->AllocateExtensionFileRecord(
+        MakeFileReference(DirectoryFile),
+        &Extension);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = Extension->SetAutomaticTimestampMask(0);
+    if (NT_SUCCESS(Status))
+    {
+        Status = Extension->InsertResidentAttribute(
+            TypeBitmap,
+            const_cast<PWSTR>(IndexName),
+            &NewAttribute);
+    }
+    if (NT_SUCCESS(Status))
+    {
+        Status = Extension->ReplaceResidentData(
+            NewAttribute,
+            InitialBitmap,
+            sizeof(InitialBitmap));
+    }
+    if (NT_SUCCESS(Status))
+    {
+        Status = Extension->InsertResidentAttribute(
+            TypeIndexAllocation,
+            const_cast<PWSTR>(IndexName),
+            &NewAttribute);
+    }
+    if (NT_SUCCESS(Status))
+    {
+        Status = Extension->PromoteResidentData(
+            NewAttribute,
+            Image,
+            RecordSize,
+            0,
+            RecordSize,
+            RecordSize);
+    }
+    for (ULONG Index = 0;
+         NT_SUCCESS(Status) && Index < RTL_NUMBER_OF(Published);
+         Index++)
+    {
+        PAttribute Listed = Extension->FindAttributeInRecord(
+            Published[Index],
+            const_cast<PWSTR>(IndexName),
+            NULL);
+        BOOLEAN OwnerReferenced = FALSE;
+
+        Status = Listed
+            ? DirectoryFile->InsertAttributeListEntry(
+                  Listed,
+                  Extension,
+                  0,
+                  FALSE,
+                  &OwnerReferenced)
+            : STATUS_FILE_CORRUPT_ERROR;
+        Referenced = Referenced || OwnerReferenced;
+    }
+    if (!NT_SUCCESS(Status))
+    {
+        /* FIXME: clusters a successful promotion allocated stay allocated on this failure. */
+        if (!Referenced)
+            (void)DiskVolume->MFT->DeallocateExtensionFileRecord(Extension);
+        delete Extension;
+        return Status;
+    }
+    delete Extension;
+
+    IndexRootAttribute = DirectoryFile->GetAttribute(
+        TypeIndexRoot,
+        const_cast<PWSTR>(IndexName));
+    RootOwner = IndexRootAttribute
+        ? DirectoryFile->GetAttributeOwner(IndexRootAttribute)
+        : NULL;
+    if (!RootOwner || IndexRootAttribute->IsNonResident)
+        return STATUS_FILE_CORRUPT_ERROR;
+    Status = RootOwner->ReplaceResidentData(
+        IndexRootAttribute,
+        RootValue,
+        RootValueLength);
+    if (NT_SUCCESS(Status))
+        Status = DiskVolume->MFT->WriteFileRecordToMFT(RootOwner);
+    return Status;
+}
+
 NTSTATUS
 Directory::PushDownRoot(
     _In_ PVolume DiskVolume,
@@ -1174,174 +1279,232 @@ Directory::PushDownRoot(
         if (!NT_SUCCESS(Status))
             goto Done;
 
-        IndexRootAttribute =
-            DirectoryFile->GetAttribute(
-                TypeIndexRoot,
-                const_cast<PWSTR>(IndexName));
-        if (!IndexRootAttribute ||
-            IndexRootAttribute->IsNonResident)
+        for (ULONG Attempt = 0;; Attempt++)
         {
-            Status = STATUS_FILE_CORRUPT_ERROR;
-            goto Done;
-        }
-        RootOwner =
-            DirectoryFile->GetAttributeOwner(
-                IndexRootAttribute);
-        if (!RootOwner)
-        {
-            Status = STATUS_FILE_CORRUPT_ERROR;
-            goto Done;
-        }
-
-        BaseBackup =
-            new(PagedPool, TAG_FILE_RECORD)
-                UCHAR[DirectoryFile->
-                    RecordBufferSize];
-        if (!BaseBackup)
-        {
-            Status =
-                STATUS_INSUFFICIENT_RESOURCES;
-            goto Done;
-        }
-        RtlCopyMemory(
-            BaseBackup,
-            DirectoryFile->Data,
-            DirectoryFile->RecordBufferSize);
-        if (RootOwner != DirectoryFile)
-        {
-            OwnerBackup =
-                new(PagedPool, TAG_FILE_RECORD)
-                    UCHAR[RootOwner->
-                        RecordBufferSize];
-            if (!OwnerBackup)
+            OwnerBackup = NULL;
+            BaseBackup = NULL;
+            IndexRootAttribute =
+                DirectoryFile->GetAttribute(
+                    TypeIndexRoot,
+                    const_cast<PWSTR>(IndexName));
+            if (!IndexRootAttribute ||
+                IndexRootAttribute->IsNonResident)
             {
-                delete[] BaseBackup;
+                Status = STATUS_FILE_CORRUPT_ERROR;
+                goto Done;
+            }
+            RootOwner =
+                DirectoryFile->GetAttributeOwner(
+                    IndexRootAttribute);
+            if (!RootOwner)
+            {
+                Status = STATUS_FILE_CORRUPT_ERROR;
+                goto Done;
+            }
+
+            BaseBackup =
+                new(PagedPool, TAG_FILE_RECORD)
+                    UCHAR[DirectoryFile->
+                        RecordBufferSize];
+            if (!BaseBackup)
+            {
                 Status =
                     STATUS_INSUFFICIENT_RESOURCES;
                 goto Done;
             }
             RtlCopyMemory(
-                OwnerBackup,
-                RootOwner->Data,
-                RootOwner->RecordBufferSize);
-        }
-
-        Status = RootOwner->ReplaceResidentData(
-            IndexRootAttribute,
-            RootValue,
-            RootValueLength);
-        if (NT_SUCCESS(Status))
-        {
-            Status =
-                DirectoryFile->
-                    InsertResidentAttribute(
-                        TypeBitmap,
-                        const_cast<PWSTR>(
-                            IndexName),
-                        &NewAttribute);
-        }
-        if (NT_SUCCESS(Status))
-        {
-            Status =
-                DirectoryFile->
-                    ReplaceResidentData(
-                        NewAttribute,
-                        InitialBitmap,
-                        sizeof(InitialBitmap));
-        }
-        if (NT_SUCCESS(Status))
-        {
-            Status =
-                DirectoryFile->
-                    InsertResidentAttribute(
-                        TypeIndexAllocation,
-                        const_cast<PWSTR>(
-                            IndexName),
-                        &NewAttribute);
-        }
-        if (NT_SUCCESS(Status))
-        {
-            Status =
-                DirectoryFile->
-                    PromoteResidentData(
-                        NewAttribute,
-                        Image,
-                        RecordSize,
-                        0,
-                        RecordSize,
-                        RecordSize);
-            if (Status == STATUS_BUFFER_TOO_SMALL)
+                BaseBackup,
+                DirectoryFile->Data,
+                DirectoryFile->RecordBufferSize);
+            if (RootOwner != DirectoryFile)
             {
-                PFileRecord AllocationOwner = DirectoryFile;
-                BOOLEAN ListCreated;
+                OwnerBackup =
+                    new(PagedPool, TAG_FILE_RECORD)
+                        UCHAR[RootOwner->
+                            RecordBufferSize];
+                if (!OwnerBackup)
+                {
+                    delete[] BaseBackup;
+                    Status =
+                        STATUS_INSUFFICIENT_RESOURCES;
+                    goto Done;
+                }
+                RtlCopyMemory(
+                    OwnerBackup,
+                    RootOwner->Data,
+                    RootOwner->RecordBufferSize);
+            }
 
+            Status = RootOwner->ReplaceResidentData(
+                IndexRootAttribute,
+                RootValue,
+                RootValueLength);
+            if (NT_SUCCESS(Status))
+            {
                 Status =
                     DirectoryFile->
-                        EnsureAttributeListForMappingGrowth(
+                        InsertResidentAttribute(
+                            TypeBitmap,
+                            const_cast<PWSTR>(
+                                IndexName),
+                            &NewAttribute);
+            }
+            if (NT_SUCCESS(Status))
+            {
+                Status =
+                    DirectoryFile->
+                        ReplaceResidentData(
+                            NewAttribute,
+                            InitialBitmap,
+                            sizeof(InitialBitmap));
+            }
+            if (NT_SUCCESS(Status))
+            {
+                Status =
+                    DirectoryFile->
+                        InsertResidentAttribute(
                             TypeIndexAllocation,
                             const_cast<PWSTR>(
                                 IndexName),
-                            &NewAttribute,
-                            &AllocationOwner,
-                            &ListCreated);
-                if (NT_SUCCESS(Status) && ListCreated)
+                            &NewAttribute);
+            }
+            if (NT_SUCCESS(Status))
+            {
+                Status =
+                    DirectoryFile->
+                        PromoteResidentData(
+                            NewAttribute,
+                            Image,
+                            RecordSize,
+                            0,
+                            RecordSize,
+                            RecordSize);
+                if (Status == STATUS_BUFFER_TOO_SMALL)
                 {
+                    PFileRecord AllocationOwner = DirectoryFile;
+                    BOOLEAN ListCreated;
+
                     Status =
-                        AllocationOwner->
-                            PromoteResidentData(
-                                NewAttribute,
-                                Image,
-                                RecordSize,
-                                0,
-                                RecordSize,
-                                RecordSize);
-                    if (NT_SUCCESS(Status) &&
-                        AllocationOwner != DirectoryFile)
+                        DirectoryFile->
+                            EnsureAttributeListForMappingGrowth(
+                                TypeIndexAllocation,
+                                const_cast<PWSTR>(
+                                    IndexName),
+                                &NewAttribute,
+                                &AllocationOwner,
+                                &ListCreated);
+                    if (NT_SUCCESS(Status) && ListCreated)
                     {
-                        Status = DiskVolume->MFT->
-                            WriteFileRecordToMFT(
-                                AllocationOwner);
+                        Status =
+                            AllocationOwner->
+                                PromoteResidentData(
+                                    NewAttribute,
+                                    Image,
+                                    RecordSize,
+                                    0,
+                                    RecordSize,
+                                    RecordSize);
+                        if (NT_SUCCESS(Status) &&
+                            AllocationOwner != DirectoryFile)
+                        {
+                            Status = DiskVolume->MFT->
+                                WriteFileRecordToMFT(
+                                    AllocationOwner);
+                        }
+                    }
+                    else if (NT_SUCCESS(Status))
+                    {
+                        Status = STATUS_BUFFER_TOO_SMALL;
                     }
                 }
-                else if (NT_SUCCESS(Status))
+                else if (NT_SUCCESS(Status) &&
+                         DirectoryFile->FindAttributeInRecord(
+                             TypeAttributeList, NULL, NULL))
                 {
-                    Status = STATUS_BUFFER_TOO_SMALL;
+                    const AttributeType Published[] =
+                        { TypeIndexAllocation, TypeBitmap };
+
+                    for (ULONG Index = 0;
+                         NT_SUCCESS(Status) &&
+                             Index < RTL_NUMBER_OF(Published);
+                         Index++)
+                    {
+                        PAttribute Listed =
+                            DirectoryFile->FindAttributeInRecord(
+                                Published[Index],
+                                const_cast<PWSTR>(IndexName),
+                                NULL);
+                        BOOLEAN OwnerReferenced;
+
+                        Status = Listed
+                            ? DirectoryFile->InsertAttributeListEntry(
+                                  Listed,
+                                  DirectoryFile,
+                                  0,
+                                  FALSE,
+                                  &OwnerReferenced)
+                            : STATUS_FILE_CORRUPT_ERROR;
+                    }
                 }
             }
-        }
-        if (NT_SUCCESS(Status) &&
-            RootOwner != DirectoryFile)
-        {
-            Status = DiskVolume->MFT->
-                WriteFileRecordToMFT(RootOwner);
-        }
-        if (!NT_SUCCESS(Status))
-        {
-            RtlCopyMemory(
-                DirectoryFile->Data,
-                BaseBackup,
-                DirectoryFile->
-                    RecordBufferSize);
-            DirectoryFile->Header =
-                reinterpret_cast<
-                    PFileRecordHeader>(
-                        DirectoryFile->Data);
-            DirectoryFile->ClearDataRunCache();
-            if (OwnerBackup)
+            if (NT_SUCCESS(Status) &&
+                RootOwner != DirectoryFile)
+            {
+                Status = DiskVolume->MFT->
+                    WriteFileRecordToMFT(RootOwner);
+            }
+            if (!NT_SUCCESS(Status))
             {
                 RtlCopyMemory(
-                    RootOwner->Data,
-                    OwnerBackup,
-                    RootOwner->RecordBufferSize);
-                RootOwner->Header =
+                    DirectoryFile->Data,
+                    BaseBackup,
+                    DirectoryFile->
+                        RecordBufferSize);
+                DirectoryFile->Header =
                     reinterpret_cast<
                         PFileRecordHeader>(
-                            RootOwner->Data);
-                RootOwner->ClearDataRunCache();
+                            DirectoryFile->Data);
+                DirectoryFile->ClearDataRunCache();
+                if (OwnerBackup)
+                {
+                    RtlCopyMemory(
+                        RootOwner->Data,
+                        OwnerBackup,
+                        RootOwner->RecordBufferSize);
+                    RootOwner->Header =
+                        reinterpret_cast<
+                            PFileRecordHeader>(
+                                RootOwner->Data);
+                    RootOwner->ClearDataRunCache();
+                }
             }
+            delete[] OwnerBackup;
+            delete[] BaseBackup;
+            if (Status == STATUS_BUFFER_TOO_SMALL &&
+                Attempt == 0 &&
+                !DirectoryFile->FindAttributeInRecord(
+                    TypeAttributeList, NULL, NULL))
+            {
+                /* A full base without a list first moves attributes into an extension. */
+                Status = DirectoryFile->CreateInitialAttributeList();
+                if (NT_SUCCESS(Status))
+                    continue;
+            }
+            else if (Status == STATUS_BUFFER_TOO_SMALL &&
+                     DirectoryFile->FindAttributeInRecord(
+                         TypeAttributeList, NULL, NULL))
+            {
+                Status = PlaceIndexAllocationInExtension(
+                    DiskVolume,
+                    DirectoryFile,
+                    IndexName,
+                    Image,
+                    RecordSize,
+                    RootValue,
+                    RootValueLength);
+            }
+            break;
         }
-        delete[] OwnerBackup;
-        delete[] BaseBackup;
         goto Done;
     }
     else

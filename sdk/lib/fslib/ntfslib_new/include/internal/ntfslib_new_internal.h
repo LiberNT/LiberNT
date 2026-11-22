@@ -1756,6 +1756,16 @@ private:
         _In_ ULONG RecordSize,
         _In_ ULONGLONG AllocationUnit);
 
+    static NTSTATUS
+    PlaceIndexAllocationInExtension(
+        _In_ PVolume DiskVolume,
+        _In_ PFileRecord DirectoryFile,
+        _In_ PCWSTR IndexName,
+        _In_ PUCHAR Image,
+        _In_ ULONG RecordSize,
+        _In_reads_bytes_(RootValueLength) PUCHAR RootValue,
+        _In_ ULONG RootValueLength);
+
     NTSTATUS
     ReleaseEmptyIndexNode(
         _In_ PFileRecord DirectoryFile,
