@@ -129,6 +129,7 @@ CCabinetWindow::CCabinetWindow() :
     m_NavigationWindow(NULL),
     m_NavigationRootCount(0),
     m_PinnedCount(0),
+    m_QuickAccess(TRUE),
     m_PinIcon(NULL),
     m_FocusSave(NULL),
     m_DetailsPane(FALSE),
@@ -1793,8 +1794,19 @@ CCabinetWindow::WatchFolder()
                                             SHCNE_UPDATEITEM, WM_CABINET_CHANGED, 1, &entry);
 }
 
+static BOOL
+QuickAccessEnabled()
+{
+    DWORD hubMode = 0, size = sizeof(hubMode);
+
+    if (RegGetValueW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer", L"HubMode",
+                     RRF_RT_REG_DWORD, NULL, &hubMode, &size) != ERROR_SUCCESS)
+        return TRUE;
+    return hubMode != 1;
+}
+
 void
-CCabinetWindow::CreateNavigationPane()
+CCabinetWindow::LoadNavigationRoots()
 {
     static const KNOWNFOLDERID *QuickAccess[] =
     {
@@ -1802,24 +1814,10 @@ CCabinetWindow::CreateNavigationPane()
         &FOLDERID_Videos
     };
     static const KNOWNFOLDERID *Locations[] = { &FOLDERID_ComputerFolder, &FOLDERID_NetworkFolder };
-    IUnknown *events = NULL;
-    DWORD cookie = 0;
-    IOleWindow *window = NULL;
-    RECT rc = { 0, 0, 0, 0 };
 
-    if (FAILED(CoCreateInstance(CLSID_NamespaceTreeControl, NULL, CLSCTX_INPROC_SERVER,
-                                IID_PPV_ARG(INameSpaceTreeControl, &m_Navigation))))
-        return;
-    if (FAILED(m_Navigation->Initialize(m_hwnd, &rc, NSTCS_HASEXPANDOS | NSTCS_ROOTHASEXPANDO |
-                                        NSTCS_SINGLECLICKEXPAND | NSTCS_FULLROWSELECT |
-                                        NSTCS_SHOWSELECTIONALWAYS | NSTCS_AUTOHSCROLL)))
-    {
-        m_Navigation->Release();
-        m_Navigation = NULL;
-        return;
-    }
-    m_Navigation->SetTheme(L"Explorer");
-    for (UINT i = 0; i < _countof(QuickAccess); i++)
+    C_ASSERT(_countof(QuickAccess) + _countof(Locations) <= _countof(m_NavigationRoots));
+    m_QuickAccess = QuickAccessEnabled();
+    for (UINT i = 0; m_QuickAccess && i < _countof(QuickAccess); i++)
     {
         IShellItem *item;
         if (SUCCEEDED(SHGetKnownFolderItem(*QuickAccess[i], KF_FLAG_DEFAULT, NULL, IID_PPV_ARG(IShellItem, &item))))
@@ -1842,6 +1840,43 @@ CCabinetWindow::CreateNavigationPane()
                 item->Release();
         }
     }
+}
+
+void
+CCabinetWindow::ReloadNavigationRoots()
+{
+    if (!m_Navigation || m_QuickAccess == QuickAccessEnabled())
+        return;
+    m_Navigation->RemoveAllRoots();
+    for (UINT i = 0; i < m_NavigationRootCount; i++)
+        m_NavigationRoots[i]->Release();
+    m_NavigationRootCount = 0;
+    m_PinnedCount = 0;
+    LoadNavigationRoots();
+    SyncNavigationPane();
+}
+
+void
+CCabinetWindow::CreateNavigationPane()
+{
+    IUnknown *events = NULL;
+    DWORD cookie = 0;
+    IOleWindow *window = NULL;
+    RECT rc = { 0, 0, 0, 0 };
+
+    if (FAILED(CoCreateInstance(CLSID_NamespaceTreeControl, NULL, CLSCTX_INPROC_SERVER,
+                                IID_PPV_ARG(INameSpaceTreeControl, &m_Navigation))))
+        return;
+    if (FAILED(m_Navigation->Initialize(m_hwnd, &rc, NSTCS_HASEXPANDOS | NSTCS_ROOTHASEXPANDO |
+                                        NSTCS_SINGLECLICKEXPAND | NSTCS_FULLROWSELECT |
+                                        NSTCS_SHOWSELECTIONALWAYS | NSTCS_AUTOHSCROLL)))
+    {
+        m_Navigation->Release();
+        m_Navigation = NULL;
+        return;
+    }
+    m_Navigation->SetTheme(L"Explorer");
+    LoadNavigationRoots();
     if (SUCCEEDED(CabinetNavigation_Create(this, &events)))
     {
         m_Navigation->TreeAdvise(events, &cookie);
@@ -3612,6 +3647,8 @@ CCabinetWindow::HandleMessage(UINT msg, WPARAM wParam, LPARAM lParam)
             EnumChildWindows(m_hwnd, ForwardToChild, (LPARAM)&message);
             if (msg == WM_SYSCOLORCHANGE || (lParam && !lstrcmpiW((LPCWSTR)lParam, L"ImmersiveColorSet")))
                 RefreshGlyphs();
+            if (msg == WM_SETTINGCHANGE)
+                ReloadNavigationRoots();
             break;
         }
         case WM_CLOSE:
