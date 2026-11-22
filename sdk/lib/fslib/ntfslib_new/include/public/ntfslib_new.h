@@ -1003,6 +1003,20 @@ NtfsMasterFileTableDeleteFileInDirectory(
     _In_ BOOLEAN KeepUnlinkedRecord,
     _Out_opt_ PBOOLEAN RecordDeleted);
 
+/* As NtfsMasterFileTableDeleteFileInDirectory, through a Child the caller has just looked up there and still owns. */
+NTSTATUS
+NtfsMasterFileTableDeleteChild(
+    _In_ PNtfsMasterFileTable Mft,
+    _Inout_ PNtfsFileRecord Parent,
+    _Inout_ PNtfsFileRecord Child,
+    _In_reads_(NameLength) PWCHAR Name,
+    _In_ ULONG NameLength,
+    _In_ BOOLEAN RemoveDirectory,
+    _In_opt_ PNtfsFileRecord CanonicalRecord,
+    _In_ BOOLEAN CanDeleteRecord,
+    _In_ BOOLEAN KeepUnlinkedRecord,
+    _Out_opt_ PBOOLEAN RecordDeleted);
+
 NTSTATUS
 NtfsMasterFileTableDeleteUnlinkedFile(
     _In_ PNtfsMasterFileTable Mft,

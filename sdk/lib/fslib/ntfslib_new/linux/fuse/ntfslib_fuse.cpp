@@ -4977,25 +4977,26 @@ RemoveChild(NtfsFuseState* State, fuse_ino_t ParentIno, const char* Name, bool I
         fuse_ino_t ChildIno = InoFromReference(NtfsFileRecordGetReference(Child));
         auto Open = State->OpenFiles.find(ChildIno);
         PNtfsFileRecord Canonical = Open != State->OpenFiles.end() ? Open->second.File : NULL;
+        struct stat Removed;
+        bool KeepStat = IsDirectory && State->Inodes.count(ChildIno) &&
+                        NT_SUCCESS(FillStatFromRecord(Child, State, &Removed));
 
-        Status = NtfsMasterFileTableDeleteFileInDirectory(StateMft(State),
-                                                          Parent,
-                                                          NtfsName.data(),
-                                                          (ULONG)(NtfsName.size() - 1),
-                                                          IsDirectory,
-                                                          Canonical,
-                                                          Canonical == NULL,
-                                                          Canonical != NULL,
-                                                          &Deleted);
+        Status = NtfsMasterFileTableDeleteChild(StateMft(State),
+                                                Parent,
+                                                Child,
+                                                NtfsName.data(),
+                                                (ULONG)(NtfsName.size() - 1),
+                                                IsDirectory,
+                                                Canonical,
+                                                Canonical == NULL,
+                                                Canonical != NULL,
+                                                &Deleted);
         if (NT_SUCCESS(Status))
         {
-            struct stat Removed;
-
             DropListing(State, ParentIno);
             if (Canonical && NtfsFileRecordGetLinkCount(Canonical) == 0)
                 Open->second.Unlinked = true;
-            if (IsDirectory && State->Inodes.count(ChildIno) &&
-                NT_SUCCESS(FillStatFromRecord(Child, State, &Removed)))
+            if (KeepStat)
             {
                 Removed.st_nlink = 0;
                 State->RemovedDirectories[ChildIno] = Removed;
