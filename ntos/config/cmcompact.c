@@ -39,17 +39,7 @@ CmpCompactHive(
 
     if (Hive->Hive.BaseBlock == NULL) return STATUS_INVALID_PARAMETER;
 
-    Status = CmpInitializeHive(&Packed,
-                               HINIT_CREATE,
-                               HIVE_VOLATILE,
-                               HFILE_TYPE_PRIMARY,
-                               NULL,
-                               NULL,
-                               NULL,
-                               NULL,
-                               NULL,
-                               NULL,
-                               0);
+    Status = CmpInitializeScratchHive(&Packed);
     if (!NT_SUCCESS(Status)) return Status;
 
     Status = CmpDeepCopyKey(&Hive->Hive,

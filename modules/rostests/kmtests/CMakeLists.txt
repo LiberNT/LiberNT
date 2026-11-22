@@ -151,6 +151,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ntos_cm/CmBootFlush.c
     ntos_cm/CmCallbacks.c
     ntos_cm/CmKeyKM.c
+    ntos_cm/CmSaveKeyFlush.c
     ntos_cm/CmSecurity.c
     ntos_cm/CmTransactions.c
     ntos_etw/EtwRegisterKM.c

@@ -945,6 +945,11 @@ CmpInitializeHive(
 
 NTSTATUS
 NTAPI
+CmpInitializeScratchHive(
+    _Out_ PCMHIVE *CmHive);
+
+NTSTATUS
+NTAPI
 CmpLinkHiveToMaster(
     _In_ PUNICODE_STRING LinkName,
     _In_ HANDLE RootDirectory,

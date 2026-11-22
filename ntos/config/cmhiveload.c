@@ -1124,17 +1124,7 @@ CmSaveKey(
     if (Kcb->KeyHive == &CmiVolatileHive->Hive && !CmpIsHardwareTree(Kcb))
         return STATUS_ACCESS_DENIED;
 
-    Status = CmpInitializeHive(&Target,
-                               HINIT_CREATE,
-                               HIVE_VOLATILE,
-                               HFILE_TYPE_PRIMARY,
-                               NULL,
-                               NULL,
-                               NULL,
-                               NULL,
-                               NULL,
-                               NULL,
-                               0);
+    Status = CmpInitializeScratchHive(&Target);
     if (!NT_SUCCESS(Status)) return Status;
 
     Status = CmpDeepCopyKey(Kcb->KeyHive,
@@ -1191,17 +1181,7 @@ CmSaveMergedKeys(
         return STATUS_PRIVILEGE_NOT_HELD;
     }
 
-    Status = CmpInitializeHive(&Target,
-                               HINIT_CREATE,
-                               HIVE_VOLATILE,
-                               HFILE_TYPE_PRIMARY,
-                               NULL,
-                               NULL,
-                               NULL,
-                               NULL,
-                               NULL,
-                               NULL,
-                               0);
+    Status = CmpInitializeScratchHive(&Target);
     if (!NT_SUCCESS(Status)) return Status;
 
     Status = CmpDeepCopyKey(LowKcb->KeyHive,

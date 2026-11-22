@@ -442,6 +442,39 @@ CmpInitializeHive(
 
 NTSTATUS
 NTAPI
+CmpInitializeScratchHive(
+    _Out_ PCMHIVE *CmHive)
+{
+    PCMHIVE Hive;
+    NTSTATUS Status;
+
+    Status = CmpInitializeHive(&Hive,
+                               HINIT_CREATE,
+                               HIVE_VOLATILE,
+                               HFILE_TYPE_PRIMARY,
+                               NULL,
+                               NULL,
+                               NULL,
+                               NULL,
+                               NULL,
+                               NULL,
+                               0);
+    if (!NT_SUCCESS(Status)) return Status;
+
+    /* Off the list while still volatile: once it is written it looks like a hive the flushers write, and its owner destroys it without asking them */
+    ExAcquirePushLockExclusive(&CmpHiveListHeadLock);
+    ASSERT(Hive->Hive.HiveFlags & HIVE_VOLATILE);
+    ASSERT(Hive->ReferenceCount == 1);
+    RemoveEntryList(&Hive->HiveList);
+    InitializeListHead(&Hive->HiveList);
+    ExReleasePushLockExclusive(&CmpHiveListHeadLock);
+
+    *CmHive = Hive;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+NTAPI
 CmpDestroyHive(
     _In_ PCMHIVE CmHive)
 {
