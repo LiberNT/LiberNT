@@ -84,7 +84,17 @@ jobs:
 
     - name: Install RosBE
       if: ${{ steps.cache_rosbe.outputs.cache-hit != 'true' }}
-      run: sh /tmp/rosbe-bootstrap.sh
+      run: |
+        # A release download can time out for minutes, longer than the bootstrap's own retries; it starts from a clean tree.
+        for attempt in 1 2 3 4; do
+          if sh /tmp/rosbe-bootstrap.sh; then
+            break
+          fi
+          if [ "$attempt" -eq 4 ]; then
+            exit 1
+          fi
+          sleep $((60 * attempt))
+        done
 
     # Pull requests only restore: their caches filled the 10 GB store and evicted those of master
     - name: Save RosBE
