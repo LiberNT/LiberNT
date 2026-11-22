@@ -31,5 +31,6 @@ PMONITOR NTAPI UserGetPrimaryMonitor(VOID);
 PMONITOR NTAPI UserGetMonitorFromHDev(HDEV hDev);
 PMONITOR NTAPI UserMonitorFromRect(PRECTL,DWORD);
 PMONITOR FASTCALL UserMonitorFromPoint(POINT,DWORD);
+UINT NTAPI UserGetMonitorRects(PRECTL,UINT);
 
 /* EOF */

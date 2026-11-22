@@ -297,6 +297,25 @@ UserUpdateMonitorSize(IN HDEV hDev)
     return STATUS_SUCCESS;
 }
 
+/* The rectangle of each monitor of the desktop, up to cMax of them; returns how many there are */
+UINT
+NTAPI
+UserGetMonitorRects(
+    _Out_writes_(cMax) PRECTL prcl,
+    _In_ UINT cMax)
+{
+    PMONITOR pMonitor;
+    UINT cMonitors = 0;
+
+    for (pMonitor = gMonitorList; pMonitor != NULL; pMonitor = pMonitor->pMonitorNext)
+    {
+        if (cMonitors < cMax)
+            prcl[cMonitors] = pMonitor->rcMonitor;
+        cMonitors++;
+    }
+    return cMonitors;
+}
+
 /* IntGetMonitorsFromRect
  *
  * Returns a list of monitor handles/rectangles. The rectangles in the list are

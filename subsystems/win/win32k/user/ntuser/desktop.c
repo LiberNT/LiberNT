@@ -1798,20 +1798,39 @@ IntFreeDesktopHeap(IN OUT PDESKTOP Desktop)
 #endif
 }
 
-static HBITMAP ghbmScaledWallpaper;
-static HANDLE ghbmScaledWallpaperSource;
-static RECTL grcScaledWallpaperSource;
-static SIZEL gsizlScaledWallpaper;
-static PPDEVOBJ gppdevScaledWallpaper;
+/* Each monitor size gets its own scaled copy of the wallpaper */
+#define SCALED_WALLPAPER_CACHE 4
+
+typedef struct _SCALED_WALLPAPER
+{
+    HBITMAP hbm;
+    HANDLE hbmSource;
+    RECTL rcSource;
+    SIZEL sizl;
+    PPDEVOBJ ppdev;
+} SCALED_WALLPAPER;
+
+static SCALED_WALLPAPER gScaledWallpaper[SCALED_WALLPAPER_CACHE];
+static ULONG giScaledWallpaperNext;
+
+static VOID
+IntFreeScaledWallpaperEntry(
+    _Inout_ SCALED_WALLPAPER *Entry)
+{
+    if (Entry->hbm == NULL)
+        return;
+    GreSetObjectOwner(Entry->hbm, GDI_OBJ_HMGR_POWNED);
+    GreDeleteObject(Entry->hbm);
+    Entry->hbm = NULL;
+}
 
 static VOID
 IntFreeScaledWallpaper(VOID)
 {
-    if (ghbmScaledWallpaper == NULL)
-        return;
-    GreSetObjectOwner(ghbmScaledWallpaper, GDI_OBJ_HMGR_POWNED);
-    GreDeleteObject(ghbmScaledWallpaper);
-    ghbmScaledWallpaper = NULL;
+    ULONG i;
+
+    for (i = 0; i < SCALED_WALLPAPER_CACHE; i++)
+        IntFreeScaledWallpaperEntry(&gScaledWallpaper[i]);
 }
 
 static HBITMAP
@@ -1858,11 +1877,13 @@ IntDrawScaledWallpaper(
     _In_ INT cxSrc,
     _In_ INT cySrc)
 {
+    SCALED_WALLPAPER *Entry;
     HDC hScaledDC;
     HBITMAP hOldBitmap;
     PPDEVOBJ ppdev;
     PDC pdc;
     BOOL Ret;
+    ULONG i;
 
     if (!UserIsEnteredExclusive() || cx <= 0 || cy <= 0)
         return NtGdiStretchBlt(hDC, x, y, cx, cy, hWallpaperDC, xSrc, ySrc, cxSrc, cySrc, SRCCOPY, CLR_INVALID);
@@ -1873,21 +1894,24 @@ IntDrawScaledWallpaper(
     ppdev = pdc->ppdev;
     DC_UnlockDc(pdc);
 
-    if (gppdevScaledWallpaper != ppdev ||
-        ghbmScaledWallpaperSource != gspv.hbmWallpaper ||
-        gsizlScaledWallpaper.cx != cx || gsizlScaledWallpaper.cy != cy ||
-        grcScaledWallpaperSource.left != xSrc || grcScaledWallpaperSource.top != ySrc ||
-        grcScaledWallpaperSource.right != xSrc + cxSrc ||
-        grcScaledWallpaperSource.bottom != ySrc + cySrc)
+    Entry = NULL;
+    for (i = 0; i < SCALED_WALLPAPER_CACHE && Entry == NULL; i++)
     {
-        IntFreeScaledWallpaper();
+        if (gScaledWallpaper[i].hbm != NULL && gScaledWallpaper[i].ppdev == ppdev &&
+            gScaledWallpaper[i].hbmSource == gspv.hbmWallpaper &&
+            gScaledWallpaper[i].sizl.cx == cx && gScaledWallpaper[i].sizl.cy == cy &&
+            gScaledWallpaper[i].rcSource.left == xSrc && gScaledWallpaper[i].rcSource.top == ySrc &&
+            gScaledWallpaper[i].rcSource.right == xSrc + cxSrc && gScaledWallpaper[i].rcSource.bottom == ySrc + cySrc)
+        {
+            Entry = &gScaledWallpaper[i];
+        }
     }
 
     hScaledDC = NtGdiCreateCompatibleDC(hDC);
     if (hScaledDC == NULL)
         return NtGdiStretchBlt(hDC, x, y, cx, cy, hWallpaperDC, xSrc, ySrc, cxSrc, cySrc, SRCCOPY, CLR_INVALID);
 
-    if (ghbmScaledWallpaper == NULL)
+    if (Entry == NULL)
     {
         HBITMAP hbmScaled = IntCreateScaledWallpaperBitmap(ppdev, cx, cy);
 
@@ -1899,15 +1923,18 @@ IntDrawScaledWallpaper(
             {
                 NtGdiSelectBitmap(hScaledDC, hOldBitmap);
                 GreSetObjectOwner(hbmScaled, GDI_OBJ_HMGR_PUBLIC);
-                ghbmScaledWallpaper = hbmScaled;
-                ghbmScaledWallpaperSource = gspv.hbmWallpaper;
-                grcScaledWallpaperSource.left = xSrc;
-                grcScaledWallpaperSource.top = ySrc;
-                grcScaledWallpaperSource.right = xSrc + cxSrc;
-                grcScaledWallpaperSource.bottom = ySrc + cySrc;
-                gsizlScaledWallpaper.cx = cx;
-                gsizlScaledWallpaper.cy = cy;
-                gppdevScaledWallpaper = ppdev;
+                Entry = &gScaledWallpaper[giScaledWallpaperNext];
+                giScaledWallpaperNext = (giScaledWallpaperNext + 1) % SCALED_WALLPAPER_CACHE;
+                IntFreeScaledWallpaperEntry(Entry);
+                Entry->hbm = hbmScaled;
+                Entry->hbmSource = gspv.hbmWallpaper;
+                Entry->rcSource.left = xSrc;
+                Entry->rcSource.top = ySrc;
+                Entry->rcSource.right = xSrc + cxSrc;
+                Entry->rcSource.bottom = ySrc + cySrc;
+                Entry->sizl.cx = cx;
+                Entry->sizl.cy = cy;
+                Entry->ppdev = ppdev;
                 hbmScaled = NULL;
             }
             else
@@ -1919,7 +1946,7 @@ IntDrawScaledWallpaper(
             GreDeleteObject(hbmScaled);
     }
 
-    hOldBitmap = ghbmScaledWallpaper ? NtGdiSelectBitmap(hScaledDC, ghbmScaledWallpaper) : NULL;
+    hOldBitmap = Entry != NULL ? NtGdiSelectBitmap(hScaledDC, Entry->hbm) : NULL;
     if (hOldBitmap != NULL)
     {
         Ret = NtGdiBitBlt(hDC, x, y, cx, cy, hScaledDC, 0, 0, SRCCOPY, CLR_INVALID, 0);
@@ -1931,6 +1958,142 @@ IntDrawScaledWallpaper(
     }
     NtGdiDeleteObjectApp(hScaledDC);
     return Ret;
+}
+
+/* Paints the wallpaper on one monitor, laid out for that monitor's size */
+static BOOL
+IntPaintWallpaper(
+    _In_ HDC hDC,
+    _In_ const RECTL *prclMonitor,
+    _In_ const RECTL *prclClip,
+    _In_ HBRUSH DesktopBrush)
+{
+    SIZE sz;
+    RECTL Rect;
+    int x, y;
+    int scaledWidth = 0, scaledHeight = 0;
+    int wallpaperX = 0, wallpaperY = 0, wallpaperWidth = 0, wallpaperHeight = 0;
+    HDC hWallpaperDC;
+    HBRUSH PreviousBrush;
+    HBITMAP hOldBitmap;
+    INT OldStretchMode = 0;
+    BOOL RestoreStretchMode = FALSE;
+
+    if (!RECTL_bIntersectRect(&Rect, prclMonitor, prclClip))
+        return FALSE;
+    sz.cx = prclMonitor->right - prclMonitor->left;
+    sz.cy = prclMonitor->bottom - prclMonitor->top;
+
+    if (gspv.WallpaperMode == wmFit ||
+        gspv.WallpaperMode == wmFill)
+    {
+        int scaleNum, scaleDen;
+
+        // Precision improvement over ((sz.cx / gspv.cxWallpaper) > (sz.cy / gspv.cyWallpaper))
+        if ((sz.cx * gspv.cyWallpaper) > (sz.cy * gspv.cxWallpaper))
+        {
+            scaleNum = gspv.WallpaperMode == wmFit ? sz.cy : sz.cx;
+            scaleDen = gspv.WallpaperMode == wmFit ? gspv.cyWallpaper : gspv.cxWallpaper;
+        }
+        else
+        {
+            scaleNum = gspv.WallpaperMode == wmFit ? sz.cx : sz.cy;
+            scaleDen = gspv.WallpaperMode == wmFit ? gspv.cxWallpaper : gspv.cyWallpaper;
+        }
+
+        scaledWidth = EngMulDiv(gspv.cxWallpaper, scaleNum, scaleDen);
+        scaledHeight = EngMulDiv(gspv.cyWallpaper, scaleNum, scaleDen);
+
+        if (gspv.WallpaperMode == wmFill)
+        {
+            wallpaperX = (((scaledWidth - sz.cx) * gspv.cxWallpaper) / (2 * scaledWidth));
+            wallpaperY = (((scaledHeight - sz.cy) * gspv.cyWallpaper) / (2 * scaledHeight));
+
+            wallpaperWidth = (sz.cx * gspv.cxWallpaper) / scaledWidth;
+            wallpaperHeight = (sz.cy * gspv.cyWallpaper) / scaledHeight;
+        }
+    }
+
+    if (gspv.WallpaperMode == wmStretch ||
+        gspv.WallpaperMode == wmTile ||
+        gspv.WallpaperMode == wmFill)
+    {
+        x = 0;
+        y = 0;
+    }
+    else if (gspv.WallpaperMode == wmFit)
+    {
+        x = (sz.cx - scaledWidth) / 2;
+        y = (sz.cy - scaledHeight) / 2;
+    }
+    else
+    {
+        /* Find the upper left corner, can be negative if the bitmap is bigger than the screen */
+        x = (sz.cx / 2) - (gspv.cxWallpaper / 2);
+        y = (sz.cy / 2) - (gspv.cyWallpaper / 2);
+    }
+
+    hWallpaperDC = NtGdiCreateCompatibleDC(hDC);
+    if (hWallpaperDC == NULL)
+        return FALSE;
+
+    /* Fill in the area that the bitmap is not going to cover */
+    if (x > 0 || y > 0)
+    {
+        /* FIXME: Clip out the bitmap
+           can be replaced with "NtGdiPatBlt(hDC, x, y, gspv.cxWallpaper, gspv.cyWallpaper, PATCOPY | DSTINVERT);"
+           once we support DSTINVERT */
+        PreviousBrush = NtGdiSelectBrush(hDC, DesktopBrush);
+        NtGdiPatBlt(hDC, Rect.left, Rect.top, Rect.right - Rect.left, Rect.bottom - Rect.top, PATCOPY);
+        NtGdiSelectBrush(hDC, PreviousBrush);
+    }
+    x += prclMonitor->left;
+    y += prclMonitor->top;
+
+    if (gspv.WallpaperMode == wmStretch ||
+        gspv.WallpaperMode == wmFit ||
+        gspv.WallpaperMode == wmFill)
+    {
+        OldStretchMode = GreSetStretchBltMode(hDC, HALFTONE);
+        RestoreStretchMode = TRUE;
+    }
+    hOldBitmap = NtGdiSelectBitmap(hWallpaperDC, gspv.hbmWallpaper);
+
+    if (gspv.WallpaperMode == wmStretch)
+    {
+        IntDrawScaledWallpaper(hDC, hWallpaperDC, x, y, sz.cx, sz.cy, 0, 0, gspv.cxWallpaper, gspv.cyWallpaper);
+    }
+    else if (gspv.WallpaperMode == wmTile)
+    {
+        /* Paint the bitmap across the monitor then down */
+        for (y = prclMonitor->top; y < Rect.bottom; y += gspv.cyWallpaper)
+        {
+            for (x = prclMonitor->left; x < Rect.right; x += gspv.cxWallpaper)
+            {
+                NtGdiBitBlt(hDC, x, y, gspv.cxWallpaper, gspv.cyWallpaper, hWallpaperDC, 0, 0, SRCCOPY,
+                            CLR_INVALID, 0);
+            }
+        }
+    }
+    else if (gspv.WallpaperMode == wmFit)
+    {
+        IntDrawScaledWallpaper(hDC, hWallpaperDC, x, y, scaledWidth, scaledHeight, 0, 0, gspv.cxWallpaper,
+                               gspv.cyWallpaper);
+    }
+    else if (gspv.WallpaperMode == wmFill)
+    {
+        IntDrawScaledWallpaper(hDC, hWallpaperDC, x, y, sz.cx, sz.cy, wallpaperX, wallpaperY, wallpaperWidth,
+                               wallpaperHeight);
+    }
+    else
+    {
+        NtGdiBitBlt(hDC, x, y, gspv.cxWallpaper, gspv.cyWallpaper, hWallpaperDC, 0, 0, SRCCOPY, CLR_INVALID, 0);
+    }
+    if (RestoreStretchMode)
+        GreSetStretchBltMode(hDC, OldStretchMode);
+    NtGdiSelectBitmap(hWallpaperDC, hOldBitmap);
+    NtGdiDeleteObjectApp(hWallpaperDC);
+    return TRUE;
 }
 
 static BOOL
@@ -1976,199 +2139,24 @@ IntPaintDesktopContent(HDC hDC)
         }
 
         /*
-         * Paint desktop background
+         * Paint desktop background, on each monitor of its own
          */
         if (gspv.hbmWallpaper != NULL)
         {
-            SIZE sz;
-            int x, y;
-            int scaledWidth = 0, scaledHeight = 0;
-            int wallpaperX = 0, wallpaperY = 0, wallpaperWidth = 0, wallpaperHeight = 0;
-            HDC hWallpaperDC;
-            INT OldStretchMode = 0;
-            BOOL RestoreStretchMode = FALSE;
+            RECTL rcMonitors[16];
+            UINT cMonitors;
+            UINT i;
 
-            sz.cx = WndDesktop->rcWindow.right - WndDesktop->rcWindow.left;
-            sz.cy = WndDesktop->rcWindow.bottom - WndDesktop->rcWindow.top;
-
-            if (gspv.WallpaperMode == wmFit ||
-                gspv.WallpaperMode == wmFill)
+            cMonitors = min(UserGetMonitorRects(rcMonitors, RTL_NUMBER_OF(rcMonitors)), RTL_NUMBER_OF(rcMonitors));
+            if (cMonitors == 0)
             {
-                int scaleNum, scaleDen;
-
-                // Precision improvement over ((sz.cx / gspv.cxWallpaper) > (sz.cy / gspv.cyWallpaper))
-                if ((sz.cx * gspv.cyWallpaper) > (sz.cy * gspv.cxWallpaper))
-                {
-                    if (gspv.WallpaperMode == wmFit)
-                    {
-                        scaleNum = sz.cy;
-                        scaleDen = gspv.cyWallpaper;
-                    }
-                    else
-                    {
-                        scaleNum = sz.cx;
-                        scaleDen = gspv.cxWallpaper;
-                    }
-                }
-                else
-                {
-                    if (gspv.WallpaperMode == wmFit)
-                    {
-                        scaleNum = sz.cx;
-                        scaleDen = gspv.cxWallpaper;
-                    }
-                    else
-                    {
-                        scaleNum = sz.cy;
-                        scaleDen = gspv.cyWallpaper;
-                    }
-                }
-
-                scaledWidth = EngMulDiv(gspv.cxWallpaper, scaleNum, scaleDen);
-                scaledHeight = EngMulDiv(gspv.cyWallpaper, scaleNum, scaleDen);
-
-                if (gspv.WallpaperMode == wmFill)
-                {
-                    wallpaperX = (((scaledWidth - sz.cx) * gspv.cxWallpaper) / (2 * scaledWidth));
-                    wallpaperY = (((scaledHeight - sz.cy) * gspv.cyWallpaper) / (2 * scaledHeight));
-
-                    wallpaperWidth = (sz.cx * gspv.cxWallpaper) / scaledWidth;
-                    wallpaperHeight = (sz.cy * gspv.cyWallpaper) / scaledHeight;
-                }
+                rcMonitors[0] = WndDesktop->rcWindow;
+                cMonitors = 1;
             }
-
-            if (gspv.WallpaperMode == wmStretch ||
-                gspv.WallpaperMode == wmTile ||
-                gspv.WallpaperMode == wmFill)
+            for (i = 0; i < cMonitors; i++)
             {
-                x = 0;
-                y = 0;
-            }
-            else if (gspv.WallpaperMode == wmFit)
-            {
-                x = (sz.cx - scaledWidth) / 2;
-                y = (sz.cy - scaledHeight) / 2;
-            }
-            else
-            {
-                /* Find the upper left corner, can be negative if the bitmap is bigger than the screen */
-                x = (sz.cx / 2) - (gspv.cxWallpaper / 2);
-                y = (sz.cy / 2) - (gspv.cyWallpaper / 2);
-            }
-
-            hWallpaperDC = NtGdiCreateCompatibleDC(hDC);
-            if (hWallpaperDC != NULL)
-            {
-                HBITMAP hOldBitmap;
-
-                /* Fill in the area that the bitmap is not going to cover */
-                if (x > 0 || y > 0)
-                {
-                    /* FIXME: Clip out the bitmap
-                       can be replaced with "NtGdiPatBlt(hDC, x, y, gspv.cxWallpaper, gspv.cyWallpaper, PATCOPY | DSTINVERT);"
-                       once we support DSTINVERT */
-                    PreviousBrush = NtGdiSelectBrush(hDC, DesktopBrush);
-                    NtGdiPatBlt(hDC, Rect.left, Rect.top, Rect.right - Rect.left, Rect.bottom - Rect.top, PATCOPY);
-                    NtGdiSelectBrush(hDC, PreviousBrush);
-                }
-
-                /* Do not fill the background after it is painted no matter the size of the picture */
-                doPatBlt = FALSE;
-
-                if (gspv.WallpaperMode == wmStretch ||
-                    gspv.WallpaperMode == wmFit ||
-                    gspv.WallpaperMode == wmFill)
-                {
-                    OldStretchMode = GreSetStretchBltMode(hDC, HALFTONE);
-                    RestoreStretchMode = TRUE;
-                }
-                hOldBitmap = NtGdiSelectBitmap(hWallpaperDC, gspv.hbmWallpaper);
-
-                if (gspv.WallpaperMode == wmStretch)
-                {
-                    if (Rect.right && Rect.bottom)
-                        IntDrawScaledWallpaper(hDC,
-                                               hWallpaperDC,
-                                               x,
-                                               y,
-                                               sz.cx,
-                                               sz.cy,
-                                               0,
-                                               0,
-                                               gspv.cxWallpaper,
-                                               gspv.cyWallpaper);
-                }
-                else if (gspv.WallpaperMode == wmTile)
-                {
-                    /* Paint the bitmap across the screen then down */
-                    for (y = 0; y < Rect.bottom; y += gspv.cyWallpaper)
-                    {
-                        for (x = 0; x < Rect.right; x += gspv.cxWallpaper)
-                        {
-                            NtGdiBitBlt(hDC,
-                                        x,
-                                        y,
-                                        gspv.cxWallpaper,
-                                        gspv.cyWallpaper,
-                                        hWallpaperDC,
-                                        0,
-                                        0,
-                                        SRCCOPY,
-                                        CLR_INVALID,
-                                        0);
-                        }
-                    }
-                }
-                else if (gspv.WallpaperMode == wmFit)
-                {
-                    if (Rect.right && Rect.bottom)
-                    {
-                        IntDrawScaledWallpaper(hDC,
-                                               hWallpaperDC,
-                                               x,
-                                               y,
-                                               scaledWidth,
-                                               scaledHeight,
-                                               0,
-                                               0,
-                                               gspv.cxWallpaper,
-                                               gspv.cyWallpaper);
-                    }
-                }
-                else if (gspv.WallpaperMode == wmFill)
-                {
-                    if (Rect.right && Rect.bottom)
-                    {
-                        IntDrawScaledWallpaper(hDC,
-                                               hWallpaperDC,
-                                               x,
-                                               y,
-                                               sz.cx,
-                                               sz.cy,
-                                               wallpaperX,
-                                               wallpaperY,
-                                               wallpaperWidth,
-                                               wallpaperHeight);
-                    }
-                }
-                else
-                {
-                    NtGdiBitBlt(hDC,
-                                x,
-                                y,
-                                gspv.cxWallpaper,
-                                gspv.cyWallpaper,
-                                hWallpaperDC,
-                                0,
-                                0,
-                                SRCCOPY,
-                                CLR_INVALID,
-                                0);
-                }
-                if (RestoreStretchMode)
-                    GreSetStretchBltMode(hDC, OldStretchMode);
-                NtGdiSelectBitmap(hWallpaperDC, hOldBitmap);
-                NtGdiDeleteObjectApp(hWallpaperDC);
+                if (IntPaintWallpaper(hDC, &rcMonitors[i], &Rect, DesktopBrush))
+                    doPatBlt = FALSE;
             }
         }
     }
