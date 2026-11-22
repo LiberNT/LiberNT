@@ -1344,7 +1344,7 @@ typedef struct tcp_opt_fastopen {
 #define IN6_EMBEDDEDV4_UOCTET_POSITION 8
 #define IPV4_MAX_MINIMUM_MTU 0x240
 #define IPV4_VERSION_BYTE 0x40
-#define NMR_REG_KEY_PATH 0
+#define NMR_REG_KEY_PATH L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\NMR\\providers"
 
 struct DL_TEREDO_ADDRESS_PRV
 {

@@ -22,6 +22,6 @@
 #include <lmstats.h>
 #include <lmjoin.h>
 
-#define _LM_ 0
+#define _LM_
 
 #endif

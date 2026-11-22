@@ -311,9 +311,9 @@ cpp_quote("#define g_wszWMVEncodeWidth (L\"_EncodeWidth\")")
 cpp_quote("#define g_wszWMVForceStartCode (L\"_FORCESTARTCODE\")")
 cpp_quote("#define g_wszWMVTimeStampFixed (L\"TSFixed\")")
 cpp_quote("#define g_wszWMVTranscodeMode (L\"_TranscodeMode\")")
-cpp_quote("#define PHANTOMING_ENABLED_KEY_GUID 0")
+cpp_quote("#define PHANTOMING_ENABLED_KEY_GUID (MFPKEY_PHANTOMING_ON . fmtid)")
 cpp_quote("#define SYSFXUI_DONOTSHOW_LOUDNESSEQUALIZATION 0x01")
-cpp_quote("#define VIRTUALIZATION_MODE_KEY_GUID 0")
+cpp_quote("#define VIRTUALIZATION_MODE_KEY_GUID (MFPKEY_AUVRHP_ROOMMODEL . fmtid)")
 cpp_quote("")
 cpp_quote("enum _MFVideoDSPMode")
 cpp_quote("{")
@@ -948,23 +948,23 @@ cpp_quote("#ifdef __cplusplus")
 cpp_quote("}")
 cpp_quote("#endif")
 
-cpp_quote("#define ROOM_PROFILE_KEY_GUID 0")
+cpp_quote("#define ROOM_PROFILE_KEY_GUID (MFPKEY_ROOMCORR_PROFILE . fmtid)")
 
-cpp_quote("#define CROSSOVER_FREQ_KEY_GUID 0")
+cpp_quote("#define CROSSOVER_FREQ_KEY_GUID (MFPKEY_BASSMGMT_CROSSOVER_FREQ . fmtid)")
 
-cpp_quote("#define FULL_RANGE_SPEAKERS_KEY_GUID 0")
+cpp_quote("#define FULL_RANGE_SPEAKERS_KEY_GUID (MFPKEY_BASSMGMT_SPKRBASSCONFIG . fmtid)")
 
-cpp_quote("#define BIG_ROOM_KEY_GUID 0")
+cpp_quote("#define BIG_ROOM_KEY_GUID (MFPKEY_BASSMGMT_BIGROOM . fmtid)")
 
-cpp_quote("#define NO_SUB_KEY_GUID 0")
+cpp_quote("#define NO_SUB_KEY_GUID (MFPKEY_BASSMGMT_NO_SUB . fmtid)")
 
-cpp_quote("#define INVERTED_SUB_KEY_GUID 0")
+cpp_quote("#define INVERTED_SUB_KEY_GUID (MFPKEY_BASSMGMT_INVERT_SUB . fmtid)")
 
-cpp_quote("#define BASSMGMT_MODE_KEY_GUID 0")
+cpp_quote("#define BASSMGMT_MODE_KEY_GUID (MFPKEY_CORR_BASS_MANAGEMENT_MODE . fmtid)")
 
-cpp_quote("#define MULTICHANNEL_MODE_KEY_GUID 0")
+cpp_quote("#define MULTICHANNEL_MODE_KEY_GUID (MFPKEY_CORR_MULTICHANNEL_MODE . fmtid)")
 
-cpp_quote("#define LEQ_ENABLED_KEY_GUID 0")
+cpp_quote("#define LEQ_ENABLED_KEY_GUID (MFPKEY_CORR_LOUDNESS_EQUALIZATION_ON . fmtid)")
 
-cpp_quote("#define ROOM_CORRECTION_ENABLED_KEY_GUID 0")
+cpp_quote("#define ROOM_CORRECTION_ENABLED_KEY_GUID (MFPKEY_CORR_ROOM_CORRECTION_ON . fmtid)")
 

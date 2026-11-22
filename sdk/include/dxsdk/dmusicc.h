@@ -725,7 +725,7 @@ DECLARE_INTERFACE_(IDirectMusicThru,IUnknown)
 
 #pragma pack(pop)
 
-#define _DMUSICC_ 0
+#define _DMUSICC_
 
 typedef struct IDirectMusic8Vtbl IDirectMusic8Vtbl;
 

@@ -245,5 +245,5 @@ BdaValidateNodeProperty(
 
 #endif /* (NTDDI_VERSION >= NTDDI_WINXP) */
 
-#define _BDATOPGY_ 0
+#define _BDATOPGY_
 

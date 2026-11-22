@@ -1105,13 +1105,21 @@ typedef struct DS_SITE_COST_INFO {
 #endif
 #define DS_ROLE_SCHEMA_OWNER 0
 #if (!(defined(UNICODE)))
-#define DS_SCHEMA_GUID_MAP 0
+#ifdef UNICODE
+#define DS_SCHEMA_GUID_MAP DS_SCHEMA_GUID_MAPW
+#else
+#define DS_SCHEMA_GUID_MAP DS_SCHEMA_GUID_MAPA
+#endif
 #endif
 #define DS_SCHEMA_GUID_NOT_FOUND 0
-#define DS_SYNCED_EVENT_NAME 0
+#define DS_SYNCED_EVENT_NAME "NTDSInitialSyncsCompleted"
 #define DS_SYNCED_EVENT_NAME_W L"NTDSInitialSyncsCompleted"
 #if (!(defined(UNICODE)))
-#define DsAddSidHistory 0
+#ifdef UNICODE
+#define DsAddSidHistory DsAddSidHistoryW
+#else
+#define DsAddSidHistory DsAddSidHistoryA
+#endif
 #endif
 #ifdef UNICODE
 #define DsBind DsBindW
@@ -1270,8 +1278,16 @@ typedef struct DS_SITE_COST_INFO {
 #endif
 #endif
 #if (!(defined(UNICODE)))
-#define DsListInfoForServer 0
-#define DsListRoles 0
+#ifdef UNICODE
+#define DsListInfoForServer DsListInfoForServerW
+#else
+#define DsListInfoForServer DsListInfoForServerA
+#endif
+#ifdef UNICODE
+#define DsListRoles DsListRolesW
+#else
+#define DsListRoles DsListRolesA
+#endif
 #endif
 #ifdef UNICODE
 #define DsListServersForDomainInSite DsListServersForDomainInSiteW
@@ -1384,7 +1400,11 @@ typedef struct DS_SITE_COST_INFO {
 #endif
 #endif
 #if (!(defined(UNICODE)))
-#define DsReplicaSyncAll 0
+#ifdef UNICODE
+#define DsReplicaSyncAll DsReplicaSyncAllW
+#else
+#define DsReplicaSyncAll DsReplicaSyncAllA
+#endif
 #endif
 #ifdef UNICODE
 #define DsReplicaUpdateRefs DsReplicaUpdateRefsW
@@ -1398,7 +1418,11 @@ typedef struct DS_SITE_COST_INFO {
 #endif
 #endif
 #if (!(defined(UNICODE)))
-#define DsReplicaVerifyObjects 0
+#ifdef UNICODE
+#define DsReplicaVerifyObjects DsReplicaVerifyObjectsW
+#else
+#define DsReplicaVerifyObjects DsReplicaVerifyObjectsA
+#endif
 #endif
 #ifdef UNICODE
 #define DsUnBind DsUnBindW
@@ -1462,17 +1486,17 @@ typedef struct DS_SITE_COST_INFO {
 #define GUID_PROGRAM_DATA_CONTAINER_BYTE "\x09\x46\x0c\x08\xae\x1e\x4a\x4e\xa0\xf6\x4a\xee\x7d\xaa\x1e\x5a"
 #define GUID_PROGRAM_DATA_CONTAINER_W L"09460c08ae1e4a4ea0f64aee7daa1e5a"
 #if (!defined(MIDL_PASS))
-#define GUID_RECYCLE_BIN_OPTIONAL_FEATURE_A 0
+#define GUID_RECYCLE_BIN_OPTIONAL_FEATURE_A "d8dc6d76d0ac5e44f3b9a7f9b6744f2a"
 #define GUID_RECYCLE_BIN_OPTIONAL_FEATURE_BYTE "\xd8\xdc\x6d\x76\xd0\xac\x5e\x44\xf3\xb9\xa7\xf9\xb6\x74\x4f\x2a"
 #define GUID_RECYCLE_BIN_OPTIONAL_FEATURE_W L"d8dc6d76d0ac5e44f3b9a7f9b6744f2a"
 #endif
 #define GUID_SYSTEMS_CONTAINER_A "ab1d30f3768811d1aded00c04fd8d5cd"
 #define GUID_SYSTEMS_CONTAINER_BYTE "\xab\x1d\x30\xf3\x76\x88\x11\xd1\xad\xed\x00\xc0\x4f\xd8\xd5\xcd"
 #define GUID_SYSTEMS_CONTAINER_W L"ab1d30f3768811d1aded00c04fd8d5cd"
-#define GUID_USERS_CONTAINER_A 0
+#define GUID_USERS_CONTAINER_A "a9d1ca15768811d1aded00c04fd8d5cd"
 #define GUID_USERS_CONTAINER_BYTE "\xa9\xd1\xca\x15\x76\x88\x11\xd1\xad\xed\x00\xc0\x4f\xd8\xd5\xcd"
 #define GUID_USERS_CONTAINER_W L"a9d1ca15768811d1aded00c04fd8d5cd"
-#define NTDSAPI 0
+#define NTDSAPI DECLSPEC_IMPORT
 #define NTDSAPI_BIND_ALLOW_DELEGATION (0x00000001)
 #define NTDSAPI_POSTXP DECLSPEC_IMPORT
 #define NTDSCONN_KCC_GC_TOPOLOGY 1
@@ -1680,9 +1704,17 @@ DWORD DsWriteAccountSpnW(HANDLE hDS, DS_SPN_WRITE_OP Operation, LPCWSTR pszAccou
 }
 #endif
 
-#define DsReplicaAdd 0
+#ifdef UNICODE
+#define DsReplicaAdd DsReplicaAddW
+#else
+#define DsReplicaAdd DsReplicaAddA
+#endif
 
-#define DsReplicaModify 0
+#ifdef UNICODE
+#define DsReplicaModify DsReplicaModifyW
+#else
+#define DsReplicaModify DsReplicaModifyA
+#endif
 
 #define FRSCONN_GET_PRIORITY(_options_) (((((_options_) & FRSCONN_PRIORITY_MASK) >> 28) != 0) ? (((_options_) & FRSCONN_PRIORITY_MASK) >> 28) : FRSCONN_MAX_PRIORITY)
 #define NTDSCONN_IGNORE_SCHEDULE(_options_) (((_options_) & NTDSCONN_OPT_IGNORE_SCHEDULE_MASK) >> 31)

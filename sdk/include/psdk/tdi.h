@@ -657,7 +657,7 @@ typedef struct _TDI_ROUTING_INFO_WS03 {
   TRANSPORT_ADDRESS Address;
 } TDI_ROUTING_INFO_WS03, *PTDI_ROUTING_INFO_WS03;
 
-#define _TDI_USER_ 0
+#define _TDI_USER_
 #define IOCTL_TDI_MAGIC_BULLET 0x2101FF
 
 #pragma pack(push, 1)

@@ -389,7 +389,7 @@ RPCRTAPI HRESULT RPC_ENTRY
 #else
 #define CStdStubBuffer_DELEGATING_METHODS_TAG 0xFFFFFFFE
 #endif
-#define CStdStubBuffer_METHODS_OPT 0
+#define CStdStubBuffer_METHODS_OPT CStdStubBuffer_QueryInterface, CStdStubBuffer_AddRef, CStdStubBuffer_Release, CStdStubBuffer_Connect, CStdStubBuffer_Disconnect, CStdStubBuffer_Invoke, CStdStubBuffer_IsIIDSupported, CStdStubBuffer_CountRefs, CStdStubBuffer_DebugServerQueryInterface, CStdStubBuffer_DebugServerRelease
 #define CStdStubBuffer_METHODS_TAG ((void *) - 1)
 #define DLLDATA_STANDARD_ROUTINES DLLDATA_ROUTINES((const ProxyFileInfo * *) pProxyFileList, & CLSID_PSFactoryBuffer)
 #ifdef _WIN64
@@ -408,7 +408,7 @@ RPCRTAPI HRESULT RPC_ENTRY
 #define IInspectableNdrStubCall3CommonStubListTag 0xFFFFFFFE
 #endif
 #endif
-#define INC_OLE2 0
+#define INC_OLE2
 #if (defined(WIN32) || defined(_M_AMD64))
 #ifdef _WIN64
 #define IUnknownInterfaceProxyTag (-2)
@@ -507,7 +507,7 @@ void WINAPI ObjectStublessClient9(void);
 #if (defined(WIN32) || defined(_M_AMD64))
 #define DLLRPCDUMMYCALL void __cdecl DLLRPCDUMMYCALL_ENTRY(void) { /* Don't define __purecall method anymore */ }
 #endif
-#define DLLRPCDUMMYCALL_ENTRY 0
+#define DLLRPCDUMMYCALL_ENTRY DllRpcDummyCall
 
 
 #if (defined(WIN32) || defined(_M_AMD64))

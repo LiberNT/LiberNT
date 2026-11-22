@@ -362,10 +362,14 @@ typedef struct _STISUBSCRIBE {
   UINT uiNotificationMessage;
 } STISUBSCRIBE, *LPSTISUBSCRIBE;
 
-#define _STICOM_ 0
-#define DLLEXP 0
+#define _STICOM_
+#define DLLEXP __declspec(dllexport)
 #if (!defined(MIDL_PASS)) && (defined(UNICODE) || defined(STI_UNICODE))
-#define IID_IStillImage 0
+#ifdef UNICODE
+#define IID_IStillImage IID_IStillImageW
+#else
+#define IID_IStillImage IID_IStillImageA
+#endif
 #endif
 #ifdef UNICODE
 #define IStillImage IStillImageW
@@ -381,7 +385,7 @@ typedef struct _STISUBSCRIBE {
 #if (!defined(MIDL_PASS)) && (defined(UNICODE) || defined(STI_UNICODE))
 #define IStillImageVtbl IStillImageWVtbl
 #endif
-#define STI_ADD_DEVICE_BROADCAST_ACTION 0
+#define STI_ADD_DEVICE_BROADCAST_ACTION "Arrival"
 #define STI_ADD_DEVICE_BROADCAST_STRING "STI\\" STI_ADD_DEVICE_BROADCAST_ACTION "\\%s"
 #define STI_GENCAP_COMMON_MASK ((DWORD)0xFF)
 #define STI_REMOVE_DEVICE_BROADCAST_ACTION "Removal"

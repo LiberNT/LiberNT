@@ -430,7 +430,7 @@ DECLARE_INTERFACE_(INetCfgSysPrep, IUnknown)
 #define INetCfgSysPrep_HrSetupSetFirstMultiSzField(p,a,b,c) (p)->lpVtbl->HrSetupSetFirstMultiSzField(p,a,b,c)
 #endif
 
-#define NETCFG_CLIENT_CID_MS_MSClient 0
+#define NETCFG_CLIENT_CID_MS_MSClient TEXT("ms_msclient")
 #define NETCFG_E_DUPLICATE_INSTANCEID (-2147180501)
 #define NETCFG_E_VMSWITCH_ACTIVE_OVER_ADAPTER (-2147180502)
 #define NETCFG_SERVICE_CID_MS_NETBIOS TEXT("ms_netbios")

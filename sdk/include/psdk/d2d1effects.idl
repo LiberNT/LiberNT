@@ -346,7 +346,7 @@ typedef enum D2D1_TURBULENCE_NOISE
     D2D1_TURBULENCE_NOISE_FORCE_DWORD = 0xffffffff
 } D2D1_TURBULENCE_NOISE;
 
-cpp_quote("#define _D2D1_EFFECTS_ 0")
+cpp_quote("#define _D2D1_EFFECTS_")
 cpp_quote("")
 cpp_quote("enum D2D1_3DTRANSFORM_INTERPOLATION_MODE")
 cpp_quote("{")

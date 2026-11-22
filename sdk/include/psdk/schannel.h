@@ -741,9 +741,9 @@ typedef struct _X509Certificate {
 #define SP_PROT_TLS1_3PLUS 0x3000
 #define SP_PROT_TLS1_3PLUS_CLIENT 0x2000
 #define SP_PROT_TLS1_3PLUS_SERVER 0x1000
-#define SSL_CRACK_CERTIFICATE_NAME 0
+#define SSL_CRACK_CERTIFICATE_NAME TEXT("SslCrackCertificate")
 #if (!(defined(UNICODE)))
-#define SSL_EMPTY_CACHE_FN 0
+#define SSL_EMPTY_CACHE_FN SSL_EMPTY_CACHE_FN_A
 #endif
 #define SSL_FREE_CERTIFICATE_NAME TEXT("SslFreeCertificate")
 #ifdef UNICODE

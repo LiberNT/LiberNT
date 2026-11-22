@@ -97,6 +97,6 @@ typedef CCINFOA CCINFO,*LPCCINFO;
 }
 #endif
 
-#define _INC_CUSTCNTL 0
+#define _INC_CUSTCNTL
 
 #endif

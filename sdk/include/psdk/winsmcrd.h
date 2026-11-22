@@ -240,7 +240,7 @@ typedef struct _SCARD_T1_REQUEST
 }
 #endif
 
-#define _NTDDSCRD_H2_ 0
+#define _NTDDSCRD_H2_
 
 #endif /* __WINSMCRD_H */
 

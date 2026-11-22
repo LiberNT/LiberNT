@@ -437,5 +437,5 @@ cpp_quote("#ifdef __cplusplus")
 cpp_quote("}")
 cpp_quote("#endif")
 
-cpp_quote("#define SID_SHTMLOMWindowServices 0")
+cpp_quote("#define SID_SHTMLOMWindowServices IID_IHTMLOMWindowServices")
 

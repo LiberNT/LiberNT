@@ -1412,7 +1412,7 @@ SrbSetPortContext(
 
 #endif /* (NTDDI_VERSION >= NTDDI_WIN8) */
 
-#define _NTSRBHELPER_ 0
+#define _NTSRBHELPER_
 
 #ifdef __cplusplus
 extern "C" {

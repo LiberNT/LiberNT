@@ -103,7 +103,7 @@ typedef SN_CHAR * SCOPE_NAME;
 #define ROUTE_MATCHING 0x1F
 #define ROUTE_SHORTER 0x21
 #define ROUTE_STATE 0x22
-#define SN_UNICODE 0
+#define SN_UNICODE
 #define TCP6_STATS 0x26
 #define TCP_ROW 0xE
 #define TCP_STATS 0xC

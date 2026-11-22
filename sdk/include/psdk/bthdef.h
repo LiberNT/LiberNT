@@ -1283,7 +1283,7 @@ typedef ULONGLONG * PBTH_ADDR;
 typedef ULONG * PBTH_COD;
 typedef ULONG * PBTH_LAP;
 
-#define LAP_GIAC_INIT 0
+#define LAP_GIAC_INIT { 0x33, 0x8B, 0x9E }
 #define LAP_LIAC_INIT { 0x00, 0x8B, 0x9E }
 #ifdef UNICODE
 #define STR_USBHCI_CLASS_HARDWAREID STR_USBHCI_CLASS_HARDWAREIDW
@@ -1299,9 +1299,9 @@ typedef ULONG * PBTH_LAP;
 #define STR_USBHCI_CLASS_HARDWAREIDA "USB\\Class_E0&SubClass_01&Prot_01"
 #define STR_USBHCI_CLASS_HARDWAREIDW L"USB\\Class_E0&SubClass_01&Prot_01"
 
-#define BasicPrintingServiceClass_UUID 0
+#define BasicPrintingServiceClass_UUID BasicPrintingProfile_UUID
 
-#define VideoDistributionServiceClass_UUID 0
+#define VideoDistributionServiceClass_UUID VideoDistributionProfile_UUID
 
 #define DEFINE_BLUETOOTH_UUID128(name, shortId) DEFINE_GUID(name, shortId, 0x0000, 0x1000, 0x80, 0x00, 0x00, 0x80, 0x5F, 0x9B, 0x34, 0xFB)
 #define LMP_3SLOT_EDR_ACL_PACKETS(x) (GET_BIT(x, 39))

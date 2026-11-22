@@ -31,5 +31,5 @@ CompareStringEx(
 } // extern "C"
 #endif
 
-#define _APISETSTRING_ 0
+#define _APISETSTRING_
 

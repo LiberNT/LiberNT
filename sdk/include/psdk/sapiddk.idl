@@ -149,7 +149,7 @@ library SpeechDDKLib
 }
 
 cpp_quote("#define SPALTERNATESCLSID L\"AlternatesCLSID\"")
-cpp_quote("#define SPRECOEXTENSION 0")
+cpp_quote("#define SPRECOEXTENSION L\"RecoExtension\"")
 cpp_quote("#define SR_LOCALIZED_DESCRIPTION L\"Description\"")
 cpp_quote("")
 cpp_quote("enum SPCFGNOTIFY")

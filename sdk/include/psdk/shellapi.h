@@ -1128,7 +1128,7 @@ typedef struct _OPEN_PRINTER_PROPS_INFOW {
 #endif
 #endif
 #endif
-#define SHGetDiskFreeSpace 0
+#define SHGetDiskFreeSpace SHGetDiskFreeSpaceEx
 #ifdef UNICODE
 #define SHGetDiskFreeSpaceEx SHGetDiskFreeSpaceExW
 #else
@@ -1152,7 +1152,11 @@ typedef struct _OPEN_PRINTER_PROPS_INFOW {
 #endif
 #endif
 #if (!(defined(UNICODE)))
-#define SHInvokePrinterCommand 0
+#ifdef UNICODE
+#define SHInvokePrinterCommand SHInvokePrinterCommandW
+#else
+#define SHInvokePrinterCommand SHInvokePrinterCommandA
+#endif
 #endif
 #ifdef UNICODE
 #define SHSetUnreadMailCount SHSetUnreadMailCountW

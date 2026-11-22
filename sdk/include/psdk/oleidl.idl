@@ -979,7 +979,7 @@ cpp_quote("#ifndef DROPEFFECT_NEWTARGET")
 cpp_quote("#define DROPEFFECT_NEWTARGET 0x40000000")
 cpp_quote("#endif")
 
-cpp_quote("#define CFSTR_ENTERPRISE_ID 0")
+cpp_quote("#define CFSTR_ENTERPRISE_ID (TEXT(\"EnterpriseDataProtectionId\"))")
 cpp_quote("")
 cpp_quote("struct IContinueVtbl")
 cpp_quote("{")

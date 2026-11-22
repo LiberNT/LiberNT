@@ -209,6 +209,6 @@ struct _DMUS_WAVEDL {
 	ULONG cbWaveData;
 };
 
-#define _DMDLS_ 0
+#define _DMDLS_
 
 #endif /* __WINE_DMUSIC_DLS_H */

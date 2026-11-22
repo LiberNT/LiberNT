@@ -35,6 +35,6 @@ INT WINAPI LZStart(VOID);
 }
 #endif
 
-#define _LZEXPAND_ 0
+#define _LZEXPAND_
 
 #endif

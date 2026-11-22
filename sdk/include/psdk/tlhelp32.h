@@ -135,6 +135,6 @@ HANDLE WINAPI CreateToolhelp32Snapshot(DWORD,DWORD);
 }
 #endif
 
-#define _INC_TOOLHELP32 0
+#define _INC_TOOLHELP32
 
 #endif /* _TLHELP32_H */

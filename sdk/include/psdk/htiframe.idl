@@ -137,7 +137,7 @@ cpp_quote("#ifndef TF_NAVIGATE")
 cpp_quote("#define TF_NAVIGATE 0x7FAEABAC")
 cpp_quote("#endif")
 
-cpp_quote("#define TARGET_NOTIFY_OBJECT_NAME 0")
+cpp_quote("#define TARGET_NOTIFY_OBJECT_NAME L\"863a99a0-21bc-11d0-82b4-00a0c90c29c5\"")
 cpp_quote("")
 cpp_quote("struct ITargetContainerVtbl")
 cpp_quote("{")

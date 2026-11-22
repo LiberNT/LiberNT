@@ -347,7 +347,11 @@ typedef struct _SERVICE_TYPE_INFO_ABSW {
 } SERVICE_TYPE_INFO_ABSW, *PSERVICE_TYPE_INFO_ABSW, *LPSERVICE_TYPE_INFO_ABSW;
 
 #if (!(defined(UNICODE)))
-#define EnumProtocols 0
+#ifdef UNICODE
+#define EnumProtocols EnumProtocolsW
+#else
+#define EnumProtocols EnumProtocolsA
+#endif
 #endif
 #ifdef UNICODE
 #define GetNameByType GetNameByTypeW

@@ -1240,8 +1240,8 @@ typedef struct _TDI_NCPA_BINDING_INFO {
   TDI_PNP_OPCODE PnpOpcode;
 } TDI_NCPA_BINDING_INFO, *PTDI_NCPA_BINDING_INFO;
 
-#define _TDI_KRNL_ 0
-#define TDI20 0
+#define _TDI_KRNL_
+#define TDI20
 
 struct _TDI_VERSION_
 {

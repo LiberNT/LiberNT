@@ -118,5 +118,5 @@ VideoPortGetAgpServices(
 }
 #endif
 
-#define VIDEOAGP_DEPRECATED 0
+#define VIDEOAGP_DEPRECATED __declspec(deprecated)
 

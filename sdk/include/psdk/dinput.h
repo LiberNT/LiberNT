@@ -5352,7 +5352,11 @@ typedef struct DIPROPCPOINTS {
 #define IDirectInputDevice8Vtbl IDirectInputDevice8AVtbl
 #define IDirectInputDeviceVtbl IDirectInputDeviceAVtbl
 #define IDirectInputVtbl IDirectInputAVtbl
-#define LPDIENUMEFFECTSCALLBACK 0
+#ifdef UNICODE
+#define LPDIENUMEFFECTSCALLBACK LPDIENUMEFFECTSCALLBACKW
+#else
+#define LPDIENUMEFFECTSCALLBACK LPDIENUMEFFECTSCALLBACKA
+#endif
 #endif
 
 struct _DIMOUSESTATE

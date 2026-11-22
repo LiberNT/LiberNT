@@ -725,6 +725,6 @@ extern "C" {
 #define EVENT_WINSOCK_TDI_PROVIDER_DETECTED 0x80003E83L
 #endif
 
-#define _NETEVENT_ 0
+#define _NETEVENT_
 
 #endif /* __NETEVENT_H */

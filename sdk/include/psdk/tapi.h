@@ -2293,7 +2293,11 @@ typedef struct linetermcaps_tag {
 #pragma pack(pop)
 
 #if (!(defined(UNICODE)))
-#define lineCreateAgent 0
+#ifdef UNICODE
+#define lineCreateAgent lineCreateAgentW
+#else
+#define lineCreateAgent lineCreateAgentA
+#endif
 #endif
 #ifdef UNICODE
 #define lineCreateAgentSession lineCreateAgentSessionW

@@ -146,7 +146,7 @@ typedef enum _MC_DISPLAY_TECHNOLOGY_TYPE
 #define MC_SUPPORTED_COLOR_TEMPERATURE_NONE 0x00000000
 #endif
 
-#define HighLevelMonitorConfigurationAPI_h 0
+#define HighLevelMonitorConfigurationAPI_h
 
 #ifdef __cplusplus
 extern "C" {

@@ -19,7 +19,7 @@
 #define SAL_INCLUDED 1
 
 
-#define _Published_ 0
+#define _Published_ _SAL2_Source_(_Published_, (), _SA_annotes0(SAL_externalIntf))
 
 #define _Called_from_function_class_(x) _In_function_class_(x)
 

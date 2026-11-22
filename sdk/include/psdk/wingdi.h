@@ -5536,7 +5536,7 @@ typedef struct tagEMRTRANSPARENTBLT {
   LONG cySrc;
 } EMRTRANSPARENTBLT, *PEMRTRANSPARENTBLT;
 
-#define _XFORM_ 0
+#define _XFORM_
 #ifdef UNICODE
 #define CreateColorSpace CreateColorSpaceW
 #else

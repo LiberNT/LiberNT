@@ -68,7 +68,7 @@ typedef struct RX_LOG {
 #else
 #define MAX_RX_LOG_ENTRY_SIZE 0x30
 #endif
-#define RDBSSLOG_ASYNC_NAME_PREFIX 0
+#define RDBSSLOG_ASYNC_NAME_PREFIX "[nowait]"
 
 #ifdef __cplusplus
 extern "C" {

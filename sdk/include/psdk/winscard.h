@@ -244,7 +244,11 @@ typedef struct READER_SEL_RESPONSE {
 #endif
 #endif
 #if (!(defined(UNICODE)))
-#define LPOCNCONNPROC 0
+#ifdef UNICODE
+#define LPOCNCONNPROC LPOCNCONNPROCW
+#else
+#define LPOCNCONNPROC LPOCNCONNPROCA
+#endif
 #endif
 #define LPOPENCARDNAME_A LPOPENCARDNAMEA
 #define LPOPENCARDNAME_W LPOPENCARDNAMEW
@@ -275,7 +279,7 @@ typedef struct READER_SEL_RESPONSE {
 #define PSCARD_READERSTATE_A PSCARD_READERSTATEA
 #define PSCARD_READERSTATE_W PSCARD_READERSTATEW
 #define SC_DLG_MINIMAL_UI 0x01
-#define SCARD_ALL_READERS 0
+#define SCARD_ALL_READERS TEXT("SCard$AllReaders\000")
 #define SCARD_AUDIT_CHV_FAILURE 0x0
 #define SCARD_DEFAULT_READERS TEXT("SCard$DefaultReaders\000")
 #define SCARD_LOCAL_READERS TEXT("SCard$LocalReaders\000")
@@ -342,7 +346,11 @@ typedef struct READER_SEL_RESPONSE {
 #endif
 #define SCardSetReaderCapabilities SCardSetAttrib
 #if (!(defined(UNICODE)))
-#define SCardUIDlgSelectCard 0
+#ifdef UNICODE
+#define SCardUIDlgSelectCard SCardUIDlgSelectCardW
+#else
+#define SCardUIDlgSelectCard SCardUIDlgSelectCardA
+#endif
 #endif
 #ifdef UNICODE
 #define SCardWriteCache SCardWriteCacheW

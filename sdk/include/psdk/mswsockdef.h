@@ -78,8 +78,12 @@ typedef struct _RIORESULT {
   ULONGLONG RequestContext;
 } RIORESULT, *PRIORESULT;
 
-#define _MSWSOCKDEF_ 0
-#define RIO_CMSG_BASE_SIZE 0
+#define _MSWSOCKDEF_
+#ifdef _WIN64
+#define RIO_CMSG_BASE_SIZE 8
+#else
+#define RIO_CMSG_BASE_SIZE 4
+#endif
 #define RIO_INVALID_BUFFERID 0xFFFFFFFF
 #define RIO_INVALID_CQ 0
 #define RIO_INVALID_RQ 0

@@ -1502,7 +1502,7 @@ INT  __cdecl OleUIPromptUserW(INT,HWND, ...);
 #define IOleUILinkInfoVtbl IOleUILinkInfoAVtbl
 #define IOleUIObjInfoVtbl IOleUIObjInfoAVtbl
 #endif
-#define OLESTDDELIM 0
+#define OLESTDDELIM TEXT("\\")
 #define OLEUI_CIERR_MUSTHAVECLSID 0x74
 #define OLEUI_CIERR_MUSTHAVECURRENTMETAFILE 0x75
 #define OLEUI_CIERR_SZICONEXEINVALID 0x76
@@ -1553,11 +1553,23 @@ INT  __cdecl OleUIPromptUserW(INT,HWND, ...);
 #define OLEUI_OPERR_SUPPROP 0x78
 #define OLEUI_VPERR_DVASPECTINVALID 0x84
 #define OLEUI_VPERR_METAPICTINVALID 0x83
-#define PROP_HWND_CHGICONDLG 0
+#define PROP_HWND_CHGICONDLG TEXT("HWND_CIDLG")
 #if (!(defined(UNICODE)))
-#define tagOLEUIBUSY 0
-#define tagOLEUICHANGEICON 0
-#define tagOLEUICHANGESOURCE 0
+#ifdef UNICODE
+#define tagOLEUIBUSY tagOLEUIBUSYW
+#else
+#define tagOLEUIBUSY tagOLEUIBUSYA
+#endif
+#ifdef UNICODE
+#define tagOLEUICHANGEICON tagOLEUICHANGEICONW
+#else
+#define tagOLEUICHANGEICON tagOLEUICHANGEICONA
+#endif
+#ifdef UNICODE
+#define tagOLEUICHANGESOURCE tagOLEUICHANGESOURCEW
+#else
+#define tagOLEUICHANGESOURCE tagOLEUICHANGESOURCEA
+#endif
 #endif
 #ifdef UNICODE
 #define tagOLEUICONVERT tagOLEUICONVERTW
@@ -1604,7 +1616,11 @@ INT  __cdecl OleUIPromptUserW(INT,HWND, ...);
 #endif
 #endif
 #if (!(defined(UNICODE)))
-#define tagOLEUILINKPROPS 0
+#ifdef UNICODE
+#define tagOLEUILINKPROPS tagOLEUILINKPROPSW
+#else
+#define tagOLEUILINKPROPS tagOLEUILINKPROPSA
+#endif
 #endif
 #ifdef UNICODE
 #define tagOLEUIOBJECTPROPS tagOLEUIOBJECTPROPSW
@@ -1618,8 +1634,16 @@ INT  __cdecl OleUIPromptUserW(INT,HWND, ...);
 #endif
 #endif
 #if (!(defined(UNICODE)))
-#define tagOLEUIPASTEENTRY 0
-#define tagOLEUIPASTESPECIAL 0
+#ifdef UNICODE
+#define tagOLEUIPASTEENTRY tagOLEUIPASTEENTRYW
+#else
+#define tagOLEUIPASTEENTRY tagOLEUIPASTEENTRYA
+#endif
+#ifdef UNICODE
+#define tagOLEUIPASTESPECIAL tagOLEUIPASTESPECIALW
+#else
+#define tagOLEUIPASTESPECIAL tagOLEUIPASTESPECIALA
+#endif
 #endif
 #ifdef UNICODE
 #define tagOLEUIVIEWPROPS tagOLEUIVIEWPROPSW

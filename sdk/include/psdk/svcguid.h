@@ -232,6 +232,6 @@ extern "C" {
 }
 #endif
 
-#define _SVCGUID_ 0
+#define _SVCGUID_
 
 #endif

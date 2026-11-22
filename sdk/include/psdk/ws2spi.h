@@ -1130,5 +1130,5 @@ NSPStartup(
 }
 #endif
 
-#define _WINSOCK2SPI_ 0
+#define _WINSOCK2SPI_
 

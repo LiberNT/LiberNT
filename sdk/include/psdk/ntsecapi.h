@@ -1598,7 +1598,11 @@ typedef struct KERB_CRYPTO_KEY32 {
 #define AUDIT_GENERIC_READ 0x2005A
 #define AUDIT_GENERIC_WRITE 0x20025
 #if (!(defined(UNICODE)))
-#define AuditLookupCategoryName 0
+#ifdef UNICODE
+#define AuditLookupCategoryName AuditLookupCategoryNameW
+#else
+#define AuditLookupCategoryName AuditLookupCategoryNameA
+#endif
 #endif
 #ifdef UNICODE
 #define AuditLookupSubCategoryName AuditLookupSubCategoryNameW
@@ -1636,7 +1640,7 @@ typedef struct KERB_CRYPTO_KEY32 {
 #define AUTH_REQ_PER_USER_FLAGS 0x4F
 #define CENTRAL_ACCESS_POLICY_VALID_FLAG_MASK 0x10101
 #define KRB_ANONYMOUS_STRING L"ANONYMOUS"
-#define KRB_WELLKNOWN_STRING 0
+#define KRB_WELLKNOWN_STRING L"WELLKNOWN"
 #define LSA_SCANNER_INFO_ADMIN_ALL_FLAGS 1
 #define LSASETCAPS_VALID_FLAG_MASK 1
 #define MAX_FOREST_TRUST_BINARY_DATA_SIZE 0x20000

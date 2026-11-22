@@ -2259,7 +2259,7 @@ typedef struct IDirect3DStateBlock9 * PDIRECT3DSTATEBLOCK9;
 typedef struct IDirect3DVertexDeclaration9 * PDIRECT3DVERTEXDECLARATION9;
 typedef struct IDirect3DVertexShader9 * PDIRECT3DVERTEXSHADER9;
 
-#define D3DAPI 0
+#define D3DAPI WINAPI
 
 typedef struct IDirect3D9ExOverlayExtension IDirect3D9ExOverlayExtension;
 

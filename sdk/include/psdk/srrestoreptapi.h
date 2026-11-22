@@ -171,7 +171,11 @@ typedef struct _RESTOREPTINFOEX {
 #endif
 #endif
 #if (!(defined(UNICODE)))
-#define RESTOREPOINTINFO 0
+#ifdef UNICODE
+#define RESTOREPOINTINFO RESTOREPOINTINFOW
+#else
+#define RESTOREPOINTINFO RESTOREPOINTINFOA
+#endif
 #endif
 #ifdef UNICODE
 #define SRSetRestorePoint SRSetRestorePointW

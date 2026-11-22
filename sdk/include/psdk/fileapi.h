@@ -78,7 +78,7 @@ typedef struct DISK_SPACE_INFORMATION {
   DWORD BytesPerSector;
 } DISK_SPACE_INFORMATION;
 
-#define _APISETFILE_ 0
+#define _APISETFILE_
 #ifdef UNICODE
 #define CreateDirectory2 CreateDirectory2W
 #else

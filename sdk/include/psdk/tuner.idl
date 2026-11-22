@@ -1816,7 +1816,7 @@ cpp_quote("#define SID_ScanningTuner IID_IScanningTuner")
 cpp_quote("#define SID_ScanningTunerEx IID_IScanningTunerEx")
 }
 
-cpp_quote("#define SID_ESEventService 0")
+cpp_quote("#define SID_ESEventService CLSID_ESEventService")
 cpp_quote("")
 cpp_quote("enum __MIDL___MIDL_itf_tuner_0000_0000_0001")
 cpp_quote("{")
@@ -3568,5 +3568,5 @@ cpp_quote("};")
 cpp_quote("")
 cpp_quote("typedef struct PersistTuneXmlUtility PersistTuneXmlUtility;")
 
-cpp_quote("#define SID_ESEventFactory 0")
+cpp_quote("#define SID_ESEventFactory CLSID_ESEventFactory")
 

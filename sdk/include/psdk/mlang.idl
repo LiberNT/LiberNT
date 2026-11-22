@@ -779,7 +779,7 @@ cpp_quote("STDAPI ConvertINetString(LPDWORD, DWORD, DWORD, LPCSTR, LPINT, LPSTR,
 cpp_quote("STDAPI ConvertINetMultiByteToUnicode(LPDWORD, DWORD, LPCSTR, LPINT, LPWSTR, LPINT);")
 cpp_quote("STDAPI ConvertINetUnicodeToMultiByte(LPDWORD, DWORD, LPCWSTR, LPINT, LPSTR, LPINT);")
 
-cpp_quote("#define _MLANG_H_API_DEF_ 0")
+cpp_quote("#define _MLANG_H_API_DEF_")
 cpp_quote("")
 cpp_quote("enum tagMLDETECTCP")
 cpp_quote("{")

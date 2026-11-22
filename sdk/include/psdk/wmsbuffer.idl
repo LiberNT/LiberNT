@@ -64,7 +64,7 @@ interface INSSBuffer3 : INSSBuffer2
     HRESULT GetProperty(GUID id, void *value, DWORD *size);
 }
 
-cpp_quote("#define IWMSBuffer 0")
+cpp_quote("#define IWMSBuffer INSSBuffer")
 cpp_quote("")
 cpp_quote("struct INSSBuffer2Vtbl")
 cpp_quote("{")

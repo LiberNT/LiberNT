@@ -143,9 +143,9 @@ cpp_quote("#ifndef TIMERMODE_VISIBILITYAWARE")
 cpp_quote("#define TIMERMODE_VISIBILITYAWARE 1")
 cpp_quote("#endif")
 
-cpp_quote("#define BFID_INDEXED_RGB_8 0")
+cpp_quote("#define BFID_INDEXED_RGB_8 BFID_RGB_8")
 cpp_quote("#define COLOR_NO_TRANSPARENT 0xFFFFFFFF")
-cpp_quote("#define SID_SDirectDraw3 0")
+cpp_quote("#define SID_SDirectDraw3 IID_IDirectDraw3")
 cpp_quote("#define TIMERMODE_NORMAL 0")
 cpp_quote("")
 cpp_quote("typedef GUID BFID;")
@@ -242,7 +242,7 @@ cpp_quote("    HRESULT (WINAPI *Freeze)(ITimer *, BOOL);")
 cpp_quote("    HRESULT (WINAPI *GetTime)(ITimer *, VARIANT *);")
 cpp_quote("};")
 
-cpp_quote("#define BFID_INDEXED_RGB_4 0")
+cpp_quote("#define BFID_INDEXED_RGB_4 BFID_RGB_4")
 
-cpp_quote("#define BFID_INDEXED_RGB_1 0")
+cpp_quote("#define BFID_INDEXED_RGB_1 BFID_MONOCHROME")
 

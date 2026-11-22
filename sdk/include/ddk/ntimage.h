@@ -2226,7 +2226,7 @@ typedef struct ANON_OBJECT_HEADER_V2 {
 #define IMAGE_ENCLAVE_SHORT_ID_LENGTH 0x10
 #define IMAGE_REL_ARM64_ADDR32 1
 #define IMAGE_SYM_SECTION_MAX_EX 0x7FFFFFFF
-#define PATCH_MAIN_CALLOUT_FUNCTION_NAME 0
+#define PATCH_MAIN_CALLOUT_FUNCTION_NAME "__PatchMainCallout__"
 
 #pragma pack(push, 2)
 #pragma pack(push, 2)

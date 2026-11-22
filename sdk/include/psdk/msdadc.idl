@@ -91,7 +91,7 @@ interface IDCInfo : IUnknown
                     [in, size_is(cInfo)] DCINFO prgInfo[]);
 };
 
-cpp_quote("#define OLEDBDECLSPEC 0")
+cpp_quote("#define OLEDBDECLSPEC __declspec(selectany)")
 cpp_quote("")
 cpp_quote("struct IDataConvertVtbl")
 cpp_quote("{")

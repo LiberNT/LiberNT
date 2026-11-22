@@ -18,6 +18,6 @@
 #define NEGOSSP_NAME_A "Negotiate"
 #define NEGOSSP_NAME_W L"Negotiate"
 #define NTLMSP_NAME L"NTLM"
-#define NTLMSP_NAME_A 0
+#define NTLMSP_NAME_A "NTLM"
 
 #endif /* _SECURITY_H */

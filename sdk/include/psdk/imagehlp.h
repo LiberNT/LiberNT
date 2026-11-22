@@ -1007,9 +1007,13 @@ BOOL    IMAGEAPI UpdateDebugInfoFileEx(PCSTR ImageFileName, PCSTR SymbolPath, PS
 #define BIND_REPORT_64BIT_VA 0x00000010
 #endif
 
-#define _IMAGEHLP_ 0
+#define _IMAGEHLP_
 #if (!(defined(UNICODE)))
-#define MapFileAndCheckSum 0
+#ifdef UNICODE
+#define MapFileAndCheckSum MapFileAndCheckSumW
+#else
+#define MapFileAndCheckSum MapFileAndCheckSumA
+#endif
 #endif
 
 #endif  /* __WINE_IMAGEHLP_H */

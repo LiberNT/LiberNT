@@ -440,7 +440,7 @@ interface IExtensionServices: IUnknown
         [in] LPCWSTR pwzPassword);
 }
 
-cpp_quote("#define CFSTR_HYPERLINK 0")
+cpp_quote("#define CFSTR_HYPERLINK (TEXT(\"Hyperlink\"))")
 cpp_quote("#define HLINK_E_FIRST (OLE_E_LAST + 1)")
 cpp_quote("#define HLINK_S_DONTHIDE 0x40100")
 cpp_quote("#define HLINK_S_FIRST 0x40100")

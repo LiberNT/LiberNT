@@ -225,7 +225,7 @@ interface ITmNodeName : IUnknown {
                         [in, out] LPWSTR pNodeNameBuffer);
 }
 
-cpp_quote("#define BOID_NULL 0")
+cpp_quote("#define BOID_NULL (* ((BOID *) (& IID_NULL)))")
 cpp_quote("")
 cpp_quote("typedef struct IKernelTransaction IKernelTransaction;")
 cpp_quote("")
