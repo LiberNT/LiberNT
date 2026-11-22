@@ -4633,6 +4633,15 @@ static PFND3D11_1DDI_SETCONSTANTBUFFERS NativeRangedConstantBuffers(NativeDevice
     return NULL;
 }
 
+static PFND3D11_1DDI_CLEARVIEW NativeClearViewFunction(NativeDevice *device)
+{
+    if (device->ddi11_1)
+        return device->ddi11_1_functions.pfnClearView;
+    if (device->wddm20)
+        return device->wddm20_functions.pfnClearView;
+    return NULL;
+}
+
 HRESULT STDMETHODCALLTYPE NativeDevice::CheckFeatureSupport(D3D11_FEATURE feature, void *data, UINT size)
 {
     switch (feature)
@@ -4696,7 +4705,8 @@ HRESULT STDMETHODCALLTYPE NativeDevice::CheckFeatureSupport(D3D11_FEATURE featur
             ZeroMemory(caps, sizeof(*caps));
             caps->OutputMergerLogicOp = !!options_caps.OutputMergerLogicOp;
             caps->ConstantBufferOffsetting = NativeRangedConstantBuffers(this, 0) != NULL;
-            /* TODO: the other D3D11.1 DDI options (discard, ClearView, copy flags, partial constant buffer updates, NO_OVERWRITE maps, forced sample counts, SAD4, extended doubles) once the runtime forwards them */
+            caps->ClearView = NativeClearViewFunction(this) != NULL;
+            /* TODO: the other D3D11.1 DDI options (discard, copy flags, partial constant buffer updates, NO_OVERWRITE maps, forced sample counts, SAD4, extended doubles) once the runtime forwards them */
             return S_OK;
         }
         case D3D11_FEATURE_ARCHITECTURE_INFO:
@@ -5267,16 +5277,56 @@ void STDMETHODCALLTYPE NativeContext::CSGetConstantBuffers1(UINT start, UINT cou
 }
 
 void STDMETHODCALLTYPE NativeContext::ClearView(ID3D11View *view, const FLOAT color[4],
-        const D3D11_RECT *rects, UINT)
+        const D3D11_RECT *rects, UINT count)
 {
-    if (!view || !color || rects) return;
-    ID3D11RenderTargetView *target = NULL;
-    if (SUCCEEDED(view->QueryInterface(IID_ID3D11RenderTargetView,
-            reinterpret_cast<void **>(&target))))
+    if (!view || !color || (count && !rects)) return;
+    if (deferred)
     {
-        ClearRenderTargetView(target, color);
-        target->Release();
+        NativeLock guard(device);
+        NativeCommandRef<ID3D11View> retained(view);
+        NativeCommandArray<FLOAT> values(4, color);
+        NativeCommandArray<D3D11_RECT> regions(count, rects);
+        if (Captured(values) && Captured(regions))
+            Record([=](NativeContext *context) { context->ClearView(retained.Get(), values.Data(), regions.Data(), count); });
+        return;
     }
+
+    PFND3D11_1DDI_CLEARVIEW clear = NativeClearViewFunction(device);
+    ID3D11RenderTargetView *target = NULL;
+    ID3D11UnorderedAccessView *unordered = NULL;
+    FLOAT value[4];
+    memcpy(value, color, sizeof(value));
+    if (SUCCEEDED(view->QueryInterface(IID_ID3D11RenderTargetView, reinterpret_cast<void **>(&target))))
+    {
+        NativeRenderTargetView *native = static_cast<NativeRenderTargetView *>(target);
+        if (native->device == device && clear)
+        {
+            NativeLock guard(device);
+            NativeWaitPendingRelease(native->texture, device);
+            clear(device->driver_device, D3D10DDI_HT_RENDERTARGETVIEW, native->handle.pDrvPrivate, value,
+                  reinterpret_cast<const D3D10_DDI_RECT *>(rects), count);
+        }
+        else if (native->device == device && !count)
+        {
+            ClearRenderTargetView(target, color);
+        }
+        target->Release();
+        return;
+    }
+    if (SUCCEEDED(view->QueryInterface(IID_ID3D11UnorderedAccessView, reinterpret_cast<void **>(&unordered))))
+    {
+        NativeUnorderedAccessView *native = static_cast<NativeUnorderedAccessView *>(unordered);
+        if (native->device == device && clear)
+        {
+            NativeLock guard(device);
+            NativeWaitPendingRelease(native->texture, device);
+            clear(device->driver_device, D3D11DDI_HT_UNORDEREDACCESSVIEW, native->handle.pDrvPrivate, value,
+                  reinterpret_cast<const D3D10_DDI_RECT *>(rects), count);
+        }
+        unordered->Release();
+        return;
+    }
+    /* TODO: ClearView on video processor input/output and decoder output views */
 }
 
 void STDMETHODCALLTYPE NativeContext::DiscardView1(ID3D11View *, const D3D11_RECT *, UINT)
