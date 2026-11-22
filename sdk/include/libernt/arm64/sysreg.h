@@ -8,7 +8,7 @@
 #pragma once
 
 #if defined(_M_ARM)
-#include <reactos/arm/sysreg.h>
+#include <libernt/arm/sysreg.h>
 #else
 
 #define ARM64_SR_ENCODE(Op0, Op1, CRn, CRm, Op2) \

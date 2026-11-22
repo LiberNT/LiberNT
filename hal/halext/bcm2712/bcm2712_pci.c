@@ -14,7 +14,7 @@
 #include <libernt/drivers/acpi/acpi.h>
 #include <halacpi.h>
 #include <hal.h>
-#include <reactos/hal/halext.h>
+#include <libernt/hal/halext.h>
 #include "bcm2712_pci.h"
 
 #define NDEBUG

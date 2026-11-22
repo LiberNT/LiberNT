@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include <reactos/hal/halext.h>
+#include <libernt/hal/halext.h>
 
 extern BOOLEAN AppleAicDetected;
 
