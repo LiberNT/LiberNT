@@ -92,6 +92,13 @@ FORCEINLINE ULONG DxgkHotPlugWorkCorePathImportance(_In_ SIZE_T PathIndex)
     return (ULONG)(1 + PathIndex);
 }
 
+/* A further connected output extends the desktop on a source of its own; with no source left it clones source 0 */
+FORCEINLINE ULONG DxgkHotPlugWorkCoreExtraPathSource(_In_ SIZE_T PathIndex, _In_ SIZE_T NumSources)
+{
+    ASSERT(PathIndex != 0);
+    return PathIndex < NumSources ? (ULONG)PathIndex : 0;
+}
+
 FORCEINLINE BOOLEAN DxgkHotPlugWorkCoreCanAcquireLevel3AfterRundown(_In_ volatile const LONG *Active)
 {
     return *Active == 0;
