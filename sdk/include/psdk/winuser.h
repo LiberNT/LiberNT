@@ -7850,9 +7850,15 @@ WINUSERAPI HDESK WINAPI CreateDesktopExA(LPCSTR lpszDesktop, LPCSTR lpszDevice, 
 #ifdef _WINGDI_
 WINUSERAPI HDESK WINAPI CreateDesktopExW(LPCWSTR lpszDesktop, LPCWSTR lpszDevice, DEVMODEW *pDevmode, DWORD dwFlags, ACCESS_MASK dwDesiredAccess, LPSECURITY_ATTRIBUTES lpsa, ULONG ulHeapSize, PVOID pvoid);
 #endif
+#if (WINVER >= 0x0602) && (NTDDI_VERSION >= NTDDI_WIN10_RS5)
 WINUSERAPI HSYNTHETICPOINTERDEVICE WINAPI CreateSyntheticPointerDevice(POINTER_INPUT_TYPE pointerType, ULONG maxCount, POINTER_FEEDBACK_MODE mode);
+#endif
+#if (WINVER >= 0x0602) && (NTDDI_VERSION >= NTDDI_WIN11_GE)
 WINUSERAPI HSYNTHETICPOINTERDEVICE WINAPI CreateSyntheticPointerDevice2(SYNTHETIC_DEVICE_CREATION_PARAMS *pParams);
+#endif
+#if (WINVER >= 0x0602) && (NTDDI_VERSION >= NTDDI_WIN10_RS5)
 WINUSERAPI void WINAPI DestroySyntheticPointerDevice(HSYNTHETICPOINTERDEVICE device);
+#endif
 #ifdef _WINGDI_
 WINUSERAPI LONG WINAPI DisplayConfigGetDeviceInfo(DISPLAYCONFIG_DEVICE_INFO_HEADER *requestPacket);
 #endif
@@ -7889,7 +7895,9 @@ WINUSERAPI BOOL WINAPI GetUpdatedClipboardFormats(PUINT lpuiFormats, UINT cForma
 WINUSERAPI DPI_HOSTING_BEHAVIOR WINAPI GetWindowDpiHostingBehavior(HWND hwnd);
 WINUSERAPI BOOL WINAPI GetWindowFeedbackSetting(HWND hwnd, FEEDBACK_TYPE feedback, DWORD dwFlags, UINT32 *pSize, void *config);
 WINUSERAPI BOOL WINAPI InheritWindowMonitor(HWND hwnd, HWND hwndInherit);
+#if (WINVER >= 0x0602) && (NTDDI_VERSION >= NTDDI_WIN11_GE)
 WINUSERAPI BOOL WINAPI InjectTouchpadAction(HSYNTHETICPOINTERDEVICE hDevice, TOUCHPAD_ACTION action);
+#endif
 WINUSERAPI BOOL WINAPI IsImmersiveProcess(HANDLE hProcess);
 WINUSERAPI BOOL WINAPI IsInterceptWindow(HWND topLevelWindow, BOOL *isIntercept);
 WINUSERAPI BOOL WINAPI IsTouchWindow(HWND hwnd, PULONG pulFlags);
