@@ -18,6 +18,7 @@
 
 #define COBJMACROS
 
+#include <stdio.h>
 #include "initguid.h"
 #include "taskschd.h"
 
@@ -335,6 +336,69 @@ static int delete_command(int argc, WCHAR *argv[])
     return 0;
 }
 
+static void print_hresult_error(HRESULT hres)
+{
+    WCHAR *text = NULL;
+
+    if (FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                       NULL, hres, 0, (WCHAR *)&text, 0, NULL) && text)
+    {
+        wprintf(L"ERROR: %s", text);
+        LocalFree(text);
+    }
+    else
+        wprintf(L"ERROR: 0x%08lx\n", hres);
+}
+
+static int run_command(int argc, WCHAR *argv[])
+{
+    const WCHAR *task_name = NULL;
+    IRegisteredTask *task;
+    IRunningTask *running = NULL;
+    LONG flags = TASK_RUN_NO_FLAGS;
+    VARIANT params;
+    HRESULT hres;
+
+    while (argc) {
+        if (!wcsicmp(argv[0], L"/tn") && argc >= 2 && !task_name) {
+            task_name = argv[1];
+            argc -= 2;
+            argv += 2;
+        } else if (!wcsicmp(argv[0], L"/i")) {
+            flags |= TASK_RUN_IGNORE_CONSTRAINTS;
+            argc--;
+            argv++;
+        } else {
+            FIXME("Unsupported argument %s\n", debugstr_w(argv[0]));
+            return 1;
+        }
+    }
+
+    if (!task_name) {
+        FIXME("Missing /tn argument\n");
+        return 1;
+    }
+
+    task = get_registered_task(task_name);
+    if (!task) {
+        print_hresult_error(HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND));
+        return 1;
+    }
+
+    V_VT(&params) = VT_EMPTY;
+    hres = IRegisteredTask_RunEx(task, params, flags, 0, NULL, &running);
+    IRegisteredTask_Release(task);
+    if (running)
+        IRunningTask_Release(running);
+    if (FAILED(hres)) {
+        print_hresult_error(hres);
+        return 1;
+    }
+
+    wprintf(L"SUCCESS: Attempted to run the scheduled task \"%s\".\n", task_name);
+    return 0;
+}
+
 int __cdecl wmain(int argc, WCHAR *argv[])
 {
     int i, ret = 0;
@@ -353,6 +417,8 @@ int __cdecl wmain(int argc, WCHAR *argv[])
         ret = create_command(argc - 2, argv + 2);
     else if (!wcsicmp(argv[1], L"/delete"))
         ret = delete_command(argc - 2, argv + 2);
+    else if (!wcsicmp(argv[1], L"/run"))
+        ret = run_command(argc - 2, argv + 2);
     else
         FIXME("Unsupported command %s\n", debugstr_w(argv[1]));
 

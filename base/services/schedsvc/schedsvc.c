@@ -27,6 +27,7 @@
 #include "objbase.h"
 #include "xmllite.h"
 #include "schrpc.h"
+#include "taskexec.h"
 #include "taskschd.h"
 #include "wine/debug.h"
 
@@ -847,9 +848,21 @@ HRESULT __cdecl SchRpcStop(const WCHAR *path, DWORD flags)
 HRESULT __cdecl SchRpcRun(const WCHAR *path, DWORD n_args, const WCHAR **args, DWORD flags,
                           DWORD session_id, const WCHAR *user, GUID *guid)
 {
-    FIXME("%s,%lu,%p,%#lx,%#lx,%s,%p: stub\n", debugstr_w(path), n_args, args, flags,
+    WCHAR *full_name, *xml = NULL;
+    HRESULT hr;
+
+    TRACE("%s,%lu,%p,%#lx,%#lx,%s,%p\n", debugstr_w(path), n_args, args, flags,
           session_id, debugstr_w(user), guid);
-    return E_NOTIMPL;
+
+    /* TODO: run as the account named by user (TASK_RUN_AS_SELF, TASK_RUN_USER_SID) */
+    full_name = get_full_name(path, NULL);
+    if (!full_name) return E_OUTOFMEMORY;
+    hr = read_xml(full_name, &xml);
+    free(full_name);
+    if (hr != S_OK) return hr;
+    hr = TaskExecRun(xml, n_args, args, flags, session_id, guid);
+    free(xml);
+    return hr;
 }
 
 HRESULT __cdecl SchRpcDelete(const WCHAR *path, DWORD flags)

@@ -1,6 +1,7 @@
 
 list(APPEND SOURCE
     ExecXmlEmpty.c
+    RunTask.c
     testlist.c)
 
 add_executable(taskschd_apitest ${SOURCE})

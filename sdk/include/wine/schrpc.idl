@@ -83,7 +83,7 @@ interface ITaskSchedulerService
     HRESULT SchRpcStopInstance([in] GUID guid, [in] DWORD flags);
     HRESULT SchRpcStop([in, string, unique] const WCHAR *path, [in] DWORD flags);
     HRESULT SchRpcRun([in, string] const WCHAR *path,
-                [in] DWORD n_args, [in, size_is(n_args),unique] const WCHAR **args,
+                [in] DWORD n_args, [in, string, size_is(n_args),unique] const WCHAR **args,
                 [in] DWORD flags, [in] DWORD session_id,
                 [in, unique, string] const WCHAR *user, [out] GUID *guid);
     HRESULT SchRpcDelete([in, string] const WCHAR *path, [in] DWORD flags);
