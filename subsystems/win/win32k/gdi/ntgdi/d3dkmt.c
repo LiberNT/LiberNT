@@ -12,6 +12,7 @@
 #include <reactos/rddm/rxgkntgdi.h>
 #include <debug.h>
 
+#define IOCTL_RXGK_OPENADAPTERFROMGDIDISPLAYNAME CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x111, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_RXGK_OPENADAPTERFROMDEVICENAME CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x112, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_RXGK_CLOSEADAPTER CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x103, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #define IOCTL_D3DKMT_CHECKOCCLUSION CTL_CODE(DXGKRNL_DEVICE_TYPE, 0x169, METHOD_BUFFERED, FILE_ANY_ACCESS)
@@ -162,6 +163,41 @@ D3dkmtCloseCapturedAdapter(
         return;
     CloseAdapter.hAdapter = AdapterHandle;
     (VOID)WddmBridgeSendIoctl(IOCTL_RXGK_CLOSEADAPTER, &CloseAdapter, sizeof(CloseAdapter), NULL, 0);
+}
+
+/* The adapter and source a display device scans out, named by its device object */
+static NTSTATUS
+D3dkmtOpenAdapterByDisplayDevice(
+    _In_ PCWSTR DeviceName,
+    _Out_ D3DKMT_HANDLE *AdapterHandle,
+    _Out_ LUID *AdapterLuid,
+    _Out_ D3DDDI_VIDEO_PRESENT_SOURCE_ID *VidPnSourceId)
+{
+    D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME OpenByDisplay;
+    ULONG_PTR Information = 0;
+    NTSTATUS Status;
+
+    *AdapterHandle = 0;
+    RtlZeroMemory(AdapterLuid, sizeof(*AdapterLuid));
+    *VidPnSourceId = D3DDDI_ID_UNINITIALIZED;
+    RtlZeroMemory(&OpenByDisplay, sizeof(OpenByDisplay));
+    Status = RtlStringCchCopyW(OpenByDisplay.DeviceName, RTL_NUMBER_OF(OpenByDisplay.DeviceName), DeviceName);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Status = WddmBridgeSendIoctlWithInformation(IOCTL_RXGK_OPENADAPTERFROMGDIDISPLAYNAME, &OpenByDisplay,
+                                                sizeof(OpenByDisplay), &OpenByDisplay, sizeof(OpenByDisplay),
+                                                &Information);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (Information != sizeof(OpenByDisplay) || OpenByDisplay.hAdapter == 0)
+    {
+        D3dkmtCloseCapturedAdapter(OpenByDisplay.hAdapter);
+        return Information != sizeof(OpenByDisplay) ? STATUS_INFO_LENGTH_MISMATCH : STATUS_INVALID_HANDLE;
+    }
+    *AdapterHandle = OpenByDisplay.hAdapter;
+    *AdapterLuid = OpenByDisplay.AdapterLuid;
+    *VidPnSourceId = OpenByDisplay.VidPnSourceId;
+    return STATUS_SUCCESS;
 }
 
 static NTSTATUS
@@ -635,13 +671,19 @@ NtGdiDdDDIOpenAdapterFromGdiDisplayName(_Inout_ D3DKMT_OPENADAPTERFROMGDIDISPLAY
     PDEVOBJ_vRelease(Pdev);
     if (!NT_SUCCESS(Status))
         return Status;
-    Status = D3dkmtOpenAdapterByCapturedNtDeviceName(
-                 NtDeviceName,
-                 &Captured.hAdapter,
-                 &Captured.AdapterLuid);
+    Status = D3dkmtOpenAdapterByDisplayDevice(NtDeviceName, &Captured.hAdapter, &Captured.AdapterLuid,
+                                              &Captured.VidPnSourceId);
     if (!NT_SUCCESS(Status))
-        return Status;
-    Captured.VidPnSourceId = 0;
+    {
+        /* A display device that is not a video present source of an adapter scans out the adapter's first source */
+        Status = D3dkmtOpenAdapterByCapturedNtDeviceName(
+                     NtDeviceName,
+                     &Captured.hAdapter,
+                     &Captured.AdapterLuid);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Captured.VidPnSourceId = 0;
+    }
     _SEH2_TRY
     {
         if (ExGetPreviousMode() != KernelMode)

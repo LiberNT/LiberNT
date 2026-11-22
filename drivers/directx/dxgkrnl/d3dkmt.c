@@ -2721,6 +2721,49 @@ DxgkpEqualDeviceInterfaceName(
     return RtlEqualUnicodeString(&NativeName, &RegisteredName, TRUE);
 }
 
+/* A display device of the desktop opens the adapter and source it scans out */
+static NTSTATUS
+DxgkpOpenAdapterByDisplayDeviceName(
+    _In_ PCWSTR DeviceName,
+    _Out_ D3DKMT_HANDLE *OutHandle,
+    _Out_ LUID *OutLuid,
+    _Out_ D3DDDI_VIDEO_PRESENT_SOURCE_ID *OutSourceId)
+{
+    PDXGKRNL_ADAPTER Snapshot[DXGKP_MAX_ADAPTERS];
+    D3DDDI_VIDEO_PRESENT_SOURCE_ID SourceId;
+    PDXGKRNL_ADAPTER Resolved;
+    UNICODE_STRING Name;
+    ULONG Count;
+    ULONG i;
+    NTSTATUS Status;
+
+    PAGED_CODE();
+    *OutHandle = 0;
+    RtlZeroMemory(OutLuid, sizeof(*OutLuid));
+    *OutSourceId = D3DDDI_ID_UNINITIALIZED;
+    RtlInitUnicodeString(&Name, DeviceName);
+    Count = DxgkpSnapshotAdapters(Snapshot);
+    Status = DxgkDisplayResolveVideoDevice(&Name, &Resolved, &SourceId);
+    if (NT_SUCCESS(Status))
+    {
+        /* The snapshot holds the reference the handle is created under */
+        Status = STATUS_UNSUCCESSFUL;
+        for (i = 0; i < Count; ++i)
+        {
+            if (Snapshot[i] != Resolved || Snapshot[i]->State != DxgkAdapterStateStarted)
+                continue;
+            ASSERT(SourceId < Snapshot[i]->NumberOfVideoPresentSources);
+            *OutHandle = DxgkpCreateAdapterHandle(Snapshot[i]);
+            *OutLuid = Snapshot[i]->AdapterLuid;
+            *OutSourceId = SourceId;
+            Status = *OutHandle != 0 ? STATUS_SUCCESS : STATUS_INSUFFICIENT_RESOURCES;
+            break;
+        }
+    }
+    DxgkpDereferenceAdapterSnapshot(Snapshot, Count);
+    return Status;
+}
+
 static NTSTATUS
 DxgkpOpenAdapterByDeviceObjectName(
     _In_ PCWSTR DeviceName,
@@ -12226,6 +12269,16 @@ DxgkpDispatchBufferedIoctlWorker(
                 return STATUS_ACCESS_DENIED;
 
             pData = (D3DKMT_OPENADAPTERFROMGDIDISPLAYNAME *)SystemBuffer;
+            /* win32k names the display by its device object, which knows its adapter and source */
+            if (wcsnlen(pData->DeviceName, RTL_NUMBER_OF(pData->DeviceName)) < RTL_NUMBER_OF(pData->DeviceName) &&
+                _wcsnicmp(pData->DeviceName, L"\\Device\\", 8) == 0)
+            {
+                Status = DxgkpOpenAdapterByDisplayDeviceName(pData->DeviceName, &pData->hAdapter, &pData->AdapterLuid,
+                                                             &pData->VidPnSourceId);
+                if (NT_SUCCESS(Status))
+                    KmtRequest->Information = sizeof(*pData);
+                return Status;
+            }
             DisplayOrdinal = DxgkpParseGdiDisplayName(
                                  pData->DeviceName,
                                  RTL_NUMBER_OF(pData->DeviceName));

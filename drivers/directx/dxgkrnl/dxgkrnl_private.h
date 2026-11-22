@@ -4123,6 +4123,12 @@ VOID
 DxgkDisplayRegisterSourceDisplays(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
+NTSTATUS
+DxgkDisplayResolveVideoDevice(
+    _In_ PCUNICODE_STRING DeviceName,
+    _Out_ PDXGKRNL_ADAPTER *Adapter,
+    _Out_ D3DDDI_VIDEO_PRESENT_SOURCE_ID *SourceId);
+
 /*
  * Display dispatch helpers — called from dxgkrnl dispatch routines
  * to route IRPs targeting \Device\Video0 to the display handler.

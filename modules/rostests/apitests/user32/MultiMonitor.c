@@ -10,6 +10,11 @@
 #define MAX_MONITORS 16
 #define PROBE_COLOR RGB(0x12, 0x9A, 0x56)
 
+static LONG (WINAPI *pGetDisplayConfigBufferSizes)(UINT32, UINT32 *, UINT32 *);
+static LONG (WINAPI *pQueryDisplayConfig)(UINT32, UINT32 *, DISPLAYCONFIG_PATH_INFO *, UINT32 *,
+                                          DISPLAYCONFIG_MODE_INFO *, DISPLAYCONFIG_TOPOLOGY_ID *);
+static LONG (WINAPI *pDisplayConfigGetDeviceInfo)(DISPLAYCONFIG_DEVICE_INFO_HEADER *);
+
 typedef struct _MONITOR_LIST
 {
     ULONG Count;
@@ -145,6 +150,75 @@ TestDrawingOnMonitor(HMONITOR Monitor)
     DestroyWindow(Window);
 }
 
+/* Each active display path names the monitor its source mode covers */
+static void
+TestDisplayConfig(const MONITOR_LIST *List)
+{
+    DISPLAYCONFIG_PATH_INFO Paths[MAX_MONITORS];
+    DISPLAYCONFIG_MODE_INFO Modes[MAX_MONITORS * 2];
+    DISPLAYCONFIG_SOURCE_DEVICE_NAME SourceName;
+    const DISPLAYCONFIG_SOURCE_MODE *Source;
+    MONITORINFOEXW Info;
+    UINT32 PathCount = 0, ModeCount = 0;
+    UINT32 Path;
+    ULONG Index;
+    LONG Result;
+    BOOL Found;
+
+    pGetDisplayConfigBufferSizes = (void *)GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetDisplayConfigBufferSizes");
+    pQueryDisplayConfig = (void *)GetProcAddress(GetModuleHandleW(L"user32.dll"), "QueryDisplayConfig");
+    pDisplayConfigGetDeviceInfo = (void *)GetProcAddress(GetModuleHandleW(L"user32.dll"), "DisplayConfigGetDeviceInfo");
+    if (pGetDisplayConfigBufferSizes == NULL || pQueryDisplayConfig == NULL || pDisplayConfigGetDeviceInfo == NULL)
+    {
+        skip("no display configuration API\n");
+        return;
+    }
+    Result = pGetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &PathCount, &ModeCount);
+    ok(Result == ERROR_SUCCESS, "GetDisplayConfigBufferSizes returned %ld\n", Result);
+    ok(PathCount == List->Count, "%u active paths, %lu monitors\n", PathCount, List->Count);
+    if (Result != ERROR_SUCCESS || PathCount == 0 || PathCount > MAX_MONITORS || ModeCount > RTL_NUMBER_OF(Modes))
+        return;
+    Result = pQueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &PathCount, Paths, &ModeCount, Modes, NULL);
+    ok(Result == ERROR_SUCCESS, "QueryDisplayConfig returned %ld\n", Result);
+    if (Result != ERROR_SUCCESS)
+        return;
+
+    for (Path = 0; Path < PathCount; Path++)
+    {
+        ok(Paths[Path].sourceInfo.modeInfoIdx < ModeCount, "path %u: source mode %u of %u\n", Path,
+           Paths[Path].sourceInfo.modeInfoIdx, ModeCount);
+        if (Paths[Path].sourceInfo.modeInfoIdx >= ModeCount)
+            continue;
+        ok(Modes[Paths[Path].sourceInfo.modeInfoIdx].infoType == DISPLAYCONFIG_MODE_INFO_TYPE_SOURCE,
+           "path %u: mode type %d\n", Path, Modes[Paths[Path].sourceInfo.modeInfoIdx].infoType);
+        Source = &Modes[Paths[Path].sourceInfo.modeInfoIdx].sourceMode;
+
+        ZeroMemory(&SourceName, sizeof(SourceName));
+        SourceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+        SourceName.header.size = sizeof(SourceName);
+        SourceName.header.adapterId = Paths[Path].sourceInfo.adapterId;
+        SourceName.header.id = Paths[Path].sourceInfo.id;
+        Result = pDisplayConfigGetDeviceInfo(&SourceName.header);
+        ok(Result == ERROR_SUCCESS, "path %u: source name query returned %ld\n", Path, Result);
+
+        Found = FALSE;
+        for (Index = 0; Index < List->Count && !Found; Index++)
+        {
+            Info.cbSize = sizeof(Info);
+            if (!GetMonitorInfoW(List->Handles[Index], (MONITORINFO *)&Info))
+                continue;
+            Found = Info.rcMonitor.left == Source->position.x && Info.rcMonitor.top == Source->position.y &&
+                    Info.rcMonitor.right - Info.rcMonitor.left == (LONG)Source->width &&
+                    Info.rcMonitor.bottom - Info.rcMonitor.top == (LONG)Source->height;
+            if (Found && Result == ERROR_SUCCESS)
+                ok(!wcscmp(SourceName.viewGdiDeviceName, Info.szDevice), "path %u: source %ls covers the monitor of %ls\n",
+                   Path, SourceName.viewGdiDeviceName, Info.szDevice);
+        }
+        ok(Found, "path %u: no monitor at (%ld,%ld) %ux%u\n", Path, Source->position.x, Source->position.y,
+           Source->width, Source->height);
+    }
+}
+
 START_TEST(MultiMonitor)
 {
     MONITOR_LIST List;
@@ -174,6 +248,7 @@ START_TEST(MultiMonitor)
     Virtual.bottom = Virtual.top + GetSystemMetrics(SM_CYVIRTUALSCREEN);
     ok(EqualRect(&Union, &Virtual), "the monitors cover %s, the virtual screen is %s\n", wine_dbgstr_rect(&Union),
        wine_dbgstr_rect(&Virtual));
+    TestDisplayConfig(&List);
 
     if (List.Count < 2)
     {

@@ -6182,6 +6182,56 @@ DxgkpSourceDisplayUnregisterAll(
     KeReleaseMutex(&g_SourceDisplayTableMutex, FALSE);
 }
 
+/* The adapter and source a display device of the desktop scans out; the adapter is not referenced */
+NTSTATUS
+DxgkDisplayResolveVideoDevice(
+    _In_ PCUNICODE_STRING DeviceName,
+    _Out_ PDXGKRNL_ADAPTER *Adapter,
+    _Out_ D3DDDI_VIDEO_PRESENT_SOURCE_ID *SourceId)
+{
+    PDXGKP_SOURCE_DISPLAY Display;
+    UNICODE_STRING Name;
+    WCHAR Buffer[24];
+    NTSTATUS Status = STATUS_UNSUCCESSFUL;
+    ULONG Index;
+
+    PAGED_CODE();
+    *Adapter = NULL;
+    *SourceId = D3DDDI_ID_UNINITIALIZED;
+    (VOID)KeWaitForSingleObject(&g_SourceDisplayTableMutex, Executive, KernelMode, FALSE, NULL);
+    if (g_DisplayAdapter != NULL && g_DisplayAdapter->DisplayDeviceName[0] != L'\0')
+    {
+        RtlInitUnicodeString(&Name, g_DisplayAdapter->DisplayDeviceName);
+        if (RtlEqualUnicodeString(DeviceName, &Name, TRUE))
+        {
+            *Adapter = g_DisplayAdapter;
+            *SourceId = 0;
+            Status = STATUS_SUCCESS;
+        }
+    }
+    for (Index = 0; !NT_SUCCESS(Status) && Index < RTL_NUMBER_OF(g_SourceDisplayDevices); Index++)
+    {
+        if (g_SourceDisplayDevices[Index] == NULL)
+            continue;
+        Display = (PDXGKP_SOURCE_DISPLAY)g_SourceDisplayDevices[Index]->DeviceExtension;
+        (VOID)KeWaitForSingleObject(&Display->Mutex, Executive, KernelMode, FALSE, NULL);
+        if (Display->Published && Display->Adapter != NULL &&
+            NT_SUCCESS(RtlStringCchPrintfW(Buffer, RTL_NUMBER_OF(Buffer), L"\\Device\\Video%lu", Display->DeviceNumber)))
+        {
+            RtlInitUnicodeString(&Name, Buffer);
+            if (RtlEqualUnicodeString(DeviceName, &Name, TRUE))
+            {
+                *Adapter = Display->Adapter;
+                *SourceId = Display->VidPnSourceId;
+                Status = STATUS_SUCCESS;
+            }
+        }
+        KeReleaseMutex(&Display->Mutex, FALSE);
+    }
+    KeReleaseMutex(&g_SourceDisplayTableMutex, FALSE);
+    return Status;
+}
+
 /* An adapter that does not host the desktop still exposes its outputs as display devices */
 VOID
 DxgkDisplayRegisterSourceDisplays(
