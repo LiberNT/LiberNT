@@ -1694,6 +1694,13 @@ ExpandGrowVolume(EXPAND_DEVICE* Device,
         return EXPAND_BAD_PARAMETER;
     if (Context.NewClusters == Context.OldClusters)
         return EXPAND_NOTHING_TO_DO;
+    /* The backup boot sector goes in the sector after the volume. */
+    if (Device->DiskSize != 0 &&
+        (NewVolumeSectors + 1 > (Device->DiskSize - VolumeStart) / Context.BytesPerSector ||
+         VolumeStart > Device->DiskSize))
+    {
+        return EXPAND_BAD_PARAMETER;
+    }
 
     Status = LocateRecords(&Context, BootSector);
     if (Status != EXPAND_OK)
