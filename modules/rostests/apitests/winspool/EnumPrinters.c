@@ -122,6 +122,26 @@ START_TEST(EnumPrinters)
             ok(GetLastError() == ERROR_SUCCESS, "EnumPrintersW returns error %lu for Level %lu!\n", GetLastError(), Level);
             HeapFree(GetProcessHeap(), 0, pMem);
 
+            if (Level != 0)
+            {
+                DWORD cbConnections;
+                DWORD dwConnections;
+
+                // With a NULL Name, local printers and the user's printer connections are enumerated together.
+                SetLastError(0xDEADBEEF);
+                ok(!EnumPrintersW(PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS, NULL, Level, NULL, 0, &cbConnections, &dwConnections), "EnumPrintersW returns TRUE for Level %lu!\n", Level);
+                ok(GetLastError() == ERROR_INSUFFICIENT_BUFFER, "EnumPrintersW returns error %lu for Level %lu!\n", GetLastError(), Level);
+                ok(cbConnections >= cbTemp, "cbConnections is %lu, reference size is %lu for Level %lu!\n", cbConnections, cbTemp, Level);
+                ok(dwConnections == 0, "dwConnections is %lu for Level %lu!\n", dwConnections, Level);
+
+                pMem = HeapAlloc(GetProcessHeap(), 0, cbConnections);
+                SetLastError(0xDEADBEEF);
+                ok(EnumPrintersW(PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS, NULL, Level, pMem, cbConnections, &cbConnections, &dwConnections), "EnumPrintersW returns FALSE for Level %lu!\n", Level);
+                ok(GetLastError() == ERROR_SUCCESS, "EnumPrintersW returns error %lu for Level %lu!\n", GetLastError(), Level);
+                ok(dwConnections >= dwReturned, "dwConnections is %lu, local printers %lu for Level %lu!\n", dwConnections, dwReturned, Level);
+                HeapFree(GetProcessHeap(), 0, pMem);
+            }
+
             if (Level != 4)
             {
                 // Show that the Name parameter is checked when PRINTER_ENUM_NAME is also specified.
