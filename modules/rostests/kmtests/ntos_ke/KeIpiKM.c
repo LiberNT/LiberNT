@@ -131,8 +131,110 @@ TestGenericCallDpc(VOID)
     ExFreePoolWithTag((PVOID)DpcVisits, 'vDpK');
 }
 
+#define IDLE_LOCK_ROUNDS 8
+
+static volatile LONG IdleLockDpcRuns;
+static volatile LONG IdleLockCalls;
+
+static
+VOID
+NTAPI
+IdleLockDpcRoutine(
+    _In_ PKDPC Dpc,
+    _In_opt_ PVOID DeferredContext,
+    _In_opt_ PVOID SystemArgument1,
+    _In_opt_ PVOID SystemArgument2)
+{
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(DeferredContext);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    InterlockedIncrement(&IdleLockDpcRuns);
+}
+
+static
+ULONG_PTR
+NTAPI
+IdleLockWorker(
+    _In_ ULONG_PTR Argument)
+{
+    UNREFERENCED_PARAMETER(Argument);
+
+    InterlockedIncrement(&IdleLockCalls);
+    return 0;
+}
+
+/* Whoever holds a processor's lock can be interrupted by a call that waits for every processor, so that processor answers the call while it waits for its lock */
+static
+VOID
+TestIpiReachesProcessorWaitingForItsLock(VOID)
+{
+    KAFFINITY Active = KeQueryActiveProcessors();
+    KAFFINITY Self, Other, PreviousAffinity;
+    LONG Total = (LONG)KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
+    ULONG OtherNumber = 0, Round, Spin, Idle = 0, Answered = 0;
+    PKPRCB Prcb;
+    KIRQL OldIrql;
+    LONG Expected;
+    KDPC Dpc;
+
+    Self = Active & (0 - Active);
+    Other = Active & ~Self;
+    Other &= (0 - Other);
+    if (!Other)
+    {
+        skip(FALSE, "Two processors are required to hold the lock of another one\n");
+        return;
+    }
+    while (((KAFFINITY)1 << OtherNumber) != Other)
+        OtherNumber++;
+
+    PreviousAffinity = KeSetSystemAffinityThreadEx(Other);
+    Prcb = KeGetCurrentPrcb();
+    KeSetSystemAffinityThreadEx(Self);
+
+    KeInitializeDpc(&Dpc, IdleLockDpcRoutine, NULL);
+    KeSetTargetProcessorDpc(&Dpc, (CCHAR)OtherNumber);
+    KeSetImportanceDpc(&Dpc, HighImportance);
+
+    for (Round = 0; Round < IDLE_LOCK_ROUNDS; Round++)
+    {
+        KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
+
+        while (InterlockedExchange((PLONG)&Prcb->PrcbLock, 1) != 0)
+            YieldProcessor();
+
+        /* The deferred routine sends a sleeping processor through its idle loop, which then meets the held lock; one already waiting for the lock cannot run it */
+        Expected = IdleLockDpcRuns + 1;
+        KeInsertQueueDpc(&Dpc, NULL, NULL);
+        for (Spin = 0; (Spin < 200) && (IdleLockDpcRuns != Expected); Spin++)
+            KeStallExecutionProcessor(10);
+        KeStallExecutionProcessor(500);
+        if (Prcb->CurrentThread == Prcb->IdleThread)
+            Idle++;
+
+        IdleLockCalls = 0;
+        KeIpiGenericCall(IdleLockWorker, 0);
+        if (IdleLockCalls == Total)
+            Answered++;
+
+        InterlockedAnd((PLONG)&Prcb->PrcbLock, 0);
+        KeLowerIrql(OldIrql);
+        KeRemoveQueueDpc(&Dpc);
+    }
+
+    KeRevertToUserAffinityThreadEx(PreviousAffinity);
+    KeFlushQueuedDpcs();
+
+    ok_eq_ulong(Answered, (ULONG)IDLE_LOCK_ROUNDS);
+    if (!Idle)
+        skip(FALSE, "Processor %lu was never idle while its lock was held\n", OtherNumber);
+}
+
 START_TEST(KeIpiKM)
 {
     TestIpiGenericCall();
     TestGenericCallDpc();
+    TestIpiReachesProcessorWaitingForItsLock();
 }
