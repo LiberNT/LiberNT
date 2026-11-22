@@ -546,7 +546,7 @@ KiSystemStartupBootStack(VOID)
     KiInitializeKernel(&KiInitialProcess.Pcb,
                        (PKTHREAD)KeLoaderBlock->Thread,
                        (PVOID)(KeLoaderBlock->KernelStack & ~3),
-                       (PKPRCB)__readfsdword(KPCR_PRCB),
+                       (PKPRCB)__readfsdword(FIELD_OFFSET(KIPCR, Prcb)),
                        KeNumberProcessors - 1,
                        KeLoaderBlock);
 
@@ -602,7 +602,8 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     if (!Cpu)
     {
         Ke386SetFs(KGDT_R0_PCR);
-        __writefsdword(KPCR_PROCESSOR_NUMBER, Cpu);
+        __writefsbyte(FIELD_OFFSET(KIPCR, PrcbData.LegacyNumber), (UCHAR)Cpu);
+        __writefsdword(FIELD_OFFSET(KIPCR, PrcbData.Number), Cpu);
 
         LoaderBlock->KernelStack = (ULONG_PTR)P0BootStack;
         LoaderBlock->Thread = (ULONG_PTR)&KiInitialThread;
@@ -634,9 +635,9 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
     InitialThread->ApcState.Process = &KiInitialProcess.Pcb;
 
     /* Clear DR6/7 to cleanup bootloader debugging */
-    __writefsdword(KPCR_TEB, 0);
-    __writefsdword(KPCR_DR6, 0);
-    __writefsdword(KPCR_DR7, 0);
+    __writefsdword(FIELD_OFFSET(KIPCR, NtTib.Self), 0);
+    __writefsdword(FIELD_OFFSET(KIPCR, PrcbData.ProcessorState.SpecialRegisters.KernelDr6), 0);
+    __writefsdword(FIELD_OFFSET(KIPCR, PrcbData.ProcessorState.SpecialRegisters.KernelDr7), 0);
 
     KeInitExceptions();
 
@@ -666,16 +667,16 @@ AppCpuInit:
         while (*(volatile PKSPIN_LOCK*)&KiFreezeExecutionLock == (PVOID)1);
     } while(InterlockedBitTestAndSet((PLONG)&KiFreezeExecutionLock, 0));
 
-    __writefsdword(KPCR_NUMBER, Cpu);
-    __writefsdword(KPCR_SET_MEMBER, 1 << Cpu);
-    __writefsdword(KPCR_SET_MEMBER_COPY, 1 << Cpu);
-    __writefsdword(KPCR_PRCB_SET_MEMBER, 1 << Cpu);
+    __writefsbyte(FIELD_OFFSET(KIPCR, Number), (UCHAR)Cpu);
+    __writefsdword(FIELD_OFFSET(KIPCR, SetMember), 1 << Cpu);
+    __writefsdword(FIELD_OFFSET(KIPCR, SetMemberCopy), 1 << Cpu);
+    __writefsdword(FIELD_OFFSET(KIPCR, PrcbData.SetMember), 1 << Cpu);
 
     KiVerifyCpuFeatures(Pcr->Prcb);
 
     HalInitializeProcessor(Cpu, KeLoaderBlock);
 
-    KeActiveProcessors.Bitmap[0] |= __readfsdword(KPCR_SET_MEMBER);
+    KeActiveProcessors.Bitmap[0] |= __readfsdword(FIELD_OFFSET(KIPCR, SetMember));
     KiSetProcessorCount(KeProcessorCount + 1);
 
     if (!Cpu)

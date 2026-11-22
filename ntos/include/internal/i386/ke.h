@@ -1,5 +1,92 @@
 #pragma once
 
+#define KI_DPC_NORMAL_PROCESSING_REQUESTED 0x00000002L
+#define KI_DPC_NORMAL_DPC_PRESENT          0x00000010L
+#define KI_DPC_THREAD_ACTIVE               0x00010000L
+#define KI_DPC_THREAD_REQUESTED            0x00020000L
+
+#define KI_ARCH_DPC_REQUEST_STATE
+
+FORCEINLINE
+BOOLEAN
+KiIsDpcInterruptRequested(
+    _In_ PKPRCB Prcb)
+{
+    return (Prcb->DpcRequestSummary & KI_DPC_NORMAL_PROCESSING_REQUESTED) != 0;
+}
+
+FORCEINLINE
+VOID
+KiSetDpcInterruptRequested(
+    _Inout_ PKPRCB Prcb)
+{
+    InterlockedOr(&Prcb->DpcRequestSummary, KI_DPC_NORMAL_PROCESSING_REQUESTED);
+}
+
+FORCEINLINE
+VOID
+KiClearDpcInterruptRequested(
+    _Inout_ PKPRCB Prcb)
+{
+    InterlockedAnd(&Prcb->DpcRequestSummary, ~KI_DPC_NORMAL_PROCESSING_REQUESTED);
+}
+
+FORCEINLINE
+VOID
+KiSetDpcPresent(
+    _Inout_ PKPRCB Prcb)
+{
+    InterlockedOr(&Prcb->DpcRequestSummary, KI_DPC_NORMAL_DPC_PRESENT);
+}
+
+FORCEINLINE
+VOID
+KiClearDpcRequestState(
+    _Inout_ PKPRCB Prcb)
+{
+    InterlockedAnd(&Prcb->DpcRequestSummary, ~(KI_DPC_NORMAL_PROCESSING_REQUESTED | KI_DPC_NORMAL_DPC_PRESENT));
+}
+
+FORCEINLINE
+BOOLEAN
+KiIsDpcThreadActive(
+    _In_ PKPRCB Prcb)
+{
+    return (Prcb->DpcRequestSummary & KI_DPC_THREAD_ACTIVE) != 0;
+}
+
+FORCEINLINE
+BOOLEAN
+KiIsDpcThreadRequested(
+    _In_ PKPRCB Prcb)
+{
+    return (Prcb->DpcRequestSummary & KI_DPC_THREAD_REQUESTED) != 0;
+}
+
+FORCEINLINE
+VOID
+KiSetDpcThreadActive(
+    _Inout_ PKPRCB Prcb)
+{
+    InterlockedOr(&Prcb->DpcRequestSummary, KI_DPC_THREAD_ACTIVE);
+}
+
+FORCEINLINE
+VOID
+KiSetDpcThreadRequested(
+    _Inout_ PKPRCB Prcb)
+{
+    InterlockedOr(&Prcb->DpcRequestSummary, KI_DPC_THREAD_REQUESTED);
+}
+
+FORCEINLINE
+VOID
+KiClearDpcThreadState(
+    _Inout_ PKPRCB Prcb)
+{
+    InterlockedAnd(&Prcb->DpcRequestSummary, ~(KI_DPC_THREAD_ACTIVE | KI_DPC_THREAD_REQUESTED));
+}
+
 #define KI_EMULATED_USER_MACHINE 0
 #define KI_EMPTY_YIELD_STALL_NS 700
 #define KiEmulationProcessorArchitecture(Process) KeProcessorArchitecture

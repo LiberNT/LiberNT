@@ -319,11 +319,6 @@ KiSwapContextEntry(
     SwitchFrame->ExceptionList = Pcr->NtTib.ExceptionList;
 
     Pcr->ContextSwitches++;
-    if (Pcr->PerfGlobalGroupMask)
-    {
-        DPRINT1("WMI Tracing not supported\n");
-        ASSERT(FALSE);
-    }
 
     OldThread = (PKTHREAD)(OldThreadAndApcFlag & ~3);
     NewThread = Pcr->PrcbData.CurrentThread;
