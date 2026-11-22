@@ -340,6 +340,10 @@ BOOL
 SETUPAPI_IsTargetOSVersionCompatible(
     IN PCWSTR TargetOSVersion);
 
+VOID
+SETUPAPI_AddPackageRootDevices(
+    IN PCWSTR InfPath);
+
 BOOL
 CreateDeviceInfo(
     IN struct DeviceInfoSet *list,

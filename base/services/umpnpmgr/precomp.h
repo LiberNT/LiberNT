@@ -121,6 +121,10 @@ IsDeviceDoNotInstall(
     _In_ PCWSTR DeviceId);
 
 BOOL
+QueueDeviceInstall(
+    _In_ PCWSTR DeviceId);
+
+BOOL
 SetupIsActive(VOID);
 
 DWORD

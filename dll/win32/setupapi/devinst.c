@@ -7450,6 +7450,85 @@ InstallDeviceComponents(
     return Changed;
 }
 
+/* [DeviceInstall32] AddDevice = <root instance ID>,<flags>,<section with HardwareIds>: Windows 11 creates the device when its package enters the driver store, and PnP installs it */
+VOID
+SETUPAPI_AddPackageRootDevices(
+    IN PCWSTR InfPath)
+{
+    WCHAR InstanceId[MAX_DEVICE_ID_LEN], Section[LINE_LEN];
+    INFCONTEXT Context, IdContext;
+    PWSTR HardwareIds, Out;
+    DEVINST Root, DevInst;
+    DWORD Field, Count;
+    CONFIGRET cr;
+    HINF hInf;
+
+    ASSERT(InfPath != NULL);
+
+    hInf = SetupOpenInfFileW(InfPath, NULL, INF_STYLE_WIN4, NULL);
+    if (hInf == INVALID_HANDLE_VALUE)
+        return;
+
+    if (!SetupFindFirstLineW(hInf, L"DeviceInstall32", L"AddDevice", &Context) ||
+        CM_Locate_DevNodeW(&Root, NULL, CM_LOCATE_DEVNODE_NORMAL) != CR_SUCCESS)
+    {
+        SetupCloseInfFile(hInf);
+        return;
+    }
+
+    do
+    {
+        /* TODO: the flags field of AddDevice */
+        if (!SetupGetStringFieldW(&Context, 1, InstanceId, ARRAYSIZE(InstanceId), NULL) ||
+            !SetupGetStringFieldW(&Context, 3, Section, ARRAYSIZE(Section), NULL) ||
+            strncmpiW(InstanceId, L"ROOT\\", 5) != 0 ||
+            !SetupFindFirstLineW(hInf, Section, L"HardwareIds", &IdContext))
+        {
+            WARN("AddDevice line without a root instance ID and a HardwareIds section in %s\n", debugstr_w(InfPath));
+            continue;
+        }
+
+        if (CM_Locate_DevNodeW(&DevInst, InstanceId, CM_LOCATE_DEVNODE_PHANTOM) == CR_SUCCESS)
+            continue;
+
+        Count = SetupGetFieldCount(&IdContext);
+        HardwareIds = MyMalloc((Count * MAX_DEVICE_ID_LEN + 1) * sizeof(WCHAR));
+        if (!HardwareIds)
+            break;
+
+        Out = HardwareIds;
+        for (Field = 1; Field <= Count; Field++)
+        {
+            if (SetupGetStringFieldW(&IdContext, Field, Out, MAX_DEVICE_ID_LEN, NULL) && Out[0])
+                Out += strlenW(Out) + 1;
+        }
+        *Out++ = UNICODE_NULL;
+        ASSERT(Out <= HardwareIds + Count * MAX_DEVICE_ID_LEN + 1);
+
+        cr = CR_INVALID_DATA;
+        if (Out > HardwareIds + 1)
+            cr = CM_Create_DevNodeW(&DevInst, InstanceId, Root, CM_CREATE_DEVNODE_PHANTOM);
+        if (cr == CR_SUCCESS)
+        {
+            ASSERT(DevInst != 0);
+            cr = CM_Set_DevNode_Registry_PropertyW(DevInst, CM_DRP_HARDWAREID, HardwareIds,
+                                                   (ULONG)((Out - HardwareIds) * sizeof(WCHAR)), 0);
+            if (cr == CR_SUCCESS)
+                cr = CM_Create_DevNodeW(&DevInst, InstanceId, Root, CM_CREATE_DEVNODE_NORMAL);
+            if (cr != CR_SUCCESS)
+                CM_Uninstall_DevNode(DevInst, 0);
+        }
+        if (cr != CR_SUCCESS)
+            WARN("AddDevice %s was not created: %lu\n", debugstr_w(InstanceId), cr);
+        else if ((cr = CM_Reenumerate_DevNode(DevInst, CM_REENUMERATE_RETRY_INSTALLATION)) != CR_SUCCESS)
+            WARN("AddDevice %s was created but not queued for installation: %lu\n", debugstr_w(InstanceId), cr);
+
+        MyFree(HardwareIds);
+    } while (SetupFindNextMatchLineW(&Context, L"AddDevice", &Context));
+
+    SetupCloseInfFile(hInf);
+}
+
 static LPWSTR
 GetDeviceIdList(
     IN HDEVINFO DeviceInfoSet,

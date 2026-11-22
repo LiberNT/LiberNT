@@ -3192,6 +3192,8 @@ static BOOL copy_oem_inf(
             }
         }
 
+        SETUPAPI_AddPackageRootDevices(pFullFileName);
+
         ret = TRUE;
 
 cleanup:
