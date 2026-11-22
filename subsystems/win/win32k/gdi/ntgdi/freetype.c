@@ -1120,7 +1120,7 @@ FreeFontSupport(VOID)
 
     if (g_FreeTypeLibrary)
     {
-        FT_Done_Library(g_FreeTypeLibrary);
+        FT_Done_FreeType(g_FreeTypeLibrary);
         g_FreeTypeLibrary = NULL;
     }
 
