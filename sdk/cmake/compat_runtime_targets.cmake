@@ -261,6 +261,7 @@ set(COMPAT_RUNTIME_MODULES
     rtworkq
     samcli
     samlib
+    sas
     schannel
     scrrun
     sechost
