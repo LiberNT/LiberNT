@@ -199,7 +199,6 @@ IntQueueDesktopDestroy(_In_ PDESKTOP pdesk)
 {
     PDESKTOP_DESTROY_REQUEST Request;
     PUSER_SESSION Session;
-    PTHREADINFO DesktopThread;
 
     if (pdesk->pDeskInfo == NULL ||
         (pdesk->pDeskInfo->spwnd == NULL && pdesk->spwndMessage == NULL))
@@ -214,8 +213,7 @@ IntQueueDesktopDestroy(_In_ PDESKTOP pdesk)
 
     UserEnterExclusive();
     Session = UserFindSession(pdesk->rpwinstaParent->dwSessionId);
-    DesktopThread = Session ? ReadPointerAcquire((PVOID volatile *)&Session->DesktopThread) : NULL;
-    if (DesktopThread == NULL || Session->Ending || (pdesk->dwDTFlags & DF_DYING))
+    if (Session == NULL || Session->DesktopThread == NULL || Session->Ending || (pdesk->dwDTFlags & DF_DYING))
     {
         UserLeave();
         ExFreePoolWithTag(Request, USERTAG_TRACKDESKTOP);
@@ -226,7 +224,7 @@ IntQueueDesktopDestroy(_In_ PDESKTOP pdesk)
     RemoveEntryList(&pdesk->ListEntry);
     Request->Desktop = pdesk;
     InsertTailList(&Session->DesktopsToDestroy, &Request->ListEntry);
-    KeSetEvent(DesktopThread->pEventQueueServer, IO_NO_INCREMENT, FALSE);
+    UserWakeDesktopThread(Session);
     UserLeave();
 }
 
@@ -285,7 +283,7 @@ co_UserEndDesktopThread(_In_ PTHREADINFO pti)
     if (Session == NULL)
         return;
     co_IntDestroyPendingDesktops(Session);
-    WritePointerRelease((PVOID volatile *)&Session->DesktopThread, NULL);
+    UserSetDesktopThread(Session, NULL);
 }
 
 static BOOL
@@ -1575,7 +1573,7 @@ VOID NTAPI DesktopThreadMain(VOID)
     PTHREADINFO pti = PsGetCurrentThreadWin32Thread();
 
     ASSERT(pti->pEventQueueServer != NULL);
-    WritePointerRelease((PVOID volatile *)&Session->DesktopThread, pti);
+    UserSetDesktopThread(Session, pti);
 
     UserEnterExclusive();
 
