@@ -288,7 +288,7 @@ BOOL WINAPI WTSEnumerateServersW(LPWSTR pDomainName, DWORD Reserved, DWORD Versi
 /************************************************************
  *                WTSEnumerateEnumerateSessionsExW  (WTSAPI32.@)
  */
-BOOL WINAPI WTSEnumerateSessionsExW(HANDLE server, DWORD *level, DWORD filter, WTS_SESSION_INFO_1W* info, DWORD *count)
+BOOL WINAPI WTSEnumerateSessionsExW(HANDLE server, DWORD *level, DWORD filter, WTS_SESSION_INFO_1W **info, DWORD *count)
 {
     FIXME("Stub %p %p %ld %p %p\n", server, level, filter, info, count);
     if (count) *count = 0;
@@ -298,7 +298,7 @@ BOOL WINAPI WTSEnumerateSessionsExW(HANDLE server, DWORD *level, DWORD filter, W
 /************************************************************
  *                WTSEnumerateEnumerateSessionsExA  (WTSAPI32.@)
  */
-BOOL WINAPI WTSEnumerateSessionsExA(HANDLE server, DWORD *level, DWORD filter, WTS_SESSION_INFO_1A* info, DWORD *count)
+BOOL WINAPI WTSEnumerateSessionsExA(HANDLE server, DWORD *level, DWORD filter, WTS_SESSION_INFO_1A **info, DWORD *count)
 {
     FIXME("Stub %p %p %ld %p %p\n", server, level, filter, info, count);
     if (count) *count = 0;

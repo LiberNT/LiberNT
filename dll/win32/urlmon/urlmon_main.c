@@ -833,7 +833,7 @@ void WINAPI FlushUrlmonZonesCache(void)
  *            RegisterMediaTypes
  *    Added in IE3, registers known MIME-type strings.
  */
-HRESULT WINAPI RegisterMediaTypes(UINT types, LPCSTR *szTypes, CLIPFORMAT *cfTypes)
+HRESULT WINAPI RegisterMediaTypes(UINT types, const LPCSTR *szTypes, CLIPFORMAT *cfTypes)
 {
    FIXME("stub: %u %p %p\n", types, szTypes, cfTypes);
    return E_INVALIDARG;

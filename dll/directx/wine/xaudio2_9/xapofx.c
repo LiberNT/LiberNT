@@ -34,7 +34,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(xaudio2);
 #endif
 
 #if XAUDIO2_VER >= 8
-HRESULT CDECL CreateFX(REFCLSID clsid, IUnknown **out, void *initdata, UINT32 initdata_bytes)
+HRESULT CDECL CreateFX(REFCLSID clsid, IUnknown **out, const void *initdata, UINT32 initdata_bytes)
 {
     HRESULT hr;
     IUnknown *obj;

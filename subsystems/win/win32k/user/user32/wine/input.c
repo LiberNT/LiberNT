@@ -33,63 +33,6 @@
 #include <winuser.h>
 #include <winbase.h>
 #include <libernt/usertouch.h>
-typedef enum
-{
-    POINTER_FEEDBACK_DEFAULT = 1,
-    POINTER_FEEDBACK_INDIRECT = 2,
-    POINTER_FEEDBACK_NONE = 3,
-} POINTER_FEEDBACK_MODE;
-
-typedef enum ORIENTATION_PREFERENCE {
-    ORIENTATION_PREFERENCE_NONE              = 0x0,
-    ORIENTATION_PREFERENCE_LANDSCAPE         = 0x1,
-    ORIENTATION_PREFERENCE_PORTRAIT          = 0x2,
-    ORIENTATION_PREFERENCE_LANDSCAPE_FLIPPED = 0x4,
-    ORIENTATION_PREFERENCE_PORTRAIT_FLIPPED  = 0x8
-} ORIENTATION_PREFERENCE;
-
-/* Touch input definitions */
-DECLARE_HANDLE(HTOUCHINPUT);
-
-
-typedef struct tagTOUCHINPUT {
-    LONG      x;
-    LONG      y;
-    HANDLE    hSource;
-    DWORD     dwID;
-    DWORD     dwFlags;
-    DWORD     dwMask;
-    DWORD     dwTime;
-    ULONG_PTR dwExtraInfo;
-    DWORD     cxContact;
-    DWORD     cyContact;
-} TOUCHINPUT, *PTOUCHINPUT;
-typedef TOUCHINPUT const * PCTOUCHINPUT;
-
-DECLARE_HANDLE(HGESTUREINFO);
-
-#define GF_BEGIN    0x00000001
-#define GF_INERTIA  0x00000002
-#define GF_END      0x00000004
-
-typedef struct tagGESTURECONFIG {
-    DWORD dwID;
-    DWORD dwWant;
-    DWORD dwBlock;
-} GESTURECONFIG, *PGESTURECONFIG;
-
-typedef struct tagGESTUREINFO {
-    UINT      cbSize;
-    DWORD     dwFlags;
-    DWORD     dwID;
-    HWND      hwndTarget;
-    POINTS    ptsLocation;
-    DWORD     dwInstanceID;
-    DWORD     dwSequenceID;
-    ULONGLONG ullArguments;
-    UINT      cbExtraArgs;
-} GESTUREINFO, *PGESTUREINFO;
-typedef GESTUREINFO const * PCGESTUREINFO;
 
 
 #else

@@ -1499,7 +1499,7 @@ static const IShellImageDataFactoryVtbl ShellImageDataFactoryVtbl =
     ShellImageDataFactory_GetDataFormatFromPath,
 };
 
-static IShellImageDataFactory ShellImageDataFactory = { &ShellImageDataFactoryVtbl };
+static IShellImageDataFactory ShellImageDataFactoryObject = { &ShellImageDataFactoryVtbl };
 
 HRESULT WINAPI ShellImageDataFactory_Constructor(IUnknown *outer, REFIID riid, void **obj)
 {
@@ -1508,7 +1508,7 @@ HRESULT WINAPI ShellImageDataFactory_Constructor(IUnknown *outer, REFIID riid, v
     if (outer)
         return CLASS_E_NOAGGREGATION;
 
-    return IShellImageDataFactory_QueryInterface(&ShellImageDataFactory, riid, obj);
+    return IShellImageDataFactory_QueryInterface(&ShellImageDataFactoryObject, riid, obj);
 }
 
 #ifdef __REACTOS__

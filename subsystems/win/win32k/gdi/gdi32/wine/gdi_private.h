@@ -88,7 +88,8 @@ typedef struct tagEMRESCAPE {
         INT iEsc;
         INT cjIn;
         BYTE Data[1];
-} EMRESCAPE, *PEMRESCAPE, EMRNAMEDESCAPE, *PEMRNAMEDESCAPE;
+} EMRESCAPE, *PEMRESCAPE;
+/* FIXME: EMR_NAMEDESCAPE records use this EMRESCAPE layout, not Windows' EMRNAMEDESCAPE (iEscape, cbDriver, cbEscData) */
 
 INT WINAPI NamedEscape(HDC,PWCHAR,INT,INT,LPSTR,INT,LPSTR);
 

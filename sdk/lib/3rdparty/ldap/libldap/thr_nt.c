@@ -18,8 +18,10 @@
 
 #if defined( HAVE_NT_THREADS )
 
+#if !defined(_WIN32_WINNT) || (_WIN32_WINNT < 0x0400)
 #undef _WIN32_WINNT
 #define _WIN32_WINNT 0x0400
+#endif
 #include <windows.h>
 #include <process.h>
 
