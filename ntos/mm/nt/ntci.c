@@ -81,11 +81,12 @@ MiCiReadFile(void *Context, uint64_t Offset, void *Buffer, size_t Length)
     return 1;
 }
 
+static
 NTSTATUS
-MiValidateImageSigningPolicy(
-    _In_ PFILE_OBJECT FileObject)
+MiVerifyImageSigning(
+    _In_ PFILE_OBJECT FileObject,
+    _Out_ PBOOLEAN VerifiedOut)
 {
-    ULONG Policy = PsGetProcessMitigationPolicyFlags(PsGetCurrentProcess(), PSP_SIGNATURE_POLICY);
     MI_CI_FILE File = { FileObject, NULL, STATUS_SUCCESS };
     SIZE_T Low = 0, High = RTL_NUMBER_OF(MiSystemImageCatalog), Middle;
     LARGE_INTEGER Size, Time;
@@ -95,8 +96,7 @@ MiValidateImageSigningPolicy(
 
     PAGED_CODE();
 
-    if (!(Policy & 9) || ExGetPreviousMode() != UserMode)
-        return STATUS_SUCCESS;
+    *VerifiedOut = FALSE;
 
     Status = FsRtlGetFileSize(FileObject, &Size);
     if (!NT_SUCCESS(Status))
@@ -149,7 +149,39 @@ MiValidateImageSigningPolicy(
     if (!NT_SUCCESS(File.Status))
         return File.Status;
 
-    if (Verified)
+    *VerifiedOut = Verified;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+MiValidateImageSigningPolicy(
+    _In_ PFILE_OBJECT FileObject,
+    _Inout_ PLONG SigningState)
+{
+    ULONG Policy = PsGetProcessMitigationPolicyFlags(PsGetCurrentProcess(), PSP_SIGNATURE_POLICY);
+    BOOLEAN Verified;
+    NTSTATUS Status;
+    LONG State;
+
+    PAGED_CODE();
+
+    if (!(Policy & 9) || ExGetPreviousMode() != UserMode)
+        return STATUS_SUCCESS;
+
+    State = InterlockedCompareExchange(SigningState, MI_IMAGE_SIGNING_UNKNOWN, MI_IMAGE_SIGNING_UNKNOWN);
+    if (State == MI_IMAGE_SIGNING_UNKNOWN)
+    {
+        Status = MiVerifyImageSigning(FileObject, &Verified);
+        if (!NT_SUCCESS(Status))
+            return Status;
+
+        State = Verified ? MI_IMAGE_SIGNING_VERIFIED : MI_IMAGE_SIGNING_UNVERIFIED;
+        InterlockedCompareExchange(SigningState, State, MI_IMAGE_SIGNING_UNKNOWN);
+    }
+
+    ASSERT(State == MI_IMAGE_SIGNING_VERIFIED || State == MI_IMAGE_SIGNING_UNVERIFIED);
+
+    if (State == MI_IMAGE_SIGNING_VERIFIED)
         return STATUS_SUCCESS;
 
     return (Policy & 1) ? STATUS_INVALID_IMAGE_HASH : STATUS_SUCCESS;
