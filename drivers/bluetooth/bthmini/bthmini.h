@@ -189,9 +189,7 @@ typedef struct _BTHMINI_GATT_READ_VALUE
 #define L2CAP_MAX_FRAME                 0xFFFF
 
 #define LMP_FEATURE(Features, Byte, Bit)    (((Features) >> ((Byte) * 8 + (Bit))) & 1)
-#define LMP_LE_SUPPORTED(Features)          LMP_FEATURE(Features, 4, 6)
 #define LMP_SSP_SUPPORTED(Features)         LMP_FEATURE(Features, 6, 3)
-#define LMP_EXTENDED_FEATURES(Features)     LMP_FEATURE(Features, 7, 7)
 #define LMP_SC_CONTROLLER(Page2)            LMP_FEATURE(Page2, 1, 0)
 
 typedef struct _BTHMINI_RX_PACKET

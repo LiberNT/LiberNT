@@ -93,15 +93,16 @@ TdiMapUserRequest (
 /*
  * @unimplemented
  */
-VOID
+NTSTATUS
 NTAPI
 TdiOpenNetbiosAddress (
-	ULONG   Unknown0,
-	ULONG   Unknown1,
-	ULONG   Unknown2,
-	ULONG   Unknown3
+	PHANDLE FileHandle,
+	PUCHAR  Buffer,
+	PVOID   DeviceName,
+	PVOID   Name
 	)
 {
+	return STATUS_NOT_IMPLEMENTED;
 }
 
 

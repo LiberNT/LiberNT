@@ -12,7 +12,7 @@
 #define NDEBUG
 #include <debug.h>
 
-typedef PVOID PSECURITY_PACKAGE_OPTIONS, PSecurityUserData;
+typedef PVOID PSECURITY_PACKAGE_OPTIONS;
 
 /* FUNCTIONS ******************************************************************/
 
@@ -262,11 +262,13 @@ MakeSignature(
     return 0;
 }
 
-VOID
+NTSTATUS
 SEC_ENTRY
-MapSecurityError(VOID)
+MapSecurityError(
+    _In_ SECURITY_STATUS SecStatus)
 {
     UNIMPLEMENTED_DBGBREAK();
+    return STATUS_NOT_IMPLEMENTED;
 }
 
 SECURITY_STATUS

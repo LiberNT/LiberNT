@@ -34,7 +34,7 @@ Revision History:
 //
 #define NT_PROCESSOR_GROUPS 1
 
-#define WDF_VIOLATION                    ((ULONG)0x0000010DL)
+#include <bugcodes.h>
 
 #if (FX_CORE_MODE == FX_CORE_USER_MODE)
 #include "mxum.h"

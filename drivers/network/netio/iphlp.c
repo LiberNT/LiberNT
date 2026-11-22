@@ -580,7 +580,7 @@ NTSTATUS
 NTAPI
 SetInterfaceDnsSettings(
     _In_ GUID Interface,
-    _In_ CONST VOID *Settings)
+    _In_ const DNS_INTERFACE_SETTINGS *Settings)
 {
     UNREFERENCED_PARAMETER(Interface);
 
