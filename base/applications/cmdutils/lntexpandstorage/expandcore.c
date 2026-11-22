@@ -1015,6 +1015,27 @@ GptApplyPlan(EXPAND_DEVICE* Device, const EXPAND_PLAN* Plan)
     {
         return EXPAND_IO_ERROR;
     }
+
+    /* The protective MBR entry spans the disk after LBA 0, capped at 32 bits (UEFI). */
+    if (ReadMbr(Device, Sector) == EXPAND_OK)
+    {
+        uint32_t Count = DiskSectors - 1 > 0xFFFFFFFFu ? 0xFFFFFFFFu : (uint32_t)(DiskSectors - 1);
+        uint32_t Index;
+
+        for (Index = 0; Index < 4; Index++)
+        {
+            MBR_ENTRY Protective;
+
+            memcpy(&Protective, Sector + 446 + Index * sizeof(MBR_ENTRY), sizeof(Protective));
+            if (Protective.Type != 0xEE || Protective.StartLba != 1 || Protective.SectorCount == Count)
+                continue;
+            Protective.SectorCount = Count;
+            memcpy(Sector + 446 + Index * sizeof(MBR_ENTRY), &Protective, sizeof(Protective));
+            if (!Device->Write(Device->Context, 0, Device->SectorSize, Sector))
+                return EXPAND_IO_ERROR;
+            break;
+        }
+    }
     memset(Sector, 0, Device->SectorSize);
     memcpy(Sector, &Primary, sizeof(Primary));
     if (!Device->Write(Device->Context, 1 * Device->SectorSize,
