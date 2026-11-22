@@ -103,14 +103,12 @@ bool ParseCode(const std::string &value, DWORD &code)
 bool ParseReturnCode(const std::string &value, DWORD &code)
 {
     const std::string owned = Trim(value);
+    DWORD magnitude = 0;
     if (owned.empty() || owned[0] != '-')
         return ParseCode(owned, code);
-    errno = 0;
-    char *end = nullptr;
-    const long long parsed = std::strtoll(owned.c_str(), &end, 0);
-    if (errno == ERANGE || !end || *end || parsed < std::numeric_limits<LONG>::min())
+    if (!ParseCode(owned.substr(1), magnitude) || magnitude > 0x80000000UL)
         return false;
-    code = static_cast<DWORD>(static_cast<LONG>(parsed));
+    code = 0UL - magnitude;
     return true;
 }
 
