@@ -233,18 +233,7 @@ UDPIsBroadcastAddress(
 }
 
 #define UDP_MAX_SEND_MSG_SIZE (0xFFFF - sizeof(IPv4_HEADER) - sizeof(UDP_HEADER))
-
-typedef struct _UDP_SEND_CONTROL
-{
-    BOOLEAN PktInfo;
-    BOOLEAN HopLimit;
-    BOOLEAN SendMsgSizeSet;
-    UCHAR Ttl;
-    UCHAR Ecn;
-    IP_ADDRESS Source;
-    ULONG InterfaceIndex;
-    ULONG SendMsgSize;
-} UDP_SEND_CONTROL, *PUDP_SEND_CONTROL;
+#define UDP_MAX_SEND_MSG_SIZE6 (0xFFFF - sizeof(UDP_HEADER))
 
 static NTSTATUS UDPReadControlInt(
     const TDI_CMSGHDR *Header,
@@ -261,22 +250,27 @@ static NTSTATUS UDPReadControlInt(
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS UDPParseSendControl(
+NTSTATUS UDPParseSendControl(
     PTDI_CONNECTION_INFORMATION ConnInfo,
     BOOLEAN IgnorePktInfo,
+    BOOLEAN Ipv6,
     PUDP_SEND_CONTROL Control)
 {
     const UCHAR *Buffer = ConnInfo->Options;
     const TDI_CMSGHDR *Header, *SendMsgSize = NULL;
-    ULONG Length, Offset, DataLength, Space;
-    ULONG PktInfo[2];
+    ULONG Length, Offset, DataLength, Space, PktInfoLength;
+    LONG Level = Ipv6 ? WS_IPPROTO_IPV6 : WS_IPPROTO_IP;
     NTSTATUS Status;
     LONG Value;
+
+    C_ASSERT(WS_IP_PKTINFO == WS_IPV6_PKTINFO && WS_IP_HOPLIMIT == WS_IPV6_HOPLIMIT);
+    C_ASSERT(WS_IP_ECN == WS_IPV6_ECN && WS_IP_DONTFRAGMENT == WS_IPV6_DONTFRAG);
 
     RtlZeroMemory(Control, sizeof(*Control));
     if (!Buffer || ConnInfo->OptionsLength <= 0)
         return STATUS_SUCCESS;
 
+    PktInfoLength = Ipv6 ? sizeof(IPv6_RAW_ADDRESS) + sizeof(ULONG) : 2 * sizeof(ULONG);
     Length = (ULONG)ConnInfo->OptionsLength;
     for (Offset = 0; Length - Offset >= sizeof(TDI_CMSGHDR); Offset += Space)
     {
@@ -290,19 +284,27 @@ static NTSTATUS UDPParseSendControl(
         DataLength = (ULONG)(Header->cmsg_len - TDI_CMSG_LEN(0));
         Status = STATUS_SUCCESS;
 
-        if (Header->cmsg_level == WS_IPPROTO_IP && Header->cmsg_type == WS_IP_PKTINFO)
+        if (Header->cmsg_level == Level && Header->cmsg_type == WS_IP_PKTINFO)
         {
             if (!Control->PktInfo && !IgnorePktInfo)
             {
-                if (DataLength < sizeof(PktInfo))
+                if (DataLength < PktInfoLength)
                     return STATUS_INVALID_PARAMETER;
-                RtlCopyMemory(PktInfo, TDI_CMSG_DATA(Header), sizeof(PktInfo));
-                AddrInitIPv4(&Control->Source, PktInfo[0]);
-                Control->InterfaceIndex = PktInfo[1];
+                if (Ipv6)
+                {
+                    Control->Source.Type = IP_ADDRESS_V6;
+                    RtlCopyMemory(Control->Source.Address.IPv6Address, TDI_CMSG_DATA(Header), sizeof(IPv6_RAW_ADDRESS));
+                }
+                else
+                {
+                    RtlCopyMemory(&Value, TDI_CMSG_DATA(Header), sizeof(Value));
+                    AddrInitIPv4(&Control->Source, (ULONG)Value);
+                }
+                RtlCopyMemory(&Control->InterfaceIndex, TDI_CMSG_DATA(Header) + PktInfoLength - sizeof(ULONG), sizeof(ULONG));
                 Control->PktInfo = TRUE;
             }
         }
-        else if (Header->cmsg_level == WS_IPPROTO_IP && Header->cmsg_type == WS_IP_HOPLIMIT)
+        else if (Header->cmsg_level == Level && Header->cmsg_type == WS_IP_HOPLIMIT)
         {
             if (!Control->HopLimit)
             {
@@ -311,12 +313,18 @@ static NTSTATUS UDPParseSendControl(
                 Control->HopLimit = TRUE;
             }
         }
-        else if (Header->cmsg_level == WS_IPPROTO_IP && Header->cmsg_type == WS_IP_ECN)
+        else if (Header->cmsg_level == Level && Header->cmsg_type == WS_IP_ECN)
         {
             Status = UDPReadControlInt(Header, DataLength, 0, 2, &Value);
             Control->Ecn = (UCHAR)Value;
         }
-        else if (Header->cmsg_level == WS_IPPROTO_IP && Header->cmsg_type == WS_IP_TOS)
+        else if (Header->cmsg_level == Level && Header->cmsg_type == WS_IP_DONTFRAGMENT)
+        {
+            Status = UDPReadControlInt(Header, DataLength, MINLONG, MAXLONG, &Value);
+            Control->DontFragment = (Value != 0);
+            Control->DontFragmentSet = TRUE;
+        }
+        else if (!Ipv6 && Header->cmsg_level == WS_IPPROTO_IP && Header->cmsg_type == WS_IP_TOS)
         {
             Status = UDPReadControlInt(Header, DataLength, MINLONG, MAXLONG, &Value);
         }
@@ -338,12 +346,13 @@ static NTSTATUS UDPParseSendControl(
         if (SendMsgSize->cmsg_len != TDI_CMSG_LEN(sizeof(ULONG)))
             return STATUS_INVALID_PARAMETER;
         RtlCopyMemory(&Control->SendMsgSize, TDI_CMSG_DATA(SendMsgSize), sizeof(ULONG));
-        if (Control->SendMsgSize > UDP_MAX_SEND_MSG_SIZE)
+        if (Control->SendMsgSize > (Ipv6 ? UDP_MAX_SEND_MSG_SIZE6 : UDP_MAX_SEND_MSG_SIZE))
             return STATUS_INVALID_PARAMETER;
         Control->SendMsgSizeSet = TRUE;
     }
 
     ASSERT(Control->Ecn <= 2);
+    ASSERT(!Control->PktInfo || Control->Source.Type == (Ipv6 ? IP_ADDRESS_V6 : IP_ADDRESS_V4));
     return STATUS_SUCCESS;
 }
 
@@ -380,94 +389,167 @@ static BOOLEAN UDPIsHeldNonUnicast(
     return FALSE;
 }
 
-static NTSTATUS UDPRoutePktInfo(
+static NTSTATUS UDPLocatePktInfoInterface(
     const UDP_SEND_CONTROL *Control,
-    PIP_ADDRESS RemoteAddress,
-    PIP_ADDRESS LocalAddress,
-    PNEIGHBOR_CACHE_ENTRY *Route)
+    PIP_INTERFACE *Interface)
 {
     IP_ADDRESS Source = Control->Source;
-    PIP_INTERFACE Interface = NULL, Owner;
-    PNEIGHBOR_CACHE_ENTRY NCE;
     BOOLEAN Unspecified = (Source.Address.IPv4Address == 0);
+    PIP_INTERFACE Located;
 
     ASSERT(Control->PktInfo);
     ASSERT(Source.Type == IP_ADDRESS_V4);
 
+    *Interface = NULL;
     if (Control->InterfaceIndex)
     {
-        Interface = IPLocateInterfaceByIndex(Control->InterfaceIndex);
-        if (!Interface)
+        Located = IPLocateInterfaceByIndex(Control->InterfaceIndex);
+        if (!Located)
             return STATUS_INVALID_PARAMETER;
-        if (!Unspecified && !IsInterfaceAddress(Interface, &Source))
+        if (!Unspecified && !IsInterfaceAddress(Located, &Source))
         {
-            IPDereferenceInterface(Interface);
+            IPDereferenceInterface(Located);
             return STATUS_INVALID_ADDRESS;
         }
     }
     else if (!Unspecified)
     {
-        Interface = IPLocateUnicastInterface(&Source);
-        if (!Interface)
+        Located = IPLocateUnicastInterface(&Source);
+        if (!Located)
             return UDPIsHeldNonUnicast(&Source) ? STATUS_INVALID_ADDRESS : STATUS_INVALID_PARAMETER;
     }
-
-    NCE = RouteGetRouteToDestination(RemoteAddress);
-    if (!Interface)
+    else
     {
+        return STATUS_SUCCESS;
+    }
+
+    *Interface = Located;
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS UDPRoutePktInfoOnInterface(
+    const UDP_SEND_CONTROL *Control,
+    ULONG MulticastSelector,
+    PIP_ADDRESS RemoteAddress,
+    BOOLEAN IsMulticast,
+    BOOLEAN IsBroadcast,
+    PIP_INTERFACE Interface,
+    PNEIGHBOR_CACHE_ENTRY *Route)
+{
+    PIP_INTERFACE Selected;
+    PNEIGHBOR_CACHE_ENTRY NCE;
+
+    ASSERT(!(IsMulticast && IsBroadcast));
+
+    if (IsMulticast)
+    {
+        if (!Control->InterfaceIndex && MulticastSelector)
+        {
+            Selected = GetMulticastInterface(MulticastSelector);
+            if (Selected)
+                IPDereferenceInterface(Selected);
+            if (Selected != Interface)
+                return STATUS_INVALID_ADDRESS;
+        }
+        NCE = RouteGetMulticastRouteOnInterface(RemoteAddress, Interface);
         if (!NCE)
             return STATUS_NETWORK_UNREACHABLE;
-        *LocalAddress = Source;
         *Route = NCE;
         return STATUS_SUCCESS;
     }
 
-    if (!NCE)
+    if (IsBroadcast)
     {
-        IPDereferenceInterface(Interface);
-        return STATUS_INVALID_ADDRESS;
+        NCE = RouteGetRouteOnInterface(RemoteAddress, Interface);
+        if (!NCE)
+            return STATUS_NETWORK_UNREACHABLE;
+        *Route = NCE;
+        return STATUS_SUCCESS;
     }
+
+    NCE = RouteGetRouteToDestination(RemoteAddress);
+    if (!NCE)
+        return STATUS_INVALID_ADDRESS;
 
     if (UDPIsLoopbackAddress(RemoteAddress) != (Interface == Loopback))
     {
         NBDereferenceNeighbor(NCE);
-        IPDereferenceInterface(Interface);
         return Interface == Loopback ? STATUS_NETWORK_UNREACHABLE : STATUS_INVALID_ADDRESS;
     }
 
     if (Interface != Loopback && NCE->Interface != Interface)
     {
-        Owner = IPLocateUnicastInterface(RemoteAddress);
-        if (Owner)
-        {
-            IPDereferenceInterface(Owner);
-        }
-        else
+        Selected = IPLocateUnicastInterface(RemoteAddress);
+        if (Selected)
+            IPDereferenceInterface(Selected);
+        if (Selected != Interface)
         {
             NBDereferenceNeighbor(NCE);
-            /* FIXME: the error for a source whose interface has no route while another interface has one is unverified on Windows 11 */
             NCE = RouteGetRouteOnInterface(RemoteAddress, Interface);
             if (!NCE)
-            {
-                IPDereferenceInterface(Interface);
                 return STATUS_NETWORK_UNREACHABLE;
-            }
         }
     }
 
-    IPDereferenceInterface(Interface);
-    *LocalAddress = Source;
+    *Route = NCE;
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS UDPRoutePktInfo(
+    const UDP_SEND_CONTROL *Control,
+    ULONG MulticastSelector,
+    PIP_ADDRESS RemoteAddress,
+    BOOLEAN IsMulticast,
+    BOOLEAN IsBroadcast,
+    PIP_ADDRESS LocalAddress,
+    PNEIGHBOR_CACHE_ENTRY *Route)
+{
+    PIP_INTERFACE Interface;
+    PNEIGHBOR_CACHE_ENTRY NCE;
+    NTSTATUS Status;
+
+    Status = UDPLocatePktInfoInterface(Control, &Interface);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (Interface)
+    {
+        Status = UDPRoutePktInfoOnInterface(Control, MulticastSelector, RemoteAddress,
+                                            IsMulticast, IsBroadcast, Interface, &NCE);
+        IPDereferenceInterface(Interface);
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
+    else
+    {
+        ASSERT(Control->Source.Address.IPv4Address == 0 && Control->InterfaceIndex == 0);
+        if (IsMulticast)
+            NCE = RouteGetMulticastRoute(RemoteAddress, MulticastSelector);
+        else
+            NCE = RouteGetRouteToDestination(RemoteAddress);
+        if (!NCE)
+            return STATUS_NETWORK_UNREACHABLE;
+    }
+
+    ASSERT(NCE != NULL);
+    *LocalAddress = Control->Source;
     *Route = NCE;
     return STATUS_SUCCESS;
 }
 
 static VOID UDPApplySendControl(
     PIP_PACKET Packet,
-    const UDP_SEND_CONTROL *Control)
+    const UDP_SEND_CONTROL *Control,
+    BOOLEAN DontFragment)
 {
     PIPv4_HEADER Header = (PIPv4_HEADER)Packet->Header;
 
     ASSERT(Packet->Type == IP_ADDRESS_V4);
+    ASSERT(Header->FlagsFragOfs == 0);
+    if (DontFragment)
+        Header->FlagsFragOfs = WH2N(IPv4_DF_MASK);
+    if (!Control)
+        return;
     ASSERT(Control->Ecn <= 2);
     if (Control->HopLimit)
         Header->Ttl = Control->Ttl;
@@ -492,17 +574,25 @@ static NTSTATUS UDPSendToAddress(
     PNEIGHBOR_CACHE_ENTRY LoopNCE = NULL;
     BOOLEAN IsBroadcast;
     BOOLEAN IsMulticast;
+    BOOLEAN DontFragment;
 
     IsBroadcast = UDPIsBroadcastAddress(&RemoteAddress);
     IsMulticast = ((DN2H(RemoteAddress.Address.IPv4Address) & 0xf0000000) == 0xe0000000);
 
     LockObject(AddrFile);
 
+    DontFragment = (Control && Control->DontFragmentSet) ? Control->DontFragment : (AddrFile->DF != 0);
     LocalAddress = AddrFile->Address;
-    /* TODO: IP_PKTINFO on multicast and broadcast destinations; the socket's interface selection applies */
-    if (Control && Control->PktInfo && AddrIsUnspecified(&LocalAddress) && !IsMulticast && !IsBroadcast)
+    if (LocalAddress.Type == IP_ADDRESS_V6)
     {
-        Status = UDPRoutePktInfo(Control, &RemoteAddress, &LocalAddress, &NCE);
+        ASSERT(AddrFile->DualStack);
+        ASSERT(AddrIsUnspecified(&LocalAddress));
+        AddrInitIPv4(&LocalAddress, 0);
+    }
+    if (Control && Control->PktInfo && AddrIsUnspecified(&LocalAddress))
+    {
+        Status = UDPRoutePktInfo(Control, AddrFile->MulticastInterface, &RemoteAddress,
+                                 IsMulticast, IsBroadcast, &LocalAddress, &NCE);
         if (!NT_SUCCESS(Status))
         {
             UnlockObject(AddrFile);
@@ -565,6 +655,13 @@ static NTSTATUS UDPSendToAddress(
         }
     }
 
+    if (DontFragment && sizeof(IPv4_HEADER) + sizeof(UDP_HEADER) + DataSize > NCE->Interface->MTU)
+    {
+        UnlockObject(AddrFile);
+        NBDereferenceNeighbor(NCE);
+        return STATUS_BUFFER_OVERFLOW;
+    }
+
     LocalPort = AddrFile->Port;
     UnlockObject(AddrFile);
 
@@ -621,12 +718,9 @@ static NTSTATUS UDPSendToAddress(
 	return Status;
     }
 
-    if (Control)
-    {
-        UDPApplySendControl(&Packet, Control);
-        if (LoopNCE != NULL)
-            UDPApplySendControl(&LoopPacket, Control);
-    }
+    UDPApplySendControl(&Packet, Control, DontFragment);
+    if (LoopNCE != NULL)
+        UDPApplySendControl(&LoopPacket, Control, DontFragment);
 
     Packet.WfpTag = *Tag;
     Status = IPSendDatagram(&Packet, NCE);
@@ -695,13 +789,15 @@ NTSTATUS UDPSendDatagram(
 		return STATUS_UNSUCCESSFUL;
     }
 
-    Status = UDPParseSendControl(ConnInfo, !AddrIsUnspecified(&AddrFile->Address), &Control);
+    Status = UDPParseSendControl(ConnInfo, !AddrIsUnspecified(&AddrFile->Address), FALSE, &Control);
     if (!NT_SUCCESS(Status))
         return Status;
 
     SendMsgSize = Control.SendMsgSizeSet ? Control.SendMsgSize : AddrFile->SendMsgSize;
     if (SendMsgSize == 0 || SendMsgSize >= DataSize)
         SendMsgSize = DataSize;
+    if (SendMsgSize > UDP_MAX_SEND_MSG_SIZE)
+        return STATUS_BUFFER_OVERFLOW;
 
     Offset = 0;
     do

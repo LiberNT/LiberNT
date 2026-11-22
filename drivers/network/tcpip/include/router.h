@@ -38,6 +38,7 @@ struct _IP4_ROUTE_INFO;
 NTSTATUS RouterQueryRouteV4(struct _IP4_ROUTE_INFO *Info);
 NTSTATUS RouterSetRouteV4(struct _IP4_ROUTE_INFO *Info);
 PNEIGHBOR_CACHE_ENTRY RouteGetMulticastRoute(PIP_ADDRESS Destination, ULONG Selector);
+PNEIGHBOR_CACHE_ENTRY RouteGetMulticastRouteOnInterface(PIP_ADDRESS Destination, PIP_INTERFACE Interface);
 PNEIGHBOR_CACHE_ENTRY RouteGetRouteOnInterface(PIP_ADDRESS Destination, PIP_INTERFACE Interface);
 
 NTSTATUS RouterRemoveRoute(PIP_ADDRESS Target, PIP_ADDRESS Router);

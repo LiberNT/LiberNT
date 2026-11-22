@@ -43,6 +43,26 @@ VOID UDPSend(
   PVOID Context,
   PDATAGRAM_SEND_REQUEST SendRequest);
 
+typedef struct _UDP_SEND_CONTROL
+{
+    BOOLEAN PktInfo;
+    BOOLEAN HopLimit;
+    BOOLEAN SendMsgSizeSet;
+    BOOLEAN DontFragmentSet;
+    BOOLEAN DontFragment;
+    UCHAR Ttl;
+    UCHAR Ecn;
+    IP_ADDRESS Source;
+    ULONG InterfaceIndex;
+    ULONG SendMsgSize;
+} UDP_SEND_CONTROL, *PUDP_SEND_CONTROL;
+
+NTSTATUS UDPParseSendControl(
+    PTDI_CONNECTION_INFORMATION ConnInfo,
+    BOOLEAN IgnorePktInfo,
+    BOOLEAN Ipv6,
+    PUDP_SEND_CONTROL Control);
+
 NTSTATUS UDPSendDatagram(
     PADDRESS_FILE AddrFile,
     PTDI_CONNECTION_INFORMATION ConnInfo,

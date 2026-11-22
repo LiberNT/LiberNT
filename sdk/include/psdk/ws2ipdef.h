@@ -118,6 +118,8 @@ extern "C" {
 #define IPV6_RECVRTHDR        38
 #define IPV6_TCLASS           39
 #define IPV6_RECVTCLASS       40
+#define IPV6_ECN              50
+#define IPV6_RECVECN          50
 
 #define UDP_SEND_MSG_SIZE           2
 #define UDP_RECV_MAX_COALESCED_SIZE 3
