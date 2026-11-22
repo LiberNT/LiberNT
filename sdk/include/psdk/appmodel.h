@@ -324,6 +324,8 @@ LONG WINAPI GetCurrentApplicationUserModelId(UINT32 *applicationUserModelIdLengt
 LONG WINAPI ParseApplicationUserModelId(PCWSTR applicationUserModelId, UINT32 *packageFamilyNameLength, PWSTR packageFamilyName, UINT32 *packageRelativeApplicationIdLength, PWSTR packageRelativeApplicationId);
 
 /* TODO: LiberNT does not implement the functions below yet */
+typedef struct PACKAGEDEPENDENCY_CONTEXT__ *PACKAGEDEPENDENCY_CONTEXT;
+
 HRESULT AddPackageDependency(PCWSTR packageDependencyId, INT32 rank, AddPackageDependencyOptions options, PACKAGEDEPENDENCY_CONTEXT *packageDependencyContext, PWSTR *packageFullName);
 HRESULT AddPackageDependency2(PCWSTR packageDependencyId, INT32 rank, AddPackageDependencyOptions2 options, PACKAGEDEPENDENCY_CONTEXT *packageDependencyContext, PWSTR *packageFullName);
 LONG AppPolicyGetClrCompat(HANDLE processToken, AppPolicyClrCompat *policy);
@@ -337,6 +339,8 @@ LONG GetApplicationUserModelId(HANDLE hProcess, UINT32 *applicationUserModelIdLe
 LONG GetCurrentPackageInfo2(const UINT32 flags, PackagePathType packagePathType, UINT32 *bufferLength, BYTE *buffer, UINT32 *count);
 LONG GetCurrentPackagePath2(PackagePathType packagePathType, UINT32 *pathLength, PWSTR path);
 HRESULT GetIdForPackageDependencyContext(PACKAGEDEPENDENCY_CONTEXT packageDependencyContext, PWSTR *packageDependencyId);
+typedef struct _PACKAGE_INFO_REFERENCE *PACKAGE_INFO_REFERENCE;
+
 LONG GetPackageApplicationIds(PACKAGE_INFO_REFERENCE packageInfoReference, UINT32 *bufferLength, BYTE *buffer, UINT32 *count);
 HRESULT GetPackageDependencyInformation(PCWSTR packageDependencyId, PSID *user, PWSTR *packageFamilyName, PACKAGE_VERSION *minVersion, PackageDependencyProcessorArchitectures *packageDependencyProcessorArchitectures, PackageDependencyLifetimeKind *lifetimeKind, PWSTR *lifetimeArtifact, CreatePackageDependencyOptions *options, FILETIME *lifetimeExpiration);
 UINT32 GetPackageGraphRevisionId(void);

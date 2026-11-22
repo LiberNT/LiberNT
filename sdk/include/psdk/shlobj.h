@@ -3152,6 +3152,8 @@ typedef struct IShellFolderBandVtbl IShellFolderBandVtbl;
 typedef struct IThumbnailCaptureVtbl IThumbnailCaptureVtbl;
 
 #pragma pack(push, 1)
+#pragma pack(push, 1)
+#pragma pack(push, 1)
 struct IThumbnailCapture
 {
     struct IThumbnailCaptureVtbl *lpVtbl;
@@ -3181,6 +3183,8 @@ extern "C" {
 BOOL WINAPI ImportPrivacySettings(PCWSTR pszFilename, BOOL *pfParsePrivacyPreferences, BOOL *pfParsePerSiteRules);
 
 /* TODO: LiberNT does not implement the functions below yet */
+typedef struct IEnumPrivacyRecords IEnumPrivacyRecords;
+
 HRESULT DoPrivacyDlg(HWND hwndOwner, PCWSTR pszUrl, IEnumPrivacyRecords *pPrivacyEnum, BOOL fReportAllSites);
 void PerUserInit(void);
 DWORD SoftwareUpdateMessageBox(HWND hWnd, PCWSTR pszDistUnit, DWORD dwFlags, LPSOFTDISTINFO psdi);

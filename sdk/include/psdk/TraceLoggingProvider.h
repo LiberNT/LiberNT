@@ -231,6 +231,8 @@ struct _tlgEventMetadata_t
 };
 #pragma pack(pop)
 
+typedef PETWENABLECALLBACK TLG_PENABLECALLBACK;
+
 struct _tlgProvider_t
 {
     UINT32 LevelPlus1;

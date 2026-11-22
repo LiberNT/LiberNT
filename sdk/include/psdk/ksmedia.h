@@ -4889,6 +4889,8 @@ struct KSAUDIO_MIX_CAPS
     };
 };
 
+typedef struct KSAUDIO_MIX_CAPS KSAUDIO_MIX_CAPS;
+
 struct KSAUDIO_MIXCAP_TABLE
 {
     ULONG InputChannels;
@@ -5109,6 +5111,8 @@ struct _VBICODECFILTERING_STATISTICS_COMMON
     DWORD BytesOutput;
 };
 
+typedef struct _VBICODECFILTERING_STATISTICS_COMMON VBICODECFILTERING_STATISTICS_COMMON;
+
 struct _VBICODECFILTERING_STATISTICS_COMMON_PIN
 {
     DWORD SRBsProcessed;
@@ -5120,6 +5124,8 @@ struct _VBICODECFILTERING_STATISTICS_COMMON_PIN
     DWORD LineConfidenceAvg;
     DWORD BytesOutput;
 };
+
+typedef struct _VBICODECFILTERING_STATISTICS_COMMON_PIN VBICODECFILTERING_STATISTICS_COMMON_PIN;
 
 struct _WST_BUFFER_LINE
 {
@@ -5237,6 +5243,8 @@ struct KSDS3D_ITD_PARAMS
     LONG SmoothFrequency;
     LONG Delay;
 };
+
+typedef struct KSDS3D_ITD_PARAMS KSDS3D_ITD_PARAMS;
 
 struct KSDS3D_ITD_PARAMS_MSG
 {
@@ -5447,6 +5455,12 @@ struct KSPROPERTY_VIDEOENCODER_S
     ULONG Capabilities;
 };
 
+struct tagKS_AMVPSIZE
+{
+    DWORD dwWidth;
+    DWORD dwHeight;
+};
+
 struct KSVPMAXPIXELRATE
 {
     KS_AMVPSIZE Size;
@@ -5483,6 +5497,8 @@ struct MEDIUM_INFO
     ULONG MediaType;
     BOOL RecordInhibit;
 };
+
+typedef struct MEDIUM_INFO MEDIUM_INFO;
 
 struct KSPROPERTY_EXTXPORT_NODE_S
 {
@@ -5702,6 +5718,19 @@ typedef struct _NABTS_BUFFER_LINE *PNABTS_BUFFER_LINE;
 
 typedef struct SECURE_BUFFER_INFO *PSECURE_BUFFER_INFO;
 
+union _timecode
+{
+    struct
+    {
+        WORD wFrameRate;
+        WORD wFrameFract;
+        DWORD dwFrames;
+    };
+    DWORDLONG qw;
+};
+
+typedef union _timecode TIMECODE;
+
 typedef TIMECODE *PTIMECODE;
 
 typedef struct _VBICAP_PROPERTIES_PROTECTION_S *PVBICAP_PROPERTIES_PROTECTION_S;
@@ -5746,6 +5775,15 @@ struct SECURE_BUFFER_INFO
     ULONGLONG ullReserved[16];
 };
 
+struct tagKS_AMVPDIMINFO
+{
+    DWORD dwFieldWidth;
+    DWORD dwFieldHeight;
+    DWORD dwVBIWidth;
+    DWORD dwVBIHeight;
+    RECT rcValidRegion;
+};
+
 struct tag_KS_TRUECOLORINFO
 {
     DWORD dwBitMasks[3];
@@ -5769,19 +5807,83 @@ struct tagKS_AMVPDATAINFO
     DWORD dwReserved1;
 };
 
-struct tagKS_AMVPDIMINFO
+
+
+struct tagKS_MPEGVIDEOINFO2
 {
-    DWORD dwFieldWidth;
-    DWORD dwFieldHeight;
-    DWORD dwVBIWidth;
-    DWORD dwVBIHeight;
-    RECT rcValidRegion;
+    KS_VIDEOINFOHEADER2 hdr;
+    DWORD dwStartTimeCode;
+    DWORD cbSequenceHeader;
+    DWORD dwProfile;
+    DWORD dwLevel;
+    DWORD dwFlags;
+    DWORD bSequenceHeader[1];
 };
 
-struct tagKS_AMVPSIZE
+struct tagKS_VIDEOINFO
 {
-    DWORD dwWidth;
-    DWORD dwHeight;
+    RECT rcSource;
+    RECT rcTarget;
+    DWORD dwBitRate;
+    DWORD dwBitErrorRate;
+    REFERENCE_TIME AvgTimePerFrame;
+    KS_BITMAPINFOHEADER bmiHeader;
+    union
+    {
+        KS_RGBQUAD bmiColors[256];
+        DWORD dwBitMasks[3];
+        KS_TRUECOLORINFO TrueColorInfo;
+    };
+};
+
+struct tagKS_MPEG1VIDEOINFO
+{
+    KS_VIDEOINFOHEADER hdr;
+    DWORD dwStartTimeCode;
+    DWORD cbSequenceHeader;
+    BYTE bSequenceHeader[1];
+};
+
+struct tagKS_H264VIDEOINFO
+{
+    WORD wWidth;
+    WORD wHeight;
+    WORD wSARwidth;
+    WORD wSARheight;
+    WORD wProfile;
+    BYTE bLevelIDC;
+    WORD wConstrainedToolset;
+    DWORD bmSupportedUsages;
+    WORD bmCapabilities;
+    DWORD bmSVCCapabilities;
+    DWORD bmMVCCapabilities;
+    DWORD dwFrameInterval;
+    BYTE bMaxCodecConfigDelay;
+    BYTE bmSupportedSliceModes;
+    BYTE bmSupportedSyncFrameTypes;
+    BYTE bResolutionScaling;
+    BYTE bSimulcastSupport;
+    BYTE bmSupportedRateControlModes;
+    WORD wMaxMBperSecOneResolutionNoScalability;
+    WORD wMaxMBperSecTwoResolutionsNoScalability;
+    WORD wMaxMBperSecThreeResolutionsNoScalability;
+    WORD wMaxMBperSecFourResolutionsNoScalability;
+    WORD wMaxMBperSecOneResolutionTemporalScalability;
+    WORD wMaxMBperSecTwoResolutionsTemporalScalablility;
+    WORD wMaxMBperSecThreeResolutionsTemporalScalability;
+    WORD wMaxMBperSecFourResolutionsTemporalScalability;
+    WORD wMaxMBperSecOneResolutionTemporalQualityScalability;
+    WORD wMaxMBperSecTwoResolutionsTemporalQualityScalability;
+    WORD wMaxMBperSecThreeResolutionsTemporalQualityScalablity;
+    WORD wMaxMBperSecFourResolutionsTemporalQualityScalability;
+    WORD wMaxMBperSecOneResolutionTemporalSpatialScalability;
+    WORD wMaxMBperSecTwoResolutionsTemporalSpatialScalability;
+    WORD wMaxMBperSecThreeResolutionsTemporalSpatialScalablity;
+    WORD wMaxMBperSecFourResolutionsTemporalSpatialScalability;
+    WORD wMaxMBperSecOneResolutionFullScalability;
+    WORD wMaxMBperSecTwoResolutionsFullScalability;
+    WORD wMaxMBperSecThreeResolutionsFullScalability;
+    WORD wMaxMBperSecFourResolutionsFullScalability;
 };
 
 struct tagKS_DATAFORMAT_H264VIDEOINFO
@@ -5852,47 +5954,6 @@ struct tagKS_DATARANGE_VIDEO_PALETTE
     KS_VIDEOINFO VideoInfo;
 };
 
-struct tagKS_H264VIDEOINFO
-{
-    WORD wWidth;
-    WORD wHeight;
-    WORD wSARwidth;
-    WORD wSARheight;
-    WORD wProfile;
-    BYTE bLevelIDC;
-    WORD wConstrainedToolset;
-    DWORD bmSupportedUsages;
-    WORD bmCapabilities;
-    DWORD bmSVCCapabilities;
-    DWORD bmMVCCapabilities;
-    DWORD dwFrameInterval;
-    BYTE bMaxCodecConfigDelay;
-    BYTE bmSupportedSliceModes;
-    BYTE bmSupportedSyncFrameTypes;
-    BYTE bResolutionScaling;
-    BYTE bSimulcastSupport;
-    BYTE bmSupportedRateControlModes;
-    WORD wMaxMBperSecOneResolutionNoScalability;
-    WORD wMaxMBperSecTwoResolutionsNoScalability;
-    WORD wMaxMBperSecThreeResolutionsNoScalability;
-    WORD wMaxMBperSecFourResolutionsNoScalability;
-    WORD wMaxMBperSecOneResolutionTemporalScalability;
-    WORD wMaxMBperSecTwoResolutionsTemporalScalablility;
-    WORD wMaxMBperSecThreeResolutionsTemporalScalability;
-    WORD wMaxMBperSecFourResolutionsTemporalScalability;
-    WORD wMaxMBperSecOneResolutionTemporalQualityScalability;
-    WORD wMaxMBperSecTwoResolutionsTemporalQualityScalability;
-    WORD wMaxMBperSecThreeResolutionsTemporalQualityScalablity;
-    WORD wMaxMBperSecFourResolutionsTemporalQualityScalability;
-    WORD wMaxMBperSecOneResolutionTemporalSpatialScalability;
-    WORD wMaxMBperSecTwoResolutionsTemporalSpatialScalability;
-    WORD wMaxMBperSecThreeResolutionsTemporalSpatialScalablity;
-    WORD wMaxMBperSecFourResolutionsTemporalSpatialScalability;
-    WORD wMaxMBperSecOneResolutionFullScalability;
-    WORD wMaxMBperSecTwoResolutionsFullScalability;
-    WORD wMaxMBperSecThreeResolutionsFullScalability;
-    WORD wMaxMBperSecFourResolutionsFullScalability;
-};
 
 struct tagKS_MPEAUDIOINFO
 {
@@ -5902,40 +5963,8 @@ struct tagKS_MPEAUDIOINFO
     DWORD dwReserved3;
 };
 
-struct tagKS_MPEG1VIDEOINFO
-{
-    KS_VIDEOINFOHEADER hdr;
-    DWORD dwStartTimeCode;
-    DWORD cbSequenceHeader;
-    BYTE bSequenceHeader[1];
-};
 
-struct tagKS_MPEGVIDEOINFO2
-{
-    KS_VIDEOINFOHEADER2 hdr;
-    DWORD dwStartTimeCode;
-    DWORD cbSequenceHeader;
-    DWORD dwProfile;
-    DWORD dwLevel;
-    DWORD dwFlags;
-    DWORD bSequenceHeader[1];
-};
 
-struct tagKS_VIDEOINFO
-{
-    RECT rcSource;
-    RECT rcTarget;
-    DWORD dwBitRate;
-    DWORD dwBitErrorRate;
-    REFERENCE_TIME AvgTimePerFrame;
-    KS_BITMAPINFOHEADER bmiHeader;
-    union
-    {
-        KS_RGBQUAD bmiColors[256];
-        DWORD dwBitMasks[3];
-        KS_TRUECOLORINFO TrueColorInfo;
-    };
-};
 
 struct tagTIMECODE_SAMPLE
 {
@@ -5998,6 +6027,11 @@ struct _NABTS_BUFFER
 };
 #pragma pack(pop)
 
+struct _VBICODECFILTERING_STATISTICS_CC
+{
+    VBICODECFILTERING_STATISTICS_COMMON Common;
+};
+
 struct KSPROPERTY_VBICODECFILTERING_SCANLINES_S
 {
     KSPROPERTY Property;
@@ -6005,6 +6039,11 @@ struct KSPROPERTY_VBICODECFILTERING_SCANLINES_S
 };
 
 typedef struct _VBICODECFILTERING_STATISTICS_CC VBICODECFILTERING_STATISTICS_CC;
+
+struct _VBICODECFILTERING_STATISTICS_CC_PIN
+{
+    VBICODECFILTERING_STATISTICS_COMMON_PIN Common;
+};
 
 struct KSPROPERTY_VBICODECFILTERING_STATISTICS_CC_S
 {
@@ -6022,10 +6061,6 @@ struct KSPROPERTY_VBICODECFILTERING_STATISTICS_CC_PIN_S
 
 typedef struct _VBICODECFILTERING_STATISTICS_COMMON VBICODECFILTERING_STATISTICS_COMMON;
 
-struct _VBICODECFILTERING_STATISTICS_CC
-{
-    VBICODECFILTERING_STATISTICS_COMMON Common;
-};
 
 struct _VBICODECFILTERING_STATISTICS_NABTS
 {
@@ -6052,10 +6087,6 @@ struct KSPROPERTY_VBICODECFILTERING_STATISTICS_COMMON_S
 
 typedef struct _VBICODECFILTERING_STATISTICS_COMMON_PIN VBICODECFILTERING_STATISTICS_COMMON_PIN;
 
-struct _VBICODECFILTERING_STATISTICS_CC_PIN
-{
-    VBICODECFILTERING_STATISTICS_COMMON_PIN Common;
-};
 
 struct _VBICODECFILTERING_STATISTICS_NABTS_PIN
 {

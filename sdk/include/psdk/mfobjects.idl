@@ -1514,4 +1514,14 @@ cpp_quote("enum __MIDL___MIDL_itf_mfobjects_0000_0018_0003")
 cpp_quote("{")
 cpp_quote("")
 cpp_quote("};")
+cpp_quote("enum MF_DXGI_DEVICE_MANAGER_MODE")
+cpp_quote("{")
+cpp_quote("")
+cpp_quote("};")
+cpp_quote("enum MF_DXGI_DEVICE_MANAGER_MODE")
+cpp_quote("{")
+cpp_quote("")
+cpp_quote("};")
+
+
 

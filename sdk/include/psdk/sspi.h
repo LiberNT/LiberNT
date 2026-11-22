@@ -1155,6 +1155,26 @@ union _SEC_WINNT_AUTH_IDENTITY_INFO
     SEC_WINNT_AUTH_IDENTITY_EXA AuthIdExa;
     SEC_WINNT_AUTH_IDENTITY_A AuthId_a;
     SEC_WINNT_AUTH_IDENTITY_W AuthId_w;
+struct _SEC_WINNT_AUTH_IDENTITY_EX2
+{
+    unsigned long Version;
+    unsigned short cbHeaderLength;
+    unsigned long cbStructureLength;
+    unsigned long UserOffset;
+    unsigned short UserLength;
+    unsigned long DomainOffset;
+    unsigned short DomainLength;
+    unsigned long PackedCredentialsOffset;
+    unsigned short PackedCredentialsLength;
+    unsigned long Flags;
+    unsigned long PackageListOffset;
+    unsigned short PackageListLength;
+};
+
+typedef struct _SEC_WINNT_AUTH_IDENTITY_EX2 SEC_WINNT_AUTH_IDENTITY_EX2;
+
+typedef struct _SEC_WINNT_AUTH_IDENTITY_EX2 SEC_WINNT_AUTH_IDENTITY_EX2;
+
     SEC_WINNT_AUTH_IDENTITY_EX2 AuthIdEx2;
 };
 

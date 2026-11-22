@@ -2303,6 +2303,8 @@ struct _DXVA_PicParams_MPEG4_PART2
 #pragma pack(pop)
 
 #if (defined(_WIN64))
+typedef LONGLONG REFERENCE_TIME;
+
 struct _DXVA_VideoSample32
 {
     REFERENCE_TIME rtStart;
@@ -2393,6 +2395,8 @@ typedef struct _DXVA_PicParams_H264_MVC *LPDXVA_PicParams_H264_MVC;
 typedef struct _DXVA_PicParams_MPEG4_PART2 *LPDXVA_PicParams_MPEG4_PART2;
 
 
+
+typedef DWORD D3DFORMAT;
 
 struct _DXVA_DeinterlaceCaps
 {

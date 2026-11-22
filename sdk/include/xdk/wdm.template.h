@@ -1097,7 +1097,6 @@ typedef enum POWER_USER_PRESENCE_TYPE {
     UserUnknown = 255
 } POWER_USER_PRESENCE_TYPE, *PPOWER_USER_PRESENCE_TYPE;
 
-#if (!defined(_WDMDDK_))
 typedef ULONG CLFS_CONTAINER_ID;
 typedef GUID CLFS_LOG_ID;
 typedef PVOID CLFS_MGMT_CLIENT;
@@ -1112,7 +1111,6 @@ typedef FILE_OBJECT LOG_FILE_OBJECT;
 typedef ULONG MM_NODE_NUMBER_ONE_BASED;
 typedef ULONG MM_NODE_NUMBER_ZERO_BASED;
 typedef PVOID PCLAIMS_BLOB;
-#endif
 typedef CLFS_CONTAINER_ID * PCLFS_CONTAINER_ID;
 typedef CLS_CONTAINER_STATE * PCLFS_CONTAINER_STATE;
 typedef PVOID * PCLFS_MGMT_CLIENT;
@@ -1135,24 +1133,18 @@ typedef enum _CLS_IOSTATS_CLASS ** PPCLS_IOSTATS_CLASS;
 typedef enum _CLS_LOG_INFORMATION_CLASS ** PPCLS_LOG_INFORMATION_CLASS;
 typedef UCHAR ** PPCLS_RECORD_TYPE;
 typedef FILE_OBJECT ** PPLOG_FILE_OBJECT;
-#if (!defined(_WDMDDK_))
 typedef PVOID PS_AVAILABLE_CPUS_CHANGE_REGISTRATION;
-#endif
 typedef PVOID * PSE_IMAGE_VERIFICATION_CALLBACK_TOKEN;
-#if (!defined(_WDMDDK_))
 typedef PVOID SE_IMAGE_VERIFICATION_CALLBACK_TOKEN;
-#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-#if (!defined(_WDMDDK_))
 FIRMWARE_TYPE NTAPI ExGetFirmwareType(void);
 BOOLEAN NTAPI ExIsManufacturingModeEnabled(void);
 BOOLEAN NTAPI ExIsSoftBoot(void);
 NTSTATUS NTAPI KeConvertAuxiliaryCounterToPerformanceCounter(ULONG64 AuxiliaryCounterValue, PULONG64 PerformanceCounterValue, PULONG64 ConversionError);
 void NTAPI PoSetHiberRange(PVOID MemoryMap, ULONG Flags, PVOID Address, ULONG_PTR Length, ULONG Tag);
-#endif
 ULONG NTAPI RtlCrc32(const void * Buffer, size_t Size, ULONG InitialCrc);
 ULONGLONG NTAPI RtlCrc64(const void * Buffer, size_t Size, ULONGLONG InitialCrc);
 #ifdef __cplusplus
@@ -1443,17 +1435,14 @@ typedef struct PO_EPM_HANDLE__ {
   int unused;
 } *PO_EPM_HANDLE;
 
-#if (!defined(_WDMDDK_))
 #define _OB_REFERENCE_TAGS_ 0
-#endif
-#if (!defined(_WDMDDK_)) && (!defined(MIDL_PASS) && !defined(SORTPP_PASS) && !defined(RC_INVOKED))
+#if (!defined(MIDL_PASS) && !defined(SORTPP_PASS) && !defined(RC_INVOKED))
 #define _RTL_VOL_MEM_ACCESSORS_ 0
 #endif
-#if (!defined(_WDMDDK_)) && (defined (_WIN64))
+#if (defined (_WIN64))
 #define BitScanForwardSizeT BitScanForward64
 #define BitScanReverseSizeT 0
 #endif
-#if (!defined(_WDMDDK_))
 #define CLFS_BASELOG_EXTENSION L".blf"
 #define CLFS_CONTAINER_RELATIVE_PREFIX L"%BLF%\\"
 #define CLFS_CONTAINER_STREAM_PREFIX 0
@@ -1470,8 +1459,7 @@ typedef struct PO_EPM_HANDLE__ {
 #define EA_CONTAINER_SIZE "ContainerSize"
 #define EX_CARR_VALID_FLAGS 3
 #define EXCEPTION_VIRTUALIZATION_FAULT 0x20
-#endif
-#if (!defined(_WDMDDK_)) && (!defined(MIDL_PASS) && !defined(SORTPP_PASS))
+#if (!defined(MIDL_PASS) && !defined(SORTPP_PASS))
 #define FAST_FAIL_ENCLAVE_CALL_FAILURE 0x35
 #define FAST_FAIL_GUARD_SS_FAILURE 0x2C
 #define FAST_FAIL_INVALID_BUFFER_ACCESS 0x1C
@@ -1479,19 +1467,16 @@ typedef struct PO_EPM_HANDLE__ {
 #define FAST_FAIL_INVALID_NEXT_THREAD 0x1E
 #define FAST_FAIL_SET_CONTEXT_DENIED 0x30
 #endif
-#if (!defined(_WDMDDK_))
 #define FILE_ATTRIBUTE_DEDICATED FILE_ATTRIBUTE_TEMPORARY
 #define IMAGE_POLICY_SECTION_NAME 0
 #define KB_SECONDARY_DATA_FLAG_ADDITIONAL_DATA 0x00000001
-#endif
-#if (!defined(_WDMDDK_)) && (defined(_AMD64_) || defined(_ARM64_))
+#if (defined(_AMD64_) || defined(_ARM64_))
 #ifdef _WIN64
 #define LOCK_QUEUE_VALID_FLAGS 7
 #else
 #define LOCK_QUEUE_VALID_FLAGS 3
 #endif
 #endif
-#if (!defined(_WDMDDK_))
 #define MEM_DEDICATED_ATTRIBUTE_NOT_SPECIFIED ((ULONG64)(-1))
 #ifdef _WIN64
 #define MEMORY_CURRENT_PARTITION_HANDLE (-1)
@@ -1554,12 +1539,10 @@ typedef struct PO_EPM_HANDLE__ {
 #define REG_APP_HIVE_OPEN_READ_ONLY 0x2000
 #define REG_UNLOAD_LEGAL_FLAGS 1
 #define RTL_QUERY_REGISTRY_TYPECHECK_MASK (-16777216)
-#endif
-#if (!defined(_WDMDDK_)) && (!defined(MIDL_PASS) && !defined(SORTPP_PASS) && !defined(RC_INVOKED)) && (!(defined(_ARM_) || defined(_ARM64_)))
+#if (!defined(MIDL_PASS) && !defined(SORTPP_PASS) && !defined(RC_INVOKED)) && (!(defined(_ARM_) || defined(_ARM64_)))
 #define RtlCompareDeviceMemory RtlCompareMemory
 #define RtlEqualDeviceMemory RtlEqualMemory
 #endif
-#if (!defined(_WDMDDK_))
 #define SERVICE_USER_OWN_PROCESS 0x50
 #define SERVICE_USER_SHARE_PROCESS 0x60
 #define SYMBOLIC_LINK_ALL_ACCESS_EX 0xFFFFF
@@ -1819,13 +1802,11 @@ typedef struct _IMAGE_POLICY_METADATA IMAGE_POLICY_METADATA;
 typedef struct _IO_ATTRIBUTION_INFORMATION IO_ATTRIBUTION_INFORMATION;
 
 typedef NTSTATUS IO_PERSISTED_MEMORY_ENUMERATION_CALLBACK(PDRIVER_OBJECT, PDEVICE_OBJECT, PUNICODE_STRING, PUSHORT, PULONG, PVOID);
-#endif
 
-#if (!defined(_WDMDDK_)) && (defined(_WIN64))
+#if (defined(_WIN64))
 typedef IO_STATUS_BLOCK IO_STATUS_BLOCK64;
 #endif
 
-#if (!defined(_WDMDDK_))
 typedef struct _KERNEL_CET_CONTEXT KERNEL_CET_CONTEXT;
 
 typedef void MM_MDL_ROUTINE(PVOID, PVOID);
@@ -2030,10 +2011,8 @@ typedef struct _NPEM_CONTROL_INTERFACE *PNPEM_CONTROL_INTERFACE;
 typedef void PO_EFFECTIVE_POWER_MODE_CALLBACK(PO_EFFECTIVE_POWER_MODE, void *);
 
 typedef void PO_FX_DRIPS_WATCHDOG_CALLBACK(PVOID, PDEVICE_OBJECT, ULONG);
-#endif
 
 
-#if (!defined(_WDMDDK_))
 typedef struct _POOL_CREATE_EXTENDED_PARAMETER POOL_CREATE_EXTENDED_PARAMETER;
 
 typedef const POOL_CREATE_EXTENDED_PARAMETER *PCPOOL_CREATE_EXTENDED_PARAMETER;
@@ -2233,18 +2212,14 @@ struct _PCI_VIRTUALIZATION_INTERFACE
 typedef struct _PCI_VIRTUALIZATION_INTERFACE PCI_VIRTUALIZATION_INTERFACE;
 
 typedef struct _PCI_VIRTUALIZATION_INTERFACE *PPCI_VIRTUALIZATION_INTERFACE;
-#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#if (!defined(_WDMDDK_))
 NTSTATUS NTAPI RtlGenerateClass5Guid(const GUID *const NamespaceGuid, PVOID Buffer, ULONG BufferSize, GUID *Guid);
-#endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-#if (!defined(_WDMDDK_))
 void BugCheckSecondaryMultiPartDumpDataCallback(KBUGCHECK_CALLBACK_REASON, struct _KBUGCHECK_REASON_CALLBACK_RECORD *, PVOID, ULONG);
 NTSTATUS NTAPI ClfsAddLogContainer(PLOG_FILE_OBJECT plfoLog, PULONGLONG pcbContainer, PUNICODE_STRING puszContainerPath);
 NTSTATUS NTAPI ClfsAddLogContainerSet(PLOG_FILE_OBJECT plfoLog, USHORT cContainers, PULONGLONG pcbContainer, PUNICODE_STRING rguszContainerPath);
@@ -2314,11 +2289,9 @@ void IoUpdateLinkShareAccess(PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess,
 void IoUpdateLinkShareAccessEx(PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess, PLINK_SHARE_ACCESS LinkShareAccess, ULONG IoShareAccessFlags);
 NTSTATUS IoWriteKsrPersistentMemory(PVOID DataHandle, PVOID Buffer, SIZE_T Size);
 NTSTATUS KeConvertPerformanceCounterToAuxiliaryCounter(ULONG64 PerformanceCounterValue, PULONG64 AuxiliaryCounterValue, PULONG64 ConversionError);
-#endif
-#if (!defined(_WDMDDK_)) && (defined(_X86_) || defined(_AMD64_))
+#if (defined(_X86_) || defined(_AMD64_))
 NTSTATUS KeDeregisterBoundCallback(PVOID Handle);
 #endif
-#if (!defined(_WDMDDK_))
 void KeInitializeTimer2SetParameters(PKT2_SET_PARAMETERS Parameters);
 NTSTATUS KeQueryAuxiliaryCounterFrequency(PULONG64 AuxiliaryCounterFrequency);
 void KeRcuReadLock(void);
@@ -2351,55 +2324,45 @@ NTSTATUS PoRegisterForEffectivePowerModeNotifications(ULONG Version, PPO_EFFECTI
 void PoSetSystemWakeDevice(PDEVICE_OBJECT DeviceObject);
 NTSTATUS PoUnregisterFromEffectivePowerModeNotifications(PO_EPM_HANDLE RegistrationHandle);
 ULONG64 PsQueryTotalCycleTimeProcess(PEPROCESS Process, PULONG64 CycleTimeStamp);
-#endif
-#if (!defined(_WDMDDK_)) && (!defined(MIDL_PASS))
+#if (!defined(MIDL_PASS))
 int RtlConstantTimeEqualMemory(const void *v1, const void *v2, unsigned long len);
 #endif
-#if (!defined(_WDMDDK_)) && (!defined(MIDL_PASS) && !defined(SORTPP_PASS) && !defined(RC_INVOKED))
+#if (!defined(MIDL_PASS) && !defined(SORTPP_PASS) && !defined(RC_INVOKED))
 volatile void * __cdecl RtlCopyDeviceMemory(volatile void *Destination, const volatile void *Source, size_t Length);
 volatile void * __cdecl RtlCopyVolatileMemory(volatile void *Destination, const volatile void *Source, size_t Length);
 #endif
-#if (!defined(_WDMDDK_))
 void RtlExtractBitMap(PRTL_BITMAP Source, PRTL_BITMAP Destination, ULONG TargetBit, ULONG NumberOfBits);
-#endif
-#if (!defined(_WDMDDK_)) && (!defined(MIDL_PASS) && !defined(SORTPP_PASS) && !defined(RC_INVOKED)) && (!(defined(_ARM_) || defined(_ARM64_)))
+#if (!defined(MIDL_PASS) && !defined(SORTPP_PASS) && !defined(RC_INVOKED)) && (!(defined(_ARM_) || defined(_ARM64_)))
 volatile void * RtlFillDeviceMemory(volatile void *Destination, size_t Length, int Fill);
 #endif
-#if (!defined(_WDMDDK_)) && (defined(_M_AMD64) || defined(_M_ARM64))
+#if (defined(_M_AMD64) || defined(_M_ARM64))
 void RtlFillMemoryNonTemporal(__unaligned void *Destination, SIZE_T Length, const UCHAR Value);
 #endif
-#if (!defined(_WDMDDK_)) && (!defined(MIDL_PASS) && !defined(SORTPP_PASS) && !defined(RC_INVOKED))
+#if (!defined(MIDL_PASS) && !defined(SORTPP_PASS) && !defined(RC_INVOKED))
 volatile void * RtlFillVolatileMemory(volatile void *Destination, size_t Length, int Fill);
 #endif
-#if (!defined(_WDMDDK_))
 void RtlFreeUTF8String(PUTF8_STRING utf8String);
-#endif
-#if (!defined(_WDMDDK_)) && (!defined(MIDL_PASS) && !defined(SORTPP_PASS) && !defined(RC_INVOKED))
+#if (!defined(MIDL_PASS) && !defined(SORTPP_PASS) && !defined(RC_INVOKED))
 volatile void * __cdecl RtlMoveVolatileMemory(volatile void *Destination, const volatile void *Source, size_t Length);
 #endif
-#if (!defined(_WDMDDK_))
 ULONG RtlNumberOfClearBitsInRange(PRTL_BITMAP BitMapHeader, ULONG StartingIndex, ULONG Length);
 OS_DEPLOYEMENT_STATE_VALUES RtlOsDeploymentState(ULONG Flags);
 ULONG RtlQueryValidationRunlevel(PCUNICODE_STRING ComponentName);
-#endif
-#if (!defined(_WDMDDK_)) && (!defined(MIDL_PASS))
+#if (!defined(MIDL_PASS))
 void RtlSanitizeUnicodeStringPadding(PUNICODE_STRING String);
 #endif
-#if (!defined(_WDMDDK_)) && (!defined(MIDL_PASS) && !defined(SORTPP_PASS) && !defined(RC_INVOKED))
+#if (!defined(MIDL_PASS) && !defined(SORTPP_PASS) && !defined(RC_INVOKED))
 volatile void * RtlSecureZeroMemory2(volatile void *Destination, size_t Length);
 volatile void * __cdecl RtlSetVolatileMemory(volatile void *Destination, int Fill, size_t Length);
 #endif
-#if (!defined(_WDMDDK_))
 NTSTATUS RtlUnicodeStringToInt64(PCUNICODE_STRING String, ULONG Base, PLONG64 Number, PWSTR *EndPointer);
-#endif
-#if (!defined(_WDMDDK_)) && ((NTDDI_VERSION >= NTDDI_WIN8) && !defined(MIDL_PASS))
+#if ((NTDDI_VERSION >= NTDDI_WIN8) && !defined(MIDL_PASS))
 NTSTATUS RtlxQueryRegistryValues(ULONG RelativeTo, PCWSTR Path, PRTL_QUERY_REGISTRY_TABLE QueryTable, PVOID Context, PVOID Environment);
 #endif
-#if (!defined(_WDMDDK_)) && (!defined(MIDL_PASS) && !defined(SORTPP_PASS) && !defined(RC_INVOKED))
+#if (!defined(MIDL_PASS) && !defined(SORTPP_PASS) && !defined(RC_INVOKED))
 volatile void * RtlZeroDeviceMemory(volatile void *Destination, size_t Length);
 volatile void * RtlZeroVolatileMemory(volatile void *Destination, size_t Length);
 #endif
-#if (!defined(_WDMDDK_))
 NTSTATUS SeEtwWriteKMCveEvent(PCUNICODE_STRING CveId, PCUNICODE_STRING AdditionalDetails);
 NTSTATUS SeRegisterImageVerificationCallback(SE_IMAGE_TYPE ImageType, SE_IMAGE_VERIFICATION_CALLBACK_TYPE CallbackType, PSE_IMAGE_VERIFICATION_CALLBACK_FUNCTION CallbackFunction, PVOID CallbackContext, SE_IMAGE_VERIFICATION_CALLBACK_TOKEN Token, PVOID *CallbackHandle);
 void SeUnregisterImageVerificationCallback(PVOID CallbackHandle);
@@ -2408,8 +2371,27 @@ NTSTATUS VslDeleteSecureSection(HANDLE GlobalHandle);
 NTSTATUS ZwCommitRegistryTransaction(HANDLE TransactionHandle, ULONG Flags);
 NTSTATUS ZwCopyFileChunk(HANDLE SourceHandle, HANDLE DestHandle, HANDLE Event, PIO_STATUS_BLOCK IoStatusBlock, ULONG Length, PLARGE_INTEGER SourceOffset, PLARGE_INTEGER DestOffset, PULONG SourceKey, PULONG DestKey, ULONG Flags);
 NTSTATUS ZwCreateRegistryTransaction(PHANDLE TransactionHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, ULONG CreateOptions);
-NTSTATUS ZwMapViewOfSectionEx(HANDLE SectionHandle, HANDLE ProcessHandle, PVOID *BaseAddress, PLARGE_INTEGER SectionOffset, PSIZE_T ViewSize, ULONG AllocationType, ULONG PageProtection, PMEM_EXTENDED_PARAMETER ExtendedParameters, ULONG ExtendedParameterCount);
+#ifndef MEM_EXTENDED_PARAMETER_TYPE_BITS
+#define MEM_EXTENDED_PARAMETER_TYPE_BITS 8
 #endif
+typedef struct DECLSPEC_ALIGN(8) MEM_EXTENDED_PARAMETER {
+    struct
+    {
+        ULONG64 Type : MEM_EXTENDED_PARAMETER_TYPE_BITS;
+        ULONG64 Reserved : 64 - MEM_EXTENDED_PARAMETER_TYPE_BITS;
+    } DUMMYSTRUCTNAME;
+
+    union
+    {
+        ULONG64 ULong64;
+        PVOID Pointer;
+        SIZE_T Size;
+        HANDLE Handle;
+        ULONG ULong;
+    } DUMMYUNIONNAME;
+} MEM_EXTENDED_PARAMETER, *PMEM_EXTENDED_PARAMETER;
+
+NTSTATUS ZwMapViewOfSectionEx(HANDLE SectionHandle, HANDLE ProcessHandle, PVOID *BaseAddress, PLARGE_INTEGER SectionOffset, PSIZE_T ViewSize, ULONG AllocationType, ULONG PageProtection, PMEM_EXTENDED_PARAMETER ExtendedParameters, ULONG ExtendedParameterCount);
 
 #ifdef __cplusplus
 }
@@ -2422,45 +2404,38 @@ enum _BOUND_CALLBACK_STATUS
     BoundExceptionMaximum = 3,
 };
 
-#if (!defined(_WDMDDK_)) && (defined(_X86_) || defined(_AMD64_))
+#if (defined(_X86_) || defined(_AMD64_))
 typedef enum _BOUND_CALLBACK_STATUS BOUND_CALLBACK_STATUS;
 
 typedef BOUND_CALLBACK_STATUS BOUND_CALLBACK(void);
 #endif
 
-#if (!defined(_WDMDDK_))
 typedef struct _AFFINITY_TOKEN *PAFFINITY_TOKEN;
-#endif
 
-#if (!defined(_WDMDDK_)) && (defined(_X86_) || defined(_AMD64_))
+#if (defined(_X86_) || defined(_AMD64_))
 typedef BOUND_CALLBACK *PBOUND_CALLBACK;
 
 typedef enum _BOUND_CALLBACK_STATUS *PBOUND_CALLBACK_STATUS;
 #endif
 
-#if (!defined(_WDMDDK_))
 typedef struct _DRIVER_PROXY_EXTENSION *PDRIVER_PROXY_EXTENSION;
 
 typedef struct _KE_SRCU *PKE_SRCU;
-#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-#if (!defined(_WDMDDK_))
 NTSTATUS IoCreateDriverProxyExtension(PDRIVER_OBJECT OwningDriverObject, DRIVER_PROXY_EXTENSION_CREATION_FLAGS Flags, PDRIVER_PROXY_EXTENSION *DriverProxyExtension);
 NTSTATUS IoDriverProxyCreateHotSwappableWorkerThread(PDRIVER_PROXY_EXTENSION DriverProxyExtension, PHANDLE ThreadHandle, ULONG DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, HANDLE ProcessHandle, PCLIENT_ID ClientId, PDRIVER_PROXY_HOTSWAP_WORKER_ROUTINE_START_CONTEXT WorkerStartContext);
 NTSTATUS IofGetDriverProxyWrapperFromEndpoint(PDRIVER_PROXY_EXTENSION DriverProxyExtension, PDRIVER_PROXY_ENDPOINT_FUNCTION Endpoint, PDRIVER_PROXY_WRAPPED_ENDPOINT_FUNCTION *Wrapper);
 PDRIVER_PROXY_WRAPPED_ENDPOINT_FUNCTION IoGetDriverProxyEndpointWrapper(PDRIVER_PROXY_EXTENSION DriverProxyExtension, DRIVER_PROXY_ENDPOINT_FUNCTION_ID FunctionId);
 PDRIVER_PROXY_EXTENSION IoGetDriverProxyExtensionFromDriverObject(PDRIVER_OBJECT DriverObject);
 NTSTATUS IoRegisterDriverProxyEndpoints(PDRIVER_PROXY_EXTENSION DriverProxyExtension, PDRIVER_PROXY_ENDPOINT_INFORMATION EndpointInfo, ULONG Count, PDRIVER_PROXY_REGISTER_CALLBACK PhasedCallback, PVOID Context);
-#endif
-#if (!defined(_WDMDDK_)) && (defined(_X86_) || defined(_AMD64_))
+#if (defined(_X86_) || defined(_AMD64_))
 PVOID KeRegisterBoundCallback(PBOUND_CALLBACK CallbackRoutine);
 #endif
-#if (!defined(_WDMDDK_))
 PKE_SRCU KeSrcuAllocate(ULONG Tag);
 void KeSrcuFree(PKE_SRCU Rcu);
 void KeSrcuReadLock(PKE_SRCU Rcu, PKE_SRCU_LOCK Lock);
@@ -2470,14 +2445,12 @@ NTSTATUS PsAllocateAffinityToken(PAFFINITY_TOKEN *AffinityToken);
 void PsFreeAffinityToken(PAFFINITY_TOKEN AffinityToken);
 void PsRevertToUserMultipleGroupAffinityThread(PAFFINITY_TOKEN AffinityToken);
 NTSTATUS PsSetSystemMultipleGroupAffinityThread(PGROUP_AFFINITY GroupAffinities, USHORT GroupCount, PAFFINITY_TOKEN AffinityToken);
-#endif
 
 #ifdef __cplusplus
 }
 #endif
 
 
-#if (!defined(_WDMDDK_))
 struct _CLS_LSN
 {
     ULONGLONG Internal;
@@ -2589,14 +2562,12 @@ typedef struct _CLS_INFORMATION *PPCLS_INFORMATION;
 typedef struct _CLS_LSN **PPCLS_LSN;
 
 typedef struct _CLS_SCAN_CONTEXT **PPCLS_SCAN_CONTEXT;
-#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-#if (!defined(_WDMDDK_))
 NTSTATUS NTAPI ClfsAdvanceLogBase(PVOID pvMarshalContext, PCLFS_LSN plsnBase, ULONG fFlags);
 NTSTATUS NTAPI ClfsCreateScanContext(PLOG_FILE_OBJECT plfoLog, ULONG cFromContainer, ULONG cContainers, CLFS_SCAN_MODE eScanMode, PCLFS_SCAN_CONTEXT pcxScan);
 CLFS_LSN NTAPI ClfsEarlierLsn(PCLFS_LSN plsn);
@@ -2627,13 +2598,11 @@ NTSTATUS NTAPI ClfsSetArchiveTail(PLOG_FILE_OBJECT plfoLog, PCLFS_LSN plsnArchiv
 NTSTATUS NTAPI ClfsSetEndOfLog(PLOG_FILE_OBJECT plfoLog, PCLFS_LSN plsnEnd);
 NTSTATUS NTAPI ClfsWriteRestartArea(PVOID pvMarshalContext, PVOID pvRestartBuffer, ULONG cbRestartBuffer, PCLFS_LSN plsnBase, ULONG fFlags, PULONG pcbWritten, PCLFS_LSN plsnNext);
 NTSTATUS ExGetSystemFirmwareTable(ULONG FirmwareTableProviderSignature, ULONG FirmwareTableID, PVOID FirmwareTableBuffer, ULONG BufferLength, PULONG ReturnLength);
-#endif
 
 #ifdef __cplusplus
 }
 #endif
 
-#if (!defined(_WDMDDK_))
 #define IMAGE_POLICY_ANSI_STRING(_PolicyId_, _Value_) { ImagePolicyEntryTypeAnsiString, _PolicyId_, _Value_ },
 #define IMAGE_POLICY_BOOL(_PolicyId_, _Value_) { ImagePolicyEntryTypeBool, _PolicyId_, (const VOID *) _Value_ },
 #define IMAGE_POLICY_INT16(_PolicyId_, _Value_) { ImagePolicyEntryTypeInt16, _PolicyId_, (const VOID *) _Value_ },
@@ -2647,20 +2616,16 @@ NTSTATUS ExGetSystemFirmwareTable(ULONG FirmwareTableProviderSignature, ULONG Fi
 #define IMAGE_POLICY_UINT8(_PolicyId_, _Value_) { ImagePolicyEntryTypeUInt8, _PolicyId_, (const VOID *) _Value_ },
 #define IMAGE_POLICY_UNICODE_STRING(_PolicyId_, _Value_) { ImagePolicyEntryTypeUnicodeString, _PolicyId_, _Value_ },
 #define IoGetDriverProxyWrapperFromEndpoint(DriverProxyExtension, Endpoint, Wrapper) __pragma(warning(push)) __pragma(warning(disable : 28024)) do { IofGetDriverProxyWrapperFromEndpoint((DriverProxyExtension), (PDRIVER_PROXY_ENDPOINT_FUNCTION) (Endpoint), (PDRIVER_PROXY_WRAPPED_ENDPOINT_FUNCTION *) (Wrapper)); } while (0) __pragma(warning(pop))
-#endif
-#if (!defined(_WDMDDK_)) && (defined(_WIN64))
+#if (defined(_WIN64))
 #define Iosb64ToIosb(_iosb, _iosb64) { (_iosb) = (_iosb64); }
 #define IosbToIosb64(_iosb64, _iosb) { (_iosb64) = (_iosb); }
 #endif
-#if (!defined(_WDMDDK_))
 #define IS_VALIDATION_ENABLED(C, L) ((L) & (C))
 #define NtCurrentSession() ((HANDLE) (LONG_PTR) - 3)
-#endif
-#if (!defined(_WDMDDK_)) && (defined(_AMD64_)) && (!defined(_ARM64EC_))
+#if (defined(_AMD64_)) && (!defined(_ARM64EC_))
 #define ReadCR8() __readcr8()
 #define WriteCR8(Data) __writecr8(Data)
 #endif
-#if (!defined(_WDMDDK_))
 #define ZwCurrentSession() NtCurrentSession()
 
 struct _EXTENDED_CREATE_INFORMATION_32
@@ -2674,7 +2639,6 @@ struct _EXTENDED_CREATE_INFORMATION_32
 typedef struct _EXTENDED_CREATE_INFORMATION_32 EXTENDED_CREATE_INFORMATION_32;
 
 typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
-#endif
 
 #endif /* !_WDMDDK_ */
 
@@ -2706,9 +2670,7 @@ typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
 #define CLFS_FLAG_NON_REENTRANT_FILTER 0x00000010
 #endif
 #ifndef CLFS_FLAG_NO_FLAGS
-#if (!defined(_WDMDDK_))
 #define CLFS_FLAG_NO_FLAGS 0x00000000
-#endif
 #endif
 #ifndef CLFS_FLAG_READ_IN_PROGRESS
 #define CLFS_FLAG_READ_IN_PROGRESS 0x00000080
@@ -2741,9 +2703,7 @@ typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
 #define CLFS_SCAN_BACKWARD 0x04
 #endif
 #ifndef CLFS_SCAN_BUFFERED
-#if (!defined(_WDMDDK_))
 #define CLFS_SCAN_BUFFERED 0x20
-#endif
 #endif
 #ifndef CLFS_SCAN_CLOSE
 #define CLFS_SCAN_CLOSE 0x08
@@ -2755,9 +2715,7 @@ typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
 #define CLFS_SCAN_INIT 0x01
 #endif
 #ifndef CLFS_SCAN_INITIALIZED
-#if (!defined(_WDMDDK_))
 #define CLFS_SCAN_INITIALIZED 0x10
-#endif
 #endif
 #ifndef ClfsContainerActive
 #define ClfsContainerActive 0x04
@@ -2772,14 +2730,10 @@ typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
 #define ClfsContainerInitializing 0x01
 #endif
 #ifndef ClfsContainerPendingArchive
-#if (!defined(_WDMDDK_))
 #define ClfsContainerPendingArchive 0x10
 #endif
-#endif
 #ifndef ClfsContainerPendingArchiveAndDelete
-#if (!defined(_WDMDDK_))
 #define ClfsContainerPendingArchiveAndDelete 0x20
-#endif
 #endif
 #ifndef ClfsDataRecord
 #define ClfsDataRecord 0x01
@@ -2800,34 +2754,22 @@ typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
 #define ClsContainerInactive 0x02
 #endif
 #ifndef ClsContainerInitializing
-#if (!defined(_WDMDDK_))
 #define ClsContainerInitializing 0x01
 #endif
-#endif
 #ifndef ClsContainerPendingArchive
-#if (!defined(_WDMDDK_))
 #define ClsContainerPendingArchive 0x10
 #endif
-#endif
 #ifndef ClsContainerPendingArchiveAndDelete
-#if (!defined(_WDMDDK_))
 #define ClsContainerPendingArchiveAndDelete 0x20
 #endif
-#endif
 #ifndef DEVICE_RESET_INTERFACE_VERSION_1
-#if (!defined(_WDMDDK_))
 #define DEVICE_RESET_INTERFACE_VERSION_1 1
 #endif
-#endif
 #ifndef DEVICE_RESET_INTERFACE_VERSION_2
-#if (!defined(_WDMDDK_))
 #define DEVICE_RESET_INTERFACE_VERSION_2 2
 #endif
-#endif
 #ifndef DEVICE_RESET_INTERFACE_VERSION_3
-#if (!defined(_WDMDDK_))
 #define DEVICE_RESET_INTERFACE_VERSION_3 3
-#endif
 #endif
 #ifndef DMA_FAIL_ON_BOUNCE
 #define DMA_FAIL_ON_BOUNCE 0x04
@@ -2842,19 +2784,13 @@ typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
 #define DPC_WATCHDOG_GLOBAL_TRIAGE_BLOCK_REVISION_1 0x1
 #endif
 #ifndef DPC_WATCHDOG_GLOBAL_TRIAGE_BLOCK_SIGNATURE
-#if (!defined(_WDMDDK_))
 #define DPC_WATCHDOG_GLOBAL_TRIAGE_BLOCK_SIGNATURE 0xAEBECEDE
 #endif
-#endif
 #ifndef EXCEPTION_CP_FAULT
-#if (!defined(_WDMDDK_))
 #define EXCEPTION_CP_FAULT 0x15
 #endif
-#endif
 #ifndef EXCEPTION_SE_FAULT
-#if (!defined(_WDMDDK_))
 #define EXCEPTION_SE_FAULT 0x17
-#endif
 #endif
 #ifndef EX_CARR_ALLOCATE_NONPAGED_POOL
 #define EX_CARR_ALLOCATE_NONPAGED_POOL 0x00000001
@@ -3025,9 +2961,7 @@ typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
 #define FAST_FAIL_VEH_CORRUPTION 60
 #endif
 #ifndef FILE_CONTAINS_EXTENDED_CREATE_INFORMATION
-#if (!defined(_WDMDDK_))
 #define FILE_CONTAINS_EXTENDED_CREATE_INFORMATION 0x10000000
-#endif
 #endif
 #ifndef FILE_QUERY_INDEX_SPECIFIED
 #define FILE_QUERY_INDEX_SPECIFIED 0x00000004
@@ -3048,17 +2982,13 @@ typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
 #define FILE_SESSION_AWARE 0x00040000
 #endif
 #ifndef FILE_VALID_EXTENDED_OPTION_FLAGS
-#if (!defined(_WDMDDK_))
 #define FILE_VALID_EXTENDED_OPTION_FLAGS 0x10000000
-#endif
 #endif
 #ifndef FO_BYPASS_IO_ENABLED
 #define FO_BYPASS_IO_ENABLED 0x00800000
 #endif
 #ifndef HAL_DMA_ADAPTER_VERSION_1
-#if (!defined(_WDMDDK_))
 #define HAL_DMA_ADAPTER_VERSION_1 1
-#endif
 #endif
 #ifndef HAL_MASK_UNMASK_FLAGS_NONE
 #define HAL_MASK_UNMASK_FLAGS_NONE 0x0
@@ -3070,9 +3000,7 @@ typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
 #define HAL_MASK_UNMASK_FLAGS_SERVICING_DEFERRED 0x1
 #endif
 #ifndef IMAGE_POLICY_METADATA_VERSION
-#if (!defined(_WDMDDK_))
 #define IMAGE_POLICY_METADATA_VERSION 1
-#endif
 #endif
 #ifndef IOMMU_ACCESS_NONE
 #define IOMMU_ACCESS_NONE 0x00
@@ -3084,9 +3012,7 @@ typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
 #define IOMMU_ACCESS_WRITE 0x02
 #endif
 #ifndef IO_ATTRIBUTION_INFO_V1
-#if (!defined(_WDMDDK_))
 #define IO_ATTRIBUTION_INFO_V1 1
-#endif
 #endif
 #ifndef IO_CHECK_SHARE_ACCESS_DONT_CHECK_DELETE
 #define IO_CHECK_SHARE_ACCESS_DONT_CHECK_DELETE 0x00000010
@@ -3125,9 +3051,7 @@ typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
 #define IO_SHARE_ACCESS_NON_PRIMARY_STREAM 0x00000080
 #endif
 #ifndef IO_SHARE_ACCESS_NO_WRITE_PERMISSION
-#if (!defined(_WDMDDK_))
 #define IO_SHARE_ACCESS_NO_WRITE_PERMISSION 0x80000000
-#endif
 #endif
 #ifndef IO_TYPE_IORING
 #define IO_TYPE_IORING 0x0000000e
@@ -3151,19 +3075,13 @@ typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
 #define KB_TRIAGE_DUMP_DATA_FLAG_BUGCHECK_ACTIVE 0x00000001ul
 #endif
 #ifndef KERNEL_SOFT_RESTART_NOTIFICATION_VERSION
-#if (!defined(_WDMDDK_))
 #define KERNEL_SOFT_RESTART_NOTIFICATION_VERSION 1
 #endif
-#endif
 #ifndef LOCK_QUEUE_HALTED
-#if (!defined(_WDMDDK_))
 #define LOCK_QUEUE_HALTED 4
 #endif
-#endif
 #ifndef LOCK_QUEUE_HALTED_BIT
-#if (!defined(_WDMDDK_))
 #define LOCK_QUEUE_HALTED_BIT 2
-#endif
 #endif
 #ifndef LOG_POLICY_OVERWRITE
 #define LOG_POLICY_OVERWRITE 0x01
@@ -3172,12 +3090,12 @@ typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
 #define LOG_POLICY_PERSIST 0x02
 #endif
 #ifndef LockQueueUnusedSpare0
-#if (!defined(_WDMDDK_)) && (defined(_AMD64_))
+#if (defined(_AMD64_))
 #define LockQueueUnusedSpare0 0
 #endif
 #endif
 #ifndef LockQueueUnusedSpare1
-#if (!defined(_WDMDDK_)) && (defined(_AMD64_))
+#if (defined(_AMD64_))
 #define LockQueueUnusedSpare1 1
 #endif
 #endif
@@ -3185,17 +3103,17 @@ typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
 #define LockQueueUnusedSpare15 15
 #endif
 #ifndef LockQueueUnusedSpare2
-#if (!defined(_WDMDDK_)) && (defined(_AMD64_))
+#if (defined(_AMD64_))
 #define LockQueueUnusedSpare2 2
 #endif
 #endif
 #ifndef LockQueueUnusedSpare3
-#if (!defined(_WDMDDK_)) && (defined(_AMD64_))
+#if (defined(_AMD64_))
 #define LockQueueUnusedSpare3 3
 #endif
 #endif
 #ifndef LockQueueUnusedSpare8
-#if (!defined(_WDMDDK_)) && (defined(_AMD64_))
+#if (defined(_AMD64_))
 #define LockQueueUnusedSpare8 8
 #endif
 #endif
@@ -3203,9 +3121,7 @@ typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
 #define MDL_LOCKED_PAGE_TABLES 0x0100
 #endif
 #ifndef MDL_PAGE_CONTENTS_INVARIANT
-#if (!defined(_WDMDDK_))
 #define MDL_PAGE_CONTENTS_INVARIANT 0x4000
-#endif
 #endif
 #ifndef MEMORY_PARTITION_MODIFY_ACCESS
 #define MEMORY_PARTITION_MODIFY_ACCESS 0x0002
@@ -3229,54 +3145,34 @@ typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
 #define MM_PROTECT_DRIVER_SECTION_ALLOW_UNLOAD 0x1
 #endif
 #ifndef MdlMappingWithGuardPtes
-#if (!defined(_WDMDDK_))
 #define MdlMappingWithGuardPtes 0x20000000
 #endif
-#endif
 #ifndef NPEM_CONTROL_INTERFACE_VERSION1
-#if (!defined(_WDMDDK_))
 #define NPEM_CONTROL_INTERFACE_VERSION1 1
 #endif
-#endif
 #ifndef NPEM_CONTROL_INTERFACE_VERSION2
-#if (!defined(_WDMDDK_))
 #define NPEM_CONTROL_INTERFACE_VERSION2 2
 #endif
-#endif
 #ifndef PAGE_ENCLAVE_MASK
-#if (!defined(_WDMDDK_))
 #define PAGE_ENCLAVE_MASK 0x10000000
 #endif
-#endif
 #ifndef PAGE_ENCLAVE_NO_CHANGE
-#if (!defined(_WDMDDK_))
 #define PAGE_ENCLAVE_NO_CHANGE 0x20000000
 #endif
-#endif
 #ifndef PAGE_ENCLAVE_THREAD_CONTROL
-#if (!defined(_WDMDDK_))
 #define PAGE_ENCLAVE_THREAD_CONTROL 0x80000000
 #endif
-#endif
 #ifndef PAGE_ENCLAVE_UNVALIDATED
-#if (!defined(_WDMDDK_))
 #define PAGE_ENCLAVE_UNVALIDATED 0x20000000
 #endif
-#endif
 #ifndef PAGE_REVERT_TO_FILE_MAP
-#if (!defined(_WDMDDK_))
 #define PAGE_REVERT_TO_FILE_MAP 0x80000000
 #endif
-#endif
 #ifndef PCI_ATS_INTERFACE_VERSION
-#if (!defined(_WDMDDK_))
 #define PCI_ATS_INTERFACE_VERSION 1
 #endif
-#endif
 #ifndef PCI_PTM_TIME_SOURCE_AUX
-#if (!defined(_WDMDDK_))
 #define PCI_PTM_TIME_SOURCE_AUX 0xFFFFFFFF
-#endif
 #endif
 #ifndef PCI_SECURITY_DIRECT_TRANSLATED_P2P
 #define PCI_SECURITY_DIRECT_TRANSLATED_P2P 0x4
@@ -3291,19 +3187,13 @@ typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
 #define PCI_SECURITY_GUEST_ASSIGNED 0x1
 #endif
 #ifndef PCI_SECURITY_INTERFACE_VERSION
-#if (!defined(_WDMDDK_))
 #define PCI_SECURITY_INTERFACE_VERSION 1
 #endif
-#endif
 #ifndef PCI_SECURITY_INTERFACE_VERSION2
-#if (!defined(_WDMDDK_))
 #define PCI_SECURITY_INTERFACE_VERSION2 2
 #endif
-#endif
 #ifndef PCI_SECURITY_SRIOV_DIRECT_TRANSLATED_P2P
-#if (!defined(_WDMDDK_))
 #define PCI_SECURITY_SRIOV_DIRECT_TRANSLATED_P2P 0x40000
-#endif
 #endif
 #ifndef PF_ARM_LSE2_AVAILABLE
 #define PF_ARM_LSE2_AVAILABLE 62
@@ -3468,9 +3358,7 @@ typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
 #define POOL_CREATE_FLG_USE_GLOBAL_POOL 0x00000002
 #endif
 #ifndef POOL_CREATE_PARAMS_VERSION
-#if (!defined(_WDMDDK_))
 #define POOL_CREATE_PARAMS_VERSION 1
-#endif
 #endif
 #ifndef PO_EFFECTIVE_POWER_MODE_V1
 #define PO_EFFECTIVE_POWER_MODE_V1 0x00000001
@@ -3530,19 +3418,13 @@ typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
 #define RTL_QUERY_REGISTRY_NOSTRING 0x00000080
 #endif
 #ifndef SDEV_IDENTIFIER_INTERFACE_VERSION
-#if (!defined(_WDMDDK_))
 #define SDEV_IDENTIFIER_INTERFACE_VERSION 1
 #endif
-#endif
 #ifndef SECURE_DRIVER_INTERFACE_VERSION
-#if (!defined(_WDMDDK_))
 #define SECURE_DRIVER_INTERFACE_VERSION 1
 #endif
-#endif
 #ifndef SECURE_SECTION_ALLOW_PARTIAL_MDL
-#if (!defined(_WDMDDK_))
 #define SECURE_SECTION_ALLOW_PARTIAL_MDL 1
-#endif
 #endif
 #ifndef SEC_64K_PAGES
 #define SEC_64K_PAGES 0x00080000
@@ -3554,35 +3436,25 @@ typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
 #define SL_BYPASS_ACCESS_CHECK 0x01
 #endif
 #ifndef SL_BYPASS_IO
-#if (!defined(_WDMDDK_))
 #define SL_BYPASS_IO 0x40
-#endif
 #endif
 #ifndef SL_FORCE_ASYNCHRONOUS
 #define SL_FORCE_ASYNCHRONOUS 0x01
 #endif
 #ifndef SL_IGNORE_READONLY_ATTRIBUTE
-#if (!defined(_WDMDDK_))
 #define SL_IGNORE_READONLY_ATTRIBUTE 0x40
-#endif
 #endif
 #ifndef SL_INFO_FORCE_ACCESS_CHECK
 #define SL_INFO_FORCE_ACCESS_CHECK 0x01
 #endif
 #ifndef SL_INFO_IGNORE_READONLY_ATTRIBUTE
-#if (!defined(_WDMDDK_))
 #define SL_INFO_IGNORE_READONLY_ATTRIBUTE 0x40
 #endif
-#endif
 #ifndef SL_NO_CURSOR_UPDATE
-#if (!defined(_WDMDDK_))
 #define SL_NO_CURSOR_UPDATE 0x10
 #endif
-#endif
 #ifndef SL_PERSISTENT_MEMORY_FIXED_MAPPING
-#if (!defined(_WDMDDK_))
 #define SL_PERSISTENT_MEMORY_FIXED_MAPPING 0x20
-#endif
 #endif
 #ifndef SL_QUERY_DIRECTORY_MASK
 #define SL_QUERY_DIRECTORY_MASK 0x1b
@@ -3621,7 +3493,5 @@ typedef struct _EXTENDED_CREATE_INFORMATION_32 *PEXTENDED_CREATE_INFORMATION_32;
 #define XSTATE_CONTEXT_FLAG_LOOKASIDE 0x1
 #endif
 #ifndef _STRSAFE_USE_SECURE_CRT
-#if (!defined(_WDMDDK_))
 #define _STRSAFE_USE_SECURE_CRT 0
-#endif
 #endif

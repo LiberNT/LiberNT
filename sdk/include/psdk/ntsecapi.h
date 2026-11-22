@@ -1683,6 +1683,8 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
+typedef struct _AUDIT_POLICY_INFORMATION *PAUDIT_POLICY_INFORMATION;
+
 BOOLEAN WINAPI AuditComputeEffectivePolicyBySid(const PSID pSid, const GUID *pSubCategoryGuids, ULONG dwPolicyCount, PAUDIT_POLICY_INFORMATION *ppAuditPolicy);
 BOOLEAN WINAPI AuditComputeEffectivePolicyByToken(HANDLE hTokenHandle, const GUID *pSubCategoryGuids, ULONG dwPolicyCount, PAUDIT_POLICY_INFORMATION *ppAuditPolicy);
 BOOLEAN WINAPI AuditEnumerateCategories(GUID **ppAuditCategoriesArray, PULONG pdwCountReturned);
@@ -1716,6 +1718,13 @@ NTSTATUS WINAPI LsaSetForestTrustInformation2(LSA_HANDLE PolicyHandle, PLSA_UNIC
 #endif
 
 
+
+enum _KERB_PROTOCOL_MESSAGE_TYPE
+{
+
+};
+
+typedef enum _KERB_PROTOCOL_MESSAGE_TYPE KERB_PROTOCOL_MESSAGE_TYPE;
 
 struct _KERB_ADD_BINDING_CACHE_ENTRY_EX_REQUEST
 {
@@ -1780,6 +1789,20 @@ struct _KERB_CLOUD_KERBEROS_DEBUG_RESPONSE
     ULONG Data[1];
 };
 
+struct KERB_CRYPTO_KEY
+{
+    LONG KeyType;
+    ULONG Length;
+    PUCHAR Value;
+};
+
+struct KERB_CRYPTO_KEY
+{
+    LONG KeyType;
+    ULONG Length;
+    PUCHAR Value;
+};
+
 struct _KERB_DECRYPT_REQUEST
 {
     KERB_PROTOCOL_MESSAGE_TYPE MessageType;
@@ -1811,6 +1834,21 @@ struct _KERB_PURGE_KDC_PROXY_CACHE_RESPONSE
     KERB_PROTOCOL_MESSAGE_TYPE MessageType;
     ULONG CountOfPurged;
 };
+
+struct _KERB_TICKET_CACHE_INFO_EX
+{
+    UNICODE_STRING ClientName;
+    UNICODE_STRING ClientRealm;
+    UNICODE_STRING ServerName;
+    UNICODE_STRING ServerRealm;
+    LARGE_INTEGER StartTime;
+    LARGE_INTEGER EndTime;
+    LARGE_INTEGER RenewTime;
+    LONG EncryptionType;
+    ULONG TicketFlags;
+};
+
+typedef struct _KERB_TICKET_CACHE_INFO_EX KERB_TICKET_CACHE_INFO_EX;
 
 struct _KERB_PURGE_TKT_CACHE_EX_REQUEST
 {
@@ -1910,6 +1948,14 @@ struct _KERB_RETRIEVE_KEY_TAB_RESPONSE
     ULONG KeyTabLength;
     PUCHAR KeyTab;
 };
+
+struct _SecHandle
+{
+    ULONG_PTR dwLower;
+    ULONG_PTR dwUpper;
+};
+
+typedef struct _SecHandle SecHandle;
 
 struct _KERB_SETPASSWORD_EX_REQUEST
 {

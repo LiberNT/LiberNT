@@ -65,4 +65,8 @@ _BOOL WINAPI DestroyPhysicalMonitor(HANDLE hMonitor);
 }
 #endif
 
+typedef BOOL _BOOL;
+
+typedef BOOL _BOOL;
+
 #endif /* __WINE_PHYSICALMONITORENUMERATIONAPI_H */

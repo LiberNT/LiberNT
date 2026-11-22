@@ -1520,3 +1520,11 @@ cpp_quote("")
 cpp_quote("typedef enum tag_WBEMSTATUS_FORMAT WBEMSTATUS_FORMAT;")
 cpp_quote("")
 cpp_quote("typedef enum tag_WMI_OBJ_TEXT WMI_OBJ_TEXT;")
+cpp_quote("typedef struct IWbemClassObject IWbemClassObject;")
+cpp_quote("typedef struct IWbemServices IWbemServices;")
+cpp_quote("typedef struct IWbemClassObject IWbemClassObject;")
+cpp_quote("typedef struct IWbemServices IWbemServices;")
+
+
+
+

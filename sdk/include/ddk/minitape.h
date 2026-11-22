@@ -1860,6 +1860,26 @@ typedef union _CDB32 CDB32;
 typedef union _CDB32 *PCDB32;
 
 
+struct _MODE_PARAMETER_HEADER
+{
+    UCHAR ModeDataLength;
+    UCHAR MediumType;
+    UCHAR DeviceSpecificParameter;
+    UCHAR BlockDescriptorLength;
+};
+
+typedef struct _MODE_PARAMETER_HEADER MODE_PARAMETER_HEADER;
+
+struct _MODE_PARAMETER_BLOCK
+{
+    UCHAR DensityCode;
+    UCHAR NumberOfBlocks[3];
+    UCHAR Reserved;
+    UCHAR BlockLength[3];
+};
+
+typedef struct _MODE_PARAMETER_BLOCK MODE_PARAMETER_BLOCK;
+
 struct _MODE_CAP_PAGE
 {
     MODE_PARAMETER_HEADER ParameterListHeader;
