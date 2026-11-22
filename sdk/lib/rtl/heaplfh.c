@@ -601,11 +601,11 @@ RtlpLfhActiveSlot(PRTLP_LFH_BUCKET BucketData)
         return &BucketData->Active;
 
     Teb = NtCurrentTeb();
-    Slot = Teb->LowFragHeapDataSlot;
+    Slot = Teb->HeapData;
     if (Slot == 0 || Slot > RTLP_LFH_AFFINITY_SLOTS)
     {
         Slot = ((ULONG)InterlockedIncrement(&RtlpLfhNextAffinitySlot) & (RTLP_LFH_AFFINITY_SLOTS - 1)) + 1;
-        Teb->LowFragHeapDataSlot = (USHORT)Slot;
+        Teb->HeapData = Slot;
     }
 
     ASSERT(Slot >= 1 && Slot <= RTLP_LFH_AFFINITY_SLOTS);

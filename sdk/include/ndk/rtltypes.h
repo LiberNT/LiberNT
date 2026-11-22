@@ -1038,6 +1038,24 @@ typedef struct _ACTIVATION_CONTEXT_STACK
     ULONG StackId;
 } ACTIVATION_CONTEXT_STACK, *PACTIVATION_CONTEXT_STACK;
 
+typedef struct _ACTIVATION_CONTEXT_STACK32
+{
+    ULONG ActiveFrame;
+    LIST_ENTRY32 FrameListCache;
+    ULONG Flags;
+    ULONG NextCookieSequenceNumber;
+    ULONG StackId;
+} ACTIVATION_CONTEXT_STACK32, *PACTIVATION_CONTEXT_STACK32;
+
+typedef struct _ACTIVATION_CONTEXT_STACK64
+{
+    ULONG64 ActiveFrame;
+    LIST_ENTRY64 FrameListCache;
+    ULONG Flags;
+    ULONG NextCookieSequenceNumber;
+    ULONG StackId;
+} ACTIVATION_CONTEXT_STACK64, *PACTIVATION_CONTEXT_STACK64;
+
 //
 // ACE Structure
 //

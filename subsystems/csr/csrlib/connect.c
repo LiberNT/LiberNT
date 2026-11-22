@@ -147,8 +147,8 @@ CsrpConnectToServer(
     /* Save CSR Section data */
     NtCurrentPeb()->ReadOnlySharedMemoryBase = ConnectionInfo->SharedSectionBase;
 #if (NTDDI_VERSION >= NTDDI_LONGHORN)
-    /* ReadOnlySharedMemoryHeap was replaced by HotpatchInformation at Vista */
-    NtCurrentPeb()->HotpatchInformation = ConnectionInfo->SharedSectionHeap;
+    /* ReadOnlySharedMemoryHeap was replaced by SharedData at Vista */
+    NtCurrentPeb()->SharedData = ConnectionInfo->SharedSectionHeap;
 #else
     NtCurrentPeb()->ReadOnlySharedMemoryHeap = ConnectionInfo->SharedSectionHeap;
 #endif

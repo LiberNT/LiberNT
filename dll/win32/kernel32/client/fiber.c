@@ -13,16 +13,8 @@
 #define NDEBUG
 #include <debug.h>
 
-/* TEB.HasFiberData was renamed to DbgHasFiberData (a bit in SameTebFlags) at
- * Vista. Map both spellings to a single accessor so this code compiles
- * regardless of NTDDI level. */
-#if (NTDDI_VERSION >= NTDDI_LONGHORN)
-#define TEB_HAS_FIBER_DATA(t)        ((t)->DbgHasFiberData)
-#define TEB_SET_FIBER_DATA(t, v)     ((t)->DbgHasFiberData = (v))
-#else
 #define TEB_HAS_FIBER_DATA(t)        ((t)->HasFiberData)
 #define TEB_SET_FIBER_DATA(t, v)     ((t)->HasFiberData = (v))
-#endif
 
 #ifdef _M_IX86
 C_ASSERT(FIELD_OFFSET(FIBER, ExceptionList) == 0x04);
