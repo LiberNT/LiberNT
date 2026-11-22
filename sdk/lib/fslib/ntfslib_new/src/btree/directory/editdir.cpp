@@ -2629,6 +2629,7 @@ RemoveMaxFromSubtree(
     _In_ ULONGLONG AllocationUnit,
     _In_ ULONGLONG Vcn,
     _In_ ULONG Depth,
+    _In_ BOOLEAN ViewIndex,
     _Outptr_result_maybenull_
         PIndexEntry* KeyEntry,
     _Out_ PULONG KeyLength,
@@ -2682,11 +2683,12 @@ RemoveMaxFromSubtree(
     while (reinterpret_cast<ULONG_PTR>(Entry) <
            End)
     {
-        if (!NtfsIsDirectoryIndexEntryValid(
+        if (!IsIndexEntryValid(
                 Entry,
                 (ULONG)(End -
                     reinterpret_cast<ULONG_PTR>(
-                        Entry))))
+                        Entry)),
+                ViewIndex))
         {
             Status = STATUS_FILE_CORRUPT_ERROR;
             goto Done;
@@ -2729,6 +2731,7 @@ RemoveMaxFromSubtree(
             AllocationUnit,
             RightVcn,
             Depth + 1,
+            ViewIndex,
             KeyEntry,
             KeyLength,
             Found,
@@ -3715,6 +3718,7 @@ Directory::RemoveIndexEntry(
         AllocationUnit,
         RemovedChild,
         0,
+        SearchKey->CollationRule != ATTRDEF_COLLATION_FILENAME,
         &MaxKey,
         &MaxKeyLength,
         &MaxFound,
@@ -3784,7 +3788,7 @@ Directory::RemoveIndexEntry(
             &IndexRoot->Header,
             RemovedChild,
             &MatchOffset,
-            FALSE);
+            Key.CollationRule != ATTRDEF_COLLATION_FILENAME);
         if (!NT_SUCCESS(Status))
             goto Done;
         Matched =
