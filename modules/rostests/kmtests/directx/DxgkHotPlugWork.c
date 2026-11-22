@@ -127,6 +127,22 @@ static VOID DxgkHotPlugWorkTestBoundedRetry(VOID)
     ok_bool_false(DxgkHotPlugWorkCoreShouldRetry(STATUS_NOT_SUPPORTED, 0), "permanent failures are not retried");
 }
 
+static VOID DxgkHotPlugWorkTestDesktopOutput(VOID)
+{
+    ok_bool_false(DxgkHotPlugWorkCorePrefersOutput(FALSE, TRUE, 9, TRUE, TRUE, 3), "a newly connected output does not take the desktop from the output showing it");
+    ok_bool_true(DxgkHotPlugWorkCorePrefersOutput(TRUE, FALSE, 1, FALSE, TRUE, 5), "the output the topology drives keeps the desktop");
+    ok_bool_true(DxgkHotPlugWorkCorePrefersOutput(FALSE, TRUE, 1, FALSE, FALSE, 5), "an output with an EDID wins among undriven outputs");
+    ok_bool_true(DxgkHotPlugWorkCorePrefersOutput(FALSE, TRUE, 7, FALSE, TRUE, 5), "the last connected output wins among equal undriven outputs");
+    ok_bool_false(DxgkHotPlugWorkCorePrefersOutput(TRUE, TRUE, 5, TRUE, TRUE, 5), "an equal output does not replace the chosen one");
+}
+
+static VOID DxgkHotPlugWorkTestPathImportance(VOID)
+{
+    ok_eq_ulong(DxgkHotPlugWorkCorePathImportance(0), 1UL);
+    ok_eq_ulong(DxgkHotPlugWorkCorePathImportance(1), 2UL);
+    ok_eq_ulong(DxgkHotPlugWorkCorePathImportance(15), 16UL);
+}
+
 START_TEST(DxgkHotPlugWork)
 {
     DxgkHotPlugWorkTestCoalescing();
@@ -137,4 +153,6 @@ START_TEST(DxgkHotPlugWork)
     DxgkHotPlugWorkTestZeroPresentEnumeration();
     DxgkHotPlugWorkTestStopRecoveryOrdering();
     DxgkHotPlugWorkTestBoundedRetry();
+    DxgkHotPlugWorkTestDesktopOutput();
+    DxgkHotPlugWorkTestPathImportance();
 }

@@ -2285,6 +2285,22 @@ DxgkpBindVidPnTargetsToChildren(
     KeReleaseMutex(&Adapter->VidPnMutex, FALSE);
 }
 
+static BOOLEAN
+DxgkpVidPnDrivesTarget(
+    _In_ PDXGKP_VIDPN VidPn,
+    _In_ D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId)
+{
+    SIZE_T Index;
+
+    ASSERT(VidPn->NumPaths <= DXGKP_MAX_PATHS);
+    for (Index = 0; Index < VidPn->NumPaths; Index++)
+    {
+        if (VidPn->Paths[Index].VidPnTargetId == TargetId)
+            return TRUE;
+    }
+    return FALSE;
+}
+
 static NTSTATUS
 DxgkpSnapshotHotPlugMonitor(
     _In_ PDXGKRNL_ADAPTER Adapter,
@@ -2296,7 +2312,10 @@ DxgkpSnapshotHotPlugMonitor(
     PLIST_ENTRY Entry;
     KIRQL OldIrql;
     ULONG ConnectedCount = 0;
+    BOOLEAN ConnectedDriven = FALSE;
+    BOOLEAN Driven;
 
+    ASSERT(VidPn != NULL);
     RtlZeroMemory(Snapshot, sizeof(*Snapshot));
     KeAcquireSpinLock(&Adapter->ChildListLock, &OldIrql);
     if (InterlockedCompareExchange64(&Adapter->HotPlugGeneration, 0, 0) != ExpectedGeneration)
@@ -2327,12 +2346,14 @@ DxgkpSnapshotHotPlugMonitor(
          * connected output rather than the last, so the choice is stable
          * across rebuilds instead of depending on child list order.
          */
+        Driven = DxgkpVidPnDrivesTarget(VidPn, Child->Descriptor.ChildUid);
         if (ConnectedChild == NULL ||
-            (!ConnectedChild->EdidValid && Child->EdidValid) ||
-            (ConnectedChild->EdidValid == Child->EdidValid &&
-             Child->ConnectSequence > ConnectedChild->ConnectSequence))
+            DxgkHotPlugWorkCorePrefersOutput(Driven, Child->EdidValid, Child->ConnectSequence,
+                                             ConnectedDriven, ConnectedChild->EdidValid,
+                                             ConnectedChild->ConnectSequence))
         {
             ConnectedChild = Child;
+            ConnectedDriven = Driven;
         }
     }
     if (ConnectedCount >= 1)
@@ -3256,6 +3277,8 @@ DxgkpSeedDefaultHotPlugPath(
             if (ExtraIndex == MAXULONG)
                 continue;
             DxgkpPopulateDefaultPath(&VidPn->Paths[VidPn->NumPaths], 0, Snapshot->Extra[Extra].ChildUid);
+            VidPn->Paths[VidPn->NumPaths].ImportanceOrdinal =
+                (D3DKMDT_VIDPN_PRESENT_PATH_IMPORTANCE)DxgkHotPlugWorkCorePathImportance(VidPn->NumPaths);
             if (VidPn->TargetModeSets[ExtraIndex] != NULL)
                 VidPn->TargetModeSets[ExtraIndex]->PinnedModeId = (UINT)-1;
             VidPn->NumPaths++;

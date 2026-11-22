@@ -71,6 +71,27 @@ FORCEINLINE NTSTATUS DxgkHotPlugWorkCoreValidateEnumerationLocked(_In_ volatile 
     return STATUS_SUCCESS;
 }
 
+/* Which connected output carries the desktop: the one the current topology already drives, then one
+ * with an EDID, then the one connected last.  A newly connected output joins the desktop; it does not
+ * take the main display from the output showing it. */
+FORCEINLINE BOOLEAN DxgkHotPlugWorkCorePrefersOutput(
+    _In_ BOOLEAN CandidateDriven, _In_ BOOLEAN CandidateEdid, _In_ ULONG64 CandidateSequence,
+    _In_ BOOLEAN CurrentDriven, _In_ BOOLEAN CurrentEdid, _In_ ULONG64 CurrentSequence)
+{
+    if (CandidateDriven != CurrentDriven)
+        return CandidateDriven;
+    if (CandidateEdid != CurrentEdid)
+        return CandidateEdid;
+    return CandidateSequence > CurrentSequence;
+}
+
+/* Path importance ordinals are unique within a topology (D3DKMDT_VIDPN_PRESENT_PATH_IMPORTANCE): 1 is primary */
+FORCEINLINE ULONG DxgkHotPlugWorkCorePathImportance(_In_ SIZE_T PathIndex)
+{
+    ASSERT(PathIndex < 255);
+    return (ULONG)(1 + PathIndex);
+}
+
 FORCEINLINE BOOLEAN DxgkHotPlugWorkCoreCanAcquireLevel3AfterRundown(_In_ volatile const LONG *Active)
 {
     return *Active == 0;
