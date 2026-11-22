@@ -103,7 +103,7 @@ static void CheckIndex(PWSTR Path, PCWSTR Name, ULONG Characters, ULONG Size)
             break;
         Restart = FALSE;
     }
-    Check(Entry.EndOfFile == Size && Entry.AllocationSize == (Size == 4 ? 0 : ((Size + 4095) & ~4095u)), "parent index sizes");
+    Check(Entry.EndOfFile == Size && Entry.AllocationSize == (Size == 4 ? 8 : ((Size + 4095) & ~4095u)), "parent index sizes");
     NtfsDirectoryDestroy(Directory);
     NtfsFileRecordDestroy(Parent);
 }

@@ -87,6 +87,7 @@ GetDataAttributeSizes(
     if (!Attribute->IsNonResident)
     {
         *DataSize = Attribute->Resident.DataLength;
+        *AllocatedSize = NtfsResidentAllocatedSize(*DataSize);
         return;
     }
     *AllocatedSize = (Attribute->Flags & (ATTR_COMPRESSION_MASK | ATTR_SPARSE))

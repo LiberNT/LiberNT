@@ -445,11 +445,11 @@ MasterFileTable::InsertFileNameLink(
     if (!(File->Header->Flags & FR_IS_DIRECTORY))
     {
         PAttribute DataAttribute =
-            File->FindAttributeInRecord(TypeData, NULL, NULL);
+            File->GetAttribute(TypeData, NULL);
 
         if (DataAttribute && !DataAttribute->IsNonResident)
         {
-            Value->AllocatedSize = 0;
+            Value->AllocatedSize = NtfsResidentAllocatedSize(DataAttribute->Resident.DataLength);
             Value->DataSize = DataAttribute->Resident.DataLength;
         }
         else if (DataAttribute && DataAttribute->NonResident.FirstVCN == 0)
