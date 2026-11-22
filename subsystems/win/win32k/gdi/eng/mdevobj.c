@@ -97,6 +97,9 @@ MDEVOBJ_Create(
             break;
         }
 
+        if (!pustrDeviceName && !EngpIsDisplayAttached(pGraphicsDevice))
+            continue;
+
         if (!pdm)
         {
             /* No settings requested. Provide nothing and LDEVOBJ_bProbeAndCaptureDevmode

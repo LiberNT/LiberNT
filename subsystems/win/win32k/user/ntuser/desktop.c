@@ -3276,7 +3276,7 @@ NtUserSwitchDesktop(HDESK hdesk)
     IntGetSysCursorInfo()->bClipped = FALSE;
 
     /* Show the new desktop window */
-    co_IntShowDesktop(pdesk, UserGetSystemMetrics(SM_CXSCREEN), UserGetSystemMetrics(SM_CYSCREEN), bRedrawDesktop);
+    co_IntShowDesktop(pdesk, UserGetSystemMetrics(SM_CXVIRTUALSCREEN), UserGetSystemMetrics(SM_CYVIRTUALSCREEN), bRedrawDesktop);
 
     if (!gpmdev)
         co_IntGraphicsCheck(TRUE);
