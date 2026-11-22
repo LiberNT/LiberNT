@@ -133,6 +133,7 @@ typedef struct _GINAINSTANCE
     PVOID Context;
     DWORD Version;
     BOOL UseCtrlAltDelete;
+    BOOL Initialized;
 } GINAINSTANCE, *PGINAINSTANCE;
 
 

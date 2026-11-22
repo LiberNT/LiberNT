@@ -1508,6 +1508,7 @@ HandleShutdown(
     if (Session->LogonState != STATE_INIT)
     {
         /* The interactive user has already agreed to log off. */
+        ASSERT(Session->Gina.Initialized);
         CallNotificationDlls(Session, ShutdownHandler);
         Session->Gina.Functions.WlxShutdown(Session->Gina.Context, wlxAction);
     }
@@ -1524,7 +1525,8 @@ HandleShutdown(
     {
         /* A setup shell has no separate user-logoff phase. */
         CallNotificationDlls(Session, ShutdownHandler);
-        Session->Gina.Functions.WlxShutdown(Session->Gina.Context, wlxAction);
+        if (Session->Gina.Initialized)
+            Session->Gina.Functions.WlxShutdown(Session->Gina.Context, wlxAction);
     }
 
     /* Show again the shutdown message */

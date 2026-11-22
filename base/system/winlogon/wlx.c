@@ -938,15 +938,17 @@ GinaInit(
     Session->Gina.Context = NULL;
     Session->Gina.Version = GinaDllVersion;
     Session->Gina.UseCtrlAltDelete = FALSE;
+    Session->Gina.Initialized = FALSE;
     Session->SuppressStatus = FALSE;
 
     TRACE("Calling WlxInitialize(\"%S\")\n", Session->InteractiveWindowStationName);
-    return Session->Gina.Functions.WlxInitialize(
+    Session->Gina.Initialized = Session->Gina.Functions.WlxInitialize(
         Session->InteractiveWindowStationName,
         (HANDLE)Session,
         NULL,
         (PVOID)&FunctionTable,
         &Session->Gina.Context);
+    return Session->Gina.Initialized;
 }
 
 BOOL

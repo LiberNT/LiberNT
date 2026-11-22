@@ -290,7 +290,7 @@ DisplayStatusMessage(
 {
     WCHAR StatusMsg[MAX_PATH];
 
-    if (Session->Gina.Version < WLX_VERSION_1_3)
+    if (!Session->Gina.Initialized || Session->Gina.Version < WLX_VERSION_1_3)
         return TRUE;
 
     if (Session->SuppressStatus)
@@ -307,7 +307,7 @@ BOOL
 RemoveStatusMessage(
     IN PWLSESSION Session)
 {
-    if (Session->Gina.Version < WLX_VERSION_1_3)
+    if (!Session->Gina.Initialized || Session->Gina.Version < WLX_VERSION_1_3)
         return TRUE;
 
     return Session->Gina.Functions.WlxRemoveStatusMessage(Session->Gina.Context);
