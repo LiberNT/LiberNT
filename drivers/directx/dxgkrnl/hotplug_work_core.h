@@ -99,6 +99,12 @@ FORCEINLINE ULONG DxgkHotPlugWorkCoreExtraPathSource(_In_ SIZE_T PathIndex, _In_
     return PathIndex < NumSources ? (ULONG)PathIndex : 0;
 }
 
+/* A further source of an extended desktop scans out a primary of its own; the desktop source keeps the adapter's shared primary */
+FORCEINLINE BOOLEAN DxgkHotPlugWorkCoreSourceHasOwnPrimary(_In_ ULONG SourceId, _In_ ULONG DesktopSourceId, _In_ ULONG NumSources, _In_ ULONG MaxSourcePrimaries)
+{
+    return SourceId != 0 && SourceId != DesktopSourceId && SourceId < NumSources && SourceId < MaxSourcePrimaries;
+}
+
 FORCEINLINE BOOLEAN DxgkHotPlugWorkCoreCanAcquireLevel3AfterRundown(_In_ volatile const LONG *Active)
 {
     return *Active == 0;

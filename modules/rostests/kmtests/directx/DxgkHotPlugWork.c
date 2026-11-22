@@ -151,6 +151,16 @@ static VOID DxgkHotPlugWorkTestExtendSource(VOID)
     ok_eq_ulong(DxgkHotPlugWorkCoreExtraPathSource(4, 4), 0UL);
 }
 
+static VOID DxgkHotPlugWorkTestSourcePrimary(VOID)
+{
+    ok_bool_true(DxgkHotPlugWorkCoreSourceHasOwnPrimary(1, 0, 4, 16), "a further source has a primary of its own");
+    ok_bool_true(DxgkHotPlugWorkCoreSourceHasOwnPrimary(3, 0, 4, 16), "every further source has one");
+    ok_bool_false(DxgkHotPlugWorkCoreSourceHasOwnPrimary(0, 0, 4, 16), "the desktop source keeps the shared primary");
+    ok_bool_false(DxgkHotPlugWorkCoreSourceHasOwnPrimary(2, 2, 4, 16), "the source holding the shared primary has no second one");
+    ok_bool_false(DxgkHotPlugWorkCoreSourceHasOwnPrimary(4, 0, 4, 16), "a source the adapter does not have gets none");
+    ok_bool_false(DxgkHotPlugWorkCoreSourceHasOwnPrimary(16, 0, 32, 16), "a source beyond the primary table gets none");
+}
+
 START_TEST(DxgkHotPlugWork)
 {
     DxgkHotPlugWorkTestCoalescing();
@@ -164,4 +174,5 @@ START_TEST(DxgkHotPlugWork)
     DxgkHotPlugWorkTestDesktopOutput();
     DxgkHotPlugWorkTestPathImportance();
     DxgkHotPlugWorkTestExtendSource();
+    DxgkHotPlugWorkTestSourcePrimary();
 }
