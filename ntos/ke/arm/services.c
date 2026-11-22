@@ -183,7 +183,7 @@ KiUnwindFrame(
     _In_ BOOLEAN CallerFrame)
 {
     PRUNTIME_FUNCTION FunctionEntry;
-    PLDR_DATA_TABLE_ENTRY LdrEntry;
+    PKLDR_DATA_TABLE_ENTRY LdrEntry;
     ULONG ImageBase, EstablisherFrame, ControlPc;
     PVOID HandlerData, Base;
     BOOLEAN InKernel;

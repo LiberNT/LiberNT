@@ -7,11 +7,6 @@
 
 #pragma once
 
-typedef union _CLS_LSN
-{
-    ULONGLONG ullOffset;
-} CLS_LSN, *PCLS_LSN;
-
 typedef struct _KTMOBJECT_NAMESPACE_LINK
 {
     RTL_BALANCED_LINKS Links;

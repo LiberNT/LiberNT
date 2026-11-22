@@ -809,7 +809,7 @@ NtQueryInformationTransactionManager(
             break;
 
         case TransactionManagerRecoveryInformation:
-            Recovery.LastRecoveredLsn = Tm->LastRecoveredLsn.ullOffset;
+            Recovery.LastRecoveredLsn = Tm->LastRecoveredLsn.Internal;
             Status = TmpReturnInformation(PreviousMode,
                                           TransactionManagerInformation,
                                           TransactionManagerInformationLength,

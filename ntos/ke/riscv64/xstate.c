@@ -7,8 +7,6 @@
 
 #include <ntoskrnl.h>
 
-#define INVALID_EXTENDED_PROCESSOR_STATE 0x131
-
 NTSTATUS
 NTAPI
 KeSaveExtendedProcessorState(

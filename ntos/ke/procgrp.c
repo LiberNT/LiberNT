@@ -20,7 +20,6 @@ NTKERNELAPI ULONG NTAPI KeQueryNodeActiveProcessorCount(_In_ USHORT NodeNumber);
 NTKERNELAPI PKPRCB NTAPI KeQueryPrcbAddress(_In_ ULONG Number);
 NTKERNELAPI ULONG NTAPI KeQueryActiveProcessorAffinity(_Out_ PKAFFINITY_EX Affinity);
 NTKERNELAPI NTSTATUS NTAPI KeQueryActiveProcessorAffinity2(_Out_ PGROUP_AFFINITY GroupAffinities, _Inout_ PUSHORT Count);
-NTKERNELAPI NTSTATUS NTAPI KeQueryNodeActiveAffinity2(_In_ USHORT NodeNumber, _Out_opt_ PGROUP_AFFINITY GroupAffinities, _Inout_ PUSHORT Count);
 NTKERNELAPI KHETERO_CPU_POLICY NTAPI KeSetHeteroCpuPolicyThread(_Inout_ PKTHREAD Thread, _In_ KHETERO_CPU_POLICY Policy, _In_ LOGICAL Reset);
 #if (NTDDI_VERSION >= NTDDI_WINBLUE)
 NTKERNELAPI BOOLEAN NTAPI KeSetTimer2(_Inout_ PKTIMER Timer, _In_ LARGE_INTEGER DueTime, _In_ LONGLONG Period, _In_opt_ PEXT_SET_PARAMETERS Parameters);
@@ -1337,20 +1336,27 @@ NTSTATUS
 NTAPI
 KeQueryNodeActiveAffinity2(
     _In_ USHORT NodeNumber,
-    _Out_opt_ PGROUP_AFFINITY GroupAffinities,
-    _Inout_ PUSHORT Count)
+    _Out_writes_to_opt_(GroupAffinitiesCount, *GroupAffinitiesRequired) PGROUP_AFFINITY GroupAffinities,
+    _In_ USHORT GroupAffinitiesCount,
+    _Out_ PUSHORT GroupAffinitiesRequired)
 {
-    if (Count == NULL)
+    USHORT Count;
+    NTSTATUS Status;
+
+    if (GroupAffinitiesRequired == NULL)
         return STATUS_INVALID_PARAMETER;
 
     if (NodeNumber != 0)
     {
-        *Count = 0;
+        *GroupAffinitiesRequired = 0;
         return STATUS_SUCCESS;
     }
 
     /* Node 0 owns every active processor, i.e. the system affinity */
-    return KeQueryActiveProcessorAffinity2(GroupAffinities, Count);
+    Count = GroupAffinitiesCount;
+    Status = KeQueryActiveProcessorAffinity2(GroupAffinities, &Count);
+    *GroupAffinitiesRequired = Count;
+    return Status;
 }
 
 /*
