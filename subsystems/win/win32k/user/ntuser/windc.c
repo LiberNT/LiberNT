@@ -974,6 +974,7 @@ DceResetActiveDCEs(PWND Window)
    INT DeltaX;
    INT DeltaY;
    BOOL bRedirected;
+   BOOL bForeign;
    PLIST_ENTRY ListEntry;
 
    if (NULL == Window)
@@ -1007,12 +1008,25 @@ DceResetActiveDCEs(PWND Window)
             }
          }
 
-         if (!GreIsHandleValid(pDCE->hDC) ||
-             (dc = DC_LockDc(pDCE->hDC)) == NULL)
+         bForeign = FALSE;
+         dc = DC_LockDc(pDCE->hDC);
+         if (dc == NULL)
          {
-            continue;
+            ASSERT(UserIsEnteredExclusive());
+            dc = DC_LockDcAnyOwner(pDCE->hDC);
+            if (dc == NULL)
+            {
+               continue;
+            }
+            bForeign = TRUE;
          }
          bRedirected = !!(dc->fs & DC_REDIRECTION);
+         if (!bRedirected && bForeign)
+         {
+            /* TODO: move the origin and clip of a direct DC owned by another process */
+            DC_UnlockDc(dc);
+            continue;
+         }
          if (bRedirected)
          {
             RECTL rcOld = dc->erclWindow;
@@ -1027,7 +1041,8 @@ DceResetActiveDCEs(PWND Window)
             {
                PRECTL prcNew = (pDCE->DCXFlags & DCX_WINDOW) ? &CurrentWindow->rcWindow : &CurrentWindow->rcClient;
 
-               if ((pDCE->DCXFlags & (DCX_INTERSECTRGN | DCX_EXCLUDERGN)) &&
+               if (!bForeign &&
+                   (pDCE->DCXFlags & (DCX_INTERSECTRGN | DCX_EXCLUDERGN)) &&
                    (rcOld.right - rcOld.left != prcNew->right - prcNew->left ||
                     rcOld.bottom - rcOld.top != prcNew->bottom - prcNew->top))
                {

@@ -5241,6 +5241,21 @@ IntCompositionEndPrintRedirect(_In_ PWND Wnd)
     DceResetActiveDCEs(Wnd);
 }
 
+static PDC
+IntCompositionLockWindowDC(_In_ HDC hDC, _Out_ PBOOL Foreign)
+{
+    PDC pdc = DC_LockDc(hDC);
+
+    *Foreign = FALSE;
+    if (pdc == NULL)
+    {
+        ASSERT(UserIsEnteredExclusive());
+        pdc = DC_LockDcAnyOwner(hDC);
+        *Foreign = (pdc != NULL);
+    }
+    return pdc;
+}
+
 VOID
 IntCompositionRedirectDC(_In_opt_ PWND Wnd, _In_ HDC hDC, _In_ ULONG DcxFlags, _In_opt_ HRGN hrgnClip, _In_ BOOL Revalidate)
 {
@@ -5252,6 +5267,7 @@ IntCompositionRedirectDC(_In_opt_ PWND Wnd, _In_ HDC hDC, _In_ ULONG DcxFlags, _
     PREGION prgn;
     BOOL bRedirect = FALSE;
     BOOL Virtual;
+    BOOL Foreign;
 
     if (Wnd != NULL &&
         (gbCompositionEnabled || (g_PrintRedirectWnd != NULL && IntCompositionTopLevel(Wnd) == g_PrintRedirectWnd)))
@@ -5287,7 +5303,7 @@ IntCompositionRedirectDC(_In_opt_ PWND Wnd, _In_ HDC hDC, _In_ ULONG DcxFlags, _
         }
     }
 
-    pdc = DC_LockDc(hDC);
+    pdc = IntCompositionLockWindowDC(hDC, &Foreign);
     if (pdc == NULL)
         return;
 
@@ -5296,13 +5312,16 @@ IntCompositionRedirectDC(_In_opt_ PWND Wnd, _In_ HDC hDC, _In_ ULONG DcxFlags, _
         /* A reused DC that was previously redirected (recycled cache entry,
          * or composition disabled meanwhile): restore the primary so the
          * backing reference is not stranded. */
-        if (pdc->fs & DC_REDIRECTION)
+        /* TODO: restore the primary of a DC owned by another process; it keeps its backing until its owner gets it again */
+        if ((pdc->fs & DC_REDIRECTION) && !Foreign)
             IntCompositionRestoreDC(pdc);
         DC_UnlockDc(pdc);
         return;
     }
 
-    if (pdc->dctype != DCTYPE_DIRECT)
+    /* TODO: rebuild the clip of another process's DC with a DCE clip region; that region is the owner's */
+    if (pdc->dctype != DCTYPE_DIRECT ||
+        (Foreign && (DcxFlags & (DCX_INTERSECTRGN | DCX_EXCLUDERGN)) && hrgnClip != NULL))
     {
         DC_UnlockDc(pdc);
         return;
@@ -5441,7 +5460,7 @@ IntCompositionRedirectDC(_In_opt_ PWND Wnd, _In_ HDC hDC, _In_ ULONG DcxFlags, _
     if (IntIsLockUpdateSuppressed(Wnd, DcxFlags))
         REGION_SetRectRgn(prgn, 0, 0, 0, 0);
 
-    pdc = DC_LockDc(hDC);
+    pdc = IntCompositionLockWindowDC(hDC, &Foreign);
     if (pdc == NULL)
     {
         REGION_Delete(prgn);
