@@ -182,6 +182,7 @@ KiTrapExitStub KiTrapReturnNoSegments,    (KI_RESTORE_VOLATILES OR KI_EXIT_IRET)
 KiTrapExitStub KiTrapReturnNoSegmentsRet8,(KI_RESTORE_VOLATILES OR KI_RESTORE_EFLAGS OR KI_EXIT_RET8)
 
 EXTERN _PsConvertToGuiThread@0:PROC
+EXTERN _KiFastSystemCallReturnAddress:DWORD
 
 PUBLIC _KiConvertToGuiThread@0
 _KiConvertToGuiThread@0:

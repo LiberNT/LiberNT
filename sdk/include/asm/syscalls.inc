@@ -484,7 +484,7 @@ Zw\Name:
 SyscallId = 0
 
 #ifdef _M_IX86
-#define KUSER_SHARED_SYSCALL HEX(7ffe0300)
+#define KUSER_SHARED_SYSCALL HEX(7ffe0308)
 #define KGDT_R0_CODE 8
 #ifdef WOW64_I386_RUNTIME
 .code
