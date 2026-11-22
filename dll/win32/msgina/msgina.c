@@ -1007,7 +1007,7 @@ DoLoginTasks(
 
 
 BOOL
-CreateProfile(
+GinaCreateProfile(
     IN OUT PGINA_CONTEXT pgContext,
     IN PWSTR UserName,
     IN PWSTR Domain,
