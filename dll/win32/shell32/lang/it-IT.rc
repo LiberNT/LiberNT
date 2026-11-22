@@ -732,6 +732,10 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "Commenti"
     IDS_SHV_COLUMN_LOCATION "Posizione"
     IDS_SHV_COLUMN_MODEL "Modello"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "Dispositivi e unità (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "Percorsi di sistema (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s disponibili su %s"
+    IDS_COMPUTER_FOLDERS "Cartelle (%u)"
 
     /* special folders */
     IDS_DESKTOP "Desktop"
@@ -769,7 +773,7 @@ BEGIN
     IDS_DISCONNECT "Disconnect"
     IDS_OPENFILELOCATION "Open f&ile location"
     IDS_SENDTO_MENU "Se&nd To"
-    IDS_COPYASPATHMENU "Copy as path"
+    IDS_COPYASPATHMENU "Copia come percorso"
 
     IDS_MOVEERRORTITLE "Error Moving File or Folder"
     IDS_COPYERRORTITLE "Error Copying File or Folder"
@@ -833,7 +837,7 @@ BEGIN
 
     /* Shell folder path default values. See also: dll/win32/userenv/lang */
     IDS_PROGRAMS "Menu Avvio\\Programmi"
-    IDS_PERSONAL "Documenti Personali"
+    IDS_PERSONAL "Documenti"
     IDS_FAVORITES "Preferiti"
     IDS_STARTUP "Menu Avvio\\Programmi\\Esecuzione automatica"
     IDS_RECENT "Recenti"
@@ -870,6 +874,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "3.5 Floppy"
     IDS_DRIVE_REMOVABLE "Disco rimovibile"
     IDS_FS_UNKNOWN "Sconosciuto"
+    IDS_FOLDER_DOWNLOADS "Download"
+    IDS_FOLDER_MUSIC "Musica"
+    IDS_FOLDER_PICTURES "Immagini"
+    IDS_FOLDER_VIDEOS "Video"
 
     /* Open With */
     IDS_OPEN_WITH "Apri con"
@@ -1042,7 +1050,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "Esplora file"
+    IDS_SEARCHBAND_COMMAND "Cerca"
+    IDS_FOLDERSHORTCUT_TYPE "Collegamento a cartella"
 END

@@ -113,6 +113,10 @@
 #define IDS_DRIVE_FLOPPY         75
 #define IDS_DRIVE_REMOVABLE      76
 #define IDS_FS_UNKNOWN           77
+#define IDS_FOLDER_DOWNLOADS     78
+#define IDS_FOLDER_MUSIC         79
+#define IDS_FOLDER_PICTURES      80
+#define IDS_FOLDER_VIDEOS        81
 
 #define IDS_CREATEFILE_CAPTION    126
 #define IDS_CREATEFILE_DENIED     127

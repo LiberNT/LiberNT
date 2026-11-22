@@ -742,6 +742,10 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "Comentários"
     IDS_SHV_COLUMN_LOCATION "Localização"
     IDS_SHV_COLUMN_MODEL "Modelo"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "Dispositivos e unidades (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "Localizações do sistema (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s livres de %s"
+    IDS_COMPUTER_FOLDERS "Pastas (%u)"
 
     /* special folders */
     IDS_DESKTOP "Ambiente de trabalho"
@@ -842,7 +846,7 @@ BEGIN
 
     /* Shell folder path default values. See also: dll/win32/userenv/lang */
     IDS_PROGRAMS "Menu Iniciar\\Programas"
-    IDS_PERSONAL "Os Meus Documentos"
+    IDS_PERSONAL "Documentos"
     IDS_FAVORITES "Favoritos"
     IDS_STARTUP "Menu Iniciar\\Programas\\Iniciar"
     IDS_RECENT "Recentes"
@@ -879,6 +883,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "3.5 Floppy"
     IDS_DRIVE_REMOVABLE "Disco removível"
     IDS_FS_UNKNOWN "Desconhecido"
+    IDS_FOLDER_DOWNLOADS "Transferências"
+    IDS_FOLDER_MUSIC "Música"
+    IDS_FOLDER_PICTURES "Imagens"
+    IDS_FOLDER_VIDEOS "Vídeos"
 
     /* Open With */
     IDS_OPEN_WITH "Abre com..."
@@ -1051,7 +1059,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "Explorador de Ficheiros"
+    IDS_SEARCHBAND_COMMAND "Procurar"
+    IDS_FOLDERSHORTCUT_TYPE "Atalho de pasta"
 END

@@ -739,6 +739,10 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "Azalpenak"
     IDS_SHV_COLUMN_LOCATION "Kokalekua"
     IDS_SHV_COLUMN_MODEL "Eredu"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "Gailuak eta unitateak (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "Sistemaren kokalekuak (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s libre, guztira %s"
+    IDS_COMPUTER_FOLDERS "Karpetak (%u)"
 
     /* special folders */
     IDS_DESKTOP "Mahaigaina"
@@ -776,7 +780,7 @@ BEGIN
     IDS_DISCONNECT "Deskonektatu"
     IDS_OPENFILELOCATION "Ireki &fitxategi kokalekua"
     IDS_SENDTO_MENU "&Bidali hona"
-    IDS_COPYASPATHMENU "Copy as path"
+    IDS_COPYASPATHMENU "Kopiatu bide-izen gisa"
 
     IDS_MOVEERRORTITLE "Errore bat gertatu da fitxategia edo karpeta lekuz aldatzean"
     IDS_COPYERRORTITLE "Errore bat gertatu da fitxategia edo karpeta kopiatzean"
@@ -838,7 +842,7 @@ BEGIN
 
     /* Shell folder path default values. See also: dll/win32/userenv/lang */
     IDS_PROGRAMS "Hasi Menua\\Programak"
-    IDS_PERSONAL "Nire dokumentuak"
+    IDS_PERSONAL "Dokumentuak"
     IDS_FAVORITES "Gogokoenak"
     IDS_STARTUP "Hasi Menua\\Programak\\Hasi"
     IDS_RECENT "Arestikoak"
@@ -875,6 +879,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "Diskete"
     IDS_DRIVE_REMOVABLE "Eurauzgarri diskoa"
     IDS_FS_UNKNOWN "Ezezagun"
+    IDS_FOLDER_DOWNLOADS "Deskargak"
+    IDS_FOLDER_MUSIC "Musika"
+    IDS_FOLDER_PICTURES "Irudiak"
+    IDS_FOLDER_VIDEOS "Bideoak"
 
     /* Open With */
     IDS_OPEN_WITH "Ireki honekin"
@@ -1047,7 +1055,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "Fitxategi-arakatzailea"
+    IDS_SEARCHBAND_COMMAND "Bilatu"
+    IDS_FOLDERSHORTCUT_TYPE "Karpetaren lasterbidea"
 END

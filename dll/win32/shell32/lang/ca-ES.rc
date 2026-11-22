@@ -732,9 +732,13 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "Comments"
     IDS_SHV_COLUMN_LOCATION "Location"
     IDS_SHV_COLUMN_MODEL "Model"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "Dispositius i unitats (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "Ubicacions del sistema (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s lliures de %s"
+    IDS_COMPUTER_FOLDERS "Carpetes (%u)"
 
     /* special folders */
-    IDS_DESKTOP "Desktop"
+    IDS_DESKTOP "Escriptori"
     IDS_MYCOMPUTER "My Computer"
     IDS_RECYCLEBIN_FOLDER_NAME "Recycle Bin"
     IDS_CONTROLPANEL "Control Panel"
@@ -769,7 +773,7 @@ BEGIN
     IDS_DISCONNECT "Disconnect"
     IDS_OPENFILELOCATION "Open f&ile location"
     IDS_SENDTO_MENU "Se&nd To"
-    IDS_COPYASPATHMENU "Copy as path"
+    IDS_COPYASPATHMENU "Copia com a camí"
 
     IDS_MOVEERRORTITLE "Error Moving File or Folder"
     IDS_COPYERRORTITLE "Error Copying File or Folder"
@@ -833,15 +837,15 @@ BEGIN
 
     /* Shell folder path default values. See also: dll/win32/userenv/lang */
     IDS_PROGRAMS "Start Menu\\Programs"
-    IDS_PERSONAL "My Documents"
-    IDS_FAVORITES "Favorites"
+    IDS_PERSONAL "Documents"
+    IDS_FAVORITES "Preferits"
     IDS_STARTUP "Start Menu\\Programs\\Startup"
     IDS_RECENT "Recent"
     IDS_SENDTO "SendTo"
     IDS_STARTMENU "Start Menu"
     IDS_MYMUSIC "My Music"
     IDS_MYVIDEO "My Videos"
-    IDS_DESKTOPDIRECTORY "Desktop"
+    IDS_DESKTOPDIRECTORY "Escriptori"
     IDS_NETHOOD "NetHood"
     IDS_TEMPLATES "Templates"
     IDS_APPDATA "Application Data"
@@ -870,6 +874,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "3.5 Floppy"
     IDS_DRIVE_REMOVABLE "Removable Disk"
     IDS_FS_UNKNOWN "Unknown"
+    IDS_FOLDER_DOWNLOADS "Baixades"
+    IDS_FOLDER_MUSIC "Música"
+    IDS_FOLDER_PICTURES "Imatges"
+    IDS_FOLDER_VIDEOS "Vídeos"
 
     /* Open With */
     IDS_OPEN_WITH "Open With"
@@ -1038,7 +1046,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "Explorador de fitxers"
+    IDS_SEARCHBAND_COMMAND "Cerca"
+    IDS_FOLDERSHORTCUT_TYPE "Drecera de carpeta"
 END

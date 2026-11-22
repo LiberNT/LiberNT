@@ -739,6 +739,10 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "टिप्पणियाँ"
     IDS_SHV_COLUMN_LOCATION "स्थान"
     IDS_SHV_COLUMN_MODEL "मॉडल"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "डिवाइस और ड्राइव (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "सिस्टम स्थान (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s खाली, कुल %s"
+    IDS_COMPUTER_FOLDERS "फ़ोल्डर (%u)"
 
     /* special folders */
     IDS_DESKTOP "डेस्कटॉप"
@@ -776,7 +780,7 @@ BEGIN
     IDS_DISCONNECT "डिस्कनेक्ट"
     IDS_OPENFILELOCATION "Open f&ile location"
     IDS_SENDTO_MENU "Se&nd To"
-    IDS_COPYASPATHMENU "Copy as path"
+    IDS_COPYASPATHMENU "पथ के रूप में कॉपी करें"
 
     IDS_MOVEERRORTITLE "Error Moving File or Folder"
     IDS_COPYERRORTITLE "Error Copying File or Folder"
@@ -835,7 +839,7 @@ BEGIN
 
     /* Shell folder path default values. See also: dll/win32/userenv/lang */
     IDS_PROGRAMS "प्रारंभ मेनू\\प्रोग्राम"
-    IDS_PERSONAL "मेरे डॉक्यूमेंट"
+    IDS_PERSONAL "डॉक्यूमेंट"
     IDS_FAVORITES "पसंदीदा"
     IDS_STARTUP "प्रारंभ मेनू\\प्रोग्राम\\स्टार्टअप"
     IDS_RECENT "हाल ही"
@@ -872,6 +876,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "3.5 फ्लॉपी"
     IDS_DRIVE_REMOVABLE "हटायी जा सकने वाली डिस्क"
     IDS_FS_UNKNOWN "अनजान"
+    IDS_FOLDER_DOWNLOADS "डाउनलोड"
+    IDS_FOLDER_MUSIC "संगीत"
+    IDS_FOLDER_PICTURES "तस्वीरें"
+    IDS_FOLDER_VIDEOS "वीडियो"
 
     /* Open With */
     IDS_OPEN_WITH "इसमें खोलें"
@@ -1044,7 +1052,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "फ़ाइल एक्सप्लोरर"
+    IDS_SEARCHBAND_COMMAND "खोजें"
+    IDS_FOLDERSHORTCUT_TYPE "फ़ोल्डर शॉर्टकट"
 END

@@ -732,6 +732,10 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "Kommentarer"
     IDS_SHV_COLUMN_LOCATION "Plassering"
     IDS_SHV_COLUMN_MODEL "Modell"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "Enheter og stasjoner (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "Systemplasseringer (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s ledig av %s"
+    IDS_COMPUTER_FOLDERS "Mapper (%u)"
 
     /* special folders */
     IDS_DESKTOP "Skrivebord"
@@ -769,7 +773,7 @@ BEGIN
     IDS_DISCONNECT "Disconnect"
     IDS_OPENFILELOCATION "Open f&ile location"
     IDS_SENDTO_MENU "Se&nd To"
-    IDS_COPYASPATHMENU "Copy as path"
+    IDS_COPYASPATHMENU "Kopier som bane"
 
     IDS_MOVEERRORTITLE "Error Moving File or Folder"
     IDS_COPYERRORTITLE "Error Copying File or Folder"
@@ -833,7 +837,7 @@ BEGIN
 
     /* Shell folder path default values. See also: dll/win32/userenv/lang */
     IDS_PROGRAMS "Start-Meny\\Programmer"
-    IDS_PERSONAL "Mine dokumenter"
+    IDS_PERSONAL "Dokumenter"
     IDS_FAVORITES "Favoritter"
     IDS_STARTUP "Start-Meny\\Programmer\\Oppstart"
     IDS_RECENT "Siste"
@@ -870,6 +874,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "3.5 Floppy"
     IDS_DRIVE_REMOVABLE "Removable Disk"
     IDS_FS_UNKNOWN "Unknown"
+    IDS_FOLDER_DOWNLOADS "Nedlastinger"
+    IDS_FOLDER_MUSIC "Musikk"
+    IDS_FOLDER_PICTURES "Bilder"
+    IDS_FOLDER_VIDEOS "Videoer"
 
     /* Open With */
     IDS_OPEN_WITH "Åpne med"
@@ -1042,7 +1050,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "Filutforsker"
+    IDS_SEARCHBAND_COMMAND "Søk"
+    IDS_FOLDERSHORTCUT_TYPE "Mappesnarvei"
 END

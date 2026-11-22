@@ -739,6 +739,10 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "Komente"
     IDS_SHV_COLUMN_LOCATION "Vendnodhje"
     IDS_SHV_COLUMN_MODEL "Modeli"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "Pajisjet dhe disqet (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "Vendndodhjet e sistemit (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s të lira nga %s"
+    IDS_COMPUTER_FOLDERS "Dosjet (%u)"
 
     /* special folders */
     IDS_DESKTOP "Desktop"
@@ -776,7 +780,7 @@ BEGIN
     IDS_DISCONNECT "Disconnect"
     IDS_OPENFILELOCATION "Open f&ile location"
     IDS_SENDTO_MENU "Se&nd To"
-    IDS_COPYASPATHMENU "Copy as path"
+    IDS_COPYASPATHMENU "Kopjo si shteg"
 
     IDS_MOVEERRORTITLE "Error Moving File or Folder"
     IDS_COPYERRORTITLE "Error Copying File or Folder"
@@ -840,7 +844,7 @@ BEGIN
 
     /* Shell folder path default values. See also: dll/win32/userenv/lang */
     IDS_PROGRAMS "Fillo Menu\\Programe"
-    IDS_PERSONAL "Dokumentet e'mi"
+    IDS_PERSONAL "Dokumente"
     IDS_FAVORITES "Preferuarat"
     IDS_STARTUP "Fillo Menu\\Programe\\Fillimi"
     IDS_RECENT "Fundift"
@@ -877,6 +881,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "3.5 Floppy"
     IDS_DRIVE_REMOVABLE "Removable Disk"
     IDS_FS_UNKNOWN "Unknown"
+    IDS_FOLDER_DOWNLOADS "Shkarkime"
+    IDS_FOLDER_MUSIC "Muzikë"
+    IDS_FOLDER_PICTURES "Foto"
+    IDS_FOLDER_VIDEOS "Video"
 
     /* Open With */
     IDS_OPEN_WITH "Hap me"
@@ -1049,7 +1057,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "Eksploruesi i skedarëve"
+    IDS_SEARCHBAND_COMMAND "Kërko"
+    IDS_FOLDERSHORTCUT_TYPE "Shkurtore dosjeje"
 END

@@ -836,7 +836,7 @@ BEGIN
 
     /* Shell folder path default values. See also: dll/win32/userenv/lang */
     IDS_PROGRAMS "スタート メニュー\\プログラム"
-    IDS_PERSONAL "マイ ドキュメント"
+    IDS_PERSONAL "ドキュメント"
     IDS_FAVORITES "お気に入り"
     IDS_STARTUP "スタート メニュー\\プログラム\\スタートアップ"
     IDS_RECENT "最近使ったドキュメント"
@@ -873,6 +873,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "3.5 フロッピー"
     IDS_DRIVE_REMOVABLE "リムーバブル ディスク"
     IDS_FS_UNKNOWN "未知の形式"
+    IDS_FOLDER_DOWNLOADS "ダウンロード"
+    IDS_FOLDER_MUSIC "ミュージック"
+    IDS_FOLDER_PICTURES "ピクチャ"
+    IDS_FOLDER_VIDEOS "ビデオ"
 
     /* Open With */
     IDS_OPEN_WITH "プログラムから開く"

@@ -729,6 +729,10 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "Komentar"
     IDS_SHV_COLUMN_LOCATION "Lokasi"
     IDS_SHV_COLUMN_MODEL "Model"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "Perangkat dan drive (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "Lokasi sistem (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s kosong dari %s"
+    IDS_COMPUTER_FOLDERS "Folder (%u)"
 
     /* special folders */
     IDS_DESKTOP "Desktop"
@@ -766,7 +770,7 @@ BEGIN
     IDS_DISCONNECT "Putuskan"
     IDS_OPENFILELOCATION "&Buka lokasi berkas"
     IDS_SENDTO_MENU "Kiri&m Ke"
-    IDS_COPYASPATHMENU "Copy as path"
+    IDS_COPYASPATHMENU "Salin sebagai jalur"
 
     IDS_MOVEERRORTITLE "Kesalahan memindahkan Berkas atau Folder"
     IDS_COPYERRORTITLE "Kesalahan menyalin Berkas atau Folder"
@@ -830,7 +834,7 @@ BEGIN
 
     /* Shell folder path default values. See also: dll/win32/userenv/lang */
     IDS_PROGRAMS "Menu Mulai\\Program"
-    IDS_PERSONAL "Dokumen Saya"
+    IDS_PERSONAL "Dokumen"
     IDS_FAVORITES "Favorit"
     IDS_STARTUP "Menu Mulai\\Program\\Startup"
     IDS_RECENT "Baru-baru Ini"
@@ -867,6 +871,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "3.5 Floppy"
     IDS_DRIVE_REMOVABLE "Disk yang bisa dilepas"
     IDS_FS_UNKNOWN "Tidak Diketahui"
+    IDS_FOLDER_DOWNLOADS "Unduhan"
+    IDS_FOLDER_MUSIC "Musik"
+    IDS_FOLDER_PICTURES "Gambar"
+    IDS_FOLDER_VIDEOS "Video"
 
     /* Open With */
     IDS_OPEN_WITH "Buka Dengan"
@@ -1038,7 +1046,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "Penjelajah File"
+    IDS_SEARCHBAND_COMMAND "Cari"
+    IDS_FOLDERSHORTCUT_TYPE "Pintasan folder"
 END

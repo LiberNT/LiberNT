@@ -732,6 +732,10 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "Poznámky" //Comments
     IDS_SHV_COLUMN_LOCATION "Location"
     IDS_SHV_COLUMN_MODEL "Model"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "Zariadenia a jednotky (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "Systémové umiestnenia (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s voľných z %s"
+    IDS_COMPUTER_FOLDERS "Priečinky (%u)"
 
     /* special folders */
     IDS_DESKTOP "Pracovná plocha"
@@ -769,7 +773,7 @@ BEGIN
     IDS_DISCONNECT "Disconnect"
     IDS_OPENFILELOCATION "Open f&ile location"
     IDS_SENDTO_MENU "Se&nd To"
-    IDS_COPYASPATHMENU "Copy as path"
+    IDS_COPYASPATHMENU "Kopírovať ako cestu"
 
     IDS_MOVEERRORTITLE "Error Moving File or Folder"
     IDS_COPYERRORTITLE "Error Copying File or Folder"
@@ -833,7 +837,7 @@ BEGIN
 
     /* Shell folder path default values. See also: dll/win32/userenv/lang */
     IDS_PROGRAMS "Ponuka Štart\\Programy"
-    IDS_PERSONAL "Moje dokumenty"
+    IDS_PERSONAL "Dokumenty"
     IDS_FAVORITES "Obľúbené položky"
     IDS_STARTUP "Ponuka Štart\\Programy\\Po spustení"
     IDS_RECENT "Recent"
@@ -870,6 +874,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "3.5 Floppy"
     IDS_DRIVE_REMOVABLE "Removable Disk"
     IDS_FS_UNKNOWN "Unknown"
+    IDS_FOLDER_DOWNLOADS "Stiahnuté súbory"
+    IDS_FOLDER_MUSIC "Hudba"
+    IDS_FOLDER_PICTURES "Obrázky"
+    IDS_FOLDER_VIDEOS "Videá"
 
     /* Open With */
     IDS_OPEN_WITH "Otvoriť v progra&me"
@@ -1042,7 +1050,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "Prieskumník"
+    IDS_SEARCHBAND_COMMAND "Hľadať"
+    IDS_FOLDERSHORTCUT_TYPE "Odkaz na priečinok"
 END

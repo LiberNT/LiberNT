@@ -740,6 +740,10 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "Komentáře"
     IDS_SHV_COLUMN_LOCATION "Umístění"
     IDS_SHV_COLUMN_MODEL "Model"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "Zařízení a jednotky (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "Systémová umístění (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s volných z %s"
+    IDS_COMPUTER_FOLDERS "Složky (%u)"
 
     /* special folders */
     IDS_DESKTOP "Plocha"
@@ -777,7 +781,7 @@ BEGIN
     IDS_DISCONNECT "Disconnect"
     IDS_OPENFILELOCATION "Open f&ile location"
     IDS_SENDTO_MENU "Se&nd To"
-    IDS_COPYASPATHMENU "Copy as path"
+    IDS_COPYASPATHMENU "Kopírovat jako cestu"
 
     IDS_MOVEERRORTITLE "Error Moving File or Folder"
     IDS_COPYERRORTITLE "Error Copying File or Folder"
@@ -878,6 +882,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "3.5 Floppy"
     IDS_DRIVE_REMOVABLE "Vyměnitelný disk"
     IDS_FS_UNKNOWN "Neznámý"
+    IDS_FOLDER_DOWNLOADS "Stažené soubory"
+    IDS_FOLDER_MUSIC "Hudba"
+    IDS_FOLDER_PICTURES "Obrázky"
+    IDS_FOLDER_VIDEOS "Videa"
 
     /* Open With */
     IDS_OPEN_WITH "Otevřít v"
@@ -1050,7 +1058,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "Průzkumník souborů"
+    IDS_SEARCHBAND_COMMAND "Hledat"
+    IDS_FOLDERSHORTCUT_TYPE "Zástupce složky"
 END

@@ -731,6 +731,10 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "Megjegyzések"
     IDS_SHV_COLUMN_LOCATION "Hely"
     IDS_SHV_COLUMN_MODEL "Modell"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "Eszközök és meghajtók (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "Rendszerhelyek (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s szabad, összesen %s"
+    IDS_COMPUTER_FOLDERS "Mappák (%u)"
 
     /* special folders */
     IDS_DESKTOP "Asztal"
@@ -768,7 +772,7 @@ BEGIN
     IDS_DISCONNECT "Leválasztás"
     IDS_OPENFILELOCATION "Tartalmazó &mappa megnyitása"
     IDS_SENDTO_MENU "&Küldés"
-    IDS_COPYASPATHMENU "Copy as path"
+    IDS_COPYASPATHMENU "Másolás elérési útként"
 
     IDS_MOVEERRORTITLE "Nem sikerült áthelyezni a fájlt/mappát"
     IDS_COPYERRORTITLE "Nem sikerült másolni a fájlt/mappát"
@@ -869,6 +873,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "3.5 Floppy"
     IDS_DRIVE_REMOVABLE "Eltávolítható lemez"
     IDS_FS_UNKNOWN "Ismeretlen"
+    IDS_FOLDER_DOWNLOADS "Letöltések"
+    IDS_FOLDER_MUSIC "Zenék"
+    IDS_FOLDER_PICTURES "Képek"
+    IDS_FOLDER_VIDEOS "Videók"
 
     /* Open With */
     IDS_OPEN_WITH "Társítás..."
@@ -1041,7 +1049,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "Fájlkezelő"
+    IDS_SEARCHBAND_COMMAND "Keresés"
+    IDS_FOLDERSHORTCUT_TYPE "Mappa parancsikonja"
 END

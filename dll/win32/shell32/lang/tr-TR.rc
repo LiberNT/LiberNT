@@ -742,6 +742,10 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "Açıklamalar"
     IDS_SHV_COLUMN_LOCATION "Konum"
     IDS_SHV_COLUMN_MODEL "Model"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "Aygıtlar ve sürücüler (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "Sistem konumları (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s boş, toplam %s"
+    IDS_COMPUTER_FOLDERS "Klasörler (%u)"
 
     /* special folders */
     IDS_DESKTOP "Masaüstü"
@@ -843,7 +847,7 @@ BEGIN
 
     /* Shell folder path default values. See also: dll/win32/userenv/lang */
     IDS_PROGRAMS "Başlat Menüsü\\Programlar"
-    IDS_PERSONAL "Belgelerim"
+    IDS_PERSONAL "Belgeler"
     IDS_FAVORITES "Yer İmleri"
     IDS_STARTUP "Başlat Menüsü\\Programlar\\Başlangıç"
     IDS_RECENT "En Son"
@@ -880,6 +884,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "3,5 Disket"
     IDS_DRIVE_REMOVABLE "Çıkarılabilir Disk"
     IDS_FS_UNKNOWN "Bilinmeyen"
+    IDS_FOLDER_DOWNLOADS "İndirilenler"
+    IDS_FOLDER_MUSIC "Müzik"
+    IDS_FOLDER_PICTURES "Resimler"
+    IDS_FOLDER_VIDEOS "Videolar"
 
     /* Open With */
     IDS_OPEN_WITH "Birlikte Aç"
@@ -1052,7 +1060,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "Dosya Gezgini"
+    IDS_SEARCHBAND_COMMAND "Ara"
+    IDS_FOLDERSHORTCUT_TYPE "Klasör kısayolu"
 END

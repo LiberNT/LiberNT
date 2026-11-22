@@ -732,6 +732,10 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "Примітки"
     IDS_SHV_COLUMN_LOCATION "Розташування"
     IDS_SHV_COLUMN_MODEL "Модель"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "Пристрої та диски (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "Системні розташування (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s вільно з %s"
+    IDS_COMPUTER_FOLDERS "Папки (%u)"
 
     /* special folders */
     IDS_DESKTOP "Робочий стіл"
@@ -769,7 +773,7 @@ BEGIN
     IDS_DISCONNECT "Відключити"
     IDS_OPENFILELOCATION "Open f&ile location"
     IDS_SENDTO_MENU "Se&nd To"
-    IDS_COPYASPATHMENU "Copy as path"
+    IDS_COPYASPATHMENU "Копіювати як шлях"
 
     IDS_MOVEERRORTITLE "Error Moving File or Folder"
     IDS_COPYERRORTITLE "Error Copying File or Folder"
@@ -833,7 +837,7 @@ BEGIN
 
     /* Shell folder path default values. See also: dll/win32/userenv/lang */
     IDS_PROGRAMS "Головне меню\\Програми"
-    IDS_PERSONAL "Мої документи"
+    IDS_PERSONAL "Документи"
     IDS_FAVORITES "Обране"
     IDS_STARTUP "Головне меню\\Програми\\Автозапуск"
     IDS_RECENT "Останні документи"
@@ -870,6 +874,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "Дисковод 3.5"
     IDS_DRIVE_REMOVABLE "Знімний диск"
     IDS_FS_UNKNOWN "Невідомо"
+    IDS_FOLDER_DOWNLOADS "Завантаження"
+    IDS_FOLDER_MUSIC "Музика"
+    IDS_FOLDER_PICTURES "Зображення"
+    IDS_FOLDER_VIDEOS "Відео"
 
     /* Open With */
     IDS_OPEN_WITH "Відкрити за допомогою"
@@ -1042,7 +1050,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "Файловий провідник"
+    IDS_SEARCHBAND_COMMAND "Пошук"
+    IDS_FOLDERSHORTCUT_TYPE "Ярлик папки"
 END

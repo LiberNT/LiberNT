@@ -739,6 +739,10 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "הערות"
     IDS_SHV_COLUMN_LOCATION "מיקום"
     IDS_SHV_COLUMN_MODEL "דגם"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "התקנים וכוננים (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "מיקומי מערכת (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s פנויים מתוך %s"
+    IDS_COMPUTER_FOLDERS "תיקיות (%u)"
 
     /* special folders */
     IDS_DESKTOP "שולחן עבודה"
@@ -776,7 +780,7 @@ BEGIN
     IDS_DISCONNECT "נתק"
     IDS_OPENFILELOCATION "&פתח מיקום קובץ"
     IDS_SENDTO_MENU "&שלח אל"
-    IDS_COPYASPATHMENU "Copy as path"
+    IDS_COPYASPATHMENU "העתק כנתיב"
 
     IDS_MOVEERRORTITLE "Error Moving File or Folder"
     IDS_COPYERRORTITLE "Error Copying File or Folder"
@@ -840,7 +844,7 @@ BEGIN
 
     /* Shell folder path default values. See also: dll/win32/userenv/lang */
     IDS_PROGRAMS "תפריט ההתחלה\\תכניות"
-    IDS_PERSONAL "המסמכים שלי"
+    IDS_PERSONAL "מסמכים"
     IDS_FAVORITES "מועדפים"
     IDS_STARTUP "תפריט ההתחלה\\תכניות\\הפעלה"
     IDS_RECENT "אחרונים"
@@ -877,6 +881,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "תקליטון 3.5"
     IDS_DRIVE_REMOVABLE "כונן נשלף"
     IDS_FS_UNKNOWN "לא ידוע"
+    IDS_FOLDER_DOWNLOADS "הורדות"
+    IDS_FOLDER_MUSIC "מוסיקה"
+    IDS_FOLDER_PICTURES "תמונות"
+    IDS_FOLDER_VIDEOS "וידאו"
 
     /* Open With */
     IDS_OPEN_WITH "פתח באמצעות"
@@ -1050,7 +1058,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "סייר הקבצים"
+    IDS_SEARCHBAND_COMMAND "חיפוש"
+    IDS_FOLDERSHORTCUT_TYPE "קיצור דרך לתיקיה"
 END

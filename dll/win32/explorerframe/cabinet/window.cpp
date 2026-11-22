@@ -438,6 +438,26 @@ CCabinetWindow::CreateBands()
     SendMessageW(m_PreviewLabel, WM_SETFONT, (WPARAM)m_Font, FALSE);
 }
 
+static void
+InitializeUserFolders()
+{
+    static const KNOWNFOLDERID *Folders[] =
+    {
+        &FOLDERID_Desktop, &FOLDERID_Documents, &FOLDERID_Downloads, &FOLDERID_Favorites, &FOLDERID_Music,
+        &FOLDERID_Pictures, &FOLDERID_Videos
+    };
+    static LONG initialized;
+
+    if (InterlockedExchange(&initialized, TRUE))
+        return;
+    for (UINT i = 0; i < _countof(Folders); i++)
+    {
+        PWSTR path = NULL;
+        if (SUCCEEDED(SHGetKnownFolderPath(*Folders[i], KF_FLAG_CREATE | KF_FLAG_INIT, NULL, &path)))
+            CoTaskMemFree(path);
+    }
+}
+
 void
 CCabinetWindow::OnCreate()
 {
@@ -451,6 +471,7 @@ CCabinetWindow::OnCreate()
     if (SUCCEEDED(SHGetStockIconInfo(SIID_FOLDER, SHGSI_ICON | SHGSI_LARGEICON, &icon)))
         SendMessageW(m_hwnd, WM_SETICON, ICON_BIG, (LPARAM)icon.hIcon);
     CreateBands();
+    InitializeUserFolders();
     CreateNavigationPane();
     ExtendFrame();
     SendMessageW(m_hwnd, WM_CHANGEUISTATE, MAKEWPARAM(UIS_INITIALIZE, 0), 0);

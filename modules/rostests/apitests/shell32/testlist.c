@@ -9,6 +9,7 @@ extern void func_AssocCreateForClasses(void);
 extern void func_DefaultProperties(void);
 extern void func_ILLoadFromStreamEx(void);
 extern void func_ItemPropertyStores(void);
+extern void func_KnownFolderName(void);
 extern void func_LocalizedName(void);
 extern void func_SHAssocEnumHandlers(void);
 extern void func_SHGetDriveMedia(void);
@@ -112,6 +113,7 @@ const struct test winetest_testlist[] =
     { "DefaultProperties", func_DefaultProperties },
     { "ILLoadFromStreamEx", func_ILLoadFromStreamEx },
     { "ItemPropertyStores", func_ItemPropertyStores },
+    { "KnownFolderName", func_KnownFolderName },
     { "LocalizedName", func_LocalizedName },
     { "SHAssocEnumHandlers", func_SHAssocEnumHandlers },
     { "SHGetDriveMedia", func_SHGetDriveMedia },

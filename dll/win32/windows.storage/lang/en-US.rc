@@ -39,7 +39,7 @@ BEGIN
     IDS_SHV_COLUMN_ATTRIBUTES "Attributes"
     IDS_DESKTOP "Desktop"
     IDS_MYCOMPUTER "This PC"
-    IDS_PERSONAL "My Documents"
+    IDS_PERSONAL "Documents"
     IDS_RECYCLEBIN_FOLDER_NAME "Recycle Bin"
     IDS_CONTROLPANEL "Control Panel"
     IDS_ADMINISTRATIVETOOLS "Administrative Tools"

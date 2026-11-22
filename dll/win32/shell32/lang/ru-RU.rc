@@ -741,6 +741,10 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "Комментарии"
     IDS_SHV_COLUMN_LOCATION "Расположение"
     IDS_SHV_COLUMN_MODEL "Модель"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "Устройства и диски (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "Системные расположения (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s свободно из %s"
+    IDS_COMPUTER_FOLDERS "Папки (%u)"
 
     /* special folders */
     IDS_DESKTOP "Рабочий стол"
@@ -842,7 +846,7 @@ BEGIN
 
     /* Shell folder path default values. See also: dll/win32/userenv/lang */
     IDS_PROGRAMS "Главное меню\\Программы"
-    IDS_PERSONAL "Мои документы"
+    IDS_PERSONAL "Документы"
     IDS_FAVORITES "Избранное"
     IDS_STARTUP "Главное меню\\Программы\\Автозагрузка"
     IDS_RECENT "Недавние документы"
@@ -879,6 +883,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "Дисковод 3.5"
     IDS_DRIVE_REMOVABLE "Съёмный диск"
     IDS_FS_UNKNOWN "Неизвестно"
+    IDS_FOLDER_DOWNLOADS "Загрузки"
+    IDS_FOLDER_MUSIC "Музыка"
+    IDS_FOLDER_PICTURES "Изображения"
+    IDS_FOLDER_VIDEOS "Видео"
 
     /* Open With */
     IDS_OPEN_WITH "Открыть с помощью"
@@ -1051,7 +1059,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "Проводник"
+    IDS_SEARCHBAND_COMMAND "Поиск"
+    IDS_FOLDERSHORTCUT_TYPE "Ярлык папки"
 END

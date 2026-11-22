@@ -739,6 +739,10 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "Kommentaarid"
     IDS_SHV_COLUMN_LOCATION "Asukoht"
     IDS_SHV_COLUMN_MODEL "Mudel"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "Seadmed ja draivid (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "Süsteemi asukohad (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s vaba, kokku %s"
+    IDS_COMPUTER_FOLDERS "Kaustad (%u)"
 
     /* special folders */
     IDS_DESKTOP "Töölaud"
@@ -776,7 +780,7 @@ BEGIN
     IDS_DISCONNECT "Katkesta ühendus"
     IDS_OPENFILELOCATION "Open f&ile location"
     IDS_SENDTO_MENU "Se&nd To"
-    IDS_COPYASPATHMENU "Copy as path"
+    IDS_COPYASPATHMENU "Kopeeri teena"
 
     IDS_MOVEERRORTITLE "Error Moving File or Folder"
     IDS_COPYERRORTITLE "Error Copying File or Folder"
@@ -840,7 +844,7 @@ BEGIN
 
     /* Shell folder path default values. See also: dll/win32/userenv/lang */
     IDS_PROGRAMS "Start Menu\\Programs"
-    IDS_PERSONAL "Minu dokumendid"
+    IDS_PERSONAL "Dokumendid"
     IDS_FAVORITES "Lemmikud"
     IDS_STARTUP "Start Menu\\Programs\\Startup"
     IDS_RECENT "Hiljutised"
@@ -848,7 +852,7 @@ BEGIN
     IDS_STARTMENU "Start Menu"
     IDS_MYMUSIC "Minu muusika"
     IDS_MYVIDEO "Minu videod"
-    IDS_DESKTOPDIRECTORY "Desktop"
+    IDS_DESKTOPDIRECTORY "Töölaud"
     IDS_NETHOOD "NetHood"
     IDS_TEMPLATES "Mallid"
     IDS_APPDATA "Rakenduste Andmed"
@@ -877,6 +881,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "3.5 Floppi"
     IDS_DRIVE_REMOVABLE "Irdmäluga seade"
     IDS_FS_UNKNOWN "Tundmatu"
+    IDS_FOLDER_DOWNLOADS "Allalaadimised"
+    IDS_FOLDER_MUSIC "Muusika"
+    IDS_FOLDER_PICTURES "Pildid"
+    IDS_FOLDER_VIDEOS "Videod"
 
     /* Open With */
     IDS_OPEN_WITH "Ava programmiga..."
@@ -1049,7 +1057,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "Failihaldur"
+    IDS_SEARCHBAND_COMMAND "Otsi"
+    IDS_FOLDERSHORTCUT_TYPE "Kausta otsetee"
 END

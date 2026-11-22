@@ -732,6 +732,10 @@ BEGIN
     IDS_SHV_COLUMN_COMMENTS "Kommentar"
     IDS_SHV_COLUMN_LOCATION "Plats"
     IDS_SHV_COLUMN_MODEL "Modell"
+    IDS_COMPUTER_DEVICES_AND_DRIVES "Enheter och diskar (%u)"
+    IDS_COMPUTER_SYSTEM_LOCATIONS "Systemplatser (%u)"
+    IDS_COMPUTER_FREE_SPACE "%s ledigt av %s"
+    IDS_COMPUTER_FOLDERS "Mappar (%u)"
 
     /* special folders */
     IDS_DESKTOP "Skrivbord"
@@ -769,7 +773,7 @@ BEGIN
     IDS_DISCONNECT "Disconnect"
     IDS_OPENFILELOCATION "Open f&ile location"
     IDS_SENDTO_MENU "Se&nd To"
-    IDS_COPYASPATHMENU "Copy as path"
+    IDS_COPYASPATHMENU "Kopiera som sökväg"
 
     IDS_MOVEERRORTITLE "Error Moving File or Folder"
     IDS_COPYERRORTITLE "Error Copying File or Folder"
@@ -833,7 +837,7 @@ BEGIN
 
     /* Shell folder path default values. See also: dll/win32/userenv/lang */
     IDS_PROGRAMS "Start-meny\\Program"
-    IDS_PERSONAL "Mina dokument"
+    IDS_PERSONAL "Dokument"
     IDS_FAVORITES "Favoriter"
     IDS_STARTUP "Start-meny\\Program\\Autostart"
     IDS_RECENT "Tidigare"
@@ -870,6 +874,10 @@ BEGIN
     IDS_DRIVE_FLOPPY "3.5 diskettenhet"
     IDS_DRIVE_REMOVABLE "Borttagbar disk"
     IDS_FS_UNKNOWN "Okänt"
+    IDS_FOLDER_DOWNLOADS "Hämtade filer"
+    IDS_FOLDER_MUSIC "Musik"
+    IDS_FOLDER_PICTURES "Bilder"
+    IDS_FOLDER_VIDEOS "Videor"
 
     /* Open With */
     IDS_OPEN_WITH "Öppna med"
@@ -1042,7 +1050,7 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_FILE_EXPLORER "File Explorer"
-    IDS_SEARCHBAND_COMMAND "Search"
-    IDS_FOLDERSHORTCUT_TYPE "Folder Shortcut"
+    IDS_FILE_EXPLORER "Utforskaren"
+    IDS_SEARCHBAND_COMMAND "Sök"
+    IDS_FOLDERSHORTCUT_TYPE "Mappgenväg"
 END
