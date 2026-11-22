@@ -484,7 +484,8 @@ ApicInitializeLocalApic(ULONG Cpu)
     {
         HalpApicHvMsrs = ApicHvMsrsRecommended();
         DPRINT1("APIC: Hyper-V synthetic EOI/ICR MSRs %s\n", HalpApicHvMsrs ? "enabled" : "not used");
-        HalpX2ApicMode = ApicExtendedModeUsable();
+        BaseRegister.LongLong = __readmsr(MSR_APIC_BASE);
+        HalpX2ApicMode = BaseRegister.ExtendedMode && ApicExtendedModeUsable();
         DPRINT1("APIC: extended (x2APIC) mode %s\n", HalpX2ApicMode ? "enabled" : "not used");
     }
 
