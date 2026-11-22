@@ -455,3 +455,159 @@ MiInitializeLoadedModuleList(
 
     return MiLinkBootImageImports(Kernel, Hal, Count);
 }
+
+typedef struct _MI_BOOT_DLL_FRAME
+{
+    PLDR_DATA_TABLE_ENTRY Module;
+    ULONG Next;
+} MI_BOOT_DLL_FRAME, *PMI_BOOT_DLL_FRAME;
+
+typedef struct _MI_BOOT_DLL_WALK
+{
+    PLDR_DATA_TABLE_ENTRY *Seen;
+    PMI_BOOT_DLL_FRAME Stack;
+    ULONG Count;
+    ULONG Capacity;
+} MI_BOOT_DLL_WALK, *PMI_BOOT_DLL_WALK;
+
+CODE_SEG("INIT")
+static
+BOOLEAN
+MiBootDllSeen(
+    _In_ PMI_BOOT_DLL_WALK Walk,
+    _In_ PLDR_DATA_TABLE_ENTRY Module)
+{
+    ULONG Index;
+
+    for (Index = 0; Index < Walk->Count; Index++)
+    {
+        if (Walk->Seen[Index] == Module)
+            return TRUE;
+    }
+
+    return FALSE;
+}
+
+CODE_SEG("INIT")
+static
+VOID
+MiInitializeBootDll(
+    _Inout_ PMI_BOOT_DLL_WALK Walk,
+    _In_ PLDR_DATA_TABLE_ENTRY Root)
+{
+    PLDR_DATA_TABLE_ENTRY Module;
+    PMI_BOOT_DLL_FRAME Frame;
+    ULONG Depth = 0;
+    NTSTATUS Status;
+
+    ASSERT(Walk->Count <= Walk->Capacity);
+
+    if (MiBootDllSeen(Walk, Root))
+        return;
+
+    ASSERT(Walk->Count < Walk->Capacity);
+    if (Walk->Count == Walk->Capacity)
+        return;
+
+    Walk->Seen[Walk->Count++] = Root;
+    Walk->Stack[Depth].Module = Root;
+    Walk->Stack[Depth].Next = 0;
+    Depth++;
+
+    while (Depth != 0)
+    {
+        Frame = &Walk->Stack[Depth - 1];
+        ASSERT(Frame->Module->LoadedImports != MM_SYSLDR_BOOT_LOADED);
+
+        if (Frame->Next < MiImportListCount(Frame->Module->LoadedImports))
+        {
+            Module = MiImportListEntry(Frame->Module->LoadedImports, Frame->Next++);
+            ASSERT(Module != NULL);
+            if (MiBootDllSeen(Walk, Module))
+                continue;
+
+            ASSERT(Walk->Count < Walk->Capacity);
+            ASSERT(Depth < Walk->Capacity);
+            if (Walk->Count == Walk->Capacity || Depth == Walk->Capacity)
+                return;
+
+            Walk->Seen[Walk->Count++] = Module;
+            Walk->Stack[Depth].Module = Module;
+            Walk->Stack[Depth].Next = 0;
+            Depth++;
+            continue;
+        }
+
+        Module = Frame->Module;
+        Depth--;
+
+        Status = MmCallDllInitialize(Module, &PsLoadedModuleList);
+        if (!NT_SUCCESS(Status))
+        {
+            /* FIXME: a boot DLL whose DllInitialize fails stays loaded and the drivers that import it still start */
+            DPRINT1("DllInitialize of the boot DLL %wZ failed with 0x%lx\n", &Module->BaseDllName, Status);
+        }
+    }
+}
+
+CODE_SEG("INIT")
+NTSTATUS
+NTAPI
+MmCallBootDllInitialize(
+    _In_ PLIST_ENTRY BootDriverListHead)
+{
+    PBOOT_DRIVER_LIST_ENTRY BootEntry;
+    PIMAGE_NT_HEADERS NtHeaders;
+    PLDR_DATA_TABLE_ENTRY Module;
+    MI_BOOT_DLL_WALK Walk;
+    PLIST_ENTRY Link;
+    ULONG Index;
+
+    PAGED_CODE();
+
+    RtlZeroMemory(&Walk, sizeof(Walk));
+
+    KeEnterCriticalRegion();
+    ExAcquireResourceSharedLite(&PsLoadedModuleResource, TRUE);
+    for (Link = PsLoadedModuleList.Flink; Link != &PsLoadedModuleList; Link = Link->Flink)
+        Walk.Capacity++;
+    ExReleaseResourceLite(&PsLoadedModuleResource);
+    KeLeaveCriticalRegion();
+
+    ASSERT(Walk.Capacity != 0);
+
+    Walk.Seen = ExAllocatePoolWithTag(PagedPool, Walk.Capacity * sizeof(*Walk.Seen), TAG_LDR_IMPORTS);
+    Walk.Stack = ExAllocatePoolWithTag(PagedPool, Walk.Capacity * sizeof(*Walk.Stack), TAG_LDR_IMPORTS);
+    if (Walk.Seen == NULL || Walk.Stack == NULL)
+    {
+        if (Walk.Seen != NULL)
+            ExFreePoolWithTag(Walk.Seen, TAG_LDR_IMPORTS);
+        if (Walk.Stack != NULL)
+            ExFreePoolWithTag(Walk.Stack, TAG_LDR_IMPORTS);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    for (Link = BootDriverListHead->Flink; Link != BootDriverListHead; Link = Link->Flink)
+    {
+        BootEntry = CONTAINING_RECORD(Link, BOOT_DRIVER_LIST_ENTRY, Link);
+        Module = BootEntry->LdrEntry;
+        if (Module == NULL)
+            continue;
+
+        NtHeaders = RtlImageNtHeader(Module->DllBase);
+        if (NtHeaders == NULL || NtHeaders->OptionalHeader.AddressOfEntryPoint == 0)
+        {
+            MiInitializeBootDll(&Walk, Module);
+            continue;
+        }
+
+        for (Index = 0; Index < MiImportListCount(Module->LoadedImports); Index++)
+            MiInitializeBootDll(&Walk, MiImportListEntry(Module->LoadedImports, Index));
+    }
+
+    ASSERT(Walk.Count <= Walk.Capacity);
+
+    ExFreePoolWithTag(Walk.Stack, TAG_LDR_IMPORTS);
+    ExFreePoolWithTag(Walk.Seen, TAG_LDR_IMPORTS);
+    return STATUS_SUCCESS;
+}

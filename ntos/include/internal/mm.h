@@ -298,6 +298,12 @@ MmCallDllInitialize(
     _In_ PLDR_DATA_TABLE_ENTRY LdrEntry,
     _In_ PLIST_ENTRY ModuleListHead);
 
+CODE_SEG("INIT")
+NTSTATUS
+NTAPI
+MmCallBootDllInitialize(
+    _In_ PLIST_ENTRY BootDriverListHead);
+
 PVOID
 NTAPI
 RtlFindExportedRoutineByName(

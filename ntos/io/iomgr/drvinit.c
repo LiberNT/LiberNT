@@ -773,7 +773,9 @@ FASTCALL
 IopInitializeBootDrivers(VOID)
 {
     PBOOT_DRIVER_LIST_ENTRY BootEntry;
+    PIMAGE_NT_HEADERS NtHeaders;
     PDRIVER_OBJECT DriverObject;
+    BOOLEAN BootDllsInitialized;
     NTSTATUS EntryStatus;
     PLIST_ENTRY ListEntry;
     NTSTATUS Status;
@@ -787,6 +789,13 @@ IopInitializeBootDrivers(VOID)
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("I/O: the service group order is unavailable (%lx)\n", Status);
+    }
+
+    Status = MmCallBootDllInitialize(&IopLoaderBlock->BootDriverListHead);
+    BootDllsInitialized = NT_SUCCESS(Status);
+    if (!BootDllsInitialized)
+    {
+        DPRINT1("I/O: the boot DLLs could not be initialized (%lx)\n", Status);
     }
 
     ListEntry = IopLoaderBlock->BootDriverListHead.Flink;
@@ -806,6 +815,15 @@ IopInitializeBootDrivers(VOID)
                          0,
                          0,
                          0);
+        }
+
+        NtHeaders = RtlImageNtHeader(BootEntry->LdrEntry->DllBase);
+        if (BootDllsInitialized &&
+            (NtHeaders == NULL ||
+             NtHeaders->OptionalHeader.AddressOfEntryPoint == 0))
+        {
+            IopBootLog(&BootEntry->FilePath, TRUE);
+            continue;
         }
 
         Status = IopOpenServiceKeyForPath(&BootEntry->RegistryPath,
