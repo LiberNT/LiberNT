@@ -2711,6 +2711,19 @@ Retry:
                     : OldResidentDataLength);
             if (Status == STATUS_BUFFER_TOO_SMALL &&
                 AttributeOwner == this &&
+                !SpaceReleased &&
+                !FindAttributeInRecord(TypeAttributeList, NULL, NULL))
+            {
+                /* A full base without a list first moves attributes into an extension. */
+                Status = CreateInitialAttributeList();
+                if (NT_SUCCESS(Status))
+                {
+                    *Length = RequestedLength;
+                    goto Retry;
+                }
+            }
+            else if (Status == STATUS_BUFFER_TOO_SMALL &&
+                AttributeOwner == this &&
                 !SpaceReleased)
             {
                 SpaceReleased = TRUE;
