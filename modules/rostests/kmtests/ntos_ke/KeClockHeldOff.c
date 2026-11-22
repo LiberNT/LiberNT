@@ -35,7 +35,12 @@ START_TEST(KeClockHeldOff)
     PreviousAffinity = KeSetSystemAffinityThreadEx(1);
     for (Index = 0; Index < RTL_NUMBER_OF(Periods); Index++)
     {
-        KeRaiseIrql(HIGH_LEVEL, &OldIrql);
+        /* Each hold starts on a tick: started later in a period, it would also measure how late that period's tick is delivered */
+        KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
+        InterruptStart = KeQueryInterruptTime();
+        while (KeQueryInterruptTime() == InterruptStart)
+            YieldProcessor();
+        KfRaiseIrql(HIGH_LEVEL);
         InterruptStart = KeQueryInterruptTime();
         Start = KeQueryPerformanceCounter(&Frequency);
         do
