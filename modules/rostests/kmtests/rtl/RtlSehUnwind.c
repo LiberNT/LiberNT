@@ -273,6 +273,104 @@ TestLongjmpIntoScope(VOID)
     ok_eq_hex(Flags, 31UL);
     ok_eq_ulong(Count, 1UL);
 }
+
+static
+DECLSPEC_NOINLINE
+VOID
+JumpWithValue(
+    _In_ jmp_buf JumpBuffer,
+    _In_ int Value)
+{
+    longjmp(JumpBuffer, Value);
+}
+
+static
+VOID
+TestLongjmpValue(VOID)
+{
+    volatile ULONG Passes = 0;
+    jmp_buf JumpBuffer;
+
+    switch (setjmp(JumpBuffer))
+    {
+        case 0:
+            ok_eq_ulong(Passes, 0UL);
+            Passes++;
+            JumpWithValue(JumpBuffer, 7);
+            break;
+
+        case 7:
+            ok_eq_ulong(Passes, 1UL);
+            Passes++;
+            JumpWithValue(JumpBuffer, 0);
+            break;
+
+        case 1:
+            ok_eq_ulong(Passes, 2UL);
+            Passes++;
+            break;
+
+        default:
+            ok(FALSE, "Unexpected value from setjmp\n");
+            Passes = 99;
+            break;
+    }
+
+    ok_eq_ulong(Passes, 3UL);
+}
+
+/* The PowerPC jump buffer records no frame */
+#ifndef _M_PPC
+static
+DECLSPEC_NOINLINE
+VOID
+JumpWithoutFrame(
+    _In_ jmp_buf JumpBuffer,
+    _Inout_ volatile ULONG *Flags)
+{
+    _SEH2_TRY
+    {
+        *Flags |= 2;
+        ((_JUMP_BUFFER *)JumpBuffer)->Frame = 0;
+        longjmp(JumpBuffer, 5);
+    }
+    _SEH2_FINALLY
+    {
+        *Flags |= 4;
+    }
+    _SEH2_END;
+}
+
+static
+VOID
+TestLongjmpWithoutFrame(VOID)
+{
+    volatile ULONG Flags = 0;
+    volatile ULONG Passes = 0;
+    jmp_buf JumpBuffer;
+
+    switch (setjmp(JumpBuffer))
+    {
+        case 0:
+            Passes++;
+            Flags |= 1;
+            JumpWithoutFrame(JumpBuffer, &Flags);
+            break;
+
+        case 5:
+            Passes++;
+            Flags |= 8;
+            break;
+
+        default:
+            ok(FALSE, "Unexpected value from setjmp\n");
+            break;
+    }
+
+    ok_eq_ulong(Passes, 2UL);
+    ok_eq_hex(Flags, 11UL);
+}
+#endif
 #endif
 
 START_TEST(RtlSehUnwind)
@@ -283,5 +381,9 @@ START_TEST(RtlSehUnwind)
     TestRecursion();
 #ifndef _M_IX86
     TestLongjmpIntoScope();
+    TestLongjmpValue();
+#ifndef _M_PPC
+    TestLongjmpWithoutFrame();
+#endif
 #endif
 }

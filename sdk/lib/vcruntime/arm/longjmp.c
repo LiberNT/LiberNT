@@ -1,38 +1,53 @@
 /*
- * PROJECT:     ReactOS vcruntime library
- * LICENSE:     MIT (https://spdx.org/licenses/MIT)
- * PURPOSE:     Implementation of longjmp for ARM
- * COPYRIGHT:   Copyright 2025 Timo Kreuzer <timo.kreuzer@reactos.org>
+ * PROJECT:     LiberNT vcruntime library
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     longjmp on ARM
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
 #include <setjmp.h>
+#include <stddef.h>
 #include <windef.h>
 
-__declspec(noreturn)
-void __longjmp_noframe(const _JUMP_BUFFER* _Buf, int _Value);
+C_ASSERT(offsetof(_JUMP_BUFFER, Frame) == 0);
+C_ASSERT(offsetof(_JUMP_BUFFER, R4) == 4);
+C_ASSERT(offsetof(_JUMP_BUFFER, Sp) == 36);
+C_ASSERT(offsetof(_JUMP_BUFFER, Pc) == 40);
+C_ASSERT(offsetof(_JUMP_BUFFER, Fpscr) == 44);
+C_ASSERT(offsetof(_JUMP_BUFFER, D) == 48);
 
 __declspec(noreturn)
-void __cdecl longjmp(
+void
+__cdecl
+_JumpBufferResume(
+    _In_ const _JUMP_BUFFER *Buffer,
+    _In_ int Value);
+
+__declspec(noreturn)
+void
+__cdecl
+longjmp(
     _In_reads_(_JBLEN) jmp_buf _Buf,
     _In_ int _Value)
 {
-    const _JUMP_BUFFER* jumpBuffer = (_JUMP_BUFFER*)_Buf;
+    const _JUMP_BUFFER *Buffer = (const _JUMP_BUFFER *)_Buf;
+    EXCEPTION_RECORD Record;
 
-    /* Ensure _Value is non-zero */
-    _Value = (_Value == 0) ? 1 : _Value;
+    if (_Value == 0)
+        _Value = 1;
 
-    if (jumpBuffer->Frame != 0)
+    /* A buffer filled with a frame leaves through the unwinder, which runs the termination handlers on the way. */
+    if (Buffer->Frame != 0)
     {
-        EXCEPTION_RECORD exceptionRecord = { 0 };
-        exceptionRecord.ExceptionCode = STATUS_LONGJUMP;
-        exceptionRecord.NumberParameters = 1;
-        exceptionRecord.ExceptionInformation[0] = (ULONG_PTR)jumpBuffer;
+        Record.ExceptionCode = STATUS_LONGJUMP;
+        Record.ExceptionFlags = 0;
+        Record.ExceptionRecord = NULL;
+        Record.ExceptionAddress = NULL;
+        Record.NumberParameters = 1;
+        Record.ExceptionInformation[0] = (ULONG_PTR)Buffer;
 
-        RtlUnwind((PVOID)jumpBuffer->Frame,
-                  (PVOID)jumpBuffer->Pc,
-                  &exceptionRecord,
-                  (PVOID)(ULONG_PTR)_Value);
+        RtlUnwind((PVOID)Buffer->Frame, (PVOID)Buffer->Pc, &Record, (PVOID)(ULONG_PTR)_Value);
     }
 
-    __longjmp_noframe(jumpBuffer, _Value);
+    _JumpBufferResume(Buffer, _Value);
 }

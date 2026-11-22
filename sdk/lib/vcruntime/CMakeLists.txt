@@ -41,8 +41,7 @@ elseif(${ARCH} STREQUAL "arm")
         arm/longjmp.c
     )
     list(APPEND VCRT_SETJMP_ASM_SOURCES
-        arm/__longjmp_noframe.s
-        arm/_setjmp.s
+        arm/jmpbuf.s
     )
 elseif(${ARCH} STREQUAL "arm64" AND ARM64EC_RUNTIME)
     list(APPEND VCRT_SETJMP_SOURCES
