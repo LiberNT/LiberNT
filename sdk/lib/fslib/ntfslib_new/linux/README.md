@@ -157,12 +157,13 @@ build/ntfslib-linux/fuse/ntfslib_fuse --writable \
 
 A read-only mount adds FUSE's `-o ro` and, because the image cannot change
 under it, keeps file data in the kernel page cache with long entry and
-attribute lifetimes. A writable mount uses direct I/O by default, so every
-read and write reaches the core (with libfuse and kernels older than the
-direct-I/O mmap capability it uses the page cache instead, so mmap works); `--page-cache` keeps file data in the kernel
-page cache, and `--writeback-cache` also lets the kernel batch writes, at the
-cost of reporting a full volume only at `fsync` or `close`. Both follow
-`--writable`. Access times follow relatime; `-o noatime` turns them off,
+attribute lifetimes. A writable mount keeps file data in the kernel page
+cache too, so `write()` and shared mappings of a file stay coherent.
+`--direct-io` sends every read and write straight to the core instead; a
+`write()` can then be lost when another process dirties a shared mapping of
+the same page at the same time. `--writeback-cache` lets the kernel batch
+writes, at the cost of reporting a full volume only at `fsync` or `close`.
+Both follow `--writable`. Access times follow relatime; `-o noatime` turns them off,
 `-o strictatime` updates them on every opened read, and the other access-time
 options of mount(8) are accepted. Directory access times are not updated. A block device can be
 supplied instead of an image when the invoking user has access to it.
