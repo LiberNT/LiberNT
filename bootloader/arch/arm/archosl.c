@@ -59,6 +59,7 @@ typedef struct _ARM_LOADER_STATE
     PVOID Process;
     PVOID Thread;
     PVOID SharedPage;
+    PVOID Handoff;
     ULONG DeviceWindowUsed;
     ULONGLONG EarlyUartPhysical;
     ULONG EarlyUartAddress;
@@ -73,7 +74,8 @@ ArmEnterKernel(
     _In_ ULONG EntryPoint,
     _In_ ULONG LoaderBlock,
     _In_ ULONG KernelStack,
-    _In_ ULONG Root);
+    _In_ ULONG Root,
+    _In_ ULONG Stub);
 
 extern UCHAR ArmEnterKernelStart[];
 extern UCHAR ArmEnterKernelEnd[];
@@ -355,6 +357,19 @@ ArmDiscoverEarlyUart(VOID)
     FDT Fdt;
 
     ArmLoader.DeviceTree = ArmFindDeviceTree(&ArmLoader.DeviceTreeSize);
+    if (ArmLoader.DeviceTree &&
+        ((ULONG_PTR)ArmLoader.DeviceTree < ArmLoader.Kseg0PhysicalBase ||
+         (ULONGLONG)(ULONG_PTR)ArmLoader.DeviceTree + ArmLoader.DeviceTreeSize >
+             ArmLoader.Kseg0PhysicalBase + ARM_LOADER_KSEG0_SIZE))
+    {
+        /* The kernel reads the tree through KSEG0, which does not reach where the firmware left it. */
+        PVOID Copy = MmAllocateMemoryWithType(ArmLoader.DeviceTreeSize, LoaderMemoryData);
+
+        if (Copy)
+            RtlCopyMemory(Copy, ArmLoader.DeviceTree, ArmLoader.DeviceTreeSize);
+        ArmLoader.DeviceTree = Copy;
+    }
+
     if (!ArmLoader.DeviceTree || !FdtOpen(ArmLoader.DeviceTree, ArmLoader.DeviceTreeSize, &Fdt))
         return;
     if (!FdtFindNode(&Fdt, "/chosen", &Chosen, NULL))
@@ -440,8 +455,9 @@ WinLdrSetupMachineDependent(
     ArmLoader.Process = ArmAllocateResident(MM_PAGE_SIZE, LoaderMemoryData);
     ArmLoader.Thread = ArmAllocateResident(MM_PAGE_SIZE, LoaderMemoryData);
     ArmLoader.SharedPage = ArmAllocateResident(MM_PAGE_SIZE, LoaderStartupPcrPage);
+    ArmLoader.Handoff = ArmAllocateResident(MM_PAGE_SIZE, LoaderLoadedProgram);
     if (!ArmLoader.KernelStack || !ArmLoader.DpcStack || !ArmLoader.PanicStack || !ArmLoader.Pcr ||
-        !ArmLoader.Process || !ArmLoader.Thread || !ArmLoader.SharedPage)
+        !ArmLoader.Process || !ArmLoader.Thread || !ArmLoader.SharedPage || !ArmLoader.Handoff)
     {
         return;
     }
@@ -471,7 +487,7 @@ WinLdrSetupMachineDependent(
     Payload->EarlyUartPhysical = ArmLoader.EarlyUartPhysical;
     Payload->EarlyUartAddress = ArmLoader.EarlyUartAddress;
     Payload->EarlyUartInterface = ArmLoader.EarlyUartAddress ? ARM_EARLY_UART_PL011 : ARM_EARLY_UART_NONE;
-    if (ArmLoader.DeviceTree && (ULONG_PTR)ArmLoader.DeviceTree >= ArmLoader.Kseg0PhysicalBase)
+    if (ArmLoader.DeviceTree)
     {
         Payload->DeviceTree = (ULONG_PTR)PaToVa((PVOID)ArmLoader.DeviceTree);
         Payload->DeviceTreeSize = ArmLoader.DeviceTreeSize;
@@ -511,16 +527,25 @@ ArmMapKseg0(VOID)
     return TRUE;
 }
 
+/* The stub turns translation on where it runs, so its page is mapped at its physical address. */
 static
 BOOLEAN
 ArmMapHandoff(VOID)
 {
-    ULONG_PTR Start = (ULONG_PTR)ArmEnterKernelStart & ~(ULONG_PTR)(MM_PAGE_SIZE - 1);
-    ULONG_PTR End = ROUND_UP((ULONG_PTR)ArmEnterKernelEnd, MM_PAGE_SIZE);
+    ULONG_PTR Stub = (ULONG_PTR)ArmLoader.Handoff;
+    /* The address of a label in Thumb code has its low bit set. */
+    PUCHAR Code = (PUCHAR)((ULONG_PTR)ArmEnterKernelStart & ~(ULONG_PTR)1);
+    SIZE_T Length = (SIZE_T)(((ULONG_PTR)ArmEnterKernelEnd & ~(ULONG_PTR)1) - (ULONG_PTR)Code);
 
-    if (End > ARM_LOADER_KSEG0_BASE)
+    ASSERT(Length != 0 && Length <= MM_PAGE_SIZE);
+    ASSERT((Stub & (MM_PAGE_SIZE - 1)) == 0);
+
+    /* TODO: a machine whose memory starts at or above the KSEG0 base has no page below it for the stub */
+    if (Stub + MM_PAGE_SIZE > ARM_LOADER_KSEG0_BASE)
         return FALSE;
-    return ArmMapPages((ULONG)Start, Start, (ULONG)((End - Start) >> MM_PAGE_SHIFT), ARM_PTE_HANDOFF);
+
+    RtlCopyMemory(ArmLoader.Handoff, Code, Length);
+    return ArmMapPages((ULONG)Stub, Stub, 1, ARM_PTE_HANDOFF);
 }
 
 /* Until the HAL has mapped its devices and firmware tables it reaches them at their physical addresses. */
@@ -638,10 +663,12 @@ OslArchStartKernel(
     PLOADER_PARAMETER_BLOCK Physical = VaToPa(LoaderBlock);
 
     ArmCleanRange((ULONG_PTR)ArmLoader.Pool, (SIZE_T)ArmLoader.PoolCount * MM_PAGE_SIZE);
+    ArmCleanRange((ULONG_PTR)ArmLoader.Handoff, MM_PAGE_SIZE);
     ArmEnterKernel((ULONG)(ULONG_PTR)EntryPoint,
                    (ULONG)(ULONG_PTR)LoaderBlock,
                    (ULONG)Physical->KernelStack,
-                   (ULONG)(ULONG_PTR)ArmLoader.Root);
+                   (ULONG)(ULONG_PTR)ArmLoader.Root,
+                   (ULONG)(ULONG_PTR)ArmLoader.Handoff);
 }
 
 BOOLEAN
