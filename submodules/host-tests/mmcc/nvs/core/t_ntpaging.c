@@ -178,10 +178,12 @@ TestNtPaging(void)
     /* PE raw sections are sector aligned, not necessarily page aligned. */
     memset(&File, 0, sizeof(File));
     File.Information = 2 * PAGE_SIZE;
-    CHECK(NT_SUCCESS(MiControlReadPages(&Control, 1024, Frames, 2)));
+    CHECK(NT_SUCCESS(MiControlReadPages(&Control, 1024, Frames, 2, &Transferred)));
     CHECK(File.Calls == 1 && File.Offset == 1024 && File.Length == 2 * PAGE_SIZE && !File.Write);
+    CHECK(Transferred == 2 * PAGE_SIZE);
     File.Information--;
-    CHECK(MiControlReadPages(&Control, 1024, Frames, 2) == STATUS_END_OF_FILE);
+    CHECK(NT_SUCCESS(MiControlReadPages(&Control, 1024, Frames, 2, &Transferred)));
+    CHECK(File.Calls == 2 && Transferred == 2 * PAGE_SIZE - 1);
     CHECK(MiPagingIoFrames(&Object, 1024, Frames, 2, TRUE, &Transferred) == STATUS_INVALID_PARAMETER);
     CHECK(MiPagingIoFrames(&Object, 1025, Frames, 2, FALSE, &Transferred) == STATUS_INVALID_PARAMETER);
 

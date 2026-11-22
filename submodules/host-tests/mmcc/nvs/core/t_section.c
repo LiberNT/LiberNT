@@ -1347,7 +1347,7 @@ typedef struct _CLUSTER_FILE
 } CLUSTER_FILE;
 
 static NTSTATUS
-ClusterRead(PVOID Context, ULONG64 Offset, const ULONG *Frames, ULONG Count)
+ClusterRead(PVOID Context, ULONG64 Offset, const ULONG *Frames, ULONG Count, PULONG Transferred)
 {
     CLUSTER_FILE *File = Context;
     ULONG i;
@@ -1365,6 +1365,7 @@ ClusterRead(PVOID Context, ULONG64 Offset, const ULONG *Frames, ULONG Count)
         memcpy(Buffer, File->File.Data + Offset + i * PAGE_SIZE, PAGE_SIZE);
         MiArchUnmapFrame(Buffer);
     }
+    *Transferred = Count * PAGE_SIZE;
     return STATUS_SUCCESS;
 }
 

@@ -307,7 +307,7 @@ CcmmExtendingCopy(void)
 
 static
 NTSTATUS
-CcmmReadPages(PVOID Context, ULONG64 Offset, const ULONG *Frames, ULONG Count)
+CcmmReadPages(PVOID Context, ULONG64 Offset, const ULONG *Frames, ULONG Count, PULONG Transferred)
 {
     CCMM_FILE *File = CONTAINING_RECORD(Context, CCMM_FILE, File);
     ULONG i;
@@ -321,6 +321,7 @@ CcmmReadPages(PVOID Context, ULONG64 Offset, const ULONG *Frames, ULONG Count)
         memcpy(Buffer, File->File.Data + Offset + i * PAGE_SIZE, PAGE_SIZE);
         MiArchUnmapFrame(Buffer);
     }
+    *Transferred = Count * PAGE_SIZE;
     return STATUS_SUCCESS;
 }
 
@@ -492,6 +493,7 @@ CcmmBasic(void)
     CHECK(CcCacheCheck(&Cache) == 0);
     CcmmFileDestroy(&File);
     CcCacheUninitialize(&Cache);
+    MiFlushStaleViews(&World.System.SystemSpace);
     CHECK(MI_ATOMIC_READ64(&World.System.SystemSpace.PageTablePages) == World.WindowTables);
     MiPfnDrainCaches(&World.System.Pfn);
     CHECK(WorldCheck(&World) == 0);
@@ -715,6 +717,7 @@ CcmmSmp(void)
 
     CcCacheUninitialize(&Cache);
     CHECK(IsListEmpty(&World.System.SegmentList));
+    MiFlushStaleViews(&World.System.SystemSpace);
     CHECK(MI_ATOMIC_READ64(&World.System.SystemSpace.PageTablePages) == World.WindowTables);
     MiPfnDrainCaches(&World.System.Pfn);
     CHECK(WorldCheck(&World) == 0);

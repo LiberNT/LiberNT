@@ -149,6 +149,14 @@ static inline void CcHostResourceRelease(CC_RESOURCE *Resource)
         abort();
 }
 
+static inline void CcHostResourceReuse(CC_RESOURCE *Resource)
+{
+    if (Resource->Waiters != 0 || pthread_rwlock_trywrlock(Resource->Native) != 0)
+        abort();
+    if (pthread_rwlock_unlock(Resource->Native) != 0)
+        abort();
+}
+
 static inline void CcHostLockAcquire(PCC_LOCK Lock)
 {
     unsigned Spins = 0;
@@ -175,6 +183,7 @@ extern _Thread_local ULONG CcHostProcessor;
 #define CC_RESOURCE_ACQUIRE_SHARED(r)   CcHostResourceAcquireShared(r)
 #define CC_RESOURCE_ACQUIRE_EXCLUSIVE(r) CcHostResourceAcquireExclusive(r)
 #define CC_RESOURCE_RELEASE(r)          CcHostResourceRelease(r)
+#define CC_RESOURCE_REUSE(r)            CcHostResourceReuse(r)
 #define CC_ALLOCATE(b)                  malloc(b)
 #define CC_FREE(p)                      free(p)
 #define CC_ATOMIC_ADD32(v, d)           __sync_fetch_and_add((v), (d))

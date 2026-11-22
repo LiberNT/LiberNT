@@ -92,6 +92,7 @@ ProcessDestroy(TEST_WORLD *World, PMI_ADDRESS_SPACE Space)
 void
 WorldExpectClean(TEST_WORLD *World, ULONG Frames)
 {
+    MiFlushStaleViews(&World->System.SystemSpace);
     MiPfnDrainCaches(&World->System.Pfn);
     CHECK(WorldCheck(World) == 0);
     CHECK(MI_ATOMIC_READ64(&World->System.CommittedPages) == 0);
