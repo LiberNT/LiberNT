@@ -1959,6 +1959,11 @@ MasterFileTable::RenameFile(
                 &NewValue);
         }
     }
+    if (Status == STATUS_BUFFER_TOO_SMALL &&
+        !Child->FindAttributeInRecord(TypeAttributeList, NULL, NULL))
+    {
+        Status = Child->CreateInitialAttributeList();
+    }
     if (!NT_SUCCESS(Status))
         goto Done;
     Status = WriteFileRecordToMFT(Child);
