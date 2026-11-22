@@ -143,6 +143,14 @@ static VOID DxgkHotPlugWorkTestPathImportance(VOID)
     ok_eq_ulong(DxgkHotPlugWorkCorePathImportance(15), 16UL);
 }
 
+static VOID DxgkHotPlugWorkTestExtendSource(VOID)
+{
+    ok_eq_ulong(DxgkHotPlugWorkCoreExtraPathSource(1, 4), 1UL);
+    ok_eq_ulong(DxgkHotPlugWorkCoreExtraPathSource(3, 4), 3UL);
+    ok_eq_ulong(DxgkHotPlugWorkCoreExtraPathSource(1, 1), 0UL);
+    ok_eq_ulong(DxgkHotPlugWorkCoreExtraPathSource(4, 4), 0UL);
+}
+
 START_TEST(DxgkHotPlugWork)
 {
     DxgkHotPlugWorkTestCoalescing();
@@ -155,4 +163,5 @@ START_TEST(DxgkHotPlugWork)
     DxgkHotPlugWorkTestBoundedRetry();
     DxgkHotPlugWorkTestDesktopOutput();
     DxgkHotPlugWorkTestPathImportance();
+    DxgkHotPlugWorkTestExtendSource();
 }

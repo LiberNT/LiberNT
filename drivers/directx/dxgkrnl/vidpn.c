@@ -3266,17 +3266,20 @@ DxgkpSeedDefaultHotPlugPath(
 
     DxgkpPopulateDefaultPath(&VidPn->Paths[0], 0, Snapshot->TargetId);
     VidPn->NumPaths = 1;
-    /* The other connected outputs show the same source: a clone. */
+    /* The other connected outputs extend the desktop, each on a source of its own; with no source left they clone it */
     {
         ULONG Extra;
 
         for (Extra = 0; Extra < Snapshot->ExtraCount && VidPn->NumPaths < DXGKP_MAX_PATHS; Extra++)
         {
             ULONG ExtraIndex = DxgkVidPnTargetIndexFromId(VidPn, Snapshot->Extra[Extra].ChildUid);
+            D3DDDI_VIDEO_PRESENT_SOURCE_ID ExtraSource =
+                (D3DDDI_VIDEO_PRESENT_SOURCE_ID)DxgkHotPlugWorkCoreExtraPathSource(VidPn->NumPaths, VidPn->NumSources);
 
             if (ExtraIndex == MAXULONG)
                 continue;
-            DxgkpPopulateDefaultPath(&VidPn->Paths[VidPn->NumPaths], 0, Snapshot->Extra[Extra].ChildUid);
+            ASSERT(ExtraSource < DXGKP_MAX_SOURCES);
+            DxgkpPopulateDefaultPath(&VidPn->Paths[VidPn->NumPaths], ExtraSource, Snapshot->Extra[Extra].ChildUid);
             VidPn->Paths[VidPn->NumPaths].ImportanceOrdinal =
                 (D3DKMDT_VIDPN_PRESENT_PATH_IMPORTANCE)DxgkHotPlugWorkCorePathImportance(VidPn->NumPaths);
             if (VidPn->TargetModeSets[ExtraIndex] != NULL)
@@ -3317,8 +3320,13 @@ DxgkpSeedDefaultHotPlugPath(
                           sizeof(Path->ContentTransformation.RotationSupport));
         }
 
-        if (VidPn->SourceModeSets[0] != NULL)
-            VidPn->SourceModeSets[0]->PinnedModeId = (UINT)-1;
+        for (PathIndex = 0; PathIndex < VidPn->NumPaths; PathIndex++)
+        {
+            D3DDDI_VIDEO_PRESENT_SOURCE_ID PathSource = VidPn->Paths[PathIndex].VidPnSourceId;
+
+            if (PathSource < DXGKP_MAX_SOURCES && VidPn->SourceModeSets[PathSource] != NULL)
+                VidPn->SourceModeSets[PathSource]->PinnedModeId = (UINT)-1;
+        }
         if (VidPn->TargetModeSets[TargetIndex] != NULL)
             VidPn->TargetModeSets[TargetIndex]->PinnedModeId = (UINT)-1;
     }
