@@ -39,7 +39,7 @@
 @ stdcall LsaEnumerateLogonSessions()
 @ stdcall LsaGetLogonSessionData()
 @ stdcall MakeSignature(ptr long ptr long)
-@ stdcall MapSecurityError()
+@ stdcall MapSecurityError(long)
 @ stdcall QueryContextAttributesW(ptr long ptr)
 @ stdcall QueryCredentialsAttributesW(ptr long ptr)
 @ stdcall QuerySecurityContextToken(ptr ptr)

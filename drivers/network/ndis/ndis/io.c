@@ -454,6 +454,7 @@ NdisMAllocateMapRegisters(
 /*
  * @implemented
  */
+#undef NdisMSetupDmaTransfer
 VOID
 EXPORT
 NdisMSetupDmaTransfer(OUT PNDIS_STATUS Status,
@@ -545,6 +546,7 @@ NdisSetupDmaTransfer(OUT PNDIS_STATUS    Status,
 /*
  * @implemented
  */
+#undef NdisMCompleteDmaTransfer
 VOID
 EXPORT
 NdisMCompleteDmaTransfer(OUT PNDIS_STATUS Status,

@@ -15,13 +15,6 @@
 #define NDIS6_PROCESSOR_TAG 'iPNn'  /* "nNPi" */
 
 /* NDIS 6.20 layouts; the legacy public NDIS header lacks these types. */
-typedef enum _NDIS_PROCESSOR_VENDOR
-{
-    NdisProcessorVendorUnknown,
-    NdisProcessorVendorGenuineIntel,
-    NdisProcessorVendorAuthenticAMD
-} NDIS_PROCESSOR_VENDOR;
-
 typedef struct _NDIS_PROCESSOR_INFO_EX
 {
     PROCESSOR_NUMBER    ProcNum;
@@ -31,43 +24,6 @@ typedef struct _NDIS_PROCESSOR_INFO_EX
     USHORT              NodeId;
     USHORT              NodeDistance;
 } NDIS_PROCESSOR_INFO_EX, *PNDIS_PROCESSOR_INFO_EX;
-
-typedef struct _NDIS_SYSTEM_PROCESSOR_INFO_EX
-{
-    NDIS_OBJECT_HEADER  Header;
-    ULONG               Flags;
-    NDIS_PROCESSOR_VENDOR ProcessorVendor;
-    ULONG               NumSockets;
-    ULONG               NumCores;
-    ULONG               NumCoresPerSocket;
-    ULONG               MaxHyperThreadingProcsPerCore;
-    ULONG               ProcessorInfoOffset;
-    ULONG               NumberOfProcessors;
-    ULONG               ProcessorInfoEntrySize;
-} NDIS_SYSTEM_PROCESSOR_INFO_EX, *PNDIS_SYSTEM_PROCESSOR_INFO_EX;
-
-typedef struct _NDIS_PROCESSOR_INFO
-{
-    ULONG               CpuNumber;
-    ULONG               PhysicalPackageId;
-    ULONG               CoreId;
-    ULONG               HyperThreadID;
-} NDIS_PROCESSOR_INFO, *PNDIS_PROCESSOR_INFO;
-
-typedef struct _NDIS_SYSTEM_PROCESSOR_INFO
-{
-    NDIS_OBJECT_HEADER  Header;
-    ULONG               Flags;
-    NDIS_PROCESSOR_VENDOR ProcessorVendor;
-    ULONG               NumPhysicalPackages;
-    ULONG               NumCores;
-    ULONG               NumCoresPerPhysicalPackage;
-    ULONG               MaxHyperThreadingCpusPerCore;
-    ULONG               RssBaseCpu;
-    ULONG               RssCpuCount;
-    PUCHAR              RssProcessors;
-    NDIS_PROCESSOR_INFO CpuInfo[MAXIMUM_PROC_PER_GROUP];
-} NDIS_SYSTEM_PROCESSOR_INFO, *PNDIS_SYSTEM_PROCESSOR_INFO;
 
 C_ASSERT(sizeof(NDIS_PROCESSOR_INFO_EX) == 20);
 C_ASSERT(sizeof(NDIS_SYSTEM_PROCESSOR_INFO_EX) == 40);
