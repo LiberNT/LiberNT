@@ -736,10 +736,10 @@ IntSetWindowPlacement(PWND Wnd, WINDOWPLACEMENT *wpl, UINT Flags)
    }
    else if (Wnd->style & WS_MAXIMIZE )
    {
-      if (Flags & PLACE_MAX)
+      if ((Flags & PLACE_MAX) && !EMPTYPOINT(Wnd->InternalPos.MaxPos))
       {
          co_WinPosSetWindowPos(Wnd, HWND_TOP,
-                               wpl->ptMaxPosition.x, wpl->ptMaxPosition.y, 0, 0,
+                               Wnd->InternalPos.MaxPos.x, Wnd->InternalPos.MaxPos.y, 0, 0,
                                SWP_NOSIZE | SWP_Flags);
          Wnd->InternalPos.flags |= WPF_MAXINIT;
       }
