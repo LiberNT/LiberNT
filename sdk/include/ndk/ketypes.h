@@ -183,7 +183,11 @@ typedef struct _FIBER                                    /* Field offsets:    */
 // kernel ABI while Bitmap preserves the variable-length view used by helpers.
 //
 #define KAFFINITY_EX_INITIALIZED_GROUPS 20
+#ifdef _WIN64
 #define KAFFINITY_EX_STATIC_GROUPS 32
+#else
+#define KAFFINITY_EX_STATIC_GROUPS 1
+#endif
 
 typedef struct _KAFFINITY_EX
 {
@@ -3195,6 +3199,81 @@ typedef struct _KPROCESS
     PVOID AvailableCpuState;                             // 0x1C0
 } KPROCESS;                                              // sizeof 0x1C8
 
+#elif defined(_M_IX86)
+
+#define KPROCESS_AFFINITY_EX_EMBEDDED
+#define KPROCESS_SEED_ARRAYS
+
+typedef struct _KPROCESS
+{
+    DISPATCHER_HEADER Header;                            // 0x000
+    LIST_ENTRY ProfileListHead;                          // 0x010
+    ULONG_PTR DirectoryTableBase;                        // 0x018
+    KGDTENTRY LdtDescriptor;                             // 0x01C
+    KIDTENTRY Int21Descriptor;                           // 0x024
+    LIST_ENTRY ThreadListHead;                           // 0x02C
+    KSPIN_LOCK ProcessLock;                              // 0x034
+    ULONGLONG DeepFreezeStartTime;                       // 0x038
+    KAFFINITY_EX Affinity;                               // 0x040
+    LIST_ENTRY ReadyListHead;                            // 0x04C
+    SINGLE_LIST_ENTRY SwapListEntry;                     // 0x054
+    volatile KAFFINITY_EX ActiveProcessors;              // 0x058
+    union
+    {
+        struct
+        {
+            ULONG AutoAlignment:1;
+            ULONG DisableBoost:1;
+            ULONG DisableQuantum:1;
+            ULONG DeepFreeze:1;
+            ULONG TimerVirtualization:1;
+            ULONG CheckStackExtents:1;
+            ULONG CacheIsolationEnabled:1;
+            ULONG PpmPolicy:3;
+            ULONG VaSpaceDeleted:1;
+            ULONG ReservedFlags:21;
+        };
+        volatile LONG ProcessFlags;                      // 0x064
+    };
+    SCHAR BasePriority;                                  // 0x068
+    SCHAR QuantumReset;                                  // 0x069
+    UCHAR Visited;                                       // 0x06A
+    union
+    {
+        KEXECUTE_OPTIONS Flags;                          // 0x06B
+        UCHAR ExecuteOptions;
+    };
+    USHORT ThreadSeed[1];                                // 0x06C
+    USHORT IdealProcessor[1];                            // 0x06E
+    USHORT IdealNode[1];                                 // 0x070
+    USHORT IdealGlobalNode;                              // 0x072
+    USHORT Spare1;                                       // 0x074
+    USHORT IopmOffset;                                   // 0x076
+    struct _KSCHEDULING_GROUP *SchedulingGroup;          // 0x078
+    volatile ULONG StackCount;                           // 0x07C KSTACK_COUNT
+    LIST_ENTRY ProcessListEntry;                         // 0x080
+    ULONGLONG CycleTime;                                 // 0x088
+    ULONGLONG ContextSwitches;                           // 0x090
+    ULONG FreezeCount;                                   // 0x098
+    ULONG KernelTime;                                    // 0x09C
+    ULONG UserTime;                                      // 0x0A0
+    ULONG ReadyTime;                                     // 0x0A4
+    PVOID VdmTrapcHandler;                               // 0x0A8
+    ULONG ProcessTimerDelay;                             // 0x0AC
+    ULONGLONG KernelWaitTime;                            // 0x0B0
+    ULONGLONG UserWaitTime;                              // 0x0B8
+    union
+    {
+        ULONG EndPadding[8];                             // 0x0C0
+        struct
+        {
+            ULONG_PTR Unused0;                           // [ReactOS]
+            UCHAR State;                                 // [ReactOS]
+            UCHAR Iopl;                                  // [ReactOS]
+        };
+    };
+} KPROCESS;                                              // sizeof 0x0E0
+
 #else
 
 typedef struct _KPROCESS
@@ -3208,19 +3287,11 @@ typedef struct _KPROCESS
     ULONG_PTR DirectoryTableBase;
     ULONG_PTR Unused0;
 #endif
-#if defined(_M_IX86)
-    KGDTENTRY LdtDescriptor;
-    KIDTENTRY Int21Descriptor;
-#endif
 #if defined(_M_AMD64)
     KGDTENTRY64 LdtSystemDescriptor;
     PVOID LdtBaseAddress;
 #endif
     USHORT IopmOffset;
-#if defined(_M_IX86)
-    UCHAR Iopl;
-    UCHAR Unused;
-#endif
     volatile KAFFINITY ActiveProcessors;
     ULONG KernelTime;
     ULONG UserTime;
@@ -3259,7 +3330,6 @@ typedef struct _KPROCESS
     volatile ULONG StackCount;
     LIST_ENTRY ProcessListEntry;
     ULONGLONG CycleTime;
-    /* FIXME: the x86 offsets of these Windows 10 members are not known here; this layout is the Vista one */
     ULONGLONG ContextSwitches;
     ULONG FreezeCount;
     ULONG ReadyTime;

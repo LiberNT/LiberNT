@@ -124,6 +124,24 @@ KiAttachProcessAffinity(
     Process->Affinity = &Storage->Affinity;
     Process->ActiveProcessors = &Storage->ActiveProcessors;
 }
+#elif defined(KPROCESS_AFFINITY_EX_EMBEDDED)
+C_ASSERT(KiArchMaximumProcessors() <= KAFFINITY_EX_STATIC_GROUPS * KI_SET_WORD_BITS);
+#define KI_PROCESS_AFFINITY_EXTENSION 0
+#define KiProcessAffinity(Process) ((Process)->Affinity.Bitmap)
+#define KiProcessActiveProcessors(Process) ((volatile KAFFINITY *)(Process)->ActiveProcessors.Bitmap)
+#define KiProcessPrimaryGroup(Process) ((VOID)(Process), (USHORT)0)
+#define KiSetProcessPrimaryGroup(Process, Group) ((VOID)(Process), (VOID)(Group))
+
+FORCEINLINE
+VOID
+KiAttachProcessAffinity(
+    _Inout_ PKPROCESS Process,
+    _In_opt_ PVOID Storage)
+{
+    UNREFERENCED_PARAMETER(Storage);
+    KiInitializeAffinityStorage(&Process->Affinity);
+    KiInitializeAffinityStorage((PKAFFINITY_EX)&Process->ActiveProcessors);
+}
 #else
 #define KI_PROCESS_AFFINITY_EXTENSION 0
 #define KiProcessAffinity(Process) (&(Process)->Affinity)
@@ -131,6 +149,14 @@ KiAttachProcessAffinity(
 #define KiProcessPrimaryGroup(Process) ((VOID)(Process), (USHORT)0)
 #define KiSetProcessPrimaryGroup(Process, Group) ((VOID)(Process), (VOID)(Group))
 #define KiAttachProcessAffinity(Process, Storage) ((VOID)(Process), (VOID)(Storage))
+#endif
+
+#ifdef KPROCESS_SEED_ARRAYS
+#define KiProcessThreadSeed(Process) ((Process)->ThreadSeed[0])
+#define KiProcessIdealNode(Process) ((Process)->IdealNode[0])
+#else
+#define KiProcessThreadSeed(Process) ((Process)->ThreadSeed)
+#define KiProcessIdealNode(Process) ((Process)->IdealNode)
 #endif
 
 FORCEINLINE
