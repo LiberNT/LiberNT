@@ -1368,6 +1368,7 @@ IoUnregisterBootDriverCallback (
 #endif
 #ifndef XSTATE_ARM64_SVE
 #define XSTATE_ARM64_SVE 2
+#endif
 
 typedef enum _HAL_DMA_CRASH_DUMP_REGISTER_TYPE {
     HalDmaCrashDumpRegisterSet1 = 0,
@@ -2682,7 +2683,7 @@ typedef struct WHEA_PCIXDEVICE_REGISTER_PAIR {
 #define IPMI_OS_SEL_RECORD_VERSION 1
 #if (defined(_AMD64_))
 #define KERNEL_SHADOW_STACK_SIZE PAGE_SIZE
-#define KUMS_UCH_VOLATILE_BIT 0
+#define KUMS_UCH_VOLATILE_BIT (0)
 #define KUMS_UCH_VOLATILE_MASK (1ULL << KUMS_UCH_VOLATILE_BIT)
 #endif
 #ifdef _WIN64
@@ -2696,7 +2697,7 @@ typedef struct WHEA_PCIXDEVICE_REGISTER_PAIR {
 #define MM_CURRENT_PROCESS_PARTITION_OBJECT 0xFFFFFFFF
 #endif
 #define MM_SYSTEM_PARTITION_OBJECT 0
-#define NTPSHEDAPI 0
+#define NTPSHEDAPI DECLSPEC_IMPORT
 #define POWER_THROTTLING_PROCESS_VALID_FLAGS 7
 #define POWER_THROTTLING_THREAD_VALID_FLAGS 1
 #define RTL_CORRELATION_VECTOR_VERSION_1 ((CHAR)1)
@@ -2724,7 +2725,7 @@ typedef struct WHEA_PCIXDEVICE_REGISTER_PAIR {
 #define WHEA_ERROR_RECORD_SIGNATURE 0x52455043
 #define WHEA_ERROR_SOURCE_DESCRIPTOR_VERSION_10 10
 #define WHEA_GENERIC_ENTRY_VERSION 0x300
-#define WHEA_PHYSICAL_ADDRESS 0
+#define WHEA_PHYSICAL_ADDRESS LARGE_INTEGER
 #define WHEA_PLUGIN_REGISTRATION_PACKET_VERSION 0x20000
 #define WHEA_XPF_MCA_SECTION_VERSION 4
 #define WRITE_NV_MEMORY_FLAG_PERSIST 3
@@ -3675,19 +3676,19 @@ union _WHEA_ERROR_RECORD_HEADER_VALIDBITS
 };
 #pragma pack(pop)
 
-typedef NTSTATUS _WHEA_ERROR_SOURCE_CORRECT(PWHEA_ERROR_SOURCE_DESCRIPTOR, PULONG);
+typedef NTSTATUS NTAPI _WHEA_ERROR_SOURCE_CORRECT(PWHEA_ERROR_SOURCE_DESCRIPTOR, PULONG);
 
 typedef NTSTATUS _WHEA_ERROR_SOURCE_CORRECT_DEVICE_DRIVER(PVOID, PULONG);
 
-typedef NTSTATUS _WHEA_ERROR_SOURCE_CREATE_RECORD(PWHEA_ERROR_SOURCE_DESCRIPTOR, PWHEA_ERROR_PACKET, PWHEA_ERROR_RECORD, ULONG, PVOID);
+typedef NTSTATUS NTAPI _WHEA_ERROR_SOURCE_CREATE_RECORD(PWHEA_ERROR_SOURCE_DESCRIPTOR, PWHEA_ERROR_PACKET, PWHEA_ERROR_RECORD, ULONG, PVOID);
 
-typedef NTSTATUS _WHEA_ERROR_SOURCE_INITIALIZE(ULONG, PWHEA_ERROR_SOURCE_DESCRIPTOR, PVOID);
+typedef NTSTATUS NTAPI _WHEA_ERROR_SOURCE_INITIALIZE(ULONG, PWHEA_ERROR_SOURCE_DESCRIPTOR, PVOID);
 
 typedef NTSTATUS _WHEA_ERROR_SOURCE_INITIALIZE_DEVICE_DRIVER(PVOID, ULONG);
 
-typedef NTSTATUS _WHEA_ERROR_SOURCE_RECOVER(PVOID, PWHEA_ERROR_SEVERITY);
+typedef NTSTATUS NTAPI _WHEA_ERROR_SOURCE_RECOVER(PVOID, PWHEA_ERROR_SEVERITY);
 
-typedef void _WHEA_ERROR_SOURCE_UNINITIALIZE(PVOID);
+typedef void NTAPI _WHEA_ERROR_SOURCE_UNINITIALIZE(PVOID);
 
 typedef void _WHEA_ERROR_SOURCE_UNINITIALIZE_DEVICE_DRIVER(PVOID);
 
@@ -4097,7 +4098,7 @@ union _WHEA_REPORT_HW_ERROR_DEVICE_DRIVER_FLAGS
     ULONG AsULONG;
 };
 
-typedef BOOLEAN _WHEA_SIGNAL_HANDLER_OVERRIDE_CALLBACK(UINT_PTR);
+typedef BOOLEAN NTAPI _WHEA_SIGNAL_HANDLER_OVERRIDE_CALLBACK(UINT_PTR);
 
 #pragma pack(push, 1)
 union _WHEA_TIMESTAMP
@@ -4356,11 +4357,11 @@ struct _MEMORY_DEFECT
 };
 #pragma pack(pop)
 
-typedef void DRIVER_REINITIALIZE(struct _DRIVER_OBJECT *, PVOID, ULONG);
+typedef void NTAPI DRIVER_REINITIALIZE(struct _DRIVER_OBJECT *, PVOID, ULONG);
 
 typedef void NTAPI HAL_PMU_NOTIFICATION_CALLBACK(PVOID, PHAL_PMU_NOTIFICATION);
 
-typedef NTSTATUS HVL_WHEA_ERROR_NOTIFICATION(PWHEA_RECOVERY_CONTEXT, BOOLEAN);
+typedef NTSTATUS NTAPI HVL_WHEA_ERROR_NOTIFICATION(PWHEA_RECOVERY_CONTEXT, BOOLEAN);
 
 typedef struct _IO_FOEXT_SILO_PARAMETERS IO_FOEXT_SILO_PARAMETERS;
 
@@ -4580,7 +4581,7 @@ typedef struct _PCI_EXPRESS_USB4_DESIGNATED_VENDOR_SPECIFIC_CAPABILITY PCI_EXPRE
 
 typedef struct _PCI_LINK_INFORMATION PCI_LINK_INFORMATION;
 
-typedef NTSTATUS PCI_SET_MAX_LINK_BANDWIDTH(PVOID, ULONG, BOOLEAN, PBOOLEAN, PPCI_LINK_SPEED);
+typedef NTSTATUS NTAPI PCI_SET_MAX_LINK_BANDWIDTH(PVOID, ULONG, BOOLEAN, PBOOLEAN, PPCI_LINK_SPEED);
 
 typedef CORRELATION_VECTOR *PCORRELATION_VECTOR;
 
@@ -4592,9 +4593,9 @@ typedef union _DIMM_ADDRESS *PDIMM_ADDRESS;
 
 typedef struct _DIMM_INFO *PDIMM_INFO;
 
-typedef BOOLEAN (*PFN_IN_USE_PAGE_OFFLINE_NOTIFY)(PFN_NUMBER, BOOLEAN, PVOID, PNTSTATUS);
+typedef BOOLEAN (NTAPI *PFN_IN_USE_PAGE_OFFLINE_NOTIFY)(PFN_NUMBER, BOOLEAN, PVOID, PNTSTATUS);
 
-typedef NTSTATUS (*PFN_WHEA_HIGH_IRQL_LOG_SEL_EVENT_HANDLER)(PVOID, PIPMI_OS_SEL_RECORD);
+typedef NTSTATUS (NTAPI *PFN_WHEA_HIGH_IRQL_LOG_SEL_EVENT_HANDLER)(PVOID, PIPMI_OS_SEL_RECORD);
 
 typedef void (*PHAL_PMU_NOTIFICATION_CALLBACK)(PVOID, PHAL_PMU_NOTIFICATION);
 
@@ -4713,7 +4714,7 @@ typedef union _PCI_EXPRESS_USB4_DESIGNATED_VENDOR_SPECIFIC_PORT_ATTRIBUTES *PPCI
 
 typedef struct _PCI_LINK_INFORMATION *PPCI_LINK_INFORMATION;
 
-typedef NTSTATUS PCI_GET_LINK_INFORMATION(PVOID, PPCI_LINK_INFORMATION);
+typedef NTSTATUS NTAPI PCI_GET_LINK_INFORMATION(PVOID, PPCI_LINK_INFORMATION);
 
 typedef PCI_GET_LINK_INFORMATION *PPCI_GET_LINK_INFORMATION;
 
@@ -4756,33 +4757,33 @@ typedef struct _PROCESS_MITIGATION_USER_POINTER_AUTH_POLICY PROCESS_MITIGATION_U
 
 typedef struct _PROCESS_MITIGATION_USER_SHADOW_STACK_POLICY PROCESS_MITIGATION_USER_SHADOW_STACK_POLICY;
 
-typedef void PS_AVAILABLE_CPUS_CHANGE_CALLBACK(PVOID);
+typedef void NTAPI PS_AVAILABLE_CPUS_CHANGE_CALLBACK(PVOID);
 
-typedef NTSTATUS (*PSHED_PI_ATTEMPT_ERROR_RECOVERY)(PVOID, ULONG, PWHEA_ERROR_RECORD);
+typedef NTSTATUS (NTAPI *PSHED_PI_ATTEMPT_ERROR_RECOVERY)(PVOID, ULONG, PWHEA_ERROR_RECORD);
 
-typedef NTSTATUS (*PSHED_PI_CLEAR_ERROR_RECORD)(PVOID, ULONG, ULONGLONG);
+typedef NTSTATUS (NTAPI *PSHED_PI_CLEAR_ERROR_RECORD)(PVOID, ULONG, ULONGLONG);
 
-typedef NTSTATUS (*PSHED_PI_CLEAR_ERROR_STATUS)(PVOID, PWHEA_ERROR_SOURCE_DESCRIPTOR, ULONG, PWHEA_ERROR_RECORD);
+typedef NTSTATUS (NTAPI *PSHED_PI_CLEAR_ERROR_STATUS)(PVOID, PWHEA_ERROR_SOURCE_DESCRIPTOR, ULONG, PWHEA_ERROR_RECORD);
 
-typedef NTSTATUS (*PSHED_PI_DISABLE_ERROR_SOURCE)(PVOID, PWHEA_ERROR_SOURCE_DESCRIPTOR);
+typedef NTSTATUS (NTAPI *PSHED_PI_DISABLE_ERROR_SOURCE)(PVOID, PWHEA_ERROR_SOURCE_DESCRIPTOR);
 
-typedef NTSTATUS (*PSHED_PI_ENABLE_ERROR_SOURCE)(PVOID, PWHEA_ERROR_SOURCE_DESCRIPTOR);
+typedef NTSTATUS (NTAPI *PSHED_PI_ENABLE_ERROR_SOURCE)(PVOID, PWHEA_ERROR_SOURCE_DESCRIPTOR);
 
-typedef NTSTATUS (*PSHED_PI_FINALIZE_ERROR_RECORD)(PVOID, PWHEA_ERROR_SOURCE_DESCRIPTOR, ULONG, PWHEA_ERROR_RECORD);
+typedef NTSTATUS (NTAPI *PSHED_PI_FINALIZE_ERROR_RECORD)(PVOID, PWHEA_ERROR_SOURCE_DESCRIPTOR, ULONG, PWHEA_ERROR_RECORD);
 
-typedef NTSTATUS (*PSHED_PI_GET_ALL_ERROR_SOURCES)(PVOID, PULONG, PWHEA_ERROR_SOURCE_DESCRIPTOR *, PULONG);
+typedef NTSTATUS (NTAPI *PSHED_PI_GET_ALL_ERROR_SOURCES)(PVOID, PULONG, PWHEA_ERROR_SOURCE_DESCRIPTOR *, PULONG);
 
-typedef NTSTATUS (*PSHED_PI_GET_ERROR_SOURCE_INFO)(PVOID, PWHEA_ERROR_SOURCE_DESCRIPTOR);
+typedef NTSTATUS (NTAPI *PSHED_PI_GET_ERROR_SOURCE_INFO)(PVOID, PWHEA_ERROR_SOURCE_DESCRIPTOR);
 
-typedef NTSTATUS (*PSHED_PI_INJECT_ERROR)(PVOID, ULONGLONG, ULONGLONG, ULONGLONG, ULONGLONG, ULONGLONG);
+typedef NTSTATUS (NTAPI *PSHED_PI_INJECT_ERROR)(PVOID, ULONGLONG, ULONGLONG, ULONGLONG, ULONGLONG, ULONGLONG);
 
-typedef NTSTATUS (*PSHED_PI_READ_ERROR_RECORD)(PVOID, ULONG, ULONGLONG, PULONGLONG, PULONG, PWHEA_ERROR_RECORD);
+typedef NTSTATUS (NTAPI *PSHED_PI_READ_ERROR_RECORD)(PVOID, ULONG, ULONGLONG, PULONGLONG, PULONG, PWHEA_ERROR_RECORD);
 
-typedef NTSTATUS (*PSHED_PI_RETRIEVE_ERROR_INFO)(PVOID, PWHEA_ERROR_SOURCE_DESCRIPTOR, ULONGLONG, PWHEA_ERROR_PACKET);
+typedef NTSTATUS (NTAPI *PSHED_PI_RETRIEVE_ERROR_INFO)(PVOID, PWHEA_ERROR_SOURCE_DESCRIPTOR, ULONGLONG, PWHEA_ERROR_PACKET);
 
-typedef NTSTATUS (*PSHED_PI_SET_ERROR_SOURCE_INFO)(PVOID, PWHEA_ERROR_SOURCE_DESCRIPTOR);
+typedef NTSTATUS (NTAPI *PSHED_PI_SET_ERROR_SOURCE_INFO)(PVOID, PWHEA_ERROR_SOURCE_DESCRIPTOR);
 
-typedef NTSTATUS (*PSHED_PI_WRITE_ERROR_RECORD)(PVOID, ULONG, ULONG, PWHEA_ERROR_RECORD);
+typedef NTSTATUS (NTAPI *PSHED_PI_WRITE_ERROR_RECORD)(PVOID, ULONG, ULONG, PWHEA_ERROR_RECORD);
 
 typedef union _WHEA_ARM_BUS_ERROR_VALID_BITS *PWHEA_ARM_BUS_ERROR_VALID_BITS;
 
@@ -4798,7 +4799,7 @@ typedef union _WHEA_ARM_TLB_ERROR_VALID_BITS *PWHEA_ARM_TLB_ERROR_VALID_BITS;
 
 typedef union _WHEA_ERROR_INJECTION_CAPABILITIES *PWHEA_ERROR_INJECTION_CAPABILITIES;
 
-typedef NTSTATUS (*PSHED_PI_GET_INJECTION_CAPABILITIES)(PVOID, PWHEA_ERROR_INJECTION_CAPABILITIES);
+typedef NTSTATUS (NTAPI *PSHED_PI_GET_INJECTION_CAPABILITIES)(PVOID, PWHEA_ERROR_INJECTION_CAPABILITIES);
 
 struct _WHEA_PSHED_PLUGIN_CALLBACKS
 {
@@ -7077,155 +7078,155 @@ void CUSTOM_SYSTEM_EVENT_TRIGGER_INIT(PCUSTOM_SYSTEM_EVENT_TRIGGER_CONFIG Config
 #endif
 void ExProbeAlignment(const volatile void *Address, SIZE_T Length, ULONG Alignment);
 #if (defined (_AMD64_))
-BOOLEAN HalCvmDmaEnabled(void);
+BOOLEAN NTAPI HalCvmDmaEnabled(void);
 #endif
-NTSTATUS HalDmaAllocateCrashDumpRegistersEx(PADAPTER_OBJECT Adapter, ULONG NumberOfMapRegisters, HAL_DMA_CRASH_DUMP_REGISTER_TYPE Type, PVOID *MapRegisterBase, PULONG MapRegistersAvailable);
-NTSTATUS HalDmaFreeCrashDumpRegistersEx(PADAPTER_OBJECT Adapter, HAL_DMA_CRASH_DUMP_REGISTER_TYPE Type);
-NTSTATUS HvlRegisterWheaErrorNotification(PHVL_WHEA_ERROR_NOTIFICATION Callback);
-NTSTATUS HvlUnregisterWheaErrorNotification(PHVL_WHEA_ERROR_NOTIFICATION Callback);
-NTSTATUS IoDecrementKeepAliveCount(PFILE_OBJECT FileObject, PEPROCESS Process);
-NTSTATUS IoGetFsZeroingOffset(PIRP Irp, PULONG ZeroingOffset);
-PEPROCESS IoGetInitiatorProcess(PFILE_OBJECT FileObject);
+NTSTATUS NTAPI HalDmaAllocateCrashDumpRegistersEx(PADAPTER_OBJECT Adapter, ULONG NumberOfMapRegisters, HAL_DMA_CRASH_DUMP_REGISTER_TYPE Type, PVOID *MapRegisterBase, PULONG MapRegistersAvailable);
+NTSTATUS NTAPI HalDmaFreeCrashDumpRegistersEx(PADAPTER_OBJECT Adapter, HAL_DMA_CRASH_DUMP_REGISTER_TYPE Type);
+NTKERNELAPI NTSTATUS NTAPI HvlRegisterWheaErrorNotification(PHVL_WHEA_ERROR_NOTIFICATION Callback);
+NTKERNELAPI NTSTATUS NTAPI HvlUnregisterWheaErrorNotification(PHVL_WHEA_ERROR_NOTIFICATION Callback);
+NTKERNELAPI NTSTATUS NTAPI IoDecrementKeepAliveCount(PFILE_OBJECT FileObject, PEPROCESS Process);
+NTSTATUS NTAPI IoGetFsZeroingOffset(PIRP Irp, PULONG ZeroingOffset);
+NTKERNELAPI PEPROCESS NTAPI IoGetInitiatorProcess(PFILE_OBJECT FileObject);
 typedef struct _OPLOCK_KEY_ECP_CONTEXT *POPLOCK_KEY_ECP_CONTEXT;
 
-POPLOCK_KEY_ECP_CONTEXT IoGetOplockKeyContext(PFILE_OBJECT FileObject);
-POPLOCK_KEY_CONTEXT IoGetOplockKeyContextEx(PFILE_OBJECT FileObject);
-PIO_FOEXT_SHADOW_FILE IoGetShadowFileInformation(PFILE_OBJECT FileObject);
-PESILO IoGetSilo(PFILE_OBJECT FileObject);
-PIO_FOEXT_SILO_PARAMETERS IoGetSiloParameters(PFILE_OBJECT FileObject);
-NTSTATUS IoIncrementKeepAliveCount(PFILE_OBJECT FileObject, PEPROCESS Process);
-LOGICAL IoIsValidIrpStatus(NTSTATUS Status);
-PIRP IoMakeAssociatedIrpEx(PIRP Irp, PDEVICE_OBJECT DeviceObject, CCHAR StackSize);
-NTSTATUS IoQueryInformationByName(POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock, PVOID FileInformation, ULONG Length, FILE_INFORMATION_CLASS FileInformationClass, ULONG Options, PIO_DRIVER_CREATE_CONTEXT DriverContext);
-NTSTATUS IoSetFsZeroingOffset(PIRP Irp, ULONG ZeroingOffset);
-NTSTATUS IoSetFsZeroingOffsetRequired(PIRP Irp);
-NTSTATUS IoSetShadowFileInformation(PFILE_OBJECT FileObject, PFILE_OBJECT BackingFileObject, PVOID BackingFltInstance);
-NTSTATUS IoVolumeDeviceNameToGuid(PUNICODE_STRING VolumeDeviceName, GUID *Guid);
-NTSTATUS IoVolumeDeviceNameToGuidPath(PUNICODE_STRING VolumeDeviceName, PUNICODE_STRING GuidPath);
-ULONG KeQueryNodeActiveProcessorCount(USHORT NodeNumber);
-NTSTATUS MmAllocateContiguousMemoryEx(PSIZE_T NumberOfBytes, PHYSICAL_ADDRESS LowestAcceptableAddress, PHYSICAL_ADDRESS HighestAcceptableAddress, PHYSICAL_ADDRESS BoundaryAddressMultiple, NODE_REQUIREMENT PreferredNode, ULONG Protect, PVOID PartitionObject, ULONG Tag, ULONG Flags, PVOID *BaseAddress);
-NTSTATUS MmGetCacheAttribute(PHYSICAL_ADDRESS PhysicalAddress, MEMORY_CACHING_TYPE *CacheType);
-NTSTATUS MmGetCacheAttributeEx(PHYSICAL_ADDRESS PhysicalAddress, ULONG Flags, MEMORY_CACHING_TYPE *CacheType);
-PPHYSICAL_MEMORY_RANGE MmGetPhysicalMemoryRangesEx2(PVOID PartitionObject, ULONG Flags);
-HANDLE MmSecureVirtualMemoryEx(PVOID Address, SIZE_T Size, ULONG ProbeMode, ULONG Flags);
-NTSTATUS PsAcquireSiloHardReference(PESILO Silo);
-NTSTATUS PsAllocSiloContextSlot(ULONG_PTR Reserved, ULONG *ReturnedContextSlot);
-NTSTATUS PsCreateSiloContext(PESILO Silo, ULONG Size, POOL_TYPE PoolType, SILO_CONTEXT_CLEANUP_CALLBACK ContextCleanupCallback, PVOID *ReturnedSiloContext);
-void PsDereferenceSiloContext(PVOID SiloContext);
-NTSTATUS PsFreeSiloContextSlot(ULONG ContextSlot);
-PUNICODE_STRING PsGetCurrentServerSiloName(void);
-PESILO PsGetCurrentSilo(void);
-PESILO PsGetEffectiveServerSilo(PESILO Silo);
+POPLOCK_KEY_ECP_CONTEXT NTAPI IoGetOplockKeyContext(PFILE_OBJECT FileObject);
+POPLOCK_KEY_CONTEXT NTAPI IoGetOplockKeyContextEx(PFILE_OBJECT FileObject);
+PIO_FOEXT_SHADOW_FILE NTAPI IoGetShadowFileInformation(PFILE_OBJECT FileObject);
+PESILO NTAPI IoGetSilo(PFILE_OBJECT FileObject);
+PIO_FOEXT_SILO_PARAMETERS NTAPI IoGetSiloParameters(PFILE_OBJECT FileObject);
+NTKERNELAPI NTSTATUS NTAPI IoIncrementKeepAliveCount(PFILE_OBJECT FileObject, PEPROCESS Process);
+NTKERNELAPI LOGICAL NTAPI IoIsValidIrpStatus(NTSTATUS Status);
+NTKERNELAPI PIRP NTAPI IoMakeAssociatedIrpEx(PIRP Irp, PDEVICE_OBJECT DeviceObject, CCHAR StackSize);
+NTKERNELAPI NTSTATUS NTAPI IoQueryInformationByName(POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock, PVOID FileInformation, ULONG Length, FILE_INFORMATION_CLASS FileInformationClass, ULONG Options, PIO_DRIVER_CREATE_CONTEXT DriverContext);
+NTSTATUS NTAPI IoSetFsZeroingOffset(PIRP Irp, ULONG ZeroingOffset);
+NTSTATUS NTAPI IoSetFsZeroingOffsetRequired(PIRP Irp);
+NTSTATUS NTAPI IoSetShadowFileInformation(PFILE_OBJECT FileObject, PFILE_OBJECT BackingFileObject, PVOID BackingFltInstance);
+NTKERNELAPI NTSTATUS NTAPI IoVolumeDeviceNameToGuid(PUNICODE_STRING VolumeDeviceName, GUID *Guid);
+NTKERNELAPI NTSTATUS NTAPI IoVolumeDeviceNameToGuidPath(PUNICODE_STRING VolumeDeviceName, PUNICODE_STRING GuidPath);
+NTKERNELAPI ULONG NTAPI KeQueryNodeActiveProcessorCount(USHORT NodeNumber);
+NTKERNELAPI NTSTATUS NTAPI MmAllocateContiguousMemoryEx(PSIZE_T NumberOfBytes, PHYSICAL_ADDRESS LowestAcceptableAddress, PHYSICAL_ADDRESS HighestAcceptableAddress, PHYSICAL_ADDRESS BoundaryAddressMultiple, NODE_REQUIREMENT PreferredNode, ULONG Protect, PVOID PartitionObject, ULONG Tag, ULONG Flags, PVOID *BaseAddress);
+NTKERNELAPI NTSTATUS NTAPI MmGetCacheAttribute(PHYSICAL_ADDRESS PhysicalAddress, MEMORY_CACHING_TYPE *CacheType);
+NTSTATUS NTAPI MmGetCacheAttributeEx(PHYSICAL_ADDRESS PhysicalAddress, ULONG Flags, MEMORY_CACHING_TYPE *CacheType);
+NTKERNELAPI PPHYSICAL_MEMORY_RANGE NTAPI MmGetPhysicalMemoryRangesEx2(PVOID PartitionObject, ULONG Flags);
+NTKERNELAPI HANDLE NTAPI MmSecureVirtualMemoryEx(PVOID Address, SIZE_T Size, ULONG ProbeMode, ULONG Flags);
+NTKERNELAPI NTSTATUS NTAPI PsAcquireSiloHardReference(PESILO Silo);
+NTKERNELAPI NTSTATUS NTAPI PsAllocSiloContextSlot(ULONG_PTR Reserved, ULONG *ReturnedContextSlot);
+NTKERNELAPI NTSTATUS NTAPI PsCreateSiloContext(PESILO Silo, ULONG Size, POOL_TYPE PoolType, SILO_CONTEXT_CLEANUP_CALLBACK ContextCleanupCallback, PVOID *ReturnedSiloContext);
+NTKERNELAPI void NTAPI PsDereferenceSiloContext(PVOID SiloContext);
+NTKERNELAPI NTSTATUS NTAPI PsFreeSiloContextSlot(ULONG ContextSlot);
+NTKERNELAPI PUNICODE_STRING NTAPI PsGetCurrentServerSiloName(void);
+NTKERNELAPI PESILO NTAPI PsGetCurrentSilo(void);
+NTKERNELAPI PESILO NTAPI PsGetEffectiveServerSilo(PESILO Silo);
 typedef struct _EJOB *PEJOB;
 
-NTSTATUS PsGetJobServerSilo(PEJOB Job, PESILO *ServerSilo);
-NTSTATUS PsGetJobSilo(PEJOB Job, PESILO *Silo);
-PESILO PsGetParentSilo(PEJOB Job);
-NTSTATUS PsGetPermanentSiloContext(PESILO Silo, ULONG ContextSlot, PVOID *ReturnedSiloContext);
-ULONG PsGetServerSiloActiveConsoleId(PESILO Silo);
-GUID * PsGetSiloContainerId(PESILO Silo);
-NTSTATUS PsGetSiloContext(PESILO Silo, ULONG ContextSlot, PVOID *ReturnedSiloContext);
-LONGLONG PsGetThreadCreateTime(PETHREAD Thread);
-NTSTATUS PsGetThreadExitStatus(PETHREAD Thread);
-PESILO PsGetThreadServerSilo(PETHREAD Thread);
-PVOID PshedAllocateMemory(ULONG Size);
-void PshedFreeMemory(PVOID Address);
-BOOLEAN PshedIsSystemWheaEnabled(void);
-NTSTATUS PshedRegisterPlugin(PWHEA_PSHED_PLUGIN_REGISTRATION_PACKET Packet);
-BOOLEAN PshedSynchronizeExecution(PWHEA_ERROR_SOURCE_DESCRIPTOR ErrorSource, PKSYNCHRONIZE_ROUTINE SynchronizeRoutine, PVOID SynchronizeContext);
-void PshedUnregisterPlugin(PVOID PluginHandle);
-NTSTATUS PsInsertPermanentSiloContext(PESILO Silo, ULONG ContextSlot, PVOID SiloContext);
-NTSTATUS PsInsertSiloContext(PESILO Silo, ULONG ContextSlot, PVOID SiloContext);
-NTSTATUS PsMakeSiloContextPermanent(PESILO Silo, ULONG ContextSlot);
-NTSTATUS PsQueryProcessAvailableCpus(PEPROCESS Process, PKAFFINITY_EX Affinity, PULONG64 ObservedSequenceNumber, PULONG64 SequenceNumber);
-NTSTATUS PsQueryProcessAvailableCpusCount(PEPROCESS Process, PULONG AvailableCpuCount, PULONG64 SequenceNumber);
-NTSTATUS PsQuerySystemAvailableCpus(PKAFFINITY_EX Affinity, PULONG64 ObservedSequenceNumber, PULONG64 SequenceNumber);
-NTSTATUS PsQuerySystemAvailableCpusCount(PULONG AvailableCpuCount, PULONG64 SequenceNumber);
-void PsReferenceSiloContext(PVOID SiloContext);
-NTSTATUS PsRegisterProcessAvailableCpusChangeNotification(PEPROCESS Process, PS_AVAILABLE_CPUS_CHANGE_CALLBACK *Callback, PVOID Context, PULONG64 ObservedSequenceNumber, PS_AVAILABLE_CPUS_CHANGE_REGISTRATION *RegistrationHandle);
-NTSTATUS PsRegisterSystemAvailableCpusChangeNotification(PS_AVAILABLE_CPUS_CHANGE_CALLBACK *Callback, PVOID Context, PULONG64 ObservedSequenceNumber, PS_AVAILABLE_CPUS_CHANGE_REGISTRATION *RegistrationHandle);
-void PsReleaseSiloHardReference(PESILO Silo);
-NTSTATUS PsRemoveSiloContext(PESILO Silo, ULONG ContextSlot, PVOID *RemovedSiloContext);
-NTSTATUS PsReplaceSiloContext(PESILO Silo, ULONG ContextSlot, PVOID NewSiloContext, PVOID *OldSiloContext);
-NTSTATUS PsSetCreateThreadNotifyRoutineEx(PSCREATETHREADNOTIFYTYPE NotifyType, PVOID NotifyInformation);
-NTSTATUS PsSetLoadImageNotifyRoutineEx(PLOAD_IMAGE_NOTIFY_ROUTINE NotifyRoutine, ULONG_PTR Flags);
-void PsTerminateServerSilo(PESILO ServerSilo, NTSTATUS ExitStatus);
-void PsUnregisterAvailableCpusChangeNotification(PS_AVAILABLE_CPUS_CHANGE_REGISTRATION RegistrationHandle);
+NTKERNELAPI NTSTATUS NTAPI PsGetJobServerSilo(PEJOB Job, PESILO *ServerSilo);
+NTKERNELAPI NTSTATUS NTAPI PsGetJobSilo(PEJOB Job, PESILO *Silo);
+PESILO NTAPI PsGetParentSilo(PEJOB Job);
+NTKERNELAPI NTSTATUS NTAPI PsGetPermanentSiloContext(PESILO Silo, ULONG ContextSlot, PVOID *ReturnedSiloContext);
+NTKERNELAPI ULONG NTAPI PsGetServerSiloActiveConsoleId(PESILO Silo);
+NTKERNELAPI GUID *NTAPI PsGetSiloContainerId(PESILO Silo);
+NTKERNELAPI NTSTATUS NTAPI PsGetSiloContext(PESILO Silo, ULONG ContextSlot, PVOID *ReturnedSiloContext);
+NTKERNELAPI LONGLONG NTAPI PsGetThreadCreateTime(PETHREAD Thread);
+NTKERNELAPI NTSTATUS NTAPI PsGetThreadExitStatus(PETHREAD Thread);
+NTKERNELAPI PESILO NTAPI PsGetThreadServerSilo(PETHREAD Thread);
+PVOID NTAPI PshedAllocateMemory(ULONG Size);
+void NTAPI PshedFreeMemory(PVOID Address);
+BOOLEAN NTAPI PshedIsSystemWheaEnabled(void);
+NTSTATUS NTAPI PshedRegisterPlugin(PWHEA_PSHED_PLUGIN_REGISTRATION_PACKET Packet);
+BOOLEAN NTAPI PshedSynchronizeExecution(PWHEA_ERROR_SOURCE_DESCRIPTOR ErrorSource, PKSYNCHRONIZE_ROUTINE SynchronizeRoutine, PVOID SynchronizeContext);
+void NTAPI PshedUnregisterPlugin(PVOID PluginHandle);
+NTKERNELAPI NTSTATUS NTAPI PsInsertPermanentSiloContext(PESILO Silo, ULONG ContextSlot, PVOID SiloContext);
+NTKERNELAPI NTSTATUS NTAPI PsInsertSiloContext(PESILO Silo, ULONG ContextSlot, PVOID SiloContext);
+NTKERNELAPI NTSTATUS NTAPI PsMakeSiloContextPermanent(PESILO Silo, ULONG ContextSlot);
+NTSTATUS NTAPI PsQueryProcessAvailableCpus(PEPROCESS Process, PKAFFINITY_EX Affinity, PULONG64 ObservedSequenceNumber, PULONG64 SequenceNumber);
+NTSTATUS NTAPI PsQueryProcessAvailableCpusCount(PEPROCESS Process, PULONG AvailableCpuCount, PULONG64 SequenceNumber);
+NTSTATUS NTAPI PsQuerySystemAvailableCpus(PKAFFINITY_EX Affinity, PULONG64 ObservedSequenceNumber, PULONG64 SequenceNumber);
+NTSTATUS NTAPI PsQuerySystemAvailableCpusCount(PULONG AvailableCpuCount, PULONG64 SequenceNumber);
+NTKERNELAPI void NTAPI PsReferenceSiloContext(PVOID SiloContext);
+NTSTATUS NTAPI PsRegisterProcessAvailableCpusChangeNotification(PEPROCESS Process, PS_AVAILABLE_CPUS_CHANGE_CALLBACK *Callback, PVOID Context, PULONG64 ObservedSequenceNumber, PS_AVAILABLE_CPUS_CHANGE_REGISTRATION *RegistrationHandle);
+NTSTATUS NTAPI PsRegisterSystemAvailableCpusChangeNotification(PS_AVAILABLE_CPUS_CHANGE_CALLBACK *Callback, PVOID Context, PULONG64 ObservedSequenceNumber, PS_AVAILABLE_CPUS_CHANGE_REGISTRATION *RegistrationHandle);
+NTKERNELAPI void NTAPI PsReleaseSiloHardReference(PESILO Silo);
+NTKERNELAPI NTSTATUS NTAPI PsRemoveSiloContext(PESILO Silo, ULONG ContextSlot, PVOID *RemovedSiloContext);
+NTKERNELAPI NTSTATUS NTAPI PsReplaceSiloContext(PESILO Silo, ULONG ContextSlot, PVOID NewSiloContext, PVOID *OldSiloContext);
+NTKERNELAPI NTSTATUS NTAPI PsSetCreateThreadNotifyRoutineEx(PSCREATETHREADNOTIFYTYPE NotifyType, PVOID NotifyInformation);
+NTKERNELAPI NTSTATUS NTAPI PsSetLoadImageNotifyRoutineEx(PLOAD_IMAGE_NOTIFY_ROUTINE NotifyRoutine, ULONG_PTR Flags);
+NTKERNELAPI void NTAPI PsTerminateServerSilo(PESILO ServerSilo, NTSTATUS ExitStatus);
+void NTAPI PsUnregisterAvailableCpusChangeNotification(PS_AVAILABLE_CPUS_CHANGE_REGISTRATION RegistrationHandle);
 #if (!defined(MIDL_PASS))
 LONGLONG RtlConvertLuidToLonglong(LUID Luid);
 #endif
-BOOLEAN RtlCreateHashTableEx(PRTL_DYNAMIC_HASH_TABLE *HashTable, ULONG InitialSize, ULONG Shift, ULONG Flags);
-void RtlDeleteElementGenericTableAvlEx(PRTL_AVL_TABLE Table, PVOID NodeOrParent);
+NTSYSAPI BOOLEAN NTAPI RtlCreateHashTableEx(PRTL_DYNAMIC_HASH_TABLE *HashTable, ULONG InitialSize, ULONG Shift, ULONG Flags);
+NTSYSAPI void NTAPI RtlDeleteElementGenericTableAvlEx(PRTL_AVL_TABLE Table, PVOID NodeOrParent);
 #if (defined(_WIN64))
-NTSTATUS RtlDrainNonVolatileFlush(PVOID NvToken);
+NTSYSAPI NTSTATUS NTAPI RtlDrainNonVolatileFlush(PVOID NvToken);
 #endif
-void RtlEndStrongEnumerationHashTable(PRTL_DYNAMIC_HASH_TABLE HashTable, PRTL_DYNAMIC_HASH_TABLE_ENUMERATOR Enumerator);
-NTSTATUS RtlExtendCorrelationVector(PCORRELATION_VECTOR CorrelationVector);
+NTSYSAPI void NTAPI RtlEndStrongEnumerationHashTable(PRTL_DYNAMIC_HASH_TABLE HashTable, PRTL_DYNAMIC_HASH_TABLE_ENUMERATOR Enumerator);
+NTSYSAPI NTSTATUS NTAPI RtlExtendCorrelationVector(PCORRELATION_VECTOR CorrelationVector);
 #if (defined(_WIN64))
-NTSTATUS RtlFillNonVolatileMemory(PVOID NvToken, __unaligned void *NvDestination, SIZE_T Size, const UCHAR Value, ULONG Flags);
-NTSTATUS RtlFlushNonVolatileMemory(PVOID NvToken, PVOID NvBuffer, SIZE_T Size, ULONG Flags);
-NTSTATUS RtlFlushNonVolatileMemoryRanges(PVOID NvToken, PNV_MEMORY_RANGE NvRanges, SIZE_T NumRanges, ULONG Flags);
-NTSTATUS RtlFreeNonVolatileToken(PVOID NvToken);
-NTSTATUS RtlGetNonVolatileToken(PVOID NvBuffer, SIZE_T Size, PVOID *NvToken);
+NTSYSAPI NTSTATUS NTAPI RtlFillNonVolatileMemory(PVOID NvToken, __unaligned void *NvDestination, SIZE_T Size, const UCHAR Value, ULONG Flags);
+NTSYSAPI NTSTATUS NTAPI RtlFlushNonVolatileMemory(PVOID NvToken, PVOID NvBuffer, SIZE_T Size, ULONG Flags);
+NTSYSAPI NTSTATUS NTAPI RtlFlushNonVolatileMemoryRanges(PVOID NvToken, PNV_MEMORY_RANGE NvRanges, SIZE_T NumRanges, ULONG Flags);
+NTSYSAPI NTSTATUS NTAPI RtlFreeNonVolatileToken(PVOID NvToken);
+NTSYSAPI NTSTATUS NTAPI RtlGetNonVolatileToken(PVOID NvBuffer, SIZE_T Size, PVOID *NvToken);
 #endif
-NTSTATUS RtlGetPersistedStateLocation(PCWSTR SourceID, PCWSTR CustomValue, PCWSTR DefaultPath, STATE_LOCATION_TYPE StateLocationType, PWCHAR TargetPath, ULONG BufferLengthIn, PULONG BufferLengthOut);
-NTSTATUS RtlIncrementCorrelationVector(PCORRELATION_VECTOR CorrelationVector);
-NTSTATUS RtlInitializeCorrelationVector(PCORRELATION_VECTOR CorrelationVector, int Version, const GUID *Guid);
-BOOLEAN RtlInitStrongEnumerationHashTable(PRTL_DYNAMIC_HASH_TABLE HashTable, PRTL_DYNAMIC_HASH_TABLE_ENUMERATOR Enumerator);
-BOOLEAN RtlIsMultiUsersInSessionSku(void);
+NTSYSAPI NTSTATUS NTAPI RtlGetPersistedStateLocation(PCWSTR SourceID, PCWSTR CustomValue, PCWSTR DefaultPath, STATE_LOCATION_TYPE StateLocationType, PWCHAR TargetPath, ULONG BufferLengthIn, PULONG BufferLengthOut);
+NTSYSAPI NTSTATUS NTAPI RtlIncrementCorrelationVector(PCORRELATION_VECTOR CorrelationVector);
+NTSYSAPI NTSTATUS NTAPI RtlInitializeCorrelationVector(PCORRELATION_VECTOR CorrelationVector, int Version, const GUID *Guid);
+NTSYSAPI BOOLEAN NTAPI RtlInitStrongEnumerationHashTable(PRTL_DYNAMIC_HASH_TABLE HashTable, PRTL_DYNAMIC_HASH_TABLE_ENUMERATOR Enumerator);
+NTSYSAPI BOOLEAN NTAPI RtlIsMultiUsersInSessionSku(void);
 #if ((NTDDI_VERSION >= NTDDI_WIN8) && !defined(MIDL_PASS))
-NTSTATUS RtlIsUntrustedObject(HANDLE Handle, PVOID Object, PBOOLEAN UntrustedObject);
+NTSYSAPI NTSTATUS NTAPI RtlIsUntrustedObject(HANDLE Handle, PVOID Object, PBOOLEAN UntrustedObject);
 #endif
-BOOLEAN RtlNormalizeSecurityDescriptor(PSECURITY_DESCRIPTOR *SecurityDescriptor, ULONG SecurityDescriptorLength, PSECURITY_DESCRIPTOR *NewSecurityDescriptor, PULONG NewSecurityDescriptorLength, BOOLEAN CheckOnly);
-NTSTATUS RtlQueryRegistryValueWithFallback(HANDLE PrimaryHandle, HANDLE FallbackHandle, PUNICODE_STRING ValueName, ULONG ValueLength, PULONG ValueType, PVOID ValueData, PULONG ResultLength);
+NTSYSAPI BOOLEAN NTAPI RtlNormalizeSecurityDescriptor(PSECURITY_DESCRIPTOR *SecurityDescriptor, ULONG SecurityDescriptorLength, PSECURITY_DESCRIPTOR *NewSecurityDescriptor, PULONG NewSecurityDescriptorLength, BOOLEAN CheckOnly);
+NTSYSAPI NTSTATUS NTAPI RtlQueryRegistryValueWithFallback(HANDLE PrimaryHandle, HANDLE FallbackHandle, PUNICODE_STRING ValueName, ULONG ValueLength, PULONG ValueType, PVOID ValueData, PULONG ResultLength);
 NTSTATUS NTAPI RtlRaiseCustomSystemEventTrigger(PCUSTOM_SYSTEM_EVENT_TRIGGER_CONFIG TriggerConfig);
-NTSTATUS RtlSetSystemGlobalData(RTL_SYSTEM_GLOBAL_DATA_ID DataId, PVOID Buffer, ULONG Size);
-PRTL_DYNAMIC_HASH_TABLE_ENTRY RtlStronglyEnumerateEntryHashTable(PRTL_DYNAMIC_HASH_TABLE HashTable, PRTL_DYNAMIC_HASH_TABLE_ENUMERATOR Enumerator);
-NTSTATUS RtlValidateCorrelationVector(PCORRELATION_VECTOR Vector);
+NTSYSAPI NTSTATUS NTAPI RtlSetSystemGlobalData(RTL_SYSTEM_GLOBAL_DATA_ID DataId, PVOID Buffer, ULONG Size);
+NTSYSAPI PRTL_DYNAMIC_HASH_TABLE_ENTRY NTAPI RtlStronglyEnumerateEntryHashTable(PRTL_DYNAMIC_HASH_TABLE HashTable, PRTL_DYNAMIC_HASH_TABLE_ENUMERATOR Enumerator);
+NTSYSAPI NTSTATUS NTAPI RtlValidateCorrelationVector(PCORRELATION_VECTOR Vector);
 #if (defined(_WIN64))
-NTSTATUS RtlWriteNonVolatileMemory(PVOID NvToken, __unaligned void *NvDestination, const __unaligned void *Source, SIZE_T Size, ULONG Flags);
+NTSYSAPI NTSTATUS NTAPI RtlWriteNonVolatileMemory(PVOID NvToken, __unaligned void *NvDestination, const __unaligned void *Source, SIZE_T Size, ULONG Flags);
 #endif
-NTSTATUS WheaAddErrorSource(PWHEA_ERROR_SOURCE_DESCRIPTOR ErrorSource, PVOID Context);
-NTSTATUS WheaAddErrorSourceDeviceDriver(PVOID Context, PWHEA_ERROR_SOURCE_CONFIGURATION_DEVICE_DRIVER Configuration, ULONG NumberPreallocatedErrorReports);
-NTSTATUS WheaAddErrorSourceDeviceDriverV1(PVOID Context, PWHEA_ERROR_SOURCE_CONFIGURATION_DEVICE_DRIVER Configuration, ULONG NumBuffersToPreallocate, ULONG MaxDataLength);
-NTSTATUS WheaAddHwErrorReportSectionDeviceDriver(WHEA_ERROR_HANDLE ErrorHandle, ULONG SectionDataLength, PWHEA_DRIVER_BUFFER_SET BufferSet);
-void WheaAttemptRowOffline(PFN_NUMBER Page, PMEMORY_DEFECT MemDefect, ULONG PageCount, PWHEA_RECOVERY_CONTEXT Context);
-NTSTATUS WheaConfigureErrorSource(WHEA_ERROR_SOURCE_TYPE SourceType, PWHEA_ERROR_SOURCE_CONFIGURATION Configuration);
-WHEA_ERROR_HANDLE WheaCreateHwErrorReportDeviceDriver(ULONG ErrorSourceId, PDEVICE_OBJECT DeviceObject);
+NTKERNELAPI NTSTATUS NTAPI WheaAddErrorSource(PWHEA_ERROR_SOURCE_DESCRIPTOR ErrorSource, PVOID Context);
+NTKERNELAPI NTSTATUS NTAPI WheaAddErrorSourceDeviceDriver(PVOID Context, PWHEA_ERROR_SOURCE_CONFIGURATION_DEVICE_DRIVER Configuration, ULONG NumberPreallocatedErrorReports);
+NTKERNELAPI NTSTATUS NTAPI WheaAddErrorSourceDeviceDriverV1(PVOID Context, PWHEA_ERROR_SOURCE_CONFIGURATION_DEVICE_DRIVER Configuration, ULONG NumBuffersToPreallocate, ULONG MaxDataLength);
+NTKERNELAPI NTSTATUS NTAPI WheaAddHwErrorReportSectionDeviceDriver(WHEA_ERROR_HANDLE ErrorHandle, ULONG SectionDataLength, PWHEA_DRIVER_BUFFER_SET BufferSet);
+NTKERNELAPI void NTAPI WheaAttemptRowOffline(PFN_NUMBER Page, PMEMORY_DEFECT MemDefect, ULONG PageCount, PWHEA_RECOVERY_CONTEXT Context);
+NTKERNELAPI NTSTATUS NTAPI WheaConfigureErrorSource(WHEA_ERROR_SOURCE_TYPE SourceType, PWHEA_ERROR_SOURCE_CONFIGURATION Configuration);
+NTKERNELAPI WHEA_ERROR_HANDLE NTAPI WheaCreateHwErrorReportDeviceDriver(ULONG ErrorSourceId, PDEVICE_OBJECT DeviceObject);
 PVOID WheaErrorRecordBuilderAddPacket(PWHEA_ERROR_RECORD Record, PWHEA_ERROR_PACKET_V2 Packet, UINT32 MaxSectionCount);
 PVOID WheaErrorRecordBuilderAddSection(PWHEA_ERROR_RECORD Record, UINT32 MaxSectionCount, UINT32 SectionLength, WHEA_ERROR_RECORD_SECTION_DESCRIPTOR_FLAGS Flags, GUID SectionType, PVOID DescriptorOut);
 void WheaErrorRecordBuilderInit(PWHEA_ERROR_RECORD Record, UINT32 RecordLength, WHEA_ERROR_SEVERITY Severity, GUID Notify);
-WHEA_ERROR_SOURCE_STATE WheaErrorSourceGetState(ULONG ErrorSourceId);
+WHEA_ERROR_SOURCE_STATE NTAPI WheaErrorSourceGetState(ULONG ErrorSourceId);
 NTSTATUS WheaFindErrorRecordSection(PWHEA_ERROR_RECORD Record, const GUID *SectionType, PWHEA_ERROR_RECORD_SECTION_DESCRIPTOR *SectionDescriptor, PVOID *SectionData);
 NTSTATUS WheaFindNextErrorRecordSection(PWHEA_ERROR_RECORD Record, ULONG *Context, PWHEA_ERROR_RECORD_SECTION_DESCRIPTOR *SectionDescriptor, PVOID *SectionData);
-NTSTATUS WheaGetErrorSourceInfo(WHEA_ERROR_SOURCE_TYPE SourceType, PULONG ErrorCount, PERROR_SOURCE_INFO *SourceInfo, ULONG PoolTag);
+NTKERNELAPI NTSTATUS NTAPI WheaGetErrorSourceInfo(WHEA_ERROR_SOURCE_TYPE SourceType, PULONG ErrorCount, PERROR_SOURCE_INFO *SourceInfo, ULONG PoolTag);
 PWHEA_ERROR_PACKET WheaGetErrPacketFromErrRecord(PWHEA_ERROR_RECORD Record);
-BOOLEAN WheaGetNotifyAllOfflinesPolicy(void);
-BOOLEAN WheaHighIrqlLogSelEventHandlerRegister(PFN_WHEA_HIGH_IRQL_LOG_SEL_EVENT_HANDLER Handler, PVOID Context);
-void WheaHighIrqlLogSelEventHandlerUnregister(void);
-NTSTATUS WheaHwErrorReportAbandonDeviceDriver(WHEA_ERROR_HANDLE ErrorHandle);
-NTSTATUS WheaHwErrorReportSetSectionNameDeviceDriver(PWHEA_DRIVER_BUFFER_SET BufferSet, ULONG NameLength, PUCHAR Name);
-NTSTATUS WheaHwErrorReportSetSeverityDeviceDriver(WHEA_ERROR_HANDLE ErrorHandle, WHEA_ERROR_SEVERITY ErrorSeverity);
-NTSTATUS WheaHwErrorReportSubmitDeviceDriver(WHEA_ERROR_HANDLE ErrorHandle);
+NTKERNELAPI BOOLEAN NTAPI WheaGetNotifyAllOfflinesPolicy(void);
+NTKERNELAPI BOOLEAN NTAPI WheaHighIrqlLogSelEventHandlerRegister(PFN_WHEA_HIGH_IRQL_LOG_SEL_EVENT_HANDLER Handler, PVOID Context);
+NTKERNELAPI void NTAPI WheaHighIrqlLogSelEventHandlerUnregister(void);
+NTKERNELAPI NTSTATUS NTAPI WheaHwErrorReportAbandonDeviceDriver(WHEA_ERROR_HANDLE ErrorHandle);
+NTKERNELAPI NTSTATUS NTAPI WheaHwErrorReportSetSectionNameDeviceDriver(PWHEA_DRIVER_BUFFER_SET BufferSet, ULONG NameLength, PUCHAR Name);
+NTKERNELAPI NTSTATUS NTAPI WheaHwErrorReportSetSeverityDeviceDriver(WHEA_ERROR_HANDLE ErrorHandle, WHEA_ERROR_SEVERITY ErrorSeverity);
+NTKERNELAPI NTSTATUS NTAPI WheaHwErrorReportSubmitDeviceDriver(WHEA_ERROR_HANDLE ErrorHandle);
 void WheaInitEventLogEntry(PWHEA_EVENT_LOG_ENTRY LogEntry, WHEA_EVENT_LOG_ENTRY_TYPE Type, WHEA_EVENT_LOG_ENTRY_ID Id, WHEA_EVENT_LOG_ENTRY_FLAGS Flags, ULONG OwnerTag, ULONG PayloadLength);
-NTSTATUS WheaInitializeRecordHeader(PWHEA_ERROR_RECORD_HEADER Header);
-BOOLEAN WheaIsCriticalState(void);
+NTKERNELAPI NTSTATUS NTAPI WheaInitializeRecordHeader(PWHEA_ERROR_RECORD_HEADER Header);
+BOOLEAN NTAPI WheaIsCriticalState(void);
 BOOLEAN WheaIsGhesAssistSrc(PWHEA_ERROR_SOURCE_DESCRIPTOR ErrSrc);
-BOOLEAN WheaIsLogSelHandlerInitialized(void);
+NTKERNELAPI BOOLEAN NTAPI WheaIsLogSelHandlerInitialized(void);
 BOOLEAN WheaIsValidErrorRecordSignature(PWHEA_ERROR_RECORD Record);
-void WheaLogInternalEvent(PWHEA_EVENT_LOG_ENTRY Entry);
-NTSTATUS WheaPrmTranslateDimmAddress(PVOID DimmAddress, PUINT64 PhysicalAddress);
-NTSTATUS WheaPrmTranslatePhysicalAddress(UINT64 PhysicalAddress, PVOID DimmAddress);
-NTSTATUS WheaRegisterErrorSourceOverride(WHEA_ERROR_SOURCE_OVERRIDE_SETTINGS OverrideSettings, PWHEA_ERROR_SOURCE_CONFIGURATION OverrideConfig, WHEA_SIGNAL_HANDLER_OVERRIDE_CALLBACK OverrideCallback);
-NTSTATUS WheaRegisterInUsePageOfflineNotification(PFN_IN_USE_PAGE_OFFLINE_NOTIFY Callback, PVOID Context);
-void WheaRemoveErrorSource(ULONG ErrorSourceId);
-NTSTATUS WheaRemoveErrorSourceDeviceDriver(ULONG ErrorSourceId);
-NTSTATUS WheaReportHwError(PWHEA_ERROR_PACKET ErrorPacket);
-NTSTATUS WheaReportHwErrorDeviceDriver(ULONG ErrorSourceId, PDEVICE_OBJECT DeviceObject, PUCHAR ErrorData, ULONG ErrorDataLength, LPGUID SectionTypeGuid, WHEA_ERROR_SEVERITY ErrorSeverity, LPSTR DeviceFriendlyName);
-BOOLEAN WheaSignalHandlerOverride(WHEA_ERROR_SOURCE_TYPE SourceType, UINT_PTR Context);
-NTSTATUS WheaUnconfigureErrorSource(WHEA_ERROR_SOURCE_TYPE SourceType);
-void WheaUnregisterErrorSourceOverride(WHEA_ERROR_SOURCE_TYPE Type, ULONG32 OverrideErrorSourceId);
-NTSTATUS WheaUnregisterInUsePageOfflineNotification(PFN_IN_USE_PAGE_OFFLINE_NOTIFY Callback);
+NTKERNELAPI void NTAPI WheaLogInternalEvent(PWHEA_EVENT_LOG_ENTRY Entry);
+NTSTATUS NTAPI WheaPrmTranslateDimmAddress(PVOID DimmAddress, PUINT64 PhysicalAddress);
+NTSTATUS NTAPI WheaPrmTranslatePhysicalAddress(UINT64 PhysicalAddress, PVOID DimmAddress);
+NTSTATUS NTAPI WheaRegisterErrorSourceOverride(WHEA_ERROR_SOURCE_OVERRIDE_SETTINGS OverrideSettings, PWHEA_ERROR_SOURCE_CONFIGURATION OverrideConfig, WHEA_SIGNAL_HANDLER_OVERRIDE_CALLBACK OverrideCallback);
+NTKERNELAPI NTSTATUS NTAPI WheaRegisterInUsePageOfflineNotification(PFN_IN_USE_PAGE_OFFLINE_NOTIFY Callback, PVOID Context);
+NTKERNELAPI void NTAPI WheaRemoveErrorSource(ULONG ErrorSourceId);
+NTKERNELAPI NTSTATUS NTAPI WheaRemoveErrorSourceDeviceDriver(ULONG ErrorSourceId);
+NTKERNELAPI NTSTATUS NTAPI WheaReportHwError(PWHEA_ERROR_PACKET ErrorPacket);
+NTKERNELAPI NTSTATUS NTAPI WheaReportHwErrorDeviceDriver(ULONG ErrorSourceId, PDEVICE_OBJECT DeviceObject, PUCHAR ErrorData, ULONG ErrorDataLength, LPGUID SectionTypeGuid, WHEA_ERROR_SEVERITY ErrorSeverity, LPSTR DeviceFriendlyName);
+BOOLEAN NTAPI WheaSignalHandlerOverride(WHEA_ERROR_SOURCE_TYPE SourceType, UINT_PTR Context);
+NTKERNELAPI NTSTATUS NTAPI WheaUnconfigureErrorSource(WHEA_ERROR_SOURCE_TYPE SourceType);
+void NTAPI WheaUnregisterErrorSourceOverride(WHEA_ERROR_SOURCE_TYPE Type, ULONG32 OverrideErrorSourceId);
+NTKERNELAPI NTSTATUS NTAPI WheaUnregisterInUsePageOfflineNotification(PFN_IN_USE_PAGE_OFFLINE_NOTIFY Callback);
 
 #ifdef __cplusplus
 }
@@ -7239,10 +7240,10 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-ULONG PsGetSiloMonitorContextSlot(PSILO_MONITOR Monitor);
-NTSTATUS PsRegisterSiloMonitor(PSILO_MONITOR_REGISTRATION Registration, PSILO_MONITOR *ReturnedMonitor);
-NTSTATUS PsStartSiloMonitor(PSILO_MONITOR Monitor);
-void PsUnregisterSiloMonitor(PSILO_MONITOR Monitor);
+NTKERNELAPI ULONG NTAPI PsGetSiloMonitorContextSlot(PSILO_MONITOR Monitor);
+NTKERNELAPI NTSTATUS NTAPI PsRegisterSiloMonitor(PSILO_MONITOR_REGISTRATION Registration, PSILO_MONITOR *ReturnedMonitor);
+NTKERNELAPI NTSTATUS NTAPI PsStartSiloMonitor(PSILO_MONITOR Monitor);
+NTKERNELAPI void NTAPI PsUnregisterSiloMonitor(PSILO_MONITOR Monitor);
 
 #ifdef __cplusplus
 }
@@ -7255,4 +7256,3 @@ void PsUnregisterSiloMonitor(PSILO_MONITOR Monitor);
 #define WHEA_PMEM_IS_PFN_ALREADY_MARKED_BAD(PageRange, TargetPfn) (((TargetPfn) - ((PageRange) -> StartingPfn) < sizeof (ULONG64) * 8) && ((((PageRange) -> MarkedBadBitmap) & (1ull << ((TargetPfn) - ((PageRange) -> StartingPfn)))) != 0))
 #define WheaAdd2Ptr(P, I) ((PVOID) ((PUCHAR) (P) + (I)))
 
-#endif

@@ -452,7 +452,7 @@ ListEntry64To32(
 
 typedef const struct _WNF_STATE_NAME * PCWNF_STATE_NAME;
 
-#define _DEFINED__WNF_STATE_NAME 0
+#define _DEFINED__WNF_STATE_NAME
 #define DECLSPEC_GUARDIGNORE __declspec(guard(ignore))
 #if (defined(_KERNEL_MODE))
 #define DECLSPEC_PAGED_CODE __declspec(code_seg("PAGE"))

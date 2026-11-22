@@ -319,6 +319,8 @@ HRESULT WINAPI CertModifyCertificatesToTrust(int cCertStore,
 
 #if (!(defined(UNICODE)))
 typedef PCERT_SELECT_STRUCT_A PCERT_SELECT_STRUCT;
+#else
+typedef PCERT_SELECT_STRUCT_W PCERT_SELECT_STRUCT;
 #endif
 
 #define CRYPTDLGAPI DECLSPEC_IMPORT

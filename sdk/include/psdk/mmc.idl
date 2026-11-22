@@ -5,7 +5,6 @@
  * COPYRIGHT:   Copyright 2017-2019 Mark Jansen (mark.jansen@reactos.org)
  */
 
-
 import "objidl.idl";
 
 interface IComponent;
@@ -31,7 +30,6 @@ interface ISnapinHelp;
 interface ISnapinHelp2;
 interface IResultDataCompare;
 
-
 typedef IComponent *LPCOMPONENT;
 typedef IComponentData *LPCOMPONENTDATA;
 typedef IExtendPropertySheet *LPEXTENDPROPERTYSHEET;
@@ -55,7 +53,6 @@ typedef IExtendContextMenu *LPEXTENDCONTEXTMENU;
 typedef ISnapinHelp *LPSNAPINHELP;
 typedef ISnapinHelp2 *LPSNAPINHELP2;
 typedef IResultDataCompare *LPRESULTDATACOMPARE;
-
 
 typedef enum _MMC_NOTIFY_TYPE { 
     MMCN_ACTIVATE            = 0x8001,
@@ -94,7 +91,6 @@ typedef enum _MMC_NOTIFY_TYPE {
     MMCN_COLUMNS_CHANGED     = 0x8022,
     MMCN_CANPASTE_OUTOFPROC  = 0x8023
 } MMC_NOTIFY_TYPE;
-
 
 typedef enum _DATA_OBJECT_TYPES { 
     CCT_SCOPE           = 0x8000,
@@ -141,7 +137,6 @@ cpp_quote("#define SDI_PREVIOUS    (0x10000000)")
 cpp_quote("#define SDI_NEXT        (0x20000000)")
 cpp_quote("#define SDI_FIRST       (0x08000000)")
 
-
 typedef struct _SCOPEDATAITEM {
     DWORD      mask;
     LPOLESTR   displayname;
@@ -153,7 +148,6 @@ typedef struct _SCOPEDATAITEM {
     HSCOPEITEM relativeID;
     HSCOPEITEM ID;
 } SCOPEDATAITEM, *LPSCOPEDATAITEM;
-
 
 typedef struct _RESULTDATAITEM {
     DWORD       mask;
@@ -168,7 +162,6 @@ typedef struct _RESULTDATAITEM {
     int         iIndent;
 } RESULTDATAITEM, *LPRESULTDATAITEM;
 
-
 #pragma pack(push, 8)
 typedef struct _MMCBUTTON {
   int      nBitmap;
@@ -179,7 +172,6 @@ typedef struct _MMCBUTTON {
   LPOLESTR lpTooltipText;
 } MMCBUTTON, *LPMMCBUTTON;
 #pragma pack(pop)
-
 
 typedef LONG_PTR MMC_COOKIE;
 
@@ -255,7 +247,6 @@ cpp_quote("#define CCF_NODETYPE L\"CCF_NODETYPE\"")
 cpp_quote("#define CCF_SZNODETYPE L\"CCF_SZNODETYPE\"")
 cpp_quote("#define CCF_DISPLAY_NAME L\"CCF_DISPLAY_NAME\"")
 cpp_quote("#define CCF_SNAPIN_CLASSID L\"CCF_SNAPIN_CLASSID\"")
-
 
 [
     object,
@@ -339,7 +330,6 @@ interface IComponent : IUnknown
     );
 }
 
-
 [
     object,
     uuid(43136eb1-d36c-11cf-adbc-00aa00a80033)
@@ -397,7 +387,6 @@ interface IConsole : IUnknown
     );
 }
 
-
 [
     object,
     uuid(103d842a-aa63-11d1-a7e1-00c04fd8d565)
@@ -415,7 +404,6 @@ interface IConsole2 : IConsole
         [in] LPOLESTR pszStatusText
     );
 }
-
 
 [
     object,
@@ -459,7 +447,6 @@ interface IConsoleNameSpace : IUnknown
     );
 }
 
-
 cpp_quote("#if 0")
 typedef struct { int dummy; } _PSP;
 typedef _PSP *HPROPSHEETPAGE;
@@ -469,7 +456,6 @@ cpp_quote("#define _HPROPSHEETPAGE_DEFINED")
 cpp_quote("DECLARE_HANDLE(HPROPSHEETPAGE);")
 cpp_quote("#endif")
 cpp_quote("#endif")
-
 
 [
     object,
@@ -485,7 +471,6 @@ interface IPropertySheetCallback : IUnknown
         [in] HPROPSHEETPAGE hPage
     );
 };
-
 
 [
     object,
@@ -522,7 +507,6 @@ interface IPropertySheetProvider : IUnknown
     );
 };
 
-
 [
     object,
     uuid(85de64dc-ef21-11cf-a285-00c04fd8dbe6)
@@ -540,7 +524,6 @@ interface IExtendPropertySheet : IUnknown
     );
 };
 
-
 [
     object,
     uuid(b7a87232-4a51-11d1-a7ea-00c04fd909dd)
@@ -555,7 +538,6 @@ interface IExtendPropertySheet2 : IExtendPropertySheet
         [out] BOOL* bStretch
   );
 };
-
 
 [
     object,
@@ -572,7 +554,6 @@ interface IConsoleNameSpace2 : IConsoleNameSpace
         [in] LPCLSID    lpClsid
     );
 }
-
 
 [
     object,
@@ -611,7 +592,6 @@ interface IHeaderCtrl : IUnknown
         [out] int *pWidth
     );
 }
-
 
 [
     object,
@@ -654,7 +634,6 @@ interface IToolbar : IUnknown
     );
 }
 
-
 [
     object,
     uuid(43136eb8-d36c-11cf-adbc-00aa00a80033)
@@ -673,7 +652,6 @@ interface IImageList : IUnknown
         [in] COLORREF cMask
     );
 }
-
 
 [
     object,
@@ -1085,21 +1063,6 @@ cpp_quote("#endif")
 cpp_quote("#define DOBJ_NULL (LPDATAOBJECT) 0")
 cpp_quote("#define ILSIF_LEAVE_MASK 0x60000000")
 cpp_quote("")
-cpp_quote("enum __MIDL___MIDL_itf_mmc_0000_0006_0003")
-cpp_quote("{")
-cpp_quote("    CCM_COMMANDID_MASK_RESERVED = (-65536),")
-cpp_quote("};")
-cpp_quote("")
-cpp_quote("enum __MIDL___MIDL_itf_mmc_0000_0006_0004")
-cpp_quote("{")
-cpp_quote("    CCM_SPECIAL_SEPARATOR = 1,")
-cpp_quote("    CCM_SPECIAL_SUBMENU = 2,")
-cpp_quote("    CCM_SPECIAL_DEFAULT_ITEM = 4,")
-cpp_quote("    CCM_SPECIAL_INSERTION_POINT = 8,")
-cpp_quote("    CCM_SPECIAL_TESTONLY = 0x10,")
-cpp_quote("    CCM_SPECIAL_ELEVATION_ICON = 0x20,")
-cpp_quote("};")
-cpp_quote("")
 cpp_quote("enum _MMC_ACTION_TYPE")
 cpp_quote("{")
 cpp_quote("    MMC_ACTION_UNINITIALIZED = (-1),")
@@ -1349,56 +1312,10 @@ cpp_quote("    HRESULT (WINAPI *CompareObjects)(IComponentData2 *, LPDATAOBJECT,
 cpp_quote("    HRESULT (WINAPI *QueryDispatch)(IComponentData2 *, MMC_COOKIE, DATA_OBJECT_TYPES, LPDISPATCH *);")
 cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IComponentDataVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IComponentData *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IComponentData *);")
-cpp_quote("    ULONG (WINAPI *Release)(IComponentData *);")
-cpp_quote("    HRESULT (WINAPI *Initialize)(IComponentData *, LPUNKNOWN);")
-cpp_quote("    HRESULT (WINAPI *CreateComponent)(IComponentData *, LPCOMPONENT *);")
-cpp_quote("    HRESULT (WINAPI *Notify)(IComponentData *, LPDATAOBJECT, MMC_NOTIFY_TYPE, LPARAM, LPARAM);")
-cpp_quote("    HRESULT (WINAPI *Destroy)(IComponentData *);")
-cpp_quote("    HRESULT (WINAPI *QueryDataObject)(IComponentData *, MMC_COOKIE, DATA_OBJECT_TYPES, LPDATAOBJECT *);")
-cpp_quote("    HRESULT (WINAPI *GetDisplayInfo)(IComponentData *, SCOPEDATAITEM *);")
-cpp_quote("    HRESULT (WINAPI *CompareObjects)(IComponentData *, LPDATAOBJECT, LPDATAOBJECT);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IComponentVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IComponent *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IComponent *);")
-cpp_quote("    ULONG (WINAPI *Release)(IComponent *);")
-cpp_quote("    HRESULT (WINAPI *Initialize)(IComponent *, LPCONSOLE);")
-cpp_quote("    HRESULT (WINAPI *Notify)(IComponent *, LPDATAOBJECT, MMC_NOTIFY_TYPE, LPARAM, LPARAM);")
-cpp_quote("    HRESULT (WINAPI *Destroy)(IComponent *, MMC_COOKIE);")
-cpp_quote("    HRESULT (WINAPI *QueryDataObject)(IComponent *, MMC_COOKIE, DATA_OBJECT_TYPES, LPDATAOBJECT *);")
-cpp_quote("    HRESULT (WINAPI *GetResultViewType)(IComponent *, MMC_COOKIE, LPOLESTR *, long *);")
-cpp_quote("    HRESULT (WINAPI *GetDisplayInfo)(IComponent *, RESULTDATAITEM *);")
-cpp_quote("    HRESULT (WINAPI *CompareObjects)(IComponent *, LPDATAOBJECT, LPDATAOBJECT);")
-cpp_quote("};")
 cpp_quote("")
 cpp_quote("typedef enum tagIconIdentifier IconIdentifier;")
 cpp_quote("")
-cpp_quote("struct IConsole2Vtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IConsole2 *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IConsole2 *);")
-cpp_quote("    ULONG (WINAPI *Release)(IConsole2 *);")
-cpp_quote("    HRESULT (WINAPI *SetHeader)(IConsole2 *, LPHEADERCTRL);")
-cpp_quote("    HRESULT (WINAPI *SetToolbar)(IConsole2 *, LPTOOLBAR);")
-cpp_quote("    HRESULT (WINAPI *QueryResultView)(IConsole2 *, LPUNKNOWN *);")
-cpp_quote("    HRESULT (WINAPI *QueryScopeImageList)(IConsole2 *, LPIMAGELIST *);")
-cpp_quote("    HRESULT (WINAPI *QueryResultImageList)(IConsole2 *, LPIMAGELIST *);")
-cpp_quote("    HRESULT (WINAPI *UpdateAllViews)(IConsole2 *, LPDATAOBJECT, LPARAM, LONG_PTR);")
-cpp_quote("    HRESULT (WINAPI *MessageBoxA)(IConsole2 *, LPCWSTR, LPCWSTR, UINT, int *);")
-cpp_quote("    HRESULT (WINAPI *QueryConsoleVerb)(IConsole2 *, LPCONSOLEVERB *);")
-cpp_quote("    HRESULT (WINAPI *SelectScopeItem)(IConsole2 *, HSCOPEITEM);")
-cpp_quote("    HRESULT (WINAPI *GetMainWindow)(IConsole2 *, HWND *);")
-cpp_quote("    HRESULT (WINAPI *NewWindow)(IConsole2 *, HSCOPEITEM, unsigned long);")
-cpp_quote("    HRESULT (WINAPI *Expand)(IConsole2 *, HSCOPEITEM, BOOL);")
-cpp_quote("    HRESULT (WINAPI *IsTaskpadViewPreferred)(IConsole2 *);")
-cpp_quote("    HRESULT (WINAPI *SetStatusText)(IConsole2 *, LPOLESTR);")
-cpp_quote("};")
 cpp_quote("")
 cpp_quote("typedef struct IConsole3 IConsole3;")
 cpp_quote("")
@@ -1424,35 +1341,7 @@ cpp_quote("    HRESULT (WINAPI *SetStatusText)(IConsole3 *, LPOLESTR);")
 cpp_quote("    HRESULT (WINAPI *RenameScopeItem)(IConsole3 *, HSCOPEITEM);")
 cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IConsoleNameSpace2Vtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IConsoleNameSpace2 *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IConsoleNameSpace2 *);")
-cpp_quote("    ULONG (WINAPI *Release)(IConsoleNameSpace2 *);")
-cpp_quote("    HRESULT (WINAPI *InsertItem)(IConsoleNameSpace2 *, LPSCOPEDATAITEM);")
-cpp_quote("    HRESULT (WINAPI *DeleteItem)(IConsoleNameSpace2 *, HSCOPEITEM, long);")
-cpp_quote("    HRESULT (WINAPI *SetItem)(IConsoleNameSpace2 *, LPSCOPEDATAITEM);")
-cpp_quote("    HRESULT (WINAPI *GetItem)(IConsoleNameSpace2 *, LPSCOPEDATAITEM);")
-cpp_quote("    HRESULT (WINAPI *GetChildItem)(IConsoleNameSpace2 *, HSCOPEITEM, HSCOPEITEM *, MMC_COOKIE *);")
-cpp_quote("    HRESULT (WINAPI *GetNextItem)(IConsoleNameSpace2 *, HSCOPEITEM, HSCOPEITEM *, MMC_COOKIE *);")
-cpp_quote("    HRESULT (WINAPI *GetParentItem)(IConsoleNameSpace2 *, HSCOPEITEM, HSCOPEITEM *, MMC_COOKIE *);")
-cpp_quote("    HRESULT (WINAPI *Expand)(IConsoleNameSpace2 *, HSCOPEITEM);")
-cpp_quote("    HRESULT (WINAPI *AddExtension)(IConsoleNameSpace2 *, HSCOPEITEM, LPCLSID);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IConsoleNameSpaceVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IConsoleNameSpace *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IConsoleNameSpace *);")
-cpp_quote("    ULONG (WINAPI *Release)(IConsoleNameSpace *);")
-cpp_quote("    HRESULT (WINAPI *InsertItem)(IConsoleNameSpace *, LPSCOPEDATAITEM);")
-cpp_quote("    HRESULT (WINAPI *DeleteItem)(IConsoleNameSpace *, HSCOPEITEM, long);")
-cpp_quote("    HRESULT (WINAPI *SetItem)(IConsoleNameSpace *, LPSCOPEDATAITEM);")
-cpp_quote("    HRESULT (WINAPI *GetItem)(IConsoleNameSpace *, LPSCOPEDATAITEM);")
-cpp_quote("    HRESULT (WINAPI *GetChildItem)(IConsoleNameSpace *, HSCOPEITEM, HSCOPEITEM *, MMC_COOKIE *);")
-cpp_quote("    HRESULT (WINAPI *GetNextItem)(IConsoleNameSpace *, HSCOPEITEM, HSCOPEITEM *, MMC_COOKIE *);")
-cpp_quote("    HRESULT (WINAPI *GetParentItem)(IConsoleNameSpace *, HSCOPEITEM, HSCOPEITEM *, MMC_COOKIE *);")
-cpp_quote("};")
 cpp_quote("")
 cpp_quote("typedef struct IConsolePower IConsolePower;")
 cpp_quote("")
@@ -1475,34 +1364,7 @@ cpp_quote("    HRESULT (WINAPI *SetExecutionState)(IConsolePower *, DWORD, DWORD
 cpp_quote("    HRESULT (WINAPI *ResetIdleTimer)(IConsolePower *, DWORD);")
 cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IConsoleVerbVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IConsoleVerb *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IConsoleVerb *);")
-cpp_quote("    ULONG (WINAPI *Release)(IConsoleVerb *);")
-cpp_quote("    HRESULT (WINAPI *GetVerbState)(IConsoleVerb *, MMC_CONSOLE_VERB, MMC_BUTTON_STATE, BOOL *);")
-cpp_quote("    HRESULT (WINAPI *SetVerbState)(IConsoleVerb *, MMC_CONSOLE_VERB, MMC_BUTTON_STATE, BOOL);")
-cpp_quote("    HRESULT (WINAPI *SetDefaultVerb)(IConsoleVerb *, MMC_CONSOLE_VERB);")
-cpp_quote("    HRESULT (WINAPI *GetDefaultVerb)(IConsoleVerb *, MMC_CONSOLE_VERB *);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IConsoleVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IConsole *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IConsole *);")
-cpp_quote("    ULONG (WINAPI *Release)(IConsole *);")
-cpp_quote("    HRESULT (WINAPI *SetHeader)(IConsole *, LPHEADERCTRL);")
-cpp_quote("    HRESULT (WINAPI *SetToolbar)(IConsole *, LPTOOLBAR);")
-cpp_quote("    HRESULT (WINAPI *QueryResultView)(IConsole *, LPUNKNOWN *);")
-cpp_quote("    HRESULT (WINAPI *QueryScopeImageList)(IConsole *, LPIMAGELIST *);")
-cpp_quote("    HRESULT (WINAPI *QueryResultImageList)(IConsole *, LPIMAGELIST *);")
-cpp_quote("    HRESULT (WINAPI *UpdateAllViews)(IConsole *, LPDATAOBJECT, LPARAM, LONG_PTR);")
-cpp_quote("    HRESULT (WINAPI *MessageBoxA)(IConsole *, LPCWSTR, LPCWSTR, UINT, int *);")
-cpp_quote("    HRESULT (WINAPI *QueryConsoleVerb)(IConsole *, LPCONSOLEVERB *);")
-cpp_quote("    HRESULT (WINAPI *SelectScopeItem)(IConsole *, HSCOPEITEM);")
-cpp_quote("    HRESULT (WINAPI *GetMainWindow)(IConsole *, HWND *);")
-cpp_quote("    HRESULT (WINAPI *NewWindow)(IConsole *, HSCOPEITEM, unsigned long);")
-cpp_quote("};")
 cpp_quote("")
 cpp_quote("typedef struct IContextMenuCallback2 IContextMenuCallback2;")
 cpp_quote("")
@@ -1514,13 +1376,6 @@ cpp_quote("    ULONG (WINAPI *Release)(IContextMenuCallback2 *);")
 cpp_quote("    HRESULT (WINAPI *AddItem)(IContextMenuCallback2 *, CONTEXTMENUITEM2 *);")
 cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IContextMenuCallbackVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IContextMenuCallback *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IContextMenuCallback *);")
-cpp_quote("    ULONG (WINAPI *Release)(IContextMenuCallback *);")
-cpp_quote("    HRESULT (WINAPI *AddItem)(IContextMenuCallback *, CONTEXTMENUITEM *);")
-cpp_quote("};")
 cpp_quote("")
 cpp_quote("typedef struct IContextMenuProvider IContextMenuProvider;")
 cpp_quote("")
@@ -1550,35 +1405,10 @@ cpp_quote("};")
 cpp_quote("")
 cpp_quote("typedef struct IEnumTASK IEnumTASK;")
 cpp_quote("")
-cpp_quote("struct IExtendContextMenuVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IExtendContextMenu *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IExtendContextMenu *);")
-cpp_quote("    ULONG (WINAPI *Release)(IExtendContextMenu *);")
-cpp_quote("    HRESULT (WINAPI *AddMenuItems)(IExtendContextMenu *, LPDATAOBJECT, LPCONTEXTMENUCALLBACK, long *);")
-cpp_quote("    HRESULT (WINAPI *Command)(IExtendContextMenu *, long, LPDATAOBJECT);")
-cpp_quote("};")
 cpp_quote("")
 cpp_quote("typedef struct IExtendControlbar IExtendControlbar;")
 cpp_quote("")
-cpp_quote("struct IExtendPropertySheet2Vtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IExtendPropertySheet2 *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IExtendPropertySheet2 *);")
-cpp_quote("    ULONG (WINAPI *Release)(IExtendPropertySheet2 *);")
-cpp_quote("    HRESULT (WINAPI *CreatePropertyPages)(IExtendPropertySheet2 *, LPPROPERTYSHEETCALLBACK, LONG_PTR, LPDATAOBJECT);")
-cpp_quote("    HRESULT (WINAPI *QueryPagesFor)(IExtendPropertySheet2 *, LPDATAOBJECT);")
-cpp_quote("    HRESULT (WINAPI *GetWatermarks)(IExtendPropertySheet2 *, LPDATAOBJECT, HBITMAP *, HBITMAP *, HPALETTE *, BOOL *);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IExtendPropertySheetVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IExtendPropertySheet *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IExtendPropertySheet *);")
-cpp_quote("    ULONG (WINAPI *Release)(IExtendPropertySheet *);")
-cpp_quote("    HRESULT (WINAPI *CreatePropertyPages)(IExtendPropertySheet *, LPPROPERTYSHEETCALLBACK, LONG_PTR, LPDATAOBJECT);")
-cpp_quote("    HRESULT (WINAPI *QueryPagesFor)(IExtendPropertySheet *, LPDATAOBJECT);")
-cpp_quote("};")
 cpp_quote("")
 cpp_quote("typedef struct IExtendTaskPad IExtendTaskPad;")
 cpp_quote("")
@@ -1586,27 +1416,7 @@ cpp_quote("typedef struct IExtendView IExtendView;")
 cpp_quote("")
 cpp_quote("typedef struct IHeaderCtrl2 IHeaderCtrl2;")
 cpp_quote("")
-cpp_quote("struct IHeaderCtrlVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IHeaderCtrl *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IHeaderCtrl *);")
-cpp_quote("    ULONG (WINAPI *Release)(IHeaderCtrl *);")
-cpp_quote("    HRESULT (WINAPI *InsertColumn)(IHeaderCtrl *, int, LPCWSTR, int, int);")
-cpp_quote("    HRESULT (WINAPI *DeleteColumn)(IHeaderCtrl *, int);")
-cpp_quote("    HRESULT (WINAPI *SetColumnText)(IHeaderCtrl *, int, LPCWSTR);")
-cpp_quote("    HRESULT (WINAPI *GetColumnText)(IHeaderCtrl *, int, LPOLESTR *);")
-cpp_quote("    HRESULT (WINAPI *SetColumnWidth)(IHeaderCtrl *, int, int);")
-cpp_quote("    HRESULT (WINAPI *GetColumnWidth)(IHeaderCtrl *, int, int *);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IImageListVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IImageList *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IImageList *);")
-cpp_quote("    ULONG (WINAPI *Release)(IImageList *);")
-cpp_quote("    HRESULT (WINAPI *ImageListSetIcon)(IImageList *, LONG_PTR *, long);")
-cpp_quote("    HRESULT (WINAPI *ImageListSetStrip)(IImageList *, LONG_PTR *, LONG_PTR *, long, COLORREF);")
-cpp_quote("};")
 cpp_quote("")
 cpp_quote("typedef struct IMenuButton IMenuButton;")
 cpp_quote("")
@@ -1645,26 +1455,7 @@ cpp_quote("};")
 cpp_quote("")
 cpp_quote("typedef struct INodeProperties INodeProperties;")
 cpp_quote("")
-cpp_quote("struct IPropertySheetCallbackVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IPropertySheetCallback *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IPropertySheetCallback *);")
-cpp_quote("    ULONG (WINAPI *Release)(IPropertySheetCallback *);")
-cpp_quote("    HRESULT (WINAPI *AddPage)(IPropertySheetCallback *, HPROPSHEETPAGE);")
-cpp_quote("    HRESULT (WINAPI *RemovePage)(IPropertySheetCallback *, HPROPSHEETPAGE);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IPropertySheetProviderVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IPropertySheetProvider *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IPropertySheetProvider *);")
-cpp_quote("    ULONG (WINAPI *Release)(IPropertySheetProvider *);")
-cpp_quote("    HRESULT (WINAPI *CreatePropertySheet)(IPropertySheetProvider *, LPCWSTR, boolean, MMC_COOKIE, LPDATAOBJECT, DWORD);")
-cpp_quote("    HRESULT (WINAPI *FindPropertySheet)(IPropertySheetProvider *, HSCOPEITEM, LPCOMPONENT, LPDATAOBJECT);")
-cpp_quote("    HRESULT (WINAPI *AddPrimaryPages)(IPropertySheetProvider *, LPUNKNOWN, BOOL, HWND, BOOL);")
-cpp_quote("    HRESULT (WINAPI *AddExtensionPages)(IPropertySheetProvider *);")
-cpp_quote("    HRESULT (WINAPI *Show)(IPropertySheetProvider *, LONG_PTR, int);")
-cpp_quote("};")
 cpp_quote("")
 cpp_quote("typedef struct IRequiredExtensions IRequiredExtensions;")
 cpp_quote("")
@@ -1705,81 +1496,15 @@ cpp_quote("};")
 cpp_quote("")
 cpp_quote("typedef struct IResultDataCompareEx IResultDataCompareEx;")
 cpp_quote("")
-cpp_quote("struct IResultDataCompareVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IResultDataCompare *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IResultDataCompare *);")
-cpp_quote("    ULONG (WINAPI *Release)(IResultDataCompare *);")
-cpp_quote("    HRESULT (WINAPI *Compare)(IResultDataCompare *, LPARAM, MMC_COOKIE, MMC_COOKIE, int *);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IResultDataVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IResultData *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IResultData *);")
-cpp_quote("    ULONG (WINAPI *Release)(IResultData *);")
-cpp_quote("    HRESULT (WINAPI *InsertItem)(IResultData *, LPRESULTDATAITEM);")
-cpp_quote("    HRESULT (WINAPI *DeleteItem)(IResultData *, HRESULTITEM, int);")
-cpp_quote("    HRESULT (WINAPI *FindItemByLParam)(IResultData *, LPARAM, HRESULTITEM *);")
-cpp_quote("    HRESULT (WINAPI *DeleteAllRsltItems)(IResultData *);")
-cpp_quote("    HRESULT (WINAPI *SetItem)(IResultData *, LPRESULTDATAITEM);")
-cpp_quote("    HRESULT (WINAPI *GetItem)(IResultData *, LPRESULTDATAITEM);")
-cpp_quote("    HRESULT (WINAPI *GetNextItem)(IResultData *, LPRESULTDATAITEM);")
-cpp_quote("    HRESULT (WINAPI *ModifyItemState)(IResultData *, int, HRESULTITEM, UINT, UINT);")
-cpp_quote("    HRESULT (WINAPI *ModifyViewStyle)(IResultData *, MMC_RESULT_VIEW_STYLE, MMC_RESULT_VIEW_STYLE);")
-cpp_quote("    HRESULT (WINAPI *SetViewMode)(IResultData *, long);")
-cpp_quote("    HRESULT (WINAPI *GetViewMode)(IResultData *, long *);")
-cpp_quote("    HRESULT (WINAPI *UpdateItem)(IResultData *, HRESULTITEM);")
-cpp_quote("    HRESULT (WINAPI *Sort)(IResultData *, int, DWORD, LPARAM);")
-cpp_quote("    HRESULT (WINAPI *SetDescBarText)(IResultData *, LPOLESTR);")
-cpp_quote("    HRESULT (WINAPI *SetItemCount)(IResultData *, int, DWORD);")
-cpp_quote("};")
 cpp_quote("")
 cpp_quote("typedef struct IResultOwnerData IResultOwnerData;")
 cpp_quote("")
-cpp_quote("struct ISnapinAboutVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(ISnapinAbout *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(ISnapinAbout *);")
-cpp_quote("    ULONG (WINAPI *Release)(ISnapinAbout *);")
-cpp_quote("    HRESULT (WINAPI *GetSnapinDescription)(ISnapinAbout *, LPOLESTR *);")
-cpp_quote("    HRESULT (WINAPI *GetProvider)(ISnapinAbout *, LPOLESTR *);")
-cpp_quote("    HRESULT (WINAPI *GetSnapinVersion)(ISnapinAbout *, LPOLESTR *);")
-cpp_quote("    HRESULT (WINAPI *GetSnapinImage)(ISnapinAbout *, HICON *);")
-cpp_quote("    HRESULT (WINAPI *GetStaticFolderImage)(ISnapinAbout *, HBITMAP *, HBITMAP *, HBITMAP *, COLORREF *);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct ISnapinHelp2Vtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(ISnapinHelp2 *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(ISnapinHelp2 *);")
-cpp_quote("    ULONG (WINAPI *Release)(ISnapinHelp2 *);")
-cpp_quote("    HRESULT (WINAPI *GetHelpTopic)(ISnapinHelp2 *, LPOLESTR *);")
-cpp_quote("    HRESULT (WINAPI *GetLinkedTopics)(ISnapinHelp2 *, LPOLESTR *);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct ISnapinHelpVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(ISnapinHelp *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(ISnapinHelp *);")
-cpp_quote("    ULONG (WINAPI *Release)(ISnapinHelp *);")
-cpp_quote("    HRESULT (WINAPI *GetHelpTopic)(ISnapinHelp *, LPOLESTR *);")
-cpp_quote("};")
 cpp_quote("")
 cpp_quote("typedef struct IStringTable IStringTable;")
 cpp_quote("")
-cpp_quote("struct IToolbarVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IToolbar *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IToolbar *);")
-cpp_quote("    ULONG (WINAPI *Release)(IToolbar *);")
-cpp_quote("    HRESULT (WINAPI *AddBitmap)(IToolbar *, int, HBITMAP, int, int, COLORREF);")
-cpp_quote("    HRESULT (WINAPI *AddButtons)(IToolbar *, int, LPMMCBUTTON);")
-cpp_quote("    HRESULT (WINAPI *InsertButton)(IToolbar *, int, LPMMCBUTTON);")
-cpp_quote("    HRESULT (WINAPI *DeleteButton)(IToolbar *, int);")
-cpp_quote("    HRESULT (WINAPI *GetButtonState)(IToolbar *, int, MMC_BUTTON_STATE, BOOL *);")
-cpp_quote("    HRESULT (WINAPI *SetButtonState)(IToolbar *, int, MMC_BUTTON_STATE, BOOL);")
-cpp_quote("};")
 cpp_quote("")
 cpp_quote("typedef struct IViewExtensionCallback IViewExtensionCallback;")
 cpp_quote("")
@@ -2119,18 +1844,6 @@ cpp_quote("#ifdef __cplusplus")
 cpp_quote("extern \"C\" {")
 cpp_quote("#endif")
 cpp_quote("")
-cpp_quote("void WINAPI HBITMAP_UserFree(unsigned long *, HBITMAP *);")
-cpp_quote("unsigned char * WINAPI HBITMAP_UserMarshal(unsigned long *, unsigned char *, HBITMAP *);")
-cpp_quote("unsigned long WINAPI HBITMAP_UserSize(unsigned long *, unsigned long, HBITMAP *);")
-cpp_quote("unsigned char * WINAPI HBITMAP_UserUnmarshal(unsigned long *, unsigned char *, HBITMAP *);")
-cpp_quote("void WINAPI HICON_UserFree(unsigned long *, HICON *);")
-cpp_quote("unsigned char * WINAPI HICON_UserMarshal(unsigned long *, unsigned char *, HICON *);")
-cpp_quote("unsigned long WINAPI HICON_UserSize(unsigned long *, unsigned long, HICON *);")
-cpp_quote("unsigned char * WINAPI HICON_UserUnmarshal(unsigned long *, unsigned char *, HICON *);")
-cpp_quote("void WINAPI HPALETTE_UserFree(unsigned long *, HPALETTE *);")
-cpp_quote("unsigned char * WINAPI HPALETTE_UserMarshal(unsigned long *, unsigned char *, HPALETTE *);")
-cpp_quote("unsigned long WINAPI HPALETTE_UserSize(unsigned long *, unsigned long, HPALETTE *);")
-cpp_quote("unsigned char * WINAPI HPALETTE_UserUnmarshal(unsigned long *, unsigned char *, HPALETTE *);")
 cpp_quote("")
 cpp_quote("/* TODO: LiberNT does not implement the functions below yet */")
 cpp_quote("void HBITMAP_UserFree64(unsigned long *, HBITMAP *);")
@@ -2155,16 +1868,6 @@ cpp_quote("#ifdef __cplusplus")
 cpp_quote("}")
 cpp_quote("#endif")
 
-cpp_quote("")
-cpp_quote("enum __MIDL___MIDL_itf_mmc_0000_0006_0001")
-cpp_quote("{")
-cpp_quote("")
-cpp_quote("};")
-cpp_quote("")
-cpp_quote("enum __MIDL___MIDL_itf_mmc_0000_0006_0002")
-cpp_quote("{")
-cpp_quote("")
-cpp_quote("};")
 cpp_quote("")
 cpp_quote("enum _MMC_CONTROL_TYPE")
 cpp_quote("{")

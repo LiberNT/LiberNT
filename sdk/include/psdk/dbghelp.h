@@ -921,10 +921,12 @@ PCHAR   IMAGEAPI SymSetHomeDirectory(HANDLE, PCSTR);
 PWSTR   IMAGEAPI SymSetHomeDirectoryW(HANDLE, PCWSTR);
 PCHAR   IMAGEAPI SymGetHomeDirectory(DWORD, PSTR, size_t);
 PWSTR   IMAGEAPI SymGetHomeDirectoryW(DWORD, PWSTR, size_t);
-#define hdBase  0
-#define hdSym   1
-#define hdSrc   2
-#define hdMax   3
+typedef enum {
+    hdBase = 0,
+    hdSym,
+    hdSrc,
+    hdMax
+} IMAGEHLP_HD_TYPE;
 
 /*************************
  *   Context management  *
@@ -1649,7 +1651,6 @@ struct _tagSTACKFRAME64
     KDHELP64 KdHelp;
 };
 
-typedef enum IMAGEHLP_HD_TYPE IMAGEHLP_HD_TYPE;
 
 typedef ULONG (WINAPI *LPCALL_BACK_USER_INTERRUPT_ROUTINE)(void);
 
@@ -1724,7 +1725,7 @@ DWORD WINAPI GetSymLoadError(void);
 void KdHelp32To64(PKDHELP64 p32, PKDHELP64 p64);
 BOOL WINAPI RangeMapAddPeImageSections(PVOID RmapHandle, PCWSTR ImageName, PVOID MappedImage, DWORD MappingBytes, DWORD64 ImageBase, DWORD64 UserTag, DWORD MappingFlags);
 PVOID WINAPI RangeMapCreate(void);
-void RangeMapFree(PVOID RmapHandle);
+void IMAGEAPI RangeMapFree(PVOID RmapHandle);
 BOOL WINAPI RangeMapRead(PVOID RmapHandle, DWORD64 Offset, PVOID Buffer, DWORD RequestBytes, DWORD Flags, PDWORD DoneBytes);
 BOOL WINAPI RangeMapRemove(PVOID RmapHandle, DWORD64 UserTag);
 BOOL WINAPI RangeMapWrite(PVOID RmapHandle, DWORD64 Offset, PVOID Buffer, DWORD RequestBytes, DWORD Flags, PDWORD DoneBytes);

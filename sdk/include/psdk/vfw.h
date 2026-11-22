@@ -2750,6 +2750,8 @@ typedef struct IAVIFileVtbl IAVIFileVtbl;
 
 typedef struct IAVIPersistFileVtbl IAVIPersistFileVtbl;
 
+typedef struct IAVIPersistFile IAVIPersistFile;
+
 struct IAVIPersistFile
 {
     struct IAVIPersistFileVtbl *lpVtbl;
@@ -2768,8 +2770,8 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-UINT DrawDibError(HDRAWDIB hdd);
-BOOL DrawDibInit(void);
+UINT VFWAPI DrawDibError(HDRAWDIB hdd);
+BOOL VFWAPI DrawDibInit(void);
 
 #ifdef __cplusplus
 }

@@ -7181,7 +7181,7 @@ HRESULT WINAPI FindCertsByIssuer(PCERT_CHAIN pCertChains, DWORD *pcbCertChains,
 #endif
 
 #ifndef ALG_SID_THIRDPARTY_ANY
-#define ALG_SID_THIRDPARTY_ANY 0
+#define ALG_SID_THIRDPARTY_ANY (0)
 #endif
 #ifndef CALG_OID_INFO_PQ
 #define CALG_OID_INFO_PQ 0xFFFFFFFD
@@ -9254,7 +9254,7 @@ typedef struct _SSL_KEY_PIN_EXTRA_CERT_CHAIN_POLICY_STATUS {
 #define CRYPT_DELETE_KEYSET CRYPT_DELETEKEYSET
 #define CRYPT_ECC_PRIVATE_KEY_INFO_v1 1
 #define CRYPT_ENCODE_ENABLE_IA5CONVERSION_FLAG 0x60000
-#define CRYPT_FAILED 0
+#define CRYPT_FAILED FALSE
 #define CRYPT_LOCALIZED_NAME_OID "LocalizedNames"
 #define CRYPT_OID_ENUM_PHYSICAL_STORE_FUNC "CertDllEnumPhysicalStore"
 #define CRYPT_OID_ENUM_SYSTEM_STORE_FUNC "CertDllEnumSystemStore"
@@ -9994,26 +9994,26 @@ BOOL WINAPI CryptSetKeyIdentifierProperty(const CRYPT_HASH_BLOB *pKeyIdentifier,
 BOOL WINAPI CryptVerifyTimeStampSignature(const BYTE *pbTSContentInfo, DWORD cbTSContentInfo, const BYTE *pbData, DWORD cbData, HCERTSTORE hAdditionalStore, PCRYPT_TIMESTAMP_CONTEXT *ppTsContext, PCCERT_CONTEXT *ppTsSigner, HCERTSTORE *phStore);
 
 /* TODO: LiberNT does not implement the functions below yet */
-void CertAddRefServerOcspResponse(HCERT_SERVER_OCSP_RESPONSE hServerOcspResponse);
-void CertAddRefServerOcspResponseContext(PCCERT_SERVER_OCSP_RESPONSE_CONTEXT pServerOcspResponseContext);
-void CertCloseServerOcspResponse(HCERT_SERVER_OCSP_RESPONSE hServerOcspResponse, DWORD dwFlags);
-BOOL CertCreateCTLEntryFromCertificateContextProperties(PCCERT_CONTEXT pCertContext, DWORD cOptAttr, PCRYPT_ATTRIBUTE rgOptAttr, DWORD dwFlags, void *pvReserved, PCTL_ENTRY pCtlEntry, DWORD *pcbCtlEntry);
-PCTL_ENTRY CertFindSubjectInCTL(DWORD dwEncodingType, DWORD dwSubjectType, void *pvSubject, PCCTL_CONTEXT pCtlContext, DWORD dwFlags);
-void CertFreeCertificateChainList(PCCERT_CHAIN_CONTEXT *prgpSelection);
-void CertFreeServerOcspResponseContext(PCCERT_SERVER_OCSP_RESPONSE_CONTEXT pServerOcspResponseContext);
-PCCERT_SERVER_OCSP_RESPONSE_CONTEXT CertGetServerOcspResponseContext(HCERT_SERVER_OCSP_RESPONSE hServerOcspResponse, DWORD dwFlags, LPVOID pvReserved);
-BOOL CertIsStrongHashToSign(PCCERT_STRONG_SIGN_PARA pStrongSignPara, LPCWSTR pwszCNGHashAlgid, PCCERT_CONTEXT pSigningCert);
-BOOL CertIsWeakHash(DWORD dwHashUseType, LPCWSTR pwszCNGHashAlgid, DWORD dwChainFlags, PCCERT_CHAIN_CONTEXT pSignerChainContext, LPFILETIME pTimeStamp, LPCWSTR pwszFileName);
-HCERT_SERVER_OCSP_RESPONSE CertOpenServerOcspResponse(PCCERT_CHAIN_CONTEXT pChainContext, DWORD dwFlags, PCERT_SERVER_OCSP_RESPONSE_OPEN_PARA pOpenPara);
-BOOL CertRetrieveLogoOrBiometricInfo(PCCERT_CONTEXT pCertContext, LPCSTR lpszLogoOrBiometricType, DWORD dwRetrievalFlags, DWORD dwTimeout, DWORD dwFlags, void *pvReserved, BYTE **ppbData, DWORD *pcbData, LPWSTR *ppwszMimeType);
-BOOL CertSelectCertificateChains(LPCGUID pSelectionContext, DWORD dwFlags, PCCERT_SELECT_CHAIN_PARA pChainParameters, DWORD cCriteria, PCCERT_SELECT_CRITERIA rgpCriteria, HCERTSTORE hStore, PDWORD pcSelection, PCCERT_CHAIN_CONTEXT **pprgpSelection);
-BOOL CertSetCertificateContextPropertiesFromCTLEntry(PCCERT_CONTEXT pCertContext, PCTL_ENTRY pCtlEntry, DWORD dwFlags);
-BOOL CryptCreateKeyIdentifierFromCSP(DWORD dwCertEncodingType, LPCSTR pszPubKeyOID, const PUBLICKEYSTRUC *pPubKeyStruc, DWORD cbPubKeyStruc, DWORD dwFlags, void *pvReserved, BYTE *pbHash, DWORD *pcbHash);
-BOOL CryptEnumKeyIdentifierProperties(const CRYPT_HASH_BLOB *pKeyIdentifier, DWORD dwPropId, DWORD dwFlags, LPCWSTR pwszComputerName, void *pvReserved, void *pvArg, PFN_CRYPT_ENUM_KEYID_PROP pfnEnum);
-BOOL CryptExportPKCS8(HCRYPTPROV hCryptProv, DWORD dwKeySpec, LPSTR pszPrivateKeyObjId, DWORD dwFlags, void *pvAuxInfo, BYTE *pbPrivateKeyBlob, DWORD *pcbPrivateKeyBlob);
-BOOL CryptExportPKCS8Ex(CRYPT_PKCS8_EXPORT_PARAMS *psExportParams, DWORD dwFlags, void *pvAuxInfo, BYTE *pbPrivateKeyBlob, DWORD *pcbPrivateKeyBlob);
-BOOL CryptGetKeyIdentifierProperty(const CRYPT_HASH_BLOB *pKeyIdentifier, DWORD dwPropId, DWORD dwFlags, LPCWSTR pwszComputerName, void *pvReserved, void *pvData, DWORD *pcbData);
-BOOL CryptImportPKCS8(CRYPT_PKCS8_IMPORT_PARAMS sPrivateKeyAndParams, DWORD dwFlags, HCRYPTPROV *phCryptProv, void *pvAuxInfo);
+WINCRYPT32API void WINAPI CertAddRefServerOcspResponse(HCERT_SERVER_OCSP_RESPONSE hServerOcspResponse);
+WINCRYPT32API void WINAPI CertAddRefServerOcspResponseContext(PCCERT_SERVER_OCSP_RESPONSE_CONTEXT pServerOcspResponseContext);
+WINCRYPT32API void WINAPI CertCloseServerOcspResponse(HCERT_SERVER_OCSP_RESPONSE hServerOcspResponse, DWORD dwFlags);
+WINCRYPT32API BOOL WINAPI CertCreateCTLEntryFromCertificateContextProperties(PCCERT_CONTEXT pCertContext, DWORD cOptAttr, PCRYPT_ATTRIBUTE rgOptAttr, DWORD dwFlags, void *pvReserved, PCTL_ENTRY pCtlEntry, DWORD *pcbCtlEntry);
+WINCRYPT32API PCTL_ENTRY WINAPI CertFindSubjectInCTL(DWORD dwEncodingType, DWORD dwSubjectType, void *pvSubject, PCCTL_CONTEXT pCtlContext, DWORD dwFlags);
+WINCRYPT32API void WINAPI CertFreeCertificateChainList(PCCERT_CHAIN_CONTEXT *prgpSelection);
+WINCRYPT32API void WINAPI CertFreeServerOcspResponseContext(PCCERT_SERVER_OCSP_RESPONSE_CONTEXT pServerOcspResponseContext);
+WINCRYPT32API PCCERT_SERVER_OCSP_RESPONSE_CONTEXT WINAPI CertGetServerOcspResponseContext(HCERT_SERVER_OCSP_RESPONSE hServerOcspResponse, DWORD dwFlags, LPVOID pvReserved);
+WINCRYPT32API BOOL WINAPI CertIsStrongHashToSign(PCCERT_STRONG_SIGN_PARA pStrongSignPara, LPCWSTR pwszCNGHashAlgid, PCCERT_CONTEXT pSigningCert);
+WINCRYPT32API BOOL WINAPI CertIsWeakHash(DWORD dwHashUseType, LPCWSTR pwszCNGHashAlgid, DWORD dwChainFlags, PCCERT_CHAIN_CONTEXT pSignerChainContext, LPFILETIME pTimeStamp, LPCWSTR pwszFileName);
+WINCRYPT32API HCERT_SERVER_OCSP_RESPONSE WINAPI CertOpenServerOcspResponse(PCCERT_CHAIN_CONTEXT pChainContext, DWORD dwFlags, PCERT_SERVER_OCSP_RESPONSE_OPEN_PARA pOpenPara);
+WINCRYPT32API BOOL WINAPI CertRetrieveLogoOrBiometricInfo(PCCERT_CONTEXT pCertContext, LPCSTR lpszLogoOrBiometricType, DWORD dwRetrievalFlags, DWORD dwTimeout, DWORD dwFlags, void *pvReserved, BYTE **ppbData, DWORD *pcbData, LPWSTR *ppwszMimeType);
+WINCRYPT32API BOOL WINAPI CertSelectCertificateChains(LPCGUID pSelectionContext, DWORD dwFlags, PCCERT_SELECT_CHAIN_PARA pChainParameters, DWORD cCriteria, PCCERT_SELECT_CRITERIA rgpCriteria, HCERTSTORE hStore, PDWORD pcSelection, PCCERT_CHAIN_CONTEXT **pprgpSelection);
+WINCRYPT32API BOOL WINAPI CertSetCertificateContextPropertiesFromCTLEntry(PCCERT_CONTEXT pCertContext, PCTL_ENTRY pCtlEntry, DWORD dwFlags);
+WINCRYPT32API BOOL WINAPI CryptCreateKeyIdentifierFromCSP(DWORD dwCertEncodingType, LPCSTR pszPubKeyOID, const PUBLICKEYSTRUC *pPubKeyStruc, DWORD cbPubKeyStruc, DWORD dwFlags, void *pvReserved, BYTE *pbHash, DWORD *pcbHash);
+WINCRYPT32API BOOL WINAPI CryptEnumKeyIdentifierProperties(const CRYPT_HASH_BLOB *pKeyIdentifier, DWORD dwPropId, DWORD dwFlags, LPCWSTR pwszComputerName, void *pvReserved, void *pvArg, PFN_CRYPT_ENUM_KEYID_PROP pfnEnum);
+WINCRYPT32API BOOL WINAPI CryptExportPKCS8(HCRYPTPROV hCryptProv, DWORD dwKeySpec, LPSTR pszPrivateKeyObjId, DWORD dwFlags, void *pvAuxInfo, BYTE *pbPrivateKeyBlob, DWORD *pcbPrivateKeyBlob);
+WINCRYPT32API BOOL WINAPI CryptExportPKCS8Ex(CRYPT_PKCS8_EXPORT_PARAMS *psExportParams, DWORD dwFlags, void *pvAuxInfo, BYTE *pbPrivateKeyBlob, DWORD *pcbPrivateKeyBlob);
+WINCRYPT32API BOOL WINAPI CryptGetKeyIdentifierProperty(const CRYPT_HASH_BLOB *pKeyIdentifier, DWORD dwPropId, DWORD dwFlags, LPCWSTR pwszComputerName, void *pvReserved, void *pvData, DWORD *pcbData);
+WINCRYPT32API BOOL WINAPI CryptImportPKCS8(CRYPT_PKCS8_IMPORT_PARAMS sPrivateKeyAndParams, DWORD dwFlags, HCRYPTPROV *phCryptProv, void *pvAuxInfo);
 BOOL __cdecl GetEncSChannel(BYTE **pData, DWORD *dwDecSize);
 
 #ifdef __cplusplus

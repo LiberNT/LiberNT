@@ -2167,7 +2167,7 @@ typedef struct _OPEN_REPARSE_LIST {
 #define CHECKSUM_TYPE_FIRST_UNUSED_TYPE 6
 #endif
 #ifndef CHECKSUM_TYPE_NONE
-#define CHECKSUM_TYPE_NONE 0
+#define CHECKSUM_TYPE_NONE (0)
 #endif
 #ifndef CHECKSUM_TYPE_SHA256
 #define CHECKSUM_TYPE_SHA256 4
@@ -3844,7 +3844,7 @@ typedef struct _OPEN_REPARSE_LIST {
 #define STREAMS_ASSOCIATE_ID_SET 0x2
 #endif
 #ifndef STREAMS_INVALID_ID
-#define STREAMS_INVALID_ID 0
+#define STREAMS_INVALID_ID (0)
 #endif
 #ifndef STREAM_EXTENT_ENTRY_ALL_EXTENTS
 #define STREAM_EXTENT_ENTRY_ALL_EXTENTS 0x00000002
@@ -4043,6 +4043,7 @@ typedef struct _OPEN_REPARSE_LIST {
 #endif
 #ifndef WOF_PROVIDER_WIM
 #define WOF_PROVIDER_WIM 0x00000001
+#endif
 
 typedef enum _CSV_DOWN_LEVEL_FILE_TYPE {
     CsvDownLevelFileObject = 0,
@@ -5908,6 +5909,12 @@ typedef struct USN_TRACK_MODIFIED_RANGES {
 #define SMB_CCF_APP_INSTANCE_EA_NAME "ClusteredApplicationInstance"
 #if (!(defined(UNICODE)))
 #define SspiInitializeSecurityContextAsync SspiInitializeSecurityContextAsync
+#else
+#ifdef UNICODE
+#define SspiInitializeSecurityContextAsync SspiInitializeSecurityContextAsyncW
+#else
+#define SspiInitializeSecurityContextAsync SspiInitializeSecurityContextAsyncA
+#endif
 #endif
 #define STREAMS_MAX_ID 0xFFFF
 #define SUPPORTED_FS_FEATURES_VALID_MASK 0xF
@@ -6302,7 +6309,7 @@ struct _STREAM_EXTENT_ENTRY
     } ExtentInformation;
 };
 
-typedef NTSTATUS ALLOCATE_VIRTUAL_MEMORY_EX_CALLBACK(HANDLE, HANDLE, PVOID *, PSIZE_T, ULONG, ULONG, PMEM_EXTENDED_PARAMETER, ULONG);
+typedef NTSTATUS NTAPI ALLOCATE_VIRTUAL_MEMORY_EX_CALLBACK(HANDLE, HANDLE, PVOID *, PSIZE_T, ULONG, ULONG, PMEM_EXTENDED_PARAMETER, ULONG);
 
 #if (((NTDDI_VERSION >= NTDDI_WIN10_RS2) && defined(_WIN64)))
 typedef struct _DUPLICATE_EXTENTS_DATA32 DUPLICATE_EXTENTS_DATA32;
@@ -6320,7 +6327,7 @@ typedef struct _FILE_NOTIFY_FULL_INFORMATION FILE_NOTIFY_FULL_INFORMATION;
 
 typedef FILE_PROVIDER_EXTERNAL_INFO_V1 FILE_PROVIDER_EXTERNAL_INFO;
 
-typedef NTSTATUS FREE_VIRTUAL_MEMORY_EX_CALLBACK(HANDLE, HANDLE, PVOID *, PSIZE_T, ULONG);
+typedef NTSTATUS NTAPI FREE_VIRTUAL_MEMORY_EX_CALLBACK(HANDLE, HANDLE, PVOID *, PSIZE_T, ULONG);
 
 typedef struct _FS_BPIO_OUTPUT FS_BPIO_OUTPUT;
 
@@ -6428,7 +6435,7 @@ typedef struct _STREAM_EXTENT_ENTRY *PSTREAM_EXTENT_ENTRY;
 
 typedef struct _QUERY_FILE_LAYOUT_INPUT QUERY_FILE_LAYOUT_INPUT;
 
-typedef NTSTATUS QUERY_VIRTUAL_MEMORY_CALLBACK(HANDLE, HANDLE, PVOID, HEAP_MEMORY_INFO_CLASS, PVOID, SIZE_T, PSIZE_T);
+typedef NTSTATUS NTAPI QUERY_VIRTUAL_MEMORY_CALLBACK(HANDLE, HANDLE, PVOID, HEAP_MEMORY_INFO_CLASS, PVOID, SIZE_T, PSIZE_T);
 
 typedef QUERY_VIRTUAL_MEMORY_CALLBACK *PQUERY_VIRTUAL_MEMORY_CALLBACK;
 
@@ -6451,6 +6458,8 @@ typedef struct _REFS_QUERY_VOLUME_IO_METRICS_INFO_INPUT_BUFFER REFS_QUERY_VOLUME
 typedef struct _REFS_QUERY_VOLUME_IO_METRICS_INFO_OUTPUT_BUFFER REFS_QUERY_VOLUME_IO_METRICS_INFO_OUTPUT_BUFFER;
 
 typedef struct _REPARSE_DATA_BUFFER_EX REPARSE_DATA_BUFFER_EX;
+
+typedef struct RETRIEVAL_POINTERS_AND_REFCOUNT_BUFFER RETRIEVAL_POINTERS_AND_REFCOUNT_BUFFER;
 
 struct RETRIEVAL_POINTERS_AND_REFCOUNT_BUFFER
 {
@@ -6500,9 +6509,9 @@ typedef struct _RTL_SEGMENT_HEAP_PARAMETERS *PRTL_SEGMENT_HEAP_PARAMETERS;
 
 typedef struct _RTL_SEGMENT_HEAP_PARAMETERS RTL_SEGMENT_HEAP_PARAMETERS;
 
-typedef NTSTATUS SE_LOGON_SESSION_TERMINATED_ROUTINE(PLUID);
+typedef NTSTATUS NTAPI SE_LOGON_SESSION_TERMINATED_ROUTINE(PLUID);
 
-typedef NTSTATUS SE_LOGON_SESSION_TERMINATED_ROUTINE_EX(PLUID, PESILO, PVOID);
+typedef NTSTATUS NTAPI SE_LOGON_SESSION_TERMINATED_ROUTINE_EX(PLUID, PESILO, PVOID);
 
 typedef SE_LOGON_SESSION_TERMINATED_ROUTINE_EX *PSE_LOGON_SESSION_TERMINATED_ROUTINE_EX;
 
@@ -6512,6 +6521,7 @@ typedef struct _SE_TOKEN_USER SE_TOKEN_USER;
 
 typedef struct _STREAM_EXTENT_ENTRY STREAM_EXTENT_ENTRY;
 
+struct _IO_IRP_EXT_TRACK_OFFSET_HEADER;
 typedef void (*PIO_IRP_EXT_PROCESS_TRACKED_OFFSET_CALLBACK)(struct _IO_IRP_EXT_TRACK_OFFSET_HEADER *, struct _IO_IRP_EXT_TRACK_OFFSET_HEADER *, LONGLONG);
 
 struct _IO_IRP_EXT_TRACK_OFFSET_HEADER
@@ -6549,7 +6559,7 @@ void CcUnregisterExternalCacheEx(PVOID ExternalCacheContext);
 NTSTATUS CcUpdateExternalCacheInfoEx(PVOID ExternalCacheContext, PCC_DIRTY_PAGES_INFO DirtyPagesInfo);
 void FsRtlAddToTunnelCacheEx(TUNNEL *Cache, ULONGLONG DirectoryKey, UNICODE_STRING *ShortName, UNICODE_STRING *LongName, ULONG Flags, ULONG DataLength, void *Data);
 PVOID FsRtlAllocateAePushLock(POOL_TYPE PoolType, ULONG Tag);
-BOOLEAN FsRtlCheckFileSystemFilterCallbacksRegistered(struct _DRIVER_OBJECT *FilterDriverObject);
+NTKERNELAPI BOOLEAN NTAPI FsRtlCheckFileSystemFilterCallbacksRegistered(struct _DRIVER_OBJECT *FilterDriverObject);
 NTSTATUS FsRtlCheckOplockEx2(POPLOCK Oplock, PIRP Irp, ULONG Flags, ULONG FlagsEx2, PVOID CompletionRoutineContext, POPLOCK_WAIT_COMPLETE_ROUTINE CompletionRoutine, POPLOCK_FS_PREPOST_IRP PostIrpRoutine, ULONGLONG Timeout, PVOID NotifyContext, POPLOCK_NOTIFY_ROUTINE NotifyRoutine);
 NTSTATUS FsRtlCheckOplockForFsFilterCallback(POPLOCK Oplock, PVOID CallbackData, ULONG Flags);
 NTSTATUS FsRtlCheckUpperOplock(POPLOCK Oplock, ULONG NewLowerOplockState, PVOID CompletionRoutineContext, POPLOCK_WAIT_COMPLETE_ROUTINE CompletionRoutine, POPLOCK_FS_PREPOST_IRP PrePendRoutine, ULONG Flags);
@@ -6576,61 +6586,61 @@ NTSTATUS FsRtlRegisterUncProviderEx2(PCUNICODE_STRING RedirDevName, PDEVICE_OBJE
 NTSTATUS FsRtlSetDriverBacking(PDRIVER_OBJECT DriverObj, ULONG Flags);
 NTSTATUS FsRtlUpperOplockFsctrl(POPLOCK Oplock, PIRP Irp, ULONG OpenCount, ULONG LowerOplockState, ULONG Flags);
 NTSTATUS FsRtlVolumeDeviceToCorrelationId(PDEVICE_OBJECT VolumeDeviceObject, GUID *Guid);
-NTSTATUS IoApplyPriorityInfoThread(PIO_PRIORITY_INFO InputPriorityInfo, PIO_PRIORITY_INFO OutputPriorityInfo, PETHREAD Thread);
-BOOLEAN IoCheckFileObjectOpenedAsCopyDestination(PFILE_OBJECT FileObject);
-BOOLEAN IoCheckFileObjectOpenedAsCopySource(PFILE_OBJECT FileObject);
-NTSTATUS IoClearFsTrackOffsetState(PIRP Irp);
-NTSTATUS IoCreateStreamFileObjectEx2(PIO_CREATE_STREAM_FILE_OPTIONS CreateOptions, PFILE_OBJECT FileObject, PDEVICE_OBJECT DeviceObject, PFILE_OBJECT *StreamFileObject, PHANDLE FileHandle);
-NTSTATUS IoGetFsTrackOffsetState(PIRP Irp, PIO_IRP_EXT_TRACK_OFFSET_HEADER *RetFsTrackOffsetBlob, LONGLONG *RetTrackedOffset);
-BOOLEAN IoIrpHasFsTrackOffsetExtensionType(PIRP Irp);
-NTSTATUS IoRequestDeviceRemovalForReset(PDEVICE_OBJECT PhysicalDeviceObject, ULONG Flags);
-NTSTATUS IoSetFsTrackOffsetState(PIRP Irp, PIO_IRP_EXT_TRACK_OFFSET_HEADER FsTrackOffsetBlob, LONGLONG TrackedOffset);
-USHORT IoSizeOfIrpEx(PDEVICE_OBJECT DeviceObject, CCHAR StackSize);
-ULONGLONG MmGetMaximumFileSectionSize(void);
-NTSTATUS MmIsFileSectionActive(PSECTION_OBJECT_POINTERS FsSectionPointer, ULONG Flags, PLOGICAL SectionIsActive);
-LOGICAL MmMdlPagesAreZero(PMDL Mdl);
-NTSTATUS NtCopyFileChunk(HANDLE SourceHandle, HANDLE DestHandle, HANDLE Event, PIO_STATUS_BLOCK IoStatusBlock, ULONG Length, PLARGE_INTEGER SourceOffset, PLARGE_INTEGER DestOffset, PULONG SourceKey, PULONG DestKey, ULONG Flags);
-NTSTATUS RtlAllocateAndInitializeSidEx(PSID_IDENTIFIER_AUTHORITY IdentifierAuthority, UCHAR SubAuthorityCount, PULONG SubAuthorities, PSID *Sid);
-NTSTATUS RtlDecompressBufferEx(USHORT CompressionFormat, PUCHAR UncompressedBuffer, ULONG UncompressedBufferSize, PUCHAR CompressedBuffer, ULONG CompressedBufferSize, PULONG FinalUncompressedSize, PVOID WorkSpace);
-NTSTATUS RtlDecompressBufferEx2(USHORT CompressionFormat, PUCHAR UncompressedBuffer, ULONG UncompressedBufferSize, PUCHAR CompressedBuffer, ULONG CompressedBufferSize, ULONG UncompressedChunkSize, PULONG FinalUncompressedSize, PVOID WorkSpace);
-NTSTATUS RtlDecompressFragmentEx(USHORT CompressionFormat, PUCHAR UncompressedFragment, ULONG UncompressedFragmentSize, PUCHAR CompressedBuffer, ULONG CompressedBufferSize, ULONG FragmentOffset, ULONG UncompressedChunkSize, PULONG FinalUncompressedSize, PVOID WorkSpace);
-NTSTATUS RtlInitStringEx(PSTRING DestinationString, PCSZ SourceString);
-NTSTATUS RtlInitUTF8StringEx(PUTF8_STRING DestinationString, PCSZ SourceString);
-BOOLEAN RtlIsCloudFilesPlaceholder(ULONG FileAttributes, ULONG ReparseTag);
-BOOLEAN RtlIsNonEmptyDirectoryReparsePointAllowed(ULONG ReparseTag);
-BOOLEAN RtlIsPartialPlaceholder(ULONG FileAttributes, ULONG ReparseTag);
-NTSTATUS RtlIsPartialPlaceholderFileHandle(HANDLE FileHandle, PBOOLEAN IsPartialPlaceholder);
-NTSTATUS RtlIsPartialPlaceholderFileInfo(const void *InfoBuffer, FILE_INFORMATION_CLASS InfoClass, PBOOLEAN IsPartialPlaceholder);
-BOOLEAN RtlIsSandboxedToken(PSECURITY_SUBJECT_CONTEXT Context, KPROCESSOR_MODE PreviousMode);
-BOOLEAN RtlIsSandboxedTokenHandle(HANDLE TokenHandle, KPROCESSOR_MODE PreviousMode);
-NTSTATUS RtlQueryPackageIdentityEx(PVOID TokenObject, PWSTR PackageFullName, PSIZE_T PackageSize, PWSTR AppId, PSIZE_T AppIdSize, LPGUID DynamicId, PULONG64 Flags);
-CHAR RtlQueryProcessPlaceholderCompatibilityMode(void);
-CHAR RtlQueryThreadPlaceholderCompatibilityMode(void);
-CHAR RtlSetProcessPlaceholderCompatibilityMode(CHAR Mode);
-CHAR RtlSetThreadPlaceholderCompatibilityMode(CHAR Mode);
+NTSTATUS NTAPI IoApplyPriorityInfoThread(PIO_PRIORITY_INFO InputPriorityInfo, PIO_PRIORITY_INFO OutputPriorityInfo, PETHREAD Thread);
+NTKERNELAPI BOOLEAN NTAPI IoCheckFileObjectOpenedAsCopyDestination(PFILE_OBJECT FileObject);
+NTKERNELAPI BOOLEAN NTAPI IoCheckFileObjectOpenedAsCopySource(PFILE_OBJECT FileObject);
+NTSTATUS NTAPI IoClearFsTrackOffsetState(PIRP Irp);
+NTKERNELAPI NTSTATUS NTAPI IoCreateStreamFileObjectEx2(PIO_CREATE_STREAM_FILE_OPTIONS CreateOptions, PFILE_OBJECT FileObject, PDEVICE_OBJECT DeviceObject, PFILE_OBJECT *StreamFileObject, PHANDLE FileHandle);
+NTSTATUS NTAPI IoGetFsTrackOffsetState(PIRP Irp, PIO_IRP_EXT_TRACK_OFFSET_HEADER *RetFsTrackOffsetBlob, LONGLONG *RetTrackedOffset);
+BOOLEAN NTAPI IoIrpHasFsTrackOffsetExtensionType(PIRP Irp);
+NTKERNELAPI NTSTATUS NTAPI IoRequestDeviceRemovalForReset(PDEVICE_OBJECT PhysicalDeviceObject, ULONG Flags);
+NTSTATUS NTAPI IoSetFsTrackOffsetState(PIRP Irp, PIO_IRP_EXT_TRACK_OFFSET_HEADER FsTrackOffsetBlob, LONGLONG TrackedOffset);
+NTKERNELAPI USHORT NTAPI IoSizeOfIrpEx(PDEVICE_OBJECT DeviceObject, CCHAR StackSize);
+NTKERNELAPI ULONGLONG NTAPI MmGetMaximumFileSectionSize(void);
+NTKERNELAPI NTSTATUS NTAPI MmIsFileSectionActive(PSECTION_OBJECT_POINTERS FsSectionPointer, ULONG Flags, PLOGICAL SectionIsActive);
+LOGICAL NTAPI MmMdlPagesAreZero(PMDL Mdl);
+NTSYSCALLAPI NTSTATUS NTAPI NtCopyFileChunk(HANDLE SourceHandle, HANDLE DestHandle, HANDLE Event, PIO_STATUS_BLOCK IoStatusBlock, ULONG Length, PLARGE_INTEGER SourceOffset, PLARGE_INTEGER DestOffset, PULONG SourceKey, PULONG DestKey, ULONG Flags);
+NTSYSAPI NTSTATUS NTAPI RtlAllocateAndInitializeSidEx(PSID_IDENTIFIER_AUTHORITY IdentifierAuthority, UCHAR SubAuthorityCount, PULONG SubAuthorities, PSID *Sid);
+NTSTATUS NTAPI RtlDecompressBufferEx(USHORT CompressionFormat, PUCHAR UncompressedBuffer, ULONG UncompressedBufferSize, PUCHAR CompressedBuffer, ULONG CompressedBufferSize, PULONG FinalUncompressedSize, PVOID WorkSpace);
+NTSTATUS NTAPI RtlDecompressBufferEx2(USHORT CompressionFormat, PUCHAR UncompressedBuffer, ULONG UncompressedBufferSize, PUCHAR CompressedBuffer, ULONG CompressedBufferSize, ULONG UncompressedChunkSize, PULONG FinalUncompressedSize, PVOID WorkSpace);
+NTSTATUS NTAPI RtlDecompressFragmentEx(USHORT CompressionFormat, PUCHAR UncompressedFragment, ULONG UncompressedFragmentSize, PUCHAR CompressedBuffer, ULONG CompressedBufferSize, ULONG FragmentOffset, ULONG UncompressedChunkSize, PULONG FinalUncompressedSize, PVOID WorkSpace);
+NTSTATUS NTAPI RtlInitStringEx(PSTRING DestinationString, PCSZ SourceString);
+NTSYSAPI NTSTATUS NTAPI RtlInitUTF8StringEx(PUTF8_STRING DestinationString, PCSZ SourceString);
+NTSYSAPI BOOLEAN NTAPI RtlIsCloudFilesPlaceholder(ULONG FileAttributes, ULONG ReparseTag);
+NTSYSAPI BOOLEAN NTAPI RtlIsNonEmptyDirectoryReparsePointAllowed(ULONG ReparseTag);
+NTSYSAPI BOOLEAN NTAPI RtlIsPartialPlaceholder(ULONG FileAttributes, ULONG ReparseTag);
+NTSYSAPI NTSTATUS NTAPI RtlIsPartialPlaceholderFileHandle(HANDLE FileHandle, PBOOLEAN IsPartialPlaceholder);
+NTSYSAPI NTSTATUS NTAPI RtlIsPartialPlaceholderFileInfo(const void *InfoBuffer, FILE_INFORMATION_CLASS InfoClass, PBOOLEAN IsPartialPlaceholder);
+NTSYSAPI BOOLEAN NTAPI RtlIsSandboxedToken(PSECURITY_SUBJECT_CONTEXT Context, KPROCESSOR_MODE PreviousMode);
+NTSYSAPI BOOLEAN NTAPI RtlIsSandboxedTokenHandle(HANDLE TokenHandle, KPROCESSOR_MODE PreviousMode);
+NTSYSAPI NTSTATUS NTAPI RtlQueryPackageIdentityEx(PVOID TokenObject, PWSTR PackageFullName, PSIZE_T PackageSize, PWSTR AppId, PSIZE_T AppIdSize, LPGUID DynamicId, PULONG64 Flags);
+NTSYSAPI CHAR NTAPI RtlQueryProcessPlaceholderCompatibilityMode(void);
+NTSYSAPI CHAR NTAPI RtlQueryThreadPlaceholderCompatibilityMode(void);
+NTSYSAPI CHAR NTAPI RtlSetProcessPlaceholderCompatibilityMode(CHAR Mode);
+NTSYSAPI CHAR NTAPI RtlSetThreadPlaceholderCompatibilityMode(CHAR Mode);
 NTSTATUS RtlUnicodeStringToUTF8String(PUTF8_STRING DestinationString, PCUNICODE_STRING SourceString, BOOLEAN AllocateDestinationString);
-BOOLEAN SeAccessCheckFromStateEx(PSECURITY_DESCRIPTOR SecurityDescriptor, PACCESS_TOKEN PrimaryToken, PACCESS_TOKEN ClientToken, ACCESS_MASK DesiredAccess, ACCESS_MASK PreviouslyGrantedAccess, PPRIVILEGE_SET *Privileges, PGENERIC_MAPPING GenericMapping, KPROCESSOR_MODE AccessMode, PACCESS_MASK GrantedAccess, PNTSTATUS AccessStatus);
-void SeAdjustAccessStateForAccessConstraints(PVOID ObjectType, PSECURITY_DESCRIPTOR SecurityDescriptor, PACCESS_STATE AccessState);
-void SeAdjustAccessStateForTrustLabel(PVOID ObjectType, PSECURITY_DESCRIPTOR SecurityDescriptor, PACCESS_STATE AccessState);
-NTSTATUS SeAdjustObjectSecurity(PUNICODE_STRING ObjectName, PSECURITY_DESCRIPTOR OriginalDescriptor, PSECURITY_DESCRIPTOR ProposedDescriptor, PSECURITY_SUBJECT_CONTEXT SubjectSecurityContext, PSECURITY_DESCRIPTOR *AdjustedDescriptor, PBOOLEAN ApplyAdjustedDescriptor);
-void SeAuditFipsCryptoSelftests(BOOLEAN bSuccess, ULONG SelftestCode);
-BOOLEAN SeAuditingFileEventsWithContextEx(BOOLEAN AccessGranted, PSECURITY_DESCRIPTOR SecurityDescriptor, PSECURITY_SUBJECT_CONTEXT SubjectSecurityContext, PBOOLEAN StagingEnabled);
+BOOLEAN NTAPI SeAccessCheckFromStateEx(PSECURITY_DESCRIPTOR SecurityDescriptor, PACCESS_TOKEN PrimaryToken, PACCESS_TOKEN ClientToken, ACCESS_MASK DesiredAccess, ACCESS_MASK PreviouslyGrantedAccess, PPRIVILEGE_SET *Privileges, PGENERIC_MAPPING GenericMapping, KPROCESSOR_MODE AccessMode, PACCESS_MASK GrantedAccess, PNTSTATUS AccessStatus);
+void NTAPI SeAdjustAccessStateForAccessConstraints(PVOID ObjectType, PSECURITY_DESCRIPTOR SecurityDescriptor, PACCESS_STATE AccessState);
+void NTAPI SeAdjustAccessStateForTrustLabel(PVOID ObjectType, PSECURITY_DESCRIPTOR SecurityDescriptor, PACCESS_STATE AccessState);
+NTKERNELAPI NTSTATUS NTAPI SeAdjustObjectSecurity(PUNICODE_STRING ObjectName, PSECURITY_DESCRIPTOR OriginalDescriptor, PSECURITY_DESCRIPTOR ProposedDescriptor, PSECURITY_SUBJECT_CONTEXT SubjectSecurityContext, PSECURITY_DESCRIPTOR *AdjustedDescriptor, PBOOLEAN ApplyAdjustedDescriptor);
+NTKERNELAPI void NTAPI SeAuditFipsCryptoSelftests(BOOLEAN bSuccess, ULONG SelftestCode);
+NTKERNELAPI BOOLEAN NTAPI SeAuditingFileEventsWithContextEx(BOOLEAN AccessGranted, PSECURITY_DESCRIPTOR SecurityDescriptor, PSECURITY_SUBJECT_CONTEXT SubjectSecurityContext, PBOOLEAN StagingEnabled);
 SECURITY_STATUS NTAPI SecAllocateAndSetCallTarget(PUCHAR lpIpAddress, ULONG cchIpAddress, LPWSTR TargetName, int *FreeCallContext);
 SECURITY_STATUS NTAPI SecAllocateAndSetIPAddress(PUCHAR lpIpAddress, ULONG cchIpAddress, int *FreeCallContext);
-void SecFreeCallContext(void);
-void SeCheckForCriticalAceRemoval(PSECURITY_DESCRIPTOR CurrentDescriptor, PSECURITY_DESCRIPTOR NewDescriptor, PSECURITY_SUBJECT_CONTEXT SubjectSecurityContext, PBOOLEAN AceRemoved);
-NTSTATUS SeMarkLogonSessionForTerminationNotificationEx(PLUID LogonId, PESILO pServerSilo);
-NTSTATUS SeQueryServerSiloToken(PACCESS_TOKEN Token, PESILO *pServerSilo);
-NTSTATUS SeQuerySessionIdTokenEx(PACCESS_TOKEN Token, PULONG SessionId, PBOOLEAN IsServiceSession);
-NTSTATUS SeRegisterLogonSessionTerminatedRoutineEx(PSE_LOGON_SESSION_TERMINATED_ROUTINE_EX CallbackRoutine, PVOID Context);
-BOOLEAN SeShouldCheckForAccessRightsFromParent(PVOID ObjectType, PSECURITY_DESCRIPTOR ChildDescriptor, PACCESS_STATE AccessState);
-NTSTATUS SeTokenFromAccessInformation(PTOKEN_ACCESS_INFORMATION AccessInformation, PACCESS_TOKEN Token, ULONG Length, PULONG RequiredLength);
-void SeTokenGetNoChildProcessRestricted(PACCESS_TOKEN Token, PBOOLEAN Enforced, PBOOLEAN UnlessSecure, PBOOLEAN AuditOnly);
-void SeTokenGetRedirectionTrustPolicy(PACCESS_TOKEN Token, PBOOLEAN Enforced, PBOOLEAN AuditOnly);
-BOOLEAN SeTokenIsNoChildProcessRestrictionEnforced(PACCESS_TOKEN Token, PBOOLEAN UnlessSecure);
-void SeTokenSetNoChildProcessRestricted(PACCESS_TOKEN Token, BOOLEAN UnlessSecure, BOOLEAN AuditOnly);
-void SeTokenSetRedirectionTrustPolicy(PACCESS_TOKEN Token, BOOLEAN AuditOnly);
-NTSTATUS SeUnregisterLogonSessionTerminatedRoutineEx(PSE_LOGON_SESSION_TERMINATED_ROUTINE_EX CallbackRoutine, PVOID Context);
+void SEC_ENTRY SecFreeCallContext(void);
+NTKERNELAPI void NTAPI SeCheckForCriticalAceRemoval(PSECURITY_DESCRIPTOR CurrentDescriptor, PSECURITY_DESCRIPTOR NewDescriptor, PSECURITY_SUBJECT_CONTEXT SubjectSecurityContext, PBOOLEAN AceRemoved);
+NTKERNELAPI NTSTATUS NTAPI SeMarkLogonSessionForTerminationNotificationEx(PLUID LogonId, PESILO pServerSilo);
+NTKERNELAPI NTSTATUS NTAPI SeQueryServerSiloToken(PACCESS_TOKEN Token, PESILO *pServerSilo);
+NTKERNELAPI NTSTATUS NTAPI SeQuerySessionIdTokenEx(PACCESS_TOKEN Token, PULONG SessionId, PBOOLEAN IsServiceSession);
+NTKERNELAPI NTSTATUS NTAPI SeRegisterLogonSessionTerminatedRoutineEx(PSE_LOGON_SESSION_TERMINATED_ROUTINE_EX CallbackRoutine, PVOID Context);
+BOOLEAN NTAPI SeShouldCheckForAccessRightsFromParent(PVOID ObjectType, PSECURITY_DESCRIPTOR ChildDescriptor, PACCESS_STATE AccessState);
+NTSTATUS NTAPI SeTokenFromAccessInformation(PTOKEN_ACCESS_INFORMATION AccessInformation, PACCESS_TOKEN Token, ULONG Length, PULONG RequiredLength);
+NTKERNELAPI void NTAPI SeTokenGetNoChildProcessRestricted(PACCESS_TOKEN Token, PBOOLEAN Enforced, PBOOLEAN UnlessSecure, PBOOLEAN AuditOnly);
+NTKERNELAPI void NTAPI SeTokenGetRedirectionTrustPolicy(PACCESS_TOKEN Token, PBOOLEAN Enforced, PBOOLEAN AuditOnly);
+NTKERNELAPI BOOLEAN NTAPI SeTokenIsNoChildProcessRestrictionEnforced(PACCESS_TOKEN Token, PBOOLEAN UnlessSecure);
+NTKERNELAPI void NTAPI SeTokenSetNoChildProcessRestricted(PACCESS_TOKEN Token, BOOLEAN UnlessSecure, BOOLEAN AuditOnly);
+NTKERNELAPI void NTAPI SeTokenSetRedirectionTrustPolicy(PACCESS_TOKEN Token, BOOLEAN AuditOnly);
+NTKERNELAPI NTSTATUS NTAPI SeUnregisterLogonSessionTerminatedRoutineEx(PSE_LOGON_SESSION_TERMINATED_ROUTINE_EX CallbackRoutine, PVOID Context);
 
 #ifdef __cplusplus
 }
@@ -6892,7 +6902,9 @@ union _SE_SID
 
 enum _SEC_APPLICATION_PROTOCOL_NEGOTIATION_EXT
 {
-
+    SecApplicationProtocolNegotiationExt_None = 0,
+    SecApplicationProtocolNegotiationExt_NPN = 1,
+    SecApplicationProtocolNegotiationExt_ALPN = 2,
 };
 
 typedef enum _SEC_APPLICATION_PROTOCOL_NEGOTIATION_EXT SEC_APPLICATION_PROTOCOL_NEGOTIATION_EXT;
@@ -6906,7 +6918,9 @@ struct _SEC_APPLICATION_PROTOCOL_LIST
 
 enum _TOKEN_ELEVATION_TYPE
 {
-
+    TokenElevationTypeDefault = 1,
+    TokenElevationTypeFull = 2,
+    TokenElevationTypeLimited = 3,
 };
 
 typedef enum _TOKEN_ELEVATION_TYPE TOKEN_ELEVATION_TYPE;
@@ -7026,9 +7040,15 @@ typedef PSecPkgContext_StreamSizes PSecPkgContext_DatagramSizes;
 
 typedef struct _TOKEN_LOGGING_INFORMATION *PTOKEN_LOGGING_INFORMATION;
 
+typedef union USN_RECORD_UNION USN_RECORD_UNION;
+
 typedef union USN_RECORD_UNION *PUSN_RECORD_UNION;
 
+typedef struct USN_RECORD_V3 USN_RECORD_V3;
+
 typedef struct USN_RECORD_V3 *PUSN_RECORD_V3;
+
+typedef struct USN_RECORD_V4 USN_RECORD_V4;
 
 typedef struct USN_RECORD_V4 *PUSN_RECORD_V4;
 
@@ -7140,4 +7160,3 @@ NTSTATUS NTAPI GetSecurityUserInfo(PLUID LogonId, ULONG Flags, PSecurityUserData
 #define QUERY_TYPE_ULONG(TokenInformationClass) (TokenInformationClass == TokenIntegrityLevel || TokenInformationClass == TokenIsAppContainer || TokenInformationClass == TokenVirtualizationAllowed || TokenInformationClass == TokenVirtualizationEnabled || TokenInformationClass == TokenUIAccess || TokenInformationClass == TokenSessionId || TokenInformationClass == TokenHasRestrictions || TokenInformationClass == TokenAppContainerNumber || TokenInformationClass == TokenIsAppSilo || TokenInformationClass == TokenLearningMode || TokenInformationClass == TokenPrivateNameSpace)
 #define REFS_VOLUME_DATA_BUFFER_CONTAINS_DRIVER_VERSION(VOLUME_DATA_BUFFER) ((VOLUME_DATA_BUFFER) -> ByteCount >= RTL_SIZEOF_THROUGH_FIELD(REFS_VOLUME_DATA_BUFFER, DriverMinorVersion))
 
-#endif

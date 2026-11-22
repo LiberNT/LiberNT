@@ -2073,6 +2073,12 @@ STRSAFE_INLINE_API StringGetsExWorkerW(STRSAFE_LPWSTR pszDest,size_t cchDest,siz
 #else
 #if (!(defined(UNICODE)))
 #define UnalignedStringCbLength StringCbLengthA
+#else
+#ifdef UNICODE
+#define UnalignedStringCbLength UnalignedStringCbLengthW
+#else
+#define UnalignedStringCbLength UnalignedStringCbLengthA
+#endif
 #endif
 #endif
 #ifdef UNICODE
@@ -2080,6 +2086,12 @@ STRSAFE_INLINE_API StringGetsExWorkerW(STRSAFE_LPWSTR pszDest,size_t cchDest,siz
 #else
 #if (!(defined(UNICODE)))
 #define UnalignedStringCchLength StringCchLengthA
+#else
+#ifdef UNICODE
+#define UnalignedStringCchLength UnalignedStringCchLengthW
+#else
+#define UnalignedStringCchLength UnalignedStringCchLengthA
+#endif
 #endif
 #endif
 

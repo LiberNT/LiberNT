@@ -981,27 +981,27 @@ HRESULT WINAPI MFCreateMFByteStreamWrapper(IMFByteStream *pStream, IMFByteStream
 HRESULT WINAPI MFLockWorkQueue(DWORD dwWorkQueue);
 
 /* TODO: LiberNT does not implement the functions below yet */
-HRESULT MFCalculateBitmapImageSize(const BITMAPINFOHEADER *pBMIH, UINT32 cbBufSize, UINT32 *pcbImageSize, BOOL *pbKnown);
-HRESULT MFCombineSamples(IMFSample *pSample, IMFSample *pSampleToAdd, DWORD dwMaxMergedDurationInMS, BOOL *pMerged);
-HRESULT MFConvertColorInfoFromDXVA(MFVIDEOFORMAT *pToFormat, DWORD dwFromDXVA);
-HRESULT MFConvertFromFP16Array(float *pDest, const WORD *pSrc, DWORD dwCount);
-HRESULT MFConvertToFP16Array(WORD *pDest, const float *pSrc, DWORD dwCount);
-HRESULT MFCreateDXGICrossAdapterBuffer(const IID *const riid, IUnknown *punkDevice, IMFMediaType *pMediaType, UINT uSubresource, IMFMediaBuffer **ppBuffer);
-HRESULT MFCreateMediaBufferWrapper(IMFMediaBuffer *pBuffer, DWORD cbOffset, DWORD dwLength, IMFMediaBuffer **ppBuffer);
-HRESULT MFCreateMediaExtensionActivate(PCWSTR szActivatableClassId, IUnknown *pConfiguration, const IID *const riid, LPVOID *ppvObject);
-HRESULT MFCreateMuxStreamAttributes(IMFCollection *pAttributesToMux, IMFAttributes **ppMuxAttribs);
-HRESULT MFCreateMuxStreamMediaType(IMFCollection *pMediaTypesToMux, IMFMediaType **ppMuxMediaType);
-HRESULT MFCreateMuxStreamSample(IMFCollection *pSamplesToMux, IMFSample **ppMuxSample);
-HRESULT MFCreateVideoMediaTypeFromBitMapInfoHeader(const BITMAPINFOHEADER *pbmihBitMapInfoHeader, DWORD dwPixelAspectRatioX, DWORD dwPixelAspectRatioY, MFVideoInterlaceMode InterlaceMode, QWORD VideoFlags, QWORD qwFramesPerSecondNumerator, QWORD qwFramesPerSecondDenominator, DWORD dwMaxBitRate, IMFVideoMediaType **ppIVideoMediaType);
-HRESULT MFCreateVideoMediaTypeFromBitMapInfoHeaderEx(const BITMAPINFOHEADER *pbmihBitMapInfoHeader, UINT32 cbBitMapInfoHeader, DWORD dwPixelAspectRatioX, DWORD dwPixelAspectRatioY, MFVideoInterlaceMode InterlaceMode, QWORD VideoFlags, DWORD dwFramesPerSecondNumerator, DWORD dwFramesPerSecondDenominator, DWORD dwMaxBitRate, IMFVideoMediaType **ppIVideoMediaType);
-HRESULT MFCreateWICBitmapBuffer(const IID *const riid, IUnknown *punkSurface, IMFMediaBuffer **ppBuffer);
-HRESULT MFGetContentProtectionSystemCLSID(const GUID *const guidProtectionSystemID, CLSID *pclsid);
-HRESULT MFGetDXGIDeviceManageMode(IUnknown *pDeviceManager, MF_DXGI_DEVICE_MANAGER_MODE *mode);
-HRESULT MFGetMFTMerit(IUnknown *pMFT, UINT32 cbVerifier, const BYTE *verifier, DWORD *merit);
+HRESULT STDAPICALLTYPE MFCalculateBitmapImageSize(const BITMAPINFOHEADER *pBMIH, UINT32 cbBufSize, UINT32 *pcbImageSize, BOOL *pbKnown);
+HRESULT STDAPICALLTYPE MFCombineSamples(IMFSample *pSample, IMFSample *pSampleToAdd, DWORD dwMaxMergedDurationInMS, BOOL *pMerged);
+HRESULT STDAPICALLTYPE MFConvertColorInfoFromDXVA(MFVIDEOFORMAT *pToFormat, DWORD dwFromDXVA);
+HRESULT STDAPICALLTYPE MFConvertFromFP16Array(float *pDest, const WORD *pSrc, DWORD dwCount);
+HRESULT STDAPICALLTYPE MFConvertToFP16Array(WORD *pDest, const float *pSrc, DWORD dwCount);
+HRESULT STDAPICALLTYPE MFCreateDXGICrossAdapterBuffer(const IID *const riid, IUnknown *punkDevice, IMFMediaType *pMediaType, UINT uSubresource, IMFMediaBuffer **ppBuffer);
+HRESULT STDAPICALLTYPE MFCreateMediaBufferWrapper(IMFMediaBuffer *pBuffer, DWORD cbOffset, DWORD dwLength, IMFMediaBuffer **ppBuffer);
+HRESULT STDAPICALLTYPE MFCreateMediaExtensionActivate(PCWSTR szActivatableClassId, IUnknown *pConfiguration, const IID *const riid, LPVOID *ppvObject);
+HRESULT STDAPICALLTYPE MFCreateMuxStreamAttributes(IMFCollection *pAttributesToMux, IMFAttributes **ppMuxAttribs);
+HRESULT STDAPICALLTYPE MFCreateMuxStreamMediaType(IMFCollection *pMediaTypesToMux, IMFMediaType **ppMuxMediaType);
+HRESULT STDAPICALLTYPE MFCreateMuxStreamSample(IMFCollection *pSamplesToMux, IMFSample **ppMuxSample);
+HRESULT STDAPICALLTYPE MFCreateVideoMediaTypeFromBitMapInfoHeader(const BITMAPINFOHEADER *pbmihBitMapInfoHeader, DWORD dwPixelAspectRatioX, DWORD dwPixelAspectRatioY, MFVideoInterlaceMode InterlaceMode, QWORD VideoFlags, QWORD qwFramesPerSecondNumerator, QWORD qwFramesPerSecondDenominator, DWORD dwMaxBitRate, IMFVideoMediaType **ppIVideoMediaType);
+HRESULT STDAPICALLTYPE MFCreateVideoMediaTypeFromBitMapInfoHeaderEx(const BITMAPINFOHEADER *pbmihBitMapInfoHeader, UINT32 cbBitMapInfoHeader, DWORD dwPixelAspectRatioX, DWORD dwPixelAspectRatioY, MFVideoInterlaceMode InterlaceMode, QWORD VideoFlags, DWORD dwFramesPerSecondNumerator, DWORD dwFramesPerSecondDenominator, DWORD dwMaxBitRate, IMFVideoMediaType **ppIVideoMediaType);
+HRESULT STDAPICALLTYPE MFCreateWICBitmapBuffer(const IID *const riid, IUnknown *punkSurface, IMFMediaBuffer **ppBuffer);
+HRESULT STDAPICALLTYPE MFGetContentProtectionSystemCLSID(const GUID *const guidProtectionSystemID, CLSID *pclsid);
+HRESULT STDAPICALLTYPE MFGetDXGIDeviceManageMode(IUnknown *pDeviceManager, MF_DXGI_DEVICE_MANAGER_MODE *mode);
+HRESULT STDAPICALLTYPE MFGetMFTMerit(IUnknown *pMFT, UINT32 cbVerifier, const BYTE *verifier, DWORD *merit);
 DWORD WINAPI MFGetUncompressedVideoFormat(const MFVIDEOFORMAT *pVideoFormat);
-HRESULT MFInitVideoFormat(MFVIDEOFORMAT *pVideoFormat, MFStandardVideoFormat type);
-HRESULT MFSplitSample(IMFSample *pSample, IMFSample **pOutputSamples, DWORD dwOutputSampleMaxCount, DWORD *pdwOutputSampleCount);
-HRESULT MFValidateMediaTypeSize(GUID FormatType, UINT8 *pBlock, UINT32 cbSize);
+HRESULT STDAPICALLTYPE MFInitVideoFormat(MFVIDEOFORMAT *pVideoFormat, MFStandardVideoFormat type);
+HRESULT STDAPICALLTYPE MFSplitSample(IMFSample *pSample, IMFSample **pOutputSamples, DWORD dwOutputSampleMaxCount, DWORD *pdwOutputSampleCount);
+HRESULT STDAPICALLTYPE MFValidateMediaTypeSize(GUID FormatType, UINT8 *pBlock, UINT32 cbSize);
 
 #ifdef __cplusplus
 }

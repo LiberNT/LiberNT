@@ -1567,29 +1567,29 @@ extern "C" {
 ULONG WINAPI HttpReceiveRequestEntityBody(HANDLE RequestQueueHandle, HTTP_REQUEST_ID RequestId, ULONG Flags, PVOID EntityBuffer, ULONG EntityBufferLength, PULONG BytesReturned, LPOVERLAPPED Overlapped);
 
 /* TODO: LiberNT does not implement the functions below yet */
-ULONG HttpAddFragmentToCache(HANDLE RequestQueueHandle, PCWSTR UrlPrefix, PHTTP_DATA_CHUNK DataChunk, PHTTP_CACHE_POLICY CachePolicy, LPOVERLAPPED Overlapped);
-ULONG HttpCancelHttpRequest(HANDLE RequestQueueHandle, HTTP_REQUEST_ID RequestId, LPOVERLAPPED Overlapped);
-ULONG HttpDeclarePush(HANDLE RequestQueueHandle, HTTP_REQUEST_ID RequestId, HTTP_VERB Verb, PCWSTR Path, PCSTR Query, PHTTP_REQUEST_HEADERS Headers);
-ULONG HttpDelegateRequestEx(HANDLE RequestQueueHandle, HANDLE DelegateQueueHandle, HTTP_REQUEST_ID RequestId, HTTP_URL_GROUP_ID DelegateUrlGroupId, ULONG PropertyInfoSetSize, PHTTP_DELEGATE_REQUEST_PROPERTY_INFO PropertyInfoSet);
-ULONG HttpFindUrlGroupId(PCWSTR FullyQualifiedUrl, HANDLE RequestQueueHandle, PHTTP_URL_GROUP_ID UrlGroupId);
-ULONG HttpFlushResponseCache(HANDLE RequestQueueHandle, PCWSTR UrlPrefix, ULONG Flags, LPOVERLAPPED Overlapped);
+ULONG WINAPI HttpAddFragmentToCache(HANDLE RequestQueueHandle, PCWSTR UrlPrefix, PHTTP_DATA_CHUNK DataChunk, PHTTP_CACHE_POLICY CachePolicy, LPOVERLAPPED Overlapped);
+ULONG WINAPI HttpCancelHttpRequest(HANDLE RequestQueueHandle, HTTP_REQUEST_ID RequestId, LPOVERLAPPED Overlapped);
+ULONG WINAPI HttpDeclarePush(HANDLE RequestQueueHandle, HTTP_REQUEST_ID RequestId, HTTP_VERB Verb, PCWSTR Path, PCSTR Query, PHTTP_REQUEST_HEADERS Headers);
+ULONG WINAPI HttpDelegateRequestEx(HANDLE RequestQueueHandle, HANDLE DelegateQueueHandle, HTTP_REQUEST_ID RequestId, HTTP_URL_GROUP_ID DelegateUrlGroupId, ULONG PropertyInfoSetSize, PHTTP_DELEGATE_REQUEST_PROPERTY_INFO PropertyInfoSet);
+ULONG WINAPI HttpFindUrlGroupId(PCWSTR FullyQualifiedUrl, HANDLE RequestQueueHandle, PHTTP_URL_GROUP_ID UrlGroupId);
+ULONG WINAPI HttpFlushResponseCache(HANDLE RequestQueueHandle, PCWSTR UrlPrefix, ULONG Flags, LPOVERLAPPED Overlapped);
 ULONG WINAPI HttpGetExtension(HTTPAPI_VERSION Version, ULONG Extension, PVOID Buffer, ULONG BufferSize);
 BOOL WINAPI HttpIsFeatureSupported(HTTP_FEATURE_ID FeatureId);
-ULONG HttpPrepareUrl(PVOID Reserved, ULONG Flags, PCWSTR Url, PWSTR *PreparedUrl);
-ULONG HttpQueryRequestProperty(HANDLE RequestQueueHandle, HTTP_OPAQUE_ID Id, HTTP_REQUEST_PROPERTY PropertyId, const void *Qualifier, ULONG QualifierSize, PVOID Output, ULONG OutputBufferSize, PULONG BytesReturned, LPOVERLAPPED Overlapped);
-ULONG HttpQueryRequestQueueProperty(HANDLE RequestQueueHandle, HTTP_SERVER_PROPERTY Property, PVOID PropertyInformation, ULONG PropertyInformationLength, ULONG Reserved1, PULONG ReturnLength, PVOID Reserved2);
-ULONG HttpQueryServerSessionProperty(HTTP_SERVER_SESSION_ID ServerSessionId, HTTP_SERVER_PROPERTY Property, PVOID PropertyInformation, ULONG PropertyInformationLength, PULONG ReturnLength);
-ULONG HttpQueryUrlGroupProperty(HTTP_URL_GROUP_ID UrlGroupId, HTTP_SERVER_PROPERTY Property, PVOID PropertyInformation, ULONG PropertyInformationLength, PULONG ReturnLength);
-ULONG HttpReadFragmentFromCache(HANDLE RequestQueueHandle, PCWSTR UrlPrefix, PHTTP_BYTE_RANGE ByteRange, PVOID Buffer, ULONG BufferLength, PULONG BytesRead, LPOVERLAPPED Overlapped);
-ULONG HttpReceiveClientCertificate(HANDLE RequestQueueHandle, HTTP_CONNECTION_ID ConnectionId, ULONG Flags, PHTTP_SSL_CLIENT_CERT_INFO SslClientCertInfo, ULONG SslClientCertInfoSize, PULONG BytesReceived, LPOVERLAPPED Overlapped);
-ULONG HttpSendResponseEntityBody(HANDLE RequestQueueHandle, HTTP_REQUEST_ID RequestId, ULONG Flags, USHORT EntityChunkCount, PHTTP_DATA_CHUNK EntityChunks, PULONG BytesSent, PVOID Reserved1, ULONG Reserved2, LPOVERLAPPED Overlapped, PHTTP_LOG_DATA LogData);
-ULONG HttpSetRequestProperty(HANDLE RequestQueueHandle, HTTP_OPAQUE_ID Id, HTTP_REQUEST_PROPERTY PropertyId, PVOID Input, ULONG InputPropertySize, LPOVERLAPPED Overlapped);
-ULONG HttpSetRequestQueueProperty(HANDLE RequestQueueHandle, HTTP_SERVER_PROPERTY Property, PVOID PropertyInformation, ULONG PropertyInformationLength, ULONG Reserved1, PVOID Reserved2);
-ULONG HttpSetServerSessionProperty(HTTP_SERVER_SESSION_ID ServerSessionId, HTTP_SERVER_PROPERTY Property, PVOID PropertyInformation, ULONG PropertyInformationLength);
-ULONG HttpUpdateServiceConfiguration(HANDLE Handle, HTTP_SERVICE_CONFIG_ID ConfigId, PVOID ConfigInfo, ULONG ConfigInfoLength, LPOVERLAPPED Overlapped);
-ULONG HttpWaitForDemandStart(HANDLE RequestQueueHandle, LPOVERLAPPED Overlapped);
-ULONG HttpWaitForDisconnect(HANDLE RequestQueueHandle, HTTP_CONNECTION_ID ConnectionId, LPOVERLAPPED Overlapped);
-ULONG HttpWaitForDisconnectEx(HANDLE RequestQueueHandle, HTTP_CONNECTION_ID ConnectionId, ULONG Reserved, LPOVERLAPPED Overlapped);
+ULONG WINAPI HttpPrepareUrl(PVOID Reserved, ULONG Flags, PCWSTR Url, PWSTR *PreparedUrl);
+ULONG WINAPI HttpQueryRequestProperty(HANDLE RequestQueueHandle, HTTP_OPAQUE_ID Id, HTTP_REQUEST_PROPERTY PropertyId, const void *Qualifier, ULONG QualifierSize, PVOID Output, ULONG OutputBufferSize, PULONG BytesReturned, LPOVERLAPPED Overlapped);
+ULONG WINAPI HttpQueryRequestQueueProperty(HANDLE RequestQueueHandle, HTTP_SERVER_PROPERTY Property, PVOID PropertyInformation, ULONG PropertyInformationLength, ULONG Reserved1, PULONG ReturnLength, PVOID Reserved2);
+ULONG WINAPI HttpQueryServerSessionProperty(HTTP_SERVER_SESSION_ID ServerSessionId, HTTP_SERVER_PROPERTY Property, PVOID PropertyInformation, ULONG PropertyInformationLength, PULONG ReturnLength);
+ULONG WINAPI HttpQueryUrlGroupProperty(HTTP_URL_GROUP_ID UrlGroupId, HTTP_SERVER_PROPERTY Property, PVOID PropertyInformation, ULONG PropertyInformationLength, PULONG ReturnLength);
+ULONG WINAPI HttpReadFragmentFromCache(HANDLE RequestQueueHandle, PCWSTR UrlPrefix, PHTTP_BYTE_RANGE ByteRange, PVOID Buffer, ULONG BufferLength, PULONG BytesRead, LPOVERLAPPED Overlapped);
+ULONG WINAPI HttpReceiveClientCertificate(HANDLE RequestQueueHandle, HTTP_CONNECTION_ID ConnectionId, ULONG Flags, PHTTP_SSL_CLIENT_CERT_INFO SslClientCertInfo, ULONG SslClientCertInfoSize, PULONG BytesReceived, LPOVERLAPPED Overlapped);
+ULONG WINAPI HttpSendResponseEntityBody(HANDLE RequestQueueHandle, HTTP_REQUEST_ID RequestId, ULONG Flags, USHORT EntityChunkCount, PHTTP_DATA_CHUNK EntityChunks, PULONG BytesSent, PVOID Reserved1, ULONG Reserved2, LPOVERLAPPED Overlapped, PHTTP_LOG_DATA LogData);
+ULONG WINAPI HttpSetRequestProperty(HANDLE RequestQueueHandle, HTTP_OPAQUE_ID Id, HTTP_REQUEST_PROPERTY PropertyId, PVOID Input, ULONG InputPropertySize, LPOVERLAPPED Overlapped);
+ULONG WINAPI HttpSetRequestQueueProperty(HANDLE RequestQueueHandle, HTTP_SERVER_PROPERTY Property, PVOID PropertyInformation, ULONG PropertyInformationLength, ULONG Reserved1, PVOID Reserved2);
+ULONG WINAPI HttpSetServerSessionProperty(HTTP_SERVER_SESSION_ID ServerSessionId, HTTP_SERVER_PROPERTY Property, PVOID PropertyInformation, ULONG PropertyInformationLength);
+ULONG WINAPI HttpUpdateServiceConfiguration(HANDLE Handle, HTTP_SERVICE_CONFIG_ID ConfigId, PVOID ConfigInfo, ULONG ConfigInfoLength, LPOVERLAPPED Overlapped);
+ULONG WINAPI HttpWaitForDemandStart(HANDLE RequestQueueHandle, LPOVERLAPPED Overlapped);
+ULONG WINAPI HttpWaitForDisconnect(HANDLE RequestQueueHandle, HTTP_CONNECTION_ID ConnectionId, LPOVERLAPPED Overlapped);
+ULONG WINAPI HttpWaitForDisconnectEx(HANDLE RequestQueueHandle, HTTP_CONNECTION_ID ConnectionId, ULONG Reserved, LPOVERLAPPED Overlapped);
 
 #ifdef __cplusplus
 }

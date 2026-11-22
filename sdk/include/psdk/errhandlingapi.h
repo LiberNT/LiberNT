@@ -44,7 +44,7 @@ extern "C" {
 BOOL WINAPI SetThreadErrorMode(DWORD dwNewMode, LPDWORD lpOldMode);
 
 /* TODO: LiberNT does not implement the functions below yet */
-void TerminateProcessOnMemoryExhaustion(SIZE_T FailedAllocationSize);
+WINBASEAPI void WINAPI TerminateProcessOnMemoryExhaustion(SIZE_T FailedAllocationSize);
 
 #ifdef __cplusplus
 }

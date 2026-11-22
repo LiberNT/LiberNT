@@ -5917,6 +5917,8 @@ typedef struct tagTRBTHUMBPOSCHANGING {
 #endif
 #if (!(defined(UNICODE)))
 #define LVN_INCREMENTALSEARCH 0xFFFFFF5E
+#else
+#define LVN_INCREMENTALSEARCH 0xFFFFFF5D
 #endif
 #define LVNI_DIRECTIONMASK 0xF00
 #define LVNI_STATEMASK 0xF
@@ -5959,6 +5961,9 @@ typedef struct tagTRBTHUMBPOSCHANGING {
 #if (!(defined(UNICODE)))
 #define TVN_ITEMCHANGED 0xFFFFFE5E
 #define TVN_ITEMCHANGING 0xFFFFFE60
+#else
+#define TVN_ITEMCHANGED 0xFFFFFE5D
+#define TVN_ITEMCHANGING 0xFFFFFE5F
 #endif
 
 #ifdef __cplusplus

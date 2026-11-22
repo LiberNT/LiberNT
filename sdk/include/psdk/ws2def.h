@@ -814,6 +814,7 @@ typedef struct addrinfoexW {
 #endif
 #ifndef SO_REUSE_UNICASTPORT
 #define SO_REUSE_UNICASTPORT 0x3007
+#endif
 
 typedef struct _SOCKET_PROCESSOR_AFFINITY {
   PROCESSOR_NUMBER Processor;
@@ -1021,4 +1022,3 @@ typedef struct addrinfoex7 *PADDRINFOEX7;
 #define _WINSOCK_DEPRECATED_BY(replacement) __declspec(deprecated("Use " replacement " instead or define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings"))
 #endif
 
-#endif

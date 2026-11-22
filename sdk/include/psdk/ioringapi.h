@@ -87,18 +87,20 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-HRESULT BuildIoRingRegisterFileHandles(HIORING ioRing, UINT32 count, const HANDLE handles[], UINT_PTR userData);
-HRESULT CloseIoRing(HIORING ioRing);
-HRESULT CreateIoRing(IORING_VERSION ioringVersion, IORING_CREATE_FLAGS flags, UINT32 submissionQueueSize, UINT32 completionQueueSize, HIORING *h);
-HRESULT GetIoRingInfo(HIORING ioRing, IORING_INFO *info);
-HRESULT PopIoRingCompletion(HIORING ioRing, IORING_CQE *cqe);
-HRESULT SetIoRingCompletionEvent(HIORING ioRing, HANDLE hEvent);
-HRESULT SubmitIoRing(HIORING ioRing, UINT32 waitOperations, UINT32 milliseconds, UINT32 *submittedEntries);
+HRESULT STDAPICALLTYPE BuildIoRingRegisterFileHandles(HIORING ioRing, UINT32 count, const HANDLE handles[], UINT_PTR userData);
+HRESULT STDAPICALLTYPE CloseIoRing(HIORING ioRing);
+HRESULT STDAPICALLTYPE CreateIoRing(IORING_VERSION ioringVersion, IORING_CREATE_FLAGS flags, UINT32 submissionQueueSize, UINT32 completionQueueSize, HIORING *h);
+HRESULT STDAPICALLTYPE GetIoRingInfo(HIORING ioRing, IORING_INFO *info);
+HRESULT STDAPICALLTYPE PopIoRingCompletion(HIORING ioRing, IORING_CQE *cqe);
+HRESULT STDAPICALLTYPE SetIoRingCompletionEvent(HIORING ioRing, HANDLE hEvent);
+HRESULT STDAPICALLTYPE SubmitIoRing(HIORING ioRing, UINT32 waitOperations, UINT32 milliseconds, UINT32 *submittedEntries);
 
 #ifdef __cplusplus
 }
 #endif
 
+
+typedef struct IORING_BUFFER_REF IORING_BUFFER_REF;
 
 struct IORING_BUFFER_REF
 {
@@ -109,6 +111,8 @@ struct IORING_BUFFER_REF
         IORING_REGISTERED_BUFFER IndexAndOffset;
     } Buffer;
 };
+
+typedef struct IORING_HANDLE_REF IORING_HANDLE_REF;
 
 struct IORING_HANDLE_REF
 {
@@ -125,12 +129,12 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-HRESULT BuildIoRingCancelRequest(HIORING ioRing, IORING_HANDLE_REF file, UINT_PTR opToCancel, UINT_PTR userData);
-HRESULT BuildIoRingFlushFile(HIORING ioRing, IORING_HANDLE_REF fileRef, FILE_FLUSH_MODE flushMode, UINT_PTR userData, IORING_SQE_FLAGS sqeFlags);
-HRESULT BuildIoRingReadFile(HIORING ioRing, IORING_HANDLE_REF fileRef, IORING_BUFFER_REF dataRef, UINT32 numberOfBytesToRead, UINT64 fileOffset, UINT_PTR userData, IORING_SQE_FLAGS sqeFlags);
-HRESULT BuildIoRingReadFileScatter(HIORING ioRing, IORING_HANDLE_REF fileRef, UINT32 segmentCount, FILE_SEGMENT_ELEMENT segmentArray[], UINT32 numberOfBytesToRead, UINT64 fileOffset, UINT_PTR userData, IORING_SQE_FLAGS sqeFlags);
-HRESULT BuildIoRingWriteFile(HIORING ioRing, IORING_HANDLE_REF fileRef, IORING_BUFFER_REF bufferRef, UINT32 numberOfBytesToWrite, UINT64 fileOffset, FILE_WRITE_FLAGS writeFlags, UINT_PTR userData, IORING_SQE_FLAGS sqeFlags);
-HRESULT BuildIoRingWriteFileGather(HIORING ioRing, IORING_HANDLE_REF fileRef, UINT32 segmentCount, FILE_SEGMENT_ELEMENT segmentArray[], UINT32 numberOfBytesToWrite, UINT64 fileOffset, FILE_WRITE_FLAGS writeFlags, UINT_PTR userData, IORING_SQE_FLAGS sqeFlags);
+HRESULT STDAPICALLTYPE BuildIoRingCancelRequest(HIORING ioRing, IORING_HANDLE_REF file, UINT_PTR opToCancel, UINT_PTR userData);
+HRESULT STDAPICALLTYPE BuildIoRingFlushFile(HIORING ioRing, IORING_HANDLE_REF fileRef, FILE_FLUSH_MODE flushMode, UINT_PTR userData, IORING_SQE_FLAGS sqeFlags);
+HRESULT STDAPICALLTYPE BuildIoRingReadFile(HIORING ioRing, IORING_HANDLE_REF fileRef, IORING_BUFFER_REF dataRef, UINT32 numberOfBytesToRead, UINT64 fileOffset, UINT_PTR userData, IORING_SQE_FLAGS sqeFlags);
+HRESULT STDAPICALLTYPE BuildIoRingReadFileScatter(HIORING ioRing, IORING_HANDLE_REF fileRef, UINT32 segmentCount, FILE_SEGMENT_ELEMENT segmentArray[], UINT32 numberOfBytesToRead, UINT64 fileOffset, UINT_PTR userData, IORING_SQE_FLAGS sqeFlags);
+HRESULT STDAPICALLTYPE BuildIoRingWriteFile(HIORING ioRing, IORING_HANDLE_REF fileRef, IORING_BUFFER_REF bufferRef, UINT32 numberOfBytesToWrite, UINT64 fileOffset, FILE_WRITE_FLAGS writeFlags, UINT_PTR userData, IORING_SQE_FLAGS sqeFlags);
+HRESULT STDAPICALLTYPE BuildIoRingWriteFileGather(HIORING ioRing, IORING_HANDLE_REF fileRef, UINT32 segmentCount, FILE_SEGMENT_ELEMENT segmentArray[], UINT32 numberOfBytesToWrite, UINT64 fileOffset, FILE_WRITE_FLAGS writeFlags, UINT_PTR userData, IORING_SQE_FLAGS sqeFlags);
 
 #ifdef __cplusplus
 }
@@ -140,32 +144,15 @@ HRESULT BuildIoRingWriteFileGather(HIORING ioRing, IORING_HANDLE_REF fileRef, UI
 
 
 
-enum IORING_OP_CODE
-{
-    IORING_OP_NOP = 0,
-    IORING_OP_READ = 1,
-    IORING_OP_REGISTER_FILES = 2,
-    IORING_OP_REGISTER_BUFFERS = 3,
-    IORING_OP_CANCEL = 4,
-    IORING_OP_WRITE = 5,
-    IORING_OP_FLUSH = 6,
-    IORING_OP_READ_SCATTER = 7,
-    IORING_OP_WRITE_GATHER = 8,
-};
 
-struct IORING_BUFFER_INFO
-{
-    void *Address;
-    UINT32 Length;
-};
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-HRESULT BuildIoRingRegisterBuffers(HIORING ioRing, UINT32 count, const IORING_BUFFER_INFO buffers[], UINT_PTR userData);
-BOOL IsIoRingOpSupported(HIORING ioRing, IORING_OP_CODE op);
+HRESULT STDAPICALLTYPE BuildIoRingRegisterBuffers(HIORING ioRing, UINT32 count, const IORING_BUFFER_INFO buffers[], UINT_PTR userData);
+BOOL STDAPICALLTYPE IsIoRingOpSupported(HIORING ioRing, IORING_OP_CODE op);
 
 #ifdef __cplusplus
 }

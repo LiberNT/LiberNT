@@ -31,7 +31,6 @@ interface ITimerSink : IUnknown
     HRESULT OnTimer([in] VARIANT vtimeAdvise);
 }
 
-
 [
     object,
     uuid(3050F360-98B5-11CF-BB82-00AA00BDCE0B),
@@ -53,7 +52,6 @@ interface ITimer : IUnknown
     HRESULT GetTime([out] VARIANT *pvtime);
 }
 
-
 [
     object,
     uuid(3050F35F-98B5-11CF-BB82-00AA00BDCE0B),
@@ -73,6 +71,8 @@ interface ITimerService : IUnknown
 
 cpp_quote("#define SID_STimerService IID_ITimerService")
 
+cpp_quote("#ifndef __ocmm_cpp_quote_1_DEFINED__")
+cpp_quote("#define __ocmm_cpp_quote_1_DEFINED__")
 cpp_quote("#ifndef E_SURFACE_DISCARDED")
 cpp_quote("#define E_SURFACE_DISCARDED 0x8000C003L")
 cpp_quote("#endif")
@@ -143,6 +143,21 @@ cpp_quote("#ifndef TIMERMODE_VISIBILITYAWARE")
 cpp_quote("#define TIMERMODE_VISIBILITYAWARE 1")
 cpp_quote("#endif")
 
+cpp_quote("#ifndef __IImageDecodeEventSink_FWD_DEFINED__")
+cpp_quote("#define __IImageDecodeEventSink_FWD_DEFINED__")
+cpp_quote("typedef interface IImageDecodeEventSink IImageDecodeEventSink;")
+cpp_quote("#endif")
+cpp_quote("")
+cpp_quote("#ifndef __IImageDecodeFilter_FWD_DEFINED__")
+cpp_quote("#define __IImageDecodeFilter_FWD_DEFINED__")
+cpp_quote("typedef interface IImageDecodeFilter IImageDecodeFilter;")
+cpp_quote("#endif")
+cpp_quote("")
+cpp_quote("#ifndef __IMapMIMEToCLSID_FWD_DEFINED__")
+cpp_quote("#define __IMapMIMEToCLSID_FWD_DEFINED__")
+cpp_quote("typedef interface IMapMIMEToCLSID IMapMIMEToCLSID;")
+cpp_quote("#endif")
+cpp_quote("")
 cpp_quote("#define BFID_INDEXED_RGB_8 BFID_RGB_8")
 cpp_quote("#define COLOR_NO_TRANSPARENT 0xFFFFFFFF")
 cpp_quote("#define SID_SDirectDraw3 IID_IDirectDraw3")
@@ -213,36 +228,11 @@ cpp_quote("    HRESULT (WINAPI *GetTime)(ITimerEx *, VARIANT *);")
 cpp_quote("    HRESULT (WINAPI *SetMode)(ITimerEx *, DWORD);")
 cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct ITimerServiceVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(ITimerService *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(ITimerService *);")
-cpp_quote("    ULONG (WINAPI *Release)(ITimerService *);")
-cpp_quote("    HRESULT (WINAPI *CreateTimer)(ITimerService *, ITimer *, ITimer **);")
-cpp_quote("    HRESULT (WINAPI *GetNamedTimer)(ITimerService *, const GUID *const , ITimer **);")
-cpp_quote("    HRESULT (WINAPI *SetNamedTimerReference)(ITimerService *, const GUID *const , ITimer *);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct ITimerSinkVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(ITimerSink *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(ITimerSink *);")
-cpp_quote("    ULONG (WINAPI *Release)(ITimerSink *);")
-cpp_quote("    HRESULT (WINAPI *OnTimer)(ITimerSink *, VARIANT);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct ITimerVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(ITimer *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(ITimer *);")
-cpp_quote("    ULONG (WINAPI *Release)(ITimer *);")
-cpp_quote("    HRESULT (WINAPI *Advise)(ITimer *, VARIANT, VARIANT, VARIANT, DWORD, ITimerSink *, DWORD *);")
-cpp_quote("    HRESULT (WINAPI *Unadvise)(ITimer *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *Freeze)(ITimer *, BOOL);")
-cpp_quote("    HRESULT (WINAPI *GetTime)(ITimer *, VARIANT *);")
-cpp_quote("};")
 
 cpp_quote("#define BFID_INDEXED_RGB_4 BFID_RGB_4")
 
 cpp_quote("#define BFID_INDEXED_RGB_1 BFID_MONOCHROME")
+cpp_quote("#endif")
 

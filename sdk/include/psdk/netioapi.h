@@ -699,7 +699,7 @@ typedef struct _MIB_MULTICASTIPADDRESS_TABLE {
 #define DNS_ENCRYPTION_POLICY_NOT_CONFIGURED 4
 #define DNS_ENCRYPTION_POLICY_REQUIRED 0x20
 #define IF_NAMESIZE 0x100
-#define NETIO_PULONG 0
+#define NETIO_PULONG PULONG
 
 struct _MIB_IP_NETWORK_CONNECTION_BANDWIDTH_ESTIMATES
 {
@@ -721,47 +721,47 @@ typedef void (*PTEREDO_PORT_CHANGE_CALLBACK)(PVOID, USHORT, MIB_NOTIFICATION_TYP
 extern "C" {
 #endif
 
-NTSTATUS WINAPI CreateSortedAddressPairs(const PSOCKADDR_IN6 SourceAddressList, ULONG SourceAddressCount, const PSOCKADDR_IN6 DestinationAddressList, ULONG DestinationAddressCount, ULONG AddressSortOptions, PSOCKADDR_IN6_PAIR *SortedAddressPairList, ULONG *SortedAddressPairCount);
-NTSTATUS WINAPI SetInterfaceDnsSettings(GUID Interface, const DNS_INTERFACE_SETTINGS *Settings);
+NETIOAPI_API CreateSortedAddressPairs(const PSOCKADDR_IN6 SourceAddressList, ULONG SourceAddressCount, const PSOCKADDR_IN6 DestinationAddressList, ULONG DestinationAddressCount, ULONG AddressSortOptions, PSOCKADDR_IN6_PAIR *SortedAddressPairList, ULONG *SortedAddressPairCount);
+NETIOAPI_API SetInterfaceDnsSettings(GUID Interface, const DNS_INTERFACE_SETTINGS *Settings);
 
 /* TODO: LiberNT does not implement the functions below yet */
-NTSTATUS WINAPI ConvertCompartmentGuidToId(const GUID *CompartmentGuid, PNET_IF_COMPARTMENT_ID CompartmentId);
-NTSTATUS WINAPI ConvertCompartmentIdToGuid(NET_IF_COMPARTMENT_ID CompartmentId, GUID *CompartmentGuid);
-NTSTATUS WINAPI ConvertIpv4MaskToLength(ULONG Mask, PUINT8 MaskLength);
-NTSTATUS WINAPI CreateAnycastIpAddressEntry(const MIB_ANYCASTIPADDRESS_ROW *Row);
-NTSTATUS WINAPI CreateFlVirtualInterface(const MIB_FL_VIRTUAL_INTERFACE_ROW *Row);
-NTSTATUS WINAPI DeleteAnycastIpAddressEntry(const MIB_ANYCASTIPADDRESS_ROW *Row);
-NTSTATUS WINAPI DeleteFlVirtualInterface(const MIB_FL_VIRTUAL_INTERFACE_ROW *Row);
+NETIOAPI_API ConvertCompartmentGuidToId(const GUID *CompartmentGuid, PNET_IF_COMPARTMENT_ID CompartmentId);
+NETIOAPI_API ConvertCompartmentIdToGuid(NET_IF_COMPARTMENT_ID CompartmentId, GUID *CompartmentGuid);
+NETIOAPI_API ConvertIpv4MaskToLength(ULONG Mask, PUINT8 MaskLength);
+NETIOAPI_API CreateAnycastIpAddressEntry(const MIB_ANYCASTIPADDRESS_ROW *Row);
+NETIOAPI_API CreateFlVirtualInterface(const MIB_FL_VIRTUAL_INTERFACE_ROW *Row);
+NETIOAPI_API DeleteAnycastIpAddressEntry(const MIB_ANYCASTIPADDRESS_ROW *Row);
+NETIOAPI_API DeleteFlVirtualInterface(const MIB_FL_VIRTUAL_INTERFACE_ROW *Row);
 void FreeDnsSettings(DNS_SETTINGS *Settings);
 void FreeInterfaceDnsSettings(DNS_INTERFACE_SETTINGS *Settings);
-NTSTATUS WINAPI GetAnycastIpAddressEntry(PMIB_ANYCASTIPADDRESS_ROW Row);
+NETIOAPI_API GetAnycastIpAddressEntry(PMIB_ANYCASTIPADDRESS_ROW Row);
 void GetCurrentThreadCompartmentScope(PNET_IF_COMPARTMENT_SCOPE CompartmentScope, PNET_IF_COMPARTMENT_ID CompartmentId);
 NET_IF_COMPARTMENT_ID GetDefaultCompartmentId(void);
-NTSTATUS WINAPI GetDnsSettings(DNS_SETTINGS *Settings);
-NTSTATUS WINAPI GetFlVirtualInterface(PMIB_FL_VIRTUAL_INTERFACE_ROW Row);
-NTSTATUS WINAPI GetFlVirtualInterfaceTable(ADDRESS_FAMILY Family, PMIB_FL_VIRTUAL_INTERFACE_TABLE *Table);
-NTSTATUS WINAPI GetIfStackTable(PMIB_IFSTACK_TABLE *Table);
-NTSTATUS WINAPI GetInterfaceDnsSettings(GUID Interface, DNS_INTERFACE_SETTINGS *Settings);
-NTSTATUS WINAPI GetInvertedIfStackTable(PMIB_INVERTEDIFSTACK_TABLE *Table);
-NTSTATUS WINAPI GetIpNetworkConnectionBandwidthEstimates(NET_IFINDEX InterfaceIndex, ADDRESS_FAMILY AddressFamily, PMIB_IP_NETWORK_CONNECTION_BANDWIDTH_ESTIMATES BandwidthEstimates);
+NETIOAPI_API GetDnsSettings(DNS_SETTINGS *Settings);
+NETIOAPI_API GetFlVirtualInterface(PMIB_FL_VIRTUAL_INTERFACE_ROW Row);
+NETIOAPI_API GetFlVirtualInterfaceTable(ADDRESS_FAMILY Family, PMIB_FL_VIRTUAL_INTERFACE_TABLE *Table);
+NETIOAPI_API GetIfStackTable(PMIB_IFSTACK_TABLE *Table);
+NETIOAPI_API GetInterfaceDnsSettings(GUID Interface, DNS_INTERFACE_SETTINGS *Settings);
+NETIOAPI_API GetInvertedIfStackTable(PMIB_INVERTEDIFSTACK_TABLE *Table);
+NETIOAPI_API GetIpNetworkConnectionBandwidthEstimates(NET_IFINDEX InterfaceIndex, ADDRESS_FAMILY AddressFamily, PMIB_IP_NETWORK_CONNECTION_BANDWIDTH_ESTIMATES BandwidthEstimates);
 NET_IF_COMPARTMENT_ID GetJobCompartmentId(HANDLE JobHandle);
-NTSTATUS WINAPI GetMulticastIpAddressEntry(PMIB_MULTICASTIPADDRESS_ROW Row);
-NTSTATUS WINAPI GetMulticastIpAddressTable(ADDRESS_FAMILY Family, PMIB_MULTICASTIPADDRESS_TABLE *Table);
-NTSTATUS WINAPI GetNetworkConnectivityHint(NL_NETWORK_CONNECTIVITY_HINT *ConnectivityHint);
-NTSTATUS WINAPI GetNetworkConnectivityHintForInterface(NET_IFINDEX InterfaceIndex, NL_NETWORK_CONNECTIVITY_HINT *ConnectivityHint);
-NTSTATUS WINAPI GetNetworkInformation(const NET_IF_NETWORK_GUID *NetworkGuid, PNET_IF_COMPARTMENT_ID CompartmentId, PULONG SiteId, PWCHAR NetworkName, ULONG Length);
+NETIOAPI_API GetMulticastIpAddressEntry(PMIB_MULTICASTIPADDRESS_ROW Row);
+NETIOAPI_API GetMulticastIpAddressTable(ADDRESS_FAMILY Family, PMIB_MULTICASTIPADDRESS_TABLE *Table);
+NETIOAPI_API GetNetworkConnectivityHint(NL_NETWORK_CONNECTIVITY_HINT *ConnectivityHint);
+NETIOAPI_API GetNetworkConnectivityHintForInterface(NET_IFINDEX InterfaceIndex, NL_NETWORK_CONNECTIVITY_HINT *ConnectivityHint);
+NETIOAPI_API GetNetworkInformation(const NET_IF_NETWORK_GUID *NetworkGuid, PNET_IF_COMPARTMENT_ID CompartmentId, PULONG SiteId, PWCHAR NetworkName, ULONG Length);
 NET_IF_COMPARTMENT_ID GetSessionCompartmentId(ULONG SessionId);
-NTSTATUS WINAPI GetTeredoPort(USHORT *Port);
+NETIOAPI_API GetTeredoPort(USHORT *Port);
 void InitializeFlVirtualInterfaceEntry(PMIB_FL_VIRTUAL_INTERFACE_ROW Row);
-NTSTATUS WINAPI NotifyNetworkConnectivityHintChange(PNETWORK_CONNECTIVITY_HINT_CHANGE_CALLBACK Callback, PVOID CallerContext, BOOLEAN InitialNotification, PHANDLE NotificationHandle);
-NTSTATUS WINAPI NotifyStableUnicastIpAddressTable(ADDRESS_FAMILY Family, PMIB_UNICASTIPADDRESS_TABLE *Table, PSTABLE_UNICAST_IPADDRESS_TABLE_CALLBACK CallerCallback, PVOID CallerContext, HANDLE *NotificationHandle);
-NTSTATUS WINAPI NotifyTeredoPortChange(PTEREDO_PORT_CHANGE_CALLBACK Callback, PVOID CallerContext, BOOLEAN InitialNotification, HANDLE *NotificationHandle);
-NTSTATUS WINAPI SetCurrentThreadCompartmentScope(NET_IF_COMPARTMENT_SCOPE CompartmentScope);
-NTSTATUS WINAPI SetDnsSettings(const DNS_SETTINGS *Settings);
-NTSTATUS WINAPI SetFlVirtualInterface(const MIB_FL_VIRTUAL_INTERFACE_ROW *Row);
-NTSTATUS WINAPI SetJobCompartmentId(HANDLE JobHandle, NET_IF_COMPARTMENT_ID CompartmentId);
-NTSTATUS WINAPI SetNetworkInformation(const NET_IF_NETWORK_GUID *NetworkGuid, NET_IF_COMPARTMENT_ID CompartmentId, const WCHAR *NetworkName);
-NTSTATUS WINAPI SetSessionCompartmentId(ULONG SessionId, NET_IF_COMPARTMENT_ID CompartmentId);
+NETIOAPI_API NotifyNetworkConnectivityHintChange(PNETWORK_CONNECTIVITY_HINT_CHANGE_CALLBACK Callback, PVOID CallerContext, BOOLEAN InitialNotification, PHANDLE NotificationHandle);
+NETIOAPI_API NotifyStableUnicastIpAddressTable(ADDRESS_FAMILY Family, PMIB_UNICASTIPADDRESS_TABLE *Table, PSTABLE_UNICAST_IPADDRESS_TABLE_CALLBACK CallerCallback, PVOID CallerContext, HANDLE *NotificationHandle);
+NETIOAPI_API NotifyTeredoPortChange(PTEREDO_PORT_CHANGE_CALLBACK Callback, PVOID CallerContext, BOOLEAN InitialNotification, HANDLE *NotificationHandle);
+NETIOAPI_API SetCurrentThreadCompartmentScope(NET_IF_COMPARTMENT_SCOPE CompartmentScope);
+NETIOAPI_API SetDnsSettings(const DNS_SETTINGS *Settings);
+NETIOAPI_API SetFlVirtualInterface(const MIB_FL_VIRTUAL_INTERFACE_ROW *Row);
+NETIOAPI_API SetJobCompartmentId(HANDLE JobHandle, NET_IF_COMPARTMENT_ID CompartmentId);
+NETIOAPI_API SetNetworkInformation(const NET_IF_NETWORK_GUID *NetworkGuid, NET_IF_COMPARTMENT_ID CompartmentId, const WCHAR *NetworkName);
+NETIOAPI_API SetSessionCompartmentId(ULONG SessionId, NET_IF_COMPARTMENT_ID CompartmentId);
 
 #ifdef __cplusplus
 }
@@ -773,7 +773,7 @@ NTSTATUS WINAPI SetSessionCompartmentId(ULONG SessionId, NET_IF_COMPARTMENT_ID C
 extern "C" {
 #endif
 
-NTSTATUS WINAPI ResolveIpNetEntry2(PMIB_IPNET_ROW2 Row, const SOCKADDR_INET *SourceAddress);
+NETIOAPI_API ResolveIpNetEntry2(PMIB_IPNET_ROW2 Row, const SOCKADDR_INET *SourceAddress);
 
 #ifdef __cplusplus
 }

@@ -146,6 +146,8 @@ typedef struct _avioldindex
     } aIndex[];
 } AVIOLDINDEX;
 
+#ifndef TIMECODE_DEFINED
+#define TIMECODE_DEFINED
 typedef union _timecode
 {
     struct
@@ -156,6 +158,18 @@ typedef union _timecode
     } DUMMYSTRUCTNAME;
     DWORDLONG qw;
 } TIMECODE;
+
+typedef struct tagTIMECODE_SAMPLE
+{
+    LONGLONG qwTick;
+    TIMECODE timecode;
+    DWORD dwUser;
+    DWORD dwFlags;
+} TIMECODE_SAMPLE;
+
+typedef TIMECODE *PTIMECODE;
+typedef TIMECODE_SAMPLE *PTIMECODE_SAMPLE;
+#endif
 
 #define TIMECODE_RATE_30DROP 0
 
@@ -330,6 +344,7 @@ typedef struct _avifieldindex_chunk {
 
 #pragma pack(pop)
 
+#ifndef WINE_NO_UNICODE_MACROS
 #pragma pack(push, 2)
 struct _avitcdlindex
 {
@@ -345,6 +360,7 @@ struct _avitcdlindex
     DWORD adwTrailingFill[3512];
 };
 #pragma pack(pop)
+#endif
 
 #pragma pack(push, 2)
 struct _avitcdlindex_entry

@@ -27,7 +27,6 @@
 
 #ifndef _KRPCENV_
 #define _KRPCENV_ 1
-
 #endif
 
 #include <fwpstypes.h>
@@ -1753,10 +1752,10 @@ FwpsCompleteOperation0(
 
 #if ((NTDDI_VERSION >= NTDDI_WIN7))
 
+#define FWPS_CLASSIFY_FLAG_REAUTHORIZE_IF_MODIFIED_BY_OTHERS   0x00000001
+
 _IRQL_requires_max_(DISPATCH_LEVEL)
 NTSTATUS
-
-#define FWPS_CLASSIFY_FLAG_REAUTHORIZE_IF_MODIFIED_BY_OTHERS   0x00000001
 NTAPI
 FwpsAcquireClassifyHandle0(
    _In_ void* classifyContext,
@@ -1942,6 +1941,8 @@ FwpsInjectForwardAsync0(
    _In_opt_ HANDLE completionContext
    );
 
+#if ((NTDDI_VERSION >= NTDDI_WIN6SP1))
+
 _IRQL_requires_max_(DISPATCH_LEVEL)
 NTSTATUS
 NTAPI
@@ -1960,8 +1961,6 @@ FwpsConstructIpHeaderForTransportPacket0(
    _In_opt_ IF_INDEX interfaceIndex,
    _In_opt_ IF_INDEX subInterfaceIndex
    );
-
-#if ((NTDDI_VERSION >= NTDDI_WIN6SP1))
 
 #endif
 #if ((NTDDI_VERSION >= NTDDI_WIN7))
@@ -2123,8 +2122,6 @@ FwpsQueryPacketInjectionState0(
 
 #if ((NTDDI_VERSION >= NTDDI_WIN8))
 
-_IRQL_requires_(PASSIVE_LEVEL)
-
 typedef enum FWPS_CONNECTION_REDIRECT_STATE_
 {
    FWPS_CONNECTION_NOT_REDIRECTED,
@@ -2133,6 +2130,8 @@ typedef enum FWPS_CONNECTION_REDIRECT_STATE_
    FWPS_CONNECTION_PREVIOUSLY_REDIRECTED_BY_SELF,
    FWPS_CONNECTION_REDIRECT_STATE_MAX
 } FWPS_CONNECTION_REDIRECT_STATE;
+
+_IRQL_requires_(PASSIVE_LEVEL)
 NTSTATUS
 NTAPI
 FwpsRedirectHandleCreate0(
@@ -2160,8 +2159,6 @@ FwpsQueryConnectionRedirectState0(
 
 typedef enum FWPS_VSWITCH_EVENT_TYPE_
 {
-#endif
-
    FWPS_VSWITCH_EVENT_VSWITCH_NONE,
    FWPS_VSWITCH_EVENT_VSWITCH_CREATE,
    FWPS_VSWITCH_EVENT_VSWITCH_DELETE,
@@ -2193,6 +2190,8 @@ typedef NTSTATUS (NTAPI *FWPS_VSWITCH_PORT_EVENT_CALLBACK0)(
                             _In_ const NDIS_SWITCH_PARAMETERS* vSwitch,
                             _In_ const NDIS_SWITCH_PORT_PARAMETERS* vSwitchPort
                             );
+
+#endif
 #endif
 
 typedef struct FWPS_STREAM_DATA_OFFSET0_
@@ -2217,13 +2216,21 @@ typedef struct FWPS_STREAM_DATA_OFFSET0_
 
 #define FWPS_STREAM_FLAG_SEND                   (0x00010000)
 
-#define FWPS_STREAM_FLAG_SEND_ABORT             (0x00100000)
-
-#define FWPS_STREAM_FLAG_SEND_DISCONNECT        (0x00080000)
-
 #define FWPS_STREAM_FLAG_SEND_EXPEDITED         (0x00020000)
 
 #define FWPS_STREAM_FLAG_SEND_NODELAY           (0x00040000)
+
+#define FWPS_STREAM_FLAG_SEND_DISCONNECT        (0x00080000)
+
+#define FWPS_STREAM_FLAG_SEND_ABORT             (0x00100000)
+
+typedef struct FWPS_STREAM_DATA0_
+{
+   UINT32 flags;
+   FWPS_STREAM_DATA_OFFSET0 dataOffset;
+   SIZE_T dataLength;
+   NET_BUFFER_LIST* netBufferListChain;
+} FWPS_STREAM_DATA0;
 
 typedef enum FWPS_STREAM_ACTION_TYPE_
 {
@@ -2236,14 +2243,6 @@ typedef enum FWPS_STREAM_ACTION_TYPE_
 #endif
    FWPS_STREAM_ACTION_TYPE_MAX
 } FWPS_STREAM_ACTION_TYPE;
-
-typedef struct FWPS_STREAM_DATA0_
-{
-   UINT32 flags;
-   FWPS_STREAM_DATA_OFFSET0 dataOffset;
-   SIZE_T dataLength;
-   NET_BUFFER_LIST* netBufferListChain;
-} FWPS_STREAM_DATA0;
 
 typedef struct FWPS_STREAM_CALLOUT_IO_PACKET0_
 {
@@ -2400,8 +2399,6 @@ FwpsClassifyOptionSet0(
    _In_ const FWP_VALUE0* newValue
    );
 
-_IRQL_requires_max_(DISPATCH_LEVEL)
-
 typedef struct FWPS_TRANSPORT_SEND_PARAMS0_
 {
    UCHAR* remoteAddress;
@@ -2409,6 +2406,8 @@ typedef struct FWPS_TRANSPORT_SEND_PARAMS0_
    WSACMSGHDR* controlData OPTIONAL;
    ULONG controlDataLength OPTIONAL;
 } FWPS_TRANSPORT_SEND_PARAMS0;
+
+_IRQL_requires_max_(DISPATCH_LEVEL)
 NTSTATUS
 NTAPI
 FwpsAllocateDeepCloneNetBufferList0(
@@ -2418,9 +2417,9 @@ FwpsAllocateDeepCloneNetBufferList0(
    _Outptr_ NET_BUFFER_LIST** netBufferList
    );
 
-_IRQL_requires_max_(DISPATCH_LEVEL)
-
 #if ((NTDDI_VERSION >= NTDDI_WIN6SP1))
+
+_IRQL_requires_max_(DISPATCH_LEVEL)
 NTSTATUS
 NTAPI
 FwpsReassembleForwardFragmentGroup0(
@@ -2545,6 +2544,8 @@ FwpsNetBufferListAssociateContext1(
    _In_  UINT32 flags
    );
 
+#endif
+
 _IRQL_requires_max_(DISPATCH_LEVEL)
 NTSTATUS
 NTAPI
@@ -2555,8 +2556,6 @@ FwpsNetBufferListRetrieveContext0(
    _In_ UINT32 flags,
    _Out_ UINT64* context
    );
-
-#endif
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 NTSTATUS
@@ -2665,6 +2664,9 @@ FwpsvSwitchNotifyComplete0(
    _Reserved_ void* reserved
    );
 
+#endif
+#endif
+
 _IRQL_requires_max_(DISPATCH_LEVEL)
 NTSTATUS
 NTAPI
@@ -2674,9 +2676,6 @@ FwpsStreamContinue0(
     _In_ UINT16 layerId,
     _In_ UINT32 streamFlags
     );
-
-#endif
-#endif
 
 #if ((NTDDI_VERSION >= NTDDI_WINTHRESHOLD))
 
@@ -2808,6 +2807,7 @@ FwpsAleEndpointSetSecurityInfo0(
 #endif
 #ifndef FWPS_SEND_INJECT_PRESERVE_IPID
 #define FWPS_SEND_INJECT_PRESERVE_IPID 0x00000001
+#endif
 
 typedef enum FWPS_FIELDS_ALE_AUTH_LISTEN_V6_ {
     FWPS_FIELD_ALE_AUTH_LISTEN_V6_ALE_APP_ID = 0,
@@ -3255,7 +3255,7 @@ typedef enum FWPS_FIELDS_STREAM_V6_ {
 #define FWPS_FIELD_OUTBOUND_TRANSPORT_V4_ICMP_TYPE 4
 #define FWPS_FIELD_OUTBOUND_TRANSPORT_V6_ICMP_CODE 5
 #define FWPS_FIELD_OUTBOUND_TRANSPORT_V6_ICMP_TYPE 4
-#define FWPS_NET_BUFFER_LIST_EVENT_TYPE 0
+#define FWPS_NET_BUFFER_LIST_EVENT_TYPE FWPS_NET_BUFFER_LIST_EVENT_TYPE0
 
 typedef void (NTAPI *FWPS_CALLOUT_BOOTTIME_CALLOUT_DELETE_NOTIFY_FN0)(UINT32);
 
@@ -3268,4 +3268,3 @@ struct _FWPS_CONNECTION_POLICY0
 
 typedef struct _FWPS_CONNECTION_POLICY0 FWPS_CONNECTION_POLICY0;
 
-#endif

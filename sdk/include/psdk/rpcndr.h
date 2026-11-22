@@ -334,7 +334,7 @@ typedef struct _USER_MARSHAL_ROUTINE_QUADRUPLE
 	( ( (DWORD)'U' << 24 ) | ( (DWORD)'S' << 16 ) | \
 	  ( (DWORD)'R' << 8  ) | ( (DWORD)'C'       ) )
 
-typedef enum
+typedef enum _USER_MARSHAL_CB_TYPE
 {
     USER_MARSHAL_CB_BUFFER_SIZE,
     USER_MARSHAL_CB_MARSHALL,
@@ -913,7 +913,7 @@ typedef unsigned short *PPARAM_OFFSETTABLE;
 
 typedef void *RPC_CLIENT_ALLOC(size_t);
 
-typedef void RPC_CLIENT_FREE(void *);
+typedef void __RPC_API RPC_CLIENT_FREE(void *);
 
 typedef void *RPC_SS_THREAD_HANDLE;
 
@@ -1006,54 +1006,54 @@ unsigned long WINAPI NdrXmitOrRepAsMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORM
 unsigned char * WINAPI NdrXmitOrRepAsUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
 
 /* TODO: LiberNT does not implement the functions below yet */
-void * I_RpcDefaultAllocate(handle_t bh, size_t size, void *(*RealAlloc)(size_t));
-void I_RpcDefaultFree(handle_t bh, void *, void (*RealFree)(void *));
-void Ndr64AsyncServerCall(PRPC_MESSAGE pRpcMsg);
-void Ndr64AsyncServerCall64(PRPC_MESSAGE pRpcMsg);
-void Ndr64AsyncServerCallAll(PRPC_MESSAGE pRpcMsg);
-long Ndr64AsyncStubCall(struct IRpcStubBuffer *pThis, struct IRpcChannelBuffer *pChannel, PRPC_MESSAGE pRpcMsg, unsigned long *pdwStubPhase);
+void *__RPC_USER I_RpcDefaultAllocate(handle_t bh, size_t size, void *(*RealAlloc)(size_t));
+void __RPC_USER I_RpcDefaultFree(handle_t bh, void *, void (*RealFree)(void *));
+RPCRTAPI void RPC_ENTRY Ndr64AsyncServerCall(PRPC_MESSAGE pRpcMsg);
+RPCRTAPI void RPC_ENTRY Ndr64AsyncServerCall64(PRPC_MESSAGE pRpcMsg);
+RPCRTAPI void RPC_ENTRY Ndr64AsyncServerCallAll(PRPC_MESSAGE pRpcMsg);
+RPCRTAPI long RPC_ENTRY Ndr64AsyncStubCall(struct IRpcStubBuffer *pThis, struct IRpcChannelBuffer *pChannel, PRPC_MESSAGE pRpcMsg, unsigned long *pdwStubPhase);
 CLIENT_CALL_RETURN Ndr64DcomAsyncClientCall(MIDL_STUBLESS_PROXY_INFO *pProxyInfo, unsigned long nProcNum, void *pReturnValue, ...);
-long Ndr64DcomAsyncStubCall(struct IRpcStubBuffer *pThis, struct IRpcChannelBuffer *pChannel, PRPC_MESSAGE pRpcMsg, unsigned long *pdwStubPhase);
-void NDRCContextUnmarshall2(NDR_CCONTEXT *pCContext, RPC_BINDING_HANDLE hBinding, void *pBuff, unsigned long DataRepresentation);
+RPCRTAPI long RPC_ENTRY Ndr64DcomAsyncStubCall(struct IRpcStubBuffer *pThis, struct IRpcChannelBuffer *pChannel, PRPC_MESSAGE pRpcMsg, unsigned long *pdwStubPhase);
+RPCRTAPI void RPC_ENTRY NDRCContextUnmarshall2(NDR_CCONTEXT *pCContext, RPC_BINDING_HANDLE hBinding, void *pBuff, unsigned long DataRepresentation);
 RPC_STATUS WINAPI NdrClientGetSupportedSyntaxes(RPC_CLIENT_INTERFACE *pInf, unsigned long *pCount, MIDL_SYNTAX_INFO **pArr);
-unsigned long NdrContextHandleMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+RPCRTAPI unsigned long RPC_ENTRY NdrContextHandleMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
 RPC_STATUS WINAPI NdrCreateServerInterfaceFromStub(struct IRpcStubBuffer *pStub, RPC_SERVER_INTERFACE *pServerIf);
-void NdrCsArrayBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
-void NdrCsArrayFree(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
-unsigned char * NdrCsArrayMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
-unsigned long NdrCsArrayMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
-unsigned char * NdrCsArrayUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
-void NdrCsTagBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
-unsigned char * NdrCsTagMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
-unsigned long NdrCsTagMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
-unsigned char * NdrCsTagUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
-void NdrPartialIgnoreClientBufferSize(PMIDL_STUB_MESSAGE pStubMsg, void *pMemory);
-void NdrPartialIgnoreClientMarshall(PMIDL_STUB_MESSAGE pStubMsg, void *pMemory);
-void NdrPartialIgnoreServerInitialize(PMIDL_STUB_MESSAGE pStubMsg, void **ppMemory, PFORMAT_STRING pFormat);
-void NdrPartialIgnoreServerUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, void **ppMemory);
-void NdrServerCall3(PRPC_MESSAGE pRpcMsg);
-void NdrServerCallNdr64(PRPC_MESSAGE pRpcMsg);
+RPCRTAPI void RPC_ENTRY NdrCsArrayBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+RPCRTAPI void RPC_ENTRY NdrCsArrayFree(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+RPCRTAPI unsigned char *RPC_ENTRY NdrCsArrayMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+RPCRTAPI unsigned long RPC_ENTRY NdrCsArrayMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+RPCRTAPI unsigned char *RPC_ENTRY NdrCsArrayUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
+RPCRTAPI void RPC_ENTRY NdrCsTagBufferSize(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+RPCRTAPI unsigned char *RPC_ENTRY NdrCsTagMarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char *pMemory, PFORMAT_STRING pFormat);
+RPCRTAPI unsigned long RPC_ENTRY NdrCsTagMemorySize(PMIDL_STUB_MESSAGE pStubMsg, PFORMAT_STRING pFormat);
+RPCRTAPI unsigned char *RPC_ENTRY NdrCsTagUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, unsigned char **ppMemory, PFORMAT_STRING pFormat, unsigned char fMustAlloc);
+RPCRTAPI void RPC_ENTRY NdrPartialIgnoreClientBufferSize(PMIDL_STUB_MESSAGE pStubMsg, void *pMemory);
+RPCRTAPI void RPC_ENTRY NdrPartialIgnoreClientMarshall(PMIDL_STUB_MESSAGE pStubMsg, void *pMemory);
+RPCRTAPI void RPC_ENTRY NdrPartialIgnoreServerInitialize(PMIDL_STUB_MESSAGE pStubMsg, void **ppMemory, PFORMAT_STRING pFormat);
+RPCRTAPI void RPC_ENTRY NdrPartialIgnoreServerUnmarshall(PMIDL_STUB_MESSAGE pStubMsg, void **ppMemory);
+RPCRTAPI void RPC_ENTRY NdrServerCall3(PRPC_MESSAGE pRpcMsg);
+RPCRTAPI void RPC_ENTRY NdrServerCallNdr64(PRPC_MESSAGE pRpcMsg);
 RPC_STATUS WINAPI NdrServerGetSupportedSyntaxes(RPC_SERVER_INTERFACE *pInf, unsigned long *pCount, MIDL_SYNTAX_INFO **pArr, unsigned long *pPreferSyntaxIndex);
-void NdrServerInitializePartial(PRPC_MESSAGE pRpcMsg, PMIDL_STUB_MESSAGE pStubMsg, PMIDL_STUB_DESC pStubDescriptor, unsigned long RequestedBufferSize);
-long NdrStubCall3(void *pThis, void *pChannel, PRPC_MESSAGE pRpcMsg, unsigned long *pdwStubPhase);
-void RpcCsGetTags(RPC_BINDING_HANDLE hBinding, int fServerSide, unsigned long *pulSendingTag, unsigned long *pulDesiredReceivingTag, unsigned long *pulReceivingTag, error_status_t *pStatus);
-void * RpcSmAllocate(size_t Size, RPC_STATUS *pStatus);
-RPC_STATUS RpcSmClientFree(void *pNodeToFree);
-RPC_STATUS RpcSmDisableAllocate(void);
-RPC_STATUS RpcSmEnableAllocate(void);
-RPC_STATUS RpcSmFree(void *NodeToFree);
-RPC_SS_THREAD_HANDLE RpcSmGetThreadHandle(RPC_STATUS *pStatus);
-RPC_STATUS RpcSmSetClientAllocFree(RPC_CLIENT_ALLOC *ClientAlloc, RPC_CLIENT_FREE *ClientFree);
-RPC_STATUS RpcSmSetThreadHandle(RPC_SS_THREAD_HANDLE Id);
-RPC_STATUS RpcSmSwapClientAllocFree(RPC_CLIENT_ALLOC *ClientAlloc, RPC_CLIENT_FREE *ClientFree, RPC_CLIENT_ALLOC **OldClientAlloc, RPC_CLIENT_FREE **OldClientFree);
-void * RpcSsAllocate(size_t Size);
-void RpcSsDisableAllocate(void);
-void RpcSsEnableAllocate(void);
-void RpcSsFree(void *NodeToFree);
-RPC_SS_THREAD_HANDLE RpcSsGetThreadHandle(void);
-void RpcSsSetClientAllocFree(RPC_CLIENT_ALLOC *ClientAlloc, RPC_CLIENT_FREE *ClientFree);
-void RpcSsSetThreadHandle(RPC_SS_THREAD_HANDLE Id);
-void RpcSsSwapClientAllocFree(RPC_CLIENT_ALLOC *ClientAlloc, RPC_CLIENT_FREE *ClientFree, RPC_CLIENT_ALLOC **OldClientAlloc, RPC_CLIENT_FREE **OldClientFree);
+RPCRTAPI void RPC_ENTRY NdrServerInitializePartial(PRPC_MESSAGE pRpcMsg, PMIDL_STUB_MESSAGE pStubMsg, PMIDL_STUB_DESC pStubDescriptor, unsigned long RequestedBufferSize);
+RPCRTAPI long RPC_ENTRY NdrStubCall3(void *pThis, void *pChannel, PRPC_MESSAGE pRpcMsg, unsigned long *pdwStubPhase);
+void __RPC_USER RpcCsGetTags(RPC_BINDING_HANDLE hBinding, int fServerSide, unsigned long *pulSendingTag, unsigned long *pulDesiredReceivingTag, unsigned long *pulReceivingTag, error_status_t *pStatus);
+RPCRTAPI void *RPC_ENTRY RpcSmAllocate(size_t Size, RPC_STATUS *pStatus);
+RPCRTAPI RPC_STATUS RPC_ENTRY RpcSmClientFree(void *pNodeToFree);
+RPCRTAPI RPC_STATUS RPC_ENTRY RpcSmDisableAllocate(void);
+RPCRTAPI RPC_STATUS RPC_ENTRY RpcSmEnableAllocate(void);
+RPCRTAPI RPC_STATUS RPC_ENTRY RpcSmFree(void *NodeToFree);
+RPCRTAPI RPC_SS_THREAD_HANDLE RPC_ENTRY RpcSmGetThreadHandle(RPC_STATUS *pStatus);
+RPCRTAPI RPC_STATUS RPC_ENTRY RpcSmSetClientAllocFree(RPC_CLIENT_ALLOC *ClientAlloc, RPC_CLIENT_FREE *ClientFree);
+RPCRTAPI RPC_STATUS RPC_ENTRY RpcSmSetThreadHandle(RPC_SS_THREAD_HANDLE Id);
+RPCRTAPI RPC_STATUS RPC_ENTRY RpcSmSwapClientAllocFree(RPC_CLIENT_ALLOC *ClientAlloc, RPC_CLIENT_FREE *ClientFree, RPC_CLIENT_ALLOC **OldClientAlloc, RPC_CLIENT_FREE **OldClientFree);
+RPCRTAPI void *RPC_ENTRY RpcSsAllocate(size_t Size);
+RPCRTAPI void RPC_ENTRY RpcSsDisableAllocate(void);
+RPCRTAPI void RPC_ENTRY RpcSsEnableAllocate(void);
+RPCRTAPI void RPC_ENTRY RpcSsFree(void *NodeToFree);
+RPCRTAPI RPC_SS_THREAD_HANDLE RPC_ENTRY RpcSsGetThreadHandle(void);
+RPCRTAPI void RPC_ENTRY RpcSsSetClientAllocFree(RPC_CLIENT_ALLOC *ClientAlloc, RPC_CLIENT_FREE *ClientFree);
+RPCRTAPI void RPC_ENTRY RpcSsSetThreadHandle(RPC_SS_THREAD_HANDLE Id);
+RPCRTAPI void RPC_ENTRY RpcSsSwapClientAllocFree(RPC_CLIENT_ALLOC *ClientAlloc, RPC_CLIENT_FREE *ClientFree, RPC_CLIENT_ALLOC **OldClientAlloc, RPC_CLIENT_FREE **OldClientFree);
 void WINAPI RpcUserFree(handle_t AsyncHandle, void *pBuffer);
 
 #ifdef __cplusplus
@@ -1061,10 +1061,6 @@ void WINAPI RpcUserFree(handle_t AsyncHandle, void *pBuffer);
 #endif
 
 
-enum _USER_MARSHAL_CB_TYPE
-{
-
-};
 
 
 struct _MIDL_INTERCEPTION_INFO

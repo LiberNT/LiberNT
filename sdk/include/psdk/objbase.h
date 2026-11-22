@@ -1111,16 +1111,22 @@ typedef enum tagCOMSD {
 extern "C" {
 #endif
 
+/* TODO: Windows includes urlmon.h here; only the interface used below is declared */
+#ifndef __IBindStatusCallback_FWD_DEFINED__
+#define __IBindStatusCallback_FWD_DEFINED__
+typedef interface IBindStatusCallback IBindStatusCallback;
+#endif
+
 /* TODO: LiberNT does not implement the functions below yet */
-HRESULT CoCreateStandardMalloc(DWORD memctx, IMalloc **ppMalloc);
-HRESULT CoGetSystemSecurityPermissions(COMSD comSDType, PSECURITY_DESCRIPTOR *ppSD);
-HRESULT CoInstall(IBindCtx *pbc, DWORD dwFlags, uCLSSPEC *pClassSpec, QUERYCONTEXT *pQuery, LPWSTR pszCodeBase);
-HRESULT CreateStdProgressIndicator(HWND hwndParent, LPCOLESTR pszTitle, IBindStatusCallback *pIbscCaller, IBindStatusCallback **ppIbsc);
-HRESULT DcomChannelSetHResult(LPVOID pvReserved, ULONG *pulReserved, HRESULT appsHR);
-HRESULT StgGetIFillLockBytesOnFile(const OLECHAR *pwcsName, IFillLockBytes **ppflb);
-HRESULT StgGetIFillLockBytesOnILockBytes(ILockBytes *pilb, IFillLockBytes **ppflb);
-HRESULT StgOpenAsyncDocfileOnIFillLockBytes(IFillLockBytes *pflb, DWORD grfMode, DWORD asyncFlags, IStorage **ppstgOpen);
-HRESULT StgOpenLayoutDocfile(const OLECHAR *pwcsDfName, DWORD grfMode, DWORD reserved, IStorage **ppstgOpen);
+HRESULT STDAPICALLTYPE CoCreateStandardMalloc(DWORD memctx, IMalloc **ppMalloc);
+HRESULT STDAPICALLTYPE CoGetSystemSecurityPermissions(COMSD comSDType, PSECURITY_DESCRIPTOR *ppSD);
+HRESULT STDAPICALLTYPE CoInstall(IBindCtx *pbc, DWORD dwFlags, uCLSSPEC *pClassSpec, QUERYCONTEXT *pQuery, LPWSTR pszCodeBase);
+HRESULT STDAPICALLTYPE CreateStdProgressIndicator(HWND hwndParent, LPCOLESTR pszTitle, IBindStatusCallback *pIbscCaller, IBindStatusCallback **ppIbsc);
+HRESULT STDAPICALLTYPE DcomChannelSetHResult(LPVOID pvReserved, ULONG *pulReserved, HRESULT appsHR);
+HRESULT STDAPICALLTYPE StgGetIFillLockBytesOnFile(const OLECHAR *pwcsName, IFillLockBytes **ppflb);
+HRESULT STDAPICALLTYPE StgGetIFillLockBytesOnILockBytes(ILockBytes *pilb, IFillLockBytes **ppflb);
+HRESULT STDAPICALLTYPE StgOpenAsyncDocfileOnIFillLockBytes(IFillLockBytes *pflb, DWORD grfMode, DWORD asyncFlags, IStorage **ppstgOpen);
+HRESULT STDAPICALLTYPE StgOpenLayoutDocfile(const OLECHAR *pwcsDfName, DWORD grfMode, DWORD reserved, IStorage **ppstgOpen);
 
 #ifdef __cplusplus
 }

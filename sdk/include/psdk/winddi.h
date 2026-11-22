@@ -4485,8 +4485,8 @@ extern "C" {
 
 /* TODO: LiberNT does not implement the functions below yet */
 BOOL WINAPI DrvSurfaceComplete(DHPDEV dhpdev, HANDLE hLogicalSurface);
-BOOL EngAcquireSemaphoreSharedNoWait(HSEMAPHORE hsem);
-BOOL EngFntCacheFlush(PVOID OffsetBuffer, BOOL DiscardContent);
+BOOL APIENTRY EngAcquireSemaphoreSharedNoWait(HSEMAPHORE hsem);
+BOOL WINAPI EngFntCacheFlush(PVOID OffsetBuffer, BOOL DiscardContent);
 
 #ifdef __cplusplus
 }

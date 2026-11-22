@@ -479,16 +479,16 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-HRESULT WerRegisterAdditionalProcess(DWORD processId, DWORD captureExtraInfoForThreadId);
-HRESULT WerRegisterAppLocalDump(PCWSTR localAppDataRelativePath);
-HRESULT WerRegisterExcludedMemoryBlock(const void *address, DWORD size);
-HRESULT WerSetMaxProcessHoldMilliseconds(DWORD dwMilliseconds);
+HRESULT STDAPICALLTYPE WerRegisterAdditionalProcess(DWORD processId, DWORD captureExtraInfoForThreadId);
+HRESULT STDAPICALLTYPE WerRegisterAppLocalDump(PCWSTR localAppDataRelativePath);
+HRESULT STDAPICALLTYPE WerRegisterExcludedMemoryBlock(const void *address, DWORD size);
+HRESULT STDAPICALLTYPE WerSetMaxProcessHoldMilliseconds(DWORD dwMilliseconds);
 HRESULT WerStorePurge(void);
 HRESULT WerStoreQueryReportMetadataV3(HREPORTSTORE hReportStore, PCWSTR pszReportKey, PWER_REPORT_METADATA_V3 pReportMetadata);
 HRESULT WerStoreUploadReport(HREPORTSTORE hReportStore, PCWSTR pszReportKey, DWORD dwFlags, PWER_SUBMIT_RESULT pSubmitResult);
-HRESULT WerUnregisterAdditionalProcess(DWORD processId);
-HRESULT WerUnregisterAppLocalDump(void);
-HRESULT WerUnregisterExcludedMemoryBlock(const void *address);
+HRESULT STDAPICALLTYPE WerUnregisterAdditionalProcess(DWORD processId);
+HRESULT STDAPICALLTYPE WerUnregisterAppLocalDump(void);
+HRESULT STDAPICALLTYPE WerUnregisterExcludedMemoryBlock(const void *address);
 
 #ifdef __cplusplus
 }

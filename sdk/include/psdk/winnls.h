@@ -622,10 +622,10 @@ typedef BOOL (CALLBACK *TIMEFMT_ENUMPROCA)(LPSTR);
 typedef BOOL (CALLBACK *TIMEFMT_ENUMPROCW)(LPWSTR);
 typedef BOOL (CALLBACK *GEO_ENUMPROC)(GEOID);
 
-enum NLS_FUNCTION {
+enum SYSNLS_FUNCTION {
 	COMPARE_STRING = 0x0001
 };
-typedef enum NLS_FUNCTION NLS_FUNCTION;
+typedef DWORD NLS_FUNCTION;
 enum SYSGEOCLASS {
     GEOCLASS_ALL = 0,
     GEOCLASS_REGION = 14,
@@ -1500,7 +1500,13 @@ typedef struct HSAVEDUILANGUAGES__ {
 #define LOCALE_SLANGDISPLAYNAME 0x6F
 #define MUI_CALLBACK_ALL_FLAGS MUI_CALLBACK_FLAG_UPGRADED_INSTALLATION
 #define MUI_FORMAT_REG_COMPAT 0x0001
+#ifndef WINNORMALIZEAPI
+#if !defined(_NORMALIZE_)
 #define WINNORMALIZEAPI DECLSPEC_IMPORT
+#else
+#define WINNORMALIZEAPI
+#endif
+#endif
 
 typedef BOOL (WINAPI *GEO_ENUMNAMEPROC)(PWSTR, LPARAM);
 
@@ -1513,21 +1519,17 @@ BOOL WINAPI EnumTimeFormatsEx(TIMEFMT_ENUMPROCEX lpTimeFmtEnumProcEx, LPCWSTR lp
 int WINAPI ResolveLocaleName(LPCWSTR lpNameToResolve, LPWSTR lpLocaleName, int cchLocaleName);
 
 /* TODO: LiberNT does not implement the functions below yet */
-BOOL EnumSystemGeoNames(GEOCLASS geoClass, GEO_ENUMNAMEPROC geoEnumProc, LPARAM data);
-BOOL LoadStringByReference(DWORD Flags, PCWSTR Language, PCWSTR SourceString, PWSTR Buffer, ULONG cchBuffer, PCWSTR Directory, PULONG pcchBufferOut);
-BOOL NotifyUILanguageChange(DWORD dwFlags, PCWSTR pcwstrNewLanguage, PCWSTR pcwstrPreviousLanguage, DWORD dwReserved, PDWORD pdwStatusRtrn);
-void RestoreThreadPreferredUILanguages(const HSAVEDUILANGUAGES snapshot);
-BOOL SetThreadPreferredUILanguages2(ULONG flags, PCZZWSTR languages, PULONG numLanguagesSet, HSAVEDUILANGUAGES *snapshot);
+WINBASEAPI BOOL WINAPI EnumSystemGeoNames(GEOCLASS geoClass, GEO_ENUMNAMEPROC geoEnumProc, LPARAM data);
+WINBASEAPI BOOL WINAPI LoadStringByReference(DWORD Flags, PCWSTR Language, PCWSTR SourceString, PWSTR Buffer, ULONG cchBuffer, PCWSTR Directory, PULONG pcchBufferOut);
+WINBASEAPI BOOL WINAPI NotifyUILanguageChange(DWORD dwFlags, PCWSTR pcwstrNewLanguage, PCWSTR pcwstrPreviousLanguage, DWORD dwReserved, PDWORD pdwStatusRtrn);
+WINBASEAPI void WINAPI RestoreThreadPreferredUILanguages(const HSAVEDUILANGUAGES snapshot);
+WINBASEAPI BOOL WINAPI SetThreadPreferredUILanguages2(ULONG flags, PCZZWSTR languages, PULONG numLanguagesSet, HSAVEDUILANGUAGES *snapshot);
 
 #ifdef __cplusplus
 }
 #endif
 
 
-enum SYSNLS_FUNCTION
-{
-
-};
 
 #define FILEMUIINFO_GET_CULTURE(pInfo) ((LPWSTR) ((pInfo -> dwLanguageNameOffset > 0) ? (ULONG_PTR) pInfo + pInfo -> dwLanguageNameOffset : NULL))
 #define FILEMUIINFO_GET_MAIN_TYPEID(pInfo, iType) (((iType < pInfo -> dwTypeIDMainSize) && (pInfo -> dwTypeIDMainOffset > 0)) ? * ((DWORD *) ((ULONG_PTR) pInfo + pInfo -> dwTypeIDMainOffset) + iType) : 0)

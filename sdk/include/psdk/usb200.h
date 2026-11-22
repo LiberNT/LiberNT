@@ -495,3 +495,5 @@ C_ASSERT(sizeof(USB_HUB_STATUS_AND_CHANGE) == sizeof(ULONG));
 #define USB_DEVICE_CLASS_VENDOR_SPECIFIC      0xFF
 
 #pragma pack(pop)
+
+#include "usbspec.h"

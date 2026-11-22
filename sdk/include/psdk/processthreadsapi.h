@@ -381,6 +381,7 @@ SetThreadSelectedCpuSets(
 #endif
 #ifndef PROCESS_LEAP_SECOND_INFO_FLAG_ENABLE_SIXTY_SECOND
 #define PROCESS_LEAP_SECOND_INFO_FLAG_ENABLE_SIXTY_SECOND 0x1
+#endif
 
 typedef enum _PROCESS_MEMORY_EXHAUSTION_TYPE {
     PMETypeFailFastOnCommitFailure = 0,
@@ -447,14 +448,14 @@ extern "C" {
 /* TODO: LiberNT does not implement the functions below yet */
 BOOL WINAPI GetProcessDefaultCpuSetMasks(HANDLE Process, PGROUP_AFFINITY CpuSetMasks, USHORT CpuSetMaskCount, PUSHORT RequiredMaskCount);
 BOOL WINAPI GetThreadSelectedCpuSetMasks(HANDLE Thread, PGROUP_AFFINITY CpuSetMasks, USHORT CpuSetMaskCount, PUSHORT RequiredMaskCount);
-BOOL IsProcessCritical(HANDLE hProcess, PBOOL Critical);
-BOOL QueryProtectedPolicy(LPCGUID PolicyGuid, PULONG_PTR PolicyValue);
+WINBASEAPI BOOL WINAPI IsProcessCritical(HANDLE hProcess, PBOOL Critical);
+WINBASEAPI BOOL WINAPI QueryProtectedPolicy(LPCGUID PolicyGuid, PULONG_PTR PolicyValue);
 BOOL WINAPI SetProcessDefaultCpuSetMasks(HANDLE Process, PGROUP_AFFINITY CpuSetMasks, USHORT CpuSetMaskCount);
-BOOL SetProcessDynamicEHContinuationTargets(HANDLE Process, USHORT NumberOfTargets, PPROCESS_DYNAMIC_EH_CONTINUATION_TARGET Targets);
-BOOL SetProcessDynamicEnforcedCetCompatibleRanges(HANDLE Process, USHORT NumberOfRanges, PPROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGE Ranges);
-BOOL SetProtectedPolicy(LPCGUID PolicyGuid, ULONG_PTR PolicyValue, PULONG_PTR OldPolicyValue);
+WINBASEAPI BOOL WINAPI SetProcessDynamicEHContinuationTargets(HANDLE Process, USHORT NumberOfTargets, PPROCESS_DYNAMIC_EH_CONTINUATION_TARGET Targets);
+WINBASEAPI BOOL WINAPI SetProcessDynamicEnforcedCetCompatibleRanges(HANDLE Process, USHORT NumberOfRanges, PPROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGE Ranges);
+WINBASEAPI BOOL WINAPI SetProtectedPolicy(LPCGUID PolicyGuid, ULONG_PTR PolicyValue, PULONG_PTR OldPolicyValue);
 BOOL WINAPI SetThreadSelectedCpuSetMasks(HANDLE Thread, PGROUP_AFFINITY CpuSetMasks, USHORT CpuSetMaskCount);
-LPVOID TlsGetValue2(DWORD dwTlsIndex);
+WINBASEAPI LPVOID WINAPI TlsGetValue2(DWORD dwTlsIndex);
 
 #ifdef __cplusplus
 }
@@ -470,4 +471,3 @@ BOOL WINAPI QueueUserAPC2(PAPCFUNC ApcRoutine, HANDLE Thread, ULONG_PTR Data, QU
 }
 #endif
 
-#endif

@@ -26,13 +26,3 @@ interface IUIViewSettingsInterop : IInspectable
     HRESULT GetForWindow([in] HWND hwnd, [in] REFIID riid, [out, retval, iid_is(riid)] void **ppv);
 }
 
-cpp_quote("struct IUIViewSettingsInteropVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IUIViewSettingsInterop *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IUIViewSettingsInterop *);")
-cpp_quote("    ULONG (WINAPI *Release)(IUIViewSettingsInterop *);")
-cpp_quote("    HRESULT (WINAPI *GetIids)(IUIViewSettingsInterop *, ULONG *, IID **);")
-cpp_quote("    HRESULT (WINAPI *GetRuntimeClassName)(IUIViewSettingsInterop *, int *);")
-cpp_quote("    HRESULT (WINAPI *GetTrustLevel)(IUIViewSettingsInterop *, int *);")
-cpp_quote("    HRESULT (WINAPI *GetForWindow)(IUIViewSettingsInterop *, HWND, const IID *const , void **);")
-cpp_quote("};")

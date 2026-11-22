@@ -3116,6 +3116,11 @@ typedef PSP_BACKUP_QUEUE_PARAMS_V1_A PSP_BACKUP_QUEUE_PARAMS_V1;
 typedef PSP_BACKUP_QUEUE_PARAMS_V2_A PSP_BACKUP_QUEUE_PARAMS_V2;
 typedef PSP_INF_SIGNER_INFO_V1_A PSP_INF_SIGNER_INFO_V1;
 typedef PSP_INF_SIGNER_INFO_V2_A PSP_INF_SIGNER_INFO_V2;
+#else
+typedef PSP_BACKUP_QUEUE_PARAMS_V1_W PSP_BACKUP_QUEUE_PARAMS_V1;
+typedef PSP_BACKUP_QUEUE_PARAMS_V2_W PSP_BACKUP_QUEUE_PARAMS_V2;
+typedef PSP_INF_SIGNER_INFO_V1_W PSP_INF_SIGNER_INFO_V1;
+typedef PSP_INF_SIGNER_INFO_V2_W PSP_INF_SIGNER_INFO_V2;
 #endif
 typedef PSP_INF_SIGNER_INFO_V2 PSP_INF_SIGNER_INFO;
 #if (!(defined(UNICODE)))
@@ -3123,6 +3128,11 @@ typedef SP_BACKUP_QUEUE_PARAMS_V1_A SP_BACKUP_QUEUE_PARAMS_V1;
 typedef SP_BACKUP_QUEUE_PARAMS_V2_A SP_BACKUP_QUEUE_PARAMS_V2;
 typedef SP_INF_SIGNER_INFO_V1_A SP_INF_SIGNER_INFO_V1;
 typedef SP_INF_SIGNER_INFO_V2_A SP_INF_SIGNER_INFO_V2;
+#else
+typedef SP_BACKUP_QUEUE_PARAMS_V1_W SP_BACKUP_QUEUE_PARAMS_V1;
+typedef SP_BACKUP_QUEUE_PARAMS_V2_W SP_BACKUP_QUEUE_PARAMS_V2;
+typedef SP_INF_SIGNER_INFO_V1_W SP_INF_SIGNER_INFO_V1;
+typedef SP_INF_SIGNER_INFO_V2_W SP_INF_SIGNER_INFO_V2;
 #endif
 typedef SP_INF_SIGNER_INFO_V2 SP_INF_SIGNER_INFO;
 
@@ -3268,6 +3278,10 @@ struct _SP_ALTPLATFORM_INFO_V3
 typedef FILEPATHS_SIGNERINFO_A FILEPATHS_SIGNERINFO;
 
 typedef PFILEPATHS_SIGNERINFO_A PFILEPATHS_SIGNERINFO;
+#else
+typedef FILEPATHS_SIGNERINFO_W FILEPATHS_SIGNERINFO;
+
+typedef PFILEPATHS_SIGNERINFO_W PFILEPATHS_SIGNERINFO;
 #endif
 
 typedef struct _SP_ALTPLATFORM_INFO_V3 *PSP_ALTPLATFORM_INFO_V3;
@@ -3285,22 +3299,22 @@ BOOL WINAPI SetupVerifyInfFileA(PCSTR InfName, PSP_ALTPLATFORM_INFO AltPlatformI
 BOOL WINAPI SetupVerifyInfFileW(PCWSTR InfName, PSP_ALTPLATFORM_INFO AltPlatformInfo, PSP_INF_SIGNER_INFO_W InfSignerInfo);
 
 /* TODO: LiberNT does not implement the functions below yet */
-BOOL SetupConfigureWmiFromInfSectionA(HINF InfHandle, PCSTR SectionName, DWORD Flags);
-BOOL SetupConfigureWmiFromInfSectionW(HINF InfHandle, PCWSTR SectionName, DWORD Flags);
-BOOL SetupDiGetClassPropertyExW(const GUID *ClassGuid, const DEVPROPKEY *PropertyKey, DEVPROPTYPE *PropertyType, PBYTE PropertyBuffer, DWORD PropertyBufferSize, PDWORD RequiredSize, DWORD Flags, PCWSTR MachineName, PVOID Reserved);
-BOOL SetupDiGetClassPropertyKeys(const GUID *ClassGuid, DEVPROPKEY *PropertyKeyArray, DWORD PropertyKeyCount, PDWORD RequiredPropertyKeyCount, DWORD Flags);
-BOOL SetupDiGetClassPropertyKeysExW(const GUID *ClassGuid, DEVPROPKEY *PropertyKeyArray, DWORD PropertyKeyCount, PDWORD RequiredPropertyKeyCount, DWORD Flags, PCWSTR MachineName, PVOID Reserved);
-BOOL SetupDiGetClassPropertyW(const GUID *ClassGuid, const DEVPROPKEY *PropertyKey, DEVPROPTYPE *PropertyType, PBYTE PropertyBuffer, DWORD PropertyBufferSize, PDWORD RequiredSize, DWORD Flags);
-BOOL SetupDiLoadDeviceIcon(HDEVINFO DeviceInfoSet, PSP_DEVINFO_DATA DeviceInfoData, UINT cxIcon, UINT cyIcon, DWORD Flags, HICON *hIcon);
-BOOL SetupDiSetClassPropertyExW(const GUID *ClassGuid, const DEVPROPKEY *PropertyKey, DEVPROPTYPE PropertyType, const PBYTE PropertyBuffer, DWORD PropertyBufferSize, DWORD Flags, PCWSTR MachineName, PVOID Reserved);
-BOOL SetupDiSetClassPropertyW(const GUID *ClassGuid, const DEVPROPKEY *PropertyKey, DEVPROPTYPE PropertyType, const PBYTE PropertyBuffer, DWORD PropertyBufferSize, DWORD Flags);
-BOOL SetupDiSetDeviceInterfaceDefault(HDEVINFO DeviceInfoSet, PSP_DEVICE_INTERFACE_DATA DeviceInterfaceData, DWORD Flags, PVOID Reserved);
-BOOL SetupGetInfDriverStoreLocationA(PCSTR FileName, PSP_ALTPLATFORM_INFO AlternatePlatformInfo, PCSTR LocaleName, PSTR ReturnBuffer, DWORD ReturnBufferSize, PDWORD RequiredSize);
-BOOL SetupGetInfPublishedNameA(PCSTR DriverStoreLocation, PSTR ReturnBuffer, DWORD ReturnBufferSize, PDWORD RequiredSize);
-BOOL SetupGetInfPublishedNameW(PCWSTR DriverStoreLocation, PWSTR ReturnBuffer, DWORD ReturnBufferSize, PDWORD RequiredSize);
-BOOL SetupPrepareQueueForRestoreA(HSPFILEQ QueueHandle, PCSTR BackupPath, DWORD RestoreFlags);
-BOOL SetupPrepareQueueForRestoreW(HSPFILEQ QueueHandle, PCWSTR BackupPath, DWORD RestoreFlags);
-BOOL SetupUninstallNewlyCopiedInfs(HSPFILEQ FileQueue, DWORD Flags, PVOID Reserved);
+WINSETUPAPI BOOL WINAPI SetupConfigureWmiFromInfSectionA(HINF InfHandle, PCSTR SectionName, DWORD Flags);
+WINSETUPAPI BOOL WINAPI SetupConfigureWmiFromInfSectionW(HINF InfHandle, PCWSTR SectionName, DWORD Flags);
+WINSETUPAPI BOOL WINAPI SetupDiGetClassPropertyExW(const GUID *ClassGuid, const DEVPROPKEY *PropertyKey, DEVPROPTYPE *PropertyType, PBYTE PropertyBuffer, DWORD PropertyBufferSize, PDWORD RequiredSize, DWORD Flags, PCWSTR MachineName, PVOID Reserved);
+WINSETUPAPI BOOL WINAPI SetupDiGetClassPropertyKeys(const GUID *ClassGuid, DEVPROPKEY *PropertyKeyArray, DWORD PropertyKeyCount, PDWORD RequiredPropertyKeyCount, DWORD Flags);
+WINSETUPAPI BOOL WINAPI SetupDiGetClassPropertyKeysExW(const GUID *ClassGuid, DEVPROPKEY *PropertyKeyArray, DWORD PropertyKeyCount, PDWORD RequiredPropertyKeyCount, DWORD Flags, PCWSTR MachineName, PVOID Reserved);
+WINSETUPAPI BOOL WINAPI SetupDiGetClassPropertyW(const GUID *ClassGuid, const DEVPROPKEY *PropertyKey, DEVPROPTYPE *PropertyType, PBYTE PropertyBuffer, DWORD PropertyBufferSize, PDWORD RequiredSize, DWORD Flags);
+WINSETUPAPI BOOL WINAPI SetupDiLoadDeviceIcon(HDEVINFO DeviceInfoSet, PSP_DEVINFO_DATA DeviceInfoData, UINT cxIcon, UINT cyIcon, DWORD Flags, HICON *hIcon);
+WINSETUPAPI BOOL WINAPI SetupDiSetClassPropertyExW(const GUID *ClassGuid, const DEVPROPKEY *PropertyKey, DEVPROPTYPE PropertyType, const PBYTE PropertyBuffer, DWORD PropertyBufferSize, DWORD Flags, PCWSTR MachineName, PVOID Reserved);
+WINSETUPAPI BOOL WINAPI SetupDiSetClassPropertyW(const GUID *ClassGuid, const DEVPROPKEY *PropertyKey, DEVPROPTYPE PropertyType, const PBYTE PropertyBuffer, DWORD PropertyBufferSize, DWORD Flags);
+WINSETUPAPI BOOL WINAPI SetupDiSetDeviceInterfaceDefault(HDEVINFO DeviceInfoSet, PSP_DEVICE_INTERFACE_DATA DeviceInterfaceData, DWORD Flags, PVOID Reserved);
+WINSETUPAPI BOOL WINAPI SetupGetInfDriverStoreLocationA(PCSTR FileName, PSP_ALTPLATFORM_INFO AlternatePlatformInfo, PCSTR LocaleName, PSTR ReturnBuffer, DWORD ReturnBufferSize, PDWORD RequiredSize);
+WINSETUPAPI BOOL WINAPI SetupGetInfPublishedNameA(PCSTR DriverStoreLocation, PSTR ReturnBuffer, DWORD ReturnBufferSize, PDWORD RequiredSize);
+WINSETUPAPI BOOL WINAPI SetupGetInfPublishedNameW(PCWSTR DriverStoreLocation, PWSTR ReturnBuffer, DWORD ReturnBufferSize, PDWORD RequiredSize);
+WINSETUPAPI BOOL WINAPI SetupPrepareQueueForRestoreA(HSPFILEQ QueueHandle, PCSTR BackupPath, DWORD RestoreFlags);
+WINSETUPAPI BOOL WINAPI SetupPrepareQueueForRestoreW(HSPFILEQ QueueHandle, PCWSTR BackupPath, DWORD RestoreFlags);
+WINSETUPAPI BOOL WINAPI SetupUninstallNewlyCopiedInfs(HSPFILEQ FileQueue, DWORD Flags, PVOID Reserved);
 
 #ifdef __cplusplus
 }
@@ -3313,11 +3327,11 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-SP_LOG_TOKEN SetupGetThreadLogToken(void);
-void SetupSetThreadLogToken(SP_LOG_TOKEN LogToken);
-void SetupWriteTextLog(SP_LOG_TOKEN LogToken, DWORD Category, DWORD Flags, PCSTR MessageStr, ...);
-void SetupWriteTextLogError(SP_LOG_TOKEN LogToken, DWORD Category, DWORD LogFlags, DWORD Error, PCSTR MessageStr, ...);
-void SetupWriteTextLogInfLine(SP_LOG_TOKEN LogToken, DWORD Flags, HINF InfHandle, PINFCONTEXT Context);
+WINSETUPAPI SP_LOG_TOKEN WINAPI SetupGetThreadLogToken(void);
+WINSETUPAPI void WINAPI SetupSetThreadLogToken(SP_LOG_TOKEN LogToken);
+WINSETUPAPI void SetupWriteTextLog(SP_LOG_TOKEN LogToken, DWORD Category, DWORD Flags, PCSTR MessageStr, ...);
+WINSETUPAPI void SetupWriteTextLogError(SP_LOG_TOKEN LogToken, DWORD Category, DWORD LogFlags, DWORD Error, PCSTR MessageStr, ...);
+WINSETUPAPI void WINAPI SetupWriteTextLogInfLine(SP_LOG_TOKEN LogToken, DWORD Flags, HINF InfHandle, PINFCONTEXT Context);
 
 #ifdef __cplusplus
 }

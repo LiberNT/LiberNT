@@ -4185,6 +4185,8 @@ typedef struct _DEBUG_DEVICE_INFORMATION DEBUG_DEVICE_INFORMATION;
 typedef struct _DEBUG_PORT_TABLE_V2 DEBUG_PORT_TABLE_V2;
 
 #pragma pack(push, 1)
+typedef struct ECDT ECDT;
+
 struct ECDT
 {
     DESCRIPTION_HEADER Header;
@@ -4273,6 +4275,8 @@ typedef struct _PRMT_TABLE PRMT_TABLE;
 typedef struct _SDEV *PSDEV;
 
 typedef struct _SERIAL_PORT_REDIRECTION_TABLE *PSERIAL_PORT_REDIRECTION_TABLE;
+
+typedef struct SLIT_TABLE SLIT_TABLE;
 
 typedef struct SLIT_TABLE *PSLIT_TABLE;
 

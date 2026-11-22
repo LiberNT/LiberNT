@@ -538,6 +538,7 @@ struct tagHH_WINTYPE
 
 typedef struct tagHH_WINTYPE *PHH_WINTYPE;
 
+#ifndef WINE_NO_UNICODE_MACROS
 typedef struct tagHHNTRACK HHNTRACK;
 
 struct tagHHNTRACK
@@ -547,5 +548,6 @@ struct tagHHNTRACK
     int idAction;
     HH_WINTYPE *phhWinType;
 };
+#endif
 
 #endif /* __HTMLHELP_H__ */

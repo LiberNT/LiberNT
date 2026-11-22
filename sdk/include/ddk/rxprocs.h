@@ -831,44 +831,44 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-NTSTATUS DuplicateTransportAddress(PTRANSPORT_ADDRESS *Copy, PTRANSPORT_ADDRESS Original, POOL_FLAGS PoolFlags);
-void RxAcquireFileForNtCreateSection(PFILE_OBJECT FileObject);
-NTSTATUS RxAcquireForCcFlush(PFILE_OBJECT FileObject, PDEVICE_OBJECT DeviceObject);
-BOOLEAN RxCancelOperationInOverflowQueue(PRX_CONTEXT RxContext);
-BOOLEAN RxCcLogError(PDEVICE_OBJECT DeviceObject, PUNICODE_STRING FileName, NTSTATUS Error, NTSTATUS DeviceError, UCHAR IrpMajorCode, PVOID Context);
+NTSTATUS NTAPI DuplicateTransportAddress(PTRANSPORT_ADDRESS *Copy, PTRANSPORT_ADDRESS Original, POOL_FLAGS PoolFlags);
+void NTAPI RxAcquireFileForNtCreateSection(PFILE_OBJECT FileObject);
+NTSTATUS NTAPI RxAcquireForCcFlush(PFILE_OBJECT FileObject, PDEVICE_OBJECT DeviceObject);
+BOOLEAN NTAPI RxCancelOperationInOverflowQueue(PRX_CONTEXT RxContext);
+BOOLEAN NTAPI RxCcLogError(PDEVICE_OBJECT DeviceObject, PUNICODE_STRING FileName, NTSTATUS Error, NTSTATUS DeviceError, UCHAR IrpMajorCode, PVOID Context);
 TYPE_OF_OPEN RxDecodeFileObject(PFILE_OBJECT FileObject, PFCB *Fcb, PFOBX *Fobx);
-void RxDeregisterAsynchronousRequest(PRDBSS_DEVICE_OBJECT RxDeviceObject);
-void RxFinalizeNetTable(PRDBSS_DEVICE_OBJECT RxDeviceObject, BOOLEAN ForceFinalization);
-void RxForceFinalizeAllVNetRoots(PNET_ROOT NetRoot);
-PRX_LOG_ENTRY_HEADER RxGetNextLogEntry(void);
-void RxIndicateChangeOfBufferingState(PMRX_SRV_CALL SrvCall, PVOID SrvOpenKey, PVOID Context);
-BOOLEAN RxIsPrefixTableEmpty(PRX_PREFIX_TABLE ThisTable);
-BOOLEAN RxLockEnumerator(PMRX_SRV_OPEN SrvOpen, PVOID *ContinuationHandle, PLARGE_INTEGER FileOffset, PLARGE_INTEGER LockRange, PBOOLEAN IsLockExclusive);
-void RxLogEventWithBufferDirect(PVOID DeviceOrDriverObject, PUNICODE_STRING OriginatorId, ULONG EventId, NTSTATUS Status, PVOID DataBuffer, USHORT DataBufferLength, ULONG LineNumber);
-NTSTATUS RxLowIoFsCtlShell(PRX_CONTEXT RxContext, PIRP Irp, PFCB Fcb, PFOBX Fobx);
-NTSTATUS RxLowIoFsCtlShellCompletion(PRX_CONTEXT RxContext);
-NTSTATUS RxLowIoSubmitRETRY(PRX_CONTEXT RxContext, PIRP Irp);
-PVOID RxMapUserBuffer(PRX_CONTEXT RxContext, PIRP Irp);
-void RxPopUpFileCorrupt(PRX_CONTEXT RxContext, PFCB Fcb);
-NTSTATUS RxPrepareRequestForHandling(PCHANGE_BUFFERING_STATE_REQUEST Request);
-void RxPrintLog(ULONG EntriesToPrint);
-void RxpSpinUpWorkerThreads(PRX_WORK_QUEUE WorkQueue);
-void RxPurgeAllFobxs(PRDBSS_DEVICE_OBJECT RxDeviceObject);
-void RxRecurrentTimerWorkItemDispatcher(PVOID Context);
-NTSTATUS RxRegisterAsynchronousRequest(PRDBSS_DEVICE_OBJECT RxDeviceObject);
-void RxReleaseFileForNtCreateSection(PFILE_OBJECT FileObject);
-NTSTATUS RxReleaseForCcFlush(PFILE_OBJECT FileObject, PDEVICE_OBJECT DeviceObject);
-void RxScavengeAllFobxs(PRDBSS_DEVICE_OBJECT RxDeviceObject);
-NTSTATUS RxSetSrvCallDomainName(PMRX_SRV_CALL SrvCall, PUNICODE_STRING DomainName);
-NTSTATUS RxShadowFastLowIo(PRX_CONTEXT RxContext, PIRP Irp);
-NTSTATUS RxShadowLowIo(PRX_CONTEXT RxContext, PIRP Irp, PFCB Fcb);
-void RxSpinDownOutstandingAsynchronousRequests(PRDBSS_DEVICE_OBJECT RxDeviceObject);
-void RxStackOverflowRead(PVOID Context, PKEVENT Event);
-void RxSyncUninitializeCacheMap(PRX_CONTEXT RxContext, PFILE_OBJECT FileObject);
-void RxTearDownWorkQueue(PRX_WORK_QUEUE WorkQueue);
-void RxTearDownWorkQueueDispatcher(PRX_WORK_QUEUE_DISPATCHER Dispatcher);
-void RxWorkerThreadDispatcher(PRX_WORK_QUEUE WorkQueue);
-void RxWorkItemDispatcher(PVOID Context);
+void NTAPI RxDeregisterAsynchronousRequest(PRDBSS_DEVICE_OBJECT RxDeviceObject);
+void NTAPI RxFinalizeNetTable(PRDBSS_DEVICE_OBJECT RxDeviceObject, BOOLEAN ForceFinalization);
+void NTAPI RxForceFinalizeAllVNetRoots(PNET_ROOT NetRoot);
+PRX_LOG_ENTRY_HEADER NTAPI RxGetNextLogEntry(void);
+void NTAPI RxIndicateChangeOfBufferingState(PMRX_SRV_CALL SrvCall, PVOID SrvOpenKey, PVOID Context);
+BOOLEAN NTAPI RxIsPrefixTableEmpty(PRX_PREFIX_TABLE ThisTable);
+BOOLEAN NTAPI RxLockEnumerator(PMRX_SRV_OPEN SrvOpen, PVOID *ContinuationHandle, PLARGE_INTEGER FileOffset, PLARGE_INTEGER LockRange, PBOOLEAN IsLockExclusive);
+void NTAPI RxLogEventWithBufferDirect(PVOID DeviceOrDriverObject, PUNICODE_STRING OriginatorId, ULONG EventId, NTSTATUS Status, PVOID DataBuffer, USHORT DataBufferLength, ULONG LineNumber);
+NTSTATUS NTAPI RxLowIoFsCtlShell(PRX_CONTEXT RxContext, PIRP Irp, PFCB Fcb, PFOBX Fobx);
+NTSTATUS NTAPI RxLowIoFsCtlShellCompletion(PRX_CONTEXT RxContext);
+NTSTATUS NTAPI RxLowIoSubmitRETRY(PRX_CONTEXT RxContext, PIRP Irp);
+PVOID NTAPI RxMapUserBuffer(PRX_CONTEXT RxContext, PIRP Irp);
+void NTAPI RxPopUpFileCorrupt(PRX_CONTEXT RxContext, PFCB Fcb);
+NTSTATUS NTAPI RxPrepareRequestForHandling(PCHANGE_BUFFERING_STATE_REQUEST Request);
+void NTAPI RxPrintLog(ULONG EntriesToPrint);
+void NTAPI RxpSpinUpWorkerThreads(PRX_WORK_QUEUE WorkQueue);
+void NTAPI RxPurgeAllFobxs(PRDBSS_DEVICE_OBJECT RxDeviceObject);
+void NTAPI RxRecurrentTimerWorkItemDispatcher(PVOID Context);
+NTSTATUS NTAPI RxRegisterAsynchronousRequest(PRDBSS_DEVICE_OBJECT RxDeviceObject);
+void NTAPI RxReleaseFileForNtCreateSection(PFILE_OBJECT FileObject);
+NTSTATUS NTAPI RxReleaseForCcFlush(PFILE_OBJECT FileObject, PDEVICE_OBJECT DeviceObject);
+void NTAPI RxScavengeAllFobxs(PRDBSS_DEVICE_OBJECT RxDeviceObject);
+NTSTATUS NTAPI RxSetSrvCallDomainName(PMRX_SRV_CALL SrvCall, PUNICODE_STRING DomainName);
+NTSTATUS NTAPI RxShadowFastLowIo(PRX_CONTEXT RxContext, PIRP Irp);
+NTSTATUS NTAPI RxShadowLowIo(PRX_CONTEXT RxContext, PIRP Irp, PFCB Fcb);
+void NTAPI RxSpinDownOutstandingAsynchronousRequests(PRDBSS_DEVICE_OBJECT RxDeviceObject);
+void NTAPI RxStackOverflowRead(PVOID Context, PKEVENT Event);
+void NTAPI RxSyncUninitializeCacheMap(PRX_CONTEXT RxContext, PFILE_OBJECT FileObject);
+void NTAPI RxTearDownWorkQueue(PRX_WORK_QUEUE WorkQueue);
+void NTAPI RxTearDownWorkQueueDispatcher(PRX_WORK_QUEUE_DISPATCHER Dispatcher);
+void NTAPI RxWorkerThreadDispatcher(PRX_WORK_QUEUE WorkQueue);
+void NTAPI RxWorkItemDispatcher(PVOID Context);
 
 #ifdef __cplusplus
 }
@@ -884,8 +884,8 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-void RxCeCleanupConnectCallOutContext(PRX_CREATE_CONNECTION_CALLOUT_CONTEXT CreateConnectionContext);
-NTSTATUS RxCeInitiateConnectRequest(PRX_CALLOUT_PARAMETERS_BLOCK ParameterBlock);
+void NTAPI RxCeCleanupConnectCallOutContext(PRX_CREATE_CONNECTION_CALLOUT_CONTEXT CreateConnectionContext);
+NTSTATUS NTAPI RxCeInitiateConnectRequest(PRX_CALLOUT_PARAMETERS_BLOCK ParameterBlock);
 
 #ifdef __cplusplus
 }
@@ -901,7 +901,7 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-NTSTATUS DuplicateConnectionInformation(PRXCE_CONNECTION_INFORMATION *Copy, PRXCE_CONNECTION_INFORMATION Original, POOL_FLAGS PoolFlags);
+NTSTATUS NTAPI DuplicateConnectionInformation(PRXCE_CONNECTION_INFORMATION *Copy, PRXCE_CONNECTION_INFORMATION Original, POOL_FLAGS PoolFlags);
 
 #ifdef __cplusplus
 }

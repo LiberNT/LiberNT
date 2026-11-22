@@ -1340,8 +1340,8 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-void FireVSDebugEvent(PODBC_VS_ARGS);
-RETCODE TraceVSControl(DWORD);
+void SQL_API FireVSDebugEvent(PODBC_VS_ARGS);
+RETCODE SQL_API TraceVSControl(DWORD);
 
 #ifdef __cplusplus
 }

@@ -214,9 +214,9 @@ extern "C" {
 
 /* TODO: LiberNT does not implement the functions below yet */
 void EtwGetTraitFromProviderTraits(PVOID ProviderTraits, UCHAR TraitType, PVOID *Trait, PUSHORT Size);
-ULONG EventAccessControl(LPGUID Guid, ULONG Operation, PSID Sid, ULONG Rights, BOOLEAN AllowOrDeny);
-ULONG EventAccessQuery(LPGUID Guid, PSECURITY_DESCRIPTOR Buffer, PULONG BufferSize);
-ULONG EventAccessRemove(LPGUID Guid);
+ULONG EVNTAPI EventAccessControl(LPGUID Guid, ULONG Operation, PSID Sid, ULONG Rights, BOOLEAN AllowOrDeny);
+ULONG EVNTAPI EventAccessQuery(LPGUID Guid, PSECURITY_DESCRIPTOR Buffer, PULONG BufferSize);
+ULONG EVNTAPI EventAccessRemove(LPGUID Guid);
 ULONG GetEventProcessorIndex(PCEVENT_RECORD EventRecord);
 
 #ifdef __cplusplus

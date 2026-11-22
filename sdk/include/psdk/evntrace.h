@@ -1532,6 +1532,7 @@ TraceSetInformation(
 #endif
 #ifndef _typedef_TRACELOGGER_HANDLE
 #define _typedef_TRACELOGGER_HANDLE 1
+#endif
 
 typedef enum _ETW_PMC_COUNTER_OWNER_TYPE {
     EtwPmcOwnerFree = 0,
@@ -1606,4 +1607,3 @@ typedef struct ETW_PMC_SESSION_INFO {
 #define ETW_APP_DECLSPEC_DEPRECATED
 #define ETW_BUFFER_CONTEXT_DEF
 
-#endif

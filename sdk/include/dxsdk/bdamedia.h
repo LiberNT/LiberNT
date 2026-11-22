@@ -1393,11 +1393,15 @@ struct _SpanningEventDescriptor
 
 typedef struct _ChannelTypeInfo ChannelTypeInfo;
 
+typedef struct DvbParentalRatingParam DvbParentalRatingParam;
+
 struct DvbParentalRatingParam
 {
     CHAR szCountryCode[4];
     BYTE bRating;
 };
+
+typedef struct DvbParentalRatingDescriptor DvbParentalRatingDescriptor;
 
 struct DvbParentalRatingDescriptor
 {
@@ -1408,6 +1412,8 @@ struct DvbParentalRatingDescriptor
 typedef struct _DVBScramblingControlSpanningEvent DVBScramblingControlSpanningEvent;
 
 typedef struct tagKS_DATARANGE_BDA_ANTENNA KS_DATARANGE_BDA_ANTENNA;
+
+typedef struct KSEVENTDATA_BDA_RF_TUNER_SCAN_S KSEVENTDATA_BDA_RF_TUNER_SCAN_S;
 
 struct KSEVENTDATA_BDA_RF_TUNER_SCAN_S
 {
@@ -1437,6 +1443,8 @@ typedef struct _KSM_BDA_TS_SELECTOR_SETTSID KSM_BDA_TS_SELECTOR_SETTSID;
 
 typedef struct _KSM_BDA_USERACTIVITY_USEREASON KSM_BDA_USERACTIVITY_USEREASON;
 
+typedef struct KSM_BDA_WMDRM_LICENSE KSM_BDA_WMDRM_LICENSE;
+
 struct KSM_BDA_WMDRM_LICENSE
 {
     KSM_NODE NodeMethod;
@@ -1449,11 +1457,15 @@ typedef struct _KSM_BDA_WMDRMTUNER_SETPIDPROTECTION KSM_BDA_WMDRMTUNER_SETPIDPRO
 
 typedef struct _KSM_BDA_WMDRMTUNER_SYNCVALUE KSM_BDA_WMDRMTUNER_SYNCVALUE;
 
+typedef struct KSP_NODE_ESPID KSP_NODE_ESPID;
+
 struct KSP_NODE_ESPID
 {
     KSP_NODE Property;
     ULONG EsPid;
 };
+
+typedef struct KSPROPERTY_BDA_RF_TUNER_CAPS_S KSPROPERTY_BDA_RF_TUNER_CAPS_S;
 
 struct KSPROPERTY_BDA_RF_TUNER_CAPS_S
 {
@@ -1469,6 +1481,8 @@ struct KSPROPERTY_BDA_RF_TUNER_CAPS_S
     ULONG MilliSecondsPerMHz;
 };
 
+typedef struct KSPROPERTY_BDA_RF_TUNER_SCAN_STATUS_S KSPROPERTY_BDA_RF_TUNER_SCAN_STATUS_S;
+
 struct KSPROPERTY_BDA_RF_TUNER_SCAN_STATUS_S
 {
     KSP_NODE Property;
@@ -1478,11 +1492,15 @@ struct KSPROPERTY_BDA_RF_TUNER_SCAN_STATUS_S
     ULONG MilliSecondsLeft;
 };
 
+typedef struct KSPROPERTY_BDA_RF_TUNER_STANDARD_MODE_S KSPROPERTY_BDA_RF_TUNER_STANDARD_MODE_S;
+
 struct KSPROPERTY_BDA_RF_TUNER_STANDARD_MODE_S
 {
     KSP_NODE Property;
     BOOL AutoDetect;
 };
+
+typedef struct KSPROPERTY_BDA_RF_TUNER_STANDARD_S KSPROPERTY_BDA_RF_TUNER_STANDARD_S;
 
 struct KSPROPERTY_BDA_RF_TUNER_STANDARD_S
 {
@@ -1491,9 +1509,15 @@ struct KSPROPERTY_BDA_RF_TUNER_STANDARD_S
     ULONG SignalStandard;
 };
 
+typedef struct RATING_ATTRIBUTE RATING_ATTRIBUTE;
+
 typedef struct RATING_ATTRIBUTE *LPRATING_ATTRIBUTE;
 
+typedef struct RATING_INFO RATING_INFO;
+
 typedef struct RATING_INFO *LPRATING_INFO;
+
+typedef struct RATING_SYSTEM RATING_SYSTEM;
 
 typedef struct RATING_SYSTEM *LPRATING_SYSTEM;
 

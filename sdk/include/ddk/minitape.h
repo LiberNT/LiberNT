@@ -1795,13 +1795,13 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-BOOLEAN TapeClassAllocateSrbBuffer(PSCSI_REQUEST_BLOCK Srb, ULONG SrbBufferSize);
-ULONG TapeClassCompareMemory(PVOID Source1, PVOID Source2, ULONG Length);
-ULONG TapeClassInitialize(PVOID Argument1, PVOID Argument2, PTAPE_INIT_DATA_EX TapeInitData);
-LARGE_INTEGER TapeClassLiDiv(LARGE_INTEGER Dividend, LARGE_INTEGER Divisor);
-TAPE_PHYS_POSITION TapeClassLogicalBlockToPhysicalBlock(UCHAR DensityCode, ULONG LogicalBlockAddress, ULONG BlockLength, BOOLEAN FromBOT);
-ULONG TapeClassPhysicalBlockToLogicalBlock(UCHAR DensityCode, ULONG PhysicalBlockAddress, ULONG BlockLength, BOOLEAN FromBOT);
-void TapeClassZeroMemory(PVOID Buffer, ULONG BufferSize);
+BOOLEAN NTAPI TapeClassAllocateSrbBuffer(PSCSI_REQUEST_BLOCK Srb, ULONG SrbBufferSize);
+ULONG NTAPI TapeClassCompareMemory(PVOID Source1, PVOID Source2, ULONG Length);
+ULONG NTAPI TapeClassInitialize(PVOID Argument1, PVOID Argument2, PTAPE_INIT_DATA_EX TapeInitData);
+LARGE_INTEGER NTAPI TapeClassLiDiv(LARGE_INTEGER Dividend, LARGE_INTEGER Divisor);
+TAPE_PHYS_POSITION NTAPI TapeClassLogicalBlockToPhysicalBlock(UCHAR DensityCode, ULONG LogicalBlockAddress, ULONG BlockLength, BOOLEAN FromBOT);
+ULONG NTAPI TapeClassPhysicalBlockToLogicalBlock(UCHAR DensityCode, ULONG PhysicalBlockAddress, ULONG BlockLength, BOOLEAN FromBOT);
+void NTAPI TapeClassZeroMemory(PVOID Buffer, ULONG BufferSize);
 void TapeDebugPrint(ULONG DebugPrintLevel, PCCHAR DebugMessage, ...);
 
 #ifdef __cplusplus

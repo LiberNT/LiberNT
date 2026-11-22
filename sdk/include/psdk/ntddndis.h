@@ -2937,11 +2937,13 @@ typedef struct _NDIS_WMI_TCP_CONNECTION_OFFLOAD
 } NDIS_WMI_TCP_CONNECTION_OFFLOAD, *PNDIS_WMI_TCP_CONNECTION_OFFLOAD;
 
 #define NDIS_SIZEOF_WMI_TCP_CONNECTION_OFFLOAD_REVISION_1 RTL_SIZEOF_THROUGH_FIELD(NDIS_WMI_TCP_CONNECTION_OFFLOAD, Flags)
+typedef enum _NDIS_PORT_CONTROL_STATE {
+  NdisPortControlStateUnknown,
+  NdisPortControlStateControlled,
+  NdisPortControlStateUncontrolled
+} NDIS_PORT_CONTROL_STATE, *PNDIS_PORT_CONTROL_STATE;
+
 #ifdef NDIS_INCLUDE_LEGACY_NAMES
-typedef enum _NDIS_PORT_CONTROL_STATE NDIS_PORT_CONTROL_STATE;
-
-typedef enum _NDIS_PORT_CONTROL_STATE NDIS_PORT_CONTROL_STATE;
-
 typedef NDIS_PORT_CONTROL_STATE  NDIS_PORT_CONTROLL_STATE;
 
 typedef PNDIS_PORT_CONTROL_STATE PNDIS_PORT_CONTROLL_STATE;
@@ -3725,6 +3727,7 @@ typedef ULONG NDIS_QOS_SQ_ID, *PNDIS_QOS_SQ_ID;
 #endif
 #endif
 
+#ifndef __WIDL__
 #ifndef NDIS_802_11_AI_REQFI_CAPABILITIES
 #define NDIS_802_11_AI_REQFI_CAPABILITIES 1
 #endif
@@ -5903,7 +5906,7 @@ struct _OFFLOAD_SECURITY_ASSOCIATION
 
 typedef struct _OFFLOAD_SECURITY_ASSOCIATION OFFLOAD_SECURITY_ASSOCIATION;
 
-typedef ULONG IPMask;
+typedef ULONG IPAddr, IPMask;
 
 struct _OFFLOAD_IPSEC_ADD_SA
 {
@@ -5960,7 +5963,44 @@ enum _NDIS_PROCESSOR_VENDOR
     NdisProcessorVendorAuthenticAMD = 2,
 };
 
-typedef struct _NDIS_PORT_CHARACTERISTICS NDIS_PORT_CHARACTERISTICS;
+enum _NDIS_PORT_AUTHORIZATION_STATE
+{
+    NdisPortAuthorizationUnknown = 0,
+    NdisPortAuthorized = 1,
+    NdisPortUnauthorized = 2,
+    NdisPortReauthorizing = 3,
+};
+
+typedef enum _NDIS_PORT_AUTHORIZATION_STATE NDIS_PORT_AUTHORIZATION_STATE;
+
+typedef enum _NDIS_PORT_TYPE {
+  NdisPortTypeUndefined,
+  NdisPortTypeBridge,
+  NdisPortTypeRasConnection,
+  NdisPortType8021xSupplicant,
+  NdisPortTypeMax
+} NDIS_PORT_TYPE, *PNDIS_PORT_TYPE;
+
+#define NDIS_PORT_CHAR_USE_DEFAULT_AUTH_SETTINGS 0x00000001
+#define NDIS_PORT_CHARACTERISTICS_REVISION_1      1
+
+typedef struct _NDIS_PORT_CHARACTERISTICS {
+  NDIS_OBJECT_HEADER            Header;
+  NDIS_PORT_NUMBER              PortNumber;
+  ULONG                         Flags;
+  NDIS_PORT_TYPE                Type;
+  NDIS_MEDIA_CONNECT_STATE      MediaConnectState;
+  ULONG64                       XmitLinkSpeed;
+  ULONG64                       RcvLinkSpeed;
+  NET_IF_DIRECTION_TYPE         Direction;
+  NDIS_PORT_CONTROL_STATE       SendControlState;
+  NDIS_PORT_CONTROL_STATE       RcvControlState;
+  NDIS_PORT_AUTHORIZATION_STATE SendAuthorizationState;
+  NDIS_PORT_AUTHORIZATION_STATE RcvAuthorizationState;
+} NDIS_PORT_CHARACTERISTICS, *PNDIS_PORT_CHARACTERISTICS;
+
+#define NDIS_SIZEOF_PORT_CHARACTERISTICS_REVISION_1 \
+  RTL_SIZEOF_THROUGH_FIELD(NDIS_PORT_CHARACTERISTICS, RcvAuthorizationState)
 
 struct _NDIS_PORT_ARRAY
 {
@@ -5970,13 +6010,6 @@ struct _NDIS_PORT_ARRAY
     ULONG ElementSize;
     NDIS_PORT_CHARACTERISTICS Ports[1];
 };
-
-enum _NDIS_PORT_AUTHORIZATION_STATE
-{
-
-};
-
-typedef enum _NDIS_PORT_AUTHORIZATION_STATE NDIS_PORT_AUTHORIZATION_STATE;
 
 struct _NDIS_PORT_STATE
 {
@@ -6000,6 +6033,8 @@ struct _NDIS_VAR_DATA_DESC
 };
 
 typedef struct _NDIS_VAR_DATA_DESC NDIS_VAR_DATA_DESC;
+
+typedef struct NDIS_CO_DEVICE_PROFILE NDIS_CO_DEVICE_PROFILE;
 
 struct NDIS_CO_DEVICE_PROFILE
 {
@@ -6048,5 +6083,7 @@ typedef struct _NDIS_PORT_STATE *PNDIS_PORT_STATE;
 typedef enum _NDIS_PROCESSOR_VENDOR *PNDIS_PROCESSOR_VENDOR;
 
 #define NDIS_MAKE_NET_LUID(_pNetLuid, _IfType, _NetLuidIndex) { (_pNetLuid) -> Info . IfType = _IfType; (_pNetLuid) -> Info . NetLuidIndex = _NetLuidIndex; (_pNetLuid) -> Info . Reserved = 0; }
+
+#endif
 
 #endif /* _NTDDNDIS_ */

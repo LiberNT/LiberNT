@@ -371,10 +371,10 @@ extern "C" {
 /* TODO: LiberNT does not implement the functions below yet */
 void COMPOSITE_DEVICE_CAPABILITIES_INIT(PCOMPOSITE_DEVICE_CAPABILITIES CapabilityFlags);
 void UsbBuildOpenStaticStreamsRequest(PURB Urb, USBD_PIPE_HANDLE PipeHandle, USHORT NumberOfStreams, PUSBD_STREAM_INFORMATION StreamInfoArray);
-void USBD_BuildRegisterCompositeDevice(USBD_HANDLE USBDHandle, COMPOSITE_DEVICE_CAPABILITIES CapabilityFlags, ULONG FunctionCount, PREGISTER_COMPOSITE_DEVICE RegisterCompositeDevice);
-BOOLEAN USBD_IsInterfaceVersionSupported(USBD_HANDLE USBDHandle, ULONG USBDInterfaceVersion);
-NTSTATUS USBD_SelectConfigUrbAllocateAndBuild(USBD_HANDLE USBDHandle, PUSB_CONFIGURATION_DESCRIPTOR ConfigurationDescriptor, PUSBD_INTERFACE_LIST_ENTRY InterfaceList, PURB *Urb);
-NTSTATUS USBD_SelectInterfaceUrbAllocateAndBuild(USBD_HANDLE USBDHandle, USBD_CONFIGURATION_HANDLE ConfigurationHandle, PUSBD_INTERFACE_LIST_ENTRY InterfaceListEntry, PURB *Urb);
+void NTAPI USBD_BuildRegisterCompositeDevice(USBD_HANDLE USBDHandle, COMPOSITE_DEVICE_CAPABILITIES CapabilityFlags, ULONG FunctionCount, PREGISTER_COMPOSITE_DEVICE RegisterCompositeDevice);
+BOOLEAN NTAPI USBD_IsInterfaceVersionSupported(USBD_HANDLE USBDHandle, ULONG USBDInterfaceVersion);
+NTSTATUS NTAPI USBD_SelectConfigUrbAllocateAndBuild(USBD_HANDLE USBDHandle, PUSB_CONFIGURATION_DESCRIPTOR ConfigurationDescriptor, PUSBD_INTERFACE_LIST_ENTRY InterfaceList, PURB *Urb);
+NTSTATUS NTAPI USBD_SelectInterfaceUrbAllocateAndBuild(USBD_HANDLE USBDHandle, USBD_CONFIGURATION_HANDLE ConfigurationHandle, PUSBD_INTERFACE_LIST_ENTRY InterfaceListEntry, PURB *Urb);
 
 #ifdef __cplusplus
 }

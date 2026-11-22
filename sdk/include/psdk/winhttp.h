@@ -1853,20 +1853,20 @@ extern "C" {
 void WINAPI WinHttpFreeProxySettings(WINHTTP_PROXY_SETTINGS *pWinHttpProxySettings);
 
 /* TODO: LiberNT does not implement the functions below yet */
-DWORD WinHttpAddRequestHeadersEx(HINTERNET hRequest, DWORD dwModifiers, ULONGLONG ullFlags, ULONGLONG ullExtra, DWORD cHeaders, WINHTTP_EXTENDED_HEADER *pHeaders);
-DWORD WinHttpFreeProxySettingsEx(WINHTTP_PROXY_SETTINGS_TYPE ProxySettingsType, PVOID pProxySettingsEx);
-void WinHttpFreeQueryConnectionGroupResult(WINHTTP_QUERY_CONNECTION_GROUP_RESULT *pResult);
-DWORD WinHttpGetProxySettingsEx(HINTERNET hResolver, WINHTTP_PROXY_SETTINGS_TYPE ProxySettingsType, PWINHTTP_PROXY_SETTINGS_PARAM pProxySettingsParam, DWORD_PTR pContext);
-DWORD WinHttpGetProxySettingsResultEx(HINTERNET hResolver, PVOID pProxySettingsEx);
-HINTERNET WinHttpProtocolCompleteUpgrade(HINTERNET hRequest, DWORD_PTR dwContext);
-DWORD WinHttpProtocolReceive(HINTERNET ProtocolHandle, ULONGLONG Flags, PVOID pvBuffer, DWORD dwBufferLength, DWORD *pdwBytesRead);
-DWORD WinHttpProtocolSend(HINTERNET ProtocolHandle, ULONGLONG Flags, PVOID pvBuffer, DWORD dwBufferLength);
-DWORD WinHttpQueryConnectionGroup(HINTERNET hInternet, const GUID *pGuidConnection, ULONGLONG ullFlags, PWINHTTP_QUERY_CONNECTION_GROUP_RESULT *ppResult);
-DWORD WinHttpQueryHeadersEx(HINTERNET hRequest, DWORD dwInfoLevel, ULONGLONG ullFlags, UINT uiCodePage, PDWORD pdwIndex, PWINHTTP_HEADER_NAME pHeaderName, PVOID pBuffer, PDWORD pdwBufferLength, PWINHTTP_EXTENDED_HEADER *ppHeaders, PDWORD pdwHeadersCount);
-DWORD WinHttpReadDataEx(HINTERNET hRequest, LPVOID lpBuffer, DWORD dwNumberOfBytesToRead, LPDWORD lpdwNumberOfBytesRead, ULONGLONG ullFlags, DWORD cbProperty, PVOID pvProperty);
-DWORD WinHttpRegisterProxyChangeNotification(ULONGLONG ullFlags, WINHTTP_PROXY_CHANGE_CALLBACK pfnCallback, PVOID pvContext, WINHTTP_PROXY_CHANGE_REGISTRATION_HANDLE *hRegistration);
-DWORD WinHttpSetProxySettingsPerUser(BOOL fProxySettingsPerUser);
-DWORD WinHttpUnregisterProxyChangeNotification(WINHTTP_PROXY_CHANGE_REGISTRATION_HANDLE hRegistration);
+WINHTTPAPI DWORD WINAPI WinHttpAddRequestHeadersEx(HINTERNET hRequest, DWORD dwModifiers, ULONGLONG ullFlags, ULONGLONG ullExtra, DWORD cHeaders, WINHTTP_EXTENDED_HEADER *pHeaders);
+WINHTTPAPI DWORD WINAPI WinHttpFreeProxySettingsEx(WINHTTP_PROXY_SETTINGS_TYPE ProxySettingsType, PVOID pProxySettingsEx);
+WINHTTPAPI void WINAPI WinHttpFreeQueryConnectionGroupResult(WINHTTP_QUERY_CONNECTION_GROUP_RESULT *pResult);
+WINHTTPAPI DWORD WINAPI WinHttpGetProxySettingsEx(HINTERNET hResolver, WINHTTP_PROXY_SETTINGS_TYPE ProxySettingsType, PWINHTTP_PROXY_SETTINGS_PARAM pProxySettingsParam, DWORD_PTR pContext);
+WINHTTPAPI DWORD WINAPI WinHttpGetProxySettingsResultEx(HINTERNET hResolver, PVOID pProxySettingsEx);
+WINHTTPAPI HINTERNET WINAPI WinHttpProtocolCompleteUpgrade(HINTERNET hRequest, DWORD_PTR dwContext);
+WINHTTPAPI DWORD WINAPI WinHttpProtocolReceive(HINTERNET ProtocolHandle, ULONGLONG Flags, PVOID pvBuffer, DWORD dwBufferLength, DWORD *pdwBytesRead);
+WINHTTPAPI DWORD WINAPI WinHttpProtocolSend(HINTERNET ProtocolHandle, ULONGLONG Flags, PVOID pvBuffer, DWORD dwBufferLength);
+WINHTTPAPI DWORD WINAPI WinHttpQueryConnectionGroup(HINTERNET hInternet, const GUID *pGuidConnection, ULONGLONG ullFlags, PWINHTTP_QUERY_CONNECTION_GROUP_RESULT *ppResult);
+WINHTTPAPI DWORD WINAPI WinHttpQueryHeadersEx(HINTERNET hRequest, DWORD dwInfoLevel, ULONGLONG ullFlags, UINT uiCodePage, PDWORD pdwIndex, PWINHTTP_HEADER_NAME pHeaderName, PVOID pBuffer, PDWORD pdwBufferLength, PWINHTTP_EXTENDED_HEADER *ppHeaders, PDWORD pdwHeadersCount);
+WINHTTPAPI DWORD WINAPI WinHttpReadDataEx(HINTERNET hRequest, LPVOID lpBuffer, DWORD dwNumberOfBytesToRead, LPDWORD lpdwNumberOfBytesRead, ULONGLONG ullFlags, DWORD cbProperty, PVOID pvProperty);
+WINHTTPAPI DWORD WINAPI WinHttpRegisterProxyChangeNotification(ULONGLONG ullFlags, WINHTTP_PROXY_CHANGE_CALLBACK pfnCallback, PVOID pvContext, WINHTTP_PROXY_CHANGE_REGISTRATION_HANDLE *hRegistration);
+WINHTTPAPI DWORD WINAPI WinHttpSetProxySettingsPerUser(BOOL fProxySettingsPerUser);
+WINHTTPAPI DWORD WINAPI WinHttpUnregisterProxyChangeNotification(WINHTTP_PROXY_CHANGE_REGISTRATION_HANDLE hRegistration);
 
 #ifdef __cplusplus
 }

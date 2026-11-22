@@ -733,6 +733,8 @@ typedef struct _X509Certificate {
 #else
 #if (!(defined(UNICODE)))
 #define DEFAULT_TLS_SSP_NAME DEFAULT_TLS_SSP_NAME_A
+#else
+#define DEFAULT_TLS_SSP_NAME DEFAULT_TLS_SSP_NAME_W
 #endif
 #endif
 #define DEFAULT_TLS_SSP_NAME_A "Default TLS SSP"
@@ -744,6 +746,8 @@ typedef struct _X509Certificate {
 #define SSL_CRACK_CERTIFICATE_NAME TEXT("SslCrackCertificate")
 #if (!(defined(UNICODE)))
 #define SSL_EMPTY_CACHE_FN SSL_EMPTY_CACHE_FN_A
+#else
+#define SSL_EMPTY_CACHE_FN SSL_EMPTY_CACHE_FN_W
 #endif
 #define SSL_FREE_CERTIFICATE_NAME TEXT("SslFreeCertificate")
 #ifdef UNICODE
@@ -786,14 +790,14 @@ extern "C" {
 
 /* TODO: LiberNT does not implement the functions below yet */
 BOOL WINAPI SslCrackCertificate(PUCHAR pbCertificate, DWORD cbCertificate, DWORD dwFlags, PX509Certificate *ppCertificate);
-SECURITY_STATUS SslDeserializeCertificateStore(CERT_BLOB SerializedCertificateStore, PCCERT_CONTEXT *ppCertContext);
-void SslFreeCertificate(PX509Certificate pCertificate);
+SECURITY_STATUS WINAPI SslDeserializeCertificateStore(CERT_BLOB SerializedCertificateStore, PCCERT_CONTEXT *ppCertContext);
+void WINAPI SslFreeCertificate(PX509Certificate pCertificate);
 BOOL WINAPI SslGenerateKeyPair(PSSL_CREDENTIAL_CERTIFICATE pCerts, PSTR pszDN, PSTR pszPassword, DWORD Bits);
-void SslGenerateRandomBits(PUCHAR pRandomData, LONG cRandomData);
+void WINAPI SslGenerateRandomBits(PUCHAR pRandomData, LONG cRandomData);
 BOOL WINAPI SslGetDefaultIssuers(PBYTE pbIssuers, DWORD *pcbIssuers);
-SECURITY_STATUS SslGetExtensions(const BYTE *clientHello, DWORD clientHelloByteSize, SCH_EXTENSION_DATA *genericExtensions, BYTE genericExtensionsCount, DWORD *bytesToRead, SchGetExtensionsOptions flags);
+SECURITY_STATUS WINAPI SslGetExtensions(const BYTE *clientHello, DWORD clientHelloByteSize, SCH_EXTENSION_DATA *genericExtensions, BYTE genericExtensionsCount, DWORD *bytesToRead, SchGetExtensionsOptions flags);
 DWORD WINAPI SslGetMaximumKeySize(DWORD Reserved);
-SECURITY_STATUS SslGetServerIdentity(PBYTE ClientHello, DWORD ClientHelloSize, PBYTE *ServerIdentity, PDWORD ServerIdentitySize, DWORD Flags);
+SECURITY_STATUS WINAPI SslGetServerIdentity(PBYTE ClientHello, DWORD ClientHelloSize, PBYTE *ServerIdentity, PDWORD ServerIdentitySize, DWORD Flags);
 
 #ifdef __cplusplus
 }

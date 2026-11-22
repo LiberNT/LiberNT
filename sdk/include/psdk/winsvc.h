@@ -883,8 +883,8 @@ extern "C" {
 DWORD WINAPI GetServiceDirectory(SERVICE_STATUS_HANDLE hServiceStatus, SERVICE_DIRECTORY_TYPE eDirectoryType, PWCHAR lpPathBuffer, DWORD cchPathBufferLength, DWORD *lpcchRequiredBufferLength);
 DWORD WINAPI GetSharedServiceDirectory(SC_HANDLE ServiceHandle, SERVICE_SHARED_DIRECTORY_TYPE DirectoryType, PWCHAR PathBuffer, DWORD PathBufferLength, DWORD *RequiredBufferLength);
 DWORD WINAPI GetSharedServiceRegistryStateKey(SC_HANDLE ServiceHandle, SERVICE_SHARED_REGISTRY_STATE_TYPE StateType, DWORD AccessMask, HKEY *ServiceStateKey);
-BOOL QueryServiceDynamicInformation(SERVICE_STATUS_HANDLE hServiceStatus, DWORD dwInfoLevel, PVOID *ppDynamicInfo);
-DWORD WaitServiceState(SC_HANDLE hService, DWORD dwNotify, DWORD dwTimeout, HANDLE hCancelEvent);
+WINADVAPI BOOL WINAPI QueryServiceDynamicInformation(SERVICE_STATUS_HANDLE hServiceStatus, DWORD dwInfoLevel, PVOID *ppDynamicInfo);
+WINADVAPI DWORD WINAPI WaitServiceState(SC_HANDLE hService, DWORD dwNotify, DWORD dwTimeout, HANDLE hCancelEvent);
 
 #ifdef __cplusplus
 }
@@ -897,8 +897,8 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-DWORD SubscribeServiceChangeNotifications(SC_HANDLE hService, SC_EVENT_TYPE eEventType, PSC_NOTIFICATION_CALLBACK pCallback, PVOID pCallbackContext, PSC_NOTIFICATION_REGISTRATION *pSubscription);
-void UnsubscribeServiceChangeNotifications(PSC_NOTIFICATION_REGISTRATION pSubscription);
+WINADVAPI DWORD WINAPI SubscribeServiceChangeNotifications(SC_HANDLE hService, SC_EVENT_TYPE eEventType, PSC_NOTIFICATION_CALLBACK pCallback, PVOID pCallbackContext, PSC_NOTIFICATION_REGISTRATION *pSubscription);
+WINADVAPI void WINAPI UnsubscribeServiceChangeNotifications(PSC_NOTIFICATION_REGISTRATION pSubscription);
 
 #ifdef __cplusplus
 }

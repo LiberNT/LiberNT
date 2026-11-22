@@ -666,6 +666,7 @@ C_ASSERT(sizeof(IN6_PKTINFO) == 20);
 #endif
 #ifndef TCP_MAXRTMS
 #define TCP_MAXRTMS 14
+#endif
 
 typedef enum _PMTUD_STATE {
     IP_PMTUDISC_NOT_SET = 0,
@@ -711,10 +712,10 @@ typedef struct in_pktinfo_ex *PIN_PKTINFO_EX;
 
 typedef struct in_recverr *PIN_RECVERR;
 
-typedef union _SOCKADDR_INET SOCKADDR_INET;
+typedef struct icmp_error_info {
+    SOCKADDR_INET srcaddress;
+    IPPROTO protocol;
+    UINT8 type;
+    UINT8 code;
+} ICMP_ERROR_INFO, *PICMP_ERROR_INFO;
 
-typedef struct icmp_error_info ICMP_ERROR_INFO;
-
-typedef union _SOCKADDR_INET SOCKADDR_INET;
-
-#endif

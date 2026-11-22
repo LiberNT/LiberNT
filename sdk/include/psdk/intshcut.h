@@ -140,6 +140,8 @@ typedef IUniformResourceLocatorA * PIUniformResourceLocator;
 #endif
 #if (!(defined(UNICODE)))
 #define IUniformResourceLocatorVtbl IUniformResourceLocatorAVtbl
+#else
+#define IUniformResourceLocatorVtbl IUniformResourceLocatorWVtbl
 #endif
 #ifdef UNICODE
 #define MIMEAssociationDialog MIMEAssociationDialogW
@@ -173,10 +175,10 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-HRESULT MIMEAssociationDialogA(HWND hwndParent, DWORD dwInFlags, PCSTR pcszFile, PCSTR pcszMIMEContentType, PSTR pszAppBuf, UINT ucAppBufLen);
-HRESULT MIMEAssociationDialogW(HWND hwndParent, DWORD dwInFlags, PCWSTR pcszFile, PCWSTR pcszMIMEContentType, PWSTR pszAppBuf, UINT ucAppBufLen);
-HRESULT URLAssociationDialogA(HWND hwndParent, DWORD dwInFlags, PCSTR pcszFile, PCSTR pcszURL, PSTR pszAppBuf, UINT ucAppBufLen);
-HRESULT URLAssociationDialogW(HWND hwndParent, DWORD dwInFlags, PCWSTR pcszFile, PCWSTR pcszURL, PWSTR pszAppBuf, UINT ucAppBufLen);
+HRESULT WINAPI MIMEAssociationDialogA(HWND hwndParent, DWORD dwInFlags, PCSTR pcszFile, PCSTR pcszMIMEContentType, PSTR pszAppBuf, UINT ucAppBufLen);
+HRESULT WINAPI MIMEAssociationDialogW(HWND hwndParent, DWORD dwInFlags, PCWSTR pcszFile, PCWSTR pcszMIMEContentType, PWSTR pszAppBuf, UINT ucAppBufLen);
+HRESULT WINAPI URLAssociationDialogA(HWND hwndParent, DWORD dwInFlags, PCSTR pcszFile, PCSTR pcszURL, PSTR pszAppBuf, UINT ucAppBufLen);
+HRESULT WINAPI URLAssociationDialogW(HWND hwndParent, DWORD dwInFlags, PCWSTR pcszFile, PCWSTR pcszURL, PWSTR pszAppBuf, UINT ucAppBufLen);
 
 #ifdef __cplusplus
 }

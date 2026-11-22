@@ -848,6 +848,8 @@ ULONG __cdecl ldap_set_dbg_flags(ULONG NewFlags);
 #define LDAP_TTL_EXTENDED_OP_OID_W L"1.3.6.1.4.1.1466.101.119.1"
 #if (!(defined(UNICODE)))
 #define LDAP_UNICODE 0
+#else
+#define LDAP_UNICODE 1
 #endif
 #define LDAP_VENDOR_NAME "Microsoft Corporation."
 #define LDAP_VENDOR_NAME_W L"Microsoft Corporation."
@@ -856,7 +858,7 @@ ULONG __cdecl ldap_set_dbg_flags(ULONG NewFlags);
 #define NULLBER ((BerElement *) 0)
 #define WINLDAPAPI DECLSPEC_IMPORT
 
-typedef ULONG (*DBGPRINT)(PCCH, ...);
+typedef ULONG (_cdecl *DBGPRINT)(PCCH, ...);
 
 typedef ULONG DEREFERENCECONNECTION(PLDAP, PLDAP);
 
@@ -883,7 +885,7 @@ extern "C" {
 LDAPMessage * __cdecl ldap_next_reference(LDAP *ld, LDAPMessage *entry);
 
 /* TODO: LiberNT does not implement the functions below yet */
-void ldap_set_dbg_routine(DBGPRINT DebugPrintRoutine);
+void LDAPAPI ldap_set_dbg_routine(DBGPRINT DebugPrintRoutine);
 
 #ifdef __cplusplus
 }

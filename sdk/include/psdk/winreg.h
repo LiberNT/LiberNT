@@ -2,6 +2,8 @@
 #define _WINREG_H
 #define _WINREG_
 
+#include <apisetcconv.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -709,6 +711,8 @@ typedef struct val_context {
 
 #if (!(defined(UNICODE)))
 typedef PPVALUEA PPVALUE;
+#else
+typedef PPVALUEW PPVALUE;
 #endif
 
 typedef DWORD (*PQUERYHANDLER)(LPVOID, PVALCONTEXT, DWORD, LPVOID, DWORD *, DWORD);
@@ -727,6 +731,8 @@ typedef struct provider_info *PPROVIDER;
 
 #if (!(defined(UNICODE)))
 typedef PVALUEA PVALUE;
+#else
+typedef PVALUEW PVALUE;
 #endif
 
 typedef DWORD __cdecl QUERYHANDLER(LPVOID, PVALCONTEXT, DWORD, LPVOID, DWORD *, DWORD);
@@ -738,15 +744,15 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-DWORD CheckForHiberboot(PBOOLEAN pHiberboot, BOOLEAN bClearFlag);
-LSTATUS RegConnectRegistryExA(LPCSTR lpMachineName, HKEY hKey, ULONG Flags, PHKEY phkResult);
-LSTATUS RegConnectRegistryExW(LPCWSTR lpMachineName, HKEY hKey, ULONG Flags, PHKEY phkResult);
-LSTATUS RegCreateKeyTransactedA(HKEY hKey, LPCSTR lpSubKey, DWORD Reserved, LPSTR lpClass, DWORD dwOptions, REGSAM samDesired, const LPSECURITY_ATTRIBUTES lpSecurityAttributes, PHKEY phkResult, LPDWORD lpdwDisposition, HANDLE hTransaction, PVOID pExtendedParemeter);
-LSTATUS RegCreateKeyTransactedW(HKEY hKey, LPCWSTR lpSubKey, DWORD Reserved, LPWSTR lpClass, DWORD dwOptions, REGSAM samDesired, const LPSECURITY_ATTRIBUTES lpSecurityAttributes, PHKEY phkResult, LPDWORD lpdwDisposition, HANDLE hTransaction, PVOID pExtendedParemeter);
-LSTATUS RegDeleteKeyTransactedA(HKEY hKey, LPCSTR lpSubKey, REGSAM samDesired, DWORD Reserved, HANDLE hTransaction, PVOID pExtendedParameter);
-LSTATUS RegDeleteKeyTransactedW(HKEY hKey, LPCWSTR lpSubKey, REGSAM samDesired, DWORD Reserved, HANDLE hTransaction, PVOID pExtendedParameter);
-LSTATUS RegOpenKeyTransactedA(HKEY hKey, LPCSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult, HANDLE hTransaction, PVOID pExtendedParemeter);
-LSTATUS RegOpenKeyTransactedW(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult, HANDLE hTransaction, PVOID pExtendedParemeter);
+WINADVAPI DWORD APIENTRY CheckForHiberboot(PBOOLEAN pHiberboot, BOOLEAN bClearFlag);
+WINADVAPI LSTATUS APIENTRY RegConnectRegistryExA(LPCSTR lpMachineName, HKEY hKey, ULONG Flags, PHKEY phkResult);
+WINADVAPI LSTATUS APIENTRY RegConnectRegistryExW(LPCWSTR lpMachineName, HKEY hKey, ULONG Flags, PHKEY phkResult);
+WINADVAPI LSTATUS APIENTRY RegCreateKeyTransactedA(HKEY hKey, LPCSTR lpSubKey, DWORD Reserved, LPSTR lpClass, DWORD dwOptions, REGSAM samDesired, const LPSECURITY_ATTRIBUTES lpSecurityAttributes, PHKEY phkResult, LPDWORD lpdwDisposition, HANDLE hTransaction, PVOID pExtendedParemeter);
+WINADVAPI LSTATUS APIENTRY RegCreateKeyTransactedW(HKEY hKey, LPCWSTR lpSubKey, DWORD Reserved, LPWSTR lpClass, DWORD dwOptions, REGSAM samDesired, const LPSECURITY_ATTRIBUTES lpSecurityAttributes, PHKEY phkResult, LPDWORD lpdwDisposition, HANDLE hTransaction, PVOID pExtendedParemeter);
+WINADVAPI LSTATUS APIENTRY RegDeleteKeyTransactedA(HKEY hKey, LPCSTR lpSubKey, REGSAM samDesired, DWORD Reserved, HANDLE hTransaction, PVOID pExtendedParameter);
+WINADVAPI LSTATUS APIENTRY RegDeleteKeyTransactedW(HKEY hKey, LPCWSTR lpSubKey, REGSAM samDesired, DWORD Reserved, HANDLE hTransaction, PVOID pExtendedParameter);
+WINADVAPI LSTATUS APIENTRY RegOpenKeyTransactedA(HKEY hKey, LPCSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult, HANDLE hTransaction, PVOID pExtendedParemeter);
+WINADVAPI LSTATUS APIENTRY RegOpenKeyTransactedW(HKEY hKey, LPCWSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult, HANDLE hTransaction, PVOID pExtendedParemeter);
 
 #ifdef __cplusplus
 }

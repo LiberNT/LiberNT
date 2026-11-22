@@ -218,10 +218,10 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-PWCHAR ScsiPortWmiGetInstanceName(PSCSIWMI_REQUEST_CONTEXT RequestContext);
-PVOID ScsiPortWmiSetData(PSCSIWMI_REQUEST_CONTEXT RequestContext, ULONG InstanceIndex, ULONG DataLength, PULONG BufferAvail, PULONG SizeNeeded);
-BOOLEAN ScsiPortWmiSetInstanceCount(PSCSIWMI_REQUEST_CONTEXT RequestContext, ULONG InstanceCount, PULONG BufferAvail, PULONG SizeNeeded);
-PWCHAR ScsiPortWmiSetInstanceName(PSCSIWMI_REQUEST_CONTEXT RequestContext, ULONG InstanceIndex, ULONG InstanceNameLength, PULONG BufferAvail, PULONG SizeNeeded);
+PWCHAR NTAPI ScsiPortWmiGetInstanceName(PSCSIWMI_REQUEST_CONTEXT RequestContext);
+PVOID NTAPI ScsiPortWmiSetData(PSCSIWMI_REQUEST_CONTEXT RequestContext, ULONG InstanceIndex, ULONG DataLength, PULONG BufferAvail, PULONG SizeNeeded);
+BOOLEAN NTAPI ScsiPortWmiSetInstanceCount(PSCSIWMI_REQUEST_CONTEXT RequestContext, ULONG InstanceCount, PULONG BufferAvail, PULONG SizeNeeded);
+PWCHAR NTAPI ScsiPortWmiSetInstanceName(PSCSIWMI_REQUEST_CONTEXT RequestContext, ULONG InstanceIndex, ULONG InstanceNameLength, PULONG BufferAvail, PULONG SizeNeeded);
 
 #ifdef __cplusplus
 }

@@ -6747,6 +6747,7 @@ typedef struct _ProcessorPerformance {
 
 #ifndef COMMIT_POLICY_OUT_Status_ID
 #define COMMIT_POLICY_OUT_Status_ID 1
+#endif
 typedef struct _COMMIT_POLICY_OUT {
   ULONG Status;
 } COMMIT_POLICY_OUT, *PCOMMIT_POLICY_OUT;
@@ -6953,7 +6954,6 @@ typedef struct _WHEA_PLUGIN_CTL_INTERFACE_OUT {
 #define WHEAPluginCtlMethodsGuid { 0xed16c828, 0xbdec, 0x41a4, { 0x8f, 0xef, 0x3b, 0xfc, 0x15, 0xad, 0xec, 0xbd } }
 #define WHEAPolicyManagementMethodsGuid { 0x794569ee, 0x137c, 0x4a06, { 0x8a, 0xdd, 0xd2, 0x25, 0xb5, 0x3d, 0xfc, 0x4b } }
 
-#endif
 #ifndef CounterCorruptionStatus_LastKnownGoodTimestamp_ID
 #define CounterCorruptionStatus_LastKnownGoodTimestamp_ID 2
 #endif

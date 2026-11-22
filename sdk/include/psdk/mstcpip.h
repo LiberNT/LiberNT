@@ -1536,6 +1536,7 @@ RtlEthernetStringToAddressW(
 #endif
 #ifndef TIMESTAMPING_FLAG_TX
 #define TIMESTAMPING_FLAG_TX 0x2
+#endif
 
 typedef enum _TCPSTATE {
     TCPSTATE_CLOSED = 0,
@@ -1734,4 +1735,3 @@ typedef struct _REAL_TIME_NOTIFICATION_SETTING_INPUT_EX {
 #define TCP_INITIAL_RTO_UNSPECIFIED_RTT ((USHORT)0xFFFF)
 #define TIMESTAMPING_FLAG_RX 0x1
 
-#endif

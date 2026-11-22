@@ -21,6 +21,10 @@
 #ifndef __WINE_D3D9TYPES_H
 #define __WINE_D3D9TYPES_H
 
+#ifndef DIRECT3D_VERSION
+#define DIRECT3D_VERSION 0x0900
+#endif
+
 #ifdef __i386__
 #pragma pack(push,4)
 #endif

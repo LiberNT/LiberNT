@@ -546,12 +546,15 @@ struct _EAP_METHOD_INFO_ARRAY
 typedef struct _EAP_METHOD_INFO_ARRAY EAP_METHOD_INFO_ARRAY;
 
 #if (!(defined(__midl)))
+typedef union EAP_UI_DATA_FORMAT EAP_UI_DATA_FORMAT;
+
 union EAP_UI_DATA_FORMAT
 {
     EAP_CRED_REQ *credData;
     EAP_CRED_EXPIRY_REQ *credExpiryData;
     EAP_CRED_LOGON_REQ *credLogonData;
 };
+
 #endif
 
 struct _EAP_INTERACTIVE_UI_DATA
@@ -564,6 +567,8 @@ struct _EAP_INTERACTIVE_UI_DATA
 };
 
 typedef struct _EAP_INTERACTIVE_UI_DATA EAP_INTERACTIVE_UI_DATA;
+
+typedef struct _EAP_METHOD_INFO_EX EAP_METHOD_INFO_EX;
 
 struct _EAP_METHOD_INFO_ARRAY_EX
 {
@@ -581,7 +586,5 @@ struct _EAP_METHOD_INFO_EX
 };
 
 typedef struct _EAP_METHOD_INFO_ARRAY_EX EAP_METHOD_INFO_ARRAY_EX;
-
-typedef struct _EAP_METHOD_INFO_EX EAP_METHOD_INFO_EX;
 
 #endif

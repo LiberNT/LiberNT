@@ -143,14 +143,14 @@ HRESULT WINAPI GetDiskSpaceInformationA(LPCSTR rootPath, DISK_SPACE_INFORMATION 
 HRESULT WINAPI GetDiskSpaceInformationW(LPCWSTR rootPath, DISK_SPACE_INFORMATION *diskSpaceInfo);
 
 /* TODO: LiberNT does not implement the functions below yet */
-BOOL AreShortNamesEnabled(HANDLE Handle, BOOL *Enabled);
-HANDLE CreateDirectory2A(LPCSTR lpPathName, DWORD dwDesiredAccess, DWORD dwShareMode, DIRECTORY_FLAGS DirectoryFlags, LPSECURITY_ATTRIBUTES lpSecurityAttributes);
-HANDLE CreateDirectory2W(LPCWSTR lpPathName, DWORD dwDesiredAccess, DWORD dwShareMode, DIRECTORY_FLAGS DirectoryFlags, LPSECURITY_ATTRIBUTES lpSecurityAttributes);
+WINBASEAPI BOOL WINAPI AreShortNamesEnabled(HANDLE Handle, BOOL *Enabled);
+WINBASEAPI HANDLE WINAPI CreateDirectory2A(LPCSTR lpPathName, DWORD dwDesiredAccess, DWORD dwShareMode, DIRECTORY_FLAGS DirectoryFlags, LPSECURITY_ATTRIBUTES lpSecurityAttributes);
+WINBASEAPI HANDLE WINAPI CreateDirectory2W(LPCWSTR lpPathName, DWORD dwDesiredAccess, DWORD dwShareMode, DIRECTORY_FLAGS DirectoryFlags, LPSECURITY_ATTRIBUTES lpSecurityAttributes);
 HANDLE CreateFile3(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, DWORD dwCreationDisposition, LPCREATEFILE3_EXTENDED_PARAMETERS pCreateExParams);
-BOOL DeleteFile2A(LPCSTR lpFileName, DWORD Flags);
-BOOL DeleteFile2W(LPCWSTR lpFileName, DWORD Flags);
-BOOL RemoveDirectory2A(LPCSTR lpPathName, DIRECTORY_FLAGS DirectoryFlags);
-BOOL RemoveDirectory2W(LPCWSTR lpPathName, DIRECTORY_FLAGS DirectoryFlags);
+WINBASEAPI BOOL WINAPI DeleteFile2A(LPCSTR lpFileName, DWORD Flags);
+WINBASEAPI BOOL WINAPI DeleteFile2W(LPCWSTR lpFileName, DWORD Flags);
+WINBASEAPI BOOL WINAPI RemoveDirectory2A(LPCSTR lpPathName, DIRECTORY_FLAGS DirectoryFlags);
+WINBASEAPI BOOL WINAPI RemoveDirectory2W(LPCWSTR lpPathName, DIRECTORY_FLAGS DirectoryFlags);
 
 #ifdef __cplusplus
 }

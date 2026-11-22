@@ -2551,6 +2551,61 @@ struct _STORAGE_COUNTER
     } Value;
 };
 
+#ifndef STORAGE_CRYPTO_ALGORITHMS_DEFINED
+#define STORAGE_CRYPTO_ALGORITHMS_DEFINED
+typedef enum _STORAGE_CRYPTO_ALGORITHM_ID {
+    StorageCryptoAlgorithmUnknown = 0,
+    StorageCryptoAlgorithmXTSAES = 1,
+    StorageCryptoAlgorithmBitlockerAESCBC = 2,
+    StorageCryptoAlgorithmAESECB = 3,
+    StorageCryptoAlgorithmESSIVAESCBC = 4,
+    StorageCryptoAlgorithmMax = 5,
+    StorCryptoAlgorithmUnknown = StorageCryptoAlgorithmUnknown,
+    StorCryptoAlgorithmXTSAES = StorageCryptoAlgorithmXTSAES,
+    StorCryptoAlgorithmBitlockerAESCBC = StorageCryptoAlgorithmBitlockerAESCBC,
+    StorCryptoAlgorithmAESECB = StorageCryptoAlgorithmAESECB,
+    StorCryptoAlgorithmESSIVAESCBC = StorageCryptoAlgorithmESSIVAESCBC
+} STORAGE_CRYPTO_ALGORITHM_ID, *PSTORAGE_CRYPTO_ALGORITHM_ID;
+
+typedef enum _STORAGE_CRYPTO_KEY_SIZE {
+    StorageCryptoKeySizeUnknown = 0,
+    StorageCryptoKeySize128Bits = 1,
+    StorageCryptoKeySize192Bits = 2,
+    StorageCryptoKeySize256Bits = 3,
+    StorageCryptoKeySize512Bits = 4,
+    StorageCryptoKeySizeMax = 5,
+    StorCryptoKeySizeUnknown = StorageCryptoKeySizeUnknown,
+    StorCryptoKeySize128Bits = StorageCryptoKeySize128Bits,
+    StorCryptoKeySize192Bits = StorageCryptoKeySize192Bits,
+    StorCryptoKeySize256Bits = StorageCryptoKeySize256Bits,
+    StorCryptoKeySize512Bits = StorageCryptoKeySize512Bits
+} STORAGE_CRYPTO_KEY_SIZE, *PSTORAGE_CRYPTO_KEY_SIZE;
+#endif
+
+#ifndef STORAGE_SECURITY_COMPLIANCE_BITMASK_DEFINED
+#define STORAGE_SECURITY_COMPLIANCE_BITMASK_DEFINED
+typedef union _STORAGE_SECURITY_COMPLIANCE_BITMASK {
+    struct {
+        UCHAR FIPS : 1;
+        UCHAR Reserved : 7;
+    };
+    UCHAR AsUchar;
+} STORAGE_SECURITY_COMPLIANCE_BITMASK;
+#endif
+
+#ifndef STORAGE_CRYPTO_KEY_TYPE_DEFINED
+#define STORAGE_CRYPTO_KEY_TYPE_DEFINED
+typedef union _STORAGE_CRYPTO_KEY_TYPE {
+    struct {
+        UCHAR DirectKey : 1;
+        UCHAR PlatformWrappedKey : 1;
+        UCHAR PlutonWrappedKey : 1;
+        UCHAR Reserved : 5;
+    };
+    UCHAR AsUchar;
+} STORAGE_CRYPTO_KEY_TYPE;
+#endif
+
 struct _STORAGE_CRYPTO_CAPABILITY_V2
 {
     ULONG Version;
@@ -2904,21 +2959,5 @@ typedef struct _STORAGE_CRYPTO_DESCRIPTOR STORAGE_CRYPTO_DESCRIPTOR;
 #define DEVICE_DSM_ROUND_DN(_a, _b) (((_a)) / (_b) * (_b))
 #define DEVICE_DSM_ROUND_UP(_a, _b) (((_a) + ((_b) - 1)) / (_b) * (_b))
 #define GET_REPAIR_TOPOLOGY_ID(R) RtlOffsetToPointer(R, ALIGN_UP_BY(FIELD_OFFSET(DEVICE_DATA_SET_REPAIR_PARAMETERS, RepairCopies) + sizeof (ULONG) * R -> NumberOfRepairCopies, 8))
-
-typedef enum _STORAGE_CRYPTO_ALGORITHM_ID STORAGE_CRYPTO_ALGORITHM_ID;
-
-typedef enum _STORAGE_CRYPTO_KEY_SIZE STORAGE_CRYPTO_KEY_SIZE;
-
-typedef union _STORAGE_SECURITY_COMPLIANCE_BITMASK STORAGE_SECURITY_COMPLIANCE_BITMASK;
-
-typedef union _STORAGE_CRYPTO_KEY_TYPE STORAGE_CRYPTO_KEY_TYPE;
-
-typedef enum _STORAGE_CRYPTO_ALGORITHM_ID STORAGE_CRYPTO_ALGORITHM_ID;
-
-typedef enum _STORAGE_CRYPTO_KEY_SIZE STORAGE_CRYPTO_KEY_SIZE;
-
-typedef union _STORAGE_SECURITY_COMPLIANCE_BITMASK STORAGE_SECURITY_COMPLIANCE_BITMASK;
-
-typedef union _STORAGE_CRYPTO_KEY_TYPE STORAGE_CRYPTO_KEY_TYPE;
 
 #endif /* _NTDDSTOR_H_ */

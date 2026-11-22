@@ -149,7 +149,9 @@ typedef struct FXREVERB_PARAMETERS {
 extern "C" {
 #endif
 
+#ifndef XAPOFX1_VER
 HRESULT __cdecl CreateFX(const IID *const clsid, IUnknown **pEffect, const void *pInitDat, UINT32 InitDataByteSize);
+#endif
 
 #ifdef __cplusplus
 }

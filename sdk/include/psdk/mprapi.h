@@ -1342,9 +1342,9 @@ DWORD WINAPI MprAdminConnectionEnum(RAS_SERVER_HANDLE hRasServer, DWORD dwLevel,
 DWORD WINAPI MprAdminConnectionEnumEx(RAS_SERVER_HANDLE hRasServer, PMPRAPI_OBJECT_HEADER pObjectHeader, DWORD dwPreferedMaxLen, LPDWORD lpdwEntriesRead, LPDWORD lpdwTotalEntries, PRAS_CONNECTION_EX *ppRasConn, LPDWORD lpdwResumeHandle);
 DWORD WINAPI MprAdminConnectionGetInfo(RAS_SERVER_HANDLE hRasServer, DWORD dwLevel, HANDLE hRasConnection, LPBYTE *lplpbBuffer);
 DWORD WINAPI MprAdminConnectionGetInfoEx(RAS_SERVER_HANDLE hRasServer, HANDLE hRasConnection, PRAS_CONNECTION_EX pRasConnection);
-void MprAdminConnectionHangupNotification(RAS_CONNECTION_0 *pRasConnection0, RAS_CONNECTION_1 *pRasConnection1);
-void MprAdminConnectionHangupNotification2(RAS_CONNECTION_0 *pRasConnection0, RAS_CONNECTION_1 *pRasConnection1, RAS_CONNECTION_2 *pRasConnection2);
-void MprAdminConnectionHangupNotification3(RAS_CONNECTION_0 *pRasConnection0, RAS_CONNECTION_1 *pRasConnection1, RAS_CONNECTION_2 *pRasConnection2, RAS_CONNECTION_3 *pRasConnection3);
+void APIENTRY MprAdminConnectionHangupNotification(RAS_CONNECTION_0 *pRasConnection0, RAS_CONNECTION_1 *pRasConnection1);
+void APIENTRY MprAdminConnectionHangupNotification2(RAS_CONNECTION_0 *pRasConnection0, RAS_CONNECTION_1 *pRasConnection1, RAS_CONNECTION_2 *pRasConnection2);
+void APIENTRY MprAdminConnectionHangupNotification3(RAS_CONNECTION_0 *pRasConnection0, RAS_CONNECTION_1 *pRasConnection1, RAS_CONNECTION_2 *pRasConnection2, RAS_CONNECTION_3 *pRasConnection3);
 void WINAPI MprAdminConnectionHangupNotificationEx(RAS_CONNECTION_EX *pRasConn);
 DWORD WINAPI MprAdminConnectionRemoveQuarantine(HANDLE hRasServer, HANDLE hRasConnection, BOOL fIsIpAddress);
 DWORD WINAPI MprAdminDeregisterConnectionNotification(MPR_SERVER_HANDLE hMprServer, HANDLE hEventNotification);
@@ -1380,7 +1380,7 @@ DWORD WINAPI MprAdminInterfaceUpdatePhonebookInfo(MPR_SERVER_HANDLE hMprServer, 
 DWORD WINAPI MprAdminInterfaceUpdateRoutes(MPR_SERVER_HANDLE hMprServer, HANDLE hInterface, DWORD dwProtocolId, HANDLE hEvent);
 DWORD WINAPI MprAdminIsDomainRasServer(LPWSTR pszDomain, LPWSTR pszMachine, PBOOL pbIsRasServer);
 DWORD WINAPI MprAdminIsServiceInitialized(LPWSTR lpwsServerName, BOOL *fIsServiceInitialized);
-void MprAdminLinkHangupNotification(RAS_PORT_0 *pRasPort0, RAS_PORT_1 *pRasPort1);
+void APIENTRY MprAdminLinkHangupNotification(RAS_PORT_0 *pRasPort0, RAS_PORT_1 *pRasPort1);
 DWORD WINAPI MprAdminMIBBufferFree(LPVOID pBuffer);
 DWORD WINAPI MprAdminMIBEntryCreate(MIB_SERVER_HANDLE hMibServer, DWORD dwPid, DWORD dwRoutingPid, LPVOID lpEntry, DWORD dwEntrySize);
 DWORD WINAPI MprAdminMIBEntryDelete(MIB_SERVER_HANDLE hMibServer, DWORD dwProtocolId, DWORD dwRoutingPid, LPVOID lpEntry, DWORD dwEntrySize);
@@ -1390,7 +1390,7 @@ DWORD WINAPI MprAdminMIBEntryGetNext(MIB_SERVER_HANDLE hMibServer, DWORD dwProto
 DWORD WINAPI MprAdminMIBEntrySet(MIB_SERVER_HANDLE hMibServer, DWORD dwProtocolId, DWORD dwRoutingPid, LPVOID lpEntry, DWORD dwEntrySize);
 DWORD WINAPI MprAdminMIBGetTrapInfo(MIB_SERVER_HANDLE hMibServer, DWORD dwProtocolId, DWORD dwRoutingPid, LPVOID lpInData, DWORD dwInDataSize, LPVOID *lplpOutData, LPDWORD lpOutDataSize);
 DWORD WINAPI MprAdminMIBServerConnect(LPWSTR lpwsServerName, MIB_SERVER_HANDLE *phMibServer);
-void MprAdminMIBServerDisconnect(MIB_SERVER_HANDLE hMibServer);
+void APIENTRY MprAdminMIBServerDisconnect(MIB_SERVER_HANDLE hMibServer);
 DWORD WINAPI MprAdminMIBSetTrapInfo(DWORD dwProtocolId, DWORD dwRoutingPid, HANDLE hEvent, LPVOID lpInData, DWORD dwInDataSize, LPVOID *lplpOutData, LPDWORD lpOutDataSize);
 DWORD WINAPI MprAdminPortClearStats(RAS_SERVER_HANDLE hRasServer, HANDLE hPort);
 DWORD WINAPI MprAdminPortDisconnect(RAS_SERVER_HANDLE hRasServer, HANDLE hPort);
@@ -1398,11 +1398,11 @@ DWORD WINAPI MprAdminPortEnum(RAS_SERVER_HANDLE hRasServer, DWORD dwLevel, HANDL
 DWORD WINAPI MprAdminPortGetInfo(RAS_SERVER_HANDLE hRasServer, DWORD dwLevel, HANDLE hPort, LPBYTE *lplpbBuffer);
 DWORD WINAPI MprAdminPortReset(RAS_SERVER_HANDLE hRasServer, HANDLE hPort);
 DWORD WINAPI MprAdminRegisterConnectionNotification(MPR_SERVER_HANDLE hMprServer, HANDLE hEventNotification);
-void MprAdminReleaseIpAddress(WCHAR *lpszUserName, WCHAR *lpszPortName, DWORD *lpdwIpAddress);
+void APIENTRY MprAdminReleaseIpAddress(WCHAR *lpszUserName, WCHAR *lpszPortName, DWORD *lpdwIpAddress);
 void MprAdminReleaseIpv6AddressForUser(WCHAR *lpszUserName, WCHAR *lpszPortName, IN6_ADDR *lpdwIpv6Address);
 DWORD WINAPI MprAdminSendUserMessage(MPR_SERVER_HANDLE hMprServer, HANDLE hConnection, LPWSTR lpwszMessage);
 DWORD WINAPI MprAdminServerConnect(LPWSTR lpwsServerName, MPR_SERVER_HANDLE *phMprServer);
-void MprAdminServerDisconnect(MPR_SERVER_HANDLE hMprServer);
+void APIENTRY MprAdminServerDisconnect(MPR_SERVER_HANDLE hMprServer);
 DWORD WINAPI MprAdminServerGetCredentials(MPR_SERVER_HANDLE hMprServer, DWORD dwLevel, LPBYTE *lplpbBuffer);
 DWORD WINAPI MprAdminServerGetInfo(MPR_SERVER_HANDLE hMprServer, DWORD dwLevel, LPBYTE *lplpbBuffer);
 DWORD WINAPI MprAdminServerGetInfoEx(MPR_SERVER_HANDLE hMprServer, MPR_SERVER_EX1 *pServerInfo);
@@ -1436,7 +1436,7 @@ DWORD WINAPI MprConfigInterfaceTransportGetInfo(HANDLE hMprConfig, HANDLE hRoute
 DWORD WINAPI MprConfigInterfaceTransportRemove(HANDLE hMprConfig, HANDLE hRouterInterface, HANDLE hRouterIfTransport);
 DWORD WINAPI MprConfigInterfaceTransportSetInfo(HANDLE hMprConfig, HANDLE hRouterInterface, HANDLE hRouterIfTransport, LPBYTE pInterfaceInfo, DWORD dwInterfaceInfoSize);
 DWORD WINAPI MprConfigServerBackup(HANDLE hMprConfig, LPWSTR lpwsPath);
-void MprConfigServerDisconnect(HANDLE hMprConfig);
+void APIENTRY MprConfigServerDisconnect(HANDLE hMprConfig);
 DWORD WINAPI MprConfigServerGetInfo(HANDLE hMprConfig, DWORD dwLevel, LPBYTE *lplpbBuffer);
 DWORD WINAPI MprConfigServerGetInfoEx(HANDLE hMprConfig, MPR_SERVER_EX1 *pServerInfo);
 DWORD WINAPI MprConfigServerInstall(DWORD dwLevel, PVOID pBuffer);
@@ -1471,7 +1471,13 @@ DWORD WINAPI MprSetupIpInIpInterfaceFriendlyNameFree(LPVOID lpBuffer);
 
 enum _RAS_PORT_CONDITION
 {
-
+    RAS_PORT_NON_OPERATIONAL = 0,
+    RAS_PORT_DISCONNECTED = 1,
+    RAS_PORT_CALLING_BACK = 2,
+    RAS_PORT_LISTENING = 3,
+    RAS_PORT_AUTHENTICATING = 4,
+    RAS_PORT_AUTHENTICATED = 5,
+    RAS_PORT_INITIALIZING = 6,
 };
 
 typedef enum _RAS_PORT_CONDITION RAS_PORT_CONDITION;

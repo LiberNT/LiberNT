@@ -67,6 +67,7 @@ typedef struct _WSA_COMPATIBILITY_MODE {
 
 #ifndef RIO_CORRUPT_CQ
 #define RIO_CORRUPT_CQ 0xFFFFFFFF
+#endif
 typedef struct _RIO_CMSG_BUFFER {
   ULONG TotalLength;
 } RIO_CMSG_BUFFER, *PRIO_CMSG_BUFFER;
@@ -116,7 +117,6 @@ typedef struct RIO_RQ_t *RIO_RQ;
 #define RIO_CMSG_FIRSTHDR(buffer) (((buffer) -> TotalLength >= RIO_CMSG_BASE_SIZE) ? ((((buffer) -> TotalLength - RIO_CMSG_BASE_SIZE) >= sizeof (WSACMSGHDR)) ? (PWSACMSGHDR) ((PUCHAR) (buffer) + RIO_CMSG_BASE_SIZE) : (PWSACMSGHDR) NULL) : (PWSACMSGHDR) NULL)
 #define RIO_CMSG_NEXTHDR(buffer, cmsg) ((cmsg) == NULL ? RIO_CMSG_FIRSTHDR(buffer) : (((PUCHAR) (cmsg) + WSA_CMSGHDR_ALIGN((cmsg) -> cmsg_len) + sizeof (WSACMSGHDR) > (PUCHAR) (buffer) + (buffer) -> TotalLength) ? (PWSACMSGHDR) NULL : (PWSACMSGHDR) ((PUCHAR) (cmsg) + WSA_CMSGHDR_ALIGN((cmsg) -> cmsg_len))))
 
-#endif
 #ifndef RIO_MAX_CQ_SIZE
 #define RIO_MAX_CQ_SIZE 0x8000000
 #endif

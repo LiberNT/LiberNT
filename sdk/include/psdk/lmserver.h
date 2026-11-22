@@ -840,8 +840,8 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-DWORD NetServerTransportAddForInstance(LPWSTR servername, DWORD level, LPBYTE bufptr, LPDWORD InstanceHandle);
-DWORD NetServerTransportDelForInstance(LPWSTR servername, DWORD level, LPBYTE bufptr, LPDWORD InstanceHandle);
+DWORD NET_API_FUNCTION NetServerTransportAddForInstance(LPWSTR servername, DWORD level, LPBYTE bufptr, LPDWORD InstanceHandle);
+DWORD NET_API_FUNCTION NetServerTransportDelForInstance(LPWSTR servername, DWORD level, LPBYTE bufptr, LPDWORD InstanceHandle);
 
 #ifdef __cplusplus
 }

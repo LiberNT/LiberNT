@@ -528,7 +528,7 @@ DWORD WINAPI WlanScan(IN HANDLE hClientHandle, IN const GUID *pInterfaceGuid, IN
 }
 #endif
 
-
+#ifndef __WIDL__
 #ifndef DOT11_PSD_IE_MAX_DATA_SIZE
 #define DOT11_PSD_IE_MAX_DATA_SIZE 240
 #endif
@@ -1067,5 +1067,6 @@ DWORD WINAPI WlanUIEditProfile(DWORD dwClientVersion, LPCWSTR wstrProfileName, G
 #define WLAN_API_MAKE_VERSION(_major, _minor) (((DWORD) (_minor)) << 16 | (_major))
 #define WLAN_API_VERSION_MAJOR(_v) ((_v) & 0xffff)
 #define WLAN_API_VERSION_MINOR(_v) (((DWORD) (_v)) >> 16)
+#endif
 
 #endif  // _WLANAPI_H

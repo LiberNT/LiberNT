@@ -1865,10 +1865,13 @@ typedef enum PRINT_EXECUTION_CONTEXT {
 } PRINT_EXECUTION_CONTEXT;
 
 typedef struct _FORM_INFO_2A * LPFORM_INFO_2A;
+typedef struct _FORM_INFO_2W * LPFORM_INFO_2W;
+
 #if (!(defined(UNICODE)))
 typedef LPFORM_INFO_2A LPFORM_INFO_2;
+#else
+typedef LPFORM_INFO_2W LPFORM_INFO_2;
 #endif
-typedef struct _FORM_INFO_2W * LPFORM_INFO_2W;
 
 typedef struct _JOB_INFO_4A {
   DWORD JobId;
@@ -2007,6 +2010,14 @@ typedef LPJOB_INFO_4A LPJOB_INFO_4;
 typedef LPPRINTER_OPTIONSA LPPRINTER_OPTIONS;
 
 typedef PJOB_INFO_4A PJOB_INFO_4;
+#else
+typedef JOB_INFO_4W JOB_INFO_4;
+
+typedef LPJOB_INFO_4W LPJOB_INFO_4;
+
+typedef LPPRINTER_OPTIONSW LPPRINTER_OPTIONS;
+
+typedef PJOB_INFO_4W PJOB_INFO_4;
 #endif
 
 #ifdef __cplusplus

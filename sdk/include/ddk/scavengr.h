@@ -189,7 +189,7 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-void RxTerminateScavenging(PRX_CONTEXT RxContext);
+void NTAPI RxTerminateScavenging(PRX_CONTEXT RxContext);
 
 #ifdef __cplusplus
 }

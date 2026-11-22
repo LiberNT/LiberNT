@@ -82,14 +82,6 @@ ENUM16 TAG(TVAudioMode)
 
 #include <unexposeenums2managed.h>
 
-enum tagAnalogVideoStandard
-{
 
-};
-
-enum tagTunerInputType
-{
-
-};
 
 #endif /* AXEXTEND_ENUM_H */

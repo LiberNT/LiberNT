@@ -26,14 +26,25 @@
 #define V1_ENUM
 #endif
 
-#define BDA_FREQUENCY_NOT_SET                -1
-#define BDA_FREQUENCY_NOT_DEFINED            0
-#define BDA_RANGE_NOT_SET                    -1
-#define BDA_RANGE_NOT_DEFINED                0
-#define BDA_CHAN_BANDWITH_NOT_SET            -1
-#define BDA_CHAN_BANDWITH_NOT_DEFINED        0
-#define BDA_FREQUENCY_MULTIPLIER_NOT_SET     -1
-#define BDA_FREQUENCY_MULTIPLIER_NOT_DEFINED 0
+typedef V1_ENUM enum BDA_Frequency {
+  BDA_FREQUENCY_NOT_SET = -1,
+  BDA_FREQUENCY_NOT_DEFINED = 0
+} BDA_Frequency;
+
+typedef V1_ENUM enum BDA_Range {
+  BDA_RANGE_NOT_SET = -1,
+  BDA_RANGE_NOT_DEFINED = 0
+} BDA_Range;
+
+typedef V1_ENUM enum BDA_Channel_Bandwidth {
+  BDA_CHAN_BANDWITH_NOT_SET = -1,
+  BDA_CHAN_BANDWITH_NOT_DEFINED = 0
+} BDA_Channel_Bandwidth;
+
+typedef V1_ENUM enum BDA_Frequency_Multiplier {
+  BDA_FREQUENCY_MULTIPLIER_NOT_SET = -1,
+  BDA_FREQUENCY_MULTIPLIER_NOT_DEFINED = 0
+} BDA_Frequency_Multiplier;
 
 typedef struct _BDA_TEMPLATE_CONNECTION {
   ULONG FromNodeType;
@@ -179,9 +190,9 @@ typedef struct _BDA_PROGRAM_PID_LIST {
   ULONG ulPID[MIN_DIMENSION];
 } BDA_PROGRAM_PID_LIST, *PBDA_PROGRAM_PID_LIST;
 
-V1_ENUM enum {
+typedef V1_ENUM enum BDA_Channel {
   BDA_UNDEFINED_CHANNEL = -1,
-};
+} BDA_Channel;
 
 typedef V1_ENUM enum ComponentCategory {
   CategoryNotSet = -1,
@@ -611,16 +622,6 @@ enum tagScanModulationTypes
     BDA_SCAN_MOD_16APSK = 0x10000000,
     BDA_SCAN_MOD_32APSK = 0x20000000,
 };
-
-typedef enum BDA_Channel BDA_Channel;
-
-typedef enum BDA_Channel_Bandwidth BDA_Channel_Bandwidth;
-
-typedef enum BDA_Frequency BDA_Frequency;
-
-typedef enum BDA_Frequency_Multiplier BDA_Frequency_Multiplier;
-
-typedef enum BDA_Range BDA_Range;
 
 struct _BDA_BUFFER
 {

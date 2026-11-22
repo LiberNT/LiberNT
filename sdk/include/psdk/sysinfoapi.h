@@ -189,6 +189,7 @@ GetSystemTimePreciseAsFileTime(
 
 #ifndef USER_CET_ENVIRONMENT_SGX2_ENCLAVE
 #define USER_CET_ENVIRONMENT_SGX2_ENCLAVE 0x00000002
+#endif
 typedef enum DEVELOPER_DRIVE_ENABLEMENT_STATE {
     DeveloperDriveEnablementStateError = 0,
     DeveloperDriveEnabled = 1,
@@ -217,20 +218,19 @@ HRESULT WINAPI GetIntegratedDisplaySize(double *sizeInInches);
 BOOL WINAPI GetPhysicallyInstalledSystemMemory(PULONGLONG TotalMemoryInKilobytes);
 
 /* TODO: LiberNT does not implement the functions below yet */
-DEVELOPER_DRIVE_ENABLEMENT_STATE GetDeveloperDriveEnablementState(void);
-BOOL GetOsManufacturingMode(PBOOL pbEnabled);
-BOOL GetSystemLeapSecondInformation(PBOOL Enabled, PDWORD Flags);
-BOOL GetSystemTimeAdjustmentPrecise(PDWORD64 lpTimeAdjustment, PDWORD64 lpTimeIncrement, PBOOL lpTimeAdjustmentDisabled);
-BOOL InstallELAMCertificateInfo(HANDLE ELAMFile);
-BOOL IsUserCetAvailableInEnvironment(DWORD UserCetEnvironment);
-BOOL SetComputerNameEx2W(COMPUTER_NAME_FORMAT NameType, DWORD Flags, LPCWSTR lpBuffer);
-BOOL SetSystemTimeAdjustmentPrecise(DWORD64 dwTimeAdjustment, BOOL bTimeAdjustmentDisabled);
+WINBASEAPI DEVELOPER_DRIVE_ENABLEMENT_STATE WINAPI GetDeveloperDriveEnablementState(void);
+WINBASEAPI BOOL WINAPI GetOsManufacturingMode(PBOOL pbEnabled);
+WINBASEAPI BOOL WINAPI GetSystemLeapSecondInformation(PBOOL Enabled, PDWORD Flags);
+WINBASEAPI BOOL WINAPI GetSystemTimeAdjustmentPrecise(PDWORD64 lpTimeAdjustment, PDWORD64 lpTimeIncrement, PBOOL lpTimeAdjustmentDisabled);
+WINBASEAPI BOOL WINAPI InstallELAMCertificateInfo(HANDLE ELAMFile);
+WINBASEAPI BOOL WINAPI IsUserCetAvailableInEnvironment(DWORD UserCetEnvironment);
+WINBASEAPI BOOL WINAPI SetComputerNameEx2W(COMPUTER_NAME_FORMAT NameType, DWORD Flags, LPCWSTR lpBuffer);
+WINBASEAPI BOOL WINAPI SetSystemTimeAdjustmentPrecise(DWORD64 dwTimeAdjustment, BOOL bTimeAdjustmentDisabled);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif
 #ifndef USER_CET_ENVIRONMENT_VBS_BASIC_ENCLAVE
 #define USER_CET_ENVIRONMENT_VBS_BASIC_ENCLAVE 0x00000011
 #endif

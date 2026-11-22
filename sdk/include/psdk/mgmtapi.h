@@ -19,6 +19,8 @@
 #ifndef _INC_MGMTAPI
 #define _INC_MGMTAPI
 
+#include <snmp.h>
+
 typedef void *LPSNMP_MGR_SESSION;
 
 #ifndef MGMCTL_SETAGENTPORT
@@ -60,13 +62,13 @@ LPSNMP_MGR_SESSION WINAPI SnmpMgrOpen(LPSTR lpAgentAddress, LPSTR lpAgentCommuni
 BOOL WINAPI SnmpMgrTrapListen(HANDLE *phTrapAvailable);
 
 /* TODO: LiberNT does not implement the functions below yet */
-BOOL SnmpMgrClose(LPSNMP_MGR_SESSION session);
-BOOL SnmpMgrCtl(LPSNMP_MGR_SESSION session, DWORD dwCtlCode, LPVOID lpvInBuffer, DWORD cbInBuffer, LPVOID lpvOUTBuffer, DWORD cbOUTBuffer, LPDWORD lpcbBytesReturned);
-BOOL SnmpMgrGetTrap(AsnObjectIdentifier *enterprise, AsnNetworkAddress *IPAddress, AsnInteger32 *genericTrap, AsnInteger32 *specificTrap, AsnTimeticks *timeStamp, SnmpVarBindList *variableBindings);
-BOOL SnmpMgrGetTrapEx(AsnObjectIdentifier *enterprise, AsnNetworkAddress *agentAddress, AsnNetworkAddress *sourceAddress, AsnInteger32 *genericTrap, AsnInteger32 *specificTrap, AsnOctetString *community, AsnTimeticks *timeStamp, SnmpVarBindList *variableBindings);
-BOOL SnmpMgrOidToStr(AsnObjectIdentifier *oid, LPSTR *string);
-INT SnmpMgrRequest(LPSNMP_MGR_SESSION session, BYTE requestType, SnmpVarBindList *variableBindings, AsnInteger32 *errorStatus, AsnInteger32 *errorIndex);
-BOOL SnmpMgrStrToOid(LPSTR string, AsnObjectIdentifier *oid);
+BOOL SNMP_FUNC_TYPE SnmpMgrClose(LPSNMP_MGR_SESSION session);
+BOOL SNMP_FUNC_TYPE SnmpMgrCtl(LPSNMP_MGR_SESSION session, DWORD dwCtlCode, LPVOID lpvInBuffer, DWORD cbInBuffer, LPVOID lpvOUTBuffer, DWORD cbOUTBuffer, LPDWORD lpcbBytesReturned);
+BOOL SNMP_FUNC_TYPE SnmpMgrGetTrap(AsnObjectIdentifier *enterprise, AsnNetworkAddress *IPAddress, AsnInteger32 *genericTrap, AsnInteger32 *specificTrap, AsnTimeticks *timeStamp, SnmpVarBindList *variableBindings);
+BOOL SNMP_FUNC_TYPE SnmpMgrGetTrapEx(AsnObjectIdentifier *enterprise, AsnNetworkAddress *agentAddress, AsnNetworkAddress *sourceAddress, AsnInteger32 *genericTrap, AsnInteger32 *specificTrap, AsnOctetString *community, AsnTimeticks *timeStamp, SnmpVarBindList *variableBindings);
+BOOL SNMP_FUNC_TYPE SnmpMgrOidToStr(AsnObjectIdentifier *oid, LPSTR *string);
+SNMPAPI SNMP_FUNC_TYPE SnmpMgrRequest(LPSNMP_MGR_SESSION session, BYTE requestType, SnmpVarBindList *variableBindings, AsnInteger32 *errorStatus, AsnInteger32 *errorIndex);
+BOOL SNMP_FUNC_TYPE SnmpMgrStrToOid(LPSTR string, AsnObjectIdentifier *oid);
 
 #ifdef __cplusplus
 }

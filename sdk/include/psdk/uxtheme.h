@@ -433,14 +433,14 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-BOOL BeginPanningFeedback(HWND hwnd);
+BOOL WINAPI BeginPanningFeedback(HWND hwnd);
 HRESULT DrawThemeParentBackgroundEx(HWND hwnd, HDC hdc, DWORD dwFlags, const RECT *prc);
-BOOL EndPanningFeedback(HWND hwnd, BOOL fAnimateBack);
+BOOL WINAPI EndPanningFeedback(HWND hwnd, BOOL fAnimateBack);
 HRESULT GetThemeAnimationProperty(HTHEME hTheme, int iStoryboardId, int iTargetId, TA_PROPERTY eProperty, void *pvProperty, DWORD cbSize, DWORD *pcbSizeOut);
 HRESULT GetThemeAnimationTransform(HTHEME hTheme, int iStoryboardId, int iTargetId, DWORD dwTransformIndex, TA_TRANSFORM *pTransform, DWORD cbSize, DWORD *pcbSizeOut);
 HRESULT GetThemeTimingFunction(HTHEME hTheme, int iTimingFunctionId, TA_TIMINGFUNCTION *pTimingFunction, DWORD cbSize, DWORD *pcbSizeOut);
 HRESULT SetWindowThemeNonClientAttributes(HWND hwnd, DWORD dwMask, DWORD dwAttributes);
-BOOL UpdatePanningFeedback(HWND hwnd, LONG lTotalOverpanOffsetX, LONG lTotalOverpanOffsetY, BOOL fInInertia);
+BOOL WINAPI UpdatePanningFeedback(HWND hwnd, LONG lTotalOverpanOffsetX, LONG lTotalOverpanOffsetY, BOOL fInInertia);
 
 #ifdef __cplusplus
 }

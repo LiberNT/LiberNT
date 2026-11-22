@@ -700,7 +700,7 @@ typedef struct _D3DLINEPATTERN {
 
 #endif /* (DIRECT3D_VERSION < 0x0800) */
 
-typedef enum {
+typedef enum _D3DTEXTUREFILTER {
   D3DFILTER_NEAREST          = 1,
   D3DFILTER_LINEAR           = 2,
   D3DFILTER_MIPNEAREST       = 3,
@@ -732,7 +732,7 @@ typedef enum {
 #endif /* (DIRECT3D_VERSION < 0x0800) */
 
 
-typedef enum {
+typedef enum _D3DTEXTUREBLEND {
   D3DTBLEND_DECAL         = 1,
   D3DTBLEND_MODULATE      = 2,
   D3DTBLEND_DECALALPHA    = 3,
@@ -810,7 +810,7 @@ typedef enum _D3DANTIALIASMODE {
   D3DANTIALIAS_FORCE_DWORD     = 0x7fffffff
 } D3DANTIALIASMODE;
 
-typedef enum {
+typedef enum _D3DVERTEXTYPE {
   D3DVT_VERTEX        = 1,
   D3DVT_LVERTEX       = 2,
   D3DVT_TLVERTEX      = 3,
@@ -857,7 +857,7 @@ typedef enum _D3DTRANSFORMSTATETYPE {
 
 #endif /* (DIRECT3D_VERSION < 0x0800) */
 
-typedef enum {
+typedef enum _D3DLIGHTSTATETYPE {
   D3DLIGHTSTATE_MATERIAL      = 1,
   D3DLIGHTSTATE_AMBIENT       = 2,
   D3DLIGHTSTATE_COLORMODEL    = 3,
@@ -1436,24 +1436,8 @@ struct _D3DSTATS
     DWORD dwVerticesProcessed;
 };
 
-enum _D3DLIGHTSTATETYPE
-{
 
-};
 
-enum _D3DTEXTUREBLEND
-{
 
-};
-
-enum _D3DTEXTUREFILTER
-{
-
-};
-
-enum _D3DVERTEXTYPE
-{
-
-};
 
 #endif

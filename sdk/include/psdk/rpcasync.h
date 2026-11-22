@@ -273,6 +273,8 @@ typedef struct _RPC_CALL_LOCAL_ADDRESS_V1 {
 
 #if (!(defined(UNICODE)))
 #define RPC_CALL_ATTRIBUTES_V1 RPC_CALL_ATTRIBUTES_V1_A
+#else
+#define RPC_CALL_ATTRIBUTES_V1 RPC_CALL_ATTRIBUTES_V1_W
 #endif
 #define RpcNotificationCallStatusChange RpcNotificationClientDisconnect
 #ifdef UNICODE
@@ -292,13 +294,13 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-RPC_STATUS I_RpcBindingInqClientTokenAttributes(RPC_BINDING_HANDLE Binding, LUID *TokenId, LUID *AuthenticationId, LUID *ModifiedId);
-RPC_STATUS RpcBindingBind(PRPC_ASYNC_STATE pAsync, RPC_BINDING_HANDLE Binding, RPC_IF_HANDLE IfSpec);
-RPC_STATUS RpcBindingUnbind(RPC_BINDING_HANDLE Binding);
-RPC_STATUS RpcServerInqCallAttributesA(RPC_BINDING_HANDLE ClientBinding, void *RpcCallAttributes);
-RPC_STATUS RpcServerInqCallAttributesW(RPC_BINDING_HANDLE ClientBinding, void *RpcCallAttributes);
-RPC_STATUS RpcServerSubscribeForNotification(RPC_BINDING_HANDLE Binding, RPC_NOTIFICATIONS Notification, RPC_NOTIFICATION_TYPES NotificationType, RPC_ASYNC_NOTIFICATION_INFO *NotificationInfo);
-RPC_STATUS RpcServerUnsubscribeForNotification(RPC_BINDING_HANDLE Binding, RPC_NOTIFICATIONS Notification, unsigned long *NotificationsQueued);
+RPCRTAPI RPC_STATUS RPC_ENTRY I_RpcBindingInqClientTokenAttributes(RPC_BINDING_HANDLE Binding, LUID *TokenId, LUID *AuthenticationId, LUID *ModifiedId);
+RPCRTAPI RPC_STATUS RPC_ENTRY RpcBindingBind(PRPC_ASYNC_STATE pAsync, RPC_BINDING_HANDLE Binding, RPC_IF_HANDLE IfSpec);
+RPCRTAPI RPC_STATUS RPC_ENTRY RpcBindingUnbind(RPC_BINDING_HANDLE Binding);
+RPCRTAPI RPC_STATUS RPC_ENTRY RpcServerInqCallAttributesA(RPC_BINDING_HANDLE ClientBinding, void *RpcCallAttributes);
+RPCRTAPI RPC_STATUS RPC_ENTRY RpcServerInqCallAttributesW(RPC_BINDING_HANDLE ClientBinding, void *RpcCallAttributes);
+RPCRTAPI RPC_STATUS RPC_ENTRY RpcServerSubscribeForNotification(RPC_BINDING_HANDLE Binding, RPC_NOTIFICATIONS Notification, RPC_NOTIFICATION_TYPES NotificationType, RPC_ASYNC_NOTIFICATION_INFO *NotificationInfo);
+RPCRTAPI RPC_STATUS RPC_ENTRY RpcServerUnsubscribeForNotification(RPC_BINDING_HANDLE Binding, RPC_NOTIFICATIONS Notification, unsigned long *NotificationsQueued);
 
 #ifdef __cplusplus
 }

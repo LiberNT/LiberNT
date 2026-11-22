@@ -1,6 +1,17 @@
 #ifndef _USERENV_H
 #define _USERENV_H
 
+/* FIXME: Windows includes <wbemcli.h> here; LiberNT users built with COM_NO_WINDOWS_H cannot take it, so only the two interfaces are forward-declared */
+#ifndef __IWbemClassObject_FWD_DEFINED__
+#define __IWbemClassObject_FWD_DEFINED__
+typedef struct IWbemClassObject IWbemClassObject;
+#endif
+#ifndef __IWbemServices_FWD_DEFINED__
+#define __IWbemServices_FWD_DEFINED__
+typedef struct IWbemServices IWbemServices;
+#endif
+typedef struct tagSAFEARRAY SAFEARRAY;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -388,10 +399,10 @@ typedef struct _POLICYSETTINGSTATUSINFO {
 #define GP_PROCESSGROUPPOLICY TEXT("ProcessGroupPolicy")
 #define GP_REQUIRESSUCCESSFULREGISTRY TEXT("RequiresSuccessfulRegistry")
 #define GPO_INFO_FLAG_MACHINE 0x00000001
-#define GROUP_POLICY_TRIGGER_EVENT_PROVIDER_GUID { 0xBD2F4252, 0x5E1E, 0x49FC, 0x9A, 0x30, 0xF3, 0x97, 0x8A, 0xD8, 0x9E, 0xE2 }
-#define MACHINE_POLICY_PRESENT_TRIGGER_GUID { 0x659FCAE6, 0x5BDB, 0x4DA9, 0xB1, 0xFF, 0xCA, 0x2A, 0x17, 0x8D, 0x46, 0xE0 }
-#define REGISTRY_EXTENSION_GUID { 0x35378EAC, 0x683F, 0x11D2, 0xA8, 0x9A, 0x00, 0xC0, 0x4F, 0xBB, 0xCF, 0xA2 }
-#define USER_POLICY_PRESENT_TRIGGER_GUID { 0x54FB46C8, 0xF089, 0x464C, 0xB1, 0xFD, 0x59, 0xD1, 0xB6, 0x2C, 0x3B, 0x50 }
+#define GROUP_POLICY_TRIGGER_EVENT_PROVIDER_GUID { 0xBD2F4252, 0x5E1E, 0x49FC, { 0x9A, 0x30, 0xF3, 0x97, 0x8A, 0xD8, 0x9E, 0xE2 } }
+#define MACHINE_POLICY_PRESENT_TRIGGER_GUID { 0x659FCAE6, 0x5BDB, 0x4DA9, { 0xB1, 0xFF, 0xCA, 0x2A, 0x17, 0x8D, 0x46, 0xE0 } }
+#define REGISTRY_EXTENSION_GUID { 0x35378EAC, 0x683F, 0x11D2, { 0xA8, 0x9A, 0x00, 0xC0, 0x4F, 0xBB, 0xCF, 0xA2 } }
+#define USER_POLICY_PRESENT_TRIGGER_GUID { 0x54FB46C8, 0xF089, 0x464C, { 0xB1, 0xFD, 0x59, 0xD1, 0xB6, 0x2C, 0x3B, 0x50 } }
 #define USERENVAPI DECLSPEC_IMPORT
 
 typedef DWORD (*PFNSTATUSMESSAGECALLBACK)(BOOL, LPWSTR);
@@ -405,19 +416,19 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-HRESULT CreateProfile(LPCWSTR pszUserSid, LPCWSTR pszUserName, LPWSTR pszProfilePath, DWORD cchProfilePath);
-HRESULT DeriveRestrictedAppContainerSidFromAppContainerSidAndRestrictedName(PSID psidAppContainerSid, PCWSTR pszRestrictedAppContainerName, PSID *ppsidRestrictedAppContainerSid);
-BOOL FreeGPOListA(PGROUP_POLICY_OBJECTA pGPOList);
-BOOL FreeGPOListW(PGROUP_POLICY_OBJECTW pGPOList);
-DWORD GenerateGPNotification(BOOL bMachine, LPCWSTR lpwszMgmtProduct, DWORD dwMgmtProductOptions);
-BOOL GetGPOListA(HANDLE hToken, LPCSTR lpName, LPCSTR lpHostName, LPCSTR lpComputerName, DWORD dwFlags, PGROUP_POLICY_OBJECTA *pGPOList);
-BOOL GetGPOListW(HANDLE hToken, LPCWSTR lpName, LPCWSTR lpHostName, LPCWSTR lpComputerName, DWORD dwFlags, PGROUP_POLICY_OBJECTW *pGPOList);
-DWORD ProcessGroupPolicyCompleted(REFGPEXTENSIONID extensionId, ASYNCCOMPLETIONHANDLE pAsyncHandle, DWORD dwStatus);
-DWORD ProcessGroupPolicyCompletedEx(REFGPEXTENSIONID extensionId, ASYNCCOMPLETIONHANDLE pAsyncHandle, DWORD dwStatus, HRESULT RsopStatus);
-HRESULT RsopAccessCheckByType(PSECURITY_DESCRIPTOR pSecurityDescriptor, PSID pPrincipalSelfSid, PRSOPTOKEN pRsopToken, DWORD dwDesiredAccessMask, POBJECT_TYPE_LIST pObjectTypeList, DWORD ObjectTypeListLength, PGENERIC_MAPPING pGenericMapping, PPRIVILEGE_SET pPrivilegeSet, LPDWORD pdwPrivilegeSetLength, LPDWORD pdwGrantedAccessMask, LPBOOL pbAccessStatus);
-HRESULT RsopFileAccessCheck(LPWSTR pszFileName, PRSOPTOKEN pRsopToken, DWORD dwDesiredAccessMask, LPDWORD pdwGrantedAccessMask, LPBOOL pbAccessStatus);
-HRESULT RsopResetPolicySettingStatus(DWORD dwFlags, IWbemServices *pServices, IWbemClassObject *pSettingInstance);
-HRESULT RsopSetPolicySettingStatus(DWORD dwFlags, IWbemServices *pServices, IWbemClassObject *pSettingInstance, DWORD nInfo, POLICYSETTINGSTATUSINFO *pStatus);
+USERENVAPI HRESULT WINAPI CreateProfile(LPCWSTR pszUserSid, LPCWSTR pszUserName, LPWSTR pszProfilePath, DWORD cchProfilePath);
+USERENVAPI HRESULT WINAPI DeriveRestrictedAppContainerSidFromAppContainerSidAndRestrictedName(PSID psidAppContainerSid, PCWSTR pszRestrictedAppContainerName, PSID *ppsidRestrictedAppContainerSid);
+USERENVAPI BOOL WINAPI FreeGPOListA(PGROUP_POLICY_OBJECTA pGPOList);
+USERENVAPI BOOL WINAPI FreeGPOListW(PGROUP_POLICY_OBJECTW pGPOList);
+USERENVAPI DWORD WINAPI GenerateGPNotification(BOOL bMachine, LPCWSTR lpwszMgmtProduct, DWORD dwMgmtProductOptions);
+USERENVAPI BOOL WINAPI GetGPOListA(HANDLE hToken, LPCSTR lpName, LPCSTR lpHostName, LPCSTR lpComputerName, DWORD dwFlags, PGROUP_POLICY_OBJECTA *pGPOList);
+USERENVAPI BOOL WINAPI GetGPOListW(HANDLE hToken, LPCWSTR lpName, LPCWSTR lpHostName, LPCWSTR lpComputerName, DWORD dwFlags, PGROUP_POLICY_OBJECTW *pGPOList);
+USERENVAPI DWORD WINAPI ProcessGroupPolicyCompleted(REFGPEXTENSIONID extensionId, ASYNCCOMPLETIONHANDLE pAsyncHandle, DWORD dwStatus);
+USERENVAPI DWORD WINAPI ProcessGroupPolicyCompletedEx(REFGPEXTENSIONID extensionId, ASYNCCOMPLETIONHANDLE pAsyncHandle, DWORD dwStatus, HRESULT RsopStatus);
+USERENVAPI HRESULT WINAPI RsopAccessCheckByType(PSECURITY_DESCRIPTOR pSecurityDescriptor, PSID pPrincipalSelfSid, PRSOPTOKEN pRsopToken, DWORD dwDesiredAccessMask, POBJECT_TYPE_LIST pObjectTypeList, DWORD ObjectTypeListLength, PGENERIC_MAPPING pGenericMapping, PPRIVILEGE_SET pPrivilegeSet, LPDWORD pdwPrivilegeSetLength, LPDWORD pdwGrantedAccessMask, LPBOOL pbAccessStatus);
+USERENVAPI HRESULT WINAPI RsopFileAccessCheck(LPWSTR pszFileName, PRSOPTOKEN pRsopToken, DWORD dwDesiredAccessMask, LPDWORD pdwGrantedAccessMask, LPBOOL pbAccessStatus);
+USERENVAPI HRESULT WINAPI RsopResetPolicySettingStatus(DWORD dwFlags, IWbemServices *pServices, IWbemClassObject *pSettingInstance);
+USERENVAPI HRESULT WINAPI RsopSetPolicySettingStatus(DWORD dwFlags, IWbemServices *pServices, IWbemClassObject *pSettingInstance, DWORD nInfo, POLICYSETTINGSTATUSINFO *pStatus);
 
 #ifdef __cplusplus
 }

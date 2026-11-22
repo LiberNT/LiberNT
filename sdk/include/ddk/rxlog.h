@@ -76,7 +76,7 @@ extern "C" {
 
 /* TODO: LiberNT does not implement the functions below yet */
 void _RxPrintLog(ULONG EntriesToPrint);
-void RxUninitializeLog(void);
+void NTAPI RxUninitializeLog(void);
 
 #ifdef __cplusplus
 }

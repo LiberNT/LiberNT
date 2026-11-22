@@ -284,6 +284,8 @@ typedef struct IPortDMusVtbl IPortDMusVtbl;
 
 typedef struct ISynthSinkDMusVtbl ISynthSinkDMusVtbl;
 
+typedef struct ISynthSinkDMus ISynthSinkDMus;
+
 struct ISynthSinkDMus
 {
     struct ISynthSinkDMusVtbl *lpVtbl;
