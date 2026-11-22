@@ -135,8 +135,8 @@ __ASM_GLOBAL_FUNC( call_stubless_func,
 
 #define T(num) \
     ".balign 4\n\t" \
-    ".globl " __ASM_NAME("ObjectStublessClient" #num) "\n" \
-    __ASM_NAME("ObjectStublessClient" #num) ":\n\t" \
+    ".globl " __ASM_STDCALL("ObjectStublessClient" #num, 0) "\n" \
+    __ASM_STDCALL("ObjectStublessClient" #num, 0) ":\n\t" \
     "movl $"#num",%eax\n\t" \
     ".byte 0xe9\n\t" /* jmp */ \
     ".long " __ASM_NAME("call_stubless_func") "-1f\n" \
@@ -325,8 +325,8 @@ __ASM_GLOBAL_FUNC( stubless_thunks, ALL_THUNK_ENTRIES )
 
 #define T(num) \
     ".balign 4\n\t" \
-    ".globl " __ASM_NAME("NdrProxyForwardingFunction" #num) "\n" \
-    __ASM_NAME("NdrProxyForwardingFunction" #num) ":\n\t" \
+    ".globl " __ASM_STDCALL("NdrProxyForwardingFunction" #num, 0) "\n" \
+    __ASM_STDCALL("NdrProxyForwardingFunction" #num, 0) ":\n\t" \
     "mov 4(%esp),%eax\n\t" \
     "mov 0x10(%eax),%eax\n\t" \
     "mov %eax,4(%esp)\n\t" \
@@ -426,7 +426,7 @@ static ULONG WINAPI delegating_Release(IUnknown *pUnk)
     return 1;
 }
 
-#define T(num) extern void NdrProxyForwardingFunction##num(void);
+#define T(num) extern void WINAPI NdrProxyForwardingFunction##num(void);
 ALL_THUNK_ENTRIES
 #undef T
 
