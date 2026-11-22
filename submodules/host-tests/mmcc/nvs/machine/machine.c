@@ -418,6 +418,12 @@ MiArchPteWrite(_Inout_ PMI_PTE Slot, _In_ MI_PTE Value)
     __atomic_store_n(Slot, Value, __ATOMIC_SEQ_CST);
 }
 
+VOID
+MiArchPteReplaceTable(_Inout_ PMI_PTE Slot, _In_ MI_PTE Value)
+{
+    MiArchPteWrite(Slot, Value);
+}
+
 static
 ULONG64
 MachineRoot(PMACHINE Machine, ULONG Cpu, ULONG64 VirtualAddress)

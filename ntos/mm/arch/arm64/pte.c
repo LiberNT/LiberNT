@@ -8,6 +8,7 @@
  */
 
 #include <mm/include/mienv.h>
+#include <archdef.h>
 
 #define A64_VALID          (1ULL << 0)
 #define A64_TYPE_PAGE      (1ULL << 1)
