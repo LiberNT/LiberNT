@@ -1,0 +1,48 @@
+; LiberNT driver for the legacy-free QEMU standard VGA
+
+[Version]
+Signature="$Windows NT$"
+LayoutFile=layout.inf
+Class=Display
+ClassGUID={4D36E968-E325-11CE-BFC1-08002BE10318}
+Provider=%LiberNT%
+DriverVer=11/22/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir=12
+
+[Manufacturer]
+%StdMfg%=StdMfg
+
+[StdMfg]
+%QemuVga.DeviceDesc%=QemuVga_Install,PCI\VEN_1234&DEV_1111&CC_0380
+
+[QemuVga_Install]
+AddReg=QemuVga_SoftwareSettings
+
+[QemuVga_SoftwareSettings]
+HKR,,InstalledDisplayDrivers,%REG_MULTI_SZ%,framebuf
+HKR,,VgaCompatible,%REG_DWORD%,0
+HKR,,UserModeDriverName,%REG_MULTI_SZ%,softgpuum.dll
+HKR,,UserModeDriverNameWow,%REG_MULTI_SZ%,softgpuum.dll
+HKR,,"Device Description",%REG_SZ%,"%QemuVga.DeviceDesc%"
+
+[QemuVga_Install.Services]
+AddService=qemuvga,0x00000002,QemuVga_Service
+
+[QemuVga_Service]
+DisplayName=%QemuVga.ServiceDesc%
+ServiceType=1
+StartType=3
+ErrorControl=0
+ServiceBinary=%12%\qemuvga.sys
+LoadOrderGroup=Video
+
+[Strings]
+LiberNT="LiberNT Project"
+StdMfg="(Standard display types)"
+QemuVga.DeviceDesc="QEMU Standard VGA (secondary)"
+QemuVga.ServiceDesc="LiberNT QEMU Standard VGA Driver"
+REG_MULTI_SZ=0x00010000
+REG_DWORD=0x00010001
+REG_SZ=0x00000000
