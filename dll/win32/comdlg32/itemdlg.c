@@ -762,7 +762,13 @@ static HRESULT on_default_action(FileDialogImpl *This)
             filter = fn_iter;
         }
 
+#ifdef __REACTOS__
+        pidla[i] = ILCreateFromPathW(canon_filename);
+        if(!pidla[i])
+            pidla[i] = SHSimpleIDListFromPath(canon_filename);
+#else
         pidla[i] = SHSimpleIDListFromPath(canon_filename);
+#endif
 
         if(psf_parent && !(open_action == ONOPEN_BROWSE))
             IShellFolder_Release(psf_parent);
@@ -772,7 +778,15 @@ static HRESULT on_default_action(FileDialogImpl *This)
 
 
     if((This->options & FOS_PICKFOLDERS) && open_action == ONOPEN_BROWSE)
+#ifdef __REACTOS__
+    {
+        if(psf_parent)
+            IShellFolder_Release(psf_parent);
         open_action = ONOPEN_OPEN; /* FIXME: Multiple folders? */
+    }
+#else
+        open_action = ONOPEN_OPEN; /* FIXME: Multiple folders? */
+#endif
 
     switch(open_action)
     {
