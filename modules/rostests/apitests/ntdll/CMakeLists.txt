@@ -206,6 +206,7 @@ list(APPEND SOURCE
     RtlGetLengthWithoutTrailingPathSeperators.c
     RtlGetLongestNtPathLength.c
     RtlGetNtProductType.c
+    RtlGetVersion.c
     RtlGetProcessHeaps.c
     RtlHeapApis.c
     RtlGetProductInfo.c
