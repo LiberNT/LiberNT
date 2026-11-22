@@ -1,8 +1,8 @@
-#/bin/sh
+#!/bin/sh
 
 if [ "$#" != "3" ]; then
     echo "Usage: CreateCabFile.sh path/to/cabman path/to/utf16le path/to/rapps-db"
-    exit -1
+    exit 1
 fi
 
 CABMAN_CMD="$1"
