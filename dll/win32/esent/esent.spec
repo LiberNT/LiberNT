@@ -1,292 +1,385 @@
-# stub JetAddColumn@28 (ord 1)cannot be forwarded with msvc .def file
-# stub JetAttachDatabase2@16 (ord 2)cannot be forwarded with msvc .def file
-# stub JetAttachDatabase@12 (ord 3)cannot be forwarded with msvc .def file
-# stub JetAttachDatabaseWithStreaming@24 (ord 4)cannot be forwarded with msvc .def file
-# stub JetBackup@12 (ord 5)cannot be forwarded with msvc .def file
-# stub JetBackupInstance@16 (ord 6)cannot be forwarded with msvc .def file
-# stub JetBeginExternalBackup@4 (ord 7)cannot be forwarded with msvc .def file
-# stub JetBeginExternalBackupInstance@8 (ord 8)cannot be forwarded with msvc .def file
-# stub JetBeginSession@16 (ord 9)cannot be forwarded with msvc .def file
-# stub JetBeginTransaction2@8 (ord 10)cannot be forwarded with msvc .def file
-# stub JetBeginTransaction@4 (ord 11)cannot be forwarded with msvc .def file
-# stub JetCloseDatabase@12 (ord 12)cannot be forwarded with msvc .def file
-# stub JetCloseFile@4 (ord 13)cannot be forwarded with msvc .def file
-# stub JetCloseFileInstance@8 (ord 14)cannot be forwarded with msvc .def file
-# stub JetCloseTable@8 (ord 15)cannot be forwarded with msvc .def file
-# stub JetCommitTransaction@8 (ord 16)cannot be forwarded with msvc .def file
-# stub JetCompact@24 (ord 17)cannot be forwarded with msvc .def file
-# stub JetComputeStats@8 (ord 18)cannot be forwarded with msvc .def file
-# stub JetConvertDDL@20 (ord 19)cannot be forwarded with msvc .def file
-# stub JetCreateDatabase2@20 (ord 20)cannot be forwarded with msvc .def file
-# stub JetCreateDatabase@20 (ord 21)cannot be forwarded with msvc .def file
-# stub JetCreateDatabaseWithStreaming@28 (ord 22)cannot be forwarded with msvc .def file
-# stub JetCreateIndex2@16 (ord 23)cannot be forwarded with msvc .def file
-# stub JetCreateIndex@28 (ord 24)cannot be forwarded with msvc .def file
-# stub JetCreateInstance2@16 (ord 25)cannot be forwarded with msvc .def file
-# stub JetCreateInstance@8 (ord 26)cannot be forwarded with msvc .def file
-# stub JetCreateTable@24 (ord 27)cannot be forwarded with msvc .def file
-# stub JetCreateTableColumnIndex2@12 (ord 28)cannot be forwarded with msvc .def file
-# stub JetCreateTableColumnIndex@12 (ord 29)cannot be forwarded with msvc .def file
-# stub JetDBUtilities@4 (ord 30)cannot be forwarded with msvc .def file
-# stub JetDefragment2@28 (ord 31)cannot be forwarded with msvc .def file
-# stub JetDefragment@24 (ord 32)cannot be forwarded with msvc .def file
-# stub JetDelete@8 (ord 33)cannot be forwarded with msvc .def file
-# stub JetDeleteColumn2@16 (ord 34)cannot be forwarded with msvc .def file
-# stub JetDeleteColumn@12 (ord 35)cannot be forwarded with msvc .def file
-# stub JetDeleteIndex@12 (ord 36)cannot be forwarded with msvc .def file
-# stub JetDeleteTable@12 (ord 37)cannot be forwarded with msvc .def file
-# stub JetDetachDatabase2@12 (ord 38)cannot be forwarded with msvc .def file
-# stub JetDetachDatabase@8 (ord 39)cannot be forwarded with msvc .def file
-# stub JetDupCursor@16 (ord 40)cannot be forwarded with msvc .def file
-# stub JetDupSession@8 (ord 41)cannot be forwarded with msvc .def file
-# stub JetEnableMultiInstance@12 (ord 42)cannot be forwarded with msvc .def file
-# stub JetEndExternalBackup@0 (ord 43)cannot be forwarded with msvc .def file
-# stub JetEndExternalBackupInstance2@8 (ord 44)cannot be forwarded with msvc .def file
-# stub JetEndExternalBackupInstance@4 (ord 45)cannot be forwarded with msvc .def file
-# stub JetEndSession@8 (ord 46)cannot be forwarded with msvc .def file
-# stub JetEnumerateColumns@40 (ord 47)cannot be forwarded with msvc .def file
-# stub JetEscrowUpdate@36 (ord 48)cannot be forwarded with msvc .def file
-# stub JetExternalRestore2@40 (ord 49)cannot be forwarded with msvc .def file
-# stub JetExternalRestore@32 (ord 50)cannot be forwarded with msvc .def file
-# stub JetFreeBuffer@4 (ord 51)cannot be forwarded with msvc .def file
-# stub JetGetAttachInfo@12 (ord 52)cannot be forwarded with msvc .def file
-# stub JetGetAttachInfoInstance@16 (ord 53)cannot be forwarded with msvc .def file
-# stub JetGetBookmark@20 (ord 54)cannot be forwarded with msvc .def file
-# stub JetGetColumnInfo@28 (ord 55)cannot be forwarded with msvc .def file
-# stub JetGetCounter@12 (ord 56)cannot be forwarded with msvc .def file
-# stub JetGetCurrentIndex@16 (ord 57)cannot be forwarded with msvc .def file
-# stub JetGetCursorInfo@20 (ord 58)cannot be forwarded with msvc .def file
-# stub JetGetDatabaseFileInfo@16 (ord 59)cannot be forwarded with msvc .def file
-# stub JetGetDatabaseInfo@20 (ord 60)cannot be forwarded with msvc .def file
-# stub JetGetIndexInfo@28 (ord 61)cannot be forwarded with msvc .def file
-# stub JetGetInstanceInfo@8 (ord 62)cannot be forwarded with msvc .def file
-# stub JetGetLS@16 (ord 63)cannot be forwarded with msvc .def file
-# stub JetGetLock@12 (ord 64)cannot be forwarded with msvc .def file
-# stub JetGetLogInfo@12 (ord 65)cannot be forwarded with msvc .def file
-# stub JetGetLogInfoInstance2@20 (ord 66)cannot be forwarded with msvc .def file
-# stub JetGetLogInfoInstance@16 (ord 67)cannot be forwarded with msvc .def file
-# stub JetGetObjectInfo@32 (ord 68)cannot be forwarded with msvc .def file
-# stub JetGetRecordPosition@16 (ord 69)cannot be forwarded with msvc .def file
-# stub JetGetSecondaryIndexBookmark@36 (ord 70)cannot be forwarded with msvc .def file
-# stub JetGetSystemParameter@24 (ord 71)cannot be forwarded with msvc .def file
-# stub JetGetTableColumnInfo@24 (ord 72)cannot be forwarded with msvc .def file
-# stub JetGetTableIndexInfo@24 (ord 73)cannot be forwarded with msvc .def file
-# stub JetGetTableInfo@20 (ord 74)cannot be forwarded with msvc .def file
-# stub JetGetTruncateLogInfoInstance@16 (ord 75)cannot be forwarded with msvc .def file
-# stub JetGetVersion@8 (ord 76)cannot be forwarded with msvc .def file
-# stub JetGotoBookmark@16 (ord 77)cannot be forwarded with msvc .def file
-# stub JetGotoPosition@12 (ord 78)cannot be forwarded with msvc .def file
-# stub JetGotoSecondaryIndexBookmark@28 (ord 79)cannot be forwarded with msvc .def file
-# stub JetGrowDatabase@16 (ord 80)cannot be forwarded with msvc .def file
-# stub JetIdle@8 (ord 81)cannot be forwarded with msvc .def file
-# stub JetIndexRecordCount@16 (ord 82)cannot be forwarded with msvc .def file
-# stub JetInit2@8 (ord 83)cannot be forwarded with msvc .def file
-# stub JetInit3@16 (ord 84)cannot be forwarded with msvc .def file
-# stub JetInit@4 (ord 85)cannot be forwarded with msvc .def file
-# stub JetIntersectIndexes@20 (ord 86)cannot be forwarded with msvc .def file
-# stub JetMakeKey@20 (ord 87)cannot be forwarded with msvc .def file
-# stub JetMove@16 (ord 88)cannot be forwarded with msvc .def file
-# stub JetOSSnapshotAbort@8 (ord 89)cannot be forwarded with msvc .def file
-# stub JetOSSnapshotFreeze@16 (ord 90)cannot be forwarded with msvc .def file
-# stub JetOSSnapshotPrepare@8 (ord 91)cannot be forwarded with msvc .def file
-# stub JetOSSnapshotThaw@8 (ord 92)cannot be forwarded with msvc .def file
-# stub JetOpenDatabase@20 (ord 93)cannot be forwarded with msvc .def file
-# stub JetOpenFile@16 (ord 94)cannot be forwarded with msvc .def file
-# stub JetOpenFileInstance@20 (ord 95)cannot be forwarded with msvc .def file
-# stub JetOpenFileSectionInstance@28 (ord 96)cannot be forwarded with msvc .def file
-# stub JetOpenTable@28 (ord 97)cannot be forwarded with msvc .def file
-# stub JetOpenTempTable2@28 (ord 98)cannot be forwarded with msvc .def file
-# stub JetOpenTempTable3@28 (ord 99)cannot be forwarded with msvc .def file
-# stub JetOpenTempTable@24 (ord 100)cannot be forwarded with msvc .def file
-# stub JetPrepareToCommitTransaction@16 (ord 101)cannot be forwarded with msvc .def file
-# stub JetPrepareUpdate@12 (ord 102)cannot be forwarded with msvc .def file
-# stub JetReadFile@16 (ord 103)cannot be forwarded with msvc .def file
-# stub JetReadFileInstance@20 (ord 104)cannot be forwarded with msvc .def file
-# stub JetRegisterCallback@24 (ord 105)cannot be forwarded with msvc .def file
-# stub JetRenameColumn@20 (ord 106)cannot be forwarded with msvc .def file
-# stub JetRenameTable@16 (ord 107)cannot be forwarded with msvc .def file
-# stub JetResetCounter@8 (ord 108)cannot be forwarded with msvc .def file
-# stub JetResetSessionContext@4 (ord 109)cannot be forwarded with msvc .def file
-# stub JetResetTableSequential@12 (ord 110)cannot be forwarded with msvc .def file
-# stub JetRestore2@12 (ord 111)cannot be forwarded with msvc .def file
-# stub JetRestore@8 (ord 112)cannot be forwarded with msvc .def file
-# stub JetRestoreInstance@16 (ord 113)cannot be forwarded with msvc .def file
-# stub JetRetrieveColumn@32 (ord 114)cannot be forwarded with msvc .def file
-# stub JetRetrieveColumns@16 (ord 115)cannot be forwarded with msvc .def file
-# stub JetRetrieveKey@24 (ord 116)cannot be forwarded with msvc .def file
-# stub JetRetrieveTaggedColumnList@28 (ord 117)cannot be forwarded with msvc .def file
-# stub JetRollback@8 (ord 118)cannot be forwarded with msvc .def file
-# stub JetSeek@12 (ord 119)cannot be forwarded with msvc .def file
-# stub JetSetColumn@28 (ord 120)cannot be forwarded with msvc .def file
-# stub JetSetColumnDefaultValue@28 (ord 121)cannot be forwarded with msvc .def file
-# stub JetSetColumns@16 (ord 122)cannot be forwarded with msvc .def file
-# stub JetSetCurrentIndex2@16 (ord 123)cannot be forwarded with msvc .def file
-# stub JetSetCurrentIndex@12 (ord 124)cannot be forwarded with msvc .def file
-# stub JetSetDatabaseSize@16 (ord 125)cannot be forwarded with msvc .def file
-# stub JetSetIndexRange@12 (ord 126)cannot be forwarded with msvc .def file
-# stub JetSetLS@16 (ord 127)cannot be forwarded with msvc .def file
-# stub JetSetSessionContext@8 (ord 128)cannot be forwarded with msvc .def file
-# stub JetSetSystemParameter@20 (ord 129)cannot be forwarded with msvc .def file
-# stub JetSetTableSequential@12 (ord 130)cannot be forwarded with msvc .def file
-# stub JetSnapshotStart@12 (ord 131)cannot be forwarded with msvc .def file
-# stub JetSnapshotStop@8 (ord 132)cannot be forwarded with msvc .def file
-# stub JetStopBackup@0 (ord 133)cannot be forwarded with msvc .def file
-# stub JetStopBackupInstance@4 (ord 134)cannot be forwarded with msvc .def file
-# stub JetStopService@0 (ord 135)cannot be forwarded with msvc .def file
-# stub JetStopServiceInstance@4 (ord 136)cannot be forwarded with msvc .def file
-# stub JetTerm2@8 (ord 137)cannot be forwarded with msvc .def file
-# stub JetTerm@4 (ord 138)cannot be forwarded with msvc .def file
-# stub JetTruncateLog@0 (ord 139)cannot be forwarded with msvc .def file
-# stub JetTruncateLogInstance@4 (ord 140)cannot be forwarded with msvc .def file
-# stub JetUnregisterCallback@16 (ord 141)cannot be forwarded with msvc .def file
-# stub JetUpdate2@24 (ord 142)cannot be forwarded with msvc .def file
-# stub JetUpdate@20 (ord 143)cannot be forwarded with msvc .def file
-# stub JetUpgradeDatabase@16 (ord 144)cannot be forwarded with msvc .def file
-145 stub JetAddColumn
-146 stub JetAttachDatabase2
-147 stub JetAttachDatabase
-148 stub JetAttachDatabaseWithStreaming
-149 stub JetBackup
-150 stub JetBackupInstance
-151 stub JetBeginExternalBackup
-152 stub JetBeginExternalBackupInstance
-153 stub JetBeginSession
-154 stub JetBeginTransaction2
-155 stub JetBeginTransaction
-156 stub JetCloseDatabase
-157 stub JetCloseFile
-158 stub JetCloseFileInstance
-159 stub JetCloseTable
-160 stub JetCommitTransaction
-161 stub JetCompact
-162 stub JetComputeStats
-163 stub JetConvertDDL
-164 stub JetCreateDatabase2
-165 stub JetCreateDatabase
-166 stub JetCreateDatabaseWithStreaming
-167 stub JetCreateIndex2
-168 stub JetCreateIndex
-169 stub JetCreateInstance2
-170 stub JetCreateInstance
-171 stub JetCreateTable
-172 stub JetCreateTableColumnIndex2
-173 stub JetCreateTableColumnIndex
-174 stub JetDBUtilities
-175 stub JetDefragment2
-176 stub JetDefragment
-177 stub JetDelete
-178 stub JetDeleteColumn2
-179 stub JetDeleteColumn
-180 stub JetDeleteIndex
-181 stub JetDeleteTable
-182 stub JetDetachDatabase2
-183 stub JetDetachDatabase
-184 stub JetDupCursor
-185 stub JetDupSession
-186 stub JetEnableMultiInstance
-187 stub JetEndExternalBackup
-188 stub JetEndExternalBackupInstance2
-189 stub JetEndExternalBackupInstance
-190 stub JetEndSession
-191 stub JetEnumerateColumns
-192 stub JetEscrowUpdate
-193 stub JetExternalRestore2
-194 stub JetExternalRestore
-195 stub JetFreeBuffer
-196 stub JetGetAttachInfo
-197 stub JetGetAttachInfoInstance
-198 stub JetGetBookmark
-199 stub JetGetColumnInfo
-200 stub JetGetCounter
-201 stub JetGetCurrentIndex
-202 stub JetGetCursorInfo
-203 stub JetGetDatabaseFileInfo
-204 stub JetGetDatabaseInfo
-205 stub JetGetIndexInfo
-206 stub JetGetInstanceInfo
-207 stub JetGetLS
-208 stub JetGetLock
-209 stub JetGetLogInfo
-210 stub JetGetLogInfoInstance2
-211 stub JetGetLogInfoInstance
-212 stub JetGetObjectInfo
-213 stub JetGetRecordPosition
-214 stub JetGetSecondaryIndexBookmark
-215 stub JetGetSystemParameter
-216 stub JetGetTableColumnInfo
-217 stub JetGetTableIndexInfo
-218 stub JetGetTableInfo
-219 stub JetGetTruncateLogInfoInstance
-220 stub JetGetVersion
-221 stub JetGotoBookmark
-222 stub JetGotoPosition
-223 stub JetGotoSecondaryIndexBookmark
-224 stub JetGrowDatabase
-225 stub JetIdle
-226 stub JetIndexRecordCount
-227 stub JetInit2
-228 stub JetInit3
-229 stub JetInit
-230 stub JetIntersectIndexes
-231 stub JetMakeKey
-232 stub JetMove
-233 stub JetOSSnapshotAbort
-234 stub JetOSSnapshotFreeze
-235 stub JetOSSnapshotPrepare
-236 stub JetOSSnapshotThaw
-237 stub JetOpenDatabase
-238 stub JetOpenFile
-239 stub JetOpenFileInstance
-240 stub JetOpenFileSectionInstance
-241 stub JetOpenTable
-242 stub JetOpenTempTable2
-243 stub JetOpenTempTable3
-244 stub JetOpenTempTable
-245 stub JetPrepareToCommitTransaction
-246 stub JetPrepareUpdate
-247 stub JetReadFile
-248 stub JetReadFileInstance
-249 stub JetRegisterCallback
-250 stub JetRenameColumn
-251 stub JetRenameTable
-252 stub JetResetCounter
-253 stub JetResetSessionContext
-254 stub JetResetTableSequential
-255 stub JetRestore2
-256 stub JetRestore
-257 stub JetRestoreInstance
-258 stub JetRetrieveColumn
-259 stub JetRetrieveColumns
-260 stub JetRetrieveKey
-261 stub JetRetrieveTaggedColumnList
-262 stub JetRollback
-263 stub JetSeek
-264 stub JetSetColumn
-265 stub JetSetColumnDefaultValue
-266 stub JetSetColumns
-267 stub JetSetCurrentIndex2
-268 stub JetSetCurrentIndex3
-269 stub JetSetCurrentIndex4
-270 stub JetSetCurrentIndex
-271 stub JetSetDatabaseSize
-272 stub JetSetIndexRange
-273 stub JetSetLS
-274 stub JetSetSessionContext
-275 stub JetSetSystemParameter
-276 stub JetSetTableSequential
-277 stub JetSnapshotStart
-278 stub JetSnapshotStop
-279 stub JetStopBackup
-280 stub JetStopBackupInstance
-281 stub JetStopService
-282 stub JetStopServiceInstance
-283 stub JetTerm2
-284 stub JetTerm
-285 stub JetTruncateLog
-286 stub JetTruncateLogInstance
-287 stub JetUnregisterCallback
-288 stub JetUpdate2
-289 stub JetUpdate
-290 stub JetUpgradeDatabase
-291 stub ese
-292 stub esent
+1 stub DllRegisterServer
+2 stub DebugExtensionInitialize
+3 stub DebugExtensionNotify
+4 stub DebugExtensionUninitialize
+5 stub JetAddColumn
+6 stub JetAddColumnA
+7 stub JetAddColumnW
+8 stub JetAttachDatabase
+9 stub JetAttachDatabase2
+10 stub JetAttachDatabase2A
+11 stdcall JetAttachDatabase2W(ptr wstr long long)
+12 stub JetAttachDatabase3
+13 stub JetAttachDatabase3A
+14 stub JetAttachDatabase3W
+15 stub JetAttachDatabaseA
+16 stub JetAttachDatabaseW
+17 stub JetAttachDatabaseWithStreaming
+18 stub JetAttachDatabaseWithStreamingA
+19 stub JetAttachDatabaseWithStreamingW
+20 stub JetBackup
+21 stub JetBackupA
+22 stub JetBackupInstance
+23 stub JetBackupInstanceA
+24 stub JetBackupInstanceW
+25 stub JetBackupW
+26 stub JetBeginDatabaseIncrementalReseed
+27 stub JetBeginDatabaseIncrementalReseedA
+28 stub JetBeginDatabaseIncrementalReseedW
+29 stub JetBeginExternalBackup
+30 stub JetBeginExternalBackupInstance
+31 stub JetBeginSession
+32 stub JetBeginSessionA
+33 stdcall JetBeginSessionW(ptr ptr wstr wstr)
+34 stub JetBeginSurrogateBackup
+35 stub JetBeginTransaction
+36 stub JetBeginTransaction2
+37 stub JetBeginTransaction3
+38 stub JetCloseDatabase
+39 stub JetCloseFile
+40 stub JetCloseFileInstance
+41 stdcall JetCloseTable(ptr ptr)
+42 stub JetCommitTransaction
+43 stub JetCommitTransaction2
+44 stub JetCompact
+45 stub JetCompactA
+46 stub JetCompactW
+47 stub JetComputeStats
+48 stub JetConfigureProcessForCrashDump
+49 stub JetConsumeLogData
+50 stub JetConvertDDL
+51 stub JetConvertDDLA
+52 stub JetConvertDDLW
+53 stub JetCreateDatabase
+54 stub JetCreateDatabase2
+55 stub JetCreateDatabase2A
+56 stub JetCreateDatabase2W
+57 stub JetCreateDatabase3
+58 stub JetCreateDatabase3A
+59 stub JetCreateDatabase3W
+60 stub JetCreateDatabaseA
+61 stub JetCreateDatabaseW
+62 stub JetCreateDatabaseWithStreaming
+63 stub JetCreateDatabaseWithStreamingA
+64 stub JetCreateDatabaseWithStreamingW
+65 stub JetCreateEncryptionKey
+66 stub JetCreateIndex
+67 stub JetCreateIndex2
+68 stub JetCreateIndex2A
+69 stub JetCreateIndex2W
+70 stub JetCreateIndex3A
+71 stub JetCreateIndex3W
+72 stub JetCreateIndex4A
+73 stub JetCreateIndex4W
+74 stub JetCreateIndexA
+75 stub JetCreateIndexW
+76 stub JetCreateInstance
+77 stub JetCreateInstance2
+78 stub JetCreateInstance2A
+79 stub JetCreateInstance2W
+80 stub JetCreateInstanceA
+81 stdcall JetCreateInstanceW(ptr wstr)
+82 stub JetCreateTable
+83 stub JetCreateTableA
+84 stub JetCreateTableColumnIndex
+85 stub JetCreateTableColumnIndex2
+86 stub JetCreateTableColumnIndex2A
+87 stub JetCreateTableColumnIndex2W
+88 stub JetCreateTableColumnIndex3A
+89 stub JetCreateTableColumnIndex3W
+90 stub JetCreateTableColumnIndex4A
+91 stub JetCreateTableColumnIndex4W
+92 stub JetCreateTableColumnIndex5A
+93 stub JetCreateTableColumnIndex5W
+94 stub JetCreateTableColumnIndexA
+95 stub JetCreateTableColumnIndexW
+96 stub JetCreateTableW
+97 stub JetDBUtilities
+98 stub JetDBUtilitiesA
+99 stub JetDBUtilitiesW
+100 stub JetDatabaseScan
+101 stub JetDefragment
+102 stub JetDefragment2
+103 stub JetDefragment2A
+104 stub JetDefragment2W
+105 stub JetDefragment3
+106 stub JetDefragment3A
+107 stub JetDefragment3W
+108 stub JetDefragmentA
+109 stub JetDefragmentW
+110 stub JetDelete
+111 stub JetDeleteColumn
+112 stub JetDeleteColumn2
+113 stub JetDeleteColumn2A
+114 stub JetDeleteColumn2W
+115 stub JetDeleteColumnA
+116 stub JetDeleteColumnW
+117 stub JetDeleteIndex
+118 stub JetDeleteIndexA
+119 stub JetDeleteIndexW
+120 stub JetDeleteTable
+121 stub JetDeleteTable2
+122 stub JetDeleteTable2A
+123 stub JetDeleteTable2W
+124 stub JetDeleteTableA
+125 stub JetDeleteTableW
+126 stub JetDetachDatabase
+127 stub JetDetachDatabase2
+128 stub JetDetachDatabase2A
+129 stub JetDetachDatabase2W
+130 stub JetDetachDatabaseA
+131 stub JetDetachDatabaseW
+132 stub JetDupCursor
+133 stub JetDupSession
+134 stub JetEnableMultiInstance
+135 stub JetEnableMultiInstanceA
+136 stub JetEnableMultiInstanceW
+137 stub JetEndDatabaseIncrementalReseed
+138 stub JetEndDatabaseIncrementalReseedA
+139 stub JetEndDatabaseIncrementalReseedW
+140 stub JetEndExternalBackup
+141 stub JetEndExternalBackupInstance
+142 stub JetEndExternalBackupInstance2
+143 stub JetEndSession
+144 stub JetEndSurrogateBackup
+145 stub JetEnumerateColumns
+146 stub JetEscrowUpdate
+147 stub JetExternalRestore
+148 stub JetExternalRestore2
+149 stub JetExternalRestore2A
+150 stub JetExternalRestore2W
+151 stub JetExternalRestoreA
+152 stub JetExternalRestoreW
+153 stub JetFreeBuffer
+154 stub JetGetAttachInfo
+155 stub JetGetAttachInfoA
+156 stub JetGetAttachInfoInstance
+157 stub JetGetAttachInfoInstanceA
+158 stub JetGetAttachInfoInstanceW
+159 stub JetGetAttachInfoW
+160 stub JetGetBookmark
+161 stub JetGetColumnInfo
+162 stub JetGetColumnInfoA
+163 stub JetGetColumnInfoW
+164 stub JetGetCounter
+165 stub JetGetCurrentIndex
+166 stub JetGetCurrentIndexA
+167 stub JetGetCurrentIndexW
+168 stub JetGetCursorInfo
+169 stub JetGetDatabaseFileInfo
+170 stub JetGetDatabaseFileInfoA
+171 stub JetGetDatabaseFileInfoW
+172 stub JetGetDatabaseInfo
+173 stub JetGetDatabaseInfoA
+174 stub JetGetDatabaseInfoW
+175 stub JetGetDatabasePages
+176 stub JetGetErrorInfoW
+177 stub JetGetIndexInfo
+178 stub JetGetIndexInfoA
+179 stub JetGetIndexInfoW
+180 stub JetGetInstanceInfo
+181 stub JetGetInstanceInfoA
+182 stub JetGetInstanceInfoW
+183 stub JetGetInstanceMiscInfo
+184 stub JetGetLS
+185 stub JetGetLock
+186 stub JetGetLogFileInfo
+187 stub JetGetLogFileInfoA
+188 stub JetGetLogFileInfoW
+189 stub JetGetLogInfo
+190 stub JetGetLogInfoA
+191 stub JetGetLogInfoInstance
+192 stub JetGetLogInfoInstance2
+193 stub JetGetLogInfoInstance2A
+194 stub JetGetLogInfoInstance2W
+195 stub JetGetLogInfoInstanceA
+196 stub JetGetLogInfoInstanceW
+197 stub JetGetLogInfoW
+198 stub JetGetMaxDatabaseSize
+199 stub JetGetObjectInfo
+200 stub JetGetObjectInfoA
+201 stub JetGetObjectInfoW
+202 stub JetGetPageInfo
+203 stub JetGetPageInfo2
+204 stub JetGetRBSFileInfoA
+205 stub JetGetRBSFileInfoW
+206 stub JetGetRecordPosition
+207 stub JetGetRecordSize
+208 stub JetGetRecordSize2
+209 stub JetGetRecordSize3
+210 stub JetGetResourceParam
+211 stub JetGetSecondaryIndexBookmark
+212 stub JetGetSessionInfo
+213 stub JetGetSessionParameter
+214 stub JetGetSystemParameter
+215 stub JetGetSystemParameterA
+216 stub JetGetSystemParameterW
+217 stub JetGetTableColumnInfo
+218 stub JetGetTableColumnInfoA
+219 stdcall JetGetTableColumnInfoW(ptr ptr wstr ptr long long)
+220 stub JetGetTableIndexInfo
+221 stub JetGetTableIndexInfoA
+222 stub JetGetTableIndexInfoW
+223 stub JetGetTableInfo
+224 stub JetGetTableInfoA
+225 stub JetGetTableInfoW
+226 stub JetGetThreadStats
+227 stub JetGetTruncateLogInfoInstance
+228 stub JetGetTruncateLogInfoInstanceA
+229 stub JetGetTruncateLogInfoInstanceW
+230 stub JetGetVersion
+231 stub JetGotoBookmark
+232 stub JetGotoPosition
+233 stub JetGotoSecondaryIndexBookmark
+234 stub JetGrowDatabase
+235 stub JetIdle
+236 stub JetIndexRecordCount
+237 stub JetIndexRecordCount2
+238 stdcall JetInit(ptr)
+239 stub JetInit2
+240 stub JetInit3
+241 stub JetInit3A
+242 stub JetInit3W
+243 stub JetInit4
+244 stub JetInit4A
+245 stub JetInit4W
+246 stub JetIntersectIndexes
+247 stub JetMakeKey
+248 stdcall JetMove(ptr ptr long long)
+249 stub JetOSSnapshotAbort
+250 stub JetOSSnapshotEnd
+251 stub JetOSSnapshotFreeze
+252 stub JetOSSnapshotFreezeA
+253 stub JetOSSnapshotFreezeW
+254 stub JetOSSnapshotGetFreezeInfo
+255 stub JetOSSnapshotGetFreezeInfoA
+256 stub JetOSSnapshotGetFreezeInfoW
+257 stub JetOSSnapshotPrepare
+258 stub JetOSSnapshotPrepareInstance
+259 stub JetOSSnapshotThaw
+260 stub JetOSSnapshotTruncateLog
+261 stub JetOSSnapshotTruncateLogInstance
+262 stub JetOnlinePatchDatabasePage
+263 stub JetOpenDatabase
+264 stub JetOpenDatabaseA
+265 stdcall JetOpenDatabaseW(ptr wstr wstr ptr long)
+266 stub JetOpenFile
+267 stub JetOpenFileA
+268 stub JetOpenFileInstance
+269 stub JetOpenFileInstanceA
+270 stub JetOpenFileInstanceW
+271 stub JetOpenFileSectionInstance
+272 stub JetOpenFileSectionInstanceA
+273 stub JetOpenFileSectionInstanceW
+274 stub JetOpenFileW
+275 stub JetOpenTable
+276 stub JetOpenTableA
+277 stdcall JetOpenTableW(ptr long wstr ptr long long ptr)
+278 stub JetOpenTempTable
+279 stub JetOpenTempTable2
+280 stub JetOpenTempTable3
+281 stub JetOpenTemporaryTable
+282 stub JetOpenTemporaryTable2
+283 stub JetPatchDatabasePages
+284 stub JetPatchDatabasePagesA
+285 stub JetPatchDatabasePagesW
+286 stub JetPrepareToCommitTransaction
+287 stub JetPrepareUpdate
+288 stub JetPrereadColumnsByReference
+289 stub JetPrereadIndexRange
+290 stub JetPrereadIndexRanges
+291 stub JetPrereadKeys
+292 stub JetPrereadTablesW
+293 stub JetRBSCancelRevert
+294 stub JetRBSExecuteRevert
+295 stub JetRBSPrepareRevert
+296 stub JetReadFile
+297 stub JetReadFileInstance
+298 stub JetRegisterCallback
+299 stub JetRemoveLogfileA
+300 stub JetRemoveLogfileW
+301 stub JetRenameColumn
+302 stub JetRenameColumnA
+303 stub JetRenameColumnW
+304 stub JetRenameTable
+305 stub JetRenameTableA
+306 stub JetRenameTableW
+307 stub JetResetCounter
+308 stub JetResetSessionContext
+309 stub JetResetTableSequential
+310 stub JetResizeDatabase
+311 stub JetRestore
+312 stub JetRestore2
+313 stub JetRestore2A
+314 stub JetRestore2W
+315 stub JetRestoreA
+316 stub JetRestoreInstance
+317 stub JetRestoreInstanceA
+318 stub JetRestoreInstanceW
+319 stub JetRestoreW
+320 stdcall JetRetrieveColumn(ptr ptr long ptr long ptr long ptr)
+321 stub JetRetrieveColumnByReference
+322 stub JetRetrieveColumnFromRecordStream
+323 stub JetRetrieveColumns
+324 stub JetRetrieveKey
+325 stub JetRetrieveTaggedColumnList
+326 stub JetRollback
+327 stub JetSeek
+328 stub JetSetColumn
+329 stub JetSetColumnDefaultValue
+330 stub JetSetColumnDefaultValueA
+331 stub JetSetColumnDefaultValueW
+332 stub JetSetColumns
+333 stub JetSetCurrentIndex
+334 stub JetSetCurrentIndex2
+335 stub JetSetCurrentIndex2A
+336 stub JetSetCurrentIndex2W
+337 stub JetSetCurrentIndex3
+338 stub JetSetCurrentIndex3A
+339 stub JetSetCurrentIndex3W
+340 stub JetSetCurrentIndex4
+341 stub JetSetCurrentIndex4A
+342 stub JetSetCurrentIndex4W
+343 stub JetSetCurrentIndexA
+344 stub JetSetCurrentIndexW
+345 stub JetSetCursorFilter
+346 stub JetSetDatabaseSize
+347 stub JetSetDatabaseSizeA
+348 stub JetSetDatabaseSizeW
+349 stub JetSetIndexRange
+350 stub JetSetLS
+351 stub JetSetMaxDatabaseSize
+352 stub JetSetResourceParam
+353 stub JetSetSessionContext
+354 stub JetSetSessionParameter
+355 stub JetSetSystemParameter
+356 stub JetSetSystemParameterA
+357 stdcall JetSetSystemParameterW(ptr ptr long ptr wstr)
+358 stub JetSetTableInfo
+359 stub JetSetTableInfoA
+360 stub JetSetTableInfoW
+361 stub JetSetTableSequential
+362 stub JetSnapshotStart
+363 stub JetSnapshotStartA
+364 stub JetSnapshotStartW
+365 stub JetSnapshotStop
+366 stub JetStopBackup
+367 stub JetStopBackupInstance
+368 stub JetStopService
+369 stub JetStopServiceInstance
+370 stub JetStopServiceInstance2
+371 stub JetStreamRecords
+372 stdcall JetTerm(ptr)
+373 stub JetTerm2
+374 stub JetTestHook
+375 stub JetTracing
+376 stub JetTruncateLog
+377 stub JetTruncateLogInstance
+378 stub JetUnregisterCallback
+379 stub JetUpdate
+380 stub JetUpdate2
+381 stub JetUpgradeDatabase
+382 stub JetUpgradeDatabaseA
+383 stub JetUpgradeDatabaseW
+384 stub ese
+385 stub rgEDBGGlobals
