@@ -32,6 +32,22 @@ target_compile_definitions(iodeviceobject_drv PRIVATE KMT_STANDALONE_DRIVER)
 add_rostests_file(TARGET iodeviceobject_drv)
 
 #
+# IoI8042StartInformation
+#
+list(APPEND IOI8042STARTINFORMATION_DRV_SOURCE
+    ../kmtest_drv/kmtest_standalone.c
+    ${REACTOS_SOURCE_DIR}/drivers/input/i8042prt/hook_core.c
+    IoI8042StartInformation_drv.c)
+
+add_library(ioi8042startinformation_drv MODULE ${IOI8042STARTINFORMATION_DRV_SOURCE})
+set_module_type(ioi8042startinformation_drv kernelmodedriver)
+target_include_directories(ioi8042startinformation_drv PRIVATE ${REACTOS_SOURCE_DIR}/drivers/input/i8042prt)
+target_link_libraries(ioi8042startinformation_drv kmtest_printf ${PSEH_LIB})
+add_importlibs(ioi8042startinformation_drv ntoskrnl hal)
+target_compile_definitions(ioi8042startinformation_drv PRIVATE KMT_STANDALONE_DRIVER)
+add_rostests_file(TARGET ioi8042startinformation_drv)
+
+#
 # IoIs32bitProcess
 #
 list(APPEND IOIS32BITPROCESS_DRV_SOURCE

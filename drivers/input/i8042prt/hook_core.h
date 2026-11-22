@@ -15,3 +15,9 @@ I8042CoreKeyboardInitialization(
     _In_ PI8042_SYNCH_READ_PORT ReadPort,
     _In_ PI8042_SYNCH_WRITE_PORT WritePort,
     _Out_ PBOOLEAN TurnTranslationOn);
+
+NTSTATUS
+I8042CoreSendStartInformation(
+    _In_ PDEVICE_OBJECT TopOfStack,
+    _In_ ULONG IoControlCode,
+    _In_ PKINTERRUPT InterruptObject);

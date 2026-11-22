@@ -367,6 +367,25 @@ cleanup:
     return Status;
 }
 
+static VOID
+i8042SendStartInformation(
+    IN PDEVICE_OBJECT Fdo,
+    IN ULONG IoControlCode,
+    IN PKINTERRUPT InterruptObject)
+{
+    PDEVICE_OBJECT TopOfStack;
+    NTSTATUS Status;
+
+    ASSERT(Fdo != NULL);
+    ASSERT(InterruptObject != NULL);
+
+    TopOfStack = IoGetAttachedDeviceReference(Fdo);
+    Status = I8042CoreSendStartInformation(TopOfStack, IoControlCode, InterruptObject);
+    ObDereferenceObject(TopOfStack);
+    if (!NT_SUCCESS(Status))
+        WARN_(I8042PRT, "Start information 0x%08lx failed with status 0x%08lx\n", IoControlCode, Status);
+}
+
 static NTSTATUS
 EnableInterrupts(
     IN PPORT_DEVICE_EXTENSION DeviceExtension,
@@ -448,6 +467,9 @@ StartProcedure(
         if (NT_SUCCESS(Status))
         {
             InterlockedOr((PLONG)&DeviceExtension->Flags, KEYBOARD_INITIALIZED);
+            i8042SendStartInformation(DeviceExtension->KeyboardExtension->Common.Fdo,
+                                      IOCTL_INTERNAL_I8042_KEYBOARD_START_INFORMATION,
+                                      DeviceExtension->KeyboardInterrupt.Object);
         }
         else
         {
@@ -484,6 +506,10 @@ StartProcedure(
             i8042IsrWritePort(DeviceExtension, MOU_CMD_RESET, CTRL_WRITE_MOUSE);
         }
         KeReleaseInterruptSpinLock(DeviceExtension->HighestDIRQLInterrupt, Irql);
+
+        i8042SendStartInformation(DeviceExtension->MouseExtension->Common.Fdo,
+                                  IOCTL_INTERNAL_I8042_MOUSE_START_INFORMATION,
+                                  DeviceExtension->MouseInterrupt.Object);
     }
 
     return Status;

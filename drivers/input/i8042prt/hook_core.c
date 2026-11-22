@@ -33,3 +33,47 @@ I8042CoreKeyboardInitialization(
                                  WritePort,
                                  TurnTranslationOn);
 }
+
+NTSTATUS
+I8042CoreSendStartInformation(
+    _In_ PDEVICE_OBJECT TopOfStack,
+    _In_ ULONG IoControlCode,
+    _In_ PKINTERRUPT InterruptObject)
+{
+    INTERNAL_I8042_START_INFORMATION StartInformation;
+    IO_STATUS_BLOCK IoStatus;
+    KEVENT Event;
+    NTSTATUS Status;
+    PIRP Irp;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(TopOfStack != NULL);
+    ASSERT(InterruptObject != NULL);
+    ASSERT(IoControlCode == IOCTL_INTERNAL_I8042_KEYBOARD_START_INFORMATION ||
+           IoControlCode == IOCTL_INTERNAL_I8042_MOUSE_START_INFORMATION);
+
+    RtlZeroMemory(&StartInformation, sizeof(StartInformation));
+    StartInformation.Size = sizeof(StartInformation);
+    StartInformation.InterruptObject = InterruptObject;
+
+    KeInitializeEvent(&Event, NotificationEvent, FALSE);
+    Irp = IoBuildDeviceIoControlRequest(IoControlCode,
+                                        TopOfStack,
+                                        &StartInformation,
+                                        sizeof(StartInformation),
+                                        NULL,
+                                        0,
+                                        TRUE,
+                                        &Event,
+                                        &IoStatus);
+    if (!Irp)
+        return STATUS_INSUFFICIENT_RESOURCES;
+
+    Status = IoCallDriver(TopOfStack, Irp);
+    if (Status == STATUS_PENDING)
+    {
+        KeWaitForSingleObject(&Event, Executive, KernelMode, FALSE, NULL);
+        Status = IoStatus.Status;
+    }
+    return Status;
+}
