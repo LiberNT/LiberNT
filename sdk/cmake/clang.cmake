@@ -439,14 +439,14 @@ function(add_delay_importlibs _module)
     # placing the delay-load IAT in read-only .rdata and causing access violations.
     # Use regular import libs + LLD's native --delayload flag instead.
     foreach(_lib ${ARGN})
-        get_filename_component(_basename "${_lib}" NAME_WE)
-        target_link_libraries(${_module} lib${_basename})
-        # Determine the DLL filename
-        if("${_lib}" MATCHES "\\.")
+        if("${_lib}" MATCHES "\\.(dll|drv)$")
+            get_filename_component(_basename "${_lib}" NAME_WLE)
             set(_dllname "${_lib}")
         else()
+            set(_basename "${_lib}")
             set(_dllname "${_lib}.dll")
         endif()
+        target_link_libraries(${_module} lib${_basename})
         target_link_options(${_module} PRIVATE "-Wl,--delayload,${_dllname}")
     endforeach()
     target_link_libraries(${_module} delayimp)
