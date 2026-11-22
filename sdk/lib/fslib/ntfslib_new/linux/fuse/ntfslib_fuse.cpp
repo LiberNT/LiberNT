@@ -6590,7 +6590,7 @@ PrintUsage(const char* Program)
             "  %s --expand-disk DISK_IMAGE [PARTITION_NUMBER]\n"
             "  %s --mft-record IMAGE FILE_REFERENCE\n"
             "  %s [--show-metadata] --streams IMAGE PATH\n"
-            "  %s [--show-metadata] [--writable [--page-cache] [--writeback-cache]]"
+            "  %s [--show-metadata] [--writable [--direct-io] [--writeback-cache]]"
             " IMAGE MOUNTPOINT [FUSE options]\n",
             Program,
             Program,
@@ -8055,10 +8055,9 @@ main(int Argc, char** Argv)
     {
         bool WritableMount = false;
 
-        /* Writeback caching would report ENOSPC only at writeback; opt-in.
-         * Uncached file data measured faster than the page cache here. */
+        /* Writeback caching would report ENOSPC only at writeback; opt-in. */
         State.WritebackCache = false;
-        State.DirectIo = true;
+        State.DirectIo = false;
         State.NoAtime = false;
         State.StrictAtime = false;
         if (First < Argc &&
@@ -8069,8 +8068,9 @@ main(int Argc, char** Argv)
         }
         while (First < Argc && strncmp(Argv[First], "--", 2) == 0)
         {
-            if (strcmp(Argv[First], "--page-cache") == 0)
-                State.DirectIo = false;
+            /* FIXME: a shared mapping's stale page can be written back over a direct write. */
+            if (strcmp(Argv[First], "--direct-io") == 0)
+                State.DirectIo = true;
             else if (strcmp(Argv[First], "--writeback-cache") == 0)
                 State.WritebackCache = true;
             else

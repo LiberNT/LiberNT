@@ -20,6 +20,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
+#include <sys/wait.h>
 #include <sys/xattr.h>
 #include <time.h>
 #include <unistd.h>
@@ -1671,6 +1672,54 @@ TestMmap()
     close(Fd);
 }
 
+/* xfstests generic/346: write() and a shared mapping of other bytes in the same pages both land. */
+static void
+TestMmapWriteRace()
+{
+    const long Pages = 256;
+    const long PageSize = sysconf(_SC_PAGESIZE);
+    std::string Path = P("mmaprace.bin");
+    long Lost = 0;
+    bool Ok = true;
+
+    for (uint64_t Round = 0; Ok && Round < 20; Round++)
+    {
+        const uint64_t Written = UINT64_C(0x5752495445000000) | Round;
+        const uint64_t Mapped = UINT64_C(0x4D4D415000000000) | Round;
+        int Fd = open(Path.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0644);
+        char* Map = (char*)MAP_FAILED;
+        pid_t Child = -1;
+        int Status = 0;
+
+        Ok = Fd >= 0 && ftruncate(Fd, Pages * PageSize) == 0;
+        if (Ok)
+            Map = (char*)mmap(NULL, Pages * PageSize, PROT_READ | PROT_WRITE, MAP_SHARED, Fd, 0);
+        Ok = Ok && Map != MAP_FAILED && (Child = fork()) >= 0;
+        if (Child == 0)
+        {
+            for (long Page = 0; Page < Pages; Page++)
+                memcpy(Map + Page * PageSize + sizeof(Written), &Mapped, sizeof(Mapped));
+            _exit(msync(Map, Pages * PageSize, MS_SYNC) == 0 ? 0 : 1);
+        }
+        for (long Page = 0; Ok && Page < Pages; Page++)
+            Ok = pwrite(Fd, &Written, sizeof(Written), Page * PageSize) == (ssize_t)sizeof(Written);
+        Ok = Ok && waitpid(Child, &Status, 0) == Child && WIFEXITED(Status) && WEXITSTATUS(Status) == 0;
+        if (Map != MAP_FAILED)
+            munmap(Map, Pages * PageSize);
+        for (long Page = 0; Ok && Page < Pages; Page++)
+        {
+            uint64_t Values[2];
+
+            Ok = pread(Fd, Values, sizeof(Values), Page * PageSize) == (ssize_t)sizeof(Values);
+            Lost += Ok && (Values[0] != Written || Values[1] != Mapped);
+        }
+        if (Fd >= 0)
+            close(Fd);
+    }
+    unlink(Path.c_str());
+    CHECK("mmap.write_race", Ok && Lost == 0, "%ld pages lost a write (%s)", Lost, strerror(errno));
+}
+
 static double
 NowSeconds()
 {
@@ -2006,6 +2055,7 @@ main(int Argc, char** Argv)
     TestTimes();
     TestXattrs();
     TestMmap();
+    TestMmapWriteRace();
     TestCoherence();
     TestGapFill();
     TestStatfs();
