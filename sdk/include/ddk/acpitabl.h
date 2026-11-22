@@ -2895,6 +2895,19 @@ struct _NFIT_PLATFORM_CAPABILITIES
 };
 
 #pragma pack(push, 1)
+#pragma pack(push, 1)
+struct _GEN_ADDR
+{
+    UCHAR AddressSpaceID;
+    UCHAR BitWidth;
+    UCHAR BitOffset;
+    UCHAR AccessSize;
+    PHYSICAL_ADDRESS Address;
+};
+#pragma pack(pop)
+
+typedef struct _GEN_ADDR GEN_ADDR;
+
 struct _PCC_EXTENDED_3_4_SUBSPACE
 {
     PCC_SUBSPACE_HEADER Header;
@@ -3039,6 +3052,23 @@ struct _PCC_REDUCED_2_SUBSPACE
 #pragma pack(pop)
 
 #pragma pack(push, 1)
+#pragma pack(push, 1)
+struct _DESCRIPTION_HEADER
+{
+    ULONG Signature;
+    ULONG Length;
+    UCHAR Revision;
+    UCHAR Checksum;
+    CHAR OEMID[6];
+    CHAR OEMTableID[8];
+    ULONG OEMRevision;
+    CHAR CreatorID[4];
+    ULONG CreatorRev;
+};
+#pragma pack(pop)
+
+typedef struct _DESCRIPTION_HEADER DESCRIPTION_HEADER;
+
 struct _PCC_TABLE
 {
     DESCRIPTION_HEADER Header;

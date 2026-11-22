@@ -920,12 +920,31 @@ void __cdecl TpSetCallbackThreadpool(PTP_CALLBACK_ENVIRON CallbackEnviron, PTP_P
 
 
 
+enum _HARDWARE_COUNTER_TYPE
+{
+    PMCCounter = 0,
+    MaxHardwareCounterType = 1,
+};
+
+typedef enum _HARDWARE_COUNTER_TYPE HARDWARE_COUNTER_TYPE;
+
 struct _HARDWARE_COUNTER_DATA
 {
     HARDWARE_COUNTER_TYPE Type;
     DWORD Reserved;
     DWORD64 Value;
 };
+
+enum _MEM_DEDICATED_ATTRIBUTE_TYPE
+{
+    MemDedicatedAttributeReadBandwidth = 0,
+    MemDedicatedAttributeReadLatency = 1,
+    MemDedicatedAttributeWriteBandwidth = 2,
+    MemDedicatedAttributeWriteLatency = 3,
+    MemDedicatedAttributeMax = 4,
+};
+
+typedef enum _MEM_DEDICATED_ATTRIBUTE_TYPE MEM_DEDICATED_ATTRIBUTE_TYPE;
 
 struct _MEMORY_PARTITION_DEDICATED_MEMORY_ATTRIBUTE
 {
@@ -1216,4 +1235,26 @@ typedef struct _PERFORMANCE_DATA *PPERFORMANCE_DATA;
 #endif
 #ifndef XSTATE_ARM64_SME_ZT
 #define XSTATE_ARM64_SME_ZT 5
+typedef void (WINAPI *PAPCFUNC)(ULONG_PTR);
+
+typedef struct _PROCESS_DYNAMIC_EH_CONTINUATION_TARGET *PPROCESS_DYNAMIC_EH_CONTINUATION_TARGET;
+
+typedef struct _PROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGE *PPROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGE;
+
+typedef struct _CUSTOM_SYSTEM_EVENT_TRIGGER_CONFIG *PCUSTOM_SYSTEM_EVENT_TRIGGER_CONFIG;
+
+typedef struct _TOKEN_USER_CLAIMS TOKEN_USER_CLAIMS;
+
+typedef struct _TOKEN_DEVICE_CLAIMS TOKEN_DEVICE_CLAIMS;
+
+struct _TOKEN_USER_CLAIMS
+{
+    PCLAIMS_BLOB UserClaims;
+};
+
+struct _TOKEN_DEVICE_CLAIMS
+{
+    PCLAIMS_BLOB DeviceClaims;
+};
+
 #endif

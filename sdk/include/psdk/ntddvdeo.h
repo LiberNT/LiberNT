@@ -1359,6 +1359,14 @@ typedef struct VIDEO_BRIGHTNESS_POLICY *PVIDEO_BRIGHTNESS_POLICY;
 #define DEVPKEY_DeviceInterface_TerminalLuid 0
 
 
+struct _COORD
+{
+    SHORT X;
+    SHORT Y;
+};
+
+typedef struct _COORD COORD;
+
 struct _FONT_IMAGE_INFO
 {
     COORD FontSize;
@@ -1381,6 +1389,18 @@ struct _FSVIDEO_SCREEN_INFORMATION
 typedef struct _CHAR_IMAGE_INFO CHAR_IMAGE_INFO;
 
 typedef struct _FONT_IMAGE_INFO FONT_IMAGE_INFO;
+
+struct _CHAR_INFO
+{
+    union
+    {
+        WCHAR UnicodeChar;
+        CHAR AsciiChar;
+    } Char;
+    USHORT Attributes;
+};
+
+typedef struct _CHAR_INFO CHAR_INFO;
 
 struct _CHAR_IMAGE_INFO
 {

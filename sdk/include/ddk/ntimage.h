@@ -1804,6 +1804,28 @@ typedef enum IMPORT_OBJECT_TYPE {
     IMPORT_OBJECT_CONST = 2
 } IMPORT_OBJECT_TYPE;
 
+struct _IMAGE_RUNTIME_FUNCTION_ENTRY
+{
+    ULONG BeginAddress;
+    ULONG EndAddress;
+    union
+    {
+        ULONG UnwindInfoAddress;
+        ULONG UnwindData;
+    };
+};
+
+struct _IMAGE_RUNTIME_FUNCTION_ENTRY
+{
+    ULONG BeginAddress;
+    ULONG EndAddress;
+    union
+    {
+        ULONG UnwindInfoAddress;
+        ULONG UnwindData;
+    };
+};
+
 typedef struct _IMAGE_RUNTIME_FUNCTION_ENTRY * _PIMAGE_RUNTIME_FUNCTION_ENTRY;
 typedef const IMAGE_EXPORT_DIRECTORY * PCIMAGE_EXPORT_DIRECTORY;
 typedef const IMAGE_IMPORT_BY_NAME * PCIMAGE_IMPORT_BY_NAME;
@@ -2206,6 +2228,26 @@ typedef struct ANON_OBJECT_HEADER_V2 {
 #define IMAGE_SYM_SECTION_MAX_EX 0x7FFFFFFF
 #define PATCH_MAIN_CALLOUT_FUNCTION_NAME 0
 
+#pragma pack(push, 2)
+#pragma pack(push, 2)
+struct IMAGE_AUX_SYMBOL_TOKEN_DEF
+{
+    UCHAR bAuxType;
+    UCHAR bReserved;
+    ULONG SymbolTableIndex;
+    UCHAR rgbReserved[12];
+};
+#pragma pack(pop)
+
+struct IMAGE_AUX_SYMBOL_TOKEN_DEF
+{
+    UCHAR bAuxType;
+    UCHAR bReserved;
+    ULONG SymbolTableIndex;
+    UCHAR rgbReserved[12];
+};
+#pragma pack(pop)
+
 union _IMAGE_AUX_SYMBOL_EX
 {
     struct
@@ -2427,7 +2469,11 @@ typedef __unaligned IMAGE_OS2_HEADER *PUIMAGE_OS2_HEADER;
 
 typedef _IMAGE_RUNTIME_FUNCTION_ENTRY IMAGE_IA64_RUNTIME_FUNCTION_ENTRY;
 
+typedef struct _IMAGE_BOUND_FORWARDER_REF IMAGE_BOUND_FORWARDER_REF;
+
 typedef const IMAGE_BOUND_FORWARDER_REF *PCIMAGE_BOUND_FORWARDER_REF;
+
+typedef struct _IMAGE_BOUND_IMPORT_DESCRIPTOR IMAGE_BOUND_IMPORT_DESCRIPTOR;
 
 typedef const IMAGE_BOUND_IMPORT_DESCRIPTOR *PCIMAGE_BOUND_IMPORT_DESCRIPTOR;
 

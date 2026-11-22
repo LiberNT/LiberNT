@@ -2090,13 +2090,19 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
+typedef unsigned long DWORD;
+
 HRESULT WINAPI StringExHandleFillBehindNullA(STRSAFE_LPSTR pszDestEnd, size_t cbRemaining, DWORD dwFlags);
 HRESULT WINAPI StringExHandleFillBehindNullW(STRSAFE_LPWSTR pszDestEnd, size_t cbRemaining, DWORD dwFlags);
 HRESULT WINAPI StringExHandleOtherFlagsA(STRSAFE_LPSTR pszDest, size_t cbDest, size_t cchOriginalDestLength, STRSAFE_LPSTR *ppszDestEnd, size_t *pcchRemaining, DWORD dwFlags);
 HRESULT WINAPI StringExHandleOtherFlagsW(STRSAFE_LPWSTR pszDest, size_t cbDest, size_t cchOriginalDestLength, STRSAFE_LPWSTR *ppszDestEnd, size_t *pcchRemaining, DWORD dwFlags);
+typedef const char *STRSAFE_PCNZCH;
+
 HRESULT WINAPI StringExValidateDestA(STRSAFE_PCNZCH pszDest, size_t cchDest, const size_t cchMax, DWORD dwFlags);
 HRESULT WINAPI StringExValidateDestAndLengthA(STRSAFE_LPCSTR pszDest, size_t cchDest, size_t *pcchDestLength, const size_t cchMax, DWORD dwFlags);
 HRESULT WINAPI StringExValidateDestAndLengthW(STRSAFE_LPCWSTR pszDest, size_t cchDest, size_t *pcchDestLength, const size_t cchMax, DWORD dwFlags);
+typedef const wchar_t *STRSAFE_PCNZWCH;
+
 HRESULT WINAPI StringExValidateDestW(STRSAFE_PCNZWCH pszDest, size_t cchDest, const size_t cchMax, DWORD dwFlags);
 HRESULT WINAPI StringExValidateSrcA(STRSAFE_PCNZCH *ppszSrc, size_t *pcchToRead, const size_t cchMax, DWORD dwFlags);
 HRESULT WINAPI StringExValidateSrcW(STRSAFE_PCNZWCH *ppszSrc, size_t *pcchToRead, const size_t cchMax, DWORD dwFlags);
@@ -2106,6 +2112,8 @@ HRESULT WINAPI StringValidateDestA(STRSAFE_PCNZCH pszDest, size_t cchDest, const
 HRESULT WINAPI StringValidateDestAndLengthA(STRSAFE_LPCSTR pszDest, size_t cchDest, size_t *pcchDestLength, const size_t cchMax);
 HRESULT WINAPI StringValidateDestAndLengthW(STRSAFE_LPCWSTR pszDest, size_t cchDest, size_t *pcchDestLength, const size_t cchMax);
 HRESULT WINAPI StringValidateDestW(STRSAFE_PCNZWCH pszDest, size_t cchDest, const size_t cchMax);
+typedef const __unaligned wchar_t *STRSAFE_PCUNZWCH;
+
 HRESULT WINAPI UnalignedStringCbLengthW(STRSAFE_PCUNZWCH psz, size_t cbMax, size_t *pcbLength);
 HRESULT WINAPI UnalignedStringCchLengthW(STRSAFE_PCUNZWCH psz, size_t cchMax, size_t *pcchLength);
 HRESULT WINAPI UnalignedStringLengthWorkerW(STRSAFE_PCUNZWCH psz, size_t cchMax, size_t *pcchLength);

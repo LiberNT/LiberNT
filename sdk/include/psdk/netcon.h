@@ -307,6 +307,8 @@ struct IEnumNetSharingPortMappingVtbl
     HRESULT (WINAPI *Clone)(IEnumNetSharingPortMapping *, IEnumNetSharingPortMapping **);
 };
 
+typedef struct IEnumNetSharingPrivateConnection IEnumNetSharingPrivateConnection;
+
 struct IEnumNetSharingPrivateConnectionVtbl
 {
     HRESULT (WINAPI *QueryInterface)(IEnumNetSharingPrivateConnection *, const IID *const , void **);
@@ -317,6 +319,8 @@ struct IEnumNetSharingPrivateConnectionVtbl
     HRESULT (WINAPI *Reset)(IEnumNetSharingPrivateConnection *);
     HRESULT (WINAPI *Clone)(IEnumNetSharingPrivateConnection *, IEnumNetSharingPrivateConnection **);
 };
+
+typedef struct IEnumNetSharingPublicConnection IEnumNetSharingPublicConnection;
 
 struct IEnumNetSharingPublicConnectionVtbl
 {
@@ -346,6 +350,8 @@ struct INetConnectionManagerVtbl
     ULONG (WINAPI *Release)(INetConnectionManager *);
     HRESULT (WINAPI *EnumConnections)(INetConnectionManager *, NETCONMGR_ENUM_FLAGS, IEnumNetConnection **);
 };
+
+typedef struct INetConnectionProps INetConnectionProps;
 
 struct INetConnectionPropsVtbl
 {
@@ -378,6 +384,14 @@ struct INetConnectionVtbl
     HRESULT (WINAPI *Rename)(INetConnection *, LPCWSTR);
 };
 
+typedef struct INetSharingPortMapping INetSharingPortMapping;
+
+typedef struct INetSharingPortMappingCollection INetSharingPortMappingCollection;
+
+typedef struct INetSharingConfiguration INetSharingConfiguration;
+
+typedef enum tagSHARINGCONNECTIONTYPE SHARINGCONNECTIONTYPE;
+
 struct INetSharingConfigurationVtbl
 {
     HRESULT (WINAPI *QueryInterface)(INetSharingConfiguration *, const IID *const , void **);
@@ -399,6 +413,8 @@ struct INetSharingConfigurationVtbl
     HRESULT (WINAPI *RemovePortMapping)(INetSharingConfiguration *, INetSharingPortMapping *);
 };
 
+typedef struct INetSharingEveryConnectionCollection INetSharingEveryConnectionCollection;
+
 struct INetSharingEveryConnectionCollectionVtbl
 {
     HRESULT (WINAPI *QueryInterface)(INetSharingEveryConnectionCollection *, const IID *const , void **);
@@ -411,6 +427,12 @@ struct INetSharingEveryConnectionCollectionVtbl
     HRESULT (WINAPI *get__NewEnum)(INetSharingEveryConnectionCollection *, IUnknown **);
     HRESULT (WINAPI *get_Count)(INetSharingEveryConnectionCollection *, long *);
 };
+
+typedef struct INetSharingPublicConnectionCollection INetSharingPublicConnectionCollection;
+
+typedef struct INetSharingPrivateConnectionCollection INetSharingPrivateConnectionCollection;
+
+typedef struct INetSharingManager INetSharingManager;
 
 struct INetSharingManagerVtbl
 {
@@ -441,6 +463,8 @@ struct INetSharingPortMappingCollectionVtbl
     HRESULT (WINAPI *get__NewEnum)(INetSharingPortMappingCollection *, IUnknown **);
     HRESULT (WINAPI *get_Count)(INetSharingPortMappingCollection *, long *);
 };
+
+typedef struct INetSharingPortMappingProps INetSharingPortMappingProps;
 
 struct INetSharingPortMappingPropsVtbl
 {

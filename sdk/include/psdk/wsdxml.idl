@@ -188,4 +188,8 @@ cpp_quote("#define OpQualifiedAttribute(name) OpQualifiedAttribute_, BYTES(name)
 cpp_quote("#define WSDXML_NAME_ENCODING(nameIndex, nameSpaceEncoding) ((((DWORD) nameSpaceEncoding) << 16) | nameIndex)")
 cpp_quote("#define WSDXML_NAMESPACE_ENCODING(namespaceIndex, layerNumber) ((((WORD) layerNumber) << 12) | namespaceIndex)")
 cpp_quote("#define WSDXML_TYPE_ENCODING(typeIndex, layerNumber) ((((DWORD) layerNumber) << 28) | typeIndex)")
+cpp_quote("typedef struct _WSDXML_ELEMENT_LIST WSDXML_ELEMENT_LIST;")
+cpp_quote("typedef struct _WSDXML_ELEMENT_LIST WSDXML_ELEMENT_LIST;")
+
+
 

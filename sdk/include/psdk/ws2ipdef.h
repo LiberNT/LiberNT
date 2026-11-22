@@ -711,4 +711,10 @@ typedef struct in_pktinfo_ex *PIN_PKTINFO_EX;
 
 typedef struct in_recverr *PIN_RECVERR;
 
+typedef union _SOCKADDR_INET SOCKADDR_INET;
+
+typedef struct icmp_error_info ICMP_ERROR_INFO;
+
+typedef union _SOCKADDR_INET SOCKADDR_INET;
+
 #endif

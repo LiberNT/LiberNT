@@ -36,4 +36,38 @@ enum IORING_FEATURE_FLAGS
 };
 typedef enum IORING_FEATURE_FLAGS IORING_FEATURE_FLAGS;
 
+enum IORING_OP_CODE
+{
+
+};
+
+struct IORING_BUFFER_INFO
+{
+    void *Address;
+    UINT32 Length;
+};
+
+struct IORING_REGISTERED_BUFFER
+{
+    UINT32 BufferIndex;
+    UINT32 Offset;
+};
+
+enum IORING_OP_CODE
+{
+
+};
+
+struct IORING_BUFFER_INFO
+{
+    void *Address;
+    UINT32 Length;
+};
+
+struct IORING_REGISTERED_BUFFER
+{
+    UINT32 BufferIndex;
+    UINT32 Offset;
+};
+
 #endif

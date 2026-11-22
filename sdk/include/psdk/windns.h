@@ -1368,7 +1368,13 @@ DNS_STATUS WINAPI DnsIsFlatRecord(PDNS_RECORD pRecord, ULONG64 ullFlags, BOOL *p
 BOOL WINAPI DnsIsZtEnabled(void);
 void DnsQueryRawResultFree(DNS_QUERY_RAW_RESULT *queryResults);
 #if (!defined(__midl))
+#if (!defined(__midl))
+typedef struct _DNS_SERVICE_CANCEL *PDNS_SERVICE_CANCEL;
+#endif
+
 DNS_STATUS WINAPI DnsServiceBrowseCancel(PDNS_SERVICE_CANCEL pCancelHandle);
+typedef DWORD *PIP4_ADDRESS;
+
 PDNS_SERVICE_INSTANCE WINAPI DnsServiceConstructInstance(PCWSTR pServiceName, PCWSTR pHostName, PIP4_ADDRESS pIp4, PIP6_ADDRESS pIp6, WORD wPort, WORD wPriority, WORD wWeight, DWORD dwPropertiesCount, PCWSTR *keys, PCWSTR *values);
 PDNS_SERVICE_INSTANCE WINAPI DnsServiceCopyInstance(PDNS_SERVICE_INSTANCE pOrig);
 DWORD WINAPI DnsServiceDeRegister(PDNS_SERVICE_REGISTER_REQUEST pRequest, PDNS_SERVICE_CANCEL pCancel);
@@ -1508,6 +1514,10 @@ struct _DNS_QUERY_RAW_REQUEST
 };
 
 #if (!defined ( USE_PRIVATE_DNS_ADDR ) || defined (MIDL_PASS))
+typedef void WINAPI DNS_QUERY_COMPLETION_ROUTINE(PVOID, PDNS_QUERY_RESULT);
+
+typedef DNS_QUERY_COMPLETION_ROUTINE *PDNS_QUERY_COMPLETION_ROUTINE;
+
 struct _DNS_QUERY_REQUEST3
 {
     ULONG Version;

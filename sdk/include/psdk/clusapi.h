@@ -3040,6 +3040,8 @@ struct CLUSPROP_LIST
     CLUSPROP_PROPERTY_NAME PropertyName;
 };
 
+#if (( !MIDL_PASS && !__midl ))
+#if (( !MIDL_PASS && !__midl ))
 struct CLUSPROP_ULARGE_INTEGER
 {
     ULARGE_INTEGER li;
