@@ -264,6 +264,7 @@ IntSetTimer( PWND Window,
         else
            pTmr->pti = PsGetCurrentThreadWin32Thread();
      }
+     ASSERT(pTmr->pti == NULL || !(pTmr->pti->TIF_flags & TIF_INCLEANUP) || pTmr->pti == PsGetCurrentThreadWin32Thread());
 
      pTmr->pWnd    = Window;
      pTmr->cmsCountdown = Elapse;
