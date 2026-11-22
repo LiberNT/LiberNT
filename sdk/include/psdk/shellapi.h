@@ -1096,19 +1096,23 @@ typedef struct _OPEN_PRINTER_PROPS_INFOW {
 #ifdef UNICODE
 #define ExtractAssociatedIconEx ExtractAssociatedIconExW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define ExtractAssociatedIconEx ExtractAssociatedIconExW
 #else
 #define ExtractAssociatedIconEx ExtractAssociatedIconExA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define IsLFNDrive IsLFNDriveW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define IsLFNDrive IsLFNDriveW
 #else
 #define IsLFNDrive IsLFNDriveA
+#endif
 #endif
 #endif
 #define PRINT_PROP_FORCE_NAME 0x01
@@ -1116,50 +1120,64 @@ typedef struct _OPEN_PRINTER_PROPS_INFOW {
 #ifdef UNICODE
 #define SHEnumerateUnreadMailAccounts SHEnumerateUnreadMailAccountsW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SHEnumerateUnreadMailAccounts SHEnumerateUnreadMailAccountsW
 #else
 #define SHEnumerateUnreadMailAccounts SHEnumerateUnreadMailAccountsA
 #endif
 #endif
+#endif
 #define SHGetDiskFreeSpace 0
 #ifdef UNICODE
 #define SHGetDiskFreeSpaceEx SHGetDiskFreeSpaceExW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SHGetDiskFreeSpaceEx SHGetDiskFreeSpaceExW
 #else
 #define SHGetDiskFreeSpaceEx SHGetDiskFreeSpaceExA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define SHGetUnreadMailCount SHGetUnreadMailCountW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SHGetUnreadMailCount SHGetUnreadMailCountW
 #else
 #define SHGetUnreadMailCount SHGetUnreadMailCountA
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define SHInvokePrinterCommand 0
+#endif
 #ifdef UNICODE
 #define SHSetUnreadMailCount SHSetUnreadMailCountW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SHSetUnreadMailCount SHSetUnreadMailCountW
 #else
 #define SHSetUnreadMailCount SHSetUnreadMailCountA
 #endif
 #endif
+#endif
 
 
+#if (!(defined(UNICODE)))
 typedef OPEN_PRINTER_PROPS_INFOA OPEN_PRINTER_PROPS_INFO;
+#endif
 
 typedef HRESULT (WINAPI *PFNCANSHAREFOLDERW)(PCWSTR);
 
 typedef HRESULT (WINAPI *PFNSHOWSHAREFOLDERUIW)(HWND, PCWSTR);
 
+#if (!(defined(UNICODE)))
 typedef POPEN_PRINTER_PROPS_INFOA POPEN_PRINTER_PROPS_INFO;
+#endif
 
 #ifdef __cplusplus
 extern "C" {

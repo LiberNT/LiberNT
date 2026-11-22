@@ -1033,7 +1033,9 @@ DWORD WINAPI WFDOpenLegacySession(HANDLE hClientHandle, PDOT11_MAC_ADDRESS pLega
 DWORD WINAPI WFDStartOpenSession(HANDLE hClientHandle, PDOT11_MAC_ADDRESS pDeviceAddress, PVOID pvContext, WFD_OPEN_SESSION_COMPLETE_CALLBACK pfnCallback, PHANDLE phSessionHandle);
 DWORD WINAPI WFDUpdateDeviceVisibility(PDOT11_MAC_ADDRESS pDeviceAddress);
 DWORD WINAPI WlanDeviceServiceCommand(HANDLE hClientHandle, const GUID *pInterfaceGuid, LPGUID pDeviceServiceGuid, DWORD dwOpCode, DWORD dwInBufferSize, PVOID pInBuffer, DWORD dwOutBufferSize, PVOID pOutBuffer, PDWORD pdwBytesReturned);
+#if (!defined(__midl))
 DWORD WINAPI WlanExtractPsdIEDataList(HANDLE hClientHandle, DWORD dwIeDataSize, const PBYTE pRawIeData, LPCWSTR strFormat, PVOID pReserved, PWLAN_RAW_DATA_LIST *ppPsdIEDataList);
+#endif
 DWORD WINAPI WlanGetFilterList(HANDLE hClientHandle, WLAN_FILTER_LIST_TYPE wlanFilterListType, PVOID pReserved, PDOT11_NETWORK_LIST *ppNetworkList);
 DWORD WINAPI WlanGetSupportedDeviceServices(HANDLE hClientHandle, const GUID *pInterfaceGuid, PWLAN_DEVICE_SERVICE_GUID_LIST *ppDevSvcGuidList);
 DWORD WINAPI WlanHostedNetworkForceStart(HANDLE hClientHandle, PWLAN_HOSTED_NETWORK_REASON pFailReason, PVOID pvReserved);

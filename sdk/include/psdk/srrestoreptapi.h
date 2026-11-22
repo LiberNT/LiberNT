@@ -162,20 +162,26 @@ typedef struct _RESTOREPTINFOEX {
 #ifdef UNICODE
 #define PRESTOREPOINTINFO PRESTOREPOINTINFOW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PRESTOREPOINTINFO PRESTOREPOINTINFOW
 #else
 #define PRESTOREPOINTINFO PRESTOREPOINTINFOA
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define RESTOREPOINTINFO 0
+#endif
 #ifdef UNICODE
 #define SRSetRestorePoint SRSetRestorePointW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SRSetRestorePoint SRSetRestorePointW
 #else
 #define SRSetRestorePoint SRSetRestorePointA
+#endif
 #endif
 #endif
 

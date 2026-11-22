@@ -889,208 +889,342 @@ cpp_quote("#endif")
 #define AVIIF_CONTROLFRAME 0x00000200L
 #endif
 #ifndef CRYSTAL_NET_SFM_CODEC
+#if (!defined(__midl))
 #define CRYSTAL_NET_SFM_CODEC 1
 #endif
+#endif
 #ifndef JIFMK_00
+#if (!defined(__midl))
 #define JIFMK_00 0xFF00
 #endif
+#endif
 #ifndef JIFMK_APP0
+#if (!defined(__midl))
 #define JIFMK_APP0 0xFFE0
 #endif
+#endif
 #ifndef JIFMK_APP1
+#if (!defined(__midl))
 #define JIFMK_APP1 0xFFE1
 #endif
+#endif
 #ifndef JIFMK_APP2
+#if (!defined(__midl))
 #define JIFMK_APP2 0xFFE2
 #endif
+#endif
 #ifndef JIFMK_APP3
+#if (!defined(__midl))
 #define JIFMK_APP3 0xFFE3
 #endif
+#endif
 #ifndef JIFMK_APP4
+#if (!defined(__midl))
 #define JIFMK_APP4 0xFFE4
 #endif
+#endif
 #ifndef JIFMK_APP5
+#if (!defined(__midl))
 #define JIFMK_APP5 0xFFE5
 #endif
+#endif
 #ifndef JIFMK_APP6
+#if (!defined(__midl))
 #define JIFMK_APP6 0xFFE6
 #endif
+#endif
 #ifndef JIFMK_APP7
+#if (!defined(__midl))
 #define JIFMK_APP7 0xFFE7
 #endif
+#endif
 #ifndef JIFMK_COM
+#if (!defined(__midl))
 #define JIFMK_COM 0xFFFE
 #endif
+#endif
 #ifndef JIFMK_DAC
+#if (!defined(__midl))
 #define JIFMK_DAC 0xFFCC
 #endif
+#endif
 #ifndef JIFMK_DHP
+#if (!defined(__midl))
 #define JIFMK_DHP 0xFFDE
 #endif
+#endif
 #ifndef JIFMK_DHT
+#if (!defined(__midl))
 #define JIFMK_DHT 0xFFC4
 #endif
+#endif
 #ifndef JIFMK_DNL
+#if (!defined(__midl))
 #define JIFMK_DNL 0xFFDC
 #endif
+#endif
 #ifndef JIFMK_DQT
+#if (!defined(__midl))
 #define JIFMK_DQT 0xFFDB
 #endif
+#endif
 #ifndef JIFMK_DRI
+#if (!defined(__midl))
 #define JIFMK_DRI 0xFFDD
 #endif
+#endif
 #ifndef JIFMK_EOI
+#if (!defined(__midl))
 #define JIFMK_EOI 0xFFD9
 #endif
+#endif
 #ifndef JIFMK_EXP
+#if (!defined(__midl))
 #define JIFMK_EXP 0xFFDF
 #endif
+#endif
 #ifndef JIFMK_FF
+#if (!defined(__midl))
 #define JIFMK_FF 0xFFFF
 #endif
+#endif
 #ifndef JIFMK_JPG
+#if (!defined(__midl))
 #define JIFMK_JPG 0xFFC8
 #endif
+#endif
 #ifndef JIFMK_JPG0
+#if (!defined(__midl))
 #define JIFMK_JPG0 0xFFF0
 #endif
+#endif
 #ifndef JIFMK_JPG1
+#if (!defined(__midl))
 #define JIFMK_JPG1 0xFFF1
 #endif
+#endif
 #ifndef JIFMK_JPG10
+#if (!defined(__midl))
 #define JIFMK_JPG10 0xFFFA
 #endif
+#endif
 #ifndef JIFMK_JPG11
+#if (!defined(__midl))
 #define JIFMK_JPG11 0xFFFB
 #endif
+#endif
 #ifndef JIFMK_JPG12
+#if (!defined(__midl))
 #define JIFMK_JPG12 0xFFFC
 #endif
+#endif
 #ifndef JIFMK_JPG13
+#if (!defined(__midl))
 #define JIFMK_JPG13 0xFFFD
 #endif
+#endif
 #ifndef JIFMK_JPG2
+#if (!defined(__midl))
 #define JIFMK_JPG2 0xFFF2
 #endif
+#endif
 #ifndef JIFMK_JPG3
+#if (!defined(__midl))
 #define JIFMK_JPG3 0xFFF3
 #endif
+#endif
 #ifndef JIFMK_JPG4
+#if (!defined(__midl))
 #define JIFMK_JPG4 0xFFF4
 #endif
+#endif
 #ifndef JIFMK_JPG5
+#if (!defined(__midl))
 #define JIFMK_JPG5 0xFFF5
 #endif
+#endif
 #ifndef JIFMK_JPG6
+#if (!defined(__midl))
 #define JIFMK_JPG6 0xFFF6
 #endif
+#endif
 #ifndef JIFMK_JPG7
+#if (!defined(__midl))
 #define JIFMK_JPG7 0xFFF7
 #endif
+#endif
 #ifndef JIFMK_JPG8
+#if (!defined(__midl))
 #define JIFMK_JPG8 0xFFF8
 #endif
+#endif
 #ifndef JIFMK_JPG9
+#if (!defined(__midl))
 #define JIFMK_JPG9 0xFFF9
 #endif
+#endif
 #ifndef JIFMK_RES
+#if (!defined(__midl))
 #define JIFMK_RES 0xFF02
 #endif
+#endif
 #ifndef JIFMK_RST0
+#if (!defined(__midl))
 #define JIFMK_RST0 0xFFD0
 #endif
+#endif
 #ifndef JIFMK_RST1
+#if (!defined(__midl))
 #define JIFMK_RST1 0xFFD1
 #endif
+#endif
 #ifndef JIFMK_RST2
+#if (!defined(__midl))
 #define JIFMK_RST2 0xFFD2
 #endif
+#endif
 #ifndef JIFMK_RST3
+#if (!defined(__midl))
 #define JIFMK_RST3 0xFFD3
 #endif
+#endif
 #ifndef JIFMK_RST4
+#if (!defined(__midl))
 #define JIFMK_RST4 0xFFD4
 #endif
+#endif
 #ifndef JIFMK_RST5
+#if (!defined(__midl))
 #define JIFMK_RST5 0xFFD5
 #endif
+#endif
 #ifndef JIFMK_RST6
+#if (!defined(__midl))
 #define JIFMK_RST6 0xFFD6
 #endif
+#endif
 #ifndef JIFMK_RST7
+#if (!defined(__midl))
 #define JIFMK_RST7 0xFFD7
 #endif
+#endif
 #ifndef JIFMK_SOF0
+#if (!defined(__midl))
 #define JIFMK_SOF0 0xFFC0
 #endif
+#endif
 #ifndef JIFMK_SOF1
+#if (!defined(__midl))
 #define JIFMK_SOF1 0xFFC1
 #endif
+#endif
 #ifndef JIFMK_SOF10
+#if (!defined(__midl))
 #define JIFMK_SOF10 0xFFCA
 #endif
+#endif
 #ifndef JIFMK_SOF11
+#if (!defined(__midl))
 #define JIFMK_SOF11 0xFFCB
 #endif
+#endif
 #ifndef JIFMK_SOF13
+#if (!defined(__midl))
 #define JIFMK_SOF13 0xFFCD
 #endif
+#endif
 #ifndef JIFMK_SOF14
+#if (!defined(__midl))
 #define JIFMK_SOF14 0xFFCE
 #endif
+#endif
 #ifndef JIFMK_SOF15
+#if (!defined(__midl))
 #define JIFMK_SOF15 0xFFCF
 #endif
+#endif
 #ifndef JIFMK_SOF2
+#if (!defined(__midl))
 #define JIFMK_SOF2 0xFFC2
 #endif
+#endif
 #ifndef JIFMK_SOF3
+#if (!defined(__midl))
 #define JIFMK_SOF3 0xFFC3
 #endif
+#endif
 #ifndef JIFMK_SOF5
+#if (!defined(__midl))
 #define JIFMK_SOF5 0xFFC5
 #endif
+#endif
 #ifndef JIFMK_SOF6
+#if (!defined(__midl))
 #define JIFMK_SOF6 0xFFC6
 #endif
+#endif
 #ifndef JIFMK_SOF7
+#if (!defined(__midl))
 #define JIFMK_SOF7 0xFFC7
 #endif
+#endif
 #ifndef JIFMK_SOF9
+#if (!defined(__midl))
 #define JIFMK_SOF9 0xFFC9
 #endif
+#endif
 #ifndef JIFMK_SOI
+#if (!defined(__midl))
 #define JIFMK_SOI 0xFFD8
 #endif
+#endif
 #ifndef JIFMK_SOS
+#if (!defined(__midl))
 #define JIFMK_SOS 0xFFDA
 #endif
+#endif
 #ifndef JIFMK_TEM
+#if (!defined(__midl))
 #define JIFMK_TEM 0xFF01
 #endif
+#endif
 #ifndef JPEG_PROCESS_BASELINE
+#if (!defined(__midl))
 #define JPEG_PROCESS_BASELINE 0
 #endif
+#endif
 #ifndef JPEG_RGB
+#if (!defined(__midl))
 #define JPEG_RGB 3
 #endif
+#endif
 #ifndef JPEG_Y
+#if (!defined(__midl))
 #define JPEG_Y 1
 #endif
+#endif
 #ifndef JPEG_YCbCr
+#if (!defined(__midl))
 #define JPEG_YCbCr 2
+#endif
 #endif
 #ifndef MM_3COM
 #define MM_3COM 260
 #endif
 #ifndef MM_3COM_CB_MIXER
+#if (!defined(__midl))
 #define MM_3COM_CB_MIXER 1
 #endif
+#endif
 #ifndef MM_3COM_CB_WAVEIN
+#if (!defined(__midl))
 #define MM_3COM_CB_WAVEIN 2
 #endif
+#endif
 #ifndef MM_3COM_CB_WAVEOUT
+#if (!defined(__midl))
 #define MM_3COM_CB_WAVEOUT 3
+#endif
 #endif
 #ifndef MM_3DFX
 #define MM_3DFX 262
@@ -1099,22 +1233,32 @@ cpp_quote("#endif")
 #define MM_AARDVARK 11
 #endif
 #ifndef MM_AARDVARK_STUDIO12_WAVEIN
+#if (!defined(__midl))
 #define MM_AARDVARK_STUDIO12_WAVEIN 2
 #endif
+#endif
 #ifndef MM_AARDVARK_STUDIO12_WAVEOUT
+#if (!defined(__midl))
 #define MM_AARDVARK_STUDIO12_WAVEOUT 1
 #endif
+#endif
 #ifndef MM_AARDVARK_STUDIO88_WAVEIN
+#if (!defined(__midl))
 #define MM_AARDVARK_STUDIO88_WAVEIN 4
 #endif
+#endif
 #ifndef MM_AARDVARK_STUDIO88_WAVEOUT
+#if (!defined(__midl))
 #define MM_AARDVARK_STUDIO88_WAVEOUT 3
+#endif
 #endif
 #ifndef MM_ACTIVEVOICE
 #define MM_ACTIVEVOICE 225
 #endif
 #ifndef MM_ACTIVEVOICE_ACM_VOXADPCM
+#if (!defined(__midl))
 #define MM_ACTIVEVOICE_ACM_VOXADPCM 1
+#endif
 #endif
 #ifndef MM_ACULAB
 #define MM_ACULAB 14
@@ -1123,22 +1267,34 @@ cpp_quote("#endif")
 #define MM_ADDX 118
 #endif
 #ifndef MM_ADDX_PCTV_AUX_CD
+#if (!defined(__midl))
 #define MM_ADDX_PCTV_AUX_CD 5
 #endif
+#endif
 #ifndef MM_ADDX_PCTV_AUX_LINE
+#if (!defined(__midl))
 #define MM_ADDX_PCTV_AUX_LINE 6
 #endif
+#endif
 #ifndef MM_ADDX_PCTV_DIGITALMIX
+#if (!defined(__midl))
 #define MM_ADDX_PCTV_DIGITALMIX 1
 #endif
+#endif
 #ifndef MM_ADDX_PCTV_MIXER
+#if (!defined(__midl))
 #define MM_ADDX_PCTV_MIXER 4
 #endif
+#endif
 #ifndef MM_ADDX_PCTV_WAVEIN
+#if (!defined(__midl))
 #define MM_ADDX_PCTV_WAVEIN 2
 #endif
+#endif
 #ifndef MM_ADDX_PCTV_WAVEOUT
+#if (!defined(__midl))
 #define MM_ADDX_PCTV_WAVEOUT 3
+#endif
 #endif
 #ifndef MM_ADLACC
 #define MM_ADLACC 91
@@ -1147,34 +1303,52 @@ cpp_quote("#endif")
 #define MM_ADMOS 235
 #endif
 #ifndef MM_ADMOS_FM_SYNTH
+#if (!defined(__midl))
 #define MM_ADMOS_FM_SYNTH 1
 #endif
+#endif
 #ifndef MM_ADMOS_QS3AMIDIIN
+#if (!defined(__midl))
 #define MM_ADMOS_QS3AMIDIIN 3
 #endif
+#endif
 #ifndef MM_ADMOS_QS3AMIDIOUT
+#if (!defined(__midl))
 #define MM_ADMOS_QS3AMIDIOUT 2
 #endif
+#endif
 #ifndef MM_ADMOS_QS3AWAVEIN
+#if (!defined(__midl))
 #define MM_ADMOS_QS3AWAVEIN 5
 #endif
+#endif
 #ifndef MM_ADMOS_QS3AWAVEOUT
+#if (!defined(__midl))
 #define MM_ADMOS_QS3AWAVEOUT 4
+#endif
 #endif
 #ifndef MM_AHEAD
 #define MM_AHEAD 77
 #endif
 #ifndef MM_AHEAD_GENERIC
+#if (!defined(__midl))
 #define MM_AHEAD_GENERIC 4
 #endif
+#endif
 #ifndef MM_AHEAD_MULTISOUND
+#if (!defined(__midl))
 #define MM_AHEAD_MULTISOUND 1
 #endif
+#endif
 #ifndef MM_AHEAD_PROAUDIO
+#if (!defined(__midl))
 #define MM_AHEAD_PROAUDIO 3
 #endif
+#endif
 #ifndef MM_AHEAD_SOUNDBLASTER
+#if (!defined(__midl))
 #define MM_AHEAD_SOUNDBLASTER 2
+#endif
 #endif
 #ifndef MM_ALARIS
 #define MM_ALARIS 174
@@ -1189,19 +1363,29 @@ cpp_quote("#endif")
 #define MM_ALGOVISION 266
 #endif
 #ifndef MM_ALGOVISION_VB80AUX
+#if (!defined(__midl))
 #define MM_ALGOVISION_VB80AUX 4
 #endif
+#endif
 #ifndef MM_ALGOVISION_VB80AUX2
+#if (!defined(__midl))
 #define MM_ALGOVISION_VB80AUX2 5
 #endif
+#endif
 #ifndef MM_ALGOVISION_VB80MIXER
+#if (!defined(__midl))
 #define MM_ALGOVISION_VB80MIXER 3
 #endif
+#endif
 #ifndef MM_ALGOVISION_VB80WAVEIN
+#if (!defined(__midl))
 #define MM_ALGOVISION_VB80WAVEIN 2
 #endif
+#endif
 #ifndef MM_ALGOVISION_VB80WAVEOUT
+#if (!defined(__midl))
 #define MM_ALGOVISION_VB80WAVEOUT 1
+#endif
 #endif
 #ifndef MM_AMD
 #define MM_AMD 146
@@ -1219,25 +1403,37 @@ cpp_quote("#endif")
 #define MM_AMD_INTERWAVE_AUX_MIC 12
 #endif
 #ifndef MM_AMD_INTERWAVE_EX_CD
+#if (!defined(__midl))
 #define MM_AMD_INTERWAVE_EX_CD 7
+#endif
 #endif
 #ifndef MM_AMD_INTERWAVE_EX_TELEPHONY
 #define MM_AMD_INTERWAVE_EX_TELEPHONY 16
 #endif
 #ifndef MM_AMD_INTERWAVE_JOYSTICK
+#if (!defined(__midl))
 #define MM_AMD_INTERWAVE_JOYSTICK 6
 #endif
+#endif
 #ifndef MM_AMD_INTERWAVE_MIDIIN
+#if (!defined(__midl))
 #define MM_AMD_INTERWAVE_MIDIIN 8
 #endif
+#endif
 #ifndef MM_AMD_INTERWAVE_MIDIOUT
+#if (!defined(__midl))
 #define MM_AMD_INTERWAVE_MIDIOUT 9
 #endif
+#endif
 #ifndef MM_AMD_INTERWAVE_MIXER1
+#if (!defined(__midl))
 #define MM_AMD_INTERWAVE_MIXER1 4
 #endif
+#endif
 #ifndef MM_AMD_INTERWAVE_MIXER2
+#if (!defined(__midl))
 #define MM_AMD_INTERWAVE_MIXER2 5
+#endif
 #endif
 #ifndef MM_AMD_INTERWAVE_MONO_IN
 #define MM_AMD_INTERWAVE_MONO_IN 14
@@ -1249,13 +1445,19 @@ cpp_quote("#endif")
 #define MM_AMD_INTERWAVE_STEREO_ENHANCED 19
 #endif
 #ifndef MM_AMD_INTERWAVE_SYNTH
+#if (!defined(__midl))
 #define MM_AMD_INTERWAVE_SYNTH 3
 #endif
+#endif
 #ifndef MM_AMD_INTERWAVE_WAVEIN
+#if (!defined(__midl))
 #define MM_AMD_INTERWAVE_WAVEIN 1
 #endif
+#endif
 #ifndef MM_AMD_INTERWAVE_WAVEOUT
+#if (!defined(__midl))
 #define MM_AMD_INTERWAVE_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_AMD_INTERWAVE_WAVEOUT_BASE
 #define MM_AMD_INTERWAVE_WAVEOUT_BASE 17
@@ -1270,31 +1472,49 @@ cpp_quote("#endif")
 #define MM_ANTEX 31
 #endif
 #ifndef MM_ANTEX_AUDIOPORT22_FEEDTHRU
+#if (!defined(__midl))
 #define MM_ANTEX_AUDIOPORT22_FEEDTHRU 9
 #endif
+#endif
 #ifndef MM_ANTEX_AUDIOPORT22_WAVEIN
+#if (!defined(__midl))
 #define MM_ANTEX_AUDIOPORT22_WAVEIN 7
 #endif
+#endif
 #ifndef MM_ANTEX_AUDIOPORT22_WAVEOUT
+#if (!defined(__midl))
 #define MM_ANTEX_AUDIOPORT22_WAVEOUT 8
 #endif
+#endif
 #ifndef MM_ANTEX_SX12_WAVEIN
+#if (!defined(__midl))
 #define MM_ANTEX_SX12_WAVEIN 1
 #endif
+#endif
 #ifndef MM_ANTEX_SX12_WAVEOUT
+#if (!defined(__midl))
 #define MM_ANTEX_SX12_WAVEOUT 2
 #endif
+#endif
 #ifndef MM_ANTEX_SX15_WAVEIN
+#if (!defined(__midl))
 #define MM_ANTEX_SX15_WAVEIN 3
 #endif
+#endif
 #ifndef MM_ANTEX_SX15_WAVEOUT
+#if (!defined(__midl))
 #define MM_ANTEX_SX15_WAVEOUT 4
 #endif
+#endif
 #ifndef MM_ANTEX_VP625_WAVEIN
+#if (!defined(__midl))
 #define MM_ANTEX_VP625_WAVEIN 5
 #endif
+#endif
 #ifndef MM_ANTEX_VP625_WAVEOUT
+#if (!defined(__midl))
 #define MM_ANTEX_VP625_WAVEOUT 6
+#endif
 #endif
 #ifndef MM_APICOM
 #define MM_APICOM 116
@@ -1309,7 +1529,9 @@ cpp_quote("#endif")
 #define MM_APT 56
 #endif
 #ifndef MM_APT_ACE100CD
+#if (!defined(__midl))
 #define MM_APT_ACE100CD 1
+#endif
 #endif
 #ifndef MM_ARRAY
 #define MM_ARRAY 231
@@ -1318,10 +1540,14 @@ cpp_quote("#endif")
 #define MM_ARTISOFT 20
 #endif
 #ifndef MM_ARTISOFT_SBWAVEIN
+#if (!defined(__midl))
 #define MM_ARTISOFT_SBWAVEIN 1
 #endif
+#endif
 #ifndef MM_ARTISOFT_SBWAVEOUT
+#if (!defined(__midl))
 #define MM_ARTISOFT_SBWAVEOUT 2
+#endif
 #endif
 #ifndef MM_AST
 #define MM_AST 64
@@ -1339,7 +1565,9 @@ cpp_quote("#endif")
 #define MM_ATT 185
 #endif
 #ifndef MM_ATT_G729A
+#if (!defined(__midl))
 #define MM_ATT_G729A 1
+#endif
 #endif
 #ifndef MM_ATT_MICROELECTRONICS
 #define MM_ATT_MICROELECTRONICS 139
@@ -1438,10 +1666,14 @@ cpp_quote("#endif")
 #define MM_AZTECH_FMSYNTH 20
 #endif
 #ifndef MM_AZTECH_MIDIIN
+#if (!defined(__midl))
 #define MM_AZTECH_MIDIIN 4
 #endif
+#endif
 #ifndef MM_AZTECH_MIDIOUT
+#if (!defined(__midl))
 #define MM_AZTECH_MIDIOUT 3
+#endif
 #endif
 #ifndef MM_AZTECH_MIXER
 #define MM_AZTECH_MIXER 21
@@ -1483,10 +1715,14 @@ cpp_quote("#endif")
 #define MM_BCB 192
 #endif
 #ifndef MM_BCB_NETBOARD_10
+#if (!defined(__midl))
 #define MM_BCB_NETBOARD_10 1
 #endif
+#endif
 #ifndef MM_BCB_TT75_10
+#if (!defined(__midl))
 #define MM_BCB_TT75_10 2
+#endif
 #endif
 #ifndef MM_BECUBED
 #define MM_BECUBED 10
@@ -1495,13 +1731,19 @@ cpp_quote("#endif")
 #define MM_BERCOS 199
 #endif
 #ifndef MM_BERCOS_MIXER
+#if (!defined(__midl))
 #define MM_BERCOS_MIXER 2
 #endif
+#endif
 #ifndef MM_BERCOS_WAVEIN
+#if (!defined(__midl))
 #define MM_BERCOS_WAVEIN 1
 #endif
+#endif
 #ifndef MM_BERCOS_WAVEOUT
+#if (!defined(__midl))
 #define MM_BERCOS_WAVEOUT 3
+#endif
 #endif
 #ifndef MM_BERKOM
 #define MM_BERKOM 189
@@ -1510,34 +1752,50 @@ cpp_quote("#endif")
 #define MM_BINTEC 12
 #endif
 #ifndef MM_BINTEC_TAPI_WAVE
+#if (!defined(__midl))
 #define MM_BINTEC_TAPI_WAVE 1
+#endif
 #endif
 #ifndef MM_BROOKTREE
 #define MM_BROOKTREE 121
 #endif
 #ifndef MM_BTV_AUX_CD
+#if (!defined(__midl))
 #define MM_BTV_AUX_CD 8
 #endif
+#endif
 #ifndef MM_BTV_AUX_LINE
+#if (!defined(__midl))
 #define MM_BTV_AUX_LINE 6
 #endif
+#endif
 #ifndef MM_BTV_AUX_MIC
+#if (!defined(__midl))
 #define MM_BTV_AUX_MIC 7
 #endif
+#endif
 #ifndef MM_BTV_DIGITALIN
+#if (!defined(__midl))
 #define MM_BTV_DIGITALIN 9
+#endif
 #endif
 #ifndef MM_BTV_DIGITALOUT
 #define MM_BTV_DIGITALOUT 10
 #endif
 #ifndef MM_BTV_MIDIIN
+#if (!defined(__midl))
 #define MM_BTV_MIDIIN 3
 #endif
+#endif
 #ifndef MM_BTV_MIDIOUT
+#if (!defined(__midl))
 #define MM_BTV_MIDIOUT 4
 #endif
+#endif
 #ifndef MM_BTV_MIDISYNTH
+#if (!defined(__midl))
 #define MM_BTV_MIDISYNTH 5
+#endif
 #endif
 #ifndef MM_BTV_MIDIWAVESTREAM
 #define MM_BTV_MIDIWAVESTREAM 11
@@ -1546,43 +1804,61 @@ cpp_quote("#endif")
 #define MM_BTV_MIXER 12
 #endif
 #ifndef MM_BTV_WAVEIN
+#if (!defined(__midl))
 #define MM_BTV_WAVEIN 1
 #endif
+#endif
 #ifndef MM_BTV_WAVEOUT
+#if (!defined(__midl))
 #define MM_BTV_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_CANAM
 #define MM_CANAM 148
 #endif
 #ifndef MM_CANAM_CBXWAVEIN
+#if (!defined(__midl))
 #define MM_CANAM_CBXWAVEIN 2
 #endif
+#endif
 #ifndef MM_CANAM_CBXWAVEOUT
+#if (!defined(__midl))
 #define MM_CANAM_CBXWAVEOUT 1
+#endif
 #endif
 #ifndef MM_CANOPUS
 #define MM_CANOPUS 49
 #endif
 #ifndef MM_CANOPUS_ACM_DVREX
+#if (!defined(__midl))
 #define MM_CANOPUS_ACM_DVREX 1
+#endif
 #endif
 #ifndef MM_CASIO
 #define MM_CASIO 162
 #endif
 #ifndef MM_CASIO_LSG_MIDIOUT
+#if (!defined(__midl))
 #define MM_CASIO_LSG_MIDIOUT 3
 #endif
+#endif
 #ifndef MM_CASIO_WP150_MIDIIN
+#if (!defined(__midl))
 #define MM_CASIO_WP150_MIDIIN 2
 #endif
+#endif
 #ifndef MM_CASIO_WP150_MIDIOUT
+#if (!defined(__midl))
 #define MM_CASIO_WP150_MIDIOUT 1
+#endif
 #endif
 #ifndef MM_CAT
 #define MM_CAT 41
 #endif
 #ifndef MM_CAT_WAVEOUT
+#if (!defined(__midl))
 #define MM_CAT_WAVEOUT 1
+#endif
 #endif
 #ifndef MM_CHROMATIC
 #define MM_CHROMATIC 155
@@ -1669,13 +1945,19 @@ cpp_quote("#endif")
 #define MM_COMPAQ 92
 #endif
 #ifndef MM_COMPAQ_BB_WAVEAUX
+#if (!defined(__midl))
 #define MM_COMPAQ_BB_WAVEAUX 3
 #endif
+#endif
 #ifndef MM_COMPAQ_BB_WAVEIN
+#if (!defined(__midl))
 #define MM_COMPAQ_BB_WAVEIN 1
 #endif
+#endif
 #ifndef MM_COMPAQ_BB_WAVEOUT
+#if (!defined(__midl))
 #define MM_COMPAQ_BB_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_COMPUSIC
 #define MM_COMPUSIC 89
@@ -1690,7 +1972,9 @@ cpp_quote("#endif")
 #define MM_CONNECTIX 158
 #endif
 #ifndef MM_CONNECTIX_VIDEC_CODEC
+#if (!defined(__midl))
 #define MM_CONNECTIX_VIDEC_CODEC 1
+#endif
 #endif
 #ifndef MM_CONTROLRES
 #define MM_CONTROLRES 84
@@ -1699,7 +1983,9 @@ cpp_quote("#endif")
 #define MM_COREDYNAMICS 147
 #endif
 #ifndef MM_COREDYNAMICS_DYNAGRAFX_VGA
+#if (!defined(__midl))
 #define MM_COREDYNAMICS_DYNAGRAFX_VGA 9
+#endif
 #endif
 #ifndef MM_COREDYNAMICS_DYNAGRAFX_WAVE_IN
 #define MM_COREDYNAMICS_DYNAGRAFX_WAVE_IN 10
@@ -1708,31 +1994,49 @@ cpp_quote("#endif")
 #define MM_COREDYNAMICS_DYNAGRAFX_WAVE_OUT 11
 #endif
 #ifndef MM_COREDYNAMICS_DYNAMIXHR
+#if (!defined(__midl))
 #define MM_COREDYNAMICS_DYNAMIXHR 1
 #endif
+#endif
 #ifndef MM_COREDYNAMICS_DYNASONIX_AUDIO_IN
+#if (!defined(__midl))
 #define MM_COREDYNAMICS_DYNASONIX_AUDIO_IN 7
 #endif
+#endif
 #ifndef MM_COREDYNAMICS_DYNASONIX_AUDIO_OUT
+#if (!defined(__midl))
 #define MM_COREDYNAMICS_DYNASONIX_AUDIO_OUT 8
 #endif
+#endif
 #ifndef MM_COREDYNAMICS_DYNASONIX_MIDI_IN
+#if (!defined(__midl))
 #define MM_COREDYNAMICS_DYNASONIX_MIDI_IN 3
 #endif
+#endif
 #ifndef MM_COREDYNAMICS_DYNASONIX_MIDI_OUT
+#if (!defined(__midl))
 #define MM_COREDYNAMICS_DYNASONIX_MIDI_OUT 4
 #endif
+#endif
 #ifndef MM_COREDYNAMICS_DYNASONIX_SYNTH
+#if (!defined(__midl))
 #define MM_COREDYNAMICS_DYNASONIX_SYNTH 2
 #endif
+#endif
 #ifndef MM_COREDYNAMICS_DYNASONIX_WAVE_IN
+#if (!defined(__midl))
 #define MM_COREDYNAMICS_DYNASONIX_WAVE_IN 5
 #endif
+#endif
 #ifndef MM_COREDYNAMICS_DYNASONIX_WAVE_OUT
+#if (!defined(__midl))
 #define MM_COREDYNAMICS_DYNASONIX_WAVE_OUT 6
 #endif
+#endif
 #ifndef MM_CREATIVE
+#if (!defined(__midl))
 #define MM_CREATIVE 2
+#endif
 #endif
 #ifndef MM_CREATIVE_AUX_CD
 #define MM_CREATIVE_AUX_CD 401
@@ -1771,13 +2075,17 @@ cpp_quote("#endif")
 #define MM_CREATIVE_MIDI_AWE32 303
 #endif
 #ifndef MM_CREATIVE_PHNBLST_WAVEIN
+#if (!defined(__midl))
 #define MM_CREATIVE_PHNBLST_WAVEIN 5
+#endif
 #endif
 #ifndef MM_CREATIVE_PHNBLST_WAVEOUT
 #define MM_CREATIVE_PHNBLST_WAVEOUT 105
 #endif
 #ifndef MM_CREATIVE_SB15_WAVEIN
+#if (!defined(__midl))
 #define MM_CREATIVE_SB15_WAVEIN 1
+#endif
 #endif
 #ifndef MM_CREATIVE_SB15_WAVEOUT
 #define MM_CREATIVE_SB15_WAVEOUT 101
@@ -1786,19 +2094,25 @@ cpp_quote("#endif")
 #define MM_CREATIVE_SB16_MIXER 409
 #endif
 #ifndef MM_CREATIVE_SB20_WAVEIN
+#if (!defined(__midl))
 #define MM_CREATIVE_SB20_WAVEIN 2
+#endif
 #endif
 #ifndef MM_CREATIVE_SB20_WAVEOUT
 #define MM_CREATIVE_SB20_WAVEOUT 102
 #endif
 #ifndef MM_CREATIVE_SBP16_WAVEIN
+#if (!defined(__midl))
 #define MM_CREATIVE_SBP16_WAVEIN 4
+#endif
 #endif
 #ifndef MM_CREATIVE_SBPRO_MIXER
 #define MM_CREATIVE_SBPRO_MIXER 408
 #endif
 #ifndef MM_CREATIVE_SBPRO_WAVEIN
+#if (!defined(__midl))
 #define MM_CREATIVE_SBPRO_WAVEIN 3
+#endif
 #endif
 #ifndef MM_CREATIVE_SBPRO_WAVEOUT
 #define MM_CREATIVE_SBPRO_WAVEOUT 103
@@ -1813,34 +2127,52 @@ cpp_quote("#endif")
 #define MM_CRYSTAL_CS4232_INPUTGAIN_LOOP 14
 #endif
 #ifndef MM_CRYSTAL_CS4232_MIDIIN
+#if (!defined(__midl))
 #define MM_CRYSTAL_CS4232_MIDIIN 9
+#endif
 #endif
 #ifndef MM_CRYSTAL_CS4232_MIDIOUT
 #define MM_CRYSTAL_CS4232_MIDIOUT 10
 #endif
 #ifndef MM_CRYSTAL_CS4232_WAVEAUX_AUX1
+#if (!defined(__midl))
 #define MM_CRYSTAL_CS4232_WAVEAUX_AUX1 4
 #endif
+#endif
 #ifndef MM_CRYSTAL_CS4232_WAVEAUX_AUX2
+#if (!defined(__midl))
 #define MM_CRYSTAL_CS4232_WAVEAUX_AUX2 5
 #endif
+#endif
 #ifndef MM_CRYSTAL_CS4232_WAVEAUX_LINE
+#if (!defined(__midl))
 #define MM_CRYSTAL_CS4232_WAVEAUX_LINE 6
 #endif
+#endif
 #ifndef MM_CRYSTAL_CS4232_WAVEAUX_MASTER
+#if (!defined(__midl))
 #define MM_CRYSTAL_CS4232_WAVEAUX_MASTER 8
 #endif
+#endif
 #ifndef MM_CRYSTAL_CS4232_WAVEAUX_MONO
+#if (!defined(__midl))
 #define MM_CRYSTAL_CS4232_WAVEAUX_MONO 7
 #endif
+#endif
 #ifndef MM_CRYSTAL_CS4232_WAVEIN
+#if (!defined(__midl))
 #define MM_CRYSTAL_CS4232_WAVEIN 1
 #endif
+#endif
 #ifndef MM_CRYSTAL_CS4232_WAVEMIXER
+#if (!defined(__midl))
 #define MM_CRYSTAL_CS4232_WAVEMIXER 3
 #endif
+#endif
 #ifndef MM_CRYSTAL_CS4232_WAVEOUT
+#if (!defined(__midl))
 #define MM_CRYSTAL_CS4232_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_CRYSTAL_NET
 #define MM_CRYSTAL_NET 154
@@ -1867,28 +2199,44 @@ cpp_quote("#endif")
 #define MM_CS 242
 #endif
 #ifndef MM_CYRIX
+#if (!defined(__midl))
 #define MM_CYRIX 6
 #endif
+#endif
 #ifndef MM_CYRIX_XAAUX
+#if (!defined(__midl))
 #define MM_CYRIX_XAAUX 6
 #endif
+#endif
 #ifndef MM_CYRIX_XAMIDIIN
+#if (!defined(__midl))
 #define MM_CYRIX_XAMIDIIN 2
 #endif
+#endif
 #ifndef MM_CYRIX_XAMIDIOUT
+#if (!defined(__midl))
 #define MM_CYRIX_XAMIDIOUT 3
 #endif
+#endif
 #ifndef MM_CYRIX_XAMIXER
+#if (!defined(__midl))
 #define MM_CYRIX_XAMIXER 7
 #endif
+#endif
 #ifndef MM_CYRIX_XASYNTH
+#if (!defined(__midl))
 #define MM_CYRIX_XASYNTH 1
 #endif
+#endif
 #ifndef MM_CYRIX_XAWAVEIN
+#if (!defined(__midl))
 #define MM_CYRIX_XAWAVEIN 4
 #endif
+#endif
 #ifndef MM_CYRIX_XAWAVEOUT
+#if (!defined(__midl))
 #define MM_CYRIX_XAWAVEOUT 5
+#endif
 #endif
 #ifndef MM_DATAFUSION
 #define MM_DATAFUSION 196
@@ -1900,22 +2248,32 @@ cpp_quote("#endif")
 #define MM_DDD 151
 #endif
 #ifndef MM_DDD_MIDILINK_MIDIIN
+#if (!defined(__midl))
 #define MM_DDD_MIDILINK_MIDIIN 1
 #endif
+#endif
 #ifndef MM_DDD_MIDILINK_MIDIOUT
+#if (!defined(__midl))
 #define MM_DDD_MIDILINK_MIDIOUT 2
 #endif
+#endif
 #ifndef MM_DF_ACM_G726
+#if (!defined(__midl))
 #define MM_DF_ACM_G726 1
 #endif
+#endif
 #ifndef MM_DF_ACM_GSM610
+#if (!defined(__midl))
 #define MM_DF_ACM_GSM610 2
+#endif
 #endif
 #ifndef MM_DIACOUSTICS
 #define MM_DIACOUSTICS 129
 #endif
 #ifndef MM_DIACOUSTICS_DRUM_ACTION
+#if (!defined(__midl))
 #define MM_DIACOUSTICS_DRUM_ACTION 1
+#endif
 #endif
 #ifndef MM_DIALOGIC
 #define MM_DIALOGIC 93
@@ -1927,7 +2285,9 @@ cpp_quote("#endif")
 #define MM_DICTAPHONE 214
 #endif
 #ifndef MM_DICTAPHONE_G726
+#if (!defined(__midl))
 #define MM_DICTAPHONE_G726 1
+#endif
 #endif
 #ifndef MM_DIGIGRAM
 #define MM_DIGIGRAM 227
@@ -1936,19 +2296,27 @@ cpp_quote("#endif")
 #define MM_DIGITAL 100
 #endif
 #ifndef MM_DIGITAL_ACM_G723
+#if (!defined(__midl))
 #define MM_DIGITAL_ACM_G723 3
+#endif
 #endif
 #ifndef MM_DIGITAL_AUDIO_LABS
 #define MM_DIGITAL_AUDIO_LABS 136
 #endif
 #ifndef MM_DIGITAL_AUDIO_LABS_CDLX
+#if (!defined(__midl))
 #define MM_DIGITAL_AUDIO_LABS_CDLX 0x13
 #endif
+#endif
 #ifndef MM_DIGITAL_AUDIO_LABS_CPRO
+#if (!defined(__midl))
 #define MM_DIGITAL_AUDIO_LABS_CPRO 0x11
 #endif
+#endif
 #ifndef MM_DIGITAL_AUDIO_LABS_CTDIF
+#if (!defined(__midl))
 #define MM_DIGITAL_AUDIO_LABS_CTDIF 0x14
+#endif
 #endif
 #ifndef MM_DIGITAL_AUDIO_LABS_DOC
 #define MM_DIGITAL_AUDIO_LABS_DOC 0x02
@@ -1957,55 +2325,87 @@ cpp_quote("#endif")
 #define MM_DIGITAL_AUDIO_LABS_TC 0x01
 #endif
 #ifndef MM_DIGITAL_AUDIO_LABS_V8
+#if (!defined(__midl))
 #define MM_DIGITAL_AUDIO_LABS_V8 0x10
 #endif
+#endif
 #ifndef MM_DIGITAL_AUDIO_LABS_VP
+#if (!defined(__midl))
 #define MM_DIGITAL_AUDIO_LABS_VP 0x12
 #endif
+#endif
 #ifndef MM_DIGITAL_AV320_WAVEIN
+#if (!defined(__midl))
 #define MM_DIGITAL_AV320_WAVEIN 1
 #endif
+#endif
 #ifndef MM_DIGITAL_AV320_WAVEOUT
+#if (!defined(__midl))
 #define MM_DIGITAL_AV320_WAVEOUT 2
 #endif
+#endif
 #ifndef MM_DIGITAL_ICM_H261
+#if (!defined(__midl))
 #define MM_DIGITAL_ICM_H261 5
 #endif
+#endif
 #ifndef MM_DIGITAL_ICM_H263
+#if (!defined(__midl))
 #define MM_DIGITAL_ICM_H263 4
 #endif
+#endif
 #ifndef MM_DIMD_AUX_LINE
+#if (!defined(__midl))
 #define MM_DIMD_AUX_LINE 9
 #endif
+#endif
 #ifndef MM_DIMD_DIRSOUND
+#if (!defined(__midl))
 #define MM_DIMD_DIRSOUND 1
 #endif
+#endif
 #ifndef MM_DIMD_MIDIIN
+#if (!defined(__midl))
 #define MM_DIMD_MIDIIN 7
 #endif
+#endif
 #ifndef MM_DIMD_MIDIOUT
+#if (!defined(__midl))
 #define MM_DIMD_MIDIOUT 8
+#endif
 #endif
 #ifndef MM_DIMD_MIXER
 #define MM_DIMD_MIXER 10
 #endif
 #ifndef MM_DIMD_PLATFORM
+#if (!defined(__midl))
 #define MM_DIMD_PLATFORM 0
 #endif
+#endif
 #ifndef MM_DIMD_VIRTJOY
+#if (!defined(__midl))
 #define MM_DIMD_VIRTJOY 4
 #endif
+#endif
 #ifndef MM_DIMD_VIRTMPU
+#if (!defined(__midl))
 #define MM_DIMD_VIRTMPU 2
 #endif
+#endif
 #ifndef MM_DIMD_VIRTSB
+#if (!defined(__midl))
 #define MM_DIMD_VIRTSB 3
 #endif
+#endif
 #ifndef MM_DIMD_WAVEIN
+#if (!defined(__midl))
 #define MM_DIMD_WAVEIN 5
 #endif
+#endif
 #ifndef MM_DIMD_WAVEOUT
+#if (!defined(__midl))
 #define MM_DIMD_WAVEOUT 6
+#endif
 #endif
 #ifndef MM_DIMD_WSS_AUX
 #define MM_DIMD_WSS_AUX 21
@@ -2032,28 +2432,40 @@ cpp_quote("#endif")
 #define MM_DSP_GROUP 43
 #endif
 #ifndef MM_DSP_GROUP_TRUESPEECH
+#if (!defined(__midl))
 #define MM_DSP_GROUP_TRUESPEECH 1
+#endif
 #endif
 #ifndef MM_DSP_SOLUTIONS
 #define MM_DSP_SOLUTIONS 25
 #endif
 #ifndef MM_DSP_SOLUTIONS_AUX
+#if (!defined(__midl))
 #define MM_DSP_SOLUTIONS_AUX 4
 #endif
+#endif
 #ifndef MM_DSP_SOLUTIONS_SYNTH
+#if (!defined(__midl))
 #define MM_DSP_SOLUTIONS_SYNTH 3
 #endif
+#endif
 #ifndef MM_DSP_SOLUTIONS_WAVEIN
+#if (!defined(__midl))
 #define MM_DSP_SOLUTIONS_WAVEIN 2
 #endif
+#endif
 #ifndef MM_DSP_SOLUTIONS_WAVEOUT
+#if (!defined(__midl))
 #define MM_DSP_SOLUTIONS_WAVEOUT 1
+#endif
 #endif
 #ifndef MM_DTS
 #define MM_DTS 226
 #endif
 #ifndef MM_DTS_DS
+#if (!defined(__midl))
 #define MM_DTS_DS 1
+#endif
 #endif
 #ifndef MM_DUCK
 #define MM_DUCK 197
@@ -2065,22 +2477,34 @@ cpp_quote("#endif")
 #define MM_ECHO 39
 #endif
 #ifndef MM_ECHO_AUX
+#if (!defined(__midl))
 #define MM_ECHO_AUX 6
 #endif
+#endif
 #ifndef MM_ECHO_MIDIIN
+#if (!defined(__midl))
 #define MM_ECHO_MIDIIN 5
 #endif
+#endif
 #ifndef MM_ECHO_MIDIOUT
+#if (!defined(__midl))
 #define MM_ECHO_MIDIOUT 4
 #endif
+#endif
 #ifndef MM_ECHO_SYNTH
+#if (!defined(__midl))
 #define MM_ECHO_SYNTH 1
 #endif
+#endif
 #ifndef MM_ECHO_WAVEIN
+#if (!defined(__midl))
 #define MM_ECHO_WAVEIN 3
 #endif
+#endif
 #ifndef MM_ECHO_WAVEOUT
+#if (!defined(__midl))
 #define MM_ECHO_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_ECS
 #define MM_ECS 145
@@ -2098,73 +2522,109 @@ cpp_quote("#endif")
 #define MM_EES 219
 #endif
 #ifndef MM_EES_PCMIDI14
+#if (!defined(__midl))
 #define MM_EES_PCMIDI14 1
 #endif
+#endif
 #ifndef MM_EES_PCMIDI14_IN
+#if (!defined(__midl))
 #define MM_EES_PCMIDI14_IN 2
 #endif
+#endif
 #ifndef MM_EES_PCMIDI14_OUT1
+#if (!defined(__midl))
 #define MM_EES_PCMIDI14_OUT1 3
 #endif
+#endif
 #ifndef MM_EES_PCMIDI14_OUT2
+#if (!defined(__midl))
 #define MM_EES_PCMIDI14_OUT2 4
 #endif
+#endif
 #ifndef MM_EES_PCMIDI14_OUT3
+#if (!defined(__midl))
 #define MM_EES_PCMIDI14_OUT3 5
 #endif
+#endif
 #ifndef MM_EES_PCMIDI14_OUT4
+#if (!defined(__midl))
 #define MM_EES_PCMIDI14_OUT4 6
+#endif
 #endif
 #ifndef MM_EMAGIC
 #define MM_EMAGIC 208
 #endif
 #ifndef MM_EMAGIC_UNITOR8
+#if (!defined(__midl))
 #define MM_EMAGIC_UNITOR8 1
+#endif
 #endif
 #ifndef MM_EMU
 #define MM_EMU 19
 #endif
 #ifndef MM_EMU_APSMIDIIN
+#if (!defined(__midl))
 #define MM_EMU_APSMIDIIN 2
 #endif
+#endif
 #ifndef MM_EMU_APSMIDIOUT
+#if (!defined(__midl))
 #define MM_EMU_APSMIDIOUT 3
 #endif
+#endif
 #ifndef MM_EMU_APSSYNTH
+#if (!defined(__midl))
 #define MM_EMU_APSSYNTH 1
 #endif
+#endif
 #ifndef MM_EMU_APSWAVEIN
+#if (!defined(__midl))
 #define MM_EMU_APSWAVEIN 4
 #endif
+#endif
 #ifndef MM_EMU_APSWAVEOUT
+#if (!defined(__midl))
 #define MM_EMU_APSWAVEOUT 5
+#endif
 #endif
 #ifndef MM_ENET
 #define MM_ENET 206
 #endif
 #ifndef MM_ENET_T2000_HANDSETIN
+#if (!defined(__midl))
 #define MM_ENET_T2000_HANDSETIN 3
 #endif
+#endif
 #ifndef MM_ENET_T2000_HANDSETOUT
+#if (!defined(__midl))
 #define MM_ENET_T2000_HANDSETOUT 4
 #endif
+#endif
 #ifndef MM_ENET_T2000_LINEIN
+#if (!defined(__midl))
 #define MM_ENET_T2000_LINEIN 1
 #endif
+#endif
 #ifndef MM_ENET_T2000_LINEOUT
+#if (!defined(__midl))
 #define MM_ENET_T2000_LINEOUT 2
+#endif
 #endif
 #ifndef MM_ENSONIQ
 #define MM_ENSONIQ 125
 #endif
 #ifndef MM_ENSONIQ_SOUNDSCAPE
+#if (!defined(__midl))
 #define MM_ENSONIQ_SOUNDSCAPE 0x10
+#endif
 #endif
 #ifndef MM_EPSON
 #define MM_EPSON 50
 #endif
 #ifndef MM_EPS_FMSND
+#if (!defined(__midl))
 #define MM_EPS_FMSND 1
+#endif
 #endif
 #ifndef MM_ESS
 #define MM_ESS 46
@@ -2191,76 +2651,124 @@ cpp_quote("#endif")
 #define MM_ESS_AUX_CD 0x08
 #endif
 #ifndef MM_ESS_ES1488_MIXER
+#if (!defined(__midl))
 #define MM_ESS_ES1488_MIXER 0x18
 #endif
+#endif
 #ifndef MM_ESS_ES1488_WAVEIN
+#if (!defined(__midl))
 #define MM_ESS_ES1488_WAVEIN 0x17
 #endif
+#endif
 #ifndef MM_ESS_ES1488_WAVEOUT
+#if (!defined(__midl))
 #define MM_ESS_ES1488_WAVEOUT 0x16
 #endif
+#endif
 #ifndef MM_ESS_ES1688_MIXER
+#if (!defined(__midl))
 #define MM_ESS_ES1688_MIXER 0x1B
 #endif
+#endif
 #ifndef MM_ESS_ES1688_WAVEIN
+#if (!defined(__midl))
 #define MM_ESS_ES1688_WAVEIN 0x1A
 #endif
+#endif
 #ifndef MM_ESS_ES1688_WAVEOUT
+#if (!defined(__midl))
 #define MM_ESS_ES1688_WAVEOUT 0x19
 #endif
+#endif
 #ifndef MM_ESS_ES1788_MIXER
+#if (!defined(__midl))
 #define MM_ESS_ES1788_MIXER 0x1E
 #endif
+#endif
 #ifndef MM_ESS_ES1788_WAVEIN
+#if (!defined(__midl))
 #define MM_ESS_ES1788_WAVEIN 0x1D
 #endif
+#endif
 #ifndef MM_ESS_ES1788_WAVEOUT
+#if (!defined(__midl))
 #define MM_ESS_ES1788_WAVEOUT 0x1C
 #endif
+#endif
 #ifndef MM_ESS_ES1868_MIXER
+#if (!defined(__midl))
 #define MM_ESS_ES1868_MIXER 0x24
 #endif
+#endif
 #ifndef MM_ESS_ES1868_WAVEIN
+#if (!defined(__midl))
 #define MM_ESS_ES1868_WAVEIN 0x23
 #endif
+#endif
 #ifndef MM_ESS_ES1868_WAVEOUT
+#if (!defined(__midl))
 #define MM_ESS_ES1868_WAVEOUT 0x22
 #endif
+#endif
 #ifndef MM_ESS_ES1878_MIXER
+#if (!defined(__midl))
 #define MM_ESS_ES1878_MIXER 0x27
 #endif
+#endif
 #ifndef MM_ESS_ES1878_WAVEIN
+#if (!defined(__midl))
 #define MM_ESS_ES1878_WAVEIN 0x26
 #endif
+#endif
 #ifndef MM_ESS_ES1878_WAVEOUT
+#if (!defined(__midl))
 #define MM_ESS_ES1878_WAVEOUT 0x25
 #endif
+#endif
 #ifndef MM_ESS_ES1888_MIXER
+#if (!defined(__midl))
 #define MM_ESS_ES1888_MIXER 0x21
 #endif
+#endif
 #ifndef MM_ESS_ES1888_WAVEIN
+#if (!defined(__midl))
 #define MM_ESS_ES1888_WAVEIN 0x20
 #endif
+#endif
 #ifndef MM_ESS_ES1888_WAVEOUT
+#if (!defined(__midl))
 #define MM_ESS_ES1888_WAVEOUT 0x1F
 #endif
+#endif
 #ifndef MM_ESS_ES488_MIXER
+#if (!defined(__midl))
 #define MM_ESS_ES488_MIXER 0x12
 #endif
+#endif
 #ifndef MM_ESS_ES488_WAVEIN
+#if (!defined(__midl))
 #define MM_ESS_ES488_WAVEIN 0x11
 #endif
+#endif
 #ifndef MM_ESS_ES488_WAVEOUT
+#if (!defined(__midl))
 #define MM_ESS_ES488_WAVEOUT 0x10
 #endif
+#endif
 #ifndef MM_ESS_ES688_MIXER
+#if (!defined(__midl))
 #define MM_ESS_ES688_MIXER 0x15
 #endif
+#endif
 #ifndef MM_ESS_ES688_WAVEIN
+#if (!defined(__midl))
 #define MM_ESS_ES688_WAVEIN 0x14
 #endif
+#endif
 #ifndef MM_ESS_ES688_WAVEOUT
+#if (!defined(__midl))
 #define MM_ESS_ES688_WAVEOUT 0x13
+#endif
 #endif
 #ifndef MM_ESS_MIXER
 #define MM_ESS_MIXER 0x07
@@ -2275,43 +2783,65 @@ cpp_quote("#endif")
 #define MM_ETEK 241
 #endif
 #ifndef MM_ETEK_KWIKMIDI_MIDIIN
+#if (!defined(__midl))
 #define MM_ETEK_KWIKMIDI_MIDIIN 1
 #endif
+#endif
 #ifndef MM_ETEK_KWIKMIDI_MIDIOUT
+#if (!defined(__midl))
 #define MM_ETEK_KWIKMIDI_MIDIOUT 2
+#endif
 #endif
 #ifndef MM_EUPHONICS
 #define MM_EUPHONICS 152
 #endif
 #ifndef MM_EUPHONICS_AUX_CD
+#if (!defined(__midl))
 #define MM_EUPHONICS_AUX_CD 1
 #endif
+#endif
 #ifndef MM_EUPHONICS_AUX_LINE
+#if (!defined(__midl))
 #define MM_EUPHONICS_AUX_LINE 2
 #endif
+#endif
 #ifndef MM_EUPHONICS_AUX_MASTER
+#if (!defined(__midl))
 #define MM_EUPHONICS_AUX_MASTER 3
 #endif
+#endif
 #ifndef MM_EUPHONICS_AUX_MIC
+#if (!defined(__midl))
 #define MM_EUPHONICS_AUX_MIC 4
 #endif
+#endif
 #ifndef MM_EUPHONICS_AUX_MIDI
+#if (!defined(__midl))
 #define MM_EUPHONICS_AUX_MIDI 5
 #endif
+#endif
 #ifndef MM_EUPHONICS_AUX_WAVE
+#if (!defined(__midl))
 #define MM_EUPHONICS_AUX_WAVE 6
+#endif
 #endif
 #ifndef MM_EUPHONICS_EUSYNTH
 #define MM_EUPHONICS_EUSYNTH 14
 #endif
 #ifndef MM_EUPHONICS_FMSYNTH_MONO
+#if (!defined(__midl))
 #define MM_EUPHONICS_FMSYNTH_MONO 7
 #endif
+#endif
 #ifndef MM_EUPHONICS_FMSYNTH_STEREO
+#if (!defined(__midl))
 #define MM_EUPHONICS_FMSYNTH_STEREO 8
 #endif
+#endif
 #ifndef MM_EUPHONICS_MIDIIN
+#if (!defined(__midl))
 #define MM_EUPHONICS_MIDIIN 9
+#endif
 #endif
 #ifndef MM_EUPHONICS_MIDIOUT
 #define MM_EUPHONICS_MIDIOUT 10
@@ -2329,7 +2859,9 @@ cpp_quote("#endif")
 #define MM_EVEREX 38
 #endif
 #ifndef MM_EVEREX_CARRIER
+#if (!defined(__midl))
 #define MM_EVEREX_CARRIER 1
+#endif
 #endif
 #ifndef MM_EXAN
 #define MM_EXAN 63
@@ -2359,76 +2891,116 @@ cpp_quote("#endif")
 #define MM_FLEXION 249
 #endif
 #ifndef MM_FLEXION_X300_WAVEIN
+#if (!defined(__midl))
 #define MM_FLEXION_X300_WAVEIN 1
 #endif
+#endif
 #ifndef MM_FLEXION_X300_WAVEOUT
+#if (!defined(__midl))
 #define MM_FLEXION_X300_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_FORTEMEDIA
 #define MM_FORTEMEDIA 229
 #endif
 #ifndef MM_FORTEMEDIA_AUX
+#if (!defined(__midl))
 #define MM_FORTEMEDIA_AUX 5
 #endif
+#endif
 #ifndef MM_FORTEMEDIA_FMSYNC
+#if (!defined(__midl))
 #define MM_FORTEMEDIA_FMSYNC 3
 #endif
+#endif
 #ifndef MM_FORTEMEDIA_MIXER
+#if (!defined(__midl))
 #define MM_FORTEMEDIA_MIXER 4
 #endif
+#endif
 #ifndef MM_FORTEMEDIA_WAVEIN
+#if (!defined(__midl))
 #define MM_FORTEMEDIA_WAVEIN 1
 #endif
+#endif
 #ifndef MM_FORTEMEDIA_WAVEOUT
+#if (!defined(__midl))
 #define MM_FORTEMEDIA_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_FRONTIER
 #define MM_FRONTIER 160
 #endif
 #ifndef MM_FRONTIER_WAVECENTER_MIDIIN
+#if (!defined(__midl))
 #define MM_FRONTIER_WAVECENTER_MIDIIN 1
 #endif
+#endif
 #ifndef MM_FRONTIER_WAVECENTER_MIDIOUT
+#if (!defined(__midl))
 #define MM_FRONTIER_WAVECENTER_MIDIOUT 2
 #endif
+#endif
 #ifndef MM_FRONTIER_WAVECENTER_WAVEIN
+#if (!defined(__midl))
 #define MM_FRONTIER_WAVECENTER_WAVEIN 3
 #endif
+#endif
 #ifndef MM_FRONTIER_WAVECENTER_WAVEOUT
+#if (!defined(__midl))
 #define MM_FRONTIER_WAVECENTER_WAVEOUT 4
+#endif
 #endif
 #ifndef MM_FTR
 #define MM_FTR 198
 #endif
 #ifndef MM_FTR_ACM
+#if (!defined(__midl))
 #define MM_FTR_ACM 2
 #endif
+#endif
 #ifndef MM_FTR_ENCODER_WAVEIN
+#if (!defined(__midl))
 #define MM_FTR_ENCODER_WAVEIN 1
 #endif
+#endif
 #ifndef MM_FUJITSU
+#if (!defined(__midl))
 #define MM_FUJITSU 4
+#endif
 #endif
 #ifndef MM_GADGETLABS
 #define MM_GADGETLABS 159
 #endif
 #ifndef MM_GADGETLABS_WAVE42_WAVEIN
+#if (!defined(__midl))
 #define MM_GADGETLABS_WAVE42_WAVEIN 3
 #endif
+#endif
 #ifndef MM_GADGETLABS_WAVE42_WAVEOUT
+#if (!defined(__midl))
 #define MM_GADGETLABS_WAVE42_WAVEOUT 4
 #endif
+#endif
 #ifndef MM_GADGETLABS_WAVE44_WAVEIN
+#if (!defined(__midl))
 #define MM_GADGETLABS_WAVE44_WAVEIN 1
 #endif
+#endif
 #ifndef MM_GADGETLABS_WAVE44_WAVEOUT
+#if (!defined(__midl))
 #define MM_GADGETLABS_WAVE44_WAVEOUT 2
 #endif
+#endif
 #ifndef MM_GADGETLABS_WAVE4_MIDIIN
+#if (!defined(__midl))
 #define MM_GADGETLABS_WAVE4_MIDIIN 5
 #endif
+#endif
 #ifndef MM_GADGETLABS_WAVE4_MIDIOUT
+#if (!defined(__midl))
 #define MM_GADGETLABS_WAVE4_MIDIOUT 6
+#endif
 #endif
 #ifndef MM_GRANDE
 #define MM_GRANDE 117
@@ -2446,28 +3018,40 @@ cpp_quote("#endif")
 #define MM_HAFTMANN 220
 #endif
 #ifndef MM_HAFTMANN_LPTDAC2
+#if (!defined(__midl))
 #define MM_HAFTMANN_LPTDAC2 1
+#endif
 #endif
 #ifndef MM_HEADSPACE
 #define MM_HEADSPACE 222
 #endif
 #ifndef MM_HEADSPACE_HAEMIXER
+#if (!defined(__midl))
 #define MM_HEADSPACE_HAEMIXER 4
 #endif
+#endif
 #ifndef MM_HEADSPACE_HAESYNTH
+#if (!defined(__midl))
 #define MM_HEADSPACE_HAESYNTH 1
 #endif
+#endif
 #ifndef MM_HEADSPACE_HAEWAVEIN
+#if (!defined(__midl))
 #define MM_HEADSPACE_HAEWAVEIN 3
 #endif
+#endif
 #ifndef MM_HEADSPACE_HAEWAVEOUT
+#if (!defined(__midl))
 #define MM_HEADSPACE_HAEWAVEOUT 2
+#endif
 #endif
 #ifndef MM_HEWLETT_PACKARD
 #define MM_HEWLETT_PACKARD 13
 #endif
 #ifndef MM_HEWLETT_PACKARD_CU_CODEC
+#if (!defined(__midl))
 #define MM_HEWLETT_PACKARD_CU_CODEC 1
+#endif
 #endif
 #ifndef MM_HORIZONS
 #define MM_HORIZONS 107
@@ -2476,10 +3060,14 @@ cpp_quote("#endif")
 #define MM_HP 253
 #endif
 #ifndef MM_HP_WAVEIN
+#if (!defined(__midl))
 #define MM_HP_WAVEIN 2
 #endif
+#endif
 #ifndef MM_HP_WAVEOUT
+#if (!defined(__midl))
 #define MM_HP_WAVEOUT 1
+#endif
 #endif
 #ifndef MM_HYPERACTIVE
 #define MM_HYPERACTIVE 246
@@ -2539,16 +3127,24 @@ cpp_quote("#endif")
 #define MM_ICCC 259
 #endif
 #ifndef MM_ICCC_UNA3_AUX
+#if (!defined(__midl))
 #define MM_ICCC_UNA3_AUX 3
 #endif
+#endif
 #ifndef MM_ICCC_UNA3_MIXER
+#if (!defined(__midl))
 #define MM_ICCC_UNA3_MIXER 4
 #endif
+#endif
 #ifndef MM_ICCC_UNA3_WAVEIN
+#if (!defined(__midl))
 #define MM_ICCC_UNA3_WAVEIN 1
 #endif
+#endif
 #ifndef MM_ICCC_UNA3_WAVEOUT
+#if (!defined(__midl))
 #define MM_ICCC_UNA3_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_ICE
 #define MM_ICE 239
@@ -2557,52 +3153,80 @@ cpp_quote("#endif")
 #define MM_ICE_AUX 11
 #endif
 #ifndef MM_ICE_MIDIIN1
+#if (!defined(__midl))
 #define MM_ICE_MIDIIN1 6
 #endif
+#endif
 #ifndef MM_ICE_MIDIIN2
+#if (!defined(__midl))
 #define MM_ICE_MIDIIN2 8
 #endif
+#endif
 #ifndef MM_ICE_MIDIOUT1
+#if (!defined(__midl))
 #define MM_ICE_MIDIOUT1 5
 #endif
+#endif
 #ifndef MM_ICE_MIDIOUT2
+#if (!defined(__midl))
 #define MM_ICE_MIDIOUT2 7
+#endif
 #endif
 #ifndef MM_ICE_MIXER
 #define MM_ICE_MIXER 10
 #endif
 #ifndef MM_ICE_MTWAVEIN
+#if (!defined(__midl))
 #define MM_ICE_MTWAVEIN 4
 #endif
+#endif
 #ifndef MM_ICE_MTWAVEOUT
+#if (!defined(__midl))
 #define MM_ICE_MTWAVEOUT 3
 #endif
+#endif
 #ifndef MM_ICE_SYNTH
+#if (!defined(__midl))
 #define MM_ICE_SYNTH 9
 #endif
+#endif
 #ifndef MM_ICE_WAVEIN
+#if (!defined(__midl))
 #define MM_ICE_WAVEIN 2
 #endif
+#endif
 #ifndef MM_ICE_WAVEOUT
+#if (!defined(__midl))
 #define MM_ICE_WAVEOUT 1
+#endif
 #endif
 #ifndef MM_ICL_PS
 #define MM_ICL_PS 32
 #endif
 #ifndef MM_ICOM_AUX
+#if (!defined(__midl))
 #define MM_ICOM_AUX 6
 #endif
+#endif
 #ifndef MM_ICOM_LINE
+#if (!defined(__midl))
 #define MM_ICOM_LINE 7
 #endif
+#endif
 #ifndef MM_ICOM_MIXER
+#if (!defined(__midl))
 #define MM_ICOM_MIXER 5
 #endif
+#endif
 #ifndef MM_ICOM_WAVEIN
+#if (!defined(__midl))
 #define MM_ICOM_WAVEIN 3
 #endif
+#endif
 #ifndef MM_ICOM_WAVEOUT
+#if (!defined(__midl))
 #define MM_ICOM_WAVEOUT 4
+#endif
 #endif
 #ifndef MM_ICS
 #define MM_ICS 57
@@ -2614,25 +3238,37 @@ cpp_quote("#endif")
 #define MM_ICS_2120_LITE_MIDIOUT 14
 #endif
 #ifndef MM_ICS_WAVEDECK_AUX
+#if (!defined(__midl))
 #define MM_ICS_WAVEDECK_AUX 4
 #endif
+#endif
 #ifndef MM_ICS_WAVEDECK_MIXER
+#if (!defined(__midl))
 #define MM_ICS_WAVEDECK_MIXER 3
 #endif
+#endif
 #ifndef MM_ICS_WAVEDECK_SYNTH
+#if (!defined(__midl))
 #define MM_ICS_WAVEDECK_SYNTH 5
 #endif
+#endif
 #ifndef MM_ICS_WAVEDECK_WAVEIN
+#if (!defined(__midl))
 #define MM_ICS_WAVEDECK_WAVEIN 2
 #endif
+#endif
 #ifndef MM_ICS_WAVEDECK_WAVEOUT
+#if (!defined(__midl))
 #define MM_ICS_WAVEDECK_WAVEOUT 1
+#endif
 #endif
 #ifndef MM_ICS_WAVEDEC_SB_AUX
 #define MM_ICS_WAVEDEC_SB_AUX 12
 #endif
 #ifndef MM_ICS_WAVEDEC_SB_FM_MIDIOUT
+#if (!defined(__midl))
 #define MM_ICS_WAVEDEC_SB_FM_MIDIOUT 8
+#endif
 #endif
 #ifndef MM_ICS_WAVEDEC_SB_MIXER
 #define MM_ICS_WAVEDEC_SB_MIXER 11
@@ -2641,13 +3277,19 @@ cpp_quote("#endif")
 #define MM_ICS_WAVEDEC_SB_MPU401_MIDIIN 10
 #endif
 #ifndef MM_ICS_WAVEDEC_SB_MPU401_MIDIOUT
+#if (!defined(__midl))
 #define MM_ICS_WAVEDEC_SB_MPU401_MIDIOUT 9
 #endif
+#endif
 #ifndef MM_ICS_WAVEDEC_SB_WAVEIN
+#if (!defined(__midl))
 #define MM_ICS_WAVEDEC_SB_WAVEIN 7
 #endif
+#endif
 #ifndef MM_ICS_WAVEDEC_SB_WAVEOUT
+#if (!defined(__midl))
 #define MM_ICS_WAVEDEC_SB_WAVEOUT 6
+#endif
 #endif
 #ifndef MM_INSOFT
 #define MM_INSOFT 94
@@ -2659,7 +3301,9 @@ cpp_quote("#endif")
 #define MM_INTELOPD_AUX 401
 #endif
 #ifndef MM_INTELOPD_WAVEIN
+#if (!defined(__midl))
 #define MM_INTELOPD_WAVEIN 1
+#endif
 #endif
 #ifndef MM_INTELOPD_WAVEOUT
 #define MM_INTELOPD_WAVEOUT 101
@@ -2674,10 +3318,14 @@ cpp_quote("#endif")
 #define MM_INTERACTIVE 36
 #endif
 #ifndef MM_INTERACTIVE_WAVEIN
+#if (!defined(__midl))
 #define MM_INTERACTIVE_WAVEIN 0x45
 #endif
+#endif
 #ifndef MM_INTERACTIVE_WAVEOUT
+#if (!defined(__midl))
 #define MM_INTERACTIVE_WAVEOUT 0x45
+#endif
 #endif
 #ifndef MM_INTERNET
 #define MM_INTERNET 244
@@ -2704,91 +3352,137 @@ cpp_quote("#endif")
 #define MM_IOMAGIC 82
 #endif
 #ifndef MM_IOMAGIC_TEMPO_AUXOUT
+#if (!defined(__midl))
 #define MM_IOMAGIC_TEMPO_AUXOUT 6
 #endif
+#endif
 #ifndef MM_IOMAGIC_TEMPO_MIDIOUT
+#if (!defined(__midl))
 #define MM_IOMAGIC_TEMPO_MIDIOUT 4
 #endif
+#endif
 #ifndef MM_IOMAGIC_TEMPO_MXDOUT
+#if (!defined(__midl))
 #define MM_IOMAGIC_TEMPO_MXDOUT 5
 #endif
+#endif
 #ifndef MM_IOMAGIC_TEMPO_SYNTH
+#if (!defined(__midl))
 #define MM_IOMAGIC_TEMPO_SYNTH 3
 #endif
+#endif
 #ifndef MM_IOMAGIC_TEMPO_WAVEIN
+#if (!defined(__midl))
 #define MM_IOMAGIC_TEMPO_WAVEIN 2
 #endif
+#endif
 #ifndef MM_IOMAGIC_TEMPO_WAVEOUT
+#if (!defined(__midl))
 #define MM_IOMAGIC_TEMPO_WAVEOUT 1
+#endif
 #endif
 #ifndef MM_IPI
 #define MM_IPI 238
 #endif
 #ifndef MM_IPI_ACM_HSX
+#if (!defined(__midl))
 #define MM_IPI_ACM_HSX 1
 #endif
+#endif
 #ifndef MM_IPI_ACM_RPELP
+#if (!defined(__midl))
 #define MM_IPI_ACM_RPELP 2
 #endif
+#endif
 #ifndef MM_IPI_AT_MIXER
+#if (!defined(__midl))
 #define MM_IPI_AT_MIXER 6
 #endif
+#endif
 #ifndef MM_IPI_AT_WAVEIN
+#if (!defined(__midl))
 #define MM_IPI_AT_WAVEIN 5
 #endif
+#endif
 #ifndef MM_IPI_AT_WAVEOUT
+#if (!defined(__midl))
 #define MM_IPI_AT_WAVEOUT 4
 #endif
+#endif
 #ifndef MM_IPI_WF_ASSS
+#if (!defined(__midl))
 #define MM_IPI_WF_ASSS 3
+#endif
 #endif
 #ifndef MM_ISOLUTION
 #define MM_ISOLUTION 106
 #endif
 #ifndef MM_ISOLUTION_PASCAL
+#if (!defined(__midl))
 #define MM_ISOLUTION_PASCAL 1
+#endif
 #endif
 #ifndef MM_ITERATEDSYS
 #define MM_ITERATEDSYS 58
 #endif
 #ifndef MM_ITERATEDSYS_FUFCODEC
+#if (!defined(__midl))
 #define MM_ITERATEDSYS_FUFCODEC 1
+#endif
 #endif
 #ifndef MM_I_LINK
 #define MM_I_LINK 233
 #endif
 #ifndef MM_I_LINK_VOICE_CODER
+#if (!defined(__midl))
 #define MM_I_LINK_VOICE_CODER 1
+#endif
 #endif
 #ifndef MM_KAY_ELEMETRICS
 #define MM_KAY_ELEMETRICS 131
 #endif
 #ifndef MM_KAY_ELEMETRICS_CSL
+#if (!defined(__midl))
 #define MM_KAY_ELEMETRICS_CSL 0x4300
 #endif
+#endif
 #ifndef MM_KAY_ELEMETRICS_CSL_4CHANNEL
+#if (!defined(__midl))
 #define MM_KAY_ELEMETRICS_CSL_4CHANNEL 0x4309
 #endif
+#endif
 #ifndef MM_KAY_ELEMETRICS_CSL_DAT
+#if (!defined(__midl))
 #define MM_KAY_ELEMETRICS_CSL_DAT 0x4308
+#endif
 #endif
 #ifndef MM_KORG
 #define MM_KORG 55
 #endif
 #ifndef MM_KORG_1212IO_MSWAVEIN
+#if (!defined(__midl))
 #define MM_KORG_1212IO_MSWAVEIN 3
 #endif
+#endif
 #ifndef MM_KORG_1212IO_MSWAVEOUT
+#if (!defined(__midl))
 #define MM_KORG_1212IO_MSWAVEOUT 4
 #endif
+#endif
 #ifndef MM_KORG_PCIF_MIDIIN
+#if (!defined(__midl))
 #define MM_KORG_PCIF_MIDIIN 2
 #endif
+#endif
 #ifndef MM_KORG_PCIF_MIDIOUT
+#if (!defined(__midl))
 #define MM_KORG_PCIF_MIDIOUT 1
 #endif
+#endif
 #ifndef MM_LERNOUT_ANDHAUSPIE_LHCODECACM
+#if (!defined(__midl))
 #define MM_LERNOUT_ANDHAUSPIE_LHCODECACM 1
+#endif
 #endif
 #ifndef MM_LERNOUT_AND_HAUSPIE
 #define MM_LERNOUT_AND_HAUSPIE 97
@@ -2797,10 +3491,14 @@ cpp_quote("#endif")
 #define MM_LEXICON 236
 #endif
 #ifndef MM_LEXICON_STUDIO_WAVE_IN
+#if (!defined(__midl))
 #define MM_LEXICON_STUDIO_WAVE_IN 2
 #endif
+#endif
 #ifndef MM_LEXICON_STUDIO_WAVE_OUT
+#if (!defined(__midl))
 #define MM_LEXICON_STUDIO_WAVE_OUT 1
+#endif
 #endif
 #ifndef MM_LOGITECH
 #define MM_LOGITECH 60
@@ -2809,28 +3507,40 @@ cpp_quote("#endif")
 #define MM_LUCENT 184
 #endif
 #ifndef MM_LUCENT_ACM_G723
+#if (!defined(__midl))
 #define MM_LUCENT_ACM_G723 0
+#endif
 #endif
 #ifndef MM_LUCID
 #define MM_LUCID 221
 #endif
 #ifndef MM_LUCID_PCI24WAVEIN
+#if (!defined(__midl))
 #define MM_LUCID_PCI24WAVEIN 1
 #endif
+#endif
 #ifndef MM_LUCID_PCI24WAVEOUT
+#if (!defined(__midl))
 #define MM_LUCID_PCI24WAVEOUT 2
+#endif
 #endif
 #ifndef MM_LUMINOSITI
 #define MM_LUMINOSITI 224
 #endif
 #ifndef MM_LUMINOSITI_SCWAVEIN
+#if (!defined(__midl))
 #define MM_LUMINOSITI_SCWAVEIN 1
 #endif
+#endif
 #ifndef MM_LUMINOSITI_SCWAVEMIX
+#if (!defined(__midl))
 #define MM_LUMINOSITI_SCWAVEMIX 3
 #endif
+#endif
 #ifndef MM_LUMINOSITI_SCWAVEOUT
+#if (!defined(__midl))
 #define MM_LUMINOSITI_SCWAVEOUT 2
+#endif
 #endif
 #ifndef MM_LYNX
 #define MM_LYNX 212
@@ -2839,7 +3549,9 @@ cpp_quote("#endif")
 #define MM_LYRRUS 88
 #endif
 #ifndef MM_LYRRUS_BRIDGE_GUITAR
+#if (!defined(__midl))
 #define MM_LYRRUS_BRIDGE_GUITAR 1
+#endif
 #endif
 #ifndef MM_MALDEN
 #define MM_MALDEN 261
@@ -2848,22 +3560,34 @@ cpp_quote("#endif")
 #define MM_MARIAN 190
 #endif
 #ifndef MM_MARIAN_ARC44WAVEIN
+#if (!defined(__midl))
 #define MM_MARIAN_ARC44WAVEIN 1
 #endif
+#endif
 #ifndef MM_MARIAN_ARC44WAVEOUT
+#if (!defined(__midl))
 #define MM_MARIAN_ARC44WAVEOUT 2
 #endif
+#endif
 #ifndef MM_MARIAN_ARC88WAVEIN
+#if (!defined(__midl))
 #define MM_MARIAN_ARC88WAVEIN 5
 #endif
+#endif
 #ifndef MM_MARIAN_ARC88WAVEOUT
+#if (!defined(__midl))
 #define MM_MARIAN_ARC88WAVEOUT 6
 #endif
+#endif
 #ifndef MM_MARIAN_PRODIF24WAVEIN
+#if (!defined(__midl))
 #define MM_MARIAN_PRODIF24WAVEIN 3
 #endif
+#endif
 #ifndef MM_MARIAN_PRODIF24WAVEOUT
+#if (!defined(__midl))
 #define MM_MARIAN_PRODIF24WAVEOUT 4
+#endif
 #endif
 #ifndef MM_MATROX_DIV
 #define MM_MATROX_DIV 254
@@ -2872,70 +3596,108 @@ cpp_quote("#endif")
 #define MM_MATSUSHITA 83
 #endif
 #ifndef MM_MATSUSHITA_AUX
+#if (!defined(__midl))
 #define MM_MATSUSHITA_AUX 5
 #endif
+#endif
 #ifndef MM_MATSUSHITA_FMSYNTH_STEREO
+#if (!defined(__midl))
 #define MM_MATSUSHITA_FMSYNTH_STEREO 3
 #endif
+#endif
 #ifndef MM_MATSUSHITA_MIXER
+#if (!defined(__midl))
 #define MM_MATSUSHITA_MIXER 4
 #endif
+#endif
 #ifndef MM_MATSUSHITA_WAVEIN
+#if (!defined(__midl))
 #define MM_MATSUSHITA_WAVEIN 1
 #endif
+#endif
 #ifndef MM_MATSUSHITA_WAVEOUT
+#if (!defined(__midl))
 #define MM_MATSUSHITA_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_MEDIASONIC
 #define MM_MEDIASONIC 71
 #endif
 #ifndef MM_MEDIASONIC_ACM_G723
+#if (!defined(__midl))
 #define MM_MEDIASONIC_ACM_G723 1
 #endif
+#endif
 #ifndef MM_MEDIASONIC_ICOM
+#if (!defined(__midl))
 #define MM_MEDIASONIC_ICOM 2
+#endif
 #endif
 #ifndef MM_MEDIATRIX
 #define MM_MEDIATRIX 141
 #endif
 #ifndef MM_MEDIAVISION
+#if (!defined(__midl))
 #define MM_MEDIAVISION 3
 #endif
+#endif
 #ifndef MM_MEDIAVISION_CDPC
+#if (!defined(__midl))
 #define MM_MEDIAVISION_CDPC 0x70
 #endif
+#endif
 #ifndef MM_MEDIAVISION_OPUS1208
+#if (!defined(__midl))
 #define MM_MEDIAVISION_OPUS1208 0x80
 #endif
+#endif
 #ifndef MM_MEDIAVISION_OPUS1216
+#if (!defined(__midl))
 #define MM_MEDIAVISION_OPUS1216 0x90
 #endif
+#endif
 #ifndef MM_MEDIAVISION_PROAUDIO
+#if (!defined(__midl))
 #define MM_MEDIAVISION_PROAUDIO 0x10
 #endif
+#endif
 #ifndef MM_MEDIAVISION_PROAUDIO_16
+#if (!defined(__midl))
 #define MM_MEDIAVISION_PROAUDIO_16 0x60
 #endif
+#endif
 #ifndef MM_MEDIAVISION_PROAUDIO_PLUS
+#if (!defined(__midl))
 #define MM_MEDIAVISION_PROAUDIO_PLUS 0x50
 #endif
+#endif
 #ifndef MM_MEDIAVISION_PROSTUDIO_16
+#if (!defined(__midl))
 #define MM_MEDIAVISION_PROSTUDIO_16 0x60
 #endif
+#endif
 #ifndef MM_MEDIAVISION_THUNDER
+#if (!defined(__midl))
 #define MM_MEDIAVISION_THUNDER 0x20
 #endif
+#endif
 #ifndef MM_MEDIAVISION_TPORT
+#if (!defined(__midl))
 #define MM_MEDIAVISION_TPORT 0x40
+#endif
 #endif
 #ifndef MM_MELABS
 #define MM_MELABS 44
 #endif
 #ifndef MM_MELABS_MIDI2GO
+#if (!defined(__midl))
 #define MM_MELABS_MIDI2GO 1
 #endif
+#endif
 #ifndef MM_MERGING_MPEGL3
+#if (!defined(__midl))
 #define MM_MERGING_MPEGL3 1
+#endif
 #endif
 #ifndef MM_MERGING_TECHNOLOGIES
 #define MM_MERGING_TECHNOLOGIES 177
@@ -2944,52 +3706,78 @@ cpp_quote("#endif")
 #define MM_METHEUS 59
 #endif
 #ifndef MM_METHEUS_ZIPPER
+#if (!defined(__midl))
 #define MM_METHEUS_ZIPPER 1
+#endif
 #endif
 #ifndef MM_MICRONAS
 #define MM_MICRONAS 251
 #endif
 #ifndef MM_MICRONAS_CLP833
+#if (!defined(__midl))
 #define MM_MICRONAS_CLP833 2
 #endif
+#endif
 #ifndef MM_MICRONAS_SC4
+#if (!defined(__midl))
 #define MM_MICRONAS_SC4 1
+#endif
 #endif
 #ifndef MM_MINDMAKER
 #define MM_MINDMAKER 263
 #endif
 #ifndef MM_MINDMAKER_GC_MIXER
+#if (!defined(__midl))
 #define MM_MINDMAKER_GC_MIXER 3
 #endif
+#endif
 #ifndef MM_MINDMAKER_GC_WAVEIN
+#if (!defined(__midl))
 #define MM_MINDMAKER_GC_WAVEIN 1
 #endif
+#endif
 #ifndef MM_MINDMAKER_GC_WAVEOUT
+#if (!defined(__midl))
 #define MM_MINDMAKER_GC_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_MIRO
 #define MM_MIRO 104
 #endif
 #ifndef MM_MIRO_DC30_MIX
+#if (!defined(__midl))
 #define MM_MIRO_DC30_MIX 7
 #endif
+#endif
 #ifndef MM_MIRO_DC30_WAVEIN
+#if (!defined(__midl))
 #define MM_MIRO_DC30_WAVEIN 6
 #endif
+#endif
 #ifndef MM_MIRO_DC30_WAVEOUT
+#if (!defined(__midl))
 #define MM_MIRO_DC30_WAVEOUT 5
 #endif
+#endif
 #ifndef MM_MIRO_MOVIEPRO
+#if (!defined(__midl))
 #define MM_MIRO_MOVIEPRO 1
 #endif
+#endif
 #ifndef MM_MIRO_VIDEOD1
+#if (!defined(__midl))
 #define MM_MIRO_VIDEOD1 2
 #endif
+#endif
 #ifndef MM_MIRO_VIDEODC1TV
+#if (!defined(__midl))
 #define MM_MIRO_VIDEODC1TV 3
 #endif
+#endif
 #ifndef MM_MIRO_VIDEOTD
+#if (!defined(__midl))
 #define MM_MIRO_VIDEOTD 4
+#endif
 #endif
 #ifndef MM_MITEL
 #define MM_MITEL 16
@@ -3043,28 +3831,40 @@ cpp_quote("#endif")
 #define MM_MITEL_TALKTO_LINE_WAVEOUT 100
 #endif
 #ifndef MM_MMOTION_WAVEAUX
+#if (!defined(__midl))
 #define MM_MMOTION_WAVEAUX 1
 #endif
+#endif
 #ifndef MM_MMOTION_WAVEIN
+#if (!defined(__midl))
 #define MM_MMOTION_WAVEIN 3
 #endif
+#endif
 #ifndef MM_MMOTION_WAVEOUT
+#if (!defined(__midl))
 #define MM_MMOTION_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_MOSCOM
 #define MM_MOSCOM 68
 #endif
 #ifndef MM_MOSCOM_VPC2400_IN
+#if (!defined(__midl))
 #define MM_MOSCOM_VPC2400_IN 1
 #endif
+#endif
 #ifndef MM_MOSCOM_VPC2400_OUT
+#if (!defined(__midl))
 #define MM_MOSCOM_VPC2400_OUT 2
+#endif
 #endif
 #ifndef MM_MOTIONPIXELS
 #define MM_MOTIONPIXELS 193
 #endif
 #ifndef MM_MOTIONPIXELS_MVI2
+#if (!defined(__midl))
 #define MM_MOTIONPIXELS_MVI2 1
+#endif
 #endif
 #ifndef MM_MOTOROLA
 #define MM_MOTOROLA 48
@@ -3550,7 +4350,9 @@ cpp_quote("#endif")
 #define MM_MPTUS 95
 #endif
 #ifndef MM_MPTUS_SPWAVEOUT
+#if (!defined(__midl))
 #define MM_MPTUS_SPWAVEOUT 1
+#endif
 #endif
 #ifndef MM_MSFT_ACM_MSFILTER
 #define MM_MSFT_ACM_MSFILTER 35
@@ -3730,34 +4532,52 @@ cpp_quote("#endif")
 #define MM_NCR 62
 #endif
 #ifndef MM_NCR_BA_AUX
+#if (!defined(__midl))
 #define MM_NCR_BA_AUX 4
 #endif
+#endif
 #ifndef MM_NCR_BA_MIXER
+#if (!defined(__midl))
 #define MM_NCR_BA_MIXER 5
 #endif
+#endif
 #ifndef MM_NCR_BA_SYNTH
+#if (!defined(__midl))
 #define MM_NCR_BA_SYNTH 3
 #endif
+#endif
 #ifndef MM_NCR_BA_WAVEIN
+#if (!defined(__midl))
 #define MM_NCR_BA_WAVEIN 1
 #endif
+#endif
 #ifndef MM_NCR_BA_WAVEOUT
+#if (!defined(__midl))
 #define MM_NCR_BA_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_NEC
 #define MM_NEC 26
 #endif
 #ifndef MM_NEC_26_SYNTH
+#if (!defined(__midl))
 #define MM_NEC_26_SYNTH 9
 #endif
+#endif
 #ifndef MM_NEC_73_86_SYNTH
+#if (!defined(__midl))
 #define MM_NEC_73_86_SYNTH 5
 #endif
+#endif
 #ifndef MM_NEC_73_86_WAVEIN
+#if (!defined(__midl))
 #define MM_NEC_73_86_WAVEIN 7
 #endif
+#endif
 #ifndef MM_NEC_73_86_WAVEOUT
+#if (!defined(__midl))
 #define MM_NEC_73_86_WAVEOUT 6
+#endif
 #endif
 #ifndef MM_NEC_JOYSTICK
 #define MM_NEC_JOYSTICK 12
@@ -3772,13 +4592,19 @@ cpp_quote("#endif")
 #define MM_NEOMAGIC 176
 #endif
 #ifndef MM_NEOMAGIC_AUX
+#if (!defined(__midl))
 #define MM_NEOMAGIC_AUX 6
 #endif
+#endif
 #ifndef MM_NEOMAGIC_MIDIIN
+#if (!defined(__midl))
 #define MM_NEOMAGIC_MIDIIN 5
 #endif
+#endif
 #ifndef MM_NEOMAGIC_MIDIOUT
+#if (!defined(__midl))
 #define MM_NEOMAGIC_MIDIOUT 4
+#endif
 #endif
 #ifndef MM_NEOMAGIC_MW3DX_AUX
 #define MM_NEOMAGIC_MW3DX_AUX 17
@@ -3823,28 +4649,40 @@ cpp_quote("#endif")
 #define MM_NEOMAGIC_MWAVE_WAVEOUT 20
 #endif
 #ifndef MM_NEOMAGIC_SYNTH
+#if (!defined(__midl))
 #define MM_NEOMAGIC_SYNTH 1
 #endif
+#endif
 #ifndef MM_NEOMAGIC_WAVEIN
+#if (!defined(__midl))
 #define MM_NEOMAGIC_WAVEIN 3
 #endif
+#endif
 #ifndef MM_NEOMAGIC_WAVEOUT
+#if (!defined(__midl))
 #define MM_NEOMAGIC_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_NETSCAPE
 #define MM_NETSCAPE 166
 #endif
 #ifndef MM_NETXL
+#if (!defined(__midl))
 #define MM_NETXL 8
 #endif
+#endif
 #ifndef MM_NETXL_XLVIDEO
+#if (!defined(__midl))
 #define MM_NETXL_XLVIDEO 1
+#endif
 #endif
 #ifndef MM_NEWMEDIA
 #define MM_NEWMEDIA 86
 #endif
 #ifndef MM_NEWMEDIA_WAVJAMMER
+#if (!defined(__midl))
 #define MM_NEWMEDIA_WAVJAMMER 1
+#endif
 #endif
 #ifndef MM_NMP
 #define MM_NMP 195
@@ -3853,10 +4691,14 @@ cpp_quote("#endif")
 #define MM_NMP_ACM_AMR 10
 #endif
 #ifndef MM_NMP_CCP_WAVEIN
+#if (!defined(__midl))
 #define MM_NMP_CCP_WAVEIN 1
 #endif
+#endif
 #ifndef MM_NMP_CCP_WAVEOUT
+#if (!defined(__midl))
 #define MM_NMP_CCP_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_NMS
 #define MM_NMS 87
@@ -3868,13 +4710,19 @@ cpp_quote("#endif")
 #define MM_NORRIS 150
 #endif
 #ifndef MM_NORRIS_VOICELINK
+#if (!defined(__midl))
 #define MM_NORRIS_VOICELINK 1
 #endif
+#endif
 #ifndef MM_NORTEL_MPXAC_WAVEIN
+#if (!defined(__midl))
 #define MM_NORTEL_MPXAC_WAVEIN 1
 #endif
+#endif
 #ifndef MM_NORTEL_MPXAC_WAVEOUT
+#if (!defined(__midl))
 #define MM_NORTEL_MPXAC_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_NORTHERN_TELECOM
 #define MM_NORTHERN_TELECOM 115
@@ -3883,25 +4731,39 @@ cpp_quote("#endif")
 #define MM_NVIDIA 127
 #endif
 #ifndef MM_NVIDIA_AUX
+#if (!defined(__midl))
 #define MM_NVIDIA_AUX 7
 #endif
+#endif
 #ifndef MM_NVIDIA_GAMEPORT
+#if (!defined(__midl))
 #define MM_NVIDIA_GAMEPORT 5
 #endif
+#endif
 #ifndef MM_NVIDIA_MIDIIN
+#if (!defined(__midl))
 #define MM_NVIDIA_MIDIIN 4
 #endif
+#endif
 #ifndef MM_NVIDIA_MIDIOUT
+#if (!defined(__midl))
 #define MM_NVIDIA_MIDIOUT 3
 #endif
+#endif
 #ifndef MM_NVIDIA_MIXER
+#if (!defined(__midl))
 #define MM_NVIDIA_MIXER 6
 #endif
+#endif
 #ifndef MM_NVIDIA_WAVEIN
+#if (!defined(__midl))
 #define MM_NVIDIA_WAVEIN 2
 #endif
+#endif
 #ifndef MM_NVIDIA_WAVEOUT
+#if (!defined(__midl))
 #define MM_NVIDIA_WAVEOUT 1
+#endif
 #endif
 #ifndef MM_OKI
 #define MM_OKI 79
@@ -3910,7 +4772,9 @@ cpp_quote("#endif")
 #define MM_OKSORI 128
 #endif
 #ifndef MM_OKSORI_BASE
+#if (!defined(__midl))
 #define MM_OKSORI_BASE 0
+#endif
 #endif
 #ifndef MM_OLIVETTI
 #define MM_OLIVETTI 81
@@ -3922,7 +4786,9 @@ cpp_quote("#endif")
 #define MM_OLIVETTI_ACM_CELP 11
 #endif
 #ifndef MM_OLIVETTI_ACM_GSM
+#if (!defined(__midl))
 #define MM_OLIVETTI_ACM_GSM 9
+#endif
 #endif
 #ifndef MM_OLIVETTI_ACM_OPR
 #define MM_OLIVETTI_ACM_OPR 13
@@ -3931,34 +4797,52 @@ cpp_quote("#endif")
 #define MM_OLIVETTI_ACM_SBC 12
 #endif
 #ifndef MM_OLIVETTI_AUX
+#if (!defined(__midl))
 #define MM_OLIVETTI_AUX 4
 #endif
+#endif
 #ifndef MM_OLIVETTI_JOYSTICK
+#if (!defined(__midl))
 #define MM_OLIVETTI_JOYSTICK 8
 #endif
+#endif
 #ifndef MM_OLIVETTI_MIDIIN
+#if (!defined(__midl))
 #define MM_OLIVETTI_MIDIIN 5
 #endif
+#endif
 #ifndef MM_OLIVETTI_MIDIOUT
+#if (!defined(__midl))
 #define MM_OLIVETTI_MIDIOUT 6
 #endif
+#endif
 #ifndef MM_OLIVETTI_MIXER
+#if (!defined(__midl))
 #define MM_OLIVETTI_MIXER 3
 #endif
+#endif
 #ifndef MM_OLIVETTI_SYNTH
+#if (!defined(__midl))
 #define MM_OLIVETTI_SYNTH 7
 #endif
+#endif
 #ifndef MM_OLIVETTI_WAVEIN
+#if (!defined(__midl))
 #define MM_OLIVETTI_WAVEIN 1
 #endif
+#endif
 #ifndef MM_OLIVETTI_WAVEOUT
+#if (!defined(__midl))
 #define MM_OLIVETTI_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_ONLIVE
 #define MM_ONLIVE 200
 #endif
 #ifndef MM_ONLIVE_MPCODEC
+#if (!defined(__midl))
 #define MM_ONLIVE_MPCODEC 1
+#endif
 #endif
 #ifndef MM_OPCODE
 #define MM_OPCODE 113
@@ -4033,34 +4917,50 @@ cpp_quote("#endif")
 #define MM_OSITECH 103
 #endif
 #ifndef MM_OSITECH_TRUMPCARD
+#if (!defined(__midl))
 #define MM_OSITECH_TRUMPCARD 1
+#endif
 #endif
 #ifndef MM_OSPREY
 #define MM_OSPREY 140
 #endif
 #ifndef MM_OSPREY_1000WAVEIN
+#if (!defined(__midl))
 #define MM_OSPREY_1000WAVEIN 1
 #endif
+#endif
 #ifndef MM_OSPREY_1000WAVEOUT
+#if (!defined(__midl))
 #define MM_OSPREY_1000WAVEOUT 2
+#endif
 #endif
 #ifndef MM_OTI
 #define MM_OTI 180
 #endif
 #ifndef MM_OTI_611MIDIN
+#if (!defined(__midl))
 #define MM_OTI_611MIDIN 0x12
 #endif
+#endif
 #ifndef MM_OTI_611MIDIOUT
+#if (!defined(__midl))
 #define MM_OTI_611MIDIOUT 0x13
 #endif
+#endif
 #ifndef MM_OTI_611MIXER
+#if (!defined(__midl))
 #define MM_OTI_611MIXER 7
 #endif
+#endif
 #ifndef MM_OTI_611WAVEIN
+#if (!defined(__midl))
 #define MM_OTI_611WAVEIN 5
 #endif
+#endif
 #ifndef MM_OTI_611WAVEOUT
+#if (!defined(__midl))
 #define MM_OTI_611WAVEOUT 6
+#endif
 #endif
 #ifndef MM_PACIFICRESEARCH
 #define MM_PACIFICRESEARCH 210
@@ -4069,22 +4969,32 @@ cpp_quote("#endif")
 #define MM_PCSPEAKER_WAVEOUT 13
 #endif
 #ifndef MM_PHILIPS_ACM_LPCBB
+#if (!defined(__midl))
 #define MM_PHILIPS_ACM_LPCBB 1
 #endif
+#endif
 #ifndef MM_PHILIPS_SPEECH_PROCESSING
+#if (!defined(__midl))
 #define MM_PHILIPS_SPEECH_PROCESSING 7
+#endif
 #endif
 #ifndef MM_PHONET
 #define MM_PHONET 203
 #endif
 #ifndef MM_PHONET_PP_MIXER
+#if (!defined(__midl))
 #define MM_PHONET_PP_MIXER 3
 #endif
+#endif
 #ifndef MM_PHONET_PP_WAVEIN
+#if (!defined(__midl))
 #define MM_PHONET_PP_WAVEIN 2
 #endif
+#endif
 #ifndef MM_PHONET_PP_WAVEOUT
+#if (!defined(__midl))
 #define MM_PHONET_PP_WAVEOUT 1
+#endif
 #endif
 #ifndef MM_PICTURETEL
 #define MM_PICTURETEL 138
@@ -4093,7 +5003,9 @@ cpp_quote("#endif")
 #define MM_PINNACLE 218
 #endif
 #ifndef MM_PRAGMATRAX
+#if (!defined(__midl))
 #define MM_PRAGMATRAX 5
+#endif
 #endif
 #ifndef MM_PRECEPT
 #define MM_PRECEPT 153
@@ -4105,10 +5017,14 @@ cpp_quote("#endif")
 #define MM_QDESIGN 194
 #endif
 #ifndef MM_QDESIGN_ACM_MPEG
+#if (!defined(__midl))
 #define MM_QDESIGN_ACM_MPEG 1
 #endif
+#endif
 #ifndef MM_QDESIGN_ACM_QDESIGN_MUSIC
+#if (!defined(__midl))
 #define MM_QDESIGN_ACM_QDESIGN_MUSIC 2
+#endif
 #endif
 #ifndef MM_QTEAM
 #define MM_QTEAM 169
@@ -4123,28 +5039,40 @@ cpp_quote("#endif")
 #define MM_QUARTERDECK 134
 #endif
 #ifndef MM_QUARTERDECK_LHWAVEIN
+#if (!defined(__midl))
 #define MM_QUARTERDECK_LHWAVEIN 0
 #endif
+#endif
 #ifndef MM_QUARTERDECK_LHWAVEOUT
+#if (!defined(__midl))
 #define MM_QUARTERDECK_LHWAVEOUT 1
+#endif
 #endif
 #ifndef MM_QUICKAUDIO
 #define MM_QUICKAUDIO 255
 #endif
 #ifndef MM_QUICKAUDIO_MAXIMIDI
+#if (!defined(__midl))
 #define MM_QUICKAUDIO_MAXIMIDI 2
 #endif
+#endif
 #ifndef MM_QUICKAUDIO_MINIMIDI
+#if (!defined(__midl))
 #define MM_QUICKAUDIO_MINIMIDI 1
+#endif
 #endif
 #ifndef MM_QUICKNET
 #define MM_QUICKNET 173
 #endif
 #ifndef MM_QUICKNET_PJWAVEIN
+#if (!defined(__midl))
 #define MM_QUICKNET_PJWAVEIN 1
 #endif
+#endif
 #ifndef MM_QUICKNET_PJWAVEOUT
+#if (!defined(__midl))
 #define MM_QUICKNET_PJWAVEOUT 2
+#endif
 #endif
 #ifndef MM_RADIUS
 #define MM_RADIUS 110
@@ -4153,10 +5081,14 @@ cpp_quote("#endif")
 #define MM_RHETOREX 120
 #endif
 #ifndef MM_RHETOREX_WAVEIN
+#if (!defined(__midl))
 #define MM_RHETOREX_WAVEIN 1
 #endif
+#endif
 #ifndef MM_RHETOREX_WAVEOUT
+#if (!defined(__midl))
 #define MM_RHETOREX_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_RICHMOND
 #define MM_RICHMOND 257
@@ -4234,37 +5166,55 @@ cpp_quote("#endif")
 #define MM_RZS 216
 #endif
 #ifndef MM_RZS_ACM_TUBGSM
+#if (!defined(__midl))
 #define MM_RZS_ACM_TUBGSM 1
+#endif
 #endif
 #ifndef MM_S3
 #define MM_S3 164
 #endif
 #ifndef MM_S3_AUX
+#if (!defined(__midl))
 #define MM_S3_AUX 7
 #endif
+#endif
 #ifndef MM_S3_FMSYNTH
+#if (!defined(__midl))
 #define MM_S3_FMSYNTH 5
 #endif
+#endif
 #ifndef MM_S3_MIDIIN
+#if (!defined(__midl))
 #define MM_S3_MIDIIN 4
 #endif
+#endif
 #ifndef MM_S3_MIDIOUT
+#if (!defined(__midl))
 #define MM_S3_MIDIOUT 3
 #endif
+#endif
 #ifndef MM_S3_MIXER
+#if (!defined(__midl))
 #define MM_S3_MIXER 6
 #endif
+#endif
 #ifndef MM_S3_WAVEIN
+#if (!defined(__midl))
 #define MM_S3_WAVEIN 2
 #endif
+#endif
 #ifndef MM_S3_WAVEOUT
+#if (!defined(__midl))
 #define MM_S3_WAVEOUT 1
+#endif
 #endif
 #ifndef MM_SANYO
 #define MM_SANYO 72
 #endif
 #ifndef MM_SANYO_ACM_LD_ADPCM
+#if (!defined(__midl))
 #define MM_SANYO_ACM_LD_ADPCM 1
+#endif
 #endif
 #ifndef MM_SCALACS
 #define MM_SCALACS 54
@@ -4273,52 +5223,80 @@ cpp_quote("#endif")
 #define MM_SEERSYS 137
 #endif
 #ifndef MM_SEERSYS_REALITY
+#if (!defined(__midl))
 #define MM_SEERSYS_REALITY 6
 #endif
+#endif
 #ifndef MM_SEERSYS_SEERMIX
+#if (!defined(__midl))
 #define MM_SEERSYS_SEERMIX 3
 #endif
+#endif
 #ifndef MM_SEERSYS_SEERSYNTH
+#if (!defined(__midl))
 #define MM_SEERSYS_SEERSYNTH 1
 #endif
+#endif
 #ifndef MM_SEERSYS_SEERWAVE
+#if (!defined(__midl))
 #define MM_SEERSYS_SEERWAVE 2
 #endif
+#endif
 #ifndef MM_SEERSYS_WAVESYNTH
+#if (!defined(__midl))
 #define MM_SEERSYS_WAVESYNTH 4
 #endif
+#endif
 #ifndef MM_SEERSYS_WAVESYNTH_WG
+#if (!defined(__midl))
 #define MM_SEERSYS_WAVESYNTH_WG 5
+#endif
 #endif
 #ifndef MM_SELSIUS_SYSTEMS
 #define MM_SELSIUS_SYSTEMS 234
 #endif
 #ifndef MM_SELSIUS_SYSTEMS_RTPWAVEIN
+#if (!defined(__midl))
 #define MM_SELSIUS_SYSTEMS_RTPWAVEIN 2
 #endif
+#endif
 #ifndef MM_SELSIUS_SYSTEMS_RTPWAVEOUT
+#if (!defined(__midl))
 #define MM_SELSIUS_SYSTEMS_RTPWAVEOUT 1
+#endif
 #endif
 #ifndef MM_SGI
 #define MM_SGI 237
 #endif
 #ifndef MM_SGI_320_MIXER
+#if (!defined(__midl))
 #define MM_SGI_320_MIXER 3
 #endif
+#endif
 #ifndef MM_SGI_320_WAVEIN
+#if (!defined(__midl))
 #define MM_SGI_320_WAVEIN 1
 #endif
+#endif
 #ifndef MM_SGI_320_WAVEOUT
+#if (!defined(__midl))
 #define MM_SGI_320_WAVEOUT 2
 #endif
+#endif
 #ifndef MM_SGI_540_MIXER
+#if (!defined(__midl))
 #define MM_SGI_540_MIXER 6
 #endif
+#endif
 #ifndef MM_SGI_540_WAVEIN
+#if (!defined(__midl))
 #define MM_SGI_540_WAVEIN 4
 #endif
+#endif
 #ifndef MM_SGI_540_WAVEOUT
+#if (!defined(__midl))
 #define MM_SGI_540_WAVEOUT 5
+#endif
 #endif
 #ifndef MM_SGI_RAD_ADAT8CHAN_WAVEIN
 #define MM_SGI_RAD_ADAT8CHAN_WAVEIN 19
@@ -4327,19 +5305,25 @@ cpp_quote("#endif")
 #define MM_SGI_RAD_ADAT8CHAN_WAVEOUT 32
 #endif
 #ifndef MM_SGI_RAD_ADATMONO1_WAVEIN
+#if (!defined(__midl))
 #define MM_SGI_RAD_ADATMONO1_WAVEIN 7
+#endif
 #endif
 #ifndef MM_SGI_RAD_ADATMONO1_WAVEOUT
 #define MM_SGI_RAD_ADATMONO1_WAVEOUT 20
 #endif
 #ifndef MM_SGI_RAD_ADATMONO2_WAVEIN
+#if (!defined(__midl))
 #define MM_SGI_RAD_ADATMONO2_WAVEIN 8
+#endif
 #endif
 #ifndef MM_SGI_RAD_ADATMONO2_WAVEOUT
 #define MM_SGI_RAD_ADATMONO2_WAVEOUT 21
 #endif
 #ifndef MM_SGI_RAD_ADATMONO3_WAVEIN
+#if (!defined(__midl))
 #define MM_SGI_RAD_ADATMONO3_WAVEIN 9
+#endif
 #endif
 #ifndef MM_SGI_RAD_ADATMONO3_WAVEOUT
 #define MM_SGI_RAD_ADATMONO3_WAVEOUT 22
@@ -4420,7 +5404,9 @@ cpp_quote("#endif")
 #define MM_SHARP 183
 #endif
 #ifndef MM_SHARP_MDC_AUX
+#if (!defined(__midl))
 #define MM_SHARP_MDC_AUX 6
+#endif
 #endif
 #ifndef MM_SHARP_MDC_AUX_BASS
 #define MM_SHARP_MDC_AUX_BASS 101
@@ -4453,31 +5439,45 @@ cpp_quote("#endif")
 #define MM_SHARP_MDC_AUX_WAVE_VOL 104
 #endif
 #ifndef MM_SHARP_MDC_MIDI_IN
+#if (!defined(__midl))
 #define MM_SHARP_MDC_MIDI_IN 2
 #endif
+#endif
 #ifndef MM_SHARP_MDC_MIDI_OUT
+#if (!defined(__midl))
 #define MM_SHARP_MDC_MIDI_OUT 3
 #endif
+#endif
 #ifndef MM_SHARP_MDC_MIDI_SYNTH
+#if (!defined(__midl))
 #define MM_SHARP_MDC_MIDI_SYNTH 1
+#endif
 #endif
 #ifndef MM_SHARP_MDC_MIXER
 #define MM_SHARP_MDC_MIXER 10
 #endif
 #ifndef MM_SHARP_MDC_WAVE_IN
+#if (!defined(__midl))
 #define MM_SHARP_MDC_WAVE_IN 4
 #endif
+#endif
 #ifndef MM_SHARP_MDC_WAVE_OUT
+#if (!defined(__midl))
 #define MM_SHARP_MDC_WAVE_OUT 5
+#endif
 #endif
 #ifndef MM_SICRESOURCE
 #define MM_SICRESOURCE 175
 #endif
 #ifndef MM_SICRESOURCE_SSO3D
+#if (!defined(__midl))
 #define MM_SICRESOURCE_SSO3D 2
 #endif
+#endif
 #ifndef MM_SICRESOURCE_SSOW3DI
+#if (!defined(__midl))
 #define MM_SICRESOURCE_SSOW3DI 3
+#endif
 #endif
 #ifndef MM_SIEMENS_SBC
 #define MM_SIEMENS_SBC 201
@@ -4486,112 +5486,174 @@ cpp_quote("#endif")
 #define MM_SIERRA 40
 #endif
 #ifndef MM_SIERRA_ARIA_AUX
+#if (!defined(__midl))
 #define MM_SIERRA_ARIA_AUX 0x19
 #endif
+#endif
 #ifndef MM_SIERRA_ARIA_AUX2
+#if (!defined(__midl))
 #define MM_SIERRA_ARIA_AUX2 0x20
 #endif
+#endif
 #ifndef MM_SIERRA_ARIA_MIDIIN
+#if (!defined(__midl))
 #define MM_SIERRA_ARIA_MIDIIN 0x15
 #endif
+#endif
 #ifndef MM_SIERRA_ARIA_MIDIOUT
+#if (!defined(__midl))
 #define MM_SIERRA_ARIA_MIDIOUT 0x14
 #endif
+#endif
 #ifndef MM_SIERRA_ARIA_SYNTH
+#if (!defined(__midl))
 #define MM_SIERRA_ARIA_SYNTH 0x16
 #endif
+#endif
 #ifndef MM_SIERRA_ARIA_WAVEIN
+#if (!defined(__midl))
 #define MM_SIERRA_ARIA_WAVEIN 0x18
 #endif
+#endif
 #ifndef MM_SIERRA_ARIA_WAVEOUT
+#if (!defined(__midl))
 #define MM_SIERRA_ARIA_WAVEOUT 0x17
 #endif
+#endif
 #ifndef MM_SIERRA_QUARTET_AUX_CD
+#if (!defined(__midl))
 #define MM_SIERRA_QUARTET_AUX_CD 0x55
 #endif
+#endif
 #ifndef MM_SIERRA_QUARTET_AUX_LINE
+#if (!defined(__midl))
 #define MM_SIERRA_QUARTET_AUX_LINE 0x56
 #endif
+#endif
 #ifndef MM_SIERRA_QUARTET_AUX_MODEM
+#if (!defined(__midl))
 #define MM_SIERRA_QUARTET_AUX_MODEM 0x57
 #endif
+#endif
 #ifndef MM_SIERRA_QUARTET_MIDIIN
+#if (!defined(__midl))
 #define MM_SIERRA_QUARTET_MIDIIN 0x52
 #endif
+#endif
 #ifndef MM_SIERRA_QUARTET_MIDIOUT
+#if (!defined(__midl))
 #define MM_SIERRA_QUARTET_MIDIOUT 0x53
 #endif
+#endif
 #ifndef MM_SIERRA_QUARTET_MIXER
+#if (!defined(__midl))
 #define MM_SIERRA_QUARTET_MIXER 0x58
 #endif
+#endif
 #ifndef MM_SIERRA_QUARTET_SYNTH
+#if (!defined(__midl))
 #define MM_SIERRA_QUARTET_SYNTH 0x54
 #endif
+#endif
 #ifndef MM_SIERRA_QUARTET_WAVEIN
+#if (!defined(__midl))
 #define MM_SIERRA_QUARTET_WAVEIN 0x50
 #endif
+#endif
 #ifndef MM_SIERRA_QUARTET_WAVEOUT
+#if (!defined(__midl))
 #define MM_SIERRA_QUARTET_WAVEOUT 0x51
+#endif
 #endif
 #ifndef MM_SILICONSOFT
 #define MM_SILICONSOFT 69
 #endif
 #ifndef MM_SILICONSOFT_SC1_WAVEIN
+#if (!defined(__midl))
 #define MM_SILICONSOFT_SC1_WAVEIN 1
 #endif
+#endif
 #ifndef MM_SILICONSOFT_SC1_WAVEOUT
+#if (!defined(__midl))
 #define MM_SILICONSOFT_SC1_WAVEOUT 2
 #endif
+#endif
 #ifndef MM_SILICONSOFT_SC2_WAVEIN
+#if (!defined(__midl))
 #define MM_SILICONSOFT_SC2_WAVEIN 3
 #endif
+#endif
 #ifndef MM_SILICONSOFT_SC2_WAVEOUT
+#if (!defined(__midl))
 #define MM_SILICONSOFT_SC2_WAVEOUT 4
 #endif
+#endif
 #ifndef MM_SILICONSOFT_SOUNDJR2PR_WAVEIN
+#if (!defined(__midl))
 #define MM_SILICONSOFT_SOUNDJR2PR_WAVEIN 6
 #endif
+#endif
 #ifndef MM_SILICONSOFT_SOUNDJR2PR_WAVEOUT
+#if (!defined(__midl))
 #define MM_SILICONSOFT_SOUNDJR2PR_WAVEOUT 7
 #endif
+#endif
 #ifndef MM_SILICONSOFT_SOUNDJR2_WAVEOUT
+#if (!defined(__midl))
 #define MM_SILICONSOFT_SOUNDJR2_WAVEOUT 5
 #endif
+#endif
 #ifndef MM_SILICONSOFT_SOUNDJR3_WAVEOUT
+#if (!defined(__midl))
 #define MM_SILICONSOFT_SOUNDJR3_WAVEOUT 8
+#endif
 #endif
 #ifndef MM_SIPROLAB
 #define MM_SIPROLAB 211
 #endif
 #ifndef MM_SIPROLAB_ACELPNET
+#if (!defined(__midl))
 #define MM_SIPROLAB_ACELPNET 1
+#endif
 #endif
 #ifndef MM_SNI
 #define MM_SNI 18
 #endif
 #ifndef MM_SNI_ACM_G721
+#if (!defined(__midl))
 #define MM_SNI_ACM_G721 1
+#endif
 #endif
 #ifndef MM_SOFTLAB_NSK
 #define MM_SOFTLAB_NSK 228
 #endif
 #ifndef MM_SOFTLAB_NSK_FRW_AUX
+#if (!defined(__midl))
 #define MM_SOFTLAB_NSK_FRW_AUX 4
 #endif
+#endif
 #ifndef MM_SOFTLAB_NSK_FRW_MIXER
+#if (!defined(__midl))
 #define MM_SOFTLAB_NSK_FRW_MIXER 3
 #endif
+#endif
 #ifndef MM_SOFTLAB_NSK_FRW_WAVEIN
+#if (!defined(__midl))
 #define MM_SOFTLAB_NSK_FRW_WAVEIN 1
 #endif
+#endif
 #ifndef MM_SOFTLAB_NSK_FRW_WAVEOUT
+#if (!defined(__midl))
 #define MM_SOFTLAB_NSK_FRW_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_SOFTSOUND
 #define MM_SOFTSOUND 149
 #endif
 #ifndef MM_SOFTSOUND_CODEC
+#if (!defined(__midl))
 #define MM_SOFTSOUND_CODEC 1
+#endif
 #endif
 #ifndef MM_SONICFOUNDRY
 #define MM_SONICFOUNDRY 66
@@ -4600,13 +5662,17 @@ cpp_quote("#endif")
 #define MM_SONORUS 230
 #endif
 #ifndef MM_SONORUS_STUDIO
+#if (!defined(__midl))
 #define MM_SONORUS_STUDIO 1
+#endif
 #endif
 #ifndef MM_SONY
 #define MM_SONY 245
 #endif
 #ifndef MM_SONY_ACM_SCX
+#if (!defined(__midl))
 #define MM_SONY_ACM_SCX 1
+#endif
 #endif
 #ifndef MM_SORVIS
 #define MM_SORVIS 187
@@ -4615,10 +5681,14 @@ cpp_quote("#endif")
 #define MM_SOUNDESIGNS 142
 #endif
 #ifndef MM_SOUNDESIGNS_WAVEIN
+#if (!defined(__midl))
 #define MM_SOUNDESIGNS_WAVEIN 1
 #endif
+#endif
 #ifndef MM_SOUNDESIGNS_WAVEOUT
+#if (!defined(__midl))
 #define MM_SOUNDESIGNS_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_SOUNDSPACE
 #define MM_SOUNDSPACE 167
@@ -4636,25 +5706,39 @@ cpp_quote("#endif")
 #define MM_SPLASH_STUDIOS 133
 #endif
 #ifndef MM_SSP_SNDFESAUX
+#if (!defined(__midl))
 #define MM_SSP_SNDFESAUX 7
 #endif
+#endif
 #ifndef MM_SSP_SNDFESMIDIIN
+#if (!defined(__midl))
 #define MM_SSP_SNDFESMIDIIN 3
 #endif
+#endif
 #ifndef MM_SSP_SNDFESMIDIOUT
+#if (!defined(__midl))
 #define MM_SSP_SNDFESMIDIOUT 4
 #endif
+#endif
 #ifndef MM_SSP_SNDFESMIX
+#if (!defined(__midl))
 #define MM_SSP_SNDFESMIX 6
 #endif
+#endif
 #ifndef MM_SSP_SNDFESSYNTH
+#if (!defined(__midl))
 #define MM_SSP_SNDFESSYNTH 5
 #endif
+#endif
 #ifndef MM_SSP_SNDFESWAVEIN
+#if (!defined(__midl))
 #define MM_SSP_SNDFESWAVEIN 1
 #endif
+#endif
 #ifndef MM_SSP_SNDFESWAVEOUT
+#if (!defined(__midl))
 #define MM_SSP_SNDFESWAVEOUT 2
+#endif
 #endif
 #ifndef MM_STUDER
 #define MM_STUDER 171
@@ -4672,43 +5756,65 @@ cpp_quote("#endif")
 #define MM_SYDEC_NV 248
 #endif
 #ifndef MM_SYDEC_NV_WAVEIN
+#if (!defined(__midl))
 #define MM_SYDEC_NV_WAVEIN 1
 #endif
+#endif
 #ifndef MM_SYDEC_NV_WAVEOUT
+#if (!defined(__midl))
 #define MM_SYDEC_NV_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_TANDY
 #define MM_TANDY 29
 #endif
 #ifndef MM_TANDY_PSSJWAVEIN
+#if (!defined(__midl))
 #define MM_TANDY_PSSJWAVEIN 9
+#endif
 #endif
 #ifndef MM_TANDY_PSSJWAVEOUT
 #define MM_TANDY_PSSJWAVEOUT 10
 #endif
 #ifndef MM_TANDY_SENS_MMAMIDIIN
+#if (!defined(__midl))
 #define MM_TANDY_SENS_MMAMIDIIN 6
 #endif
+#endif
 #ifndef MM_TANDY_SENS_MMAMIDIOUT
+#if (!defined(__midl))
 #define MM_TANDY_SENS_MMAMIDIOUT 7
 #endif
+#endif
 #ifndef MM_TANDY_SENS_MMAWAVEIN
+#if (!defined(__midl))
 #define MM_TANDY_SENS_MMAWAVEIN 4
 #endif
+#endif
 #ifndef MM_TANDY_SENS_MMAWAVEOUT
+#if (!defined(__midl))
 #define MM_TANDY_SENS_MMAWAVEOUT 5
 #endif
+#endif
 #ifndef MM_TANDY_SENS_VISWAVEOUT
+#if (!defined(__midl))
 #define MM_TANDY_SENS_VISWAVEOUT 8
 #endif
+#endif
 #ifndef MM_TANDY_VISBIOSSYNTH
+#if (!defined(__midl))
 #define MM_TANDY_VISBIOSSYNTH 3
 #endif
+#endif
 #ifndef MM_TANDY_VISWAVEIN
+#if (!defined(__midl))
 #define MM_TANDY_VISWAVEIN 1
 #endif
+#endif
 #ifndef MM_TANDY_VISWAVEOUT
+#if (!defined(__midl))
 #define MM_TANDY_VISWAVEOUT 2
+#endif
 #endif
 #ifndef MM_TBS_TROPEZ_AUX1
 #define MM_TBS_TROPEZ_AUX1 39
@@ -4729,7 +5835,9 @@ cpp_quote("#endif")
 #define MM_TDK 135
 #endif
 #ifndef MM_TDK_MW_AUX
+#if (!defined(__midl))
 #define MM_TDK_MW_AUX 6
+#endif
 #endif
 #ifndef MM_TDK_MW_AUX_BASS
 #define MM_TDK_MW_AUX_BASS 101
@@ -4762,31 +5870,45 @@ cpp_quote("#endif")
 #define MM_TDK_MW_AUX_WAVE_VOL 104
 #endif
 #ifndef MM_TDK_MW_MIDI_IN
+#if (!defined(__midl))
 #define MM_TDK_MW_MIDI_IN 2
 #endif
+#endif
 #ifndef MM_TDK_MW_MIDI_OUT
+#if (!defined(__midl))
 #define MM_TDK_MW_MIDI_OUT 3
 #endif
+#endif
 #ifndef MM_TDK_MW_MIDI_SYNTH
+#if (!defined(__midl))
 #define MM_TDK_MW_MIDI_SYNTH 1
+#endif
 #endif
 #ifndef MM_TDK_MW_MIXER
 #define MM_TDK_MW_MIXER 10
 #endif
 #ifndef MM_TDK_MW_WAVE_IN
+#if (!defined(__midl))
 #define MM_TDK_MW_WAVE_IN 4
 #endif
+#endif
 #ifndef MM_TDK_MW_WAVE_OUT
+#if (!defined(__midl))
 #define MM_TDK_MW_WAVE_OUT 5
+#endif
 #endif
 #ifndef MM_TELEKOL
 #define MM_TELEKOL 264
 #endif
 #ifndef MM_TELEKOL_WAVEIN
+#if (!defined(__midl))
 #define MM_TELEKOL_WAVEIN 2
 #endif
+#endif
 #ifndef MM_TELEKOL_WAVEOUT
+#if (!defined(__midl))
 #define MM_TELEKOL_WAVEOUT 1
+#endif
 #endif
 #ifndef MM_TERALOGIC
 #define MM_TERALOGIC 202
@@ -4798,40 +5920,62 @@ cpp_quote("#endif")
 #define MM_TRUEVISION 51
 #endif
 #ifndef MM_TRUEVISION_WAVEIN1
+#if (!defined(__midl))
 #define MM_TRUEVISION_WAVEIN1 1
 #endif
+#endif
 #ifndef MM_TRUEVISION_WAVEOUT1
+#if (!defined(__midl))
 #define MM_TRUEVISION_WAVEOUT1 2
 #endif
+#endif
 #ifndef MM_TTEWS_AUX
+#if (!defined(__midl))
 #define MM_TTEWS_AUX 9
 #endif
+#endif
 #ifndef MM_TTEWS_MIDIIN
+#if (!defined(__midl))
 #define MM_TTEWS_MIDIIN 3
 #endif
+#endif
 #ifndef MM_TTEWS_MIDIMONITOR
+#if (!defined(__midl))
 #define MM_TTEWS_MIDIMONITOR 6
 #endif
+#endif
 #ifndef MM_TTEWS_MIDIOUT
+#if (!defined(__midl))
 #define MM_TTEWS_MIDIOUT 4
 #endif
+#endif
 #ifndef MM_TTEWS_MIDISYNTH
+#if (!defined(__midl))
 #define MM_TTEWS_MIDISYNTH 5
+#endif
 #endif
 #ifndef MM_TTEWS_MIXER
 #define MM_TTEWS_MIXER 10
 #endif
 #ifndef MM_TTEWS_VMIDIIN
+#if (!defined(__midl))
 #define MM_TTEWS_VMIDIIN 7
 #endif
+#endif
 #ifndef MM_TTEWS_VMIDIOUT
+#if (!defined(__midl))
 #define MM_TTEWS_VMIDIOUT 8
 #endif
+#endif
 #ifndef MM_TTEWS_WAVEIN
+#if (!defined(__midl))
 #define MM_TTEWS_WAVEIN 1
 #endif
+#endif
 #ifndef MM_TTEWS_WAVEOUT
+#if (!defined(__midl))
 #define MM_TTEWS_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_TURTLE_BEACH
 #define MM_TURTLE_BEACH 21
@@ -4840,22 +5984,30 @@ cpp_quote("#endif")
 #define MM_UHER_INFORMATIC 247
 #endif
 #ifndef MM_UH_ACM_ADPCM
+#if (!defined(__midl))
 #define MM_UH_ACM_ADPCM 1
+#endif
 #endif
 #ifndef MM_UNISYS
 #define MM_UNISYS 223
 #endif
 #ifndef MM_UNISYS_ACM_NAP
+#if (!defined(__midl))
 #define MM_UNISYS_ACM_NAP 1
+#endif
 #endif
 #ifndef MM_VAL
 #define MM_VAL 35
 #endif
 #ifndef MM_VAL_MICROKEY_AP_WAVEIN
+#if (!defined(__midl))
 #define MM_VAL_MICROKEY_AP_WAVEIN 1
 #endif
+#endif
 #ifndef MM_VAL_MICROKEY_AP_WAVEOUT
+#if (!defined(__midl))
 #define MM_VAL_MICROKEY_AP_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_VANKOEVERING
 #define MM_VANKOEVERING 168
@@ -4864,25 +6016,39 @@ cpp_quote("#endif")
 #define MM_VIA 250
 #endif
 #ifndef MM_VIA_AUX
+#if (!defined(__midl))
 #define MM_VIA_AUX 4
 #endif
+#endif
 #ifndef MM_VIA_MIXER
+#if (!defined(__midl))
 #define MM_VIA_MIXER 3
 #endif
+#endif
 #ifndef MM_VIA_MPU401_MIDIIN
+#if (!defined(__midl))
 #define MM_VIA_MPU401_MIDIIN 6
 #endif
+#endif
 #ifndef MM_VIA_MPU401_MIDIOUT
+#if (!defined(__midl))
 #define MM_VIA_MPU401_MIDIOUT 5
 #endif
+#endif
 #ifndef MM_VIA_SWFM_SYNTH
+#if (!defined(__midl))
 #define MM_VIA_SWFM_SYNTH 7
 #endif
+#endif
 #ifndef MM_VIA_WAVEIN
+#if (!defined(__midl))
 #define MM_VIA_WAVEIN 2
 #endif
+#endif
 #ifndef MM_VIA_WAVEOUT
+#if (!defined(__midl))
 #define MM_VIA_WAVEOUT 1
+#endif
 #endif
 #ifndef MM_VIA_WDM_MIXER
 #define MM_VIA_WDM_MIXER 10
@@ -4894,46 +6060,68 @@ cpp_quote("#endif")
 #define MM_VIA_WDM_MPU401_MIDIOUT 11
 #endif
 #ifndef MM_VIA_WDM_WAVEIN
+#if (!defined(__midl))
 #define MM_VIA_WDM_WAVEIN 9
 #endif
+#endif
 #ifndef MM_VIA_WDM_WAVEOUT
+#if (!defined(__midl))
 #define MM_VIA_WDM_WAVEOUT 8
+#endif
 #endif
 #ifndef MM_VIDEOLOGIC
 #define MM_VIDEOLOGIC 53
 #endif
 #ifndef MM_VIDEOLOGIC_MSWAVEIN
+#if (!defined(__midl))
 #define MM_VIDEOLOGIC_MSWAVEIN 1
 #endif
+#endif
 #ifndef MM_VIDEOLOGIC_MSWAVEOUT
+#if (!defined(__midl))
 #define MM_VIDEOLOGIC_MSWAVEOUT 2
+#endif
 #endif
 #ifndef MM_VIENNASYS
 #define MM_VIENNASYS 157
 #endif
 #ifndef MM_VIENNASYS_TSP_WAVE_DRIVER
+#if (!defined(__midl))
 #define MM_VIENNASYS_TSP_WAVE_DRIVER 1
+#endif
 #endif
 #ifndef MM_VIONA
 #define MM_VIONA 161
 #endif
 #ifndef MM_VIONAQVINPCI_WAVEOUT
+#if (!defined(__midl))
 #define MM_VIONAQVINPCI_WAVEOUT 3
 #endif
+#endif
 #ifndef MM_VIONA_BUSTER_MIXER
+#if (!defined(__midl))
 #define MM_VIONA_BUSTER_MIXER 4
 #endif
+#endif
 #ifndef MM_VIONA_CINEMASTER_MIXER
+#if (!defined(__midl))
 #define MM_VIONA_CINEMASTER_MIXER 5
 #endif
+#endif
 #ifndef MM_VIONA_CONCERTO_MIXER
+#if (!defined(__midl))
 #define MM_VIONA_CONCERTO_MIXER 6
 #endif
+#endif
 #ifndef MM_VIONA_QVINPCI_MIXER
+#if (!defined(__midl))
 #define MM_VIONA_QVINPCI_MIXER 1
 #endif
+#endif
 #ifndef MM_VIONA_QVINPCI_WAVEIN
+#if (!defined(__midl))
 #define MM_VIONA_QVINPCI_WAVEIN 2
+#endif
 #endif
 #ifndef MM_VIRTUALMUSIC
 #define MM_VIRTUALMUSIC 205
@@ -4942,16 +6130,22 @@ cpp_quote("#endif")
 #define MM_VITEC 67
 #endif
 #ifndef MM_VITEC_VMAKER
+#if (!defined(__midl))
 #define MM_VITEC_VMAKER 1
 #endif
+#endif
 #ifndef MM_VITEC_VMPRO
+#if (!defined(__midl))
 #define MM_VITEC_VMPRO 2
+#endif
 #endif
 #ifndef MM_VIVO
 #define MM_VIVO 182
 #endif
 #ifndef MM_VIVO_AUDIO_CODEC
+#if (!defined(__midl))
 #define MM_VIVO_AUDIO_CODEC 1
+#endif
 #endif
 #ifndef MM_VKC_MPU401_MIDIIN
 #define MM_VKC_MPU401_MIDIIN 0x0100
@@ -4969,22 +6163,30 @@ cpp_quote("#endif")
 #define MM_VOCALTEC 23
 #endif
 #ifndef MM_VOCALTEC_WAVEIN
+#if (!defined(__midl))
 #define MM_VOCALTEC_WAVEIN 2
 #endif
+#endif
 #ifndef MM_VOCALTEC_WAVEOUT
+#if (!defined(__midl))
 #define MM_VOCALTEC_WAVEOUT 1
+#endif
 #endif
 #ifndef MM_VOICEINFO
 #define MM_VOICEINFO 156
 #endif
 #ifndef MM_VOICEMIXER
+#if (!defined(__midl))
 #define MM_VOICEMIXER 1
+#endif
 #endif
 #ifndef MM_VOXWARE
 #define MM_VOXWARE 114
 #endif
 #ifndef MM_VOXWARE_CODEC
+#if (!defined(__midl))
 #define MM_VOXWARE_CODEC 1
+#endif
 #endif
 #ifndef MM_VOYETRA
 #define MM_VOYETRA 30
@@ -4993,10 +6195,14 @@ cpp_quote("#endif")
 #define MM_VQST 240
 #endif
 #ifndef MM_VQST_VQC1
+#if (!defined(__midl))
 #define MM_VQST_VQC1 1
 #endif
+#endif
 #ifndef MM_VQST_VQC2
+#if (!defined(__midl))
 #define MM_VQST_VQC2 2
+#endif
 #endif
 #ifndef MM_VTG
 #define MM_VTG 109
@@ -5005,10 +6211,14 @@ cpp_quote("#endif")
 #define MM_WANGLABS 28
 #endif
 #ifndef MM_WANGLABS_WAVEIN1
+#if (!defined(__midl))
 #define MM_WANGLABS_WAVEIN1 1
 #endif
+#endif
 #ifndef MM_WANGLABS_WAVEOUT1
+#if (!defined(__midl))
 #define MM_WANGLABS_WAVEOUT1 2
+#endif
 #endif
 #ifndef MM_WEITEK
 #define MM_WEITEK 96
@@ -5017,7 +6227,9 @@ cpp_quote("#endif")
 #define MM_WILDCAT 119
 #endif
 #ifndef MM_WILDCAT_AUTOSCOREMIDIIN
+#if (!defined(__midl))
 #define MM_WILDCAT_AUTOSCOREMIDIIN 1
+#endif
 #endif
 #ifndef MM_WILLOPOND_SNDCOMM_WAVEIN
 #define MM_WILLOPOND_SNDCOMM_WAVEIN 108
@@ -5083,46 +6295,72 @@ cpp_quote("#endif")
 #define MM_WINNOV 61
 #endif
 #ifndef MM_WINNOV_CAVIAR_CHAMPAGNE
+#if (!defined(__midl))
 #define MM_WINNOV_CAVIAR_CHAMPAGNE 4
 #endif
+#endif
 #ifndef MM_WINNOV_CAVIAR_VIDC
+#if (!defined(__midl))
 #define MM_WINNOV_CAVIAR_VIDC 3
 #endif
+#endif
 #ifndef MM_WINNOV_CAVIAR_WAVEIN
+#if (!defined(__midl))
 #define MM_WINNOV_CAVIAR_WAVEIN 1
 #endif
+#endif
 #ifndef MM_WINNOV_CAVIAR_WAVEOUT
+#if (!defined(__midl))
 #define MM_WINNOV_CAVIAR_WAVEOUT 2
 #endif
+#endif
 #ifndef MM_WINNOV_CAVIAR_YUV8
+#if (!defined(__midl))
 #define MM_WINNOV_CAVIAR_YUV8 5
+#endif
 #endif
 #ifndef MM_WORKBIT
 #define MM_WORKBIT 102
 #endif
 #ifndef MM_WORKBIT_AUX
+#if (!defined(__midl))
 #define MM_WORKBIT_AUX 7
 #endif
+#endif
 #ifndef MM_WORKBIT_FMSYNTH
+#if (!defined(__midl))
 #define MM_WORKBIT_FMSYNTH 6
 #endif
+#endif
 #ifndef MM_WORKBIT_JOYSTICK
+#if (!defined(__midl))
 #define MM_WORKBIT_JOYSTICK 8
 #endif
+#endif
 #ifndef MM_WORKBIT_MIDIIN
+#if (!defined(__midl))
 #define MM_WORKBIT_MIDIIN 4
 #endif
+#endif
 #ifndef MM_WORKBIT_MIDIOUT
+#if (!defined(__midl))
 #define MM_WORKBIT_MIDIOUT 5
 #endif
+#endif
 #ifndef MM_WORKBIT_MIXER
+#if (!defined(__midl))
 #define MM_WORKBIT_MIXER 1
 #endif
+#endif
 #ifndef MM_WORKBIT_WAVEIN
+#if (!defined(__midl))
 #define MM_WORKBIT_WAVEIN 3
 #endif
+#endif
 #ifndef MM_WORKBIT_WAVEOUT
+#if (!defined(__midl))
 #define MM_WORKBIT_WAVEOUT 2
+#endif
 #endif
 #ifndef MM_WSS_SB16_AUX_CD
 #define MM_WSS_SB16_AUX_CD 45
@@ -5179,7 +6417,9 @@ cpp_quote("#endif")
 #define MM_XIRLINK 178
 #endif
 #ifndef MM_XIRLINK_VISIONLINK
+#if (!defined(__midl))
 #define MM_XIRLINK_VISIONLINK 1
+#endif
 #endif
 #ifndef MM_XYZ
 #define MM_XYZ 112
@@ -5188,19 +6428,29 @@ cpp_quote("#endif")
 #define MM_YAMAHA 37
 #endif
 #ifndef MM_YAMAHA_ACXG_AUX
+#if (!defined(__midl))
 #define MM_YAMAHA_ACXG_AUX 0x29
 #endif
+#endif
 #ifndef MM_YAMAHA_ACXG_MIDIOUT
+#if (!defined(__midl))
 #define MM_YAMAHA_ACXG_MIDIOUT 0x27
 #endif
+#endif
 #ifndef MM_YAMAHA_ACXG_MIXER
+#if (!defined(__midl))
 #define MM_YAMAHA_ACXG_MIXER 0x28
 #endif
+#endif
 #ifndef MM_YAMAHA_ACXG_WAVEIN
+#if (!defined(__midl))
 #define MM_YAMAHA_ACXG_WAVEIN 0x25
 #endif
+#endif
 #ifndef MM_YAMAHA_ACXG_WAVEOUT
+#if (!defined(__midl))
 #define MM_YAMAHA_ACXG_WAVEOUT 0x26
+#endif
 #endif
 #ifndef MM_YAMAHA_GSS_AUX
 #define MM_YAMAHA_GSS_AUX 0x06
@@ -5221,28 +6471,44 @@ cpp_quote("#endif")
 #define MM_YAMAHA_GSS_WAVEOUT 0x02
 #endif
 #ifndef MM_YAMAHA_OPL3SA_FMSYNTH
+#if (!defined(__midl))
 #define MM_YAMAHA_OPL3SA_FMSYNTH 0x12
 #endif
+#endif
 #ifndef MM_YAMAHA_OPL3SA_JOYSTICK
+#if (!defined(__midl))
 #define MM_YAMAHA_OPL3SA_JOYSTICK 0x18
 #endif
+#endif
 #ifndef MM_YAMAHA_OPL3SA_MIDIIN
+#if (!defined(__midl))
 #define MM_YAMAHA_OPL3SA_MIDIIN 0x15
 #endif
+#endif
 #ifndef MM_YAMAHA_OPL3SA_MIDIOUT
+#if (!defined(__midl))
 #define MM_YAMAHA_OPL3SA_MIDIOUT 0x14
 #endif
+#endif
 #ifndef MM_YAMAHA_OPL3SA_MIXER
+#if (!defined(__midl))
 #define MM_YAMAHA_OPL3SA_MIXER 0x17
 #endif
+#endif
 #ifndef MM_YAMAHA_OPL3SA_WAVEIN
+#if (!defined(__midl))
 #define MM_YAMAHA_OPL3SA_WAVEIN 0x11
 #endif
+#endif
 #ifndef MM_YAMAHA_OPL3SA_WAVEOUT
+#if (!defined(__midl))
 #define MM_YAMAHA_OPL3SA_WAVEOUT 0x10
 #endif
+#endif
 #ifndef MM_YAMAHA_OPL3SA_YSYNTH
+#if (!defined(__midl))
 #define MM_YAMAHA_OPL3SA_YSYNTH 0x13
+#endif
 #endif
 #ifndef MM_YAMAHA_SERIAL_MIDIIN
 #define MM_YAMAHA_SERIAL_MIDIIN 0x08
@@ -5251,25 +6517,37 @@ cpp_quote("#endif")
 #define MM_YAMAHA_SERIAL_MIDIOUT 0x07
 #endif
 #ifndef MM_YAMAHA_SXG_MIDIOUT
+#if (!defined(__midl))
 #define MM_YAMAHA_SXG_MIDIOUT 0x22
 #endif
+#endif
 #ifndef MM_YAMAHA_SXG_MIXER
+#if (!defined(__midl))
 #define MM_YAMAHA_SXG_MIXER 0x24
 #endif
+#endif
 #ifndef MM_YAMAHA_SXG_WAVEOUT
+#if (!defined(__midl))
 #define MM_YAMAHA_SXG_WAVEOUT 0x23
 #endif
+#endif
 #ifndef MM_YAMAHA_YMF724LEG_FMSYNTH
+#if (!defined(__midl))
 #define MM_YAMAHA_YMF724LEG_FMSYNTH 0x20
+#endif
 #endif
 #ifndef MM_YAMAHA_YMF724LEG_MIDIIN
 #define MM_YAMAHA_YMF724LEG_MIDIIN 0x1a
 #endif
 #ifndef MM_YAMAHA_YMF724LEG_MIDIOUT
+#if (!defined(__midl))
 #define MM_YAMAHA_YMF724LEG_MIDIOUT 0x19
 #endif
+#endif
 #ifndef MM_YAMAHA_YMF724LEG_MIXER
+#if (!defined(__midl))
 #define MM_YAMAHA_YMF724LEG_MIXER 0x21
+#endif
 #endif
 #ifndef MM_YAMAHA_YMF724_AUX
 #define MM_YAMAHA_YMF724_AUX 0x1e
@@ -5293,13 +6571,19 @@ cpp_quote("#endif")
 #define MM_ZEFIRO 170
 #endif
 #ifndef MM_ZEFIRO_ZA2
+#if (!defined(__midl))
 #define MM_ZEFIRO_ZA2 2
 #endif
+#endif
 #ifndef MM_ZYXEL
+#if (!defined(__midl))
 #define MM_ZYXEL 9
 #endif
+#endif
 #ifndef MM_ZYXEL_ACM_ADPCM
+#if (!defined(__midl))
 #define MM_ZYXEL_ACM_ADPCM 1
+#endif
 #endif
 #ifndef ROCKWELL_WA1_MIXER
 #define ROCKWELL_WA1_MIXER 103
@@ -5346,6 +6630,7 @@ typedef G721_ADPCMWAVEFORMAT * NPG721_ADPCMWAVEFORMAT;
 typedef HEAACWAVEFORMAT * NPHEAACWAVEFORMAT;
 typedef HEAACWAVEINFO * NPHEAACWAVEINFO;
 
+#if (!defined(__midl))
 #define BICOMP_CREATIVEYUV 0x76757963
 #define BICOMP_IBMPHOTOMOTION 0x4F4D4850
 #define BICOMP_IBMULTIMOTION 0x49544C55
@@ -5535,5 +6820,6 @@ struct tagJPEGINFOHEADER
     DWORD JPEGVSubSampling;
 };
 #pragma pack(pop)
+#endif
 
 #endif

@@ -271,15 +271,19 @@ typedef struct _RPC_CALL_LOCAL_ADDRESS_V1 {
   RpcLocalAddressFormat AddressFormat;
 } RPC_CALL_LOCAL_ADDRESS_V1, *PRPC_CALL_LOCAL_ADDRESS_V1;
 
+#if (!(defined(UNICODE)))
 #define RPC_CALL_ATTRIBUTES_V1 0
+#endif
 #define RpcNotificationCallStatusChange RpcNotificationClientDisconnect
 #ifdef UNICODE
 #define RpcServerInqCallAttributes RpcServerInqCallAttributesW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define RpcServerInqCallAttributes RpcServerInqCallAttributesW
 #else
 #define RpcServerInqCallAttributes RpcServerInqCallAttributesA
+#endif
 #endif
 #endif
 

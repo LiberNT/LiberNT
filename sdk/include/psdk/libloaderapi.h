@@ -165,31 +165,39 @@ typedef struct tagENUMUILANG {
 #ifdef UNICODE
 #define EnumResourceLanguagesEx EnumResourceLanguagesExW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define EnumResourceLanguagesEx EnumResourceLanguagesExW
 #else
 #define EnumResourceLanguagesEx EnumResourceLanguagesExA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define EnumResourceNamesEx EnumResourceNamesExW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define EnumResourceNamesEx EnumResourceNamesExW
 #else
 #define EnumResourceNamesEx EnumResourceNamesExA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define EnumResourceTypesEx EnumResourceTypesExW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define EnumResourceTypesEx EnumResourceTypesExW
 #else
 #define EnumResourceTypesEx EnumResourceTypesExA
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define PGET_MODULE_HANDLE_EX 0
+#endif
 
 typedef const REDIRECTION_FUNCTION_DESCRIPTOR *PCREDIRECTION_FUNCTION_DESCRIPTOR;
 

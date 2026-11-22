@@ -5426,28 +5426,40 @@ typedef struct _ABCFLOAT * NPABCFLOAT;
 typedef struct tagBITMAP * NPBITMAP;
 typedef struct tagCHARSETINFO * NPCHARSETINFO;
 typedef struct _devicemodeA * NPDEVMODEA;
+#if (!(defined(UNICODE)))
 typedef NPDEVMODEA NPDEVMODE;
+#endif
 typedef struct tagEXTLOGFONTA * NPEXTLOGFONTA;
+#if (!(defined(UNICODE)))
 typedef NPEXTLOGFONTA NPEXTLOGFONT;
+#endif
 typedef struct tagEXTLOGFONTW * NPEXTLOGFONTW;
 typedef struct tagLOGBRUSH * NPLOGBRUSH;
 typedef struct tagLOGBRUSH32 * NPLOGBRUSH32;
 typedef struct tagLOGFONTA * NPLOGFONTA;
+#if (!(defined(UNICODE)))
 typedef NPLOGFONTA NPLOGFONT;
+#endif
 typedef struct tagLOGFONTW * NPLOGFONTW;
 typedef struct tagLOGPEN * NPLOGPEN;
 typedef struct tagNEWTEXTMETRICA * NPNEWTEXTMETRICA;
+#if (!(defined(UNICODE)))
 typedef NPNEWTEXTMETRICA NPNEWTEXTMETRIC;
+#endif
 typedef struct tagNEWTEXTMETRICW * NPNEWTEXTMETRICW;
 typedef struct _OUTLINETEXTMETRICA * NPOUTLINETEXTMETRICA;
+#if (!(defined(UNICODE)))
 typedef NPOUTLINETEXTMETRICA NPOUTLINETEXTMETRIC;
+#endif
 typedef struct _OUTLINETEXTMETRICW * NPOUTLINETEXTMETRICW;
 typedef PATTERN * NPPATTERN;
 typedef struct tagPELARRAY * NPPELARRAY;
 typedef struct tagRGBTRIPLE * NPRGBTRIPLE;
 typedef struct _RGNDATA * NPRGNDATA;
 typedef struct tagTEXTMETRICA * NPTEXTMETRICA;
+#if (!(defined(UNICODE)))
 typedef NPTEXTMETRICA NPTEXTMETRIC;
+#endif
 typedef struct tagTEXTMETRICW * NPTEXTMETRICW;
 typedef struct tagENHMETARECORD * PENHMETARECORD;
 typedef struct tagRGBTRIPLE * PRGBTRIPLE;
@@ -5528,10 +5540,12 @@ typedef struct tagEMRTRANSPARENTBLT {
 #ifdef UNICODE
 #define CreateColorSpace CreateColorSpaceW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define CreateColorSpace CreateColorSpaceW
 #else
 #define CreateColorSpace CreateColorSpaceA
+#endif
 #endif
 #endif
 #define GDI_MAX_OBJ_TYPE 0xE
@@ -5677,7 +5691,9 @@ struct tagPOLYTEXTA
 
 typedef struct tagPOLYTEXTA *NPPOLYTEXTA;
 
+#if (!(defined(UNICODE)))
 typedef NPPOLYTEXTA NPPOLYTEXT;
+#endif
 
 struct tagPOLYTEXTW
 {

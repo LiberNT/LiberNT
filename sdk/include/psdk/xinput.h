@@ -264,7 +264,9 @@ DWORD WINAPI XInputGetStateEx(DWORD, XINPUT_STATE*);
 #ifdef UNICODE
 #define XINPUT_DLL XINPUT_DLL_W
 #else
+#if (!(defined(UNICODE)))
 #define XINPUT_DLL XINPUT_DLL_A
+#endif
 #endif
 #define XINPUT_DLL_A 0
 #define XINPUT_DLL_W L"xinput1_4.dll"

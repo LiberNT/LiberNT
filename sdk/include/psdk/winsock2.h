@@ -2829,7 +2829,9 @@ typedef struct timeval FAR *LPTIMEVAL;
 #ifndef WSA_FLAG_REGISTERED_IO
 #define WSA_FLAG_REGISTERED_IO 0x100
 
+#if (!(((defined(_WINSOCK_DEPRECATED_NO_WARNINGS) || defined(BUILD_WINDOWS)) && !defined(_WINSOCK_DEPRECATE_WARNINGS)) || defined(MIDL_PASS)))
 #define _WINSOCK_DEPRECATED __declspec(deprecated("Define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings"))
+#endif
 #define SOCK_NOTIFY_EVENT_HANGUP 4
 #define SOCK_NOTIFY_EVENT_IN 1
 #define SOCK_NOTIFY_EVENT_OUT 2
@@ -2844,20 +2846,26 @@ extern "C" {
 
 /* TODO: LiberNT does not implement the functions below yet */
 int GetHostNameW(PWSTR name, int namelen);
+#if (!defined(NO_EXTRA_HTON_FUNCTIONS) && !defined(__midl) && (defined(INCL_EXTRA_HTON_FUNCTIONS) || NTDDI_VERSION>=NTDDI_WIN8))
 unsigned long long htond(double Value);
 unsigned int htonf(float Value);
 unsigned long long htonll(unsigned long long Value);
 double ntohd(unsigned long long Value);
 float ntohf(unsigned int Value);
 unsigned long long ntohll(unsigned long long Value);
+#endif
+#if (!defined(__midl))
 UINT32 SocketNotificationRetrieveEvents(OVERLAPPED_ENTRY *notification);
+#endif
 
 #ifdef __cplusplus
 }
 #endif
 
+#if (!defined(NO_EXTRA_HTON_FUNCTIONS) && !defined(__midl) && (defined(INCL_EXTRA_HTON_FUNCTIONS) || NTDDI_VERSION>=NTDDI_WIN8))
 #define _WS2_32_WINSOCK_SWAP_LONG(l) ((((l) >> 24) & 0x000000FFL) | (((l) >> 8) & 0x0000FF00L) | (((l) << 8) & 0x00FF0000L) | (((l) << 24) & 0xFF000000L))
 #define _WS2_32_WINSOCK_SWAP_LONGLONG(l) ((((l) >> 56) & 0x00000000000000FFLL) | (((l) >> 40) & 0x000000000000FF00LL) | (((l) >> 24) & 0x0000000000FF0000LL) | (((l) >> 8) & 0x00000000FF000000LL) | (((l) << 8) & 0x000000FF00000000LL) | (((l) << 24) & 0x0000FF0000000000LL) | (((l) << 40) & 0x00FF000000000000LL) | (((l) << 56) & 0xFF00000000000000LL))
+#endif
 #define SOMAXCONN_HINT(b) (- (b))
 
 #endif

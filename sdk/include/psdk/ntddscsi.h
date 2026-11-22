@@ -7,403 +7,6 @@
 
 #ifndef FAR
 #define FAR
-typedef enum _MP_STORAGE_DIAGNOSTIC_LEVEL {
-    MpStorageDiagnosticLevelDefault = 0,
-    MpStorageDiagnosticLevelMax = 1
-} MP_STORAGE_DIAGNOSTIC_LEVEL, *PMP_STORAGE_DIAGNOSTIC_LEVEL;
-
-typedef enum _MP_STORAGE_DIAGNOSTIC_TARGET_TYPE {
-    MpStorageDiagnosticTargetTypeUndefined = 0,
-    MpStorageDiagnosticTargetTypeMiniport = 2,
-    MpStorageDiagnosticTargetTypeHbaFirmware = 3,
-    MpStorageDiagnosticTargetTypeMax = 4
-} MP_STORAGE_DIAGNOSTIC_TARGET_TYPE, *PMP_STORAGE_DIAGNOSTIC_TARGET_TYPE;
-
-typedef enum _NV_SEP_WRITE_CACHE_TYPE {
-    NVSEPWriteCacheTypeUnknown = 0,
-    NVSEPWriteCacheTypeNone = 1,
-    NVSEPWriteCacheTypeWriteBack = 2,
-    NVSEPWriteCacheTypeWriteThrough = 3
-} NV_SEP_WRITE_CACHE_TYPE, *PNV_SEP_WRITE_CACHE_TYPE;
-
-typedef struct _BOOT_PARTITION_REQUEST_BLOCK {
-  ULONG Version;
-  ULONG Size;
-  ULONG Function;
-  ULONG Flags;
-  ULONG DataBufferOffset;
-  ULONG DataBufferLength;
-} BOOT_PARTITION_REQUEST_BLOCK, *PBOOT_PARTITION_REQUEST_BLOCK;
-
-typedef struct _DUMP_DRIVER {
-  PVOID DumpDriverList;
-  WCHAR DriverName[15];
-  WCHAR BaseName[15];
-} DUMP_DRIVER, *PDUMP_DRIVER;
-
-typedef struct _DUMP_POINTERS_VERSION {
-  ULONG Version;
-  ULONG Size;
-} DUMP_POINTERS_VERSION, *PDUMP_POINTERS_VERSION;
-
-typedef struct _IDE_IO_CONTROL {
-  ULONG HeaderLength;
-  UCHAR Signature[8];
-  ULONG Timeout;
-  ULONG ControlCode;
-  ULONG ReturnStatus;
-  ULONG DataLength;
-} IDE_IO_CONTROL, *PIDE_IO_CONTROL;
-
-typedef struct _MP_DEVICE_DATA_SET_RANGE {
-  LONGLONG StartingOffset;
-  ULONGLONG LengthInBytes;
-} MP_DEVICE_DATA_SET_RANGE, *PMP_DEVICE_DATA_SET_RANGE;
-
-typedef struct _DSM_NOTIFICATION_REQUEST_BLOCK {
-  ULONG Size;
-  ULONG Version;
-  ULONG NotifyFlags;
-  ULONG DataSetProfile;
-  ULONG Reserved[3];
-  ULONG DataSetRangesCount;
-  MP_DEVICE_DATA_SET_RANGE DataSetRanges[1];
-} DSM_NOTIFICATION_REQUEST_BLOCK, *PDSM_NOTIFICATION_REQUEST_BLOCK;
-
-typedef struct _MPIO_PASS_THROUGH_PATH {
-  SCSI_PASS_THROUGH PassThrough;
-  ULONG Version;
-  USHORT Length;
-  UCHAR Flags;
-  UCHAR PortNumber;
-  ULONGLONG MpioPathId;
-} MPIO_PASS_THROUGH_PATH, *PMPIO_PASS_THROUGH_PATH;
-
-typedef struct _MPIO_PASS_THROUGH_PATH_DIRECT {
-  SCSI_PASS_THROUGH_DIRECT PassThrough;
-  ULONG Version;
-  USHORT Length;
-  UCHAR Flags;
-  UCHAR PortNumber;
-  ULONGLONG MpioPathId;
-} MPIO_PASS_THROUGH_PATH_DIRECT, *PMPIO_PASS_THROUGH_PATH_DIRECT;
-
-typedef struct _MPIO_PASS_THROUGH_PATH_DIRECT_EX {
-  ULONG PassThroughOffset;
-  ULONG Version;
-  USHORT Length;
-  UCHAR Flags;
-  UCHAR PortNumber;
-  ULONGLONG MpioPathId;
-} MPIO_PASS_THROUGH_PATH_DIRECT_EX, *PMPIO_PASS_THROUGH_PATH_DIRECT_EX;
-
-typedef struct _MPIO_PASS_THROUGH_PATH_EX {
-  ULONG PassThroughOffset;
-  ULONG Version;
-  USHORT Length;
-  UCHAR Flags;
-  UCHAR PortNumber;
-  ULONGLONG MpioPathId;
-} MPIO_PASS_THROUGH_PATH_EX, *PMPIO_PASS_THROUGH_PATH_EX;
-
-typedef struct _NTSCSI_UNICODE_STRING {
-  USHORT Length;
-  USHORT MaximumLength;
-  PWCH Buffer;
-} NTSCSI_UNICODE_STRING;
-
-typedef struct _DUMP_DRIVER_EX {
-  PVOID DumpDriverList;
-  WCHAR DriverName[15];
-  WCHAR BaseName[15];
-  NTSCSI_UNICODE_STRING DriverFullPath;
-} DUMP_DRIVER_EX, *PDUMP_DRIVER_EX;
-
-typedef struct _NVCACHE_HINT_PAYLOAD {
-  UCHAR Command;
-  UCHAR Feature7_0;
-  UCHAR Feature15_8;
-  UCHAR Count15_8;
-  UCHAR LBA7_0;
-  UCHAR LBA15_8;
-  UCHAR LBA23_16;
-  UCHAR LBA31_24;
-  UCHAR LBA39_32;
-  UCHAR LBA47_40;
-  UCHAR Auxiliary7_0;
-  UCHAR Auxiliary23_16;
-  UCHAR Reserved[4];
-} NVCACHE_HINT_PAYLOAD, *PNVCACHE_HINT_PAYLOAD;
-
-typedef struct _STORAGE_BOOT_PARTITION_ACTIVATE {
-  ULONG Version;
-  ULONG Size;
-  UCHAR BPID;
-  UCHAR Reserved0[3];
-} STORAGE_BOOT_PARTITION_ACTIVATE, *PSTORAGE_BOOT_PARTITION_ACTIVATE;
-
-typedef struct _STORAGE_BOOT_PARTITION_DOWNLOAD {
-  ULONG Version;
-  ULONG Size;
-  UCHAR BPID;
-  ULONGLONG Offset;
-  ULONGLONG BufferSize;
-  UCHAR ImageBuffer[1];
-} STORAGE_BOOT_PARTITION_DOWNLOAD, *PSTORAGE_BOOT_PARTITION_DOWNLOAD;
-
-typedef struct _STORAGE_BOOT_PARTITION_INFO {
-  ULONG Version;
-  ULONG Size;
-  ULONGLONG BPSZ;
-  ULONG ImagePayloadAlignment;
-  ULONG ImagePayloadMaxSize;
-  UCHAR SlotCount;
-  UCHAR ABPID;
-} STORAGE_BOOT_PARTITION_INFO, *PSTORAGE_BOOT_PARTITION_INFO;
-
-typedef struct _STORAGE_DIAGNOSTIC_MP_REQUEST {
-  ULONG Version;
-  ULONG Size;
-  MP_STORAGE_DIAGNOSTIC_TARGET_TYPE TargetType;
-  MP_STORAGE_DIAGNOSTIC_LEVEL Level;
-  GUID ProviderId;
-  ULONG BufferSize;
-  ULONG Reserved;
-  UCHAR DataBuffer[1];
-} STORAGE_DIAGNOSTIC_MP_REQUEST, *PSTORAGE_DIAGNOSTIC_MP_REQUEST;
-
-typedef struct _STORAGE_FIRMWARE_ACTIVATE {
-  ULONG Version;
-  ULONG Size;
-  UCHAR SlotToActivate;
-  UCHAR Reserved0[3];
-} STORAGE_FIRMWARE_ACTIVATE, *PSTORAGE_FIRMWARE_ACTIVATE;
-
-typedef struct _STORAGE_FIRMWARE_DOWNLOAD {
-  ULONG Version;
-  ULONG Size;
-  ULONGLONG Offset;
-  ULONGLONG BufferSize;
-  UCHAR ImageBuffer[0];
-} STORAGE_FIRMWARE_DOWNLOAD, *PSTORAGE_FIRMWARE_DOWNLOAD;
-
-typedef struct _STORAGE_FIRMWARE_DOWNLOAD_V2 {
-  ULONG Version;
-  ULONG Size;
-  ULONGLONG Offset;
-  ULONGLONG BufferSize;
-  UCHAR Slot;
-  UCHAR Reserved[3];
-  ULONG ImageSize;
-  UCHAR ImageBuffer[0];
-} STORAGE_FIRMWARE_DOWNLOAD_V2, *PSTORAGE_FIRMWARE_DOWNLOAD_V2;
-
-#ifdef _WIN64
-#define DUMP_POINTERS_EX_V2_SIZE ((ULONG)0x30)
-#else
-#define DUMP_POINTERS_EX_V2_SIZE ((ULONG)0x20)
-#endif
-#ifdef _WIN64
-#define DUMP_POINTERS_EX_V3_SIZE ((ULONG)0x58)
-#else
-#define DUMP_POINTERS_EX_V3_SIZE ((ULONG)0x3C)
-#endif
-#ifdef _WIN64
-#define DUMP_POINTERS_EX_V4_SIZE 0x68
-#else
-#define DUMP_POINTERS_EX_V4_SIZE 0x44
-#endif
-#define IOCTL_ATA_MINIPORT 0x4D034
-#define IOCTL_MINIPORT_PROCESS_SERVICE_IRP 0x4D038
-#define IOCTL_MINIPORT_SIGNATURE_BOOT_PARTITION "BOOTPINF"
-#define IOCTL_MINIPORT_SIGNATURE_DSM_GENERAL "MPDSMGEN"
-#define IOCTL_MINIPORT_SIGNATURE_DSM_NOTIFICATION "MPDSM   "
-#define IOCTL_MINIPORT_SIGNATURE_ENDURANCE_INFO "ENDURINF"
-#define IOCTL_MINIPORT_SIGNATURE_FIRMWARE "FIRMWARE"
-#define IOCTL_MINIPORT_SIGNATURE_HYBRDISK "HYBRDISK"
-#define IOCTL_MINIPORT_SIGNATURE_SCSIDISK 0
-#define IOCTL_MINIPORT_SIGNATURE_SET_PROTOCOL "SETPROTO"
-#define IOCTL_MINIPORT_SIGNATURE_SET_TEMPERATURE_THRESHOLD "SETTEMPT"
-#define IOCTL_MPIO_PASS_THROUGH_PATH 0x4D03C
-#define IOCTL_MPIO_PASS_THROUGH_PATH_DIRECT 0x4D040
-#define IOCTL_MPIO_PASS_THROUGH_PATH_DIRECT_EX 0x4D050
-#define IOCTL_MPIO_PASS_THROUGH_PATH_EX 0x4D04C
-#define IOCTL_SCSI_MINIPORT_BOOT_PARTITION 0x1B0790
-#define IOCTL_SCSI_MINIPORT_DIAGNOSTIC 0x1B0900
-#define MINIPORT_DSM_NOTIFICATION_VERSION 1
-#define NV_SEP_CACHE_PARAMETER_VERSION 1
-
-struct _MPIO_PASS_THROUGH_PATH32
-{
-    SCSI_PASS_THROUGH32 PassThrough;
-    ULONG Version;
-    USHORT Length;
-    UCHAR Flags;
-    UCHAR PortNumber;
-    ULONGLONG MpioPathId;
-};
-
-struct _MPIO_PASS_THROUGH_PATH32_EX
-{
-    ULONG PassThroughOffset;
-    ULONG Version;
-    USHORT Length;
-    UCHAR Flags;
-    UCHAR PortNumber;
-    ULONGLONG MpioPathId;
-};
-
-struct _MPIO_PASS_THROUGH_PATH_DIRECT32
-{
-    SCSI_PASS_THROUGH_DIRECT32 PassThrough;
-    ULONG Version;
-    USHORT Length;
-    UCHAR Flags;
-    UCHAR PortNumber;
-    ULONGLONG MpioPathId;
-};
-
-struct _MPIO_PASS_THROUGH_PATH_DIRECT32_EX
-{
-    ULONG PassThroughOffset;
-    ULONG Version;
-    USHORT Length;
-    UCHAR Flags;
-    UCHAR PortNumber;
-    ULONGLONG MpioPathId;
-};
-
-struct _NV_SEP_CACHE_PARAMETER
-{
-    ULONG Version;
-    ULONG Size;
-    union
-    {
-        struct
-        {
-            UCHAR WriteCacheEnabled : 1;
-            UCHAR WriteCacheChangeable : 1;
-            UCHAR WriteThroughIOSupported : 1;
-            UCHAR FlushCacheSupported : 1;
-            UCHAR ReservedBits : 4;
-        } CacheFlags;
-        UCHAR CacheFlagsSet;
-    } Flags;
-    UCHAR WriteCacheType;
-    UCHAR WriteCacheTypeEffective;
-    UCHAR ParameterReserve1[3];
-};
-
-struct _STORAGE_ENDURANCE_INFO
-{
-    ULONG ValidFields;
-    ULONG GroupId;
-    struct
-    {
-        ULONG Shared : 1;
-        ULONG Reserved : 31;
-    } Flags;
-    ULONG LifePercentage;
-    UCHAR BytesReadCount[16];
-    UCHAR ByteWriteCount[16];
-};
-
-struct _STORAGE_FIRMWARE_SLOT_INFO
-{
-    UCHAR SlotNumber;
-    BOOLEAN ReadOnly;
-    UCHAR Reserved[6];
-    union
-    {
-        UCHAR Info[8];
-        ULONGLONG AsUlonglong;
-    } Revision;
-};
-
-typedef LONG DUMP_DEVICE_POWERON_ROUTINE(PVOID);
-
-typedef struct _MPIO_PASS_THROUGH_PATH32 MPIO_PASS_THROUGH_PATH32;
-
-typedef struct _MPIO_PASS_THROUGH_PATH32_EX MPIO_PASS_THROUGH_PATH32_EX;
-
-typedef struct _MPIO_PASS_THROUGH_PATH_DIRECT32 MPIO_PASS_THROUGH_PATH_DIRECT32;
-
-typedef struct _MPIO_PASS_THROUGH_PATH_DIRECT32_EX MPIO_PASS_THROUGH_PATH_DIRECT32_EX;
-
-typedef struct _NV_SEP_CACHE_PARAMETER NV_SEP_CACHE_PARAMETER;
-
-typedef DUMP_DEVICE_POWERON_ROUTINE *PDUMP_DEVICE_POWERON_ROUTINE;
-
-struct _DUMP_POINTERS_EX
-{
-    DUMP_POINTERS_VERSION Header;
-    PVOID DumpData;
-    PVOID CommonBufferVa;
-    ULONG CommonBufferSize;
-    BOOLEAN AllocateCommonBuffers;
-    PVOID DeviceObject;
-    PVOID DriverList;
-    ULONG dwPortFlags;
-    ULONG MaxDeviceDumpSectionSize;
-    ULONG MaxDeviceDumpLevel;
-    ULONG MaxTransferSize;
-    PVOID AdapterObject;
-    PVOID MappedRegisterBase;
-    PBOOLEAN DeviceReady;
-    PDUMP_DEVICE_POWERON_ROUTINE DumpDevicePowerOn;
-    PVOID DumpDevicePowerOnContext;
-};
-
-typedef struct _DUMP_POINTERS_EX DUMP_POINTERS_EX;
-
-typedef struct _DUMP_POINTERS_EX *PDUMP_POINTERS_EX;
-
-typedef struct _MPIO_PASS_THROUGH_PATH32 *PMPIO_PASS_THROUGH_PATH32;
-
-typedef struct _MPIO_PASS_THROUGH_PATH32_EX *PMPIO_PASS_THROUGH_PATH32_EX;
-
-typedef struct _MPIO_PASS_THROUGH_PATH_DIRECT32 *PMPIO_PASS_THROUGH_PATH_DIRECT32;
-
-typedef struct _MPIO_PASS_THROUGH_PATH_DIRECT32_EX *PMPIO_PASS_THROUGH_PATH_DIRECT32_EX;
-
-typedef NTSCSI_UNICODE_STRING *PNTSCSI_UNICODE_STRING;
-
-typedef struct _NV_SEP_CACHE_PARAMETER *PNV_SEP_CACHE_PARAMETER;
-
-typedef struct _STORAGE_ENDURANCE_INFO *PSTORAGE_ENDURANCE_INFO;
-
-typedef struct _STORAGE_FIRMWARE_SLOT_INFO *PSTORAGE_FIRMWARE_SLOT_INFO;
-
-typedef struct _STORAGE_ENDURANCE_INFO STORAGE_ENDURANCE_INFO;
-
-struct _STORAGE_ENDURANCE_DATA_DESCRIPTOR
-{
-    ULONG Version;
-    ULONG Size;
-    STORAGE_ENDURANCE_INFO EnduranceInfo;
-};
-
-typedef struct _STORAGE_ENDURANCE_DATA_DESCRIPTOR *PSTORAGE_ENDURANCE_DATA_DESCRIPTOR;
-
-typedef struct _STORAGE_ENDURANCE_DATA_DESCRIPTOR STORAGE_ENDURANCE_DATA_DESCRIPTOR;
-
-typedef struct _STORAGE_FIRMWARE_SLOT_INFO STORAGE_FIRMWARE_SLOT_INFO;
-
-struct _STORAGE_FIRMWARE_INFO
-{
-    ULONG Version;
-    ULONG Size;
-    BOOLEAN UpgradeSupport;
-    UCHAR SlotCount;
-    UCHAR ActiveSlot;
-    UCHAR PendingActivateSlot;
-    ULONG Reserved;
-    STORAGE_FIRMWARE_SLOT_INFO Slot[0];
-};
-
-typedef struct _STORAGE_FIRMWARE_INFO *PSTORAGE_FIRMWARE_INFO;
-
-typedef struct _STORAGE_FIRMWARE_INFO STORAGE_FIRMWARE_INFO;
 
 #endif
 
@@ -1193,4 +796,409 @@ typedef struct _STORAGE_FIRMWARE_INFO_V2 {
 #endif
 #ifndef STORAGE_FIRMWARE_INFO_STRUCTURE_VERSION
 #define STORAGE_FIRMWARE_INFO_STRUCTURE_VERSION 0x1
+
+typedef enum _MP_STORAGE_DIAGNOSTIC_LEVEL {
+    MpStorageDiagnosticLevelDefault = 0,
+    MpStorageDiagnosticLevelMax = 1
+} MP_STORAGE_DIAGNOSTIC_LEVEL, *PMP_STORAGE_DIAGNOSTIC_LEVEL;
+
+typedef enum _MP_STORAGE_DIAGNOSTIC_TARGET_TYPE {
+    MpStorageDiagnosticTargetTypeUndefined = 0,
+    MpStorageDiagnosticTargetTypeMiniport = 2,
+    MpStorageDiagnosticTargetTypeHbaFirmware = 3,
+    MpStorageDiagnosticTargetTypeMax = 4
+} MP_STORAGE_DIAGNOSTIC_TARGET_TYPE, *PMP_STORAGE_DIAGNOSTIC_TARGET_TYPE;
+
+typedef enum _NV_SEP_WRITE_CACHE_TYPE {
+    NVSEPWriteCacheTypeUnknown = 0,
+    NVSEPWriteCacheTypeNone = 1,
+    NVSEPWriteCacheTypeWriteBack = 2,
+    NVSEPWriteCacheTypeWriteThrough = 3
+} NV_SEP_WRITE_CACHE_TYPE, *PNV_SEP_WRITE_CACHE_TYPE;
+
+typedef struct _BOOT_PARTITION_REQUEST_BLOCK {
+  ULONG Version;
+  ULONG Size;
+  ULONG Function;
+  ULONG Flags;
+  ULONG DataBufferOffset;
+  ULONG DataBufferLength;
+} BOOT_PARTITION_REQUEST_BLOCK, *PBOOT_PARTITION_REQUEST_BLOCK;
+
+typedef struct _DUMP_DRIVER {
+  PVOID DumpDriverList;
+  WCHAR DriverName[15];
+  WCHAR BaseName[15];
+} DUMP_DRIVER, *PDUMP_DRIVER;
+
+typedef struct _DUMP_POINTERS_VERSION {
+  ULONG Version;
+  ULONG Size;
+} DUMP_POINTERS_VERSION, *PDUMP_POINTERS_VERSION;
+
+typedef struct _IDE_IO_CONTROL {
+  ULONG HeaderLength;
+  UCHAR Signature[8];
+  ULONG Timeout;
+  ULONG ControlCode;
+  ULONG ReturnStatus;
+  ULONG DataLength;
+} IDE_IO_CONTROL, *PIDE_IO_CONTROL;
+
+typedef struct _MP_DEVICE_DATA_SET_RANGE {
+  LONGLONG StartingOffset;
+  ULONGLONG LengthInBytes;
+} MP_DEVICE_DATA_SET_RANGE, *PMP_DEVICE_DATA_SET_RANGE;
+
+typedef struct _DSM_NOTIFICATION_REQUEST_BLOCK {
+  ULONG Size;
+  ULONG Version;
+  ULONG NotifyFlags;
+  ULONG DataSetProfile;
+  ULONG Reserved[3];
+  ULONG DataSetRangesCount;
+  MP_DEVICE_DATA_SET_RANGE DataSetRanges[1];
+} DSM_NOTIFICATION_REQUEST_BLOCK, *PDSM_NOTIFICATION_REQUEST_BLOCK;
+
+typedef struct _MPIO_PASS_THROUGH_PATH {
+  SCSI_PASS_THROUGH PassThrough;
+  ULONG Version;
+  USHORT Length;
+  UCHAR Flags;
+  UCHAR PortNumber;
+  ULONGLONG MpioPathId;
+} MPIO_PASS_THROUGH_PATH, *PMPIO_PASS_THROUGH_PATH;
+
+typedef struct _MPIO_PASS_THROUGH_PATH_DIRECT {
+  SCSI_PASS_THROUGH_DIRECT PassThrough;
+  ULONG Version;
+  USHORT Length;
+  UCHAR Flags;
+  UCHAR PortNumber;
+  ULONGLONG MpioPathId;
+} MPIO_PASS_THROUGH_PATH_DIRECT, *PMPIO_PASS_THROUGH_PATH_DIRECT;
+
+typedef struct _MPIO_PASS_THROUGH_PATH_DIRECT_EX {
+  ULONG PassThroughOffset;
+  ULONG Version;
+  USHORT Length;
+  UCHAR Flags;
+  UCHAR PortNumber;
+  ULONGLONG MpioPathId;
+} MPIO_PASS_THROUGH_PATH_DIRECT_EX, *PMPIO_PASS_THROUGH_PATH_DIRECT_EX;
+
+typedef struct _MPIO_PASS_THROUGH_PATH_EX {
+  ULONG PassThroughOffset;
+  ULONG Version;
+  USHORT Length;
+  UCHAR Flags;
+  UCHAR PortNumber;
+  ULONGLONG MpioPathId;
+} MPIO_PASS_THROUGH_PATH_EX, *PMPIO_PASS_THROUGH_PATH_EX;
+
+typedef struct _NTSCSI_UNICODE_STRING {
+  USHORT Length;
+  USHORT MaximumLength;
+  PWCH Buffer;
+} NTSCSI_UNICODE_STRING;
+
+typedef struct _DUMP_DRIVER_EX {
+  PVOID DumpDriverList;
+  WCHAR DriverName[15];
+  WCHAR BaseName[15];
+  NTSCSI_UNICODE_STRING DriverFullPath;
+} DUMP_DRIVER_EX, *PDUMP_DRIVER_EX;
+
+typedef struct _NVCACHE_HINT_PAYLOAD {
+  UCHAR Command;
+  UCHAR Feature7_0;
+  UCHAR Feature15_8;
+  UCHAR Count15_8;
+  UCHAR LBA7_0;
+  UCHAR LBA15_8;
+  UCHAR LBA23_16;
+  UCHAR LBA31_24;
+  UCHAR LBA39_32;
+  UCHAR LBA47_40;
+  UCHAR Auxiliary7_0;
+  UCHAR Auxiliary23_16;
+  UCHAR Reserved[4];
+} NVCACHE_HINT_PAYLOAD, *PNVCACHE_HINT_PAYLOAD;
+
+typedef struct _STORAGE_BOOT_PARTITION_ACTIVATE {
+  ULONG Version;
+  ULONG Size;
+  UCHAR BPID;
+  UCHAR Reserved0[3];
+} STORAGE_BOOT_PARTITION_ACTIVATE, *PSTORAGE_BOOT_PARTITION_ACTIVATE;
+
+typedef struct _STORAGE_BOOT_PARTITION_DOWNLOAD {
+  ULONG Version;
+  ULONG Size;
+  UCHAR BPID;
+  ULONGLONG Offset;
+  ULONGLONG BufferSize;
+  UCHAR ImageBuffer[1];
+} STORAGE_BOOT_PARTITION_DOWNLOAD, *PSTORAGE_BOOT_PARTITION_DOWNLOAD;
+
+typedef struct _STORAGE_BOOT_PARTITION_INFO {
+  ULONG Version;
+  ULONG Size;
+  ULONGLONG BPSZ;
+  ULONG ImagePayloadAlignment;
+  ULONG ImagePayloadMaxSize;
+  UCHAR SlotCount;
+  UCHAR ABPID;
+} STORAGE_BOOT_PARTITION_INFO, *PSTORAGE_BOOT_PARTITION_INFO;
+
+typedef struct _STORAGE_DIAGNOSTIC_MP_REQUEST {
+  ULONG Version;
+  ULONG Size;
+  MP_STORAGE_DIAGNOSTIC_TARGET_TYPE TargetType;
+  MP_STORAGE_DIAGNOSTIC_LEVEL Level;
+  GUID ProviderId;
+  ULONG BufferSize;
+  ULONG Reserved;
+  UCHAR DataBuffer[1];
+} STORAGE_DIAGNOSTIC_MP_REQUEST, *PSTORAGE_DIAGNOSTIC_MP_REQUEST;
+
+typedef struct _STORAGE_FIRMWARE_ACTIVATE {
+  ULONG Version;
+  ULONG Size;
+  UCHAR SlotToActivate;
+  UCHAR Reserved0[3];
+} STORAGE_FIRMWARE_ACTIVATE, *PSTORAGE_FIRMWARE_ACTIVATE;
+
+typedef struct _STORAGE_FIRMWARE_DOWNLOAD {
+  ULONG Version;
+  ULONG Size;
+  ULONGLONG Offset;
+  ULONGLONG BufferSize;
+  UCHAR ImageBuffer[0];
+} STORAGE_FIRMWARE_DOWNLOAD, *PSTORAGE_FIRMWARE_DOWNLOAD;
+
+typedef struct _STORAGE_FIRMWARE_DOWNLOAD_V2 {
+  ULONG Version;
+  ULONG Size;
+  ULONGLONG Offset;
+  ULONGLONG BufferSize;
+  UCHAR Slot;
+  UCHAR Reserved[3];
+  ULONG ImageSize;
+  UCHAR ImageBuffer[0];
+} STORAGE_FIRMWARE_DOWNLOAD_V2, *PSTORAGE_FIRMWARE_DOWNLOAD_V2;
+
+#ifdef _WIN64
+#define DUMP_POINTERS_EX_V2_SIZE ((ULONG)0x30)
+#else
+#define DUMP_POINTERS_EX_V2_SIZE ((ULONG)0x20)
+#endif
+#ifdef _WIN64
+#define DUMP_POINTERS_EX_V3_SIZE ((ULONG)0x58)
+#else
+#define DUMP_POINTERS_EX_V3_SIZE ((ULONG)0x3C)
+#endif
+#ifdef _WIN64
+#define DUMP_POINTERS_EX_V4_SIZE 0x68
+#else
+#define DUMP_POINTERS_EX_V4_SIZE 0x44
+#endif
+#define IOCTL_ATA_MINIPORT 0x4D034
+#define IOCTL_MINIPORT_PROCESS_SERVICE_IRP 0x4D038
+#define IOCTL_MINIPORT_SIGNATURE_BOOT_PARTITION "BOOTPINF"
+#define IOCTL_MINIPORT_SIGNATURE_DSM_GENERAL "MPDSMGEN"
+#define IOCTL_MINIPORT_SIGNATURE_DSM_NOTIFICATION "MPDSM   "
+#define IOCTL_MINIPORT_SIGNATURE_ENDURANCE_INFO "ENDURINF"
+#define IOCTL_MINIPORT_SIGNATURE_FIRMWARE "FIRMWARE"
+#define IOCTL_MINIPORT_SIGNATURE_HYBRDISK "HYBRDISK"
+#define IOCTL_MINIPORT_SIGNATURE_SCSIDISK 0
+#define IOCTL_MINIPORT_SIGNATURE_SET_PROTOCOL "SETPROTO"
+#define IOCTL_MINIPORT_SIGNATURE_SET_TEMPERATURE_THRESHOLD "SETTEMPT"
+#define IOCTL_MPIO_PASS_THROUGH_PATH 0x4D03C
+#define IOCTL_MPIO_PASS_THROUGH_PATH_DIRECT 0x4D040
+#define IOCTL_MPIO_PASS_THROUGH_PATH_DIRECT_EX 0x4D050
+#define IOCTL_MPIO_PASS_THROUGH_PATH_EX 0x4D04C
+#define IOCTL_SCSI_MINIPORT_BOOT_PARTITION 0x1B0790
+#define IOCTL_SCSI_MINIPORT_DIAGNOSTIC 0x1B0900
+#define MINIPORT_DSM_NOTIFICATION_VERSION 1
+#define NV_SEP_CACHE_PARAMETER_VERSION 1
+
+#if (defined(_WIN64))
+struct _MPIO_PASS_THROUGH_PATH32
+{
+    SCSI_PASS_THROUGH32 PassThrough;
+    ULONG Version;
+    USHORT Length;
+    UCHAR Flags;
+    UCHAR PortNumber;
+    ULONGLONG MpioPathId;
+};
+
+struct _MPIO_PASS_THROUGH_PATH32_EX
+{
+    ULONG PassThroughOffset;
+    ULONG Version;
+    USHORT Length;
+    UCHAR Flags;
+    UCHAR PortNumber;
+    ULONGLONG MpioPathId;
+};
+
+struct _MPIO_PASS_THROUGH_PATH_DIRECT32
+{
+    SCSI_PASS_THROUGH_DIRECT32 PassThrough;
+    ULONG Version;
+    USHORT Length;
+    UCHAR Flags;
+    UCHAR PortNumber;
+    ULONGLONG MpioPathId;
+};
+
+struct _MPIO_PASS_THROUGH_PATH_DIRECT32_EX
+{
+    ULONG PassThroughOffset;
+    ULONG Version;
+    USHORT Length;
+    UCHAR Flags;
+    UCHAR PortNumber;
+    ULONGLONG MpioPathId;
+};
+#endif
+
+struct _NV_SEP_CACHE_PARAMETER
+{
+    ULONG Version;
+    ULONG Size;
+    union
+    {
+        struct
+        {
+            UCHAR WriteCacheEnabled : 1;
+            UCHAR WriteCacheChangeable : 1;
+            UCHAR WriteThroughIOSupported : 1;
+            UCHAR FlushCacheSupported : 1;
+            UCHAR ReservedBits : 4;
+        } CacheFlags;
+        UCHAR CacheFlagsSet;
+    } Flags;
+    UCHAR WriteCacheType;
+    UCHAR WriteCacheTypeEffective;
+    UCHAR ParameterReserve1[3];
+};
+
+struct _STORAGE_ENDURANCE_INFO
+{
+    ULONG ValidFields;
+    ULONG GroupId;
+    struct
+    {
+        ULONG Shared : 1;
+        ULONG Reserved : 31;
+    } Flags;
+    ULONG LifePercentage;
+    UCHAR BytesReadCount[16];
+    UCHAR ByteWriteCount[16];
+};
+
+struct _STORAGE_FIRMWARE_SLOT_INFO
+{
+    UCHAR SlotNumber;
+    BOOLEAN ReadOnly;
+    UCHAR Reserved[6];
+    union
+    {
+        UCHAR Info[8];
+        ULONGLONG AsUlonglong;
+    } Revision;
+};
+
+typedef LONG DUMP_DEVICE_POWERON_ROUTINE(PVOID);
+
+#if (defined(_WIN64))
+typedef struct _MPIO_PASS_THROUGH_PATH32 MPIO_PASS_THROUGH_PATH32;
+
+typedef struct _MPIO_PASS_THROUGH_PATH32_EX MPIO_PASS_THROUGH_PATH32_EX;
+
+typedef struct _MPIO_PASS_THROUGH_PATH_DIRECT32 MPIO_PASS_THROUGH_PATH_DIRECT32;
+
+typedef struct _MPIO_PASS_THROUGH_PATH_DIRECT32_EX MPIO_PASS_THROUGH_PATH_DIRECT32_EX;
+#endif
+
+typedef struct _NV_SEP_CACHE_PARAMETER NV_SEP_CACHE_PARAMETER;
+
+typedef DUMP_DEVICE_POWERON_ROUTINE *PDUMP_DEVICE_POWERON_ROUTINE;
+
+struct _DUMP_POINTERS_EX
+{
+    DUMP_POINTERS_VERSION Header;
+    PVOID DumpData;
+    PVOID CommonBufferVa;
+    ULONG CommonBufferSize;
+    BOOLEAN AllocateCommonBuffers;
+    PVOID DeviceObject;
+    PVOID DriverList;
+    ULONG dwPortFlags;
+    ULONG MaxDeviceDumpSectionSize;
+    ULONG MaxDeviceDumpLevel;
+    ULONG MaxTransferSize;
+    PVOID AdapterObject;
+    PVOID MappedRegisterBase;
+    PBOOLEAN DeviceReady;
+    PDUMP_DEVICE_POWERON_ROUTINE DumpDevicePowerOn;
+    PVOID DumpDevicePowerOnContext;
+};
+
+typedef struct _DUMP_POINTERS_EX DUMP_POINTERS_EX;
+
+typedef struct _DUMP_POINTERS_EX *PDUMP_POINTERS_EX;
+
+#if (defined(_WIN64))
+typedef struct _MPIO_PASS_THROUGH_PATH32 *PMPIO_PASS_THROUGH_PATH32;
+
+typedef struct _MPIO_PASS_THROUGH_PATH32_EX *PMPIO_PASS_THROUGH_PATH32_EX;
+
+typedef struct _MPIO_PASS_THROUGH_PATH_DIRECT32 *PMPIO_PASS_THROUGH_PATH_DIRECT32;
+
+typedef struct _MPIO_PASS_THROUGH_PATH_DIRECT32_EX *PMPIO_PASS_THROUGH_PATH_DIRECT32_EX;
+#endif
+
+typedef NTSCSI_UNICODE_STRING *PNTSCSI_UNICODE_STRING;
+
+typedef struct _NV_SEP_CACHE_PARAMETER *PNV_SEP_CACHE_PARAMETER;
+
+typedef struct _STORAGE_ENDURANCE_INFO *PSTORAGE_ENDURANCE_INFO;
+
+typedef struct _STORAGE_FIRMWARE_SLOT_INFO *PSTORAGE_FIRMWARE_SLOT_INFO;
+
+typedef struct _STORAGE_ENDURANCE_INFO STORAGE_ENDURANCE_INFO;
+
+struct _STORAGE_ENDURANCE_DATA_DESCRIPTOR
+{
+    ULONG Version;
+    ULONG Size;
+    STORAGE_ENDURANCE_INFO EnduranceInfo;
+};
+
+typedef struct _STORAGE_ENDURANCE_DATA_DESCRIPTOR *PSTORAGE_ENDURANCE_DATA_DESCRIPTOR;
+
+typedef struct _STORAGE_ENDURANCE_DATA_DESCRIPTOR STORAGE_ENDURANCE_DATA_DESCRIPTOR;
+
+typedef struct _STORAGE_FIRMWARE_SLOT_INFO STORAGE_FIRMWARE_SLOT_INFO;
+
+struct _STORAGE_FIRMWARE_INFO
+{
+    ULONG Version;
+    ULONG Size;
+    BOOLEAN UpgradeSupport;
+    UCHAR SlotCount;
+    UCHAR ActiveSlot;
+    UCHAR PendingActivateSlot;
+    ULONG Reserved;
+    STORAGE_FIRMWARE_SLOT_INFO Slot[0];
+};
+
+typedef struct _STORAGE_FIRMWARE_INFO *PSTORAGE_FIRMWARE_INFO;
+
+typedef struct _STORAGE_FIRMWARE_INFO STORAGE_FIRMWARE_INFO;
+
 #endif

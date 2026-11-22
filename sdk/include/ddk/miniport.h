@@ -380,18 +380,27 @@ typedef struct _PCI_VENDOR_SPECIFIC_CAPABILITY {
   UCHAR VendorSpecific;
 } PCI_VENDOR_SPECIFIC_CAPABILITY, *PPCI_VENDOR_SPECIFIC_CAPABILITY;
 
+#if (!defined(_DBGRAISEASSERTIONFAILURE_) && !defined(RC_INVOKED) && !defined(MIDL_PASS))
 #define _DBGRAISEASSERTIONFAILURE_ 0
+#endif
 #define ASAN_WARNING_DISABLE_4714_POP
 #define ASAN_WARNING_DISABLE_4714_PUSH
 #define CFORCEINLINE FORCEINLINE
+#if (defined(_AMD64_)) && (defined(_M_AMD64) && !defined(RC_INVOKED) && !defined(MIDL_PASS)) && (!defined(_M_ARM64EC))
 #define CpuIdEx __cpuidex
+#endif
 #define DECLSPEC_CHPE_GUEST
+#if (!(defined (_M_HYBRID_X86_ARM64) || defined(_M_ARM64EC)))
 #define DECLSPEC_CHPE_PATCHABLE DECLSPEC_NOINLINE
+#endif
 #define DECLSPEC_NOSANITIZEADDRESS
+#if ((_MSC_VER >= 1915) && !defined(MIDL_PASS))
 #define DECLSPEC_RESTRICT __declspec(restrict)
+#endif
 #define DEPRECATED_NO_MESSAGE_STDAPI EXTERN_C __declspec(deprecated) HRESULT STDAPICALLTYPE
 #define DEPRECATED_NO_MESSAGE_STDAPIV EXTERN_C __declspec(deprecated) HRESULT STDAPIVCALLTYPE
 #define DUMMYSTRUCTNAME6
+#if (defined(_AMD64_)) && (defined(_M_AMD64) && !defined(RC_INVOKED) && !defined(MIDL_PASS)) && (!defined(_M_ARM64EC))
 #define GetSegmentLimit __segmentlimit
 #define InterlockedCompareExchangeAcquire128 _InterlockedCompareExchange128
 #define InterlockedCompareExchangeNoFence128 _InterlockedCompareExchange128
@@ -401,18 +410,27 @@ typedef struct _PCI_VENDOR_SPECIFIC_CAPABILITY {
 #define InterlockedExchangeAdd8 _InterlockedExchangeAdd8
 #define InterlockedExchangeNoFence8 InterlockedExchange8
 #define Multiply128 _mul128
+#endif
 #define PFORCEINLINE FORCEINLINE
+#if (defined(_AMD64_)) && (defined(_M_AMD64) && !defined(RC_INVOKED) && !defined(MIDL_PASS)) && (!defined(_M_ARM64EC))
 #define PopulationCount64 __popcnt64
+#endif
+#if (defined(_AMD64_)) && (defined(_M_AMD64) && !defined(RC_INVOKED) && !defined(MIDL_PASS))
 #define ReadMxCsr _mm_getcsr
+#endif
+#if (defined(_AMD64_)) && (defined(_M_AMD64) && !defined(RC_INVOKED) && !defined(MIDL_PASS)) && (!defined(_M_ARM64EC))
 #define ReadPMC __readpmc
 #define ShiftLeft128 __shiftleft128
 #define ShiftRight128 __shiftright128
 #define SpeculationFence LoadFence
+#endif
 #define STDAPI_CHPE_PATCHABLE EXTERN_C DECLSPEC_CHPE_PATCHABLE HRESULT STDAPICALLTYPE
 #define STKFORCEINLINE FORCEINLINE
 #define WIN_NOEXCEPT
 #define WIN_NOEXCEPT_PFN
+#if (defined(_AMD64_)) && (defined(_M_AMD64) && !defined(RC_INVOKED) && !defined(MIDL_PASS))
 #define WriteMxCsr _mm_setcsr
+#endif
 
 struct _PCI_ADVANCED_FEATURES_CAPABILITY
 {
@@ -1033,16 +1051,25 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
+#if (!defined(RC_INVOKED) && !defined(MIDL_PASS))
 LONG FASTCALL AddRaw(volatile LONG *Destination, LONG Value);
 LONG64 FASTCALL AddRaw64(volatile LONG64 *Destination, LONG64 Value);
 ULONG64 FASTCALL AddULong64Raw(volatile ULONG64 *Destination, ULONG64 Value);
 ULONG FASTCALL AddULongRaw(volatile ULONG *Destination, ULONG Value);
+#endif
+#if (!defined(RC_INVOKED) && !defined(MIDL_PASS)) && (((defined(_M_AMD64) || defined(_M_IX86)) && !defined(_M_HYBRID_X86_ARM64) && !defined(_M_ARM64EC)) || defined(_M_CEE_PURE))
 void FASTCALL BarrierAfterRead(void);
+#endif
+#if (!defined(RC_INVOKED) && !defined(MIDL_PASS))
 LONG FASTCALL IncrementRaw(volatile LONG *Destination);
 LONG64 FASTCALL IncrementRaw64(volatile LONG64 *Destination);
 ULONG64 FASTCALL IncrementULong64Raw(volatile ULONG64 *Destination);
 ULONG FASTCALL IncrementULongRaw(volatile ULONG *Destination);
+#endif
+#if (defined(_AMD64_)) && (defined(_M_AMD64) && !defined(RC_INVOKED) && !defined(MIDL_PASS))
 LONG64 MultiplyExtract128(LONG64 Multiplier, LONG64 Multiplicand, UCHAR Shift);
+#endif
+#if (!defined(RC_INVOKED) && !defined(MIDL_PASS))
 UCHAR FASTCALL ReadBooleanRaw(const volatile BOOLEAN *Source);
 INT32 FASTCALL ReadInt32Acquire(const volatile INT32 *Source);
 INT32 FASTCALL ReadInt32NoFence(const volatile INT32 *Source);
@@ -1050,14 +1077,19 @@ INT32 FASTCALL ReadInt32Raw(const volatile INT32 *Source);
 UINT32 FASTCALL ReadUInt32Acquire(const volatile UINT32 *Source);
 UINT32 FASTCALL ReadUInt32NoFence(const volatile UINT32 *Source);
 UINT32 FASTCALL ReadUInt32Raw(const volatile UINT32 *Source);
+#endif
+#if (defined(_AMD64_)) && (defined(_M_AMD64) && !defined(RC_INVOKED) && !defined(MIDL_PASS))
 ULONG64 UnsignedMultiply128(ULONG64 Multiplier, ULONG64 Multiplicand, ULONG64 *HighProduct);
 ULONG64 UnsignedMultiplyExtract128(ULONG64 Multiplier, ULONG64 Multiplicand, UCHAR Shift);
+#endif
+#if (!defined(RC_INVOKED) && !defined(MIDL_PASS))
 void FASTCALL WriteInt32NoFence(volatile INT32 *Destination, INT32 Value);
 void FASTCALL WriteInt32Raw(volatile INT32 *Destination, INT32 Value);
 void FASTCALL WriteInt32Release(volatile INT32 *Destination, INT32 Value);
 void FASTCALL WriteUInt32NoFence(volatile UINT32 *Destination, UINT32 Value);
 void FASTCALL WriteUInt32Raw(volatile UINT32 *Destination, UINT32 Value);
 void FASTCALL WriteUInt32Release(volatile UINT32 *Destination, UINT32 Value);
+#endif
 
 #ifdef __cplusplus
 }
@@ -1067,7 +1099,9 @@ void FASTCALL WriteUInt32Release(volatile UINT32 *Destination, UINT32 Value);
 
 #define DECLSPEC_GUARDNOCF 0
 
+#if (defined(_AMD64_)) && (defined(_M_AMD64) && !defined(RC_INVOKED) && !defined(MIDL_PASS)) && (!defined(_M_ARM64EC))
 #define CacheLineFlush(Address) _mm_clflush(Address)
+#endif
 #define COMPILETIME_OR_6FLAGS(a, b, c, d, e, f) ((UINT) (a) | (UINT) (b) | (UINT) (c) | (UINT) (d) | (UINT) (e) | (UINT) (f))
 #define DEPRECATED_NO_MESSAGE_STDAPI_(type) EXTERN_C __declspec(deprecated) type STDAPICALLTYPE
 #define DEPRECATED_NO_MESSAGE_STDAPIV_(type) EXTERN_C __declspec(deprecated) type STDAPIVCALLTYPE
@@ -1075,7 +1109,9 @@ void FASTCALL WriteUInt32Release(volatile UINT32 *Destination, UINT32 Value);
 #define DEPRECATED_STDAPI_(type, message) EXTERN_C __declspec(deprecated(message)) type STDAPICALLTYPE
 #define DEPRECATED_STDAPIV(message) EXTERN_C __declspec(deprecated(message)) HRESULT STDAPIVCALLTYPE
 #define DEPRECATED_STDAPIV_(type, message) EXTERN_C __declspec(deprecated(message)) type STDAPIVCALLTYPE
+#if (defined(_AMD64_)) && (defined(_M_AMD64) && !defined(RC_INVOKED) && !defined(MIDL_PASS)) && (!defined(_M_ARM64EC))
 #define GetCallersEflags() __getcallerseflags()
+#endif
 #define STDAPI_CHPE_PATCHABLE_(type) EXTERN_C DECLSPEC_CHPE_PATCHABLE type STDAPICALLTYPE
 
 #endif /* __MINIPORT_H */

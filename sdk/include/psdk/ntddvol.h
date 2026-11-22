@@ -193,8 +193,10 @@ typedef enum _CSV_FILECACHE_IO_TYPE {
     CSV_FILECACHE_IO_TYPE_PURGE = 1
 } CSV_FILECACHE_IO_TYPE;
 
+#if (defined(_KERNEL_MODE))
 typedef GUID FILE_SIG_T;
 typedef GUID VOLUME_SIG_T;
+#endif
 
 typedef struct _CSV_FILECACHE_IO_RANGE {
   ULONGLONG Offset;
@@ -274,6 +276,7 @@ typedef struct _VOLUME_SHRINK_INFO {
 #define IOCTL_VOLUME_QUERY_MINIMUM_SHRINK_SIZE 0x564058
 #define IOCTL_VOLUME_UPDATE_PROPERTIES 0x560054
 
+#if (defined(_KERNEL_MODE))
 struct _CSV_FILECACHE_CONTEXT
 {
     union
@@ -436,5 +439,6 @@ struct _CSV_CACHE_CALLBACK_V3_OUTPUT
     CSV_FILECACHE_FILE_SET_EXTENSION FileSetExtension;
     CSV_FILECACHE_FILE_GET_EXTENSION FileGetExtension;
 };
+#endif
 
 #endif /* _NTDDVOL_ */

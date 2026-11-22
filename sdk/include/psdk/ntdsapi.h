@@ -148,10 +148,14 @@ DWORD WINAPI DsServerRegisterSpnW(DS_SPN_WRITE_OP operation, LPCWSTR ServiceClas
 #define ACTRL_DS_WRITE_PROP 0x00000020
 #endif
 #ifndef ADAM_REPL_AUTHENTICATION_MODE_MUTUAL_AUTH_REQUIRED
+#if (!defined(MIDL_PASS))
 #define ADAM_REPL_AUTHENTICATION_MODE_MUTUAL_AUTH_REQUIRED 2
 #endif
+#endif
 #ifndef ADAM_REPL_AUTHENTICATION_MODE_NEGOTIATE
+#if (!defined(MIDL_PASS))
 #define ADAM_REPL_AUTHENTICATION_MODE_NEGOTIATE 1
+#endif
 #endif
 #ifndef DS_BEHAVIOR_WIN2003
 #define DS_BEHAVIOR_WIN2003 2
@@ -996,6 +1000,7 @@ typedef struct DS_SITE_COST_INFO {
   DWORD cost;
 } DS_SITE_COST_INFO, *PDS_SITE_COST_INFO;
 
+#if (!defined(MIDL_PASS))
 #define ADAM_REPL_AUTHENTICATION_MODE_NEGOTIATE_PASS_THROUGH 0
 #define ADAM_SCP_FSMO_NAMING_STRING "naming"
 #define ADAM_SCP_FSMO_NAMING_STRING_W L"naming"
@@ -1009,6 +1014,7 @@ typedef struct DS_SITE_COST_INFO {
 #define ADAM_SCP_PARTITION_STRING_W L"partition:"
 #define ADAM_SCP_SITE_NAME_STRING "site:"
 #define ADAM_SCP_SITE_NAME_STRING_W L"site:"
+#endif
 #define DS_BEHAVIOR_LONGHORN 3
 #define DS_BEHAVIOR_WIN2000 0
 #define DS_BEHAVIOR_WIN7 4
@@ -1020,28 +1026,34 @@ typedef struct DS_SITE_COST_INFO {
 #ifdef UNICODE
 #define DS_DOMAIN_CONTROLLER_INFO_1 DS_DOMAIN_CONTROLLER_INFO_1W
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DS_DOMAIN_CONTROLLER_INFO_1 DS_DOMAIN_CONTROLLER_INFO_1W
 #else
 #define DS_DOMAIN_CONTROLLER_INFO_1 DS_DOMAIN_CONTROLLER_INFO_1A
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DS_DOMAIN_CONTROLLER_INFO_2 DS_DOMAIN_CONTROLLER_INFO_2W
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DS_DOMAIN_CONTROLLER_INFO_2 DS_DOMAIN_CONTROLLER_INFO_2W
 #else
 #define DS_DOMAIN_CONTROLLER_INFO_2 DS_DOMAIN_CONTROLLER_INFO_2A
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DS_DOMAIN_CONTROLLER_INFO_3 DS_DOMAIN_CONTROLLER_INFO_3W
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DS_DOMAIN_CONTROLLER_INFO_3 DS_DOMAIN_CONTROLLER_INFO_3W
 #else
 #define DS_DOMAIN_CONTROLLER_INFO_3 DS_DOMAIN_CONTROLLER_INFO_3A
+#endif
 #endif
 #endif
 #define DS_DOMAIN_SIMPLE_NAME 8
@@ -1060,107 +1072,133 @@ typedef struct DS_SITE_COST_INFO {
 #ifdef UNICODE
 #define DS_REPSYNCALL_ERRINFO DS_REPSYNCALL_ERRINFOW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DS_REPSYNCALL_ERRINFO DS_REPSYNCALL_ERRINFOW
 #else
 #define DS_REPSYNCALL_ERRINFO DS_REPSYNCALL_ERRINFOA
 #endif
 #endif
+#endif
 #define DS_REPSYNCALL_NO_OPTIONS 0x00000000
 #ifdef UNICODE
 #define DS_REPSYNCALL_SYNC DS_REPSYNCALL_SYNCW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DS_REPSYNCALL_SYNC DS_REPSYNCALL_SYNCW
 #else
 #define DS_REPSYNCALL_SYNC DS_REPSYNCALL_SYNCA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DS_REPSYNCALL_UPDATE DS_REPSYNCALL_UPDATEW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DS_REPSYNCALL_UPDATE DS_REPSYNCALL_UPDATEW
 #else
 #define DS_REPSYNCALL_UPDATE DS_REPSYNCALL_UPDATEA
 #endif
 #endif
+#endif
 #define DS_ROLE_SCHEMA_OWNER 0
+#if (!(defined(UNICODE)))
 #define DS_SCHEMA_GUID_MAP 0
+#endif
 #define DS_SCHEMA_GUID_NOT_FOUND 0
 #define DS_SYNCED_EVENT_NAME 0
 #define DS_SYNCED_EVENT_NAME_W L"NTDSInitialSyncsCompleted"
+#if (!(defined(UNICODE)))
 #define DsAddSidHistory 0
+#endif
 #ifdef UNICODE
 #define DsBind DsBindW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsBind DsBindW
 #else
 #define DsBind DsBindA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DsBindByInstance DsBindByInstanceW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsBindByInstance DsBindByInstanceW
 #else
 #define DsBindByInstance DsBindByInstanceA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DsBindToISTG DsBindToISTGW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsBindToISTG DsBindToISTGW
 #else
 #define DsBindToISTG DsBindToISTGA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DsBindWithCred DsBindWithCredW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsBindWithCred DsBindWithCredW
 #else
 #define DsBindWithCred DsBindWithCredA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DsBindWithSpn DsBindWithSpnW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsBindWithSpn DsBindWithSpnW
 #else
 #define DsBindWithSpn DsBindWithSpnA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DsBindWithSpnEx DsBindWithSpnExW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsBindWithSpnEx DsBindWithSpnExW
 #else
 #define DsBindWithSpnEx DsBindWithSpnExA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DsFreeDomainControllerInfo DsFreeDomainControllerInfoW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsFreeDomainControllerInfo DsFreeDomainControllerInfoW
 #else
 #define DsFreeDomainControllerInfo DsFreeDomainControllerInfoA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DsFreeNameResult DsFreeNameResultW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsFreeNameResult DsFreeNameResultW
 #else
 #define DsFreeNameResult DsFreeNameResultA
+#endif
 #endif
 #endif
 #define DsFreePasswordCredentialsA DsFreePasswordCredentials
@@ -1168,184 +1206,230 @@ typedef struct DS_SITE_COST_INFO {
 #ifdef UNICODE
 #define DsFreeSchemaGuidMap DsFreeSchemaGuidMapW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsFreeSchemaGuidMap DsFreeSchemaGuidMapW
 #else
 #define DsFreeSchemaGuidMap DsFreeSchemaGuidMapA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DsFreeSpnArray DsFreeSpnArrayW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsFreeSpnArray DsFreeSpnArrayW
 #else
 #define DsFreeSpnArray DsFreeSpnArrayA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DsGetDomainControllerInfo DsGetDomainControllerInfoW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsGetDomainControllerInfo DsGetDomainControllerInfoW
 #else
 #define DsGetDomainControllerInfo DsGetDomainControllerInfoA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DsGetSpn DsGetSpnW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsGetSpn DsGetSpnW
 #else
 #define DsGetSpn DsGetSpnA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DsInheritSecurityIdentity DsInheritSecurityIdentityW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsInheritSecurityIdentity DsInheritSecurityIdentityW
 #else
 #define DsInheritSecurityIdentity DsInheritSecurityIdentityA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DsListDomainsInSite DsListDomainsInSiteW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsListDomainsInSite DsListDomainsInSiteW
 #else
 #define DsListDomainsInSite DsListDomainsInSiteA
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define DsListInfoForServer 0
 #define DsListRoles 0
+#endif
 #ifdef UNICODE
 #define DsListServersForDomainInSite DsListServersForDomainInSiteW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsListServersForDomainInSite DsListServersForDomainInSiteW
 #else
 #define DsListServersForDomainInSite DsListServersForDomainInSiteA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DsListServersInSite DsListServersInSiteW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsListServersInSite DsListServersInSiteW
 #else
 #define DsListServersInSite DsListServersInSiteA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DsListSites DsListSitesW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsListSites DsListSitesW
 #else
 #define DsListSites DsListSitesA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DsMakePasswordCredentials DsMakePasswordCredentialsW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsMakePasswordCredentials DsMakePasswordCredentialsW
 #else
 #define DsMakePasswordCredentials DsMakePasswordCredentialsA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DsMapSchemaGuids DsMapSchemaGuidsW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsMapSchemaGuids DsMapSchemaGuidsW
 #else
 #define DsMapSchemaGuids DsMapSchemaGuidsA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DsQuerySitesByCost DsQuerySitesByCostW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsQuerySitesByCost DsQuerySitesByCostW
 #else
 #define DsQuerySitesByCost DsQuerySitesByCostA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DsRemoveDsDomain DsRemoveDsDomainW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsRemoveDsDomain DsRemoveDsDomainW
 #else
 #define DsRemoveDsDomain DsRemoveDsDomainA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DsRemoveDsServer DsRemoveDsServerW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsRemoveDsServer DsRemoveDsServerW
 #else
 #define DsRemoveDsServer DsRemoveDsServerA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DsReplicaDel DsReplicaDelW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsReplicaDel DsReplicaDelW
 #else
 #define DsReplicaDel DsReplicaDelA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DsReplicaSync DsReplicaSyncW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsReplicaSync DsReplicaSyncW
 #else
 #define DsReplicaSync DsReplicaSyncA
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define DsReplicaSyncAll 0
+#endif
 #ifdef UNICODE
 #define DsReplicaUpdateRefs DsReplicaUpdateRefsW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsReplicaUpdateRefs DsReplicaUpdateRefsW
 #else
 #define DsReplicaUpdateRefs DsReplicaUpdateRefsA
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define DsReplicaVerifyObjects 0
+#endif
 #ifdef UNICODE
 #define DsUnBind DsUnBindW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsUnBind DsUnBindW
 #else
 #define DsUnBind DsUnBindA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define DsWriteAccountSpn DsWriteAccountSpnW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define DsWriteAccountSpn DsWriteAccountSpnW
 #else
 #define DsWriteAccountSpn DsWriteAccountSpnA
 #endif
 #endif
+#endif
 #define GUID_COMPUTRS_CONTAINER_A "aa312825768811d1aded00c04fd8d5cd"
 #define GUID_COMPUTRS_CONTAINER_BYTE "\xaa\x31\x28\x25\x76\x88\x11\xd1\xad\xed\x00\xc0\x4f\xd8\xd5\xcd"
 #define GUID_COMPUTRS_CONTAINER_W L"aa312825768811d1aded00c04fd8d5cd"
+#if (!defined(MIDL_PASS))
 #define GUID_DATABASE_32K_PAGES_OPTIONAL_FEATURE_A "c62a9852731e4f75ae2473ae2775aab8"
 #define GUID_DATABASE_32K_PAGES_OPTIONAL_FEATURE_BYTE "\xc6\x2a\x98\x52\x73\x1e\x4f\x75\xae\x24\x73\xae\x27\x75\xaa\xb8"
 #define GUID_DATABASE_32K_PAGES_OPTIONAL_FEATURE_W L"c62a9852731e4f75ae2473ae2775aab8"
+#endif
 #define GUID_DELETED_OBJECTS_CONTAINER_A "18e2ea80684f11d2b9aa00c04f79f805"
 #define GUID_DELETED_OBJECTS_CONTAINER_BYTE "\x18\xe2\xea\x80\x68\x4f\x11\xd2\xb9\xaa\x00\xc0\x4f\x79\xf8\x05"
 #define GUID_DELETED_OBJECTS_CONTAINER_W L"18e2ea80684f11d2b9aa00c04f79f805"
@@ -1369,15 +1453,19 @@ typedef struct DS_SITE_COST_INFO {
 #define GUID_NTDS_QUOTAS_CONTAINER_A "6227f0af1fc2410d8e3bb10615bb5b0f"
 #define GUID_NTDS_QUOTAS_CONTAINER_BYTE "\x62\x27\xf0\xaf\x1f\xc2\x41\x0d\x8e\x3b\xb1\x06\x15\xbb\x5b\x0f"
 #define GUID_NTDS_QUOTAS_CONTAINER_W L"6227f0af1fc2410d8e3bb10615bb5b0f"
+#if (!defined(MIDL_PASS))
 #define GUID_PRIVILEGED_ACCESS_MANAGEMENT_OPTIONAL_FEATURE_A "73e843ece8cc4046b4ab07ffe4ab5bcd"
 #define GUID_PRIVILEGED_ACCESS_MANAGEMENT_OPTIONAL_FEATURE_BYTE "\x73\xe8\x43\xec\xe8\xcc\x40\x46\xb4\xab\x07\xff\xe4\xab\x5b\xcd"
 #define GUID_PRIVILEGED_ACCESS_MANAGEMENT_OPTIONAL_FEATURE_W L"73e843ece8cc4046b4ab07ffe4ab5bcd"
+#endif
 #define GUID_PROGRAM_DATA_CONTAINER_A "09460c08ae1e4a4ea0f64aee7daa1e5a"
 #define GUID_PROGRAM_DATA_CONTAINER_BYTE "\x09\x46\x0c\x08\xae\x1e\x4a\x4e\xa0\xf6\x4a\xee\x7d\xaa\x1e\x5a"
 #define GUID_PROGRAM_DATA_CONTAINER_W L"09460c08ae1e4a4ea0f64aee7daa1e5a"
+#if (!defined(MIDL_PASS))
 #define GUID_RECYCLE_BIN_OPTIONAL_FEATURE_A 0
 #define GUID_RECYCLE_BIN_OPTIONAL_FEATURE_BYTE "\xd8\xdc\x6d\x76\xd0\xac\x5e\x44\xf3\xb9\xa7\xf9\xb6\x74\x4f\x2a"
 #define GUID_RECYCLE_BIN_OPTIONAL_FEATURE_W L"d8dc6d76d0ac5e44f3b9a7f9b6744f2a"
+#endif
 #define GUID_SYSTEMS_CONTAINER_A "ab1d30f3768811d1aded00c04fd8d5cd"
 #define GUID_SYSTEMS_CONTAINER_BYTE "\xab\x1d\x30\xf3\x76\x88\x11\xd1\xad\xed\x00\xc0\x4f\xd8\xd5\xcd"
 #define GUID_SYSTEMS_CONTAINER_W L"ab1d30f3768811d1aded00c04fd8d5cd"
@@ -1435,64 +1523,78 @@ typedef struct DS_SITE_COST_INFO {
 #ifdef UNICODE
 #define PDS_DOMAIN_CONTROLLER_INFO_1 PDS_DOMAIN_CONTROLLER_INFO_1W
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PDS_DOMAIN_CONTROLLER_INFO_1 PDS_DOMAIN_CONTROLLER_INFO_1W
 #else
 #define PDS_DOMAIN_CONTROLLER_INFO_1 PDS_DOMAIN_CONTROLLER_INFO_1A
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PDS_DOMAIN_CONTROLLER_INFO_2 PDS_DOMAIN_CONTROLLER_INFO_2W
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PDS_DOMAIN_CONTROLLER_INFO_2 PDS_DOMAIN_CONTROLLER_INFO_2W
 #else
 #define PDS_DOMAIN_CONTROLLER_INFO_2 PDS_DOMAIN_CONTROLLER_INFO_2A
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PDS_DOMAIN_CONTROLLER_INFO_3 PDS_DOMAIN_CONTROLLER_INFO_3W
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PDS_DOMAIN_CONTROLLER_INFO_3 PDS_DOMAIN_CONTROLLER_INFO_3W
 #else
 #define PDS_DOMAIN_CONTROLLER_INFO_3 PDS_DOMAIN_CONTROLLER_INFO_3A
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PDS_REPSYNCALL_ERRINFO PDS_REPSYNCALL_ERRINFOW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PDS_REPSYNCALL_ERRINFO PDS_REPSYNCALL_ERRINFOW
 #else
 #define PDS_REPSYNCALL_ERRINFO PDS_REPSYNCALL_ERRINFOA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PDS_REPSYNCALL_SYNC PDS_REPSYNCALL_SYNCW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PDS_REPSYNCALL_SYNC PDS_REPSYNCALL_SYNCW
 #else
 #define PDS_REPSYNCALL_SYNC PDS_REPSYNCALL_SYNCA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PDS_REPSYNCALL_UPDATE PDS_REPSYNCALL_UPDATEW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PDS_REPSYNCALL_UPDATE PDS_REPSYNCALL_UPDATEW
 #else
 #define PDS_REPSYNCALL_UPDATE PDS_REPSYNCALL_UPDATEA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PDS_SCHEMA_GUID_MAP PDS_SCHEMA_GUID_MAPW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PDS_SCHEMA_GUID_MAP PDS_SCHEMA_GUID_MAPW
 #else
 #define PDS_SCHEMA_GUID_MAP PDS_SCHEMA_GUID_MAPA
+#endif
 #endif
 #endif
 

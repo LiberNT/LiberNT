@@ -907,7 +907,9 @@ DEFINE_SAFE_MULT_U16(UShortMult, USHORT, ULongToUShort)
 #define DWordLongToUShort ULongLongToUShort
 #define DWordLongToWord ULongLongToUShort
 #define DWordMult ULongMult
+#if (defined(_WIN64))
 #define DWordPtrMult ULongLongMult
+#endif
 #define DWordPtrToByte ULongPtrToUInt8
 #define DWordPtrToChar ULongPtrToChar
 #define DWordPtrToDWord ULongPtrToULong
@@ -1287,18 +1289,26 @@ DEFINE_SAFE_MULT_U16(UShortMult, USHORT, ULongToUShort)
 #define UInt64ToULongPtr ULongLongToULongPtr
 #define UInt64ToUShort ULongLongToUShort
 #define UInt64ToWord ULongLongToUShort
+#if (defined(_WIN64))
 #define UIntPtrMult ULongLongMult
+#endif
 #define UIntPtrToByte UIntPtrToUInt8
 #define UIntPtrToDWord UIntPtrToULong
 #define UIntPtrToInt32 UIntPtrToInt
 #define UIntPtrToInt64 UIntPtrToLongLong
 #define UIntPtrToLong64 UIntPtrToLongLong
+#if (defined(_WIN64))
 #define UIntPtrToLongLong ULongLongToLongLong
+#endif
 #define UIntPtrToPtrdiffT UIntPtrToIntPtr
 #define UIntPtrToSSIZET UIntPtrToLongPtr
+#if (defined(_WIN64))
 #define UIntPtrToUInt ULongLongToUInt
+#endif
 #define UIntPtrToUInt32 UIntPtrToUInt
+#if (defined(_WIN64))
 #define UIntPtrToULong ULongLongToULong
+#endif
 #define UIntPtrToWord UIntPtrToUShort
 #define UIntToByte UIntToUInt8
 #define UIntToInt16 UIntToShort
@@ -1345,17 +1355,23 @@ DEFINE_SAFE_MULT_U16(UShortMult, USHORT, ULongToUShort)
 #define ULongLongToUInt16 ULongLongToUShort
 #define ULongLongToUInt32 ULongLongToUInt
 #define ULongLongToWord ULongLongToUShort
+#if (defined(_WIN64))
 #define ULongPtrMult ULongLongMult
+#endif
 #define ULongPtrToByte ULongPtrToUInt8
 #define ULongPtrToDWord ULongPtrToULong
 #define ULongPtrToInt16 ULongPtrToShort
 #define ULongPtrToInt32 ULongPtrToInt
 #define ULongPtrToInt64 ULongPtrToLongLong
 #define ULongPtrToLong64 ULongPtrToLongLong
+#if (defined(_WIN64))
 #define ULongPtrToLongLong ULongLongToLongLong
+#endif
 #define ULongPtrToPtrdiffT ULongPtrToIntPtr
 #define ULongPtrToSSIZET ULongPtrToLongPtr
+#if (defined(_WIN64))
 #define ULongPtrToUInt ULongLongToUInt
+#endif
 #define ULongPtrToUInt16 ULongPtrToUShort
 #define ULongPtrToUInt32 ULongPtrToUInt
 #define ULongPtrToWord ULongPtrToUShort
@@ -1382,11 +1398,15 @@ extern "C" {
 /* TODO: LiberNT does not implement the functions below yet */
 HRESULT IntPtrToChar(INT_PTR iOperand, CHAR *pch);
 HRESULT LongLongToUInt8(LONGLONG llOperand, UINT8 *pu8Result);
+#if (defined(_WIN64))
 HRESULT LongToIntPtr(LONG lOperand, INT_PTR *piResult);
+#endif
 HRESULT UInt8Mult(UINT8 u8Multiplicand, UINT8 u8Multiplier, UINT8 *pu8Result);
 HRESULT UIntPtrToChar(UINT_PTR uOperand, CHAR *pch);
+#if (defined(_WIN64))
 HRESULT UIntToIntPtr(UINT uOperand, INT_PTR *piResult);
 HRESULT UIntToLongPtr(UINT uOperand, LONG_PTR *plResult);
+#endif
 HRESULT ULongLongToUInt8(ULONGLONG ullOperand, UINT8 *pu8Result);
 HRESULT ULongPtrToChar(ULONG_PTR ulOperand, CHAR *pch);
 HRESULT ULongPtrToInt(ULONG_PTR ulOperand, INT *piResult);

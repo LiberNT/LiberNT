@@ -5248,84 +5248,112 @@ typedef struct DIPROPCPOINTS {
 #ifdef UNICODE
 #define IDirectInput IDirectInputW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define IDirectInput IDirectInputW
 #else
 #define IDirectInput IDirectInputA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define IDirectInput2 IDirectInput2W
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define IDirectInput2 IDirectInput2W
 #else
 #define IDirectInput2 IDirectInput2A
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define IDirectInput2Vtbl IDirectInput2AVtbl
+#endif
 #ifdef UNICODE
 #define IDirectInput7 IDirectInput7W
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define IDirectInput7 IDirectInput7W
 #else
 #define IDirectInput7 IDirectInput7A
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define IDirectInput7Vtbl IDirectInput7AVtbl
+#endif
 #ifdef UNICODE
 #define IDirectInput8 IDirectInput8W
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define IDirectInput8 IDirectInput8W
 #else
 #define IDirectInput8 IDirectInput8A
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define IDirectInput8Vtbl IDirectInput8AVtbl
+#endif
 #ifdef UNICODE
 #define IDirectInputDevice IDirectInputDeviceW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define IDirectInputDevice IDirectInputDeviceW
 #else
 #define IDirectInputDevice IDirectInputDeviceA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define IDirectInputDevice2 IDirectInputDevice2W
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define IDirectInputDevice2 IDirectInputDevice2W
 #else
 #define IDirectInputDevice2 IDirectInputDevice2A
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define IDirectInputDevice2Vtbl IDirectInputDevice2AVtbl
+#endif
 #ifdef UNICODE
 #define IDirectInputDevice7 IDirectInputDevice7W
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define IDirectInputDevice7 IDirectInputDevice7W
 #else
 #define IDirectInputDevice7 IDirectInputDevice7A
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define IDirectInputDevice7Vtbl IDirectInputDevice7AVtbl
+#endif
 #ifdef UNICODE
 #define IDirectInputDevice8 IDirectInputDevice8W
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define IDirectInputDevice8 IDirectInputDevice8W
 #else
 #define IDirectInputDevice8 IDirectInputDevice8A
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define IDirectInputDevice8Vtbl IDirectInputDevice8AVtbl
 #define IDirectInputDeviceVtbl IDirectInputDeviceAVtbl
 #define IDirectInputVtbl IDirectInputAVtbl
 #define LPDIENUMEFFECTSCALLBACK 0
+#endif
 
 struct _DIMOUSESTATE
 {

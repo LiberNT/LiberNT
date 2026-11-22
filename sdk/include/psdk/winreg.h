@@ -664,42 +664,52 @@ typedef struct val_context {
 #ifdef UNICODE
 #define RegConnectRegistryEx RegConnectRegistryExW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define RegConnectRegistryEx RegConnectRegistryExW
 #else
 #define RegConnectRegistryEx RegConnectRegistryExA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define RegCreateKeyTransacted RegCreateKeyTransactedW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define RegCreateKeyTransacted RegCreateKeyTransactedW
 #else
 #define RegCreateKeyTransacted RegCreateKeyTransactedA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define RegDeleteKeyTransacted RegDeleteKeyTransactedW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define RegDeleteKeyTransacted RegDeleteKeyTransactedW
 #else
 #define RegDeleteKeyTransacted RegDeleteKeyTransactedA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define RegOpenKeyTransacted RegOpenKeyTransactedW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define RegOpenKeyTransacted RegOpenKeyTransactedW
 #else
 #define RegOpenKeyTransacted RegOpenKeyTransactedA
 #endif
 #endif
+#endif
 #define WIN31_CLASS 0
 
+#if (!(defined(UNICODE)))
 typedef PPVALUEA PPVALUE;
+#endif
 
 typedef DWORD (*PQUERYHANDLER)(LPVOID, PVALCONTEXT, DWORD, LPVOID, DWORD *, DWORD);
 
@@ -715,7 +725,9 @@ struct provider_info
 
 typedef struct provider_info *PPROVIDER;
 
+#if (!(defined(UNICODE)))
 typedef PVALUEA PVALUE;
+#endif
 
 typedef DWORD __cdecl QUERYHANDLER(LPVOID, PVALCONTEXT, DWORD, LPVOID, DWORD *, DWORD);
 

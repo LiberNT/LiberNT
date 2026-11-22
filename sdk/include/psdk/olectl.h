@@ -509,9 +509,11 @@ HRESULT WINAPI OleTranslateColor( OLE_COLOR clr, HPALETTE hpal,
 #define DISPID_WORDWRAP (-536)
 #endif
 
+#if (!defined(__MKTYPLIB__) && !defined(__midl))
 #define VT_HANDLE 3
 #define WINOLECTLAPI 0
 
 #define WINOLECTLAPI_(type) EXTERN_C DECLSPEC_IMPORT type STDAPICALLTYPE
+#endif
 
 #endif /*  __WINE_OLECTL_H */

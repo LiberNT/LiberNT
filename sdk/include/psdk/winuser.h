@@ -7441,9 +7441,11 @@ typedef enum TOUCHPAD_SENSITIVITY_LEVEL {
     TOUCHPAD_SENSITIVITY_LEVEL_LEAST_SENSITIVE = 4
 } TOUCHPAD_SENSITIVITY_LEVEL;
 
+#if (!(defined(UNICODE)))
 typedef HELPWININFOA HELPWININFO;
 typedef ICONINFOEXA ICONINFOEX;
 typedef LPHELPWININFOA LPHELPWININFO;
+#endif
 typedef struct tagMENUBARINFO * LPMENUBARINFO;
 typedef struct tagRAWINPUTHEADER * LPRAWINPUTHEADER;
 typedef struct tagCWPRETSTRUCT * NPCWPRETSTRUCT;
@@ -7452,8 +7454,10 @@ typedef struct tagDEBUGHOOKINFO * NPDEBUGHOOKINFO;
 typedef struct tagEVENTMSG * NPEVENTMSG;
 typedef struct tagEVENTMSG * NPEVENTMSGMSG;
 typedef struct tagPAINTSTRUCT * NPPAINTSTRUCT;
+#if (!(defined(UNICODE)))
 typedef PHELPWININFOA PHELPWININFO;
 typedef PICONINFOEXA PICONINFOEX;
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -7582,15 +7586,19 @@ typedef struct TOUCHPAD_PARAMETERS_V1 {
 #ifdef UNICODE
 #define CreateDesktopEx CreateDesktopExW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define CreateDesktopEx CreateDesktopExW
 #else
 #define CreateDesktopEx CreateDesktopExA
 #endif
 #endif
+#endif
 #define CURSOR_CREATION_SCALING_NONE 1
 #define GC_ROLLOVER 1
+#if (!(defined(UNICODE)))
 #define GetIconInfoEx 0
+#endif
 #define GID_ROLLOVER 7
 #ifdef _WIN64
 #define GR_GLOBAL (-2)
@@ -7752,7 +7760,9 @@ struct tagWNDCLASSA
 
 typedef struct tagWNDCLASSA *NPWNDCLASSA;
 
+#if (!(defined(UNICODE)))
 typedef NPWNDCLASSA NPWNDCLASS;
+#endif
 
 struct tagWNDCLASSEXA
 {
@@ -7772,7 +7782,9 @@ struct tagWNDCLASSEXA
 
 typedef struct tagWNDCLASSEXA *NPWNDCLASSEXA;
 
+#if (!(defined(UNICODE)))
 typedef NPWNDCLASSEXA NPWNDCLASSEX;
+#endif
 
 struct tagWNDCLASSEXW
 {
@@ -7936,9 +7948,11 @@ typedef struct tagGESTURECONFIG *PGESTURECONFIG;
 
 typedef struct tagGESTUREINFO *PGESTUREINFO;
 
+#if (!(defined(UNICODE)))
 typedef PICONMETRICSA PICONMETRICS;
 
 typedef PNONCLIENTMETRICSA PNONCLIENTMETRICS;
+#endif
 
 typedef struct tagTOUCHINPUT *PTOUCHINPUT;
 

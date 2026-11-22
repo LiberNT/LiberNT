@@ -5898,10 +5898,12 @@ typedef struct tagTRBTHUMBPOSCHANGING {
 #define HDM_SETFOCUSEDITEM 0x121C
 #define HDM_TRANSLATEACCELERATOR 0
 #define HDSIL_NORMAL 0
+#if (!(defined(UNICODE)))
 #ifdef _WIN64
 #define LVITEM_V5_SIZE 0x48
 #else
 #define LVITEM_V5_SIZE 0x34
+#endif
 #endif
 #ifdef _WIN64
 #define LVITEMA_V5_SIZE 0x48
@@ -5913,7 +5915,9 @@ typedef struct tagTRBTHUMBPOSCHANGING {
 #else
 #define LVITEMW_V5_SIZE 0x34
 #endif
+#if (!(defined(UNICODE)))
 #define LVN_INCREMENTALSEARCH 0xFFFFFF5E
+#endif
 #define LVNI_DIRECTIONMASK 0xF00
 #define LVNI_STATEMASK 0xF
 #define LVNSCH_DEFAULT - 1
@@ -5938,10 +5942,12 @@ typedef struct tagTRBTHUMBPOSCHANGING {
 #define RB_SETBANDWIDTH 0x42C
 #define RB_SETEXTENDEDSTYLE 0x429
 #define RBN_SPLITTERDRAG 0xFFFFFCB6
+#if (!(defined(UNICODE)))
 #ifdef _WIN64
 #define REBARBANDINFO_V6_SIZE 0x6C
 #else
 #define REBARBANDINFO_V6_SIZE 0x50
+#endif
 #endif
 #define TB_GETITEMDROPDOWNRECT 0x467
 #define TB_GETPRESSEDIMAGELIST 0x469
@@ -5950,8 +5956,10 @@ typedef struct tagTRBTHUMBPOSCHANGING {
 #define TRBN_FIRST 0xFFFFFA23
 #define TRBN_LAST 0xFFFFFA11
 #define TRBN_THUMBPOSCHANGING 0xFFFFFA22
+#if (!(defined(UNICODE)))
 #define TVN_ITEMCHANGED 0xFFFFFE5E
 #define TVN_ITEMCHANGING 0xFFFFFE60
+#endif
 
 #ifdef __cplusplus
 extern "C" {

@@ -1240,13 +1240,17 @@ typedef struct DNS_PROXY_INFORMATION {
   PWSTR proxyName;
 } DNS_PROXY_INFORMATION;
 
+#if (!(defined(UNICODE)))
 #define DNS_IP4_REVERSE_DOMAIN_STRING 0
+#endif
 #define DNS_IP4_REVERSE_DOMAIN_STRING_A 0
 #define DNS_IP4_REVERSE_DOMAIN_STRING_W (L"in-addr.arpa.")
 #ifdef UNICODE
 #define DNS_IP6_REVERSE_DOMAIN_STRING DNS_IP6_REVERSE_DOMAIN_STRING_W
 #else
+#if (!(defined(UNICODE)))
 #define DNS_IP6_REVERSE_DOMAIN_STRING DNS_IP6_REVERSE_DOMAIN_STRING_A
+#endif
 #endif
 #define DNS_IP6_REVERSE_DOMAIN_STRING_A 0
 #define DNS_IP6_REVERSE_DOMAIN_STRING_W (L"ip6.arpa.")
@@ -1284,12 +1288,15 @@ typedef struct _DNS_QUERY_RAW_RESULT DNS_QUERY_RAW_RESULT;
 
 typedef void (WINAPI *DNS_QUERY_RAW_COMPLETION_ROUTINE)(void *, DNS_QUERY_RAW_RESULT *);
 
+#if (!defined(__midl))
 typedef void WINAPI DNS_SERVICE_REGISTER_COMPLETE(DWORD, PVOID, PDNS_SERVICE_INSTANCE);
 
 typedef void WINAPI DNS_SERVICE_RESOLVE_COMPLETE(DWORD, PVOID, PDNS_SERVICE_INSTANCE);
+#endif
 
 typedef void WINAPI MDNS_QUERY_CALLBACK(PVOID, PMDNS_QUERY_HANDLE, PDNS_QUERY_RESULT);
 
+#if (!defined(__midl))
 typedef DNS_SERVICE_REGISTER_COMPLETE *PDNS_SERVICE_REGISTER_COMPLETE;
 
 struct _DNS_SERVICE_REGISTER_REQUEST
@@ -1321,6 +1328,7 @@ struct _DNS_SERVICE_RESOLVE_REQUEST
 typedef struct _DNS_SERVICE_RESOLVE_REQUEST DNS_SERVICE_RESOLVE_REQUEST;
 
 typedef struct _DNS_SERVICE_RESOLVE_REQUEST *PDNS_SERVICE_RESOLVE_REQUEST;
+#endif
 
 typedef MDNS_QUERY_CALLBACK *PMDNS_QUERY_CALLBACK;
 
@@ -1359,6 +1367,7 @@ DWORD WINAPI DnsGetProxyInformation(PCWSTR hostName, DNS_PROXY_INFORMATION *prox
 DNS_STATUS WINAPI DnsIsFlatRecord(PDNS_RECORD pRecord, ULONG64 ullFlags, BOOL *pfFlat);
 BOOL WINAPI DnsIsZtEnabled(void);
 void DnsQueryRawResultFree(DNS_QUERY_RAW_RESULT *queryResults);
+#if (!defined(__midl))
 DNS_STATUS WINAPI DnsServiceBrowseCancel(PDNS_SERVICE_CANCEL pCancelHandle);
 PDNS_SERVICE_INSTANCE WINAPI DnsServiceConstructInstance(PCWSTR pServiceName, PCWSTR pHostName, PIP4_ADDRESS pIp4, PIP6_ADDRESS pIp6, WORD wPort, WORD wPriority, WORD wWeight, DWORD dwPropertiesCount, PCWSTR *keys, PCWSTR *values);
 PDNS_SERVICE_INSTANCE WINAPI DnsServiceCopyInstance(PDNS_SERVICE_INSTANCE pOrig);
@@ -1368,6 +1377,7 @@ DWORD WINAPI DnsServiceRegister(PDNS_SERVICE_REGISTER_REQUEST pRequest, PDNS_SER
 DWORD WINAPI DnsServiceRegisterCancel(PDNS_SERVICE_CANCEL pCancelHandle);
 DNS_STATUS WINAPI DnsServiceResolve(PDNS_SERVICE_RESOLVE_REQUEST pRequest, PDNS_SERVICE_CANCEL pCancel);
 DNS_STATUS WINAPI DnsServiceResolveCancel(PDNS_SERVICE_CANCEL pCancelHandle);
+#endif
 DNS_STATUS WINAPI DnsStartMulticastQuery(PMDNS_QUERY_REQUEST pQueryRequest, PMDNS_QUERY_HANDLE pHandle);
 DNS_STATUS WINAPI DnsStopMulticastQuery(PMDNS_QUERY_HANDLE pHandle);
 
@@ -1497,6 +1507,7 @@ struct _DNS_QUERY_RAW_REQUEST
     };
 };
 
+#if (!defined ( USE_PRIVATE_DNS_ADDR ) || defined (MIDL_PASS))
 struct _DNS_QUERY_REQUEST3
 {
     ULONG Version;
@@ -1512,12 +1523,15 @@ struct _DNS_QUERY_REQUEST3
     DWORD cCustomServers;
     DNS_CUSTOM_SERVER *pCustomServers;
 };
+#endif
 
 typedef struct _DNS_QUERY_RAW_REQUEST DNS_QUERY_RAW_REQUEST;
 
+#if (!defined ( USE_PRIVATE_DNS_ADDR ) || defined (MIDL_PASS))
 typedef struct _DNS_QUERY_REQUEST3 DNS_QUERY_REQUEST3;
 
 typedef struct _DNS_QUERY_REQUEST3 *PDNS_QUERY_REQUEST3;
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -1534,8 +1548,10 @@ DWORD DnsSetApplicationSettings(DWORD cServers, const DNS_CUSTOM_SERVER *pServer
 #endif
 
 #define DNS_QUESTION_NAME_FROM_HEADER(_pHeader_) ((PCHAR) ((PDNS_HEADER) (_pHeader_) + 1))
+#if (!(defined(UNICODE)))
 #define DnsRecordCopy(pRR) DnsRecordCopyEx((pRR), DnsCharSetAnsi, DnsCharSetAnsi)
 #define DnsRecordSetCopy(pRR) DnsRecordSetCopyEx((pRR), DnsCharSetAnsi, DnsCharSetAnsi)
+#endif
 #define INLINE_DWORD_FLIP(out, in) { DWORD _in = (in); (out) = ((_in << 8) & 0x00ff0000) | (_in << 24) | ((_in >> 8) & 0x0000ff00) | (_in >> 24); }
 #define INLINE_HTONL(out, in) INLINE_DWORD_FLIP(out, in)
 #define INLINE_NTOHL(out, in) INLINE_DWORD_FLIP(out, in)

@@ -1495,11 +1495,13 @@ INT  __cdecl OleUIPromptUserW(INT,HWND, ...);
 #define OLEUI_QUERY_LINKBROKEN 0xFF01
 #endif
 
+#if (!(defined(UNICODE)))
 #define IDD_LINKTYPECHANGED 0x402
 #define IDD_SERVERNOTREG 0x401
 #define IOleUILinkContainerVtbl IOleUILinkContainerAVtbl
 #define IOleUILinkInfoVtbl IOleUILinkInfoAVtbl
 #define IOleUIObjInfoVtbl IOleUIObjInfoAVtbl
+#endif
 #define OLESTDDELIM 0
 #define OLEUI_CIERR_MUSTHAVECLSID 0x74
 #define OLEUI_CIERR_MUSTHAVECURRENTMETAFILE 0x75
@@ -1552,64 +1554,82 @@ INT  __cdecl OleUIPromptUserW(INT,HWND, ...);
 #define OLEUI_VPERR_DVASPECTINVALID 0x84
 #define OLEUI_VPERR_METAPICTINVALID 0x83
 #define PROP_HWND_CHGICONDLG 0
+#if (!(defined(UNICODE)))
 #define tagOLEUIBUSY 0
 #define tagOLEUICHANGEICON 0
 #define tagOLEUICHANGESOURCE 0
+#endif
 #ifdef UNICODE
 #define tagOLEUICONVERT tagOLEUICONVERTW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define tagOLEUICONVERT tagOLEUICONVERTW
 #else
 #define tagOLEUICONVERT tagOLEUICONVERTA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define tagOLEUIEDITLINKS tagOLEUIEDITLINKSW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define tagOLEUIEDITLINKS tagOLEUIEDITLINKSW
 #else
 #define tagOLEUIEDITLINKS tagOLEUIEDITLINKSA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define tagOLEUIGNRLPROPS tagOLEUIGNRLPROPSW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define tagOLEUIGNRLPROPS tagOLEUIGNRLPROPSW
 #else
 #define tagOLEUIGNRLPROPS tagOLEUIGNRLPROPSA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define tagOLEUIINSERTOBJECT tagOLEUIINSERTOBJECTW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define tagOLEUIINSERTOBJECT tagOLEUIINSERTOBJECTW
 #else
 #define tagOLEUIINSERTOBJECT tagOLEUIINSERTOBJECTA
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define tagOLEUILINKPROPS 0
+#endif
 #ifdef UNICODE
 #define tagOLEUIOBJECTPROPS tagOLEUIOBJECTPROPSW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define tagOLEUIOBJECTPROPS tagOLEUIOBJECTPROPSW
 #else
 #define tagOLEUIOBJECTPROPS tagOLEUIOBJECTPROPSA
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define tagOLEUIPASTEENTRY 0
 #define tagOLEUIPASTESPECIAL 0
+#endif
 #ifdef UNICODE
 #define tagOLEUIVIEWPROPS tagOLEUIVIEWPROPSW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define tagOLEUIVIEWPROPS tagOLEUIVIEWPROPSW
 #else
 #define tagOLEUIVIEWPROPS tagOLEUIVIEWPROPSA
+#endif
 #endif
 #endif
 

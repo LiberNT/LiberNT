@@ -1865,7 +1865,9 @@ typedef enum PRINT_EXECUTION_CONTEXT {
 } PRINT_EXECUTION_CONTEXT;
 
 typedef struct _FORM_INFO_2A * LPFORM_INFO_2A;
+#if (!(defined(UNICODE)))
 typedef LPFORM_INFO_2A LPFORM_INFO_2;
+#endif
 typedef struct _FORM_INFO_2W * LPFORM_INFO_2W;
 
 typedef struct _JOB_INFO_4A {
@@ -1951,10 +1953,12 @@ typedef struct PRINT_EXECUTION_DATA {
 #ifdef UNICODE
 #define CorePrinterDriverInstalled CorePrinterDriverInstalledW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define CorePrinterDriverInstalled CorePrinterDriverInstalledW
 #else
 #define CorePrinterDriverInstalled CorePrinterDriverInstalledA
+#endif
 #endif
 #endif
 #define ERROR_BIDI_DEVICE_CONFIG_UNCHANGED 0x32D6
@@ -1970,7 +1974,9 @@ typedef struct PRINT_EXECUTION_DATA {
 #define ERROR_BIDI_SET_UNKNOWN_FAILURE 0x32D1
 #define ERROR_BIDI_UNSUPPORTED_CLIENT_LANGUAGE 0x32D9
 #define ERROR_BIDI_UNSUPPORTED_RESOURCE_FORMAT 0x32DA
+#if (!(defined(UNICODE)))
 #define InstallPrinterDriverFromPackage 0
+#endif
 #define IPDFP_COPY_ALL_FILES 0x00000001
 #define MAX_FORM_KEYWORD_LENGTH 0x40
 #define MS_PRINT_JOB_OUTPUT_FILE L"MsPrintJobOutputFile"
@@ -1989,6 +1995,7 @@ typedef struct PRINT_EXECUTION_DATA {
 #define SPLREG_PRINT_QUEUE_V4_DRIVER_DIRECTORY TEXT("PrintQueueV4DriverDirectory")
 #define UPDP_SILENT_UPLOAD 0x00000001
 
+#if (!(defined(UNICODE)))
 typedef JOB_INFO_4A JOB_INFO_4;
 
 typedef LPJOB_INFO_4A LPJOB_INFO_4;
@@ -1996,6 +2003,7 @@ typedef LPJOB_INFO_4A LPJOB_INFO_4;
 typedef LPPRINTER_OPTIONSA LPPRINTER_OPTIONS;
 
 typedef PJOB_INFO_4A PJOB_INFO_4;
+#endif
 
 #ifdef __cplusplus
 extern "C" {

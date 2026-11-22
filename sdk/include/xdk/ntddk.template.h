@@ -368,13 +368,19 @@ IoUnregisterBootDriverCallback (
 #define ARBITER_FLAG_ROOT_ENUM 0x00000002
 #endif
 #ifndef DBG_DEVICE_FLAG_HOST_VISIBLE_ALLOCATED
+#if (!defined(_NTDDK_))
 #define DBG_DEVICE_FLAG_HOST_VISIBLE_ALLOCATED 0x20
 #endif
+#endif
 #ifndef DO_BOOT_CRITICAL
+#if (!defined(_NTDDK_))
 #define DO_BOOT_CRITICAL 0x20000000
 #endif
+#endif
 #ifndef DO_DAX_VOLUME
+#if (!defined(_NTDDK_))
 #define DO_DAX_VOLUME 0x10000000
+#endif
 #endif
 #ifndef DO_DEVICE_IRP_REQUIRES_EXTENSION
 #define DO_DEVICE_IRP_REQUIRES_EXTENSION 0x08000000
@@ -395,7 +401,9 @@ IoUnregisterBootDriverCallback (
 #define DYNAMIC_ENFORCED_ADDRESS_RANGE_PROCESSED 0x00000002
 #endif
 #ifndef ERRTYP_BUS
+#if (!defined(_NTDDK_))
 #define ERRTYP_BUS 0x10
+#endif
 #endif
 #ifndef ERRTYP_CACHE
 #define ERRTYP_CACHE 0x06
@@ -407,46 +415,66 @@ IoUnregisterBootDriverCallback (
 #define ERRTYP_FUNCTION 0x07
 #endif
 #ifndef ERRTYP_IMPROPER
+#if (!defined(_NTDDK_))
 #define ERRTYP_IMPROPER 0x12
+#endif
 #endif
 #ifndef ERRTYP_INTERNAL
 #define ERRTYP_INTERNAL 0x01
 #endif
 #ifndef ERRTYP_LOSSOFLOCKSTEP
+#if (!defined(_NTDDK_))
 #define ERRTYP_LOSSOFLOCKSTEP 0x14
 #endif
+#endif
 #ifndef ERRTYP_MAP
+#if (!defined(_NTDDK_))
 #define ERRTYP_MAP 0x11
+#endif
 #endif
 #ifndef ERRTYP_MEM
 #define ERRTYP_MEM 0x04
 #endif
 #ifndef ERRTYP_PARITY
+#if (!defined(_NTDDK_))
 #define ERRTYP_PARITY 0x16
 #endif
+#endif
 #ifndef ERRTYP_PATHERROR
+#if (!defined(_NTDDK_))
 #define ERRTYP_PATHERROR 0x18
 #endif
+#endif
 #ifndef ERRTYP_POISONED
+#if (!defined(_NTDDK_))
 #define ERRTYP_POISONED 0x1A
 #endif
+#endif
 #ifndef ERRTYP_PROTOCOL
+#if (!defined(_NTDDK_))
 #define ERRTYP_PROTOCOL 0x17
 #endif
+#endif
 #ifndef ERRTYP_RESPONSE
+#if (!defined(_NTDDK_))
 #define ERRTYP_RESPONSE 0x15
+#endif
 #endif
 #ifndef ERRTYP_SELFTEST
 #define ERRTYP_SELFTEST 0x08
 #endif
 #ifndef ERRTYP_TIMEOUT
+#if (!defined(_NTDDK_))
 #define ERRTYP_TIMEOUT 0x19
+#endif
 #endif
 #ifndef ERRTYP_TLB
 #define ERRTYP_TLB 0x05
 #endif
 #ifndef ERRTYP_UNIMPL
+#if (!defined(_NTDDK_))
 #define ERRTYP_UNIMPL 0x13
+#endif
 #endif
 #ifndef FILE_DEVICE_EVENT_COLLECTOR
 #define FILE_DEVICE_EVENT_COLLECTOR 0x0000005f
@@ -494,55 +522,89 @@ IoUnregisterBootDriverCallback (
 #define GENPROC_FLAGS_RESTARTABLE 0x01
 #endif
 #ifndef GENPROC_OP_DATAREAD
+#if (!defined(_NTDDK_))
 #define GENPROC_OP_DATAREAD 1
 #endif
+#endif
 #ifndef GENPROC_OP_DATAWRITE
+#if (!defined(_NTDDK_))
 #define GENPROC_OP_DATAWRITE 2
 #endif
+#endif
 #ifndef GENPROC_OP_GENERIC
+#if (!defined(_NTDDK_))
 #define GENPROC_OP_GENERIC 0
 #endif
+#endif
 #ifndef GENPROC_OP_INSTRUCTIONEXE
+#if (!defined(_NTDDK_))
 #define GENPROC_OP_INSTRUCTIONEXE 3
 #endif
+#endif
 #ifndef GENPROC_PROCERRTYPE_BUS
+#if (!defined(_NTDDK_))
 #define GENPROC_PROCERRTYPE_BUS 4
 #endif
+#endif
 #ifndef GENPROC_PROCERRTYPE_CACHE
+#if (!defined(_NTDDK_))
 #define GENPROC_PROCERRTYPE_CACHE 1
 #endif
+#endif
 #ifndef GENPROC_PROCERRTYPE_MAE
+#if (!defined(_NTDDK_))
 #define GENPROC_PROCERRTYPE_MAE 8
 #endif
+#endif
 #ifndef GENPROC_PROCERRTYPE_TLB
+#if (!defined(_NTDDK_))
 #define GENPROC_PROCERRTYPE_TLB 2
 #endif
+#endif
 #ifndef GENPROC_PROCERRTYPE_UNKNOWN
+#if (!defined(_NTDDK_))
 #define GENPROC_PROCERRTYPE_UNKNOWN 0
 #endif
+#endif
 #ifndef GENPROC_PROCISA_ARM32
+#if (!defined(_NTDDK_))
 #define GENPROC_PROCISA_ARM32 4
 #endif
+#endif
 #ifndef GENPROC_PROCISA_ARM64
+#if (!defined(_NTDDK_))
 #define GENPROC_PROCISA_ARM64 8
 #endif
+#endif
 #ifndef GENPROC_PROCISA_IPF
+#if (!defined(_NTDDK_))
 #define GENPROC_PROCISA_IPF 1
 #endif
+#endif
 #ifndef GENPROC_PROCISA_X64
+#if (!defined(_NTDDK_))
 #define GENPROC_PROCISA_X64 2
 #endif
+#endif
 #ifndef GENPROC_PROCISA_X86
+#if (!defined(_NTDDK_))
 #define GENPROC_PROCISA_X86 0
 #endif
+#endif
 #ifndef GENPROC_PROCTYPE_ARM
+#if (!defined(_NTDDK_))
 #define GENPROC_PROCTYPE_ARM 2
 #endif
+#endif
 #ifndef GENPROC_PROCTYPE_IPF
+#if (!defined(_NTDDK_))
 #define GENPROC_PROCTYPE_IPF 1
 #endif
+#endif
 #ifndef GENPROC_PROCTYPE_XPF
+#if (!defined(_NTDDK_))
 #define GENPROC_PROCTYPE_XPF 0
+#endif
 #endif
 #ifndef HAL_PMU_NOTIFCATION_CALLBACK_VERSION
 #define HAL_PMU_NOTIFCATION_CALLBACK_VERSION 0x01
@@ -593,10 +655,14 @@ IoUnregisterBootDriverCallback (
 #define IPMI_IOCTL_INDEX 0x0400
 #endif
 #ifndef IPMI_OS_SEL_RECORD_MASK
+#if (!defined(_NTDDK_))
 #define IPMI_OS_SEL_RECORD_MASK 0xFFFF
 #endif
+#endif
 #ifndef IPMI_OS_SEL_RECORD_VERSION_1
+#if (!defined(_NTDDK_))
 #define IPMI_OS_SEL_RECORD_VERSION_1 1
+#endif
 #endif
 #ifndef LINKSPEED_MTS_16000
 #define LINKSPEED_MTS_16000 16000
@@ -692,25 +758,39 @@ IoUnregisterBootDriverCallback (
 #define PCIXBUS_ERRTYPE_UNKNOWN 0x0000
 #endif
 #ifndef PCI_EXPRESS_TPH_ST_LOCATION_MSIX_TABLE
+#if (!defined(_NTDDK_))
 #define PCI_EXPRESS_TPH_ST_LOCATION_MSIX_TABLE 2
 #endif
+#endif
 #ifndef PCI_EXPRESS_TPH_ST_LOCATION_NONE
+#if (!defined(_NTDDK_))
 #define PCI_EXPRESS_TPH_ST_LOCATION_NONE 0
 #endif
+#endif
 #ifndef PCI_EXPRESS_TPH_ST_LOCATION_RESERVED
+#if (!defined(_NTDDK_))
 #define PCI_EXPRESS_TPH_ST_LOCATION_RESERVED 3
 #endif
+#endif
 #ifndef PCI_EXPRESS_TPH_ST_LOCATION_TPH_CAPABILITY
+#if (!defined(_NTDDK_))
 #define PCI_EXPRESS_TPH_ST_LOCATION_TPH_CAPABILITY 1
 #endif
+#endif
 #ifndef PCI_INVALID_ALTERNATE_FUNCTION_NUMBER
+#if (!defined(_NTDDK_))
 #define PCI_INVALID_ALTERNATE_FUNCTION_NUMBER 0xFF
 #endif
+#endif
 #ifndef PCI_LNKINTRF_VERSION
+#if (!defined(_NTDDK_))
 #define PCI_LNKINTRF_VERSION 1
 #endif
+#endif
 #ifndef POWER_THROTTLING_PROCESS_CURRENT_VERSION
+#if (!defined(_NTDDK_))
 #define POWER_THROTTLING_PROCESS_CURRENT_VERSION 1
+#endif
 #endif
 #ifndef POWER_THROTTLING_PROCESS_DELAYTIMERS
 #define POWER_THROTTLING_PROCESS_DELAYTIMERS 0x2
@@ -722,7 +802,9 @@ IoUnregisterBootDriverCallback (
 #define POWER_THROTTLING_PROCESS_IGNORE_TIMER_RESOLUTION 0x4
 #endif
 #ifndef POWER_THROTTLING_THREAD_CURRENT_VERSION
+#if (!defined(_NTDDK_))
 #define POWER_THROTTLING_THREAD_CURRENT_VERSION 1
+#endif
 #endif
 #ifndef POWER_THROTTLING_THREAD_EXECUTION_SPEED
 #define POWER_THROTTLING_THREAD_EXECUTION_SPEED 0x1
@@ -776,25 +858,39 @@ IoUnregisterBootDriverCallback (
 #define RTL_CORRELATION_VECTOR_V2_PREFIX_LENGTH 22
 #endif
 #ifndef SEH_VALIDATION_POLICY_DEFER
+#if (!defined(_NTDDK_))
 #define SEH_VALIDATION_POLICY_DEFER 3
 #endif
+#endif
 #ifndef SEH_VALIDATION_POLICY_OFF
+#if (!defined(_NTDDK_))
 #define SEH_VALIDATION_POLICY_OFF 1
 #endif
+#endif
 #ifndef SEH_VALIDATION_POLICY_ON
+#if (!defined(_NTDDK_))
 #define SEH_VALIDATION_POLICY_ON 0
 #endif
+#endif
 #ifndef SEH_VALIDATION_POLICY_TELEMETRY
+#if (!defined(_NTDDK_))
 #define SEH_VALIDATION_POLICY_TELEMETRY 2
 #endif
+#endif
 #ifndef SHARED_GLOBAL_FLAGS_ADMINAPPROVALMODE_TYPE_SHADOWADMIN_V
+#if (!defined(_NTDDK_))
 #define SHARED_GLOBAL_FLAGS_ADMINAPPROVALMODE_TYPE_SHADOWADMIN_V 0xC
 #endif
+#endif
 #ifndef SHARED_GLOBAL_FLAGS_ADMINAPPROVALMODE_TYPE_SPLITTOKEN_V
+#if (!defined(_NTDDK_))
 #define SHARED_GLOBAL_FLAGS_ADMINAPPROVALMODE_TYPE_SPLITTOKEN_V 0xB
 #endif
+#endif
 #ifndef SHARED_GLOBAL_FLAGS_CLEAR_GLOBAL_DATA_FLAG
+#if (!defined(_NTDDK_))
 #define SHARED_GLOBAL_FLAGS_CLEAR_GLOBAL_DATA_FLAG 0x80000000
+#endif
 #endif
 #ifndef SHARED_GLOBAL_FLAGS_CONSOLE_BROKER_ENABLED_V
 #define SHARED_GLOBAL_FLAGS_CONSOLE_BROKER_ENABLED_V 0x6
@@ -812,16 +908,24 @@ IoUnregisterBootDriverCallback (
 #define SHARED_GLOBAL_FLAGS_SECURE_BOOT_ENABLED_V 0x7
 #endif
 #ifndef SHARED_GLOBAL_FLAGS_SET_GLOBAL_DATA_FLAG
+#if (!defined(_NTDDK_))
 #define SHARED_GLOBAL_FLAGS_SET_GLOBAL_DATA_FLAG 0x40000000
 #endif
+#endif
 #ifndef SHARED_GLOBAL_FLAGS_STATE_SEPARATION_ENABLED_V
+#if (!defined(_NTDDK_))
 #define SHARED_GLOBAL_FLAGS_STATE_SEPARATION_ENABLED_V 0xA
 #endif
+#endif
 #ifndef SILO_MONITOR_REGISTRATION_VERSION
+#if (!defined(_NTDDK_))
 #define SILO_MONITOR_REGISTRATION_VERSION 1
 #endif
+#endif
 #ifndef SYSTEM_CALL_SYSCALL
+#if (!defined(_NTDDK_))
 #define SYSTEM_CALL_SYSCALL 0
+#endif
 #endif
 #ifndef WCS_RAS_REGISTER_NAME_MAX_LENGTH
 #define WCS_RAS_REGISTER_NAME_MAX_LENGTH 32
@@ -830,7 +934,9 @@ IoUnregisterBootDriverCallback (
 #define WHEA_AMD_EXT_REG_NUM 10
 #endif
 #ifndef WHEA_ARM_RAS_NODE_FIELD_COUNT
+#if (!defined(_NTDDK_))
 #define WHEA_ARM_RAS_NODE_FIELD_COUNT 8
+#endif
 #endif
 #ifndef WHEA_BAD_PAGE_LIST_LOCATION
 #define WHEA_BAD_PAGE_LIST_LOCATION 15
@@ -848,31 +954,49 @@ IoUnregisterBootDriverCallback (
 #define WHEA_CMCI_THRESHOLD_TIME 11
 #endif
 #ifndef WHEA_DEVICE_DRIVER_BUFFER_SET_MAX
+#if (!defined(_NTDDK_))
 #define WHEA_DEVICE_DRIVER_BUFFER_SET_MAX 1
 #endif
+#endif
 #ifndef WHEA_DEVICE_DRIVER_BUFFER_SET_MIN
+#if (!defined(_NTDDK_))
 #define WHEA_DEVICE_DRIVER_BUFFER_SET_MIN 1
 #endif
+#endif
 #ifndef WHEA_DEVICE_DRIVER_BUFFER_SET_V1
+#if (!defined(_NTDDK_))
 #define WHEA_DEVICE_DRIVER_BUFFER_SET_V1 1
 #endif
+#endif
 #ifndef WHEA_DEVICE_DRIVER_CONFIG_MAX
+#if (!defined(_NTDDK_))
 #define WHEA_DEVICE_DRIVER_CONFIG_MAX 2
 #endif
+#endif
 #ifndef WHEA_DEVICE_DRIVER_CONFIG_MIN
+#if (!defined(_NTDDK_))
 #define WHEA_DEVICE_DRIVER_CONFIG_MIN 1
 #endif
+#endif
 #ifndef WHEA_DEVICE_DRIVER_CONFIG_V1
+#if (!defined(_NTDDK_))
 #define WHEA_DEVICE_DRIVER_CONFIG_V1 1
 #endif
+#endif
 #ifndef WHEA_DEVICE_DRIVER_CONFIG_V2
+#if (!defined(_NTDDK_))
 #define WHEA_DEVICE_DRIVER_CONFIG_V2 2
 #endif
+#endif
 #ifndef WHEA_DISABLE_DUMMY_WRITE
+#if (!defined(_NTDDK_))
 #define WHEA_DISABLE_DUMMY_WRITE 6
 #endif
+#endif
 #ifndef WHEA_DISABLE_OFFLINE
+#if (!defined(_NTDDK_))
 #define WHEA_DISABLE_OFFLINE 0
+#endif
 #endif
 #ifndef WHEA_DISABLE_PRM_ADDRESS_TRANSLATION
 #define WHEA_DISABLE_PRM_ADDRESS_TRANSLATION 20
@@ -881,10 +1005,14 @@ IoUnregisterBootDriverCallback (
 #define WHEA_ENABLE_BATCHED_ROW_OFFLINE 21
 #endif
 #ifndef WHEA_ERROR_LOG_ENTRY_VERSION
+#if (!defined(_NTDDK_))
 #define WHEA_ERROR_LOG_ENTRY_VERSION 1
 #endif
+#endif
 #ifndef WHEA_ERROR_PACKET_V1_VERSION
+#if (!defined(_NTDDK_))
 #define WHEA_ERROR_PACKET_V1_VERSION 2
+#endif
 #endif
 #ifndef WHEA_ERROR_RECORD_FLAGS_DEVICE_DRIVER
 #define WHEA_ERROR_RECORD_FLAGS_DEVICE_DRIVER 0x00000008
@@ -905,7 +1033,9 @@ IoUnregisterBootDriverCallback (
 #define WHEA_ERROR_RECORD_SECTION_DESCRIPTOR_REVISION 0x0300
 #endif
 #ifndef WHEA_ERROR_RECORD_SIGNATURE_END
+#if (!defined(_NTDDK_))
 #define WHEA_ERROR_RECORD_SIGNATURE_END 0xFFFFFFFF
+#endif
 #endif
 #ifndef WHEA_ERROR_RECORD_VALID_PARTITIONID
 #define WHEA_ERROR_RECORD_VALID_PARTITIONID 0x00000004
@@ -917,43 +1047,65 @@ IoUnregisterBootDriverCallback (
 #define WHEA_ERROR_RECORD_VALID_TIMESTAMP 0x00000002
 #endif
 #ifndef WHEA_ERROR_SOURCE_DESCRIPTOR_TYPE_AERBRIDGE
+#if (!defined(_NTDDK_))
 #define WHEA_ERROR_SOURCE_DESCRIPTOR_TYPE_AERBRIDGE 8
 #endif
+#endif
 #ifndef WHEA_ERROR_SOURCE_DESCRIPTOR_TYPE_AERENDPOINT
+#if (!defined(_NTDDK_))
 #define WHEA_ERROR_SOURCE_DESCRIPTOR_TYPE_AERENDPOINT 7
 #endif
+#endif
 #ifndef WHEA_ERROR_SOURCE_DESCRIPTOR_TYPE_AERROOTPORT
+#if (!defined(_NTDDK_))
 #define WHEA_ERROR_SOURCE_DESCRIPTOR_TYPE_AERROOTPORT 6
 #endif
+#endif
 #ifndef WHEA_ERROR_SOURCE_DESCRIPTOR_TYPE_GENERIC
+#if (!defined(_NTDDK_))
 #define WHEA_ERROR_SOURCE_DESCRIPTOR_TYPE_GENERIC 9
+#endif
 #endif
 #ifndef WHEA_ERROR_SOURCE_DESCRIPTOR_TYPE_GENERIC_V2
 #define WHEA_ERROR_SOURCE_DESCRIPTOR_TYPE_GENERIC_V2 10
 #endif
 #ifndef WHEA_ERROR_SOURCE_DESCRIPTOR_TYPE_IPFCMC
+#if (!defined(_NTDDK_))
 #define WHEA_ERROR_SOURCE_DESCRIPTOR_TYPE_IPFCMC 4
 #endif
+#endif
 #ifndef WHEA_ERROR_SOURCE_DESCRIPTOR_TYPE_IPFCPE
+#if (!defined(_NTDDK_))
 #define WHEA_ERROR_SOURCE_DESCRIPTOR_TYPE_IPFCPE 5
 #endif
+#endif
 #ifndef WHEA_ERROR_SOURCE_DESCRIPTOR_TYPE_IPFMCA
+#if (!defined(_NTDDK_))
 #define WHEA_ERROR_SOURCE_DESCRIPTOR_TYPE_IPFMCA 3
 #endif
+#endif
 #ifndef WHEA_ERROR_SOURCE_DESCRIPTOR_TYPE_XPFCMC
+#if (!defined(_NTDDK_))
 #define WHEA_ERROR_SOURCE_DESCRIPTOR_TYPE_XPFCMC 1
 #endif
+#endif
 #ifndef WHEA_ERROR_SOURCE_DESCRIPTOR_TYPE_XPFMCE
+#if (!defined(_NTDDK_))
 #define WHEA_ERROR_SOURCE_DESCRIPTOR_TYPE_XPFMCE 0
 #endif
+#endif
 #ifndef WHEA_ERROR_SOURCE_DESCRIPTOR_TYPE_XPFNMI
+#if (!defined(_NTDDK_))
 #define WHEA_ERROR_SOURCE_DESCRIPTOR_TYPE_XPFNMI 2
+#endif
 #endif
 #ifndef WHEA_ERROR_SOURCE_DESCRIPTOR_VERSION_11
 #define WHEA_ERROR_SOURCE_DESCRIPTOR_VERSION_11 11
 #endif
 #ifndef WHEA_ERROR_SOURCE_FLAG_DEFAULTSOURCE
+#if (!defined(_NTDDK_))
 #define WHEA_ERROR_SOURCE_FLAG_DEFAULTSOURCE 0x80000000
+#endif
 #endif
 #ifndef WHEA_ERROR_SOURCE_FLAG_FIRMWAREFIRST
 #define WHEA_ERROR_SOURCE_FLAG_FIRMWAREFIRST 0x00000001
@@ -965,25 +1117,35 @@ IoUnregisterBootDriverCallback (
 #define WHEA_ERROR_SOURCE_FLAG_GLOBAL 0x00000002
 #endif
 #ifndef WHEA_ERROR_SOURCE_INVALID_RELATED_SOURCE
+#if (!defined(_NTDDK_))
 #define WHEA_ERROR_SOURCE_INVALID_RELATED_SOURCE 0xFFFF
+#endif
 #endif
 #ifndef WHEA_ERROR_TEXT_LEN
 #define WHEA_ERROR_TEXT_LEN 32
 #endif
 #ifndef WHEA_ERR_SRC_OVERRIDE_FLAG
+#if (!defined(_NTDDK_))
 #define WHEA_ERR_SRC_OVERRIDE_FLAG 0x40000000
 #endif
+#endif
 #ifndef WHEA_FIRMWARE_RECORD_TYPE_IPFSAL
+#if (!defined(_NTDDK_))
 #define WHEA_FIRMWARE_RECORD_TYPE_IPFSAL 0
+#endif
 #endif
 #ifndef WHEA_GENERIC_ENTRY_TEXT_LEN
 #define WHEA_GENERIC_ENTRY_TEXT_LEN 20
 #endif
 #ifndef WHEA_GENERIC_ENTRY_V2_VERSION
+#if (!defined(_NTDDK_))
 #define WHEA_GENERIC_ENTRY_V2_VERSION 0x300
 #endif
+#endif
 #ifndef WHEA_INVALID_ERR_SRC_ID
+#if (!defined(_NTDDK_))
 #define WHEA_INVALID_ERR_SRC_ID 0
+#endif
 #endif
 #ifndef WHEA_MAX_LOG_DATA_LEN
 #define WHEA_MAX_LOG_DATA_LEN 36
@@ -1031,52 +1193,82 @@ IoUnregisterBootDriverCallback (
 #define WHEA_MEMERRTYPE_WATCHDOGTIMEOUT 0x09
 #endif
 #ifndef WHEA_MEM_PERSISTOFFLINE
+#if (!defined(_NTDDK_))
 #define WHEA_MEM_PERSISTOFFLINE 1
 #endif
+#endif
 #ifndef WHEA_MEM_PFA_DISABLE
+#if (!defined(_NTDDK_))
 #define WHEA_MEM_PFA_DISABLE 2
 #endif
+#endif
 #ifndef WHEA_MEM_PFA_PAGECOUNT
+#if (!defined(_NTDDK_))
 #define WHEA_MEM_PFA_PAGECOUNT 3
 #endif
+#endif
 #ifndef WHEA_MEM_PFA_THRESHOLD
+#if (!defined(_NTDDK_))
 #define WHEA_MEM_PFA_THRESHOLD 4
 #endif
+#endif
 #ifndef WHEA_MEM_PFA_TIMEOUT
+#if (!defined(_NTDDK_))
 #define WHEA_MEM_PFA_TIMEOUT 5
 #endif
+#endif
 #ifndef WHEA_NOTIFICATION_TYPE_ARMV8_SEA
+#if (!defined(_NTDDK_))
 #define WHEA_NOTIFICATION_TYPE_ARMV8_SEA 8
 #endif
+#endif
 #ifndef WHEA_NOTIFICATION_TYPE_ARMV8_SEI
+#if (!defined(_NTDDK_))
 #define WHEA_NOTIFICATION_TYPE_ARMV8_SEI 9
 #endif
+#endif
 #ifndef WHEA_NOTIFICATION_TYPE_CMCI
+#if (!defined(_NTDDK_))
 #define WHEA_NOTIFICATION_TYPE_CMCI 5
 #endif
+#endif
 #ifndef WHEA_NOTIFICATION_TYPE_EXTERNALINTERRUPT
+#if (!defined(_NTDDK_))
 #define WHEA_NOTIFICATION_TYPE_EXTERNALINTERRUPT 1
+#endif
 #endif
 #ifndef WHEA_NOTIFICATION_TYPE_EXTERNALINTERRUPT_GSIV
 #define WHEA_NOTIFICATION_TYPE_EXTERNALINTERRUPT_GSIV 10
 #endif
 #ifndef WHEA_NOTIFICATION_TYPE_GPIO_SIGNAL
+#if (!defined(_NTDDK_))
 #define WHEA_NOTIFICATION_TYPE_GPIO_SIGNAL 7
 #endif
+#endif
 #ifndef WHEA_NOTIFICATION_TYPE_LOCALINTERRUPT
+#if (!defined(_NTDDK_))
 #define WHEA_NOTIFICATION_TYPE_LOCALINTERRUPT 2
 #endif
+#endif
 #ifndef WHEA_NOTIFICATION_TYPE_MCE
+#if (!defined(_NTDDK_))
 #define WHEA_NOTIFICATION_TYPE_MCE 6
 #endif
+#endif
 #ifndef WHEA_NOTIFICATION_TYPE_NMI
+#if (!defined(_NTDDK_))
 #define WHEA_NOTIFICATION_TYPE_NMI 4
 #endif
+#endif
 #ifndef WHEA_NOTIFICATION_TYPE_POLLED
+#if (!defined(_NTDDK_))
 #define WHEA_NOTIFICATION_TYPE_POLLED 0
 #endif
+#endif
 #ifndef WHEA_NOTIFICATION_TYPE_SCI
+#if (!defined(_NTDDK_))
 #define WHEA_NOTIFICATION_TYPE_SCI 3
+#endif
 #endif
 #ifndef WHEA_NOTIFICATION_TYPE_SDEI
 #define WHEA_NOTIFICATION_TYPE_SDEI 11
@@ -1103,34 +1295,54 @@ IoUnregisterBootDriverCallback (
 #define WHEA_PMEM_ERROR_SECTION_MAX_PAGES 50
 #endif
 #ifndef WHEA_PRM_ADDRESS_TRANSLATION_INTEL_FORWARD_ADDRESS_TRANSLATE
+#if (!defined(_NTDDK_))
 #define WHEA_PRM_ADDRESS_TRANSLATION_INTEL_FORWARD_ADDRESS_TRANSLATE 2
 #endif
+#endif
 #ifndef WHEA_PRM_ADDRESS_TRANSLATION_INTEL_GET_ADDRESS_PARAMETERS
+#if (!defined(_NTDDK_))
 #define WHEA_PRM_ADDRESS_TRANSLATION_INTEL_GET_ADDRESS_PARAMETERS 1
 #endif
+#endif
 #ifndef WHEA_PRM_ADDRESS_TRANSLATION_INTEL_INTERNAL_ERROR
+#if (!defined(_NTDDK_))
 #define WHEA_PRM_ADDRESS_TRANSLATION_INTEL_INTERNAL_ERROR 3
 #endif
+#endif
 #ifndef WHEA_PRM_ADDRESS_TRANSLATION_INTEL_INVALID_COMMAND
+#if (!defined(_NTDDK_))
 #define WHEA_PRM_ADDRESS_TRANSLATION_INTEL_INVALID_COMMAND 2
 #endif
+#endif
 #ifndef WHEA_PRM_ADDRESS_TRANSLATION_INTEL_REVERSE_ADDRESS_TRANSLATE
+#if (!defined(_NTDDK_))
 #define WHEA_PRM_ADDRESS_TRANSLATION_INTEL_REVERSE_ADDRESS_TRANSLATE 3
 #endif
+#endif
 #ifndef WHEA_PRM_ADDRESS_TRANSLATION_INTEL_SUCCESS
+#if (!defined(_NTDDK_))
 #define WHEA_PRM_ADDRESS_TRANSLATION_INTEL_SUCCESS 0
 #endif
+#endif
 #ifndef WHEA_PRM_ADDRESS_TRANSLATION_INTEL_UNKNOWN_FAILURE
+#if (!defined(_NTDDK_))
 #define WHEA_PRM_ADDRESS_TRANSLATION_INTEL_UNKNOWN_FAILURE 1
 #endif
+#endif
 #ifndef WHEA_RESTORE_CMCI_ATTEMPTS
+#if (!defined(_NTDDK_))
 #define WHEA_RESTORE_CMCI_ATTEMPTS 8
 #endif
+#endif
 #ifndef WHEA_RESTORE_CMCI_ENABLED
+#if (!defined(_NTDDK_))
 #define WHEA_RESTORE_CMCI_ENABLED 7
 #endif
+#endif
 #ifndef WHEA_RESTORE_CMCI_ERR_LIMIT
+#if (!defined(_NTDDK_))
 #define WHEA_RESTORE_CMCI_ERR_LIMIT 9
+#endif
 #endif
 #ifndef WHEA_ROW_FAIL_CHECK_ENABLE
 #define WHEA_ROW_FAIL_CHECK_ENABLE 18
@@ -1166,7 +1378,9 @@ IoUnregisterBootDriverCallback (
 #define WHEA_SECTION_DESCRIPTOR_FLAGS_THRESHOLDEXCEEDED 0x00000008
 #endif
 #ifndef WHEA_SEL_BUGCHECK_RECOVERY_STATUS_PHASE1_VERSION
+#if (!defined(_NTDDK_))
 #define WHEA_SEL_BUGCHECK_RECOVERY_STATUS_PHASE1_VERSION 1
+#endif
 #endif
 #ifndef WHEA_WRITE_FLAG_DUMMY
 #define WHEA_WRITE_FLAG_DUMMY 0x00000001
@@ -1178,22 +1392,34 @@ IoUnregisterBootDriverCallback (
 #define WHEA_XPF_MCA_EXTREG_MAX_COUNT 24
 #endif
 #ifndef WHEA_XPF_MCA_SECTION_VERSION_2
+#if (!defined(_NTDDK_))
 #define WHEA_XPF_MCA_SECTION_VERSION_2 2
 #endif
+#endif
 #ifndef WHEA_XPF_MCA_SECTION_VERSION_3
+#if (!defined(_NTDDK_))
 #define WHEA_XPF_MCA_SECTION_VERSION_3 3
 #endif
+#endif
 #ifndef WHEA_XPF_MCA_SECTION_VERSION_4
+#if (!defined(_NTDDK_))
 #define WHEA_XPF_MCA_SECTION_VERSION_4 4
 #endif
+#endif
 #ifndef WHEA_XPF_MC_BANK_STATUSFORMAT_AMD64MCA
+#if (!defined(_NTDDK_))
 #define WHEA_XPF_MC_BANK_STATUSFORMAT_AMD64MCA 2
 #endif
+#endif
 #ifndef WHEA_XPF_MC_BANK_STATUSFORMAT_IA32MCA
+#if (!defined(_NTDDK_))
 #define WHEA_XPF_MC_BANK_STATUSFORMAT_IA32MCA 0
 #endif
+#endif
 #ifndef WHEA_XPF_MC_BANK_STATUSFORMAT_Intel64MCA
+#if (!defined(_NTDDK_))
 #define WHEA_XPF_MC_BANK_STATUSFORMAT_Intel64MCA 1
+#endif
 #endif
 #ifndef WRITE_NV_MEMORY_FLAG_FLUSH
 #define WRITE_NV_MEMORY_FLAG_FLUSH 0x00000001
@@ -1205,169 +1431,279 @@ IoUnregisterBootDriverCallback (
 #define WRITE_NV_MEMORY_FLAG_NO_DRAIN 0x00000100
 #endif
 #ifndef XPF_BUS_CHECK_ADDRESS_IO
+#if (!defined(_NTDDK_))
 #define XPF_BUS_CHECK_ADDRESS_IO 2
 #endif
+#endif
 #ifndef XPF_BUS_CHECK_ADDRESS_MEMORY
+#if (!defined(_NTDDK_))
 #define XPF_BUS_CHECK_ADDRESS_MEMORY 0
 #endif
+#endif
 #ifndef XPF_BUS_CHECK_ADDRESS_OTHER
+#if (!defined(_NTDDK_))
 #define XPF_BUS_CHECK_ADDRESS_OTHER 3
 #endif
+#endif
 #ifndef XPF_BUS_CHECK_ADDRESS_RESERVED
+#if (!defined(_NTDDK_))
 #define XPF_BUS_CHECK_ADDRESS_RESERVED 1
 #endif
+#endif
 #ifndef XPF_BUS_CHECK_OPERATION_DATAREAD
+#if (!defined(_NTDDK_))
 #define XPF_BUS_CHECK_OPERATION_DATAREAD 3
 #endif
+#endif
 #ifndef XPF_BUS_CHECK_OPERATION_DATAWRITE
+#if (!defined(_NTDDK_))
 #define XPF_BUS_CHECK_OPERATION_DATAWRITE 4
 #endif
+#endif
 #ifndef XPF_BUS_CHECK_OPERATION_GENERIC
+#if (!defined(_NTDDK_))
 #define XPF_BUS_CHECK_OPERATION_GENERIC 0
 #endif
+#endif
 #ifndef XPF_BUS_CHECK_OPERATION_GENREAD
+#if (!defined(_NTDDK_))
 #define XPF_BUS_CHECK_OPERATION_GENREAD 1
 #endif
+#endif
 #ifndef XPF_BUS_CHECK_OPERATION_GENWRITE
+#if (!defined(_NTDDK_))
 #define XPF_BUS_CHECK_OPERATION_GENWRITE 2
 #endif
+#endif
 #ifndef XPF_BUS_CHECK_OPERATION_INSTRUCTIONFETCH
+#if (!defined(_NTDDK_))
 #define XPF_BUS_CHECK_OPERATION_INSTRUCTIONFETCH 5
 #endif
+#endif
 #ifndef XPF_BUS_CHECK_OPERATION_PREFETCH
+#if (!defined(_NTDDK_))
 #define XPF_BUS_CHECK_OPERATION_PREFETCH 6
 #endif
+#endif
 #ifndef XPF_BUS_CHECK_PARTICIPATION_GENERIC
+#if (!defined(_NTDDK_))
 #define XPF_BUS_CHECK_PARTICIPATION_GENERIC 3
 #endif
+#endif
 #ifndef XPF_BUS_CHECK_PARTICIPATION_PROCOBSERVED
+#if (!defined(_NTDDK_))
 #define XPF_BUS_CHECK_PARTICIPATION_PROCOBSERVED 2
 #endif
+#endif
 #ifndef XPF_BUS_CHECK_PARTICIPATION_PROCORIGINATED
+#if (!defined(_NTDDK_))
 #define XPF_BUS_CHECK_PARTICIPATION_PROCORIGINATED 0
 #endif
+#endif
 #ifndef XPF_BUS_CHECK_PARTICIPATION_PROCRESPONDED
+#if (!defined(_NTDDK_))
 #define XPF_BUS_CHECK_PARTICIPATION_PROCRESPONDED 1
 #endif
+#endif
 #ifndef XPF_BUS_CHECK_TRANSACTIONTYPE_DATAACCESS
+#if (!defined(_NTDDK_))
 #define XPF_BUS_CHECK_TRANSACTIONTYPE_DATAACCESS 1
 #endif
+#endif
 #ifndef XPF_BUS_CHECK_TRANSACTIONTYPE_GENERIC
+#if (!defined(_NTDDK_))
 #define XPF_BUS_CHECK_TRANSACTIONTYPE_GENERIC 2
 #endif
+#endif
 #ifndef XPF_BUS_CHECK_TRANSACTIONTYPE_INSTRUCTION
+#if (!defined(_NTDDK_))
 #define XPF_BUS_CHECK_TRANSACTIONTYPE_INSTRUCTION 0
 #endif
+#endif
 #ifndef XPF_CACHE_CHECK_OPERATION_DATAREAD
+#if (!defined(_NTDDK_))
 #define XPF_CACHE_CHECK_OPERATION_DATAREAD 3
 #endif
+#endif
 #ifndef XPF_CACHE_CHECK_OPERATION_DATAWRITE
+#if (!defined(_NTDDK_))
 #define XPF_CACHE_CHECK_OPERATION_DATAWRITE 4
 #endif
+#endif
 #ifndef XPF_CACHE_CHECK_OPERATION_EVICTION
+#if (!defined(_NTDDK_))
 #define XPF_CACHE_CHECK_OPERATION_EVICTION 7
 #endif
+#endif
 #ifndef XPF_CACHE_CHECK_OPERATION_GENERIC
+#if (!defined(_NTDDK_))
 #define XPF_CACHE_CHECK_OPERATION_GENERIC 0
 #endif
+#endif
 #ifndef XPF_CACHE_CHECK_OPERATION_GENREAD
+#if (!defined(_NTDDK_))
 #define XPF_CACHE_CHECK_OPERATION_GENREAD 1
 #endif
+#endif
 #ifndef XPF_CACHE_CHECK_OPERATION_GENWRITE
+#if (!defined(_NTDDK_))
 #define XPF_CACHE_CHECK_OPERATION_GENWRITE 2
 #endif
+#endif
 #ifndef XPF_CACHE_CHECK_OPERATION_INSTRUCTIONFETCH
+#if (!defined(_NTDDK_))
 #define XPF_CACHE_CHECK_OPERATION_INSTRUCTIONFETCH 5
 #endif
+#endif
 #ifndef XPF_CACHE_CHECK_OPERATION_PREFETCH
+#if (!defined(_NTDDK_))
 #define XPF_CACHE_CHECK_OPERATION_PREFETCH 6
 #endif
+#endif
 #ifndef XPF_CACHE_CHECK_OPERATION_SNOOP
+#if (!defined(_NTDDK_))
 #define XPF_CACHE_CHECK_OPERATION_SNOOP 8
 #endif
+#endif
 #ifndef XPF_CACHE_CHECK_TRANSACTIONTYPE_DATAACCESS
+#if (!defined(_NTDDK_))
 #define XPF_CACHE_CHECK_TRANSACTIONTYPE_DATAACCESS 1
 #endif
+#endif
 #ifndef XPF_CACHE_CHECK_TRANSACTIONTYPE_GENERIC
+#if (!defined(_NTDDK_))
 #define XPF_CACHE_CHECK_TRANSACTIONTYPE_GENERIC 2
 #endif
+#endif
 #ifndef XPF_CACHE_CHECK_TRANSACTIONTYPE_INSTRUCTION
+#if (!defined(_NTDDK_))
 #define XPF_CACHE_CHECK_TRANSACTIONTYPE_INSTRUCTION 0
 #endif
+#endif
 #ifndef XPF_CONTEXT_INFO_32BITCONTEXT
+#if (!defined(_NTDDK_))
 #define XPF_CONTEXT_INFO_32BITCONTEXT 2
 #endif
+#endif
 #ifndef XPF_CONTEXT_INFO_32BITDEBUGREGS
+#if (!defined(_NTDDK_))
 #define XPF_CONTEXT_INFO_32BITDEBUGREGS 5
 #endif
+#endif
 #ifndef XPF_CONTEXT_INFO_64BITCONTEXT
+#if (!defined(_NTDDK_))
 #define XPF_CONTEXT_INFO_64BITCONTEXT 3
 #endif
+#endif
 #ifndef XPF_CONTEXT_INFO_64BITDEBUGREGS
+#if (!defined(_NTDDK_))
 #define XPF_CONTEXT_INFO_64BITDEBUGREGS 6
 #endif
+#endif
 #ifndef XPF_CONTEXT_INFO_FXSAVE
+#if (!defined(_NTDDK_))
 #define XPF_CONTEXT_INFO_FXSAVE 4
 #endif
+#endif
 #ifndef XPF_CONTEXT_INFO_MMREGISTERS
+#if (!defined(_NTDDK_))
 #define XPF_CONTEXT_INFO_MMREGISTERS 7
 #endif
+#endif
 #ifndef XPF_CONTEXT_INFO_MSRREGISTERS
+#if (!defined(_NTDDK_))
 #define XPF_CONTEXT_INFO_MSRREGISTERS 1
 #endif
+#endif
 #ifndef XPF_CONTEXT_INFO_UNCLASSIFIEDDATA
+#if (!defined(_NTDDK_))
 #define XPF_CONTEXT_INFO_UNCLASSIFIEDDATA 0
 #endif
+#endif
 #ifndef XPF_MS_CHECK_ERRORTYPE_EXTERNAL
+#if (!defined(_NTDDK_))
 #define XPF_MS_CHECK_ERRORTYPE_EXTERNAL 3
 #endif
+#endif
 #ifndef XPF_MS_CHECK_ERRORTYPE_FRC
+#if (!defined(_NTDDK_))
 #define XPF_MS_CHECK_ERRORTYPE_FRC 4
 #endif
+#endif
 #ifndef XPF_MS_CHECK_ERRORTYPE_INTERNALUNCLASSIFIED
+#if (!defined(_NTDDK_))
 #define XPF_MS_CHECK_ERRORTYPE_INTERNALUNCLASSIFIED 5
 #endif
+#endif
 #ifndef XPF_MS_CHECK_ERRORTYPE_MCROMPARITY
+#if (!defined(_NTDDK_))
 #define XPF_MS_CHECK_ERRORTYPE_MCROMPARITY 2
 #endif
+#endif
 #ifndef XPF_MS_CHECK_ERRORTYPE_NOERROR
+#if (!defined(_NTDDK_))
 #define XPF_MS_CHECK_ERRORTYPE_NOERROR 0
 #endif
+#endif
 #ifndef XPF_MS_CHECK_ERRORTYPE_UNCLASSIFIED
+#if (!defined(_NTDDK_))
 #define XPF_MS_CHECK_ERRORTYPE_UNCLASSIFIED 1
 #endif
+#endif
 #ifndef XPF_TLB_CHECK_OPERATION_DATAREAD
+#if (!defined(_NTDDK_))
 #define XPF_TLB_CHECK_OPERATION_DATAREAD 3
 #endif
+#endif
 #ifndef XPF_TLB_CHECK_OPERATION_DATAWRITE
+#if (!defined(_NTDDK_))
 #define XPF_TLB_CHECK_OPERATION_DATAWRITE 4
 #endif
+#endif
 #ifndef XPF_TLB_CHECK_OPERATION_GENERIC
+#if (!defined(_NTDDK_))
 #define XPF_TLB_CHECK_OPERATION_GENERIC 0
 #endif
+#endif
 #ifndef XPF_TLB_CHECK_OPERATION_GENREAD
+#if (!defined(_NTDDK_))
 #define XPF_TLB_CHECK_OPERATION_GENREAD 1
 #endif
+#endif
 #ifndef XPF_TLB_CHECK_OPERATION_GENWRITE
+#if (!defined(_NTDDK_))
 #define XPF_TLB_CHECK_OPERATION_GENWRITE 2
 #endif
+#endif
 #ifndef XPF_TLB_CHECK_OPERATION_INSTRUCTIONFETCH
+#if (!defined(_NTDDK_))
 #define XPF_TLB_CHECK_OPERATION_INSTRUCTIONFETCH 5
 #endif
+#endif
 #ifndef XPF_TLB_CHECK_OPERATION_PREFETCH
+#if (!defined(_NTDDK_))
 #define XPF_TLB_CHECK_OPERATION_PREFETCH 6
 #endif
+#endif
 #ifndef XPF_TLB_CHECK_TRANSACTIONTYPE_DATAACCESS
+#if (!defined(_NTDDK_))
 #define XPF_TLB_CHECK_TRANSACTIONTYPE_DATAACCESS 1
 #endif
+#endif
 #ifndef XPF_TLB_CHECK_TRANSACTIONTYPE_GENERIC
+#if (!defined(_NTDDK_))
 #define XPF_TLB_CHECK_TRANSACTIONTYPE_GENERIC 2
 #endif
+#endif
 #ifndef XPF_TLB_CHECK_TRANSACTIONTYPE_INSTRUCTION
+#if (!defined(_NTDDK_))
 #define XPF_TLB_CHECK_TRANSACTIONTYPE_INSTRUCTION 0
 #endif
+#endif
 #ifndef XSTATE_ARM64_SVE
+#if (!defined(_NTDDK_))
 #define XSTATE_ARM64_SVE 2
+#endif
 
 typedef enum _HAL_DMA_CRASH_DUMP_REGISTER_TYPE {
     HalDmaCrashDumpRegisterSet1 = 0,
@@ -1757,19 +2093,23 @@ typedef enum _WHEAP_PFA_OFFLINE_DECISION_TYPE {
     WheapPfaOfflineUncorrectedError = 2
 } WHEAP_PFA_OFFLINE_DECISION_TYPE, *PWHEAP_PFA_OFFLINE_DECISION_TYPE;
 
+#if (!defined(_NTDDK_))
 typedef PVOID WHEA_ERROR_HANDLE;
 typedef struct _WHEA_ERROR_RECORD WHEA_ERROR_RECORD;
 typedef struct _WHEA_ERROR_SOURCE_DESCRIPTOR WHEA_ERROR_SOURCE_DESCRIPTOR;
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+#if (!defined(_NTDDK_))
 PPHYSICAL_MEMORY_RANGE NTAPI MmGetPhysicalMemoryRangesEx(PVOID PartitionObject);
 PVOID NTAPI PsGetThreadProperty(PETHREAD Thread, ULONG_PTR Key, ULONG Flags);
 NTSTATUS NTAPI RtlGetSystemGlobalData(RTL_SYSTEM_GLOBAL_DATA_ID DataId, PVOID Buffer, ULONG Size);
 BOOLEAN NTAPI RtlIsStateSeparationEnabled(void);
 BOOLEAN NTAPI RtlIsZeroMemory(PVOID Buffer, SIZE_T Length);
 BOOLEAN NTAPI RtlSuffixUnicodeString(PCUNICODE_STRING String1, PCUNICODE_STRING String2, BOOLEAN CaseInSensitive);
+#endif
 #ifdef __cplusplus
 }
 #endif
@@ -2671,6 +3011,7 @@ typedef struct WHEA_PCIXDEVICE_REGISTER_PAIR {
 } WHEA_PCIXDEVICE_REGISTER_PAIR, *PWHEA_PCIXDEVICE_REGISTER_PAIR;
 #pragma pack(pop)
 
+#if (!defined(_NTDDK_))
 #define FILL_NV_MEMORY_FLAG_PERSIST 3
 #ifdef _WIN64
 #define FLUSH_NV_MEMORY_DEFAULT_TOKEN ((ULONG_PTR)(-1))
@@ -2680,9 +3021,13 @@ typedef struct WHEA_PCIXDEVICE_REGISTER_PAIR {
 #define IOCTL_IPMI_INTERNAL_RECORD_SEL_EVENT 0x221000
 #define IPMI_OS_SEL_RECORD_SIGNATURE 0x5253534F
 #define IPMI_OS_SEL_RECORD_VERSION 1
+#endif
+#if (!defined(_NTDDK_)) && (defined(_AMD64_))
 #define KERNEL_SHADOW_STACK_SIZE PAGE_SIZE
 #define KUMS_UCH_VOLATILE_BIT 0
 #define KUMS_UCH_VOLATILE_MASK (1ULL << KUMS_UCH_VOLATILE_BIT)
+#endif
+#if (!defined(_NTDDK_))
 #ifdef _WIN64
 #define MM_ALL_PARTITIONS_OBJECT (-2)
 #else
@@ -2726,7 +3071,11 @@ typedef struct WHEA_PCIXDEVICE_REGISTER_PAIR {
 #define WHEA_PLUGIN_REGISTRATION_PACKET_VERSION 0x20000
 #define WHEA_XPF_MCA_SECTION_VERSION 4
 #define WRITE_NV_MEMORY_FLAG_PERSIST 3
+#endif
+#if (!defined(_NTDDK_)) && (defined(_AMD64_))
 #define XSTATE_FIRST_NON_LEGACY_FEATURE 2
+#endif
+#if (!defined(_NTDDK_))
 #define XSTATE_MASK_AMD64_LEGACY 3
 #define XSTATE_MASK_ARM64_SVE 4
 
@@ -7018,22 +7367,34 @@ struct _WHEA_XPF_MCA_SECTION
 typedef struct _WHEA_XPF_MCA_SECTION *PWHEA_XPF_MCA_SECTION;
 
 typedef struct _WHEA_XPF_MCA_SECTION WHEA_XPF_MCA_SECTION;
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#if (!defined(_NTDDK_))
 NTSTATUS NTAPI KeInitializeCrashDumpHeader(ULONG DumpType, ULONG Flags, PVOID Buffer, ULONG BufferSize, PULONG BufferNeeded);
 NTSTATUS NTAPI KeQueryNodeActiveAffinity2(USHORT NodeNumber, PGROUP_AFFINITY GroupAffinities, USHORT GroupAffinitiesCount, PUSHORT GroupAffinitiesRequired);
 NTSTATUS NTAPI RtlIsApiSetImplemented(PCSTR apiSetName);
+#endif
 
 /* TODO: LiberNT does not implement the functions below yet */
+#if (!defined(_NTDDK_)) && (defined(_AMD64_)) && (defined(_M_AMD64) && !defined(RC_INVOKED)  && !defined(MIDL_PASS))
 LONG _ExInterlockedDecrementLong(PLONG Addend);
 ULONG _ExInterlockedExchangeUlong(PULONG Target, ULONG Value);
 LONG _ExInterlockedIncrementLong(PLONG Addend);
+#endif
+#if (!defined(_NTDDK_)) && (!defined(MIDL_PASS))
 void CUSTOM_SYSTEM_EVENT_TRIGGER_INIT(PCUSTOM_SYSTEM_EVENT_TRIGGER_CONFIG Config, PCWSTR TriggerId);
+#endif
+#if (!defined(_NTDDK_))
 void ExProbeAlignment(const volatile void *Address, SIZE_T Length, ULONG Alignment);
+#endif
+#if (!defined(_NTDDK_)) && (defined (_AMD64_))
 BOOLEAN HalCvmDmaEnabled(void);
+#endif
+#if (!defined(_NTDDK_))
 NTSTATUS HalDmaAllocateCrashDumpRegistersEx(PADAPTER_OBJECT Adapter, ULONG NumberOfMapRegisters, HAL_DMA_CRASH_DUMP_REGISTER_TYPE Type, PVOID *MapRegisterBase, PULONG MapRegistersAvailable);
 NTSTATUS HalDmaFreeCrashDumpRegistersEx(PADAPTER_OBJECT Adapter, HAL_DMA_CRASH_DUMP_REGISTER_TYPE Type);
 NTSTATUS HvlRegisterWheaErrorNotification(PHVL_WHEA_ERROR_NOTIFICATION Callback);
@@ -7102,30 +7463,50 @@ NTSTATUS PsSetCreateThreadNotifyRoutineEx(PSCREATETHREADNOTIFYTYPE NotifyType, P
 NTSTATUS PsSetLoadImageNotifyRoutineEx(PLOAD_IMAGE_NOTIFY_ROUTINE NotifyRoutine, ULONG_PTR Flags);
 void PsTerminateServerSilo(PESILO ServerSilo, NTSTATUS ExitStatus);
 void PsUnregisterAvailableCpusChangeNotification(PS_AVAILABLE_CPUS_CHANGE_REGISTRATION RegistrationHandle);
+#endif
+#if (!defined(_NTDDK_)) && (!defined(MIDL_PASS))
 LONGLONG RtlConvertLuidToLonglong(LUID Luid);
+#endif
+#if (!defined(_NTDDK_))
 BOOLEAN RtlCreateHashTableEx(PRTL_DYNAMIC_HASH_TABLE *HashTable, ULONG InitialSize, ULONG Shift, ULONG Flags);
 void RtlDeleteElementGenericTableAvlEx(PRTL_AVL_TABLE Table, PVOID NodeOrParent);
+#endif
+#if (!defined(_NTDDK_)) && (defined(_WIN64))
 NTSTATUS RtlDrainNonVolatileFlush(PVOID NvToken);
+#endif
+#if (!defined(_NTDDK_))
 void RtlEndStrongEnumerationHashTable(PRTL_DYNAMIC_HASH_TABLE HashTable, PRTL_DYNAMIC_HASH_TABLE_ENUMERATOR Enumerator);
 NTSTATUS RtlExtendCorrelationVector(PCORRELATION_VECTOR CorrelationVector);
+#endif
+#if (!defined(_NTDDK_)) && (defined(_WIN64))
 NTSTATUS RtlFillNonVolatileMemory(PVOID NvToken, __unaligned void *NvDestination, SIZE_T Size, const UCHAR Value, ULONG Flags);
 NTSTATUS RtlFlushNonVolatileMemory(PVOID NvToken, PVOID NvBuffer, SIZE_T Size, ULONG Flags);
 NTSTATUS RtlFlushNonVolatileMemoryRanges(PVOID NvToken, PNV_MEMORY_RANGE NvRanges, SIZE_T NumRanges, ULONG Flags);
 NTSTATUS RtlFreeNonVolatileToken(PVOID NvToken);
 NTSTATUS RtlGetNonVolatileToken(PVOID NvBuffer, SIZE_T Size, PVOID *NvToken);
+#endif
+#if (!defined(_NTDDK_))
 NTSTATUS RtlGetPersistedStateLocation(PCWSTR SourceID, PCWSTR CustomValue, PCWSTR DefaultPath, STATE_LOCATION_TYPE StateLocationType, PWCHAR TargetPath, ULONG BufferLengthIn, PULONG BufferLengthOut);
 NTSTATUS RtlIncrementCorrelationVector(PCORRELATION_VECTOR CorrelationVector);
 NTSTATUS RtlInitializeCorrelationVector(PCORRELATION_VECTOR CorrelationVector, int Version, const GUID *Guid);
 BOOLEAN RtlInitStrongEnumerationHashTable(PRTL_DYNAMIC_HASH_TABLE HashTable, PRTL_DYNAMIC_HASH_TABLE_ENUMERATOR Enumerator);
 BOOLEAN RtlIsMultiUsersInSessionSku(void);
+#endif
+#if (!defined(_NTDDK_)) && ((NTDDI_VERSION >= NTDDI_WIN8) && !defined(MIDL_PASS))
 NTSTATUS RtlIsUntrustedObject(HANDLE Handle, PVOID Object, PBOOLEAN UntrustedObject);
+#endif
+#if (!defined(_NTDDK_))
 BOOLEAN RtlNormalizeSecurityDescriptor(PSECURITY_DESCRIPTOR *SecurityDescriptor, ULONG SecurityDescriptorLength, PSECURITY_DESCRIPTOR *NewSecurityDescriptor, PULONG NewSecurityDescriptorLength, BOOLEAN CheckOnly);
 NTSTATUS RtlQueryRegistryValueWithFallback(HANDLE PrimaryHandle, HANDLE FallbackHandle, PUNICODE_STRING ValueName, ULONG ValueLength, PULONG ValueType, PVOID ValueData, PULONG ResultLength);
 NTSTATUS NTAPI RtlRaiseCustomSystemEventTrigger(PCUSTOM_SYSTEM_EVENT_TRIGGER_CONFIG TriggerConfig);
 NTSTATUS RtlSetSystemGlobalData(RTL_SYSTEM_GLOBAL_DATA_ID DataId, PVOID Buffer, ULONG Size);
 PRTL_DYNAMIC_HASH_TABLE_ENTRY RtlStronglyEnumerateEntryHashTable(PRTL_DYNAMIC_HASH_TABLE HashTable, PRTL_DYNAMIC_HASH_TABLE_ENUMERATOR Enumerator);
 NTSTATUS RtlValidateCorrelationVector(PCORRELATION_VECTOR Vector);
+#endif
+#if (!defined(_NTDDK_)) && (defined(_WIN64))
 NTSTATUS RtlWriteNonVolatileMemory(PVOID NvToken, __unaligned void *NvDestination, const __unaligned void *Source, SIZE_T Size, ULONG Flags);
+#endif
+#if (!defined(_NTDDK_))
 NTSTATUS WheaAddErrorSource(PWHEA_ERROR_SOURCE_DESCRIPTOR ErrorSource, PVOID Context);
 NTSTATUS WheaAddErrorSourceDeviceDriver(PVOID Context, PWHEA_ERROR_SOURCE_CONFIGURATION_DEVICE_DRIVER Configuration, ULONG NumberPreallocatedErrorReports);
 NTSTATUS WheaAddErrorSourceDeviceDriverV1(PVOID Context, PWHEA_ERROR_SOURCE_CONFIGURATION_DEVICE_DRIVER Configuration, ULONG NumBuffersToPreallocate, ULONG MaxDataLength);
@@ -7167,33 +7548,40 @@ BOOLEAN WheaSignalHandlerOverride(WHEA_ERROR_SOURCE_TYPE SourceType, UINT_PTR Co
 NTSTATUS WheaUnconfigureErrorSource(WHEA_ERROR_SOURCE_TYPE SourceType);
 void WheaUnregisterErrorSourceOverride(WHEA_ERROR_SOURCE_TYPE Type, ULONG32 OverrideErrorSourceId);
 NTSTATUS WheaUnregisterInUsePageOfflineNotification(PFN_IN_USE_PAGE_OFFLINE_NOTIFY Callback);
+#endif
 
 #ifdef __cplusplus
 }
 #endif
 
 
+#if (!defined(_NTDDK_))
 typedef struct _SILO_MONITOR *PSILO_MONITOR;
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
+#if (!defined(_NTDDK_))
 ULONG PsGetSiloMonitorContextSlot(PSILO_MONITOR Monitor);
 NTSTATUS PsRegisterSiloMonitor(PSILO_MONITOR_REGISTRATION Registration, PSILO_MONITOR *ReturnedMonitor);
 NTSTATUS PsStartSiloMonitor(PSILO_MONITOR Monitor);
 void PsUnregisterSiloMonitor(PSILO_MONITOR Monitor);
+#endif
 
 #ifdef __cplusplus
 }
 #endif
 
+#if (!defined(_NTDDK_))
 #define CPER_FIELD_CHECK(type, field, offset, length) C_ASSERT(((FIELD_OFFSET(type, field) == (offset)) && (RTL_FIELD_SIZE(type, field) == (length))))
 #define FsRtlIsChecksumError(STS) ((BOOLEAN) !FsRtlIsTotalDeviceFailure(STS))
 #define TraceLoggingCORRELATION_VECTOR(cv) TraceLoggingString((cv) . Vector, "__TlgCV__")
 #define WHEA_PMEM_IS_PAGE_RANGE_ALREADY_MARKED_BAD(PageRange) (((PageRange) -> PageCount <= sizeof (ULONG64) * 8) && (((PageRange) -> MarkedBadBitmap) == (ULONG64_MAX >> (sizeof (ULONG64) * 8 - (PageRange) -> PageCount))))
 #define WHEA_PMEM_IS_PFN_ALREADY_MARKED_BAD(PageRange, TargetPfn) (((TargetPfn) - ((PageRange) -> StartingPfn) < sizeof (ULONG64) * 8) && ((((PageRange) -> MarkedBadBitmap) & (1ull << ((TargetPfn) - ((PageRange) -> StartingPfn)))) != 0))
 #define WheaAdd2Ptr(P, I) ((PVOID) ((PUCHAR) (P) + (I)))
+#endif
 
 #endif

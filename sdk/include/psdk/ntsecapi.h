@@ -1597,32 +1597,40 @@ typedef struct KERB_CRYPTO_KEY32 {
 #define AUDIT_GENERIC_EXECUTE 0x20000
 #define AUDIT_GENERIC_READ 0x2005A
 #define AUDIT_GENERIC_WRITE 0x20025
+#if (!(defined(UNICODE)))
 #define AuditLookupCategoryName 0
+#endif
 #ifdef UNICODE
 #define AuditLookupSubCategoryName AuditLookupSubCategoryNameW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define AuditLookupSubCategoryName AuditLookupSubCategoryNameW
 #else
 #define AuditLookupSubCategoryName AuditLookupSubCategoryNameA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define AuditQueryGlobalSacl AuditQueryGlobalSaclW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define AuditQueryGlobalSacl AuditQueryGlobalSaclW
 #else
 #define AuditQueryGlobalSacl AuditQueryGlobalSaclA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define AuditSetGlobalSacl AuditSetGlobalSaclW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define AuditSetGlobalSacl AuditSetGlobalSaclW
 #else
 #define AuditSetGlobalSacl AuditSetGlobalSaclA
+#endif
 #endif
 #endif
 #define AUTH_REQ_PER_USER_FLAGS 0x4F

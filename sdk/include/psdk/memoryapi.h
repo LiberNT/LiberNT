@@ -340,7 +340,9 @@ BOOL WINAPI GetNumaNodeMemoryReadBandwidth(USHORT TargetNodeNumber, USHORT Initi
 BOOL WINAPI GetNumaNodeMemoryReadLatency(USHORT TargetNodeNumber, USHORT InitiatorNodeNumber, NUMA_NODE_MEMORY_PERFORMANCE_LATENCY *Latency);
 BOOL WINAPI GetNumaNodeMemoryWriteBandwidth(USHORT TargetNodeNumber, USHORT InitiatorNodeNumber, NUMA_NODE_MEMORY_PERFORMANCE_BANDWIDTH *Bandwidth);
 BOOL WINAPI GetNumaNodeMemoryWriteLatency(USHORT TargetNodeNumber, USHORT InitiatorNodeNumber, NUMA_NODE_MEMORY_PERFORMANCE_LATENCY *Latency);
+#if (!defined(MIDL_PASS))
 PVOID MapViewOfFile2(HANDLE FileMappingHandle, HANDLE ProcessHandle, ULONG64 Offset, PVOID BaseAddress, SIZE_T ViewSize, ULONG AllocationType, ULONG PageProtection);
+#endif
 PVOID MapViewOfFile3FromApp(HANDLE FileMapping, HANDLE Process, PVOID BaseAddress, ULONG64 Offset, SIZE_T ViewSize, ULONG AllocationType, ULONG PageProtection, MEM_EXTENDED_PARAMETER *ExtendedParameters, ULONG ParameterCount);
 PVOID MapViewOfFileNuma2(HANDLE FileMappingHandle, HANDLE ProcessHandle, ULONG64 Offset, PVOID BaseAddress, SIZE_T ViewSize, ULONG AllocationType, ULONG PageProtection, ULONG PreferredNode);
 DWORD WINAPI OfferVirtualMemory(PVOID VirtualAddress, SIZE_T Size, OFFER_PRIORITY Priority);

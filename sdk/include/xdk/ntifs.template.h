@@ -2005,7 +2005,9 @@ typedef struct _OPEN_REPARSE_LIST {
 #define ACCESS_REASON_EXDATA_MASK 0x7f000000
 #endif
 #ifndef ACCESS_REASON_STAGING_MASK
+#if (!defined(_NTIFS_))
 #define ACCESS_REASON_STAGING_MASK 0x80000000
+#endif
 #endif
 #ifndef ASC_REQ_EXPLICIT_SESSION
 #define ASC_REQ_EXPLICIT_SESSION 0x0000001000000000
@@ -2038,7 +2040,9 @@ typedef struct _OPEN_REPARSE_LIST {
 #define ATOMIC_CREATE_ECP_IN_FLAG_FILE_ATTRIBUTES_SPECIFIED 0x0020
 #endif
 #ifndef ATOMIC_CREATE_ECP_IN_FLAG_GEN_FLAGS_SPECIFIED
+#if (!defined(_NTIFS_))
 #define ATOMIC_CREATE_ECP_IN_FLAG_GEN_FLAGS_SPECIFIED 0x8000
+#endif
 #endif
 #ifndef ATOMIC_CREATE_ECP_IN_FLAG_MARK_USN_SOURCE_INFO
 #define ATOMIC_CREATE_ECP_IN_FLAG_MARK_USN_SOURCE_INFO 0x0800
@@ -2071,7 +2075,9 @@ typedef struct _OPEN_REPARSE_LIST {
 #define ATOMIC_CREATE_ECP_IN_FLAG_VDL_SPECIFIED 0x0008
 #endif
 #ifndef ATOMIC_CREATE_ECP_IN_FLAG_WRITE_USN_CLOSE_RECORD
+#if (!defined(_NTIFS_))
 #define ATOMIC_CREATE_ECP_IN_FLAG_WRITE_USN_CLOSE_RECORD 0x1000
+#endif
 #endif
 #ifndef ATOMIC_CREATE_ECP_IN_OP_FLAG_CASE_SENSITIVE_FLAGS_SPECIFIED
 #define ATOMIC_CREATE_ECP_IN_OP_FLAG_CASE_SENSITIVE_FLAGS_SPECIFIED 0x00000001
@@ -2110,7 +2116,9 @@ typedef struct _OPEN_REPARSE_LIST {
 #define ATOMIC_CREATE_ECP_OUT_FLAG_USN_CLOSE_RECORD_WRITTEN 0x0800
 #endif
 #ifndef ATOMIC_CREATE_ECP_OUT_FLAG_USN_RETURNED
+#if (!defined(_NTIFS_))
 #define ATOMIC_CREATE_ECP_OUT_FLAG_USN_RETURNED 0x1000
+#endif
 #endif
 #ifndef ATOMIC_CREATE_ECP_OUT_FLAG_USN_SOURCE_INFO_MARKED
 #define ATOMIC_CREATE_ECP_OUT_FLAG_USN_SOURCE_INFO_MARKED 0x0400
@@ -2122,7 +2130,9 @@ typedef struct _OPEN_REPARSE_LIST {
 #define ATOMIC_CREATE_ECP_OUT_OP_FLAG_CASE_SENSITIVE_FLAGS_SET 0x00000001
 #endif
 #ifndef CACHE_MANAGER_CALLBACKS_EX_V1
+#if (!defined(_NTIFS_))
 #define CACHE_MANAGER_CALLBACKS_EX_V1 1
+#endif
 #endif
 #ifndef CACHE_USE_DIRECT_ACCESS_MAPPING
 #define CACHE_USE_DIRECT_ACCESS_MAPPING 0x00000001
@@ -2137,7 +2147,9 @@ typedef struct _OPEN_REPARSE_LIST {
 #define CC_AGGRESSIVE_UNMAP_BEHIND 0x00000001
 #endif
 #ifndef CC_DIRTY_PAGES_INFO_V1
+#if (!defined(_NTIFS_))
 #define CC_DIRTY_PAGES_INFO_V1 1
+#endif
 #endif
 #ifndef CC_DISABLE_READ_AHEAD
 #define CC_DISABLE_READ_AHEAD 0x00000002
@@ -2146,7 +2158,9 @@ typedef struct _OPEN_REPARSE_LIST {
 #define CC_DISABLE_WRITE_BEHIND 0x00000004
 #endif
 #ifndef CC_ENABLE_CPU_CACHE
+#if (!defined(_NTIFS_))
 #define CC_ENABLE_CPU_CACHE 0x10000000
+#endif
 #endif
 #ifndef CC_FLUSH_AND_PURGE_GATHER_DIRTY_BITS
 #define CC_FLUSH_AND_PURGE_GATHER_DIRTY_BITS 0x2
@@ -2155,28 +2169,44 @@ typedef struct _OPEN_REPARSE_LIST {
 #define CC_FLUSH_AND_PURGE_WRITEABLE_VIEWS_NOTSEEN 0x4
 #endif
 #ifndef CHECKSUM_TYPE_CRC32
+#if (!defined(_NTIFS_))
 #define CHECKSUM_TYPE_CRC32 1
 #endif
+#endif
 #ifndef CHECKSUM_TYPE_CRC64
+#if (!defined(_NTIFS_))
 #define CHECKSUM_TYPE_CRC64 2
 #endif
+#endif
 #ifndef CHECKSUM_TYPE_ECC
+#if (!defined(_NTIFS_))
 #define CHECKSUM_TYPE_ECC 3
 #endif
+#endif
 #ifndef CHECKSUM_TYPE_FIRST_UNUSED_TYPE
+#if (!defined(_NTIFS_))
 #define CHECKSUM_TYPE_FIRST_UNUSED_TYPE 6
 #endif
+#endif
 #ifndef CHECKSUM_TYPE_NONE
+#if (!defined(_NTIFS_))
 #define CHECKSUM_TYPE_NONE 0
 #endif
+#endif
 #ifndef CHECKSUM_TYPE_SHA256
+#if (!defined(_NTIFS_))
 #define CHECKSUM_TYPE_SHA256 4
 #endif
+#endif
 #ifndef CHECKSUM_TYPE_XXH64
+#if (!defined(_NTIFS_))
 #define CHECKSUM_TYPE_XXH64 5
 #endif
+#endif
 #ifndef COMPRESSION_ENGINE_MASK
+#if (!defined(_NTIFS_))
 #define COMPRESSION_ENGINE_MASK 0xFF00
+#endif
 #endif
 #ifndef COMPRESSION_ENGINE_MAX
 #define COMPRESSION_ENGINE_MAX 0x0200
@@ -2242,7 +2272,9 @@ typedef struct _OPEN_REPARSE_LIST {
 #define CONTAINER_VOLUME_STATE_HOSTING_CONTAINER 0x00000001
 #endif
 #ifndef COPY_FILE_CHUNK_DUPLICATE_EXTENTS
+#if (!defined(_NTIFS_))
 #define COPY_FILE_CHUNK_DUPLICATE_EXTENTS 0x00000001L
+#endif
 #endif
 #ifndef CREATE_REDIRECTION_FLAGS_SERVICED_FROM_LAYER
 #define CREATE_REDIRECTION_FLAGS_SERVICED_FROM_LAYER 0x0001
@@ -2260,7 +2292,9 @@ typedef struct _OPEN_REPARSE_LIST {
 #define CREATE_REDIRECTION_FLAGS_SERVICED_FROM_USER_MODE 0x0010
 #endif
 #ifndef CRITICAL_ACE_FLAG
+#if (!defined(_NTIFS_))
 #define CRITICAL_ACE_FLAG 0x20
+#endif
 #endif
 #ifndef CSV_MGMTLOCK_CHECK_VOLUME_REDIRECTED
 #define CSV_MGMTLOCK_CHECK_VOLUME_REDIRECTED 0x00000001
@@ -2275,7 +2309,9 @@ typedef struct _OPEN_REPARSE_LIST {
 #define CSV_QUERY_MDS_PATH_FLAG_STORAGE_ON_THIS_NODE_IS_CONNECTED 0x1
 #endif
 #ifndef CSV_QUERY_MDS_PATH_V2_VERSION_1
+#if (!defined(_NTIFS_))
 #define CSV_QUERY_MDS_PATH_V2_VERSION_1 1
+#endif
 #endif
 #ifndef DAX_ALLOC_ALIGNMENT_FLAG_FALLBACK_SPECIFIED
 #define DAX_ALLOC_ALIGNMENT_FLAG_FALLBACK_SPECIFIED 0x00000002
@@ -2392,7 +2428,9 @@ typedef struct _OPEN_REPARSE_LIST {
 #define ENCRYPTED_DATA_INFO_SPARSE_DATA 0x00000002
 #endif
 #ifndef FILESYSTEM_STATISTICS_TYPE_REFS
+#if (!defined(_NTIFS_))
 #define FILESYSTEM_STATISTICS_TYPE_REFS 4
+#endif
 #endif
 #ifndef FILE_CLEANUP_FILE_DELETED
 #define FILE_CLEANUP_FILE_DELETED 0x00000004
@@ -2551,7 +2589,9 @@ typedef struct _OPEN_REPARSE_LIST {
 #define FILE_LAYOUT_NAME_ENTRY_PRIMARY 0x00000001
 #endif
 #ifndef FILE_NAME_FLAGS_UNSPECIFIED
+#if (!defined(_NTIFS_))
 #define FILE_NAME_FLAGS_UNSPECIFIED 0x80
+#endif
 #endif
 #ifndef FILE_NAME_FLAG_BOTH
 #define FILE_NAME_FLAG_BOTH 0x03
@@ -2560,7 +2600,9 @@ typedef struct _OPEN_REPARSE_LIST {
 #define FILE_NAME_FLAG_DOS 0x02
 #endif
 #ifndef FILE_NAME_FLAG_HARDLINK
+#if (!defined(_NTIFS_))
 #define FILE_NAME_FLAG_HARDLINK 0
+#endif
 #endif
 #ifndef FILE_NAME_FLAG_NTFS
 #define FILE_NAME_FLAG_NTFS 0x01
@@ -2638,7 +2680,9 @@ typedef struct _OPEN_REPARSE_LIST {
 #define FILE_SUPPORTS_BYPASS_IO 0x00000800
 #endif
 #ifndef FILE_SUPPORTS_GHOSTING
+#if (!defined(_NTIFS_))
 #define FILE_SUPPORTS_GHOSTING 0x40000000
+#endif
 #endif
 #ifndef FILE_SUPPORTS_POSIX_UNLINK_RENAME
 #define FILE_SUPPORTS_POSIX_UNLINK_RENAME 0x00000400
@@ -2680,7 +2724,9 @@ typedef struct _OPEN_REPARSE_LIST {
 #define FLUSH_FLAGS_NO_SYNC 0x00000002
 #endif
 #ifndef FSCTL_INTEGRITY_FLAG_CHECKSUM_ENFORCEMENT_OFF
+#if (!defined(_NTIFS_))
 #define FSCTL_INTEGRITY_FLAG_CHECKSUM_ENFORCEMENT_OFF 1
+#endif
 #endif
 #ifndef FSRTL_ADD_TC_CASE_SENSITIVE
 #define FSRTL_ADD_TC_CASE_SENSITIVE 0x00000001
@@ -2695,10 +2741,14 @@ typedef struct _OPEN_REPARSE_LIST {
 #define FSRTL_FIND_TC_CASE_SENSITIVE 0x00000001
 #endif
 #ifndef FSRTL_FLAG2_BYPASSIO_STREAM_PAUSED
+#if (!defined(_NTIFS_))
 #define FSRTL_FLAG2_BYPASSIO_STREAM_PAUSED 0x20
 #endif
+#endif
 #ifndef FSRTL_FLAG2_WRITABLE_USER_MAPPED_FILE
+#if (!defined(_NTIFS_))
 #define FSRTL_FLAG2_WRITABLE_USER_MAPPED_FILE 0x10
+#endif
 #endif
 #ifndef FSRTL_UNC_HARDENING_CAPABILITIES_INTEGRITY
 #define FSRTL_UNC_HARDENING_CAPABILITIES_INTEGRITY 0x00000002
@@ -2719,7 +2769,9 @@ typedef struct _OPEN_REPARSE_LIST {
 #define FSRTL_UNC_REGISTRATION_VERSION_0201 0x0201
 #endif
 #ifndef GCR_VSM_PROTECTED_PASSWORD
+#if (!defined(_NTIFS_))
 #define GCR_VSM_PROTECTED_PASSWORD 0x4000
+#endif
 #endif
 #ifndef GET_VOLUME_BITMAP_FLAG_MASK_METADATA
 #define GET_VOLUME_BITMAP_FLAG_MASK_METADATA 0x00000001
@@ -3139,7 +3191,9 @@ typedef struct _OPEN_REPARSE_LIST {
 #define IO_REPARSE_TAG_ZLTI_HSM 0x00000038L
 #endif
 #ifndef ISC_REQ_CONFIDENTIALITY_ONLY
+#if (!defined(_NTIFS_))
 #define ISC_REQ_CONFIDENTIALITY_ONLY 0x40000000
+#endif
 #endif
 #ifndef ISC_REQ_DEFERRED_CRED_VALIDATION
 #define ISC_REQ_DEFERRED_CRED_VALIDATION 0x0000000200000000
@@ -3157,10 +3211,14 @@ typedef struct _OPEN_REPARSE_LIST {
 #define ISC_REQ_REUSE_SESSION_TICKETS 0x0000000800000000
 #endif
 #ifndef ISC_REQ_UNVERIFIED_TARGET_NAME
+#if (!defined(_NTIFS_))
 #define ISC_REQ_UNVERIFIED_TARGET_NAME 0x20000000
 #endif
+#endif
 #ifndef ISC_RET_CONFIDENTIALITY_ONLY
+#if (!defined(_NTIFS_))
 #define ISC_RET_CONFIDENTIALITY_ONLY 0x40000000
+#endif
 #endif
 #ifndef ISC_RET_DEFERRED_CRED_VALIDATION
 #define ISC_RET_DEFERRED_CRED_VALIDATION 0x0000000200000000
@@ -3178,28 +3236,40 @@ typedef struct _OPEN_REPARSE_LIST {
 #define ISC_RET_REUSE_SESSION_TICKETS 0x0000000800000000
 #endif
 #ifndef KDC_NETWORK_DISCOVERY_FLAGS_DS13_REQUIRED
+#if (!defined(_NTIFS_))
 #define KDC_NETWORK_DISCOVERY_FLAGS_DS13_REQUIRED 0x80000000
 #endif
+#endif
 #ifndef KDC_NETWORK_SETTINGS_FLAGS_CONFIGURE_DISCOVERY
+#if (!defined(_NTIFS_))
 #define KDC_NETWORK_SETTINGS_FLAGS_CONFIGURE_DISCOVERY 0x40000000
 #endif
+#endif
 #ifndef KDC_NETWORK_SETTINGS_FLAGS_CONFIGURE_PROXY
+#if (!defined(_NTIFS_))
 #define KDC_NETWORK_SETTINGS_FLAGS_CONFIGURE_PROXY 0x80000000
+#endif
 #endif
 #ifndef KDC_NETWORK_SETTINGS_FLAGS_FORCEPROXY
 #define KDC_NETWORK_SETTINGS_FLAGS_FORCEPROXY 0x1
 #endif
 #ifndef KDC_NETWORK_SETTINGS_V2
+#if (!defined(_NTIFS_))
 #define KDC_NETWORK_SETTINGS_V2 2
+#endif
 #endif
 #ifndef KDC_PROXY_SETTINGS_FLAGS_FORCEPROXY
 #define KDC_PROXY_SETTINGS_FLAGS_FORCEPROXY 0x1
 #endif
 #ifndef LOGON_MANAGED_SERVICE
+#if (!defined(_NTIFS_))
 #define LOGON_MANAGED_SERVICE 0x80000
 #endif
+#endif
 #ifndef LOGON_NO_ELEVATION
+#if (!defined(_NTIFS_))
 #define LOGON_NO_ELEVATION 0x40000
+#endif
 #endif
 #ifndef MAP_DISABLE_PAGEFAULT_CLUSTERING
 #define MAP_DISABLE_PAGEFAULT_CLUSTERING 0x00000100
@@ -3211,7 +3281,9 @@ typedef struct _OPEN_REPARSE_LIST {
 #define MARK_HANDLE_DISABLE_FILE_METADATA_OPTIMIZATION 0x00001000
 #endif
 #ifndef MARK_HANDLE_ENABLE_CPU_CACHE
+#if (!defined(_NTIFS_))
 #define MARK_HANDLE_ENABLE_CPU_CACHE 0x10000000
+#endif
 #endif
 #ifndef MARK_HANDLE_ENABLE_USN_SOURCE_ON_PAGING_IO
 #define MARK_HANDLE_ENABLE_USN_SOURCE_ON_PAGING_IO 0x00002000
@@ -3274,10 +3346,14 @@ typedef struct _OPEN_REPARSE_LIST {
 #define MSV1_0_CRED_VERSION_RESERVED_1 0xfffffffe
 #endif
 #ifndef MSV1_0_CRED_VERSION_V2
+#if (!defined(_NTIFS_))
 #define MSV1_0_CRED_VERSION_V2 2
 #endif
+#endif
 #ifndef MSV1_0_CRED_VERSION_V3
+#if (!defined(_NTIFS_))
 #define MSV1_0_CRED_VERSION_V3 4
+#endif
 #endif
 #ifndef MSV1_0_INTERNET_DOMAIN
 #define MSV1_0_INTERNET_DOMAIN 0x00080000
@@ -3286,13 +3362,17 @@ typedef struct _OPEN_REPARSE_LIST {
 #define MSV1_0_SHA_PASSWORD_LENGTH 20
 #endif
 #ifndef NETWORK_APP_INSTANCE_CSV_FLAGS_VALID_ONLY_IF_CSV_COORDINATOR
+#if (!defined(_NTIFS_))
 #define NETWORK_APP_INSTANCE_CSV_FLAGS_VALID_ONLY_IF_CSV_COORDINATOR 0x00000001
+#endif
 #endif
 #ifndef NETWORK_OPEN_ECP_IN_FLAG_DISABLE_OPLOCKS
 #define NETWORK_OPEN_ECP_IN_FLAG_DISABLE_OPLOCKS 0x4
 #endif
 #ifndef NETWORK_OPEN_ECP_IN_FLAG_FORCE_MAX_EOF_HACK
+#if (!defined(_NTIFS_))
 #define NETWORK_OPEN_ECP_IN_FLAG_FORCE_MAX_EOF_HACK 0x40000000
+#endif
 #endif
 #ifndef NETWORK_OPEN_ECP_IN_FLAG_REQ_MUTUAL_AUTH
 #define NETWORK_OPEN_ECP_IN_FLAG_REQ_MUTUAL_AUTH 0x8
@@ -3301,10 +3381,14 @@ typedef struct _OPEN_REPARSE_LIST {
 #define NETWORK_OPEN_ECP_OUT_FLAG_RET_MUTUAL_AUTH 0x8
 #endif
 #ifndef NO_LONG_NAMES
+#if (!defined(_NTIFS_))
 #define NO_LONG_NAMES 2
 #endif
+#endif
 #ifndef OFFLOAD_READ_FLAG_ALL_ZERO_BEYOND_CURRENT_RANGE
+#if (!defined(_NTIFS_))
 #define OFFLOAD_READ_FLAG_ALL_ZERO_BEYOND_CURRENT_RANGE 1
+#endif
 #endif
 #ifndef OPEN_REPARSE_POINT_OVERRIDE_CREATE_OPTION
 #define OPEN_REPARSE_POINT_OVERRIDE_CREATE_OPTION 0x00000040
@@ -3385,16 +3469,24 @@ typedef struct _OPEN_REPARSE_LIST {
 #define PIN_VERIFY_REQUIRED 0x00000080
 #endif
 #ifndef PROJFS_PROTOCOL_VERSION
+#if (!defined(_NTIFS_))
 #define PROJFS_PROTOCOL_VERSION 3
 #endif
+#endif
 #ifndef PSMP_MAXIMUM_SYSAPP_CLAIM_VALUES
+#if (!defined(_NTIFS_))
 #define PSMP_MAXIMUM_SYSAPP_CLAIM_VALUES 4
 #endif
+#endif
 #ifndef PSMP_MINIMUM_SYSAPP_CLAIM_VALUES
+#if (!defined(_NTIFS_))
 #define PSMP_MINIMUM_SYSAPP_CLAIM_VALUES 2
 #endif
+#endif
 #ifndef PURGE_WITH_ACTIVE_VIEWS
+#if (!defined(_NTIFS_))
 #define PURGE_WITH_ACTIVE_VIEWS 8
+#endif
 #endif
 #ifndef QUERY_DIRECT_ACCESS_DATA_EXTENTS
 #define QUERY_DIRECT_ACCESS_DATA_EXTENTS 0x00000002
@@ -3460,13 +3552,19 @@ typedef struct _OPEN_REPARSE_LIST {
 #define QUERY_FILE_LAYOUT_SINGLE_INSTANCED 0x00000001
 #endif
 #ifndef QUERY_STORAGE_CLASSES_FLAGS_MEASURE_READ
+#if (!defined(_NTIFS_))
 #define QUERY_STORAGE_CLASSES_FLAGS_MEASURE_READ 0x40000000
 #endif
+#endif
 #ifndef QUERY_STORAGE_CLASSES_FLAGS_MEASURE_WRITE
+#if (!defined(_NTIFS_))
 #define QUERY_STORAGE_CLASSES_FLAGS_MEASURE_WRITE 0x80000000
 #endif
+#endif
 #ifndef QUERY_STORAGE_CLASSES_FLAGS_NO_DEFRAG_VOLUME
+#if (!defined(_NTIFS_))
 #define QUERY_STORAGE_CLASSES_FLAGS_NO_DEFRAG_VOLUME 0x20000000
+#endif
 #endif
 #ifndef QoCFileEaInformation
 #define QoCFileEaInformation 0x00000004
@@ -3484,52 +3582,84 @@ typedef struct _OPEN_REPARSE_LIST {
 #define QoCFileUsnInformation 0x00000008
 #endif
 #ifndef REFS_QUERY_ROLLBACK_PROTECTION_INFO_OUTPUT_BUFFER_VERSION
+#if (!defined(_NTIFS_))
 #define REFS_QUERY_ROLLBACK_PROTECTION_INFO_OUTPUT_BUFFER_VERSION 1
 #endif
+#endif
 #ifndef REFS_QUERY_VOLUME_COMPRESSION_INFO_OUTPUT_BUFFER_VERSION
+#if (!defined(_NTIFS_))
 #define REFS_QUERY_VOLUME_COMPRESSION_INFO_OUTPUT_BUFFER_VERSION 1
 #endif
+#endif
 #ifndef REFS_QUERY_VOLUME_IO_METRICS_INFO_INPUT_BUFFER_VERSION
+#if (!defined(_NTIFS_))
 #define REFS_QUERY_VOLUME_IO_METRICS_INFO_INPUT_BUFFER_VERSION 1
 #endif
+#endif
 #ifndef REFS_QUERY_VOLUME_IO_METRICS_INFO_OUTPUT_BUFFER_VERSION
+#if (!defined(_NTIFS_))
 #define REFS_QUERY_VOLUME_IO_METRICS_INFO_OUTPUT_BUFFER_VERSION 1
 #endif
+#endif
 #ifndef REFS_QUERY_VOLUME_TOTAL_SHARED_LCNS_OUTPUT_BUFFER_VERSION
+#if (!defined(_NTIFS_))
 #define REFS_QUERY_VOLUME_TOTAL_SHARED_LCNS_OUTPUT_BUFFER_VERSION 1
 #endif
+#endif
 #ifndef REFS_SET_ROLLBACK_PROTECTION_INFO_INPUT_BUFFER_VERSION
+#if (!defined(_NTIFS_))
 #define REFS_SET_ROLLBACK_PROTECTION_INFO_INPUT_BUFFER_VERSION 2
 #endif
+#endif
 #ifndef REFS_SET_ROLLBACK_PROTECTION_INFO_INPUT_BUFFER_VERSION_V1
+#if (!defined(_NTIFS_))
 #define REFS_SET_ROLLBACK_PROTECTION_INFO_INPUT_BUFFER_VERSION_V1 1
 #endif
+#endif
 #ifndef REFS_SET_VOLUME_COMPRESSION_INFO_INPUT_BUFFER_VERSION
+#if (!defined(_NTIFS_))
 #define REFS_SET_VOLUME_COMPRESSION_INFO_INPUT_BUFFER_VERSION 1
 #endif
+#endif
 #ifndef REFS_SET_VOLUME_IO_METRICS_INFO_INPUT_BUFFER_VERSION
+#if (!defined(_NTIFS_))
 #define REFS_SET_VOLUME_IO_METRICS_INFO_INPUT_BUFFER_VERSION 1
 #endif
+#endif
 #ifndef REFS_SMR_VOLUME_GC_PARAMETERS_VERSION_V1
+#if (!defined(_NTIFS_))
 #define REFS_SMR_VOLUME_GC_PARAMETERS_VERSION_V1 1
 #endif
+#endif
 #ifndef REFS_SMR_VOLUME_INFO_OUTPUT_VERSION_V0
+#if (!defined(_NTIFS_))
 #define REFS_SMR_VOLUME_INFO_OUTPUT_VERSION_V0 0
 #endif
+#endif
 #ifndef REFS_SMR_VOLUME_INFO_OUTPUT_VERSION_V1
+#if (!defined(_NTIFS_))
 #define REFS_SMR_VOLUME_INFO_OUTPUT_VERSION_V1 1
 #endif
+#endif
 #ifndef REFS_VOLUME_DEDUP_INFO_INPUT_BUFFER_VERSION
+#if (!defined(_NTIFS_))
 #define REFS_VOLUME_DEDUP_INFO_INPUT_BUFFER_VERSION 2
 #endif
+#endif
 #ifndef REFS_VOLUME_DEDUP_INFO_INPUT_BUFFER_VERSION_V1
+#if (!defined(_NTIFS_))
 #define REFS_VOLUME_DEDUP_INFO_INPUT_BUFFER_VERSION_V1 1
 #endif
+#endif
 #ifndef REFS_VOLUME_DEDUP_INFO_OUTPUT_BUFFER_VERSION
+#if (!defined(_NTIFS_))
 #define REFS_VOLUME_DEDUP_INFO_OUTPUT_BUFFER_VERSION 2
 #endif
+#endif
 #ifndef REFS_VOLUME_DEDUP_INFO_OUTPUT_BUFFER_VERSION_V1
+#if (!defined(_NTIFS_))
 #define REFS_VOLUME_DEDUP_INFO_OUTPUT_BUFFER_VERSION_V1 1
+#endif
 #endif
 #ifndef REMOTE_PROTOCOL_FLAG_INTEGRITY
 #define REMOTE_PROTOCOL_FLAG_INTEGRITY 0x00000010
@@ -3607,16 +3737,24 @@ typedef struct _OPEN_REPARSE_LIST {
 #define RPI_SMB2_SHAREFLAG_ENCRYPT_DATA 0x00000001
 #endif
 #ifndef RPI_SMB2_SHARETYPE_DISK
+#if (!defined(_NTIFS_))
 #define RPI_SMB2_SHARETYPE_DISK 0
 #endif
+#endif
 #ifndef RPI_SMB2_SHARETYPE_PIPE
+#if (!defined(_NTIFS_))
 #define RPI_SMB2_SHARETYPE_PIPE 1
 #endif
+#endif
 #ifndef RPI_SMB2_SHARETYPE_PRINT
+#if (!defined(_NTIFS_))
 #define RPI_SMB2_SHARETYPE_PRINT 2
 #endif
+#endif
 #ifndef RTL_HEAP_MEMORY_LIMIT_CURRENT_VERSION
+#if (!defined(_NTIFS_))
 #define RTL_HEAP_MEMORY_LIMIT_CURRENT_VERSION 1
+#endif
 #endif
 #ifndef SCRUB_DATA_INPUT_FLAG_IGNORE_REDUNDANCY
 #define SCRUB_DATA_INPUT_FLAG_IGNORE_REDUNDANCY 0x00000008
@@ -3712,16 +3850,24 @@ typedef struct _OPEN_REPARSE_LIST {
 #define SECPKG_CALLFLAGS_FORCE_SUPPLIED 0x00000004
 #endif
 #ifndef SECPKG_CRED_ATTR_CERT
+#if (!defined(_NTIFS_))
 #define SECPKG_CRED_ATTR_CERT 4
 #endif
+#endif
 #ifndef SECPKG_CRED_ATTR_KDC_NETWORK_SETTINGS
+#if (!defined(_NTIFS_))
 #define SECPKG_CRED_ATTR_KDC_NETWORK_SETTINGS 3
 #endif
+#endif
 #ifndef SECPKG_CRED_ATTR_KDC_PROXY_SETTINGS
+#if (!defined(_NTIFS_))
 #define SECPKG_CRED_ATTR_KDC_PROXY_SETTINGS 3
 #endif
+#endif
 #ifndef SECPKG_CRED_ATTR_PAC_BYPASS
+#if (!defined(_NTIFS_))
 #define SECPKG_CRED_ATTR_PAC_BYPASS 5
+#endif
 #endif
 #ifndef SECPKG_CRED_KERB_ANCHOR_DS_VERSION
 #define SECPKG_CRED_KERB_ANCHOR_DS_VERSION 0x00000040
@@ -3757,10 +3903,14 @@ typedef struct _OPEN_REPARSE_LIST {
 #define SECURITY_INSTALLER_CAPABILITY_RID_COUNT 10
 #endif
 #ifndef SECURITY_INSTALLER_GROUP_CAPABILITY_BASE
+#if (!defined(_NTIFS_))
 #define SECURITY_INSTALLER_GROUP_CAPABILITY_BASE 0x20
 #endif
+#endif
 #ifndef SECURITY_INSTALLER_GROUP_CAPABILITY_RID_COUNT
+#if (!defined(_NTIFS_))
 #define SECURITY_INSTALLER_GROUP_CAPABILITY_RID_COUNT 9
+#endif
 #endif
 #ifndef SECURITY_LOCAL_ACCOUNT_AND_ADMIN_RID
 #define SECURITY_LOCAL_ACCOUNT_AND_ADMIN_RID 0x00000072L
@@ -3778,7 +3928,9 @@ typedef struct _OPEN_REPARSE_LIST {
 #define SECURITY_RESTRICTED_SERVICES_RID_COUNT 6L
 #endif
 #ifndef SECURITY_SUPPORT_PROVIDER_INTERFACE_VERSION_5
+#if (!defined(_NTIFS_))
 #define SECURITY_SUPPORT_PROVIDER_INTERFACE_VERSION_5 5
+#endif
 #endif
 #ifndef SECURITY_UNIQUIFIED_SERVICE_BASE_RID
 #define SECURITY_UNIQUIFIED_SERVICE_BASE_RID 0x00000061L
@@ -3799,19 +3951,29 @@ typedef struct _OPEN_REPARSE_LIST {
 #define SEC_CHANNEL_BINDINGS_RESULT_NOTVALID_MISSING 0x8
 #endif
 #ifndef SEC_CHANNEL_BINDINGS_RESULT_VALID_MATCHED
+#if (!defined(_NTIFS_))
 #define SEC_CHANNEL_BINDINGS_RESULT_VALID_MATCHED 0x10
 #endif
+#endif
 #ifndef SEC_CHANNEL_BINDINGS_RESULT_VALID_MISSING
+#if (!defined(_NTIFS_))
 #define SEC_CHANNEL_BINDINGS_RESULT_VALID_MISSING 0x40
 #endif
+#endif
 #ifndef SEC_CHANNEL_BINDINGS_RESULT_VALID_PROXY
+#if (!defined(_NTIFS_))
 #define SEC_CHANNEL_BINDINGS_RESULT_VALID_PROXY 0x20
 #endif
+#endif
 #ifndef SEF_FORCE_USER_MODE
+#if (!defined(_NTIFS_))
 #define SEF_FORCE_USER_MODE 0x2000
 #endif
+#endif
 #ifndef SEF_NORMALIZE_OUTPUT_DESCRIPTOR
+#if (!defined(_NTIFS_))
 #define SEF_NORMALIZE_OUTPUT_DESCRIPTOR 0x4000
+#endif
 #endif
 #ifndef SEGMENT_HEAP_FLG_NO_LFH
 #define SEGMENT_HEAP_FLG_NO_LFH 0x2
@@ -3820,7 +3982,9 @@ typedef struct _OPEN_REPARSE_LIST {
 #define SEGMENT_HEAP_FLG_USE_PAGE_HEAP 0x1
 #endif
 #ifndef SEGMENT_HEAP_PARAMETERS_VERSION
+#if (!defined(_NTIFS_))
 #define SEGMENT_HEAP_PARAMETERS_VERSION 3
+#endif
 #endif
 #ifndef SEGMENT_HEAP_PARAMS_VALID_FLAGS
 #define SEGMENT_HEAP_PARAMS_VALID_FLAGS 0x3
@@ -3844,7 +4008,9 @@ typedef struct _OPEN_REPARSE_LIST {
 #define STREAMS_ASSOCIATE_ID_SET 0x2
 #endif
 #ifndef STREAMS_INVALID_ID
+#if (!defined(_NTIFS_))
 #define STREAMS_INVALID_ID 0
+#endif
 #endif
 #ifndef STREAM_EXTENT_ENTRY_ALL_EXTENTS
 #define STREAM_EXTENT_ENTRY_ALL_EXTENTS 0x00000002
@@ -3880,13 +4046,19 @@ typedef struct _OPEN_REPARSE_LIST {
 #define SUPPORTED_FS_FEATURES_QUERY_OPEN 0x00000004
 #endif
 #ifndef SYMLINK_DIRECTORY
+#if (!defined(_NTIFS_))
 #define SYMLINK_DIRECTORY 0x80000000
 #endif
+#endif
 #ifndef SYMLINK_FILE
+#if (!defined(_NTIFS_))
 #define SYMLINK_FILE 0x40000000
 #endif
+#endif
 #ifndef SYMLINK_RESERVED_MASK
+#if (!defined(_NTIFS_))
 #define SYMLINK_RESERVED_MASK 0xF0000000
+#endif
 #endif
 #ifndef SYSTEM_ACCESS_FILTER_NOCONSTRAINT_MASK
 #define SYSTEM_ACCESS_FILTER_NOCONSTRAINT_MASK 0xffffffff
@@ -3910,10 +4082,14 @@ typedef struct _OPEN_REPARSE_LIST {
 #define TOKEN_SYSTEM_MANAGED_ADMIN_FULL_TOKEN 0x08000000
 #endif
 #ifndef TRUST_PROTECTED_FILTER_ACE_FLAG
+#if (!defined(_NTIFS_))
 #define TRUST_PROTECTED_FILTER_ACE_FLAG 0x40
 #endif
+#endif
 #ifndef UNDERSTANDS_LONG_NAMES
+#if (!defined(_NTIFS_))
 #define UNDERSTANDS_LONG_NAMES 1
+#endif
 #endif
 #ifndef USN_REASON_DESIRED_STORAGE_CLASS_CHANGE
 #define USN_REASON_DESIRED_STORAGE_CLASS_CHANGE 0x01000000
@@ -4272,6 +4448,7 @@ typedef enum OPLOCK_NOTIFY_REASON {
     OPLOCK_NOTIFY_BREAK_WAIT_TERMINATED = 1
 } OPLOCK_NOTIFY_REASON;
 
+#if (!defined(_NTIFS_))
 typedef ULONGLONG CLSN;
 typedef ULONG FSRTL_UNC_HARDENING_CAPABILITIES;
 typedef ULONG FSRTL_UNC_PROVIDER_FLAGS;
@@ -4279,9 +4456,12 @@ typedef ULONG LCN_WEAK_REFERENCE_CREATE_FLAGS;
 typedef ULONG LCN_WEAK_REFERENCE_STATE;
 typedef ULONG NETWORK_OPEN_IN_FLAGS;
 typedef ULONG NETWORK_OPEN_OUT_FLAGS;
+#endif
 typedef LCN_WEAK_REFERENCE_CREATE_FLAGS * PLCN_WEAK_REFERENCE_CREATE_FLAGS;
 typedef LCN_WEAK_REFERENCE_STATE * PLCN_WEAK_REFERENCE_STATE;
+#if (!defined(_NTIFS_))
 typedef USHORT REFS_STREAM_EXTENT_PROPERTIES;
+#endif
 typedef REFS_STREAM_EXTENT_PROPERTIES * PREFS_STREAM_EXTENT_PROPERTIES;
 
 typedef struct _ASYNC_DUPLICATE_EXTENTS_STATUS {
@@ -5753,6 +5933,7 @@ typedef struct USN_TRACK_MODIFIED_RANGES {
   LONGLONG FileSizeThreshold;
 } USN_TRACK_MODIFIED_RANGES, *PUSN_TRACK_MODIFIED_RANGES;
 
+#if (!defined(_NTIFS_))
 #define _IO_IRP_EXT_TRACK_OFFSET_HEADER_ 0
 #define _WNNC_
 #define ASYNC_DUPLICATE_EXTENTS_STATUS_V1 0x28
@@ -5767,7 +5948,11 @@ typedef struct USN_TRACK_MODIFIED_RANGES {
 #define EA_NAME_NETWORK_OPEN_ECP_PRIVACY 0
 #define EA_NAME_NETWORK_OPEN_ECP_PRIVACY_U L"ECP{c584edbf-00df-4d28-00b8-8435baca8911e8}-PRIVACY"
 #define FILE_PIPE_SYMLINK_VALID_FLAGS 3
+#endif
+#if (!defined(_NTIFS_)) && (defined(_WIN64))
 #define FILE_REGION_USAGE_QUERY_ALIGNMENT (FILE_REGION_USAGE_LARGE_PAGE_ALIGNMENT | FILE_REGION_USAGE_HUGE_PAGE_ALIGNMENT)
+#endif
+#if (!defined(_NTIFS_))
 #define FileBothDirectoryInformationDefinition { FileBothDirectoryInformation, FIELD_OFFSET(FILE_BOTH_DIR_INFORMATION, NextEntryOffset), FIELD_OFFSET(FILE_BOTH_DIR_INFORMATION, FileName), FIELD_OFFSET(FILE_BOTH_DIR_INFORMATION, FileNameLength) }
 #define FileDirectoryInformationDefinition 0
 #define FileFullDirectoryInformationDefinition { FileFullDirectoryInformation, FIELD_OFFSET(FILE_FULL_DIR_INFORMATION, NextEntryOffset), FIELD_OFFSET(FILE_FULL_DIR_INFORMATION, FileName), FIELD_OFFSET(FILE_FULL_DIR_INFORMATION, FileNameLength) }
@@ -5790,11 +5975,15 @@ typedef struct USN_TRACK_MODIFIED_RANGES {
 #define FSCTL_CLEAR_LCN_WEAK_REFERENCE 0x90464
 #define FSCTL_CREATE_LCN_WEAK_REFERENCE 0x90460
 #define FSCTL_DUPLICATE_CLUSTER 0x9045C
+#endif
+#if (!defined(_NTIFS_)) && (defined(_WIN64))
 #ifdef _WIN64
 #define FSCTL_ENABLE_PER_IO_FLAGS 0x9042C
 #else
 #define FSCTL_ENABLE_PER_IO_FLAGS 0
 #endif
+#endif
+#if (!defined(_NTIFS_))
 #define FSCTL_ENCRYPTION_KEY_CONTROL 0x90404
 #define FSCTL_FILE_SOV_CHECK_RANGE 0x90498
 #define FSCTL_GET_FILTER_FILE_IDENTIFIER 0x903C4
@@ -5878,15 +6067,19 @@ typedef struct USN_TRACK_MODIFIED_RANGES {
 #else
 #define QUERY_ON_CREATE_ECP_CONTEXT_USN_INFO_END ((ULONG)0xA0)
 #endif
+#endif
 #ifdef UNICODE
 #define QueryCredentialsAttributesEx QueryCredentialsAttributesExW
 #else
+#if (!defined(_NTIFS_))
 #ifdef UNICODE
 #define QueryCredentialsAttributesEx QueryCredentialsAttributesExW
 #else
 #define QueryCredentialsAttributesEx QueryCredentialsAttributesExA
 #endif
 #endif
+#endif
+#if (!defined(_NTIFS_))
 #define REPARSE_DATA_BUFFER_EX_HEADER_SIZE 0x28
 #define REPARSE_GUID_DATA_BUFFER_EX_HEADER_SIZE 0x38
 #define RTL_SEGHEAP_MEM_SOURCE_ANY_NODE ((ULONG)0xFFFFFFFF)
@@ -5898,19 +6091,33 @@ typedef struct USN_TRACK_MODIFIED_RANGES {
 #define SECURITY_AUTHENTICATION_AUTHORITY { 0, 0, 0, 0, 0, 18 }
 #define SECURITY_AUTHENTICATION_AUTHORITY_RID_COUNT (1L)
 #define SECURITY_MANDATORY_MEDIUM_PLUS_RID 0x2100
+#endif
+#if (!defined(_NTIFS_)) && (!defined(MIDL_PASS))
 #define SECURITY_MAX_SID_STRING_CHARACTERS 0xBB
+#endif
+#if (!defined(_NTIFS_))
 #define SMB_CCF_APP_INSTANCE_EA_NAME 0
+#endif
+#if (!defined(_NTIFS_)) && (!(defined(UNICODE)))
 #define SspiInitializeSecurityContextAsync SspiInitializeSecurityContextAsync
+#endif
+#if (!defined(_NTIFS_))
 #define STREAMS_MAX_ID 0xFFFF
 #define SUPPORTED_FS_FEATURES_VALID_MASK 0xF
 #define TOKEN_ACCESS_PSEUDO_HANDLE 0x18
 #define TOKEN_ACCESS_PSEUDO_HANDLE_WIN8 0x18
+#endif
+#if (!defined(_NTIFS_)) && (!defined(MIDL_PASS))
 #ifdef _WIN64
 #define TOKEN_APPCONTAINER_SID_MAX_SIZE 0x4C
 #else
 #define TOKEN_APPCONTAINER_SID_MAX_SIZE 0x48
 #endif
+#endif
+#if (!defined(_NTIFS_))
 #define TOKEN_INHERIT_SECURITY_FLAGS 0x380000
+#endif
+#if (!defined(_NTIFS_)) && (!defined(MIDL_PASS))
 #ifdef _WIN64
 #define TOKEN_INTEGRITY_LEVEL_MAX_SIZE 0x54
 #else
@@ -5921,13 +6128,19 @@ typedef struct USN_TRACK_MODIFIED_RANGES {
 #else
 #define TOKEN_OWNER_MAX_SIZE 0x48
 #endif
+#endif
+#if (!defined(_NTIFS_))
 #define TOKEN_TRUST_ALLOWED_MASK 0x2001E
 #define TOKEN_TRUST_CONSTRAINT_MASK 0x20018
+#endif
+#if (!defined(_NTIFS_)) && (!defined(MIDL_PASS))
 #ifdef _WIN64
 #define TOKEN_USER_MAX_SIZE 0x54
 #else
 #define TOKEN_USER_MAX_SIZE 0x4C
 #endif
+#endif
+#if (!defined(_NTIFS_))
 #define USN_SOURCE_VALID_FLAGS 0xF
 #define VALID_COPY_FILE_CHUNK_FLAGS 1
 #define VALID_WRITE_USN_REASON_MASK 0x80000001
@@ -5935,7 +6148,9 @@ typedef struct USN_TRACK_MODIFIED_RANGES {
 #define WCIFS_REDIRECTION_FLAGS_CREATE_SERVICED_FROM_REGISTERED_LAYER 4
 #define WCIFS_REDIRECTION_FLAGS_CREATE_SERVICED_FROM_REMOTE_LAYER 8
 #define WCIFS_REDIRECTION_FLAGS_CREATE_SERVICED_FROM_SCRATCH 2
+#endif
 
+#if (!defined(_NTIFS_)) && (((NTDDI_VERSION >= NTDDI_WIN10_RS2) && defined(_WIN64)))
 struct _DUPLICATE_EXTENTS_DATA32
 {
     UINT32 FileHandle;
@@ -5943,7 +6158,9 @@ struct _DUPLICATE_EXTENTS_DATA32
     LARGE_INTEGER TargetFileOffset;
     LARGE_INTEGER ByteCount;
 };
+#endif
 
+#if (!defined(_NTIFS_)) && (((NTDDI_VERSION >= NTDDI_WIN10_RS3) && defined(_WIN64)))
 struct _DUPLICATE_EXTENTS_DATA_EX32
 {
     ULONG32 Size;
@@ -5953,7 +6170,9 @@ struct _DUPLICATE_EXTENTS_DATA_EX32
     LARGE_INTEGER ByteCount;
     ULONG Flags;
 };
+#endif
 
+#if (!defined(_NTIFS_))
 struct _FILE_LAYOUT_INFO_ENTRY
 {
     struct
@@ -6182,7 +6401,9 @@ struct _QUERY_FILE_LAYOUT_INPUT
         STORAGE_RESERVE_ID StorageReserveIds[1];
     } Filter;
 };
+#endif
 
+#if (!defined(_NTIFS_)) && (defined(_WIN64))
 struct _REARRANGE_FILE_DATA32
 {
     ULONGLONG SourceStartingOffset;
@@ -6191,7 +6412,9 @@ struct _REARRANGE_FILE_DATA32
     ULONG Length;
     ULONG Flags;
 };
+#endif
 
+#if (!defined(_NTIFS_))
 struct _REFS_QUERY_VOLUME_IO_METRICS_INFO_INPUT_BUFFER
 {
     ULONG Version;
@@ -6256,7 +6479,9 @@ struct _REPARSE_DATA_BUFFER_EX
         REPARSE_GUID_DATA_BUFFER ReparseGuidDataBuffer;
     };
 };
+#endif
 
+#if (!defined(_NTIFS_)) && (!defined(MIDL_PASS))
 struct _SE_TOKEN_USER
 {
     union
@@ -6270,7 +6495,9 @@ struct _SE_TOKEN_USER
         UCHAR Buffer[68];
     };
 };
+#endif
 
+#if (!defined(_NTIFS_))
 struct _STREAM_EXTENT_ENTRY
 {
     ULONG Flags;
@@ -6281,11 +6508,17 @@ struct _STREAM_EXTENT_ENTRY
 };
 
 typedef NTSTATUS ALLOCATE_VIRTUAL_MEMORY_EX_CALLBACK(HANDLE, HANDLE, PVOID *, PSIZE_T, ULONG, ULONG, PMEM_EXTENDED_PARAMETER, ULONG);
+#endif
 
+#if (!defined(_NTIFS_)) && (((NTDDI_VERSION >= NTDDI_WIN10_RS2) && defined(_WIN64)))
 typedef struct _DUPLICATE_EXTENTS_DATA32 DUPLICATE_EXTENTS_DATA32;
+#endif
 
+#if (!defined(_NTIFS_)) && (((NTDDI_VERSION >= NTDDI_WIN10_RS3) && defined(_WIN64)))
 typedef struct _DUPLICATE_EXTENTS_DATA_EX32 DUPLICATE_EXTENTS_DATA_EX32;
+#endif
 
+#if (!defined(_NTIFS_))
 typedef struct _FILE_LAYOUT_INFO_ENTRY FILE_LAYOUT_INFO_ENTRY;
 
 typedef struct _FILE_NOTIFY_EXTENDED_INFORMATION FILE_NOTIFY_EXTENDED_INFORMATION;
@@ -6349,11 +6582,17 @@ typedef struct _CC_ASYNC_READ_CONTEXT *PCC_ASYNC_READ_CONTEXT;
 typedef const struct _SMB_SHARE_FLUSH_AND_PURGE_INPUT *PCSMB_SHARE_FLUSH_AND_PURGE_INPUT;
 
 typedef const struct _SMB_SHARE_FLUSH_AND_PURGE_OUTPUT *PCSMB_SHARE_FLUSH_AND_PURGE_OUTPUT;
+#endif
 
+#if (!defined(_NTIFS_)) && (((NTDDI_VERSION >= NTDDI_WIN10_RS2) && defined(_WIN64)))
 typedef struct _DUPLICATE_EXTENTS_DATA32 *PDUPLICATE_EXTENTS_DATA32;
+#endif
 
+#if (!defined(_NTIFS_)) && (((NTDDI_VERSION >= NTDDI_WIN10_RS3) && defined(_WIN64)))
 typedef struct _DUPLICATE_EXTENTS_DATA_EX32 *PDUPLICATE_EXTENTS_DATA_EX32;
+#endif
 
+#if (!defined(_NTIFS_))
 typedef void (*PEXTERNAL_CACHE_CALLBACK_EX)(PVOID, PCC_DIRTY_PAGES_INFO);
 
 typedef struct _FILE_LAYOUT_INFO_ENTRY *PFILE_LAYOUT_INFO_ENTRY;
@@ -6379,17 +6618,25 @@ typedef NTSTATUS (*POPLOCK_NOTIFY_ROUTINE)(POPLOCK_NOTIFY_PARAMS);
 typedef struct _QUERY_FILE_LAYOUT_INPUT *PQUERY_FILE_LAYOUT_INPUT;
 
 typedef void (*PQUERY_LOG_USAGE)(PVOID, PUSHORT);
+#endif
 
+#if (!defined(_NTIFS_)) && (defined(_WIN64))
 typedef struct _REARRANGE_FILE_DATA32 *PREARRANGE_FILE_DATA32;
+#endif
 
+#if (!defined(_NTIFS_))
 typedef struct _REFS_QUERY_VOLUME_IO_METRICS_INFO_INPUT_BUFFER *PREFS_QUERY_VOLUME_IO_METRICS_INFO_INPUT_BUFFER;
 
 typedef struct _REFS_QUERY_VOLUME_IO_METRICS_INFO_OUTPUT_BUFFER *PREFS_QUERY_VOLUME_IO_METRICS_INFO_OUTPUT_BUFFER;
 
 typedef struct _REPARSE_DATA_BUFFER_EX *PREPARSE_DATA_BUFFER_EX;
+#endif
 
+#if (!defined(_NTIFS_)) && (!defined(MIDL_PASS))
 typedef struct _SE_TOKEN_USER PSE_TOKEN_USER;
+#endif
 
+#if (!defined(_NTIFS_))
 typedef struct _STREAM_EXTENT_ENTRY *PSTREAM_EXTENT_ENTRY;
 
 typedef struct _QUERY_FILE_LAYOUT_INPUT QUERY_FILE_LAYOUT_INPUT;
@@ -6407,9 +6654,13 @@ struct _RTL_SEGMENT_HEAP_VA_CALLBACKS
 };
 
 typedef struct _RTL_SEGMENT_HEAP_VA_CALLBACKS *PRTL_SEGMENT_HEAP_VA_CALLBACKS;
+#endif
 
+#if (!defined(_NTIFS_)) && (defined(_WIN64))
 typedef struct _REARRANGE_FILE_DATA32 REARRANGE_FILE_DATA32;
+#endif
 
+#if (!defined(_NTIFS_))
 typedef struct _REFS_QUERY_VOLUME_IO_METRICS_INFO_INPUT_BUFFER REFS_QUERY_VOLUME_IO_METRICS_INFO_INPUT_BUFFER;
 
 typedef struct _REFS_QUERY_VOLUME_IO_METRICS_INFO_OUTPUT_BUFFER REFS_QUERY_VOLUME_IO_METRICS_INFO_OUTPUT_BUFFER;
@@ -6469,9 +6720,13 @@ typedef NTSTATUS SE_LOGON_SESSION_TERMINATED_ROUTINE(PLUID);
 typedef NTSTATUS SE_LOGON_SESSION_TERMINATED_ROUTINE_EX(PLUID, PESILO, PVOID);
 
 typedef SE_LOGON_SESSION_TERMINATED_ROUTINE_EX *PSE_LOGON_SESSION_TERMINATED_ROUTINE_EX;
+#endif
 
+#if (!defined(_NTIFS_)) && (!defined(MIDL_PASS))
 typedef struct _SE_TOKEN_USER SE_TOKEN_USER;
+#endif
 
+#if (!defined(_NTIFS_))
 typedef struct _STREAM_EXTENT_ENTRY STREAM_EXTENT_ENTRY;
 
 struct _IO_IRP_EXT_TRACK_OFFSET_HEADER
@@ -6486,15 +6741,19 @@ typedef struct _IO_IRP_EXT_TRACK_OFFSET_HEADER IO_IRP_EXT_TRACK_OFFSET_HEADER;
 typedef void (*PIO_IRP_EXT_PROCESS_TRACKED_OFFSET_CALLBACK)(struct _IO_IRP_EXT_TRACK_OFFSET_HEADER *, struct _IO_IRP_EXT_TRACK_OFFSET_HEADER *, LONGLONG);
 
 typedef struct _IO_IRP_EXT_TRACK_OFFSET_HEADER *PIO_IRP_EXT_TRACK_OFFSET_HEADER;
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#if (!defined(_NTIFS_))
 NTSTATUS NTAPI MapSecurityError(SECURITY_STATUS SecStatus);
 NTSTATUS NTAPI RtlGetAcesBufferSize(PACL Acl, PULONG AcesBufferSize);
+#endif
 
 /* TODO: LiberNT does not implement the functions below yet */
+#if (!defined(_NTIFS_))
 BOOLEAN CcAsyncCopyRead(PFILE_OBJECT FileObject, PLARGE_INTEGER FileOffset, ULONG Length, BOOLEAN Wait, PVOID Buffer, PIO_STATUS_BLOCK IoStatus, PETHREAD IoIssuerThread, PCC_ASYNC_READ_CONTEXT AsyncReadContext);
 NTSTATUS CcErrorCallbackRoutine(PCC_ERROR_CALLBACK_CONTEXT Context);
 LONGLONG CcGetCacheFileSize(const SECTION_OBJECT_POINTERS *SectionObjectPointer);
@@ -6591,6 +6850,7 @@ BOOLEAN SeTokenIsNoChildProcessRestrictionEnforced(PACCESS_TOKEN Token, PBOOLEAN
 void SeTokenSetNoChildProcessRestricted(PACCESS_TOKEN Token, BOOLEAN UnlessSecure, BOOLEAN AuditOnly);
 void SeTokenSetRedirectionTrustPolicy(PACCESS_TOKEN Token, BOOLEAN AuditOnly);
 NTSTATUS SeUnregisterLogonSessionTerminatedRoutineEx(PSE_LOGON_SESSION_TERMINATED_ROUTINE_EX CallbackRoutine, PVOID Context);
+#endif
 
 #ifdef __cplusplus
 }
@@ -6600,13 +6860,16 @@ NTSTATUS SeUnregisterLogonSessionTerminatedRoutineEx(PSE_LOGON_SESSION_TERMINATE
 #ifdef UNICODE
 #define SspiAcquireCredentialsHandleAsync SspiAcquireCredentialsHandleAsyncW
 #else
+#if (!defined(_NTIFS_)) && (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SspiAcquireCredentialsHandleAsync SspiAcquireCredentialsHandleAsyncW
 #else
 #define SspiAcquireCredentialsHandleAsync SspiAcquireCredentialsHandleAsyncA
 #endif
 #endif
+#endif
 
+#if (!defined(_NTIFS_))
 struct _STREAM_INFORMATION_ENTRY
 {
     ULONG Version;
@@ -6649,12 +6912,14 @@ typedef struct _SspiAsyncContext SspiAsyncContext;
 typedef void (*SspiAsyncNotifyCallback)(SspiAsyncContext *, PVOID);
 
 typedef struct _STREAM_INFORMATION_ENTRY STREAM_INFORMATION_ENTRY;
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
+#if (!defined(_NTIFS_))
 SECURITY_STATUS SspiAcceptSecurityContextAsync(SspiAsyncContext *AsyncContext, PCredHandle phCredential, PCtxtHandle phContext, PSecBufferDesc pInput, unsigned long fContextReq, unsigned long TargetDataRep, PCtxtHandle phNewContext, PSecBufferDesc pOutput, unsigned long *pfContextAttr, PTimeStamp ptsExpiry);
 SECURITY_STATUS SspiAcquireCredentialsHandleAsyncA(SspiAsyncContext *AsyncContext, LPSTR pszPrincipal, LPSTR pszPackage, unsigned long fCredentialUse, void *pvLogonId, void *pAuthData, SEC_GET_KEY_FN pGetKeyFn, void *pvGetKeyArgument, PCredHandle phCredential, PTimeStamp ptsExpiry);
 SECURITY_STATUS SspiAcquireCredentialsHandleAsyncW(SspiAsyncContext *AsyncContext, PSECURITY_STRING pszPrincipal, PSECURITY_STRING pszPackage, unsigned long fCredentialUse, void *pvLogonId, void *pAuthData, SEC_GET_KEY_FN pGetKeyFn, void *pvGetKeyArgument, PCredHandle phCredential, PTimeStamp ptsExpiry);
@@ -6668,15 +6933,19 @@ SECURITY_STATUS SspiInitializeSecurityContextAsyncA(SspiAsyncContext *AsyncConte
 SECURITY_STATUS SspiInitializeSecurityContextAsyncW(SspiAsyncContext *AsyncContext, PCredHandle phCredential, PCtxtHandle phContext, PSECURITY_STRING pszTargetName, unsigned long fContextReq, unsigned long Reserved1, unsigned long TargetDataRep, PSecBufferDesc pInput, unsigned long Reserved2, PCtxtHandle phNewContext, PSecBufferDesc pOutput, unsigned long *pfContextAttr, PTimeStamp ptsExpiry);
 NTSTATUS SspiReinitAsyncContext(SspiAsyncContext *Handle);
 SECURITY_STATUS SspiSetAsyncNotifyCallback(SspiAsyncContext *Context, SspiAsyncNotifyCallback Callback, void *CallbackData);
+#endif
 
 #ifdef __cplusplus
 }
 #endif
 
+#if (!defined(_NTIFS_))
 #define _WCIFS_REDIRECTION_ECP_CONTEXT _CREATE_REDIRECTION_ECP_CONTEXT
 #define FileIdAllExtdBothDirectoryInformationDefinition { FileIdAllExtdBothDirectoryInformation, FIELD_OFFSET(FILE_ID_ALL_EXTD_BOTH_DIR_INFORMATION, NextEntryOffset), FIELD_OFFSET(FILE_ID_ALL_EXTD_BOTH_DIR_INFORMATION, FileName), FIELD_OFFSET(FILE_ID_ALL_EXTD_BOTH_DIR_INFORMATION, FileNameLength) }
 #define FileIdAllExtdDirectoryInformationDefinition { FileIdAllExtdDirectoryInformation, FIELD_OFFSET(FILE_ID_ALL_EXTD_DIR_INFORMATION, NextEntryOffset), FIELD_OFFSET(FILE_ID_ALL_EXTD_DIR_INFORMATION, FileName), FIELD_OFFSET(FILE_ID_ALL_EXTD_DIR_INFORMATION, FileNameLength) }
+#endif
 #define FileIdExtdBothDirectoryInformationDefinition 0
+#if (!defined(_NTIFS_))
 #define PWCIFS_REDIRECTION_ECP_CONTEXT PCREATE_REDIRECTION_ECP_CONTEXT
 #define WCIFS_REDIRECTION_ECP_CONTEXT CREATE_REDIRECTION_ECP_CONTEXT
 
@@ -6839,13 +7108,17 @@ struct _QUERY_ON_CREATE_USN_INFORMATION
     USN Usn;
     FILE_ID_128 FileReferenceNumber;
 };
+#endif
 
+#if (!defined(_NTIFS_)) && (!defined(MIDL_PASS))
 union _SE_SID
 {
     SID Sid;
     UCHAR Buffer[68];
 };
+#endif
 
+#if (!defined(_NTIFS_))
 struct _SEC_APPLICATION_PROTOCOL_LIST
 {
     SEC_APPLICATION_PROTOCOL_NEGOTIATION_EXT ProtoNegoExt;
@@ -6955,9 +7228,13 @@ typedef struct _PHYSICAL_MEMORY_RUN *PPHYSICAL_MEMORY_RUN;
 typedef struct _QUERY_ON_CREATE_ECP_CONTEXT *PQUERY_ON_CREATE_ECP_CONTEXT;
 
 typedef struct _QUERY_ON_CREATE_USN_INFORMATION *PQUERY_ON_CREATE_USN_INFORMATION;
+#endif
 
+#if (!defined(_NTIFS_)) && (!defined(MIDL_PASS))
 typedef union _SE_SID *PSE_SID;
+#endif
 
+#if (!defined(_NTIFS_))
 typedef struct _SEC_APPLICATION_PROTOCOL_LIST *PSEC_APPLICATION_PROTOCOL_LIST;
 
 typedef struct _SEC_APPLICATION_PROTOCOLS *PSEC_APPLICATION_PROTOCOLS;
@@ -6994,9 +7271,13 @@ struct _QUERY_ON_CREATE_ECP_CONTEXT
     SECURITY_INFORMATION SecurityInformationRequested;
     QUERY_ON_CREATE_SECURITY_INFORMATION SecurityInformation;
 };
+#endif
 
+#if (!defined(_NTIFS_)) && (!defined(MIDL_PASS))
 typedef union _SE_SID SE_SID;
+#endif
 
+#if (!defined(_NTIFS_))
 typedef struct _SEC_APPLICATION_PROTOCOL_LIST SEC_APPLICATION_PROTOCOL_LIST;
 
 struct _SEC_APPLICATION_PROTOCOLS
@@ -7052,17 +7333,21 @@ union USN_RECORD_UNION
 };
 
 typedef struct _WOF_EXTERNAL_FILE_ID WOF_EXTERNAL_FILE_ID;
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#if (!defined(_NTIFS_))
 NTSTATUS NTAPI GetSecurityUserInfo(PLUID LogonId, ULONG Flags, PSecurityUserData *UserInformation);
+#endif
 
 #ifdef __cplusplus
 }
 #endif
 
+#if (!defined(_NTIFS_))
 #define FILE_ID_IS_INVALID(FID) ((FID) . QuadPart == FILE_INVALID_FILE_ID)
 #define FsRtlGetBypassIoOpenCount(_fo) (((FsRtlGetPerStreamContextPointer(_fo) != NULL) && (FsRtlGetPerStreamContextPointer(_fo) -> Version >= FSRTL_FCB_HEADER_V4)) ? FsRtlGetPerStreamContextPointer(_fo) -> BypassIoOpenCount : 0)
 #define FsRtlGetBypassIoOpenCountPtr(_fo) (((FsRtlGetPerStreamContextPointer(_fo) != NULL) && (FsRtlGetPerStreamContextPointer(_fo) -> Version >= FSRTL_FCB_HEADER_V4)) ? & FsRtlGetPerStreamContextPointer(_fo) -> BypassIoOpenCount : NULL)
@@ -7073,5 +7358,6 @@ NTSTATUS NTAPI GetSecurityUserInfo(PLUID LogonId, ULONG Flags, PSecurityUserData
 #define MSV1_0_IUM_SUPPLEMENTAL_CREDENTIAL_SIZE(Creds) (FIELD_OFFSET(MSV1_0_IUM_SUPPLEMENTAL_CREDENTIAL, EncryptedCreds) + (Creds) -> EncryptedCredsSize)
 #define QUERY_TYPE_ULONG(TokenInformationClass) (TokenInformationClass == TokenIntegrityLevel || TokenInformationClass == TokenIsAppContainer || TokenInformationClass == TokenVirtualizationAllowed || TokenInformationClass == TokenVirtualizationEnabled || TokenInformationClass == TokenUIAccess || TokenInformationClass == TokenSessionId || TokenInformationClass == TokenHasRestrictions || TokenInformationClass == TokenAppContainerNumber || TokenInformationClass == TokenIsAppSilo || TokenInformationClass == TokenLearningMode || TokenInformationClass == TokenPrivateNameSpace)
 #define REFS_VOLUME_DATA_BUFFER_CONTAINS_DRIVER_VERSION(VOLUME_DATA_BUFFER) ((VOLUME_DATA_BUFFER) -> ByteCount >= RTL_SIZEOF_THROUGH_FIELD(REFS_VOLUME_DATA_BUFFER, DriverMinorVersion))
+#endif
 
 #endif

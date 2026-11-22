@@ -121,19 +121,23 @@ RPC_STATUS RPC_ENTRY RpcNsBindingImportBeginW(unsigned long,unsigned short*,RPC_
 #ifdef UNICODE
 #define RpcNsBindingExportPnP RpcNsBindingExportPnPW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define RpcNsBindingExportPnP RpcNsBindingExportPnPW
 #else
 #define RpcNsBindingExportPnP RpcNsBindingExportPnPA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define RpcNsBindingUnexportPnP RpcNsBindingUnexportPnPW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define RpcNsBindingUnexportPnP RpcNsBindingUnexportPnPW
 #else
 #define RpcNsBindingUnexportPnP RpcNsBindingUnexportPnPA
+#endif
 #endif
 #endif
 

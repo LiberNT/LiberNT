@@ -369,7 +369,9 @@ typedef struct _PDH_TIME_INFO {
 #ifdef UNICODE
 #define PDH_BROWSE_DLG_CONFIG PDH_BROWSE_DLG_CONFIG_W
 #else
+#if (!(defined(UNICODE)))
 #define PDH_BROWSE_DLG_CONFIG PDH_BROWSE_DLG_CONFIG_A
+#endif
 #endif
 #define PDH_FLAGS_CLOSE_QUERY ((DWORD)1)
 #define PDH_FLAGS_FILE_BROWSER_ONLY ((DWORD)1)
@@ -393,7 +395,9 @@ typedef struct _PDH_TIME_INFO {
 #ifdef UNICODE
 #define PDH_LOG_SERVICE_QUERY_INFO PDH_LOG_SERVICE_QUERY_INFO_W
 #else
+#if (!(defined(UNICODE)))
 #define PDH_LOG_SERVICE_QUERY_INFO PDH_LOG_SERVICE_QUERY_INFO_A
+#endif
 #endif
 #define PDH_LOG_UPDATE_ACCESS ((DWORD)0x40000)
 #define PDH_LOG_WRITE_ACCESS ((DWORD)0x20000)
@@ -403,213 +407,261 @@ typedef struct _PDH_TIME_INFO {
 #ifdef UNICODE
 #define PDH_RAW_COUNTER_ITEM PDH_RAW_COUNTER_ITEM_W
 #else
+#if (!(defined(UNICODE)))
 #define PDH_RAW_COUNTER_ITEM PDH_RAW_COUNTER_ITEM_A
+#endif
 #endif
 #ifdef UNICODE
 #define PdhBrowseCounters PdhBrowseCountersW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhBrowseCounters PdhBrowseCountersW
 #else
 #define PdhBrowseCounters PdhBrowseCountersA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PdhBrowseCountersH PdhBrowseCountersHW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhBrowseCountersH PdhBrowseCountersHW
 #else
 #define PdhBrowseCountersH PdhBrowseCountersHA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PdhConnectMachine PdhConnectMachineW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhConnectMachine PdhConnectMachineW
 #else
 #define PdhConnectMachine PdhConnectMachineA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PdhCreateSQLTables PdhCreateSQLTablesW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhCreateSQLTables PdhCreateSQLTablesW
 #else
 #define PdhCreateSQLTables PdhCreateSQLTablesA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PdhEnumLogSetNames PdhEnumLogSetNamesW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhEnumLogSetNames PdhEnumLogSetNamesW
 #else
 #define PdhEnumLogSetNames PdhEnumLogSetNamesA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PdhEnumMachines PdhEnumMachinesW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhEnumMachines PdhEnumMachinesW
 #else
 #define PdhEnumMachines PdhEnumMachinesA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PdhEnumMachinesH PdhEnumMachinesHW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhEnumMachinesH PdhEnumMachinesHW
 #else
 #define PdhEnumMachinesH PdhEnumMachinesHA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PdhEnumObjectItemsH PdhEnumObjectItemsHW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhEnumObjectItemsH PdhEnumObjectItemsHW
 #else
 #define PdhEnumObjectItemsH PdhEnumObjectItemsHA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PdhEnumObjectsH PdhEnumObjectsHW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhEnumObjectsH PdhEnumObjectsHW
 #else
 #define PdhEnumObjectsH PdhEnumObjectsHA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PdhExpandCounterPath PdhExpandCounterPathW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhExpandCounterPath PdhExpandCounterPathW
 #else
 #define PdhExpandCounterPath PdhExpandCounterPathA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PdhExpandWildCardPath PdhExpandWildCardPathW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhExpandWildCardPath PdhExpandWildCardPathW
 #else
 #define PdhExpandWildCardPath PdhExpandWildCardPathA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PdhExpandWildCardPathH PdhExpandWildCardPathHW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhExpandWildCardPathH PdhExpandWildCardPathHW
 #else
 #define PdhExpandWildCardPathH PdhExpandWildCardPathHA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PdhGetDataSourceTimeRange PdhGetDataSourceTimeRangeW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhGetDataSourceTimeRange PdhGetDataSourceTimeRangeW
 #else
 #define PdhGetDataSourceTimeRange PdhGetDataSourceTimeRangeA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PdhGetDefaultPerfCounter PdhGetDefaultPerfCounterW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhGetDefaultPerfCounter PdhGetDefaultPerfCounterW
 #else
 #define PdhGetDefaultPerfCounter PdhGetDefaultPerfCounterA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PdhGetDefaultPerfCounterH PdhGetDefaultPerfCounterHW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhGetDefaultPerfCounterH PdhGetDefaultPerfCounterHW
 #else
 #define PdhGetDefaultPerfCounterH PdhGetDefaultPerfCounterHA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PdhGetDefaultPerfObject PdhGetDefaultPerfObjectW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhGetDefaultPerfObject PdhGetDefaultPerfObjectW
 #else
 #define PdhGetDefaultPerfObject PdhGetDefaultPerfObjectA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PdhGetDefaultPerfObjectH PdhGetDefaultPerfObjectHW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhGetDefaultPerfObjectH PdhGetDefaultPerfObjectHW
 #else
 #define PdhGetDefaultPerfObjectH PdhGetDefaultPerfObjectHA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PdhOpenLog PdhOpenLogW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhOpenLog PdhOpenLogW
 #else
 #define PdhOpenLog PdhOpenLogA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PdhParseCounterPath PdhParseCounterPathW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhParseCounterPath PdhParseCounterPathW
 #else
 #define PdhParseCounterPath PdhParseCounterPathA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PdhParseInstanceName PdhParseInstanceNameW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhParseInstanceName PdhParseInstanceNameW
 #else
 #define PdhParseInstanceName PdhParseInstanceNameA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PdhSelectDataSource PdhSelectDataSourceW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhSelectDataSource PdhSelectDataSourceW
 #else
 #define PdhSelectDataSource PdhSelectDataSourceA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PdhUpdateLog PdhUpdateLogW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhUpdateLog PdhUpdateLogW
 #else
 #define PdhUpdateLog PdhUpdateLogA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define PdhVerifySQLDB PdhVerifySQLDBW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PdhVerifySQLDB PdhVerifySQLDBW
 #else
 #define PdhVerifySQLDB PdhVerifySQLDBA
+#endif
 #endif
 #endif
 #define PERF_DETAIL_COSTLY ((DWORD)0x10000)
@@ -617,17 +669,23 @@ typedef struct _PDH_TIME_INFO {
 #ifdef UNICODE
 #define PPDH_BROWSE_DLG_CONFIG PPDH_BROWSE_DLG_CONFIG_W
 #else
+#if (!(defined(UNICODE)))
 #define PPDH_BROWSE_DLG_CONFIG PPDH_BROWSE_DLG_CONFIG_A
+#endif
 #endif
 #ifdef UNICODE
 #define PPDH_LOG_SERVICE_QUERY_INFO PPDH_LOG_SERVICE_QUERY_INFO_W
 #else
+#if (!(defined(UNICODE)))
 #define PPDH_LOG_SERVICE_QUERY_INFO PPDH_LOG_SERVICE_QUERY_INFO_A
+#endif
 #endif
 #ifdef UNICODE
 #define PPDH_RAW_COUNTER_ITEM PPDH_RAW_COUNTER_ITEM_W
 #else
+#if (!(defined(UNICODE)))
 #define PPDH_RAW_COUNTER_ITEM PPDH_RAW_COUNTER_ITEM_A
+#endif
 #endif
 
 struct _PDH_LOG_SERVICE_QUERY_INFO_A
@@ -907,10 +965,12 @@ PDH_STATUS WINAPI PdhVerifySQLDBW(LPCWSTR szDataSource);
 #ifdef UNICODE
 #define PPDH_BROWSE_DLG_CONFIG_H PPDH_BROWSE_DLG_CONFIG_HW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define PPDH_BROWSE_DLG_CONFIG_H PPDH_BROWSE_DLG_CONFIG_HW
 #else
 #define PPDH_BROWSE_DLG_CONFIG_H PPDH_BROWSE_DLG_CONFIG_HA
+#endif
 #endif
 #endif
 

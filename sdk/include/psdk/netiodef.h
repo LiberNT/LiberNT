@@ -1395,7 +1395,9 @@ extern "C" {
 UINT32 In6ExtractEmbeddedV4AddrFromV6(const IN6_ADDR *Ipv6Address, ULONG PrefixLength, IN_ADDR *Ipv4Address);
 UINT32 In6IsEmbeddedV4AddrPrefixLengthValid(ULONG PrefixLength);
 UINT32 In6SetAddrV4Embedded(const IN6_ADDR *Prefix, ULONG PrefixLength, IN_ADDR *Ipv4Address, IN6_ADDR *Ipv6Address);
+#if (defined(_NTDDK_) || defined(_NTRTL_))
 UINT32 Ipv6pGetVersionClassEcnFlow(UINT8 Class, UINT8 EcnField, UINT32 Flow);
+#endif
 
 #ifdef __cplusplus
 }

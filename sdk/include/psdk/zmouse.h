@@ -30,13 +30,17 @@
 # define SPI_SETWHEELSCROLLLINES 105
 #endif
 
+#if (!(defined(UNICODE)))
 #define MOUSEZ_CLASSNAME 0
 #define MOUSEZ_TITLE "Magellan MSWHEEL"
 #define MSH_MOUSEWHEEL 0
 #define MSH_SCROLL_LINES "MSH_SCROLL_LINES_MSG"
+#endif
 #define MSH_WHEELMODULE_CLASS (MOUSEZ_CLASSNAME)
 #define MSH_WHEELMODULE_TITLE (MOUSEZ_TITLE)
+#if (!(defined(UNICODE)))
 #define MSH_WHEELSUPPORT "MSH_WHEELSUPPORT_MSG"
+#endif
 
 #ifdef __cplusplus
 extern "C" {

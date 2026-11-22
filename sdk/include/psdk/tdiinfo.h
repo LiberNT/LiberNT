@@ -127,6 +127,7 @@ struct _TDI_TL_IO_CONTROL_ENDPOINT
 
 typedef struct _TDI_TL_IO_CONTROL_ENDPOINT *PTDI_TL_IO_CONTROL_ENDPOINT;
 
+#if (defined(_WIN64))
 struct tcp_request_query_information_ex32_xp
 {
     TDIObjectID ID;
@@ -136,6 +137,7 @@ struct tcp_request_query_information_ex32_xp
 typedef struct tcp_request_query_information_ex32_xp *PTCP_REQUEST_QUERY_INFORMATION_EX32_XP;
 
 typedef struct tcp_request_query_information_ex32_xp TCP_REQUEST_QUERY_INFORMATION_EX32_XP;
+#endif
 
 struct tcp_request_set_information_ex
 {

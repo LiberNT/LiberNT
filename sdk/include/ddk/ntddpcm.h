@@ -186,6 +186,8 @@ typedef struct _PCMCIA_SOCKET_REQUEST {
 
 #define IOCTL_PCMCIA_HIDE_DEVICE 0x4AF08
 #define IOCTL_PCMCIA_REVEAL_DEVICE 0x4AF0C
+#if (defined(_NTDDK_))
 #define PCMCIA_CONFIG_SPACE 1
+#endif
 
 #endif /* _NTDDPCMH_ */

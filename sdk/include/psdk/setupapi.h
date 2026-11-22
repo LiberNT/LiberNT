@@ -3111,15 +3111,19 @@ WINSETUPAPI PSTR WINAPI UnicodeToMultiByte(PCWSTR lpUnicodeStr, UINT uCodePage);
 #define SUOI_INTERNAL1 0x00000002
 #endif
 
+#if (!(defined(UNICODE)))
 typedef PSP_BACKUP_QUEUE_PARAMS_V1_A PSP_BACKUP_QUEUE_PARAMS_V1;
 typedef PSP_BACKUP_QUEUE_PARAMS_V2_A PSP_BACKUP_QUEUE_PARAMS_V2;
 typedef PSP_INF_SIGNER_INFO_V1_A PSP_INF_SIGNER_INFO_V1;
 typedef PSP_INF_SIGNER_INFO_V2_A PSP_INF_SIGNER_INFO_V2;
+#endif
 typedef PSP_INF_SIGNER_INFO_V2 PSP_INF_SIGNER_INFO;
+#if (!(defined(UNICODE)))
 typedef SP_BACKUP_QUEUE_PARAMS_V1_A SP_BACKUP_QUEUE_PARAMS_V1;
 typedef SP_BACKUP_QUEUE_PARAMS_V2_A SP_BACKUP_QUEUE_PARAMS_V2;
 typedef SP_INF_SIGNER_INFO_V1_A SP_INF_SIGNER_INFO_V1;
 typedef SP_INF_SIGNER_INFO_V2_A SP_INF_SIGNER_INFO_V2;
+#endif
 typedef SP_INF_SIGNER_INFO_V2 SP_INF_SIGNER_INFO;
 
 #ifdef __cplusplus
@@ -3180,10 +3184,14 @@ typedef struct _FILEPATHS_SIGNERINFO_W {
 #define FLG_ADDREG_TYPE_QWORD 0xB0001
 #define FLG_DELREG_TYPE_QWORD 0xB0001
 #define SCWMI_CLOBBER_SECURITY 0x00000001
+#if (!(defined(UNICODE)))
 #define SetupConfigureWmiFromInfSection 0
+#endif
 #define SetupDiDeleteInterfaceDeviceRegKey SetupDiDeleteDeviceInterfaceRegKey
 #define SetupDiEnumInterfaceDevice SetupDiEnumDeviceInterfaces
+#if (!(defined(UNICODE)))
 #define SetupDiGetCustomDeviceProperty 0
+#endif
 #define SetupDiGetInterfaceDeviceAlias SetupDiGetDeviceInterfaceAlias
 #define SetupDiInstallInterfaceDevices SetupDiInstallDeviceInterfaces
 #define SetupDiOpenInterfaceDeviceRegKey SetupDiOpenDeviceInterfaceRegKey
@@ -3191,31 +3199,39 @@ typedef struct _FILEPATHS_SIGNERINFO_W {
 #ifdef UNICODE
 #define SetupGetInfDriverStoreLocation SetupGetInfDriverStoreLocationW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SetupGetInfDriverStoreLocation SetupGetInfDriverStoreLocationW
 #else
 #define SetupGetInfDriverStoreLocation SetupGetInfDriverStoreLocationA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define SetupGetInfPublishedName SetupGetInfPublishedNameW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SetupGetInfPublishedName SetupGetInfPublishedNameW
 #else
 #define SetupGetInfPublishedName SetupGetInfPublishedNameA
 #endif
 #endif
+#endif
 #ifdef UNICODE
 #define SetupPrepareQueueForRestore SetupPrepareQueueForRestoreW
 #else
+#if (!(defined(UNICODE)))
 #ifdef UNICODE
 #define SetupPrepareQueueForRestore SetupPrepareQueueForRestoreW
 #else
 #define SetupPrepareQueueForRestore SetupPrepareQueueForRestoreA
 #endif
 #endif
+#endif
+#if (!(defined(UNICODE)))
 #define SetupVerifyInfFile 0
+#endif
 
 struct _SP_ALTPLATFORM_INFO_V3
 {
@@ -3236,9 +3252,11 @@ struct _SP_ALTPLATFORM_INFO_V3
     DWORD BuildNumber;
 };
 
+#if (!(defined(UNICODE)))
 typedef FILEPATHS_SIGNERINFO_A FILEPATHS_SIGNERINFO;
 
 typedef PFILEPATHS_SIGNERINFO_A PFILEPATHS_SIGNERINFO;
+#endif
 
 typedef struct _SP_ALTPLATFORM_INFO_V3 *PSP_ALTPLATFORM_INFO_V3;
 

@@ -2071,12 +2071,16 @@ STRSAFE_INLINE_API StringGetsExWorkerW(STRSAFE_LPWSTR pszDest,size_t cchDest,siz
 #ifdef UNICODE
 #define UnalignedStringCbLength StringCbLengthW
 #else
+#if (!(defined(UNICODE)))
 #define UnalignedStringCbLength StringCbLengthA
+#endif
 #endif
 #ifdef UNICODE
 #define UnalignedStringCchLength StringCchLengthW
 #else
+#if (!(defined(UNICODE)))
 #define UnalignedStringCchLength StringCchLengthA
+#endif
 #endif
 
 typedef const __unaligned wchar_t *STRSAFE_LPCUWSTR;
