@@ -267,6 +267,16 @@ static void APIENTRY NativeWddm20NoDeferredWork(D3D10DDI_HRTCORELAYER)
      * has no deferred garbage collection or amortized work queue. */
 }
 
+#define NATIVE_WDDM20_REFRESH_CONSTANT_BUFFERS(Name, Stage) \
+static void APIENTRY NativeWddm20State##Name(D3D10DDI_HRTCORELAYER layer, UINT base, UINT count) \
+{ \
+    NativeContext *context = static_cast<NativeDevice *>(layer.handle)->context; \
+    count = NativeWddm20RefreshCount(count, base, 14); \
+    if (!context || !count) return; \
+    NativeStateBypass bypass(context); \
+    context->RestoreConstantBuffers(context, Stage, base, count); \
+}
+
 static UINT NativeWddm20RefreshCount(UINT count, UINT base, UINT capacity)
 {
     if (base >= capacity) return 0;
@@ -280,22 +290,22 @@ static void APIENTRY NativeWddm20State##Name(D3D10DDI_HRTCORELAYER layer, UINT b
     count = NativeWddm20RefreshCount(count, base, Capacity); \
     if (context && count) NativeStateBypass(context)->Method(Stage, base, count, &context->Member[Stage][base]); \
 }
-NATIVE_WDDM20_REFRESH_RANGE(VsConstBuf, 0, SetConstantBuffers, constant_buffers, 14)
-NATIVE_WDDM20_REFRESH_RANGE(PsConstBuf, 1, SetConstantBuffers, constant_buffers, 14)
-NATIVE_WDDM20_REFRESH_RANGE(GsConstBuf, 2, SetConstantBuffers, constant_buffers, 14)
+NATIVE_WDDM20_REFRESH_CONSTANT_BUFFERS(VsConstBuf, 0)
+NATIVE_WDDM20_REFRESH_CONSTANT_BUFFERS(PsConstBuf, 1)
+NATIVE_WDDM20_REFRESH_CONSTANT_BUFFERS(GsConstBuf, 2)
 NATIVE_WDDM20_REFRESH_RANGE(VsSrv, 0, SetShaderResources, shader_resources, 128)
 NATIVE_WDDM20_REFRESH_RANGE(PsSrv, 1, SetShaderResources, shader_resources, 128)
 NATIVE_WDDM20_REFRESH_RANGE(GsSrv, 2, SetShaderResources, shader_resources, 128)
 NATIVE_WDDM20_REFRESH_RANGE(VsSampler, 0, SetSamplers, samplers, 16)
 NATIVE_WDDM20_REFRESH_RANGE(PsSampler, 1, SetSamplers, samplers, 16)
 NATIVE_WDDM20_REFRESH_RANGE(GsSampler, 2, SetSamplers, samplers, 16)
-NATIVE_WDDM20_REFRESH_RANGE(HsConstBuf, 3, SetConstantBuffers, constant_buffers, 14)
+NATIVE_WDDM20_REFRESH_CONSTANT_BUFFERS(HsConstBuf, 3)
 NATIVE_WDDM20_REFRESH_RANGE(HsSrv, 3, SetShaderResources, shader_resources, 128)
 NATIVE_WDDM20_REFRESH_RANGE(HsSampler, 3, SetSamplers, samplers, 16)
-NATIVE_WDDM20_REFRESH_RANGE(DsConstBuf, 4, SetConstantBuffers, constant_buffers, 14)
+NATIVE_WDDM20_REFRESH_CONSTANT_BUFFERS(DsConstBuf, 4)
 NATIVE_WDDM20_REFRESH_RANGE(DsSrv, 4, SetShaderResources, shader_resources, 128)
 NATIVE_WDDM20_REFRESH_RANGE(DsSampler, 4, SetSamplers, samplers, 16)
-NATIVE_WDDM20_REFRESH_RANGE(CsConstBuf, 5, SetConstantBuffers, constant_buffers, 14)
+NATIVE_WDDM20_REFRESH_CONSTANT_BUFFERS(CsConstBuf, 5)
 NATIVE_WDDM20_REFRESH_RANGE(CsSrv, 5, SetShaderResources, shader_resources, 128)
 NATIVE_WDDM20_REFRESH_RANGE(CsSampler, 5, SetSamplers, samplers, 16)
 #undef NATIVE_WDDM20_REFRESH_RANGE

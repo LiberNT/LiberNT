@@ -235,7 +235,7 @@ void NativeContext::CopyStateTo(NativeContext *destination)
     destination->SOSetTargets(4, stream_outputs, append);
     for (UINT stage = 0; stage < 6; ++stage)
     {
-        destination->SetConstantBuffers(stage, 0, 14, constant_buffers[stage]);
+        RestoreConstantBuffers(destination, stage, 0, 14);
         destination->SetSamplers(stage, 0, 16, samplers[stage]);
         destination->SetShaderResources(stage, 0, 128, shader_resources[stage]);
     }
