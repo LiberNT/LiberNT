@@ -119,6 +119,9 @@ IoIs32bitProcess(
 
     ASSERT(KeGetCurrentIrql() <= DISPATCH_LEVEL);
 
+    if (Irp != NULL && Irp->RequestorMode == KernelMode)
+        return FALSE;
+
     Process = (Irp != NULL) ? IoGetRequestorProcess(Irp) : PsGetCurrentProcess();
     if (Process == NULL) return FALSE;
 
