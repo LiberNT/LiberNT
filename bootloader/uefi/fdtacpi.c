@@ -1086,7 +1086,7 @@ FdtAcpiInstallTables(
     _In_ PFDTACPI_PLATFORM Platform)
 {
     EFI_GUID Acpi20Guid = EFI_ACPI_20_TABLE_GUID;
-    EFI_PHYSICAL_ADDRESS Memory = 0xFFFFFFFF;
+    EFI_PHYSICAL_ADDRESS Memory = min(0xFFFFFFFFULL, ((ULONGLONG)MmArchMaxLoaderPage << MM_PAGE_SHIFT) - 1);
     EFI_STATUS Status;
     ULONG TableCount = 2 + (Platform->TimerPresent ? 1 : 0) + (Platform->UartPresent ? 1 : 0);
     ULONG RsdpOffset = 0;

@@ -41,9 +41,7 @@ _exituefi:
     mov     sp, r4
     pop     {r4, pc}
 
-    .balign 4096
-    .global ArmEnterKernelStart
-ArmEnterKernelStart:
+    .balign 4
     .global ArmEnterKernel
     .thumb_func
 ArmEnterKernel:
@@ -52,10 +50,24 @@ ArmEnterKernel:
     mov     r5, r1
     mov     r6, r2
     mov     r7, r3
+    ldr     r8, [sp]
     mrc     p15, 0, r0, c1, c0, 0
     bic     r0, r0, #1
     mcr     p15, 0, r0, c1, c0, 0
     isb
+    mov     r1, #0
+    mcr     p15, 0, r1, c7, c5, 0
+    mcr     p15, 0, r1, c7, c5, 6
+    dsb     sy
+    isb
+    orr     r8, r8, #1
+    bx      r8
+
+    .balign 4
+    .global ArmEnterKernelStart
+ArmEnterKernelStart:
+    .thumb_func
+ArmEnterKernelStub:
     movw    r0, #0x00FF
     movt    r0, #0x4444
     mcr     p15, 0, r0, c10, c2, 0
