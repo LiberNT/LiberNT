@@ -22,6 +22,7 @@ KSPIN_LOCK KiFreezeExecutionLock;
 KSPIN_LOCK Ki486CompatibilityLock;
 
 ULONG KiDpcTimeCount[MAXIMUM_PROCESSORS];
+ULONG KiFastSystemCallReturnAddress;
 
 ULONGLONG BootCycles, BootCyclesEnd;
 
@@ -717,7 +718,7 @@ KiI386PublishSystemCallStubs(
         if ((Call == NULL) || (Return == NULL)) return STATUS_PROCEDURE_NOT_FOUND;
 
         SharedUserData->SystemCall = (ULONG)(ULONG_PTR)Call;
-        SharedUserData->SystemCallReturn = (ULONG)(ULONG_PTR)Return;
+        KiFastSystemCallReturnAddress = (ULONG)(ULONG_PTR)Return;
         return STATUS_SUCCESS;
     }
 
@@ -725,6 +726,6 @@ KiI386PublishSystemCallStubs(
     if (Call == NULL) return STATUS_PROCEDURE_NOT_FOUND;
 
     SharedUserData->SystemCall = (ULONG)(ULONG_PTR)Call;
-    SharedUserData->SystemCallReturn = 0;
+    KiFastSystemCallReturnAddress = 0;
     return STATUS_SUCCESS;
 }

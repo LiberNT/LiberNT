@@ -748,6 +748,7 @@ KiExceptionExit(
 
 extern PVOID Ki386IopmSaveArea;
 extern ULONG KeI386EFlagsAndMaskV86;
+extern ULONG KiFastSystemCallReturnAddress;
 extern ULONG KeI386EFlagsOrMaskV86;
 extern BOOLEAN KeI386VirtualIntExtensions;
 extern KIDTENTRY KiIdt[MAXIMUM_IDTVECTOR+1];

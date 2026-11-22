@@ -698,21 +698,11 @@ typedef struct _KUSER_SHARED_DATA
 
     ULONG DataFlagsPad[1];                                  // 0x2f4
     ULONGLONG TestRetInstruction;                           // 0x2f8
-#if defined(_M_IX86)
-/* FIXME: Windows puts QpcFrequency at 0x300 and SystemCall at 0x308 on x86 too; the i386 system call stubs still call through 0x300 */
-    ULONG SystemCall;                                       // 0x300
-    ULONG SystemCallReturn;                                 // 0x304
-#else
     ULONGLONG QpcFrequency;                                 // 0x300
-#endif
-#if !defined(_M_IX86)
     ULONG SystemCall;                                       // 0x308
     ULONG Reserved2;                                        // 0x30c
     ULONGLONG FullNumberOfPhysicalPages;                    // 0x310
     ULONGLONG SystemCallPad[1];                             // 0x318
-#else
-    ULONGLONG SystemCallPad[3];                             // 0x308
-#endif
     union
     {
         volatile KSYSTEM_TIME TickCount;                    // 0x320

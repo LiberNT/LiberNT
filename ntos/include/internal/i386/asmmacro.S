@@ -57,7 +57,7 @@ MACRO(KiEnterTrap, Flags)
         push edx
         pushfd
         push KGDT_R3_CODE or RPL_MASK
-        push dword ptr ds:[KUSER_SHARED_SYSCALL_RET]
+        push dword ptr ds:[_KiFastSystemCallReturnAddress]
 
     elseif (Flags AND KI_SOFTWARE_TRAP)
 
