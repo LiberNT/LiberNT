@@ -856,6 +856,12 @@ static size_t packed_message_64to32( UINT message, WPARAM wparam,
             mcs32.cy      = mcs64->cy;
             mcs32.style   = mcs64->style;
             mcs32.lParam  = mcs64->lParam;
+#ifdef __REACTOS__
+            if (mcs32.szClass == sizeof(*mcs64))
+                mcs32.szClass = sizeof(mcs32);
+            if (mcs32.szTitle)
+                mcs32.szTitle -= sizeof(*mcs64) - sizeof(mcs32);
+#endif
             size -= sizeof(*mcs64);
             if (size) memmove( (char *)params32 + sizeof(mcs32), mcs64 + 1, size );
             memcpy( params32, &mcs32, sizeof(mcs32) );
