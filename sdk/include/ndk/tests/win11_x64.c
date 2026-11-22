@@ -8,7 +8,8 @@
 #include <ntifs.h>
 #include <ndk/ntndk.h>
 
-#define C_ASSERT_FIELD(Type, Offset, MemberName) C_ASSERT(FIELD_OFFSET(Type, MemberName) == Offset);
+#define C_ASSERT_FIELD(Type, Offset, MemberName) \
+    C_ASSERT(FIELD_OFFSET(Type, MemberName) == Offset);
 
 /* KTHREAD */
 C_ASSERT(sizeof(KTHREAD) == 0x4C0);
@@ -28,20 +29,10 @@ C_ASSERT_FIELD(KTHREAD, 0x068, SchedulingGroup)
 C_ASSERT_FIELD(KTHREAD, 0x070, WaitRegister)
 C_ASSERT_FIELD(KTHREAD, 0x071, Running)
 C_ASSERT_FIELD(KTHREAD, 0x072, Alerted)
-/* FIXME: KTHREAD.AutoBoostActive is at 0x074 on Windows 11 */
 C_ASSERT_FIELD(KTHREAD, 0x074, MiscFlags)
-/* FIXME: KTHREAD.SecureThread is at 0x075 on Windows 11 */
-/* FIXME: KTHREAD.WaitNextClearWobPriorityFloor is at 0x076 on Windows 11 */
-/* FIXME: KTHREAD.Reserved is at 0x077 on Windows 11 */
-/* FIXME: KTHREAD.UserIdealProcessorFixed is at 0x078 on Windows 11 */
 C_ASSERT_FIELD(KTHREAD, 0x078, ThreadFlags)
-/* FIXME: KTHREAD.DisableQuantum is at 0x079 on Windows 11 */
-/* FIXME: KTHREAD.AutoBoostEntriesExhausted is at 0x07A on Windows 11 */
-/* FIXME: KTHREAD.EtwStackTraceApcInserted is at 0x07B on Windows 11 */
 C_ASSERT_FIELD(KTHREAD, 0x07C, Tag)
-/* FIXME: KTHREAD.CalloutActive is at 0x07D on Windows 11 */
 C_ASSERT_FIELD(KTHREAD, 0x07D, SameThreadTransientFlags)
-/* FIXME: KTHREAD.RunningNonRetpolineCode is at 0x07E on Windows 11 */
 C_ASSERT_FIELD(KTHREAD, 0x07E, SpecCtrl)
 C_ASSERT_FIELD(KTHREAD, 0x080, SystemCallNumber)
 C_ASSERT_FIELD(KTHREAD, 0x084, ReadyTime)
@@ -83,21 +74,18 @@ C_ASSERT_FIELD(KTHREAD, 0x1E6, SpecialApcDisable)
 C_ASSERT_FIELD(KTHREAD, 0x1F0, Spare18)
 C_ASSERT_FIELD(KTHREAD, 0x1F8, LastXStateSaveDebugInfo)
 C_ASSERT_FIELD(KTHREAD, 0x200, ThreadFlags2)
-/* FIXME: KTHREAD.DisableKasan is at 0x200 on Windows 11 */
 C_ASSERT_FIELD(KTHREAD, 0x204, BamQosLevel)
 C_ASSERT_FIELD(KTHREAD, 0x205, HardwareFeedbackClass)
 C_ASSERT_FIELD(KTHREAD, 0x206, PriorityDecrement)
-/* FIXME: KTHREAD.ForegroundBoost is at 0x206 on Windows 11 */
 C_ASSERT_FIELD(KTHREAD, 0x208, QueueListEntry)
 C_ASSERT_FIELD(KTHREAD, 0x218, NextProcessor)
-/* FIXME: KTHREAD.NextProcessorNumber is at 0x218 on Windows 11 */
 C_ASSERT_FIELD(KTHREAD, 0x21C, QueuePriority)
 C_ASSERT_FIELD(KTHREAD, 0x220, Process)
 C_ASSERT_FIELD(KTHREAD, 0x228, UserAffinity)
 C_ASSERT_FIELD(KTHREAD, 0x230, UserAffinityPrimaryGroup)
 C_ASSERT_FIELD(KTHREAD, 0x232, PreviousMode)
 C_ASSERT_FIELD(KTHREAD, 0x233, BasePriority)
-/* FIXME: KTHREAD.Spare24 is at 0x234 on Windows 11 */
+C_ASSERT_FIELD(KTHREAD, 0x234, Spare24)
 C_ASSERT_FIELD(KTHREAD, 0x235, Preempted)
 C_ASSERT_FIELD(KTHREAD, 0x236, AdjustReason)
 C_ASSERT_FIELD(KTHREAD, 0x237, AdjustIncrement)
@@ -133,7 +121,6 @@ C_ASSERT_FIELD(KTHREAD, 0x318, AbWaitEntryCount)
 C_ASSERT_FIELD(KTHREAD, 0x318, AbEntryCountValue)
 C_ASSERT_FIELD(KTHREAD, 0x319, AbOwnedEntryCount)
 C_ASSERT_FIELD(KTHREAD, 0x31A, FreezeFlags)
-/* FIXME: KTHREAD.FreezeCount2 is at 0x31A on Windows 11 */
 C_ASSERT_FIELD(KTHREAD, 0x31B, WobPriority)
 C_ASSERT_FIELD(KTHREAD, 0x31C, SecureThreadCookie)
 C_ASSERT_FIELD(KTHREAD, 0x320, SchedulerSharedSystemSlot)
@@ -145,7 +132,7 @@ C_ASSERT_FIELD(KTHREAD, 0x35C, AbCompletedIoBoostCount)
 C_ASSERT_FIELD(KTHREAD, 0x360, AbCompletedIoQoSBoostCount)
 C_ASSERT_FIELD(KTHREAD, 0x364, KeReferenceCount)
 C_ASSERT_FIELD(KTHREAD, 0x366, DecayBoost)
-/* FIXME: KTHREAD.Spare6 is at 0x367 on Windows 11 */
+C_ASSERT_FIELD(KTHREAD, 0x367, Spare6)
 C_ASSERT_FIELD(KTHREAD, 0x368, ForegroundLossTime)
 C_ASSERT_FIELD(KTHREAD, 0x370, GlobalForegroundListEntry)
 C_ASSERT_FIELD(KTHREAD, 0x370, ForegroundDpcStackListEntry)
@@ -197,37 +184,37 @@ C_ASSERT_FIELD(KTHREAD, 0x480, KcsanThread)
 C_ASSERT_FIELD(KTHREAD, 0x488, SchedulerAssistYieldCounter)
 C_ASSERT_FIELD(KTHREAD, 0x48C, SchedulerAssistYieldBoostCount)
 C_ASSERT_FIELD(KTHREAD, 0x490, SchedulerAssistLastYieldBoostTime)
-/* FIXME: KTHREAD.Padding is at 0x498 on Windows 11 */
+C_ASSERT_FIELD(KTHREAD, 0x498, Padding)
 
 /* KPCR */
 C_ASSERT(sizeof(KIPCR) == 0xD080);
-C_ASSERT_FIELD(KPCR, 0x000, NtTib)
-C_ASSERT_FIELD(KPCR, 0x000, GdtBase)
-C_ASSERT_FIELD(KPCR, 0x008, TssBase)
-C_ASSERT_FIELD(KPCR, 0x010, UserRsp)
-C_ASSERT_FIELD(KPCR, 0x018, Self)
-C_ASSERT_FIELD(KPCR, 0x020, CurrentPrcb)
-C_ASSERT_FIELD(KPCR, 0x028, LockArray)
-C_ASSERT_FIELD(KPCR, 0x030, Used_Self)
-C_ASSERT_FIELD(KPCR, 0x038, IdtBase)
-C_ASSERT_FIELD(KPCR, 0x040, Unused)
-C_ASSERT_FIELD(KPCR, 0x050, Irql)
-C_ASSERT_FIELD(KPCR, 0x051, SecondLevelCacheAssociativity)
-C_ASSERT_FIELD(KPCR, 0x052, ObsoleteNumber)
-C_ASSERT_FIELD(KPCR, 0x053, Fill0)
-C_ASSERT_FIELD(KPCR, 0x054, Unused0)
-C_ASSERT_FIELD(KPCR, 0x060, MajorVersion)
-C_ASSERT_FIELD(KPCR, 0x062, MinorVersion)
-C_ASSERT_FIELD(KPCR, 0x064, StallScaleFactor)
-C_ASSERT_FIELD(KPCR, 0x068, Unused1)
-C_ASSERT_FIELD(KPCR, 0x080, KernelReserved)
-C_ASSERT_FIELD(KPCR, 0x0BC, SecondLevelCacheSize)
-C_ASSERT_FIELD(KPCR, 0x0C0, HalReserved)
-C_ASSERT_FIELD(KPCR, 0x100, Unused2)
-C_ASSERT_FIELD(KPCR, 0x108, KdVersionBlock)
-C_ASSERT_FIELD(KPCR, 0x110, Unused3)
-C_ASSERT_FIELD(KPCR, 0x118, PcrAlign1)
-C_ASSERT(FIELD_OFFSET(KIPCR, Prcb) == 0x180);
+C_ASSERT_FIELD(KIPCR, 0x000, NtTib)
+C_ASSERT_FIELD(KIPCR, 0x000, GdtBase)
+C_ASSERT_FIELD(KIPCR, 0x008, TssBase)
+C_ASSERT_FIELD(KIPCR, 0x010, UserRsp)
+C_ASSERT_FIELD(KIPCR, 0x018, Self)
+C_ASSERT_FIELD(KIPCR, 0x020, CurrentPrcb)
+C_ASSERT_FIELD(KIPCR, 0x028, LockArray)
+C_ASSERT_FIELD(KIPCR, 0x030, Used_Self)
+C_ASSERT_FIELD(KIPCR, 0x038, IdtBase)
+C_ASSERT_FIELD(KIPCR, 0x040, Unused)
+C_ASSERT_FIELD(KIPCR, 0x050, Irql)
+C_ASSERT_FIELD(KIPCR, 0x051, SecondLevelCacheAssociativity)
+C_ASSERT_FIELD(KIPCR, 0x052, ObsoleteNumber)
+C_ASSERT_FIELD(KIPCR, 0x053, Fill0)
+C_ASSERT_FIELD(KIPCR, 0x054, Unused0)
+C_ASSERT_FIELD(KIPCR, 0x060, MajorVersion)
+C_ASSERT_FIELD(KIPCR, 0x062, MinorVersion)
+C_ASSERT_FIELD(KIPCR, 0x064, StallScaleFactor)
+C_ASSERT_FIELD(KIPCR, 0x068, Unused1)
+C_ASSERT_FIELD(KIPCR, 0x080, KernelReserved)
+C_ASSERT_FIELD(KIPCR, 0x0BC, SecondLevelCacheSize)
+C_ASSERT_FIELD(KIPCR, 0x0C0, HalReserved)
+C_ASSERT_FIELD(KIPCR, 0x100, Unused2)
+C_ASSERT_FIELD(KIPCR, 0x108, KdVersionBlock)
+C_ASSERT_FIELD(KIPCR, 0x110, Unused3)
+C_ASSERT_FIELD(KIPCR, 0x118, PcrAlign1)
+C_ASSERT_FIELD(KIPCR, 0x180, Prcb)
 
 /* KPRCB */
 C_ASSERT(sizeof(KPRCB) == 0xCF00);
@@ -242,7 +229,6 @@ C_ASSERT_FIELD(KPRCB, 0x018, IdleThread)
 C_ASSERT_FIELD(KPRCB, 0x020, NestingLevel)
 C_ASSERT_FIELD(KPRCB, 0x021, ClockOwner)
 C_ASSERT_FIELD(KPRCB, 0x022, PendingTickFlags)
-/* FIXME: KPRCB.PendingTick is at 0x022 on Windows 11 */
 C_ASSERT_FIELD(KPRCB, 0x023, IdleState)
 C_ASSERT_FIELD(KPRCB, 0x024, Number)
 C_ASSERT_FIELD(KPRCB, 0x028, RspBase)
@@ -251,8 +237,8 @@ C_ASSERT_FIELD(KPRCB, 0x038, PriorityState)
 C_ASSERT_FIELD(KPRCB, 0x040, CpuType)
 C_ASSERT_FIELD(KPRCB, 0x041, CpuID)
 C_ASSERT_FIELD(KPRCB, 0x042, CpuStep)
-/* FIXME: KPRCB.CpuStepping is at 0x042 on Windows 11 */
-/* FIXME: KPRCB.CpuModel is at 0x043 on Windows 11 */
+C_ASSERT_FIELD(KPRCB, 0x042, CpuStepping)
+C_ASSERT_FIELD(KPRCB, 0x043, CpuModel)
 C_ASSERT_FIELD(KPRCB, 0x044, MHz)
 C_ASSERT_FIELD(KPRCB, 0x048, HalReserved)
 C_ASSERT_FIELD(KPRCB, 0x088, MinorVersion)
@@ -281,14 +267,14 @@ C_ASSERT_FIELD(KPRCB, 0x0DC, ApicMask)
 C_ASSERT_FIELD(KPRCB, 0x0E0, AcpiReserved)
 C_ASSERT_FIELD(KPRCB, 0x0E8, CFlushSize)
 C_ASSERT_FIELD(KPRCB, 0x0EC, PrcbFlags)
-/* FIXME: KPRCB.PrcbFlagsReserved is at 0x0EC on Windows 11 */
+C_ASSERT_FIELD(KPRCB, 0x0EC, PrcbFlagsReserved)
 C_ASSERT_FIELD(KPRCB, 0x0F0, PrcbPad11)
 C_ASSERT_FIELD(KPRCB, 0x100, ProcessorState)
 C_ASSERT_FIELD(KPRCB, 0x6C0, ExtendedSupervisorState)
 C_ASSERT_FIELD(KPRCB, 0x6C8, ProcessorSignature)
 C_ASSERT_FIELD(KPRCB, 0x6CC, ProcessorFlags)
 C_ASSERT_FIELD(KPRCB, 0x6D0, TrappedSecurityDomain)
-/* FIXME: KPRCB.PrcbPad12a is at 0x6D0 on Windows 11 */
+C_ASSERT_FIELD(KPRCB, 0x6D0, PrcbPad12a)
 C_ASSERT_FIELD(KPRCB, 0x6D8, BpbState)
 C_ASSERT_FIELD(KPRCB, 0x6DA, BpbTrappedBpbState)
 C_ASSERT_FIELD(KPRCB, 0x6DC, BpbFeatures)
@@ -369,12 +355,9 @@ C_ASSERT_FIELD(KPRCB, 0x38B9, QuantumEnd)
 C_ASSERT_FIELD(KPRCB, 0x38BA, DpcRoutineActive)
 C_ASSERT_FIELD(KPRCB, 0x38BB, IdleSchedule)
 C_ASSERT_FIELD(KPRCB, 0x38BC, DpcRequestSummary)
-/* FIXME: KPRCB.DpcRequestSlot is at 0x38BC on Windows 11 */
-/* FIXME: KPRCB.NormalDpcState is at 0x38BC on Windows 11 */
-/* FIXME: KPRCB.DpcNormalProcessingActive is at 0x38BC on Windows 11 */
-/* FIXME: KPRCB.DpcNormalSpare is at 0x38BD on Windows 11 */
-/* FIXME: KPRCB.ThreadDpcState is at 0x38BE on Windows 11 */
-/* FIXME: KPRCB.DpcThreadActive is at 0x38BE on Windows 11 */
+C_ASSERT_FIELD(KPRCB, 0x38BC, DpcRequestSlot)
+C_ASSERT_FIELD(KPRCB, 0x38BC, NormalDpcState)
+C_ASSERT_FIELD(KPRCB, 0x38BE, ThreadDpcState)
 C_ASSERT_FIELD(KPRCB, 0x38C0, LastTick)
 C_ASSERT_FIELD(KPRCB, 0x38C4, ClockInterrupts)
 C_ASSERT_FIELD(KPRCB, 0x38C8, ReadyScanTick)
@@ -395,7 +378,7 @@ C_ASSERT_FIELD(KPRCB, 0x8360, CallDpc)
 C_ASSERT_FIELD(KPRCB, 0x83A0, ClockKeepAlive)
 C_ASSERT_FIELD(KPRCB, 0x83A4, PrcbPad60)
 C_ASSERT_FIELD(KPRCB, 0x83A6, NmiActive)
-/* FIXME: KPRCB.CombinedNmiMceActive is at 0x83A6 on Windows 11 */
+C_ASSERT_FIELD(KPRCB, 0x83A6, CombinedNmiMceActive)
 C_ASSERT_FIELD(KPRCB, 0x83A7, MceActive)
 C_ASSERT_FIELD(KPRCB, 0x83A8, DpcWatchdogPeriodTicks)
 C_ASSERT_FIELD(KPRCB, 0x83AC, DpcWatchdogCount)
@@ -434,7 +417,7 @@ C_ASSERT_FIELD(KPRCB, 0x8678, ReadyQueueExpectedRunTime)
 C_ASSERT_FIELD(KPRCB, 0x8680, StartCycles)
 C_ASSERT_FIELD(KPRCB, 0x8688, TaggedCycles)
 C_ASSERT_FIELD(KPRCB, 0x86A8, AffinitizedCycles)
-/* FIXME: KPRCB.CyclesByThreadType is at 0x86B0 on Windows 11 */
+C_ASSERT_FIELD(KPRCB, 0x86B0, CyclesByThreadType)
 C_ASSERT_FIELD(KPRCB, 0x86B8, CpuCycleScalingFactor)
 C_ASSERT_FIELD(KPRCB, 0x86BC, PerformanceScoreByClass)
 C_ASSERT_FIELD(KPRCB, 0x86CC, EfficiencyScoreByClass)
@@ -509,7 +492,7 @@ C_ASSERT_FIELD(KPRCB, 0x8BB0, ExSaPageArray)
 C_ASSERT_FIELD(KPRCB, 0x8BB8, KeAlignmentFixupCount)
 C_ASSERT_FIELD(KPRCB, 0x8BBC, PrcbPad95)
 C_ASSERT_FIELD(KPRCB, 0x8BC0, HypercallPageList)
-/* FIXME: KPRCB.StatisticsPage is at 0x8BD0 on Windows 11 */
+C_ASSERT_FIELD(KPRCB, 0x8BD0, StatisticsPage)
 C_ASSERT_FIELD(KPRCB, 0x8BD8, GenerationTarget)
 C_ASSERT_FIELD(KPRCB, 0x8BE0, VirtualApicAssistPage)
 C_ASSERT_FIELD(KPRCB, 0x8BE8, PrcbPad85)
@@ -518,7 +501,7 @@ C_ASSERT_FIELD(KPRCB, 0x8C08, VirtualApicAssist)
 C_ASSERT_FIELD(KPRCB, 0x8C10, PackageProcessorSet)
 C_ASSERT_FIELD(KPRCB, 0x8D18, PrcbPad86)
 C_ASSERT_FIELD(KPRCB, 0x8E18, ProcessorId)
-/* FIXME: KPRCB.TopologyId is at 0x8E18 on Windows 11 */
+C_ASSERT_FIELD(KPRCB, 0x8E18, TopologyId)
 C_ASSERT_FIELD(KPRCB, 0x8E1C, CoreId)
 C_ASSERT_FIELD(KPRCB, 0x8E20, ModuleId)
 C_ASSERT_FIELD(KPRCB, 0x8E24, DieId)
@@ -582,7 +565,7 @@ C_ASSERT_FIELD(KPRCB, 0x9AC8, PrcbPad130)
 C_ASSERT_FIELD(KPRCB, 0x9B00, McheckContext)
 C_ASSERT_FIELD(KPRCB, 0x9BA0, TransitionShadowStack)
 C_ASSERT_FIELD(KPRCB, 0x9BA8, KernelShadowStackInitial)
-/* FIXME: KPRCB.IstShadowStacksTable is at 0x9BB0 on Windows 11 */
+C_ASSERT_FIELD(KPRCB, 0x9BB0, IstShadowStacksTable)
 C_ASSERT_FIELD(KPRCB, 0x9BB8, HiberSwapShadowStacks)
 C_ASSERT_FIELD(KPRCB, 0x9BE0, HiberSwapShadowStackBases)
 C_ASSERT_FIELD(KPRCB, 0x9C08, MmFaultCompletionInfo)
@@ -647,14 +630,14 @@ C_ASSERT_FIELD(TEB, 0x108, CurrentLocale)
 C_ASSERT_FIELD(TEB, 0x10C, FpSoftwareStatusRegister)
 C_ASSERT_FIELD(TEB, 0x110, ReservedForDebuggerInstrumentation)
 C_ASSERT_FIELD(TEB, 0x190, SystemReserved1)
-/* FIXME: TEB.HeapFlsData is at 0x258 on Windows 11 */
-/* FIXME: TEB.RngState is at 0x260 on Windows 11 */
-/* FIXME: TEB.PlaceholderCompatibilityMode is at 0x280 on Windows 11 */
-/* FIXME: TEB.PlaceholderHydrationAlwaysExplicit is at 0x281 on Windows 11 */
-/* FIXME: TEB.PlaceholderReserved is at 0x282 on Windows 11 */
-/* FIXME: TEB.ProxiedProcessId is at 0x28C on Windows 11 */
-/* FIXME: TEB._ActivationStack is at 0x290 on Windows 11 */
-/* FIXME: TEB.WorkingOnBehalfTicket is at 0x2B8 on Windows 11 */
+C_ASSERT_FIELD(TEB, 0x258, HeapFlsData)
+C_ASSERT_FIELD(TEB, 0x260, RngState)
+C_ASSERT_FIELD(TEB, 0x280, PlaceholderCompatibilityMode)
+C_ASSERT_FIELD(TEB, 0x281, PlaceholderHydrationAlwaysExplicit)
+C_ASSERT_FIELD(TEB, 0x282, PlaceholderReserved)
+C_ASSERT_FIELD(TEB, 0x28C, ProxiedProcessId)
+C_ASSERT_FIELD(TEB, 0x290, _ActivationStack)
+C_ASSERT_FIELD(TEB, 0x2B8, WorkingOnBehalfTicket)
 C_ASSERT_FIELD(TEB, 0x2C0, ExceptionCode)
 C_ASSERT_FIELD(TEB, 0x2C4, Padding0)
 C_ASSERT_FIELD(TEB, 0x2C8, ActivationContextStackPointer)
@@ -716,13 +699,13 @@ C_ASSERT_FIELD(TEB, 0x1768, SavedPriorityState)
 C_ASSERT_FIELD(TEB, 0x1770, ReservedForCodeCoverage)
 C_ASSERT_FIELD(TEB, 0x1778, ThreadPoolData)
 C_ASSERT_FIELD(TEB, 0x1780, TlsExpansionSlots)
-/* FIXME: TEB.ChpeV2CpuAreaInfo is at 0x1788 on Windows 11 */
-/* FIXME: TEB.Unused is at 0x1790 on Windows 11 */
+C_ASSERT_FIELD(TEB, 0x1788, ChpeV2CpuAreaInfo)
+C_ASSERT_FIELD(TEB, 0x1790, Unused)
 C_ASSERT_FIELD(TEB, 0x1798, MuiGeneration)
 C_ASSERT_FIELD(TEB, 0x179C, IsImpersonating)
 C_ASSERT_FIELD(TEB, 0x17A0, NlsCache)
 C_ASSERT_FIELD(TEB, 0x17A8, pShimData)
-/* FIXME: TEB.HeapData is at 0x17B0 on Windows 11 */
+C_ASSERT_FIELD(TEB, 0x17B0, HeapData)
 C_ASSERT_FIELD(TEB, 0x17B4, Padding7)
 C_ASSERT_FIELD(TEB, 0x17B8, CurrentTransactionHandle)
 C_ASSERT_FIELD(TEB, 0x17C0, ActiveFrame)
@@ -732,10 +715,7 @@ C_ASSERT_FIELD(TEB, 0x17D8, UserPrefLanguages)
 C_ASSERT_FIELD(TEB, 0x17E0, MergedPrefLanguages)
 C_ASSERT_FIELD(TEB, 0x17E8, MuiImpersonation)
 C_ASSERT_FIELD(TEB, 0x17EC, CrossTebFlags)
-/* FIXME: TEB.SpareCrossTebBits is at 0x17EC on Windows 11 */
 C_ASSERT_FIELD(TEB, 0x17EE, SameTebFlags)
-/* FIXME: TEB.SafeThunkCall is at 0x17EE on Windows 11 */
-/* FIXME: TEB.DisableUserStackWalk is at 0x17EF on Windows 11 */
 C_ASSERT_FIELD(TEB, 0x17F0, TxnScopeEnterCallback)
 C_ASSERT_FIELD(TEB, 0x17F8, TxnScopeExitCallback)
 C_ASSERT_FIELD(TEB, 0x1800, TxnScopeContext)
@@ -747,7 +727,7 @@ C_ASSERT_FIELD(TEB, 0x1820, ReservedForCrt)
 C_ASSERT_FIELD(TEB, 0x1828, EffectiveContainerId)
 C_ASSERT_FIELD(TEB, 0x1838, LastSleepCounter)
 C_ASSERT_FIELD(TEB, 0x1840, SpinCallCount)
-/* FIXME: TEB.Padding8 is at 0x1844 on Windows 11 */
+C_ASSERT_FIELD(TEB, 0x1844, Padding8)
 C_ASSERT_FIELD(TEB, 0x1848, ExtendedFeatureDisableMask)
 C_ASSERT_FIELD(TEB, 0x1850, SchedulerSharedDataSlot)
 C_ASSERT_FIELD(TEB, 0x1858, HeapWalkContext)
@@ -773,14 +753,14 @@ C_ASSERT_FIELD(TEB32, 0x0C4, CurrentLocale)
 C_ASSERT_FIELD(TEB32, 0x0C8, FpSoftwareStatusRegister)
 C_ASSERT_FIELD(TEB32, 0x0CC, ReservedForDebuggerInstrumentation)
 C_ASSERT_FIELD(TEB32, 0x10C, SystemReserved1)
-/* FIXME: TEB32.HeapFlsData is at 0x160 on Windows 11 */
-/* FIXME: TEB32.RngState is at 0x164 on Windows 11 */
-/* FIXME: TEB32.PlaceholderCompatibilityMode is at 0x174 on Windows 11 */
-/* FIXME: TEB32.PlaceholderHydrationAlwaysExplicit is at 0x175 on Windows 11 */
-/* FIXME: TEB32.PlaceholderReserved is at 0x176 on Windows 11 */
-/* FIXME: TEB32.ProxiedProcessId is at 0x180 on Windows 11 */
-/* FIXME: TEB32._ActivationStack is at 0x184 on Windows 11 */
-/* FIXME: TEB32.WorkingOnBehalfTicket is at 0x19C on Windows 11 */
+C_ASSERT_FIELD(TEB32, 0x160, HeapFlsData)
+C_ASSERT_FIELD(TEB32, 0x164, RngState)
+C_ASSERT_FIELD(TEB32, 0x174, PlaceholderCompatibilityMode)
+C_ASSERT_FIELD(TEB32, 0x175, PlaceholderHydrationAlwaysExplicit)
+C_ASSERT_FIELD(TEB32, 0x176, PlaceholderReserved)
+C_ASSERT_FIELD(TEB32, 0x180, ProxiedProcessId)
+C_ASSERT_FIELD(TEB32, 0x184, _ActivationStack)
+C_ASSERT_FIELD(TEB32, 0x19C, WorkingOnBehalfTicket)
 C_ASSERT_FIELD(TEB32, 0x1A4, ExceptionCode)
 C_ASSERT_FIELD(TEB32, 0x1A8, ActivationContextStackPointer)
 C_ASSERT_FIELD(TEB32, 0x1AC, InstrumentationCallbackSp)
@@ -839,7 +819,7 @@ C_ASSERT_FIELD(TEB32, 0xF98, MuiGeneration)
 C_ASSERT_FIELD(TEB32, 0xF9C, IsImpersonating)
 C_ASSERT_FIELD(TEB32, 0xFA0, NlsCache)
 C_ASSERT_FIELD(TEB32, 0xFA4, pShimData)
-/* FIXME: TEB32.HeapData is at 0xFA8 on Windows 11 */
+C_ASSERT_FIELD(TEB32, 0xFA8, HeapData)
 C_ASSERT_FIELD(TEB32, 0xFAC, CurrentTransactionHandle)
 C_ASSERT_FIELD(TEB32, 0xFB0, ActiveFrame)
 C_ASSERT_FIELD(TEB32, 0xFB4, FlsData)
@@ -848,10 +828,7 @@ C_ASSERT_FIELD(TEB32, 0xFBC, UserPrefLanguages)
 C_ASSERT_FIELD(TEB32, 0xFC0, MergedPrefLanguages)
 C_ASSERT_FIELD(TEB32, 0xFC4, MuiImpersonation)
 C_ASSERT_FIELD(TEB32, 0xFC8, CrossTebFlags)
-/* FIXME: TEB32.SpareCrossTebBits is at 0xFC8 on Windows 11 */
 C_ASSERT_FIELD(TEB32, 0xFCA, SameTebFlags)
-/* FIXME: TEB32.SafeThunkCall is at 0xFCA on Windows 11 */
-/* FIXME: TEB32.DisableUserStackWalk is at 0xFCB on Windows 11 */
 C_ASSERT_FIELD(TEB32, 0xFCC, TxnScopeEnterCallback)
 C_ASSERT_FIELD(TEB32, 0xFD0, TxnScopeExitCallback)
 C_ASSERT_FIELD(TEB32, 0xFD4, TxnScopeContext)
@@ -875,8 +852,7 @@ C_ASSERT_FIELD(PEB, 0x000, InheritedAddressSpace)
 C_ASSERT_FIELD(PEB, 0x001, ReadImageFileExecOptions)
 C_ASSERT_FIELD(PEB, 0x002, BeingDebugged)
 C_ASSERT_FIELD(PEB, 0x003, BitField)
-/* FIXME: PEB.ImageUsesLargePages is at 0x003 on Windows 11 */
-/* FIXME: PEB.Padding0 is at 0x004 on Windows 11 */
+C_ASSERT_FIELD(PEB, 0x004, Padding0)
 C_ASSERT_FIELD(PEB, 0x008, Mutant)
 C_ASSERT_FIELD(PEB, 0x010, ImageBaseAddress)
 C_ASSERT_FIELD(PEB, 0x018, Ldr)
@@ -884,23 +860,21 @@ C_ASSERT_FIELD(PEB, 0x020, ProcessParameters)
 C_ASSERT_FIELD(PEB, 0x028, SubSystemData)
 C_ASSERT_FIELD(PEB, 0x030, ProcessHeap)
 C_ASSERT_FIELD(PEB, 0x038, FastPebLock)
-/* FIXME: PEB.AtlThunkSListPtr is at 0x040 on Windows 11 */
+C_ASSERT_FIELD(PEB, 0x040, AtlThunkSListPtr)
 C_ASSERT_FIELD(PEB, 0x048, IFEOKey)
 C_ASSERT_FIELD(PEB, 0x050, CrossProcessFlags)
-/* FIXME: PEB.ProcessInJob is at 0x050 on Windows 11 */
-/* FIXME: PEB.ReservedBits0 is at 0x051 on Windows 11 */
-/* FIXME: PEB.Padding1 is at 0x054 on Windows 11 */
+C_ASSERT_FIELD(PEB, 0x054, Padding1)
 C_ASSERT_FIELD(PEB, 0x058, KernelCallbackTable)
 C_ASSERT_FIELD(PEB, 0x058, UserSharedInfoPtr)
 C_ASSERT_FIELD(PEB, 0x060, SystemReserved)
-/* FIXME: PEB.AtlThunkSListPtr32 is at 0x064 on Windows 11 */
+C_ASSERT_FIELD(PEB, 0x064, AtlThunkSListPtr32)
 C_ASSERT_FIELD(PEB, 0x068, ApiSetMap)
 C_ASSERT_FIELD(PEB, 0x070, TlsExpansionCounter)
-/* FIXME: PEB.Padding2 is at 0x074 on Windows 11 */
+C_ASSERT_FIELD(PEB, 0x074, Padding2)
 C_ASSERT_FIELD(PEB, 0x078, TlsBitmap)
 C_ASSERT_FIELD(PEB, 0x080, TlsBitmapBits)
 C_ASSERT_FIELD(PEB, 0x088, ReadOnlySharedMemoryBase)
-/* FIXME: PEB.SharedData is at 0x090 on Windows 11 */
+C_ASSERT_FIELD(PEB, 0x090, SharedData)
 C_ASSERT_FIELD(PEB, 0x098, ReadOnlyStaticServerData)
 C_ASSERT_FIELD(PEB, 0x0A0, AnsiCodePageData)
 C_ASSERT_FIELD(PEB, 0x0A8, OemCodePageData)
@@ -918,7 +892,7 @@ C_ASSERT_FIELD(PEB, 0x0F0, ProcessHeaps)
 C_ASSERT_FIELD(PEB, 0x0F8, GdiSharedHandleTable)
 C_ASSERT_FIELD(PEB, 0x100, ProcessStarterHelper)
 C_ASSERT_FIELD(PEB, 0x108, GdiDCAttributeList)
-/* FIXME: PEB.Padding3 is at 0x10C on Windows 11 */
+C_ASSERT_FIELD(PEB, 0x10C, Padding3)
 C_ASSERT_FIELD(PEB, 0x110, LoaderLock)
 C_ASSERT_FIELD(PEB, 0x118, OSMajorVersion)
 C_ASSERT_FIELD(PEB, 0x11C, OSMinorVersion)
@@ -928,14 +902,14 @@ C_ASSERT_FIELD(PEB, 0x124, OSPlatformId)
 C_ASSERT_FIELD(PEB, 0x128, ImageSubsystem)
 C_ASSERT_FIELD(PEB, 0x12C, ImageSubsystemMajorVersion)
 C_ASSERT_FIELD(PEB, 0x130, ImageSubsystemMinorVersion)
-/* FIXME: PEB.Padding4 is at 0x134 on Windows 11 */
-/* FIXME: PEB.ActiveProcessAffinityMask is at 0x138 on Windows 11 */
+C_ASSERT_FIELD(PEB, 0x134, Padding4)
+C_ASSERT_FIELD(PEB, 0x138, ActiveProcessAffinityMask)
 C_ASSERT_FIELD(PEB, 0x140, GdiHandleBuffer)
 C_ASSERT_FIELD(PEB, 0x230, PostProcessInitRoutine)
 C_ASSERT_FIELD(PEB, 0x238, TlsExpansionBitmap)
 C_ASSERT_FIELD(PEB, 0x240, TlsExpansionBitmapBits)
 C_ASSERT_FIELD(PEB, 0x2C0, SessionId)
-/* FIXME: PEB.Padding5 is at 0x2C4 on Windows 11 */
+C_ASSERT_FIELD(PEB, 0x2C4, Padding5)
 C_ASSERT_FIELD(PEB, 0x2C8, AppCompatFlags)
 C_ASSERT_FIELD(PEB, 0x2D0, AppCompatFlagsUser)
 C_ASSERT_FIELD(PEB, 0x2D8, pShimData)
@@ -946,22 +920,21 @@ C_ASSERT_FIELD(PEB, 0x300, ProcessAssemblyStorageMap)
 C_ASSERT_FIELD(PEB, 0x308, SystemDefaultActivationContextData)
 C_ASSERT_FIELD(PEB, 0x310, SystemAssemblyStorageMap)
 C_ASSERT_FIELD(PEB, 0x318, MinimumStackCommit)
-/* FIXME: PEB.SparePointers is at 0x320 on Windows 11 */
-/* FIXME: PEB.PatchLoaderData is at 0x330 on Windows 11 */
+C_ASSERT_FIELD(PEB, 0x320, SparePointers)
+C_ASSERT_FIELD(PEB, 0x330, PatchLoaderData)
 C_ASSERT_FIELD(PEB, 0x338, ChpeV2ProcessInfo)
-/* FIXME: PEB.AppModelFeatureState is at 0x340 on Windows 11 */
-/* FIXME: PEB.SpareUlongs is at 0x344 on Windows 11 */
-/* FIXME: PEB.ActiveCodePage is at 0x34C on Windows 11 */
-/* FIXME: PEB.OemCodePage is at 0x34E on Windows 11 */
-/* FIXME: PEB.UseCaseMapping is at 0x350 on Windows 11 */
-/* FIXME: PEB.UnusedNlsField is at 0x352 on Windows 11 */
+C_ASSERT_FIELD(PEB, 0x340, AppModelFeatureState)
+C_ASSERT_FIELD(PEB, 0x344, SpareUlongs)
+C_ASSERT_FIELD(PEB, 0x34C, ActiveCodePage)
+C_ASSERT_FIELD(PEB, 0x34E, OemCodePage)
+C_ASSERT_FIELD(PEB, 0x350, UseCaseMapping)
+C_ASSERT_FIELD(PEB, 0x352, UnusedNlsField)
 C_ASSERT_FIELD(PEB, 0x358, WerRegistrationData)
 C_ASSERT_FIELD(PEB, 0x360, WerShipAssertPtr)
 C_ASSERT_FIELD(PEB, 0x368, EcCodeBitMap)
 C_ASSERT_FIELD(PEB, 0x370, pImageHeaderHash)
 C_ASSERT_FIELD(PEB, 0x378, TracingFlags)
-/* FIXME: PEB.HeapTracingEnabled is at 0x378 on Windows 11 */
-/* FIXME: PEB.Padding6 is at 0x37C on Windows 11 */
+C_ASSERT_FIELD(PEB, 0x37C, Padding6)
 C_ASSERT_FIELD(PEB, 0x380, CsrServerReadOnlySharedMemoryBase)
 C_ASSERT_FIELD(PEB, 0x388, TppWorkerpListLock)
 C_ASSERT_FIELD(PEB, 0x390, TppWorkerpList)
@@ -973,7 +946,6 @@ C_ASSERT_FIELD(PEB, 0x7B0, PlaceholderCompatibilityMode)
 C_ASSERT_FIELD(PEB, 0x7B1, PlaceholderCompatibilityModeReserved)
 C_ASSERT_FIELD(PEB, 0x7B8, LeapSecondData)
 C_ASSERT_FIELD(PEB, 0x7C0, LeapSecondFlags)
-/* FIXME: PEB.SixtySecondEnabled is at 0x7C0 on Windows 11 */
 C_ASSERT_FIELD(PEB, 0x7C4, NtGlobalFlag2)
 C_ASSERT_FIELD(PEB, 0x7C8, ExtendedFeatureDisableMask)
 
@@ -983,7 +955,6 @@ C_ASSERT_FIELD(PEB32, 0x000, InheritedAddressSpace)
 C_ASSERT_FIELD(PEB32, 0x001, ReadImageFileExecOptions)
 C_ASSERT_FIELD(PEB32, 0x002, BeingDebugged)
 C_ASSERT_FIELD(PEB32, 0x003, BitField)
-/* FIXME: PEB32.ImageUsesLargePages is at 0x003 on Windows 11 */
 C_ASSERT_FIELD(PEB32, 0x004, Mutant)
 C_ASSERT_FIELD(PEB32, 0x008, ImageBaseAddress)
 C_ASSERT_FIELD(PEB32, 0x00C, Ldr)
@@ -991,21 +962,19 @@ C_ASSERT_FIELD(PEB32, 0x010, ProcessParameters)
 C_ASSERT_FIELD(PEB32, 0x014, SubSystemData)
 C_ASSERT_FIELD(PEB32, 0x018, ProcessHeap)
 C_ASSERT_FIELD(PEB32, 0x01C, FastPebLock)
-/* FIXME: PEB32.AtlThunkSListPtr is at 0x020 on Windows 11 */
+C_ASSERT_FIELD(PEB32, 0x020, AtlThunkSListPtr)
 C_ASSERT_FIELD(PEB32, 0x024, IFEOKey)
 C_ASSERT_FIELD(PEB32, 0x028, CrossProcessFlags)
-/* FIXME: PEB32.ProcessInJob is at 0x028 on Windows 11 */
-/* FIXME: PEB32.ReservedBits0 is at 0x029 on Windows 11 */
 C_ASSERT_FIELD(PEB32, 0x02C, KernelCallbackTable)
 C_ASSERT_FIELD(PEB32, 0x02C, UserSharedInfoPtr)
 C_ASSERT_FIELD(PEB32, 0x030, SystemReserved)
-/* FIXME: PEB32.AtlThunkSListPtr32 is at 0x034 on Windows 11 */
+C_ASSERT_FIELD(PEB32, 0x034, AtlThunkSListPtr32)
 C_ASSERT_FIELD(PEB32, 0x038, ApiSetMap)
 C_ASSERT_FIELD(PEB32, 0x03C, TlsExpansionCounter)
 C_ASSERT_FIELD(PEB32, 0x040, TlsBitmap)
 C_ASSERT_FIELD(PEB32, 0x044, TlsBitmapBits)
 C_ASSERT_FIELD(PEB32, 0x04C, ReadOnlySharedMemoryBase)
-/* FIXME: PEB32.SharedData is at 0x050 on Windows 11 */
+C_ASSERT_FIELD(PEB32, 0x050, SharedData)
 C_ASSERT_FIELD(PEB32, 0x054, ReadOnlyStaticServerData)
 C_ASSERT_FIELD(PEB32, 0x058, AnsiCodePageData)
 C_ASSERT_FIELD(PEB32, 0x05C, OemCodePageData)
@@ -1032,7 +1001,7 @@ C_ASSERT_FIELD(PEB32, 0x0B0, OSPlatformId)
 C_ASSERT_FIELD(PEB32, 0x0B4, ImageSubsystem)
 C_ASSERT_FIELD(PEB32, 0x0B8, ImageSubsystemMajorVersion)
 C_ASSERT_FIELD(PEB32, 0x0BC, ImageSubsystemMinorVersion)
-/* FIXME: PEB32.ActiveProcessAffinityMask is at 0x0C0 on Windows 11 */
+C_ASSERT_FIELD(PEB32, 0x0C0, ActiveProcessAffinityMask)
 C_ASSERT_FIELD(PEB32, 0x0C4, GdiHandleBuffer)
 C_ASSERT_FIELD(PEB32, 0x14C, PostProcessInitRoutine)
 C_ASSERT_FIELD(PEB32, 0x150, TlsExpansionBitmap)
@@ -1048,21 +1017,20 @@ C_ASSERT_FIELD(PEB32, 0x1FC, ProcessAssemblyStorageMap)
 C_ASSERT_FIELD(PEB32, 0x200, SystemDefaultActivationContextData)
 C_ASSERT_FIELD(PEB32, 0x204, SystemAssemblyStorageMap)
 C_ASSERT_FIELD(PEB32, 0x208, MinimumStackCommit)
-/* FIXME: PEB32.SparePointers is at 0x20C on Windows 11 */
-/* FIXME: PEB32.PatchLoaderData is at 0x214 on Windows 11 */
+C_ASSERT_FIELD(PEB32, 0x20C, SparePointers)
+C_ASSERT_FIELD(PEB32, 0x214, PatchLoaderData)
 C_ASSERT_FIELD(PEB32, 0x218, ChpeV2ProcessInfo)
-/* FIXME: PEB32.AppModelFeatureState is at 0x21C on Windows 11 */
-/* FIXME: PEB32.SpareUlongs is at 0x220 on Windows 11 */
-/* FIXME: PEB32.ActiveCodePage is at 0x228 on Windows 11 */
-/* FIXME: PEB32.OemCodePage is at 0x22A on Windows 11 */
-/* FIXME: PEB32.UseCaseMapping is at 0x22C on Windows 11 */
-/* FIXME: PEB32.UnusedNlsField is at 0x22E on Windows 11 */
+C_ASSERT_FIELD(PEB32, 0x21C, AppModelFeatureState)
+C_ASSERT_FIELD(PEB32, 0x220, SpareUlongs)
+C_ASSERT_FIELD(PEB32, 0x228, ActiveCodePage)
+C_ASSERT_FIELD(PEB32, 0x22A, OemCodePage)
+C_ASSERT_FIELD(PEB32, 0x22C, UseCaseMapping)
+C_ASSERT_FIELD(PEB32, 0x22E, UnusedNlsField)
 C_ASSERT_FIELD(PEB32, 0x230, WerRegistrationData)
 C_ASSERT_FIELD(PEB32, 0x234, WerShipAssertPtr)
-/* FIXME: PEB32.Spare is at 0x238 on Windows 11 */
+C_ASSERT_FIELD(PEB32, 0x238, Spare)
 C_ASSERT_FIELD(PEB32, 0x23C, pImageHeaderHash)
 C_ASSERT_FIELD(PEB32, 0x240, TracingFlags)
-/* FIXME: PEB32.HeapTracingEnabled is at 0x240 on Windows 11 */
 C_ASSERT_FIELD(PEB32, 0x248, CsrServerReadOnlySharedMemoryBase)
 C_ASSERT_FIELD(PEB32, 0x250, TppWorkerpListLock)
 C_ASSERT_FIELD(PEB32, 0x254, TppWorkerpList)
@@ -1074,7 +1042,6 @@ C_ASSERT_FIELD(PEB32, 0x468, PlaceholderCompatibilityMode)
 C_ASSERT_FIELD(PEB32, 0x469, PlaceholderCompatibilityModeReserved)
 C_ASSERT_FIELD(PEB32, 0x470, LeapSecondData)
 C_ASSERT_FIELD(PEB32, 0x474, LeapSecondFlags)
-/* FIXME: PEB32.SixtySecondEnabled is at 0x474 on Windows 11 */
 C_ASSERT_FIELD(PEB32, 0x478, NtGlobalFlag2)
 C_ASSERT_FIELD(PEB32, 0x480, ExtendedFeatureDisableMask)
 
@@ -1114,7 +1081,6 @@ C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x2C8, SystemExpirationDate)
 C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x2D0, SuiteMask)
 C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x2D4, KdDebuggerEnabled)
 C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x2D5, MitigationPolicies)
-/* FIXME: KUSER_SHARED_DATA.NXSupportPolicy is at 0x2D5 on Windows 11 */
 C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x2D6, CyclesPerYield)
 C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x2D8, ActiveConsoleId)
 C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x2DC, DismountCount)
@@ -1125,8 +1091,6 @@ C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x2EC, SafeBootMode)
 C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x2ED, VirtualizationFlags)
 C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x2EE, Reserved12)
 C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x2F0, SharedDataFlags)
-/* FIXME: KUSER_SHARED_DATA.DbgErrorPortPresent is at 0x2F0 on Windows 11 */
-/* FIXME: KUSER_SHARED_DATA.DbgMultiSessionSku is at 0x2F1 on Windows 11 */
 C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x2F4, DataFlagsPad)
 C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x2F8, TestRetInstruction)
 C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x300, QpcFrequency)
@@ -1162,7 +1126,7 @@ C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x3C4, ActiveGroupCount)
 C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x3C5, Reserved9)
 C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x3C6, QpcData)
 C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x3C6, QpcBypassEnabled)
-/* FIXME: KUSER_SHARED_DATA.QpcReserved is at 0x3C7 on Windows 11 */
+C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x3C7, QpcReserved)
 C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x3C8, TimeZoneBiasEffectiveStart)
 C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x3D0, TimeZoneBiasEffectiveEnd)
 C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x3D8, XState)
@@ -1170,64 +1134,3 @@ C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x720, FeatureConfigurationChangeStamp)
 C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x72C, Spare)
 C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x730, UserPointerAuthMask)
 C_ASSERT_FIELD(KUSER_SHARED_DATA, 0x738, Reserved10)
-
-/* KLDR_DATA_TABLE_ENTRY */
-C_ASSERT(sizeof(KLDR_DATA_TABLE_ENTRY) == 0xA0);
-C_ASSERT_FIELD(KLDR_DATA_TABLE_ENTRY, 0x000, InLoadOrderLinks)
-C_ASSERT_FIELD(KLDR_DATA_TABLE_ENTRY, 0x010, ExceptionTable)
-C_ASSERT_FIELD(KLDR_DATA_TABLE_ENTRY, 0x018, ExceptionTableSize)
-C_ASSERT_FIELD(KLDR_DATA_TABLE_ENTRY, 0x020, GpValue)
-C_ASSERT_FIELD(KLDR_DATA_TABLE_ENTRY, 0x028, NonPagedDebugInfo)
-C_ASSERT_FIELD(KLDR_DATA_TABLE_ENTRY, 0x030, DllBase)
-C_ASSERT_FIELD(KLDR_DATA_TABLE_ENTRY, 0x038, EntryPoint)
-C_ASSERT_FIELD(KLDR_DATA_TABLE_ENTRY, 0x040, SizeOfImage)
-C_ASSERT_FIELD(KLDR_DATA_TABLE_ENTRY, 0x048, FullDllName)
-C_ASSERT_FIELD(KLDR_DATA_TABLE_ENTRY, 0x058, BaseDllName)
-C_ASSERT_FIELD(KLDR_DATA_TABLE_ENTRY, 0x068, Flags)
-C_ASSERT_FIELD(KLDR_DATA_TABLE_ENTRY, 0x06C, LoadCount)
-C_ASSERT_FIELD(KLDR_DATA_TABLE_ENTRY, 0x06E, u1)
-C_ASSERT_FIELD(KLDR_DATA_TABLE_ENTRY, 0x070, SectionPointer)
-C_ASSERT_FIELD(KLDR_DATA_TABLE_ENTRY, 0x078, CheckSum)
-C_ASSERT_FIELD(KLDR_DATA_TABLE_ENTRY, 0x07C, CoverageSectionSize)
-C_ASSERT_FIELD(KLDR_DATA_TABLE_ENTRY, 0x080, CoverageSection)
-C_ASSERT_FIELD(KLDR_DATA_TABLE_ENTRY, 0x088, LoadedImports)
-C_ASSERT_FIELD(KLDR_DATA_TABLE_ENTRY, 0x090, Spare)
-C_ASSERT_FIELD(KLDR_DATA_TABLE_ENTRY, 0x098, SizeOfImageNotRounded)
-C_ASSERT_FIELD(KLDR_DATA_TABLE_ENTRY, 0x09C, TimeDateStamp)
-
-/* LDR_DATA_TABLE_ENTRY */
-C_ASSERT(sizeof(LDR_DATA_TABLE_ENTRY) == 0x138);
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x000, InLoadOrderLinks)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x010, InMemoryOrderLinks)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x020, InInitializationOrderLinks)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x030, DllBase)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x038, EntryPoint)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x040, SizeOfImage)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x048, FullDllName)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x058, BaseDllName)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x068, FlagGroup)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x068, Flags)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x06C, ObsoleteLoadCount)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x06E, TlsIndex)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x070, HashLinks)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x080, TimeDateStamp)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x088, EntryPointActivationContext)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x090, Lock)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x098, DdagNode)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x0A0, NodeModuleLink)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x0B0, LoadContext)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x0B8, ParentDllBase)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x0C0, SwitchBackContext)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x0C8, BaseAddressIndexNode)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x0E0, MappingInfoIndexNode)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x0F8, OriginalBase)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x100, LoadTime)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x108, BaseNameHashValue)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x10C, LoadReason)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x110, ImplicitPathOptions)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x114, ReferenceCount)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x118, DependentLoadFlags)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x11C, SigningLevel)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x120, CheckSum)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x128, ActivePatchImageBase)
-C_ASSERT_FIELD(LDR_DATA_TABLE_ENTRY, 0x130, HotPatchState)
