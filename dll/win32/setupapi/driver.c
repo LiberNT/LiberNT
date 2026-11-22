@@ -2663,6 +2663,53 @@ SETUPAPI_InstallFilters(
     }
 }
 
+BOOL
+SETUPAPI_InstallWdfSection(
+    IN HINF hInf,
+    IN PCWSTR WdfSection,
+    IN HKEY MachineKey)
+{
+    WCHAR Service[LINE_LEN], Section[LINE_LEN], Version[LINE_LEN], Path[LINE_LEN + 64];
+    INFCONTEXT Context, VersionContext;
+    HKEY Wdf;
+    LONG Error;
+    BOOL Found;
+
+    ASSERT(hInf != NULL && hInf != INVALID_HANDLE_VALUE);
+    ASSERT(WdfSection != NULL);
+    ASSERT(MachineKey != NULL);
+
+    /* TODO: UmdfService, UmdfServiceOrder and the other UMDF directives of a Wdf section */
+    for (Found = SetupFindFirstLineW(hInf, WdfSection, L"KmdfService", &Context);
+         Found;
+         Found = SetupFindNextMatchLineW(&Context, L"KmdfService", &Context))
+    {
+        if (!SetupGetStringFieldW(&Context, 1, Service, ARRAY_SIZE(Service), NULL) ||
+            !SetupGetStringFieldW(&Context, 2, Section, ARRAY_SIZE(Section), NULL) ||
+            !SetupFindFirstLineW(hInf, Section, L"KmdfLibraryVersion", &VersionContext) ||
+            !SetupGetStringFieldW(&VersionContext, 1, Version, ARRAY_SIZE(Version), NULL))
+        {
+            continue;
+        }
+        ASSERT(Service[0] != UNICODE_NULL);
+
+        swprintf(Path, ARRAY_SIZE(Path), REGSTR_PATH_SERVICES L"\\%s\\Parameters\\Wdf", Service);
+        Error = RegCreateKeyExW(MachineKey, Path, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, NULL, &Wdf, NULL);
+        if (Error == ERROR_SUCCESS)
+        {
+            Error = RegSetValueExW(Wdf, L"KmdfLibraryVersion", 0, REG_SZ, (const BYTE *)Version,
+                                   (strlenW(Version) + 1) * sizeof(WCHAR));
+            RegCloseKey(Wdf);
+        }
+        if (Error != ERROR_SUCCESS)
+        {
+            SetLastError(Error);
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
 static VOID
 DriverDatabaseRecordConfiguration(
     IN HINF hInf,
