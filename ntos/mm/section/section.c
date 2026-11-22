@@ -1637,7 +1637,6 @@ MiTlbBatchFlush(
     PMI_TLB_BATCH Batch = Space->TlbBatch;
     PMI_SYSTEM System = Space->System;
     UCHAR Invalidate;
-    ULONG First = 0;
     ULONG i;
 
     MI_ASSERT(Batch != NULL && Batch->Count <= MI_TLB_BATCH_SIZE);
@@ -1666,16 +1665,11 @@ MiTlbBatchFlush(
     if (Invalidate == MI_TLB_INVALIDATE_ALL)
         MiArchTlbInvalidateAll(TRUE);
 
-    while (Invalidate == MI_TLB_INVALIDATE_RANGES && First < Batch->Count)
+    if (Invalidate == MI_TLB_INVALIDATE_RANGES && Batch->Count != 0)
     {
-        ULONG Last = First + 1;
-
-        while (Last < Batch->Count && Batch->Entry[Last].Va - Batch->Entry[Last - 1].Va <= PAGE_SIZE)
-            Last++;
-
-        MiTlbInvalidateSpace(Space, Batch->Entry[First].Va,
-                             ((Batch->Entry[Last - 1].Va - Batch->Entry[First].Va) >> PAGE_SHIFT) + 1);
-        First = Last;
+        MI_ASSERT(Batch->Entry[Batch->Count - 1].Va >= Batch->Entry[0].Va);
+        MiTlbInvalidateSpace(Space, Batch->Entry[0].Va,
+                             ((Batch->Entry[Batch->Count - 1].Va - Batch->Entry[0].Va) >> PAGE_SHIFT) + 1);
     }
 
     for (i = 0; i < Batch->Count; i++)
