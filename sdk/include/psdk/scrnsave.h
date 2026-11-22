@@ -70,7 +70,7 @@ extern UINT         MyHelpMessage;
 }
 #endif
 
-#define _INC_SCRNSAVE 0
+#define _INC_SCRNSAVE
 #define SCRM_VERIFYPW 0x8000
 
 #ifdef __cplusplus

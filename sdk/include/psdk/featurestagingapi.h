@@ -73,7 +73,7 @@ void WINAPI UnsubscribeFeatureStateChangeNotification(FEATURE_STATE_CHANGE_SUBSC
 }
 #endif
 
-#define _APISET_WIL_FEATURESTAGING_ 0
+#define _APISET_WIL_FEATURESTAGING_
 
 
 #endif

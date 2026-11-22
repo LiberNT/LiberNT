@@ -5,7 +5,7 @@
 #define USE_FORCE 1
 #define USE_LOTS_OF_FORCE 2
 
-#define _LMUSEFLG_ 0
+#define _LMUSEFLG_
 
 #define FORCE_LEVEL(LEVELFLAGS) ((LEVELFLAGS) & 0xffff)
 

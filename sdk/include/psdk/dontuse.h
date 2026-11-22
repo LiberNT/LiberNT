@@ -17,26 +17,30 @@
  * cleanroom headers can include it without forcing policy changes on callers.
  */
 
-#define lstrcatn 0
+#ifdef UNICODE
+#define lstrcatn lstrcatnW
+#else
+#define lstrcatn lstrcatnA
+#endif
 
-#define lstrcatnA 0
+#define lstrcatnA lstrcatnA_instead_use_strncat_s_or_StringCchCatNA_or_StringCbCatNA
 
-#define lstrcatnW 0
+#define lstrcatnW lstrcatnW_instead_use_wcsncat_s_or_StringCchCatNW_or_StringCbCatNW
 
-#define StrNCpyA 0
+#define StrNCpyA StrNCpyA_instead_use_strncpy_s_or_StringCchCopyNA_or_StringCbCopyNA
 
-#define StrNCpyW 0
+#define StrNCpyW StrNCpyW_instead_use_wcsncpy_s_or_StringCchCopyNW_or_StringCbCopyNW
 
-#define snscanf 0
+#define snscanf snscanf_instead_use__snscanf_s
 
-#define sprintfA 0
+#define sprintfA sprintfA_instead_use_sprintf_s_or_StringCchPrintfA_or_StringCbPrintfA
 
-#define strcatA 0
+#define strcatA strcatA_instead_use_strcat_s_or_StringCchCatA_or_StringCbCatA
 
-#define nsprintf 0
+#define nsprintf nsprintf_instead_use_vsprintf_s_or_StringCchPrintf_or_StringCbPrintf
 
-#define _ftccat 0
+#define _ftccat _ftccat_instead_use_strcat_s_or_StringCchCat_or_StringCbCat
 
-#define _tccat 0
+#define _tccat _tccat_instead_use_strcat_s_or_StringCchCat_or_StringCbCat
 
 #endif /* _DONTUSE_H_INCLUDED_ */

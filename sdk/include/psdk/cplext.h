@@ -7,6 +7,6 @@
 #define CPLPAGE_KEYBOARD_SPEED 1
 #define CPLPAGE_DISPLAY_BACKGROUND 1
 
-#define _INC_CPLEXT 0
+#define _INC_CPLEXT
 
 #endif

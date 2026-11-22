@@ -352,6 +352,6 @@
 #define BITS_MC_WSD_PORT 0x8019400BL
 #endif
 
-#define _BGCPYMSG_ 0
+#define _BGCPYMSG_
 
 #endif /* #ifndef __WINE_BITMSG_H__ */

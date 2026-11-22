@@ -116,5 +116,5 @@ typedef struct _MOUSE_ATTRIBUTES {
 }
 #endif
 
-#define _NTDDMOU_ 0
+#define _NTDDMOU_
 

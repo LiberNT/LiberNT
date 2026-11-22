@@ -964,7 +964,7 @@ cpp_quote("#define IProcessDebugManager IProcessDebugManager64")
 cpp_quote("#endif")
 cpp_quote("#define MachineDebugManger MachineDebugManager_RETAIL")
 cpp_quote("#if (defined(_WIN64))")
-cpp_quote("#define SynchronousCallIntoThread 0")
+cpp_quote("#define SynchronousCallIntoThread SynchronousCallIntoThread64")
 cpp_quote("#endif")
 cpp_quote("#define THREAD_STATE_RUNNING (0x1)")
 cpp_quote("")
@@ -1858,13 +1858,13 @@ cpp_quote("#endif")
 cpp_quote("#if (defined(_WIN64))")
 cpp_quote("#define EnumStackFramesEx EnumStackFramesEx64")
 cpp_quote("#endif")
-cpp_quote("#define IID_IDebugStackFrameSnifferEx 0")
+cpp_quote("#define IID_IDebugStackFrameSnifferEx IID_IDebugStackFrameSnifferEx64")
 
-cpp_quote("#define IID_IDebugDocumentHelper 0")
+cpp_quote("#define IID_IDebugDocumentHelper IID_IDebugDocumentHelper64")
 
-cpp_quote("#define IID_IProcessDebugManager 0")
+cpp_quote("#define IID_IProcessDebugManager IID_IProcessDebugManager64")
 
-cpp_quote("#define IID_IDebugThreadCall 0")
+cpp_quote("#define IID_IDebugThreadCall IID_IDebugThreadCall64")
 
-cpp_quote("#define CLSID_MachineDebugManager 0")
+cpp_quote("#define CLSID_MachineDebugManager CLSID_MachineDebugManager_RETAIL")
 

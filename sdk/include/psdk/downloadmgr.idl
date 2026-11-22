@@ -42,7 +42,7 @@ interface IDownloadManager : IUnknown
         [in] UINT uiCP);
 }
 
-cpp_quote("#define SID_SDownloadManager 0")
+cpp_quote("#define SID_SDownloadManager IID_IDownloadManager")
 cpp_quote("")
 cpp_quote("struct IDownloadManagerVtbl")
 cpp_quote("{")

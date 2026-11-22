@@ -80,7 +80,7 @@ typedef struct IORING_INFO {
   UINT32 CompletionQueueSize;
 } IORING_INFO;
 
-#define _APISET_IORING_ 0
+#define _APISET_IORING_
 
 #ifdef __cplusplus
 extern "C" {

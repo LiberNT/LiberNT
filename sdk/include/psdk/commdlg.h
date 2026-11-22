@@ -790,7 +790,7 @@ typedef struct tagOFN_NT4W {
   LPCWSTR lpTemplateName;
 } OPENFILENAME_NT4W, *LPOPENFILENAME_NT4W;
 
-#define _INC_COMMDLG 0
+#define _INC_COMMDLG
 #define FRM_FIRST (WM_USER + 100)
 #define FRM_LAST 0x4C8
 #define FRM_SETOPERATIONRESULT 0x464

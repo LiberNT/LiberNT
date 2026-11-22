@@ -1094,7 +1094,7 @@ cpp_quote("#ifndef ADS_EXT_MINEXTDISPID")
 cpp_quote("#define ADS_EXT_MINEXTDISPID 1")
 cpp_quote("#endif")
 
-cpp_quote("#define ADS_DIRSYNC_COOKIE 0")
+cpp_quote("#define ADS_DIRSYNC_COOKIE (L\"fc8cb04d-311d-406c-8cb9-1ae8b843b418\")")
 cpp_quote("#define ADS_VLV_RESPONSE (L\"fc8cb04d-311d-406c-8cb9-1ae8b843b419\")")
 cpp_quote("")
 cpp_quote("enum __MIDL___MIDL_itf_ads_0000_0000_0020")

@@ -7597,7 +7597,11 @@ typedef struct TOUCHPAD_PARAMETERS_V1 {
 #define CURSOR_CREATION_SCALING_NONE 1
 #define GC_ROLLOVER 1
 #if (!(defined(UNICODE)))
-#define GetIconInfoEx 0
+#ifdef UNICODE
+#define GetIconInfoEx GetIconInfoExW
+#else
+#define GetIconInfoEx GetIconInfoExA
+#endif
 #endif
 #define GID_ROLLOVER 7
 #ifdef _WIN64
@@ -7614,7 +7618,7 @@ typedef struct TOUCHPAD_PARAMETERS_V1 {
 #define MENU_READ_ACCESS 0x20007
 #define MENU_WRITE_ACCESS 0x20FF8
 #define PMB_ACTIVE 0x00000001
-#define POINTER_STRUCTURES 0
+#define POINTER_STRUCTURES
 #define RES_ICON 1
 #define SETWALLPAPER_DEFAULT ((LPWSTR) - 1)
 #define TOUCHPREDICTIONPARAMETERS_DEFAULT_RLS_DELTA 0

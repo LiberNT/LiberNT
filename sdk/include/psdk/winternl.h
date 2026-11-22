@@ -751,6 +751,6 @@ typedef struct _SYSTEM_HANDLECOUNT_INFORMATION {
   ULONG HandleCount;
 } SYSTEM_HANDLECOUNT_INFORMATION, *PSYSTEM_HANDLECOUNT_INFORMATION;
 
-#define __os_arm64x_get_x64_information 0
+#define __os_arm64x_get_x64_information __os_arm64x_rdtsc
 
 #endif /* _WINTERNL_ */

@@ -1991,9 +1991,9 @@ typedef struct IDirectSoundCaptureFXNoiseSuppress *LPDIRECTSOUNDCAPTUREFXNOISESU
 
 typedef struct IDirectSoundCaptureFXNoiseSuppress *LPDIRECTSOUNDCAPTUREFXNOISESUPPRESS8;
 
-#define IID_IDirectSoundCaptureFXAec8 0
+#define IID_IDirectSoundCaptureFXAec8 IID_IDirectSoundCaptureFXAec
 
-#define IID_IDirectSoundCaptureFXNoiseSuppress8 0
+#define IID_IDirectSoundCaptureFXNoiseSuppress8 IID_IDirectSoundCaptureFXNoiseSuppress
 
 #define IDirectSoundCaptureFXAec_AddRef(p) IUnknown_AddRef(p)
 #define IDirectSoundCaptureFXAec_GetAllParameters(p, a) (p) -> lpVtbl -> GetAllParameters(p, a)

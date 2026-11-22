@@ -411,7 +411,7 @@ cpp_quote("#define TASK_MAX_RUN_TIMES 1440")
 cpp_quote("#endif")
 
 cpp_quote("#define IEnumTasks IEnumWorkItems")
-cpp_quote("#define ISchedulingAgent 0")
+cpp_quote("#define ISchedulingAgent ITaskScheduler")
 cpp_quote("")
 cpp_quote("struct IEnumWorkItemsVtbl")
 cpp_quote("{")
@@ -541,7 +541,7 @@ cpp_quote("    HRESULT (WINAPI *SetMaxRunTime)(ITask *, DWORD);")
 cpp_quote("    HRESULT (WINAPI *GetMaxRunTime)(ITask *, DWORD *);")
 cpp_quote("};")
 
-cpp_quote("#define IID_ISchedulingAgent 0")
+cpp_quote("#define IID_ISchedulingAgent IID_ITaskScheduler")
 
-cpp_quote("#define CLSID_CSchedulingAgent 0")
+cpp_quote("#define CLSID_CSchedulingAgent CLSID_CTaskScheduler")
 

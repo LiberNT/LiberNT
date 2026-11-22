@@ -227,7 +227,7 @@ typedef struct VolLockBroadcast {
   BYTE vlb_flags;
 } VolLockBroadcast;
 
-#define DBTFAR 0
+#define DBTFAR far
 
 typedef VolLockBroadcast *pVolLockBroadcast;
 

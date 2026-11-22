@@ -42,6 +42,6 @@ DWORD WINAPI RasSecurityDialogGetInfo(IN HPORT hPort, IN RAS_SECURITY_INFO* pBuf
 }
 #endif
 
-#define _RASSHOST_ 0
+#define _RASSHOST_
 
 #endif

@@ -4477,7 +4477,11 @@ typedef struct _OPERATION_START_PARAMETERS {
 #endif
 #endif
 #if (!(defined(UNICODE)))
-#define CreateSymbolicLink 0
+#ifdef UNICODE
+#define CreateSymbolicLink CreateSymbolicLinkW
+#else
+#define CreateSymbolicLink CreateSymbolicLinkA
+#endif
 #endif
 #ifdef UNICODE
 #define CreateSymbolicLinkTransacted CreateSymbolicLinkTransactedW
@@ -4551,7 +4555,11 @@ typedef struct _OPERATION_START_PARAMETERS {
 #endif
 #endif
 #if (!(defined(UNICODE)))
-#define GetCurrentHwProfile 0
+#ifdef UNICODE
+#define GetCurrentHwProfile GetCurrentHwProfileW
+#else
+#define GetCurrentHwProfile GetCurrentHwProfileA
+#endif
 #endif
 #ifdef UNICODE
 #define GetFileAttributesTransacted GetFileAttributesTransactedW
@@ -4739,7 +4747,11 @@ typedef struct _OPERATION_START_PARAMETERS {
 #ifdef _WIN64
 #define SCS_THIS_PLATFORM_BINARY 6
 #else
+#ifdef _WIN64
+#define SCS_THIS_PLATFORM_BINARY 6
+#else
 #define SCS_THIS_PLATFORM_BINARY 0
+#endif
 #endif
 #endif
 #define SecureZeroMemory2 RtlSecureZeroMemory2
@@ -4986,9 +4998,17 @@ BOOLEAN WTSIsServerContainer(void);
 }
 #endif
 
-#define GetNamedPipeClientComputerName 0
+#ifdef UNICODE
+#define GetNamedPipeClientComputerName GetNamedPipeClientComputerNameW
+#else
+#define GetNamedPipeClientComputerName GetNamedPipeClientComputerNameA
+#endif
 
-#define AccessCheckByTypeAndAuditAlarm 0
+#ifdef UNICODE
+#define AccessCheckByTypeAndAuditAlarm AccessCheckByTypeAndAuditAlarmW
+#else
+#define AccessCheckByTypeAndAuditAlarm AccessCheckByTypeAndAuditAlarmA
+#endif
 
 struct COPYFILE2_EXTENDED_PARAMETERS_V2
 {
@@ -5034,12 +5054,24 @@ BOOL SetUmsThreadInformation(PUMS_CONTEXT UmsThread, UMS_THREAD_INFO_CLASS UmsTh
 }
 #endif
 
-#define AccessCheckByTypeResultListAndAuditAlarm 0
+#ifdef UNICODE
+#define AccessCheckByTypeResultListAndAuditAlarm AccessCheckByTypeResultListAndAuditAlarmW
+#else
+#define AccessCheckByTypeResultListAndAuditAlarm AccessCheckByTypeResultListAndAuditAlarmA
+#endif
 
-#define AccessCheckByTypeResultListAndAuditAlarmByHandle 0
+#ifdef UNICODE
+#define AccessCheckByTypeResultListAndAuditAlarmByHandle AccessCheckByTypeResultListAndAuditAlarmByHandleW
+#else
+#define AccessCheckByTypeResultListAndAuditAlarmByHandle AccessCheckByTypeResultListAndAuditAlarmByHandleA
+#endif
 #define ACTIVATION_CONTEXT_BASIC_INFORMATION_DEFINED 1
 
-#define OpenJobObject 0
+#ifdef UNICODE
+#define OpenJobObject OpenJobObjectW
+#else
+#define OpenJobObject OpenJobObjectA
+#endif
 
 #define GlobalLRUNewest(h) ((HANDLE) (h))
 #define GlobalLRUOldest(h) ((HANDLE) (h))

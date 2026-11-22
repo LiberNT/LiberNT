@@ -1424,6 +1424,6 @@ HRESULT ULongPtrToUShort(ULONG_PTR ulOperand, USHORT *pusResult);
 }
 #endif
 
-#define __UnsignedMultiply128 0
+#define __UnsignedMultiply128 _umul128
 
 #endif // !_INTSAFE_H_INCLUDED_

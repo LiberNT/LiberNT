@@ -40,14 +40,18 @@ typedef const struct _TlgProvider_t *TraceLoggingHProvider;
 #define _tlg_IS_PARENTHESIZED_imp0...) 1
 #define _TLG_IS_PARENTHESIZED_imp0...) 1
 #define _tlg_IS_PARENTHESIZED_imp1 1,
-#define _TLG_IS_PARENTHESIZED_imp1 0
+#define _TLG_IS_PARENTHESIZED_imp1 1,
 #define _tlg_IS_PARENTHESIZED_imp_tlg_IS_PARENTHESIZED_imp0 0,
 #define _TLG_IS_PARENTHESIZED_imp_TLG_IS_PARENTHESIZED_imp0 0,
 #define _tlg_MetaDataDescCount 2
 #ifdef _WIN64
 #define _tlg_MetadataFlags 1
 #else
+#ifdef _WIN64
+#define _tlg_MetadataFlags 1
+#else
 #define _tlg_MetadataFlags 0
+#endif
 #endif
 #define _tlg_MetadataMagic (-4933124757307257210LL)
 #define _tlg_MetadataSignature 0x30575445
@@ -68,7 +72,11 @@ typedef const struct _TlgProvider_t *TraceLoggingHProvider;
 #ifdef _WIN64
 #define _TlgFlagsVal 1
 #else
+#ifdef _WIN64
+#define _TlgFlagsVal 1
+#else
 #define _TlgFlagsVal 0
+#endif
 #endif
 #define _tlgInfoVals_0...)
 #define _TlgInfoVals_0...)
@@ -78,8 +86,8 @@ typedef const struct _TlgProvider_t *TraceLoggingHProvider;
 #define _TlgOpcodeVal_TlgStruct...)
 #define _tlgPragmaUtf8Begin
 #define _tlgPragmaUtf8End
-#define _tlgSegMetadataBegin 0
-#define _TlgSegMetadataBegin 0
+#define _tlgSegMetadataBegin _tlg_STRINGIZE(_tlg_PASTE2(TLG_METADATA_SEGMENT_BASE, $zETW0))
+#define _TlgSegMetadataBegin _TLG_STRINGIZE(_TLG_PASTE(TLG_METADATA_SEGMENT_BASE, $zETW0))
 #define _TlgSeqEnd
 #define _TlgSeqStart
 #define _TlgSigVal 0x30575445
@@ -88,10 +96,10 @@ typedef const struct _TlgProvider_t *TraceLoggingHProvider;
 #define _TlgVerVal 0
 #define _Tracelogging_SyntaxError_ProviderIdMustBeElevenIntegers_11...) /* not an error */ { __VA_ARGS__ }
 #define _Tracelogging_UnrecognizedOption__TlgOptionGroup...) /* recognized */ { __VA_ARGS__ }
-#define _traceloggingprovider_ 0
-#define _TRACELOGGINGPROVIDER_ 0
+#define _traceloggingprovider_
+#define _TRACELOGGINGPROVIDER_
 #define TLG_DEBUG 1
-#define TLG_EVENT_REGISTER 0
+#define TLG_EVENT_REGISTER EtwRegister
 #define TLG_EVENT_SET_INFORMATION EtwSetInformation
 #define TLG_EVENT_UNREGISTER EtwUnregister
 #define TLG_EVENT_WRITE_EX EtwWriteEx
@@ -99,10 +107,10 @@ typedef const struct _TlgProvider_t *TraceLoggingHProvider;
 #define TLG_HAVE_EVENT_SET_INFORMATION 1
 #define TLG_INLINE __inline
 #define TLG_METADATA_SEGMENT_BASE . rdata
-#define TLG_NONPAGED_SEGMENT 0
+#define TLG_NONPAGED_SEGMENT ".text"
 #define TLG_NULL NULL
 #define TLG_PAGED_SEGMENT "PAGE"
-#define TLG_PFORCEINLINE 0
+#define TLG_PFORCEINLINE PFORCEINLINE
 #define TRACELOGGING_PROTOCOL_MICROSOFT_RESERVED0 0
 #define TRACELOGGING_PROTOCOL_MICROSOFT_RESERVED1 1
 #define TRACELOGGING_PROTOCOL_MICROSOFT_RESERVED2 2
@@ -327,24 +335,24 @@ void WINAPI TraceLoggingUnregister_EtwUnregister(TraceLoggingHProvider hProvider
 }
 #endif
 
-#define _TlgSegMetadataEvents 0
-#define TraceLoggingSetInformation 0
+#define _TlgSegMetadataEvents _TLG_STRINGIZE(_TLG_PASTE(TLG_METADATA_SEGMENT_BASE, $zETW1))
+#define TraceLoggingSetInformation _tlg_PASTE2(TraceLoggingSetInformation_, _tlg_EVENT_SET_INFORMATION_suffix)
 
-#define _TlgSegMetadataProviders 0
-#define _tlgWriteTransfer 0
+#define _TlgSegMetadataProviders _TLG_STRINGIZE(_TLG_PASTE(TLG_METADATA_SEGMENT_BASE, $zETW2))
+#define _tlgWriteTransfer _tlg_PASTE2(_tlgWriteTransfer_, TLG_EVENT_WRITE_TRANSFER)
 
-#define _TlgSegMetadataEnd 0
-#define _tlgWriteEx 0
+#define _TlgSegMetadataEnd _TLG_STRINGIZE(_TLG_PASTE(TLG_METADATA_SEGMENT_BASE, $zETW9))
+#define _tlgWriteEx _tlg_PASTE2(_tlgWriteEx_, TLG_EVENT_WRITE_EX)
 
-#define _TlgPragmaUtf8Begin 0
-#define _tlgSegMetadataEvents 0
+#define _TlgPragmaUtf8Begin __pragma(execution_character_set(push, "UTF-8"))
+#define _tlgSegMetadataEvents _tlg_STRINGIZE(_tlg_PASTE2(TLG_METADATA_SEGMENT_BASE, $zETW1))
 
-#define _TlgPragmaUtf8End 0
-#define _tlgSegMetadataProviders 0
+#define _TlgPragmaUtf8End __pragma(execution_character_set(pop))
+#define _tlgSegMetadataProviders _tlg_STRINGIZE(_tlg_PASTE2(TLG_METADATA_SEGMENT_BASE, $zETW2))
 
-#define _tlgSegMetadataEnd 0
+#define _tlgSegMetadataEnd _tlg_STRINGIZE(_tlg_PASTE2(TLG_METADATA_SEGMENT_BASE, $zETW9))
 
-#define _tlgValidateProviderId_parenthesis0 0
+#define _tlgValidateProviderId_parenthesis0 /* parameter not parenthesized - error case */ _tracelogging_SyntaxError_ProviderIdMustBeInParenthesis _tracelogging_SyntaxError_ProviderIdMustBeInParenthesis;
 
 #define _tlg_ASSERT(exp, str) ((void) (!(exp) ? (__annotation(L"Debug", L"AssertFail", L"TraceLogging: " _tlg_LSTRINGIZE(exp) L" : " str), TLG_RAISEASSERTIONFAILURE(), 0) : 0))
 #define _TLG_ASSERT(exp, str) ((void) (!(exp) ? (__annotation(L"Debug", L"AssertFail", L"TraceLogging: " L ## # exp L" : " L ## str), DbgRaiseAssertionFailure(), 0) : 0))
@@ -737,7 +745,7 @@ void WINAPI TraceLoggingUnregister_EtwUnregister(TraceLoggingHProvider hProvider
 #define _tlgDT_imp2(name, desc, tags) name, L"" desc, tags, 1
 #define _tlgDT_impB(macro, args) macro args
 #define _TlgEvtTagEncode(eventTag) (((eventTag) & 0xfe00000) >> 21) /* Encode 0x0fe00000 bits into UINT16  */ | (((eventTag) & 0x1fc000) >> 6) /* Encode 0x001fc000 bits into UINT16  */ | (((eventTag) & 0x3fff) << 16) /* Trigger warning for 0x00003fff bits */ | (~(~(eventTag) | 0x0FFFFFFF))
-#define _tlgEvtTagInit 0
+#define _tlgEvtTagInit 128 /* Set the high bit of the low byte to indicate 2 bytes of tags. */ | ((0xfe00000 & (UINT32) _tlgTagConst) >> 21) /* Encode 0x0fe00000 bits into UINT16  */ | ((0x01fc000 & (UINT32) _tlgTagConst) >> 6) /* Encode 0x001fc000 bits into UINT16  */ | ((0x0003fff & (UINT32) _tlgTagConst) << 16) /* Trigger warning for 0x00003fff bits */ | (~(0x0FFFFFFF | ~(UINT32) _tlgTagConst))
 #define _tlgEvtTagVal(n, args) _tlgApplyArgs(_tlgEvtTagVal, args)
 #define _TlgEvtTagVal_TlgA(value)
 #define _tlgEvtTagVal_tlgArray(ctype, pValues, cValues, inType, outType, hasOut, name, desc, tags, hasTags)

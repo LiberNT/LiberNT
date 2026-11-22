@@ -1260,5 +1260,5 @@ interface ID2D1Factory : IUnknown
 [local] void __stdcall D2D1MakeSkewMatrix(float angle_x, float angle_y, D2D1_POINT_2F center, D2D1_MATRIX_3X2_F *matrix);
 
 cpp_quote("#define D2D1_INVALID_TAG ULONGLONG_MAX")
-cpp_quote("#define D2D1FORCEINLINE 0")
-cpp_quote("#define D2D_USE_C_DEFINITIONS 0")
+cpp_quote("#define D2D1FORCEINLINE FORCEINLINE")
+cpp_quote("#define D2D_USE_C_DEFINITIONS")

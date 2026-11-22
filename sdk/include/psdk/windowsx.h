@@ -587,7 +587,7 @@ extern "C" {
 }
 #endif
 
-#define _ncalloc 0
+#define _ncalloc calloc
 #define _nexpand _expand
 #define _nfree free
 #define _nmalloc malloc

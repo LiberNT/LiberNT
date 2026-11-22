@@ -78,7 +78,11 @@ DeleteSynchronizationBarrier(
 #define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
 
 #if (!(defined(UNICODE)))
-#define CreateMutexEx 0
+#ifdef UNICODE
+#define CreateMutexEx CreateMutexExW
+#else
+#define CreateMutexEx CreateMutexExA
+#endif
 #endif
 
 #ifdef __cplusplus

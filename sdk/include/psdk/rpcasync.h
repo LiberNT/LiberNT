@@ -272,7 +272,7 @@ typedef struct _RPC_CALL_LOCAL_ADDRESS_V1 {
 } RPC_CALL_LOCAL_ADDRESS_V1, *PRPC_CALL_LOCAL_ADDRESS_V1;
 
 #if (!(defined(UNICODE)))
-#define RPC_CALL_ATTRIBUTES_V1 0
+#define RPC_CALL_ATTRIBUTES_V1 RPC_CALL_ATTRIBUTES_V1_A
 #endif
 #define RpcNotificationCallStatusChange RpcNotificationClientDisconnect
 #ifdef UNICODE
@@ -304,9 +304,9 @@ RPC_STATUS RpcServerUnsubscribeForNotification(RPC_BINDING_HANDLE Binding, RPC_N
 }
 #endif
 
-#define RPC_CALL_ATTRIBUTES_V2 0
+#define RPC_CALL_ATTRIBUTES_V2 RPC_CALL_ATTRIBUTES_V2_A
 
-#define RPC_CALL_ATTRIBUTES_V3 0
+#define RPC_CALL_ATTRIBUTES_V3 RPC_CALL_ATTRIBUTES_V3_A
 
 typedef struct tagRPC_CALL_ATTRIBUTES_V1_A RPC_CALL_ATTRIBUTES_V1_A;
 

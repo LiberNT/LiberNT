@@ -306,7 +306,7 @@ cpp_quote("                                             LPCWSTR encoding, IXmlWr
 cpp_quote("STDAPI CreateXmlWriterOutputWithEncodingCodePage(IUnknown *stream, IMalloc *pMalloc,")
 cpp_quote("    UINT codepage, IXmlWriterOutput **output);")
 
-cpp_quote("#define IID_IXmlReader 0")
+cpp_quote("#define IID_IXmlReader _IID_IXmlReader")
 cpp_quote("")
 cpp_quote("struct IXmlReaderVtbl")
 cpp_quote("{")
@@ -419,7 +419,7 @@ cpp_quote("    HRESULT (WINAPI *WriteWhitespace)(IXmlWriter *, LPCWSTR);")
 cpp_quote("    HRESULT (WINAPI *Flush)(IXmlWriter *);")
 cpp_quote("};")
 
-cpp_quote("#define IID_IXmlWriter 0")
+cpp_quote("#define IID_IXmlWriter _IID_IXmlWriter")
 
-cpp_quote("#define IID_IXmlResolver 0")
+cpp_quote("#define IID_IXmlResolver _IID_IXmlResolver")
 

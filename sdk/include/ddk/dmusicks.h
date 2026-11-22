@@ -264,7 +264,7 @@ DEFINE_GUIDSTRUCT("c096df9e-fb09-11d1-81b0-0060083316c1", IID_IMXF);
 #define SET_PACKAGE_EVT(evt)    ((evt)->usFlags |= DMUS_KEF_PACKAGE_EVENT)
 #define CLEAR_PACKAGE_EVT(evt)  ((evt)->usFlags &= (~DMUS_KEF_PACKAGE_EVENT))
 
-#define IID_ISynthSinkDMus 0
+#define IID_ISynthSinkDMus DEFINE_GUIDNAMED(IID_ISynthSinkDMus)
 #define STATIC_CLSID_MiniportDriverDMusUART 0xd3f0ce1c, 0xfffc, 0x11d1, 0x81, 0xb0, 0x00, 0x60, 0x08, 0x33, 0x16, 0xc1
 #define STATIC_CLSID_MiniportDriverDMusUARTCapture 0xd3f0ce1d, 0xfffc, 0x11d1, 0x81, 0xb0, 0x00, 0x60, 0x08, 0x33, 0x16, 0xc1
 #define STATIC_CLSID_PortDMus 0xC1
@@ -289,7 +289,7 @@ struct ISynthSinkDMus
     struct ISynthSinkDMusVtbl *lpVtbl;
 };
 
-#define IMP_ISynthSinkDMus 0
+#define IMP_ISynthSinkDMus IMP_IMXF; STDMETHODIMP_(void) Render(_In_ PBYTE pBuffer, _In_ DWORD dwLength, _In_ LONGLONG llPosition); STDMETHODIMP_(NTSTATUS) SyncToMaster(_In_ REFERENCE_TIME rfTime, _In_ BOOL fStart); STDMETHODIMP_(NTSTATUS) SampleToRefTime(_In_ LONGLONG llSampleTime, _Out_ REFERENCE_TIME * prfTime); STDMETHODIMP_(NTSTATUS) RefTimeToSample(_In_ REFERENCE_TIME rfTime, _Out_ LONGLONG * pllSampleTime)
 
 typedef ISynthSinkDMus *PSYNTHSINKDMUS;
 

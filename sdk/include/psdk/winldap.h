@@ -849,12 +849,12 @@ ULONG __cdecl ldap_set_dbg_flags(ULONG NewFlags);
 #if (!(defined(UNICODE)))
 #define LDAP_UNICODE 0
 #endif
-#define LDAP_VENDOR_NAME 0
+#define LDAP_VENDOR_NAME "Microsoft Corporation."
 #define LDAP_VENDOR_NAME_W L"Microsoft Corporation."
 #define mod_bvalues mod_vals . modv_bvals
 #define mod_values mod_vals . modv_strvals
 #define NULLBER ((BerElement *) 0)
-#define WINLDAPAPI 0
+#define WINLDAPAPI DECLSPEC_IMPORT
 
 typedef ULONG (*DBGPRINT)(PCCH, ...);
 

@@ -123,7 +123,7 @@ interface IWordBreaker: IUnknown
               [string][out] const WCHAR **ppwcsLicense);
 }
 
-cpp_quote("#define CLSID_CISimpleCommandCreator 0")
+cpp_quote("#define CLSID_CISimpleCommandCreator { 0xc7b6c04a, 0xcbb5, 0x11d0, { 0xbb, 0x4c, 0x0, 0xc0, 0x4f, 0xc2, 0xf4, 0x10 } }")
 cpp_quote("#define INDEX_SERVER_DEFAULT_CAT (L\"__IndexServerDefault__\")")
 cpp_quote("#define LOCAL_MACHINE (L\".\")")
 cpp_quote("#define SYSTEM_DEFAULT_CAT (L\"__SystemDefault__\")")

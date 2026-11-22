@@ -480,4 +480,4 @@ interface ID2D1SvgDocument : ID2D1Resource
     );
 }
 
-cpp_quote("#define _D2D1_SVG_ 0")
+cpp_quote("#define _D2D1_SVG_")

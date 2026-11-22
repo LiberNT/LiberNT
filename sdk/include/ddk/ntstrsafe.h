@@ -3378,7 +3378,7 @@ RtlUnicodeStringPrintfEx(
 
 #define NTSTRSAFE_MAX_LENGTH 0x7FFFFFFE
 #define NTSTRSAFE_USE_SECURE_CRT 0
-#define NTSTRSAFEDDI 0
+#define NTSTRSAFEDDI __inline NTSTATUS __stdcall
 #define NTSTRSAFEWORKERDDI static NTSTRSAFEDDI
 
 typedef const __unaligned wchar_t *NTSTRSAFE_PCUWSTR;

@@ -2419,25 +2419,25 @@ typedef struct _STORAGE_ZONE_GROUP {
 #define DeviceDsmDefinition_DrtQuery { DeviceDsmAction_DrtQuery, FALSE, 0, 0, TRUE, 0, 0 }
 #define DeviceDsmDefinition_FinishZone { DeviceDsmAction_FinishZone, FALSE, 0, 0, FALSE, 0, 0 }
 #define DeviceDsmDefinition_GetFreeSpace { DeviceDsmAction_GetFreeSpace, FALSE, 0, 0, TRUE, __alignof(DEVICE_DSM_FREE_SPACE_OUTPUT), sizeof (DEVICE_DSM_FREE_SPACE_OUTPUT) }
-#define DeviceDsmDefinition_GetPhysicalAddresses 0
-#define DeviceDsmDefinition_GetRangeErrorInfo 0
+#define DeviceDsmDefinition_GetPhysicalAddresses { DeviceDsmAction_GetPhysicalAddresses, FALSE, 0, 0, TRUE, __alignof(DEVICE_DSM_PHYSICAL_ADDRESSES_OUTPUT), sizeof (DEVICE_DSM_PHYSICAL_ADDRESSES_OUTPUT) }
+#define DeviceDsmDefinition_GetRangeErrorInfo { DeviceDsmAction_GetRangeErrorInfo, FALSE, 0, 0, TRUE, __alignof(DEVICE_DSM_RANGE_ERROR_OUTPUT), sizeof (DEVICE_DSM_RANGE_ERROR_OUTPUT) }
 #define DeviceDsmDefinition_LostQuery { DeviceDsmAction_LostQuery, TRUE, __alignof(DEVICE_DSM_LOST_QUERY_PARAMETERS), sizeof (DEVICE_DSM_LOST_QUERY_PARAMETERS), TRUE, __alignof(DEVICE_DSM_LOST_QUERY_OUTPUT), sizeof (DEVICE_DSM_LOST_QUERY_OUTPUT) }
 #define DeviceDsmDefinition_Map { DeviceDsmAction_Map, FALSE, 0, 0, FALSE, 0, 0 }
-#define DeviceDsmDefinition_None 0
-#define DeviceDsmDefinition_Notification 0
+#define DeviceDsmDefinition_None { DeviceDsmAction_None, FALSE, 0, 0, FALSE, 0, 0 }
+#define DeviceDsmDefinition_Notification { DeviceDsmAction_Notification, FALSE, __alignof(DEVICE_DSM_NOTIFICATION_PARAMETERS), sizeof (DEVICE_DSM_NOTIFICATION_PARAMETERS), FALSE, 0, 0 }
 #define DeviceDsmDefinition_NvCache_Change_Priority { DeviceDsmAction_NvCache_Change_Priority, FALSE, __alignof(DEVICE_DSM_NVCACHE_CHANGE_PRIORITY_PARAMETERS), sizeof (DEVICE_DSM_NVCACHE_CHANGE_PRIORITY_PARAMETERS), FALSE, 0, 0 }
 #define DeviceDsmDefinition_NvCache_Evict { DeviceDsmAction_NvCache_Evict, FALSE, 0, 0, FALSE, 0, 0 }
 #define DeviceDsmDefinition_OpenZone { DeviceDsmAction_OpenZone, FALSE, 0, 0, FALSE, 0, 0 }
 #define DeviceDsmDefinition_QueryPreferLocalRepair { DeviceDsmAction_QueryPreferLocalRepair, FALSE, 0, 0, TRUE, __alignof(DEVICE_DSM_QUERY_PREFER_LOCAL_REPAIR_OUTPUT), sizeof (DEVICE_DSM_QUERY_PREFER_LOCAL_REPAIR_OUTPUT) }
 #define DeviceDsmDefinition_RegenerateParity { DeviceDsmAction_RegenerateParity, FALSE, 0, 0, FALSE, 0, 0 }
-#define DeviceDsmDefinition_Repair 0
+#define DeviceDsmDefinition_Repair { DeviceDsmAction_Repair, TRUE, __alignof(DEVICE_DSM_REPAIR_PARAMETERS), sizeof (DEVICE_DSM_REPAIR_PARAMETERS), TRUE, __alignof(DEVICE_DSM_REPAIR_OUTPUT), sizeof (DEVICE_DSM_REPAIR_OUTPUT) }
 #define DeviceDsmDefinition_ReportZones { DeviceDsmAction_ReportZones, FALSE, __alignof(DEVICE_DSM_REPORT_ZONES_PARAMETERS), sizeof (DEVICE_DSM_REPORT_ZONES_PARAMETERS), TRUE, __alignof(DEVICE_DSM_REPORT_ZONES_OUTPUT), sizeof (DEVICE_DSM_REPORT_ZONES_OUTPUT) }
 #define DeviceDsmDefinition_ResetWritePointer { DeviceDsmAction_ResetWritePointer, FALSE, 0, 0, FALSE, 0, 0 }
 #define DeviceDsmDefinition_ScopeRegen { DeviceDsmAction_ScopeRegen, FALSE, 0, 0, FALSE, 0, 0 }
-#define DeviceDsmDefinition_Scrub 0
+#define DeviceDsmDefinition_Scrub { DeviceDsmAction_Scrub, FALSE, 0, 0, TRUE, __alignof(DEVICE_DSM_SCRUB_OUTPUT2), sizeof (DEVICE_DSM_SCRUB_OUTPUT2) }
 #define DeviceDsmDefinition_TieringQuery { DeviceDsmAction_TieringQuery, TRUE, __alignof(DEVICE_DSM_TIERING_QUERY_PARAMETERS), sizeof (DEVICE_DSM_TIERING_QUERY_PARAMETERS), TRUE, __alignof(DEVICE_DSM_TIERING_QUERY_OUTPUT), sizeof (DEVICE_DSM_TIERING_QUERY_OUTPUT) }
 #define DeviceDsmDefinition_TopologyIdQuery { DeviceDsmAction_TopologyIdQuery, FALSE, 0, 0, TRUE, __alignof(DEVICE_DSM_TOPOLOGY_ID_QUERY_OUTPUT), sizeof (DEVICE_DSM_TOPOLOGY_ID_QUERY_OUTPUT) }
-#define DeviceDsmDefinition_Trim 0
+#define DeviceDsmDefinition_Trim { DeviceDsmAction_Trim, FALSE, 0, 0, FALSE, 0, 0 }
 #define DeviceDsmDefinition_VdtSet { DeviceDsmAction_VdtSet, FALSE, 0, 0, FALSE, 0, 0 }
 #define DeviceDsmDefinition_WriteZeroes { DeviceDsmAction_WriteZeroes, FALSE, 0, 0, FALSE, 0, 0 }
 #define DEVICEDUMP_CAP_PRIVATE_SECTION 0x00000001
@@ -2452,14 +2452,14 @@ typedef struct _STORAGE_ZONE_GROUP {
 #define STORAGE_ADAPTER_SERIAL_NUMBER_V1_SIZE 0x108
 #define STORAGE_ADAPTER_SERIAL_NUMBER_V1_VERSION 0x108
 #define STORAGE_COUNTERS_VERSION_V1 0x20
-#define STORAGE_CRASH_TELEMETRY_REGKEY 0
+#define STORAGE_CRASH_TELEMETRY_REGKEY L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\CrashControl\\StorageTelemetry"
 #define STORAGE_DEVICE_NUMA_NODE_UNKNOWN 0xFFFFFFFF
 #define STORAGE_DEVICE_TELEMETRY_REGKEY L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Storage\\StorageTelemetry"
 #define STORAGE_MINIPORT_DESCRIPTOR_V1_SIZE 0x10
 #define STORAGE_SUPPORTED_FEATURES_MASK 1
-#define TC_PUBLIC_DATA_TYPE_ATAGP 0
+#define TC_PUBLIC_DATA_TYPE_ATAGP "ATAGPLogPages"
 #define TC_PUBLIC_DATA_TYPE_ATASMART "ATASMARTPages"
-#define TCRecordStorportSrbFunction 0
+#define TCRecordStorportSrbFunction Command [0]
 
 struct _BPIO_OUTPUT
 {

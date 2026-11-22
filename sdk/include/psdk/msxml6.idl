@@ -3222,7 +3222,7 @@ cpp_quote("#ifndef XHR_PROP_ONDATA_NEVER")
 cpp_quote("#define XHR_PROP_ONDATA_NEVER 0xFFFFFFFFFFFFFFFF")
 cpp_quote("#endif")
 
-cpp_quote("#define CLSID_XmlHttpRequest 0")
+cpp_quote("#define CLSID_XmlHttpRequest CLSID_FreeThreadedXMLHTTP60")
 cpp_quote("")
 cpp_quote("enum _XHR_CERT_ERROR_FLAG")
 cpp_quote("{")

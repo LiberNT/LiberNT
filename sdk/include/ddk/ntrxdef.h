@@ -48,15 +48,15 @@
 #define RxAllocatePool ExAllocatePool
 #define RxAllocatePoolWithTag2 ExAllocatePool2
 #define RXCOMMON_ARGUMENTS RxContext
-#define RXCOMMON_SIGNATURE 0
-#define RxSprintf 0
+#define RXCOMMON_SIGNATURE PRX_CONTEXT RxContext
+#define RxSprintf sprintf
 #define TICKS_PER_MILLESECOND 0x2710
 #define TICKS_PER_SECOND 0x989680
 #define TRANSPORT_HEADER_SIZE 128
 
-#define RxCaptureRequestPacket 0
+#define RxCaptureRequestPacket PIRP __C_Irp = RxContext -> CurrentIrp
 
-#define capReqPacket 0
+#define capReqPacket __C_Irp
 
 #define RX_DEFINE_FLAG(a, c, d) a = ((1 << c) & d),
 #define RxAllocateHeaderMdl(Buffer, BufferSize, Mdl) { Mdl = RxAllocateMdl(Buffer, BufferSize); if ((Mdl) && (Mdl -> ByteOffset >= TRANSPORT_HEADER_SIZE)) { SetFlag(Mdl -> MdlFlags, MDL_NETWORK_HEADER); } }

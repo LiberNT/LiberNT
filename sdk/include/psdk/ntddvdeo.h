@@ -1356,7 +1356,7 @@ struct VIDEO_BRIGHTNESS_POLICY
 
 typedef struct VIDEO_BRIGHTNESS_POLICY *PVIDEO_BRIGHTNESS_POLICY;
 
-#define DEVPKEY_DeviceInterface_TerminalLuid 0
+#define DEVPKEY_DeviceInterface_TerminalLuid DEVPKEY_Device_TerminalLuid
 
 
 struct _COORD

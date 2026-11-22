@@ -1317,7 +1317,11 @@ LRESULT WINAPI SHSendMessageBroadcastA(UINT uMsg, WPARAM wParam, LPARAM lParam);
 #endif
 #endif
 #if (!(defined(UNICODE)))
-#define SHFormatDateTime 0
+#ifdef UNICODE
+#define SHFormatDateTime SHFormatDateTimeW
+#else
+#define SHFormatDateTime SHFormatDateTimeA
+#endif
 #endif
 #ifdef UNICODE
 #define SHMessageBoxCheck SHMessageBoxCheckW

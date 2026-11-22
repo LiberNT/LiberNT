@@ -39,7 +39,7 @@ typedef struct _PHYSICAL_MONITOR
 }
 #endif
 
-#define PhysicalMonitorEnumerationAPI_h 0
+#define PhysicalMonitorEnumerationAPI_h
 
 #ifdef __cplusplus
 extern "C" {

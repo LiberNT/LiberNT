@@ -965,7 +965,7 @@ typedef struct _DSKTLSYSTEMTIME {
 #define VPDF_SHOWMULTIBATT 0x00000020
 #endif
 
-#define _INC_REGSTR 0
+#define _INC_REGSTR
 #define REGSTR_KEY_ACPIENUM TEXT("ACPI")
 #define REGSTR_KEY_CONTROL TEXT("Control")
 #define REGSTR_KEY_DEVICEPARAMETERS TEXT("Device Parameters")
@@ -988,7 +988,7 @@ typedef struct _DSKTLSYSTEMTIME {
 #define REGSTR_PATH_DRIVERSIGN TEXT("Software\\Microsoft\\Driver Signing")
 #define REGSTR_PATH_DRIVERSIGN_POLICY TEXT("Software\\Policies\\Microsoft\\Windows NT\\Driver Signing")
 #define REGSTR_PATH_HWPROFILESCURRENT TEXT("System\\CurrentControlSet\\Hardware Profiles\\Current")
-#define REGSTR_PATH_LASTGOOD 0
+#define REGSTR_PATH_LASTGOOD TEXT("System\\LastKnownGoodRecovery\\LastGood")
 #define REGSTR_PATH_LASTGOODTMP TEXT("System\\LastKnownGoodRecovery\\LastGood.Tmp")
 #define REGSTR_PATH_MULTIMEDIA_AUDIO_IMAGES REGSTR_PATH_MULTIMEDIA_AUDIO TEXT("\\Images")
 #define REGSTR_PATH_NONDRIVERSIGN TEXT("Software\\Microsoft\\Non-Driver Signing")
@@ -1013,9 +1013,9 @@ typedef struct _DSKTLSYSTEMTIME {
 #define REGSTR_VAL_ACSPINDOWNPREVIOUS TEXT("ACSpinDownPrevious")
 #define REGSTR_VAL_ACTIVESERVICE TEXT("ActiveService")
 #define REGSTR_VAL_ADDRESS TEXT("Address")
-#define REGSTR_VAL_APMACTIMEOUT 0
+#define REGSTR_VAL_APMACTIMEOUT TEXT("APMACTimeout")
 #define REGSTR_VAL_APMBATTIMEOUT TEXT("APMBatTimeout")
-#define REGSTR_VAL_APMSHUTDOWNPOWER 0
+#define REGSTR_VAL_APMSHUTDOWNPOWER TEXT("APMShutDownPower")
 #define REGSTR_VAL_AUDIO_BITMAP TEXT("bitmap")
 #define REGSTR_VAL_AUDIO_ICON TEXT("icon")
 #define REGSTR_VAL_BASICPROPERTIES_32 TEXT("BasicProperties32")

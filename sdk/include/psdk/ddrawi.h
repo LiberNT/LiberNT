@@ -2068,7 +2068,7 @@ typedef DDHAL_DDVIDEOPORTCALLBACKS * LPDDHAL_DDVIDEOPORTCALLBACKS;
 
 #define DDRAW_DLL_UNLOADED 1
 #define EXTERN_DDAPI WINAPI
-#define IS_32 0
+#define IS_32
 
 #ifdef __cplusplus
 extern "C" {

@@ -162,9 +162,13 @@ DiUninstallDevice(
 #ifndef DIIRFLAG_INSTALL_AS_SET
 #define DIIRFLAG_INSTALL_AS_SET 0x00000040
 
-#define _INC_NEWDEV 0
+#define _INC_NEWDEV
 #if (!(defined(UNICODE)))
-#define DiUninstallDriver 0
+#ifdef UNICODE
+#define DiUninstallDriver DiUninstallDriverW
+#else
+#define DiUninstallDriver DiUninstallDriverA
+#endif
 #endif
 #define DIURFLAG_NO_REMOVE_INF (0x00000001)
 #define DIURFLAG_VALID 3

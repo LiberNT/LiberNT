@@ -2699,10 +2699,10 @@ typedef struct tagCapInfoChunk {
   LONG cbData;
 } CAPINFOCHUNK, *PCAPINFOCHUNK, *LPCAPINFOCHUNK;
 
-#define _INC_VFW 0
+#define _INC_VFW
 #define AVIFILEHANDLER_CANREAD 0x0001
 #define AVIStreamExit AVIFileExit
-#define AVIStreamFindKeyFrame 0
+#define AVIStreamFindKeyFrame AVIStreamFindSample
 #define AVIStreamInit AVIFileInit
 #ifdef UNICODE
 #define CAPERRORCALLBACK CAPERRORCALLBACKW
@@ -2716,7 +2716,11 @@ typedef struct tagCapInfoChunk {
 #endif
 #endif
 #if (!(defined(UNICODE)))
-#define CAPSTATUSCALLBACK 0
+#ifdef UNICODE
+#define CAPSTATUSCALLBACK CAPSTATUSCALLBACKW
+#else
+#define CAPSTATUSCALLBACK CAPSTATUSCALLBACKA
+#endif
 #endif
 #define CONTROLCALLBACK_PREROLL 1
 #define FindKeyFrame FindSample

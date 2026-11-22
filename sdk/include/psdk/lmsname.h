@@ -53,7 +53,7 @@
 #define NWSAP_DISPLAY_NAME TEXT("NW Sap Agent")
 #define SERVICE_NWCS TEXT("NWCWorkstation")
 
-#define _LMSNAME_ 0
+#define _LMSNAME_
 #define SERVCE_LM20_W32TIME SERVICE_W32TIME
 #define SERVICE_ADWS TEXT("ADWS")
 #define SERVICE_DNS_CACHE TEXT("DnsCache")

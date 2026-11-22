@@ -752,10 +752,10 @@ extern "C" {
 #define IPsecSaDbSetSecurityInfo IPsecSaDbSetSecurityInfo0
 #define IPsecSaDestroyEnumHandle IPsecSaDestroyEnumHandle0
 
-#define FwpmBitmapIndexGet 0
+#define FwpmBitmapIndexGet FwpmBitmapIndexGet0
 #define IPsecSaContextCreateEnumHandle 0
 
-#define FwpmBitmapIndexFree 0
+#define FwpmBitmapIndexFree FwpmBitmapIndexFree0
 #define FWPS_CONNECTION_POLICY FWPS_CONNECTION_POLICY0
 #define IPsecSaContextEnum 0
 #define IPsecSaCreateEnumHandle IPsecSaCreateEnumHandle0

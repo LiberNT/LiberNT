@@ -379,7 +379,7 @@ typedef struct _PDH_TIME_INFO {
 #define PDH_FMT_NODATA ((DWORD)0x4000)
 #define PDH_FMT_RAW ((DWORD)0x10)
 #define PDH_FMT_UNICODE ((DWORD)0x40)
-#define PDH_FUNCTION 0
+#define PDH_FUNCTION PDH_STATUS __stdcall
 #define PDH_LOG_ACCESS_MASK ((DWORD)0xF0000)
 #define PDH_LOG_CREATE_ALWAYS ((DWORD)2)
 #define PDH_LOG_CREATE_MASK ((DWORD)0xF)
@@ -956,12 +956,24 @@ PDH_STATUS WINAPI PdhVerifySQLDBW(LPCWSTR szDataSource);
 }
 #endif
 
-#define PdhLogServiceControl 0
+#ifdef UNICODE
+#define PdhLogServiceControl PdhLogServiceControlW
+#else
+#define PdhLogServiceControl PdhLogServiceControlA
+#endif
 
-#define PdhLogServiceQuery 0
+#ifdef UNICODE
+#define PdhLogServiceQuery PdhLogServiceQueryW
+#else
+#define PdhLogServiceQuery PdhLogServiceQueryA
+#endif
 
 
-#define PDH_BROWSE_DLG_CONFIG_H 0
+#ifdef UNICODE
+#define PDH_BROWSE_DLG_CONFIG_H PDH_BROWSE_DLG_CONFIG_HW
+#else
+#define PDH_BROWSE_DLG_CONFIG_H PDH_BROWSE_DLG_CONFIG_HA
+#endif
 #ifdef UNICODE
 #define PPDH_BROWSE_DLG_CONFIG_H PPDH_BROWSE_DLG_CONFIG_HW
 #else

@@ -476,7 +476,7 @@ typedef struct tagMONMSGSTRUCT {
   DDEML_MSG_HOOK_DATA dmhd;
 } MONMSGSTRUCT, *PMONMSGSTRUCT;
 
-#define _INC_DDEMLH 0
+#define _INC_DDEMLH
 #if (!(defined(UNICODE)))
 #define CP_WINNEUTRAL 0x3EC
 #endif

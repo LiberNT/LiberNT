@@ -42,7 +42,7 @@ typedef enum _MC_VCP_CODE_TYPE
 }
 #endif
 
-#define LowLevelMonitorConfigurationAPI_h 0
+#define LowLevelMonitorConfigurationAPI_h
 
 #ifdef __cplusplus
 extern "C" {

@@ -43,7 +43,7 @@ DWORD WINAPI UnloadPerfCounterTextStringsW(LPCWSTR, BOOL);
 #define LOADPERF_FLAGS_DELETE_MOF_ON_EXIT ((ULONG_PTR) 1)
 #define LOADPERF_FLAGS_DISPLAY_USER_MSGS ((ULONG_PTR)8)
 #define LOADPERF_FLAGS_LOAD_REGISTRY_ONLY ((ULONG_PTR)2)
-#define LOADPERF_FUNCTION 0
+#define LOADPERF_FUNCTION __declspec(dllimport) DWORD __stdcall
 #ifdef UNICODE
 #define SetServiceAsTrusted SetServiceAsTrustedW
 #else

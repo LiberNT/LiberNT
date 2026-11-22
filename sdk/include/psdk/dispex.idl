@@ -206,7 +206,7 @@ interface IProvideRuntimeContext : IUnknown
             [out] VARIANT_BOOL *pfExecutingGlobalCode);
 }
 
-cpp_quote("#define SID_GetScriptSite 0")
+cpp_quote("#define SID_GetScriptSite IID_IActiveScriptSite")
 cpp_quote("")
 cpp_quote("struct ICanHandleExceptionVtbl")
 cpp_quote("{")

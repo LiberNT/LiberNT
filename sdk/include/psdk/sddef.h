@@ -239,6 +239,6 @@ typedef struct _SDSTOR_DEVICE_INFO {
 }
 #endif
 
-#define _SDDEFH_ 0
+#define _SDDEFH_
 
 #endif /* __SDDEF_H__ */

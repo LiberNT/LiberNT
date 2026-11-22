@@ -153,7 +153,7 @@ cpp_quote("#ifndef REO_WRAPTEXTAROUND")
 cpp_quote("#define REO_WRAPTEXTAROUND 0x00000200L")
 cpp_quote("#endif")
 
-cpp_quote("#define _RICHOLE_ 0")
+cpp_quote("#define _RICHOLE_")
 cpp_quote("")
 cpp_quote("typedef struct IRichEditOleCallbackVtbl IRichEditOleCallbackVtbl;")
 cpp_quote("")

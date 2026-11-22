@@ -639,7 +639,7 @@ typedef struct _D3DNTHALDeviceDesc_V2 {
 #endif
 #define D3DNTHALDEVICEDESCSIZE_V1 0xAC
 #define D3DNTHALDEVICEDESCSIZE_V2 0xCC
-#define dvVertexProcessingCaps 0
+#define dvVertexProcessingCaps dwVertexProcessingCaps
 
 struct _D3DNTHAL_DP2COMMAND
 {

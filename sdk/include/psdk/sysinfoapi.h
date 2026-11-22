@@ -206,7 +206,7 @@ BOOL WINAPI GetProcessorSystemCycleTime(USHORT Group, PSYSTEM_PROCESSOR_CYCLE_TI
 }
 #endif
 
-#define NOT_BUILD_WINDOWS_DEPRECATE 0
+#define NOT_BUILD_WINDOWS_DEPRECATE __declspec(deprecated)
 #define SCEX2_ALT_NETBIOS_NAME 0x00000001
 
 #ifdef __cplusplus

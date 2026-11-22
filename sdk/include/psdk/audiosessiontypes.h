@@ -68,7 +68,7 @@ typedef enum _AUDIO_STREAM_CATEGORY
 
 #if (!(defined(__midl)))
 #define MIDL_ANYSIZE_ARRAY ANYSIZE_ARRAY
-#define MIDL_STRING 0
+#define MIDL_STRING
 
 #define MIDL_SIZE_IS(x)
 #endif

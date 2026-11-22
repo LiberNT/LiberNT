@@ -39,6 +39,6 @@
 #define FRERR_BUFFERLENGTHZERO	0x4001
 #define CCERR_CHOOSECOLORCODES	0x5000
 
-#define _INC_CDERR 0
+#define _INC_CDERR
 
 #endif

@@ -295,7 +295,7 @@ VOID WINAPIV SnmpUtilDbgPrint(INT nLogLevel, LPSTR szFormat, ...);
 }
 #endif
 
-#define _INC_SNMP 0
+#define _INC_SNMP
 #define ASN_CONTEXTSPECIFIC 0x80
 #define ASN_PRIMATIVE 0
 #define ASN_RFC1155_COUNTER 0x41
@@ -315,7 +315,7 @@ VOID WINAPIV SnmpUtilDbgPrint(INT nLogLevel, LPSTR szFormat, ...);
 #define AsnGauge AsnGauge32
 #define AsnInteger AsnInteger32
 #define RFC1157VarBind SnmpVarBind
-#define RFC1157VarBindList 0
+#define RFC1157VarBindList SnmpVarBindList
 #define SNMP_CopyVarBind SnmpUtilVarBindCpy
 #define SNMP_CopyVarBindList SnmpUtilVarBindListCpy
 #define SNMP_DBG_free SnmpUtilMemFree
@@ -328,12 +328,12 @@ VOID WINAPIV SnmpUtilDbgPrint(INT nLogLevel, LPSTR szFormat, ...);
 #define SNMP_malloc SnmpUtilMemAlloc
 #define SNMP_oidappend SnmpUtilOidAppend
 #define SNMP_oidcmp SnmpUtilOidCmp
-#define SNMP_oidcpy 0
+#define SNMP_oidcpy SnmpUtilOidCpy
 #define SNMP_oidfree SnmpUtilOidFree
 #define SNMP_oidncmp SnmpUtilOidNCmp
 #define SNMP_printany SnmpUtilPrintAsnAny
 #define SNMP_realloc SnmpUtilMemReAlloc
-#define SNMPAPI 0
+#define SNMPAPI INT
 
 #define DEFINE_NULLOCTETS() { NULL, 0, FALSE }
 #define SNMPDBG(_x_) SnmpUtilDbgPrint _x_

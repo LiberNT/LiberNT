@@ -4444,7 +4444,7 @@ cpp_quote("#define D3D11_WHQL_DRAW_VERTEX_COUNT_2_TO_EXP 25")
 cpp_quote("#endif")
 
 cpp_quote("#define _FACD3D11DEBUG 0x87D")
-cpp_quote("#define APP_DEPRECATED_HRESULT_TYPEDEF 0")
+cpp_quote("#define APP_DEPRECATED_HRESULT_TYPEDEF")
 cpp_quote("#define D3D11_DEFAULT_BLEND_FACTOR_ALPHA 1")
 cpp_quote("#define D3D11_DEFAULT_BLEND_FACTOR_BLUE 1")
 cpp_quote("#define D3D11_DEFAULT_BLEND_FACTOR_GREEN 1")

@@ -321,7 +321,7 @@ HRESULT WINAPI CertModifyCertificatesToTrust(int cCertStore,
 typedef PCERT_SELECT_STRUCT_A PCERT_SELECT_STRUCT;
 #endif
 
-#define CRYPTDLGAPI 0
+#define CRYPTDLGAPI DECLSPEC_IMPORT
 #define CRYTPDLG_FLAGS_MASK 0xff000000
 
 #endif

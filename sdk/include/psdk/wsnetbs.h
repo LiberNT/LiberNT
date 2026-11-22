@@ -30,6 +30,6 @@ typedef struct sockaddr_nb {
 }
 #endif   /* RC_INVOKED */
 
-#define _WSNETBS_ 0
+#define _WSNETBS_
 
 #endif

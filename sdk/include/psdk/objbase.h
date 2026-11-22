@@ -1105,7 +1105,7 @@ typedef enum tagCOMSD {
     SD_ACCESSRESTRICTIONS = 3
 } COMSD;
 
-#define COM_SUPPORT_MALLOC_SPIES 0
+#define COM_SUPPORT_MALLOC_SPIES
 
 #ifdef __cplusplus
 extern "C" {

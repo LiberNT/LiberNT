@@ -6861,14 +6861,14 @@ typedef struct _WHEA_PLUGIN_CTL_INTERFACE_OUT {
   UCHAR OutputBuffer[1];
 } WHEA_PLUGIN_CTL_INTERFACE_OUT, *PWHEA_PLUGIN_CTL_INTERFACE_OUT;
 
-#define _wmidata_h_ 0
+#define _wmidata_h_
 #define COMMIT_POLICY_OUT_SIZE 4
 #define COMMIT_POLICY_OUT_Status_SIZE 4
 #define CounterCorruptionStatus_LastKnownGoodTimestamp_SIZE 8
 #define CounterCorruptionStatus_ProfileSource_ID 1
 #define CounterCorruptionStatus_ProfileSource_SIZE sizeof (ULONG)
 #define CounterCorruptionStatus_SIZE 0x10
-#define CounterCorruptionStatusGuid 0
+#define CounterCorruptionStatusGuid { 0x5a5183f3, 0x9216, 0x4b06, { 0x97, 0x07, 0x81, 0x48, 0x20, 0x6c, 0x1e, 0x3c } }
 #define GET_ALL_POLICY_OUT_Count_SIZE 4
 #define GET_ALL_POLICY_OUT_Length_SIZE 4
 #define GET_ALL_POLICY_OUT_Status_SIZE 4
@@ -6889,7 +6889,7 @@ typedef struct _WHEA_PLUGIN_CTL_INTERFACE_OUT {
 #define MSNdis_NetworkDirectAdapterCapabilities_MissingCounterMask_SIZE 8
 #define MSNdis_NetworkDirectAdapterCapabilities_NdAdapterInfo_SIZE 0x60
 #define MSNdis_NetworkDirectAdapterCapabilities_SIZE 0x88
-#define MSNdis_NetworkDirectAdapterCapabilitiesGuid 0
+#define MSNdis_NetworkDirectAdapterCapabilitiesGuid { 0x64c71824, 0x1bb8, 0x47d2, { 0xb3, 0x47, 0xa8, 0xfb, 0xd9, 0x5b, 0x9c, 0x07 } }
 #define MSNdis_NetworkDirectAdapterInfo_DeviceId_SIZE 4
 #define MSNdis_NetworkDirectAdapterInfo_FRMRPageCount_SIZE 4
 #define MSNdis_NetworkDirectAdapterInfo_InOrderDMA_SIZE 1
@@ -6915,24 +6915,24 @@ typedef struct _WHEA_PLUGIN_CTL_INTERFACE_OUT {
 #define MSNdis_NetworkDirectAdapterInfo_VendorId_SIZE 4
 #define MSNdis_NetworkDirectAdapterInfo_Version_ID 1
 #define MSNdis_NetworkDirectAdapterInfo_Version_SIZE sizeof (MSNdis_NetworkDirectVersion)
-#define MSNdis_NetworkDirectAdapterInfoGuid 0
+#define MSNdis_NetworkDirectAdapterInfoGuid { 0x691a00ec, 0x4e8e, 0x4993, { 0x87, 0x9e, 0x96, 0x00, 0x11, 0xa4, 0x6c, 0xef } }
 #define MSNdis_NetworkDirectCapabilities_NdCapabilities_ID 1
 #define MSNdis_NetworkDirectCapabilities_NdCapabilities_SIZE sizeof (MSNdis_NetworkDirectAdapterCapabilities)
 #define MSNdis_NetworkDirectCapabilities_SIZE 0x88
-#define MSNdis_NetworkDirectCapabilitiesGuid 0
+#define MSNdis_NetworkDirectCapabilitiesGuid { 0x7969ba4d, 0xdd80, 0x4bc7, { 0xb3, 0xe6, 0x68, 0x04, 0x39, 0x97, 0xe5, 0x19 } }
 #define MSNdis_NetworkDirectState_Enabled_ID 1
 #define MSNdis_NetworkDirectState_Enabled_SIZE sizeof (BOOLEAN)
 #define MSNdis_NetworkDirectState_SIZE 1
-#define MSNdis_NetworkDirectStateGuid 0
+#define MSNdis_NetworkDirectStateGuid { 0x530c69c9, 0x2f51, 0x49de, { 0xa1, 0xaf, 0x08, 0x8d, 0x54, 0xff, 0xa4, 0x74 } }
 #define MSNdis_NetworkDirectVersion_MajorVersionNumber_ID 1
 #define MSNdis_NetworkDirectVersion_MajorVersionNumber_SIZE sizeof (USHORT)
 #define MSNdis_NetworkDirectVersion_MinorVersionNumber_SIZE 2
 #define MSNdis_NetworkDirectVersion_SIZE 4
-#define MSNdis_NetworkDirectVersionGuid 0
+#define MSNdis_NetworkDirectVersionGuid { 0xc89b8490, 0x350a, 0x4a34, { 0x90, 0xb6, 0x98, 0xb3, 0x7f, 0x4e, 0xd5, 0xb2 } }
 #define MSNdis_StatusExternalConnectivityChange_NdisMediaConnectStatus_ID 1
 #define MSNdis_StatusExternalConnectivityChange_NdisMediaConnectStatus_SIZE sizeof (ULONG)
 #define MSNdis_StatusExternalConnectivityChange_SIZE 4
-#define MSNdis_StatusExternalConnectivityChangeGuid 0
+#define MSNdis_StatusExternalConnectivityChangeGuid { 0xfd306974, 0xc420, 0x4433, { 0xb0, 0xfe, 0x4c, 0xf6, 0xa6, 0x13, 0xf5, 0x9f } }
 #define RESET_POLICY_OUT_SIZE 4
 #define RESET_POLICY_OUT_Status_SIZE 4
 #define SET_SINGLE_POLICY_IN_SIZE 8
@@ -6948,10 +6948,10 @@ typedef struct _WHEA_PLUGIN_CTL_INTERFACE_OUT {
 #define WHEA_PLUGIN_CTL_INTERFACE_OUT_Status_SIZE 4
 #define WheaGetAllPolicyRtn 1
 #define WheaPageOfflineInterfaceRtn 1
-#define WHEAPageOfflineMethodsGuid 0
+#define WHEAPageOfflineMethodsGuid { 0x8a13d6df, 0xa461, 0x4882, { 0xb4, 0x59, 0x5e, 0x68, 0xb7, 0x14, 0x6c, 0x3d } }
 #define WheaPluginCtlInterfaceRtn 1
-#define WHEAPluginCtlMethodsGuid 0
-#define WHEAPolicyManagementMethodsGuid 0
+#define WHEAPluginCtlMethodsGuid { 0xed16c828, 0xbdec, 0x41a4, { 0x8f, 0xef, 0x3b, 0xfc, 0x15, 0xad, 0xec, 0xbd } }
+#define WHEAPolicyManagementMethodsGuid { 0x794569ee, 0x137c, 0x4a06, { 0x8a, 0xdd, 0xd2, 0x25, 0xb5, 0x3d, 0xfc, 0x4b } }
 
 #endif
 #ifndef CounterCorruptionStatus_LastKnownGoodTimestamp_ID

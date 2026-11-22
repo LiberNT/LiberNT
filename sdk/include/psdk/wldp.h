@@ -160,7 +160,7 @@ typedef enum WLDP_KEY {
 #define WLDP_CANEXECUTEBUFFER_FN "WldpCanExecuteBuffer"
 #define WLDP_CANEXECUTEFILE_FN "WldpCanExecuteFile"
 #define WLDP_CANEXECUTEFILEFROMDETACHEDSIGNATURE_FN "WldpCanExecuteFileFromDetachedSignature"
-#define WLDP_DLL 0
+#define WLDP_DLL L"WLDP.DLL"
 #define WLDP_GETLOCKDOWNPOLICY_FN "WldpGetLockdownPolicy"
 #define WLDP_ISAPPAPPROVEDBYPOLICY_FN "WldpIsAppApprovedByPolicy"
 #define WLDP_ISCLASSINAPPROVEDLIST_FN "WldpIsClassInApprovedList"

@@ -53298,7 +53298,7 @@ cpp_quote("typedef struct WebGeopositionError WebGeopositionError;")
 cpp_quote("")
 cpp_quote("typedef struct XMLHttpRequestEventTarget XMLHttpRequestEventTarget;")
 
-cpp_quote("#define SID_STrackingProtection 0")
+cpp_quote("#define SID_STrackingProtection IID_ITrackingProtection")
 cpp_quote("")
 cpp_quote("enum _ELEMENT_ADJACENCY")
 cpp_quote("{")

@@ -1761,6 +1761,6 @@ VideoPortDbgReportComplete(
 }
 #endif
 
-#define VIDEOPORT_API 0
-#define VIDEOPORT_DEPRECATED 0
+#define VIDEOPORT_API
+#define VIDEOPORT_DEPRECATED __declspec(deprecated)
 

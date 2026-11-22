@@ -100,7 +100,7 @@ interface IShellImageDataFactory : IUnknown
 }
 
 cpp_quote("#define E_NOTVALIDFORANIMATEDIMAGE (-2147221503)")
-cpp_quote("#define SHIMGKEY_QUALITY 0")
+cpp_quote("#define SHIMGKEY_QUALITY L\"Compression\"")
 cpp_quote("#define SHIMGKEY_RAWFORMAT L\"RawDataFormat\"")
 cpp_quote("")
 cpp_quote("struct IShellImageDataAbortVtbl")

@@ -123,7 +123,7 @@ typedef struct _TC_GEN_FILTER {
 #endif
 #endif
 #define tcSpi S_un . S_Spi
-#define tcSrcPort 0
+#define tcSrcPort S_un . S_un_ports . s_srcport
 
 struct _ADDRESS_LIST_DESCRIPTOR
 {

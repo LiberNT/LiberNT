@@ -1975,7 +1975,11 @@ typedef struct PRINT_EXECUTION_DATA {
 #define ERROR_BIDI_UNSUPPORTED_CLIENT_LANGUAGE 0x32D9
 #define ERROR_BIDI_UNSUPPORTED_RESOURCE_FORMAT 0x32DA
 #if (!(defined(UNICODE)))
-#define InstallPrinterDriverFromPackage 0
+#ifdef UNICODE
+#define InstallPrinterDriverFromPackage InstallPrinterDriverFromPackageW
+#else
+#define InstallPrinterDriverFromPackage InstallPrinterDriverFromPackageA
+#endif
 #endif
 #define IPDFP_COPY_ALL_FILES 0x00000001
 #define MAX_FORM_KEYWORD_LENGTH 0x40
@@ -1986,7 +1990,7 @@ typedef struct PRINT_EXECUTION_DATA {
 #define PPCAPS_LEFT_THEN_DOWN 4
 #define SPLDS_PRINT_IPP_COMPRESSION_SUPPORTED TEXT("ippCompressionSupported")
 #define SPLREG_PRINT_DRIVER_ISOLATION_EXECUTION_POLICY TEXT("PrintDriverIsolationExecutionPolicy")
-#define SPLREG_PRINT_DRIVER_ISOLATION_GROUPS 0
+#define SPLREG_PRINT_DRIVER_ISOLATION_GROUPS TEXT("PrintDriverIsolationGroups")
 #define SPLREG_PRINT_DRIVER_ISOLATION_GROUPS_SEPARATOR L'\\'
 #define SPLREG_PRINT_DRIVER_ISOLATION_IDLE_TIMEOUT TEXT("PrintDriverIsolationIdleTimeout")
 #define SPLREG_PRINT_DRIVER_ISOLATION_MAX_OBJECTS_BEFORE_RECYCLE TEXT("PrintDriverIsolationMaxobjsBeforeRecycle")

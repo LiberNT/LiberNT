@@ -137,7 +137,7 @@ typedef struct _LIGATURE ## i { \
 };
 #endif//__KBD_H
 
-#define _KBD_ 0
+#define _KBD_
 #define ACUTE 0x301
 #define AX_KBD_DESKTOP_TYPE 1
 #define BREVE 0x306
@@ -367,7 +367,7 @@ typedef struct _LIGATURE ## i { \
 #define TOSHIBA_KBD_DESKTOP_TYPE 0xD
 #define TOSHIBA_KBD_LAPTOP_TYPE 0xF
 #define UMLAUT 0x308
-#define VK_ 0
+#define VK_
 #define VK__none_ 0xFF
 #define wszACUTE L"\x0301"
 #define wszBREVE L"\x0306"
@@ -376,7 +376,7 @@ typedef struct _LIGATURE ## i { \
 #define wszDIARESIS_TONOS L"\x0385"
 #define wszDOT_ABOVE L"\x0307"
 #define wszDOUBLE_ACUTE L"\x030B"
-#define wszGRAVE 0
+#define wszGRAVE L"\x0300"
 #define wszHACEK L"\x030C"
 #define wszHOOK_ABOVE L"\x0309"
 #define wszMACRON L"\x0304"
@@ -407,7 +407,7 @@ typedef struct _LIGATURE ## i { \
 #define X5B 0x5B
 #define X5C 0x5C
 #define X5D 0x5D
-#define X5E 0
+#define X5E _EQ(POWER)
 #define X65 0xAA
 #define X66 0xAB
 #define X67 0xA8

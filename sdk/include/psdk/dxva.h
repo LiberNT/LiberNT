@@ -2033,7 +2033,7 @@ typedef struct _DXVA_VideoPropertyRange {
 #define DXVA_ModeVC1_PostProc DXVA_ModeVC1_A
 #define DXVA_ModeVC1_VLD DXVA_ModeVC1_D
 #define DXVA_ModeWMV8_MoComp DXVA_ModeWMV8_B
-#define DXVA_ModeWMV8_PostProc 0
+#define DXVA_ModeWMV8_PostProc DXVA_ModeWMV8_A
 #define DXVA_ModeWMV9_IDCT DXVA_ModeWMV9_C
 #define DXVA_ModeWMV9_MoComp DXVA_ModeWMV9_B
 #define DXVA_ModeWMV9_PostProc DXVA_ModeWMV9_A

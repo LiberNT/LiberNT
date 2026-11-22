@@ -207,5 +207,5 @@ typedef struct _AGP_BUS_INTERFACE_STANDARD {
 }
 #endif
 
-#define _NTAGP_ 0
+#define _NTAGP_
 

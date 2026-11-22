@@ -315,10 +315,10 @@ typedef struct _SHARE_INFO_1503 {
   GUID shi1503_sharefilter;
 } SHARE_INFO_1503, *PSHARE_INFO_1503, *LPSHARE_INFO_1503;
 
-#define _LMCONNECTION_ 0
+#define _LMCONNECTION_
 #define _LMFILE_
-#define _LMSESSION_ 0
-#define _LMSHARE_ 0
+#define _LMSESSION_
+#define _LMSHARE_
 #define SHI1005_VALID_FLAGS_SET 0xFFFF30
 
 #ifdef __cplusplus

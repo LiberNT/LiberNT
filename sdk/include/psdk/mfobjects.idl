@@ -850,7 +850,7 @@ interface IMFDXGIDeviceManager : IUnknown
     HRESULT UnlockDevice([in] HANDLE device, [in] BOOL state);
 }
 
-cpp_quote("#define _MFVIDEOFORMAT_ 0")
+cpp_quote("#define _MFVIDEOFORMAT_")
 cpp_quote("#define MFVideoInterlace_FieldSingleLowerFirst 6")
 cpp_quote("#define MFVideoInterlace_FieldSingleUpperFirst MFVideoInterlace_FieldSingleUpper")
 cpp_quote("")

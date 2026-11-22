@@ -859,7 +859,7 @@ typedef PREGISTERWORDA PREGISTERWORD;
 typedef REGISTERWORDA REGISTERWORD;
 #endif
 
-#define _IMM_ 0
+#define _IMM_
 
 
 

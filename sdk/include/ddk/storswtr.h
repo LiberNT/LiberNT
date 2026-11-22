@@ -127,6 +127,6 @@ void StorDebugPrint(int DebugPrintLevel, DEBUG_FLAGS DebugPrintFlags, PCCHAR Deb
 
 #endif  // DEBUG_USE_KDPRINT
 
-#define _stortrce_h_ 0
+#define _stortrce_h_
 
 #endif  // _STORSWTR_H_

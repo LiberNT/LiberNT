@@ -3156,8 +3156,8 @@ typedef struct _FILEPATHS_SIGNERINFO_W {
   PCWSTR CatalogFile;
 } FILEPATHS_SIGNERINFO_W, *PFILEPATHS_SIGNERINFO_W;
 
-#define _INC_SETUPAPI 0
-#define _SPAPI_ERRORS 0
+#define _INC_SETUPAPI
+#define _SPAPI_ERRORS
 #define DICLASSPROP_INSTALLER 0x00000001
 #define ERROR_AUTHENTICODE_DISALLOWED 0xE0000240
 #define ERROR_AUTHENTICODE_PUBLISHER_NOT_TRUSTED 0xE0000243
@@ -3185,12 +3185,20 @@ typedef struct _FILEPATHS_SIGNERINFO_W {
 #define FLG_DELREG_TYPE_QWORD 0xB0001
 #define SCWMI_CLOBBER_SECURITY 0x00000001
 #if (!(defined(UNICODE)))
-#define SetupConfigureWmiFromInfSection 0
+#ifdef UNICODE
+#define SetupConfigureWmiFromInfSection SetupConfigureWmiFromInfSectionW
+#else
+#define SetupConfigureWmiFromInfSection SetupConfigureWmiFromInfSectionA
+#endif
 #endif
 #define SetupDiDeleteInterfaceDeviceRegKey SetupDiDeleteDeviceInterfaceRegKey
 #define SetupDiEnumInterfaceDevice SetupDiEnumDeviceInterfaces
 #if (!(defined(UNICODE)))
-#define SetupDiGetCustomDeviceProperty 0
+#ifdef UNICODE
+#define SetupDiGetCustomDeviceProperty SetupDiGetCustomDevicePropertyW
+#else
+#define SetupDiGetCustomDeviceProperty SetupDiGetCustomDevicePropertyA
+#endif
 #endif
 #define SetupDiGetInterfaceDeviceAlias SetupDiGetDeviceInterfaceAlias
 #define SetupDiInstallInterfaceDevices SetupDiInstallDeviceInterfaces
@@ -3230,7 +3238,11 @@ typedef struct _FILEPATHS_SIGNERINFO_W {
 #endif
 #endif
 #if (!(defined(UNICODE)))
-#define SetupVerifyInfFile 0
+#ifdef UNICODE
+#define SetupVerifyInfFile SetupVerifyInfFileW
+#else
+#define SetupVerifyInfFile SetupVerifyInfFileA
+#endif
 #endif
 
 struct _SP_ALTPLATFORM_INFO_V3

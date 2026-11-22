@@ -42,7 +42,7 @@
 #endif
 
 #if (!defined(_M_CEE) &&      ((defined(_M_X64) && !defined(_M_ARM64EC)) ||       (defined(_ARM64_MULT_INTRINS_SUPPORTED) && _ARM64_MULT_INTRINS_SUPPORTED) ||       (defined(_M_IA64) && (_MSC_VER >= 1400))))
-#define _USE_INTRINSIC_MULTIPLY128 0
+#define _USE_INTRINSIC_MULTIPLY128
 #endif
 #define RtlDWord64Mult RtlULongLongMult
 #define RtlDWord64ToByte RtlULongLongToUInt8
@@ -782,7 +782,7 @@ NTSTATUS RtlUShortToUInt8(USHORT usOperand, UINT8 *pui8Result);
 }
 #endif
 
-#define __RtlpUnsignedMultiply128 0
+#define __RtlpUnsignedMultiply128 _umul128
 
 #endif // !_NTINTSAFE_H_INCLUDED_
 

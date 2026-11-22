@@ -206,7 +206,7 @@ typedef struct _EVENT_EXTENDED_ITEM_TS_ID {
   ULONG SessionId;
 } EVENT_EXTENDED_ITEM_TS_ID, *PEVENT_EXTENDED_ITEM_TS_ID;
 
-#define EVNTCONS_INLINE 0
+#define EVNTCONS_INLINE __inline
 
 #ifdef __cplusplus
 extern "C" {

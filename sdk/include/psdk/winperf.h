@@ -190,7 +190,7 @@ typedef DWORD(CALLBACK PM_CLOSE_PROC)(void);
 #define WINPERF_LOG_VERBOSE 3
 #endif
 
-#define _WINPERF_ 0
+#define _WINPERF_
 #define PERF_PRECISION_TIMESTAMP 0x40030500
 
 #endif

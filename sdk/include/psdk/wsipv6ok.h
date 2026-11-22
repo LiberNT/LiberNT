@@ -82,5 +82,5 @@
 
 #endif
 
-#define _WSIPV6OK_ 0
+#define _WSIPV6OK_
 

@@ -237,7 +237,7 @@ typedef struct _PATCH_OLD_FILE_INFO_W {
 #endif
 #endif
 #endif
-#define PATCHAPI 0
+#define PATCHAPI WINAPI
 
 struct _PATCH_OLD_FILE_INFO
 {
