@@ -153,6 +153,34 @@ DiUninstallDevice(
   PBOOL NeedReboot OPTIONAL);
 #endif /* (WINVER >= _WIN32_WINNT_WIN7) */
 
+#if (WINVER >= _WIN32_WINNT_WIN10)
+#define DIURFLAG_NO_REMOVE_INF            0x00000001
+#define DIURFLAG_RESERVED                 0x00000002
+#define DIURFLAG_VALID                    (DIURFLAG_NO_REMOVE_INF | DIURFLAG_RESERVED)
+
+BOOL
+WINAPI
+DiUninstallDriverW(
+  HWND hwndParent OPTIONAL,
+  LPCWSTR InfPath,
+  DWORD Flags,
+  PBOOL NeedReboot OPTIONAL);
+
+BOOL
+WINAPI
+DiUninstallDriverA(
+  HWND hwndParent OPTIONAL,
+  LPCSTR InfPath,
+  DWORD Flags,
+  PBOOL NeedReboot OPTIONAL);
+
+#ifdef UNICODE
+#define DiUninstallDriver DiUninstallDriverW
+#else
+#define DiUninstallDriver DiUninstallDriverA
+#endif
+#endif /* (WINVER >= _WIN32_WINNT_WIN10) */
+
 #pragma pack(pop)
 
 #ifdef __cplusplus

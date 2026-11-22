@@ -73,6 +73,11 @@ InstallNeedsReboot(
     IN PDEVINSTDATA DevInstData);
 
 static BOOL
+GetCurrentDriverInfoDetail(
+    IN PDEVINSTDATA DevInstData,
+    OUT PSP_DRVINFO_DETAIL_DATA_W *DriverInfoDetail);
+
+static BOOL
 ReadPipeData(
     IN HANDLE hPipe,
     OUT PVOID Buffer,
@@ -941,6 +946,334 @@ DiInstallDriverA(
     }
 
     return DiInstallDriverW(hwndParent, InfPathW, Flags, NeedReboot);
+}
+
+static BOOL
+ReadWholeFile(
+    IN LPCWSTR Path,
+    OUT PBYTE *Data,
+    OUT PDWORD Size)
+{
+    LARGE_INTEGER FileSize;
+    HANDLE File;
+    DWORD Read = 0;
+    BOOL Ret = FALSE;
+
+    *Data = NULL;
+    File = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                       NULL, OPEN_EXISTING, 0, NULL);
+    if (File == INVALID_HANDLE_VALUE)
+        return FALSE;
+
+    if (GetFileSizeEx(File, &FileSize) && FileSize.QuadPart < MAXDWORD)
+    {
+        *Size = FileSize.LowPart;
+        *Data = HeapAlloc(GetProcessHeap(), 0, *Size ? *Size : 1);
+        if (*Data)
+        {
+            Ret = ReadFile(File, *Data, *Size, &Read, NULL) && Read == *Size;
+            if (!Ret)
+            {
+                HeapFree(GetProcessHeap(), 0, *Data);
+                *Data = NULL;
+            }
+        }
+    }
+
+    CloseHandle(File);
+    return Ret;
+}
+
+static BOOL
+GetPublishedInfName(
+    IN LPCWSTR FullInfPath,
+    IN LPCWSTR FileName,
+    OUT LPWSTR PublishedInf,
+    IN DWORD PublishedInfCch)
+{
+    WCHAR InfDirectory[MAX_PATH], Candidate[MAX_PATH];
+    WIN32_FIND_DATAW FindData;
+    LPCWSTR Digits;
+    PBYTE Source, Published;
+    DWORD SourceSize, PublishedSize;
+    HANDLE Search;
+    UINT Length;
+    BOOL Found = FALSE;
+
+    Length = GetSystemWindowsDirectoryW(InfDirectory, _countof(InfDirectory));
+    if (Length == 0 || Length + 5 >= _countof(InfDirectory))
+        return FALSE;
+    wcscat(InfDirectory, L"\\inf\\");
+    Length = wcslen(InfDirectory);
+
+    if (_wcsnicmp(FullInfPath, InfDirectory, Length) == 0 && FileName == FullInfPath + Length)
+    {
+        Digits = FileName + 3;
+        if (_wcsnicmp(FileName, L"oem", 3) != 0 || !iswdigit(*Digits))
+        {
+            SetLastError(ERROR_NOT_AN_INSTALLED_OEM_INF);
+            return FALSE;
+        }
+        while (iswdigit(*Digits))
+            Digits++;
+        if (_wcsicmp(Digits, L".inf") != 0)
+        {
+            SetLastError(ERROR_NOT_AN_INSTALLED_OEM_INF);
+            return FALSE;
+        }
+        if (wcslen(FileName) >= PublishedInfCch)
+        {
+            SetLastError(ERROR_INSUFFICIENT_BUFFER);
+            return FALSE;
+        }
+        wcscpy(PublishedInf, FileName);
+        return TRUE;
+    }
+
+    if (!ReadWholeFile(FullInfPath, &Source, &SourceSize))
+        return FALSE;
+
+    if (Length + 8 >= _countof(Candidate))
+    {
+        HeapFree(GetProcessHeap(), 0, Source);
+        return FALSE;
+    }
+    wcscpy(Candidate, InfDirectory);
+    wcscat(Candidate, L"oem*.inf");
+
+    Search = FindFirstFileW(Candidate, &FindData);
+    if (Search != INVALID_HANDLE_VALUE)
+    {
+        do
+        {
+            if ((FindData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) ||
+                FindData.nFileSizeHigh != 0 || FindData.nFileSizeLow != SourceSize ||
+                Length + wcslen(FindData.cFileName) >= _countof(Candidate) ||
+                wcslen(FindData.cFileName) >= PublishedInfCch)
+            {
+                continue;
+            }
+
+            wcscpy(Candidate + Length, FindData.cFileName);
+            if (!ReadWholeFile(Candidate, &Published, &PublishedSize))
+                continue;
+            Found = PublishedSize == SourceSize && memcmp(Source, Published, SourceSize) == 0;
+            HeapFree(GetProcessHeap(), 0, Published);
+            if (Found)
+                wcscpy(PublishedInf, FindData.cFileName);
+        } while (!Found && FindNextFileW(Search, &FindData));
+        FindClose(Search);
+    }
+
+    HeapFree(GetProcessHeap(), 0, Source);
+    if (!Found)
+        SetLastError(ERROR_NOT_FOUND);
+    return Found;
+}
+
+static BOOL
+IsDeviceUsingInf(
+    IN PDEVINSTDATA DevInstData,
+    IN LPCWSTR PublishedInf)
+{
+    WCHAR InfPath[MAX_PATH];
+    DWORD Size = sizeof(InfPath) - sizeof(WCHAR);
+    DWORD Type;
+    HKEY hKey;
+    LONG rc;
+
+    hKey = SetupDiOpenDevRegKey(DevInstData->hDevInfo, &DevInstData->devInfoData,
+                                DICS_FLAG_GLOBAL, 0, DIREG_DRV, KEY_QUERY_VALUE);
+    if (hKey == INVALID_HANDLE_VALUE)
+        return FALSE;
+
+    rc = RegQueryValueExW(hKey, REGSTR_VAL_INFPATH, NULL, &Type, (LPBYTE)InfPath, &Size);
+    RegCloseKey(hKey);
+    if (rc != ERROR_SUCCESS || Type != REG_SZ)
+        return FALSE;
+
+    InfPath[Size / sizeof(WCHAR)] = UNICODE_NULL;
+    return _wcsicmp(InfPath, PublishedInf) == 0;
+}
+
+static BOOL
+SelectDriverFromOtherPackage(
+    IN PDEVINSTDATA DevInstData,
+    IN LPCWSTR PublishedInf)
+{
+    SP_DEVINSTALL_PARAMS_W Params;
+    SP_DRVINSTALL_PARAMS DriverParams;
+    SP_DRVINFO_DATA_W DriverInfo, BestDriver;
+    PSP_DRVINFO_DETAIL_DATA_W Details;
+    LPCWSTR FileName;
+    DWORD Index, BestRank = 0;
+    BOOL Found = FALSE, SamePackage;
+
+    Params.cbSize = sizeof(Params);
+    if (!SetupDiGetDeviceInstallParamsW(DevInstData->hDevInfo, &DevInstData->devInfoData, &Params))
+        return FALSE;
+    Params.Flags &= ~DI_ENUMSINGLEINF;
+    Params.FlagsEx |= DI_FLAGSEX_ALLOWEXCLUDEDDRVS;
+    Params.DriverPath[0] = UNICODE_NULL;
+    if (!SetupDiSetDeviceInstallParamsW(DevInstData->hDevInfo, &DevInstData->devInfoData, &Params))
+        return FALSE;
+
+    SetupDiDestroyDriverInfoList(DevInstData->hDevInfo, &DevInstData->devInfoData, SPDIT_COMPATDRIVER);
+    if (!SetupDiBuildDriverInfoList(DevInstData->hDevInfo, &DevInstData->devInfoData, SPDIT_COMPATDRIVER))
+        return FALSE;
+
+    DriverInfo.cbSize = sizeof(DriverInfo);
+    for (Index = 0;
+         SetupDiEnumDriverInfoW(DevInstData->hDevInfo, &DevInstData->devInfoData, SPDIT_COMPATDRIVER, Index, &DriverInfo);
+         Index++)
+    {
+        DevInstData->drvInfoData = DriverInfo;
+        if (!GetCurrentDriverInfoDetail(DevInstData, &Details))
+            continue;
+        FileName = wcsrchr(Details->InfFileName, L'\\');
+        SamePackage = _wcsicmp(FileName ? FileName + 1 : Details->InfFileName, PublishedInf) == 0;
+        HeapFree(GetProcessHeap(), 0, Details);
+        if (SamePackage)
+            continue;
+
+        DriverParams.cbSize = sizeof(DriverParams);
+        if (!SetupDiGetDriverInstallParamsW(DevInstData->hDevInfo, &DevInstData->devInfoData, &DriverInfo, &DriverParams) ||
+            (DriverParams.Flags & DNF_BAD_DRIVER))
+        {
+            continue;
+        }
+
+        if (!Found || DriverParams.Rank < BestRank ||
+            (DriverParams.Rank == BestRank && CompareFileTime(&DriverInfo.DriverDate, &BestDriver.DriverDate) > 0))
+        {
+            BestDriver = DriverInfo;
+            BestRank = DriverParams.Rank;
+            Found = TRUE;
+        }
+    }
+
+    if (!Found)
+        return FALSE;
+
+    DevInstData->drvInfoData = BestDriver;
+    return SetupDiSetSelectedDriverW(DevInstData->hDevInfo, &DevInstData->devInfoData, &BestDriver);
+}
+
+BOOL WINAPI
+DiUninstallDriverW(
+    IN HWND hwndParent OPTIONAL,
+    IN LPCWSTR InfPath,
+    IN DWORD Flags,
+    OUT PBOOL NeedReboot OPTIONAL)
+{
+    DEVINSTDATA DevInstData;
+    WCHAR FullInfPath[MAX_PATH], PublishedInf[MAX_PATH];
+    LPWSTR FileName = NULL;
+    DWORD Length, Index, Error = ERROR_SUCCESS;
+    BOOL Wow64 = FALSE;
+
+    TRACE("DiUninstallDriverW(%p %s 0x%lx %p)\n", hwndParent, debugstr_w(InfPath), Flags, NeedReboot);
+
+    if (!InfPath)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (Flags & ~DIURFLAG_VALID)
+    {
+        SetLastError(ERROR_INVALID_FLAGS);
+        return FALSE;
+    }
+    if (IsWow64Process(GetCurrentProcess(), &Wow64) && Wow64)
+    {
+        SetLastError(ERROR_IN_WOW64);
+        return FALSE;
+    }
+    if (!IsUserAdmin())
+    {
+        SetLastError(ERROR_ACCESS_DENIED);
+        return FALSE;
+    }
+
+    Length = GetFullPathNameW(InfPath, _countof(FullInfPath), FullInfPath, &FileName);
+    if (Length == 0 || Length >= _countof(FullInfPath) || !FileName ||
+        GetFileAttributesW(FullInfPath) == INVALID_FILE_ATTRIBUTES)
+    {
+        SetLastError(ERROR_FILE_NOT_FOUND);
+        return FALSE;
+    }
+
+    if (!GetPublishedInfName(FullInfPath, FileName, PublishedInf, _countof(PublishedInf)))
+        return FALSE;
+
+    if (NeedReboot)
+        *NeedReboot = FALSE;
+
+    ZeroMemory(&DevInstData, sizeof(DevInstData));
+    DevInstData.hDevInfo = SetupDiGetClassDevsW(NULL, NULL, hwndParent, DIGCF_ALLCLASSES | DIGCF_PRESENT);
+    if (DevInstData.hDevInfo == INVALID_HANDLE_VALUE)
+        return FALSE;
+
+    DevInstData.devInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
+    for (Index = 0; SetupDiEnumDeviceInfo(DevInstData.hDevInfo, Index, &DevInstData.devInfoData); Index++)
+    {
+        if (!IsDeviceUsingInf(&DevInstData, PublishedInf))
+            continue;
+
+        if (SelectDriverFromOtherPackage(&DevInstData, PublishedInf))
+        {
+            if (!InstallSelectedDriver(&DevInstData))
+            {
+                if (Error == ERROR_SUCCESS)
+                    Error = GetLastError();
+                continue;
+            }
+            if (NeedReboot && InstallNeedsReboot(&DevInstData))
+                *NeedReboot = TRUE;
+            continue;
+        }
+
+        /* FIXME: the null driver cannot be installed yet; the device is removed and comes back without a driver */
+        if (!SetupDiCallClassInstaller(DIF_REMOVE, DevInstData.hDevInfo, &DevInstData.devInfoData) &&
+            Error == ERROR_SUCCESS)
+        {
+            Error = GetLastError();
+        }
+    }
+
+    SetupDiDestroyDeviceInfoList(DevInstData.hDevInfo);
+
+    if (Error == ERROR_SUCCESS && !(Flags & DIURFLAG_NO_REMOVE_INF) &&
+        !SetupUninstallOEMInfW(PublishedInf, 0, NULL))
+    {
+        Error = GetLastError();
+    }
+
+    SetLastError(Error);
+    return Error == ERROR_SUCCESS;
+}
+
+BOOL WINAPI
+DiUninstallDriverA(
+    IN HWND hwndParent OPTIONAL,
+    IN LPCSTR InfPath,
+    IN DWORD Flags,
+    OUT PBOOL NeedReboot OPTIONAL)
+{
+    WCHAR InfPathW[MAX_PATH];
+
+    if (!InfPath)
+    {
+        SetLastError(ERROR_INVALID_PARAMETER);
+        return FALSE;
+    }
+    if (!MultiByteToWideChar(CP_ACP, 0, InfPath, -1, InfPathW, _countof(InfPathW)))
+    {
+        SetLastError(ERROR_FILE_NOT_FOUND);
+        return FALSE;
+    }
+
+    return DiUninstallDriverW(hwndParent, InfPathW, Flags, NeedReboot);
 }
 
 /* Directory and InfFile MUST NOT be specified simultaneously */
