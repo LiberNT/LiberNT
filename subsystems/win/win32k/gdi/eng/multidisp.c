@@ -32,6 +32,10 @@ typedef struct _MULTIDEV
     LONG yStripe;
     /* The surface of each display, held while the desktop surface is enabled */
     PSURFACE *ppsurfDisplay;
+    /* The display showing the pointer, MAXULONG when none does */
+    volatile LONG iPointerDisplay;
+    /* Every display moves its pointer while another thread draws */
+    BOOL bAsyncMove;
 } MULTIDEV, *PMULTIDEV;
 
 static ULONG
@@ -125,11 +129,15 @@ MultiEnablePDEV(
         return NULL;
     }
     pmultidev->pmdev = pmdev;
+    pmultidev->iPointerDisplay = (LONG)MAXULONG;
+    pmultidev->bAsyncMove = TRUE;
 
     ppdevPrimary = MultiPrimaryDisplay(pmdev);
     MultiDisplayRect(ppdevPrimary, &pmultidev->rclDesktop);
     for (i = 0; i < pmdev->cDev; i++)
     {
+        if (!(pmdev->dev[i].ppdev->devinfo.flGraphicsCaps & GCAPS_ASYNCMOVE))
+            pmultidev->bAsyncMove = FALSE;
         MultiDisplayRect(pmdev->dev[i].ppdev, &rcl);
         pmultidev->rclDesktop.left = min(pmultidev->rclDesktop.left, rcl.left);
         pmultidev->rclDesktop.top = min(pmultidev->rclDesktop.top, rcl.top);
@@ -145,6 +153,8 @@ MultiEnablePDEV(
     ((PGDIINFO)pdevcaps)->ulVertRes = pmultidev->rclDesktop.bottom;
     RtlCopyMemory(pdi, &ppdevPrimary->devinfo, sizeof(DEVINFO));
     pdi->flGraphicsCaps &= ~(GCAPS_PANNING | GCAPS_ASYNCMOVE);
+    if (pmultidev->bAsyncMove)
+        pdi->flGraphicsCaps |= GCAPS_ASYNCMOVE;
     pmultidev->iBitmapFormat = pdi->iDitherFormat;
     if (MultiBitsPerPixel(pmultidev->iBitmapFormat) == 0)
     {
@@ -657,6 +667,171 @@ MultiAssertMode(
     return TRUE;
 }
 
+static ULONG
+MultiEscapeDisplays(
+    _In_ PMULTIDEV pmultidev,
+    _In_ ULONG iEsc,
+    _In_ ULONG cjIn,
+    _In_reads_bytes_opt_(cjIn) PVOID pvIn,
+    _In_ ULONG cjOut,
+    _Out_writes_bytes_opt_(cjOut) PVOID pvOut)
+{
+    PPDEVOBJ ppdev;
+    LONG Display, All = 1;
+    ULONG i, Result;
+
+    ASSERT(iEsc == CDD_ESCAPE_HW_POINTER || iEsc == CDD_ESCAPE_SUPPRESS_CURSOR);
+    if (iEsc == CDD_ESCAPE_HW_POINTER && (pvOut == NULL || cjOut < sizeof(LONG)))
+        return 0;
+    for (i = 0; i < pmultidev->pmdev->cDev; i++)
+    {
+        ppdev = pmultidev->pmdev->dev[i].ppdev;
+        if (ppdev->DriverFunctions.Escape == NULL || pmultidev->ppsurfDisplay[i] == NULL)
+            return 0;
+        Display = 0;
+        EngAcquireSemaphore(ppdev->hsemDevLock);
+        Result = ppdev->DriverFunctions.Escape(&pmultidev->ppsurfDisplay[i]->SurfObj, iEsc, cjIn, pvIn,
+                                               iEsc == CDD_ESCAPE_HW_POINTER ? sizeof(Display) : cjOut,
+                                               iEsc == CDD_ESCAPE_HW_POINTER ? &Display : pvOut);
+        EngReleaseSemaphore(ppdev->hsemDevLock);
+        if (Result == 0)
+            return 0;
+        if (Display == 0)
+            All = 0;
+    }
+    if (iEsc == CDD_ESCAPE_HW_POINTER)
+        *(PLONG)pvOut = All;
+    return 1;
+}
+
+static BOOL
+MultiPointerOnDisplay(
+    _In_ const RECTL *prcl,
+    _In_ LONG x,
+    _In_ LONG y)
+{
+    /* A negative x removes the pointer */
+    return x >= 0 && x >= prcl->left && x < prcl->right && y >= prcl->top && y < prcl->bottom;
+}
+
+/* Each display takes the shape and only the one under the pointer shows it, or the desktop uses the software one. */
+ULONG
+APIENTRY
+MultiSetPointerShape(
+    _In_ SURFOBJ *pso,
+    _In_opt_ SURFOBJ *psoMask,
+    _In_opt_ SURFOBJ *psoColor,
+    _In_opt_ XLATEOBJ *pxlo,
+    _In_ LONG xHot,
+    _In_ LONG yHot,
+    _In_ LONG x,
+    _In_ LONG y,
+    _In_opt_ RECTL *prcl,
+    _In_ FLONG fl)
+{
+    PMULTIDEV pmultidev = (PMULTIDEV)pso->dhpdev;
+    PPDEVOBJ ppdev;
+    RECTL rclDisplay, rclExclude;
+    ULONG Result = SPS_ACCEPT_NOEXCLUDE, Display;
+    ULONG i;
+
+    InterlockedExchange(&pmultidev->iPointerDisplay, (LONG)MAXULONG);
+    for (i = 0; i < pmultidev->pmdev->cDev && Result == SPS_ACCEPT_NOEXCLUDE; i++)
+    {
+        ppdev = pmultidev->pmdev->dev[i].ppdev;
+        if (ppdev->DriverFunctions.SetPointerShape == NULL || ppdev->DriverFunctions.MovePointer == NULL ||
+            pmultidev->ppsurfDisplay[i] == NULL)
+        {
+            Result = SPS_DECLINE;
+            break;
+        }
+        MultiDisplayRect(ppdev, &rclDisplay);
+        EngAcquireSemaphore(ppdev->hsemDevLock);
+        if (MultiPointerOnDisplay(&rclDisplay, x, y))
+        {
+            Display = ppdev->DriverFunctions.SetPointerShape(&pmultidev->ppsurfDisplay[i]->SurfObj, psoMask, psoColor,
+                                                             pxlo, xHot, yHot, x - rclDisplay.left, y - rclDisplay.top,
+                                                             &rclExclude, fl);
+            if (Display == SPS_ACCEPT_NOEXCLUDE)
+                InterlockedExchange(&pmultidev->iPointerDisplay, (LONG)i);
+        }
+        else
+        {
+            Display = ppdev->DriverFunctions.SetPointerShape(&pmultidev->ppsurfDisplay[i]->SurfObj, psoMask, psoColor,
+                                                             pxlo, xHot, yHot, -1, -1, &rclExclude, fl);
+        }
+        EngReleaseSemaphore(ppdev->hsemDevLock);
+        if (Display != SPS_ACCEPT_NOEXCLUDE)
+            Result = Display == SPS_ERROR ? SPS_ERROR : SPS_DECLINE;
+    }
+    if (Result != SPS_ACCEPT_NOEXCLUDE)
+    {
+        /* The displays that took the shape hide it again */
+        while (i-- > 0)
+        {
+            ppdev = pmultidev->pmdev->dev[i].ppdev;
+            EngAcquireSemaphore(ppdev->hsemDevLock);
+            ppdev->DriverFunctions.MovePointer(&pmultidev->ppsurfDisplay[i]->SurfObj, -1, -1, NULL);
+            EngReleaseSemaphore(ppdev->hsemDevLock);
+        }
+        InterlockedExchange(&pmultidev->iPointerDisplay, (LONG)MAXULONG);
+    }
+    else if (prcl != NULL)
+    {
+        prcl->left = prcl->top = prcl->right = prcl->bottom = -1;
+    }
+    return Result;
+}
+
+/* An asynchronous move reaches displays that move their pointer while another thread draws, so it takes no lock */
+static VOID
+MultiMoveDisplayPointer(
+    _In_ PMULTIDEV pmultidev,
+    _In_ ULONG iDisplay,
+    _In_ LONG x,
+    _In_ LONG y)
+{
+    PPDEVOBJ ppdev;
+
+    ASSERT(iDisplay < pmultidev->pmdev->cDev);
+    ppdev = pmultidev->pmdev->dev[iDisplay].ppdev;
+    if (!pmultidev->bAsyncMove)
+        EngAcquireSemaphore(ppdev->hsemDevLock);
+    ppdev->DriverFunctions.MovePointer(&pmultidev->ppsurfDisplay[iDisplay]->SurfObj, x, y, NULL);
+    if (!pmultidev->bAsyncMove)
+        EngReleaseSemaphore(ppdev->hsemDevLock);
+}
+
+VOID
+APIENTRY
+MultiMovePointer(
+    _In_ SURFOBJ *pso,
+    _In_ LONG x,
+    _In_ LONG y,
+    _In_opt_ RECTL *prcl)
+{
+    PMULTIDEV pmultidev = (PMULTIDEV)pso->dhpdev;
+    RECTL rclDisplay;
+    ULONG i, iDisplay = MAXULONG, iPrevious;
+
+    for (i = 0; i < pmultidev->pmdev->cDev && iDisplay == MAXULONG; i++)
+    {
+        MultiDisplayRect(pmultidev->pmdev->dev[i].ppdev, &rclDisplay);
+        if (MultiPointerOnDisplay(&rclDisplay, x, y))
+            iDisplay = i;
+    }
+    iPrevious = (ULONG)InterlockedExchange(&pmultidev->iPointerDisplay, (LONG)iDisplay);
+    if (iPrevious != MAXULONG && iPrevious != iDisplay)
+        MultiMoveDisplayPointer(pmultidev, iPrevious, -1, -1);
+    if (iDisplay != MAXULONG)
+    {
+        MultiDisplayRect(pmultidev->pmdev->dev[iDisplay].ppdev, &rclDisplay);
+        MultiMoveDisplayPointer(pmultidev, iDisplay, x - rclDisplay.left, y - rclDisplay.top);
+    }
+    if (prcl != NULL)
+        prcl->left = prcl->top = prcl->right = prcl->bottom = -1;
+}
+
 ULONG
 APIENTRY
 MultiEscape(
@@ -708,6 +883,10 @@ MultiEscape(
         return 1;
     }
 
+    /* The desktop has a hardware pointer when each display has one, and the compositor draws it on all or none */
+    if (iEsc == CDD_ESCAPE_HW_POINTER || iEsc == CDD_ESCAPE_SUPPRESS_CURSOR)
+        return MultiEscapeDisplays(pmultidev, iEsc, cjIn, pvIn, cjOut, pvOut);
+
     /* The compositor's other channels belong to the primary display's driver */
     ppdevPrimary = MultiPrimaryDisplay(pmultidev->pmdev);
     if (ppdevPrimary->DriverFunctions.Escape == NULL)
@@ -729,6 +908,8 @@ static DRVFN gMultiDrvFn[] =
     { INDEX_DrvDisableSurface, (PFN) MultiDisableSurface },
     { INDEX_DrvAssertMode,     (PFN) MultiAssertMode     },
     { INDEX_DrvEscape,         (PFN) MultiEscape         },
+    { INDEX_DrvSetPointerShape, (PFN) MultiSetPointerShape },
+    { INDEX_DrvMovePointer,    (PFN) MultiMovePointer    },
     { INDEX_DrvBitBlt,         (PFN) MultiBitBlt         },
     { INDEX_DrvCopyBits,       (PFN) MultiCopyBits       },
     { INDEX_DrvLineTo,         (PFN) MultiLineTo         },
