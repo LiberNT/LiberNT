@@ -191,17 +191,76 @@ static HRESULT WINAPI regtask_put_Enabled(IRegisteredTask *iface, VARIANT_BOOL e
 #endif
 }
 
-static HRESULT WINAPI regtask_Run(IRegisteredTask *iface, VARIANT params, IRunningTask **task)
+#define TASK_RUN_MAX_PARAMS 32
+
+static HRESULT run_params_from_array(SAFEARRAY *array, VARTYPE type, const WCHAR **args, DWORD *count)
 {
-    FIXME("%p,%s,%p: stub\n", iface, debugstr_variant(&params), task);
-    return E_NOTIMPL;
+    LONG lower, upper, index;
+    HRESULT hr;
+
+    if (SafeArrayGetDim(array) != 1) return E_INVALIDARG;
+    if (FAILED(hr = SafeArrayGetLBound(array, 1, &lower)) || FAILED(hr = SafeArrayGetUBound(array, 1, &upper)))
+        return hr;
+    if (upper - lower + 1 > TASK_RUN_MAX_PARAMS) return E_INVALIDARG;
+    for (index = lower; index <= upper; index++)
+    {
+        void *element;
+
+        if (FAILED(hr = SafeArrayPtrOfIndex(array, &index, &element))) return hr;
+        if (type == VT_BSTR)
+            args[(*count)++] = *(BSTR *)element;
+        else if (V_VT((VARIANT *)element) == VT_BSTR)
+            args[(*count)++] = V_BSTR((VARIANT *)element);
+        else
+            return E_INVALIDARG;
+    }
+    return S_OK;
+}
+
+static HRESULT run_params(const VARIANT *params, const WCHAR **args, DWORD *count)
+{
+    *count = 0;
+    switch (V_VT(params))
+    {
+    case VT_EMPTY:
+    case VT_NULL:
+        return S_OK;
+    case VT_ERROR:
+        return V_ERROR(params) == DISP_E_PARAMNOTFOUND ? S_OK : E_INVALIDARG;
+    case VT_BSTR:
+        args[(*count)++] = V_BSTR(params);
+        return S_OK;
+    case VT_ARRAY | VT_BSTR:
+        return run_params_from_array(V_ARRAY(params), VT_BSTR, args, count);
+    case VT_ARRAY | VT_VARIANT:
+        return run_params_from_array(V_ARRAY(params), VT_VARIANT, args, count);
+    default:
+        return E_INVALIDARG;
+    }
 }
 
 static HRESULT WINAPI regtask_RunEx(IRegisteredTask *iface, VARIANT params, LONG flags,
                                     LONG session_id, BSTR user, IRunningTask **task)
 {
-    FIXME("%p,%s,%lx,%lx,%s,%p: stub\n", iface, debugstr_variant(&params), flags, session_id, debugstr_w(user), task);
-    return E_NOTIMPL;
+    RegisteredTask *regtask = impl_from_IRegisteredTask(iface);
+    const WCHAR *args[TASK_RUN_MAX_PARAMS];
+    DWORD count;
+    GUID guid;
+    HRESULT hr;
+
+    TRACE("%p,%s,%lx,%lx,%s,%p\n", iface, debugstr_variant(&params), flags, session_id, debugstr_w(user), task);
+
+    if (task) *task = NULL;
+    if (FAILED(hr = run_params(&params, args, &count))) return hr;
+    memset(&guid, 0, sizeof(guid));
+    hr = SchRpcRun(regtask->path, count, args, flags, session_id, user, &guid);
+    if (FAILED(hr) || !task) return hr;
+    return RunningTask_create(regtask->path, &guid, task);
+}
+
+static HRESULT WINAPI regtask_Run(IRegisteredTask *iface, VARIANT params, IRunningTask **task)
+{
+    return regtask_RunEx(iface, params, TASK_RUN_NO_FLAGS, 0, NULL, task);
 }
 
 static HRESULT WINAPI regtask_GetInstances(IRegisteredTask *iface, LONG flags, IRunningTaskCollection **tasks)
