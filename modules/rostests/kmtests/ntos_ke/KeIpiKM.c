@@ -232,9 +232,216 @@ TestIpiReachesProcessorWaitingForItsLock(VOID)
         skip(FALSE, "Processor %lu was never idle while its lock was held\n", OtherNumber);
 }
 
+#define HANDLER_LOCK_ROUNDS 4
+
+typedef BOOLEAN (NTAPI *PKMT_CONNECT_INTERRUPT)(PKINTERRUPT);
+typedef BOOLEAN (NTAPI *PKMT_PEND_INTERRUPT)(ULONG);
+typedef VOID (NTAPI *PKMT_INTERRUPT_STATE)(ULONG, PULONG, PULONG, PULONG, PULONG);
+
+typedef struct _HANDLER_LOCK_CONTEXT
+{
+    KAFFINITY Initiator;
+    volatile LONG Ready;
+    volatile LONG Go;
+    volatile LONG Done;
+    volatile LONG Calls;
+    volatile LONG Handled;
+    volatile LONG HandledOn;
+} HANDLER_LOCK_CONTEXT, *PHANDLER_LOCK_CONTEXT;
+
+static HANDLER_LOCK_CONTEXT HandlerLockContext;
+
+static
+BOOLEAN
+NTAPI
+HandlerLockServiceRoutine(
+    _In_ PKINTERRUPT Interrupt,
+    _In_opt_ PVOID ServiceContext)
+{
+    PHANDLER_LOCK_CONTEXT Context = ServiceContext;
+
+    UNREFERENCED_PARAMETER(Interrupt);
+
+    InterlockedExchange(&Context->HandledOn, (LONG)KeGetCurrentProcessorNumberEx(NULL));
+    InterlockedIncrement(&Context->Handled);
+    return TRUE;
+}
+
+static
+ULONG_PTR
+NTAPI
+HandlerLockWorker(
+    _In_ ULONG_PTR Argument)
+{
+    PHANDLER_LOCK_CONTEXT Context = (PHANDLER_LOCK_CONTEXT)Argument;
+
+    InterlockedIncrement(&Context->Calls);
+    return 0;
+}
+
+static
+VOID
+NTAPI
+HandlerLockInitiator(
+    _In_ PVOID Parameter)
+{
+    PHANDLER_LOCK_CONTEXT Context = Parameter;
+    KAFFINITY PreviousAffinity;
+    LONG Round = 0, Go;
+
+    PreviousAffinity = KeSetSystemAffinityThreadEx(Context->Initiator);
+    InterlockedExchange(&Context->Ready, 1);
+
+    for (;;)
+    {
+        while ((Go = Context->Go) == Round)
+            YieldProcessor();
+        if (Go < 0)
+            break;
+
+        Round = Go;
+        KeIpiGenericCall(HandlerLockWorker, (ULONG_PTR)Context);
+        InterlockedExchange(&Context->Done, Round);
+    }
+
+    KeRevertToUserAffinityThreadEx(PreviousAffinity);
+}
+
+static
+BOOLEAN
+HandlerLockWaitFor(
+    _In_ volatile LONG *Value,
+    _In_ LONG Expected)
+{
+    ULONG Spin;
+
+    for (Spin = 0; (Spin < 10000) && (*Value != Expected); Spin++)
+        KeStallExecutionProcessor(10);
+    return *Value == Expected;
+}
+
+/* A call that waits for every processor reaches the holder of an interrupt's lock, so the processor whose handler waits for that lock answers it too */
+static
+VOID
+TestIpiReachesHandlerWaitingForItsLock(VOID)
+{
+    PHANDLER_LOCK_CONTEXT Context = &HandlerLockContext;
+    PKMT_CONNECT_INTERRUPT Connect, Disconnect;
+    PKMT_INTERRUPT_STATE State;
+    PKMT_PEND_INTERRUPT Pend;
+    KAFFINITY Active = KeQueryActiveProcessors();
+    KAFFINITY Target, Holder, Remaining, PreviousAffinity;
+    LONG Total = (LONG)KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
+    ULONG Vector, Priority, Enable, Pending, InService, TargetNumber = 0, Good = 0;
+    PKTHREAD Initiator = NULL;
+    KINTERRUPT Interrupt;
+    KIRQL OldIrql;
+    LONG Round, Before, Calls;
+    BOOLEAN Waited;
+
+    Connect = (PKMT_CONNECT_INTERRUPT)KmtGetSystemRoutineAddress(L"KeConnectInterrupt");
+    Disconnect = (PKMT_CONNECT_INTERRUPT)KmtGetSystemRoutineAddress(L"KeDisconnectInterrupt");
+    Pend = (PKMT_PEND_INTERRUPT)KmtGetSystemRoutineAddress(L"HalArm64DbgPendInterrupt");
+    State = (PKMT_INTERRUPT_STATE)KmtGetSystemRoutineAddress(L"HalArm64DbgGicState");
+    if (!Connect || !Disconnect || !Pend || !State)
+    {
+        skip(FALSE, "No way to raise a device interrupt on demand\n");
+        return;
+    }
+    if (Total < 3)
+    {
+        skip(FALSE, "Three processors are required: one holds the lock, one handles, one calls\n");
+        return;
+    }
+
+    RtlZeroMemory(Context, sizeof(*Context));
+    RtlZeroMemory(&Interrupt, sizeof(Interrupt));
+
+    Target = Active & ~(Active & (0 - Active));
+    Target &= (0 - Target);
+    while (((KAFFINITY)1 << TargetNumber) != Target)
+        TargetNumber++;
+
+    PreviousAffinity = KeSetSystemAffinityThreadEx(Active & (0 - Active));
+
+    for (Vector = 990; Vector >= 62; Vector -= 32)
+    {
+        State(Vector, &Priority, &Enable, &Pending, &InService);
+        if (Enable != 0)
+            continue;
+
+        KeInitializeInterrupt(&Interrupt, HandlerLockServiceRoutine, Context, NULL, Vector,
+                              DISPATCH_LEVEL + 1, DISPATCH_LEVEL + 1, Latched, FALSE, (CCHAR)TargetNumber, FALSE);
+        if (!Connect(&Interrupt))
+            continue;
+
+        State(Vector, &Priority, &Enable, &Pending, &InService);
+        if (Enable == 1)
+            break;
+        Disconnect(&Interrupt);
+    }
+    if (!Interrupt.Connected)
+    {
+        skip(FALSE, "No free interrupt line to test with\n");
+        goto Cleanup;
+    }
+
+    /* Where the line is delivered is the interrupt controller's choice, so ask it once */
+    ok_eq_bool(Pend(Vector), TRUE);
+    if (!HandlerLockWaitFor(&Context->Handled, 1))
+    {
+        skip(FALSE, "Interrupt line %lu was not delivered\n", Vector);
+        goto Cleanup;
+    }
+
+    Remaining = Active & ~((KAFFINITY)1 << Context->HandledOn);
+    Holder = Remaining & (0 - Remaining);
+    Remaining &= ~Holder;
+    Context->Initiator = Remaining & (0 - Remaining);
+    KeSetSystemAffinityThreadEx(Holder);
+
+    Initiator = KmtStartThread(HandlerLockInitiator, Context);
+    if (!Initiator || !HandlerLockWaitFor(&Context->Ready, 1))
+    {
+        ok(FALSE, "The calling thread did not start\n");
+        goto Cleanup;
+    }
+
+    for (Round = 1; Round <= HANDLER_LOCK_ROUNDS; Round++)
+    {
+        OldIrql = KeAcquireInterruptSpinLock(&Interrupt);
+
+        Before = Context->Handled;
+        Pend(Vector);
+        KeStallExecutionProcessor(500);
+        Waited = (Context->Handled == Before);
+
+        Context->Calls = 0;
+        InterlockedExchange(&Context->Go, Round);
+        while (Context->Done != Round)
+            YieldProcessor();
+        Calls = Context->Calls;
+
+        KeReleaseInterruptSpinLock(&Interrupt, OldIrql);
+
+        if (Waited && (Calls == Total) && HandlerLockWaitFor(&Context->Handled, Before + 1))
+            Good++;
+    }
+    ok_eq_ulong(Good, (ULONG)HANDLER_LOCK_ROUNDS);
+
+Cleanup:
+    InterlockedExchange(&Context->Go, -1);
+    if (Initiator)
+        KmtFinishThread(Initiator, NULL);
+    if (Interrupt.Connected)
+        Disconnect(&Interrupt);
+    KeRevertToUserAffinityThreadEx(PreviousAffinity);
+}
+
 START_TEST(KeIpiKM)
 {
     TestIpiGenericCall();
     TestGenericCallDpc();
     TestIpiReachesProcessorWaitingForItsLock();
+    TestIpiReachesHandlerWaitingForItsLock();
 }
