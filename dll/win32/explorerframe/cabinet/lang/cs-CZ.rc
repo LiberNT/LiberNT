@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Czech)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_CZECH, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "Nový"
+    IDS_CAB_SORT "Seřadit"
+    IDS_CAB_VIEW "Zobrazit"
+    IDS_CAB_DETAILS "Podrobnosti"
+    IDS_CAB_SEARCH_IN "Prohledat: %s"
+    IDS_CAB_ITEMS "Položky: %u"
+    IDS_CAB_ITEM "1 položka"
+    IDS_CAB_SELECTED "Vybrané položky: %u"
+    IDS_CAB_SELECTED_ONE "Vybrána 1 položka"
+    IDS_CAB_SORT_NAME "Název"
+    IDS_CAB_SORT_DATE "Datum změny"
+    IDS_CAB_SORT_TYPE "Typ"
+    IDS_CAB_SORT_SIZE "Velikost"
+    IDS_CAB_SORT_ASCENDING "Vzestupně"
+    IDS_CAB_SORT_DESCENDING "Sestupně"
+    IDS_CAB_VIEW_XLARGE "Velmi velké ikony"
+    IDS_CAB_VIEW_LARGE "Velké ikony"
+    IDS_CAB_VIEW_MEDIUM "Střední ikony"
+    IDS_CAB_VIEW_SMALL "Malé ikony"
+    IDS_CAB_VIEW_LIST "Seznam"
+    IDS_CAB_VIEW_DETAILS "Podrobnosti"
+    IDS_CAB_VIEW_TILES "Dlaždice"
+    IDS_CAB_VIEW_CONTENT "Obsah"
+    IDS_CAB_SELECT_ALL "Vybrat vše"
+    IDS_CAB_SELECT_NONE "Zrušit výběr"
+    IDS_CAB_INVERT_SELECTION "Invertovat výběr"
+    IDS_CAB_PROPERTIES "Vlastnosti"
+    IDS_CAB_OPTIONS "Možnosti"
+    IDS_CAB_OPEN_NEW_TAB "Otevřít na nové kartě"
+    IDS_CAB_OPEN_NEW_WINDOW "Otevřít v novém okně"
+    IDS_CAB_CLOSE_TAB "Zavřít kartu"
+    IDS_CAB_CLOSE_OTHER_TABS "Zavřít ostatní karty"
+    IDS_CAB_SHOW "Zobrazit"
+    IDS_CAB_SHOW_NAVIGATION "Navigační podokno"
+    IDS_CAB_SHOW_DETAILS "Podokno podrobností"
+    IDS_CAB_SHOW_CHECKBOXES "Zaškrtávací políčka položek"
+    IDS_CAB_SHOW_EXTENSIONS "Přípony názvů souborů"
+    IDS_CAB_SHOW_HIDDEN "Skryté položky"
+    IDS_CAB_CUT "Vyjmout"
+    IDS_CAB_COPY "Kopírovat"
+    IDS_CAB_PASTE "Vložit"
+    IDS_CAB_RENAME "Přejmenovat"
+    IDS_CAB_DELETE "Odstranit"
+    IDS_CAB_BACK "Zpět"
+    IDS_CAB_FORWARD "Vpřed"
+    IDS_CAB_UP "Nahoru"
+    IDS_CAB_REFRESH "Aktualizovat"
+    IDS_CAB_MORE "Zobrazit více"
+    IDS_CAB_NEW_TAB "Nová karta"
+    IDS_CAB_SHOW_PREVIEW "Podokno náhledu"
+    IDS_CAB_PREVIEW_NONE "Náhled není k dispozici."
+    IDS_CAB_PREVIEW_SELECT "Vyberte soubor, jehož náhled chcete zobrazit."
+    IDS_CAB_SHOW_QUICK_ACCESS "Zobrazit Rychlý přístup"
+    IDS_CAB_TITLE "Průzkumník souborů"
+    IDS_CAB_TITLE_FORMAT "%s - Průzkumník souborů"
+END

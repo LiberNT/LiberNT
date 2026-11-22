@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Greek)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_GREEK, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "Δημιουργία"
+    IDS_CAB_SORT "Ταξινόμηση"
+    IDS_CAB_VIEW "Προβολή"
+    IDS_CAB_DETAILS "Λεπτομέρειες"
+    IDS_CAB_SEARCH_IN "Αναζήτηση σε %s"
+    IDS_CAB_ITEMS "%u στοιχεία"
+    IDS_CAB_ITEM "1 στοιχείο"
+    IDS_CAB_SELECTED "Επιλέχθηκαν %u στοιχεία"
+    IDS_CAB_SELECTED_ONE "Επιλέχθηκε 1 στοιχείο"
+    IDS_CAB_SORT_NAME "Όνομα"
+    IDS_CAB_SORT_DATE "Ημερομηνία τροποποίησης"
+    IDS_CAB_SORT_TYPE "Τύπος"
+    IDS_CAB_SORT_SIZE "Μέγεθος"
+    IDS_CAB_SORT_ASCENDING "Αύξουσα"
+    IDS_CAB_SORT_DESCENDING "Φθίνουσα"
+    IDS_CAB_VIEW_XLARGE "Πολύ μεγάλα εικονίδια"
+    IDS_CAB_VIEW_LARGE "Μεγάλα εικονίδια"
+    IDS_CAB_VIEW_MEDIUM "Μεσαία εικονίδια"
+    IDS_CAB_VIEW_SMALL "Μικρά εικονίδια"
+    IDS_CAB_VIEW_LIST "Λίστα"
+    IDS_CAB_VIEW_DETAILS "Λεπτομέρειες"
+    IDS_CAB_VIEW_TILES "Πλακίδια"
+    IDS_CAB_VIEW_CONTENT "Περιεχόμενο"
+    IDS_CAB_SELECT_ALL "Επιλογή όλων"
+    IDS_CAB_SELECT_NONE "Καμία επιλογή"
+    IDS_CAB_INVERT_SELECTION "Αντιστροφή επιλογής"
+    IDS_CAB_PROPERTIES "Ιδιότητες"
+    IDS_CAB_OPTIONS "Επιλογές"
+    IDS_CAB_OPEN_NEW_TAB "Άνοιγμα σε νέα καρτέλα"
+    IDS_CAB_OPEN_NEW_WINDOW "Άνοιγμα σε νέο παράθυρο"
+    IDS_CAB_CLOSE_TAB "Κλείσιμο καρτέλας"
+    IDS_CAB_CLOSE_OTHER_TABS "Κλείσιμο των άλλων καρτελών"
+    IDS_CAB_SHOW "Εμφάνιση"
+    IDS_CAB_SHOW_NAVIGATION "Παράθυρο περιήγησης"
+    IDS_CAB_SHOW_DETAILS "Παράθυρο λεπτομερειών"
+    IDS_CAB_SHOW_CHECKBOXES "Πλαίσια ελέγχου στοιχείων"
+    IDS_CAB_SHOW_EXTENSIONS "Επεκτάσεις ονομάτων αρχείων"
+    IDS_CAB_SHOW_HIDDEN "Κρυφά στοιχεία"
+    IDS_CAB_CUT "Αποκοπή"
+    IDS_CAB_COPY "Αντιγραφή"
+    IDS_CAB_PASTE "Επικόλληση"
+    IDS_CAB_RENAME "Μετονομασία"
+    IDS_CAB_DELETE "Διαγραφή"
+    IDS_CAB_BACK "Πίσω"
+    IDS_CAB_FORWARD "Εμπρός"
+    IDS_CAB_UP "Επάνω"
+    IDS_CAB_REFRESH "Ανανέωση"
+    IDS_CAB_MORE "Δείτε περισσότερα"
+    IDS_CAB_NEW_TAB "Νέα καρτέλα"
+    IDS_CAB_SHOW_PREVIEW "Παράθυρο προεπισκόπησης"
+    IDS_CAB_PREVIEW_NONE "Δεν υπάρχει διαθέσιμη προεπισκόπηση."
+    IDS_CAB_PREVIEW_SELECT "Επιλέξτε ένα αρχείο για προεπισκόπηση."
+    IDS_CAB_SHOW_QUICK_ACCESS "Εμφάνιση Γρήγορης πρόσβασης"
+    IDS_CAB_TITLE "Εξερεύνηση αρχείων"
+    IDS_CAB_TITLE_FORMAT "%s - Εξερεύνηση αρχείων"
+END

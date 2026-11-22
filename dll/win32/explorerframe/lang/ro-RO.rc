@@ -340,5 +340,5 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_BROWSER_NAME "File Explorer"
+    IDS_BROWSER_NAME "Explorator fișiere"
 END

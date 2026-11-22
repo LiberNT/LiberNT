@@ -354,5 +354,5 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_BROWSER_NAME "File Explorer"
+    IDS_BROWSER_NAME "文件资源管理器"
 END

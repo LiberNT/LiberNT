@@ -47,8 +47,11 @@ add_library(explorerframe MODULE
     browseui.rc
     ${CMAKE_CURRENT_BINARY_DIR}/explorerframe.def)
 
+file(GLOB explorerframe_cabinet_lang ${CMAKE_CURRENT_SOURCE_DIR}/cabinet/lang/*.rc)
 add_rc_deps(browseui.rc
     ${CMAKE_CURRENT_SOURCE_DIR}/cabinet/cabinet.rc
+    ${CMAKE_CURRENT_SOURCE_DIR}/cabinet/cabinet_res.h
+    ${explorerframe_cabinet_lang}
     ${CMAKE_CURRENT_SOURCE_DIR}/res/toolbar/01-back.ico
     ${CMAKE_CURRENT_SOURCE_DIR}/res/toolbar/02-forward.ico
     ${CMAKE_CURRENT_SOURCE_DIR}/res/toolbar/03-up.ico

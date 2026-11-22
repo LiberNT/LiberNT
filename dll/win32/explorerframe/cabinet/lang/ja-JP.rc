@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Japanese)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "新規作成"
+    IDS_CAB_SORT "並べ替え"
+    IDS_CAB_VIEW "表示"
+    IDS_CAB_DETAILS "詳細"
+    IDS_CAB_SEARCH_IN "%sの検索"
+    IDS_CAB_ITEMS "%u 個の項目"
+    IDS_CAB_ITEM "1 個の項目"
+    IDS_CAB_SELECTED "%u 個の項目を選択"
+    IDS_CAB_SELECTED_ONE "1 個の項目を選択"
+    IDS_CAB_SORT_NAME "名前"
+    IDS_CAB_SORT_DATE "更新日時"
+    IDS_CAB_SORT_TYPE "種類"
+    IDS_CAB_SORT_SIZE "サイズ"
+    IDS_CAB_SORT_ASCENDING "昇順"
+    IDS_CAB_SORT_DESCENDING "降順"
+    IDS_CAB_VIEW_XLARGE "特大アイコン"
+    IDS_CAB_VIEW_LARGE "大アイコン"
+    IDS_CAB_VIEW_MEDIUM "中アイコン"
+    IDS_CAB_VIEW_SMALL "小アイコン"
+    IDS_CAB_VIEW_LIST "一覧"
+    IDS_CAB_VIEW_DETAILS "詳細"
+    IDS_CAB_VIEW_TILES "並べて表示"
+    IDS_CAB_VIEW_CONTENT "コンテンツ"
+    IDS_CAB_SELECT_ALL "すべて選択"
+    IDS_CAB_SELECT_NONE "選択解除"
+    IDS_CAB_INVERT_SELECTION "選択の切り替え"
+    IDS_CAB_PROPERTIES "プロパティ"
+    IDS_CAB_OPTIONS "オプション"
+    IDS_CAB_OPEN_NEW_TAB "新しいタブで開く"
+    IDS_CAB_OPEN_NEW_WINDOW "新しいウィンドウで開く"
+    IDS_CAB_CLOSE_TAB "タブを閉じる"
+    IDS_CAB_CLOSE_OTHER_TABS "他のタブを閉じる"
+    IDS_CAB_SHOW "表示"
+    IDS_CAB_SHOW_NAVIGATION "ナビゲーション ウィンドウ"
+    IDS_CAB_SHOW_DETAILS "詳細ウィンドウ"
+    IDS_CAB_SHOW_CHECKBOXES "項目チェック ボックス"
+    IDS_CAB_SHOW_EXTENSIONS "ファイル名拡張子"
+    IDS_CAB_SHOW_HIDDEN "隠しファイル"
+    IDS_CAB_CUT "切り取り"
+    IDS_CAB_COPY "コピー"
+    IDS_CAB_PASTE "貼り付け"
+    IDS_CAB_RENAME "名前の変更"
+    IDS_CAB_DELETE "削除"
+    IDS_CAB_BACK "戻る"
+    IDS_CAB_FORWARD "進む"
+    IDS_CAB_UP "上へ"
+    IDS_CAB_REFRESH "最新の情報に更新"
+    IDS_CAB_MORE "もっと見る"
+    IDS_CAB_NEW_TAB "新しいタブ"
+    IDS_CAB_SHOW_PREVIEW "プレビュー ウィンドウ"
+    IDS_CAB_PREVIEW_NONE "プレビューを利用できません。"
+    IDS_CAB_PREVIEW_SELECT "プレビューするファイルを選択してください。"
+    IDS_CAB_SHOW_QUICK_ACCESS "クイック アクセスを表示する"
+    IDS_CAB_TITLE "エクスプローラー"
+    IDS_CAB_TITLE_FORMAT "%s - エクスプローラー"
+END

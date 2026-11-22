@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Ukrainian)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_UKRAINIAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "Створити"
+    IDS_CAB_SORT "Сортування"
+    IDS_CAB_VIEW "Вигляд"
+    IDS_CAB_DETAILS "Відомості"
+    IDS_CAB_SEARCH_IN "Пошук: %s"
+    IDS_CAB_ITEMS "Елементів: %u"
+    IDS_CAB_ITEM "1 елемент"
+    IDS_CAB_SELECTED "Вибрано елементів: %u"
+    IDS_CAB_SELECTED_ONE "Вибрано 1 елемент"
+    IDS_CAB_SORT_NAME "Ім'я"
+    IDS_CAB_SORT_DATE "Дата змінення"
+    IDS_CAB_SORT_TYPE "Тип"
+    IDS_CAB_SORT_SIZE "Розмір"
+    IDS_CAB_SORT_ASCENDING "За зростанням"
+    IDS_CAB_SORT_DESCENDING "За спаданням"
+    IDS_CAB_VIEW_XLARGE "Величезні піктограми"
+    IDS_CAB_VIEW_LARGE "Великі піктограми"
+    IDS_CAB_VIEW_MEDIUM "Середні піктограми"
+    IDS_CAB_VIEW_SMALL "Дрібні піктограми"
+    IDS_CAB_VIEW_LIST "Список"
+    IDS_CAB_VIEW_DETAILS "Таблиця"
+    IDS_CAB_VIEW_TILES "Плитка"
+    IDS_CAB_VIEW_CONTENT "Вміст"
+    IDS_CAB_SELECT_ALL "Виділити все"
+    IDS_CAB_SELECT_NONE "Зняти виділення"
+    IDS_CAB_INVERT_SELECTION "Обернути виділення"
+    IDS_CAB_PROPERTIES "Властивості"
+    IDS_CAB_OPTIONS "Параметри"
+    IDS_CAB_OPEN_NEW_TAB "Відкрити в новій вкладці"
+    IDS_CAB_OPEN_NEW_WINDOW "Відкрити в новому вікні"
+    IDS_CAB_CLOSE_TAB "Закрити вкладку"
+    IDS_CAB_CLOSE_OTHER_TABS "Закрити інші вкладки"
+    IDS_CAB_SHOW "Показати"
+    IDS_CAB_SHOW_NAVIGATION "Область переходів"
+    IDS_CAB_SHOW_DETAILS "Область відомостей"
+    IDS_CAB_SHOW_CHECKBOXES "Прапорці елементів"
+    IDS_CAB_SHOW_EXTENSIONS "Розширення імен файлів"
+    IDS_CAB_SHOW_HIDDEN "Приховані елементи"
+    IDS_CAB_CUT "Вирізати"
+    IDS_CAB_COPY "Копіювати"
+    IDS_CAB_PASTE "Вставити"
+    IDS_CAB_RENAME "Перейменувати"
+    IDS_CAB_DELETE "Видалити"
+    IDS_CAB_BACK "Назад"
+    IDS_CAB_FORWARD "Вперед"
+    IDS_CAB_UP "Вгору"
+    IDS_CAB_REFRESH "Оновити"
+    IDS_CAB_MORE "Докладніше"
+    IDS_CAB_NEW_TAB "Нова вкладка"
+    IDS_CAB_SHOW_PREVIEW "Область перегляду"
+    IDS_CAB_PREVIEW_NONE "Попередній перегляд недоступний."
+    IDS_CAB_PREVIEW_SELECT "Виберіть файл для попереднього перегляду."
+    IDS_CAB_SHOW_QUICK_ACCESS "Показувати швидкий доступ"
+    IDS_CAB_TITLE "Файловий провідник"
+    IDS_CAB_TITLE_FORMAT "%s - Файловий провідник"
+END

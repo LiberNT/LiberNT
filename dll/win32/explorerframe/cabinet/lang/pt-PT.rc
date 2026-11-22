@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Portuguese, Portugal)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_PORTUGUESE, SUBLANG_NEUTRAL
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "Novo"
+    IDS_CAB_SORT "Ordenar"
+    IDS_CAB_VIEW "Ver"
+    IDS_CAB_DETAILS "Detalhes"
+    IDS_CAB_SEARCH_IN "Procurar em %s"
+    IDS_CAB_ITEMS "%u itens"
+    IDS_CAB_ITEM "1 item"
+    IDS_CAB_SELECTED "%u itens selecionados"
+    IDS_CAB_SELECTED_ONE "1 item selecionado"
+    IDS_CAB_SORT_NAME "Nome"
+    IDS_CAB_SORT_DATE "Data de modificação"
+    IDS_CAB_SORT_TYPE "Tipo"
+    IDS_CAB_SORT_SIZE "Tamanho"
+    IDS_CAB_SORT_ASCENDING "Ascendente"
+    IDS_CAB_SORT_DESCENDING "Descendente"
+    IDS_CAB_VIEW_XLARGE "Ícones muito grandes"
+    IDS_CAB_VIEW_LARGE "Ícones grandes"
+    IDS_CAB_VIEW_MEDIUM "Ícones médios"
+    IDS_CAB_VIEW_SMALL "Ícones pequenos"
+    IDS_CAB_VIEW_LIST "Lista"
+    IDS_CAB_VIEW_DETAILS "Detalhes"
+    IDS_CAB_VIEW_TILES "Mosaicos"
+    IDS_CAB_VIEW_CONTENT "Conteúdo"
+    IDS_CAB_SELECT_ALL "Selecionar tudo"
+    IDS_CAB_SELECT_NONE "Não selecionar nada"
+    IDS_CAB_INVERT_SELECTION "Inverter seleção"
+    IDS_CAB_PROPERTIES "Propriedades"
+    IDS_CAB_OPTIONS "Opções"
+    IDS_CAB_OPEN_NEW_TAB "Abrir num novo separador"
+    IDS_CAB_OPEN_NEW_WINDOW "Abrir numa nova janela"
+    IDS_CAB_CLOSE_TAB "Fechar separador"
+    IDS_CAB_CLOSE_OTHER_TABS "Fechar os outros separadores"
+    IDS_CAB_SHOW "Mostrar"
+    IDS_CAB_SHOW_NAVIGATION "Painel de navegação"
+    IDS_CAB_SHOW_DETAILS "Painel de detalhes"
+    IDS_CAB_SHOW_CHECKBOXES "Caixas de verificação de itens"
+    IDS_CAB_SHOW_EXTENSIONS "Extensões de nomes de ficheiros"
+    IDS_CAB_SHOW_HIDDEN "Itens ocultos"
+    IDS_CAB_CUT "Cortar"
+    IDS_CAB_COPY "Copiar"
+    IDS_CAB_PASTE "Colar"
+    IDS_CAB_RENAME "Mudar o nome"
+    IDS_CAB_DELETE "Eliminar"
+    IDS_CAB_BACK "Anterior"
+    IDS_CAB_FORWARD "Seguinte"
+    IDS_CAB_UP "Para cima"
+    IDS_CAB_REFRESH "Atualizar"
+    IDS_CAB_MORE "Ver mais"
+    IDS_CAB_NEW_TAB "Novo separador"
+    IDS_CAB_SHOW_PREVIEW "Painel de pré-visualização"
+    IDS_CAB_PREVIEW_NONE "Nenhuma pré-visualização disponível."
+    IDS_CAB_PREVIEW_SELECT "Selecione um ficheiro para pré-visualizar."
+    IDS_CAB_SHOW_QUICK_ACCESS "Mostrar Acesso rápido"
+    IDS_CAB_TITLE "Explorador de Ficheiros"
+    IDS_CAB_TITLE_FORMAT "%s - Explorador de Ficheiros"
+END

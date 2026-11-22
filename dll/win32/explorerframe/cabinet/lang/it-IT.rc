@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Italian)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_ITALIAN, SUBLANG_NEUTRAL
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "Nuovo"
+    IDS_CAB_SORT "Ordina"
+    IDS_CAB_VIEW "Visualizza"
+    IDS_CAB_DETAILS "Dettagli"
+    IDS_CAB_SEARCH_IN "Cerca in %s"
+    IDS_CAB_ITEMS "%u elementi"
+    IDS_CAB_ITEM "1 elemento"
+    IDS_CAB_SELECTED "%u elementi selezionati"
+    IDS_CAB_SELECTED_ONE "1 elemento selezionato"
+    IDS_CAB_SORT_NAME "Nome"
+    IDS_CAB_SORT_DATE "Ultima modifica"
+    IDS_CAB_SORT_TYPE "Tipo"
+    IDS_CAB_SORT_SIZE "Dimensione"
+    IDS_CAB_SORT_ASCENDING "Crescente"
+    IDS_CAB_SORT_DESCENDING "Decrescente"
+    IDS_CAB_VIEW_XLARGE "Icone molto grandi"
+    IDS_CAB_VIEW_LARGE "Icone grandi"
+    IDS_CAB_VIEW_MEDIUM "Icone medie"
+    IDS_CAB_VIEW_SMALL "Icone piccole"
+    IDS_CAB_VIEW_LIST "Elenco"
+    IDS_CAB_VIEW_DETAILS "Dettagli"
+    IDS_CAB_VIEW_TILES "Riquadri"
+    IDS_CAB_VIEW_CONTENT "Contenuto"
+    IDS_CAB_SELECT_ALL "Seleziona tutto"
+    IDS_CAB_SELECT_NONE "Deseleziona tutto"
+    IDS_CAB_INVERT_SELECTION "Inverti selezione"
+    IDS_CAB_PROPERTIES "Proprietà"
+    IDS_CAB_OPTIONS "Opzioni"
+    IDS_CAB_OPEN_NEW_TAB "Apri in una nuova scheda"
+    IDS_CAB_OPEN_NEW_WINDOW "Apri in una nuova finestra"
+    IDS_CAB_CLOSE_TAB "Chiudi scheda"
+    IDS_CAB_CLOSE_OTHER_TABS "Chiudi le altre schede"
+    IDS_CAB_SHOW "Mostra"
+    IDS_CAB_SHOW_NAVIGATION "Riquadro di spostamento"
+    IDS_CAB_SHOW_DETAILS "Riquadro dettagli"
+    IDS_CAB_SHOW_CHECKBOXES "Caselle di controllo elementi"
+    IDS_CAB_SHOW_EXTENSIONS "Estensioni nomi file"
+    IDS_CAB_SHOW_HIDDEN "Elementi nascosti"
+    IDS_CAB_CUT "Taglia"
+    IDS_CAB_COPY "Copia"
+    IDS_CAB_PASTE "Incolla"
+    IDS_CAB_RENAME "Rinomina"
+    IDS_CAB_DELETE "Elimina"
+    IDS_CAB_BACK "Indietro"
+    IDS_CAB_FORWARD "Avanti"
+    IDS_CAB_UP "Su"
+    IDS_CAB_REFRESH "Aggiorna"
+    IDS_CAB_MORE "Altro"
+    IDS_CAB_NEW_TAB "Nuova scheda"
+    IDS_CAB_SHOW_PREVIEW "Riquadro di anteprima"
+    IDS_CAB_PREVIEW_NONE "Nessuna anteprima disponibile."
+    IDS_CAB_PREVIEW_SELECT "Selezionare un file da visualizzare in anteprima."
+    IDS_CAB_SHOW_QUICK_ACCESS "Mostra Accesso rapido"
+    IDS_CAB_TITLE "Esplora file"
+    IDS_CAB_TITLE_FORMAT "%s - Esplora file"
+END

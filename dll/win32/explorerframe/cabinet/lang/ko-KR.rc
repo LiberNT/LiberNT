@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Korean)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "새로 만들기"
+    IDS_CAB_SORT "정렬"
+    IDS_CAB_VIEW "보기"
+    IDS_CAB_DETAILS "세부 정보"
+    IDS_CAB_SEARCH_IN "%s 검색"
+    IDS_CAB_ITEMS "%u개 항목"
+    IDS_CAB_ITEM "1개 항목"
+    IDS_CAB_SELECTED "%u개 항목 선택됨"
+    IDS_CAB_SELECTED_ONE "1개 항목 선택됨"
+    IDS_CAB_SORT_NAME "이름"
+    IDS_CAB_SORT_DATE "수정한 날짜"
+    IDS_CAB_SORT_TYPE "유형"
+    IDS_CAB_SORT_SIZE "크기"
+    IDS_CAB_SORT_ASCENDING "오름차순"
+    IDS_CAB_SORT_DESCENDING "내림차순"
+    IDS_CAB_VIEW_XLARGE "아주 큰 아이콘"
+    IDS_CAB_VIEW_LARGE "큰 아이콘"
+    IDS_CAB_VIEW_MEDIUM "보통 아이콘"
+    IDS_CAB_VIEW_SMALL "작은 아이콘"
+    IDS_CAB_VIEW_LIST "목록"
+    IDS_CAB_VIEW_DETAILS "자세히"
+    IDS_CAB_VIEW_TILES "타일"
+    IDS_CAB_VIEW_CONTENT "내용"
+    IDS_CAB_SELECT_ALL "모두 선택"
+    IDS_CAB_SELECT_NONE "선택 안 함"
+    IDS_CAB_INVERT_SELECTION "선택 영역 반전"
+    IDS_CAB_PROPERTIES "속성"
+    IDS_CAB_OPTIONS "옵션"
+    IDS_CAB_OPEN_NEW_TAB "새 탭에서 열기"
+    IDS_CAB_OPEN_NEW_WINDOW "새 창에서 열기"
+    IDS_CAB_CLOSE_TAB "탭 닫기"
+    IDS_CAB_CLOSE_OTHER_TABS "다른 탭 닫기"
+    IDS_CAB_SHOW "표시"
+    IDS_CAB_SHOW_NAVIGATION "탐색 창"
+    IDS_CAB_SHOW_DETAILS "세부 정보 창"
+    IDS_CAB_SHOW_CHECKBOXES "항목 확인란"
+    IDS_CAB_SHOW_EXTENSIONS "파일 확장명"
+    IDS_CAB_SHOW_HIDDEN "숨긴 항목"
+    IDS_CAB_CUT "잘라내기"
+    IDS_CAB_COPY "복사"
+    IDS_CAB_PASTE "붙여넣기"
+    IDS_CAB_RENAME "이름 바꾸기"
+    IDS_CAB_DELETE "삭제"
+    IDS_CAB_BACK "뒤로"
+    IDS_CAB_FORWARD "앞으로"
+    IDS_CAB_UP "위로"
+    IDS_CAB_REFRESH "새로 고침"
+    IDS_CAB_MORE "자세히 보기"
+    IDS_CAB_NEW_TAB "새 탭"
+    IDS_CAB_SHOW_PREVIEW "미리 보기 창"
+    IDS_CAB_PREVIEW_NONE "미리 보기를 사용할 수 없습니다."
+    IDS_CAB_PREVIEW_SELECT "미리 볼 파일을 선택하세요."
+    IDS_CAB_SHOW_QUICK_ACCESS "바로 가기 표시"
+    IDS_CAB_TITLE "파일 탐색기"
+    IDS_CAB_TITLE_FORMAT "%s - 파일 탐색기"
+END

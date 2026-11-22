@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Indonesian)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_INDONESIAN, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "Baru"
+    IDS_CAB_SORT "Urutkan"
+    IDS_CAB_VIEW "Tampilan"
+    IDS_CAB_DETAILS "Detail"
+    IDS_CAB_SEARCH_IN "Cari di %s"
+    IDS_CAB_ITEMS "%u item"
+    IDS_CAB_ITEM "1 item"
+    IDS_CAB_SELECTED "%u item dipilih"
+    IDS_CAB_SELECTED_ONE "1 item dipilih"
+    IDS_CAB_SORT_NAME "Nama"
+    IDS_CAB_SORT_DATE "Tanggal diubah"
+    IDS_CAB_SORT_TYPE "Jenis"
+    IDS_CAB_SORT_SIZE "Ukuran"
+    IDS_CAB_SORT_ASCENDING "Naik"
+    IDS_CAB_SORT_DESCENDING "Turun"
+    IDS_CAB_VIEW_XLARGE "Ikon ekstra besar"
+    IDS_CAB_VIEW_LARGE "Ikon besar"
+    IDS_CAB_VIEW_MEDIUM "Ikon sedang"
+    IDS_CAB_VIEW_SMALL "Ikon kecil"
+    IDS_CAB_VIEW_LIST "Daftar"
+    IDS_CAB_VIEW_DETAILS "Detail"
+    IDS_CAB_VIEW_TILES "Ubin"
+    IDS_CAB_VIEW_CONTENT "Konten"
+    IDS_CAB_SELECT_ALL "Pilih semua"
+    IDS_CAB_SELECT_NONE "Batalkan pilihan"
+    IDS_CAB_INVERT_SELECTION "Balikkan pilihan"
+    IDS_CAB_PROPERTIES "Properti"
+    IDS_CAB_OPTIONS "Opsi"
+    IDS_CAB_OPEN_NEW_TAB "Buka di tab baru"
+    IDS_CAB_OPEN_NEW_WINDOW "Buka di jendela baru"
+    IDS_CAB_CLOSE_TAB "Tutup tab"
+    IDS_CAB_CLOSE_OTHER_TABS "Tutup tab lainnya"
+    IDS_CAB_SHOW "Tampilkan"
+    IDS_CAB_SHOW_NAVIGATION "Panel navigasi"
+    IDS_CAB_SHOW_DETAILS "Panel detail"
+    IDS_CAB_SHOW_CHECKBOXES "Kotak centang item"
+    IDS_CAB_SHOW_EXTENSIONS "Ekstensi nama file"
+    IDS_CAB_SHOW_HIDDEN "Item tersembunyi"
+    IDS_CAB_CUT "Potong"
+    IDS_CAB_COPY "Salin"
+    IDS_CAB_PASTE "Tempel"
+    IDS_CAB_RENAME "Ganti nama"
+    IDS_CAB_DELETE "Hapus"
+    IDS_CAB_BACK "Kembali"
+    IDS_CAB_FORWARD "Maju"
+    IDS_CAB_UP "Naik"
+    IDS_CAB_REFRESH "Segarkan"
+    IDS_CAB_MORE "Lihat lainnya"
+    IDS_CAB_NEW_TAB "Tab baru"
+    IDS_CAB_SHOW_PREVIEW "Panel pratinjau"
+    IDS_CAB_PREVIEW_NONE "Pratinjau tidak tersedia."
+    IDS_CAB_PREVIEW_SELECT "Pilih file untuk dipratinjau."
+    IDS_CAB_SHOW_QUICK_ACCESS "Tampilkan Akses cepat"
+    IDS_CAB_TITLE "Penjelajah File"
+    IDS_CAB_TITLE_FORMAT "%s - Penjelajah File"
+END

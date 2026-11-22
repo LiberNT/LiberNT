@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Polish)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_POLISH, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "Nowy"
+    IDS_CAB_SORT "Sortuj"
+    IDS_CAB_VIEW "Widok"
+    IDS_CAB_DETAILS "Szczegóły"
+    IDS_CAB_SEARCH_IN "Przeszukaj: %s"
+    IDS_CAB_ITEMS "Elementy: %u"
+    IDS_CAB_ITEM "1 element"
+    IDS_CAB_SELECTED "Zaznaczone elementy: %u"
+    IDS_CAB_SELECTED_ONE "Zaznaczono 1 element"
+    IDS_CAB_SORT_NAME "Nazwa"
+    IDS_CAB_SORT_DATE "Data modyfikacji"
+    IDS_CAB_SORT_TYPE "Typ"
+    IDS_CAB_SORT_SIZE "Rozmiar"
+    IDS_CAB_SORT_ASCENDING "Rosnąco"
+    IDS_CAB_SORT_DESCENDING "Malejąco"
+    IDS_CAB_VIEW_XLARGE "Bardzo duże ikony"
+    IDS_CAB_VIEW_LARGE "Duże ikony"
+    IDS_CAB_VIEW_MEDIUM "Średnie ikony"
+    IDS_CAB_VIEW_SMALL "Małe ikony"
+    IDS_CAB_VIEW_LIST "Lista"
+    IDS_CAB_VIEW_DETAILS "Szczegóły"
+    IDS_CAB_VIEW_TILES "Kafelki"
+    IDS_CAB_VIEW_CONTENT "Zawartość"
+    IDS_CAB_SELECT_ALL "Zaznacz wszystko"
+    IDS_CAB_SELECT_NONE "Nie zaznaczaj niczego"
+    IDS_CAB_INVERT_SELECTION "Odwróć zaznaczenie"
+    IDS_CAB_PROPERTIES "Właściwości"
+    IDS_CAB_OPTIONS "Opcje"
+    IDS_CAB_OPEN_NEW_TAB "Otwórz w nowej karcie"
+    IDS_CAB_OPEN_NEW_WINDOW "Otwórz w nowym oknie"
+    IDS_CAB_CLOSE_TAB "Zamknij kartę"
+    IDS_CAB_CLOSE_OTHER_TABS "Zamknij pozostałe karty"
+    IDS_CAB_SHOW "Pokaż"
+    IDS_CAB_SHOW_NAVIGATION "Okienko nawigacji"
+    IDS_CAB_SHOW_DETAILS "Okienko szczegółów"
+    IDS_CAB_SHOW_CHECKBOXES "Pola wyboru elementów"
+    IDS_CAB_SHOW_EXTENSIONS "Rozszerzenia nazw plików"
+    IDS_CAB_SHOW_HIDDEN "Ukryte elementy"
+    IDS_CAB_CUT "Wytnij"
+    IDS_CAB_COPY "Kopiuj"
+    IDS_CAB_PASTE "Wklej"
+    IDS_CAB_RENAME "Zmień nazwę"
+    IDS_CAB_DELETE "Usuń"
+    IDS_CAB_BACK "Wstecz"
+    IDS_CAB_FORWARD "Dalej"
+    IDS_CAB_UP "W górę"
+    IDS_CAB_REFRESH "Odśwież"
+    IDS_CAB_MORE "Zobacz więcej"
+    IDS_CAB_NEW_TAB "Nowa karta"
+    IDS_CAB_SHOW_PREVIEW "Okienko podglądu"
+    IDS_CAB_PREVIEW_NONE "Podgląd jest niedostępny."
+    IDS_CAB_PREVIEW_SELECT "Wybierz plik, aby wyświetlić podgląd."
+    IDS_CAB_SHOW_QUICK_ACCESS "Pokaż Szybki dostęp"
+    IDS_CAB_TITLE "Eksplorator plików"
+    IDS_CAB_TITLE_FORMAT "%s - Eksplorator plików"
+END

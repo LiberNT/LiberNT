@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Chinese, Simplified)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "新建"
+    IDS_CAB_SORT "排序"
+    IDS_CAB_VIEW "查看"
+    IDS_CAB_DETAILS "详细信息"
+    IDS_CAB_SEARCH_IN "在 %s 中搜索"
+    IDS_CAB_ITEMS "%u 个项目"
+    IDS_CAB_ITEM "1 个项目"
+    IDS_CAB_SELECTED "已选择 %u 个项目"
+    IDS_CAB_SELECTED_ONE "已选择 1 个项目"
+    IDS_CAB_SORT_NAME "名称"
+    IDS_CAB_SORT_DATE "修改日期"
+    IDS_CAB_SORT_TYPE "类型"
+    IDS_CAB_SORT_SIZE "大小"
+    IDS_CAB_SORT_ASCENDING "递增"
+    IDS_CAB_SORT_DESCENDING "递减"
+    IDS_CAB_VIEW_XLARGE "超大图标"
+    IDS_CAB_VIEW_LARGE "大图标"
+    IDS_CAB_VIEW_MEDIUM "中等图标"
+    IDS_CAB_VIEW_SMALL "小图标"
+    IDS_CAB_VIEW_LIST "列表"
+    IDS_CAB_VIEW_DETAILS "详细信息"
+    IDS_CAB_VIEW_TILES "平铺"
+    IDS_CAB_VIEW_CONTENT "内容"
+    IDS_CAB_SELECT_ALL "全部选择"
+    IDS_CAB_SELECT_NONE "全部取消"
+    IDS_CAB_INVERT_SELECTION "反向选择"
+    IDS_CAB_PROPERTIES "属性"
+    IDS_CAB_OPTIONS "选项"
+    IDS_CAB_OPEN_NEW_TAB "在新标签页中打开"
+    IDS_CAB_OPEN_NEW_WINDOW "在新窗口中打开"
+    IDS_CAB_CLOSE_TAB "关闭标签页"
+    IDS_CAB_CLOSE_OTHER_TABS "关闭其他标签页"
+    IDS_CAB_SHOW "显示"
+    IDS_CAB_SHOW_NAVIGATION "导航窗格"
+    IDS_CAB_SHOW_DETAILS "详细信息窗格"
+    IDS_CAB_SHOW_CHECKBOXES "项目复选框"
+    IDS_CAB_SHOW_EXTENSIONS "文件扩展名"
+    IDS_CAB_SHOW_HIDDEN "隐藏的项目"
+    IDS_CAB_CUT "剪切"
+    IDS_CAB_COPY "复制"
+    IDS_CAB_PASTE "粘贴"
+    IDS_CAB_RENAME "重命名"
+    IDS_CAB_DELETE "删除"
+    IDS_CAB_BACK "后退"
+    IDS_CAB_FORWARD "前进"
+    IDS_CAB_UP "向上"
+    IDS_CAB_REFRESH "刷新"
+    IDS_CAB_MORE "查看更多"
+    IDS_CAB_NEW_TAB "新建标签页"
+    IDS_CAB_SHOW_PREVIEW "预览窗格"
+    IDS_CAB_PREVIEW_NONE "没有可用的预览。"
+    IDS_CAB_PREVIEW_SELECT "选择要预览的文件。"
+    IDS_CAB_SHOW_QUICK_ACCESS "显示快速访问"
+    IDS_CAB_TITLE "文件资源管理器"
+    IDS_CAB_TITLE_FORMAT "%s - 文件资源管理器"
+END

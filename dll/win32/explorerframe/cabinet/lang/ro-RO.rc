@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Romanian)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_ROMANIAN, SUBLANG_NEUTRAL
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "Nou"
+    IDS_CAB_SORT "Sortare"
+    IDS_CAB_VIEW "Vizualizare"
+    IDS_CAB_DETAILS "Detalii"
+    IDS_CAB_SEARCH_IN "Căutare în %s"
+    IDS_CAB_ITEMS "%u elemente"
+    IDS_CAB_ITEM "1 element"
+    IDS_CAB_SELECTED "%u elemente selectate"
+    IDS_CAB_SELECTED_ONE "1 element selectat"
+    IDS_CAB_SORT_NAME "Nume"
+    IDS_CAB_SORT_DATE "Data modificării"
+    IDS_CAB_SORT_TYPE "Tip"
+    IDS_CAB_SORT_SIZE "Dimensiune"
+    IDS_CAB_SORT_ASCENDING "Ascendent"
+    IDS_CAB_SORT_DESCENDING "Descendent"
+    IDS_CAB_VIEW_XLARGE "Pictograme foarte mari"
+    IDS_CAB_VIEW_LARGE "Pictograme mari"
+    IDS_CAB_VIEW_MEDIUM "Pictograme medii"
+    IDS_CAB_VIEW_SMALL "Pictograme mici"
+    IDS_CAB_VIEW_LIST "Listă"
+    IDS_CAB_VIEW_DETAILS "Detalii"
+    IDS_CAB_VIEW_TILES "Dale"
+    IDS_CAB_VIEW_CONTENT "Conținut"
+    IDS_CAB_SELECT_ALL "Selectare totală"
+    IDS_CAB_SELECT_NONE "Deselectare totală"
+    IDS_CAB_INVERT_SELECTION "Inversare selecție"
+    IDS_CAB_PROPERTIES "Proprietăți"
+    IDS_CAB_OPTIONS "Opțiuni"
+    IDS_CAB_OPEN_NEW_TAB "Deschide într-o filă nouă"
+    IDS_CAB_OPEN_NEW_WINDOW "Deschide într-o fereastră nouă"
+    IDS_CAB_CLOSE_TAB "Închide fila"
+    IDS_CAB_CLOSE_OTHER_TABS "Închide celelalte file"
+    IDS_CAB_SHOW "Afișare"
+    IDS_CAB_SHOW_NAVIGATION "Panou de navigare"
+    IDS_CAB_SHOW_DETAILS "Panou de detalii"
+    IDS_CAB_SHOW_CHECKBOXES "Casete de selectare pentru elemente"
+    IDS_CAB_SHOW_EXTENSIONS "Extensii nume de fișier"
+    IDS_CAB_SHOW_HIDDEN "Elemente ascunse"
+    IDS_CAB_CUT "Decupare"
+    IDS_CAB_COPY "Copiere"
+    IDS_CAB_PASTE "Lipire"
+    IDS_CAB_RENAME "Redenumire"
+    IDS_CAB_DELETE "Ștergere"
+    IDS_CAB_BACK "Înapoi"
+    IDS_CAB_FORWARD "Înainte"
+    IDS_CAB_UP "Sus"
+    IDS_CAB_REFRESH "Reîmprospătare"
+    IDS_CAB_MORE "Vedeți mai multe"
+    IDS_CAB_NEW_TAB "Filă nouă"
+    IDS_CAB_SHOW_PREVIEW "Panou de examinare"
+    IDS_CAB_PREVIEW_NONE "Nicio examinare disponibilă."
+    IDS_CAB_PREVIEW_SELECT "Selectați un fișier pentru examinare."
+    IDS_CAB_SHOW_QUICK_ACCESS "Afișează Acces rapid"
+    IDS_CAB_TITLE "Explorator fișiere"
+    IDS_CAB_TITLE_FORMAT "%s - Explorator fișiere"
+END

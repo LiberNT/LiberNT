@@ -1,0 +1,67 @@
+/*
+ * PROJECT:     LiberNT Explorer
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     File Explorer strings (Danish)
+ * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
+ */
+
+LANGUAGE LANG_DANISH, SUBLANG_DEFAULT
+
+STRINGTABLE
+BEGIN
+    IDS_CAB_NEW "Ny"
+    IDS_CAB_SORT "Sortér"
+    IDS_CAB_VIEW "Vis"
+    IDS_CAB_DETAILS "Detaljer"
+    IDS_CAB_SEARCH_IN "Søg i %s"
+    IDS_CAB_ITEMS "%u elementer"
+    IDS_CAB_ITEM "1 element"
+    IDS_CAB_SELECTED "%u elementer valgt"
+    IDS_CAB_SELECTED_ONE "1 element valgt"
+    IDS_CAB_SORT_NAME "Navn"
+    IDS_CAB_SORT_DATE "Ændringsdato"
+    IDS_CAB_SORT_TYPE "Type"
+    IDS_CAB_SORT_SIZE "Størrelse"
+    IDS_CAB_SORT_ASCENDING "Stigende"
+    IDS_CAB_SORT_DESCENDING "Faldende"
+    IDS_CAB_VIEW_XLARGE "Ekstra store ikoner"
+    IDS_CAB_VIEW_LARGE "Store ikoner"
+    IDS_CAB_VIEW_MEDIUM "Mellemstore ikoner"
+    IDS_CAB_VIEW_SMALL "Små ikoner"
+    IDS_CAB_VIEW_LIST "Liste"
+    IDS_CAB_VIEW_DETAILS "Detaljer"
+    IDS_CAB_VIEW_TILES "Side om side"
+    IDS_CAB_VIEW_CONTENT "Indhold"
+    IDS_CAB_SELECT_ALL "Markér alt"
+    IDS_CAB_SELECT_NONE "Markér intet"
+    IDS_CAB_INVERT_SELECTION "Invertér markering"
+    IDS_CAB_PROPERTIES "Egenskaber"
+    IDS_CAB_OPTIONS "Indstillinger"
+    IDS_CAB_OPEN_NEW_TAB "Åbn på ny fane"
+    IDS_CAB_OPEN_NEW_WINDOW "Åbn i nyt vindue"
+    IDS_CAB_CLOSE_TAB "Luk fane"
+    IDS_CAB_CLOSE_OTHER_TABS "Luk andre faner"
+    IDS_CAB_SHOW "Vis"
+    IDS_CAB_SHOW_NAVIGATION "Navigationsrude"
+    IDS_CAB_SHOW_DETAILS "Detaljerude"
+    IDS_CAB_SHOW_CHECKBOXES "Afkrydsningsfelter for elementer"
+    IDS_CAB_SHOW_EXTENSIONS "Filtypenavne"
+    IDS_CAB_SHOW_HIDDEN "Skjulte elementer"
+    IDS_CAB_CUT "Klip"
+    IDS_CAB_COPY "Kopiér"
+    IDS_CAB_PASTE "Sæt ind"
+    IDS_CAB_RENAME "Omdøb"
+    IDS_CAB_DELETE "Slet"
+    IDS_CAB_BACK "Tilbage"
+    IDS_CAB_FORWARD "Frem"
+    IDS_CAB_UP "Op"
+    IDS_CAB_REFRESH "Opdater"
+    IDS_CAB_MORE "Se mere"
+    IDS_CAB_NEW_TAB "Ny fane"
+    IDS_CAB_SHOW_PREVIEW "Eksempelrude"
+    IDS_CAB_PREVIEW_NONE "Der er ingen tilgængelig eksempelvisning."
+    IDS_CAB_PREVIEW_SELECT "Vælg en fil for at få vist et eksempel."
+    IDS_CAB_SHOW_QUICK_ACCESS "Vis Hurtig adgang"
+    IDS_CAB_TITLE "Stifinder"
+    IDS_CAB_TITLE_FORMAT "%s - Stifinder"
+END
