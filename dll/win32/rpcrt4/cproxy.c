@@ -50,9 +50,6 @@ static inline StdProxyImpl *impl_from_proxy_obj( void *iface )
     return CONTAINING_RECORD(iface, StdProxyImpl, PVtbl);
 }
 
-extern void ObjectStublessClient3(void);
-extern void ObjectStublessClient4(void);
-
 BOOL fill_stubless_table( IUnknownVtbl *vtbl, DWORD num )
 {
     size_t entry_size = (char *)ObjectStublessClient4 - (char *)ObjectStublessClient3;
