@@ -1074,6 +1074,59 @@ MasterFileTable::DeleteFileInDirectory(
 }
 
 NTSTATUS
+MasterFileTable::DeleteLookedUpChild(
+    _Inout_ PFileRecord Parent,
+    _Inout_ PFileRecord Child,
+    _In_reads_(NameLength) PWCHAR Name,
+    _In_ ULONG NameLength,
+    _In_ BOOLEAN RemoveDirectory,
+    _In_opt_ PFileRecord CanonicalRecord,
+    _In_ BOOLEAN CanDeleteRecord,
+    _Out_opt_ PBOOLEAN RecordDeleted,
+    _In_ BOOLEAN KeepUnlinkedRecord)
+{
+    if (RecordDeleted)
+        *RecordDeleted = FALSE;
+    if (!Parent || !Child || !Name || !DiskVolume ||
+        NameLength == 0 ||
+        NameLength > NTFS_MAX_FILE_NAME_LENGTH ||
+        Name[NameLength] != 0)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    if (DiskVolume->IsReadOnly)
+        return STATUS_ACCESS_DENIED;
+    if (Parent->DiskVolume != DiskVolume ||
+        !Parent->Header ||
+        Parent->BaseRecordOwner ||
+        !(Parent->Header->Flags & FR_IN_USE) ||
+        Child->DiskVolume != DiskVolume ||
+        Child == Parent ||
+        Child == CanonicalRecord ||
+        !Child->Header ||
+        Child->BaseRecordOwner ||
+        Child->Header->BaseFileRecord != 0 ||
+        !(Child->Header->Flags & FR_IN_USE))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+    if (!(Parent->Header->Flags & FR_IS_DIRECTORY))
+        return STATUS_NOT_A_DIRECTORY;
+    if (Child->RecordNumber <= NTFS_LAST_RESERVED_FILE_RECORD)
+        return STATUS_ACCESS_DENIED;
+    return DeleteChild(Parent,
+                       Child,
+                       MakeFileReference(Child),
+                       Name,
+                       NameLength,
+                       RemoveDirectory,
+                       CanonicalRecord,
+                       CanDeleteRecord,
+                       RecordDeleted,
+                       KeepUnlinkedRecord);
+}
+
+NTSTATUS
 MasterFileTable::DeleteChild(
     _Inout_ PFileRecord Parent,
     _Inout_ PFileRecord Child,

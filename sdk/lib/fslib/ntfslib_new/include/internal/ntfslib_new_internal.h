@@ -2004,6 +2004,18 @@ public:
         _In_ BOOLEAN KeepUnlinkedRecord);
 
     NTSTATUS
+    DeleteLookedUpChild(
+        _Inout_ PFileRecord Parent,
+        _Inout_ PFileRecord Child,
+        _In_reads_(NameLength) PWCHAR Name,
+        _In_ ULONG NameLength,
+        _In_ BOOLEAN RemoveDirectory,
+        _In_opt_ PFileRecord CanonicalRecord,
+        _In_ BOOLEAN CanDeleteRecord,
+        _Out_opt_ PBOOLEAN RecordDeleted,
+        _In_ BOOLEAN KeepUnlinkedRecord);
+
+    NTSTATUS
     DeleteUnlinkedFile(
         _In_ ULONGLONG FileReference,
         _Out_opt_ PBOOLEAN RecordDeleted = NULL);

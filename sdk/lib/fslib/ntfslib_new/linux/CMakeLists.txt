@@ -220,8 +220,14 @@ if(BUILD_TESTING AND NTFSLIB_BUILD_FUSE)
         target_link_libraries(ntfslib_create_eas_test PRIVATE ntfslib_linux)
         target_link_options(ntfslib_create_eas_test PRIVATE -Wl,--wrap=NtfsWriteVolumeContext)
         add_test(NAME ntfslib_linux_create_eas COMMAND /bin/sh
-            "${CMAKE_CURRENT_LIST_DIR}/tests/create_eas.sh" "$<TARGET_FILE:ntfslib_fuse>"
+            "${CMAKE_CURRENT_LIST_DIR}/tests/fresh_volume_test.sh" "$<TARGET_FILE:ntfslib_fuse>"
             "$<TARGET_FILE:ntfslib_create_eas_test>" "${MKNTFS_EXECUTABLE}")
+        add_executable(ntfslib_delete_child_test tests/delete_child.cpp)
+        target_compile_features(ntfslib_delete_child_test PRIVATE cxx_std_17)
+        target_link_libraries(ntfslib_delete_child_test PRIVATE ntfslib_linux)
+        add_test(NAME ntfslib_linux_delete_child COMMAND /bin/sh
+            "${CMAKE_CURRENT_LIST_DIR}/tests/fresh_volume_test.sh" "$<TARGET_FILE:ntfslib_fuse>"
+            "$<TARGET_FILE:ntfslib_delete_child_test>" "${MKNTFS_EXECUTABLE}")
     endif()
     find_program(XXD_EXECUTABLE NAMES xxd)
     find_library(WIM_LIBRARY NAMES wim libwim.so.15)
