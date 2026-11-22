@@ -146,6 +146,34 @@ static BOOL ProcessObjectGone(DWORD pid, ULONG sessionId)
     return NT_SUCCESS(status) && info.SessionId != sessionId;
 }
 
+static BOOL DirectoryHasEntry(PCWSTR directory, ULONG sessionId)
+{
+    OBJECT_ATTRIBUTES attributes;
+    UNICODE_STRING name, entry;
+    WCHAR entryName[16];
+    ULONG context = 0, length;
+    UCHAR buffer[512];
+    POBJECT_DIRECTORY_INFORMATION info = (POBJECT_DIRECTORY_INFORMATION)buffer;
+    BOOLEAN restart = TRUE, found = FALSE;
+    HANDLE handle;
+    NTSTATUS status;
+
+    swprintf(entryName, ARRAYSIZE(entryName), L"%lu", sessionId);
+    RtlInitUnicodeString(&entry, entryName);
+    RtlInitUnicodeString(&name, directory);
+    InitializeObjectAttributes(&attributes, &name, OBJ_CASE_INSENSITIVE, NULL, NULL);
+    status = NtOpenDirectoryObject(&handle, DIRECTORY_QUERY, &attributes);
+    ok(status == STATUS_SUCCESS, "opening %ls returned 0x%lx\n", directory, status);
+    if (!NT_SUCCESS(status)) return FALSE;
+    while (!found && NT_SUCCESS(NtQueryDirectoryObject(handle, info, sizeof(buffer), TRUE, restart, &context, &length)))
+    {
+        restart = FALSE;
+        found = RtlEqualUnicodeString(&info->Name, &entry, TRUE);
+    }
+    NtClose(handle);
+    return found;
+}
+
 static const char SessionTags[][5] =
 {
     "Gla1", "Gla4", "Gla5", "Gla8", "Gh05", "Gh08", "Gh09", "Gh0:", "Gh0@", "Gh?@",
@@ -153,7 +181,7 @@ static const char SessionTags[][5] =
     "Usdc", "Ussn", "Ussy", "AtoT", "USTR", "TIMB", "Sect"
 };
 
-static PSYSTEM_POOLTAG_INFORMATION PoolTags(void)
+static PSYSTEM_POOLTAG_INFORMATION QueryPoolTags(void)
 {
     PSYSTEM_POOLTAG_INFORMATION info;
     ULONG length = 1 << 20;
@@ -164,6 +192,13 @@ static PSYSTEM_POOLTAG_INFORMATION PoolTags(void)
         HeapFree(GetProcessHeap(), 0, info);
         info = NULL;
     }
+    return info;
+}
+
+static PSYSTEM_POOLTAG_INFORMATION PoolTags(void)
+{
+    PSYSTEM_POOLTAG_INFORMATION info = QueryPoolTags();
+
     ok(info != NULL, "SystemPoolTagInformation failed\n");
     return info;
 }
@@ -180,6 +215,37 @@ static LONG PoolBlocks(PSYSTEM_POOLTAG_INFORMATION info, const char *tag)
                           info->TagInfo[i].NonPagedAllocs - info->TagInfo[i].NonPagedFrees);
     }
     return 0;
+}
+
+static BOOL SameSessionTags(PSYSTEM_POOLTAG_INFORMATION first, PSYSTEM_POOLTAG_INFORMATION second)
+{
+    ULONG i;
+
+    for (i = 0; i < ARRAYSIZE(SessionTags); i++)
+    {
+        if (PoolBlocks(first, SessionTags[i]) != PoolBlocks(second, SessionTags[i])) return FALSE;
+    }
+    return TRUE;
+}
+
+static PSYSTEM_POOLTAG_INFORMATION SettledPoolTags(PSYSTEM_POOLTAG_INFORMATION expected)
+{
+    PSYSTEM_POOLTAG_INFORMATION info, next;
+    ULONG wait, stable = 0;
+
+    info = QueryPoolTags();
+    for (wait = 0; wait < 100 && info && stable < 5; wait++)
+    {
+        if (expected && SameSessionTags(info, expected)) break;
+        Sleep(200);
+        next = QueryPoolTags();
+        if (!next) break;
+        stable = SameSessionTags(info, next) ? stable + 1 : 0;
+        HeapFree(GetProcessHeap(), 0, info);
+        info = next;
+    }
+    ok(info != NULL, "SystemPoolTagInformation failed\n");
+    return info;
 }
 
 static void RunSession(HANDLE port, ULONG ownSession, ULONG *previous)
@@ -221,6 +287,8 @@ static void RunSession(HANDLE port, ULONG ownSession, ULONG *previous)
        "the new session's screen is %dx%d, its display mode %lux%lu\n", width, height, modeWidth, modeHeight);
     ok(ProcessesInSession(sessionId, FALSE) >= 2, "the new session has %lu processes\n",
        ProcessesInSession(sessionId, FALSE));
+    ok(DirectoryHasEntry(L"\\Sessions", sessionId), "session %lu has no object directory\n", sessionId);
+    ok(DirectoryHasEntry(L"\\Sessions\\BNOLINKS", sessionId), "session %lu has no BNOLINKS entry\n", sessionId);
 
     csrssPid = SessionProcessId(sessionId, L"csrss.exe");
     ok(csrssPid != 0, "session %lu has no csrss\n", sessionId);
@@ -236,6 +304,9 @@ static void RunSession(HANDLE port, ULONG ownSession, ULONG *previous)
     for (wait = 0; wait < 100 && !ProcessObjectGone(csrssPid, sessionId); wait++) Sleep(100);
     ok(ProcessObjectGone(csrssPid, sessionId), "the csrss of session %lu (%lu) was never deleted\n",
        sessionId, csrssPid);
+    ok(!DirectoryHasEntry(L"\\Sessions", sessionId), "the object directory of session %lu outlived it\n", sessionId);
+    ok(!DirectoryHasEntry(L"\\Sessions\\BNOLINKS", sessionId), "the BNOLINKS entry of session %lu outlived it\n",
+       sessionId);
     status = SmStopCsr(port, sessionId);
     ok(status == STATUS_INVALID_PARAMETER, "stopping session %lu again returned 0x%lx\n", sessionId, status);
     *previous = sessionId;
@@ -288,9 +359,9 @@ START_TEST(StartSession)
         ok(messageLists > 0 && gdiLists > 0, "the console's win32k holds %ld UMSG and %ld Ghtb blocks\n",
            messageLists, gdiLists);
         RunSession(port, ownSession, &previous);
-        between = PoolTags();
+        between = SettledPoolTags(NULL);
         RunSession(port, ownSession, &previous);
-        after = PoolTags();
+        after = SettledPoolTags(between);
         ok(PoolBlocks(after, "UMSG") == messageLists, "UMSG went from %ld to %ld blocks across two sessions\n",
            messageLists, PoolBlocks(after, "UMSG"));
         ok(PoolBlocks(after, "Ghtb") == gdiLists, "Ghtb went from %ld to %ld blocks across two sessions\n",
