@@ -209,6 +209,12 @@ static struct object *create_key_object(enum algid algid, NCRYPT_PROV_HANDLE pro
         if (!(object = allocate_object(KEY))) return NULL;
 
         object->key.algid = ECDSA_P256;
+#ifdef __REACTOS__
+        set_object_property(object, NCRYPT_ALGORITHM_PROPERTY, (BYTE *)NCRYPT_ECDSA_P256_ALGORITHM,
+                            sizeof(NCRYPT_ECDSA_P256_ALGORITHM));
+        set_object_property(object, NCRYPT_ALGORITHM_GROUP_PROPERTY, (BYTE *)NCRYPT_ECDSA_ALGORITHM_GROUP,
+                            sizeof(NCRYPT_ECDSA_ALGORITHM_GROUP));
+#endif
         break;
 
 #ifdef __REACTOS__
