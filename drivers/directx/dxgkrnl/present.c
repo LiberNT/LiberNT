@@ -1689,6 +1689,8 @@ DxgkpProgramSharedPrimaryScanout(
     LARGE_INTEGER PrimaryAddress;
     LONG TraceSeq;
     NTSTATUS Status;
+    ULONG PlaneWidth;
+    ULONG PlaneHeight;
     BOOLEAN KmdTransaction = FALSE;
     BOOLEAN Program;
     BOOLEAN ProgramSource;
@@ -1700,6 +1702,15 @@ DxgkpProgramSharedPrimaryScanout(
         !DxgkpHasPrimaryScanout(Adapter))
     {
         return STATUS_NOT_SUPPORTED;
+    }
+
+    /* The lease below rejects a generation that no longer owns the source, so this size is that generation's */
+    PlaneWidth = Adapter->CommittedWidth;
+    PlaneHeight = Adapter->CommittedHeight;
+    if (VidPnSourceId != Adapter->SharedPrimaryVidPnSourceId && CompositorGeneration != 0 &&
+        !DxgkVidPnGetCompositorOutputSize(Adapter, VidPnSourceId, &PlaneWidth, &PlaneHeight))
+    {
+        return STATUS_GRAPHICS_VIDPN_SOURCE_IN_USE;
     }
 
     Status = DxgkVidPnAcquireScanoutLease(Adapter, Device, VidPnSourceId, Window, CompositorGeneration, &Program);
@@ -1727,9 +1738,9 @@ DxgkpProgramSharedPrimaryScanout(
     (VOID)DxgkpApplyPendingScanoutModeChange(Adapter, VidPnSourceId, Allocation, PrimaryAddress);
 
     /* MPO-capable miniports get the flip as a one-plane configuration. */
-    /* FIXME: the plane takes the desktop source's committed size; a flip on a further source needs that source's size */
+    /* FIXME: a flip on a further source that no compositor owns takes the desktop source's committed size */
     Status = DxgkpProgramScanoutViaMpo(Adapter, Allocation, VidPnSourceId, PrimaryAddress, PresentId, FlipInterval,
-                                       Adapter->CommittedWidth, Adapter->CommittedHeight);
+                                       PlaneWidth, PlaneHeight);
 
     if (NT_SUCCESS(Status))
     {
