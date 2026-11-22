@@ -593,11 +593,21 @@ MasterFileTable::InsertFileNameAttribute(
         AttributeId = Inserted->AttributeID;
         OwnerReference = MakeFileReference(Owner);
         Status = File->InsertAttributeListEntry(Inserted, Owner, 0, FALSE, &OwnerReferenced);
+        /* Publishing the list entry may move base attributes and drops cached extents. */
+        if (!Allocated)
+        {
+            if (Owner != File)
+                Owner = File->GetExtentRecord(OwnerReference);
+            Inserted = Owner ? Owner->FindAttributeInRecord(TypeFileName, NULL, &AttributeId) : NULL;
+        }
     }
     if (!NT_SUCCESS(Status))
     {
-        if (Inserted && NT_SUCCESS(Owner->RemoveAttributeRecord(Inserted)) && Owner != File && !Allocated)
+        if (Inserted && Owner && NT_SUCCESS(Owner->RemoveAttributeRecord(Inserted)) &&
+            Owner != File && !Allocated)
+        {
             (void)WriteFileRecordToMFT(Owner);
+        }
         if (Allocated && !OwnerReferenced)
             (void)DeallocateExtensionFileRecord(Allocated);
         delete Allocated;
@@ -609,9 +619,9 @@ MasterFileTable::InsertFileNameAttribute(
         delete Allocated;
         Owner = File->GetExtentRecord(OwnerReference);
         Inserted = Owner ? Owner->FindAttributeInRecord(TypeFileName, NULL, &AttributeId) : NULL;
-        if (!Inserted)
-            return STATUS_FILE_CORRUPT_ERROR;
     }
+    if (!Inserted)
+        return STATUS_FILE_CORRUPT_ERROR;
     *NewAttribute = Inserted;
     return STATUS_SUCCESS;
 }
