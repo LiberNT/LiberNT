@@ -21,6 +21,8 @@ NTSTATUS IPAddInterfaceAddress( PIP_INTERFACE Interface, IPv4_RAW_ADDRESS Addres
 NTSTATUS IPDeleteInterfaceAddress( ULONG Context );
 VOID IPDeleteInterfaceAddresses( PIP_INTERFACE Interface );
 BOOLEAN IsInterfaceAddress( PIP_INTERFACE Interface, PIP_ADDRESS Address );
+PIP_INTERFACE IPLocateInterfaceByIndex( ULONG Index );
+PIP_INTERFACE IPLocateUnicastInterface( PIP_ADDRESS Address );
 BOOLEAN IsInterfaceBroadcast( PIP_INTERFACE Interface, PIP_ADDRESS Address );
 BOOLEAN IsInterfaceOnLink( PIP_INTERFACE Interface, PIP_ADDRESS Address );
 BOOLEAN GetInterfaceSourceAddress( PIP_INTERFACE Interface, PIP_ADDRESS Destination, PIP_ADDRESS NextHop,

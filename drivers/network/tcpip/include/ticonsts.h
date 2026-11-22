@@ -43,7 +43,10 @@
 #define WS_IP_TOS 3
 #define WS_IP_TTL 4
 #define WS_IP_PKTINFO 19
+#define WS_IP_HOPLIMIT 21
 #define WS_IP_RECVDSTADDR 25
 #define WS_IP_ECN 50
+#define WS_IPPROTO_UDP 17
+#define WS_UDP_SEND_MSG_SIZE 2
 
 /* EOF */

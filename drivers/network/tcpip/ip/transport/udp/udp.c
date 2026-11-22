@@ -232,13 +232,256 @@ UDPIsBroadcastAddress(
     return IsBroadcast;
 }
 
+#define UDP_MAX_SEND_MSG_SIZE (0xFFFF - sizeof(IPv4_HEADER) - sizeof(UDP_HEADER))
+
+typedef struct _UDP_SEND_CONTROL
+{
+    BOOLEAN PktInfo;
+    BOOLEAN HopLimit;
+    BOOLEAN SendMsgSizeSet;
+    UCHAR Ttl;
+    UCHAR Ecn;
+    IP_ADDRESS Source;
+    ULONG InterfaceIndex;
+    ULONG SendMsgSize;
+} UDP_SEND_CONTROL, *PUDP_SEND_CONTROL;
+
+static NTSTATUS UDPReadControlInt(
+    const TDI_CMSGHDR *Header,
+    ULONG DataLength,
+    LONG Minimum,
+    LONG Maximum,
+    PLONG Value)
+{
+    if (DataLength < sizeof(*Value))
+        return STATUS_INVALID_PARAMETER;
+    RtlCopyMemory(Value, TDI_CMSG_DATA(Header), sizeof(*Value));
+    if (*Value < Minimum || *Value > Maximum)
+        return STATUS_INVALID_PARAMETER;
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS UDPParseSendControl(
+    PTDI_CONNECTION_INFORMATION ConnInfo,
+    BOOLEAN IgnorePktInfo,
+    PUDP_SEND_CONTROL Control)
+{
+    const UCHAR *Buffer = ConnInfo->Options;
+    const TDI_CMSGHDR *Header, *SendMsgSize = NULL;
+    ULONG Length, Offset, DataLength, Space;
+    ULONG PktInfo[2];
+    NTSTATUS Status;
+    LONG Value;
+
+    RtlZeroMemory(Control, sizeof(*Control));
+    if (!Buffer || ConnInfo->OptionsLength <= 0)
+        return STATUS_SUCCESS;
+
+    Length = (ULONG)ConnInfo->OptionsLength;
+    for (Offset = 0; Length - Offset >= sizeof(TDI_CMSGHDR); Offset += Space)
+    {
+        Header = (const TDI_CMSGHDR *)(Buffer + Offset);
+        ASSERT(((ULONG_PTR)Header & (TYPE_ALIGNMENT(TDI_CMSGHDR) - 1)) == 0);
+        if (Header->cmsg_len < TDI_CMSG_LEN(0) || Header->cmsg_len > Length - Offset)
+            return STATUS_INVALID_PARAMETER;
+        Space = (ULONG)TDI_CMSGHDR_ALIGN(Header->cmsg_len);
+        if (Space > Length - Offset)
+            return STATUS_INVALID_PARAMETER;
+        DataLength = (ULONG)(Header->cmsg_len - TDI_CMSG_LEN(0));
+        Status = STATUS_SUCCESS;
+
+        if (Header->cmsg_level == WS_IPPROTO_IP && Header->cmsg_type == WS_IP_PKTINFO)
+        {
+            if (!Control->PktInfo && !IgnorePktInfo)
+            {
+                if (DataLength < sizeof(PktInfo))
+                    return STATUS_INVALID_PARAMETER;
+                RtlCopyMemory(PktInfo, TDI_CMSG_DATA(Header), sizeof(PktInfo));
+                AddrInitIPv4(&Control->Source, PktInfo[0]);
+                Control->InterfaceIndex = PktInfo[1];
+                Control->PktInfo = TRUE;
+            }
+        }
+        else if (Header->cmsg_level == WS_IPPROTO_IP && Header->cmsg_type == WS_IP_HOPLIMIT)
+        {
+            if (!Control->HopLimit)
+            {
+                Status = UDPReadControlInt(Header, DataLength, 0, MAXUCHAR, &Value);
+                Control->Ttl = (UCHAR)Value;
+                Control->HopLimit = TRUE;
+            }
+        }
+        else if (Header->cmsg_level == WS_IPPROTO_IP && Header->cmsg_type == WS_IP_ECN)
+        {
+            Status = UDPReadControlInt(Header, DataLength, 0, 2, &Value);
+            Control->Ecn = (UCHAR)Value;
+        }
+        else if (Header->cmsg_level == WS_IPPROTO_IP && Header->cmsg_type == WS_IP_TOS)
+        {
+            Status = UDPReadControlInt(Header, DataLength, MINLONG, MAXLONG, &Value);
+        }
+        else if (Header->cmsg_level == WS_IPPROTO_UDP && Header->cmsg_type == WS_UDP_SEND_MSG_SIZE)
+        {
+            SendMsgSize = Header;
+        }
+        else
+        {
+            return STATUS_INVALID_PARAMETER;
+        }
+
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
+
+    if (SendMsgSize)
+    {
+        if (SendMsgSize->cmsg_len != TDI_CMSG_LEN(sizeof(ULONG)))
+            return STATUS_INVALID_PARAMETER;
+        RtlCopyMemory(&Control->SendMsgSize, TDI_CMSG_DATA(SendMsgSize), sizeof(ULONG));
+        if (Control->SendMsgSize > UDP_MAX_SEND_MSG_SIZE)
+            return STATUS_INVALID_PARAMETER;
+        Control->SendMsgSizeSet = TRUE;
+    }
+
+    ASSERT(Control->Ecn <= 2);
+    return STATUS_SUCCESS;
+}
+
+static BOOLEAN UDPIsLoopbackAddress(
+    PIP_ADDRESS Address)
+{
+    return Address->Type == IP_ADDRESS_V4 && (DN2H(Address->Address.IPv4Address) >> 24) == 127;
+}
+
+static BOOLEAN UDPIsHeldNonUnicast(
+    PIP_ADDRESS Address)
+{
+    ULONG Indexes[16], Count = 0, i;
+    KIRQL OldIrql;
+    IF_LIST_ITER(CurrentIF);
+
+    if (UDPIsBroadcastAddress(Address))
+        return TRUE;
+    if ((DN2H(Address->Address.IPv4Address) & 0xf0000000) != 0xe0000000)
+        return FALSE;
+
+    TcpipAcquireSpinLock(&InterfaceListLock, &OldIrql);
+    ForEachInterface(CurrentIF) {
+        if (CurrentIF != Loopback && Count < RTL_NUMBER_OF(Indexes))
+            Indexes[Count++] = CurrentIF->Index;
+    } EndFor(CurrentIF);
+    TcpipReleaseSpinLock(&InterfaceListLock, OldIrql);
+
+    for (i = 0; i < Count; i++)
+    {
+        if (DN2H(Address->Address.IPv4Address) == 0xE0000001 || IGMPIsJoined(Indexes[i], Address->Address.IPv4Address))
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static NTSTATUS UDPRoutePktInfo(
+    const UDP_SEND_CONTROL *Control,
+    PIP_ADDRESS RemoteAddress,
+    PIP_ADDRESS LocalAddress,
+    PNEIGHBOR_CACHE_ENTRY *Route)
+{
+    IP_ADDRESS Source = Control->Source;
+    PIP_INTERFACE Interface = NULL, Owner;
+    PNEIGHBOR_CACHE_ENTRY NCE;
+    BOOLEAN Unspecified = (Source.Address.IPv4Address == 0);
+
+    ASSERT(Control->PktInfo);
+    ASSERT(Source.Type == IP_ADDRESS_V4);
+
+    if (Control->InterfaceIndex)
+    {
+        Interface = IPLocateInterfaceByIndex(Control->InterfaceIndex);
+        if (!Interface)
+            return STATUS_INVALID_PARAMETER;
+        if (!Unspecified && !IsInterfaceAddress(Interface, &Source))
+        {
+            IPDereferenceInterface(Interface);
+            return STATUS_INVALID_ADDRESS;
+        }
+    }
+    else if (!Unspecified)
+    {
+        Interface = IPLocateUnicastInterface(&Source);
+        if (!Interface)
+            return UDPIsHeldNonUnicast(&Source) ? STATUS_INVALID_ADDRESS : STATUS_INVALID_PARAMETER;
+    }
+
+    NCE = RouteGetRouteToDestination(RemoteAddress);
+    if (!Interface)
+    {
+        if (!NCE)
+            return STATUS_NETWORK_UNREACHABLE;
+        *LocalAddress = Source;
+        *Route = NCE;
+        return STATUS_SUCCESS;
+    }
+
+    if (!NCE)
+    {
+        IPDereferenceInterface(Interface);
+        return STATUS_INVALID_ADDRESS;
+    }
+
+    if (UDPIsLoopbackAddress(RemoteAddress) != (Interface == Loopback))
+    {
+        NBDereferenceNeighbor(NCE);
+        IPDereferenceInterface(Interface);
+        return Interface == Loopback ? STATUS_NETWORK_UNREACHABLE : STATUS_INVALID_ADDRESS;
+    }
+
+    if (Interface != Loopback && NCE->Interface != Interface)
+    {
+        Owner = IPLocateUnicastInterface(RemoteAddress);
+        if (Owner)
+        {
+            IPDereferenceInterface(Owner);
+        }
+        else
+        {
+            NBDereferenceNeighbor(NCE);
+            /* FIXME: the error for a source whose interface has no route while another interface has one is unverified on Windows 11 */
+            NCE = RouteGetRouteOnInterface(RemoteAddress, Interface);
+            if (!NCE)
+            {
+                IPDereferenceInterface(Interface);
+                return STATUS_NETWORK_UNREACHABLE;
+            }
+        }
+    }
+
+    IPDereferenceInterface(Interface);
+    *LocalAddress = Source;
+    *Route = NCE;
+    return STATUS_SUCCESS;
+}
+
+static VOID UDPApplySendControl(
+    PIP_PACKET Packet,
+    const UDP_SEND_CONTROL *Control)
+{
+    PIPv4_HEADER Header = (PIPv4_HEADER)Packet->Header;
+
+    ASSERT(Packet->Type == IP_ADDRESS_V4);
+    ASSERT(Control->Ecn <= 2);
+    if (Control->HopLimit)
+        Header->Ttl = Control->Ttl;
+    Header->Tos = (Header->Tos & ~3) | Control->Ecn;
+}
+
 static NTSTATUS UDPSendToAddress(
     PADDRESS_FILE AddrFile,
     IP_ADDRESS RemoteAddress,
     USHORT RemotePort,
     PCHAR BufferData,
     ULONG DataSize,
-    const WFP_SHIM_TAG *Tag)
+    const WFP_SHIM_TAG *Tag,
+    const UDP_SEND_CONTROL *Control)
 {
     IP_PACKET Packet;
     IP_PACKET LoopPacket;
@@ -256,7 +499,17 @@ static NTSTATUS UDPSendToAddress(
     LockObject(AddrFile);
 
     LocalAddress = AddrFile->Address;
-    if ((DN2H(RemoteAddress.Address.IPv4Address) & 0xf0000000) == 0xe0000000)
+    /* TODO: IP_PKTINFO on multicast and broadcast destinations; the socket's interface selection applies */
+    if (Control && Control->PktInfo && AddrIsUnspecified(&LocalAddress) && !IsMulticast && !IsBroadcast)
+    {
+        Status = UDPRoutePktInfo(Control, &RemoteAddress, &LocalAddress, &NCE);
+        if (!NT_SUCCESS(Status))
+        {
+            UnlockObject(AddrFile);
+            return Status;
+        }
+    }
+    else if ((DN2H(RemoteAddress.Address.IPv4Address) & 0xf0000000) == 0xe0000000)
     {
         ULONG Selector = AddrFile->MulticastInterface;
         if (!Selector) Selector = LocalAddress.Address.IPv4Address;
@@ -368,6 +621,13 @@ static NTSTATUS UDPSendToAddress(
 	return Status;
     }
 
+    if (Control)
+    {
+        UDPApplySendControl(&Packet, Control);
+        if (LoopNCE != NULL)
+            UDPApplySendControl(&LoopPacket, Control);
+    }
+
     Packet.WfpTag = *Tag;
     Status = IPSendDatagram(&Packet, NCE);
     NBDereferenceNeighbor(NCE);
@@ -401,6 +661,7 @@ NTSTATUS UDPSendDatagram(
 {
     static const WFP_SHIM_TAG NoTag;
     PTA_IP_ADDRESS RemoteAddressTa = (PTA_IP_ADDRESS)ConnInfo->RemoteAddress;
+    UDP_SEND_CONTROL Control;
     IP_ADDRESS RemoteAddress;
     USHORT RemotePort;
     NTSTATUS Status;
@@ -434,7 +695,11 @@ NTSTATUS UDPSendDatagram(
 		return STATUS_UNSUCCESSFUL;
     }
 
-    SendMsgSize = AddrFile->SendMsgSize;
+    Status = UDPParseSendControl(ConnInfo, !AddrIsUnspecified(&AddrFile->Address), &Control);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    SendMsgSize = Control.SendMsgSizeSet ? Control.SendMsgSize : AddrFile->SendMsgSize;
     if (SendMsgSize == 0 || SendMsgSize >= DataSize)
         SendMsgSize = DataSize;
 
@@ -442,7 +707,7 @@ NTSTATUS UDPSendDatagram(
     do
     {
         Chunk = min(SendMsgSize, DataSize - Offset);
-        Status = UDPSendToAddress(AddrFile, RemoteAddress, RemotePort, BufferData + Offset, Chunk, &NoTag);
+        Status = UDPSendToAddress(AddrFile, RemoteAddress, RemotePort, BufferData + Offset, Chunk, &NoTag, &Control);
         if (!NT_SUCCESS(Status))
             return Status;
         Offset += Chunk;
@@ -542,7 +807,8 @@ static VOID UDPInjectWorker(
                                       UDPHeader->DestPort,
                                       (PCHAR)(UDPHeader + 1),
                                       Injection->Length - sizeof(UDP_HEADER),
-                                      &Injection->Tag);
+                                      &Injection->Tag,
+                                      NULL);
         }
         DereferenceObject(AddrFile);
     }

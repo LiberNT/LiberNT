@@ -536,7 +536,6 @@ NTSTATUS NTAPI ReceiveComplete
     return STATUS_SUCCESS;
 }
 
-#define AFD_CMSG32_HEADER_LENGTH (3 * sizeof(ULONG))
 #define AFD_CMSG32_SPACE(Length) (AFD_CMSG32_HEADER_LENGTH + (((Length) + sizeof(ULONG) - 1) & ~(sizeof(ULONG) - 1)))
 
 static UINT

@@ -360,6 +360,7 @@ LibUDPSendDatagram(PADDRESS_FILE AddrFile, PTDI_CONNECTION_INFORMATION ConnInfo,
     USHORT RemotePort;
     NTSTATUS Status;
 
+    /* FIXME: the send control data in ConnInfo->Options is ignored on IPv6 sockets */
     Status = AddrGetAddress((PTRANSPORT_ADDRESS)ConnInfo->RemoteAddress, &RemoteAddress, &RemotePort);
     if (!NT_SUCCESS(Status))
         return Status;

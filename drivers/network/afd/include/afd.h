@@ -56,6 +56,8 @@
 #define TAG_AFD_WSA_BUFFER                 'bWfA'
 #define TAG_AFD_TDI_IRP_CONTEXT            'iTfA'
 
+#define AFD_CMSG32_HEADER_LENGTH (3 * sizeof(ULONG))
+
 static __inline BOOLEAN
 AfdIs32bitIoctl(PIRP Irp)
 {
