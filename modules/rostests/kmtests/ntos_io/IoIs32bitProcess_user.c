@@ -128,6 +128,7 @@ CheckCallers(VOID)
     ok_eq_ulong(Result.ProcessIsWow64, (ULONG)(sizeof(PVOID) == sizeof(ULONG)));
     ok_eq_ulong(Result.NullForm, Result.ProcessIsWow64);
     ok_eq_ulong(Result.IrpForm, Result.ProcessIsWow64);
+    ok_eq_ulong(Result.KernelIrpForm, 0UL);
 
     if (!GetSystemWow64DirectoryW(Helper, ARRAYSIZE(Helper)))
         Helper[0] = UNICODE_NULL;
@@ -143,6 +144,7 @@ CheckCallers(VOID)
     ok_eq_ulong(Result.ProcessIsWow64, 1UL);
     ok_eq_ulong(Result.NullForm, 1UL);
     ok_eq_ulong(Result.IrpForm, 1UL);
+    ok_eq_ulong(Result.KernelIrpForm, 0UL);
 }
 
 START_TEST(IoIs32bitProcess)

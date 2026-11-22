@@ -109,6 +109,31 @@ TestUnload(
 }
 
 static
+ULONG
+ProbeKernelIrp(VOID)
+{
+    UNICODE_STRING Name = RTL_CONSTANT_STRING(L"\\Device\\" IO_IS32BIT_PROBE_DEVICE);
+    OBJECT_ATTRIBUTES Attributes;
+    IO_STATUS_BLOCK IoStatus;
+    HANDLE Handle;
+    ULONG Value = 2;
+    NTSTATUS Status;
+
+    InitializeObjectAttributes(&Attributes, &Name, OBJ_KERNEL_HANDLE | OBJ_CASE_INSENSITIVE, NULL, NULL);
+    Status = ZwOpenFile(&Handle, GENERIC_READ | GENERIC_WRITE | SYNCHRONIZE, &Attributes, &IoStatus, 0,
+                        FILE_SYNCHRONOUS_IO_NONALERT);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return Value;
+
+    Status = ZwDeviceIoControlFile(Handle, NULL, NULL, NULL, &IoStatus, IOCTL_IO_IS32BIT_KERNEL_PROBE,
+                                   NULL, 0, &Value, sizeof(Value));
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ZwClose(Handle);
+    return Value;
+}
+
+static
 NTSTATUS
 TestProbeIrpHandler(
     _In_ PDEVICE_OBJECT DeviceObject,
@@ -124,7 +149,16 @@ TestProbeIrpHandler(
 
     ok_irql(PASSIVE_LEVEL);
 
-    if (IoStackLocation->Parameters.DeviceIoControl.IoControlCode != IOCTL_IO_IS32BIT_PROBE)
+    if (IoStackLocation->Parameters.DeviceIoControl.IoControlCode == IOCTL_IO_IS32BIT_KERNEL_PROBE &&
+        IoStackLocation->Parameters.DeviceIoControl.OutputBufferLength >= sizeof(ULONG) &&
+        pIoIs32bitProcess != NULL)
+    {
+        ok_eq_uint(Irp->RequestorMode, KernelMode);
+        *(PULONG)Irp->AssociatedIrp.SystemBuffer = pIoIs32bitProcess(Irp);
+        Information = sizeof(ULONG);
+        Status = STATUS_SUCCESS;
+    }
+    else if (IoStackLocation->Parameters.DeviceIoControl.IoControlCode != IOCTL_IO_IS32BIT_PROBE)
     {
         Status = STATUS_INVALID_DEVICE_REQUEST;
     }
@@ -145,6 +179,7 @@ TestProbeIrpHandler(
         Result->NullForm = pIoIs32bitProcess(NULL);
         Result->IrpForm = pIoIs32bitProcess(Irp);
         Result->ProcessIsWow64 = Wow64Information != 0;
+        Result->KernelIrpForm = ProbeKernelIrp();
         Information = sizeof(*Result);
         Status = STATUS_SUCCESS;
     }
