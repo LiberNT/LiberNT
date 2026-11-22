@@ -2809,13 +2809,13 @@ LdrpInitializeProcess(IN PCONTEXT Context,
 #undef VALID_CONFIG_FIELD
 
     /* Check for custom affinity mask */
-    if (Peb->ImageProcessAffinityMask)
+    if (Peb->ActiveProcessAffinityMask)
     {
         /* Set it */
         Status = NtSetInformationProcess(NtCurrentProcess(),
                                          ProcessAffinityMask,
-                                         &Peb->ImageProcessAffinityMask,
-                                         sizeof(Peb->ImageProcessAffinityMask));
+                                         &Peb->ActiveProcessAffinityMask,
+                                         sizeof(Peb->ActiveProcessAffinityMask));
     }
 
     /* Check if verbose debugging (ShowSnaps) was requested */

@@ -557,7 +557,7 @@ MmCreatePeb(
         Peb->OSPlatformId = VER_PLATFORM_WIN32_NT;
         Peb->OSCSDVersion = (USHORT)CmNtCSDVersion;
         Peb->NumberOfProcessors = KeNumberProcessors;
-        Peb->ImageProcessAffinityMask = 0;
+        Peb->ActiveProcessAffinityMask = 0;
         Peb->BeingDebugged = (BOOLEAN)(Process->DebugPort != NULL);
         Peb->NtGlobalFlag = NtGlobalFlag;
         Peb->HeapSegmentReserve = MmHeapSegmentReserve;
@@ -627,11 +627,11 @@ MmCreatePeb(
             }
 
             if (AffinityMask != 0)
-                Peb->ImageProcessAffinityMask = AffinityMask;
+                Peb->ActiveProcessAffinityMask = AffinityMask;
 
             if (NtHeaders->FileHeader.Characteristics & IMAGE_FILE_UP_SYSTEM_ONLY)
             {
-                Peb->ImageProcessAffinityMask = AFFINITY_MASK(MiRotatingUniprocessorNumber);
+                Peb->ActiveProcessAffinityMask = AFFINITY_MASK(MiRotatingUniprocessorNumber);
                 MiRotatingUniprocessorNumber = (MiRotatingUniprocessorNumber + 1) % KeNumberProcessors;
             }
         }
@@ -703,7 +703,7 @@ MmCreatePeb32(
         Peb->OSPlatformId = VER_PLATFORM_WIN32_NT;
         Peb->OSCSDVersion = (USHORT)CmNtCSDVersion;
         Peb->NumberOfProcessors = KeNumberProcessors;
-        Peb->ImageProcessAffinityMask = (ULONG)Process->Peb->ImageProcessAffinityMask;
+        Peb->ActiveProcessAffinityMask = (ULONG)Process->Peb->ActiveProcessAffinityMask;
         Peb->NtGlobalFlag = NtGlobalFlag;
         Peb->HeapSegmentReserve = (ULONG)MmHeapSegmentReserve;
         Peb->HeapSegmentCommit = (ULONG)MmHeapSegmentCommit;
