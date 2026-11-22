@@ -181,6 +181,11 @@ WddmBridgeInit(VOID)
     return STATUS_NOT_SUPPORTED;
 }
 
+VOID
+WddmBridgeCleanup(VOID)
+{
+}
+
 NTSTATUS
 WddmBridgeRequireReady(VOID)
 {

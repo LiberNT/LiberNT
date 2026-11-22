@@ -11,6 +11,7 @@
 #include <winbase_undoc.h>
 #include "dcomposition.h"
 #include "composition.h"
+#include "drivers/wddm/wddm_bridge.h"
 
 #define NDEBUG
 #include <debug.h>
@@ -1145,6 +1146,7 @@ DriverUnload(IN PDRIVER_OBJECT DriverObject)
     FreeLDEVImpl();
     FreePDEVImpl();
     FreeDeviceImpl();
+    WddmBridgeCleanup();
     FreeSafeSemaphoreImpl();
     FreeInputImpl();
     FreeTimerImpl();

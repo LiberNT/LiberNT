@@ -36,6 +36,7 @@ typedef struct _DXGKP_REDIRECTION_SYNC_SNAPSHOT
 
 static EX_PUSH_LOCK DxgkpWin32kCddInterfaceLock;
 static DXGKRNL_WIN32K_CDD_INTERFACE DxgkpWin32kCddInterface;
+static ULONG DxgkpWin32kCddInterfaceCount;
 static KEVENT DxgkpWindowBltRetiredEvent;
 
 static BOOLEAN
@@ -53,6 +54,7 @@ DxgkRedirectionInitialize(VOID)
                   sizeof(DxgkpWin32kCddInterfaceLock));
     RtlZeroMemory(&DxgkpWin32kCddInterface,
                   sizeof(DxgkpWin32kCddInterface));
+    DxgkpWin32kCddInterfaceCount = 0;
     KeInitializeEvent(&DxgkpWindowBltRetiredEvent, NotificationEvent, FALSE);
 }
 
@@ -120,9 +122,22 @@ DxgkRegisterWin32kCddInterface(
 
     KeEnterCriticalRegion();
     ExfAcquirePushLockExclusive(&DxgkpWin32kCddInterfaceLock);
-    RtlZeroMemory(&DxgkpWin32kCddInterface,
-                  sizeof(DxgkpWin32kCddInterface));
-    RtlCopyMemory(&DxgkpWin32kCddInterface, Interface, RequiredSize);
+    /* Every session's win32k registers the same session-space entry points; the last one to unload clears them */
+    if (Interface->AddRedirectionDirtyRegion == NULL)
+    {
+        ASSERT(DxgkpWin32kCddInterfaceCount != 0);
+        if (DxgkpWin32kCddInterfaceCount != 0 && --DxgkpWin32kCddInterfaceCount == 0)
+            RtlZeroMemory(&DxgkpWin32kCddInterface, sizeof(DxgkpWin32kCddInterface));
+    }
+    else
+    {
+        ASSERT(DxgkpWin32kCddInterfaceCount == 0 ||
+               DxgkpWin32kCddInterface.AddRedirectionDirtyRegion == Interface->AddRedirectionDirtyRegion);
+        DxgkpWin32kCddInterfaceCount++;
+        RtlZeroMemory(&DxgkpWin32kCddInterface,
+                      sizeof(DxgkpWin32kCddInterface));
+        RtlCopyMemory(&DxgkpWin32kCddInterface, Interface, RequiredSize);
+    }
     ExfReleasePushLockExclusive(&DxgkpWin32kCddInterfaceLock);
     KeLeaveCriticalRegion();
     return STATUS_SUCCESS;
