@@ -20,6 +20,7 @@ typedef struct _USER_SESSION
     struct _WINSTATION_OBJECT *InputWindowStation;
     PKEVENT DesktopSwitchEvent;
     HANDLE DesktopSwitchEventHandle;
+    KSPIN_LOCK DesktopThreadLock;
     struct _THREADINFO *DesktopThread;
     KEVENT DesktopThreadStarted;
     LIST_ENTRY DesktopsToDestroy;
@@ -44,4 +45,6 @@ BOOLEAN FASTCALL UserIsLogonProcess(HANDLE ProcessId);
 BOOLEAN FASTCALL UserIsDesktopThread(struct _THREADINFO *pti);
 PUSER_SESSION FASTCALL UserGetDesktopThreadSession(struct _THREADINFO *pti);
 struct _THREADINFO *FASTCALL UserGetDesktopThread(VOID);
+VOID FASTCALL UserSetDesktopThread(PUSER_SESSION Session, struct _THREADINFO *pti);
+VOID FASTCALL UserWakeDesktopThread(PUSER_SESSION Session);
 VOID FASTCALL UserForEachSessionDesktop(PUSER_SESSION Session, VOID (FASTCALL *Callback)(struct _DESKTOP *Desktop));
