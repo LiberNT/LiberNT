@@ -1030,6 +1030,11 @@ public:
         _In_reads_(UpdateCount)
             const NtfsExtendedAttributeUpdate* Updates,
         _In_ ULONG UpdateCount);
+    NTSTATUS InitializeExtendedAttributes(
+        _In_reads_(UpdateCount)
+            const NtfsExtendedAttributeUpdate* Updates,
+        _In_ ULONG UpdateCount,
+        _Out_ PULONG EaInformation);
     NTSTATUS
     SetSecurityDescriptor(
         _In_reads_bytes_(BufferLength) const UCHAR* Buffer,
@@ -1973,7 +1978,9 @@ public:
         _In_opt_ PCWSTR PreferredShortName = NULL,
         _In_ ULONG PreferredShortNameLength = 0,
         _In_opt_ const UCHAR* SecurityDescriptor = NULL,
-        _In_ ULONG SecurityDescriptorLength = 0);
+        _In_ ULONG SecurityDescriptorLength = 0,
+        _In_reads_opt_(EaCount) const NtfsExtendedAttributeUpdate* Eas = NULL,
+        _In_ ULONG EaCount = 0);
 
     // ./namespace.cpp
     NTSTATUS

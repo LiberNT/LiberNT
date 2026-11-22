@@ -661,21 +661,21 @@ ReadPosixMetadata(PNtfsFileRecord File, NtfsPosixMetadata* Metadata)
     }
 }
 
-static NTSTATUS
-WritePosixMetadata(PNtfsFileRecord File,
-                   const UINT32* Uid,
-                   const UINT32* Gid,
-                   const UINT32* Mode,
-                   const UINT32* Dev)
+static ULONG
+BuildPosixUpdates(NtfsExtendedAttributeUpdate (&Updates)[4],
+                  const UINT32* Uid,
+                  const UINT32* Gid,
+                  const UINT32* Mode,
+                  const UINT32* Dev)
 {
     const UINT32* Values[] = {Uid, Gid, Mode, Dev};
-    NtfsExtendedAttributeUpdate Updates[4] = {};
     ULONG Count = 0;
 
     for (ULONG Index = 0; Index < 4; Index++)
     {
         if (!Values[Index])
             continue;
+        Updates[Count] = {};
         Updates[Count].Operation = NTFS_EA_UPDATE_SET;
         Updates[Count].NameLength = 6;
         Updates[Count].ValueLength = sizeof(UINT32);
@@ -683,6 +683,19 @@ WritePosixMetadata(PNtfsFileRecord File,
         Updates[Count].Value = (const UCHAR*)Values[Index];
         Count++;
     }
+    return Count;
+}
+
+static NTSTATUS
+WritePosixMetadata(PNtfsFileRecord File,
+                   const UINT32* Uid,
+                   const UINT32* Gid,
+                   const UINT32* Mode,
+                   const UINT32* Dev)
+{
+    NtfsExtendedAttributeUpdate Updates[4];
+    ULONG Count = BuildPosixUpdates(Updates, Uid, Gid, Mode, Dev);
+
     return Count ? NtfsFileRecordUpdateExtendedAttributes(File, Updates, Count) : STATUS_SUCCESS;
 }
 
@@ -4789,43 +4802,38 @@ CreateChild(NtfsFuseState* State,
     if (!NT_SUCCESS(Status))
         return Status;
     ReadPosixMetadata(Parent, &ParentMetadata);
-    Status = NtfsMasterFileTableCreateFileInDirectory(StateMft(State),
-                                                      Parent,
-                                                      NtfsName.data(),
-                                                      (ULONG)(NtfsName.size() - 1),
-                                                      IsDirectory,
-                                                      0,
-                                                      FALSE,
-                                                      NULL,
-                                                      0,
-                                                      Created);
+
+    const struct fuse_ctx* Context = fuse_req_ctx(Request);
+    UINT32 Uid = Context->uid;
+    UINT32 Gid = Context->gid;
+    UINT32 FullMode = Mode;
+    UINT32 Dev = (UINT32)((major(Device) << 20) | (minor(Device) & 0xFFFFF));
+    NtfsExtendedAttributeUpdate Updates[4];
+
+    /* A set-group-ID directory passes its group on, and the bit to subdirectories. */
+    if (ParentMetadata.HasMode && (ParentMetadata.Mode & S_ISGID))
+    {
+        Gid = ParentMetadata.HasGid ? ParentMetadata.Gid : State->Group;
+        if (IsDirectory)
+            FullMode |= S_ISGID;
+    }
+    ULONG Count = BuildPosixUpdates(Updates, &Uid, &Gid, &FullMode,
+                                    S_ISCHR(Mode) || S_ISBLK(Mode) ? &Dev : NULL);
+
+    /* The kernel looked the name up first; the index insertion still refuses a duplicate. */
+    Status = NtfsMasterFileTableCreateFileWithEas(StateMft(State),
+                                                  Parent,
+                                                  NtfsName.data(),
+                                                  (ULONG)(NtfsName.size() - 1),
+                                                  IsDirectory,
+                                                  0,
+                                                  TRUE,
+                                                  Updates,
+                                                  Count,
+                                                  Created);
     ReleaseLoaded(Parent, Owned);
     if (NT_SUCCESS(Status))
-    {
-        const struct fuse_ctx* Context = fuse_req_ctx(Request);
-        UINT32 Uid = Context->uid;
-        UINT32 Gid = Context->gid;
-        UINT32 FullMode = Mode;
-
-        /* A set-group-ID directory passes its group on, and the bit to subdirectories. */
-        if (ParentMetadata.HasMode && (ParentMetadata.Mode & S_ISGID))
-        {
-            Gid = ParentMetadata.HasGid ? ParentMetadata.Gid : State->Group;
-            if (IsDirectory)
-                FullMode |= S_ISGID;
-        }
-        UINT32 Dev = (UINT32)((major(Device) << 20) | (minor(Device) & 0xFFFFF));
-
         DropListing(State, ParentIno);
-        Status = WritePosixMetadata(*Created, &Uid, &Gid, &FullMode,
-                                    S_ISCHR(Mode) || S_ISBLK(Mode) ? &Dev : NULL);
-        if (!NT_SUCCESS(Status))
-        {
-            NtfsFileRecordDestroy(*Created);
-            *Created = NULL;
-            (void)RemoveChild(State, ParentIno, Name, IsDirectory);
-        }
-    }
     return Status;
 }
 

@@ -1367,6 +1367,79 @@ FileRecord::EnsureExtendedAttributeSpace(
 }
 
 NTSTATUS
+FileRecord::InitializeExtendedAttributes(
+    _In_reads_(UpdateCount)
+        const NtfsExtendedAttributeUpdate* Updates,
+    _In_ ULONG UpdateCount,
+    _Out_ PULONG EaInformation)
+{
+    PEA_BUILD_ENTRY Entries = NULL;
+    PAttribute InformationAttribute;
+    PAttribute EaAttribute;
+    PUCHAR FinalData = NULL;
+    EAInformationEx FinalInformation;
+    ULONG BuildEntryCount = 0;
+    ULONG FinalLength = 0;
+    ULONG Needed;
+    NTSTATUS Status;
+
+    *EaInformation = 0;
+    Status = ValidateEaUpdates(Updates, UpdateCount);
+    if (!NT_SUCCESS(Status) || UpdateCount == 0)
+        return Status;
+    if (!DiskVolume || !Header)
+        return STATUS_INVALID_DEVICE_STATE;
+    ASSERT(Header->BaseFileRecord == 0);
+    ASSERT(!FindAttributeInRecord(TypeAttributeList, NULL, NULL));
+    ASSERT(!FindAttributeInRecord(TypeEA, NULL, NULL));
+    ASSERT(!FindAttributeInRecord(TypeEAInformation, NULL, NULL));
+
+    Entries = new(PagedPool, TAG_NTFS) EA_BUILD_ENTRY[UpdateCount];
+    if (!Entries)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlZeroMemory(Entries, sizeof(*Entries) * UpdateCount);
+    Status = PopulateEaBuildEntries(NULL, 0, 0, Updates, UpdateCount, Entries, &BuildEntryCount);
+    if (NT_SUCCESS(Status))
+    {
+        Status = BuildRawExtendedAttributes(Entries,
+                                            BuildEntryCount,
+                                            &FinalData,
+                                            &FinalLength,
+                                            &FinalInformation);
+    }
+    if (!NT_SUCCESS(Status) || FinalLength == 0)
+        goto Done;
+
+    Needed = (ULONG)(2 * 0x18 + ALIGN_UP_BY(sizeof(FinalInformation), 8) + ALIGN_UP_BY(FinalLength, 8));
+    if (Header->ActualSize > Header->AllocatedSize ||
+        Header->AllocatedSize - Header->ActualSize < Needed)
+    {
+        Status = STATUS_BUFFER_TOO_SMALL;
+        goto Done;
+    }
+    Status = InsertResidentAttribute(TypeEAInformation, NULL, &InformationAttribute);
+    if (NT_SUCCESS(Status))
+    {
+        Status = ReplaceResidentData(InformationAttribute,
+                                     reinterpret_cast<const UCHAR*>(&FinalInformation),
+                                     sizeof(FinalInformation));
+    }
+    if (NT_SUCCESS(Status))
+        Status = InsertResidentAttribute(TypeEA, NULL, &EaAttribute);
+    if (NT_SUCCESS(Status))
+        Status = ReplaceResidentData(EaAttribute, FinalData, FinalLength);
+    if (NT_SUCCESS(Status))
+        Status = SetStandardEaFlag(TRUE);
+    if (NT_SUCCESS(Status))
+        *EaInformation = NtfsMakeFileNameEaInformation(FinalInformation.PackedEASize, FinalInformation.UnpackedEASize);
+
+Done:
+    delete[] FinalData;
+    delete[] Entries;
+    return Status;
+}
+
+NTSTATUS
 FileRecord::UpdateExtendedAttributes(
     _In_reads_(UpdateCount)
         const NtfsExtendedAttributeUpdate* Updates,
