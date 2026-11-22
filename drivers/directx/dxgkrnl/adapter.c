@@ -4778,6 +4778,7 @@ DxgkpEnsureGlobalInitialization(VOID)
     KeInitializeSpinLock(&g_PostDisplayOwnerLock);
     KeInitializeMutex(&g_PostDisplayOwnershipMutex, 0);
     KeInitializeMutex(&g_MiniportRegistrationMutex, 0);
+    DxgkDisplayInitializeGlobals();
     ExInitializeFastMutex(&DxgkpMapMemoryMutex);
     InitializeListHead(&DxgkpMapMemoryList);
     ExInitializeFastMutex(&DxgkpSleepDisableMutex);
@@ -15404,6 +15405,11 @@ DxgkAdapterStart(
                             Status);
                 goto StartRollback;
             }
+            Progress.DisplayRegistered = TRUE;
+        }
+        else
+        {
+            DxgkDisplayRegisterSourceDisplays(Adapter);
             Progress.DisplayRegistered = TRUE;
         }
         DisplayUs = DxgkpTraceElapsedUs(StepStart100ns);

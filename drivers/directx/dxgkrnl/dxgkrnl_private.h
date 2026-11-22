@@ -4116,6 +4116,13 @@ VOID
 DxgkDisplayUnregister(
     _In_ PDXGKRNL_ADAPTER Adapter);
 
+VOID
+DxgkDisplayInitializeGlobals(VOID);
+
+VOID
+DxgkDisplayRegisterSourceDisplays(
+    _In_ PDXGKRNL_ADAPTER Adapter);
+
 /*
  * Display dispatch helpers — called from dxgkrnl dispatch routines
  * to route IRPs targeting \Device\Video0 to the display handler.
