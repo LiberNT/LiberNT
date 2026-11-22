@@ -931,6 +931,21 @@ HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\WebView
 HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\WebViewBarricade","DefaultValue",0x00010001,0x00000000
 HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\Folder\WebViewBarricade",Grayed,0x10001,6
 
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\NavPane",,0x00000012
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\NavPane","Type",0x00000000,"group"
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\NavPane","Text",0x00000000,"@explorerframe.dll,-12041"
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\NavPane","Bitmap",0x00020000,"%SystemRoot%\system32\SHELL32.dll,4"
+
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\NavPane\ShowQuickAccess",,0x00000012
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\NavPane\ShowQuickAccess","Type",0x00000000,"checkbox"
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\NavPane\ShowQuickAccess","Text",0x00000000,"@explorerframe.dll,-12047"
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\NavPane\ShowQuickAccess","HKeyRoot",0x00010001,0x80000002
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\NavPane\ShowQuickAccess","RegPath",0x00000000,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer"
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\NavPane\ShowQuickAccess","ValueName",0x00000000,"HubMode"
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\NavPane\ShowQuickAccess","CheckedValue",0x00010001,0x00000000
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\NavPane\ShowQuickAccess","UncheckedValue",0x00010001,0x00000001
+HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced\NavPane\ShowQuickAccess","DefaultValue",0x00010001,0x00000000
+
 ; Sysdm.cpl Visual Effects
 HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewShadow","ValueName",,"ListviewShadow"
 HKLM,"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects\ListviewShadow","RegPath",,"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
