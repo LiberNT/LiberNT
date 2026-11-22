@@ -100,8 +100,8 @@ Create(const std::string& Name, const NtfsExtendedAttributeUpdate* Eas, ULONG Co
     return Status;
 }
 
-static USHORT
-IndexEaSize(const std::string& Name)
+static NtfsDirectoryEntry
+EntryOf(const std::string& Name)
 {
     std::vector<WCHAR> Wanted = Wide(Name);
     PNtfsFileRecord Root = Lookup("\\");
@@ -119,11 +119,34 @@ IndexEaSize(const std::string& Name)
     }
     NtfsDirectoryDestroy(Directory);
     NtfsFileRecordDestroy(Root);
-    return Entry.EaSize;
+    return Entry;
+}
+
+static UINT32
+RecordAttributes(const std::string& Name)
+{
+    PNtfsFileRecord File = Lookup("\\" + Name);
+    NtfsFileBasicInformation Basic = {};
+
+    Check(NT_SUCCESS(NtfsFileRecordGetBasicInformation(File, &Basic)), "read basic information");
+    NtfsFileRecordDestroy(File);
+    return Basic.FileAttributes;
+}
+
+/* The same EAs set on a file after it exists, for comparison. */
+static void
+CreateReference(const std::string& Name, const NtfsExtendedAttributeUpdate* Eas, ULONG Count)
+{
+    PNtfsFileRecord File;
+
+    Check(NT_SUCCESS(Create(Name, nullptr, 0)), "create the reference");
+    File = Lookup("\\" + Name);
+    Check(NT_SUCCESS(NtfsFileRecordUpdateExtendedAttributes(File, Eas, Count)), "set the reference EAs");
+    NtfsFileRecordDestroy(File);
 }
 
 static void
-CheckEas(const std::string& Name, const char* EaName, const std::vector<UCHAR>& Value)
+CheckEas(const std::string& Name, const std::string& Reference, const char* EaName, const std::vector<UCHAR>& Value)
 {
     PNtfsFileRecord File = Lookup("\\" + Name);
     std::vector<UCHAR> Buffer(65536);
@@ -148,8 +171,12 @@ CheckEas(const std::string& Name, const char* EaName, const std::vector<UCHAR>& 
         Offset += Next;
     }
     Check(Found, "EA value");
-    Check(Information.PackedEASize != 0 && IndexEaSize(Name) == Information.PackedEASize, "index entry EA size");
     NtfsFileRecordDestroy(File);
+    Check(Information.PackedEASize != 0 && EntryOf(Name).EaSize != 0, "EA sizes");
+    Check(EntryOf(Name).EaSize == EntryOf(Reference).EaSize, "index entry EA size matches a later EA update");
+    Check(EntryOf(Name).FileAttributes == EntryOf(Reference).FileAttributes,
+          "index entry flags match a later EA update");
+    Check(RecordAttributes(Name) == RecordAttributes(Reference), "record flags match a later EA update");
 }
 
 int
@@ -178,19 +205,21 @@ main(int argc, char** argv)
     Big[0].Value = Large.data();
 
     Mount(argv[1]);
+    CreateReference("smallref", Small, 2);
+    CreateReference(std::string(255, 'r'), Big, 1);
     Check(NT_SUCCESS(Create("small", Small, 2)), "create with EAs");
     Check(Create("SMALL", Small, 2) == STATUS_OBJECT_NAME_COLLISION, "a known-missing name that exists collides");
     Check(NT_SUCCESS(Create(LongName, Big, 1)), "create with EAs larger than the new record holds");
     Check(Create(LongName, Big, 1) == STATUS_OBJECT_NAME_COLLISION, "a long name that exists collides");
     Check(NT_SUCCESS(Create("plain", nullptr, 0)), "create without EAs");
-    CheckEas("small", "$LXUID", UidValue);
-    CheckEas(LongName, "LARGE", Large);
-    Check(IndexEaSize("plain") == 0, "no EA size without EAs");
+    CheckEas("small", "smallref", "$LXUID", UidValue);
+    CheckEas(LongName, std::string(255, 'r'), "LARGE", Large);
+    Check(EntryOf("plain").EaSize == 0, "no EA size without EAs");
     Unmount();
 
     Mount(argv[1]);
-    CheckEas("small", "$LXUID", UidValue);
-    CheckEas(LongName, "LARGE", Large);
+    CheckEas("small", "smallref", "$LXUID", UidValue);
+    CheckEas(LongName, std::string(255, 'r'), "LARGE", Large);
     Unmount();
 
     ULONG FailedCreates = 0;
@@ -221,7 +250,7 @@ main(int argc, char** argv)
             std::exit(1);
         }
         if (NT_SUCCESS(Status))
-            CheckEas(Name, "LARGE", Large);
+            CheckEas(Name, std::string(255, 'r'), "LARGE", Large);
         Unmount();
         if (!Injected)
             break;
