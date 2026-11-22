@@ -113,6 +113,12 @@ private:
 
     bool ListDevicesByConnection(
         );
+    bool ListClasslessDevices(
+        _In_ CClassNode *ClassNode,
+        _In_ bool AddedParent,
+        _Inout_ HTREEITEM *ClassItem
+        );
+
     bool ListDevicesByType(
         );
     bool ListResourcesByType(

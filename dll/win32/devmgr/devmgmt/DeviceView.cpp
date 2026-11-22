@@ -477,6 +477,51 @@ unsigned int __stdcall CDeviceView::RefreshThread(void *Param)
 
 
 bool
+CDeviceView::ListClasslessDevices(
+    _In_ CClassNode *ClassNode,
+    _In_ bool AddedParent,
+    _Inout_ HTREEITEM *ClassItem)
+{
+    WCHAR ClassGuidString[MAX_GUID_STRING_LEN];
+    CDeviceNode *DeviceNode;
+    DEVINST RootInst = 0;
+    ULONG Length;
+    POSITION Pos;
+
+    (void)CM_Locate_DevNodeW(&RootInst, NULL, CM_LOCATE_DEVNODE_NORMAL);
+    Pos = m_DeviceNodeList.GetHeadPosition();
+    while (Pos != NULL)
+    {
+        DeviceNode = m_DeviceNodeList.GetNext(Pos);
+        if (!IsEqualGUID(*DeviceNode->GetClassGuid(), GUID_DEVCLASS_UNKNOWN) ||
+            DeviceNode->GetDeviceInst() == RootInst)
+        {
+            continue;
+        }
+
+        // Only the devices with no class at all: those of the Unknown class are already listed
+        Length = sizeof(ClassGuidString);
+        if (CM_Get_DevNode_Registry_PropertyW(DeviceNode->GetDeviceInst(), CM_DRP_CLASSGUID, NULL,
+                                              ClassGuidString, &Length, 0) == CR_SUCCESS)
+        {
+            continue;
+        }
+        if (DeviceNode->IsHidden() && m_ShowHidden == FALSE)
+            continue;
+
+        if (!AddedParent)
+        {
+            *ClassItem = InsertIntoTreeView(m_hTreeRoot, ClassNode);
+            AddedParent = true;
+        }
+        (void)InsertIntoTreeView(*ClassItem, DeviceNode);
+        if (DeviceNode->HasProblem())
+            (void)TreeView_Expand(m_hTreeView, *ClassItem, TVE_EXPAND);
+    }
+    return AddedParent;
+}
+
+bool
 CDeviceView::ListDevicesByType()
 {
     CClassNode *ClassNode;
@@ -577,6 +622,10 @@ CDeviceView::ListDevicesByType()
                 DeviceIndex++;
 
             } while (MoreItems);
+
+            // A device without a class belongs to no class key; it is listed with the Unknown class ("Other devices")
+            if (IsEqualGUID(ClassGuid, GUID_DEVCLASS_UNKNOWN))
+                AddedParent = ListClasslessDevices(ClassNode, AddedParent, &hTreeItem);
 
             // If this class has devices, sort them alphabetically
             if (AddedParent == true)
