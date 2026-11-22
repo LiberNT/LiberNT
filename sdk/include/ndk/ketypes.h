@@ -2532,7 +2532,11 @@ typedef struct _KTHREAD
 #ifndef _WIN64
     ULONG ContextSwitches;
     volatile UCHAR State;
-    CHAR DecayBoost; // Windows 10 name: Spare12
+    union
+    {
+        CHAR Spare12;
+        CHAR DecayBoost;
+    };
     KIRQL WaitIrql;
     KPROCESSOR_MODE WaitMode;
 #endif
