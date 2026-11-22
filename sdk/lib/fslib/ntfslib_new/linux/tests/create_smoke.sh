@@ -48,6 +48,15 @@ mft_bitmap_bit()
     echo $(((_byte >> (_record % 8)) & 1))
 }
 
+mft_record_base()
+{
+    "$ntfscat" -i 0 "$2" >"$workdir/mft.bin" 2>/dev/null
+    dd if="$workdir/mft.bin" bs=1 skip=$(($1 * 1024 + 32)) count=4 \
+        status=none |
+        od -An -tu4 |
+        tr -d ' '
+}
+
 record_allocation()
 {
     "$ntfsinfo" -i "$1" "$image" |
@@ -246,6 +255,11 @@ cmp "$workdir/names.ours" "$workdir/names.ntfs3g"
 test "$(wc -l <"$workdir/names.ours")" -eq 413
 recovered_record=$("$driver" --create-file "$large" /leaf-rollback.dat)
 test "$recovered_record" -eq $((last_success + 1))
-test "$(mft_bitmap_bit $((recovered_record + 1)) "$large")" = 0
+# The first root child copies the root's descriptor into $Secure, whose
+# crowded base record may move $SDS into an extension record.
+if test "$(mft_bitmap_bit $((recovered_record + 1)) "$large")" = 1; then
+    test "$(mft_record_base $((recovered_record + 1)) "$large")" -eq 9
+fi
+test "$(mft_bitmap_bit $((recovered_record + 2)) "$large")" = 0
 
 "$ntfsfix" -n "$large" >/dev/null
