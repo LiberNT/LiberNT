@@ -60,6 +60,18 @@ POSIX_EDGE_SERIALIZED_FS=1 "$edge" "$mountpoint/t"
 unmount_path "$mountpoint"
 mounted=0
 
+# Stopping the daemon with a file still open stores what its last close would.
+"$frontend" --writable "$image" "$mountpoint" -f &
+daemon=$!
+mounted=1
+wait_mount "$mountpoint"
+exec 3>"$mountpoint/t/held"
+head -c 100000 /dev/zero >&3
+kill -TERM "$daemon"
+wait "$daemon" || true
+exec 3>&-
+mounted=0
+
 "$ntfsfix" -n "$image" >/dev/null
 "$frontend" --check "$image" | grep -q ' errors=0$'
 
@@ -83,6 +95,13 @@ done
 "$frontend" --list-info "$image" /t/extdata | awk '
     $1 == "-" { n++; if ($2 != 262144 || $3 != 262144) { print "extdata: " $2 " " $3; bad = 1 } }
     END { exit bad || n != 2 }' >&2
+"$frontend" --list-info "$image" /t/closenames | awk '
+    $1 == "-" { n++; size[$4] = $2; alloc[$4] = $3; ea[$4] = $5; print "closenames: " $0 }
+    END { exit !(n == 2 && size["a"] == 15000 && alloc["a"] == 16384 && size["b"] == 15000 &&
+                 alloc["b"] == 16384 && ea["a"] == ea["b"] && ea["a"] > 0) }' >&2
+"$frontend" --list-info "$image" /t | awk '
+    $1 == "-" && $4 == "held" { found = 1; if ($2 != 100000 || $3 != 102400) { print "held: " $0; bad = 1 } }
+    END { exit bad || !found }' >&2
 
 "$ntfs3g" "$image" "$checkpoint" -o ro
 checkmounted=1

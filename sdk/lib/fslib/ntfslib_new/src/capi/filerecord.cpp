@@ -220,6 +220,25 @@ NtfsFileRecordSetAutomaticTimestampMask(
         SetAutomaticTimestampMask(Fields);
 }
 
+NTSTATUS
+NtfsFileRecordDeferFileNameUpdates(
+    _In_ PNtfsFileRecord Fr,
+    _In_ BOOLEAN Defer)
+{
+    if (!Fr)
+        return STATUS_INVALID_PARAMETER;
+    return reinterpret_cast<PFileRecord>(Fr)->DeferFileNameUpdates(Defer);
+}
+
+NTSTATUS
+NtfsFileRecordFlushFileNameUpdates(
+    _In_ PNtfsFileRecord Fr)
+{
+    if (!Fr)
+        return STATUS_INVALID_PARAMETER;
+    return reinterpret_cast<PFileRecord>(Fr)->FlushFileNameUpdates();
+}
+
 UINT32
 NtfsFileRecordGetAutomaticTimestampMask(
     _In_ PNtfsFileRecord Fr)

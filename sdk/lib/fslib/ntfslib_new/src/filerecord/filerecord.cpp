@@ -64,6 +64,7 @@ FileRecord::RefreshFrom(_In_ const FileRecord& Record)
 
 FileRecord::~FileRecord()
 {
+    ASSERT(PendingFileNameFields == 0);
     ClearDataRunCache();
     ClearExtentCache();
     if (AttributeListData)
