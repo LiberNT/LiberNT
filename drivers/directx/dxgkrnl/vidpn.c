@@ -3747,6 +3747,7 @@ DxgkpVidPnRebuildForHotPlugGeneration(
     PDXGK_CHILD_PDO_EXTENSION MatchingChild = NULL;
     KIRQL ChildOldIrql;
     BOOLEAN NotifyMonitorEvent = FALSE;
+    BOOLEAN PathsChanged = FALSE;
     NTSTATUS Status;
 
     PAGED_CODE();
@@ -3877,6 +3878,10 @@ DxgkpVidPnRebuildForHotPlugGeneration(
         PDXGKP_VIDPN OutgoingVidPn = (PDXGKP_VIDPN)Adapter->VidPn;
         SIZE_T OldIndex, NewIndex;
 
+        /* An output joining or leaving the desktop changes the display devices win32k attaches */
+        PathsChanged = OutgoingVidPn == NULL || CandidateObject == NULL ||
+                       OutgoingVidPn->NumPaths != CandidateObject->NumPaths;
+
         /* Paths that drive the same output from the same source before and
          * after; a changed transformation on one is announced below. */
         for (NewIndex = 0; OutgoingVidPn != NULL && CandidateObject != NULL &&
@@ -3915,7 +3920,7 @@ DxgkpVidPnRebuildForHotPlugGeneration(
     DxgkpDisplayPublishInitialMode(Adapter);
     DxgkVidPnDestroyDisplayModeCache(Adapter);
     NotifyMonitorEvent = CommitResult.VidPnCommitted &&
-                         (Snapshot->Connected ||
+                         (Snapshot->Connected || PathsChanged ||
                           CommitResult.CommittedWidth != OldCommittedWidth || CommitResult.CommittedHeight != OldCommittedHeight);
     if (CommitResult.CommittedWidth != OldCommittedWidth || CommitResult.CommittedHeight != OldCommittedHeight ||
         (!Snapshot->Connected && !CommitResult.HeadlessDesktop))
@@ -7814,6 +7819,38 @@ DxgkpSyncSourcePrimariesLocked(
         if (!NT_SUCCESS(Status))
             DXGKRNL_WARN("DxgkpSyncSourcePrimaries: source %u target %u failed 0x%08lX\n", SourceId, TargetId, Status);
     }
+}
+
+/* A further source is live once it scans out a primary of its own; that primary's size is the source's mode */
+BOOLEAN
+DxgkVidPnGetSourcePrimarySize(
+    _In_ PDXGKRNL_ADAPTER Adapter,
+    _In_ D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId,
+    _Out_ PULONG Width,
+    _Out_ PULONG Height)
+{
+    PDXGKRNL_SOURCE_PRIMARY Primary;
+    BOOLEAN Live = FALSE;
+
+    PAGED_CODE();
+    ASSERT(Adapter != NULL);
+    *Width = 0;
+    *Height = 0;
+    (VOID)KeWaitForSingleObject(&Adapter->SharedPrimaryMutex, Executive, KernelMode, FALSE, NULL);
+    if (DxgkpSourceUsesSourcePrimary(Adapter, VidPnSourceId))
+    {
+        Primary = &Adapter->SourcePrimaries[VidPnSourceId];
+        if (Primary->AllocationHandle != NULL && Primary->ScannedOut)
+        {
+            ASSERT(Primary->Width != 0);
+            ASSERT(Primary->Height != 0);
+            *Width = Primary->Width;
+            *Height = Primary->Height;
+            Live = TRUE;
+        }
+    }
+    KeReleaseMutex(&Adapter->SharedPrimaryMutex, FALSE);
+    return Live;
 }
 
 NTSTATUS
