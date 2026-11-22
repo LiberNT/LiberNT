@@ -86,51 +86,6 @@ Author:
 #define KTSS_IO_MAPS                            0x68
 
 //
-// KTHREAD Offsets
-//
-#define KTHREAD_DEBUG_ACTIVE                    0x03
-#define KTHREAD_INITIAL_STACK                   0x18
-#define KTHREAD_STACK_LIMIT                     0x1C
-#define KTHREAD_TEB                             0x74
-#define KTHREAD_KERNEL_STACK                    0x20
-#define KTHREAD_ALERTED                         0x5E
-#define KTHREAD_APCSTATE_PROCESS                0x28 + 0x10
-#define KTHREAD_PENDING_USER_APC                0x28 + 0x16
-#define KTHREAD_PENDING_KERNEL_APC              0x28 + 0x15
-#define KTHREAD_CONTEXT_SWITCHES                0x48
-#define KTHREAD_STATE_                          0x4C
-#define KTHREAD_NPX_STATE                       0x4D
-#define KTHREAD_WAIT_IRQL                       0x4E
-#define KTHREAD_NEXT_PROCESSOR                  0x40
-#define KTHREAD_WAIT_REASON                     0x5A
-#define KTHREAD_PRIORITY                        0x5B
-#define KTHREAD_SWAP_BUSY                       0x5D
-#define KTHREAD_SERVICE_TABLE                   0x118
-#define KTHREAD_PREVIOUS_MODE                   0xD7
-#define KTHREAD_COMBINED_APC_DISABLE            0x70
-#define KTHREAD_SPECIAL_APC_DISABLE             0x72
-#define KTHREAD_LARGE_STACK                     0x107
-#define KTHREAD_TRAP_FRAME                      0x110
-#define KTHREAD_CALLBACK_STACK                  0x114
-#define KTHREAD_APC_STATE_INDEX                 0x11C
-#define KTHREAD_STACK_BASE                      0x158
-#define KTHREAD_QUANTUM                         0x15D
-#define KTHREAD_KERNEL_TIME                     0x160
-#define KTHREAD_USER_TIME                       0x18C
-
-//
-// KPROCESS Offsets
-//
-#define KPROCESS_DIRECTORY_TABLE_BASE           0x18
-#define KPROCESS_LDT_DESCRIPTOR0                0x20
-#define KPROCESS_LDT_DESCRIPTOR1                0x24
-#define KPROCESS_INT21_DESCRIPTOR0              0x28
-#define KPROCESS_INT21_DESCRIPTOR1              0x2C
-#define KPROCESS_IOPM_OFFSET                    0x30
-#define KPROCESS_ACTIVE_PROCESSORS              0x34
-#define EPROCESS_VDM_OBJECTS                    0x144
-
-//
 // KTIMER_TABLE Offsets
 //
 #ifdef __ASM__

@@ -364,7 +364,7 @@ KeStartThread(
     if (KiAndProcessorSets(Affinity, KiProcessAffinity(Process), KeActiveProcessors.Bitmap))
     {
         /* TODO: a node's processor mask describes only the first word of processors */
-        Node = KeNodeBlock[Process->IdealNode];
+        Node = KeNodeBlock[KiProcessIdealNode(Process)];
         if ((KeNumberNodes > 1) && (Node != NULL) && ((Affinity[0] & Node->ProcessorMask) != 0))
         {
             KiClearProcessorSet(Narrowed);
@@ -373,11 +373,11 @@ KeStartThread(
         }
 
         /* TODO: ThreadSeed holds only processor numbers below 256 */
-        if (!KiFindProcessorInSet(Affinity, (ULONG)Process->ThreadSeed + 1, &Ideal))
+        if (!KiFindProcessorInSet(Affinity, (ULONG)KiProcessThreadSeed(Process) + 1, &Ideal))
             Ideal = KiLowestSetProcessor(Affinity);
 
         Thread->IdealProcessor = Ideal;
-        Process->ThreadSeed = (UCHAR)Ideal;
+        KiProcessThreadSeed(Process) = (UCHAR)Ideal;
         Thread->UserIdealProcessor = Ideal;
         Thread->NextProcessor = Ideal;
     }

@@ -249,8 +249,8 @@ KeInitializeProcess(
     KiSetProcessPrimaryGroup(Process, KiSelectPrimaryGroup(KiProcessAffinity(Process)));
     Process->BasePriority = (SCHAR)Priority;
     Process->QuantumReset = 6;
-    Process->ThreadSeed = 0;
-    Process->IdealNode = 0;
+    KiProcessThreadSeed(Process) = 0;
+    KiProcessIdealNode(Process) = 0;
     Process->State = ProcessInMemory;
     Process->StackCount = 0;
     Process->ProcessFlags = 0;

@@ -21,8 +21,8 @@ KiSwapProcess(
     LONG SetMember;
 
     SetMember = (LONG)Pcr->SetMember;
-    InterlockedXor((PLONG)&NewProcess->ActiveProcessors, SetMember);
-    InterlockedXor((PLONG)&OldProcess->ActiveProcessors, SetMember);
+    InterlockedXor((PLONG)KiProcessActiveProcessors(NewProcess), SetMember);
+    InterlockedXor((PLONG)KiProcessActiveProcessors(OldProcess), SetMember);
 
     if (NewProcess->LdtDescriptor.LimitLow != OldProcess->LdtDescriptor.LimitLow)
     {

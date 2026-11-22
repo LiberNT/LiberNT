@@ -598,7 +598,7 @@ Ke386IoSetAccessProcess(
 
     Process->IopmOffset = MapOffset;
 
-    TargetProcessors = Process->ActiveProcessors;
+    TargetProcessors = *KiProcessActiveProcessors(Process);
     Prcb = KeGetCurrentPrcb();
     if (TargetProcessors & Prcb->SetMember)
         KeGetPcr()->TSS->IoMapBase = MapOffset;
