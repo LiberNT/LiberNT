@@ -1225,6 +1225,7 @@ DriverUnload(IN PDRIVER_OBJECT DriverObject)
     FreeLDEVImpl();
     FreePDEVImpl();
     FreeDeviceImpl();
+    WddmBridgeCleanup();
     FreeSafeSemaphoreImpl();
     FreeInputImpl();
     FreeTimerImpl();

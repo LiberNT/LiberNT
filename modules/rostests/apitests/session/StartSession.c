@@ -178,7 +178,7 @@ static const char SessionTags[][5] =
 {
     "Gla1", "Gla4", "Gla5", "Gla8", "Gh05", "Gh08", "Gh09", "Gh0:", "Gh0@", "Gh?@",
     "GDev", "Gdev", "Gmdv", "Gldv", "Gsem", "Gpff", "Gfnt", "FNTE", "CDD ", "Usts",
-    "Usdc", "Ussn", "Ussy", "AtoT", "USTR", "TIMB", "Sect"
+    "Usdc", "Ussn", "Ussy", "AtoT", "USTR", "TIMB", "Sect", "File", "DgxA"
 };
 
 static PSYSTEM_POOLTAG_INFORMATION QueryPoolTags(void)
