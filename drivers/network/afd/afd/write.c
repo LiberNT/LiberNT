@@ -859,12 +859,14 @@ AfdCaptureSendAddress(
     return Status;
 }
 
+#define AFD_NO_PEER_PKTINFO (-1)
+
 static NTSTATUS
 AfdConvertSendControl(
     _In_reads_bytes_(Length) const UCHAR *Source,
     _In_ ULONG Length,
     _In_ BOOLEAN Is32Bit,
-    _In_ BOOLEAN ToPeer,
+    _In_ LONG PeerPktInfoLevel,
     _Out_writes_bytes_opt_(*Written) PUCHAR Destination,
     _Out_ PULONG Written)
 {
@@ -873,6 +875,7 @@ AfdConvertSendControl(
     SIZE_T CmsgLength;
     LONG Level, Type;
 
+    ASSERT(PeerPktInfoLevel == AFD_NO_PEER_PKTINFO || PeerPktInfoLevel == IPPROTO_IP || PeerPktInfoLevel == IPPROTO_IPV6);
     for (Offset = 0; Length - Offset >= HeaderLength; Offset += Space)
     {
         if (Is32Bit)
@@ -899,7 +902,8 @@ AfdConvertSendControl(
             return STATUS_INVALID_PARAMETER;
         DataLength = (ULONG)CmsgLength - HeaderLength;
 
-        if (ToPeer && Level == IPPROTO_IP && Type == IP_PKTINFO)
+        if (Level == PeerPktInfoLevel &&
+            Type == (PeerPktInfoLevel == IPPROTO_IP ? IP_PKTINFO : IPV6_PKTINFO))
             continue;
 
         if (Destination)
@@ -918,13 +922,33 @@ AfdConvertSendControl(
     return STATUS_SUCCESS;
 }
 
+static LONG
+AfdPeerPktInfoLevel(
+    _In_ PTRANSPORT_ADDRESS Peer)
+{
+    PTA_ADDRESS Address = Peer->Address;
+    PTDI_ADDRESS_IP6 Ip6;
+    ULONG i;
+
+    if (Address->AddressType != TDI_ADDRESS_TYPE_IP6 || Address->AddressLength < TDI_ADDRESS_LENGTH_IP6)
+        return IPPROTO_IP;
+
+    Ip6 = (PTDI_ADDRESS_IP6)Address->Address;
+    for (i = 0; i < 5; i++)
+    {
+        if (Ip6->sin6_addr[i])
+            return IPPROTO_IPV6;
+    }
+    return Ip6->sin6_addr[5] == 0xFFFF ? IPPROTO_IP : IPPROTO_IPV6;
+}
+
 static NTSTATUS
 AfdCaptureSendControl(
     _In_opt_ PVOID UserControl,
     _In_ LONG UserLength,
     _In_ KPROCESSOR_MODE Mode,
     _In_ BOOLEAN Is32Bit,
-    _In_ BOOLEAN ToPeer,
+    _In_ LONG PeerPktInfoLevel,
     _Out_ PVOID *Control,
     _Out_ PULONG ControlLength,
     _Out_ PNTSTATUS FormatStatus)
@@ -964,7 +988,7 @@ AfdCaptureSendControl(
         return Status;
     }
 
-    *FormatStatus = AfdConvertSendControl(Captured, Length, Is32Bit, ToPeer, NULL, &Needed);
+    *FormatStatus = AfdConvertSendControl(Captured, Length, Is32Bit, PeerPktInfoLevel, NULL, &Needed);
     if (NT_SUCCESS(*FormatStatus) && Needed)
     {
         *Control = ExAllocatePoolWithTag(NonPagedPool, Needed, TAG_AFD_DATA_BUFFER);
@@ -974,7 +998,7 @@ AfdCaptureSendControl(
         }
         else
         {
-            NT_VERIFY(NT_SUCCESS(AfdConvertSendControl(Captured, Length, Is32Bit, ToPeer, *Control, &Written)));
+            NT_VERIFY(NT_SUCCESS(AfdConvertSendControl(Captured, Length, Is32Bit, PeerPktInfoLevel, *Control, &Written)));
             ASSERT(Written == Needed);
             *ControlLength = Needed;
         }
@@ -1072,7 +1096,7 @@ AfdPacketSocketWriteData(PDEVICE_OBJECT DeviceObject, PIRP Irp,
                                    SendReq->TdiConnection.OptionsLength,
                                    LockMode,
                                    AfdIs32bitIoctl(Irp),
-                                   CapturedAddress == NULL,
+                                   CapturedAddress ? AFD_NO_PEER_PKTINFO : AfdPeerPktInfoLevel(RemoteAddress),
                                    &Control,
                                    &ControlLength,
                                    &FormatStatus);

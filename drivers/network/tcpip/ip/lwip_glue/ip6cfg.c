@@ -453,6 +453,107 @@ LibIP6RouteHook(const ip6_addr_t *Source, const ip6_addr_t *Destination)
     return LibIP6BestRouterNetif(NULL, &RouterCost);
 }
 
+static
+BOOLEAN
+LibIP6NetifReaches(struct netif *Netif, const ip6_addr_t *Destination)
+{
+    ULONG RouterCost;
+    s8_t i;
+
+    if (ip6_addr_islinklocal(Destination))
+        return TRUE;
+    for (i = 0; i < LWIP_IPV6_NUM_ADDRESSES; i++)
+    {
+        if (ip6_addr_isvalid(netif_ip6_addr_state(Netif, i)) &&
+            ip6_addr_net_eq(Destination, netif_ip6_addr(Netif, i)))
+            return TRUE;
+    }
+    for (i = 0; i < LWIP_ND6_NUM_PREFIXES; i++)
+    {
+        if (prefix_list[i].netif == Netif && prefix_list[i].invalidation_timer &&
+            ip6_addr_net_eq(Destination, &prefix_list[i].prefix))
+            return TRUE;
+    }
+    return LibIP6LookupRoute(Destination, Netif) != NULL || LibIP6BestRouterNetif(Netif, &RouterCost) != NULL;
+}
+
+static
+BOOLEAN
+LibIP6IsHeldMulticast(const ip6_addr_t *Address)
+{
+    struct netif *netif;
+
+    if (!ip6_addr_ismulticast(Address))
+        return FALSE;
+    NETIF_FOREACH(netif)
+    {
+        if (!netif->state || LibIP6NetifIsLoopback(netif) || !netif_is_up(netif))
+            continue;
+        if (ip6_addr_isallnodes_linklocal(Address) || mld6_lookfor_group(netif, Address))
+            return TRUE;
+    }
+    return FALSE;
+}
+
+NTSTATUS
+LibIP6RoutePktInfo(const ip6_addr_t *Source, ULONG Index, const ip6_addr_t *Destination, struct netif **Netif)
+{
+    BOOLEAN Unspecified = ip6_addr_isany(Source);
+    struct netif *Selected, *Route, *Owner;
+    BOOLEAN Loopback;
+
+    LWIP_ASSERT_CORE_LOCKED();
+    *Netif = NULL;
+
+    if (Index)
+    {
+        Selected = LibIP6FindNetif(Index);
+        if (!Selected)
+            return STATUS_INVALID_PARAMETER;
+        if (!Unspecified && netif_get_ip6_addr_match(Selected, Source) < 0)
+            return STATUS_INVALID_ADDRESS;
+    }
+    else if (!Unspecified)
+    {
+        Selected = LibIP6SourceNetif(Source);
+        if (!Selected)
+            return LibIP6IsHeldMulticast(Source) ? STATUS_INVALID_ADDRESS : STATUS_INVALID_PARAMETER;
+    }
+    else
+    {
+        return STATUS_SUCCESS;
+    }
+
+    ASSERT(Selected->state != NULL);
+    if (ip6_addr_has_zone(Destination) && !ip6_addr_test_zone(Destination, Selected))
+        return STATUS_INVALID_ADDRESS;
+
+    if (!ip6_addr_ismulticast(Destination))
+    {
+        Route = NULL;
+        if (!ip6_addr_islinklocal(Destination))
+        {
+            Route = ip6_route(IP6_ADDR_ANY6, Destination);
+            if (!Route)
+                return STATUS_INVALID_ADDRESS;
+        }
+
+        Loopback = LibIP6NetifIsLoopback(Selected);
+        if (ip6_addr_isloopback(Destination) != Loopback)
+            return Loopback ? STATUS_NETWORK_UNREACHABLE : STATUS_INVALID_ADDRESS;
+
+        if (!Loopback && Route && Route != Selected)
+        {
+            Owner = LibIP6SourceNetif(Destination);
+            if (Owner != Selected && !LibIP6NetifReaches(Selected, Destination))
+                return STATUS_NETWORK_UNREACHABLE;
+        }
+    }
+
+    *Netif = Selected;
+    return STATUS_SUCCESS;
+}
+
 const ip6_addr_t *
 LibIP6GatewayHook(struct netif *Netif, const ip6_addr_t *Destination)
 {

@@ -459,18 +459,29 @@ PNEIGHBOR_CACHE_ENTRY RouteGetRouteFromSource(PIP_ADDRESS Destination, PIP_INTER
     return RouteGetRouteOnInterface(Destination, SourceInterface);
 }
 
-PNEIGHBOR_CACHE_ENTRY RouteGetMulticastRoute(PIP_ADDRESS Destination, ULONG Selector)
+PNEIGHBOR_CACHE_ENTRY RouteGetMulticastRouteOnInterface(PIP_ADDRESS Destination, PIP_INTERFACE Interface)
 {
-    PIP_INTERFACE Interface = GetMulticastInterface(Selector);
     PNEIGHBOR_CACHE_ENTRY Neighbor;
     ULONG Address = DN2H(Destination->Address.IPv4Address);
     UCHAR LinkAddress[6] = {0x01, 0x00, 0x5e, (Address >> 16) & 0x7f,
                            (Address >> 8) & 0xff, Address & 0xff};
-    if (!Interface) return NULL;
+
+    ASSERT(Destination->Type == IP_ADDRESS_V4);
+    ASSERT((Address & 0xf0000000) == 0xe0000000);
     Neighbor = NBLocateNeighbor(Destination, Interface);
     if (!Neighbor && (Interface->AddressLength == sizeof(LinkAddress) || Interface == Loopback))
         Neighbor = NBAddNeighbor(Interface, Destination, Interface == Loopback ? NULL : LinkAddress,
                                  Interface->AddressLength, NUD_PERMANENT, 0);
+    return Neighbor;
+}
+
+PNEIGHBOR_CACHE_ENTRY RouteGetMulticastRoute(PIP_ADDRESS Destination, ULONG Selector)
+{
+    PIP_INTERFACE Interface = GetMulticastInterface(Selector);
+    PNEIGHBOR_CACHE_ENTRY Neighbor;
+
+    if (!Interface) return NULL;
+    Neighbor = RouteGetMulticastRouteOnInterface(Destination, Interface);
     IPDereferenceInterface(Interface);
     return Neighbor;
 }

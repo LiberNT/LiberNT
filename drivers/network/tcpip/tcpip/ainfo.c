@@ -110,6 +110,10 @@ TDI_STATUS SetAddressFileInfo(TDIObjectID *ID,
       case AO_OPTION_IP_RECVTOS:
       case AO_OPTION_IP_RECVECN:
       case AO_OPTION_IP_RECVDSTADDR:
+      case AO_OPTION_IPV6_PKTINFO:
+      case AO_OPTION_IPV6_RECVHOPLIMIT:
+      case AO_OPTION_IPV6_RECVTCLASS:
+      case AO_OPTION_IPV6_RECVECN:
       {
          BOOLEAN Enable;
 
@@ -124,6 +128,10 @@ TDI_STATUS SetAddressFileInfo(TDIObjectID *ID,
             case AO_OPTION_IP_RECVTTL: AddrFile->RecvTtl = Enable; break;
             case AO_OPTION_IP_RECVTOS: AddrFile->RecvTos = Enable; break;
             case AO_OPTION_IP_RECVECN: AddrFile->RecvEcn = Enable; break;
+            case AO_OPTION_IPV6_PKTINFO: AddrFile->RecvPktInfo6 = Enable; break;
+            case AO_OPTION_IPV6_RECVHOPLIMIT: AddrFile->RecvHopLimit6 = Enable; break;
+            case AO_OPTION_IPV6_RECVTCLASS: AddrFile->RecvTclass6 = Enable; break;
+            case AO_OPTION_IPV6_RECVECN: AddrFile->RecvEcn6 = Enable; break;
             default: AddrFile->RecvDstAddr = Enable; break;
          }
          UnlockObject(AddrFile);

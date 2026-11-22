@@ -185,6 +185,8 @@ typedef struct _LIB_UDP_DELIVERY
     IP_ADDRESS DstAddress;
     USHORT SrcPort;
     PIP_INTERFACE Interface;
+    IPv6_HEADER Header;
+    BOOLEAN HaveHeader;
     UINT Size;
     CHAR Data[ANYSIZE_ARRAY];
 } LIB_UDP_DELIVERY, *PLIB_UDP_DELIVERY;
@@ -215,7 +217,8 @@ LibUDPDeliverWorker(PVOID Context)
 
     RtlZeroMemory(&Packet, sizeof(Packet));
     Packet.Type = IP_ADDRESS_V6;
-    Packet.Header = Delivery->Data;
+    Packet.Header = Delivery->HaveHeader ? (PVOID)&Delivery->Header : Delivery->Data;
+    Packet.HeaderSize = Delivery->HaveHeader ? sizeof(Delivery->Header) : 0;
     Packet.Data = Delivery->Data;
     Packet.TotalSize = Delivery->Size;
     Packet.SrcAddr = Delivery->SrcAddress;
@@ -246,6 +249,12 @@ LibUDPRecvCallback(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr
         LibIPAddressFromLwip(ip_current_dest_addr(), &Delivery->DstAddress);
         Delivery->SrcPort = lwip_htons(port);
         Delivery->Interface = ip_current_input_netif() ? ip_current_input_netif()->state : NULL;
+        Delivery->HaveHeader = ip_current_is_v6() && ip6_current_header() != NULL;
+        if (Delivery->HaveHeader)
+        {
+            C_ASSERT(sizeof(Delivery->Header) == IP6_HLEN);
+            RtlCopyMemory(&Delivery->Header, ip6_current_header(), sizeof(Delivery->Header));
+        }
         Delivery->Size = p->tot_len;
         Delivery->AddrFile = AddrFile;
 
@@ -336,66 +345,113 @@ LibUDPClose(PADDRESS_FILE AddrFile)
     (void)tcpip_callback_wait(LibUDPCloseCallback, &msg);
 }
 
+typedef struct _LIB_UDP_SEND
+{
+    PADDRESS_FILE AddrFile;
+    struct pbuf *Packet;
+    ip_addr_t Destination;
+    u16_t Port;
+    const UDP_SEND_CONTROL *Control;
+    NTSTATUS Status;
+    err_t Error;
+} LIB_UDP_SEND, *PLIB_UDP_SEND;
+
 static
 void
 LibUDPSendCallback(void *arg)
 {
-    struct lib_ip_msg *msg = arg;
+    PLIB_UDP_SEND Send = arg;
+    const UDP_SEND_CONTROL *Control = Send->Control;
+    struct udp_pcb *pcb = Send->AddrFile->UdpPcb;
+    struct netif *Netif = NULL;
+    ip_addr_t Source;
+    u8_t Ttl, MulticastTtl, Tos;
 
-    if (!msg->AddrFile->UdpPcb)
+    if (!pcb)
     {
-        msg->Error = ERR_CLSD;
+        Send->Error = ERR_CLSD;
         return;
     }
 
-    msg->Error = udp_sendto(msg->AddrFile->UdpPcb, msg->Packet, &msg->IpAddress, msg->Port);
+    if (Control->PktInfo)
+    {
+        ASSERT(Control->Source.Type == IP_ADDRESS_V6);
+        LibIPAddressToLwip(&Control->Source, &Source);
+        Send->Status = LibIP6RoutePktInfo(ip_2_ip6(&Source), Control->InterfaceIndex,
+                                          ip_2_ip6(&Send->Destination), &Netif);
+        if (!NT_SUCCESS(Send->Status))
+            return;
+    }
+
+    if (Control->DontFragmentSet ? Control->DontFragment : (Send->AddrFile->DF != 0))
+    {
+        struct netif *Route = Netif ? Netif : ip6_route(ip_2_ip6(&pcb->local_ip), ip_2_ip6(&Send->Destination));
+        u16_t Mtu = Route ? nd6_get_destination_mtu(ip_2_ip6(&Send->Destination), Route) : 0;
+
+        if (Mtu && (ULONG)Send->Packet->tot_len + UDP_HLEN + IP6_HLEN > Mtu)
+        {
+            Send->Status = STATUS_BUFFER_OVERFLOW;
+            return;
+        }
+    }
+
+    ASSERT(Control->Ecn <= 2);
+    Ttl = pcb->ttl;
+    MulticastTtl = udp_get_multicast_ttl(pcb);
+    Tos = pcb->tos;
+    if (Control->HopLimit)
+    {
+        pcb->ttl = Control->Ttl;
+        udp_set_multicast_ttl(pcb, Control->Ttl);
+    }
+    pcb->tos = (u8_t)((Tos & ~3) | Control->Ecn);
+
+    if (Netif)
+        Send->Error = udp_sendto_if_src(pcb, Send->Packet, &Send->Destination, Send->Port, Netif, &Source);
+    else
+        Send->Error = udp_sendto(pcb, Send->Packet, &Send->Destination, Send->Port);
+
+    pcb->ttl = Ttl;
+    udp_set_multicast_ttl(pcb, MulticastTtl);
+    pcb->tos = Tos;
 }
 
+static
 NTSTATUS
-LibUDPSendDatagram(PADDRESS_FILE AddrFile, PTDI_CONNECTION_INFORMATION ConnInfo,
-                   PCHAR BufferData, ULONG DataSize, PULONG DataUsed)
+LibUDPSendChunk(PADDRESS_FILE AddrFile, const ip_addr_t *Destination, u16_t Port,
+                PCHAR BufferData, ULONG DataSize, const UDP_SEND_CONTROL *Control)
 {
-    struct lib_ip_msg msg;
-    IP_ADDRESS RemoteAddress, UnmappedAddress;
-    USHORT RemotePort;
-    NTSTATUS Status;
+    LIB_UDP_SEND Send;
 
-    /* FIXME: the send control data in ConnInfo->Options is ignored on IPv6 sockets */
-    Status = AddrGetAddress((PTRANSPORT_ADDRESS)ConnInfo->RemoteAddress, &RemoteAddress, &RemotePort);
-    if (!NT_SUCCESS(Status))
-        return Status;
+    if (DataSize > 0xFFFF - sizeof(UDP_HEADER))
+        return STATUS_BUFFER_OVERFLOW;
 
-    if (RemoteAddress.Type != IP_ADDRESS_V6)
-        return STATUS_INVALID_ADDRESS;
-
-    UnmappedAddress = RemoteAddress;
-    if (TCPUnmapFromDualStack(&UnmappedAddress) && !TCPAddressFileAcceptsMapped(AddrFile))
-        return STATUS_INVALID_ADDRESS;
-
-    if (DataSize > 0xFFFF - 8)
-        return STATUS_INVALID_BUFFER_SIZE;
-
-    msg.Packet = pbuf_alloc(PBUF_TRANSPORT, (u16_t)DataSize, PBUF_RAM);
-    if (!msg.Packet)
+    /* TODO: datagrams whose IPv6 packet exceeds 65535 bytes before fragmentation fail with STATUS_INSUFFICIENT_RESOURCES */
+    Send.Packet = pbuf_alloc(PBUF_TRANSPORT, (u16_t)DataSize, PBUF_RAM);
+    if (!Send.Packet)
         return STATUS_INSUFFICIENT_RESOURCES;
-
+    ASSERT(Send.Packet->tot_len == DataSize);
     if (DataSize)
-        RtlCopyMemory(msg.Packet->payload, BufferData, DataSize);
+        pbuf_take(Send.Packet, BufferData, (u16_t)DataSize);
 
-    msg.AddrFile = AddrFile;
-    msg.Port = lwip_ntohs(RemotePort);
-    msg.Error = ERR_OK;
-    LibIPAddressToLwip(&RemoteAddress, &msg.IpAddress);
+    Send.AddrFile = AddrFile;
+    Send.Destination = *Destination;
+    Send.Port = Port;
+    Send.Control = Control;
+    Send.Status = STATUS_SUCCESS;
+    Send.Error = ERR_OK;
 
-    if (tcpip_callback_wait(LibUDPSendCallback, &msg) != ERR_OK)
-        msg.Error = ERR_MEM;
+    if (tcpip_callback_wait(LibUDPSendCallback, &Send) != ERR_OK)
+        Send.Error = ERR_MEM;
 
-    pbuf_free(msg.Packet);
+    pbuf_free(Send.Packet);
 
-    switch (msg.Error)
+    if (!NT_SUCCESS(Send.Status))
+        return Send.Status;
+
+    switch (Send.Error)
     {
     case ERR_OK:
-        *DataUsed = DataSize;
         return STATUS_SUCCESS;
     case ERR_RTE:
         return STATUS_NETWORK_UNREACHABLE;
@@ -405,6 +461,56 @@ LibUDPSendDatagram(PADDRESS_FILE AddrFile, PTDI_CONNECTION_INFORMATION ConnInfo,
     default:
         return STATUS_INVALID_CONNECTION;
     }
+}
+
+NTSTATUS
+LibUDPSendDatagram(PADDRESS_FILE AddrFile, PTDI_CONNECTION_INFORMATION ConnInfo,
+                   PCHAR BufferData, ULONG DataSize, PULONG DataUsed)
+{
+    IP_ADDRESS RemoteAddress, UnmappedAddress;
+    UDP_SEND_CONTROL Control;
+    ip_addr_t Destination;
+    ULONG SendMsgSize, Offset, Chunk;
+    USHORT RemotePort;
+    NTSTATUS Status;
+
+    Status = AddrGetAddress((PTRANSPORT_ADDRESS)ConnInfo->RemoteAddress, &RemoteAddress, &RemotePort);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (RemoteAddress.Type != IP_ADDRESS_V6)
+        return STATUS_INVALID_ADDRESS;
+
+    UnmappedAddress = RemoteAddress;
+    if (TCPUnmapFromDualStack(&UnmappedAddress))
+    {
+        if (!TCPAddressFileAcceptsMapped(AddrFile))
+            return STATUS_INVALID_ADDRESS;
+        return UDPSendDatagram(AddrFile, ConnInfo, BufferData, DataSize, DataUsed);
+    }
+
+    Status = UDPParseSendControl(ConnInfo, !AddrIsUnspecified(&AddrFile->Address), TRUE, &Control);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    SendMsgSize = Control.SendMsgSizeSet ? Control.SendMsgSize : AddrFile->SendMsgSize;
+    if (SendMsgSize == 0 || SendMsgSize >= DataSize)
+        SendMsgSize = DataSize;
+
+    LibIPAddressToLwip(&RemoteAddress, &Destination);
+    Offset = 0;
+    do
+    {
+        Chunk = min(SendMsgSize, DataSize - Offset);
+        Status = LibUDPSendChunk(AddrFile, &Destination, lwip_ntohs(RemotePort), BufferData + Offset, Chunk, &Control);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Offset += Chunk;
+    } while (Offset < DataSize);
+
+    ASSERT(Offset == DataSize);
+    *DataUsed = DataSize;
+    return STATUS_SUCCESS;
 }
 
 VOID

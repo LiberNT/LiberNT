@@ -287,6 +287,22 @@ GetTdiTypeId(
                 *TdiId = AO_OPTION_DEL_MCAST;
                 return;
 
+             case IPV6_PKTINFO:
+                *TdiId = AO_OPTION_IPV6_PKTINFO;
+                return;
+
+             case IPV6_HOPLIMIT:
+                *TdiId = AO_OPTION_IPV6_RECVHOPLIMIT;
+                return;
+
+             case IPV6_RECVTCLASS:
+                *TdiId = AO_OPTION_IPV6_RECVTCLASS;
+                return;
+
+             case IPV6_RECVECN:
+                *TdiId = AO_OPTION_IPV6_RECVECN;
+                return;
+
              default:
                 break;
           }
@@ -1895,6 +1911,17 @@ WSHSetSocketInformation(
                 if (!OptionValue || OptionLength < sizeof(struct ipv6_mreq))
                     return WSAEFAULT;
                 OptionLength = sizeof(struct ipv6_mreq);
+                break;
+            }
+            if (OptionName == IPV6_PKTINFO || OptionName == IPV6_HOPLIMIT ||
+                OptionName == IPV6_RECVTCLASS || OptionName == IPV6_RECVECN)
+            {
+                if (!OptionValue || OptionLength < 1)
+                    return WSAEFAULT;
+                memcpy(&RecvValue, OptionValue, min(OptionLength, (INT)sizeof(ULONG)));
+                RecvValue = (RecvValue != 0);
+                OptionValue = (PCHAR)&RecvValue;
+                OptionLength = sizeof(ULONG);
                 break;
             }
             if (OptionName != IPV6_V6ONLY)

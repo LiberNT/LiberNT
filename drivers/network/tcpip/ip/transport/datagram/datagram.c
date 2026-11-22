@@ -99,9 +99,48 @@ DGBuildControlData(
     PIP_ADDRESS DstAddress = &Info->DstAddress;
     ULONG Written = 0;
     ULONG PktInfo[2];
+    UCHAR PktInfo6[sizeof(IPv6_RAW_ADDRESS) + sizeof(ULONG)];
     INT Value;
 
-    if (!Buffer || !Info->PacketIsV4 || DstAddress->Type != IP_ADDRESS_V4)
+    if (!Buffer)
+        return 0;
+
+    if (!Info->PacketIsV4 && DstAddress->Type == IP_ADDRESS_V6)
+    {
+        if (AddrFile->RecvPktInfo6)
+        {
+            C_ASSERT(sizeof(PktInfo6) == 20);
+            RtlCopyMemory(PktInfo6, DstAddress->Address.IPv6Address, sizeof(IPv6_RAW_ADDRESS));
+            RtlCopyMemory(PktInfo6 + sizeof(IPv6_RAW_ADDRESS), &Info->InterfaceIndex, sizeof(ULONG));
+            Written += DGAppendControl(Buffer + Written, BufferLength - Written,
+                                       WS_IPPROTO_IPV6, WS_IPV6_PKTINFO, PktInfo6, sizeof(PktInfo6));
+        }
+
+        if (AddrFile->RecvEcn6)
+        {
+            Value = Info->Tos & 3;
+            Written += DGAppendControl(Buffer + Written, BufferLength - Written,
+                                       WS_IPPROTO_IPV6, WS_IPV6_ECN, &Value, sizeof(Value));
+        }
+
+        if (AddrFile->RecvHopLimit6)
+        {
+            Value = Info->Ttl;
+            Written += DGAppendControl(Buffer + Written, BufferLength - Written,
+                                       WS_IPPROTO_IPV6, WS_IPV6_HOPLIMIT, &Value, sizeof(Value));
+        }
+
+        if (AddrFile->RecvTclass6)
+        {
+            Value = Info->Tos;
+            Written += DGAppendControl(Buffer + Written, BufferLength - Written,
+                                       WS_IPPROTO_IPV6, WS_IPV6_TCLASS, &Value, sizeof(Value));
+        }
+
+        return Written;
+    }
+
+    if (!Info->PacketIsV4 || DstAddress->Type != IP_ADDRESS_V4)
         return 0;
 
     if (AddrFile->RecvPktInfo)
@@ -351,8 +390,21 @@ DGDeliverData(
     Info.DstAddress = *DstAddress;
     Info.SrcPort = SrcPort;
     Info.PacketIsV4 = IPPacket->Type == IP_ADDRESS_V4;
-    Info.Ttl = Info.PacketIsV4 ? ((PIPv4_HEADER)IPPacket->Header)->Ttl : 0;
-    Info.Tos = Info.PacketIsV4 ? ((PIPv4_HEADER)IPPacket->Header)->Tos : 0;
+    if (Info.PacketIsV4)
+    {
+        Info.Ttl = ((PIPv4_HEADER)IPPacket->Header)->Ttl;
+        Info.Tos = ((PIPv4_HEADER)IPPacket->Header)->Tos;
+    }
+    else if (IPPacket->Type == IP_ADDRESS_V6 && IPPacket->HeaderSize >= sizeof(IPv6_HEADER))
+    {
+        Info.Ttl = ((PIPv6_HEADER)IPPacket->Header)->HopLimit;
+        Info.Tos = (UCHAR)(DN2H(((PIPv6_HEADER)IPPacket->Header)->VTF) >> 20);
+    }
+    else
+    {
+        Info.Ttl = 0;
+        Info.Tos = 0;
+    }
     Info.InterfaceIndex = Interface ? Interface->Index : 0;
 
     LockObject(AddrFile);
