@@ -419,40 +419,10 @@ typedef struct _LIGATURE ## i { \
 #define X6D 0xB5
 #define Y1D 0x13
 
-struct _LIGATURE1
-{
-    BYTE VirtualKey;
-    WORD ModificationNumber;
-    WCHAR wch[1];
-};
 
-struct _LIGATURE2
-{
-    BYTE VirtualKey;
-    WORD ModificationNumber;
-    WCHAR wch[2];
-};
 
-struct _LIGATURE3
-{
-    BYTE VirtualKey;
-    WORD ModificationNumber;
-    WCHAR wch[3];
-};
 
-struct _LIGATURE4
-{
-    BYTE VirtualKey;
-    WORD ModificationNumber;
-    WCHAR wch[4];
-};
 
-struct _LIGATURE5
-{
-    BYTE VirtualKey;
-    WORD ModificationNumber;
-    WCHAR wch[5];
-};
 
 struct _VK_FUNCTION_PARAM
 {
@@ -460,75 +430,15 @@ struct _VK_FUNCTION_PARAM
     ULONG NLSFEProcParam;
 };
 
-struct _VK_TO_WCHARS1
-{
-    BYTE VirtualKey;
-    BYTE Attributes;
-    WCHAR wch[1];
-};
 
-struct _VK_TO_WCHARS10
-{
-    BYTE VirtualKey;
-    BYTE Attributes;
-    WCHAR wch[10];
-};
 
-struct _VK_TO_WCHARS2
-{
-    BYTE VirtualKey;
-    BYTE Attributes;
-    WCHAR wch[2];
-};
 
-struct _VK_TO_WCHARS3
-{
-    BYTE VirtualKey;
-    BYTE Attributes;
-    WCHAR wch[3];
-};
 
-struct _VK_TO_WCHARS4
-{
-    BYTE VirtualKey;
-    BYTE Attributes;
-    WCHAR wch[4];
-};
 
-struct _VK_TO_WCHARS5
-{
-    BYTE VirtualKey;
-    BYTE Attributes;
-    WCHAR wch[5];
-};
 
-struct _VK_TO_WCHARS6
-{
-    BYTE VirtualKey;
-    BYTE Attributes;
-    WCHAR wch[6];
-};
 
-struct _VK_TO_WCHARS7
-{
-    BYTE VirtualKey;
-    BYTE Attributes;
-    WCHAR wch[7];
-};
 
-struct _VK_TO_WCHARS8
-{
-    BYTE VirtualKey;
-    BYTE Attributes;
-    WCHAR wch[8];
-};
 
-struct _VK_TO_WCHARS9
-{
-    BYTE VirtualKey;
-    BYTE Attributes;
-    WCHAR wch[9];
-};
 
 struct _VK_VSC
 {

@@ -132,9 +132,10 @@ typedef struct {
 typedef UINT64 PHYSICAL_ADDRESS;
 
 ///
+typedef struct _LIST_ENTRY LIST_ENTRY;
+
 /// LIST_ENTRY structure definition.
 ///
-typedef struct _LIST_ENTRY LIST_ENTRY;
 
 ///
 /// _LIST_ENTRY structure definition.

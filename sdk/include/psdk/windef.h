@@ -271,7 +271,7 @@ typedef struct tagPOINTS {
 #define APP_LOCAL_DEVICE_ID_SIZE 32
 #endif
 
-#define _DPI_AWARENESS_CONTEXTS_ 0
+#define _DPI_AWARENESS_CONTEXTS_
 
 
 

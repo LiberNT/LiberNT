@@ -204,6 +204,8 @@ typedef struct _SID_INFO_LIST {
 
 typedef struct IEffectivePermission2Vtbl IEffectivePermission2Vtbl;
 
+typedef struct IEffectivePermission2 IEffectivePermission2;
+
 struct IEffectivePermission2
 {
     struct IEffectivePermission2Vtbl *lpVtbl;
@@ -215,12 +217,16 @@ typedef struct ISecurityInformation2Vtbl ISecurityInformation2Vtbl;
 
 typedef struct ISecurityInformation3Vtbl ISecurityInformation3Vtbl;
 
+typedef struct ISecurityInformation3 ISecurityInformation3;
+
 struct ISecurityInformation3
 {
     struct ISecurityInformation3Vtbl *lpVtbl;
 };
 
 typedef struct ISecurityInformation4Vtbl ISecurityInformation4Vtbl;
+
+typedef struct ISecurityInformation4 ISecurityInformation4;
 
 struct ISecurityInformation4
 {

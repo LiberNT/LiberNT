@@ -33,6 +33,7 @@
 #endif
 
 #include "ntrxdef.h"
+#include "rxcehdlr.h"
 #include "fcbtable.h"
 #include "mrxfcb.h"
 #include "rxworkq.h"

@@ -605,12 +605,6 @@ typedef ULONG_PTR HDRV_CALL;
 #define LINETRANSLATERESULT_NOTRANSLATION 0x00000800
 #endif
 
-typedef struct _NDIS_VAR_DATA_DESC {
-  USHORT Length;
-  USHORT MaximumLength;
-  ULONG_PTR Offset;
-} NDIS_VAR_DATA_DESC, *PNDIS_VAR_DATA_DESC;
-
 typedef struct _LINE_DIAL_PARAMS {
   ULONG ulDialPause;
   ULONG ulDialSpeed;

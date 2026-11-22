@@ -96,7 +96,7 @@ struct _WSDXML_TEXT
 
 struct _WSDXML_ELEMENT_LIST
 {
-    WSDXML_ELEMENT_LIST *Next;
+    struct _WSDXML_ELEMENT_LIST *Next;
     WSDXML_ELEMENT *Element;
 };
 

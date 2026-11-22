@@ -331,33 +331,33 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-BOOLEAN DevicePowerClose(void);
-BOOLEAN DevicePowerEnumDevices(ULONG QueryIndex, ULONG QueryInterpretationFlags, ULONG QueryFlags, PBYTE pReturnBuffer, PULONG pBufferSize);
-BOOLEAN DevicePowerOpen(ULONG DebugMask);
-DWORD DevicePowerSetDeviceState(LPCWSTR DeviceDescription, ULONG SetFlags, PVOID SetData);
-DWORD PowerCanRestoreIndividualDefaultPowerScheme(const GUID *SchemeGuid);
-DWORD PowerGetUserConfiguredACPowerMode(GUID *PowerModeGuid);
-DWORD PowerGetUserConfiguredDCPowerMode(GUID *PowerModeGuid);
-DWORD PowerImportPowerScheme(HKEY RootPowerKey, LPCWSTR ImportFileNamePath, GUID **DestinationSchemeGuid);
-BOOLEAN PowerIsSettingRangeDefined(const GUID *SubKeyGuid, const GUID *SettingGuid);
-DWORD PowerOpenSystemPowerKey(HKEY *phSystemPowerKey, REGSAM Access, BOOL OpenExisting);
-DWORD PowerOpenUserPowerKey(HKEY *phUserPowerKey, REGSAM Access, BOOL OpenExisting);
-DWORD PowerReadIconResourceSpecifier(HKEY RootPowerKey, const GUID *SchemeGuid, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, PUCHAR Buffer, LPDWORD BufferSize);
-DWORD PowerReadPossibleDescription(HKEY RootPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, ULONG PossibleSettingIndex, PUCHAR Buffer, LPDWORD BufferSize);
-DWORD PowerReadPossibleFriendlyName(HKEY RootPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, ULONG PossibleSettingIndex, PUCHAR Buffer, LPDWORD BufferSize);
-DWORD PowerReadPossibleValue(HKEY RootPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, PULONG Type, ULONG PossibleSettingIndex, PUCHAR Buffer, LPDWORD BufferSize);
-DWORD PowerReadSettingAttributes(const GUID *SubGroupGuid, const GUID *PowerSettingGuid);
-DWORD PowerReadValueIncrement(HKEY RootPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, LPDWORD ValueIncrement);
-DWORD PowerReadValueMax(HKEY RootPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, LPDWORD ValueMaximum);
-DWORD PowerReadValueMin(HKEY RootPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, LPDWORD ValueMinimum);
-DWORD PowerReadValueUnitsSpecifier(HKEY RootPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, UCHAR *Buffer, LPDWORD BufferSize);
-DWORD PowerReplaceDefaultPowerSchemes(void);
-DWORD PowerReportThermalEvent(PTHERMAL_EVENT Event);
-DWORD PowerRestoreDefaultPowerSchemes(void);
-DWORD PowerRestoreIndividualDefaultPowerScheme(const GUID *SchemeGuid);
-DWORD PowerSetUserConfiguredACPowerMode(const GUID *PowerModeGuid);
-DWORD PowerSetUserConfiguredDCPowerMode(const GUID *PowerModeGuid);
-DWORD PowerWriteIconResourceSpecifier(HKEY RootPowerKey, const GUID *SchemeGuid, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, UCHAR *Buffer, DWORD BufferSize);
+BOOLEAN STDAPICALLTYPE DevicePowerClose(void);
+BOOLEAN STDAPICALLTYPE DevicePowerEnumDevices(ULONG QueryIndex, ULONG QueryInterpretationFlags, ULONG QueryFlags, PBYTE pReturnBuffer, PULONG pBufferSize);
+BOOLEAN STDAPICALLTYPE DevicePowerOpen(ULONG DebugMask);
+DWORD STDAPICALLTYPE DevicePowerSetDeviceState(LPCWSTR DeviceDescription, ULONG SetFlags, PVOID SetData);
+DWORD STDAPICALLTYPE PowerCanRestoreIndividualDefaultPowerScheme(const GUID *SchemeGuid);
+DWORD STDAPICALLTYPE PowerGetUserConfiguredACPowerMode(GUID *PowerModeGuid);
+DWORD STDAPICALLTYPE PowerGetUserConfiguredDCPowerMode(GUID *PowerModeGuid);
+DWORD STDAPICALLTYPE PowerImportPowerScheme(HKEY RootPowerKey, LPCWSTR ImportFileNamePath, GUID **DestinationSchemeGuid);
+BOOLEAN STDAPICALLTYPE PowerIsSettingRangeDefined(const GUID *SubKeyGuid, const GUID *SettingGuid);
+DWORD STDAPICALLTYPE PowerOpenSystemPowerKey(HKEY *phSystemPowerKey, REGSAM Access, BOOL OpenExisting);
+DWORD STDAPICALLTYPE PowerOpenUserPowerKey(HKEY *phUserPowerKey, REGSAM Access, BOOL OpenExisting);
+DWORD STDAPICALLTYPE PowerReadIconResourceSpecifier(HKEY RootPowerKey, const GUID *SchemeGuid, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, PUCHAR Buffer, LPDWORD BufferSize);
+DWORD STDAPICALLTYPE PowerReadPossibleDescription(HKEY RootPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, ULONG PossibleSettingIndex, PUCHAR Buffer, LPDWORD BufferSize);
+DWORD STDAPICALLTYPE PowerReadPossibleFriendlyName(HKEY RootPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, ULONG PossibleSettingIndex, PUCHAR Buffer, LPDWORD BufferSize);
+DWORD STDAPICALLTYPE PowerReadPossibleValue(HKEY RootPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, PULONG Type, ULONG PossibleSettingIndex, PUCHAR Buffer, LPDWORD BufferSize);
+DWORD STDAPICALLTYPE PowerReadSettingAttributes(const GUID *SubGroupGuid, const GUID *PowerSettingGuid);
+DWORD STDAPICALLTYPE PowerReadValueIncrement(HKEY RootPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, LPDWORD ValueIncrement);
+DWORD STDAPICALLTYPE PowerReadValueMax(HKEY RootPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, LPDWORD ValueMaximum);
+DWORD STDAPICALLTYPE PowerReadValueMin(HKEY RootPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, LPDWORD ValueMinimum);
+DWORD STDAPICALLTYPE PowerReadValueUnitsSpecifier(HKEY RootPowerKey, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, UCHAR *Buffer, LPDWORD BufferSize);
+DWORD STDAPICALLTYPE PowerReplaceDefaultPowerSchemes(void);
+DWORD STDAPICALLTYPE PowerReportThermalEvent(PTHERMAL_EVENT Event);
+DWORD STDAPICALLTYPE PowerRestoreDefaultPowerSchemes(void);
+DWORD STDAPICALLTYPE PowerRestoreIndividualDefaultPowerScheme(const GUID *SchemeGuid);
+DWORD STDAPICALLTYPE PowerSetUserConfiguredACPowerMode(const GUID *PowerModeGuid);
+DWORD STDAPICALLTYPE PowerSetUserConfiguredDCPowerMode(const GUID *PowerModeGuid);
+DWORD STDAPICALLTYPE PowerWriteIconResourceSpecifier(HKEY RootPowerKey, const GUID *SchemeGuid, const GUID *SubGroupOfPowerSettingsGuid, const GUID *PowerSettingGuid, UCHAR *Buffer, DWORD BufferSize);
 
 #ifdef __cplusplus
 }

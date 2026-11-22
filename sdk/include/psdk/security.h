@@ -13,6 +13,8 @@
 #else
 #if (!(defined(UNICODE)))
 #define NEGOSSP_NAME NEGOSSP_NAME_A
+#else
+#define NEGOSSP_NAME NEGOSSP_NAME_W
 #endif
 #endif
 #define NEGOSSP_NAME_A "Negotiate"

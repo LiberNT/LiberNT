@@ -381,7 +381,7 @@ typedef struct _PCI_VENDOR_SPECIFIC_CAPABILITY {
 } PCI_VENDOR_SPECIFIC_CAPABILITY, *PPCI_VENDOR_SPECIFIC_CAPABILITY;
 
 #if (!defined(_DBGRAISEASSERTIONFAILURE_) && !defined(RC_INVOKED) && !defined(MIDL_PASS))
-#define _DBGRAISEASSERTIONFAILURE_ 0
+#define _DBGRAISEASSERTIONFAILURE_
 #endif
 #define ASAN_WARNING_DISABLE_4714_POP
 #define ASAN_WARNING_DISABLE_4714_PUSH
@@ -1095,9 +1095,9 @@ void FASTCALL WriteUInt32Release(volatile UINT32 *Destination, UINT32 Value);
 }
 #endif
 
-#define DECLSPEC_SAFEBUFFERS 0
+#define DECLSPEC_SAFEBUFFERS __declspec(safebuffers)
 
-#define DECLSPEC_GUARDNOCF 0
+#define DECLSPEC_GUARDNOCF __declspec(guard(nocf))
 
 #if (defined(_AMD64_)) && (defined(_M_AMD64) && !defined(RC_INVOKED) && !defined(MIDL_PASS)) && (!defined(_M_ARM64EC))
 #define CacheLineFlush(Address) _mm_clflush(Address)

@@ -20,6 +20,9 @@
 #ifndef __WINE_RICHEDIT_H
 #define __WINE_RICHEDIT_H
 
+#include <wtypes.h>
+#include <objbase.h>
+
 #pragma pack(push, 4)
 
 #ifdef __cplusplus
@@ -1034,12 +1037,15 @@ typedef LONG (*EDITWORDBREAKPROCEX)(char*,LONG,BYTE,INT);
 #endif
 
 /* options of the EM_SETTEXTMODE message */
-#define TM_PLAINTEXT          0x00000001
-#define TM_RICHTEXT           0x00000002
-#define TM_SINGLELEVELUNDO    0x00000004
-#define TM_MULTILEVELUNDO     0x00000008
-#define TM_SINGLECODEPAGE     0x00000010
-#define TM_MULTICODEPAGE      0x00000020
+typedef enum tagTextMode
+{
+    TM_PLAINTEXT       = 0x00000001,
+    TM_RICHTEXT        = 0x00000002,
+    TM_SINGLELEVELUNDO = 0x00000004,
+    TM_MULTILEVELUNDO  = 0x00000008,
+    TM_SINGLECODEPAGE  = 0x00000010,
+    TM_MULTICODEPAGE   = 0x00000020
+} TEXTMODE;
 
 /* GETTEXTEX structure flags */
 #define GT_DEFAULT            0x00000000
@@ -1452,12 +1458,7 @@ struct _findtextw
 
 typedef int (WINAPI *AutoCorrectProc)(LANGID, const WCHAR *, WCHAR *, LONG, LONG *);
 
-enum tagTextMode
-{
 
-};
-
-typedef enum tagTextMode TEXTMODE;
 
 #pragma pack(push, 4)
 struct _clipboardformat

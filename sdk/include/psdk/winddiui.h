@@ -272,10 +272,10 @@ extern "C" {
 BOOL WINAPI DrvConvertDevMode(LPTSTR pPrinterName, PDEVMODE pdmIn, PDEVMODE pdmOut, PLONG pcbNeeded, DWORD fMode);
 BOOL WINAPI DrvQueryColorProfile(HANDLE hPrinter, PDEVMODEW pdevmode, ULONG ulQueryMode, void *pvProfileData, ULONG *pcbProfileData, FLONG *pflProfileData);
 BOOL WINAPI DrvQueryJobAttributes(HANDLE hPrinter, PDEVMODE pDevMode, DWORD dwLevel, LPBYTE lpAttributeInfo);
-void DrvSplAbort(HANDLE hDriver);
-void DrvSplClose(HANDLE hDriver);
+void WINAPI DrvSplAbort(HANDLE hDriver);
+void WINAPI DrvSplClose(HANDLE hDriver);
 DWORD DrvSplDeviceCaps(HANDLE hPrinter, PWSTR pszDeviceName, WORD Capability, PVOID pOutput, DWORD cchBufSize, PDEVMODE pDevmode);
-void DrvSplEndDoc(HANDLE hDriver);
+void WINAPI DrvSplEndDoc(HANDLE hDriver);
 BOOL WINAPI DrvSplEndPage(HANDLE hDriver);
 HANDLE WINAPI DrvSplStartDoc(HANDLE hPrinter, DWORD JobId);
 BOOL WINAPI DrvSplStartPage(HANDLE hDriver);

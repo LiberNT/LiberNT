@@ -44,13 +44,8 @@ interface IObjectSafety : IUnknown
 				      [in] DWORD dwEnabledOptions);
 }
 
-cpp_quote("struct IObjectSafetyVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IObjectSafety *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IObjectSafety *);")
-cpp_quote("    ULONG (WINAPI *Release)(IObjectSafety *);")
-cpp_quote("    HRESULT (WINAPI *GetInterfaceSafetyOptions)(IObjectSafety *, const IID *const , DWORD *, DWORD *);")
-cpp_quote("    HRESULT (WINAPI *SetInterfaceSafetyOptions)(IObjectSafety *, const IID *const , DWORD, DWORD);")
-cpp_quote("};")
+cpp_quote("#ifndef __objsafe_cpp_quote_1_DEFINED__")
+cpp_quote("#define __objsafe_cpp_quote_1_DEFINED__")
 cpp_quote("")
 cpp_quote("typedef IObjectSafety *LPOBJECTSAFETY;")
+cpp_quote("#endif")

@@ -110,13 +110,13 @@ HRESULT WINAPI CLSIDFromProgIDEx(LPCOLESTR lpszProgID, LPCLSID lpclsid);
 HRESULT WINAPI CoGetCallerTID(LPDWORD lpdwTID);
 
 /* TODO: LiberNT does not implement the functions below yet */
-HRESULT CoAllowUnmarshalerCLSID(const IID *const clsid);
-HRESULT CoInvalidateRemoteMachineBindings(LPOLESTR pszMachineName);
-HRESULT CoRegisterDeviceCatalog(PCWSTR deviceInstanceId, CO_DEVICE_CATALOG_COOKIE *cookie);
-HRESULT CoRevokeDeviceCatalog(CO_DEVICE_CATALOG_COOKIE cookie);
-HRESULT CoSetCancelObject(IUnknown *pUnk);
-HRESULT CoTestCancel(void);
-HRESULT CoWaitForMultipleObjects(DWORD dwFlags, DWORD dwTimeout, ULONG cHandles, const HANDLE *pHandles, LPDWORD lpdwindex);
+HRESULT STDAPICALLTYPE CoAllowUnmarshalerCLSID(const IID *const clsid);
+HRESULT STDAPICALLTYPE CoInvalidateRemoteMachineBindings(LPOLESTR pszMachineName);
+HRESULT STDAPICALLTYPE CoRegisterDeviceCatalog(PCWSTR deviceInstanceId, CO_DEVICE_CATALOG_COOKIE *cookie);
+HRESULT STDAPICALLTYPE CoRevokeDeviceCatalog(CO_DEVICE_CATALOG_COOKIE cookie);
+HRESULT STDAPICALLTYPE CoSetCancelObject(IUnknown *pUnk);
+HRESULT STDAPICALLTYPE CoTestCancel(void);
+HRESULT STDAPICALLTYPE CoWaitForMultipleObjects(DWORD dwFlags, DWORD dwTimeout, ULONG cHandles, const HANDLE *pHandles, LPDWORD lpdwindex);
 
 #ifdef __cplusplus
 }

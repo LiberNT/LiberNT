@@ -569,12 +569,6 @@ typedef struct _STORAGE_FIRMWARE_INFO_V2 {
     STORAGE_FIRMWARE_SLOT_INFO_V2 Slot[0];
 } STORAGE_FIRMWARE_INFO_V2, *PSTORAGE_FIRMWARE_INFO_V2;
 
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* _NTDDSCSIH_ */
-
 #ifndef BOOT_PARTITION_FUNCTION_ACTIVATE
 #define BOOT_PARTITION_FUNCTION_ACTIVATE 0x02
 #endif
@@ -796,6 +790,7 @@ typedef struct _STORAGE_FIRMWARE_INFO_V2 {
 #endif
 #ifndef STORAGE_FIRMWARE_INFO_STRUCTURE_VERSION
 #define STORAGE_FIRMWARE_INFO_STRUCTURE_VERSION 0x1
+#endif
 
 typedef enum _MP_STORAGE_DIAGNOSTIC_LEVEL {
     MpStorageDiagnosticLevelDefault = 0,
@@ -1201,4 +1196,8 @@ typedef struct _STORAGE_FIRMWARE_INFO *PSTORAGE_FIRMWARE_INFO;
 
 typedef struct _STORAGE_FIRMWARE_INFO STORAGE_FIRMWARE_INFO;
 
+#ifdef __cplusplus
+}
 #endif
+
+#endif /* _NTDDSCSIH_ */

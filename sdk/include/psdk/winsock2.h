@@ -2740,7 +2740,6 @@ typedef struct timeval FAR *LPTIMEVAL;
 #endif
 #endif */
 
-#endif /* !(defined _WINSOCK2API_ || defined _WINSOCKAPI_) */
 
 #ifndef LUP_API_ANSI
 #define LUP_API_ANSI 0x01000000
@@ -2828,6 +2827,7 @@ typedef struct timeval FAR *LPTIMEVAL;
 #endif
 #ifndef WSA_FLAG_REGISTERED_IO
 #define WSA_FLAG_REGISTERED_IO 0x100
+#endif
 
 #if (!(((defined(_WINSOCK_DEPRECATED_NO_WARNINGS) || defined(BUILD_WINDOWS)) && !defined(_WINSOCK_DEPRECATE_WARNINGS)) || defined(MIDL_PASS)))
 #define _WINSOCK_DEPRECATED __declspec(deprecated("Define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings"))
@@ -2845,7 +2845,7 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-int GetHostNameW(PWSTR name, int namelen);
+WINSOCK_API_LINKAGE int WSAAPI GetHostNameW(PWSTR name, int namelen);
 #if (!defined(NO_EXTRA_HTON_FUNCTIONS) && !defined(__midl) && (defined(INCL_EXTRA_HTON_FUNCTIONS) || NTDDI_VERSION>=NTDDI_WIN8))
 unsigned long long htond(double Value);
 unsigned int htonf(float Value);
@@ -2854,8 +2854,15 @@ double ntohd(unsigned long long Value);
 float ntohf(unsigned int Value);
 unsigned long long ntohll(unsigned long long Value);
 #endif
-#if (!defined(__midl))
-UINT32 SocketNotificationRetrieveEvents(OVERLAPPED_ENTRY *notification);
+/* FIXME: Windows needs no _MINWINBASE_ check here; LiberNT users built with _INC_WINDOWS lack OVERLAPPED_ENTRY */
+#if (!defined(__midl)) && defined(_MINWINBASE_)
+FORCEINLINE
+UINT32
+SocketNotificationRetrieveEvents(
+    _In_ OVERLAPPED_ENTRY *notification)
+{
+    return (UINT32)notification->dwNumberOfBytesTransferred;
+}
 #endif
 
 #ifdef __cplusplus
@@ -2868,4 +2875,4 @@ UINT32 SocketNotificationRetrieveEvents(OVERLAPPED_ENTRY *notification);
 #endif
 #define SOMAXCONN_HINT(b) (- (b))
 
-#endif
+#endif /* !(defined _WINSOCK2API_ || defined _WINSOCKAPI_) */

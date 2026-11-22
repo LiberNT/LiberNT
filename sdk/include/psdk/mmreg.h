@@ -837,54 +837,6 @@ typedef struct tagEXBMINFOHEADER {
 
 #pragma pack(pop)
 
-#endif /* __WINE_MMREG_H */
-
-#else /* __WIDL__ */
-
-cpp_quote("#if 0")
-#pragma pack(push, 1)
-
-typedef struct tWAVEFORMATEX {
-    WORD wFormatTag;
-    WORD nChannels;
-    DWORD nSamplesPerSec;
-    DWORD nAvgBytesPerSec;
-    WORD nBlockAlign;
-    WORD wBitsPerSample;
-    WORD cbSize;
-    [size_is(cbSize)] BYTE pExtraBytes[];
-} WAVEFORMATEX, *PWAVEFORMATEX, *NPWAVEFORMATEX, *LPWAVEFORMATEX;
-
-typedef struct {
-    WORD wFormatTag;
-    WORD nChannels;
-    DWORD nSamplesPerSec;
-    DWORD nAvgBytesPerSec;
-    WORD nBlockAlign;
-    WORD wBitsPerSample;
-    WORD cbSize;
-    WORD wValidBitsPerSample;
-    DWORD dwChannelMask;
-    GUID SubFormat;
-} WAVEFORMATEXTENSIBLE, *PWAVEFORMATEXTENSIBLE;
-
-typedef struct {
-	WAVEFORMATEX wfx;
-	WORD fwHeadLayer;
-	DWORD dwHeadBitrate;
-	WORD fwHeadMode;
-	WORD fwHeadModeExt;
-	WORD wHeadEmphasis;
-	WORD fwHeadFlags;
-	DWORD dwPTSLow;
-	DWORD dwPTSHigh;
-} MPEG1WAVEFORMAT;
-
-#pragma pack(pop)
-cpp_quote("#endif")
-
-#endif /* __WIDL__ */
-
 #ifndef AVIIF_CONTROLFRAME
 #define AVIIF_CONTROLFRAME 0x00000200L
 #endif
@@ -6623,11 +6575,16 @@ cpp_quote("#endif")
 #endif
 #ifndef WAVE_FORMAT_WMAVOICE10
 #define WAVE_FORMAT_WMAVOICE10 0x000B
+#endif
 
+#ifndef __WIDL__
 typedef HEAACWAVEFORMAT * LPHEAACWAVEFORMAT;
+#endif
 typedef HEAACWAVEINFO * LPHEAACWAVEINFO;
 typedef G721_ADPCMWAVEFORMAT * NPG721_ADPCMWAVEFORMAT;
+#ifndef __WIDL__
 typedef HEAACWAVEFORMAT * NPHEAACWAVEFORMAT;
+#endif
 typedef HEAACWAVEINFO * NPHEAACWAVEINFO;
 
 #if (!defined(__midl))
@@ -6822,4 +6779,50 @@ struct tagJPEGINFOHEADER
 #pragma pack(pop)
 #endif
 
-#endif
+#endif /* __WINE_MMREG_H */
+
+#else /* __WIDL__ */
+
+cpp_quote("#if 0")
+#pragma pack(push, 1)
+
+typedef struct tWAVEFORMATEX {
+    WORD wFormatTag;
+    WORD nChannels;
+    DWORD nSamplesPerSec;
+    DWORD nAvgBytesPerSec;
+    WORD nBlockAlign;
+    WORD wBitsPerSample;
+    WORD cbSize;
+    [size_is(cbSize)] BYTE pExtraBytes[];
+} WAVEFORMATEX, *PWAVEFORMATEX, *NPWAVEFORMATEX, *LPWAVEFORMATEX;
+
+typedef struct {
+    WORD wFormatTag;
+    WORD nChannels;
+    DWORD nSamplesPerSec;
+    DWORD nAvgBytesPerSec;
+    WORD nBlockAlign;
+    WORD wBitsPerSample;
+    WORD cbSize;
+    WORD wValidBitsPerSample;
+    DWORD dwChannelMask;
+    GUID SubFormat;
+} WAVEFORMATEXTENSIBLE, *PWAVEFORMATEXTENSIBLE;
+
+typedef struct {
+	WAVEFORMATEX wfx;
+	WORD fwHeadLayer;
+	DWORD dwHeadBitrate;
+	WORD fwHeadMode;
+	WORD fwHeadModeExt;
+	WORD wHeadEmphasis;
+	WORD fwHeadFlags;
+	DWORD dwPTSLow;
+	DWORD dwPTSHigh;
+} MPEG1WAVEFORMAT;
+
+#pragma pack(pop)
+cpp_quote("#endif")
+
+#endif /* __WIDL__ */

@@ -181,11 +181,11 @@ enum msidbComponentAttributes
     msidbComponentAttributesShared = 0x800,
 };
 
-enum msidbODBCDataSourceRegistration
+typedef enum _msidbODBCDataSourceRegistration
 {
     msidbODBCDataSourceRegistrationPerMachine = 0x00000000,
     msidbODBCDataSourceRegistrationPerUser = 0x00000001
-};
+} msidbODBCDataSourceRegistration;
 
 enum msidbRegistryRoot
 {
@@ -195,13 +195,13 @@ enum msidbRegistryRoot
     msidbRegistryRootUsers = 3,
 };
 
-enum msidbLocatorType
+typedef enum _msidbLocatorType
 {
     msidbLocatorTypeDirectory = 0x000,
     msidbLocatorTypeFileName = 0x001,
     msidbLocatorTypeRawValue = 0x002,
     msidbLocatorType64bit = 0x010,
-};
+} msidbLocatorType;
 
 enum msidbServiceControlEvent
 {
@@ -244,7 +244,7 @@ enum msidbRemoveFileInstallMode
     msidbRemoveFileInstallModeOnBoth = 0x00000003,
 };
 
-enum
+enum _msidbIniFileAction
 {
     msidbIniFileActionAddLine    = 0x00000000,
     msidbIniFileActionCreateLine = 0x00000001,
@@ -559,20 +559,8 @@ enum msirbRebootType {
 #define IPROPVALUE_RBCOST_PROMPT TEXT("P")
 #define IPROPVALUE_RBCOST_SILENT TEXT("D")
 
-enum _msidbIniFileAction
-{
 
-};
 
-enum _msidbLocatorType
-{
-
-};
-
-enum _msidbODBCDataSourceRegistration
-{
-
-};
 
 typedef enum _msidbIniFileAction msidbIniFileAction;
 

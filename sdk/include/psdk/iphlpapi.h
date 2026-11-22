@@ -243,27 +243,29 @@ DWORD WINAPI DisableMediaSense(HANDLE *pHandle, OVERLAPPED *pOverLapped);
 ULONG WINAPI GetTcpTable2(PMIB_TCPTABLE2 TcpTable, PULONG SizePointer, BOOL Order);
 
 /* TODO: LiberNT does not implement the functions below yet */
-void CancelIfTimestampConfigChange(HIFTIMESTAMPCHANGE NotificationHandle);
-DWORD CaptureInterfaceHardwareCrossTimestamp(const NET_LUID *InterfaceLuid, PINTERFACE_HARDWARE_CROSSTIMESTAMP CrossTimestamp);
-ULONG CreatePersistentTcpPortReservation(USHORT StartPort, USHORT NumberOfPorts, PULONG64 Token);
-ULONG CreatePersistentUdpPortReservation(USHORT StartPort, USHORT NumberOfPorts, PULONG64 Token);
-ULONG DeletePersistentTcpPortReservation(USHORT StartPort, USHORT NumberOfPorts);
-ULONG DeletePersistentUdpPortReservation(USHORT StartPort, USHORT NumberOfPorts);
-PIP_ADAPTER_ORDER_MAP GetAdapterOrderMap(void);
-DWORD GetInterfaceActiveTimestampCapabilities(const NET_LUID *InterfaceLuid, PINTERFACE_TIMESTAMP_CAPABILITIES TimestampCapabilites);
-DWORD GetInterfaceCurrentTimestampCapabilities(const NET_LUID *InterfaceLuid, PINTERFACE_TIMESTAMP_CAPABILITIES TimestampCapabilites);
-DWORD GetInterfaceHardwareTimestampCapabilities(const NET_LUID *InterfaceLuid, PINTERFACE_TIMESTAMP_CAPABILITIES TimestampCapabilites);
-DWORD GetInterfaceSupportedTimestampCapabilities(const NET_LUID *InterfaceLuid, PINTERFACE_TIMESTAMP_CAPABILITIES TimestampCapabilites);
-DWORD GetIpErrorString(IP_STATUS ErrorCode, PWSTR Buffer, PDWORD Size);
+IPHLPAPI_DLL_LINKAGE void WINAPI CancelIfTimestampConfigChange(HIFTIMESTAMPCHANGE NotificationHandle);
+IPHLPAPI_DLL_LINKAGE DWORD WINAPI CaptureInterfaceHardwareCrossTimestamp(const NET_LUID *InterfaceLuid, PINTERFACE_HARDWARE_CROSSTIMESTAMP CrossTimestamp);
+IPHLPAPI_DLL_LINKAGE ULONG WINAPI CreatePersistentTcpPortReservation(USHORT StartPort, USHORT NumberOfPorts, PULONG64 Token);
+IPHLPAPI_DLL_LINKAGE ULONG WINAPI CreatePersistentUdpPortReservation(USHORT StartPort, USHORT NumberOfPorts, PULONG64 Token);
+IPHLPAPI_DLL_LINKAGE ULONG WINAPI DeletePersistentTcpPortReservation(USHORT StartPort, USHORT NumberOfPorts);
+IPHLPAPI_DLL_LINKAGE ULONG WINAPI DeletePersistentUdpPortReservation(USHORT StartPort, USHORT NumberOfPorts);
+IPHLPAPI_DLL_LINKAGE PIP_ADAPTER_ORDER_MAP WINAPI GetAdapterOrderMap(void);
+IPHLPAPI_DLL_LINKAGE DWORD WINAPI GetInterfaceActiveTimestampCapabilities(const NET_LUID *InterfaceLuid, PINTERFACE_TIMESTAMP_CAPABILITIES TimestampCapabilites);
+IPHLPAPI_DLL_LINKAGE DWORD WINAPI GetInterfaceCurrentTimestampCapabilities(const NET_LUID *InterfaceLuid, PINTERFACE_TIMESTAMP_CAPABILITIES TimestampCapabilites);
+IPHLPAPI_DLL_LINKAGE DWORD WINAPI GetInterfaceHardwareTimestampCapabilities(const NET_LUID *InterfaceLuid, PINTERFACE_TIMESTAMP_CAPABILITIES TimestampCapabilites);
+IPHLPAPI_DLL_LINKAGE DWORD WINAPI GetInterfaceSupportedTimestampCapabilities(const NET_LUID *InterfaceLuid, PINTERFACE_TIMESTAMP_CAPABILITIES TimestampCapabilites);
+IPHLPAPI_DLL_LINKAGE DWORD WINAPI GetIpErrorString(IP_STATUS ErrorCode, PWSTR Buffer, PDWORD Size);
 DWORD GetOwnerModuleFromPidAndInfo(ULONG ulPid, ULONGLONG *pInfo, TCPIP_OWNER_MODULE_INFO_CLASS Class, PVOID pBuffer, PDWORD pdwSize);
-ULONG GetTcpStatisticsEx2(PMIB_TCPSTATS2 Statistics, ULONG Family);
-ULONG GetUdpStatisticsEx2(PMIB_UDPSTATS2 Statistics, ULONG Family);
-ULONG LookupPersistentTcpPortReservation(USHORT StartPort, USHORT NumberOfPorts, PULONG64 Token);
-ULONG LookupPersistentUdpPortReservation(USHORT StartPort, USHORT NumberOfPorts, PULONG64 Token);
-DWORD NotifyIfTimestampConfigChange(PVOID CallerContext, PINTERFACE_TIMESTAMP_CONFIG_CHANGE_CALLBACK Callback, HIFTIMESTAMPCHANGE *NotificationHandle);
-DWORD RegisterInterfaceTimestampConfigChange(PINTERFACE_TIMESTAMP_CONFIG_CHANGE_CALLBACK Callback, PVOID CallerContext, HIFTIMESTAMPCHANGE *NotificationHandle);
-ULONG SetIpStatisticsEx(PMIB_IPSTATS Statistics, ULONG Family);
-void UnregisterInterfaceTimestampConfigChange(HIFTIMESTAMPCHANGE NotificationHandle);
+#if (NTDDI_VERSION >= NTDDI_WIN10_RS3)
+IPHLPAPI_DLL_LINKAGE ULONG WINAPI GetTcpStatisticsEx2(PMIB_TCPSTATS2 Statistics, ULONG Family);
+IPHLPAPI_DLL_LINKAGE ULONG WINAPI GetUdpStatisticsEx2(PMIB_UDPSTATS2 Statistics, ULONG Family);
+#endif
+IPHLPAPI_DLL_LINKAGE ULONG WINAPI LookupPersistentTcpPortReservation(USHORT StartPort, USHORT NumberOfPorts, PULONG64 Token);
+IPHLPAPI_DLL_LINKAGE ULONG WINAPI LookupPersistentUdpPortReservation(USHORT StartPort, USHORT NumberOfPorts, PULONG64 Token);
+IPHLPAPI_DLL_LINKAGE DWORD WINAPI NotifyIfTimestampConfigChange(PVOID CallerContext, PINTERFACE_TIMESTAMP_CONFIG_CHANGE_CALLBACK Callback, HIFTIMESTAMPCHANGE *NotificationHandle);
+IPHLPAPI_DLL_LINKAGE DWORD WINAPI RegisterInterfaceTimestampConfigChange(PINTERFACE_TIMESTAMP_CONFIG_CHANGE_CALLBACK Callback, PVOID CallerContext, HIFTIMESTAMPCHANGE *NotificationHandle);
+IPHLPAPI_DLL_LINKAGE ULONG WINAPI SetIpStatisticsEx(PMIB_IPSTATS Statistics, ULONG Family);
+IPHLPAPI_DLL_LINKAGE void WINAPI UnregisterInterfaceTimestampConfigChange(HIFTIMESTAMPCHANGE NotificationHandle);
 
 #ifdef __cplusplus
 }

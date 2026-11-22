@@ -183,6 +183,7 @@ AppPolicyGetMediaFoundationCodecLoading(
 
 #ifndef PACKAGE_DEPENDENCY_RANK_DEFAULT
 #define PACKAGE_DEPENDENCY_RANK_DEFAULT 0
+#endif
 typedef enum _PackageOrigin {
     PackageOrigin_Unknown = 0,
     PackageOrigin_Unsigned = 1,
@@ -326,54 +327,53 @@ LONG WINAPI ParseApplicationUserModelId(PCWSTR applicationUserModelId, UINT32 *p
 /* TODO: LiberNT does not implement the functions below yet */
 typedef struct PACKAGEDEPENDENCY_CONTEXT__ *PACKAGEDEPENDENCY_CONTEXT;
 
-HRESULT AddPackageDependency(PCWSTR packageDependencyId, INT32 rank, AddPackageDependencyOptions options, PACKAGEDEPENDENCY_CONTEXT *packageDependencyContext, PWSTR *packageFullName);
-HRESULT AddPackageDependency2(PCWSTR packageDependencyId, INT32 rank, AddPackageDependencyOptions2 options, PACKAGEDEPENDENCY_CONTEXT *packageDependencyContext, PWSTR *packageFullName);
-LONG AppPolicyGetClrCompat(HANDLE processToken, AppPolicyClrCompat *policy);
-LONG AppPolicyGetCreateFileAccess(HANDLE processToken, AppPolicyCreateFileAccess *policy);
-LONG AppPolicyGetLifecycleManagement(HANDLE processToken, AppPolicyLifecycleManagement *policy);
-HRESULT CheckIsMSIXPackage(PCWSTR packageFullName, BOOL *isMSIXPackage);
-HRESULT DeletePackageDependency(PCWSTR packageDependencyId);
-HRESULT FindPackageDependency(const FindPackageDependencyCriteria *findPackageDependencyCriteria, UINT32 *packageDependencyIdsCount, PWSTR **packageDependencyIds);
-LONG FormatApplicationUserModelId(PCWSTR packageFamilyName, PCWSTR packageRelativeApplicationId, UINT32 *applicationUserModelIdLength, PWSTR applicationUserModelId);
-LONG GetApplicationUserModelId(HANDLE hProcess, UINT32 *applicationUserModelIdLength, PWSTR applicationUserModelId);
-LONG GetCurrentPackageInfo2(const UINT32 flags, PackagePathType packagePathType, UINT32 *bufferLength, BYTE *buffer, UINT32 *count);
-LONG GetCurrentPackagePath2(PackagePathType packagePathType, UINT32 *pathLength, PWSTR path);
-HRESULT GetIdForPackageDependencyContext(PACKAGEDEPENDENCY_CONTEXT packageDependencyContext, PWSTR *packageDependencyId);
+WINBASEAPI HRESULT WINAPI AddPackageDependency(PCWSTR packageDependencyId, INT32 rank, AddPackageDependencyOptions options, PACKAGEDEPENDENCY_CONTEXT *packageDependencyContext, PWSTR *packageFullName);
+WINBASEAPI HRESULT WINAPI AddPackageDependency2(PCWSTR packageDependencyId, INT32 rank, AddPackageDependencyOptions2 options, PACKAGEDEPENDENCY_CONTEXT *packageDependencyContext, PWSTR *packageFullName);
+WINBASEAPI LONG WINAPI AppPolicyGetClrCompat(HANDLE processToken, AppPolicyClrCompat *policy);
+WINBASEAPI LONG WINAPI AppPolicyGetCreateFileAccess(HANDLE processToken, AppPolicyCreateFileAccess *policy);
+WINBASEAPI LONG WINAPI AppPolicyGetLifecycleManagement(HANDLE processToken, AppPolicyLifecycleManagement *policy);
+WINBASEAPI HRESULT WINAPI CheckIsMSIXPackage(PCWSTR packageFullName, BOOL *isMSIXPackage);
+WINBASEAPI HRESULT WINAPI DeletePackageDependency(PCWSTR packageDependencyId);
+WINBASEAPI HRESULT WINAPI FindPackageDependency(const FindPackageDependencyCriteria *findPackageDependencyCriteria, UINT32 *packageDependencyIdsCount, PWSTR **packageDependencyIds);
+WINBASEAPI LONG WINAPI FormatApplicationUserModelId(PCWSTR packageFamilyName, PCWSTR packageRelativeApplicationId, UINT32 *applicationUserModelIdLength, PWSTR applicationUserModelId);
+WINBASEAPI LONG WINAPI GetApplicationUserModelId(HANDLE hProcess, UINT32 *applicationUserModelIdLength, PWSTR applicationUserModelId);
+WINBASEAPI LONG WINAPI GetCurrentPackageInfo2(const UINT32 flags, PackagePathType packagePathType, UINT32 *bufferLength, BYTE *buffer, UINT32 *count);
+WINBASEAPI LONG WINAPI GetCurrentPackagePath2(PackagePathType packagePathType, UINT32 *pathLength, PWSTR path);
+WINBASEAPI HRESULT WINAPI GetIdForPackageDependencyContext(PACKAGEDEPENDENCY_CONTEXT packageDependencyContext, PWSTR *packageDependencyId);
 typedef struct _PACKAGE_INFO_REFERENCE *PACKAGE_INFO_REFERENCE;
 
-LONG GetPackageApplicationIds(PACKAGE_INFO_REFERENCE packageInfoReference, UINT32 *bufferLength, BYTE *buffer, UINT32 *count);
-HRESULT GetPackageDependencyInformation(PCWSTR packageDependencyId, PSID *user, PWSTR *packageFamilyName, PACKAGE_VERSION *minVersion, PackageDependencyProcessorArchitectures *packageDependencyProcessorArchitectures, PackageDependencyLifetimeKind *lifetimeKind, PWSTR *lifetimeArtifact, CreatePackageDependencyOptions *options, FILETIME *lifetimeExpiration);
-UINT32 GetPackageGraphRevisionId(void);
-LONG GetPackageInfo(PACKAGE_INFO_REFERENCE packageInfoReference, const UINT32 flags, UINT32 *bufferLength, BYTE *buffer, UINT32 *count);
-LONG GetPackageInfo2(PACKAGE_INFO_REFERENCE packageInfoReference, const UINT32 flags, PackagePathType packagePathType, UINT32 *bufferLength, BYTE *buffer, UINT32 *count);
-LONG GetPackagePath(const PACKAGE_ID *packageId, const UINT32 reserved, UINT32 *pathLength, PWSTR path);
-LONG GetPackagePathByFullName2(PCWSTR packageFullName, PackagePathType packagePathType, UINT32 *pathLength, PWSTR path);
-HRESULT GetProcessesUsingPackageDependency(PCWSTR packageDependencyId, PSID user, BOOL scopeIsSystem, UINT32 *processIdsCount, DWORD **processIds);
-HRESULT GetResolvedPackageFullNameForPackageDependency(PCWSTR packageDependencyId, PWSTR *packageFullName);
-HRESULT GetResolvedPackageFullNameForPackageDependency2(PCWSTR packageDependencyId, PWSTR *packageFullName);
-LONG GetStagedPackageOrigin(PCWSTR packageFullName, PackageOrigin *origin);
+WINBASEAPI LONG WINAPI GetPackageApplicationIds(PACKAGE_INFO_REFERENCE packageInfoReference, UINT32 *bufferLength, BYTE *buffer, UINT32 *count);
+WINBASEAPI HRESULT WINAPI GetPackageDependencyInformation(PCWSTR packageDependencyId, PSID *user, PWSTR *packageFamilyName, PACKAGE_VERSION *minVersion, PackageDependencyProcessorArchitectures *packageDependencyProcessorArchitectures, PackageDependencyLifetimeKind *lifetimeKind, PWSTR *lifetimeArtifact, CreatePackageDependencyOptions *options, FILETIME *lifetimeExpiration);
+WINBASEAPI UINT32 WINAPI GetPackageGraphRevisionId(void);
+WINBASEAPI LONG WINAPI GetPackageInfo(PACKAGE_INFO_REFERENCE packageInfoReference, const UINT32 flags, UINT32 *bufferLength, BYTE *buffer, UINT32 *count);
+WINBASEAPI LONG WINAPI GetPackageInfo2(PACKAGE_INFO_REFERENCE packageInfoReference, const UINT32 flags, PackagePathType packagePathType, UINT32 *bufferLength, BYTE *buffer, UINT32 *count);
+WINBASEAPI LONG WINAPI GetPackagePath(const PACKAGE_ID *packageId, const UINT32 reserved, UINT32 *pathLength, PWSTR path);
+WINBASEAPI LONG WINAPI GetPackagePathByFullName2(PCWSTR packageFullName, PackagePathType packagePathType, UINT32 *pathLength, PWSTR path);
+WINBASEAPI HRESULT WINAPI GetProcessesUsingPackageDependency(PCWSTR packageDependencyId, PSID user, BOOL scopeIsSystem, UINT32 *processIdsCount, DWORD **processIds);
+WINBASEAPI HRESULT WINAPI GetResolvedPackageFullNameForPackageDependency(PCWSTR packageDependencyId, PWSTR *packageFullName);
+WINBASEAPI HRESULT WINAPI GetResolvedPackageFullNameForPackageDependency2(PCWSTR packageDependencyId, PWSTR *packageFullName);
+WINBASEAPI LONG WINAPI GetStagedPackageOrigin(PCWSTR packageFullName, PackageOrigin *origin);
 HRESULT GetStagedPackageOrigin2(PCWSTR packageFullName, PackageOrigin2 *origin);
-LONG GetStagedPackagePathByFullName(PCWSTR packageFullName, UINT32 *pathLength, PWSTR path);
-LONG GetStagedPackagePathByFullName2(PCWSTR packageFullName, PackagePathType packagePathType, UINT32 *pathLength, PWSTR path);
-BOOL IsPackageFeatureSupported(AppModelPackageFeature feature);
-LONG OpenPackageInfoByFullName(PCWSTR packageFullName, const UINT32 reserved, PACKAGE_INFO_REFERENCE *packageInfoReference);
-LONG OpenPackageInfoByFullNameForUser(PSID userSid, PCWSTR packageFullName, const UINT32 reserved, PACKAGE_INFO_REFERENCE *packageInfoReference);
-LONG PackageFamilyNameFromId(const PACKAGE_ID *packageId, UINT32 *packageFamilyNameLength, PWSTR packageFamilyName);
-LONG PackageFullNameFromId(const PACKAGE_ID *packageId, UINT32 *packageFullNameLength, PWSTR packageFullName);
-LONG PackageNameAndPublisherIdFromFamilyName(PCWSTR packageFamilyName, UINT32 *packageNameLength, PWSTR packageName, UINT32 *packagePublisherIdLength, PWSTR packagePublisherId);
-HRESULT TryCreatePackageDependency(PSID user, PCWSTR packageFamilyName, PACKAGE_VERSION minVersion, PackageDependencyProcessorArchitectures packageDependencyProcessorArchitectures, PackageDependencyLifetimeKind lifetimeKind, PCWSTR lifetimeArtifact, CreatePackageDependencyOptions options, PWSTR *packageDependencyId);
-HRESULT TryCreatePackageDependency2(PSID user, PCWSTR packageFamilyName, PACKAGE_VERSION minVersion, PackageDependencyProcessorArchitectures packageDependencyProcessorArchitectures, PackageDependencyLifetimeKind lifetimeKind, PCWSTR lifetimeArtifact, CreatePackageDependencyOptions options, const FILETIME *lifetimeExpiration, PWSTR *packageDependencyId);
-LONG VerifyApplicationUserModelId(PCWSTR applicationUserModelId);
-LONG VerifyPackageFamilyName(PCWSTR packageFamilyName);
-LONG VerifyPackageFullName(PCWSTR packageFullName);
-LONG VerifyPackageId(const PACKAGE_ID *packageId);
-LONG VerifyPackageRelativeApplicationId(PCWSTR packageRelativeApplicationId);
+WINBASEAPI LONG WINAPI GetStagedPackagePathByFullName(PCWSTR packageFullName, UINT32 *pathLength, PWSTR path);
+WINBASEAPI LONG WINAPI GetStagedPackagePathByFullName2(PCWSTR packageFullName, PackagePathType packagePathType, UINT32 *pathLength, PWSTR path);
+WINBASEAPI BOOL WINAPI IsPackageFeatureSupported(AppModelPackageFeature feature);
+WINBASEAPI LONG WINAPI OpenPackageInfoByFullName(PCWSTR packageFullName, const UINT32 reserved, PACKAGE_INFO_REFERENCE *packageInfoReference);
+WINBASEAPI LONG WINAPI OpenPackageInfoByFullNameForUser(PSID userSid, PCWSTR packageFullName, const UINT32 reserved, PACKAGE_INFO_REFERENCE *packageInfoReference);
+WINBASEAPI LONG WINAPI PackageFamilyNameFromId(const PACKAGE_ID *packageId, UINT32 *packageFamilyNameLength, PWSTR packageFamilyName);
+WINBASEAPI LONG WINAPI PackageFullNameFromId(const PACKAGE_ID *packageId, UINT32 *packageFullNameLength, PWSTR packageFullName);
+WINBASEAPI LONG WINAPI PackageNameAndPublisherIdFromFamilyName(PCWSTR packageFamilyName, UINT32 *packageNameLength, PWSTR packageName, UINT32 *packagePublisherIdLength, PWSTR packagePublisherId);
+WINBASEAPI HRESULT WINAPI TryCreatePackageDependency(PSID user, PCWSTR packageFamilyName, PACKAGE_VERSION minVersion, PackageDependencyProcessorArchitectures packageDependencyProcessorArchitectures, PackageDependencyLifetimeKind lifetimeKind, PCWSTR lifetimeArtifact, CreatePackageDependencyOptions options, PWSTR *packageDependencyId);
+WINBASEAPI HRESULT WINAPI TryCreatePackageDependency2(PSID user, PCWSTR packageFamilyName, PACKAGE_VERSION minVersion, PackageDependencyProcessorArchitectures packageDependencyProcessorArchitectures, PackageDependencyLifetimeKind lifetimeKind, PCWSTR lifetimeArtifact, CreatePackageDependencyOptions options, const FILETIME *lifetimeExpiration, PWSTR *packageDependencyId);
+WINBASEAPI LONG WINAPI VerifyApplicationUserModelId(PCWSTR applicationUserModelId);
+WINBASEAPI LONG WINAPI VerifyPackageFamilyName(PCWSTR packageFamilyName);
+WINBASEAPI LONG WINAPI VerifyPackageFullName(PCWSTR packageFullName);
+WINBASEAPI LONG WINAPI VerifyPackageId(const PACKAGE_ID *packageId);
+WINBASEAPI LONG WINAPI VerifyPackageRelativeApplicationId(PCWSTR packageRelativeApplicationId);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif
 #ifndef PACKAGE_FILTER_ALL_LOADED
 #define PACKAGE_FILTER_ALL_LOADED 0
 #endif

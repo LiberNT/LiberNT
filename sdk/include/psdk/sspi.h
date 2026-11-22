@@ -1149,12 +1149,6 @@ SECURITY_STATUS WINAPI DelegateSecurityContext(PCtxtHandle phContext, PSECURITY_
 }
 #endif
 
-union _SEC_WINNT_AUTH_IDENTITY_INFO
-{
-    SEC_WINNT_AUTH_IDENTITY_EXW AuthIdExw;
-    SEC_WINNT_AUTH_IDENTITY_EXA AuthIdExa;
-    SEC_WINNT_AUTH_IDENTITY_A AuthId_a;
-    SEC_WINNT_AUTH_IDENTITY_W AuthId_w;
 struct _SEC_WINNT_AUTH_IDENTITY_EX2
 {
     unsigned long Version;
@@ -1173,8 +1167,41 @@ struct _SEC_WINNT_AUTH_IDENTITY_EX2
 
 typedef struct _SEC_WINNT_AUTH_IDENTITY_EX2 SEC_WINNT_AUTH_IDENTITY_EX2;
 
-typedef struct _SEC_WINNT_AUTH_IDENTITY_EX2 SEC_WINNT_AUTH_IDENTITY_EX2;
+#ifndef _AUTH_IDENTITY_DEFINED
+#define _AUTH_IDENTITY_DEFINED
+typedef struct _SEC_WINNT_AUTH_IDENTITY_W
+{
+    unsigned short* User;
+    ULONG UserLength;
+    unsigned short* Domain;
+    ULONG DomainLength;
+    unsigned short* Password;
+    ULONG PasswordLength;
+    ULONG Flags;
+} SEC_WINNT_AUTH_IDENTITY_W, *PSEC_WINNT_AUTH_IDENTITY_W;
+#endif
 
+/* FIXME: Windows leaves the ANSI record undefined after ntifs.h has defined _AUTH_IDENTITY_DEFINED; LiberNT always provides it once */
+#ifndef _AUTH_IDENTITY_A_DEFINED
+#define _AUTH_IDENTITY_A_DEFINED
+typedef struct _SEC_WINNT_AUTH_IDENTITY_A
+{
+    unsigned char* User;
+    ULONG UserLength;
+    unsigned char* Domain;
+    ULONG DomainLength;
+    unsigned char* Password;
+    ULONG PasswordLength;
+    ULONG Flags;
+} SEC_WINNT_AUTH_IDENTITY_A, *PSEC_WINNT_AUTH_IDENTITY_A;
+#endif
+
+union _SEC_WINNT_AUTH_IDENTITY_INFO
+{
+    SEC_WINNT_AUTH_IDENTITY_EXW AuthIdExw;
+    SEC_WINNT_AUTH_IDENTITY_EXA AuthIdExa;
+    SEC_WINNT_AUTH_IDENTITY_A AuthId_a;
+    SEC_WINNT_AUTH_IDENTITY_W AuthId_w;
     SEC_WINNT_AUTH_IDENTITY_EX2 AuthIdEx2;
 };
 

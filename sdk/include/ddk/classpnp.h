@@ -1532,6 +1532,7 @@ ClassModeSelect(
 
 #ifndef DEV_BYPASS_IO
 #define DEV_BYPASS_IO 0x00000100
+#endif
 typedef struct _FAILURE_PREDICTION_INFO * PFAILURE_PREDICTION_INFO;
 
 #define CLASS_TAG_ZONE_INFO 0x5A496353
@@ -1541,7 +1542,7 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-NTSTATUS ClassModeSenseTranslate(PDEVICE_OBJECT DeviceObject, PMODE_PARAMETER_HEADER ModeSenseData, PULONG ModeSenseBufferSize);
+NTSTATUS NTAPI ClassModeSenseTranslate(PDEVICE_OBJECT DeviceObject, PMODE_PARAMETER_HEADER ModeSenseData, PULONG ModeSenseBufferSize);
 
 #ifdef __cplusplus
 }
@@ -1551,7 +1552,6 @@ NTSTATUS ClassModeSenseTranslate(PDEVICE_OBJECT DeviceObject, PMODE_PARAMETER_HE
 #define SET_FLAG_NOFENCE(Flags, Bit) WriteUShortNoFence(& (Flags), (ReadUShortNoFence(& (Flags)) | (Bit)))
 #define TEST_FLAG_NOFENCE(Flags, Bit) (((ReadUShortNoFence(& (Flags))) & (Bit)) != 0)
 
-#endif
 #ifndef DEV_FORWARD_IO
 #define DEV_FORWARD_IO 0x00000040
 #endif

@@ -420,8 +420,8 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-SQLRETURN SQLCancelHandle(SQLSMALLINT HandleType, SQLHANDLE InputHandle);
-SQLRETURN SQLCompleteAsync(SQLSMALLINT HandleType, SQLHANDLE Handle, RETCODE *AsyncRetCodePtr);
+SQLRETURN SQL_API SQLCancelHandle(SQLSMALLINT HandleType, SQLHANDLE InputHandle);
+SQLRETURN SQL_API SQLCompleteAsync(SQLSMALLINT HandleType, SQLHANDLE Handle, RETCODE *AsyncRetCodePtr);
 
 #ifdef __cplusplus
 }

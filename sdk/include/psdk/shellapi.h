@@ -1173,6 +1173,8 @@ typedef struct _OPEN_PRINTER_PROPS_INFOW {
 
 #if (!(defined(UNICODE)))
 typedef OPEN_PRINTER_PROPS_INFOA OPEN_PRINTER_PROPS_INFO;
+#else
+typedef OPEN_PRINTER_PROPS_INFOW OPEN_PRINTER_PROPS_INFO;
 #endif
 
 typedef HRESULT (WINAPI *PFNCANSHAREFOLDERW)(PCWSTR);
@@ -1181,6 +1183,8 @@ typedef HRESULT (WINAPI *PFNSHOWSHAREFOLDERUIW)(HWND, PCWSTR);
 
 #if (!(defined(UNICODE)))
 typedef POPEN_PRINTER_PROPS_INFOA POPEN_PRINTER_PROPS_INFO;
+#else
+typedef POPEN_PRINTER_PROPS_INFOW POPEN_PRINTER_PROPS_INFO;
 #endif
 
 #ifdef __cplusplus
@@ -1195,9 +1199,9 @@ BOOL WINAPI SHInvokePrinterCommandA(HWND hwnd, UINT uAction, LPCSTR lpBuf1, LPCS
 BOOL WINAPI SHInvokePrinterCommandW(HWND hwnd, UINT uAction, LPCWSTR lpBuf1, LPCWSTR lpBuf2, BOOL fModal);
 
 /* TODO: LiberNT does not implement the functions below yet */
-HRESULT SHEnumerateUnreadMailAccountsA(HKEY hKeyUser, DWORD dwIndex, LPSTR pszMailAddress, int cchMailAddress);
-HRESULT SHGetUnreadMailCountA(HKEY hKeyUser, LPCSTR pszMailAddress, DWORD *pdwCount, FILETIME *pFileTime, LPSTR pszShellExecuteCommand, int cchShellExecuteCommand);
-HRESULT SHSetUnreadMailCountA(LPCSTR pszMailAddress, DWORD dwCount, LPCSTR pszShellExecuteCommand);
+HRESULT STDAPICALLTYPE SHEnumerateUnreadMailAccountsA(HKEY hKeyUser, DWORD dwIndex, LPSTR pszMailAddress, int cchMailAddress);
+HRESULT STDAPICALLTYPE SHGetUnreadMailCountA(HKEY hKeyUser, LPCSTR pszMailAddress, DWORD *pdwCount, FILETIME *pFileTime, LPSTR pszShellExecuteCommand, int cchShellExecuteCommand);
+HRESULT STDAPICALLTYPE SHSetUnreadMailCountA(LPCSTR pszMailAddress, DWORD dwCount, LPCSTR pszShellExecuteCommand);
 
 #ifdef __cplusplus
 }

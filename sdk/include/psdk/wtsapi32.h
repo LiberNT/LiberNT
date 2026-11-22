@@ -853,6 +853,8 @@ typedef struct WTS_CLOUD_AUTH_HANDLE__ {
 #else
 #if (!(defined(UNICODE)))
 #define PWTSINFOEX_LEVEL PWTSINFOEX_LEVEL_A
+#else
+#define PWTSINFOEX_LEVEL PWTSINFOEX_LEVEL_W
 #endif
 #endif
 #ifdef UNICODE
@@ -860,6 +862,8 @@ typedef struct WTS_CLOUD_AUTH_HANDLE__ {
 #else
 #if (!(defined(UNICODE)))
 #define PWTSINFOEX_LEVEL1 PWTSINFOEX_LEVEL1_A
+#else
+#define PWTSINFOEX_LEVEL1 PWTSINFOEX_LEVEL1_W
 #endif
 #endif
 #ifdef UNICODE
@@ -1023,6 +1027,8 @@ typedef struct WTS_CLOUD_AUTH_HANDLE__ {
 #else
 #if (!(defined(UNICODE)))
 #define WTSINFOEX_LEVEL WTSINFOEX_LEVEL_A
+#else
+#define WTSINFOEX_LEVEL WTSINFOEX_LEVEL_W
 #endif
 #endif
 #ifdef UNICODE
@@ -1030,6 +1036,8 @@ typedef struct WTS_CLOUD_AUTH_HANDLE__ {
 #else
 #if (!(defined(UNICODE)))
 #define WTSINFOEX_LEVEL1 WTSINFOEX_LEVEL1_A
+#else
+#define WTSINFOEX_LEVEL1 WTSINFOEX_LEVEL1_W
 #endif
 #endif
 #ifdef UNICODE

@@ -161,6 +161,7 @@ DiUninstallDevice(
 
 #ifndef DIIRFLAG_INSTALL_AS_SET
 #define DIIRFLAG_INSTALL_AS_SET 0x00000040
+#endif
 
 #define _INC_NEWDEV
 #if (!(defined(UNICODE)))
@@ -186,7 +187,6 @@ BOOL WINAPI DiUninstallDriverW(HWND hwndParent, LPCWSTR InfPath, DWORD Flags, PB
 }
 #endif
 
-#endif
 #ifndef DIIRFLAG_PRE_CONFIGURE_INF
 #define DIIRFLAG_PRE_CONFIGURE_INF 0x00000020
 #endif

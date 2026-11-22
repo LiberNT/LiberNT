@@ -1694,7 +1694,7 @@ BOOLEAN WINAPI AuditComputeEffectivePolicyByToken(HANDLE hTokenHandle, const GUI
 BOOLEAN WINAPI AuditEnumerateCategories(GUID **ppAuditCategoriesArray, PULONG pdwCountReturned);
 BOOLEAN WINAPI AuditEnumeratePerUserPolicy(PPOLICY_AUDIT_SID_ARRAY *ppAuditSidArray);
 BOOLEAN WINAPI AuditEnumerateSubCategories(const GUID *pAuditCategoryGuid, BOOLEAN bRetrieveAllSubCategories, GUID **ppAuditSubCategoriesArray, PULONG pdwCountReturned);
-void AuditFree(PVOID Buffer);
+void NTAPI AuditFree(PVOID Buffer);
 BOOLEAN WINAPI AuditLookupCategoryGuidFromCategoryId(POLICY_AUDIT_EVENT_TYPE AuditCategoryId, GUID *pAuditCategoryGuid);
 BOOLEAN WINAPI AuditLookupCategoryIdFromCategoryGuid(const GUID *pAuditCategoryGuid, PPOLICY_AUDIT_EVENT_TYPE pAuditCategoryId);
 BOOLEAN WINAPI AuditLookupCategoryNameA(const GUID *pAuditCategoryGuid, PSTR *ppszCategoryName);
@@ -1725,7 +1725,45 @@ NTSTATUS WINAPI LsaSetForestTrustInformation2(LSA_HANDLE PolicyHandle, PLSA_UNIC
 
 enum _KERB_PROTOCOL_MESSAGE_TYPE
 {
-
+    KerbDebugRequestMessage = 0,
+    KerbQueryTicketCacheMessage = 1,
+    KerbChangeMachinePasswordMessage = 2,
+    KerbVerifyPacMessage = 3,
+    KerbRetrieveTicketMessage = 4,
+    KerbUpdateAddressesMessage = 5,
+    KerbPurgeTicketCacheMessage = 6,
+    KerbChangePasswordMessage = 7,
+    KerbRetrieveEncodedTicketMessage = 8,
+    KerbDecryptDataMessage = 9,
+    KerbAddBindingCacheEntryMessage = 0xA,
+    KerbSetPasswordMessage = 0xB,
+    KerbSetPasswordExMessage = 0xC,
+    KerbVerifyCredentialsMessage = 0xD,
+    KerbQueryTicketCacheExMessage = 0xE,
+    KerbPurgeTicketCacheExMessage = 0xF,
+    KerbRefreshSmartcardCredentialsMessage = 0x10,
+    KerbAddExtraCredentialsMessage = 0x11,
+    KerbQuerySupplementalCredentialsMessage = 0x12,
+    KerbTransferCredentialsMessage = 0x13,
+    KerbQueryTicketCacheEx2Message = 0x14,
+    KerbSubmitTicketMessage = 0x15,
+    KerbAddExtraCredentialsExMessage = 0x16,
+    KerbQueryKdcProxyCacheMessage = 0x17,
+    KerbPurgeKdcProxyCacheMessage = 0x18,
+    KerbQueryTicketCacheEx3Message = 0x19,
+    KerbCleanupMachinePkinitCredsMessage = 0x1A,
+    KerbAddBindingCacheEntryExMessage = 0x1B,
+    KerbQueryBindingCacheMessage = 0x1C,
+    KerbPurgeBindingCacheMessage = 0x1D,
+    KerbPinKdcMessage = 0x1E,
+    KerbUnpinAllKdcsMessage = 0x1F,
+    KerbQueryDomainExtendedPoliciesMessage = 0x20,
+    KerbQueryS4U2ProxyCacheMessage = 0x21,
+    KerbRetrieveKeyTabMessage = 0x22,
+    KerbRefreshPolicyMessage = 0x23,
+    KerbPrintCloudKerberosDebugMessage = 0x24,
+    KerbNetworkTicketLogonMessage = 0x25,
+    KerbNlChangeMachinePasswordMessage = 0x26,
 };
 
 typedef enum _KERB_PROTOCOL_MESSAGE_TYPE KERB_PROTOCOL_MESSAGE_TYPE;
@@ -1793,12 +1831,7 @@ struct _KERB_CLOUD_KERBEROS_DEBUG_RESPONSE
     ULONG Data[1];
 };
 
-struct KERB_CRYPTO_KEY
-{
-    LONG KeyType;
-    ULONG Length;
-    PUCHAR Value;
-};
+typedef struct KERB_CRYPTO_KEY KERB_CRYPTO_KEY;
 
 struct KERB_CRYPTO_KEY
 {
@@ -1953,6 +1986,7 @@ struct _KERB_RETRIEVE_KEY_TAB_RESPONSE
     PUCHAR KeyTab;
 };
 
+#ifndef __SECHANDLE_DEFINED__
 struct _SecHandle
 {
     ULONG_PTR dwLower;
@@ -1960,6 +1994,9 @@ struct _SecHandle
 };
 
 typedef struct _SecHandle SecHandle;
+typedef struct _SecHandle *PSecHandle;
+#define __SECHANDLE_DEFINED__
+#endif
 
 struct _KERB_SETPASSWORD_EX_REQUEST
 {

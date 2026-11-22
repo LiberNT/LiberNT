@@ -1343,6 +1343,8 @@ typedef struct _PANEL_SET_BRIGHTNESS *PPANEL_SET_BRIGHTNESS;
 
 typedef struct _PANEL_SET_BRIGHTNESS_STATE *PPANEL_SET_BRIGHTNESS_STATE;
 
+typedef struct VIDEO_BRIGHTNESS_POLICY VIDEO_BRIGHTNESS_POLICY;
+
 struct VIDEO_BRIGHTNESS_POLICY
 {
     BOOLEAN DefaultToBiosPolicy;
@@ -1359,6 +1361,7 @@ typedef struct VIDEO_BRIGHTNESS_POLICY *PVIDEO_BRIGHTNESS_POLICY;
 #define DEVPKEY_DeviceInterface_TerminalLuid DEVPKEY_Device_TerminalLuid
 
 
+#ifndef _WINCON_
 struct _COORD
 {
     SHORT X;
@@ -1366,6 +1369,7 @@ struct _COORD
 };
 
 typedef struct _COORD COORD;
+#endif
 
 struct _FONT_IMAGE_INFO
 {
@@ -1390,6 +1394,7 @@ typedef struct _CHAR_IMAGE_INFO CHAR_IMAGE_INFO;
 
 typedef struct _FONT_IMAGE_INFO FONT_IMAGE_INFO;
 
+#ifndef _WINCON_
 struct _CHAR_INFO
 {
     union
@@ -1401,6 +1406,7 @@ struct _CHAR_INFO
 };
 
 typedef struct _CHAR_INFO CHAR_INFO;
+#endif
 
 struct _CHAR_IMAGE_INFO
 {

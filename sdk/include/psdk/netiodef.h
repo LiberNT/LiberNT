@@ -1346,6 +1346,8 @@ typedef struct tcp_opt_fastopen {
 #define IPV4_VERSION_BYTE 0x40
 #define NMR_REG_KEY_PATH L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\NMR\\providers"
 
+typedef struct DL_TEREDO_ADDRESS_PRV DL_TEREDO_ADDRESS_PRV;
+
 struct DL_TEREDO_ADDRESS_PRV
 {
     UINT8 Reserved[6];

@@ -41,6 +41,8 @@ typedef struct _PHYSICAL_MONITOR
 
 #define PhysicalMonitorEnumerationAPI_h
 
+typedef BOOL _BOOL;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -64,9 +66,5 @@ _BOOL WINAPI DestroyPhysicalMonitor(HANDLE hMonitor);
 #ifdef __cplusplus
 }
 #endif
-
-typedef BOOL _BOOL;
-
-typedef BOOL _BOOL;
 
 #endif /* __WINE_PHYSICALMONITORENUMERATIONAPI_H */

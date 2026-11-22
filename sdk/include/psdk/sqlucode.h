@@ -142,9 +142,9 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-SQLRETURN SQLDescribeParamA(SQLHSTMT hstmt, SQLUSMALLINT ipar, SQLSMALLINT *pfSqlType, SQLUINTEGER *pcbParamDef, SQLSMALLINT *pibScale, SQLSMALLINT *pfNullable);
-SQLRETURN SQLGetStmtOptionA(SQLHSTMT hstmt, SQLUSMALLINT fOption, SQLPOINTER pvParam);
-SQLRETURN SQLSetStmtOptionA(SQLHSTMT hstmt, SQLUSMALLINT fOption, SQLULEN vParam);
+SQLRETURN SQL_API SQLDescribeParamA(SQLHSTMT hstmt, SQLUSMALLINT ipar, SQLSMALLINT *pfSqlType, SQLUINTEGER *pcbParamDef, SQLSMALLINT *pibScale, SQLSMALLINT *pfNullable);
+SQLRETURN SQL_API SQLGetStmtOptionA(SQLHSTMT hstmt, SQLUSMALLINT fOption, SQLPOINTER pvParam);
+SQLRETURN SQL_API SQLSetStmtOptionA(SQLHSTMT hstmt, SQLUSMALLINT fOption, SQLULEN vParam);
 
 #ifdef __cplusplus
 }

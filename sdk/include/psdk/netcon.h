@@ -270,17 +270,6 @@ VOID WINAPI NcFreeNetconProperties (NETCON_PROPERTIES* pProps);
 
 #define S_OBJECT_NO_LONGER_VALID ((HRESULT)2)
 
-struct IEnumNetConnectionVtbl
-{
-    HRESULT (WINAPI *QueryInterface)(IEnumNetConnection *, const IID *const , void **);
-    ULONG (WINAPI *AddRef)(IEnumNetConnection *);
-    ULONG (WINAPI *Release)(IEnumNetConnection *);
-    HRESULT (WINAPI *Next)(IEnumNetConnection *, ULONG, INetConnection **, ULONG *);
-    HRESULT (WINAPI *Skip)(IEnumNetConnection *, ULONG);
-    HRESULT (WINAPI *Reset)(IEnumNetConnection *);
-    HRESULT (WINAPI *Clone)(IEnumNetConnection *, IEnumNetConnection **);
-};
-
 typedef struct IEnumNetSharingEveryConnection IEnumNetSharingEveryConnection;
 
 struct IEnumNetSharingEveryConnectionVtbl
@@ -333,24 +322,6 @@ struct IEnumNetSharingPublicConnectionVtbl
     HRESULT (WINAPI *Clone)(IEnumNetSharingPublicConnection *, IEnumNetSharingPublicConnection **);
 };
 
-struct INetConnectionConnectUiVtbl
-{
-    HRESULT (WINAPI *QueryInterface)(INetConnectionConnectUi *, const IID *const , void **);
-    ULONG (WINAPI *AddRef)(INetConnectionConnectUi *);
-    ULONG (WINAPI *Release)(INetConnectionConnectUi *);
-    HRESULT (WINAPI *SetConnection)(INetConnectionConnectUi *, INetConnection *);
-    HRESULT (WINAPI *Connect)(INetConnectionConnectUi *, HWND, DWORD);
-    HRESULT (WINAPI *Disconnect)(INetConnectionConnectUi *, HWND, DWORD);
-};
-
-struct INetConnectionManagerVtbl
-{
-    HRESULT (WINAPI *QueryInterface)(INetConnectionManager *, const IID *const , void **);
-    ULONG (WINAPI *AddRef)(INetConnectionManager *);
-    ULONG (WINAPI *Release)(INetConnectionManager *);
-    HRESULT (WINAPI *EnumConnections)(INetConnectionManager *, NETCONMGR_ENUM_FLAGS, IEnumNetConnection **);
-};
-
 typedef struct INetConnectionProps INetConnectionProps;
 
 struct INetConnectionPropsVtbl
@@ -370,27 +341,31 @@ struct INetConnectionPropsVtbl
     HRESULT (WINAPI *get_Characteristics)(INetConnectionProps *, DWORD *);
 };
 
-struct INetConnectionVtbl
-{
-    HRESULT (WINAPI *QueryInterface)(INetConnection *, const IID *const , void **);
-    ULONG (WINAPI *AddRef)(INetConnection *);
-    ULONG (WINAPI *Release)(INetConnection *);
-    HRESULT (WINAPI *Connect)(INetConnection *);
-    HRESULT (WINAPI *Disconnect)(INetConnection *);
-    HRESULT (WINAPI *Delete)(INetConnection *);
-    HRESULT (WINAPI *Duplicate)(INetConnection *, LPCWSTR, INetConnection **);
-    HRESULT (WINAPI *GetProperties)(INetConnection *, NETCON_PROPERTIES **);
-    HRESULT (WINAPI *GetUiObjectClassId)(INetConnection *, CLSID *);
-    HRESULT (WINAPI *Rename)(INetConnection *, LPCWSTR);
-};
-
 typedef struct INetSharingPortMapping INetSharingPortMapping;
 
 typedef struct INetSharingPortMappingCollection INetSharingPortMappingCollection;
 
 typedef struct INetSharingConfiguration INetSharingConfiguration;
 
-typedef enum tagSHARINGCONNECTIONTYPE SHARINGCONNECTIONTYPE;
+typedef enum tagSHARINGCONNECTIONTYPE
+{
+    ICSSHARINGTYPE_PUBLIC = 0,
+    ICSSHARINGTYPE_PRIVATE = 1
+} SHARINGCONNECTIONTYPE;
+
+typedef enum tagSHARINGCONNECTIONTYPE *LPSHARINGCONNECTIONTYPE;
+
+typedef enum tagSHARINGCONNECTION_ENUM_FLAGS
+{
+    ICSSC_DEFAULT = 0,
+    ICSSC_ENABLED = 1
+} SHARINGCONNECTION_ENUM_FLAGS;
+
+typedef enum tagICS_TARGETTYPE
+{
+    ICSTT_NAME = 0,
+    ICSTT_IPADDRESS = 1
+} ICS_TARGETTYPE;
 
 struct INetSharingConfigurationVtbl
 {

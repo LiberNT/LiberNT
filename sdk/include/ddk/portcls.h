@@ -3455,7 +3455,7 @@ typedef IMiniportStreamAudioEngineNode2 *PIMINIPORTStreamAudioEngineNode2;
 
 #undef INTERFACE
 
-#define IID_IAdapterPowerManagment 0
+#define IID_IAdapterPowerManagment IID_IAdapterPowerManagement
 #define IID_IAdapterPowerManagment2 IID_IAdapterPowerManagement2
 #define IMP_IMiniportMidi IMP_IMiniport; STDMETHODIMP_(NTSTATUS) Init(_In_ PUNKNOWN UnknownAdapter, _In_ PRESOURCELIST ResourceList, _In_ PPORTMIDI Port, _Out_ PSERVICEGROUP * ServiceGroup); STDMETHODIMP_(void) Service(void); STDMETHODIMP_(NTSTATUS) NewStream(_Out_ PMINIPORTMIDISTREAM * Stream, _In_opt_ PUNKNOWN OuterUnknown, _In_ POOL_TYPE PoolType, _In_ ULONG Pin, _In_ BOOLEAN Capture, _In_ PKSDATAFORMAT DataFormat, _Out_ PSERVICEGROUP * ServiceGroup)
 #define IMP_IMiniportMidiStream STDMETHODIMP_(NTSTATUS) SetFormat(_In_ PKSDATAFORMAT DataFormat); STDMETHODIMP_(NTSTATUS) SetState(_In_ KSSTATE State); STDMETHODIMP_(NTSTATUS) Read(_In_ PVOID BufferAddress, _In_ ULONG BufferLength, _Out_ PULONG BytesRead); STDMETHODIMP_(NTSTATUS) Write(_In_ PVOID BufferAddress, _In_ ULONG BytesToWrite, _Out_ PULONG BytesWritten)
@@ -3464,9 +3464,9 @@ typedef IMiniportStreamAudioEngineNode2 *PIMINIPORTStreamAudioEngineNode2;
 #define PADAPTERPOWERMANAGMENT PADAPTERPOWERMANAGEMENT
 #define PADAPTERPOWERMANAGMENT2 PADAPTERPOWERMANAGEMENT2
 
-typedef NTSTATUS EVT_PC_POST_PO_FX_REGISTER_DEVICE(PVOID, POHANDLE);
+typedef NTSTATUS NTAPI EVT_PC_POST_PO_FX_REGISTER_DEVICE(PVOID, POHANDLE);
 
-typedef void EVT_PC_PRE_PO_FX_UNREGISTER_DEVICE(PVOID, POHANDLE);
+typedef void NTAPI EVT_PC_PRE_PO_FX_UNREGISTER_DEVICE(PVOID, POHANDLE);
 
 typedef struct IAdapterPnpManagementVtbl IAdapterPnpManagementVtbl;
 
@@ -3608,9 +3608,9 @@ extern "C" {
 
 /* TODO: LiberNT does not implement the functions below yet */
 void PC_POWER_FRAMEWORK_SETTINGS_INIT(PPC_POWER_FRAMEWORK_SETTINGS PowerFrameworkSettings);
-NTSTATUS PcAssignPowerFrameworkSettings(PDEVICE_OBJECT DeviceObject, PPC_POWER_FRAMEWORK_SETTINGS PowerFrameworkSettings);
-NTSTATUS PcRegisterAdapterPnpManagement(PUNKNOWN Unknown, PDEVICE_OBJECT DeviceObject);
-NTSTATUS PcUnregisterAdapterPnpManagement(PDEVICE_OBJECT DeviceObject);
+NTSTATUS NTAPI PcAssignPowerFrameworkSettings(PDEVICE_OBJECT DeviceObject, PPC_POWER_FRAMEWORK_SETTINGS PowerFrameworkSettings);
+NTSTATUS NTAPI PcRegisterAdapterPnpManagement(PUNKNOWN Unknown, PDEVICE_OBJECT DeviceObject);
+NTSTATUS NTAPI PcUnregisterAdapterPnpManagement(PDEVICE_OBJECT DeviceObject);
 
 #ifdef __cplusplus
 }

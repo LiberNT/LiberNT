@@ -2005,6 +2005,9 @@ typedef struct IDirectSoundCaptureFXNoiseSuppress *LPDIRECTSOUNDCAPTUREFXNOISESU
 #define IDirectSoundCaptureFXNoiseSuppress_QueryInterface(p, a, b) IUnknown_QueryInterface(p, a, b)
 #define IDirectSoundCaptureFXNoiseSuppress_Release(p) IUnknown_Release(p)
 #define IDirectSoundCaptureFXNoiseSuppress_SetAllParameters(p, a) (p) -> lpVtbl -> SetAllParameters(p, a)
+/* widl's C inline wrappers in strmif.h declare these names as functions */
+#if (!defined(__cplusplus) || defined(CINTERFACE)) && !defined(WIDL_C_INLINE_WRAPPERS)
+#ifndef IReferenceClock_QueryInterface
 #define IReferenceClock_AddRef(p) IUnknown_AddRef(p)
 #define IReferenceClock_AdvisePeriodic(p, a, b, c, d) (p) -> lpVtbl -> AdvisePeriodic(p, a, b, c, d)
 #define IReferenceClock_AdviseTime(p, a, b, c, d) (p) -> lpVtbl -> AdviseTime(p, a, b, c, d)
@@ -2012,5 +2015,7 @@ typedef struct IDirectSoundCaptureFXNoiseSuppress *LPDIRECTSOUNDCAPTUREFXNOISESU
 #define IReferenceClock_QueryInterface(p, a, b) IUnknown_QueryInterface(p, a, b)
 #define IReferenceClock_Release(p) IUnknown_Release(p)
 #define IReferenceClock_Unadvise(p, a) (p) -> lpVtbl -> Unadvise(p, a)
+#endif
+#endif
 
 #endif /* __DSOUND_INCLUDED__ */

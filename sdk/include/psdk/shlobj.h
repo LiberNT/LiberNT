@@ -3077,6 +3077,9 @@ typedef struct tagAASHELLMENUITEM {
 #if (!(defined(UNICODE)))
 #define ICopyHookVtbl ICopyHookAVtbl
 #define INewShortcutHookVtbl INewShortcutHookAVtbl
+#else
+#define ICopyHookVtbl ICopyHookWVtbl
+#define INewShortcutHookVtbl INewShortcutHookWVtbl
 #endif
 #ifdef UNICODE
 #define LPCOPYHOOK LPCOPYHOOKW
@@ -3111,6 +3114,8 @@ struct IColumnProvider
 typedef struct ICopyHookAVtbl ICopyHookAVtbl;
 
 #pragma pack(push, 1)
+typedef struct ICopyHookA ICopyHookA;
+
 struct ICopyHookA
 {
     struct ICopyHookAVtbl *lpVtbl;
@@ -3120,6 +3125,8 @@ struct ICopyHookA
 typedef struct ICopyHookWVtbl ICopyHookWVtbl;
 
 #pragma pack(push, 1)
+typedef struct ICopyHookW ICopyHookW;
+
 struct ICopyHookW
 {
     struct ICopyHookWVtbl *lpVtbl;
@@ -3152,8 +3159,8 @@ typedef struct IShellFolderBandVtbl IShellFolderBandVtbl;
 typedef struct IThumbnailCaptureVtbl IThumbnailCaptureVtbl;
 
 #pragma pack(push, 1)
-#pragma pack(push, 1)
-#pragma pack(push, 1)
+typedef struct IThumbnailCapture IThumbnailCapture;
+
 struct IThumbnailCapture
 {
     struct IThumbnailCaptureVtbl *lpVtbl;
@@ -3185,9 +3192,9 @@ BOOL WINAPI ImportPrivacySettings(PCWSTR pszFilename, BOOL *pfParsePrivacyPrefer
 /* TODO: LiberNT does not implement the functions below yet */
 typedef struct IEnumPrivacyRecords IEnumPrivacyRecords;
 
-HRESULT DoPrivacyDlg(HWND hwndOwner, PCWSTR pszUrl, IEnumPrivacyRecords *pPrivacyEnum, BOOL fReportAllSites);
-void PerUserInit(void);
-DWORD SoftwareUpdateMessageBox(HWND hWnd, PCWSTR pszDistUnit, DWORD dwFlags, LPSOFTDISTINFO psdi);
+HRESULT STDAPICALLTYPE DoPrivacyDlg(HWND hwndOwner, PCWSTR pszUrl, IEnumPrivacyRecords *pPrivacyEnum, BOOL fReportAllSites);
+void STDAPICALLTYPE PerUserInit(void);
+DWORD STDAPICALLTYPE SoftwareUpdateMessageBox(HWND hWnd, PCWSTR pszDistUnit, DWORD dwFlags, LPSOFTDISTINFO psdi);
 
 #ifdef __cplusplus
 }

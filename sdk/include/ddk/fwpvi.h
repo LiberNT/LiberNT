@@ -753,15 +753,15 @@ extern "C" {
 #define IPsecSaDestroyEnumHandle IPsecSaDestroyEnumHandle0
 
 #define FwpmBitmapIndexGet FwpmBitmapIndexGet0
-#define IPsecSaContextCreateEnumHandle 0
+#define IPsecSaContextCreateEnumHandle IPsecSaContextCreateEnumHandle0
 
 #define FwpmBitmapIndexFree FwpmBitmapIndexFree0
 #define FWPS_CONNECTION_POLICY FWPS_CONNECTION_POLICY0
-#define IPsecSaContextEnum 0
+#define IPsecSaContextEnum IPsecSaContextEnum1
 #define IPsecSaCreateEnumHandle IPsecSaCreateEnumHandle0
 #define IPsecSaEnum IPsecSaEnum1
 
-#define FWPS_CALLOUT_CLASSIFY_FN_FAST 0
+#define FWPS_CALLOUT_CLASSIFY_FN_FAST FWPS_CALLOUT_CLASSIFY_FN_FAST0
 
-#define FWPS_CALLOUT_FAST 0
+#define FWPS_CALLOUT_FAST FWPS_CALLOUT_FAST0
 

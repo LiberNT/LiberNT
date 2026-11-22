@@ -4539,6 +4539,10 @@ typedef struct _OPERATION_START_PARAMETERS {
 #define GET_SYSTEM_WOW64_DIRECTORY_NAME_T_A GET_SYSTEM_WOW64_DIRECTORY_NAME_A_A
 #define GET_SYSTEM_WOW64_DIRECTORY_NAME_T_T GET_SYSTEM_WOW64_DIRECTORY_NAME_A_T
 #define GET_SYSTEM_WOW64_DIRECTORY_NAME_T_W GET_SYSTEM_WOW64_DIRECTORY_NAME_A_W
+#else
+#define GET_SYSTEM_WOW64_DIRECTORY_NAME_T_A GET_SYSTEM_WOW64_DIRECTORY_NAME_W_A
+#define GET_SYSTEM_WOW64_DIRECTORY_NAME_T_T GET_SYSTEM_WOW64_DIRECTORY_NAME_W_T
+#define GET_SYSTEM_WOW64_DIRECTORY_NAME_T_W GET_SYSTEM_WOW64_DIRECTORY_NAME_W_W
 #endif
 #define GET_SYSTEM_WOW64_DIRECTORY_NAME_W_A "GetSystemWow64DirectoryW"
 #define GET_SYSTEM_WOW64_DIRECTORY_NAME_W_T TEXT("GetSystemWow64DirectoryW")
@@ -4750,7 +4754,11 @@ typedef struct _OPERATION_START_PARAMETERS {
 #ifdef _WIN64
 #define SCS_THIS_PLATFORM_BINARY 6
 #else
+#ifdef _WIN64
+#define SCS_THIS_PLATFORM_BINARY 6
+#else
 #define SCS_THIS_PLATFORM_BINARY 0
+#endif
 #endif
 #endif
 #endif
@@ -4878,100 +4886,100 @@ BOOL WINAPI SetMessageWaitingIndicator(HANDLE hMsgIndicator, ULONG ulMsgCount);
 HANDLE WINAPI SetTimerQueueTimer(HANDLE TimerQueue, WAITORTIMERCALLBACK Callback, PVOID Parameter, DWORD DueTime, DWORD Period, BOOL PreferIo);
 
 /* TODO: LiberNT does not implement the functions below yet */
-void ApplicationRecoveryFinished(BOOL bSuccess);
-HRESULT ApplicationRecoveryInProgress(PBOOL pbCancelled);
-BOOL CopyFileTransactedA(LPCSTR lpExistingFileName, LPCSTR lpNewFileName, LPPROGRESS_ROUTINE lpProgressRoutine, LPVOID lpData, LPBOOL pbCancel, DWORD dwCopyFlags, HANDLE hTransaction);
-BOOL CopyFileTransactedW(LPCWSTR lpExistingFileName, LPCWSTR lpNewFileName, LPPROGRESS_ROUTINE lpProgressRoutine, LPVOID lpData, LPBOOL pbCancel, DWORD dwCopyFlags, HANDLE hTransaction);
-BOOL CreateDirectoryTransactedA(LPCSTR lpTemplateDirectory, LPCSTR lpNewDirectory, LPSECURITY_ATTRIBUTES lpSecurityAttributes, HANDLE hTransaction);
-BOOL CreateDirectoryTransactedW(LPCWSTR lpTemplateDirectory, LPCWSTR lpNewDirectory, LPSECURITY_ATTRIBUTES lpSecurityAttributes, HANDLE hTransaction);
-HANDLE CreateFileMappingNumaA(HANDLE hFile, LPSECURITY_ATTRIBUTES lpFileMappingAttributes, DWORD flProtect, DWORD dwMaximumSizeHigh, DWORD dwMaximumSizeLow, LPCSTR lpName, DWORD nndPreferred);
-HANDLE CreateFileTransactedA(LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes, HANDLE hTemplateFile, HANDLE hTransaction, PUSHORT pusMiniVersion, PVOID lpExtendedParameter);
-HANDLE CreateFileTransactedW(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes, HANDLE hTemplateFile, HANDLE hTransaction, PUSHORT pusMiniVersion, PVOID lpExtendedParameter);
-BOOL CreateHardLinkTransactedA(LPCSTR lpFileName, LPCSTR lpExistingFileName, LPSECURITY_ATTRIBUTES lpSecurityAttributes, HANDLE hTransaction);
-BOOL CreateHardLinkTransactedW(LPCWSTR lpFileName, LPCWSTR lpExistingFileName, LPSECURITY_ATTRIBUTES lpSecurityAttributes, HANDLE hTransaction);
-BOOLEAN CreateSymbolicLinkTransactedA(LPCSTR lpSymlinkFileName, LPCSTR lpTargetFileName, DWORD dwFlags, HANDLE hTransaction);
-BOOLEAN CreateSymbolicLinkTransactedW(LPCWSTR lpSymlinkFileName, LPCWSTR lpTargetFileName, DWORD dwFlags, HANDLE hTransaction);
+WINBASEAPI void WINAPI ApplicationRecoveryFinished(BOOL bSuccess);
+WINBASEAPI HRESULT WINAPI ApplicationRecoveryInProgress(PBOOL pbCancelled);
+WINBASEAPI BOOL WINAPI CopyFileTransactedA(LPCSTR lpExistingFileName, LPCSTR lpNewFileName, LPPROGRESS_ROUTINE lpProgressRoutine, LPVOID lpData, LPBOOL pbCancel, DWORD dwCopyFlags, HANDLE hTransaction);
+WINBASEAPI BOOL WINAPI CopyFileTransactedW(LPCWSTR lpExistingFileName, LPCWSTR lpNewFileName, LPPROGRESS_ROUTINE lpProgressRoutine, LPVOID lpData, LPBOOL pbCancel, DWORD dwCopyFlags, HANDLE hTransaction);
+WINBASEAPI BOOL WINAPI CreateDirectoryTransactedA(LPCSTR lpTemplateDirectory, LPCSTR lpNewDirectory, LPSECURITY_ATTRIBUTES lpSecurityAttributes, HANDLE hTransaction);
+WINBASEAPI BOOL WINAPI CreateDirectoryTransactedW(LPCWSTR lpTemplateDirectory, LPCWSTR lpNewDirectory, LPSECURITY_ATTRIBUTES lpSecurityAttributes, HANDLE hTransaction);
+WINBASEAPI HANDLE WINAPI CreateFileMappingNumaA(HANDLE hFile, LPSECURITY_ATTRIBUTES lpFileMappingAttributes, DWORD flProtect, DWORD dwMaximumSizeHigh, DWORD dwMaximumSizeLow, LPCSTR lpName, DWORD nndPreferred);
+WINBASEAPI HANDLE WINAPI CreateFileTransactedA(LPCSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes, HANDLE hTemplateFile, HANDLE hTransaction, PUSHORT pusMiniVersion, PVOID lpExtendedParameter);
+WINBASEAPI HANDLE WINAPI CreateFileTransactedW(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, LPSECURITY_ATTRIBUTES lpSecurityAttributes, DWORD dwCreationDisposition, DWORD dwFlagsAndAttributes, HANDLE hTemplateFile, HANDLE hTransaction, PUSHORT pusMiniVersion, PVOID lpExtendedParameter);
+WINBASEAPI BOOL WINAPI CreateHardLinkTransactedA(LPCSTR lpFileName, LPCSTR lpExistingFileName, LPSECURITY_ATTRIBUTES lpSecurityAttributes, HANDLE hTransaction);
+WINBASEAPI BOOL WINAPI CreateHardLinkTransactedW(LPCWSTR lpFileName, LPCWSTR lpExistingFileName, LPSECURITY_ATTRIBUTES lpSecurityAttributes, HANDLE hTransaction);
+WINBASEAPI BOOLEAN APIENTRY CreateSymbolicLinkTransactedA(LPCSTR lpSymlinkFileName, LPCSTR lpTargetFileName, DWORD dwFlags, HANDLE hTransaction);
+WINBASEAPI BOOLEAN APIENTRY CreateSymbolicLinkTransactedW(LPCWSTR lpSymlinkFileName, LPCWSTR lpTargetFileName, DWORD dwFlags, HANDLE hTransaction);
 #if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
-BOOL CreateUmsCompletionList(PUMS_COMPLETION_LIST *UmsCompletionList);
-BOOL CreateUmsThreadContext(PUMS_CONTEXT *lpUmsThread);
+WINBASEAPI BOOL WINAPI CreateUmsCompletionList(PUMS_COMPLETION_LIST *UmsCompletionList);
+WINBASEAPI BOOL WINAPI CreateUmsThreadContext(PUMS_CONTEXT *lpUmsThread);
 #endif
-BOOL DeleteFileTransactedA(LPCSTR lpFileName, HANDLE hTransaction);
-BOOL DeleteFileTransactedW(LPCWSTR lpFileName, HANDLE hTransaction);
+WINBASEAPI BOOL WINAPI DeleteFileTransactedA(LPCSTR lpFileName, HANDLE hTransaction);
+WINBASEAPI BOOL WINAPI DeleteFileTransactedW(LPCWSTR lpFileName, HANDLE hTransaction);
 #if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
-BOOL DeleteUmsCompletionList(PUMS_COMPLETION_LIST UmsCompletionList);
-BOOL DeleteUmsThreadContext(PUMS_CONTEXT UmsThread);
-BOOL DequeueUmsCompletionListItems(PUMS_COMPLETION_LIST UmsCompletionList, DWORD WaitTimeOut, PUMS_CONTEXT *UmsThreadList);
+WINBASEAPI BOOL WINAPI DeleteUmsCompletionList(PUMS_COMPLETION_LIST UmsCompletionList);
+WINBASEAPI BOOL WINAPI DeleteUmsThreadContext(PUMS_CONTEXT UmsThread);
+WINBASEAPI BOOL WINAPI DequeueUmsCompletionListItems(PUMS_COMPLETION_LIST UmsCompletionList, DWORD WaitTimeOut, PUMS_CONTEXT *UmsThreadList);
 #endif
 #if (!defined(MIDL_PASS))
 void DestroyThreadpoolEnvironment(PTP_CALLBACK_ENVIRON pcbe);
 #endif
-DWORD DisableThreadProfiling(HANDLE PerformanceDataHandle);
+WINBASEAPI DWORD APIENTRY DisableThreadProfiling(HANDLE PerformanceDataHandle);
 #if (defined(_AMD64_) || defined(_X86_) || defined(_ARM64_))
-BOOL EnableProcessOptionalXStateFeatures(DWORD64 Features);
+WINBASEAPI BOOL WINAPI EnableProcessOptionalXStateFeatures(DWORD64 Features);
 #endif
-DWORD EnableThreadProfiling(HANDLE ThreadHandle, DWORD Flags, DWORD64 HardwareCounters, HANDLE *PerformanceDataHandle);
+WINBASEAPI DWORD APIENTRY EnableThreadProfiling(HANDLE ThreadHandle, DWORD Flags, DWORD64 HardwareCounters, HANDLE *PerformanceDataHandle);
 #if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
-BOOL EnterUmsSchedulingMode(PUMS_SCHEDULER_STARTUP_INFO SchedulerStartupInfo);
-BOOL ExecuteUmsThread(PUMS_CONTEXT UmsThread);
+WINBASEAPI BOOL WINAPI EnterUmsSchedulingMode(PUMS_SCHEDULER_STARTUP_INFO SchedulerStartupInfo);
+WINBASEAPI BOOL WINAPI ExecuteUmsThread(PUMS_CONTEXT UmsThread);
 #endif
-HANDLE FindFirstFileNameTransactedW(LPCWSTR lpFileName, DWORD dwFlags, LPDWORD StringLength, PWSTR LinkName, HANDLE hTransaction);
-HANDLE FindFirstFileTransactedA(LPCSTR lpFileName, FINDEX_INFO_LEVELS fInfoLevelId, LPVOID lpFindFileData, FINDEX_SEARCH_OPS fSearchOp, LPVOID lpSearchFilter, DWORD dwAdditionalFlags, HANDLE hTransaction);
-HANDLE FindFirstFileTransactedW(LPCWSTR lpFileName, FINDEX_INFO_LEVELS fInfoLevelId, LPVOID lpFindFileData, FINDEX_SEARCH_OPS fSearchOp, LPVOID lpSearchFilter, DWORD dwAdditionalFlags, HANDLE hTransaction);
-HANDLE FindFirstStreamTransactedW(LPCWSTR lpFileName, STREAM_INFO_LEVELS InfoLevel, LPVOID lpFindStreamData, DWORD dwFlags, HANDLE hTransaction);
-ULONG GetCommPorts(PULONG lpPortNumbers, ULONG uPortNumbersCount, PULONG puPortNumbersFound);
-DWORD GetCompressedFileSizeTransactedA(LPCSTR lpFileName, LPDWORD lpFileSizeHigh, HANDLE hTransaction);
-DWORD GetCompressedFileSizeTransactedW(LPCWSTR lpFileName, LPDWORD lpFileSizeHigh, HANDLE hTransaction);
+WINBASEAPI HANDLE WINAPI FindFirstFileNameTransactedW(LPCWSTR lpFileName, DWORD dwFlags, LPDWORD StringLength, PWSTR LinkName, HANDLE hTransaction);
+WINBASEAPI HANDLE WINAPI FindFirstFileTransactedA(LPCSTR lpFileName, FINDEX_INFO_LEVELS fInfoLevelId, LPVOID lpFindFileData, FINDEX_SEARCH_OPS fSearchOp, LPVOID lpSearchFilter, DWORD dwAdditionalFlags, HANDLE hTransaction);
+WINBASEAPI HANDLE WINAPI FindFirstFileTransactedW(LPCWSTR lpFileName, FINDEX_INFO_LEVELS fInfoLevelId, LPVOID lpFindFileData, FINDEX_SEARCH_OPS fSearchOp, LPVOID lpSearchFilter, DWORD dwAdditionalFlags, HANDLE hTransaction);
+WINBASEAPI HANDLE WINAPI FindFirstStreamTransactedW(LPCWSTR lpFileName, STREAM_INFO_LEVELS InfoLevel, LPVOID lpFindStreamData, DWORD dwFlags, HANDLE hTransaction);
+WINBASEAPI ULONG WINAPI GetCommPorts(PULONG lpPortNumbers, ULONG uPortNumbersCount, PULONG puPortNumbersFound);
+WINBASEAPI DWORD WINAPI GetCompressedFileSizeTransactedA(LPCSTR lpFileName, LPDWORD lpFileSizeHigh, HANDLE hTransaction);
+WINBASEAPI DWORD WINAPI GetCompressedFileSizeTransactedW(LPCWSTR lpFileName, LPDWORD lpFileSizeHigh, HANDLE hTransaction);
 #if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
-PUMS_CONTEXT GetCurrentUmsThread(void);
+WINBASEAPI PUMS_CONTEXT WINAPI GetCurrentUmsThread(void);
 #endif
-BOOL GetFileAttributesTransactedA(LPCSTR lpFileName, GET_FILEEX_INFO_LEVELS fInfoLevelId, LPVOID lpFileInformation, HANDLE hTransaction);
-BOOL GetFileAttributesTransactedW(LPCWSTR lpFileName, GET_FILEEX_INFO_LEVELS fInfoLevelId, LPVOID lpFileInformation, HANDLE hTransaction);
+WINBASEAPI BOOL WINAPI GetFileAttributesTransactedA(LPCSTR lpFileName, GET_FILEEX_INFO_LEVELS fInfoLevelId, LPVOID lpFileInformation, HANDLE hTransaction);
+WINBASEAPI BOOL WINAPI GetFileAttributesTransactedW(LPCWSTR lpFileName, GET_FILEEX_INFO_LEVELS fInfoLevelId, LPVOID lpFileInformation, HANDLE hTransaction);
 BOOL WINAPI GetFileInformationByName(PCWSTR FileName, FILE_INFO_BY_NAME_CLASS FileInformationClass, PVOID FileInfoBuffer, ULONG FileInfoBufferSize);
-DWORD GetFullPathNameTransactedA(LPCSTR lpFileName, DWORD nBufferLength, LPSTR lpBuffer, LPSTR *lpFilePart, HANDLE hTransaction);
-DWORD GetFullPathNameTransactedW(LPCWSTR lpFileName, DWORD nBufferLength, LPWSTR lpBuffer, LPWSTR *lpFilePart, HANDLE hTransaction);
-DWORD GetLongPathNameTransactedA(LPCSTR lpszShortPath, LPSTR lpszLongPath, DWORD cchBuffer, HANDLE hTransaction);
-DWORD GetLongPathNameTransactedW(LPCWSTR lpszShortPath, LPWSTR lpszLongPath, DWORD cchBuffer, HANDLE hTransaction);
-DWORD GetMaximumProcessorCount(WORD GroupNumber);
-WORD GetMaximumProcessorGroupCount(void);
-BOOL GetNamedPipeClientComputerNameA(HANDLE Pipe, LPSTR ClientComputerName, ULONG ClientComputerNameLength);
-BOOL GetNamedPipeClientSessionId(HANDLE Pipe, PULONG ClientSessionId);
-BOOL GetNamedPipeServerProcessId(HANDLE Pipe, PULONG ServerProcessId);
-BOOL GetNamedPipeServerSessionId(HANDLE Pipe, PULONG ServerSessionId);
+WINBASEAPI DWORD WINAPI GetFullPathNameTransactedA(LPCSTR lpFileName, DWORD nBufferLength, LPSTR lpBuffer, LPSTR *lpFilePart, HANDLE hTransaction);
+WINBASEAPI DWORD WINAPI GetFullPathNameTransactedW(LPCWSTR lpFileName, DWORD nBufferLength, LPWSTR lpBuffer, LPWSTR *lpFilePart, HANDLE hTransaction);
+WINBASEAPI DWORD WINAPI GetLongPathNameTransactedA(LPCSTR lpszShortPath, LPSTR lpszLongPath, DWORD cchBuffer, HANDLE hTransaction);
+WINBASEAPI DWORD WINAPI GetLongPathNameTransactedW(LPCWSTR lpszShortPath, LPWSTR lpszLongPath, DWORD cchBuffer, HANDLE hTransaction);
+WINBASEAPI DWORD WINAPI GetMaximumProcessorCount(WORD GroupNumber);
+WINBASEAPI WORD WINAPI GetMaximumProcessorGroupCount(void);
+WINBASEAPI BOOL WINAPI GetNamedPipeClientComputerNameA(HANDLE Pipe, LPSTR ClientComputerName, ULONG ClientComputerNameLength);
+WINBASEAPI BOOL WINAPI GetNamedPipeClientSessionId(HANDLE Pipe, PULONG ClientSessionId);
+WINBASEAPI BOOL WINAPI GetNamedPipeServerProcessId(HANDLE Pipe, PULONG ServerProcessId);
+WINBASEAPI BOOL WINAPI GetNamedPipeServerSessionId(HANDLE Pipe, PULONG ServerSessionId);
 #if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
-PUMS_CONTEXT GetNextUmsListItem(PUMS_CONTEXT UmsContext);
+WINBASEAPI PUMS_CONTEXT WINAPI GetNextUmsListItem(PUMS_CONTEXT UmsContext);
 #endif
-BOOL GetNumaAvailableMemoryNodeEx(USHORT Node, PULONGLONG AvailableBytes);
-BOOL GetNumaNodeNumberFromHandle(HANDLE hFile, PUSHORT NodeNumber);
-BOOL GetNumaProximityNode(ULONG ProximityId, PUCHAR NodeNumber);
+WINBASEAPI BOOL WINAPI GetNumaAvailableMemoryNodeEx(USHORT Node, PULONGLONG AvailableBytes);
+WINBASEAPI BOOL WINAPI GetNumaNodeNumberFromHandle(HANDLE hFile, PUSHORT NodeNumber);
+WINBASEAPI BOOL WINAPI GetNumaProximityNode(ULONG ProximityId, PUCHAR NodeNumber);
 #if (defined(_AMD64_) || defined(_X86_) || defined(_ARM64_))
-DWORD64 GetThreadEnabledXStateFeatures(void);
+WINBASEAPI DWORD64 WINAPI GetThreadEnabledXStateFeatures(void);
 #endif
 #if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
-BOOL GetUmsCompletionListEvent(PUMS_COMPLETION_LIST UmsCompletionList, PHANDLE UmsCompletionEvent);
-BOOL GetUmsSystemThreadInformation(HANDLE ThreadHandle, PUMS_SYSTEM_THREAD_INFORMATION SystemThreadInfo);
+WINBASEAPI BOOL WINAPI GetUmsCompletionListEvent(PUMS_COMPLETION_LIST UmsCompletionList, PHANDLE UmsCompletionEvent);
+WINBASEAPI BOOL WINAPI GetUmsSystemThreadInformation(HANDLE ThreadHandle, PUMS_SYSTEM_THREAD_INFORMATION SystemThreadInfo);
 #endif
-ATOM GlobalAddAtomExA(LPCSTR lpString, DWORD Flags);
-ATOM GlobalAddAtomExW(LPCWSTR lpString, DWORD Flags);
+WINBASEAPI ATOM WINAPI GlobalAddAtomExA(LPCSTR lpString, DWORD Flags);
+WINBASEAPI ATOM WINAPI GlobalAddAtomExW(LPCWSTR lpString, DWORD Flags);
 #if (!defined(MIDL_PASS))
 void InitializeThreadpoolEnvironment(PTP_CALLBACK_ENVIRON pcbe);
 #endif
-BOOL IsNativeVhdBoot(PBOOL NativeVhdBoot);
-BOOL IsTokenUntrusted(HANDLE TokenHandle);
-BOOL LookupAccountNameLocalA(LPCSTR lpAccountName, PSID Sid, LPDWORD cbSid, LPSTR ReferencedDomainName, LPDWORD cchReferencedDomainName, PSID_NAME_USE peUse);
-BOOL LookupAccountNameLocalW(LPCWSTR lpAccountName, PSID Sid, LPDWORD cbSid, LPWSTR ReferencedDomainName, LPDWORD cchReferencedDomainName, PSID_NAME_USE peUse);
-BOOL MoveFileTransactedA(LPCSTR lpExistingFileName, LPCSTR lpNewFileName, LPPROGRESS_ROUTINE lpProgressRoutine, LPVOID lpData, DWORD dwFlags, HANDLE hTransaction);
-BOOL MoveFileTransactedW(LPCWSTR lpExistingFileName, LPCWSTR lpNewFileName, LPPROGRESS_ROUTINE lpProgressRoutine, LPVOID lpData, DWORD dwFlags, HANDLE hTransaction);
-HANDLE OpenCommPort(ULONG uPortNumber, DWORD dwDesiredAccess, DWORD dwFlagsAndAttributes);
-BOOL OperationEnd(OPERATION_END_PARAMETERS *OperationEndParams);
-BOOL OperationStart(OPERATION_START_PARAMETERS *OperationStartParams);
-DWORD QueryThreadProfiling(HANDLE ThreadHandle, PBOOLEAN Enabled);
-DWORD RaiseCustomSystemEventTrigger(PCUSTOM_SYSTEM_EVENT_TRIGGER_CONFIG CustomSystemEventTriggerConfig);
-BOOL ReadDirectoryChangesExW(HANDLE hDirectory, LPVOID lpBuffer, DWORD nBufferLength, BOOL bWatchSubtree, DWORD dwNotifyFilter, LPDWORD lpBytesReturned, LPOVERLAPPED lpOverlapped, LPOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine, READ_DIRECTORY_NOTIFY_INFORMATION_CLASS ReadDirectoryNotifyInformationClass);
-BOOL RemoveDirectoryTransactedA(LPCSTR lpPathName, HANDLE hTransaction);
-BOOL RemoveDirectoryTransactedW(LPCWSTR lpPathName, HANDLE hTransaction);
-BOOL ReplacePartitionUnit(PWSTR TargetPartition, PWSTR SparePartition, ULONG Flags);
-BOOL SetFileAttributesTransactedA(LPCSTR lpFileName, DWORD dwFileAttributes, HANDLE hTransaction);
-BOOL SetFileAttributesTransactedW(LPCWSTR lpFileName, DWORD dwFileAttributes, HANDLE hTransaction);
+WINBASEAPI BOOL WINAPI IsNativeVhdBoot(PBOOL NativeVhdBoot);
+WINADVAPI BOOL WINAPI IsTokenUntrusted(HANDLE TokenHandle);
+WINADVAPI BOOL WINAPI LookupAccountNameLocalA(LPCSTR lpAccountName, PSID Sid, LPDWORD cbSid, LPSTR ReferencedDomainName, LPDWORD cchReferencedDomainName, PSID_NAME_USE peUse);
+WINADVAPI BOOL WINAPI LookupAccountNameLocalW(LPCWSTR lpAccountName, PSID Sid, LPDWORD cbSid, LPWSTR ReferencedDomainName, LPDWORD cchReferencedDomainName, PSID_NAME_USE peUse);
+WINBASEAPI BOOL WINAPI MoveFileTransactedA(LPCSTR lpExistingFileName, LPCSTR lpNewFileName, LPPROGRESS_ROUTINE lpProgressRoutine, LPVOID lpData, DWORD dwFlags, HANDLE hTransaction);
+WINBASEAPI BOOL WINAPI MoveFileTransactedW(LPCWSTR lpExistingFileName, LPCWSTR lpNewFileName, LPPROGRESS_ROUTINE lpProgressRoutine, LPVOID lpData, DWORD dwFlags, HANDLE hTransaction);
+WINBASEAPI HANDLE WINAPI OpenCommPort(ULONG uPortNumber, DWORD dwDesiredAccess, DWORD dwFlagsAndAttributes);
+WINADVAPI BOOL WINAPI OperationEnd(OPERATION_END_PARAMETERS *OperationEndParams);
+WINADVAPI BOOL WINAPI OperationStart(OPERATION_START_PARAMETERS *OperationStartParams);
+WINBASEAPI DWORD APIENTRY QueryThreadProfiling(HANDLE ThreadHandle, PBOOLEAN Enabled);
+WINBASEAPI DWORD WINAPI RaiseCustomSystemEventTrigger(PCUSTOM_SYSTEM_EVENT_TRIGGER_CONFIG CustomSystemEventTriggerConfig);
+WINBASEAPI BOOL WINAPI ReadDirectoryChangesExW(HANDLE hDirectory, LPVOID lpBuffer, DWORD nBufferLength, BOOL bWatchSubtree, DWORD dwNotifyFilter, LPDWORD lpBytesReturned, LPOVERLAPPED lpOverlapped, LPOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine, READ_DIRECTORY_NOTIFY_INFORMATION_CLASS ReadDirectoryNotifyInformationClass);
+WINBASEAPI BOOL WINAPI RemoveDirectoryTransactedA(LPCSTR lpPathName, HANDLE hTransaction);
+WINBASEAPI BOOL WINAPI RemoveDirectoryTransactedW(LPCWSTR lpPathName, HANDLE hTransaction);
+WINBASEAPI BOOL WINAPI ReplacePartitionUnit(PWSTR TargetPartition, PWSTR SparePartition, ULONG Flags);
+WINBASEAPI BOOL WINAPI SetFileAttributesTransactedA(LPCSTR lpFileName, DWORD dwFileAttributes, HANDLE hTransaction);
+WINBASEAPI BOOL WINAPI SetFileAttributesTransactedW(LPCWSTR lpFileName, DWORD dwFileAttributes, HANDLE hTransaction);
 #if (!defined(MIDL_PASS))
 void SetThreadpoolCallbackCleanupGroup(PTP_CALLBACK_ENVIRON pcbe, PTP_CLEANUP_GROUP ptpcg, PTP_CLEANUP_GROUP_CANCEL_CALLBACK pfng);
 void SetThreadpoolCallbackLibrary(PTP_CALLBACK_ENVIRON pcbe, PVOID mod);
@@ -4981,18 +4989,18 @@ void SetThreadpoolCallbackPriority(PTP_CALLBACK_ENVIRON pcbe, TP_CALLBACK_PRIORI
 void SetThreadpoolCallbackRunsLong(PTP_CALLBACK_ENVIRON pcbe);
 #endif
 #if (defined(_AMD64_) || defined(_X86_) || defined(_ARM64_))
-BOOL SetXStateFeaturesMask(PCONTEXT Context, DWORD64 FeatureMask);
+WINBASEAPI BOOL WINAPI SetXStateFeaturesMask(PCONTEXT Context, DWORD64 FeatureMask);
 #endif
 #if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
-BOOL UmsThreadYield(PVOID SchedulerParam);
+WINBASEAPI BOOL WINAPI UmsThreadYield(PVOID SchedulerParam);
 #endif
-HRESULT UnregisterApplicationRecoveryCallback(void);
-HRESULT UnregisterApplicationRestart(void);
+WINBASEAPI HRESULT WINAPI UnregisterApplicationRecoveryCallback(void);
+WINBASEAPI HRESULT WINAPI UnregisterApplicationRestart(void);
 #if (!defined(MIDL_PASS))
-BOOL Wow64GetThreadSelectorEntry(HANDLE hThread, DWORD dwSelector, PWOW64_LDT_ENTRY lpSelectorEntry);
+WINBASEAPI BOOL WINAPI Wow64GetThreadSelectorEntry(HANDLE hThread, DWORD dwSelector, PWOW64_LDT_ENTRY lpSelectorEntry);
 #endif
-DWORD WTSGetServiceSessionId(void);
-BOOLEAN WTSIsServerContainer(void);
+WINBASEAPI DWORD WINAPI WTSGetServiceSessionId(void);
+WINBASEAPI BOOLEAN WINAPI WTSIsServerContainer(void);
 
 #ifdef __cplusplus
 }
@@ -5009,6 +5017,8 @@ BOOLEAN WTSIsServerContainer(void);
 #else
 #define AccessCheckByTypeAndAuditAlarm AccessCheckByTypeAndAuditAlarmA
 #endif
+
+typedef struct COPYFILE2_EXTENDED_PARAMETERS_V2 COPYFILE2_EXTENDED_PARAMETERS_V2;
 
 struct COPYFILE2_EXTENDED_PARAMETERS_V2
 {
@@ -5039,15 +5049,15 @@ extern "C" {
 
 /* TODO: LiberNT does not implement the functions below yet */
 #if (defined(_AMD64_) || defined(_X86_) || defined(_ARM64_))
-BOOL GetXStateFeaturesMask(PCONTEXT Context, PDWORD64 FeatureMask);
-PVOID LocateXStateFeature(PCONTEXT Context, DWORD FeatureId, PDWORD Length);
+WINBASEAPI BOOL WINAPI GetXStateFeaturesMask(PCONTEXT Context, PDWORD64 FeatureMask);
+WINBASEAPI PVOID WINAPI LocateXStateFeature(PCONTEXT Context, DWORD FeatureId, PDWORD Length);
 #endif
 #if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
-BOOL QueryUmsThreadInformation(PUMS_CONTEXT UmsThread, UMS_THREAD_INFO_CLASS UmsThreadInfoClass, PVOID UmsThreadInformation, ULONG UmsThreadInformationLength, PULONG ReturnLength);
+WINBASEAPI BOOL WINAPI QueryUmsThreadInformation(PUMS_CONTEXT UmsThread, UMS_THREAD_INFO_CLASS UmsThreadInfoClass, PVOID UmsThreadInformation, ULONG UmsThreadInformationLength, PULONG ReturnLength);
 #endif
-DWORD ReadThreadProfilingData(HANDLE PerformanceDataHandle, DWORD Flags, PPERFORMANCE_DATA PerformanceData);
+WINBASEAPI DWORD APIENTRY ReadThreadProfilingData(HANDLE PerformanceDataHandle, DWORD Flags, PPERFORMANCE_DATA PerformanceData);
 #if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
-BOOL SetUmsThreadInformation(PUMS_CONTEXT UmsThread, UMS_THREAD_INFO_CLASS UmsThreadInfoClass, PVOID UmsThreadInformation, ULONG UmsThreadInformationLength);
+WINBASEAPI BOOL WINAPI SetUmsThreadInformation(PUMS_CONTEXT UmsThread, UMS_THREAD_INFO_CLASS UmsThreadInfoClass, PVOID UmsThreadInformation, ULONG UmsThreadInformationLength);
 #endif
 
 #ifdef __cplusplus

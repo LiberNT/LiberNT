@@ -36,6 +36,8 @@ extern "C" {
 typedef LONG TDI_STATUS;
 typedef PVOID CONNECTION_CONTEXT;
 
+typedef struct _TDI_CONNECTION_INFORMATION TDI_CONNECTION_INFORMATION;
+
 typedef struct _TDI_CONNECTION_INFORMATION {
   LONG  UserDataLength;
   PVOID  UserData;
@@ -372,6 +374,8 @@ typedef struct _TA_ADDRESS {
 #define TDI_TRANSPORT_ADDRESS_LENGTH      (sizeof(TdiTransportAddress) - 1)
 #define TDI_CONNECTION_CONTEXT_LENGTH     (sizeof(TdiConnectionContext) - 1)
 
+typedef struct _TRANSPORT_ADDRESS *PTRANSPORT_ADDRESS;
+
 typedef struct _TRANSPORT_ADDRESS {
   LONG  TAAddressCount;
   TA_ADDRESS  Address[1];
@@ -537,7 +541,7 @@ typedef struct _TA_ADDRESS_IPX {
   } Address[1];
 } TA_IPX_ADDRESS, *PTA_IPX_ADDRESS;
 
-typedef struct _TA_NETBIOS_ADDRESS {
+typedef struct _TA_ADDRESS_NETBIOS {
   LONG  TAAddressCount;
   struct _Addr{
     USHORT  AddressLength;
@@ -660,19 +664,6 @@ typedef struct _TDI_ROUTING_INFO_WS03 {
 #define _TDI_USER_
 #define IOCTL_TDI_MAGIC_BULLET 0x2101FF
 
-#pragma pack(push, 1)
-struct _TA_ADDRESS_NETBIOS
-{
-    LONG TAAddressCount;
-    struct _Addr
-    {
-        USHORT AddressLength;
-        USHORT AddressType;
-        TDI_ADDRESS_NETBIOS Address[1];
-    } Address[1];
-};
-#pragma pack(pop)
-
 typedef TDI_ROUTING_INFO_WS03 TDI_ROUTING_INFO;
 
 typedef TDI_ROUTING_INFO *PTDI_ROUTING_INFO;
@@ -698,18 +689,10 @@ typedef struct _TA_ADDRESS_NETBIOS_EX TA_NETBIOS_EX_ADDRESS;
 extern "C" {
 #endif
 
-NTSTATUS WINAPI TdiOpenNetbiosAddress(PHANDLE FileHandle, PUCHAR Buffer, PVOID DeviceName, PVOID Name);
+NTSTATUS NTAPI TdiOpenNetbiosAddress(PHANDLE FileHandle, PUCHAR Buffer, PVOID DeviceName, PVOID Name);
 
 #ifdef __cplusplus
 }
 #endif
-
-typedef struct _TRANSPORT_ADDRESS *PTRANSPORT_ADDRESS;
-
-typedef struct _TDI_CONNECTION_INFORMATION TDI_CONNECTION_INFORMATION;
-
-typedef struct _TRANSPORT_ADDRESS *PTRANSPORT_ADDRESS;
-
-typedef struct _TDI_CONNECTION_INFORMATION TDI_CONNECTION_INFORMATION;
 
 #endif /* __TDI_H */

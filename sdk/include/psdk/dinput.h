@@ -5269,6 +5269,8 @@ typedef struct DIPROPCPOINTS {
 #endif
 #if (!(defined(UNICODE)))
 #define IDirectInput2Vtbl IDirectInput2AVtbl
+#else
+#define IDirectInput2Vtbl IDirectInput2WVtbl
 #endif
 #ifdef UNICODE
 #define IDirectInput7 IDirectInput7W
@@ -5283,6 +5285,8 @@ typedef struct DIPROPCPOINTS {
 #endif
 #if (!(defined(UNICODE)))
 #define IDirectInput7Vtbl IDirectInput7AVtbl
+#else
+#define IDirectInput7Vtbl IDirectInput7WVtbl
 #endif
 #ifdef UNICODE
 #define IDirectInput8 IDirectInput8W
@@ -5297,6 +5301,8 @@ typedef struct DIPROPCPOINTS {
 #endif
 #if (!(defined(UNICODE)))
 #define IDirectInput8Vtbl IDirectInput8AVtbl
+#else
+#define IDirectInput8Vtbl IDirectInput8WVtbl
 #endif
 #ifdef UNICODE
 #define IDirectInputDevice IDirectInputDeviceW
@@ -5322,6 +5328,8 @@ typedef struct DIPROPCPOINTS {
 #endif
 #if (!(defined(UNICODE)))
 #define IDirectInputDevice2Vtbl IDirectInputDevice2AVtbl
+#else
+#define IDirectInputDevice2Vtbl IDirectInputDevice2WVtbl
 #endif
 #ifdef UNICODE
 #define IDirectInputDevice7 IDirectInputDevice7W
@@ -5336,6 +5344,8 @@ typedef struct DIPROPCPOINTS {
 #endif
 #if (!(defined(UNICODE)))
 #define IDirectInputDevice7Vtbl IDirectInputDevice7AVtbl
+#else
+#define IDirectInputDevice7Vtbl IDirectInputDevice7WVtbl
 #endif
 #ifdef UNICODE
 #define IDirectInputDevice8 IDirectInputDevice8W
@@ -5423,7 +5433,9 @@ typedef void (WINAPI *LPFNSHOWJOYCPL)(HWND);
 extern "C" {
 #endif
 
+#ifdef _INC_MMSYSTEM
 MMRESULT WINAPI joyConfigChanged(DWORD dwFlags);
+#endif
 
 /* TODO: LiberNT does not implement the functions below yet */
 LPCDIDATAFORMAT WINAPI GetdfDIJoystick(void);

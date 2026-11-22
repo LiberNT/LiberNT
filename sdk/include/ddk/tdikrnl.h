@@ -1258,7 +1258,7 @@ struct _TDI_VERSION_
 
 typedef struct _TDI_VERSION_ *PTDI_VERSION;
 
-typedef void (*TDI_NET_READY_HANDLER)(NTSTATUS);
+typedef void (NTAPI *TDI_NET_READY_HANDLER)(NTSTATUS);
 
 typedef struct _TDI_VERSION_ TDI_VERSION;
 
@@ -1268,9 +1268,9 @@ extern "C" {
 
 /* TODO: LiberNT does not implement the functions below yet */
 void TdiCopyBufferToMdlWithReservedMapping(PVOID SourceBuffer, PMDL DestinationMdl, ULONG DestinationOffset, ULONG BytesToCopy);
-void TdiCopyBufferToMdlWithReservedMappingAtDpcLevel(PVOID SourceBuffer, PMDL DestinationMdl, ULONG DestinationOffset, ULONG BytesToCopy);
-void TdiGet9FTriageBlock(PVOID *TriageBlockAddress);
-NTSTATUS TdiMakeNCPAChanges(TDI_NCPA_BINDING_INFO NcpaBindingInfo);
+void NTAPI TdiCopyBufferToMdlWithReservedMappingAtDpcLevel(PVOID SourceBuffer, PMDL DestinationMdl, ULONG DestinationOffset, ULONG BytesToCopy);
+void NTAPI TdiGet9FTriageBlock(PVOID *TriageBlockAddress);
+NTSTATUS NTAPI TdiMakeNCPAChanges(TDI_NCPA_BINDING_INFO NcpaBindingInfo);
 
 #ifdef __cplusplus
 }

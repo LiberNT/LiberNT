@@ -6,7 +6,7 @@ extern "C" {
 #endif
 
 #if (_WIN32_WINNT >= 0x0501)
-typedef enum {
+typedef enum tagEFaultRepRetVal {
 	frrvErr = 3,
 	frrvErrNoDW = 4,
 	frrvErrTimeout = 5,
@@ -56,9 +56,5 @@ typedef EFaultRepRetVal (WINAPI *pfn_ADDEREXCLUDEDAPPLICATIONA)(LPCSTR);
 
 typedef EFaultRepRetVal (WINAPI *pfn_ADDEREXCLUDEDAPPLICATIONW)(LPCWSTR);
 
-enum tagEFaultRepRetVal
-{
-
-};
 
 #endif

@@ -371,6 +371,8 @@ typedef struct _PDH_TIME_INFO {
 #else
 #if (!(defined(UNICODE)))
 #define PDH_BROWSE_DLG_CONFIG PDH_BROWSE_DLG_CONFIG_A
+#else
+#define PDH_BROWSE_DLG_CONFIG PDH_BROWSE_DLG_CONFIG_W
 #endif
 #endif
 #define PDH_FLAGS_CLOSE_QUERY ((DWORD)1)
@@ -397,6 +399,8 @@ typedef struct _PDH_TIME_INFO {
 #else
 #if (!(defined(UNICODE)))
 #define PDH_LOG_SERVICE_QUERY_INFO PDH_LOG_SERVICE_QUERY_INFO_A
+#else
+#define PDH_LOG_SERVICE_QUERY_INFO PDH_LOG_SERVICE_QUERY_INFO_W
 #endif
 #endif
 #define PDH_LOG_UPDATE_ACCESS ((DWORD)0x40000)
@@ -409,6 +413,8 @@ typedef struct _PDH_TIME_INFO {
 #else
 #if (!(defined(UNICODE)))
 #define PDH_RAW_COUNTER_ITEM PDH_RAW_COUNTER_ITEM_A
+#else
+#define PDH_RAW_COUNTER_ITEM PDH_RAW_COUNTER_ITEM_W
 #endif
 #endif
 #ifdef UNICODE
@@ -671,6 +677,8 @@ typedef struct _PDH_TIME_INFO {
 #else
 #if (!(defined(UNICODE)))
 #define PPDH_BROWSE_DLG_CONFIG PPDH_BROWSE_DLG_CONFIG_A
+#else
+#define PPDH_BROWSE_DLG_CONFIG PPDH_BROWSE_DLG_CONFIG_W
 #endif
 #endif
 #ifdef UNICODE
@@ -678,6 +686,8 @@ typedef struct _PDH_TIME_INFO {
 #else
 #if (!(defined(UNICODE)))
 #define PPDH_LOG_SERVICE_QUERY_INFO PPDH_LOG_SERVICE_QUERY_INFO_A
+#else
+#define PPDH_LOG_SERVICE_QUERY_INFO PPDH_LOG_SERVICE_QUERY_INFO_W
 #endif
 #endif
 #ifdef UNICODE
@@ -685,6 +695,8 @@ typedef struct _PDH_TIME_INFO {
 #else
 #if (!(defined(UNICODE)))
 #define PPDH_RAW_COUNTER_ITEM PPDH_RAW_COUNTER_ITEM_A
+#else
+#define PPDH_RAW_COUNTER_ITEM PPDH_RAW_COUNTER_ITEM_W
 #endif
 #endif
 

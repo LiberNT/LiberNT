@@ -155,6 +155,4 @@ cpp_quote("#endif")
 
 cpp_quote("#define _RICHOLE_")
 cpp_quote("")
-cpp_quote("typedef struct IRichEditOleCallbackVtbl IRichEditOleCallbackVtbl;")
 cpp_quote("")
-cpp_quote("typedef struct IRichEditOleVtbl IRichEditOleVtbl;")

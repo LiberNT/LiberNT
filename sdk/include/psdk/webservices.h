@@ -19,6 +19,12 @@
 #ifndef __WINE_WEBSERVICES_H
 #define __WINE_WEBSERVICES_H
 
+#include <wtypes.h>
+#include <wincrypt.h>
+
+struct _CERT_CONTEXT;
+struct _SecPkgContext_IssuerListInfoEx;
+
 #ifdef __cplusplus
 extern "C" {
 #endif  /* __cplusplus */
@@ -2977,10 +2983,8 @@ typedef struct _WS_XML_WRITER_RAW_ENCODING {
 #define WS_STRING_EMPTY { 0, NULL }
 #define WS_XML_STRING_NULL { 0, NULL, NULL, NULL }
 
-enum WS_SECURITY_ALGORITHM_PROPERTY_ID
-{
-
-};
+/* FIXME: Windows declares WS_SECURITY_ALGORITHM_PROPERTY_ID as an enumeration without enumerators, which C does not allow */
+typedef int WS_SECURITY_ALGORITHM_PROPERTY_ID;
 
 struct _WS_CHANNEL_PROPERTY_CONSTRAINT
 {
@@ -3369,14 +3373,14 @@ struct _WS_CUSTOM_TYPE_DESCRIPTION
 
 typedef struct _WS_CUSTOM_TYPE_DESCRIPTION WS_CUSTOM_TYPE_DESCRIPTION;
 
+typedef struct _WS_ASYNC_OPERATION WS_ASYNC_OPERATION;
+
+typedef HRESULT (WINAPI *WS_ASYNC_FUNCTION)(HRESULT, WS_CALLBACK_MODEL, void *, WS_ASYNC_OPERATION *, const WS_ASYNC_CONTEXT *, WS_ERROR *);
+
 struct _WS_ASYNC_OPERATION
 {
     WS_ASYNC_FUNCTION function;
 };
-
-typedef HRESULT (WINAPI *WS_ASYNC_FUNCTION)(HRESULT, WS_CALLBACK_MODEL, void *, WS_ASYNC_OPERATION *, const WS_ASYNC_CONTEXT *, WS_ERROR *);
-
-typedef struct _WS_ASYNC_OPERATION WS_ASYNC_OPERATION;
 
 #ifdef __cplusplus
 extern "C" {

@@ -50,7 +50,6 @@ interface IAudioMediaStream : IMediaStream
 	);
 }
 
-
 [
 object,
 local,
@@ -63,7 +62,6 @@ interface IAudioStreamSample : IStreamSample
 		[out] IAudioData **ppAudio
 	);
 }
-
 
 [
 object,
@@ -89,7 +87,6 @@ interface IMemoryData : IUnknown
 	);
 }
 
-
 [
 object,
 local,
@@ -107,53 +104,6 @@ interface IAudioData : IMemoryData
 	);
 }
 
-cpp_quote("struct IAudioDataVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IAudioData *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IAudioData *);")
-cpp_quote("    ULONG (WINAPI *Release)(IAudioData *);")
-cpp_quote("    HRESULT (WINAPI *SetBuffer)(IAudioData *, DWORD, BYTE *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *GetInfo)(IAudioData *, DWORD *, BYTE **, DWORD *);")
-cpp_quote("    HRESULT (WINAPI *SetActual)(IAudioData *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *GetFormat)(IAudioData *, WAVEFORMATEX *);")
-cpp_quote("    HRESULT (WINAPI *SetFormat)(IAudioData *, const WAVEFORMATEX *);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IAudioMediaStreamVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IAudioMediaStream *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IAudioMediaStream *);")
-cpp_quote("    ULONG (WINAPI *Release)(IAudioMediaStream *);")
-cpp_quote("    HRESULT (WINAPI *GetMultiMediaStream)(IAudioMediaStream *, IMultiMediaStream **);")
-cpp_quote("    HRESULT (WINAPI *GetInformation)(IAudioMediaStream *, MSPID *, STREAM_TYPE *);")
-cpp_quote("    HRESULT (WINAPI *SetSameFormat)(IAudioMediaStream *, IMediaStream *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *AllocateSample)(IAudioMediaStream *, DWORD, IStreamSample **);")
-cpp_quote("    HRESULT (WINAPI *CreateSharedSample)(IAudioMediaStream *, IStreamSample *, DWORD, IStreamSample **);")
-cpp_quote("    HRESULT (WINAPI *SendEndOfStream)(IAudioMediaStream *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *GetFormat)(IAudioMediaStream *, WAVEFORMATEX *);")
-cpp_quote("    HRESULT (WINAPI *SetFormat)(IAudioMediaStream *, const WAVEFORMATEX *);")
-cpp_quote("    HRESULT (WINAPI *CreateSample)(IAudioMediaStream *, IAudioData *, DWORD, IAudioStreamSample **);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IAudioStreamSampleVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IAudioStreamSample *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IAudioStreamSample *);")
-cpp_quote("    ULONG (WINAPI *Release)(IAudioStreamSample *);")
-cpp_quote("    HRESULT (WINAPI *GetMediaStream)(IAudioStreamSample *, IMediaStream **);")
-cpp_quote("    HRESULT (WINAPI *GetSampleTimes)(IAudioStreamSample *, STREAM_TIME *, STREAM_TIME *, STREAM_TIME *);")
-cpp_quote("    HRESULT (WINAPI *SetSampleTimes)(IAudioStreamSample *, const STREAM_TIME *, const STREAM_TIME *);")
-cpp_quote("    HRESULT (WINAPI *Update)(IAudioStreamSample *, DWORD, HANDLE, PAPCFUNC, DWORD_PTR);")
-cpp_quote("    HRESULT (WINAPI *CompletionStatus)(IAudioStreamSample *, DWORD, DWORD);")
-cpp_quote("    HRESULT (WINAPI *GetAudioData)(IAudioStreamSample *, IAudioData **);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IMemoryDataVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IMemoryData *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IMemoryData *);")
-cpp_quote("    ULONG (WINAPI *Release)(IMemoryData *);")
-cpp_quote("    HRESULT (WINAPI *SetBuffer)(IMemoryData *, DWORD, BYTE *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *GetInfo)(IMemoryData *, DWORD *, BYTE **, DWORD *);")
-cpp_quote("    HRESULT (WINAPI *SetActual)(IMemoryData *, DWORD);")
-cpp_quote("};")

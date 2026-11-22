@@ -138,7 +138,6 @@ interface IXAPO : IUnknown
 /* XAudio2 2.7 version of IXAPO is identical to 2.8 */
 cpp_quote("DEFINE_GUID(IID_IXAPO27, 0xa90bc001, 0xe897, 0xe897, 0x55, 0xe4, 0x9e, 0x47, 0x00, 0x00, 0x00, 0x00);")
 
-
 /* XAudio2 2.8 version of IXAPOParameters */
 [
     object,
@@ -175,30 +174,10 @@ cpp_quote("#endif")
 
 cpp_quote("#define XAPO_E_FORMAT_UNSUPPORTED (-2003369983)")
 cpp_quote("")
-cpp_quote("typedef struct IXAPOParametersVtbl IXAPOParametersVtbl;")
 cpp_quote("")
-cpp_quote("typedef struct IXAPOVtbl IXAPOVtbl;")
 cpp_quote("")
 cpp_quote("typedef struct XAPO_LOCKFORPROCESS_BUFFER_PARAMETERS XAPO_LOCKFORPROCESS_PARAMETERS;")
 
-cpp_quote("#define IXAPO_AddRef(This) ((This) -> lpVtbl -> AddRef(This))")
-cpp_quote("#define IXAPO_CalcInputFrames(This, OutputFrameCount) ((This) -> lpVtbl -> CalcInputFrames(This, OutputFrameCount))")
-cpp_quote("#define IXAPO_CalcOutputFrames(This, InputFrameCount) ((This) -> lpVtbl -> CalcOutputFrames(This, InputFrameCount))")
-cpp_quote("#define IXAPO_GetRegistrationProperties(This, ppRegistrationProperties) ((This) -> lpVtbl -> GetRegistrationProperties(This, ppRegistrationProperties))")
-cpp_quote("#define IXAPO_Initialize(This, pData, DataByteSize) ((This) -> lpVtbl -> Initialize(This, pData, DataByteSize))")
-cpp_quote("#define IXAPO_IsInputFormatSupported(This, pOutputFormat, pRequestedInputFormat, ppSupportedInputFormat) ((This) -> lpVtbl -> IsInputFormatSupported(This, pOutputFormat, pRequestedInputFormat, ppSupportedInputFormat))")
-cpp_quote("#define IXAPO_IsOutputFormatSupported(This, pInputFormat, pRequestedOutputFormat, ppSupportedOutputFormat) ((This) -> lpVtbl -> IsOutputFormatSupported(This, pInputFormat, pRequestedOutputFormat, ppSupportedOutputFormat))")
-cpp_quote("#define IXAPO_LockForProcess(This, InputLockedParameterCount, pInputLockedParameters, OutputLockedParameterCount, pOutputLockedParameters) ((This) -> lpVtbl -> LockForProcess(This, InputLockedParameterCount, pInputLockedParameters, OutputLockedParameterCount, pOutputLockedParameters))")
-cpp_quote("#define IXAPO_Process(This, InputProcessParameterCount, pInputProcessParameters, OutputProcessParameterCount, pOutputProcessParameters, IsEnabled) ((This) -> lpVtbl -> Process(This, InputProcessParameterCount, pInputProcessParameters, OutputProcessParameterCount, pOutputProcessParameters, IsEnabled))")
-cpp_quote("#define IXAPO_QueryInterface(This, riid, ppInterface) ((This) -> lpVtbl -> QueryInterface(This, riid, ppInterface))")
-cpp_quote("#define IXAPO_Release(This) ((This) -> lpVtbl -> Release(This))")
-cpp_quote("#define IXAPO_Reset(This) ((This) -> lpVtbl -> Reset(This))")
-cpp_quote("#define IXAPO_UnlockForProcess(This) ((This) -> lpVtbl -> UnlockForProcess(This))")
-cpp_quote("#define IXAPOParameters_AddRef(This) ((This) -> lpVtbl -> AddRef(This))")
-cpp_quote("#define IXAPOParameters_GetParameters(This, pParameters, ParameterByteSize) ((This) -> lpVtbl -> GetParameters(This, pParameters, ParameterByteSize))")
-cpp_quote("#define IXAPOParameters_QueryInterface(This, riid, ppInterface) ((This) -> lpVtbl -> QueryInterface(This, riid, ppInterface))")
-cpp_quote("#define IXAPOParameters_Release(This) ((This) -> lpVtbl -> Release(This))")
-cpp_quote("#define IXAPOParameters_SetParameters(This, pParameters, ParameterByteSize) ((This) -> lpVtbl -> SetParameters(This, pParameters, ParameterByteSize))")
 cpp_quote("#define XAPOAlloc(size) CoTaskMemAlloc(size)")
 cpp_quote("#define XAPOFree(p) CoTaskMemFree(p)")
 

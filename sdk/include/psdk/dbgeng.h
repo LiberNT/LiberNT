@@ -16,6 +16,8 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
+#pragma once
+
 #include "objbase.h"
 
 #ifdef __cplusplus
@@ -4302,6 +4304,7 @@ HRESULT WINAPI DebugCreate(REFIID riid, void **out);
 #endif
 #ifndef STACK_FRAME_TYPE_STACK
 #define STACK_FRAME_TYPE_STACK 0x01
+#endif
 
 typedef struct IDebugAdvanced * PDEBUG_ADVANCED;
 typedef struct IDebugAdvanced2 * PDEBUG_ADVANCED2;
@@ -4548,21 +4551,29 @@ typedef struct _SYMBOL_INFO_EX {
 #define DEBUG_OUTPUT_NAME_END "**NAME**"
 #if (!(defined(UNICODE)))
 #define DEBUG_OUTPUT_NAME_END_T DEBUG_OUTPUT_NAME_END
+#else
+#define DEBUG_OUTPUT_NAME_END_T DEBUG_OUTPUT_NAME_END_WIDE
 #endif
 #define DEBUG_OUTPUT_NAME_END_WIDE L"**NAME**"
 #define DEBUG_OUTPUT_OFFSET_END "**OFF**"
 #if (!(defined(UNICODE)))
 #define DEBUG_OUTPUT_OFFSET_END_T DEBUG_OUTPUT_OFFSET_END
+#else
+#define DEBUG_OUTPUT_OFFSET_END_T DEBUG_OUTPUT_OFFSET_END_WIDE
 #endif
 #define DEBUG_OUTPUT_OFFSET_END_WIDE L"**OFF**"
 #define DEBUG_OUTPUT_TYPE_END "**TYPE**"
 #if (!(defined(UNICODE)))
 #define DEBUG_OUTPUT_TYPE_END_T DEBUG_OUTPUT_TYPE_END
+#else
+#define DEBUG_OUTPUT_TYPE_END_T DEBUG_OUTPUT_TYPE_END_WIDE
 #endif
 #define DEBUG_OUTPUT_TYPE_END_WIDE L"**TYPE**"
 #define DEBUG_OUTPUT_VALUE_END "**VALUE**"
 #if (!(defined(UNICODE)))
 #define DEBUG_OUTPUT_VALUE_END_T DEBUG_OUTPUT_VALUE_END
+#else
+#define DEBUG_OUTPUT_VALUE_END_T DEBUG_OUTPUT_VALUE_END_WIDE
 #endif
 #define DEBUG_OUTPUT_VALUE_END_WIDE L"**VALUE**"
 #define DEBUG_SCOPE_GROUP_VALID_FLAGS 7
@@ -4847,7 +4858,7 @@ HRESULT WINAPI DebugCreateEx(const IID *const InterfaceId, DWORD DbgEngOptions, 
 
 /* TODO: LiberNT does not implement the functions below yet */
 void DebugCommandException(ULONG Command, ULONG ArgSize, PVOID Arg);
-HRESULT DebugConnectWide(PCWSTR RemoteOptions, const IID *const InterfaceId, PVOID *Interface);
+HRESULT STDAPICALLTYPE DebugConnectWide(PCWSTR RemoteOptions, const IID *const InterfaceId, PVOID *Interface);
 
 #ifdef __cplusplus
 }
@@ -4873,4 +4884,3 @@ typedef union _DEBUG_PROCESSOR_IDENTIFICATION_ALL *PDEBUG_PROCESSOR_IDENTIFICATI
 #define DEBUG_EXTENSION_VERSION(Major, Minor) ((((Major) & 0xffff) << 16) | ((Minor) & 0xffff))
 #define DEBUG_OUTTYPE_RECURSION_LEVEL(Max) (((Max) & 0xf) << 4)
 
-#endif

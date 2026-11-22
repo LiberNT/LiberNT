@@ -7445,6 +7445,10 @@ typedef enum TOUCHPAD_SENSITIVITY_LEVEL {
 typedef HELPWININFOA HELPWININFO;
 typedef ICONINFOEXA ICONINFOEX;
 typedef LPHELPWININFOA LPHELPWININFO;
+#else
+typedef HELPWININFOW HELPWININFO;
+typedef ICONINFOEXW ICONINFOEX;
+typedef LPHELPWININFOW LPHELPWININFO;
 #endif
 typedef struct tagMENUBARINFO * LPMENUBARINFO;
 typedef struct tagRAWINPUTHEADER * LPRAWINPUTHEADER;
@@ -7457,6 +7461,9 @@ typedef struct tagPAINTSTRUCT * NPPAINTSTRUCT;
 #if (!(defined(UNICODE)))
 typedef PHELPWININFOA PHELPWININFO;
 typedef PICONINFOEXA PICONINFOEX;
+#else
+typedef PHELPWININFOW PHELPWININFO;
+typedef PICONINFOEXW PICONINFOEX;
 #endif
 
 #ifdef __cplusplus
@@ -7763,9 +7770,12 @@ struct tagWNDCLASSA
 };
 
 typedef struct tagWNDCLASSA *NPWNDCLASSA;
+typedef struct tagWNDCLASSW *NPWNDCLASSW;
 
 #if (!(defined(UNICODE)))
 typedef NPWNDCLASSA NPWNDCLASS;
+#else
+typedef NPWNDCLASSW NPWNDCLASS;
 #endif
 
 struct tagWNDCLASSEXA
@@ -7785,9 +7795,12 @@ struct tagWNDCLASSEXA
 };
 
 typedef struct tagWNDCLASSEXA *NPWNDCLASSEXA;
+typedef struct tagWNDCLASSEXW *NPWNDCLASSEXW;
 
 #if (!(defined(UNICODE)))
 typedef NPWNDCLASSEXA NPWNDCLASSEX;
+#else
+typedef NPWNDCLASSEXW NPWNDCLASSEX;
 #endif
 
 struct tagWNDCLASSEXW
@@ -7806,8 +7819,6 @@ struct tagWNDCLASSEXW
     HICON hIconSm;
 };
 
-typedef struct tagWNDCLASSEXW *NPWNDCLASSEXW;
-
 struct tagWNDCLASSW
 {
     UINT style;
@@ -7822,8 +7833,6 @@ struct tagWNDCLASSW
     LPCWSTR lpszClassName;
 };
 
-typedef struct tagWNDCLASSW *NPWNDCLASSW;
-
 typedef struct tagTOUCHPAD_PARAMETERS_V2 TOUCHPAD_PARAMETERS_V2;
 
 #ifdef __cplusplus
@@ -7831,87 +7840,99 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-BOOL ApplyWindowAction(HWND hwnd, WINDOW_ACTION *pAction);
-BOOL CancelShutdown(void);
-BOOL ConvertPrimaryPointerToMouseDrag(void);
-BOOL ConvertToInterceptWindow(HWND topLevelWindow);
-HDESK CreateDesktopExA(LPCSTR lpszDesktop, LPCSTR lpszDevice, DEVMODEA *pDevmode, DWORD dwFlags, ACCESS_MASK dwDesiredAccess, LPSECURITY_ATTRIBUTES lpsa, ULONG ulHeapSize, PVOID pvoid);
-HDESK CreateDesktopExW(LPCWSTR lpszDesktop, LPCWSTR lpszDevice, DEVMODEW *pDevmode, DWORD dwFlags, ACCESS_MASK dwDesiredAccess, LPSECURITY_ATTRIBUTES lpsa, ULONG ulHeapSize, PVOID pvoid);
-HSYNTHETICPOINTERDEVICE CreateSyntheticPointerDevice(POINTER_INPUT_TYPE pointerType, ULONG maxCount, POINTER_FEEDBACK_MODE mode);
-HSYNTHETICPOINTERDEVICE CreateSyntheticPointerDevice2(SYNTHETIC_DEVICE_CREATION_PARAMS *pParams);
-void DestroySyntheticPointerDevice(HSYNTHETICPOINTERDEVICE device);
-LONG DisplayConfigGetDeviceInfo(DISPLAYCONFIG_DEVICE_INFO_HEADER *requestPacket);
-LONG DisplayConfigSetDeviceInfo(DISPLAYCONFIG_DEVICE_INFO_HEADER *setPacket);
-BOOL EnableMouseInPointerForThread(void);
-BOOL EnterMoveSizeLoop(HWND hwnd, POINT ptCursor, MOVESIZE_OPERATION moveSizeCode);
-BOOL GetCIMSSM(INPUT_MESSAGE_SOURCE *inputMessageSource);
-BOOL GetClipboardMetadata(UINT format, PGETCLIPBMETADATA metadata);
-UINT GetCurrentMonitorTopologyId(void);
-LONG GetDisplayConfigBufferSizes(UINT32 flags, UINT32 *numPathArrayElements, UINT32 *numModeInfoArrayElements);
-BOOL GetPointerCursorId(UINT32 pointerId, UINT32 *cursorId);
-BOOL GetPointerDeviceCursors(HANDLE device, UINT32 *cursorCount, POINTER_DEVICE_CURSOR_INFO *deviceCursors);
-BOOL GetPointerDeviceProperties(HANDLE device, UINT32 *propertyCount, POINTER_DEVICE_PROPERTY *pointerProperties);
-BOOL GetPointerDeviceRects(HANDLE device, RECT *pointerDeviceRect, RECT *displayRect);
-BOOL GetPointerFrameInfo(UINT32 pointerId, UINT32 *pointerCount, POINTER_INFO *pointerInfo);
-BOOL GetPointerFrameInfoHistory(UINT32 pointerId, UINT32 *entriesCount, UINT32 *pointerCount, POINTER_INFO *pointerInfo);
-BOOL GetPointerFramePenInfo(UINT32 pointerId, UINT32 *pointerCount, POINTER_PEN_INFO *penInfo);
-BOOL GetPointerFramePenInfoHistory(UINT32 pointerId, UINT32 *entriesCount, UINT32 *pointerCount, POINTER_PEN_INFO *penInfo);
-BOOL GetPointerFrameTouchInfoHistory(UINT32 pointerId, UINT32 *entriesCount, UINT32 *pointerCount, POINTER_TOUCH_INFO *touchInfo);
-BOOL GetPointerFrameTouchpadInfo(UINT32 pointerId, UINT32 *pointerCount, POINTER_TOUCH_INFO *touchpadInfo);
-BOOL GetPointerFrameTouchpadInfoHistory(UINT32 pointerId, UINT32 *entriesCount, UINT32 *pointerCount, POINTER_TOUCH_INFO *touchpadInfo);
-BOOL GetPointerInfoHistory(UINT32 pointerId, UINT32 *entriesCount, POINTER_INFO *pointerInfo);
-BOOL GetPointerInputTransform(UINT32 pointerId, UINT32 historyCount, INPUT_TRANSFORM *inputTransform);
-BOOL GetPointerPenInfoHistory(UINT32 pointerId, UINT32 *entriesCount, POINTER_PEN_INFO *penInfo);
-BOOL GetPointerTouchpadInfo(UINT32 pointerId, POINTER_TOUCH_INFO *touchpadInfo);
-BOOL GetPointerTouchpadInfoHistory(UINT32 pointerId, UINT32 *entriesCount, POINTER_TOUCH_INFO *touchpadInfo);
-BOOL GetRawPointerDeviceData(UINT32 pointerId, UINT32 historyCount, UINT32 propertiesCount, POINTER_DEVICE_PROPERTY *pProperties, LONG *pValues);
-UINT GetSystemDpiForProcess(HANDLE hProcess);
-DPI_HOSTING_BEHAVIOR GetThreadDpiHostingBehavior(void);
-DWORD GetUnpredictedMessagePos(void);
-BOOL GetUpdatedClipboardFormats(PUINT lpuiFormats, UINT cFormats, PUINT pcFormatsOut);
-DPI_HOSTING_BEHAVIOR GetWindowDpiHostingBehavior(HWND hwnd);
-BOOL GetWindowFeedbackSetting(HWND hwnd, FEEDBACK_TYPE feedback, DWORD dwFlags, UINT32 *pSize, void *config);
-BOOL InheritWindowMonitor(HWND hwnd, HWND hwndInherit);
-BOOL InjectTouchpadAction(HSYNTHETICPOINTERDEVICE hDevice, TOUCHPAD_ACTION action);
-BOOL IsImmersiveProcess(HANDLE hProcess);
-BOOL IsInterceptWindow(HWND topLevelWindow, BOOL *isIntercept);
-BOOL IsTouchWindow(HWND hwnd, PULONG pulFlags);
-BOOL LogicalToPhysicalPoint(HWND hWnd, LPPOINT lpPoint);
-BOOL LogicalToPhysicalPointForPerMonitorDPI(HWND hWnd, LPPOINT lpPoint);
-LRESULT PackTouchHitTestingProximityEvaluation(const TOUCH_HIT_TESTING_INPUT *pHitTestingInput, const TOUCH_HIT_TESTING_PROXIMITY_EVALUATION *pProximityEval);
-BOOL PhysicalToLogicalPoint(HWND hWnd, LPPOINT lpPoint);
-BOOL PhysicalToLogicalPointForPerMonitorDPI(HWND hWnd, LPPOINT lpPoint);
-LONG QueryDisplayConfig(UINT32 flags, UINT32 *numPathArrayElements, DISPLAYCONFIG_PATH_INFO *pathArray, UINT32 *numModeInfoArrayElements, DISPLAYCONFIG_MODE_INFO *modeInfoArray, DISPLAYCONFIG_TOPOLOGY_ID *currentTopologyId);
-BOOL RegisterCloakedNotification(HWND hwnd, BOOL fRegister);
-BOOL RegisterForTooltipDismissNotification(HWND hWnd, TOOLTIP_DISMISS_FLAGS tdFlags);
-BOOL RegisterPointerDeviceNotifications(HWND window, BOOL notifyRange);
-BOOL RegisterPointerInputTarget(HWND hwnd, POINTER_INPUT_TYPE pointerType);
-BOOL RegisterPointerInputTargetEx(HWND hwnd, POINTER_INPUT_TYPE pointerType, BOOL fObserve);
-HPOWERNOTIFY RegisterSuspendResumeNotification(HANDLE hRecipient, DWORD Flags);
-BOOL RegisterTouchHitTestingWindow(HWND hwnd, ULONG value);
-BOOL RegisterTouchpadCapableThread(BOOL fEnable);
-BOOL RegisterTouchpadCapableWindow(HWND hWnd, BOOL fEnable);
-BOOL RegisterTouchWindow(HWND hwnd, ULONG ulFlags);
-BOOL ReportWindowContentInertia(HWND hWnd, BOOL bStartInertia);
-BOOL SetAdditionalForegroundBoostProcesses(HWND topLevelWindow, DWORD processHandleCount, HANDLE *processHandleArray);
-UINT_PTR SetCoalescableTimer(HWND hWnd, UINT_PTR nIDEvent, UINT uElapse, TIMERPROC lpTimerFunc, ULONG uToleranceDelay);
-LONG SetDisplayConfig(UINT32 numPathArrayElements, DISPLAYCONFIG_PATH_INFO *pathArray, UINT32 numModeInfoArrayElements, DISPLAYCONFIG_MODE_INFO *modeInfoArray, UINT32 flags);
-BOOL SetMaxTouchpadSensitivity(BOOL maxSensitivity);
-BOOL SetPhysicalCursorPos(int X, int Y);
-BOOL SetProcessRestrictionExemption(BOOL fEnableExemption);
-UINT SetThreadCursorCreationScaling(UINT cursorDpi);
-DPI_HOSTING_BEHAVIOR SetThreadDpiHostingBehavior(DPI_HOSTING_BEHAVIOR value);
-BOOL SetWindowFeedbackSetting(HWND hwnd, FEEDBACK_TYPE feedback, DWORD dwFlags, UINT32 size, const void *configuration);
-BOOL ShutdownBlockReasonCreate(HWND hWnd, LPCWSTR pwszReason);
-BOOL ShutdownBlockReasonDestroy(HWND hWnd);
-BOOL ShutdownBlockReasonQuery(HWND hWnd, LPWSTR pwszBuff, DWORD *pcchBuff);
-BOOL SkipPointerFrameMessages(UINT32 pointerId);
-BOOL SoundSentry(void);
-BOOL SystemParametersInfoForDpi(UINT uiAction, UINT uiParam, PVOID pvParam, UINT fWinIni, UINT dpi);
-BOOL UnregisterPointerInputTarget(HWND hwnd, POINTER_INPUT_TYPE pointerType);
-BOOL UnregisterPointerInputTargetEx(HWND hwnd, POINTER_INPUT_TYPE pointerType);
-BOOL UnregisterSuspendResumeNotification(HPOWERNOTIFY Handle);
-BOOL UnregisterTouchWindow(HWND hwnd);
+WINUSERAPI BOOL WINAPI ApplyWindowAction(HWND hwnd, WINDOW_ACTION *pAction);
+WINUSERAPI BOOL WINAPI CancelShutdown(void);
+WINUSERAPI BOOL WINAPI ConvertPrimaryPointerToMouseDrag(void);
+WINUSERAPI BOOL WINAPI ConvertToInterceptWindow(HWND topLevelWindow);
+#ifdef _WINGDI_
+WINUSERAPI HDESK WINAPI CreateDesktopExA(LPCSTR lpszDesktop, LPCSTR lpszDevice, DEVMODEA *pDevmode, DWORD dwFlags, ACCESS_MASK dwDesiredAccess, LPSECURITY_ATTRIBUTES lpsa, ULONG ulHeapSize, PVOID pvoid);
+#endif
+#ifdef _WINGDI_
+WINUSERAPI HDESK WINAPI CreateDesktopExW(LPCWSTR lpszDesktop, LPCWSTR lpszDevice, DEVMODEW *pDevmode, DWORD dwFlags, ACCESS_MASK dwDesiredAccess, LPSECURITY_ATTRIBUTES lpsa, ULONG ulHeapSize, PVOID pvoid);
+#endif
+WINUSERAPI HSYNTHETICPOINTERDEVICE WINAPI CreateSyntheticPointerDevice(POINTER_INPUT_TYPE pointerType, ULONG maxCount, POINTER_FEEDBACK_MODE mode);
+WINUSERAPI HSYNTHETICPOINTERDEVICE WINAPI CreateSyntheticPointerDevice2(SYNTHETIC_DEVICE_CREATION_PARAMS *pParams);
+WINUSERAPI void WINAPI DestroySyntheticPointerDevice(HSYNTHETICPOINTERDEVICE device);
+#ifdef _WINGDI_
+WINUSERAPI LONG WINAPI DisplayConfigGetDeviceInfo(DISPLAYCONFIG_DEVICE_INFO_HEADER *requestPacket);
+#endif
+#ifdef _WINGDI_
+WINUSERAPI LONG WINAPI DisplayConfigSetDeviceInfo(DISPLAYCONFIG_DEVICE_INFO_HEADER *setPacket);
+#endif
+WINUSERAPI BOOL WINAPI EnableMouseInPointerForThread(void);
+WINUSERAPI BOOL WINAPI EnterMoveSizeLoop(HWND hwnd, POINT ptCursor, MOVESIZE_OPERATION moveSizeCode);
+WINUSERAPI BOOL WINAPI GetCIMSSM(INPUT_MESSAGE_SOURCE *inputMessageSource);
+WINUSERAPI BOOL WINAPI GetClipboardMetadata(UINT format, PGETCLIPBMETADATA metadata);
+WINUSERAPI UINT WINAPI GetCurrentMonitorTopologyId(void);
+WINUSERAPI LONG WINAPI GetDisplayConfigBufferSizes(UINT32 flags, UINT32 *numPathArrayElements, UINT32 *numModeInfoArrayElements);
+WINUSERAPI BOOL WINAPI GetPointerCursorId(UINT32 pointerId, UINT32 *cursorId);
+WINUSERAPI BOOL WINAPI GetPointerDeviceCursors(HANDLE device, UINT32 *cursorCount, POINTER_DEVICE_CURSOR_INFO *deviceCursors);
+WINUSERAPI BOOL WINAPI GetPointerDeviceProperties(HANDLE device, UINT32 *propertyCount, POINTER_DEVICE_PROPERTY *pointerProperties);
+WINUSERAPI BOOL WINAPI GetPointerDeviceRects(HANDLE device, RECT *pointerDeviceRect, RECT *displayRect);
+WINUSERAPI BOOL WINAPI GetPointerFrameInfo(UINT32 pointerId, UINT32 *pointerCount, POINTER_INFO *pointerInfo);
+WINUSERAPI BOOL WINAPI GetPointerFrameInfoHistory(UINT32 pointerId, UINT32 *entriesCount, UINT32 *pointerCount, POINTER_INFO *pointerInfo);
+WINUSERAPI BOOL WINAPI GetPointerFramePenInfo(UINT32 pointerId, UINT32 *pointerCount, POINTER_PEN_INFO *penInfo);
+WINUSERAPI BOOL WINAPI GetPointerFramePenInfoHistory(UINT32 pointerId, UINT32 *entriesCount, UINT32 *pointerCount, POINTER_PEN_INFO *penInfo);
+WINUSERAPI BOOL WINAPI GetPointerFrameTouchInfoHistory(UINT32 pointerId, UINT32 *entriesCount, UINT32 *pointerCount, POINTER_TOUCH_INFO *touchInfo);
+WINUSERAPI BOOL WINAPI GetPointerFrameTouchpadInfo(UINT32 pointerId, UINT32 *pointerCount, POINTER_TOUCH_INFO *touchpadInfo);
+WINUSERAPI BOOL WINAPI GetPointerFrameTouchpadInfoHistory(UINT32 pointerId, UINT32 *entriesCount, UINT32 *pointerCount, POINTER_TOUCH_INFO *touchpadInfo);
+WINUSERAPI BOOL WINAPI GetPointerInfoHistory(UINT32 pointerId, UINT32 *entriesCount, POINTER_INFO *pointerInfo);
+WINUSERAPI BOOL WINAPI GetPointerInputTransform(UINT32 pointerId, UINT32 historyCount, INPUT_TRANSFORM *inputTransform);
+WINUSERAPI BOOL WINAPI GetPointerPenInfoHistory(UINT32 pointerId, UINT32 *entriesCount, POINTER_PEN_INFO *penInfo);
+WINUSERAPI BOOL WINAPI GetPointerTouchpadInfo(UINT32 pointerId, POINTER_TOUCH_INFO *touchpadInfo);
+WINUSERAPI BOOL WINAPI GetPointerTouchpadInfoHistory(UINT32 pointerId, UINT32 *entriesCount, POINTER_TOUCH_INFO *touchpadInfo);
+WINUSERAPI BOOL WINAPI GetRawPointerDeviceData(UINT32 pointerId, UINT32 historyCount, UINT32 propertiesCount, POINTER_DEVICE_PROPERTY *pProperties, LONG *pValues);
+WINUSERAPI UINT WINAPI GetSystemDpiForProcess(HANDLE hProcess);
+WINUSERAPI DPI_HOSTING_BEHAVIOR WINAPI GetThreadDpiHostingBehavior(void);
+WINUSERAPI DWORD WINAPI GetUnpredictedMessagePos(void);
+WINUSERAPI BOOL WINAPI GetUpdatedClipboardFormats(PUINT lpuiFormats, UINT cFormats, PUINT pcFormatsOut);
+WINUSERAPI DPI_HOSTING_BEHAVIOR WINAPI GetWindowDpiHostingBehavior(HWND hwnd);
+WINUSERAPI BOOL WINAPI GetWindowFeedbackSetting(HWND hwnd, FEEDBACK_TYPE feedback, DWORD dwFlags, UINT32 *pSize, void *config);
+WINUSERAPI BOOL WINAPI InheritWindowMonitor(HWND hwnd, HWND hwndInherit);
+WINUSERAPI BOOL WINAPI InjectTouchpadAction(HSYNTHETICPOINTERDEVICE hDevice, TOUCHPAD_ACTION action);
+WINUSERAPI BOOL WINAPI IsImmersiveProcess(HANDLE hProcess);
+WINUSERAPI BOOL WINAPI IsInterceptWindow(HWND topLevelWindow, BOOL *isIntercept);
+WINUSERAPI BOOL WINAPI IsTouchWindow(HWND hwnd, PULONG pulFlags);
+WINUSERAPI BOOL WINAPI LogicalToPhysicalPoint(HWND hWnd, LPPOINT lpPoint);
+WINUSERAPI BOOL WINAPI LogicalToPhysicalPointForPerMonitorDPI(HWND hWnd, LPPOINT lpPoint);
+WINUSERAPI LRESULT WINAPI PackTouchHitTestingProximityEvaluation(const TOUCH_HIT_TESTING_INPUT *pHitTestingInput, const TOUCH_HIT_TESTING_PROXIMITY_EVALUATION *pProximityEval);
+WINUSERAPI BOOL WINAPI PhysicalToLogicalPoint(HWND hWnd, LPPOINT lpPoint);
+WINUSERAPI BOOL WINAPI PhysicalToLogicalPointForPerMonitorDPI(HWND hWnd, LPPOINT lpPoint);
+#ifdef _WINGDI_
+WINUSERAPI LONG WINAPI QueryDisplayConfig(UINT32 flags, UINT32 *numPathArrayElements, DISPLAYCONFIG_PATH_INFO *pathArray, UINT32 *numModeInfoArrayElements, DISPLAYCONFIG_MODE_INFO *modeInfoArray, DISPLAYCONFIG_TOPOLOGY_ID *currentTopologyId);
+#endif
+WINUSERAPI BOOL WINAPI RegisterCloakedNotification(HWND hwnd, BOOL fRegister);
+WINUSERAPI BOOL WINAPI RegisterForTooltipDismissNotification(HWND hWnd, TOOLTIP_DISMISS_FLAGS tdFlags);
+WINUSERAPI BOOL WINAPI RegisterPointerDeviceNotifications(HWND window, BOOL notifyRange);
+WINUSERAPI BOOL WINAPI RegisterPointerInputTarget(HWND hwnd, POINTER_INPUT_TYPE pointerType);
+WINUSERAPI BOOL WINAPI RegisterPointerInputTargetEx(HWND hwnd, POINTER_INPUT_TYPE pointerType, BOOL fObserve);
+WINUSERAPI HPOWERNOTIFY WINAPI RegisterSuspendResumeNotification(HANDLE hRecipient, DWORD Flags);
+WINUSERAPI BOOL WINAPI RegisterTouchHitTestingWindow(HWND hwnd, ULONG value);
+WINUSERAPI BOOL WINAPI RegisterTouchpadCapableThread(BOOL fEnable);
+WINUSERAPI BOOL WINAPI RegisterTouchpadCapableWindow(HWND hWnd, BOOL fEnable);
+WINUSERAPI BOOL WINAPI RegisterTouchWindow(HWND hwnd, ULONG ulFlags);
+WINUSERAPI BOOL WINAPI ReportWindowContentInertia(HWND hWnd, BOOL bStartInertia);
+WINUSERAPI BOOL WINAPI SetAdditionalForegroundBoostProcesses(HWND topLevelWindow, DWORD processHandleCount, HANDLE *processHandleArray);
+WINUSERAPI UINT_PTR WINAPI SetCoalescableTimer(HWND hWnd, UINT_PTR nIDEvent, UINT uElapse, TIMERPROC lpTimerFunc, ULONG uToleranceDelay);
+#ifdef _WINGDI_
+WINUSERAPI LONG WINAPI SetDisplayConfig(UINT32 numPathArrayElements, DISPLAYCONFIG_PATH_INFO *pathArray, UINT32 numModeInfoArrayElements, DISPLAYCONFIG_MODE_INFO *modeInfoArray, UINT32 flags);
+#endif
+WINUSERAPI BOOL WINAPI SetMaxTouchpadSensitivity(BOOL maxSensitivity);
+WINUSERAPI BOOL WINAPI SetPhysicalCursorPos(int X, int Y);
+WINUSERAPI BOOL WINAPI SetProcessRestrictionExemption(BOOL fEnableExemption);
+WINUSERAPI UINT WINAPI SetThreadCursorCreationScaling(UINT cursorDpi);
+WINUSERAPI DPI_HOSTING_BEHAVIOR WINAPI SetThreadDpiHostingBehavior(DPI_HOSTING_BEHAVIOR value);
+WINUSERAPI BOOL WINAPI SetWindowFeedbackSetting(HWND hwnd, FEEDBACK_TYPE feedback, DWORD dwFlags, UINT32 size, const void *configuration);
+WINUSERAPI BOOL WINAPI ShutdownBlockReasonCreate(HWND hWnd, LPCWSTR pwszReason);
+WINUSERAPI BOOL WINAPI ShutdownBlockReasonDestroy(HWND hWnd);
+WINUSERAPI BOOL WINAPI ShutdownBlockReasonQuery(HWND hWnd, LPWSTR pwszBuff, DWORD *pcchBuff);
+WINUSERAPI BOOL WINAPI SkipPointerFrameMessages(UINT32 pointerId);
+WINUSERAPI BOOL WINAPI SoundSentry(void);
+WINUSERAPI BOOL WINAPI SystemParametersInfoForDpi(UINT uiAction, UINT uiParam, PVOID pvParam, UINT fWinIni, UINT dpi);
+WINUSERAPI BOOL WINAPI UnregisterPointerInputTarget(HWND hwnd, POINTER_INPUT_TYPE pointerType);
+WINUSERAPI BOOL WINAPI UnregisterPointerInputTargetEx(HWND hwnd, POINTER_INPUT_TYPE pointerType);
+WINUSERAPI BOOL WINAPI UnregisterSuspendResumeNotification(HPOWERNOTIFY Handle);
+WINUSERAPI BOOL WINAPI UnregisterTouchWindow(HWND hwnd);
 
 #ifdef __cplusplus
 }
@@ -7927,6 +7948,8 @@ enum ORIENTATION_PREFERENCE
     ORIENTATION_PREFERENCE_LANDSCAPE_FLIPPED = 4,
     ORIENTATION_PREFERENCE_PORTRAIT_FLIPPED = 8,
 };
+
+typedef enum ORIENTATION_PREFERENCE ORIENTATION_PREFERENCE;
 
 typedef struct tagGESTURECONFIG GESTURECONFIG;
 
@@ -7953,9 +7976,13 @@ typedef struct tagGESTURECONFIG *PGESTURECONFIG;
 typedef struct tagGESTUREINFO *PGESTUREINFO;
 
 #if (!(defined(UNICODE)))
+#ifdef _WINGDI_
 typedef PICONMETRICSA PICONMETRICS;
+#endif
 
+#ifdef _WINGDI_
 typedef PNONCLIENTMETRICSA PNONCLIENTMETRICS;
+#endif
 #endif
 
 typedef struct tagTOUCHINPUT *PTOUCHINPUT;
@@ -8003,16 +8030,16 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-BOOL CloseGestureInfoHandle(HGESTUREINFO hGestureInfo);
-BOOL CloseTouchInputHandle(HTOUCHINPUT hTouchInput);
-BOOL GetDisplayAutoRotationPreferences(ORIENTATION_PREFERENCE *pOrientation);
-BOOL GetDisplayAutoRotationPreferencesByProcessId(DWORD dwProcessId, ORIENTATION_PREFERENCE *pOrientation, BOOL *fRotateScreen);
-BOOL GetGestureConfig(HWND hwnd, DWORD dwReserved, DWORD dwFlags, PUINT pcIDs, PGESTURECONFIG pGestureConfig, UINT cbSize);
-BOOL GetGestureExtraArgs(HGESTUREINFO hGestureInfo, UINT cbExtraArgs, PBYTE pExtraArgs);
-BOOL GetGestureInfo(HGESTUREINFO hGestureInfo, PGESTUREINFO pGestureInfo);
-BOOL GetTouchInputInfo(HTOUCHINPUT hTouchInput, UINT cInputs, PTOUCHINPUT pInputs, int cbSize);
-BOOL SetDisplayAutoRotationPreferences(ORIENTATION_PREFERENCE orientation);
-BOOL SetGestureConfig(HWND hwnd, DWORD dwReserved, UINT cIDs, PGESTURECONFIG pGestureConfig, UINT cbSize);
+WINUSERAPI BOOL WINAPI CloseGestureInfoHandle(HGESTUREINFO hGestureInfo);
+WINUSERAPI BOOL WINAPI CloseTouchInputHandle(HTOUCHINPUT hTouchInput);
+WINUSERAPI BOOL WINAPI GetDisplayAutoRotationPreferences(ORIENTATION_PREFERENCE *pOrientation);
+WINUSERAPI BOOL WINAPI GetDisplayAutoRotationPreferencesByProcessId(DWORD dwProcessId, ORIENTATION_PREFERENCE *pOrientation, BOOL *fRotateScreen);
+WINUSERAPI BOOL WINAPI GetGestureConfig(HWND hwnd, DWORD dwReserved, DWORD dwFlags, PUINT pcIDs, PGESTURECONFIG pGestureConfig, UINT cbSize);
+WINUSERAPI BOOL WINAPI GetGestureExtraArgs(HGESTUREINFO hGestureInfo, UINT cbExtraArgs, PBYTE pExtraArgs);
+WINUSERAPI BOOL WINAPI GetGestureInfo(HGESTUREINFO hGestureInfo, PGESTUREINFO pGestureInfo);
+WINUSERAPI BOOL WINAPI GetTouchInputInfo(HTOUCHINPUT hTouchInput, UINT cInputs, PTOUCHINPUT pInputs, int cbSize);
+WINUSERAPI BOOL WINAPI SetDisplayAutoRotationPreferences(ORIENTATION_PREFERENCE orientation);
+WINUSERAPI BOOL WINAPI SetGestureConfig(HWND hwnd, DWORD dwReserved, UINT cIDs, PGESTURECONFIG pGestureConfig, UINT cbSize);
 
 #ifdef __cplusplus
 }

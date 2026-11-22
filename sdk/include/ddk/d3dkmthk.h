@@ -6525,8 +6525,7 @@ typedef enum _DXGKMT_POWER_SHARED_TYPE
 extern "C" {
 #endif
 
-/* TODO: LiberNT does not implement the functions below yet */
-NTSTATUS D3DKMTRegisterVailProcess(GUID *);
+NTSTATUS APIENTRY D3DKMTRegisterVailProcess(GUID *);
 
 #ifdef __cplusplus
 }

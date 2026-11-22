@@ -453,7 +453,7 @@ typedef enum _MINIRDR_BUFSTATE_COMMANDS {
 
 typedef void (NTAPI *PMRX_NEWSTATE_CALLDOWN)(PVOID);
 
-typedef BOOLEAN (*PRX_LOCK_ENUMERATOR)(PMRX_SRV_OPEN, PVOID *, PLARGE_INTEGER, PLARGE_INTEGER, PBOOLEAN);
+typedef BOOLEAN (NTAPI *PRX_LOCK_ENUMERATOR)(PMRX_SRV_OPEN, PVOID *, PLARGE_INTEGER, PLARGE_INTEGER, PBOOLEAN);
 
 #ifdef __cplusplus
 extern "C" {
@@ -461,9 +461,9 @@ extern "C" {
 
 /* TODO: LiberNT does not implement the functions below yet */
 void __RxFillAndInstallFastIoDispatch(PRDBSS_DEVICE_OBJECT RxDeviceObject, PFAST_IO_DISPATCH FastIoDispatch, ULONG FastIoDispatchSize);
-void RxFinalizeLockList(struct _RX_CONTEXT *RxContext);
-void RxMakeLateDeviceAvailable(PRDBSS_DEVICE_OBJECT RxDeviceObject);
-NTSTATUS RxSetDomainForMailslotBroadcast(PUNICODE_STRING DomainName);
+void NTAPI RxFinalizeLockList(struct _RX_CONTEXT *RxContext);
+void NTAPI RxMakeLateDeviceAvailable(PRDBSS_DEVICE_OBJECT RxDeviceObject);
+NTSTATUS NTAPI RxSetDomainForMailslotBroadcast(PUNICODE_STRING DomainName);
 
 #ifdef __cplusplus
 }

@@ -37,14 +37,3 @@ interface IPersistHistory : IPersist
     HRESULT GetPositionCookie([out] DWORD *pdwPositioncookie);
 }
 
-cpp_quote("struct IPersistHistoryVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IPersistHistory *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IPersistHistory *);")
-cpp_quote("    ULONG (WINAPI *Release)(IPersistHistory *);")
-cpp_quote("    HRESULT (WINAPI *GetClassID)(IPersistHistory *, CLSID *);")
-cpp_quote("    HRESULT (WINAPI *LoadHistory)(IPersistHistory *, IStream *, IBindCtx *);")
-cpp_quote("    HRESULT (WINAPI *SaveHistory)(IPersistHistory *, IStream *);")
-cpp_quote("    HRESULT (WINAPI *SetPositionCookie)(IPersistHistory *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *GetPositionCookie)(IPersistHistory *, DWORD *);")
-cpp_quote("};")

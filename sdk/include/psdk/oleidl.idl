@@ -56,7 +56,6 @@ interface IOLETypes
       LINKSRCDESCRIPTOR, *PLINKSRCDESCRIPTOR,  *LPLINKSRCDESCRIPTOR;
 }
 
-
 /*****************************************************************************
  * IOleWindow interface
  */
@@ -75,7 +74,6 @@ interface IOleWindow : IUnknown
     HRESULT ContextSensitiveHelp(
         [in] BOOL fEnterMode);
 }
-
 
 /*****************************************************************************
  * IOleInPlaceObject interface
@@ -99,7 +97,6 @@ interface IOleInPlaceObject : IOleWindow
 
     HRESULT ReactivateAndUndo();
 }
-
 
 /*****************************************************************************
  * IOleInPlaceUIWindow interface
@@ -131,7 +128,6 @@ interface IOleInPlaceUIWindow : IOleWindow
         [in, unique] IOleInPlaceActiveObject *pActiveObject,
         [in, string, unique] LPCOLESTR pszObjName);
 }
-
 
 /* avoid conflict with Wine Unicode macros */
 cpp_quote("#ifdef WINE_NO_UNICODE_MACROS")
@@ -189,7 +185,6 @@ interface IOleInPlaceFrame : IOleInPlaceUIWindow
         [in] WORD wID);
 }
 
-
 /*****************************************************************************
  * IOleInPlaceActiveObject interface
  */
@@ -231,7 +226,6 @@ interface IOleInPlaceActiveObject : IOleWindow
         [in] BOOL fEnable);
 }
 
-
 /*****************************************************************************
  * IOleInPlaceSite interface
  */
@@ -269,7 +263,6 @@ interface IOleInPlaceSite : IOleWindow
         [in] LPCRECT lprcPosRect);
 }
 
-
 /*****************************************************************************
  * IParseDisplayName interface
  */
@@ -288,7 +281,6 @@ interface IParseDisplayName : IUnknown
         [out] ULONG *pchEaten,
         [out] IMoniker **ppmkOut);
 }
-
 
 /*****************************************************************************
  * IOleContainer interface
@@ -309,7 +301,6 @@ interface IOleContainer : IParseDisplayName
     HRESULT LockContainer(
         [in] BOOL fLock);
 }
-
 
 /*****************************************************************************
  * IOleItemContainer interface
@@ -358,7 +349,6 @@ cpp_quote("#endif")
     HRESULT IsRunning(
         [in] LPOLESTR pszItem);
 }
-
 
 /*****************************************************************************
  * IOleLink interface
@@ -416,7 +406,6 @@ interface IOleLink : IUnknown
         [in, unique] IBindCtx *pbc);
 }
 
-
 /*****************************************************************************
  * IOleClientSite interface
  */
@@ -446,7 +435,6 @@ interface IOleClientSite : IUnknown
 
     HRESULT RequestNewObjectLayout();
 }
-
 
 /*****************************************************************************
  * IOleCache interface
@@ -479,7 +467,6 @@ interface IOleCache : IUnknown
         [in, unique] STGMEDIUM *pmedium,
         [in] BOOL fRelease);
 }
-
 
 /*****************************************************************************
  * IOleCache2 interface
@@ -526,7 +513,6 @@ interface IOleCache2 : IOleCache
         [in] DWORD dwDiscardOptions);
 }
 
-
 /*****************************************************************************
  * IOleCacheControl interface
  */
@@ -543,7 +529,6 @@ interface IOleCacheControl : IUnknown
 
     HRESULT OnStop();
 }
-
 
 /*****************************************************************************
  *  IEnumOLEVERB interface
@@ -591,7 +576,6 @@ interface IEnumOLEVERB : IUnknown
     HRESULT Clone(
         [out] IEnumOLEVERB **ppenum);
 }
-
 
 /*****************************************************************************
  * IOleObject interface
@@ -739,7 +723,6 @@ interface IOleObject : IUnknown
         [in] LOGPALETTE *pLogpal);
 }
 
-
 /*****************************************************************************
  * IOleAdviseHolder interface
  */
@@ -769,7 +752,6 @@ interface IOleAdviseHolder : IUnknown
     HRESULT SendOnClose();
 }
 
-
 /*****************************************************************************
  * IContinue interface
  */
@@ -781,7 +763,6 @@ interface IContinue : IUnknown
 {
     HRESULT FContinue();
 }
-
 
 /*****************************************************************************
  * IViewObject interface
@@ -872,7 +853,6 @@ interface IViewObject : IUnknown
         [out] IAdviseSink **ppAdvSink);
 }
 
-
 /*****************************************************************************
  * IViewObject2 interface
  */
@@ -890,7 +870,6 @@ interface IViewObject2 : IViewObject
         [in, unique]  DVTARGETDEVICE* ptd,
         [out] LPSIZEL lpsizel);
 }
-
 
 /*****************************************************************************
  * IDropSource interface
@@ -911,7 +890,6 @@ interface IDropSource : IUnknown
     HRESULT GiveFeedback(
         [in] DWORD dwEffect);
 }
-
 
 /*****************************************************************************
  * IDropTarget interface
@@ -972,6 +950,8 @@ interface IDropSourceNotify : IUnknown
     HRESULT DragTargetLeave( void );
 }
 
+cpp_quote("#ifndef __oleidl_cpp_quote_1_DEFINED__")
+cpp_quote("#define __oleidl_cpp_quote_1_DEFINED__")
 cpp_quote("#ifndef DROPEFFECT_BACKGROUNDTARGET")
 cpp_quote("#define DROPEFFECT_BACKGROUNDTARGET 0x20000000")
 cpp_quote("#endif")
@@ -981,42 +961,9 @@ cpp_quote("#endif")
 
 cpp_quote("#define CFSTR_ENTERPRISE_ID (TEXT(\"EnterpriseDataProtectionId\"))")
 cpp_quote("")
-cpp_quote("struct IContinueVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IContinue *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IContinue *);")
-cpp_quote("    ULONG (WINAPI *Release)(IContinue *);")
-cpp_quote("    HRESULT (WINAPI *FContinue)(IContinue *);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IDropSourceNotifyVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IDropSourceNotify *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IDropSourceNotify *);")
-cpp_quote("    ULONG (WINAPI *Release)(IDropSourceNotify *);")
-cpp_quote("    HRESULT (WINAPI *DragEnterTarget)(IDropSourceNotify *, HWND);")
-cpp_quote("    HRESULT (WINAPI *DragLeaveTarget)(IDropSourceNotify *);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IDropSourceVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IDropSource *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IDropSource *);")
-cpp_quote("    ULONG (WINAPI *Release)(IDropSource *);")
-cpp_quote("    HRESULT (WINAPI *QueryContinueDrag)(IDropSource *, BOOL, DWORD);")
-cpp_quote("    HRESULT (WINAPI *GiveFeedback)(IDropSource *, DWORD);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IDropTargetVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IDropTarget *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IDropTarget *);")
-cpp_quote("    ULONG (WINAPI *Release)(IDropTarget *);")
-cpp_quote("    HRESULT (WINAPI *DragEnter)(IDropTarget *, IDataObject *, DWORD, POINTL, DWORD *);")
-cpp_quote("    HRESULT (WINAPI *DragOver)(IDropTarget *, DWORD, POINTL, DWORD *);")
-cpp_quote("    HRESULT (WINAPI *DragLeave)(IDropTarget *);")
-cpp_quote("    HRESULT (WINAPI *Drop)(IDropTarget *, IDataObject *, DWORD, POINTL, DWORD *);")
-cpp_quote("};")
 cpp_quote("")
 cpp_quote("typedef struct IEnterpriseDropTarget IEnterpriseDropTarget;")
 cpp_quote("")
@@ -1029,268 +976,24 @@ cpp_quote("    HRESULT (WINAPI *SetDropSourceEnterpriseId)(IEnterpriseDropTarget
 cpp_quote("    HRESULT (WINAPI *IsEvaluatingEdpPolicy)(IEnterpriseDropTarget *, BOOL *);")
 cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IEnumOLEVERBVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IEnumOLEVERB *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IEnumOLEVERB *);")
-cpp_quote("    ULONG (WINAPI *Release)(IEnumOLEVERB *);")
-cpp_quote("    HRESULT (WINAPI *Next)(IEnumOLEVERB *, ULONG, LPOLEVERB, ULONG *);")
-cpp_quote("    HRESULT (WINAPI *Skip)(IEnumOLEVERB *, ULONG);")
-cpp_quote("    HRESULT (WINAPI *Reset)(IEnumOLEVERB *);")
-cpp_quote("    HRESULT (WINAPI *Clone)(IEnumOLEVERB *, IEnumOLEVERB **);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IOleAdviseHolderVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IOleAdviseHolder *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IOleAdviseHolder *);")
-cpp_quote("    ULONG (WINAPI *Release)(IOleAdviseHolder *);")
-cpp_quote("    HRESULT (WINAPI *Advise)(IOleAdviseHolder *, IAdviseSink *, DWORD *);")
-cpp_quote("    HRESULT (WINAPI *Unadvise)(IOleAdviseHolder *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *EnumAdvise)(IOleAdviseHolder *, IEnumSTATDATA **);")
-cpp_quote("    HRESULT (WINAPI *SendOnRename)(IOleAdviseHolder *, IMoniker *);")
-cpp_quote("    HRESULT (WINAPI *SendOnSave)(IOleAdviseHolder *);")
-cpp_quote("    HRESULT (WINAPI *SendOnClose)(IOleAdviseHolder *);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IOleCache2Vtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IOleCache2 *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IOleCache2 *);")
-cpp_quote("    ULONG (WINAPI *Release)(IOleCache2 *);")
-cpp_quote("    HRESULT (WINAPI *Cache)(IOleCache2 *, FORMATETC *, DWORD, DWORD *);")
-cpp_quote("    HRESULT (WINAPI *Uncache)(IOleCache2 *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *EnumCache)(IOleCache2 *, IEnumSTATDATA **);")
-cpp_quote("    HRESULT (WINAPI *InitCache)(IOleCache2 *, IDataObject *);")
-cpp_quote("    HRESULT (WINAPI *SetData)(IOleCache2 *, FORMATETC *, STGMEDIUM *, BOOL);")
-cpp_quote("    HRESULT (WINAPI *UpdateCache)(IOleCache2 *, LPDATAOBJECT, DWORD, LPVOID);")
-cpp_quote("    HRESULT (WINAPI *DiscardCache)(IOleCache2 *, DWORD);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IOleCacheControlVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IOleCacheControl *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IOleCacheControl *);")
-cpp_quote("    ULONG (WINAPI *Release)(IOleCacheControl *);")
-cpp_quote("    HRESULT (WINAPI *OnRun)(IOleCacheControl *, LPDATAOBJECT);")
-cpp_quote("    HRESULT (WINAPI *OnStop)(IOleCacheControl *);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IOleCacheVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IOleCache *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IOleCache *);")
-cpp_quote("    ULONG (WINAPI *Release)(IOleCache *);")
-cpp_quote("    HRESULT (WINAPI *Cache)(IOleCache *, FORMATETC *, DWORD, DWORD *);")
-cpp_quote("    HRESULT (WINAPI *Uncache)(IOleCache *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *EnumCache)(IOleCache *, IEnumSTATDATA **);")
-cpp_quote("    HRESULT (WINAPI *InitCache)(IOleCache *, IDataObject *);")
-cpp_quote("    HRESULT (WINAPI *SetData)(IOleCache *, FORMATETC *, STGMEDIUM *, BOOL);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IOleClientSiteVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IOleClientSite *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IOleClientSite *);")
-cpp_quote("    ULONG (WINAPI *Release)(IOleClientSite *);")
-cpp_quote("    HRESULT (WINAPI *SaveObject)(IOleClientSite *);")
-cpp_quote("    HRESULT (WINAPI *GetMoniker)(IOleClientSite *, DWORD, DWORD, IMoniker **);")
-cpp_quote("    HRESULT (WINAPI *GetContainer)(IOleClientSite *, IOleContainer **);")
-cpp_quote("    HRESULT (WINAPI *ShowObject)(IOleClientSite *);")
-cpp_quote("    HRESULT (WINAPI *OnShowWindow)(IOleClientSite *, BOOL);")
-cpp_quote("    HRESULT (WINAPI *RequestNewObjectLayout)(IOleClientSite *);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IOleContainerVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IOleContainer *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IOleContainer *);")
-cpp_quote("    ULONG (WINAPI *Release)(IOleContainer *);")
-cpp_quote("    HRESULT (WINAPI *ParseDisplayName)(IOleContainer *, IBindCtx *, LPOLESTR, ULONG *, IMoniker **);")
-cpp_quote("    HRESULT (WINAPI *EnumObjects)(IOleContainer *, DWORD, IEnumUnknown **);")
-cpp_quote("    HRESULT (WINAPI *LockContainer)(IOleContainer *, BOOL);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IOleInPlaceActiveObjectVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IOleInPlaceActiveObject *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IOleInPlaceActiveObject *);")
-cpp_quote("    ULONG (WINAPI *Release)(IOleInPlaceActiveObject *);")
-cpp_quote("    HRESULT (WINAPI *GetWindow)(IOleInPlaceActiveObject *, HWND *);")
-cpp_quote("    HRESULT (WINAPI *ContextSensitiveHelp)(IOleInPlaceActiveObject *, BOOL);")
-cpp_quote("    HRESULT (WINAPI *TranslateAcceleratorA)(IOleInPlaceActiveObject *, LPMSG);")
-cpp_quote("    HRESULT (WINAPI *OnFrameWindowActivate)(IOleInPlaceActiveObject *, BOOL);")
-cpp_quote("    HRESULT (WINAPI *OnDocWindowActivate)(IOleInPlaceActiveObject *, BOOL);")
-cpp_quote("    HRESULT (WINAPI *ResizeBorder)(IOleInPlaceActiveObject *, LPCRECT, IOleInPlaceUIWindow *, BOOL);")
-cpp_quote("    HRESULT (WINAPI *EnableModeless)(IOleInPlaceActiveObject *, BOOL);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IOleInPlaceFrameVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IOleInPlaceFrame *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IOleInPlaceFrame *);")
-cpp_quote("    ULONG (WINAPI *Release)(IOleInPlaceFrame *);")
-cpp_quote("    HRESULT (WINAPI *GetWindow)(IOleInPlaceFrame *, HWND *);")
-cpp_quote("    HRESULT (WINAPI *ContextSensitiveHelp)(IOleInPlaceFrame *, BOOL);")
-cpp_quote("    HRESULT (WINAPI *GetBorder)(IOleInPlaceFrame *, LPRECT);")
-cpp_quote("    HRESULT (WINAPI *RequestBorderSpace)(IOleInPlaceFrame *, LPCBORDERWIDTHS);")
-cpp_quote("    HRESULT (WINAPI *SetBorderSpace)(IOleInPlaceFrame *, LPCBORDERWIDTHS);")
-cpp_quote("    HRESULT (WINAPI *SetActiveObject)(IOleInPlaceFrame *, IOleInPlaceActiveObject *, LPCOLESTR);")
-cpp_quote("    HRESULT (WINAPI *InsertMenus)(IOleInPlaceFrame *, HMENU, LPOLEMENUGROUPWIDTHS);")
-cpp_quote("    HRESULT (WINAPI *SetMenu)(IOleInPlaceFrame *, HMENU, HOLEMENU, HWND);")
-cpp_quote("    HRESULT (WINAPI *RemoveMenus)(IOleInPlaceFrame *, HMENU);")
-cpp_quote("    HRESULT (WINAPI *SetStatusText)(IOleInPlaceFrame *, LPCOLESTR);")
-cpp_quote("    HRESULT (WINAPI *EnableModeless)(IOleInPlaceFrame *, BOOL);")
-cpp_quote("    HRESULT (WINAPI *TranslateAcceleratorA)(IOleInPlaceFrame *, LPMSG, WORD);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IOleInPlaceObjectVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IOleInPlaceObject *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IOleInPlaceObject *);")
-cpp_quote("    ULONG (WINAPI *Release)(IOleInPlaceObject *);")
-cpp_quote("    HRESULT (WINAPI *GetWindow)(IOleInPlaceObject *, HWND *);")
-cpp_quote("    HRESULT (WINAPI *ContextSensitiveHelp)(IOleInPlaceObject *, BOOL);")
-cpp_quote("    HRESULT (WINAPI *InPlaceDeactivate)(IOleInPlaceObject *);")
-cpp_quote("    HRESULT (WINAPI *UIDeactivate)(IOleInPlaceObject *);")
-cpp_quote("    HRESULT (WINAPI *SetObjectRects)(IOleInPlaceObject *, LPCRECT, LPCRECT);")
-cpp_quote("    HRESULT (WINAPI *ReactivateAndUndo)(IOleInPlaceObject *);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IOleInPlaceSiteVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IOleInPlaceSite *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IOleInPlaceSite *);")
-cpp_quote("    ULONG (WINAPI *Release)(IOleInPlaceSite *);")
-cpp_quote("    HRESULT (WINAPI *GetWindow)(IOleInPlaceSite *, HWND *);")
-cpp_quote("    HRESULT (WINAPI *ContextSensitiveHelp)(IOleInPlaceSite *, BOOL);")
-cpp_quote("    HRESULT (WINAPI *CanInPlaceActivate)(IOleInPlaceSite *);")
-cpp_quote("    HRESULT (WINAPI *OnInPlaceActivate)(IOleInPlaceSite *);")
-cpp_quote("    HRESULT (WINAPI *OnUIActivate)(IOleInPlaceSite *);")
-cpp_quote("    HRESULT (WINAPI *GetWindowContext)(IOleInPlaceSite *, IOleInPlaceFrame **, IOleInPlaceUIWindow **, LPRECT, LPRECT, LPOLEINPLACEFRAMEINFO);")
-cpp_quote("    HRESULT (WINAPI *Scroll)(IOleInPlaceSite *, SIZE);")
-cpp_quote("    HRESULT (WINAPI *OnUIDeactivate)(IOleInPlaceSite *, BOOL);")
-cpp_quote("    HRESULT (WINAPI *OnInPlaceDeactivate)(IOleInPlaceSite *);")
-cpp_quote("    HRESULT (WINAPI *DiscardUndoState)(IOleInPlaceSite *);")
-cpp_quote("    HRESULT (WINAPI *DeactivateAndUndo)(IOleInPlaceSite *);")
-cpp_quote("    HRESULT (WINAPI *OnPosRectChange)(IOleInPlaceSite *, LPCRECT);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IOleInPlaceUIWindowVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IOleInPlaceUIWindow *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IOleInPlaceUIWindow *);")
-cpp_quote("    ULONG (WINAPI *Release)(IOleInPlaceUIWindow *);")
-cpp_quote("    HRESULT (WINAPI *GetWindow)(IOleInPlaceUIWindow *, HWND *);")
-cpp_quote("    HRESULT (WINAPI *ContextSensitiveHelp)(IOleInPlaceUIWindow *, BOOL);")
-cpp_quote("    HRESULT (WINAPI *GetBorder)(IOleInPlaceUIWindow *, LPRECT);")
-cpp_quote("    HRESULT (WINAPI *RequestBorderSpace)(IOleInPlaceUIWindow *, LPCBORDERWIDTHS);")
-cpp_quote("    HRESULT (WINAPI *SetBorderSpace)(IOleInPlaceUIWindow *, LPCBORDERWIDTHS);")
-cpp_quote("    HRESULT (WINAPI *SetActiveObject)(IOleInPlaceUIWindow *, IOleInPlaceActiveObject *, LPCOLESTR);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IOleItemContainerVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IOleItemContainer *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IOleItemContainer *);")
-cpp_quote("    ULONG (WINAPI *Release)(IOleItemContainer *);")
-cpp_quote("    HRESULT (WINAPI *ParseDisplayName)(IOleItemContainer *, IBindCtx *, LPOLESTR, ULONG *, IMoniker **);")
-cpp_quote("    HRESULT (WINAPI *EnumObjects)(IOleItemContainer *, DWORD, IEnumUnknown **);")
-cpp_quote("    HRESULT (WINAPI *LockContainer)(IOleItemContainer *, BOOL);")
-cpp_quote("    HRESULT (WINAPI *GetObjectA)(IOleItemContainer *, LPOLESTR, DWORD, IBindCtx *, const IID *const , void **);")
-cpp_quote("    HRESULT (WINAPI *GetObjectStorage)(IOleItemContainer *, LPOLESTR, IBindCtx *, const IID *const , void **);")
-cpp_quote("    HRESULT (WINAPI *IsRunning)(IOleItemContainer *, LPOLESTR);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IOleLinkVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IOleLink *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IOleLink *);")
-cpp_quote("    ULONG (WINAPI *Release)(IOleLink *);")
-cpp_quote("    HRESULT (WINAPI *SetUpdateOptions)(IOleLink *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *GetUpdateOptions)(IOleLink *, DWORD *);")
-cpp_quote("    HRESULT (WINAPI *SetSourceMoniker)(IOleLink *, IMoniker *, const IID *const );")
-cpp_quote("    HRESULT (WINAPI *GetSourceMoniker)(IOleLink *, IMoniker **);")
-cpp_quote("    HRESULT (WINAPI *SetSourceDisplayName)(IOleLink *, LPCOLESTR);")
-cpp_quote("    HRESULT (WINAPI *GetSourceDisplayName)(IOleLink *, LPOLESTR *);")
-cpp_quote("    HRESULT (WINAPI *BindToSource)(IOleLink *, DWORD, IBindCtx *);")
-cpp_quote("    HRESULT (WINAPI *BindIfRunning)(IOleLink *);")
-cpp_quote("    HRESULT (WINAPI *GetBoundSource)(IOleLink *, IUnknown **);")
-cpp_quote("    HRESULT (WINAPI *UnbindSource)(IOleLink *);")
-cpp_quote("    HRESULT (WINAPI *Update)(IOleLink *, IBindCtx *);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IOleObjectVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IOleObject *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IOleObject *);")
-cpp_quote("    ULONG (WINAPI *Release)(IOleObject *);")
-cpp_quote("    HRESULT (WINAPI *SetClientSite)(IOleObject *, IOleClientSite *);")
-cpp_quote("    HRESULT (WINAPI *GetClientSite)(IOleObject *, IOleClientSite **);")
-cpp_quote("    HRESULT (WINAPI *SetHostNames)(IOleObject *, LPCOLESTR, LPCOLESTR);")
-cpp_quote("    HRESULT (WINAPI *Close)(IOleObject *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *SetMoniker)(IOleObject *, DWORD, IMoniker *);")
-cpp_quote("    HRESULT (WINAPI *GetMoniker)(IOleObject *, DWORD, DWORD, IMoniker **);")
-cpp_quote("    HRESULT (WINAPI *InitFromData)(IOleObject *, IDataObject *, BOOL, DWORD);")
-cpp_quote("    HRESULT (WINAPI *GetClipboardData)(IOleObject *, DWORD, IDataObject **);")
-cpp_quote("    HRESULT (WINAPI *DoVerb)(IOleObject *, LONG, LPMSG, IOleClientSite *, LONG, HWND, LPCRECT);")
-cpp_quote("    HRESULT (WINAPI *EnumVerbs)(IOleObject *, IEnumOLEVERB **);")
-cpp_quote("    HRESULT (WINAPI *Update)(IOleObject *);")
-cpp_quote("    HRESULT (WINAPI *IsUpToDate)(IOleObject *);")
-cpp_quote("    HRESULT (WINAPI *GetUserClassID)(IOleObject *, CLSID *);")
-cpp_quote("    HRESULT (WINAPI *GetUserType)(IOleObject *, DWORD, LPOLESTR *);")
-cpp_quote("    HRESULT (WINAPI *SetExtent)(IOleObject *, DWORD, SIZEL *);")
-cpp_quote("    HRESULT (WINAPI *GetExtent)(IOleObject *, DWORD, SIZEL *);")
-cpp_quote("    HRESULT (WINAPI *Advise)(IOleObject *, IAdviseSink *, DWORD *);")
-cpp_quote("    HRESULT (WINAPI *Unadvise)(IOleObject *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *EnumAdvise)(IOleObject *, IEnumSTATDATA **);")
-cpp_quote("    HRESULT (WINAPI *GetMiscStatus)(IOleObject *, DWORD, DWORD *);")
-cpp_quote("    HRESULT (WINAPI *SetColorScheme)(IOleObject *, LOGPALETTE *);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IOleWindowVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IOleWindow *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IOleWindow *);")
-cpp_quote("    ULONG (WINAPI *Release)(IOleWindow *);")
-cpp_quote("    HRESULT (WINAPI *GetWindow)(IOleWindow *, HWND *);")
-cpp_quote("    HRESULT (WINAPI *ContextSensitiveHelp)(IOleWindow *, BOOL);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IParseDisplayNameVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IParseDisplayName *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IParseDisplayName *);")
-cpp_quote("    ULONG (WINAPI *Release)(IParseDisplayName *);")
-cpp_quote("    HRESULT (WINAPI *ParseDisplayName)(IParseDisplayName *, IBindCtx *, LPOLESTR, ULONG *, IMoniker **);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IViewObject2Vtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IViewObject2 *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IViewObject2 *);")
-cpp_quote("    ULONG (WINAPI *Release)(IViewObject2 *);")
-cpp_quote("    HRESULT (WINAPI *Draw)(IViewObject2 *, DWORD, LONG, void *, DVTARGETDEVICE *, HDC, HDC, LPCRECTL, LPCRECTL, BOOL (*)(ULONG_PTR), ULONG_PTR);")
-cpp_quote("    HRESULT (WINAPI *GetColorSet)(IViewObject2 *, DWORD, LONG, void *, DVTARGETDEVICE *, HDC, LOGPALETTE **);")
-cpp_quote("    HRESULT (WINAPI *Freeze)(IViewObject2 *, DWORD, LONG, void *, DWORD *);")
-cpp_quote("    HRESULT (WINAPI *Unfreeze)(IViewObject2 *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *SetAdvise)(IViewObject2 *, DWORD, DWORD, IAdviseSink *);")
-cpp_quote("    HRESULT (WINAPI *GetAdvise)(IViewObject2 *, DWORD *, DWORD *, IAdviseSink **);")
-cpp_quote("    HRESULT (WINAPI *GetExtent)(IViewObject2 *, DWORD, LONG, DVTARGETDEVICE *, LPSIZEL);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IViewObjectVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IViewObject *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IViewObject *);")
-cpp_quote("    ULONG (WINAPI *Release)(IViewObject *);")
-cpp_quote("    HRESULT (WINAPI *Draw)(IViewObject *, DWORD, LONG, void *, DVTARGETDEVICE *, HDC, HDC, LPCRECTL, LPCRECTL, BOOL (*)(ULONG_PTR), ULONG_PTR);")
-cpp_quote("    HRESULT (WINAPI *GetColorSet)(IViewObject *, DWORD, LONG, void *, DVTARGETDEVICE *, HDC, LOGPALETTE **);")
-cpp_quote("    HRESULT (WINAPI *Freeze)(IViewObject *, DWORD, LONG, void *, DWORD *);")
-cpp_quote("    HRESULT (WINAPI *Unfreeze)(IViewObject *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *SetAdvise)(IViewObject *, DWORD, DWORD, IAdviseSink *);")
-cpp_quote("    HRESULT (WINAPI *GetAdvise)(IViewObject *, DWORD *, DWORD *, IAdviseSink **);")
-cpp_quote("};")
 cpp_quote("")
 cpp_quote("struct tagOIFI")
 cpp_quote("{")
@@ -1305,49 +1008,14 @@ cpp_quote("#ifdef __cplusplus")
 cpp_quote("extern \"C\" {")
 cpp_quote("#endif")
 cpp_quote("")
-cpp_quote("void WINAPI HGLOBAL_UserFree(unsigned long *, HGLOBAL *);")
-cpp_quote("unsigned char * WINAPI HGLOBAL_UserMarshal(unsigned long *, unsigned char *, HGLOBAL *);")
-cpp_quote("unsigned long WINAPI HGLOBAL_UserSize(unsigned long *, unsigned long, HGLOBAL *);")
-cpp_quote("unsigned char * WINAPI HGLOBAL_UserUnmarshal(unsigned long *, unsigned char *, HGLOBAL *);")
 cpp_quote("")
 cpp_quote("/* TODO: LiberNT does not implement the functions below yet */")
 cpp_quote("void HGLOBAL_UserFree64(unsigned long *, HGLOBAL *);")
 cpp_quote("unsigned char * HGLOBAL_UserMarshal64(unsigned long *, unsigned char *, HGLOBAL *);")
 cpp_quote("unsigned long HGLOBAL_UserSize64(unsigned long *, unsigned long, HGLOBAL *);")
 cpp_quote("unsigned char * HGLOBAL_UserUnmarshal64(unsigned long *, unsigned char *, HGLOBAL *);")
-cpp_quote("HRESULT WINAPI IEnumOLEVERB_Next_Proxy(IEnumOLEVERB *This, ULONG celt, LPOLEVERB rgelt, ULONG *pceltFetched);")
-cpp_quote("HRESULT WINAPI IEnumOLEVERB_Next_Stub(IEnumOLEVERB *This, ULONG celt, LPOLEVERB rgelt, ULONG *pceltFetched);")
-cpp_quote("HRESULT WINAPI IEnumOLEVERB_RemoteNext_Proxy(IEnumOLEVERB *This, ULONG celt, LPOLEVERB rgelt, ULONG *pceltFetched);")
-cpp_quote("void IEnumOLEVERB_RemoteNext_Stub(IRpcStubBuffer *This, IRpcChannelBuffer *_pRpcChannelBuffer, PRPC_MESSAGE _pRpcMessage, DWORD *_pdwStubPhase);")
-cpp_quote("HRESULT WINAPI IOleCache2_RemoteUpdateCache_Proxy(IOleCache2 *This, LPDATAOBJECT pDataObject, DWORD grfUpdf, LONG_PTR pReserved);")
-cpp_quote("void IOleCache2_RemoteUpdateCache_Stub(IRpcStubBuffer *This, IRpcChannelBuffer *_pRpcChannelBuffer, PRPC_MESSAGE _pRpcMessage, DWORD *_pdwStubPhase);")
-cpp_quote("HRESULT WINAPI IOleCache2_UpdateCache_Proxy(IOleCache2 *This, LPDATAOBJECT pDataObject, DWORD grfUpdf, LPVOID pReserved);")
-cpp_quote("HRESULT WINAPI IOleCache2_UpdateCache_Stub(IOleCache2 *This, LPDATAOBJECT pDataObject, DWORD grfUpdf, LONG_PTR pReserved);")
-cpp_quote("HRESULT WINAPI IOleInPlaceActiveObject_RemoteResizeBorder_Proxy(IOleInPlaceActiveObject *This, LPCRECT prcBorder, const IID *const riid, IOleInPlaceUIWindow *pUIWindow, BOOL fFrameWindow);")
-cpp_quote("void IOleInPlaceActiveObject_RemoteResizeBorder_Stub(IRpcStubBuffer *This, IRpcChannelBuffer *_pRpcChannelBuffer, PRPC_MESSAGE _pRpcMessage, DWORD *_pdwStubPhase);")
-cpp_quote("HRESULT WINAPI IOleInPlaceActiveObject_RemoteTranslateAccelerator_Proxy(IOleInPlaceActiveObject *This);")
-cpp_quote("void IOleInPlaceActiveObject_RemoteTranslateAccelerator_Stub(IRpcStubBuffer *This, IRpcChannelBuffer *_pRpcChannelBuffer, PRPC_MESSAGE _pRpcMessage, DWORD *_pdwStubPhase);")
-cpp_quote("HRESULT WINAPI IOleInPlaceActiveObject_ResizeBorder_Proxy(IOleInPlaceActiveObject *This, LPCRECT prcBorder, IOleInPlaceUIWindow *pUIWindow, BOOL fFrameWindow);")
-cpp_quote("HRESULT WINAPI IOleInPlaceActiveObject_ResizeBorder_Stub(IOleInPlaceActiveObject *This, LPCRECT prcBorder, const IID *const riid, IOleInPlaceUIWindow *pUIWindow, BOOL fFrameWindow);")
-cpp_quote("HRESULT WINAPI IOleInPlaceActiveObject_TranslateAccelerator_Proxy(IOleInPlaceActiveObject *This, LPMSG lpmsg);")
-cpp_quote("HRESULT WINAPI IOleInPlaceActiveObject_TranslateAccelerator_Stub(IOleInPlaceActiveObject *This);")
-cpp_quote("HRESULT WINAPI IViewObject_Draw_Proxy(IViewObject *This, DWORD dwDrawAspect, LONG lindex, void *pvAspect, DVTARGETDEVICE *ptd, HDC hdcTargetDev, HDC hdcDraw, LPCRECTL lprcBounds, LPCRECTL lprcWBounds, BOOL (WINAPI *pfnContinue)(ULONG_PTR), ULONG_PTR dwContinue);")
-cpp_quote("HRESULT WINAPI IViewObject_Draw_Stub(IViewObject *This, DWORD dwDrawAspect, LONG lindex, ULONG_PTR pvAspect, DVTARGETDEVICE *ptd, HDC hdcTargetDev, HDC hdcDraw, LPCRECTL lprcBounds, LPCRECTL lprcWBounds, IContinue *pContinue);")
-cpp_quote("HRESULT WINAPI IViewObject_Freeze_Proxy(IViewObject *This, DWORD dwDrawAspect, LONG lindex, void *pvAspect, DWORD *pdwFreeze);")
-cpp_quote("HRESULT WINAPI IViewObject_Freeze_Stub(IViewObject *This, DWORD dwDrawAspect, LONG lindex, ULONG_PTR pvAspect, DWORD *pdwFreeze);")
-cpp_quote("HRESULT WINAPI IViewObject_GetAdvise_Proxy(IViewObject *This, DWORD *pAspects, DWORD *pAdvf, IAdviseSink **ppAdvSink);")
-cpp_quote("HRESULT WINAPI IViewObject_GetAdvise_Stub(IViewObject *This, DWORD *pAspects, DWORD *pAdvf, IAdviseSink **ppAdvSink);")
-cpp_quote("HRESULT WINAPI IViewObject_GetColorSet_Proxy(IViewObject *This, DWORD dwDrawAspect, LONG lindex, void *pvAspect, DVTARGETDEVICE *ptd, HDC hicTargetDev, LOGPALETTE **ppColorSet);")
-cpp_quote("HRESULT WINAPI IViewObject_GetColorSet_Stub(IViewObject *This, DWORD dwDrawAspect, LONG lindex, ULONG_PTR pvAspect, DVTARGETDEVICE *ptd, ULONG_PTR hicTargetDev, LOGPALETTE **ppColorSet);")
-cpp_quote("HRESULT WINAPI IViewObject_RemoteDraw_Proxy(IViewObject *This, DWORD dwDrawAspect, LONG lindex, ULONG_PTR pvAspect, DVTARGETDEVICE *ptd, HDC hdcTargetDev, HDC hdcDraw, LPCRECTL lprcBounds, LPCRECTL lprcWBounds, IContinue *pContinue);")
-cpp_quote("void IViewObject_RemoteDraw_Stub(IRpcStubBuffer *This, IRpcChannelBuffer *_pRpcChannelBuffer, PRPC_MESSAGE _pRpcMessage, DWORD *_pdwStubPhase);")
-cpp_quote("HRESULT WINAPI IViewObject_RemoteFreeze_Proxy(IViewObject *This, DWORD dwDrawAspect, LONG lindex, ULONG_PTR pvAspect, DWORD *pdwFreeze);")
-cpp_quote("void IViewObject_RemoteFreeze_Stub(IRpcStubBuffer *This, IRpcChannelBuffer *_pRpcChannelBuffer, PRPC_MESSAGE _pRpcMessage, DWORD *_pdwStubPhase);")
-cpp_quote("HRESULT WINAPI IViewObject_RemoteGetAdvise_Proxy(IViewObject *This, DWORD *pAspects, DWORD *pAdvf, IAdviseSink **ppAdvSink);")
-cpp_quote("void IViewObject_RemoteGetAdvise_Stub(IRpcStubBuffer *This, IRpcChannelBuffer *_pRpcChannelBuffer, PRPC_MESSAGE _pRpcMessage, DWORD *_pdwStubPhase);")
-cpp_quote("HRESULT WINAPI IViewObject_RemoteGetColorSet_Proxy(IViewObject *This, DWORD dwDrawAspect, LONG lindex, ULONG_PTR pvAspect, DVTARGETDEVICE *ptd, ULONG_PTR hicTargetDev, LOGPALETTE **ppColorSet);")
-cpp_quote("void IViewObject_RemoteGetColorSet_Stub(IRpcStubBuffer *This, IRpcChannelBuffer *_pRpcChannelBuffer, PRPC_MESSAGE _pRpcMessage, DWORD *_pdwStubPhase);")
 cpp_quote("")
 cpp_quote("#ifdef __cplusplus")
 cpp_quote("}")
+cpp_quote("#endif")
 cpp_quote("#endif")

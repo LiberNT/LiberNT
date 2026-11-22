@@ -401,6 +401,18 @@ typedef struct _BYTE_BLOB {
 } BYTE_BLOB;
 typedef [unique] BYTE_BLOB *UP_BYTE_BLOB;
 
+typedef struct _WORD_BLOB {
+  unsigned long clSize;
+  [size_is(clSize)] unsigned short asData[];
+} WORD_BLOB;
+typedef [unique] WORD_BLOB *UP_WORD_BLOB;
+
+typedef struct _DWORD_BLOB {
+  unsigned long clSize;
+  [size_is(clSize)] unsigned long alData[];
+} DWORD_BLOB;
+typedef [unique] DWORD_BLOB *UP_DWORD_BLOB;
+
 typedef struct _FLAGGED_BYTE_BLOB {
   unsigned long fFlags;
   unsigned long clSize;
@@ -870,29 +882,6 @@ cpp_quote("typedef struct tagRemBRUSH RemHBRUSH;")
 cpp_quote("")
 cpp_quote("typedef RemotableHandle *wireHRGN;")
 
-cpp_quote("struct __MIDL___MIDL_itf_wtypes_0000_0001_0001")
-cpp_quote("{")
-cpp_quote("    DWORD tyspec;")
-cpp_quote("    union __MIDL___MIDL_itf_wtypes_0000_0001_0005")
-cpp_quote("    {")
-cpp_quote("        CLSID clsid;")
-cpp_quote("        LPOLESTR pFileExt;")
-cpp_quote("        LPOLESTR pMimeType;")
-cpp_quote("        LPOLESTR pProgId;")
-cpp_quote("        LPOLESTR pFileName;")
-cpp_quote("        struct")
-cpp_quote("        {")
-cpp_quote("            LPOLESTR pPackageName;")
-cpp_quote("            GUID PolicyId;")
-cpp_quote("        } ByName;")
-cpp_quote("        struct")
-cpp_quote("        {")
-cpp_quote("            GUID ObjectId;")
-cpp_quote("            GUID PolicyId;")
-cpp_quote("        } ByObjectId;")
-cpp_quote("    } tagged_union;")
-cpp_quote("};")
-cpp_quote("")
 cpp_quote("struct _GDI_NONREMOTE")
 cpp_quote("{")
 cpp_quote("    LONG fContext;")

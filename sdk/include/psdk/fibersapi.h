@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-PVOID FlsGetValue2(DWORD dwTlsIndex);
+WINBASEAPI PVOID WINAPI FlsGetValue2(DWORD dwTlsIndex);
 
 #ifdef __cplusplus
 }

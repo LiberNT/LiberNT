@@ -958,6 +958,7 @@ DnsWriteQuestionToBuffer_UTF8(
 }
 #endif
 
+#ifndef __WIDL__
 #ifndef DNS_APP_SETTINGS_EXCLUSIVE_SERVERS
 #define DNS_APP_SETTINGS_EXCLUSIVE_SERVERS 0x1
 #endif
@@ -1242,6 +1243,8 @@ typedef struct DNS_PROXY_INFORMATION {
 
 #if (!(defined(UNICODE)))
 #define DNS_IP4_REVERSE_DOMAIN_STRING DNS_IP4_REVERSE_DOMAIN_STRING_A
+#else
+#define DNS_IP4_REVERSE_DOMAIN_STRING DNS_IP4_REVERSE_DOMAIN_STRING_W
 #endif
 #define DNS_IP4_REVERSE_DOMAIN_STRING_A ("in-addr.arpa.")
 #define DNS_IP4_REVERSE_DOMAIN_STRING_W (L"in-addr.arpa.")
@@ -1250,6 +1253,8 @@ typedef struct DNS_PROXY_INFORMATION {
 #else
 #if (!(defined(UNICODE)))
 #define DNS_IP6_REVERSE_DOMAIN_STRING DNS_IP6_REVERSE_DOMAIN_STRING_A
+#else
+#define DNS_IP6_REVERSE_DOMAIN_STRING DNS_IP6_REVERSE_DOMAIN_STRING_W
 #endif
 #endif
 #define DNS_IP6_REVERSE_DOMAIN_STRING_A ("ip6.arpa.")
@@ -1287,6 +1292,15 @@ typedef void (WINAPI *DNS_PROXY_COMPLETION_ROUTINE)(void *, DNS_STATUS);
 typedef struct _DNS_QUERY_RAW_RESULT DNS_QUERY_RAW_RESULT;
 
 typedef void (WINAPI *DNS_QUERY_RAW_COMPLETION_ROUTINE)(void *, DNS_QUERY_RAW_RESULT *);
+
+typedef struct _DNS_QUERY_RESULT
+{
+    ULONG Version;
+    DNS_STATUS QueryStatus;
+    ULONG64 QueryOptions;
+    PDNS_RECORD pQueryRecords;
+    PVOID Reserved;
+} DNS_QUERY_RESULT, *PDNS_QUERY_RESULT;
 
 #if (!defined(__midl))
 typedef void WINAPI DNS_SERVICE_REGISTER_COMPLETE(DWORD, PVOID, PDNS_SERVICE_INSTANCE);
@@ -1561,6 +1575,9 @@ DWORD DnsSetApplicationSettings(DWORD cServers, const DNS_CUSTOM_SERVER *pServer
 #if (!(defined(UNICODE)))
 #define DnsRecordCopy(pRR) DnsRecordCopyEx((pRR), DnsCharSetAnsi, DnsCharSetAnsi)
 #define DnsRecordSetCopy(pRR) DnsRecordSetCopyEx((pRR), DnsCharSetAnsi, DnsCharSetAnsi)
+#else
+#define DnsRecordCopy(pRR) DnsRecordCopyEx((pRR), DnsCharSetUnicode, DnsCharSetUnicode)
+#define DnsRecordSetCopy(pRR) DnsRecordSetCopyEx((pRR), DnsCharSetUnicode, DnsCharSetUnicode)
 #endif
 #define INLINE_DWORD_FLIP(out, in) { DWORD _in = (in); (out) = ((_in << 8) & 0x00ff0000) | (_in << 24) | ((_in >> 8) & 0x0000ff00) | (_in >> 24); }
 #define INLINE_HTONL(out, in) INLINE_DWORD_FLIP(out, in)
@@ -1570,5 +1587,7 @@ DWORD DnsSetApplicationSettings(DWORD cServers, const DNS_CUSTOM_SERVER *pServer
 #define IS_DWORD_ALIGNED(p) (!((UINT_PTR) (p) & (UINT_PTR) 3))
 #define IS_QWORD_ALIGNED(p) (!((UINT_PTR) (p) & (UINT_PTR) 7))
 #define IS_WORD_ALIGNED(p) (!((UINT_PTR) (p) & (UINT_PTR) 1))
+
+#endif
 
 #endif /* _WINDNS_INCLUDED_ */

@@ -57,7 +57,6 @@ enum {
 	AMMSF_RUN                = 0x00000008
 };
 
-
 typedef [v1_enum] enum {
 	Disabled = 0,
 	ReadData = 1,
@@ -118,7 +117,6 @@ interface IAMMultiMediaStream : IMultiMediaStream
 		[in] DWORD dwFlags);
 }
 
-
 [
 object,
 uuid(BEBE595D-9A6F-11d0-8FDE-00C04FD9189D),
@@ -144,7 +142,6 @@ interface IAMMediaStream : IMediaStream
 	HRESULT JoinFilterGraph(
 		[in] IFilterGraph *pFilterGraph);
 }
-
 
 [
 object,
@@ -183,7 +180,6 @@ interface IMediaStreamFilter : IBaseFilter
 	HRESULT EndOfStream();
 }
 
-
 [
 object,
 local,
@@ -194,7 +190,6 @@ interface IDirectDrawMediaSampleAllocator : IUnknown
 {
 	HRESULT GetDirectDraw(IDirectDraw **ppDirectDraw);
 }
-
 
 [
 object,
@@ -210,7 +205,6 @@ interface IDirectDrawMediaSample : IUnknown
 
 	HRESULT LockMediaSamplePointer(void);
 }
-
 
 [
 object,
@@ -242,7 +236,6 @@ interface IAMMediaTypeStream : IMediaStream
 	HRESULT SetStreamAllocatorRequirements(
 		[in] ALLOCATOR_PROPERTIES *pProps);
 }
-
 
 [
 object,
@@ -317,156 +310,11 @@ cpp_quote("DEFINE_GUID(CLSID_AMAudioData,         0xf2468580, 0xaf8a, 0x11d0, 0x
 cpp_quote("DEFINE_GUID(CLSID_AMMediaTypeStream,   0xcf0f2f7c, 0xf7bf, 0x11d0, 0x90, 0x0d, 0x00, 0xc0, 0x4f, 0xd9, 0x18, 0x9d);")
 cpp_quote("DEFINE_GUID(CLSID_MediaStreamFilter,   0x49c47ce0, 0x9ba4, 0x11d0, 0x82, 0x12, 0x00, 0xc0, 0x4f, 0xc3, 0x2c, 0x45);")
 
-cpp_quote("struct IAMMediaStreamVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IAMMediaStream *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IAMMediaStream *);")
-cpp_quote("    ULONG (WINAPI *Release)(IAMMediaStream *);")
-cpp_quote("    HRESULT (WINAPI *GetMultiMediaStream)(IAMMediaStream *, IMultiMediaStream **);")
-cpp_quote("    HRESULT (WINAPI *GetInformation)(IAMMediaStream *, MSPID *, STREAM_TYPE *);")
-cpp_quote("    HRESULT (WINAPI *SetSameFormat)(IAMMediaStream *, IMediaStream *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *AllocateSample)(IAMMediaStream *, DWORD, IStreamSample **);")
-cpp_quote("    HRESULT (WINAPI *CreateSharedSample)(IAMMediaStream *, IStreamSample *, DWORD, IStreamSample **);")
-cpp_quote("    HRESULT (WINAPI *SendEndOfStream)(IAMMediaStream *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *Initialize)(IAMMediaStream *, IUnknown *, DWORD, REFMSPID, const STREAM_TYPE);")
-cpp_quote("    HRESULT (WINAPI *SetState)(IAMMediaStream *, FILTER_STATE);")
-cpp_quote("    HRESULT (WINAPI *JoinAMMultiMediaStream)(IAMMediaStream *, IAMMultiMediaStream *);")
-cpp_quote("    HRESULT (WINAPI *JoinFilter)(IAMMediaStream *, IMediaStreamFilter *);")
-cpp_quote("    HRESULT (WINAPI *JoinFilterGraph)(IAMMediaStream *, IFilterGraph *);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IAMMediaTypeSampleVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IAMMediaTypeSample *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IAMMediaTypeSample *);")
-cpp_quote("    ULONG (WINAPI *Release)(IAMMediaTypeSample *);")
-cpp_quote("    HRESULT (WINAPI *GetMediaStream)(IAMMediaTypeSample *, IMediaStream **);")
-cpp_quote("    HRESULT (WINAPI *GetSampleTimes)(IAMMediaTypeSample *, STREAM_TIME *, STREAM_TIME *, STREAM_TIME *);")
-cpp_quote("    HRESULT (WINAPI *SetSampleTimes)(IAMMediaTypeSample *, const STREAM_TIME *, const STREAM_TIME *);")
-cpp_quote("    HRESULT (WINAPI *Update)(IAMMediaTypeSample *, DWORD, HANDLE, PAPCFUNC, DWORD_PTR);")
-cpp_quote("    HRESULT (WINAPI *CompletionStatus)(IAMMediaTypeSample *, DWORD, DWORD);")
-cpp_quote("    HRESULT (WINAPI *SetPointer)(IAMMediaTypeSample *, BYTE *, long);")
-cpp_quote("    HRESULT (WINAPI *GetPointer)(IAMMediaTypeSample *, BYTE **);")
-cpp_quote("    long (WINAPI *GetSize)(IAMMediaTypeSample *);")
-cpp_quote("    HRESULT (WINAPI *GetTime)(IAMMediaTypeSample *, REFERENCE_TIME *, REFERENCE_TIME *);")
-cpp_quote("    HRESULT (WINAPI *SetTime)(IAMMediaTypeSample *, REFERENCE_TIME *, REFERENCE_TIME *);")
-cpp_quote("    HRESULT (WINAPI *IsSyncPoint)(IAMMediaTypeSample *);")
-cpp_quote("    HRESULT (WINAPI *SetSyncPoint)(IAMMediaTypeSample *, BOOL);")
-cpp_quote("    HRESULT (WINAPI *IsPreroll)(IAMMediaTypeSample *);")
-cpp_quote("    HRESULT (WINAPI *SetPreroll)(IAMMediaTypeSample *, BOOL);")
-cpp_quote("    long (WINAPI *GetActualDataLength)(IAMMediaTypeSample *);")
-cpp_quote("    HRESULT (WINAPI *SetActualDataLength)(IAMMediaTypeSample *, long);")
-cpp_quote("    HRESULT (WINAPI *GetMediaType)(IAMMediaTypeSample *, AM_MEDIA_TYPE **);")
-cpp_quote("    HRESULT (WINAPI *SetMediaType)(IAMMediaTypeSample *, AM_MEDIA_TYPE *);")
-cpp_quote("    HRESULT (WINAPI *IsDiscontinuity)(IAMMediaTypeSample *);")
-cpp_quote("    HRESULT (WINAPI *SetDiscontinuity)(IAMMediaTypeSample *, BOOL);")
-cpp_quote("    HRESULT (WINAPI *GetMediaTime)(IAMMediaTypeSample *, LONGLONG *, LONGLONG *);")
-cpp_quote("    HRESULT (WINAPI *SetMediaTime)(IAMMediaTypeSample *, LONGLONG *, LONGLONG *);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IAMMediaTypeStreamVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IAMMediaTypeStream *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IAMMediaTypeStream *);")
-cpp_quote("    ULONG (WINAPI *Release)(IAMMediaTypeStream *);")
-cpp_quote("    HRESULT (WINAPI *GetMultiMediaStream)(IAMMediaTypeStream *, IMultiMediaStream **);")
-cpp_quote("    HRESULT (WINAPI *GetInformation)(IAMMediaTypeStream *, MSPID *, STREAM_TYPE *);")
-cpp_quote("    HRESULT (WINAPI *SetSameFormat)(IAMMediaTypeStream *, IMediaStream *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *AllocateSample)(IAMMediaTypeStream *, DWORD, IStreamSample **);")
-cpp_quote("    HRESULT (WINAPI *CreateSharedSample)(IAMMediaTypeStream *, IStreamSample *, DWORD, IStreamSample **);")
-cpp_quote("    HRESULT (WINAPI *SendEndOfStream)(IAMMediaTypeStream *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *GetFormat)(IAMMediaTypeStream *, AM_MEDIA_TYPE *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *SetFormat)(IAMMediaTypeStream *, AM_MEDIA_TYPE *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *CreateSample)(IAMMediaTypeStream *, long, BYTE *, DWORD, IUnknown *, IAMMediaTypeSample **);")
-cpp_quote("    HRESULT (WINAPI *GetStreamAllocatorRequirements)(IAMMediaTypeStream *, ALLOCATOR_PROPERTIES *);")
-cpp_quote("    HRESULT (WINAPI *SetStreamAllocatorRequirements)(IAMMediaTypeStream *, ALLOCATOR_PROPERTIES *);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IAMMultiMediaStreamVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IAMMultiMediaStream *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IAMMultiMediaStream *);")
-cpp_quote("    ULONG (WINAPI *Release)(IAMMultiMediaStream *);")
-cpp_quote("    HRESULT (WINAPI *GetInformation)(IAMMultiMediaStream *, DWORD *, STREAM_TYPE *);")
-cpp_quote("    HRESULT (WINAPI *GetMediaStream)(IAMMultiMediaStream *, REFMSPID, IMediaStream **);")
-cpp_quote("    HRESULT (WINAPI *EnumMediaStreams)(IAMMultiMediaStream *, long, IMediaStream **);")
-cpp_quote("    HRESULT (WINAPI *GetState)(IAMMultiMediaStream *, STREAM_STATE *);")
-cpp_quote("    HRESULT (WINAPI *SetState)(IAMMultiMediaStream *, STREAM_STATE);")
-cpp_quote("    HRESULT (WINAPI *GetTime)(IAMMultiMediaStream *, STREAM_TIME *);")
-cpp_quote("    HRESULT (WINAPI *GetDuration)(IAMMultiMediaStream *, STREAM_TIME *);")
-cpp_quote("    HRESULT (WINAPI *Seek)(IAMMultiMediaStream *, STREAM_TIME);")
-cpp_quote("    HRESULT (WINAPI *GetEndOfStreamEventHandle)(IAMMultiMediaStream *, HANDLE *);")
-cpp_quote("    HRESULT (WINAPI *Initialize)(IAMMultiMediaStream *, STREAM_TYPE, DWORD, IGraphBuilder *);")
-cpp_quote("    HRESULT (WINAPI *GetFilterGraph)(IAMMultiMediaStream *, IGraphBuilder **);")
-cpp_quote("    HRESULT (WINAPI *GetFilter)(IAMMultiMediaStream *, IMediaStreamFilter **);")
-cpp_quote("    HRESULT (WINAPI *AddMediaStream)(IAMMultiMediaStream *, IUnknown *, const MSPID *, DWORD, IMediaStream **);")
-cpp_quote("    HRESULT (WINAPI *OpenFile)(IAMMultiMediaStream *, LPCWSTR, DWORD);")
-cpp_quote("    HRESULT (WINAPI *OpenMoniker)(IAMMultiMediaStream *, IBindCtx *, IMoniker *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *Render)(IAMMultiMediaStream *, DWORD);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IDirectDrawMediaSampleAllocatorVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IDirectDrawMediaSampleAllocator *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IDirectDrawMediaSampleAllocator *);")
-cpp_quote("    ULONG (WINAPI *Release)(IDirectDrawMediaSampleAllocator *);")
-cpp_quote("    HRESULT (WINAPI *GetDirectDraw)(IDirectDrawMediaSampleAllocator *, IDirectDraw **);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IDirectDrawMediaSampleVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IDirectDrawMediaSample *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IDirectDrawMediaSample *);")
-cpp_quote("    ULONG (WINAPI *Release)(IDirectDrawMediaSample *);")
-cpp_quote("    HRESULT (WINAPI *GetSurfaceAndReleaseLock)(IDirectDrawMediaSample *, IDirectDrawSurface **, RECT *);")
-cpp_quote("    HRESULT (WINAPI *LockMediaSamplePointer)(IDirectDrawMediaSample *);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IMediaStreamFilterVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IMediaStreamFilter *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IMediaStreamFilter *);")
-cpp_quote("    ULONG (WINAPI *Release)(IMediaStreamFilter *);")
-cpp_quote("    HRESULT (WINAPI *GetClassID)(IMediaStreamFilter *, CLSID *);")
-cpp_quote("    HRESULT (WINAPI *Stop)(IMediaStreamFilter *);")
-cpp_quote("    HRESULT (WINAPI *Pause)(IMediaStreamFilter *);")
-cpp_quote("    HRESULT (WINAPI *Run)(IMediaStreamFilter *, REFERENCE_TIME);")
-cpp_quote("    HRESULT (WINAPI *GetState)(IMediaStreamFilter *, DWORD, FILTER_STATE *);")
-cpp_quote("    HRESULT (WINAPI *SetSyncSource)(IMediaStreamFilter *, IReferenceClock *);")
-cpp_quote("    HRESULT (WINAPI *GetSyncSource)(IMediaStreamFilter *, IReferenceClock **);")
-cpp_quote("    HRESULT (WINAPI *EnumPins)(IMediaStreamFilter *, IEnumPins **);")
-cpp_quote("    HRESULT (WINAPI *FindPin)(IMediaStreamFilter *, LPCWSTR, IPin **);")
-cpp_quote("    HRESULT (WINAPI *QueryFilterInfo)(IMediaStreamFilter *, FILTER_INFO *);")
-cpp_quote("    HRESULT (WINAPI *JoinFilterGraph)(IMediaStreamFilter *, IFilterGraph *, LPCWSTR);")
-cpp_quote("    HRESULT (WINAPI *QueryVendorInfo)(IMediaStreamFilter *, LPWSTR *);")
-cpp_quote("    HRESULT (WINAPI *AddMediaStream)(IMediaStreamFilter *, IAMMediaStream *);")
-cpp_quote("    HRESULT (WINAPI *GetMediaStream)(IMediaStreamFilter *, REFMSPID, IMediaStream **);")
-cpp_quote("    HRESULT (WINAPI *EnumMediaStreams)(IMediaStreamFilter *, long, IMediaStream **);")
-cpp_quote("    HRESULT (WINAPI *SupportSeeking)(IMediaStreamFilter *, BOOL);")
-cpp_quote("    HRESULT (WINAPI *ReferenceTimeToStreamTime)(IMediaStreamFilter *, REFERENCE_TIME *);")
-cpp_quote("    HRESULT (WINAPI *GetCurrentStreamTime)(IMediaStreamFilter *, REFERENCE_TIME *);")
-cpp_quote("    HRESULT (WINAPI *WaitUntil)(IMediaStreamFilter *, REFERENCE_TIME);")
-cpp_quote("    HRESULT (WINAPI *Flush)(IMediaStreamFilter *, BOOL);")
-cpp_quote("    HRESULT (WINAPI *EndOfStream)(IMediaStreamFilter *);")
-cpp_quote("};")
 
-cpp_quote("enum __MIDL___MIDL_itf_amstream_0000_0000_0001")
-cpp_quote("{")
-cpp_quote("")
-cpp_quote("};")
-cpp_quote("")
-cpp_quote("enum __MIDL___MIDL_itf_amstream_0000_0000_0002")
-cpp_quote("{")
-cpp_quote("")
-cpp_quote("};")
-cpp_quote("")
-cpp_quote("enum __MIDL___MIDL_itf_amstream_0000_0000_0003")
-cpp_quote("{")
-cpp_quote("")
-cpp_quote("};")
-cpp_quote("")
-cpp_quote("enum __MIDL___MIDL_itf_amstream_0000_0000_0004")
-cpp_quote("{")
-cpp_quote("")
-cpp_quote("};")
 

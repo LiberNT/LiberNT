@@ -23,10 +23,8 @@ import "oleidl.idl";
 import "oaidl.idl";
 import "servprov.idl";
 
-
 interface IOleDocumentView;
 interface IEnumOleDocumentViews;
-
 
 /*****************************************************************************
  * IOleDocument interface
@@ -62,7 +60,6 @@ interface IOleDocument : IUnknown
         [out] IOleDocumentView **ppView);
 }
 
-
 /*****************************************************************************
  * IOleDocumentSite interface
  */
@@ -77,7 +74,6 @@ interface IOleDocumentSite : IUnknown
 
     HRESULT ActivateMe( [in] IOleDocumentView *pViewToActivate );
 }
-
 
 /*****************************************************************************
  * IOleDocumentView interface
@@ -124,7 +120,6 @@ interface IOleDocumentView : IUnknown
         [out] IOleDocumentView **ppViewNew);
 }
 
-
 /*****************************************************************************
  * IEnumOleDocumentViews interface
  */
@@ -155,7 +150,6 @@ interface IEnumOleDocumentViews : IUnknown
 
     HRESULT Clone( [out] IEnumOleDocumentViews **ppEnum );
 }
-
 
 /*****************************************************************************
  * IOleCommandTarget interface
@@ -310,7 +304,6 @@ interface IOleCommandTarget : IUnknown
         [in, out, unique] VARIANT *pvaOut);
 }
 
-
 /*****************************************************************************
  * IContinueCallback interface
  */
@@ -330,7 +323,6 @@ interface IContinueCallback : IUnknown
         [in] LONG nCurPage,
         [in, unique] WCHAR *pwszPrintStatus);
 }
-
 
 /*****************************************************************************
  * IPrint interface
@@ -400,7 +392,6 @@ interface IPrint : IUnknown
         [out] LONG *pnLastPage);
 }
 
-
 cpp_quote("#define OLECMDERR_E_FIRST            (OLE_E_LAST+1)")
 cpp_quote("#define OLECMDERR_E_NOTSUPPORTED     (OLECMDERR_E_FIRST)")
 cpp_quote("#define OLECMDERR_E_DISABLED         (OLECMDERR_E_FIRST+1)")
@@ -428,6 +419,8 @@ cpp_quote("#define IID_IMsoCommandTarget          IID_IOleCommandTarget")
 
 cpp_quote("EXTERN_C const GUID SID_SContainerDispatch;")
 
+cpp_quote("#ifndef __docobj_cpp_quote_1_DEFINED__")
+cpp_quote("#define __docobj_cpp_quote_1_DEFINED__")
 cpp_quote("#ifndef INSTALL_SCOPE_INVALID")
 cpp_quote("#define INSTALL_SCOPE_INVALID 0")
 cpp_quote("#endif")
@@ -512,6 +505,8 @@ cpp_quote("    IGNOREMIME_PROMPT = 1,")
 cpp_quote("    IGNOREMIME_TEXT = 2,")
 cpp_quote("};")
 cpp_quote("")
+cpp_quote("typedef enum IGNOREMIME IGNOREMIME;")
+cpp_quote("")
 cpp_quote("enum MEDIAPLAYBACK_STATE")
 cpp_quote("{")
 cpp_quote("    MEDIAPLAYBACK_RESUME = 0,")
@@ -519,6 +514,8 @@ cpp_quote("    MEDIAPLAYBACK_PAUSE = 1,")
 cpp_quote("    MEDIAPLAYBACK_PAUSE_AND_SUSPEND = 2,")
 cpp_quote("    MEDIAPLAYBACK_RESUME_FROM_SUSPEND = 3,")
 cpp_quote("};")
+cpp_quote("")
+cpp_quote("typedef enum MEDIAPLAYBACK_STATE MEDIAPLAYBACK_STATE;")
 cpp_quote("")
 cpp_quote("enum OLECMDID_BROWSERSTATEFLAG")
 cpp_quote("{")
@@ -531,6 +528,8 @@ cpp_quote("    OLECMDIDF_BROWSERSTATE_DESKTOPHTMLDIALOG = 0x20,")
 cpp_quote("    OLECMDIDF_BROWSERSTATE_BLOCKEDVERSION = 0x40,")
 cpp_quote("};")
 cpp_quote("")
+cpp_quote("typedef enum OLECMDID_BROWSERSTATEFLAG OLECMDID_BROWSERSTATEFLAG;")
+cpp_quote("")
 cpp_quote("enum OLECMDID_OPTICAL_ZOOMFLAG")
 cpp_quote("{")
 cpp_quote("    OLECMDIDF_OPTICAL_ZOOM_NOPERSIST = 1,")
@@ -538,6 +537,8 @@ cpp_quote("    OLECMDIDF_OPTICAL_ZOOM_NOLAYOUT = 0x10,")
 cpp_quote("    OLECMDIDF_OPTICAL_ZOOM_NOTRANSIENT = 0x20,")
 cpp_quote("    OLECMDIDF_OPTICAL_ZOOM_RELOADFORNEWTAB = 0x40,")
 cpp_quote("};")
+cpp_quote("")
+cpp_quote("typedef enum OLECMDID_OPTICAL_ZOOMFLAG OLECMDID_OPTICAL_ZOOMFLAG;")
 cpp_quote("")
 cpp_quote("enum OLECMDID_PAGEACTIONFLAG")
 cpp_quote("{")
@@ -576,6 +577,8 @@ cpp_quote("    OLECMDIDF_PAGEACTION_GENERIC_STATE = 0x40000000,")
 cpp_quote("    OLECMDIDF_PAGEACTION_RESET = (-2147483647 - 1),")
 cpp_quote("};")
 cpp_quote("")
+cpp_quote("typedef enum OLECMDID_PAGEACTIONFLAG OLECMDID_PAGEACTIONFLAG;")
+cpp_quote("")
 cpp_quote("enum OLECMDID_REFRESHFLAG")
 cpp_quote("{")
 cpp_quote("    OLECMDIDF_REFRESH_NORMAL = 0,")
@@ -603,6 +606,8 @@ cpp_quote("    OLECMDIDF_REFRESH_PAGEACTION_INVALID_CERT = 0x4000000,")
 cpp_quote("    OLECMDIDF_REFRESH_PAGEACTION_ALLOW_VERSION = 0x8000000,")
 cpp_quote("};")
 cpp_quote("")
+cpp_quote("typedef enum OLECMDID_REFRESHFLAG OLECMDID_REFRESHFLAG;")
+cpp_quote("")
 cpp_quote("enum OLECMDID_VIEWPORT_MODE_FLAG")
 cpp_quote("{")
 cpp_quote("    OLECMDIDF_VIEWPORTMODE_FIXED_LAYOUT_WIDTH = 1,")
@@ -610,6 +615,8 @@ cpp_quote("    OLECMDIDF_VIEWPORTMODE_EXCLUDE_VISUAL_BOTTOM = 2,")
 cpp_quote("    OLECMDIDF_VIEWPORTMODE_FIXED_LAYOUT_WIDTH_VALID = 0x10000,")
 cpp_quote("    OLECMDIDF_VIEWPORTMODE_EXCLUDE_VISUAL_BOTTOM_VALID = 0x20000,")
 cpp_quote("};")
+cpp_quote("")
+cpp_quote("typedef enum OLECMDID_VIEWPORT_MODE_FLAG OLECMDID_VIEWPORT_MODE_FLAG;")
 cpp_quote("")
 cpp_quote("enum OLECMDID_WINDOWSTATE_FLAG")
 cpp_quote("{")
@@ -619,6 +626,8 @@ cpp_quote("    OLECMDIDF_WINDOWSTATE_USERVISIBLE_VALID = 0x10000,")
 cpp_quote("    OLECMDIDF_WINDOWSTATE_ENABLED_VALID = 0x20000,")
 cpp_quote("};")
 cpp_quote("")
+cpp_quote("typedef enum OLECMDID_WINDOWSTATE_FLAG OLECMDID_WINDOWSTATE_FLAG;")
+cpp_quote("")
 cpp_quote("enum PAGEACTION_UI")
 cpp_quote("{")
 cpp_quote("    PAGEACTION_UI_DEFAULT = 0,")
@@ -627,88 +636,22 @@ cpp_quote("    PAGEACTION_UI_MODELESS = 2,")
 cpp_quote("    PAGEACTION_UI_SILENT = 3,")
 cpp_quote("};")
 cpp_quote("")
+cpp_quote("typedef enum PAGEACTION_UI PAGEACTION_UI;")
+cpp_quote("")
 cpp_quote("enum WPCSETTING")
 cpp_quote("{")
 cpp_quote("    WPCSETTING_LOGGING_ENABLED = 1,")
 cpp_quote("    WPCSETTING_FILEDOWNLOAD_BLOCKED = 2,")
 cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IContinueCallbackVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IContinueCallback *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IContinueCallback *);")
-cpp_quote("    ULONG (WINAPI *Release)(IContinueCallback *);")
-cpp_quote("    HRESULT (WINAPI *FContinue)(IContinueCallback *);")
-cpp_quote("    HRESULT (WINAPI *FContinuePrinting)(IContinueCallback *, LONG, LONG, wchar_t *);")
-cpp_quote("};")
+cpp_quote("typedef enum WPCSETTING WPCSETTING;")
 cpp_quote("")
-cpp_quote("struct IEnumOleDocumentViewsVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IEnumOleDocumentViews *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IEnumOleDocumentViews *);")
-cpp_quote("    ULONG (WINAPI *Release)(IEnumOleDocumentViews *);")
-cpp_quote("    HRESULT (WINAPI *Next)(IEnumOleDocumentViews *, ULONG, IOleDocumentView **, ULONG *);")
-cpp_quote("    HRESULT (WINAPI *Skip)(IEnumOleDocumentViews *, ULONG);")
-cpp_quote("    HRESULT (WINAPI *Reset)(IEnumOleDocumentViews *);")
-cpp_quote("    HRESULT (WINAPI *Clone)(IEnumOleDocumentViews *, IEnumOleDocumentViews **);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IOleCommandTargetVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IOleCommandTarget *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IOleCommandTarget *);")
-cpp_quote("    ULONG (WINAPI *Release)(IOleCommandTarget *);")
-cpp_quote("    HRESULT (WINAPI *QueryStatus)(IOleCommandTarget *, const GUID *, ULONG, OLECMD [], OLECMDTEXT *);")
-cpp_quote("    HRESULT (WINAPI *Exec)(IOleCommandTarget *, const GUID *, DWORD, DWORD, VARIANT *, VARIANT *);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IOleDocumentSiteVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IOleDocumentSite *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IOleDocumentSite *);")
-cpp_quote("    ULONG (WINAPI *Release)(IOleDocumentSite *);")
-cpp_quote("    HRESULT (WINAPI *ActivateMe)(IOleDocumentSite *, IOleDocumentView *);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IOleDocumentViewVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IOleDocumentView *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IOleDocumentView *);")
-cpp_quote("    ULONG (WINAPI *Release)(IOleDocumentView *);")
-cpp_quote("    HRESULT (WINAPI *SetInPlaceSite)(IOleDocumentView *, IOleInPlaceSite *);")
-cpp_quote("    HRESULT (WINAPI *GetInPlaceSite)(IOleDocumentView *, IOleInPlaceSite **);")
-cpp_quote("    HRESULT (WINAPI *GetDocument)(IOleDocumentView *, IUnknown **);")
-cpp_quote("    HRESULT (WINAPI *SetRect)(IOleDocumentView *, LPRECT);")
-cpp_quote("    HRESULT (WINAPI *GetRect)(IOleDocumentView *, LPRECT);")
-cpp_quote("    HRESULT (WINAPI *SetRectComplex)(IOleDocumentView *, LPRECT, LPRECT, LPRECT, LPRECT);")
-cpp_quote("    HRESULT (WINAPI *Show)(IOleDocumentView *, BOOL);")
-cpp_quote("    HRESULT (WINAPI *UIActivate)(IOleDocumentView *, BOOL);")
-cpp_quote("    HRESULT (WINAPI *Open)(IOleDocumentView *);")
-cpp_quote("    HRESULT (WINAPI *CloseView)(IOleDocumentView *, DWORD);")
-cpp_quote("    HRESULT (WINAPI *SaveViewState)(IOleDocumentView *, LPSTREAM);")
-cpp_quote("    HRESULT (WINAPI *ApplyViewState)(IOleDocumentView *, LPSTREAM);")
-cpp_quote("    HRESULT (WINAPI *Clone)(IOleDocumentView *, IOleInPlaceSite *, IOleDocumentView **);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IOleDocumentVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IOleDocument *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IOleDocument *);")
-cpp_quote("    ULONG (WINAPI *Release)(IOleDocument *);")
-cpp_quote("    HRESULT (WINAPI *CreateView)(IOleDocument *, IOleInPlaceSite *, IStream *, DWORD, IOleDocumentView **);")
-cpp_quote("    HRESULT (WINAPI *GetDocMiscStatus)(IOleDocument *, DWORD *);")
-cpp_quote("    HRESULT (WINAPI *EnumViews)(IOleDocument *, IEnumOleDocumentViews **, IOleDocumentView **);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IPrintVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IPrint *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IPrint *);")
-cpp_quote("    ULONG (WINAPI *Release)(IPrint *);")
-cpp_quote("    HRESULT (WINAPI *SetInitialPageNum)(IPrint *, LONG);")
-cpp_quote("    HRESULT (WINAPI *GetPageInfo)(IPrint *, LONG *, LONG *);")
-cpp_quote("    HRESULT (WINAPI *Print)(IPrint *, DWORD, DVTARGETDEVICE **, PAGESET **, STGMEDIUM *, IContinueCallback *, LONG, LONG *, LONG *);")
-cpp_quote("};")
+cpp_quote("")
 cpp_quote("")
 cpp_quote("typedef struct IProtectedModeMenuServices IProtectedModeMenuServices;")
 cpp_quote("")
@@ -746,36 +689,16 @@ cpp_quote("#ifdef __cplusplus")
 cpp_quote("extern \"C\" {")
 cpp_quote("#endif")
 cpp_quote("")
-cpp_quote("void WINAPI HMENU_UserFree(unsigned long *, HMENU *);")
-cpp_quote("unsigned char * WINAPI HMENU_UserMarshal(unsigned long *, unsigned char *, HMENU *);")
-cpp_quote("unsigned long WINAPI HMENU_UserSize(unsigned long *, unsigned long, HMENU *);")
-cpp_quote("unsigned char * WINAPI HMENU_UserUnmarshal(unsigned long *, unsigned char *, HMENU *);")
 cpp_quote("")
 cpp_quote("/* TODO: LiberNT does not implement the functions below yet */")
 cpp_quote("void HMENU_UserFree64(unsigned long *, HMENU *);")
 cpp_quote("unsigned char * HMENU_UserMarshal64(unsigned long *, unsigned char *, HMENU *);")
 cpp_quote("unsigned long HMENU_UserSize64(unsigned long *, unsigned long, HMENU *);")
 cpp_quote("unsigned char * HMENU_UserUnmarshal64(unsigned long *, unsigned char *, HMENU *);")
-cpp_quote("HRESULT WINAPI IEnumOleDocumentViews_Next_Proxy(IEnumOleDocumentViews *This, ULONG cViews, IOleDocumentView **rgpView, ULONG *pcFetched);")
-cpp_quote("HRESULT WINAPI IEnumOleDocumentViews_Next_Stub(IEnumOleDocumentViews *This, ULONG cViews, IOleDocumentView **rgpView, ULONG *pcFetched);")
-cpp_quote("HRESULT WINAPI IEnumOleDocumentViews_RemoteNext_Proxy(IEnumOleDocumentViews *This, ULONG cViews, IOleDocumentView **rgpView, ULONG *pcFetched);")
-cpp_quote("void IEnumOleDocumentViews_RemoteNext_Stub(IRpcStubBuffer *This, IRpcChannelBuffer *_pRpcChannelBuffer, PRPC_MESSAGE _pRpcMessage, DWORD *_pdwStubPhase);")
-cpp_quote("HRESULT WINAPI IPrint_Print_Proxy(IPrint *This, DWORD grfFlags, DVTARGETDEVICE **pptd, PAGESET **ppPageSet, STGMEDIUM *pstgmOptions, IContinueCallback *pcallback, LONG nFirstPage, LONG *pcPagesPrinted, LONG *pnLastPage);")
-cpp_quote("HRESULT WINAPI IPrint_Print_Stub(IPrint *This, DWORD grfFlags, DVTARGETDEVICE **pptd, PAGESET **pppageset, RemSTGMEDIUM *pstgmOptions, IContinueCallback *pcallback, LONG nFirstPage, LONG *pcPagesPrinted, LONG *pnLastPage);")
-cpp_quote("HRESULT WINAPI IPrint_RemotePrint_Proxy(IPrint *This, DWORD grfFlags, DVTARGETDEVICE **pptd, PAGESET **pppageset, RemSTGMEDIUM *pstgmOptions, IContinueCallback *pcallback, LONG nFirstPage, LONG *pcPagesPrinted, LONG *pnLastPage);")
-cpp_quote("void IPrint_RemotePrint_Stub(IRpcStubBuffer *This, IRpcChannelBuffer *_pRpcChannelBuffer, PRPC_MESSAGE _pRpcMessage, DWORD *_pdwStubPhase);")
 cpp_quote("")
 cpp_quote("#ifdef __cplusplus")
 cpp_quote("}")
 cpp_quote("#endif")
+cpp_quote("#endif")
 
-cpp_quote("enum __MIDL_IOleDocument_0001")
-cpp_quote("{")
-cpp_quote("")
-cpp_quote("};")
-cpp_quote("")
-cpp_quote("enum __MIDL_IPrint_0001")
-cpp_quote("{")
-cpp_quote("")
-cpp_quote("};")
 

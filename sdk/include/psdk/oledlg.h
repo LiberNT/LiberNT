@@ -1501,6 +1501,12 @@ INT  __cdecl OleUIPromptUserW(INT,HWND, ...);
 #define IOleUILinkContainerVtbl IOleUILinkContainerAVtbl
 #define IOleUILinkInfoVtbl IOleUILinkInfoAVtbl
 #define IOleUIObjInfoVtbl IOleUIObjInfoAVtbl
+#else
+#define IDD_LINKTYPECHANGED 0x3FE
+#define IDD_SERVERNOTREG 0x3FD
+#define IOleUILinkContainerVtbl IOleUILinkContainerWVtbl
+#define IOleUILinkInfoVtbl IOleUILinkInfoWVtbl
+#define IOleUIObjInfoVtbl IOleUIObjInfoWVtbl
 #endif
 #define OLESTDDELIM TEXT("\\")
 #define OLEUI_CIERR_MUSTHAVECLSID 0x74

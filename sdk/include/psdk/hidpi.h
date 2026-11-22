@@ -676,8 +676,8 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-NTSTATUS WINAPI HidP_GetButtonArray(HIDP_REPORT_TYPE ReportType, int UsagePage, USHORT LinkCollection, int Usage, PHIDP_BUTTON_ARRAY_DATA ButtonData, PUSHORT ButtonDataLength, PHIDP_PREPARSED_DATA PreparsedData, PCHAR Report, ULONG ReportLength);
-NTSTATUS WINAPI HidP_SetButtonArray(HIDP_REPORT_TYPE ReportType, int UsagePage, USHORT LinkCollection, int Usage, PHIDP_BUTTON_ARRAY_DATA ButtonData, USHORT ButtonDataLength, PHIDP_PREPARSED_DATA PreparsedData, PCHAR Report, ULONG ReportLength);
+NTSTATUS NTAPI HidP_GetButtonArray(HIDP_REPORT_TYPE ReportType, int UsagePage, USHORT LinkCollection, int Usage, PHIDP_BUTTON_ARRAY_DATA ButtonData, PUSHORT ButtonDataLength, PHIDP_PREPARSED_DATA PreparsedData, PCHAR Report, ULONG ReportLength);
+NTSTATUS NTAPI HidP_SetButtonArray(HIDP_REPORT_TYPE ReportType, int UsagePage, USHORT LinkCollection, int Usage, PHIDP_BUTTON_ARRAY_DATA ButtonData, USHORT ButtonDataLength, PHIDP_PREPARSED_DATA PreparsedData, PCHAR Report, ULONG ReportLength);
 
 #ifdef __cplusplus
 }

@@ -776,12 +776,12 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-void OaEnablePerUserTLibRegistration(void);
-HRESULT SafeArrayAddRef(SAFEARRAY *psa, PVOID *ppDataToRelease);
-void SafeArrayReleaseData(PVOID pData);
-void SafeArrayReleaseDescriptor(SAFEARRAY *psa);
-HRESULT SysAddRefString(BSTR bstrString);
-void SysReleaseString(BSTR bstrString);
+void STDAPICALLTYPE OaEnablePerUserTLibRegistration(void);
+HRESULT STDAPICALLTYPE SafeArrayAddRef(SAFEARRAY *psa, PVOID *ppDataToRelease);
+void STDAPICALLTYPE SafeArrayReleaseData(PVOID pData);
+void STDAPICALLTYPE SafeArrayReleaseDescriptor(SAFEARRAY *psa);
+HRESULT STDAPICALLTYPE SysAddRefString(BSTR bstrString);
+void STDAPICALLTYPE SysReleaseString(BSTR bstrString);
 
 #ifdef __cplusplus
 }

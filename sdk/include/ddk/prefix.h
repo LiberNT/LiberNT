@@ -117,18 +117,18 @@ RxExclusivePrefixTableLockToShared(
 #define HASH_BUCKET(T, H) &(T)->HashBuckets[H % (T)->TableSize]
 #endif
 
-typedef PRX_PREFIX_ENTRY (*PRX_TABLE_INSERTENTRY)(PRX_PREFIX_TABLE, PRX_PREFIX_ENTRY);
+typedef PRX_PREFIX_ENTRY (NTAPI *PRX_TABLE_INSERTENTRY)(PRX_PREFIX_TABLE, PRX_PREFIX_ENTRY);
 
-typedef PVOID (*PRX_TABLE_LOOKUPNAME)(PRX_PREFIX_TABLE, PUNICODE_STRING, PUNICODE_STRING);
+typedef PVOID (NTAPI *PRX_TABLE_LOOKUPNAME)(PRX_PREFIX_TABLE, PUNICODE_STRING, PUNICODE_STRING);
 
-typedef void (*PRX_TABLE_REMOVEENTRY)(PRX_PREFIX_TABLE, PRX_PREFIX_ENTRY);
+typedef void (NTAPI *PRX_TABLE_REMOVEENTRY)(PRX_PREFIX_TABLE, PRX_PREFIX_ENTRY);
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-void RxFinalizePrefixTable(PRX_PREFIX_TABLE ThisTable);
+void NTAPI RxFinalizePrefixTable(PRX_PREFIX_TABLE ThisTable);
 
 #ifdef __cplusplus
 }

@@ -1435,27 +1435,27 @@ typedef struct PO_EPM_HANDLE__ {
   int unused;
 } *PO_EPM_HANDLE;
 
-#define _OB_REFERENCE_TAGS_ 0
+#define _OB_REFERENCE_TAGS_
 #if (!defined(MIDL_PASS) && !defined(SORTPP_PASS) && !defined(RC_INVOKED))
-#define _RTL_VOL_MEM_ACCESSORS_ 0
+#define _RTL_VOL_MEM_ACCESSORS_
 #endif
 #if (defined (_WIN64))
 #define BitScanForwardSizeT BitScanForward64
-#define BitScanReverseSizeT 0
+#define BitScanReverseSizeT BitScanReverse64
 #endif
 #define CLFS_BASELOG_EXTENSION L".blf"
 #define CLFS_CONTAINER_RELATIVE_PREFIX L"%BLF%\\"
-#define CLFS_CONTAINER_STREAM_PREFIX 0
+#define CLFS_CONTAINER_STREAM_PREFIX L"%BLF%:"
 #define CLFS_FLAG_FILTER_INTERMEDIATE_LEVEL 0x10
 #define CLFS_FLAG_FILTER_TOP_LEVEL 0x20
 #define CLFS_LOG_SIZE_MAXIMUM ((ULONGLONG)(-1))
 #define CLFS_LOG_SIZE_MINIMUM ((ULONGLONG)0)
 #define CLFS_MGMT_NUM_POLICIES ((ULONG)0xA)
 #define ClfsClientRecord 3
-#define CLFSUSER_API 0
+#define CLFSUSER_API __declspec(dllimport)
 #define DPC_WATCHDOG_GLOBAL_TRIAGE_BLOCK_VER_1_SIZE 0x10
 #define DRIVER_PROXY_ENDPOINT_FUNCTION_ID_INVALID 0xFFFFFFFF
-#define EA_CONTAINER_NAME 0
+#define EA_CONTAINER_NAME "ContainerName"
 #define EA_CONTAINER_SIZE "ContainerSize"
 #define EX_CARR_VALID_FLAGS 3
 #define EXCEPTION_VIRTUALIZATION_FAULT 0x20
@@ -1468,7 +1468,7 @@ typedef struct PO_EPM_HANDLE__ {
 #define FAST_FAIL_SET_CONTEXT_DENIED 0x30
 #endif
 #define FILE_ATTRIBUTE_DEDICATED FILE_ATTRIBUTE_TEMPORARY
-#define IMAGE_POLICY_SECTION_NAME 0
+#define IMAGE_POLICY_SECTION_NAME ".tPolicy"
 #define KB_SECONDARY_DATA_FLAG_ADDITIONAL_DATA 0x00000001
 #if (defined(_AMD64_) || defined(_ARM64_))
 #ifdef _WIN64
@@ -1494,7 +1494,7 @@ typedef struct PO_EPM_HANDLE__ {
 #else
 #define MEMORY_SYSTEM_PARTITION_HANDLE 0xFFFFFFFE
 #endif
-#define MM_BAD_POINTER 0
+#define MM_BAD_POINTER (__pragma(warning(push)) __pragma(warning(disable : 4995)) * (PVOID *) MmBadPointer __pragma(warning(pop)))
 #define MM_MAPPING_ADDRESS_DIVISIBLE 0x1
 #define MM_PROTECT_DRIVER_SECTION_VALID_FLAGS 1
 #define NPEM_CONTROL_INTERFACE_CURRENT_VERSION 2
@@ -1550,7 +1550,7 @@ typedef struct PO_EPM_HANDLE__ {
 #define VRL_CLASS_CONSISTENCY 1
 #define VRL_CUSTOM_CLASS_BEGIN 0x100
 #define VRL_ENABLE_KERNEL_BREAKS (-2147483647 - 1)
-#define VRL_GLOBAL_LEVEL 0
+#define VRL_GLOBAL_LEVEL (SharedUserData -> GlobalValidationRunlevel)
 #define VRL_PREDEFINED_CLASS_BEGIN (1 << 0)
 
 typedef int __prefast_analysis_mode_flag0;
@@ -1751,41 +1751,41 @@ typedef struct _CLFS_MGMT_POLICY CLFS_MGMT_POLICY;
 
 typedef CLS_WRITE_ENTRY CLFS_WRITE_ENTRY;
 
-typedef void DRIVER_PROXY_ENDPOINT_FUNCTION(void);
+typedef void NTAPI DRIVER_PROXY_ENDPOINT_FUNCTION(void);
 
 typedef union _DRIVER_PROXY_EXTENSION_CREATION_FLAGS DRIVER_PROXY_EXTENSION_CREATION_FLAGS;
 
 typedef union _DRIVER_PROXY_FEATURE_FLAGS DRIVER_PROXY_FEATURE_FLAGS;
 
-typedef BOOLEAN DRIVER_PROXY_HOTSWAP_WORKER_ROUTINE(PVOID, NTSTATUS);
+typedef BOOLEAN NTAPI DRIVER_PROXY_HOTSWAP_WORKER_ROUTINE(PVOID, NTSTATUS);
 
 typedef NTSTATUS DRIVER_PROXY_REGISTER_CALLBACK(DRIVER_PROXY_REGISTER_CALLBACK_PHASE, PVOID);
 
-typedef NTSTATUS ENABLE_VIRTUALIZATION(PVOID, UINT16, BOOLEAN, BOOLEAN, BOOLEAN);
+typedef NTSTATUS NTAPI ENABLE_VIRTUALIZATION(PVOID, UINT16, BOOLEAN, BOOLEAN, BOOLEAN);
 
 typedef void NTAPI ETWENABLECALLBACK(LPCGUID, ULONG, UCHAR, ULONGLONG, ULONGLONG, PEVENT_FILTER_DESCRIPTOR, PVOID);
 
 typedef struct _FILE_MEMORY_PARTITION_INFORMATION FILE_MEMORY_PARTITION_INFORMATION;
 
-typedef void FPGA_BUS_SCAN(PVOID);
+typedef void NTAPI FPGA_BUS_SCAN(PVOID);
 
-typedef NTSTATUS FPGA_CONTROL_CONFIG_SPACE(PVOID, BOOLEAN);
+typedef NTSTATUS NTAPI FPGA_CONTROL_CONFIG_SPACE(PVOID, BOOLEAN);
 
-typedef NTSTATUS FPGA_CONTROL_ERROR_REPORTING(PVOID, ULONG, ULONG, BOOLEAN);
+typedef NTSTATUS NTAPI FPGA_CONTROL_ERROR_REPORTING(PVOID, ULONG, ULONG, BOOLEAN);
 
-typedef NTSTATUS FPGA_CONTROL_LINK(PVOID, BOOLEAN);
+typedef NTSTATUS NTAPI FPGA_CONTROL_LINK(PVOID, BOOLEAN);
 
-typedef ULONGLONG GET_SDEV_IDENTIFIER(PVOID);
+typedef ULONGLONG NTAPI GET_SDEV_IDENTIFIER(PVOID);
 
-typedef NTSTATUS GET_UPDATED_BUS_RESOURCE(PVOID, PCM_RESOURCE_LIST *, PCM_RESOURCE_LIST *);
+typedef NTSTATUS NTAPI GET_UPDATED_BUS_RESOURCE(PVOID, PCM_RESOURCE_LIST *, PCM_RESOURCE_LIST *);
 
-typedef ULONG GET_VIRTUAL_DEVICE_DATA(PVOID, USHORT, PVOID, ULONG, ULONG);
+typedef ULONG NTAPI GET_VIRTUAL_DEVICE_DATA(PVOID, USHORT, PVOID, ULONG, ULONG);
 
-typedef NTSTATUS GET_VIRTUAL_DEVICE_LOCATION(PVOID, USHORT, PUINT16, PUINT8, PUINT8);
+typedef NTSTATUS NTAPI GET_VIRTUAL_DEVICE_LOCATION(PVOID, USHORT, PUINT16, PUINT8, PUINT8);
 
-typedef void GET_VIRTUAL_DEVICE_RESOURCES(PVOID, PUINT8);
+typedef void NTAPI GET_VIRTUAL_DEVICE_RESOURCES(PVOID, PUINT8);
 
-typedef NTSTATUS GET_VIRTUAL_FUNCTION_PROBED_BARS(PVOID, PULONG);
+typedef NTSTATUS NTAPI GET_VIRTUAL_FUNCTION_PROBED_BARS(PVOID, PULONG);
 
 typedef struct _IMAGE_POLICY_ENTRY IMAGE_POLICY_ENTRY;
 
@@ -1801,31 +1801,41 @@ typedef struct _IMAGE_POLICY_METADATA IMAGE_POLICY_METADATA;
 
 typedef struct _IO_ATTRIBUTION_INFORMATION IO_ATTRIBUTION_INFORMATION;
 
-typedef NTSTATUS IO_PERSISTED_MEMORY_ENUMERATION_CALLBACK(PDRIVER_OBJECT, PDEVICE_OBJECT, PUNICODE_STRING, PUSHORT, PULONG, PVOID);
+typedef NTSTATUS NTAPI IO_PERSISTED_MEMORY_ENUMERATION_CALLBACK(PDRIVER_OBJECT, PDEVICE_OBJECT, PUNICODE_STRING, PUSHORT, PULONG, PVOID);
 
 #if (defined(_WIN64))
 typedef IO_STATUS_BLOCK IO_STATUS_BLOCK64;
+#else
+typedef struct _IO_STATUS_BLOCK64
+{
+    union
+    {
+        NTSTATUS Status;
+        PVOID64 Pointer;
+    };
+    ULONG64 Information;
+} IO_STATUS_BLOCK64;
 #endif
 
 typedef struct _KERNEL_CET_CONTEXT KERNEL_CET_CONTEXT;
 
-typedef void MM_MDL_ROUTINE(PVOID, PVOID);
+typedef void NTAPI MM_MDL_ROUTINE(PVOID, PVOID);
 
 typedef union _NPEM_CAPABILITY_STANDARD NPEM_CAPABILITY_STANDARD;
 
-typedef NTSTATUS NPEM_CONTROL_ENABLE_DISABLE(PVOID, BOOLEAN);
+typedef NTSTATUS NTAPI NPEM_CONTROL_ENABLE_DISABLE(PVOID, BOOLEAN);
 
-typedef ULONG NPEM_CONTROL_QUERY_CONTROL(PVOID);
+typedef ULONG NTAPI NPEM_CONTROL_QUERY_CONTROL(PVOID);
 
-typedef NTSTATUS NPEM_CONTROL_SET_STANDARD_CONTROL(PVOID, NPEM_CONTROL_STANDARD_CONTROL_BIT, BOOLEAN);
+typedef NTSTATUS NTAPI NPEM_CONTROL_SET_STANDARD_CONTROL(PVOID, NPEM_CONTROL_STANDARD_CONTROL_BIT, BOOLEAN);
 
-typedef void NTFS_DEREF_EXPORTED_SECURITY_DESCRIPTOR(PVOID, PSECURITY_DESCRIPTOR);
+typedef void NTAPI NTFS_DEREF_EXPORTED_SECURITY_DESCRIPTOR(PVOID, PSECURITY_DESCRIPTOR);
 
-typedef NTSTATUS PCI_SET_ACS(PVOID, PCI_ACS_BIT, PCI_ACS_BIT, PCI_ACS_BIT, PCI_ACS_BIT, PCI_ACS_BIT, PCI_ACS_BIT, PCI_ACS_BIT);
+typedef NTSTATUS NTAPI PCI_SET_ACS(PVOID, PCI_ACS_BIT, PCI_ACS_BIT, PCI_ACS_BIT, PCI_ACS_BIT, PCI_ACS_BIT, PCI_ACS_BIT, PCI_ACS_BIT);
 
-typedef NTSTATUS PCI_SET_ACS2(PVOID, ULONG, ULONG);
+typedef NTSTATUS NTAPI PCI_SET_ACS2(PVOID, ULONG, ULONG);
 
-typedef NTSTATUS PCI_SET_ATS(PVOID, BOOLEAN);
+typedef NTSTATUS NTAPI PCI_SET_ATS(PVOID, BOOLEAN);
 
 typedef const IMAGE_POLICY_ENTRY *PCIMAGE_POLICY_ENTRY;
 
@@ -1849,7 +1859,7 @@ typedef void (*PCLFS_SET_LOG_SIZE_COMPLETE_CALLBACK)(PLOG_FILE_OBJECT, NTSTATUS,
 
 typedef CLFS_WRITE_ENTRY *PCLFS_WRITE_ENTRY;
 
-typedef NTSTATUS (*PCRASHDUMP_POWER_ON)(PVOID);
+typedef NTSTATUS (NTAPI *PCRASHDUMP_POWER_ON)(PVOID);
 
 struct _CRASHDUMP_FUNCTIONS_INTERFACE
 {
@@ -1975,13 +1985,13 @@ typedef IO_STATUS_BLOCK64 *PIO_STATUS_BLOCK64;
 
 typedef struct _KERNEL_CET_CONTEXT *PKERNEL_CET_CONTEXT;
 
-typedef PVOID (*PMM_GET_SYSTEM_ROUTINE_ADDRESS_EX)(PUNICODE_STRING, PSTR);
+typedef PVOID (NTAPI *PMM_GET_SYSTEM_ROUTINE_ADDRESS_EX)(PUNICODE_STRING, PSTR);
 
 typedef MM_MDL_ROUTINE *PMM_MDL_ROUTINE;
 
 typedef union _NPEM_CAPABILITY_STANDARD *PNPEM_CAPABILITY_STANDARD;
 
-typedef NTSTATUS NPEM_CONTROL_QUERY_STANDARD_CAPABILITIES(PVOID, PNPEM_CAPABILITY_STANDARD);
+typedef NTSTATUS NTAPI NPEM_CONTROL_QUERY_STANDARD_CAPABILITIES(PVOID, PNPEM_CAPABILITY_STANDARD);
 
 typedef NPEM_CONTROL_ENABLE_DISABLE *PNPEM_CONTROL_ENABLE_DISABLE;
 
@@ -2008,9 +2018,9 @@ typedef struct _NPEM_CONTROL_INTERFACE NPEM_CONTROL_INTERFACE;
 
 typedef struct _NPEM_CONTROL_INTERFACE *PNPEM_CONTROL_INTERFACE;
 
-typedef void PO_EFFECTIVE_POWER_MODE_CALLBACK(PO_EFFECTIVE_POWER_MODE, void *);
+typedef void NTAPI PO_EFFECTIVE_POWER_MODE_CALLBACK(PO_EFFECTIVE_POWER_MODE, void *);
 
-typedef void PO_FX_DRIPS_WATCHDOG_CALLBACK(PVOID, PDEVICE_OBJECT, ULONG);
+typedef void NTAPI PO_FX_DRIPS_WATCHDOG_CALLBACK(PVOID, PDEVICE_OBJECT, ULONG);
 
 
 typedef struct _POOL_CREATE_EXTENDED_PARAMETER POOL_CREATE_EXTENDED_PARAMETER;
@@ -2111,7 +2121,7 @@ typedef const POOL_CREATE_EXTENDED_PARAMS *PCPOOL_CREATE_EXTENDED_PARAMS;
 
 typedef struct _POOL_CREATE_EXTENDED_PARAMS *PPOOL_CREATE_EXTENDED_PARAMS;
 
-typedef void (*PQUERYEXTENDEDADDRESS)(PVOID, PULONG64);
+typedef void (NTAPI *PQUERYEXTENDEDADDRESS)(PVOID, PULONG64);
 
 struct _PNP_EXTENDED_ADDRESS_INTERFACE
 {
@@ -2129,19 +2139,19 @@ typedef struct _PNP_EXTENDED_ADDRESS_INTERFACE *PPNP_EXTENDED_ADDRESS_INTERFACE;
 
 typedef struct _SDEV_IDENTIFIER_INTERFACE *PSDEV_IDENTIFIER_INTERFACE;
 
-typedef NTSTATUS PTM_DEVICE_DISABLE(PVOID);
+typedef NTSTATUS NTAPI PTM_DEVICE_DISABLE(PVOID);
 
 typedef PTM_DEVICE_DISABLE *PPTM_DEVICE_DISABLE;
 
-typedef NTSTATUS PTM_DEVICE_ENABLE(PVOID);
+typedef NTSTATUS NTAPI PTM_DEVICE_ENABLE(PVOID);
 
 typedef PTM_DEVICE_ENABLE *PPTM_DEVICE_ENABLE;
 
-typedef NTSTATUS PTM_DEVICE_QUERY_GRANULARITY(PVOID, PUCHAR);
+typedef NTSTATUS NTAPI PTM_DEVICE_QUERY_GRANULARITY(PVOID, PUCHAR);
 
 typedef PTM_DEVICE_QUERY_GRANULARITY *PPTM_DEVICE_QUERY_GRANULARITY;
 
-typedef NTSTATUS PTM_DEVICE_QUERY_TIME_SOURCE(PVOID, PULONG);
+typedef NTSTATUS NTAPI PTM_DEVICE_QUERY_TIME_SOURCE(PVOID, PULONG);
 
 typedef PTM_DEVICE_QUERY_TIME_SOURCE *PPTM_DEVICE_QUERY_TIME_SOURCE;
 
@@ -2166,15 +2176,15 @@ typedef NTSTATUS (NTAPI *PTM_PROPAGATE_ROUTINE)(PVOID, PVOID, NTSTATUS, GUID);
 
 typedef struct _SDEV_IDENTIFIER_INTERFACE SDEV_IDENTIFIER_INTERFACE;
 
-typedef void SE_IMAGE_VERIFICATION_CALLBACK_FUNCTION(PVOID, SE_IMAGE_TYPE, PBDCB_IMAGE_INFORMATION);
+typedef void NTAPI SE_IMAGE_VERIFICATION_CALLBACK_FUNCTION(PVOID, SE_IMAGE_TYPE, PBDCB_IMAGE_INFORMATION);
 
 typedef SE_IMAGE_VERIFICATION_CALLBACK_FUNCTION *PSE_IMAGE_VERIFICATION_CALLBACK_FUNCTION;
 
-typedef void SECURE_DRIVER_PROCESS_DEREFERENCE(PVOID, PEPROCESS);
+typedef void NTAPI SECURE_DRIVER_PROCESS_DEREFERENCE(PVOID, PEPROCESS);
 
 typedef SECURE_DRIVER_PROCESS_DEREFERENCE *PSECURE_DRIVER_PROCESS_DEREFERENCE;
 
-typedef PEPROCESS SECURE_DRIVER_PROCESS_REFERENCE(PVOID);
+typedef PEPROCESS NTAPI SECURE_DRIVER_PROCESS_REFERENCE(PVOID);
 
 typedef SECURE_DRIVER_PROCESS_REFERENCE *PSECURE_DRIVER_PROCESS_REFERENCE;
 
@@ -2190,7 +2200,7 @@ typedef struct _SECURE_DRIVER_INTERFACE *PSECURE_DRIVER_INTERFACE;
 
 typedef struct _SECURE_DRIVER_INTERFACE SECURE_DRIVER_INTERFACE;
 
-typedef ULONG SET_VIRTUAL_DEVICE_DATA(PVOID, USHORT, PVOID, ULONG, ULONG);
+typedef ULONG NTAPI SET_VIRTUAL_DEVICE_DATA(PVOID, USHORT, PVOID, ULONG, ULONG);
 
 typedef SET_VIRTUAL_DEVICE_DATA *PSET_VIRTUAL_DEVICE_DATA;
 
@@ -2253,77 +2263,77 @@ NTSTATUS NTAPI ClfsRemoveLogContainerSet(PLOG_FILE_OBJECT plfoLog, USHORT cConta
 NTSTATUS NTAPI ClfsSetLogFileInformation(PLOG_FILE_OBJECT plfoLog, CLFS_LOG_INFORMATION_CLASS eInformationClass, PVOID pinfoBuffer, ULONG cbBuffer);
 NTSTATUS NTAPI ClfsTerminateReadLog(PVOID pvCursorContext);
 BOOLEAN NTAPI ClfsValidTopLevelContext(PIRP pirpTopLevelContext);
-NTSTATUS EtwSetInformation(REGHANDLE RegHandle, EVENT_INFO_CLASS InformationClass, PVOID EventInformation, ULONG InformationLength);
-void ExCleanupRundownProtectionCacheAware(PEX_RUNDOWN_REF_CACHE_AWARE RunRefCacheAware);
-NTSTATUS ExCreatePool(ULONG Flags, ULONG_PTR Tag, POOL_CREATE_EXTENDED_PARAMS *Params, HANDLE *PoolHandle);
-void ExDestroyPool(HANDLE PoolHandle);
-NTSTATUS ExEnumerateSystemFirmwareTables(ULONG FirmwareTableProviderSignature, PVOID FirmwareTableBuffer, ULONG BufferLength, PULONG ReturnLength);
-NTSTATUS ExInitializeDeviceAts(struct _DEVICE_OBJECT *PhysicalDeviceObject, ULONG Flags);
+NTKERNELAPI NTSTATUS NTAPI EtwSetInformation(REGHANDLE RegHandle, EVENT_INFO_CLASS InformationClass, PVOID EventInformation, ULONG InformationLength);
+NTKERNELAPI void NTAPI ExCleanupRundownProtectionCacheAware(PEX_RUNDOWN_REF_CACHE_AWARE RunRefCacheAware);
+NTKERNELAPI NTSTATUS NTAPI ExCreatePool(ULONG Flags, ULONG_PTR Tag, POOL_CREATE_EXTENDED_PARAMS *Params, HANDLE *PoolHandle);
+NTKERNELAPI void NTAPI ExDestroyPool(HANDLE PoolHandle);
+NTKERNELAPI NTSTATUS NTAPI ExEnumerateSystemFirmwareTables(ULONG FirmwareTableProviderSignature, PVOID FirmwareTableBuffer, ULONG BufferLength, PULONG ReturnLength);
+NTKERNELAPI NTSTATUS NTAPI ExInitializeDeviceAts(struct _DEVICE_OBJECT *PhysicalDeviceObject, ULONG Flags);
 void ExInitializeNPagedLookasideList_NXPoolOptIn(PNPAGED_LOOKASIDE_LIST Lookaside, PALLOCATE_FUNCTION Allocate, PFREE_FUNCTION Free, ULONG Flags, SIZE_T Size, ULONG Tag, USHORT Depth);
-void ExInitializeRundownProtectionCacheAwareEx(PEX_RUNDOWN_REF_CACHE_AWARE RunRefCacheAware, ULONG Flags);
-void ExRcuFreePool(PEX_RCU_FREE_POOL_CONTEXT Context, PVOID Ptr);
-NTSTATUS ExSecurePoolUpdate(HANDLE SecurePoolHandle, ULONG Tag, PVOID Allocation, ULONG_PTR Cookie, SIZE_T Offset, SIZE_T Size, PVOID Buffer);
-LOGICAL ExSecurePoolValidate(HANDLE SecurePoolHandle, ULONG Tag, PVOID Allocation, ULONG_PTR Cookie);
-NTSTATUS IoAcquireKsrPersistentMemory(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, PVOID Buffer, PSIZE_T Size);
-NTSTATUS IoAcquireKsrPersistentMemoryEx(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, PUNICODE_STRING PhysicalDeviceId, PUSHORT DataTag, PULONG DataVersion, PVOID Buffer, PSIZE_T Size);
-NTSTATUS IoCheckLinkShareAccess(ACCESS_MASK DesiredAccess, ULONG DesiredShareAccess, PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess, PLINK_SHARE_ACCESS LinkShareAccess, ULONG IoShareAccessFlags);
-NTSTATUS IoEnumerateKsrPersistentMemoryEx(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, PUNICODE_STRING PhysicalDeviceId, PIO_PERSISTED_MEMORY_ENUMERATION_CALLBACK Callback, PVOID CallbackContext);
-NTSTATUS IoFreeKsrPersistentMemory(PVOID DataHandle);
-void IoGetDriverProxyFeatures(PDRIVER_OBJECT DriverObject, PDRIVER_PROXY_FEATURE_FLAGS Flags);
-NTSTATUS IoGetIoAttributionHandle(PIRP Irp, PVOID *IoAttributionHandle);
-NTSTATUS IoGetKsrPersistentMemoryBuffer(PVOID DataHandle, PVOID *BufferPtr, PSIZE_T BufferSize);
-void IoInitializeIrpEx(PIRP Irp, PDEVICE_OBJECT DeviceObject, USHORT PacketSize, CCHAR StackSize);
-BOOLEAN IoIsInitiator32bitProcess(PIRP Irp);
-NTSTATUS IoMapKsrPersistentMemoryEx(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, PUNICODE_STRING PhysicalDeviceId, PUSHORT DataTag, PULONG DataVersion, PVOID *DataHandle);
-NTSTATUS IoQueryKsrPersistentMemorySize(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, PSIZE_T BufferSize);
-NTSTATUS IoQueryKsrPersistentMemorySizeEx(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, PUNICODE_STRING PhysicalDeviceId, PUSHORT DataTag, PULONG DataVersion, PSIZE_T BufferSize);
-NTSTATUS IoRecordIoAttribution(PVOID OpaqueHandle, IO_ATTRIBUTION_INFORMATION *AttributionInformation);
-void IoRemoveLinkShareAccess(PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess, PLINK_SHARE_ACCESS LinkShareAccess);
-void IoRemoveLinkShareAccessEx(PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess, PLINK_SHARE_ACCESS LinkShareAccess, ULONG IoShareAccessFlags);
-NTSTATUS IoReserveKsrPersistentMemory(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, SIZE_T Size, ULONG Flags, PVOID *DataHandle);
-NTSTATUS IoReserveKsrPersistentMemoryEx(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, PUNICODE_STRING PhysicalDeviceId, PUSHORT DataTag, ULONG DataVersion, SIZE_T Size, ULONG Flags, PVOID *DataHandle);
-NTSTATUS IoSetIoAttributionIrp(PIRP Irp, PVOID AttributionSource, ULONG Flags);
-void IoSetLinkShareAccess(ACCESS_MASK DesiredAccess, ULONG DesiredShareAccess, PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess, PLINK_SHARE_ACCESS LinkShareAccess, ULONG IoShareAccessFlags);
-BOOLEAN IoTryQueueWorkItem(PIO_WORKITEM IoWorkItem, PIO_WORKITEM_ROUTINE_EX WorkerRoutine, WORK_QUEUE_TYPE QueueType, PVOID Context);
-void IoUpdateLinkShareAccess(PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess, PLINK_SHARE_ACCESS LinkShareAccess);
-void IoUpdateLinkShareAccessEx(PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess, PLINK_SHARE_ACCESS LinkShareAccess, ULONG IoShareAccessFlags);
-NTSTATUS IoWriteKsrPersistentMemory(PVOID DataHandle, PVOID Buffer, SIZE_T Size);
-NTSTATUS KeConvertPerformanceCounterToAuxiliaryCounter(ULONG64 PerformanceCounterValue, PULONG64 AuxiliaryCounterValue, PULONG64 ConversionError);
+NTKERNELAPI void NTAPI ExInitializeRundownProtectionCacheAwareEx(PEX_RUNDOWN_REF_CACHE_AWARE RunRefCacheAware, ULONG Flags);
+NTKERNELAPI void NTAPI ExRcuFreePool(PEX_RCU_FREE_POOL_CONTEXT Context, PVOID Ptr);
+NTKERNELAPI NTSTATUS NTAPI ExSecurePoolUpdate(HANDLE SecurePoolHandle, ULONG Tag, PVOID Allocation, ULONG_PTR Cookie, SIZE_T Offset, SIZE_T Size, PVOID Buffer);
+NTKERNELAPI LOGICAL NTAPI ExSecurePoolValidate(HANDLE SecurePoolHandle, ULONG Tag, PVOID Allocation, ULONG_PTR Cookie);
+NTKERNELAPI NTSTATUS NTAPI IoAcquireKsrPersistentMemory(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, PVOID Buffer, PSIZE_T Size);
+NTKERNELAPI NTSTATUS NTAPI IoAcquireKsrPersistentMemoryEx(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, PUNICODE_STRING PhysicalDeviceId, PUSHORT DataTag, PULONG DataVersion, PVOID Buffer, PSIZE_T Size);
+NTKERNELAPI NTSTATUS NTAPI IoCheckLinkShareAccess(ACCESS_MASK DesiredAccess, ULONG DesiredShareAccess, PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess, PLINK_SHARE_ACCESS LinkShareAccess, ULONG IoShareAccessFlags);
+NTKERNELAPI NTSTATUS NTAPI IoEnumerateKsrPersistentMemoryEx(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, PUNICODE_STRING PhysicalDeviceId, PIO_PERSISTED_MEMORY_ENUMERATION_CALLBACK Callback, PVOID CallbackContext);
+NTKERNELAPI NTSTATUS NTAPI IoFreeKsrPersistentMemory(PVOID DataHandle);
+NTKERNELAPI void NTAPI IoGetDriverProxyFeatures(PDRIVER_OBJECT DriverObject, PDRIVER_PROXY_FEATURE_FLAGS Flags);
+NTSTATUS NTAPI IoGetIoAttributionHandle(PIRP Irp, PVOID *IoAttributionHandle);
+NTKERNELAPI NTSTATUS NTAPI IoGetKsrPersistentMemoryBuffer(PVOID DataHandle, PVOID *BufferPtr, PSIZE_T BufferSize);
+NTKERNELAPI void NTAPI IoInitializeIrpEx(PIRP Irp, PDEVICE_OBJECT DeviceObject, USHORT PacketSize, CCHAR StackSize);
+NTKERNELAPI BOOLEAN NTAPI IoIsInitiator32bitProcess(PIRP Irp);
+NTKERNELAPI NTSTATUS NTAPI IoMapKsrPersistentMemoryEx(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, PUNICODE_STRING PhysicalDeviceId, PUSHORT DataTag, PULONG DataVersion, PVOID *DataHandle);
+NTKERNELAPI NTSTATUS NTAPI IoQueryKsrPersistentMemorySize(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, PSIZE_T BufferSize);
+NTKERNELAPI NTSTATUS NTAPI IoQueryKsrPersistentMemorySizeEx(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, PUNICODE_STRING PhysicalDeviceId, PUSHORT DataTag, PULONG DataVersion, PSIZE_T BufferSize);
+NTSTATUS NTAPI IoRecordIoAttribution(PVOID OpaqueHandle, IO_ATTRIBUTION_INFORMATION *AttributionInformation);
+NTKERNELAPI void NTAPI IoRemoveLinkShareAccess(PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess, PLINK_SHARE_ACCESS LinkShareAccess);
+NTKERNELAPI void NTAPI IoRemoveLinkShareAccessEx(PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess, PLINK_SHARE_ACCESS LinkShareAccess, ULONG IoShareAccessFlags);
+NTKERNELAPI NTSTATUS NTAPI IoReserveKsrPersistentMemory(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, SIZE_T Size, ULONG Flags, PVOID *DataHandle);
+NTKERNELAPI NTSTATUS NTAPI IoReserveKsrPersistentMemoryEx(PDRIVER_OBJECT DriverObject, PDEVICE_OBJECT PhysicalDeviceObject, PUNICODE_STRING PhysicalDeviceId, PUSHORT DataTag, ULONG DataVersion, SIZE_T Size, ULONG Flags, PVOID *DataHandle);
+NTSTATUS NTAPI IoSetIoAttributionIrp(PIRP Irp, PVOID AttributionSource, ULONG Flags);
+NTKERNELAPI void NTAPI IoSetLinkShareAccess(ACCESS_MASK DesiredAccess, ULONG DesiredShareAccess, PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess, PLINK_SHARE_ACCESS LinkShareAccess, ULONG IoShareAccessFlags);
+BOOLEAN NTAPI IoTryQueueWorkItem(PIO_WORKITEM IoWorkItem, PIO_WORKITEM_ROUTINE_EX WorkerRoutine, WORK_QUEUE_TYPE QueueType, PVOID Context);
+NTKERNELAPI void NTAPI IoUpdateLinkShareAccess(PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess, PLINK_SHARE_ACCESS LinkShareAccess);
+NTKERNELAPI void NTAPI IoUpdateLinkShareAccessEx(PFILE_OBJECT FileObject, PSHARE_ACCESS ShareAccess, PLINK_SHARE_ACCESS LinkShareAccess, ULONG IoShareAccessFlags);
+NTKERNELAPI NTSTATUS NTAPI IoWriteKsrPersistentMemory(PVOID DataHandle, PVOID Buffer, SIZE_T Size);
+NTSTATUS NTAPI KeConvertPerformanceCounterToAuxiliaryCounter(ULONG64 PerformanceCounterValue, PULONG64 AuxiliaryCounterValue, PULONG64 ConversionError);
 #if (defined(_X86_) || defined(_AMD64_))
-NTSTATUS KeDeregisterBoundCallback(PVOID Handle);
+NTKERNELAPI NTSTATUS NTAPI KeDeregisterBoundCallback(PVOID Handle);
 #endif
 void KeInitializeTimer2SetParameters(PKT2_SET_PARAMETERS Parameters);
-NTSTATUS KeQueryAuxiliaryCounterFrequency(PULONG64 AuxiliaryCounterFrequency);
-void KeRcuReadLock(void);
-void KeRcuReadUnlock(void);
-void KeRcuSynchronize(void);
-NTSTATUS MmAddVerifierSpecialThunks(ULONG_PTR EntryRoutine, PVOID ThunkBuffer, ULONG ThunkBufferSize);
-PVOID MmAllocateMappingAddressEx(SIZE_T NumberOfBytes, ULONG PoolTag, ULONG Flags);
-PMDL MmAllocateNodePagesForMdlEx(PHYSICAL_ADDRESS LowAddress, PHYSICAL_ADDRESS HighAddress, PHYSICAL_ADDRESS SkipBytes, SIZE_T TotalBytes, MEMORY_CACHING_TYPE CacheType, ULONG IdealNode, ULONG Flags);
-PMDL MmAllocatePartitionNodePagesForMdlEx(PHYSICAL_ADDRESS LowAddress, PHYSICAL_ADDRESS HighAddress, PHYSICAL_ADDRESS SkipBytes, SIZE_T TotalBytes, MEMORY_CACHING_TYPE CacheType, MM_NODE_NUMBER_ZERO_BASED IdealNode, ULONG Flags, PVOID PartitionObject);
-LOGICAL MmAreMdlPagesCached(PMDL MemoryDescriptorList);
-void MmFreePagesFromMdlEx(PMDL MemoryDescriptorList, ULONG Flags);
-LOGICAL MmIsDriverSuspectForVerifier(struct _DRIVER_OBJECT *DriverObject);
+NTSTATUS NTAPI KeQueryAuxiliaryCounterFrequency(PULONG64 AuxiliaryCounterFrequency);
+NTKERNELAPI void FASTCALL KeRcuReadLock(void);
+NTKERNELAPI void FASTCALL KeRcuReadUnlock(void);
+NTKERNELAPI void NTAPI KeRcuSynchronize(void);
+NTKERNELAPI NTSTATUS NTAPI MmAddVerifierSpecialThunks(ULONG_PTR EntryRoutine, PVOID ThunkBuffer, ULONG ThunkBufferSize);
+NTKERNELAPI PVOID NTAPI MmAllocateMappingAddressEx(SIZE_T NumberOfBytes, ULONG PoolTag, ULONG Flags);
+NTKERNELAPI PMDL NTAPI MmAllocateNodePagesForMdlEx(PHYSICAL_ADDRESS LowAddress, PHYSICAL_ADDRESS HighAddress, PHYSICAL_ADDRESS SkipBytes, SIZE_T TotalBytes, MEMORY_CACHING_TYPE CacheType, ULONG IdealNode, ULONG Flags);
+NTKERNELAPI PMDL NTAPI MmAllocatePartitionNodePagesForMdlEx(PHYSICAL_ADDRESS LowAddress, PHYSICAL_ADDRESS HighAddress, PHYSICAL_ADDRESS SkipBytes, SIZE_T TotalBytes, MEMORY_CACHING_TYPE CacheType, MM_NODE_NUMBER_ZERO_BASED IdealNode, ULONG Flags, PVOID PartitionObject);
+NTKERNELAPI LOGICAL NTAPI MmAreMdlPagesCached(PMDL MemoryDescriptorList);
+NTKERNELAPI void NTAPI MmFreePagesFromMdlEx(PMDL MemoryDescriptorList, ULONG Flags);
+NTKERNELAPI LOGICAL NTAPI MmIsDriverSuspectForVerifier(struct _DRIVER_OBJECT *DriverObject);
 PVOID MmMapLockedPagesSpecifyCache_NXOptIn(PMDL MemoryDescriptorList, KPROCESSOR_MODE AccessMode, MEMORY_CACHING_TYPE CacheType, PVOID RequestedAddress, ULONG BugCheckOnFailure, ULONG Priority);
-NTSTATUS MmMapMdl(PMDL MemoryDescriptorList, ULONG Protection, PMM_MDL_ROUTINE DriverRoutine, PVOID DriverContext);
-NTSTATUS MmMapMemoryDumpMdlEx(PVOID Va, PFN_NUMBER PageTotal, PMDL MemoryDumpMdl, ULONG Flags);
-MM_MDL_PAGE_CONTENTS_STATE MmMdlPageContentsState(PMDL MemoryDescriptorList, MM_MDL_PAGE_CONTENTS_STATE State);
-NTSTATUS MmProtectDriverSection(PVOID AddressWithinSection, SIZE_T Size, ULONG Flags);
-NTSTATUS MmSetPermanentCacheAttribute(PHYSICAL_ADDRESS StartAddress, LARGE_INTEGER NumberOfBytes, MEMORY_CACHING_TYPE CacheType, ULONG Flags);
-NTSTATUS NtManagePartition(HANDLE TargetHandle, HANDLE SourceHandle, PARTITION_INFORMATION_CLASS PartitionInformationClass, PVOID PartitionInformation, ULONG PartitionInformationLength);
-NTSTATUS NtOpenRegistryTransaction(PHANDLE TransactionHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes);
-NTSTATUS NtRollbackRegistryTransaction(HANDLE TransactionHandle, ULONG Flags);
-BOOLEAN ObReferenceObjectSafe(PVOID Object);
-BOOLEAN ObReferenceObjectSafeWithTag(PVOID Object, ULONG Tag);
-void PoFxIssueComponentPerfStateChangeMultiple(POHANDLE Handle, ULONG Flags, ULONG Component, ULONG PerfChangesCount, PO_FX_PERF_STATE_CHANGE PerfChanges[], PVOID Context);
-void PoFxNotifySurprisePowerOn(PDEVICE_OBJECT Pdo);
-void PoFxRegisterDripsWatchdogCallback(POHANDLE Handle, PPO_FX_DRIPS_WATCHDOG_CALLBACK Callback, BOOLEAN IncludeChildDevices, PDRIVER_OBJECT MatchingDriverObject);
-void PoFxSetComponentWake(POHANDLE Handle, ULONG Component, BOOLEAN WakeHint);
-NTSTATUS PoFxSetTargetDripsDevicePowerState(POHANDLE Handle, DEVICE_POWER_STATE TargetState);
-NTSTATUS PoRegisterForEffectivePowerModeNotifications(ULONG Version, PPO_EFFECTIVE_POWER_MODE_CALLBACK Callback, PVOID Context, PO_EPM_HANDLE *RegistrationHandle, PDEVICE_OBJECT DeviceObject);
-void PoSetSystemWakeDevice(PDEVICE_OBJECT DeviceObject);
-NTSTATUS PoUnregisterFromEffectivePowerModeNotifications(PO_EPM_HANDLE RegistrationHandle);
-ULONG64 PsQueryTotalCycleTimeProcess(PEPROCESS Process, PULONG64 CycleTimeStamp);
+NTKERNELAPI NTSTATUS NTAPI MmMapMdl(PMDL MemoryDescriptorList, ULONG Protection, PMM_MDL_ROUTINE DriverRoutine, PVOID DriverContext);
+NTKERNELAPI NTSTATUS NTAPI MmMapMemoryDumpMdlEx(PVOID Va, PFN_NUMBER PageTotal, PMDL MemoryDumpMdl, ULONG Flags);
+NTKERNELAPI MM_MDL_PAGE_CONTENTS_STATE NTAPI MmMdlPageContentsState(PMDL MemoryDescriptorList, MM_MDL_PAGE_CONTENTS_STATE State);
+NTSTATUS NTAPI MmProtectDriverSection(PVOID AddressWithinSection, SIZE_T Size, ULONG Flags);
+NTKERNELAPI NTSTATUS NTAPI MmSetPermanentCacheAttribute(PHYSICAL_ADDRESS StartAddress, LARGE_INTEGER NumberOfBytes, MEMORY_CACHING_TYPE CacheType, ULONG Flags);
+NTSYSCALLAPI NTSTATUS NTAPI NtManagePartition(HANDLE TargetHandle, HANDLE SourceHandle, PARTITION_INFORMATION_CLASS PartitionInformationClass, PVOID PartitionInformation, ULONG PartitionInformationLength);
+NTSYSCALLAPI NTSTATUS NTAPI NtOpenRegistryTransaction(PHANDLE TransactionHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes);
+NTSYSCALLAPI NTSTATUS NTAPI NtRollbackRegistryTransaction(HANDLE TransactionHandle, ULONG Flags);
+NTKERNELAPI BOOLEAN FASTCALL ObReferenceObjectSafe(PVOID Object);
+NTKERNELAPI BOOLEAN FASTCALL ObReferenceObjectSafeWithTag(PVOID Object, ULONG Tag);
+NTKERNELAPI void NTAPI PoFxIssueComponentPerfStateChangeMultiple(POHANDLE Handle, ULONG Flags, ULONG Component, ULONG PerfChangesCount, PO_FX_PERF_STATE_CHANGE PerfChanges[], PVOID Context);
+NTKERNELAPI void NTAPI PoFxNotifySurprisePowerOn(PDEVICE_OBJECT Pdo);
+NTKERNELAPI void NTAPI PoFxRegisterDripsWatchdogCallback(POHANDLE Handle, PPO_FX_DRIPS_WATCHDOG_CALLBACK Callback, BOOLEAN IncludeChildDevices, PDRIVER_OBJECT MatchingDriverObject);
+NTKERNELAPI void NTAPI PoFxSetComponentWake(POHANDLE Handle, ULONG Component, BOOLEAN WakeHint);
+NTKERNELAPI NTSTATUS NTAPI PoFxSetTargetDripsDevicePowerState(POHANDLE Handle, DEVICE_POWER_STATE TargetState);
+NTKERNELAPI NTSTATUS NTAPI PoRegisterForEffectivePowerModeNotifications(ULONG Version, PPO_EFFECTIVE_POWER_MODE_CALLBACK Callback, PVOID Context, PO_EPM_HANDLE *RegistrationHandle, PDEVICE_OBJECT DeviceObject);
+NTKERNELAPI void NTAPI PoSetSystemWakeDevice(PDEVICE_OBJECT DeviceObject);
+NTKERNELAPI NTSTATUS NTAPI PoUnregisterFromEffectivePowerModeNotifications(PO_EPM_HANDLE RegistrationHandle);
+ULONG64 NTAPI PsQueryTotalCycleTimeProcess(PEPROCESS Process, PULONG64 CycleTimeStamp);
 #if (!defined(MIDL_PASS))
 int RtlConstantTimeEqualMemory(const void *v1, const void *v2, unsigned long len);
 #endif
@@ -2331,23 +2341,23 @@ int RtlConstantTimeEqualMemory(const void *v1, const void *v2, unsigned long len
 volatile void * __cdecl RtlCopyDeviceMemory(volatile void *Destination, const volatile void *Source, size_t Length);
 volatile void * __cdecl RtlCopyVolatileMemory(volatile void *Destination, const volatile void *Source, size_t Length);
 #endif
-void RtlExtractBitMap(PRTL_BITMAP Source, PRTL_BITMAP Destination, ULONG TargetBit, ULONG NumberOfBits);
+NTSYSAPI void NTAPI RtlExtractBitMap(PRTL_BITMAP Source, PRTL_BITMAP Destination, ULONG TargetBit, ULONG NumberOfBits);
 #if (!defined(MIDL_PASS) && !defined(SORTPP_PASS) && !defined(RC_INVOKED)) && (!(defined(_ARM_) || defined(_ARM64_)))
 volatile void * RtlFillDeviceMemory(volatile void *Destination, size_t Length, int Fill);
 #endif
 #if (defined(_M_AMD64) || defined(_M_ARM64))
-void RtlFillMemoryNonTemporal(__unaligned void *Destination, SIZE_T Length, const UCHAR Value);
+NTSYSAPI void NTAPI RtlFillMemoryNonTemporal(__unaligned void *Destination, SIZE_T Length, const UCHAR Value);
 #endif
 #if (!defined(MIDL_PASS) && !defined(SORTPP_PASS) && !defined(RC_INVOKED))
 volatile void * RtlFillVolatileMemory(volatile void *Destination, size_t Length, int Fill);
 #endif
-void RtlFreeUTF8String(PUTF8_STRING utf8String);
+NTSYSAPI void NTAPI RtlFreeUTF8String(PUTF8_STRING utf8String);
 #if (!defined(MIDL_PASS) && !defined(SORTPP_PASS) && !defined(RC_INVOKED))
 volatile void * __cdecl RtlMoveVolatileMemory(volatile void *Destination, const volatile void *Source, size_t Length);
 #endif
-ULONG RtlNumberOfClearBitsInRange(PRTL_BITMAP BitMapHeader, ULONG StartingIndex, ULONG Length);
-OS_DEPLOYEMENT_STATE_VALUES RtlOsDeploymentState(ULONG Flags);
-ULONG RtlQueryValidationRunlevel(PCUNICODE_STRING ComponentName);
+NTSYSAPI ULONG NTAPI RtlNumberOfClearBitsInRange(PRTL_BITMAP BitMapHeader, ULONG StartingIndex, ULONG Length);
+NTSYSAPI OS_DEPLOYEMENT_STATE_VALUES NTAPI RtlOsDeploymentState(ULONG Flags);
+NTSYSAPI ULONG NTAPI RtlQueryValidationRunlevel(PCUNICODE_STRING ComponentName);
 #if (!defined(MIDL_PASS))
 void RtlSanitizeUnicodeStringPadding(PUNICODE_STRING String);
 #endif
@@ -2355,7 +2365,7 @@ void RtlSanitizeUnicodeStringPadding(PUNICODE_STRING String);
 volatile void * RtlSecureZeroMemory2(volatile void *Destination, size_t Length);
 volatile void * __cdecl RtlSetVolatileMemory(volatile void *Destination, int Fill, size_t Length);
 #endif
-NTSTATUS RtlUnicodeStringToInt64(PCUNICODE_STRING String, ULONG Base, PLONG64 Number, PWSTR *EndPointer);
+NTSTATUS NTAPI RtlUnicodeStringToInt64(PCUNICODE_STRING String, ULONG Base, PLONG64 Number, PWSTR *EndPointer);
 #if ((NTDDI_VERSION >= NTDDI_WIN8) && !defined(MIDL_PASS))
 NTSTATUS RtlxQueryRegistryValues(ULONG RelativeTo, PCWSTR Path, PRTL_QUERY_REGISTRY_TABLE QueryTable, PVOID Context, PVOID Environment);
 #endif
@@ -2363,17 +2373,44 @@ NTSTATUS RtlxQueryRegistryValues(ULONG RelativeTo, PCWSTR Path, PRTL_QUERY_REGIS
 volatile void * RtlZeroDeviceMemory(volatile void *Destination, size_t Length);
 volatile void * RtlZeroVolatileMemory(volatile void *Destination, size_t Length);
 #endif
-NTSTATUS SeEtwWriteKMCveEvent(PCUNICODE_STRING CveId, PCUNICODE_STRING AdditionalDetails);
-NTSTATUS SeRegisterImageVerificationCallback(SE_IMAGE_TYPE ImageType, SE_IMAGE_VERIFICATION_CALLBACK_TYPE CallbackType, PSE_IMAGE_VERIFICATION_CALLBACK_FUNCTION CallbackFunction, PVOID CallbackContext, SE_IMAGE_VERIFICATION_CALLBACK_TOKEN Token, PVOID *CallbackHandle);
-void SeUnregisterImageVerificationCallback(PVOID CallbackHandle);
-NTSTATUS VslCreateSecureSection(PHANDLE Handle, PEPROCESS TargetProcess, PMDL Mdl, ULONG DevicePageProtection, ULONG Attributes);
-NTSTATUS VslDeleteSecureSection(HANDLE GlobalHandle);
-NTSTATUS ZwCommitRegistryTransaction(HANDLE TransactionHandle, ULONG Flags);
-NTSTATUS ZwCopyFileChunk(HANDLE SourceHandle, HANDLE DestHandle, HANDLE Event, PIO_STATUS_BLOCK IoStatusBlock, ULONG Length, PLARGE_INTEGER SourceOffset, PLARGE_INTEGER DestOffset, PULONG SourceKey, PULONG DestKey, ULONG Flags);
-NTSTATUS ZwCreateRegistryTransaction(PHANDLE TransactionHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, ULONG CreateOptions);
+NTKERNELAPI NTSTATUS NTAPI SeEtwWriteKMCveEvent(PCUNICODE_STRING CveId, PCUNICODE_STRING AdditionalDetails);
+NTKERNELAPI NTSTATUS NTAPI SeRegisterImageVerificationCallback(SE_IMAGE_TYPE ImageType, SE_IMAGE_VERIFICATION_CALLBACK_TYPE CallbackType, PSE_IMAGE_VERIFICATION_CALLBACK_FUNCTION CallbackFunction, PVOID CallbackContext, SE_IMAGE_VERIFICATION_CALLBACK_TOKEN Token, PVOID *CallbackHandle);
+NTKERNELAPI void NTAPI SeUnregisterImageVerificationCallback(PVOID CallbackHandle);
+NTSTATUS NTAPI VslCreateSecureSection(PHANDLE Handle, PEPROCESS TargetProcess, PMDL Mdl, ULONG DevicePageProtection, ULONG Attributes);
+NTSTATUS NTAPI VslDeleteSecureSection(HANDLE GlobalHandle);
+NTSYSCALLAPI NTSTATUS NTAPI ZwCommitRegistryTransaction(HANDLE TransactionHandle, ULONG Flags);
+NTSYSAPI NTSTATUS NTAPI ZwCopyFileChunk(HANDLE SourceHandle, HANDLE DestHandle, HANDLE Event, PIO_STATUS_BLOCK IoStatusBlock, ULONG Length, PLARGE_INTEGER SourceOffset, PLARGE_INTEGER DestOffset, PULONG SourceKey, PULONG DestKey, ULONG Flags);
+NTSYSCALLAPI NTSTATUS NTAPI ZwCreateRegistryTransaction(PHANDLE TransactionHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, ULONG CreateOptions);
 #ifndef MEM_EXTENDED_PARAMETER_TYPE_BITS
+#define MEM_EXTENDED_PARAMETER_GRAPHICS            0x00000001
+#define MEM_EXTENDED_PARAMETER_NONPAGED            0x00000002
+#define MEM_EXTENDED_PARAMETER_ZERO_PAGES_OPTIONAL 0x00000004
+#define MEM_EXTENDED_PARAMETER_NONPAGED_LARGE      0x00000008
+#define MEM_EXTENDED_PARAMETER_NONPAGED_HUGE       0x00000010
+#define MEM_EXTENDED_PARAMETER_SOFT_FAULT_PAGES    0x00000020
+#define MEM_EXTENDED_PARAMETER_EC_CODE             0x00000040
+
+typedef enum _MEM_EXTENDED_PARAMETER_TYPE
+{
+    MemExtendedParameterInvalidType,
+    MemExtendedParameterAddressRequirements,
+    MemExtendedParameterNumaNode,
+    MemExtendedParameterPartitionHandle,
+    MemExtendedParameterUserPhysicalHandle,
+    MemExtendedParameterAttributeFlags,
+    MemExtendedParameterImageMachine,
+    MemExtendedParameterMax
+} MEM_EXTENDED_PARAMETER_TYPE, *PMEM_EXTENDED_PARAMETER_TYPE;
+
+typedef struct _MEM_ADDRESS_REQUIREMENTS
+{
+    PVOID LowestStartingAddress;
+    PVOID HighestEndingAddress;
+    SIZE_T Alignment;
+} MEM_ADDRESS_REQUIREMENTS, *PMEM_ADDRESS_REQUIREMENTS;
+
 #define MEM_EXTENDED_PARAMETER_TYPE_BITS 8
-#endif
+
 typedef struct DECLSPEC_ALIGN(8) MEM_EXTENDED_PARAMETER {
     struct
     {
@@ -2390,14 +2427,15 @@ typedef struct DECLSPEC_ALIGN(8) MEM_EXTENDED_PARAMETER {
         ULONG ULong;
     } DUMMYUNIONNAME;
 } MEM_EXTENDED_PARAMETER, *PMEM_EXTENDED_PARAMETER;
+#endif
 
-NTSTATUS ZwMapViewOfSectionEx(HANDLE SectionHandle, HANDLE ProcessHandle, PVOID *BaseAddress, PLARGE_INTEGER SectionOffset, PSIZE_T ViewSize, ULONG AllocationType, ULONG PageProtection, PMEM_EXTENDED_PARAMETER ExtendedParameters, ULONG ExtendedParameterCount);
+NTSYSAPI NTSTATUS NTAPI ZwMapViewOfSectionEx(HANDLE SectionHandle, HANDLE ProcessHandle, PVOID *BaseAddress, PLARGE_INTEGER SectionOffset, PSIZE_T ViewSize, ULONG AllocationType, ULONG PageProtection, PMEM_EXTENDED_PARAMETER ExtendedParameters, ULONG ExtendedParameterCount);
 
 #ifdef __cplusplus
 }
 #endif
 
-#define IMAGE_POLICY_METADATA_NAME 0
+#define IMAGE_POLICY_METADATA_NAME __ImagePolicyMetadata
 
 enum _BOUND_CALLBACK_STATUS
 {
@@ -2407,7 +2445,7 @@ enum _BOUND_CALLBACK_STATUS
 #if (defined(_X86_) || defined(_AMD64_))
 typedef enum _BOUND_CALLBACK_STATUS BOUND_CALLBACK_STATUS;
 
-typedef BOUND_CALLBACK_STATUS BOUND_CALLBACK(void);
+typedef BOUND_CALLBACK_STATUS NTAPI BOUND_CALLBACK(void);
 #endif
 
 typedef struct _AFFINITY_TOKEN *PAFFINITY_TOKEN;
@@ -2427,24 +2465,24 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-NTSTATUS IoCreateDriverProxyExtension(PDRIVER_OBJECT OwningDriverObject, DRIVER_PROXY_EXTENSION_CREATION_FLAGS Flags, PDRIVER_PROXY_EXTENSION *DriverProxyExtension);
-NTSTATUS IoDriverProxyCreateHotSwappableWorkerThread(PDRIVER_PROXY_EXTENSION DriverProxyExtension, PHANDLE ThreadHandle, ULONG DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, HANDLE ProcessHandle, PCLIENT_ID ClientId, PDRIVER_PROXY_HOTSWAP_WORKER_ROUTINE_START_CONTEXT WorkerStartContext);
-NTSTATUS IofGetDriverProxyWrapperFromEndpoint(PDRIVER_PROXY_EXTENSION DriverProxyExtension, PDRIVER_PROXY_ENDPOINT_FUNCTION Endpoint, PDRIVER_PROXY_WRAPPED_ENDPOINT_FUNCTION *Wrapper);
-PDRIVER_PROXY_WRAPPED_ENDPOINT_FUNCTION IoGetDriverProxyEndpointWrapper(PDRIVER_PROXY_EXTENSION DriverProxyExtension, DRIVER_PROXY_ENDPOINT_FUNCTION_ID FunctionId);
-PDRIVER_PROXY_EXTENSION IoGetDriverProxyExtensionFromDriverObject(PDRIVER_OBJECT DriverObject);
-NTSTATUS IoRegisterDriverProxyEndpoints(PDRIVER_PROXY_EXTENSION DriverProxyExtension, PDRIVER_PROXY_ENDPOINT_INFORMATION EndpointInfo, ULONG Count, PDRIVER_PROXY_REGISTER_CALLBACK PhasedCallback, PVOID Context);
+NTKERNELAPI NTSTATUS NTAPI IoCreateDriverProxyExtension(PDRIVER_OBJECT OwningDriverObject, DRIVER_PROXY_EXTENSION_CREATION_FLAGS Flags, PDRIVER_PROXY_EXTENSION *DriverProxyExtension);
+NTKERNELAPI NTSTATUS NTAPI IoDriverProxyCreateHotSwappableWorkerThread(PDRIVER_PROXY_EXTENSION DriverProxyExtension, PHANDLE ThreadHandle, ULONG DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, HANDLE ProcessHandle, PCLIENT_ID ClientId, PDRIVER_PROXY_HOTSWAP_WORKER_ROUTINE_START_CONTEXT WorkerStartContext);
+NTKERNELAPI NTSTATUS NTAPI IofGetDriverProxyWrapperFromEndpoint(PDRIVER_PROXY_EXTENSION DriverProxyExtension, PDRIVER_PROXY_ENDPOINT_FUNCTION Endpoint, PDRIVER_PROXY_WRAPPED_ENDPOINT_FUNCTION *Wrapper);
+NTKERNELAPI PDRIVER_PROXY_WRAPPED_ENDPOINT_FUNCTION NTAPI IoGetDriverProxyEndpointWrapper(PDRIVER_PROXY_EXTENSION DriverProxyExtension, DRIVER_PROXY_ENDPOINT_FUNCTION_ID FunctionId);
+NTKERNELAPI PDRIVER_PROXY_EXTENSION NTAPI IoGetDriverProxyExtensionFromDriverObject(PDRIVER_OBJECT DriverObject);
+NTKERNELAPI NTSTATUS NTAPI IoRegisterDriverProxyEndpoints(PDRIVER_PROXY_EXTENSION DriverProxyExtension, PDRIVER_PROXY_ENDPOINT_INFORMATION EndpointInfo, ULONG Count, PDRIVER_PROXY_REGISTER_CALLBACK PhasedCallback, PVOID Context);
 #if (defined(_X86_) || defined(_AMD64_))
-PVOID KeRegisterBoundCallback(PBOUND_CALLBACK CallbackRoutine);
+NTKERNELAPI PVOID NTAPI KeRegisterBoundCallback(PBOUND_CALLBACK CallbackRoutine);
 #endif
-PKE_SRCU KeSrcuAllocate(ULONG Tag);
-void KeSrcuFree(PKE_SRCU Rcu);
-void KeSrcuReadLock(PKE_SRCU Rcu, PKE_SRCU_LOCK Lock);
-void KeSrcuReadUnlock(PKE_SRCU Rcu, PKE_SRCU_LOCK Lock);
-void KeSrcuSynchronize(PKE_SRCU Rcu);
-NTSTATUS PsAllocateAffinityToken(PAFFINITY_TOKEN *AffinityToken);
-void PsFreeAffinityToken(PAFFINITY_TOKEN AffinityToken);
-void PsRevertToUserMultipleGroupAffinityThread(PAFFINITY_TOKEN AffinityToken);
-NTSTATUS PsSetSystemMultipleGroupAffinityThread(PGROUP_AFFINITY GroupAffinities, USHORT GroupCount, PAFFINITY_TOKEN AffinityToken);
+NTKERNELAPI PKE_SRCU NTAPI KeSrcuAllocate(ULONG Tag);
+NTKERNELAPI void NTAPI KeSrcuFree(PKE_SRCU Rcu);
+NTKERNELAPI void FASTCALL KeSrcuReadLock(PKE_SRCU Rcu, PKE_SRCU_LOCK Lock);
+NTKERNELAPI void FASTCALL KeSrcuReadUnlock(PKE_SRCU Rcu, PKE_SRCU_LOCK Lock);
+NTKERNELAPI void NTAPI KeSrcuSynchronize(PKE_SRCU Rcu);
+NTKERNELAPI NTSTATUS NTAPI PsAllocateAffinityToken(PAFFINITY_TOKEN *AffinityToken);
+NTKERNELAPI void NTAPI PsFreeAffinityToken(PAFFINITY_TOKEN AffinityToken);
+NTKERNELAPI void NTAPI PsRevertToUserMultipleGroupAffinityThread(PAFFINITY_TOKEN AffinityToken);
+NTKERNELAPI NTSTATUS NTAPI PsSetSystemMultipleGroupAffinityThread(PGROUP_AFFINITY GroupAffinities, USHORT GroupCount, PAFFINITY_TOKEN AffinityToken);
 
 #ifdef __cplusplus
 }
@@ -2597,7 +2635,7 @@ NTSTATUS NTAPI ClfsScanLogContainers(PCLFS_SCAN_CONTEXT pcxScan, CLFS_SCAN_MODE 
 NTSTATUS NTAPI ClfsSetArchiveTail(PLOG_FILE_OBJECT plfoLog, PCLFS_LSN plsnArchiveTail);
 NTSTATUS NTAPI ClfsSetEndOfLog(PLOG_FILE_OBJECT plfoLog, PCLFS_LSN plsnEnd);
 NTSTATUS NTAPI ClfsWriteRestartArea(PVOID pvMarshalContext, PVOID pvRestartBuffer, ULONG cbRestartBuffer, PCLFS_LSN plsnBase, ULONG fFlags, PULONG pcbWritten, PCLFS_LSN plsnNext);
-NTSTATUS ExGetSystemFirmwareTable(ULONG FirmwareTableProviderSignature, ULONG FirmwareTableID, PVOID FirmwareTableBuffer, ULONG BufferLength, PULONG ReturnLength);
+NTKERNELAPI NTSTATUS NTAPI ExGetSystemFirmwareTable(ULONG FirmwareTableProviderSignature, ULONG FirmwareTableID, PVOID FirmwareTableBuffer, ULONG BufferLength, PULONG ReturnLength);
 
 #ifdef __cplusplus
 }

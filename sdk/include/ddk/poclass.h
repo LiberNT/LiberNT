@@ -23,8 +23,6 @@
 #ifndef __POCLASS_H
 #define __POCLASS_H
 
-#include "batclass.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -465,5 +463,7 @@ typedef struct _POWER_ADAPTER_STATUS POWER_ADAPTER_STATUS;
 typedef union _POWER_ADAPTER_POWER_STATES *PPOWER_ADAPTER_POWER_STATES;
 
 typedef struct _POWER_ADAPTER_STATUS *PPOWER_ADAPTER_STATUS;
+
+#include "batclass.h"
 
 #endif /* __POCLASS_H */

@@ -46,6 +46,8 @@ coclass InternetExplorerManager
     [default] interface IInternetExplorerManager;
 }
 
+cpp_quote("#ifndef __ieautomation_cpp_quote_1_DEFINED__")
+cpp_quote("#define __ieautomation_cpp_quote_1_DEFINED__")
 cpp_quote("typedef struct IEnumManagerFrames IEnumManagerFrames;")
 cpp_quote("")
 cpp_quote("struct IEnumManagerFramesVtbl")
@@ -70,10 +72,4 @@ cpp_quote("    ULONG (WINAPI *Release)(IInternetExplorerManager2 *);")
 cpp_quote("    HRESULT (WINAPI *EnumFrameWindows)(IInternetExplorerManager2 *, IEnumManagerFrames **);")
 cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IInternetExplorerManagerVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IInternetExplorerManager *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IInternetExplorerManager *);")
-cpp_quote("    ULONG (WINAPI *Release)(IInternetExplorerManager *);")
-cpp_quote("    HRESULT (WINAPI *CreateObject)(IInternetExplorerManager *, DWORD, LPCWSTR, const IID *const , void **);")
-cpp_quote("};")
+cpp_quote("#endif")

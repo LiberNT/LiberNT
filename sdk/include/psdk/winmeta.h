@@ -16,11 +16,11 @@
 
 #ifndef MSG_category_Devices
 #define MSG_category_Devices 0x00000001L
+#endif
 
 #define WINEVENT_OPCODE_START 1
 #define WINEVENT_OPCODE_STOP 2
 
-#endif
 #ifndef MSG_category_Disk
 #define MSG_category_Disk 0x00000002L
 #endif

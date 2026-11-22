@@ -2083,8 +2083,17 @@ void DDHAL_VidMemFree(LPDDRAWI_DIRECTDRAW_GBL lpDD, int heap, FLATPTR fpMem);
 }
 #endif
 
+#if defined(IS_32) && !defined(_NOCSECT_TYPE)
 typedef CRITICAL_SECTION CSECT;
 
 typedef CSECT *LPCSECT;
+#else
+typedef struct
+{
+    DWORD vals[6];
+} CSECT;
+
+typedef void *LPCSECT;
+#endif
 
 #endif /* __DDRAWI_INCLUDED__ */

@@ -1291,6 +1291,9 @@ typedef const QITAB * LPCQITAB;
 #if (!(defined(UNICODE)))
 typedef PARSEDURLA PARSEDURL;
 typedef PPARSEDURLA PPARSEDURL;
+#else
+typedef PARSEDURLW PARSEDURL;
+typedef PPARSEDURLW PPARSEDURL;
 #endif
 typedef DWORD SHCT_FLAGS;
 
@@ -1463,12 +1466,14 @@ int WINAPI StrCmpNICW(LPCWSTR pszStr1, LPCWSTR pszStr2, int nChar);
 HRESULT WINAPI UrlFixupW(PCWSTR pcszUrl, PWSTR pszTranslatedUrl, DWORD cchMax);
 
 /* TODO: LiberNT does not implement the functions below yet */
-HRESULT IStream_Copy(IStream *pstmFrom, IStream *pstmTo, DWORD cb);
-HRESULT IStream_ReadStr(IStream *pstm, PWSTR *ppsz);
-HRESULT IStream_WriteStr(IStream *pstm, PCWSTR psz);
+HRESULT STDAPICALLTYPE IStream_Copy(IStream *pstmFrom, IStream *pstmTo, DWORD cb);
+HRESULT STDAPICALLTYPE IStream_ReadStr(IStream *pstm, PWSTR *ppsz);
+HRESULT STDAPICALLTYPE IStream_WriteStr(IStream *pstm, PCWSTR psz);
 BOOL SHCreateThreadWithHandle(LPTHREAD_START_ROUTINE pfnThreadProc, void *pData, SHCT_FLAGS flags, LPTHREAD_START_ROUTINE pfnCallback, HANDLE *pHandle);
-DWORD SHGetAssocKeys(IQueryAssociations *pqa, HKEY *rgKeys, DWORD cKeys);
-PWSTR StrChrNIW(PCWSTR pszStart, WCHAR wMatch, UINT cchMax);
+#ifndef NO_SHLWAPI_REG
+DWORD STDAPICALLTYPE SHGetAssocKeys(IQueryAssociations *pqa, HKEY *rgKeys, DWORD cKeys);
+#endif
+PWSTR STDAPICALLTYPE StrChrNIW(PCWSTR pszStart, WCHAR wMatch, UINT cchMax);
 
 #ifdef __cplusplus
 }
@@ -1545,8 +1550,12 @@ typedef enum
 } SHGLOBALCOUNTER;
 
 long WINAPI SHGlobalCounterDecrement(const SHGLOBALCOUNTER id);
+#ifndef NO_SHLWAPI_REG
 LSTATUS WINAPI SHRegGetValueFromHKCUHKLM(PCWSTR pwszKey, PCWSTR pwszValue, SRRF srrfFlags, DWORD *pdwType, void *pvData, DWORD *pcbData);
+#endif
+#ifndef NO_SHLWAPI_REG
 LSTATUS WINAPI SHRegSetValue(HKEY hkey, LPCWSTR pszSubKey, LPCWSTR pszValue, SRRF srrfFlags, DWORD dwType, LPCVOID pvData, DWORD cbData);
+#endif
 
 #ifdef __cplusplus
 }
@@ -1558,6 +1567,11 @@ LSTATUS WINAPI SHRegSetValue(HKEY hkey, LPCWSTR pszSubKey, LPCWSTR pszValue, SRR
 #define SHTCharToAnsi(szSrc, szDest, cchSize) SHAnsiToAnsi(szSrc, szDest, cchSize)
 #define SHTCharToUnicode(szSrc, wzDest, cchSize) SHAnsiToUnicode(szSrc, wzDest, cchSize)
 #define SHUnicodeToTChar(wzSrc, szDest, cchSize) SHUnicodeToAnsi(wzSrc, szDest, cchSize)
+#else
+#define SHAnsiToTChar(szSrc, wzDest, cchSize) SHAnsiToUnicode(szSrc, wzDest, cchSize)
+#define SHTCharToAnsi(wzSrc, szDest, cchSize) SHUnicodeToAnsi(wzSrc, szDest, cchSize)
+#define SHTCharToUnicode(wzSrc, wzDest, cchSize) SHUnicodeToUnicode(wzSrc, wzDest, cchSize)
+#define SHUnicodeToTChar(wzSrc, wzDest, cchSize) SHUnicodeToUnicode(wzSrc, wzDest, cchSize)
 #endif
 #define STATIC_CAST(typ) static_cast < typ >
 

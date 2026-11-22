@@ -5428,39 +5428,56 @@ typedef struct tagCHARSETINFO * NPCHARSETINFO;
 typedef struct _devicemodeA * NPDEVMODEA;
 #if (!(defined(UNICODE)))
 typedef NPDEVMODEA NPDEVMODE;
+#else
+typedef NPDEVMODEW NPDEVMODE;
 #endif
 typedef struct tagEXTLOGFONTA * NPEXTLOGFONTA;
+typedef struct tagEXTLOGFONTW * NPEXTLOGFONTW;
+
 #if (!(defined(UNICODE)))
 typedef NPEXTLOGFONTA NPEXTLOGFONT;
+#else
+typedef NPEXTLOGFONTW NPEXTLOGFONT;
 #endif
-typedef struct tagEXTLOGFONTW * NPEXTLOGFONTW;
 typedef struct tagLOGBRUSH * NPLOGBRUSH;
 typedef struct tagLOGBRUSH32 * NPLOGBRUSH32;
 typedef struct tagLOGFONTA * NPLOGFONTA;
+typedef struct tagLOGFONTW * NPLOGFONTW;
+
 #if (!(defined(UNICODE)))
 typedef NPLOGFONTA NPLOGFONT;
+#else
+typedef NPLOGFONTW NPLOGFONT;
 #endif
-typedef struct tagLOGFONTW * NPLOGFONTW;
 typedef struct tagLOGPEN * NPLOGPEN;
 typedef struct tagNEWTEXTMETRICA * NPNEWTEXTMETRICA;
+typedef struct tagNEWTEXTMETRICW * NPNEWTEXTMETRICW;
+
 #if (!(defined(UNICODE)))
 typedef NPNEWTEXTMETRICA NPNEWTEXTMETRIC;
+#else
+typedef NPNEWTEXTMETRICW NPNEWTEXTMETRIC;
 #endif
-typedef struct tagNEWTEXTMETRICW * NPNEWTEXTMETRICW;
 typedef struct _OUTLINETEXTMETRICA * NPOUTLINETEXTMETRICA;
+typedef struct _OUTLINETEXTMETRICW * NPOUTLINETEXTMETRICW;
+
 #if (!(defined(UNICODE)))
 typedef NPOUTLINETEXTMETRICA NPOUTLINETEXTMETRIC;
+#else
+typedef NPOUTLINETEXTMETRICW NPOUTLINETEXTMETRIC;
 #endif
-typedef struct _OUTLINETEXTMETRICW * NPOUTLINETEXTMETRICW;
 typedef PATTERN * NPPATTERN;
 typedef struct tagPELARRAY * NPPELARRAY;
 typedef struct tagRGBTRIPLE * NPRGBTRIPLE;
 typedef struct _RGNDATA * NPRGNDATA;
 typedef struct tagTEXTMETRICA * NPTEXTMETRICA;
+typedef struct tagTEXTMETRICW * NPTEXTMETRICW;
+
 #if (!(defined(UNICODE)))
 typedef NPTEXTMETRICA NPTEXTMETRIC;
+#else
+typedef NPTEXTMETRICW NPTEXTMETRIC;
 #endif
-typedef struct tagTEXTMETRICW * NPTEXTMETRICW;
 typedef struct tagENHMETARECORD * PENHMETARECORD;
 typedef struct tagRGBTRIPLE * PRGBTRIPLE;
 
@@ -5690,9 +5707,12 @@ struct tagPOLYTEXTA
 };
 
 typedef struct tagPOLYTEXTA *NPPOLYTEXTA;
+typedef struct tagPOLYTEXTW *NPPOLYTEXTW;
 
 #if (!(defined(UNICODE)))
 typedef NPPOLYTEXTA NPPOLYTEXT;
+#else
+typedef NPPOLYTEXTW NPPOLYTEXT;
 #endif
 
 struct tagPOLYTEXTW
@@ -5705,8 +5725,6 @@ struct tagPOLYTEXTW
     RECT rcl;
     int *pdx;
 };
-
-typedef struct tagPOLYTEXTW *NPPOLYTEXTW;
 
 #ifdef __cplusplus
 extern "C" {

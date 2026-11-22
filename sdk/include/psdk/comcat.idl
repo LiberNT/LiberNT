@@ -41,7 +41,6 @@ cpp_quote("#define IEnumCLSID IEnumGUID")
 cpp_quote("#define IID_IEnumCLSID IID_IEnumGUID")
 cpp_quote("#define LPENUMCLSID LPENUMGUID")
 
-
 /*****************************************************************************
  * IEnumGUID
  */
@@ -67,7 +66,6 @@ interface IEnumGUID : IUnknown
     HRESULT Clone(
         [out] IEnumGUID **ppenum);
 }
-
 
 /*****************************************************************************
  * IEnumCATEGORYINFO
@@ -101,7 +99,6 @@ interface IEnumCATEGORYINFO : IUnknown
     HRESULT Clone(
         [out] IEnumCATEGORYINFO** ppenum);
 }
-
 
 /*****************************************************************************
  * ICatInformation
@@ -165,7 +162,6 @@ interface ICatInformation : IUnknown
         [out] IEnumCATID** ppenumCatid);
 }
 
-
 /*****************************************************************************
  * ICatRegister
  */
@@ -207,7 +203,6 @@ interface ICatRegister : IUnknown
         [in, size_is(cCategories)] CATID rgcatid[]);
 }
 
-
 /*****************************************************************************
  * Category IDs
  */
@@ -231,67 +226,15 @@ cpp_quote("DEFINE_GUID( CATID_DesignTimeUIActivatableControl, 0xf2bb56d1, 0xdb07
 /* The Component Category Manager */
 cpp_quote("DEFINE_GUID(CLSID_StdComponentCategoriesMgr, 0x0002e005, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46);")
 
-cpp_quote("struct ICatInformationVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(ICatInformation *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(ICatInformation *);")
-cpp_quote("    ULONG (WINAPI *Release)(ICatInformation *);")
-cpp_quote("    HRESULT (WINAPI *EnumCategories)(ICatInformation *, LCID, IEnumCATEGORYINFO **);")
-cpp_quote("    HRESULT (WINAPI *GetCategoryDesc)(ICatInformation *, REFCATID, LCID, LPWSTR *);")
-cpp_quote("    HRESULT (WINAPI *EnumClassesOfCategories)(ICatInformation *, ULONG, const CATID [], ULONG, const CATID [], IEnumGUID **);")
-cpp_quote("    HRESULT (WINAPI *IsClassOfCategories)(ICatInformation *, const IID *const , ULONG, const CATID [], ULONG, const CATID []);")
-cpp_quote("    HRESULT (WINAPI *EnumImplCategoriesOfClass)(ICatInformation *, const IID *const , IEnumGUID **);")
-cpp_quote("    HRESULT (WINAPI *EnumReqCategoriesOfClass)(ICatInformation *, const IID *const , IEnumGUID **);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct ICatRegisterVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(ICatRegister *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(ICatRegister *);")
-cpp_quote("    ULONG (WINAPI *Release)(ICatRegister *);")
-cpp_quote("    HRESULT (WINAPI *RegisterCategories)(ICatRegister *, ULONG, CATEGORYINFO []);")
-cpp_quote("    HRESULT (WINAPI *UnRegisterCategories)(ICatRegister *, ULONG, CATID []);")
-cpp_quote("    HRESULT (WINAPI *RegisterClassImplCategories)(ICatRegister *, const IID *const , ULONG, CATID []);")
-cpp_quote("    HRESULT (WINAPI *UnRegisterClassImplCategories)(ICatRegister *, const IID *const , ULONG, CATID []);")
-cpp_quote("    HRESULT (WINAPI *RegisterClassReqCategories)(ICatRegister *, const IID *const , ULONG, CATID []);")
-cpp_quote("    HRESULT (WINAPI *UnRegisterClassReqCategories)(ICatRegister *, const IID *const , ULONG, CATID []);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IEnumCATEGORYINFOVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IEnumCATEGORYINFO *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IEnumCATEGORYINFO *);")
-cpp_quote("    ULONG (WINAPI *Release)(IEnumCATEGORYINFO *);")
-cpp_quote("    HRESULT (WINAPI *Next)(IEnumCATEGORYINFO *, ULONG, CATEGORYINFO *, ULONG *);")
-cpp_quote("    HRESULT (WINAPI *Skip)(IEnumCATEGORYINFO *, ULONG);")
-cpp_quote("    HRESULT (WINAPI *Reset)(IEnumCATEGORYINFO *);")
-cpp_quote("    HRESULT (WINAPI *Clone)(IEnumCATEGORYINFO *, IEnumCATEGORYINFO **);")
-cpp_quote("};")
 cpp_quote("")
-cpp_quote("struct IEnumGUIDVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IEnumGUID *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IEnumGUID *);")
-cpp_quote("    ULONG (WINAPI *Release)(IEnumGUID *);")
-cpp_quote("    HRESULT (WINAPI *Next)(IEnumGUID *, ULONG, GUID *, ULONG *);")
-cpp_quote("    HRESULT (WINAPI *Skip)(IEnumGUID *, ULONG);")
-cpp_quote("    HRESULT (WINAPI *Reset)(IEnumGUID *);")
-cpp_quote("    HRESULT (WINAPI *Clone)(IEnumGUID *, IEnumGUID **);")
-cpp_quote("};")
 cpp_quote("")
 cpp_quote("#ifdef __cplusplus")
 cpp_quote("extern \"C\" {")
 cpp_quote("#endif")
 cpp_quote("")
 cpp_quote("/* TODO: LiberNT does not implement the functions below yet */")
-cpp_quote("HRESULT WINAPI ICatInformation_EnumClassesOfCategories_Proxy(ICatInformation *This, ULONG cImplemented, const CATID rgcatidImpl[], ULONG cRequired, const CATID rgcatidReq[], IEnumGUID **ppenumClsid);")
-cpp_quote("HRESULT WINAPI ICatInformation_EnumClassesOfCategories_Stub(ICatInformation *This, ULONG cImplemented, const CATID rgcatidImpl[], ULONG cRequired, const CATID rgcatidReq[], IEnumGUID **ppenumClsid);")
-cpp_quote("HRESULT WINAPI ICatInformation_IsClassOfCategories_Proxy(ICatInformation *This, const IID *const rclsid, ULONG cImplemented, const CATID rgcatidImpl[], ULONG cRequired, const CATID rgcatidReq[]);")
-cpp_quote("HRESULT WINAPI ICatInformation_IsClassOfCategories_Stub(ICatInformation *This, const IID *const rclsid, ULONG cImplemented, const CATID rgcatidImpl[], ULONG cRequired, const CATID rgcatidReq[]);")
-cpp_quote("HRESULT WINAPI ICatInformation_RemoteEnumClassesOfCategories_Proxy(ICatInformation *This, ULONG cImplemented, const CATID rgcatidImpl[], ULONG cRequired, const CATID rgcatidReq[], IEnumGUID **ppenumClsid);")
-cpp_quote("void ICatInformation_RemoteEnumClassesOfCategories_Stub(IRpcStubBuffer *This, IRpcChannelBuffer *_pRpcChannelBuffer, PRPC_MESSAGE _pRpcMessage, DWORD *_pdwStubPhase);")
-cpp_quote("HRESULT WINAPI ICatInformation_RemoteIsClassOfCategories_Proxy(ICatInformation *This, const IID *const rclsid, ULONG cImplemented, const CATID rgcatidImpl[], ULONG cRequired, const CATID rgcatidReq[]);")
-cpp_quote("void ICatInformation_RemoteIsClassOfCategories_Stub(IRpcStubBuffer *This, IRpcChannelBuffer *_pRpcChannelBuffer, PRPC_MESSAGE _pRpcMessage, DWORD *_pdwStubPhase);")
 cpp_quote("HRESULT WINAPI IEnumGUID_Next_Proxy(IEnumGUID *This, ULONG celt, GUID *rgelt, ULONG *pceltFetched);")
 cpp_quote("HRESULT WINAPI IEnumGUID_Next_Stub(IEnumGUID *This, ULONG celt, GUID *rgelt, ULONG *pceltFetched);")
 cpp_quote("HRESULT WINAPI IEnumGUID_RemoteNext_Proxy(IEnumGUID *This, ULONG celt, GUID *rgelt, ULONG *pceltFetched);")

@@ -369,14 +369,14 @@ RPCRTAPI HRESULT RPC_ENTRY
 #endif
 
 #if (defined(WIN32) || defined(_M_AMD64))
-#define CStdAsyncStubBuffer_DELEGATING_METHODS 0
+#define CStdAsyncStubBuffer_DELEGATING_METHODS 0,0,0,0,0,0,0,0,0,0
 #define CStdAsyncStubBuffer_DELEGATING_METHODS_OPT CStdAsyncStubBuffer_QueryInterface, CStdAsyncStubBuffer_AddRef, CStdAsyncStubBuffer2_Release, CStdAsyncStubBuffer2_Connect, CStdAsyncStubBuffer2_Disconnect, CStdAsyncStubBuffer_Invoke, CStdStubBuffer_IsIIDSupported, CStdStubBuffer2_CountRefs, CStdStubBuffer_DebugServerQueryInterface, CStdStubBuffer_DebugServerRelease
 #ifdef _WIN64
 #define CStdAsyncStubBuffer_DELEGATING_METHODS_TAG (-4)
 #else
 #define CStdAsyncStubBuffer_DELEGATING_METHODS_TAG 0xFFFFFFFC
 #endif
-#define CStdAsyncStubBuffer_METHODS 0
+#define CStdAsyncStubBuffer_METHODS 0,0,0,0,0,0,0,0,0,0
 #define CStdAsyncStubBuffer_METHODS_OPT CStdAsyncStubBuffer_QueryInterface, CStdAsyncStubBuffer_AddRef, CStdAsyncStubBuffer_Release, CStdAsyncStubBuffer_Connect, CStdAsyncStubBuffer_Disconnect, CStdAsyncStubBuffer_Invoke, CStdStubBuffer_IsIIDSupported, CStdStubBuffer_CountRefs, CStdStubBuffer_DebugServerQueryInterface, CStdStubBuffer_DebugServerRelease
 #ifdef _WIN64
 #define CStdAsyncStubBuffer_METHODS_TAG (-3)

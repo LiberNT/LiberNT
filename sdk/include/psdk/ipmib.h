@@ -456,7 +456,32 @@ struct _MIB_IPMCAST_IF_TABLE
 
 typedef struct _MIB_IPMCAST_IF_TABLE MIB_IPMCAST_IF_TABLE;
 
+typedef struct _MIB_IPMCAST_OIF_XP MIB_IPMCAST_OIF_XP;
+typedef MIB_IPMCAST_OIF_XP MIB_IPMCAST_OIF;
+typedef struct _MIB_IPMCAST_OIF_STATS_LH MIB_IPMCAST_OIF_STATS_LH;
+typedef MIB_IPMCAST_OIF_STATS_LH MIB_IPMCAST_OIF_STATS;
+
 typedef struct _MIB_IPMCAST_MFE MIB_IPMCAST_MFE;
+
+struct _MIB_IPMCAST_MFE
+{
+    DWORD dwGroup;
+    DWORD dwSource;
+    DWORD dwSrcMask;
+    DWORD dwUpStrmNgbr;
+    DWORD dwInIfIndex;
+    DWORD dwInIfProtocol;
+    DWORD dwRouteProtocol;
+    DWORD dwRouteNetwork;
+    DWORD dwRouteMask;
+    ULONG ulUpTime;
+    ULONG ulExpiryTime;
+    ULONG ulTimeOut;
+    ULONG ulNumOutIf;
+    DWORD fFlags;
+    DWORD dwReserved;
+    MIB_IPMCAST_OIF rgmioOutInfo[1];
+};
 
 struct _MIB_MFE_TABLE
 {
@@ -465,20 +490,6 @@ struct _MIB_MFE_TABLE
 };
 
 typedef struct _MIB_IPMCAST_MFE_STATS MIB_IPMCAST_MFE_STATS;
-
-struct _MIB_MFE_STATS_TABLE
-{
-    DWORD dwNumEntries;
-    MIB_IPMCAST_MFE_STATS table[1];
-};
-
-typedef struct _MIB_IPMCAST_MFE_STATS_EX_XP MIB_IPMCAST_MFE_STATS_EX_XP;
-
-typedef MIB_IPMCAST_MFE_STATS_EX_XP MIB_IPMCAST_MFE_STATS_EX;
-
-typedef struct _MIB_IPMCAST_OIF_STATS_LH MIB_IPMCAST_OIF_STATS_LH;
-
-typedef MIB_IPMCAST_OIF_STATS_LH MIB_IPMCAST_OIF_STATS;
 
 struct _MIB_IPMCAST_MFE_STATS
 {
@@ -500,6 +511,16 @@ struct _MIB_IPMCAST_MFE_STATS
     ULONG ulQueueOverflow;
     MIB_IPMCAST_OIF_STATS rgmiosOutStats[1];
 };
+
+struct _MIB_MFE_STATS_TABLE
+{
+    DWORD dwNumEntries;
+    MIB_IPMCAST_MFE_STATS table[1];
+};
+
+typedef struct _MIB_IPMCAST_MFE_STATS_EX_XP MIB_IPMCAST_MFE_STATS_EX_XP;
+
+typedef MIB_IPMCAST_MFE_STATS_EX_XP MIB_IPMCAST_MFE_STATS_EX;
 
 struct _MIB_IPMCAST_MFE_STATS_EX_XP
 {
@@ -530,30 +551,6 @@ struct _MIB_IPMCAST_MFE_STATS_EX_XP
 typedef struct _MIB_IPMCAST_OIF_STATS_W2K MIB_IPMCAST_OIF_STATS_W2K;
 
 typedef struct _MIB_IPMCAST_OIF_W2K MIB_IPMCAST_OIF_W2K;
-
-typedef struct _MIB_IPMCAST_OIF_XP MIB_IPMCAST_OIF_XP;
-
-typedef MIB_IPMCAST_OIF_XP MIB_IPMCAST_OIF;
-
-struct _MIB_IPMCAST_MFE
-{
-    DWORD dwGroup;
-    DWORD dwSource;
-    DWORD dwSrcMask;
-    DWORD dwUpStrmNgbr;
-    DWORD dwInIfIndex;
-    DWORD dwInIfProtocol;
-    DWORD dwRouteProtocol;
-    DWORD dwRouteNetwork;
-    DWORD dwRouteMask;
-    ULONG ulUpTime;
-    ULONG ulExpiryTime;
-    ULONG ulTimeOut;
-    ULONG ulNumOutIf;
-    DWORD fFlags;
-    DWORD dwReserved;
-    MIB_IPMCAST_OIF rgmioOutInfo[1];
-};
 
 typedef struct _MIB_IPNETROW_W2K MIB_IPNETROW_W2K;
 

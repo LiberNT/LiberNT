@@ -50,7 +50,11 @@ typedef const struct _TlgProvider_t *TraceLoggingHProvider;
 #ifdef _WIN64
 #define _tlg_MetadataFlags 1
 #else
+#ifdef _WIN64
+#define _tlg_MetadataFlags 1
+#else
 #define _tlg_MetadataFlags 0
+#endif
 #endif
 #endif
 #define _tlg_MetadataMagic (-4933124757307257210LL)
@@ -75,7 +79,11 @@ typedef const struct _TlgProvider_t *TraceLoggingHProvider;
 #ifdef _WIN64
 #define _TlgFlagsVal 1
 #else
+#ifdef _WIN64
+#define _TlgFlagsVal 1
+#else
 #define _TlgFlagsVal 0
+#endif
 #endif
 #endif
 #define _tlgInfoVals_0...)

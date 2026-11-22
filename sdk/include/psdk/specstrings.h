@@ -547,7 +547,7 @@ void __pfx_assume(int, const char *);
 #define _Kernel_entry_
 #define _Kernel_entry_always_
 #endif
-#define _User_ 0
+#define _User_
 #if (!((_MSC_VER >= 1000) && !defined(__midl) && defined(_PREFAST_)))
 #define _User_always_
 

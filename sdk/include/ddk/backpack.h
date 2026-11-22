@@ -26,8 +26,8 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-void RxInitiateOrContinueThrottling(PTHROTTLING_STATE pBP);
-BOOLEAN RxShouldRequestBeThrottled(PTHROTTLING_STATE pBP);
+void NTAPI RxInitiateOrContinueThrottling(PTHROTTLING_STATE pBP);
+BOOLEAN NTAPI RxShouldRequestBeThrottled(PTHROTTLING_STATE pBP);
 
 #ifdef __cplusplus
 }

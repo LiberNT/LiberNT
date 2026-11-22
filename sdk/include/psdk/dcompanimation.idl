@@ -35,15 +35,3 @@ interface IDCompositionAnimation : IUnknown
     HRESULT End([in] double offset, [in] float value);
 };
 
-cpp_quote("struct IDCompositionAnimationVtbl")
-cpp_quote("{")
-cpp_quote("    HRESULT (WINAPI *QueryInterface)(IDCompositionAnimation *, const IID *const , void **);")
-cpp_quote("    ULONG (WINAPI *AddRef)(IDCompositionAnimation *);")
-cpp_quote("    ULONG (WINAPI *Release)(IDCompositionAnimation *);")
-cpp_quote("    HRESULT (WINAPI *Reset)(IDCompositionAnimation *);")
-cpp_quote("    HRESULT (WINAPI *SetAbsoluteBeginTime)(IDCompositionAnimation *, LARGE_INTEGER);")
-cpp_quote("    HRESULT (WINAPI *AddCubic)(IDCompositionAnimation *, double, float, float, float, float);")
-cpp_quote("    HRESULT (WINAPI *AddSinusoidal)(IDCompositionAnimation *, double, float, float, float, float);")
-cpp_quote("    HRESULT (WINAPI *AddRepeat)(IDCompositionAnimation *, double, double);")
-cpp_quote("    HRESULT (WINAPI *End)(IDCompositionAnimation *, double, float);")
-cpp_quote("};")

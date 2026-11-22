@@ -1179,6 +1179,14 @@ typedef FAX_EVENTA FAX_EVENT;
 typedef PFAX_COVERPAGE_INFOA PFAX_COVERPAGE_INFO;
 
 typedef PFAX_EVENTA PFAX_EVENT;
+#else
+typedef FAX_COVERPAGE_INFOW FAX_COVERPAGE_INFO;
+
+typedef FAX_EVENTW FAX_EVENT;
+
+typedef PFAX_COVERPAGE_INFOW PFAX_COVERPAGE_INFO;
+
+typedef PFAX_EVENTW PFAX_EVENT;
 #endif
 
 typedef BOOL (WINAPI *PFAXABORT)(HANDLE, DWORD);
@@ -1298,9 +1306,9 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-BOOL FaxUnregisterRoutingExtensionA(HANDLE hFaxHandle, LPCSTR lpctstrExtensionName);
-BOOL FaxUnregisterRoutingExtensionW(HANDLE hFaxHandle, LPCWSTR lpctstrExtensionName);
-BOOL FaxUnregisterServiceProviderW(LPCWSTR DeviceProvider);
+BOOL WINAPI FaxUnregisterRoutingExtensionA(HANDLE hFaxHandle, LPCSTR lpctstrExtensionName);
+BOOL WINAPI FaxUnregisterRoutingExtensionW(HANDLE hFaxHandle, LPCWSTR lpctstrExtensionName);
+BOOL WINAPI FaxUnregisterServiceProviderW(LPCWSTR DeviceProvider);
 
 #ifdef __cplusplus
 }

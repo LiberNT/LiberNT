@@ -95,12 +95,13 @@ typedef void (*TIFFPostMethod)(TIFF *tif, uint8_t *buf, tmsize_t size);
 typedef uint32_t (*TIFFStripMethod)(TIFF *, uint32_t);
 typedef void (*TIFFTileMethod)(TIFF *, uint32_t *, uint32_t *);
 
+typedef struct TIFFOffsetAndDirNumber TIFFOffsetAndDirNumber;
+
 struct TIFFOffsetAndDirNumber
 {
     uint64_t offset;
     tdir_t dirNumber;
 };
-typedef struct TIFFOffsetAndDirNumber TIFFOffsetAndDirNumber;
 
 typedef union
 {

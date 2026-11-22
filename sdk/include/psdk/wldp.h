@@ -244,10 +244,10 @@ extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-HRESULT WldpCanExecuteFileFromDetachedSignature(const GUID *const host, WLDP_EXECUTION_EVALUATION_OPTIONS options, HANDLE contentFileHandle, HANDLE signatureFileHandle, PCWSTR auditInfo, WLDP_EXECUTION_POLICY *result);
-HRESULT WldpGetApplicationSettingBoolean(PCWSTR id, PCWSTR setting, BOOL *result);
-HRESULT WldpGetApplicationSettingStringList(PCWSTR id, PCWSTR setting, SIZE_T dataCount, SIZE_T *requiredCount, PZZWSTR result);
-HRESULT WldpGetApplicationSettingStringSet(PCWSTR id, PCWSTR setting, SIZE_T dataCount, SIZE_T *requiredCount, PZZWSTR result);
+HRESULT STDAPICALLTYPE WldpCanExecuteFileFromDetachedSignature(const GUID *const host, WLDP_EXECUTION_EVALUATION_OPTIONS options, HANDLE contentFileHandle, HANDLE signatureFileHandle, PCWSTR auditInfo, WLDP_EXECUTION_POLICY *result);
+HRESULT STDAPICALLTYPE WldpGetApplicationSettingBoolean(PCWSTR id, PCWSTR setting, BOOL *result);
+HRESULT STDAPICALLTYPE WldpGetApplicationSettingStringList(PCWSTR id, PCWSTR setting, SIZE_T dataCount, SIZE_T *requiredCount, PZZWSTR result);
+HRESULT STDAPICALLTYPE WldpGetApplicationSettingStringSet(PCWSTR id, PCWSTR setting, SIZE_T dataCount, SIZE_T *requiredCount, PZZWSTR result);
 
 #ifdef __cplusplus
 }

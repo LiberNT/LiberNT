@@ -1054,11 +1054,20 @@ typedef struct _DXVA_ExtendedFormat
 {
     UINT SampleFormat : 8;
     UINT VideoChromaSubsampling : 4;
+#if defined(__GNUC__) && !defined(__clang__)
+    /* GCC rejects enum bit-fields narrower than the enum's Mask members; UINT keeps the same layout */
+    UINT NominalRange : 3;
+    UINT VideoTransferMatrix : 3;
+    UINT VideoLighting : 4;
+    UINT VideoPrimaries : 5;
+    UINT VideoTransferFunction : 5;
+#else
     DXVA_NominalRange NominalRange : 3;
     DXVA_VideoTransferMatrix VideoTransferMatrix : 3;
     DXVA_VideoLighting VideoLighting : 4;
     DXVA_VideoPrimaries VideoPrimaries : 5;
     DXVA_VideoTransferFunction VideoTransferFunction : 5;
+#endif
 } DXVA_ExtendedFormat;
 
 #ifdef __cplusplus
@@ -2302,9 +2311,9 @@ struct _DXVA_PicParams_MPEG4_PART2
 };
 #pragma pack(pop)
 
-#if (defined(_WIN64))
 typedef LONGLONG REFERENCE_TIME;
 
+#if (defined(_WIN64))
 struct _DXVA_VideoSample32
 {
     REFERENCE_TIME rtStart;
@@ -2396,7 +2405,9 @@ typedef struct _DXVA_PicParams_MPEG4_PART2 *LPDXVA_PicParams_MPEG4_PART2;
 
 
 
+#if (DIRECT3D_VERSION < 0x0800) || !defined(DIRECT3D_VERSION)
 typedef DWORD D3DFORMAT;
+#endif
 
 struct _DXVA_DeinterlaceCaps
 {
