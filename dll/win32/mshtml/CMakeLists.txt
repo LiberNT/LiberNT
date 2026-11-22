@@ -77,7 +77,7 @@ if(MSVC AND NOT ARCH STREQUAL "arm64")
     add_asm_files(mshtml_asm msvc.S)
 endif()
 
-add_arm64ec_x64_source(MSHTML_IFACEWRAP_SOURCE ifacewrap.c)
+add_arm64ec_x64_source(MSHTML_IFACEWRAP_SOURCE ifacewrap.c __WINESRC__)
 
 list(APPEND PCH_SKIP_SOURCE
     ${MSHTML_IFACEWRAP_SOURCE}
