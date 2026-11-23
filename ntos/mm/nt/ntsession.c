@@ -352,18 +352,25 @@ MiSessionDereference(
         MiSessionFree(Session);
 }
 
-VOID
+BOOLEAN
 MiSessionAddProcess(
     _Inout_ PEPROCESS NewProcess)
 {
     PEPROCESS Current = PsGetCurrentProcess();
     PMI_SESSION Session;
+    BOOLEAN Added = TRUE;
 
     MiSessionLockAcquire();
     Session = MiSessionOfProcess(Current);
     if ((Current->Flags & PSF_PROCESS_IN_SESSION_BIT) && Session != NULL && NewProcess->Session == NULL)
-        MiSessionJoinLocked(Session, NewProcess);
+    {
+        if (Session->Ending)
+            Added = FALSE;
+        else
+            MiSessionJoinLocked(Session, NewProcess);
+    }
     KeReleaseGuardedMutex(&MiSessionLock);
+    return Added;
 }
 
 static
@@ -713,7 +720,6 @@ MmMoveProcessToSession(
     PLIST_ENTRY Entry;
     LIST_ENTRY Drivers;
     BOOLEAN Free = FALSE;
-    NTSTATUS Status = STATUS_SUCCESS;
 
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
 
@@ -742,30 +748,29 @@ MmMoveProcessToSession(
         KeReleaseGuardedMutex(&MiSessionLock);
         return STATUS_INVALID_PARAMETER;
     }
+    ASSERT(Target->ReferenceCount < 0x7fffffffL && Target->LiveProcessCount < 0x7fffffffL);
+    InterlockedIncrement(&Target->ReferenceCount);
+    Target->LiveProcessCount++;
     if (Current != NULL)
         MiSessionRetireLocked(Current, MI_PROCESS_OF(Process), &Drivers);
-    ASSERT(Target->ReferenceCount < 0x7fffffffL);
-    InterlockedIncrement(&Target->ReferenceCount);
     KeReleaseGuardedMutex(&MiSessionLock);
 
     MiSessionUnloadDrivers(Process, &Drivers);
 
     MiSessionLockAcquire();
-    if (Target->Ending || MiSessionOfProcess(Process) != Current)
-        Status = STATUS_INVALID_PARAMETER;
-    else
-    {
-        if (Current != NULL)
-            Free = MiSessionLeaveLocked(Process);
-        MiSessionJoinLocked(Target, Process);
-        ASSERT(MiSessionOfProcess(Process) == Target && Target->SessionId == SessionId);
-    }
+    ASSERT(Target->LiveProcessCount > 0 && !Target->Ending);
+    Target->LiveProcessCount--;
+    ASSERT(MiSessionOfProcess(Process) == Current);
+    if (Current != NULL)
+        Free = MiSessionLeaveLocked(Process);
+    MiSessionJoinLocked(Target, Process);
+    ASSERT(MiSessionOfProcess(Process) == Target && Target->SessionId == SessionId);
     KeReleaseGuardedMutex(&MiSessionLock);
 
     if (Free)
         MiSessionFree(Current);
     MiSessionDereference(Target);
-    return Status;
+    return STATUS_SUCCESS;
 }
 
 NTSTATUS
@@ -784,7 +789,9 @@ MmAttachSession(
     MiSessionLockAcquire();
     MiSessionAssertLocked(Session);
     ASSERT(Session->ReferenceCount > Session->ProcessCount);
-    for (Entry = Session->Processes.Flink; Entry != &Session->Processes; Entry = Entry->Flink)
+    for (Entry = Session->Ending ? &Session->Processes : Session->Processes.Flink;
+         Entry != &Session->Processes;
+         Entry = Entry->Flink)
     {
         PMI_PROCESS Native = CONTAINING_RECORD(Entry, MI_PROCESS, SessionLink);
         PEPROCESS Candidate = Native->SessionProcess;
