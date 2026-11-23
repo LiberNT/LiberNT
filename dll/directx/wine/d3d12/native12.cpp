@@ -586,16 +586,24 @@ HRESULT Native12Device::QueryCaps(D3D12DDICAPS_TYPE type, void *info, void *data
 
 HRESULT Native12Device::QueryFeature106(D3D12DDICAPS_TYPE type, void *data, UINT size, BOOL *supported)
 {
-    HRESULT hr;
+    BYTE answer[64];
+    SIZE_T offset = reinterpret_cast<BYTE *>(supported) - static_cast<BYTE *>(data);
+    BOOL answered;
 
     if (ddi_build < D3D12DDI_BUILD_VERSION_0106)
     {
         *supported = TRUE;
         return S_OK;
     }
-    if (FAILED(hr = QueryCaps(type, NULL, data, size))) return hr;
+    if (size > sizeof(answer) || offset + sizeof(BOOL) > size) return E_INVALIDARG;
+    /* A driver that cannot answer is reported like Windows 11 does, and the caller's data stays as it was */
+    memcpy(answer, data, size);
+    if (FAILED(QueryCaps(type, NULL, answer, size))) return E_UNEXPECTED;
+    memcpy(&answered, answer + offset, sizeof(answered));
     /* Optional only on D3D_FEATURE_LEVEL_1_0_GENERIC, which this runtime does not create. */
-    return *supported ? S_OK : DXGI_ERROR_DRIVER_INTERNAL_ERROR;
+    if (!answered) return DXGI_ERROR_DRIVER_INTERNAL_ERROR;
+    memcpy(data, answer, size);
+    return S_OK;
 }
 
 HRESULT Native12Device::Initialize(IDXGIAdapter *selected_adapter, D3D_FEATURE_LEVEL minimum_level)
