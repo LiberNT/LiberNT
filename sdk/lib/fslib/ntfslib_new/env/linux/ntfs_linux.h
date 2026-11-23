@@ -28,6 +28,21 @@ NtfsDiskInitializeLinuxWritable(
 void
 NtfsDiskCloseLinux(void);
 
+int
+NtfsDiskFdLinux(void);
+
+void
+NtfsUseWritebackClockLinux(BOOLEAN Enable);
+
+ULONGLONG
+NtfsDiskWriteGenerationLinux(void);
+
+NTSTATUS
+NtfsReadFileLinux(PNtfsFileRecord File, PUCHAR Buffer, PULONG Length, ULONGLONG Offset);
+
+NTSTATUS
+NtfsWriteFileDataLinux(ULONGLONG Offset, const UCHAR* Buffer, ULONG Length);
+
 #ifdef __cplusplus
 }
 #endif

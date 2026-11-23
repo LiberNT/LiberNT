@@ -119,6 +119,11 @@ if(NTFSLIB_BUILD_FUSE)
 endif()
 
 if(BUILD_TESTING)
+    add_executable(ntfslib_disk_cache_test tests/disk_cache.cpp)
+    target_include_directories(ntfslib_disk_cache_test PRIVATE "${NTFSLIB_ROOT}/include/internal")
+    target_link_libraries(ntfslib_disk_cache_test PRIVATE ntfslib_linux)
+    add_test(NAME ntfslib_linux_disk_cache COMMAND ntfslib_disk_cache_test)
+
     add_executable(ntfslib_record_refresh_test tests/record_refresh.cpp)
     target_include_directories(ntfslib_record_refresh_test PRIVATE
         "${NTFSLIB_ROOT}/include/internal")
