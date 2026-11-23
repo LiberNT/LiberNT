@@ -1345,8 +1345,77 @@ DriverEntry(
 }
 
 
+static
+BOOLEAN
+PortRegistryStringType(
+    _In_ ULONG Type)
+{
+    return (Type == REG_SZ) || (Type == REG_EXPAND_SZ) || (Type == REG_MULTI_SZ);
+}
+
+
+static
+NTSTATUS
+PortRegistryValueName(
+    _In_ PUCHAR ValueName,
+    _Out_ PUNICODE_STRING Name)
+{
+    ANSI_STRING AnsiName;
+    NTSTATUS Status;
+
+    Status = RtlInitAnsiStringEx(&AnsiName, (PCSZ)ValueName);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    return RtlAnsiStringToUnicodeString(Name, &AnsiName, TRUE);
+}
+
+
+static
+NTSTATUS
+PortOpenMiniportRegistryKey(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ BOOLEAN Global,
+    _In_ BOOLEAN Create,
+    _Out_ PHANDLE Key)
+{
+    WCHAR NameBuffer[RTL_NUMBER_OF(L"Device") + 10];
+    WCHAR NumberBuffer[11];
+    UNICODE_STRING Name, Number;
+    OBJECT_ATTRIBUTES ObjectAttributes;
+    HANDLE ParametersKey;
+    NTSTATUS Status;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    *Key = NULL;
+    RtlInitEmptyUnicodeString(&Name, NameBuffer, sizeof(NameBuffer));
+    Status = RtlAppendUnicodeToString(&Name, L"Device");
+    if (NT_SUCCESS(Status) && !Global)
+    {
+        RtlInitEmptyUnicodeString(&Number, NumberBuffer, sizeof(NumberBuffer));
+        Status = RtlIntegerToUnicodeString(DeviceExtension->PortNumber, 10, &Number);
+        if (NT_SUCCESS(Status))
+            Status = RtlAppendUnicodeStringToString(&Name, &Number);
+    }
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    Status = IoOpenDriverRegistryKey(DeviceExtension->Device->DriverObject, DriverRegKeyParameters,
+                                     Create ? (KEY_READ | KEY_WRITE) : KEY_READ, 0, &ParametersKey);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    InitializeObjectAttributes(&ObjectAttributes, &Name, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, ParametersKey, NULL);
+    if (Create)
+        Status = ZwCreateKey(Key, KEY_READ | KEY_WRITE, &ObjectAttributes, 0, NULL, REG_OPTION_NON_VOLATILE, NULL);
+    else
+        Status = ZwOpenKey(Key, KEY_READ, &ObjectAttributes);
+    ZwClose(ParametersKey);
+    return Status;
+}
+
+
 /*
- * @unimplemented
+ * @implemented
  */
 STORPORT_API
 PUCHAR
@@ -1355,9 +1424,20 @@ StorPortAllocateRegistryBuffer(
     _In_ PVOID HwDeviceExtension,
     _In_ PULONG Length)
 {
-    DPRINT1("StorPortAllocateRegistryBuffer()\n");
-    UNIMPLEMENTED;
-    return NULL;
+    PFDO_DEVICE_EXTENSION DeviceExtension = PortMiniportFdo(HwDeviceExtension);
+    PVOID Buffer;
+
+    if ((DeviceExtension == NULL) || (Length == NULL) || (*Length == 0) || (KeGetCurrentIrql() > DISPATCH_LEVEL))
+        return NULL;
+    Buffer = ExAllocatePoolZero(NonPagedPoolNx, *Length, TAG_REGISTRY_BUFFER);
+    if (Buffer == NULL)
+        return NULL;
+    if (InterlockedCompareExchangePointer(&DeviceExtension->RegistryBuffer, Buffer, NULL) != NULL)
+    {
+        ExFreePoolWithTag(Buffer, TAG_REGISTRY_BUFFER);
+        return NULL;
+    }
+    return Buffer;
 }
 
 
@@ -2791,7 +2871,7 @@ StorPortFreeDeviceBase(
 
 
 /*
- * @unimplemented
+ * @implemented
  */
 STORPORT_API
 VOID
@@ -2800,8 +2880,12 @@ StorPortFreeRegistryBuffer(
     _In_ PVOID HwDeviceExtension,
     _In_ PUCHAR Buffer)
 {
-    DPRINT1("StorPortFreeRegistryBuffer()\n");
-    UNIMPLEMENTED;
+    PFDO_DEVICE_EXTENSION DeviceExtension = PortMiniportFdo(HwDeviceExtension);
+
+    if ((DeviceExtension == NULL) || (Buffer == NULL))
+        return;
+    if (InterlockedCompareExchangePointer(&DeviceExtension->RegistryBuffer, NULL, Buffer) == Buffer)
+        ExFreePoolWithTag(Buffer, TAG_REGISTRY_BUFFER);
 }
 
 
@@ -3693,7 +3777,7 @@ StorPortReady(
 
 
 /*
- * @unimplemented
+ * @implemented
  */
 STORPORT_API
 BOOLEAN
@@ -3706,14 +3790,81 @@ StorPortRegistryRead(
     _In_ PUCHAR Buffer,
     _In_ PULONG BufferLength)
 {
-    DPRINT1("StorPortRegistryRead()\n");
-    UNIMPLEMENTED;
-    return FALSE;
+    PFDO_DEVICE_EXTENSION DeviceExtension = PortMiniportFdo(HwDeviceExtension);
+    PKEY_VALUE_PARTIAL_INFORMATION Information = NULL;
+    UNICODE_STRING Name = { 0 };
+    HANDLE Key = NULL;
+    ULONG Capacity, Size, Required;
+    BOOLEAN Result = FALSE;
+    NTSTATUS Status;
+
+    if (BufferLength == NULL)
+        return FALSE;
+    Capacity = *BufferLength;
+    *BufferLength = 0;
+    if ((DeviceExtension == NULL) || (ValueName == NULL) || (Buffer == NULL) ||
+        (KeGetCurrentIrql() != PASSIVE_LEVEL) || !NT_SUCCESS(PortRegistryValueName(ValueName, &Name)))
+    {
+        return FALSE;
+    }
+    Status = PortOpenMiniportRegistryKey(DeviceExtension, Global != 0, FALSE, &Key);
+    if (NT_SUCCESS(Status))
+    {
+        Status = ZwQueryValueKey(Key, &Name, KeyValuePartialInformation, NULL, 0, &Size);
+        if ((Status == STATUS_BUFFER_TOO_SMALL) || (Status == STATUS_BUFFER_OVERFLOW))
+        {
+            Information = ExAllocatePoolWithTag(PagedPool, Size, TAG_REGISTRY_BUFFER);
+            Status = (Information != NULL) ?
+                ZwQueryValueKey(Key, &Name, KeyValuePartialInformation, Information, Size, &Size) :
+                STATUS_INSUFFICIENT_RESOURCES;
+        }
+    }
+    if (NT_SUCCESS(Status) && (Information != NULL) && (Information->Type == Type))
+    {
+        if (PortRegistryStringType(Type))
+        {
+            UNICODE_STRING Data;
+            ANSI_STRING Ansi;
+
+            Required = 0;
+            Status = STATUS_BUFFER_OVERFLOW;
+            if (Information->DataLength <= UNICODE_STRING_MAX_BYTES)
+            {
+                Data.Buffer = (PWCH)Information->Data;
+                Data.Length = Data.MaximumLength = (USHORT)(Information->DataLength & ~1UL);
+                Status = RtlUnicodeStringToAnsiString(&Ansi, &Data, TRUE);
+            }
+            if (NT_SUCCESS(Status))
+            {
+                Required = Ansi.Length;
+                if (Required <= Capacity)
+                    RtlCopyMemory(Buffer, Ansi.Buffer, Required);
+                RtlFreeAnsiString(&Ansi);
+            }
+        }
+        else
+        {
+            Required = Information->DataLength;
+            if (Required <= Capacity)
+                RtlCopyMemory(Buffer, Information->Data, Required);
+        }
+        if (NT_SUCCESS(Status))
+        {
+            *BufferLength = Required;
+            Result = (Required <= Capacity);
+        }
+    }
+    if (Information != NULL)
+        ExFreePoolWithTag(Information, TAG_REGISTRY_BUFFER);
+    if (Key != NULL)
+        ZwClose(Key);
+    RtlFreeUnicodeString(&Name);
+    return Result;
 }
 
 
 /*
- * @unimplemented
+ * @implemented
  */
 STORPORT_API
 BOOLEAN
@@ -3726,9 +3877,46 @@ StorPortRegistryWrite(
     _In_ PUCHAR Buffer,
     _In_ ULONG BufferLength)
 {
-    DPRINT1("StorPortRegistryWrite()\n");
-    UNIMPLEMENTED;
-    return FALSE;
+    PFDO_DEVICE_EXTENSION DeviceExtension = PortMiniportFdo(HwDeviceExtension);
+    UNICODE_STRING Name = { 0 };
+    UNICODE_STRING Unicode = { 0 };
+    PWCH Data = NULL;
+    HANDLE Key = NULL;
+    ULONG Size = BufferLength;
+    NTSTATUS Status;
+
+    if ((DeviceExtension == NULL) || (ValueName == NULL) || ((Buffer == NULL) && (BufferLength != 0)) ||
+        (KeGetCurrentIrql() != PASSIVE_LEVEL) || !NT_SUCCESS(PortRegistryValueName(ValueName, &Name)))
+    {
+        return FALSE;
+    }
+    Status = STATUS_SUCCESS;
+    if (PortRegistryStringType(Type) && (BufferLength != 0))
+    {
+        ANSI_STRING Ansi;
+
+        Status = STATUS_BUFFER_OVERFLOW;
+        if (BufferLength <= MAXUSHORT)
+        {
+            Ansi.Buffer = (PCHAR)Buffer;
+            Ansi.Length = Ansi.MaximumLength = (USHORT)BufferLength;
+            Status = RtlAnsiStringToUnicodeString(&Unicode, &Ansi, TRUE);
+        }
+        if (NT_SUCCESS(Status))
+        {
+            Data = Unicode.Buffer;
+            Size = Unicode.Length;
+        }
+    }
+    if (NT_SUCCESS(Status))
+        Status = PortOpenMiniportRegistryKey(DeviceExtension, Global != 0, TRUE, &Key);
+    if (NT_SUCCESS(Status))
+        Status = ZwSetValueKey(Key, &Name, 0, Type, (Data != NULL) ? (PVOID)Data : (PVOID)Buffer, Size);
+    if (Key != NULL)
+        ZwClose(Key);
+    RtlFreeUnicodeString(&Unicode);
+    RtlFreeUnicodeString(&Name);
+    return NT_SUCCESS(Status);
 }
 
 

@@ -43,6 +43,7 @@
 #define TAG_DMA_BUFFER      'DBtS'
 #define TAG_RESET_REQUEST   'RRtS'
 #define TAG_LU_EXTENSION    'ULtS'
+#define TAG_REGISTRY_BUFFER 'BRtS'
 
 typedef enum
 {
@@ -243,6 +244,7 @@ typedef struct _FDO_DEVICE_EXTENSION
     BOOLEAN BusResetActive;
     LONG BusyCompletions;
     volatile LONG64 PausedUntil;
+    PVOID volatile RegistryBuffer;
     PIO_WORKITEM ResetWorkItem;
     KEVENT ResetIdle;
     UCHAR ResetPathId;

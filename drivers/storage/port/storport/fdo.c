@@ -2397,6 +2397,7 @@ PortFdoRemoveDevice(
     _In_ PIRP Irp)
 {
     PDEVICE_OBJECT LowerDevice = DeviceExtension->LowerDevice;
+    PVOID RegistryBuffer;
     NTSTATUS Status;
 
     PortFdoHoldRequests(DeviceExtension, DeviceExtension->PnpState != dsSurpriseRemoved);
@@ -2406,6 +2407,9 @@ PortFdoRemoveDevice(
     DeviceExtension->PnpState = dsRemoved;
     PortFdoReleaseRequests(DeviceExtension, STATUS_NO_SUCH_DEVICE);
     PortFdoReleaseAdapter(DeviceExtension);
+    RegistryBuffer = InterlockedExchangePointer(&DeviceExtension->RegistryBuffer, NULL);
+    if (RegistryBuffer != NULL)
+        ExFreePoolWithTag(RegistryBuffer, TAG_REGISTRY_BUFFER);
 
     Irp->IoStatus.Status = STATUS_SUCCESS;
     IoSkipCurrentIrpStackLocation(Irp);
