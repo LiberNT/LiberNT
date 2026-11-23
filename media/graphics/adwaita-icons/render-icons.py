@@ -180,7 +180,6 @@ TARGETS = (
     ("legacy:legacy/applications-utilities", "base/applications/mmc/resources/", ("mmc",)),
     ("legacy:legacy/multimedia-player", "base/applications/mplay32/resources/", ("mplay32",)),
     ("legacy:legacy/preferences-system", "base/applications/msconfig/res/", ("msconfig",)),
-    ("legacy:legacy/preferences-system", "base/applications/msconfig_new/res/", ("msconfig",)),
     ("mimetypes/application-certificate", "base/applications/mscutils/certmgr/resources/", ("certmgr",)),
     ("devices/drive-harddisk", "base/applications/mscutils/diskmgmt/res/", ("hdisk",)),
     ("legacy:legacy/edit-copy", "base/applications/mscutils/eventvwr/res/", ("copy",)),

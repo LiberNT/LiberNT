@@ -12,8 +12,6 @@
 #include "toolspage.h"
 #include "srvpage.h"
 #include "startuppage.h"
-#include "freeldrpage.h"
-#include "systempage.h"
 #include "generalpage.h"
 
 HINSTANCE hInst = 0;
@@ -101,8 +99,6 @@ BOOL OnCreate(HWND hWnd)
 
     hTabWnd = GetDlgItem(hWnd, IDC_TAB);
     hGeneralPage = CreateDialog(hInst, MAKEINTRESOURCE(IDD_GENERAL_PAGE), hWnd,  GeneralPageWndProc); EnableDialogTheme(hGeneralPage);
-    hSystemPage = CreateDialog(hInst, MAKEINTRESOURCE(IDD_SYSTEM_PAGE), hWnd,  SystemPageWndProc); EnableDialogTheme(hSystemPage);
-    hFreeLdrPage = CreateDialog(hInst, MAKEINTRESOURCE(IDD_FREELDR_PAGE), hWnd,  FreeLdrPageWndProc); EnableDialogTheme(hFreeLdrPage);
     hServicesPage = CreateDialog(hInst, MAKEINTRESOURCE(IDD_SERVICES_PAGE), hWnd,  ServicesPageWndProc); EnableDialogTheme(hServicesPage);
     hStartupPage = CreateDialog(hInst, MAKEINTRESOURCE(IDD_STARTUP_PAGE), hWnd,  StartupPageWndProc); EnableDialogTheme(hStartupPage);
     hToolsPage = CreateDialog(hInst, MAKEINTRESOURCE(IDD_TOOLS_PAGE), hWnd,  ToolsPageWndProc); EnableDialogTheme(hToolsPage);
@@ -117,35 +113,25 @@ BOOL OnCreate(HWND hWnd)
     item.pszText = szTemp;
     (void)TabCtrl_InsertItem(hTabWnd, 0, &item);
 
-    LoadString(hInst, IDS_TAB_SYSTEM, szTemp, 256);
-    memset(&item, 0, sizeof(TCITEM));
-    item.mask = TCIF_TEXT;
-    item.pszText = szTemp;
-    (void)TabCtrl_InsertItem(hTabWnd, 1, &item);
-
-    LoadString(hInst, IDS_TAB_FREELDR, szTemp, 256);
-    memset(&item, 0, sizeof(TCITEM));
-    item.mask = TCIF_TEXT;
-    item.pszText = szTemp;
-    (void)TabCtrl_InsertItem(hTabWnd, 2, &item);
+    /* TODO: the Boot tab that edits the BCD store, between General and Services */
 
     LoadString(hInst, IDS_TAB_SERVICES, szTemp, 256);
     memset(&item, 0, sizeof(TCITEM));
     item.mask = TCIF_TEXT;
     item.pszText = szTemp;
-    (void)TabCtrl_InsertItem(hTabWnd, 3, &item);
+    (void)TabCtrl_InsertItem(hTabWnd, 1, &item);
 
     LoadString(hInst, IDS_TAB_STARTUP, szTemp, 256);
     memset(&item, 0, sizeof(TCITEM));
     item.mask = TCIF_TEXT;
     item.pszText = szTemp;
-    (void)TabCtrl_InsertItem(hTabWnd, 4, &item);
+    (void)TabCtrl_InsertItem(hTabWnd, 2, &item);
 
     LoadString(hInst, IDS_TAB_TOOLS, szTemp, 256);
     memset(&item, 0, sizeof(TCITEM));
     item.mask = TCIF_TEXT;
     item.pszText = szTemp;
-    (void)TabCtrl_InsertItem(hTabWnd, 5, &item);
+    (void)TabCtrl_InsertItem(hTabWnd, 3, &item);
 
     MsConfig_OnTabWndSelChange();
 
@@ -159,62 +145,15 @@ BOOL OnCreate(HWND hWnd)
 
 void MsConfig_OnTabWndSelChange(void)
 {
-    switch (TabCtrl_GetCurSel(hTabWnd)) {
-    case 0: //General
-        ShowWindow(hGeneralPage, SW_SHOW);
-        ShowWindow(hSystemPage, SW_HIDE);
-        ShowWindow(hFreeLdrPage, SW_HIDE);
-        ShowWindow(hServicesPage, SW_HIDE);
-        ShowWindow(hStartupPage, SW_HIDE);
-        ShowWindow(hToolsPage, SW_HIDE);
-        BringWindowToTop(hGeneralPage);
-        break;
-    case 1: //SYSTEM.INI
-        ShowWindow(hGeneralPage, SW_HIDE);
-        ShowWindow(hSystemPage, SW_SHOW);
-        ShowWindow(hToolsPage, SW_HIDE);
-        ShowWindow(hStartupPage, SW_HIDE);
-        ShowWindow(hFreeLdrPage, SW_HIDE);
-        ShowWindow(hServicesPage, SW_HIDE);
-        BringWindowToTop(hSystemPage);
-        break;
-    case 2: //Freeldr
-        ShowWindow(hGeneralPage, SW_HIDE);
-        ShowWindow(hSystemPage, SW_HIDE);
-        ShowWindow(hFreeLdrPage, SW_SHOW);
-        ShowWindow(hServicesPage, SW_HIDE);
-        ShowWindow(hStartupPage, SW_HIDE);
-        ShowWindow(hToolsPage, SW_HIDE);
-        BringWindowToTop(hFreeLdrPage);
-        break;
-    case 3: //Services
-        ShowWindow(hGeneralPage, SW_HIDE);
-        ShowWindow(hSystemPage, SW_HIDE);
-        ShowWindow(hFreeLdrPage, SW_HIDE);
-        ShowWindow(hServicesPage, SW_SHOW);
-        ShowWindow(hStartupPage, SW_HIDE);
-        ShowWindow(hToolsPage, SW_HIDE);
-        BringWindowToTop(hServicesPage);
-        break;
-    case 4: //startup
-        ShowWindow(hGeneralPage, SW_HIDE);
-        ShowWindow(hSystemPage, SW_HIDE);
-        ShowWindow(hFreeLdrPage, SW_HIDE);
-        ShowWindow(hServicesPage, SW_HIDE);
-        ShowWindow(hStartupPage, SW_SHOW);
-        ShowWindow(hToolsPage, SW_HIDE);
-        BringWindowToTop(hStartupPage);
-        break;
-    case 5: //Tools
-        ShowWindow(hGeneralPage, SW_HIDE);
-        ShowWindow(hSystemPage, SW_HIDE);
-        ShowWindow(hFreeLdrPage, SW_HIDE);
-        ShowWindow(hServicesPage, SW_HIDE);
-        ShowWindow(hStartupPage, SW_HIDE);
-        ShowWindow(hToolsPage, SW_SHOW);
-        BringWindowToTop(hToolsPage);
-        break;
-    }
+    HWND Pages[] = {hGeneralPage, hServicesPage, hStartupPage, hToolsPage};
+    INT Selected = TabCtrl_GetCurSel(hTabWnd);
+    INT i;
+
+    for (i = 0; i < (INT)_countof(Pages); i++)
+        ShowWindow(Pages[i], (i == Selected) ? SW_SHOW : SW_HIDE);
+
+    if (Selected >= 0 && Selected < (INT)_countof(Pages))
+        BringWindowToTop(Pages[Selected]);
 }
 
 
@@ -314,10 +253,6 @@ MsConfigWndProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
                 DestroyWindow(hServicesPage);
             if (hStartupPage)
                 DestroyWindow(hStartupPage);
-            if (hFreeLdrPage)
-                DestroyWindow(hFreeLdrPage);
-            if (hSystemPage)
-                DestroyWindow(hSystemPage);
             if (hDialogIconBig)
                 DestroyIcon(hDialogIconBig);
             if (hDialogIconSmall)

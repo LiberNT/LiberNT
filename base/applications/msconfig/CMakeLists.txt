@@ -2,9 +2,7 @@
 list(APPEND SOURCE
     toolspage.c
     srvpage.c
-    systempage.c
     startuppage.c
-    freeldrpage.c
     generalpage.c
     msconfig.c
     precomp.h)
