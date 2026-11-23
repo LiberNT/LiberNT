@@ -35,6 +35,7 @@
 #include "windows.system.profile.h"
 #include "windows.storage.streams.h"
 
+extern IActivationFactory *analytics_info_factory;
 extern IActivationFactory *integrity_policy_factory;
 
 #define DEFINE_IINSPECTABLE_( pfx, iface_type, impl_type, impl_from, iface_mem, expr )             \

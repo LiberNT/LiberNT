@@ -1,6 +1,7 @@
 #define STANDALONE
 #include <apitest.h>
 
+extern void func_AnalyticsInfo(void);
 extern void func_AppInstallManager(void);
 extern void func_DispatcherQueue(void);
 extern void func_NotificationData(void);
@@ -13,6 +14,7 @@ extern void func_ValueSet(void);
 
 const struct test winetest_testlist[] =
 {
+    { "AnalyticsInfo", func_AnalyticsInfo },
     { "AppInstallManager", func_AppInstallManager },
     { "DispatcherQueue", func_DispatcherQueue },
     { "NotificationData", func_NotificationData },

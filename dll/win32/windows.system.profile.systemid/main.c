@@ -399,7 +399,9 @@ HRESULT WINAPI DllGetActivationFactory( HSTRING classid, IActivationFactory **fa
     if (!factory) return E_POINTER;
     *factory = NULL;
 
-    if (!wcscmp( name, RuntimeClass_Windows_System_Profile_SystemIdentification ))
+    if (!wcscmp( name, RuntimeClass_Windows_System_Profile_AnalyticsInfo ))
+        IActivationFactory_QueryInterface( analytics_info_factory, &IID_IActivationFactory, (void **)factory );
+    else if (!wcscmp( name, RuntimeClass_Windows_System_Profile_SystemIdentification ))
         IActivationFactory_QueryInterface( system_id_factory, &IID_IActivationFactory, (void **)factory );
     else if (!wcscmp( name, RuntimeClass_Windows_System_Profile_WindowsIntegrityPolicy ))
         IActivationFactory_QueryInterface( integrity_policy_factory, &IID_IActivationFactory, (void **)factory );

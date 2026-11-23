@@ -1,5 +1,6 @@
 
 list(APPEND SOURCE
+    AnalyticsInfo.c
     AppInstallManager.c
     DispatcherQueue.c
     guid.c
