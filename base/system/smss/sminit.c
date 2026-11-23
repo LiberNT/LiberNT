@@ -874,6 +874,7 @@ SmpLoadBootConfigurationStore(
 {
     static const PCWSTR StorePaths[] = { L"\\EFI\\LiberNT\\Boot\\BCD", L"\\Boot\\BCD" };
     static BOOLEAN Attempted;
+    SYSTEM_BOOT_ENVIRONMENT_INFORMATION BootEnvironment;
     UNICODE_STRING KeyName = RTL_CONSTANT_STRING(L"\\Registry\\Machine\\BCD00000000");
     OBJECT_ATTRIBUTES KeyAttributes, FileAttributes;
     FILE_BASIC_INFORMATION BasicInfo;
@@ -887,8 +888,18 @@ SmpLoadBootConfigurationStore(
         return;
     Attempted = TRUE;
 
+    i = 0;
+    if (NT_SUCCESS(NtQuerySystemInformation(SystemBootEnvironmentInformation,
+                                            &BootEnvironment,
+                                            sizeof(BootEnvironment),
+                                            NULL)) &&
+        BootEnvironment.FirmwareType == FirmwareTypeBios)
+    {
+        i = 1;
+    }
+
     InitializeObjectAttributes(&KeyAttributes, &KeyName, OBJ_CASE_INSENSITIVE, NULL, NULL);
-    for (i = 0; i < RTL_NUMBER_OF(StorePaths); i++)
+    for (; i < RTL_NUMBER_OF(StorePaths); i++)
     {
         RtlInitEmptyUnicodeString(&FileName, Buffer, sizeof(Buffer));
         if (!NT_SUCCESS(RtlAppendUnicodeStringToString(&FileName, SystemPartition)) ||
