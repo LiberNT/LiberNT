@@ -1409,6 +1409,8 @@ SECURITY_STATUS SEC_ENTRY ntlm_VerifySignature(PCtxtHandle phContext,
     TRACE("Negotiated flags: 0x%08x\n", helper->neg_flags);
 
     local_buff = HeapAlloc(GetProcessHeap(), 0, pMessage->cBuffers * sizeof(SecBuffer));
+    if(!local_buff)
+        return SEC_E_INSUFFICIENT_MEMORY;
 
     local_desc.ulVersion = SECBUFFER_VERSION;
     local_desc.cBuffers = pMessage->cBuffers;
@@ -1431,10 +1433,15 @@ SECURITY_STATUS SEC_ENTRY ntlm_VerifySignature(PCtxtHandle phContext,
     }
 
     if((ret = ntlm_CreateSignature(helper, &local_desc, token_idx, NTLM_RECV, TRUE)) != SEC_E_OK)
+    {
+        HeapFree(GetProcessHeap(), 0, local_buff);
         return ret;
+    }
 
     sig_start = (helper->neg_flags & NTLMSSP_NEGOTIATE_NTLM2 && helper->neg_flags & NTLMSSP_NEGOTIATE_SIGN) ? 4 : 8;
-    if(memcmp(((PBYTE)local_buff[token_idx].pvBuffer) + sig_start,
+    if(*(const UNALIGNED ULONG *)pMessage->pBuffers[token_idx].pvBuffer != 1)
+        ret = SEC_E_INVALID_TOKEN;
+    else if(memcmp(((PBYTE)local_buff[token_idx].pvBuffer) + sig_start,
                 ((PBYTE)pMessage->pBuffers[token_idx].pvBuffer) + sig_start, 16 - sig_start))
         ret = SEC_E_MESSAGE_ALTERED;
     else
