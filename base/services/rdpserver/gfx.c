@@ -17,6 +17,7 @@
 #include "gfx.h"
 #include "clearenc.h"
 #include "videodetect.h"
+#include "tilekey.h"
 
 #define GFX_SURFACE_ID 0
 #define GFX_TILE_SIZE 64
@@ -58,6 +59,7 @@ struct RDP_GFX
     UINT16 *Buckets, *FreeSlots;
     UINT16 CacheSlots, NextFreeSlot, FreeCount, Newest, Oldest;
     UINT32 CacheBytes, CacheLimit;
+    TILE_KEY_SECRET KeySecret;
     BOOL H264Enabled;
     H264_CONTEXT *H264;
     VIDEO_TRACKER Video;
@@ -147,7 +149,8 @@ RDP_GFX *GfxCreate(HANDLE vcm, rdpContext *rdp, GFX_LOG log, BOOL h264)
     gfx->Cache = calloc(GFX_CACHE_SLOTS + 1, sizeof(*gfx->Cache));
     gfx->Buckets = calloc(GFX_CACHE_BUCKETS, sizeof(*gfx->Buckets));
     gfx->FreeSlots = calloc(GFX_CACHE_SLOTS, sizeof(*gfx->FreeSlots));
-    if (!gfx->Context || !gfx->Progressive || !gfx->Encoded || !gfx->Clear || !gfx->Cache || !gfx->Buckets || !gfx->FreeSlots)
+    if (!gfx->Context || !gfx->Progressive || !gfx->Encoded || !gfx->Clear || !gfx->Cache || !gfx->Buckets || !gfx->FreeSlots ||
+        !TileKeySecret(&gfx->KeySecret))
     {
         GfxFree(gfx);
         return NULL;
@@ -295,20 +298,9 @@ static UINT32 FrameTimestamp(void)
     return ((UINT32)now.wHour << 22) | ((UINT32)now.wMinute << 16) | ((UINT32)now.wSecond << 10) | now.wMilliseconds;
 }
 
-static UINT64 TileKey(const BYTE *pixels, UINT32 stride, const GFX_TILE *tile)
+static UINT64 TileKey(const RDP_GFX *gfx, const BYTE *pixels, UINT32 stride, const GFX_TILE *tile)
 {
-    UINT64 key = 0xCBF29CE484222325ull ^ ((UINT64)tile->Width << 16 | tile->Height);
-    UINT32 x, y;
-    for (y = 0; y < tile->Height; ++y)
-    {
-        const UINT32 *row = (const UINT32 *)(pixels + (size_t)(tile->Top + y) * stride + (size_t)tile->Left * 4);
-        for (x = 0; x < tile->Width; ++x)
-        {
-            key ^= row[x] & 0x00FFFFFF;
-            key *= 0x100000001B3ull;
-        }
-    }
-    return key;
+    return TileKeyOf(&gfx->KeySecret, pixels, stride, tile->Left, tile->Top, tile->Width, tile->Height);
 }
 
 static BOOL TileSolid(const BYTE *pixels, UINT32 stride, const GFX_TILE *tile, UINT32 *color)
@@ -484,7 +476,7 @@ static BOOL SendTile(RDP_GFX *gfx, const BYTE *pixels, UINT32 stride, const GFX_
     whole.Height = (UINT16)min(GFX_TILE_SIZE, gfx->Height - whole.Top);
     assert(tile->Left + tile->Width <= whole.Left + whole.Width && tile->Top + tile->Height <= whole.Top + whole.Height);
     partial = tile->Width != whole.Width || tile->Height != whole.Height;
-    key = TileKey(pixels, stride, &whole);
+    key = TileKey(gfx, pixels, stride, &whole);
     slot = CacheFind(gfx, key);
     if (slot) return SendCachedTile(gfx, slot, &whole);
     if (TileSolid(pixels, stride, tile, &color)) return SendSolidTile(gfx, color, tile);

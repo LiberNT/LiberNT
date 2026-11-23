@@ -15,6 +15,7 @@ extern void func_PasswordMemory(void);
 extern void func_PipeSquat(void);
 extern void func_RemoteDesktop(void);
 extern void func_RemoteLogonType(void);
+extern void func_TileKey(void);
 extern void func_VideoDetect(void);
 extern void func_Zgfx(void);
 
@@ -34,6 +35,7 @@ const struct test winetest_testlist[] =
     { "PipeSquat", func_PipeSquat },
     { "RemoteDesktop", func_RemoteDesktop },
     { "RemoteLogonType", func_RemoteLogonType },
+    { "TileKey", func_TileKey },
     { "VideoDetect", func_VideoDetect },
     { "Zgfx", func_Zgfx },
     { 0, 0 }
