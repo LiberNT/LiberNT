@@ -320,7 +320,7 @@ TouchInputAttach(
     Device->Path.Length = Path->Length;
     Device->Path.MaximumLength = Path->Length;
 
-    Status = InputHoldOpen(&Device->File, Path, FILE_READ_DATA);
+    Status = InputHoldOpen(&Device->File, Path, FILE_READ_DATA, &Device->Iosb);
     if (!NT_SUCCESS(Status))
     {
         ERR("Touch screen %wZ could not be opened: 0x%08lx\n", Path, Status);
@@ -683,6 +683,7 @@ TouchInputProcess(VOID)
             if (TouchInputDispatchReport(Device))
                 Dispatched = TRUE;
             Device->Iosb.Information = 0;
+            LntUpdateDesktopWatch(Device->File.Watch, LntWatchComplete);
         }
         else
         {

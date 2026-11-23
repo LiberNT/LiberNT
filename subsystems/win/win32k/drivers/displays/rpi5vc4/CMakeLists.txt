@@ -24,6 +24,6 @@ add_library(rpi5vc4disp MODULE
 target_include_directories(rpi5vc4disp PRIVATE ../framebuf)
 set_module_type(rpi5vc4disp kerneldll ENTRYPOINT DrvEnableDriver 12)
 target_link_libraries(rpi5vc4disp libcntpr)
-add_importlibs(rpi5vc4disp win32k)
+add_importlibs(rpi5vc4disp win32k ntoskrnl)
 add_dependencies(rpi5vc4disp psdk)
 add_cd_file(TARGET rpi5vc4disp DESTINATION reactos/system32 FOR all)

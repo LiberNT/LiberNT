@@ -125,11 +125,14 @@ IntQueueShadowRect(
    if (!IntClipShadowRect(ppdev, prcl, &Clipped))
       return;
 
+   LntUpdateDesktopWatch(ppdev->Watch, LntWatchArm);
    RowBytes = IntShadowRowBytes(ppdev, &Clipped, &ByteLeft);
    Bytes = (ULONGLONG)RowBytes * (Clipped.bottom - Clipped.top);
    if (Bytes < FRAMEBUF_DEFERRED_FLUSH_BYTES)
    {
       IntCopyShadowRect(ppdev, &Clipped);
+      LntUpdateDesktopWatch(ppdev->Watch, ppdev->ShadowFlushValid || ppdev->ShadowPendingValid ?
+                            LntWatchProgress : LntWatchComplete);
       return;
    }
 
@@ -205,6 +208,7 @@ IntFlushShadowStripe(
    {
       ppdev->ShadowFlushValid = FALSE;
       ppdev->ShadowFlushStarted = FALSE;
+      LntUpdateDesktopWatch(ppdev->Watch, ppdev->ShadowPendingValid ? LntWatchArm : LntWatchComplete);
       return;
    }
 
@@ -226,6 +230,8 @@ IntFlushShadowStripe(
    {
       ppdev->ShadowFlushRect.top = Stripe.bottom;
    }
+   LntUpdateDesktopWatch(ppdev->Watch, ppdev->ShadowFlushValid || ppdev->ShadowPendingValid ?
+                         LntWatchProgress : LntWatchComplete);
 }
 
 VOID
@@ -233,6 +239,7 @@ IntFlushShadowRect(
    PPDEV ppdev,
    const RECTL *prcl)
 {
+   LntUpdateDesktopWatch(ppdev->Watch, LntWatchArm);
    IntCopyShadowRect(ppdev, prcl);
 
    if (prcl == NULL)
@@ -241,6 +248,8 @@ IntFlushShadowRect(
       ppdev->ShadowPendingValid = FALSE;
       ppdev->ShadowFlushStarted = FALSE;
    }
+   LntUpdateDesktopWatch(ppdev->Watch, ppdev->ShadowFlushValid || ppdev->ShadowPendingValid ?
+                         LntWatchProgress : LntWatchComplete);
 }
 
 VOID

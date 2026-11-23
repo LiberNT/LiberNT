@@ -87,6 +87,7 @@ Rpi5PublishShadowSurface(
         return;
     }
 
+    LntUpdateDesktopWatch(Device->Watch, LntWatchArm);
     Width = Clipped.right - Clipped.left;
     Height = Clipped.bottom - Clipped.top;
     if (Width > RPI5VC4_V3D_CLEAR_MAX_WIDTH ||
@@ -151,7 +152,10 @@ Rpi5PublishShadowSurface(
         (Result.Diagnostics.Flags &
          RPI5VC4_V3D_SELFTEST_FLAG_PASSED) != 0;
     if (HardwarePresented)
+    {
+        LntUpdateDesktopWatch(Device->Watch, LntWatchComplete);
         return;
+    }
 
 CpuFallback:
     IntFlushShadowRect(Device, &Clipped);

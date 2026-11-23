@@ -150,7 +150,8 @@ NTAPI
 InputHoldOpen(
     _Out_ PINPUT_HOLD_FILE File,
     _In_ PUNICODE_STRING Path,
-    _In_ ACCESS_MASK DesiredAccess)
+    _In_ ACCESS_MASK DesiredAccess,
+    _In_ PIO_STATUS_BLOCK ReadStatus)
 {
     OBJECT_ATTRIBUTES Attributes;
     IO_STATUS_BLOCK Iosb;
@@ -181,6 +182,8 @@ InputHoldOpen(
         RtlZeroMemory(File, sizeof(*File));
     }
 
+    if (NT_SUCCESS(Status))
+        File->Watch = LntCreateDesktopWatch(LntWatchInput, File->ReadEvent, ReadStatus);
     return Status;
 }
 
@@ -279,7 +282,13 @@ InputHoldRead(
 
     InputHoldLock(Hold);
     if (!File->Closed)
+    {
+        KeClearEvent(File->ReadEvent);
+        LntUpdateDesktopWatch(File->Watch, LntWatchObserveRead);
         Status = ZwReadFile(File->Handle, File->EventHandle, NULL, NULL, Iosb, Buffer, Length, &ByteOffset, NULL);
+        if (Status != STATUS_PENDING && NT_SUCCESS(Status) && NT_SUCCESS(Iosb->Status) && Iosb->Information)
+            LntUpdateDesktopWatch(File->Watch, LntWatchArm);
+    }
     InputHoldUnlock(Hold);
 
     return Status;
@@ -296,6 +305,8 @@ InputHoldClose(
     IO_STATUS_BLOCK Iosb;
     HANDLE Handle = NULL;
 
+    LntDestroyDesktopWatch(File->Watch);
+    File->Watch = NULL;
     InputHoldLock(Hold);
     if (File->Target)
     {

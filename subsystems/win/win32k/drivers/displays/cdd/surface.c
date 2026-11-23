@@ -184,6 +184,7 @@ RcddEnableSurface(
       return NULL;
    }
 
+   ppdev->Watch = LntCreateDesktopWatch(LntWatchFramebuffer, NULL, NULL);
    ppdev->hSurfEng = hSurface;
 
    return hSurface;
@@ -210,6 +211,8 @@ RcddDisableSurface(
    VIDEO_MEMORY VideoMemory;
    PRCDD_PDEV ppdev = (PRCDD_PDEV)dhpdev;
 
+   LntDestroyDesktopWatch(ppdev->Watch);
+   ppdev->Watch = NULL;
    KeWaitForSingleObject(&ppdev->CaptureMutex, Executive, KernelMode, FALSE, NULL);
    ppdev->ScreenMirrorValid = FALSE;
    if (ppdev->CaptureSurface != NULL)

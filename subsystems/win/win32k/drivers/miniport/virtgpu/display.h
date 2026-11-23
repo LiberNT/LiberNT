@@ -16,6 +16,7 @@
 #include <ntddvdeo.h>
 
 #include "virtgpu_shared.h"
+#include <reactos/desktopwatchdog.h>
 
 #define DEVICE_NAME L"virtgpu"
 #define ALLOC_TAG 'dgrV'
@@ -26,6 +27,7 @@ typedef struct _PDEV
     ULONG Signature;
     HANDLE hDriver;
     HDEV hDevEng;
+    PLNT_DESKTOP_WATCH Watch;
     HSURF hSurfEng;
     HSURF hSurfFrameBuffer;
     SURFOBJ *psoFrameBuffer;

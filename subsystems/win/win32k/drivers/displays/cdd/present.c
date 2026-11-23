@@ -50,7 +50,7 @@ RcddNotifyDirtyRects(
    SIZE_T HeaderSize;
    SIZE_T InputSize;
    ULONG Ret;
-   BOOL Result;
+   ULONG Error;
 
    HeaderSize = FIELD_OFFSET(DXGK_PRESENT_DIRTY_RECTS_INPUT, Rects);
    if (Count > DXGK_PRESENT_DIRTY_MAX_RECTS)
@@ -68,14 +68,18 @@ RcddNotifyDirtyRects(
    if (Count != 0)
       RtlCopyMemory(Input->Rects, prcl, Count * sizeof(Input->Rects[0]));
 
-   Result = EngDeviceIoControl(ppdev->hDriver,
-                               IOCTL_VIDEO_DXGK_PRESENT_DIRTY_RECT,
-                               Input,
-                               (ULONG)InputSize,
-                               NULL,
-                               0,
-                               &Ret) == 0;
-   return Result;
+   LntUpdateDesktopWatch(ppdev->Watch, LntWatchArm);
+   Error = EngDeviceIoControl(ppdev->hDriver,
+                              IOCTL_VIDEO_DXGK_PRESENT_DIRTY_RECT,
+                              Input,
+                              (ULONG)InputSize,
+                              NULL,
+                              0,
+                              &Ret);
+   if (Error == (ULONG)STATUS_GRAPHICS_PRESENT_OCCLUDED ||
+       Error == (ULONG)STATUS_GRAPHICS_VIDPN_SOURCE_IN_USE)
+      LntUpdateDesktopWatch(ppdev->Watch, LntWatchComplete);
+   return Error == 0;
 }
 
 static LONGLONG
@@ -229,6 +233,7 @@ RcddPublishPending(
       return FALSE;
 
    ppdev->PendingRectCount = 0;
+   LntUpdateDesktopWatch(ppdev->Watch, LntWatchComplete);
    ppdev->SentSeq = ppdev->PendingSeq;
    ppdev->SentRect = SentRect;
    return TRUE;
@@ -284,6 +289,7 @@ RcddPresentComposition(PRCDD_PDEV ppdev, const CDD_PRESENT_SOURCE *Source)
    InterlockedIncrement((volatile LONG *)&ppdev->PresentCompletedCount);
    InterlockedIncrement((volatile LONG *)&ppdev->PresentSynchronousCount);
    ppdev->PendingRectCount = 0;
+   LntUpdateDesktopWatch(ppdev->Watch, LntWatchComplete);
    ppdev->SentSeq = ppdev->PendingSeq;
    ppdev->SentRect = *Rect;
    return TRUE;

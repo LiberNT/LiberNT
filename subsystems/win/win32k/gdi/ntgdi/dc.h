@@ -199,6 +199,9 @@ BOOL FASTCALL DC_InvertXform(const XFORM *xformSrc, XFORM *xformDest);
 VOID FASTCALL DC_vUpdateViewportExt(PDC pdc);
 VOID FASTCALL DC_vCopyState(PDC pdcSrc, PDC pdcDst, BOOL To);
 VOID FASTCALL DC_vFinishBlit(PDC pdc1, PDC pdc2);
+VOID DC_vStartDisplayWatch(VOID);
+VOID DC_vStopDisplayWatch(VOID);
+VOID FASTCALL DC_vPrepareForRead(PDC Dc, const RECT *Rect);
 VOID FASTCALL DC_vFinishRead(PDC pdc);
 VOID FASTCALL DC_vPrepareDCsForBlit(PDC pdcDest, const RECT* rcDest, PDC pdcSrc, const RECT* rcSrc);
 

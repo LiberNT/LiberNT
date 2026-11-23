@@ -41,6 +41,8 @@
 /* DWM_ROUTINE_PRESENTED parameter: the frame was presented, or the output is occluded and nothing was presented */
 #define DWM_PRESENTED_FRAME      0
 #define DWM_PRESENTED_OCCLUDED   1
+#define DWM_PRESENTING_FRAME     2
+#define DWM_NO_FRAME_NEEDED      3
 
 /*
  * Internal win32k control channel to the canonical display driver (DrvEscape).

@@ -7,6 +7,7 @@ SeverityNames=(Success=0x0:STATUS_SEVERITY_SUCCESS
               )
 
 FacilityNames=(System=0x0:FACILITY_SYSTEM
+               LiberNTDebug=0x701:FACILITY_LIBERNT_DEBUG
                Runtime=0x2:FACILITY_RUNTIME
                Stubs=0x3:FACILITY_STUBS
                Io=0x4:FACILITY_IO_ERROR_CODE
@@ -1757,6 +1758,17 @@ SymbolicName=CLOCK_WATCHDOG_TIMEOUT
 Language=English
 A clock interrupt expected on a secondary processor was not received within
 the allocated interval.
+.
+
+MessageId=0x1
+Severity=Success
+Facility=LiberNTDebug
+SymbolicName=LIBERNT_DESKTOP_WATCHDOG_TIMEOUT
+Language=English
+The interactive desktop stopped making progress while work was pending.
+Parameter 1 identifies input dispatch (1), compositor presentation (2), or
+framebuffer publication (3). Parameter 2 is the session ID. Parameters 3 and
+4 are the elapsed time and the timeout in milliseconds.
 .
 
 MessageId=0x133

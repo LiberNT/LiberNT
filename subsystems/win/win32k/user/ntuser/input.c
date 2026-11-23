@@ -141,6 +141,7 @@ typedef struct _INPUT_DEVICE
     HANDLE Handle;
     HANDLE EventHandle;
     PKEVENT ReadEvent;
+    PLNT_DESKTOP_WATCH Watch;
     IO_STATUS_BLOCK Iosb;
     BOOLEAN Keyboard;
     BOOLEAN ReadPending;
@@ -299,6 +300,7 @@ InputDeviceClose(
     IO_STATUS_BLOCK Iosb;
     HANDLE Handle;
 
+    LntDestroyDesktopWatch(Device->Watch);
     UserEnterExclusive();
     State->Devices[Index] = NULL;
     UserLeave();
@@ -735,6 +737,7 @@ InputDeviceAttach(
         return;
     }
 
+    Device->Watch = LntCreateDesktopWatch(LntWatchInput, Device->ReadEvent, &Device->Iosb);
     InputTargetRegister(State, Device);
 
     UserEnterExclusive();
@@ -811,6 +814,8 @@ InputDevicesPrepareWait(
             Status = STATUS_FILE_CLOSED;
             if (Device->Handle)
             {
+                KeClearEvent(Device->ReadEvent);
+                LntUpdateDesktopWatch(Device->Watch, LntWatchObserveRead);
                 Status = ZwReadFile(Device->Handle,
                                     Device->EventHandle,
                                     NULL,
@@ -931,10 +936,18 @@ InputDevicesProcess(VOID)
             continue;
         }
 
+        if (Device->Iosb.Information == 0 ||
+            (Device->Keyboard && Device->Iosb.Information != sizeof(KEYBOARD_INPUT_DATA)))
+        {
+            LntUpdateDesktopWatch(Device->Watch, LntWatchComplete);
+            continue;
+        }
+        LntUpdateDesktopWatch(Device->Watch, LntWatchArm);
         if (!Device->Keyboard)
         {
             TRACE("MouseEvent\n");
             InputProcessMouse(Device);
+            LntUpdateDesktopWatch(Device->Watch, LntWatchComplete);
             continue;
         }
 
@@ -949,6 +962,7 @@ InputDevicesProcess(VOID)
         UserProcessKeyboardInput(&Device->Data.Keyboard);
         RawInputSetSourceDevice(NULL);
         UserLeave();
+        LntUpdateDesktopWatch(Device->Watch, LntWatchComplete);
     }
 }
 

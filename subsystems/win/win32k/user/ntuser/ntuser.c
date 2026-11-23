@@ -437,6 +437,7 @@ NtUserInitialize(
         return Status;
     }
 
+    DC_vStartDisplayWatch();
     WritePointerRelease((PVOID volatile *)&gpDisplaySession, Session);
 
 // Initialize Media Change (use hMediaRequestEvent).

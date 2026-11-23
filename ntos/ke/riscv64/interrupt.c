@@ -126,7 +126,7 @@ KiRiscvCallInterruptServiceRoutine(
     if (Raise)
         KfRaiseIrql(Interrupt->SynchronizeIrql);
     KeAcquireSpinLockAtDpcLevel(Interrupt->ActualLock);
-    Handled = Interrupt->ServiceRoutine(Interrupt, Interrupt->ServiceContext);
+    Handled = KiInvokeDeviceIsr(Interrupt);
     KeReleaseSpinLockFromDpcLevel(Interrupt->ActualLock);
     if (Raise)
         KfLowerIrql(OldIrql);

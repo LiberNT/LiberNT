@@ -333,7 +333,7 @@ HidInputOpenRawReader(
     if (!Reader->Report)
         return;
 
-    if (!NT_SUCCESS(InputHoldOpen(&Reader->File, &Target->Path, FILE_READ_DATA)))
+    if (!NT_SUCCESS(InputHoldOpen(&Reader->File, &Target->Path, FILE_READ_DATA, &Reader->Iosb)))
     {
         ExFreePoolWithTag(Reader->Report, USERTAG_HIDDATA);
         RtlZeroMemory(Reader, sizeof(*Reader));
@@ -477,7 +477,7 @@ HidInputAttach(
     Device->Path.Length = Path->Length;
     Device->Path.MaximumLength = Path->Length;
 
-    Status = InputHoldOpen(&Device->File, Path, FILE_READ_DATA);
+    Status = InputHoldOpen(&Device->File, Path, FILE_READ_DATA, &Device->Iosb);
     if (!NT_SUCCESS(Status))
     {
         HidInputClose(Device);
@@ -1055,6 +1055,7 @@ HidInputProcess(VOID)
             UserLeave();
             Reader->Iosb.Information = 0;
         }
+        LntUpdateDesktopWatch(Reader->File.Watch, LntWatchComplete);
     }
 
     for (Index = 0; Index < HIDINPUT_MAX_DEVICES; Index++)
@@ -1067,6 +1068,7 @@ HidInputProcess(VOID)
         {
             if (HidInputDispatchReport(State, Device))
                 Dispatched = TRUE;
+            LntUpdateDesktopWatch(Device->File.Watch, LntWatchComplete);
         }
         else
         {

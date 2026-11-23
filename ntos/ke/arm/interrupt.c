@@ -116,7 +116,7 @@ KiArmServiceInterruptVector(
     do
     {
         KeAcquireSpinLockAtDpcLevel(Interrupt->ActualLock);
-        Handled = Interrupt->ServiceRoutine(Interrupt, Interrupt->ServiceContext);
+        Handled = KiInvokeDeviceIsr(Interrupt);
         KeReleaseSpinLockFromDpcLevel(Interrupt->ActualLock);
         Interrupt->ServiceCount++;
         if (Handled && (Interrupt->Mode == Latched))

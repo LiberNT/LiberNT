@@ -338,7 +338,7 @@ KiWatchdogTicks(
 
     if (Increment == 0) return 0;
 
-    return (ULONG)(((ULONGLONG)Seconds * 10 * 1000 * 1000) / Increment);
+    return (ULONG)min(((ULONGLONG)Seconds * 10000000) / Increment, (ULONGLONG)MAXLONG);
 }
 
 CODE_SEG("INIT")

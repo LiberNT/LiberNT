@@ -200,6 +200,7 @@ DrvEnableSurface(
       goto Failure;
    }
 
+   ppdev->Watch = LntCreateDesktopWatch(LntWatchFramebuffer, NULL, NULL);
    ppdev->hSurfEng = hSurface;
 
    return hSurface;
@@ -238,6 +239,8 @@ DrvDisableSurface(
    VIDEO_MEMORY VideoMemory;
    PPDEV ppdev = (PPDEV)dhpdev;
 
+   LntDestroyDesktopWatch(ppdev->Watch);
+   ppdev->Watch = NULL;
    EngDeleteSurface(ppdev->hSurfEng);
    ppdev->hSurfEng = NULL;
 
@@ -304,6 +307,7 @@ DrvAssertMode(
       }
 
       /* The framebuffer contents are unknown; resync it from the shadow. */
+      LntUpdateDesktopWatch(ppdev->Watch, LntWatchResumeOutput);
       IntFlushShadowRect(ppdev, NULL);
 
       return TRUE;
@@ -313,7 +317,9 @@ DrvAssertMode(
       /*
        * Call the miniport driver to reset the device to a known state.
        */
-      return !EngDeviceIoControl(ppdev->hDriver, IOCTL_VIDEO_RESET_DEVICE,
-                                 NULL, 0, NULL, 0, &ulTemp);
+      if (EngDeviceIoControl(ppdev->hDriver, IOCTL_VIDEO_RESET_DEVICE, NULL, 0, NULL, 0, &ulTemp))
+         return FALSE;
+      LntUpdateDesktopWatch(ppdev->Watch, LntWatchSuspendOutput);
+      return TRUE;
    }
 }

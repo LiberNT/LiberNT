@@ -180,6 +180,8 @@ KiPopDpc(
     *SystemArgument1 = Dpc->SystemArgument1;
     *SystemArgument2 = Dpc->SystemArgument2;
 
+    if (DpcData == &KeGetCurrentPrcb()->DpcData[DPC_NORMAL])
+        KiPrcbDpcTimeCount(KeGetCurrentPrcb()) = 0;
     DpcData->ActiveDpc = Dpc;
     DpcData->DpcQueueDepth--;
 
@@ -697,16 +699,24 @@ KeQueryDpcWatchdogInformation(
     _Out_ PKDPC_WATCHDOG_INFORMATION WatchdogInformation)
 {
     PKPRCB Prcb;
+    ULONG TimeLimit, TimeCount, WatchdogLimit, WatchdogCount;
+    BOOLEAN Enabled;
 
     /* Below DISPATCH_LEVEL there is no one processor to answer for */
     if (KeGetCurrentIrql() < DISPATCH_LEVEL) return STATUS_UNSUCCESSFUL;
 
+    Enabled = KeDisableInterrupts();
     Prcb = KeGetCurrentPrcb();
+    TimeLimit = KiPrcbDpcTimeLimit(Prcb);
+    TimeCount = KiPrcbDpcTimeCount(Prcb);
+    WatchdogLimit = (ULONG)KiPrcbDpcWatchdogPeriod(Prcb);
+    WatchdogCount = (ULONG)KiPrcbDpcWatchdogCount(Prcb);
+    KeRestoreInterrupts(Enabled);
 
-    WatchdogInformation->DpcTimeLimit = KiPrcbDpcTimeLimit(Prcb);
-    WatchdogInformation->DpcTimeCount = KiPrcbDpcTimeCount(Prcb);
-    WatchdogInformation->DpcWatchdogLimit = KiPrcbDpcWatchdogPeriod(Prcb);
-    WatchdogInformation->DpcWatchdogCount = KiPrcbDpcWatchdogCount(Prcb);
+    WatchdogInformation->DpcTimeLimit = TimeLimit;
+    WatchdogInformation->DpcTimeCount = (TimeCount < TimeLimit) ? TimeLimit - TimeCount : 0;
+    WatchdogInformation->DpcWatchdogLimit = WatchdogLimit;
+    WatchdogInformation->DpcWatchdogCount = (WatchdogCount < WatchdogLimit) ? WatchdogLimit - WatchdogCount : 0;
     WatchdogInformation->Reserved = 0;
 
     return STATUS_SUCCESS;
@@ -733,7 +743,6 @@ KiRetireDpcList(
     ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
     Prcb->DpcRoutineActive = TRUE;
-    KiPrcbDpcWatchdogCount(Prcb) = 0;
 
     /*
      * The caller arrives from a trap gate, which left interrupts off, and
@@ -756,14 +765,9 @@ KiRetireDpcList(
         if (Dpc == NULL)
             break;
 
-        /*
-         * The watchdog measures one routine at a time as well as the pass as
-         * a whole, so the per-routine count starts again here while the
-         * pass count carries on.
-         */
-        KiPrcbDpcTimeCount(Prcb) = 0;
-
         Routine(Dpc, Context, SystemArgument1, SystemArgument2);
+        DpcData->ActiveDpc = NULL;
+        KiPrcbDpcTimeCount(Prcb) = 0;
 
         if (KeGetCurrentIrql() != DISPATCH_LEVEL)
         {
@@ -781,7 +785,6 @@ KiRetireDpcList(
     Prcb->DpcRoutineActive = FALSE;
     KiClearDpcRequestState(Prcb);
     KiPrcbDpcTimeCount(Prcb) = 0;
-    KiPrcbDpcWatchdogCount(Prcb) = 0;
 
     /* The rate is what the next queue decides its urgency against */
     Prcb->DpcRequestRate = ((DpcData->DpcCount - Prcb->DpcLastCount) +

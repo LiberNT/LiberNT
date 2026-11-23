@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ndk/kbd.h>
+#include <reactos/desktopwatchdog.h>
  
 typedef struct tagKBDNLSLAYER
 {
@@ -129,6 +130,7 @@ typedef struct _INPUT_HOLD_FILE
     HANDLE Handle;
     HANDLE EventHandle;
     PKEVENT ReadEvent;
+    PLNT_DESKTOP_WATCH Watch;
     struct _INPUT_HOLD_TARGET *Target;
     BOOLEAN Closed;
 } INPUT_HOLD_FILE, *PINPUT_HOLD_FILE;
@@ -137,7 +139,7 @@ typedef VOID (NTAPI *PINPUT_HOLD_ENDED)(PVOID Owner, PINPUT_HOLD_FILE File, PCUN
                                         PVOID Context);
 
 VOID NTAPI InputHoldInitialize(PINPUT_HOLD Hold, PKEVENT Wake);
-NTSTATUS NTAPI InputHoldOpen(PINPUT_HOLD_FILE File, PUNICODE_STRING Path, ACCESS_MASK DesiredAccess);
+NTSTATUS NTAPI InputHoldOpen(PINPUT_HOLD_FILE File, PUNICODE_STRING Path, ACCESS_MASK DesiredAccess, PIO_STATUS_BLOCK ReadStatus);
 NTSTATUS NTAPI InputHoldIoctl(PINPUT_HOLD_FILE File, ULONG IoControlCode, PVOID Buffer, ULONG Length);
 VOID NTAPI InputHoldFollow(PINPUT_HOLD Hold, PINPUT_HOLD_FILE File, PCUNICODE_STRING Path, PVOID Owner,
                            PDRIVER_OBJECT DriverObject);

@@ -960,6 +960,7 @@ VirtGpuDispDirtyBytes(_In_ const RECTL *Rect)
 static VOID
 VirtGpuDispMarkDirty(_Inout_ PPDEV ppdev, _In_ const RECTL *Rect)
 {
+    LntUpdateDesktopWatch(ppdev->Watch, LntWatchArm);
     if (!ppdev->DirtyValid)
     {
         ppdev->DirtyRect = *Rect;
@@ -983,7 +984,7 @@ VirtGpuDispResetDirty(_Inout_ PPDEV ppdev)
     ppdev->DirtyRect.bottom = 0;
 }
 
-static VOID
+static BOOL
 VirtGpuDispFlush2DRect(_In_ PPDEV ppdev, _In_ const RECTL *Rect)
 {
     VIRTGPU_DIRTY_RECT DirtyRect;
@@ -994,13 +995,13 @@ VirtGpuDispFlush2DRect(_In_ PPDEV ppdev, _In_ const RECTL *Rect)
     DirtyRect.Right = Rect->right;
     DirtyRect.Bottom = Rect->bottom;
 
-    EngDeviceIoControl(ppdev->hDriver,
+    return EngDeviceIoControl(ppdev->hDriver,
                        IOCTL_VIDEO_VIRTGPU_FLUSH_RECT,
                        &DirtyRect,
                        sizeof(DirtyRect),
                        NULL,
                        0,
-                       &Returned);
+                       &Returned) == 0;
 }
 
 VOID
@@ -1017,12 +1018,18 @@ VirtGpuDispCommitDirty(_Inout_ PPDEV ppdev)
     if (ppdev->Gdi3DEnabled)
     {
         if (VirtGpuDispGdi3DUploadRect(ppdev, &Dirty))
+        {
+            LntUpdateDesktopWatch(ppdev->Watch, LntWatchComplete);
             return;
+        }
 
         VirtGpuDispDisableGdi3D(ppdev);
     }
 
-    VirtGpuDispFlush2DRect(ppdev, &Dirty);
+    if (VirtGpuDispFlush2DRect(ppdev, &Dirty))
+        LntUpdateDesktopWatch(ppdev->Watch, LntWatchComplete);
+    else
+        VirtGpuDispMarkDirty(ppdev, &Dirty);
 }
 
 VOID
@@ -1292,7 +1299,7 @@ VirtGpuDispInitScreenInfo(
     GdiInfo->ciDevice.BlueGamma = 20000;
 
     DevInfo->flGraphicsCaps = 0;
-    DevInfo->flGraphicsCaps2 = 0;
+    DevInfo->flGraphicsCaps2 = GCAPS2_SYNCFLUSH | GCAPS2_SYNCTIMER;
     DevInfo->lfDefaultFont = SystemFont;
     DevInfo->lfAnsiVarFont = AnsiVariableFont;
     DevInfo->lfAnsiFixFont = AnsiFixedFont;
@@ -1869,6 +1876,7 @@ DrvEnableSurface(_In_ DHPDEV dhpdev)
         return NULL;
     }
 
+    ppdev->Watch = LntCreateDesktopWatch(LntWatchFramebuffer, NULL, NULL);
     ppdev->hSurfEng = DeviceSurface;
     ppdev->hSurfFrameBuffer = FrameBufferSurface;
     VirtGpuDispFlushRect(ppdev, NULL);
@@ -1883,6 +1891,8 @@ DrvDisableSurface(_In_ DHPDEV dhpdev)
     VIDEO_MEMORY VideoMemory;
     ULONG Returned;
 
+    LntDestroyDesktopWatch(ppdev->Watch);
+    ppdev->Watch = NULL;
     VirtGpuDispDisablePointer(ppdev);
     VirtGpuDispDisableGdi3D(ppdev);
 
@@ -1941,17 +1951,21 @@ DrvAssertMode(_In_ DHPDEV dhpdev, _In_ BOOL bEnable)
             VirtGpuDispDisableGdi3D(ppdev);
         }
 
+        LntUpdateDesktopWatch(ppdev->Watch, LntWatchResumeOutput);
         VirtGpuDispFlushRect(ppdev, NULL);
         return TRUE;
     }
 
-    return EngDeviceIoControl(ppdev->hDriver,
+    if (EngDeviceIoControl(ppdev->hDriver,
                               IOCTL_VIDEO_RESET_DEVICE,
                               NULL,
                               0,
                               NULL,
                               0,
-                              &Returned) == 0;
+                              &Returned) != 0)
+        return FALSE;
+    LntUpdateDesktopWatch(ppdev->Watch, LntWatchSuspendOutput);
+    return TRUE;
 }
 
 ULONG
@@ -2023,12 +2037,11 @@ DrvSynchronizeSurface(
 {
     PPDEV ppdev;
 
-    UNREFERENCED_PARAMETER(fl);
-
     ppdev = VirtGpuDispFindPdev(pso, NULL, NULL);
     if ((ppdev != NULL) && VirtGpuDispIsPrimarySurface(ppdev, pso))
     {
-        VirtGpuDispFlushRect(ppdev, prcl);
+        if (prcl || !(fl & (DSS_TIMER_EVENT | DSS_FLUSH_EVENT)))
+            VirtGpuDispFlushRect(ppdev, prcl);
         VirtGpuDispCommitDirty(ppdev);
     }
 }

@@ -474,6 +474,7 @@ RcddAssertMode(
          RcddSetPaletteEntries(dhpdev, ppdev->PaletteEntries, 0, 256);
       }
 
+      LntUpdateDesktopWatch(ppdev->Watch, LntWatchResumeOutput);
       RcddRemapSurface(ppdev);
 
       /* The scan-out contents are unknown; re-present the full shadow. */
@@ -483,6 +484,8 @@ RcddAssertMode(
    }
 
    /* Reset the device to a known state via the WDDM display device. */
-   return !EngDeviceIoControl(ppdev->hDriver, IOCTL_VIDEO_RESET_DEVICE,
-                              NULL, 0, NULL, 0, &ulTemp);
+   if (EngDeviceIoControl(ppdev->hDriver, IOCTL_VIDEO_RESET_DEVICE, NULL, 0, NULL, 0, &ulTemp))
+      return FALSE;
+   LntUpdateDesktopWatch(ppdev->Watch, LntWatchSuspendOutput);
+   return TRUE;
 }

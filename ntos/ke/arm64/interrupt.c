@@ -1560,7 +1560,7 @@ KiArm64CallInterruptServiceRoutine(
 
     if (RaiseIrql) KfRaiseIrql(Interrupt->SynchronizeIrql);
     if (AcquireLock) KxAcquireSpinLock(Interrupt->ActualLock);
-    Handled = Interrupt->ServiceRoutine(Interrupt, Interrupt->ServiceContext);
+    Handled = KiInvokeDeviceIsr(Interrupt);
     if (AcquireLock) KxReleaseSpinLock(Interrupt->ActualLock);
     if (RaiseIrql) KfLowerIrql(OldIrql);
     return Handled;

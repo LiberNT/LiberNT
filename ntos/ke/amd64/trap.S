@@ -25,6 +25,7 @@ EXTERN KiXmmExceptionHandler:PROC
 EXTERN KiMcheckAbortHandler:PROC
 EXTERN KiDeliverApc:PROC
 EXTERN KiDpcInterruptHandler:PROC
+EXTERN KiInvokeDeviceIsr:PROC
 EXTERN KiIpiInterruptHandler:PROC
 EXTERN PsConvertToGuiThread:PROC
 EXTERN KiConvertToGuiThreadFailure:PROC
@@ -997,8 +998,7 @@ FUNC KiInterruptDispatch
     call KeAcquireSpinLockAtDpcLevel
 
     mov rcx, rbx
-    mov rdx, [rbx + KINTERRUPT_ServiceContext]
-    call qword ptr [rbx + KINTERRUPT_ServiceRoutine]
+    call KiInvokeDeviceIsr
 
     mov rcx, [rbx + KINTERRUPT_ActualLock]
     call KeReleaseSpinLockFromDpcLevel

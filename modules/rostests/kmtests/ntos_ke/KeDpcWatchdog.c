@@ -19,11 +19,42 @@ TestTraceWatchdog(
           Info->DpcWatchdogCount, Info->DpcWatchdogLimit, Info->Reserved);
 }
 
+typedef struct _WATCHDOG_TEST_CONTEXT
+{
+    KEVENT Complete;
+    KDPC_WATCHDOG_INFORMATION Before;
+    KDPC_WATCHDOG_INFORMATION After;
+    NTSTATUS BeforeStatus;
+    NTSTATUS AfterStatus;
+} WATCHDOG_TEST_CONTEXT;
+
+static
+VOID
+NTAPI
+TestWatchdogDpc(
+    _In_ PKDPC Dpc,
+    _In_opt_ PVOID DeferredContext,
+    _In_opt_ PVOID SystemArgument1,
+    _In_opt_ PVOID SystemArgument2)
+{
+    WATCHDOG_TEST_CONTEXT *Context = DeferredContext;
+
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    Context->BeforeStatus = KeQueryDpcWatchdogInformation(&Context->Before);
+    Context->AfterStatus = KeQueryDpcWatchdogInformation(&Context->After);
+    KeSetEvent(&Context->Complete, IO_NO_INCREMENT, FALSE);
+}
+
 START_TEST(KeDpcWatchdog)
 {
     KDPC_WATCHDOG_INFORMATION Info;
     NTSTATUS Status;
     KIRQL OldIrql;
+    WATCHDOG_TEST_CONTEXT Context;
+    KDPC Dpc;
 
     RtlFillMemory(&Info, sizeof(Info), 0xCC);
     Status = KeQueryDpcWatchdogInformation(&Info);
@@ -38,4 +69,32 @@ START_TEST(KeDpcWatchdog)
     KeLowerIrql(OldIrql);
     TestTraceWatchdog("dispatch", Status, &Info);
     ok_eq_hex(Status, STATUS_SUCCESS);
+
+    RtlZeroMemory(&Context, sizeof(Context));
+    KeInitializeEvent(&Context.Complete, NotificationEvent, FALSE);
+    KeInitializeDpc(&Dpc, TestWatchdogDpc, &Context);
+    if (!KeInsertQueueDpc(&Dpc, NULL, NULL))
+    {
+        ok(FALSE, "Failed to queue watchdog test DPC\n");
+        return;
+    }
+    KeWaitForSingleObject(&Context.Complete, Executive, KernelMode, FALSE, NULL);
+    KeFlushQueuedDpcs();
+
+    TestTraceWatchdog("DPC start", Context.BeforeStatus, &Context.Before);
+    TestTraceWatchdog("DPC end", Context.AfterStatus, &Context.After);
+    ok_eq_hex(Context.BeforeStatus, STATUS_SUCCESS);
+    ok_eq_hex(Context.AfterStatus, STATUS_SUCCESS);
+    if (Context.Before.DpcTimeLimit != 0)
+    {
+        ok(Context.Before.DpcTimeCount >= Context.After.DpcTimeCount,
+           "Single-DPC budget increased: %lu -> %lu\n",
+           Context.Before.DpcTimeCount, Context.After.DpcTimeCount);
+    }
+    if (Context.Before.DpcWatchdogLimit != 0)
+    {
+        ok(Context.Before.DpcWatchdogCount >= Context.After.DpcWatchdogCount,
+           "Cumulative budget increased: %lu -> %lu\n",
+           Context.Before.DpcWatchdogCount, Context.After.DpcWatchdogCount);
+    }
 }

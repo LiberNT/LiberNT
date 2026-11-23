@@ -2392,7 +2392,7 @@ IntGdiGetPixel(
     rcDest.bottom = ptlSrc.y + 1;
 
     /* Prepare DC for blit */
-    DC_vPrepareDCsForBlit(pdc, &rcDest, NULL, NULL);
+    DC_vPrepareForRead(pdc, &rcDest);
     Prepared = TRUE;
 
     {

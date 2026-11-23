@@ -4479,6 +4479,7 @@ DwmComposeLoop(HANDLE hStopEvent)
         {
             HANDLE WaitHandles[2] = {hStopEvent, hWake};
 
+            NtUserCallOneParam(DWM_NO_FRAME_NEEDED, DWM_ROUTINE_PRESENTED);
             if (MsgWaitForMultipleObjects(ARRAYSIZE(WaitHandles), WaitHandles, FALSE,
                                           hdr->IdleRetryMs != 0 ? hdr->IdleRetryMs : INFINITE,
                                           QS_ALLINPUT) == WAIT_OBJECT_0)
@@ -4582,6 +4583,8 @@ DwmComposeLoop(HANDLE hStopEvent)
 
             if (pr > pl && pb > pt)
             {
+                if (!hdr->Dirty)
+                    NtUserCallOneParam(DWM_PRESENTING_FRAME, DWM_ROUTINE_PRESENTED);
                 if (refreshBackdrop)
                 {
                     RECT fullBackdrop = {0, 0, g_W, g_H};

@@ -31,6 +31,7 @@
 /* DWM composition contract (CDD_ESCAPE_*, IOCTL_VIDEO_DXGK_*): shared with
  * win32k and dxgkrnl. */
 #include <reactos/dwmframe.h>
+#include <reactos/desktopwatchdog.h>
 
 #define RCDD_DISPLAY_TILE_DIMENSION 9
 #define RCDD_DISPLAY_TILE_COUNT \
@@ -40,6 +41,7 @@ typedef struct _RCDD_PDEV
 {
    HANDLE hDriver;             /* Handle to \Device\VideoN served by dxgkrnl */
    HDEV hDevEng;               /* GDI device handle (from DrvCompletePDEV)   */
+   PLNT_DESKTOP_WATCH Watch;
    HSURF hSurfEng;             /* The primary surface handed to GDI          */
    ULONG ModeIndex;
    ULONG ScreenWidth;

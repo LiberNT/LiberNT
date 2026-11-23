@@ -272,6 +272,7 @@ list(APPEND SOURCE
     ${REACTOS_SOURCE_DIR}/ntos/ke/arcconfig.c
     ${REACTOS_SOURCE_DIR}/ntos/ke/balance.c
     ${REACTOS_SOURCE_DIR}/ntos/ke/clockint.c
+    ${REACTOS_SOURCE_DIR}/ntos/ke/desktopwatch.c
     ${REACTOS_SOURCE_DIR}/ntos/ke/cpuctrl.c
     ${REACTOS_SOURCE_DIR}/ntos/ke/crash.c
     ${REACTOS_SOURCE_DIR}/ntos/ke/dispatch.c

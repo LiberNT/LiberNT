@@ -78,7 +78,7 @@ KiInterruptDispatch(
         KiExitInterrupt(TrapFrame, OldIrql, TRUE);
 
     KxAcquireSpinLock(Interrupt->ActualLock);
-    Interrupt->ServiceRoutine(Interrupt, Interrupt->ServiceContext);
+    KiInvokeDeviceIsr(Interrupt);
     KxReleaseSpinLock(Interrupt->ActualLock);
 
     KiExitInterrupt(TrapFrame, OldIrql, FALSE);
@@ -98,7 +98,7 @@ KiServiceChainedInterrupt(
         OldIrql = KfRaiseIrql(Interrupt->SynchronizeIrql);
 
     KxAcquireSpinLock(Interrupt->ActualLock);
-    Handled = Interrupt->ServiceRoutine(Interrupt, Interrupt->ServiceContext);
+    Handled = KiInvokeDeviceIsr(Interrupt);
     KxReleaseSpinLock(Interrupt->ActualLock);
 
     if (Raise)

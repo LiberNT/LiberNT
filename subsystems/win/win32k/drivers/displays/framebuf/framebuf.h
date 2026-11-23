@@ -27,6 +27,7 @@
 #include <winddi.h>
 #include <winioctl.h>
 #include <ntddvdeo.h>
+#include <reactos/desktopwatchdog.h>
 
 //#define EXPERIMENTAL_MOUSE_CURSOR_SUPPORT
 
@@ -55,6 +56,7 @@ typedef struct _PDEV
 {
    HANDLE hDriver;
    HDEV hDevEng;
+   PLNT_DESKTOP_WATCH Watch;
    HSURF hSurfEng;
    ULONG ModeIndex;
    ULONG ScreenWidth;

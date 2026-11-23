@@ -971,6 +971,14 @@ KiUpdateIdleRunTime(
     PKTRAP_FRAME TrapFrame,
     ULONG Ticks);
 
+ULONGLONG KiDesktopInterruptTime(VOID);
+VOID KiCheckDesktopWatchdogs(ULONGLONG Now);
+
+BOOLEAN
+NTAPI
+KiInvokeDeviceIsr(
+    _In_ PKINTERRUPT Interrupt);
+
 VOID
 NTAPI
 KiUpdateRunTime(

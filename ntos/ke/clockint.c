@@ -239,48 +239,67 @@ KiWasInUserMode(
     return KeGetTrapFramePc(TrapFrame) < (ULONG_PTR)MM_SYSTEM_RANGE_START;
 }
 
-/*
- * Charges a clock period to the deferred routine this processor is running and
- * stops the system where it has run for too long.
- *
- * A routine that overruns has either deadlocked or is doing work that belongs
- * in a thread. Either way the processor it is on is lost to everything else,
- * including the dispatcher, so saying so is the only way it is ever found.
- *
- * Nothing is reported while a debugger is attached: a routine stopped at a
- * breakpoint has not overrun, it has been stopped.
- */
+ULONGLONG
+KiDesktopInterruptTime(VOID)
+{
+    return KiGetInterruptTime() - KiInterruptTimeBias;
+}
+
+static PULONG volatile KiIsrWatchdogCount[KE_MAXIMUM_PROCESSORS];
+
+BOOLEAN
+NTAPI
+KiInvokeDeviceIsr(
+    _In_ PKINTERRUPT Interrupt)
+{
+    PKPRCB Prcb = KeGetCurrentPrcb();
+    ULONG Count = 0;
+    PULONG Outer;
+    BOOLEAN Handled;
+
+    ASSERT(Prcb->Number < RTL_NUMBER_OF(KiIsrWatchdogCount));
+    Outer = InterlockedExchangePointer((PVOID volatile *)&KiIsrWatchdogCount[Prcb->Number], &Count);
+    Handled = Interrupt->ServiceRoutine(Interrupt, Interrupt->ServiceContext);
+    InterlockedExchangePointer((PVOID volatile *)&KiIsrWatchdogCount[Prcb->Number], Outer);
+    return Handled;
+}
+
 static
 VOID
 KiChargeDpcWatchdog(
     _Inout_ PKPRCB Prcb,
+    _In_ KIRQL Irql,
     _In_ ULONG Ticks)
 {
-    KiPrcbDpcTimeCount(Prcb) += Ticks;
-    KiPrcbDpcWatchdogCount(Prcb) += (LONG)Ticks;
+    PULONG Count;
+    ULONG Total, Period;
 
-    if (KdDebuggerEnabled && !KdDebuggerNotPresent)
+    if (Irql < DISPATCH_LEVEL ||
+        (Irql == DISPATCH_LEVEL && Prcb->CurrentThread == Prcb->IdleThread &&
+         !Prcb->DpcRoutineActive && !KiIsrWatchdogCount[Prcb->Number]))
+    {
+        KiPrcbDpcWatchdogCount(Prcb) = 0;
+        return;
+    }
+    if (!Ticks || KdEnteredDebugger || KeBugCheckActive || KiInterruptTimeFrozen)
         return;
 
-    if ((KiPrcbDpcTimeLimit(Prcb) != 0) &&
-        (KiPrcbDpcTimeCount(Prcb) > KiPrcbDpcTimeLimit(Prcb)))
+    Count = KiIsrWatchdogCount[Prcb->Number];
+    if (!Count && Prcb->DpcRoutineActive && Prcb->DpcData[DPC_NORMAL].ActiveDpc)
+        Count = &KiPrcbDpcTimeCount(Prcb);
+    if (Count)
     {
-        KeBugCheckEx(DPC_WATCHDOG_VIOLATION,
-                     0,
-                     KiPrcbDpcTimeCount(Prcb),
-                     KiPrcbDpcTimeLimit(Prcb),
-                     (ULONG_PTR)Prcb->DpcData[DPC_NORMAL].ActiveDpc);
+        *Count += min(Ticks, MAXULONG - *Count);
+        if (KiPrcbDpcTimeLimit(Prcb) && *Count >= KiPrcbDpcTimeLimit(Prcb))
+            KeBugCheckEx(DPC_WATCHDOG_VIOLATION, 0, *Count, KiPrcbDpcTimeLimit(Prcb), 0);
     }
 
-    if ((KiPrcbDpcWatchdogPeriod(Prcb) != 0) &&
-        (KiPrcbDpcWatchdogCount(Prcb) > KiPrcbDpcWatchdogPeriod(Prcb)))
-    {
-        KeBugCheckEx(DPC_WATCHDOG_VIOLATION,
-                     1,
-                     (ULONG_PTR)KiPrcbDpcWatchdogCount(Prcb),
-                     (ULONG_PTR)KiPrcbDpcWatchdogPeriod(Prcb),
-                     (ULONG_PTR)Prcb->DpcData[DPC_NORMAL].ActiveDpc);
-    }
+    Total = (ULONG)KiPrcbDpcWatchdogCount(Prcb);
+    Total += min(Ticks, (ULONG)MAXLONG - Total);
+    KiPrcbDpcWatchdogCount(Prcb) = (LONG)Total;
+    Period = (ULONG)KiPrcbDpcWatchdogPeriod(Prcb);
+    if (Period && Total >= Period)
+        KeBugCheckEx(DPC_WATCHDOG_VIOLATION, 1, Period, 0, 0);
 }
 
 /* Ten seconds without a clock interrupt of its own stops the system: the processor is hung */
@@ -861,6 +880,8 @@ KiTickClockOwner(
 
     ASSERT(KiClockOwnerPrcb == KeGetCurrentPrcb());
 
+    if (!KiInterruptTimeFrozen && !KdEnteredDebugger && !KeBugCheckActive)
+        KiCheckDesktopWatchdogs(InterruptTime - KiInterruptTimeBias);
     KdpLogWatchdogCheck(InterruptTime);
 
     if (KdDebuggerEnabled && KdPollBreakIn())
@@ -961,7 +982,6 @@ KiChargeRunTime(
     {
         Prcb->DpcTime += Ticks;
         Prcb->KernelTime += Ticks;
-        KiChargeDpcWatchdog(Prcb, Ticks);
     }
     else if (KiWasInUserMode(TrapFrame))
     {
@@ -1028,6 +1048,8 @@ KiUpdateRunTime(
 {
     PKPRCB Prcb = KeGetCurrentPrcb();
 
+    if (KiClockStopSeen[Prcb->Number] == ReadAcquire(&KiClockStopCount))
+        KiChargeDpcWatchdog(Prcb, Irql, Ticks);
     KiCheckClockWatchdog(Prcb, Ticks);
     KiChargeRunTime(Prcb, TrapFrame, Irql, Ticks);
 }
@@ -1045,6 +1067,7 @@ KiUpdateIdleRunTime(
     ASSERT(Prcb->CurrentThread == Prcb->IdleThread);
 
     InterlockedExchange(&Prcb->ClockKeepAlive, 0);
+    KiPrcbDpcWatchdogCount(Prcb) = 0;
     KiChargeRunTime(Prcb, TrapFrame, DISPATCH_LEVEL, Ticks);
 }
 

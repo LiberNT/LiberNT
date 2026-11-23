@@ -14,6 +14,7 @@
 #include "composition.h"
 #include "dcomposition.h"
 #include <reactos/dwmframe.h>
+#include <reactos/desktopwatchdog.h>
 #include "captioncache.h"
 #if defined(REACTOS_GRAPHICS_DRIVER_MODEL_WDDM)
 #include "drivers/wddm/wddm_bridge.h"
@@ -257,6 +258,7 @@ static LONGLONG        g_DwmWatchdogStart = 0;
 /* Damage wake event for dwm (referenced from dwm's handle), so dwm blocks
  * instead of polling when the desktop is idle. */
 static PKEVENT         g_DwmWakeEvent = NULL;
+static PLNT_DESKTOP_WATCH g_DwmWatch;
 static BOOL            g_DwmPointerComposed = FALSE;
 static BOOL            g_DwmScreenMirror = FALSE;
 static volatile LONG   g_ScreenReadRequest = 0;
@@ -521,6 +523,7 @@ IntCompositionDwmWake(VOID)
 {
     if (g_DwmWakeEvent != NULL)
     {
+        LntUpdateDesktopWatch(g_DwmWatch, LntWatchArm);
         InterlockedCompareExchange64(&g_DwmWakePendingTime, (LONGLONG)KeQueryInterruptTime(), 0);
         KeSetEvent(g_DwmWakeEvent, IO_NO_INCREMENT, FALSE);
     }
@@ -591,12 +594,24 @@ IntCompositionDwmPresented(_In_ DWORD_PTR Param)
         return STATUS_ACCESS_DENIED;
     if (Param == DWM_PRESENTED_OCCLUDED)
     {
+        LntUpdateDesktopWatch(g_DwmWatch, LntWatchOccluded);
         /* An occluded compositor pulls no frames but is alive: keep the watchdog from tearing composition down */
         g_DwmLastFrameTime = (LONGLONG)KeQueryInterruptTime();
         return STATUS_SUCCESS;
     }
+    if (Param == DWM_NO_FRAME_NEEDED)
+    {
+        LntUpdateDesktopWatch(g_DwmWatch, LntWatchEmptyFrame);
+        return STATUS_SUCCESS;
+    }
+    if (Param == DWM_PRESENTING_FRAME)
+    {
+        LntUpdateDesktopWatch(g_DwmWatch, LntWatchDirtyFrame);
+        return STATUS_SUCCESS;
+    }
     if (Param != DWM_PRESENTED_FRAME)
         return STATUS_INVALID_PARAMETER;
+    LntUpdateDesktopWatch(g_DwmWatch, LntWatchPresented);
     g_DwmFramePresented = g_DwmFrameIssued;
     IntCompositionWakeFlushWaiters();
     return STATUS_SUCCESS;
@@ -3192,6 +3207,7 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
     if (Input.BufBytes < DWM_FRAME_BYTES)
         return STATUS_BUFFER_TOO_SMALL;
 
+    LntUpdateDesktopWatch(g_DwmWatch, LntWatchPull);
     InterlockedExchange64(&g_DwmWakePendingTime, 0);
 
     /* The previous frame's imports and GPU reads have completed before DWM
@@ -3833,6 +3849,8 @@ IntCompositionDwmGetFrame(_In_ PVOID pUser)
         IntCompositionMarkDamage(TRUE);
     else
     {
+        if (Frame.Dirty)
+            LntUpdateDesktopWatch(g_DwmWatch, LntWatchDirtyFrame);
         ++g_DwmFrameIssued;
         g_DwmLastFrameTime = (LONGLONG)KeQueryInterruptTime();
     }
@@ -3921,6 +3939,7 @@ IntCompositionDwmTeardown(VOID)
     PEPROCESS Process;
     PKEVENT WakeEvent;
 
+    LntUpdateDesktopWatch(g_DwmWatch, LntWatchDetach);
     g_DwmAttached = FALSE;
     g_DwmPointerComposed = FALSE;
     g_DwmScreenMirror = FALSE;
@@ -3976,6 +3995,8 @@ IntCompositionUnload(VOID)
 {
     PKEVENT ScreenReadEvent = InterlockedExchangePointer((PVOID *)&g_ScreenReadEvent, NULL);
 
+    LntDestroyDesktopWatch(g_DwmWatch);
+    g_DwmWatch = NULL;
     if (ScreenReadEvent != NULL)
         ExFreePoolWithTag(ScreenReadEvent, 'rSwD');
 }
@@ -4093,6 +4114,12 @@ IntCompositionDwmAttach(_In_ PVOID pUser)
 
         /* Allocate the mandatory wake channel before disturbing an existing
          * attachment. Re-attach is therefore failure-atomic. */
+        if (g_DwmWatch == NULL)
+        {
+            g_DwmWatch = LntCreateDesktopWatch(LntWatchCompositor, NULL, NULL);
+            if (g_DwmWatch == NULL)
+                return STATUS_INSUFFICIENT_RESOURCES;
+        }
         hWake = IntCompositionCreateDwmEvent(&WakeEvent);
         if (hWake == NULL)
             return STATUS_INSUFFICIENT_RESOURCES;
@@ -4100,6 +4127,7 @@ IntCompositionDwmAttach(_In_ PVOID pUser)
         g_DwmWakeEvent = WakeEvent;
         ObReferenceObject(CurrentProcess);
         g_DwmProcess = CurrentProcess;
+        LntUpdateDesktopWatch(g_DwmWatch, LntWatchAttach);
         g_DwmAttached = TRUE;
         g_DwmLastFrameTime = (LONGLONG)KeQueryInterruptTime();
 

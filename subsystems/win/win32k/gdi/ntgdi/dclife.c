@@ -7,12 +7,34 @@
  */
 
 #include <win32k.h>
+#include <reactos/desktopwatchdog.h>
 
 #define NDEBUG
 #include <debug.h>
 
 // FIXME: Windows uses 0x0012009f
 #define DIRTY_DEFAULT DIRTY_CHARSET|DIRTY_BACKGROUND|DIRTY_TEXT|DIRTY_LINE|DIRTY_FILL
+
+static PLNT_DESKTOP_WATCH DirectDrawWatch;
+
+VOID DC_vStartDisplayWatch(VOID)
+{
+    ASSERT(DirectDrawWatch == NULL);
+    DirectDrawWatch = LntCreateDesktopWatch(LntWatchFramebuffer, NULL, NULL);
+}
+
+VOID DC_vStopDisplayWatch(VOID)
+{
+    LntDestroyDesktopWatch(DirectDrawWatch);
+    DirectDrawWatch = NULL;
+}
+
+static BOOL
+DC_bWatchDesktopDraw(PDC Dc)
+{
+    return Dc->dctype == DCTYPE_DIRECT && !(Dc->fs & DC_REDIRECTION) &&
+           Dc->ppdev && (Dc->ppdev->flFlags & PDEV_DISPLAY) && UserIsEntered();
+}
 
 PSURFACE psurfDefaultBitmap = NULL;
 PBRUSH pbrDefaultBrush = NULL;
@@ -504,9 +526,8 @@ DC_vUpdateDC(PDC pdc)
 /* Prepare a blit for up to 2 DCs */
 /* rc1 and rc2 are the rectangles where we want to draw or
  * from where we take pixels. */
-VOID
-FASTCALL
-DC_vPrepareDCsForBlit(
+static VOID
+DC_vPrepareDCs(
     PDC pdcDest,
     const RECT* rcDest,
     PDC pdcSrc,
@@ -632,6 +653,20 @@ DC_vPrepareDCsForBlit(
 #endif
 }
 
+VOID FASTCALL
+DC_vPrepareDCsForBlit(PDC Dest, const RECT *DestRect, PDC Src, const RECT *SrcRect)
+{
+    if (DC_bWatchDesktopDraw(Dest))
+        LntUpdateDesktopWatch(DirectDrawWatch, LntWatchBeginDraw);
+    DC_vPrepareDCs(Dest, DestRect, Src, SrcRect);
+}
+
+VOID FASTCALL
+DC_vPrepareForRead(PDC Dc, const RECT *Rect)
+{
+    DC_vPrepareDCs(Dc, Rect, NULL, NULL);
+}
+
 /* Release the locks and cursor exclusion for one or two prepared DCs. */
 static VOID
 FASTCALL
@@ -681,7 +716,11 @@ VOID
 FASTCALL
 DC_vFinishBlit(PDC pdcDest, PDC pdcSrc)
 {
+    BOOL Direct = DC_bWatchDesktopDraw(pdcDest);
+
     DC_vFinishBlitInternal(pdcDest, pdcSrc, TRUE);
+    if (Direct)
+        LntUpdateDesktopWatch(DirectDrawWatch, LntWatchEndDraw);
 }
 
 VOID

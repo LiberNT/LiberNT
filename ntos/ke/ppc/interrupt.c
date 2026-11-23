@@ -182,7 +182,7 @@ KiPpcExternalInterrupt(_Inout_ PKTRAP_FRAME TrapFrame)
             if (Interrupt->SynchronizeIrql > KI_PPC_EXTERNAL_IRQL)
                 RaisedIrql = KfRaiseIrql(Interrupt->SynchronizeIrql);
             KeAcquireSpinLockAtDpcLevel(Interrupt->ActualLock);
-            Handled = Interrupt->ServiceRoutine(Interrupt, Interrupt->ServiceContext);
+            Handled = KiInvokeDeviceIsr(Interrupt);
             KeReleaseSpinLockFromDpcLevel(Interrupt->ActualLock);
             if (Interrupt->SynchronizeIrql > KI_PPC_EXTERNAL_IRQL)
                 KfLowerIrql(RaisedIrql);

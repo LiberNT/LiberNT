@@ -3692,3 +3692,7 @@
 @ stdcall -arch=arm,arm64 HalWheaHandleSea(ptr)
 @ stdcall -arch=arm,arm64 HalWheaHandleSei(ptr)
 @ stdcall -arch=arm,arm64 HalWheaUpdateCmciPolicy(ptr)
+
+@ stdcall LntCreateDesktopWatch(long ptr ptr)
+@ stdcall LntDestroyDesktopWatch(ptr)
+@ stdcall LntUpdateDesktopWatch(ptr long)
