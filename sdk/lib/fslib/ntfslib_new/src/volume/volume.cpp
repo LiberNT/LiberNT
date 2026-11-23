@@ -221,6 +221,7 @@ Volume::~Volume()
     CachedBitmapData = NULL;
     delete[] BitmapWorkBuffer;
     BitmapWorkBuffer = NULL;
+    delete MFT;
     while (RecordPoolHead)
     {
         PUCHAR Next = *(PUCHAR*)RecordPoolHead;
@@ -245,7 +246,6 @@ Volume::~Volume()
         LookupSlots[Index].Buffer = NULL;
     }
 
-    delete MFT;
     delete LFS;
     delete[] AttrDefCache;
     delete[] UpcaseTable;
