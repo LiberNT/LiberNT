@@ -31,8 +31,6 @@ PortAcquireLuEntry(
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
 
     *LuEntry = NULL;
-    if (Size == 0)
-        return STATUS_SUCCESS;
 
     for (Entry = ReadPointerAcquire((PVOID volatile *)&FdoExtension->LuEntries);
          Entry != NULL;
@@ -42,7 +40,10 @@ PortAcquireLuEntry(
         {
             ASSERT(ReadAcquire(&Entry->Present) == 0);
             ASSERT(Entry->ExtensionSize == Size);
-            RtlZeroMemory(Entry->Extension, Entry->ExtensionSize);
+            ASSERT((Entry->Extension != NULL) == (Size != 0));
+            if (Entry->Extension != NULL)
+                RtlZeroMemory(Entry->Extension, Entry->ExtensionSize);
+            InterlockedExchange64(&Entry->PausedUntil, 0);
             Previous = InterlockedExchange(&Entry->Present, 1);
             ASSERT(Previous == 0);
             *LuEntry = Entry;
@@ -53,11 +54,14 @@ PortAcquireLuEntry(
     Entry = ExAllocatePoolZero(NonPagedPoolNx, sizeof(*Entry), TAG_LU_EXTENSION);
     if (Entry == NULL)
         return STATUS_INSUFFICIENT_RESOURCES;
-    Entry->Extension = ExAllocatePoolZero(NonPagedPoolNx, Size, TAG_LU_EXTENSION);
-    if (Entry->Extension == NULL)
+    if (Size != 0)
     {
-        ExFreePoolWithTag(Entry, TAG_LU_EXTENSION);
-        return STATUS_INSUFFICIENT_RESOURCES;
+        Entry->Extension = ExAllocatePoolZero(NonPagedPoolNx, Size, TAG_LU_EXTENSION);
+        if (Entry->Extension == NULL)
+        {
+            ExFreePoolWithTag(Entry, TAG_LU_EXTENSION);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
     }
     Entry->Bus = Bus;
     Entry->Target = Target;
@@ -71,8 +75,8 @@ PortAcquireLuEntry(
 }
 
 
-PVOID
-PortFindLuExtension(
+PPORT_LU_ENTRY
+PortFindLuEntry(
     _In_ PFDO_DEVICE_EXTENSION FdoExtension,
     _In_ ULONG Bus,
     _In_ ULONG Target,
@@ -85,9 +89,22 @@ PortFindLuExtension(
          Entry = Entry->Next)
     {
         if (Entry->Bus == Bus && Entry->Target == Target && Entry->Lun == Lun)
-            return ReadAcquire(&Entry->Present) != 0 ? Entry->Extension : NULL;
+            return ReadAcquire(&Entry->Present) != 0 ? Entry : NULL;
     }
     return NULL;
+}
+
+
+PVOID
+PortFindLuExtension(
+    _In_ PFDO_DEVICE_EXTENSION FdoExtension,
+    _In_ ULONG Bus,
+    _In_ ULONG Target,
+    _In_ ULONG Lun)
+{
+    PPORT_LU_ENTRY Entry = PortFindLuEntry(FdoExtension, Bus, Target, Lun);
+
+    return (Entry != NULL) ? Entry->Extension : NULL;
 }
 
 
@@ -105,7 +122,8 @@ PortFreeLuEntries(
     {
         Next = Entry->Next;
         ASSERT(ReadAcquire(&Entry->Present) == 0);
-        ExFreePoolWithTag(Entry->Extension, TAG_LU_EXTENSION);
+        if (Entry->Extension != NULL)
+            ExFreePoolWithTag(Entry->Extension, TAG_LU_EXTENSION);
         ExFreePoolWithTag(Entry, TAG_LU_EXTENSION);
         Entry = Next;
     }

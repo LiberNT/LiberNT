@@ -1306,6 +1306,27 @@ PortFdoCountRequestLocked(
 
 
 static
+ULONGLONG
+PortFdoRequestHeldUntilLocked(
+    _In_ PFDO_DEVICE_EXTENSION DeviceExtension,
+    _In_ PIRP Irp)
+{
+    PPDO_DEVICE_EXTENSION PdoExtension = PortFdoRequestUnit(Irp);
+    PPORT_LU_ENTRY LuEntry;
+    ULONGLONG Until = (ULONGLONG)ReadAcquire64(&DeviceExtension->PausedUntil);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    if (PdoExtension == NULL)
+        return Until;
+    Until = max(Until, PdoExtension->BusyUntil);
+    LuEntry = ReadPointerAcquire((PVOID volatile *)&PdoExtension->LuEntry);
+    if (LuEntry != NULL)
+        Until = max(Until, (ULONGLONG)ReadAcquire64(&LuEntry->PausedUntil));
+    return Until;
+}
+
+
+static
 BOOLEAN
 PortFdoRequestBlockedLocked(
     _In_ PFDO_DEVICE_EXTENSION DeviceExtension,
@@ -1318,9 +1339,10 @@ PortFdoRequestBlockedLocked(
     ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
     if (DeviceExtension->HoldRequests || DeviceExtension->BusyCompletions > 0)
         return TRUE;
+    if (PortFdoRequestHeldUntilLocked(DeviceExtension, Irp) > KeQueryInterruptTime())
+        return TRUE;
     if ((PdoExtension != NULL) &&
         ((PdoExtension->BusyCompletions > 0) ||
-         ((PdoExtension->BusyUntil != 0) && (KeQueryInterruptTime() < PdoExtension->BusyUntil)) ||
          ((PdoExtension->UntaggedRequests > 0) && PortFdoRequestUntagged(Irp))))
     {
         return TRUE;
@@ -1345,6 +1367,7 @@ PortFdoStartRequest(
 {
     KIRQL OldIrql;
     BOOLEAN Started = TRUE;
+    BOOLEAN Timed = FALSE;
 
     KeAcquireSpinLock(&DeviceExtension->RequestHoldLock, &OldIrql);
     if (!PortRequest && PortFdoRequestBlockedLocked(DeviceExtension, Irp))
@@ -1352,12 +1375,15 @@ PortFdoStartRequest(
         IoMarkIrpPending(Irp);
         InsertTailList(&DeviceExtension->HeldRequests, &Irp->Tail.Overlay.ListEntry);
         Started = FALSE;
+        Timed = PortFdoRequestHeldUntilLocked(DeviceExtension, Irp) > KeQueryInterruptTime();
     }
     else
     {
         PortFdoCountRequestLocked(DeviceExtension, Irp, 1);
     }
     KeReleaseSpinLock(&DeviceExtension->RequestHoldLock, OldIrql);
+    if (Timed)
+        KeInsertQueueDpc(&DeviceExtension->RequestRestartDpc, NULL, NULL);
     return Started;
 }
 
@@ -1442,10 +1468,10 @@ PortFdoRestartRequestsDpc(
 
             if (PortFdoRequestBlockedLocked(DeviceExtension, Held))
             {
-                PPDO_DEVICE_EXTENSION Unit = PortFdoRequestUnit(Held);
+                ULONGLONG Until = PortFdoRequestHeldUntilLocked(DeviceExtension, Held);
 
-                if ((Unit != NULL) && (Unit->BusyUntil > Now) && ((RetryAt == 0) || (Unit->BusyUntil < RetryAt)))
-                    RetryAt = Unit->BusyUntil;
+                if ((Until > Now) && ((RetryAt == 0) || (Until < RetryAt)))
+                    RetryAt = Until;
                 continue;
             }
             RemoveEntryList(Entry);
@@ -1456,7 +1482,7 @@ PortFdoRestartRequestsDpc(
         KeReleaseSpinLockFromDpcLevel(&DeviceExtension->RequestHoldLock);
         if (Irp == NULL)
         {
-            /* A unit still busy is looked at again once its busy time is over: nothing else would restart it */
+            /* A unit still busy or paused is looked at again once that time is over: nothing else would restart it */
             if (RetryAt != 0)
             {
                 DueTime.QuadPart = -(LONGLONG)(RetryAt - Now);

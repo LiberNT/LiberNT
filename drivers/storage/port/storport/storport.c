@@ -3590,8 +3590,39 @@ StorPortNotification(
 }
 
 
+static
+BOOLEAN
+PortSetPause(
+    _In_ PVOID HwDeviceExtension,
+    _In_ BOOLEAN Unit,
+    _In_ UCHAR PathId,
+    _In_ UCHAR TargetId,
+    _In_ UCHAR Lun,
+    _In_ ULONGLONG Until)
+{
+    PFDO_DEVICE_EXTENSION DeviceExtension = PortMiniportFdo(HwDeviceExtension);
+    PPORT_LU_ENTRY LuEntry;
+
+    if ((DeviceExtension == NULL) || DeviceExtension->DumpMode)
+        return FALSE;
+    if (Unit)
+    {
+        LuEntry = PortFindLuEntry(DeviceExtension, PathId, TargetId, Lun);
+        if (LuEntry == NULL)
+            return FALSE;
+        InterlockedExchange64(&LuEntry->PausedUntil, (LONG64)Until);
+    }
+    else
+    {
+        InterlockedExchange64(&DeviceExtension->PausedUntil, (LONG64)Until);
+    }
+    KeInsertQueueDpc(&DeviceExtension->RequestRestartDpc, NULL, NULL);
+    return TRUE;
+}
+
+
 /*
- * @unimplemented
+ * @implemented
  */
 STORPORT_API
 BOOLEAN
@@ -3600,14 +3631,12 @@ StorPortPause(
     _In_ PVOID HwDeviceExtension,
     _In_ ULONG TimeOut)
 {
-    DPRINT1("StorPortPause()\n");
-    UNIMPLEMENTED;
-    return FALSE;
+    return PortSetPause(HwDeviceExtension, FALSE, 0, 0, 0, KeQueryInterruptTime() + (ULONGLONG)TimeOut * 10000000ULL);
 }
 
 
 /*
- * @unimplemented
+ * @implemented
  */
 STORPORT_API
 BOOLEAN
@@ -3619,9 +3648,8 @@ StorPortPauseDevice(
     _In_ UCHAR Lun,
     _In_ ULONG TimeOut)
 {
-    DPRINT1("StorPortPauseDevice()\n");
-    UNIMPLEMENTED;
-    return FALSE;
+    return PortSetPause(HwDeviceExtension, TRUE, PathId, TargetId, Lun,
+                        KeQueryInterruptTime() + (ULONGLONG)TimeOut * 10000000ULL);
 }
 
 
@@ -3705,7 +3733,7 @@ StorPortRegistryWrite(
 
 
 /*
- * @unimplemented
+ * @implemented
  */
 STORPORT_API
 BOOLEAN
@@ -3713,14 +3741,12 @@ NTAPI
 StorPortResume(
     _In_ PVOID HwDeviceExtension)
 {
-    DPRINT1("StorPortResume()\n");
-    UNIMPLEMENTED;
-    return FALSE;
+    return PortSetPause(HwDeviceExtension, FALSE, 0, 0, 0, 0);
 }
 
 
 /*
- * @unimplemented
+ * @implemented
  */
 STORPORT_API
 BOOLEAN
@@ -3731,9 +3757,7 @@ StorPortResumeDevice(
     _In_ UCHAR TargetId,
     _In_ UCHAR Lun)
 {
-    DPRINT1("StorPortResumeDevice()\n");
-    UNIMPLEMENTED;
-    return FALSE;
+    return PortSetPause(HwDeviceExtension, TRUE, PathId, TargetId, Lun, 0);
 }
 
 
