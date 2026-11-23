@@ -106,6 +106,7 @@
 @ stdcall CloseThreadpoolTimer(ptr) ntdll.TpReleaseTimer
 @ stdcall CloseThreadpoolWait(ptr) ntdll.TpReleaseWait
 @ stdcall CloseThreadpoolWork(ptr) ntdll.TpReleaseWork
+@ stdcall CommandLineToArgvW(wstr ptr) shell32.CommandLineToArgvW
 @ stdcall CompareFileTime(ptr ptr) kernel32.CompareFileTime
 @ stdcall -version=0xA00+ CompareObjectHandles(ptr ptr) kernel32.CompareObjectHandles
 @ stdcall CompareStringA(long long str long str long)

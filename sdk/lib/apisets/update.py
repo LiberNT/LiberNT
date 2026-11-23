@@ -25,6 +25,7 @@ REDIRECT_HOSTS = {
 # module-wide fallback above. Contract overrides always take precedence.
 CONTRACT_HOST_OVERRIDES = {
     'api-ms-win-core-com-l1-1-1.dll': 'combase.dll',
+    'api-ms-win-core-commandlinetoargv-l1-1-0.dll': 'kernelbase.dll',
     'api-ms-win-core-featurestaging-l1-1-0.dll': 'shcore.dll',
     'api-ms-win-core-featurestaging-l1-1-1.dll': 'shcore.dll',
     'api-ms-win-core-apiquery-l2-1-0.dll': 'kernelbase.dll',
@@ -209,6 +210,28 @@ class CombinedSchemas:
                          'api-ms-win-core-sysinfo-l1-2-8.dll'):
             if contract not in self._apisets:
                 self._apisets[contract] = Apiset(contract, 'kernelbase.dll', ['APISET_WIN10'])
+        for contract, host in (
+            ('api-ms-win-core-commandlinetoargv-l1-1-0.dll', 'kernelbase.dll'),
+            ('api-ms-win-core-kernel32-private-l1-2-0.dll', 'kernel32.dll'),
+            ('api-ms-win-dwmapi-l1-1-0.dll', 'dwmapi.dll'),
+            ('ext-ms-win-appmodel-shellexecute-l1-1-0.dll', 'windows.storage.dll'),
+            ('ext-ms-win-bluetooth-apis-internal-l1-1-0.dll', 'bluetoothapis.dll'),
+            ('ext-ms-win-com-ole32-l1-3-0.dll', 'ole32.dll'),
+            ('ext-ms-win-com-ole32-l1-4-0.dll', 'ole32.dll'),
+            ('ext-ms-win-com-sta-l1-1-0.dll', 'ole32.dll'),
+            ('ext-ms-win-core-marshal-l2-1-0.dll', 'ole32.dll'),
+            ('ext-ms-win-kernel32-updateresource-l1-1-0.dll', 'kernel32.dll'),
+            ('ext-ms-win-kernelbase-processthread-l1-2-2.dll', 'kernel32.dll'),
+            ('ext-ms-win-rtcore-ole32-dragdrop-l1-1-0.dll', 'ole32.dll'),
+            ('ext-ms-win-rtcore-ole32-misc-l1-1-0.dll', 'ole32.dll'),
+            ('ext-ms-win-shell-shell32-l1-4-0.dll', 'shell32.dll'),
+            ('ext-ms-win-shell-shell32-l1-5-0.dll', 'shell32.dll'),
+        ):
+            if contract not in self._apisets:
+                self._apisets[contract] = Apiset(contract, host, ['APISET_WIN10'])
+            else:
+                self._apisets[contract].host = host
+                self._apisets[contract].add_version('APISET_WIN10')
         legacy = 'api-ms-win-service-legacy-l1-1-0.dll'
         if legacy not in self._apisets:
             self._apisets[legacy] = Apiset(legacy, 'advapi32.dll', ['APISET_WIN10'])

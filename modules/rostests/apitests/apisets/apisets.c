@@ -99,6 +99,38 @@ START_TEST(apisets)
     UNICODE_STRING KernelBase = RTL_CONSTANT_STRING(L"kernelbase.dll");
     UNICODE_STRING Advapi32 = RTL_CONSTANT_STRING(L"advapi32.dll");
     UNICODE_STRING Shcore = RTL_CONSTANT_STRING(L"shcore.dll");
+    UNICODE_STRING Dwmapi = RTL_CONSTANT_STRING(L"dwmapi.dll");
+    UNICODE_STRING Kernel32 = RTL_CONSTANT_STRING(L"kernel32.dll");
+    UNICODE_STRING Ole32 = RTL_CONSTANT_STRING(L"ole32.dll");
+    UNICODE_STRING Shell32 = RTL_CONSTANT_STRING(L"shell32.dll");
+    UNICODE_STRING Bluetooth = RTL_CONSTANT_STRING(L"bluetoothapis.dll");
+    UNICODE_STRING Storage = RTL_CONSTANT_STRING(L"windows.storage.dll");
+    UNICODE_STRING ExtraKernel32[] = {
+        RTL_CONSTANT_STRING(L"api-ms-win-core-kernel32-private-l1-2-0.dll"),
+        RTL_CONSTANT_STRING(L"ext-ms-win-kernelbase-processthread-l1-2-2.dll"),
+    };
+    UNICODE_STRING ExtraOle32[] = {
+        RTL_CONSTANT_STRING(L"ext-ms-win-com-ole32-l1-3-0.dll"),
+        RTL_CONSTANT_STRING(L"ext-ms-win-com-ole32-l1-4-0.dll"),
+        RTL_CONSTANT_STRING(L"ext-ms-win-com-sta-l1-1-0.dll"),
+        RTL_CONSTANT_STRING(L"ext-ms-win-core-marshal-l2-1-0.dll"),
+        RTL_CONSTANT_STRING(L"ext-ms-win-rtcore-ole32-misc-l1-1-0.dll"),
+    };
+    UNICODE_STRING ExtraShell32[] = {
+        RTL_CONSTANT_STRING(L"ext-ms-win-shell-shell32-l1-4-0.dll"),
+        RTL_CONSTANT_STRING(L"ext-ms-win-shell-shell32-l1-5-0.dll"),
+    };
+    UNICODE_STRING ExtraBluetooth[] = {
+        RTL_CONSTANT_STRING(L"ext-ms-win-bluetooth-apis-internal-l1-1-0.dll"),
+    };
+    UNICODE_STRING ExtraStorage[] = {
+        RTL_CONSTANT_STRING(L"ext-ms-win-appmodel-shellexecute-l1-1-0.dll"),
+    };
+    UNICODE_STRING Cmdline = RTL_CONSTANT_STRING(L"api-ms-win-core-commandlinetoargv-l1-1-0.dll");
+    UNICODE_STRING Dwm = RTL_CONSTANT_STRING(L"api-ms-win-dwmapi-l1-1-0.dll");
+    UNICODE_STRING DwmPresence = RTL_CONSTANT_STRING(L"api-ms-win-dwmapi-l1-1-0");
+    UNICODE_STRING Resource = RTL_CONSTANT_STRING(L"ext-ms-win-kernel32-updateresource-l1-1-0.dll");
+    UNICODE_STRING DragDrop = RTL_CONSTANT_STRING(L"ext-ms-win-rtcore-ole32-dragdrop-l1-1-0.dll");
     UNICODE_STRING MemoryNewest = RTL_CONSTANT_STRING(L"api-ms-win-core-memory-l1-1-9");
     UNICODE_STRING SysinfoNewest = RTL_CONSTANT_STRING(L"api-ms-win-core-sysinfo-l1-2-8");
     UNICODE_STRING KernelContracts[] = {
@@ -129,6 +161,21 @@ START_TEST(apisets)
     test_contract_host(&StringAnsi, &KernelBase);
     test_contract_host(&NamedPipe, &KernelBase);
     test_contract_host(&ServiceLegacy, &Advapi32);
+    test_contract_host(&Cmdline, &KernelBase);
+    test_contract_host(&Dwm, &Dwmapi);
+    test_contract_host(&Resource, &Kernel32);
+    test_contract_host(&DragDrop, &Ole32);
+    for (DWORD n = 0; n < RTL_NUMBER_OF(ExtraKernel32); n++)
+        test_contract_host(&ExtraKernel32[n], &Kernel32);
+    for (DWORD n = 0; n < RTL_NUMBER_OF(ExtraOle32); n++)
+        test_contract_host(&ExtraOle32[n], &Ole32);
+    for (DWORD n = 0; n < RTL_NUMBER_OF(ExtraShell32); n++)
+        test_contract_host(&ExtraShell32[n], &Shell32);
+    for (DWORD n = 0; n < RTL_NUMBER_OF(ExtraBluetooth); n++)
+        test_contract_host(&ExtraBluetooth[n], &Bluetooth);
+    for (DWORD n = 0; n < RTL_NUMBER_OF(ExtraStorage); n++)
+        test_contract_host(&ExtraStorage[n], &Storage);
+    test_contract_presence(&DwmPresence);
     test_contract_presence(&MemoryNewest);
     test_contract_presence(&SysinfoNewest);
     for (DWORD n = 0; n < RTL_NUMBER_OF(KernelContracts); n++)
