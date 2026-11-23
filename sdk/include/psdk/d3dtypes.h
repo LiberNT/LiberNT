@@ -27,8 +27,10 @@
 
 /* #include <windows.h> FIXME: Need to include for compatibility. Inclusion caused compile fail */
 
-#if (DIRECT3D_VERSION >= 0x0800)
-#error "You should not include d3dtypes.h when compiling for DX8 or newer."
+#if DIRECT3D_VERSION >= 0x0900
+#include <d3d9types.h>
+#elif DIRECT3D_VERSION >= 0x0800
+#include <d3d8types.h>
 #endif
 
 #include <float.h>
@@ -89,9 +91,10 @@ typedef HRESULT (CALLBACK *LPD3DENUMPIXELFORMATSCALLBACK)(DDPIXELFORMAT *format,
 typedef float D3DVALUE,*LPD3DVALUE;
 
 #ifndef D3DCOLOR_DEFINED
-typedef DWORD D3DCOLOR, *LPD3DCOLOR;
+typedef DWORD D3DCOLOR;
 #define D3DCOLOR_DEFINED
 #endif
+typedef DWORD *LPD3DCOLOR;
 
 #ifndef D3DVECTOR_DEFINED
 typedef struct _D3DVECTOR {
@@ -115,6 +118,9 @@ public:
   _D3DVECTOR(D3DVALUE f);
   _D3DVECTOR(D3DVALUE _x, D3DVALUE _y, D3DVALUE _z);
   _D3DVECTOR(const D3DVALUE f[3]);
+
+  const D3DVALUE& operator[](int i) const;
+  D3DVALUE& operator[](int i);
 
   /*** assignment operators ***/
   _D3DVECTOR& operator += (const _D3DVECTOR& v);
@@ -144,12 +150,13 @@ public:
   friend D3DVALUE DotProduct(const _D3DVECTOR& v1, const _D3DVECTOR& v2);
   friend _D3DVECTOR CrossProduct(const _D3DVECTOR& v1, const _D3DVECTOR& v2);
 #endif
-} D3DVECTOR,*LPD3DVECTOR;
+} D3DVECTOR;
 #define D3DVECTOR_DEFINED
 #endif
 
 #define DX_SHARED_DEFINES
 #endif /* DX_SHARED_DEFINES */
+typedef struct _D3DVECTOR *LPD3DVECTOR;
 
 typedef DWORD D3DMATERIALHANDLE, *LPD3DMATERIALHANDLE;
 typedef DWORD D3DTEXTUREHANDLE,  *LPD3DTEXTUREHANDLE;
@@ -173,8 +180,10 @@ typedef struct _D3DCOLORVALUE {
                 D3DVALUE a;
                 D3DVALUE dvA;
         } DUMMYUNIONNAME4;
-} D3DCOLORVALUE,*LPD3DCOLORVALUE;
+} D3DCOLORVALUE;
+#define D3DCOLORVALUE_DEFINED
 #endif
+typedef struct _D3DCOLORVALUE *LPD3DCOLORVALUE;
 
 #ifndef D3DRECT_DEFINED
 typedef struct _D3DRECT {
@@ -195,6 +204,7 @@ typedef struct _D3DRECT {
     LONG lY2;
   } DUMMYUNIONNAME4;
 } D3DRECT;
+#define D3DRECT_DEFINED
 #endif
 typedef struct _D3DRECT *LPD3DRECT;
 
@@ -352,8 +362,10 @@ typedef struct _D3DMATRIX {
     const D3DVALUE &operator() (int r, int c) const
 	{ return (&_11)[r*4 + c]; }
 #endif
-} D3DMATRIX, *LPD3DMATRIX;
+} D3DMATRIX;
+#define D3DMATRIX_DEFINED
 #endif
+typedef struct _D3DMATRIX *LPD3DMATRIX;
 
 #if defined(__cplusplus) && defined(D3D_OVERLOADS)
 #include <d3dvec.inl>
@@ -1420,10 +1432,6 @@ typedef enum _D3DTEXTURETRANSFORMFLAGS {
 #define D3DFVF_TEXCOORDSIZE4(CoordIndex) (D3DFVF_TEXTUREFORMAT4 << (CoordIndex*2 + 16))
 #define D3DFVF_TEXCOORDSIZE1(CoordIndex) (D3DFVF_TEXTUREFORMAT1 << (CoordIndex*2 + 16))
 
-#ifdef __i386__
-#pragma pack(pop)
-#endif
-
 #endif /* (DIRECT3D_VERSION < 0x0800) */
 
 struct _D3DSTATS
@@ -1436,8 +1444,8 @@ struct _D3DSTATS
     DWORD dwVerticesProcessed;
 };
 
-
-
-
+#ifdef __i386__
+#pragma pack(pop)
+#endif
 
 #endif

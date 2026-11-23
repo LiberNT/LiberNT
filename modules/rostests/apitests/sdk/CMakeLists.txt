@@ -33,3 +33,11 @@ target_compile_definitions(sdk_header_abi_unicode PRIVATE
 target_compile_options(sdk_header_abi_xp PRIVATE
     -UWINVER -U_WIN32_WINNT -UNTDDI_VERSION
     -DWINVER=0x0501 -D_WIN32_WINNT=0x0501 -DNTDDI_VERSION=0x05010000)
+
+foreach(version IN ITEMS 7 8 9)
+    set(target sdk_d3d${version}_hal_abi)
+    add_library(${target} OBJECT d3dhal_abi.cpp)
+    add_dependencies(${target} psdk xdk)
+    target_include_directories(${target} PRIVATE ${REACTOS_SOURCE_DIR}/sdk/include/dxsdk)
+    target_compile_definitions(${target} PRIVATE DIRECT3D_VERSION=0x0${version}00)
+endforeach()
