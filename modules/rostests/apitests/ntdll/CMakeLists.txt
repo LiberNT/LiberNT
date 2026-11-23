@@ -108,6 +108,7 @@ list(APPEND SOURCE
     NtFilterToken.c
     NtFlushInstructionCache.c
     NtFreeVirtualMemory.c
+    NtGetContextThread.c
     NtGetCurrentProcessorNumberEx.c
     NtImpersonateAnonymousToken.c
     NtInitializeRegistry.c
