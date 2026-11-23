@@ -24,6 +24,8 @@ set(WOW64_I386_MODULES ${COMPAT_RUNTIME_MODULES}
     olethk32
     stdole2.tlb
     stdole32.tlb
+    windows_applicationmodel
+    windows_system_profile_systemid
     winegstreamer
     winsqlite3
 )
