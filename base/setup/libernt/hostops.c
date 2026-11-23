@@ -1941,7 +1941,7 @@ HostFindLiberNTStore(
         *StorePartition = *WindowsSystemPartition;
         return ERROR_SUCCESS;
     }
-    /* TODO: LiberNT installations started by FreeLoader have no boot configuration store to stage the upgrade in */
+    /* TODO: find the \Boot\BCD store of LiberNT installations on PC/AT firmware */
     return ERROR_NOT_FOUND;
 }
 
