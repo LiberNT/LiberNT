@@ -294,6 +294,7 @@ windows.ui.dll
 windows.ui.core.textinput.dll
 windows.ui.xaml.dll
 windows.web.dll
+windows.web.http.dll
 wintypes.dll
 wpnapps.dll
 
