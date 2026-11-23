@@ -971,12 +971,15 @@ typedef struct _D3DCLIPSTATUS8 {
    DWORD ClipIntersection;
 } D3DCLIPSTATUS8;
 
+#ifndef D3DCOLORVALUE_DEFINED
 typedef struct _D3DCOLORVALUE {
     float r;
     float g;
     float b;
     float a;
 } D3DCOLORVALUE;
+#define D3DCOLORVALUE_DEFINED
+#endif
 
 typedef struct _D3DDEVICE_CREATION_PARAMETERS {
     UINT          AdapterOrdinal;
@@ -1055,6 +1058,7 @@ typedef struct _D3DMATERIAL8 {
     float           Power;
 } D3DMATERIAL8;
 
+#ifndef D3DMATRIX_DEFINED
 typedef struct _D3DMATRIX {
     union {
         struct {
@@ -1066,6 +1070,8 @@ typedef struct _D3DMATRIX {
         float m[4][4];
     } DUMMYUNIONNAME;
 } D3DMATRIX;
+#define D3DMATRIX_DEFINED
+#endif
 
 #define D3DPRESENT_RATE_DEFAULT 0
 #define D3DPRESENT_RATE_UNLIMITED 0x7fffffff
@@ -1102,12 +1108,15 @@ typedef struct _D3DRASTER_STATUS {
     UINT            ScanLine;
 } D3DRASTER_STATUS;
 
+#ifndef D3DRECT_DEFINED
 typedef struct _D3DRECT {
     LONG x1;
     LONG y1;
     LONG x2;
     LONG y2;
 } D3DRECT;
+#define D3DRECT_DEFINED
+#endif
 
 typedef struct _D3DRECTPATCH_INFO {
     UINT                StartVertexOffsetWidth;
