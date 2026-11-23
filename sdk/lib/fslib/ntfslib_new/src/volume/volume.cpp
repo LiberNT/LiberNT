@@ -437,6 +437,15 @@ Volume::InvalidateLookupNode(_In_ ULONGLONG FileReference,
 }
 
 void
+Volume::ForgetLookupNodes()
+{
+    NtfsAcquireMutex(&LazyCacheMutex);
+    for (ULONG Index = 0; Index < NTFS_LOOKUP_SLOTS; Index++)
+        LookupSlots[Index].Valid = FALSE;
+    NtfsReleaseMutex(&LazyCacheMutex);
+}
+
+void
 Volume::ReleaseLookupSlot(_In_ PNtfsLookupSlot Slot)
 {
     ASSERT(Slot->Busy);
@@ -583,6 +592,8 @@ Volume::Initialize(_In_ PUCHAR BootSectorData,
     }
     else if (NT_SUCCESS(Status) && LFS->VolumeRecovered)
     {
+        /* The replay rewrote index nodes that the hibernation check's lookup may have cached. */
+        ForgetLookupNodes();
         delete MFT;
         MFT = new(PagedPool, TAG_MFT) MasterFileTable(this,
                                                       PartitionBootSector->MFTLCN,
