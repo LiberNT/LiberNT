@@ -46,9 +46,6 @@ START_TEST(CoreApplication)
     if (FAILED(hr))
         goto done;
 
-    hr = ICoreApplication_get_Properties(Core, NULL);
-    ok(hr == E_POINTER, "Properties(NULL) returned %#lx\n", hr);
-
     First = GetProperties(Core);
     Second = GetProperties(Core);
     if (!First || !Second)

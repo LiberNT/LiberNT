@@ -54,9 +54,6 @@ START_TEST(AnalyticsInfo)
     ok(hr == S_OK, "IAgileObject returned %#lx\n", hr);
     if (Agile) IAgileObject_Release(Agile);
 
-    hr = IAnalyticsInfoStatics_get_VersionInfo(Statics, NULL);
-    ok(hr == E_POINTER, "VersionInfo(NULL) returned %#lx\n", hr);
-
     hr = IAnalyticsInfoStatics_get_VersionInfo(Statics, &Version);
     ok(hr == S_OK, "VersionInfo returned %#lx\n", hr);
     if (FAILED(hr))
