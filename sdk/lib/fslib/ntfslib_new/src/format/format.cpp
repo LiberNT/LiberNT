@@ -322,7 +322,7 @@ FormatComputeLayout(_In_ PFormatContext Ctx)
                                   FormatClustersFor(Ctx, NTFS_BOOT_AREA_SIZE),
                                   &Ctx->BootClusters);
     Ctx->MftMirrLcn = FormatAllocate(&NextLcn,
-                                     FormatClustersFor(Ctx, 4ULL * Ctx->MftRecordSize),
+                                     FormatClustersFor(Ctx, (ULONGLONG)FormatMirrorRecords(Ctx) * Ctx->MftRecordSize),
                                      &Ctx->MftMirrClusters);
     Ctx->UpCaseLcn = FormatAllocate(&NextLcn,
                                     FormatClustersFor(Ctx, NTFS_UPCASE_SIZE),

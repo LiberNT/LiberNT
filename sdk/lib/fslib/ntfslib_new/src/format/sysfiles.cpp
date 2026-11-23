@@ -111,7 +111,7 @@ FormatWriteSdsHeader(_Out_ PUCHAR Buffer,
 }
 
 /* Writes the record currently in Ctx->RecordBuffer to its slot in $MFT, and
- * additionally to $MFTMirr for the four records the mirror covers. */
+ * additionally to $MFTMirr for the records the mirror covers. */
 static NTSTATUS
 FormatFlushRecord(_In_ PFormatContext Ctx,
                   _In_ ULONG RecordNumber)
@@ -130,7 +130,7 @@ FormatFlushRecord(_In_ PFormatContext Ctx,
     if (!NT_SUCCESS(Status))
         return Status;
 
-    if (RecordNumber < 4)
+    if (RecordNumber < FormatMirrorRecords(Ctx))
     {
         Offset = Ctx->MftMirrLcn * Ctx->ClusterSize +
                  (ULONGLONG)RecordNumber * Ctx->MftRecordSize;
@@ -1292,7 +1292,7 @@ FormatWriteMetadata(_In_ PFormatContext Ctx)
                                        L"$MFTMirr",
                                        Ctx->MftMirrLcn,
                                        Ctx->MftMirrClusters,
-                                       4ULL * Ctx->MftRecordSize);
+                                       (ULONGLONG)FormatMirrorRecords(Ctx) * Ctx->MftRecordSize);
     if (!NT_SUCCESS(Status))
         return Status;
 

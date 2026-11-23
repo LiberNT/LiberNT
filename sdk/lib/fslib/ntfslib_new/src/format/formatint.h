@@ -146,6 +146,10 @@ typedef struct FormatContext
     USHORT NextAttributeId;
 } FormatContext, *PFormatContext;
 
+/* $MFTMirr copies the first four file records, or the whole first cluster of $MFT when it holds more. */
+#define FormatMirrorRecords(Ctx) \
+    ((Ctx)->ClusterSize / (Ctx)->MftRecordSize > 4 ? (Ctx)->ClusterSize / (Ctx)->MftRecordSize : 4)
+
 /* format.cpp */
 NTSTATUS
 FormatWriteAt(
