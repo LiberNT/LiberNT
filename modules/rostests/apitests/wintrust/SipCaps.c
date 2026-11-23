@@ -9,6 +9,7 @@
 #include <wincrypt.h>
 #include <wintrust.h>
 #include <mssip.h>
+#include <mscat.h>
 #include <stdio.h>
 
 typedef struct
@@ -249,6 +250,33 @@ FileMatches(const WCHAR *Path, const BYTE *Expected, DWORD ExpectedSize)
 }
 
 static
+VOID
+TestCabinetCatalogHash(const WCHAR *Path, const BYTE *Digest, DWORD DigestSize, const char *Form)
+{
+    HCATADMIN Admin = NULL;
+    HANDLE File;
+    BYTE Hash[64];
+    DWORD Size = sizeof(Hash);
+    BOOL Ret;
+
+    ok(CryptCATAdminAcquireContext2(&Admin, NULL, BCRYPT_SHA256_ALGORITHM, NULL, 0),
+       "CryptCATAdminAcquireContext2 failed with %lu\n", GetLastError());
+    if (!Admin)
+        return;
+    File = CreateFileW(Path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    ok(File != INVALID_HANDLE_VALUE, "cannot open the %s cabinet\n", Form);
+    if (File != INVALID_HANDLE_VALUE)
+    {
+        Ret = CryptCATAdminCalcHashFromFileHandle2(Admin, File, &Size, Hash, 0);
+        ok(Ret, "%s cabinet: CryptCATAdminCalcHashFromFileHandle2 failed with %lu\n", Form, GetLastError());
+        ok(Ret && Size == DigestSize && !memcmp(Hash, Digest, DigestSize),
+           "%s cabinet: the catalog hash is not the cabinet subject digest\n", Form);
+        CloseHandle(File);
+    }
+    CryptCATAdminReleaseContext(Admin, 0);
+}
+
+static
 DWORD
 BuildReservedCabinet(BYTE *Cab, WORD Reserve, BYTE FolderReserve, BOOL Magic, BYTE Fill, DWORD SigOffset, DWORD SigSize)
 {
@@ -474,6 +502,7 @@ TestCabinetIndirectData(const WCHAR *Temp)
         skip("Cannot write the cabinets\n");
         return;
     }
+    TestCabinetCatalogHash(First, Digest, sizeof(Digest), "plain");
     File = CreateFileW(First, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
     ReadFile(File, Original, sizeof(Original), &OriginalSize, NULL);
     ok(!CreateCabinetIndirect(First, File), "CAB indirect data created through a read-only handle\n");
@@ -493,6 +522,7 @@ TestCabinetIndirectData(const WCHAR *Temp)
        "handle position %I64d\n", Position.QuadPart);
     CloseHandle(File);
     ok(FileMatches(First, Prepared, sizeof(Prepared)), "the cabinet was not prepared for a signature\n");
+    TestCabinetCatalogHash(First, Digest, sizeof(Digest), "prepared");
     if (Data)
     {
         ok(!strcmp(Data->Data.pszObjId, SPC_LINK_OBJID), "data %s\n", Data->Data.pszObjId);

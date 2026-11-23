@@ -13,6 +13,7 @@
 #include <wincrypt.h>
 #include <wintrust.h>
 #include <softpub.h>
+#include <mscat.h>
 
 #include <algorithm>
 #include <cstring>
@@ -117,59 +118,7 @@ void ListFiles(const std::wstring &directory, std::vector<std::wstring> &files)
     FindClose(find);
 }
 
-void ImageRanges(HANDLE file, ULONGLONG size, std::vector<Range> &ranges)
-{
-    BYTE header[4096];
-    DWORD read = 0, pe = 0, rvaCount = 0, certOffset = 0, certSize = 0, optional, directories, checksum, certEntry;
-    WORD magic = 0;
-    LARGE_INTEGER start = {};
-
-    ranges.assign(1, Range{ 0, size });
-    if (!SetFilePointerEx(file, start, NULL, FILE_BEGIN) || !ReadFile(file, header, sizeof(header), &read, NULL) ||
-        read < 0x40 || header[0] != 'M' || header[1] != 'Z')
-    {
-        return;
-    }
-    memcpy(&pe, header + 0x3C, sizeof(pe));
-    if (pe > read || read - pe < 24 + 112 + 5 * 8 || memcmp(header + pe, "PE\0\0", 4) != 0)
-        return;
-    optional = pe + 24;
-    memcpy(&magic, header + optional, sizeof(magic));
-    if (magic == 0x10B)
-    {
-        memcpy(&rvaCount, header + optional + 92, sizeof(rvaCount));
-        directories = optional + 96;
-    }
-    else if (magic == 0x20B)
-    {
-        memcpy(&rvaCount, header + optional + 108, sizeof(rvaCount));
-        directories = optional + 112;
-    }
-    else
-    {
-        return;
-    }
-    if (rvaCount < 5 || directories + 5 * 8 > read)
-        return;
-    checksum = optional + 64;
-    certEntry = directories + 4 * 8;
-    memcpy(&certOffset, header + certEntry, sizeof(certOffset));
-    memcpy(&certSize, header + certEntry + 4, sizeof(certSize));
-    ranges.clear();
-    ranges.push_back(Range{ 0, checksum });
-    ranges.push_back(Range{ checksum + 4, certEntry - checksum - 4 });
-    if (certOffset && certSize && certOffset >= certEntry + 8 && (ULONGLONG)certOffset + certSize <= size)
-    {
-        ranges.push_back(Range{ certEntry + 8, certOffset - certEntry - 8 });
-        ranges.push_back(Range{ (ULONGLONG)certOffset + certSize, size - certOffset - certSize });
-    }
-    else
-    {
-        ranges.push_back(Range{ certEntry + 8, size - certEntry - 8 });
-    }
-}
-
-DWORD DigestFile(const std::wstring &path, bool image, const std::vector<LPCWSTR> &algorithms,
+DWORD DigestFile(const std::wstring &path, const std::vector<LPCWSTR> &algorithms,
                  std::vector<std::vector<BYTE>> &digests)
 {
     HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
@@ -189,10 +138,7 @@ DWORD DigestFile(const std::wstring &path, bool image, const std::vector<LPCWSTR
         CloseHandle(file);
         return error;
     }
-    if (image)
-        ImageRanges(file, (ULONGLONG)size.QuadPart, ranges);
-    else
-        ranges.assign(1, Range{ 0, (ULONGLONG)size.QuadPart });
+    ranges.assign(1, Range{ 0, (ULONGLONG)size.QuadPart });
     for (LPCWSTR algorithm : algorithms)
         hashers.push_back(new Hasher(algorithm));
     for (Hasher *hasher : hashers)
@@ -237,6 +183,43 @@ DWORD DigestFile(const std::wstring &path, bool image, const std::vector<LPCWSTR
         digests.push_back(digest);
         delete hasher;
     }
+    return error;
+}
+
+DWORD CatalogDigests(const std::wstring &path, const std::vector<LPCWSTR> &algorithms,
+                     std::vector<std::vector<BYTE>> &digests)
+{
+    HANDLE file = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
+                              FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+    DWORD error = ERROR_SUCCESS;
+
+    digests.clear();
+    if (file == INVALID_HANDLE_VALUE)
+        return GetLastError();
+    for (LPCWSTR algorithm : algorithms)
+    {
+        HCATADMIN admin = NULL;
+        std::vector<BYTE> digest(64);
+        DWORD size = (DWORD)digest.size();
+        LARGE_INTEGER start = {};
+
+        if (!CryptCATAdminAcquireContext2(&admin, NULL, algorithm, NULL, 0))
+        {
+            error = GetLastError();
+            break;
+        }
+        if (!SetFilePointerEx(file, start, NULL, FILE_BEGIN) ||
+            !CryptCATAdminCalcHashFromFileHandle2(admin, file, &size, digest.data(), 0))
+        {
+            error = GetLastError();
+        }
+        CryptCATAdminReleaseContext(admin, 0);
+        if (error)
+            break;
+        digest.resize(size);
+        digests.push_back(digest);
+    }
+    CloseHandle(file);
     return error;
 }
 
@@ -354,7 +337,7 @@ bool Contains(const std::vector<BYTE> &content, const std::vector<BYTE> &digest)
 DWORD HashFile(const std::wstring &path, LPCWSTR algorithm, std::vector<BYTE> &digest)
 {
     std::vector<std::vector<BYTE>> digests;
-    DWORD error = DigestFile(path, false, std::vector<LPCWSTR>(1, algorithm), digests);
+    DWORD error = DigestFile(path, std::vector<LPCWSTR>(1, algorithm), digests);
 
     digest = error || digests.empty() ? std::vector<BYTE>() : digests.front();
     return error;
@@ -412,7 +395,7 @@ DWORD VerifyPackage(const std::wstring &directory, std::wstring &file)
         {
             continue;
         }
-        error = DigestFile(path, !HasExtension(path, L".inf"), algorithms, digests);
+        error = CatalogDigests(path, algorithms, digests);
         if (error)
         {
             file = name;
