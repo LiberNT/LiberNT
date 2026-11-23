@@ -201,6 +201,39 @@ PspReapRoutine(
     }
 }
 
+/* TODO: a thread made by NtCreateThreadEx and ended by another thread keeps the stack the kernel allocated for it */
+static
+VOID
+PspReleaseUserStack(
+    _In_ PTEB Teb)
+{
+    PVOID Stack = NULL, Stack32 = NULL;
+    SIZE_T Size = 0;
+    TEB32 *Teb32;
+
+    PAGED_CODE();
+
+    _SEH2_TRY
+    {
+        if (Teb->ReservedPad1) Stack = Teb->DeallocationStack;
+        if (Teb->WowTebOffset != 0)
+        {
+            Teb32 = (TEB32 *)((PUCHAR)Teb + Teb->WowTebOffset);
+            if (Teb32->ReservedPad1) Stack32 = UlongToPtr(Teb32->DeallocationStack);
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Stack = NULL;
+        Stack32 = NULL;
+    }
+    _SEH2_END;
+
+    if (Stack != NULL) ZwFreeVirtualMemory(NtCurrentProcess(), &Stack, &Size, MEM_RELEASE);
+    Size = 0;
+    if (Stack32 != NULL) ZwFreeVirtualMemory(NtCurrentProcess(), &Stack32, &Size, MEM_RELEASE);
+}
+
 /*
  * Everything a thread does on its own way out, running on the thread itself.
  * It never returns: the scheduler takes the thread away at the end.
@@ -295,6 +328,7 @@ PspExitThread(
     Teb = Thread->Tcb.Teb;
     if (Teb != NULL)
     {
+        PspReleaseUserStack(Teb);
         MmDeleteTeb(Process, Teb);
         Thread->Tcb.Teb = NULL;
     }
