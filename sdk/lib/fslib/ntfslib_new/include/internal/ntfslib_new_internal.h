@@ -1142,6 +1142,9 @@ public:
     UINT32
     GetAutomaticTimestampMask() const;
 
+    void
+    DeferDirectoryTimes(_In_ BOOLEAN Defer);
+
     NTSTATUS
     UpdateAutomaticTimestamps(_In_ UINT32 Fields);
 
@@ -1273,6 +1276,7 @@ private:
     UINT32 AutomaticTimestampMask =
         NTFS_AUTOMATIC_TIMESTAMP_FIELDS;
     BOOLEAN FileNameUpdatesDeferred = FALSE;
+    BOOLEAN DirectoryTimesDeferred = FALSE;
     UINT32 PendingFileNameFields = 0;
     ULONGLONG PendingAllocatedSize = 0;
     ULONGLONG PendingDataSize = 0;

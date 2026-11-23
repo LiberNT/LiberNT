@@ -221,6 +221,17 @@ NtfsFileRecordSetAutomaticTimestampMask(
 }
 
 NTSTATUS
+NtfsFileRecordDeferDirectoryTimes(
+    _In_ PNtfsFileRecord Fr,
+    _In_ BOOLEAN Defer)
+{
+    if (!Fr)
+        return STATUS_INVALID_PARAMETER;
+    reinterpret_cast<PFileRecord>(Fr)->DeferDirectoryTimes(Defer);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
 NtfsFileRecordDeferFileNameUpdates(
     _In_ PNtfsFileRecord Fr,
     _In_ BOOLEAN Defer)
