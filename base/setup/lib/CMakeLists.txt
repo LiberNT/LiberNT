@@ -13,7 +13,6 @@ list(APPEND SOURCE
     spapisup/fileqsup.c
     spapisup/infsupp.c
     utils/arcname.c
-    utils/bldrsup.c
     utils/devutils.c
     utils/filesup.c
     utils/fsrec.c

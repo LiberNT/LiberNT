@@ -37,7 +37,6 @@ extern "C" {
 #include "spapisup/infsupp.h"
 #include "utils/linklist.h"
 // #include "utils/arcname.h"
-#include "utils/bldrsup.h"
 #include "utils/filesup.h"
 #include "utils/fsrec.h"
 #include "utils/genlist.h"
