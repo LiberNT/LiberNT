@@ -56,6 +56,7 @@ add_subdirectory(poguid)
 add_subdirectory(pseh)
 
 add_subdirectory(rtl)
+add_subdirectory(rtl/boot)
 add_subdirectory(scrnsave)
 add_subdirectory(skiplist)
 add_subdirectory(strmiids)
