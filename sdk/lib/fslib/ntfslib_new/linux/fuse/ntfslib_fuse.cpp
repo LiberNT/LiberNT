@@ -8230,6 +8230,9 @@ main(int Argc, char** Argv)
                     const char* Comma = strchr(Cursor, ',');
                     std::string Option(Cursor, Comma ? (size_t)(Comma - Cursor) : strlen(Cursor));
 
+                    /* FIXME: a later remount,rw is not seen; the daemon keeps refusing writes. */
+                    if (Option == "ro")
+                        State.Writable = false;
                     if (Option == "noatime")
                         State.NoAtime = true;
                     else if (Option == "strictatime")
