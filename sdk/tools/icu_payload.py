@@ -35,6 +35,7 @@ MSI_ARCH = {
     "arm64": ("x64", "System64Folder", "yes", "Arm64;1033"),
     "i386": ("x86", "SystemFolder", "no", "Intel;1033"),
 }
+LICENSE_NAME = {"amd64": LICENSE, "arm64": LICENSE, "i386": f"{LICENSE}-x86"}
 UPGRADE_NAMESPACE = uuid.UUID("3d1f6a52-8b0e-4c47-a6f2-9e57c1b4d208")
 
 BUILD = r'''
@@ -151,7 +152,7 @@ def write_msi(root, arch, release, version, output, work):
       </Directory>
       <Directory Id="WindowsFolder">
         <Directory Id="ThirdParty" Name="3rdParty">
-          <Component Id="license" Guid="*" Win64="{win64}"><File Id="license" Source={quoteattr(str(root / LICENSE))} KeyPath="yes"/></Component>
+          <Component Id="license" Guid="*" Win64="{win64}"><File Id="license" Name="{LICENSE_NAME[arch]}" Source={quoteattr(str(root / LICENSE))} KeyPath="yes"/></Component>
         </Directory>
       </Directory>
     </Directory>
