@@ -118,6 +118,8 @@ Volume::CompareFileNames(_In_  PUNICODE_STRING Left,
         WCHAR LeftCharacter = Left->Buffer[Index];
         WCHAR RightCharacter = Right->Buffer[Index];
 
+        if (LeftCharacter == RightCharacter)
+            continue;
         if (LeftCharacter < UpcaseTableLength)
             LeftCharacter = UpcaseTable[LeftCharacter];
         if (RightCharacter < UpcaseTableLength)
