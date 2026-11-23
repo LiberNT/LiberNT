@@ -380,7 +380,7 @@ Status SourceManager::ActivateSource(const std::wstring &sourcePackage, bool cop
     SourcePackageContents contents;
     Status status = LoadSourcePackage(sourcePackage, contents);
     if (!status) return status;
-    status = VerifySourcePackageTrust(contents);
+    status = VerifySourcePackageTrust(contents, !copyPackage);
     if (!status) return status;
 
     std::wstring indexTemporary;
