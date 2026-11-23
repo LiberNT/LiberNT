@@ -1,6 +1,6 @@
 ; PROJECT:     ReactOS ARM64 boot hive
 ; LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
-; FILE:        boot/bootdata/hivesys_arm64.inf
+; FILE:        image/data/hivesys_arm64.inf
 ; PURPOSE:     ARM64 boot-start driver registry entries
 ; COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
 

@@ -37,7 +37,7 @@ BEGIN
     IDS_STARTUP "Hasi Menua\\Programak\\Hasi"
     IDS_LOCALSETTINGS "Lokal konfigurazioa"
     IDS_LOCALAPPDATA "Lokal konfigurazioa\\Programaren datuak"
-    IDS_TEMP "Lokal konfigurazioa\\Temp" /* See also TEMP_DIR in boot/bootdata/hivedef.inf */
+    IDS_TEMP "Lokal konfigurazioa\\Temp" /* See also TEMP_DIR in image/data/hivedef.inf */
     IDS_CACHE "Lokal konfigurazioa\\Interneten Aldi Baterako Fitxategiak"
     IDS_HISTORY "Lokal konfigurazioa\\Historia"
     IDS_COOKIES "Cookiak"

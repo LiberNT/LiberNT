@@ -668,7 +668,7 @@ SelfTestReadSddl(
     return Sddl;
 }
 
-/* Setup gives what it installs the security the preinstalled image gets from boot/bootdata/filesecurity.txt */
+/* Setup gives what it installs the security the preinstalled image gets from image/data/filesecurity.txt */
 static VOID
 SelfTestSecurityMatches(
     _In_ PSELFTEST_CONTEXT Context,

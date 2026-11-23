@@ -50,6 +50,6 @@ other wallpapers. Its size is 324,085 bytes, down from 4,742,546 bytes. Its
 provenance record is in LICENSE.txt.
 
 "Sea Bridge" is the default wallpaper. Changing it means updating
-HKCU Control Panel\Desktop\Wallpaper in boot/bootdata/hivedef.inf.
+HKCU Control Panel\Desktop\Wallpaper in image/data/hivedef.inf.
 
 The wallpapers are included in every built image.

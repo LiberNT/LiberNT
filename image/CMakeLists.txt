@@ -6,6 +6,6 @@ endif()
 
 option(BOOTLOADER_WIM_RAMDISK "Boot the live media from a boot.wim RAM disk" OFF)
 
-include(${REACTOS_SOURCE_DIR}/sdk/cmake/boot_images.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/images.cmake)
 
-add_subdirectory(bootdata)
+add_subdirectory(data ${CMAKE_CURRENT_BINARY_DIR}/bootdata)

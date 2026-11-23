@@ -453,4 +453,3 @@ if(ARCH STREQUAL "amd64" OR ARCH STREQUAL "i386")
     add_dependencies(bootloader bootmgrbios winloadpcat)
 endif()
 
-add_subdirectory(image)
