@@ -33,6 +33,8 @@ struct nk_attr
     nk_u32 mapped;
     nk_u32 empty;
     nk_u64 valid;
+    /* Sparse or compressed: the stream can hold holes and grow past the volume's size. */
+    nk_u32 holes;
     /* POSIX ownership, whole st_mode and device number, for those of them the record stores (NK_HAS_*). */
     nk_u32 has;
     nk_u32 uid;

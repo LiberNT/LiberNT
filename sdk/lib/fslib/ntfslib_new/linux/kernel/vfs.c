@@ -47,6 +47,8 @@ struct nk_sb {
 	bool core_wrote_data;
 	/* The last listing's name buffer, for the next listing to take instead of allocating one. */
 	char *list_buffer;
+	/* No file that cannot hold holes grows past this. */
+	u64 volume_bytes;
 	/* The blocks the core touched last, held under the lock so that it finds them again without a search. */
 	struct buffer_head *recent[1u << NK_RECENT_BITS];
 };
@@ -56,6 +58,7 @@ struct nk_inode {
 	bool mapped;
 	bool empty;
 	bool removed;
+	bool holes;
 	/* The record is a directory, whatever the inode shows it as: a junction is a link here. */
 	bool directory_record;
 	/*
@@ -86,6 +89,11 @@ static struct kmem_cache *nk_inode_cache;
 static struct nk_inode *NK_I(struct inode *inode)
 {
 	return container_of(inode, struct nk_inode, vfs);
+}
+
+static struct nk_sb *nk_sbi(struct super_block *sb)
+{
+	return sb->s_fs_info;
 }
 
 /* The core is single threaded: one lock around every call into it. */
@@ -360,6 +368,7 @@ static void nk_apply(struct inode *inode, const struct nk_attr *attr)
 {
 	NK_I(inode)->mapped = attr->mapped;
 	NK_I(inode)->empty = attr->empty;
+	NK_I(inode)->holes = attr->holes;
 	nk_set_valid(NK_I(inode), attr->valid);
 	NK_I(inode)->allocated = attr->allocated;
 	if (attr->directory)
@@ -683,6 +692,9 @@ static int nk_setattr_op(struct mnt_idmap *idmap, struct dentry *dentry, struct 
 	if ((attr->ia_valid & ATTR_SIZE) && attr->ia_size != i_size_read(inode)) {
 		loff_t old = i_size_read(inode);
 		struct nk_attr after;
+
+		if (!ni->holes && attr->ia_size > nk_sbi(inode->i_sb)->volume_bytes)
+			return -EFBIG;
 
 		/* What the last block holds past the old or the new end must not come back when the file grows. */
 		err = nk_zero_tail(inode, min_t(loff_t, attr->ia_size, old));
@@ -1582,6 +1594,15 @@ static ssize_t nk_write_iter(struct kiocb *iocb, struct iov_iter *from)
 
 	inode_lock(inode);
 	ret = generic_write_checks(iocb, from);
+	if (ret > 0 && !ni->holes && iocb->ki_pos + ret > nk_sbi(inode->i_sb)->volume_bytes) {
+		/* As past s_maxbytes: what fits is written, a write that starts beyond fails. */
+		if (iocb->ki_pos >= nk_sbi(inode->i_sb)->volume_bytes) {
+			ret = -EFBIG;
+			goto unlock;
+		}
+		iov_iter_truncate(from, nk_sbi(inode->i_sb)->volume_bytes - iocb->ki_pos);
+		ret = iov_iter_count(from);
+	}
 	if (ret > 0) {
 		u64 end = iocb->ki_pos + ret;
 		int privs = file_modified(iocb->ki_filp);
@@ -1709,6 +1730,7 @@ static struct inode *nk_alloc_inode(struct super_block *sb)
 	ni->mapped = false;
 	ni->empty = false;
 	ni->removed = false;
+	ni->holes = false;
 	ni->directory_record = false;
 	ni->valid = 0;
 	ni->allocated = 0;
@@ -1823,6 +1845,12 @@ static int nk_fill_super(struct super_block *sb, struct fs_context *fc)
 	err = nk_mount(sb, bdev_logical_block_size(sb->s_bdev), sb_rdonly(sb), &sbi->volume, &sbi->root);
 	if (!err)
 		err = nk_getattr(sbi->volume, sbi->root, &attr);
+	if (!err) {
+		struct nk_space space;
+
+		err = nk_space(sbi->volume, &space);
+		sbi->volume_bytes = err ? 0 : space.clusters * space.cluster_bytes;
+	}
 	nk_leave(saved);
 	root = err ? ERR_PTR(err) : nk_iget(sb, &attr);
 	if (!IS_ERR(root))
