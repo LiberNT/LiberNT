@@ -7,6 +7,8 @@
 
 #pragma once
 
+#define IDI_SYSTEMSETTINGS             1
+
 #define IDS_APP_TITLE                  100
 #define IDS_FIND_SETTING               101
 #define IDS_BACK                       102
