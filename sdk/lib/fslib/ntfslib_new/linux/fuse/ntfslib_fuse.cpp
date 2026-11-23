@@ -4136,6 +4136,24 @@ TimespecToNtfsTime(const struct timespec* Time)
     return Ticks > INT64_MAX ? INT64_MAX : Ticks;
 }
 
+/* A stream that cannot hold holes, neither sparse nor compressed, is never larger than its volume. */
+static bool
+ExceedsVolume(NtfsFuseState* State, PNtfsFileRecord File, ULONGLONG Size)
+{
+    PAttribute Data = NtfsFileRecordGetAttribute(File, TypeData, NULL);
+    NtfsFileBasicInformation Basic = {};
+    NtfsVolumeInformation Information;
+
+    if ((Data && (Data->Flags & (ATTR_SPARSE | ATTR_COMPRESSION_MASK))) ||
+        (NT_SUCCESS(NtfsFileRecordGetBasicInformation(File, &Basic)) &&
+         (Basic.FileAttributes & (FILE_PERM_SPARSE | FILE_PERM_COMPRESSED))))
+    {
+        return false;
+    }
+    return NT_SUCCESS(NtfsVolumeQueryInformation(State->Volume, &Information)) &&
+           Size > Information.TotalClusters * (ULONGLONG)Information.BytesPerCluster;
+}
+
 static bool
 IsReadOnlyFile(PNtfsFileRecord File)
 {
@@ -5106,6 +5124,12 @@ NtfsLowSetattr(fuse_req_t Request,
             Status = STATUS_FILE_IS_A_DIRECTORY;
         else if (!(FileInfo && FileInfo->fh) && IsReadOnlyFile(File))
             Status = STATUS_ACCESS_DENIED;
+        else if (ExceedsVolume(State, File, (ULONGLONG)Attributes->st_size))
+        {
+            ReleaseLoaded(File, Owned);
+            fuse_reply_err(Request, EFBIG);
+            return;
+        }
         else
             Status = NtfsFileRecordSetFileDataSize(File, TypeData, NULL,
                                                    (ULONGLONG)Attributes->st_size);

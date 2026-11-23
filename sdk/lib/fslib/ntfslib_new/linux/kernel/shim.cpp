@@ -460,6 +460,7 @@ FillAttr(PNtfsFileRecord File, struct nk_attr* Attr)
     Attr->mapped = 0;
     Attr->empty = 0;
     Attr->valid = 0;
+    Attr->holes = 0;
     if (Data && !Attr->directory)
     {
         bool Plain = !Data->Flags && !NtfsFileRecordGetAttribute(File, TypeReparsePoint, NULL);
@@ -471,6 +472,8 @@ FillAttr(PNtfsFileRecord File, struct nk_attr* Attr)
         Attr->empty = Plain && !Data->IsNonResident && Attr->size == 0;
     }
     (void)NtfsFileRecordGetBasicInformation(File, &Basic);
+    Attr->holes = (Data && (Data->Flags & (ATTR_SPARSE | ATTR_COMPRESSION_MASK))) ||
+                  (Basic.FileAttributes & (FILE_PERM_SPARSE | FILE_PERM_COMPRESSED));
     Attr->created = Basic.CreationTime;
     Attr->accessed = Basic.LastAccessTime;
     Attr->written = Basic.LastWriteTime;
