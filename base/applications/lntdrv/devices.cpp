@@ -617,6 +617,40 @@ bool WantsCatalogDriver(const DeviceInfo &device)
     return NeedsDriver(device) || (GenericDriver(device) && !CatalogQueries(device).empty());
 }
 
+std::wstring GroupKey(const DeviceInfo &device)
+{
+    return device.HardwareIds.empty() ? device.InstanceId : device.HardwareIds.front();
+}
+
+std::vector<std::vector<DeviceInfo>> MissingGroups(const std::vector<DeviceInfo> &devices, bool searchable, bool generic)
+{
+    std::vector<std::vector<DeviceInfo>> groups;
+
+    for (const DeviceInfo &device : devices)
+    {
+        std::wstring key = GroupKey(device);
+        auto group = std::find_if(groups.begin(), groups.end(), [&key](const std::vector<DeviceInfo> &other) {
+            return _wcsicmp(GroupKey(other.front()).c_str(), key.c_str()) == 0;
+        });
+
+        if (!(generic ? WantsCatalogDriver(device) : NeedsDriver(device)) ||
+            (searchable && CatalogQueries(device).empty()))
+        {
+            continue;
+        }
+        if (group == groups.end())
+            groups.push_back(std::vector<DeviceInfo>(1, device));
+        else
+            group->push_back(device);
+    }
+    return groups;
+}
+
+std::vector<std::vector<DeviceInfo>> MissingInstallAllGroups(const std::vector<DeviceInfo> &devices)
+{
+    return MissingGroups(devices, true, false);
+}
+
 std::wstring DeviceStatus(const DeviceInfo &device)
 {
     if (NeedsDriver(device))

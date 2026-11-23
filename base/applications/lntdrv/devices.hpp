@@ -83,6 +83,10 @@ bool GenericDriver(const DeviceInfo &device);
 bool NeedsDriver(const DeviceInfo &device);
 bool NullDriver(const DeviceInfo &device);
 bool WantsCatalogDriver(const DeviceInfo &device);
+std::wstring GroupKey(const DeviceInfo &device);
+std::vector<std::vector<DeviceInfo>> MissingGroups(const std::vector<DeviceInfo> &devices, bool searchable,
+                                                   bool generic);
+std::vector<std::vector<DeviceInfo>> MissingInstallAllGroups(const std::vector<DeviceInfo> &devices);
 std::wstring DeviceStatus(const DeviceInfo &device);
 std::wstring DeviceDetails(const DeviceInfo &device, const std::vector<HistoryEntry> &history);
 std::vector<std::wstring> CatalogQueries(const DeviceInfo &device);
