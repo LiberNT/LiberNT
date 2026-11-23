@@ -732,6 +732,7 @@ NtGdiDdDDIOpenAdapterFromHdc(_Inout_ D3DKMT_OPENADAPTERFROMHDC* unnamedParam1)
 {
     D3DKMT_OPENADAPTERFROMHDC Captured;
     WCHAR DeviceName[CCHDEVICENAME / 2];
+    BOOLEAN Desktop = FALSE;
     PDC Dc;
     NTSTATUS Status = D3dkmtValidateWddmThunk(unnamedParam1);
 
@@ -755,7 +756,11 @@ NtGdiDdDDIOpenAdapterFromHdc(_Inout_ D3DKMT_OPENADAPTERFROMHDC* unnamedParam1)
     Dc = DC_LockDc(Captured.hDc);
     if (Dc == NULL)
         return STATUS_INVALID_PARAMETER;
-    if (Dc->dctype != DCTYPE_DIRECT || Dc->ppdev == NULL || (Dc->ppdev->flFlags & PDEV_DISPLAY) == 0 || Dc->ppdev->pGraphicsDevice == NULL || Dc->ppdev->pGraphicsDevice->szNtDeviceName[0] == L'\0')
+    if (Dc->dctype != DCTYPE_DIRECT || Dc->ppdev == NULL || (Dc->ppdev->flFlags & PDEV_DISPLAY) == 0)
+        Status = STATUS_INVALID_HANDLE;
+    else if (Dc->ppdev->pGraphicsDevice == NULL)
+        Desktop = TRUE;
+    else if (Dc->ppdev->pGraphicsDevice->szNtDeviceName[0] == L'\0')
         Status = STATUS_INVALID_HANDLE;
     else
     {
@@ -765,14 +770,22 @@ NtGdiDdDDIOpenAdapterFromHdc(_Inout_ D3DKMT_OPENADAPTERFROMHDC* unnamedParam1)
     DC_UnlockDc(Dc);
     if (!NT_SUCCESS(Status))
         return Status;
+    /* TODO: INFO_NEEDED: the display Windows 11 picks for a window DC on another display of the extended desktop; this uses the primary */
+    if (Desktop && !NT_SUCCESS(EngpGetPrimaryDisplayNtName(DeviceName, RTL_NUMBER_OF(DeviceName))))
+        return STATUS_INVALID_HANDLE;
 
-    Status = D3dkmtOpenAdapterByCapturedNtDeviceName(
-                 DeviceName,
-                 &Captured.hAdapter,
-                 &Captured.AdapterLuid);
+    Status = D3dkmtOpenAdapterByDisplayDevice(DeviceName, &Captured.hAdapter, &Captured.AdapterLuid,
+                                              &Captured.VidPnSourceId);
     if (!NT_SUCCESS(Status))
-        return Status;
-    Captured.VidPnSourceId = 0;
+    {
+        Status = D3dkmtOpenAdapterByCapturedNtDeviceName(
+                     DeviceName,
+                     &Captured.hAdapter,
+                     &Captured.AdapterLuid);
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Captured.VidPnSourceId = 0;
+    }
     _SEH2_TRY
     {
         if (ExGetPreviousMode() != KernelMode)

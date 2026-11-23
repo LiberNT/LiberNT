@@ -866,6 +866,29 @@ leave:
 }
 
 
+NTSTATUS
+NTAPI
+EngpGetPrimaryDisplayNtName(
+    _Out_writes_(cchName) PWSTR pwszName,
+    _In_ SIZE_T cchName)
+{
+    PPDEVOBJ ppdevPrimary;
+    NTSTATUS Status = STATUS_NOT_FOUND;
+
+    ASSERT(pwszName != NULL);
+    ASSERT(cchName != 0);
+    EngAcquireSemaphoreShared(ghsemPDEV);
+    if (gpmdev && gpmdev->cDev != 0)
+    {
+        ppdevPrimary = MultiPrimaryDisplay(gpmdev);
+        ASSERT(ppdevPrimary != NULL);
+        if (ppdevPrimary->pGraphicsDevice && ppdevPrimary->pGraphicsDevice->szNtDeviceName[0] != L'\0')
+            Status = RtlStringCchCopyW(pwszName, cchName, ppdevPrimary->pGraphicsDevice->szNtDeviceName);
+    }
+    EngReleaseSemaphore(ghsemPDEV);
+    return Status;
+}
+
 PPDEVOBJ
 NTAPI
 EngpGetPDEV(
