@@ -58,7 +58,7 @@ START_TEST(counters)
 
     if (Info.LastDeviceDependentCounter >= D3D11_COUNTER_DEVICE_DEPENDENT_0)
     {
-        Desc.Counter = D3D11_COUNTER_DEVICE_DEPENDENT_0;
+        Desc.Counter = Info.LastDeviceDependentCounter;
         Hr = Device->CreateCounter(&Desc, NULL);
         ok(Hr == S_FALSE, "CreateCounter validation-only call: %#lx\n", Hr);
     }
