@@ -332,6 +332,21 @@ IntDesktopObjectDelete(
     return STATUS_SUCCESS;
 }
 
+static BOOL
+IntIsDesktopHandleInUse(_In_ PPROCESSINFO ppi, _In_ HDESK hDesktop)
+{
+    PTHREADINFO pti;
+
+    if (hDesktop == ppi->hdeskStartup)
+        return TRUE;
+    for (pti = ppi->ptiList; pti != NULL; pti = pti->ptiSibling)
+    {
+        if (pti->hdesk == hDesktop)
+            return TRUE;
+    }
+    return FALSE;
+}
+
 NTSTATUS
 NTAPI
 IntDesktopOkToClose(
@@ -339,6 +354,7 @@ IntDesktopOkToClose(
 {
     PWIN32_OKAYTOCLOSEMETHOD_PARAMETERS OkToCloseParameters = Parameters;
     PTHREADINFO pti = PsGetCurrentThreadWin32Thread();
+    BOOL InUse;
 
     if (pti == NULL)
     {
@@ -346,14 +362,10 @@ IntDesktopOkToClose(
         return STATUS_SUCCESS;
     }
 
-    /* Do not allow the current desktop or the initial desktop to be closed */
-    if (OkToCloseParameters->Handle == pti->ppi->hdeskStartup ||
-        OkToCloseParameters->Handle == pti->hdesk)
-    {
-        return STATUS_ACCESS_DENIED;
-    }
-
-    return STATUS_SUCCESS;
+    UserEnterShared();
+    InUse = IntIsDesktopHandleInUse(pti->ppi, OkToCloseParameters->Handle);
+    UserLeave();
+    return InUse ? STATUS_ACCESS_DENIED : STATUS_SUCCESS;
 }
 
 NTSTATUS
@@ -3125,7 +3137,7 @@ NtUserCloseDesktop(HDESK hDesktop)
     TRACE("NtUserCloseDesktop(0x%p) called\n", hDesktop);
     UserEnterExclusive();
 
-    if (hDesktop == gptiCurrent->hdesk || hDesktop == gptiCurrent->ppi->hdeskStartup)
+    if (IntIsDesktopHandleInUse(gptiCurrent->ppi, hDesktop))
     {
         ERR("Attempted to close thread desktop\n");
         EngSetLastError(ERROR_BUSY);
