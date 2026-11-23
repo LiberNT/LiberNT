@@ -121,7 +121,7 @@ NTSTATUS NTAPI LdrpInitializeProcess(IN PCONTEXT Context, IN PVOID SystemArgumen
 VOID NTAPI LdrpInitFailure(NTSTATUS Status);
 VOID NTAPI LdrpValidateImageForMp(IN PLDR_DATA_TABLE_ENTRY LdrDataTableEntry);
 VOID NTAPI LdrpEnsureLoaderLockIsHeld(VOID);
-NTSTATUS NTAPI LdrpInitializeGuard(IN PLDR_DATA_TABLE_ENTRY LdrEntry);
+NTSTATUS NTAPI LdrpProcessLoadConfig(IN PLDR_DATA_TABLE_ENTRY LdrEntry);
 
 /* ldrpe.c */
 PWSTR
@@ -228,12 +228,25 @@ LdrpOwnsLoaderLock(VOID)
     return LdrpLoaderLock.OwningThread == NtCurrentTeb()->ClientId.UniqueThread;
 }
 
+typedef struct _LDRP_MODULE_ENTRY
+{
+    LDR_DATA_TABLE_ENTRY Entry;
+    LONG InitializationScheduled;
+} LDRP_MODULE_ENTRY, *PLDRP_MODULE_ENTRY;
+
+FORCEINLINE
+VOID
+LdrpMarkInitializationScheduled(PLDR_DATA_TABLE_ENTRY Entry)
+{
+    WriteRelease(&CONTAINING_RECORD(Entry, LDRP_MODULE_ENTRY, Entry)->InitializationScheduled, TRUE);
+}
+
 FORCEINLINE
 BOOLEAN
 LdrpIsModuleReady(
     _In_ PLDR_DATA_TABLE_ENTRY LdrEntry)
 {
-    return (ReadAcquire((volatile LONG *)&LdrEntry->Flags) & LDRP_ENTRY_PROCESSED) != 0;
+    return ReadAcquire(&CONTAINING_RECORD(LdrEntry, LDRP_MODULE_ENTRY, Entry)->InitializationScheduled) != 0;
 }
 
 FORCEINLINE

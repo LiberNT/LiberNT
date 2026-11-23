@@ -148,6 +148,8 @@ LdrpPinNode(PLDR_DDAG_NODE Node)
 static VOID
 LdrpReleaseNode(PLDR_DDAG_NODE Node)
 {
+    /* Multiple incoming edges can reach a node already released in this unload. */
+    if (Node->State == LdrModulesUnloading) return;
     ASSERT(Node->LoadCount);
     if (Node->LoadCount == MAXULONG) return;
     if (Node->LoadCount == 1 && Node->IncomingDependencies.Tail)
