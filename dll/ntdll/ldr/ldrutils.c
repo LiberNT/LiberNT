@@ -1537,7 +1537,7 @@ RelocDone:;
 
     if (NT_SUCCESS(Status) && LdrEntry)
     {
-        Status = LdrpInitializeGuard(LdrEntry);
+        Status = LdrpProcessLoadConfig(LdrEntry);
         if (!NT_SUCCESS(Status))
         {
             DPRINT1("LDR: CFG initialization failed for %wZ, Status = 0x%08lx\n", &LdrEntry->BaseDllName, Status);
@@ -1595,7 +1595,7 @@ LdrpAllocateDataTableEntry(IN PVOID BaseAddress)
         /* Allocate an entry */
         LdrEntry = RtlAllocateHeap(LdrpHeap,
                                    HEAP_ZERO_MEMORY,
-                                   sizeof(*LdrEntry));
+                                   sizeof(LDRP_MODULE_ENTRY));
 
         if (LdrEntry && !LdrpInitializeNode(LdrEntry))
         {
@@ -1641,6 +1641,7 @@ LdrpInsertMemoryTableEntry(IN PLDR_DATA_TABLE_ENTRY LdrEntry)
     /* Insert into other lists */
     InsertTailList(&PebData->InLoadOrderModuleList, &LdrEntry->InLoadOrderLinks);
     InsertTailList(&PebData->InMemoryOrderModuleList, &LdrEntry->InMemoryOrderLinks);
+    LdrEntry->Flags |= LDRP_IN_LEGACY_LISTS;
     LdrpInsertImageRange(LdrEntry);
 
     RtlReleaseSRWLockExclusive(&LdrpModuleDatatableLock);
@@ -1653,6 +1654,7 @@ NTAPI
 LdrpRemoveMemoryTableEntry(IN PLDR_DATA_TABLE_ENTRY LdrEntry)
 {
     RtlAcquireSRWLockExclusive(&LdrpModuleDatatableLock);
+    LdrEntry->Flags &= ~LDRP_IN_LEGACY_LISTS;
     LdrpRemoveImageRange(LdrEntry);
     RemoveEntryList(&LdrEntry->InLoadOrderLinks);
     RemoveEntryList(&LdrEntry->InMemoryOrderLinks);
@@ -2542,7 +2544,7 @@ LdrpGetProcedureAddress(
                                          InInitializationOrderLinks);
 
             /* Make sure we didn't process it yet*/
-            if (!(LdrEntry->Flags & LDRP_ENTRY_PROCESSED))
+            if (!LdrpIsModuleReady(LdrEntry))
             {
                 /* Call the init routine */
                 _SEH2_TRY
@@ -2753,7 +2755,7 @@ LdrpLoadDll(IN BOOLEAN Redirected,
                     goto Done;
                 }
             }
-            if (!(LdrEntry->Flags & LDRP_LOAD_NOTIFICATIONS_SENT))
+            if ((LdrEntry->Flags & LDRP_IMAGE_DLL) && !(LdrEntry->Flags & LDRP_LOAD_NOTIFICATIONS_SENT))
             {
                 LdrpSendDllNotifications(LdrEntry, LDR_DLL_NOTIFICATION_REASON_LOADED);
                 LdrEntry->Flags |= LDRP_LOAD_NOTIFICATIONS_SENT;
@@ -2770,6 +2772,7 @@ LdrpLoadDll(IN BOOLEAN Redirected,
                 if (g_ShimsEnabled)
                 {
                     VOID (NTAPI* SE_DllLoaded)(PLDR_DATA_TABLE_ENTRY) = RtlDecodeSystemPointer(g_pfnSE_DllLoaded);
+                    LdrEntry->Flags |= LDRP_SHIM_ENGINE_CALLOUT_SENT;
                     SE_DllLoaded(LdrEntry);
                 }
 
@@ -2849,9 +2852,9 @@ LdrpCountUnprocessedEntries(VOID)
                                      LDR_DATA_TABLE_ENTRY,
                                      InInitializationOrderLinks);
 
-        /* Check for modules with entry point count but not processed yet */
-        if ((LdrEntry->EntryPoint) &&
-            !(LdrEntry->Flags & LDRP_ENTRY_PROCESSED))
+        /* Count each DLL that this initialization round will schedule. */
+        if ((LdrEntry->Flags & (LDRP_IMAGE_DLL | LDRP_ENTRY_PROCESSED)) == LDRP_IMAGE_DLL &&
+            !LdrpIsModuleReady(LdrEntry))
         {
             /* Increase counter */
             ModulesCount++;

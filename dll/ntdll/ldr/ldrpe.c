@@ -1331,7 +1331,7 @@ LdrpSnapThunk(IN PVOID ExportBase,
     if ((ULONG)Ordinal >= ExportDirectory->NumberOfFunctions)
     {
 FailurePath:
-        /* Check if we loeaded a forwarder DLL */
+        /* Release any reference that has not reached the graph. */
         if (ForwarderReferenced)
         {
             /* Unload the forwarder DLL */
@@ -1540,8 +1540,7 @@ FailurePath:
             if (LookupOnly && !NT_SUCCESS(Status))
                 return STATUS_RETRY;
 
-            /* If the load or conversion failed, use the failure path */
-            if (!NT_SUCCESS(Status)) goto FailurePath;
+            if (!NT_SUCCESS(Status)) goto ForwarderFailure;
 
             if (ForwarderReferenced)
             {
@@ -1596,10 +1595,7 @@ FailurePath:
                                              FALSE,
                                              DllPath,
                                              StaticImporter, ForwarderOwner);
-            /* If this fails, then error out */
-            if (!NT_SUCCESS(Status)) goto FailurePath;
-
-
+            if (!NT_SUCCESS(Status)) goto ForwarderFailure;
         }
         else
         {
@@ -1633,6 +1629,16 @@ FailurePath:
     }
 
     /* Return status */
+    return Status;
+
+ForwarderFailure:
+    /* A missing forwarder is reported against the original export. Preserve
+     * operational errors through every level of a forwarded call. */
+    if (Status == STATUS_DLL_NOT_FOUND || Status == STATUS_PROCEDURE_NOT_FOUND ||
+        Status == STATUS_ORDINAL_NOT_FOUND || Status == STATUS_ENTRYPOINT_NOT_FOUND ||
+        Status == STATUS_OBJECT_NAME_NOT_FOUND || Status == STATUS_OBJECT_PATH_NOT_FOUND)
+        goto FailurePath;
+    if (ForwarderReferenced) LdrUnloadDll(ForwarderHandle);
     return Status;
 }
 

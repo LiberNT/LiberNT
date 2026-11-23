@@ -302,8 +302,7 @@ LdrpValidateUserCallTarget(
     return LdrpGuardDynamicTargetIsExecutable(Target);
 }
 
-NTSTATUS
-NTAPI
+static NTSTATUS
 LdrpInitializeGuard(
     _In_ PLDR_DATA_TABLE_ENTRY LdrEntry)
 {
@@ -392,8 +391,7 @@ NTSTATUS NTAPI RtlSetCfgTargetValidity(_In_ PVOID Base, _In_ SIZE_T Size, _In_ U
     return STATUS_NOT_SUPPORTED;
 }
 
-NTSTATUS
-NTAPI
+static NTSTATUS
 LdrpInitializeGuard(
     _In_ PLDR_DATA_TABLE_ENTRY LdrEntry)
 {
@@ -408,3 +406,47 @@ LdrpGuardInvalidateModuleCache(VOID)
 }
 
 #endif
+
+NTSTATUS
+NTAPI
+LdrpProcessLoadConfig(PLDR_DATA_TABLE_ENTRY Entry)
+{
+    PIMAGE_NT_HEADERS Headers = RtlImageNtHeader(Entry->DllBase);
+    ULONG DirectorySize, Field, Size, GuardFlags, Flags = LDRP_LOAD_CONFIG_PROCESSED;
+    PUCHAR Config;
+    ULONG_PTR Offset;
+    NTSTATUS Status;
+
+    if (!Headers)
+        return STATUS_INVALID_IMAGE_FORMAT;
+
+    _SEH2_TRY
+    {
+        Config = RtlImageDirectoryEntryToData(Entry->DllBase, TRUE, IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG, &DirectorySize);
+        if (Config && DirectorySize >= sizeof(Size))
+        {
+            Field = Headers->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC ?
+                FIELD_OFFSET(IMAGE_LOAD_CONFIG_DIRECTORY32, GuardFlags) :
+                FIELD_OFFSET(IMAGE_LOAD_CONFIG_DIRECTORY64, GuardFlags);
+            Offset = (ULONG_PTR)Config - (ULONG_PTR)Entry->DllBase;
+            if (Offset <= Entry->SizeOfImage && Entry->SizeOfImage - Offset >= Field + sizeof(GuardFlags))
+            {
+                RtlCopyMemory(&Size, Config, sizeof(Size));
+                if (Size >= Field + sizeof(GuardFlags))
+                {
+                    RtlCopyMemory(&GuardFlags, Config + Field, sizeof(GuardFlags));
+                    if (GuardFlags & IMAGE_GUARD_PROTECT_DELAYLOAD_IAT)
+                        Flags |= LDRP_PROTECT_DELAY_LOAD;
+                }
+            }
+        }
+        Status = LdrpInitializeGuard(Entry);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = STATUS_INVALID_IMAGE_FORMAT;
+    }
+    _SEH2_END;
+    if (NT_SUCCESS(Status)) InterlockedOr((PLONG)&Entry->Flags, Flags);
+    return Status;
+}

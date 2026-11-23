@@ -223,11 +223,47 @@ static void CheckModuleEntry(HMODULE Module, BOOL ProcessImport, LDR_DLL_LOAD_RE
     ok_ptr((PVOID)Entry->OriginalBase, (PVOID)(ULONG_PTR)RtlImageNtHeader(Module)->OptionalHeader.ImageBase);
 }
 
+typedef struct _ENTRY_NOTIFICATIONS
+{
+    UNICODE_STRING Name;
+    ULONG Loads, Unloads;
+    ULONG LoadFlags, UnloadFlags;
+} ENTRY_NOTIFICATIONS;
+
+static VOID CALLBACK CaptureEntryFlags(ULONG Reason, PCLDR_DLL_NOTIFICATION_DATA Data, PVOID Context)
+{
+    ENTRY_NOTIFICATIONS *Notifications = Context;
+    PLDR_DATA_TABLE_ENTRY Entry = NULL;
+    ULONG Flags = MAXULONG;
+
+    if (!RtlEqualUnicodeString(&Notifications->Name, Data->Loaded.BaseDllName, TRUE))
+        return;
+    if (NT_SUCCESS(LdrFindEntryForAddress(Data->Loaded.DllBase, &Entry)))
+        Flags = Entry->Flags;
+    if (Reason == LDR_DLL_NOTIFICATION_REASON_LOADED)
+    {
+        ++Notifications->Loads;
+        Notifications->LoadFlags = Flags;
+    }
+    else
+    {
+        ++Notifications->Unloads;
+        Notifications->UnloadFlags = Flags;
+    }
+}
+
 START_TEST(LdrModuleEntry)
 {
     WCHAR Directory[MAX_PATH], Filename[MAX_PATH];
     HMODULE Module;
     DWORD Length;
+    ENTRY_NOTIFICATIONS Notifications = {0};
+    PVOID Cookie = NULL;
+    const ULONG Membership = LDRP_IN_LEGACY_LISTS | LDRP_IN_INDEXES |
+                             LDRP_IN_EXCEPTION_TABLE | LDRP_LOAD_CONFIG_PROCESSED;
+    const ULONG Mask = Membership | LDRP_IMAGE_DLL | LDRP_ENTRY_PROCESSED |
+                       LDRP_LOAD_NOTIFICATIONS_SENT | LDRP_PROCESS_ATTACH_CALLED | LDRP_PROCESS_ATTACH_FAILED;
+    const ULONG Ready = Membership | LDRP_IMAGE_DLL | LDRP_LOAD_NOTIFICATIONS_SENT | LDRP_PROCESS_ATTACH_CALLED;
 
     if (NtCurrentPeb()->OSMajorVersion < 10)
     {
@@ -252,6 +288,8 @@ START_TEST(LdrModuleEntry)
     }
     if (extract_resource(Filename, (LPCWSTR)102))
     {
+        RtlInitUnicodeString(&Notifications.Name, wcsrchr(Filename, L'\\') + 1);
+        ok_ntstatus(LdrRegisterDllNotification(0, CaptureEntryFlags, &Notifications, &Cookie), STATUS_SUCCESS);
         Module = LoadLibraryW(Filename);
         ok(Module != NULL, "LoadLibraryW failed, error %lu\n", GetLastError());
         if (Module)
@@ -261,6 +299,7 @@ START_TEST(LdrModuleEntry)
             CheckModuleEntry(Module, FALSE, LoadReasonDynamicLoad);
             if (NT_SUCCESS(LdrFindEntryForAddress(Module, &Entry)) && Entry->DdagNode)
             {
+                ok_hex(Entry->Flags & Mask, Ready);
                 ok_int(Entry->ObsoleteLoadCount, 6);
                 ok_int(Entry->ReferenceCount, 1);
                 ok_ptr(Entry->NodeModuleLink.Flink, &Entry->DdagNode->Modules);
@@ -279,6 +318,29 @@ START_TEST(LdrModuleEntry)
             }
             FreeLibrary(Module);
         }
+        ok_int(Notifications.Loads, 1);
+        ok_int(Notifications.Unloads, 1);
+        ok_hex(Notifications.LoadFlags & Mask, Membership | LDRP_IMAGE_DLL);
+        ok_hex(Notifications.UnloadFlags & Mask, Ready);
+
+        Module = LoadLibraryExW(Filename, NULL, DONT_RESOLVE_DLL_REFERENCES);
+        ok(Module != NULL, "LoadLibraryExW failed, error %lu\n", GetLastError());
+        if (Module)
+        {
+            PLDR_DATA_TABLE_ENTRY Entry;
+            NTSTATUS Status = LdrFindEntryForAddress(Module, &Entry);
+            ok_ntstatus(Status, STATUS_SUCCESS);
+            if (NT_SUCCESS(Status))
+            {
+                ok_hex(Entry->Flags & Mask, Membership);
+                ok(Entry->DdagNode && Entry->DdagNode->State == LdrModulesReadyToRun,
+                   "Expected a ready node for an unresolved image\n");
+            }
+            FreeLibrary(Module);
+        }
+        ok_int(Notifications.Loads, 1);
+        ok_int(Notifications.Unloads, 1);
+        if (Cookie) LdrUnregisterDllNotification(Cookie);
     }
     DeleteFileW(Filename);
 }

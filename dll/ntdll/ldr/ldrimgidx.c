@@ -100,6 +100,7 @@ LdrpInsertImageRange(
     LdrpImageRanges[Index].End = End;
     LdrpImageRanges[Index].Entry = Entry;
     LdrpImageRangeCount++;
+    Entry->Flags |= LDRP_IN_INDEXES | LDRP_IN_EXCEPTION_TABLE;
 }
 
 _Requires_exclusive_lock_held_(LdrpModuleDatatableLock)
@@ -118,6 +119,7 @@ LdrpRemoveImageRange(
 
     Index--;
     LdrpImageRangeCount--;
+    Entry->Flags &= ~(LDRP_IN_INDEXES | LDRP_IN_EXCEPTION_TABLE);
     RtlMoveMemory(&LdrpImageRanges[Index],
                   &LdrpImageRanges[Index + 1],
                   (LdrpImageRangeCount - Index) * sizeof(LDRP_IMAGE_RANGE));

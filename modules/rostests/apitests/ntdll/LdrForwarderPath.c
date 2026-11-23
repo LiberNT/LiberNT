@@ -69,6 +69,21 @@ static void Child(int argc, char **argv)
         if (!hModule)
             ExitProcess(RESULT_NOT_LOADED | GetLastError());
     }
+    if (!strcmp(argv[2], "Diamond"))
+    {
+        HMODULE Middle, Leaf;
+        /* Resolving A.Bar adds A->B and A->C. Resolving B.Bar adds B->C. */
+        pfn = GetProcAddress(hModule, "Bar");
+        Middle = GetModuleHandleW(L"ldrfwd_b.dll");
+        Leaf = GetModuleHandleW(L"ldrfwd_c.dll");
+        if (!pfn || !Middle || !Leaf || GetProcAddress(Middle, "Bar") != pfn)
+            ExitProcess(ERROR_PROC_NOT_FOUND);
+        if (!FreeLibrary(Leaf) || GetModuleHandleW(L"ldrfwd_c.dll") != Leaf ||
+            !FreeLibrary(hModule) || GetModuleHandleW(L"ldrfwd_b.dll") ||
+            GetModuleHandleW(L"ldrfwd_c.dll"))
+            ExitProcess(ERROR_INVALID_DATA);
+        ExitProcess(0);
+    }
     pfn = GetProcAddress(hModule, argv[2]);
     if (!pfn)
         ExitProcess(GetLastError());
@@ -142,6 +157,8 @@ START_TEST(LdrForwarderPath)
 
     ok_long(RunChild("Bar", "8"), 43);
     ok_long(RunChild("Bar", "100"), 43);
+    if (NtCurrentPeb()->OSMajorVersion >= 10)
+        ok_long(RunChild("Diamond", "8"), 0);
     ok_long(RunChild("Foo", "0 8"), ERROR_PROC_NOT_FOUND);
     ok_long(RunChild("Foo", "8 0"), 42);
     ok_long(RunChild("Foo", "800 100"), ERROR_PROC_NOT_FOUND);

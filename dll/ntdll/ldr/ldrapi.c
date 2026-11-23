@@ -1402,11 +1402,8 @@ LdrDisableThreadCalloutsForDll(
     {
         /* Get if it has a TLS slot */
         if (!LdrEntry->TlsIndex)
-        {
-            /* It doesn't, so you're allowed to call this */
             LdrEntry->Flags |= LDRP_DONT_CALL_FOR_THREADS;
-            Status = STATUS_SUCCESS;
-        }
+        Status = STATUS_SUCCESS;
     }
 
     /* Check if the lock was held */
@@ -1537,6 +1534,7 @@ LdrUnloadDll(
     Released = LdrpAdjustReference(LdrEntry, TRUE, TRUE);
     RtlReleaseSRWLockExclusive(&LdrpModuleDatatableLock);
     if (!Released || LdrEntry->DdagNode->LoadCount) goto Quickie;
+    InterlockedIncrement((PLONG)&LdrEntry->ReferenceCount);
 
     /* Show debug message */
     if (ShowSnaps) DPRINT1("LDR: UNINIT LIST\n");
@@ -1621,7 +1619,7 @@ LdrUnloadDll(
         EntryPoint = LdrEntry->EntryPoint;
 
         /* Check if we should call it */
-        if ((EntryPoint || LdrEntry->TlsIndex) && (LdrEntry->Flags & LDRP_PROCESS_ATTACH_CALLED))
+        if (EntryPoint && (LdrEntry->Flags & LDRP_PROCESS_ATTACH_CALLED))
         {
             /* Show message */
             if (ShowSnaps)
@@ -1678,16 +1676,13 @@ LdrUnloadDll(
 
         /* Send shutdown notification */
         if (CurrentEntry->Flags & LDRP_LOAD_NOTIFICATIONS_SENT)
-        {
-            if (CurrentEntry->DllBase == BaseAddress)
-                InterlockedIncrement((PLONG)&CurrentEntry->ReferenceCount);
             LdrpSendDllNotifications(CurrentEntry, LDR_DLL_NOTIFICATION_REASON_UNLOADED);
-        }
 
         /* Remove it from the list */
         RtlAcquireSRWLockExclusive(&LdrpModuleDatatableLock);
         LdrpRemoveImageRange(CurrentEntry);
         RemoveEntryList(&CurrentEntry->InLoadOrderLinks);
+        CurrentEntry->Flags &= ~LDRP_IN_LEGACY_LISTS;
         LdrpLoadedDllHandleCache = NULL;
         LdrpGetModuleHandleCache = NULL;
         RtlReleaseSRWLockExclusive(&LdrpModuleDatatableLock);
