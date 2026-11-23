@@ -81,6 +81,7 @@ bool HasDriver(const DeviceInfo &device);
 DWORD InstalledRank(const DeviceInfo &device);
 bool GenericDriver(const DeviceInfo &device);
 bool NeedsDriver(const DeviceInfo &device);
+bool NullDriver(const DeviceInfo &device);
 bool WantsCatalogDriver(const DeviceInfo &device);
 std::wstring DeviceStatus(const DeviceInfo &device);
 std::wstring DeviceDetails(const DeviceInfo &device, const std::vector<HistoryEntry> &history);

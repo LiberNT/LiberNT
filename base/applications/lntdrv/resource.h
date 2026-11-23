@@ -156,3 +156,4 @@
 #define IDS_SPEED_KB                 2135
 #define IDS_SPEED_MB                 2136
 #define IDS_ERROR_PROTECTED          2137
+#define IDS_STATUS_NO_DRIVER_NEEDED  2138

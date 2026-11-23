@@ -148,6 +148,7 @@ BEGIN
     IDS_STATUS_PROBLEM "問題コード %1"
     IDS_STATUS_WORKING "正常に動作"
     IDS_STATUS_STOPPED "開始されていません"
+    IDS_STATUS_NO_DRIVER_NEEDED "動作中 (ドライバーは不要)"
     IDS_SOURCE_CATALOG "Microsoft Update カタログ"
     IDS_SOURCE_THIRD_PARTY "サードパーティ"
     IDS_DETAIL_NAME "名前: %1"

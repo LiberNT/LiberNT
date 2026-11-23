@@ -141,6 +141,7 @@ BEGIN
     IDS_STATUS_PROBLEM "Code de problème %1"
     IDS_STATUS_WORKING "Fonctionne"
     IDS_STATUS_STOPPED "Non démarré"
+    IDS_STATUS_NO_DRIVER_NEEDED "Fonctionne, aucun pilote requis"
     IDS_SOURCE_CATALOG "Catalogue Microsoft Update"
     IDS_SOURCE_THIRD_PARTY "Tiers"
     IDS_DETAIL_NAME "Nom : %1"

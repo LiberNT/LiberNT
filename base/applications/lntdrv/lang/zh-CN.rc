@@ -148,6 +148,7 @@ BEGIN
     IDS_STATUS_PROBLEM "问题代码 %1"
     IDS_STATUS_WORKING "正常工作"
     IDS_STATUS_STOPPED "未启动"
+    IDS_STATUS_NO_DRIVER_NEEDED "正常工作，无需驱动程序"
     IDS_SOURCE_CATALOG "Microsoft 更新目录"
     IDS_SOURCE_THIRD_PARTY "第三方"
     IDS_DETAIL_NAME "名称: %1"

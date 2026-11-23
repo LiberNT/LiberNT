@@ -138,8 +138,22 @@ static void CheckInfClass(const char *klass, const char *guid, bool function)
     DeleteFileW(path);
 }
 
+static void CheckNullDriver(const wchar_t *inf, const wchar_t *service, bool expected)
+{
+    DeviceInfo device = Device(L"PCI\\VEN_1022&DEV_14EC&SUBSYS_14EC1022&REV_00\\4&6FF89C89&0&0042",
+                               { L"PCI\\VEN_1022&DEV_14EC&SUBSYS_14EC1022&REV_00" }, {});
+
+    device.Inf = inf;
+    device.Service = service;
+    ok(NullDriver(device) == expected, "inf '%ls', service '%ls': null driver %d, expected %d\n", inf, service,
+       NullDriver(device), expected);
+}
+
 START_TEST(DeviceRules)
 {
+    CheckNullDriver(L"oem27.inf", L"", true);
+    CheckNullDriver(L"oem27.inf", L"amdgpio2", false);
+    CheckNullDriver(L"", L"", false);
     CheckInfClass("System", "{4d36e97d-e325-11ce-bfc1-08002be10318}", true);
     CheckInfClass("Extension", "{e2f84ce7-8efa-411c-aa69-97454ca4cb57}", false);
     CheckInfClass("SoftwareComponent", "{5c4c3332-344d-483c-8739-259e934c9cc8}", false);
