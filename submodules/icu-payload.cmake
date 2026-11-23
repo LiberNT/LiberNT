@@ -7,7 +7,9 @@
 # sdk/tools/icu_payload.py builds the payload.
 
 set(ICU_PAYLOAD_RELEASE "72.1-1")
+set(ICU_PAYLOAD_SHA256_amd64 "5c583b89b122298d6e9765a2537ad30dea7327a1a1ac13a62ab9048aa67f53aa")
 set(ICU_PAYLOAD_SHA256_arm64 "9d5d74e3f85066116953d168303d0577e2a218bfc48ed12b003fb9339906e8c8")
+set(ICU_PAYLOAD_SHA256_i386 "fe20c270f6a464309844ba4a79203cb0b8aa70d61f0bfc15ffcf46a39d60492e")
 set(ICU_PAYLOAD "" CACHE FILEPATH "Local ICU payload .zip used instead of downloading the release asset")
 
 include("${CMAKE_CURRENT_LIST_DIR}/payload-download.cmake")
