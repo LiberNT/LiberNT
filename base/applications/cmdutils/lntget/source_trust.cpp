@@ -238,7 +238,7 @@ Status VerifyPublisher(const CERT_CONTEXT *certificate, const std::string &appxM
 
 } // namespace
 
-Status VerifySourcePackageTrust(const SourcePackageContents &contents)
+Status VerifySourcePackageTrust(const SourcePackageContents &contents, bool allowOfflineRevocation)
 {
     if (contents.signature.size() < 5 || contents.blockMap.empty() || contents.manifest.empty() || contents.index.empty())
         return Status::Fail(ERROR_BAD_FORMAT, "source MSIX is missing signed package content");
@@ -289,11 +289,18 @@ Status VerifySourcePackageTrust(const SourcePackageContents &contents)
     ChainOwner chain(rawChain);
     CERT_CHAIN_POLICY_PARA policyParameters{};
     policyParameters.cbSize = sizeof(policyParameters);
+    DWORD chainErrors = rawChain->TrustStatus.dwErrorStatus;
+    if (allowOfflineRevocation && (chainErrors & CERT_TRUST_IS_OFFLINE_REVOCATION))
+    {
+        OutputDebugStringA("[LNTGET:TRUST] revocation server unreachable; accepting the cached source verified at download\n");
+        chainErrors &= ~(CERT_TRUST_REVOCATION_STATUS_UNKNOWN | CERT_TRUST_IS_OFFLINE_REVOCATION);
+        policyParameters.dwFlags = CERT_CHAIN_POLICY_IGNORE_ALL_REV_UNKNOWN_FLAGS;
+    }
     CERT_CHAIN_POLICY_STATUS policyStatus{};
     policyStatus.cbSize = sizeof(policyStatus);
     if (!CertVerifyCertificateChainPolicy(CERT_CHAIN_POLICY_AUTHENTICODE, rawChain, &policyParameters, &policyStatus))
         return Status::Fail(GetLastError(), "cannot validate the source Authenticode certificate policy");
-    if (rawChain->TrustStatus.dwErrorStatus != CERT_TRUST_NO_ERROR || policyStatus.dwError != ERROR_SUCCESS)
+    if (chainErrors != CERT_TRUST_NO_ERROR || policyStatus.dwError != ERROR_SUCCESS)
         return Status::Fail(policyStatus.dwError ? policyStatus.dwError : ERROR_ACCESS_DENIED,
                             "source publisher certificate chain is not trusted");
 

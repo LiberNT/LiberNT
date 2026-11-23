@@ -20,6 +20,6 @@ struct SourcePackageContents
     std::vector<uint8_t> index;
 };
 
-Status VerifySourcePackageTrust(const SourcePackageContents &contents);
+Status VerifySourcePackageTrust(const SourcePackageContents &contents, bool allowOfflineRevocation);
 
 } // namespace lntget
