@@ -540,6 +540,7 @@ ip6_input(struct pbuf *p, struct netif *inp)
   struct netif *netif;
   const u8_t *nexth;
   u16_t hlen, hlen_tot; /* the current header length */
+  u8_t transport_only = 0;
 #if 0 /*IP_ACCEPT_LINK_LAYER_ADDRESSING*/
   @todo
   int check_ip_src=1;
@@ -995,6 +996,10 @@ netif_found:
     case IP6_NEXTH_FRAGMENT:
     {
       struct ip6_frag_hdr *frag_hdr;
+#if LWIP_IPV6_REASS
+      struct ip6_hdr *transport_hdr;
+      u8_t *transport_nexth;
+#endif /* LWIP_IPV6_REASS */
       LWIP_DEBUGF(IP6_DEBUG, ("ip6_input: packet with Fragment header\n"));
 
       frag_hdr = (struct ip6_frag_hdr *)p->payload;
@@ -1036,17 +1041,35 @@ netif_found:
         pbuf_remove_header(p, hlen);
       } else {
 #if LWIP_IPV6_REASS
+        if (transport_only) {
+          pbuf_free(p);
+          IP6_FRAG_STATS_INC(ip6_frag.proterr);
+          IP6_FRAG_STATS_INC(ip6_frag.drop);
+          goto ip6_input_cleanup;
+        }
+
         /* reassemble the packet */
         ip_data.current_ip_header_tot_len = hlen_tot;
-        p = ip6_reass(p);
+        p = ip6_reass(p, &transport_hdr, &transport_nexth);
         /* packet not fully reassembled yet? */
         if (p == NULL) {
           goto ip6_input_cleanup;
         }
 
+        if (transport_hdr != NULL) {
+          LWIP_ASSERT("ip6_input: next header of the reassembled packet", transport_nexth != NULL);
+          ip6hdr = transport_hdr;
+          ip_data.current_ip6_header = transport_hdr;
+          nexth = transport_nexth;
+          hlen_tot = 0;
+          transport_only = 1;
+          break;
+        }
+
         /* Returned p point to IPv6 header.
          * Update all our variables and pointers and continue. */
         ip6hdr = (struct ip6_hdr *)p->payload;
+        ip_data.current_ip6_header = ip6hdr;
         nexth = &IP6H_NEXTH(ip6hdr);
         hlen = hlen_tot = IP6_HLEN;
         pbuf_remove_header(p, IP6_HLEN);
@@ -1079,6 +1102,12 @@ netif_found:
 options_done:
 
   /* send to upper layers */
+  if (transport_only) {
+    LWIP_ASSERT("ip6_input: headers of a transport packet lie just before its data",
+                (u32_t)((u8_t *)p->payload - (u8_t *)ip6hdr) + p->tot_len == (u32_t)IP6_HLEN + IP6H_PLEN(ip6hdr));
+    hlen_tot = 0;
+  }
+  LWIP_ASSERT("ip6_input: only a transport packet comes without its IPv6 header", (hlen_tot == 0) == (transport_only != 0));
   ip_data.current_ip_header_tot_len = hlen_tot;
 
 #if LWIP_RAW
@@ -1128,7 +1157,15 @@ options_done:
         /* send ICMP parameter problem unless it was a multicast or ICMPv6 */
         if ((!ip6_addr_ismulticast(ip6_current_dest_addr())) &&
             (IP6H_NEXTH(ip6hdr) != IP6_NEXTH_ICMP6)) {
-          icmp6_param_problem(p, ICMP6_PP_HEADER, nexth);
+          if (transport_only) {
+            struct pbuf *quote = icmp6_quote_transport_packet(p);
+            if (quote != NULL) {
+              icmp6_param_problem(quote, ICMP6_PP_HEADER, nexth);
+              pbuf_free(quote);
+            }
+          } else {
+            icmp6_param_problem(p, ICMP6_PP_HEADER, nexth);
+          }
         }
 #endif /* LWIP_ICMP */
         LWIP_DEBUGF(IP6_DEBUG | LWIP_DBG_LEVEL_SERIOUS, ("ip6_input: Unsupported transport protocol %"U16_F"\n", (u16_t)IP6H_NEXTH(ip6hdr)));
@@ -1231,6 +1268,12 @@ ip6_output_if_src(struct pbuf *p, const ip6_addr_t *src, const ip6_addr_t *dest,
 #ifdef LWIP_HOOK_IP6_PATH_OUTPUT
     LWIP_HOOK_IP6_PATH_OUTPUT(netif, src, dest, nexth, p);
 #endif
+
+#if LWIP_IPV6_FRAG
+    if (p->tot_len > 0xFFFF - IP6_HLEN) {
+      return ip6_frag_transport(p, src != NULL ? src : IP6_ADDR_ANY6, dest, hl, tc, nexth, netif);
+    }
+#endif /* LWIP_IPV6_FRAG */
 
     /* generate IPv6 header */
     if (pbuf_add_header(p, IP6_HLEN)) {

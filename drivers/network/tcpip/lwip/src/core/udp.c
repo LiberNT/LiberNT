@@ -419,8 +419,22 @@ udp_input(struct pbuf *p, struct netif *inp)
          destination address was broadcast/multicast. */
       if (!broadcast && !ip_addr_ismulticast(ip_current_dest_addr())) {
         /* move payload pointer back to ip header */
-        pbuf_header_force(p, (s16_t)(ip_current_header_tot_len() + UDP_HLEN));
-        icmp_port_unreach(ip_current_is_v6(), p);
+#if LWIP_IPV6 && LWIP_ICMP6
+        if (ip_current_header_tot_len() == 0) {
+          struct pbuf *quote;
+          LWIP_ASSERT("udp_input: only an IPv6 packet comes without its header", ip_current_is_v6());
+          pbuf_header_force(p, UDP_HLEN);
+          quote = icmp6_quote_transport_packet(p);
+          if (quote != NULL) {
+            icmp6_dest_unreach(quote, ICMP6_DUR_PORT);
+            pbuf_free(quote);
+          }
+        } else
+#endif /* LWIP_IPV6 && LWIP_ICMP6 */
+        {
+          pbuf_header_force(p, (s16_t)(ip_current_header_tot_len() + UDP_HLEN));
+          icmp_port_unreach(ip_current_is_v6(), p);
+        }
       }
 #endif /* LWIP_ICMP || LWIP_ICMP6 */
       UDP_STATS_INC(udp.proterr);

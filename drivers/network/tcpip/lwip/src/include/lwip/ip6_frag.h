@@ -113,7 +113,7 @@ struct ip6_reassdata {
 
 #define ip6_reass_init() /* Compatibility define */
 void ip6_reass_tmr(void);
-struct pbuf *ip6_reass(struct pbuf *p);
+struct pbuf *ip6_reass(struct pbuf *p, struct ip6_hdr **transport_hdr, u8_t **transport_nexth);
 
 #endif /* LWIP_IPV6 && LWIP_IPV6_REASS */
 
@@ -133,6 +133,8 @@ struct pbuf_custom_ref {
 #endif /* LWIP_PBUF_CUSTOM_REF_DEFINED */
 
 err_t ip6_frag(struct pbuf *p, struct netif *netif, const ip6_addr_t *dest);
+err_t ip6_frag_transport(struct pbuf *p, const ip6_addr_t *src, const ip6_addr_t *dest,
+                         u8_t hl, u8_t tc, u8_t nexth, struct netif *netif);
 
 #endif /* LWIP_IPV6 && LWIP_IPV6_FRAG */
 

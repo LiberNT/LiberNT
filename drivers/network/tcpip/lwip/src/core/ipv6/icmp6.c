@@ -206,6 +206,40 @@ icmp6_input(struct pbuf *p, struct netif *inp)
 }
 
 
+struct pbuf *
+icmp6_quote_transport_packet(struct pbuf *p)
+{
+  const u8_t *hdr = (const u8_t *)ip6_current_header();
+  u16_t hlen, hcopy, len;
+  struct pbuf *q;
+
+  LWIP_ASSERT("icmp6_quote_transport_packet: packet being received", hdr != NULL);
+  LWIP_ASSERT("icmp6_quote_transport_packet: packet came without its IPv6 header", ip_current_header_tot_len() == 0);
+  LWIP_ASSERT("icmp6_quote_transport_packet: payload length covers the transport data",
+              IP6H_PLEN(ip6_current_header()) >= p->tot_len);
+  hlen = (u16_t)(IP6_HLEN + IP6H_PLEN(ip6_current_header()) - p->tot_len);
+  LWIP_ASSERT("icmp6_quote_transport_packet: headers lie just before the transport data",
+              hdr + hlen == (const u8_t *)p->payload);
+
+  len = (u16_t)LWIP_MIN((u32_t)hlen + p->tot_len, LWIP_ICMP6_DATASIZE);
+  q = pbuf_alloc(PBUF_RAW, len, PBUF_RAM);
+  if (q == NULL) {
+    ICMP6_STATS_INC(icmp6.memerr);
+    return NULL;
+  }
+  LWIP_ASSERT("icmp6_quote_transport_packet: quote in one pbuf", q->len == q->tot_len);
+
+  hcopy = LWIP_MIN(hlen, len);
+  MEMCPY(q->payload, hdr, hcopy);
+  if (len > hcopy &&
+      pbuf_copy_partial(p, (u8_t *)q->payload + hcopy, (u16_t)(len - hcopy), 0) != (u16_t)(len - hcopy)) {
+    pbuf_free(q);
+    ICMP6_STATS_INC(icmp6.err);
+    return NULL;
+  }
+  return q;
+}
+
 /**
  * Send an icmpv6 'destination unreachable' packet.
  *

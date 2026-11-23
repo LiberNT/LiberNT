@@ -141,26 +141,37 @@ struct lib_ip_msg
 };
 
 static
+BOOLEAN
+LibIPIsLocalIp6Address(const ip6_addr_t *Address)
+{
+    struct netif *netif;
+    s8_t i;
+
+    LWIP_ASSERT_CORE_LOCKED();
+
+    NETIF_FOREACH(netif)
+    {
+        if (ip6_addr_has_zone(Address) && !ip6_addr_test_zone(Address, netif))
+            continue;
+        for (i = 0; i < LWIP_IPV6_NUM_ADDRESSES; i++)
+        {
+            if (ip6_addr_isvalid(netif_ip6_addr_state(netif, i)) &&
+                ip6_addr_zoneless_eq(netif_ip6_addr(netif, i), Address))
+            {
+                return TRUE;
+            }
+        }
+    }
+    return FALSE;
+}
+
+static
 void
 LibIPIsLocalAddressCallback(void *arg)
 {
     struct lib_ip_msg *msg = arg;
-    struct netif *netif;
-    s8_t i;
 
-    msg->Result = FALSE;
-    NETIF_FOREACH(netif)
-    {
-        for (i = 0; i < LWIP_IPV6_NUM_ADDRESSES; i++)
-        {
-            if (ip6_addr_isvalid(netif_ip6_addr_state(netif, i)) &&
-                ip6_addr_zoneless_eq(netif_ip6_addr(netif, i), ip_2_ip6(&msg->IpAddress)))
-            {
-                msg->Result = TRUE;
-                return;
-            }
-        }
-    }
+    msg->Result = LibIPIsLocalIp6Address(ip_2_ip6(&msg->IpAddress));
 }
 
 BOOLEAN
@@ -426,7 +437,6 @@ LibUDPSendChunk(PADDRESS_FILE AddrFile, const ip_addr_t *Destination, u16_t Port
     if (DataSize > 0xFFFF - sizeof(UDP_HEADER))
         return STATUS_BUFFER_OVERFLOW;
 
-    /* TODO: datagrams whose IPv6 packet exceeds 65535 bytes before fragmentation fail with STATUS_INSUFFICIENT_RESOURCES */
     Send.Packet = pbuf_alloc(PBUF_TRANSPORT, (u16_t)DataSize, PBUF_RAM);
     if (!Send.Packet)
         return STATUS_INSUFFICIENT_RESOURCES;
@@ -1159,12 +1169,48 @@ LibICMP6Recv(void *arg, struct raw_pcb *pcb, struct pbuf *p, const ip_addr_t *ad
 }
 
 static
+VOID
+LibICMP6AnswerLocal(PICMP6_ECHO_CONTEXT Context)
+{
+    PICMPV6_ECHO_REPLY Reply = Context->Reply;
+    ULONG Copy;
+
+    ASSERT(Context->OutputLength >= sizeof(*Reply));
+
+    if (InterlockedCompareExchange(&Context->Finished, 1, 0) != 0)
+        return;
+
+    RtlZeroMemory(Reply, sizeof(*Reply));
+    LibICMP6FillAddress(&Reply->Address, &Context->Destination);
+    Reply->Status = IP_SUCCESS;
+
+    Copy = min((ULONG)Context->DataSize, Context->OutputLength - sizeof(*Reply));
+    if (Copy)
+        RtlCopyMemory(Reply + 1, Context->Data, Copy);
+    Context->Irp->IoStatus.Status = STATUS_SUCCESS;
+    Context->Irp->IoStatus.Information = sizeof(*Reply) + Copy;
+
+    KeCancelTimer(&Context->Timer);
+    IoQueueWorkItem(Context->WorkItem, LibICMP6FinishWorker, DelayedWorkQueue, Context);
+}
+
+static
 void
 LibICMP6StartCallback(void *arg)
 {
     PICMP6_ECHO_CONTEXT Context = arg;
     struct icmp6_echo_hdr *Header;
     struct pbuf *p;
+
+    if (Context->DataSize > 0xFFFF - sizeof(*Header))
+    {
+        /* Too large for an IPv6 packet: only the stack itself can answer it */
+        if (LibIPIsLocalIp6Address(ip_2_ip6(&Context->Destination)))
+            LibICMP6AnswerLocal(Context);
+        else
+            Context->SendError = ERR_VAL;
+        return;
+    }
 
     Context->Pcb = raw_new_ip6(IP6_NEXTH_ICMP6);
     if (!Context->Pcb)
@@ -1181,6 +1227,7 @@ LibICMP6StartCallback(void *arg)
         raw_bind(Context->Pcb, &Context->Source);
     raw_recv(Context->Pcb, LibICMP6Recv, Context);
 
+    ASSERT(Context->DataSize <= 0xFFFF - sizeof(*Header));
     p = pbuf_alloc(PBUF_IP, sizeof(*Header) + Context->DataSize, PBUF_RAM);
     if (!p)
     {
@@ -1307,7 +1354,7 @@ LibICMP6EchoRequest(PDEVICE_OBJECT DeviceObject, PIRP Irp, PIO_STACK_LOCATION Ir
         return STATUS_INVALID_PARAMETER;
 
     DataSize = InputLength - sizeof(*Request);
-    if (DataSize > 0xFFFF - IP6_HLEN - sizeof(struct icmp6_echo_hdr))
+    if (DataSize > 0xFFFF)
         return STATUS_INVALID_PARAMETER;
 
     Reply = MmGetSystemAddressForMdlSafe(Irp->MdlAddress, NormalPagePriority);

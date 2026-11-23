@@ -10,6 +10,7 @@ list(APPEND SOURCE
     GetOwnerModuleFromUdpEntry.c
     icmp.c
     icmp_echo.c
+    icmp6_echo.c
     InitializeIpInterfaceEntry.c
     NotifyIpInterfaceChange.c
     SendARP.c
