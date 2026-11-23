@@ -1769,6 +1769,9 @@ public:
     GetNextEntry(_In_ BOOLEAN RestartScan,
                  _Out_ PNtfsDirectoryEntry Entry);
 
+    NTSTATUS
+    VisitNames(PFileRecord File, PNtfsDirectoryNameCallback Callback, void* Context);
+
     // ./editdir.cpp
     NTSTATUS
     AddIndexEntry(

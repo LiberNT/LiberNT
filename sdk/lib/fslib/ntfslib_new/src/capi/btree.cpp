@@ -142,6 +142,15 @@ NtfsDirectoryLoadForEnumeration(
 }
 
 NTSTATUS
+NtfsDirectoryVisitNames(PNtfsVolume Volume, PNtfsFileRecord File, PNtfsDirectoryNameCallback Callback, void* Context)
+{
+    if (!Volume || !File || !Callback)
+        return STATUS_INVALID_PARAMETER;
+    Directory View(reinterpret_cast<PVolume>(Volume));
+    return View.VisitNames(reinterpret_cast<PFileRecord>(File), Callback, Context);
+}
+
+NTSTATUS
 NtfsDirectoryReadNext(
     _In_ PNtfsDirectory Dir,
     _In_ BOOLEAN RestartScan,

@@ -941,6 +941,23 @@ Directory::GetFileBothDirInfoDirect(
 }
 
 NTSTATUS
+Directory::VisitNames(PFileRecord File, PNtfsDirectoryNameCallback Callback, void* Context)
+{
+    NTSTATUS Status = LoadDirectoryForEnumeration(File);
+
+    while (NT_SUCCESS(Status))
+    {
+        PIndexEntry Entry;
+        Status = GetNextDirectEntry(&Entry);
+        if (!NT_SUCCESS(Status))
+            return Status == STATUS_NO_MORE_FILES ? STATUS_SUCCESS : Status;
+        if (IsEligibleForFileDir(Entry, NULL))
+            Status = Callback(Context, Entry->Data.Directory.IndexedFile, (const FileNameEx*)Entry->IndexStream);
+    }
+    return Status;
+}
+
+NTSTATUS
 Directory::GetNextEntry(_In_ BOOLEAN RestartScan,
                         _Out_ PNtfsDirectoryEntry Entry)
 {
