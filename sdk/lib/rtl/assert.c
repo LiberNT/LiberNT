@@ -86,11 +86,14 @@ RtlAssert(
         if (RtlGetNtGlobalFlags() & FLG_DISABLE_DEBUG_PROMPTS)
             RtlRaiseStatus(STATUS_ASSERTION_FAILURE);
 
+        if (!SharedUserData->KdDebuggerEnabled)
+            return;
+
         Answer = RtlpAskAboutAssertion();
         switch (Answer)
         {
             case RtlpAssertUnanswered:
-                /* Nobody can answer: with no debugger this breakpoint is the stop documented for an assertion (bug check 0x1E, STATUS_BREAKPOINT) */
+                /* An empty answer at the debugger breaks in like break once */
                 DbgBreakPoint();
                 break;
 
