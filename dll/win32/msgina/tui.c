@@ -214,7 +214,7 @@ TUILoggedOutSAS(
     if (!ReadString(IDS_ASKFORPASSWORD, Password, _countof(Password), FALSE))
         return WLX_SAS_ACTION_NONE;
 
-    Status = DoLoginTasks(pgContext, UserName, NULL, Password, &SubStatus);
+    Status = DoLoginTasks(pgContext, UserName, NULL, Password, Interactive, &SubStatus);
     if (Status == STATUS_SUCCESS)
     {
         if (GinaCreateProfile(pgContext, UserName, NULL, Password))

@@ -982,6 +982,7 @@ DoLoginTasks(
     IN PWSTR UserName,
     IN PWSTR Domain,
     IN PWSTR Password,
+    IN SECURITY_LOGON_TYPE LogonType,
     OUT PNTSTATUS SubStatus)
 {
     NTSTATUS Status;
@@ -998,7 +999,7 @@ DoLoginTasks(
                          UserName,
                          Domain,
                          Password,
-                         Interactive,
+                         LogonType,
                          &pgContext->UserToken,
                          SubStatus);
     if (!NT_SUCCESS(Status))
@@ -1209,9 +1210,8 @@ RemoteLogon(
     if (!pgContext->pWlxFuncs->WlxQueryTsLogonCredentials(&Credentials))
         return WLX_SAS_ACTION_NONE;
 
-    /* FIXME: Windows signs a Remote Desktop client in with the RemoteInteractive logon type */
     Status = DoLoginTasks(pgContext, Credentials.pszUserName, Credentials.pszDomain, Credentials.pszPassword,
-                          &SubStatus);
+                          RemoteInteractive, &SubStatus);
     if (NT_SUCCESS(Status) &&
         GinaCreateProfile(pgContext, Credentials.pszUserName, Credentials.pszDomain, Credentials.pszPassword))
     {

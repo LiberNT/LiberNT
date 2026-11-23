@@ -926,7 +926,7 @@ LsapAddDefaultGroups(
         if (TokenInfo1->Groups != NULL)
         {
             Length = sizeof(TOKEN_GROUPS) +
-                     (TokenInfo1->Groups->GroupCount + 2 - ANYSIZE_ARRAY) * sizeof(SID_AND_ATTRIBUTES);
+                     (TokenInfo1->Groups->GroupCount + 3 - ANYSIZE_ARRAY) * sizeof(SID_AND_ATTRIBUTES);
 
             Groups = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, Length);
             if (Groups == NULL)
@@ -951,7 +951,7 @@ LsapAddDefaultGroups(
         else
         {
             Length = sizeof(TOKEN_GROUPS) +
-                     (2 - ANYSIZE_ARRAY) * sizeof(SID_AND_ATTRIBUTES);
+                     (3 - ANYSIZE_ARRAY) * sizeof(SID_AND_ATTRIBUTES);
 
             Groups = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, Length);
             if (Groups == NULL)
@@ -984,6 +984,7 @@ LsapAddDefaultGroups(
         switch (LogonType)
         {
             case Interactive:
+            case RemoteInteractive:
             case Unlock:
                 SrcSid = LsapInteractiveSid;
                 break;
@@ -1020,6 +1021,18 @@ LsapAddDefaultGroups(
             SE_GROUP_ENABLED | SE_GROUP_ENABLED_BY_DEFAULT | SE_GROUP_MANDATORY;
 
         Groups->GroupCount++;
+
+        if (LogonType == RemoteInteractive)
+        {
+            Length = RtlLengthSid(LsapRemoteInteractiveSid);
+            Groups->Groups[Groups->GroupCount].Sid = RtlAllocateHeap(RtlGetProcessHeap(), HEAP_ZERO_MEMORY, Length);
+            if (Groups->Groups[Groups->GroupCount].Sid == NULL)
+                return STATUS_INSUFFICIENT_RESOURCES;
+            RtlCopyMemory(Groups->Groups[Groups->GroupCount].Sid, LsapRemoteInteractiveSid, Length);
+            Groups->Groups[Groups->GroupCount].Attributes =
+                SE_GROUP_ENABLED | SE_GROUP_ENABLED_BY_DEFAULT | SE_GROUP_MANDATORY;
+            Groups->GroupCount++;
+        }
     }
     else
     {
@@ -1878,6 +1891,7 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
     }
 
     if (LogonType == Interactive ||
+        LogonType == RemoteInteractive ||
         LogonType == Batch ||
         LogonType == Service ||
         LogonType == Unlock)

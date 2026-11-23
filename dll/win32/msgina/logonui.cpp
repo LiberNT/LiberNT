@@ -2147,7 +2147,9 @@ public:
 static VOID
 RunLogon(PGINA_CONTEXT Context, LogonJob *Pending)
 {
-    Pending->Status = DoLoginTasks(Context, Pending->User, Pending->Domain, Pending->Password, &Pending->SubStatus);
+    Pending->Status = DoLoginTasks(Context, Pending->User, Pending->Domain, Pending->Password,
+                                   GetSystemMetrics(SM_REMOTESESSION) ? RemoteInteractive : Interactive,
+                                   &Pending->SubStatus);
     if (NT_SUCCESS(Pending->Status))
     {
         if (!GinaCreateProfile(Context, Pending->User, Pending->Domain, Pending->Password))

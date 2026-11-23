@@ -491,7 +491,7 @@ static BOOL Logon(freerdp_peer *peer, const SEC_WINNT_AUTH_IDENTITY *identity, B
         Log("NLA logon rejected for peer %s", peer->hostname);
         return FALSE;
     }
-    ctx->NlaLogon = LogonUserW(wuser, wdomain, wpassword, LOGON32_LOGON_INTERACTIVE, LOGON32_PROVIDER_DEFAULT, &token);
+    ctx->NlaLogon = LogonUserW(wuser, wdomain, wpassword, LOGON32_LOGON_NETWORK, LOGON32_PROVIDER_DEFAULT, &token);
     SecureZeroMemory(wpassword, sizeof(wpassword));
     if (ctx->NlaLogon)
     {

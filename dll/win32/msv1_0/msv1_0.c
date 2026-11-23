@@ -1532,6 +1532,7 @@ LsaApLogonUserEx2(IN PLSA_CLIENT_REQUEST ClientRequest,
 
     /* Parameters validation */
     if (LogonType == Interactive ||
+        LogonType == RemoteInteractive ||
         LogonType == Batch ||
         LogonType == Service ||
         LogonType == Unlock ||
@@ -1770,7 +1771,8 @@ LsaApLogonUserEx2(IN PLSA_CLIENT_REQUEST ClientRequest,
         RtlReleaseResource(&LogonListResource);
     }
 
-    if (LogonType == Interactive || LogonType == Batch || LogonType == Service || LogonType == Unlock)
+    if (LogonType == Interactive || LogonType == RemoteInteractive || LogonType == Batch || LogonType == Service ||
+        LogonType == Unlock)
     {
         /* Build and fill the interactive profile buffer */
         Status = BuildInteractiveProfileBuffer(ClientRequest,

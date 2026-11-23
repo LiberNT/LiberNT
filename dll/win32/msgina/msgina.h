@@ -138,6 +138,7 @@ DoLoginTasks(
     IN PWSTR UserName,
     IN PWSTR Domain,
     IN PWSTR Password,
+    IN SECURITY_LOGON_TYPE LogonType,
     OUT PNTSTATUS SubStatus);
 
 BOOL
