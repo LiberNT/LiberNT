@@ -18,6 +18,7 @@
 #include "clearenc.h"
 #include "videodetect.h"
 #include "tilekey.h"
+#include "gfxcaps.h"
 
 #define GFX_SURFACE_ID 0
 #define GFX_TILE_SIZE 64
@@ -67,34 +68,16 @@ struct RDP_GFX
     ULONGLONG VideoBytes;
 };
 
-static const UINT32 KnownVersions[] =
-{
-    RDPGFX_CAPVERSION_107, RDPGFX_CAPVERSION_106, RDPGFX_CAPVERSION_105, RDPGFX_CAPVERSION_104,
-    RDPGFX_CAPVERSION_103, RDPGFX_CAPVERSION_102, RDPGFX_CAPVERSION_101, RDPGFX_CAPVERSION_10,
-    RDPGFX_CAPVERSION_81, RDPGFX_CAPVERSION_8
-};
-
 static UINT CapsAdvertise(RdpgfxServerContext *context, const RDPGFX_CAPS_ADVERTISE_PDU *pdu)
 {
     RDP_GFX *gfx = context->custom;
     RDPGFX_CAPS_CONFIRM_PDU confirm = {0};
-    const RDPGFX_CAPSET *chosen = NULL;
-    UINT32 i, j;
     UINT error;
-    for (i = 0; !chosen && i < ARRAYSIZE(KnownVersions); ++i)
-        for (j = 0; j < pdu->capsSetCount; ++j)
-            if (pdu->capsSets[j].version == KnownVersions[i])
-            {
-                chosen = &pdu->capsSets[j];
-                break;
-            }
-    if (!chosen)
+    if (!GfxChooseCaps(pdu->capsSets, pdu->capsSetCount, &gfx->CapSet))
     {
         gfx->Log("Client offered no graphics pipeline version this server knows");
         return CHANNEL_RC_UNSUPPORTED_VERSION;
     }
-    gfx->CapSet = *chosen;
-    gfx->CapSet.length = 4;
     confirm.capsSet = &gfx->CapSet;
     error = context->CapsConfirm(context, &confirm);
     if (error != CHANNEL_RC_OK) return error;

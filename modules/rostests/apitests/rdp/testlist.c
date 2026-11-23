@@ -9,6 +9,7 @@ extern void func_Cookie(void);
 extern void func_Experience(void);
 extern void func_FrameMove(void);
 extern void func_GfxBatch(void);
+extern void func_GfxCaps(void);
 extern void func_OpenH264(void);
 extern void func_OtherUser(void);
 extern void func_PasswordMemory(void);
@@ -29,6 +30,7 @@ const struct test winetest_testlist[] =
     { "Experience", func_Experience },
     { "FrameMove", func_FrameMove },
     { "GfxBatch", func_GfxBatch },
+    { "GfxCaps", func_GfxCaps },
     { "OpenH264", func_OpenH264 },
     { "OtherUser", func_OtherUser },
     { "PasswordMemory", func_PasswordMemory },
