@@ -145,9 +145,13 @@ target_compile_definitions(msvcrt_shared PRIVATE _MSVCR_VER=0 __UCRTSUPPORT__)
 add_dependencies(msvcrt_shared psdk asm)
 
 if(ARCH STREQUAL "amd64")
+    if(MSVC)
+        add_asm_files(msvcrt_handler4_asm amd64/except_x86_64.s)
+    endif()
     add_library(msvcrt_handler4 STATIC
         handler4.c
-        except_x86_64.c)
+        except_x86_64.c
+        ${msvcrt_handler4_asm})
     target_compile_definitions(msvcrt_handler4 PRIVATE _MSVCR_VER=140 __UCRTSUPPORT__)
     target_link_libraries(msvcrt_handler4 PUBLIC wine)
     add_dependencies(msvcrt_handler4 psdk asm)
