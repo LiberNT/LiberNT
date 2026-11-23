@@ -953,7 +953,7 @@ StageUpdate(
     if (Error != ERROR_SUCCESS)
         return Error;
 
-    /* TODO: systems started by FreeLoader have no boot configuration store to stage the install in */
+    /* TODO: on PC/AT firmware stage winload.exe and open \Boot\BCD */
     Error = OpenBcdStore(&Store);
     if (Error != ERROR_SUCCESS)
         return Error;

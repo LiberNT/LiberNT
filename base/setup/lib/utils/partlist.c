@@ -4332,7 +4332,7 @@ UseAlternativePartition:
      * partition that we know how to support. What we are going to do is
      * to change the existing system partition and use the alternative partition
      * (e.g. on which we install ReactOS) as the new system partition.
-     * Then we will need to add in FreeLdr's boot menu an entry for booting
+     * Then we will need to add in the BCD boot menu an entry for booting
      * from the original system partition.
      */
     ASSERT(CandidatePartition);
