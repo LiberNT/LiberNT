@@ -142,6 +142,11 @@ raw_input(struct pbuf *p, struct netif *inp)
   LWIP_UNUSED_ARG(inp);
 
 #if LWIP_IPV6
+  if (ip_current_header_tot_len() == 0) {
+    /* reassembled IPv6 packet too large to keep its header in the pbuf */
+    LWIP_ASSERT("raw_input: only an IPv6 packet comes without its header", ip_current_is_v6());
+    proto = IP6H_NEXTH(ip6_current_header());
+  } else
 #if LWIP_IPV4
   if (IP_HDR_GET_VERSION(p->payload) == 6)
 #endif /* LWIP_IPV4 */
@@ -459,8 +464,12 @@ raw_sendto_if_src(struct raw_pcb *pcb, struct pbuf *p, const ip_addr_t *dst_ip,
 
   /* packet too large to add an IP header without causing an overflow? */
   if ((u16_t)(p->tot_len + header_size) < p->tot_len) {
-    return ERR_MEM;
-  }
+    if (!IP_IS_V6(dst_ip)) {
+      return ERR_MEM;
+    }
+    /* ip6_output_if fragments it, each fragment with its own header */
+    q = p;
+  } else
   /* not enough space to add an IP header to first pbuf in given p chain? */
   if (pbuf_add_header(p, header_size)) {
     /* allocate header in new pbuf */

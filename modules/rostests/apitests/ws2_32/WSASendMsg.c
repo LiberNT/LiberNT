@@ -1748,6 +1748,53 @@ TraceArrival(
     trace("%s: %lu datagrams%s%s\n", Tag, Received.Count, Received.Count ? " from " : "", Received.Count ? HostText(&Received.From) : "");
 }
 
+static VOID
+ExpectLargeArrival(
+    _In_ PCSTR Tag,
+    _In_ SOCKET Receiver,
+    _In_ SOCKET Sender,
+    _In_ const SOCKADDR_STORAGE *To,
+    _In_ ULONG Payload)
+{
+    static CHAR Sent[0x10000], Data[0x10000];
+    struct timeval Timeout = { 2, 0 };
+    WSAMSG Message;
+    WSABUF Buffer;
+    fd_set ReadSet;
+    DWORD Bytes = 0xdeadbeef;
+    ULONG i;
+    int Received;
+
+    ok(Payload <= sizeof(Sent), "%s: payload %lu too large\n", Tag, Payload);
+    for (i = 0; i < Payload; i++)
+        Sent[i] = (CHAR)(i * 7 + i / 251);
+    Buffer.buf = Sent;
+    Buffer.len = Payload;
+    ZeroMemory(&Message, sizeof(Message));
+    Message.name = (LPSOCKADDR)To;
+    Message.namelen = AddressLength(To);
+    Message.lpBuffers = &Buffer;
+    Message.dwBufferCount = 1;
+    if (ControlSendMsg(Sender, &Message, 0, &Bytes, NULL, NULL))
+    {
+        ok(0, "%s: send error %d\n", Tag, WSAGetLastError());
+        return;
+    }
+    ok(Bytes == Payload, "%s: %lu bytes sent, expected %lu\n", Tag, Bytes, Payload);
+    FD_ZERO(&ReadSet);
+    FD_SET(Receiver, &ReadSet);
+    if (select(0, &ReadSet, NULL, NULL, &Timeout) != 1)
+    {
+        ok(0, "%s: nothing arrived\n", Tag);
+        return;
+    }
+    Received = recv(Receiver, Data, sizeof(Data), 0);
+    ok(Received == (int)Payload, "%s: received %d bytes, error %d, expected %lu\n", Tag, Received,
+       Received < 0 ? WSAGetLastError() : 0, Payload);
+    if (Received == (int)Payload)
+        ok(!memcmp(Data, Sent, Payload), "%s: received data differs from the sent data\n", Tag);
+}
+
 #define EXPECT_ANY(Tag, Socket, To, Control, Payload, ExpectedError) \
     do { DWORD Bytes_; int Error_ = SendAny(Socket, To, Control, Payload, &Bytes_); EXPECT_SEND(Tag, Error_, ExpectedError); } while (0)
 
@@ -2230,10 +2277,9 @@ TestControl6Values(
 
     Error = SendAny(Sender, To, NULL, 65528, &Bytes);
     EXPECT_SEND("IPv6 65528-byte datagram", Error, WSAEMSGSIZE);
-    Error = SendAny(Sender, To, NULL, 65527, &Bytes);
-    todo_ros EXPECT_SEND("IPv6 65527-byte datagram", Error, 0);
-    if (!Error)
-        TraceArrival("IPv6 65527-byte datagram", Receiver, Sender, To);
+    ExpectLargeArrival("IPv6 65487-byte datagram", Receiver, Sender, To, 65487);
+    ExpectLargeArrival("IPv6 65488-byte datagram", Receiver, Sender, To, 65488);
+    ExpectLargeArrival("IPv6 65527-byte datagram", Receiver, Sender, To, 65527);
     return LoopbackIndex;
 }
 
@@ -2422,6 +2468,7 @@ TestControl6Adapter(
 
     EXPECT_ANY("IPv6 to the adapter", Sender, &GlobalTo, NULL, 1, 0);
     ExpectArrival("IPv6 to the adapter", AnyReceiver, Sender, &GlobalTo, 1, 0, 1, -1, -1, Global);
+    ExpectLargeArrival("IPv6 65527-byte datagram to the adapter", AnyReceiver, Sender, &GlobalTo, 65527);
     Control.Length = 0;
     AddPktInfo6(&Control, Global, 0);
     EXPECT_ANY("IPv6 to the adapter from it", Sender, &GlobalTo, &Control, 1, 0);
