@@ -1257,7 +1257,7 @@ USBPORT_OpenPipe(IN PDEVICE_OBJECT FdoDevice,
 
     if (PipeHandle->EndpointDescriptor.wMaxPacketSize == 0)
     {
-        DPRINT1("USBPORT_OpenPipe: wMaxPacketSize==0 (null pipe) IRQL=%lu\n",
+        DPRINT("USBPORT_OpenPipe: wMaxPacketSize==0 (null pipe) IRQL=%lu\n",
                 KeGetCurrentIrql());
         USBPORT_AddPipeHandle(DeviceHandle, PipeHandle);
 
@@ -2145,7 +2145,7 @@ USBPORT_DmaEndpointPaused(IN PDEVICE_OBJECT FdoDevice,
                 Transfer->CompletedTransferLen = CompletedLen;
             }
 
-            DPRINT1("USBPORT_DmaEndpointPaused: moving ABORTED transfer %p to CancelList (Flags=0x%lx NUKE=%u)\n",
+            DPRINT("USBPORT_DmaEndpointPaused: moving ABORTED transfer %p to CancelList (Flags=0x%lx NUKE=%u)\n",
                     Transfer, Transfer->Flags, !!(Endpoint->Flags & ENDPOINT_FLAG_NUKE));
 
             RemoveEntryList(&Transfer->TransferLink);

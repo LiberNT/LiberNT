@@ -463,7 +463,7 @@ USBH_PdoIoctlGetPortStatus(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
     PULONG PortStatus;
     NTSTATUS Status;
 
-    DPRINT1("USBH_PdoIoctlGetPortStatus: Port %u PDO %p\n",
+    DPRINT("USBH_PdoIoctlGetPortStatus: Port %u PDO %p\n",
             PortExtension->PortNumber,
             PortExtension->Common.SelfDevice);
 
@@ -515,7 +515,7 @@ USBH_PdoIoctlGetPortStatus(IN PUSBHUB_PORT_PDO_EXTENSION PortExtension,
                    FALSE);
     }
 
-    DPRINT1("USBH_PdoIoctlGetPortStatus: Status %x RawPortStatus 0x%08lx Flags %s%s\n",
+    DPRINT("USBH_PdoIoctlGetPortStatus: Status %x RawPortStatus 0x%08lx Flags %s%s\n",
             Status,
             *(ULONG *)&PortData->PortStatus.PortStatus,
             (*PortStatus & USBD_PORT_CONNECTED) ? "C" : "-",
