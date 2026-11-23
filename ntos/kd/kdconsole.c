@@ -33,6 +33,7 @@ BOOLEAN KdTermCrashMode = FALSE;
 
 /* A key read ahead while waiting to see whether anyone types at all */
 static BOOLEAN KdpPendingKey;
+static BOOLEAN KdpTerminalAnswered;
 static CHAR KdpPendingChar;
 static ULONG KdpPendingScanCode;
 
@@ -57,12 +58,18 @@ KdpTryGetChar(
     {
         Char = KdbpTryGetCharSerial(Retry);
         if (Char != (CHAR)-1)
+        {
+            KdpTerminalAnswered = TRUE;
             return Char;
+        }
     }
 
     Char = KdbpTryGetCharKeyboard(ScanCode, Retry);
     if (Char != (CHAR)-1)
+    {
+        KdpTerminalAnswered = TRUE;
         return Char;
+    }
 
     /*
      * Once the machine has stopped, the USB controller is driven by the
@@ -72,7 +79,10 @@ KdpTryGetChar(
     {
         Char = KdpUsbKeyboardTryGetChar(ScanCode);
         if (Char != (CHAR)-1)
+        {
+            KdpTerminalAnswered = TRUE;
             return Char;
+        }
     }
 
     return (CHAR)-1;
@@ -251,6 +261,10 @@ KdpWaitForTermKey(
     if (KdpPendingKey)
         return TRUE;
 
+    /* Nobody has typed at this debugger since boot: no one is there to answer */
+    if (!KdpTerminalAnswered)
+        return FALSE;
+
     Deadline = KeQueryPerformanceCounter(&Frequency).QuadPart;
     Deadline += (Frequency.QuadPart * Milliseconds) / 1000;
     for (;;)
@@ -362,7 +376,10 @@ KdpTerminalPollBreakIn(VOID)
 
     /* The network terminal keeps its own count of what the host sent */
     if (KdpDebugMode.Net && KdpNetPollBreakIn())
+    {
+        KdpTerminalAnswered = TRUE;
         return TRUE;
+    }
 
     /* The PC keyboard controller belongs to its driver while the system runs: a byte read here is taken from it */
     if (!KdTermSerial && !KdpDebugMode.Net)
@@ -372,6 +389,8 @@ KdpTerminalPollBreakIn(VOID)
 
     if (Char == (CHAR)-1)
         return FALSE;
+
+    KdpTerminalAnswered = TRUE;
 
     /* Ctrl-C, and nothing else: a terminal is also where people type */
     return (Char == 0x03);
