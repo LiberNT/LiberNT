@@ -498,6 +498,15 @@ TestSigning(const char *Label, PEER *From, PEER *To)
     Signature[5] ^= 0x55;
     Status = VerifySignature(&To->Ctxt, &Desc, 0, &Qop);
     ok(Status == SEC_E_MESSAGE_ALTERED, "%s: VerifySignature with a changed checksum 0x%08lx\n", Label, Status);
+
+    Bufs[1].cbBuffer = sizeof(Signature);
+    Status = MakeSignature(&From->Ctxt, 0, &Desc, 0);
+    ok(Status == SEC_E_OK, "%s: MakeSignature 0x%08lx\n", Label, Status);
+    ok(Signature[0] == 1 && Signature[1] == 0 && Signature[2] == 0 && Signature[3] == 0,
+       "%s: the signature version is %02x%02x%02x%02x\n", Label, Signature[3], Signature[2], Signature[1], Signature[0]);
+    Signature[0] = 2;
+    Status = VerifySignature(&To->Ctxt, &Desc, 0, &Qop);
+    ok(Status == SEC_E_INVALID_TOKEN, "%s: VerifySignature with signature version 2 0x%08lx\n", Label, Status);
 }
 
 static void
