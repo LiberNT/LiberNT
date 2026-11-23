@@ -173,6 +173,17 @@ static void CheckSearchTerms()
     terms = CatalogSearchTerms(ids);
     ok(terms.size() == 2 && terms[0] == ids[0] && terms[1] == ids[1], "ACPI device: %u terms\n",
        (unsigned)terms.size());
+
+    ids.assign(Display, Display + ARRAYSIZE(Display));
+    terms = CatalogNarrowerTerms(L"PCI\\VEN_8086&DEV_3185", ids);
+    ok(terms.size() == 3, "%u narrower terms, expected 3\n", (unsigned)terms.size());
+    if (terms.size() == 3)
+    {
+        ok(terms[0] == Display[0] && terms[1] == Display[1] && terms[2] == Display[4],
+           "narrower terms '%ls', '%ls', '%ls'\n", terms[0].c_str(), terms[1].c_str(), terms[2].c_str());
+    }
+    terms = CatalogNarrowerTerms(L"PCI\\VEN_8086&CC_030000", ids);
+    ok(terms.empty(), "%u narrower terms for a class-code term\n", (unsigned)terms.size());
 }
 
 static void CheckSupported()

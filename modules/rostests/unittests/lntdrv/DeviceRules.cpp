@@ -107,6 +107,14 @@ static void CheckCatalogTarget()
     root.Service = L"BasicDisplay";
     root.MatchingId = L"PCI\\CC_0300";
     ok(!WantsCatalogDriver(root), "root-enumerated device on a generic driver: catalog target\n");
+    gpu.Inf = L"basicdisplay.inf";
+    gpu.Service = L"BasicDisplay";
+    gpu.MatchingId = L"PCI\\CC_0300";
+    CheckQueries(gpu,
+                 { L"PCI\\VEN_1002&DEV_15D8&SUBSYS_01231002&REV_C2", L"PCI\\VEN_1002&DEV_15D8&SUBSYS_01231002",
+                   L"PCI\\VEN_1002&DEV_15D8&CC_030000", L"PCI\\VEN_1002&DEV_15D8&CC_0300",
+                   L"PCI\\VEN_1002&DEV_15D8&REV_C2", L"PCI\\VEN_1002&DEV_15D8" },
+                 false);
 }
 
 static void CheckInfClass(const char *klass, const char *guid, bool function)

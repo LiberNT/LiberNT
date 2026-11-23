@@ -662,6 +662,26 @@ std::vector<std::wstring> CatalogSearchTerms(const std::vector<std::wstring> &id
     return terms;
 }
 
+/* The device's IDs that narrow a search term whose results run past what one search reads, most specific first;
+ * catalog drivers do not list class-code IDs */
+std::vector<std::wstring> CatalogNarrowerTerms(const std::wstring &term, const std::vector<std::wstring> &ids)
+{
+    std::vector<std::wstring> narrower;
+    std::wstring prefix = Upper(term) + L"&";
+
+    for (const std::wstring &id : ids)
+    {
+        std::wstring upper = Upper(id);
+        bool seen = std::find_if(narrower.begin(), narrower.end(), [&upper](const std::wstring &other) {
+                        return Upper(other) == upper;
+                    }) != narrower.end();
+
+        if (!seen && upper.compare(0, prefix.size(), prefix) == 0 && upper.find(L"&CC_") == std::wstring::npos)
+            narrower.push_back(id);
+    }
+    return narrower;
+}
+
 bool SupportsHardwareIds(const CatalogUpdate &update, const std::vector<std::wstring> &ids)
 {
     if (update.HardwareIds.empty())
@@ -1274,7 +1294,21 @@ DWORD Catalog::Advance(SearchPlan &plan)
     }
     plan.Page++;
     if (plan.Updates.size() >= WantedMatches || last || plan.Page >= MaximumPages || plan.Detailed >= MaximumDetails)
+    {
+        if (plan.Updates.empty() && !last)
+        {
+            for (const std::wstring &term : CatalogNarrowerTerms(plan.Terms[plan.Term], plan.Ids))
+            {
+                if (std::find_if(plan.Terms.begin(), plan.Terms.end(), [&term](const std::wstring &other) {
+                        return _wcsicmp(other.c_str(), term.c_str()) == 0;
+                    }) == plan.Terms.end())
+                {
+                    plan.Terms.push_back(term);
+                }
+            }
+        }
         return NextTerm(plan);
+    }
     return ERROR_SUCCESS;
 }
 
