@@ -2405,7 +2405,8 @@ typedef struct _DXVA_PicParams_MPEG4_PART2 *LPDXVA_PicParams_MPEG4_PART2;
 
 
 
-#if (DIRECT3D_VERSION < 0x0800) || !defined(DIRECT3D_VERSION)
+#if !defined(_D3D8FORMAT_H_) && ((DIRECT3D_VERSION < 0x0800) || !defined(DIRECT3D_VERSION))
+#define _DXVA_DWORD_D3DFORMAT
 typedef DWORD D3DFORMAT;
 #endif
 

@@ -7056,7 +7056,6 @@ extern "C" {
 #endif
 
 NTSTATUS NTAPI KeInitializeCrashDumpHeader(ULONG DumpType, ULONG Flags, PVOID Buffer, ULONG BufferSize, PULONG BufferNeeded);
-NTSTATUS NTAPI KeQueryNodeActiveAffinity2(USHORT NodeNumber, PGROUP_AFFINITY GroupAffinities, USHORT GroupAffinitiesCount, PUSHORT GroupAffinitiesRequired);
 NTSTATUS NTAPI RtlIsApiSetImplemented(PCSTR apiSetName);
 
 /* TODO: LiberNT does not implement the functions below yet */
@@ -7095,7 +7094,6 @@ NTSTATUS NTAPI IoSetFsZeroingOffsetRequired(PIRP Irp);
 NTSTATUS NTAPI IoSetShadowFileInformation(PFILE_OBJECT FileObject, PFILE_OBJECT BackingFileObject, PVOID BackingFltInstance);
 NTKERNELAPI NTSTATUS NTAPI IoVolumeDeviceNameToGuid(PUNICODE_STRING VolumeDeviceName, GUID *Guid);
 NTKERNELAPI NTSTATUS NTAPI IoVolumeDeviceNameToGuidPath(PUNICODE_STRING VolumeDeviceName, PUNICODE_STRING GuidPath);
-NTKERNELAPI ULONG NTAPI KeQueryNodeActiveProcessorCount(USHORT NodeNumber);
 NTKERNELAPI NTSTATUS NTAPI MmAllocateContiguousMemoryEx(PSIZE_T NumberOfBytes, PHYSICAL_ADDRESS LowestAcceptableAddress, PHYSICAL_ADDRESS HighestAcceptableAddress, PHYSICAL_ADDRESS BoundaryAddressMultiple, NODE_REQUIREMENT PreferredNode, ULONG Protect, PVOID PartitionObject, ULONG Tag, ULONG Flags, PVOID *BaseAddress);
 NTKERNELAPI NTSTATUS NTAPI MmGetCacheAttribute(PHYSICAL_ADDRESS PhysicalAddress, MEMORY_CACHING_TYPE *CacheType);
 NTSTATUS NTAPI MmGetCacheAttributeEx(PHYSICAL_ADDRESS PhysicalAddress, ULONG Flags, MEMORY_CACHING_TYPE *CacheType);

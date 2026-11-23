@@ -10600,15 +10600,21 @@ typedef union _NDIS_SWITCH_FORWARDING_DETAIL_NET_BUFFER_LIST_INFO
     ((PNDIS_SWITCH_FORWARDING_DETAIL_NET_BUFFER_LIST_INFO)\
     &(NET_BUFFER_LIST_INFO((_NBL), SwitchForwardingDetail)))
 
-#endif
-#if !(defined(_AMD64_) || defined(_ARM64_))
-#if ((NDIS_SUPPORT_NDIS682))
+#define NET_BUFFER_LIST_SWITCH_FORWARDING_DETAIL_CLEAR(_NBL) \
+    ((_NBL)->NetBufferListInfo[SwitchForwardingDetail] = 0)
+
+#elif NDIS_SUPPORT_NDIS682
 
 #define NET_BUFFER_LIST_SWITCH_FORWARDING_DETAIL(_NBL)\
     ((PNDIS_SWITCH_FORWARDING_DETAIL_NET_BUFFER_LIST_INFO)\
     &(NET_BUFFER_LIST_INFO((_NBL), SwitchForwardingDetail_b0_to_b31)))
 
-#endif
+#define NET_BUFFER_LIST_SWITCH_FORWARDING_DETAIL_CLEAR(_NBL) \
+    do { \
+        (_NBL)->NetBufferListInfo[SwitchForwardingDetail_b0_to_b31] = 0; \
+        (_NBL)->NetBufferListInfo[SwitchForwardingDetail_b32_to_b63] = 0; \
+    } while (0)
+
 #endif
 
 typedef struct _NDIS_SWITCH_PORT_DESTINATION
@@ -13537,11 +13543,6 @@ NDIS_STATUS NTAPI NdisGetProcessorInformationEx(NDIS_HANDLE NdisHandle, PNDIS_SY
 #endif
 #if (NDIS_SUPPORT_NDIS6) && ((NDIS_SUPPORT_NDIS620)) && ((NDIS_SUPPORT_NDIS630))
 #define NET_BUFFER_LIST_RECEIVE_FILTER_VPORT_ID(_NBL) (((PNDIS_NET_BUFFER_LIST_FILTERING_INFO) & NET_BUFFER_LIST_INFO(_NBL, NetBufferListFilteringInfo)) -> FilteringInfo . QueueVPortInfo . VPortId)
-#endif
-#if (defined(_AMD64_) || defined(_ARM64_))
-#if (NDIS_SUPPORT_NDIS6) && ((NDIS_SUPPORT_NDIS630))
-#define NET_BUFFER_LIST_SWITCH_FORWARDING_DETAIL_CLEAR(_NBL) (_NBL) -> NetBufferListInfo [SwitchForwardingDetail] = 0
-#endif
 #endif
 #define WanMiniportSend(Status, NdisBindingHandle, NdisLinkHandle, WanPacket) { * (Status) = ((((PNDIS_OPEN_BLOCK) (NdisBindingHandle)) -> WanSendHandler)) (((PNDIS_OPEN_BLOCK) (NdisBindingHandle)) -> BindingHandle, (NdisLinkHandle), (PNDIS_PACKET) (WanPacket)); }
 

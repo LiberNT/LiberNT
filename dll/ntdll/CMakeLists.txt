@@ -45,6 +45,7 @@ list(APPEND SOURCE
     ldr/ldrnotify.c
     ldr/ldrmui.c
     ldr/ldrpe.c
+    ldr/ldrddag.c
     ldr/ldrutils.c
     ldr/verifier.c
     rtl/barrier.c

@@ -152,8 +152,44 @@ static VOID KeQueryLogicalProcessorRelationshipTest(VOID)
     ExFreePoolWithTag(Cores, 'PrcK');
 }
 
+static VOID KeQueryNodeActiveAffinityTest(VOID)
+{
+    UNICODE_STRING Name = RTL_CONSTANT_STRING(L"KeQueryNodeActiveAffinity2");
+    typedef NTSTATUS (NTAPI *QUERY_AFFINITY)(USHORT, PGROUP_AFFINITY, USHORT, PUSHORT);
+    QUERY_AFFINITY Query = (QUERY_AFFINITY)MmGetSystemRoutineAddress(&Name);
+    USHORT Node = KeGetCurrentNodeNumber(), Count = 0, Returned = 0, Index;
+    ULONG Processors = 0;
+    PGROUP_AFFINITY Groups;
+    NTSTATUS Status;
+
+    if (skip(Query != NULL, "KeQueryNodeActiveAffinity2 unavailable\n")) return;
+    Status = Query(MAXUSHORT, NULL, 0, &Returned);
+    ok_eq_hex(Status, STATUS_INVALID_PARAMETER);
+    Status = Query(Node, NULL, 0, &Count);
+    ok_eq_hex(Status, STATUS_BUFFER_TOO_SMALL);
+    ok(Count && Count <= KeQueryActiveGroupCount(), "Invalid group count %u\n", Count);
+    if (!Count || Count > KeQueryActiveGroupCount()) return;
+    Groups = ExAllocatePoolWithTag(NonPagedPool, Count * sizeof(*Groups), 'PrcK');
+    if (skip(Groups != NULL, "No memory for group affinities\n")) return;
+    Status = Query(Node, Groups, Count, &Returned);
+    ok_eq_hex(Status, STATUS_SUCCESS);
+    ok_eq_uint(Returned, Count);
+    if (NT_SUCCESS(Status))
+    {
+        for (Index = 0; Index < Count; ++Index)
+        {
+            ok(Groups[Index].Mask != 0, "Empty affinity for group %u\n", Groups[Index].Group);
+            ok(Groups[Index].Group < KeQueryActiveGroupCount(), "Invalid group %u\n", Groups[Index].Group);
+            Processors += RtlNumberOfSetBitsUlongPtr(Groups[Index].Mask);
+        }
+        ok_eq_ulong(Processors, KeQueryNodeActiveProcessorCount(Node));
+    }
+    ExFreePoolWithTag(Groups, 'PrcK');
+}
+
 START_TEST(KeProcessor)
 {
     KeStallExecutionProcessorTest();
     KeQueryLogicalProcessorRelationshipTest();
+    KeQueryNodeActiveAffinityTest();
 }

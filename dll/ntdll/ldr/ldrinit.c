@@ -108,7 +108,6 @@ RTL_CRITICAL_SECTION LdrpLoaderLock =
     0
 };
 RTL_SRWLOCK LdrpModuleDatatableLock = RTL_SRWLOCK_INIT;
-RTL_SRWLOCK LdrpLoadCountWalkLock = RTL_SRWLOCK_INIT;
 RTL_CRITICAL_SECTION FastPebLock;
 
 BOOLEAN ShowSnaps;
@@ -836,6 +835,22 @@ Exit:
     DPRINT("LdrpInitializeThread() done\n");
 }
 
+static VOID
+LdrpPublishInitializedNode(PLDR_DDAG_NODE Node)
+{
+    PLIST_ENTRY Link;
+    if (Node->State < LdrModulesMapping || Node->State == LdrModulesReadyToRun)
+        return;
+    for (Link = Node->Modules.Flink; Link != &Node->Modules; Link = Link->Flink)
+    {
+        PLDR_DATA_TABLE_ENTRY Entry = CONTAINING_RECORD(Link, LDR_DATA_TABLE_ENTRY, NodeModuleLink);
+        if (!(Entry->Flags & LDRP_ENTRY_PROCESSED) ||
+            (Entry->EntryPoint && !(Entry->Flags & LDRP_PROCESS_ATTACH_CALLED)))
+            return;
+    }
+    WriteRelease((volatile LONG *)&Node->State, LdrModulesReadyToRun);
+}
+
 NTSTATUS
 NTAPI
 LdrpRunInitializeRoutines(IN PCONTEXT Context OPTIONAL)
@@ -954,6 +969,7 @@ LdrpRunInitializeRoutines(IN PCONTEXT Context OPTIONAL)
 
         /* Set the flag */
         InterlockedOr((PLONG)&LdrEntry->Flags, LDRP_ENTRY_PROCESSED);
+        if (!LdrEntry->EntryPoint) LdrpPublishInitializedNode(LdrEntry->DdagNode);
         NextEntry = NextEntry->Flink;
     }
 
@@ -1051,6 +1067,7 @@ LdrpRunInitializeRoutines(IN PCONTEXT Context OPTIONAL)
                 if (ShowSnaps)
                     DPRINT1("%wZ - Calling entry point at %p for DLL_PROCESS_ATTACH\n",
                             &LdrEntry->BaseDllName, EntryPoint);
+                LdrEntry->DdagNode->State = LdrModulesInitializing;
                 DllStatus = LdrpCallProcessCallbacks(LdrEntry, DLL_PROCESS_ATTACH,
                                                      Context, &DllInitCompleted);
             }
@@ -1062,9 +1079,13 @@ LdrpRunInitializeRoutines(IN PCONTEXT Context OPTIONAL)
             _SEH2_END;
 
             /* Mark the entry as processed */
-            /* FIXME: a module whose attach fails stays visible to the lock-free LdrLoadDll path until unloaded. */
             if (DllInitCompleted)
                 InterlockedOr((PLONG)&LdrEntry->Flags, LDRP_PROCESS_ATTACH_CALLED);
+
+            if (DllStatus)
+                LdrpPublishInitializedNode(LdrEntry->DdagNode);
+            else
+                WriteRelease((volatile LONG *)&LdrEntry->DdagNode->State, LdrModulesInitError);
 
             /* Fail if DLL init failed */
             if (!DllStatus)
@@ -3066,7 +3087,7 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     /* Set it up */
     LdrpImageEntry->EntryPoint = LdrpFetchAddressOfEntryPoint(LdrpImageEntry->DllBase);
     LdrpImageEntry->LoadReason = LoadReasonDynamicLoad;
-    LdrpImageEntry->ObsoleteLoadCount = -1;
+    LdrpReferenceModule(LdrpImageEntry, TRUE);
     LdrpImageEntry->EntryPointActivationContext = 0;
     LdrpImageEntry->FullDllName = ImageFileName;
 
@@ -3114,6 +3135,7 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     LdrpInsertMemoryTableEntry(LdrpImageEntry);
     LdrpInitSecurityCookie(LdrpImageEntry);
     LdrpImageEntry->Flags |= LDRP_ENTRY_PROCESSED;
+    LdrpImageEntry->DdagNode->State = LdrModulesReadyToRun;
 
     /* Now add an entry for NTDLL */
     NtLdrEntry = LdrpAllocateDataTableEntry(SystemArgument1);
@@ -3124,7 +3146,7 @@ LdrpInitializeProcess(IN PCONTEXT Context,
     }
     NtLdrEntry->Flags = LDRP_IMAGE_DLL;
     NtLdrEntry->EntryPoint = LdrpFetchAddressOfEntryPoint(NtLdrEntry->DllBase);
-    NtLdrEntry->ObsoleteLoadCount = -1;
+    LdrpReferenceModule(NtLdrEntry, TRUE);
     NtLdrEntry->EntryPointActivationContext = 0;
 
     NtLdrEntry->FullDllName.Length = FullPath.Length;
@@ -3246,6 +3268,9 @@ LdrpInitializeProcess(IN PCONTEXT Context,
             return Status;
         }
 
+        Status = LdrAddRefDll(LDR_ADDREF_DLL_PIN, Kernel32BaseAddress);
+        if (!NT_SUCCESS(Status)) return Status;
+
         Status = LdrGetProcedureAddress(Kernel32BaseAddress,
                                         &BaseProcessInitPostImportName,
                                         0,
@@ -3352,14 +3377,13 @@ LdrpInitializeProcess(IN PCONTEXT Context,
         if (!NT_SUCCESS(Status)) return Status;
     }
 
-    /* Lock the DLLs */
+    /* Startup imports retain a loader-entry reference for the process lifetime. */
     ListHead = &Peb->Ldr->InLoadOrderModuleList;
-    NextEntry = ListHead->Flink;
-    while (ListHead != NextEntry)
+    for (NextEntry = ListHead->Flink; NextEntry != ListHead; NextEntry = NextEntry->Flink)
     {
         NtLdrEntry = CONTAINING_RECORD(NextEntry, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
-        NtLdrEntry->ObsoleteLoadCount = -1;
-        NextEntry = NextEntry->Flink;
+        if (NtLdrEntry->DdagNode->LoadCount != MAXULONG)
+            InterlockedIncrement((PLONG)&NtLdrEntry->ReferenceCount);
     }
 
     /* Phase 0 is done */

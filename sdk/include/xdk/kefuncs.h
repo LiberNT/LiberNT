@@ -1332,6 +1332,23 @@ LOGICAL
 NTAPI
 KeShouldYieldProcessor(VOID);
 
+#if (NTDDI_VERSION >= NTDDI_WIN10_FE)
+NTKERNELAPI
+NTSTATUS
+NTAPI
+KeQueryNodeActiveAffinity2(
+  _In_ USHORT NodeNumber,
+  _Out_writes_to_opt_(GroupAffinitiesCount, *GroupAffinitiesRequired) PGROUP_AFFINITY GroupAffinities,
+  _In_ USHORT GroupAffinitiesCount,
+  _Out_ PUSHORT GroupAffinitiesRequired);
+
+NTKERNELAPI
+ULONG
+NTAPI
+KeQueryNodeActiveProcessorCount(
+  _In_ USHORT NodeNumber);
+#endif
+
 $endif (_WDMDDK_ || _NTDDK_)
 
 $if (_WDMDDK_)

@@ -238,7 +238,7 @@ IatReady:
                                        ImportName,
                                        DllPath,
                                        FALSE,
-                                       ImportLdrEntry);
+                                       ImportLdrEntry, ImportLdrEntry->DllBase);
 
                 /* Move to the next thunk */
                 FirstThunk++;
@@ -297,7 +297,7 @@ IatReady:
                                        ImportName,
                                        DllPath,
                                        FALSE,
-                                       ImportLdrEntry);
+                                       ImportLdrEntry, ImportLdrEntry->DllBase);
 
                 /* Next thunks */
                 OriginalThunk++;
@@ -768,9 +768,8 @@ LdrpNameToOrdinal(IN LPSTR ImportName,
     return OrdinalTable[Next];
 }
 
-NTSTATUS
-NTAPI
-LdrpWalkImportDescriptor(IN LPWSTR DllPath OPTIONAL,
+static NTSTATUS
+LdrpWalkImports(IN LPWSTR DllPath OPTIONAL,
                          IN PLDR_DATA_TABLE_ENTRY LdrEntry)
 {
     RTL_CALLER_ALLOCATED_ACTIVATION_CONTEXT_STACK_FRAME_EXTENDED ActCtx;
@@ -916,6 +915,34 @@ LdrpWalkImportDescriptor(IN LPWSTR DllPath OPTIONAL,
 
 NTSTATUS
 NTAPI
+LdrpWalkImportDescriptor(IN LPWSTR DllPath OPTIONAL,
+                         IN PLDR_DATA_TABLE_ENTRY LdrEntry)
+{
+    /* Import recursion runs under the loader lock. Keep a DFS index per walk. */
+    static ULONG NextPreorder;
+    ULONG Saved = NextPreorder;
+    BOOLEAN Root = LdrEntry->LoadReason == LoadReasonDynamicLoad || LdrEntry->DllBase == NtCurrentPeb()->ImageBaseAddress;
+    NTSTATUS Status;
+
+    if (Root)
+        NextPreorder = 0;
+    LdrEntry->DdagNode->PreorderNumber = ++NextPreorder;
+    LdrEntry->DdagNode->LowestLink = NextPreorder;
+    _SEH2_TRY
+    {
+        Status = LdrpWalkImports(DllPath, LdrEntry);
+    }
+    _SEH2_FINALLY
+    {
+        if (!Saved || Root)
+            NextPreorder = Saved;
+    }
+    _SEH2_END;
+    return Status;
+}
+
+NTSTATUS
+NTAPI
 LdrpLoadImportModule(IN PWSTR DllPath OPTIONAL,
                      IN PLDR_DATA_TABLE_ENTRY Importer,
                      IN LPSTR ImportName,
@@ -1040,7 +1067,7 @@ LdrpLoadImportModule(IN PWSTR DllPath OPTIONAL,
         if (ChpeIsChpeProcess())
             ChpeRegisterImageCodeRanges((*DataTableEntry)->DllBase);
 #endif
-        Status = STATUS_SUCCESS;
+        Status = LdrpAddDependency(Importer, *DataTableEntry, LoadReasonStaticDependency);
         goto done;
     }
 
@@ -1067,20 +1094,19 @@ LdrpLoadImportModule(IN PWSTR DllPath OPTIONAL,
     {
         DPRINT1("LDR: CHPE redirected image %wZ is not ARM64EC\n", &(*DataTableEntry)->BaseDllName);
         Status = STATUS_INVALID_IMAGE_FORMAT;
-        goto done;
     }
-
-    if (ChpeIsChpeProcess() && !ChpeRegisterImageCodeRanges((*DataTableEntry)->DllBase))
+    else if (ChpeIsChpeProcess() && !ChpeRegisterImageCodeRanges((*DataTableEntry)->DllBase))
     {
         DPRINT1("LDR: CHPE failed to register image code ranges for %wZ\n", &(*DataTableEntry)->BaseDllName);
         Status = STATUS_INVALID_IMAGE_FORMAT;
-        goto done;
     }
 #endif
 
     /* Walk its import descriptor table */
-    Status = LdrpWalkImportDescriptor(DllPath,
-                                      *DataTableEntry);
+    if (NT_SUCCESS(Status))
+        Status = LdrpAddDependency(Importer, *DataTableEntry, LoadReasonStaticDependency);
+    if (NT_SUCCESS(Status))
+        Status = LdrpWalkImportDescriptor(DllPath, *DataTableEntry);
     if (!NT_SUCCESS(Status))
     {
         /* Add it to the in-init-order list in case of failure */
@@ -1098,81 +1124,12 @@ done:
     return Status;
 }
 
-typedef struct _LDRP_FORWARDER_REFERENCE
+static BOOLEAN
+LdrpIsForwarderReferenced(PVOID OwnerBase, PLDR_DATA_TABLE_ENTRY Target)
 {
-    LIST_ENTRY Links;
-    PVOID OwnerBase;
-    PVOID TargetBase;
-} LDRP_FORWARDER_REFERENCE, *PLDRP_FORWARDER_REFERENCE;
-
-static LIST_ENTRY LdrpForwarderReferenceList = { &LdrpForwarderReferenceList, &LdrpForwarderReferenceList };
-
-static
-BOOLEAN
-LdrpIsForwarderReferenced(
-    _In_ PVOID OwnerBase,
-    _In_ PVOID TargetBase)
-{
-    PLDRP_FORWARDER_REFERENCE Reference;
-    PLIST_ENTRY Entry;
-
-    for (Entry = LdrpForwarderReferenceList.Flink; Entry != &LdrpForwarderReferenceList; Entry = Entry->Flink)
-    {
-        Reference = CONTAINING_RECORD(Entry, LDRP_FORWARDER_REFERENCE, Links);
-        if (Reference->OwnerBase == OwnerBase && Reference->TargetBase == TargetBase)
-            return TRUE;
-    }
-
-    return FALSE;
-}
-
-static
-VOID
-LdrpAddForwarderReference(
-    _In_ PVOID OwnerBase,
-    _In_ PVOID TargetBase)
-{
-    PLDRP_FORWARDER_REFERENCE Reference;
-
-    Reference = RtlAllocateHeap(LdrpHeap, 0, sizeof(*Reference));
-    if (!Reference)
-        return;
-
-    Reference->OwnerBase = OwnerBase;
-    Reference->TargetBase = TargetBase;
-    RtlAcquireSRWLockExclusive(&LdrpModuleDatatableLock);
-    InsertTailList(&LdrpForwarderReferenceList, &Reference->Links);
-    RtlReleaseSRWLockExclusive(&LdrpModuleDatatableLock);
-}
-
-VOID
-NTAPI
-LdrpReleaseForwarderReferences(IN PVOID OwnerBase)
-{
-    PLDRP_FORWARDER_REFERENCE Reference;
-    PLIST_ENTRY Entry;
-    PVOID TargetBase;
-
-    Entry = LdrpForwarderReferenceList.Flink;
-    while (Entry != &LdrpForwarderReferenceList)
-    {
-        Reference = CONTAINING_RECORD(Entry, LDRP_FORWARDER_REFERENCE, Links);
-        if (Reference->OwnerBase != OwnerBase)
-        {
-            Entry = Entry->Flink;
-            continue;
-        }
-
-        TargetBase = Reference->TargetBase;
-        RtlAcquireSRWLockExclusive(&LdrpModuleDatatableLock);
-        RemoveEntryList(&Reference->Links);
-        RtlReleaseSRWLockExclusive(&LdrpModuleDatatableLock);
-        RtlFreeHeap(LdrpHeap, 0, Reference);
-
-        LdrUnloadDll(TargetBase);
-
-        Entry = LdrpForwarderReferenceList.Flink;
-    }
+    PLDR_DATA_TABLE_ENTRY Owner;
+    return Target->DdagNode->LoadCount == MAXULONG ||
+           (LdrpCheckForLoadedDllHandle(OwnerBase, &Owner) && LdrpHasDependency(Owner, Target));
 }
 
 static
@@ -1228,8 +1185,7 @@ LdrpFindReferencedForwarder(
             DllPath = LdrpGetModuleLoadPath(OwnerBase);
         if (LdrpFindLoadedForwarder(DllPath, DllName, Redirected, &LdrEntry) &&
             LdrpIsModuleReady(LdrEntry) &&
-            ((*(volatile USHORT *)&LdrEntry->ObsoleteLoadCount == 0xFFFF) ||
-             LdrpIsForwarderReferenced(OwnerBase, LdrEntry->DllBase)))
+            LdrpIsForwarderReferenced(OwnerBase, LdrEntry))
         {
             *TargetBase = LdrEntry->DllBase;
             Status = STATUS_SUCCESS;
@@ -1254,25 +1210,20 @@ LdrpReferenceLoadedDll(
     _Out_ PVOID *BaseAddress)
 {
     PLDR_DATA_TABLE_ENTRY LdrEntry = NULL;
-    LDRP_WALK_SET Set;
-    BOOLEAN Referenced = FALSE, Walk = FALSE, SetReady = FALSE;
+    BOOLEAN Referenced = FALSE;
 
 #if defined(_M_ARM64)
     if (ChpeIsChpeProcess())
         return FALSE;
 #endif
 
-    RtlAcquireSRWLockShared(&LdrpLoadCountWalkLock);
-    RtlAcquireSRWLockShared(&LdrpModuleDatatableLock);
+    RtlAcquireSRWLockExclusive(&LdrpModuleDatatableLock);
     _SEH2_TRY
     {
         if (LdrpFindLoadedForwarder(DllPath, DllName, Redirected, &LdrEntry) &&
             LdrpIsModuleInitialized(LdrEntry))
         {
-            if (*(volatile USHORT *)&LdrEntry->ObsoleteLoadCount == 0xFFFF)
-                Referenced = TRUE;
-            else if ((SetReady = LdrpAllocateWalkSet(&Set)))
-                Referenced = LdrpTryReferenceModule(LdrEntry, FALSE, &Walk);
+            Referenced = LdrpAdjustReference(LdrEntry, FALSE, FALSE);
         }
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
@@ -1280,13 +1231,7 @@ LdrpReferenceLoadedDll(
         Referenced = FALSE;
     }
     _SEH2_END;
-    RtlReleaseSRWLockShared(&LdrpModuleDatatableLock);
-
-    if (Walk)
-        LdrpWalkLoadCount(LdrEntry, LDRP_UPDATE_REFCOUNT, &Set);
-    RtlReleaseSRWLockShared(&LdrpLoadCountWalkLock);
-    if (SetReady)
-        LdrpFreeWalkSet(&Set);
+    RtlReleaseSRWLockExclusive(&LdrpModuleDatatableLock);
 
     if (!Referenced)
         return FALSE;
@@ -1307,7 +1252,8 @@ LdrpSnapThunk(IN PVOID ExportBase,
               IN LPSTR DllName,
               IN PWSTR DllPath OPTIONAL,
               IN BOOLEAN LookupOnly,
-              IN PLDR_DATA_TABLE_ENTRY StaticImporter OPTIONAL)
+              IN PLDR_DATA_TABLE_ENTRY StaticImporter OPTIONAL,
+              IN PVOID ForwarderOwner)
 {
     BOOLEAN IsOrdinal;
     USHORT Ordinal;
@@ -1328,7 +1274,6 @@ LdrpSnapThunk(IN PVOID ExportBase,
     ANSI_STRING ForwarderName;
     PANSI_STRING ForwardName;
     PVOID ForwarderHandle = NULL;
-    PVOID ForwarderOwner = Static ? ImportBase : ExportBase;
     PLDR_DATA_TABLE_ENTRY ForwarderLdrEntry;
     BOOLEAN ForwarderReferenced = FALSE;
     ULONG ForwardOrdinal;
@@ -1571,7 +1516,7 @@ FailurePath:
                 else if (NT_SUCCESS(Status))
                 {
                     if (LdrpFindLoadedForwarder(ForwarderPath, RedirectedImportName, Redirected, &ForwarderLdrEntry) &&
-                        LdrpIsForwarderReferenced(ForwarderOwner, ForwarderLdrEntry->DllBase))
+                        LdrpIsForwarderReferenced(ForwarderOwner, ForwarderLdrEntry))
                     {
                         ForwarderHandle = ForwarderLdrEntry->DllBase;
                     }
@@ -1580,7 +1525,7 @@ FailurePath:
                         LDR_DLL_LOAD_REASON Reason = StaticImporter ? LoadReasonStaticForwarderDependency
                                                                    : LoadReasonDynamicForwarderDependency;
                         Status = LdrpLoadDll(Redirected && !ApiSetRedirected, ForwarderPath, NULL,
-                                             RedirectedImportName, &ForwarderHandle, FALSE, Reason, StaticImporter);
+                                             RedirectedImportName, &ForwarderHandle, !StaticImporter, Reason, StaticImporter);
                         ForwarderReferenced = NT_SUCCESS(Status);
                     }
                 }
@@ -1597,6 +1542,26 @@ FailurePath:
 
             /* If the load or conversion failed, use the failure path */
             if (!NT_SUCCESS(Status)) goto FailurePath;
+
+            if (ForwarderReferenced)
+            {
+                PLDR_DATA_TABLE_ENTRY Owner;
+                LDR_DLL_LOAD_REASON Reason = StaticImporter ? LoadReasonStaticForwarderDependency :
+                                                             LoadReasonDynamicForwarderDependency;
+                if (!LdrpCheckForLoadedDllHandle(ForwarderOwner, &Owner) ||
+                    !LdrpCheckForLoadedDllHandle(ForwarderHandle, &ForwarderLdrEntry))
+                {
+                    Status = STATUS_DLL_NOT_FOUND;
+                    goto FailurePath;
+                }
+                Status = LdrpAddDependency(Owner, ForwarderLdrEntry, Reason);
+                if (!NT_SUCCESS(Status))
+                {
+                    LdrUnloadDll(ForwarderHandle);
+                    return Status;
+                }
+                ForwarderReferenced = FALSE;
+            }
 
             /* Now set up a name for the actual forwarder dll */
             RtlInitAnsiString(&ForwarderName,
@@ -1630,12 +1595,11 @@ FailurePath:
                                              (PVOID*)&Thunk->u1.Function,
                                              FALSE,
                                              DllPath,
-                                             StaticImporter);
+                                             StaticImporter, ForwarderOwner);
             /* If this fails, then error out */
             if (!NT_SUCCESS(Status)) goto FailurePath;
 
-            if (ForwarderReferenced)
-                LdrpAddForwarderReference(ForwarderOwner, ForwarderHandle);
+
         }
         else
         {

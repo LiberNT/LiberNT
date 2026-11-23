@@ -11,18 +11,6 @@
 #define LDR_HASH_TABLE_ENTRIES 32
 #define LDR_GET_HASH_ENTRY(x) (RtlUpcaseUnicodeChar((x)) & (LDR_HASH_TABLE_ENTRIES - 1))
 
-/* LdrpUpdateLoadCount2 flags */
-#define LDRP_UPDATE_REFCOUNT   0x01
-#define LDRP_UPDATE_DEREFCOUNT 0x02
-#define LDRP_UPDATE_PIN        0x03
-
-typedef struct _LDRP_WALK_SET
-{
-    struct _LDR_DATA_TABLE_ENTRY **Entries;
-    ULONG Count;
-    ULONG Size;
-} LDRP_WALK_SET, *PLDRP_WALK_SET;
-
 /* Loader flags */
 #define IMAGE_LOADER_FLAGS_COMPLUS 0x00000001
 #define IMAGE_LOADER_FLAGS_SYSTEM_GLOBAL 0x01000000
@@ -82,7 +70,6 @@ NTSTATUS
 /* Global data */
 extern RTL_CRITICAL_SECTION LdrpLoaderLock;
 extern RTL_SRWLOCK LdrpModuleDatatableLock;
-extern RTL_SRWLOCK LdrpLoadCountWalkLock;
 extern BOOLEAN LdrpInLdrInit;
 extern PVOID LdrpHeap;
 extern LIST_ENTRY LdrpHashTable[LDR_HASH_TABLE_ENTRIES];
@@ -137,10 +124,6 @@ VOID NTAPI LdrpEnsureLoaderLockIsHeld(VOID);
 NTSTATUS NTAPI LdrpInitializeGuard(IN PLDR_DATA_TABLE_ENTRY LdrEntry);
 
 /* ldrpe.c */
-VOID
-NTAPI
-LdrpReleaseForwarderReferences(IN PVOID OwnerBase);
-
 PWSTR
 NTAPI
 LdrpGetModuleLoadPath(IN PVOID DllBase);
@@ -157,7 +140,8 @@ LdrpSnapThunk(IN PVOID ExportBase,
               IN LPSTR DllName,
               IN PWSTR DllPath OPTIONAL,
               IN BOOLEAN LookupOnly,
-              IN PLDR_DATA_TABLE_ENTRY StaticImporter OPTIONAL);
+              IN PLDR_DATA_TABLE_ENTRY StaticImporter OPTIONAL,
+              IN PVOID ForwarderOwner);
 
 NTSTATUS NTAPI
 LdrpWalkImportDescriptor(IN LPWSTR DllPath OPTIONAL,
@@ -212,7 +196,8 @@ LdrpGetProcedureAddress(
     _Out_ PVOID *ProcedureAddress,
     _In_ BOOLEAN ExecuteInit,
     _In_opt_ PWSTR DllPath,
-    _In_opt_ PLDR_DATA_TABLE_ENTRY StaticImporter);
+    _In_opt_ PLDR_DATA_TABLE_ENTRY StaticImporter,
+    _In_ PVOID ForwarderOwner);
 
 PLDR_DATA_TABLE_ENTRY NTAPI
 LdrpAllocateDataTableEntry(IN PVOID BaseAddress);
@@ -256,15 +241,7 @@ BOOLEAN
 LdrpIsModuleInitialized(
     _In_ PLDR_DATA_TABLE_ENTRY LdrEntry)
 {
-    LONG Flags = ReadAcquire((volatile LONG *)&LdrEntry->Flags);
-    ULONG Size;
-
-    if (!(Flags & LDRP_ENTRY_PROCESSED))
-        return FALSE;
-    if (Flags & LDRP_PROCESS_ATTACH_CALLED)
-        return TRUE;
-    return !LdrEntry->EntryPoint &&
-           !RtlImageDirectoryEntryToData(LdrEntry->DllBase, TRUE, IMAGE_DIRECTORY_ENTRY_IMPORT, &Size);
+    return ReadAcquire((volatile LONG *)&LdrEntry->DdagNode->State) == LdrModulesReadyToRun;
 }
 
 NTSTATUS NTAPI
@@ -277,25 +254,12 @@ LdrpLoadDll(IN BOOLEAN Redirected,
             IN LDR_DLL_LOAD_REASON LoadReason,
             IN PLDR_DATA_TABLE_ENTRY Importer OPTIONAL);
 
-VOID NTAPI
-LdrpUpdateLoadCount2(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
-                     IN ULONG Flags);
-
-BOOLEAN NTAPI
-LdrpAllocateWalkSet(OUT PLDRP_WALK_SET Set);
-
-VOID NTAPI
-LdrpFreeWalkSet(IN PLDRP_WALK_SET Set);
-
-VOID NTAPI
-LdrpWalkLoadCount(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
-                  IN ULONG Flags,
-                  IN PLDRP_WALK_SET Set);
-
-BOOLEAN NTAPI
-LdrpTryReferenceModule(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
-                       IN BOOLEAN Release,
-                       OUT PBOOLEAN Walk);
+BOOLEAN LdrpInitializeNode(PLDR_DATA_TABLE_ENTRY Entry);
+VOID LdrpDestroyNode(PLDR_DATA_TABLE_ENTRY Entry);
+BOOLEAN LdrpAdjustReference(PLDR_DATA_TABLE_ENTRY Entry, BOOLEAN Release, BOOLEAN AllowLast);
+BOOLEAN LdrpReferenceModule(PLDR_DATA_TABLE_ENTRY Entry, BOOLEAN Pin);
+BOOLEAN LdrpHasDependency(PLDR_DATA_TABLE_ENTRY Owner, PLDR_DATA_TABLE_ENTRY Target);
+NTSTATUS LdrpAddDependency(PLDR_DATA_TABLE_ENTRY Owner, PLDR_DATA_TABLE_ENTRY Target, LDR_DLL_LOAD_REASON Reason);
 
 ULONG NTAPI
 LdrpCountUnprocessedEntries(VOID);

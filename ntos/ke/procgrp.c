@@ -16,7 +16,6 @@
 /* PRIVATE TYPES *************************************************************/
 
 /* KeSetTimer2 and friends are internal exports not declared by the DDK. */
-NTKERNELAPI ULONG NTAPI KeQueryNodeActiveProcessorCount(_In_ USHORT NodeNumber);
 NTKERNELAPI PKPRCB NTAPI KeQueryPrcbAddress(_In_ ULONG Number);
 NTKERNELAPI ULONG NTAPI KeQueryActiveProcessorAffinity(_Out_ PKAFFINITY_EX Affinity);
 NTKERNELAPI NTSTATUS NTAPI KeQueryActiveProcessorAffinity2(_Out_ PGROUP_AFFINITY GroupAffinities, _Inout_ PUSHORT Count);
@@ -1303,9 +1302,29 @@ KeQueryGroupAffinityEx(
     return Affinity->Bitmap[GroupNumber];
 }
 
-/*
- * @implemented
- */
+static
+KAFFINITY
+KiQueryNodeGroupMask(USHORT NodeNumber, USHORT Group)
+{
+    KAFFINITY Active = KeQueryGroupAffinity(Group);
+    KAFFINITY Mask = 0;
+    ULONG Base = (ULONG)Group * KiMaximumGroupSize;
+
+    if (KeNumberNodes <= 1)
+        return Active;
+
+    while (Active)
+    {
+        ULONG Bit = RtlFindLeastSignificantBit((ULONGLONG)Active);
+        KAFFINITY Member = (KAFFINITY)1 << Bit;
+        PKPRCB Prcb = KiProcessorBlock[Base + Bit];
+        if (Prcb && Prcb->ParentNode == KeNodeBlock[NodeNumber])
+            Mask |= Member;
+        Active &= ~Member;
+    }
+    return Mask;
+}
+
 VOID
 NTAPI
 KeQueryNodeActiveAffinity(
@@ -1313,25 +1332,28 @@ KeQueryNodeActiveAffinity(
     _Out_opt_ PGROUP_AFFINITY Affinity,
     _Out_opt_ PUSHORT Count)
 {
-    /* Node 0 owns every active processor; other nodes are empty. */
-    /* FIXME: a node of more than one group is reported as its part of group 0; KeQueryNodeActiveAffinity2 has all of it */
-    if (Affinity != NULL)
+    GROUP_AFFINITY Primary = {0};
+    USHORT PrimaryCount = 0;
+    USHORT Group;
+
+    if (NodeNumber <= KeQueryHighestNodeNumber())
     {
-        RtlZeroMemory(Affinity, sizeof(*Affinity));
-        if (NodeNumber == 0)
+        for (Group = 0; Group < KeQueryActiveGroupCount(); ++Group)
         {
-            Affinity->Mask = KeQueryGroupAffinity(0);
-            Affinity->Group = 0;
+            KAFFINITY Mask = KiQueryNodeGroupMask(NodeNumber, Group);
+            USHORT Members = (USHORT)RtlNumberOfSetBitsUlongPtr(Mask);
+            if (Members > PrimaryCount)
+            {
+                PrimaryCount = Members;
+                Primary.Group = Group;
+                Primary.Mask = Mask;
+            }
         }
     }
-
-    if (Count != NULL)
-        *Count = (NodeNumber == 0) ? (USHORT)KeQueryActiveProcessorCountEx(0) : 0;
+    if (Affinity) *Affinity = Primary;
+    if (Count) *Count = PrimaryCount;
 }
 
-/*
- * @implemented
- */
 NTSTATUS
 NTAPI
 KeQueryNodeActiveAffinity2(
@@ -1340,37 +1362,44 @@ KeQueryNodeActiveAffinity2(
     _In_ USHORT GroupAffinitiesCount,
     _Out_ PUSHORT GroupAffinitiesRequired)
 {
-    USHORT Count;
-    NTSTATUS Status;
+    USHORT Required = 0, Group;
+    USHORT Groups = KeQueryActiveGroupCount();
 
-    if (GroupAffinitiesRequired == NULL)
+    if (!GroupAffinitiesRequired || NodeNumber > KeQueryHighestNodeNumber())
         return STATUS_INVALID_PARAMETER;
 
-    if (NodeNumber != 0)
+    for (Group = 0; Group < Groups; ++Group)
     {
-        *GroupAffinitiesRequired = 0;
-        return STATUS_SUCCESS;
+        KAFFINITY Mask = KiQueryNodeGroupMask(NodeNumber, Group);
+        if (Mask)
+        {
+            if (GroupAffinities && Required < GroupAffinitiesCount)
+            {
+                RtlZeroMemory(&GroupAffinities[Required], sizeof(GROUP_AFFINITY));
+                GroupAffinities[Required].Group = Group;
+                GroupAffinities[Required].Mask = Mask;
+            }
+            ++Required;
+        }
     }
-
-    /* Node 0 owns every active processor, i.e. the system affinity */
-    Count = GroupAffinitiesCount;
-    Status = KeQueryActiveProcessorAffinity2(GroupAffinities, &Count);
-    *GroupAffinitiesRequired = Count;
-    return Status;
+    *GroupAffinitiesRequired = Required;
+    if (Required && (!GroupAffinities || GroupAffinitiesCount < Required))
+        return STATUS_BUFFER_TOO_SMALL;
+    return STATUS_SUCCESS;
 }
 
-/*
- * @implemented
- */
 ULONG
 NTAPI
 KeQueryNodeActiveProcessorCount(
     _In_ USHORT NodeNumber)
 {
-    if (NodeNumber != 0)
-        return 0;
+    USHORT Group;
+    ULONG Count = 0;
 
-    return KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS);
+    if (NodeNumber <= KeQueryHighestNodeNumber())
+        for (Group = 0; Group < KeQueryActiveGroupCount(); ++Group)
+            Count += RtlNumberOfSetBitsUlongPtr(KiQueryNodeGroupMask(NodeNumber, Group));
+    return Count;
 }
 
 /*

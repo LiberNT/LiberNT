@@ -52,7 +52,11 @@ typedef unsigned long POINTER_64_INT;
 
 #ifndef __HANDLE64_DEFINED__
 #define __HANDLE64_DEFINED__
+#if !defined(_WIN64) && defined(__GNUC__) && !defined(__clang__)
+typedef unsigned __int64 HANDLE64;
+#else
 typedef void *POINTER_64 HANDLE64;
+#endif
 typedef HANDLE64 *PHANDLE64;
 #endif
 
@@ -266,8 +270,8 @@ static inline void *Handle64ToHandle(HANDLE64 h)
 #else
 #define PtrToPtr64(p) ((void *POINTER_64)(p))
 #define Ptr64ToPtr(p) ((void *)(p))
-#define HandleToHandle64(h) ((HANDLE64)(h))
-#define Handle64ToHandle(h) ((void *)(h))
+#define HandleToHandle64(h) ((HANDLE64)(LONG_PTR)(h))
+#define Handle64ToHandle(h) ((void *)(ULONG_PTR)(h))
 #endif
 #endif
 #define HandleToHandle32(h) PtrToPtr32(h)
