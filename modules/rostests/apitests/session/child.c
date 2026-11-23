@@ -10,28 +10,16 @@
 
 BOOL WINAPI RegisterLogonProcess(DWORD dwProcessId, BOOL bRegister);
 
-int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, LPWSTR commandLine, int show)
+static VOID WriteReport(PCWSTR name, HDESK desktop, DWORD desktopError)
 {
     DISPLAY_DEVICEW device = { sizeof(device) };
     WCHAR path[MAX_PATH], text[256];
-    HWINSTA station;
-    HDESK desktop;
     DEVMODEW mode = { 0 };
     HDC screen;
-    DWORD session = 0, written, index, desktopError;
+    DWORD session = 0, written, index;
     int devices = 0, remote = 0, length;
     HANDLE file;
 
-    RegisterLogonProcess(GetCurrentProcessId(), TRUE);
-    station = CreateWindowStationW(L"WinSta0", 0, WINSTA_ALL_ACCESS, NULL);
-    if (station) SetProcessWindowStation(station);
-    desktop = CreateDesktopW(L"Default", NULL, NULL, 0, GENERIC_ALL, NULL);
-    desktopError = desktop ? 0 : GetLastError();
-    if (desktop)
-    {
-        SetThreadDesktop(desktop);
-        SwitchDesktop(desktop);
-    }
     screen = GetDC(NULL);
     for (index = 0; EnumDisplayDevicesW(NULL, index, &device, 0); index++)
     {
@@ -49,13 +37,36 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, LPWSTR commandLine, 
                         mode.dmPelsWidth, mode.dmPelsHeight, desktop != NULL, desktopError);
     if (screen) ReleaseDC(NULL, screen);
     GetWindowsDirectoryW(path, MAX_PATH);
-    lstrcatW(path, L"\\Temp\\session_child.txt");
+    lstrcatW(path, name);
     file = CreateFileW(path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, 0, NULL);
     if (file != INVALID_HANDLE_VALUE)
     {
         WriteFile(file, text, length * sizeof(WCHAR), &written, NULL);
         CloseHandle(file);
     }
+}
+
+int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, LPWSTR commandLine, int show)
+{
+    HWINSTA station;
+    HDESK desktop;
+    HANDLE again;
+    DWORD desktopError;
+
+    RegisterLogonProcess(GetCurrentProcessId(), TRUE);
+    station = CreateWindowStationW(L"WinSta0", 0, WINSTA_ALL_ACCESS, NULL);
+    if (station) SetProcessWindowStation(station);
+    desktop = CreateDesktopW(L"Default", NULL, NULL, 0, GENERIC_ALL, NULL);
+    desktopError = desktop ? 0 : GetLastError();
+    if (desktop)
+    {
+        SetThreadDesktop(desktop);
+        SwitchDesktop(desktop);
+    }
+    again = OpenEventW(SYNCHRONIZE, FALSE, L"Global\\SessionChildAgain");
+    WriteReport(L"\\Temp\\session_child.txt", desktop, desktopError);
+    if (again && WaitForSingleObject(again, 60000) == WAIT_OBJECT_0)
+        WriteReport(L"\\Temp\\session_child2.txt", desktop, desktopError);
     Sleep(INFINITE);
     return 0;
 }
