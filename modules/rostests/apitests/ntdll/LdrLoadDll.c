@@ -206,12 +206,18 @@ BOOL extract_resource(const WCHAR *Filename, LPCWSTR ResourceName);
 static void CheckModuleEntry(HMODULE Module, BOOL ProcessImport, LDR_DLL_LOAD_REASON Reason)
 {
     PLDR_DATA_TABLE_ENTRY Entry;
+    ULONG Hash;
     NTSTATUS Status = LdrFindEntryForAddress(Module, &Entry);
     ok_ntstatus(Status, STATUS_SUCCESS);
     if (!NT_SUCCESS(Status))
         return;
 
     ok(!Entry->MarkedForRemoval, "Live module %p marked for removal, flags %#lx\n", Module, Entry->Flags);
+    ok_ntstatus(RtlHashUnicodeString(&Entry->BaseDllName, TRUE, HASH_STRING_ALGORITHM_X65599, &Hash), STATUS_SUCCESS);
+    ok_hex(Entry->BaseNameHashValue, Hash);
+    ok(Entry->DdagNode != NULL, "Missing dependency node\n");
+    if (Entry->DdagNode)
+        ok_int(Entry->DdagNode->State, LdrModulesReadyToRun);
     ok_int(Entry->ProcessStaticImport, ProcessImport);
     ok_int(Entry->LoadReason, Reason);
     ok_ptr((PVOID)Entry->OriginalBase, (PVOID)(ULONG_PTR)RtlImageNtHeader(Module)->OptionalHeader.ImageBase);
@@ -250,7 +256,27 @@ START_TEST(LdrModuleEntry)
         ok(Module != NULL, "LoadLibraryW failed, error %lu\n", GetLastError());
         if (Module)
         {
+            PLDR_DATA_TABLE_ENTRY Entry;
+            HMODULE Second;
             CheckModuleEntry(Module, FALSE, LoadReasonDynamicLoad);
+            if (NT_SUCCESS(LdrFindEntryForAddress(Module, &Entry)) && Entry->DdagNode)
+            {
+                ok_int(Entry->ObsoleteLoadCount, 6);
+                ok_int(Entry->ReferenceCount, 1);
+                ok_ptr(Entry->NodeModuleLink.Flink, &Entry->DdagNode->Modules);
+                ok_ptr(Entry->DdagNode->Modules.Flink, &Entry->NodeModuleLink);
+                ok_int(Entry->DdagNode->LoadCount, 1);
+                Second = LoadLibraryW(Filename);
+                ok_ptr(Second, Module);
+                if (Second)
+                {
+                    ok_int(Entry->DdagNode->LoadCount, 2);
+                    ok_int(Entry->ReferenceCount, 1);
+                    ok_int(Entry->ObsoleteLoadCount, 6);
+                    FreeLibrary(Second);
+                    ok_int(Entry->DdagNode->LoadCount, 1);
+                }
+            }
             FreeLibrary(Module);
         }
     }

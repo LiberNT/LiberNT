@@ -165,6 +165,7 @@ RtlpQueryRemoteModules(
     PRTL_PROCESS_MODULES Modules;
     PRTL_PROCESS_MODULE_INFORMATION Module;
     LDR_DATA_TABLE_ENTRY Entry;
+    ULONG LoadCount;
     PPEB_LDR_DATA Ldr;
     PLIST_ENTRY Head;
     PLIST_ENTRY Link;
@@ -213,7 +214,10 @@ RtlpQueryRemoteModules(
         Module->ImageBase = Entry.DllBase;
         Module->ImageSize = Entry.SizeOfImage;
         Module->Flags = Entry.Flags;
-        Module->LoadCount = (USHORT)Entry.ObsoleteLoadCount;
+        if (!Entry.DdagNode) return STATUS_PARTIAL_COPY;
+        Status = RtlpReadTarget(Process, &Entry.DdagNode->LoadCount, &LoadCount, sizeof(LoadCount));
+        if (!NT_SUCCESS(Status)) return Status;
+        Module->LoadCount = (USHORT)min(LoadCount, MAXUSHORT);
         Module->LoadOrderIndex = (USHORT)Count;
 
         UnicodePath.Length = min(Entry.FullDllName.Length, (USHORT)(sizeof(Path) - sizeof(WCHAR)));

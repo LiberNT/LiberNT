@@ -33,6 +33,8 @@ static const ULONG SingleRestrictions[] =
     JOB_OBJECT_UILIMIT_GLOBALATOMS,
     JOB_OBJECT_UILIMIT_DESKTOP,
     JOB_OBJECT_UILIMIT_EXITWINDOWS,
+    JOB_OBJECT_UILIMIT_IME,
+    JOB_OBJECT_UILIMIT_INJECTION,
 };
 
 static
@@ -180,7 +182,7 @@ test_InvalidParameters(void)
     ok_err(ERROR_INVALID_PARAMETER);
 
     SetLastError(0xDEADBEEF);
-    Success = SetRestrictions(hJob, JOB_OBJECT_UILIMIT_ALL | 0x100);
+    Success = SetRestrictions(hJob, JOB_OBJECT_UILIMIT_ALL | 0x400);
     ok(Success == FALSE, "Setting one undefined bit succeeded\n");
     ok_err(ERROR_INVALID_PARAMETER);
 

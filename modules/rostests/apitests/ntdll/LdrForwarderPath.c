@@ -74,12 +74,23 @@ static void Child(int argc, char **argv)
         ExitProcess(GetLastError());
     if (NtCurrentPeb()->OSMajorVersion >= 10)
     {
-        PLDR_DATA_TABLE_ENTRY Entry;
+        PLDR_DATA_TABLE_ENTRY Entry, Owner;
+        PLDR_DEPENDENCY_RECORD Edge;
         NTSTATUS Status = LdrFindEntryForAddress((PVOID)pfn, &Entry);
         if (!NT_SUCCESS(Status) || Entry->ProcessStaticImport ||
             Entry->LoadReason != LoadReasonDynamicForwarderDependency)
         {
             trace("GetProcAddress forwarder has unexpected loader state, status %#lx\n", Status);
+            ExitProcess(ERROR_INVALID_DATA);
+        }
+        if (!Entry->DdagNode || !Entry->DdagNode->IncomingDependencies.Tail ||
+            !NT_SUCCESS(LdrFindEntryForAddress(hModule, &Owner)))
+            ExitProcess(ERROR_INVALID_DATA);
+        Edge = CONTAINING_RECORD(Entry->DdagNode->IncomingDependencies.Tail,
+                                 LDR_DEPENDENCY_RECORD, IncomingDependencyLink);
+        if ((ULONG_PTR)Edge->IncomingDependencyNode != ((ULONG_PTR)Owner->DdagNode | 1))
+        {
+            trace("Wrong owner of the final forwarded export\n");
             ExitProcess(ERROR_INVALID_DATA);
         }
     }

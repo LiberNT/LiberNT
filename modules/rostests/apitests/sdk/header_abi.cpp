@@ -5,16 +5,20 @@
  * COPYRIGHT:   Copyright 2026 LiberNT contributors
  */
 
+#include <TraceLoggingProvider.h>
 #include <windows.h>
 #include <setupapi.h>
 
 template<class A, class B> struct SameType { enum { value = false }; };
 template<class A> struct SameType<A, A> { enum { value = true }; };
 
+static_assert(_tlg_MetadataMagic == 0xBB8A052B88040E86ULL && _tlg_MetadataMagic > 0, "metadata signature");
+static_assert(_tlg_FLATTEN(3 + 4) == 7, "TraceLogging macro expansion");
+static_assert(TlgInPOINTER == (sizeof(void *) == 8 ? TlgInHEXINT64 : TlgInHEXINT32), "pointer metadata");
 static_assert(sizeof(POINTER_64_INT) == sizeof(void *), "pointer-sized integer");
 static_assert(sizeof(PHANDLE64) == sizeof(void *), "native pointer to HANDLE64");
-#if defined(_MSC_VER) || (defined(__clang__) && (defined(__i386__) || defined(__x86_64__) || defined(__aarch64__)))
 static_assert(sizeof(HANDLE64) == 8, "64-bit handle");
+#if defined(_MSC_VER) || (defined(__clang__) && (defined(__i386__) || defined(__x86_64__) || defined(__aarch64__)))
 static_assert(sizeof(void *POINTER_32) == 4, "32-bit pointer");
 static_assert(sizeof(void *POINTER_64) == 8, "64-bit pointer");
 #endif

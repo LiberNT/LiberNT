@@ -147,6 +147,8 @@ LdrpSendDllNotifications(
         (PVOID volatile *)&LdrpDllNotificationDispatcher, NULL, NULL);
 
     /* Send notification to all registered callbacks */
+    if (NotificationReason == LDR_DLL_NOTIFICATION_REASON_LOADED)
+        DllEntry->DdagNode->State = LdrModulesReadyToInit;
     RtlEnterCriticalSection(&LdrpDllNotificationLock);
     _SEH2_TRY
     {

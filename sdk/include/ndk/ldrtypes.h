@@ -144,6 +144,52 @@ typedef enum _LDR_DLL_LOAD_REASON
 // NOTE: The field 'InMemoryOrderLinks' MUST have that name.
 // It's hard-coded into WinDbg for PEB dumping!
 //
+typedef enum _LDR_DDAG_STATE
+{
+    LdrModulesMerged = -5,
+    LdrModulesInitError = -4,
+    LdrModulesSnapError = -3,
+    LdrModulesUnloaded = -2,
+    LdrModulesUnloading = -1,
+    LdrModulesPlaceHolder = 0,
+    LdrModulesMapping = 1,
+    LdrModulesMapped = 2,
+    LdrModulesWaitingForDependencies = 3,
+    LdrModulesSnapping = 4,
+    LdrModulesSnapped = 5,
+    LdrModulesCondensed = 6,
+    LdrModulesReadyToInit = 7,
+    LdrModulesInitializing = 8,
+    LdrModulesReadyToRun = 9,
+} LDR_DDAG_STATE;
+
+typedef struct _LDRP_CSLIST
+{
+    PSINGLE_LIST_ENTRY Tail;
+} LDRP_CSLIST;
+
+typedef struct _LDR_DDAG_NODE
+{
+    LIST_ENTRY Modules;
+    struct _LDR_SERVICE_TAG_RECORD *ServiceTagList;
+    ULONG LoadCount;
+    ULONG LoadWhileUnloadingCount;
+    ULONG LowestLink;
+    LDRP_CSLIST Dependencies;
+    LDRP_CSLIST IncomingDependencies;
+    LDR_DDAG_STATE State;
+    SINGLE_LIST_ENTRY CondenseLink;
+    ULONG PreorderNumber;
+} LDR_DDAG_NODE, *PLDR_DDAG_NODE;
+
+typedef struct _LDR_DEPENDENCY_RECORD
+{
+    SINGLE_LIST_ENTRY DependencyLink;
+    PLDR_DDAG_NODE DependencyNode;
+    SINGLE_LIST_ENTRY IncomingDependencyLink;
+    PLDR_DDAG_NODE IncomingDependencyNode;
+} LDR_DEPENDENCY_RECORD, *PLDR_DEPENDENCY_RECORD;
+
 typedef enum _LDR_HOT_PATCH_STATE
 {
     LdrHotPatchBaseImage = 0,

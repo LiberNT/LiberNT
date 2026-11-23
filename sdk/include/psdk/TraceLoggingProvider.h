@@ -7,11 +7,15 @@
 
 #pragma once
 
+#if !defined(_NTDDK_) && !defined(_WDMDDK_) && !defined(_WDM_INCLUDED_)
+#include <windows.h>
+#endif
+#include <evntprov.h>
 #include <winmeta.h>
 
 /* FIXME: TraceLogging events are not emitted; providers never register and are always disabled */
 
-typedef const struct _TlgProvider_t *TraceLoggingHProvider;
+typedef const struct _tlgProvider_t *TraceLoggingHProvider;
 
 #define TRACELOGGING_DECLARE_PROVIDER(hProvider) \
     extern const TraceLoggingHProvider hProvider
@@ -19,8 +23,8 @@ typedef const struct _TlgProvider_t *TraceLoggingHProvider;
 #define TRACELOGGING_DEFINE_PROVIDER(hProvider, providerName, providerId, ...) \
     const TraceLoggingHProvider hProvider = (TraceLoggingHProvider)0
 
-#define TraceLoggingRegister(hProvider) ((HRESULT)0)
-#define TraceLoggingRegisterEx(hProvider, pEnableCallback, pCallbackContext) ((HRESULT)0)
+#define TraceLoggingRegister(hProvider) ((TLG_STATUS)0)
+#define TraceLoggingRegisterEx(hProvider, pEnableCallback, pCallbackContext) ((TLG_STATUS)0)
 #define TraceLoggingUnregister(hProvider) ((void)0)
 #define TraceLoggingProviderEnabled(hProvider, eventLevel, eventKeyword) (0)
 #define TraceLoggingWrite(hProvider, eventName, ...) ((void)0)
@@ -35,10 +39,10 @@ typedef const struct _TlgProvider_t *TraceLoggingHProvider;
 #define _tlg_EVENT_SET_INFORMATION_suffix TLG_EVENT_SET_INFORMATION
 #define _tlg_EXTERN_C extern
 #define _tlg_EXTERN_C_CONST const
-#define _tlg_FLATTEN...) __VA_ARGS__
-#define _TLG_FLATTEN...) __VA_ARGS__
-#define _tlg_IS_PARENTHESIZED_imp0...) 1
-#define _TLG_IS_PARENTHESIZED_imp0...) 1
+#define _tlg_FLATTEN(...) __VA_ARGS__
+#define _TLG_FLATTEN(...) __VA_ARGS__
+#define _tlg_IS_PARENTHESIZED_imp0(...) 1
+#define _TLG_IS_PARENTHESIZED_imp0(...) 1
 #define _tlg_IS_PARENTHESIZED_imp1 1,
 #define _TLG_IS_PARENTHESIZED_imp1 1,
 #define _tlg_IS_PARENTHESIZED_imp_tlg_IS_PARENTHESIZED_imp0 0,
@@ -47,51 +51,35 @@ typedef const struct _TlgProvider_t *TraceLoggingHProvider;
 #ifdef _WIN64
 #define _tlg_MetadataFlags 1
 #else
-#ifdef _WIN64
-#define _tlg_MetadataFlags 1
-#else
-#ifdef _WIN64
-#define _tlg_MetadataFlags 1
-#else
 #define _tlg_MetadataFlags 0
 #endif
-#endif
-#endif
-#define _tlg_MetadataMagic (-4933124757307257210LL)
+#define _tlg_MetadataMagic 0xBB8A052B88040E86
 #define _tlg_MetadataSignature 0x30575445
 #define _tlg_MetadataVersion 0
-#define _tlg_PARENTHESIZE...) (__VA_ARGS__)
-#define _TLG_PARENTHESIZE...) (__VA_ARGS__)
+#define _tlg_PARENTHESIZE(...) (__VA_ARGS__)
+#define _TLG_PARENTHESIZE(...) (__VA_ARGS__)
 #define _tlg_PROVIDER_METADATA_PREAMBLE 16
 #define _TLG_PROVIDER_METADATA_PREAMBLE 16
-#define _tlgApplyArgs_UNWRAP...) __VA_ARGS__
-#define _TlgChannelVal_TlgStruct...)
+#define _tlgApplyArgs_UNWRAP(...) __VA_ARGS__
+#define _TlgChannelVal_TlgStruct(...)
 #define _tlgDefineProvider_functionWrapperEnd0
 #define _TlgDefineProvider_functionWrapperEnd0
 #define _tlgDefineProvider_functionWrapperEnd1 }
 #define _TlgDefineProvider_functionWrapperEnd1 }
-#define _TlgEvtTagDecl...)
+#define _TlgEvtTagDecl(...)
 #define _tlgEvtTagType UINT16
 #define _TlgEvtTagType UINT16
 #ifdef _WIN64
 #define _TlgFlagsVal 1
 #else
-#ifdef _WIN64
-#define _TlgFlagsVal 1
-#else
-#ifdef _WIN64
-#define _TlgFlagsVal 1
-#else
 #define _TlgFlagsVal 0
 #endif
-#endif
-#endif
-#define _tlgInfoVals_0...)
-#define _TlgInfoVals_0...)
-#define _TlgKeywordVal_TlgStruct...)
-#define _TlgLevelVal_TlgStruct...)
+#define _tlgInfoVals_0(...)
+#define _TlgInfoVals_0(...)
+#define _TlgKeywordVal_TlgStruct(...)
+#define _TlgLevelVal_TlgStruct(...)
 #define _TlgMagicVal (-4933124757307257210LL)
-#define _TlgOpcodeVal_TlgStruct...)
+#define _TlgOpcodeVal_TlgStruct(...)
 #define _tlgPragmaUtf8Begin
 #define _tlgPragmaUtf8End
 #define _tlgSegMetadataBegin _tlg_STRINGIZE(_tlg_PASTE2(TLG_METADATA_SEGMENT_BASE, $zETW0))
@@ -100,10 +88,10 @@ typedef const struct _TlgProvider_t *TraceLoggingHProvider;
 #define _TlgSeqStart
 #define _TlgSigVal 0x30575445
 #define _TlgSkipVal 2
-#define _tlgValidateProviderId_parenthesis1...)
+#define _tlgValidateProviderId_parenthesis1(...)
 #define _TlgVerVal 0
-#define _Tracelogging_SyntaxError_ProviderIdMustBeElevenIntegers_11...) /* not an error */ { __VA_ARGS__ }
-#define _Tracelogging_UnrecognizedOption__TlgOptionGroup...) /* recognized */ { __VA_ARGS__ }
+#define _Tracelogging_SyntaxError_ProviderIdMustBeElevenIntegers_11(...) /* not an error */ { __VA_ARGS__ }
+#define _Tracelogging_UnrecognizedOption__TlgOptionGroup(...) /* recognized */ { __VA_ARGS__ }
 #define _traceloggingprovider_
 #define _TRACELOGGINGPROVIDER_
 #define TLG_DEBUG 1
@@ -178,9 +166,9 @@ enum TlgIn_t
     _TlgInSTRUCT = 0x18,
     TlgInCOUNTEDBINARY = 0x19,
     _TlgInMax = 0x1A,
-    TlgInINTPTR = 9,
-    TlgInUINTPTR = 0xA,
-    TlgInPOINTER = 0x15,
+    TlgInINTPTR = sizeof(void *) == 8 ? TlgInINT64 : TlgInINT32,
+    TlgInUINTPTR = sizeof(void *) == 8 ? TlgInUINT64 : TlgInUINT32,
+    TlgInPOINTER = sizeof(void *) == 8 ? TlgInHEXINT64 : TlgInHEXINT32,
     TlgInLONG = 7,
     TlgInULONG = 8,
     TlgInHEXLONG = 0x14,
@@ -247,7 +235,11 @@ struct _tlgEventMetadata_t
 };
 #pragma pack(pop)
 
+#ifdef _ETW_KM_
 typedef PETWENABLECALLBACK TLG_PENABLECALLBACK;
+#else
+typedef PENABLECALLBACK TLG_PENABLECALLBACK;
+#endif
 
 struct _tlgProvider_t
 {
@@ -307,37 +299,42 @@ typedef int TLG_EVENT_WRITE_TRANSFER_must_not_be_a_functionLike_macro_EtwWriteTr
 
 typedef void TLG_EVENT_WRITE_TRANSFER_must_not_be_a_functionLike_macro_TLG_EVENT_WRITE_TRANSFER;
 
+#ifdef _ETW_KM_
 typedef NTSTATUS TLG_STATUS;
+#else
+typedef HRESULT TLG_STATUS;
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* TODO: LiberNT does not implement the functions below yet */
-void WINAPI _tlgCreate1Sz_char(PEVENT_DATA_DESCRIPTOR pDesc, const char *psz);
-void WINAPI _tlgCreate1Sz_wchar_t(PEVENT_DATA_DESCRIPTOR pDesc, const wchar_t *psz);
-void WINAPI _tlgCreate2Binary(PEVENT_DATA_DESCRIPTOR pDesc, const void *pValue, ULONG cbValue);
+void _tlg_CALL _tlgCreate1Sz_char(PEVENT_DATA_DESCRIPTOR pDesc, const char *psz);
+void _tlg_CALL _tlgCreate1Sz_wchar_t(PEVENT_DATA_DESCRIPTOR pDesc, const wchar_t *psz);
+void _tlg_CALL _tlgCreate2Binary(PEVENT_DATA_DESCRIPTOR pDesc, const void *pValue, ULONG cbValue);
 void _TlgCreateArray(PEVENT_DATA_DESCRIPTOR pDesc, const void *pVals, const UINT16 *pcVals, ULONG cbVal);
 void _TlgCreateBinary(PEVENT_DATA_DESCRIPTOR pDesc, const void *pVals, ULONG cVals);
 void _TlgCreateFixedArray(PEVENT_DATA_DESCRIPTOR pDesc, const void *pVals, ULONG cVals, ULONG cbVal);
-void _TlgCreateSid(PEVENT_DATA_DESCRIPTOR pDesc, const SID *pSid);
-void _TlgCreateSz(PEVENT_DATA_DESCRIPTOR pDesc, LPCSTR psz);
-void _TlgCreateWsz(PEVENT_DATA_DESCRIPTOR pDesc, LPCWSTR pwsz);
-void WINAPI _tlgEnableCallback(LPCGUID pSourceId, ULONG callbackType, UCHAR level, ULONGLONG keywordAny, ULONGLONG keywordAll, PEVENT_FILTER_DESCRIPTOR pFilterData, PVOID pCallbackContext);
-void WINAPI _TlgEnableCallback(LPCGUID pSourceId, ULONG callbackType, UCHAR level, ULONGLONG keywordAny, ULONGLONG keywordAll, PEVENT_FILTER_DESCRIPTOR pFilterData, PVOID pCallbackContext);
-BOOLEAN WINAPI _tlgKeywordOn(TraceLoggingHProvider hProvider, ULONGLONG keyword);
+struct _SID;
+void _TlgCreateSid(PEVENT_DATA_DESCRIPTOR pDesc, const struct _SID *pSid);
+void _TlgCreateSz(PEVENT_DATA_DESCRIPTOR pDesc, const char *psz);
+void _TlgCreateWsz(PEVENT_DATA_DESCRIPTOR pDesc, const WCHAR *pwsz);
+void _tlg_CALL _tlgEnableCallback(LPCGUID pSourceId, ULONG callbackType, UCHAR level, ULONGLONG keywordAny, ULONGLONG keywordAll, PEVENT_FILTER_DESCRIPTOR pFilterData, PVOID pCallbackContext);
+void _tlg_CALL _TlgEnableCallback(LPCGUID pSourceId, ULONG callbackType, UCHAR level, ULONGLONG keywordAny, ULONGLONG keywordAll, PEVENT_FILTER_DESCRIPTOR pFilterData, PVOID pCallbackContext);
+BOOLEAN _tlg_CALL _tlgKeywordOn(TraceLoggingHProvider hProvider, ULONGLONG keyword);
 BOOLEAN _TlgKeywordOn(TraceLoggingHProvider hProvider, ULONGLONG keyword);
 TLG_STATUS _TlgWrite(TraceLoggingHProvider hProvider, const void *pEventMetadata, LPCGUID pActivityId, LPCGUID pRelatedActivityId, UINT32 cData, EVENT_DATA_DESCRIPTOR *pData);
 void _tlgWriteCommon(TraceLoggingHProvider hProvider, const void *pEventMetadata, ULONGLONG *pDesc, EVENT_DATA_DESCRIPTOR *pData);
 void _TlgWriteCommon(TraceLoggingHProvider hProvider, const void *pEventMetadata, ULONGLONG *pDesc, EVENT_DATA_DESCRIPTOR *pData);
 TLG_STATUS _TlgWriteEx(TraceLoggingHProvider hProvider, const void *pEventMetadata, ULONG64 filter, ULONG flags, LPCGUID pActivityId, LPCGUID pRelatedActivityId, UINT32 cData, EVENT_DATA_DESCRIPTOR *pData);
-TLG_STATUS WINAPI _tlgWriteEx_EtwWriteEx(TraceLoggingHProvider hProvider, const void *pEventMetadata, ULONG64 filter, ULONG flags, LPCGUID pActivityId, LPCGUID pRelatedActivityId, UINT32 cData, EVENT_DATA_DESCRIPTOR *pData);
-TLG_STATUS WINAPI _tlgWriteTransfer_EtwWriteTransfer(TraceLoggingHProvider hProvider, const void *pEventMetadata, LPCGUID pActivityId, LPCGUID pRelatedActivityId, UINT32 cData, EVENT_DATA_DESCRIPTOR *pData);
-GUID WINAPI TraceLoggingProviderId(TraceLoggingHProvider hProvider);
-TLG_STATUS WINAPI TraceLoggingRegister_EtwRegister_EtwSetInformation(TraceLoggingHProvider hProvider);
-TLG_STATUS WINAPI TraceLoggingRegisterEx_EtwRegister_EtwSetInformation(TraceLoggingHProvider hProvider, TLG_PENABLECALLBACK pEnableCallback, PVOID pCallbackContext);
-TLG_STATUS WINAPI TraceLoggingSetInformation_EtwSetInformation(TraceLoggingHProvider hProvider, EVENT_INFO_CLASS informationClass, PVOID pvInformation, ULONG cbInformation);
-void WINAPI TraceLoggingUnregister_EtwUnregister(TraceLoggingHProvider hProvider);
+TLG_STATUS _tlg_CALL _tlgWriteEx_EtwWriteEx(TraceLoggingHProvider hProvider, const void *pEventMetadata, ULONG64 filter, ULONG flags, LPCGUID pActivityId, LPCGUID pRelatedActivityId, UINT32 cData, EVENT_DATA_DESCRIPTOR *pData);
+TLG_STATUS _tlg_CALL _tlgWriteTransfer_EtwWriteTransfer(TraceLoggingHProvider hProvider, const void *pEventMetadata, LPCGUID pActivityId, LPCGUID pRelatedActivityId, UINT32 cData, EVENT_DATA_DESCRIPTOR *pData);
+GUID _tlg_CALL TraceLoggingProviderId(TraceLoggingHProvider hProvider);
+TLG_STATUS _tlg_CALL TraceLoggingRegister_EtwRegister_EtwSetInformation(TraceLoggingHProvider hProvider);
+TLG_STATUS _tlg_CALL TraceLoggingRegisterEx_EtwRegister_EtwSetInformation(TraceLoggingHProvider hProvider, TLG_PENABLECALLBACK pEnableCallback, PVOID pCallbackContext);
+TLG_STATUS _tlg_CALL TraceLoggingSetInformation_EtwSetInformation(TraceLoggingHProvider hProvider, EVENT_INFO_CLASS informationClass, PVOID pvInformation, ULONG cbInformation);
+void _tlg_CALL TraceLoggingUnregister_EtwUnregister(TraceLoggingHProvider hProvider);
 
 #ifdef __cplusplus
 }

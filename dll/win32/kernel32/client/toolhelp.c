@@ -105,15 +105,27 @@ typedef struct _TH32_LDR_DATA_TABLE_ENTRY32
   UNICODE_STRING32 FullDllName;
   UNICODE_STRING32 BaseDllName;
   ULONG Flags;
-  USHORT LoadCount;
+  USHORT ObsoleteLoadCount;
   USHORT TlsIndex;
+  LIST_ENTRY32 HashLinks;
+  ULONG TimeDateStamp;
+  ULONG EntryPointActivationContext;
+  ULONG Lock;
+  ULONG DdagNode;
 } TH32_LDR_DATA_TABLE_ENTRY32, *PTH32_LDR_DATA_TABLE_ENTRY32;
 
 C_ASSERT(FIELD_OFFSET(TH32_PEB32, Ldr) == 0x0C);
 C_ASSERT(FIELD_OFFSET(TH32_PEB_LDR_DATA32, InLoadOrderModuleList) == 0x0C);
 C_ASSERT(FIELD_OFFSET(TH32_LDR_DATA_TABLE_ENTRY32, DllBase) == 0x18);
 C_ASSERT(FIELD_OFFSET(TH32_LDR_DATA_TABLE_ENTRY32, FullDllName) == 0x24);
-C_ASSERT(FIELD_OFFSET(TH32_LDR_DATA_TABLE_ENTRY32, LoadCount) == 0x38);
+C_ASSERT(FIELD_OFFSET(TH32_LDR_DATA_TABLE_ENTRY32, DdagNode) == 0x50);
+typedef struct _TH32_DDAG_NODE32
+{
+  LIST_ENTRY32 Modules;
+  ULONG ServiceTagList;
+  ULONG LoadCount;
+} TH32_DDAG_NODE32;
+C_ASSERT(FIELD_OFFSET(TH32_DDAG_NODE32, LoadCount) == 0x0C);
 
 /* INTERNAL FUNCTIONS *********************************************************/
 
@@ -189,6 +201,7 @@ TH32QueryWow64Modules(DWORD th32ProcessID,
   ULONG_PTR Peb32 = 0;
   ULONG Ldr = 0, Head, Current, Count = 0, Index = 0;
   TH32_LDR_DATA_TABLE_ENTRY32 Entry;
+  TH32_DDAG_NODE32 Node;
   LPMODULEENTRY32W ModuleEntry;
   WCHAR FullName[MAX_PATH], Wow64Directory[MAX_PATH];
   UNICODE_STRING FullNameString;
@@ -342,8 +355,12 @@ TH32QueryWow64Modules(DWORD th32ProcessID,
     ModuleEntry->dwSize = sizeof(MODULEENTRY32W);
     ModuleEntry->th32ModuleID = 1;
     ModuleEntry->th32ProcessID = th32ProcessID;
-    ModuleEntry->GlblcntUsage = Entry.LoadCount;
-    ModuleEntry->ProccntUsage = Entry.LoadCount;
+    if (!Entry.DdagNode ||
+        !NT_SUCCESS(NtReadVirtualMemory(ProcessHandle, UlongToPtr(Entry.DdagNode),
+                                        &Node, sizeof(Node), NULL)))
+      continue;
+    ModuleEntry->GlblcntUsage = min(Node.LoadCount, MAXUSHORT);
+    ModuleEntry->ProccntUsage = ModuleEntry->GlblcntUsage;
     ModuleEntry->modBaseAddr = UlongToPtr(Entry.DllBase);
     ModuleEntry->modBaseSize = Entry.SizeOfImage;
     ModuleEntry->hModule = UlongToPtr(Entry.DllBase);

@@ -453,8 +453,10 @@ typedef struct _PS_CREATE_INFO
 #define JOB_OBJECT_UILIMIT_GLOBALATOMS          0x0020
 #define JOB_OBJECT_UILIMIT_DESKTOP              0x0040
 #define JOB_OBJECT_UILIMIT_EXITWINDOWS          0x0080
-#define JOB_OBJECT_UILIMIT_ALL                  0x00FF
-#define JOB_OBJECT_UILIMIT_VALID_FLAGS          0x00FF
+#define JOB_OBJECT_UILIMIT_IME              0x0100
+#define JOB_OBJECT_UILIMIT_INJECTION        0x0200
+#define JOB_OBJECT_UILIMIT_ALL                  0x03FF
+#define JOB_OBJECT_UI_VALID_FLAGS           0x03FF
 
 //
 // Job Security Limit Flags
