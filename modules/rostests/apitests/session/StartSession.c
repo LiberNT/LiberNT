@@ -49,19 +49,32 @@ static BOOL SessionSeesRemoteAdapter(void)
     return FALSE;
 }
 
-static BOOL ReadChildReport(WCHAR *text, DWORD count)
+static BOOL ReadReport(PCWSTR name, WCHAR *text, DWORD count)
 {
     WCHAR path[MAX_PATH];
     HANDLE file;
     DWORD read = 0;
     GetWindowsDirectoryW(path, MAX_PATH);
-    lstrcatW(path, CHILD_REPORT);
+    lstrcatW(path, name);
     file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
     if (file == INVALID_HANDLE_VALUE) return FALSE;
     ReadFile(file, text, (count - 1) * sizeof(WCHAR), &read, NULL);
     CloseHandle(file);
     text[read / sizeof(WCHAR)] = 0;
     return read != 0;
+}
+
+static BOOL ReadChildReport(WCHAR *text, DWORD count)
+{
+    return ReadReport(CHILD_REPORT, text, count);
+}
+
+static VOID DeleteReport(PCWSTR name)
+{
+    WCHAR path[MAX_PATH];
+    GetWindowsDirectoryW(path, MAX_PATH);
+    lstrcatW(path, name);
+    DeleteFileW(path);
 }
 
 static DWORD SessionProcessId(ULONG sessionId, PCWSTR image)
@@ -403,5 +416,128 @@ START_TEST(StartSession)
     ok(!SessionSeesRemoteAdapter(), "the console session sees the new session's adapter\n");
     ok(ProcessesInSession(ownSession, FALSE) > 0, "the console session lost its processes\n");
     SwDeviceClose(adapter);
+    CloseHandle(AdapterReady);
+}
+
+static HSWDEVICE CreateNewSessionAdapter(PCWSTR instance)
+{
+    static const WCHAR hardwareIds[] = L"RdpVdd_RemoteDisplay\0";
+    SW_DEVICE_CREATE_INFO info = { sizeof(info) };
+    HSWDEVICE adapter = NULL;
+    ULONG videoBefore = VideoDeviceCount(), wait;
+    HRESULT hr;
+
+    ResetEvent(AdapterReady);
+    info.pszInstanceId = instance;
+    info.pszzHardwareIds = hardwareIds;
+    info.pszzCompatibleIds = hardwareIds;
+    info.CapabilityFlags = SWDeviceCapabilitiesRemovable | SWDeviceCapabilitiesSilentInstall |
+                           SWDeviceCapabilitiesDriverRequired;
+    info.pszDeviceDescription = L"LiberNT Remote Display Adapter";
+    hr = SwDeviceCreate(L"RemoteDisplayEnum", L"HTREE\\ROOT\\0", &info, 0, NULL, AdapterCreated, NULL, &adapter);
+    ok(hr == S_OK, "SwDeviceCreate(%ls) returned 0x%08lx\n", instance, hr);
+    if (FAILED(hr))
+        return NULL;
+    ok(WaitForSingleObject(AdapterReady, 15000) == WAIT_OBJECT_0, "%ls was not created\n", instance);
+    for (wait = 0; wait < 150 && VideoDeviceCount() <= videoBefore; wait++) Sleep(100);
+    ok(VideoDeviceCount() > videoBefore, "%ls did not start\n", instance);
+    return adapter;
+}
+
+static ULONG StartChildSession(HANDLE port, HANDLE *csrss, HANDLE *initial, int *devices, int *remote)
+{
+    WCHAR commandLine[MAX_PATH], report[1024];
+    UNICODE_STRING command;
+    ULONG sessionId = MAXULONG, childSession = MAXULONG, childConsole = MAXULONG, wait;
+    NTSTATUS status;
+
+    *devices = *remote = -1;
+    DeleteReport(CHILD_REPORT);
+    GetModuleFileNameW(NULL, commandLine, MAX_PATH);
+    lstrcpyW(wcsrchr(commandLine, L'\\') + 1, L"session_child.exe");
+    RtlInitUnicodeString(&command, commandLine);
+    status = SmStartCsr(port, &sessionId, &command, csrss, initial);
+    ok(status == STATUS_SUCCESS, "SmStartCsr returned 0x%lx\n", status);
+    if (!NT_SUCCESS(status))
+        return MAXULONG;
+    for (wait = 0; wait < 300 && !ReadChildReport(report, ARRAYSIZE(report)); wait++) Sleep(100);
+    ok(ReadChildReport(report, ARRAYSIZE(report)), "the child in session %lu wrote no report\n", sessionId);
+    swscanf(report, L"session %lu console %lu devices %d remote %d", &childSession, &childConsole, devices, remote);
+    return sessionId;
+}
+
+static VOID StopChildSession(HANDLE port, ULONG sessionId, HANDLE csrss, HANDLE initial)
+{
+    NTSTATUS status = SmStopCsr(port, sessionId);
+
+    ok(status == STATUS_SUCCESS, "SmStopCsr(%lu) returned 0x%lx\n", sessionId, status);
+    if (!NT_SUCCESS(status))
+    {
+        TerminateProcess(initial, 1);
+        TerminateProcess(csrss, 1);
+    }
+    CloseHandle(csrss);
+    CloseHandle(initial);
+}
+
+START_TEST(NewSessionAdapter)
+{
+    HSWDEVICE first, second;
+    HANDLE port = NULL, again, csrss, initial, nextCsrss, nextInitial;
+    WCHAR report[1024];
+    ULONG session, next, childSession = MAXULONG, childConsole = MAXULONG, wait;
+    int devices, remote;
+    NTSTATUS status;
+
+    AdapterReady = CreateEventW(NULL, TRUE, FALSE, NULL);
+    again = CreateEventW(NULL, TRUE, FALSE, L"Global\\SessionChildAgain");
+    ok(again != NULL, "CreateEvent failed: %lu\n", GetLastError());
+    first = CreateNewSessionAdapter(L"RdpVdd_RemoteDisplay&NewSession_901");
+    status = SmConnectToSm(NULL, NULL, 0, &port);
+    ok(status == STATUS_SUCCESS, "SmConnectToSm returned 0x%lx\n", status);
+    if (first && again && NT_SUCCESS(status))
+    {
+        session = StartChildSession(port, &csrss, &initial, &devices, &remote);
+        if (session != MAXULONG)
+        {
+            ok(devices == 1 && remote == 1, "session %lu sees %d display devices, %d remote\n", session, devices,
+               remote);
+            second = CreateNewSessionAdapter(L"RdpVdd_RemoteDisplay&NewSession_902");
+            DeleteReport(L"\\Temp\\session_child2.txt");
+            SetEvent(again);
+            for (wait = 0; wait < 300 && !ReadReport(L"\\Temp\\session_child2.txt", report, ARRAYSIZE(report)); wait++)
+                Sleep(100);
+            devices = remote = -1;
+            ok(ReadReport(L"\\Temp\\session_child2.txt", report, ARRAYSIZE(report)),
+               "the child in session %lu did not look again\n", session);
+            swscanf(report, L"session %lu console %lu devices %d remote %d", &childSession, &childConsole, &devices,
+                    &remote);
+            ResetEvent(again);
+            ok(devices == 1 && remote == 1,
+               "session %lu, which has its display, took the one made for the next session: %d devices, %d remote\n",
+               session, devices, remote);
+            if (second && devices == 1)
+            {
+                next = StartChildSession(port, &nextCsrss, &nextInitial, &devices, &remote);
+                if (next != MAXULONG)
+                {
+                    ok(devices == 1 && remote == 1, "the next session %lu sees %d display devices, %d remote\n",
+                       next, devices, remote);
+                    StopChildSession(port, next, nextCsrss, nextInitial);
+                }
+            }
+            StopChildSession(port, session, csrss, initial);
+            if (second)
+                SwDeviceClose(second);
+        }
+    }
+    DeleteReport(CHILD_REPORT);
+    DeleteReport(L"\\Temp\\session_child2.txt");
+    if (port)
+        NtClose(port);
+    if (first)
+        SwDeviceClose(first);
+    if (again)
+        CloseHandle(again);
     CloseHandle(AdapterReady);
 }
