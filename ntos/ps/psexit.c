@@ -150,7 +150,7 @@ PspDrainApcs(
         Entry = Entry->Flink;
 
         if (Apc->RundownRoutine != NULL) Apc->RundownRoutine(Apc);
-        else ExFreePool(Apc);
+        else if (Mode == UserMode) ExFreePool(Apc);
     } while (Entry != First);
 }
 
@@ -303,7 +303,9 @@ PspExitThread(
 
     KeDisableThreadApcQueueing(&Thread->Tcb);
 
-    /* Another thread may have told this one to end while it was already ending itself */
+    ASSERT(Thread->Tcb.CombinedApcDisable == 0);
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    if (!IsListEmpty(&Thread->Tcb.ApcState.ApcListHead[KernelMode])) KiCheckForKernelApcDelivery();
     PspDrainApcs(Thread, KernelMode);
     PspDrainApcs(Thread, UserMode);
 
