@@ -117,10 +117,6 @@ u32_t retrans_timer = LWIP_ND6_RETRANS_TIMER; /* @todo implement this value in t
 #define ND6_RETRANS_TIME(netif) retrans_timer
 #endif
 
-#if LWIP_ND6_QUEUEING
-static u8_t nd6_queue_size = 0;
-#endif
-
 /* Index for cache entries. */
 static netif_addr_idx_t nd6_cached_destination_index;
 
@@ -2125,6 +2121,33 @@ nd6_get_next_hop_entry(const ip6_addr_t *ip6addr, struct netif *netif)
   return dest->cached_neighbor_idx;
 }
 
+#if LWIP_ND6_QUEUEING
+static u8_t
+nd6_q_continues_datagram(const struct pbuf *queued, const struct pbuf *p)
+{
+  const struct ip6_hdr *qhdr, *hdr;
+  const struct ip6_frag_hdr *qfrag, *frag;
+
+  LWIP_ASSERT("queued != NULL", queued != NULL);
+  LWIP_ASSERT("p != NULL", p != NULL);
+
+  if ((queued->len < IP6_HLEN + IP6_FRAG_HLEN) || (p->len < IP6_HLEN + IP6_FRAG_HLEN)) {
+    return 0;
+  }
+  qhdr = (const struct ip6_hdr *)queued->payload;
+  hdr = (const struct ip6_hdr *)p->payload;
+  if ((IP6H_NEXTH(qhdr) != IP6_NEXTH_FRAGMENT) || (IP6H_NEXTH(hdr) != IP6_NEXTH_FRAGMENT)) {
+    return 0;
+  }
+  qfrag = (const struct ip6_frag_hdr *)((const u8_t *)qhdr + IP6_HLEN);
+  frag = (const struct ip6_frag_hdr *)((const u8_t *)hdr + IP6_HLEN);
+  return (u8_t)((frag->_identification == qfrag->_identification) &&
+                ((frag->_fragment_offset & PP_HTONS(IP6_FRAG_OFFSET_MASK)) != 0) &&
+                (memcmp(&hdr->src, &qhdr->src, sizeof(hdr->src)) == 0) &&
+                (memcmp(&hdr->dest, &qhdr->dest, sizeof(hdr->dest)) == 0));
+}
+#endif /* LWIP_ND6_QUEUEING */
+
 /**
  * Queue a packet for a neighbor.
  *
@@ -2181,12 +2204,14 @@ nd6_queue_packet(s8_t neighbor_index, struct pbuf *q)
   if (p != NULL) {
     /* queue packet ... */
 #if LWIP_ND6_QUEUEING
-    /* allocate a new nd6 queue entry */
-    new_entry = NULL;
-    if (nd6_queue_size < MEMP_NUM_ND6_QUEUE) {
-      new_entry = (struct nd6_q_entry *)memp_malloc(MEMP_ND6_QUEUE);
-      nd6_queue_size++;
+    /* Hold only the newest datagram, as Windows 11 does */
+    if ((neighbor_cache[neighbor_index].q != NULL) &&
+        !nd6_q_continues_datagram(neighbor_cache[neighbor_index].q->p, p)) {
+      nd6_free_q(neighbor_cache[neighbor_index].q);
+      neighbor_cache[neighbor_index].q = NULL;
     }
+    /* allocate a new nd6 queue entry */
+    new_entry = (struct nd6_q_entry *)memp_malloc(MEMP_ND6_QUEUE);
     if ((new_entry == NULL) && (neighbor_cache[neighbor_index].q != NULL)) {
       /* Free oldest packet (as per RFC recommendation) */
       r = neighbor_cache[neighbor_index].q;
@@ -2194,7 +2219,6 @@ nd6_queue_packet(s8_t neighbor_index, struct pbuf *q)
       r->next = NULL;
       nd6_free_q(r);
       new_entry = (struct nd6_q_entry *)memp_malloc(MEMP_ND6_QUEUE);
-      nd6_queue_size++;
     }
     if (new_entry != NULL) {
       new_entry->next = NULL;
@@ -2253,7 +2277,6 @@ nd6_free_q(struct nd6_q_entry *q)
     LWIP_ASSERT("r->p != NULL", (r->p != NULL));
     pbuf_free(r->p);
     memp_free(MEMP_ND6_QUEUE, r);
-    nd6_queue_size--;
   }
 }
 #endif /* LWIP_ND6_QUEUEING */
@@ -2294,7 +2317,6 @@ nd6_send_q(s8_t i)
     pbuf_free(q->p);
     /* now queue entry can be freed */
     memp_free(MEMP_ND6_QUEUE, q);
-    nd6_queue_size--;
   }
 #else /* LWIP_ND6_QUEUEING */
   if (neighbor_cache[i].q != NULL) {
