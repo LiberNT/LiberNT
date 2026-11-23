@@ -166,7 +166,7 @@ set(ISO_BOOT_FILES_OPTIONS
 # ISO_BOOT_OPTIONS
 
 # BIOS-based PC boot entry (x86/x64 only)
-if((ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64") AND NOT MSVC)
+if(BOOTLOADER_UEFI AND (ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64") AND NOT MSVC)
     set(ISO_BOOT_OPTIONS
         -eltorito-platform x86 -eltorito-boot boot/etfsboot.com -no-emul-boot -boot-load-size 4)
 endif()

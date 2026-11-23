@@ -26,6 +26,7 @@
 #include "uuids.h"
 #include "ole2.h"
 #include "initguid.h"
+#include "strmif.h"
 #include "dmusici.h"
 #include "dmusicf.h"
 #include "dmksctrl.h"
