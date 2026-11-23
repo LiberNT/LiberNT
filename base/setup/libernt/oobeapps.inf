@@ -2,6 +2,7 @@
 Signature = "$Windows NT$"
 
 [Apps.amd64]
+ICU.amd64
 LLVMpipe.amd64
 VCRedist.x64
 VCRedist.x86
@@ -28,6 +29,7 @@ Firefox.arm64
 LLVMpipe.riscv64
 
 [Apps.x86]
+ICU.x86
 VCRedist.x86
 WineMono.x86
 WineGecko.x86
@@ -61,6 +63,15 @@ Space = 4
 Sha256 = "bd5e871ca61186a13684e4e0970720b7fd928f6e5236cbc11d6a9f2fca0bf7aa"
 Detect = "%11%\avcodec-62.dll"
 
+[ICU.amd64]
+Name = "ICU Unicode support for .NET and Qt programs (x64)"
+Url = "https://github.com/LiberNT/LiberNT/releases/download/icu-72.1-1/libernt-icu-72.1-1-amd64.msi"
+File = "libernt-icu-72.1-1-amd64.msi"
+Type = "msi"
+Space = 36
+Sha256 = "7f99053d78c36513efac3df8bc67912e26b0f73bdc74f226cd84a37c6417c2d0"
+Detect = "%10%\3rdParty\ICU-LICENSE"
+
 [ICU.arm64]
 Name = "ICU Unicode support for .NET and Qt programs (ARM64)"
 Url = "https://github.com/LiberNT/LiberNT/releases/download/icu-72.1-1/libernt-icu-72.1-1-arm64.msi"
@@ -68,6 +79,15 @@ File = "libernt-icu-72.1-1-arm64.msi"
 Type = "msi"
 Space = 36
 Sha256 = "4d4a8f40b28a75d89f04c15ab3dc1cc7f773f25881bf50e0d3871917e8f1d71e"
+Detect = "%10%\3rdParty\ICU-LICENSE"
+
+[ICU.x86]
+Name = "ICU Unicode support for .NET and Qt programs (x86)"
+Url = "https://github.com/LiberNT/LiberNT/releases/download/icu-72.1-1/libernt-icu-72.1-1-i386.msi"
+File = "libernt-icu-72.1-1-i386.msi"
+Type = "msi"
+Space = 36
+Sha256 = "dc684889922e438ae1eb983213d84cc8ef8babed37562aad9186c77709ec874a"
 Detect = "%10%\3rdParty\ICU-LICENSE"
 
 [LLVMpipe.amd64]
