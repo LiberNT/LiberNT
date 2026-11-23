@@ -1,4 +1,5 @@
 list(APPEND SOURCE
+    forward.c
     ustring.c
     testlist.c)
 
