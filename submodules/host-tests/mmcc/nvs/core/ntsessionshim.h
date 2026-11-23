@@ -55,6 +55,7 @@ typedef struct _SESSION_TEST_UNLOAD
     volatile LONG Count;
     PVOID LastDriver;
     PEPROCESS LastProcess;
+    VOID (*Hook)(VOID);
 } SESSION_TEST_UNLOAD;
 
 extern PMI_SYSTEM MiSessionTestSystem;
@@ -117,6 +118,8 @@ static inline VOID NTAPI IoUnloadSessionDriver(PVOID Driver)
     InterlockedIncrement(&MiSessionTestUnload.Count);
     MiSessionTestUnload.LastDriver = Driver;
     MiSessionTestUnload.LastProcess = MiSessionTestCurrent;
+    if (MiSessionTestUnload.Hook != NULL)
+        MiSessionTestUnload.Hook();
 }
 
 NTSTATUS NTAPI MmSessionCreate(PULONG SessionId);
@@ -132,7 +135,7 @@ NTSTATUS NTAPI MmAttachSession(PVOID SessionEntry, PKAPC_STATE State);
 VOID NTAPI MmDetachSession(PVOID SessionEntry, PKAPC_STATE State);
 PVOID NTAPI MmGetNextSession(PVOID SessionEntry);
 VOID NTAPI MmQuitNextSession(PVOID SessionEntry);
-VOID MiSessionAddProcess(PEPROCESS Process);
+BOOLEAN MiSessionAddProcess(PEPROCESS Process);
 VOID MiSessionRemoveProcess(PEPROCESS Process);
 VOID MiSessionProcessCleaned(PEPROCESS Process);
 PMI_ADDRESS_SPACE MiSessionSpaceOfProcess(PEPROCESS Process);
