@@ -688,8 +688,8 @@ E1000DisableInterrupts(
         E1000_WRITE_REG(Adapter, E1000_REG_EIMC, 0xFFFFFFFF);
     }
 
-    /* Clear any pending interrupts */
-    E1000_READ_REG(Adapter, E1000_REG_ICR);
+    /* Flush the mask writes without acknowledging pending causes. */
+    E1000_READ_REG(Adapter, E1000_REG_STATUS);
 
     InterlockedAnd(&Adapter->Flags, ~E1000_FLAG_INTERRUPT_ENABLED);
 }
@@ -728,12 +728,6 @@ E1000EnableInterrupts(
 
     /* Store mask for later reference */
     Adapter->InterruptMask = InterruptMask;
-
-    /* Clear pending interrupts first */
-    if (Adapter->InterruptMode != E1000InterruptModeMsix)
-    {
-        E1000_READ_REG(Adapter, E1000_REG_ICR);
-    }
 
     /* Enable interrupts */
     E1000_WRITE_REG(Adapter, E1000_REG_IMS, InterruptMask);
