@@ -124,6 +124,12 @@ FileRecord::GetAutomaticTimestampMask() const
     return AutomaticTimestampMask;
 }
 
+void
+FileRecord::DeferDirectoryTimes(_In_ BOOLEAN Defer)
+{
+    DirectoryTimesDeferred = Defer;
+}
+
 BOOLEAN
 FileRecord::HasAutomaticTimestampUpdate(
     _In_ UINT32 Fields) const
@@ -252,6 +258,8 @@ FileRecord::TouchDirectory()
     }
     if (DiskVolume->IsReadOnly)
         return STATUS_ACCESS_DENIED;
+    if (DirectoryTimesDeferred)
+        return STATUS_SUCCESS;
 
     Status = GetStandardInformationForUpdate(
         &Attribute,
