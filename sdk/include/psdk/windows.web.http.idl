@@ -1,0 +1,2480 @@
+/*
+ * PROJECT:     LiberNT SDK
+ * LICENSE:     LGPL-2.1-or-later (https://spdx.org/licenses/LGPL-2.1-or-later)
+ * PURPOSE:     Windows.Web.Http, Windows.Web.Http.Headers and Windows.Web.Http.Filters runtime declarations
+ * COPYRIGHT:   Copyright 2026 Ostap Brehin <osbre@protonmail.com>
+ */
+
+#ifdef __WIDL__
+#pragma winrt ns_prefix
+#endif
+
+import "inspectable.idl";
+import "asyncinfo.idl";
+import "eventtoken.idl";
+import "windowscontracts.idl";
+import "windows.foundation.idl";
+import "windows.globalization.idl";
+import "windows.networking.idl";
+import "windows.networking.sockets.idl";
+import "windows.security.credentials.idl";
+import "windows.security.cryptography.certificates.idl";
+import "windows.storage.streams.idl";
+import "windows.system.idl";
+
+namespace Windows.Web.Http {
+    typedef enum HttpCompletionOption HttpCompletionOption;
+    typedef enum HttpProgressStage HttpProgressStage;
+    typedef enum HttpResponseMessageSource HttpResponseMessageSource;
+    typedef enum HttpStatusCode HttpStatusCode;
+    typedef enum HttpVersion HttpVersion;
+    typedef struct HttpProgress HttpProgress;
+    interface IHttpBufferContentFactory;
+    interface IHttpClient;
+    interface IHttpClient2;
+    interface IHttpClient3;
+    interface IHttpClientFactory;
+    interface IHttpContent;
+    interface IHttpCookie;
+    interface IHttpCookieFactory;
+    interface IHttpCookieManager;
+    interface IHttpFormUrlEncodedContentFactory;
+    interface IHttpGetBufferResult;
+    interface IHttpGetInputStreamResult;
+    interface IHttpGetStringResult;
+    interface IHttpMethod;
+    interface IHttpMethodFactory;
+    interface IHttpMethodStatics;
+    interface IHttpMultipartContent;
+    interface IHttpMultipartContentFactory;
+    interface IHttpMultipartFormDataContent;
+    interface IHttpMultipartFormDataContentFactory;
+    interface IHttpRequestMessage;
+    interface IHttpRequestMessage2;
+    interface IHttpRequestMessageFactory;
+    interface IHttpRequestResult;
+    interface IHttpResponseMessage;
+    interface IHttpResponseMessageFactory;
+    interface IHttpStreamContentFactory;
+    interface IHttpStringContentFactory;
+    interface IHttpTransportInformation;
+    runtimeclass HttpBufferContent;
+    runtimeclass HttpClient;
+    runtimeclass HttpCookie;
+    runtimeclass HttpCookieCollection;
+    runtimeclass HttpCookieManager;
+    runtimeclass HttpFormUrlEncodedContent;
+    runtimeclass HttpGetBufferResult;
+    runtimeclass HttpGetInputStreamResult;
+    runtimeclass HttpGetStringResult;
+    runtimeclass HttpMethod;
+    runtimeclass HttpMultipartContent;
+    runtimeclass HttpMultipartFormDataContent;
+    runtimeclass HttpRequestMessage;
+    runtimeclass HttpRequestResult;
+    runtimeclass HttpResponseMessage;
+    runtimeclass HttpStreamContent;
+    runtimeclass HttpStringContent;
+    runtimeclass HttpTransportInformation;
+}
+
+namespace Windows.Web.Http.Filters {
+    interface IHttpFilter;
+    typedef enum HttpCacheReadBehavior HttpCacheReadBehavior;
+    typedef enum HttpCacheWriteBehavior HttpCacheWriteBehavior;
+    typedef enum HttpCookieUsageBehavior HttpCookieUsageBehavior;
+    interface IHttpBaseProtocolFilter;
+    interface IHttpBaseProtocolFilter2;
+    interface IHttpBaseProtocolFilter3;
+    interface IHttpBaseProtocolFilter4;
+    interface IHttpBaseProtocolFilter5;
+    interface IHttpBaseProtocolFilterStatics;
+    interface IHttpCacheControl;
+    interface IHttpServerCustomValidationRequestedEventArgs;
+    runtimeclass HttpBaseProtocolFilter;
+    runtimeclass HttpCacheControl;
+    runtimeclass HttpServerCustomValidationRequestedEventArgs;
+}
+
+namespace Windows.Web.Http.Headers {
+    runtimeclass HttpContentHeaderCollection;
+    runtimeclass HttpRequestHeaderCollection;
+    runtimeclass HttpResponseHeaderCollection;
+    interface IHttpCacheDirectiveHeaderValueCollection;
+    interface IHttpChallengeHeaderValue;
+    interface IHttpChallengeHeaderValueCollection;
+    interface IHttpChallengeHeaderValueFactory;
+    interface IHttpChallengeHeaderValueStatics;
+    interface IHttpConnectionOptionHeaderValue;
+    interface IHttpConnectionOptionHeaderValueCollection;
+    interface IHttpConnectionOptionHeaderValueFactory;
+    interface IHttpConnectionOptionHeaderValueStatics;
+    interface IHttpContentCodingHeaderValue;
+    interface IHttpContentCodingHeaderValueCollection;
+    interface IHttpContentCodingHeaderValueFactory;
+    interface IHttpContentCodingHeaderValueStatics;
+    interface IHttpContentCodingWithQualityHeaderValue;
+    interface IHttpContentCodingWithQualityHeaderValueCollection;
+    interface IHttpContentCodingWithQualityHeaderValueFactory;
+    interface IHttpContentCodingWithQualityHeaderValueStatics;
+    interface IHttpContentDispositionHeaderValue;
+    interface IHttpContentDispositionHeaderValueFactory;
+    interface IHttpContentDispositionHeaderValueStatics;
+    interface IHttpContentHeaderCollection;
+    interface IHttpContentRangeHeaderValue;
+    interface IHttpContentRangeHeaderValueFactory;
+    interface IHttpContentRangeHeaderValueStatics;
+    interface IHttpCookiePairHeaderValue;
+    interface IHttpCookiePairHeaderValueCollection;
+    interface IHttpCookiePairHeaderValueFactory;
+    interface IHttpCookiePairHeaderValueStatics;
+    interface IHttpCredentialsHeaderValue;
+    interface IHttpCredentialsHeaderValueFactory;
+    interface IHttpCredentialsHeaderValueStatics;
+    interface IHttpDateOrDeltaHeaderValue;
+    interface IHttpDateOrDeltaHeaderValueStatics;
+    interface IHttpExpectationHeaderValue;
+    interface IHttpExpectationHeaderValueCollection;
+    interface IHttpExpectationHeaderValueFactory;
+    interface IHttpExpectationHeaderValueStatics;
+    interface IHttpLanguageHeaderValueCollection;
+    interface IHttpLanguageRangeWithQualityHeaderValue;
+    interface IHttpLanguageRangeWithQualityHeaderValueCollection;
+    interface IHttpLanguageRangeWithQualityHeaderValueFactory;
+    interface IHttpLanguageRangeWithQualityHeaderValueStatics;
+    interface IHttpMediaTypeHeaderValue;
+    interface IHttpMediaTypeHeaderValueFactory;
+    interface IHttpMediaTypeHeaderValueStatics;
+    interface IHttpMediaTypeWithQualityHeaderValue;
+    interface IHttpMediaTypeWithQualityHeaderValueCollection;
+    interface IHttpMediaTypeWithQualityHeaderValueFactory;
+    interface IHttpMediaTypeWithQualityHeaderValueStatics;
+    interface IHttpMethodHeaderValueCollection;
+    interface IHttpNameValueHeaderValue;
+    interface IHttpNameValueHeaderValueFactory;
+    interface IHttpNameValueHeaderValueStatics;
+    interface IHttpProductHeaderValue;
+    interface IHttpProductHeaderValueFactory;
+    interface IHttpProductHeaderValueStatics;
+    interface IHttpProductInfoHeaderValue;
+    interface IHttpProductInfoHeaderValueCollection;
+    interface IHttpProductInfoHeaderValueFactory;
+    interface IHttpProductInfoHeaderValueStatics;
+    interface IHttpRequestHeaderCollection;
+    interface IHttpResponseHeaderCollection;
+    interface IHttpTransferCodingHeaderValue;
+    interface IHttpTransferCodingHeaderValueCollection;
+    interface IHttpTransferCodingHeaderValueFactory;
+    interface IHttpTransferCodingHeaderValueStatics;
+    runtimeclass HttpCacheDirectiveHeaderValueCollection;
+    runtimeclass HttpChallengeHeaderValue;
+    runtimeclass HttpChallengeHeaderValueCollection;
+    runtimeclass HttpConnectionOptionHeaderValue;
+    runtimeclass HttpConnectionOptionHeaderValueCollection;
+    runtimeclass HttpContentCodingHeaderValue;
+    runtimeclass HttpContentCodingHeaderValueCollection;
+    runtimeclass HttpContentCodingWithQualityHeaderValue;
+    runtimeclass HttpContentCodingWithQualityHeaderValueCollection;
+    runtimeclass HttpContentDispositionHeaderValue;
+    runtimeclass HttpContentRangeHeaderValue;
+    runtimeclass HttpCookiePairHeaderValue;
+    runtimeclass HttpCookiePairHeaderValueCollection;
+    runtimeclass HttpCredentialsHeaderValue;
+    runtimeclass HttpDateOrDeltaHeaderValue;
+    runtimeclass HttpExpectationHeaderValue;
+    runtimeclass HttpExpectationHeaderValueCollection;
+    runtimeclass HttpLanguageHeaderValueCollection;
+    runtimeclass HttpLanguageRangeWithQualityHeaderValue;
+    runtimeclass HttpLanguageRangeWithQualityHeaderValueCollection;
+    runtimeclass HttpMediaTypeHeaderValue;
+    runtimeclass HttpMediaTypeWithQualityHeaderValue;
+    runtimeclass HttpMediaTypeWithQualityHeaderValueCollection;
+    runtimeclass HttpMethodHeaderValueCollection;
+    runtimeclass HttpNameValueHeaderValue;
+    runtimeclass HttpProductHeaderValue;
+    runtimeclass HttpProductInfoHeaderValue;
+    runtimeclass HttpProductInfoHeaderValueCollection;
+    runtimeclass HttpTransferCodingHeaderValue;
+    runtimeclass HttpTransferCodingHeaderValueCollection;
+}
+
+namespace Windows.Web.Http {
+    declare
+    {
+        interface Windows.Foundation.IReference<UINT64>;
+    }
+}
+
+namespace Windows.Web.Http {
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0)
+    ]
+    enum HttpCompletionOption
+    {
+        ResponseContentRead = 0,
+        ResponseHeadersRead = 1
+    };
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0)
+    ]
+    enum HttpProgressStage
+    {
+        None               = 0,
+        DetectingProxy     = 10,
+        ResolvingName      = 20,
+        ConnectingToServer = 30,
+        NegotiatingSsl     = 40,
+        SendingHeaders     = 50,
+        SendingContent     = 60,
+        WaitingForResponse = 70,
+        ReceivingHeaders   = 80,
+        ReceivingContent   = 90
+    };
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0)
+    ]
+    enum HttpResponseMessageSource
+    {
+        None    = 0,
+        Cache   = 1,
+        Network = 2
+    };
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0)
+    ]
+    enum HttpStatusCode
+    {
+        None                          = 0,
+        Continue                      = 100,
+        SwitchingProtocols            = 101,
+        Processing                    = 102,
+        Ok                            = 200,
+        Created                       = 201,
+        Accepted                      = 202,
+        NonAuthoritativeInformation   = 203,
+        NoContent                     = 204,
+        ResetContent                  = 205,
+        PartialContent                = 206,
+        MultiStatus                   = 207,
+        AlreadyReported               = 208,
+        IMUsed                        = 226,
+        MultipleChoices               = 300,
+        MovedPermanently              = 301,
+        Found                         = 302,
+        SeeOther                      = 303,
+        NotModified                   = 304,
+        UseProxy                      = 305,
+        TemporaryRedirect             = 307,
+        PermanentRedirect             = 308,
+        BadRequest                    = 400,
+        Unauthorized                  = 401,
+        PaymentRequired               = 402,
+        Forbidden                     = 403,
+        NotFound                      = 404,
+        MethodNotAllowed              = 405,
+        NotAcceptable                 = 406,
+        ProxyAuthenticationRequired   = 407,
+        RequestTimeout                = 408,
+        Conflict                      = 409,
+        Gone                          = 410,
+        LengthRequired                = 411,
+        PreconditionFailed            = 412,
+        RequestEntityTooLarge         = 413,
+        RequestUriTooLong             = 414,
+        UnsupportedMediaType          = 415,
+        RequestedRangeNotSatisfiable  = 416,
+        ExpectationFailed             = 417,
+        UnprocessableEntity           = 422,
+        Locked                        = 423,
+        FailedDependency              = 424,
+        UpgradeRequired               = 426,
+        PreconditionRequired          = 428,
+        TooManyRequests               = 429,
+        RequestHeaderFieldsTooLarge   = 431,
+        InternalServerError           = 500,
+        NotImplemented                = 501,
+        BadGateway                    = 502,
+        ServiceUnavailable            = 503,
+        GatewayTimeout                = 504,
+        HttpVersionNotSupported       = 505,
+        VariantAlsoNegotiates         = 506,
+        InsufficientStorage           = 507,
+        LoopDetected                  = 508,
+        NotExtended                   = 510,
+        NetworkAuthenticationRequired = 511
+    };
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0)
+    ]
+    enum HttpVersion
+    {
+        None   = 0,
+        Http10 = 1,
+        Http11 = 2,
+        [contract(Windows.Foundation.UniversalApiContract, 1.0)]
+        Http20 = 3
+    };
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0)
+    ]
+    struct HttpProgress
+    {
+        Windows.Web.Http.HttpProgressStage Stage;
+        UINT64 BytesSent;
+        Windows.Foundation.IReference<UINT64>* TotalBytesToSend;
+        UINT64 BytesReceived;
+        Windows.Foundation.IReference<UINT64>* TotalBytesToReceive;
+        UINT32 Retries;
+    };
+}
+
+namespace Windows.Web.Http.Filters {
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0)
+    ]
+    enum HttpCacheReadBehavior
+    {
+        Default       = 0,
+        MostRecent    = 1,
+        OnlyFromCache = 2,
+        [contract(Windows.Foundation.UniversalApiContract, 3.0)]
+        NoCache       = 3
+    };
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0)
+    ]
+    enum HttpCacheWriteBehavior
+    {
+        Default = 0,
+        NoCache = 1
+    };
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 2.0)
+    ]
+    enum HttpCookieUsageBehavior
+    {
+        Default   = 0,
+        NoCookies = 1
+    };
+}
+
+namespace Windows.Web.Http {
+    declare
+    {
+        interface Windows.Foundation.AsyncOperationCompletedHandler<Windows.Web.Http.HttpResponseMessage*>;
+        interface Windows.Foundation.AsyncOperationProgressHandler<HSTRING, UINT64>;
+        interface Windows.Foundation.AsyncOperationProgressHandler<HSTRING, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.AsyncOperationProgressHandler<Windows.Storage.Streams.IBuffer*, UINT64>;
+        interface Windows.Foundation.AsyncOperationProgressHandler<Windows.Storage.Streams.IBuffer*, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.AsyncOperationProgressHandler<Windows.Storage.Streams.IInputStream*, UINT64>;
+        interface Windows.Foundation.AsyncOperationProgressHandler<Windows.Storage.Streams.IInputStream*, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.AsyncOperationProgressHandler<Windows.Web.Http.HttpGetBufferResult*, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.AsyncOperationProgressHandler<Windows.Web.Http.HttpGetInputStreamResult*, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.AsyncOperationProgressHandler<Windows.Web.Http.HttpGetStringResult*, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.AsyncOperationProgressHandler<Windows.Web.Http.HttpRequestResult*, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.AsyncOperationProgressHandler<Windows.Web.Http.HttpResponseMessage*, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.AsyncOperationWithProgressCompletedHandler<HSTRING, UINT64>;
+        interface Windows.Foundation.AsyncOperationWithProgressCompletedHandler<HSTRING, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.AsyncOperationWithProgressCompletedHandler<Windows.Storage.Streams.IBuffer*, UINT64>;
+        interface Windows.Foundation.AsyncOperationWithProgressCompletedHandler<Windows.Storage.Streams.IBuffer*, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.AsyncOperationWithProgressCompletedHandler<Windows.Storage.Streams.IInputStream*, UINT64>;
+        interface Windows.Foundation.AsyncOperationWithProgressCompletedHandler<Windows.Storage.Streams.IInputStream*, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.AsyncOperationWithProgressCompletedHandler<Windows.Web.Http.HttpGetBufferResult*, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.AsyncOperationWithProgressCompletedHandler<Windows.Web.Http.HttpGetInputStreamResult*, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.AsyncOperationWithProgressCompletedHandler<Windows.Web.Http.HttpGetStringResult*, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.AsyncOperationWithProgressCompletedHandler<Windows.Web.Http.HttpRequestResult*, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.AsyncOperationWithProgressCompletedHandler<Windows.Web.Http.HttpResponseMessage*, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Globalization.Language*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.HttpCookie*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.HttpMethod*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.IHttpContent*>;
+        interface Windows.Foundation.Collections.IIterator<Windows.Web.Http.HttpCookie*>;
+        interface Windows.Foundation.Collections.IIterator<Windows.Web.Http.HttpMethod*>;
+        interface Windows.Foundation.Collections.IIterator<Windows.Web.Http.IHttpContent*>;
+        interface Windows.Foundation.Collections.IKeyValuePair<HSTRING, HSTRING>;
+        interface Windows.Foundation.Collections.IMap<HSTRING, HSTRING>;
+        interface Windows.Foundation.Collections.IVector<Windows.Globalization.Language*>;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.HttpCookie*>;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.HttpMethod*>;
+        interface Windows.Foundation.Collections.IVectorView<Windows.Web.Http.HttpCookie*>;
+        interface Windows.Foundation.Collections.IVectorView<Windows.Web.Http.HttpMethod*>;
+        interface Windows.Foundation.IAsyncOperation<Windows.Web.Http.HttpResponseMessage*>;
+        interface Windows.Foundation.IAsyncOperationWithProgress<HSTRING, UINT64>;
+        interface Windows.Foundation.IAsyncOperationWithProgress<HSTRING, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.IAsyncOperationWithProgress<Windows.Storage.Streams.IBuffer*, UINT64>;
+        interface Windows.Foundation.IAsyncOperationWithProgress<Windows.Storage.Streams.IBuffer*, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.IAsyncOperationWithProgress<Windows.Storage.Streams.IInputStream*, UINT64>;
+        interface Windows.Foundation.IAsyncOperationWithProgress<Windows.Storage.Streams.IInputStream*, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpGetBufferResult*, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpGetInputStreamResult*, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpGetStringResult*, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpRequestResult*, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpResponseMessage*, Windows.Web.Http.HttpProgress>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Foundation.Collections.IKeyValuePair<HSTRING, HSTRING>*>;
+    }
+}
+
+namespace Windows.Web.Http.Filters {
+    declare
+    {
+        interface Windows.Foundation.TypedEventHandler<Windows.Web.Http.Filters.HttpBaseProtocolFilter*, Windows.Web.Http.Filters.HttpServerCustomValidationRequestedEventArgs*>;
+    }
+}
+
+namespace Windows.Web.Http.Headers {
+    declare
+    {
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.Headers.HttpChallengeHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.Headers.HttpConnectionOptionHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.Headers.HttpContentCodingHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.Headers.HttpContentCodingWithQualityHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.Headers.HttpCookiePairHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.Headers.HttpExpectationHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.Headers.HttpLanguageRangeWithQualityHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.Headers.HttpMediaTypeWithQualityHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.Headers.HttpNameValueHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.Headers.HttpProductInfoHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.Headers.HttpTransferCodingHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterator<Windows.Web.Http.Headers.HttpChallengeHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterator<Windows.Web.Http.Headers.HttpConnectionOptionHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterator<Windows.Web.Http.Headers.HttpContentCodingHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterator<Windows.Web.Http.Headers.HttpContentCodingWithQualityHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterator<Windows.Web.Http.Headers.HttpCookiePairHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterator<Windows.Web.Http.Headers.HttpExpectationHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterator<Windows.Web.Http.Headers.HttpLanguageRangeWithQualityHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterator<Windows.Web.Http.Headers.HttpMediaTypeWithQualityHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterator<Windows.Web.Http.Headers.HttpNameValueHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterator<Windows.Web.Http.Headers.HttpProductInfoHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterator<Windows.Web.Http.Headers.HttpTransferCodingHeaderValue*>;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpChallengeHeaderValue*>;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpConnectionOptionHeaderValue*>;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpContentCodingHeaderValue*>;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpContentCodingWithQualityHeaderValue*>;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpCookiePairHeaderValue*>;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpExpectationHeaderValue*>;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpLanguageRangeWithQualityHeaderValue*>;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpMediaTypeWithQualityHeaderValue*>;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpNameValueHeaderValue*>;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpProductInfoHeaderValue*>;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpTransferCodingHeaderValue*>;
+        interface Windows.Foundation.Collections.IVectorView<Windows.Web.Http.Headers.HttpChallengeHeaderValue*>;
+        interface Windows.Foundation.Collections.IVectorView<Windows.Web.Http.Headers.HttpConnectionOptionHeaderValue*>;
+        interface Windows.Foundation.Collections.IVectorView<Windows.Web.Http.Headers.HttpContentCodingHeaderValue*>;
+        interface Windows.Foundation.Collections.IVectorView<Windows.Web.Http.Headers.HttpContentCodingWithQualityHeaderValue*>;
+        interface Windows.Foundation.Collections.IVectorView<Windows.Web.Http.Headers.HttpCookiePairHeaderValue*>;
+        interface Windows.Foundation.Collections.IVectorView<Windows.Web.Http.Headers.HttpExpectationHeaderValue*>;
+        interface Windows.Foundation.Collections.IVectorView<Windows.Web.Http.Headers.HttpLanguageRangeWithQualityHeaderValue*>;
+        interface Windows.Foundation.Collections.IVectorView<Windows.Web.Http.Headers.HttpMediaTypeWithQualityHeaderValue*>;
+        interface Windows.Foundation.Collections.IVectorView<Windows.Web.Http.Headers.HttpNameValueHeaderValue*>;
+        interface Windows.Foundation.Collections.IVectorView<Windows.Web.Http.Headers.HttpProductInfoHeaderValue*>;
+        interface Windows.Foundation.Collections.IVectorView<Windows.Web.Http.Headers.HttpTransferCodingHeaderValue*>;
+    }
+}
+
+namespace Windows.Web.Http {
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.HttpBufferContent),
+        uuid(BC20C193-C41F-4FF7-9123-6435736EADC2)
+    ]
+    interface IHttpBufferContentFactory : IInspectable
+    {
+        HRESULT CreateFromBuffer([in] Windows.Storage.Streams.IBuffer* content, [out, retval] Windows.Web.Http.HttpBufferContent** value);
+        HRESULT CreateFromBufferWithOffset([in] Windows.Storage.Streams.IBuffer* content, [in] UINT32 offset, [in] UINT32 count, [out, retval] Windows.Web.Http.HttpBufferContent** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.HttpClient),
+        uuid(7FDA1151-3574-4880-A8BA-E6B1E0061F3D)
+    ]
+    interface IHttpClient : IInspectable
+    {
+        HRESULT DeleteAsync([in] Windows.Foundation.Uri* uri, [out, retval] Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpResponseMessage*, Windows.Web.Http.HttpProgress>** operation);
+        [overload("GetAsync")] HRESULT GetAsync([in] Windows.Foundation.Uri* uri, [out, retval] Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpResponseMessage*, Windows.Web.Http.HttpProgress>** operation);
+        [overload("GetAsync")] HRESULT GetWithOptionAsync([in] Windows.Foundation.Uri* uri, [in] Windows.Web.Http.HttpCompletionOption completionOption, [out, retval] Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpResponseMessage*, Windows.Web.Http.HttpProgress>** operation);
+        HRESULT GetBufferAsync([in] Windows.Foundation.Uri* uri, [out, retval] Windows.Foundation.IAsyncOperationWithProgress<Windows.Storage.Streams.IBuffer*, Windows.Web.Http.HttpProgress>** operation);
+        HRESULT GetInputStreamAsync([in] Windows.Foundation.Uri* uri, [out, retval] Windows.Foundation.IAsyncOperationWithProgress<Windows.Storage.Streams.IInputStream*, Windows.Web.Http.HttpProgress>** operation);
+        HRESULT GetStringAsync([in] Windows.Foundation.Uri* uri, [out, retval] Windows.Foundation.IAsyncOperationWithProgress<HSTRING, Windows.Web.Http.HttpProgress>** operation);
+        HRESULT PostAsync([in] Windows.Foundation.Uri* uri, [in] Windows.Web.Http.IHttpContent* content, [out, retval] Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpResponseMessage*, Windows.Web.Http.HttpProgress>** operation);
+        HRESULT PutAsync([in] Windows.Foundation.Uri* uri, [in] Windows.Web.Http.IHttpContent* content, [out, retval] Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpResponseMessage*, Windows.Web.Http.HttpProgress>** operation);
+        [overload("SendRequestAsync")] HRESULT SendRequestAsync([in] Windows.Web.Http.HttpRequestMessage* request, [out, retval] Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpResponseMessage*, Windows.Web.Http.HttpProgress>** operation);
+        [overload("SendRequestAsync")] HRESULT SendRequestWithOptionAsync([in] Windows.Web.Http.HttpRequestMessage* request, [in] Windows.Web.Http.HttpCompletionOption completionOption, [out, retval] Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpResponseMessage*, Windows.Web.Http.HttpProgress>** operation);
+        [propget] HRESULT DefaultRequestHeaders([out, retval] Windows.Web.Http.Headers.HttpRequestHeaderCollection** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 8.0),
+        exclusiveto(Windows.Web.Http.HttpClient),
+        uuid(CDD83348-E8B7-4CEC-B1B0-DC455FE72C92)
+    ]
+    interface IHttpClient2 : IInspectable
+    {
+        HRESULT TryDeleteAsync([in] Windows.Foundation.Uri* uri, [out, retval] Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpRequestResult*, Windows.Web.Http.HttpProgress>** operation);
+        [overload("TryGetAsync")] HRESULT TryGetAsync([in] Windows.Foundation.Uri* uri, [out, retval] Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpRequestResult*, Windows.Web.Http.HttpProgress>** operation);
+        [overload("TryGetAsync")] HRESULT TryGetAsync2([in] Windows.Foundation.Uri* uri, [in] Windows.Web.Http.HttpCompletionOption completionOption, [out, retval] Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpRequestResult*, Windows.Web.Http.HttpProgress>** operation);
+        HRESULT TryGetBufferAsync([in] Windows.Foundation.Uri* uri, [out, retval] Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpGetBufferResult*, Windows.Web.Http.HttpProgress>** operation);
+        HRESULT TryGetInputStreamAsync([in] Windows.Foundation.Uri* uri, [out, retval] Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpGetInputStreamResult*, Windows.Web.Http.HttpProgress>** operation);
+        HRESULT TryGetStringAsync([in] Windows.Foundation.Uri* uri, [out, retval] Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpGetStringResult*, Windows.Web.Http.HttpProgress>** operation);
+        HRESULT TryPostAsync([in] Windows.Foundation.Uri* uri, [in] Windows.Web.Http.IHttpContent* content, [out, retval] Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpRequestResult*, Windows.Web.Http.HttpProgress>** operation);
+        HRESULT TryPutAsync([in] Windows.Foundation.Uri* uri, [in] Windows.Web.Http.IHttpContent* content, [out, retval] Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpRequestResult*, Windows.Web.Http.HttpProgress>** operation);
+        [overload("TrySendRequestAsync")] HRESULT TrySendRequestAsync([in] Windows.Web.Http.HttpRequestMessage* request, [out, retval] Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpRequestResult*, Windows.Web.Http.HttpProgress>** operation);
+        [overload("TrySendRequestAsync")] HRESULT TrySendRequestAsync2([in] Windows.Web.Http.HttpRequestMessage* request, [in] Windows.Web.Http.HttpCompletionOption completionOption, [out, retval] Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpRequestResult*, Windows.Web.Http.HttpProgress>** operation);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 15.0),
+        exclusiveto(Windows.Web.Http.HttpClient),
+        uuid(1172FD01-9899-4194-963F-8F9D72A7EC15)
+    ]
+    interface IHttpClient3 : IInspectable
+    {
+        [propget] HRESULT DefaultPrivacyAnnotation([out, retval] HSTRING* value);
+        [propput] HRESULT DefaultPrivacyAnnotation([in] HSTRING value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.HttpClient),
+        uuid(C30C4ECA-E3FA-4F99-AFB4-63CC65009462)
+    ]
+    interface IHttpClientFactory : IInspectable
+    {
+        HRESULT Create([in] Windows.Web.Http.Filters.IHttpFilter* filter, [out, retval] Windows.Web.Http.HttpClient** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        uuid(6B14A441-FBA7-4BD2-AF0A-839DE7C295DA)
+    ]
+    interface IHttpContent : IInspectable
+        requires
+            Windows.Foundation.IClosable
+    {
+        [propget] HRESULT Headers([out, retval] Windows.Web.Http.Headers.HttpContentHeaderCollection** value);
+        HRESULT BufferAllAsync([out, retval] Windows.Foundation.IAsyncOperationWithProgress<UINT64, UINT64>** operation);
+        HRESULT ReadAsBufferAsync([out, retval] Windows.Foundation.IAsyncOperationWithProgress<Windows.Storage.Streams.IBuffer*, UINT64>** operation);
+        HRESULT ReadAsInputStreamAsync([out, retval] Windows.Foundation.IAsyncOperationWithProgress<Windows.Storage.Streams.IInputStream*, UINT64>** operation);
+        HRESULT ReadAsStringAsync([out, retval] Windows.Foundation.IAsyncOperationWithProgress<HSTRING, UINT64>** operation);
+        HRESULT TryComputeLength([out] UINT64* length, [out, retval] boolean* succeeded);
+        HRESULT WriteToStreamAsync([in] Windows.Storage.Streams.IOutputStream* outputStream, [out, retval] Windows.Foundation.IAsyncOperationWithProgress<UINT64, UINT64>** operation);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.HttpCookie),
+        uuid(1F5488E2-CC2D-4779-86A7-88F10687D249)
+    ]
+    interface IHttpCookie : IInspectable
+    {
+        [propget] HRESULT Name([out, retval] HSTRING* value);
+        [propget] HRESULT Domain([out, retval] HSTRING* value);
+        [propget] HRESULT Path([out, retval] HSTRING* value);
+        [propget] HRESULT Expires([out, retval] Windows.Foundation.IReference<Windows.Foundation.DateTime>** value);
+        [propput] HRESULT Expires([in] Windows.Foundation.IReference<Windows.Foundation.DateTime>* value);
+        [propget] HRESULT HttpOnly([out, retval] boolean* value);
+        [propput] HRESULT HttpOnly([in] boolean value);
+        [propget] HRESULT Secure([out, retval] boolean* value);
+        [propput] HRESULT Secure([in] boolean value);
+        [propget] HRESULT Value([out, retval] HSTRING* value);
+        [propput] HRESULT Value([in] HSTRING value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.HttpCookie),
+        uuid(6A0585A9-931C-4CD1-A96D-C21701785C5F)
+    ]
+    interface IHttpCookieFactory : IInspectable
+    {
+        HRESULT Create([in] HSTRING name, [in] HSTRING domain, [in] HSTRING path, [out, retval] Windows.Web.Http.HttpCookie** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.HttpCookieManager),
+        uuid(7A431780-CD4F-4E57-A84A-5B0A53D6BB96)
+    ]
+    interface IHttpCookieManager : IInspectable
+    {
+        [overload("SetCookie")] HRESULT SetCookie([in] Windows.Web.Http.HttpCookie* cookie, [out, retval] boolean* result);
+        [overload("SetCookie")] HRESULT SetCookieWithThirdParty([in] Windows.Web.Http.HttpCookie* cookie, [in] boolean thirdParty, [out, retval] boolean* result);
+        HRESULT DeleteCookie([in] Windows.Web.Http.HttpCookie* cookie);
+        HRESULT GetCookies([in] Windows.Foundation.Uri* uri, [out, retval] Windows.Web.Http.HttpCookieCollection** result);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.HttpFormUrlEncodedContent),
+        uuid(43F0138C-2F73-4302-B5F3-EAE9238A5E01)
+    ]
+    interface IHttpFormUrlEncodedContentFactory : IInspectable
+    {
+        HRESULT Create([in] Windows.Foundation.Collections.IIterable<Windows.Foundation.Collections.IKeyValuePair<HSTRING, HSTRING>*>* content, [out, retval] Windows.Web.Http.HttpFormUrlEncodedContent** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 8.0),
+        exclusiveto(Windows.Web.Http.HttpGetBufferResult),
+        uuid(53D08E7C-E209-404E-9A49-742D8236FD3A)
+    ]
+    interface IHttpGetBufferResult : IInspectable
+    {
+        [propget] HRESULT ExtendedError([out, retval] HRESULT* value);
+        [propget] HRESULT RequestMessage([out, retval] Windows.Web.Http.HttpRequestMessage** value);
+        [propget] HRESULT ResponseMessage([out, retval] Windows.Web.Http.HttpResponseMessage** value);
+        [propget] HRESULT Succeeded([out, retval] boolean* value);
+        [propget] HRESULT Value([out, retval] Windows.Storage.Streams.IBuffer** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 8.0),
+        exclusiveto(Windows.Web.Http.HttpGetInputStreamResult),
+        uuid(D5D63463-13AA-4EE0-BE95-A0C39FE91203)
+    ]
+    interface IHttpGetInputStreamResult : IInspectable
+    {
+        [propget] HRESULT ExtendedError([out, retval] HRESULT* value);
+        [propget] HRESULT RequestMessage([out, retval] Windows.Web.Http.HttpRequestMessage** value);
+        [propget] HRESULT ResponseMessage([out, retval] Windows.Web.Http.HttpResponseMessage** value);
+        [propget] HRESULT Succeeded([out, retval] boolean* value);
+        [propget] HRESULT Value([out, retval] Windows.Storage.Streams.IInputStream** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 8.0),
+        exclusiveto(Windows.Web.Http.HttpGetStringResult),
+        uuid(9BAC466D-8509-4775-B16D-8953F47A7F5F)
+    ]
+    interface IHttpGetStringResult : IInspectable
+    {
+        [propget] HRESULT ExtendedError([out, retval] HRESULT* value);
+        [propget] HRESULT RequestMessage([out, retval] Windows.Web.Http.HttpRequestMessage** value);
+        [propget] HRESULT ResponseMessage([out, retval] Windows.Web.Http.HttpResponseMessage** value);
+        [propget] HRESULT Succeeded([out, retval] boolean* value);
+        [propget] HRESULT Value([out, retval] HSTRING* value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.HttpMethod),
+        uuid(728D4022-700D-4FE0-AFA5-40299C58DBFD)
+    ]
+    interface IHttpMethod : IInspectable
+    {
+        [propget] HRESULT Method([out, retval] HSTRING* value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.HttpMethod),
+        uuid(3C51D10D-36D7-40F8-A86D-E759CAF2F83F)
+    ]
+    interface IHttpMethodFactory : IInspectable
+    {
+        HRESULT Create([in] HSTRING method, [out, retval] Windows.Web.Http.HttpMethod** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.HttpMethod),
+        uuid(64D171F0-D99A-4153-8DC6-D68CC4CCE317)
+    ]
+    interface IHttpMethodStatics : IInspectable
+    {
+        [propget] HRESULT Delete([out, retval] Windows.Web.Http.HttpMethod** value);
+        [propget] HRESULT Get([out, retval] Windows.Web.Http.HttpMethod** value);
+        [propget] HRESULT Head([out, retval] Windows.Web.Http.HttpMethod** value);
+        [propget] HRESULT Options([out, retval] Windows.Web.Http.HttpMethod** value);
+        [propget] HRESULT Patch([out, retval] Windows.Web.Http.HttpMethod** value);
+        [propget] HRESULT Post([out, retval] Windows.Web.Http.HttpMethod** value);
+        [propget] HRESULT Put([out, retval] Windows.Web.Http.HttpMethod** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.HttpMultipartContent),
+        uuid(DF916AFF-9926-4AC9-AAF1-E0D04EF09BB9)
+    ]
+    interface IHttpMultipartContent : IInspectable
+    {
+        HRESULT Add([in] Windows.Web.Http.IHttpContent* content);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.HttpMultipartContent),
+        uuid(7EB42E62-0222-4F20-B372-47D5DB5D33B4)
+    ]
+    interface IHttpMultipartContentFactory : IInspectable
+    {
+        HRESULT CreateWithSubtype([in] HSTRING subtype, [out, retval] Windows.Web.Http.HttpMultipartContent** value);
+        HRESULT CreateWithSubtypeAndBoundary([in] HSTRING subtype, [in] HSTRING boundary, [out, retval] Windows.Web.Http.HttpMultipartContent** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.HttpMultipartFormDataContent),
+        uuid(64D337E2-E967-4624-B6D1-CF74604A4A42)
+    ]
+    interface IHttpMultipartFormDataContent : IInspectable
+    {
+        [overload("Add")] HRESULT Add([in] Windows.Web.Http.IHttpContent* content);
+        [overload("Add")] HRESULT AddWithName([in] Windows.Web.Http.IHttpContent* content, [in] HSTRING name);
+        [overload("Add")] HRESULT AddWithNameAndFileName([in] Windows.Web.Http.IHttpContent* content, [in] HSTRING name, [in] HSTRING fileName);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.HttpMultipartFormDataContent),
+        uuid(A04D7311-5017-4622-93A8-49B24A4FCBFC)
+    ]
+    interface IHttpMultipartFormDataContentFactory : IInspectable
+    {
+        HRESULT CreateWithBoundary([in] HSTRING boundary, [out, retval] Windows.Web.Http.HttpMultipartFormDataContent** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.HttpRequestMessage),
+        uuid(F5762B3C-74D4-4811-B5DC-9F8B4E2F9ABF)
+    ]
+    interface IHttpRequestMessage : IInspectable
+    {
+        [propget] HRESULT Content([out, retval] Windows.Web.Http.IHttpContent** value);
+        [propput] HRESULT Content([in] Windows.Web.Http.IHttpContent* value);
+        [propget] HRESULT Headers([out, retval] Windows.Web.Http.Headers.HttpRequestHeaderCollection** value);
+        [propget] HRESULT Method([out, retval] Windows.Web.Http.HttpMethod** value);
+        [propput] HRESULT Method([in] Windows.Web.Http.HttpMethod* value);
+        [propget] HRESULT Properties([out, retval] Windows.Foundation.Collections.IMap<HSTRING, IInspectable*>** value);
+        [propget] HRESULT RequestUri([out, retval] Windows.Foundation.Uri** value);
+        [propput] HRESULT RequestUri([in] Windows.Foundation.Uri* value);
+        [propget] HRESULT TransportInformation([out, retval] Windows.Web.Http.HttpTransportInformation** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 15.0),
+        exclusiveto(Windows.Web.Http.HttpRequestMessage),
+        uuid(C3C60489-62C2-4A3F-9554-226E7C60BD96)
+    ]
+    interface IHttpRequestMessage2 : IInspectable
+    {
+        [propget] HRESULT PrivacyAnnotation([out, retval] HSTRING* value);
+        [propput] HRESULT PrivacyAnnotation([in] HSTRING value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.HttpRequestMessage),
+        uuid(5BAC994E-3886-412E-AEC3-52EC7F25616F)
+    ]
+    interface IHttpRequestMessageFactory : IInspectable
+    {
+        HRESULT Create([in] Windows.Web.Http.HttpMethod* method, [in] Windows.Foundation.Uri* uri, [out, retval] Windows.Web.Http.HttpRequestMessage** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 8.0),
+        exclusiveto(Windows.Web.Http.HttpRequestResult),
+        uuid(6ACF4DA8-B5EB-4A35-A902-4217FBE820C5)
+    ]
+    interface IHttpRequestResult : IInspectable
+    {
+        [propget] HRESULT ExtendedError([out, retval] HRESULT* value);
+        [propget] HRESULT RequestMessage([out, retval] Windows.Web.Http.HttpRequestMessage** value);
+        [propget] HRESULT ResponseMessage([out, retval] Windows.Web.Http.HttpResponseMessage** value);
+        [propget] HRESULT Succeeded([out, retval] boolean* value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.HttpResponseMessage),
+        uuid(FEE200FB-8664-44E0-95D9-42696199BFFC)
+    ]
+    interface IHttpResponseMessage : IInspectable
+    {
+        [propget] HRESULT Content([out, retval] Windows.Web.Http.IHttpContent** value);
+        [propput] HRESULT Content([in] Windows.Web.Http.IHttpContent* value);
+        [propget] HRESULT Headers([out, retval] Windows.Web.Http.Headers.HttpResponseHeaderCollection** value);
+        [propget] HRESULT IsSuccessStatusCode([out, retval] boolean* value);
+        [propget] HRESULT ReasonPhrase([out, retval] HSTRING* value);
+        [propput] HRESULT ReasonPhrase([in] HSTRING value);
+        [propget] HRESULT RequestMessage([out, retval] Windows.Web.Http.HttpRequestMessage** value);
+        [propput] HRESULT RequestMessage([in] Windows.Web.Http.HttpRequestMessage* value);
+        [propget] HRESULT Source([out, retval] Windows.Web.Http.HttpResponseMessageSource* value);
+        [propput] HRESULT Source([in] Windows.Web.Http.HttpResponseMessageSource value);
+        [propget] HRESULT StatusCode([out, retval] Windows.Web.Http.HttpStatusCode* value);
+        [propput] HRESULT StatusCode([in] Windows.Web.Http.HttpStatusCode value);
+        [propget] HRESULT Version([out, retval] Windows.Web.Http.HttpVersion* value);
+        [propput] HRESULT Version([in] Windows.Web.Http.HttpVersion value);
+        HRESULT EnsureSuccessStatusCode([out, retval] Windows.Web.Http.HttpResponseMessage** result);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.HttpResponseMessage),
+        uuid(52A8AF99-F095-43DA-B60F-7CFC2BC7EA2F)
+    ]
+    interface IHttpResponseMessageFactory : IInspectable
+    {
+        HRESULT Create([in] Windows.Web.Http.HttpStatusCode statusCode, [out, retval] Windows.Web.Http.HttpResponseMessage** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.HttpStreamContent),
+        uuid(F3E64D9D-F725-407E-942F-0EDA189809F4)
+    ]
+    interface IHttpStreamContentFactory : IInspectable
+    {
+        HRESULT CreateFromInputStream([in] Windows.Storage.Streams.IInputStream* content, [out, retval] Windows.Web.Http.HttpStreamContent** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.HttpStringContent),
+        uuid(46649D5B-2E93-48EB-8E61-19677878E57F)
+    ]
+    interface IHttpStringContentFactory : IInspectable
+    {
+        HRESULT CreateFromString([in] HSTRING content, [out, retval] Windows.Web.Http.HttpStringContent** value);
+        HRESULT CreateFromStringWithEncoding([in] HSTRING content, [in] Windows.Storage.Streams.UnicodeEncoding encoding, [out, retval] Windows.Web.Http.HttpStringContent** value);
+        HRESULT CreateFromStringWithEncodingAndMediaType([in] HSTRING content, [in] Windows.Storage.Streams.UnicodeEncoding encoding, [in] HSTRING mediaType, [out, retval] Windows.Web.Http.HttpStringContent** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.HttpTransportInformation),
+        uuid(70127198-C6A7-4ED0-833A-83FD8B8F178D)
+    ]
+    interface IHttpTransportInformation : IInspectable
+    {
+        [propget] HRESULT ServerCertificate([out, retval] Windows.Security.Cryptography.Certificates.Certificate** value);
+        [propget] HRESULT ServerCertificateErrorSeverity([out, retval] Windows.Networking.Sockets.SocketSslErrorSeverity* value);
+        [propget] HRESULT ServerCertificateErrors([out, retval] Windows.Foundation.Collections.IVectorView<Windows.Security.Cryptography.Certificates.ChainValidationResult>** value);
+        [propget] HRESULT ServerIntermediateCertificates([out, retval] Windows.Foundation.Collections.IVectorView<Windows.Security.Cryptography.Certificates.Certificate*>** value);
+    }
+
+    [
+        activatable(Windows.Web.Http.IHttpBufferContentFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        threading(both)
+    ]
+    runtimeclass HttpBufferContent
+    {
+        [default] interface Windows.Web.Http.IHttpContent;
+        interface Windows.Foundation.IClosable;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Foundation.UniversalApiContract, 1.0),
+        activatable(Windows.Web.Http.IHttpClientFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        threading(both)
+    ]
+    runtimeclass HttpClient
+    {
+        [default] interface Windows.Web.Http.IHttpClient;
+        [contract(Windows.Foundation.UniversalApiContract, 8.0)] interface Windows.Web.Http.IHttpClient2;
+        [contract(Windows.Foundation.UniversalApiContract, 15.0)] interface Windows.Web.Http.IHttpClient3;
+        interface Windows.Foundation.IClosable;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Web.Http.IHttpCookieFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        threading(both)
+    ]
+    runtimeclass HttpCookie
+    {
+        [default] interface Windows.Web.Http.IHttpCookie;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpCookieCollection
+    {
+        [default] interface Windows.Foundation.Collections.IVectorView<Windows.Web.Http.HttpCookie*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.HttpCookie*>;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpCookieManager
+    {
+        [default] interface Windows.Web.Http.IHttpCookieManager;
+    }
+
+    [
+        activatable(Windows.Web.Http.IHttpFormUrlEncodedContentFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        threading(both)
+    ]
+    runtimeclass HttpFormUrlEncodedContent
+    {
+        [default] interface Windows.Web.Http.IHttpContent;
+        interface Windows.Foundation.IClosable;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 8.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpGetBufferResult
+    {
+        [default] interface Windows.Web.Http.IHttpGetBufferResult;
+        interface Windows.Foundation.IClosable;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 8.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpGetInputStreamResult
+    {
+        [default] interface Windows.Web.Http.IHttpGetInputStreamResult;
+        interface Windows.Foundation.IClosable;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 8.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpGetStringResult
+    {
+        [default] interface Windows.Web.Http.IHttpGetStringResult;
+        interface Windows.Foundation.IClosable;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Web.Http.IHttpMethodFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        static(Windows.Web.Http.IHttpMethodStatics, Windows.Foundation.UniversalApiContract, 1.0),
+        threading(both)
+    ]
+    runtimeclass HttpMethod
+    {
+        [default] interface Windows.Web.Http.IHttpMethod;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Foundation.UniversalApiContract, 1.0),
+        activatable(Windows.Web.Http.IHttpMultipartContentFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        threading(both)
+    ]
+    runtimeclass HttpMultipartContent
+    {
+        interface Windows.Web.Http.IHttpMultipartContent;
+        [default] interface Windows.Web.Http.IHttpContent;
+        interface Windows.Foundation.IClosable;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.IHttpContent*>;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Foundation.UniversalApiContract, 1.0),
+        activatable(Windows.Web.Http.IHttpMultipartFormDataContentFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        threading(both)
+    ]
+    runtimeclass HttpMultipartFormDataContent
+    {
+        interface Windows.Web.Http.IHttpMultipartFormDataContent;
+        [default] interface Windows.Web.Http.IHttpContent;
+        interface Windows.Foundation.IClosable;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.IHttpContent*>;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Foundation.UniversalApiContract, 1.0),
+        activatable(Windows.Web.Http.IHttpRequestMessageFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        threading(both)
+    ]
+    runtimeclass HttpRequestMessage
+    {
+        [default] interface Windows.Web.Http.IHttpRequestMessage;
+        [contract(Windows.Foundation.UniversalApiContract, 15.0)] interface Windows.Web.Http.IHttpRequestMessage2;
+        interface Windows.Foundation.IClosable;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 8.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpRequestResult
+    {
+        [default] interface Windows.Web.Http.IHttpRequestResult;
+        interface Windows.Foundation.IClosable;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Foundation.UniversalApiContract, 1.0),
+        activatable(Windows.Web.Http.IHttpResponseMessageFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        threading(both)
+    ]
+    runtimeclass HttpResponseMessage
+    {
+        [default] interface Windows.Web.Http.IHttpResponseMessage;
+        interface Windows.Foundation.IClosable;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Web.Http.IHttpStreamContentFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        threading(both)
+    ]
+    runtimeclass HttpStreamContent
+    {
+        [default] interface Windows.Web.Http.IHttpContent;
+        interface Windows.Foundation.IClosable;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Web.Http.IHttpStringContentFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        threading(both)
+    ]
+    runtimeclass HttpStringContent
+    {
+        [default] interface Windows.Web.Http.IHttpContent;
+        interface Windows.Foundation.IClosable;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpTransportInformation
+    {
+        [default] interface Windows.Web.Http.IHttpTransportInformation;
+        interface Windows.Foundation.IStringable;
+    }
+}
+
+namespace Windows.Web.Http.Headers {
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpCacheDirectiveHeaderValueCollection),
+        uuid(9A586B89-D5D0-4FBE-BD9D-B5B3636811B4)
+    ]
+    interface IHttpCacheDirectiveHeaderValueCollection : IInspectable
+    {
+        [propget] HRESULT MaxAge([out, retval] Windows.Foundation.IReference<Windows.Foundation.TimeSpan>** value);
+        [propput] HRESULT MaxAge([in] Windows.Foundation.IReference<Windows.Foundation.TimeSpan>* value);
+        [propget] HRESULT MaxStale([out, retval] Windows.Foundation.IReference<Windows.Foundation.TimeSpan>** value);
+        [propput] HRESULT MaxStale([in] Windows.Foundation.IReference<Windows.Foundation.TimeSpan>* value);
+        [propget] HRESULT MinFresh([out, retval] Windows.Foundation.IReference<Windows.Foundation.TimeSpan>** value);
+        [propput] HRESULT MinFresh([in] Windows.Foundation.IReference<Windows.Foundation.TimeSpan>* value);
+        [propget] HRESULT SharedMaxAge([out, retval] Windows.Foundation.IReference<Windows.Foundation.TimeSpan>** value);
+        [propput] HRESULT SharedMaxAge([in] Windows.Foundation.IReference<Windows.Foundation.TimeSpan>* value);
+        HRESULT ParseAdd([in] HSTRING input);
+        HRESULT TryParseAdd([in] HSTRING input, [out, retval] boolean* result);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpChallengeHeaderValue),
+        uuid(393361AF-0F7D-4820-9FDD-A2B956EEAEAB)
+    ]
+    interface IHttpChallengeHeaderValue : IInspectable
+    {
+        [propget] HRESULT Parameters([out, retval] Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpNameValueHeaderValue*>** value);
+        [propget] HRESULT Scheme([out, retval] HSTRING* value);
+        [propget] HRESULT Token([out, retval] HSTRING* value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpChallengeHeaderValueCollection),
+        uuid(CA9E5F81-AEE0-4353-A10B-E625BABD64C2)
+    ]
+    interface IHttpChallengeHeaderValueCollection : IInspectable
+    {
+        HRESULT ParseAdd([in] HSTRING input);
+        HRESULT TryParseAdd([in] HSTRING input, [out, retval] boolean* result);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpChallengeHeaderValue),
+        uuid(C452C451-D99C-40AA-9399-90EEB98FC613)
+    ]
+    interface IHttpChallengeHeaderValueFactory : IInspectable
+    {
+        HRESULT CreateFromScheme([in] HSTRING scheme, [out, retval] Windows.Web.Http.Headers.HttpChallengeHeaderValue** value);
+        HRESULT CreateFromSchemeWithToken([in] HSTRING scheme, [in] HSTRING token, [out, retval] Windows.Web.Http.Headers.HttpChallengeHeaderValue** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpChallengeHeaderValue),
+        uuid(F3D38A72-FC01-4D01-A008-FCB7C459D635)
+    ]
+    interface IHttpChallengeHeaderValueStatics : IInspectable
+    {
+        HRESULT Parse([in] HSTRING input, [out, retval] Windows.Web.Http.Headers.HttpChallengeHeaderValue** result);
+        HRESULT TryParse([in] HSTRING input, [out] Windows.Web.Http.Headers.HttpChallengeHeaderValue** challengeHeaderValue, [out, retval] boolean* succeeded);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpConnectionOptionHeaderValue),
+        uuid(CB4AF27A-4E90-45EB-8DCD-FD1408F4C44F)
+    ]
+    interface IHttpConnectionOptionHeaderValue : IInspectable
+    {
+        [propget] HRESULT Token([out, retval] HSTRING* value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpConnectionOptionHeaderValueCollection),
+        uuid(E4F56C1D-5142-4E00-8E0F-019509337629)
+    ]
+    interface IHttpConnectionOptionHeaderValueCollection : IInspectable
+    {
+        HRESULT ParseAdd([in] HSTRING input);
+        HRESULT TryParseAdd([in] HSTRING input, [out, retval] boolean* result);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpConnectionOptionHeaderValue),
+        uuid(D93CCC1E-0B7D-4C3F-A58D-A2A1BDEABC0A)
+    ]
+    interface IHttpConnectionOptionHeaderValueFactory : IInspectable
+    {
+        HRESULT Create([in] HSTRING token, [out, retval] Windows.Web.Http.Headers.HttpConnectionOptionHeaderValue** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpConnectionOptionHeaderValue),
+        uuid(AAA75D37-A946-4B1F-85AF-48B68B3C50BD)
+    ]
+    interface IHttpConnectionOptionHeaderValueStatics : IInspectable
+    {
+        HRESULT Parse([in] HSTRING input, [out, retval] Windows.Web.Http.Headers.HttpConnectionOptionHeaderValue** result);
+        HRESULT TryParse([in] HSTRING input, [out] Windows.Web.Http.Headers.HttpConnectionOptionHeaderValue** connectionOptionHeaderValue, [out, retval] boolean* succeeded);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpContentCodingHeaderValue),
+        uuid(BCF7F92A-9376-4D85-BCCC-9F4F9ACAB434)
+    ]
+    interface IHttpContentCodingHeaderValue : IInspectable
+    {
+        [propget] HRESULT ContentCoding([out, retval] HSTRING* value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpContentCodingHeaderValueCollection),
+        uuid(7D221721-A6DB-436E-8E83-91596192819C)
+    ]
+    interface IHttpContentCodingHeaderValueCollection : IInspectable
+    {
+        HRESULT ParseAdd([in] HSTRING input);
+        HRESULT TryParseAdd([in] HSTRING input, [out, retval] boolean* result);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpContentCodingHeaderValue),
+        uuid(C53D2BD7-332B-4350-8510-2E67A2289A5A)
+    ]
+    interface IHttpContentCodingHeaderValueFactory : IInspectable
+    {
+        HRESULT Create([in] HSTRING contentCoding, [out, retval] Windows.Web.Http.Headers.HttpContentCodingHeaderValue** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpContentCodingHeaderValue),
+        uuid(94D8602E-F9BF-42F7-AA46-ED272A41E212)
+    ]
+    interface IHttpContentCodingHeaderValueStatics : IInspectable
+    {
+        HRESULT Parse([in] HSTRING input, [out, retval] Windows.Web.Http.Headers.HttpContentCodingHeaderValue** result);
+        HRESULT TryParse([in] HSTRING input, [out] Windows.Web.Http.Headers.HttpContentCodingHeaderValue** contentCodingHeaderValue, [out, retval] boolean* succeeded);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpContentCodingWithQualityHeaderValue),
+        uuid(94531CD5-8B13-4D73-8651-F76B38F88495)
+    ]
+    interface IHttpContentCodingWithQualityHeaderValue : IInspectable
+    {
+        [propget] HRESULT ContentCoding([out, retval] HSTRING* value);
+        [propget] HRESULT Quality([out, retval] Windows.Foundation.IReference<DOUBLE>** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpContentCodingWithQualityHeaderValueCollection),
+        uuid(7C0D753E-E899-4378-B5C8-412D820711CC)
+    ]
+    interface IHttpContentCodingWithQualityHeaderValueCollection : IInspectable
+    {
+        HRESULT ParseAdd([in] HSTRING input);
+        HRESULT TryParseAdd([in] HSTRING input, [out, retval] boolean* result);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpContentCodingWithQualityHeaderValue),
+        uuid(C45EEE1A-C553-46FC-ADE2-D75C1D53DF7B)
+    ]
+    interface IHttpContentCodingWithQualityHeaderValueFactory : IInspectable
+    {
+        HRESULT CreateFromValue([in] HSTRING contentCoding, [out, retval] Windows.Web.Http.Headers.HttpContentCodingWithQualityHeaderValue** value);
+        HRESULT CreateFromValueWithQuality([in] HSTRING contentCoding, [in] DOUBLE quality, [out, retval] Windows.Web.Http.Headers.HttpContentCodingWithQualityHeaderValue** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpContentCodingWithQualityHeaderValue),
+        uuid(E8C9357C-8F89-4801-8E75-4C9ABFC3DE71)
+    ]
+    interface IHttpContentCodingWithQualityHeaderValueStatics : IInspectable
+    {
+        HRESULT Parse([in] HSTRING input, [out, retval] Windows.Web.Http.Headers.HttpContentCodingWithQualityHeaderValue** result);
+        HRESULT TryParse([in] HSTRING input, [out] Windows.Web.Http.Headers.HttpContentCodingWithQualityHeaderValue** contentCodingWithQualityHeaderValue, [out, retval] boolean* succeeded);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpContentDispositionHeaderValue),
+        uuid(F2A2EEDC-2629-4B49-9908-96A168E9365E)
+    ]
+    interface IHttpContentDispositionHeaderValue : IInspectable
+    {
+        [propget] HRESULT DispositionType([out, retval] HSTRING* value);
+        [propput] HRESULT DispositionType([in] HSTRING value);
+        [propget] HRESULT FileName([out, retval] HSTRING* value);
+        [propput] HRESULT FileName([in] HSTRING value);
+        [propget] HRESULT FileNameStar([out, retval] HSTRING* value);
+        [propput] HRESULT FileNameStar([in] HSTRING value);
+        [propget] HRESULT Name([out, retval] HSTRING* value);
+        [propput] HRESULT Name([in] HSTRING value);
+        [propget] HRESULT Parameters([out, retval] Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpNameValueHeaderValue*>** value);
+        [propget] HRESULT Size([out, retval] Windows.Foundation.IReference<UINT64>** value);
+        [propput] HRESULT Size([in] Windows.Foundation.IReference<UINT64>* value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpContentDispositionHeaderValue),
+        uuid(9915BBC4-456C-4E81-8295-B2AB3CBCF545)
+    ]
+    interface IHttpContentDispositionHeaderValueFactory : IInspectable
+    {
+        HRESULT Create([in] HSTRING dispositionType, [out, retval] Windows.Web.Http.Headers.HttpContentDispositionHeaderValue** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpContentDispositionHeaderValue),
+        uuid(29C56067-5A37-46E4-B074-C5177D69CA66)
+    ]
+    interface IHttpContentDispositionHeaderValueStatics : IInspectable
+    {
+        HRESULT Parse([in] HSTRING input, [out, retval] Windows.Web.Http.Headers.HttpContentDispositionHeaderValue** result);
+        HRESULT TryParse([in] HSTRING input, [out] Windows.Web.Http.Headers.HttpContentDispositionHeaderValue** contentDispositionHeaderValue, [out, retval] boolean* succeeded);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpContentHeaderCollection),
+        uuid(40612A44-47AE-4B7E-9124-69628B64AA18)
+    ]
+    interface IHttpContentHeaderCollection : IInspectable
+    {
+        [propget] HRESULT ContentDisposition([out, retval] Windows.Web.Http.Headers.HttpContentDispositionHeaderValue** value);
+        [propput] HRESULT ContentDisposition([in] Windows.Web.Http.Headers.HttpContentDispositionHeaderValue* value);
+        [propget] HRESULT ContentEncoding([out, retval] Windows.Web.Http.Headers.HttpContentCodingHeaderValueCollection** value);
+        [propget] HRESULT ContentLanguage([out, retval] Windows.Web.Http.Headers.HttpLanguageHeaderValueCollection** value);
+        [propget] HRESULT ContentLength([out, retval] Windows.Foundation.IReference<UINT64>** value);
+        [propput] HRESULT ContentLength([in] Windows.Foundation.IReference<UINT64>* value);
+        [propget] HRESULT ContentLocation([out, retval] Windows.Foundation.Uri** value);
+        [propput] HRESULT ContentLocation([in] Windows.Foundation.Uri* value);
+        [propget] HRESULT ContentMD5([out, retval] Windows.Storage.Streams.IBuffer** value);
+        [propput] HRESULT ContentMD5([in] Windows.Storage.Streams.IBuffer* value);
+        [propget] HRESULT ContentRange([out, retval] Windows.Web.Http.Headers.HttpContentRangeHeaderValue** value);
+        [propput] HRESULT ContentRange([in] Windows.Web.Http.Headers.HttpContentRangeHeaderValue* value);
+        [propget] HRESULT ContentType([out, retval] Windows.Web.Http.Headers.HttpMediaTypeHeaderValue** value);
+        [propput] HRESULT ContentType([in] Windows.Web.Http.Headers.HttpMediaTypeHeaderValue* value);
+        [propget] HRESULT Expires([out, retval] Windows.Foundation.IReference<Windows.Foundation.DateTime>** value);
+        [propput] HRESULT Expires([in] Windows.Foundation.IReference<Windows.Foundation.DateTime>* value);
+        [propget] HRESULT LastModified([out, retval] Windows.Foundation.IReference<Windows.Foundation.DateTime>** value);
+        [propput] HRESULT LastModified([in] Windows.Foundation.IReference<Windows.Foundation.DateTime>* value);
+        HRESULT Append([in] HSTRING name, [in] HSTRING value);
+        HRESULT TryAppendWithoutValidation([in] HSTRING name, [in] HSTRING value, [out, retval] boolean* result);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpContentRangeHeaderValue),
+        uuid(04D967D3-A4F6-495C-9530-8579FCBA8AA9)
+    ]
+    interface IHttpContentRangeHeaderValue : IInspectable
+    {
+        [propget] HRESULT FirstBytePosition([out, retval] Windows.Foundation.IReference<UINT64>** value);
+        [propget] HRESULT LastBytePosition([out, retval] Windows.Foundation.IReference<UINT64>** value);
+        [propget] HRESULT Length([out, retval] Windows.Foundation.IReference<UINT64>** value);
+        [propget] HRESULT Unit([out, retval] HSTRING* value);
+        [propput] HRESULT Unit([in] HSTRING value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpContentRangeHeaderValue),
+        uuid(3F5BD691-A03C-4456-9A6F-EF27ECD03CAE)
+    ]
+    interface IHttpContentRangeHeaderValueFactory : IInspectable
+    {
+        HRESULT CreateFromLength([in] UINT64 length, [out, retval] Windows.Web.Http.Headers.HttpContentRangeHeaderValue** value);
+        HRESULT CreateFromRange([in] UINT64 from, [in] UINT64 to, [out, retval] Windows.Web.Http.Headers.HttpContentRangeHeaderValue** value);
+        HRESULT CreateFromRangeWithLength([in] UINT64 from, [in] UINT64 to, [in] UINT64 length, [out, retval] Windows.Web.Http.Headers.HttpContentRangeHeaderValue** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpContentRangeHeaderValue),
+        uuid(80A346CA-174C-4FAE-821C-134CD294AA38)
+    ]
+    interface IHttpContentRangeHeaderValueStatics : IInspectable
+    {
+        HRESULT Parse([in] HSTRING input, [out, retval] Windows.Web.Http.Headers.HttpContentRangeHeaderValue** result);
+        HRESULT TryParse([in] HSTRING input, [out] Windows.Web.Http.Headers.HttpContentRangeHeaderValue** contentRangeHeaderValue, [out, retval] boolean* succeeded);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpCookiePairHeaderValue),
+        uuid(CBD46217-4B29-412B-BD90-B3D814AB8E1B)
+    ]
+    interface IHttpCookiePairHeaderValue : IInspectable
+    {
+        [propget] HRESULT Name([out, retval] HSTRING* value);
+        [propget] HRESULT Value([out, retval] HSTRING* value);
+        [propput] HRESULT Value([in] HSTRING value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpCookiePairHeaderValueCollection),
+        uuid(F3F44350-581E-4ECC-9F59-E507D04F06E6)
+    ]
+    interface IHttpCookiePairHeaderValueCollection : IInspectable
+    {
+        HRESULT ParseAdd([in] HSTRING input);
+        HRESULT TryParseAdd([in] HSTRING input, [out, retval] boolean* result);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpCookiePairHeaderValue),
+        uuid(635E326F-146F-4F56-AA21-2CB7D6D58B1E)
+    ]
+    interface IHttpCookiePairHeaderValueFactory : IInspectable
+    {
+        HRESULT CreateFromName([in] HSTRING name, [out, retval] Windows.Web.Http.Headers.HttpCookiePairHeaderValue** value);
+        HRESULT CreateFromNameWithValue([in] HSTRING name, [in] HSTRING value, [out, retval] Windows.Web.Http.Headers.HttpCookiePairHeaderValue** cookiePairHeaderValue);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpCookiePairHeaderValue),
+        uuid(6E866D48-06AF-4462-8158-99388D5DCA81)
+    ]
+    interface IHttpCookiePairHeaderValueStatics : IInspectable
+    {
+        HRESULT Parse([in] HSTRING input, [out, retval] Windows.Web.Http.Headers.HttpCookiePairHeaderValue** result);
+        HRESULT TryParse([in] HSTRING input, [out] Windows.Web.Http.Headers.HttpCookiePairHeaderValue** cookiePairHeaderValue, [out, retval] boolean* succeeded);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpCredentialsHeaderValue),
+        uuid(C34CC3CB-542E-4177-A6C7-B674CE193FBF)
+    ]
+    interface IHttpCredentialsHeaderValue : IInspectable
+    {
+        [propget] HRESULT Parameters([out, retval] Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpNameValueHeaderValue*>** value);
+        [propget] HRESULT Scheme([out, retval] HSTRING* value);
+        [propget] HRESULT Token([out, retval] HSTRING* value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpCredentialsHeaderValue),
+        uuid(F21D9E91-4D1C-4182-BFD1-34470A62F950)
+    ]
+    interface IHttpCredentialsHeaderValueFactory : IInspectable
+    {
+        HRESULT CreateFromScheme([in] HSTRING scheme, [out, retval] Windows.Web.Http.Headers.HttpCredentialsHeaderValue** value);
+        HRESULT CreateFromSchemeWithToken([in] HSTRING scheme, [in] HSTRING token, [out, retval] Windows.Web.Http.Headers.HttpCredentialsHeaderValue** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpCredentialsHeaderValue),
+        uuid(A69B2BE6-CE8C-4443-A35A-1B727B131036)
+    ]
+    interface IHttpCredentialsHeaderValueStatics : IInspectable
+    {
+        HRESULT Parse([in] HSTRING input, [out, retval] Windows.Web.Http.Headers.HttpCredentialsHeaderValue** result);
+        HRESULT TryParse([in] HSTRING input, [out] Windows.Web.Http.Headers.HttpCredentialsHeaderValue** credentialsHeaderValue, [out, retval] boolean* succeeded);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpDateOrDeltaHeaderValue),
+        uuid(EAFCAA6A-C4DC-49E2-A27D-043ADF5867A3)
+    ]
+    interface IHttpDateOrDeltaHeaderValue : IInspectable
+    {
+        [propget] HRESULT Date([out, retval] Windows.Foundation.IReference<Windows.Foundation.DateTime>** value);
+        [propget] HRESULT Delta([out, retval] Windows.Foundation.IReference<Windows.Foundation.TimeSpan>** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpDateOrDeltaHeaderValue),
+        uuid(7C2659A8-6672-4E90-9A9A-F39766F7F576)
+    ]
+    interface IHttpDateOrDeltaHeaderValueStatics : IInspectable
+    {
+        HRESULT Parse([in] HSTRING input, [out, retval] Windows.Web.Http.Headers.HttpDateOrDeltaHeaderValue** result);
+        HRESULT TryParse([in] HSTRING input, [out] Windows.Web.Http.Headers.HttpDateOrDeltaHeaderValue** dateOrDeltaHeaderValue, [out, retval] boolean* succeeded);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpExpectationHeaderValue),
+        uuid(4CE585CD-3A99-43AF-A2E6-EC232FEA9658)
+    ]
+    interface IHttpExpectationHeaderValue : IInspectable
+    {
+        [propget] HRESULT Name([out, retval] HSTRING* value);
+        [propget] HRESULT Value([out, retval] HSTRING* value);
+        [propput] HRESULT Value([in] HSTRING value);
+        [propget] HRESULT Parameters([out, retval] Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpNameValueHeaderValue*>** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpExpectationHeaderValueCollection),
+        uuid(E78521B3-A0E2-4AC4-9E66-79706CB9FD58)
+    ]
+    interface IHttpExpectationHeaderValueCollection : IInspectable
+    {
+        HRESULT ParseAdd([in] HSTRING input);
+        HRESULT TryParseAdd([in] HSTRING input, [out, retval] boolean* result);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpExpectationHeaderValue),
+        uuid(4EA275CB-D53E-4868-8856-1E21A5030DC0)
+    ]
+    interface IHttpExpectationHeaderValueFactory : IInspectable
+    {
+        HRESULT CreateFromName([in] HSTRING name, [out, retval] Windows.Web.Http.Headers.HttpExpectationHeaderValue** value);
+        HRESULT CreateFromNameWithValue([in] HSTRING name, [in] HSTRING value, [out, retval] Windows.Web.Http.Headers.HttpExpectationHeaderValue** expectationHeaderValue);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpExpectationHeaderValue),
+        uuid(3019ABE2-CFE5-473B-A57F-FBA5B14EB257)
+    ]
+    interface IHttpExpectationHeaderValueStatics : IInspectable
+    {
+        HRESULT Parse([in] HSTRING input, [out, retval] Windows.Web.Http.Headers.HttpExpectationHeaderValue** result);
+        HRESULT TryParse([in] HSTRING input, [out] Windows.Web.Http.Headers.HttpExpectationHeaderValue** expectationHeaderValue, [out, retval] boolean* succeeded);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpLanguageHeaderValueCollection),
+        uuid(9EBD7CA3-8219-44F6-9902-8C56DFD3340C)
+    ]
+    interface IHttpLanguageHeaderValueCollection : IInspectable
+    {
+        HRESULT ParseAdd([in] HSTRING input);
+        HRESULT TryParseAdd([in] HSTRING input, [out, retval] boolean* result);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpLanguageRangeWithQualityHeaderValue),
+        uuid(7256E102-0080-4DB4-A083-7DE7B2E5BA4C)
+    ]
+    interface IHttpLanguageRangeWithQualityHeaderValue : IInspectable
+    {
+        [propget] HRESULT LanguageRange([out, retval] HSTRING* value);
+        [propget] HRESULT Quality([out, retval] Windows.Foundation.IReference<DOUBLE>** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpLanguageRangeWithQualityHeaderValueCollection),
+        uuid(885D5ABD-4B4F-480A-89CE-8AEDCEE6E3A0)
+    ]
+    interface IHttpLanguageRangeWithQualityHeaderValueCollection : IInspectable
+    {
+        HRESULT ParseAdd([in] HSTRING input);
+        HRESULT TryParseAdd([in] HSTRING input, [out, retval] boolean* result);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpLanguageRangeWithQualityHeaderValue),
+        uuid(7BB83970-780F-4C83-9FE4-DC3087F6BD55)
+    ]
+    interface IHttpLanguageRangeWithQualityHeaderValueFactory : IInspectable
+    {
+        HRESULT CreateFromLanguageRange([in] HSTRING languageRange, [out, retval] Windows.Web.Http.Headers.HttpLanguageRangeWithQualityHeaderValue** value);
+        HRESULT CreateFromLanguageRangeWithQuality([in] HSTRING languageRange, [in] DOUBLE quality, [out, retval] Windows.Web.Http.Headers.HttpLanguageRangeWithQualityHeaderValue** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpLanguageRangeWithQualityHeaderValue),
+        uuid(2541E146-F308-46F5-B695-42F54024EC68)
+    ]
+    interface IHttpLanguageRangeWithQualityHeaderValueStatics : IInspectable
+    {
+        HRESULT Parse([in] HSTRING input, [out, retval] Windows.Web.Http.Headers.HttpLanguageRangeWithQualityHeaderValue** result);
+        HRESULT TryParse([in] HSTRING input, [out] Windows.Web.Http.Headers.HttpLanguageRangeWithQualityHeaderValue** languageRangeWithQualityHeaderValue, [out, retval] boolean* succeeded);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpMediaTypeHeaderValue),
+        uuid(16B28533-E728-4FCB-BDB0-08A431A14844)
+    ]
+    interface IHttpMediaTypeHeaderValue : IInspectable
+    {
+        [propget] HRESULT CharSet([out, retval] HSTRING* value);
+        [propput] HRESULT CharSet([in] HSTRING value);
+        [propget] HRESULT MediaType([out, retval] HSTRING* value);
+        [propput] HRESULT MediaType([in] HSTRING value);
+        [propget] HRESULT Parameters([out, retval] Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpNameValueHeaderValue*>** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpMediaTypeHeaderValue),
+        uuid(BED747A8-CD17-42DD-9367-AB9C5B56DD7D)
+    ]
+    interface IHttpMediaTypeHeaderValueFactory : IInspectable
+    {
+        HRESULT Create([in] HSTRING mediaType, [out, retval] Windows.Web.Http.Headers.HttpMediaTypeHeaderValue** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpMediaTypeHeaderValue),
+        uuid(E04D83DF-1D41-4D8C-A2DE-6FD2ED87399B)
+    ]
+    interface IHttpMediaTypeHeaderValueStatics : IInspectable
+    {
+        HRESULT Parse([in] HSTRING input, [out, retval] Windows.Web.Http.Headers.HttpMediaTypeHeaderValue** result);
+        HRESULT TryParse([in] HSTRING input, [out] Windows.Web.Http.Headers.HttpMediaTypeHeaderValue** mediaTypeHeaderValue, [out, retval] boolean* succeeded);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpMediaTypeWithQualityHeaderValue),
+        uuid(188D5E32-76BE-44A0-B1CD-2074BDED2DDE)
+    ]
+    interface IHttpMediaTypeWithQualityHeaderValue : IInspectable
+    {
+        [propget] HRESULT CharSet([out, retval] HSTRING* value);
+        [propput] HRESULT CharSet([in] HSTRING value);
+        [propget] HRESULT MediaType([out, retval] HSTRING* value);
+        [propput] HRESULT MediaType([in] HSTRING value);
+        [propget] HRESULT Parameters([out, retval] Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpNameValueHeaderValue*>** value);
+        [propget] HRESULT Quality([out, retval] Windows.Foundation.IReference<DOUBLE>** value);
+        [propput] HRESULT Quality([in] Windows.Foundation.IReference<DOUBLE>* value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpMediaTypeWithQualityHeaderValueCollection),
+        uuid(3C0C6B73-1342-4587-A056-18D02FF67165)
+    ]
+    interface IHttpMediaTypeWithQualityHeaderValueCollection : IInspectable
+    {
+        HRESULT ParseAdd([in] HSTRING input);
+        HRESULT TryParseAdd([in] HSTRING input, [out, retval] boolean* result);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpMediaTypeWithQualityHeaderValue),
+        uuid(4C6D20F4-9457-44E6-A323-D122B958780B)
+    ]
+    interface IHttpMediaTypeWithQualityHeaderValueFactory : IInspectable
+    {
+        HRESULT CreateFromMediaType([in] HSTRING mediaType, [out, retval] Windows.Web.Http.Headers.HttpMediaTypeWithQualityHeaderValue** value);
+        HRESULT CreateFromMediaTypeWithQuality([in] HSTRING mediaType, [in] DOUBLE quality, [out, retval] Windows.Web.Http.Headers.HttpMediaTypeWithQualityHeaderValue** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpMediaTypeWithQualityHeaderValue),
+        uuid(5B070CD9-B560-4FC8-9835-7E6C0A657B24)
+    ]
+    interface IHttpMediaTypeWithQualityHeaderValueStatics : IInspectable
+    {
+        HRESULT Parse([in] HSTRING input, [out, retval] Windows.Web.Http.Headers.HttpMediaTypeWithQualityHeaderValue** result);
+        HRESULT TryParse([in] HSTRING input, [out] Windows.Web.Http.Headers.HttpMediaTypeWithQualityHeaderValue** mediaTypeWithQualityHeaderValue, [out, retval] boolean* succeeded);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpMethodHeaderValueCollection),
+        uuid(43BC3FF4-6119-4ADF-938C-34BFFFCF92ED)
+    ]
+    interface IHttpMethodHeaderValueCollection : IInspectable
+    {
+        HRESULT ParseAdd([in] HSTRING input);
+        HRESULT TryParseAdd([in] HSTRING input, [out, retval] boolean* result);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpNameValueHeaderValue),
+        uuid(D8BA7463-5B9A-4D1B-93F9-AA5B44ECFDDF)
+    ]
+    interface IHttpNameValueHeaderValue : IInspectable
+    {
+        [propget] HRESULT Name([out, retval] HSTRING* value);
+        [propget] HRESULT Value([out, retval] HSTRING* value);
+        [propput] HRESULT Value([in] HSTRING value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpNameValueHeaderValue),
+        uuid(770E2267-CBF8-4736-A925-93FBE10C7CA8)
+    ]
+    interface IHttpNameValueHeaderValueFactory : IInspectable
+    {
+        HRESULT CreateFromName([in] HSTRING name, [out, retval] Windows.Web.Http.Headers.HttpNameValueHeaderValue** value);
+        HRESULT CreateFromNameWithValue([in] HSTRING name, [in] HSTRING value, [out, retval] Windows.Web.Http.Headers.HttpNameValueHeaderValue** nameValueHeaderValue);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpNameValueHeaderValue),
+        uuid(FFD4030F-1130-4152-8659-256909A9D115)
+    ]
+    interface IHttpNameValueHeaderValueStatics : IInspectable
+    {
+        HRESULT Parse([in] HSTRING input, [out, retval] Windows.Web.Http.Headers.HttpNameValueHeaderValue** result);
+        HRESULT TryParse([in] HSTRING input, [out] Windows.Web.Http.Headers.HttpNameValueHeaderValue** nameValueHeaderValue, [out, retval] boolean* succeeded);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpProductHeaderValue),
+        uuid(F4FEEE03-EBD4-4160-B9FF-807C5183B6E6)
+    ]
+    interface IHttpProductHeaderValue : IInspectable
+    {
+        [propget] HRESULT Name([out, retval] HSTRING* value);
+        [propget] HRESULT Version([out, retval] HSTRING* value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpProductHeaderValue),
+        uuid(611AA4F5-82BC-42FB-977B-DC00536E5E86)
+    ]
+    interface IHttpProductHeaderValueFactory : IInspectable
+    {
+        HRESULT CreateFromName([in] HSTRING productName, [out, retval] Windows.Web.Http.Headers.HttpProductHeaderValue** value);
+        HRESULT CreateFromNameWithVersion([in] HSTRING productName, [in] HSTRING productVersion, [out, retval] Windows.Web.Http.Headers.HttpProductHeaderValue** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpProductHeaderValue),
+        uuid(90C33E29-BEFC-4337-BE62-49F097975F53)
+    ]
+    interface IHttpProductHeaderValueStatics : IInspectable
+    {
+        HRESULT Parse([in] HSTRING input, [out, retval] Windows.Web.Http.Headers.HttpProductHeaderValue** result);
+        HRESULT TryParse([in] HSTRING input, [out] Windows.Web.Http.Headers.HttpProductHeaderValue** productHeaderValue, [out, retval] boolean* succeeded);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpProductInfoHeaderValue),
+        uuid(1B1A8732-4C35-486A-966F-646489198E4D)
+    ]
+    interface IHttpProductInfoHeaderValue : IInspectable
+    {
+        [propget] HRESULT Product([out, retval] Windows.Web.Http.Headers.HttpProductHeaderValue** value);
+        [propget] HRESULT Comment([out, retval] HSTRING* value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpProductInfoHeaderValueCollection),
+        uuid(877DF74A-D69B-44F8-AD4F-453AF9C42ED0)
+    ]
+    interface IHttpProductInfoHeaderValueCollection : IInspectable
+    {
+        HRESULT ParseAdd([in] HSTRING input);
+        HRESULT TryParseAdd([in] HSTRING input, [out, retval] boolean* result);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpProductInfoHeaderValue),
+        uuid(24220FBE-EABE-4464-B460-EC010B7C41E2)
+    ]
+    interface IHttpProductInfoHeaderValueFactory : IInspectable
+    {
+        HRESULT CreateFromComment([in] HSTRING productComment, [out, retval] Windows.Web.Http.Headers.HttpProductInfoHeaderValue** value);
+        HRESULT CreateFromNameWithVersion([in] HSTRING productName, [in] HSTRING productVersion, [out, retval] Windows.Web.Http.Headers.HttpProductInfoHeaderValue** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpProductInfoHeaderValue),
+        uuid(DB7FD857-327A-4E73-81E5-7059A302B042)
+    ]
+    interface IHttpProductInfoHeaderValueStatics : IInspectable
+    {
+        HRESULT Parse([in] HSTRING input, [out, retval] Windows.Web.Http.Headers.HttpProductInfoHeaderValue** result);
+        HRESULT TryParse([in] HSTRING input, [out] Windows.Web.Http.Headers.HttpProductInfoHeaderValue** productInfoHeaderValue, [out, retval] boolean* succeeded);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpRequestHeaderCollection),
+        uuid(AF40329B-B544-469B-86B9-AC3D466FEA36)
+    ]
+    interface IHttpRequestHeaderCollection : IInspectable
+    {
+        [propget] HRESULT Accept([out, retval] Windows.Web.Http.Headers.HttpMediaTypeWithQualityHeaderValueCollection** value);
+        [propget] HRESULT AcceptEncoding([out, retval] Windows.Web.Http.Headers.HttpContentCodingWithQualityHeaderValueCollection** value);
+        [propget] HRESULT AcceptLanguage([out, retval] Windows.Web.Http.Headers.HttpLanguageRangeWithQualityHeaderValueCollection** value);
+        [propget] HRESULT Authorization([out, retval] Windows.Web.Http.Headers.HttpCredentialsHeaderValue** value);
+        [propput] HRESULT Authorization([in] Windows.Web.Http.Headers.HttpCredentialsHeaderValue* value);
+        [propget] HRESULT CacheControl([out, retval] Windows.Web.Http.Headers.HttpCacheDirectiveHeaderValueCollection** value);
+        [propget] HRESULT Connection([out, retval] Windows.Web.Http.Headers.HttpConnectionOptionHeaderValueCollection** value);
+        [propget] HRESULT Cookie([out, retval] Windows.Web.Http.Headers.HttpCookiePairHeaderValueCollection** value);
+        [propget] HRESULT Date([out, retval] Windows.Foundation.IReference<Windows.Foundation.DateTime>** value);
+        [propput] HRESULT Date([in] Windows.Foundation.IReference<Windows.Foundation.DateTime>* value);
+        [propget] HRESULT Expect([out, retval] Windows.Web.Http.Headers.HttpExpectationHeaderValueCollection** value);
+        [propget] HRESULT From([out, retval] HSTRING* value);
+        [propput] HRESULT From([in] HSTRING value);
+        [propget] HRESULT Host([out, retval] Windows.Networking.HostName** value);
+        [propput] HRESULT Host([in] Windows.Networking.HostName* value);
+        [propget] HRESULT IfModifiedSince([out, retval] Windows.Foundation.IReference<Windows.Foundation.DateTime>** value);
+        [propput] HRESULT IfModifiedSince([in] Windows.Foundation.IReference<Windows.Foundation.DateTime>* value);
+        [propget] HRESULT IfUnmodifiedSince([out, retval] Windows.Foundation.IReference<Windows.Foundation.DateTime>** value);
+        [propput] HRESULT IfUnmodifiedSince([in] Windows.Foundation.IReference<Windows.Foundation.DateTime>* value);
+        [propget] HRESULT MaxForwards([out, retval] Windows.Foundation.IReference<UINT32>** value);
+        [propput] HRESULT MaxForwards([in] Windows.Foundation.IReference<UINT32>* value);
+        [propget] HRESULT ProxyAuthorization([out, retval] Windows.Web.Http.Headers.HttpCredentialsHeaderValue** value);
+        [propput] HRESULT ProxyAuthorization([in] Windows.Web.Http.Headers.HttpCredentialsHeaderValue* value);
+        [propget] HRESULT Referer([out, retval] Windows.Foundation.Uri** value);
+        [propput] HRESULT Referer([in] Windows.Foundation.Uri* value);
+        [propget] HRESULT TransferEncoding([out, retval] Windows.Web.Http.Headers.HttpTransferCodingHeaderValueCollection** value);
+        [propget] HRESULT UserAgent([out, retval] Windows.Web.Http.Headers.HttpProductInfoHeaderValueCollection** value);
+        HRESULT Append([in] HSTRING name, [in] HSTRING value);
+        HRESULT TryAppendWithoutValidation([in] HSTRING name, [in] HSTRING value, [out, retval] boolean* result);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpResponseHeaderCollection),
+        uuid(7A990969-FA3F-41ED-AAC6-BF957975C16B)
+    ]
+    interface IHttpResponseHeaderCollection : IInspectable
+    {
+        [propget] HRESULT Age([out, retval] Windows.Foundation.IReference<Windows.Foundation.TimeSpan>** value);
+        [propput] HRESULT Age([in] Windows.Foundation.IReference<Windows.Foundation.TimeSpan>* value);
+        [propget] HRESULT Allow([out, retval] Windows.Web.Http.Headers.HttpMethodHeaderValueCollection** value);
+        [propget] HRESULT CacheControl([out, retval] Windows.Web.Http.Headers.HttpCacheDirectiveHeaderValueCollection** value);
+        [propget] HRESULT Connection([out, retval] Windows.Web.Http.Headers.HttpConnectionOptionHeaderValueCollection** value);
+        [propget] HRESULT Date([out, retval] Windows.Foundation.IReference<Windows.Foundation.DateTime>** value);
+        [propput] HRESULT Date([in] Windows.Foundation.IReference<Windows.Foundation.DateTime>* value);
+        [propget] HRESULT Location([out, retval] Windows.Foundation.Uri** value);
+        [propput] HRESULT Location([in] Windows.Foundation.Uri* value);
+        [propget] HRESULT ProxyAuthenticate([out, retval] Windows.Web.Http.Headers.HttpChallengeHeaderValueCollection** value);
+        [propget] HRESULT RetryAfter([out, retval] Windows.Web.Http.Headers.HttpDateOrDeltaHeaderValue** value);
+        [propput] HRESULT RetryAfter([in] Windows.Web.Http.Headers.HttpDateOrDeltaHeaderValue* value);
+        [propget] HRESULT TransferEncoding([out, retval] Windows.Web.Http.Headers.HttpTransferCodingHeaderValueCollection** value);
+        [propget] HRESULT WwwAuthenticate([out, retval] Windows.Web.Http.Headers.HttpChallengeHeaderValueCollection** value);
+        HRESULT Append([in] HSTRING name, [in] HSTRING value);
+        HRESULT TryAppendWithoutValidation([in] HSTRING name, [in] HSTRING value, [out, retval] boolean* result);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpTransferCodingHeaderValue),
+        uuid(436F32F9-3DED-42BD-B38A-5496A2511CE6)
+    ]
+    interface IHttpTransferCodingHeaderValue : IInspectable
+    {
+        [propget] HRESULT Parameters([out, retval] Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpNameValueHeaderValue*>** value);
+        [propget] HRESULT Value([out, retval] HSTRING* value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpTransferCodingHeaderValueCollection),
+        uuid(202C8C34-2C03-49B8-9665-73E27CB2FC79)
+    ]
+    interface IHttpTransferCodingHeaderValueCollection : IInspectable
+    {
+        HRESULT ParseAdd([in] HSTRING input);
+        HRESULT TryParseAdd([in] HSTRING input, [out, retval] boolean* result);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpTransferCodingHeaderValue),
+        uuid(BB62DFFC-E361-4F08-8E4F-C9E723DE703B)
+    ]
+    interface IHttpTransferCodingHeaderValueFactory : IInspectable
+    {
+        HRESULT Create([in] HSTRING input, [out, retval] Windows.Web.Http.Headers.HttpTransferCodingHeaderValue** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Headers.HttpTransferCodingHeaderValue),
+        uuid(6AB8892A-1A98-4D32-A906-7470A9875CE5)
+    ]
+    interface IHttpTransferCodingHeaderValueStatics : IInspectable
+    {
+        HRESULT Parse([in] HSTRING input, [out, retval] Windows.Web.Http.Headers.HttpTransferCodingHeaderValue** result);
+        HRESULT TryParse([in] HSTRING input, [out] Windows.Web.Http.Headers.HttpTransferCodingHeaderValue** transferCodingHeaderValue, [out, retval] boolean* succeeded);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpCacheDirectiveHeaderValueCollection
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpCacheDirectiveHeaderValueCollection;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpNameValueHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.Headers.HttpNameValueHeaderValue*>;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Web.Http.Headers.IHttpChallengeHeaderValueFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        static(Windows.Web.Http.Headers.IHttpChallengeHeaderValueStatics, Windows.Foundation.UniversalApiContract, 1.0),
+        threading(both)
+    ]
+    runtimeclass HttpChallengeHeaderValue
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpChallengeHeaderValue;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpChallengeHeaderValueCollection
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpChallengeHeaderValueCollection;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpChallengeHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.Headers.HttpChallengeHeaderValue*>;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Web.Http.Headers.IHttpConnectionOptionHeaderValueFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        static(Windows.Web.Http.Headers.IHttpConnectionOptionHeaderValueStatics, Windows.Foundation.UniversalApiContract, 1.0),
+        threading(both)
+    ]
+    runtimeclass HttpConnectionOptionHeaderValue
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpConnectionOptionHeaderValue;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpConnectionOptionHeaderValueCollection
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpConnectionOptionHeaderValueCollection;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpConnectionOptionHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.Headers.HttpConnectionOptionHeaderValue*>;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Web.Http.Headers.IHttpContentCodingHeaderValueFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        static(Windows.Web.Http.Headers.IHttpContentCodingHeaderValueStatics, Windows.Foundation.UniversalApiContract, 1.0),
+        threading(both)
+    ]
+    runtimeclass HttpContentCodingHeaderValue
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpContentCodingHeaderValue;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpContentCodingHeaderValueCollection
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpContentCodingHeaderValueCollection;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpContentCodingHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.Headers.HttpContentCodingHeaderValue*>;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Web.Http.Headers.IHttpContentCodingWithQualityHeaderValueFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        static(Windows.Web.Http.Headers.IHttpContentCodingWithQualityHeaderValueStatics, Windows.Foundation.UniversalApiContract, 1.0),
+        threading(both)
+    ]
+    runtimeclass HttpContentCodingWithQualityHeaderValue
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpContentCodingWithQualityHeaderValue;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpContentCodingWithQualityHeaderValueCollection
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpContentCodingWithQualityHeaderValueCollection;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpContentCodingWithQualityHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.Headers.HttpContentCodingWithQualityHeaderValue*>;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Web.Http.Headers.IHttpContentDispositionHeaderValueFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        static(Windows.Web.Http.Headers.IHttpContentDispositionHeaderValueStatics, Windows.Foundation.UniversalApiContract, 1.0),
+        threading(both)
+    ]
+    runtimeclass HttpContentDispositionHeaderValue
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpContentDispositionHeaderValue;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        threading(both)
+    ]
+    runtimeclass HttpContentHeaderCollection
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpContentHeaderCollection;
+        interface Windows.Foundation.Collections.IMap<HSTRING, HSTRING>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Foundation.Collections.IKeyValuePair<HSTRING, HSTRING>*>;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Web.Http.Headers.IHttpContentRangeHeaderValueFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        static(Windows.Web.Http.Headers.IHttpContentRangeHeaderValueStatics, Windows.Foundation.UniversalApiContract, 1.0),
+        threading(both)
+    ]
+    runtimeclass HttpContentRangeHeaderValue
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpContentRangeHeaderValue;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Web.Http.Headers.IHttpCookiePairHeaderValueFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        static(Windows.Web.Http.Headers.IHttpCookiePairHeaderValueStatics, Windows.Foundation.UniversalApiContract, 1.0),
+        threading(both)
+    ]
+    runtimeclass HttpCookiePairHeaderValue
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpCookiePairHeaderValue;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpCookiePairHeaderValueCollection
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpCookiePairHeaderValueCollection;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpCookiePairHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.Headers.HttpCookiePairHeaderValue*>;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Web.Http.Headers.IHttpCredentialsHeaderValueFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        static(Windows.Web.Http.Headers.IHttpCredentialsHeaderValueStatics, Windows.Foundation.UniversalApiContract, 1.0),
+        threading(both)
+    ]
+    runtimeclass HttpCredentialsHeaderValue
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpCredentialsHeaderValue;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        static(Windows.Web.Http.Headers.IHttpDateOrDeltaHeaderValueStatics, Windows.Foundation.UniversalApiContract, 1.0),
+        threading(both)
+    ]
+    runtimeclass HttpDateOrDeltaHeaderValue
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpDateOrDeltaHeaderValue;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Web.Http.Headers.IHttpExpectationHeaderValueFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        static(Windows.Web.Http.Headers.IHttpExpectationHeaderValueStatics, Windows.Foundation.UniversalApiContract, 1.0),
+        threading(both)
+    ]
+    runtimeclass HttpExpectationHeaderValue
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpExpectationHeaderValue;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpExpectationHeaderValueCollection
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpExpectationHeaderValueCollection;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpExpectationHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.Headers.HttpExpectationHeaderValue*>;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpLanguageHeaderValueCollection
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpLanguageHeaderValueCollection;
+        interface Windows.Foundation.Collections.IVector<Windows.Globalization.Language*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Globalization.Language*>;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Web.Http.Headers.IHttpLanguageRangeWithQualityHeaderValueFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        static(Windows.Web.Http.Headers.IHttpLanguageRangeWithQualityHeaderValueStatics, Windows.Foundation.UniversalApiContract, 1.0),
+        threading(both)
+    ]
+    runtimeclass HttpLanguageRangeWithQualityHeaderValue
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpLanguageRangeWithQualityHeaderValue;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpLanguageRangeWithQualityHeaderValueCollection
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpLanguageRangeWithQualityHeaderValueCollection;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpLanguageRangeWithQualityHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.Headers.HttpLanguageRangeWithQualityHeaderValue*>;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Web.Http.Headers.IHttpMediaTypeHeaderValueFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        static(Windows.Web.Http.Headers.IHttpMediaTypeHeaderValueStatics, Windows.Foundation.UniversalApiContract, 1.0),
+        threading(both)
+    ]
+    runtimeclass HttpMediaTypeHeaderValue
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpMediaTypeHeaderValue;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Web.Http.Headers.IHttpMediaTypeWithQualityHeaderValueFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        static(Windows.Web.Http.Headers.IHttpMediaTypeWithQualityHeaderValueStatics, Windows.Foundation.UniversalApiContract, 1.0),
+        threading(both)
+    ]
+    runtimeclass HttpMediaTypeWithQualityHeaderValue
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpMediaTypeWithQualityHeaderValue;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpMediaTypeWithQualityHeaderValueCollection
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpMediaTypeWithQualityHeaderValueCollection;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpMediaTypeWithQualityHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.Headers.HttpMediaTypeWithQualityHeaderValue*>;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpMethodHeaderValueCollection
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpMethodHeaderValueCollection;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.HttpMethod*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.HttpMethod*>;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Web.Http.Headers.IHttpNameValueHeaderValueFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        static(Windows.Web.Http.Headers.IHttpNameValueHeaderValueStatics, Windows.Foundation.UniversalApiContract, 1.0),
+        threading(both)
+    ]
+    runtimeclass HttpNameValueHeaderValue
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpNameValueHeaderValue;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Web.Http.Headers.IHttpProductHeaderValueFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        static(Windows.Web.Http.Headers.IHttpProductHeaderValueStatics, Windows.Foundation.UniversalApiContract, 1.0),
+        threading(both)
+    ]
+    runtimeclass HttpProductHeaderValue
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpProductHeaderValue;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Web.Http.Headers.IHttpProductInfoHeaderValueFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        static(Windows.Web.Http.Headers.IHttpProductInfoHeaderValueStatics, Windows.Foundation.UniversalApiContract, 1.0),
+        threading(both)
+    ]
+    runtimeclass HttpProductInfoHeaderValue
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpProductInfoHeaderValue;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpProductInfoHeaderValueCollection
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpProductInfoHeaderValueCollection;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpProductInfoHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.Headers.HttpProductInfoHeaderValue*>;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpRequestHeaderCollection
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpRequestHeaderCollection;
+        interface Windows.Foundation.Collections.IMap<HSTRING, HSTRING>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Foundation.Collections.IKeyValuePair<HSTRING, HSTRING>*>;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpResponseHeaderCollection
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpResponseHeaderCollection;
+        interface Windows.Foundation.Collections.IMap<HSTRING, HSTRING>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Foundation.Collections.IKeyValuePair<HSTRING, HSTRING>*>;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        activatable(Windows.Web.Http.Headers.IHttpTransferCodingHeaderValueFactory, Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        static(Windows.Web.Http.Headers.IHttpTransferCodingHeaderValueStatics, Windows.Foundation.UniversalApiContract, 1.0),
+        threading(both)
+    ]
+    runtimeclass HttpTransferCodingHeaderValue
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpTransferCodingHeaderValue;
+        interface Windows.Foundation.IStringable;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpTransferCodingHeaderValueCollection
+    {
+        [default] interface Windows.Web.Http.Headers.IHttpTransferCodingHeaderValueCollection;
+        interface Windows.Foundation.Collections.IVector<Windows.Web.Http.Headers.HttpTransferCodingHeaderValue*>;
+        interface Windows.Foundation.Collections.IIterable<Windows.Web.Http.Headers.HttpTransferCodingHeaderValue*>;
+        interface Windows.Foundation.IStringable;
+    }
+}
+
+namespace Windows.Web.Http.Filters {
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Filters.HttpBaseProtocolFilter),
+        uuid(71C89B09-E131-4B54-A53C-EB43FF37E9BB)
+    ]
+    interface IHttpBaseProtocolFilter : IInspectable
+    {
+        [propget] HRESULT AllowAutoRedirect([out, retval] boolean* value);
+        [propput] HRESULT AllowAutoRedirect([in] boolean value);
+        [propget] HRESULT AllowUI([out, retval] boolean* value);
+        [propput] HRESULT AllowUI([in] boolean value);
+        [propget] HRESULT AutomaticDecompression([out, retval] boolean* value);
+        [propput] HRESULT AutomaticDecompression([in] boolean value);
+        [propget] HRESULT CacheControl([out, retval] Windows.Web.Http.Filters.HttpCacheControl** value);
+        [propget] HRESULT CookieManager([out, retval] Windows.Web.Http.HttpCookieManager** value);
+        [propget] HRESULT ClientCertificate([out, retval] Windows.Security.Cryptography.Certificates.Certificate** value);
+        [propput] HRESULT ClientCertificate([in] Windows.Security.Cryptography.Certificates.Certificate* value);
+        [propget] HRESULT IgnorableServerCertificateErrors([out, retval] Windows.Foundation.Collections.IVector<Windows.Security.Cryptography.Certificates.ChainValidationResult>** value);
+        [propget] HRESULT MaxConnectionsPerServer([out, retval] UINT32* value);
+        [propput] HRESULT MaxConnectionsPerServer([in] UINT32 value);
+        [propget] HRESULT ProxyCredential([out, retval] Windows.Security.Credentials.PasswordCredential** value);
+        [propput] HRESULT ProxyCredential([in] Windows.Security.Credentials.PasswordCredential* value);
+        [propget] HRESULT ServerCredential([out, retval] Windows.Security.Credentials.PasswordCredential** value);
+        [propput] HRESULT ServerCredential([in] Windows.Security.Credentials.PasswordCredential* value);
+        [propget] HRESULT UseProxy([out, retval] boolean* value);
+        [propput] HRESULT UseProxy([in] boolean value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Filters.HttpBaseProtocolFilter),
+        uuid(2EC30013-9427-4900-A017-FA7DA3B5C9AE)
+    ]
+    interface IHttpBaseProtocolFilter2 : IInspectable
+    {
+        [propget] HRESULT MaxVersion([out, retval] Windows.Web.Http.HttpVersion* value);
+        [propput] HRESULT MaxVersion([in] Windows.Web.Http.HttpVersion value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 2.0),
+        exclusiveto(Windows.Web.Http.Filters.HttpBaseProtocolFilter),
+        uuid(D43F4D4C-BD42-43AE-8717-AD2C8F4B2937)
+    ]
+    interface IHttpBaseProtocolFilter3 : IInspectable
+    {
+        [propget] HRESULT CookieUsageBehavior([out, retval] Windows.Web.Http.Filters.HttpCookieUsageBehavior* value);
+        [propput] HRESULT CookieUsageBehavior([in] Windows.Web.Http.Filters.HttpCookieUsageBehavior value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 3.0),
+        exclusiveto(Windows.Web.Http.Filters.HttpBaseProtocolFilter),
+        uuid(9FE36CCF-2983-4893-941F-EB518CA8CEF9)
+    ]
+    interface IHttpBaseProtocolFilter4 : IInspectable
+    {
+        [eventadd] HRESULT ServerCustomValidationRequested([in] Windows.Foundation.TypedEventHandler<Windows.Web.Http.Filters.HttpBaseProtocolFilter*, Windows.Web.Http.Filters.HttpServerCustomValidationRequestedEventArgs*>* handler, [out, retval] EventRegistrationToken* token);
+        [eventremove] HRESULT ServerCustomValidationRequested([in] EventRegistrationToken token);
+        HRESULT ClearAuthenticationCache();
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 8.0),
+        exclusiveto(Windows.Web.Http.Filters.HttpBaseProtocolFilter),
+        uuid(416E4993-31E3-4816-BF09-E018EE8DC1F5)
+    ]
+    interface IHttpBaseProtocolFilter5 : IInspectable
+    {
+        [propget] HRESULT User([out, retval] Windows.System.User** value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 8.0),
+        exclusiveto(Windows.Web.Http.Filters.HttpBaseProtocolFilter),
+        uuid(6D4DEE0C-E908-494E-B5A3-1263C9B8242A)
+    ]
+    interface IHttpBaseProtocolFilterStatics : IInspectable
+    {
+        HRESULT CreateForUser([in] Windows.System.User* user, [out, retval] Windows.Web.Http.Filters.HttpBaseProtocolFilter** result);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        exclusiveto(Windows.Web.Http.Filters.HttpCacheControl),
+        uuid(C77E1CB4-3CEA-4EB5-AC85-04E186E63AB7)
+    ]
+    interface IHttpCacheControl : IInspectable
+    {
+        [propget] HRESULT ReadBehavior([out, retval] Windows.Web.Http.Filters.HttpCacheReadBehavior* value);
+        [propput] HRESULT ReadBehavior([in] Windows.Web.Http.Filters.HttpCacheReadBehavior value);
+        [propget] HRESULT WriteBehavior([out, retval] Windows.Web.Http.Filters.HttpCacheWriteBehavior* value);
+        [propput] HRESULT WriteBehavior([in] Windows.Web.Http.Filters.HttpCacheWriteBehavior value);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        uuid(A4CB6DD5-0902-439E-BFD7-E12552B165CE)
+    ]
+    interface IHttpFilter : IInspectable
+        requires
+            Windows.Foundation.IClosable
+    {
+        HRESULT SendRequestAsync([in] Windows.Web.Http.HttpRequestMessage* request, [out, retval] Windows.Foundation.IAsyncOperationWithProgress<Windows.Web.Http.HttpResponseMessage*, Windows.Web.Http.HttpProgress>** operation);
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 3.0),
+        exclusiveto(Windows.Web.Http.Filters.HttpServerCustomValidationRequestedEventArgs),
+        uuid(3165FE32-E7DD-48B7-A361-939C750E63CC)
+    ]
+    interface IHttpServerCustomValidationRequestedEventArgs : IInspectable
+    {
+        [propget] HRESULT RequestMessage([out, retval] Windows.Web.Http.HttpRequestMessage** value);
+        [propget] HRESULT ServerCertificate([out, retval] Windows.Security.Cryptography.Certificates.Certificate** value);
+        [propget] HRESULT ServerCertificateErrorSeverity([out, retval] Windows.Networking.Sockets.SocketSslErrorSeverity* value);
+        [propget] HRESULT ServerCertificateErrors([out, retval] Windows.Foundation.Collections.IVectorView<Windows.Security.Cryptography.Certificates.ChainValidationResult>** value);
+        [propget] HRESULT ServerIntermediateCertificates([out, retval] Windows.Foundation.Collections.IVectorView<Windows.Security.Cryptography.Certificates.Certificate*>** value);
+        HRESULT Reject();
+        HRESULT GetDeferral([out, retval] Windows.Foundation.Deferral** result);
+    }
+
+    [
+        activatable(Windows.Foundation.UniversalApiContract, 1.0),
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile),
+        static(Windows.Web.Http.Filters.IHttpBaseProtocolFilterStatics, Windows.Foundation.UniversalApiContract, 8.0),
+        threading(both)
+    ]
+    runtimeclass HttpBaseProtocolFilter
+    {
+        [default] interface Windows.Web.Http.Filters.IHttpBaseProtocolFilter;
+        [contract(Windows.Foundation.UniversalApiContract, 1.0)] interface Windows.Web.Http.Filters.IHttpBaseProtocolFilter2;
+        [contract(Windows.Foundation.UniversalApiContract, 2.0)] interface Windows.Web.Http.Filters.IHttpBaseProtocolFilter3;
+        [contract(Windows.Foundation.UniversalApiContract, 3.0)] interface Windows.Web.Http.Filters.IHttpBaseProtocolFilter4;
+        [contract(Windows.Foundation.UniversalApiContract, 8.0)] interface Windows.Web.Http.Filters.IHttpBaseProtocolFilter5;
+        interface Windows.Web.Http.Filters.IHttpFilter;
+        interface Windows.Foundation.IClosable;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 1.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpCacheControl
+    {
+        [default] interface Windows.Web.Http.Filters.IHttpCacheControl;
+    }
+
+    [
+        contract(Windows.Foundation.UniversalApiContract, 3.0),
+        marshaling_behavior(agile)
+    ]
+    runtimeclass HttpServerCustomValidationRequestedEventArgs
+    {
+        [default] interface Windows.Web.Http.Filters.IHttpServerCustomValidationRequestedEventArgs;
+    }
+}

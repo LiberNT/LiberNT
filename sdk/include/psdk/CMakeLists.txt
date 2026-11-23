@@ -263,6 +263,7 @@ list(APPEND SOURCE
     windows.security.authorization.appcapabilityaccess.idl
     windows.security.credentials.idl
     windows.security.credentials.ui.idl
+    windows.security.cryptography.certificates.idl
     windows.security.cryptography.core.idl
     windows.security.cryptography.idl
     windows.security.enterprisedata.idl
@@ -293,6 +294,7 @@ list(APPEND SOURCE
     windows.ui.xaml.hosting.desktopwindowxamlsource.idl
     windows.ui.xaml.idl
     windows.ui.xaml.interop.idl
+    windows.web.http.idl
     windowscontracts.idl
     wincodec.idl
     wincodecsdk.idl

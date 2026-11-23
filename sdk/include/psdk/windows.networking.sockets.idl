@@ -24,6 +24,7 @@ import "windowscontracts.idl";
 
 namespace Windows.Networking.Sockets {
     typedef enum SocketProtectionLevel SocketProtectionLevel;
+    typedef enum SocketSslErrorSeverity SocketSslErrorSeverity;
 
     [contract(Windows.Foundation.UniversalApiContract, 1.0)]
     enum SocketProtectionLevel
@@ -47,5 +48,13 @@ namespace Windows.Networking.Sockets {
         Unspecified = 9,
         [contract(Windows.Foundation.UniversalApiContract, 16.0)]
         Tls13 = 10,
+    };
+
+    [contract(Windows.Foundation.UniversalApiContract, 1.0)]
+    enum SocketSslErrorSeverity
+    {
+        None = 0,
+        Ignorable = 1,
+        Fatal = 2,
     };
 }
