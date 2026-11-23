@@ -98,17 +98,6 @@ typedef struct _FAT32_BOOTSECTOR
 } FAT32_BOOTSECTOR, *PFAT32_BOOTSECTOR;
 C_ASSERT(sizeof(FAT32_BOOTSECTOR) == FAT32_BOOTSECTOR_SIZE);
 
-typedef struct _BTRFS_BOOTSECTOR
-{
-    UCHAR JumpBoot[3];
-    UCHAR ChunkMapSize;
-    UCHAR BootDrive;
-    ULONGLONG PartitionStartLBA;
-    UCHAR Fill[1521]; // 1536 - 15
-    USHORT BootSectorMagic;
-} BTRFS_BOOTSECTOR, *PBTRFS_BOOTSECTOR;
-C_ASSERT(sizeof(BTRFS_BOOTSECTOR) == BTRFS_BOOTSECTOR_SIZE);
-
 typedef struct _NTFS_BOOTSECTOR
 {
     UCHAR Jump[3];
@@ -571,113 +560,6 @@ InstallFat32BootCode(
     if (!NT_SUCCESS(Status))
     {
         DPRINT1("NtWriteFile() failed (Status %lx)\n", Status);
-    }
-
-    /* Free the new bootsector */
-    FreeBootCode(&NewBootSector);
-
-    return Status;
-}
-
-NTSTATUS
-InstallBtrfsBootCode(
-    IN PCWSTR SrcPath,          // BTRFS bootsector source file (on the installation medium)
-    IN HANDLE DstPath,          // Where to save the bootsector built from the source + partition information
-    IN HANDLE RootPartition)    // Partition holding the (old) BTRFS information
-{
-    NTSTATUS Status;
-    NTSTATUS LockStatus;
-    UNICODE_STRING Name;
-    IO_STATUS_BLOCK IoStatusBlock;
-    LARGE_INTEGER FileOffset;
-    PARTITION_INFORMATION_EX PartInfo;
-    BOOTCODE NewBootSector = {0};
-
-    /* Allocate and read the new bootsector from SrcPath */
-    RtlInitUnicodeString(&Name, SrcPath);
-    Status = ReadBootCodeFromFile(&NewBootSector,
-                                  &Name,
-                                  BTRFS_BOOTSECTOR_SIZE);
-    if (!NT_SUCCESS(Status))
-        return Status;
-
-    /*
-     * The BTRFS driver requires the volume to be locked in order to modify
-     * the first sectors of the partition, even though they are outside the
-     * file-system space / in the reserved area (they are situated before
-     * the super-block at 0x1000) and is in principle allowed by the NT
-     * storage stack.
-     * So we lock here in order to write the bootsector at sector 0.
-     * If locking fails, we ignore and continue nonetheless.
-     */
-    LockStatus = NtFsControlFile(DstPath,
-                                 NULL,
-                                 NULL,
-                                 NULL,
-                                 &IoStatusBlock,
-                                 FSCTL_LOCK_VOLUME,
-                                 NULL,
-                                 0,
-                                 NULL,
-                                 0);
-    if (!NT_SUCCESS(LockStatus))
-    {
-        DPRINT1("WARNING: Failed to lock BTRFS volume for writing bootsector! Operations may fail! (Status 0x%lx)\n", LockStatus);
-    }
-
-    /* Obtain partition info and write it to the bootsector */
-    Status = NtDeviceIoControlFile(RootPartition,
-                                   NULL,
-                                   NULL,
-                                   NULL,
-                                   &IoStatusBlock,
-                                   IOCTL_DISK_GET_PARTITION_INFO_EX,
-                                   NULL,
-                                   0,
-                                   &PartInfo,
-                                   sizeof(PartInfo));
-    if (!NT_SUCCESS(Status))
-    {
-        DPRINT1("IOCTL_DISK_GET_PARTITION_INFO_EX failed (Status %lx)\n", Status);
-        goto Quit;
-    }
-
-    /* Write new bootsector to RootPath */
-    ((PBTRFS_BOOTSECTOR)NewBootSector.BootCode)->PartitionStartLBA =
-        PartInfo.StartingOffset.QuadPart / SECTORSIZE;
-
-    /* Write sector 0 */
-    FileOffset.QuadPart = 0ULL;
-    Status = NtWriteFile(DstPath,
-                         NULL,
-                         NULL,
-                         NULL,
-                         &IoStatusBlock,
-                         NewBootSector.BootCode,
-                         NewBootSector.Length,
-                         &FileOffset,
-                         NULL);
-    if (!NT_SUCCESS(Status))
-    {
-        DPRINT1("NtWriteFile() failed (Status %lx)\n", Status);
-        goto Quit;
-    }
-
-Quit:
-    /* Unlock the volume */
-    LockStatus = NtFsControlFile(DstPath,
-                                 NULL,
-                                 NULL,
-                                 NULL,
-                                 &IoStatusBlock,
-                                 FSCTL_UNLOCK_VOLUME,
-                                 NULL,
-                                 0,
-                                 NULL,
-                                 0);
-    if (!NT_SUCCESS(LockStatus))
-    {
-        DPRINT1("Failed to unlock BTRFS volume (Status 0x%lx)\n", LockStatus);
     }
 
     /* Free the new bootsector */

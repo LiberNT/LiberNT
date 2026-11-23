@@ -449,6 +449,10 @@ if(ARCH STREQUAL "amd64" OR ARCH STREQUAL "i386")
             ${CMAKE_CURRENT_BINARY_DIR}/etfsboot.com
             0)
         add_dependencies(bootmgrbios biosmbr biosfat32 biosetfs)
+
+        add_cd_file(TARGET bootmgrbios FILE ${CMAKE_CURRENT_BINARY_DIR}/bootmgr DESTINATION reactos/Boot/PCAT NO_CAB FOR all)
+        add_cd_file(TARGET biosmbr FILE ${CMAKE_CURRENT_BINARY_DIR}/mbr.bin DESTINATION reactos/Boot/PCAT NO_CAB FOR all)
+        add_cd_file(TARGET biosfat32 FILE ${CMAKE_CURRENT_BINARY_DIR}/fat32.bin DESTINATION reactos/Boot/PCAT NO_CAB FOR all)
     endif()
     add_dependencies(bootloader bootmgrbios winloadpcat)
 endif()
