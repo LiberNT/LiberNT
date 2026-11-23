@@ -244,6 +244,87 @@ void DisplayMessage(BOOL bConsole, BOOL bSilent, LPCTSTR lpMessage, LPCTSTR lpTi
 		_tprintf(_T("%s: %s\n\n"),lpTitle,lpMessage);
 }
 
+static LPCWSTR SkipProgramName(LPCWSTR lpCommandLine)
+{
+	LPCWSTR p = lpCommandLine;
+
+	if (*p == L'"')
+	{
+		for (p++; *p != UNICODE_NULL && *p != L'"'; p++);
+		if (*p == L'"')
+			p++;
+		return p;
+	}
+	while (*p != UNICODE_NULL && *p != L' ' && *p != L'\t')
+		p++;
+	return p;
+}
+
+static BOOL IsDllFor32BitMachine(LPCWSTR lpDllName)
+{
+	MEMORY_BASIC_INFORMATION Info;
+	PIMAGE_DOS_HEADER DosHeader;
+	PIMAGE_NT_HEADERS NtHeaders;
+	HMODULE hImage;
+	SIZE_T cbMapped;
+	BOOL bResult = FALSE;
+
+	hImage = LoadLibraryExW(lpDllName, NULL, LOAD_LIBRARY_AS_DATAFILE);
+	if (hImage == NULL)
+		return FALSE;
+	DosHeader = (PIMAGE_DOS_HEADER)((ULONG_PTR)hImage & ~(ULONG_PTR)3);
+	if (VirtualQuery(DosHeader, &Info, sizeof(Info)) &&
+	    DosHeader->e_magic == IMAGE_DOS_SIGNATURE && DosHeader->e_lfanew > 0)
+	{
+		cbMapped = Info.RegionSize - (SIZE_T)((PBYTE)DosHeader - (PBYTE)Info.BaseAddress);
+		if ((SIZE_T)DosHeader->e_lfanew + FIELD_OFFSET(IMAGE_NT_HEADERS, OptionalHeader) <= cbMapped)
+		{
+			NtHeaders = (PIMAGE_NT_HEADERS)((PBYTE)DosHeader + DosHeader->e_lfanew);
+			bResult = NtHeaders->Signature == IMAGE_NT_SIGNATURE &&
+			          (NtHeaders->FileHeader.Characteristics & IMAGE_FILE_32BIT_MACHINE);
+		}
+	}
+	FreeLibrary(hImage);
+	return bResult;
+}
+
+/* A 64-bit regsvr32 gives a 32-bit DLL to the WoW64 regsvr32 with the arguments after its own program name, verbatim. */
+static BOOL RunWow64RegSvr32(LPCWSTR lpDllName, DWORD dwLoadError, int *pnExitCode)
+{
+	WCHAR szRegSvr32[MAX_PATH];
+	PROCESS_INFORMATION ProcessInfo;
+	STARTUPINFOW StartupInfo;
+	LPWSTR lpArguments;
+	DWORD dwExitCode;
+	UINT cchDirectory;
+	BOOL bResult;
+
+	/* TODO: hand a 64-bit DLL from the WoW64 regsvr32 to the native one */
+	if (sizeof(void *) < 8 || dwLoadError != ERROR_BAD_EXE_FORMAT || !IsDllFor32BitMachine(lpDllName))
+		return FALSE;
+	cchDirectory = GetSystemWow64DirectoryW(szRegSvr32, _countof(szRegSvr32));
+	if (cchDirectory == 0 || cchDirectory + sizeof("\\regsvr32.exe") > _countof(szRegSvr32))
+		return FALSE;
+	wcscat(szRegSvr32, L"\\regsvr32.exe");
+
+	lpArguments = _wcsdup(SkipProgramName(GetCommandLineW()));
+	if (lpArguments == NULL)
+		return FALSE;
+	ZeroMemory(&StartupInfo, sizeof(StartupInfo));
+	StartupInfo.cb = sizeof(StartupInfo);
+	bResult = CreateProcessW(szRegSvr32, lpArguments, NULL, NULL, FALSE, 0, NULL, NULL, &StartupInfo, &ProcessInfo);
+	free(lpArguments);
+	if (!bResult)
+		return FALSE;
+	CloseHandle(ProcessInfo.hThread);
+	WaitForSingleObject(ProcessInfo.hProcess, INFINITE);
+	if (!GetExitCodeProcess(ProcessInfo.hProcess, &dwExitCode))
+		dwExitCode = EXITCODE_LOADERROR;
+	CloseHandle(ProcessInfo.hProcess);
+	*pnExitCode = (int)dwExitCode;
+	return TRUE;
+}
+
 int WINAPI _tWinMain(
   HINSTANCE hInstance,
   HINSTANCE hPrevInstance,
@@ -466,6 +547,8 @@ int WINAPI _tWinMain(
 				// The dll could not be loaded; display an error message
 				dwErr = GetLastError();
 				SetErrorMode(fuOldErrorMode);
+				if (RunWow64RegSvr32(lptDllName, dwErr, &nRetValue))
+					break;
 				lptMsgBuffer = (LPTSTR)malloc((_tcslen(DllNotLoaded) + 2 + _tcslen(lptDllName) + 1) * sizeof(TCHAR));
 				_stprintf(lptMsgBuffer,DllNotLoaded,lptDllName,dwErr);
 				DisplayMessage(bConsole,bSilent,lptMsgBuffer,ModuleTitle,MB_ICONEXCLAMATION);
