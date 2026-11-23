@@ -272,9 +272,12 @@ set(ISO_BOOT_FILES_OPTIONS
 # ISO_BOOT_OPTIONS
 
 # BIOS-based PC boot entry (x86/x64 only)
-if(ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64")
+if(FREELDR_HAS_BIOS_BOOT)
     set(ISO_BOOT_OPTIONS
         -eltorito-platform x86 -eltorito-boot loader/isoboot.bin -no-emul-boot -boot-load-size 4)
+elseif((ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64") AND NOT MSVC)
+    set(ISO_BOOT_OPTIONS
+        -eltorito-platform x86 -eltorito-boot boot/etfsboot.com -no-emul-boot -boot-load-size 4)
 endif()
 
 # EFI boot entry
@@ -847,6 +850,17 @@ if(FREELDR_HAS_BIOS_BOOT)
     list(APPEND _liberntimg_mbr_args -mbr ${_dosmbr_file})
     list(APPEND _liberntimg_deps dosmbr)
 endif()
+if((ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64") AND NOT MSVC)
+    set(_preinstall_boot_partition_fs fat32)
+    list(APPEND _preinstall_boot_partition_options -boot ${REACTOS_BINARY_DIR}/bootloader/fat32.bin)
+    list(APPEND _preinstall_boot_partition_files
+        -add ${REACTOS_BINARY_DIR}/bootloader/bootmgr bootmgr
+        -mkdir Boot
+        -add ${REACTOS_BINARY_DIR}/bootloader/image/standardpcat/BCD Boot/BCD)
+    list(APPEND _preinstall_partition_deps bootmgrbios bootloaderstandardpcatbcd)
+    list(APPEND _liberntimg_mbr_args -mbr ${REACTOS_BINARY_DIR}/bootloader/mbr.bin)
+    list(APPEND _liberntimg_deps bootmgrbios)
+endif()
 if(DEFINED EFI_PLATFORM_ID)
     list(APPEND _preinstall_boot_partition_files
         -mkdir EFI
@@ -1109,6 +1123,14 @@ if(DEFINED EFI_PLATFORM_ID)
         add_cd_file(TARGET bootloader${_uefi_media_store}bcd
                     FILE ${REACTOS_BINARY_DIR}/bootloader/image/${_uefi_media_store}/BCD
                     DESTINATION loader NO_CAB NAME_ON_CD media.bcd FOR bootcd)
+    endif()
+    if(BOOTLOADER_UEFI AND (ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64") AND NOT MSVC)
+        add_cd_file(TARGET bootmgrbios FILE ${REACTOS_BINARY_DIR}/bootloader/bootmgr DESTINATION root NO_CAB FOR bootcd)
+        add_cd_file(TARGET bootmgrbios FILE ${REACTOS_BINARY_DIR}/bootloader/etfsboot.com DESTINATION boot NO_CAB FOR bootcd)
+        add_cd_file(TARGET bootloader${_uefi_media_store}pcatbcd
+                    FILE ${REACTOS_BINARY_DIR}/bootloader/image/${_uefi_media_store}/pcat/BCD
+                    DESTINATION boot NO_CAB NAME_ON_CD bcd FOR bootcd)
+        add_cd_file(TARGET winloadpcat DESTINATION boot NO_CAB FOR bootcd)
     endif()
     if(_uefi_driver_files)
         foreach(_driver ${_uefi_driver_files})

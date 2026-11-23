@@ -50,10 +50,10 @@ OslAllocateLoaderBlock(VOID)
     LoaderBlock->Extension = Extension;
     LoaderBlock->OsMajorVersion = (OSL_NT_VERSION >> 8) & 0xFF;
     LoaderBlock->OsMinorVersion = OSL_NT_VERSION & 0xFF;
-    LoaderBlock->FirmwareInformation.FirmwareTypeEfi = 1;
+    LoaderBlock->FirmwareInformation.FirmwareTypeEfi = FwUefiFirmware;
 
     Extension->Size = sizeof(*Extension);
-    Extension->BootViaEFI = 1;
+    Extension->BootViaEFI = FwUefiFirmware;
 
     if (FwGetTime(&Time))
         RtlTimeFieldsToTime(&Time, &Extension->SystemTime);
@@ -248,7 +248,8 @@ OslFinalizeLoaderBlock(
     if (OslAcpiPresent)
         Extension->AcpiTable = (PVOID)1;
     Extension->SMBiosEPSHeader = FwGetSmbiosEntryPoint();
-    OslAddFirmwareResources(LoaderBlock);
+    if (FwUefiFirmware)
+        OslAddFirmwareResources(LoaderBlock);
     OslSetFrameBuffer(Extension);
 
     Extension->LoaderPerformanceData = PaToVa(&OslSystemBlock->LoaderPerformanceData);

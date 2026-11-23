@@ -83,8 +83,9 @@ function(bootloader_efi_application _target _entry)
     add_dependencies(${_target} xdk)
 endfunction()
 
-list(APPEND BOOTLIB_SOURCE
+list(APPEND BOOTLIB_COMMON_SOURCE
     lib/bcd.c
+    lib/cdfs.c
     lib/disk.c
     lib/entries.c
     lib/exfat.c
@@ -93,6 +94,7 @@ list(APPEND BOOTLIB_SOURCE
     lib/libsupp.c
     lib/ntfs.c
     lib/sha256.c)
+list(APPEND BOOTLIB_SOURCE ${BOOTLIB_COMMON_SOURCE})
 
 if(ARCH STREQUAL "ppc")
     add_asm_files(bootlib_asm ofw/ofwgate.S)
@@ -273,15 +275,21 @@ elseif(ARCH STREQUAL "amd64")
         arch/amd64/resume.S
         arch/amd64/uefiasm.S)
 
-    list(APPEND WINLOAD_SOURCE
+    list(APPEND WINLOAD_ARCH_SOURCE
         arch/amd64/archosl.c)
+    list(APPEND WINLOAD_SOURCE
+        ${WINLOAD_ARCH_SOURCE}
+        uefi/exit.c)
 elseif(ARCH STREQUAL "i386")
     list(APPEND WINLOAD_ASM_SOURCE
         arch/i386/resume.S
         arch/i386/uefiasm.S)
 
-    list(APPEND WINLOAD_SOURCE
+    list(APPEND WINLOAD_ARCH_SOURCE
         arch/i386/archosl.c)
+    list(APPEND WINLOAD_SOURCE
+        ${WINLOAD_ARCH_SOURCE}
+        uefi/exit.c)
 elseif(ARCH STREQUAL "ppc")
     list(APPEND WINLOAD_ASM_SOURCE
         arch/ppc/ppcjump.S)
@@ -299,30 +307,33 @@ if(NOT ARCH STREQUAL "ppc")
         uefi/memory.c)
 endif()
 
+list(APPEND WINLOAD_COMMON_SOURCE
+    ${REACTOS_SOURCE_DIR}/ntos/config/cmboot.c
+    lib/mm.c
+    lib/pe.c
+    winload/hw.c
+    winload/lpb.c
+    winload/main.c
+    winload/memory.c
+    ramdisk/fatformat.c
+    ramdisk/fatwrite.c
+    ramdisk/wim.c
+    winload/options.c
+    winload/ramdisk.c
+    winload/registry.c
+    winload/resume.c
+    winload/smbios.c
+    winload/startup.c
+    winload/httpsync.c
+    winload/install.c)
+
 if(WINLOAD_ASM_SOURCE)
     add_asm_files(winload_asm ${WINLOAD_ASM_SOURCE})
 
     add_executable(winload
         ${winload_asm}
         ${WINLOAD_SOURCE}
-        ${REACTOS_SOURCE_DIR}/ntos/config/cmboot.c
-        lib/mm.c
-        lib/pe.c
-        winload/hw.c
-        winload/lpb.c
-        winload/main.c
-        winload/memory.c
-        ramdisk/fatformat.c
-        ramdisk/fatwrite.c
-        ramdisk/wim.c
-        winload/options.c
-        winload/ramdisk.c
-        winload/registry.c
-        winload/resume.c
-        winload/smbios.c
-        winload/startup.c
-        winload/httpsync.c
-        winload/install.c)
+        ${WINLOAD_COMMON_SOURCE})
     if(ARCH STREQUAL "ppc")
         bootloader_ofw_application(winload 0x00400000)
     else()
@@ -338,6 +349,108 @@ if(WINLOAD_ASM_SOURCE)
         target_link_libraries(winload jh7110disp)
     endif()
     add_cd_file(TARGET winload DESTINATION reactos/system32 FOR all)
+endif()
+
+if(ARCH STREQUAL "amd64" OR ARCH STREQUAL "i386")
+    set(BOOTLOADER_PCAT TRUE)
+    set_property(GLOBAL PROPERTY BOOTLOADER_PCAT TRUE)
+
+    add_library(bootlibpcat
+        ${BOOTLIB_COMMON_SOURCE}
+        arch/x86/comport.c
+        bios/bios.c
+        bios/console.c
+        bios/disk.c
+        bios/memory.c)
+    target_link_libraries(bootlibpcat fatfs cportlib)
+    add_dependencies(bootlibpcat bugcodes asm xdk)
+
+    add_library(bootguipcat
+        ${BOOTGUI_SOURCE}
+        gui/bmui.c
+        gui/bootui.c
+        gui/ftglue.c
+        gui/guisupp.c)
+    target_include_directories(bootguipcat PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+    target_link_libraries(bootguipcat setjmp freetype bootlibpcat)
+    add_dependencies(bootguipcat bugcodes asm xdk)
+
+    function(bootloader_pcat_application _target _base)
+        set_target_properties(${_target} PROPERTIES SUFFIX ".exe")
+        set_image_base(${_target} ${_base})
+        if(NOT MSVC)
+            target_link_options(${_target} PRIVATE -Wl,--exclude-all-symbols,--file-alignment,0x200)
+        endif()
+        if(MSVC OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
+            set_subsystem(${_target} boot_application)
+        else()
+            set_subsystem(${_target} 16)
+        endif()
+        set_entrypoint(${_target} BiosEntry)
+        target_link_libraries(${_target} bootlibpcat blcmlib blrtl libcntpr)
+        if(RUNTIME_CHECKS)
+            target_link_libraries(${_target} runtmchk)
+        endif()
+        if(ARCH STREQUAL "i386")
+            target_link_libraries(${_target} mini_hal)
+        endif()
+        add_dependencies(${_target} xdk)
+    endfunction()
+
+    add_executable(bootmgrpcat
+        bootmgr/app.c
+        bootmgr/logo.c
+        bootmgr/main.c
+        bootmgr/startup.c)
+    set_target_properties(bootmgrpcat PROPERTIES OUTPUT_NAME bootmgr)
+    bootloader_pcat_application(bootmgrpcat 0x00800000)
+    target_link_libraries(bootmgrpcat bootguipcat bootwim)
+    if(MSVC)
+        set_property(TARGET bootmgrpcat PROPERTY C_STANDARD 11)
+    endif()
+
+    add_executable(winloadpcat
+        ${winload_asm}
+        ${WINLOAD_ARCH_SOURCE}
+        ${WINLOAD_COMMON_SOURCE}
+        bios/osl.c)
+    set_target_properties(winloadpcat PROPERTIES OUTPUT_NAME winload)
+    bootloader_pcat_application(winloadpcat 0x01000000)
+    target_link_libraries(winloadpcat bootwim bootntfs)
+    if(MSVC)
+        set_property(TARGET winloadpcat PROPERTY C_STANDARD 11)
+    endif()
+    add_cd_file(TARGET winloadpcat DESTINATION reactos/system32 FOR all)
+
+    if(MSVC)
+        # TODO: assemble the BOOTMGR startup stub with ML; the MSVC build ships no BIOS \bootmgr
+        add_custom_target(bootmgrbios DEPENDS bootmgrpcat)
+    else()
+        CreateBootSectorTarget(bootmgrstub
+            ${CMAKE_CURRENT_SOURCE_DIR}/bios/startup.S
+            ${CMAKE_CURRENT_BINARY_DIR}/bootmgr_stub.bin
+            0)
+        concatenate_files(${CMAKE_CURRENT_BINARY_DIR}/bootmgr
+            ${CMAKE_CURRENT_BINARY_DIR}/bootmgr_stub.bin
+            $<TARGET_FILE:bootmgrpcat>)
+        add_custom_target(bootmgrbios DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/bootmgr)
+        add_dependencies(bootmgrbios bootmgrstub bootmgrpcat)
+
+        CreateBootSectorTarget(biosmbr
+            ${CMAKE_CURRENT_SOURCE_DIR}/bios/mbr.S
+            ${CMAKE_CURRENT_BINARY_DIR}/mbr.bin
+            0)
+        CreateBootSectorTarget(biosfat32
+            ${CMAKE_CURRENT_SOURCE_DIR}/bios/fat32.S
+            ${CMAKE_CURRENT_BINARY_DIR}/fat32.bin
+            0)
+        CreateBootSectorTarget(biosetfs
+            ${CMAKE_CURRENT_SOURCE_DIR}/bios/etfs.S
+            ${CMAKE_CURRENT_BINARY_DIR}/etfsboot.com
+            0)
+        add_dependencies(bootmgrbios biosmbr biosfat32 biosetfs)
+    endif()
+    add_dependencies(bootloader bootmgrbios winloadpcat)
 endif()
 
 add_subdirectory(image)

@@ -61,6 +61,8 @@ typedef VOID (*POFW_APPLICATION_ENTRY)(PVOID Argument);
 
 const USHORT FwApplicationSubsystem = IMAGE_SUBSYSTEM_NATIVE;
 const USHORT FwApplicationMachine = IMAGE_FILE_MACHINE_NATIVE;
+/* FIXME: Open Firmware is not UEFI; the kernel is still told it booted through UEFI */
+const BOOLEAN FwUefiFirmware = TRUE;
 
 POFW_APPLICATION_PARAMETERS OfwParameters;
 OFW_MACHINE_INFO OfwMachine;

@@ -37,6 +37,7 @@ typedef struct _FW_GOP_TRANSFORM
 
 const USHORT FwApplicationSubsystem = IMAGE_SUBSYSTEM_EFI_APPLICATION;
 /* UEFI 2.10 section 2.1.1: 32-bit ARM applications carry the Thumb mixed machine type. */
+const BOOLEAN FwUefiFirmware = TRUE;
 const USHORT FwApplicationMachine = (IMAGE_FILE_MACHINE_NATIVE == IMAGE_FILE_MACHINE_ARMNT) ?
                                     IMAGE_FILE_MACHINE_THUMB : IMAGE_FILE_MACHINE_NATIVE;
 
