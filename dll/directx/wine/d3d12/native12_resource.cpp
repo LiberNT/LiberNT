@@ -385,7 +385,8 @@ HRESULT Native12Device::QueryPlacedResourceSupport(D3D12_FEATURE_DATA_PLACED_RES
     placed.CreationNodeMask = heap.CreationNodeMask;
     placed.VisibleNodeMask = heap.VisibleNodeMask;
     hr = QueryFeature106(D3D12DDI_FEATURE_PLACED_RESOURCE_SUPPORT_INFO_106, &placed, sizeof(placed), &placed.Supported);
-    caps->Supported = placed.Supported;
+    if (SUCCEEDED(hr))
+        caps->Supported = placed.Supported;
     return hr;
 }
 
