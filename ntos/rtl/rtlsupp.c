@@ -111,6 +111,13 @@ RtlpCheckForActiveDebugger(VOID)
 
 BOOLEAN
 NTAPI
+RtlpKernelDebuggerEnabled(VOID)
+{
+    return KdDebuggerEnabled;
+}
+
+BOOLEAN
+NTAPI
 RtlpDebugPrintWanted(
     _Out_ PNTSTATUS Status)
 {

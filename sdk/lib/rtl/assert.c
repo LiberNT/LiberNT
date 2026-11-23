@@ -86,7 +86,7 @@ RtlAssert(
         if (RtlGetNtGlobalFlags() & FLG_DISABLE_DEBUG_PROMPTS)
             RtlRaiseStatus(STATUS_ASSERTION_FAILURE);
 
-        if (!SharedUserData->KdDebuggerEnabled)
+        if (!RtlpKernelDebuggerEnabled())
             return;
 
         Answer = RtlpAskAboutAssertion();

@@ -37,6 +37,13 @@ RtlpCheckForActiveDebugger(VOID)
     return NtCurrentPeb()->BeingDebugged;
 }
 
+BOOLEAN
+NTAPI
+RtlpKernelDebuggerEnabled(VOID)
+{
+    return (SharedUserData->KdDebuggerEnabled & 1) != 0;
+}
+
 ULONG
 NTAPI
 DebugPrint(
