@@ -212,7 +212,6 @@ BEGIN
             UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS | WS_CHILD | WS_VISIBLE, 0, 0, 8, 13
     LTEXT "секунд", IDC_STATIC, 213, 70, 25, 8
     LTEXT "Для редактир. вручную нажмите ""Изменить""", IDC_STATIC, 14, 90, 187, 8
-    PUSHBUTTON "&Изменить", IDC_STRRECEDIT, 188, 87, 50, 14
     GROUPBOX "Отказ системы", IDC_STATIC, 7, 111, 238, 140
     AUTOCHECKBOX "Записать событие в системный &журнал", IDC_STRRECWRITEEVENT, 14, 124, 154, 10
     AUTOCHECKBOX "&Отправить административное оповещение", IDC_STRRECSENDALERT, 14, 138, 165, 10

@@ -212,7 +212,6 @@ BEGIN
             UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS | WS_CHILD | WS_VISIBLE, 0, 0, 8, 13
     LTEXT "sek.", IDC_STATIC, 223, 70, 18, 8
     LTEXT "Klikk på rediger for å redigere oppstartsalternativfilen.", IDC_STATIC, 14, 89, 187, 8
-    PUSHBUTTON "&Rediger", IDC_STRRECEDIT, 188, 87, 50, 14
     GROUPBOX "Systemfeil", IDC_STATIC, 7, 111, 238, 140
     AUTOCHECKBOX "&Skriv en heldelse til systemloggen", IDC_STRRECWRITEEVENT, 14, 124, 148, 10
     AUTOCHECKBOX "Se&nd et administrativt varsel", IDC_STRRECSENDALERT, 14, 138, 148, 10

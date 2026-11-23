@@ -212,7 +212,6 @@ BEGIN
             UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS | WS_CHILD | WS_VISIBLE, 0, 0, 8, 13
     LTEXT "секунди", IDC_STATIC, 215, 70, 25, 8
     LTEXT "За да обработите ръчно файла с пусковите настройки, натиснете „Обработка”.", IDC_STATIC, 14, 87, 187, 16
-    PUSHBUTTON "&Обработка", IDC_STRRECEDIT, 188, 87, 50, 14
     GROUPBOX "Отказ (повреда) на системата", IDC_STATIC, 7, 111, 238, 140
     AUTOCHECKBOX "В&писване на събития в дневника на системата", IDC_STRRECWRITEEVENT, 14, 124, 220, 10
     AUTOCHECKBOX "Из&пращане на административно предупреждение", IDC_STRRECSENDALERT, 14, 138, 220, 10

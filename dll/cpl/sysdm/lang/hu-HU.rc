@@ -214,7 +214,6 @@ BEGIN
             UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS | WS_CHILD | WS_VISIBLE, 0, 0, 8, 13
     LTEXT "másodpercig", IDC_STATIC, 198, 70, 43, 8
     LTEXT "Az indítási beállításokat tartalmazó fájl manuális szerkesztéséhez kattintson a Szerkesztés gombra.", IDC_STATIC, 14, 85, 187, 17
-    PUSHBUTTON "&Szerkesztés", IDC_STRRECEDIT, 188, 87, 50, 14
     GROUPBOX "Rendszerhiba", IDC_STATIC, 7, 111, 238, 140
     AUTOCHECKBOX "&Esemény bejegyzése a rendszernaplóba", IDC_STRRECWRITEEVENT, 14, 124, 148, 10
     AUTOCHECKBOX "&Küldjön adminisztratív riasztást", IDC_STRRECSENDALERT, 14, 138, 148, 10

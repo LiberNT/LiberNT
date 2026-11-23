@@ -212,7 +212,6 @@ BEGIN
             UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS | WS_CHILD | WS_VISIBLE, 0, 0, 8, 13
     LTEXT "sek.", IDC_STATIC, 223, 70, 18, 8
     LTEXT "Për të modifikuar opsionet e dokumentacionit fillestarë manualisht, klikoni modifiko.", IDC_STATIC, 14, 89, 187, 8
-    PUSHBUTTON "&Modifiko", IDC_STRRECEDIT, 188, 87, 50, 14
     GROUPBOX "Sistemi Dështoi", IDC_STATIC, 7, 111, 238, 140
     AUTOCHECKBOX "&Shkruaj një even tek shënimet e sistemit", IDC_STRRECWRITEEVENT, 14, 124, 148, 10
     AUTOCHECKBOX "Dërgo një alarm admi&nistrativ", IDC_STRRECSENDALERT, 14, 138, 148, 10

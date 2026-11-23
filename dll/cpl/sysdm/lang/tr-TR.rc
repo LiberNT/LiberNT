@@ -222,7 +222,6 @@ BEGIN
             UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS | WS_CHILD | WS_VISIBLE, 0, 0, 8, 13
     LTEXT "saniye", IDC_STATIC, 223, 70, 18, 8
     LTEXT "Başlangıç seçenekleri dosyasını elle düzenlemek için Düzenle'ye tıklayınız.", IDC_STATIC, 14, 89, 187, 8
-    PUSHBUTTON "Dü&zenle", IDC_STRRECEDIT, 188, 87, 50, 14
     GROUPBOX "Sistem Başarısızlığı", IDC_STATIC, 7, 111, 238, 140
     AUTOCHECKBOX "Sistem &Kaydına Bir Olay Yaz", IDC_STRRECWRITEEVENT, 14, 124, 148, 10
     AUTOCHECKBOX "&Bir Yönetim Uyarısı Gönder", IDC_STRRECSENDALERT, 14, 138, 148, 10
