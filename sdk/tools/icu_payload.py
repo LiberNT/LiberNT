@@ -28,6 +28,8 @@ LLVM_MINGW_URL = f"https://github.com/mstorsjo/llvm-mingw/releases/download/2026
 LLVM_MINGW_SHA256 = "e7e5d135d93d3f2a3beaaea633a5b0e66ac75391a53feae654391913dd76102b"
 LICENSE = "ICU-LICENSE"
 TRIPLE = {"amd64": "x86_64-w64-mingw32", "arm64": "aarch64-w64-mingw32", "i386": "i686-w64-mingw32"}
+SYMBOL_PREFIX = {"amd64": "", "arm64": "", "i386": "_"}
+DATA_LIB = {"amd64": "sicudt.a", "arm64": "sicudt.a", "i386": "libsicudt.a"}
 MSI_ARCH = {
     "amd64": ("x64", "System64Folder", "yes", "x64;1033"),
     "arm64": ("x64", "System64Folder", "yes", "Arm64;1033"),
@@ -54,12 +56,12 @@ mkdir host cross
     --enable-static --disable-shared --with-data-packaging=static --disable-renaming \
     --disable-tests --disable-samples --disable-extras --disable-tools \
     CC="$TRIPLE-clang" CXX="$TRIPLE-clang++" >/dev/null && make -j"$(nproc)" >/dev/null)
-LIBS="cross/lib/libsicuin.a cross/lib/libsicuuc.a cross/lib/sicudt.a"
+LIBS="cross/lib/libsicuin.a cross/lib/libsicuuc.a cross/lib/$DATA_LIB"
 {
     echo "LIBRARY icu.dll"
     echo "EXPORTS"
     llvm-nm --defined-only --extern-only -P cross/lib/libsicuuc.a cross/lib/libsicuin.a 2>/dev/null |
-        awk '$2 == "T" { print $1 }' | grep -v '^_Z' | sed 's/^_//' |
+        awk '$2 == "T" { print $1 }' | sed "s/^$SYMBOL_PREFIX//" | grep -v '^_Z' |
         grep -E '^[A-Za-z][A-Za-z0-9_]*$' | grep -v '^uprv_' | sort -u
 } > icu.def
 cat > icu.rc <<RC
@@ -108,7 +110,8 @@ def build(arch, out):
     env = {
         "ICU_SOURCE": ICU_SOURCE, "ICU_SHA256": ICU_SHA256,
         "LLVM_MINGW": LLVM_MINGW, "LLVM_MINGW_URL": LLVM_MINGW_URL, "LLVM_MINGW_SHA256": LLVM_MINGW_SHA256,
-        "TRIPLE": TRIPLE[arch],
+        "TRIPLE": TRIPLE[arch], "SYMBOL_PREFIX": SYMBOL_PREFIX[arch],
+        "DATA_LIB": DATA_LIB[arch],
     }
     command = ["docker", "run", "--rm", "--platform", "linux/arm64", "-v", f"{out}:/out"]
     for key, value in env.items():
