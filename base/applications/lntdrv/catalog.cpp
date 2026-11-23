@@ -1759,10 +1759,9 @@ int ProductFit(const std::wstring &products, const SystemTarget &system)
         { L"2025", 26100 }, { L"23H2", 25398 }, { L"2022", 20348 }, { L"IRON", 20348 }, { L"2019", 17763 },
         { L"1809", 17763 }, { L"1803", 17134 }, { L"1709", 16299 }, { L"2016", 14393 },
     };
+    static const WCHAR *const LegacyServers[] = { L"2000", L"2003", L"2008", L"2012" };
     std::wstring upper = Upper(products);
     size_t pos = upper.find(L"WINDOWS");
-    bool any = false;
-    int fit = 0;
 
     while (pos != std::wstring::npos)
     {
@@ -1771,10 +1770,14 @@ int ProductFit(const std::wstring &products, const SystemTarget &system)
         bool client = false, server = false;
         ULONG build = 0;
 
-        any = true;
         pos = next;
         if (entry.find(L"SERVER") != std::wstring::npos)
         {
+            if (std::any_of(std::begin(LegacyServers), std::end(LegacyServers),
+                            [&entry](const WCHAR *year) { return entry.find(year) != std::wstring::npos; }))
+            {
+                continue;
+            }
             server = true;
             build = FindBuild(entry, Servers, 14393);
         }
@@ -1789,20 +1792,14 @@ int ProductFit(const std::wstring &products, const SystemTarget &system)
             server = entry.compare(0, 20, L"WINDOWS 10 AND LATER") == 0;
             build = FindBuild(entry, Client10, 10240);
         }
-        else if (entry.compare(0, 21, L"WINDOWS 8.1 AND LATER") == 0)
-        {
-            client = server = true;
-            build = 9600;
-        }
         else
         {
-            fit = std::max(fit, 1);
             continue;
         }
         if (((system.Server && server) || (!system.Server && client)) && build <= system.Build)
-            fit = 2;
+            return 2;
     }
-    return any ? fit : 1;
+    return 0;
 }
 
 int CompareVersions(const std::wstring &left, const std::wstring &right)
