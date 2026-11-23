@@ -91,7 +91,7 @@ RunTool(PCWSTR Arguments, DWORD *ExitCode)
 }
 
 static BOOL
-ArpViewHasDisplayName(HKEY Root, REGSAM View, PCWSTR DisplayName)
+ArpViewFind(HKEY Root, REGSAM View, PCWSTR DisplayName, BOOL Exact, PWSTR Version, DWORD VersionSize)
 {
     WCHAR SubKey[256], Name[512];
     DWORD Index, SubKeyLength, NameSize;
@@ -107,19 +107,29 @@ ArpViewHasDisplayName(HKEY Root, REGSAM View, PCWSTR DisplayName)
         if (RegEnumKeyExW(Uninstall, Index, SubKey, &SubKeyLength, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
             break;
         NameSize = sizeof(Name);
-        if (RegGetValueW(Uninstall, SubKey, L"DisplayName", RRF_RT_REG_SZ, NULL, Name, &NameSize) == ERROR_SUCCESS)
-            Found = wcsncmp(Name, DisplayName, wcslen(DisplayName)) == 0;
+        if (RegGetValueW(Uninstall, SubKey, L"DisplayName", RRF_RT_REG_SZ, NULL, Name, &NameSize) != ERROR_SUCCESS)
+            continue;
+        Found = Exact ? wcscmp(Name, DisplayName) == 0 : wcsncmp(Name, DisplayName, wcslen(DisplayName)) == 0;
+        if (Found && Version &&
+            RegGetValueW(Uninstall, SubKey, L"DisplayVersion", RRF_RT_REG_SZ, NULL, Version, &VersionSize) != ERROR_SUCCESS)
+            Version[0] = L'\0';
     }
     RegCloseKey(Uninstall);
     return Found;
 }
 
 static BOOL
+ArpFind(PCWSTR DisplayName, BOOL Exact, PWSTR Version, DWORD VersionSize)
+{
+    return ArpViewFind(HKEY_LOCAL_MACHINE, KEY_WOW64_64KEY, DisplayName, Exact, Version, VersionSize) ||
+           ArpViewFind(HKEY_LOCAL_MACHINE, KEY_WOW64_32KEY, DisplayName, Exact, Version, VersionSize) ||
+           ArpViewFind(HKEY_CURRENT_USER, 0, DisplayName, Exact, Version, VersionSize);
+}
+
+static BOOL
 ArpHasDisplayName(PCWSTR DisplayName)
 {
-    return ArpViewHasDisplayName(HKEY_LOCAL_MACHINE, KEY_WOW64_64KEY, DisplayName) ||
-           ArpViewHasDisplayName(HKEY_LOCAL_MACHINE, KEY_WOW64_32KEY, DisplayName) ||
-           ArpViewHasDisplayName(HKEY_CURRENT_USER, 0, DisplayName);
+    return ArpFind(DisplayName, FALSE, NULL, 0);
 }
 
 static BOOL
@@ -228,4 +238,195 @@ START_TEST(portable)
 START_TEST(wix)
 {
     TestPackage(&WixPackage);
+}
+
+typedef struct _UPGRADE_PACKAGE
+{
+    PCWSTR Id;
+    PCWSTR DisplayName;
+    PCWSTR OldVersion;
+    PCWSTR Directory;
+} UPGRADE_PACKAGE;
+
+static const UPGRADE_PACKAGE UpgradePackages[] =
+{
+    { L"jqlang.jq", L"jq", L"1.8.1", L"%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\jqlang.jq_Microsoft.Winget.Source_8wekyb3d8bbwe" },
+    { L"sharkdp.fd", L"fd", L"10.4.2", L"%LOCALAPPDATA%\\Microsoft\\WinGet\\Packages\\sharkdp.fd_Microsoft.Winget.Source_8wekyb3d8bbwe" },
+};
+
+static BOOL
+InstalledVersion(const UPGRADE_PACKAGE *Package, PWSTR Version, DWORD VersionSize)
+{
+    Version[0] = L'\0';
+    return ArpFind(Package->DisplayName, TRUE, Version, VersionSize);
+}
+
+static BOOL
+InstallVersion(const UPGRADE_PACKAGE *Package, PCWSTR Version)
+{
+    WCHAR Arguments[512], Installed[64];
+    DWORD ExitCode;
+
+    StringCchPrintfW(Arguments, _countof(Arguments),
+                     L"install --id %s -e --source winget --version %s --silent --accept-package-agreements --disable-interactivity",
+                     Package->Id, Version);
+    if (!RunTool(Arguments, &ExitCode))
+        return FALSE;
+    ok(ExitCode == 0, "install %ls %ls returned 0x%08lx:\n%s\n", Package->Id, Version, ExitCode, Output);
+    ok(InstalledVersion(Package, Installed, sizeof(Installed)) && wcscmp(Installed, Version) == 0,
+       "%ls is installed as version '%ls', not %ls\n", Package->Id, Installed, Version);
+    return ExitCode == 0;
+}
+
+static void
+UninstallPackage(PCWSTR Id)
+{
+    WCHAR Arguments[512];
+    DWORD ExitCode;
+
+    StringCchPrintfW(Arguments, _countof(Arguments), L"uninstall --id %s -e --source winget --silent --disable-interactivity", Id);
+    if (RunTool(Arguments, &ExitCode))
+        ok(ExitCode == 0, "uninstall %ls returned 0x%08lx:\n%s\n", Id, ExitCode, Output);
+}
+
+static BOOL
+PackagesInstalled(void)
+{
+    WCHAR Version[64];
+    ULONG i;
+
+    for (i = 0; i < _countof(UpgradePackages); i++)
+    {
+        if (InstalledVersion(&UpgradePackages[i], Version, sizeof(Version)))
+            return TRUE;
+    }
+    return FALSE;
+}
+
+static BOOL
+SourceAvailable(PCWSTR Id)
+{
+    WCHAR Arguments[256];
+    DWORD ExitCode;
+
+    StringCchPrintfW(Arguments, _countof(Arguments), L"search --id %s -e --source winget", Id);
+    if (!RunTool(Arguments, &ExitCode))
+        return FALSE;
+    if (ExitCode != 0)
+        skip("the winget source is unavailable: 0x%08lx\n%s\n", ExitCode, Output);
+    return ExitCode == 0;
+}
+
+static ULONG
+LockDirectory(PCWSTR Directory, HANDLE *Handles, ULONG Capacity, ULONG Count)
+{
+    WCHAR Pattern[MAX_PATH], Path[MAX_PATH];
+    WIN32_FIND_DATAW Data;
+    HANDLE Find;
+
+    StringCchPrintfW(Pattern, _countof(Pattern), L"%s\\*", Directory);
+    Find = FindFirstFileW(Pattern, &Data);
+    if (Find == INVALID_HANDLE_VALUE)
+        return Count;
+    do
+    {
+        if (!wcscmp(Data.cFileName, L".") || !wcscmp(Data.cFileName, L".."))
+            continue;
+        StringCchPrintfW(Path, _countof(Path), L"%s\\%s", Directory, Data.cFileName);
+        if (Data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+            Count = LockDirectory(Path, Handles, Capacity, Count);
+        else if (Count < Capacity)
+        {
+            Handles[Count] = CreateFileW(Path, GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
+            if (Handles[Count] != INVALID_HANDLE_VALUE)
+                Count++;
+        }
+    } while (FindNextFileW(Find, &Data));
+    FindClose(Find);
+    return Count;
+}
+
+START_TEST(upgrade)
+{
+    const UPGRADE_PACKAGE *Package = &UpgradePackages[0];
+    WCHAR Arguments[512], Version[64];
+    DWORD ExitCode;
+
+    if (PackagesInstalled())
+    {
+        skip("an upgrade test package is already installed\n");
+        return;
+    }
+    if (!SourceAvailable(Package->Id) || !InstallVersion(Package, Package->OldVersion))
+        return;
+
+    if (RunTool(L"upgrade --source winget", &ExitCode))
+    {
+        ok(ExitCode == 0, "upgrade list returned 0x%08lx:\n%s\n", ExitCode, Output);
+        ok(OutputContains(Package->Id), "upgrade list does not name %ls:\n%s\n", Package->Id, Output);
+    }
+
+    StringCchPrintfW(Arguments, _countof(Arguments),
+                     L"upgrade --id %s -e --source winget --silent --accept-package-agreements --disable-interactivity", Package->Id);
+    if (RunTool(Arguments, &ExitCode))
+        ok(ExitCode == 0, "upgrade returned 0x%08lx:\n%s\n", ExitCode, Output);
+    ok(InstalledVersion(Package, Version, sizeof(Version)), "%ls is no longer installed\n", Package->Id);
+    ok(wcscmp(Version, Package->OldVersion) != 0, "%ls is still version %ls\n", Package->Id, Version);
+
+    StringCchPrintfW(Arguments, _countof(Arguments), L"upgrade --id %s -e --source winget", Package->Id);
+    if (RunTool(Arguments, &ExitCode))
+        ok(ExitCode != 0, "upgrade still finds an upgrade for %ls:\n%s\n", Package->Id, Output);
+
+    if (RunTool(L"upgrade --all --version 1.0 --source winget", &ExitCode))
+        ok(ExitCode != 0, "upgrade --all --version was accepted:\n%s\n", Output);
+
+    UninstallPackage(Package->Id);
+}
+
+START_TEST(upgradeall)
+{
+    WCHAR Directory[MAX_PATH], Version[64];
+    HANDLE Handles[64];
+    ULONG Locked, Count, i, j;
+    DWORD ExitCode;
+
+    if (PackagesInstalled())
+    {
+        skip("an upgrade test package is already installed\n");
+        return;
+    }
+    if (!SourceAvailable(UpgradePackages[0].Id))
+        return;
+
+    for (Locked = 0; Locked < _countof(UpgradePackages); Locked++)
+    {
+        for (i = 0; i < _countof(UpgradePackages); i++)
+        {
+            if (!InstallVersion(&UpgradePackages[i], UpgradePackages[i].OldVersion))
+                return;
+        }
+
+        ExpandEnvironmentStringsW(UpgradePackages[Locked].Directory, Directory, _countof(Directory));
+        Count = LockDirectory(Directory, Handles, _countof(Handles), 0);
+        ok(Count != 0, "nothing to lock in %ls\n", Directory);
+
+        if (RunTool(L"upgrade --all --source winget --silent --accept-package-agreements --disable-interactivity", &ExitCode))
+            ok(ExitCode != 0, "upgrade --all succeeded with %ls locked:\n%s\n", UpgradePackages[Locked].Id, Output);
+
+        for (j = 0; j < Count; j++)
+            CloseHandle(Handles[j]);
+
+        for (i = 0; i < _countof(UpgradePackages); i++)
+        {
+            ok(InstalledVersion(&UpgradePackages[i], Version, sizeof(Version)), "%ls is no longer installed\n", UpgradePackages[i].Id);
+            if (i == Locked)
+                ok(wcscmp(Version, UpgradePackages[i].OldVersion) == 0, "locked %ls changed to version %ls\n", UpgradePackages[i].Id, Version);
+            else
+                ok(wcscmp(Version, UpgradePackages[i].OldVersion) != 0, "%ls was not upgraded with %ls locked:\n%s\n",
+                   UpgradePackages[i].Id, UpgradePackages[Locked].Id, Output);
+        }
+
+        for (i = 0; i < _countof(UpgradePackages); i++)
+            UninstallPackage(UpgradePackages[i].Id);
+    }
 }
