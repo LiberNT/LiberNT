@@ -11063,7 +11063,7 @@ XHCI_SendCommand(
      *
      * The polling is bounded to prevent excessive DPC time:
      * - Standard commands: max 5ms at DISPATCH_LEVEL
-     * - RESET_EP/SET_DEQ: max 50ms (hardware may need 10-25ms)
+     * - RESET_EP/SET_DEQ/CONFIG_EP: max 50ms (hardware may need 10-25ms)
      * - Total iterations = timeout_ms * 1000 / XHCI_COMMAND_POLL_INTERVAL_US
      */
     if (!Extension)
@@ -11093,7 +11093,9 @@ XHCI_SendCommand(
          * - 5ms timeout = 100 iterations max
          * - 50ms timeout = 1000 iterations max
          */
-        if (TrbType == XHCI_TRB_TYPE_RESET_EP || TrbType == XHCI_TRB_TYPE_SET_DEQ)
+        if (TrbType == XHCI_TRB_TYPE_RESET_EP ||
+            TrbType == XHCI_TRB_TYPE_SET_DEQ ||
+            TrbType == XHCI_TRB_TYPE_CONFIG_EP)
         {
             if (EffectiveTimeout > 50)
                 EffectiveTimeout = 50;
