@@ -251,29 +251,87 @@ Volume::~Volume()
     delete[] UpcaseTable;
 }
 
-PNtfsLookupSlot
-Volume::AcquireLookupSlot(_In_ ULONGLONG DirectoryReference,
-                          _In_ ULONG BufferSize)
+static BOOLEAN
+IsLookupSlotFor(_In_ PNtfsLookupSlot Slot,
+                _In_ ULONGLONG FileReference,
+                _In_ ULONGLONG IndexName,
+                _In_ ULONGLONG Vcn)
+{
+    return Slot->FileReference == FileReference && Slot->IndexName == IndexName && Slot->VCN == Vcn;
+}
+
+/* Under LazyCacheMutex: a free slot holding the node, else a free empty one, else the least recently used. */
+static PNtfsLookupSlot
+PickLookupSlot(_Inout_ PNtfsLookupSlot Slots,
+               _In_ ULONGLONG FileReference,
+               _In_ ULONGLONG IndexName,
+               _In_ ULONGLONG Vcn,
+               _Out_ PBOOLEAN Hit)
 {
     PNtfsLookupSlot Slot = NULL;
 
-    NtfsAcquireMutex(&LazyCacheMutex);
+    *Hit = FALSE;
     for (ULONG Index = 0; Index < NTFS_LOOKUP_SLOTS; Index++)
     {
-        PNtfsLookupSlot Candidate = &LookupSlots[Index];
+        PNtfsLookupSlot Candidate = &Slots[Index];
 
         if (Candidate->Busy)
             continue;
-        if (!Slot)
-            Slot = Candidate;
-        if (Candidate->Valid && Candidate->FileReference == DirectoryReference)
+        if (Candidate->Valid && IsLookupSlotFor(Candidate, FileReference, IndexName, Vcn))
+        {
+            *Hit = TRUE;
+            return Candidate;
+        }
+        if (!Slot || (Slot->Valid && !Candidate->Valid) ||
+            (Slot->Valid == Candidate->Valid && (LONG)(Candidate->LastUse - Slot->LastUse) < 0))
         {
             Slot = Candidate;
-            break;
         }
     }
+    return Slot;
+}
+
+static BOOLEAN
+EnsureLookupBuffer(_Inout_ PNtfsLookupSlot Slot,
+                   _In_ ULONG BufferSize)
+{
+    if (!Slot->Buffer || Slot->BufferSize < BufferSize)
+    {
+        delete[] Slot->Buffer;
+        Slot->Buffer = new(PagedPool, TAG_NTFS) UCHAR[BufferSize];
+        Slot->BufferSize = Slot->Buffer ? BufferSize : 0;
+        Slot->Valid = FALSE;
+    }
+    return Slot->Buffer != NULL;
+}
+
+PNtfsLookupSlot
+Volume::AcquireLookupSlot(_In_ ULONGLONG FileReference,
+                          _In_ ULONGLONG IndexName,
+                          _In_ ULONGLONG Vcn,
+                          _In_ ULONG BufferSize,
+                          _Out_ PBOOLEAN Hit,
+                          _In_opt_ PNtfsLookupSlot Previous)
+{
+    PNtfsLookupSlot Slot;
+
+    if (Previous && Previous->Private)
+    {
+        ReleaseLookupSlot(Previous);
+        Previous = NULL;
+    }
+    NtfsAcquireMutex(&LazyCacheMutex);
+    if (Previous)
+    {
+        ASSERT(Previous->Busy);
+        Previous->Busy = FALSE;
+    }
+    Slot = PickLookupSlot(LookupSlots, FileReference, IndexName, Vcn, Hit);
     if (Slot)
+    {
         Slot->Busy = TRUE;
+        Slot->LastUse = ++LookupClock;
+    }
     NtfsReleaseMutex(&LazyCacheMutex);
 
     if (!Slot)
@@ -285,20 +343,97 @@ Volume::AcquireLookupSlot(_In_ ULONGLONG DirectoryReference,
         Slot->Private = TRUE;
         Slot->Busy = TRUE;
     }
-
-    if (!Slot->Buffer || Slot->BufferSize < BufferSize)
-    {
-        delete[] Slot->Buffer;
-        Slot->Buffer = new(PagedPool, TAG_NTFS) UCHAR[BufferSize];
-        Slot->BufferSize = Slot->Buffer ? BufferSize : 0;
-        Slot->Valid = FALSE;
-    }
-    if (!Slot->Buffer)
+    if (!EnsureLookupBuffer(Slot, BufferSize))
     {
         ReleaseLookupSlot(Slot);
         return NULL;
     }
+    *Hit = *Hit && Slot->Valid;
+    ASSERT(!*Hit || IsLookupSlotFor(Slot, FileReference, IndexName, Vcn));
     return Slot;
+}
+
+BOOLEAN
+Volume::CopyLookupNode(_In_ ULONGLONG FileReference,
+                       _In_ ULONGLONG IndexName,
+                       _In_ ULONGLONG Vcn,
+                       _Out_writes_bytes_(Size) PUCHAR Image,
+                       _In_ ULONG Size)
+{
+    PNtfsLookupSlot Slot;
+    BOOLEAN Hit;
+
+    NtfsAcquireMutex(&LazyCacheMutex);
+    Slot = PickLookupSlot(LookupSlots, FileReference, IndexName, Vcn, &Hit);
+    Hit = Hit && Slot->BufferSize >= Size;
+    if (Hit)
+    {
+        Slot->LastUse = ++LookupClock;
+        RtlCopyMemory(Image, Slot->Buffer, Size);
+    }
+    NtfsReleaseMutex(&LazyCacheMutex);
+    return Hit;
+}
+
+PNtfsLookupSlot
+Volume::BeginLookupStore(_In_ ULONGLONG FileReference,
+                         _In_ ULONGLONG IndexName,
+                         _In_ ULONGLONG Vcn,
+                         _In_ ULONG Size)
+{
+    PNtfsLookupSlot Slot;
+    BOOLEAN Hit;
+
+    NtfsAcquireMutex(&LazyCacheMutex);
+    for (ULONG Index = 0; Index < NTFS_LOOKUP_SLOTS; Index++)
+    {
+        if (IsLookupSlotFor(&LookupSlots[Index], FileReference, IndexName, Vcn))
+            LookupSlots[Index].Valid = FALSE;
+    }
+    Slot = PickLookupSlot(LookupSlots, FileReference, IndexName, Vcn, &Hit);
+    ASSERT(!Hit);
+    if (Slot)
+    {
+        Slot->Busy = TRUE;
+        Slot->Valid = FALSE;
+        Slot->LastUse = ++LookupClock;
+    }
+    NtfsReleaseMutex(&LazyCacheMutex);
+    if (!Slot)
+        return NULL;
+    if (!EnsureLookupBuffer(Slot, Size))
+    {
+        ReleaseLookupSlot(Slot);
+        return NULL;
+    }
+    Slot->FileReference = FileReference;
+    Slot->IndexName = IndexName;
+    Slot->VCN = Vcn;
+    Slot->Table.Valid = FALSE;
+    return Slot;
+}
+
+void
+Volume::EndLookupStore(_In_ PNtfsLookupSlot Slot,
+                       _In_ BOOLEAN Valid)
+{
+    ASSERT(Slot->Busy && !Slot->Private);
+    Slot->Valid = Valid;
+    ReleaseLookupSlot(Slot);
+}
+
+void
+Volume::InvalidateLookupNode(_In_ ULONGLONG FileReference,
+                             _In_ ULONGLONG IndexName,
+                             _In_ ULONGLONG Vcn)
+{
+    NtfsAcquireMutex(&LazyCacheMutex);
+    for (ULONG Index = 0; Index < NTFS_LOOKUP_SLOTS; Index++)
+    {
+        if (IsLookupSlotFor(&LookupSlots[Index], FileReference, IndexName, Vcn))
+            LookupSlots[Index].Valid = FALSE;
+    }
+    NtfsReleaseMutex(&LazyCacheMutex);
 }
 
 void

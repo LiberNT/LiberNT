@@ -169,7 +169,8 @@ NtfsFindIndexInsertionPoint(
     _Out_ PULONG InsertionOffset,
     _Out_ PULONGLONG ChildVcn,
     _Out_ PBOOLEAN Descend,
-    _Out_opt_ PBOOLEAN FoundExact)
+    _Out_opt_ PBOOLEAN FoundExact,
+    _In_opt_ PNtfsIndexEntryTable Table)
 {
     PIndexEntry Entry;
     ULONG_PTR End;
@@ -214,6 +215,101 @@ NtfsFindIndexInsertionPoint(
     End =
         reinterpret_cast<ULONG_PTR>(Header) +
         Header->TotalIndexSize;
+
+    /*
+     * Entries are sorted: a node that is sound from end to end is searched by halving. Anything
+     * else is walked in order below, which stops and judges exactly where it always did.
+     */
+    {
+        ULONG LocalOffsets[NTFS_INDEX_SEARCH_ENTRIES];
+        PULONG Offsets = Table ? Table->Offsets : LocalOffsets;
+        ULONG Count = 0;
+        ULONG EndOffset = 0;
+        BOOLEAN Sorted = Table && Table->Valid;
+
+        if (Sorted)
+        {
+            /* A cached node does not change: what its first search checked still holds. */
+            Count = Table->Count;
+            EndOffset = Table->EndOffset;
+            ASSERT(Count <= NTFS_INDEX_SEARCH_ENTRIES && EndOffset < Header->TotalIndexSize);
+        }
+        else
+        {
+            PIndexEntry Walk = Entry;
+
+            while (reinterpret_cast<ULONG_PTR>(Walk) < End)
+            {
+                if (!IsIndexEntryValid(Walk,
+                                       (ULONG)(End - reinterpret_cast<ULONG_PTR>(Walk)),
+                                       Key->CollationRule != ATTRDEF_COLLATION_FILENAME) ||
+                    !!(Walk->Flags & INDEX_ENTRY_NODE) != Large)
+                {
+                    break;
+                }
+                if (Walk->Flags & INDEX_ENTRY_END)
+                {
+                    Sorted = reinterpret_cast<ULONG_PTR>(Walk) + Walk->EntryLength == End;
+                    EndOffset = (ULONG)(reinterpret_cast<PUCHAR>(Walk) - reinterpret_cast<PUCHAR>(Header));
+                    break;
+                }
+                if (Count == NTFS_INDEX_SEARCH_ENTRIES)
+                    break;
+                Offsets[Count++] = (ULONG)(reinterpret_cast<PUCHAR>(Walk) - reinterpret_cast<PUCHAR>(Header));
+                Walk = reinterpret_cast<PIndexEntry>(reinterpret_cast<PUCHAR>(Walk) + Walk->EntryLength);
+            }
+            if (Table)
+            {
+                Table->Count = Count;
+                Table->EndOffset = EndOffset;
+                Table->Valid = Sorted;
+            }
+        }
+        if (Sorted)
+        {
+            ULONG Low = 0;
+            ULONG High = Count;
+            PIndexEntry Next;
+
+            while (Low < High)
+            {
+                ULONG Middle = Low + (High - Low) / 2;
+
+                Status = CompareIndexKey(DiskVolume,
+                                         Key,
+                                         reinterpret_cast<PIndexEntry>(reinterpret_cast<PUCHAR>(Header) +
+                                                                       Offsets[Middle]),
+                                         &Comparison);
+                if (!NT_SUCCESS(Status))
+                    return Status;
+                if (Comparison == 0)
+                {
+                    if (!FoundExact)
+                        return STATUS_OBJECT_NAME_COLLISION;
+                    *FoundExact = TRUE;
+                    *InsertionOffset = Offsets[Middle];
+                    return STATUS_SUCCESS;
+                }
+                if (Comparison < 0)
+                    High = Middle;
+                else
+                    Low = Middle + 1;
+            }
+            Next = reinterpret_cast<PIndexEntry>(reinterpret_cast<PUCHAR>(Header) +
+                                                 (Low < Count ? Offsets[Low] : EndOffset));
+            if (Large)
+            {
+                *ChildVcn = *GetSubnodeVCN(Next);
+                *Descend = TRUE;
+            }
+            else
+            {
+                *InsertionOffset = Low < Count ? Offsets[Low] : EndOffset;
+            }
+            return STATUS_SUCCESS;
+        }
+    }
+
     while (reinterpret_cast<ULONG_PTR>(Entry) <
            End)
     {
@@ -684,7 +780,7 @@ BuildIndexBufferImage(
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS
+NTSTATUS
 WriteIndexNode(
     _In_ PVolume DiskVolume,
     _In_ PFileRecord DirectoryFile,
@@ -695,6 +791,9 @@ WriteIndexNode(
     _Inout_updates_bytes_(RecordSize)
         PUCHAR Image)
 {
+    PNTFSRecordHeader Record = reinterpret_cast<PNTFSRecordHeader>(Image);
+    ULONGLONG Name = NtfsLookupIndexName(IndexName);
+    PNtfsLookupSlot Slot = NULL;
     LARGE_INTEGER WriteOffset;
     ULONGLONG AllocationOffset;
     ULONG WriteLength = RecordSize;
@@ -709,37 +808,56 @@ WriteIndexNode(
         return STATUS_FILE_TOO_LARGE;
     }
 
+    if (Name)
+        Slot = DiskVolume->BeginLookupStore(MakeFileReference(DirectoryFile), Name, Vcn, RecordSize);
+    if (Slot)
+        RtlCopyMemory(Slot->Buffer, Image, RecordSize);
     Status = NtfsCommitFixup(
-        reinterpret_cast<PNTFSRecordHeader>(
-            Image),
+        Record,
         RecordSize,
         DiskVolume->BytesPerSector);
-    if (!NT_SUCCESS(Status))
-        return Status;
-
-    WriteOffset.QuadPart =
-        (LONGLONG)AllocationOffset;
-    Status = DirectoryFile->WriteFileData(
-        TypeIndexAllocation,
-        const_cast<PWSTR>(IndexName),
-        Image,
-        &WriteLength,
-        &WriteOffset);
-    if (NT_SUCCESS(Status) &&
-        WriteLength != RecordSize)
+    if (NT_SUCCESS(Status))
     {
-        Status = STATUS_END_OF_FILE;
+        WriteOffset.QuadPart =
+            (LONGLONG)AllocationOffset;
+        Status = DirectoryFile->WriteFileData(
+            TypeIndexAllocation,
+            const_cast<PWSTR>(IndexName),
+            Image,
+            &WriteLength,
+            &WriteOffset);
+        if (NT_SUCCESS(Status) &&
+            WriteLength != RecordSize)
+        {
+            Status = STATUS_END_OF_FILE;
+        }
+    }
+    if (Slot)
+    {
+        /* The copy is the node as used in memory: of the commit it lacks only the new update sequence array. */
+        if (NT_SUCCESS(Status))
+        {
+            ULONG UsaBytes = Record->SizeOfUpdateSequence * sizeof(USHORT);
+
+            ASSERT(Record->UpdateSequenceOffset + UsaBytes <= RecordSize);
+            RtlCopyMemory(Slot->Buffer + Record->UpdateSequenceOffset, Image + Record->UpdateSequenceOffset, UsaBytes);
+        }
+        DiskVolume->EndLookupStore(Slot, NT_SUCCESS(Status));
     }
     return Status;
 }
 
 static NTSTATUS
 SetIndexRecordBitmapBit(
+    _In_ PVolume DiskVolume,
     _In_ PFileRecord DirectoryFile,
     _In_ PCWSTR IndexName,
-    _In_ ULONGLONG RecordOrdinal,
+    _In_ ULONG RecordSize,
+    _In_ ULONGLONG AllocationUnit,
+    _In_ ULONGLONG Vcn,
     _In_ BOOLEAN Value)
 {
+    ULONGLONG RecordOrdinal;
     PAttribute BitmapAttribute;
     LARGE_INTEGER WriteOffset;
     ULONGLONG BitmapLength;
@@ -751,6 +869,9 @@ SetIndexRecordBitmapBit(
     UCHAR BitmapMask;
     NTSTATUS Status;
 
+    if (!RecordSize || Vcn > ~(ULONGLONG)0 / AllocationUnit)
+        return STATUS_FILE_CORRUPT_ERROR;
+    RecordOrdinal = Vcn * AllocationUnit / RecordSize;
     ByteOffset = RecordOrdinal >> 3;
     BitmapMask =
         (UCHAR)(1u << (RecordOrdinal & 7));
@@ -814,6 +935,7 @@ SetIndexRecordBitmapBit(
     else
     {
         BitmapByte &= (UCHAR)~BitmapMask;
+        DiskVolume->InvalidateLookupNode(MakeFileReference(DirectoryFile), NtfsLookupIndexName(IndexName), Vcn);
     }
 
     WriteLength = 1;
@@ -1541,9 +1663,12 @@ Directory::PushDownRoot(
         if (!NT_SUCCESS(Status))
             goto Done;
         Status = SetIndexRecordBitmapBit(
+            DiskVolume,
             DirectoryFile,
             IndexName,
-            RecordOrdinal,
+            RecordSize,
+            AllocationUnit,
+            Vcn,
             TRUE);
         if (!NT_SUCCESS(Status))
             goto Done;
@@ -1577,9 +1702,12 @@ Directory::PushDownRoot(
     {
         NTSTATUS CleanupStatus =
             SetIndexRecordBitmapBit(
+                DiskVolume,
                 DirectoryFile,
                 IndexName,
-                RecordOrdinal,
+                RecordSize,
+                AllocationUnit,
+                Vcn,
                 FALSE);
         if (!NT_SUCCESS(CleanupStatus))
         {
@@ -1643,8 +1771,9 @@ BuildPromotedEntry(
     return STATUS_SUCCESS;
 }
 
+/* The node as on the device: allocated in the bitmap, an INDX record of this VCN, update sequence undone. */
 static NTSTATUS
-ReadIndexNode(
+LoadIndexNode(
     _In_ PVolume DiskVolume,
     _In_ PFileRecord DirectoryFile,
     _In_ PCWSTR IndexName,
@@ -1746,6 +1875,65 @@ ReadIndexNode(
         return STATUS_FILE_CORRUPT_ERROR;
     }
     return STATUS_SUCCESS;
+}
+
+NTSTATUS
+PinIndexNode(
+    _In_ PVolume DiskVolume,
+    _In_ PFileRecord DirectoryFile,
+    _In_ PCWSTR IndexName,
+    _In_ ULONG RecordSize,
+    _In_ ULONGLONG AllocationUnit,
+    _In_ ULONGLONG Vcn,
+    _Inout_ PNtfsLookupSlot* Slot)
+{
+    ULONGLONG FileReference = MakeFileReference(DirectoryFile);
+    ULONGLONG Name = NtfsLookupIndexName(IndexName);
+    PNtfsLookupSlot Held;
+    BOOLEAN Hit;
+    NTSTATUS Status;
+
+    Held = DiskVolume->AcquireLookupSlot(FileReference, Name, Vcn, RecordSize, &Hit, *Slot);
+    *Slot = Held;
+    if (!Held)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    if (Hit)
+        return STATUS_SUCCESS;
+    Held->Valid = FALSE;
+    Held->Table.Valid = FALSE;
+    Status = LoadIndexNode(DiskVolume, DirectoryFile, IndexName, RecordSize, AllocationUnit, Vcn, Held->Buffer);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Held->FileReference = FileReference;
+    Held->IndexName = Name;
+    Held->VCN = Vcn;
+    Held->Valid = Name != 0;
+    return STATUS_SUCCESS;
+}
+
+/* A copy of the node for the caller to change. */
+static NTSTATUS
+ReadIndexNode(
+    _In_ PVolume DiskVolume,
+    _In_ PFileRecord DirectoryFile,
+    _In_ PCWSTR IndexName,
+    _In_ ULONG RecordSize,
+    _In_ ULONGLONG AllocationUnit,
+    _In_ ULONGLONG Vcn,
+    _Out_writes_bytes_(RecordSize) PUCHAR Image)
+{
+    ULONGLONG Name = NtfsLookupIndexName(IndexName);
+    PNtfsLookupSlot Slot = NULL;
+    NTSTATUS Status;
+
+    if (Name && DiskVolume->CopyLookupNode(MakeFileReference(DirectoryFile), Name, Vcn, Image, RecordSize))
+        return STATUS_SUCCESS;
+    Status = PinIndexNode(DiskVolume, DirectoryFile, IndexName, RecordSize, AllocationUnit, Vcn, &Slot);
+    if (NT_SUCCESS(Status))
+        RtlCopyMemory(Image, Slot->Buffer, RecordSize);
+    if (Slot)
+        DiskVolume->ReleaseLookupSlot(Slot);
+    return Status;
 }
 
 /*
@@ -1909,9 +2097,12 @@ Directory::SplitAndPromote(
         if (!NT_SUCCESS(Status))
             goto Done;
         Status = SetIndexRecordBitmapBit(
+            DiskVolume,
             DirectoryFile,
             IndexName,
-            NewOrdinal,
+            RecordSize,
+            AllocationUnit,
+            NewVcn,
             TRUE);
         if (!NT_SUCCESS(Status))
             goto Done;
@@ -2137,7 +2328,6 @@ Directory::PushDownResidentRoot(
     {
         return STATUS_INVALID_PARAMETER;
     }
-    DiskVolume->IndexEditGeneration++;
 
     IndexRootAttribute =
         DirectoryFile->GetAttribute(
@@ -2254,6 +2444,7 @@ Directory::AddIndexEntry(
     PIndexRootEx IndexRoot;
     PUCHAR NewRootData = NULL;
     PUCHAR IndexBufferData = NULL;
+    PNtfsLookupSlot Pinned = NULL;
     ULONG InsertionOffset;
     ULONG NewRootDataLength;
     ULONG IndexRecordSize;
@@ -2273,7 +2464,6 @@ Directory::AddIndexEntry(
     {
         return STATUS_INVALID_PARAMETER;
     }
-    DiskVolume->IndexEditGeneration++;
 
     IndexRootAttribute =
         DirectoryFile->GetAttribute(
@@ -2481,19 +2671,19 @@ Directory::AddIndexEntry(
         VisitedVcns[VisitedCount++] =
             ChildVcn;
 
-        Status = ReadIndexNode(
+        Status = PinIndexNode(
             DiskVolume,
             DirectoryFile,
             IndexName,
             IndexRecordSize,
             AllocationUnit,
             ChildVcn,
-            IndexBufferData);
+            &Pinned);
         if (!NT_SUCCESS(Status))
             goto Done;
         NodeBuffer =
             reinterpret_cast<PIndexBuffer>(
-                IndexBufferData);
+                Pinned->Buffer);
 
         Descend = FALSE;
         Status = NtfsFindIndexInsertionPoint(
@@ -2505,11 +2695,21 @@ Directory::AddIndexEntry(
             Key,
             &InsertionOffset,
             &ChildVcn,
-            &Descend);
+            &Descend,
+            NULL,
+            &Pinned->Table);
         if (!NT_SUCCESS(Status))
             goto Done;
         if (Descend)
             continue;
+
+        /* Only the leaf changes: it is edited in a copy of its own. */
+        RtlCopyMemory(IndexBufferData, Pinned->Buffer, IndexRecordSize);
+        DiskVolume->ReleaseLookupSlot(Pinned);
+        Pinned = NULL;
+        NodeBuffer =
+            reinterpret_cast<PIndexBuffer>(
+                IndexBufferData);
 
         if (NodeBuffer->
                 IndexHeader.TotalIndexSize >
@@ -2565,6 +2765,8 @@ Directory::AddIndexEntry(
     }
 
 Done:
+    if (Pinned)
+        DiskVolume->ReleaseLookupSlot(Pinned);
     /* Volume-owned scratch. */
     delete[] NewRootData;
     return Status;
@@ -2760,10 +2962,12 @@ ReleaseEndOnlyChain(
             !!(Entry->Flags & INDEX_ENTRY_NODE);
 
         Status = SetIndexRecordBitmapBit(
+            DiskVolume,
             DirectoryFile,
             IndexName,
-            (ChainVcn * AllocationUnit) /
-                RecordSize,
+            RecordSize,
+            AllocationUnit,
+            ChainVcn,
             FALSE);
         if (!NT_SUCCESS(Status))
             break;
@@ -3507,10 +3711,12 @@ Directory::ReleaseEmptyIndexNode(
     {
         NTSTATUS ClearStatus =
             SetIndexRecordBitmapBit(
+                DiskVolume,
                 DirectoryFile,
                 IndexName,
-                (Path[Index] * AllocationUnit) /
-                    IndexRecordSize,
+                IndexRecordSize,
+                AllocationUnit,
+                Path[Index],
                 FALSE);
 
         if (!NT_SUCCESS(ClearStatus))
@@ -3538,10 +3744,12 @@ Directory::ReleaseEmptyIndexNode(
                  Index++)
             {
                 (void)SetIndexRecordBitmapBit(
+                    DiskVolume,
                     DirectoryFile,
                     IndexName,
-                    (Path[Index] * AllocationUnit) /
-                        IndexRecordSize,
+                    IndexRecordSize,
+                    AllocationUnit,
+                    Path[Index],
                     TRUE);
             }
             if (ParentIsRoot)
@@ -3621,6 +3829,7 @@ Directory::RemoveIndexEntry(
     PUCHAR NodeImage = NULL;
     PUCHAR RootValue = NULL;
     PUCHAR Scratch = NULL;
+    PNtfsLookupSlot Pinned = NULL;
     ULONG MatchOffset;
     ULONG MaxKeyLength = 0;
     ULONG ReplacementLength = 0;
@@ -3648,7 +3857,6 @@ Directory::RemoveIndexEntry(
     {
         return STATUS_INVALID_PARAMETER;
     }
-    DiskVolume->IndexEditGeneration++;
 
     IndexRootAttribute =
         DirectoryFile->GetAttribute(
@@ -3738,19 +3946,19 @@ Directory::RemoveIndexEntry(
         }
         VisitedVcns[VisitedCount++] = ChildVcn;
 
-        Status = ReadIndexNode(
+        Status = PinIndexNode(
             DiskVolume,
             DirectoryFile,
             IndexName,
             IndexRecordSize,
             AllocationUnit,
             ChildVcn,
-            NodeImage);
+            &Pinned);
         if (!NT_SUCCESS(Status))
             goto Done;
         NodeBuffer =
             reinterpret_cast<PIndexBuffer>(
-                NodeImage);
+                Pinned->Buffer);
         Descend = FALSE;
         Status = NtfsFindIndexInsertionPoint(
             DiskVolume,
@@ -3762,9 +3970,17 @@ Directory::RemoveIndexEntry(
             &MatchOffset,
             &ChildVcn,
             &Descend,
-            &FoundExact);
+            &FoundExact,
+            &Pinned->Table);
         if (!NT_SUCCESS(Status))
             goto Done;
+    }
+    /* Only the node holding the entry changes: it is edited in a copy of its own. */
+    if (Pinned)
+    {
+        RtlCopyMemory(NodeImage, Pinned->Buffer, IndexRecordSize);
+        DiskVolume->ReleaseLookupSlot(Pinned);
+        Pinned = NULL;
     }
 
     /* MatchOffset addresses the entry inside its owning node header. */
@@ -4124,6 +4340,8 @@ TouchDirectory:
     }
 
 Done:
+    if (Pinned)
+        DiskVolume->ReleaseLookupSlot(Pinned);
     if (MaxKey)
         NtfsFreePool(MaxKey);
     if (Replacement)
