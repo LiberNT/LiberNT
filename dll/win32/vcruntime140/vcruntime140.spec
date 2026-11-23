@@ -3,15 +3,15 @@
 @ cdecl -arch=i386 -norelay _EH_prolog() ucrtbase._EH_prolog
 @ cdecl _FindAndUnlinkFrame(ptr) ucrtbase._FindAndUnlinkFrame
 @ cdecl _IsExceptionObjectToBeDestroyed(ptr) ucrtbase._IsExceptionObjectToBeDestroyed
-@ cdecl _NLG_Dispatch2() ucrtbase.__NLG_Dispatch2
-@ cdecl _NLG_Return() ucrtbase.__NLG_Return2
-@ cdecl _NLG_Return2() ucrtbase.__NLG_Return2
+@ cdecl -arch=!i386 _NLG_Dispatch2() ucrtbase.__NLG_Dispatch2
+@ cdecl -arch=!i386 _NLG_Return() ucrtbase.__NLG_Return2
+@ cdecl -arch=!i386 _NLG_Return2() ucrtbase.__NLG_Return2
 @ cdecl _SetWinRTOutOfMemoryExceptionCallback(ptr) ucrtbase._SetWinRTOutOfMemoryExceptionCallback
 @ cdecl __AdjustPointer(ptr ptr) ucrtbase.__AdjustPointer
 @ cdecl __BuildCatchObject(ptr ptr ptr long) ucrtbase.__BuildCatchObject
 @ cdecl __BuildCatchObjectHelper(ptr ptr ptr long) ucrtbase.__BuildCatchObjectHelper
 @ stdcall -arch=!i386 __C_specific_handler(ptr long ptr ptr) ucrtbase.__C_specific_handler
-@ cdecl __C_specific_handler_noexcept(ptr long ptr ptr) ucrtbase.__C_specific_handler_noexcept
+@ cdecl -arch=!i386 __C_specific_handler_noexcept(ptr long ptr ptr) ucrtbase.__C_specific_handler_noexcept
 @ cdecl __CxxDetectRethrow(ptr) ucrtbase.__CxxDetectRethrow
 @ cdecl __CxxExceptionFilter(ptr ptr long ptr) ucrtbase.__CxxExceptionFilter
 @ cdecl -norelay __CxxFrameHandler(ptr ptr ptr ptr) ucrtbase.__CxxFrameHandler
@@ -24,8 +24,8 @@
 @ cdecl __DestructExceptionObject(ptr) ucrtbase.__DestructExceptionObject
 @ cdecl __FrameUnwindFilter(ptr) ucrtbase.__FrameUnwindFilter
 @ cdecl __GetPlatformExceptionInfo(ptr) ucrtbase.__GetPlatformExceptionInfo
-@ cdecl __NLG_Dispatch2() ucrtbase.__NLG_Dispatch2
-@ cdecl __NLG_Return2() ucrtbase.__NLG_Return2
+@ cdecl -arch=!i386 __NLG_Dispatch2() ucrtbase.__NLG_Dispatch2
+@ cdecl -arch=!i386 __NLG_Return2() ucrtbase.__NLG_Return2
 @ cdecl __RTCastToVoid(ptr) ucrtbase.__RTCastToVoid
 @ cdecl __RTDynamicCast(ptr long ptr ptr long) ucrtbase.__RTDynamicCast
 @ cdecl __RTtypeid(ptr) ucrtbase.__RTtypeid
