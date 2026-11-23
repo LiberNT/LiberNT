@@ -18,13 +18,15 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#include <corecrt.h>
+#include "include/corecrt.h"
 
 #if defined(__x86_64__) && _MSVCR_VER>=140
 
 #include <stdarg.h>
 #include "include/stdlib.h"
 
+#define COBJMACROS
+#include <windows.h>
 #include "wine/exception.h"
 #include "wine/debug.h"
 #include "cppexcept.h"
