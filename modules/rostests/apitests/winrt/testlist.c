@@ -6,6 +6,7 @@ extern void func_AppInstallManager(void);
 extern void func_CoreApplication(void);
 extern void func_DispatcherQueue(void);
 extern void func_HString(void);
+extern void func_HttpClient(void);
 extern void func_NotificationData(void);
 extern void func_PenDevice(void);
 extern void func_ToastCallback(void);
@@ -21,6 +22,7 @@ const struct test winetest_testlist[] =
     { "CoreApplication", func_CoreApplication },
     { "DispatcherQueue", func_DispatcherQueue },
     { "HString", func_HString },
+    { "HttpClient", func_HttpClient },
     { "NotificationData", func_NotificationData },
     { "PenDevice", func_PenDevice },
     { "ToastCallback", func_ToastCallback },

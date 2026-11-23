@@ -19,6 +19,8 @@
 #include <windows.system.h>
 #include <windows.system.profile.h>
 #include <windows.applicationmodel.core.h>
+#include <windows.web.http.h>
+#include <robuffer.h>
 #include <weakreference.h>
 #include <shlobj.h>
 #include <propkey.h>

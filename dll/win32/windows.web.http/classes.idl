@@ -1,0 +1,25 @@
+/*
+ * PROJECT:     LiberNT Windows Runtime
+ * LICENSE:     GPL-3.0-or-later (https://spdx.org/licenses/GPL-3.0-or-later)
+ * PURPOSE:     Runtime classes of Windows.Web.Http.dll
+ * COPYRIGHT:   Copyright 2026 Ostap Brehin <osbre@protonmail.com>
+ */
+
+#pragma makedep register
+#pragma winrt ns_prefix
+
+import "windows.web.http.idl";
+
+namespace Windows.Web.Http {
+    runtimeclass HttpClient;
+    runtimeclass HttpMethod;
+    runtimeclass HttpRequestMessage;
+}
+
+namespace Windows.Web.Http.Filters {
+    runtimeclass HttpBaseProtocolFilter;
+}
+
+namespace Windows.Web.Http.Headers {
+    runtimeclass HttpDateOrDeltaHeaderValue;
+}
