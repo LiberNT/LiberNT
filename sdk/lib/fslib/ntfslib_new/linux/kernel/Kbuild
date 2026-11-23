@@ -1,0 +1,7 @@
+obj-m := ntfslib.o
+ntfslib-y := vfs.o ntfslib_core.o
+OBJECT_FILES_NON_STANDARD_ntfslib_core.o := y
+
+$(obj)/ntfslib_core.o: $(obj)/ntfslib_core.o_shipped
+	cp $< $@
+	touch $(obj)/.ntfslib_core.o.cmd

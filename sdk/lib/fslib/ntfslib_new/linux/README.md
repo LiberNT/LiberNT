@@ -190,6 +190,52 @@ A second mount of an image, or a tool run against a mounted one, fails with
 `EBUSY`; an image whose daemon is still unmounting is waited for, up to two
 seconds.
 
+## Kernel module
+
+`kernel/` builds the same core into `ntfslib.ko`, a Linux filesystem driver
+(`mount -t ntfslib`), for the cases FUSE cannot make fast: every FUSE request
+costs a round trip to the daemon, and creating or removing a file takes two
+or three of them.
+
+```sh
+make -C sdk/lib/fslib/ntfslib_new/linux/kernel OUT=/path/to/empty/build/dir
+```
+
+It is an early driver: files, directories, rename, truncation, times, page
+cache with delayed write-back and mmap work. Plain cluster-backed files are
+read and written through iomap with large folios; resident, compressed and
+sparse streams go through the core. NTFS keeps one written length per stream:
+blocks past it read as zeros, and write-back zeroes on the device whatever
+lies between the old written length and the block it stores before moving the
+length over it, so a store through a mapping or a write far into a grown file
+never exposes what the clusters held before. Bytes past the end of a file in
+its last block are cleared when that page is mapped and when the file grows,
+as the device only holds zeros there if this driver wrote the block.
+Ownership, mode and device numbers are stored as described below, so files,
+directories, hard links, symbolic links, FIFOs, sockets and device nodes made
+here read the same through the FUSE frontend and ntfs3. Extended attributes,
+sparse files, `O_DIRECT`, `fstrim` and mount options are not implemented. One
+lock serializes the core. It has not been used on real hardware yet.
+
+Listing a directory walks its index once per pass: the names wait with the
+open directory between `getdents` calls, and each name handed out also becomes
+a cached name and inode, so the `stat`, `open` or `unlink` that usually follows
+needs no second index lookup. A directory's change times are written once,
+when it leaves a short list of recently changed directories, at `sync`,
+`fsync` or unmount, and not at all if the directory is removed first; until
+then `stat` reports the pending time.
+
+POSIX ownership, mode and device numbers are kept in the `$LXUID`, `$LXGID`,
+`$LXMOD` and `$LXDEV` extended attributes, as WSL and ntfs3 store them, so
+FIFOs, sockets and device nodes are ordinary records typed by `$LXMOD`.
+Files without them belong to the mounting user. The kernel enforces these
+permissions (FUSE `default_permissions`), as it does for ntfs3, and the
+frontend clears set-user-ID and set-group-ID on writes, truncation,
+preallocation and chown with the rules the Linux VFS applies. Symbolic links are NTFS
+symbolic-link reparse points, and other native EAs appear as `user.` extended
+attributes. Lookups are case-sensitive, while the volume keeps the NTFS rule
+that names differing only in case cannot share a directory.
+
 ## Resize a volume
 
 ```sh
