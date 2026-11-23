@@ -435,7 +435,8 @@ static
 BOOLEAN
 DxgkpSessionMayUseAdapter(
     _In_ PDXGKRNL_ADAPTER Adapter,
-    _In_ ULONG SessionId)
+    _In_ ULONG SessionId,
+    _Out_ PBOOLEAN ForNewSession)
 {
     static const WCHAR Remote[] = L"\\RdpVdd_RemoteDisplay&";
     static const WCHAR SessionPrefix[] = L"SessionId_";
@@ -452,6 +453,7 @@ DxgkpSessionMayUseAdapter(
     PAGED_CODE();
     ASSERT(SessionId != 0);
 
+    *ForNewSession = FALSE;
     if (Adapter->PhysicalDeviceObject == NULL)
         return Console == 0 || Console == SessionId;
     Status = IoGetDevicePropertyData(Adapter->PhysicalDeviceObject, &DEVPKEY_Device_InstanceId, LOCALE_NEUTRAL, 0, 0,
@@ -484,7 +486,10 @@ DxgkpSessionMayUseAdapter(
         May = Console == 0 || Console == SessionId;
     else if (_wcsnicmp(Tail, NewSession, RTL_NUMBER_OF(NewSession) - 1) == 0 &&
              (Tail[RTL_NUMBER_OF(NewSession) - 1] == UNICODE_NULL || Tail[RTL_NUMBER_OF(NewSession) - 1] == L'_'))
+    {
+        *ForNewSession = TRUE;
         May = Console != 0 && Console != SessionId;
+    }
     else if (_wcsnicmp(Tail, SessionPrefix, RTL_NUMBER_OF(SessionPrefix) - 1) != 0)
         May = FALSE;
     else
@@ -505,7 +510,7 @@ DxgkpUseAdapterInSession(
 {
     PDXGKP_WIN32K_SESSION Owner;
     ULONG SessionId = PsGetCurrentProcessSessionId();
-    BOOLEAN May;
+    BOOLEAN May, ForNewSession;
     KIRQL OldIrql;
 
     PAGED_CODE();
@@ -525,9 +530,11 @@ DxgkpUseAdapterInSession(
 
     if (SessionId == 0)
         return STATUS_SUCCESS;
-    May = DxgkpSessionMayUseAdapter(Adapter, SessionId);
+    May = DxgkpSessionMayUseAdapter(Adapter, SessionId, &ForNewSession);
 
     KeAcquireSpinLock(&g_DisplayWin32kProcessLock, &OldIrql);
+    if (May && ForNewSession && Bridge->UseSessionId != SessionId && DxgkpFindWin32kSession(SessionId) != NULL)
+        May = FALSE;
     if (May && Bridge->UseSessionId != MAXULONG && Bridge->UseSessionId != SessionId)
     {
         Owner = DxgkpFindWin32kSession(Bridge->UseSessionId);
