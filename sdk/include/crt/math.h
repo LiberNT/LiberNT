@@ -267,97 +267,97 @@ _Check_return_ float __cdecl tanhf(_In_ float x);
 #endif /* _MSC_VER */
 
 #if !defined(_CRTBLD)
-_Check_return_ __CRT_INLINE float _chgsignf(_In_ float x) { return (float)_chgsign((double)x); }
-_Check_return_ __CRT_INLINE float _copysignf(_In_ float x, _In_ float y) { return (float)_copysign((double)x, (double)y); }
-_Check_return_ __CRT_INLINE float _hypotf(_In_ float x, _In_ float y) { return (float)_hypot((double)x, (double)y); }
+_Check_return_ __CRT_INLINE float __CRTDECL _chgsignf(_In_ float x) { return (float)_chgsign((double)x); }
+_Check_return_ __CRT_INLINE float __CRTDECL _copysignf(_In_ float x, _In_ float y) { return (float)_copysign((double)x, (double)y); }
+_Check_return_ __CRT_INLINE float __CRTDECL _hypotf(_In_ float x, _In_ float y) { return (float)_hypot((double)x, (double)y); }
 #if defined(__i386__) || defined(_M_IX86)
-_Check_return_ __CRT_INLINE float acosf(_In_ float x) { return (float)acos((double)x); }
-_Check_return_ __CRT_INLINE float asinf(_In_ float x) { return (float)asin((double)x); }
-_Check_return_ __CRT_INLINE float atanf(_In_ float x) { return (float)atan((double)x); }
-_Check_return_ __CRT_INLINE float atan2f(_In_ float x, _In_ float y) { return (float)atan2((double)x,(double)y); }
-_Check_return_ __CRT_INLINE float ceilf(_In_ float x) { return (float)ceil((double)x); }
-_Check_return_ __CRT_INLINE float cosf(_In_ float x) { return (float)cos((double)x); }
-_Check_return_ __CRT_INLINE float coshf(_In_ float x) { return (float)cosh((double)x); }
-_Check_return_ __CRT_INLINE float expf(_In_ float x) { return (float)exp((double)x); }
-_Check_return_ __CRT_INLINE float floorf(_In_ float x) { return (float)floor((double)x); }
-_Check_return_ __CRT_INLINE float fmodf(_In_ float x, _In_ float y) { return (float)fmod((double)x,(double)y); }
-_Check_return_ __CRT_INLINE float logf(_In_ float x) { return (float)log((double)x); }
-_Check_return_ __CRT_INLINE float log10f(_In_ float x) { return (float)log10((double)x); }
-_Check_return_ __CRT_INLINE float modff(_In_ float x, _Out_ float *y) { double _Di,_Df = modf((double)x,&_Di); *y = (float)_Di; return (float)_Df; }
-_Check_return_ __CRT_INLINE float powf(_In_ float x, _In_ float y) { return (float)pow((double)x,(double)y); }
-_Check_return_ __CRT_INLINE float sinf(_In_ float x) { return (float)sin((double)x); }
-_Check_return_ __CRT_INLINE float sinhf(_In_ float x) { return (float)sinh((double)x); }
-_Check_return_ __CRT_INLINE float sqrtf(_In_ float x) { return (float)sqrt((double)x); }
-_Check_return_ __CRT_INLINE float tanf(_In_ float x) { return (float)tan((double)x); }
-_Check_return_ __CRT_INLINE float tanhf(_In_ float x) { return (float)tanh((double)x); }
+_Check_return_ __CRT_INLINE float __CRTDECL acosf(_In_ float x) { return (float)acos((double)x); }
+_Check_return_ __CRT_INLINE float __CRTDECL asinf(_In_ float x) { return (float)asin((double)x); }
+_Check_return_ __CRT_INLINE float __CRTDECL atanf(_In_ float x) { return (float)atan((double)x); }
+_Check_return_ __CRT_INLINE float __CRTDECL atan2f(_In_ float x, _In_ float y) { return (float)atan2((double)x,(double)y); }
+_Check_return_ __CRT_INLINE float __CRTDECL ceilf(_In_ float x) { return (float)ceil((double)x); }
+_Check_return_ __CRT_INLINE float __CRTDECL cosf(_In_ float x) { return (float)cos((double)x); }
+_Check_return_ __CRT_INLINE float __CRTDECL coshf(_In_ float x) { return (float)cosh((double)x); }
+_Check_return_ __CRT_INLINE float __CRTDECL expf(_In_ float x) { return (float)exp((double)x); }
+_Check_return_ __CRT_INLINE float __CRTDECL floorf(_In_ float x) { return (float)floor((double)x); }
+_Check_return_ __CRT_INLINE float __CRTDECL fmodf(_In_ float x, _In_ float y) { return (float)fmod((double)x,(double)y); }
+_Check_return_ __CRT_INLINE float __CRTDECL logf(_In_ float x) { return (float)log((double)x); }
+_Check_return_ __CRT_INLINE float __CRTDECL log10f(_In_ float x) { return (float)log10((double)x); }
+_Check_return_ __CRT_INLINE float __CRTDECL modff(_In_ float x, _Out_ float *y) { double _Di,_Df = modf((double)x,&_Di); *y = (float)_Di; return (float)_Df; }
+_Check_return_ __CRT_INLINE float __CRTDECL powf(_In_ float x, _In_ float y) { return (float)pow((double)x,(double)y); }
+_Check_return_ __CRT_INLINE float __CRTDECL sinf(_In_ float x) { return (float)sin((double)x); }
+_Check_return_ __CRT_INLINE float __CRTDECL sinhf(_In_ float x) { return (float)sinh((double)x); }
+_Check_return_ __CRT_INLINE float __CRTDECL sqrtf(_In_ float x) { return (float)sqrt((double)x); }
+_Check_return_ __CRT_INLINE float __CRTDECL tanf(_In_ float x) { return (float)tan((double)x); }
+_Check_return_ __CRT_INLINE float __CRTDECL tanhf(_In_ float x) { return (float)tanh((double)x); }
 #endif
 #endif /* !defined(_CRTBLD) */
 
-_Check_return_ __CRT_INLINE double hypot(_In_ double x, _In_ double y) { return _hypot(x, y); }
-_Check_return_ __CRT_INLINE float hypotf(_In_ float x, _In_ float y) { return _hypotf(x, y); }
-_Check_return_ __CRT_INLINE float frexpf(_In_ float x, _Out_ int *y) { return ((float)frexp((double)x,y)); }
+_Check_return_ __CRT_INLINE double __CRTDECL hypot(_In_ double x, _In_ double y) { return _hypot(x, y); }
+_Check_return_ __CRT_INLINE float __CRTDECL hypotf(_In_ float x, _In_ float y) { return _hypotf(x, y); }
+_Check_return_ __CRT_INLINE float __CRTDECL frexpf(_In_ float x, _Out_ int *y) { return ((float)frexp((double)x,y)); }
 
 /* long double equals double, so just use inline wrappers */
-_Check_return_ __CRT_INLINE long double acosl(_In_ long double x) { return (acos((double)x)); }
-_Check_return_ __CRT_INLINE long double asinl(_In_ long double x) { return (asin((double)x)); }
-_Check_return_ __CRT_INLINE long double atanl(_In_ long double x) { return (atan((double)x)); }
-_Check_return_ __CRT_INLINE long double atan2l(_In_ long double y, _In_ long double x) { return (atan2((double)y, (double)x)); }
-_Check_return_ __CRT_INLINE long double ceill(_In_ long double x) { return (ceil((double)x)); }
-_Check_return_ __CRT_INLINE long double cosl(_In_ long double x) { return (cos((double)x)); }
-_Check_return_ __CRT_INLINE long double coshl(_In_ long double x) { return (cosh((double)x)); }
-_Check_return_ __CRT_INLINE long double expl(_In_ long double x) { return (exp((double)x)); }
-_Check_return_ __CRT_INLINE long double fabsl(_In_ long double x) { return fabs((double)x); }
-_Check_return_ __CRT_INLINE long double floorl(_In_ long double x) { return (floor((double)x)); }
-_Check_return_ __CRT_INLINE long double fmodl(_In_ long double x, _In_ long double y) { return (fmod((double)x, (double)y)); }
-_Check_return_ __CRT_INLINE long double frexpl(_In_ long double x, _Out_ int *y) { return (frexp((double)x, y)); }
-_Check_return_ __CRT_INLINE long double hypotl(_In_ long double x, _In_ long double y) { return _hypot((double)x, (double)y); }
-_Check_return_ __CRT_INLINE long double logl(_In_ long double x) { return (log((double)x)); }
-_Check_return_ __CRT_INLINE long double log10l(_In_ long double x) { return (log10((double)x)); }
-_Check_return_ __CRT_INLINE long double powl(_In_ long double x, _In_ long double y) { return (pow((double)x, (double)y)); }
-_Check_return_ __CRT_INLINE long double sinl(_In_ long double x) { return (sin((double)x)); }
-_Check_return_ __CRT_INLINE long double sinhl(_In_ long double x) { return (sinh((double)x)); }
-_Check_return_ __CRT_INLINE long double sqrtl(_In_ long double x) { return (sqrt((double)x)); }
-_Check_return_ __CRT_INLINE long double tanhl(_In_ long double x) {return (tanh((double)x)); }
-_Check_return_ __CRT_INLINE long double _chgsignl(_In_ long double number) { return _chgsign((double)number); }
-_Check_return_ __CRT_INLINE long double _copysignl(_In_ long double number, _In_ long double sign) { return _copysign((double)number, (double)sign); }
-_Check_return_ __CRT_INLINE long double _hypotl(_In_ long double x, _In_ long double y) { return _hypot((double)x, (double)y); }
-_Check_return_ __CRT_INLINE long double ldexpl(_In_ long double x, _In_ int y) { return ldexp((double)x, y); }
-_Check_return_ __CRT_INLINE long double modfl(_In_ long double x, _Out_ long double *y) { return (long double)modf((double)x, (double *)y); }
+_Check_return_ __CRT_INLINE long double __CRTDECL acosl(_In_ long double x) { return (acos((double)x)); }
+_Check_return_ __CRT_INLINE long double __CRTDECL asinl(_In_ long double x) { return (asin((double)x)); }
+_Check_return_ __CRT_INLINE long double __CRTDECL atanl(_In_ long double x) { return (atan((double)x)); }
+_Check_return_ __CRT_INLINE long double __CRTDECL atan2l(_In_ long double y, _In_ long double x) { return (atan2((double)y, (double)x)); }
+_Check_return_ __CRT_INLINE long double __CRTDECL ceill(_In_ long double x) { return (ceil((double)x)); }
+_Check_return_ __CRT_INLINE long double __CRTDECL cosl(_In_ long double x) { return (cos((double)x)); }
+_Check_return_ __CRT_INLINE long double __CRTDECL coshl(_In_ long double x) { return (cosh((double)x)); }
+_Check_return_ __CRT_INLINE long double __CRTDECL expl(_In_ long double x) { return (exp((double)x)); }
+_Check_return_ __CRT_INLINE long double __CRTDECL fabsl(_In_ long double x) { return fabs((double)x); }
+_Check_return_ __CRT_INLINE long double __CRTDECL floorl(_In_ long double x) { return (floor((double)x)); }
+_Check_return_ __CRT_INLINE long double __CRTDECL fmodl(_In_ long double x, _In_ long double y) { return (fmod((double)x, (double)y)); }
+_Check_return_ __CRT_INLINE long double __CRTDECL frexpl(_In_ long double x, _Out_ int *y) { return (frexp((double)x, y)); }
+_Check_return_ __CRT_INLINE long double __CRTDECL hypotl(_In_ long double x, _In_ long double y) { return _hypot((double)x, (double)y); }
+_Check_return_ __CRT_INLINE long double __CRTDECL logl(_In_ long double x) { return (log((double)x)); }
+_Check_return_ __CRT_INLINE long double __CRTDECL log10l(_In_ long double x) { return (log10((double)x)); }
+_Check_return_ __CRT_INLINE long double __CRTDECL powl(_In_ long double x, _In_ long double y) { return (pow((double)x, (double)y)); }
+_Check_return_ __CRT_INLINE long double __CRTDECL sinl(_In_ long double x) { return (sin((double)x)); }
+_Check_return_ __CRT_INLINE long double __CRTDECL sinhl(_In_ long double x) { return (sinh((double)x)); }
+_Check_return_ __CRT_INLINE long double __CRTDECL sqrtl(_In_ long double x) { return (sqrt((double)x)); }
+_Check_return_ __CRT_INLINE long double __CRTDECL tanhl(_In_ long double x) {return (tanh((double)x)); }
+_Check_return_ __CRT_INLINE long double __CRTDECL _chgsignl(_In_ long double number) { return _chgsign((double)number); }
+_Check_return_ __CRT_INLINE long double __CRTDECL _copysignl(_In_ long double number, _In_ long double sign) { return _copysign((double)number, (double)sign); }
+_Check_return_ __CRT_INLINE long double __CRTDECL _hypotl(_In_ long double x, _In_ long double y) { return _hypot((double)x, (double)y); }
+_Check_return_ __CRT_INLINE long double __CRTDECL ldexpl(_In_ long double x, _In_ int y) { return ldexp((double)x, y); }
+_Check_return_ __CRT_INLINE long double __CRTDECL modfl(_In_ long double x, _Out_ long double *y) { return (long double)modf((double)x, (double *)y); }
 
 /* Support for some functions, not exported in MSVCRT */
 #if (_MSC_VER >= 1929) && !defined(__clang__)
-_Check_return_ long lrint(_In_ double x);
-_Check_return_ long lrintf(_In_ float x);
-_Check_return_ long lrintl(_In_ long double x);
+_Check_return_ long __cdecl lrint(_In_ double x);
+_Check_return_ long __cdecl lrintf(_In_ float x);
+_Check_return_ long __cdecl lrintl(_In_ long double x);
 #pragma function(lrint, lrintf, lrintl)
 #endif
 
 #ifndef _CRTBLD
 _Check_return_ float __cdecl exp2f(_In_ float x);
-_Check_return_ __CRT_INLINE double round(_In_ double x) { return (x < 0) ? ceil(x - 0.5f) : floor(x + 0.5); }
-_Check_return_ __CRT_INLINE float roundf(_In_ float x) { return (x < 0) ? ceilf(x - 0.5f) : floorf(x + 0.5); }
-_Check_return_ __CRT_INLINE long double roundl(_In_ long double x) { return (x < 0) ? ceill(x - 0.5f) : floorl(x + 0.5); }
-_Check_return_ __CRT_INLINE long lround(_In_ double x) { return (long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
-_Check_return_ __CRT_INLINE long lroundf(_In_ float x) { return (long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
-_Check_return_ __CRT_INLINE long lroundl(_In_ long double x) { return (long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
-_Check_return_ __CRT_INLINE long long llround(_In_ double x) { return (long long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
-_Check_return_ __CRT_INLINE long long llroundf(_In_ float x) { return (long long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
-_Check_return_ __CRT_INLINE long long llroundl(_In_ long double x) { return (long long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
-_Check_return_ __CRT_INLINE double rint(_In_ double x) { return round(x); }
-_Check_return_ __CRT_INLINE float rintf(_In_ float x) { return roundf(x); }
-_Check_return_ __CRT_INLINE long double rintl(_In_ long double x) { return roundl(x); }
-_Check_return_ __CRT_INLINE long lrint(_In_ double x) { return (long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
-_Check_return_ __CRT_INLINE long lrintf(_In_ float x) { return (long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
-_Check_return_ __CRT_INLINE long lrintl(_In_ long double x) { return (long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
-_Check_return_ __CRT_INLINE long long llrint(_In_ double x) { return (long long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
-_Check_return_ __CRT_INLINE long long llrintf(_In_ float x) { return (long long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
-_Check_return_ __CRT_INLINE long long llrintl(_In_ long double x) { return (long long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
+_Check_return_ __CRT_INLINE double __CRTDECL round(_In_ double x) { return (x < 0) ? ceil(x - 0.5f) : floor(x + 0.5); }
+_Check_return_ __CRT_INLINE float __CRTDECL roundf(_In_ float x) { return (x < 0) ? ceilf(x - 0.5f) : floorf(x + 0.5); }
+_Check_return_ __CRT_INLINE long double __CRTDECL roundl(_In_ long double x) { return (x < 0) ? ceill(x - 0.5f) : floorl(x + 0.5); }
+_Check_return_ __CRT_INLINE long __CRTDECL lround(_In_ double x) { return (long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
+_Check_return_ __CRT_INLINE long __CRTDECL lroundf(_In_ float x) { return (long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
+_Check_return_ __CRT_INLINE long __CRTDECL lroundl(_In_ long double x) { return (long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
+_Check_return_ __CRT_INLINE long long __CRTDECL llround(_In_ double x) { return (long long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
+_Check_return_ __CRT_INLINE long long __CRTDECL llroundf(_In_ float x) { return (long long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
+_Check_return_ __CRT_INLINE long long __CRTDECL llroundl(_In_ long double x) { return (long long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
+_Check_return_ __CRT_INLINE double __CRTDECL rint(_In_ double x) { return round(x); }
+_Check_return_ __CRT_INLINE float __CRTDECL rintf(_In_ float x) { return roundf(x); }
+_Check_return_ __CRT_INLINE long double __CRTDECL rintl(_In_ long double x) { return roundl(x); }
+_Check_return_ __CRT_INLINE long __CRTDECL lrint(_In_ double x) { return (long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
+_Check_return_ __CRT_INLINE long __CRTDECL lrintf(_In_ float x) { return (long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
+_Check_return_ __CRT_INLINE long __CRTDECL lrintl(_In_ long double x) { return (long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
+_Check_return_ __CRT_INLINE long long __CRTDECL llrint(_In_ double x) { return (long long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
+_Check_return_ __CRT_INLINE long long __CRTDECL llrintf(_In_ float x) { return (long long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
+_Check_return_ __CRT_INLINE long long __CRTDECL llrintl(_In_ long double x) { return (long long)((x < 0) ? (x - 0.5f) : (x + 0.5)); }
 #ifdef _MSC_VER
 #define log2 _log2 // nasty hack, see CORE-18255
 #define log2f _log2f
 #endif
-_Check_return_ __CRT_INLINE double log2(_In_ double x) { return log(x) / log(2); }
-_Check_return_ __CRT_INLINE float log2f(_In_ float x) { return (float)(log((double)x) / 0.69314718055994530942); }
+_Check_return_ __CRT_INLINE double __CRTDECL log2(_In_ double x) { return log(x) / log(2); }
+_Check_return_ __CRT_INLINE float __CRTDECL log2f(_In_ float x) { return (float)(log((double)x) / 0.69314718055994530942); }
 #endif /* !_CRTBLD */
 
 #ifndef NO_OLDNAMES /* !__STDC__ */
