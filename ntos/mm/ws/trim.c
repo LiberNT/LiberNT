@@ -577,6 +577,19 @@ MiWriteModifiedPages(
 
         if ((MI_PFN_FLAGS(Entry) & MI_PFN_FLAG_PROTOTYPE) && MiSoftKind(Original) == MiSoftSubsection)
         {
+            if (Count != 0)
+            {
+                Status = MiWritePageFileCluster(System, Frames, Slots, ClusterReused, Count);
+                if (!NT_SUCCESS(Status))
+                {
+                    MiPfnWriteComplete(&System->Pfn, Frame, 0, FALSE);
+                    return Written;
+                }
+
+                Written += Count;
+                Count = 0;
+            }
+
             Status = MiWritePrototypePage(System, Frame);
 
             /* The page of a busy file went back to the modified list. */
