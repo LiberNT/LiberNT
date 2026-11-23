@@ -2819,6 +2819,15 @@ public:
         AddTaskItemButton(TaskItem);
     }
 
+    /* Every taskbar gets the shell window notifications; the main one answers those meant for the shell */
+    BOOL IsMainTaskbar()
+    {
+        WCHAR ClassName[32];
+
+        return ::GetClassNameW(m_Tray->GetHWND(), ClassName, _countof(ClassName)) != 0 &&
+               wcscmp(ClassName, L"Shell_TrayWnd") == 0;
+    }
+
     BOOL AddTask(IN HWND hWnd)
     {
         PTASK_ITEM TaskItem;
@@ -3393,10 +3402,13 @@ public:
             break;
 
         case HSHELL_TASKMAN:
-            ::PostMessage(m_Tray->GetHWND(), TWM_OPENSTARTMENU, 0, 0);
+            if (IsMainTaskbar())
+                ::PostMessage(m_Tray->GetHWND(), TWM_OPENSTARTMENU, 0, 0);
             break;
 
         case HSHELL_ACTIVATESHELLWINDOW:
+            if (!IsMainTaskbar())
+                break;
             ::SwitchToThisWindow(m_Tray->GetHWND(), TRUE);
             ::SetForegroundWindow(m_Tray->GetHWND());
             break;

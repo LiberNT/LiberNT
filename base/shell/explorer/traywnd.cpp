@@ -821,6 +821,298 @@ public:
     END_MSG_MAP()
 };
 
+#define TRAY_MAX_SECONDARY 7
+
+/* The taskbar of a monitor that does not hold the main taskbar. It shows the main taskbar's task buttons and the
+ * clock; its Start button opens the Start menu of the main taskbar. */
+class CSecondaryTrayWindow :
+    public CComCoClass<CSecondaryTrayWindow>,
+    public CComObjectRootEx<CComMultiThreadModelNoCS>,
+    public CWindowImpl<CSecondaryTrayWindow, CWindow, CControlWinTraits>,
+    public ITrayWindow
+{
+    CStartButton m_StartButton;
+    CComPtr<IUnknown> m_TaskSwitchInstance;
+    CComPtr<IUnknown> m_ClockInstance;
+    HWND m_TaskSwitch;
+    HWND m_Clock;
+    HTHEME m_Theme;
+    ITrayWindow *m_Primary;
+    RECT m_rcMonitor;
+
+    VOID AlignControls()
+    {
+        RECT rcClient;
+        SIZE StartSize, ClockSize;
+        BOOL Modern;
+
+        if (!GetClientRect(&rcClient) || m_StartButton.m_hWnd == NULL)
+            return;
+        m_StartButton.UpdateSize();
+        Modern = m_StartButton.IsModernTaskbar();
+        StartSize = m_StartButton.GetSize();
+        StartSize.cy = rcClient.bottom;
+        if (Modern)
+            StartSize.cx = MulDiv(StartSize.cy, 6, 5);
+        StartSize.cx = min(StartSize.cx, rcClient.right);
+        m_StartButton.SetWindowPos(NULL, 0, 0, StartSize.cx, StartSize.cy, SWP_NOZORDER | SWP_NOACTIVATE);
+
+        ClockSize.cx = 0;
+        ClockSize.cy = rcClient.bottom;
+        if (m_Clock != NULL && !GetHideClock())
+            ::SendMessageW(m_Clock, TNWM_GETMINIMUMSIZE, Modern ? TNWM_MINSIZE_MODERN : TRUE, (LPARAM)&ClockSize);
+        if (m_Clock != NULL)
+        {
+            ::SetWindowPos(m_Clock, NULL, rcClient.right - ClockSize.cx, 0, ClockSize.cx, rcClient.bottom,
+                           SWP_NOZORDER | SWP_NOACTIVATE | (GetHideClock() ? SWP_HIDEWINDOW : SWP_SHOWWINDOW));
+        }
+        if (m_TaskSwitch != NULL)
+        {
+            INT Left = StartSize.cx + GetSystemMetrics(SM_CXSIZEFRAME);
+
+            ::SetWindowPos(m_TaskSwitch, NULL, Left, 0, max(0, rcClient.right - ClockSize.cx - Left), rcClient.bottom,
+                           SWP_NOZORDER | SWP_NOACTIVATE);
+            ::SendMessageW(m_TaskSwitch, TSWM_UPDATETASKBARPOS, 0, 0);
+        }
+    }
+
+    /* The work area of the monitor ends where its taskbar begins */
+    VOID SetWorkArea(BOOL bReserve)
+    {
+        RECT rcTray, rcWork = m_rcMonitor;
+
+        if (bReserve && GetWindowRect(&rcTray))
+            SubtractRect(&rcWork, &m_rcMonitor, &rcTray);
+        SystemParametersInfoW(SPI_SETWORKAREA, 0, &rcWork, SPIF_SENDCHANGE);
+    }
+
+public:
+    CSecondaryTrayWindow()
+        : m_TaskSwitch(NULL),
+          m_Clock(NULL),
+          m_Theme(NULL),
+          m_Primary(NULL)
+    {
+        SetRectEmpty(&m_rcMonitor);
+    }
+
+    HRESULT Initialize(ITrayWindow *Primary, const RECT *prcMonitor, LONG Height)
+    {
+        RECT rcTray;
+        DWORD ExStyle = WS_EX_TOOLWINDOW | (g_TaskbarSettings.sr.AlwaysOnTop ? WS_EX_TOPMOST : 0);
+
+        ATLASSERT(Primary != NULL);
+        ATLASSERT(Height > 0);
+        m_Primary = Primary;
+        m_rcMonitor = *prcMonitor;
+        SetRect(&rcTray, m_rcMonitor.left, m_rcMonitor.bottom - Height, m_rcMonitor.right, m_rcMonitor.bottom);
+        if (Create(NULL, rcTray, NULL, WS_POPUP | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, ExStyle) == NULL)
+            return E_FAIL;
+        AlignControls();
+        ShowWindow(SW_SHOWNOACTIVATE);
+        SetWorkArea(TRUE);
+        return S_OK;
+    }
+
+    VOID Close(BOOL bRestoreWorkArea)
+    {
+        if (m_hWnd == NULL)
+            return;
+        if (bRestoreWorkArea)
+            SetWorkArea(FALSE);
+        DestroyWindow();
+    }
+
+    /* ITrayWindow */
+    HRESULT STDMETHODCALLTYPE Open() override
+    {
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE Close() override
+    {
+        return S_OK;
+    }
+
+    HWND STDMETHODCALLTYPE GetHWND() override
+    {
+        return m_hWnd;
+    }
+
+    BOOL STDMETHODCALLTYPE IsSpecialHWND(IN HWND hWnd) override
+    {
+        return hWnd == m_hWnd || hWnd == m_StartButton.m_hWnd || hWnd == m_TaskSwitch || hWnd == m_Clock ||
+               m_Primary->IsSpecialHWND(hWnd);
+    }
+
+    BOOL STDMETHODCALLTYPE IsHorizontal() override
+    {
+        return TRUE;
+    }
+
+    HWND STDMETHODCALLTYPE DisplayProperties() override
+    {
+        return m_Primary->DisplayProperties();
+    }
+
+    BOOL STDMETHODCALLTYPE ExecContextMenuCmd(IN UINT uiCmd) override
+    {
+        return m_Primary->ExecContextMenuCmd(uiCmd);
+    }
+
+    BOOL STDMETHODCALLTYPE Lock(IN BOOL bLock) override
+    {
+        return m_Primary->Lock(bLock);
+    }
+
+    BOOL STDMETHODCALLTYPE IsTaskWnd(HWND hWnd) override
+    {
+        /* TODO: MMTaskbarMode 1 and 2 show a window's button only on the taskbar of the monitor holding it */
+        return m_Primary->IsTaskWnd(hWnd);
+    }
+
+    HRESULT STDMETHODCALLTYPE NotifyFullScreenToAppBars(HMONITOR hMonitor, BOOL bFullOpening) override
+    {
+        return m_Primary->NotifyFullScreenToAppBars(hMonitor, bFullOpening);
+    }
+
+    LRESULT OnCreate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        HRESULT hr;
+
+        SetWindowTheme(m_hWnd, L"TaskBar", NULL);
+        m_Theme = OpenThemeData(m_hWnd, L"TaskBar");
+        if (m_StartButton.Create(m_hWnd) == NULL)
+            return -1;
+        hr = CTaskSwitchWnd_CreateInstance(m_hWnd, this, IID_PPV_ARG(IUnknown, &m_TaskSwitchInstance));
+        if (SUCCEEDED(hr))
+            hr = IUnknown_GetWindow(m_TaskSwitchInstance, &m_TaskSwitch);
+        if (SUCCEEDED(hr))
+            hr = CTrayClockWnd_CreateInstance(m_hWnd, IID_PPV_ARG(IUnknown, &m_ClockInstance));
+        if (SUCCEEDED(hr))
+            hr = IUnknown_GetWindow(m_ClockInstance, &m_Clock);
+        return FAILED_UNEXPECTEDLY(hr) ? -1 : 0;
+    }
+
+    LRESULT OnDestroy(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        if (m_Theme)
+            CloseThemeData(m_Theme);
+        m_Theme = NULL;
+        return 0;
+    }
+
+    LRESULT OnSize(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        AlignControls();
+        return 0;
+    }
+
+    LRESULT OnEraseBackground(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        HDC hdc = (HDC)wParam;
+        COLORREF crMaterial;
+        RECT rect;
+
+        if (!m_Theme)
+        {
+            bHandled = FALSE;
+            return 0;
+        }
+        GetClientRect(&rect);
+        if (ShellGetTaskbarMaterial(&crMaterial) && ShellColorIsLight(crMaterial))
+        {
+            RECT rcEdge = { rect.left, rect.top, rect.right, rect.top + 1 };
+            HBRUSH hbr = CreateSolidBrush(crMaterial);
+
+            FillRect(hdc, &rect, hbr);
+            DeleteObject(hbr);
+            hbr = CreateSolidBrush(RGB(190, 190, 190));
+            FillRect(hdc, &rcEdge, hbr);
+            DeleteObject(hbr);
+        }
+        else
+        {
+            DrawThemeBackground(m_Theme, hdc, TBP_BACKGROUNDBOTTOM, 0, &rect, 0);
+        }
+        return TRUE;
+    }
+
+    LRESULT OnThemeChanged(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        if (m_Theme)
+            CloseThemeData(m_Theme);
+        m_Theme = OpenThemeData(m_hWnd, L"TaskBar");
+        /* SetWindowTheme sends this before the Start button exists */
+        if (m_StartButton.m_hWnd != NULL)
+            m_StartButton.SendMessage(WM_THEMECHANGED, 0, 0);
+        AlignControls();
+        InvalidateRect(NULL, TRUE);
+        return 0;
+    }
+
+    LRESULT OnCtlColorBtn(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        SetBkMode((HDC)wParam, TRANSPARENT);
+        return (LRESULT)GetStockObject(HOLLOW_BRUSH);
+    }
+
+    LRESULT OnOpenStartMenu(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        /* TODO: open the Start menu on the monitor of the taskbar that asked for it */
+        ::PostMessageW(m_Primary->GetHWND(), TWM_OPENSTARTMENU, wParam, lParam);
+        return 0;
+    }
+
+    LRESULT OnContextMenu(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        HWND hwndPrimary = m_Primary->GetHWND();
+
+        return ::SendMessageW(hwndPrimary, WM_CONTEXTMENU, (WPARAM)hwndPrimary, lParam);
+    }
+
+    LRESULT OnNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        const NMHDR *pnmh = (const NMHDR *)lParam;
+
+        if (pnmh != NULL && pnmh->code == NTNWM_REALIGN)
+            AlignControls();
+        bHandled = FALSE;
+        return 0;
+    }
+
+    LRESULT OnForwardToChildren(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        if (m_TaskSwitch != NULL)
+            ::SendMessageW(m_TaskSwitch, uMsg, wParam, lParam);
+        if (m_Clock != NULL)
+            ::SendMessageW(m_Clock, uMsg, wParam, lParam);
+        AlignControls();
+        return 0;
+    }
+
+    DECLARE_WND_CLASS_EX(L"Shell_SecondaryTrayWnd", CS_DBLCLKS, COLOR_3DFACE)
+
+    BEGIN_MSG_MAP(CSecondaryTrayWindow)
+        MESSAGE_HANDLER(WM_CREATE, OnCreate)
+        MESSAGE_HANDLER(WM_DESTROY, OnDestroy)
+        MESSAGE_HANDLER(WM_SIZE, OnSize)
+        MESSAGE_HANDLER(WM_ERASEBKGND, OnEraseBackground)
+        MESSAGE_HANDLER(WM_THEMECHANGED, OnThemeChanged)
+        MESSAGE_HANDLER(WM_CTLCOLORBTN, OnCtlColorBtn)
+        MESSAGE_HANDLER(WM_CONTEXTMENU, OnContextMenu)
+        MESSAGE_HANDLER(WM_NOTIFY, OnNotify)
+        MESSAGE_HANDLER(WM_TIMECHANGE, OnForwardToChildren)
+        MESSAGE_HANDLER(TWM_SETTINGSCHANGED, OnForwardToChildren)
+        MESSAGE_HANDLER(TWM_OPENSTARTMENU, OnOpenStartMenu)
+    END_MSG_MAP()
+
+    DECLARE_NOT_AGGREGATABLE(CSecondaryTrayWindow)
+    DECLARE_PROTECT_FINAL_CONSTRUCT()
+    BEGIN_COM_MAP(CSecondaryTrayWindow)
+    END_COM_MAP()
+};
+
 class CTrayWindow :
     public CComCoClass<CTrayWindow>,
     public CComObjectRootEx<CComMultiThreadModelNoCS>,
@@ -833,6 +1125,8 @@ class CTrayWindow :
 {
     CStartButton m_StartButton;
     CTrayShowDesktopButton* m_pShowDesktopButton;
+    CComObject<CSecondaryTrayWindow> *m_SecondaryTrays[TRAY_MAX_SECONDARY];
+    UINT m_SecondaryTrayCount;
 
     CComPtr<IMenuBand>  m_StartMenuBand;
     CComPtr<IMenuPopup> m_StartMenuPopup;
@@ -887,6 +1181,7 @@ public:
     CTrayWindow() :
         m_StartButton(),
         m_pShowDesktopButton(NULL),
+        m_SecondaryTrayCount(0),
         m_Theme(NULL),
         m_Font(NULL),
         m_DesktopWnd(NULL),
@@ -904,6 +1199,7 @@ public:
         m_ShellServices(NULL),
         Flags(0)
     {
+        ZeroMemory(m_SecondaryTrays, sizeof(m_SecondaryTrays));
         ZeroMemory(&m_TrayRects, sizeof(m_TrayRects));
         ZeroMemory(&m_TraySize, sizeof(m_TraySize));
         ZeroMemory(&m_AutoHideOffset, sizeof(m_AutoHideOffset));
@@ -3103,11 +3399,80 @@ ChangePos:
             }
         }
 
+        PostMessage(TWM_UPDATESECONDARYTRAYS, 0, 0);
         return TRUE;
+    }
+
+    /* "Show my taskbar on all displays" */
+    static BOOL MultiMonitorTaskbarsEnabled()
+    {
+        DWORD Value = 1, Size = sizeof(Value);
+
+        if (SHGetValueW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+                        L"MMTaskbarEnabled", NULL, &Value, &Size) != ERROR_SUCCESS)
+        {
+            return TRUE;
+        }
+        return Value != 0;
+    }
+
+    VOID DestroySecondaryTrays()
+    {
+        for (UINT i = 0; i < m_SecondaryTrayCount; ++i)
+        {
+            ATLASSERT(m_SecondaryTrays[i] != NULL);
+            m_SecondaryTrays[i]->Close(TRUE);
+            m_SecondaryTrays[i]->Release();
+            m_SecondaryTrays[i] = NULL;
+        }
+        m_SecondaryTrayCount = 0;
+    }
+
+    BOOL AddSecondaryTray(HMONITOR hMonitor)
+    {
+        MONITORINFO mi = { sizeof(mi) };
+        CComObject<CSecondaryTrayWindow> *Tray = NULL;
+        LONG Height = IsPosHorizontal() && m_TraySize.cy > 0 ? m_TraySize.cy : GetDefaultTrayHeight();
+
+        if (m_SecondaryTrayCount == TRAY_MAX_SECONDARY)
+            return FALSE;
+        if (hMonitor == MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTONEAREST) || !GetMonitorInfoW(hMonitor, &mi))
+            return TRUE;
+        /* TODO: a secondary taskbar follows the main taskbar's edge and auto-hide state */
+        if (FAILED_UNEXPECTEDLY(CComObject<CSecondaryTrayWindow>::CreateInstance(&Tray)))
+            return TRUE;
+        Tray->AddRef();
+        if (FAILED_UNEXPECTEDLY(Tray->Initialize(this, &mi.rcMonitor, Height)))
+        {
+            Tray->Close(FALSE);
+            Tray->Release();
+            return TRUE;
+        }
+        m_SecondaryTrays[m_SecondaryTrayCount++] = Tray;
+        return TRUE;
+    }
+
+    static BOOL CALLBACK AddSecondaryTrayProc(HMONITOR hMonitor, HDC hdc, LPRECT prcMonitor, LPARAM lParam)
+    {
+        return reinterpret_cast<CTrayWindow *>(lParam)->AddSecondaryTray(hMonitor);
+    }
+
+    VOID UpdateSecondaryTrays()
+    {
+        DestroySecondaryTrays();
+        if (MultiMonitorTaskbarsEnabled())
+            EnumDisplayMonitors(NULL, NULL, AddSecondaryTrayProc, reinterpret_cast<LPARAM>(this));
+    }
+
+    LRESULT OnUpdateSecondaryTrays(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        UpdateSecondaryTrays();
+        return 0;
     }
 
     LRESULT OnDestroy(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
     {
+        DestroySecondaryTrays();
         TrayFlyouts_Destroy();
         StartMenu2_Destroy();
         return 0;
@@ -3237,6 +3602,7 @@ ChangePos:
         /* Move the tray window to the right position and resize it if necessary */
         CheckTrayWndPosition();
 
+        UpdateSecondaryTrays();
         return TRUE;
     }
 
@@ -4188,6 +4554,7 @@ HandleTrayContextMenu:
         CheckTrayWndPosition();
 
         g_TaskbarSettings.Save();
+        UpdateSecondaryTrays();
         return 0;
     }
 
@@ -4265,6 +4632,7 @@ HandleTrayContextMenu:
         MESSAGE_HANDLER(TWM_DOEXITWINDOWS, OnDoExitWindows)
         MESSAGE_HANDLER(TWM_GETTASKSWITCH, OnGetTaskSwitch)
         MESSAGE_HANDLER(TWM_SETZORDER, OnSetZOrder)
+        MESSAGE_HANDLER(TWM_UPDATESECONDARYTRAYS, OnUpdateSecondaryTrays)
     ALT_MSG_MAP(1)
     END_MSG_MAP()
 
