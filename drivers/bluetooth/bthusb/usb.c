@@ -304,7 +304,7 @@ BthUsbReceive(
             Stream->Discard = FALSE;
         }
     }
-    if (Kind == BthUsbRxEvent && Received < Dev->EventPacketSize && Stream->Length)
+    if (Kind == BthUsbRxEvent && (Received % Dev->EventPacketSize) != 0 && Stream->Length)
     {
         DPRINT1("BTHUSB: %04x:%04x dropped %lu bytes of an event ended by a short packet\n",
                 Dev->VendorId, Dev->ProductId, Stream->Length);
@@ -396,7 +396,7 @@ BthUsbStartReads(
 
             Read->Dev = Dev;
             Read->Kind = (BTHUSB_RX_KIND)Kind;
-            Read->Size = Kind == BthUsbRxEvent ? Dev->EventPacketSize : BTHUSB_ACL_READ_SIZE;
+            Read->Size = Kind == BthUsbRxEvent ? ALIGN_UP_BY(2 + 255, Dev->EventPacketSize) : BTHUSB_ACL_READ_SIZE;
             if (!Read->Buffer)
                 Read->Buffer = ExAllocatePoolWithTag(NonPagedPool, Read->Size, BTHUSB_TAG);
             if (!Read->Irp)
