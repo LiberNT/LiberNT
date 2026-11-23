@@ -226,6 +226,7 @@ HRESULT WINAPI _CBandSite_CreateInstance(LPUNKNOWN pUnkOuter, REFIID riid, void 
 #define TWM_SHOWBLUETOOTHFLYOUT (WM_USER + 274)
 #define TWM_SETTINGSCHANGED (WM_USER + 300)
 #define TWM_SETZORDER (WM_USER + 338)
+#define TWM_UPDATESECONDARYTRAYS (WM_USER + 339)
 
 extern const GUID IID_IShellDesktopTray;
 
