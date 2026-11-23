@@ -22,18 +22,21 @@
 
 static HANDLE AdapterReady;
 
-static ULONG VideoDeviceCount(void)
+static WCHAR AdapterInstance[MAX_DEVICE_ID_LEN];
+
+static BOOL AdapterStarted(void)
 {
-    DWORD max = 0, size = sizeof(max);
-    if (RegGetValueW(HKEY_LOCAL_MACHINE, L"HARDWARE\\DEVICEMAP\\VIDEO", L"MaxObjectNumber", RRF_RT_REG_DWORD,
-                     NULL, &max, &size) != ERROR_SUCCESS)
-        return 0;
-    return max + 1;
+    ULONG status = 0, problem = 0;
+    DEVINST node;
+    return AdapterInstance[0] &&
+           CM_Locate_DevNodeW(&node, AdapterInstance, CM_LOCATE_DEVNODE_NORMAL) == CR_SUCCESS &&
+           CM_Get_DevNode_Status(&status, &problem, node, 0) == CR_SUCCESS && (status & DN_STARTED);
 }
 
 static VOID WINAPI AdapterCreated(HSWDEVICE device, HRESULT result, PVOID context, PCWSTR instance)
 {
     trace("adapter %ls: 0x%08lx\n", instance ? instance : L"", result);
+    if (SUCCEEDED(result) && instance) lstrcpynW(AdapterInstance, instance, ARRAYSIZE(AdapterInstance));
     if (SUCCEEDED(result)) SetEvent(AdapterReady);
 }
 
@@ -261,6 +264,14 @@ static PSYSTEM_POOLTAG_INFORMATION SettledPoolTags(PSYSTEM_POOLTAG_INFORMATION e
     return info;
 }
 
+static void EndProcessById(HANDLE processId)
+{
+    HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE, HandleToUlong(processId));
+    if (!process) return;
+    TerminateProcess(process, 1);
+    CloseHandle(process);
+}
+
 static void RunSession(HANDLE port, ULONG ownSession, ULONG *previous)
 {
     WCHAR commandLine[MAX_PATH + 32], path[MAX_PATH], report[1024];
@@ -305,14 +316,14 @@ static void RunSession(HANDLE port, ULONG ownSession, ULONG *previous)
 
     csrssPid = SessionProcessId(sessionId, L"csrss.exe");
     ok(csrssPid != 0, "session %lu has no csrss\n", sessionId);
+    ok(csrssPid == HandleToUlong(csrss), "SmStartCsr named process %lu, but the csrss of session %lu is %lu\n",
+       HandleToUlong(csrss), sessionId, csrssPid);
     status = SmStopCsr(port, sessionId);
     ok(status == STATUS_SUCCESS, "SmStopCsr returned 0x%lx\n", status);
     if (!NT_SUCCESS(status))
     {
-        TerminateProcess(initial, 1);
-        TerminateProcess(csrss, 1);
-        CloseHandle(csrss);
-        CloseHandle(initial);
+        EndProcessById(initial);
+        EndProcessById(csrss);
         GetWindowsDirectoryW(path, MAX_PATH);
         lstrcatW(path, CHILD_REPORT);
         DeleteFileW(path);
@@ -321,8 +332,6 @@ static void RunSession(HANDLE port, ULONG ownSession, ULONG *previous)
     }
     ok(ProcessesInSession(sessionId, FALSE) == 0, "%lu processes outlived session %lu\n",
        ProcessesInSession(sessionId, FALSE), sessionId);
-    CloseHandle(csrss);
-    CloseHandle(initial);
     for (wait = 0; wait < 100 && ProcessesInSession(sessionId, TRUE) != 0; wait++) Sleep(100);
     ok(ProcessesInSession(sessionId, TRUE) == 0, "%lu exited processes of session %lu were never deleted\n",
        ProcessesInSession(sessionId, TRUE), sessionId);
@@ -346,7 +355,7 @@ START_TEST(StartSession)
     SW_DEVICE_CREATE_INFO info = { sizeof(info) };
     HSWDEVICE adapter = NULL;
     HANDLE port = NULL;
-    ULONG videoBefore, wait, previous = MAXULONG, i;
+    ULONG wait, previous = MAXULONG, i;
     PSYSTEM_POOLTAG_INFORMATION before, between, after;
     LONG messageLists, gdiLists;
     DWORD ownSession = 0, console;
@@ -358,7 +367,7 @@ START_TEST(StartSession)
     ok(console == ownSession, "the test runs in session %lu, the console is %lu\n", ownSession, console);
 
     AdapterReady = CreateEventW(NULL, TRUE, FALSE, NULL);
-    videoBefore = VideoDeviceCount();
+    AdapterInstance[0] = 0;
     info.pszInstanceId = L"RdpVdd_RemoteDisplay&NewSession";
     info.pszzHardwareIds = hardwareIds;
     info.pszzCompatibleIds = hardwareIds;
@@ -373,8 +382,8 @@ START_TEST(StartSession)
         return;
     }
     ok(WaitForSingleObject(AdapterReady, 15000) == WAIT_OBJECT_0, "the adapter was not created\n");
-    for (wait = 0; wait < 150 && VideoDeviceCount() <= videoBefore; wait++) Sleep(100);
-    ok(VideoDeviceCount() > videoBefore, "the adapter did not start (%lu video devices)\n", VideoDeviceCount());
+    for (wait = 0; wait < 150 && !AdapterStarted(); wait++) Sleep(100);
+    ok(AdapterStarted(), "the adapter %ls did not start\n", AdapterInstance);
     ok(!SessionSeesRemoteAdapter(), "the console session took the adapter meant for a new session\n");
 
     status = SmConnectToSm(NULL, NULL, 0, &port);
@@ -424,10 +433,11 @@ static HSWDEVICE CreateNewSessionAdapter(PCWSTR instance)
     static const WCHAR hardwareIds[] = L"RdpVdd_RemoteDisplay\0";
     SW_DEVICE_CREATE_INFO info = { sizeof(info) };
     HSWDEVICE adapter = NULL;
-    ULONG videoBefore = VideoDeviceCount(), wait;
+    ULONG wait;
     HRESULT hr;
 
     ResetEvent(AdapterReady);
+    AdapterInstance[0] = 0;
     info.pszInstanceId = instance;
     info.pszzHardwareIds = hardwareIds;
     info.pszzCompatibleIds = hardwareIds;
@@ -439,8 +449,8 @@ static HSWDEVICE CreateNewSessionAdapter(PCWSTR instance)
     if (FAILED(hr))
         return NULL;
     ok(WaitForSingleObject(AdapterReady, 15000) == WAIT_OBJECT_0, "%ls was not created\n", instance);
-    for (wait = 0; wait < 150 && VideoDeviceCount() <= videoBefore; wait++) Sleep(100);
-    ok(VideoDeviceCount() > videoBefore, "%ls did not start\n", instance);
+    for (wait = 0; wait < 150 && !AdapterStarted(); wait++) Sleep(100);
+    ok(AdapterStarted(), "%ls did not start\n", instance);
     return adapter;
 }
 
@@ -473,11 +483,9 @@ static VOID StopChildSession(HANDLE port, ULONG sessionId, HANDLE csrss, HANDLE 
     ok(status == STATUS_SUCCESS, "SmStopCsr(%lu) returned 0x%lx\n", sessionId, status);
     if (!NT_SUCCESS(status))
     {
-        TerminateProcess(initial, 1);
-        TerminateProcess(csrss, 1);
+        EndProcessById(initial);
+        EndProcessById(csrss);
     }
-    CloseHandle(csrss);
-    CloseHandle(initial);
 }
 
 START_TEST(NewSessionAdapter)
