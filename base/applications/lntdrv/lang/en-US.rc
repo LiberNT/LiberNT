@@ -141,6 +141,7 @@ BEGIN
     IDS_STATUS_PROBLEM "Problem code %1"
     IDS_STATUS_WORKING "Working"
     IDS_STATUS_STOPPED "Not started"
+    IDS_STATUS_NO_DRIVER_NEEDED "Working, no driver needed"
     IDS_SOURCE_CATALOG "Microsoft Update Catalog"
     IDS_SOURCE_THIRD_PARTY "Third party"
     IDS_DETAIL_NAME "Name: %1"

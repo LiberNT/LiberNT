@@ -571,6 +571,12 @@ bool HasDriver(const DeviceInfo &device)
     return !device.Inf.empty() || !device.Service.empty();
 }
 
+/* An INF that installs no service: the device needs no driver, and only one its bus runs raw starts */
+bool NullDriver(const DeviceInfo &device)
+{
+    return !device.Inf.empty() && device.Service.empty();
+}
+
 DWORD InstalledRank(const DeviceInfo &device)
 {
     const std::vector<std::wstring> *lists[] = { &device.HardwareIds, &device.CompatibleIds };
@@ -616,6 +622,8 @@ std::wstring DeviceStatus(const DeviceInfo &device)
         return LoadText(IDS_STATUS_MISSING);
     if (device.Problem)
         return FormatText(IDS_STATUS_PROBLEM, NumberText(device.Problem));
+    if (!device.Started && NullDriver(device))
+        return LoadText(IDS_STATUS_NO_DRIVER_NEEDED);
     return LoadText(device.Started ? IDS_STATUS_WORKING : IDS_STATUS_STOPPED);
 }
 
