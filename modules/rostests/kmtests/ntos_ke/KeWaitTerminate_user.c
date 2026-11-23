@@ -36,7 +36,7 @@ static BOOL Query(ULONG Index, PWAIT_TERMINATE_CASE Case)
 static void TestCase(ULONG Index, BOOLEAN Alertable, BOOLEAN User, NTSTATUS Expected, BOOLEAN Known)
 {
     WAIT_THREAD Wait = { NULL, { Index, Alertable, User } };
-    WAIT_TERMINATE_CASE Case, State;
+    WAIT_TERMINATE_CASE Case, State = { 0 };
     HANDLE Thread;
     DWORD Ended, Code = 0, Start, Took;
     ULONG Tries;
@@ -78,7 +78,13 @@ static void TestCase(ULONG Index, BOOLEAN Alertable, BOOLEAN User, NTSTATUS Expe
           Index, Case.Alertable, Case.UserMode, Case.Status, Case.Milliseconds, Took);
     /* TODO: LiberNT ends this wait with STATUS_USER_APC; Windows 11 lets it run to its timeout */
     if (!Known)
+    {
+        if (is_reactos())
+            trace("case %lu: known difference, the wait returned 0x%lx, Windows 11 0x%lx\n", Index, Case.Status, Expected);
+        else
+            ok(Case.Status == Expected, "case %lu: the wait returned 0x%lx\n", Index, Case.Status);
         return;
+    }
     ok(Case.Status == Expected, "case %lu: the wait returned 0x%lx\n", Index, Case.Status);
     if (Expected == STATUS_TIMEOUT)
     {
