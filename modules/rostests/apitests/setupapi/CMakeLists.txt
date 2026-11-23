@@ -36,6 +36,7 @@ list(APPEND SOURCE
     SetupInstallRegisterDlls.c
     AddRegRegistryView.c
     SetupInstallServicesFromInfSectionEx.c
+    ServiceFilterNoLegacyNode.c
     SoftwareComponent.c
     SysButtonDevices.c
     UsbHubInformation.c

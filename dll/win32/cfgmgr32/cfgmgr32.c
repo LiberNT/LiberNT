@@ -2401,7 +2401,6 @@ CONFIGRET WINAPI CM_Get_Device_ID_List_Size_ExW( ULONG *len, const WCHAR *filter
 
     if (!len) return CR_INVALID_POINTER;
     if (flags & ~CM_GETIDLIST_FILTER_BITS) return CR_INVALID_FLAG;
-    if (flags & CM_GETIDLIST_DONOTGENERATE) FIXME( "CM_GETIDLIST_DONOTGENERATE not implemented!\n" );
 
     *len = 0;
     if (flags & CM_GETIDLIST_FILTER_CLASS && filter && guid_from_string( filter, &guid )) return CR_INVALID_DATA;
@@ -2476,7 +2475,6 @@ CONFIGRET WINAPI CM_Get_Device_ID_List_ExW( const WCHAR *filter, WCHAR *buffer, 
     if (!buffer) return CR_INVALID_POINTER;
     if (!len) return buffer ? CR_INVALID_POINTER : CR_BUFFER_SMALL;
     if (flags & ~CM_GETIDLIST_FILTER_BITS) return CR_INVALID_FLAG;
-    if (flags & CM_GETIDLIST_DONOTGENERATE) FIXME( "CM_GETIDLIST_DONOTGENERATE not implemented!\n" );
 
     *buffer = 0;
     if (flags & CM_GETIDLIST_FILTER_CLASS && filter && guid_from_string( filter, &guid )) return CR_INVALID_DATA;
