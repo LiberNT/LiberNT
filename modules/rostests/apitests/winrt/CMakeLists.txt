@@ -5,6 +5,7 @@ list(APPEND SOURCE
     CoreApplication.c
     DispatcherQueue.c
     guid.c
+    HString.c
     NotificationData.c
     PenDevice.c
     shortcut.c
