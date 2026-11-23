@@ -500,13 +500,6 @@ static void update_lcd_display(HWND hwnd)
     else
         StringCbCopy(tmp, sizeof(tmp), calc.buffer);
 
-    /* Add final '.' in decimal mode (if it's missing), but
-     * only if it's a result: no append if it prints "ERROR".
-     */
-    if (calc.base == IDC_RADIO_DEC && !calc.is_nan) {
-        if (_tcschr(tmp, _T('.')) == NULL)
-            StringCbCat(tmp, sizeof(tmp), _T("."));
-    }
     /* if separator mode is on, let's add an additional space */
     if (calc.usesep && !calc.sci_in && !calc.sci_out && !calc.is_nan) {
         /* go to the integer part of the string */
@@ -549,9 +542,11 @@ static void update_lcd_display(HWND hwnd)
                 } else
                     p++;
             }
-            /* update decimal point too. */
-            memmove(p+calc.sDecimal_len, p+1, _tcslen(p)*sizeof(TCHAR));
-            memcpy(p, calc.sDecimal, calc.sDecimal_len*sizeof(TCHAR));
+            /* Convert the decimal marker only when one is present. */
+            if (*p == _T('.')) {
+                memmove(p+calc.sDecimal_len, p+1, _tcslen(p)*sizeof(TCHAR));
+                memcpy(p, calc.sDecimal, calc.sDecimal_len*sizeof(TCHAR));
+            }
         }
     } else {
         TCHAR *p = _tcschr(tmp, _T('.'));
@@ -1013,17 +1008,16 @@ static void CopyMemToClipboard(void *ptr)
 static void handle_copy_command(HWND hWnd)
 {
     TCHAR display[MAX_CALC_SIZE];
-    UINT  n;
+
 
     // Read current text from output display
-    n = GetDlgItemText(hWnd, IDC_TEXT_OUTPUT, display, SIZEOF(display));
+    GetDlgItemText(hWnd, IDC_TEXT_OUTPUT, display, SIZEOF(display));
 
     // Check if result is a true number
     if (!calc.is_nan)
     {
         // Remove trailing decimal point if no decimal digits exist
-        if (calc.base == IDC_RADIO_DEC && _tcschr(calc.buffer, _T('.')) == NULL)
-            display[n - calc.sDecimal_len] = _T('\0');
+        /* The display no longer adds a trailing decimal separator. */
     }
 
     CopyMemToClipboard(display);
@@ -1251,100 +1245,6 @@ static void run_lpar(calc_number_t *c)
     exec_infix2postfix(c, RPN_OPERATOR_PARENT);
 }
 
-static LRESULT CALLBACK SubclassButtonProc(HWND hWnd, WPARAM wp, LPARAM lp)
-{
-    LPDRAWITEMSTRUCT dis = (LPDRAWITEMSTRUCT)lp;
-    UINT             dwText;
-    TCHAR            text[64];
-    int              dx, dy, len;
-    SIZE             size;
-    POINT            pt;
-
-    if(dis->CtlType == ODT_BUTTON)
-    {
-        HTHEME hTheme = NULL;
-        LPBTNINFO lpBtnInfo;
-
-        if (calc_IsAppThemed() && calc_IsThemeActive())
-            hTheme = calc_OpenThemeData(hWnd, L"Button");
-
-        if (hTheme)
-        {
-            int iState = 0;
-
-            if ((dis->itemState & ODS_DISABLED))
-                iState |= PBS_DISABLED;
-            if ((dis->itemState & ODS_SELECTED))
-                iState |= PBS_PRESSED;
-
-            lpBtnInfo = (LPBTNINFO)GetWindowLongPtr(dis->hwndItem, GWLP_USERDATA);
-            if (lpBtnInfo != NULL)
-            {
-                if (lpBtnInfo->bHover)
-                    iState |= PBS_HOT;
-            }
-
-            if (calc_IsThemeBackgroundPartiallyTransparent(hTheme, BP_PUSHBUTTON, iState))
-            {
-                calc_DrawThemeParentBackground(dis->hwndItem, dis->hDC, &dis->rcItem);
-            }
-
-            // Draw the frame around the control
-            calc_DrawThemeBackground(hTheme, dis->hDC, BP_PUSHBUTTON, iState, &dis->rcItem, NULL);
-
-            calc_CloseThemeData(hTheme);
-        } else {
-            /* default state: unpushed */
-            DWORD dwStyle = 0;
-
-            if ((dis->itemState & ODS_SELECTED))
-                dwStyle = DFCS_PUSHED;
-
-            DrawFrameControl(dis->hDC, &dis->rcItem, DFC_BUTTON, DFCS_BUTTONPUSH | dwStyle);
-        }
-
-        /* button text to write */
-        len = GetWindowText(dis->hwndItem, text, SIZEOF(text));
-
-        /*
-         * little exception: 1/x has different color
-         * in standard and scientific modes
-         */
-        if ((calc.layout == CALC_LAYOUT_STANDARD ||
-             calc.layout == CALC_LAYOUT_CONVERSION) &&
-            IDC_BUTTON_RX == dis->CtlID) {
-            SetTextColor(dis->hDC, CALC_CLR_BLUE);
-        } else
-        for (dx=0; dx<SIZEOF(key2code); dx++) {
-            if (key2code[dx].idc == dis->CtlID) {
-                SetTextColor(dis->hDC, key2code[dx].col);
-                break;
-            }
-        }
-
-        /* No background, to avoid corruption of the texture */
-        SetBkMode(dis->hDC, TRANSPARENT);
-
-        /* Default state: enabled */
-        dwText = 0;
-        if ((dis->itemState & ODS_DISABLED))
-            dwText = DSS_DISABLED;
-
-        /* Draw the text in the button */
-        GetTextExtentPoint32(dis->hDC, text, len, &size);
-        dx = ((dis->rcItem.right-dis->rcItem.left) - size.cx) >> 1;
-        dy = ((dis->rcItem.bottom-dis->rcItem.top) - size.cy) >> 1;
-        if ((dis->itemState & ODS_SELECTED)) {
-            dx++;
-            dy++;
-        }
-        pt.x = dis->rcItem.left + dx;
-        pt.y = dis->rcItem.top + dy;
-        DrawState(dis->hDC, NULL, NULL, (LPARAM)text, 0, pt.x, pt.y, size.cx, size.cy, DST_TEXT | dwText);
-    }
-    return 1L;
-}
-
 static INT_PTR CALLBACK HotButtonProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     LPBTNINFO lpBtnInfo = (LPBTNINFO)GetWindowLongPtr(hWnd, GWLP_USERDATA);
@@ -1389,6 +1289,8 @@ static BOOL CALLBACK EnumChildProc(HWND hWnd, LPARAM lParam)
         int *pnCtrls = (int *)lParam;
         int nCtrls = *pnCtrls;
 
+        if (nCtrls >= (int)SIZEOF(BtnInfo))
+            return FALSE;
         BtnInfo[nCtrls].oldProc = (WNDPROC)GetWindowLongPtr(hWnd, GWLP_WNDPROC);
         BtnInfo[nCtrls].bHover  = FALSE;
 
@@ -1423,6 +1325,58 @@ static INT_PTR CALLBACK OnSettingChange(HWND hWnd, WPARAM wParam, LPARAM lParam)
     return 0;
 }
 
+#include "modern_ui.h"
+
+static TCHAR uiHistory[512];
+static TCHAR uiLeftOperand[256];
+static TCHAR uiOperator[8];
+#define UI_HISTORY_READY (WM_APP + 117)
+
+static void UiHistoryCommand(HWND hwnd, UINT id)
+{
+    TCHAR current[256];
+    TCHAR line[512];
+    LPCTSTR symbol = NULL;
+    if (calc.layout != CALC_LAYOUT_STANDARD) return;
+    if (id == IDC_BUTTON_CANC || id == IDC_BUTTON_CE) {
+        uiHistory[0] = uiLeftOperand[0] = uiOperator[0] = 0;
+        ModernCalcSetExpression(hwnd, uiHistory);
+        return;
+    }
+    switch (id) {
+    case IDC_BUTTON_ADD: symbol = TEXT("+"); break;
+    case IDC_BUTTON_SUB: symbol = TEXT("-"); break;
+    case IDC_BUTTON_MULT: symbol = TEXT("×"); break;
+    case IDC_BUTTON_DIV: symbol = TEXT("÷"); break;
+    case IDC_BUTTON_EQU: symbol = TEXT("="); break;
+    default: break;
+    }
+    if (!symbol) {
+        if (uiOperator[0]) {
+            GetDlgItemText(hwnd, IDC_TEXT_OUTPUT, current, SIZEOF(current));
+            StringCchPrintf(line, SIZEOF(line), TEXT("%s %s %s"),
+                            uiLeftOperand, uiOperator, current);
+            ModernCalcSetExpression(hwnd, line);
+        }
+        return;
+    }
+    GetDlgItemText(hwnd, IDC_TEXT_OUTPUT, current, SIZEOF(current));
+    if (id == IDC_BUTTON_EQU) {
+        if (uiOperator[0]) {
+            StringCchPrintf(uiHistory, SIZEOF(uiHistory), TEXT("%s %s %s ="),
+                            uiLeftOperand, uiOperator, current);
+            ModernCalcSetExpression(hwnd, uiHistory);
+            PostMessage(hwnd,UI_HISTORY_READY,0,0);
+        }
+        uiOperator[0] = 0;
+    } else {
+        StringCchCopy(uiLeftOperand, SIZEOF(uiLeftOperand), current);
+        StringCchCopy(uiOperator, SIZEOF(uiOperator), symbol);
+        StringCchPrintf(uiHistory, SIZEOF(uiHistory), TEXT("%s %s"), current, symbol);
+        ModernCalcSetExpression(hwnd, uiHistory);
+    }
+}
+
 static INT_PTR CALLBACK DlgMainProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp)
 {
     unsigned int x;
@@ -1430,13 +1384,26 @@ static INT_PTR CALLBACK DlgMainProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp)
 
     switch (msg) {
     case WM_DRAWITEM:
-        return SubclassButtonProc(hWnd, wp, lp);
+        return ModernCalcDrawButton((const DRAWITEMSTRUCT *)lp);
+
+    case WM_ERASEBKGND:
+        return ModernCalcErase((HDC)wp, hWnd);
+        break;
+
+    case WM_SIZE:
+        ModernCalcLayout(hWnd);
+        break;
 
     case WM_INITDIALOG:
 #ifdef DISABLE_HTMLHELP_SUPPORT
         EnableMenuItem(GetMenu(hWnd), IDM_HELP_HELP, MF_BYCOMMAND | MF_GRAYED);
 #endif
         calc.hWnd=hWnd;
+        uiHistory[0] = uiLeftOperand[0] = uiOperator[0] = 0;
+        if (calc.layout == CALC_LAYOUT_STANDARD)
+            ModernCalcInit(hWnd);
+        else
+            ModernCalcInitOther(hWnd, calc.layout);
         /* Enumerate children and apply hover function */
         BtnCount = 0;
         EnumChildWindows(hWnd, EnumChildProc, (LPARAM)&BtnCount);
@@ -1459,6 +1426,7 @@ static INT_PTR CALLBACK DlgMainProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp)
         enable_allowed_controls(hWnd, IDC_RADIO_DEC);
         update_radio(hWnd, IDC_RADIO_DEC);
         update_menu(hWnd);
+        ModernCalcScientificRefresh(hWnd);
         display_rpn_result(hWnd, &calc.code);
         update_memory_flag(hWnd, calc.is_memory);
         /* remove keyboard focus */
@@ -1485,14 +1453,26 @@ static INT_PTR CALLBACK DlgMainProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp)
             MoveWindow(hWnd, calc.x_coord, calc.y_coord, w, h, FALSE);
         }
         break;
+    case WM_CTLCOLORLISTBOX:
+        return ModernCalcHistoryColor((HDC)wp);
     case WM_CTLCOLORSTATIC:
+        return ModernCalcStaticColor((HDC)wp, (HWND)lp, hWnd);
         if ((HWND)lp == GetDlgItem(hWnd, IDC_TEXT_OUTPUT))
             return (LRESULT)GetStockObject(WHITE_BRUSH);
         break;
     case WM_HANDLE_CLIPBOARD:
         handle_sequence_input(hWnd, &calc.Clipboard);
         return TRUE;
+    case UI_HISTORY_READY:
+        {
+            TCHAR result[256];
+            GetDlgItemText(hWnd,IDC_TEXT_OUTPUT,result,SIZEOF(result));
+            ModernCalcHistoryAdd(uiHistory,result);
+            return TRUE;
+        }
     case WM_COMMAND:
+        if (ModernCalcScientificCommand(hWnd, LOWORD(wp))) return TRUE;
+        if (ModernCalcHistoryCommand(hWnd,LOWORD(wp))) return TRUE;
         /*
          * if selection of category is changed, we must
          * update the content of the "from/to" combo boxes.
@@ -1506,6 +1486,12 @@ static INT_PTR CALLBACK DlgMainProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp)
         /* avoid flicker if the user selects from keyboard */
         if (GetFocus() != GetDlgItem(hWnd, IDC_BUTTON_FOCUS))
             SetFocus(GetDlgItem(hWnd, IDC_BUTTON_FOCUS));
+        if (calc.layout == CALC_LAYOUT_STANDARD &&
+            (LOWORD(wp) == IDC_BUTTON_ADD || LOWORD(wp) == IDC_BUTTON_SUB ||
+             LOWORD(wp) == IDC_BUTTON_MULT || LOWORD(wp) == IDC_BUTTON_DIV ||
+             LOWORD(wp) == IDC_BUTTON_EQU || LOWORD(wp) == IDC_BUTTON_CE ||
+             LOWORD(wp) == IDC_BUTTON_CANC))
+            UiHistoryCommand(hWnd, LOWORD(wp));
         switch (LOWORD(wp)) {
         case IDM_HELP_ABOUT:
         {
@@ -1513,6 +1499,15 @@ static INT_PTR CALLBACK DlgMainProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp)
             TCHAR infotext[200];
             LoadString(calc.hInstance, IDS_CALC_NAME, infotitle, SIZEOF(infotitle));
             LoadString(calc.hInstance, IDS_AUTHOR, infotext, SIZEOF(infotext));
+            /* Keep the native ShellAbout (including Wine/LiberNT version
+             * information). The redesign attribution is also in the title,
+             * because some ShellAbout implementations truncate multiline text. */
+            {
+                TCHAR credit[96] = TEXT("");
+                ModernCalcAppendCredit(credit, SIZEOF(credit));
+                if (credit[0] == TEXT('\n')) credit[0] = TEXT(' ');
+                StringCchCat(infotitle, SIZEOF(infotitle), credit);
+            }
             ShellAbout(hWnd, infotitle, infotext, calc.hBgIcon);
             return TRUE;
         }
@@ -1896,6 +1891,7 @@ static INT_PTR CALLBACK DlgMainProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp)
         return TRUE;
 
     case WM_DESTROY:
+        ModernCalcCleanup();
         /* Get (x,y) position of the calculator */
         GetWindowRect(hWnd, &rc);
         calc.x_coord = rc.left;

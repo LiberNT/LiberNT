@@ -7,6 +7,7 @@ list(APPEND SOURCE
     winmain.c
     htmlhelp.c
     theme.c
+    modern_ui.c
     calc.h)
 
 file(GLOB calc_rc_deps res/*.*)
