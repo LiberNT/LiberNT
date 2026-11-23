@@ -101,6 +101,13 @@ static ULONG CmpDpcQueueDepthLength = sizeof(ULONG);
 static ULONG CmpMinimumDpcRateLength = sizeof(ULONG);
 static ULONG CmpAdjustDpcThresholdLength = sizeof(ULONG);
 static ULONG CmpIdealDpcRateLength = sizeof(ULONG);
+static ULONG CmpKdWin2000MaskLength = sizeof(ULONG);
+#define CMP_KD_MASK_LENGTH(Name) static ULONG CmpKd##Name##MaskLength = sizeof(ULONG);
+KD_COMPONENTS(CMP_KD_MASK_LENGTH)
+
+#define CMP_WIDE_NAME(Name) L ## Name
+#define CMP_KD_MASK_ENTRY(Name) \
+    { L"Session Manager\\Debug Print Filter", CMP_WIDE_NAME(#Name), &Kd_##Name##_Mask, &CmpKd##Name##MaskLength, &DummyData },
 
 /* GLOBALS ********************************************************************/
 
@@ -206,6 +213,14 @@ CM_SYSTEM_CONTROL_VECTOR CmControlVector[] =
         &CmpTsAppCompatLength,
         &DummyData
     },
+    {
+        L"Session Manager\\Debug Print Filter",
+        L"WIN2000",
+        &Kd_WIN2000_Mask,
+        &CmpKdWin2000MaskLength,
+        &DummyData
+    },
+    KD_COMPONENTS(CMP_KD_MASK_ENTRY)
     {
         NULL,
         NULL,

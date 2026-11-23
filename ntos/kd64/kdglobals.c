@@ -225,34 +225,6 @@ KDDEBUGGER_DATA64 KdDebuggerDataBlock =
  */
 ULONG Kd_WIN2000_Mask = 1;
 
-#define KD_COMPONENTS(Component) \
-    Component(SYSTEM) Component(SMSS) Component(SETUP) Component(NTFS) Component(FSTUB) Component(CRASHDUMP) \
-    Component(CDAUDIO) Component(CDROM) Component(CLASSPNP) Component(DISK) Component(REDBOOK) Component(STORPROP) \
-    Component(SCSIPORT) Component(SCSIMINIPORT) Component(CONFIG) Component(I8042PRT) Component(SERMOUSE) Component(LSERMOUS) \
-    Component(KBDHID) Component(MOUHID) Component(KBDCLASS) Component(MOUCLASS) Component(TWOTRACK) Component(WMILIB) \
-    Component(ACPI) Component(AMLI) Component(HALIA64) Component(VIDEO) Component(SVCHOST) Component(VIDEOPRT) \
-    Component(TCPIP) Component(DMSYNTH) Component(NTOSPNP) Component(FASTFAT) Component(SAMSS) Component(PNPMGR) \
-    Component(NETAPI) Component(SCSERVER) Component(SCCLIENT) Component(SERIAL) Component(SERENUM) Component(UHCD) \
-    Component(RPCPROXY) Component(AUTOCHK) Component(DCOMSS) Component(UNIMODEM) Component(SIS) Component(FLTMGR) \
-    Component(WMICORE) Component(BURNENG) Component(IMAPI) Component(SXS) Component(FUSION) Component(IDLETASK) \
-    Component(SOFTPCI) Component(TAPE) Component(MCHGR) Component(IDEP) Component(PCIIDE) Component(FLOPPY) \
-    Component(FDC) Component(TERMSRV) Component(W32TIME) Component(PREFETCHER) Component(RSFILTER) Component(FCPORT) \
-    Component(PCI) Component(DMIO) Component(DMCONFIG) Component(DMADMIN) Component(WSOCKTRANSPORT) Component(VSS) \
-    Component(PNPMEM) Component(PROCESSOR) Component(DMSERVER) Component(SR) Component(INFINIBAND) Component(IHVDRIVER) \
-    Component(IHVVIDEO) Component(IHVAUDIO) Component(IHVNETWORK) Component(IHVSTREAMING) Component(IHVBUS) Component(HPS) \
-    Component(RTLTHREADPOOL) Component(LDR) Component(TCPIP6) Component(ISAPNP) Component(SHPC) Component(STORPORT) \
-    Component(STORMINIPORT) Component(PRINTSPOOLER) Component(VSSDYNDISK) Component(VERIFIER) Component(VDS) Component(VDSBAS) \
-    Component(VDSDYN) Component(VDSDYNDR) Component(VDSLDR) Component(VDSUTIL) Component(DFRGIFC) Component(DEFAULT) \
-    Component(MM) Component(DFSC) Component(WOW64) Component(ALPC) Component(WDI) Component(PERFLIB) \
-    Component(KTM) Component(IOSTRESS) Component(HEAP) Component(WHEA) Component(USERGDI) Component(MMCSS) \
-    Component(TPM) Component(THREADORDER) Component(ENVIRON) Component(EMS) Component(WDT) Component(FVEVOL) \
-    Component(NDIS) Component(NVCTRACE) Component(LUAFV) Component(APPCOMPAT) Component(USBSTOR) Component(SBP2PORT) \
-    Component(COVERAGE) Component(CACHEMGR) Component(MOUNTMGR) Component(CFR) Component(TXF) Component(KSECDD) \
-    Component(FLTREGRESS) Component(MPIO) Component(MSDSM) Component(UDFS) Component(PSHED) Component(STORVSP) \
-    Component(LSASS) Component(SSPICLI) Component(CNG) Component(EXFAT) Component(FILETRACE) Component(XSAVE) \
-    Component(SE) Component(DRIVEEXTENDER) Component(POWER) Component(CRASHDUMPXHCI) Component(GPIO) Component(REFS) \
-    Component(WER) Component(CAPIMG) Component(VPCI) Component(STORAGECLASSMEMORY) Component(FSLIB) Component(ENDOFTABLE)
-
 #define KD_DEFINE_MASK(Name) ULONG Kd_##Name##_Mask;
 KD_COMPONENTS(KD_DEFINE_MASK)
 
