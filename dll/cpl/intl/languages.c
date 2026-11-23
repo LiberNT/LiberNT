@@ -72,9 +72,9 @@ LanguagesPageProc(HWND hwndDlg,
             {
                 case LANG_JAPANESE:
                     if (HasJapanesePackage(hwndDlg))
-                    {
                         CheckDlgButton(hwndDlg, IDC_INST_FILES_FOR_ASIAN, BST_CHECKED);
-                    }
+                    else
+                        EnableWindow(GetDlgItem(hwndDlg, IDC_INST_FILES_FOR_ASIAN), FALSE);
                     break;
 
                 case LANG_CHINESE: /* Not supported yet */
@@ -118,16 +118,7 @@ LanguagesPageProc(HWND hwndDlg,
                 switch (PRIMARYLANGID(GetUserDefaultLangID()))
                 {
                     case LANG_JAPANESE:
-                        if (IsDlgButtonChecked(hwndDlg, IDC_INST_FILES_FOR_ASIAN) == BST_CHECKED)
-                        {
-                            if (!HasJapanesePackage(hwndDlg))
-                            {
-                                /* Install now */
-                                ShellExecuteW(hwndDlg, NULL, L"rapps.exe", L"/INSTALL jpn-package",
-                                              NULL, SW_SHOWNORMAL);
-                            }
-                        }
-                        else
+                        if (IsDlgButtonChecked(hwndDlg, IDC_INST_FILES_FOR_ASIAN) != BST_CHECKED)
                         {
                             WCHAR szUninstall[MAX_PATH];
                             if (GetJapaneseUninstallCmdLine(hwndDlg, szUninstall, _countof(szUninstall)))

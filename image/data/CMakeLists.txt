@@ -173,9 +173,6 @@ add_livecd_shortcut("Command Prompt"
     "shell:system\\cmd.exe" ICON_INDEX 0
     WORKDIR "${envvar_homedrive}${envvar_homepath}"
     DESTINATION "${dir_startmenu_accessories}")
-add_livecd_shortcut("Applications Manager"
-    "shell:system\\rapps.exe" ICON_INDEX 0
-    DESTINATION "${dir_startmenu_programs}")
 add_livecd_shortcut("Device Manager"
     "shell:system\\devmgmt.exe" ICON_INDEX 0
     DESTINATION "${dir_startmenu_admintools}")

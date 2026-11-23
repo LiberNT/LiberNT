@@ -29,7 +29,7 @@ records the icon name, design size, file and SHA-256 of each one.
 | Downloads | `places/folder-green-download` | shell32.dll, 16722 (`downloads.ico`) |
 | NT Object Namespace | `places/folder-blue-code` | ntobjshex.dll, 1 |
 | System Registry | `places/folder-blue-private` | ntobjshex.dll, -7 |
-| Applications Manager, LntGet | `apps/system-software-install` | rapps.exe, lntget.exe |
+| LntGet | `apps/system-software-install` | lntget.exe |
 | DWM Settings | `apps/preferences-system-windows` | dwmsettings.exe |
 | Command Prompt, Terminal | `apps/utilities-terminal` | cmd.exe, terminal.exe |
 | Task Manager | `devices/computer` with `apps/com.github.stsdc.monitor` centered on its screen | taskmgr.exe, taskmgr11.exe |
