@@ -189,7 +189,7 @@ static void test_term(void)
     cb_val = 0xdeadbeef;
     hres = AtlModuleTerm(&test);
     ok (hres == S_OK, "AtlModuleTerm failed (0x%lx).\n", hres);
-    ok (cb_val == ex, "wrong callback value (0x%Ix).\n", cb_val);
+    ok (cb_val == ex, "wrong callback value (0x%Ix).\n", (size_t)cb_val);
 
     test.cbSize = FIELD_OFFSET(_ATL_MODULEW, dwAtlBuildVer);
 
@@ -202,7 +202,7 @@ static void test_term(void)
     cb_val = 0xdeadbeef;
     hres = AtlModuleTerm(&test);
     ok (hres == S_OK, "AtlModuleTerm failed (0x%lx).\n", hres);
-    ok (cb_val == 0xdeadbeef, "wrong callback value (0x%Ix).\n", cb_val);
+    ok (cb_val == 0xdeadbeef, "wrong callback value (0x%Ix).\n", (size_t)cb_val);
 }
 
 START_TEST(module)

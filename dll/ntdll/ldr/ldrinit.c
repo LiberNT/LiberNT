@@ -864,7 +864,7 @@ LdrpRunInitializeRoutines(IN PCONTEXT Context OPTIONAL)
     LdrpEnsureLoaderLockIsHeld();
 
      /* Get the number of entries to call */
-    if ((Count = LdrpClearLoadInProgress()))
+    if ((Count = LdrpCountUnprocessedEntries()))
     {
         /* Check if we can use our local buffer */
         if (Count > 16)
@@ -1046,41 +1046,20 @@ LdrpRunInitializeRoutines(IN PCONTEXT Context OPTIONAL)
             RtlActivateActivationContextUnsafeFast(&ActCtx,
                                                    LdrEntry->EntryPointActivationContext);
 
-            /* Check if it has TLS */
-            if (LdrEntry->TlsIndex)
-            {
-                /* Call TLS */
-                LdrpCallTlsInitializers(LdrEntry, DLL_PROCESS_ATTACH);
-            }
-
-            DllInitCompleted = FALSE;
             _SEH2_TRY
             {
-                /* Call the Entrypoint */
                 if (ShowSnaps)
-                {
                     DPRINT1("%wZ - Calling entry point at %p for DLL_PROCESS_ATTACH\n",
                             &LdrEntry->BaseDllName, EntryPoint);
-                }
-                DllStatus = LdrpCallInitRoutine(EntryPoint,
-                                                LdrEntry->DllBase,
-                                                DLL_PROCESS_ATTACH,
-                                                Context);
-                DllInitCompleted = TRUE;
+                DllStatus = LdrpCallProcessCallbacks(LdrEntry, DLL_PROCESS_ATTACH,
+                                                     Context, &DllInitCompleted);
             }
-            _SEH2_EXCEPT(LdrpDebugExceptionFilter(_SEH2_GetExceptionInformation()))
+            _SEH2_FINALLY
             {
-                DllStatus = FALSE;
-                DPRINT1("WARNING: Exception during LdrpCallInitRoutine(DLL_PROCESS_ATTACH) for %wZ\n",
-                        &LdrEntry->BaseDllName);
+                RtlDeactivateActivationContextUnsafeFast(&ActCtx);
+                LdrpCurrentDllInitializer = OldInitializer;
             }
             _SEH2_END;
-
-            /* Deactivate the ActCtx */
-            RtlDeactivateActivationContextUnsafeFast(&ActCtx);
-
-            /* Save the Current DLL Initializer */
-            LdrpCurrentDllInitializer = OldInitializer;
 
             /* Mark the entry as processed */
             /* FIXME: a module whose attach fails stays visible to the lock-free LdrLoadDll path until unloaded. */
@@ -3086,6 +3065,7 @@ LdrpInitializeProcess(IN PCONTEXT Context,
 
     /* Set it up */
     LdrpImageEntry->EntryPoint = LdrpFetchAddressOfEntryPoint(LdrpImageEntry->DllBase);
+    LdrpImageEntry->LoadReason = LoadReasonDynamicLoad;
     LdrpImageEntry->ObsoleteLoadCount = -1;
     LdrpImageEntry->EntryPointActivationContext = 0;
     LdrpImageEntry->FullDllName = ImageFileName;

@@ -79,7 +79,7 @@ static void TestThreads(void)
     ok(Error == ERROR_SUCCESS, "Thread query returned %lu\n", Error);
     ok(Info.ThreadsCaptured >= 1, "%lu threads captured\n", Info.ThreadsCaptured);
     ok(Info.ContextLength == sizeof(CONTEXT), "Context length %lu\n", Info.ContextLength);
-    ok(pMarkerGet(Marker, &Position) == ERROR_SUCCESS && Position == 0, "Initial position %Iu\n", Position);
+    ok(pMarkerGet(Marker, &Position) == ERROR_SUCCESS && Position == 0, "Initial position %Iu\n", (size_t)Position);
 
     while ((Error = pWalk(Snapshot, PSS_WALK_THREADS, Marker, &Entry, sizeof(Entry))) == ERROR_SUCCESS)
     {

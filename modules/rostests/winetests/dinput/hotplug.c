@@ -404,7 +404,7 @@ static CALLBACK DWORD cm_notify_callback( HCMNOTIFICATION hnotify, void *ctx, CM
         idx = (ARRAY_SIZE(device_change_events) + 1) - cb_data->device_change_expect_custom;
         event = &device_change_events[idx];
 
-        winetest_push_context( "%Id", idx );
+        winetest_push_context( "%Id", (ptrdiff_t)idx );
         ok( size == offsetof( CM_NOTIFY_EVENT_DATA, u.DeviceHandle.Data[data->u.DeviceHandle.DataSize] ),
             "got %#lx\n", size );
         ok( IsEqualGUID( &data->u.DeviceHandle.EventGuid, &event->Event ), "got DeviceHandle.EventGuid %s\n",

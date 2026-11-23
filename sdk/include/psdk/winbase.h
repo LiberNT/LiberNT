@@ -1645,10 +1645,6 @@ HANDLE WINAPI CreateMailslotA(_In_ LPCSTR, _In_ DWORD, _In_ DWORD, _In_opt_ LPSE
 HANDLE WINAPI CreateMailslotW(_In_ LPCWSTR, _In_ DWORD, _In_ DWORD, _In_opt_ LPSECURITY_ATTRIBUTES);
 HANDLE WINAPI CreateMutexA(LPSECURITY_ATTRIBUTES,BOOL,LPCSTR);
 HANDLE WINAPI CreateMutexW(LPSECURITY_ATTRIBUTES,BOOL,LPCWSTR);
-#if (_WIN32_WINNT >= 0x0600)
-HANDLE WINAPI CreateMutexExA(LPSECURITY_ATTRIBUTES,LPCSTR,DWORD,DWORD);
-HANDLE WINAPI CreateMutexExW(LPSECURITY_ATTRIBUTES,LPCWSTR,DWORD,DWORD);
-#endif
 HANDLE WINAPI CreateNamedPipeA(_In_ LPCSTR, _In_ DWORD, _In_ DWORD, _In_ DWORD, _In_ DWORD, _In_ DWORD, _In_ DWORD, _In_opt_ LPSECURITY_ATTRIBUTES);
 HANDLE WINAPI CreateNamedPipeW(_In_ LPCWSTR, _In_ DWORD, _In_ DWORD, _In_ DWORD, _In_ DWORD, _In_ DWORD, _In_ DWORD, _In_opt_ LPSECURITY_ATTRIBUTES);
 BOOL WINAPI CreatePipe(PHANDLE,PHANDLE,LPSECURITY_ATTRIBUTES,DWORD);
@@ -4373,11 +4369,6 @@ EXECUTION_STATE WINAPI SetThreadExecutionState(EXECUTION_STATE esFlags);
 }
 #endif
 
-typedef struct _COPYFILE2_CREATE_OPLOCK_KEYS {
-  GUID ParentOplockKey;
-  GUID TargetOplockKey;
-} COPYFILE2_CREATE_OPLOCK_KEYS, *PCOPYFILE2_CREATE_OPLOCK_KEYS;
-
 typedef struct _FILE_CASE_SENSITIVE_INFO {
   ULONG Flags;
 } FILE_CASE_SENSITIVE_INFO, *PFILE_CASE_SENSITIVE_INFO;
@@ -4924,7 +4915,9 @@ WINBASEAPI BOOL WINAPI ExecuteUmsThread(PUMS_CONTEXT UmsThread);
 WINBASEAPI HANDLE WINAPI FindFirstFileNameTransactedW(LPCWSTR lpFileName, DWORD dwFlags, LPDWORD StringLength, PWSTR LinkName, HANDLE hTransaction);
 WINBASEAPI HANDLE WINAPI FindFirstFileTransactedA(LPCSTR lpFileName, FINDEX_INFO_LEVELS fInfoLevelId, LPVOID lpFindFileData, FINDEX_SEARCH_OPS fSearchOp, LPVOID lpSearchFilter, DWORD dwAdditionalFlags, HANDLE hTransaction);
 WINBASEAPI HANDLE WINAPI FindFirstFileTransactedW(LPCWSTR lpFileName, FINDEX_INFO_LEVELS fInfoLevelId, LPVOID lpFindFileData, FINDEX_SEARCH_OPS fSearchOp, LPVOID lpSearchFilter, DWORD dwAdditionalFlags, HANDLE hTransaction);
+#if (_WIN32_WINNT >= 0x0600)
 WINBASEAPI HANDLE WINAPI FindFirstStreamTransactedW(LPCWSTR lpFileName, STREAM_INFO_LEVELS InfoLevel, LPVOID lpFindStreamData, DWORD dwFlags, HANDLE hTransaction);
+#endif
 WINBASEAPI ULONG WINAPI GetCommPorts(PULONG lpPortNumbers, ULONG uPortNumbersCount, PULONG puPortNumbersFound);
 WINBASEAPI DWORD WINAPI GetCompressedFileSizeTransactedA(LPCSTR lpFileName, LPDWORD lpFileSizeHigh, HANDLE hTransaction);
 WINBASEAPI DWORD WINAPI GetCompressedFileSizeTransactedW(LPCWSTR lpFileName, LPDWORD lpFileSizeHigh, HANDLE hTransaction);
@@ -4975,7 +4968,9 @@ WINADVAPI BOOL WINAPI OperationEnd(OPERATION_END_PARAMETERS *OperationEndParams)
 WINADVAPI BOOL WINAPI OperationStart(OPERATION_START_PARAMETERS *OperationStartParams);
 WINBASEAPI DWORD APIENTRY QueryThreadProfiling(HANDLE ThreadHandle, PBOOLEAN Enabled);
 WINBASEAPI DWORD WINAPI RaiseCustomSystemEventTrigger(PCUSTOM_SYSTEM_EVENT_TRIGGER_CONFIG CustomSystemEventTriggerConfig);
+#if (NTDDI_VERSION >= NTDDI_WIN10_RS3)
 WINBASEAPI BOOL WINAPI ReadDirectoryChangesExW(HANDLE hDirectory, LPVOID lpBuffer, DWORD nBufferLength, BOOL bWatchSubtree, DWORD dwNotifyFilter, LPDWORD lpBytesReturned, LPOVERLAPPED lpOverlapped, LPOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine, READ_DIRECTORY_NOTIFY_INFORMATION_CLASS ReadDirectoryNotifyInformationClass);
+#endif
 WINBASEAPI BOOL WINAPI RemoveDirectoryTransactedA(LPCSTR lpPathName, HANDLE hTransaction);
 WINBASEAPI BOOL WINAPI RemoveDirectoryTransactedW(LPCWSTR lpPathName, HANDLE hTransaction);
 WINBASEAPI BOOL WINAPI ReplacePartitionUnit(PWSTR TargetPartition, PWSTR SparePartition, ULONG Flags);
@@ -5019,6 +5014,14 @@ WINBASEAPI BOOLEAN WINAPI WTSIsServerContainer(void);
 #define AccessCheckByTypeAndAuditAlarm AccessCheckByTypeAndAuditAlarmA
 #endif
 
+#if (_WIN32_WINNT >= 0x0601) && (NTDDI_VERSION >= NTDDI_WIN10_FE)
+#if (NTDDI_VERSION >= NTDDI_WIN11_GE)
+typedef struct _COPYFILE2_CREATE_OPLOCK_KEYS {
+  GUID ParentOplockKey;
+  GUID TargetOplockKey;
+} COPYFILE2_CREATE_OPLOCK_KEYS, *PCOPYFILE2_CREATE_OPLOCK_KEYS;
+#endif
+
 typedef struct COPYFILE2_EXTENDED_PARAMETERS_V2 COPYFILE2_EXTENDED_PARAMETERS_V2;
 
 struct COPYFILE2_EXTENDED_PARAMETERS_V2
@@ -5031,10 +5034,19 @@ struct COPYFILE2_EXTENDED_PARAMETERS_V2
     DWORD dwCopyFlagsV2;
     ULONG ioDesiredSize;
     ULONG ioDesiredRate;
+#if (NTDDI_VERSION >= NTDDI_WIN11_GA)
     LPPROGRESS_ROUTINE pProgressRoutineOld;
+#if (NTDDI_VERSION >= NTDDI_WIN11_GE)
     PCOPYFILE2_CREATE_OPLOCK_KEYS SourceOplockKeys;
     PVOID reserved[6];
+#else
+    PVOID reserved[7];
+#endif
+#else
+    PVOID reserved[8];
+#endif
 };
+#endif
 
 #if ((_WIN32_WINNT >= 0x0601) && !defined(MIDL_PASS))
 typedef enum _RTL_UMS_THREAD_INFO_CLASS *PUMS_THREAD_INFO_CLASS;

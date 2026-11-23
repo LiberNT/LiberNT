@@ -759,7 +759,7 @@ typedef enum _JOBOBJECTINFOCLASS
     JobObjectBasicAndIoAccountingInformation,
     JobObjectExtendedLimitInformation,
     JobObjectJobSetInformation,
-    MaxJobObjectInfoClass,
+    JobObjectGroupInformation,
     JobObjectNotificationLimitInformation = 0xC,
     JobObjectLimitViolationInformation = 0xD,
     JobObjectGroupInformationEx = 0xE,
@@ -800,7 +800,7 @@ typedef enum _JOBOBJECTINFOCLASS
     JobObjectReserved27Information = 0x31,
     JobObjectReserved28Information = 0x32,
     JobObjectNetworkAccountingInformation = 0x33,
-    JobObjectCpuPartition = 0x34,
+    MaxJobObjectInfoClass
 } JOBOBJECTINFOCLASS;
 
 //

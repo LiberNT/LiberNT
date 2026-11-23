@@ -26,10 +26,10 @@ AlpcTestReserveBoundaries(
         Output.ResourceId = 0x55555555;
         Output.Guard = 0xa5a5a5a5;
         Status = NtAlpcCreateResourceReserve(Port, 0, Sizes[Index], &Output.ResourceId);
-        trace("ALPC_OBSERVE status Reserve.boundary size=%Iu status=%08lx output=%08lx guard=%08lx\n", Sizes[Index], Status, Output.ResourceId, Output.Guard);
+        trace("ALPC_OBSERVE status Reserve.boundary size=%Iu status=%08lx output=%08lx guard=%08lx\n", (size_t)Sizes[Index], Status, Output.ResourceId, Output.Guard);
         alpc_trace_scalar_mutation("Reserve.boundary", "output", 0x55555555, Output.ResourceId);
         ok_eq_hex(Output.Guard, 0xa5a5a5a5);
-        ok(Status != STATUS_NOT_IMPLEMENTED, "reserve size %Iu reached a stub\n", Sizes[Index]);
+        ok(Status != STATUS_NOT_IMPLEMENTED, "reserve size %Iu reached a stub\n", (size_t)Sizes[Index]);
         if (NT_SUCCESS(Status))
         {
             alpc_expect_status("Reserve.boundary_delete", NtAlpcDeleteResourceReserve(Port, 0, Output.ResourceId), STATUS_SUCCESS);
@@ -65,10 +65,10 @@ AlpcTestSectionBoundaries(
         Section = (ALPC_HANDLE)(ULONG_PTR)0x5555555555555555ULL;
         ActualSize = (SIZE_T)0x5555555555555555ULL;
         Status = NtAlpcCreatePortSection(Port, 0, NULL, Sizes[Index], &Section, &ActualSize);
-        trace("ALPC_OBSERVE status Section.boundary size=%Iu status=%08lx section=%p actual=%Iu\n", Sizes[Index], Status, Section, ActualSize);
+        trace("ALPC_OBSERVE status Section.boundary size=%Iu status=%08lx section=%p actual=%Iu\n", (size_t)Sizes[Index], Status, Section, (size_t)ActualSize);
         alpc_trace_scalar_mutation("Section.boundary", "section", (ALPC_HANDLE)(ULONG_PTR)0x5555555555555555ULL, Section);
         alpc_trace_scalar_mutation("Section.boundary", "actual_size", (SIZE_T)0x5555555555555555ULL, ActualSize);
-        ok(Status != STATUS_NOT_IMPLEMENTED, "section size %Iu reached a stub\n", Sizes[Index]);
+        ok(Status != STATUS_NOT_IMPLEMENTED, "section size %Iu reached a stub\n", (size_t)Sizes[Index]);
         if (NT_SUCCESS(Status))
             alpc_expect_status("Section.boundary_delete", NtAlpcDeletePortSection(Port, 0, Section), STATUS_SUCCESS);
     }
@@ -78,7 +78,7 @@ AlpcTestSectionBoundaries(
         Section = (ALPC_HANDLE)(ULONG_PTR)0x5555555555555555ULL;
         ActualSize = (SIZE_T)0x5555555555555555ULL;
         Status = NtAlpcCreatePortSection(Port, Flags[Index], NULL, PAGE_SIZE, &Section, &ActualSize);
-        trace("ALPC_OBSERVE status Section.flags flags=%08lx status=%08lx section=%p actual=%Iu\n", Flags[Index], Status, Section, ActualSize);
+        trace("ALPC_OBSERVE status Section.flags flags=%08lx status=%08lx section=%p actual=%Iu\n", Flags[Index], Status, Section, (size_t)ActualSize);
         alpc_trace_scalar_mutation("Section.flags", "section", (ALPC_HANDLE)(ULONG_PTR)0x5555555555555555ULL, Section);
         alpc_trace_scalar_mutation("Section.flags", "actual_size", (SIZE_T)0x5555555555555555ULL, ActualSize);
         ok(Status != STATUS_NOT_IMPLEMENTED, "section flags %08lx reached a stub\n", Flags[Index]);
@@ -124,7 +124,7 @@ AlpcTestViewFlagMatrix(
         View.ViewSize = PAGE_SIZE;
         Before = View;
         Status = NtAlpcCreateSectionView(Port, 0, &View);
-        trace("ALPC_OBSERVE status View.flags flags=%08lx status=%08lx section=%p base=%p size=%Iu\n", Flags[Index], Status, View.SectionHandle, View.ViewBase, View.ViewSize);
+        trace("ALPC_OBSERVE status View.flags flags=%08lx status=%08lx section=%p base=%p size=%Iu\n", Flags[Index], Status, View.SectionHandle, View.ViewBase, (size_t)View.ViewSize);
         AlpcTestTraceBufferMutation("View.flags", (const UCHAR *)&Before, (const UCHAR *)&View, sizeof(View));
         ok(Status != STATUS_NOT_IMPLEMENTED, "view flags %08lx reached a stub\n", Flags[Index]);
         if (NT_SUCCESS(Status) && View.ViewBase)
@@ -228,10 +228,10 @@ AlpcTestOutputFaultRollback(
 
     ActualSize = 0;
     Status = NtAlpcCreatePortSection(Port, 0, NULL, PAGE_SIZE, (PALPC_HANDLE)ReadOnlyOutput, &ActualSize);
-    trace("ALPC_OBSERVE status Rollback.section_output_fault=%08lx actual=%Iu\n", Status, ActualSize);
+    trace("ALPC_OBSERVE status Rollback.section_output_fault=%08lx actual=%Iu\n", Status, (size_t)ActualSize);
     ok(Status != STATUS_NOT_IMPLEMENTED, "section output fault reached a stub\n");
     Status = NtAlpcCreatePortSection(Port, 0, NULL, PAGE_SIZE, &Section, &ActualSize);
-    trace("ALPC_OBSERVE status Rollback.section_after_fault=%08lx section=%p actual=%Iu\n", Status, Section, ActualSize);
+    trace("ALPC_OBSERVE status Rollback.section_after_fault=%08lx section=%p actual=%Iu\n", Status, Section, (size_t)ActualSize);
     if (NT_SUCCESS(Status))
         NtAlpcDeletePortSection(Port, 0, Section);
 
@@ -312,21 +312,21 @@ START_TEST(NtAlpcResources)
     }
 
     alpc_observe_status("PortSection.create_internal", NtAlpcCreatePortSection(ClientPort, 0, NULL, 0x3000, &SectionId, &ActualSize));
-    trace("ALPC_NATIVE_VALUE PortSection.internal_size=%Iu\n", ActualSize);
+    trace("ALPC_NATIVE_VALUE PortSection.internal_size=%Iu\n", (size_t)ActualSize);
     if (NT_SUCCESS(Status))
     {
         ok(SectionId != NULL, "port section ID was not returned\n");
-        ok(ActualSize >= 0x3000, "actual section size %Iu is too small\n", ActualSize);
+        ok(ActualSize >= 0x3000, "actual section size %Iu is too small\n", (size_t)ActualSize);
 
         RtlZeroMemory(&ViewAttribute, sizeof(ViewAttribute));
         ViewAttribute.SectionHandle = SectionId;
         ViewAttribute.ViewSize = 0x2000;
         alpc_observe_status("SectionView.create", NtAlpcCreateSectionView(ClientPort, 0, &ViewAttribute));
-        trace("ALPC_NATIVE_VALUE SectionView.base=%p size=%Iu\n", ViewAttribute.ViewBase, ViewAttribute.ViewSize);
+        trace("ALPC_NATIVE_VALUE SectionView.base=%p size=%Iu\n", ViewAttribute.ViewBase, (size_t)ViewAttribute.ViewSize);
         if (NT_SUCCESS(Status))
         {
             ok(ViewAttribute.ViewBase != NULL, "section view base was not returned\n");
-            ok(ViewAttribute.ViewSize >= 0x2000, "section view size %Iu is too small\n", ViewAttribute.ViewSize);
+            ok(ViewAttribute.ViewSize >= 0x2000, "section view size %Iu is too small\n", (size_t)ViewAttribute.ViewSize);
             AccessStatus = STATUS_SUCCESS;
             if (ViewAttribute.ViewBase && ViewAttribute.ViewSize >= sizeof(ULONG))
             {
@@ -356,7 +356,7 @@ START_TEST(NtAlpcResources)
     if (NT_SUCCESS(Status))
     {
         alpc_observe_status("PortSection.create_external", NtAlpcCreatePortSection(ServerPort, 0, ExternalSection, 0x5000, &ExternalSectionId, &ExternalActualSize));
-        trace("ALPC_NATIVE_VALUE PortSection.external_size=%Iu\n", ExternalActualSize);
+        trace("ALPC_NATIVE_VALUE PortSection.external_size=%Iu\n", (size_t)ExternalActualSize);
         if (NT_SUCCESS(Status))
         {
             ok(ExternalSectionId != NULL, "external port section ID was not returned\n");

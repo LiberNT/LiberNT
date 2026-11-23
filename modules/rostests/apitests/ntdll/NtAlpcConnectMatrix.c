@@ -117,7 +117,7 @@ AlpcTestConnectRoundTrip(
     ok_eq_ulong(WaitStatus, WAIT_OBJECT_0);
     if (WaitStatus == WAIT_OBJECT_0)
     {
-        trace("ALPC_OBSERVE status Connect.client use_ex=%u accept=%u status=%08lx output=%p length=%Iu type=%04x\n", UseConnectEx, AcceptConnection, Context->Status, Context->Port, Context->Length, Context->Message.Header.u2.s2.Type);
+        trace("ALPC_OBSERVE status Connect.client use_ex=%u accept=%u status=%08lx output=%p length=%Iu type=%04x\n", UseConnectEx, AcceptConnection, Context->Status, Context->Port, (size_t)Context->Length, Context->Message.Header.u2.s2.Type);
         alpc_trace_scalar_mutation("Connect.client", "output", (HANDLE)(ULONG_PTR)0x5555555555555555ULL, Context->Port);
         alpc_trace_scalar_mutation("Connect.client", "length", sizeof(Context->Message), Context->Length);
         AlpcTestTraceBufferMutation(UseConnectEx ? "ConnectEx.message" : "Connect.message", Context->Before, (const UCHAR *)&Context->Message, sizeof(Context->Message));
@@ -193,7 +193,7 @@ AlpcTestRequiredServerSidMismatch(VOID)
     ok_eq_ulong(WaitStatus, WAIT_OBJECT_0);
     if (WaitStatus == WAIT_OBJECT_0)
     {
-        trace("ALPC_OBSERVE status Connect.required_sid_world=%08lx output=%p length=%Iu\n", Context->Status, Context->Port, Context->Length);
+        trace("ALPC_OBSERVE status Connect.required_sid_world=%08lx output=%p length=%Iu\n", Context->Status, Context->Port, (size_t)Context->Length);
         alpc_trace_scalar_mutation("Connect.required_sid_world", "output", (HANDLE)(ULONG_PTR)0x5555555555555555ULL, Context->Port);
         alpc_trace_scalar_mutation("Connect.required_sid_world", "length", sizeof(Context->Message), Context->Length);
         ok(Context->Status != STATUS_NOT_IMPLEMENTED, "required SID connect reached a stub\n");
@@ -278,7 +278,7 @@ AlpcTestAcceptedReplyCapacityCase(
     ok_eq_ulong(WaitStatus, WAIT_OBJECT_0);
     if (WaitStatus == WAIT_OBJECT_0)
     {
-        trace("ALPC_OBSERVE status Connect.reply_capacity null_message=%u initial=%Iu required=%u status=%08lx output=%p returned_length=%Iu\n", NullConnectionMessage, InitialLength, ReplyLength, Context->Status, Context->Port, Context->Length);
+        trace("ALPC_OBSERVE status Connect.reply_capacity null_message=%u initial=%Iu required=%u status=%08lx output=%p returned_length=%Iu\n", NullConnectionMessage, (size_t)InitialLength, ReplyLength, Context->Status, Context->Port, (size_t)Context->Length);
         alpc_trace_scalar_mutation("Connect.reply_capacity", "output", (HANDLE)(ULONG_PTR)0x5555555555555555ULL, Context->Port);
         alpc_trace_scalar_mutation("Connect.reply_capacity", "length", InitialLength, Context->Length);
         AlpcTestTraceBufferMutation("Connect.reply_capacity.message", Context->Before, (const UCHAR *)&Context->Message, sizeof(Context->Message));
@@ -341,7 +341,7 @@ AlpcTestMalformedConnectionMessages(VOID)
     Length = sizeof(Message);
     Output = (HANDLE)(ULONG_PTR)0x5555555555555555ULL;
     alpc_observe_status("Connect.malformed.total_header_minus_1", NtAlpcConnectPort(&Output, &MissingName, NULL, &Attributes, 0, NULL, &Message.Header, &Length, NULL, NULL, &Timeout));
-    trace("ALPC_OBSERVE value Connect.malformed.total_header_minus_1 output=%p length=%Iu\n", Output, Length);
+    trace("ALPC_OBSERVE value Connect.malformed.total_header_minus_1 output=%p length=%Iu\n", Output, (size_t)Length);
     alpc_trace_scalar_mutation("Connect.malformed.total_header_minus_1", "output", (HANDLE)(ULONG_PTR)0x5555555555555555ULL, Output);
     alpc_trace_scalar_mutation("Connect.malformed.total_header_minus_1", "length", sizeof(Message), Length);
 
@@ -350,7 +350,7 @@ AlpcTestMalformedConnectionMessages(VOID)
     Length = sizeof(Message);
     Output = (HANDLE)(ULONG_PTR)0x5555555555555555ULL;
     alpc_expect_status("Connect.malformed.data_exceeds_total", NtAlpcConnectPort(&Output, &MissingName, NULL, &Attributes, 0, NULL, &Message.Header, &Length, NULL, NULL, &Timeout), STATUS_OBJECT_NAME_NOT_FOUND);
-    trace("ALPC_OBSERVE value Connect.malformed.data_exceeds_total output=%p length=%Iu\n", Output, Length);
+    trace("ALPC_OBSERVE value Connect.malformed.data_exceeds_total output=%p length=%Iu\n", Output, (size_t)Length);
     alpc_trace_scalar_mutation("Connect.malformed.data_exceeds_total", "output", (HANDLE)(ULONG_PTR)0x5555555555555555ULL, Output);
     alpc_trace_scalar_mutation("Connect.malformed.data_exceeds_total", "length", sizeof(Message), Length);
 
@@ -358,7 +358,7 @@ AlpcTestMalformedConnectionMessages(VOID)
     Length = sizeof(PORT_MESSAGE) - 1;
     Output = (HANDLE)(ULONG_PTR)0x5555555555555555ULL;
     alpc_observe_status("Connect.malformed.buffer_length_header_minus_1", NtAlpcConnectPort(&Output, &MissingName, NULL, &Attributes, 0, NULL, &Message.Header, &Length, NULL, NULL, &Timeout));
-    trace("ALPC_OBSERVE value Connect.malformed.buffer_length_header_minus_1 output=%p length=%Iu\n", Output, Length);
+    trace("ALPC_OBSERVE value Connect.malformed.buffer_length_header_minus_1 output=%p length=%Iu\n", Output, (size_t)Length);
     alpc_trace_scalar_mutation("Connect.malformed.buffer_length_header_minus_1", "output", (HANDLE)(ULONG_PTR)0x5555555555555555ULL, Output);
     alpc_trace_scalar_mutation("Connect.malformed.buffer_length_header_minus_1", "length", sizeof(PORT_MESSAGE) - 1, Length);
 }

@@ -570,7 +570,7 @@ static void testCertProperties(void)
          CERT_NCRYPT_KEY_HANDLE_PROP_ID, &retrievedHandle, &size);
         ok(ret, "CertGetCertificateContextProperty failed: %08lx\n", GetLastError());
         ok(retrievedHandle == keyContext.hNCryptKey,
-         "Expected handle %Ix, got %Ix\n", keyContext.hNCryptKey, retrievedHandle);
+         "Expected handle %Ix, got %Ix\n", (size_t)keyContext.hNCryptKey, (size_t)retrievedHandle);
         ok(size == sizeof(retrievedHandle),
          "Expected size %Iu, got %lu\n", sizeof(retrievedHandle), size);
 

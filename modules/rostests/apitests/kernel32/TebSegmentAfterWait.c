@@ -9,6 +9,22 @@
 
 #if defined(_M_IX86)
 
+static DWORD TebSegmentLimit(void)
+{
+    DWORD Limit;
+#ifdef _MSC_VER
+    __asm
+    {
+        mov ax, fs
+        lsl eax, ax
+        mov Limit, eax
+    }
+#else
+    __asm__ volatile("mov %%fs, %w0\n\tlsl %w0, %0" : "=r"(Limit) : : "cc");
+#endif
+    return Limit;
+}
+
 static HANDLE Ping, Pong;
 static volatile LONG Mismatches;
 
@@ -54,6 +70,10 @@ START_TEST(TebSegmentAfterWait)
 {
 #if defined(_M_IX86)
     HANDLE Threads[2];
+    DWORD Limit = TebSegmentLimit();
+
+    if (NtCurrentPeb()->OSBuildNumber >= 26100)
+        ok(Limit >= sizeof(TEB) - 1, "FS limit %#lx does not cover the TEB\n", Limit);
 
     Ping = CreateEventW(NULL, FALSE, TRUE, NULL);
     Pong = CreateEventW(NULL, FALSE, FALSE, NULL);

@@ -3201,10 +3201,16 @@ ChpeRtlIsEcCode(ULONG_PTR CodeAddress)
     return RtlIsEcCode(CodeAddress);
 }
 
+ULONG64 NTAPI
+ChpeRtlGetEnabledExtendedFeatures(ULONG64 Mask)
+{
+    return SharedUserData->XState.EnabledFeatures & Mask;
+}
+
 PVOID NTAPI
 ChpeRtlLocateExtendedFeature(PVOID ContextEx, ULONG FeatureId, PULONG Length)
 {
-    return RtlLocateExtendedFeature(ContextEx, FeatureId, Length);
+    return RtlLocateExtendedFeature2(ContextEx, FeatureId, &SharedUserData->XState, Length);
 }
 
 PVOID NTAPI

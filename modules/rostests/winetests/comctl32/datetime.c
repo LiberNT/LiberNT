@@ -24,9 +24,9 @@
 #include "msg.h"
 #include "v6util.h"
 
-#define expect(EXPECTED, GOT) ok((GOT)==(EXPECTED), "Expected %d, got %Id\n", (EXPECTED), (GOT))
+#define expect(EXPECTED, GOT) ok((GOT)==(EXPECTED), "Expected %d, got %Id\n", (EXPECTED), (ptrdiff_t)((GOT)))
 
-#define expect_unsuccess(EXPECTED, GOT) ok((GOT)==(EXPECTED), "Expected %d(unsuccessful), got %Id(successful)\n", (EXPECTED), (GOT))
+#define expect_unsuccess(EXPECTED, GOT) ok((GOT)==(EXPECTED), "Expected %d(unsuccessful), got %Id(successful)\n", (EXPECTED), (ptrdiff_t)((GOT)))
 
 #define NUM_MSG_SEQUENCES   1
 #define DATETIME_SEQ_INDEX    0
@@ -339,7 +339,7 @@ static void test_dtm_get_monthcal(void)
 #endif
     {
         r = SendMessageA(hWnd, DTM_GETMONTHCAL, 0, 0);
-        ok(r == 0, "Expected NULL(no child month calendar control), got %Id\n", r);
+        ok(r == 0, "Expected NULL(no child month calendar control), got %Id\n", (ptrdiff_t)r);
     }
 
     ok_sequence(sequences, DATETIME_SEQ_INDEX, test_dtm_get_monthcal_seq, "test_dtm_get_monthcal", FALSE);
@@ -405,7 +405,7 @@ static void test_dtm_set_and_get_range(void)
     r = SendMessageA(hWnd, DTM_SETRANGE, GDTR_MIN, (LPARAM)st);
     expect(1, r);
     r = SendMessageA(hWnd, DTM_GETRANGE, 0, (LPARAM)getSt);
-    ok(r == GDTR_MIN, "Expected %x, not %x(GDTR_MAX) or %x(GDTR_MIN | GDTR_MAX), got %Ix\n", GDTR_MIN, GDTR_MAX, GDTR_MIN | GDTR_MAX, r);
+    ok(r == GDTR_MIN, "Expected %x, not %x(GDTR_MAX) or %x(GDTR_MIN | GDTR_MAX), got %Ix\n", GDTR_MIN, GDTR_MAX, GDTR_MIN | GDTR_MAX, (size_t)r);
     expect_systime(&st[0], &getSt[0]);
 
     r = SendMessageA(hWnd, DTM_SETRANGE, GDTR_MAX, (LPARAM)st);
@@ -419,7 +419,7 @@ static void test_dtm_set_and_get_range(void)
     r = SendMessageA(hWnd, DTM_SETRANGE, GDTR_MAX, (LPARAM)st);
     expect(1, r);
     r = SendMessageA(hWnd, DTM_GETRANGE, 0, (LPARAM)getSt);
-    ok(r == GDTR_MAX, "Expected %x, not %x(GDTR_MIN) or %x(GDTR_MIN | GDTR_MAX), got %Ix\n", GDTR_MAX, GDTR_MIN, GDTR_MIN | GDTR_MAX, r);
+    ok(r == GDTR_MAX, "Expected %x, not %x(GDTR_MIN) or %x(GDTR_MIN | GDTR_MAX), got %Ix\n", GDTR_MAX, GDTR_MIN, GDTR_MIN | GDTR_MAX, (size_t)r);
     expect_systime(&st[1], &getSt[1]);
 
     r = SendMessageA(hWnd, DTM_SETRANGE, GDTR_MIN, (LPARAM)st);
@@ -433,7 +433,7 @@ static void test_dtm_set_and_get_range(void)
     r = SendMessageA(hWnd, DTM_SETRANGE, GDTR_MIN | GDTR_MAX, (LPARAM)st);
     expect(1, r);
     r = SendMessageA(hWnd, DTM_GETRANGE, 0, (LPARAM)getSt);
-    ok(r == (GDTR_MIN | GDTR_MAX), "Expected %x, not %x(GDTR_MIN) or %x(GDTR_MAX), got %Ix\n", (GDTR_MIN | GDTR_MAX), GDTR_MIN, GDTR_MAX, r);
+    ok(r == (GDTR_MIN | GDTR_MAX), "Expected %x, not %x(GDTR_MIN) or %x(GDTR_MAX), got %Ix\n", (GDTR_MIN | GDTR_MAX), GDTR_MIN, GDTR_MAX, (size_t)r);
     expect_systime(&st[0], &getSt[0]);
     expect_systime(&st[1], &getSt[1]);
 
@@ -445,7 +445,7 @@ static void test_dtm_set_and_get_range(void)
     r = SendMessageA(hWnd, DTM_SETRANGE, GDTR_MIN | GDTR_MAX, (LPARAM)st);
     expect(1, r);
     r = SendMessageA(hWnd, DTM_GETRANGE, 0, (LPARAM)getSt);
-    ok(r == (GDTR_MIN | GDTR_MAX), "Expected %x, not %x(GDTR_MIN) or %x(GDTR_MAX), got %Ix\n", (GDTR_MIN | GDTR_MAX), GDTR_MIN, GDTR_MAX, r);
+    ok(r == (GDTR_MIN | GDTR_MAX), "Expected %x, not %x(GDTR_MIN) or %x(GDTR_MAX), got %Ix\n", (GDTR_MIN | GDTR_MAX), GDTR_MIN, GDTR_MAX, (size_t)r);
     expect_systime(&st[0], &getSt[0]);
     expect_systime(&st[1], &getSt[1]);
 
@@ -457,7 +457,7 @@ static void test_dtm_set_and_get_range(void)
     r = SendMessageA(hWnd, DTM_SETRANGE, GDTR_MIN | GDTR_MAX, (LPARAM)st);
     expect(1, r);
     r = SendMessageA(hWnd, DTM_GETRANGE, 0, (LPARAM)getSt);
-    ok(r == (GDTR_MIN | GDTR_MAX), "Expected %x, not %x(GDTR_MIN) or %x(GDTR_MAX), got %Ix\n", (GDTR_MIN | GDTR_MAX), GDTR_MIN, GDTR_MAX, r);
+    ok(r == (GDTR_MIN | GDTR_MAX), "Expected %x, not %x(GDTR_MIN) or %x(GDTR_MAX), got %Ix\n", (GDTR_MIN | GDTR_MAX), GDTR_MIN, GDTR_MAX, (size_t)r);
     expect_systime(&st[0], &getSt[0]);
     expect_systime(&st[1], &getSt[1]);
 
@@ -465,9 +465,9 @@ static void test_dtm_set_and_get_range(void)
 
     /* DTM_SETRANGE with 0 flags */
     r = SendMessageA(hWnd, DTM_SETRANGE, 0, (LPARAM)st);
-    ok(r, "got %Iu\n", r);
+    ok(r, "got %Iu\n", (size_t)r);
     r = SendMessageA(hWnd, DTM_GETRANGE, 0, (LPARAM)getSt);
-    ok(r == 0, "got %Iu\n", r);
+    ok(r == 0, "got %Iu\n", (size_t)r);
     ok(getSt[0].wYear == 0 && getSt[1].wYear == 0, "got %u, %u\n", getSt[0].wYear, getSt[1].wYear);
 
     DestroyWindow(hWnd);
@@ -492,7 +492,7 @@ static void test_dtm_set_range_swap_min_max(void)
     r = SendMessageA(hWnd, DTM_SETSYSTEMTIME, GDT_VALID, (LPARAM)&st[0]);
     expect(1, r);
     r = SendMessageA(hWnd, DTM_GETSYSTEMTIME, 0, (LPARAM)&origSt);
-    ok(r == GDT_VALID, "Expected %d, not %d(GDT_NONE) or %d(GDT_ERROR), got %Id\n", GDT_VALID, GDT_NONE, GDT_ERROR, r);
+    ok(r == GDT_VALID, "Expected %d, not %d(GDT_NONE) or %d(GDT_ERROR), got %Id\n", GDT_VALID, GDT_NONE, GDT_ERROR, (ptrdiff_t)r);
     expect_systime(&st[0], &origSt);
 
     /* set st[0] to value higher than st[1] */
@@ -504,7 +504,7 @@ static void test_dtm_set_range_swap_min_max(void)
     r = SendMessageA(hWnd, DTM_SETRANGE, GDTR_MIN | GDTR_MAX, (LPARAM)st);
     expect(1, r);
     r = SendMessageA(hWnd, DTM_GETRANGE, 0, (LPARAM)getSt);
-    ok(r == (GDTR_MIN | GDTR_MAX), "Expected %x, not %x(GDTR_MIN) or %x(GDTR_MAX), got %Ix\n", (GDTR_MIN | GDTR_MAX), GDTR_MIN, GDTR_MAX, r);
+    ok(r == (GDTR_MIN | GDTR_MAX), "Expected %x, not %x(GDTR_MIN) or %x(GDTR_MAX), got %Ix\n", (GDTR_MIN | GDTR_MAX), GDTR_MIN, GDTR_MAX, (size_t)r);
 #ifndef __REACTOS__
     todo_wine
 #endif
@@ -523,7 +523,7 @@ static void test_dtm_set_range_swap_min_max(void)
     r = SendMessageA(hWnd, DTM_SETSYSTEMTIME, GDT_VALID, (LPARAM)&st[0]);
     expect(1, r);
     r = SendMessageA(hWnd, DTM_GETSYSTEMTIME, 0, (LPARAM)&getSt[0]);
-    ok(r == GDT_VALID, "Expected %d, not %d(GDT_NONE) or %d(GDT_ERROR), got %Id\n", GDT_VALID, GDT_NONE, GDT_ERROR, r);
+    ok(r == GDT_VALID, "Expected %d, not %d(GDT_NONE) or %d(GDT_ERROR), got %Id\n", GDT_VALID, GDT_NONE, GDT_ERROR, (ptrdiff_t)r);
     /* the time part seems to not change after swapping the min and max values
     and doing DTM_SETSYSTEMTIME */
     expect_systime_date(&st[0], &getSt[0]);
@@ -547,7 +547,7 @@ static void test_dtm_set_range_swap_min_max(void)
     whenever we do a DTM_SETRANGE, the DTM_GETRANGE will return the values
     swapped*/
     r = SendMessageA(hWnd, DTM_GETRANGE, 0, (LPARAM)getSt);
-    ok(r == (GDTR_MIN | GDTR_MAX), "Expected %x, not %x(GDTR_MIN) or %x(GDTR_MAX), got %Ix\n", (GDTR_MIN | GDTR_MAX), GDTR_MIN, GDTR_MAX, r);
+    ok(r == (GDTR_MIN | GDTR_MAX), "Expected %x, not %x(GDTR_MIN) or %x(GDTR_MAX), got %Ix\n", (GDTR_MIN | GDTR_MAX), GDTR_MIN, GDTR_MAX, (size_t)r);
 #ifndef __REACTOS__
     todo_wine
 #endif
@@ -570,7 +570,7 @@ static void test_dtm_set_range_swap_min_max(void)
     r = SendMessageA(hWnd, DTM_SETRANGE, GDTR_MIN | GDTR_MAX, (LPARAM)st);
     expect(1, r);
     r = SendMessageA(hWnd, DTM_GETRANGE, 0, (LPARAM)getSt);
-    ok(r == (GDTR_MIN | GDTR_MAX), "Expected %x, not %x(GDTR_MIN) or %x(GDTR_MAX), got %Ix\n", (GDTR_MIN | GDTR_MAX), GDTR_MIN, GDTR_MAX, r);
+    ok(r == (GDTR_MIN | GDTR_MAX), "Expected %x, not %x(GDTR_MIN) or %x(GDTR_MAX), got %Ix\n", (GDTR_MIN | GDTR_MAX), GDTR_MIN, GDTR_MAX, (size_t)r);
     expect_systime(&st[0], &getSt[1]);
     expect_systime(&st[1], &getSt[0]);
 
@@ -582,7 +582,7 @@ static void test_dtm_set_range_swap_min_max(void)
     r = SendMessageA(hWnd, DTM_SETRANGE, GDTR_MIN | GDTR_MAX, (LPARAM)st);
     expect(1, r);
     r = SendMessageA(hWnd, DTM_GETRANGE, 0, (LPARAM)getSt);
-    ok(r == (GDTR_MIN | GDTR_MAX), "Expected %x, not %x(GDTR_MIN) or %x(GDTR_MAX), got %Ix\n", (GDTR_MIN | GDTR_MAX), GDTR_MIN, GDTR_MAX, r);
+    ok(r == (GDTR_MIN | GDTR_MAX), "Expected %x, not %x(GDTR_MIN) or %x(GDTR_MAX), got %Ix\n", (GDTR_MIN | GDTR_MAX), GDTR_MIN, GDTR_MAX, (size_t)r);
     expect_systime(&st[0], &getSt[0]);
     expect_systime(&st[1], &getSt[1]);
 
@@ -610,7 +610,7 @@ static void test_dtm_set_and_get_system_time(void)
     r = SendMessageA(hWnd, DTM_SETSYSTEMTIME, GDT_NONE, (LPARAM)&st);
     expect(1, r);
     r = SendMessageA(hWnd, DTM_GETSYSTEMTIME, 0, (LPARAM)&getSt);
-    ok(r == GDT_NONE, "Expected %d, not %d(GDT_VALID) or %d(GDT_ERROR), got %Id\n", GDT_NONE, GDT_VALID, GDT_ERROR, r);
+    ok(r == GDT_NONE, "Expected %d, not %d(GDT_VALID) or %d(GDT_ERROR), got %Id\n", GDT_NONE, GDT_VALID, GDT_ERROR, (ptrdiff_t)r);
 
     /* set st to lowest possible value */
     fill_systime_struct(&st, 1601, 1, 0, 1, 0, 0, 0, 0);
@@ -630,7 +630,7 @@ static void test_dtm_set_and_get_system_time(void)
     r = SendMessageA(hWnd, DTM_SETSYSTEMTIME, GDT_VALID, (LPARAM)&st);
     expect(1, r);
     r = SendMessageA(hWnd, DTM_GETSYSTEMTIME, 0, (LPARAM)&getSt);
-    ok(r == GDT_VALID, "Expected %d, not %d(GDT_NONE) or %d(GDT_ERROR), got %Id\n", GDT_VALID, GDT_NONE, GDT_ERROR, r);
+    ok(r == GDT_VALID, "Expected %d, not %d(GDT_NONE) or %d(GDT_ERROR), got %Id\n", GDT_VALID, GDT_NONE, GDT_ERROR, (ptrdiff_t)r);
     expect_systime(&st, &getSt);
 
     /* set st to invalid value */
@@ -755,7 +755,7 @@ static void test_dtm_set_and_get_systemtime_with_limits(void)
     r = SendMessageA(hWnd, DTM_SETRANGE, GDTR_MIN | GDTR_MAX, (LPARAM)st);
     expect(1, r);
     r = SendMessageA(hWnd, DTM_GETRANGE, 0, (LPARAM)getSt);
-    ok(r == (GDTR_MIN | GDTR_MAX), "Expected %x, not %x(GDTR_MIN) or %x(GDTR_MAX), got %Ix\n", (GDTR_MIN | GDTR_MAX), GDTR_MIN, GDTR_MAX, r);
+    ok(r == (GDTR_MIN | GDTR_MAX), "Expected %x, not %x(GDTR_MIN) or %x(GDTR_MAX), got %Ix\n", (GDTR_MIN | GDTR_MAX), GDTR_MIN, GDTR_MAX, (size_t)r);
     expect_systime(&st[0], &getSt[0]);
     expect_systime(&st[1], &getSt[1]);
 
@@ -764,7 +764,7 @@ static void test_dtm_set_and_get_systemtime_with_limits(void)
     r = SendMessageA(hWnd, DTM_SETSYSTEMTIME, GDT_VALID, (LPARAM)&refSt);
     expect(1, r);
     r = SendMessageA(hWnd, DTM_GETSYSTEMTIME, 0, (LPARAM)&getSt[0]);
-    ok(r == GDT_VALID, "Expected %d, not %d(GDT_NONE) or %d(GDT_ERROR), got %Id\n", GDT_VALID, GDT_NONE, GDT_ERROR, r);
+    ok(r == GDT_VALID, "Expected %d, not %d(GDT_NONE) or %d(GDT_ERROR), got %Id\n", GDT_VALID, GDT_NONE, GDT_ERROR, (ptrdiff_t)r);
     expect_systime(&refSt, &getSt[0]);
 
     /* Now set an out-of-bounds time */
@@ -773,7 +773,7 @@ static void test_dtm_set_and_get_systemtime_with_limits(void)
     r = SendMessageA(hWnd, DTM_SETSYSTEMTIME, GDT_VALID, (LPARAM)&st[0]);
     expect(1, r);
     r = SendMessageA(hWnd, DTM_GETSYSTEMTIME, 0, (LPARAM)&getSt[0]);
-    ok(r == GDT_VALID, "Expected %d, not %d(GDT_NONE) or %d(GDT_ERROR), got %Id\n", GDT_VALID, GDT_NONE, GDT_ERROR, r);
+    ok(r == GDT_VALID, "Expected %d, not %d(GDT_NONE) or %d(GDT_ERROR), got %Id\n", GDT_VALID, GDT_NONE, GDT_ERROR, (ptrdiff_t)r);
     expect_systime(&refSt, &getSt[0]);
 
     fill_systime_struct(&st[0], 1977, 1, 0, 1, 0, 0, 0, 0);
@@ -781,7 +781,7 @@ static void test_dtm_set_and_get_systemtime_with_limits(void)
     r = SendMessageA(hWnd, DTM_SETSYSTEMTIME, GDT_VALID, (LPARAM)&st[0]);
     expect(1, r);
     r = SendMessageA(hWnd, DTM_GETSYSTEMTIME, 0, (LPARAM)&getSt[0]);
-    ok(r == GDT_VALID, "Expected %d, not %d(GDT_NONE) or %d(GDT_ERROR), got %Id\n", GDT_VALID, GDT_NONE, GDT_ERROR, r);
+    ok(r == GDT_VALID, "Expected %d, not %d(GDT_NONE) or %d(GDT_ERROR), got %Id\n", GDT_VALID, GDT_NONE, GDT_ERROR, (ptrdiff_t)r);
     expect_systime(&refSt, &getSt[0]);
 
     ok_sequence(sequences, DATETIME_SEQ_INDEX, test_dtm_set_and_get_systime_with_limits, "test_dtm_set_and_get_systime_with_limits", FALSE);
@@ -843,7 +843,7 @@ static void test_wm_set_get_text(void)
     ok(CB_ERR == ret ||
        broken(0 == ret) || /* comctl32 <= 4.72 */
        broken(1 == ret), /* comctl32 <= 4.70 */
-       "Expected CB_ERR, got %Id\n", ret);
+       "Expected CB_ERR, got %Id\n", (ptrdiff_t)ret);
 
     buff[0] = 0;
     ret = SendMessageA(hWnd, WM_GETTEXT, sizeof(buff), (LPARAM)buff);
@@ -860,13 +860,13 @@ static void test_wm_set_get_text(void)
         SetLastError(0xdeadbeef);
         ret = GetDateFormatA(LOCALE_USER_DEFAULT, 0, NULL, NULL, time, sizeof(time));
         if (ret == 0)
-            skip("GetDateFormat failed, returned %Id, error %ld\n", ret, GetLastError());
+            skip("GetDateFormat failed, returned %Id, error %ld\n", (ptrdiff_t)ret, GetLastError());
         else
         {
             ok(!strcmp(buff, time), "Expected %s, got %s\n", time, buff);
 
             ret = SendMessageA(hWnd, WM_GETTEXTLENGTH, 0, 0);
-            ok(ret == strlen(time), "Got wrong length: %Id, expected %Id.\n", ret, strlen(time));
+            ok(ret == strlen(time), "Got wrong length: %Id, expected %Id.\n", (ptrdiff_t)ret, strlen(time));
         }
     }
 

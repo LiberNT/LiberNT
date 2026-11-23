@@ -186,7 +186,7 @@ AlpcTestSendLengthMatrix(
         {
             ReceiveLength = 0x10000;
             Status = AlpcBoundaryReceive(ConnectionPort, ReceiveMessage, 0x10000, &ReceiveLength);
-            trace("ALPC_OBSERVE status Message.receive_length total=%u status=%08lx returned_length=%Iu received_total=%u received_data=%u type=%04x\n", TotalLengths[Index], Status, ReceiveLength, (USHORT)ReceiveMessage->u1.s1.TotalLength, (USHORT)ReceiveMessage->u1.s1.DataLength, ReceiveMessage->u2.s2.Type);
+            trace("ALPC_OBSERVE status Message.receive_length total=%u status=%08lx returned_length=%Iu received_total=%u received_data=%u type=%04x\n", TotalLengths[Index], Status, (size_t)ReceiveLength, (USHORT)ReceiveMessage->u1.s1.TotalLength, (USHORT)ReceiveMessage->u1.s1.DataLength, ReceiveMessage->u2.s2.Type);
             alpc_trace_scalar_mutation("Message.receive_length", "buffer_length", 0x10000, ReceiveLength);
             ok_hex(Status, STATUS_SUCCESS);
             ok_eq_size(ReceiveLength, 0x10000);
@@ -277,28 +277,28 @@ AlpcTestReceiveLengthMatrix(
         RtlCopyMemory(Before, ReceiveBuffer, sizeof(Before));
         Length = ReceiveLengths[Index];
         Status = AlpcBoundaryReceive(ConnectionPort, (PPORT_MESSAGE)ReceiveBuffer, sizeof(ReceiveBuffer), &Length);
-        trace("ALPC_OBSERVE status Message.receive_capacity capacity=%Iu status=%08lx returned_length=%Iu total=%u data=%u\n", ReceiveLengths[Index], Status, Length, ((PPORT_MESSAGE)ReceiveBuffer)->u1.s1.TotalLength, ((PPORT_MESSAGE)ReceiveBuffer)->u1.s1.DataLength);
+        trace("ALPC_OBSERVE status Message.receive_capacity capacity=%Iu status=%08lx returned_length=%Iu total=%u data=%u\n", (size_t)ReceiveLengths[Index], Status, (size_t)Length, ((PPORT_MESSAGE)ReceiveBuffer)->u1.s1.TotalLength, ((PPORT_MESSAGE)ReceiveBuffer)->u1.s1.DataLength);
         alpc_trace_scalar_mutation("Message.receive_capacity", "buffer_length", ReceiveLengths[Index], Length);
         AlpcTestTraceBufferMutation("Message.receive_capacity", Before, ReceiveBuffer, sizeof(ReceiveBuffer));
         if (ReceiveLengths[Index] < sizeof(PORT_MESSAGE) + 16)
         {
             ok_hex(Status, STATUS_BUFFER_TOO_SMALL);
             ok_eq_size(Length, sizeof(PORT_MESSAGE) + 16);
-            ok(!memcmp(Before, ReceiveBuffer, sizeof(ReceiveBuffer)), "capacity %Iu copied a truncated message\n", ReceiveLengths[Index]);
+            ok(!memcmp(Before, ReceiveBuffer, sizeof(ReceiveBuffer)), "capacity %Iu copied a truncated message\n", (size_t)ReceiveLengths[Index]);
 
             if (Status == STATUS_BUFFER_TOO_SMALL)
             {
                 RtlFillMemory(ReceiveBuffer, sizeof(ReceiveBuffer), 0x55);
                 RetryLength = sizeof(ReceiveBuffer);
                 RetryStatus = AlpcBoundaryReceive(ConnectionPort, (PPORT_MESSAGE)ReceiveBuffer, sizeof(ReceiveBuffer), &RetryLength);
-                trace("ALPC_OBSERVE status Message.receive_capacity_retry capacity=%Iu status=%08lx returned_length=%Iu total=%u data=%u\n", ReceiveLengths[Index], RetryStatus, RetryLength, ((PPORT_MESSAGE)ReceiveBuffer)->u1.s1.TotalLength, ((PPORT_MESSAGE)ReceiveBuffer)->u1.s1.DataLength);
+                trace("ALPC_OBSERVE status Message.receive_capacity_retry capacity=%Iu status=%08lx returned_length=%Iu total=%u data=%u\n", (size_t)ReceiveLengths[Index], RetryStatus, (size_t)RetryLength, ((PPORT_MESSAGE)ReceiveBuffer)->u1.s1.TotalLength, ((PPORT_MESSAGE)ReceiveBuffer)->u1.s1.DataLength);
                 ok_hex(RetryStatus, STATUS_SUCCESS);
                 if (!NT_SUCCESS(RetryStatus))
                     return FALSE;
                 ok_eq_size(RetryLength, sizeof(ReceiveBuffer));
                 ok_eq_ulong(((PPORT_MESSAGE)ReceiveBuffer)->u1.s1.TotalLength, sizeof(PORT_MESSAGE) + 16);
                 ok_eq_ulong(((PPORT_MESSAGE)ReceiveBuffer)->u1.s1.DataLength, 16);
-                ok(!memcmp(ReceiveBuffer + sizeof(PORT_MESSAGE), ExpectedPayload, sizeof(ExpectedPayload)), "capacity %Iu retry returned the wrong payload\n", ReceiveLengths[Index]);
+                ok(!memcmp(ReceiveBuffer + sizeof(PORT_MESSAGE), ExpectedPayload, sizeof(ExpectedPayload)), "capacity %Iu retry returned the wrong payload\n", (size_t)ReceiveLengths[Index]);
             }
             else if (!NT_SUCCESS(Status))
                 return FALSE;
@@ -311,7 +311,7 @@ AlpcTestReceiveLengthMatrix(
             ok_eq_size(Length, ReceiveLengths[Index]);
             ok_eq_ulong(((PPORT_MESSAGE)ReceiveBuffer)->u1.s1.TotalLength, sizeof(PORT_MESSAGE) + 16);
             ok_eq_ulong(((PPORT_MESSAGE)ReceiveBuffer)->u1.s1.DataLength, 16);
-            ok(!memcmp(ReceiveBuffer + sizeof(PORT_MESSAGE), ExpectedPayload, sizeof(ExpectedPayload)), "capacity %Iu returned the wrong payload\n", ReceiveLengths[Index]);
+            ok(!memcmp(ReceiveBuffer + sizeof(PORT_MESSAGE), ExpectedPayload, sizeof(ExpectedPayload)), "capacity %Iu returned the wrong payload\n", (size_t)ReceiveLengths[Index]);
         }
     }
     return TRUE;

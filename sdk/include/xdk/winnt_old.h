@@ -2411,15 +2411,19 @@ RtlVirtualUnwind(
 #define CONTEXT_ARM64_DEBUG_REGISTERS (CONTEXT_ARM64 | 0x8L)
 #define CONTEXT_ARM64_X18 (CONTEXT_ARM64 | 0x10L)
 #define CONTEXT_ARM64_XSTATE (CONTEXT_ARM64 | 0x20L)
+#define CONTEXT_ARM64_FLOATING_POINT_LOW (CONTEXT_ARM64 | 0x40L)
+#define CONTEXT_ARM64_FLOATING_POINT_HIGH (CONTEXT_ARM64 | 0x80L)
 #define CONTEXT_ARM64_FULL (CONTEXT_ARM64_CONTROL | CONTEXT_ARM64_INTEGER | CONTEXT_ARM64_FLOATING_POINT)
-#define CONTEXT_ARM64_ALL (CONTEXT_ARM64_FULL | CONTEXT_ARM64_DEBUG_REGISTERS | CONTEXT_ARM64_X18)
+#define CONTEXT_ARM64_ALL (CONTEXT_ARM64_FULL | CONTEXT_ARM64_DEBUG_REGISTERS | CONTEXT_ARM64_X18 | \
+                           CONTEXT_ARM64_FLOATING_POINT_LOW | CONTEXT_ARM64_FLOATING_POINT_HIGH)
 #define CONTEXT_CONTROL (CONTEXT_ARM64 | 0x1L)
 #define CONTEXT_INTEGER (CONTEXT_ARM64 | 0x2L)
 #define CONTEXT_FLOATING_POINT  (CONTEXT_ARM64 | 0x4L)
 #define CONTEXT_DEBUG_REGISTERS (CONTEXT_ARM64 | 0x8L)
 #define CONTEXT_X18 (CONTEXT_ARM64 | 0x10L)
 #define CONTEXT_FULL (CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_FLOATING_POINT)
-#define CONTEXT_ALL (CONTEXT_FULL | CONTEXT_DEBUG_REGISTERS | CONTEXT_X18)
+#define CONTEXT_XSTATE CONTEXT_ARM64_XSTATE
+#define CONTEXT_ALL CONTEXT_ARM64_ALL
 
 
 #define EXCEPTION_READ_FAULT    0
@@ -2660,8 +2664,11 @@ $include(riscv64/ketypes.h)
 #define CONTEXT_ARM64_DEBUG_REGISTERS (CONTEXT_ARM64 | 0x8L)
 #define CONTEXT_ARM64_X18 (CONTEXT_ARM64 | 0x10L)
 #define CONTEXT_ARM64_XSTATE (CONTEXT_ARM64 | 0x20L)
+#define CONTEXT_ARM64_FLOATING_POINT_LOW (CONTEXT_ARM64 | 0x40L)
+#define CONTEXT_ARM64_FLOATING_POINT_HIGH (CONTEXT_ARM64 | 0x80L)
 #define CONTEXT_ARM64_FULL (CONTEXT_ARM64_CONTROL | CONTEXT_ARM64_INTEGER | CONTEXT_ARM64_FLOATING_POINT)
-#define CONTEXT_ARM64_ALL (CONTEXT_ARM64_FULL | CONTEXT_ARM64_DEBUG_REGISTERS | CONTEXT_ARM64_X18)
+#define CONTEXT_ARM64_ALL (CONTEXT_ARM64_FULL | CONTEXT_ARM64_DEBUG_REGISTERS | CONTEXT_ARM64_X18 | \
+                           CONTEXT_ARM64_FLOATING_POINT_LOW | CONTEXT_ARM64_FLOATING_POINT_HIGH)
 #endif
 
 #ifndef CONTEXT_UNWOUND_TO_CALL
@@ -4452,6 +4459,46 @@ typedef enum _JOBOBJECTINFOCLASS {
   JobObjectExtendedLimitInformation,
   JobObjectJobSetInformation,
   JobObjectGroupInformation,
+  JobObjectNotificationLimitInformation = 0xC,
+  JobObjectLimitViolationInformation = 0xD,
+  JobObjectGroupInformationEx = 0xE,
+  JobObjectCpuRateControlInformation = 0xF,
+  JobObjectCompletionFilter = 0x10,
+  JobObjectCompletionCounter = 0x11,
+  JobObjectReserved1Information = 0x12,
+  JobObjectReserved2Information = 0x13,
+  JobObjectReserved3Information = 0x14,
+  JobObjectReserved4Information = 0x15,
+  JobObjectReserved5Information = 0x16,
+  JobObjectReserved6Information = 0x17,
+  JobObjectReserved7Information = 0x18,
+  JobObjectReserved8Information = 0x19,
+  JobObjectReserved9Information = 0x1A,
+  JobObjectReserved10Information = 0x1B,
+  JobObjectReserved11Information = 0x1C,
+  JobObjectReserved12Information = 0x1D,
+  JobObjectReserved13Information = 0x1E,
+  JobObjectReserved14Information = 0x1F,
+  JobObjectNetRateControlInformation = 0x20,
+  JobObjectNotificationLimitInformation2 = 0x21,
+  JobObjectLimitViolationInformation2 = 0x22,
+  JobObjectCreateSilo = 0x23,
+  JobObjectSiloBasicInformation = 0x24,
+  JobObjectReserved15Information = 0x25,
+  JobObjectReserved16Information = 0x26,
+  JobObjectReserved17Information = 0x27,
+  JobObjectReserved18Information = 0x28,
+  JobObjectReserved19Information = 0x29,
+  JobObjectReserved20Information = 0x2A,
+  JobObjectReserved21Information = 0x2B,
+  JobObjectReserved22Information = 0x2C,
+  JobObjectReserved23Information = 0x2D,
+  JobObjectReserved24Information = 0x2E,
+  JobObjectReserved25Information = 0x2F,
+  JobObjectReserved26Information = 0x30,
+  JobObjectReserved27Information = 0x31,
+  JobObjectReserved28Information = 0x32,
+  JobObjectNetworkAccountingInformation = 0x33,
   MaxJobObjectInfoClass
 } JOBOBJECTINFOCLASS;
 

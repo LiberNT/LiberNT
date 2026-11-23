@@ -333,8 +333,8 @@ START_TEST(MmLargePages)
     ok(Mdl != NULL, "MDL allocation failed\n");
     if (Mdl != NULL)
     {
-        Selected[0].Buffer = (PVOID64)(ULONG_PTR)((PUCHAR)Base + 3 * PAGE_SIZE);
-        Selected[1].Buffer = (PVOID64)(ULONG_PTR)((PUCHAR)Base + PAGE_SIZE);
+        Selected[0].Buffer = PtrToPtr64((PUCHAR)Base + 3 * PAGE_SIZE);
+        Selected[1].Buffer = PtrToPtr64((PUCHAR)Base + PAGE_SIZE);
         Selected[2].Buffer = Selected[0].Buffer;
         KmtStartSeh();
         MmProbeAndLockSelectedPages(Mdl, Selected, KernelMode, IoModifyAccess);

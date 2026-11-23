@@ -1818,7 +1818,7 @@ TestDwmSessionShutdownEventName(HANDLE Event, DWORD SessionId)
     ExpectedLength = lstrlenW(Expected) * sizeof(WCHAR);
     ok(NameBuffer.Information.Name.Length == ExpectedLength,
        "shutdown event name length %u, expected %Iu\n",
-       NameBuffer.Information.Name.Length, ExpectedLength);
+       NameBuffer.Information.Name.Length, (size_t)ExpectedLength);
     if (NameBuffer.Information.Name.Length == ExpectedLength)
     {
         ok(!memcmp(NameBuffer.Information.Name.Buffer, Expected,

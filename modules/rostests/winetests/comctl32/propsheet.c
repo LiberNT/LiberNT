@@ -425,7 +425,7 @@ static void test_wiznavigation(void)
 
     control = GetFocus();
     controlID = GetWindowLongPtrA(control, GWLP_ID);
-    ok(controlID == nextID, "Focus should have been set to the Next button. Expected: %d, Found: %Id\n", nextID, controlID);
+    ok(controlID == nextID, "Focus should have been set to the Next button. Expected: %d, Found: %Id\n", nextID, (ptrdiff_t)controlID);
 
     /* simulate pressing the Next button */
     SendMessageA(hdlg, PSM_PRESSBUTTON, PSBTN_NEXT, 0);
@@ -435,7 +435,7 @@ static void test_wiznavigation(void)
 
     control = GetFocus();
     controlID = GetWindowLongPtrA(control, GWLP_ID);
-    ok(controlID == IDC_PS_EDIT1, "Focus should be set to the first item on the second page. Expected: %d, Found: %Id\n", IDC_PS_EDIT1, controlID);
+    ok(controlID == IDC_PS_EDIT1, "Focus should be set to the first item on the second page. Expected: %d, Found: %Id\n", IDC_PS_EDIT1, (ptrdiff_t)controlID);
 
     defidres = SendMessageA(hdlg, DM_GETDEFID, 0, 0);
     ok(defidres == MAKELRESULT(nextID, DC_HASDEFID), "Expected default button ID to be %d, is %d\n", nextID, LOWORD(defidres));
@@ -450,7 +450,7 @@ static void test_wiznavigation(void)
 
     control = GetFocus();
     controlID = GetWindowLongPtrA(control, GWLP_ID);
-    ok(controlID == IDC_PS_RADIO1, "Focus should have been set to item on third page. Expected: %d, Found %Id\n", IDC_PS_RADIO1, controlID);
+    ok(controlID == IDC_PS_RADIO1, "Focus should have been set to item on third page. Expected: %d, Found %Id\n", IDC_PS_RADIO1, (ptrdiff_t)controlID);
 
     /* back button */
     SendMessageA(hdlg, PSM_PRESSBUTTON, PSBTN_BACK, 0);
@@ -459,7 +459,7 @@ static void test_wiznavigation(void)
 
     control = GetFocus();
     controlID = GetWindowLongPtrA(control, GWLP_ID);
-    ok(controlID == IDC_PS_EDIT1, "Focus should have been set to the first item on second page. Expected: %d, Found %Id\n", IDC_PS_EDIT1, controlID);
+    ok(controlID == IDC_PS_EDIT1, "Focus should have been set to the first item on second page. Expected: %d, Found %Id\n", IDC_PS_EDIT1, (ptrdiff_t)controlID);
 
     defidres = SendMessageA(hdlg, DM_GETDEFID, 0, 0);
     ok(defidres == MAKELRESULT(backID, DC_HASDEFID), "Expected default button ID to be %d, is %d\n", backID, LOWORD(defidres));
@@ -476,7 +476,7 @@ static void test_wiznavigation(void)
 
     control = GetFocus();
     controlID = GetWindowLongPtrA(control, GWLP_ID);
-    ok(controlID == nextID, "Focus should have been set to the Next button. Expected: %d, Found: %Id\n", nextID, controlID);
+    ok(controlID == nextID, "Focus should have been set to the Next button. Expected: %d, Found: %Id\n", nextID, (ptrdiff_t)controlID);
 
     /* try to navigate away, but shouldn't be able to */
     SendMessageA(hdlg, PSM_PRESSBUTTON, PSBTN_BACK, 0);
@@ -1058,7 +1058,7 @@ static UINT CALLBACK proppage_callback_a(HWND hwnd, UINT msg, PROPSHEETPAGEA *ps
     ok(hwnd == NULL, "Expected NULL hwnd, got %p\n", hwnd);
 
     ok(psp->lParam && psp->lParam != (LPARAM)psp, "Expected newly allocated page description, got %Ix, %p\n",
-            psp->lParam, psp);
+            (size_t)psp->lParam, psp);
     if (psp->dwFlags & PSP_USETITLE)
         ok(psp_orig->pszTitle != psp->pszTitle, "Expected different page title pointer\n");
     else
@@ -1095,7 +1095,7 @@ static UINT CALLBACK proppage_callback_w(HWND hwnd, UINT msg, PROPSHEETPAGEW *ps
 
     ok(hwnd == NULL, "Expected NULL hwnd, got %p\n", hwnd);
     ok(psp->lParam && psp->lParam != (LPARAM)psp, "Expected newly allocated page description, got %Ix, %p\n",
-            psp->lParam, psp);
+            (size_t)psp->lParam, psp);
     ok(psp_orig->pszTitle == psp->pszTitle, "Expected same page title pointer\n");
     ok(!lstrcmpW(psp_orig->pszTitle, psp->pszTitle), "Expected same page title string\n");
     if (psp->dwSize >= FIELD_OFFSET(struct custom_proppage, addref_called))
@@ -1288,7 +1288,7 @@ static void test_page_dialog_texture(void)
 
     /* Test that page dialog procedure is unchanged */
     dlgproc = GetWindowLongPtrA(sheethwnd, DWLP_DLGPROC);
-    ok(dlgproc == (ULONG_PTR)test_WM_CTLCOLORSTATIC_proc, "Unexpected dlgproc %#Ix.\n", dlgproc);
+    ok(dlgproc == (ULONG_PTR)test_WM_CTLCOLORSTATIC_proc, "Unexpected dlgproc %#Ix.\n", (size_t)dlgproc);
 
     /* Test that theme dialog texture is enabled for comctl32 v6, even when theming is off */
     ret = pIsThemeDialogTextureEnabled(sheethwnd);

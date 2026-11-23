@@ -601,7 +601,7 @@ static CROSS_PROCESS_WORK_ENTRY *expect_cross_work_entry_( CROSS_PROCESS_WORK_LI
     ok_(__FILE__,line)( entry->addr == (ULONG_PTR)addr, "wrong address %s / %p\n",
                         wine_dbgstr_longlong(entry->addr), addr );
     ok_(__FILE__,line)( entry->size == size, "wrong size %s / %Ix\n",
-                        wine_dbgstr_longlong(entry->size), size );
+                        wine_dbgstr_longlong(entry->size), (size_t)size );
     ok_(__FILE__,line)( entry->args[0] == arg0, "wrong args[0] %lx / %x\n", entry->args[0], arg0 );
     ok_(__FILE__,line)( entry->args[1] == arg1, "wrong args[1] %lx / %x\n", entry->args[1], arg1 );
     ok_(__FILE__,line)( entry->args[2] == arg2, "wrong args[2] %lx / %x\n", entry->args[2], arg2 );
@@ -632,7 +632,7 @@ static void test_cross_process_notifications( HANDLE process, ULONG_PTR section,
     status = NtMapViewOfSection( mapping, GetCurrentProcess(), &addr, 0, 0, NULL,
                                  &size, ViewShare, 0, PAGE_READWRITE );
     ok( !status, "NtMapViewOfSection failed %lx\n", status );
-    ok( size == 0x4000, "unexpected size %Ix\n", size );
+    ok( size == 0x4000, "unexpected size %Ix\n", (size_t)size );
     list = addr;
     addr2 = malloc( size );
     ret = ReadProcessMemory( process, (void *)ptr, addr2, size, &size );
@@ -1076,7 +1076,7 @@ static void test_peb_teb(void)
         status = NtQueryInformationThread( pi.hThread, ThreadBasicInformation, &info, sizeof(info), NULL );
         ok( !status, "ThreadBasicInformation failed %lx\n", status );
         if (!ReadProcessMemory( pi.hProcess, info.TebBaseAddress, &teb, sizeof(teb), &res )) res = 0;
-        ok( res == sizeof(teb), "wrong len %Ix\n", res );
+        ok( res == sizeof(teb), "wrong len %Ix\n", (size_t)res );
         ok( teb.Tib.Self == info.TebBaseAddress, "wrong teb %p / %p\n", teb.Tib.Self, info.TebBaseAddress );
         if (is_wow64)
         {
@@ -1095,7 +1095,7 @@ static void test_peb_teb(void)
                 "wrong Tib.ExceptionList %p / %p\n",
                 (char *)teb.Tib.ExceptionList, (char *)info.TebBaseAddress + 0x2000 );
             if (!ReadProcessMemory( pi.hProcess, teb.Tib.ExceptionList, &teb32, sizeof(teb32), &res )) res = 0;
-            ok( res == sizeof(teb32), "wrong len %Ix\n", res );
+            ok( res == sizeof(teb32), "wrong len %Ix\n", (size_t)res );
             ok( (char *)ULongToPtr(teb32.Peb) == (char *)teb.Peb + 0x1000 ||
                 broken( ULongToPtr(teb32.Peb) != teb.Peb ), /* vista */
                 "wrong peb %p / %p\n", ULongToPtr(teb32.Peb), teb.Peb );
@@ -1113,17 +1113,17 @@ static void test_peb_teb(void)
             "wrong peb %p\n", (void *)peb_ptr );
 
         if (!ReadProcessMemory( pi.hProcess, proc_info.PebBaseAddress, &peb, sizeof(peb), &res )) res = 0;
-        ok( res == sizeof(peb), "wrong len %Ix\n", res );
+        ok( res == sizeof(peb), "wrong len %Ix\n", (size_t)res );
         ok( !peb.BeingDebugged, "BeingDebugged is %u\n", peb.BeingDebugged );
         if (!is_wow64)
         {
             if (!ReadProcessMemory( pi.hProcess, ULongToPtr(teb32.Peb), &peb32, sizeof(peb32), &res )) res = 0;
-            ok( res == sizeof(peb32), "wrong len %Ix\n", res );
+            ok( res == sizeof(peb32), "wrong len %Ix\n", (size_t)res );
             ok( !peb32.BeingDebugged, "BeingDebugged is %u\n", peb32.BeingDebugged );
         }
 
         if (!ReadProcessMemory( pi.hProcess, peb.ProcessParameters, &params, sizeof(params), &res )) res = 0;
-        ok( res == sizeof(params), "wrong len %Ix\n", res );
+        ok( res == sizeof(params), "wrong len %Ix\n", (size_t)res );
 #define CHECK_STR(name) \
         ok( (char *)params.name.Buffer >= (char *)peb.ProcessParameters && \
             (char *)params.name.Buffer < (char *)peb.ProcessParameters + params.Size, \
@@ -1140,7 +1140,7 @@ static void test_peb_teb(void)
             ok( peb32.ProcessParameters && ULongToPtr(peb32.ProcessParameters) != peb.ProcessParameters,
                 "wrong ptr32 %p / %p\n", ULongToPtr(peb32.ProcessParameters), peb.ProcessParameters );
             if (!ReadProcessMemory( pi.hProcess, ULongToPtr(peb32.ProcessParameters), &params32, sizeof(params32), &res )) res = 0;
-            ok( res == sizeof(params32), "wrong len %Ix\n", res );
+            ok( res == sizeof(params32), "wrong len %Ix\n", (size_t)res );
 #define CHECK_STR(name) \
             ok( ULongToPtr(params32.name.Buffer) >= ULongToPtr(peb32.ProcessParameters) && \
                 ULongToPtr(params32.name.Buffer) < ULongToPtr(peb32.ProcessParameters + params32.Size), \
@@ -1155,7 +1155,7 @@ static void test_peb_teb(void)
             CHECK_STR( ShellInfo );
 #undef CHECK_STR
             ok( params32.EnvironmentSize == params.EnvironmentSize, "wrong size %lu / %Iu\n",
-                params32.EnvironmentSize, params.EnvironmentSize );
+                params32.EnvironmentSize, (size_t)params.EnvironmentSize );
         }
 
         ResumeThread( pi.hThread );
@@ -1167,12 +1167,12 @@ static void test_peb_teb(void)
         ret = DebugActiveProcess( pi.dwProcessId );
         ok( ret, "debugging failed\n" );
         if (!ReadProcessMemory( pi.hProcess, proc_info.PebBaseAddress, &peb, sizeof(peb), &res )) res = 0;
-        ok( res == sizeof(peb), "wrong len %Ix\n", res );
+        ok( res == sizeof(peb), "wrong len %Ix\n", (size_t)res );
         ok( peb.BeingDebugged == !!ret, "BeingDebugged is %u\n", peb.BeingDebugged );
         if (!is_wow64)
         {
             if (!ReadProcessMemory( pi.hProcess, ULongToPtr(teb32.Peb), &peb32, sizeof(peb32), &res )) res = 0;
-            ok( res == sizeof(peb32), "wrong len %Ix\n", res );
+            ok( res == sizeof(peb32), "wrong len %Ix\n", (size_t)res );
             ok( peb32.BeingDebugged == !!ret, "BeingDebugged is %u\n", peb32.BeingDebugged );
         }
 
@@ -1190,7 +1190,7 @@ static void test_peb_teb(void)
         status = NtQueryInformationThread( pi.hThread, ThreadBasicInformation, &info, sizeof(info), NULL );
         ok( !status, "ThreadBasicInformation failed %lx\n", status );
         if (!ReadProcessMemory( pi.hProcess, info.TebBaseAddress, &teb, sizeof(teb), &res )) res = 0;
-        ok( res == sizeof(teb), "wrong len %Ix\n", res );
+        ok( res == sizeof(teb), "wrong len %Ix\n", (size_t)res );
         ok( teb.Tib.Self == info.TebBaseAddress, "wrong teb %p / %p\n", teb.Tib.Self, info.TebBaseAddress );
         ok( !teb.GdiBatchCount, "GdiBatchCount set\n" );
         ok( !teb.WowTebOffset, "wrong teb offset %ld\n", teb.WowTebOffset );
@@ -1207,7 +1207,7 @@ static void test_peb_teb(void)
         ok( !peb_ptr, "wrong peb %p\n", (void *)peb_ptr );
 
         if (!ReadProcessMemory( pi.hProcess, proc_info.PebBaseAddress, &peb, sizeof(peb), &res )) res = 0;
-        ok( res == sizeof(peb), "wrong len %Ix\n", res );
+        ok( res == sizeof(peb), "wrong len %Ix\n", (size_t)res );
         ok( !peb.BeingDebugged, "BeingDebugged is %u\n", peb.BeingDebugged );
 
         ResumeThread( pi.hThread );
@@ -1230,7 +1230,7 @@ static void test_peb_teb(void)
         if (!is_wow64)
         {
             if (!ReadProcessMemory( pi.hProcess, info.TebBaseAddress, &teb, sizeof(teb), &res )) res = 0;
-            ok( res == sizeof(teb), "wrong len %Ix\n", res );
+            ok( res == sizeof(teb), "wrong len %Ix\n", (size_t)res );
             ok( teb.Tib.Self == info.TebBaseAddress, "wrong teb %p / %p\n",
                 teb.Tib.Self, info.TebBaseAddress );
             ok( !teb.GdiBatchCount, "GdiBatchCount set\n" );
@@ -2827,11 +2827,11 @@ static void test_nt_wow64(void)
                     broken( is_wow64 && llabs( (INT64)pbi64.PebBaseAddress - (INT64)expected_peb ) < 0x10000 ),
                     "expected 0x%lx got 0x%I64x\n", expected_peb, pbi64.PebBaseAddress );
                 ok( pbi64.AffinityMask == pbi32.AffinityMask,
-                    "expected 0x%Ix got 0x%I64x\n", pbi32.AffinityMask, pbi64.AffinityMask );
+                    "expected 0x%Ix got 0x%I64x\n", (size_t)pbi32.AffinityMask, pbi64.AffinityMask );
                 ok( pbi64.UniqueProcessId == pbi32.UniqueProcessId,
-                    "expected %Ix got %I64x\n", pbi32.UniqueProcessId, pbi64.UniqueProcessId );
+                    "expected %Ix got %I64x\n", (size_t)pbi32.UniqueProcessId, pbi64.UniqueProcessId );
                 ok( pbi64.InheritedFromUniqueProcessId == pbi32.InheritedFromUniqueProcessId,
-                    "expected %Ix got %I64x\n", pbi32.UniqueProcessId, pbi64.UniqueProcessId );
+                    "expected %Ix got %I64x\n", (size_t)pbi32.UniqueProcessId, pbi64.UniqueProcessId );
                 break;
             default:
                 status = pNtWow64QueryInformationProcess64( GetCurrentProcess(), class, NULL, 0, NULL );
@@ -3074,15 +3074,15 @@ static void test_iosb(void)
     ok( status == STATUS_PENDING, "NtReadFile returned %lx\n", status );
     ok( iosb32.Status == 0x55555555, "status changed to %lx\n", iosb32.Status );
     ok( iosb64.Pointer == PtrToUlong(&iosb32), "pointer changed to %I64x\n", iosb64.Pointer );
-    ok( iosb64.Information == 0xdeadbeef, "info changed to %Ix\n", (ULONG_PTR)iosb64.Information );
+    ok( iosb64.Information == 0xdeadbeef, "info changed to %Ix\n", (size_t)iosb64.Information );
 
     ret = WriteFile( client, "data", sizeof("data"), &size, NULL );
     ok( ret == TRUE, "got error %lu\n", GetLastError() );
 
     ok( iosb32.Status == 0, "Wrong iostatus %lx\n", iosb32.Status );
-    ok( iosb32.Information == sizeof("data"), "Wrong information %Ix\n", iosb32.Information );
+    ok( iosb32.Information == sizeof("data"), "Wrong information %Ix\n", (size_t)iosb32.Information );
     ok( iosb64.Pointer == PtrToUlong(&iosb32), "pointer changed to %I64x\n", iosb64.Pointer );
-    ok( iosb64.Information == 0xdeadbeef, "info changed to %Ix\n", (ULONG_PTR)iosb64.Information );
+    ok( iosb64.Information == 0xdeadbeef, "info changed to %Ix\n", (size_t)iosb64.Information );
     ok( !memcmp( buffer, "data", iosb32.Information ),
         "got wrong data %s\n", debugstr_an(buffer, iosb32.Information) );
 
@@ -3097,9 +3097,9 @@ static void test_iosb(void)
     status = call_func64( read_func, ARRAY_SIZE(args), args );
     ok( status == STATUS_SUCCESS, "NtReadFile returned %lx\n", status );
     ok( iosb32.Status == STATUS_SUCCESS, "status changed to %lx\n", iosb32.Status );
-    ok( iosb32.Information == sizeof("data"), "info changed to %Ix\n", iosb32.Information );
+    ok( iosb32.Information == sizeof("data"), "info changed to %Ix\n", (size_t)iosb32.Information );
     ok( iosb64.Pointer == PtrToUlong(&iosb32), "pointer changed to %I64x\n", iosb64.Pointer );
-    ok( iosb64.Information == 0xdeadbeef, "info changed to %Ix\n", (ULONG_PTR)iosb64.Information );
+    ok( iosb64.Information == 0xdeadbeef, "info changed to %Ix\n", (size_t)iosb64.Information );
     ok( !memcmp( buffer, "data", iosb32.Information ),
         "got wrong data %s\n", debugstr_an(buffer, iosb32.Information) );
 
@@ -3113,9 +3113,9 @@ static void test_iosb(void)
     status = call_func64( flush_func, ARRAY_SIZE(flush_args), flush_args );
     ok( status == STATUS_SUCCESS, "NtFlushBuffersFile returned %lx\n", status );
     ok( iosb32.Status == 0x55555555, "status changed to %lx\n", iosb32.Status );
-    ok( iosb32.Information == 0x55555555, "info changed to %Ix\n", iosb32.Information );
+    ok( iosb32.Information == 0x55555555, "info changed to %Ix\n", (size_t)iosb32.Information );
     ok( iosb64.Pointer == STATUS_SUCCESS, "pointer changed to %I64x\n", iosb64.Pointer );
-    ok( iosb64.Information == 0, "info changed to %Ix\n", (ULONG_PTR)iosb64.Information );
+    ok( iosb64.Information == 0, "info changed to %Ix\n", (size_t)iosb64.Information );
 
     CloseHandle( client );
     CloseHandle( server );
@@ -3143,9 +3143,9 @@ static void test_iosb(void)
     status = call_func64( read_func, ARRAY_SIZE(args), args );
     ok( status == STATUS_SUCCESS, "NtReadFile returned %lx\n", status );
     ok( iosb32.Status == 0x55555555, "status changed to %lx\n", iosb32.Status );
-    ok( iosb32.Information == 0x55555555, "info changed to %Ix\n", iosb32.Information );
+    ok( iosb32.Information == 0x55555555, "info changed to %Ix\n", (size_t)iosb32.Information );
     ok( iosb64.Pointer == STATUS_SUCCESS, "pointer changed to %I64x\n", iosb64.Pointer );
-    ok( iosb64.Information == sizeof("data"), "info changed to %Ix\n", (ULONG_PTR)iosb64.Information );
+    ok( iosb64.Information == sizeof("data"), "info changed to %Ix\n", (size_t)iosb64.Information );
     ok( !memcmp( buffer, "data", iosb64.Information ),
         "got wrong data %s\n", debugstr_an(buffer, iosb64.Information) );
 
@@ -3162,9 +3162,9 @@ static void test_iosb(void)
     todo_wine
     {
     ok( iosb32.Status == 0x55555555, "status changed to %lx\n", iosb32.Status );
-    ok( iosb32.Information == 0x55555555, "info changed to %Ix\n", iosb32.Information );
+    ok( iosb32.Information == 0x55555555, "info changed to %Ix\n", (size_t)iosb32.Information );
     ok( iosb64.Pointer == STATUS_SUCCESS, "pointer changed to %I64x\n", iosb64.Pointer );
-    ok( iosb64.Information == sizeof("data"), "info changed to %Ix\n", (ULONG_PTR)iosb64.Information );
+    ok( iosb64.Information == sizeof("data"), "info changed to %Ix\n", (size_t)iosb64.Information );
     ok( !memcmp( buffer, "data", iosb64.Information ),
         "got wrong data %s\n", debugstr_an(buffer, iosb64.Information) );
     }
@@ -3181,9 +3181,9 @@ static void test_iosb(void)
     status = call_func64( flush_func, ARRAY_SIZE(flush_args), flush_args );
     ok( status == STATUS_SUCCESS, "NtFlushBuffersFile returned %lx\n", status );
     ok( iosb32.Status == 0x55555555, "status changed to %lx\n", iosb32.Status );
-    ok( iosb32.Information == 0x55555555, "info changed to %Ix\n", iosb32.Information );
+    ok( iosb32.Information == 0x55555555, "info changed to %Ix\n", (size_t)iosb32.Information );
     ok( iosb64.Pointer == STATUS_SUCCESS, "pointer changed to %I64x\n", iosb64.Pointer );
-    ok( iosb64.Information == 0, "info changed to %Ix\n", (ULONG_PTR)iosb64.Information );
+    ok( iosb64.Information == 0, "info changed to %Ix\n", (size_t)iosb64.Information );
 
     CloseHandle( client );
     CloseHandle( server );

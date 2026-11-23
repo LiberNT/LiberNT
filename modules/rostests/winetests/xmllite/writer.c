@@ -87,7 +87,7 @@ static void check_output_raw(IStream *stream, const void *expected, SIZE_T size,
     ok_(__FILE__, line)(hr == S_OK, "Failed to get the stream handle, hr %#lx.\n", hr);
 
     content_size = GlobalSize(hglobal);
-    ok_(__FILE__, line)(size == content_size, "Unexpected test output size %Id.\n", content_size);
+    ok_(__FILE__, line)(size == content_size, "Unexpected test output size %Id.\n", (ptrdiff_t)content_size);
     ptr = GlobalLock(hglobal);
     if (size <= content_size)
         ok_(__FILE__, line)(!memcmp(expected, ptr, size), "Unexpected output content.\n");
@@ -351,22 +351,22 @@ static void test_writer_create(void)
     value = 0;
     hr = IXmlWriter_GetProperty(writer, XmlWriterProperty_ByteOrderMark, &value);
     ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
-    ok(value == TRUE, "got %Id.\n", value);
+    ok(value == TRUE, "got %Id.\n", (ptrdiff_t)value);
 
     value = TRUE;
     hr = IXmlWriter_GetProperty(writer, XmlWriterProperty_Indent, &value);
     ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
-    ok(value == FALSE, "got %Id.\n", value);
+    ok(value == FALSE, "got %Id.\n", (ptrdiff_t)value);
 
     value = TRUE;
     hr = IXmlWriter_GetProperty(writer, XmlWriterProperty_OmitXmlDeclaration, &value);
     ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
-    ok(value == FALSE, "got %Id.\n", value);
+    ok(value == FALSE, "got %Id.\n", (ptrdiff_t)value);
 
     value = XmlConformanceLevel_Auto;
     hr = IXmlWriter_GetProperty(writer, XmlWriterProperty_ConformanceLevel, &value);
     ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
-    ok(value == XmlConformanceLevel_Document, "got %Id.\n", value);
+    ok(value == XmlConformanceLevel_Document, "got %Id.\n", (ptrdiff_t)value);
 
     IXmlWriter_Release(writer);
 }

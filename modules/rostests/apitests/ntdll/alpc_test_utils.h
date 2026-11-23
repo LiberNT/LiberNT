@@ -375,7 +375,7 @@ AlpcTestTraceBufferMutation(
         }
     }
 
-    trace("ALPC_OBSERVE mutation %s length=%Iu changed=%Iu first=%Iu before_hash=%08lx after_hash=%08lx\n", Label, Length, Changed, First, BeforeHash, AfterHash);
+    trace("ALPC_OBSERVE mutation %s length=%Iu changed=%Iu first=%Iu before_hash=%08lx after_hash=%08lx\n", Label, (size_t)Length, (size_t)Changed, (size_t)First, BeforeHash, AfterHash);
 }
 
 #define alpc_observe_status(Label, Expression) \

@@ -110,18 +110,18 @@ static void test_WM_SETTEXT(void)
     LRESULT result;
 
     result = SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)testitems[i].itemtext);
-    ok (result == 1, "[%d] WM_SETTEXT returned %Id instead of 1\n", i, result);
+    ok (result == 1, "[%d] WM_SETTEXT returned %Id instead of 1\n", i, (ptrdiff_t)result);
     result = SendMessageA(hwndRichEdit, WM_GETTEXT, 1024, (LPARAM)buf);
     ok (result == lstrlenA(buf),
         "[%d] WM_GETTEXT returned %Id instead of expected %u\n",
-        i, result, lstrlenA(buf));
+        i, (ptrdiff_t)result, lstrlenA(buf));
     result = strcmp(testitems[i].itemtext, buf);
     ok (result == 0,
-        "[%d] WM_SETTEXT round trip: strcmp = %Id\n", i, result);
+        "[%d] WM_SETTEXT round trip: strcmp = %Id\n", i, (ptrdiff_t)result);
     result = SendMessageA(hwndRichEdit, EM_GETLINECOUNT, 0, 0);
     ok (result == (rtl ? testitems[i].lines_rtl : testitems[i].lines) ||
         broken(testitems[i].lines_broken && result == testitems[i].lines_broken),
-        "[%d] EM_GETLINECOUNT returned %Id, expected %ld\n", i, result, testitems[i].lines);
+        "[%d] EM_GETLINECOUNT returned %Id, expected %ld\n", i, (ptrdiff_t)result, testitems[i].lines);
   }
 
   DestroyWindow(hwndRichEdit);
@@ -217,7 +217,7 @@ static void test_EM_STREAMIN(void)
 
   result = SendMessageA(hwndRichEdit, WM_GETTEXT, 1024, (LPARAM)buffer);
   ok (result  == 12,
-      "EM_STREAMIN: Test 0 returned %Id, expected 12\n", result);
+      "EM_STREAMIN: Test 0 returned %Id, expected 12\n", (ptrdiff_t)result);
   result = strcmp (buffer,"TestSomeText");
   ok (result  == 0,
       "EM_STREAMIN: Test 0 set wrong text: Result: %s\n",buffer);
@@ -232,7 +232,7 @@ static void test_EM_STREAMIN(void)
 
   result = SendMessageA(hwndRichEdit, WM_GETTEXT, 1024, (LPARAM)buffer);
   ok (result  == 12,
-      "EM_STREAMIN: Test 0-a returned %Id, expected 12\n", result);
+      "EM_STREAMIN: Test 0-a returned %Id, expected 12\n", (ptrdiff_t)result);
   result = strcmp (buffer,"TestSomeText");
   ok (result  == 0,
       "EM_STREAMIN: Test 0-a set wrong text: Result: %s\n",buffer);
@@ -247,7 +247,7 @@ static void test_EM_STREAMIN(void)
 
   result = SendMessageA(hwndRichEdit, WM_GETTEXT, 1024, (LPARAM)buffer);
   ok (result  == 14,
-      "EM_STREAMIN: Test 0-b returned %Id, expected 14\n", result);
+      "EM_STREAMIN: Test 0-b returned %Id, expected 14\n", (ptrdiff_t)result);
   result = strcmp (buffer,"TestSomeText\r\n");
   ok (result  == 0,
       "EM_STREAMIN: Test 0-b set wrong text: Result: %s\n",buffer);
@@ -261,7 +261,7 @@ static void test_EM_STREAMIN(void)
 
   result = SendMessageA(hwndRichEdit, WM_GETTEXT, 1024, (LPARAM)buffer);
   ok (result  == 12,
-      "EM_STREAMIN: Test 1 returned %Id, expected 12\n", result);
+      "EM_STREAMIN: Test 1 returned %Id, expected 12\n", (ptrdiff_t)result);
   result = strcmp (buffer,"TestSomeText");
   ok (result  == 0,
       "EM_STREAMIN: Test 1 set wrong text: Result: %s\n",buffer);
@@ -276,7 +276,7 @@ static void test_EM_STREAMIN(void)
   result = SendMessageA(hwndRichEdit, WM_GETTEXT, 1024, (LPARAM)buffer);
   todo_wine {
   ok (result  == 9,
-      "EM_STREAMIN: Test 2 returned %Id, expected 9\n", result);
+      "EM_STREAMIN: Test 2 returned %Id, expected 9\n", (ptrdiff_t)result);
   }
   result = strcmp (buffer,"RichEdit1");
   todo_wine {
@@ -292,7 +292,7 @@ static void test_EM_STREAMIN(void)
 
   result = SendMessageA(hwndRichEdit, WM_GETTEXT, 1024, (LPARAM)buffer);
   ok (result  == 0,
-      "EM_STREAMIN: Test 3 returned %Id, expected 0\n", result);
+      "EM_STREAMIN: Test 3 returned %Id, expected 0\n", (ptrdiff_t)result);
   ok (!*buffer,
       "EM_STREAMIN: Test 3 set wrong text: Result: %s\n",buffer);
   ok(es.dwError == -16, "EM_STREAMIN: Test 0 set error %ld, expected %d\n", es.dwError, -16);
@@ -502,12 +502,12 @@ static void test_EM_LINELENGTH(void)
      win_skip("Win9x, WinME and NT4 don't handle '\\r only' correctly\n");
      return;
   }
-  ok(result == 9, "Incorrect line count of %Id\n", result);
+  ok(result == 9, "Incorrect line count of %Id\n", (ptrdiff_t)result);
 
   for (i = 0; i < ARRAY_SIZE(offset_test); i++) {
     result = SendMessageA(hwndRichEdit, EM_LINELENGTH, offset_test[i][0], 0);
     ok(result == offset_test[i][1], "Length of line at offset %d is %Id, expected %d\n",
-       offset_test[i][0], result, offset_test[i][1]);
+       offset_test[i][0], (ptrdiff_t)result, offset_test[i][1]);
   }
 
   /* Test with multibyte character */
@@ -529,7 +529,7 @@ static void test_EM_LINELENGTH(void)
       result = SendMessageA(hwndRichEdit, EM_LINELENGTH, offset_test1[i][0], 0);
       todo_wine_if (offset_test1[i][2])
           ok(result == offset_test1[i][1], "Length of line at offset %d is %Id, expected %d\n",
-             offset_test1[i][0], result, offset_test1[i][1]);
+             offset_test1[i][0], (ptrdiff_t)result, offset_test1[i][1]);
     }
   }
 
@@ -554,14 +554,14 @@ static void test_EM_GETTEXTRANGE(void)
     textRange.chrg.cpMin = 4;
     textRange.chrg.cpMax = 12;
     result = SendMessageA(hwndRichEdit, EM_GETTEXTRANGE, 0, (LPARAM)&textRange);
-    ok(result == 8, "EM_GETTEXTRANGE returned %Id\n", result);
+    ok(result == 8, "EM_GETTEXTRANGE returned %Id\n", (ptrdiff_t)result);
     ok(!strcmp(expect1, buffer), "EM_GETTEXTRANGE filled %s\n", buffer);
 
     textRange.lpstrText = buffer;
     textRange.chrg.cpMin = 8;
     textRange.chrg.cpMax = 12;
     result = SendMessageA(hwndRichEdit, EM_GETTEXTRANGE, 0, (LPARAM)&textRange);
-    ok(result == 4, "EM_GETTEXTRANGE returned %Id\n", result);
+    ok(result == 4, "EM_GETTEXTRANGE returned %Id\n", (ptrdiff_t)result);
     ok(!strcmp(expect2, buffer), "EM_GETTEXTRANGE filled %s\n", buffer);
 
     SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)text3);
@@ -570,7 +570,7 @@ static void test_EM_GETTEXTRANGE(void)
     textRange.chrg.cpMin = 4;
     textRange.chrg.cpMax = 11;
     result = SendMessageA(hwndRichEdit, EM_GETTEXTRANGE, 0, (LPARAM)&textRange);
-    ok(result == 7, "EM_GETTEXTRANGE returned %Id\n", result);
+    ok(result == 7, "EM_GETTEXTRANGE returned %Id\n", (ptrdiff_t)result);
 
     ok(!strcmp(expect3, buffer), "EM_GETTEXTRANGE filled %s\n", buffer);
 
@@ -583,7 +583,7 @@ static void test_EM_GETTEXTRANGE(void)
         textRange.chrg.cpMin = 4;
         textRange.chrg.cpMax = 8;
         result = SendMessageA(hwndRichEdit, EM_GETTEXTRANGE, 0, (LPARAM)&textRange);
-        ok(result == 4, "EM_GETTEXTRANGE returned %Id\n", result);
+        ok(result == 4, "EM_GETTEXTRANGE returned %Id\n", (ptrdiff_t)result);
         ok(!strcmp("ef\x8e\xf0", buffer), "EM_GETTEXTRANGE filled %s\n", buffer);
     }
 
@@ -604,14 +604,14 @@ static void test_EM_GETSELTEXT(void)
 
     SendMessageA(hwndRichEdit, EM_SETSEL, 4, 12);
     result = SendMessageA(hwndRichEdit, EM_GETSELTEXT, 0, (LPARAM)buffer);
-    ok(result == 8, "EM_GETSELTEXT returned %Id\n", result);
+    ok(result == 8, "EM_GETSELTEXT returned %Id\n", (ptrdiff_t)result);
     ok(!strcmp(expect1, buffer), "EM_GETSELTEXT filled %s\n", buffer);
 
     SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)text2);
 
     SendMessageA(hwndRichEdit, EM_SETSEL, 4, 11);
     result = SendMessageA(hwndRichEdit, EM_GETSELTEXT, 0, (LPARAM)buffer);
-    ok(result == 7, "EM_GETSELTEXT returned %Id\n", result);
+    ok(result == 7, "EM_GETSELTEXT returned %Id\n", (ptrdiff_t)result);
     ok(!strcmp(expect2, buffer), "EM_GETSELTEXT filled %s\n", buffer);
 
     /* Test with multibyte character */
@@ -622,7 +622,7 @@ static void test_EM_GETSELTEXT(void)
         SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)"abcdef\x8e\xf0ghijk");
         SendMessageA(hwndRichEdit, EM_SETSEL, 4, 8);
         result = SendMessageA(hwndRichEdit, EM_GETSELTEXT, 0, (LPARAM)buffer);
-        ok(result == 4, "EM_GETSELTEXT returned %Id\n", result);
+        ok(result == 4, "EM_GETSELTEXT returned %Id\n", (ptrdiff_t)result);
         ok(!strcmp("ef\x8e\xf0", buffer), "EM_GETSELTEXT filled %s\n", buffer);
     }
 
@@ -839,7 +839,7 @@ static void test_EM_POSFROMCHAR(void)
   {
     /* All the lines are 16 characters long */
     result = SendMessageA(hwndRichEdit, EM_POSFROMCHAR, (WPARAM)&pl, i * 16);
-    ok(result == 0, "EM_POSFROMCHAR returned %Id, expected 0\n", result);
+    ok(result == 0, "EM_POSFROMCHAR returned %Id, expected 0\n", (ptrdiff_t)result);
     if (i == 0)
     {
       ok(pl.y == 0, "EM_POSFROMCHAR reports y=%ld, expected 0\n", pl.y);
@@ -864,13 +864,13 @@ static void test_EM_POSFROMCHAR(void)
 
   /* Testing position at end of text */
   result = SendMessageA(hwndRichEdit, EM_POSFROMCHAR, (WPARAM)&pl, 50 * 16);
-  ok(result == 0, "EM_POSFROMCHAR returned %Id, expected 0\n", result);
+  ok(result == 0, "EM_POSFROMCHAR returned %Id, expected 0\n", (ptrdiff_t)result);
   ok(pl.y == 50 * height, "EM_POSFROMCHAR reports y=%ld, expected %d\n", pl.y, 50 * height);
   ok(pl.x == xpos, "EM_POSFROMCHAR reports x=%ld, expected %d\n", pl.x, xpos);
 
   /* Testing position way past end of text */
   result = SendMessageA(hwndRichEdit, EM_POSFROMCHAR, (WPARAM)&pl, 55 * 16);
-  ok(result == 0, "EM_POSFROMCHAR returned %Id, expected 0\n", result);
+  ok(result == 0, "EM_POSFROMCHAR returned %Id, expected 0\n", (ptrdiff_t)result);
   ok(pl.y == 50 * height, "EM_POSFROMCHAR reports y=%ld, expected %d\n", pl.y, 50 * height);
 
   ok(pl.x == xpos_rtl_adjusted, "EM_POSFROMCHAR reports x=%ld, expected %d\n", pl.x, xpos_rtl_adjusted);
@@ -882,7 +882,7 @@ static void test_EM_POSFROMCHAR(void)
   {
     /* All the lines are 16 characters long */
     result = SendMessageA(hwndRichEdit, EM_POSFROMCHAR, (WPARAM)&pl, i * 16);
-    ok(result == 0, "EM_POSFROMCHAR returned %Id, expected 0\n", result);
+    ok(result == 0, "EM_POSFROMCHAR returned %Id, expected 0\n", (ptrdiff_t)result);
     ok(pl.y == (i - 1) * height,
         "EM_POSFROMCHAR reports y=%ld, expected %d\n",
         pl.y, (i - 1) * height);
@@ -891,13 +891,13 @@ static void test_EM_POSFROMCHAR(void)
 
   /* Testing position at end of text */
   result = SendMessageA(hwndRichEdit, EM_POSFROMCHAR, (WPARAM)&pl, 50 * 16);
-  ok(result == 0, "EM_POSFROMCHAR returned %Id, expected 0\n", result);
+  ok(result == 0, "EM_POSFROMCHAR returned %Id, expected 0\n", (ptrdiff_t)result);
   ok(pl.y == (50 - 1) * height, "EM_POSFROMCHAR reports y=%ld, expected %d\n", pl.y, (50 - 1) * height);
   ok(pl.x == xpos, "EM_POSFROMCHAR reports x=%ld, expected %d\n", pl.x, xpos);
 
   /* Testing position way past end of text */
   result = SendMessageA(hwndRichEdit, EM_POSFROMCHAR, (WPARAM)&pl, 55 * 16);
-  ok(result == 0, "EM_POSFROMCHAR returned %Id, expected 0\n", result);
+  ok(result == 0, "EM_POSFROMCHAR returned %Id, expected 0\n", (ptrdiff_t)result);
   ok(pl.y == (50 - 1) * height, "EM_POSFROMCHAR reports y=%ld, expected %d\n", pl.y, (50 - 1) * height);
   ok(pl.x == xpos_rtl_adjusted, "EM_POSFROMCHAR reports x=%ld, expected %d\n", pl.x, xpos_rtl_adjusted);
 
@@ -906,7 +906,7 @@ static void test_EM_POSFROMCHAR(void)
   SendMessageA(hwndRichEdit, EM_SCROLL, SB_LINEUP, 0); /* line up */
 
   result = SendMessageA(hwndRichEdit, EM_POSFROMCHAR, (WPARAM)&pl, 0);
-  ok(result == 0, "EM_POSFROMCHAR returned %Id, expected 0\n", result);
+  ok(result == 0, "EM_POSFROMCHAR returned %Id, expected 0\n", (ptrdiff_t)result);
   ok(pl.y == 0, "EM_POSFROMCHAR reports y=%ld, expected 0\n", pl.y);
   ok(pl.x == 1 ||
       broken(pl.x == 0), /* Win9x, WinME and NT4 */
@@ -915,7 +915,7 @@ static void test_EM_POSFROMCHAR(void)
 
   SendMessageA(hwndRichEdit, WM_HSCROLL, SB_LINERIGHT, 0);
   result = SendMessageA(hwndRichEdit, EM_POSFROMCHAR, (WPARAM)&pl, 0);
-  ok(result == 0, "EM_POSFROMCHAR returned %Id, expected 0\n", result);
+  ok(result == 0, "EM_POSFROMCHAR returned %Id, expected 0\n", (ptrdiff_t)result);
   ok(pl.y == 0, "EM_POSFROMCHAR reports y=%ld, expected 0\n", pl.y);
   todo_wine {
   /* Fails on builtin because horizontal scrollbar is not being shown */
@@ -1192,7 +1192,7 @@ static void test_enter(void)
   {
     /* Set the text to the initial text */
     result = SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)testenteritems[i].initialtext);
-    ok (result == 1, "[%d] WM_SETTEXT returned %Id instead of 1\n", i, result);
+    ok (result == 1, "[%d] WM_SETTEXT returned %Id instead of 1\n", i, (ptrdiff_t)result);
 
     /* Send Enter */
     SendMessageA(hwndRichEdit, EM_SETSEL, testenteritems[i].cursor, testenteritems[i].cursor);
@@ -1247,7 +1247,7 @@ static void test_enter(void)
   getText.codepage = CP_ACP;
 
   result = SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)"");
-  ok (result == 1, "[%d] WM_SETTEXT returned %Id instead of 1\n", i, result);
+  ok (result == 1, "[%d] WM_SETTEXT returned %Id instead of 1\n", i, (ptrdiff_t)result);
   SendMessageW(hwndRichEdit, WM_CHAR, 'T', 0);
   SendMessageW(hwndRichEdit, WM_KEYDOWN, VK_RETURN, 0);
 
@@ -1259,12 +1259,12 @@ static void test_enter(void)
   ok (result == 0, "[%d] EM_GETTEXTEX, GT_DEFAULT unexpected '%s', expected '%s'\n", i, resultbuf, expectedbuf);
 
   result = SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)"");
-  ok (result == 1, "[%d] WM_SETTEXT returned %Id instead of 1\n", i, result);
+  ok (result == 1, "[%d] WM_SETTEXT returned %Id instead of 1\n", i, (ptrdiff_t)result);
   SendMessageW(hwndRichEdit, WM_CHAR, 'T', 0);
   SendMessageW(hwndRichEdit, WM_CHAR, '\r', 0);
 
   result = SendMessageA(hwndRichEdit, EM_GETTEXTEX, (WPARAM)&getText, (LPARAM)buf);
-  ok(result == 3, "Got %Id\n", result);
+  ok(result == 3, "Got %Id\n", (ptrdiff_t)result);
   format_test_result(resultbuf, buf);
   format_test_result(expectedbuf, "T\r\n");
   result = strcmp(resultbuf, expectedbuf);
@@ -1322,7 +1322,7 @@ static void check_EM_EXSETSEL(HWND hwnd, const struct exsetsel_s *setsel, int id
     result = SendMessageA(hwnd, EM_EXSETSEL, 0, (LPARAM)&cr);
 
     todo_wine_if (setsel->result_todo)
-        ok(result == setsel->expected_retval, "EM_EXSETSEL(%d): expected: %Id actual: %Id\n", id, setsel->expected_retval, result);
+        ok(result == setsel->expected_retval, "EM_EXSETSEL(%d): expected: %Id actual: %Id\n", id, (ptrdiff_t)setsel->expected_retval, (ptrdiff_t)result);
 
     SendMessageA(hwnd, EM_GETSEL, (WPARAM)&start, (LPARAM)&end);
 
@@ -1360,7 +1360,7 @@ static void test_EM_EXSETSEL(void)
         /*                                                 012345  6   7 8901 */
         cr.cpMin = 4; cr.cpMax = 8;
         result =  SendMessageA(hwndRichEdit, EM_EXSETSEL, 0, (LPARAM)&cr);
-        todo_wine ok(result == 7, "EM_EXSETSEL return %Id expected 7\n", result);
+        todo_wine ok(result == 7, "EM_EXSETSEL return %Id expected 7\n", (ptrdiff_t)result);
         result = SendMessageA(hwndRichEdit, EM_GETSELTEXT, 0, (LPARAM)bufA);
         ok(!strcmp(bufA, "ef\x8e\xf0"), "EM_GETSELTEXT return incorrect string\n");
         SendMessageA(hwndRichEdit, EM_EXGETSEL, 0, (LPARAM)&cr);
@@ -1378,7 +1378,7 @@ static void check_EM_SETSEL(HWND hwnd, const struct exsetsel_s *setsel, int id) 
     result = SendMessageA(hwnd, EM_SETSEL, setsel->min, setsel->max);
 
     todo_wine_if (setsel->result_todo)
-        ok(result == setsel->expected_retval, "EM_SETSEL(%d): expected: %Id actual: %Id\n", id, setsel->expected_retval, result);
+        ok(result == setsel->expected_retval, "EM_SETSEL(%d): expected: %Id actual: %Id\n", id, (ptrdiff_t)setsel->expected_retval, (ptrdiff_t)result);
 
     SendMessageA(hwnd, EM_GETSEL, (WPARAM)&start, (LPARAM)&end);
 
@@ -1419,7 +1419,7 @@ static void test_EM_SETSEL(void)
         SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)"abcdef\x8e\xf0ghijk");
         /*                                                 012345  6   7 8901 */
         result =  SendMessageA(hwndRichEdit, EM_SETSEL, 4, 8);
-        todo_wine ok(result == 7, "EM_SETSEL return %Id expected 7\n", result);
+        todo_wine ok(result == 7, "EM_SETSEL return %Id expected 7\n", (ptrdiff_t)result);
         result = SendMessageA(hwndRichEdit, EM_GETSELTEXT, 0, (LPARAM)buffA);
         ok(!strcmp(buffA, "ef\x8e\xf0"), "EM_GETSELTEXT return incorrect string\n");
         result = SendMessageA(hwndRichEdit, EM_GETSEL, (WPARAM)&sel_start, (LPARAM)&sel_end);

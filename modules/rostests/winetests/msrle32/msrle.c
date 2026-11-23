@@ -62,7 +62,7 @@ static void test_encode(void)
     ok(hic != NULL, "ICOpen failed\n");
 
     res = ICGetInfo(hic, &info, sizeof(info));
-    ok(res == sizeof(info), "res = %Id\n", res);
+    ok(res == sizeof(info), "res = %Id\n", (ptrdiff_t)res);
     ok(info.dwSize == sizeof(info), "dwSize = %ld\n", info.dwSize);
     ok(info.fccHandler == FCC('M','R','L','E'), "fccHandler = %lx\n", info.fccHandler);
     ok(info.dwFlags == (VIDCF_QUALITY|VIDCF_CRUNCH|VIDCF_TEMPORAL), "dwFlags = %lx\n", info.dwFlags);
@@ -70,17 +70,17 @@ static void test_encode(void)
 
     quality = 0xdeadbeef;
     res = ICSendMessage(hic, ICM_GETDEFAULTQUALITY, (DWORD_PTR)&quality, 0);
-    ok(res == ICERR_OK, "ICSendMessage(ICM_GETDEFAULTQUALITY) failed: %Id\n", res);
+    ok(res == ICERR_OK, "ICSendMessage(ICM_GETDEFAULTQUALITY) failed: %Id\n", (ptrdiff_t)res);
     ok(quality == 8500, "quality = %ld\n", quality);
 
     quality = 0xdeadbeef;
     res = ICSendMessage(hic, ICM_GETQUALITY, (DWORD_PTR)&quality, 0);
-    ok(res == ICERR_UNSUPPORTED, "ICSendMessage(ICM_GETQUALITY) failed: %Id\n", res);
+    ok(res == ICERR_UNSUPPORTED, "ICSendMessage(ICM_GETQUALITY) failed: %Id\n", (ptrdiff_t)res);
     ok(quality == 0xdeadbeef, "quality = %ld\n", quality);
 
     quality = ICQUALITY_HIGH;
     res = ICSendMessage(hic, ICM_SETQUALITY, (DWORD_PTR)&quality, 0);
-    ok(res == ICERR_UNSUPPORTED, "ICSendMessage(ICM_SETQUALITY) failed: %Id\n", res);
+    ok(res == ICERR_UNSUPPORTED, "ICSendMessage(ICM_SETQUALITY) failed: %Id\n", (ptrdiff_t)res);
 
     output_size = ICCompressGetFormatSize(hic, &input_header.header);
     ok(output_size == 1064, "output_size = %ld\n", output_size);
@@ -90,7 +90,7 @@ static void test_encode(void)
 
     flags = 0;
     res = ICCompress(hic, ICCOMPRESS_KEYFRAME, output_header, buf, &input_header.header, input1, 0, &flags, 0, 0, 0, NULL, NULL);
-    ok(res == ICERR_OK, "ICCompress failed: %Id\n", res);
+    ok(res == ICERR_OK, "ICCompress failed: %Id\n", (ptrdiff_t)res);
     test_output(buf, output_header->biSizeImage, output1, sizeof(output1));
     ok(flags == (AVIIF_TWOCC|AVIIF_KEYFRAME), "flags = %lx\n", flags);
 

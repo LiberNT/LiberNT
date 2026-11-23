@@ -316,7 +316,10 @@ RxAllocateFcbObject(
     ULONG NameSize,
     PVOID AlreadyAllocatedObject)
 {
-    POOL_TYPE PoolType = FlagOn(PoolFlags, POOL_FLAG_NON_PAGED) ? NonPagedPool : PagedPool;
+    static const POOL_EXTENDED_PARAMETER Priority = {
+        .Type = PoolExtendedParameterPriority,
+        .Priority = LowPoolPriority
+    };
     PFCB Fcb;
     PFOBX Fobx;
     PSRV_OPEN SrvOpen;
@@ -377,7 +380,7 @@ RxAllocateFcbObject(
         /* If we're asked to allocate from nonpaged, also allocate the NON_PAGED_FCB
          * Otherwise, it will be allocated later on, specifically
          */
-        if (PoolType == NonPagedPool)
+        if (FlagOn(PoolFlags, POOL_FLAG_NON_PAGED | POOL_FLAG_NON_PAGED_EXECUTE))
         {
             NonPagedSize = sizeof(NON_PAGED_FCB);
         }
@@ -407,7 +410,8 @@ RxAllocateFcbObject(
     /* Otherwise, allocate it */
     else
     {
-        Buffer = RxAllocatePoolWithTag(PoolType, NameSize + FcbSize + SrvOpenSize + FobxSize + NonPagedSize, RX_FCB_POOLTAG);
+        Buffer = ExAllocatePool3(PoolFlags, (SIZE_T)NameSize + FcbSize + SrvOpenSize + FobxSize + NonPagedSize,
+                                 RX_FCB_POOLTAG, &Priority, 1);
         if (Buffer == NULL)
         {
             return NULL;
@@ -440,22 +444,27 @@ RxAllocateFcbObject(
         }
 
         /* If we were not allocated from non paged, allocate the NON_PAGED_FCB now */
-        if (PoolType != NonPagedPool)
+        PAPNBuffer = Add2Ptr(Buffer, FcbSize + SrvOpenSize + FobxSize);
+        if (NonPagedSize == 0)
         {
-            NonPagedFcb = RxAllocatePoolWithTag(NonPagedPool, sizeof(NON_PAGED_FCB), RX_NONPAGEDFCB_POOLTAG);
+            POOL_FLAGS NonPagedFlags = (PoolFlags & ~(POOL_FLAG_PAGED | POOL_FLAG_RAISE_ON_FAILURE)) |
+                                      POOL_FLAG_NON_PAGED;
+            NonPagedFcb = ExAllocatePool3(NonPagedFlags, sizeof(NON_PAGED_FCB),
+                                          RX_NONPAGEDFCB_POOLTAG, &Priority, 1);
             if (NonPagedFcb == NULL)
             {
-                RxFreePoolWithTag(Buffer, RX_FCB_POOLTAG);
+                if (!AlreadyAllocatedObject)
+                    RxFreePoolWithTag(Buffer, RX_FCB_POOLTAG);
+                if (FlagOn(PoolFlags, POOL_FLAG_RAISE_ON_FAILURE))
+                    ExRaiseStatus(STATUS_INSUFFICIENT_RESOURCES);
                 return NULL;
             }
-
-            PAPNBuffer = Add2Ptr(Buffer, FcbSize + SrvOpenSize + FobxSize);
         }
         /* Otherwise, just point at the right place in what has been allocated previously */
         else
         {
-            NonPagedFcb = Add2Ptr(Fobx, FobxSize);
-            PAPNBuffer = Add2Ptr(Fobx, FobxSize + NonPagedSize);
+            NonPagedFcb = PAPNBuffer;
+            PAPNBuffer = Add2Ptr(NonPagedFcb, NonPagedSize);
         }
     }
 
@@ -498,6 +507,7 @@ RxAllocateFcbObject(
     {
         ZeroAndInitializeNodeType(Fcb, RDBSS_STORAGE_NTC(FileTypeNotYetKnown), FcbSize);
 
+        Fcb->RxDeviceObject = RxDeviceObject;
         Fcb->NonPaged = NonPagedFcb;
         ZeroAndInitializeNodeType(Fcb->NonPaged, RDBSS_NTC_NONPAGED_FCB, sizeof(NON_PAGED_FCB));
 #if DBG
@@ -4303,8 +4313,8 @@ RxFreeFcbObject(
 
         SetFlag(Fcb->Header.Flags, FSRTL_FLAG_ACQUIRE_MAIN_RSRC_SH);
 
-        /* If there was a non-paged FCB allocated, free it */
-        if (!BooleanFlagOn(Fcb->FcbState, FCB_STATE_PAGING_FILE))
+        /* An embedded NON_PAGED_FCB immediately precedes the name buffer. */
+        if (Add2Ptr(Fcb->NonPaged, sizeof(NON_PAGED_FCB)) != Fcb->PrivateAlreadyPrefixedName.Buffer)
         {
             RxFreePoolWithTag(Fcb->NonPaged, RX_NONPAGEDFCB_POOLTAG);
         }

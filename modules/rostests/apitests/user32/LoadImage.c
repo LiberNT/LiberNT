@@ -447,7 +447,7 @@ START_TEST(LoadImage)
     }
 
     /* Start child process */
-    sprintf( path, "%s LoadImage %Iu", test_argv[0], (ULONG_PTR)handle );
+    sprintf( path, "%s LoadImage %Iu", test_argv[0], (size_t)handle );
     memset( &si, 0, sizeof(si) );
     si.cb = sizeof(si);
     CreateProcessA( NULL, path, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi );

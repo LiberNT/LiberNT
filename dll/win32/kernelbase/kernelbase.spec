@@ -643,7 +643,7 @@
 @ stdcall GetWriteWatch(long ptr long ptr ptr ptr) kernel32.GetWriteWatch
 @ stdcall -version=0x601+ GetWsChanges(long ptr long) kernel32.K32GetWsChanges
 @ stdcall -version=0x601+ GetWsChangesEx(long ptr ptr) kernel32.K32GetWsChangesEx
-@ stdcall -arch=i386,x86_64,arm64ec GetXStateFeaturesMask(ptr ptr)
+@ stdcall -arch=i386,x86_64,arm64,arm64ec GetXStateFeaturesMask(ptr ptr)
 @ stdcall GlobalAlloc(long long) kernel32.GlobalAlloc
 @ stdcall GlobalFree(long) kernel32.GlobalFree
 @ stdcall GlobalMemoryStatusEx(ptr) kernel32.GlobalMemoryStatusEx
@@ -799,7 +799,7 @@
 @ stdcall LocalReAlloc(long long long) kernel32.LocalReAlloc
 @ stdcall LocalUnlock(long) kernel32.LocalUnlock
 @ stdcall LocaleNameToLCID(wstr long)
-@ stdcall -arch=i386,x86_64,arm64ec LocateXStateFeature(ptr long ptr)
+@ stdcall -arch=i386,x86_64,arm64,arm64ec LocateXStateFeature(ptr long ptr)
 @ stdcall LockFile(long long long long long) kernel32.LockFile
 @ stdcall LockFileEx(long long long long long ptr) kernel32.LockFileEx
 @ stdcall LockResource(long) kernel32.LockResource
@@ -1252,7 +1252,7 @@
 @ stdcall SetUserGeoName(wstr)
 @ stdcall SetWaitableTimer(long ptr long ptr ptr long) kernel32.SetWaitableTimer
 @ stdcall SetWaitableTimerEx(long ptr long ptr ptr ptr long) kernel32.SetWaitableTimerEx
-@ stdcall -arch=i386,x86_64,arm64ec SetXStateFeaturesMask(ptr int64)
+@ stdcall -arch=i386,x86_64,arm64,arm64ec SetXStateFeaturesMask(ptr int64)
 @ stdcall SetupComm(long long long) kernel32.SetupComm
 @ stdcall SignalObjectAndWait(long long long long) kernel32.SignalObjectAndWait
 @ stdcall SizeofResource(long long) kernel32.SizeofResource

@@ -198,12 +198,12 @@ static void test_query_basic(void)
     /* Higher 32 bits of AllocationGranularity is sometimes garbage on Windows. */
     ok( (ULONG)sbi.AllocationGranularity == (ULONG)sbi2.AllocationGranularity,
             "Expected AllocationGranularity %#Ix, got %#Ix.\n",
-            sbi.AllocationGranularity, sbi2.AllocationGranularity);
+            (size_t)sbi.AllocationGranularity, (size_t)sbi2.AllocationGranularity);
     ok( sbi.LowestUserAddress == sbi2.LowestUserAddress, "Expected LowestUserAddress %p, got %p.\n",
             sbi.LowestUserAddress, sbi2.LowestUserAddress);
     ok( sbi.ActiveProcessorsAffinityMask == sbi2.ActiveProcessorsAffinityMask,
             "Expected ActiveProcessorsAffinityMask %#Ix, got %#Ix.\n",
-            sbi.ActiveProcessorsAffinityMask, sbi2.ActiveProcessorsAffinityMask);
+            (size_t)sbi.ActiveProcessorsAffinityMask, (size_t)sbi2.ActiveProcessorsAffinityMask);
     ok( sbi.NumberOfProcessors == sbi2.NumberOfProcessors, "Expected NumberOfProcessors %u, got %u.\n",
             sbi.NumberOfProcessors, sbi2.NumberOfProcessors);
 #ifdef _WIN64
@@ -279,13 +279,13 @@ static void test_query_basic(void)
         ok( sbi.MmHighestPhysicalPage == sbi64.MmHighestPhysicalPage, "MmHighestPhysicalPage %lu / %lu\n",
             sbi.MmHighestPhysicalPage, sbi64.MmHighestPhysicalPage);
         ok( sbi.AllocationGranularity == (ULONG_PTR)sbi64.AllocationGranularity,
-            "AllocationGranularity %#Ix / %#Ix\n", sbi.AllocationGranularity,
-            (ULONG_PTR)sbi64.AllocationGranularity);
+            "AllocationGranularity %#Ix / %#Ix\n", (size_t)sbi.AllocationGranularity,
+            (size_t)sbi64.AllocationGranularity);
         ok( (ULONG_PTR)sbi.LowestUserAddress == sbi64.LowestUserAddress, "LowestUserAddress %p / %s\n",
             sbi.LowestUserAddress, wine_dbgstr_longlong(sbi64.LowestUserAddress));
         ok( sbi.ActiveProcessorsAffinityMask == sbi64.ActiveProcessorsAffinityMask,
             "ActiveProcessorsAffinityMask %#Ix / %s\n",
-            sbi.ActiveProcessorsAffinityMask, wine_dbgstr_longlong(sbi64.ActiveProcessorsAffinityMask));
+            (size_t)sbi.ActiveProcessorsAffinityMask, wine_dbgstr_longlong(sbi64.ActiveProcessorsAffinityMask));
         ok( sbi.NumberOfProcessors == sbi64.NumberOfProcessors, "NumberOfProcessors %u / %u\n",
             sbi.NumberOfProcessors, sbi64.NumberOfProcessors);
         ok( sbi64.HighestUserAddress == 0x7ffffffeffff, "wrong limit %s\n",
@@ -994,7 +994,7 @@ static void test_query_handle_ex(void)
     ok(!status, "got %#lx\n", status);
     expect_size = FIELD_OFFSET(SYSTEM_HANDLE_INFORMATION_EX, Handles[info->NumberOfHandles]);
     ok(size == expect_size, "expected size %lu, got %lu\n", expect_size, size);
-    ok(info->NumberOfHandles > 1, "got %Iu handles\n", info->NumberOfHandles);
+    ok(info->NumberOfHandles > 1, "got %Iu handles\n", (size_t)info->NumberOfHandles);
 
     found = FALSE;
     for (i = 0; i < info->NumberOfHandles; ++i)
@@ -1024,7 +1024,7 @@ static void test_query_handle_ex(void)
     ok(!status, "got %#lx\n", status);
     expect_size = FIELD_OFFSET(SYSTEM_HANDLE_INFORMATION_EX, Handles[info->NumberOfHandles]);
     ok(size == expect_size, "expected size %lu, got %lu\n", expect_size, size);
-    ok(info->NumberOfHandles > 1, "got %Iu handles\n", info->NumberOfHandles);
+    ok(info->NumberOfHandles > 1, "got %Iu handles\n", (size_t)info->NumberOfHandles);
 
     found = FALSE;
     for (i = 0; i < info->NumberOfHandles; ++i)
@@ -1379,7 +1379,7 @@ static void test_query_logicalprocex(void)
             trace("infoex[%u].Processor.GroupCount: 0x%x\n", i, ex->Processor.GroupCount);
             for (j = 0; j < ex->Processor.GroupCount; ++j)
             {
-                trace("infoex[%u].Processor.GroupMask[%u].Mask: 0x%Ix\n", i, j, ex->Processor.GroupMask[j].Mask);
+                trace("infoex[%u].Processor.GroupMask[%u].Mask: 0x%Ix\n", i, j, (size_t)ex->Processor.GroupMask[j].Mask);
                 trace("infoex[%u].Processor.GroupMask[%u].Group: 0x%x\n", i, j, ex->Processor.GroupMask[j].Group);
             }
             break;
@@ -1387,7 +1387,7 @@ static void test_query_logicalprocex(void)
         case RelationNumaNodeEx:
             trace("infoex[%u].Relationship: 0x%x (%s)\n", i, ex->Relationship, names[ex->Relationship]);
             trace("infoex[%u].NumaNode.NodeNumber: 0x%lx\n", i, ex->NumaNode.NodeNumber);
-            trace("infoex[%u].NumaNode.GroupMask.Mask: 0x%Ix\n", i, ex->NumaNode.GroupMask.Mask);
+            trace("infoex[%u].NumaNode.GroupMask.Mask: 0x%Ix\n", i, (size_t)ex->NumaNode.GroupMask.Mask);
             trace("infoex[%u].NumaNode.GroupMask.Group: 0x%x\n", i, ex->NumaNode.GroupMask.Group);
             break;
         case RelationCache:
@@ -1397,7 +1397,7 @@ static void test_query_logicalprocex(void)
             trace("infoex[%u].Cache.LineSize: 0x%x\n", i, ex->Cache.LineSize);
             trace("infoex[%u].Cache.CacheSize: 0x%lx\n", i, ex->Cache.CacheSize);
             trace("infoex[%u].Cache.Type: 0x%x\n", i, ex->Cache.Type);
-            trace("infoex[%u].Cache.GroupMask.Mask: 0x%Ix\n", i, ex->Cache.GroupMask.Mask);
+            trace("infoex[%u].Cache.GroupMask.Mask: 0x%Ix\n", i, (size_t)ex->Cache.GroupMask.Mask);
             trace("infoex[%u].Cache.GroupMask.Group: 0x%x\n", i, ex->Cache.GroupMask.Group);
             break;
         case RelationGroup:
@@ -1408,7 +1408,7 @@ static void test_query_logicalprocex(void)
             {
                 trace("infoex[%u].Group.GroupInfo[%u].MaximumProcessorCount: 0x%x\n", i, j, ex->Group.GroupInfo[j].MaximumProcessorCount);
                 trace("infoex[%u].Group.GroupInfo[%u].ActiveProcessorCount: 0x%x\n", i, j, ex->Group.GroupInfo[j].ActiveProcessorCount);
-                trace("infoex[%u].Group.GroupInfo[%u].ActiveProcessorMask: 0x%Ix\n", i, j, ex->Group.GroupInfo[j].ActiveProcessorMask);
+                trace("infoex[%u].Group.GroupInfo[%u].ActiveProcessorMask: 0x%Ix\n", i, j, (size_t)ex->Group.GroupInfo[j].ActiveProcessorMask);
             }
             break;
         default:
@@ -1780,24 +1780,24 @@ static void test_query_process_wow64(void)
     pbi[0] = pbi[1] = dummy;
     status = NtQueryInformationProcess(NULL, ProcessWow64Information, pbi, sizeof(ULONG_PTR), NULL);
     ok( status == STATUS_INVALID_HANDLE, "Expected STATUS_INVALID_HANDLE, got %08lx\n", status);
-    ok( pbi[0] == dummy, "pbi[0] changed to %Ix\n", pbi[0]);
-    ok( pbi[1] == dummy, "pbi[1] changed to %Ix\n", pbi[1]);
+    ok( pbi[0] == dummy, "pbi[0] changed to %Ix\n", (size_t)pbi[0]);
+    ok( pbi[1] == dummy, "pbi[1] changed to %Ix\n", (size_t)pbi[1]);
 
     /* Use a greater buffer size */
     pbi[0] = pbi[1] = dummy;
     status = NtQueryInformationProcess(NULL, ProcessWow64Information, pbi, sizeof(ULONG_PTR) + 1, NULL);
     ok( status == STATUS_INFO_LENGTH_MISMATCH, "Expected STATUS_INFO_LENGTH_MISMATCH, got %08lx\n", status);
-    ok( pbi[0] == dummy, "pbi[0] changed to %Ix\n", pbi[0]);
-    ok( pbi[1] == dummy, "pbi[1] changed to %Ix\n", pbi[1]);
+    ok( pbi[0] == dummy, "pbi[0] changed to %Ix\n", (size_t)pbi[0]);
+    ok( pbi[1] == dummy, "pbi[1] changed to %Ix\n", (size_t)pbi[1]);
 
     /* Use no ReturnLength */
     pbi[0] = pbi[1] = dummy;
     status = NtQueryInformationProcess(GetCurrentProcess(), ProcessWow64Information, pbi, sizeof(ULONG_PTR), NULL);
     ok( status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status);
-    ok( is_wow64 == (pbi[0] != 0), "is_wow64 %x, pbi[0] %Ix\n", is_wow64, pbi[0]);
+    ok( is_wow64 == (pbi[0] != 0), "is_wow64 %x, pbi[0] %Ix\n", is_wow64, (size_t)pbi[0]);
     if (is_wow64)
-        ok( (void *)pbi[0] == NtCurrentTeb()->Peb, "pbi[0] %Ix / %p\n", pbi[0], NtCurrentTeb()->Peb);
-    ok( pbi[1] == dummy, "pbi[1] changed to %Ix\n", pbi[1]);
+        ok( (void *)pbi[0] == NtCurrentTeb()->Peb, "pbi[0] %Ix / %p\n", (size_t)pbi[0], NtCurrentTeb()->Peb);
+    ok( pbi[1] == dummy, "pbi[1] changed to %Ix\n", (size_t)pbi[1]);
     /* Test written size on 64 bit by checking high 32 bit buffer */
     if (sizeof(ULONG_PTR) > sizeof(DWORD))
     {
@@ -1810,10 +1810,10 @@ static void test_query_process_wow64(void)
     ReturnLength = 0xdeadbeef;
     status = NtQueryInformationProcess(GetCurrentProcess(), ProcessWow64Information, pbi, sizeof(ULONG_PTR), &ReturnLength);
     ok( status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status);
-    ok( is_wow64 == (pbi[0] != 0), "is_wow64 %x, pbi[0] %Ix\n", is_wow64, pbi[0]);
+    ok( is_wow64 == (pbi[0] != 0), "is_wow64 %x, pbi[0] %Ix\n", is_wow64, (size_t)pbi[0]);
     if (is_wow64)
-        ok( (void *)pbi[0] == NtCurrentTeb()->Peb, "pbi[0] %Ix / %p\n", pbi[0], NtCurrentTeb()->Peb);
-    ok( pbi[1] == dummy, "pbi[1] changed to %Ix\n", pbi[1]);
+        ok( (void *)pbi[0] == NtCurrentTeb()->Peb, "pbi[0] %Ix / %p\n", (size_t)pbi[0], NtCurrentTeb()->Peb);
+    ok( pbi[1] == dummy, "pbi[1] changed to %Ix\n", (size_t)pbi[1]);
     ok( ReturnLength == sizeof(ULONG_PTR), "Inconsistent length %ld\n", ReturnLength);
 
     /* Everything is correct except a too small buffer size */
@@ -1821,8 +1821,8 @@ static void test_query_process_wow64(void)
     ReturnLength = 0xdeadbeef;
     status = NtQueryInformationProcess(GetCurrentProcess(), ProcessWow64Information, pbi, sizeof(ULONG_PTR) - 1, &ReturnLength);
     ok( status == STATUS_INFO_LENGTH_MISMATCH, "Expected STATUS_INFO_LENGTH_MISMATCH, got %08lx\n", status);
-    ok( pbi[0] == dummy, "pbi[0] changed to %Ix\n", pbi[0]);
-    ok( pbi[1] == dummy, "pbi[1] changed to %Ix\n", pbi[1]);
+    ok( pbi[0] == dummy, "pbi[0] changed to %Ix\n", (size_t)pbi[0]);
+    ok( pbi[1] == dummy, "pbi[1] changed to %Ix\n", (size_t)pbi[1]);
     ok( ReturnLength == 0xdeadbeef, "Expected 0xdeadbeef, got %ld\n", ReturnLength);
 
     /* Everything is correct except a too large buffer size */
@@ -1830,8 +1830,8 @@ static void test_query_process_wow64(void)
     ReturnLength = 0xdeadbeef;
     status = NtQueryInformationProcess(GetCurrentProcess(), ProcessWow64Information, pbi, sizeof(ULONG_PTR) + 1, &ReturnLength);
     ok( status == STATUS_INFO_LENGTH_MISMATCH, "Expected STATUS_INFO_LENGTH_MISMATCH, got %08lx\n", status);
-    ok( pbi[0] == dummy, "pbi[0] changed to %Ix\n", pbi[0]);
-    ok( pbi[1] == dummy, "pbi[1] changed to %Ix\n", pbi[1]);
+    ok( pbi[0] == dummy, "pbi[0] changed to %Ix\n", (size_t)pbi[0]);
+    ok( pbi[1] == dummy, "pbi[1] changed to %Ix\n", (size_t)pbi[1]);
     ok( ReturnLength == 0xdeadbeef, "Expected 0xdeadbeef, got %ld\n", ReturnLength);
 }
 
@@ -1883,24 +1883,24 @@ static void test_query_process_basic(void)
     ok( status == STATUS_INFO_LENGTH_MISMATCH, "Expected STATUS_INFO_LENGTH_MISMATCH, got %08lx\n", status);
     ok( sizeof(pbi) == ReturnLength, "Inconsistent length %ld\n", ReturnLength);
 
-    if (winetest_debug > 1) trace("ProcessID : %Ix\n", pbi.UniqueProcessId);
+    if (winetest_debug > 1) trace("ProcessID : %Ix\n", (size_t)pbi.UniqueProcessId);
     ok( pbi.UniqueProcessId > 0, "Expected a ProcessID > 0, got 0\n");
 }
 
 static void dump_vm_counters(const char *header, const VM_COUNTERS_EX *pvi)
 {
     trace("%s:\n", header);
-    trace("PeakVirtualSize           : %Iu\n", pvi->PeakVirtualSize);
-    trace("VirtualSize               : %Iu\n", pvi->VirtualSize);
+    trace("PeakVirtualSize           : %Iu\n", (size_t)pvi->PeakVirtualSize);
+    trace("VirtualSize               : %Iu\n", (size_t)pvi->VirtualSize);
     trace("PageFaultCount            : %lu\n",  pvi->PageFaultCount);
-    trace("PeakWorkingSetSize        : %Iu\n", pvi->PeakWorkingSetSize);
-    trace("WorkingSetSize            : %Iu\n", pvi->WorkingSetSize);
-    trace("QuotaPeakPagedPoolUsage   : %Iu\n", pvi->QuotaPeakPagedPoolUsage);
-    trace("QuotaPagedPoolUsage       : %Iu\n", pvi->QuotaPagedPoolUsage);
-    trace("QuotaPeakNonPagePoolUsage : %Iu\n", pvi->QuotaPeakNonPagedPoolUsage);
-    trace("QuotaNonPagePoolUsage     : %Iu\n", pvi->QuotaNonPagedPoolUsage);
-    trace("PagefileUsage             : %Iu\n", pvi->PagefileUsage);
-    trace("PeakPagefileUsage         : %Iu\n", pvi->PeakPagefileUsage);
+    trace("PeakWorkingSetSize        : %Iu\n", (size_t)pvi->PeakWorkingSetSize);
+    trace("WorkingSetSize            : %Iu\n", (size_t)pvi->WorkingSetSize);
+    trace("QuotaPeakPagedPoolUsage   : %Iu\n", (size_t)pvi->QuotaPeakPagedPoolUsage);
+    trace("QuotaPagedPoolUsage       : %Iu\n", (size_t)pvi->QuotaPagedPoolUsage);
+    trace("QuotaPeakNonPagePoolUsage : %Iu\n", (size_t)pvi->QuotaPeakNonPagedPoolUsage);
+    trace("QuotaNonPagePoolUsage     : %Iu\n", (size_t)pvi->QuotaNonPagedPoolUsage);
+    trace("PagefileUsage             : %Iu\n", (size_t)pvi->PagefileUsage);
+    trace("PeakPagefileUsage         : %Iu\n", (size_t)pvi->PeakPagefileUsage);
 }
 
 static void test_query_process_vm(void)
@@ -1951,7 +1951,7 @@ static void test_query_process_vm(void)
     process = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, GetCurrentProcessId());
     status = NtQueryInformationProcess(process, ProcessVmCounters, &pvi, sizeof(pvi), NULL);
     ok( status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status);
-    ok( pvi.PrivateUsage == pvi.PagefileUsage, "wrong value %Iu/%Iu\n", pvi.PrivateUsage, pvi.PagefileUsage );
+    ok( pvi.PrivateUsage == pvi.PagefileUsage, "wrong value %Iu/%Iu\n", (size_t)pvi.PrivateUsage, (size_t)pvi.PagefileUsage );
 
     /* Check if we have some return values */
     if (winetest_debug > 1)
@@ -1964,7 +1964,7 @@ static void test_query_process_vm(void)
     /* Check if we have real counters */
     status = NtQueryInformationProcess(GetCurrentProcess(), ProcessVmCounters, &pvi, sizeof(pvi), NULL);
     ok( status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status);
-    ok( pvi.PrivateUsage == pvi.PagefileUsage, "wrong value %Iu/%Iu\n", pvi.PrivateUsage, pvi.PagefileUsage );
+    ok( pvi.PrivateUsage == pvi.PagefileUsage, "wrong value %Iu/%Iu\n", (size_t)pvi.PrivateUsage, (size_t)pvi.PagefileUsage );
     prev_size = pvi.VirtualSize;
     if (winetest_debug > 1)
         dump_vm_counters("VM counters before VirtualAlloc", &pvi);
@@ -1972,16 +1972,16 @@ static void test_query_process_vm(void)
     ok( ptr != NULL, "VirtualAlloc failed, err %lu\n", GetLastError());
     status = NtQueryInformationProcess(GetCurrentProcess(), ProcessVmCounters, &pvi, sizeof(pvi), NULL);
     ok( status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status);
-    ok( pvi.PrivateUsage == pvi.PagefileUsage, "wrong value %Iu/%Iu\n", pvi.PrivateUsage, pvi.PagefileUsage );
+    ok( pvi.PrivateUsage == pvi.PagefileUsage, "wrong value %Iu/%Iu\n", (size_t)pvi.PrivateUsage, (size_t)pvi.PagefileUsage );
     if (winetest_debug > 1)
         dump_vm_counters("VM counters after VirtualAlloc", &pvi);
     todo_wine ok( pvi.VirtualSize >= prev_size + alloc_size,
-        "Expected to be greater than %Iu, got %Iu\n", prev_size + alloc_size, pvi.VirtualSize);
+        "Expected to be greater than %Iu, got %Iu\n", (size_t)(prev_size + alloc_size), (size_t)pvi.VirtualSize);
     VirtualFree( ptr, 0, MEM_RELEASE);
 
     status = NtQueryInformationProcess(GetCurrentProcess(), ProcessVmCounters, &pvi, sizeof(pvi), NULL);
     ok( status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status);
-    ok( pvi.PrivateUsage == pvi.PagefileUsage, "wrong value %Iu/%Iu\n", pvi.PrivateUsage, pvi.PagefileUsage );
+    ok( pvi.PrivateUsage == pvi.PagefileUsage, "wrong value %Iu/%Iu\n", (size_t)pvi.PrivateUsage, (size_t)pvi.PagefileUsage );
     prev_size = pvi.VirtualSize;
     if (winetest_debug > 1)
         dump_vm_counters("VM counters before VirtualAlloc", &pvi);
@@ -1989,22 +1989,22 @@ static void test_query_process_vm(void)
     ok( ptr != NULL, "VirtualAlloc failed, err %lu\n", GetLastError());
     status = NtQueryInformationProcess(GetCurrentProcess(), ProcessVmCounters, &pvi, sizeof(pvi), NULL);
     ok( status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status);
-    ok( pvi.PrivateUsage == pvi.PagefileUsage, "wrong value %Iu/%Iu\n", pvi.PrivateUsage, pvi.PagefileUsage );
+    ok( pvi.PrivateUsage == pvi.PagefileUsage, "wrong value %Iu/%Iu\n", (size_t)pvi.PrivateUsage, (size_t)pvi.PagefileUsage );
     if (winetest_debug > 1)
         dump_vm_counters("VM counters after VirtualAlloc(MEM_RESERVE)", &pvi);
     todo_wine ok( pvi.VirtualSize >= prev_size + alloc_size,
-        "Expected to be greater than %Iu, got %Iu\n", prev_size + alloc_size, pvi.VirtualSize);
+        "Expected to be greater than %Iu, got %Iu\n", (size_t)(prev_size + alloc_size), (size_t)pvi.VirtualSize);
     prev_size = pvi.VirtualSize;
 
     ptr = VirtualAlloc(ptr, alloc_size, MEM_COMMIT, PAGE_READWRITE);
     ok( ptr != NULL, "VirtualAlloc failed, err %lu\n", GetLastError());
     status = NtQueryInformationProcess(GetCurrentProcess(), ProcessVmCounters, &pvi, sizeof(pvi), NULL);
     ok( status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status);
-    ok( pvi.PrivateUsage == pvi.PagefileUsage, "wrong value %Iu/%Iu\n", pvi.PrivateUsage, pvi.PagefileUsage );
+    ok( pvi.PrivateUsage == pvi.PagefileUsage, "wrong value %Iu/%Iu\n", (size_t)pvi.PrivateUsage, (size_t)pvi.PagefileUsage );
     if (winetest_debug > 1)
         dump_vm_counters("VM counters after VirtualAlloc(MEM_COMMIT)", &pvi);
     ok( pvi.VirtualSize == prev_size,
-        "Expected to equal to %Iu, got %Iu\n", prev_size, pvi.VirtualSize);
+        "Expected to equal to %Iu, got %Iu\n", (size_t)prev_size, (size_t)pvi.VirtualSize);
     VirtualFree( ptr, 0, MEM_RELEASE);
 }
 
@@ -2150,14 +2150,14 @@ static void test_query_process_debug_port(int argc, char **argv)
     status = NtQueryInformationProcess(GetCurrentProcess(), ProcessDebugPort,
             &debug_port, sizeof(debug_port), &len);
     ok(!status, "NtQueryInformationProcess failed, status %#lx.\n", status);
-    ok(debug_port == 0, "Expected port 0, got %#Ix.\n", debug_port);
+    ok(debug_port == 0, "Expected port 0, got %#Ix.\n", (size_t)debug_port);
     ok(len == sizeof(debug_port), "len set to %lx\n", len );
 
     len = 0xdeadbeef;
     status = NtQueryInformationProcess(pi.hProcess, ProcessDebugPort,
             &debug_port, sizeof(debug_port), &len);
     ok(!status, "NtQueryInformationProcess failed, status %#lx.\n", status);
-    ok(debug_port == ~(DWORD_PTR)0, "Expected port %#Ix, got %#Ix.\n", ~(DWORD_PTR)0, debug_port);
+    ok(debug_port == ~(DWORD_PTR)0, "Expected port %#Ix, got %#Ix.\n", (size_t)(~(DWORD_PTR)0), (size_t)debug_port);
     ok(len == sizeof(debug_port), "len set to %lx\n", len );
 
     for (;;)
@@ -2796,7 +2796,7 @@ static void test_readvirtualmemory(void)
     /* normal operation */
     status = pNtReadVirtualMemory(process, teststring, buffer, 12, &readcount);
     ok( status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status);
-    ok( readcount == 12, "Expected to read 12 bytes, got %Id\n",readcount);
+    ok( readcount == 12, "Expected to read 12 bytes, got %Id\n",(ptrdiff_t)readcount);
     ok( strcmp(teststring, buffer) == 0, "Expected read memory to be the same as original memory\n");
 
     /* no number of bytes */
@@ -2810,19 +2810,19 @@ static void test_readvirtualmemory(void)
     status = pNtReadVirtualMemory(process, (void *) 0x1234, buffer, 12, &readcount);
     ok( status == STATUS_PARTIAL_COPY, "Expected STATUS_PARTIAL_COPY, got %08lx\n", status);
     if (status == STATUS_PARTIAL_COPY)
-        ok( readcount == 0, "Expected to read 0 bytes, got %Id\n",readcount);
+        ok( readcount == 0, "Expected to read 0 bytes, got %Id\n",(ptrdiff_t)readcount);
     }
 
     /* 0 handle */
     status = pNtReadVirtualMemory(0, teststring, buffer, 12, &readcount);
     ok( status == STATUS_INVALID_HANDLE, "Expected STATUS_INVALID_HANDLE, got %08lx\n", status);
-    ok( readcount == 0, "Expected to read 0 bytes, got %Id\n",readcount);
+    ok( readcount == 0, "Expected to read 0 bytes, got %Id\n",(ptrdiff_t)readcount);
 
     /* pseudo handle for current process*/
     memset(buffer, 0, 12);
     status = pNtReadVirtualMemory((HANDLE)-1, teststring, buffer, 12, &readcount);
     ok( status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status);
-    ok( readcount == 12, "Expected to read 12 bytes, got %Id\n",readcount);
+    ok( readcount == 12, "Expected to read 12 bytes, got %Id\n",(ptrdiff_t)readcount);
     ok( strcmp(teststring, buffer) == 0, "Expected read memory to be the same as original memory\n");
 
     /* illegal local address */
@@ -2830,7 +2830,7 @@ static void test_readvirtualmemory(void)
     ok( status == STATUS_ACCESS_VIOLATION || broken(status == STATUS_PARTIAL_COPY) /* Win10 */,
         "Expected STATUS_ACCESS_VIOLATION, got %08lx\n", status);
     if (status == STATUS_ACCESS_VIOLATION)
-        ok( readcount == 0, "Expected to read 0 bytes, got %Id\n",readcount);
+        ok( readcount == 0, "Expected to read 0 bytes, got %Id\n",(ptrdiff_t)readcount);
 
     CloseHandle(process);
 }
@@ -2942,7 +2942,7 @@ static void test_threadstack(void)
     ok( meminfo.AllocationBase == info.StackBase, "wrong base %p/%p\n",
         meminfo.AllocationBase, info.StackBase );
     ok( meminfo.RegionSize == info.ReserveSize, "wrong size %Ix/%Ix\n",
-        meminfo.RegionSize, info.ReserveSize );
+        (size_t)meminfo.RegionSize, (size_t)info.ReserveSize );
     ok( meminfo.State == MEM_RESERVE, "wrong state %lx\n", meminfo.State );
     ok( meminfo.Protect == 0, "wrong protect %lx\n", meminfo.Protect );
     ok( meminfo.Type == MEM_PRIVATE, "wrong type %lx\n", meminfo.Type );
@@ -2961,7 +2961,7 @@ static void test_threadstack(void)
         ok( meminfo.AllocationBase == info_ex.AllocInfo.StackBase, "wrong base %p/%p\n",
             meminfo.AllocationBase, info_ex.AllocInfo.StackBase );
         ok( meminfo.RegionSize == info_ex.AllocInfo.ReserveSize, "wrong size %Ix/%Ix\n",
-            meminfo.RegionSize, info_ex.AllocInfo.ReserveSize );
+            (size_t)meminfo.RegionSize, (size_t)info_ex.AllocInfo.ReserveSize );
         ok( meminfo.State == MEM_RESERVE, "wrong state %lx\n", meminfo.State );
         ok( meminfo.Protect == 0, "wrong protect %lx\n", meminfo.Protect );
         ok( meminfo.Type == MEM_PRIVATE, "wrong type %lx\n", meminfo.Type );
@@ -3002,7 +3002,7 @@ static void test_queryvirtualmemory(void)
     module = GetModuleHandleA( "ntdll.dll" );
     status = pNtQueryVirtualMemory(NtCurrentProcess(), module, MemoryBasicInformation, &mbi, sizeof(MEMORY_BASIC_INFORMATION), &readcount);
     ok( status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status);
-    ok( readcount == sizeof(MEMORY_BASIC_INFORMATION), "Expected to read %d bytes, got %Id\n",(int)sizeof(MEMORY_BASIC_INFORMATION),readcount);
+    ok( readcount == sizeof(MEMORY_BASIC_INFORMATION), "Expected to read %d bytes, got %Id\n",(int)sizeof(MEMORY_BASIC_INFORMATION),(ptrdiff_t)readcount);
     ok (mbi.AllocationBase == module, "mbi.AllocationBase is 0x%p, expected 0x%p\n", mbi.AllocationBase, module);
     ok (mbi.AllocationProtect == PAGE_EXECUTE_WRITECOPY, "mbi.AllocationProtect is 0x%lx, expected 0x%x\n", mbi.AllocationProtect, PAGE_EXECUTE_WRITECOPY);
     ok (mbi.State == MEM_COMMIT, "mbi.State is 0x%lx, expected 0x%x\n", mbi.State, MEM_COMMIT);
@@ -3012,7 +3012,7 @@ static void test_queryvirtualmemory(void)
     module = GetModuleHandleA( "ntdll.dll" );
     status = pNtQueryVirtualMemory(NtCurrentProcess(), pNtQueryVirtualMemory, MemoryBasicInformation, &mbi, sizeof(MEMORY_BASIC_INFORMATION), &readcount);
     ok( status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status);
-    ok( readcount == sizeof(MEMORY_BASIC_INFORMATION), "Expected to read %d bytes, got %Id\n",(int)sizeof(MEMORY_BASIC_INFORMATION),readcount);
+    ok( readcount == sizeof(MEMORY_BASIC_INFORMATION), "Expected to read %d bytes, got %Id\n",(int)sizeof(MEMORY_BASIC_INFORMATION),(ptrdiff_t)readcount);
     ok (mbi.AllocationBase == module, "mbi.AllocationBase is 0x%p, expected 0x%p\n", mbi.AllocationBase, module);
     ok (mbi.AllocationProtect == PAGE_EXECUTE_WRITECOPY, "mbi.AllocationProtect is 0x%lx, expected 0x%x\n", mbi.AllocationProtect, PAGE_EXECUTE_WRITECOPY);
     ok (mbi.State == MEM_COMMIT, "mbi.State is 0x%lx, expected 0x%x\n", mbi.State, MEM_COMMIT);
@@ -3020,7 +3020,7 @@ static void test_queryvirtualmemory(void)
 
     status = pNtQueryVirtualMemory(NtCurrentProcess(), GetProcessHeap(), MemoryBasicInformation, &mbi, sizeof(MEMORY_BASIC_INFORMATION), &readcount);
     ok( status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status);
-    ok( readcount == sizeof(MEMORY_BASIC_INFORMATION), "Expected to read %d bytes, got %Id\n",(int)sizeof(MEMORY_BASIC_INFORMATION),readcount);
+    ok( readcount == sizeof(MEMORY_BASIC_INFORMATION), "Expected to read %d bytes, got %Id\n",(int)sizeof(MEMORY_BASIC_INFORMATION),(ptrdiff_t)readcount);
     ok (mbi.AllocationProtect == PAGE_READWRITE || mbi.AllocationProtect == PAGE_EXECUTE_READWRITE,
         "mbi.AllocationProtect is 0x%lx\n", mbi.AllocationProtect);
     ok (mbi.State == MEM_COMMIT, "mbi.State is 0x%lx, expected 0x%x\n", mbi.State, MEM_COMMIT);
@@ -3029,7 +3029,7 @@ static void test_queryvirtualmemory(void)
 
     status = pNtQueryVirtualMemory(NtCurrentProcess(), stackbuf, MemoryBasicInformation, &mbi, sizeof(MEMORY_BASIC_INFORMATION), &readcount);
     ok( status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status);
-    ok( readcount == sizeof(MEMORY_BASIC_INFORMATION), "Expected to read %d bytes, got %Id\n",(int)sizeof(MEMORY_BASIC_INFORMATION),readcount);
+    ok( readcount == sizeof(MEMORY_BASIC_INFORMATION), "Expected to read %d bytes, got %Id\n",(int)sizeof(MEMORY_BASIC_INFORMATION),(ptrdiff_t)readcount);
     ok (mbi.AllocationProtect == PAGE_READWRITE, "mbi.AllocationProtect is 0x%lx, expected 0x%x\n", mbi.AllocationProtect, PAGE_READWRITE);
     ok (mbi.State == MEM_COMMIT, "mbi.State is 0x%lx, expected 0x%x\n", mbi.State, MEM_COMMIT);
     ok (mbi.Protect == PAGE_READWRITE, "mbi.Protect is 0x%lx, expected 0x%x\n", mbi.Protect, PAGE_READWRITE);
@@ -3037,7 +3037,7 @@ static void test_queryvirtualmemory(void)
     module = GetModuleHandleA( NULL );
     status = pNtQueryVirtualMemory(NtCurrentProcess(), teststring, MemoryBasicInformation, &mbi, sizeof(MEMORY_BASIC_INFORMATION), &readcount);
     ok( status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status);
-    ok( readcount == sizeof(MEMORY_BASIC_INFORMATION), "Expected to read %d bytes, got %Id\n",(int)sizeof(MEMORY_BASIC_INFORMATION),readcount);
+    ok( readcount == sizeof(MEMORY_BASIC_INFORMATION), "Expected to read %d bytes, got %Id\n",(int)sizeof(MEMORY_BASIC_INFORMATION),(ptrdiff_t)readcount);
     ok (mbi.AllocationBase == module, "mbi.AllocationBase is 0x%p, expected 0x%p\n", mbi.AllocationBase, module);
     ok (mbi.AllocationProtect == PAGE_EXECUTE_WRITECOPY, "mbi.AllocationProtect is 0x%lx, expected 0x%x\n", mbi.AllocationProtect, PAGE_EXECUTE_WRITECOPY);
     ok (mbi.State == MEM_COMMIT, "mbi.State is 0x%lx, expected 0x%X\n", mbi.State, MEM_COMMIT);
@@ -3045,7 +3045,7 @@ static void test_queryvirtualmemory(void)
 
     status = pNtQueryVirtualMemory(NtCurrentProcess(), datatestbuf, MemoryBasicInformation, &mbi, sizeof(MEMORY_BASIC_INFORMATION), &readcount);
     ok( status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status);
-    ok( readcount == sizeof(MEMORY_BASIC_INFORMATION), "Expected to read %d bytes, got %Id\n",(int)sizeof(MEMORY_BASIC_INFORMATION),readcount);
+    ok( readcount == sizeof(MEMORY_BASIC_INFORMATION), "Expected to read %d bytes, got %Id\n",(int)sizeof(MEMORY_BASIC_INFORMATION),(ptrdiff_t)readcount);
     ok (mbi.AllocationBase == module, "mbi.AllocationBase is 0x%p, expected 0x%p\n", mbi.AllocationBase, module);
     ok (mbi.AllocationProtect == PAGE_EXECUTE_WRITECOPY, "mbi.AllocationProtect is 0x%lx, expected 0x%x\n", mbi.AllocationProtect, PAGE_EXECUTE_WRITECOPY);
     ok (mbi.State == MEM_COMMIT, "mbi.State is 0x%lx, expected 0x%X\n", mbi.State, MEM_COMMIT);
@@ -3054,7 +3054,7 @@ static void test_queryvirtualmemory(void)
 
     status = pNtQueryVirtualMemory(NtCurrentProcess(), rwtestbuf, MemoryBasicInformation, &mbi, sizeof(MEMORY_BASIC_INFORMATION), &readcount);
     ok( status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status);
-    ok( readcount == sizeof(MEMORY_BASIC_INFORMATION), "Expected to read %d bytes, got %Id\n",(int)sizeof(MEMORY_BASIC_INFORMATION),readcount);
+    ok( readcount == sizeof(MEMORY_BASIC_INFORMATION), "Expected to read %d bytes, got %Id\n",(int)sizeof(MEMORY_BASIC_INFORMATION),(ptrdiff_t)readcount);
     if (mbi.AllocationBase == module)
     {
         ok (mbi.AllocationProtect == PAGE_EXECUTE_WRITECOPY, "mbi.AllocationProtect is 0x%lx, expected 0x%x\n", mbi.AllocationProtect, PAGE_EXECUTE_WRITECOPY);
@@ -3066,13 +3066,13 @@ static void test_queryvirtualmemory(void)
 
     status = pNtQueryVirtualMemory(NtCurrentProcess(), user_shared_data, MemoryBasicInformation, &mbi, sizeof(MEMORY_BASIC_INFORMATION), &readcount);
     ok(status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status);
-    ok(readcount == sizeof(MEMORY_BASIC_INFORMATION), "Expected to read %d bytes, got %Id\n",(int)sizeof(MEMORY_BASIC_INFORMATION),readcount);
+    ok(readcount == sizeof(MEMORY_BASIC_INFORMATION), "Expected to read %d bytes, got %Id\n",(int)sizeof(MEMORY_BASIC_INFORMATION),(ptrdiff_t)readcount);
     ok(mbi.AllocationBase == user_shared_data, "mbi.AllocationBase is 0x%p, expected 0x%p\n", mbi.AllocationBase, user_shared_data);
     ok(mbi.AllocationProtect == PAGE_READONLY, "mbi.AllocationProtect is 0x%lx, expected 0x%x\n", mbi.AllocationProtect, PAGE_READONLY);
     ok(mbi.State == MEM_COMMIT, "mbi.State is 0x%lx, expected 0x%X\n", mbi.State, MEM_COMMIT);
     ok(mbi.Protect == PAGE_READONLY, "mbi.Protect is 0x%lx\n", mbi.Protect);
     ok(mbi.Type == MEM_PRIVATE, "mbi.Type is 0x%lx, expected 0x%x\n", mbi.Type, MEM_PRIVATE);
-    ok(mbi.RegionSize == 0x1000, "mbi.RegionSize is 0x%Ix, expected 0x%x\n", mbi.RegionSize, 0x1000);
+    ok(mbi.RegionSize == 0x1000, "mbi.RegionSize is 0x%Ix, expected 0x%x\n", (size_t)mbi.RegionSize, 0x1000);
 
     /* check error code when addr is higher than user space limit */
     status = pNtQuerySystemInformation(SystemBasicInformation, &sbi, sizeof(sbi), NULL);
@@ -3100,7 +3100,7 @@ static void test_queryvirtualmemory(void)
     ok(status == STATUS_BUFFER_OVERFLOW, "got %08lx\n", status);
     ok(name->SectionFileName.Length == 0xcccc || broken(!name->SectionFileName.Length),  /* vista64 */
        "Wrong len %u\n", name->SectionFileName.Length);
-    ok(readcount > sizeof(*name), "Wrong count %Iu\n", readcount);
+    ok(readcount > sizeof(*name), "Wrong count %Iu\n", (size_t)readcount);
 
     memset(buffer, 0xcc, sizeof(buffer));
     readcount = 0xdeadbeef;
@@ -3113,7 +3113,7 @@ static void test_queryvirtualmemory(void)
     ok(name->SectionFileName.MaximumLength == name->SectionFileName.Length + sizeof(WCHAR),
        "Wrong maxlen %u/%u\n", name->SectionFileName.MaximumLength, name->SectionFileName.Length);
     ok(readcount == sizeof(name->SectionFileName) + name->SectionFileName.MaximumLength,
-       "Wrong count %Iu/%u\n", readcount, name->SectionFileName.MaximumLength);
+       "Wrong count %Iu/%u\n", (size_t)readcount, name->SectionFileName.MaximumLength);
     ok( !name->SectionFileName.Buffer[name->SectionFileName.Length / sizeof(WCHAR)],
         "buffer not null-terminated\n" );
 
@@ -3133,7 +3133,7 @@ static void test_queryvirtualmemory(void)
                                    name, sizeof(*name) - 1, &readcount);
     ok(status == STATUS_INFO_LENGTH_MISMATCH, "got %08lx\n", status);
     ok(name->SectionFileName.Length == 0xcccc, "Wrong len %u\n", name->SectionFileName.Length);
-    ok(readcount == prev, "Wrong count %Iu\n", readcount);
+    ok(readcount == prev, "Wrong count %Iu\n", (size_t)readcount);
 
     memset(buffer, 0xcc, sizeof(buffer));
     readcount = 0xdeadbeef;
@@ -3141,7 +3141,7 @@ static void test_queryvirtualmemory(void)
                                    name, sizeof(buffer), &readcount);
     ok(status == STATUS_INVALID_HANDLE, "got %08lx\n", status);
     ok(readcount == 0xdeadbeef || broken(readcount == 1024 + sizeof(*name)), /* wow64 */
-       "Wrong count %Iu\n", readcount);
+       "Wrong count %Iu\n", (size_t)readcount);
 
     memset(buffer, 0xcc, sizeof(buffer));
     readcount = 0xdeadbeef;
@@ -3150,7 +3150,7 @@ static void test_queryvirtualmemory(void)
     ok(status == STATUS_INVALID_ADDRESS, "got %08lx\n", status);
     ok(name->SectionFileName.Length == 0xcccc, "Wrong len %u\n", name->SectionFileName.Length);
     ok(readcount == 0xdeadbeef || broken(readcount == 1024 + sizeof(*name)), /* wow64 */
-       "Wrong count %Iu\n", readcount);
+       "Wrong count %Iu\n", (size_t)readcount);
 
     readcount = 0xdeadbeef;
     status = pNtQueryVirtualMemory(NtCurrentProcess(), (void *)0x1234, MemoryMappedFilenameInformation,
@@ -3158,7 +3158,7 @@ static void test_queryvirtualmemory(void)
     ok(status == STATUS_INVALID_ADDRESS, "got %08lx\n", status);
     ok(name->SectionFileName.Length == 0xcccc, "Wrong len %u\n", name->SectionFileName.Length);
     ok(readcount == 0xdeadbeef || broken(readcount == 1024 + sizeof(*name)), /* wow64 */
-       "Wrong count %Iu\n", readcount);
+       "Wrong count %Iu\n", (size_t)readcount);
 
     readcount = 0xdeadbeef;
     status = pNtQueryVirtualMemory(NtCurrentProcess(), (void *)0x1234, MemoryMappedFilenameInformation,
@@ -3166,7 +3166,7 @@ static void test_queryvirtualmemory(void)
     ok(status == STATUS_INVALID_ADDRESS, "got %08lx\n", status);
     ok(name->SectionFileName.Length == 0xcccc, "Wrong len %u\n", name->SectionFileName.Length);
     ok(readcount == 0xdeadbeef || broken(readcount == 15), /* wow64 */
-       "Wrong count %Iu\n", readcount);
+       "Wrong count %Iu\n", (size_t)readcount);
 }
 
 static void test_affinity(void)
@@ -3224,7 +3224,7 @@ static void test_affinity(void)
     {
         status = pNtQueryInformationThread( GetCurrentThread(), ThreadBasicInformation, &tbi, sizeof(tbi), NULL );
         ok( status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status );
-        ok( tbi.AffinityMask == pbi.AffinityMask, "Unexpected thread affinity. Expected %Ix, got %Ix\n", pbi.AffinityMask, tbi.AffinityMask );
+        ok( tbi.AffinityMask == pbi.AffinityMask, "Unexpected thread affinity. Expected %Ix, got %Ix\n", (size_t)pbi.AffinityMask, (size_t)tbi.AffinityMask );
     }
 
     thread_affinity = ~(DWORD_PTR)0 - 1;
@@ -3234,7 +3234,7 @@ static void test_affinity(void)
     {
         status = pNtQueryInformationThread( GetCurrentThread(), ThreadBasicInformation, &tbi, sizeof(tbi), NULL );
         ok( status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status );
-        ok( tbi.AffinityMask == (pbi.AffinityMask & (~(DWORD_PTR)0 - 1)), "Unexpected thread affinity. Expected %Ix, got %Ix\n", pbi.AffinityMask & (~(DWORD_PTR)0 - 1), tbi.AffinityMask );
+        ok( tbi.AffinityMask == (pbi.AffinityMask & (~(DWORD_PTR)0 - 1)), "Unexpected thread affinity. Expected %Ix, got %Ix\n", (size_t)(pbi.AffinityMask & (~(DWORD_PTR)0 - 1)), (size_t)tbi.AffinityMask );
     }
 
     /* NOTE: Pre-Vista does not recognize the "all processors" flag (all bits set) */
@@ -3254,7 +3254,7 @@ static void test_affinity(void)
     {
         status = pNtQueryInformationThread( GetCurrentThread(), ThreadBasicInformation, &tbi, sizeof(tbi), NULL );
         ok(status == STATUS_SUCCESS, "Expected STATUS_SUCCESS, got %08lx\n", status);
-        ok( tbi.AffinityMask == get_affinity_mask( si.dwNumberOfProcessors ), "unexpected affinity %#Ix\n", tbi.AffinityMask );
+        ok( tbi.AffinityMask == get_affinity_mask( si.dwNumberOfProcessors ), "unexpected affinity %#Ix\n", (size_t)tbi.AffinityMask );
     }
     else
         skip("Cannot test thread affinity mask for 'all processors' flag\n");
@@ -3395,7 +3395,7 @@ static void test_NtGetCurrentProcessorNumber(void)
 
         current_cpu = pNtGetCurrentProcessorNumber();
         ok((current_cpu == i), "%ld (new_mask 0x%Ix): running on processor %ld (AffinityMask: 0x%Ix)\n",
-                                i, new_mask, current_cpu, tbi.AffinityMask);
+                                i, (size_t)new_mask, current_cpu, (size_t)tbi.AffinityMask);
     }
 
     /* restore old values */
@@ -3821,7 +3821,7 @@ static void test_debuggee_dbgport(int argc, char **argv)
     status = NtQueryInformationProcess( GetCurrentProcess(), ProcessDebugPort,
                                          &debug_port, sizeof(debug_port), NULL );
     ok( !status, "NtQueryInformationProcess ProcessDebugPort failed, status %#lx.\n", status );
-    ok( debug_port == ~(DWORD_PTR)0, "Expected port %#Ix, got %#Ix.\n", ~(DWORD_PTR)0, debug_port );
+    ok( debug_port == ~(DWORD_PTR)0, "Expected port %#Ix, got %#Ix.\n", (size_t)(~(DWORD_PTR)0), (size_t)debug_port );
 
     status = NtQueryInformationProcess( GetCurrentProcess(), ProcessDebugFlags,
                                          &debug_flags, sizeof(debug_flags), NULL );

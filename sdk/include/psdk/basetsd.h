@@ -20,45 +20,40 @@
 #error Not supported.
 #endif
 
-#if defined(_MSC_VER) && !defined(MIDL_PASS) && !defined(RC_INVOKED)
- #define POINTER_64 __ptr64
- #if defined(_WIN64)
-  #define POINTER_32 __ptr32
- #else
-  #define POINTER_32
- #endif
-#elif defined(__clang__) && defined(__MINGW32__) && !defined(MIDL_PASS) && !defined(RC_INVOKED)
- /* FIXME: POINTER_64 stays empty, so PVOID64 is 4 bytes on 32-bit targets instead of 8 */
- #define POINTER_64
- #if defined(_WIN64)
-  #define POINTER_32 __ptr32
- #else
-  #define POINTER_32
- #endif
+#if (defined(_MSC_VER) || (defined(__clang__) && defined(__MINGW32__))) && \
+    !defined(MIDL_PASS) && !defined(__WIDL__) && !defined(RC_INVOKED)
+#define POINTER_64 __ptr64
+#ifdef _WIN64
+#define POINTER_32 __ptr32
 #else
- /* FIXME: GCC has no __ptr32/__ptr64; the *32 thunk structures get native pointers on 64-bit targets */
- #define POINTER_64
- #define POINTER_32
-#endif /* defined(_MSC_VER) && !defined(MIDL_PASS) && !defined(RC_INVOKED) */
-
-#if defined(_M_MRX000) || defined(_M_AMD64) || defined(_M_IA64)
- typedef unsigned __int64 POINTER_64_INT;
-#else
- typedef unsigned long POINTER_64_INT;
+#define POINTER_32
 #endif
-
-#if defined(_IA64_) || defined(_AMD64_)
- #define FIRMWARE_PTR
-#else
- #define FIRMWARE_PTR POINTER_32
-#endif
-
-#if 0 /* Not supported yet */
 #define POINTER_SIGNED __sptr
 #define POINTER_UNSIGNED __uptr
 #else
+/* FIXME: GCC has no __ptr32/__ptr64; the *32 thunk structures get native pointers on 64-bit targets */
+#define POINTER_64
+#define POINTER_32
 #define POINTER_SIGNED
 #define POINTER_UNSIGNED
+#endif
+
+#if defined(_WIN64) || defined(_M_MRX000)
+typedef unsigned __int64 POINTER_64_INT;
+#else
+typedef unsigned long POINTER_64_INT;
+#endif
+
+#ifdef _WIN64
+#define FIRMWARE_PTR
+#else
+#define FIRMWARE_PTR POINTER_32
+#endif
+
+#ifndef __HANDLE64_DEFINED__
+#define __HANDLE64_DEFINED__
+typedef void *POINTER_64 HANDLE64;
+typedef HANDLE64 *PHANDLE64;
 #endif
 
 #define SPOINTER_32 POINTER_SIGNED POINTER_32
@@ -71,7 +66,6 @@ typedef unsigned __int64 HANDLE_PTR;
 typedef unsigned int UHALF_PTR, *PUHALF_PTR;
 typedef int HALF_PTR, *PHALF_PTR;
 #define ADDRESS_TAG_BIT 0x40000000000UI64
-#define Handle32ToHandle( h ) ((HANDLE)(LONG_PTR)(LONG)(h))
 #else /*  !_WIN64 */
 #define __int3264   __int32
 #define ADDRESS_TAG_BIT 0x80000000UL
@@ -223,6 +217,62 @@ typedef unsigned char UINT8, *PUINT8;
 typedef signed short INT16, *PINT16;
 typedef unsigned short UINT16, *PUINT16;
 
+#if !defined(__midl) && !defined(__WIDL__)
+#ifdef _WIN64
+#define Ptr64ToPtr(p) ((void *)(p))
+#define PtrToPtr64(p) ((void *POINTER_64)(p))
+#define Handle64ToHandle(h) Ptr64ToPtr(h)
+#define HandleToHandle64(h) PtrToPtr64(h)
+
+static inline void *Ptr32ToPtr(const void *POINTER_32 p)
+{
+    return (void *)(ULONG_PTR)(ULONG32)(ULONG_PTR)(const void *)p;
+}
+
+static inline void *Handle32ToHandle(const void *POINTER_32 h)
+{
+    return (void *)(LONG_PTR)(LONG32)(LONG_PTR)(const void *)h;
+}
+
+static inline void *POINTER_32 PtrToPtr32(const void *p)
+{
+    return (void *POINTER_32)(void *)(ULONG_PTR)(ULONG32)(ULONG_PTR)p;
+}
+#else
+#define Ptr32ToPtr(p) ((void *)(p))
+#define PtrToPtr32(p) ((void *POINTER_32)(p))
+#define Handle32ToHandle(h) Ptr32ToPtr(h)
+
+#if defined(_MSC_VER) || defined(__clang__)
+static inline void *POINTER_64 PtrToPtr64(const void *p)
+{
+    return (void *POINTER_64)(unsigned __int64)(ULONG_PTR)p;
+}
+
+static inline void *Ptr64ToPtr(const void *POINTER_64 p)
+{
+    return (void *)(ULONG_PTR)(unsigned __int64)p;
+}
+
+static inline HANDLE64 HandleToHandle64(const void *h)
+{
+    return (HANDLE64)(__int64)(LONG_PTR)h;
+}
+
+static inline void *Handle64ToHandle(HANDLE64 h)
+{
+    return (void *)(ULONG_PTR)(unsigned __int64)h;
+}
+#else
+#define PtrToPtr64(p) ((void *POINTER_64)(p))
+#define Ptr64ToPtr(p) ((void *)(p))
+#define HandleToHandle64(h) ((HANDLE64)(h))
+#define Handle64ToHandle(h) ((void *)(h))
+#endif
+#endif
+#define HandleToHandle32(h) PtrToPtr32(h)
+#endif
+
 typedef ULONG_PTR KAFFINITY;
 typedef KAFFINITY *PKAFFINITY;
 
@@ -235,28 +285,5 @@ typedef KAFFINITY *PKAFFINITY;
 #define MAXDWORD64 ((DWORD64)(-1))
 #define MAXINT ((INT) (MAXUINT >> 1))
 #define MININT ((INT) ~MAXINT)
-
-#if (defined(_WIN64)) && (!defined(__midl))
-#define Handle64ToHandle(h) (Ptr64ToPtr(h))
-#define HandleToHandle64(h) (PtrToPtr64(h))
-#define Ptr64ToPtr(p) ((void *) p)
-#define PtrToPtr64(p) ((void * POINTER_64) p)
-
-#define HandleToHandle32(h) (PtrToPtr32(h))
-#endif
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/* TODO: LiberNT does not implement the functions below yet */
-#if (defined(_WIN64)) && (!defined(__midl))
-void * Ptr32ToPtr(const void *POINTER_SIGNED POINTER_32 p);
-void *POINTER_SIGNED POINTER_32  PtrToPtr32(const void *p);
-#endif
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif /* _BASETSD_H_ */

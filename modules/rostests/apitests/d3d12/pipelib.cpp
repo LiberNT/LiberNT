@@ -141,7 +141,7 @@ static void TestLibrary(struct d3d12_test_context *context, ID3D12Device1 *devic
     loaded = NULL;
 
     size = library->GetSerializedSize();
-    ok(size > 0, "GetSerializedSize: %Iu\n", size);
+    ok(size > 0, "GetSerializedSize: %Iu\n", (size_t)size);
     data = static_cast<BYTE *>(HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size ? size : 1));
     if (data && size)
     {

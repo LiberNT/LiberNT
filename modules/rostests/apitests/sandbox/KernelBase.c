@@ -785,7 +785,7 @@ TestThreadAttributes(void)
     ZeroMemory(&Affinity, sizeof(Affinity));
     Affinity.Mask = 1;
     ok(SetThreadGroupAffinity(GetCurrentThread(), &Affinity, NULL), "SetThreadGroupAffinity failed %lu\n", GetLastError());
-    ok(GetThreadGroupAffinity(GetCurrentThread(), &Queried) && Queried.Mask == 1, "group affinity not applied: %Ix\n", Queried.Mask);
+    ok(GetThreadGroupAffinity(GetCurrentThread(), &Queried) && Queried.Mask == 1, "group affinity not applied: %Ix\n", (size_t)Queried.Mask);
     Affinity.Group = 1;
     SetLastError(0xdeadbeef);
     ok(!SetThreadGroupAffinity(GetCurrentThread(), &Affinity, NULL) && GetLastError() == ERROR_INVALID_PARAMETER,
@@ -810,7 +810,7 @@ TestThreadAttributes(void)
     ok(Thread != NULL, "CreateRemoteThreadEx(group affinity) failed %lu\n", GetLastError());
     if (Thread)
     {
-        ok(GetThreadGroupAffinity(Thread, &Queried) && Queried.Mask == 1, "thread attribute affinity not applied: %Ix\n", Queried.Mask);
+        ok(GetThreadGroupAffinity(Thread, &Queried) && Queried.Mask == 1, "thread attribute affinity not applied: %Ix\n", (size_t)Queried.Mask);
         ok(ResumeThread(Thread) == 1, "suspended thread was running\n");
         ok(WaitForSingleObject(Thread, 5000) == WAIT_OBJECT_0, "attribute thread did not run\n");
         CloseHandle(Thread);
@@ -826,7 +826,7 @@ TestThreadAttributes(void)
     {
         ZeroMemory(&Queried, sizeof(Queried));
         ok(GetThreadGroupAffinity(Info.hThread, &Queried) && Queried.Mask == 1,
-           "suspended child initial thread affinity %Ix (%lu)\n", Queried.Mask, GetLastError());
+           "suspended child initial thread affinity %Ix (%lu)\n", (size_t)Queried.Mask, GetLastError());
         ok(ResumeThread(Info.hThread) == 1, "child initial thread was not suspended\n");
         ExitCode = SbxWaitChild(&Info);
         ok(ExitCode == 0, "affinity child failed with 0x%lx\n", ExitCode);

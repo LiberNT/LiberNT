@@ -2656,7 +2656,7 @@ static void test_wndproc(void)
 
     proc = GetWindowLongPtrA(window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
     expect_messages = messages;
     hr = IDirectDraw2_SetCooperativeLevel(ddraw, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
     ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#lx.\n", hr);
@@ -2664,28 +2664,28 @@ static void test_wndproc(void)
     expect_messages = NULL;
     proc = GetWindowLongPtrA(window, GWLP_WNDPROC);
     ok(proc != (LONG_PTR)test_proc, "Expected wndproc != %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
     ref = IDirectDraw2_Release(ddraw);
     ok(!ref, "Unexpected refcount %lu.\n", ref);
     proc = GetWindowLongPtrA(window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
 
     /* DDSCL_NORMAL doesn't. */
     ddraw = create_ddraw();
     proc = GetWindowLongPtrA(window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
     hr = IDirectDraw2_SetCooperativeLevel(ddraw, window, DDSCL_NORMAL | DDSCL_FULLSCREEN);
     ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#lx.\n", hr);
     proc = GetWindowLongPtrA(window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
     ref = IDirectDraw2_Release(ddraw);
     ok(!ref, "Unexpected refcount %lu.\n", ref);
     proc = GetWindowLongPtrA(window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
 
     /* The original window proc is only restored by ddraw if the current
      * window proc matches the one ddraw set. This also affects switching
@@ -2693,53 +2693,53 @@ static void test_wndproc(void)
     ddraw = create_ddraw();
     proc = GetWindowLongPtrA(window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
     hr = IDirectDraw2_SetCooperativeLevel(ddraw, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
     ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#lx.\n", hr);
     proc = GetWindowLongPtrA(window, GWLP_WNDPROC);
     ok(proc != (LONG_PTR)test_proc, "Expected wndproc != %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
     ddraw_proc = proc;
     hr = IDirectDraw2_SetCooperativeLevel(ddraw, window, DDSCL_NORMAL);
     ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#lx.\n", hr);
     proc = GetWindowLongPtrA(window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
     hr = IDirectDraw2_SetCooperativeLevel(ddraw, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
     ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#lx.\n", hr);
     proc = SetWindowLongPtrA(window, GWLP_WNDPROC, (LONG_PTR)DefWindowProcA);
     ok(proc != (LONG_PTR)test_proc, "Expected wndproc != %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
     hr = IDirectDraw2_SetCooperativeLevel(ddraw, window, DDSCL_NORMAL);
     ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#lx.\n", hr);
     proc = GetWindowLongPtrA(window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)DefWindowProcA, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)DefWindowProcA, proc);
+            (size_t)DefWindowProcA, (size_t)proc);
     hr = IDirectDraw2_SetCooperativeLevel(ddraw, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
     ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#lx.\n", hr);
     proc = SetWindowLongPtrA(window, GWLP_WNDPROC, ddraw_proc);
     ok(proc == (LONG_PTR)DefWindowProcA, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)DefWindowProcA, proc);
+            (size_t)DefWindowProcA, (size_t)proc);
     ref = IDirectDraw2_Release(ddraw);
     ok(!ref, "Unexpected refcount %lu.\n", ref);
     proc = GetWindowLongPtrA(window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
 
     ddraw = create_ddraw();
     proc = GetWindowLongPtrA(window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
     hr = IDirectDraw2_SetCooperativeLevel(ddraw, window, DDSCL_EXCLUSIVE | DDSCL_FULLSCREEN);
     ok(SUCCEEDED(hr), "SetCooperativeLevel failed, hr %#lx.\n", hr);
     proc = SetWindowLongPtrA(window, GWLP_WNDPROC, (LONG_PTR)DefWindowProcA);
     ok(proc != (LONG_PTR)test_proc, "Expected wndproc != %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
     ref = IDirectDraw2_Release(ddraw);
     ok(!ref, "Unexpected refcount %lu.\n", ref);
     proc = GetWindowLongPtrA(window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)DefWindowProcA, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)DefWindowProcA, proc);
+            (size_t)DefWindowProcA, (size_t)proc);
 
     fix_wndproc(window, (LONG_PTR)test_proc);
     expect_messages = NULL;

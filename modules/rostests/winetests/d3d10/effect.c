@@ -6103,7 +6103,7 @@ static void test_effect_resource_variable(void)
     ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
     ok(!!pass_desc.pIAInputSignature, "Unexpected input signature.\n");
     ok(pass_desc.IAInputSignatureSize == 88, "Got unexpected input signature size %Iu.\n",
-            pass_desc.IAInputSignatureSize);
+            (size_t)pass_desc.IAInputSignatureSize);
 
     hr = pass->lpVtbl->Apply(pass, 0);
     ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);

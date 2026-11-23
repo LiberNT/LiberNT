@@ -181,11 +181,11 @@ static void test_getname(void)
     ok(ret == D3DXFERR_BADVALUE, "GetName returned %#lx, expected %#lx\n", ret, D3DXFERR_BADVALUE);
     ret = data_object->lpVtbl->GetName(data_object, NULL, &length);
     ok(ret == S_OK, "GetName failed with %#lx\n", ret);
-    ok(length == 7, "Returned length should be 7 instead of %Id\n", length);
+    ok(length == 7, "Returned length should be 7 instead of %Id\n", (ptrdiff_t)length);
     length = sizeof(name);
     ret = data_object->lpVtbl->GetName(data_object, name, &length);
     ok(ret == S_OK, "GetName failed with %#lx\n", ret);
-    ok(length == 7, "Returned length should be 7 instead of %Id\n", length);
+    ok(length == 7, "Returned length should be 7 instead of %Id\n", (ptrdiff_t)length);
     ok(!strcmp(name, "Object"), "Returned string should be 'Object' instead of '%s'\n", name);
     length = 3;
     ret = data_object->lpVtbl->GetName(data_object, name, &length);
@@ -206,18 +206,18 @@ static void test_getname(void)
      * If the input size is 0, it returns a length of 1 without touching the buffer */
     ret = data_object->lpVtbl->GetName(data_object, NULL, &length);
     ok(ret == S_OK, "GetName failed with %#lx\n", ret);
-    ok(length == 1, "Returned length should be 1 instead of %Id\n", length);
+    ok(length == 1, "Returned length should be 1 instead of %Id\n", (ptrdiff_t)length);
     length = 0;
     name[0] = 0x7f;
     ret = data_object->lpVtbl->GetName(data_object, name, &length);
     ok(ret == S_OK, "GetName failed with %#lx\n", ret);
-    ok(length == 1, "Returned length should be 1 instead of %Id\n", length);
+    ok(length == 1, "Returned length should be 1 instead of %Id\n", (ptrdiff_t)length);
     ok(name[0] == 0x7f, "First character is %#x instead of 0x7f\n", name[0]);
     length = sizeof(name);
     name[0] = 0x7f;
     ret = data_object->lpVtbl->GetName(data_object, name, &length);
     ok(ret == S_OK, "GetName failed with %#lx\n", ret);
-    ok(length == 1, "Returned length should be 1 instead of %Id\n", length);
+    ok(length == 1, "Returned length should be 1 instead of %Id\n", (ptrdiff_t)length);
     ok(name[0] == 0, "First character is %#x instead of 0x00\n", name[0]);
 
     data_object->lpVtbl->Release(data_object);

@@ -409,7 +409,7 @@ static void     doChild(const char* file, const char* option)
                 siA.dwX, siA.dwY, siA.dwXSize, siA.dwYSize,
                 siA.dwXCountChars, siA.dwYCountChars, siA.dwFillAttribute,
                 siA.dwFlags, siA.wShowWindow,
-                (DWORD_PTR)siA.hStdInput, (DWORD_PTR)siA.hStdOutput, (DWORD_PTR)siA.hStdError,
+                (size_t)siA.hStdInput, (size_t)siA.hStdOutput, (size_t)siA.hStdError,
                 encode_handle_attributes(siA.hStdInput), encode_handle_attributes(siA.hStdOutput),
                 encode_handle_attributes(siA.hStdError));
 
@@ -417,8 +417,8 @@ static void     doChild(const char* file, const char* option)
     childPrintf(hFile,
                 "[TEB]\nhStdInput=%Iu\nhStdOutput=%Iu\nhStdError=%Iu\n"
                 "hStdInputEncode=%u\nhStdOutputEncode=%u\nhStdErrorEncode=%u\n\n",
-                (DWORD_PTR)params->hStdInput, (DWORD_PTR)params->hStdOutput,
-                (DWORD_PTR)params->hStdError,
+                (size_t)params->hStdInput, (size_t)params->hStdOutput,
+                (size_t)params->hStdError,
                 encode_handle_attributes(params->hStdInput), encode_handle_attributes(params->hStdOutput),
                 encode_handle_attributes(params->hStdError));
 
@@ -435,7 +435,7 @@ static void     doChild(const char* file, const char* option)
                 siW.dwX, siW.dwY, siW.dwXSize, siW.dwYSize,
                 siW.dwXCountChars, siW.dwYCountChars, siW.dwFillAttribute,
                 siW.dwFlags, siW.wShowWindow,
-                (DWORD_PTR)siW.hStdInput, (DWORD_PTR)siW.hStdOutput, (DWORD_PTR)siW.hStdError,
+                (size_t)siW.hStdInput, (size_t)siW.hStdOutput, (size_t)siW.hStdError,
                 encode_handle_attributes(siW.hStdInput), encode_handle_attributes(siW.hStdOutput),
                 encode_handle_attributes(siW.hStdError));
 
@@ -466,7 +466,7 @@ static void     doChild(const char* file, const char* option)
                 "[Toolhelp]\ncntUsage=%lu\nth32DefaultHeapID=%Iu\n"
                 "th32ModuleID=%lu\ncntThreads=%lu\nth32ParentProcessID=%lu\n"
                 "pcPriClassBase=%lu\ndwFlags=%lu\nszExeFile=%s\n\n",
-                pe.cntUsage, pe.th32DefaultHeapID, pe.th32ModuleID,
+                pe.cntUsage, (size_t)pe.th32DefaultHeapID, pe.th32ModuleID,
                 pe.cntThreads, pe.th32ParentProcessID, pe.pcPriClassBase,
                 pe.dwFlags, encodeA(pe.szExeFile));
 
@@ -1807,7 +1807,7 @@ static void test_OpenProcess(void)
     SetLastError(0xdeadbeef);
     ret = ReadProcessMemory(hproc, test_OpenProcess, &dummy, sizeof(dummy), &read_bytes);
     ok(ret, "ReadProcessMemory error %ld\n", GetLastError());
-    ok(read_bytes == sizeof(dummy), "wrong read bytes %Id\n", read_bytes);
+    ok(read_bytes == sizeof(dummy), "wrong read bytes %Id\n", (ptrdiff_t)read_bytes);
 
     CloseHandle(hproc);
 
@@ -1829,7 +1829,7 @@ static void test_OpenProcess(void)
     ok(!ReadProcessMemory(hproc, addr1, &dummy, sizeof(dummy), &read_bytes),
        "ReadProcessMemory without PROCESS_VM_READ rights should fail\n");
     ok(GetLastError() == ERROR_ACCESS_DENIED, "wrong error %ld\n", GetLastError());
-    ok(read_bytes == 0, "wrong read bytes %Id\n", read_bytes);
+    ok(read_bytes == 0, "wrong read bytes %Id\n", (ptrdiff_t)read_bytes);
 
     CloseHandle(hproc);
 
@@ -1842,7 +1842,7 @@ static void test_OpenProcess(void)
     ok(info.BaseAddress == addr1, "%p != %p\n", info.BaseAddress, addr1);
     ok(info.AllocationBase == addr1, "%p != %p\n", info.AllocationBase, addr1);
     ok(info.AllocationProtect == PAGE_NOACCESS, "%lx != PAGE_NOACCESS\n", info.AllocationProtect);
-    ok(info.RegionSize == 0x10000, "%Ix != 0x10000\n", info.RegionSize);
+    ok(info.RegionSize == 0x10000, "%Ix != 0x10000\n", (size_t)info.RegionSize);
     ok(info.State == MEM_RESERVE, "%lx != MEM_RESERVE\n", info.State);
     /* NT reports Protect == 0 for a not committed memory block */
     ok(info.Protect == 0 /* NT */ ||
@@ -1869,7 +1869,7 @@ static void test_OpenProcess(void)
             ok(info.BaseAddress == addr1, "%p != %p\n", info.BaseAddress, addr1);
             ok(info.AllocationBase == addr1, "%p != %p\n", info.AllocationBase, addr1);
             ok(info.AllocationProtect == PAGE_NOACCESS, "%lx != PAGE_NOACCESS\n", info.AllocationProtect);
-            ok(info.RegionSize == 0x10000, "%Ix != 0x10000\n", info.RegionSize);
+            ok(info.RegionSize == 0x10000, "%Ix != 0x10000\n", (size_t)info.RegionSize);
             ok(info.State == MEM_RESERVE, "%lx != MEM_RESERVE\n", info.State);
             ok(info.Protect == 0, "%lx != PAGE_NOACCESS\n", info.Protect);
             ok(info.Type == MEM_PRIVATE, "%lx != MEM_PRIVATE\n", info.Type);
@@ -2667,7 +2667,7 @@ static void _test_assigned_proc(int line, HANDLE job, unsigned int count, ...)
     {
         pid = va_arg(valist, unsigned int);
         ok_(__FILE__, line)(pid == list->ProcessIdList[i],
-                            "wrong pid %u: expected %#04x, got %#04Ix\n", i, pid, list->ProcessIdList[i]);
+                            "wrong pid %u: expected %#04x, got %#04Ix\n", i, pid, (size_t)list->ProcessIdList[i]);
     }
     va_end(valist);
 }
@@ -3994,13 +3994,13 @@ static void test_SuspendProcessState(void)
     ok( child_peb.CriticalSectionTimeout.QuadPart, "CriticalSectionTimeout not set %s\n",
         wine_dbgstr_longlong(child_peb.CriticalSectionTimeout.QuadPart) );
     ok( child_peb.HeapSegmentReserve == peb->HeapSegmentReserve,
-        "HeapSegmentReserve not set %Iu\n", child_peb.HeapSegmentReserve );
+        "HeapSegmentReserve not set %Iu\n", (size_t)child_peb.HeapSegmentReserve );
     ok( child_peb.HeapSegmentCommit == peb->HeapSegmentCommit,
-        "HeapSegmentCommit not set %Iu\n", child_peb.HeapSegmentCommit );
+        "HeapSegmentCommit not set %Iu\n", (size_t)child_peb.HeapSegmentCommit );
     ok( child_peb.HeapDeCommitTotalFreeThreshold == peb->HeapDeCommitTotalFreeThreshold,
-        "HeapDeCommitTotalFreeThreshold not set %Iu\n", child_peb.HeapDeCommitTotalFreeThreshold );
+        "HeapDeCommitTotalFreeThreshold not set %Iu\n", (size_t)child_peb.HeapDeCommitTotalFreeThreshold );
     ok( child_peb.HeapDeCommitFreeBlockThreshold == peb->HeapDeCommitFreeBlockThreshold,
-        "HeapDeCommitFreeBlockThreshold not set %Iu\n", child_peb.HeapDeCommitFreeBlockThreshold );
+        "HeapDeCommitFreeBlockThreshold not set %Iu\n", (size_t)child_peb.HeapDeCommitFreeBlockThreshold );
 
     if (pNtQueryInformationThread)
     {
@@ -4397,7 +4397,7 @@ static void test_largepages(void)
     }
     size = pGetLargePageMinimum();
 
-    ok((size == 0) || (size == 2*1024*1024) || (size == 4*1024*1024), "GetLargePageMinimum reports %Id size\n", size);
+    ok((size == 0) || (size == 2*1024*1024) || (size == 4*1024*1024), "GetLargePageMinimum reports %Id size\n", (ptrdiff_t)size);
 }
 
 struct proc_thread_attr
@@ -4439,7 +4439,7 @@ static void test_ProcThreadAttributeList(void)
         if(i >= 4 && GetLastError() == ERROR_INVALID_PARAMETER) /* Vista only allows a maximium of 3 slots */
             break;
         ok(GetLastError() == ERROR_INSUFFICIENT_BUFFER, "got %ld\n", GetLastError());
-        ok(size == needed, "%d: got %Id expect %Id\n", i, size, needed);
+        ok(size == needed, "%d: got %Id expect %Id\n", i, (ptrdiff_t)size, (ptrdiff_t)needed);
 
         memset(&list, 0xcc, sizeof(list));
         ret = pInitializeProcThreadAttributeList(&list, i, 0, &size);
@@ -4447,7 +4447,7 @@ static void test_ProcThreadAttributeList(void)
         ok(list.mask == 0, "%d: got %08lx\n", i, list.mask);
         ok(list.size == i, "%d: got %08lx\n", i, list.size);
         ok(list.count == 0, "%d: got %08lx\n", i, list.count);
-        ok(list.unk == 0, "%d: got %08Ix\n", i, list.unk);
+        ok(list.unk == 0, "%d: got %08Ix\n", i, (size_t)list.unk);
     }
 
     memset(handles, 0, sizeof(handles));

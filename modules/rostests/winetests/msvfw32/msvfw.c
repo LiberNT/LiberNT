@@ -388,10 +388,10 @@ static LRESULT CALLBACK enum_driver_proc(DWORD_PTR id, HDRVR driver, UINT msg,
 {
     ICINFO *info = (ICINFO *)lparam1;
 
-    ok(!id, "Got unexpected id %#Ix.\n", id);
+    ok(!id, "Got unexpected id %#Ix.\n", (size_t)id);
     ok(msg == ICM_GETINFO, "Got unexpected message %#x.\n", msg);
     ok(info == &enum_info, "Expected lparam1 %p, got %p.\n", &enum_info, info);
-    ok(lparam2 == sizeof(ICINFO), "Got lparam2 %Id.\n", lparam2);
+    ok(lparam2 == sizeof(ICINFO), "Got lparam2 %Id.\n", (ptrdiff_t)lparam2);
 
     ok(!info->fccType, "Got unexpected type %#lx.\n", info->fccType);
     ok(!info->fccHandler, "Got unexpected handler %#lx.\n", info->fccHandler);
@@ -572,7 +572,7 @@ static LRESULT CALLBACK gdf_driver_proc(DWORD_PTR id, HDRVR driver, UINT msg,
     LRESULT ret = 0;
 
     if (winetest_debug > 1)
-        trace("(%#Ix, %p, %#x, %#Ix, %#Ix)\n", id, driver, msg, lparam1, lparam2);
+        trace("(%#Ix, %p, %#x, %#Ix, %#Ix)\n", (size_t)id, driver, msg, (size_t)lparam1, (size_t)lparam2);
 
     switch(msg)
     {
@@ -586,7 +586,7 @@ static LRESULT CALLBACK gdf_driver_proc(DWORD_PTR id, HDRVR driver, UINT msg,
         BITMAPINFOHEADER *out = (BITMAPINFOHEADER *)lparam2;
         DWORD expected_size;
 
-        ok(lparam1 == (LPARAM)&gdf_in, "got input %#Ix\n", lparam1);
+        ok(lparam1 == (LPARAM)&gdf_in, "got input %#Ix\n", (size_t)lparam1);
 
         if (!out)
             return ICERR_OK;
@@ -638,7 +638,7 @@ static LRESULT CALLBACK gdf_driver_proc(DWORD_PTR id, HDRVR driver, UINT msg,
     {
         BITMAPINFOHEADER *out = (BITMAPINFOHEADER *)lparam2;
 
-        ok(lparam1 == (LPARAM)&gdf_in, "got input %#Ix\n", lparam1);
+        ok(lparam1 == (LPARAM)&gdf_in, "got input %#Ix\n", (size_t)lparam1);
         if (out)
         {
             ok(out == gdf_out, "got output %p\n", out);
@@ -657,7 +657,7 @@ static LRESULT CALLBACK gdf_driver_proc(DWORD_PTR id, HDRVR driver, UINT msg,
     {
         BITMAPINFO *out = (BITMAPINFO *)lparam2;
 
-        ok(lparam1 == (LPARAM)&gdf_in, "got input %#Ix\n", lparam1);
+        ok(lparam1 == (LPARAM)&gdf_in, "got input %#Ix\n", (size_t)lparam1);
         if (out)
         {
             ok(out == (BITMAPINFO *)gdf_out, "got output %p\n", out);
@@ -792,7 +792,7 @@ static void test_ICGetDisplayFormat(void)
         "got wrong colour\n");
 
     lres = ICClose(hic);
-    ok(lres == ICERR_OK, "got %Id\n", lres);
+    ok(lres == ICERR_OK, "got %Id\n", (ptrdiff_t)lres);
 
     ret = ICRemove(ICTYPE_VIDEO, testcc, 0);
     ok(ret, "ICRemove failed\n");

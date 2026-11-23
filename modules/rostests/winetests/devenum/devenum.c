@@ -440,7 +440,7 @@ static void test_directshow_filter(void)
         StringFromGUID2(&CLSID_AudioRendererCategory, buffer + wcslen(buffer), CHARS_IN_GUID);
         wcscat(buffer, L"\\Instance\\test");
         res = RegDeleteKeyW(HKEY_CLASSES_ROOT, buffer);
-        ok(!res, "Failed to delete key, error %Iu.\n", res);
+        ok(!res, "Failed to delete key, error %Iu.\n", (size_t)res);
     }
 
     VariantClear(&var);
@@ -476,7 +476,7 @@ static void test_directshow_filter(void)
         RegDeleteKeyA(HKEY_CLASSES_ROOT, "CLSID\\test\\Instance");
 
         res = RegDeleteKeyA(HKEY_CLASSES_ROOT, "CLSID\\test");
-        ok(!res, "Failed to delete key, error %Iu.\n", res);
+        ok(!res, "Failed to delete key, error %Iu.\n", (size_t)res);
     }
 
     VariantClear(&var);

@@ -4561,7 +4561,7 @@ static BOOL CALLBACK langgrp_procA(LGRPID lgrpid, LPSTR lpszNum, LPSTR lpszName,
 {
   if (winetest_debug > 1)
     trace("%08lx, %s, %s, %08lx, %08Ix\n",
-          lgrpid, lpszNum, lpszName, dwFlags, lParam);
+          lgrpid, lpszNum, lpszName, dwFlags, (size_t)lParam);
 
   ok(pIsValidLanguageGroup(lgrpid, dwFlags) == TRUE,
      "Enumerated grp %ld not valid (flags %ld)\n", lgrpid, dwFlags);
@@ -4814,7 +4814,7 @@ static BOOL CALLBACK lgrplocale_procA(LGRPID lgrpid, LCID lcid, LPSTR lpszNum,
                                       LONG_PTR lParam)
 {
   if (winetest_debug > 1)
-    trace("%08lx, %08lx, %s, %08Ix\n", lgrpid, lcid, lpszNum, lParam);
+    trace("%08lx, %08lx, %s, %08Ix\n", lgrpid, lcid, lpszNum, (size_t)lParam);
 
   /* invalid locale enumerated on some platforms */
   if (lcid == 0)
@@ -4954,7 +4954,7 @@ static void test_SetLocaleInfo(void)
 static BOOL CALLBACK luilocale_proc1A(LPSTR value, LONG_PTR lParam)
 {
   if (winetest_debug > 1)
-    trace("%s %08Ix\n", value, lParam);
+    trace("%s %08Ix\n", value, (size_t)lParam);
   return(TRUE);
 }
 
@@ -5337,7 +5337,7 @@ static void test_GetCPInfo(void)
         if (status != STATUS_INVALID_PARAMETER_1)
         {
             ok( !status, "failed %lx\n", status );
-            ok( size > 0x1000 && size <= 0x8000 , "wrong size %Ix\n", size );
+            ok( size > 0x1000 && size <= 0x8000 , "wrong size %Ix\n", (size_t)size );
             status = pNtGetNlsSectionPtr( 10, 0, NULL, &ptr2, &size );
             ok( !status, "failed %lx\n", status );
             ok( ptr != ptr2, "got same pointer\n" );
@@ -5353,7 +5353,7 @@ static void test_GetCPInfo(void)
         size = 0xdeadbeef;
         status = pNtGetNlsSectionPtr( 11, 437, NULL, &ptr, &size );
         ok( !status, "failed %lx\n", status );
-        ok( size > 0x10000 && size <= 0x20000, "wrong size %Ix\n", size );
+        ok( size > 0x10000 && size <= 0x20000, "wrong size %Ix\n", (size_t)size );
         memset( &table, 0xcc, sizeof(table) );
         if (pRtlInitCodePageTable)
         {
@@ -5368,7 +5368,7 @@ static void test_GetCPInfo(void)
 
         status = pNtGetNlsSectionPtr( 11, 936, NULL, &ptr, &size );
         ok( !status, "failed %lx\n", status );
-        ok( size > 0x30000 && size <= 0x40000, "wrong size %Ix\n", size );
+        ok( size > 0x30000 && size <= 0x40000, "wrong size %Ix\n", (size_t)size );
         memset( &table, 0xcc, sizeof(table) );
         if (pRtlInitCodePageTable)
         {
@@ -5445,7 +5445,7 @@ static void test_GetCPInfo(void)
             case 13:  /* IDN */
                 ok( !status, "%u: failed %lx\n", i, status );
                 if (status) break;
-                ok( size > 0x8000 && size <= 0x30000 , "wrong size %Ix\n", size );
+                ok( size > 0x8000 && size <= 0x30000 , "wrong size %Ix\n", (size_t)size );
                 ret = UnmapViewOfFile( ptr );
                 ok( ret, "UnmapViewOfFile failed err %lu\n", GetLastError() );
                 break;

@@ -1525,7 +1525,7 @@ static LRESULT CALLBACK parent_wnd_proc(HWND hWnd, UINT message, WPARAM wParam, 
                   g_item_expanding.mask = TVIF_STATE;
                   g_item_expanding.hItem = hRoot;
                   ret = SendMessageA(pHdr->hwndFrom, TVM_GETITEMA, 0, (LPARAM)&g_item_expanding);
-                  ok(ret == TRUE, "got %Iu\n", ret);
+                  ok(ret == TRUE, "got %Iu\n", (size_t)ret);
                 }
                 break;
               }
@@ -1541,7 +1541,7 @@ static LRESULT CALLBACK parent_wnd_proc(HWND hWnd, UINT message, WPARAM wParam, 
                   g_item_expanded.mask = TVIF_STATE;
                   g_item_expanded.hItem = hRoot;
                   ret = SendMessageA(pHdr->hwndFrom, TVM_GETITEMA, 0, (LPARAM)&g_item_expanded);
-                  ok(ret == TRUE, "got %Iu\n", ret);
+                  ok(ret == TRUE, "got %Iu\n", (size_t)ret);
                 }
                 if (g_get_rect_in_expand)
                 {
@@ -2452,7 +2452,7 @@ static void test_WM_PRINTCLIENT(void)
     /* test parameters when the treeview is visible */
     for (i = 0; i < ARRAY_SIZE(params); i++)
     {
-        winetest_push_context("lParam=0x%Ix", params[i]);
+        winetest_push_context("lParam=0x%Ix", (size_t)params[i]);
         FillRect(hdc, &rc, GetStockObject(BLACK_BRUSH));
         clr = GetPixel(hdc, 1, 1);
         ok(clr == RGB(0, 0, 0), "got 0x%lx\n", clr);
@@ -2468,7 +2468,7 @@ static void test_WM_PRINTCLIENT(void)
     ShowWindow(hTree, SW_HIDE);
     for (i = 0; i < ARRAY_SIZE(params); i++)
     {
-        winetest_push_context("lParam=0x%Ix", params[i]);
+        winetest_push_context("lParam=0x%Ix", (size_t)params[i]);
         FillRect(hdc, &rc, GetStockObject(BLACK_BRUSH));
         clr = GetPixel(hdc, 1, 1);
         ok(clr == RGB(0, 0, 0), "got 0x%lx\n", clr);
@@ -2549,8 +2549,8 @@ static void test_delete_items(void)
 
     if (item_sequence[0]->count == 2)
     {
-      ok(msg[0].lParam == (LPARAM)hChild, "expected %p, got 0x%Ix\n", hChild, msg[0].lParam);
-      ok(msg[1].lParam == (LPARAM)hRoot, "expected %p, got 0x%Ix\n", hRoot, msg[1].lParam);
+      ok(msg[0].lParam == (LPARAM)hChild, "expected %p, got 0x%Ix\n", hChild, (size_t)msg[0].lParam);
+      ok(msg[1].lParam == (LPARAM)hRoot, "expected %p, got 0x%Ix\n", hRoot, (size_t)msg[1].lParam);
     }
 
     ret = SendMessageA(hTree, TVM_GETCOUNT, 0, 0);

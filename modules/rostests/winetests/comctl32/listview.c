@@ -1550,7 +1550,7 @@ static void test_items(void)
     item.iSubItem = 0;
     r = SendMessageA(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
     expect(1, r);
-    ok(item.lParam == lparamTest, "got lParam %Ix, expected %Ix\n", item.lParam, lparamTest);
+    ok(item.lParam == lparamTest, "got lParam %Ix, expected %Ix\n", (size_t)item.lParam, (size_t)lparamTest);
 
     /* Set up a subitem */
     memset (&item, 0xcc, sizeof (item));
@@ -1617,7 +1617,7 @@ static void test_items(void)
     item.iSubItem = 1;
     r = SendMessageA(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
     expect(1, r);
-    ok(item.lParam == lparamTest, "got lParam %Ix, expected %Ix\n", item.lParam, lparamTest);
+    ok(item.lParam == lparamTest, "got lParam %Ix, expected %Ix\n", (size_t)item.lParam, (size_t)lparamTest);
 
     /* Set up param on first subitem: no effect */
     memset (&item, 0xcc, sizeof (item));
@@ -1635,7 +1635,7 @@ static void test_items(void)
     item.iSubItem = 1;
     r = SendMessageA(hwnd, LVM_GETITEMA, 0, (LPARAM) &item);
     expect(1, r);
-    ok(item.lParam == lparamTest, "got lParam %Ix, expected %Ix\n", item.lParam, lparamTest);
+    ok(item.lParam == lparamTest, "got lParam %Ix, expected %Ix\n", (size_t)item.lParam, (size_t)lparamTest);
 
     /**** Some tests of state highlighting ****/
     memset (&item, 0xcc, sizeof (item));
@@ -6513,7 +6513,7 @@ static void test_WM_PRINTCLIENT(void)
 
         for (j = 0; j < ARRAY_SIZE(params); j++)
         {
-            winetest_push_context("state=%d lParam=0x%Ix", states[i], params[j]);
+            winetest_push_context("state=%d lParam=0x%Ix", states[i], (size_t)params[j]);
 
             FillRect(hdc, &rc, GetStockObject(BLACK_BRUSH));
             clr = GetPixel(hdc, 1, 1);
@@ -7204,7 +7204,7 @@ static void test_state_image(void)
         ok(r, "Failed to get item state.\n");
         ok(item.state == (INDEXTOSTATEIMAGEMASK(1) | LVIS_SELECTED | LVIS_FOCUSED),
             "Unexpected item state %#x.\n", item.state);
-        ok(item.lParam == 123456, "Unexpected lParam %Id.\n", item.lParam);
+        ok(item.lParam == 123456, "Unexpected lParam %Id.\n", (ptrdiff_t)item.lParam);
 
         item.mask = 0;
         item.stateMask = ~0u;
@@ -7224,7 +7224,7 @@ static void test_state_image(void)
         r = SendMessageA(hwnd, LVM_GETITEMA, 0, (LPARAM)&item);
         ok(r, "Failed to get subitem state.\n");
         ok(item.state == 0, "Unexpected state %#x.\n", item.state);
-        ok(item.lParam == 123456, "Unexpected lParam %Id.\n", item.lParam);
+        ok(item.lParam == 123456, "Unexpected lParam %Id.\n", (ptrdiff_t)item.lParam);
 
         item.mask = LVIF_STATE;
         item.stateMask = LVIS_FOCUSED;
@@ -7342,18 +7342,18 @@ static void test_list_explicit_width(void)
     {
         item.iItem = i;
         ret = SendMessageA(hwnd, LVM_INSERTITEMA, 0, (LPARAM)&item);
-        ok(ret == i, "failed to insert item %d, got %Id\n", i, ret);
+        ok(ret == i, "failed to insert item %d, got %Id\n", i, (ptrdiff_t)ret);
     }
 
     ret = SendMessageA(hwnd, LVM_SETCOLUMNWIDTH, 0, MAKELPARAM(240, 0));
-    ok(ret == TRUE, "failed to set explicit list width, got %Id\n", ret);
+    ok(ret == TRUE, "failed to set explicit list width, got %Id\n", (ptrdiff_t)ret);
     g_dispinfo_count = 0;
     SendMessageA(hwnd, WM_SETREDRAW, TRUE, 0);
     InvalidateRect(hwnd, NULL, TRUE);
     UpdateWindow(hwnd);
 
     ret = SendMessageA(hwnd, LVM_GETCOLUMNWIDTH, 0, 0);
-    ok(ret == 240, "expected width 240, got %Id\n", ret);
+    ok(ret == 240, "expected width 240, got %Id\n", (ptrdiff_t)ret);
     ok(g_dispinfo_count < item_count,
        "explicit width requested all %u item labels\n", g_dispinfo_count);
 
@@ -7381,7 +7381,7 @@ static void test_list_deferred_width(void)
     {
         item.iItem = i;
         ret = SendMessageA(hwnd, LVM_INSERTITEMA, 0, (LPARAM)&item);
-        ok(ret == i, "failed to insert item %d, got %Id\n", i, ret);
+        ok(ret == i, "failed to insert item %d, got %Id\n", i, (ptrdiff_t)ret);
     }
     ok(!g_dispinfo_count, "insertion requested %u item labels\n",
        g_dispinfo_count);
@@ -7408,7 +7408,7 @@ static void test_list_deferred_width(void)
     {
         item.iItem = i;
         ret = SendMessageA(hwnd, LVM_INSERTITEMA, 0, (LPARAM)&item);
-        ok(ret == i, "failed to insert item %d, got %Id\n", i, ret);
+        ok(ret == i, "failed to insert item %d, got %Id\n", i, (ptrdiff_t)ret);
     }
     width = SendMessageA(hwnd, LVM_GETCOLUMNWIDTH, 0, 0);
     ok(width == default_width, "expected width %d, got %d\n",

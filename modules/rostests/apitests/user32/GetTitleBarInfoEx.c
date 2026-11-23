@@ -123,7 +123,7 @@ TestCrossProcessTitleBarInfo(void)
         SetLastError(0xdeadbeef);
         SendResult = SendMessageTimeoutA(hwnd, WM_GETTITLEBARINFOEX, 0, (LPARAM)&Info, SMTO_ABORTIFHUNG, 5000, &MessageResult);
         ok(SendResult != 0, "SendMessageTimeoutA failed, error %lu\n", GetLastError());
-        ok(MessageResult != 0, "WM_GETTITLEBARINFOEX returned %Iu\n", MessageResult);
+        ok(MessageResult != 0, "WM_GETTITLEBARINFOEX returned %Iu\n", (size_t)MessageResult);
         if (SendResult != 0 && MessageResult != 0)
         {
             ok(Info.cbSize == sizeof(Info), "cbSize changed to %lu\n", Info.cbSize);

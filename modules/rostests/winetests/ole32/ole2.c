@@ -2037,7 +2037,7 @@ static void test_data_cache_dib_contents_stream(int num)
     ok( SUCCEEDED(hr), "got %08lx\n", hr );
     ok( med.tymed == TYMED_HGLOBAL, "got %lx\n", med.tymed );
     ok( GlobalSize( med.hGlobal ) >= sizeof(dib_white) - sizeof(BITMAPFILEHEADER),
-        "got %Iu\n", GlobalSize( med.hGlobal ) );
+        "got %Iu\n", (size_t)(GlobalSize( med.hGlobal )) );
     ptr = GlobalLock( med.hGlobal );
 
     expect_info = *(BITMAPINFOHEADER *)(file_dib + sizeof(BITMAPFILEHEADER));

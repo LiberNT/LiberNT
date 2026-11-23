@@ -131,7 +131,7 @@ static void WINAPI apc( void *arg, IO_STATUS_BLOCK *iosb, ULONG reserved )
     int *count = arg;
 
     trace( "apc called block %p iosb.status %lx iosb.info %Iu\n",
-           iosb, iosb->Status, iosb->Information );
+           iosb, iosb->Status, (size_t)iosb->Information );
     (*count)++;
     ok( !reserved, "reserved is not 0: %lx\n", reserved );
 }
@@ -657,7 +657,7 @@ static void read_file_test(void)
             "wrong status %lx.\n", status );
     if (status == STATUS_PENDING) WaitForSingleObject( event, 1000 );
     ok( iosb.Status == STATUS_SUCCESS, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == strlen(text), "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == strlen(text), "wrong info %Iu\n", (size_t)iosb.Information );
     ok( is_signaled( event ), "event is not signaled\n" );
     ok( !apc_count, "apc was called\n" );
     SleepEx( 1, TRUE ); /* alertable sleep */
@@ -674,7 +674,7 @@ static void read_file_test(void)
             "wrong status %lx.\n", status);
     if (status == STATUS_PENDING) WaitForSingleObject( event, 1000 );
     ok( iosb.Status == STATUS_SUCCESS, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == strlen(text), "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == strlen(text), "wrong info %Iu\n", (size_t)iosb.Information );
     ok( is_signaled( event ), "event is not signaled\n" );
     ok( !apc_count, "apc was called\n" );
     SleepEx( 1, TRUE ); /* alertable sleep */
@@ -692,7 +692,7 @@ static void read_file_test(void)
     {
         WaitForSingleObject( event, 1000 );
         ok( iosb.Status == STATUS_END_OF_FILE, "wrong status %lx\n", iosb.Status );
-        ok( iosb.Information == 0, "wrong info %Iu\n", iosb.Information );
+        ok( iosb.Information == 0, "wrong info %Iu\n", (size_t)iosb.Information );
         ok( is_signaled( event ), "event is not signaled\n" );
         ok( !apc_count, "apc was called\n" );
         SleepEx( 1, TRUE ); /* alertable sleep */
@@ -713,7 +713,7 @@ static void read_file_test(void)
         "wrong status %lx\n", status );
     if (status == STATUS_PENDING) WaitForSingleObject( event, 1000 );
     ok( iosb.Status == STATUS_SUCCESS, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == strlen(text), "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == strlen(text), "wrong info %Iu\n", (size_t)iosb.Information );
     ok( is_signaled( event ), "event is not signaled\n" );
     ok( !apc_count, "apc was called\n" );
     SleepEx( 1, TRUE ); /* alertable sleep */
@@ -727,7 +727,7 @@ static void read_file_test(void)
     status = pNtReadFile( handle, event, apc, &apc_count, &iosb, buffer, strlen(text) + 10, &offset, NULL );
     ok( status == STATUS_SUCCESS, "wrong status %lx\n", status );
     ok( iosb.Status == STATUS_SUCCESS, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == strlen(text), "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == strlen(text), "wrong info %Iu\n", (size_t)iosb.Information );
     ok( is_signaled( event ), "event is not signaled\n" );
     ok( !apc_count, "apc was called\n" );
     SleepEx( 1, TRUE ); /* alertable sleep */
@@ -742,7 +742,7 @@ static void read_file_test(void)
     status = pNtReadFile( handle, event, apc, &apc_count, &iosb, buffer, 2, &offset, NULL );
     ok( status == STATUS_END_OF_FILE, "wrong status %lx\n", status );
     ok( iosb.Status == STATUS_END_OF_FILE, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == 0, "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == 0, "wrong info %Iu\n", (size_t)iosb.Information );
     ok( is_signaled( event ), "event is not signaled\n" );
     ok( !apc_count, "apc was called\n" );
     SleepEx( 1, TRUE ); /* alertable sleep */
@@ -765,7 +765,7 @@ static void read_file_test(void)
             || broken(status == STATUS_SUCCESS) /* before Vista */,
             "Wrong status %lx.\n", status);
     ok(iosb.Status == STATUS_SUCCESS, "Wrong status %lx.\n", iosb.Status);
-    ok(iosb.Information == sizeof(aligned_buffer), "Wrong info %Iu.\n", iosb.Information);
+    ok(iosb.Information == sizeof(aligned_buffer), "Wrong info %Iu.\n", (size_t)iosb.Information);
     ok(is_signaled(event), "event is not signaled.\n");
     ok(!apc_count, "apc was called.\n");
     SleepEx(1, TRUE); /* alertable sleep */
@@ -782,7 +782,7 @@ static void read_file_test(void)
     ok(status == STATUS_PENDING, "Wrong status %lx.\n", status);
     WaitForSingleObject(event, 1000);
     ok(iosb.Status == STATUS_SUCCESS, "Wrong status %lx.\n", iosb.Status);
-    ok(iosb.Information == sizeof(aligned_buffer), "Wrong info %Iu.\n", iosb.Information);
+    ok(iosb.Information == sizeof(aligned_buffer), "Wrong info %Iu.\n", (size_t)iosb.Information);
     ok(is_signaled(event), "event is not signaled.\n");
     ok(!apc_count, "apc was called.\n");
     SleepEx(1, TRUE); /* alertable sleep */
@@ -813,7 +813,7 @@ static void append_file_test(void)
     status = pNtWriteFile(handle, NULL, NULL, NULL, &iosb, text, 2, NULL, NULL);
     ok(status == STATUS_SUCCESS, "NtWriteFile error %#lx\n", status);
     ok(iosb.Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", iosb.Status);
-    ok(iosb.Information == 2, "expected 2, got %Iu\n", iosb.Information);
+    ok(iosb.Information == 2, "expected 2, got %Iu\n", (size_t)iosb.Information);
 
     CloseHandle(handle);
 
@@ -828,7 +828,7 @@ static void append_file_test(void)
     status = pNtWriteFile(handle, NULL, NULL, NULL, &iosb, text + 2, 2, &offset, NULL);
     ok(status == STATUS_SUCCESS, "NtWriteFile error %#lx\n", status);
     ok(iosb.Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", iosb.Status);
-    ok(iosb.Information == 2, "expected 2, got %Iu\n", iosb.Information);
+    ok(iosb.Information == 2, "expected 2, got %Iu\n", (size_t)iosb.Information);
 
     ret = SetFilePointer(handle, 0, NULL, FILE_CURRENT);
     ok(ret == 4, "expected 4, got %lu\n", ret);
@@ -839,7 +839,7 @@ static void append_file_test(void)
     status = pNtWriteFile(handle, NULL, NULL, NULL, &iosb, text + 4, 2, &offset, NULL);
     ok(status == STATUS_SUCCESS, "NtWriteFile error %#lx\n", status);
     ok(iosb.Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", iosb.Status);
-    ok(iosb.Information == 2, "expected 2, got %Iu\n", iosb.Information);
+    ok(iosb.Information == 2, "expected 2, got %Iu\n", (size_t)iosb.Information);
 
     ret = SetFilePointer(handle, 0, NULL, FILE_CURRENT);
     ok(ret == 6, "expected 6, got %lu\n", ret);
@@ -856,7 +856,7 @@ static void append_file_test(void)
     status = pNtReadFile(handle, 0, NULL, NULL, &iosb, buf, sizeof(buf), &offset, NULL);
     ok(status == STATUS_SUCCESS, "NtReadFile error %#lx\n", status);
     ok(iosb.Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", iosb.Status);
-    ok(iosb.Information == 6, "expected 6, got %Iu\n", iosb.Information);
+    ok(iosb.Information == 6, "expected 6, got %Iu\n", (size_t)iosb.Information);
     buf[6] = 0;
     ok(memcmp(buf, text, 6) == 0, "wrong file contents: %s\n", buf);
 
@@ -866,7 +866,7 @@ static void append_file_test(void)
     status = pNtWriteFile(handle, NULL, NULL, NULL, &iosb, text + 3, 3, &offset, NULL);
     ok(status == STATUS_SUCCESS, "NtWriteFile error %#lx\n", status);
     ok(iosb.Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", iosb.Status);
-    ok(iosb.Information == 3, "expected 3, got %Iu\n", iosb.Information);
+    ok(iosb.Information == 3, "expected 3, got %Iu\n", (size_t)iosb.Information);
 
     memset(buf, 0, sizeof(buf));
     iosb.Status = -1;
@@ -875,7 +875,7 @@ static void append_file_test(void)
     status = pNtReadFile(handle, 0, NULL, NULL, &iosb, buf, sizeof(buf), &offset, NULL);
     ok(status == STATUS_SUCCESS, "NtReadFile error %#lx\n", status);
     ok(iosb.Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", iosb.Status);
-    ok(iosb.Information == 6, "expected 6, got %Iu\n", iosb.Information);
+    ok(iosb.Information == 6, "expected 6, got %Iu\n", (size_t)iosb.Information);
     buf[6] = 0;
     ok(memcmp(buf, "barbar", 6) == 0, "wrong file contents: %s\n", buf);
 
@@ -1032,10 +1032,10 @@ static void test_set_io_completion(void)
 
     res = pNtRemoveIoCompletion( h, &key, &value, &iosb, &timeout );
     ok( res == STATUS_SUCCESS, "NtRemoveIoCompletion failed: %#lx\n", res );
-    ok( key == CKEY_FIRST, "Invalid completion key: %#Ix\n", key );
-    ok( iosb.Information == size, "Invalid iosb.Information: %Iu\n", iosb.Information );
+    ok( key == CKEY_FIRST, "Invalid completion key: %#Ix\n", (size_t)key );
+    ok( iosb.Information == size, "Invalid iosb.Information: %Iu\n", (size_t)iosb.Information );
     ok( iosb.Status == STATUS_INVALID_DEVICE_REQUEST, "Invalid iosb.Status: %#lx\n", iosb.Status );
-    ok( value == CVALUE_FIRST, "Invalid completion value: %#Ix\n", value );
+    ok( value == CVALUE_FIRST, "Invalid completion value: %#Ix\n", (size_t)value );
 
     count = get_pending_msgs(h);
     ok( !count, "Unexpected msg count: %ld\n", count );
@@ -1059,10 +1059,10 @@ static void test_set_io_completion(void)
     res = pNtRemoveIoCompletionEx( h, info, 2, &count, &timeout, FALSE );
     ok( res == STATUS_SUCCESS, "NtRemoveIoCompletionEx failed: %#lx\n", res );
     ok( count == 1, "wrong count %lu\n", count );
-    ok( info[0].CompletionKey == 123, "wrong key %#Ix\n", info[0].CompletionKey );
-    ok( info[0].CompletionValue == 456, "wrong value %#Ix\n", info[0].CompletionValue );
+    ok( info[0].CompletionKey == 123, "wrong key %#Ix\n", (size_t)info[0].CompletionKey );
+    ok( info[0].CompletionValue == 456, "wrong value %#Ix\n", (size_t)info[0].CompletionValue );
     ok( info[0].IoStatusBlock.Information == size, "wrong information %#Ix\n",
-        info[0].IoStatusBlock.Information );
+        (size_t)info[0].IoStatusBlock.Information );
     ok( info[0].IoStatusBlock.Status == 789, "wrong status %#lx\n", info[0].IoStatusBlock.Status);
 
     res = pNtSetIoCompletion( h, 123, 456, 789, size );
@@ -1075,15 +1075,15 @@ static void test_set_io_completion(void)
     res = pNtRemoveIoCompletionEx( h, info, 2, &count, &timeout, FALSE );
     ok( res == STATUS_SUCCESS, "NtRemoveIoCompletionEx failed: %#lx\n", res );
     ok( count == 2, "wrong count %lu\n", count );
-    ok( info[0].CompletionKey == 123, "wrong key %#Ix\n", info[0].CompletionKey );
-    ok( info[0].CompletionValue == 456, "wrong value %#Ix\n", info[0].CompletionValue );
+    ok( info[0].CompletionKey == 123, "wrong key %#Ix\n", (size_t)info[0].CompletionKey );
+    ok( info[0].CompletionValue == 456, "wrong value %#Ix\n", (size_t)info[0].CompletionValue );
     ok( info[0].IoStatusBlock.Information == size, "wrong information %#Ix\n",
-        info[0].IoStatusBlock.Information );
+        (size_t)info[0].IoStatusBlock.Information );
     ok( info[0].IoStatusBlock.Status == 789, "wrong status %#lx\n", info[0].IoStatusBlock.Status);
-    ok( info[1].CompletionKey == 12, "wrong key %#Ix\n", info[1].CompletionKey );
-    ok( info[1].CompletionValue == 34, "wrong value %#Ix\n", info[1].CompletionValue );
+    ok( info[1].CompletionKey == 12, "wrong key %#Ix\n", (size_t)info[1].CompletionKey );
+    ok( info[1].CompletionValue == 34, "wrong value %#Ix\n", (size_t)info[1].CompletionValue );
     ok( info[1].IoStatusBlock.Information == size, "wrong information %#Ix\n",
-        info[1].IoStatusBlock.Information );
+        (size_t)info[1].IoStatusBlock.Information );
     ok( info[1].IoStatusBlock.Status == 56, "wrong status %#lx\n", info[1].IoStatusBlock.Status);
 
     res = pNtSetIoCompletion( h, 123, 456, 789, size );
@@ -1096,20 +1096,20 @@ static void test_set_io_completion(void)
     res = pNtRemoveIoCompletionEx( h, info, 1, &count, NULL, FALSE );
     ok( res == STATUS_SUCCESS, "NtRemoveIoCompletionEx failed: %#lx\n", res );
     ok( count == 1, "wrong count %lu\n", count );
-    ok( info[0].CompletionKey == 123, "wrong key %#Ix\n", info[0].CompletionKey );
-    ok( info[0].CompletionValue == 456, "wrong value %#Ix\n", info[0].CompletionValue );
+    ok( info[0].CompletionKey == 123, "wrong key %#Ix\n", (size_t)info[0].CompletionKey );
+    ok( info[0].CompletionValue == 456, "wrong value %#Ix\n", (size_t)info[0].CompletionValue );
     ok( info[0].IoStatusBlock.Information == size, "wrong information %#Ix\n",
-        info[0].IoStatusBlock.Information );
+        (size_t)info[0].IoStatusBlock.Information );
     ok( info[0].IoStatusBlock.Status == 789, "wrong status %#lx\n", info[0].IoStatusBlock.Status);
 
     count = 0xdeadbeef;
     res = pNtRemoveIoCompletionEx( h, info, 1, &count, NULL, FALSE );
     ok( res == STATUS_SUCCESS, "NtRemoveIoCompletionEx failed: %#lx\n", res );
     ok( count == 1, "wrong count %lu\n", count );
-    ok( info[0].CompletionKey == 12, "wrong key %#Ix\n", info[0].CompletionKey );
-    ok( info[0].CompletionValue == 34, "wrong value %#Ix\n", info[0].CompletionValue );
+    ok( info[0].CompletionKey == 12, "wrong key %#Ix\n", (size_t)info[0].CompletionKey );
+    ok( info[0].CompletionValue == 34, "wrong value %#Ix\n", (size_t)info[0].CompletionValue );
     ok( info[0].IoStatusBlock.Information == size, "wrong information %#Ix\n",
-        info[0].IoStatusBlock.Information );
+        (size_t)info[0].IoStatusBlock.Information );
     ok( info[0].IoStatusBlock.Status == 56, "wrong status %#lx\n", info[0].IoStatusBlock.Status);
 
     apc_count = 0;
@@ -1205,10 +1205,10 @@ static void test_file_io_completion(void)
 
     res = pNtRemoveIoCompletion( h, &key, &value, &iosb, &timeout );
     ok( res == STATUS_SUCCESS, "NtRemoveIoCompletion failed: %#lx\n", res );
-    ok( key == CKEY_SECOND, "Invalid completion key: %#Ix\n", key );
-    ok( iosb.Information == 3, "Invalid iosb.Information: %Id\n", iosb.Information );
+    ok( key == CKEY_SECOND, "Invalid completion key: %#Ix\n", (size_t)key );
+    ok( iosb.Information == 3, "Invalid iosb.Information: %Id\n", (ptrdiff_t)iosb.Information );
     ok( iosb.Status == STATUS_SUCCESS, "Invalid iosb.Status: %#lx\n", iosb.Status );
-    ok( value == (ULONG_PTR)&o, "Invalid completion value: %#Ix\n", value );
+    ok( value == (ULONG_PTR)&o, "Invalid completion value: %#Ix\n", (size_t)value );
     ok( !memcmp( send_buf, recv_buf, TEST_BUF_LEN ),
             "Receive buffer (%02x %02x %02x) did not match send buffer (%02x %02x %02x)\n",
             recv_buf[0], recv_buf[1], recv_buf[2], send_buf[0], send_buf[1], send_buf[2] );
@@ -1226,10 +1226,10 @@ static void test_file_io_completion(void)
 
     res = pNtRemoveIoCompletion( h, &key, &value, &iosb, &timeout );
     ok( res == STATUS_SUCCESS, "NtRemoveIoCompletion failed: %#lx\n", res );
-    ok( key == CKEY_SECOND, "Invalid completion key: %#Ix\n", key );
-    ok( iosb.Information == 2, "Invalid iosb.Information: %Id\n", iosb.Information );
+    ok( key == CKEY_SECOND, "Invalid completion key: %#Ix\n", (size_t)key );
+    ok( iosb.Information == 2, "Invalid iosb.Information: %Id\n", (ptrdiff_t)iosb.Information );
     ok( iosb.Status == STATUS_SUCCESS, "Invalid iosb.Status: %#lx\n", iosb.Status );
-    ok( value == (ULONG_PTR)&o, "Invalid completion value: %#Ix\n", value );
+    ok( value == (ULONG_PTR)&o, "Invalid completion value: %#Ix\n", (size_t)value );
     ok( !memcmp( send_buf, recv_buf, 2 ),
             "Receive buffer (%02x %02x) did not match send buffer (%02x %02x)\n",
             recv_buf[0], recv_buf[1], send_buf[0], send_buf[1] );
@@ -1241,10 +1241,10 @@ static void test_file_io_completion(void)
 
     res = pNtRemoveIoCompletion( h, &key, &value, &iosb, &timeout );
     ok( res == STATUS_SUCCESS, "NtRemoveIoCompletion failed: %#lx\n", res );
-    ok( key == CKEY_SECOND, "Invalid completion key: %Ix\n", key );
-    ok( iosb.Information == 0, "Invalid iosb.Information: %Id\n", iosb.Information );
+    ok( key == CKEY_SECOND, "Invalid completion key: %Ix\n", (size_t)key );
+    ok( iosb.Information == 0, "Invalid iosb.Information: %Id\n", (ptrdiff_t)iosb.Information );
     ok( iosb.Status == STATUS_PIPE_BROKEN, "Invalid iosb.Status: %lx\n", iosb.Status );
-    ok( value == (ULONG_PTR)&o, "Invalid completion value: %Ix\n", value );
+    ok( value == (ULONG_PTR)&o, "Invalid completion value: %Ix\n", (size_t)value );
 
     CloseHandle( client );
 
@@ -1274,10 +1274,10 @@ static void test_file_io_completion(void)
 
     res = pNtRemoveIoCompletion( h, &key, &value, &iosb, &timeout );
     ok( res == STATUS_SUCCESS, "NtRemoveIoCompletion failed: %#lx\n", res );
-    ok( key == CKEY_SECOND, "Invalid completion key: %#Ix\n", key );
-    ok( iosb.Information == 3, "Invalid iosb.Information: %Id\n", iosb.Information );
+    ok( key == CKEY_SECOND, "Invalid completion key: %#Ix\n", (size_t)key );
+    ok( iosb.Information == 3, "Invalid iosb.Information: %Id\n", (ptrdiff_t)iosb.Information );
     ok( iosb.Status == STATUS_SUCCESS, "Invalid iosb.Status: %#lx\n", iosb.Status );
-    ok( value == (ULONG_PTR)&o, "Invalid completion value: %#Ix\n", value );
+    ok( value == (ULONG_PTR)&o, "Invalid completion value: %#Ix\n", (size_t)value );
     ok( !memcmp( send_buf, recv_buf, TEST_BUF_LEN ),
             "Receive buffer (%02x %02x %02x) did not match send buffer (%02x %02x %02x)\n",
             recv_buf[0], recv_buf[1], recv_buf[2], send_buf[0], send_buf[1], send_buf[2] );
@@ -3903,7 +3903,7 @@ static void test_file_name_information(void)
     ok(CharLowerW((LPWSTR)(UINT_PTR)info->FileName[1]) == CharLowerW((LPWSTR)(UINT_PTR)expected[1]),
             "info->FileName[1] is %p, expected %p.\n",
             CharLowerW((LPWSTR)(UINT_PTR)info->FileName[1]), CharLowerW((LPWSTR)(UINT_PTR)expected[1]));
-    ok(io.Information == sizeof(*info), "io.Information is %Iu\n", io.Information);
+    ok(io.Information == sizeof(*info), "io.Information is %Iu\n", (size_t)io.Information);
 
     memset( info, 0xcc, info_size );
     hr = pNtQueryInformationFile( h, &io, info, info_size, FileNameInformation );
@@ -3917,7 +3917,7 @@ static void test_file_name_information(void)
             wine_dbgstr_w( info->FileName ), wine_dbgstr_w( expected ));
     ok(io.Information == FIELD_OFFSET(FILE_NAME_INFORMATION, FileName) + info->FileNameLength,
             "io.Information is %Iu, expected %lu.\n",
-            io.Information, FIELD_OFFSET(FILE_NAME_INFORMATION, FileName) + info->FileNameLength);
+            (size_t)io.Information, FIELD_OFFSET(FILE_NAME_INFORMATION, FileName) + info->FileNameLength);
 
     CloseHandle( h );
     HeapFree( GetProcessHeap(), 0, info );
@@ -4035,7 +4035,7 @@ static void test_file_all_name_information(void)
     ok(CharLowerW((LPWSTR)(UINT_PTR)info->NameInformation.FileName[1]) == CharLowerW((LPWSTR)(UINT_PTR)expected[1]),
             "info->NameInformation.FileName[1] is %p, expected %p.\n",
             CharLowerW((LPWSTR)(UINT_PTR)info->NameInformation.FileName[1]), CharLowerW((LPWSTR)(UINT_PTR)expected[1]));
-    ok(io.Information == sizeof(*info), "io.Information is %Iu\n", io.Information);
+    ok(io.Information == sizeof(*info), "io.Information is %Iu\n", (size_t)io.Information);
 
     memset( info, 0xcc, info_size );
     hr = pNtQueryInformationFile( h, &io, info, info_size, FileAllInformation );
@@ -4052,7 +4052,7 @@ static void test_file_all_name_information(void)
             wine_dbgstr_w( info->NameInformation.FileName ), wine_dbgstr_w( expected ));
     ok(io.Information == FIELD_OFFSET(FILE_ALL_INFORMATION, NameInformation.FileName)
             + info->NameInformation.FileNameLength,
-            "io.Information is %Iu\n", io.Information );
+            "io.Information is %Iu\n", (size_t)io.Information );
 
     CloseHandle( h );
     HeapFree( GetProcessHeap(), 0, info );
@@ -4118,7 +4118,7 @@ static void _test_completion_flags(unsigned line, HANDLE handle, DWORD expected_
                                      FileIoCompletionNotificationInformation);
     ok_(__FILE__,line)(status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %08lx\n", status);
     ok_(__FILE__,line)(io.Status == STATUS_SUCCESS, "Status = %lx\n", io.Status);
-    ok_(__FILE__,line)(io.Information == sizeof(info), "Information = %Iu\n", io.Information);
+    ok_(__FILE__,line)(io.Information == sizeof(info), "Information = %Iu\n", (size_t)io.Information);
     ok_(__FILE__,line)((info.Flags & expected_flags) == expected_flags, "got %08lx\n", info.Flags);
 }
 
@@ -4213,7 +4213,7 @@ static void test_file_completion_information(void)
         pov = NULL;
         ret = GetQueuedCompletionStatus(port, &num_bytes, &key, &pov, 1000);
         ok(ret, "GetQueuedCompletionStatus failed, error %lu\n", GetLastError());
-        ok(key == 0xdeadbeef, "expected 0xdeadbeef, got %Ix\n", key);
+        ok(key == 0xdeadbeef, "expected 0xdeadbeef, got %Ix\n", (size_t)key);
         ok(pov == &ov, "expected %p, got %p\n", &ov, pov);
     }
 
@@ -4750,7 +4750,7 @@ static void test_query_volume_information_file(void)
 
     ok(io.Information == (FIELD_OFFSET(FILE_FS_VOLUME_INFORMATION, VolumeLabel) + ffvi->VolumeLabelLength),
     "expected %ld, got %Iu\n", (FIELD_OFFSET(FILE_FS_VOLUME_INFORMATION, VolumeLabel) + ffvi->VolumeLabelLength),
-     io.Information);
+     (size_t)io.Information);
 
     todo_wine ok(ffvi->VolumeCreationTime.QuadPart != 0, "Missing VolumeCreationTime\n");
     ok(ffvi->VolumeSerialNumber != 0, "Missing VolumeSerialNumber\n");
@@ -4866,7 +4866,7 @@ static void test_NtCreateFile(void)
 
         if (!status)
         {
-            ok(io.Information == td[i].result,"%ld: expected %#lx got %#Ix\n", i, td[i].result, io.Information);
+            ok(io.Information == td[i].result,"%ld: expected %#lx got %#Ix\n", i, td[i].result, (size_t)io.Information);
 
             ret = GetFileAttributesW(path);
             ret &= ~FILE_ATTRIBUTE_NOT_CONTENT_INDEXED;
@@ -4926,7 +4926,7 @@ static void test_read_write(void)
     status = pNtReadFile(INVALID_HANDLE_VALUE, 0, NULL, NULL, &iob, buf, sizeof(buf), &offset, NULL);
     ok(status == STATUS_OBJECT_TYPE_MISMATCH || status == STATUS_INVALID_HANDLE, "expected STATUS_OBJECT_TYPE_MISMATCH, got %#lx\n", status);
     ok(iob.Status == -1, "expected -1, got %#lx\n", iob.Status);
-    ok(iob.Information == -1, "expected -1, got %Iu\n", iob.Information);
+    ok(iob.Information == -1, "expected -1, got %Iu\n", (size_t)iob.Information);
 
     iob.Status = -1;
     iob.Information = -1;
@@ -4934,7 +4934,7 @@ static void test_read_write(void)
     status = pNtReadFile(INVALID_HANDLE_VALUE, 0, NULL, NULL, &iob, NULL, sizeof(buf), &offset, NULL);
     ok(status == STATUS_OBJECT_TYPE_MISMATCH || status == STATUS_INVALID_HANDLE, "expected STATUS_OBJECT_TYPE_MISMATCH, got %#lx\n", status);
     ok(iob.Status == -1, "expected -1, got %#lx\n", iob.Status);
-    ok(iob.Information == -1, "expected -1, got %Iu\n", iob.Information);
+    ok(iob.Information == -1, "expected -1, got %Iu\n", (size_t)iob.Information);
 
     iob.Status = -1;
     iob.Information = -1;
@@ -4942,7 +4942,7 @@ static void test_read_write(void)
     status = pNtWriteFile(INVALID_HANDLE_VALUE, 0, NULL, NULL, &iob, buf, sizeof(buf), &offset, NULL);
     ok(status == STATUS_OBJECT_TYPE_MISMATCH || status == STATUS_INVALID_HANDLE, "expected STATUS_OBJECT_TYPE_MISMATCH, got %#lx\n", status);
     ok(iob.Status == -1, "expected -1, got %#lx\n", iob.Status);
-    ok(iob.Information == -1, "expected -1, got %Iu\n", iob.Information);
+    ok(iob.Information == -1, "expected -1, got %Iu\n", (size_t)iob.Information);
 
     iob.Status = -1;
     iob.Information = -1;
@@ -4950,7 +4950,7 @@ static void test_read_write(void)
     status = pNtWriteFile(INVALID_HANDLE_VALUE, 0, NULL, NULL, &iob, buf, sizeof(buf), &offset, NULL);
     ok(status == STATUS_OBJECT_TYPE_MISMATCH || status == STATUS_INVALID_HANDLE, "expected STATUS_OBJECT_TYPE_MISMATCH, got %#lx\n", status);
     ok(iob.Status == -1, "expected -1, got %#lx\n", iob.Status);
-    ok(iob.Information == -1, "expected -1, got %Iu\n", iob.Information);
+    ok(iob.Information == -1, "expected -1, got %Iu\n", (size_t)iob.Information);
 
     hfile = create_temp_file(0);
     if (!hfile) return;
@@ -4960,7 +4960,7 @@ static void test_read_write(void)
     status = pNtWriteFile(hfile, 0, NULL, NULL, &iob, NULL, sizeof(contents), NULL, NULL);
     ok(status == STATUS_INVALID_USER_BUFFER, "expected STATUS_INVALID_USER_BUFFER, got %#lx\n", status);
     ok(iob.Status == -1, "expected -1, got %#lx\n", iob.Status);
-    ok(iob.Information == -1, "expected -1, got %Iu\n", iob.Information);
+    ok(iob.Information == -1, "expected -1, got %Iu\n", (size_t)iob.Information);
 
     iob.Status = -1;
     iob.Information = -1;
@@ -4968,7 +4968,7 @@ static void test_read_write(void)
     status = pNtWriteFile(hfile, event, NULL, NULL, &iob, NULL, sizeof(contents), NULL, NULL);
     ok(status == STATUS_INVALID_USER_BUFFER, "expected STATUS_INVALID_USER_BUFFER, got %#lx\n", status);
     ok(iob.Status == -1, "expected -1, got %#lx\n", iob.Status);
-    ok(iob.Information == -1, "expected -1, got %Iu\n", iob.Information);
+    ok(iob.Information == -1, "expected -1, got %Iu\n", (size_t)iob.Information);
     ok(!is_signaled(event), "event is not signaled\n");
 
     iob.Status = -1;
@@ -4976,7 +4976,7 @@ static void test_read_write(void)
     status = pNtReadFile(hfile, 0, NULL, NULL, &iob, NULL, sizeof(contents), NULL, NULL);
     ok(status == STATUS_ACCESS_VIOLATION, "expected STATUS_ACCESS_VIOLATION, got %#lx\n", status);
     ok(iob.Status == -1, "expected -1, got %#lx\n", iob.Status);
-    ok(iob.Information == -1, "expected -1, got %Iu\n", iob.Information);
+    ok(iob.Information == -1, "expected -1, got %Iu\n", (size_t)iob.Information);
 
     iob.Status = -1;
     iob.Information = -1;
@@ -4984,7 +4984,7 @@ static void test_read_write(void)
     status = pNtReadFile(hfile, event, NULL, NULL, &iob, NULL, sizeof(contents), NULL, NULL);
     ok(status == STATUS_ACCESS_VIOLATION, "expected STATUS_ACCESS_VIOLATION, got %#lx\n", status);
     ok(iob.Status == -1, "expected -1, got %#lx\n", iob.Status);
-    ok(iob.Information == -1, "expected -1, got %Iu\n", iob.Information);
+    ok(iob.Information == -1, "expected -1, got %Iu\n", (size_t)iob.Information);
     ok(is_signaled(event), "event is not signaled\n");
 
     iob.Status = -1;
@@ -4993,7 +4993,7 @@ static void test_read_write(void)
     status = pNtReadFile(hfile, event, NULL, NULL, &iob, (void*)0xdeadbeef, sizeof(contents), NULL, NULL);
     ok(status == STATUS_ACCESS_VIOLATION, "expected STATUS_ACCESS_VIOLATION, got %#lx\n", status);
     ok(iob.Status == -1, "expected -1, got %#lx\n", iob.Status);
-    ok(iob.Information == -1, "expected -1, got %Iu\n", iob.Information);
+    ok(iob.Information == -1, "expected -1, got %Iu\n", (size_t)iob.Information);
     ok(is_signaled(event), "event is not signaled\n");
 
     iob.Status = -1;
@@ -5001,7 +5001,7 @@ static void test_read_write(void)
     status = pNtWriteFile(hfile, 0, NULL, NULL, &iob, contents, 7, NULL, NULL);
     ok(status == STATUS_SUCCESS, "NtWriteFile error %#lx\n", status);
     ok(iob.Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", iob.Status);
-    ok(iob.Information == 7, "expected 7, got %Iu\n", iob.Information);
+    ok(iob.Information == 7, "expected 7, got %Iu\n", (size_t)iob.Information);
 
     SetFilePointer(hfile, 0, NULL, FILE_BEGIN);
 
@@ -5011,7 +5011,7 @@ static void test_read_write(void)
     status = pNtWriteFile(hfile, 0, NULL, NULL, &iob, contents + 7, sizeof(contents) - 7, &offset, NULL);
     ok(status == STATUS_SUCCESS, "NtWriteFile error %#lx\n", status);
     ok(iob.Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", iob.Status);
-    ok(iob.Information == sizeof(contents) - 7, "expected sizeof(contents)-7, got %Iu\n", iob.Information);
+    ok(iob.Information == sizeof(contents) - 7, "expected sizeof(contents)-7, got %Iu\n", (size_t)iob.Information);
 
     off = SetFilePointer(hfile, 0, NULL, FILE_CURRENT);
     ok(off == sizeof(contents), "expected sizeof(contents), got %lu\n", off);
@@ -5056,7 +5056,7 @@ static void test_read_write(void)
         status = pNtWriteFile(hfile, 0, NULL, NULL, &iob, contents, sizeof(contents), &offset, NULL);
         ok(status == STATUS_INVALID_PARAMETER, "%ld: expected STATUS_INVALID_PARAMETER, got %#lx\n", i, status);
         ok(iob.Status == -1, "expected -1, got %#lx\n", iob.Status);
-        ok(iob.Information == -1, "expected -1, got %Id\n", iob.Information);
+        ok(iob.Information == -1, "expected -1, got %Id\n", (ptrdiff_t)iob.Information);
     }
 
     SetFilePointer(hfile, sizeof(contents) - 4, NULL, FILE_BEGIN);
@@ -5067,7 +5067,7 @@ static void test_read_write(void)
     status = pNtWriteFile(hfile, 0, NULL, NULL, &iob, "DCBA", 4, &offset, NULL);
     ok(status == STATUS_SUCCESS, "NtWriteFile error %#lx\n", status);
     ok(iob.Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", iob.Status);
-    ok(iob.Information == 4, "expected 4, got %Iu\n", iob.Information);
+    ok(iob.Information == 4, "expected 4, got %Iu\n", (size_t)iob.Information);
 
     off = SetFilePointer(hfile, 0, NULL, FILE_CURRENT);
     ok(off == sizeof(contents), "expected sizeof(contents), got %lu\n", off);
@@ -5077,7 +5077,7 @@ static void test_read_write(void)
     status = pNtReadFile(hfile, 0, NULL, NULL, &iob, buf, sizeof(buf), NULL, NULL);
     ok(status == STATUS_END_OF_FILE, "expected STATUS_END_OF_FILE, got %#lx\n", status);
     ok(iob.Status == STATUS_END_OF_FILE, "expected STATUS_END_OF_FILE, got %#lx\n", iob.Status);
-    ok(iob.Information == 0, "expected 0, got %Iu\n", iob.Information);
+    ok(iob.Information == 0, "expected 0, got %Iu\n", (size_t)iob.Information);
 
     SetFilePointer(hfile, 0, NULL, FILE_BEGIN);
 
@@ -5136,8 +5136,8 @@ static void test_read_write(void)
     ok(!ret, "ReadFile should fail\n");
     ok(GetLastError() == ERROR_HANDLE_EOF, "expected ERROR_HANDLE_EOF, got %ld\n", GetLastError());
     ok(bytes == 0, "bytes %lu\n", bytes);
-    ok((NTSTATUS)ovl.Internal == STATUS_END_OF_FILE, "expected STATUS_END_OF_FILE, got %#Ix\n", ovl.Internal);
-    ok(ovl.InternalHigh == 0, "expected 0, got %Iu\n", ovl.InternalHigh);
+    ok((NTSTATUS)ovl.Internal == STATUS_END_OF_FILE, "expected STATUS_END_OF_FILE, got %#Ix\n", (size_t)ovl.Internal);
+    ok(ovl.InternalHigh == 0, "expected 0, got %Iu\n", (size_t)ovl.InternalHigh);
 
     ovl.Offset = sizeof(contents);
     ovl.OffsetHigh = 0;
@@ -5150,22 +5150,22 @@ static void test_read_write(void)
     ok(ret, "ReadFile error %ld\n", GetLastError());
     ok(GetLastError() == 0xdeadbeef, "expected 0xdeadbeef, got %ld\n", GetLastError());
     ok(bytes == 0, "bytes %lu\n", bytes);
-    ok((NTSTATUS)ovl.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", ovl.Internal);
-    ok(ovl.InternalHigh == 0, "expected 0, got %Iu\n", ovl.InternalHigh);
+    ok((NTSTATUS)ovl.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", (size_t)ovl.Internal);
+    ok(ovl.InternalHigh == 0, "expected 0, got %Iu\n", (size_t)ovl.InternalHigh);
 
     iob.Status = -1;
     iob.Information = -1;
     status = pNtReadFile(hfile, 0, NULL, NULL, &iob, buf, sizeof(buf), NULL, NULL);
     ok(status == STATUS_END_OF_FILE, "expected STATUS_END_OF_FILE, got %#lx\n", status);
     ok(iob.Status == STATUS_END_OF_FILE, "expected STATUS_END_OF_FILE, got %#lx\n", iob.Status);
-    ok(iob.Information == 0, "expected 0, got %Iu\n", iob.Information);
+    ok(iob.Information == 0, "expected 0, got %Iu\n", (size_t)iob.Information);
 
     iob.Status = -1;
     iob.Information = -1;
     status = pNtReadFile(hfile, 0, NULL, NULL, &iob, buf, 0, NULL, NULL);
     ok(status == STATUS_SUCCESS, "NtReadFile error %#lx\n", status);
     ok(iob.Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", iob.Status);
-    ok(iob.Information == 0, "expected 0, got %Iu\n", iob.Information);
+    ok(iob.Information == 0, "expected 0, got %Iu\n", (size_t)iob.Information);
 
     iob.Status = -1;
     iob.Information = -1;
@@ -5173,7 +5173,7 @@ static void test_read_write(void)
     status = pNtReadFile(hfile, 0, NULL, NULL, &iob, buf, sizeof(buf), &offset, NULL);
     ok(status == STATUS_END_OF_FILE, "expected STATUS_END_OF_FILE, got %#lx\n", status);
     ok(iob.Status == STATUS_END_OF_FILE, "expected STATUS_END_OF_FILE, got %#lx\n", iob.Status);
-    ok(iob.Information == 0, "expected 0, got %Iu\n", iob.Information);
+    ok(iob.Information == 0, "expected 0, got %Iu\n", (size_t)iob.Information);
 
     iob.Status = -1;
     iob.Information = -1;
@@ -5181,7 +5181,7 @@ static void test_read_write(void)
     status = pNtReadFile(hfile, 0, NULL, NULL, &iob, buf, 0, &offset, NULL);
     ok(status == STATUS_SUCCESS, "NtReadFile error %#lx\n", status);
     ok(iob.Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", iob.Status);
-    ok(iob.Information == 0, "expected 0, got %Iu\n", iob.Information);
+    ok(iob.Information == 0, "expected 0, got %Iu\n", (size_t)iob.Information);
 
     iob.Status = -1;
     iob.Information = -1;
@@ -5189,7 +5189,7 @@ static void test_read_write(void)
     status = pNtReadFile(hfile, 0, NULL, NULL, &iob, buf, sizeof(buf), &offset, NULL);
     ok(status == STATUS_END_OF_FILE, "expected STATUS_END_OF_FILE, got %#lx\n", status);
     ok(iob.Status == STATUS_END_OF_FILE, "expected STATUS_END_OF_FILE, got %#lx\n", iob.Status);
-    ok(iob.Information == 0, "expected 0, got %Iu\n", iob.Information);
+    ok(iob.Information == 0, "expected 0, got %Iu\n", (size_t)iob.Information);
 
     iob.Status = -1;
     iob.Information = -1;
@@ -5197,7 +5197,7 @@ static void test_read_write(void)
     status = pNtReadFile(hfile, 0, NULL, NULL, &iob, buf, 0, &offset, NULL);
     ok(status == STATUS_SUCCESS, "NtReadFile error %#lx\n", status);
     ok(iob.Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", iob.Status);
-    ok(iob.Information == 0, "expected 0, got %Iu\n", iob.Information);
+    ok(iob.Information == 0, "expected 0, got %Iu\n", (size_t)iob.Information);
 
     for (i = -20; i < 0; i++)
     {
@@ -5209,7 +5209,7 @@ static void test_read_write(void)
         status = pNtReadFile(hfile, 0, NULL, NULL, &iob, buf, sizeof(buf), &offset, NULL);
         ok(status == STATUS_INVALID_PARAMETER, "%ld: expected STATUS_INVALID_PARAMETER, got %#lx\n", i, status);
         ok(iob.Status == -1, "expected -1, got %#lx\n", iob.Status);
-        ok(iob.Information == -1, "expected -1, got %Id\n", iob.Information);
+        ok(iob.Information == -1, "expected -1, got %Id\n", (ptrdiff_t)iob.Information);
     }
 
     SetFilePointer(hfile, 0, NULL, FILE_BEGIN);
@@ -5230,7 +5230,7 @@ static void test_read_write(void)
     status = pNtReadFile(hfile, 0, NULL, NULL, &iob, buf, sizeof(buf), &offset, NULL);
     ok(status == STATUS_SUCCESS, "NtReadFile error %#lx\n", status);
     ok(iob.Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", iob.Status);
-    ok(iob.Information == sizeof(contents), "expected sizeof(contents), got %Iu\n", iob.Information);
+    ok(iob.Information == sizeof(contents), "expected sizeof(contents), got %Iu\n", (size_t)iob.Information);
     ok(!memcmp(contents, buf, sizeof(contents)), "file contents mismatch\n");
 
     off = SetFilePointer(hfile, 0, NULL, FILE_CURRENT);
@@ -5242,7 +5242,7 @@ static void test_read_write(void)
     status = pNtWriteFile(hfile, 0, NULL, NULL, &iob, "DCBA", 4, &offset, NULL);
     ok(status == STATUS_SUCCESS, "NtWriteFile error %#lx\n", status);
     ok(iob.Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", iob.Status);
-    ok(iob.Information == 4, "expected 4, got %Iu\n", iob.Information);
+    ok(iob.Information == 4, "expected 4, got %Iu\n", (size_t)iob.Information);
 
     off = SetFilePointer(hfile, 0, NULL, FILE_CURRENT);
     ok(off == sizeof(contents), "expected sizeof(contents), got %lu\n", off);
@@ -5253,7 +5253,7 @@ static void test_read_write(void)
     status = pNtReadFile(hfile, 0, NULL, NULL, &iob, buf, sizeof(buf), &offset, NULL);
     ok(status == STATUS_SUCCESS, "NtReadFile error %#lx\n", status);
     ok(iob.Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", iob.Status);
-    ok(iob.Information == sizeof(contents), "expected sizeof(contents), got %Iu\n", iob.Information);
+    ok(iob.Information == sizeof(contents), "expected sizeof(contents), got %Iu\n", (size_t)iob.Information);
     ok(!memcmp(contents, buf, sizeof(contents) - 4), "file contents mismatch\n");
     ok(!memcmp(buf + sizeof(contents) - 4, "DCBA", 4), "file contents mismatch\n");
 
@@ -5282,8 +5282,8 @@ static void test_read_write(void)
     ret = ReadFile(hfile, buf, sizeof(buf), &bytes, &ovl);
     ok(ret, "ReadFile error %ld\n", GetLastError());
     ok(bytes == sizeof(contents), "bytes %lu\n", bytes);
-    ok((NTSTATUS)ovl.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", ovl.Internal);
-    ok(ovl.InternalHigh == sizeof(contents), "expected sizeof(contents), got %Iu\n", ovl.InternalHigh);
+    ok((NTSTATUS)ovl.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", (size_t)ovl.Internal);
+    ok(ovl.InternalHigh == sizeof(contents), "expected sizeof(contents), got %Iu\n", (size_t)ovl.InternalHigh);
     ok(!memcmp(contents, buf, sizeof(contents) - 4), "file contents mismatch\n");
     ok(!memcmp(buf + sizeof(contents) - 4, "ABCD", 4), "file contents mismatch\n");
 
@@ -5312,8 +5312,8 @@ static void test_read_write(void)
     /* ReadFile return value depends on Windows version and testing it is not practical */
     ReadFile(hfile, buf, 0, &bytes, &ovl);
     ok(bytes == 0, "bytes %lu\n", bytes);
-    ok((NTSTATUS)ovl.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", ovl.Internal);
-    ok(ovl.InternalHigh == 0, "expected 0, got %Iu\n", ovl.InternalHigh);
+    ok((NTSTATUS)ovl.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", (size_t)ovl.Internal);
+    ok(ovl.InternalHigh == 0, "expected 0, got %Iu\n", (size_t)ovl.InternalHigh);
 
     bytes = 0xdeadbeef;
     SetLastError(0xdeadbeef);
@@ -5327,7 +5327,7 @@ static void test_read_write(void)
     status = pNtWriteFile(hfile, 0, NULL, NULL, &iob, contents, sizeof(contents), NULL, NULL);
     ok(status == STATUS_INVALID_PARAMETER, "expected STATUS_INVALID_PARAMETER, got %#lx\n", status);
     ok(iob.Status == -1, "expected -1, got %#lx\n", iob.Status);
-    ok(iob.Information == -1, "expected -1, got %Id\n", iob.Information);
+    ok(iob.Information == -1, "expected -1, got %Id\n", (ptrdiff_t)iob.Information);
 
     for (i = -20; i < -1; i++)
     {
@@ -5337,7 +5337,7 @@ static void test_read_write(void)
         status = pNtWriteFile(hfile, 0, NULL, NULL, &iob, contents, sizeof(contents), &offset, NULL);
         ok(status == STATUS_INVALID_PARAMETER, "%ld: expected STATUS_INVALID_PARAMETER, got %#lx\n", i, status);
         ok(iob.Status == -1, "expected -1, got %#lx\n", iob.Status);
-        ok(iob.Information == -1, "expected -1, got %Id\n", iob.Information);
+        ok(iob.Information == -1, "expected -1, got %Id\n", (ptrdiff_t)iob.Information);
     }
 
     iob.Status = -1;
@@ -5352,7 +5352,7 @@ static void test_read_write(void)
         ok(ret == WAIT_OBJECT_0, "WaitForSingleObject error %ld\n", ret);
     }
     ok(iob.Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", iob.Status);
-    ok(iob.Information == sizeof(contents), "expected sizeof(contents), got %Iu\n", iob.Information);
+    ok(iob.Information == sizeof(contents), "expected sizeof(contents), got %Iu\n", (size_t)iob.Information);
 
     off = SetFilePointer(hfile, 0, NULL, FILE_CURRENT);
     ok(off == 0, "expected 0, got %lu\n", off);
@@ -5369,7 +5369,7 @@ static void test_read_write(void)
     status = pNtReadFile(hfile, 0, NULL, NULL, &iob, buf, sizeof(buf), NULL, NULL);
     ok(status == STATUS_INVALID_PARAMETER, "expected STATUS_INVALID_PARAMETER, got %#lx\n", status);
     ok(iob.Status == -1, "expected -1, got %#lx\n", iob.Status);
-    ok(iob.Information == -1, "expected -1, got %Id\n", iob.Information);
+    ok(iob.Information == -1, "expected -1, got %Id\n", (ptrdiff_t)iob.Information);
 
     for (i = -20; i < 0; i++)
     {
@@ -5379,7 +5379,7 @@ static void test_read_write(void)
         status = pNtReadFile(hfile, 0, NULL, NULL, &iob, buf, sizeof(buf), &offset, NULL);
         ok(status == STATUS_INVALID_PARAMETER, "%ld: expected STATUS_INVALID_PARAMETER, got %#lx\n", i, status);
         ok(iob.Status == -1, "expected -1, got %#lx\n", iob.Status);
-        ok(iob.Information == -1, "expected -1, got %Id\n", iob.Information);
+        ok(iob.Information == -1, "expected -1, got %Id\n", (ptrdiff_t)iob.Information);
     }
 
     off = SetFilePointer(hfile, 0, NULL, FILE_CURRENT);
@@ -5412,8 +5412,8 @@ static void test_read_write(void)
         ok(!ret, "GetOverlappedResult should report FALSE\n");
         ok(GetLastError() == ERROR_HANDLE_EOF, "expected ERROR_HANDLE_EOF, got %ld\n", GetLastError());
         ok(bytes == 0, "expected 0, read %lu\n", bytes);
-        ok((NTSTATUS)ovl.Internal == STATUS_END_OF_FILE, "expected STATUS_END_OF_FILE, got %#Ix\n", ovl.Internal);
-        ok(ovl.InternalHigh == 0, "expected 0, got %Iu\n", ovl.InternalHigh);
+        ok((NTSTATUS)ovl.Internal == STATUS_END_OF_FILE, "expected STATUS_END_OF_FILE, got %#Ix\n", (size_t)ovl.Internal);
+        ok(ovl.InternalHigh == 0, "expected 0, got %Iu\n", (size_t)ovl.InternalHigh);
     }
 
     off = SetFilePointer(hfile, 0, NULL, FILE_CURRENT);
@@ -5443,8 +5443,8 @@ static void test_read_write(void)
         ret = GetOverlappedResult(hfile, &ovl, &bytes, TRUE);
         ok(ret, "GetOverlappedResult returned FALSE with %lu (expected TRUE)\n", GetLastError());
         ok(bytes == 0, "expected 0, read %lu\n", bytes);
-        ok((NTSTATUS)ovl.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", ovl.Internal);
-        ok(ovl.InternalHigh == 0, "expected 0, got %Iu\n", ovl.InternalHigh);
+        ok((NTSTATUS)ovl.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", (size_t)ovl.Internal);
+        ok(ovl.InternalHigh == 0, "expected 0, got %Iu\n", (size_t)ovl.InternalHigh);
     }
 
     offset.QuadPart = sizeof(contents);
@@ -5471,8 +5471,8 @@ static void test_read_write(void)
         ret = GetOverlappedResult(hfile, &ovl, &bytes, TRUE);
         ok(ret, "GetOverlappedResult returned FALSE with %lu (expected TRUE)\n", GetLastError());
         ok(bytes == 0, "expected 0, read %lu\n", bytes);
-        ok((NTSTATUS)ovl.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", ovl.Internal);
-        ok(ovl.InternalHigh == 0, "expected 0, got %Iu\n", ovl.InternalHigh);
+        ok((NTSTATUS)ovl.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", (size_t)ovl.Internal);
+        ok(ovl.InternalHigh == 0, "expected 0, got %Iu\n", (size_t)ovl.InternalHigh);
     }
 
     iob.Status = -1;
@@ -5484,13 +5484,13 @@ static void test_read_write(void)
         ret = WaitForSingleObject(hfile, 3000);
         ok(ret == WAIT_OBJECT_0, "WaitForSingleObject error %ld\n", ret);
         ok(iob.Status == STATUS_END_OF_FILE, "expected STATUS_END_OF_FILE, got %#lx\n", iob.Status);
-        ok(iob.Information == 0, "expected 0, got %Iu\n", iob.Information);
+        ok(iob.Information == 0, "expected 0, got %Iu\n", (size_t)iob.Information);
     }
     else
     {
         ok(status == STATUS_END_OF_FILE, "expected STATUS_END_OF_FILE, got %#lx\n", status);
         ok(iob.Status == -1, "expected -1, got %#lx\n", iob.Status);
-        ok(iob.Information == -1, "expected -1, got %Iu\n", iob.Information);
+        ok(iob.Information == -1, "expected -1, got %Iu\n", (size_t)iob.Information);
     }
 
     off = SetFilePointer(hfile, 0, NULL, FILE_CURRENT);
@@ -5507,12 +5507,12 @@ static void test_read_write(void)
         ret = WaitForSingleObject(hfile, 3000);
         ok(ret == WAIT_OBJECT_0, "WaitForSingleObject error %ld\n", ret);
         ok(iob.Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", iob.Status);
-        ok(iob.Information == 0, "expected 0, got %Iu\n", iob.Information);
+        ok(iob.Information == 0, "expected 0, got %Iu\n", (size_t)iob.Information);
     }
     else
     {
         ok(iob.Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", iob.Status);
-        ok(iob.Information == 0, "expected 0, got %Iu\n", iob.Information);
+        ok(iob.Information == 0, "expected 0, got %Iu\n", (size_t)iob.Information);
     }
 
     off = SetFilePointer(hfile, 0, NULL, FILE_CURRENT);
@@ -5532,8 +5532,8 @@ static void test_read_write(void)
         ok(bytes == 0, "bytes %lu\n", bytes);
     else
         ok(bytes == 14, "bytes %lu\n", bytes);
-    ok((NTSTATUS)ovl.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", ovl.Internal);
-    ok(ovl.InternalHigh == sizeof(contents), "expected sizeof(contents), got %Iu\n", ovl.InternalHigh);
+    ok((NTSTATUS)ovl.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", (size_t)ovl.Internal);
+    ok(ovl.InternalHigh == sizeof(contents), "expected sizeof(contents), got %Iu\n", (size_t)ovl.InternalHigh);
 
     off = SetFilePointer(hfile, 0, NULL, FILE_CURRENT);
     ok(off == 0, "expected 0, got %lu\n", off);
@@ -5542,8 +5542,8 @@ static void test_read_write(void)
     ret = GetOverlappedResult(hfile, &ovl, &bytes, TRUE);
     ok(ret, "GetOverlappedResult error %ld\n", GetLastError());
     ok(bytes == sizeof(contents), "bytes %lu\n", bytes);
-    ok((NTSTATUS)ovl.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", ovl.Internal);
-    ok(ovl.InternalHigh == sizeof(contents), "expected sizeof(contents), got %Iu\n", ovl.InternalHigh);
+    ok((NTSTATUS)ovl.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", (size_t)ovl.Internal);
+    ok(ovl.InternalHigh == sizeof(contents), "expected sizeof(contents), got %Iu\n", (size_t)ovl.InternalHigh);
     ok(!memcmp(contents, buf, sizeof(contents)), "file contents mismatch\n");
 
     off = SetFilePointer(hfile, 0, NULL, FILE_CURRENT);
@@ -5565,7 +5565,7 @@ static void test_read_write(void)
         ok(ret == WAIT_OBJECT_0, "WaitForSingleObject error %ld\n", ret);
     }
     ok(iob.Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", iob.Status);
-    ok(iob.Information == 4, "expected 4, got %Iu\n", iob.Information);
+    ok(iob.Information == 4, "expected 4, got %Iu\n", (size_t)iob.Information);
 
     off = SetFilePointer(hfile, 0, NULL, FILE_CURRENT);
     ok(off == 0, "expected 0, got %lu\n", off);
@@ -5582,7 +5582,7 @@ static void test_read_write(void)
         ok(ret == WAIT_OBJECT_0, "WaitForSingleObject error %ld\n", ret);
     }
     ok(iob.Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", iob.Status);
-    ok(iob.Information == sizeof(contents), "expected sizeof(contents), got %Iu\n", iob.Information);
+    ok(iob.Information == sizeof(contents), "expected sizeof(contents), got %Iu\n", (size_t)iob.Information);
 
     off = SetFilePointer(hfile, 0, NULL, FILE_CURRENT);
     ok(off == 0, "expected 0, got %lu\n", off);
@@ -5610,8 +5610,8 @@ static void test_read_write(void)
         ok(ret == WAIT_OBJECT_0, "WaitForSingleObject error %ld\n", ret);
     }
     else ok(bytes == 4, "bytes %lu\n", bytes);
-    ok((NTSTATUS)ovl.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", ovl.Internal);
-    ok(ovl.InternalHigh == 4, "expected 4, got %Iu\n", ovl.InternalHigh);
+    ok((NTSTATUS)ovl.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", (size_t)ovl.Internal);
+    ok(ovl.InternalHigh == 4, "expected 4, got %Iu\n", (size_t)ovl.InternalHigh);
 
     off = SetFilePointer(hfile, 0, NULL, FILE_CURRENT);
     ok(off == 0, "expected 0, got %lu\n", off);
@@ -5620,8 +5620,8 @@ static void test_read_write(void)
     ret = GetOverlappedResult(hfile, &ovl, &bytes, TRUE);
     ok(ret, "GetOverlappedResult error %ld\n", GetLastError());
     ok(bytes == 4, "bytes %lu\n", bytes);
-    ok((NTSTATUS)ovl.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", ovl.Internal);
-    ok(ovl.InternalHigh == 4, "expected 4, got %Iu\n", ovl.InternalHigh);
+    ok((NTSTATUS)ovl.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", (size_t)ovl.Internal);
+    ok(ovl.InternalHigh == 4, "expected 4, got %Iu\n", (size_t)ovl.InternalHigh);
 
     off = SetFilePointer(hfile, 0, NULL, FILE_CURRENT);
     ok(off == 0, "expected 0, got %lu\n", off);
@@ -5643,8 +5643,8 @@ static void test_read_write(void)
         ok(ret == WAIT_OBJECT_0, "WaitForSingleObject error %ld\n", ret);
     }
     else ok(bytes == 14, "bytes %lu\n", bytes);
-    ok((NTSTATUS)ovl.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", ovl.Internal);
-    ok(ovl.InternalHigh == sizeof(contents), "expected sizeof(contents), got %Iu\n", ovl.InternalHigh);
+    ok((NTSTATUS)ovl.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", (size_t)ovl.Internal);
+    ok(ovl.InternalHigh == sizeof(contents), "expected sizeof(contents), got %Iu\n", (size_t)ovl.InternalHigh);
 
     off = SetFilePointer(hfile, 0, NULL, FILE_CURRENT);
     ok(off == 0, "expected 0, got %lu\n", off);
@@ -5653,8 +5653,8 @@ static void test_read_write(void)
     ret = GetOverlappedResult(hfile, &ovl, &bytes, TRUE);
     ok(ret, "GetOverlappedResult error %ld\n", GetLastError());
     ok(bytes == sizeof(contents), "bytes %lu\n", bytes);
-    ok((NTSTATUS)ovl.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", ovl.Internal);
-    ok(ovl.InternalHigh == sizeof(contents), "expected sizeof(contents), got %Iu\n", ovl.InternalHigh);
+    ok((NTSTATUS)ovl.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", (size_t)ovl.Internal);
+    ok(ovl.InternalHigh == sizeof(contents), "expected sizeof(contents), got %Iu\n", (size_t)ovl.InternalHigh);
     ok(!memcmp(contents, buf, sizeof(contents) - 4), "file contents mismatch\n");
     ok(!memcmp(buf + sizeof(contents) - 4, "ABCD", 4), "file contents mismatch\n");
 
@@ -5726,7 +5726,7 @@ static void test_flush_buffers_file(void)
     ok(io_status_block.Status == STATUS_SUCCESS, "Got unexpected io_status_block.Status %#lx.\n",
             io_status_block.Status);
     ok(!io_status_block.Information, "Got unexpected io_status_block.Information %#Ix.\n",
-            io_status_block.Information);
+            (size_t)io_status_block.Information);
 
     status = pNtFlushBuffersFile(hfileread, &io_status_block);
     ok(status == STATUS_ACCESS_DENIED, "expected STATUS_ACCESS_DENIED, got %#lx.\n", status);
@@ -5738,7 +5738,7 @@ static void test_flush_buffers_file(void)
     ok(io_status_block.Status == 0xdeadbeef, "Got unexpected io_status_block.Status %#lx.\n",
             io_status_block.Status);
     ok(io_status_block.Information == 0xdeadbeef, "Got unexpected io_status_block.Information %#Ix.\n",
-            io_status_block.Information);
+            (size_t)io_status_block.Information);
 
     CloseHandle(hfileread);
     CloseHandle(hfile);
@@ -5756,7 +5756,7 @@ static void test_flush_buffers_file(void)
     ok(io_status_block.Status == 0xdeadbeef, "Got unexpected io_status_block.Status %#lx.\n",
             io_status_block.Status);
     ok(io_status_block.Information == 0xdeadbeef, "Got unexpected io_status_block.Information %#Ix.\n",
-            io_status_block.Information);
+            (size_t)io_status_block.Information);
 
     CloseHandle(hfile);
     DeleteFileA(buffer);
@@ -5782,7 +5782,7 @@ static void test_query_ea(void)
     status = pNtQueryEaFile(INVALID_HANDLE_VALUE, &io, buffer, buffer_len, TRUE, NULL, 0, NULL, FALSE);
     ok(status == STATUS_OBJECT_TYPE_MISMATCH, "expected STATUS_OBJECT_TYPE_MISMATCH, got %#lx\n", status);
     ok(io.Status == 0xdeadbeef, "expected 0xdeadbeef, got %#lx\n", io.Status);
-    ok(io.Information == 0xdeadbeef, "expected 0xdeadbeef, got %#Ix\n", io.Information);
+    ok(io.Information == 0xdeadbeef, "expected 0xdeadbeef, got %#Ix\n", (size_t)io.Information);
     ok(buffer[0] == 0xcc, "data at position 0 overwritten\n");
 
     /* test with 0xdeadbeef */
@@ -5793,7 +5793,7 @@ static void test_query_ea(void)
     status = pNtQueryEaFile((void *)0xdeadbeef, &io, buffer, buffer_len, TRUE, NULL, 0, NULL, FALSE);
     ok(status == STATUS_INVALID_HANDLE, "expected STATUS_INVALID_HANDLE, got %#lx\n", status);
     ok(io.Status == 0xdeadbeef, "expected 0xdeadbeef, got %#lx\n", io.Status);
-    ok(io.Information == 0xdeadbeef, "expected 0xdeadbeef, got %#Ix\n", io.Information);
+    ok(io.Information == 0xdeadbeef, "expected 0xdeadbeef, got %#Ix\n", (size_t)io.Information);
     ok(buffer[0] == 0xcc, "data at position 0 overwritten\n");
 
     /* test without buffer */
@@ -5802,7 +5802,7 @@ static void test_query_ea(void)
     status = pNtQueryEaFile(handle, &io, NULL, 0, TRUE, NULL, 0, NULL, FALSE);
     ok(status == STATUS_NO_EAS_ON_FILE, "expected STATUS_NO_EAS_ON_FILE, got %#lx\n", status);
     ok(io.Status == 0xdeadbeef, "expected 0xdeadbeef, got %#lx\n", io.Status);
-    ok(io.Information == 0xdeadbeef, "expected 0xdeadbeef, got %#Ix\n", io.Information);
+    ok(io.Information == 0xdeadbeef, "expected 0xdeadbeef, got %#Ix\n", (size_t)io.Information);
 
     /* test with zero buffer */
     io.Status = 0xdeadbeef;
@@ -5810,7 +5810,7 @@ static void test_query_ea(void)
     status = pNtQueryEaFile(handle, &io, buffer, 0, TRUE, NULL, 0, NULL, FALSE);
     ok(status == STATUS_NO_EAS_ON_FILE, "expected STATUS_NO_EAS_ON_FILE, got %#lx\n", status);
     ok(io.Status == 0xdeadbeef, "expected 0xdeadbeef, got %#lx\n", io.Status);
-    ok(io.Information == 0xdeadbeef, "expected 0xdeadbeef, got %#Ix\n", io.Information);
+    ok(io.Information == 0xdeadbeef, "expected 0xdeadbeef, got %#Ix\n", (size_t)io.Information);
 
     /* test with very small buffer */
     io.Status = 0xdeadbeef;
@@ -5820,7 +5820,7 @@ static void test_query_ea(void)
     status = pNtQueryEaFile(handle, &io, buffer, buffer_len, TRUE, NULL, 0, NULL, FALSE);
     ok(status == STATUS_NO_EAS_ON_FILE, "expected STATUS_NO_EAS_ON_FILE, got %#lx\n", status);
     ok(io.Status == 0xdeadbeef, "expected 0xdeadbeef, got %#lx\n", io.Status);
-    ok(io.Information == 0xdeadbeef, "expected 0xdeadbeef, got %#Ix\n", io.Information);
+    ok(io.Information == 0xdeadbeef, "expected 0xdeadbeef, got %#Ix\n", (size_t)io.Information);
     for (i = 0; i < buffer_len && !buffer[i]; i++);
     ok(i == buffer_len,  "expected %lu bytes filled with 0x00, got %lu bytes\n", buffer_len, i);
     ok(buffer[i] == 0xcc, "data at position %u overwritten\n", buffer[i]);
@@ -5833,7 +5833,7 @@ static void test_query_ea(void)
     status = pNtQueryEaFile(handle, &io, buffer, buffer_len, TRUE, NULL, 0, NULL, FALSE);
     ok(status == STATUS_NO_EAS_ON_FILE, "expected STATUS_NO_EAS_ON_FILE, got %#lx\n", status);
     ok(io.Status == 0xdeadbeef, "expected 0xdeadbeef, got %#lx\n", io.Status);
-    ok(io.Information == 0xdeadbeef, "expected 0xdeadbeef, got %#Ix\n", io.Information);
+    ok(io.Information == 0xdeadbeef, "expected 0xdeadbeef, got %#Ix\n", (size_t)io.Information);
     for (i = 0; i < buffer_len && !buffer[i]; i++);
     ok(i == buffer_len,  "expected %lu bytes filled with 0x00, got %lu bytes\n", buffer_len, i);
     ok(buffer[i] == 0xcc, "data at position %u overwritten\n", buffer[i]);
@@ -6061,10 +6061,10 @@ static void test_set_io_completion_ex(void)
 
     status = pNtRemoveIoCompletion(completion, &key, &value, &iosb, &timeout);
     ok(status == STATUS_SUCCESS, "Got unexpected status %#lx.\n", status);
-    ok(key == CKEY_FIRST, "Invalid completion key: %#Ix\n", key);
-    ok(iosb.Information == size, "Invalid iosb.Information: %Iu\n", iosb.Information);
+    ok(key == CKEY_FIRST, "Invalid completion key: %#Ix\n", (size_t)key);
+    ok(iosb.Information == size, "Invalid iosb.Information: %Iu\n", (size_t)iosb.Information);
     ok(iosb.Status == STATUS_INVALID_DEVICE_REQUEST, "Invalid iosb.Status: %#lx\n", iosb.Status);
-    ok(value == CVALUE_FIRST, "Invalid completion value: %#Ix\n", value);
+    ok(value == CVALUE_FIRST, "Invalid completion value: %#Ix\n", (size_t)value);
 
     CloseHandle(apc_reserve);
     CloseHandle(completion_reserve);

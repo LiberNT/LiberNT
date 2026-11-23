@@ -206,9 +206,9 @@ static enum debugger_stages test_stage;
 
 static void CALLBACK apc_func( ULONG_PTR arg1, ULONG_PTR arg2, ULONG_PTR arg3 )
 {
-    ok( arg1 == 0x1234 + apc_count, "wrong arg1 %Ix\n", arg1 );
-    ok( arg2 == 0x5678, "wrong arg2 %Ix\n", arg2 );
-    ok( arg3 == 0xdeadbeef, "wrong arg3 %Ix\n", arg3 );
+    ok( arg1 == 0x1234 + apc_count, "wrong arg1 %Ix\n", (size_t)arg1 );
+    ok( arg2 == 0x5678, "wrong arg2 %Ix\n", (size_t)arg2 );
+    ok( arg3 == 0xdeadbeef, "wrong arg3 %Ix\n", (size_t)arg3 );
     apc_count++;
 }
 
@@ -803,14 +803,14 @@ static DWORD prot_fault_handler( EXCEPTION_RECORD *rec, EXCEPTION_REGISTRATION_R
         for (i = 0; i < rec->NumberParameters; i++)
             ok( rec->ExceptionInformation[i] == except->params[i],
                 "%u: Wrong parameter %d: %Ix/%lx\n",
-                entry, i, rec->ExceptionInformation[i], except->params[i] );
+                entry, i, (size_t)rec->ExceptionInformation[i], except->params[i] );
     }
     else
     {
         for (i = 0; i < rec->NumberParameters; i++)
             ok( rec->ExceptionInformation[i] == except->alt_params[i],
                 "%u: Wrong parameter %d: %Ix/%lx\n",
-                entry, i, rec->ExceptionInformation[i], except->alt_params[i] );
+                entry, i, (size_t)rec->ExceptionInformation[i], except->alt_params[i] );
     }
 
 skip_params:
@@ -1464,10 +1464,10 @@ static DWORD simd_fault_handler( EXCEPTION_RECORD *rec, EXCEPTION_REGISTRATION_R
                 "exception code: %#lx, should be %#lx\n",
                 rec->ExceptionCode,  STATUS_FLOAT_MULTIPLE_TRAPS);
             ok( rec->NumberParameters == is_wow64 ? 2 : 1, "# of params: %li\n", rec->NumberParameters);
-            ok( rec->ExceptionInformation[0] == 0, "param #1: %Ix, should be 0\n", rec->ExceptionInformation[0]);
+            ok( rec->ExceptionInformation[0] == 0, "param #1: %Ix, should be 0\n", (size_t)rec->ExceptionInformation[0]);
             if (rec->NumberParameters == 2)
                 ok( rec->ExceptionInformation[1] == ((XSAVE_FORMAT *)context->ExtendedRegisters)->MxCsr,
-                    "param #1: %Ix / %lx\n", rec->ExceptionInformation[1],
+                    "param #1: %Ix / %lx\n", (size_t)rec->ExceptionInformation[1],
                     ((XSAVE_FORMAT *)context->ExtendedRegisters)->MxCsr);
         }
         context->Eip += 3; /* skip divps */
@@ -2181,9 +2181,9 @@ static void * CDECL hook_KiUserApcDispatcher( void *func, ULONG_PTR arg1, ULONG_
     CONTEXT *context = (CONTEXT *)((ULONG_PTR)&arg3 + sizeof(ULONG));
 
     ok( func == apc_func, "wrong function %p / %p\n", func, apc_func );
-    ok( arg1 == 0x1234 + apc_count, "wrong arg1 %Ix\n", arg1 );
-    ok( arg2 == 0x5678, "wrong arg2 %Ix\n", arg2 );
-    ok( arg3 == 0xdeadbeef, "wrong arg3 %Ix\n", arg3 );
+    ok( arg1 == 0x1234 + apc_count, "wrong arg1 %Ix\n", (size_t)arg1 );
+    ok( arg2 == 0x5678, "wrong arg2 %Ix\n", (size_t)arg2 );
+    ok( arg3 == 0xdeadbeef, "wrong arg3 %Ix\n", (size_t)arg3 );
 
     if (context->ContextFlags != 1)
     {
@@ -8525,12 +8525,12 @@ static DWORD WINAPI register_check_thread(void *arg)
 
     status = pNtGetContextThread(GetCurrentThread(), &ctx);
     ok(status == STATUS_SUCCESS, "NtGetContextThread failed with %lx\n", status);
-    ok(!ctx.Dr0, "expected 0, got %Ix\n", (DWORD_PTR)ctx.Dr0);
-    ok(!ctx.Dr1, "expected 0, got %Ix\n", (DWORD_PTR)ctx.Dr1);
-    ok(!ctx.Dr2, "expected 0, got %Ix\n", (DWORD_PTR)ctx.Dr2);
-    ok(!ctx.Dr3, "expected 0, got %Ix\n", (DWORD_PTR)ctx.Dr3);
-    ok(!ctx.Dr6, "expected 0, got %Ix\n", (DWORD_PTR)ctx.Dr6);
-    ok(!ctx.Dr7, "expected 0, got %Ix\n", (DWORD_PTR)ctx.Dr7);
+    ok(!ctx.Dr0, "expected 0, got %Ix\n", (size_t)ctx.Dr0);
+    ok(!ctx.Dr1, "expected 0, got %Ix\n", (size_t)ctx.Dr1);
+    ok(!ctx.Dr2, "expected 0, got %Ix\n", (size_t)ctx.Dr2);
+    ok(!ctx.Dr3, "expected 0, got %Ix\n", (size_t)ctx.Dr3);
+    ok(!ctx.Dr6, "expected 0, got %Ix\n", (size_t)ctx.Dr6);
+    ok(!ctx.Dr7, "expected 0, got %Ix\n", (size_t)ctx.Dr7);
 
     return 0;
 }
@@ -8572,21 +8572,21 @@ static void test_debug_registers(void)
         ok(status == STATUS_SUCCESS, "NtGetContextThread failed with %08lx\n", status);
         if (is_arm64ec)  /* setting debug registers is silently ignored */
         {
-            ok(!ctx.Dr0, "test %d: expected 0, got %Ix\n", i, (DWORD_PTR)ctx.Dr0);
-            ok(!ctx.Dr1, "test %d: expected 0, got %Ix\n", i, (DWORD_PTR)ctx.Dr1);
-            ok(!ctx.Dr2, "test %d: expected 0, got %Ix\n", i, (DWORD_PTR)ctx.Dr2);
-            ok(!ctx.Dr3, "test %d: expected 0, got %Ix\n", i, (DWORD_PTR)ctx.Dr3);
-            ok(!ctx.Dr6, "test %d: expected 0, got %Ix\n", i, (DWORD_PTR)ctx.Dr6);
-            ok(!ctx.Dr7, "test %d: expected 0, got %Ix\n", i, (DWORD_PTR)ctx.Dr7);
+            ok(!ctx.Dr0, "test %d: expected 0, got %Ix\n", i, (size_t)ctx.Dr0);
+            ok(!ctx.Dr1, "test %d: expected 0, got %Ix\n", i, (size_t)ctx.Dr1);
+            ok(!ctx.Dr2, "test %d: expected 0, got %Ix\n", i, (size_t)ctx.Dr2);
+            ok(!ctx.Dr3, "test %d: expected 0, got %Ix\n", i, (size_t)ctx.Dr3);
+            ok(!ctx.Dr6, "test %d: expected 0, got %Ix\n", i, (size_t)ctx.Dr6);
+            ok(!ctx.Dr7, "test %d: expected 0, got %Ix\n", i, (size_t)ctx.Dr7);
         }
         else
         {
-            ok(ctx.Dr0 == tests[i].dr0, "test %d: expected %Ix, got %Ix\n", i, tests[i].dr0, (DWORD_PTR)ctx.Dr0);
-            ok(ctx.Dr1 == tests[i].dr1, "test %d: expected %Ix, got %Ix\n", i, tests[i].dr1, (DWORD_PTR)ctx.Dr1);
-            ok(ctx.Dr2 == tests[i].dr2, "test %d: expected %Ix, got %Ix\n", i, tests[i].dr2, (DWORD_PTR)ctx.Dr2);
-            ok(ctx.Dr3 == tests[i].dr3, "test %d: expected %Ix, got %Ix\n", i, tests[i].dr3, (DWORD_PTR)ctx.Dr3);
-            ok((ctx.Dr6 &  0xf00f) == tests[i].dr6, "test %d: expected %Ix, got %Ix\n", i, tests[i].dr6, (DWORD_PTR)ctx.Dr6);
-            ok((ctx.Dr7 & ~0xdc00) == tests[i].dr7, "test %d: expected %Ix, got %Ix\n", i, tests[i].dr7, (DWORD_PTR)ctx.Dr7);
+            ok(ctx.Dr0 == tests[i].dr0, "test %d: expected %Ix, got %Ix\n", i, (size_t)tests[i].dr0, (size_t)ctx.Dr0);
+            ok(ctx.Dr1 == tests[i].dr1, "test %d: expected %Ix, got %Ix\n", i, (size_t)tests[i].dr1, (size_t)ctx.Dr1);
+            ok(ctx.Dr2 == tests[i].dr2, "test %d: expected %Ix, got %Ix\n", i, (size_t)tests[i].dr2, (size_t)ctx.Dr2);
+            ok(ctx.Dr3 == tests[i].dr3, "test %d: expected %Ix, got %Ix\n", i, (size_t)tests[i].dr3, (size_t)ctx.Dr3);
+            ok((ctx.Dr6 &  0xf00f) == tests[i].dr6, "test %d: expected %Ix, got %Ix\n", i, (size_t)tests[i].dr6, (size_t)ctx.Dr6);
+            ok((ctx.Dr7 & ~0xdc00) == tests[i].dr7, "test %d: expected %Ix, got %Ix\n", i, (size_t)tests[i].dr7, (size_t)ctx.Dr7);
         }
     }
 
@@ -8607,12 +8607,12 @@ static void test_debug_registers(void)
     ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS;
     status = pNtGetContextThread(thread, &ctx);
     ok(status == STATUS_SUCCESS, "NtGetContextThread failed with %lx\n", status);
-    ok(!ctx.Dr0, "expected 0, got %Ix\n", (DWORD_PTR)ctx.Dr0);
-    ok(!ctx.Dr1, "expected 0, got %Ix\n", (DWORD_PTR)ctx.Dr1);
-    ok(!ctx.Dr2, "expected 0, got %Ix\n", (DWORD_PTR)ctx.Dr2);
-    ok(!ctx.Dr3, "expected 0, got %Ix\n", (DWORD_PTR)ctx.Dr3);
-    ok(!ctx.Dr6, "expected 0, got %Ix\n", (DWORD_PTR)ctx.Dr6);
-    ok(!ctx.Dr7, "expected 0, got %Ix\n", (DWORD_PTR)ctx.Dr7);
+    ok(!ctx.Dr0, "expected 0, got %Ix\n", (size_t)ctx.Dr0);
+    ok(!ctx.Dr1, "expected 0, got %Ix\n", (size_t)ctx.Dr1);
+    ok(!ctx.Dr2, "expected 0, got %Ix\n", (size_t)ctx.Dr2);
+    ok(!ctx.Dr3, "expected 0, got %Ix\n", (size_t)ctx.Dr3);
+    ok(!ctx.Dr6, "expected 0, got %Ix\n", (size_t)ctx.Dr6);
+    ok(!ctx.Dr7, "expected 0, got %Ix\n", (size_t)ctx.Dr7);
 
     ResumeThread(thread);
     WaitForSingleObject(thread, 10000);
@@ -8782,13 +8782,13 @@ static LONG CALLBACK debug_service_handler(EXCEPTION_POINTERS *ExceptionInfo)
        "ExceptionParameters is %ld instead of %d\n", rec->NumberParameters, is_wow64 ? 1 : 3);
     ok(rec->ExceptionInformation[0] == ExceptionInfo->ContextRecord->Eax,
        "expected ExceptionInformation[0] = %lx, got %Ix\n",
-       ExceptionInfo->ContextRecord->Eax, rec->ExceptionInformation[0]);
+       ExceptionInfo->ContextRecord->Eax, (size_t)rec->ExceptionInformation[0]);
     if (!is_wow64)
     {
         ok(rec->ExceptionInformation[1] == 0x11111111,
-           "got ExceptionInformation[1] = %Ix\n", rec->ExceptionInformation[1]);
+           "got ExceptionInformation[1] = %Ix\n", (size_t)rec->ExceptionInformation[1]);
         ok(rec->ExceptionInformation[2] == 0x22222222,
-           "got ExceptionInformation[2] = %Ix\n", rec->ExceptionInformation[2]);
+           "got ExceptionInformation[2] = %Ix\n", (size_t)rec->ExceptionInformation[2]);
     }
 #else
     ok(ExceptionInfo->ContextRecord->Rip == (DWORD_PTR)code_mem + 0x2f,
@@ -9173,7 +9173,7 @@ static void subtest_fastfail(unsigned int code)
                 if (de.u.Exception.ExceptionRecord.NumberParameters >= 1)
                     ok(de.u.Exception.ExceptionRecord.ExceptionInformation[0] == code,
                        "expected %u for code, got %Iu\n",
-                       code, de.u.Exception.ExceptionRecord.ExceptionInformation[0]);
+                       code, (size_t)de.u.Exception.ExceptionRecord.ExceptionInformation[0]);
                 had_ff = TRUE;
             }
 
@@ -9241,7 +9241,7 @@ static LONG CALLBACK breakpoint_handler(EXCEPTION_POINTERS *ExceptionInfo)
     ok(rec->NumberParameters == (is_wow64 ? 1 : 3),
        "ExceptionParameters is %ld instead of %d\n", rec->NumberParameters, is_wow64 ? 1 : 3);
     ok(rec->ExceptionInformation[0] == 0,
-       "got ExceptionInformation[0] = %Ix\n", rec->ExceptionInformation[0]);
+       "got ExceptionInformation[0] = %Ix\n", (size_t)rec->ExceptionInformation[0]);
     ExceptionInfo->ContextRecord->Eip = (DWORD)code_mem + 2;
 #elif defined(__x86_64__)
     ok(ExceptionInfo->ContextRecord->Rip == (DWORD_PTR)code_mem + 1,

@@ -988,7 +988,7 @@ static void WINAPI status_callback(HINTERNET handle, DWORD_PTR ctx, DWORD status
     case INTERNET_STATUS_NAME_RESOLVED:
     case INTERNET_STATUS_CONNECTING_TO_SERVER:
     case INTERNET_STATUS_CONNECTED_TO_SERVER:
-        trace("%p %Ix %lu %s %lu\n", handle, ctx, status, (char *)info, info_len);
+        trace("%p %Ix %lu %s %lu\n", handle, (size_t)ctx, status, (char *)info, info_len);
         break;
     default:
         break;

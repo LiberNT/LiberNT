@@ -161,7 +161,7 @@ static HDDEDATA CALLBACK ddeCb(UINT uType, UINT uFmt, HCONV hConv,
 
     if (winetest_debug > 2)
         trace("dde_cb: %04x, %04x, %p, %p, %p, %p, %08Ix, %08Ix\n",
-              uType, uFmt, hConv, hsz1, hsz2, hData, dwData1, dwData2);
+              uType, uFmt, hConv, hsz1, hsz2, hData, (size_t)dwData1, (size_t)dwData2);
 
     switch (uType)
     {
@@ -300,7 +300,7 @@ static void doChild(int argc, char** argv)
             while (GetMessageA(&msg, NULL, 0, 0))
             {
                 if (winetest_debug > 2)
-                    trace("msg %d lParam=%Id wParam=%Iu\n", msg.message, msg.lParam, msg.wParam);
+                    trace("msg %d lParam=%Id wParam=%Iu\n", msg.message, (ptrdiff_t)msg.lParam, msg.wParam);
                 DispatchMessageA(&msg);
             }
 

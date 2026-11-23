@@ -4965,12 +4965,6 @@ void NTAPI ChpeAutoRtlGetDeviceFamilyInfoEnum(PULONGLONG a0, PULONG a1, PULONG a
 }
 _Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlGetDeviceFamilyInfoEnum), __typeof__(&RtlGetDeviceFamilyInfoEnum)), "RtlGetDeviceFamilyInfoEnum bridge signature mismatch");
 
-ULONG64 NTAPI ChpeAutoRtlGetEnabledExtendedFeatures(ULONG64 a0)
-{
-    return RtlGetEnabledExtendedFeatures(a0);
-}
-_Static_assert(__builtin_types_compatible_p(__typeof__(&ChpeAutoRtlGetEnabledExtendedFeatures), __typeof__(&RtlGetEnabledExtendedFeatures)), "RtlGetEnabledExtendedFeatures bridge signature mismatch");
-
 PVOID NTAPI ChpeAutoRtlGetElementGenericTable(PRTL_GENERIC_TABLE a0, ULONG a1)
 {
     return RtlGetElementGenericTable(a0, a1);

@@ -489,12 +489,23 @@ typedef struct _TDI_ADDRESS_VNS {
 
 #define TDI_ADDRESS_LENGTH_VNS            sizeof(TDI_ADDRESS_VNS)
 
-typedef struct _TDI_ADDRESS_IP6 {
-  USHORT  sin6_port;
-  ULONG  sin6_flowinfo;
-  USHORT  sin6_addr[8];
-  ULONG  sin6_scope_id;
-} TDI_ADDRESS_IP6, *PTDI_ADDRESS_IP6;
+typedef struct _TDI_ADDRESS_IP6_WIN2K {
+  USHORT sin6_port;
+  ULONG sin6_flowinfo;
+  UCHAR sin6_addr[16];
+} TDI_ADDRESS_IP6_WIN2K, *PTDI_ADDRESS_IP6_WIN2K;
+typedef struct _TDI_ADDRESS_IP6_XP {
+  USHORT sin6_port;
+  ULONG sin6_flowinfo;
+  USHORT sin6_addr[8];
+  ULONG sin6_scope_id;
+} TDI_ADDRESS_IP6_XP, *PTDI_ADDRESS_IP6_XP;
+#if (NTDDI_VERSION >= NTDDI_WINXP)
+typedef TDI_ADDRESS_IP6_XP TDI_ADDRESS_IP6;
+#else
+typedef TDI_ADDRESS_IP6_WIN2K TDI_ADDRESS_IP6;
+#endif
+typedef TDI_ADDRESS_IP6 *PTDI_ADDRESS_IP6;
 
 #define TDI_ADDRESS_LENGTH_IP6            sizeof(TDI_ADDRESS_IP6)
 
@@ -505,14 +516,17 @@ enum eNameBufferType {
 	NBT_WRITTEN
 };
 
-typedef struct _TDI_ADDRESS_NETBIOS_UNICODE_EX {
+typedef UNALIGNED struct _TDI_ADDRESS_NETBIOS_UNICODE_EX_XP {
   USHORT  NetbiosNameType;
   enum eNameBufferType  NameBufferType;
   UNICODE_STRING  EndpointName;
   UNICODE_STRING  RemoteName;
   WCHAR  EndpointBuffer[17];
   WCHAR  RemoteNameBuffer[1];
-} TDI_ADDRESS_NETBIOS_UNICODE_EX, *PTDI_ADDRESS_NETBIOS_UNICODE_EX;
+} TDI_ADDRESS_NETBIOS_UNICODE_EX_XP, *PTDI_ADDRESS_NETBIOS_UNICODE_EX_XP;
+#if (NTDDI_VERSION >= NTDDI_WINXP)
+typedef TDI_ADDRESS_NETBIOS_UNICODE_EX_XP TDI_ADDRESS_NETBIOS_UNICODE_EX, *PTDI_ADDRESS_NETBIOS_UNICODE_EX;
+#endif
 
 typedef struct _TA_APPLETALK_ADDR {
   LONG  TAAddressCount;
@@ -577,14 +591,17 @@ typedef struct _TA_ADDRESS_IP6 {
   } Address [1];
 } TA_IP6_ADDRESS, *PTA_IP6_ADDRESS;
 
-typedef struct _TA_ADDRESS_NETBIOS_UNICODE_EX {
+typedef UNALIGNED struct _TA_ADDRESS_NETBIOS_UNICODE_EX_XP {
   LONG  TAAddressCount;
   struct _AddrNetbiosWCharEx {
     USHORT  AddressLength;
     USHORT  AddressType;
-    TDI_ADDRESS_NETBIOS_UNICODE_EX  Address[1];
+    TDI_ADDRESS_NETBIOS_UNICODE_EX_XP Address[1];
   } Address [1];
-} TA_NETBIOS_UNICODE_EX_ADDRESS, *PTA_NETBIOS_UNICODE_EX_ADDRESS;
+} TA_NETBIOS_UNICODE_EX_ADDRESS_XP, *PTA_NETBIOS_UNICODE_EX_ADDRESS_XP;
+#if (NTDDI_VERSION >= NTDDI_WINXP)
+typedef TA_NETBIOS_UNICODE_EX_ADDRESS_XP TA_NETBIOS_UNICODE_EX_ADDRESS, *PTA_NETBIOS_UNICODE_EX_ADDRESS;
+#endif
 
 #pragma pack(pop)
 
@@ -618,41 +635,6 @@ typedef struct _STREAMS_TDI_ACTION {
   ULONG BufferLength;
   CHAR Buffer[1];
 } STREAMS_TDI_ACTION, *PSTREAMS_TDI_ACTION;
-
-#pragma pack(push, 1)
-typedef struct _TA_ADDRESS_NETBIOS_UNICODE_EX_XP {
-  LONG TAAddressCount;
-  struct _AddrNetbiosWCharEx Address[1];
-} TA_NETBIOS_UNICODE_EX_ADDRESS_XP, *PTA_NETBIOS_UNICODE_EX_ADDRESS_XP;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _TDI_ADDRESS_IP6_WIN2K {
-  USHORT sin6_port;
-  ULONG sin6_flowinfo;
-  UCHAR sin6_addr[16];
-} TDI_ADDRESS_IP6_WIN2K, *PTDI_ADDRESS_IP6_WIN2K;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _TDI_ADDRESS_IP6_XP {
-  USHORT sin6_port;
-  ULONG sin6_flowinfo;
-  USHORT sin6_addr[8];
-  ULONG sin6_scope_id;
-} TDI_ADDRESS_IP6_XP, *PTDI_ADDRESS_IP6_XP;
-#pragma pack(pop)
-
-#pragma pack(push, 1)
-typedef struct _TDI_ADDRESS_NETBIOS_UNICODE_EX_XP {
-  USHORT NetbiosNameType;
-  enum eNameBufferType NameBufferType;
-  UNICODE_STRING EndpointName;
-  UNICODE_STRING RemoteName;
-  WCHAR EndpointBuffer[17];
-  WCHAR RemoteNameBuffer[1];
-} TDI_ADDRESS_NETBIOS_UNICODE_EX_XP, *PTDI_ADDRESS_NETBIOS_UNICODE_EX_XP;
-#pragma pack(pop)
 
 typedef struct _TDI_ROUTING_INFO_WS03 {
   ULONG Protocol;

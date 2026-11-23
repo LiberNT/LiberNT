@@ -13,7 +13,7 @@
         ok((msg)->hwnd == NULL, "hwnd = %p\n", (msg)->hwnd);                                        \
         ok((msg)->wParam == (id), "wParam = 0x%Ix\n", (msg)->wParam);                               \
         ok((msg)->lParam == MAKELONG(mod, vk),                                                      \
-           "wParam = 0x%Ix, expected 0x%lx\n", (msg)->lParam, MAKELONG(mod, vk));                   \
+           "wParam = 0x%Ix, expected 0x%lx\n", (size_t)((msg)->lParam), MAKELONG(mod, vk));                   \
     } while (0)
 #define expect_hotkey(id, mod, vk) do                                                               \
     {                                                                                               \
@@ -32,11 +32,11 @@
         if ((msg)->message == WM_HOTKEY)                                                            \
             ok((msg)->message != WM_HOTKEY,                                                         \
                "Got WM_HOTKEY with hwnd=%p, wParam=0x%Ix, lParam=0x%Ix\n",                          \
-               (msg)->hwnd, (msg)->wParam, (msg)->lParam);                                          \
+               (msg)->hwnd, (msg)->wParam, (size_t)((msg)->lParam));                                          \
         else                                                                                        \
             ok(0,                                                                                   \
                "Unexpected message %u posted to thread with hwnd=%p, wParam=0x%Ix, lParam=0x%Ix\n", \
-               (msg)->message, (msg)->hwnd, (msg)->wParam, (msg)->lParam);                          \
+               (msg)->message, (msg)->hwnd, (msg)->wParam, (size_t)((msg)->lParam));                          \
     } while (0)
 #define expect_no_hotkey() do                                                                       \
     {                                                                                               \

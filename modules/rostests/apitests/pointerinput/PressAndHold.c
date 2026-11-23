@@ -30,7 +30,7 @@ HoldWndProc(HWND hwnd, UINT Msg, WPARAM wParam, LPARAM lParam)
         case WM_RBUTTONUP:
         case WM_LBUTTONDBLCLK:
             trace("  %5lu ms msg 0x%04x wParam 0x%Ix pos (%d,%d) extra 0x%Ix\n", Elapsed, Msg, wParam,
-                  (SHORT)LOWORD(lParam), (SHORT)HIWORD(lParam), (ULONG_PTR)GetMessageExtraInfo());
+                  (SHORT)LOWORD(lParam), (SHORT)HIWORD(lParam), (size_t)GetMessageExtraInfo());
             break;
         case WM_MOUSEMOVE:
             if (!MoveLogged)

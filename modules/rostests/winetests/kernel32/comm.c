@@ -1453,7 +1453,7 @@ static void test_WaitCts(void)
 	args[1] = SETRTS;
     args[2]=(DWORD_PTR)hcom;
 
-    trace("test_WaitCts timeout %Id clt 0x%08Ix handle %p\n",args[0], args[1], hcom);
+    trace("test_WaitCts timeout %Id clt 0x%08Ix handle %p\n",(ptrdiff_t)args[0], (size_t)args[1], hcom);
 
     ok(SetCommMask(hcom, EV_CTS), "SetCommMask failed\n");
     hComPortEvent =  CreateEventW( NULL, TRUE, FALSE, NULL );
@@ -1549,7 +1549,7 @@ static void test_AbortWaitCts(void)
     args[0]= TIMEOUT >>1;
     args[1]= (DWORD_PTR)hcom;
 
-    trace("test_AbortWaitCts timeout %Id handle %p\n",args[0], hcom);
+    trace("test_AbortWaitCts timeout %Id handle %p\n",(ptrdiff_t)args[0], hcom);
 
     ok(SetCommMask(hcom, EV_CTS), "SetCommMask failed\n");
     hComPortEvent =  CreateEventW( NULL, TRUE, FALSE, NULL );
@@ -1623,7 +1623,7 @@ static void test_WaitDsr(void)
 	args[1] = SETDTR;
     args[2]= (DWORD_PTR)hcom;
 
-    trace("test_WaitDsr timeout %Id clt 0x%08Ix handle %p\n",args[0], args[1], hcom);
+    trace("test_WaitDsr timeout %Id clt 0x%08Ix handle %p\n",(ptrdiff_t)args[0], (size_t)args[1], hcom);
 
     ok(SetCommMask(hcom, EV_DSR), "SetCommMask failed\n");
     hComPortEvent =  CreateEventW( NULL, TRUE, FALSE, NULL );
@@ -1711,7 +1711,7 @@ static void test_WaitRing(void)
 	args[1] = SETDTR;
     args[2]=(DWORD_PTR) hcom;
 
-    trace("test_WaitRing timeout %Id clt 0x%08Ix handle %p\n",args[0], args[1], hcom);
+    trace("test_WaitRing timeout %Id clt 0x%08Ix handle %p\n",(ptrdiff_t)args[0], (size_t)args[1], hcom);
 
     ok(SetCommMask(hcom, EV_RING), "SetCommMask failed\n");
     hComPortEvent =  CreateEventW( NULL, TRUE, FALSE, NULL );
@@ -1792,7 +1792,7 @@ static void test_WaitDcd(void)
 	args[1] = SETDTR;
     args[2]= (DWORD_PTR)hcom;
 
-    trace("test_WaitDcd timeout %Id clt 0x%08Ix handle %p\n",args[0], args[1], hcom);
+    trace("test_WaitDcd timeout %Id clt 0x%08Ix handle %p\n",(ptrdiff_t)args[0], (size_t)args[1], hcom);
 
     ok(SetCommMask(hcom, EV_RLSD), "SetCommMask failed\n");
     hComPortEvent =  CreateEventW( NULL, TRUE, FALSE, NULL );
@@ -2067,7 +2067,7 @@ static void test_read_write(void)
     status = pNtWriteFile(hcom, 0, NULL, NULL, &iob, atz, 0, NULL, NULL);
     ok(status == STATUS_INVALID_PARAMETER, "expected STATUS_INVALID_PARAMETER, got %#lx\n", status);
     ok(iob.Status == -1, "expected -1, got %#lx\n", iob.Status);
-    ok(iob.Information == -1, "expected -1, got %Id\n", iob.Information);
+    ok(iob.Information == -1, "expected -1, got %Id\n", (ptrdiff_t)iob.Information);
 
     for (i = -20; i < 20; i++)
     {
@@ -2079,13 +2079,13 @@ static void test_read_write(void)
         {
             ok(status == STATUS_SUCCESS, "%ld: expected STATUS_SUCCESS, got %#lx\n", i, status);
             ok(iob.Status == STATUS_SUCCESS, "%ld: expected STATUS_SUCCESS, got %#lx\n", i, iob.Status);
-            ok(iob.Information == 0, "%ld: expected 0, got %Iu\n", i, iob.Information);
+            ok(iob.Information == 0, "%ld: expected 0, got %Iu\n", i, (size_t)iob.Information);
         }
         else
         {
             ok(status == STATUS_INVALID_PARAMETER, "%ld: expected STATUS_INVALID_PARAMETER, got %#lx\n", i, status);
             ok(iob.Status == -1, "%ld: expected -1, got %#lx\n", i, iob.Status);
-            ok(iob.Information == -1, "%ld: expected -1, got %Id\n", i, iob.Information);
+            ok(iob.Information == -1, "%ld: expected -1, got %Id\n", i, (ptrdiff_t)iob.Information);
         }
     }
 
@@ -2107,7 +2107,7 @@ static void test_read_write(void)
     }
     ok(ret == WAIT_OBJECT_0, "WaitForSingleObject error %ld\n", ret);
     ok(iob.Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", iob.Status);
-    ok(iob.Information == sizeof(atz), "expected sizeof(atz), got %Iu\n", iob.Information);
+    ok(iob.Information == sizeof(atz), "expected sizeof(atz), got %Iu\n", (size_t)iob.Information);
 
     ret = SetCommMask(hcom, EV_RXCHAR);
     ok(ret, "SetCommMask error %ld\n", GetLastError());
@@ -2152,7 +2152,7 @@ static void test_read_write(void)
                 status = pNtReadFile(hcom, 0, NULL, NULL, &iob, buf, 0, NULL, NULL);
                 ok(status == STATUS_INVALID_PARAMETER, "expected STATUS_INVALID_PARAMETER, got %#lx\n", status);
                 ok(iob.Status == -1, "expected -1, got %#lx\n", iob.Status);
-                ok(iob.Information == -1, "expected -1, got %Id\n", iob.Information);
+                ok(iob.Information == -1, "expected -1, got %Id\n", (ptrdiff_t)iob.Information);
 
                 for (i = -20; i < 20; i++)
                 {
@@ -2164,13 +2164,13 @@ static void test_read_write(void)
                     {
                         ok(status == STATUS_SUCCESS, "%ld: expected STATUS_SUCCESS, got %#lx\n", i, status);
                         ok(iob.Status == STATUS_SUCCESS, "%ld: expected STATUS_SUCCESS, got %#lx\n", i, iob.Status);
-                        ok(iob.Information == 0, "%ld: expected 0, got %Iu\n", i, iob.Information);
+                        ok(iob.Information == 0, "%ld: expected 0, got %Iu\n", i, (size_t)iob.Information);
                     }
                     else
                     {
                         ok(status == STATUS_INVALID_PARAMETER, "%ld: expected STATUS_INVALID_PARAMETER, got %#lx\n", i, status);
                         ok(iob.Status == -1, "%ld: expected -1, got %#lx\n", i, iob.Status);
-                        ok(iob.Information == -1, "%ld: expected -1, got %Id\n", i, iob.Information);
+                        ok(iob.Information == -1, "%ld: expected -1, got %Id\n", i, (ptrdiff_t)iob.Information);
                     }
                 }
 
@@ -2180,7 +2180,7 @@ static void test_read_write(void)
                 status = pNtReadFile(hcom, 0, NULL, NULL, &iob, buf, 1, &offset, NULL);
                 ok(status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", status);
                 ok(iob.Status == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#lx\n", iob.Status);
-                ok(iob.Information == 1, "expected 1, got %Iu\n", iob.Information);
+                ok(iob.Information == 1, "expected 1, got %Iu\n", (size_t)iob.Information);
                 goto done;
             }
             else

@@ -87,7 +87,7 @@ static void TestSerialization(void)
     {
         ok(blob->GetBufferSize() == sizeof(reference_v12)
                 && !memcmp(blob->GetBufferPointer(), reference_v12, sizeof(reference_v12)),
-                "version 1.2 blob differs from Windows (size %Iu)\n", blob->GetBufferSize());
+                "version 1.2 blob differs from Windows (size %Iu)\n", (size_t)(blob->GetBufferSize()));
         blob->Release();
     }
 
@@ -98,7 +98,7 @@ static void TestSerialization(void)
     hr = Serialize12(samplers, 2, NULL, 0, &blob, NULL);
     ok(hr == S_OK, "two samplers: %#lx\n", hr);
     if (!blob) return;
-    ok(blob->GetBufferSize() == 180, "two samplers: size %Iu\n", blob->GetBufferSize());
+    ok(blob->GetBufferSize() == 180, "two samplers: size %Iu\n", (size_t)(blob->GetBufferSize()));
 
     hr = D3D12CreateVersionedRootSignatureDeserializer(blob->GetBufferPointer(), blob->GetBufferSize(),
             __uuidof(ID3D12VersionedRootSignatureDeserializer), reinterpret_cast<void **>(&deserializer));

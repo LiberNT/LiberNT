@@ -303,7 +303,7 @@ DumpObject(WPD_TEST_DEVICE *Test, LPCWSTR ObjectId, int Depth)
         ok(hr == S_OK, "read %ls hr 0x%08lX\n", ObjectId, hr);
         if (SUCCEEDED(hr))
         {
-            trace("  data size %Iu hash 0x%08lX\n", Size, WpdHash(Data, Size, 2166136261u));
+            trace("  data size %Iu hash 0x%08lX\n", (size_t)Size, WpdHash(Data, Size, 2166136261u));
             WpdDumpBytes("  data ", Data, (DWORD)Size, 32);
             HeapFree(GetProcessHeap(), 0, Data);
         }

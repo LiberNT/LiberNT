@@ -348,13 +348,13 @@ static void test_mciParser(HWND hwnd)
     parm.status.dwReturn = 0xFEEDABAD;
     err = mciSendCommandA(wDeviceID, MCI_STATUS, MCI_STATUS_ITEM, (DWORD_PTR)&parm);
     ok(!err,"mciCommand status time format: %s\n", dbg_mcierr(err));
-    if(!err) ok(MCI_FORMAT_MILLISECONDS==parm.status.dwReturn,"status time format: %Id\n",parm.status.dwReturn);
+    if(!err) ok(MCI_FORMAT_MILLISECONDS==parm.status.dwReturn,"status time format: %Id\n",(ptrdiff_t)parm.status.dwReturn);
 
     parm.status.dwItem = MCI_STATUS_MODE;
     parm.status.dwReturn = 0xFEEDABAD;
     err = mciSendCommandA(wDeviceID, MCI_STATUS, MCI_STATUS_ITEM, (DWORD_PTR)&parm);
     ok(!err,"mciCommand status mode: %s\n", dbg_mcierr(err));
-    if(!err) ok(MCI_MODE_STOP==parm.status.dwReturn,"STATUS mode: %Id\n",parm.status.dwReturn);
+    if(!err) ok(MCI_MODE_STOP==parm.status.dwReturn,"STATUS mode: %Id\n",(ptrdiff_t)parm.status.dwReturn);
 
     err = mciSendStringA("status x mode", buf, sizeof(buf), hwnd);
     ok(!err,"status mode: %s\n", dbg_mcierr(err));
@@ -681,7 +681,7 @@ static void test_recordWAVE(HWND hwnd)
     parm.status.dwItem = MCI_STATUS_TIME_FORMAT;
     err = mciSendCommandA(wDeviceID, MCI_STATUS, MCI_STATUS_ITEM, (DWORD_PTR)&parm);
     ok(!err,"mciCommand status time format: %s\n", dbg_mcierr(err));
-    ok(parm.status.dwReturn==MCI_FORMAT_MILLISECONDS,"status time format: %Id\n",parm.status.dwReturn);
+    ok(parm.status.dwReturn==MCI_FORMAT_MILLISECONDS,"status time format: %Id\n",(ptrdiff_t)parm.status.dwReturn);
 
     /* Info file fails until named in Open or Save. */
     err = mciSendStringA("info x file", buf, sizeof(buf), NULL);
@@ -771,7 +771,7 @@ static void test_recordWAVE(HWND hwnd)
     err = mciSendCommandA(wDeviceID, MCI_STATUS, MCI_STATUS_ITEM, (DWORD_PTR)&parm);
     ok(!err,"mciCommand status position: %s\n", dbg_mcierr(err));
     expect = 2 * nsamp * nch * nbits/8;
-    if(!err) todo_wine ok(parm.status.dwReturn==expect,"recorded %Iu bytes, expected %lu\n",parm.status.dwReturn,expect);
+    if(!err) todo_wine ok(parm.status.dwReturn==expect,"recorded %Iu bytes, expected %lu\n",(size_t)parm.status.dwReturn,expect);
 
     parm.set.dwTimeFormat = MCI_FORMAT_SAMPLES;
     err = mciSendCommandA(wDeviceID, MCI_SET, MCI_SET_TIME_FORMAT, (DWORD_PTR)&parm);
@@ -781,7 +781,7 @@ static void test_recordWAVE(HWND hwnd)
     err = mciSendCommandA(wDeviceID, MCI_STATUS, MCI_STATUS_ITEM, (DWORD_PTR)&parm);
     ok(!err,"mciCommand status position: %s\n", dbg_mcierr(err));
     expect = 2 * nsamp;
-    if(!err) todo_wine ok(parm.status.dwReturn==expect,"recorded %Iu samples, expected %lu\n",parm.status.dwReturn,expect);
+    if(!err) todo_wine ok(parm.status.dwReturn==expect,"recorded %Iu samples, expected %lu\n",(size_t)parm.status.dwReturn,expect);
 
     err = mciSendStringA("set x time format milliseconds", NULL, 0, NULL);
     ok(!err,"mci set time format milliseconds returned %s\n", dbg_mcierr(err));
@@ -996,7 +996,7 @@ static void test_asyncWAVE(HWND hwnd)
     parm.status.dwItem = MCI_STATUS_TIME_FORMAT;
     err = mciSendCommandA(wDeviceID, MCI_STATUS, MCI_STATUS_ITEM, (DWORD_PTR)&parm);
     ok(!err,"mciCommand status time format: %s\n", dbg_mcierr(err));
-    if(!err) ok(parm.status.dwReturn==MCI_FORMAT_MILLISECONDS,"status time format: %Id\n",parm.status.dwReturn);
+    if(!err) ok(parm.status.dwReturn==MCI_FORMAT_MILLISECONDS,"status time format: %Id\n",(ptrdiff_t)parm.status.dwReturn);
 
     parm.set.dwTimeFormat = MCI_FORMAT_MILLISECONDS;
     err = mciSendCommandA(wDeviceID, MCI_SET, MCI_SET_TIME_FORMAT, (DWORD_PTR)&parm);
@@ -1818,13 +1818,13 @@ static void test_avi_end_position(void)
     parm.status.dwReturn = 0xFEEDABAD;
     err = mciSendCommandW(id, MCI_STATUS, MCI_STATUS_ITEM, (DWORD_PTR)&parm);
     ok(!err,"mciCommand status time format: %s\n", dbg_mcierr(err));
-    ok(parm.status.dwReturn == MCI_FORMAT_FRAMES, "status time format: %Id\n", parm.status.dwReturn);
+    ok(parm.status.dwReturn == MCI_FORMAT_FRAMES, "status time format: %Id\n", (ptrdiff_t)parm.status.dwReturn);
 
     parm.status.dwItem = MCI_STATUS_LENGTH;
     parm.status.dwReturn = 0xFEEDABAD;
     err = mciSendCommandW(id, MCI_STATUS, MCI_STATUS_ITEM, (DWORD_PTR)&parm);
     ok(!err,"mciCommand status length: %s\n", dbg_mcierr(err));
-    ok(parm.status.dwReturn > 0, "status length: %Id\n", parm.status.dwReturn);
+    ok(parm.status.dwReturn > 0, "status length: %Id\n", (ptrdiff_t)parm.status.dwReturn);
     frames = (DWORD_PTR)parm.status.dwReturn;
 
     /* before playing, the position equals to zero */
@@ -1832,7 +1832,7 @@ static void test_avi_end_position(void)
     parm.status.dwReturn = 0xFEEDABAD;
     err = mciSendCommandW(id, MCI_STATUS, MCI_STATUS_ITEM, (DWORD_PTR)&parm);
     ok(!err, "mciCommand status position: %s\n", dbg_mcierr(err));
-    ok(parm.status.dwReturn == 0, "Got %Iu, expected 0\n", parm.status.dwReturn);
+    ok(parm.status.dwReturn == 0, "Got %Iu, expected 0\n", (size_t)parm.status.dwReturn);
 
     /* after playing, the position equals to the length */
     err = mciSendCommandW(id, MCI_PLAY, MCI_WAIT, (DWORD_PTR)&parm);
@@ -1842,7 +1842,7 @@ static void test_avi_end_position(void)
     parm.status.dwReturn = 0xFEEDABAD;
     err = mciSendCommandW(id, MCI_STATUS, MCI_STATUS_ITEM, (DWORD_PTR)&parm);
     ok(!err, "mciCommand status position: %s\n", dbg_mcierr(err));
-    ok(parm.status.dwReturn == frames, "Got %Iu, expected %Iu\n", parm.status.dwReturn, frames);
+    ok(parm.status.dwReturn == frames, "Got %Iu, expected %Iu\n", (size_t)parm.status.dwReturn, (size_t)frames);
 
     /* test "play to" range */
     parm.play.dwTo = frames;
@@ -1874,7 +1874,7 @@ static void test_avi_end_position(void)
     parm.status.dwReturn = 0xFEEDABAD;
     err = mciSendCommandW(id, MCI_STATUS, MCI_STATUS_ITEM, (DWORD_PTR)&parm);
     ok(!err, "mciCommand status position: %s\n", dbg_mcierr(err));
-    ok(parm.status.dwReturn == frames, "Got %Iu, expected %Iu\n", parm.status.dwReturn, frames);
+    ok(parm.status.dwReturn == frames, "Got %Iu, expected %Iu\n", (size_t)parm.status.dwReturn, (size_t)frames);
 
     /* the start position equals to zero */
     err = mciSendCommandW(id, MCI_SEEK, MCI_SEEK_TO_START | MCI_WAIT, (DWORD_PTR)&parm);
@@ -1884,7 +1884,7 @@ static void test_avi_end_position(void)
     parm.status.dwReturn = 0xFEEDABAD;
     err = mciSendCommandW(id, MCI_STATUS, MCI_STATUS_ITEM, (DWORD_PTR)&parm);
     ok(!err, "mciCommand status position: %s\n", dbg_mcierr(err));
-    ok(parm.status.dwReturn == 0, "Got %Iu, expected %Iu\n", parm.status.dwReturn, frames);
+    ok(parm.status.dwReturn == 0, "Got %Iu, expected %Iu\n", (size_t)parm.status.dwReturn, (size_t)frames);
 
     /* test "step to" range */
     parm.step.dwFrames = frames;

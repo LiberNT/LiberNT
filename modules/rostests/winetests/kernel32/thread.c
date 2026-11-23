@@ -966,7 +966,7 @@ static VOID test_thread_processor(void)
         affinity_new.Mask  = affinity.Mask;
         ok(pSetThreadGroupAffinity(curthread, &affinity_new, &affinity), "SetThreadGroupAffinity failed\n");
         ok(affinity_new.Mask == affinity.Mask, "Expected old affinity mask %Ix, got %Ix\n",
-           affinity_new.Mask, affinity.Mask);
+           (size_t)affinity_new.Mask, (size_t)affinity.Mask);
 
         /* show that the "all processors" flag is not supported for SetThreadGroupAffinity */
         if (sysInfo.dwNumberOfProcessors < 8 * sizeof(DWORD_PTR))
@@ -1002,7 +1002,7 @@ static VOID test_thread_processor(void)
         SetLastError(0xdeadbeef);
         ok(pSetThreadGroupAffinity(curthread, &affinity_new, &affinity), "SetThreadGroupAffinity failed\n");
         ok(affinity_new.Mask == affinity.Mask, "Expected old affinity mask %Ix, got %Ix\n",
-           affinity_new.Mask, affinity.Mask);
+           (size_t)affinity_new.Mask, (size_t)affinity.Mask);
     }
     else
         win_skip("Get/SetThreadGroupAffinity not available\n");
@@ -1027,8 +1027,8 @@ static VOID test_GetCurrentThreadStackLimits(void)
     }
 
     pGetCurrentThreadStackLimits(&low, &high);
-    ok(low == (ULONG_PTR)NtCurrentTeb()->DeallocationStack, "expected %p, got %Ix\n", NtCurrentTeb()->DeallocationStack, low);
-    ok(high == (ULONG_PTR)NtCurrentTeb()->Tib.StackBase, "expected %p, got %Ix\n", NtCurrentTeb()->Tib.StackBase, high);
+    ok(low == (ULONG_PTR)NtCurrentTeb()->DeallocationStack, "expected %p, got %Ix\n", NtCurrentTeb()->DeallocationStack, (size_t)low);
+    ok(high == (ULONG_PTR)NtCurrentTeb()->Tib.StackBase, "expected %p, got %Ix\n", NtCurrentTeb()->Tib.StackBase, (size_t)high);
 }
 
 static void test_SetThreadStackGuarantee(void)

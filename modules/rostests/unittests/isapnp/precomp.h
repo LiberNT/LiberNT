@@ -369,7 +369,7 @@ DrvCreateCard2(
     ok((Desc)->u.Interrupt.Vector == (ExpectedVector),                                     \
        "Desc->u.Interrupt.Vector = %lu\n", (Desc)->u.Interrupt.Vector);                    \
     ok((Desc)->u.Interrupt.Affinity == (ExpectedAffinity),                                 \
-       "Desc->u.Interrupt.Affinity = %Ix\n", (Desc)->u.Interrupt.Affinity);                \
+       "Desc->u.Interrupt.Affinity = %Ix\n", (size_t)((Desc)->u.Interrupt.Affinity));                \
     } while (0)
 
 #define expect_dma_res(Desc, ExpectedFlags, ExpectedShare, ExpectedChannel)                \

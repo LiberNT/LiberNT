@@ -7,8 +7,6 @@
 
 #include "precomp.h"
 
-DWORD WINAPI GetMaximumProcessorCount(WORD GroupNumber);
-
 START_TEST(MaximumProcessorCount)
 {
     SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *Info;

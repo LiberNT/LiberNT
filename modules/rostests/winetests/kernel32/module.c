@@ -1807,7 +1807,7 @@ static unsigned int check_address_index_tree( RTL_BALANCED_NODE *node )
 
     if (!node) return 0;
     ok( (node->ParentValue & RTL_BALANCED_NODE_RESERVED_PARENT_MASK) <= 1, "got ParentValue %#Ix.\n",
-        node->ParentValue );
+        (size_t)node->ParentValue );
 
     mod = CONTAINING_RECORD(node, LDR_DATA_TABLE_ENTRY, BaseAddressIndexNode);
     base = mod->DllBase;

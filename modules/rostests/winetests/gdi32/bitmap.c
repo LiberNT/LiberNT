@@ -485,7 +485,7 @@ static void test_dibsections(void)
     ok(info.BaseAddress == bits, "%p != %p\n", info.BaseAddress, bits);
     ok(info.AllocationBase == bits, "%p != %p\n", info.AllocationBase, bits);
     ok(info.AllocationProtect == PAGE_READWRITE, "%lx != PAGE_READWRITE\n", info.AllocationProtect);
-    ok(info.RegionSize == 0x26000, "0x%Ix != 0x26000\n", info.RegionSize);
+    ok(info.RegionSize == 0x26000, "0x%Ix != 0x26000\n", (size_t)info.RegionSize);
     ok(info.State == MEM_COMMIT, "%lx != MEM_COMMIT\n", info.State);
     ok(info.Protect == PAGE_READWRITE, "%lx != PAGE_READWRITE\n", info.Protect);
     ok(info.Type == MEM_PRIVATE, "%lx != MEM_PRIVATE\n", info.Type);
@@ -525,7 +525,7 @@ static void test_dibsections(void)
     ok(info.BaseAddress == bits, "%p != %p\n", info.BaseAddress, bits);
     ok(info.AllocationBase == bits, "%p != %p\n", info.AllocationBase, bits);
     ok(info.AllocationProtect == PAGE_READWRITE, "%lx != PAGE_READWRITE\n", info.AllocationProtect);
-    ok(info.RegionSize == 0x19000, "0x%Ix != 0x19000\n", info.RegionSize);
+    ok(info.RegionSize == 0x19000, "0x%Ix != 0x19000\n", (size_t)info.RegionSize);
     ok(info.State == MEM_COMMIT, "%lx != MEM_COMMIT\n", info.State);
     ok(info.Protect == PAGE_READWRITE, "%lx != PAGE_READWRITE\n", info.Protect);
     ok(info.Type == MEM_PRIVATE, "%lx != MEM_PRIVATE\n", info.Type);

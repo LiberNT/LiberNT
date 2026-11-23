@@ -99,12 +99,12 @@ static void test_hatch_brush(void)
             if (i <= HS_DIAGCROSS)
             {
                 ok( lb.lbStyle == BS_HATCHED, "wrong style %u\n", lb.lbStyle );
-                ok( lb.lbHatch == i, "wrong hatch %Iu/%u\n", lb.lbHatch, i );
+                ok( lb.lbHatch == i, "wrong hatch %Iu/%u\n", (size_t)lb.lbHatch, i );
             }
             else
             {
                 ok( lb.lbStyle == BS_SOLID, "wrong style %u\n", lb.lbStyle );
-                ok( lb.lbHatch == 0, "wrong hatch %Iu\n", lb.lbHatch );
+                ok( lb.lbHatch == 0, "wrong hatch %Iu\n", (size_t)lb.lbHatch );
             }
             DeleteObject( brush );
         }

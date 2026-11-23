@@ -367,7 +367,7 @@ static void test_incorrect_api_usage(void)
     result = CryptAcquireContextA(&hProv2, szBadKeySet, NULL, PROV_RSA_FULL,
                                    CRYPT_DELETEKEYSET);
     ok (result, "%ld\n", GetLastError());
-    ok (hProv2 == 0, "%Id\n", hProv2);
+    ok (hProv2 == 0, "%Id\n", (ptrdiff_t)hProv2);
     if (!result) return;
 
     result = CryptReleaseContext(hProv, 0);
@@ -1318,7 +1318,7 @@ static void test_container_sd(void)
     ret = CryptAcquireContextA(&prov, "winetest", "Microsoft Enhanced Cryptographic Provider v1.0",
                                PROV_RSA_FULL, CRYPT_MACHINE_KEYSET|CRYPT_DELETEKEYSET);
     ok(ret, "got %lu\n", GetLastError());
-    ok(prov == 0, "got %Id\n", prov);
+    ok(prov == 0, "got %Id\n", (ptrdiff_t)prov);
 }
 
 START_TEST(crypt)

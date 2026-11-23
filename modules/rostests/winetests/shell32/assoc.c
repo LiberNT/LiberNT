@@ -155,22 +155,22 @@ static void test_IQueryAssociations_GetString(void)
         return;
     }
 
-    ok(r == ERROR_SUCCESS, "RegCreateKeyExW(HKCR, \".test\") failed: 0x%Ix\n", r);
+    ok(r == ERROR_SUCCESS, "RegCreateKeyExW(HKCR, \".test\") failed: 0x%Ix\n", (size_t)r);
     r = RegSetValueExW(test_extension_key, NULL, 0, REG_SZ, (PBYTE)test_progidW, sizeof(test_progidW));
-    ok(r == ERROR_SUCCESS, "RegSetValueExW(HKCR\\.test, NULL, \"testfile\") failed: 0x%Ix\n", r);
+    ok(r == ERROR_SUCCESS, "RegSetValueExW(HKCR\\.test, NULL, \"testfile\") failed: 0x%Ix\n", (size_t)r);
 
     /* adding progid key with no information should fail to return information */
     r = RegCreateKeyExW(HKEY_CLASSES_ROOT, test_progidW, 0, NULL, 0, KEY_ALL_ACCESS, NULL, &test_progid_key, NULL);
-    ok(r == ERROR_SUCCESS, "RegCreateKeyExW(HKCR, \"testfile\") failed: 0x%Ix\n", r);
+    ok(r == ERROR_SUCCESS, "RegCreateKeyExW(HKCR, \"testfile\") failed: 0x%Ix\n", (size_t)r);
     getstring_test(L".test", NULL, ASSOCSTR_DEFAULTICON, NULL, __LINE__);
     getstring_test(test_progidW, NULL, ASSOCSTR_DEFAULTICON, NULL, __LINE__);
     getstring_test(NULL, test_progid_key, ASSOCSTR_DEFAULTICON, NULL, __LINE__);
 
     /* adding information to the progid should return that information */
     r = RegCreateKeyExW(test_progid_key, L"DefaultIcon", 0, NULL, 0, KEY_ALL_ACCESS, NULL, &test_defaulticon_key, NULL);
-    ok(r == ERROR_SUCCESS, "RegCreateKeyExW(HKCR\\testfile\\DefaultIcon) failed: 0x%Ix\n", r);
+    ok(r == ERROR_SUCCESS, "RegCreateKeyExW(HKCR\\testfile\\DefaultIcon) failed: 0x%Ix\n", (size_t)r);
     r = RegSetValueExW(test_defaulticon_key, NULL, 0, REG_SZ, (PBYTE)test_iconW, sizeof(test_iconW));
-    ok(r == ERROR_SUCCESS, "RegSetValueExW(HKCR\\testfile\\DefaultIcon, NULL, \"folder.ico\") failed: 0x%Ix\n", r);
+    ok(r == ERROR_SUCCESS, "RegSetValueExW(HKCR\\testfile\\DefaultIcon, NULL, \"folder.ico\") failed: 0x%Ix\n", (size_t)r);
     getstring_test(L".test", NULL, ASSOCSTR_DEFAULTICON, test_iconW, __LINE__);
     getstring_test(test_progidW, NULL, ASSOCSTR_DEFAULTICON, test_iconW, __LINE__);
     getstring_test(NULL, test_progid_key, ASSOCSTR_DEFAULTICON, test_iconW, __LINE__);

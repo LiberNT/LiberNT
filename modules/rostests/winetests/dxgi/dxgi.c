@@ -353,13 +353,13 @@ static void check_adapter_desc_(unsigned int line, const DXGI_ADAPTER_DESC *desc
             desc->Revision, expected_desc->Revision);
     ok_(__FILE__, line)(desc->DedicatedVideoMemory == expected_desc->DedicatedVideoMemory,
             "Got dedicated video memory %Iu, expected %Iu.\n",
-            desc->DedicatedVideoMemory, expected_desc->DedicatedVideoMemory);
+            (size_t)desc->DedicatedVideoMemory, (size_t)expected_desc->DedicatedVideoMemory);
     ok_(__FILE__, line)(desc->DedicatedSystemMemory == expected_desc->DedicatedSystemMemory,
             "Got dedicated system memory %Iu, expected %Iu.\n",
-            desc->DedicatedSystemMemory, expected_desc->DedicatedSystemMemory);
+            (size_t)desc->DedicatedSystemMemory, (size_t)expected_desc->DedicatedSystemMemory);
     ok_(__FILE__, line)(desc->SharedSystemMemory == expected_desc->SharedSystemMemory,
             "Got shared system memory %Iu, expected %Iu.\n",
-            desc->SharedSystemMemory, expected_desc->SharedSystemMemory);
+            (size_t)desc->SharedSystemMemory, (size_t)expected_desc->SharedSystemMemory);
     ok_(__FILE__, line)(equal_luid(desc->AdapterLuid, expected_desc->AdapterLuid),
             "Got LUID %08lx:%08lx, expected %08lx:%08lx.\n",
             desc->AdapterLuid.HighPart, desc->AdapterLuid.LowPart,
@@ -1001,11 +1001,11 @@ static void test_adapter_desc(void)
     trace("%04x: %04x:%04x (rev %02x).\n",
             desc.SubSysId, desc.VendorId, desc.DeviceId, desc.Revision);
     trace("Dedicated video memory: %Iu (%Iu MB).\n",
-            desc.DedicatedVideoMemory, desc.DedicatedVideoMemory / (1024 * 1024));
+            (size_t)desc.DedicatedVideoMemory, (size_t)(desc.DedicatedVideoMemory / (1024 * 1024)));
     trace("Dedicated system memory: %Iu (%Iu MB).\n",
-            desc.DedicatedSystemMemory, desc.DedicatedSystemMemory / (1024 * 1024));
+            (size_t)desc.DedicatedSystemMemory, (size_t)(desc.DedicatedSystemMemory / (1024 * 1024)));
     trace("Shared system memory: %Iu (%Iu MB).\n",
-            desc.SharedSystemMemory, desc.SharedSystemMemory / (1024 * 1024));
+            (size_t)desc.SharedSystemMemory, (size_t)(desc.SharedSystemMemory / (1024 * 1024)));
     trace("LUID: %08lx:%08lx.\n", desc.AdapterLuid.HighPart, desc.AdapterLuid.LowPart);
 
     hr = IDXGIAdapter_QueryInterface(adapter, &IID_IDXGIAdapter1, (void **)&adapter1);
@@ -1023,11 +1023,11 @@ static void test_adapter_desc(void)
     ok(desc1.SubSysId == desc.SubSysId, "Got unexpected sub system ID %04x.\n", desc1.SubSysId);
     ok(desc1.Revision == desc.Revision, "Got unexpected revision %02x.\n", desc1.Revision);
     ok(desc1.DedicatedVideoMemory == desc.DedicatedVideoMemory,
-            "Got unexpected dedicated video memory %Iu.\n", desc1.DedicatedVideoMemory);
+            "Got unexpected dedicated video memory %Iu.\n", (size_t)desc1.DedicatedVideoMemory);
     ok(desc1.DedicatedSystemMemory == desc.DedicatedSystemMemory,
-            "Got unexpected dedicated system memory %Iu.\n", desc1.DedicatedSystemMemory);
+            "Got unexpected dedicated system memory %Iu.\n", (size_t)desc1.DedicatedSystemMemory);
     ok(desc1.SharedSystemMemory == desc.SharedSystemMemory,
-            "Got unexpected shared system memory %Iu.\n", desc1.SharedSystemMemory);
+            "Got unexpected shared system memory %Iu.\n", (size_t)desc1.SharedSystemMemory);
     ok(equal_luid(desc1.AdapterLuid, desc.AdapterLuid),
             "Got unexpected adapter LUID %08lx:%08lx.\n", desc1.AdapterLuid.HighPart, desc1.AdapterLuid.LowPart);
     trace("Flags: %08x.\n", desc1.Flags);
@@ -6589,9 +6589,9 @@ static void test_multi_adapter(void)
     ok(adapter_desc.Revision == 0x0000,
             "Got unexpected revision %#x.\n", adapter_desc.Revision);
     todo_wine ok(!adapter_desc.DedicatedVideoMemory,
-            "Got unexpected DedicatedVideoMemory %#Ix.\n", adapter_desc.DedicatedVideoMemory);
+            "Got unexpected DedicatedVideoMemory %#Ix.\n", (size_t)adapter_desc.DedicatedVideoMemory);
     ok(!adapter_desc.DedicatedSystemMemory,
-            "Got unexpected DedicatedSystemMemory %#Ix.\n", adapter_desc.DedicatedSystemMemory);
+            "Got unexpected DedicatedSystemMemory %#Ix.\n", (size_t)adapter_desc.DedicatedSystemMemory);
 
     hr = IDXGIAdapter_QueryInterface(adapter, &IID_IDXGIAdapter1, (void **)&adapter1);
     ok(hr == S_OK || broken(hr == E_NOINTERFACE), "Got unexpected hr %#lx.\n", hr);
@@ -6651,7 +6651,7 @@ static LRESULT CALLBACK test_wndproc(HWND hwnd, unsigned int message, WPARAM wpa
 
     flaky
     ok(!expect_no_messages, "Got unexpected message %#x, hwnd %p, wparam %#Ix, lparam %#Ix.\n",
-            message, hwnd, wparam, lparam);
+            message, hwnd, wparam, (size_t)lparam);
 
     ok(!reentry, "Re-entered wndproc in nested SetFullscreenState call\n");
 
@@ -7273,7 +7273,7 @@ static void test_window_association(IUnknown *device, BOOL is_d3d12)
 
         wndproc = GetWindowLongPtrW(swapchain_desc.OutputWindow, GWLP_WNDPROC);
         ok(wndproc == original_wndproc, "Got unexpected wndproc %#Ix, expected %#Ix for flags %#x.\n",
-                wndproc, original_wndproc, i);
+                (size_t)wndproc, (size_t)original_wndproc, i);
 
         hwnd = (HWND)0xdeadbeef;
         hr = IDXGIFactory_GetWindowAssociation(factory, &hwnd);
@@ -7292,7 +7292,7 @@ static void test_window_association(IUnknown *device, BOOL is_d3d12)
     ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
 
     wndproc = GetWindowLongPtrW(swapchain_desc.OutputWindow, GWLP_WNDPROC);
-    ok(wndproc == original_wndproc, "Got unexpected wndproc %#Ix, expected %#Ix.\n", wndproc, original_wndproc);
+    ok(wndproc == original_wndproc, "Got unexpected wndproc %#Ix, expected %#Ix.\n", (size_t)wndproc, (size_t)original_wndproc);
 
     hr = IDXGISwapChain_SetFullscreenState(swapchain, TRUE, NULL);
     ok(hr == S_OK || hr == DXGI_ERROR_NOT_CURRENTLY_AVAILABLE
@@ -7345,7 +7345,7 @@ static void test_window_association(IUnknown *device, BOOL is_d3d12)
 
             wndproc = GetWindowLongPtrW(swapchain_desc.OutputWindow, GWLP_WNDPROC);
             ok(wndproc == original_wndproc, "Got unexpected wndproc %#Ix, expected %#Ix.\n",
-                    wndproc, original_wndproc);
+                    (size_t)wndproc, (size_t)original_wndproc);
 
             winetest_pop_context();
         }

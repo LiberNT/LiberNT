@@ -350,8 +350,8 @@ static void test_stringtable_layout(void)
     ok(ptr->nextoffset == 509*sizeof(DWORD), "got %ld\n", ptr->nextoffset);
     ok(ptr->allocated != 0, "got %ld\n", ptr->allocated);
 todo_wine {
-    ok(ptr->unk[0] != 0, "got %Ix\n", ptr->unk[0]);
-    ok(ptr->unk[1] != 0, "got %Ix\n", ptr->unk[1]);
+    ok(ptr->unk[0] != 0, "got %Ix\n", (size_t)ptr->unk[0]);
+    ok(ptr->unk[1] != 0, "got %Ix\n", (size_t)ptr->unk[1]);
 }
     ok(ptr->max_extra_size == 0, "got %ld\n", ptr->max_extra_size);
     ok(ptr->lcid == GetThreadLocale(), "got %lx, thread lcid %lx\n", ptr->lcid, GetThreadLocale());

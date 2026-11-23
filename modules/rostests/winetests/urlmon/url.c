@@ -578,7 +578,7 @@ static HRESULT WINAPI Protocol_Start(IInternetProtocol *iface, LPCWSTR szUrl,
     ok(pOIProtSink != NULL, "pOIProtSink == NULL\n");
     ok(pOIBindInfo != NULL, "pOIBindInfo == NULL\n");
     ok(grfPI == 0, "grfPI=%ld, expected 0\n", grfPI);
-    ok(dwReserved == 0, "dwReserved=%Ix, expected 0\n", dwReserved);
+    ok(dwReserved == 0, "dwReserved=%Ix, expected 0\n", (size_t)dwReserved);
 
     if(!filedwl_api && binding_hres != S_OK) {
         SET_EXPECT(OnStopBinding);
@@ -1264,7 +1264,7 @@ static HRESULT WINAPI HttpNegotiate_GetRootSecurityId(IHttpNegotiate2 *iface,
 
     ok(GetCurrentThreadId() == thread_id, "wrong thread %ld\n", GetCurrentThreadId());
 
-    ok(!dwReserved, "dwReserved=%Id, expected 0\n", dwReserved);
+    ok(!dwReserved, "dwReserved=%Id, expected 0\n", (ptrdiff_t)dwReserved);
     ok(pbSecurityId != NULL, "pbSecurityId == NULL\n");
     ok(pcbSecurityId != NULL, "pcbSecurityId == NULL\n");
 

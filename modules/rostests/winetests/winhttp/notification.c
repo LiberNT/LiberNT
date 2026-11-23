@@ -1185,7 +1185,7 @@ static void test_websocket(void)
     ok( info.buflen == sizeof(*result), "got %u\n", info.buflen );
     result = (WINHTTP_WEB_SOCKET_ASYNC_RESULT *)info.buffer;
     ok( result->Operation == WINHTTP_WEB_SOCKET_RECEIVE_OPERATION, "got %u\n", result->Operation );
-    ok( !result->AsyncResult.dwResult, "got %Iu\n", result->AsyncResult.dwResult );
+    ok( !result->AsyncResult.dwResult, "got %Iu\n", (size_t)result->AsyncResult.dwResult );
     ok( result->AsyncResult.dwError == ERROR_WINHTTP_OPERATION_CANCELLED, "got %lu\n", result->AsyncResult.dwError );
 
     close_status = 0xdead;
@@ -1271,7 +1271,7 @@ static void test_websocket(void)
     ok( info.buflen == sizeof(*result), "got %u\n", info.buflen );
     result = (WINHTTP_WEB_SOCKET_ASYNC_RESULT *)info.buffer;
     ok( result->Operation == WINHTTP_WEB_SOCKET_CLOSE_OPERATION, "got %u\n", result->Operation );
-    todo_wine ok( !result->AsyncResult.dwResult, "got %Iu\n", result->AsyncResult.dwResult );
+    todo_wine ok( !result->AsyncResult.dwResult, "got %Iu\n", (size_t)result->AsyncResult.dwResult );
     ok( result->AsyncResult.dwError == ERROR_WINHTTP_OPERATION_CANCELLED, "got %lu\n", result->AsyncResult.dwError );
 
     setup_test( &info, winhttp_close_handle, __LINE__ );
@@ -1336,7 +1336,7 @@ static void test_websocket(void)
     ok( info.buflen == sizeof(*result), "got %u\n", info.buflen );
     result = (WINHTTP_WEB_SOCKET_ASYNC_RESULT *)info.buffer;
     ok( result->Operation == WINHTTP_WEB_SOCKET_RECEIVE_OPERATION, "got %u\n", result->Operation );
-    ok( !result->AsyncResult.dwResult, "got %Iu\n", result->AsyncResult.dwResult );
+    ok( !result->AsyncResult.dwResult, "got %Iu\n", (size_t)result->AsyncResult.dwResult );
     ok( result->AsyncResult.dwError == ERROR_WINHTTP_OPERATION_CANCELLED, "got %lu\n", result->AsyncResult.dwError );
 
     setup_test( &info, winhttp_close_handle, __LINE__ );

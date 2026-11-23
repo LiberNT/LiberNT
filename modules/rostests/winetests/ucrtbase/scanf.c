@@ -314,13 +314,13 @@ static void test_sscanf(void)
         ret = vsscanf_wrapper(tests[i], "0x87654321", -1, "%Ix", &result_ptr);
         ok(ret == 1, "sscanf returned %d for flags %#x\n", ret, tests[i]);
         ok(result_ptr == 0x87654321,
-           "got wrong number %Ix for flags %#x\n", result_ptr, tests[i]);
+           "got wrong number %Ix for flags %#x\n", (size_t)result_ptr, tests[i]);
 
         result_ptr = 0;
         ret = vsscanf_wrapper(tests[i], "0x123456789", -1, "%Ix", &result_ptr);
         ok(ret == 1, "sscanf returned %d for flags %#x\n", ret, tests[i]);
         ok(result_ptr == (DWORD_PTR)0x123456789ull, /* this is truncated on 32bit systems */
-           "got wrong number %Ix for flags %#x\n", result_ptr, tests[i]);
+           "got wrong number %Ix for flags %#x\n", (size_t)result_ptr, tests[i]);
     }
 }
 

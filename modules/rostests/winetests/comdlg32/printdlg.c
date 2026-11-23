@@ -405,7 +405,7 @@ static HRESULT WINAPI callback_SelectionChange(IPrintDialogCallback *iface)
 static HRESULT WINAPI callback_HandleMessage(IPrintDialogCallback *iface,
     HWND hdlg, UINT msg, WPARAM wp, LPARAM lp, LRESULT *res)
 {
-    trace("callback_HandleMessage %p,%04x,%Ix,%Ix,%p\n", hdlg, msg, wp, lp, res);
+    trace("callback_HandleMessage %p,%04x,%Ix,%Ix,%p\n", hdlg, msg, wp, (size_t)lp, res);
     /* *res = PD_RESULT_PRINT; */
     return S_OK;
 }

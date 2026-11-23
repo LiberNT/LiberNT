@@ -47,7 +47,7 @@ TraceMapping(const char *What, const void *Address)
         return;
     }
     trace("%s %p: base %p alloc %p size %Ix state %#lx protect %#lx type %#lx\n", What, Address, Info.BaseAddress,
-          Info.AllocationBase, Info.RegionSize, Info.State, Info.Protect, Info.Type);
+          Info.AllocationBase, (size_t)Info.RegionSize, Info.State, Info.Protect, Info.Type);
 }
 
 static void
@@ -60,7 +60,7 @@ TraceFence(const char *What, ULONG Index, const D3DKMT_CREATESYNCHRONIZATIONOBJE
     ULONGLONG FirstGpu = First->Info.MonitoredFence.FenceValueGPUVirtualAddress;
 
     trace("%s %lu: cpu %p (page offset %#Ix, delta %Id) gpu %#I64x (page offset %#I64x, delta %I64d)\n", What, Index,
-          (void *)Cpu, Cpu & 0xfff, (LONG_PTR)(Cpu - FirstCpu), Gpu, Gpu & 0xfff, (LONGLONG)(Gpu - FirstGpu));
+          (void *)Cpu, (size_t)(Cpu & 0xfff), (ptrdiff_t)((LONG_PTR)(Cpu - FirstCpu)), Gpu, Gpu & 0xfff, (LONGLONG)(Gpu - FirstGpu));
 }
 
 static void

@@ -27,7 +27,7 @@ AlpcTestInitializeAttributes(
     RtlFillMemory(Buffer, BufferSize, 0x55);
     Status = AlpcInitializeMessageAttribute(Flags, Attributes, BufferSize, &RequiredSize);
     ok_hex(Status, STATUS_SUCCESS);
-    ok(RequiredSize <= BufferSize, "attribute size %Iu exceeds buffer %Iu\n", RequiredSize, BufferSize);
+    ok(RequiredSize <= BufferSize, "attribute size %Iu exceeds buffer %Iu\n", (size_t)RequiredSize, (size_t)BufferSize);
     return NT_SUCCESS(Status) ? Attributes : NULL;
 }
 
@@ -203,7 +203,7 @@ AlpcTestQuerySender(
         NtClose(ProcessHandle);
 
     alpc_observe_status("OpenSenderThread.valid", NtAlpcOpenSenderThread(&ThreadHandle, ServerPort, &Message->Header, 0, THREAD_QUERY_LIMITED_INFORMATION, &ObjectAttributes));
-    trace("ALPC_OBSERVE value OpenSenderThread.handle=%p tid=%lu message_tid=%Iu\n", ThreadHandle, ThreadHandle ? GetThreadId(ThreadHandle) : 0, (ULONG_PTR)Message->Header.ClientId.UniqueThread);
+    trace("ALPC_OBSERVE value OpenSenderThread.handle=%p tid=%lu message_tid=%Iu\n", ThreadHandle, ThreadHandle ? GetThreadId(ThreadHandle) : 0, (size_t)Message->Header.ClientId.UniqueThread);
     if (ThreadHandle)
         NtClose(ThreadHandle);
 
@@ -753,7 +753,7 @@ AlpcTestViewAndSecurity(
 
     ReceiveSecurity = AlpcGetMessageAttribute(ReceiveAttributes, ALPC_MESSAGE_SECURITY_ATTRIBUTE);
     ReceiveView = AlpcGetMessageAttribute(ReceiveAttributes, ALPC_MESSAGE_VIEW_ATTRIBUTE);
-    trace("ALPC_OBSERVE value Attributes.view_security valid=%08lx security_flags=%08lx security_context=%p view_flags=%08lx section=%p base=%p size=%Iu\n", ReceiveAttributes->ValidAttributes, ReceiveSecurity->Flags, ReceiveSecurity->ContextHandle, ReceiveView->Flags, ReceiveView->SectionHandle, ReceiveView->ViewBase, ReceiveView->ViewSize);
+    trace("ALPC_OBSERVE value Attributes.view_security valid=%08lx security_flags=%08lx security_context=%p view_flags=%08lx section=%p base=%p size=%Iu\n", ReceiveAttributes->ValidAttributes, ReceiveSecurity->Flags, ReceiveSecurity->ContextHandle, ReceiveView->Flags, ReceiveView->SectionHandle, ReceiveView->ViewBase, (size_t)ReceiveView->ViewSize);
     alpc_expect_status("Attributes.view_security_reply", AlpcTestReplyRequest(ServerPort, &Message), STATUS_SUCCESS);
 
 DeleteSecurity:

@@ -1276,7 +1276,7 @@ TrPrepareExecute(
     if (Context->ServiceRequest.InputBufferSize != 0)
     {
         Status = WdfRequestProbeAndLockUserBufferForRead(Request,
-                                                         (PVOID)(ULONG_PTR)Context->ServiceRequest.InputBuffer,
+                                                         Ptr64ToPtr(Context->ServiceRequest.InputBuffer),
                                                          (size_t)Context->ServiceRequest.InputBufferSize,
                                                          &Memory);
         if (!NT_SUCCESS(Status))
@@ -1285,13 +1285,13 @@ TrPrepareExecute(
             return FALSE;
         }
 
-        Context->ServiceRequest.InputBuffer = WdfMemoryGetBuffer(Memory, NULL);
+        Context->ServiceRequest.InputBuffer = PtrToPtr64(WdfMemoryGetBuffer(Memory, NULL));
     }
 
     if (Context->ServiceRequest.OutputBufferSize != 0)
     {
         Status = WdfRequestProbeAndLockUserBufferForWrite(Request,
-                                                          (PVOID)(ULONG_PTR)Context->ServiceRequest.OutputBuffer,
+                                                          Ptr64ToPtr(Context->ServiceRequest.OutputBuffer),
                                                           (size_t)Context->ServiceRequest.OutputBufferSize,
                                                           &Memory);
         if (!NT_SUCCESS(Status))
@@ -1300,7 +1300,7 @@ TrPrepareExecute(
             return FALSE;
         }
 
-        Context->ServiceRequest.OutputBuffer = WdfMemoryGetBuffer(Memory, NULL);
+        Context->ServiceRequest.OutputBuffer = PtrToPtr64(WdfMemoryGetBuffer(Memory, NULL));
     }
 
     Context->Prepared = TRUE;

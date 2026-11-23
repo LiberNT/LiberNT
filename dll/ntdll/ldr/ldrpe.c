@@ -237,7 +237,8 @@ IatReady:
                                        TRUE,
                                        ImportName,
                                        DllPath,
-                                       FALSE);
+                                       FALSE,
+                                       ImportLdrEntry);
 
                 /* Move to the next thunk */
                 FirstThunk++;
@@ -295,7 +296,8 @@ IatReady:
                                        TRUE,
                                        ImportName,
                                        DllPath,
-                                       FALSE);
+                                       FALSE,
+                                       ImportLdrEntry);
 
                 /* Next thunks */
                 OriginalThunk++;
@@ -358,7 +360,7 @@ LdrpHandleOneNewFormatImportDescriptor(IN LPWSTR DllPath OPTIONAL,
 
     /* Load the module for this entry */
     Status = LdrpLoadImportModule(DllPath,
-                                  LdrEntry->DllBase,
+                                  LdrEntry,
                                   BoundImportName,
                                   &DllLdrEntry,
                                   &AlreadyLoaded);
@@ -385,7 +387,7 @@ LdrpHandleOneNewFormatImportDescriptor(IN LPWSTR DllPath OPTIONAL,
 
     /* Check if the Bound Entry is now invalid */
     if ((BoundEntry->TimeDateStamp != DllLdrEntry->TimeDateStamp) ||
-        (DllLdrEntry->Flags & LDRP_IMAGE_NOT_AT_BASE))
+        ((ULONG_PTR)DllLdrEntry->DllBase != DllLdrEntry->OriginalBase))
     {
         /* Show debug message */
         if (ShowSnaps)
@@ -432,7 +434,7 @@ LdrpHandleOneNewFormatImportDescriptor(IN LPWSTR DllPath OPTIONAL,
 
         /* Load the module */
         Status = LdrpLoadImportModule(DllPath,
-                                      LdrEntry->DllBase,
+                                      LdrEntry,
                                       ForwarderName,
                                       &ForwarderLdrEntry,
                                       &AlreadyLoaded);
@@ -450,7 +452,7 @@ LdrpHandleOneNewFormatImportDescriptor(IN LPWSTR DllPath OPTIONAL,
         /* Check if the Bound Entry is now invalid */
         if (!(NT_SUCCESS(Status)) ||
             (ForwarderEntry->TimeDateStamp != ForwarderLdrEntry->TimeDateStamp) ||
-            (ForwarderLdrEntry->Flags & LDRP_IMAGE_NOT_AT_BASE))
+            ((ULONG_PTR)ForwarderLdrEntry->DllBase != ForwarderLdrEntry->OriginalBase))
         {
             /* Show debug message */
             if (ShowSnaps)
@@ -622,7 +624,7 @@ LdrpHandleOneOldFormatImportDescriptor(IN LPWSTR DllPath OPTIONAL,
 
     /* Load the module associated to it */
     Status = LdrpLoadImportModule(DllPath,
-                                  LdrEntry->DllBase,
+                                  LdrEntry,
                                   ImportName,
                                   &DllLdrEntry,
                                   &AlreadyLoaded);
@@ -915,7 +917,7 @@ LdrpWalkImportDescriptor(IN LPWSTR DllPath OPTIONAL,
 NTSTATUS
 NTAPI
 LdrpLoadImportModule(IN PWSTR DllPath OPTIONAL,
-                     IN PVOID ImportBase,
+                     IN PLDR_DATA_TABLE_ENTRY Importer,
                      IN LPSTR ImportName,
                      OUT PLDR_DATA_TABLE_ENTRY *DataTableEntry,
                      OUT PBOOLEAN Existing)
@@ -936,7 +938,7 @@ LdrpLoadImportModule(IN PWSTR DllPath OPTIONAL,
     BOOLEAN ChpeRedirectedDll;
 #endif
 
-    DPRINT("LdrpLoadImportModule('%S' %p '%s' %p %p)\n", DllPath, ImportBase, ImportName, DataTableEntry, Existing);
+    DPRINT("LdrpLoadImportModule('%S' %p '%s' %p %p)\n", DllPath, Importer->DllBase, ImportName, DataTableEntry, Existing);
 
     RedirectedDll = FALSE;
     RtlInitEmptyUnicodeString(&RedirectedImpDescName, NULL, 0);
@@ -1003,7 +1005,7 @@ LdrpLoadImportModule(IN PWSTR DllPath OPTIONAL,
     }
 
 #if LDRP_CHPE_IMPORT_REDIRECTION
-    if (ChpeShouldRedirectImport(ImportBase, ImpDescName))
+    if (ChpeShouldRedirectImport(Importer->DllBase, ImpDescName))
     {
         Status = LdrpBuildArm64EcImportName(ImpDescName, &ChpeImpDescName);
         if (!NT_SUCCESS(Status))
@@ -1050,7 +1052,8 @@ LdrpLoadImportModule(IN PWSTR DllPath OPTIONAL,
                         NULL,
                         ImpDescName->Buffer,
                         NULL,
-                        TRUE,
+                        Importer,
+                        LoadReasonStaticDependency,
                         RedirectedDll && !ApiSetRedirected,
                         DataTableEntry);
     if (!NT_SUCCESS(Status))
@@ -1303,7 +1306,8 @@ LdrpSnapThunk(IN PVOID ExportBase,
               IN BOOLEAN Static,
               IN LPSTR DllName,
               IN PWSTR DllPath OPTIONAL,
-              IN BOOLEAN LookupOnly)
+              IN BOOLEAN LookupOnly,
+              IN PLDR_DATA_TABLE_ENTRY StaticImporter OPTIONAL)
 {
     BOOLEAN IsOrdinal;
     USHORT Ordinal;
@@ -1573,7 +1577,10 @@ FailurePath:
                     }
                     else
                     {
-                        Status = LdrpLoadDll(Redirected && !ApiSetRedirected, ForwarderPath, NULL, RedirectedImportName, &ForwarderHandle, FALSE);
+                        LDR_DLL_LOAD_REASON Reason = StaticImporter ? LoadReasonStaticForwarderDependency
+                                                                   : LoadReasonDynamicForwarderDependency;
+                        Status = LdrpLoadDll(Redirected && !ApiSetRedirected, ForwarderPath, NULL,
+                                             RedirectedImportName, &ForwarderHandle, FALSE, Reason, StaticImporter);
                         ForwarderReferenced = NT_SUCCESS(Status);
                     }
                 }
@@ -1622,7 +1629,8 @@ FailurePath:
                                              ForwardOrdinal,
                                              (PVOID*)&Thunk->u1.Function,
                                              FALSE,
-                                             DllPath);
+                                             DllPath,
+                                             StaticImporter);
             /* If this fails, then error out */
             if (!NT_SUCCESS(Status)) goto FailurePath;
 

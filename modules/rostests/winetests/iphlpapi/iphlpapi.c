@@ -1434,7 +1434,7 @@ static void testIcmpSendEcho(void)
     SleepEx(0, TRUE);
     ok(icmp_send_echo_test_apc_expect == FALSE, "APC was not executed!\n");
     ok(!icmp_send_echo_io.Status, "got %#lx.\n", icmp_send_echo_io.Status);
-    ok(icmp_send_echo_io.Information == sizeof(replydata), "got %Iu.\n", icmp_send_echo_io.Information);
+    ok(icmp_send_echo_io.Information == sizeof(replydata), "got %Iu.\n", (size_t)icmp_send_echo_io.Information);
     reply = (ICMP_ECHO_REPLY*)replydata2;
     ok(ntohl(reply->Address) == INADDR_LOOPBACK, "Address mismatch, expect: %s, got: %s\n", ntoa(INADDR_LOOPBACK),
        ntoa(reply->Address));
@@ -1577,7 +1577,7 @@ static void test_Icmp6SendEcho(void)
     ret = WaitForSingleObjectEx(event, INFINITE, TRUE);
     ok(ret == WAIT_IO_COMPLETION, "got %#lx.\n", ret);
     ok(!icmp_send_echo_io.Status, "got %#lx.\n", icmp_send_echo_io.Status);
-    ok(icmp_send_echo_io.Information == sizeof(replydata), "got %Iu.\n", icmp_send_echo_io.Information);
+    ok(icmp_send_echo_io.Information == sizeof(replydata), "got %Iu.\n", (size_t)icmp_send_echo_io.Information);
     ok(!reply->Status, "got %#lx.\n", reply->Status);
     ok(!icmp_send_echo_test_apc_expect, "APC was not called.\n");
     ok(!memcmp(reply->Address.sin6_addr, &address.sin6_addr, sizeof(address.sin6_addr)), "got %s.\n",
@@ -1620,7 +1620,7 @@ static void test_Icmp6SendEcho(void)
     ok(ret == WAIT_IO_COMPLETION, "got %#lx.\n", ret);
     ok(!icmp_send_echo_test_apc_expect, "APC was not called.\n");
     todo_wine ok(icmp_send_echo_io.Status == STATUS_INVALID_PARAMETER, "got %#lx.\n", icmp_send_echo_io.Status);
-    ok(icmp_send_echo_io.Information == sizeof(ICMPV6_ECHO_REPLY), "got %Iu.\n", icmp_send_echo_io.Information);
+    ok(icmp_send_echo_io.Information == sizeof(ICMPV6_ECHO_REPLY), "got %Iu.\n", (size_t)icmp_send_echo_io.Information);
     ok(reply->Status == IP_GENERAL_FAILURE, "got %#lx.\n", reply->Status);
     ok(IN6_IS_ADDR_UNSPECIFIED((IN6_ADDR *)&reply->Address.sin6_addr), "got %s.\n",
             inet_ntop(AF_INET6, (void *)&reply->Address.sin6_addr, str, sizeof(str)));

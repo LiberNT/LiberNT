@@ -1099,7 +1099,7 @@ static void test_marshal_VARIANT(void)
     ok(V_VT(&v) == V_VT(&v2), "got vt %d expect %d\n", V_VT(&v), V_VT(&v2));
     ok(*V_UI4REF(&v) == *V_UI4REF(&v2), "got ui4 ref %lx expect ui4 ref %lx\n", *V_UI4REF(&v), *V_UI4REF(&v2));
     size = IMalloc_GetSize(allocator, V_BYREF(&v2));
-    ok(size == sizeof(V_UI4(&v2)), "got size %#Ix\n", size);
+    ok(size == sizeof(V_UI4(&v2)), "got size %#Ix\n", (size_t)size);
     VARIANT_UserFree(&umcb.Flags, &v2);
     HeapFree(GetProcessHeap(), 0, oldbuffer);
 
@@ -1214,7 +1214,7 @@ static void test_marshal_VARIANT(void)
     ok(V_VT(&v) == V_VT(&v2), "got vt %d expect %d\n", V_VT(&v), V_VT(&v2));
     ok(*V_R8REF(&v) == *V_R8REF(&v2), "got r8 ref %f expect %f\n", *V_R8REF(&v), *V_R8REF(&v2));
     size = IMalloc_GetSize(allocator, V_BYREF(&v2));
-    ok(size == sizeof(V_R8(&v2)), "got size %#Ix\n", size);
+    ok(size == sizeof(V_R8(&v2)), "got size %#Ix\n", (size_t)size);
     VARIANT_UserFree(&umcb.Flags, &v2);
     HeapFree(GetProcessHeap(), 0, oldbuffer);
 
@@ -1310,7 +1310,7 @@ static void test_marshal_VARIANT(void)
     ok(V_VT(&v) == V_VT(&v2), "got vt %d expect %d\n", V_VT(&v), V_VT(&v2));
     ok(!memcmp(V_DECIMALREF(&v), V_DECIMALREF(&v2), sizeof(DECIMAL)), "decimals differ\n");
     size = IMalloc_GetSize(allocator, V_BYREF(&v2));
-    ok(size == sizeof(V_DECIMAL(&v2)), "got size %#Ix\n", size);
+    ok(size == sizeof(V_DECIMAL(&v2)), "got size %#Ix\n", (size_t)size);
     VARIANT_UserFree(&umcb.Flags, &v2);
     HeapFree(GetProcessHeap(), 0, oldbuffer);
 
@@ -1422,7 +1422,7 @@ static void test_marshal_VARIANT(void)
     ok(SysStringByteLen(*V_BSTRREF(&v)) == SysStringByteLen(*V_BSTRREF(&v2)), "bstr string lens differ\n");
     ok(!memcmp(*V_BSTRREF(&v), *V_BSTRREF(&v2), SysStringByteLen(*V_BSTRREF(&v))), "bstrs differ\n");
     size = IMalloc_GetSize(allocator, V_BYREF(&v2));
-    ok(size == sizeof(V_BSTR(&v2)), "got size %#Ix\n", size);
+    ok(size == sizeof(V_BSTR(&v2)), "got size %#Ix\n", (size_t)size);
     SysFreeString(b2);
     HeapFree(GetProcessHeap(), 0, oldbuffer);
     SysFreeString(b);
@@ -1508,7 +1508,7 @@ static void test_marshal_VARIANT(void)
     SafeArrayGetVartype(*V_ARRAYREF(&v2), &vt2);
     ok(vt == vt2, "array vts differ %x %x\n", vt, vt2);
     size = IMalloc_GetSize(allocator, V_BYREF(&v2));
-    ok(size == sizeof(V_ARRAY(&v2)), "got size %#Ix\n", size);
+    ok(size == sizeof(V_ARRAY(&v2)), "got size %#Ix\n", (size_t)size);
     VARIANT_UserFree(&umcb.Flags, &v2);
     HeapFree(GetProcessHeap(), 0, oldbuffer);
 
@@ -1601,7 +1601,7 @@ static void test_marshal_VARIANT(void)
        V_VT(V_VARIANTREF(&v)), V_VT(V_VARIANTREF(&v3))); 
     ok(V_R8(V_VARIANTREF(&v)) == V_R8(V_VARIANTREF(&v3)), "r8s differ\n"); 
     size = IMalloc_GetSize(allocator, V_BYREF(&v3));
-    ok(size == sizeof(*V_VARIANTREF(&v3)), "got size %#Ix\n", size);
+    ok(size == sizeof(*V_VARIANTREF(&v3)), "got size %#Ix\n", (size_t)size);
     VARIANT_UserFree(&umcb.Flags, &v3);
     HeapFree(GetProcessHeap(), 0, oldbuffer);
 
@@ -1713,7 +1713,7 @@ static void test_marshal_VARIANT(void)
     ok(V_VT(&v) == V_VT(&v3), "got vt %d expect %d\n", V_VT(&v), V_VT(&v3));
     ok(*V_UNKNOWNREF(&v) == *V_UNKNOWNREF(&v3), "got %p expect %p\n", *V_UNKNOWNREF(&v), *V_UNKNOWNREF(&v3));
     size = IMalloc_GetSize(allocator, V_BYREF(&v3));
-    ok(size == sizeof(V_BSTR(&v3)), "got size %#Ix\n", size);
+    ok(size == sizeof(V_BSTR(&v3)), "got size %#Ix\n", (size_t)size);
     VARIANT_UserFree(&umcb.Flags, &v3);
     ok(heap_unknown->refs == 1, "%ld refcounts of IUnknown leaked\n", heap_unknown->refs - 1);
     IUnknown_Release(&heap_unknown->IUnknown_iface);
@@ -1743,7 +1743,7 @@ static void test_marshal_VARIANT(void)
     ok(V_VT(&v) == V_VT(&v2), "got vt %d expect %d\n", V_VT(&v2), V_VT(&v));
     ok(!*V_UNKNOWNREF(&v2), "got %p expect NULL\n", *V_UNKNOWNREF(&v2));
     size = IMalloc_GetSize(allocator, V_BYREF(&v2));
-    ok(size == sizeof(V_BSTR(&v2)), "got size %#Ix\n", size);
+    ok(size == sizeof(V_BSTR(&v2)), "got size %#Ix\n", (size_t)size);
     VARIANT_UserFree(&umcb.Flags, &v2);
     HeapFree(GetProcessHeap(), 0, oldbuffer);
 

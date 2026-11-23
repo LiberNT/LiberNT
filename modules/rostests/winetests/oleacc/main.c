@@ -701,7 +701,7 @@ static void test_LresultFromObject(const char *name)
     LRESULT lres;
 
     lres = LresultFromObject(NULL, 0, 0);
-    ok(lres == E_INVALIDARG, "got %Ix\n", lres);
+    ok(lres == E_INVALIDARG, "got %Ix\n", (size_t)lres);
 
     hres = ObjectFromLresult(0, &IID_IUnknown, 0, (void**)&unk);
     ok(hres == E_FAIL, "got %lx\n", hres);
@@ -710,7 +710,7 @@ static void test_LresultFromObject(const char *name)
 
     ok(Object_ref == 1, "Object_ref = %ld\n", Object_ref);
     lres = LresultFromObject(&IID_IUnknown, 0, &Object);
-    ok(SUCCEEDED(lres), "got %Ix\n", lres);
+    ok(SUCCEEDED(lres), "got %Ix\n", (size_t)lres);
     ok(Object_ref > 1, "Object_ref = %ld\n", Object_ref);
 
     hres = ObjectFromLresult(lres, &IID_IUnknown, 0, (void**)&unk);
@@ -720,7 +720,7 @@ static void test_LresultFromObject(const char *name)
     ok(Object_ref == 1, "Object_ref = %ld\n", Object_ref);
 
     lres = LresultFromObject(&IID_IUnknown, 0, &Object);
-    ok(SUCCEEDED(lres), "got %Ix\n", lres);
+    ok(SUCCEEDED(lres), "got %Ix\n", (size_t)lres);
     ok(Object_ref > 1, "Object_ref = %ld\n", Object_ref);
 
     sprintf(cmdline, "\"%s\" main ObjectFromLresult %s", name, wine_dbgstr_longlong(lres));
@@ -754,7 +754,7 @@ static LRESULT WINAPI test_window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARA
         if(lparam == 1)
             return LresultFromObject(&IID_IUnknown, wparam, (IUnknown*)&Accessible);
 
-        ok(0, "unexpected (%Id)\n", lparam);
+        ok(0, "unexpected (%Id)\n", (ptrdiff_t)lparam);
         return 0;
     }
 
@@ -1561,7 +1561,7 @@ static LRESULT WINAPI test_query_class(HWND hwnd, UINT msg, WPARAM wparam, LPARA
 
     CHECK_EXPECT(winproc_GETOBJECT);
     ok(!wparam, "wparam = %Ix\n", wparam);
-    ok(lparam == OBJID_QUERYCLASSNAMEIDX, "lparam = %Ix\n", lparam);
+    ok(lparam == OBJID_QUERYCLASSNAMEIDX, "lparam = %Ix\n", (size_t)lparam);
     return 0;
 }
 

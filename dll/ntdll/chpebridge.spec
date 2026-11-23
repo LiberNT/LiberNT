@@ -234,6 +234,7 @@
 840 stdcall LdrGetDllFullName(ptr ptr) ChpeLdrGetDllFullName
 877 stdcall RtlFindExportedRoutineByName(ptr str) ChpeRtlFindExportedRoutineByName
 843 stdcall RtlIsEcCode(ptr) ChpeRtlIsEcCode
+921 stdcall -version=0x600+ RtlGetEnabledExtendedFeatures(int64) ChpeRtlGetEnabledExtendedFeatures
 852 stdcall RtlLocateExtendedFeature(ptr long ptr) ChpeRtlLocateExtendedFeature
 853 stdcall RtlLocateExtendedFeature2(ptr long ptr ptr) ChpeRtlLocateExtendedFeature2
 855 stdcall RtlQueryPerformanceCounter(ptr) ChpeRtlQueryPerformanceCounter
@@ -1048,7 +1049,6 @@
 918 stdcall -version=0x600+ RtlGetCurrentTransaction() ChpeAutoRtlGetCurrentTransaction
 919 stdcall RtlGetDaclSecurityDescriptor(ptr ptr ptr ptr) ChpeAutoRtlGetDaclSecurityDescriptor
 920 stdcall -version=0xA00+ RtlGetDeviceFamilyInfoEnum(ptr ptr ptr) ChpeAutoRtlGetDeviceFamilyInfoEnum
-921 stdcall -version=0x600+ RtlGetEnabledExtendedFeatures(int64) ChpeAutoRtlGetEnabledExtendedFeatures
 922 stdcall RtlGetElementGenericTable(ptr long) ChpeAutoRtlGetElementGenericTable
 923 stdcall RtlGetElementGenericTableAvl(ptr long) ChpeAutoRtlGetElementGenericTableAvl
 924 stdcall -version=0x600+ RtlGetExtendedContextLength(long ptr) ChpeAutoRtlGetExtendedContextLength

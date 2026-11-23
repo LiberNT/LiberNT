@@ -207,7 +207,7 @@ static DWORD WINAPI keyed_event_thread( void *arg )
             status = pNtWaitForKeyedEvent( handle, (void *)(i * 2), 0, NULL );
         else
             status = pNtReleaseKeyedEvent( handle, (void *)(i * 2), 0, NULL );
-        ok( status == STATUS_SUCCESS, "%Ii: failed %lx\n", i, status );
+        ok( status == STATUS_SUCCESS, "%Ii: failed %lx\n", (ptrdiff_t)i, status );
         Sleep( 20 - i );
     }
 
@@ -293,7 +293,7 @@ static void test_keyed_events(void)
             status = pNtReleaseKeyedEvent( handle, (void *)(i * 2), 0, NULL );
         else
             status = pNtWaitForKeyedEvent( handle, (void *)(i * 2), 0, NULL );
-        ok( status == STATUS_SUCCESS, "%Ii: failed %lx\n", i, status );
+        ok( status == STATUS_SUCCESS, "%Ii: failed %lx\n", (ptrdiff_t)i, status );
         Sleep( i );
     }
     status = pNtWaitForKeyedEvent( handle, (void *)0x1234, 0, &timeout );
@@ -915,7 +915,7 @@ static DWORD WINAPI test_completion_port_scheduling_thread(void *param)
     ok( ret == WAIT_OBJECT_0, "got %#lx.\n", ret );
     bret = GetQueuedCompletionStatus( p->port, &count, &key, &overlapped, INFINITE );
     ok( bret, "got error %lu.\n", GetLastError() );
-    ok( key == 3 + p->index || broken( p->index && key == 5 ) /* before Win10 */, "got %Iu, expected %u.\n", key, 3 + p->index );
+    ok( key == 3 + p->index || broken( p->index && key == 5 ) /* before Win10 */, "got %Iu, expected %u.\n", (size_t)key, 3 + p->index );
     SetEvent( p->test_ready );
 
     /* Port is being closed. */
@@ -1038,7 +1038,7 @@ static void test_completion_port_scheduling(void)
     PostQueuedCompletionStatus( port, 0, 5, NULL );
     bret = GetQueuedCompletionStatus( p->port, &count, &key, &overlapped, INFINITE );
     ok( bret, "got error %lu.\n", GetLastError() );
-    ok( key == 5 || broken( key == 4 ) /* before Win10 */, "got %Iu, expected 5.\n", key );
+    ok( key == 5 || broken( key == 4 ) /* before Win10 */, "got %Iu, expected 5.\n", (size_t)key );
 
     /* Close port handle while threads are waiting on it directly. */
     for (i = 0; i < 2; ++i) SetEvent( p[i].ready );

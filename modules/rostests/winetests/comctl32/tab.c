@@ -991,7 +991,7 @@ static void test_getset_item(void)
     expect(TRUE, ret);
     /* everything higher specified size is preserved */
     memset(&lparam, 0xff, sizeof(lparam)-1);
-    ok(tcItem.lParam == lparam, "Expected 0x%Ix, got 0x%Ix\n", lparam, tcItem.lParam);
+    ok(tcItem.lParam == lparam, "Expected 0x%Ix, got 0x%Ix\n", (size_t)lparam, (size_t)tcItem.lParam);
 
     DestroyWindow(hTab);
 
@@ -1006,7 +1006,7 @@ static void test_getset_item(void)
     tcItem.mask = TCIF_PARAM;
     ret = SendMessageA(hTab, TCM_GETITEMA, 5, (LPARAM)&tcItem);
     expect(FALSE, ret);
-    ok(tcItem.lParam == 0, "Expected zero lParam, got %Iu\n", tcItem.lParam);
+    ok(tcItem.lParam == 0, "Expected zero lParam, got %Iu\n", (size_t)tcItem.lParam);
 
     memset(&tcItem, 0xcc, sizeof(tcItem));
     tcItem.mask = TCIF_IMAGE;
@@ -1047,13 +1047,13 @@ static void test_getset_item(void)
     tcItem.mask = TCIF_PARAM;
     ret = SendMessageA(hTab, TCM_GETITEMA, -1, (LPARAM)&tcItem);
     expect(FALSE, ret);
-    ok(tcItem.lParam == 0, "Expected zero lParam, got %Iu\n", tcItem.lParam);
+    ok(tcItem.lParam == 0, "Expected zero lParam, got %Iu\n", (size_t)tcItem.lParam);
 
     memset(&tcItem, 0xcc, sizeof(tcItem));
     tcItem.mask = TCIF_PARAM;
     ret = SendMessageA(hTab, TCM_GETITEMA, -2, (LPARAM)&tcItem);
     expect(FALSE, ret);
-    ok(tcItem.lParam == 0, "Expected zero lParam, got %Iu\n", tcItem.lParam);
+    ok(tcItem.lParam == 0, "Expected zero lParam, got %Iu\n", (size_t)tcItem.lParam);
 
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
 
@@ -1420,7 +1420,7 @@ static void test_TCS_OWNERDRAWFIXED(void)
 
     itemdata = 0;
     memset(&itemdata, 0xde, 4);
-    ok(g_drawitem.itemData == itemdata, "got 0x%Ix, expected 0x%Ix\n", g_drawitem.itemData, itemdata);
+    ok(g_drawitem.itemData == itemdata, "got 0x%Ix, expected 0x%Ix\n", (size_t)g_drawitem.itemData, (size_t)itemdata);
 
     DestroyWindow(hTab);
 
@@ -1450,7 +1450,7 @@ static void test_TCS_OWNERDRAWFIXED(void)
     RedrawWindow(hTab, NULL, 0, RDW_UPDATENOW);
 
     memset(&itemdata, 0xde, sizeof(ULONG_PTR));
-    ok(*(ULONG_PTR*)g_drawitem.itemData == itemdata, "got 0x%Ix, expected 0x%Ix\n", g_drawitem.itemData, itemdata);
+    ok(*(ULONG_PTR*)g_drawitem.itemData == itemdata, "got 0x%Ix, expected 0x%Ix\n", (size_t)g_drawitem.itemData, (size_t)itemdata);
 
     DestroyWindow(hTab);
 
@@ -1483,7 +1483,7 @@ static void test_TCS_OWNERDRAWFIXED(void)
     todo_wine_if(sizeof(void *) == 4)
     ok(g_drawitem.itemData == itemdata ||
        broken(sizeof(void *) == 4 && g_drawitem.itemData == 0xdededede), /* Win7-32-bit */
-       "got 0x%Ix, expected 0x%Ix\n", g_drawitem.itemData, itemdata);
+       "got 0x%Ix, expected 0x%Ix\n", (size_t)g_drawitem.itemData, (size_t)itemdata);
 
     DestroyWindow(hTab);
 

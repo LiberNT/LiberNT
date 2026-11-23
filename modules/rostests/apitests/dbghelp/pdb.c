@@ -456,7 +456,7 @@ static BOOL CALLBACK EnumSymProc(PSYMBOL_INFO pSymInfo, ULONG SymbolSize, PVOID 
     }
     else
     {
-        ok(0, "Out of bounds (%Iu), max is: %Iu!\n", ctx->Index, ARRAYSIZE(test_data));
+        ok(0, "Out of bounds (%Iu), max is: %Iu!\n", (size_t)ctx->Index, ARRAYSIZE(test_data));
     }
 
     return TRUE;

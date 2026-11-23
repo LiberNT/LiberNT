@@ -4470,7 +4470,7 @@ static void check_ntfs_directory_existing_child(HANDLE handle)
     ok(!status, "Retained directory enumeration returned %#lx.\n", (DWORD)status);
     if (status) return;
     ok(io.Information >= FIELD_OFFSET(FILE_NAMES_INFORMATION, FileName) + name.Length &&
-       io.Information <= sizeof(buffer), "Directory enumeration size %Iu.\n", io.Information);
+       io.Information <= sizeof(buffer), "Directory enumeration size %Iu.\n", (size_t)io.Information);
     if (io.Information < FIELD_OFFSET(FILE_NAMES_INFORMATION, FileName) + name.Length ||
         io.Information > sizeof(buffer)) return;
     ok(info->FileNameLength == name.Length && !memcmp(info->FileName, name.Buffer, name.Length),
@@ -4497,7 +4497,7 @@ static void check_ntfs_directory_ea(HANDLE handle, FILE_FULL_EA_INFORMATION *exp
     status = NtQueryEaFile(handle, &io, actual, sizeof(buffer), TRUE, NULL, 0, NULL, TRUE);
     ok(!status, "EA query returned %#lx.\n", (DWORD)status);
     if (status) return;
-    ok(io.Information == size, "EA query size %Iu, expected %lu.\n", io.Information, size);
+    ok(io.Information == size, "EA query size %Iu, expected %lu.\n", (size_t)io.Information, size);
     if (io.Information != size) return;
     ok(!memcmp(actual, expected, size), "Queried EA differs from the last write.\n");
 }
@@ -5075,9 +5075,9 @@ static void check_ntfs_large_dacl(HANDLE handle, PACL expected)
     ok(ret && present && acl, "Large descriptor DACL returned %d, present %d, ACL %p.\n", ret, present, acl);
     if (!ret || !present || !acl) goto done;
     offset = (ULONG_PTR)acl - (ULONG_PTR)sd;
-    ok(offset <= size && sizeof(*acl) <= size - offset, "Large DACL offset %Iu exceeds size %lu.\n", offset, size);
+    ok(offset <= size && sizeof(*acl) <= size - offset, "Large DACL offset %Iu exceeds size %lu.\n", (size_t)offset, size);
     if (offset > size || sizeof(*acl) > size - offset) goto done;
-    ok(acl->AclSize <= size - offset, "Large DACL length %u exceeds descriptor remainder %Iu.\n", acl->AclSize, size - offset);
+    ok(acl->AclSize <= size - offset, "Large DACL length %u exceeds descriptor remainder %Iu.\n", acl->AclSize, (size_t)(size - offset));
     if (acl->AclSize > size - offset) goto done;
     ret = IsValidAcl(acl) && GetAclInformation(acl, &info, sizeof(info), AclSizeInformation);
     ok(ret, "Large ACL validation failed: %lu.\n", GetLastError());
@@ -12622,7 +12622,7 @@ static void test_duplicate_handle_access(void)
     ok(ret, "got error %lu\n", GetLastError());
 
     sprintf(cmdline, "%s security duplicate %Iu %lu %Iu", myARGV[0],
-            (ULONG_PTR)sync_event, GetCurrentProcessId(), (ULONG_PTR)impersonation );
+            (size_t)sync_event, GetCurrentProcessId(), (size_t)impersonation );
     ret = CreateProcessAsUserA(restricted, NULL, cmdline, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi);
     ok(ret, "got error %lu\n", GetLastError());
 

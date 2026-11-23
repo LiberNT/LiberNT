@@ -432,7 +432,7 @@ static SQLRETURN WINAPI driver_SQLGetData( SQLHSTMT stmt, SQLUSMALLINT col,
     ok( col == 1, "col = %d\n", col );
     ok( type == SQL_C_SLONG, "type = %d\n", type );
     ok( val != NULL, "val = %p\n", val );
-    ok( max_len == sizeof(SLONG), "max_len = %Id\n", max_len );
+    ok( max_len == sizeof(SLONG), "max_len = %Id\n", (ptrdiff_t)max_len );
     ok( len != NULL, "len = %p\n", len );
 
     *(SLONG *)val = stmt_data.rows[stmt_data.cur_row - 1].id;
@@ -451,7 +451,7 @@ static SQLRETURN WINAPI driver_SQLBindCol( SQLHSTMT stmt, SQLUSMALLINT col,
     if (col == 1)
     {
         ok( type == SQL_C_SLONG, "type = %d\n", type );
-        ok( max_len == 2 * sizeof(int), "max_len = %Id\n", max_len );
+        ok( max_len == 2 * sizeof(int), "max_len = %Id\n", (ptrdiff_t)max_len );
 
         stmt_data.id_buf = val;
         stmt_data.id_len = len;
@@ -460,7 +460,7 @@ static SQLRETURN WINAPI driver_SQLBindCol( SQLHSTMT stmt, SQLUSMALLINT col,
 
     ok( col == 2, "col = %d\n", col );
     ok( type == SQL_C_CHAR, "type = %d\n", type );
-    ok( max_len == sizeof(char[32]), "max_len = %Id\n", max_len );
+    ok( max_len == sizeof(char[32]), "max_len = %Id\n", (ptrdiff_t)max_len );
 
     stmt_data.name_buf = val;
     stmt_data.name_len = len;
@@ -484,10 +484,10 @@ static SQLRETURN WINAPI driver_SQLBindParameter( SQLHSTMT stmt, SQLUSMALLINT par
     CHECK_EXPECT( driver_SQLBindParameter );
     ok( (ULONG_PTR)stmt == SQL_HANDLE_STMT, "stmt = %p\n", stmt );
     ok( param_type == SQL_PARAM_INPUT, "param_type = %d\n", param_type );
-    ok( !size, "size = %Id\n", size );
+    ok( !size, "size = %Id\n", (ptrdiff_t)size );
     ok( !decimal_digits, "decimal_digits = %d\n", decimal_digits );
     ok( val != NULL, "val = %p\n", val );
-    ok( !max_len, "max_len = %Id\n", max_len );
+    ok( !max_len, "max_len = %Id\n", (ptrdiff_t)max_len );
     ok( len != NULL, "len = %p\n", len );
 
     if (param == 1)
@@ -495,7 +495,7 @@ static SQLRETURN WINAPI driver_SQLBindParameter( SQLHSTMT stmt, SQLUSMALLINT par
         ok( ctype == SQL_C_LONG, "ctype = %d\n", ctype );
         ok( type == SQL_INTEGER, "type = %d\n", type );
         ok( *(int *)val == 1, "val = %d\n", *(int *)val );
-        ok( *len == sizeof(int), "*len = %Id\n", *len );
+        ok( *len == sizeof(int), "*len = %Id\n", (ptrdiff_t)(*len) );
         return SQL_SUCCESS;
     }
 
@@ -503,7 +503,7 @@ static SQLRETURN WINAPI driver_SQLBindParameter( SQLHSTMT stmt, SQLUSMALLINT par
     ok( ctype == SQL_C_CHAR, "ctype = %d\n", ctype );
     ok( type == SQL_VARCHAR, "type = %d\n", type );
     ok( !strcmp((char *)val, "Mary"), "val = %s\n", (char *)val);
-    ok( *len == strlen("Mary"), "*len = %Id\n", *len );
+    ok( *len == strlen("Mary"), "*len = %Id\n", (ptrdiff_t)(*len) );
     return SQL_SUCCESS;
 }
 

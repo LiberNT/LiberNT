@@ -88,10 +88,10 @@ START_TEST(SetProp)
 
     Result = EnumPropsW(hWnd, EnumFunc);
     if (0) // Windows returns an uninitialized value here
-    ok(Result == TRUE, "EnumProps returned %Iu\n", Result);
+    ok(Result == TRUE, "EnumProps returned %Iu\n", (size_t)Result);
     Result = EnumPropsExW(hWnd, EnumFuncEx, 0);
     if (0) // Windows returns an uninitialized value here
-    ok(Result == TRUE, "EnumPropsEx returned %Iu\n", Result);
+    ok(Result == TRUE, "EnumPropsEx returned %Iu\n", (size_t)Result);
 
     Atom2 = GlobalAddAtomW(L"PropTestAtom2");
     ok(Atom2 != 0, "PropTestAtom2 is 0x%04x\n", Atom2);
@@ -103,16 +103,16 @@ START_TEST(SetProp)
 
     Result = EnumPropsExW(hWnd, EnumFuncEx, 0);
     if (0) // Windows returns an uninitialized value here
-    ok(Result == TRUE, "EnumPropsEx returned %Iu\n", Result);
+    ok(Result == TRUE, "EnumPropsEx returned %Iu\n", (size_t)Result);
 
     Result = SetPropW(hWnd, (PCWSTR)MAKEINTATOM(Atom1), &Atom1);
-    ok(Result == TRUE, "SetProp returned %Iu\n", Result);
+    ok(Result == TRUE, "SetProp returned %Iu\n", (size_t)Result);
     Result = SetPropW(hWnd, (PCWSTR)MAKEINTATOM(Atom2), &Atom3);
-    ok(Result == TRUE, "SetProp returned %Iu\n", Result);
+    ok(Result == TRUE, "SetProp returned %Iu\n", (size_t)Result);
     Prop = GetPropW(hWnd, (PCWSTR)MAKEINTATOM(Atom2));
     ok(Prop == &Atom3, "GetProp returned %p, expected %p\n", Prop, &Atom3);
     Result = SetPropW(hWnd, (PCWSTR)MAKEINTATOM(Atom2), &Atom2);
-    ok(Result == TRUE, "SetProp returned %Iu\n", Result);
+    ok(Result == TRUE, "SetProp returned %Iu\n", (size_t)Result);
     Prop = GetPropW(hWnd, (PCWSTR)MAKEINTATOM(Atom2));
     ok(Prop == &Atom2, "GetProp returned %p, expected %p\n", Prop, &Atom2);
     Prop = GetPropW(hWnd, L"PropTestAtom2");
@@ -121,7 +121,7 @@ START_TEST(SetProp)
     ok(Prop == &Atom2, "GetProp returned %p, expected %p\n", Prop, &Atom2);
 
     Result = EnumPropsExW(hWnd, EnumFuncEx, 1);
-    ok(Result == TRUE, "EnumPropsEx returned %Iu\n", Result);
+    ok(Result == TRUE, "EnumPropsEx returned %Iu\n", (size_t)Result);
 
     hIcon = LoadImageW(NULL, (PCWSTR)MAKEINTRESOURCE(OIC_NOTE), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
     ok(hIcon != NULL, "LoadImage failed with %lu\n", GetLastError());
@@ -133,7 +133,7 @@ START_TEST(SetProp)
 
     /* Set big icon, should also set small icon */
     Result = SendMessageW(hWnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
-    ok(Result == 0, "WM_SETICON returned 0x%Ix\n", Result);
+    ok(Result == 0, "WM_SETICON returned 0x%Ix\n", (size_t)Result);
 
     hIcon2 = (HICON)SendMessageW(hWnd, WM_GETICON, ICON_BIG, 0);
     ok(hIcon2 == hIcon, "WM_GETICON returned %p, expected %p\n", hIcon2, hIcon);

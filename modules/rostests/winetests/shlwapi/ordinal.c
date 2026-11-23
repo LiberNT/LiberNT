@@ -2486,7 +2486,7 @@ static void test_SHCreateWorkerWindowA(void)
     ok(lstrcmpA(classA, "WorkerA") == 0, "expected WorkerA class, got %s\n", classA);
 
     ret = GetWindowLongPtrA(hwnd, 0);
-    ok(ret == 0, "got %Id\n", ret);
+    ok(ret == 0, "got %Id\n", (ptrdiff_t)ret);
 
     /* class info */
     memset(&cliA, 0, sizeof(cliA));
@@ -2507,19 +2507,19 @@ static void test_SHCreateWorkerWindowA(void)
     ok(lstrcmpA(classA, "WorkerA") == 0, "expected WorkerA class, got %s\n", classA);
 
     ret = GetWindowLongPtrA(hwnd, 0);
-    ok(ret == 0xdeadbeef, "got %Id\n", ret);
+    ok(ret == 0xdeadbeef, "got %Id\n", (ptrdiff_t)ret);
 
     /* test exstyle */
     ret = GetWindowLongA(hwnd, GWL_EXSTYLE);
     ok(ret == WS_EX_WINDOWEDGE ||
-       ret == (WS_EX_WINDOWEDGE|WS_EX_LAYOUTRTL) /* systems with RTL locale */, "0x%08Ix\n", ret);
+       ret == (WS_EX_WINDOWEDGE|WS_EX_LAYOUTRTL) /* systems with RTL locale */, "0x%08Ix\n", (size_t)ret);
 
     DestroyWindow(hwnd);
 
     hwnd = pSHCreateWorkerWindowA(0, NULL, WS_EX_TOOLWINDOW, 0, 0, 0);
     ret = GetWindowLongA(hwnd, GWL_EXSTYLE);
     ok(ret == (WS_EX_WINDOWEDGE|WS_EX_TOOLWINDOW) ||
-       ret == (WS_EX_WINDOWEDGE|WS_EX_TOOLWINDOW|WS_EX_LAYOUTRTL) /* systems with RTL locale */, "0x%08Ix\n", ret);
+       ret == (WS_EX_WINDOWEDGE|WS_EX_TOOLWINDOW|WS_EX_LAYOUTRTL) /* systems with RTL locale */, "0x%08Ix\n", (size_t)ret);
     DestroyWindow(hwnd);
 }
 

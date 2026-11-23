@@ -131,7 +131,7 @@ START_TEST(SendMessageTimeoutHung)
     Elapsed = GetTickCount() - Start;
     ok_long((LONG)Ret, 0);
     ok_long(Error, ERROR_TIMEOUT);
-    ok(Result == 0, "Result 0x%Ix\n", Result);
+    ok(Result == 0, "Result 0x%Ix\n", (size_t)Result);
     ok(Elapsed >= 150, "Returned after %lu ms\n", Elapsed);
 
     printf("Waiting for the window to be reported hung\n");

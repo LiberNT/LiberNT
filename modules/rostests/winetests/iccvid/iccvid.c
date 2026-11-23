@@ -38,7 +38,7 @@ static void test_formats(void)
     ok(!!hic, "Failed to open codec.\n");
 
     ret = ICGetInfo(hic, &info, sizeof(info));
-    ok(ret == sizeof(info), "Got %Id.\n", ret);
+    ok(ret == sizeof(info), "Got %Id.\n", (ptrdiff_t)ret);
     ok(info.dwSize == sizeof(info), "Got size %lu.\n", info.dwSize);
     ok(info.fccType == ICTYPE_VIDEO, "Got type %#lx.\n", info.fccType);
     ok(info.fccHandler == mmioFOURCC('c','v','i','d'), "Got handler %#lx.\n", info.fccHandler);
@@ -48,10 +48,10 @@ static void test_formats(void)
     ok(info.dwVersionICM == ICVERSION, "Got ICM version %#lx.\n", info.dwVersionICM);
 
     ret = ICDecompressQuery(hic, in, NULL);
-    ok(ret == ICERR_OK, "Got %Id.\n", ret);
+    ok(ret == ICERR_OK, "Got %Id.\n", (ptrdiff_t)ret);
 
     ret = ICDecompressGetFormat(hic, in, NULL);
-    ok(ret == sizeof(BITMAPINFOHEADER), "Got %Id.\n", ret);
+    ok(ret == sizeof(BITMAPINFOHEADER), "Got %Id.\n", (ptrdiff_t)ret);
 
     in->biWidth = 320;
     in->biHeight = 240;
@@ -62,7 +62,7 @@ static void test_formats(void)
 
     memset(buffer, 0xcc, sizeof(buffer));
     ret = ICDecompressGetFormat(hic, in, out);
-    ok(ret == ICERR_OK, "Got %Id.\n", ret);
+    ok(ret == ICERR_OK, "Got %Id.\n", (ptrdiff_t)ret);
     ok(out->bmiHeader.biSize == sizeof(BITMAPINFOHEADER), "Got size %lu.\n", out->bmiHeader.biSize);
     ok(out->bmiHeader.biWidth == 320, "Got width %ld.\n", out->bmiHeader.biWidth);
     ok(out->bmiHeader.biHeight == 240, "Got height %ld.\n", out->bmiHeader.biHeight);
@@ -77,110 +77,110 @@ static void test_formats(void)
     todo_wine ok(out->bmiColors[0].rgbRed == 0xcc, "Expected colours to be unmodified.\n");
 
     ret = ICDecompressQuery(hic, in, out);
-    ok(ret == ICERR_OK, "Got %Id.\n", ret);
+    ok(ret == ICERR_OK, "Got %Id.\n", (ptrdiff_t)ret);
 
     out->bmiHeader.biHeight = -240;
     out->bmiHeader.biSizeImage = 0;
     ret = ICDecompressQuery(hic, in, out);
-    ok(ret == ICERR_OK, "Got %Id.\n", ret);
+    ok(ret == ICERR_OK, "Got %Id.\n", (ptrdiff_t)ret);
 
     out->bmiHeader.biPlanes = 0;
     ret = ICDecompressQuery(hic, in, out);
-    todo_wine ok(ret == ICERR_BADFORMAT, "Got %Id.\n", ret);
+    todo_wine ok(ret == ICERR_BADFORMAT, "Got %Id.\n", (ptrdiff_t)ret);
     out->bmiHeader.biPlanes = 1;
 
     out->bmiHeader.biHeight = -480;
     ret = ICDecompressQuery(hic, in, out);
-    ok(ret == ICERR_BADFORMAT, "Got %Id.\n", ret);
+    ok(ret == ICERR_BADFORMAT, "Got %Id.\n", (ptrdiff_t)ret);
     out->bmiHeader.biHeight = -240;
 
     out->bmiHeader.biWidth = 640;
     out->bmiHeader.biHeight = 480;
     ret = ICDecompressQuery(hic, in, out);
-    ok(ret == ICERR_BADFORMAT, "Got %Id.\n", ret);
+    ok(ret == ICERR_BADFORMAT, "Got %Id.\n", (ptrdiff_t)ret);
     out->bmiHeader.biWidth = 160;
     out->bmiHeader.biHeight = 120;
     ret = ICDecompressQuery(hic, in, out);
-    ok(ret == ICERR_BADFORMAT, "Got %Id.\n", ret);
+    ok(ret == ICERR_BADFORMAT, "Got %Id.\n", (ptrdiff_t)ret);
     out->bmiHeader.biWidth = 320;
     out->bmiHeader.biHeight = 240;
 
     out->bmiHeader.biBitCount = 8;
     ret = ICDecompressQuery(hic, in, out);
-    todo_wine ok(ret == ICERR_OK, "Got %Id.\n", ret);
+    todo_wine ok(ret == ICERR_OK, "Got %Id.\n", (ptrdiff_t)ret);
     out->bmiHeader.biBitCount = 16;
     ret = ICDecompressQuery(hic, in, out);
-    ok(ret == ICERR_OK, "Got %Id.\n", ret);
+    ok(ret == ICERR_OK, "Got %Id.\n", (ptrdiff_t)ret);
     out->bmiHeader.biBitCount = 32;
     ret = ICDecompressQuery(hic, in, out);
-    ok(ret == ICERR_OK, "Got %Id.\n", ret);
+    ok(ret == ICERR_OK, "Got %Id.\n", (ptrdiff_t)ret);
 
     out->bmiHeader.biBitCount = 16;
     out->bmiHeader.biCompression = BI_BITFIELDS;
     ret = ICDecompressQuery(hic, in, out);
-    ok(ret == ICERR_BADFORMAT, "Got %Id.\n", ret);
+    ok(ret == ICERR_BADFORMAT, "Got %Id.\n", (ptrdiff_t)ret);
     ((DWORD *)&out->bmiColors[0])[0] = 0xf800;
     ((DWORD *)&out->bmiColors[0])[1] = 0x07e0;
     ((DWORD *)&out->bmiColors[0])[2] = 0x001f;
     ret = ICDecompressQuery(hic, in, out);
-    ok(ret == ICERR_OK, "Got %Id.\n", ret);
+    ok(ret == ICERR_OK, "Got %Id.\n", (ptrdiff_t)ret);
 
     out->bmiHeader.biCompression = mmioFOURCC('C','L','J','R');
     out->bmiHeader.biBitCount = 8;
     ret = ICDecompressQuery(hic, in, out);
-    ok(ret == ICERR_BADFORMAT, "Got %Id.\n", ret);
+    ok(ret == ICERR_BADFORMAT, "Got %Id.\n", (ptrdiff_t)ret);
     out->bmiHeader.biBitCount = 16;
     out->bmiHeader.biCompression = mmioFOURCC('U','Y','V','Y');
     ret = ICDecompressQuery(hic, in, out);
-    ok(ret == ICERR_BADFORMAT, "Got %Id.\n", ret);
+    ok(ret == ICERR_BADFORMAT, "Got %Id.\n", (ptrdiff_t)ret);
     out->bmiHeader.biCompression = mmioFOURCC('Y','U','Y','2');
     ret = ICDecompressQuery(hic, in, out);
-    ok(ret == ICERR_BADFORMAT, "Got %Id.\n", ret);
+    ok(ret == ICERR_BADFORMAT, "Got %Id.\n", (ptrdiff_t)ret);
 
     ret = ICDecompressEnd(hic);
-    ok(ret == ICERR_OK, "Got %Id.\n", ret);
+    ok(ret == ICERR_OK, "Got %Id.\n", (ptrdiff_t)ret);
 
     out->bmiHeader.biCompression = BI_RGB;
     out->bmiHeader.biBitCount = 24;
     ret = ICDecompressBegin(hic, in, out);
-    ok(ret == ICERR_OK, "Got %Id.\n", ret);
+    ok(ret == ICERR_OK, "Got %Id.\n", (ptrdiff_t)ret);
 
     ret = ICDecompressEnd(hic);
-    ok(ret == ICERR_OK, "Got %Id.\n", ret);
+    ok(ret == ICERR_OK, "Got %Id.\n", (ptrdiff_t)ret);
 
     ret = ICDecompressExQuery(hic, 0, in, NULL, 0, 0, 320, 240, NULL, NULL, 0, 0, 0, 0);
-    ok(ret == ICERR_OK, "Got %Id.\n", ret);
+    ok(ret == ICERR_OK, "Got %Id.\n", (ptrdiff_t)ret);
     ret = ICDecompressExQuery(hic, 0, in, NULL, 0, 0, 32, 24, NULL, NULL, 0, 0, 0, 0);
-    ok(ret == ICERR_BADPARAM, "Got %Id.\n", ret);
+    ok(ret == ICERR_BADPARAM, "Got %Id.\n", (ptrdiff_t)ret);
     ret = ICDecompressExQuery(hic, 0, in, NULL, 0, 0, 0, 0, NULL, NULL, 0, 0, 0, 0);
-    ok(ret == ICERR_BADPARAM, "Got %Id.\n", ret);
+    ok(ret == ICERR_BADPARAM, "Got %Id.\n", (ptrdiff_t)ret);
     ret = ICDecompressExQuery(hic, 0, in, NULL, 20, 0, 320, 240, NULL, NULL, 0, 0, 0, 0);
-    ok(ret == ICERR_BADPARAM, "Got %Id.\n", ret);
+    ok(ret == ICERR_BADPARAM, "Got %Id.\n", (ptrdiff_t)ret);
     ret = ICDecompressExQuery(hic, 0, in, NULL, 0, 20, 320, 240, NULL, NULL, 0, 0, 0, 0);
-    ok(ret == ICERR_BADPARAM, "Got %Id.\n", ret);
+    ok(ret == ICERR_BADPARAM, "Got %Id.\n", (ptrdiff_t)ret);
     ret = ICDecompressExQuery(hic, 0, in, NULL, 0, 0, 320, 240, &out->bmiHeader, NULL, 0, 0, 0, 0);
-    ok(ret == ICERR_BADFORMAT, "Got %Id.\n", ret);
+    ok(ret == ICERR_BADFORMAT, "Got %Id.\n", (ptrdiff_t)ret);
     ret = ICDecompressExQuery(hic, 0, in, NULL, 0, 0, 320, 240, &out->bmiHeader, NULL, 0, 0, 320, 240);
-    ok(ret == ICERR_OK, "Got %Id.\n", ret);
+    ok(ret == ICERR_OK, "Got %Id.\n", (ptrdiff_t)ret);
     ret = ICDecompressExQuery(hic, 0, in, NULL, 0, 0, 320, 240, &out->bmiHeader, NULL, 0, 0, 160, 120);
-    ok(ret == ICERR_BADFORMAT, "Got %Id.\n", ret);
+    ok(ret == ICERR_BADFORMAT, "Got %Id.\n", (ptrdiff_t)ret);
 
     out->bmiHeader.biWidth = 640;
     ret = ICDecompressExQuery(hic, 0, in, NULL, 0, 0, 320, 240, &out->bmiHeader, NULL, 0, 0, 640, 240);
-    ok(ret == ICERR_BADFORMAT, "Got %Id.\n", ret);
+    ok(ret == ICERR_BADFORMAT, "Got %Id.\n", (ptrdiff_t)ret);
     out->bmiHeader.biHeight = 480;
     ret = ICDecompressExQuery(hic, 0, in, NULL, 0, 0, 320, 240, &out->bmiHeader, NULL, 0, 0, 640, 480);
-    ok(ret == ICERR_BADFORMAT, "Got %Id.\n", ret);
+    ok(ret == ICERR_BADFORMAT, "Got %Id.\n", (ptrdiff_t)ret);
     ret = ICDecompressExQuery(hic, 0, in, NULL, 0, 0, 320, 240, &out->bmiHeader, NULL, 20, 20, 320, 240);
-    ok(ret == ICERR_OK, "Got %Id.\n", ret);
+    ok(ret == ICERR_OK, "Got %Id.\n", (ptrdiff_t)ret);
 
     ret = ICDecompressExBegin(hic, 0, in, NULL, 0, 0, 320, 240, &out->bmiHeader, NULL, 20, 20, 320, 240);
-    ok(ret == ICERR_OK, "Got %Id.\n", ret);
+    ok(ret == ICERR_OK, "Got %Id.\n", (ptrdiff_t)ret);
     ret = ICDecompressExEnd(hic);
-    ok(ret == ICERR_OK, "Got %Id.\n", ret);
+    ok(ret == ICERR_OK, "Got %Id.\n", (ptrdiff_t)ret);
 
     ret = ICClose(hic);
-    ok(!ret, "Got %Id.\n", ret);
+    ok(!ret, "Got %Id.\n", (ptrdiff_t)ret);
 }
 
 START_TEST(iccvid)

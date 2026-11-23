@@ -157,7 +157,7 @@ static void test_play(HWND hwnd)
     parm.status.dwReturn = 0xFEEDABAD;
     err = mciSendCommandA(wDeviceID, MCI_STATUS, MCI_STATUS_ITEM, (DWORD_PTR)&parm);
     ok(!err, "STATUS time format: %s\n", dbg_mcierr(err));
-    if(!err) ok(parm.status.dwReturn == MCI_FORMAT_MSF, "status time default format: %Id\n", parm.status.dwReturn);
+    if(!err) ok(parm.status.dwReturn == MCI_FORMAT_MSF, "status time default format: %Id\n", (ptrdiff_t)parm.status.dwReturn);
 
     /* "CD-Audio" */
     err = mciSendStringA("info c product wait notify", buf, sizeof(buf), hwnd);
@@ -187,7 +187,7 @@ static void test_play(HWND hwnd)
         /* set door closed may not work. */
         return;
     default: /* play/record/seek/pause */
-        ok(parm.status.dwReturn==MCI_MODE_STOP, "STATUS mode is %Ix\n", parm.status.dwReturn);
+        ok(parm.status.dwReturn==MCI_MODE_STOP, "STATUS mode is %Ix\n", (size_t)parm.status.dwReturn);
         /* fall through */
     case MCI_MODE_STOP: /* normal */
         break;
@@ -220,7 +220,7 @@ static void test_play(HWND hwnd)
     ok(err == ok_hw, "STATUS number of tracks: %s\n", dbg_mcierr(err));
     numtracks = parm.status.dwReturn;
     /* cf. MAXIMUM_NUMBER_TRACKS */
-    ok(0 < numtracks && numtracks <= 99, "number of tracks=%Id\n", parm.status.dwReturn);
+    ok(0 < numtracks && numtracks <= 99, "number of tracks=%Id\n", (ptrdiff_t)parm.status.dwReturn);
 
     err = mciSendStringA("status c length", buf, sizeof(buf), hwnd);
     ok(err == ok_hw, "status length: %s\n", dbg_mcierr(err));
@@ -325,7 +325,7 @@ static void test_play(HWND hwnd)
     err = mciSendCommandA(wDeviceID, MCI_STATUS, MCI_STATUS_ITEM | MCI_TRACK, (DWORD_PTR)&parm);
     ok(!err, "STATUS type track 1: %s\n", dbg_mcierr(err));
     ok(parm.status.dwReturn==MCI_CDA_TRACK_OTHER || parm.status.dwReturn==MCI_CDA_TRACK_AUDIO,
-       "unknown track type %Ix\n", parm.status.dwReturn);
+       "unknown track type %Ix\n", (size_t)parm.status.dwReturn);
 
     if (parm.status.dwReturn == MCI_CDA_TRACK_OTHER) {
         /* Find an audio track */
@@ -335,7 +335,7 @@ static void test_play(HWND hwnd)
         err = mciSendCommandA(wDeviceID, MCI_STATUS, MCI_STATUS_ITEM | MCI_TRACK, (DWORD_PTR)&parm);
         ok(!err, "STATUS type track %lu: %s\n", numtracks, dbg_mcierr(err));
         ok(parm.status.dwReturn == MCI_CDA_TRACK_OTHER || parm.status.dwReturn == MCI_CDA_TRACK_AUDIO,
-           "unknown track type %Ix\n", parm.status.dwReturn);
+           "unknown track type %Ix\n", (size_t)parm.status.dwReturn);
         track = (!err && parm.status.dwReturn == MCI_CDA_TRACK_AUDIO) ? numtracks : 0;
 
         /* Seek to start (above) skips over data tracks
@@ -347,7 +347,7 @@ static void test_play(HWND hwnd)
         ok(!err || broken(err == MCIERR_HARDWARE), "STATUS position: %s\n", dbg_mcierr(err));
 
         if(!err && track) ok(parm.status.dwReturn > duration,
-            "Seek did not skip data tracks, position %Iums\n", parm.status.dwReturn);
+            "Seek did not skip data tracks, position %Iums\n", (size_t)parm.status.dwReturn);
         /* dwReturn > start + length(#1) may fail because of small position report fluctuation.
          * On some native systems, status position fluctuates around the target position;
          * Successive calls return varying positions! */
@@ -526,7 +526,7 @@ static void test_play(HWND hwnd)
     parm.status.dwReturn = 0xFEEDABAD;
     err = mciSendCommandA(wDeviceID, MCI_STATUS, MCI_STATUS_ITEM | MCI_TRACK, (DWORD_PTR)&parm);
     ok(!err, "STATUS length track %lu: %s\n", parm.status.dwTrack, dbg_mcierr(err));
-    ok(duration == parm.status.dwReturn, "length MSF<>TMSF %08IX\n", parm.status.dwReturn);
+    ok(duration == parm.status.dwReturn, "length MSF<>TMSF %08IX\n", (size_t)parm.status.dwReturn);
 
     /* Play from position start to start+length always works. */
     /* TODO? also play it using MSF */

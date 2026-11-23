@@ -3864,7 +3864,7 @@ static void test_overlapped(void)
     r = GetOverlappedResult( 0, &ov, &result, TRUE );
     ok( r == TRUE, "should return TRUE\n" );
     ok( result == 0xabcd, "wrong result %lu\n", result );
-    ok( ov.Internal == STATUS_PENDING, "expected STATUS_PENDING, got %08Ix\n", ov.Internal );
+    ok( ov.Internal == STATUS_PENDING, "expected STATUS_PENDING, got %08Ix\n", (size_t)ov.Internal );
 
     ResetEvent( ov.hEvent );
 
@@ -5717,7 +5717,7 @@ static void test_post_completion(void)
     ret = GetQueuedCompletionStatus( port, &size, &key, &povl, 0 );
     ok(ret, "GetQueuedCompletionStatus failed: %lu\n", GetLastError());
     ok(size == 123, "wrong size %lu\n", size);
-    ok(key == 456, "wrong key %Iu\n", key);
+    ok(key == 456, "wrong key %Iu\n", (size_t)key);
     ok(povl == &ovl, "wrong ovl %p\n", povl);
 
     ret = GetQueuedCompletionStatus( port, &size, &key, &povl, 0 );
@@ -5745,7 +5745,7 @@ static void test_post_completion(void)
     ret = pGetQueuedCompletionStatusEx( port, entries, 2, &count, 0, FALSE );
     ok(ret, "GetQueuedCompletionStatusEx failed\n");
     ok(count == 1, "wrong count %lu\n", count);
-    ok(entries[0].lpCompletionKey == 456, "wrong key %Iu\n", entries[0].lpCompletionKey);
+    ok(entries[0].lpCompletionKey == 456, "wrong key %Iu\n", (size_t)entries[0].lpCompletionKey);
     ok(entries[0].lpOverlapped == &ovl, "wrong ovl %p\n", entries[0].lpOverlapped);
     ok(!(ULONG)entries[0].Internal, "wrong internal %#lx\n", (ULONG)entries[0].Internal);
     ok(entries[0].dwNumberOfBytesTransferred == 123, "wrong size %lu\n", entries[0].dwNumberOfBytesTransferred);
@@ -5761,11 +5761,11 @@ static void test_post_completion(void)
     ret = pGetQueuedCompletionStatusEx( port, entries, 2, &count, 0, FALSE );
     ok(ret, "GetQueuedCompletionStatusEx failed\n");
     ok(count == 2, "wrong count %lu\n", count);
-    ok(entries[0].lpCompletionKey == 456, "wrong key %Iu\n", entries[0].lpCompletionKey);
+    ok(entries[0].lpCompletionKey == 456, "wrong key %Iu\n", (size_t)entries[0].lpCompletionKey);
     ok(entries[0].lpOverlapped == &ovl, "wrong ovl %p\n", entries[0].lpOverlapped);
     ok(!(ULONG)entries[0].Internal, "wrong internal %#lx\n", (ULONG)entries[0].Internal);
     ok(entries[0].dwNumberOfBytesTransferred == 123, "wrong size %lu\n", entries[0].dwNumberOfBytesTransferred);
-    ok(entries[1].lpCompletionKey == 321, "wrong key %Iu\n", entries[1].lpCompletionKey);
+    ok(entries[1].lpCompletionKey == 321, "wrong key %Iu\n", (size_t)entries[1].lpCompletionKey);
     ok(entries[1].lpOverlapped == &ovl2, "wrong ovl %p\n", entries[1].lpOverlapped);
     ok(!(ULONG)entries[1].Internal, "wrong internal %#lx\n", (ULONG)entries[1].Internal);
     ok(entries[1].dwNumberOfBytesTransferred == 654, "wrong size %lu\n", entries[1].dwNumberOfBytesTransferred);
@@ -6235,7 +6235,7 @@ static void test_eof(void)
     ok(!size, "got size %lu\n", size);
     ok((NTSTATUS)overlapped.Internal == STATUS_PENDING || (NTSTATUS)overlapped.Internal == STATUS_END_OF_FILE,
        "got status %#lx\n", (NTSTATUS)overlapped.Internal);
-    ok(!overlapped.InternalHigh, "got size %Iu\n", overlapped.InternalHigh);
+    ok(!overlapped.InternalHigh, "got size %Iu\n", (size_t)overlapped.InternalHigh);
 
     SetFilePointer(file, 2, NULL, SEEK_SET);
 

@@ -362,7 +362,7 @@ static void test_NtQueryDirectoryFile_classes( HANDLE handle, UNICODE_STRING *ma
         status = pNtQueryDirectoryFile( handle, 0, NULL, NULL, &io, data, data_size,
                                         class, FALSE, mask, TRUE );
         ok( io.Status == 0xdeadbeef, "%u: wrong status %lx\n", class, io.Status );
-        ok( io.Information == 0xdeadbeef, "%u: wrong info %Ix\n", class, io.Information );
+        ok( io.Information == 0xdeadbeef, "%u: wrong info %Ix\n", class, (size_t)io.Information );
         ok(data[0] == 0x55555555, "%u: wrong offset %lx\n",  class, data[0] );
 
         switch (class)
@@ -397,13 +397,13 @@ static void test_NtQueryDirectoryFile_classes( HANDLE handle, UNICODE_STRING *ma
             {
                 ok( io.Status == STATUS_BUFFER_OVERFLOW, "%u: wrong status %lx\n", class, io.Status );
                 ok( io.Information == data_size || broken(!io.Information), /* win10 1709 */
-                    "%u: wrong info %Ix\n", class, io.Information );
+                    "%u: wrong info %Ix\n", class, (size_t)io.Information );
                 if (io.Information) ok(data[0] == 0, "%u: wrong offset %lx\n",  class, data[0] );
             }
             else
             {
                 ok( io.Status == 0xdeadbeef || io.Status == status, "%u: wrong status %lx\n", class, io.Status );
-                ok( io.Information == (io.Status == 0xdeadbeef ? 0xdeadbeef : 0), "%u: wrong info %Ix\n", class, io.Information );
+                ok( io.Information == (io.Status == 0xdeadbeef ? 0xdeadbeef : 0), "%u: wrong info %Ix\n", class, (size_t)io.Information );
                 ok(data[0] == 0x55555555, "%u: wrong offset %lx\n",  class, data[0] );
             }
             if (status != STATUS_INFO_LENGTH_MISMATCH) break;
@@ -663,7 +663,7 @@ static void test_NtQueryDirectoryFile(void)
     ok(status == STATUS_SUCCESS, "failed to query directory status %lx\n", status);
     ok(io.Status == STATUS_SUCCESS, "failed to query directory status %lx\n", io.Status);
     ok(io.Information == offsetof(FILE_BOTH_DIRECTORY_INFORMATION, FileName[lstrlenW(testfiles[0].name)]),
-       "wrong info %Ix\n", io.Information);
+       "wrong info %Ix\n", (size_t)io.Information);
     ok(fbdi->FileNameLength == lstrlenW(testfiles[0].name)*sizeof(WCHAR) &&
             !memcmp(fbdi->FileName, testfiles[0].name, fbdi->FileNameLength),
             "incorrect long file name: %s\n", wine_dbgstr_wn(fbdi->FileName,
@@ -684,7 +684,7 @@ static void test_NtQueryDirectoryFile(void)
     ok( status == STATUS_BUFFER_OVERFLOW, "wrong status %lx\n", status );
     ok( io.Status == STATUS_BUFFER_OVERFLOW, "wrong status %lx\n", io.Status );
     ok( io.Information == data_size || broken( io.Information == 0),
-        "wrong info %Ix\n", io.Information );
+        "wrong info %Ix\n", (size_t)io.Information );
     ok( fbdi->NextEntryOffset == 0 || fbdi->NextEntryOffset == 0x55555555, /* win10 >= 1709 */
         "wrong offset %lx\n",  fbdi->NextEntryOffset );
     if (!fbdi->NextEntryOffset)
@@ -727,7 +727,7 @@ static void test_NtQueryDirectoryFile(void)
                                    FileBothDirectoryInformation, FALSE, NULL, TRUE);
     ok(status == STATUS_SUCCESS, "wrong status %lx\n", status);
     ok(io.Status == STATUS_SUCCESS, "wrong status %lx\n", io.Status);
-    ok(io.Information > 0 && io.Information < data_size, "wrong info %Ix\n", io.Information);
+    ok(io.Information > 0 && io.Information < data_size, "wrong info %Ix\n", (size_t)io.Information);
     ok( fbdi->NextEntryOffset == ((offsetof( FILE_BOTH_DIRECTORY_INFORMATION, FileName[1] ) + 7) & ~7),
         "wrong offset %lx\n",  fbdi->NextEntryOffset );
     ok( fbdi->FileNameLength == sizeof(WCHAR), "wrong length %lx\n", fbdi->FileNameLength );
@@ -750,7 +750,7 @@ static void test_NtQueryDirectoryFile(void)
     ok( status == STATUS_SUCCESS, "wrong status %lx\n", status );
     ok( io.Status == STATUS_SUCCESS, "wrong status %lx\n", io.Status );
     ok( io.Information == offsetof( FILE_BOTH_DIRECTORY_INFORMATION, FileName[1] ),
-        "wrong info %Ix\n", io.Information );
+        "wrong info %Ix\n", (size_t)io.Information );
     ok( fbdi->NextEntryOffset == 0, "wrong offset %lx\n",  fbdi->NextEntryOffset );
     ok( fbdi->FileNameLength == sizeof(WCHAR), "wrong length %lx\n", fbdi->FileNameLength );
     ok( fbdi->FileName[0] == '.', "incorrect long file name: %s\n",
@@ -767,7 +767,7 @@ static void test_NtQueryDirectoryFile(void)
     ok( status == STATUS_SUCCESS, "wrong status %lx\n", status );
     ok( io.Status == STATUS_SUCCESS, "wrong status %lx\n", io.Status );
     ok( io.Information == offsetof( FILE_BOTH_DIRECTORY_INFORMATION, FileName[1] ),
-        "wrong info %Ix\n", io.Information );
+        "wrong info %Ix\n", (size_t)io.Information );
     ok( fbdi->NextEntryOffset == 0, "wrong offset %lx\n",  fbdi->NextEntryOffset );
 
     data_size = ((offsetof( FILE_BOTH_DIRECTORY_INFORMATION, FileName[1] ) + 7) & ~7) +
@@ -780,7 +780,7 @@ static void test_NtQueryDirectoryFile(void)
     ok( status == STATUS_SUCCESS, "wrong status %lx\n", status );
     ok( io.Status == STATUS_SUCCESS, "wrong status %lx\n", io.Status );
     ok( io.Information == data_size || io.Information == ((data_size + 7) & ~7),
-        "wrong info %Ix / %x\n", io.Information, data_size );
+        "wrong info %Ix / %x\n", (size_t)io.Information, data_size );
     ok( fbdi->NextEntryOffset == ((offsetof( FILE_BOTH_DIRECTORY_INFORMATION, FileName[1] ) + 7) & ~7),
         "wrong offset %lx\n",  fbdi->NextEntryOffset );
     ok( fbdi->FileNameLength == sizeof(WCHAR), "wrong length %lx\n", fbdi->FileNameLength );
@@ -802,7 +802,7 @@ static void test_NtQueryDirectoryFile(void)
                                     FileNamesInformation, FALSE, NULL, TRUE );
     ok( status == STATUS_SUCCESS, "wrong status %lx\n", status );
     ok( io.Status == STATUS_SUCCESS, "wrong status %lx\n", io.Status );
-    ok( io.Information == data_size, "wrong info %Ix / %x\n", io.Information, data_size );
+    ok( io.Information == data_size, "wrong info %Ix / %x\n", (size_t)io.Information, data_size );
     names = (FILE_NAMES_INFORMATION *)data;
     ok( names->NextEntryOffset == ((offsetof( FILE_NAMES_INFORMATION, FileName[1] ) + 7) & ~7),
         "wrong offset %lx\n",  names->NextEntryOffset );

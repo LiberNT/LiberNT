@@ -22,13 +22,13 @@ TestIdealSize(HWND hWnd)
     Height = SendMessageW(hWnd, LM_GETIDEALSIZE, 4096, (LPARAM)&Unbounded);
     ok(Unbounded.cx > 40, "cx = %ld for a wide limit\n", Unbounded.cx);
     ok(Unbounded.cy > 0, "cy = %ld for a wide limit\n", Unbounded.cy);
-    ok(Height == Unbounded.cy, "Height = %Id, cy = %ld\n", Height, Unbounded.cy);
+    ok(Height == Unbounded.cy, "Height = %Id, cy = %ld\n", (ptrdiff_t)Height, Unbounded.cy);
 
     Zero.cx = Zero.cy = -1;
     Height = SendMessageW(hWnd, LM_GETIDEALSIZE, 0, (LPARAM)&Zero);
     ok(Zero.cx == Unbounded.cx, "cx = %ld for no limit, expected %ld\n", Zero.cx, Unbounded.cx);
     ok(Zero.cy == Unbounded.cy, "cy = %ld for no limit, expected %ld\n", Zero.cy, Unbounded.cy);
-    ok(Height == Zero.cy, "Height = %Id, cy = %ld\n", Height, Zero.cy);
+    ok(Height == Zero.cy, "Height = %Id, cy = %ld\n", (ptrdiff_t)Height, Zero.cy);
 
     Narrow.cx = Narrow.cy = 0;
     SendMessageW(hWnd, LM_GETIDEALSIZE, Unbounded.cx / 2, (LPARAM)&Narrow);

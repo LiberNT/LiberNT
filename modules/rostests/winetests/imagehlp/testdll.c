@@ -24,8 +24,6 @@
 #include <commdlg.h>
 #include <shlwapi.h>
 
-extern DWORD WINAPI StrCmpCA(const char *, const char *);
-
 void export(void)
 {
     SysAllocString(NULL);

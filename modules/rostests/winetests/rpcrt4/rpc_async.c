@@ -54,7 +54,7 @@ static void test_RpcAsyncInitializeHandle(void)
     ok(async.Event == 0xcccccccc, "async.Event should be unset, not %d\n", async.Event);
     ok(async.NotificationType == 0xcccccccc, "async.NotificationType should be unset, not %d\n", async.NotificationType);
     for (i = 0; i < 4; i++)
-        ok(async.Reserved[i] == 0x0, "async.Reserved[%d] should be 0x0, not 0x%Ix\n", i, async.Reserved[i]);
+        ok(async.Reserved[i] == 0x0, "async.Reserved[%d] should be 0x0, not 0x%Ix\n", i, (size_t)async.Reserved[i]);
 }
 
 static void test_RpcAsyncGetCallStatus(void)
