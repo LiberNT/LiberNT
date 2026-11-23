@@ -132,6 +132,7 @@ list(APPEND SOURCE
     TebSegmentAfterWait.c
     SharedMemorySecurity.c
     SharedMemoryTransfer.c
+    MapFlush.c
     StarvationBoost.c
     SystemTimeChangeTimers.c
     TzSpecificLocalTimeEx.c
