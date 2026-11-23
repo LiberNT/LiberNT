@@ -167,3 +167,35 @@ START_TEST(wow64)
     RegDeleteKeyW(HKEY_CURRENT_USER, TEST_KEY);
     DeleteFileW(inf);
 }
+
+START_TEST(native)
+{
+    WCHAR windows[MAX_PATH], system[MAX_PATH], rundll32[MAX_PATH], native[MAX_PATH], temp[MAX_PATH], dll[MAX_PATH];
+    WCHAR inf[MAX_PATH];
+    BOOL wow64 = FALSE;
+    DWORD code;
+
+    if (sizeof(void *) > 4 || !IsWow64Process(GetCurrentProcess(), &wow64) || !wow64)
+    {
+        skip("not a 32-bit process under WoW64\n");
+        return;
+    }
+    GetWindowsDirectoryW(windows, ARRAYSIZE(windows));
+    GetSystemDirectoryW(system, ARRAYSIZE(system));
+    GetTempPathW(ARRAYSIZE(temp), temp);
+    StringCbPrintfW(rundll32, sizeof(rundll32), L"%ls\\rundll32.exe", system);
+    StringCbPrintfW(native, sizeof(native), L"%ls\\Sysnative\\setupapi.dll", windows);
+    StringCbPrintfW(dll, sizeof(dll), L"%lslntrundll32n.dll", temp);
+    StringCbPrintfW(inf, sizeof(inf), L"%lslntrundll32n.inf", temp);
+    ok(CopyFileW(native, dll, FALSE), "cannot copy %ls: %lu\n", native, GetLastError());
+    RegDeleteKeyW(HKEY_CURRENT_USER, TEST_KEY);
+
+    ok(write_inf(inf, "Native32"), "cannot write %ls\n", inf);
+    code = run_rundll32(rundll32, dll, inf);
+    ok(code == 0, "native DLL: exit code %lu\n", code);
+    ok(value_written(L"Native32"), "native DLL entry point had not run when rundll32 exited\n");
+
+    RegDeleteKeyW(HKEY_CURRENT_USER, TEST_KEY);
+    DeleteFileW(inf);
+    DeleteFileW(dll);
+}
