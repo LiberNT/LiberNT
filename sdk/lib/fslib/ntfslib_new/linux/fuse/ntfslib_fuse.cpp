@@ -15,6 +15,9 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
+#include <pthread.h>
+#include <signal.h>
 #include <inttypes.h>
 #include <time.h>
 #include <stdint.h>
@@ -28,13 +31,15 @@
 #include <sys/xattr.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <condition_variable>
-#include <deque>
 #include <memory>
 #include <mutex>
-#include <string>
+#include <shared_mutex>
 #include <thread>
+#include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 #include <map>
@@ -77,6 +82,38 @@ NtfsQueryTicks(void)
 #include <fuse_lowlevel.h>
 #endif
 
+/* One piece of a plain data stream: file bytes [Start, End) live at image byte Disk. */
+struct NtfsFastExtent
+{
+    ULONGLONG Start;
+    ULONGLONG End;
+    ULONGLONG Disk;
+};
+
+/*
+ * Data I/O that changes no allocation runs outside the request lock, on any thread, against this
+ * snapshot. Everything else on the file first waits such I/O out and takes the snapshot down.
+ */
+struct NtfsFastFile
+{
+    PNtfsFileRecord File;
+    struct NtfsFuseOpenFile* Owner;
+    std::shared_mutex Lock;
+    std::atomic<bool> Armed{false};
+    bool ReadOk;
+    bool WriteOk;
+    bool SetIdChecked;
+    ULONGLONG Committed;
+    ULONGLONG DataSize;
+    std::vector<NtfsFastExtent> Extents;
+    /* Writes past the valid data length: [Committed, Frontier) is contiguous, Ahead holds the rest. */
+    std::mutex PendingLock;
+    ULONGLONG Frontier;
+    std::vector<std::pair<ULONGLONG, ULONGLONG>> Ahead;
+    std::atomic<bool> Written{false};
+    std::atomic<UINT64> WriteTime{0};
+};
+
 struct NtfsFuseOpenFile
 {
     PNtfsFileRecord File;
@@ -94,23 +131,18 @@ struct NtfsFuseOpenFile
     bool AccessChecked;
     /* A write by an unprivileged caller has dropped set-id bits. */
     bool SetIdChecked;
-};
-
-/* A cached-mode O_DIRECT write waiting for its pages to be dropped before its reply. */
-struct NtfsFuseDirectWrite
-{
-#if NTFSLIB_HAVE_FUSE
-    fuse_req_t Request;
-#endif
-    uint64_t Ino;
-    off_t Offset;
-    size_t Length;
+    NtfsFastFile* Fast;
+    unsigned DataRequests;
 };
 
 struct NtfsFuseInode
 {
     ULONGLONG Reference;
     uint64_t Lookups;
+    bool Unlinked;
+    /* Where the last listing with attributes showed this inode: directory and position. */
+    uint64_t ListDirectory;
+    size_t ListIndex;
 };
 
 struct NtfsFuseState
@@ -125,26 +157,64 @@ struct NtfsFuseState
     bool StrictAtime;
 #if NTFSLIB_HAVE_FUSE
     struct fuse_session* Session;
+    size_t SpliceThreshold;
+    std::unique_ptr<NtfsFileRecord, decltype(&NtfsFileRecordDestroy)> LookupRecord{nullptr, NtfsFileRecordDestroy};
+    std::vector<WCHAR> LookupName;
+    UINT64 LookupParent;
+    UINT64 LookupGeneration;
+    std::unordered_map<UINT64, decltype(LookupRecord)> ListedRecords;
+    UINT64 ListingGeneration;
+    std::unique_ptr<NtfsFileRecord, decltype(&NtfsFileRecordDestroy)> ParentRecord{nullptr, NtfsFileRecordDestroy};
+    UINT64 ParentGeneration;
+    bool ParentFromLookup;
 #endif
     /* Inodes the kernel holds, keyed by inode number, with lookup counts. */
     std::unordered_map<uint64_t, NtfsFuseInode> Inodes;
     /* One record per open file, shared by all its handles. */
     std::unordered_map<uint64_t, NtfsFuseOpenFile> OpenFiles;
-    /* Values are shared with open directory handles so a cache
-     * invalidation cannot free a listing a reader still holds.
+    /* Values are shared with the scans below so a cache invalidation
+     * cannot free a listing a reader still walks.
      */
     std::unordered_map<uint64_t, std::shared_ptr<NtfsDirectoryListing>> DirectoryCache;
+    /*
+     * Directories are read without an open: a scan is tied to the listing it started on by a
+     * number in the upper bits of its offsets. The last few listings of a directory are kept.
+     */
+    std::unordered_map<uint64_t, std::vector<std::pair<uint32_t, std::shared_ptr<NtfsDirectoryListing>>>> DirectoryScans;
+    bool OpenlessDirectories;
     std::vector<UCHAR> ReadBuffer;
     /* Lazy access times of closed files, by file reference, as NT keeps them. */
     std::unordered_map<uint64_t, UINT64> PendingAccess;
-    /* Attributes of removed directories the kernel still holds open, by inode. */
-    std::unordered_map<uint64_t, struct stat> RemovedDirectories;
-    /* Drops pages behind O_DIRECT writes off the request thread, which readers holding those pages wait on. */
-    std::mutex DirectWriteLock;
-    std::condition_variable DirectWriteReady;
-    std::deque<NtfsFuseDirectWrite> DirectWrites;
-    std::thread DirectWriteThread;
-    bool DirectWriteStop;
+    std::mutex RequestLock;
+    /* Helper threads drain the request queue when the kernel has several requests waiting. */
+    std::vector<std::thread> Workers;
+    std::mutex WorkerLock;
+    std::condition_variable WorkerWake;
+    unsigned WorkerTokens;
+    std::atomic<unsigned> WorkersSleeping{0};
+    std::atomic<unsigned> WorkersDone{0};
+    std::atomic<bool> WorkerStop{false};
+    bool RingTransport;
+    /*
+     * A reader walking a directory opens its files in listing order: the data of the small ones
+     * ahead of it is pushed into the kernel's page cache, so each costs an open and no read.
+     */
+    std::thread PrefetchThread;
+    std::mutex PrefetchLock;
+    std::condition_variable PrefetchWake;
+    std::shared_ptr<NtfsDirectoryListing> PrefetchListing;
+    size_t PrefetchFrom;
+    size_t PrefetchTo;
+    uint64_t PrefetchJobGeneration;
+    bool PrefetchPending;
+    /* Held shared while pushed data is on its way; taken exclusive by whatever may free clusters. */
+    std::shared_mutex PrefetchGate;
+    std::atomic<uint64_t> PrefetchGeneration{0};
+    const NtfsDirectoryListing* PrefetchStream;
+    size_t PrefetchNext;
+    size_t PrefetchBatch;
+    std::mutex StoredLock;
+    std::unordered_set<uint64_t> Stored;
 };
 
 #ifndef STATUS_INVALID_HANDLE
@@ -165,6 +235,8 @@ NtStatusToErrno(NTSTATUS Status)
             return ENOENT;
         case STATUS_INVALID_HANDLE:
             return ESTALE;
+        case STATUS_SHARING_VIOLATION:
+            return EBUSY;
         case STATUS_NO_MORE_FILES:
             return ENOENT;
         case STATUS_END_OF_FILE:
@@ -248,6 +320,7 @@ Utf8ToNtfsString(const char* Input,
     Output.clear();
     if (!Input || (!AllowEmpty && *Input == '\0'))
         return false;
+    Output.reserve(strlen(Input) + 1);
 
     while (*Cursor)
     {
@@ -679,7 +752,7 @@ ReadPosixMetadata(PNtfsFileRecord File, NtfsPosixMetadata* Metadata)
     {
         UINT32 Value;
 
-        if (View.ValueLength != sizeof(Value) || !IsPosixEaName(View.Name, View.NameLength))
+        if (View.ValueLength != sizeof(Value) || View.NameLength != 6)
             continue;
         memcpy(&Value, View.Value, sizeof(Value));
         if (strncasecmp((const char*)View.Name, "$LXUID", 6) == 0)
@@ -688,7 +761,7 @@ ReadPosixMetadata(PNtfsFileRecord File, NtfsPosixMetadata* Metadata)
             Metadata->HasGid = true, Metadata->Gid = Value;
         else if (strncasecmp((const char*)View.Name, "$LXMOD", 6) == 0)
             Metadata->HasMode = true, Metadata->Mode = Value;
-        else
+        else if (strncasecmp((const char*)View.Name, "$LXDEV", 6) == 0)
             Metadata->HasDev = true, Metadata->Dev = Value;
     }
 }
@@ -737,7 +810,6 @@ FillStatFromRecord(PNtfsFileRecord File,
                    struct stat* Stat)
 {
     PFileRecordHeader Header = NtfsFileRecordGetHeader(File);
-    PAttribute Data = NtfsFileRecordGetAttribute(File, TypeData, NULL);
     PStandardInformationEx Standard = NULL;
     PUCHAR StandardData = NULL;
     NTSTATUS StandardStatus;
@@ -757,6 +829,8 @@ FillStatFromRecord(PNtfsFileRecord File,
     }
     else
     {
+        PAttribute Data = NtfsFileRecordGetAttribute(File, TypeData, NULL);
+
         Stat->st_mode = S_IFREG | (State->Writable ? 0755 : 0555);
         Stat->st_size = (off_t)AttributeSize(Data);
         if (Data && Data->IsNonResident)
@@ -895,6 +969,11 @@ OpenImageWritable(const char* Image,
 static void
 CloseImage(NtfsFuseState* State)
 {
+#if NTFSLIB_HAVE_FUSE
+    State->ListedRecords.clear();
+    State->LookupRecord.reset();
+    State->ParentRecord.reset();
+#endif
     State->DirectoryCache.clear();
     State->Inodes.clear();
     NtfsVolumeDestroy(State->Volume);
@@ -3989,6 +4068,54 @@ RequestState(fuse_req_t Request)
     return (NtfsFuseState*)fuse_req_userdata(Request);
 }
 
+template<auto Handler, typename... Args>
+static void
+DispatchRequest(fuse_req_t Request, Args... Arguments)
+{
+    int OldCancelState;
+    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &OldCancelState);
+    {
+        std::lock_guard<std::mutex> Guard(RequestState(Request)->RequestLock);
+        Handler(Request, Arguments...);
+    }
+    pthread_setcancelstate(OldCancelState, NULL);
+}
+
+static void
+WakeWorker(NtfsFuseState* State);
+
+/*
+ * For requests that may free clusters or let a file's cached pages turn dirty: pushed data still on
+ * its way would land on the wrong bytes. The request lock is dropped while waiting, so that a read
+ * the push itself waits on can be answered.
+ */
+template<auto Handler, typename... Args>
+static void
+DispatchMutation(fuse_req_t Request, Args... Arguments)
+{
+    NtfsFuseState* State = RequestState(Request);
+    int OldCancelState;
+
+    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &OldCancelState);
+    for (;;)
+    {
+        std::unique_lock<std::mutex> Guard(State->RequestLock);
+
+        State->PrefetchGeneration++;
+        if (!State->PrefetchThread.joinable() || State->PrefetchGate.try_lock())
+        {
+            if (State->PrefetchThread.joinable())
+                State->PrefetchGate.unlock();
+            Handler(Request, Arguments...);
+            break;
+        }
+        Guard.unlock();
+        WakeWorker(State);
+        std::unique_lock<std::shared_mutex> Wait(State->PrefetchGate);
+    }
+    pthread_setcancelstate(OldCancelState, NULL);
+}
+
 static PNtfsMasterFileTable
 StateMft(NtfsFuseState* State)
 {
@@ -4004,8 +4131,9 @@ TimespecToNtfsTime(const struct timespec* Time)
         return 0;
     if (Time->tv_sec > INT64_MAX / 10000000 - EpochSeconds)
         return (UINT64)INT64_MAX;
-    return (UINT64)(Time->tv_sec + EpochSeconds) * UINT64_C(10000000) +
-           (UINT64)Time->tv_nsec / 100;
+    UINT64 Ticks = (UINT64)(Time->tv_sec + EpochSeconds) * UINT64_C(10000000) +
+                   (UINT64)Time->tv_nsec / 100;
+    return Ticks > INT64_MAX ? INT64_MAX : Ticks;
 }
 
 static bool
@@ -4054,12 +4182,182 @@ FlushPendingWriteTime(NtfsFuseOpenFile* Open)
     return Status;
 }
 
+static ULONG
+ClusterBytes(NtfsFuseState* State);
+
+static const ULONGLONG NtfsFastWindow = 32u * 1024u * 1024u;
+
+/* Zeroes file bytes [From, To) of a plain stream on the image; the caller holds the request lock. */
+static NTSTATUS
+ZeroDataRange(NtfsFuseState* State, PNtfsFileRecord File, ULONGLONG From, ULONGLONG To)
+{
+    static const UCHAR Zeroes[64 * 1024] = {};
+    ULONG Cluster = ClusterBytes(State);
+
+    while (From < To)
+    {
+        NtfsRetrievalExtent Extent;
+        ULONGLONG Start;
+        ULONG Count = 1;
+        NTSTATUS Status = NtfsFileRecordQueryRetrievalPointers(File, TypeData, NULL, From / Cluster, &Start, &Extent, &Count);
+
+        if ((!NT_SUCCESS(Status) && Status != STATUS_BUFFER_OVERFLOW) || Count != 1 || Extent.Lcn < 0 ||
+            Extent.NextVcn <= From / Cluster)
+        {
+            return NT_SUCCESS(Status) ? STATUS_FILE_CORRUPT_ERROR : Status;
+        }
+        ULONGLONG End = Extent.NextVcn * Cluster < To ? Extent.NextVcn * Cluster : To;
+        ULONGLONG Disk = ((ULONGLONG)Extent.Lcn + (From / Cluster - Start)) * Cluster + From % Cluster;
+
+        while (From < End)
+        {
+            ULONG Chunk = End - From > sizeof(Zeroes) ? (ULONG)sizeof(Zeroes) : (ULONG)(End - From);
+
+            Status = NtfsWriteFileDataLinux(Disk, Zeroes, Chunk);
+            if (!NT_SUCCESS(Status))
+                return Status;
+            From += Chunk;
+            Disk += Chunk;
+        }
+    }
+    return STATUS_SUCCESS;
+}
+
+/*
+ * Waits out the data I/O running outside the request lock, stores the sizes its writes reached and
+ * takes the snapshot down. Every path that uses an open file under the request lock comes through here.
+ */
+static void
+SettleFast(NtfsFuseState* State, NtfsFuseOpenFile* Open)
+{
+    NtfsFastFile* Fast = Open->Fast;
+
+    if (!Fast || !Fast->Armed.load(std::memory_order_acquire))
+        return;
+    Fast->Armed.store(false, std::memory_order_release);
+    {
+        std::unique_lock<std::shared_mutex> Guard(Fast->Lock);
+    }
+    if (Fast->Written.exchange(false))
+        Open->Written = true;
+    UINT64 Time = Fast->WriteTime.exchange(0);
+    if (Time > Open->PendingWriteTime)
+        Open->PendingWriteTime = Time;
+
+    NTSTATUS Status = STATUS_SUCCESS;
+    ULONGLONG End = Fast->Frontier;
+
+    for (const auto& Range : Fast->Ahead)
+    {
+        /* Nothing wrote the bytes below this range: they are a hole and read as zero. */
+        if (Range.first > End && NT_SUCCESS(Status))
+        {
+            Status = ZeroDataRange(State, Fast->File, End, Range.first);
+        }
+        if (Range.second > End)
+            End = Range.second;
+    }
+    Fast->Ahead.clear();
+    if (End > Fast->Committed && NT_SUCCESS(Status))
+    {
+        UINT32 Mask = NtfsFileRecordGetAutomaticTimestampMask(Fast->File);
+
+        (void)NtfsFileRecordSetAutomaticTimestampMask(Fast->File, 0);
+        if (End > Fast->DataSize)
+        {
+            PAttribute Data = NtfsFileRecordGetAttribute(Fast->File, TypeData, NULL);
+
+            /* The extents handed out stay allocated: the size moves inside them. */
+            Status = NtfsFileRecordSetWriteSize(Fast->File, TypeData, NULL, End,
+                                                Data && Data->IsNonResident ? Data->NonResident.AllocatedSize : 0);
+        }
+        if (NT_SUCCESS(Status))
+            Status = NtfsFileRecordSetFileValidDataLength(Fast->File, TypeData, NULL, End);
+        (void)NtfsFileRecordSetAutomaticTimestampMask(Fast->File, Mask);
+    }
+    if (!NT_SUCCESS(Status))
+        fprintf(stderr, "ntfslib: storing the written length failed 0x%08" PRIx32 "\n", (uint32_t)Status);
+    Fast->Extents.clear();
+}
+
+/* Snapshots the extents around Offset once a second data request shows the file is being streamed. */
+static void
+ArmFast(NtfsFuseState* State, NtfsFuseOpenFile* Open, ULONGLONG Offset)
+{
+    NtfsFastFile* Fast = Open->Fast;
+    NtfsRetrievalExtent Raw[32];
+    ULONG Count = 32;
+    ULONG Cluster = ClusterBytes(State);
+    ULONGLONG Clusters = NtfsVolumeGetClustersInVolume(State->Volume);
+    ULONGLONG Vcn;
+
+    if (!Fast || ++Open->DataRequests < 2 || Fast->Armed.load(std::memory_order_relaxed))
+        return;
+    PAttribute Data = NtfsFileRecordGetAttribute(Open->File, TypeData, NULL);
+    if (!Data || !Data->IsNonResident || Data->Flags || !Data->NonResident.AllocatedSize ||
+        NtfsFileRecordGetAttribute(Open->File, TypeReparsePoint, NULL))
+    {
+        return;
+    }
+    if (Offset >= Data->NonResident.AllocatedSize)
+        Offset = Data->NonResident.AllocatedSize - 1;
+    NTSTATUS Status = NtfsFileRecordQueryRetrievalPointers(Open->File, TypeData, NULL, Offset / Cluster, &Vcn, Raw, &Count);
+    if ((!NT_SUCCESS(Status) && Status != STATUS_BUFFER_OVERFLOW) || !Count)
+        return;
+    Fast->Extents.clear();
+    for (ULONG Index = 0; Index < Count; Index++)
+    {
+        ULONGLONG Lcn = (ULONGLONG)Raw[Index].Lcn;
+
+        if (Raw[Index].Lcn < 0 || Raw[Index].NextVcn <= Vcn || Lcn >= Clusters ||
+            Raw[Index].NextVcn - Vcn > Clusters - Lcn || Raw[Index].NextVcn > (ULONGLONG)INT64_MAX / Cluster)
+        {
+            break;
+        }
+        Fast->Extents.push_back({Vcn * Cluster, Raw[Index].NextVcn * Cluster, Lcn * Cluster});
+        Vcn = Raw[Index].NextVcn;
+    }
+    if (Fast->Extents.empty())
+        return;
+    Fast->Committed = Data->NonResident.InitalizedDataSize;
+    Fast->DataSize = Data->NonResident.DataSize;
+    Fast->Frontier = Fast->Committed;
+    Fast->ReadOk = !State->Writable || State->NoAtime || Open->AccessChecked;
+    Fast->WriteOk = State->Writable;
+    Fast->SetIdChecked = Open->SetIdChecked;
+    Fast->Armed.store(true, std::memory_order_release);
+}
+
+static const ULONGLONG NtfsPrefetchFileLimit = 128u * 1024u;
+
+static bool
+IsStored(NtfsFuseState* State, fuse_ino_t Ino)
+{
+    std::lock_guard<std::mutex> Guard(State->StoredLock);
+
+    return State->Stored.count(Ino) != 0;
+}
+
+static void
+SetStored(NtfsFuseState* State, fuse_ino_t Ino, bool Stored)
+{
+    std::lock_guard<std::mutex> Guard(State->StoredLock);
+
+    if (Stored)
+        State->Stored.insert(Ino);
+    else
+        State->Stored.erase(Ino);
+}
+
 static NtfsFuseOpenFile*
 FindOpen(NtfsFuseState* State, fuse_ino_t Ino)
 {
     auto Open = State->OpenFiles.find(Ino);
 
-    return Open == State->OpenFiles.end() ? NULL : &Open->second;
+    if (Open == State->OpenFiles.end())
+        return NULL;
+    SettleFast(State, &Open->second);
+    return &Open->second;
 }
 
 /* FillStatFromRecord plus the write time an open file has not stored yet. */
@@ -4107,7 +4405,6 @@ RememberEntry(NtfsFuseState* State,
     NtfsFuseInode& Inode = State->Inodes[Entry->ino];
     Inode.Reference = Reference;
     Inode.Lookups++;
-    State->RemovedDirectories.erase(Entry->ino);
     return STATUS_SUCCESS;
 }
 
@@ -4125,10 +4422,40 @@ LoadInode(NtfsFuseState* State,
     *Owned = false;
     if (Open != State->OpenFiles.end())
     {
+        SettleFast(State, &Open->second);
         *File = Open->second.File;
         return STATUS_SUCCESS;
     }
     *Owned = true;
+    if (State->ParentFromLookup && State->ParentRecord && Inode != State->Inodes.end() &&
+        Inode->second.Reference == NtfsFileRecordGetReference(State->ParentRecord.get()) &&
+        State->ParentGeneration == NtfsDiskWriteGenerationLinux())
+    {
+        *File = State->ParentRecord.release();
+        return STATUS_SUCCESS;
+    }
+    if (State->LookupRecord && Inode != State->Inodes.end() &&
+        Inode->second.Reference == NtfsFileRecordGetReference(State->LookupRecord.get()) &&
+        State->LookupGeneration == NtfsDiskWriteGenerationLinux())
+    {
+        *File = State->LookupRecord.release();
+        return STATUS_SUCCESS;
+    }
+    if (!State->ListedRecords.empty() && Inode != State->Inodes.end())
+    {
+        if (State->ListingGeneration != NtfsDiskWriteGenerationLinux())
+            State->ListedRecords.clear();
+        else
+        {
+            auto Record = State->ListedRecords.find(Inode->second.Reference);
+            if (Record != State->ListedRecords.end())
+            {
+                *File = Record->second.release();
+                State->ListedRecords.erase(Record);
+                return STATUS_SUCCESS;
+            }
+        }
+    }
     if (Inode == State->Inodes.end())
     {
         /* A file handle may name an inode the kernel forgot; it checks the generation. */
@@ -4196,6 +4523,12 @@ LookupChild(NtfsFuseState* State,
     NTSTATUS Status;
 
     *Child = NULL;
+    if (State->LookupRecord && State->LookupParent == NtfsFileRecordGetReference(Parent) &&
+        Name == State->LookupName && State->LookupGeneration == NtfsDiskWriteGenerationLinux())
+    {
+        *Child = State->LookupRecord.release();
+        return STATUS_SUCCESS;
+    }
     Status = NtfsMasterFileTableGetFileRecordInDirectory(
         StateMft(State),
         Parent,
@@ -4284,6 +4617,7 @@ RefreshOpenFile(NtfsFuseState* State, fuse_ino_t Ino)
 
     if (Open == State->OpenFiles.end())
         return STATUS_SUCCESS;
+    SettleFast(State, &Open->second);
     Status = NtfsMasterFileTableGetFileRecordByReference(
         StateMft(State),
         NtfsFileRecordGetReference(Open->second.File),
@@ -4328,7 +4662,16 @@ AcquireOpenFile(NtfsFuseState* State, fuse_ino_t Ino, PNtfsFileRecord File)
 
     if (Existing == State->OpenFiles.end())
     {
-        State->OpenFiles.emplace(Ino, NtfsFuseOpenFile{File, 1u, false, false, false, 0, 0, false, false});
+        auto Pending = State->PendingAccess.find(NtfsFileRecordGetReference(File));
+        UINT64 Accessed = Pending == State->PendingAccess.end() ? 0 : Pending->second;
+        auto Inode = State->Inodes.find(Ino);
+        bool Unlinked = Inode != State->Inodes.end() && Inode->second.Unlinked;
+        auto Added = State->OpenFiles.emplace(Ino, NtfsFuseOpenFile{File, 1u, false, false, Unlinked, 0, Accessed, false, false, NULL, 0});
+        Added.first->second.Fast = new NtfsFastFile;
+        Added.first->second.Fast->File = File;
+        Added.first->second.Fast->Owner = &Added.first->second;
+        if (Pending != State->PendingAccess.end())
+            State->PendingAccess.erase(Pending);
         if (State->Writable)
             (void)NtfsFileRecordDeferFileNameUpdates(File, TRUE);
         return File;
@@ -4338,6 +4681,15 @@ AcquireOpenFile(NtfsFuseState* State, fuse_ino_t Ino, PNtfsFileRecord File)
     NtfsFileRecordDestroy(File);
     Existing->second.References++;
     return Existing->second.File;
+}
+
+static void
+DeleteUnlinkedRecord(NtfsFuseState* State, ULONGLONG Reference)
+{
+    NTSTATUS Status = NtfsMasterFileTableDeleteUnlinkedFile(StateMft(State), Reference, NULL);
+
+    if (!NT_SUCCESS(Status))
+        fprintf(stderr, "ntfslib: deleting an unlinked file failed 0x%08" PRIx32 "\n", (uint32_t)Status);
 }
 
 static void
@@ -4351,6 +4703,7 @@ ReleaseOpenFile(NtfsFuseState* State, fuse_ino_t Ino)
     if (--Existing->second.References != 0)
         return;
 
+    SettleFast(State, &Existing->second);
     File = Existing->second.File;
     if (!Existing->second.Unlinked &&
         Existing->second.PendingWriteTime == 0 &&
@@ -4358,7 +4711,7 @@ ReleaseOpenFile(NtfsFuseState* State, fuse_ino_t Ino)
     {
         State->PendingAccess[NtfsFileRecordGetReference(File)] = Existing->second.PendingAccessTime;
         Existing->second.PendingAccessTime = 0;
-        if (State->PendingAccess.size() > 4096)
+        if (State->PendingAccess.size() > 32768)
             FlushPendingAccess(State);
     }
     if (!Existing->second.Unlinked)
@@ -4371,16 +4724,9 @@ ReleaseOpenFile(NtfsFuseState* State, fuse_ino_t Ino)
     }
     if (Existing->second.Unlinked)
     {
-        NTSTATUS Status;
-
         (void)NtfsFileRecordDeferFileNameUpdates(File, FALSE);
-        Status = NtfsMasterFileTableDeleteUnlinkedFile(
-            StateMft(State),
-            NtfsFileRecordGetReference(File),
-            NULL);
-        if (!NT_SUCCESS(Status))
-            fprintf(stderr, "ntfslib: deleting an unlinked file failed 0x%08" PRIx32 "\n",
-                    (uint32_t)Status);
+        if (State->Inodes.find(Ino) == State->Inodes.end())
+            DeleteUnlinkedRecord(State, NtfsFileRecordGetReference(File));
     }
     else
     {
@@ -4412,6 +4758,7 @@ ReleaseOpenFile(NtfsFuseState* State, fuse_ino_t Ino)
             fprintf(stderr, "ntfslib: updating the file names failed 0x%08" PRIx32 "\n",
                     (uint32_t)Status);
     }
+    delete Existing->second.Fast;
     State->OpenFiles.erase(Existing);
     NtfsFileRecordDestroy(File);
 }
@@ -4422,18 +4769,41 @@ NtfsLowInit(void* UserData, struct fuse_conn_info* Connection)
     NtfsFuseState* State = (NtfsFuseState*)UserData;
 
     Connection->time_gran = 100;
+    Connection->want &= ~FUSE_CAP_ASYNC_DIO;
+    if (Connection->max_background < 64)
+    {
+        Connection->max_background = 64;
+        Connection->congestion_threshold = 48;
+    }
+#ifdef FUSE_CAP_OVER_IO_URING
+    State->RingTransport = fuse_get_feature_flag(Connection, FUSE_CAP_OVER_IO_URING);
+#endif
+    long PageSize = sysconf(_SC_PAGESIZE);
+    if (PageSize > 0 && (Connection->capable & FUSE_CAP_SPLICE_WRITE))
+    {
+        Connection->want |= FUSE_CAP_SPLICE_WRITE | (Connection->capable & FUSE_CAP_SPLICE_MOVE);
+        State->SpliceThreshold = 2 * (size_t)PageSize;
+    }
+    if (Connection->capable & FUSE_CAP_NO_OPENDIR_SUPPORT)
+    {
+        Connection->want |= FUSE_CAP_NO_OPENDIR_SUPPORT;
+        State->OpenlessDirectories = true;
+    }
     if (Connection->capable & FUSE_CAP_READDIRPLUS)
         Connection->want |= FUSE_CAP_READDIRPLUS;
-    /* Every listing carries attributes: one record load per entry beats a
-     * lookup round trip per entry later. */
     Connection->want &= ~FUSE_CAP_READDIRPLUS_AUTO;
     if (Connection->capable & FUSE_CAP_CACHE_SYMLINKS)
         Connection->want |= FUSE_CAP_CACHE_SYMLINKS;
     if (Connection->capable & FUSE_CAP_EXPORT_SUPPORT)
         Connection->want |= FUSE_CAP_EXPORT_SUPPORT;
     /* With v2 the kernel stops asking for security.capability before every write; no security.* xattr is stored. */
+    State->WritebackCache = State->Writable && !State->DirectIo && State->WritebackCache &&
+                            (Connection->capable & FUSE_CAP_WRITEBACK_CACHE);
+    NtfsUseWritebackClockLinux(State->WritebackCache);
     if (State->Writable && (Connection->capable & FUSE_CAP_HANDLE_KILLPRIV_V2))
         Connection->want |= FUSE_CAP_HANDLE_KILLPRIV_V2;
+    else if (State->WritebackCache)
+        Connection->want &= ~FUSE_CAP_HANDLE_KILLPRIV;
     else if (State->Writable && (Connection->capable & FUSE_CAP_HANDLE_KILLPRIV))
         Connection->want |= FUSE_CAP_HANDLE_KILLPRIV;
     /* mmap of a direct-I/O file fails with ENODEV unless this capability is granted. */
@@ -4445,8 +4815,7 @@ NtfsLowInit(void* UserData, struct fuse_conn_info* Connection)
 #else
     State->DirectIo = false;
 #endif
-    if (State->Writable && State->WritebackCache &&
-        (Connection->capable & FUSE_CAP_WRITEBACK_CACHE))
+    if (State->WritebackCache)
     {
         Connection->want |= FUSE_CAP_WRITEBACK_CACHE;
     }
@@ -4508,8 +4877,24 @@ NtfsLowLookup(fuse_req_t Request, fuse_ino_t ParentIno, const char* Name)
     }
     Status = LoadInode(State, ParentIno, &Parent, &Owned);
     if (NT_SUCCESS(Status))
+    {
         Status = LookupChild(State, Parent, NtfsName, &Child);
-    ReleaseLoaded(Parent, Owned);
+        if (NT_SUCCESS(Status))
+        {
+            State->LookupRecord.reset(Child);
+            State->LookupParent = NtfsFileRecordGetReference(Parent);
+            State->LookupName = std::move(NtfsName);
+            State->LookupGeneration = NtfsDiskWriteGenerationLinux();
+        }
+    }
+    if (Owned && (NT_SUCCESS(Status) || Status == STATUS_OBJECT_NAME_NOT_FOUND) && Parent)
+    {
+        State->ParentRecord.reset(Parent);
+        State->ParentFromLookup = true;
+        State->ParentGeneration = NtfsDiskWriteGenerationLinux();
+    }
+    else
+        ReleaseLoaded(Parent, Owned);
     if (Status == STATUS_OBJECT_NAME_NOT_FOUND)
     {
         memset(&Entry, 0, sizeof(Entry));
@@ -4521,11 +4906,12 @@ NtfsLowLookup(fuse_req_t Request, fuse_ino_t ParentIno, const char* Name)
     {
         auto Open = State->OpenFiles.find(InoFromReference(NtfsFileRecordGetReference(Child)));
 
+        if (Open != State->OpenFiles.end())
+            SettleFast(State, &Open->second);
         Status = RememberEntry(State,
                                Open != State->OpenFiles.end() ? Open->second.File : Child,
                                &Entry);
     }
-    NtfsFileRecordDestroy(Child);
     if (!NT_SUCCESS(Status))
         ReplyStatus(Request, Status);
     else
@@ -4541,8 +4927,11 @@ ForgetInode(NtfsFuseState* State, fuse_ino_t Ino, uint64_t Count)
         return;
     if (Inode->second.Lookups <= Count)
     {
+        if (Inode->second.Unlinked && State->OpenFiles.find(Ino) == State->OpenFiles.end())
+            DeleteUnlinkedRecord(State, Inode->second.Reference);
         State->Inodes.erase(Inode);
-        State->RemovedDirectories.erase(Ino);
+        State->DirectoryScans.erase(Ino);
+        SetStored(State, Ino, false);
     }
     else
         Inode->second.Lookups -= Count;
@@ -4573,19 +4962,20 @@ NtfsLowGetattr(fuse_req_t Request, fuse_ino_t Ino, struct fuse_file_info* FileIn
     NTSTATUS Status;
 
     UNREFERENCED_PARAMETER(FileInfo);
-    Status = LoadInode(State, Ino, &File, &Owned);
+    if (State->ParentRecord && Ino == InoFromReference(NtfsFileRecordGetReference(State->ParentRecord.get())) &&
+        State->ParentGeneration == NtfsDiskWriteGenerationLinux())
+    {
+        File = State->ParentRecord.get();
+        Owned = false;
+        Status = STATUS_SUCCESS;
+    }
+    else
+        Status = LoadInode(State, Ino, &File, &Owned);
     if (NT_SUCCESS(Status))
         Status = FillInodeStat(State, Ino, File, &Stat);
     ReleaseLoaded(File, Owned);
     if (!NT_SUCCESS(Status))
     {
-        auto Removed = State->RemovedDirectories.find(Ino);
-
-        if (Removed != State->RemovedDirectories.end())
-        {
-            fuse_reply_attr(Request, &Removed->second, NtfsFuseCacheTimeout);
-            return;
-        }
         ReplyStatus(Request, Status);
     }
     else
@@ -4672,7 +5062,10 @@ NtfsLowSetattr(fuse_req_t Request,
         return;
     }
     if (FileInfo && FileInfo->fh)
-        File = (PNtfsFileRecord)(uintptr_t)FileInfo->fh;
+    {
+        File = ((NtfsFastFile*)(uintptr_t)FileInfo->fh)->File;
+        SettleFast(State, ((NtfsFastFile*)(uintptr_t)FileInfo->fh)->Owner);
+    }
     else
     {
         Status = LoadInode(State, Ino, &File, &Owned);
@@ -4683,6 +5076,21 @@ NtfsLowSetattr(fuse_req_t Request,
         }
     }
     IsDirectory = (NtfsFileRecordGetHeader(File)->Flags & FR_IS_DIRECTORY) != 0;
+    if (!IsDirectory && State->WritebackCache && (ToSet & FUSE_SET_ATTR_MTIME) && !(ToSet & FUSE_SET_ATTR_MTIME_NOW))
+    {
+        const struct timespec& Input = Attributes->st_mtim;
+        struct timespec Stored = NtfsTimeToTimespec(TimespecToNtfsTime(&Input));
+        if (Stored.tv_sec != Input.tv_sec || Stored.tv_nsec != Input.tv_nsec / 100 * 100)
+        {
+            Status = FillInodeStat(State, Ino, File, &Stat);
+            if (!NT_SUCCESS(Status) || S_ISREG(Stat.st_mode))
+            {
+                ReleaseLoaded(File, Owned);
+                fuse_reply_err(Request, NT_SUCCESS(Status) ? EOVERFLOW : NtStatusToErrno(Status));
+                return;
+            }
+        }
+    }
     clock_gettime(CLOCK_REALTIME, &Now);
     if (ToSet & (FUSE_SET_ATTR_ATIME | FUSE_SET_ATTR_ATIME_NOW))
     {
@@ -4717,6 +5125,7 @@ NtfsLowSetattr(fuse_req_t Request,
         Status = NtfsFileRecordGetBasicInformation(File, &Information);
         if (NT_SUCCESS(Status))
         {
+            const NtfsFileBasicInformation Original = Information;
             UINT32 Fields = 0;
 
             if (ToSet & FUSE_SET_ATTR_ATIME_NOW)
@@ -4747,7 +5156,13 @@ NtfsLowSetattr(fuse_req_t Request,
                     ? TimespecToNtfsTime(&Attributes->st_ctim)
                     : TimespecToNtfsTime(&Now);
                 Information.Fields = Fields | NTFS_BASIC_INFO_CHANGE_TIME;
-                Status = NtfsFileRecordSetBasicInformation(File, &Information);
+                if (Information.LastAccessTime != Original.LastAccessTime ||
+                    Information.LastWriteTime != Original.LastWriteTime ||
+                    Information.ChangeTime != Original.ChangeTime ||
+                    Information.FileAttributes != Original.FileAttributes)
+                {
+                    Status = NtfsFileRecordSetBasicInformation(File, &Information);
+                }
             }
         }
     }
@@ -4806,6 +5221,19 @@ NtfsLowReadlink(fuse_req_t Request, fuse_ino_t Ino)
 
 static NTSTATUS
 RemoveChild(NtfsFuseState* State, fuse_ino_t ParentIno, const char* Name, bool IsDirectory);
+
+static void
+ReleaseChangedParent(NtfsFuseState* State, PNtfsFileRecord Parent, bool Owned, NTSTATUS Status)
+{
+    if (Owned && NT_SUCCESS(Status))
+    {
+        State->ParentRecord.reset(Parent);
+        State->ParentFromLookup = false;
+        State->ParentGeneration = NtfsDiskWriteGenerationLinux();
+    }
+    else
+        ReleaseLoaded(Parent, Owned);
+}
 
 /* Creates Name in Parent with the caller's ownership and Mode (type and
  * permissions); on success Created holds the new record. */
@@ -4866,7 +5294,7 @@ CreateChild(NtfsFuseState* State,
                                                   Updates,
                                                   Count,
                                                   Created);
-    ReleaseLoaded(Parent, Owned);
+    ReleaseChangedParent(State, Parent, Owned, Status);
     if (NT_SUCCESS(Status))
         DropListing(State, ParentIno);
     return Status;
@@ -5011,10 +5439,11 @@ RemoveChild(NtfsFuseState* State, fuse_ino_t ParentIno, const char* Name, bool I
     {
         fuse_ino_t ChildIno = InoFromReference(NtfsFileRecordGetReference(Child));
         auto Open = State->OpenFiles.find(ChildIno);
+        if (Open != State->OpenFiles.end())
+            SettleFast(State, &Open->second);
         PNtfsFileRecord Canonical = Open != State->OpenFiles.end() ? Open->second.File : NULL;
-        struct stat Removed;
-        bool KeepStat = IsDirectory && State->Inodes.count(ChildIno) &&
-                        NT_SUCCESS(FillStatFromRecord(Child, State, &Removed));
+        auto Inode = State->Inodes.find(ChildIno);
+        bool KeepRecord = Canonical || Inode != State->Inodes.end();
 
         Status = NtfsMasterFileTableDeleteChild(StateMft(State),
                                                 Parent,
@@ -5023,22 +5452,28 @@ RemoveChild(NtfsFuseState* State, fuse_ino_t ParentIno, const char* Name, bool I
                                                 (ULONG)(NtfsName.size() - 1),
                                                 IsDirectory,
                                                 Canonical,
-                                                Canonical == NULL,
-                                                Canonical != NULL,
+                                                !KeepRecord,
+                                                KeepRecord,
                                                 &Deleted);
         if (NT_SUCCESS(Status))
         {
             DropListing(State, ParentIno);
-            if (Canonical && NtfsFileRecordGetLinkCount(Canonical) == 0)
-                Open->second.Unlinked = true;
-            if (KeepStat)
+            if (IsDirectory)
             {
-                Removed.st_nlink = 0;
-                State->RemovedDirectories[ChildIno] = Removed;
+                DropListing(State, ChildIno);
+                fuse_lowlevel_notify_inval_inode(State->Session, ChildIno, 0, 0);
+            }
+            if (KeepRecord && NtfsFileRecordGetLinkCount(Child) == 0)
+            {
+                if (Canonical)
+                    Open->second.Unlinked = true;
+                if (Inode != State->Inodes.end())
+                    Inode->second.Unlinked = true;
+                State->PendingAccess.erase(NtfsFileRecordGetReference(Child));
             }
         }
     }
-    ReleaseLoaded(Parent, Owned);
+    ReleaseChangedParent(State, Parent, Owned, Status);
     NtfsFileRecordDestroy(Child);
     return Status;
 }
@@ -5153,6 +5588,11 @@ NtfsLowRename(fuse_req_t Request,
     {
         DropListing(State, OldParentIno);
         DropListing(State, NewParentIno);
+        if (OldParentIno != NewParentIno && (NtfsFileRecordGetHeader(Source)->Flags & FR_IS_DIRECTORY))
+        {
+            DropListing(State, SourceIno);
+            fuse_lowlevel_notify_inval_inode(State->Session, SourceIno, 0, 0);
+        }
         Status = RefreshOpenFile(State, SourceIno);
     }
     NtfsFileRecordDestroy(Source);
@@ -5254,10 +5694,7 @@ AccessTimeDue(NtfsFuseState* State, NtfsFuseOpenFile* Open, PNtfsFileRecord File
 
     if (!NT_SUCCESS(NtfsFileRecordGetBasicInformation(File, &Information)))
         return false;
-    auto Lazy = State->PendingAccess.find(NtfsFileRecordGetReference(File));
-    UINT64 Accessed = Open->PendingAccessTime ? Open->PendingAccessTime
-                    : Lazy != State->PendingAccess.end() ? Lazy->second
-                                                         : Information.LastAccessTime;
+    UINT64 Accessed = Open->PendingAccessTime ? Open->PendingAccessTime : Information.LastAccessTime;
     UINT64 Written = Open->PendingWriteTime ? Open->PendingWriteTime : Information.LastWriteTime;
     UINT64 Changed = Open->PendingWriteTime ? Open->PendingWriteTime : Information.ChangeTime;
 
@@ -5267,7 +5704,7 @@ AccessTimeDue(NtfsFuseState* State, NtfsFuseOpenFile* Open, PNtfsFileRecord File
 }
 
 static void
-SetOpenCaching(NtfsFuseState* State, NtfsFuseOpenFile* Open, struct fuse_file_info* FileInfo)
+SetOpenCaching(NtfsFuseState* State, fuse_ino_t Ino, NtfsFuseOpenFile* Open, struct fuse_file_info* FileInfo)
 {
     UINT64 Current;
 
@@ -5277,6 +5714,248 @@ SetOpenCaching(NtfsFuseState* State, NtfsFuseOpenFile* Open, struct fuse_file_in
     else if (!State->Writable || State->NoAtime || (FileInfo->flags & O_ACCMODE) == O_WRONLY ||
              Open->AccessChecked || !AccessTimeDue(State, Open, Open->File, &Current))
         FileInfo->keep_cache = 1;
+    else if (IsStored(State, Ino))
+    {
+        /* FIXME: an open whose data was pushed ahead takes the access time whether or not it reads. */
+        Open->AccessChecked = true;
+        Open->PendingAccessTime = Current;
+        FileInfo->keep_cache = 1;
+        /* No read will reach the daemon to make the kernel ask for the new time: drop its copy now. */
+        if (State->Session)
+            fuse_lowlevel_notify_inval_inode(State->Session, Ino, -1, 0);
+    }
+}
+
+/* What a small plain file's data is made of: resident bytes, or up to four runs on the image. */
+struct NtfsPrefetchItem
+{
+    fuse_ino_t Ino;
+    ULONG Size;
+    std::vector<UCHAR> Resident;
+    NtfsFastExtent Runs[4];
+    unsigned RunCount;
+};
+
+static bool
+DescribeSmallFile(NtfsFuseState* State, PNtfsFileRecord File, NtfsPrefetchItem* Item)
+{
+    PAttribute Data = NtfsFileRecordGetAttribute(File, TypeData, NULL);
+    ULONG Cluster = ClusterBytes(State);
+    ULONGLONG Clusters = NtfsVolumeGetClustersInVolume(State->Volume);
+
+    if (!Data || Data->Flags || (NtfsFileRecordGetHeader(File)->Flags & FR_IS_DIRECTORY) ||
+        NtfsFileRecordGetAttribute(File, TypeReparsePoint, NULL))
+    {
+        return false;
+    }
+    Item->RunCount = 0;
+    Item->Resident.clear();
+    if (!Data->IsNonResident)
+    {
+        ULONG Length = Data->Resident.DataLength;
+        ULONG Remaining = Length;
+
+        Item->Size = Length;
+        Item->Resident.resize(Length);
+        return Length == 0 ||
+               (NT_SUCCESS(NtfsFileRecordCopyData(File, TypeData, NULL, Item->Resident.data(), &Remaining, 0)) && Remaining == 0);
+    }
+    if (Data->NonResident.DataSize > NtfsPrefetchFileLimit ||
+        Data->NonResident.InitalizedDataSize != Data->NonResident.DataSize)
+    {
+        return false;
+    }
+    Item->Size = (ULONG)Data->NonResident.DataSize;
+    for (ULONGLONG Offset = 0; Offset < Item->Size;)
+    {
+        NtfsRetrievalExtent Extent;
+        ULONGLONG Start;
+        ULONG Count = 1;
+        NTSTATUS Status = NtfsFileRecordQueryRetrievalPointers(File, TypeData, NULL, Offset / Cluster, &Start, &Extent, &Count);
+        ULONGLONG Lcn = (ULONGLONG)Extent.Lcn;
+
+        if ((!NT_SUCCESS(Status) && Status != STATUS_BUFFER_OVERFLOW) || Count != 1 || Extent.Lcn < 0 ||
+            Item->RunCount == 4 || Extent.NextVcn <= Offset / Cluster || Lcn >= Clusters ||
+            Extent.NextVcn - Start > Clusters - Lcn)
+        {
+            return false;
+        }
+        ULONGLONG End = Extent.NextVcn * Cluster < Item->Size ? Extent.NextVcn * Cluster : Item->Size;
+
+        Item->Runs[Item->RunCount++] = {Offset, End, (Lcn + (Offset / Cluster - Start)) * Cluster + Offset % Cluster};
+        Offset = End;
+    }
+    return true;
+}
+
+static bool
+PushSmallFile(NtfsFuseState* State, const NtfsPrefetchItem& Item, std::vector<UCHAR>& Buffer)
+{
+    struct fuse_bufvec Vector = FUSE_BUFVEC_INIT(Item.Size);
+
+    if (Item.Size == 0)
+        return true;
+    if (Item.RunCount == 0)
+        Vector.buf[0].mem = const_cast<UCHAR*>(Item.Resident.data());
+    else
+    {
+        if (Buffer.size() < Item.Size)
+            Buffer.resize(Item.Size);
+        for (unsigned Index = 0; Index < Item.RunCount; Index++)
+        {
+            size_t Length = (size_t)(Item.Runs[Index].End - Item.Runs[Index].Start);
+            size_t Done = 0;
+
+
+            while (Done < Length)
+            {
+                ssize_t Result = pread(NtfsDiskFdLinux(), Buffer.data() + Item.Runs[Index].Start + Done, Length - Done,
+                                       (off_t)(Item.Runs[Index].Disk + Done));
+
+                if (Result < 0 && errno == EINTR)
+                    continue;
+                if (Result <= 0)
+                    return false;
+                Done += (size_t)Result;
+            }
+        }
+        Vector.buf[0].mem = Buffer.data();
+    }
+    return fuse_lowlevel_notify_store(State->Session, Item.Ino, 0, &Vector, (fuse_buf_copy_flags)0) == 0;
+}
+
+/* The first reader of a small file gets its data with the open instead of asking for it afterwards. */
+static void
+StoreAtOpen(NtfsFuseState* State, fuse_ino_t Ino, PNtfsFileRecord File)
+{
+    static std::vector<UCHAR> Buffer;
+    NtfsPrefetchItem Item;
+
+    if (!State->Session || !State->PrefetchThread.joinable() || IsStored(State, Ino))
+        return;
+    Item.Ino = Ino;
+    if (DescribeSmallFile(State, File, &Item) && PushSmallFile(State, Item, Buffer))
+    {
+        SetStored(State, Ino, true);
+    }
+}
+
+static void
+SchedulePrefetch(NtfsFuseState* State, fuse_ino_t Ino)
+{
+    auto Inode = State->Inodes.find(Ino);
+
+    if (!State->PrefetchThread.joinable() || State->DirectIo || Inode == State->Inodes.end() ||
+        !Inode->second.ListDirectory)
+    {
+        return;
+    }
+    auto Cached = State->DirectoryCache.find(Inode->second.ListDirectory);
+    if (Cached == State->DirectoryCache.end())
+        return;
+    const std::shared_ptr<NtfsDirectoryListing>& Listing = Cached->second;
+    size_t Index = Inode->second.ListIndex;
+    size_t From;
+
+    if (Index >= Listing->Entries.size() || Listing->Entries[Index].Reference != Inode->second.Reference)
+        return;
+    if (State->PrefetchStream != Listing.get() || Index >= State->PrefetchNext || Index + 64 < State->PrefetchNext)
+    {
+        State->PrefetchStream = Listing.get();
+        State->PrefetchBatch = 8;
+        From = Index + 1;
+    }
+    else if (Index + State->PrefetchBatch / 2 >= State->PrefetchNext)
+    {
+        if (State->PrefetchBatch < 64)
+            State->PrefetchBatch *= 2;
+        From = State->PrefetchNext;
+    }
+    else
+        return;
+    State->PrefetchNext = From + State->PrefetchBatch < Listing->Entries.size() ? From + State->PrefetchBatch
+                                                                                 : Listing->Entries.size();
+    if (From >= State->PrefetchNext)
+        return;
+    {
+        std::lock_guard<std::mutex> Guard(State->PrefetchLock);
+
+        State->PrefetchListing = Listing;
+        State->PrefetchFrom = From;
+        State->PrefetchTo = State->PrefetchNext;
+        State->PrefetchJobGeneration = State->PrefetchGeneration.load();
+        State->PrefetchPending = true;
+    }
+    State->PrefetchWake.notify_one();
+}
+
+static void
+PrefetchLoop(NtfsFuseState* State)
+{
+    std::vector<NtfsPrefetchItem> Items;
+    std::vector<UCHAR> Buffer;
+
+    for (;;)
+    {
+        std::shared_ptr<NtfsDirectoryListing> Listing;
+        size_t From, To;
+        uint64_t Generation;
+
+        {
+            std::unique_lock<std::mutex> Guard(State->PrefetchLock);
+
+            State->PrefetchWake.wait(Guard, [State] { return State->PrefetchPending || State->WorkerStop.load(); });
+            if (State->WorkerStop.load())
+                return;
+            Listing = std::move(State->PrefetchListing);
+            From = State->PrefetchFrom;
+            To = State->PrefetchTo;
+            Generation = State->PrefetchJobGeneration;
+            State->PrefetchPending = false;
+        }
+        Items.clear();
+        {
+            std::lock_guard<std::mutex> Guard(State->RequestLock);
+            ULONGLONG Total = 0;
+
+            if (Generation != State->PrefetchGeneration.load())
+                continue;
+            for (size_t Index = From; Index < To && Total < 4 * 1024 * 1024; Index++)
+            {
+                const NtfsDirectoryName& Child = Listing->Entries[Index];
+                fuse_ino_t Ino = InoFromReference(Child.Reference);
+                auto Inode = State->Inodes.find(Ino);
+                PNtfsFileRecord File = NULL;
+                NtfsPrefetchItem Item;
+
+                /* Only files the kernel knows, nobody has open and nothing was pushed for. */
+                if (Inode == State->Inodes.end() || Inode->second.Reference != Child.Reference || Inode->second.Unlinked ||
+                    State->OpenFiles.count(Ino) || IsStored(State, Ino) ||
+                    !NT_SUCCESS(NtfsMasterFileTableGetFileRecordByReference(StateMft(State), Child.Reference, &File)))
+                {
+                    continue;
+                }
+                Item.Ino = Ino;
+                if (DescribeSmallFile(State, File, &Item))
+                {
+                    Total += Item.Size;
+                    Items.push_back(std::move(Item));
+                }
+                NtfsFileRecordDestroy(File);
+            }
+            State->PrefetchGate.lock_shared();
+        }
+        for (const NtfsPrefetchItem& Item : Items)
+        {
+            if (Generation != State->PrefetchGeneration.load())
+                break;
+            if (PushSmallFile(State, Item, Buffer))
+            {
+                SetStored(State, Item.Ino, true);
+            }
+        }
+        State->PrefetchGate.unlock_shared();
+    }
 }
 
 /* Shared by open and create; consumes File, or uses the shared record when
@@ -5329,8 +6008,8 @@ OpenRecord(NtfsFuseState* State,
     }
     Open = FindOpen(State, Ino);
     assert(Open && Open->File == File);
-    FileInfo->fh = (uint64_t)(uintptr_t)File;
-    SetOpenCaching(State, Open, FileInfo);
+    FileInfo->fh = (uint64_t)(uintptr_t)Open->Fast;
+    SetOpenCaching(State, Ino, Open, FileInfo);
     return STATUS_SUCCESS;
 }
 
@@ -5350,6 +6029,7 @@ NtfsLowOpen(fuse_req_t Request, fuse_ino_t Ino, struct fuse_file_info* FileInfo)
     NtfsFuseState* State = RequestState(Request);
     PNtfsFileRecord File = NULL;
     NTSTATUS Status = STATUS_SUCCESS;
+    bool Reader = (FileInfo->flags & O_ACCMODE) == O_RDONLY && !(FileInfo->flags & O_TRUNC);
 
     if (!FindOpen(State, Ino))
     {
@@ -5357,13 +6037,18 @@ NtfsLowOpen(fuse_req_t Request, fuse_ino_t Ino, struct fuse_file_info* FileInfo)
 
         Status = LoadInode(State, Ino, &File, &Owned);
         assert(!NT_SUCCESS(Status) || Owned);
+        /* Nobody has it open, so the kernel holds no newer pages of it. */
+        if (NT_SUCCESS(Status) && Reader && !State->DirectIo)
+            StoreAtOpen(State, Ino, File);
     }
     if (NT_SUCCESS(Status))
         Status = OpenRecord(State, Ino, File, FileInfo);
+    if (NT_SUCCESS(Status) && Reader)
+        SchedulePrefetch(State, Ino);
     if (NT_SUCCESS(Status) && (FileInfo->flags & O_TRUNC) &&
         (FileInfo->flags & O_ACCMODE) != O_RDONLY)
     {
-        Status = KillSetIdBits(State, Request, Ino, (PNtfsFileRecord)(uintptr_t)FileInfo->fh,
+        Status = KillSetIdBits(State, Request, Ino, ((NtfsFastFile*)(uintptr_t)FileInfo->fh)->File,
                                false, true);
         if (!NT_SUCCESS(Status))
             ReleaseOpenFile(State, Ino);
@@ -5372,6 +6057,15 @@ NtfsLowOpen(fuse_req_t Request, fuse_ino_t Ino, struct fuse_file_info* FileInfo)
         fuse_reply_err(Request, OpenErrno(Status));
     else
         fuse_reply_open(Request, FileInfo);
+}
+
+static void
+NtfsLowOpenAny(fuse_req_t Request, fuse_ino_t Ino, struct fuse_file_info* FileInfo)
+{
+    if ((FileInfo->flags & O_ACCMODE) == O_RDONLY && !(FileInfo->flags & O_TRUNC))
+        DispatchRequest<NtfsLowOpen>(Request, Ino, FileInfo);
+    else
+        DispatchMutation<NtfsLowOpen>(Request, Ino, FileInfo);
 }
 
 static void
@@ -5413,6 +6107,61 @@ NtfsLowRelease(fuse_req_t Request, fuse_ino_t Ino, struct fuse_file_info* FileIn
     fuse_reply_err(Request, 0);
 }
 
+static PUCHAR
+GetReplyBuffer(fuse_req_t Request, NtfsFuseState* State, size_t Size)
+{
+#ifdef FUSE_CAP_OVER_IO_URING
+    char* Payload;
+    size_t Capacity;
+    if (fuse_req_get_payload(Request, &Payload, &Capacity, NULL) == 0 && Capacity >= Size)
+        return (PUCHAR)Payload;
+#else
+    UNREFERENCED_PARAMETER(Request);
+#endif
+    if (State->ReadBuffer.size() < Size)
+        State->ReadBuffer.resize(Size);
+    return State->ReadBuffer.data();
+}
+
+static bool
+ReplyMappedRead(fuse_req_t Request, NtfsFuseState* State, PNtfsFileRecord File, ULONG Length, ULONGLONG Offset)
+{
+    PAttribute Data = NtfsFileRecordGetAttribute(File, TypeData, NULL);
+    if (!Data || !Data->IsNonResident || Data->Flags ||
+        Offset >= Data->NonResident.DataSize || Offset >= Data->NonResident.InitalizedDataSize ||
+        NtfsFileRecordGetAttribute(File, TypeReparsePoint, NULL))
+        return false;
+
+    if (Length > Data->NonResident.DataSize - Offset)
+        Length = (ULONG)(Data->NonResident.DataSize - Offset);
+    if (Length < State->SpliceThreshold || Length > Data->NonResident.InitalizedDataSize - Offset)
+        return false;
+
+    ULONG Cluster = ClusterBytes(State);
+    ULONGLONG First = Offset / Cluster;
+    ULONGLONG Last = (Offset + Length - 1) / Cluster;
+    ULONGLONG Start;
+    NtfsRetrievalExtent Extent;
+    ULONG Count = 1;
+    NTSTATUS Status = NtfsFileRecordQueryRetrievalPointers(File, TypeData, NULL, First, &Start, &Extent, &Count);
+    if ((!NT_SUCCESS(Status) && Status != STATUS_BUFFER_OVERFLOW) || Count != 1 ||
+        Extent.Lcn < 0 || Start > First || Last >= Extent.NextVcn)
+        return false;
+
+    ULONGLONG Lcn = (ULONGLONG)Extent.Lcn;
+    ULONGLONG Clusters = NtfsVolumeGetClustersInVolume(State->Volume);
+    if (Lcn >= Clusters || Last - Start >= Clusters - Lcn ||
+        Lcn + (Last - Start) > ((ULONGLONG)INT64_MAX - (Cluster - 1)) / Cluster)
+        return false;
+
+    struct fuse_bufvec Reply = FUSE_BUFVEC_INIT(Length);
+    Reply.buf[0].flags = (fuse_buf_flags)(FUSE_BUF_IS_FD | FUSE_BUF_FD_SEEK);
+    Reply.buf[0].fd = NtfsDiskFdLinux();
+    Reply.buf[0].pos = (off_t)((Lcn + (First - Start)) * Cluster + Offset % Cluster);
+    fuse_reply_data(Request, &Reply, FUSE_BUF_SPLICE_MOVE);
+    return true;
+}
+
 static void
 NtfsLowRead(fuse_req_t Request,
             fuse_ino_t Ino,
@@ -5421,37 +6170,37 @@ NtfsLowRead(fuse_req_t Request,
             struct fuse_file_info* FileInfo)
 {
     NtfsFuseState* State = RequestState(Request);
-    PNtfsFileRecord File = (PNtfsFileRecord)(uintptr_t)FileInfo->fh;
+    NtfsFuseOpenFile* Open = ((NtfsFastFile*)(uintptr_t)FileInfo->fh)->Owner;
+    PNtfsFileRecord File = Open->File;
     ULONG Requested = Size > MAXULONG ? MAXULONG : (ULONG)Size;
     ULONG Remaining = Requested;
     NTSTATUS Status;
 
+    UNREFERENCED_PARAMETER(Ino);
+    SettleFast(State, Open);
     if (State->Writable && !State->NoAtime)
     {
-        NtfsFuseOpenFile* Open = FindOpen(State, Ino);
         UINT64 Current;
 
-        if (Open && !Open->AccessChecked)
+        if (!Open->AccessChecked)
         {
             Open->AccessChecked = true;
             if (AccessTimeDue(State, Open, File, &Current))
                 Open->PendingAccessTime = Current;
         }
     }
-    if (State->ReadBuffer.size() < Requested)
-        State->ReadBuffer.resize(Requested);
-    Status = NtfsFileRecordCopyData(File,
-                                    TypeData,
-                                    NULL,
-                                    State->ReadBuffer.data(),
-                                    &Remaining,
-                                    (ULONGLONG)Offset);
+    ArmFast(State, Open, (ULONGLONG)Offset);
+    if (State->SpliceThreshold && Requested >= State->SpliceThreshold &&
+        ReplyMappedRead(Request, State, File, Requested, (ULONGLONG)Offset))
+        return;
+    PUCHAR Buffer = GetReplyBuffer(Request, State, Requested);
+    Status = NtfsReadFileLinux(File, Buffer, &Remaining, (ULONGLONG)Offset);
     if (Status == STATUS_END_OF_FILE)
         fuse_reply_buf(Request, NULL, 0);
     else if (!NT_SUCCESS(Status))
         ReplyStatus(Request, Status);
     else
-        fuse_reply_buf(Request, (const char*)State->ReadBuffer.data(), Requested - Remaining);
+        fuse_reply_buf(Request, (const char*)Buffer, Requested - Remaining);
 }
 
 
@@ -5465,7 +6214,7 @@ NtfsLowWrite(fuse_req_t Request,
              struct fuse_file_info* FileInfo)
 {
     NtfsFuseState* State = RequestState(Request);
-    PNtfsFileRecord File = (PNtfsFileRecord)(uintptr_t)FileInfo->fh;
+    PNtfsFileRecord File = ((NtfsFastFile*)(uintptr_t)FileInfo->fh)->File;
     auto Open = State->OpenFiles.find(Ino);
     LARGE_INTEGER ByteOffset;
     ULONG Length = Size > MAXULONG ? MAXULONG : (ULONG)Size;
@@ -5476,13 +6225,15 @@ NtfsLowWrite(fuse_req_t Request,
         fuse_reply_err(Request, EROFS);
         return;
     }
+    if (Open != State->OpenFiles.end())
+        SettleFast(State, &Open->second);
     ByteOffset.QuadPart = (LONGLONG)Offset;
     if (Open != State->OpenFiles.end())
     {
         UINT32 Mask = NtfsFileRecordGetAutomaticTimestampMask(File);
         struct timespec Now;
 
-        if (!Open->second.SetIdChecked && fuse_req_ctx(Request)->uid != 0)
+        if (!FileInfo->writepage && !Open->second.SetIdChecked && fuse_req_ctx(Request)->uid != 0)
         {
             Status = KillSetIdBits(State, Request, Ino, File, false, true);
             if (!NT_SUCCESS(Status))
@@ -5501,7 +6252,7 @@ NtfsLowWrite(fuse_req_t Request,
                                              &Length,
                                              &ByteOffset);
         (void)NtfsFileRecordSetAutomaticTimestampMask(File, Mask);
-        if (NT_SUCCESS(Status))
+        if (NT_SUCCESS(Status) && !FileInfo->writepage)
         {
             clock_gettime(CLOCK_REALTIME, &Now);
             Open->second.PendingWriteTime = TimespecToNtfsTime(&Now);
@@ -5521,36 +6272,442 @@ NtfsLowWrite(fuse_req_t Request,
         ReplyStatus(Request, Status);
         return;
     }
-    /* The kernel drops no cached pages after an asynchronous O_DIRECT write completes. */
-    if ((FileInfo->flags & O_DIRECT) && !State->DirectIo && State->DirectWriteThread.joinable())
-    {
-        std::lock_guard<std::mutex> Guard(State->DirectWriteLock);
-
-        State->DirectWrites.push_back(NtfsFuseDirectWrite{Request, Ino, Offset, Length});
-        State->DirectWriteReady.notify_one();
-        return;
-    }
+    if (Open != State->OpenFiles.end())
+        ArmFast(State, &Open->second, (ULONGLONG)Offset);
     fuse_reply_write(Request, Length);
 }
 
-static void
-DirectWriteWorker(NtfsFuseState* State)
+/* Maps file bytes [Start, End) through the snapshot; false when any part lies outside it. */
+static bool
+MapFast(const NtfsFastFile* Fast, ULONGLONG Start, ULONGLONG End, NtfsFastExtent* Pieces, unsigned* Count)
 {
-    std::unique_lock<std::mutex> Guard(State->DirectWriteLock);
+    unsigned Capacity = *Count;
+    unsigned Used = 0;
+
+    for (const NtfsFastExtent& Extent : Fast->Extents)
+    {
+        if (Start >= Extent.End)
+            continue;
+        if (Start < Extent.Start || Used == Capacity)
+            return false;
+        ULONGLONG Stop = End < Extent.End ? End : Extent.End;
+
+        Pieces[Used++] = {Start, Stop, Extent.Disk + (Start - Extent.Start)};
+        Start = Stop;
+        if (Start == End)
+        {
+            *Count = Used;
+            return true;
+        }
+    }
+    return false;
+}
+
+static PUCHAR
+FastBuffer(fuse_req_t Request, size_t Size)
+{
+    static thread_local std::vector<UCHAR> Buffer;
+#ifdef FUSE_CAP_OVER_IO_URING
+    char* Payload;
+    size_t Capacity;
+
+    if (fuse_req_get_payload(Request, &Payload, &Capacity, NULL) == 0 && Capacity >= Size)
+        return (PUCHAR)Payload;
+#else
+    UNREFERENCED_PARAMETER(Request);
+#endif
+    if (Buffer.size() < Size)
+        Buffer.resize(Size);
+    return Buffer.data();
+}
+
+static bool
+TryFastRead(fuse_req_t Request, NtfsFuseState* State, NtfsFastFile* Fast, size_t Size, off_t Offset)
+{
+    NtfsFastExtent Pieces[8];
+    unsigned Count = 8;
+
+    if (!Fast->Armed.load(std::memory_order_acquire))
+        return false;
+    std::shared_lock<std::shared_mutex> Guard(Fast->Lock);
+    if (!Fast->Armed.load(std::memory_order_acquire) || !Fast->ReadOk || Offset < 0 || Size == 0 ||
+        (ULONGLONG)Offset >= Fast->DataSize)
+    {
+        return false;
+    }
+    ULONGLONG Start = (ULONGLONG)Offset;
+    ULONGLONG Length = Size < Fast->DataSize - Start ? Size : Fast->DataSize - Start;
+
+    if (Length > Fast->Committed || Start > Fast->Committed - Length || !MapFast(Fast, Start, Start + Length, Pieces, &Count))
+        return false;
+    if (State->SpliceThreshold && Length >= State->SpliceThreshold)
+    {
+        union
+        {
+            struct fuse_bufvec Vector;
+            char Storage[sizeof(struct fuse_bufvec) + 7 * sizeof(struct fuse_buf)];
+        } Reply = {};
+
+        struct fuse_buf* Buffers = Reply.Vector.buf;
+
+        Reply.Vector.count = Count;
+        for (unsigned Index = 0; Index < Count; Index++)
+        {
+            Buffers[Index].size = (size_t)(Pieces[Index].End - Pieces[Index].Start);
+            Buffers[Index].flags = (fuse_buf_flags)(FUSE_BUF_IS_FD | FUSE_BUF_FD_SEEK);
+            Buffers[Index].fd = NtfsDiskFdLinux();
+            Buffers[Index].pos = (off_t)Pieces[Index].Disk;
+        }
+        fuse_reply_data(Request, &Reply.Vector, FUSE_BUF_SPLICE_MOVE);
+        return true;
+    }
+
+    PUCHAR Buffer = FastBuffer(Request, (size_t)Length);
+    size_t Done = 0;
+
+    for (unsigned Index = 0; Index < Count; Index++)
+    {
+        size_t Piece = (size_t)(Pieces[Index].End - Pieces[Index].Start);
+        size_t Read = 0;
+
+        while (Read < Piece)
+        {
+            ssize_t Result = pread(NtfsDiskFdLinux(), Buffer + Done + Read, Piece - Read, (off_t)(Pieces[Index].Disk + Read));
+
+            if (Result < 0 && errno == EINTR)
+                continue;
+            if (Result <= 0)
+            {
+                fuse_reply_err(Request, EIO);
+                return true;
+            }
+            Read += (size_t)Result;
+        }
+        Done += Piece;
+    }
+    fuse_reply_buf(Request, (const char*)Buffer, Done);
+    return true;
+}
+
+static bool
+TryFastWrite(fuse_req_t Request, NtfsFuseState* State, NtfsFastFile* Fast, const char* Buffer, size_t Size, off_t Offset,
+             struct fuse_file_info* FileInfo)
+{
+    NtfsFastExtent Pieces[8];
+    unsigned Count = 8;
+    ULONGLONG Start = (ULONGLONG)Offset;
+    ULONGLONG End = Start + Size;
+    bool Commit = false;
+
+    if (!Fast->Armed.load(std::memory_order_acquire))
+        return false;
+    {
+        std::shared_lock<std::shared_mutex> Guard(Fast->Lock);
+
+        if (!Fast->Armed.load(std::memory_order_acquire) || !Fast->WriteOk || Offset < 0 || Size == 0 || Size > MAXULONG ||
+            (!FileInfo->writepage && !Fast->SetIdChecked && fuse_req_ctx(Request)->uid != 0) ||
+            !MapFast(Fast, Start, End, Pieces, &Count))
+        {
+            return false;
+        }
+        if (End > Fast->Committed)
+        {
+            std::lock_guard<std::mutex> Pending(Fast->PendingLock);
+
+            if (Start > Fast->Frontier && Start - Fast->Frontier > NtfsFastWindow)
+                return false;
+        }
+        for (unsigned Index = 0; Index < Count; Index++)
+        {
+            NTSTATUS Status = NtfsWriteFileDataLinux(Pieces[Index].Disk,
+                                                     (const UCHAR*)Buffer + (Pieces[Index].Start - Start),
+                                                     (ULONG)(Pieces[Index].End - Pieces[Index].Start));
+
+            if (!NT_SUCCESS(Status))
+            {
+                ReplyStatus(Request, Status);
+                return true;
+            }
+        }
+        if (End > Fast->Committed)
+        {
+            std::lock_guard<std::mutex> Pending(Fast->PendingLock);
+
+            if (Start <= Fast->Frontier)
+            {
+                if (End > Fast->Frontier)
+                    Fast->Frontier = End;
+                while (!Fast->Ahead.empty() && Fast->Ahead.front().first <= Fast->Frontier)
+                {
+                    if (Fast->Ahead.front().second > Fast->Frontier)
+                        Fast->Frontier = Fast->Ahead.front().second;
+                    Fast->Ahead.erase(Fast->Ahead.begin());
+                }
+            }
+            else
+            {
+                auto Place = Fast->Ahead.begin();
+
+                while (Place != Fast->Ahead.end() && Place->first < Start)
+                    ++Place;
+                Fast->Ahead.insert(Place, {Start, End});
+            }
+            Commit = Fast->Frontier - Fast->Committed >= 4 * NtfsFastWindow;
+        }
+        Fast->Written.store(true, std::memory_order_relaxed);
+        if (!FileInfo->writepage)
+        {
+            struct timespec Now;
+            UINT64 Previous = Fast->WriteTime.load(std::memory_order_relaxed);
+
+            clock_gettime(CLOCK_REALTIME, &Now);
+            UINT64 Time = TimespecToNtfsTime(&Now);
+            while (Previous < Time && !Fast->WriteTime.compare_exchange_weak(Previous, Time))
+            {
+            }
+        }
+    }
+    if (Commit)
+    {
+        /* Store the length reached so far, so a long stream does not leave it all to the last close. */
+        std::lock_guard<std::mutex> Guard(State->RequestLock);
+
+        SettleFast(State, Fast->Owner);
+        Fast->Owner->DataRequests = 1;
+        ArmFast(State, Fast->Owner, End - 1);
+    }
+    fuse_reply_write(Request, Size);
+    return true;
+}
+
+static void
+NtfsLowReadFast(fuse_req_t Request, fuse_ino_t Ino, size_t Size, off_t Offset, struct fuse_file_info* FileInfo)
+{
+    NtfsFastFile* Fast = (NtfsFastFile*)(uintptr_t)FileInfo->fh;
+    NtfsFuseState* State = RequestState(Request);
+    int OldCancelState;
+    bool Done;
+
+    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &OldCancelState);
+    Done = Fast && TryFastRead(Request, State, Fast, Size, Offset);
+    if (!Done && Fast)
+    {
+        /* Whoever held the request lock may have armed the file again: do not take it down for nothing. */
+        std::unique_lock<std::mutex> Guard(State->RequestLock);
+
+        if (Fast->Armed.load(std::memory_order_acquire))
+        {
+            Guard.unlock();
+            Done = TryFastRead(Request, State, Fast, Size, Offset);
+        }
+    }
+    pthread_setcancelstate(OldCancelState, NULL);
+    if (!Done)
+        DispatchRequest<NtfsLowRead>(Request, Ino, Size, Offset, FileInfo);
+}
+
+static void
+NtfsLowWriteFast(fuse_req_t Request, fuse_ino_t Ino, const char* Buffer, size_t Size, off_t Offset,
+                 struct fuse_file_info* FileInfo)
+{
+    NtfsFastFile* Fast = (NtfsFastFile*)(uintptr_t)FileInfo->fh;
+    NtfsFuseState* State = RequestState(Request);
+    int OldCancelState;
+    bool Done;
+
+    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &OldCancelState);
+    Done = Fast && TryFastWrite(Request, State, Fast, Buffer, Size, Offset, FileInfo);
+    if (!Done && Fast)
+    {
+        std::unique_lock<std::mutex> Guard(State->RequestLock);
+
+        if (Fast->Armed.load(std::memory_order_acquire))
+        {
+            Guard.unlock();
+            Done = TryFastWrite(Request, State, Fast, Buffer, Size, Offset, FileInfo);
+        }
+    }
+    pthread_setcancelstate(OldCancelState, NULL);
+    if (!Done)
+        DispatchRequest<NtfsLowWrite>(Request, Ino, Buffer, Size, Offset, FileInfo);
+}
+
+/*
+ * One thread answers a caller that waits for each reply fastest. When the kernel queues requests
+ * without waiting, as writeback and read-ahead do, helpers drain the queue beside it.
+ */
+static void
+WakeWorker(NtfsFuseState* State)
+{
+    if (State->WorkersSleeping.load(std::memory_order_relaxed) == 0)
+        return;
+    {
+        std::lock_guard<std::mutex> Guard(State->WorkerLock);
+
+        State->WorkerTokens++;
+    }
+    State->WorkerWake.notify_one();
+}
+
+static bool
+RequestWaiting(struct fuse_session* Session)
+{
+    struct pollfd Poll = {fuse_session_fd(Session), POLLIN, 0};
+
+    return poll(&Poll, 1, 0) > 0 && (Poll.revents & POLLIN);
+}
+
+static void
+WorkerLoop(NtfsFuseState* State)
+{
+    struct fuse_session* Session = State->Session;
+    struct fuse_buf Buffer = {};
 
     for (;;)
     {
-        State->DirectWriteReady.wait(Guard, [State] { return State->DirectWriteStop || !State->DirectWrites.empty(); });
-        if (State->DirectWrites.empty())
-            return;
-        NtfsFuseDirectWrite Write = State->DirectWrites.front();
+        {
+            std::unique_lock<std::mutex> Guard(State->WorkerLock);
 
-        State->DirectWrites.pop_front();
-        Guard.unlock();
-        fuse_lowlevel_notify_inval_inode(State->Session, Write.Ino, Write.Offset, (off_t)Write.Length);
-        fuse_reply_write(Write.Request, Write.Length);
-        Guard.lock();
+            State->WorkersSleeping++;
+            State->WorkerWake.wait(Guard, [State] { return State->WorkerTokens != 0 || State->WorkerStop.load(); });
+            State->WorkersSleeping--;
+            if (State->WorkerStop.load())
+                break;
+            State->WorkerTokens--;
+        }
+        for (unsigned Idle = 0; Idle < 64 && !State->WorkerStop.load() && !fuse_session_exited(Session);)
+        {
+            if (!RequestWaiting(Session))
+            {
+                Idle++;
+                continue;
+            }
+            int Result = fuse_session_receive_buf(Session, &Buffer);
+
+            if (Result == -EINTR || Result == -EAGAIN)
+                continue;
+            if (Result <= 0)
+                break;
+            Idle = 0;
+            if (RequestWaiting(Session))
+                WakeWorker(State);
+            fuse_session_process_buf(Session, &Buffer);
+        }
     }
+    free(Buffer.mem);
+    State->WorkersDone++;
+}
+
+static void
+WakeBlockedWorker(int Signal)
+{
+    UNREFERENCED_PARAMETER(Signal);
+}
+
+/* A helper that lost the race for a request sits in read(): a signal brings it back to look at the stop flag. */
+static void
+StopWorkers(NtfsFuseState* State)
+{
+    struct sigaction Action = {};
+
+    Action.sa_handler = WakeBlockedWorker;
+    sigaction(SIGUSR2, &Action, NULL);
+    State->WorkerStop.store(true);
+    while (State->WorkersDone.load() < State->Workers.size())
+    {
+        State->WorkerWake.notify_all();
+        for (std::thread& Worker : State->Workers)
+            pthread_kill(Worker.native_handle(), SIGUSR2);
+        usleep(1000);
+    }
+    for (std::thread& Worker : State->Workers)
+        Worker.join();
+    State->Workers.clear();
+    {
+        std::lock_guard<std::mutex> Guard(State->PrefetchLock);
+    }
+    State->PrefetchWake.notify_all();
+    if (State->PrefetchThread.joinable())
+        State->PrefetchThread.join();
+}
+
+/*
+ * The kernel lets a FUSE mount hold 1% of the dirty memory, which paces writers below what the
+ * daemon can take. A privileged mount gets the share of any other filesystem; without the
+ * privilege the write fails and the default stays.
+ */
+static void
+RaiseDirtyShare(const char* Mountpoint)
+{
+    char* Resolved = realpath(Mountpoint, NULL);
+    FILE* Mounts = fopen("/proc/self/mountinfo", "r");
+    char Line[4096];
+    char Device[64] = "";
+
+    while (Resolved && Mounts && fgets(Line, sizeof(Line), Mounts))
+    {
+        char Found[64];
+        char Path[2048];
+
+        if (sscanf(Line, "%*u %*u %63s %*s %2047s", Found, Path) == 2 && strcmp(Path, Resolved) == 0)
+            snprintf(Device, sizeof(Device), "%s", Found);
+    }
+    if (Mounts)
+        fclose(Mounts);
+    free(Resolved);
+    if (Device[0])
+    {
+        char Name[128];
+
+        snprintf(Name, sizeof(Name), "/sys/class/bdi/%s/max_ratio", Device);
+        int File = open(Name, O_WRONLY | O_CLOEXEC);
+
+        if (File >= 0)
+        {
+            (void)!write(File, "100", 3);
+            close(File);
+        }
+    }
+}
+
+static int
+SessionLoop(NtfsFuseState* State)
+{
+    struct fuse_session* Session = State->Session;
+    struct fuse_buf Buffer = {};
+    unsigned Interval = 1;
+    unsigned Seen = 0;
+    int Result = 0;
+
+    while (!fuse_session_exited(Session))
+    {
+        Result = fuse_session_receive_buf(Session, &Buffer);
+        if (Result == -EINTR)
+            continue;
+        if (Result <= 0)
+            break;
+        if (!State->Workers.empty() && Buffer.size >= 8 && !(Buffer.flags & FUSE_BUF_IS_FD))
+        {
+            uint32_t Opcode;
+
+            memcpy(&Opcode, (const char*)Buffer.mem + 4, sizeof(Opcode));
+            /* FUSE_READ and FUSE_WRITE; a lone caller's requests never find another one waiting. */
+            if ((Opcode == 15 || Opcode == 16) && ++Seen >= Interval)
+            {
+                Seen = 0;
+                if (RequestWaiting(Session))
+                {
+                    Interval = 1;
+                    WakeWorker(State);
+                }
+                else if (Interval < 16)
+                    Interval *= 2;
+            }
+        }
+        fuse_session_process_buf(Session, &Buffer);
+    }
+    free(Buffer.mem);
+    return Result < 0 ? Result : 0;
 }
 
 static void
@@ -5568,7 +6725,6 @@ NtfsLowFsync(fuse_req_t Request, fuse_ino_t Ino, int DataOnly, struct fuse_file_
         Status = FlushPendingWriteTime(Open);
         if (NT_SUCCESS(Status) && Open)
             Status = NtfsFileRecordFlushFileNameUpdates(Open->File);
-        FlushPendingAccess(State);
         if (NT_SUCCESS(Status))
             Status = NtfsFlushVolumeContext(NULL);
     }
@@ -5584,7 +6740,7 @@ NtfsLowFallocate(fuse_req_t Request,
                  struct fuse_file_info* FileInfo)
 {
     NtfsFuseState* State = RequestState(Request);
-    PNtfsFileRecord File = (PNtfsFileRecord)(uintptr_t)FileInfo->fh;
+    PNtfsFileRecord File = ((NtfsFastFile*)(uintptr_t)FileInfo->fh)->File;
     auto Open = State->OpenFiles.find(Ino);
     PAttribute Data;
     ULONGLONG Target;
@@ -5595,6 +6751,8 @@ NtfsLowFallocate(fuse_req_t Request,
         fuse_reply_err(Request, EROFS);
         return;
     }
+    if (Open != State->OpenFiles.end())
+        SettleFast(State, &Open->second);
     /* TODO: FALLOC_FL_PUNCH_HOLE and FALLOC_FL_ZERO_RANGE through the core's zero-data range. */
     if (Mode & ~FALLOC_FL_KEEP_SIZE)
     {
@@ -5630,17 +6788,42 @@ NtfsLowFallocate(fuse_req_t Request,
 }
 
 static NTSTATUS
+AppendDirectoryName(void* Context, ULONGLONG Reference, const FileNameEx* Entry)
+{
+    auto* Listing = static_cast<NtfsDirectoryListing*>(Context);
+    std::string Name;
+    mode_t Type = 0;
+
+    if (!Utf16ToUtf8(Entry->Name, Entry->NameLength, Name))
+        return STATUS_OBJECT_NAME_INVALID;
+    if (Entry->Flags & FILE_PERM_REPARSE_PT)
+    {
+        if (Entry->Extended.ReparseTag == NTFS_IO_REPARSE_TAG_WOF)
+            Type = Entry->Flags & FN_DIRECTORY ? S_IFDIR : S_IFREG;
+    }
+    else if (Entry->Flags & FN_DIRECTORY)
+        Type = S_IFDIR;
+    else if (!Entry->Extended.EAInfo.PackedEASize)
+        Type = S_IFREG;
+    Listing->Entries.push_back({std::move(Name), Reference, Type});
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
 GetListing(NtfsFuseState* State, fuse_ino_t Ino, std::shared_ptr<NtfsDirectoryListing>& Result)
 {
     auto Cached = State->DirectoryCache.find(Ino);
 
     if (Cached == State->DirectoryCache.end())
     {
+        auto Inode = State->Inodes.find(Ino);
+        if (Inode != State->Inodes.end() && Inode->second.Unlinked)
+        {
+            Result.reset();
+            return STATUS_SUCCESS;
+        }
         PNtfsFileRecord File = NULL;
-        PNtfsDirectory Directory = NULL;
         NtfsDirectoryListing Listing;
-        NtfsDirectoryEntry Entry;
-        BOOLEAN Restart = TRUE;
         bool Owned;
         NTSTATUS Status;
 
@@ -5661,43 +6844,8 @@ GetListing(NtfsFuseState* State, fuse_ino_t Ino, std::shared_ptr<NtfsDirectoryLi
             {
                 Listing.Parent = ParentReference;
             }
-            Directory = NtfsDirectoryCreate(State->Volume);
-            if (!Directory)
-                Status = STATUS_INSUFFICIENT_RESOURCES;
+            Status = NtfsDirectoryVisitNames(State->Volume, File, AppendDirectoryName, &Listing);
         }
-        if (NT_SUCCESS(Status))
-            Status = NtfsDirectoryLoadDirectory(Directory, File);
-        while (NT_SUCCESS(Status))
-        {
-            std::string Name;
-
-            Status = NtfsDirectoryReadNext(Directory, Restart, &Entry);
-            Restart = FALSE;
-            if (Status == STATUS_NO_MORE_FILES)
-            {
-                Status = STATUS_SUCCESS;
-                break;
-            }
-            if (!NT_SUCCESS(Status))
-                break;
-            if (!Utf16ToUtf8(Entry.Name, Entry.NameLength, Name))
-            {
-                Status = STATUS_OBJECT_NAME_INVALID;
-                break;
-            }
-            /* Reparse points and files with EAs stay untyped: only the record knows
-             * whether one is a link, a FIFO or a device. */
-            Listing.Entries.push_back({std::move(Name),
-                                       Entry.FileReference,
-                                       (mode_t)((Entry.FileAttributes & FILE_PERM_REPARSE_PT) ||
-                                                        (Entry.EaSize != 0 &&
-                                                         !(Entry.FileAttributes & FN_DIRECTORY))
-                                                    ? 0
-                                                    : (Entry.FileAttributes & FN_DIRECTORY)
-                                                          ? S_IFDIR
-                                                          : S_IFREG)});
-        }
-        NtfsDirectoryDestroy(Directory);
         ReleaseLoaded(File, Owned);
         if (!NT_SUCCESS(Status))
             return Status;
@@ -5714,20 +6862,21 @@ NtfsLowOpendir(fuse_req_t Request, fuse_ino_t Ino, struct fuse_file_info* FileIn
 {
     NtfsFuseState* State = RequestState(Request);
     std::shared_ptr<NtfsDirectoryListing> Listing;
-    NTSTATUS Status = GetListing(State, Ino, Listing);
+    NTSTATUS Status;
 
-    if (!NT_SUCCESS(Status) && State->RemovedDirectories.count(Ino))
+    /* The kernel then stops asking: a directory costs no open and no release. */
+    if (State->OpenlessDirectories)
     {
-        Listing = std::make_shared<NtfsDirectoryListing>();
-        Status = STATUS_SUCCESS;
+        fuse_reply_err(Request, ENOSYS);
+        return;
     }
+    Status = GetListing(State, Ino, Listing);
     if (!NT_SUCCESS(Status))
     {
         fuse_reply_err(Request, Status == STATUS_OBJECT_NAME_INVALID ? EILSEQ
                                                                      : NtStatusToErrno(Status));
         return;
     }
-    FileInfo->fh = (uint64_t)(uintptr_t)new std::shared_ptr<NtfsDirectoryListing>(std::move(Listing));
     FileInfo->keep_cache = 1;
     FileInfo->cache_readdir = 1;
     fuse_reply_open(Request, FileInfo);
@@ -5737,9 +6886,12 @@ static void
 NtfsLowReleasedir(fuse_req_t Request, fuse_ino_t Ino, struct fuse_file_info* FileInfo)
 {
     UNREFERENCED_PARAMETER(Ino);
-    delete (std::shared_ptr<NtfsDirectoryListing>*)(uintptr_t)FileInfo->fh;
+    UNREFERENCED_PARAMETER(FileInfo);
     fuse_reply_err(Request, 0);
 }
+
+/* The position leads and the scan number trails, so any offset below a valid one still names a position. */
+static const unsigned NtfsScanBits = 20;
 
 static void
 ReadDirectory(fuse_req_t Request,
@@ -5750,35 +6902,61 @@ ReadDirectory(fuse_req_t Request,
               bool Plus)
 {
     NtfsFuseState* State = RequestState(Request);
-    auto* Handle = (std::shared_ptr<NtfsDirectoryListing>*)(uintptr_t)FileInfo->fh;
+    uint64_t Cookie = Offset < 0 ? 0 : (uint64_t)Offset;
+    uint32_t Scan = (uint32_t)(Cookie & ((UINT64_C(1) << NtfsScanBits) - 1));
+    size_t First = (size_t)(Cookie >> NtfsScanBits);
+    std::shared_ptr<NtfsDirectoryListing> Snapshot;
+    auto& Scans = State->DirectoryScans[Ino];
 
+    UNREFERENCED_PARAMETER(FileInfo);
     /* TODO: update the directory access time under relatime and strictatime. */
-    /* A read from the start (opendir or rewinddir) sees names added since the open. */
-    if (Offset == 0)
+    for (const auto& Known : Scans)
     {
-        std::shared_ptr<NtfsDirectoryListing> Current;
-        NTSTATUS Status = GetListing(State, Ino, Current);
+        if (Cookie != 0 && Known.first == Scan)
+            Snapshot = Known.second;
+    }
+    /* A read from the start (opendir or rewinddir) sees names added since the last one. */
+    if (!Snapshot)
+    {
+        NTSTATUS Status = GetListing(State, Ino, Snapshot);
 
-        if (!NT_SUCCESS(Status) && State->RemovedDirectories.count(Ino))
-        {
-            fuse_reply_buf(Request, NULL, 0);
-            return;
-        }
         if (!NT_SUCCESS(Status))
         {
             fuse_reply_err(Request, Status == STATUS_OBJECT_NAME_INVALID ? EILSEQ
                                                                          : NtStatusToErrno(Status));
             return;
         }
-        *Handle = std::move(Current);
+        if (Scans.empty() || Scans.back().second != Snapshot)
+        {
+            uint32_t Next = Scans.empty() ? 1 : Scans.back().first + 1;
+
+            if (Next >= (UINT32_C(1) << NtfsScanBits))
+                Next = 1;
+            Scans.emplace_back(Next, Snapshot);
+            if (Scans.size() > 4)
+                Scans.erase(Scans.begin());
+        }
+        Scan = Scans.back().first;
     }
 
-    const NtfsDirectoryListing* Listing = Handle->get();
-    std::vector<char> Buffer(Size);
+    const NtfsDirectoryListing* Listing = Snapshot.get();
+    if (!Listing)
+    {
+        fuse_reply_buf(Request, NULL, 0);
+        return;
+    }
+    auto Current = State->DirectoryCache.find(Ino);
+    bool IsCurrent = Current != State->DirectoryCache.end() && Current->second.get() == Listing;
+    char* Buffer = (char*)GetReplyBuffer(Request, State, Size);
     size_t Used = 0;
     size_t Total = Listing->Entries.size() + 2;
 
-    for (size_t Index = Offset < 0 ? 0 : (size_t)Offset; Index < Total; Index++)
+    if (Plus)
+    {
+        State->ListedRecords.clear();
+        State->ListingGeneration = NtfsDiskWriteGenerationLinux();
+    }
+    for (size_t Index = First; Index < Total; Index++)
     {
         struct fuse_entry_param Entry;
         PNtfsFileRecord File = NULL;
@@ -5800,11 +6978,13 @@ ReadDirectory(fuse_req_t Request,
             Name = Child.Name.c_str();
             Entry.attr.st_ino = (ino_t)(Child.Reference & UINT64_C(0x0000FFFFFFFFFFFF));
             Entry.attr.st_mode = Child.Type;
-            if (Plus)
+            if (IsCurrent && (!Child.Type || (Plus && Child.Type == S_IFDIR)))
             {
                 auto Open = State->OpenFiles.find(InoFromReference(Child.Reference));
                 NTSTATUS Status = STATUS_SUCCESS;
 
+                if (Open != State->OpenFiles.end())
+                    SettleFast(State, &Open->second);
                 if (Open == State->OpenFiles.end())
                     Status = NtfsMasterFileTableGetFileRecordByReference(StateMft(State),
                                                                          Child.Reference,
@@ -5826,11 +7006,11 @@ ReadDirectory(fuse_req_t Request,
                 }
             }
         }
-        Needed = Plus ? fuse_add_direntry_plus(Request, Buffer.data() + Used, Size - Used, Name,
-                                               &Entry, (off_t)Index + 1)
-                      : fuse_add_direntry(Request, Buffer.data() + Used, Size - Used, Name,
-                                          &Entry.attr, (off_t)Index + 1);
-        NtfsFileRecordDestroy(File);
+        off_t Next = (off_t)(((uint64_t)(Index + 1) << NtfsScanBits) | Scan);
+
+        Needed = Plus ? fuse_add_direntry_plus(Request, Buffer + Used, Size - Used, Name, &Entry, Next)
+                      : fuse_add_direntry(Request, Buffer + Used, Size - Used, Name, &Entry.attr, Next);
+        decltype(State->LookupRecord) Record(File, NtfsFileRecordDestroy);
         if (Needed > Size - Used)
             break;
         Used += Needed;
@@ -5839,10 +7019,16 @@ ReadDirectory(fuse_req_t Request,
             NtfsFuseInode& Inode = State->Inodes[Entry.ino];
             Inode.Reference = Listing->Entries[Index - 2].Reference;
             Inode.Lookups++;
-            State->RemovedDirectories.erase(Entry.ino);
+            if (IsCurrent)
+            {
+                Inode.ListDirectory = Ino;
+                Inode.ListIndex = Index - 2;
+            }
+            if (Record)
+                State->ListedRecords.emplace(Inode.Reference, std::move(Record));
         }
     }
-    fuse_reply_buf(Request, Buffer.data(), Used);
+    fuse_reply_buf(Request, Buffer, Used);
 }
 
 static void
@@ -6205,40 +7391,41 @@ MountImage(int Argc, char** Argv, NtfsFuseState* State)
         fprintf(stderr, "cannot open the root directory\n");
         return 1;
     }
-    State->Inodes[FUSE_ROOT_ID] = NtfsFuseInode{NtfsFileRecordGetReference(Root), 1};
+    State->Inodes[FUSE_ROOT_ID] = NtfsFuseInode{NtfsFileRecordGetReference(Root), 1, false, 0, 0};
     NtfsFileRecordDestroy(Root);
 
     Operations.init = NtfsLowInit;
-    Operations.lookup = NtfsLowLookup;
-    Operations.forget = NtfsLowForget;
-    Operations.forget_multi = NtfsLowForgetMulti;
-    Operations.getattr = NtfsLowGetattr;
-    Operations.setattr = NtfsLowSetattr;
-    Operations.readlink = NtfsLowReadlink;
-    Operations.mknod = NtfsLowMknod;
-    Operations.mkdir = NtfsLowMkdir;
-    Operations.unlink = NtfsLowUnlink;
-    Operations.rmdir = NtfsLowRmdir;
-    Operations.symlink = NtfsLowSymlink;
-    Operations.rename = NtfsLowRename;
-    Operations.link = NtfsLowLink;
-    Operations.open = NtfsLowOpen;
-    Operations.read = NtfsLowRead;
-    Operations.write = NtfsLowWrite;
-    Operations.release = NtfsLowRelease;
-    Operations.fsync = NtfsLowFsync;
-    Operations.opendir = NtfsLowOpendir;
-    Operations.readdir = NtfsLowReaddir;
-    Operations.readdirplus = NtfsLowReaddirplus;
-    Operations.releasedir = NtfsLowReleasedir;
-    Operations.statfs = NtfsLowStatfs;
-    Operations.setxattr = NtfsLowSetxattr;
-    Operations.getxattr = NtfsLowGetxattr;
-    Operations.listxattr = NtfsLowListxattr;
-    Operations.removexattr = NtfsLowRemovexattr;
-    Operations.access = NtfsLowAccess;
-    Operations.create = NtfsLowCreate;
-    Operations.fallocate = NtfsLowFallocate;
+    Operations.lookup = DispatchRequest<NtfsLowLookup>;
+    Operations.forget = DispatchRequest<NtfsLowForget>;
+    Operations.forget_multi = DispatchRequest<NtfsLowForgetMulti>;
+    Operations.getattr = DispatchRequest<NtfsLowGetattr>;
+    Operations.setattr = DispatchMutation<NtfsLowSetattr>;
+    Operations.readlink = DispatchRequest<NtfsLowReadlink>;
+    Operations.mknod = DispatchRequest<NtfsLowMknod>;
+    Operations.mkdir = DispatchRequest<NtfsLowMkdir>;
+    Operations.unlink = DispatchMutation<NtfsLowUnlink>;
+    Operations.rmdir = DispatchMutation<NtfsLowRmdir>;
+    Operations.symlink = DispatchRequest<NtfsLowSymlink>;
+    Operations.rename = DispatchMutation<NtfsLowRename>;
+    Operations.link = DispatchRequest<NtfsLowLink>;
+    Operations.open = NtfsLowOpenAny;
+    Operations.read = NtfsLowReadFast;
+    Operations.write = NtfsLowWriteFast;
+    Operations.release = DispatchRequest<NtfsLowRelease>;
+    Operations.fsync = DispatchRequest<NtfsLowFsync>;
+    Operations.fsyncdir = DispatchRequest<NtfsLowFsync>;
+    Operations.opendir = DispatchRequest<NtfsLowOpendir>;
+    Operations.readdir = DispatchRequest<NtfsLowReaddir>;
+    Operations.readdirplus = DispatchRequest<NtfsLowReaddirplus>;
+    Operations.releasedir = DispatchRequest<NtfsLowReleasedir>;
+    Operations.statfs = DispatchRequest<NtfsLowStatfs>;
+    Operations.setxattr = DispatchRequest<NtfsLowSetxattr>;
+    Operations.getxattr = DispatchRequest<NtfsLowGetxattr>;
+    Operations.listxattr = DispatchRequest<NtfsLowListxattr>;
+    Operations.removexattr = DispatchRequest<NtfsLowRemovexattr>;
+    Operations.access = DispatchRequest<NtfsLowAccess>;
+    Operations.create = DispatchRequest<NtfsLowCreate>;
+    Operations.fallocate = DispatchRequest<NtfsLowFallocate>;
 
     if (fuse_parse_cmdline(&Arguments, &Options) != 0)
         return 2;
@@ -6256,22 +7443,22 @@ MountImage(int Argc, char** Argv, NtfsFuseState* State)
         {
             if (fuse_session_mount(Session, Options.mountpoint) == 0)
             {
+                if (State->Writable)
+                    RaiseDirtyShare(Options.mountpoint);
                 fuse_daemonize(Options.foreground);
-                State->DirectWriteStop = false;
-                if (State->Writable && !State->DirectIo)
-                    State->DirectWriteThread = std::thread(DirectWriteWorker, State);
-                Result = fuse_session_loop(Session) == 0 ? 0 : 1;
-                if (State->DirectWriteThread.joinable())
+                if (!State->RingTransport)
                 {
-                    {
-                        std::lock_guard<std::mutex> Guard(State->DirectWriteLock);
+                    unsigned Count = std::thread::hardware_concurrency();
 
-                        State->DirectWriteStop = true;
-                        State->DirectWriteReady.notify_one();
-                    }
-                    State->DirectWriteThread.join();
+                    Count = Count > 2 ? 2 : Count > 1 ? 1 : 0;
+                    for (unsigned Index = 0; Index < Count; Index++)
+                        State->Workers.emplace_back(WorkerLoop, State);
                 }
+                if (!State->Workers.empty())
+                    State->PrefetchThread = std::thread(PrefetchLoop, State);
+                Result = SessionLoop(State) == 0 ? 0 : 1;
                 fuse_session_unmount(Session);
+                StopWorkers(State);
             }
             fuse_remove_signal_handlers(Session);
         }
@@ -6284,6 +7471,11 @@ MountImage(int Argc, char** Argv, NtfsFuseState* State)
 
         Open->second.References = 1;
         ReleaseOpenFile(State, Open->first);
+    }
+    for (const auto& Inode : State->Inodes)
+    {
+        if (Inode.second.Unlinked)
+            DeleteUnlinkedRecord(State, Inode.second.Reference);
     }
     FlushPendingAccess(State);
     free(Options.mountpoint);
@@ -6688,7 +7880,7 @@ PrintUsage(const char* Program)
             "  %s --expand-disk DISK_IMAGE [PARTITION_NUMBER]\n"
             "  %s --mft-record IMAGE FILE_REFERENCE\n"
             "  %s [--show-metadata] --streams IMAGE PATH\n"
-            "  %s [--show-metadata] [--writable [--direct-io] [--writeback-cache]]"
+            "  %s [--show-metadata] [--writable [--direct-io] [--writeback-cache|--write-through]]"
             " IMAGE MOUNTPOINT [FUSE options]\n",
             Program,
             Program,
@@ -8153,8 +9345,7 @@ main(int Argc, char** Argv)
     {
         bool WritableMount = false;
 
-        /* Writeback caching would report ENOSPC only at writeback; opt-in. */
-        State.WritebackCache = false;
+        State.WritebackCache = true;
         State.DirectIo = false;
         State.NoAtime = false;
         State.StrictAtime = false;
@@ -8171,6 +9362,8 @@ main(int Argc, char** Argv)
                 State.DirectIo = true;
             else if (strcmp(Argv[First], "--writeback-cache") == 0)
                 State.WritebackCache = true;
+            else if (strcmp(Argv[First], "--write-through") == 0)
+                State.WritebackCache = false;
             else
                 break;
             First++;

@@ -850,6 +850,21 @@ TestUnlinkOpen()
         CHECK("unlink.open_released", Names.empty(), "%zu leftover names (%s)", Names.size(),
               Names.empty() ? "" : Names.begin()->c_str());
     }
+    WriteFile(P("unl/old"), A);
+    int PathFd = open(P("unl/old").c_str(), O_PATH);
+    struct stat Old = {}, New = {};
+    bool Held = PathFd >= 0 && fstat(PathFd, &Old) == 0 && unlink(P("unl/old").c_str()) == 0;
+    WriteFile(P("unl/new"), std::vector<uint8_t>{7});
+    CHECK("unlink.path_handle_identity", Held && stat(P("unl/new").c_str(), &New) == 0 &&
+          New.st_ino != Old.st_ino && fstat(PathFd, &Old) == 0 && Old.st_nlink == 0 &&
+          Old.st_size == (off_t)A.size(), "old inode %llu links %lu, new inode %llu",
+          (unsigned long long)Old.st_ino, (unsigned long)Old.st_nlink, (unsigned long long)New.st_ino);
+    if (PathFd >= 0)
+        close(PathFd);
+    Fd = open(P("unl/new").c_str(), O_RDONLY);
+    CHECK("unlink.deferred_times_sync", Fd >= 0 && syncfs(Fd) == 0, "%s", strerror(errno));
+    if (Fd >= 0)
+        close(Fd);
 }
 
 static void
@@ -915,6 +930,29 @@ TestBigDirectory()
         Expected.insert(Name);
     }
     CHECK("bigdir.create", Ok, "%s", strerror(errno));
+    {
+        bool TypesOk = mkfifo(P("big/zzz-fifo").c_str(), 0600) == 0 &&
+                       symlink("zzz-fifo", P("big/zzz-link").c_str()) == 0;
+        DIR* Handle = opendir(P("big").c_str());
+        unsigned Seen = 0;
+        while (Handle)
+        {
+            struct dirent* Entry = readdir(Handle);
+            if (!Entry)
+                break;
+            if (!strcmp(Entry->d_name, ".") || !strcmp(Entry->d_name, ".."))
+                continue;
+            unsigned Type = !strcmp(Entry->d_name, "zzz-fifo") ? DT_FIFO :
+                            !strcmp(Entry->d_name, "zzz-link") ? DT_LNK : DT_REG;
+            TypesOk = TypesOk && Entry->d_type == Type;
+            Seen++;
+        }
+        if (Handle)
+            closedir(Handle);
+        CHECK("bigdir.readdir_types", TypesOk && Seen == Count + 2, "checked %u file types", Seen);
+        unlink(P("big/zzz-fifo").c_str());
+        unlink(P("big/zzz-link").c_str());
+    }
     CHECK("bigdir.readdir", ListNames(P("big")) == Expected, "listing differs (%zu vs %zu)",
           ListNames(P("big")).size(), Expected.size());
     {
@@ -953,6 +991,112 @@ TestBigDirectory()
               "seen %zu of %zu, %zu left", Seen, Expected.size(), ListNames(P("big")).size());
     }
     CHECK("bigdir.rmdir", rmdir(P("big").c_str()) == 0, "%s", strerror(errno));
+}
+
+/* Two walks of one directory that changes between their starts: each keeps the names it started with. */
+static void
+TestInterleavedScans()
+{
+    const int Count = 2500;
+    std::set<std::string> Stable;
+    std::multiset<std::string> SeenFirst;
+    std::set<std::string> SeenSecond;
+    bool Ok = true;
+
+    MakeDir("scans");
+    for (int Index = 0; Ok && Index < Count; Index++)
+    {
+        char Name[64];
+
+        snprintf(Name, sizeof(Name), "entry-%05d", Index);
+        int Fd = open(P(std::string("scans/") + Name).c_str(), O_CREAT | O_WRONLY, 0644);
+        Ok = Fd >= 0;
+        if (Fd >= 0)
+            close(Fd);
+        if (Index % 5)
+            Stable.insert(Name);
+    }
+    DIR* First = opendir(P("scans").c_str());
+    for (int Index = 0; First && Index < 300; Index++)
+    {
+        struct dirent* Entry = readdir(First);
+
+        if (Entry && Entry->d_name[0] != '.')
+            SeenFirst.insert(Entry->d_name);
+    }
+    for (int Index = 0; Ok && Index < Count; Index += 5)
+    {
+        char Name[64];
+
+        snprintf(Name, sizeof(Name), "scans/entry-%05d", Index);
+        Ok = unlink(P(Name).c_str()) == 0;
+        snprintf(Name, sizeof(Name), "scans/added-%05d", Index);
+        int Fd = open(P(Name).c_str(), O_CREAT | O_WRONLY, 0644);
+        Ok = Ok && Fd >= 0;
+        if (Fd >= 0)
+            close(Fd);
+    }
+    DIR* Second = opendir(P("scans").c_str());
+    while (Second)
+    {
+        struct dirent* Entry = readdir(Second);
+
+        if (!Entry)
+            break;
+        if (Entry->d_name[0] != '.')
+            SeenSecond.insert(Entry->d_name);
+    }
+    while (First)
+    {
+        struct dirent* Entry = readdir(First);
+
+        if (!Entry)
+            break;
+        if (Entry->d_name[0] != '.')
+            SeenFirst.insert(Entry->d_name);
+    }
+    if (First)
+        closedir(First);
+    if (Second)
+        closedir(Second);
+    size_t Missing = 0;
+    size_t Repeated = 0;
+    for (const std::string& Name : Stable)
+    {
+        Missing += SeenFirst.count(Name) == 0;
+        Repeated += SeenFirst.count(Name) > 1;
+        Ok = Ok && SeenSecond.count(Name) == 1;
+    }
+    /* Any offset below one a walk handed out still leads to an entry, never to a false end. */
+    {
+        DIR* Walk = opendir(P("scans").c_str());
+        long Highest = 0;
+        bool Found = Walk != NULL;
+
+        for (int Index = 0; Walk && Index < 400; Index++)
+        {
+            long Position = telldir(Walk);
+
+            if (Position > Highest)
+                Highest = Position;
+            if (!readdir(Walk))
+                break;
+        }
+        for (int Index = 1; Found && Highest > 0 && Index <= 64; Index++)
+        {
+            seekdir(Walk, (long)((unsigned long long)Highest * Index / 65));
+            Found = readdir(Walk) != NULL;
+        }
+        if (Walk)
+            closedir(Walk);
+        CHECK("readdir.offset_below_valid", Found && Highest > 0, "highest offset %ld", Highest);
+    }
+    CHECK("readdir.interleaved_scans", Ok && First && Second && Missing == 0 && Repeated == 0 &&
+          SeenSecond.size() == Stable.size() + Count / 5,
+          "first walk missed %zu and repeated %zu, second saw %zu", Missing, Repeated, SeenSecond.size());
+    for (const std::string& Name : SeenSecond)
+        unlink(P("scans/" + Name).c_str());
+    rmdir(P("scans").c_str());
 }
 
 static void
@@ -1190,6 +1334,36 @@ TestRemovedOpenDirectory()
     CHECK("dir.removed_open_fstat_readdir", Ok, "%s", strerror(errno));
     if (Fd >= 0)
         close(Fd);
+}
+
+static void
+TestMovedDirectoryListing()
+{
+    MakeDir("movedir");
+    MakeDir("movedir/old");
+    MakeDir("movedir/new");
+    MakeDir("movedir/old/child");
+    DIR* Handle = opendir(P("movedir/old/child").c_str());
+    if (!Handle)
+    {
+        FAIL("readdir.moved_parent", "%s", strerror(errno));
+        return;
+    }
+    while (readdir(Handle))
+        ;
+    struct stat Parent;
+    ino_t ListedParent = 0;
+    bool Ok = rename(P("movedir/old/child").c_str(), P("movedir/new/child").c_str()) == 0 &&
+              stat(P("movedir/new").c_str(), &Parent) == 0;
+    rewinddir(Handle);
+    while (struct dirent* Entry = readdir(Handle))
+    {
+        if (!strcmp(Entry->d_name, ".."))
+            ListedParent = Entry->d_ino;
+    }
+    closedir(Handle);
+    CHECK("readdir.moved_parent", Ok && ListedParent == Parent.st_ino, "listed parent %llu",
+          (unsigned long long)ListedParent);
 }
 
 /* A PATH_MAX - 1 byte target fits one reparse name but not two. */
@@ -1488,6 +1662,11 @@ TestTimes()
     std::string Path = P("times");
 
     WriteFile(Path, std::vector<uint8_t>{1, 2, 3});
+    CHECK("time.new_file_write_after_creation", stat(Path.c_str(), &Stat) == 0 &&
+          (Stat.st_mtim.tv_sec > Stat.st_atim.tv_sec ||
+           (Stat.st_mtim.tv_sec == Stat.st_atim.tv_sec && Stat.st_mtim.tv_nsec >= Stat.st_atim.tv_nsec)),
+          "atime %lld.%09ld mtime %lld.%09ld", (long long)Stat.st_atim.tv_sec, Stat.st_atim.tv_nsec,
+          (long long)Stat.st_mtim.tv_sec, Stat.st_mtim.tv_nsec);
     Times[0].tv_sec = 981173106;
     Times[0].tv_nsec = 123456789;
     Times[1].tv_sec = 1000000000;
@@ -1501,6 +1680,20 @@ TestTimes()
     CHECK("time.atime_100ns", Stat.st_atim.tv_sec == 981173106 &&
                                   Stat.st_atim.tv_nsec == 123456700,
           "atime %lld.%09ld", (long long)Stat.st_atim.tv_sec, Stat.st_atim.tv_nsec);
+    if (sizeof(time_t) >= 8)
+    {
+        struct timespec Limit[2] = {{0, UTIME_OMIT}, {(time_t)INT64_C(910692730085), 477580800}};
+        struct stat After = {};
+        int Result = utimensat(AT_FDCWD, Path.c_str(), Limit, 0);
+        int Error = errno;
+        CHECK("time.ntfs_upper_bound", stat(Path.c_str(), &After) == 0 &&
+              ((Result == 0 && After.st_mtim.tv_sec == Limit[1].tv_sec &&
+                After.st_mtim.tv_nsec == 477580700) ||
+               (Result < 0 && Error == EOVERFLOW && After.st_mtim.tv_sec == Stat.st_mtim.tv_sec &&
+                After.st_mtim.tv_nsec == Stat.st_mtim.tv_nsec)),
+              "result %d errno %d mtime %lld.%09ld", Result, Error,
+              (long long)After.st_mtim.tv_sec, After.st_mtim.tv_nsec);
+    }
     Times[0].tv_nsec = UTIME_OMIT;
     Times[1].tv_sec = 1100000000;
     Times[1].tv_nsec = 0;
@@ -1565,6 +1758,14 @@ TestTimes()
               (long long)Stat.st_atim.tv_sec, Stat.st_atim.tv_nsec);
 
         /* xfstests generic/003: a read after a write moves atime even when the written pages are cached. */
+        for (int Attempt = 0; Attempt < 1000; ++Attempt)
+        {
+            struct timespec Now;
+            clock_gettime(CLOCK_REALTIME_COARSE, &Now);
+            if (Now.tv_sec > First.tv_sec || (Now.tv_sec == First.tv_sec && Now.tv_nsec / 100 > First.tv_nsec / 100))
+                break;
+            usleep(1000);
+        }
         Fd = open(Path.c_str(), O_WRONLY);
         bool Wrote = Fd >= 0 && pwrite(Fd, "w", 1, 0) == 1;
         if (Fd >= 0)
@@ -1970,13 +2171,14 @@ TestEnospc()
     std::vector<uint8_t> Chunk(1048576, 0x5A);
     struct statvfs Before, Released;
     off_t Offset = 0;
+    off_t Durable = 0;
     int Error = 0;
     int Fd;
 
     sync();
     statvfs(Root.c_str(), &Before);
     Fd = open(Path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    for (;;)
+    while (Fd >= 0 && (uint64_t)Offset <= (uint64_t)Before.f_blocks * Before.f_frsize)
     {
         ssize_t Done = pwrite(Fd, Chunk.data(), Chunk.size(), Offset);
         if (Done < 0)
@@ -1987,24 +2189,40 @@ TestEnospc()
         if (Done == 0)
             break;
         Offset += Done;
+        if (fsync(Fd) < 0)
+        {
+            Error = errno;
+            break;
+        }
+        Durable = Offset;
     }
-    close(Fd);
-    CHECK("enospc.errno", Error == ENOSPC, "write failed with %s after %lld bytes",
+    if (close(Fd) < 0 && !Error)
+        Error = errno;
+    CHECK("enospc.errno", Error == ENOSPC, "write or synchronization failed with %s after %lld bytes",
           Error ? strerror(Error) : "nothing", (long long)Offset);
-    CHECK("enospc.size_matches_written", SizeOf(Path) == Offset, "size %lld written %lld",
-          (long long)SizeOf(Path), (long long)Offset);
+    off_t Size = SizeOf(Path);
+    CHECK("enospc.size_matches_written", Size >= Durable && Size <= Offset,
+          "size %lld synced %lld written %lld", (long long)Size, (long long)Durable, (long long)Offset);
     {
         std::vector<uint8_t> Actual;
-        bool Ok = ReadFile(Path, Actual) && (off_t)Actual.size() == Offset;
-        for (size_t Index = 0; Ok && Index < Actual.size(); Index += 4093)
-            Ok = Actual[Index] == 0x5A;
+        bool Ok = Durable > 0 && Size >= Durable && ReadFile(Path, Actual) && (off_t)Actual.size() == Size &&
+                  std::all_of(Actual.begin(), Actual.begin() + Durable, [](uint8_t Byte) { return Byte == 0x5A; });
         CHECK("enospc.data_intact", Ok, "written data unreadable after ENOSPC");
     }
     {
-        int Probe = open(P("after-full").c_str(), O_CREAT | O_WRONLY, 0644);
-        INFO("enospc.create_when_full", "%s", Probe >= 0 ? "allowed" : strerror(errno));
+        int Probe = open(P("after-full").c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0644);
+        int ProbeError = Probe < 0 ? errno : 0;
         if (Probe >= 0)
-            close(Probe);
+        {
+            for (size_t i = 0; i < 2 && !ProbeError; ++i)
+            {
+                if (!WriteAll(Probe, Chunk.data(), Chunk.size(), i * Chunk.size()))
+                    ProbeError = errno;
+            }
+            if (close(Probe) < 0 && !ProbeError)
+                ProbeError = errno;
+        }
+        CHECK("enospc.write_or_close", ProbeError == ENOSPC, "full volume returned %s", strerror(ProbeError));
         unlink(P("after-full").c_str());
     }
     unlink(Path.c_str());
@@ -2137,6 +2355,7 @@ main(int Argc, char** Argv)
     TestUnlinkOpen();
     TestErrors();
     TestBigDirectory();
+    TestInterleavedScans();
     TestDeepTree();
     TestSymlinks();
     TestSymlinkChurn();
@@ -2147,6 +2366,7 @@ main(int Argc, char** Argv)
     TestResidentIndexSizes();
     TestCloseTimeNames();
     TestRemovedOpenDirectory();
+    TestMovedDirectoryListing();
     TestRenameExtensionData();
     TestFullBaseRecords();
     TestSetgidDirectory();

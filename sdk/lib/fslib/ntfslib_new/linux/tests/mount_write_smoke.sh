@@ -26,6 +26,7 @@ checkpoint="$workdir/ntfs3g"
 twin="$workdir/twin"
 mounted=0
 checkmounted=0
+loopdev=
 
 # AppArmor can deny fusermount3 the unmount operation for TMPDIR
 # mountpoints; util-linux umount stays available for the fixture.
@@ -49,6 +50,9 @@ cleanup()
     if test "$mounted" -eq 1; then
         unmount_fixture >/dev/null 2>&1 || true
     fi
+    if test -n "$loopdev"; then
+        losetup -d "$loopdev"
+    fi
     rm -r -- "$workdir"
 }
 trap cleanup EXIT HUP INT TERM
@@ -66,6 +70,13 @@ while ! mountpoint -q "$mountpoint" && test "$attempt" -lt 50; do
     attempt=$((attempt + 1))
 done
 mountpoint -q "$mountpoint" || exit 77
+
+ln "$image" "$workdir/alias.ntfs"
+if "$frontend" --set-label "$workdir/alias.ntfs" SECOND >"$workdir/second.log" 2>&1; then
+    echo "second writer opened the mounted image" >&2
+    exit 1
+fi
+grep -qi 'c0000043' "$workdir/second.log"
 
 # Every mutation runs against the mount and the twin; the trees must stay
 # identical through each phase.
@@ -186,5 +197,16 @@ PYEOF
 fi
 unmount_check
 checkmounted=0
+
+if test "$(id -u)" = 0 && loopdev=$(losetup --find --show "$image" 2>/dev/null); then
+    mknod "$workdir/block-alias" b "$(stat -c %Hr "$loopdev")" "$(stat -c %Lr "$loopdev")"
+    "$frontend" --writable "$loopdev" "$mountpoint"
+    mounted=1
+    if "$frontend" --set-label "$workdir/block-alias" SECOND >"$workdir/second.log" 2>&1; then
+        echo "second writer opened the mounted block device" >&2
+        exit 1
+    fi
+    grep -qi 'c0000043' "$workdir/second.log"
+fi
 
 echo "writable mount end-to-end comparison passed"
