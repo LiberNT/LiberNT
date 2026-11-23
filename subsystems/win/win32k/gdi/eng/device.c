@@ -30,6 +30,7 @@ typedef struct _GRAPHICS_DEVICE_NOTIFY
 
 static PDRIVER_OBJECT gpGraphicsDriverObject;
 static LIST_ENTRY gGraphicsDeviceNotifyList;
+static LIST_ENTRY gGraphicsDeviceNotifyRetired;
 
 static const GUID GraphicsDeviceQueryRemove =
     { 0xcb3a4006, 0x46f0, 0x11d0, { 0xb0, 0x8f, 0x00, 0x60, 0x97, 0x13, 0x05, 0x3f } };
@@ -48,6 +49,7 @@ InitDeviceImpl(
 
     gpGraphicsDriverObject = DriverObject;
     InitializeListHead(&gGraphicsDeviceNotifyList);
+    InitializeListHead(&gGraphicsDeviceNotifyRetired);
     return STATUS_SUCCESS;
 }
 
@@ -227,11 +229,33 @@ EngpIsGraphicsDeviceRegistered(
 }
 
 static
-PGRAPHICS_DEVICE_NOTIFY
+VOID
+EngpReleaseRetiredNotifications(VOID)
+{
+    PGRAPHICS_DEVICE_NOTIFY pNotify;
+
+    ASSERT(!UserIsEntered());
+    for (;;)
+    {
+        pNotify = NULL;
+        EngAcquireSemaphore(ghsemGraphicsDeviceList);
+        if (!IsListEmpty(&gGraphicsDeviceNotifyRetired))
+            pNotify = CONTAINING_RECORD(RemoveHeadList(&gGraphicsDeviceNotifyRetired), GRAPHICS_DEVICE_NOTIFY, ListEntry);
+        EngReleaseSemaphore(ghsemGraphicsDeviceList);
+        if (!pNotify)
+            break;
+        ASSERT(pNotify->pGraphicsDevice == NULL);
+        IoUnregisterPlugPlayNotificationEx(pNotify->NotificationEntry);
+        ExFreePoolWithTag(pNotify, GDITAG_GDEVICE);
+    }
+}
+
+static
+VOID
 EngpFreeGraphicsDevice(
     _In_ PGRAPHICS_DEVICE pGraphicsDevice)
 {
-    PGRAPHICS_DEVICE_NOTIFY pNotify = NULL;
+    PGRAPHICS_DEVICE_NOTIFY pNotify;
     PDEVMODEINFO pdminfo, pdmiNext;
     PLIST_ENTRY pEntry;
     ULONG i;
@@ -239,18 +263,16 @@ EngpFreeGraphicsDevice(
     EngAcquireSemaphore(ghsemGraphicsDeviceList);
     for (pEntry = gGraphicsDeviceNotifyList.Flink; pEntry != &gGraphicsDeviceNotifyList; pEntry = pEntry->Flink)
     {
-        if (CONTAINING_RECORD(pEntry, GRAPHICS_DEVICE_NOTIFY, ListEntry)->pGraphicsDevice == pGraphicsDevice)
+        pNotify = CONTAINING_RECORD(pEntry, GRAPHICS_DEVICE_NOTIFY, ListEntry);
+        if (pNotify->pGraphicsDevice == pGraphicsDevice)
         {
-            pNotify = CONTAINING_RECORD(pEntry, GRAPHICS_DEVICE_NOTIFY, ListEntry);
             RemoveEntryList(&pNotify->ListEntry);
             pNotify->pGraphicsDevice = NULL;
+            InsertTailList(&gGraphicsDeviceNotifyRetired, &pNotify->ListEntry);
             break;
         }
     }
     EngReleaseSemaphore(ghsemGraphicsDeviceList);
-    /* Only the removal callback may free the record: another call of it can still be running */
-    if (pNotify)
-        IoUnregisterPlugPlayNotification(pNotify->NotificationEntry);
 
     for (pdminfo = pGraphicsDevice->pdevmodeInfo; pdminfo; pdminfo = pdmiNext)
     {
@@ -270,7 +292,6 @@ EngpFreeGraphicsDevice(
     ObDereferenceObject(pGraphicsDevice->FileObject);
     ExFreePoolWithTag(pGraphicsDevice->pDiplayDrivers, GDITAG_DRVSUP);
     ExFreePoolWithTag(pGraphicsDevice, GDITAG_GDEVICE);
-    return pNotify;
 }
 
 static
@@ -283,6 +304,7 @@ EngpGraphicsDeviceNotification(
     PTARGET_DEVICE_REMOVAL_NOTIFICATION pNotification = NotificationStructure;
     PGRAPHICS_DEVICE_NOTIFY pNotify = Context;
     PGRAPHICS_DEVICE pGraphicsDevice;
+    WCHAR szWinDeviceName[CCHDEVICENAME / 2] = L"";
     BOOLEAN bQueryRemove;
     BOOLEAN bRemove = FALSE;
 
@@ -293,9 +315,11 @@ EngpGraphicsDeviceNotification(
     UserEnterExclusive();
     EngAcquireSemaphore(ghsemGraphicsDeviceList);
     pGraphicsDevice = pNotify->pGraphicsDevice;
+    if (pGraphicsDevice)
+        RtlCopyMemory(szWinDeviceName, pGraphicsDevice->szWinDeviceName, sizeof(szWinDeviceName));
     if (pGraphicsDevice && gppdevDetached && gpmdev && gpmdev->ppdevGlobal->pGraphicsDevice == pGraphicsDevice)
     {
-        TRACE("Moving the desktop off the removed graphics device %S\n", pGraphicsDevice->szWinDeviceName);
+        TRACE("Moving the desktop off the removed graphics device %S\n", szWinDeviceName);
         if (!bQueryRemove)
             pNotify->bRemoved = TRUE;
         UserQueueDisplayDetach();
@@ -307,7 +331,7 @@ EngpGraphicsDeviceNotification(
         !pGraphicsDevice->pVgaDevice &&
         !PDEVOBJ_bGraphicsDeviceInUse(pGraphicsDevice))
     {
-        TRACE("Removing graphics device %S (%S)\n", pGraphicsDevice->szWinDeviceName, pGraphicsDevice->szNtDeviceName);
+        TRACE("Removing graphics device %S (%S)\n", szWinDeviceName, pGraphicsDevice->szNtDeviceName);
         EngpUnlinkGraphicsDevice(pGraphicsDevice);
         bRemove = TRUE;
     }
@@ -316,20 +340,19 @@ EngpGraphicsDeviceNotification(
 
     if (bRemove)
     {
-        pNotify = EngpFreeGraphicsDevice(pGraphicsDevice);
-        if (pNotify)
-            ExFreePoolWithTag(pNotify, GDITAG_GDEVICE);
+        EngpFreeGraphicsDevice(pGraphicsDevice);
+        EngpReleaseRetiredNotifications();
         return STATUS_SUCCESS;
     }
 
     if (pGraphicsDevice && bQueryRemove)
     {
-        TRACE("Graphics device %S is in use\n", pGraphicsDevice->szWinDeviceName);
+        TRACE("Graphics device %S is in use\n", szWinDeviceName);
         return STATUS_UNSUCCESSFUL;
     }
 
     if (pGraphicsDevice)
-        ERR("Graphics device %S was removed while in use\n", pGraphicsDevice->szWinDeviceName);
+        ERR("Graphics device %S was removed while in use\n", szWinDeviceName);
     return STATUS_SUCCESS;
 }
 
@@ -337,7 +360,6 @@ VOID
 NTAPI
 EngpReleaseAllGraphicsDevices(VOID)
 {
-    PGRAPHICS_DEVICE_NOTIFY pNotify;
     PGRAPHICS_DEVICE pGraphicsDevice;
 
     for (;;)
@@ -350,12 +372,11 @@ EngpReleaseAllGraphicsDevices(VOID)
         if (!pGraphicsDevice)
             break;
 
-        pNotify = EngpFreeGraphicsDevice(pGraphicsDevice);
-        if (pNotify)
-            ExFreePoolWithTag(pNotify, GDITAG_GDEVICE);
+        EngpFreeGraphicsDevice(pGraphicsDevice);
     }
     gpPrimaryGraphicsDevice = NULL;
     gpVgaGraphicsDevice = NULL;
+    EngpReleaseRetiredNotifications();
 }
 
 VOID
@@ -387,10 +408,13 @@ EngpReleaseRemovedGraphicsDevices(VOID)
             break;
 
         TRACE("Releasing removed graphics device %S\n", pGraphicsDevice->szWinDeviceName);
-        pNotify = EngpFreeGraphicsDevice(pGraphicsDevice);
-        if (pNotify)
-            ExFreePoolWithTag(pNotify, GDITAG_GDEVICE);
+        EngpFreeGraphicsDevice(pGraphicsDevice);
     }
+
+    ASSERT(UserIsEnteredExclusive());
+    UserLeave();
+    EngpReleaseRetiredNotifications();
+    UserEnterExclusive();
 }
 
 static
