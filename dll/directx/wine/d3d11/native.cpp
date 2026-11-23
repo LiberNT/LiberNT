@@ -260,6 +260,7 @@ public:
     ID3D11BlendState *default_blend_state = NULL;
     ID3D11DepthStencilState *default_depth_stencil_state = NULL;
     ID3D11RasterizerState *default_rasterizer_state = NULL;
+    ID3D11SamplerState *default_sampler_state = NULL;
     void HoldDefaultStates();
     IDXGIAdapter *adapter = NULL;
     D3DKMT_HANDLE km_adapter = 0;
@@ -2650,6 +2651,7 @@ void NativeDevice::MaybeDestroy()
     NativeDropDefault(default_blend_state);
     NativeDropDefault(default_depth_stencil_state);
     NativeDropDefault(default_rasterizer_state);
+    NativeDropDefault(default_sampler_state);
 }
 
 ULONG STDMETHODCALLTYPE NativeDevice::Release()
