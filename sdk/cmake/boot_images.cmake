@@ -161,9 +161,9 @@ if(DEFINED EFI_PLATFORM_ID AND EXISTS "${REACTOS_SOURCE_DIR}/bootloader/arch/${A
     set_property(GLOBAL PROPERTY BOOTLOADER_UEFI TRUE)
 else()
     set(BOOTLOADER_UEFI FALSE)
-    set(_uefi_loader uefildr)
+    set(_uefi_loader)
     set(_uefi_loader_files)
-    set(_uefi_loader_deps uefildr)
+    set(_uefi_loader_deps)
     set(_efisys_sectors 5760)
 endif()
 
