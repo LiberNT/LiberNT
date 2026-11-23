@@ -260,7 +260,7 @@ static LPCWSTR SkipProgramName(LPCWSTR lpCommandLine)
 	return p;
 }
 
-static BOOL IsDllFor32BitMachine(LPCWSTR lpDllName)
+static BOOL GetDllBitness(LPCWSTR lpDllName, BOOL *pb32Bit)
 {
 	MEMORY_BASIC_INFORMATION Info;
 	PIMAGE_DOS_HEADER DosHeader;
@@ -280,16 +280,16 @@ static BOOL IsDllFor32BitMachine(LPCWSTR lpDllName)
 		if ((SIZE_T)DosHeader->e_lfanew + FIELD_OFFSET(IMAGE_NT_HEADERS, OptionalHeader) <= cbMapped)
 		{
 			NtHeaders = (PIMAGE_NT_HEADERS)((PBYTE)DosHeader + DosHeader->e_lfanew);
-			bResult = NtHeaders->Signature == IMAGE_NT_SIGNATURE &&
-			          (NtHeaders->FileHeader.Characteristics & IMAGE_FILE_32BIT_MACHINE);
+			bResult = NtHeaders->Signature == IMAGE_NT_SIGNATURE;
+			*pb32Bit = (NtHeaders->FileHeader.Characteristics & IMAGE_FILE_32BIT_MACHINE) != 0;
 		}
 	}
 	FreeLibrary(hImage);
 	return bResult;
 }
 
-/* A 64-bit regsvr32 gives a 32-bit DLL to the WoW64 regsvr32 with the arguments after its own program name, verbatim. */
-static BOOL RunWow64RegSvr32(LPCWSTR lpDllName, DWORD dwLoadError, int *pnExitCode)
+/* A regsvr32 gives a DLL of the other bitness to the WoW64 or the native regsvr32 with the arguments after its own program name, verbatim. */
+static BOOL RunOtherRegSvr32(LPCWSTR lpDllName, DWORD dwLoadError, int *pnExitCode)
 {
 	WCHAR szRegSvr32[MAX_PATH];
 	PROCESS_INFORMATION ProcessInfo;
@@ -297,14 +297,27 @@ static BOOL RunWow64RegSvr32(LPCWSTR lpDllName, DWORD dwLoadError, int *pnExitCo
 	LPWSTR lpArguments;
 	DWORD dwExitCode;
 	UINT cchDirectory;
-	BOOL bResult;
+	BOOL bResult, b32Bit = FALSE, bWow64 = FALSE;
 
-	/* TODO: hand a 64-bit DLL from the WoW64 regsvr32 to the native one */
-	if (sizeof(void *) < 8 || dwLoadError != ERROR_BAD_EXE_FORMAT || !IsDllFor32BitMachine(lpDllName))
+	if (dwLoadError != ERROR_BAD_EXE_FORMAT || !GetDllBitness(lpDllName, &b32Bit))
 		return FALSE;
-	cchDirectory = GetSystemWow64DirectoryW(szRegSvr32, _countof(szRegSvr32));
-	if (cchDirectory == 0 || cchDirectory + sizeof("\\regsvr32.exe") > _countof(szRegSvr32))
-		return FALSE;
+	if (sizeof(void *) < 8)
+	{
+		if (b32Bit || !IsWow64Process(GetCurrentProcess(), &bWow64) || !bWow64)
+			return FALSE;
+		cchDirectory = GetWindowsDirectoryW(szRegSvr32, _countof(szRegSvr32));
+		if (cchDirectory == 0 || cchDirectory + sizeof("\\Sysnative\\regsvr32.exe") > _countof(szRegSvr32))
+			return FALSE;
+		wcscat(szRegSvr32, L"\\Sysnative");
+	}
+	else
+	{
+		if (!b32Bit)
+			return FALSE;
+		cchDirectory = GetSystemWow64DirectoryW(szRegSvr32, _countof(szRegSvr32));
+		if (cchDirectory == 0 || cchDirectory + sizeof("\\regsvr32.exe") > _countof(szRegSvr32))
+			return FALSE;
+	}
 	wcscat(szRegSvr32, L"\\regsvr32.exe");
 
 	lpArguments = _wcsdup(SkipProgramName(GetCommandLineW()));
@@ -547,7 +560,7 @@ int WINAPI _tWinMain(
 				// The dll could not be loaded; display an error message
 				dwErr = GetLastError();
 				SetErrorMode(fuOldErrorMode);
-				if (RunWow64RegSvr32(lptDllName, dwErr, &nRetValue))
+				if (RunOtherRegSvr32(lptDllName, dwErr, &nRetValue))
 					break;
 				lptMsgBuffer = (LPTSTR)malloc((_tcslen(DllNotLoaded) + 2 + _tcslen(lptDllName) + 1) * sizeof(TCHAR));
 				_stprintf(lptMsgBuffer,DllNotLoaded,lptDllName,dwErr);

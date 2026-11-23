@@ -90,3 +90,29 @@ START_TEST(wow64)
     ok(code == EXITCODE_LOADERROR, "file that is not an image: exit code %lu\n", code);
     DeleteFileW(bogus);
 }
+
+START_TEST(native)
+{
+    WCHAR windows[MAX_PATH], system[MAX_PATH], regsvr32[MAX_PATH], native[MAX_PATH], temp[MAX_PATH], dll[MAX_PATH];
+    BOOL wow64 = FALSE;
+    DWORD code;
+
+    if (sizeof(void *) > 4 || !IsWow64Process(GetCurrentProcess(), &wow64) || !wow64)
+    {
+        skip("not a 32-bit process under WoW64\n");
+        return;
+    }
+    GetWindowsDirectoryW(windows, ARRAYSIZE(windows));
+    GetSystemDirectoryW(system, ARRAYSIZE(system));
+    GetTempPathW(ARRAYSIZE(temp), temp);
+    StringCbPrintfW(regsvr32, sizeof(regsvr32), L"%ls\\regsvr32.exe", system);
+    StringCbPrintfW(native, sizeof(native), L"%ls\\Sysnative\\version.dll", windows);
+    StringCbPrintfW(dll, sizeof(dll), L"%lslntregsvr32n.dll", temp);
+    ok(CopyFileW(native, dll, FALSE), "cannot copy %ls: %lu\n", native, GetLastError());
+
+    code = run_regsvr32(regsvr32, L"/s", dll);
+    ok(code == EXITCODE_NOENTRY, "native DLL without DllRegisterServer: exit code %lu\n", code);
+    code = run_regsvr32(regsvr32, L"/s /u", dll);
+    ok(code == EXITCODE_NOENTRY, "native DLL without DllUnregisterServer: exit code %lu\n", code);
+    DeleteFileW(dll);
+}

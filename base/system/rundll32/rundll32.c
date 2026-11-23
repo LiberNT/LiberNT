@@ -409,7 +409,7 @@ SkipProgramName(LPCWSTR p)
 }
 
 static BOOL
-IsDllFor32BitMachine(LPCWSTR lpDllName)
+GetDllBitness(LPCWSTR lpDllName, BOOL *pb32Bit)
 {
     MEMORY_BASIC_INFORMATION Info;
     PIMAGE_DOS_HEADER DosHeader;
@@ -429,17 +429,17 @@ IsDllFor32BitMachine(LPCWSTR lpDllName)
         if ((SIZE_T)DosHeader->e_lfanew + FIELD_OFFSET(IMAGE_NT_HEADERS, OptionalHeader) <= cbMapped)
         {
             NtHeaders = (PIMAGE_NT_HEADERS)((PBYTE)DosHeader + DosHeader->e_lfanew);
-            bResult = NtHeaders->Signature == IMAGE_NT_SIGNATURE &&
-                      (NtHeaders->FileHeader.Characteristics & IMAGE_FILE_32BIT_MACHINE);
+            bResult = NtHeaders->Signature == IMAGE_NT_SIGNATURE;
+            *pb32Bit = (NtHeaders->FileHeader.Characteristics & IMAGE_FILE_32BIT_MACHINE) != 0;
         }
     }
     FreeLibrary(hImage);
     return bResult;
 }
 
-/* A 64-bit rundll32 hands a DLL built for a 32-bit machine to the rundll32 of the WoW64 directory and waits for it. */
+/* A rundll32 hands a DLL of the other bitness to the rundll32 of the WoW64 or the native system directory and waits for it. */
 static BOOL
-RunWow64Rundll32(LPCWSTR lpDllName, int nCmdShow)
+RunOtherRundll32(LPCWSTR lpDllName, int nCmdShow)
 {
     WCHAR szRundll32[MAX_PATH];
     PROCESS_INFORMATION ProcessInfo;
@@ -448,13 +448,27 @@ RunWow64Rundll32(LPCWSTR lpDllName, int nCmdShow)
     LPWSTR lpCommandLine;
     SIZE_T cchCommandLine;
     UINT cchDirectory;
-    BOOL bResult;
+    BOOL bResult, b32Bit = FALSE, bWow64 = FALSE;
 
-    if (sizeof(void *) < 8 || GetLastError() != ERROR_BAD_EXE_FORMAT || !IsDllFor32BitMachine(lpDllName))
+    if (GetLastError() != ERROR_BAD_EXE_FORMAT || !GetDllBitness(lpDllName, &b32Bit))
         return FALSE;
-    cchDirectory = GetSystemWow64DirectoryW(szRundll32, _countof(szRundll32));
-    if (cchDirectory == 0 || cchDirectory + sizeof("\\rundll32.exe") > _countof(szRundll32))
-        return FALSE;
+    if (sizeof(void *) < 8)
+    {
+        if (b32Bit || !IsWow64Process(GetCurrentProcess(), &bWow64) || !bWow64)
+            return FALSE;
+        cchDirectory = GetWindowsDirectoryW(szRundll32, _countof(szRundll32));
+        if (cchDirectory == 0 || cchDirectory + sizeof("\\Sysnative\\rundll32.exe") > _countof(szRundll32))
+            return FALSE;
+        wcscat(szRundll32, L"\\Sysnative");
+    }
+    else
+    {
+        if (!b32Bit)
+            return FALSE;
+        cchDirectory = GetSystemWow64DirectoryW(szRundll32, _countof(szRundll32));
+        if (cchDirectory == 0 || cchDirectory + sizeof("\\rundll32.exe") > _countof(szRundll32))
+            return FALSE;
+    }
     wcscat(szRundll32, L"\\rundll32.exe");
 
     lpArguments = SkipProgramName(GetCommandLineW());
@@ -651,7 +665,7 @@ int WINAPI _tWinMain(
         // The dll function has finished executing, so unload it
         FreeLibrary(hDll);
     }
-    else if (!RunWow64Rundll32(lptDllName, nCmdShow)) {
+    else if (!RunOtherRundll32(lptDllName, nCmdShow)) {
         // The dll could not be loaded; display an error message
         GetModuleTitle();
         LoadString( GetModuleHandle(NULL), IDS_DllNotLoaded, (LPTSTR) szMsg,RC_STRING_MAX_SIZE);
