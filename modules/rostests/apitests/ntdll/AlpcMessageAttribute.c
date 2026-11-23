@@ -113,7 +113,7 @@ AlpcTestAttributeAlignmentAndFaults(VOID)
     Attributes = (PALPC_MESSAGE_ATTRIBUTES)(Buffer + 1);
     RequiredSize = 0;
     Status = AlpcInitializeMessageAttribute(ALPC_MESSAGE_ATTRIBUTE_ALL, Attributes, sizeof(Buffer) - 1, &RequiredSize);
-    trace("ALPC_OBSERVE status MessageAttributes.misaligned_buffer=%08lx required=%Iu allocated=%08lx valid=%08lx\n", Status, RequiredSize, Attributes->AllocatedAttributes, Attributes->ValidAttributes);
+    trace("ALPC_OBSERVE status MessageAttributes.misaligned_buffer=%08lx required=%Iu allocated=%08lx valid=%08lx\n", Status, (size_t)RequiredSize, Attributes->AllocatedAttributes, Attributes->ValidAttributes);
     ok(Status != STATUS_NOT_IMPLEMENTED, "misaligned attribute initialization reached a stub\n");
 
     StartSeh()
@@ -152,7 +152,7 @@ AlpcTestUnknownAttributeFlags(VOID)
         ok_eq_ulong(Attributes->AllocatedAttributes, UnknownFlags[Index]);
         ok_eq_ulong(Attributes->ValidAttributes, 0);
         Attribute = AlpcGetMessageAttribute(Attributes, UnknownFlags[Index] & (0 - UnknownFlags[Index]));
-        trace("ALPC_OBSERVE value MessageAttributes.unknown flags=%08lx pointer=%p offset=%Id\n", UnknownFlags[Index], Attribute, Attribute ? (SSIZE_T)((UCHAR *)Attribute - Buffer) : -1);
+        trace("ALPC_OBSERVE value MessageAttributes.unknown flags=%08lx pointer=%p offset=%Id\n", UnknownFlags[Index], Attribute, (ptrdiff_t)(Attribute ? (SSIZE_T)((UCHAR *)Attribute - Buffer) : -1));
     }
 }
 

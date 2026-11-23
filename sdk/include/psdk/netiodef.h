@@ -49,7 +49,11 @@ extern "C" {
 typedef UINT8 HANDLE8, *PHANDLE8;
 typedef UINT16 HANDLE16, *PHANDLE16;
 typedef UINT32 HANDLE32, *PHANDLE32;
-typedef UINT64 HANDLE64, *PHANDLE64;
+#ifndef __HANDLE64_DEFINED__
+#define __HANDLE64_DEFINED__
+typedef void *POINTER_64 HANDLE64;
+typedef HANDLE64 *PHANDLE64;
+#endif
 
 #define MAKE_DD_DEVICE_NAME(x)  (L"\\Device\\" x)
 #define MAKE_WIN_DEVICE_NAME(x) (L"\\\\.\\" x)

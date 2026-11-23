@@ -127,6 +127,8 @@ NTSTATUS NTAPI LdrpAllocateTls(VOID);
 VOID NTAPI LdrpFreeTls(VOID);
 VOID NTAPI LdrpCallTlsInitializers(IN PLDR_DATA_TABLE_ENTRY LdrEntry, IN ULONG Reason);
 BOOLEAN NTAPI LdrpCallInitRoutine(IN PDLL_INIT_ROUTINE EntryPoint, IN PVOID BaseAddress, IN ULONG Reason, IN PVOID Context);
+BOOLEAN NTAPI
+LdrpCallProcessCallbacks(PLDR_DATA_TABLE_ENTRY Entry, ULONG Reason, PVOID Context, PBOOLEAN Completed);
 LONG NTAPI LdrpDebugExceptionFilter(IN PEXCEPTION_POINTERS ExceptionPointers);
 NTSTATUS NTAPI LdrpInitializeProcess(IN PCONTEXT Context, IN PVOID SystemArgument1);
 VOID NTAPI LdrpInitFailure(NTSTATUS Status);
@@ -154,7 +156,8 @@ LdrpSnapThunk(IN PVOID ExportBase,
               IN BOOLEAN Static,
               IN LPSTR DllName,
               IN PWSTR DllPath OPTIONAL,
-              IN BOOLEAN LookupOnly);
+              IN BOOLEAN LookupOnly,
+              IN PLDR_DATA_TABLE_ENTRY StaticImporter OPTIONAL);
 
 NTSTATUS NTAPI
 LdrpWalkImportDescriptor(IN LPWSTR DllPath OPTIONAL,
@@ -208,7 +211,8 @@ LdrpGetProcedureAddress(
     _In_opt_ _When_(Name == NULL, _In_range_(>, 0)) ULONG Ordinal,
     _Out_ PVOID *ProcedureAddress,
     _In_ BOOLEAN ExecuteInit,
-    _In_opt_ PWSTR DllPath);
+    _In_opt_ PWSTR DllPath,
+    _In_opt_ PLDR_DATA_TABLE_ENTRY StaticImporter);
 
 PLDR_DATA_TABLE_ENTRY NTAPI
 LdrpAllocateDataTableEntry(IN PVOID BaseAddress);
@@ -269,7 +273,9 @@ LdrpLoadDll(IN BOOLEAN Redirected,
             IN PULONG DllCharacteristics OPTIONAL,
             IN PUNICODE_STRING DllName,
             OUT PVOID *BaseAddress,
-            IN BOOLEAN CallInit);
+            IN BOOLEAN CallInit,
+            IN LDR_DLL_LOAD_REASON LoadReason,
+            IN PLDR_DATA_TABLE_ENTRY Importer OPTIONAL);
 
 VOID NTAPI
 LdrpUpdateLoadCount2(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
@@ -292,7 +298,7 @@ LdrpTryReferenceModule(IN PLDR_DATA_TABLE_ENTRY LdrEntry,
                        OUT PBOOLEAN Walk);
 
 ULONG NTAPI
-LdrpClearLoadInProgress(VOID);
+LdrpCountUnprocessedEntries(VOID);
 
 NTSTATUS
 NTAPI
@@ -316,7 +322,8 @@ LdrpMapDll(IN PWSTR SearchPath OPTIONAL,
            IN PWSTR DllPath2,
            IN PWSTR DllName OPTIONAL,
            IN PULONG DllCharacteristics,
-           IN BOOLEAN Static,
+           IN PLDR_DATA_TABLE_ENTRY Importer OPTIONAL,
+           IN LDR_DLL_LOAD_REASON LoadReason,
            IN BOOLEAN Redirect,
            OUT PLDR_DATA_TABLE_ENTRY *DataTableEntry);
 
@@ -376,7 +383,7 @@ LdrpGetResidentSize(PIMAGE_NT_HEADERS NTHeaders);
 NTSTATUS
 NTAPI
 LdrpLoadImportModule(IN PWSTR DllPath OPTIONAL,
-                     IN PVOID ImportBase,
+                     IN PLDR_DATA_TABLE_ENTRY Importer,
                      IN LPSTR ImportName,
                      OUT PLDR_DATA_TABLE_ENTRY *DataTableEntry,
                      OUT PBOOLEAN Existing);

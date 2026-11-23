@@ -72,6 +72,17 @@ static void Child(int argc, char **argv)
     pfn = GetProcAddress(hModule, argv[2]);
     if (!pfn)
         ExitProcess(GetLastError());
+    if (NtCurrentPeb()->OSMajorVersion >= 10)
+    {
+        PLDR_DATA_TABLE_ENTRY Entry;
+        NTSTATUS Status = LdrFindEntryForAddress((PVOID)pfn, &Entry);
+        if (!NT_SUCCESS(Status) || Entry->ProcessStaticImport ||
+            Entry->LoadReason != LoadReasonDynamicForwarderDependency)
+        {
+            trace("GetProcAddress forwarder has unexpected loader state, status %#lx\n", Status);
+            ExitProcess(ERROR_INVALID_DATA);
+        }
+    }
     ExitProcess(((int (WINAPI *)(void))pfn)());
 }
 

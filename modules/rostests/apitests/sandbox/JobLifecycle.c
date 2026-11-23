@@ -237,7 +237,7 @@ TestCompletionPortLifecycle(void)
         Value = NULL;
         if (!GetQueuedCompletionStatus(Port, &Message, &Key, &Value, 1000))
             continue;
-        ok(Key == JOB_COMPLETION_KEY, "completion key %Ix\n", Key);
+        ok(Key == JOB_COMPLETION_KEY, "completion key %Ix\n", (size_t)Key);
         if (Message == JOB_OBJECT_MSG_NEW_PROCESS)
             SawNew = TRUE;
         else if (Message == JOB_OBJECT_MSG_EXIT_PROCESS)

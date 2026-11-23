@@ -2011,7 +2011,7 @@ static void test_EnableThemeDialogTexture(void)
 
     /* Test that dialog procedure is unchanged */
     proc = GetWindowLongPtrA(dialog, DWLP_DLGPROC);
-    ok(proc == (ULONG_PTR)test_EnableThemeDialogTexture_proc, "Unexpected proc %#Ix.\n", proc);
+    ok(proc == (ULONG_PTR)test_EnableThemeDialogTexture_proc, "Unexpected proc %#Ix.\n", (size_t)proc);
 
     /* Test dialog texture is disabled by default. EnableThemeDialogTexture() needs to be called */
     ret = IsThemeDialogTextureEnabled(dialog);
@@ -2095,7 +2095,7 @@ static void test_EnableThemeDialogTexture(void)
     /* Test that the dialog procedure should take precedence over DefDlgProc() for WM_ERASEBKGND */
     handle_WM_ERASEBKGND = TRUE;
     lr = SendMessageW(dialog, WM_ERASEBKGND, (WPARAM)child_hdc, 0);
-    ok(lr == 0, "Expected 0, got %#Ix.\n", lr);
+    ok(lr == 0, "Expected 0, got %#Ix.\n", (size_t)lr);
     handle_WM_ERASEBKGND = FALSE;
 
     /* Test that dialog doesn't have theme handle opened for itself */

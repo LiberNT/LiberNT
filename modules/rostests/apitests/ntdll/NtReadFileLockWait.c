@@ -79,7 +79,7 @@ START_TEST(NtReadFileLockWait)
     ok_long(WaitForSingleObject(HolderThread, 1000), WAIT_OBJECT_0);
     ok_ntstatus(Holder.Status, STATUS_SUCCESS);
     ok(Holder.IoStatus.Information == 1 && Holder.Byte == 'x', "The holder read %Iu bytes, first 0x%x\n",
-       Holder.IoStatus.Information, Holder.Byte);
+       (size_t)Holder.IoStatus.Information, Holder.Byte);
     ok_long(WaitForSingleObject(WaiterThread, 1000), WAIT_OBJECT_0);
 
     CloseHandle(WaiterThread);

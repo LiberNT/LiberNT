@@ -12,6 +12,16 @@
 extern "C" {
 #endif
 
+#if (_WIN32_WINNT >= 0x0600)
+WINBASEAPI HANDLE WINAPI CreateMutexExA(LPSECURITY_ATTRIBUTES, LPCSTR, DWORD, DWORD);
+WINBASEAPI HANDLE WINAPI CreateMutexExW(LPSECURITY_ATTRIBUTES, LPCWSTR, DWORD, DWORD);
+#ifdef UNICODE
+#define CreateMutexEx CreateMutexExW
+#else
+#define CreateMutexEx CreateMutexExA
+#endif
+#endif
+
 WINBASEAPI
 BOOL
 WINAPI
@@ -76,14 +86,6 @@ DeleteSynchronizationBarrier(
 
 #ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
 #define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
-#endif
-
-#if (!(defined(UNICODE)))
-#ifdef UNICODE
-#define CreateMutexEx CreateMutexExW
-#else
-#define CreateMutexEx CreateMutexExA
-#endif
 #endif
 
 #ifdef __cplusplus

@@ -5,10 +5,20 @@
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
+#ifdef HAVE_APITEST
+#include <apitest.h>
+#define WIN32_NO_STATUS
+#include <ndk/ntndk.h>
+#endif
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <libernt/drivers/appleagxfw.h>
 
+#ifdef HAVE_APITEST
+#define CHECK(Expression) ok(!!(Expression), "%s\n", #Expression)
+#define CHECK_EQ(Got, Want) ok_eq_hex64((Got), (Want))
+#else
 static unsigned Checks, Failures;
 
 #define CHECK(Expression)                                                                   \
@@ -33,6 +43,7 @@ static unsigned Checks, Failures;
             printf("%s:%d: %s = %#llx, want %#llx\n", __FILE__, __LINE__, #Got, G_, W_);    \
         }                                                                                   \
     } while (0)
+#endif
 
 static ULONG64
 Get64(const void *Base, ULONG Offset)
@@ -238,7 +249,8 @@ TestDomain(void)
     CHECK(!AppleAgxFwParseDomain((const UCHAR *)Blob, 0x30, 1, 16, &Table));
 }
 
-static UCHAR GroupMemory[APPLE_AGX_FW_GROUPS][0x90000] __attribute__((aligned(0x4000)));
+#define GROUP_BYTES 0x90000
+static UCHAR GroupMemory[APPLE_AGX_FW_GROUPS * GROUP_BYTES + APPLE_AGX_FW_PAGE - 1];
 static UCHAR RootMemory[APPLE_AGX_FW_PAGE], RegionAMemory[APPLE_AGX_FW_PAGE];
 static UCHAR ScratchMemory[0x20000];
 
@@ -247,6 +259,7 @@ BuildFw(APPLE_AGX_FW *Fw, APPLE_AGX_FW_CONFIG *Config)
 {
     static const ULONG States[] = { 0, 600, 338000000, 650, 618000000, 700, 798000000, 750, 1100000000, 800 };
     ULONG Group, Index;
+    uintptr_t First = ((uintptr_t)GroupMemory + APPLE_AGX_FW_PAGE - 1) & ~(uintptr_t)(APPLE_AGX_FW_PAGE - 1);
 
     memset(Fw, 0, sizeof(*Fw));
     memset(GroupMemory, 0, sizeof(GroupMemory));
@@ -255,8 +268,8 @@ BuildFw(APPLE_AGX_FW *Fw, APPLE_AGX_FW_CONFIG *Config)
     memset(ScratchMemory, 0, sizeof(ScratchMemory));
     for (Group = 0; Group < APPLE_AGX_FW_GROUPS; ++Group)
     {
-        CHECK(AppleAgxFwGroupSize(Group) <= sizeof(GroupMemory[Group]));
-        Fw->Group[Group].Virtual = GroupMemory[Group];
+        CHECK(AppleAgxFwGroupSize(Group) <= GROUP_BYTES);
+        Fw->Group[Group].Virtual = (UCHAR *)First + Group * GROUP_BYTES;
         Fw->Group[Group].Address = 0xfffffc2c00000000ULL + Group * 0x100000ULL;
     }
     Fw->Root.Virtual = RootMemory;
@@ -499,8 +512,12 @@ TestRings(void)
     CHECK(!AppleAgxFwTake(State, Records, APPLE_AGX_FW_EVENT_RECORD, Event));
 }
 
+#ifdef HAVE_APITEST
+START_TEST(AgxFirmware)
+#else
 int
 main(void)
+#endif
 {
     TestLayout();
     TestCore();
@@ -509,6 +526,8 @@ main(void)
     TestDomain();
     TestWrite();
     TestRings();
+#ifndef HAVE_APITEST
     printf("appleagx_fw: %u checks, %u failures\n", Checks, Failures);
     return Failures ? EXIT_FAILURE : EXIT_SUCCESS;
+#endif
 }

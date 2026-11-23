@@ -7,10 +7,6 @@
 
 #include "precomp.h"
 
-/* The SDK headers of this tree do not declare these two */
-WORD WINAPI GetMaximumProcessorGroupCount(VOID);
-DWORD WINAPI GetMaximumProcessorCount(_In_ WORD GroupNumber);
-
 #define MAX_PROCESSORS 2048
 #define RUN_MS 300
 #define JOIN_MS 20000

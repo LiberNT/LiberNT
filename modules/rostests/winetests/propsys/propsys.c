@@ -1665,7 +1665,7 @@ static void test_PropVariantChangeType_CLSID(void)
 
     for (i = 0; i < ARRAY_SIZE(test_cases); i++)
     {
-        winetest_push_context("test_cases[%Iu]", i);
+        winetest_push_context("test_cases[%Iu]", (size_t)i);
         PropVariantInit(&src);
         src.vt = VT_LPWSTR;
         src.pwszVal = CoTaskMemAlloc((wcslen(test_cases[i].str) + 1) * sizeof(WCHAR));

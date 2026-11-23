@@ -675,7 +675,7 @@ static void test_comboex_get_set_item(void)
     item.lParam = 0xdeadbeef;
     ret = SendMessageA(hComboEx, CBEM_GETITEMA, 0, (LPARAM)&item);
     ok(ret == 1, "Unexpected return value %ld.\n", ret);
-    ok(item.lParam == 0, "Expected zero, got %Ix\n", item.lParam);
+    ok(item.lParam == 0, "Expected zero, got %Ix\n", (size_t)item.lParam);
 
     item.lParam = 0x1abe11ed;
     ret = SendMessageA(hComboEx, CBEM_SETITEMA, 0, (LPARAM)&item);
@@ -684,7 +684,7 @@ static void test_comboex_get_set_item(void)
     item.lParam = 0;
     ret = SendMessageA(hComboEx, CBEM_GETITEMA, 0, (LPARAM)&item);
     ok(ret == 1, "Unexpected return value %ld.\n", ret);
-    ok(item.lParam == 0x1abe11ed, "Expected 0x1abe11ed, got %Ix\n", item.lParam);
+    ok(item.lParam == 0x1abe11ed, "Expected 0x1abe11ed, got %Ix\n", (size_t)item.lParam);
 
     DestroyWindow(hComboEx);
 }

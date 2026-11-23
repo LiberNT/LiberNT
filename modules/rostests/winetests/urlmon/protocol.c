@@ -348,7 +348,7 @@ static HRESULT WINAPI HttpNegotiate_GetRootSecurityId(IHttpNegotiate2 *iface,
 
     CHECK_EXPECT(GetRootSecurityId);
 
-    ok(!dwReserved, "dwReserved=%Id, expected 0\n", dwReserved);
+    ok(!dwReserved, "dwReserved=%Id, expected 0\n", (ptrdiff_t)dwReserved);
     ok(pbSecurityId != NULL, "pbSecurityId == NULL\n");
     ok(pcbSecurityId != NULL, "pcbSecurityId == NULL\n");
 
@@ -1937,7 +1937,7 @@ static HRESULT WINAPI ProtocolEmul_Start(IInternetProtocolEx *iface, LPCWSTR szU
 {
     CHECK_EXPECT(Start);
 
-    ok(!dwReserved, "dwReserved = %Ix\n", dwReserved);
+    ok(!dwReserved, "dwReserved = %Ix\n", (size_t)dwReserved);
     protocol_start(pOIProtSink, pOIBindInfo, grfPI);
     return S_OK;
 }

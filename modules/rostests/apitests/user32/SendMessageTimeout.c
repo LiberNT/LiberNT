@@ -24,20 +24,20 @@ TestSendMessageTimeout(
     DWORD_PTR result;
 
     ret = SendMessageTimeoutW(hWnd, Msg, 0, 0, SMTO_NORMAL, 0, NULL);
-    ok(ret == 0, "ret = %Id\n", ret);
+    ok(ret == 0, "ret = %Id\n", (ptrdiff_t)ret);
 
     result = 0x55555555;
     ret = SendMessageTimeoutW(hWnd, Msg, 0, 0, SMTO_NORMAL, 0, &result);
-    ok(ret == 0, "ret = %Id\n", ret);
-    ok(result == 0, "result = %Iu\n", result);
+    ok(ret == 0, "ret = %Id\n", (ptrdiff_t)ret);
+    ok(result == 0, "result = %Iu\n", (size_t)result);
 
     ret = SendMessageTimeoutA(hWnd, Msg, 0, 0, SMTO_NORMAL, 0, NULL);
-    ok(ret == 0, "ret = %Id\n", ret);
+    ok(ret == 0, "ret = %Id\n", (ptrdiff_t)ret);
 
     result = 0x55555555;
     ret = SendMessageTimeoutA(hWnd, Msg, 0, 0, SMTO_NORMAL, 0, &result);
-    ok(ret == 0, "ret = %Id\n", ret);
-    ok(result == 0, "result = %Iu\n", result);
+    ok(ret == 0, "ret = %Id\n", (ptrdiff_t)ret);
+    ok(result == 0, "result = %Iu\n", (size_t)result);
 }
 
 #define WM_SENDTOOTHERTHREAD (WM_USER + 14)
@@ -86,12 +86,12 @@ WndProc(
             {
                 TerminateThread(hThread1, 456);
             }
-            ok(lParam == dwThread2, "lParam = %Iu, expected %lu\n", lParam, dwThread2);
+            ok(lParam == dwThread2, "lParam = %Iu, expected %lu\n", (size_t)lParam, dwThread2);
             return SendMessage(hWndThread2, WM_SENDTOOTHERTHREAD, wParam + 1, GetCurrentThreadId());
         }
         else
         {
-            ok(lParam == dwThread1, "lParam = %Iu, expected %lu\n", lParam, dwThread1);
+            ok(lParam == dwThread1, "lParam = %Iu, expected %lu\n", (size_t)lParam, dwThread1);
             return SendMessage(hWndThread1, WM_SENDTOOTHERTHREAD, wParam + 1, GetCurrentThreadId());
         }
     }
@@ -162,7 +162,7 @@ Thread2(
 
     wParam = (WPARAM)Parameter;
     ret = SendMessage(hWndThread1, WM_SENDTOOTHERTHREAD, wParam, dwThread2);
-    ok(ret == 0, "ret = %Id\n", ret);
+    ok(ret == 0, "ret = %Id\n", (ptrdiff_t)ret);
 
     while (PeekMessage(&msg, 0, 0, 0, PM_REMOVE))
     {

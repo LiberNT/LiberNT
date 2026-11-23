@@ -87,7 +87,7 @@ START_TEST(PropSheetRecalc)
     ok(PropSheet_AddPage(Sheet, LargeHandle), "The large page was not added\n");
 
     Result = SendMessageW(Sheet, PSM_RECALCPAGESIZES, 0, 0);
-    ok(Result == TRUE, "PSM_RECALCPAGESIZES returned %Id\n", Result);
+    ok(Result == TRUE, "PSM_RECALCPAGESIZES returned %Id\n", (ptrdiff_t)Result);
     PumpMessages();
 
     Tab = PropSheet_GetTabControl(Sheet);

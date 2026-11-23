@@ -3162,13 +3162,13 @@ static LRESULT CALLBACK keyboard_wndproc( HWND hwnd, UINT msg, WPARAM wparam, LP
     {
         key_down_count++;
         if (us_kbd) ok( wparam == 'A', "got wparam %#Ix\n", wparam );
-        ok( lparam == 0x1e0001, "got lparam %#Ix\n", lparam );
+        ok( lparam == 0x1e0001, "got lparam %#Ix\n", (size_t)lparam );
     }
     if (msg == WM_KEYUP)
     {
         key_up_count++;
         if (us_kbd) ok( wparam == 'A', "got wparam %#Ix\n", wparam );
-        ok( lparam == 0xc01e0001, "got lparam %#Ix\n", lparam );
+        ok( lparam == 0xc01e0001, "got lparam %#Ix\n", (size_t)lparam );
     }
     return DefWindowProcA( hwnd, msg, wparam, lparam );
 }

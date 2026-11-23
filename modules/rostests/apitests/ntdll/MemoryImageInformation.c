@@ -50,9 +50,9 @@ CheckImageEx(
 
     Status = QueryImage(Address, &Image, sizeof(Image), &Returned);
     ok(Status == STATUS_SUCCESS, "%s: status 0x%lx\n", What, Status);
-    ok(Returned == sizeof(Image), "%s: returned %Iu\n", What, Returned);
+    ok(Returned == sizeof(Image), "%s: returned %Iu\n", What, (size_t)Returned);
     ok(Image.ImageBase == Base, "%s: base %p, expected %p\n", What, Image.ImageBase, Base);
-    ok(Image.SizeOfImage == ImageSize(Base), "%s: size 0x%Ix, expected 0x%Ix\n", What, Image.SizeOfImage, ImageSize(Base));
+    ok(Image.SizeOfImage == ImageSize(Base), "%s: size 0x%Ix, expected 0x%Ix\n", What, (size_t)Image.SizeOfImage, (size_t)ImageSize(Base));
     ok(Image.ImagePartialMap == 0, "%s: partial map\n", What);
     ok(Image.ImageNotExecutable == NotExecutable, "%s: not executable %lu, expected %lu\n", What,
        (ULONG)Image.ImageNotExecutable, NotExecutable);
@@ -147,9 +147,9 @@ CheckNotImage(
 
     Status = QueryImage(Address, &Image, sizeof(Image), &Returned);
     ok(Status == STATUS_SUCCESS, "%s: status 0x%lx\n", What, Status);
-    ok(Returned == sizeof(Image), "%s: returned %Iu\n", What, Returned);
+    ok(Returned == sizeof(Image), "%s: returned %Iu\n", What, (size_t)Returned);
     ok(Image.ImageBase == NULL && Image.SizeOfImage == 0 && Image.ImageFlags == 0,
-       "%s: base %p size 0x%Ix flags 0x%lx\n", What, Image.ImageBase, Image.SizeOfImage, Image.ImageFlags);
+       "%s: base %p size 0x%Ix flags 0x%lx\n", What, Image.ImageBase, (size_t)Image.SizeOfImage, Image.ImageFlags);
 }
 
 START_TEST(MemoryImageInformation)
@@ -169,13 +169,13 @@ START_TEST(MemoryImageInformation)
     CheckImage(Exe, Exe, "exe");
 
     Status = QueryImage(Ntdll, &Image, 0, &Returned);
-    ok(Status == STATUS_INFO_LENGTH_MISMATCH && Returned == 0xdead, "length 0: status 0x%lx returned %Iu\n", Status, Returned);
+    ok(Status == STATUS_INFO_LENGTH_MISMATCH && Returned == 0xdead, "length 0: status 0x%lx returned %Iu\n", Status, (size_t)Returned);
     Status = QueryImage(Ntdll, &Image, 2 * sizeof(PVOID), &Returned);
-    ok(Status == STATUS_INFO_LENGTH_MISMATCH && Returned == 0xdead, "short length: status 0x%lx returned %Iu\n", Status, Returned);
+    ok(Status == STATUS_INFO_LENGTH_MISMATCH && Returned == 0xdead, "short length: status 0x%lx returned %Iu\n", Status, (size_t)Returned);
     Status = QueryImage(Ntdll, &Image, sizeof(Image) - 1, &Returned);
-    ok(Status == STATUS_INFO_LENGTH_MISMATCH && Returned == 0xdead, "length - 1: status 0x%lx returned %Iu\n", Status, Returned);
+    ok(Status == STATUS_INFO_LENGTH_MISMATCH && Returned == 0xdead, "length - 1: status 0x%lx returned %Iu\n", Status, (size_t)Returned);
     Status = QueryImage(Ntdll, &Image, sizeof(Image) + 8, &Returned);
-    ok(Status == STATUS_SUCCESS && Returned == sizeof(Image), "longer length: status 0x%lx returned %Iu\n", Status, Returned);
+    ok(Status == STATUS_SUCCESS && Returned == sizeof(Image), "longer length: status 0x%lx returned %Iu\n", Status, (size_t)Returned);
 
     Status = NtQueryVirtualMemory(NtCurrentProcess(), Ntdll, MemoryImageInformation, Buffer, sizeof(Buffer), NULL);
     ok(Status == STATUS_SUCCESS, "NULL return length: status 0x%lx\n", Status);
@@ -194,7 +194,7 @@ START_TEST(MemoryImageInformation)
     Size = 0;
     NtFreeVirtualMemory(NtCurrentProcess(), &Reserve, &Size, MEM_RELEASE);
     Status = QueryImage(Reserve, &Image, sizeof(Image), &Returned);
-    ok(Status == STATUS_INVALID_ADDRESS && Returned == 0xdead, "free: status 0x%lx returned %Iu\n", Status, Returned);
+    ok(Status == STATUS_INVALID_ADDRESS && Returned == 0xdead, "free: status 0x%lx returned %Iu\n", Status, (size_t)Returned);
 
     Status = QueryImage((PVOID)~(ULONG_PTR)0xfff, &Image, sizeof(Image), &Returned);
     ok(Status == STATUS_INVALID_PARAMETER, "kernel address: status 0x%lx\n", Status);

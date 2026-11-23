@@ -111,7 +111,7 @@ Slide(
     X = (Rect.left + Rect.right) / 2 - 20;
     Y = Rect.bottom - 60;
     ItemHeight = HIWORD(SendMessageW(List, LVM_GETITEMSPACING, TRUE, 0));
-    ok(ItemHeight > 0, "Item height %Id\n", ItemHeight);
+    ok(ItemHeight > 0, "Item height %Id\n", (ptrdiff_t)ItemHeight);
     if (ItemHeight <= 0)
         return;
 
@@ -130,7 +130,7 @@ Slide(
     Rows = (int)SendMessageW(List, LVM_GETTOPINDEX, 0, 0);
     ok(Rows >= SLIDE_STEPS * SLIDE_STEP_PIXELS / ItemHeight - 1,
        "%u fingers slid %d pixels: the list moved %d rows of %Id pixels\n",
-       Fingers, SLIDE_STEPS * SLIDE_STEP_PIXELS, Rows, ItemHeight);
+       Fingers, SLIDE_STEPS * SLIDE_STEP_PIXELS, Rows, (ptrdiff_t)ItemHeight);
     ok_long((LONG)SendMessageW(List, LVM_GETSELECTEDCOUNT, 0, 0), 0);
 }
 

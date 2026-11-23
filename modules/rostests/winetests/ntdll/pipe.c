@@ -715,7 +715,7 @@ static void test_cancelsynchronousio(void)
     if (res != STATUS_ACCESS_VIOLATION)
     {
         ok(iosb.Status == STATUS_NOT_FOUND, "iosb.Status got changed to %lx\n", iosb.Status);
-        ok(iosb.Information == 0, "iosb.Information got changed to %Iu\n", iosb.Information);
+        ok(iosb.Information == 0, "iosb.Information got changed to %Iu\n", (size_t)iosb.Information);
     }
 
     /* synchronous i/o */
@@ -733,13 +733,13 @@ static void test_cancelsynchronousio(void)
     res = pNtCancelSynchronousIoFile(thread, NULL, &iosb);
     ok(res == STATUS_SUCCESS, "Failed to cancel I/O\n");
     ok(iosb.Status == STATUS_SUCCESS, "iosb.Status got changed to %lx\n", iosb.Status);
-    ok(iosb.Information == 0, "iosb.Information got changed to %Iu\n", iosb.Information);
+    ok(iosb.Information == 0, "iosb.Information got changed to %Iu\n", (size_t)iosb.Information);
     ret = WaitForSingleObject(thread, 1000);
     ok(ret == WAIT_OBJECT_0, "wait returned %lx\n", ret);
     CloseHandle(thread);
     CloseHandle(ctx.pipe);
     ok(ctx.iosb.Status == 0xdeadbabe || ctx.iosb.Status == STATUS_CANCELLED, "wrong status %lx\n", ctx.iosb.Status);
-    ok(ctx.iosb.Information == (ctx.iosb.Status == STATUS_CANCELLED ? 0 : 0xdeadbeef), "wrong info %Iu\n", ctx.iosb.Information);
+    ok(ctx.iosb.Information == (ctx.iosb.Status == STATUS_CANCELLED ? 0 : 0xdeadbeef), "wrong info %Iu\n", (size_t)ctx.iosb.Information);
 
     /* specified io */
     res = create_pipe(&ctx.pipe, 0, FILE_SHARE_READ | FILE_SHARE_WRITE, FILE_SYNCHRONOUS_IO_NONALERT);
@@ -761,7 +761,7 @@ static void test_cancelsynchronousio(void)
         "Failed to cancel I/O\n");
     ok(iosb.Status == STATUS_SUCCESS || broken(is_wow64 && iosb.Status == STATUS_NOT_FOUND),
         "iosb.Status got changed to %lx\n", iosb.Status);
-    ok(iosb.Information == 0, "iosb.Information got changed to %Iu\n", iosb.Information);
+    ok(iosb.Information == 0, "iosb.Information got changed to %Iu\n", (size_t)iosb.Information);
     if (res == STATUS_NOT_FOUND)
     {
         res = pNtCancelSynchronousIoFile(thread, NULL, &iosb);
@@ -773,7 +773,7 @@ static void test_cancelsynchronousio(void)
     CloseHandle(thread);
     CloseHandle(ctx.pipe);
     ok(ctx.iosb.Status == 0xdeadbabe || ctx.iosb.Status == STATUS_CANCELLED, "wrong status %lx\n", ctx.iosb.Status);
-    ok(ctx.iosb.Information == (ctx.iosb.Status == STATUS_CANCELLED ? 0 : 0xdeadbeef), "wrong info %Iu\n", ctx.iosb.Information);
+    ok(ctx.iosb.Information == (ctx.iosb.Status == STATUS_CANCELLED ? 0 : 0xdeadbeef), "wrong info %Iu\n", (size_t)ctx.iosb.Information);
 
     /* asynchronous i/o */
     ctx.iosb.Status = 0xdeadbabe;
@@ -788,12 +788,12 @@ static void test_cancelsynchronousio(void)
     res = pNtCancelSynchronousIoFile(GetCurrentThread(), NULL, &iosb);
     ok(res == STATUS_NOT_FOUND, "NtCancelSynchronousIoFile returned %lx\n", res);
     ok(iosb.Status == STATUS_NOT_FOUND, "iosb.Status got changed to %lx\n", iosb.Status);
-    ok(iosb.Information == 0, "iosb.Information got changed to %Iu\n", iosb.Information);
+    ok(iosb.Information == 0, "iosb.Information got changed to %Iu\n", (size_t)iosb.Information);
     memset(&iosb, 0x55, sizeof(iosb));
     res = pNtCancelSynchronousIoFile(GetCurrentThread(), &ctx.iosb, &iosb);
     ok(res == STATUS_NOT_FOUND, "NtCancelSynchronousIoFile returned %lx\n", res);
     ok(iosb.Status == STATUS_NOT_FOUND, "iosb.Status got changed to %lx\n", iosb.Status);
-    ok(iosb.Information == 0, "iosb.Information got changed to %Iu\n", iosb.Information);
+    ok(iosb.Information == 0, "iosb.Information got changed to %Iu\n", (size_t)iosb.Information);
     ret = WaitForSingleObject(event, 0);
     ok(ret == WAIT_TIMEOUT, "wait returned %lx\n", ret);
     client = CreateFileW(testpipe, GENERIC_READ | GENERIC_WRITE, 0, 0, OPEN_EXISTING,
@@ -1110,13 +1110,13 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     ok( !is_signaled( read ), "read handle is signaled\n" );
     ok( !is_signaled( event ), "event is signaled\n" );
     ok( iosb.Status == 0xdeadbabe, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", (size_t)iosb.Information );
     ok( !apc_count, "apc was called\n" );
     ret = WriteFile( write, buffer, 1, &written, NULL );
     ok(ret && written == 1, "WriteFile error %ld\n", GetLastError());
     /* iosb updated here by async i/o */
     ok( iosb.Status == 0, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == 1, "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == 1, "wrong info %Iu\n", (size_t)iosb.Information );
     ok( !is_signaled( read ), "read handle is signaled\n" );
     ok( is_signaled( event ), "event is not signaled\n" );
     ok( !apc_count, "apc was called\n" );
@@ -1135,13 +1135,13 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     ok( status == STATUS_PENDING, "wrong status %lx\n", status );
     ok( !is_signaled( read ), "read handle is signaled\n" );
     ok( iosb.Status == 0xdeadbabe, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", (size_t)iosb.Information );
     ok( !apc_count, "apc was called\n" );
     ret = WriteFile( write, buffer, 1, &written, NULL );
     ok(ret && written == 1, "WriteFile error %ld\n", GetLastError());
     /* iosb updated here by async i/o */
     ok( iosb.Status == 0, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == 1, "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == 1, "wrong info %Iu\n", (size_t)iosb.Information );
     ok( is_signaled( read ), "read handle is not signaled\n" );
     ok( !apc_count, "apc was called\n" );
     apc_count = 0;
@@ -1163,7 +1163,7 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     status = NtReadFile( read, event, apc, &apc_count, &iosb, buffer, 1, NULL, NULL );
     ok( status == STATUS_SUCCESS, "wrong status %lx\n", status );
     ok( iosb.Status == 0, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == 1, "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == 1, "wrong info %Iu\n", (size_t)iosb.Information );
     ok( is_signaled( event ), "event is not signaled\n" );
     ok( !apc_count, "apc was called\n" );
     SleepEx( 0, FALSE ); /* non-alertable sleep */
@@ -1194,7 +1194,7 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
         ok( iosb.Status == 0, "wrong status %lx\n", iosb.Status );
     }
     ok( iosb.Information == FIELD_OFFSET(FILE_PIPE_PEEK_BUFFER, Data[1]),
-        "wrong info %Iu\n", iosb.Information );
+        "wrong info %Iu\n", (size_t)iosb.Information );
 
     status = NtReadFile( read, event, apc, &apc_count, &iosb, buffer, 1, NULL, NULL );
     if (pipe_type & PIPE_READMODE_MESSAGE)
@@ -1207,7 +1207,7 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
         ok( status == STATUS_SUCCESS, "wrong status %lx\n", status );
         ok( iosb.Status == 0, "wrong status %lx\n", iosb.Status );
     }
-    ok( iosb.Information == 1, "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == 1, "wrong info %Iu\n", (size_t)iosb.Information );
     ok( is_signaled( event ), "event is not signaled\n" );
     ok( !apc_count, "apc was called\n" );
     SleepEx( 0, FALSE ); /* non-alertable sleep */
@@ -1218,7 +1218,7 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     status = NtReadFile( read, event, apc, &apc_count, &iosb, buffer, 1, NULL, NULL );
     ok( status == STATUS_SUCCESS, "wrong status %lx\n", status );
     ok( iosb.Status == 0, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == 1, "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == 1, "wrong info %Iu\n", (size_t)iosb.Information );
     ok( is_signaled( event ), "event is not signaled\n" );
     ok( !apc_count, "apc was called\n" );
     SleepEx( 0, FALSE ); /* non-alertable sleep */
@@ -1235,7 +1235,7 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     ok( status == STATUS_PENDING, "wrong status %lx\n", status );
     ok( !is_signaled( event ), "event is signaled\n" );
     ok( iosb.Status == 0xdeadbabe, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", (size_t)iosb.Information );
     ok( !apc_count, "apc was called\n" );
     ret = WriteFile( write, buffer, 1, &written, NULL );
     ok(ret && written == 1, "WriteFile error %ld\n", GetLastError());
@@ -1243,7 +1243,7 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     Sleep(0);  /* FIXME: needed for wine to run the i/o apc  */
     ok( is_signaled( event ), "event is not signaled\n" );
     ok( iosb.Status == 0, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == 1, "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == 1, "wrong info %Iu\n", (size_t)iosb.Information );
     ok( !apc_count, "apc was called\n" );
     SleepEx( 0, TRUE ); /* alertable sleep */
     ok( apc_count == 1, "apc was not called\n" );
@@ -1256,7 +1256,7 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     status = NtReadFile( read, event, apc, &apc_count, &iosb, buffer, 1, NULL, NULL );
     ok( status == STATUS_PIPE_BROKEN, "wrong status %lx\n", status );
     ok( iosb.Status == 0xdeadbabe, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", (size_t)iosb.Information );
     ok( !is_signaled( event ), "event is signaled\n" );
     ok( !apc_count, "apc was called\n" );
     SleepEx( 0, TRUE ); /* alertable sleep */
@@ -1270,7 +1270,7 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     status = NtReadFile( read, (HANDLE)0xdeadbeef, apc, &apc_count, &iosb, buffer, 1, NULL, NULL );
     ok( status == STATUS_INVALID_HANDLE, "wrong status %lx\n", status );
     ok( iosb.Status == 0xdeadbabe, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", (size_t)iosb.Information );
     ok( !apc_count, "apc was called\n" );
     SleepEx( 0, TRUE ); /* alertable sleep */
     ok( !apc_count, "apc was called\n" );
@@ -1284,7 +1284,7 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     status = NtReadFile( read, event, apc, &apc_count, &iosb, buffer, 1, NULL, NULL );
     ok( status == STATUS_INVALID_HANDLE, "wrong status %lx\n", status );
     ok( iosb.Status == 0xdeadbabe, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", (size_t)iosb.Information );
     ok( is_signaled( event ), "event is not signaled\n" );  /* not reset on invalid handle */
     ok( !apc_count, "apc was called\n" );
     SleepEx( 0, TRUE ); /* alertable sleep */
@@ -1299,12 +1299,12 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     ok( status == STATUS_PENDING, "wrong status %lx\n", status );
     ok( !is_signaled( event ), "event is signaled\n" );
     ok( iosb.Status == 0xdeadbabe, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", (size_t)iosb.Information );
     ok( !apc_count, "apc was called\n" );
     CloseHandle( write );
     Sleep(0);  /* FIXME: needed for wine to run the i/o apc  */
     ok( iosb.Status == STATUS_PIPE_BROKEN, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == 0, "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == 0, "wrong info %Iu\n", (size_t)iosb.Information );
     ok( is_signaled( event ), "event is not signaled\n" );
     ok( !apc_count, "apc was called\n" );
     SleepEx( 0, TRUE ); /* alertable sleep */
@@ -1322,14 +1322,14 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     ok( status == STATUS_PENDING, "wrong status %lx\n", status );
     ok( !is_signaled( event ), "event is signaled\n" );
     ok( iosb.Status == 0xdeadbabe, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", (size_t)iosb.Information );
     ok( !apc_count, "apc was called\n" );
     /* Cancel by other handle */
     status = pNtCancelIoFile( read, &iosb2 );
     ok(status == STATUS_SUCCESS, "failed to cancel by different handle: %lx\n", status);
     Sleep(0);  /* FIXME: needed for wine to run the i/o apc  */
     ok( iosb.Status == STATUS_CANCELLED, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == 0, "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == 0, "wrong info %Iu\n", (size_t)iosb.Information );
     ok( is_signaled( event ), "event is not signaled\n" );
     ok( !apc_count, "apc was called\n" );
     SleepEx( 0, TRUE ); /* alertable sleep */
@@ -1342,20 +1342,20 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
     ok( status == STATUS_PENDING, "wrong status %lx\n", status );
     ok( !is_signaled( event ), "event is signaled\n" );
     ok( iosb.Status == 0xdeadbabe, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", (size_t)iosb.Information );
     ok( !apc_count, "apc was called\n" );
     /* Close queued handle */
     CloseHandle( read );
     SleepEx( 0, TRUE ); /* alertable sleep */
     ok( iosb.Status == 0xdeadbabe, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", (size_t)iosb.Information );
     status = pNtCancelIoFile( read, &iosb2 );
     ok(status == STATUS_INVALID_HANDLE, "cancelled by closed handle?\n");
     status = pNtCancelIoFile( handle, &iosb2 );
     ok(status == STATUS_SUCCESS, "failed to cancel: %lx\n", status);
     Sleep(0);  /* FIXME: needed for wine to run the i/o apc  */
     ok( iosb.Status == STATUS_CANCELLED, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == 0, "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == 0, "wrong info %Iu\n", (size_t)iosb.Information );
     ok( is_signaled( event ), "event is not signaled\n" );
     ok( !apc_count, "apc was called\n" );
     SleepEx( 0, TRUE ); /* alertable sleep */
@@ -1375,13 +1375,13 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
         ok( status == STATUS_PENDING, "wrong status %lx\n", status );
         ok( !is_signaled( event ), "event is signaled\n" );
         ok( iosb.Status == 0xdeadbabe, "wrong status %lx\n", iosb.Status );
-        ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", iosb.Information );
+        ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", (size_t)iosb.Information );
         ok( !apc_count, "apc was called\n" );
         status = pNtCancelIoFileEx( read, &iosb, &iosb2 );
         ok(status == STATUS_SUCCESS, "Failed to cancel I/O\n");
         Sleep(0);  /* FIXME: needed for wine to run the i/o apc  */
         ok( iosb.Status == STATUS_CANCELLED, "wrong status %lx\n", iosb.Status );
-        ok( iosb.Information == 0, "wrong info %Iu\n", iosb.Information );
+        ok( iosb.Information == 0, "wrong info %Iu\n", (size_t)iosb.Information );
         ok( is_signaled( event ), "event is not signaled\n" );
         ok( !apc_count, "apc was called\n" );
         SleepEx( 0, TRUE ); /* alertable sleep */
@@ -1395,19 +1395,19 @@ static void read_pipe_test(ULONG pipe_flags, ULONG pipe_type)
         ok( status == STATUS_PENDING, "wrong status %lx\n", status );
         ok( !is_signaled( event ), "event is signaled\n" );
         ok( iosb.Status == 0xdeadbabe, "wrong status %lx\n", iosb.Status );
-        ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", iosb.Information );
+        ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", (size_t)iosb.Information );
         ok( !apc_count, "apc was called\n" );
         status = NtReadFile( read, event, apc, &apc_count, &iosb, buffer, 2, NULL, NULL );
         ok( status == STATUS_PENDING, "wrong status %lx\n", status );
         ok( !is_signaled( event ), "event is signaled\n" );
         ok( iosb.Status == 0xdeadbabe, "wrong status %lx\n", iosb.Status );
-        ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", iosb.Information );
+        ok( iosb.Information == 0xdeadbeef, "wrong info %Iu\n", (size_t)iosb.Information );
         ok( !apc_count, "apc was called\n" );
         status = pNtCancelIoFileEx( read, &iosb, &iosb2 );
         ok(status == STATUS_SUCCESS, "Failed to cancel I/O\n");
         Sleep(0);  /* FIXME: needed for wine to run the i/o apc  */
         ok( iosb.Status == STATUS_CANCELLED, "wrong status %lx\n", iosb.Status );
-        ok( iosb.Information == 0, "wrong info %Iu\n", iosb.Information );
+        ok( iosb.Information == 0, "wrong info %Iu\n", (size_t)iosb.Information );
         ok( is_signaled( event ), "event is not signaled\n" );
         ok( !apc_count, "apc was called\n" );
         SleepEx( 0, TRUE ); /* alertable sleep */
@@ -1444,7 +1444,7 @@ static void test_transceive(void)
     ok(ret && written == 2, "WriteFile error %ld\n", GetLastError());
 
     ok( iosb.Status == 0, "wrong status %lx\n", iosb.Status );
-    ok( iosb.Information == 2, "wrong info %Iu\n", iosb.Information );
+    ok( iosb.Information == 2, "wrong info %Iu\n", (size_t)iosb.Information );
     ok( is_signaled( event ), "event is not signaled\n" );
 
     CloseHandle( caller );
@@ -1477,10 +1477,10 @@ static void _test_queued_completion(unsigned line, HANDLE port, IO_STATUS_BLOCK 
 
     status = pNtRemoveIoCompletion(port, &key, &value, &iosb, &timeout);
     ok_(__FILE__,line)(status == STATUS_SUCCESS, "NtRemoveIoCompletion returned %lx\n", status);
-    ok_(__FILE__,line)(value == (ULONG_PTR)io, "value = %Ix\n", value);
+    ok_(__FILE__,line)(value == (ULONG_PTR)io, "value = %Ix\n", (size_t)value);
     ok_(__FILE__,line)(io->Status == expected_status, "Status = %lx\n", io->Status);
     ok_(__FILE__,line)(io->Information == expected_information,
-                       "Information = %Iu\n", io->Information);
+                       "Information = %Iu\n", (size_t)io->Information);
 }
 
 static void test_completion(void)
@@ -1544,7 +1544,7 @@ static void test_completion(void)
     status = NtReadFile(client, NULL, NULL, &io, &io, read_buf, 1, NULL, NULL);
     ok(status == STATUS_BUFFER_OVERFLOW || status == STATUS_PENDING, "status = %lx\n", status);
     ok(io.Status == STATUS_BUFFER_OVERFLOW, "Status = %lx\n", io.Status);
-    ok(io.Information == 1, "Information = %Iu\n", io.Information);
+    ok(io.Information == 1, "Information = %Iu\n", (size_t)io.Information);
     if(status == STATUS_PENDING) /* win8+ */
         test_queued_completion(port, &io, STATUS_BUFFER_OVERFLOW, 1);
     else
@@ -1553,7 +1553,7 @@ static void test_completion(void)
     status = NtReadFile(client, NULL, NULL, &io, &io, read_buf, sizeof(read_buf), NULL, NULL);
     ok(status == STATUS_SUCCESS, "status = %lx\n", status);
     ok(io.Status == STATUS_SUCCESS, "Status = %lx\n", io.Status);
-    ok(io.Information == sizeof(buf)-1, "Information = %Iu\n", io.Information);
+    ok(io.Information == sizeof(buf)-1, "Information = %Iu\n", (size_t)io.Information);
     test_no_queued_completion(port);
 
     status = NtFsControlFile(client, NULL, NULL, &io, &io, FSCTL_PIPE_PEEK,
@@ -1606,7 +1606,7 @@ static void test_completion(void)
     ok(ret, "WriteFile failed, error %lu\n", GetLastError());
     ok(is_signaled(client), "client is signaled\n");
     ok(io.Status == STATUS_SUCCESS, "Status = %lx\n", io.Status);
-    ok(io.Information == sizeof(buf), "Information = %Iu\n", io.Information);
+    ok(io.Information == sizeof(buf), "Information = %Iu\n", (size_t)io.Information);
 
     /* event with no APC nor completion: signals only event */
     memset(&io, 0xcc, sizeof(io));
@@ -1620,7 +1620,7 @@ static void test_completion(void)
     ok(!is_signaled(client), "client is signaled\n");
     ok(is_signaled(event), "event is not signaled\n");
     ok(io.Status == STATUS_SUCCESS, "Status = %lx\n", io.Status);
-    ok(io.Information == sizeof(buf), "Information = %Iu\n", io.Information);
+    ok(io.Information == sizeof(buf), "Information = %Iu\n", (size_t)io.Information);
 
     /* APC with no event: handle is signaled */
     ioapc_called = FALSE;
@@ -1633,7 +1633,7 @@ static void test_completion(void)
     ok(ret, "WriteFile failed, error %lu\n", GetLastError());
     ok(is_signaled(client), "client is signaled\n");
     ok(io.Status == STATUS_SUCCESS, "Status = %lx\n", io.Status);
-    ok(io.Information == sizeof(buf), "Information = %Iu\n", io.Information);
+    ok(io.Information == sizeof(buf), "Information = %Iu\n", (size_t)io.Information);
 
     ok(!ioapc_called, "ioapc called\n");
     SleepEx(0, TRUE);
@@ -1813,7 +1813,7 @@ static void test_blocking(ULONG options)
     status = NtReadFile(ctx.client, NULL, NULL, NULL, &io, read_buf, sizeof(read_buf), NULL, NULL);
     ok(status == STATUS_SUCCESS, "status = %lx\n", status);
     ok(io.Status == STATUS_SUCCESS, "Status = %lx\n", io.Status);
-    ok(io.Information == 1, "Information = %Iu\n", io.Information);
+    ok(io.Information == 1, "Information = %Iu\n", (size_t)io.Information);
     ok(is_signaled(ctx.client), "client is not signaled\n");
 
     res = WaitForSingleObject(ctx.done, 10000);
@@ -1829,7 +1829,7 @@ static void test_blocking(ULONG options)
                         sizeof(read_buf), NULL, NULL);
     ok(status == STATUS_SUCCESS, "status = %lx\n", status);
     ok(io.Status == STATUS_SUCCESS, "Status = %lx\n", io.Status);
-    ok(io.Information == 1, "Information = %Iu\n", io.Information);
+    ok(io.Information == 1, "Information = %Iu\n", (size_t)io.Information);
     ok(is_signaled(ctx.event), "event is not signaled\n");
     todo_wine
     ok(is_signaled(ctx.client), "client is not signaled\n");
@@ -1856,7 +1856,7 @@ static void test_blocking(ULONG options)
     status = NtFlushBuffersFile(ctx.client, &io);
     ok(status == STATUS_SUCCESS, "status = %lx\n", status);
     ok(io.Status == STATUS_SUCCESS, "Status = %lx\n", io.Status);
-    ok(io.Information == 0, "Information = %Iu\n", io.Information);
+    ok(io.Information == 0, "Information = %Iu\n", (size_t)io.Information);
     ok(is_signaled(ctx.client), "client is not signaled\n");
 
     res = WaitForSingleObject(ctx.done, 10000);
@@ -1883,7 +1883,7 @@ static void test_blocking(ULONG options)
     status = NtFlushBuffersFile(ctx.client, &io);
     ok(status == STATUS_SUCCESS, "status = %lx\n", status);
     ok(io.Status == STATUS_SUCCESS, "Status = %lx\n", io.Status);
-    ok(io.Information == 0, "Information = %Iu\n", io.Information);
+    ok(io.Information == 0, "Information = %Iu\n", (size_t)io.Information);
     /* client signaling is inconsistent in this case */
 
     res = WaitForSingleObject(ctx.done, 10000);
@@ -1919,7 +1919,7 @@ static void test_volume_info(void)
     status = pNtQueryVolumeInformationFile( read, &iosb, buffer, sizeof(buffer), FileFsDeviceInformation );
     ok( status == STATUS_SUCCESS, "NtQueryVolumeInformationFile failed: %lx\n", status );
     ok( iosb.Status == STATUS_SUCCESS, "got status %#lx\n", iosb.Status );
-    ok( iosb.Information == sizeof(*device_info), "Information = %Iu\n", iosb.Information );
+    ok( iosb.Information == sizeof(*device_info), "Information = %Iu\n", (size_t)iosb.Information );
     device_info = (FILE_FS_DEVICE_INFORMATION*)buffer;
     ok( device_info->DeviceType == FILE_DEVICE_NAMED_PIPE, "DeviceType = %lu\n", device_info->DeviceType );
     ok( !(device_info->Characteristics & ~FILE_DEVICE_ALLOW_APPCONTAINER_TRAVERSAL),
@@ -1930,7 +1930,7 @@ static void test_volume_info(void)
     status = pNtQueryVolumeInformationFile( write, &iosb, buffer, sizeof(buffer), FileFsDeviceInformation );
     ok( status == STATUS_SUCCESS, "NtQueryVolumeInformationFile failed: %lx\n", status );
     ok( iosb.Status == STATUS_SUCCESS, "got status %#lx\n", iosb.Status );
-    ok( iosb.Information == sizeof(*device_info), "Information = %Iu\n", iosb.Information );
+    ok( iosb.Information == sizeof(*device_info), "Information = %Iu\n", (size_t)iosb.Information );
     device_info = (FILE_FS_DEVICE_INFORMATION*)buffer;
     ok( device_info->DeviceType == FILE_DEVICE_NAMED_PIPE, "DeviceType = %lu\n", device_info->DeviceType );
     ok( !(device_info->Characteristics & ~FILE_DEVICE_ALLOW_APPCONTAINER_TRAVERSAL),
@@ -1973,7 +1973,7 @@ static void _test_file_name(unsigned line, HANDLE pipe)
     ok_(__FILE__,line)( status == STATUS_SUCCESS, "NtQueryInformationFile failed: %lx\n", status );
     ok_(__FILE__,line)( iosb.Status == STATUS_SUCCESS, "Status = %lx\n", iosb.Status );
     ok_(__FILE__,line)( iosb.Information == sizeof(name_info->FileNameLength) + sizeof(nameW),
-        "Information = %Iu\n", iosb.Information );
+        "Information = %Iu\n", (size_t)iosb.Information );
     ok( name_info->FileNameLength == sizeof(nameW), "FileNameLength = %lu\n", name_info->FileNameLength );
     ok( !memcmp(name_info->FileName, nameW, sizeof(nameW)), "FileName = %s\n", wine_dbgstr_w(name_info->FileName) );
 
@@ -1983,7 +1983,7 @@ static void _test_file_name(unsigned line, HANDLE pipe)
     status = NtQueryInformationFile( pipe, &iosb, buffer, 20, FileNameInformation );
     ok( status == STATUS_BUFFER_OVERFLOW, "NtQueryInformationFile failed: %lx\n", status );
     ok( iosb.Status == STATUS_BUFFER_OVERFLOW, "Status = %lx\n", iosb.Status );
-    ok( iosb.Information == 20, "Information = %Iu\n", iosb.Information );
+    ok( iosb.Information == 20, "Information = %Iu\n", (size_t)iosb.Information );
     ok( name_info->FileNameLength == sizeof(nameW), "FileNameLength = %lu\n", name_info->FileNameLength );
     ok( !memcmp(name_info->FileName, nameW, 16), "FileName = %s\n", wine_dbgstr_w(name_info->FileName) );
 
@@ -2090,7 +2090,7 @@ static void test_pipe_state(HANDLE pipe, BOOL is_server, DWORD state)
         ok(status == STATUS_SUCCESS, "status = %lx in %s state %lu\n",
            status, is_server ? "server" : "client", state);
         ok(io.Status == status, "io.Status = %lx\n", io.Status);
-        ok(!io.Information, "io.Information = %Ix\n", io.Information);
+        ok(!io.Information, "io.Information = %Ix\n", (size_t)io.Information);
     }
 
     if (state != FILE_PIPE_CONNECTED_STATE)

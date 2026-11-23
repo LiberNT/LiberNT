@@ -754,7 +754,7 @@
 @ stdcall GetWindowsDirectoryA(ptr long)
 @ stdcall GetWindowsDirectoryW(ptr long)
 @ stdcall GetWriteWatch(long ptr long ptr ptr ptr)
-@ stdcall -thunk -version=0x601+ -arch=i386,x86_64,arm64ec GetXStateFeaturesMask(ptr ptr) kernelbase.GetXStateFeaturesMask
+@ stdcall -thunk -version=0x601+ -arch=i386,x86_64,arm64,arm64ec GetXStateFeaturesMask(ptr ptr) kernelbase.GetXStateFeaturesMask
 @ stdcall GlobalAddAtomA(str)
 @ stdcall GlobalAddAtomW(wstr)
 @ stdcall GlobalAlloc(long long)
@@ -925,7 +925,7 @@
 @ stdcall LocalSize(long)
 @ stdcall LocalUnlock(long)
 @ stdcall -thunk -version=0x600+ LocaleNameToLCID(wstr long) kernelbase.LocaleNameToLCID
-@ stdcall -thunk -version=0x601+ -arch=i386,x86_64,arm64ec LocateXStateFeature(ptr long ptr) kernelbase.LocateXStateFeature
+@ stdcall -thunk -version=0x601+ -arch=i386,x86_64,arm64,arm64ec LocateXStateFeature(ptr long ptr) kernelbase.LocateXStateFeature
 @ stdcall LockFile(long long long long long)
 @ stdcall LockFileEx(long long long long long ptr)
 @ stdcall LockResource(long)
@@ -1321,7 +1321,7 @@
 @ stdcall SetVolumeMountPointW(wstr wstr)
 @ stdcall SetWaitableTimer(long ptr long ptr ptr long)
 @ stdcall -version=0x601+ SetWaitableTimerEx(long ptr long ptr ptr ptr long)
-@ stdcall -thunk -version=0x601+ -arch=i386,x86_64,arm64ec SetXStateFeaturesMask(ptr int64) kernelbase.SetXStateFeaturesMask
+@ stdcall -thunk -version=0x601+ -arch=i386,x86_64,arm64,arm64ec SetXStateFeaturesMask(ptr int64) kernelbase.SetXStateFeaturesMask
 @ stdcall SetupComm(long long long)
 @ stdcall -thunk ShowConsoleCursor(long long) kernelbase.ShowConsoleCursor
 @ stdcall SignalObjectAndWait(long long long long)

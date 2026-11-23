@@ -122,7 +122,7 @@ PoolCompare(const UVC_POOL_TAGS *Before, const UVC_POOL_TAGS *After, ULONG Cycle
         if (New->PagedUsed + New->NonPagedUsed > OldUsed + 32 * 1024)
         {
             trace("MEASURE pool tag %.4s grew by %Iu bytes, allocs %lu frees %lu\n", (const char *)&New->Tag,
-                  New->PagedUsed + New->NonPagedUsed - OldUsed, NewAllocs, NewFrees);
+                  (size_t)(New->PagedUsed + New->NonPagedUsed - OldUsed), NewAllocs, NewFrees);
         }
         if (New->Tag == UVC_TAG_KS || New->Tag == UVC_TAG_DRIVER || New->Tag == UVC_TAG_USBPORT || New->Tag == UVC_TAG_XHCI)
         {
@@ -209,7 +209,7 @@ START_TEST(KsRestart)
 
     Sleep(500);
     After = KernelPages();
-    trace("MEASURE kernel pool pages %Iu then %Iu, %lu ms\n", Before, After, GetTickCount() - Start);
+    trace("MEASURE kernel pool pages %Iu then %Iu, %lu ms\n", (size_t)Before, (size_t)After, GetTickCount() - Start);
     TagsAfter = PoolSnapshot();
     ok(TagsBefore != NULL && TagsAfter != NULL, "Pool tag snapshots failed\n");
     if (TagsBefore && TagsAfter)

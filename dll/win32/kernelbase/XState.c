@@ -20,9 +20,12 @@ BOOL WINAPI InitializeContext2(void *buffer, DWORD flags, CONTEXT **context,
     NTSTATUS status;
 
     status = RtlGetExtendedContextLength2(flags, length, compaction_mask);
-    if (status == STATUS_NOT_SUPPORTED && (flags & 0x40))
+    if (status == STATUS_NOT_SUPPORTED)
     {
-        flags &= ~0x40;
+        DWORD xstate_flag = flags & CONTEXT_ARM64 ? CONTEXT_ARM64_XSTATE & ~CONTEXT_ARM64
+                                                  : CONTEXT_AMD64_XSTATE & ~CONTEXT_AMD64;
+        if (!(flags & xstate_flag)) return set_ntstatus(status);
+        flags &= ~xstate_flag;
         status = RtlGetExtendedContextLength2(flags, length, compaction_mask);
     }
     if (status) return set_ntstatus(status);
@@ -122,6 +125,36 @@ void *WINAPI LocateXStateFeature(CONTEXT *context, DWORD feature, DWORD *length)
     }
     if (length) *length = FIELD_OFFSET(XSAVE_FORMAT, XmmRegisters);
     return &context->ExtendedRegisters;
+}
+
+#elif defined(__aarch64__)
+
+BOOL WINAPI GetXStateFeaturesMask(CONTEXT *context, DWORD64 *mask)
+{
+    if (!(context->ContextFlags & CONTEXT_ARM64))
+    {
+        SetLastError(ERROR_NOT_SUPPORTED);
+        return FALSE;
+    }
+    *mask = (context->ContextFlags & CONTEXT_XSTATE) == CONTEXT_XSTATE
+        ? RtlGetExtendedFeaturesMask((CONTEXT_EX *)(context + 1)) : 0;
+    return TRUE;
+}
+
+BOOL WINAPI SetXStateFeaturesMask(CONTEXT *context, DWORD64 mask)
+{
+    if (!(context->ContextFlags & CONTEXT_ARM64)) return FALSE;
+    mask = RtlGetEnabledExtendedFeatures(mask);
+    if ((context->ContextFlags & CONTEXT_XSTATE) != CONTEXT_XSTATE)
+        return !mask;
+    RtlSetExtendedFeaturesMask((CONTEXT_EX *)(context + 1), mask);
+    return TRUE;
+}
+
+void *WINAPI LocateXStateFeature(CONTEXT *context, DWORD feature, DWORD *length)
+{
+    if ((context->ContextFlags & CONTEXT_XSTATE) != CONTEXT_XSTATE) return NULL;
+    return RtlLocateExtendedFeature((CONTEXT_EX *)(context + 1), feature, length);
 }
 
 #endif

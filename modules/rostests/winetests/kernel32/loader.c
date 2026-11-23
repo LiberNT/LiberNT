@@ -352,7 +352,7 @@ static BOOL query_image_section( int id, const char *dll_name, const IMAGE_NT_HE
     }
     status = pNtQuerySection( mapping, SectionImageInformation, &image, sizeof(image), &info_size );
     ok( !status, "%u: NtQuerySection failed err %lx\n", id, status );
-    ok( info_size == sizeof(image), "%u: NtQuerySection wrong size %Iu\n", id, info_size );
+    ok( info_size == sizeof(image), "%u: NtQuerySection wrong size %Iu\n", id, (size_t)info_size );
     if (nt_header->OptionalHeader.Magic == (is_win64 ? IMAGE_NT_OPTIONAL_HDR64_MAGIC
                                                      : IMAGE_NT_OPTIONAL_HDR32_MAGIC))
     {
@@ -395,9 +395,9 @@ static BOOL query_image_section( int id, const char *dll_name, const IMAGE_NT_HE
         image.TransferAddress, entry_point, nt_header->OptionalHeader.AddressOfEntryPoint );
     ok( image.ZeroBits == 0, "%u: ZeroBits wrong %08lx\n", id, image.ZeroBits );
     ok( image.MaximumStackSize == max_stack,
-        "%u: MaximumStackSize wrong %Ix / %Ix\n", id, image.MaximumStackSize, max_stack );
+        "%u: MaximumStackSize wrong %Ix / %Ix\n", id, (size_t)image.MaximumStackSize, (size_t)max_stack );
     ok( image.CommittedStackSize == commit_stack,
-        "%u: CommittedStackSize wrong %Ix / %Ix\n", id, image.CommittedStackSize, commit_stack );
+        "%u: CommittedStackSize wrong %Ix / %Ix\n", id, (size_t)image.CommittedStackSize, (size_t)commit_stack );
     ok( image.SubSystemType == nt_header->OptionalHeader.Subsystem,
         "%u: SubSystemType wrong %08lx / %08x\n", id,
         image.SubSystemType, nt_header->OptionalHeader.Subsystem );
@@ -637,7 +637,7 @@ static NTSTATUS map_image_section( const IMAGE_NT_HEADERS *nt_header, const IMAG
         SIZE_T info_size = 0xdeadbeef;
         NTSTATUS ret = pNtQuerySection( map, SectionBasicInformation, &info, sizeof(info), &info_size );
         ok( !ret, "NtQuerySection failed err %lx\n", ret );
-        ok( info_size == sizeof(info), "NtQuerySection wrong size %Iu\n", info_size );
+        ok( info_size == sizeof(info), "NtQuerySection wrong size %Iu\n", (size_t)info_size );
         ok( info.Attributes == (SEC_IMAGE | SEC_FILE), "NtQuerySection wrong attr %lx\n", info.Attributes );
         ok( info.BaseAddress == NULL, "NtQuerySection wrong base %p\n", info.BaseAddress );
         ok( info.Size.QuadPart == file_size, "NtQuerySection wrong size %lx%08lx / %08lx\n",
@@ -946,7 +946,7 @@ static void test_Loader(void)
             ok(info.AllocationBase == hlib, "%p != %p\n", info.AllocationBase, hlib);
             ok(info.AllocationProtect == PAGE_EXECUTE_WRITECOPY, "%lx != PAGE_EXECUTE_WRITECOPY\n", info.AllocationProtect);
             ok(info.RegionSize == ALIGN_SIZE(nt_header.OptionalHeader.SizeOfImage, page_size), "got %Ix != expected %x\n",
-               info.RegionSize, (UINT)ALIGN_SIZE(nt_header.OptionalHeader.SizeOfImage, page_size));
+               (size_t)info.RegionSize, (UINT)ALIGN_SIZE(nt_header.OptionalHeader.SizeOfImage, page_size));
             ok(info.State == MEM_COMMIT, "%lx != MEM_COMMIT\n", info.State);
             if (nt_header.OptionalHeader.SectionAlignment < page_size)
                 ok(info.Protect == PAGE_EXECUTE_WRITECOPY, "%lx != PAGE_EXECUTE_WRITECOPY\n", info.Protect);
@@ -981,7 +981,7 @@ static void test_Loader(void)
                 ok(info.AllocationBase == hlib, "%p != %p\n", info.AllocationBase, hlib);
                 ok(info.AllocationProtect == PAGE_EXECUTE_WRITECOPY, "%lx != PAGE_EXECUTE_WRITECOPY\n", info.AllocationProtect);
                 ok(info.RegionSize == ALIGN_SIZE(file_size, page_size), "got %Ix != expected %x\n",
-                   info.RegionSize, (UINT)ALIGN_SIZE(file_size, page_size));
+                   (size_t)info.RegionSize, (UINT)ALIGN_SIZE(file_size, page_size));
                 ok(info.State == MEM_COMMIT, "%lx != MEM_COMMIT\n", info.State);
                 ok(info.Protect == PAGE_READONLY, "%lx != PAGE_READONLY\n", info.Protect);
                 ok(info.Type == SEC_IMAGE, "%lx != SEC_IMAGE\n", info.Type);
@@ -1007,14 +1007,14 @@ static void test_Loader(void)
                 {
                     ok(info.BaseAddress == hlib, "got %p != expected %p\n", info.BaseAddress, hlib);
                     ok(info.RegionSize == ALIGN_SIZE(nt_header.OptionalHeader.SizeOfImage, page_size), "got %Ix != expected %x\n",
-                       info.RegionSize, (UINT)ALIGN_SIZE(nt_header.OptionalHeader.SizeOfImage, page_size));
+                       (size_t)info.RegionSize, (UINT)ALIGN_SIZE(nt_header.OptionalHeader.SizeOfImage, page_size));
                     ok(info.Protect == PAGE_EXECUTE_WRITECOPY, "%lx != PAGE_EXECUTE_WRITECOPY\n", info.Protect);
                 }
                 else
                 {
                     ok(info.BaseAddress == (char *)hlib + section.VirtualAddress, "got %p != expected %p\n", info.BaseAddress, (char *)hlib + section.VirtualAddress);
                     ok(info.RegionSize == ALIGN_SIZE(section.Misc.VirtualSize, page_size), "got %Ix != expected %x\n",
-                       info.RegionSize, (UINT)ALIGN_SIZE(section.Misc.VirtualSize, page_size));
+                       (size_t)info.RegionSize, (UINT)ALIGN_SIZE(section.Misc.VirtualSize, page_size));
                     ok(info.Protect == PAGE_READONLY, "%lx != PAGE_READONLY\n", info.Protect);
                 }
                 ok(info.AllocationBase == hlib, "%p != %p\n", info.AllocationBase, hlib);
@@ -1686,7 +1686,7 @@ static void test_image_mapping(const char *dll_name, DWORD scn_page_access, BOOL
     size = VirtualQuery((char *)addr1 + section.VirtualAddress, &info, sizeof(info));
     ok(size == sizeof(info), "VirtualQuery error %ld\n", GetLastError());
     ok(info.BaseAddress == (char *)addr1 + section.VirtualAddress, "got %p != expected %p\n", info.BaseAddress, (char *)addr1 + section.VirtualAddress);
-    ok(info.RegionSize == page_size, "got %#Ix != expected %#lx\n", info.RegionSize, page_size);
+    ok(info.RegionSize == page_size, "got %#Ix != expected %#lx\n", (size_t)info.RegionSize, page_size);
     ok(info.Protect == scn_page_access, "got %#lx != expected %#lx\n", info.Protect, scn_page_access);
     ok(info.AllocationBase == addr1, "%p != %p\n", info.AllocationBase, addr1);
     ok(info.AllocationProtect == PAGE_EXECUTE_WRITECOPY, "%#lx != PAGE_EXECUTE_WRITECOPY\n", info.AllocationProtect);
@@ -1705,7 +1705,7 @@ static void test_image_mapping(const char *dll_name, DWORD scn_page_access, BOOL
     size = VirtualQuery((char *)addr2 + section.VirtualAddress, &info, sizeof(info));
     ok(size == sizeof(info), "VirtualQuery error %ld\n", GetLastError());
     ok(info.BaseAddress == (char *)addr2 + section.VirtualAddress, "got %p != expected %p\n", info.BaseAddress, (char *)addr2 + section.VirtualAddress);
-    ok(info.RegionSize == page_size, "got %#Ix != expected %#lx\n", info.RegionSize, page_size);
+    ok(info.RegionSize == page_size, "got %#Ix != expected %#lx\n", (size_t)info.RegionSize, page_size);
     ok(info.Protect == scn_page_access, "got %#lx != expected %#lx\n", info.Protect, scn_page_access);
     ok(info.AllocationBase == addr2, "%p != %p\n", info.AllocationBase, addr2);
     ok(info.AllocationProtect == PAGE_EXECUTE_WRITECOPY, "%#lx != PAGE_EXECUTE_WRITECOPY\n", info.AllocationProtect);
@@ -1723,7 +1723,7 @@ static void test_image_mapping(const char *dll_name, DWORD scn_page_access, BOOL
     size = VirtualQuery((char *)addr2 + section.VirtualAddress, &info, sizeof(info));
     ok(size == sizeof(info), "VirtualQuery error %ld\n", GetLastError());
     ok(info.BaseAddress == (char *)addr2 + section.VirtualAddress, "got %p != expected %p\n", info.BaseAddress, (char *)addr2 + section.VirtualAddress);
-    ok(info.RegionSize == page_size, "got %#Ix != expected %#lx\n", info.RegionSize, page_size);
+    ok(info.RegionSize == page_size, "got %#Ix != expected %#lx\n", (size_t)info.RegionSize, page_size);
     ok(info.Protect == scn_page_access, "got %#lx != expected %#lx\n", info.Protect, scn_page_access);
     ok(info.AllocationBase == addr2, "%p != %p\n", info.AllocationBase, addr2);
     ok(info.AllocationProtect == PAGE_EXECUTE_WRITECOPY, "%#lx != PAGE_EXECUTE_WRITECOPY\n", info.AllocationProtect);
@@ -1827,7 +1827,7 @@ static void test_VirtualProtect(void *base, void *section)
         ret = VirtualQuery(section, &info, sizeof(info));
         ok(ret, "VirtualQuery failed %ld\n", GetLastError());
         ok(info.BaseAddress == section, "%ld: got %p != expected %p\n", i, info.BaseAddress, section);
-        ok(info.RegionSize == page_size, "%ld: got %#Ix != expected %#lx\n", i, info.RegionSize, page_size);
+        ok(info.RegionSize == page_size, "%ld: got %#Ix != expected %#lx\n", i, (size_t)info.RegionSize, page_size);
         ok(info.Protect == PAGE_NOACCESS, "%ld: got %#lx != expected PAGE_NOACCESS\n", i, info.Protect);
         ok(info.AllocationBase == base, "%ld: %p != %p\n", i, info.AllocationBase, base);
         ok(info.AllocationProtect == PAGE_EXECUTE_WRITECOPY, "%ld: %#lx != PAGE_EXECUTE_WRITECOPY\n", i, info.AllocationProtect);
@@ -1846,7 +1846,7 @@ static void test_VirtualProtect(void *base, void *section)
             ret = VirtualQuery(section, &info, sizeof(info));
             ok(ret, "VirtualQuery failed %ld\n", GetLastError());
             ok(info.BaseAddress == section, "%ld: got %p != expected %p\n", i, info.BaseAddress, section);
-            ok(info.RegionSize == page_size, "%ld: got %#Ix != expected %#lx\n", i, info.RegionSize, page_size);
+            ok(info.RegionSize == page_size, "%ld: got %#Ix != expected %#lx\n", i, (size_t)info.RegionSize, page_size);
             ok(info.Protect == td[i].prot_get, "%ld: got %#lx != expected %#lx\n", i, info.Protect, td[i].prot_get);
             ok(info.AllocationBase == base, "%ld: %p != %p\n", i, info.AllocationBase, base);
             ok(info.AllocationProtect == PAGE_EXECUTE_WRITECOPY, "%ld: %#lx != PAGE_EXECUTE_WRITECOPY\n", i, info.AllocationProtect);
@@ -2010,7 +2010,7 @@ static void test_section_access(void)
         ok(size == sizeof(info),
             "%d: VirtualQuery error %ld\n", i, GetLastError());
         ok(info.BaseAddress == (char *)hlib + section.VirtualAddress, "%d: got %p != expected %p\n", i, info.BaseAddress, (char *)hlib + section.VirtualAddress);
-        ok(info.RegionSize == page_size, "%d: got %#Ix != expected %#lx\n", i, info.RegionSize, page_size);
+        ok(info.RegionSize == page_size, "%d: got %#Ix != expected %#lx\n", i, (size_t)info.RegionSize, page_size);
         ok(info.Protect == td[i].scn_page_access, "%d: got %#lx != expected %#lx\n", i, info.Protect, td[i].scn_page_access);
         ok(info.AllocationBase == hlib, "%d: %p != %p\n", i, info.AllocationBase, hlib);
         ok(info.AllocationProtect == PAGE_EXECUTE_WRITECOPY, "%d: %#lx != PAGE_EXECUTE_WRITECOPY\n", i, info.AllocationProtect);
@@ -2074,7 +2074,7 @@ static void test_section_access(void)
         ok(size == sizeof(info),
             "%d: VirtualQuery error %ld\n", i, GetLastError());
         ok(info.BaseAddress == (char *)hlib + section.VirtualAddress, "%d: got %p != expected %p\n", i, info.BaseAddress, (char *)hlib + section.VirtualAddress);
-        ok(info.RegionSize == page_size, "%d: got %#Ix != expected %#lx\n", i, info.RegionSize, page_size);
+        ok(info.RegionSize == page_size, "%d: got %#Ix != expected %#lx\n", i, (size_t)info.RegionSize, page_size);
         ok(info.Protect == td[i].scn_page_access, "%d: got %#lx != expected %#lx\n", i, info.Protect, td[i].scn_page_access);
         ok(info.AllocationBase == hlib, "%d: %p != %p\n", i, info.AllocationBase, hlib);
         ok(info.AllocationProtect == PAGE_EXECUTE_WRITECOPY, "%d: %#lx != PAGE_EXECUTE_WRITECOPY\n", i, info.AllocationProtect);
@@ -4091,7 +4091,7 @@ static void test_ExitProcess(void)
     SetLastError(0xdeadbeef);
     ret = ReadProcessMemory(pi.hProcess, addr, buf, 4, &size);
     ok(ret, "ReadProcessMemory error %ld\n", GetLastError());
-    ok(size == 4, "expected 4, got %Iu\n", size);
+    ok(size == 4, "expected 4, got %Iu\n", (size_t)size);
 
     SetLastError(0xdeadbeef);
     hmap = CreateFileMappingW(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, 4096, NULL);
@@ -4211,7 +4211,7 @@ static void test_ExitProcess(void)
     ok(!ret, "ReadProcessMemory should fail\n");
     ok(GetLastError() == ERROR_PARTIAL_COPY || GetLastError() == ERROR_ACCESS_DENIED,
        "expected ERROR_PARTIAL_COPY, got %ld\n", GetLastError());
-    ok(!size, "expected 0, got %Iu\n", size);
+    ok(!size, "expected 0, got %Iu\n", (size_t)size);
     SetLastError(0xdeadbeef);
     ret = VirtualFreeEx(pi.hProcess, addr, 0, MEM_RELEASE);
     ok(!ret, "VirtualFreeEx should fail\n");

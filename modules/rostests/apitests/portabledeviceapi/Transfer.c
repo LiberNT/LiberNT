@@ -110,7 +110,7 @@ CreateFile_(WPD_TEST_DEVICE *Test, LPCWSTR ParentId, LPCWSTR Name, const BYTE *D
             break;
         Done += Written;
     }
-    ok(hr == S_OK, "Write hr 0x%08lX done %Iu\n", hr, Done);
+    ok(hr == S_OK, "Write hr 0x%08lX done %Iu\n", hr, (size_t)Done);
     hr = IStream_Commit(Stream, STGC_DEFAULT);
     ok(hr == S_OK, "Commit hr 0x%08lX\n", hr);
     if (SUCCEEDED(IStream_QueryInterface(Stream, &IID_IPortableDeviceDataStream, (void **)&DataStream)))
@@ -264,7 +264,7 @@ START_TEST(Transfer)
         ok(hr == S_OK, "read back hr 0x%08lX\n", hr);
         if (SUCCEEDED(hr))
         {
-            ok(BackSize == Sizes[i], "read back size %Iu expected %Iu\n", BackSize, Sizes[i]);
+            ok(BackSize == Sizes[i], "read back size %Iu expected %Iu\n", (size_t)BackSize, (size_t)Sizes[i]);
             ok(BackSize == Sizes[i] && !memcmp(Back, Data, BackSize), "read back data differs\n");
             HeapFree(GetProcessHeap(), 0, Back);
         }

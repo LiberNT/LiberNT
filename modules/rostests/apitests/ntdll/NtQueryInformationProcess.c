@@ -739,16 +739,16 @@ Test_ProcessVmCounters(void)
      * just touched; a page count would be 4096 times smaller. */
     ok(VmCounters.WorkingSetSize >= TouchedSize / 2,
        "WorkingSetSize %Iu is too small for %Iu touched bytes\n",
-       VmCounters.WorkingSetSize, TouchedSize);
+       (size_t)VmCounters.WorkingSetSize, (size_t)TouchedSize);
     ok(VmCounters.WorkingSetSize % 4096 == 0,
        "WorkingSetSize %Iu is not a whole number of pages\n",
-       VmCounters.WorkingSetSize);
+       (size_t)VmCounters.WorkingSetSize);
     ok(VmCounters.PeakWorkingSetSize >= VmCounters.WorkingSetSize,
        "PeakWorkingSetSize %Iu is below WorkingSetSize %Iu\n",
-       VmCounters.PeakWorkingSetSize, VmCounters.WorkingSetSize);
+       (size_t)VmCounters.PeakWorkingSetSize, (size_t)VmCounters.WorkingSetSize);
     ok(VmCounters.WorkingSetSize <= VmCounters.VirtualSize,
        "WorkingSetSize %Iu is above VirtualSize %Iu\n",
-       VmCounters.WorkingSetSize, VmCounters.VirtualSize);
+       (size_t)VmCounters.WorkingSetSize, (size_t)VmCounters.VirtualSize);
 
     VirtualFree(Touched, 0, MEM_RELEASE);
 }

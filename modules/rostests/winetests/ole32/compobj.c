@@ -2432,7 +2432,7 @@ static void test_CoGetContextToken(void)
     token = 0xdeadbeef;
     hr = pCoGetContextToken(&token);
     ok(hr == CO_E_NOTINITIALIZED, "Expected CO_E_NOTINITIALIZED, got 0x%08lx\n", hr);
-    ok(token == 0xdeadbeef, "Expected 0, got 0x%Ix\n", token);
+    ok(token == 0xdeadbeef, "Expected 0, got 0x%Ix\n", (size_t)token);
 
     test_apt_type(APTTYPE_CURRENT, APTTYPEQUALIFIER_NONE);
 
@@ -4302,7 +4302,7 @@ static void test_GlobalOptions(void)
     hres = IGlobalOptions_Query(global_options, COMGLB_EXCEPTION_HANDLING, &value);
     ok(hres == S_OK || broken(hres == E_FAIL) /* Vista */, "Unexpected hr %#lx.\n", hres);
     if (SUCCEEDED(hres))
-        ok(value == COMGLB_EXCEPTION_HANDLE, "Unexpected value %Id.\n", value);
+        ok(value == COMGLB_EXCEPTION_HANDLE, "Unexpected value %Id.\n", (ptrdiff_t)value);
 
     IGlobalOptions_Release(global_options);
 

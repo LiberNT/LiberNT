@@ -489,14 +489,14 @@ static BOOL WINAPI bind_image_cb(IMAGEHLP_STATUS_REASON reason, const char *file
 
     if (winetest_debug > 1)
         trace("reason %u, file %s, module %s, va %#Ix, param %#Ix\n",
-                reason, debugstr_a(file), debugstr_a(module), va, param);
+                reason, debugstr_a(file), debugstr_a(module), (size_t)va, (size_t)param);
 
     if (reason == BindImportModule)
     {
         ok(!strchr(module, '\\'), "got module name %s\n", debugstr_a(module));
         strcpy(last_module, module);
-        ok(!va, "got VA %#Ix\n", va);
-        ok(!param, "got param %#Ix\n", param);
+        ok(!va, "got VA %#Ix\n", (size_t)va);
+        ok(!param, "got param %#Ix\n", (size_t)param);
     }
     else if (reason == BindImportProcedure)
     {

@@ -70,7 +70,7 @@ START_TEST(MaximizedCaptionClick)
     Point.x = (WindowRect.left + WindowRect.right) / 2;
     Point.y = Work.top;
     Hit = SendMessageW(Window, WM_NCHITTEST, 0, MAKELPARAM(Point.x, Point.y));
-    ok(Hit == HTCAPTION, "top edge of the maximized caption hit %Id, expected HTCAPTION\n", Hit);
+    ok(Hit == HTCAPTION, "top edge of the maximized caption hit %Id, expected HTCAPTION\n", (ptrdiff_t)Hit);
 
     click(Point.x, Point.y);
     flush_messages(500);

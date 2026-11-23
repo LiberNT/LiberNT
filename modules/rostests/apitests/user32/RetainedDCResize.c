@@ -106,7 +106,7 @@ START_TEST(RetainedDCResize)
     hReady = OpenTestEvent(L"Ready", GetCurrentProcessId());
     hDraw = OpenTestEvent(L"Draw", GetCurrentProcessId());
     hDrawn = OpenTestEvent(L"Drawn", GetCurrentProcessId());
-    sprintf(CommandLine, "\"%s\" RetainedDCResize holder %Ix %lu", test_argv[0], (ULONG_PTR)hwndChild,
+    sprintf(CommandLine, "\"%s\" RetainedDCResize holder %Ix %lu", test_argv[0], (size_t)hwndChild,
             GetCurrentProcessId());
     if (!CreateProcessA(NULL, CommandLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
     {

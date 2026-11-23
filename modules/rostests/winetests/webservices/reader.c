@@ -191,31 +191,31 @@ static void test_WsCreateHeap(void)
     size = sizeof(max);
     hr = WsGetHeapProperty( heap, WS_HEAP_PROPERTY_MAX_SIZE, &max, size, NULL );
     ok( hr == S_OK, "got %#lx\n", hr );
-    ok( max == 1 << 16, "got %Iu\n", max );
+    ok( max == 1 << 16, "got %Iu\n", (size_t)max );
 
     trim = 0xdeadbeef;
     size = sizeof(trim);
     hr = WsGetHeapProperty( heap, WS_HEAP_PROPERTY_TRIM_SIZE, &trim, size, NULL );
     ok( hr == S_OK, "got %#lx\n", hr );
-    ok( trim == 1 << 6, "got %Iu\n", trim );
+    ok( trim == 1 << 6, "got %Iu\n", (size_t)trim );
 
     requested = 0xdeadbeef;
     size = sizeof(requested);
     hr = WsGetHeapProperty( heap, WS_HEAP_PROPERTY_REQUESTED_SIZE, &requested, size, NULL );
     ok( hr == S_OK, "got %#lx\n", hr );
-    ok( !requested, "got %Iu\n", requested );
+    ok( !requested, "got %Iu\n", (size_t)requested );
 
     actual = 0xdeadbeef;
     size = sizeof(actual);
     hr = WsGetHeapProperty( heap, WS_HEAP_PROPERTY_ACTUAL_SIZE, &actual, size, NULL );
     ok( hr == S_OK, "got %#lx\n", hr );
-    ok( !actual, "got %Iu\n", actual );
+    ok( !actual, "got %Iu\n", (size_t)actual );
 
     actual = 0xdeadbeef;
     size = sizeof(actual);
     hr = WsGetHeapProperty( heap, WS_HEAP_PROPERTY_ACTUAL_SIZE + 1, &actual, size, NULL );
     ok( hr == E_INVALIDARG, "got %#lx\n", hr );
-    ok( actual == 0xdeadbeef, "got %Iu\n", actual );
+    ok( actual == 0xdeadbeef, "got %Iu\n", (size_t)actual );
     WsFreeHeap( heap );
 
     max = 1 << 16;
@@ -2128,13 +2128,13 @@ static void test_WsAlloc(void)
     size = sizeof(requested);
     hr = WsGetHeapProperty( heap, WS_HEAP_PROPERTY_REQUESTED_SIZE, &requested, size, NULL );
     ok( hr == S_OK, "got %#lx\n", hr );
-    ok( requested == 16, "got %Iu\n", requested );
+    ok( requested == 16, "got %Iu\n", (size_t)requested );
 
     actual = 0xdeadbeef;
     size = sizeof(actual);
     hr = WsGetHeapProperty( heap, WS_HEAP_PROPERTY_ACTUAL_SIZE, &actual, size, NULL );
     ok( hr == S_OK, "got %#lx\n", hr );
-    todo_wine ok( actual == 128, "got %Iu\n", actual );
+    todo_wine ok( actual == 128, "got %Iu\n", (size_t)actual );
 
     WsFreeHeap( heap );
 }
@@ -3538,13 +3538,13 @@ static void test_WsResetHeap(void)
     size = sizeof(requested);
     hr = WsGetHeapProperty( heap, WS_HEAP_PROPERTY_REQUESTED_SIZE, &requested, size, NULL );
     ok( hr == S_OK, "got %#lx\n", hr );
-    ok( !requested, "got %Iu\n", requested );
+    ok( !requested, "got %Iu\n", (size_t)requested );
 
     actual = 0xdeadbeef;
     size = sizeof(actual);
     hr = WsGetHeapProperty( heap, WS_HEAP_PROPERTY_ACTUAL_SIZE, &actual, size, NULL );
     ok( hr == S_OK, "got %#lx\n", hr );
-    ok( !actual, "got %Iu\n", actual );
+    ok( !actual, "got %Iu\n", (size_t)actual );
 
     hr = WsAlloc( heap, 128, &ptr, NULL );
     ok( hr == S_OK, "got %#lx\n", hr );
@@ -3553,13 +3553,13 @@ static void test_WsResetHeap(void)
     size = sizeof(requested);
     hr = WsGetHeapProperty( heap, WS_HEAP_PROPERTY_REQUESTED_SIZE, &requested, size, NULL );
     ok( hr == S_OK, "got %#lx\n", hr );
-    ok( requested == 128, "got %Iu\n", requested );
+    ok( requested == 128, "got %Iu\n", (size_t)requested );
 
     actual = 0xdeadbeef;
     size = sizeof(actual);
     hr = WsGetHeapProperty( heap, WS_HEAP_PROPERTY_ACTUAL_SIZE, &actual, size, NULL );
     ok( hr == S_OK, "got %#lx\n", hr );
-    ok( actual == 128, "got %Iu\n", actual );
+    ok( actual == 128, "got %Iu\n", (size_t)actual );
 
     hr = WsAlloc( heap, 1, &ptr, NULL );
     ok( hr == S_OK, "got %#lx\n", hr );
@@ -3568,13 +3568,13 @@ static void test_WsResetHeap(void)
     size = sizeof(requested);
     hr = WsGetHeapProperty( heap, WS_HEAP_PROPERTY_REQUESTED_SIZE, &requested, size, NULL );
     ok( hr == S_OK, "got %#lx\n", hr );
-    ok( requested == 129, "got %Iu\n", requested );
+    ok( requested == 129, "got %Iu\n", (size_t)requested );
 
     actual = 0xdeadbeef;
     size = sizeof(actual);
     hr = WsGetHeapProperty( heap, WS_HEAP_PROPERTY_ACTUAL_SIZE, &actual, size, NULL );
     ok( hr == S_OK, "got %#lx\n", hr );
-    todo_wine ok( actual == 384, "got %Iu\n", actual );
+    todo_wine ok( actual == 384, "got %Iu\n", (size_t)actual );
 
     hr = WsResetHeap( NULL, NULL );
     ok( hr == E_INVALIDARG, "got %#lx\n", hr );
@@ -3586,13 +3586,13 @@ static void test_WsResetHeap(void)
     size = sizeof(requested);
     hr = WsGetHeapProperty( heap, WS_HEAP_PROPERTY_REQUESTED_SIZE, &requested, size, NULL );
     ok( hr == S_OK, "got %#lx\n", hr );
-    ok( !requested, "got %Iu\n", requested );
+    ok( !requested, "got %Iu\n", (size_t)requested );
 
     actual = 0xdeadbeef;
     size = sizeof(actual);
     hr = WsGetHeapProperty( heap, WS_HEAP_PROPERTY_ACTUAL_SIZE, &actual, size, NULL );
     ok( hr == S_OK, "got %#lx\n", hr );
-    todo_wine ok( actual == 128, "got %Iu\n", actual );
+    todo_wine ok( actual == 128, "got %Iu\n", (size_t)actual );
 
     WsFreeHeap( heap );
 }

@@ -25,7 +25,7 @@ AlpcValidationCreatePortMatrix(VOID)
         Attributes.MaxMessageLength = MaximumMessageLengths[Index];
         Output = (HANDLE)(ULONG_PTR)0x5555555555555555ULL;
         alpc_observe_scalar_output("CreatePort.max_message", Output, NtAlpcCreatePort(&Output, NULL, &Attributes));
-        trace("ALPC_OBSERVE input CreatePort.max_message=%Iu\n", MaximumMessageLengths[Index]);
+        trace("ALPC_OBSERVE input CreatePort.max_message=%Iu\n", (size_t)MaximumMessageLengths[Index]);
         if (NT_SUCCESS(Status))
             NtClose(Output);
     }

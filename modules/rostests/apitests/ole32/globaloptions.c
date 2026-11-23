@@ -31,14 +31,14 @@ START_TEST(globaloptions)
     Value = 0xdead;
     hr = IGlobalOptions_Query(Options, COMGLB_EXCEPTION_HANDLING, &Value);
     ok(hr == S_OK, "Query(COMGLB_EXCEPTION_HANDLING) failed, hr %#lx\n", hr);
-    ok(Value == COMGLB_EXCEPTION_DONOT_HANDLE, "Exception handling is %Iu\n", Value);
+    ok(Value == COMGLB_EXCEPTION_DONOT_HANDLE, "Exception handling is %Iu\n", (size_t)Value);
 
     hr = IGlobalOptions_Set(Options, COMGLB_RO_SETTINGS, COMGLB_FAST_RUNDOWN);
     ok(hr == S_OK, "Set(COMGLB_RO_SETTINGS) failed, hr %#lx\n", hr);
     Value = 0xdead;
     hr = IGlobalOptions_Query(Options, COMGLB_RO_SETTINGS, &Value);
     ok(hr == S_OK, "Query(COMGLB_RO_SETTINGS) failed, hr %#lx\n", hr);
-    ok(Value == COMGLB_FAST_RUNDOWN, "RO settings are %Iu\n", Value);
+    ok(Value == COMGLB_FAST_RUNDOWN, "RO settings are %Iu\n", (size_t)Value);
 
     hr = IGlobalOptions_Query(Options, 0, &Value);
     ok(FAILED(hr), "Query(0) succeeded\n");

@@ -225,7 +225,7 @@ static void TEST_NumParts(void)
 
         ok(p.second.gotParts == p.second.nParts,
            "Locale 0x%04lX, num parts mismatch s%02d, expected %Iu got %Iu. Will skip related checks.\n",
-           curLcid, p.first, p.second.nParts, p.second.gotParts);
+           curLcid, p.first, (size_t)p.second.nParts, (size_t)p.second.gotParts);
     }
 }
 

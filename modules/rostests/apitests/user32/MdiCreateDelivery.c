@@ -32,7 +32,7 @@ static LRESULT CALLBACK MdiCreateProc(HWND hwnd, UINT Msg, WPARAM wParam, LPARAM
         ok(Mdi->x == 11 && Mdi->y == 22 && Mdi->cx == 333 && Mdi->cy == 444,
            "%s: position %d,%d %dx%d\n", g_Path, Mdi->x, Mdi->y, Mdi->cx, Mdi->cy);
         ok(Mdi->style == 0x00cf0000, "%s: style %08lx\n", g_Path, Mdi->style);
-        ok(Mdi->lParam == g_Mdi.lParam, "%s: lParam field %Ix\n", g_Path, (ULONG_PTR)Mdi->lParam);
+        ok(Mdi->lParam == g_Mdi.lParam, "%s: lParam field %Ix\n", g_Path, (size_t)Mdi->lParam);
         return 0x5150;
     }
     return DefWindowProcW(hwnd, Msg, wParam, lParam);

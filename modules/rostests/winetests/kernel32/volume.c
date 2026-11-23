@@ -1889,7 +1889,7 @@ static void test_mountmgr_query_points(void)
             IOCTL_MOUNTMGR_QUERY_POINTS, NULL, 0, NULL, 0 );
     ok(status == STATUS_INVALID_PARAMETER, "got %#lx\n", status);
     ok(io.Status == 0xdeadf00d, "got status %#lx\n", io.Status);
-    ok(io.Information == 0xdeadf00d, "got information %#Ix\n", io.Information);
+    ok(io.Information == 0xdeadf00d, "got information %#Ix\n", (size_t)io.Information);
 
     memset( input, 0, sizeof(*input) );
 
@@ -1899,7 +1899,7 @@ static void test_mountmgr_query_points(void)
             IOCTL_MOUNTMGR_QUERY_POINTS, input, sizeof(*input) - 1, NULL, 0 );
     ok(status == STATUS_INVALID_PARAMETER, "got %#lx\n", status);
     ok(io.Status == 0xdeadf00d, "got status %#lx\n", io.Status);
-    ok(io.Information == 0xdeadf00d, "got information %#Ix\n", io.Information);
+    ok(io.Information == 0xdeadf00d, "got information %#Ix\n", (size_t)io.Information);
 
     io.Status = 0xdeadf00d;
     io.Information = 0xdeadf00d;
@@ -1907,7 +1907,7 @@ static void test_mountmgr_query_points(void)
             IOCTL_MOUNTMGR_QUERY_POINTS, input, sizeof(*input), NULL, 0 );
     ok(status == STATUS_INVALID_PARAMETER, "got %#lx\n", status);
     ok(io.Status == 0xdeadf00d, "got status %#lx\n", io.Status);
-    ok(io.Information == 0xdeadf00d, "got information %#Ix\n", io.Information);
+    ok(io.Information == 0xdeadf00d, "got information %#Ix\n", (size_t)io.Information);
 
     io.Status = 0xdeadf00d;
     io.Information = 0xdeadf00d;
@@ -1916,7 +1916,7 @@ static void test_mountmgr_query_points(void)
             IOCTL_MOUNTMGR_QUERY_POINTS, input, sizeof(*input), output, sizeof(*output) - 1 );
     ok(status == STATUS_INVALID_PARAMETER, "got %#lx\n", status);
     ok(io.Status == 0xdeadf00d, "got status %#lx\n", io.Status);
-    ok(io.Information == 0xdeadf00d, "got information %#Ix\n", io.Information);
+    ok(io.Information == 0xdeadf00d, "got information %#Ix\n", (size_t)io.Information);
     ok(output->Size == 0xcccccccc, "got size %lu\n", output->Size);
     ok(output->NumberOfMountPoints == 0xcccccccc, "got count %lu\n", output->NumberOfMountPoints);
 
@@ -1928,7 +1928,7 @@ static void test_mountmgr_query_points(void)
     ok(status == STATUS_BUFFER_OVERFLOW, "got %#lx\n", status);
     ok(io.Status == STATUS_BUFFER_OVERFLOW, "got status %#lx\n", io.Status);
 #ifdef __REACTOS__
-    todo_wine ok(io.Information == offsetof(MOUNTMGR_MOUNT_POINTS, MountPoints[0]) || broken(io.Information == sizeof(MOUNTMGR_MOUNT_POINTS)) /* WS03 */, "got information %#Ix\n", io.Information);
+    todo_wine ok(io.Information == offsetof(MOUNTMGR_MOUNT_POINTS, MountPoints[0]) || broken(io.Information == sizeof(MOUNTMGR_MOUNT_POINTS)) /* WS03 */, "got information %#Ix\n", (size_t)io.Information);
 #else
     todo_wine ok(io.Information == offsetof(MOUNTMGR_MOUNT_POINTS, MountPoints[0]), "got information %#Ix\n", io.Information);
 #endif
@@ -1944,7 +1944,7 @@ static void test_mountmgr_query_points(void)
             IOCTL_MOUNTMGR_QUERY_POINTS, input, sizeof(*input), output, output->Size );
     ok(!status, "got %#lx\n", status);
     ok(!io.Status, "got status %#lx\n", io.Status);
-    ok(io.Information == output->Size, "got size %lu, information %#Ix\n", output->Size, io.Information);
+    ok(io.Information == output->Size, "got size %lu, information %#Ix\n", output->Size, (size_t)io.Information);
     ok(output->Size > offsetof(MOUNTMGR_MOUNT_POINTS, MountPoints[0]), "got size %lu\n", output->Size);
     ok(output->NumberOfMountPoints && output->NumberOfMountPoints != 0xcccccccc,
             "got count %lu\n", output->NumberOfMountPoints);

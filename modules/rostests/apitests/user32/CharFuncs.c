@@ -374,7 +374,7 @@ static LPSTR AllocStringA(LPWSTR lpszStr, SIZE_T len)
     {
         HeapFree(GetProcessHeap(), 0, str);
         str = NULL;
-        trace("WideCharToMultiByte returned %Iu (error %ld)\n", mbs, GetLastError());
+        trace("WideCharToMultiByte returned %Iu (error %ld)\n", (size_t)mbs, GetLastError());
         goto Skip;
     }
 

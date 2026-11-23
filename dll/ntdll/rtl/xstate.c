@@ -23,12 +23,19 @@ typedef struct _RTL_CONTEXT_EX
     RTL_CONTEXT_CHUNK XState;
 } RTL_CONTEXT_EX, *PRTL_CONTEXT_EX;
 
+/* On ARM64, XState describes the x86-compatible state and XStateArm64 the native state. */
+#if defined(_ARM64_) && !defined(_M_ARM64EC)
+#define NATIVE_XSTATE_CONFIGURATION (&SharedUserData->XStateArm64)
+#else
+#define NATIVE_XSTATE_CONFIGURATION (&SharedUserData->XState)
+#endif
+
 #ifdef __REACTOS__
 ULONG64
 NTAPI
 RtlGetEnabledExtendedFeatures(ULONG64 FeatureMask)
 {
-    return SharedUserData->XState.EnabledFeatures & FeatureMask;
+    return NATIVE_XSTATE_CONFIGURATION->EnabledFeatures & FeatureMask;
 }
 #endif
 
@@ -36,14 +43,15 @@ static
 ULONG
 RtlpNextCompactedXStateOffset(ULONG Offset,
                               ULONG64 CompactionMask,
-                              ULONG FeatureId)
+                              ULONG FeatureId,
+                              const XSTATE_CONFIGURATION *Configuration)
 {
     ULONG64 FeatureMask = (ULONG64)1 << FeatureId;
 
     if (CompactionMask & FeatureMask)
-        Offset += SharedUserData->XState.Features[FeatureId].Size;
+        Offset += Configuration->Features[FeatureId].Size;
 
-    if (SharedUserData->XState.AlignedFeatures & (FeatureMask << 1))
+    if (Configuration->AlignedFeatures & (FeatureMask << 1))
         Offset = ALIGN_UP_BY(Offset, 64);
 
     return Offset;
@@ -61,10 +69,8 @@ RtlLocateExtendedFeature2(PVOID ContextExPointer,
     ULONG64 FeatureMask;
     ULONG Offset, Index;
 
-    if (!XStateConfiguration)
-        return NULL;
-
-    if (XStateConfiguration != &SharedUserData->XState)
+    if (XStateConfiguration != &SharedUserData->XState &&
+        XStateConfiguration != NATIVE_XSTATE_CONFIGURATION)
         return NULL;
 
     if (FeatureId < 2 || FeatureId >= 64)
@@ -89,7 +95,8 @@ RtlLocateExtendedFeature2(PVOID ContextExPointer,
         {
             Offset = RtlpNextCompactedXStateOffset(Offset,
                                                    XSaveHeader->CompactionMask,
-                                                   Index);
+                                                   Index,
+                                                   XStateConfiguration);
         }
     }
     else
@@ -97,7 +104,8 @@ RtlLocateExtendedFeature2(PVOID ContextExPointer,
         Offset = XStateConfiguration->Features[FeatureId].Offset - sizeof(XSAVE_FORMAT);
     }
 
-    if (ContextEx->XState.Length < Offset + XStateConfiguration->Features[FeatureId].Size)
+    if (Offset > ContextEx->XState.Length ||
+        XStateConfiguration->Features[FeatureId].Size > ContextEx->XState.Length - Offset)
         return NULL;
 
     return (PUCHAR)XSaveHeader + Offset;
@@ -111,6 +119,6 @@ RtlLocateExtendedFeature(PVOID ContextEx,
 {
     return RtlLocateExtendedFeature2(ContextEx,
                                      FeatureId,
-                                     &SharedUserData->XState,
+                                     NATIVE_XSTATE_CONFIGURATION,
                                      Length);
 }

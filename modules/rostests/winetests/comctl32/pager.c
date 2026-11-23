@@ -561,26 +561,26 @@ static void test_wm_notifyformat(void)
         /* Test parent */
         notify_query_received = FALSE;
         ret = SendMessageW(pager, WM_NOTIFYFORMAT, (WPARAM)parent, NF_REQUERY);
-        ok(ret == notify_format, "Expect %d, got %Id\n", notify_format, ret);
+        ok(ret == notify_format, "Expect %d, got %Id\n", notify_format, (ptrdiff_t)ret);
         ok(notify_query_received, "Didn't receive notify\n");
 
         /* Send NF_QUERY directly to parent */
         notify_query_received = FALSE;
         ret = SendMessageW(parent, WM_NOTIFYFORMAT, (WPARAM)pager, NF_QUERY);
-        ok(ret == notify_format, "Expect %d, got %Id\n", notify_format, ret);
+        ok(ret == notify_format, "Expect %d, got %Id\n", notify_format, (ptrdiff_t)ret);
         ok(notify_query_received, "Didn't receive notify\n");
 
         /* Pager send notifications to its parent regardless of wParam */
         notify_query_received = FALSE;
         ret = SendMessageW(pager, WM_NOTIFYFORMAT, (WPARAM)parent_wnd, NF_REQUERY);
-        ok(ret == notify_format, "Expect %d, got %Id\n", notify_format, ret);
+        ok(ret == notify_format, "Expect %d, got %Id\n", notify_format, (ptrdiff_t)ret);
         ok(notify_query_received, "Didn't receive notify\n");
 
         /* Pager always wants Unicode notifications from children */
         ret = SendMessageW(child, WM_NOTIFYFORMAT, (WPARAM)pager, NF_REQUERY);
-        ok(ret == NFR_UNICODE, "Expect %d, got %Id\n", NFR_UNICODE, ret);
+        ok(ret == NFR_UNICODE, "Expect %d, got %Id\n", NFR_UNICODE, (ptrdiff_t)ret);
         ret = SendMessageW(pager, WM_NOTIFYFORMAT, (WPARAM)child, NF_QUERY);
-        ok(ret == NFR_UNICODE, "Expect %d, got %Id\n", NFR_UNICODE, ret);
+        ok(ret == NFR_UNICODE, "Expect %d, got %Id\n", NFR_UNICODE, (ptrdiff_t)ret);
 
         DestroyWindow(parent);
     }

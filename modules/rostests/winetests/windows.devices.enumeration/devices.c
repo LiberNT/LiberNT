@@ -715,7 +715,7 @@ static void test_DeviceInformation_properties( IDeviceInformation *info, const s
         PropertyType type = 0xdeadbeef;
         HSTRING_HEADER hdr;
 
-        winetest_push_context( "exp_props[%Iu]", i );
+        winetest_push_context( "exp_props[%Iu]", (size_t)i );
         hr = WindowsCreateStringReference( exp_props[i].name, wcslen( exp_props[i].name ), &hdr, &str );
         ok( hr == S_OK, "got hr %#lx\n", hr );
         hr = IMapView_HSTRING_IInspectable_Lookup( properties, str, &inspectable );
@@ -746,7 +746,7 @@ static void test_DeviceInformation_properties( IDeviceInformation *info, const s
         IKeyValuePair_HSTRING_IInspectable *pair;
         const WCHAR *prop_buf;
 
-        winetest_push_context( "i=%Iu", i++ );
+        winetest_push_context( "i=%Iu", (size_t)(i++) );
 
         hr = IIterator_IKeyValuePair_HSTRING_IInspectable_get_Current( iterator, &pair );
         ok( hr == S_OK, "got hr %#lx\n", hr );
@@ -1084,7 +1084,7 @@ static void test_FindAllAsyncAqsFilter_( IDeviceInformationStatics *statics, con
         HSTRING str;
         HRESULT hr;
 
-        winetest_push_context("%s[%Iu]", name, i );
+        winetest_push_context("%s[%Iu]", name, (size_t)i );
 
         hr = WindowsCreateString( test_case->filter, wcslen( test_case->filter ), &str );
         ok( hr == S_OK, "got hr %#lx\n", hr );
@@ -1139,7 +1139,7 @@ static void test_CreateWatcherAqsFilter_( IDeviceInformationStatics *statics, co
         HRESULT hr;
         DWORD ret;
 
-        winetest_push_context("%s[%Iu]", name, i );
+        winetest_push_context("%s[%Iu]", name, (size_t)i );
 
         hr = WindowsCreateString( test_case->filter, wcslen( test_case->filter ), &str );
         ok( hr == S_OK, "got hr %#lx\n", hr );

@@ -1,6 +1,8 @@
 #ifndef _WINSVC_
 #define _WINSVC_
 
+#include <apisetcconv.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif

@@ -1683,7 +1683,7 @@ static void test_common_stub_data( const char *prefix, const MIDL_STUB_MESSAGE *
 #define TEST_ZERO(field, fmt) ok(stubMsg->field == 0, "%s: " #field " should have been set to zero instead of " fmt "\n", prefix, stubMsg->field)
 #define TEST_POINTER_UNSET(field) ok(stubMsg->field == unset_ptr, "%s: " #field " should have been unset instead of %p\n", prefix, stubMsg->field)
 #define TEST_ULONG_UNSET(field) ok(stubMsg->field == 0xcccccccc, "%s: " #field " should have been unset instead of 0x%lx\n", prefix, stubMsg->field)
-#define TEST_ULONG_PTR_UNSET(field) ok(stubMsg->field == (ULONG_PTR)unset_ptr, "%s: " #field " should have been unset instead of 0x%Ix\n", prefix, stubMsg->field)
+#define TEST_ULONG_PTR_UNSET(field) ok(stubMsg->field == (ULONG_PTR)unset_ptr, "%s: " #field " should have been unset instead of 0x%Ix\n", prefix, (size_t)stubMsg->field)
 
     TEST_POINTER_UNSET(BufferMark);
     TEST_ULONG_UNSET(MemorySize);

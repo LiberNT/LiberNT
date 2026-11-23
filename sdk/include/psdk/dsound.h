@@ -2005,17 +2005,46 @@ typedef struct IDirectSoundCaptureFXNoiseSuppress *LPDIRECTSOUNDCAPTUREFXNOISESU
 #define IDirectSoundCaptureFXNoiseSuppress_QueryInterface(p, a, b) IUnknown_QueryInterface(p, a, b)
 #define IDirectSoundCaptureFXNoiseSuppress_Release(p) IUnknown_Release(p)
 #define IDirectSoundCaptureFXNoiseSuppress_SetAllParameters(p, a) (p) -> lpVtbl -> SetAllParameters(p, a)
-/* widl's C inline wrappers in strmif.h declare these names as functions */
-#if (!defined(__cplusplus) || defined(CINTERFACE)) && !defined(WIDL_C_INLINE_WRAPPERS)
-#ifndef IReferenceClock_QueryInterface
-#define IReferenceClock_AddRef(p) IUnknown_AddRef(p)
-#define IReferenceClock_AdvisePeriodic(p, a, b, c, d) (p) -> lpVtbl -> AdvisePeriodic(p, a, b, c, d)
-#define IReferenceClock_AdviseTime(p, a, b, c, d) (p) -> lpVtbl -> AdviseTime(p, a, b, c, d)
-#define IReferenceClock_GetTime(p, a) (p) -> lpVtbl -> GetTime(p, a)
-#define IReferenceClock_QueryInterface(p, a, b) IUnknown_QueryInterface(p, a, b)
-#define IReferenceClock_Release(p) IUnknown_Release(p)
-#define IReferenceClock_Unadvise(p, a) (p) -> lpVtbl -> Unadvise(p, a)
+#if !defined(IReferenceClock_QueryInterface) && \
+    (!defined(WIDL_C_INLINE_WRAPPERS) || !defined(__IReferenceClock_INTERFACE_DEFINED__))
+#if !defined(__cplusplus) || defined(CINTERFACE)
+#define IReferenceClock_QueryInterface(p, riid, out) (p)->lpVtbl->QueryInterface(p, riid, out)
+#define IReferenceClock_AddRef(p) (p)->lpVtbl->AddRef(p)
+#define IReferenceClock_Release(p) (p)->lpVtbl->Release(p)
+#define IReferenceClock_GetTime(p, time) (p)->lpVtbl->GetTime(p, time)
+#define IReferenceClock_AdviseTime(p, base, stream, event, cookie) (p)->lpVtbl->AdviseTime(p, base, stream, event, cookie)
+#define IReferenceClock_AdvisePeriodic(p, start, period, semaphore, cookie) (p)->lpVtbl->AdvisePeriodic(p, start, period, semaphore, cookie)
+#define IReferenceClock_Unadvise(p, cookie) (p)->lpVtbl->Unadvise(p, cookie)
+#else
+#define IReferenceClock_QueryInterface(p, riid, out) (p)->QueryInterface(riid, out)
+#define IReferenceClock_AddRef(p) (p)->AddRef()
+#define IReferenceClock_Release(p) (p)->Release()
+#define IReferenceClock_GetTime(p, time) (p)->GetTime(time)
+#define IReferenceClock_AdviseTime(p, base, stream, event, cookie) (p)->AdviseTime(base, stream, event, cookie)
+#define IReferenceClock_AdvisePeriodic(p, start, period, semaphore, cookie) (p)->AdvisePeriodic(start, period, semaphore, cookie)
+#define IReferenceClock_Unadvise(p, cookie) (p)->Unadvise(cookie)
 #endif
+#endif
+
+#ifndef __IReferenceClock_INTERFACE_DEFINED__
+#define __IReferenceClock_INTERFACE_DEFINED__
+
+typedef LONGLONG REFERENCE_TIME, *LPREFERENCE_TIME;
+DEFINE_GUID(IID_IReferenceClock, 0x56a86897, 0x0ad4, 0x11ce, 0xb0, 0x3a, 0x00, 0x20, 0xaf, 0x0b, 0xa7, 0x70);
+
+#undef INTERFACE
+#define INTERFACE IReferenceClock
+DECLARE_INTERFACE_(IReferenceClock, IUnknown)
+{
+    STDMETHOD(QueryInterface)(THIS_ REFIID riid, void **out) PURE;
+    STDMETHOD_(ULONG, AddRef)(THIS) PURE;
+    STDMETHOD_(ULONG, Release)(THIS) PURE;
+    STDMETHOD(GetTime)(THIS_ REFERENCE_TIME *time) PURE;
+    STDMETHOD(AdviseTime)(THIS_ REFERENCE_TIME base, REFERENCE_TIME stream, HANDLE event, DWORD *cookie) PURE;
+    STDMETHOD(AdvisePeriodic)(THIS_ REFERENCE_TIME start, REFERENCE_TIME period, HANDLE semaphore, DWORD *cookie) PURE;
+    STDMETHOD(Unadvise)(THIS_ DWORD cookie) PURE;
+};
+#undef INTERFACE
 #endif
 
 #endif /* __DSOUND_INCLUDED__ */

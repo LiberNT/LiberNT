@@ -36,11 +36,11 @@ TestFileCacheInformation(VOID)
 
     /* CurrentSize and PeakSize are byte counts, so both are whole pages. */
     ok((Info.CurrentSize & (PAGE_SIZE - 1)) == 0,
-       "CurrentSize %Iu is not a multiple of the page size\n", Info.CurrentSize);
+       "CurrentSize %Iu is not a multiple of the page size\n", (size_t)Info.CurrentSize);
     ok((Info.PeakSize & (PAGE_SIZE - 1)) == 0,
-       "PeakSize %Iu is not a multiple of the page size\n", Info.PeakSize);
+       "PeakSize %Iu is not a multiple of the page size\n", (size_t)Info.PeakSize);
     ok(Info.PeakSize >= Info.CurrentSize,
-       "PeakSize %Iu is below CurrentSize %Iu\n", Info.PeakSize, Info.CurrentSize);
+       "PeakSize %Iu is below CurrentSize %Iu\n", (size_t)Info.PeakSize, (size_t)Info.CurrentSize);
 
     /*
      * The two transition members count pages, not bytes, so a size reported in
@@ -48,20 +48,20 @@ TestFileCacheInformation(VOID)
      */
     ok(Info.CurrentSizeIncludingTransitionInPages >= (Info.CurrentSize >> PAGE_SHIFT),
        "CurrentSizeIncludingTransitionInPages %Iu is below the %Iu resident pages\n",
-       Info.CurrentSizeIncludingTransitionInPages, Info.CurrentSize >> PAGE_SHIFT);
+       (size_t)Info.CurrentSizeIncludingTransitionInPages, (size_t)Info.CurrentSize >> PAGE_SHIFT);
     ok(Info.CurrentSizeIncludingTransitionInPages < (Info.CurrentSize >> PAGE_SHIFT) + 0x100000,
        "CurrentSizeIncludingTransitionInPages %Iu is implausible for a %Iu-byte cache\n",
-       Info.CurrentSizeIncludingTransitionInPages, Info.CurrentSize);
+       (size_t)Info.CurrentSizeIncludingTransitionInPages, (size_t)Info.CurrentSize);
     ok(Info.PeakSizeIncludingTransitionInPages >= Info.CurrentSizeIncludingTransitionInPages,
        "PeakSizeIncludingTransitionInPages %Iu is below CurrentSizeIncludingTransitionInPages %Iu\n",
-       Info.PeakSizeIncludingTransitionInPages, Info.CurrentSizeIncludingTransitionInPages);
+       (size_t)Info.PeakSizeIncludingTransitionInPages, (size_t)Info.CurrentSizeIncludingTransitionInPages);
 
     ok(Info.MaximumWorkingSet >= Info.CurrentSize,
        "MaximumWorkingSet %Iu is below CurrentSize %Iu\n",
-       Info.MaximumWorkingSet, Info.CurrentSize);
+       (size_t)Info.MaximumWorkingSet, (size_t)Info.CurrentSize);
     ok(Info.MinimumWorkingSet <= Info.MaximumWorkingSet,
        "MinimumWorkingSet %Iu is above MaximumWorkingSet %Iu\n",
-       Info.MinimumWorkingSet, Info.MaximumWorkingSet);
+       (size_t)Info.MinimumWorkingSet, (size_t)Info.MaximumWorkingSet);
 }
 
 static

@@ -424,17 +424,17 @@ static void test_GetWindowSubclass(void)
     data = 0xdeadbeef;
     ret = pGetWindowSubclass(NULL, wnd_proc_sub, 2, &data);
     ok(!ret, "GetWindowSubclass succeeded.\n");
-    ok(data == 0, "Got unexpected data %#Ix.\n", data);
+    ok(data == 0, "Got unexpected data %#Ix.\n", (size_t)data);
 
     data = 0xdeadbeef;
     ret = pGetWindowSubclass(hwnd, NULL, 2, &data);
     ok(!ret, "GetWindowSubclass succeeded.\n");
-    ok(data == 0, "Got unexpected data %#Ix.\n", data);
+    ok(data == 0, "Got unexpected data %#Ix.\n", (size_t)data);
 
     data = 0xdeadbeef;
     ret = pGetWindowSubclass(hwnd, wnd_proc_sub, 0, &data);
     ok(!ret, "GetWindowSubclass succeeded.\n");
-    ok(data == 0, "Got unexpected data %#Ix.\n", data);
+    ok(data == 0, "Got unexpected data %#Ix.\n", (size_t)data);
 
     ret = pGetWindowSubclass(hwnd, wnd_proc_sub, 2, NULL);
     ok(ret, "GetWindowSubclass failed.\n");
@@ -442,7 +442,7 @@ static void test_GetWindowSubclass(void)
     data = 0xdeadbeef;
     ret = pGetWindowSubclass(hwnd, wnd_proc_sub, 2, &data);
     ok(ret, "GetWindowSubclass failed.\n");
-    ok(data == 7, "Got unexpected data %#Ix.\n", data);
+    ok(data == 7, "Got unexpected data %#Ix.\n", (size_t)data);
 
     pRemoveWindowSubclass(hwnd, wnd_proc_sub, 2);
     DestroyWindow(hwnd);

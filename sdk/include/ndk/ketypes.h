@@ -182,11 +182,12 @@ typedef struct _FIBER                                    /* Field offsets:    */
 // Extended processor affinity. The fixed backing array matches the native
 // kernel ABI while Bitmap preserves the variable-length view used by helpers.
 //
-#define KAFFINITY_EX_INITIALIZED_GROUPS 20
 #ifdef _WIN64
+#define KAFFINITY_EX_INITIALIZED_GROUPS 20
 #define KAFFINITY_EX_STATIC_GROUPS 32
 #else
 #define KAFFINITY_EX_STATIC_GROUPS 1
+#define KAFFINITY_EX_INITIALIZED_GROUPS KAFFINITY_EX_STATIC_GROUPS
 #endif
 
 typedef struct _KAFFINITY_EX
@@ -200,6 +201,8 @@ typedef struct _KAFFINITY_EX
         KAFFINITY StaticBitmap[KAFFINITY_EX_STATIC_GROUPS];
     };
 } KAFFINITY_EX;
+
+C_ASSERT(KAFFINITY_EX_INITIALIZED_GROUPS <= KAFFINITY_EX_STATIC_GROUPS);
 
 // Only a 64-bit KAFFINITY has more than one group, as on Windows
 #define KE_MAXIMUM_GROUPS ((sizeof(KAFFINITY) == 8) ? KAFFINITY_EX_STATIC_GROUPS : 1)

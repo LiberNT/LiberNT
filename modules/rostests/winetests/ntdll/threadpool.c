@@ -725,8 +725,8 @@ static void test_tp_simple(void)
     /* test querying and setting the stack size */
     status = pTpQueryPoolStackInformation(pool, &stack_info);
     ok(!status, "TpQueryPoolStackInformation failed: %lx\n", status);
-    ok(stack_info.StackReserve == nt->OptionalHeader.SizeOfStackReserve, "expected default StackReserve, got %Ix\n", stack_info.StackReserve);
-    ok(stack_info.StackCommit == nt->OptionalHeader.SizeOfStackCommit, "expected default StackCommit, got %Ix\n", stack_info.StackCommit);
+    ok(stack_info.StackReserve == nt->OptionalHeader.SizeOfStackReserve, "expected default StackReserve, got %Ix\n", (size_t)stack_info.StackReserve);
+    ok(stack_info.StackCommit == nt->OptionalHeader.SizeOfStackCommit, "expected default StackCommit, got %Ix\n", (size_t)stack_info.StackCommit);
 
     /* threadpool does not validate the stack size values */
     stack_info.StackReserve = stack_info.StackCommit = 1;
@@ -2119,7 +2119,7 @@ static void test_tp_io(void)
     ok(userdata.count == 1, "callback ran %u times\n", userdata.count);
     ok(userdata.ovl == &ovl, "expected %p, got %p\n", &ovl, userdata.ovl);
     ok(userdata.ret == STATUS_SUCCESS, "got status %#lx\n", userdata.ret);
-    ok(userdata.length == 1, "got length %Iu\n", userdata.length);
+    ok(userdata.length == 1, "got length %Iu\n", (size_t)userdata.length);
     ok(userdata.io == io, "expected %p, got %p\n", io, userdata.io);
 
     ok(!WaitForSingleObject(thread, 1000), "wait timed out\n");
@@ -2144,7 +2144,7 @@ static void test_tp_io(void)
     pTpWaitForIoCompletion(io, FALSE);
     ok(userdata.count == 2, "callback ran %u times\n", userdata.count);
     ok(userdata.ret == STATUS_SUCCESS, "got status %#lx\n", userdata.ret);
-    ok(userdata.length == 1, "got length %Iu\n", userdata.length);
+    ok(userdata.length == 1, "got length %Iu\n", (size_t)userdata.length);
     ok(userdata.io == io, "expected %p, got %p\n", io, userdata.io);
 
     /* The documentation is a bit unclear about passing TRUE to
@@ -2170,7 +2170,7 @@ static void test_tp_io(void)
     ok(userdata.count == 1, "callback ran %u times\n", userdata.count);
     ok(userdata.ovl == &ovl, "expected %p, got %p\n", &ovl, userdata.ovl);
     ok(userdata.ret == STATUS_SUCCESS, "got status %#lx\n", userdata.ret);
-    ok(userdata.length == 1, "got length %Iu\n", userdata.length);
+    ok(userdata.length == 1, "got length %Iu\n", (size_t)userdata.length);
     ok(userdata.io == io, "expected %p, got %p\n", io, userdata.io);
 
     userdata.count = 0;
@@ -2197,7 +2197,7 @@ static void test_tp_io(void)
     ok(userdata.count == 1, "callback ran %u times\n", userdata.count);
     ok(userdata.ovl == &ovl, "expected %p, got %p\n", &ovl, userdata.ovl);
     ok(userdata.ret == STATUS_CANCELLED, "got status %#lx\n", userdata.ret);
-    ok(!userdata.length, "got length %Iu\n", userdata.length);
+    ok(!userdata.length, "got length %Iu\n", (size_t)userdata.length);
     ok(userdata.io == io, "expected %p, got %p\n", io, userdata.io);
 
     userdata.count = 0;
@@ -2338,7 +2338,7 @@ static void test_kernel32_tp_io(void)
     ok(userdata.count == 1, "callback ran %u times\n", userdata.count);
     ok(userdata.ovl == &ovl, "expected %p, got %p\n", &ovl, userdata.ovl);
     ok(userdata.ret == ERROR_SUCCESS, "got status %#lx\n", userdata.ret);
-    ok(userdata.length == 1, "got length %Iu\n", userdata.length);
+    ok(userdata.length == 1, "got length %Iu\n", (size_t)userdata.length);
     ok(userdata.io == io, "expected %p, got %p\n", io, userdata.io);
 
     ok(!WaitForSingleObject(thread, 1000), "wait timed out\n");
@@ -2363,7 +2363,7 @@ static void test_kernel32_tp_io(void)
     pWaitForThreadpoolIoCallbacks(io, FALSE);
     ok(userdata.count == 2, "callback ran %u times\n", userdata.count);
     ok(userdata.ret == STATUS_SUCCESS, "got status %#lx\n", userdata.ret);
-    ok(userdata.length == 1, "got length %Iu\n", userdata.length);
+    ok(userdata.length == 1, "got length %Iu\n", (size_t)userdata.length);
     ok(userdata.io == io, "expected %p, got %p\n", io, userdata.io);
 
     userdata.count = 0;
@@ -2383,7 +2383,7 @@ static void test_kernel32_tp_io(void)
     ok(userdata.count == 1, "callback ran %u times\n", userdata.count);
     ok(userdata.ovl == &ovl, "expected %p, got %p\n", &ovl, userdata.ovl);
     ok(userdata.ret == ERROR_SUCCESS, "got status %#lx\n", userdata.ret);
-    ok(userdata.length == 1, "got length %Iu\n", userdata.length);
+    ok(userdata.length == 1, "got length %Iu\n", (size_t)userdata.length);
     ok(userdata.io == io, "expected %p, got %p\n", io, userdata.io);
 
     userdata.count = 0;
@@ -2410,7 +2410,7 @@ static void test_kernel32_tp_io(void)
     ok(userdata.count == 1, "callback ran %u times\n", userdata.count);
     ok(userdata.ovl == &ovl, "expected %p, got %p\n", &ovl, userdata.ovl);
     ok(userdata.ret == ERROR_OPERATION_ABORTED, "got status %#lx\n", userdata.ret);
-    ok(!userdata.length, "got length %Iu\n", userdata.length);
+    ok(!userdata.length, "got length %Iu\n", (size_t)userdata.length);
     ok(userdata.io == io, "expected %p, got %p\n", io, userdata.io);
 
     CloseHandle(ovl.hEvent);

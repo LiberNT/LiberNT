@@ -222,7 +222,7 @@ static BOOL readproc(HANDLE proc, LPVOID address, PVOID target, DWORD size)
     SIZE_T dwRead;
     if (ReadProcessMemory(proc, address, target, size, &dwRead))
     {
-        ok(dwRead == size, "Expected to read %lu bytes, got %Iu\n", size, dwRead);
+        ok(dwRead == size, "Expected to read %lu bytes, got %Iu\n", size, (size_t)dwRead);
         return dwRead == size;
     }
     ok(0, "RPM failed with %lu\n", GetLastError());
@@ -251,7 +251,7 @@ static BOOL get_shiminfo(HANDLE proc, test_RemoteShimInfo* info)
                 return TRUE;
 
             dwRead = VirtualQueryEx(proc, (LPCVOID)peb.pShimData, &mbi, sizeof(mbi));
-            ok(dwRead == sizeof(mbi), "Expected VQE to return %u, got %Iu\n", sizeof(mbi), dwRead);
+            ok(dwRead == sizeof(mbi), "Expected VQE to return %u, got %Iu\n", sizeof(mbi), (size_t)dwRead);
             if (dwRead == sizeof(mbi) || peb.pShimData == NULL)
             {
                 info->ShimDataSize = mbi.RegionSize;
@@ -445,7 +445,7 @@ static void Validate_ShimData_Win10_v2(PVOID data, WCHAR szApphelp[256], size_t 
     }
 
     ok(pShimData->dwSize == sizeof(ShimData_Win10_v2), "Expected pShimData->dwSize to be %u, was %Iu\n",
-       sizeof(ShimData_Win10_v2), pShimData->dwSize);
+       sizeof(ShimData_Win10_v2), (size_t)pShimData->dwSize);
     if (pShimData->Query.dwLayerCount != min(count, SDB_MAX_LAYERS))
     {
         char buf[250] = {0};
@@ -453,7 +453,7 @@ static void Validate_ShimData_Win10_v2(PVOID data, WCHAR szApphelp[256], size_t 
         trace("At test: %s\n", buf);
     }
     ok(pShimData->Query.dwLayerCount == min(count, SDB_MAX_LAYERS),
-       "Expected LayerCount to be %u, was %Iu\n", min(count, SDB_MAX_LAYERS), pShimData->Query.dwLayerCount);
+       "Expected LayerCount to be %u, was %Iu\n", min(count, SDB_MAX_LAYERS), (size_t)pShimData->Query.dwLayerCount);
     for (n = 0; n < SDB_MAX_LAYERS; ++n)
     {
         if (n < count)

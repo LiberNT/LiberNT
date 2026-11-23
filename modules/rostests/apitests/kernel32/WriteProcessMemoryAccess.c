@@ -26,7 +26,7 @@ static void TestProtection(HANDLE Process, DWORD Protect, BOOL ExpectWritten, PC
     ok(Result == ExpectWritten, "%s: WriteProcessMemory(0x%lx) returned %d error %lu\n", What, Protect, Result, GetLastError());
     if (ExpectWritten)
     {
-        ok(Written == sizeof(Data), "%s: wrote %Iu bytes\n", What, Written);
+        ok(Written == sizeof(Data), "%s: wrote %Iu bytes\n", What, (size_t)Written);
         ok(ReadProcessMemory(Process, Remote, Buffer, sizeof(Buffer), &Read) && !memcmp(Buffer, Data, sizeof(Data)),
            "%s: the written bytes did not arrive\n", What);
     }
@@ -50,12 +50,12 @@ static void TestQueryAccess(DWORD ProcessId, PVOID Remote, DWORD Access, BOOL Gr
     Size = VirtualQueryEx(Process, Remote, &Info, sizeof(Info));
     if (Granted)
     {
-        ok(Size == sizeof(Info), "%s: VirtualQueryEx returned %Iu error %lu\n", What, Size, GetLastError());
+        ok(Size == sizeof(Info), "%s: VirtualQueryEx returned %Iu error %lu\n", What, (size_t)Size, GetLastError());
         ok(Size != sizeof(Info) || Info.Protect == PAGE_READWRITE, "%s: protection 0x%lx\n", What, Info.Protect);
     }
     else
     {
-        ok(Size == 0 && GetLastError() == ERROR_ACCESS_DENIED, "%s: VirtualQueryEx returned %Iu error %lu\n", What, Size, GetLastError());
+        ok(Size == 0 && GetLastError() == ERROR_ACCESS_DENIED, "%s: VirtualQueryEx returned %Iu error %lu\n", What, (size_t)Size, GetLastError());
     }
     SetLastError(0xdeadbeef);
     ok(K32GetMappedFileNameW(Process, Remote, Name, MAX_PATH) == 0, "%s: private memory has a mapped file name\n", What);

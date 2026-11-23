@@ -145,7 +145,7 @@ ExFreePoolWithTag(PVOID MemPtr, ULONG Tag)
     PULONG_PTR Mem = MemPtr;
 
     Mem -= 2;
-    ok(Mem[1] == Tag, "Tag is %Ix, expected %lx\n", Mem[1], Tag);
+    ok(Mem[1] == Tag, "Tag is %Ix, expected %lx\n", (size_t)Mem[1], Tag);
     HeapFree(GetProcessHeap(), 0, Mem);
 
     --DrvpBlocksAllocated;

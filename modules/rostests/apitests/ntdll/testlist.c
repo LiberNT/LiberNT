@@ -43,6 +43,7 @@ extern void func_LdrFindResource_U(void);
 extern void func_LdrForwarderPath(void);
 extern void func_LdrGetDllHandleByName(void);
 extern void func_LdrLoadDll(void);
+extern void func_LdrModuleEntry(void);
 extern void func_LdrQueryProcessModuleInformation(void);
 extern void func_load_notifications(void);
 extern void func_memmove(void);
@@ -301,6 +302,7 @@ const struct test winetest_testlist[] =
     { "LdrForwarderPath",               func_LdrForwarderPath },
     { "LdrGetDllHandleByName",          func_LdrGetDllHandleByName },
     { "LdrLoadDll",                     func_LdrLoadDll },
+    { "LdrModuleEntry",                 func_LdrModuleEntry },
     { "LdrQueryProcessModuleInformation", func_LdrQueryProcessModuleInformation },
     { "load_notifications",             func_load_notifications },
     { "memmove",                        func_memmove },

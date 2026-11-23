@@ -810,8 +810,8 @@ static void test_ReadFile(void)
     res = ReadFile(server, buf, 1, &size, &overlapped);
     ok(!res && GetLastError() == ERROR_MORE_DATA, "ReadFile returned %x(%lu)\n", res, GetLastError());
     ok(size == 0, "size = %lu\n", size);
-    ok((NTSTATUS)overlapped.Internal == STATUS_BUFFER_OVERFLOW, "Internal = %Ix\n", overlapped.Internal);
-    ok(overlapped.InternalHigh == 1, "InternalHigh = %Ix\n", overlapped.InternalHigh);
+    ok((NTSTATUS)overlapped.Internal == STATUS_BUFFER_OVERFLOW, "Internal = %Ix\n", (size_t)overlapped.Internal);
+    ok(overlapped.InternalHigh == 1, "InternalHigh = %Ix\n", (size_t)overlapped.InternalHigh);
 
     DisconnectNamedPipe(server);
 
@@ -820,16 +820,16 @@ static void test_ReadFile(void)
     res = ReadFile(server, buf, 1, &size, &overlapped);
     ok(!res && GetLastError() == ERROR_PIPE_NOT_CONNECTED, "ReadFile returned %x(%lu)\n", res, GetLastError());
     ok(size == 0, "size = %lu\n", size);
-    ok(overlapped.Internal == STATUS_PENDING, "Internal = %Ix\n", overlapped.Internal);
-    ok(overlapped.InternalHigh == 0xdeadbeef, "InternalHigh = %Ix\n", overlapped.InternalHigh);
+    ok(overlapped.Internal == STATUS_PENDING, "Internal = %Ix\n", (size_t)overlapped.Internal);
+    ok(overlapped.InternalHigh == 0xdeadbeef, "InternalHigh = %Ix\n", (size_t)overlapped.InternalHigh);
 
     memset(&overlapped, 0, sizeof(overlapped));
     overlapped.InternalHigh = 0xdeadbeef;
     res = WriteFile(server, buf, 1, &size, &overlapped);
     ok(!res && GetLastError() == ERROR_PIPE_NOT_CONNECTED, "ReadFile returned %x(%lu)\n", res, GetLastError());
     ok(size == 0, "size = %lu\n", size);
-    ok(overlapped.Internal == STATUS_PENDING, "Internal = %Ix\n", overlapped.Internal);
-    ok(overlapped.InternalHigh == 0xdeadbeef, "InternalHigh = %Ix\n", overlapped.InternalHigh);
+    ok(overlapped.Internal == STATUS_PENDING, "Internal = %Ix\n", (size_t)overlapped.Internal);
+    ok(overlapped.InternalHigh == 0xdeadbeef, "InternalHigh = %Ix\n", (size_t)overlapped.InternalHigh);
 
     CloseHandle(server);
     CloseHandle(client);
@@ -2403,7 +2403,7 @@ static void test_overlapped_error(void)
     ret = GetOverlappedResult(pipe, &overlapped, &numbytes, TRUE);
     ok(ret == TRUE, "GetOverlappedResult failed\n");
     ok(numbytes == 0, "expected 0, got %lu\n", numbytes);
-    ok(overlapped.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %08Ix\n", overlapped.Internal);
+    ok(overlapped.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %08Ix\n", (size_t)overlapped.Internal);
 
     CloseHandle(file);
     CloseHandle(pipe);
@@ -2423,7 +2423,7 @@ static void test_overlapped_error(void)
     err = GetLastError();
     ok(ret == FALSE, "ConnectNamedPipe succeeded\n");
     ok(err == ERROR_PIPE_CONNECTED, "expected ERROR_PIPE_CONNECTED, got %lu\n", err);
-    ok(overlapped.Internal == STATUS_PENDING, "expected STATUS_PENDING, got %08Ix\n", overlapped.Internal);
+    ok(overlapped.Internal == STATUS_PENDING, "expected STATUS_PENDING, got %08Ix\n", (size_t)overlapped.Internal);
 
     CloseHandle(file);
     CloseHandle(pipe);
@@ -2716,8 +2716,8 @@ static void test_readfileex_pending(void)
     ok(!ret, "ReadFile should fail\n");
     ok(GetLastError() == ERROR_IO_PENDING, "expected ERROR_IO_PENDING, got %ld\n", GetLastError());
     ok(num_bytes == 0, "bytes %lu\n", num_bytes);
-    ok((NTSTATUS)overlapped.Internal == STATUS_PENDING, "expected STATUS_PENDING, got %#Ix\n", overlapped.Internal);
-    ok(overlapped.InternalHigh == -1, "expected -1, got %Iu\n", overlapped.InternalHigh);
+    ok((NTSTATUS)overlapped.Internal == STATUS_PENDING, "expected STATUS_PENDING, got %#Ix\n", (size_t)overlapped.Internal);
+    ok(overlapped.InternalHigh == -1, "expected -1, got %Iu\n", (size_t)overlapped.InternalHigh);
 
     wait = WaitForSingleObject(event, 0);
     ok(wait == WAIT_TIMEOUT, "WaitForSingleObject returned %lx\n", wait);
@@ -2731,8 +2731,8 @@ static void test_readfileex_pending(void)
     ok(wait == WAIT_OBJECT_0, "WaitForSingleObject returned %lx\n", wait);
 
     ok(num_bytes == 1, "bytes %lu\n", num_bytes);
-    ok((NTSTATUS)overlapped.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", overlapped.Internal);
-    ok(overlapped.InternalHigh == 0, "expected 0, got %Iu\n", overlapped.InternalHigh);
+    ok((NTSTATUS)overlapped.Internal == STATUS_SUCCESS, "expected STATUS_SUCCESS, got %#Ix\n", (size_t)overlapped.Internal);
+    ok(overlapped.InternalHigh == 0, "expected 0, got %Iu\n", (size_t)overlapped.InternalHigh);
 
     /* read the pending byte and clear the pipe */
     num_bytes = 0xdeadbeef;
@@ -2765,7 +2765,7 @@ static void _test_peek_pipe(unsigned line, HANDLE pipe, DWORD expected_read, DWO
     status = NtFsControlFile(pipe, 0, NULL, NULL, &io, FSCTL_PIPE_PEEK, NULL, 0, buf, sizeof(buf));
     ok_(__FILE__,line)(!status || status == STATUS_PENDING, "NtFsControlFile(FSCTL_PIPE_PEEK) failed: %lx\n", status);
     ok_(__FILE__,line)(io.Information == FIELD_OFFSET(FILE_PIPE_PEEK_BUFFER, Data[expected_read]),
-                       "io.Information = %Iu\n", io.Information);
+                       "io.Information = %Iu\n", (size_t)io.Information);
     ok_(__FILE__,line)(peek_buf->ReadDataAvailable == expected_avail, "ReadDataAvailable = %lu, expected %lu\n",
                        peek_buf->ReadDataAvailable, expected_avail);
     ok_(__FILE__,line)(peek_buf->MessageLength == expected_message_length, "MessageLength = %lu, expected %lu\n",
@@ -4227,7 +4227,7 @@ static void test_exit_process_async(void)
     ok(!ret, "expected failure\n");
     ok(GetLastError() == ERROR_OPERATION_ABORTED, "got error %lu\n", GetLastError());
     ok(!size, "got size %lu\n", size);
-    ok(key == 123, "got key %Iu\n", key);
+    ok(key == 123, "got key %Iu\n", (size_t)key);
 
     CloseHandle(port);
     CloseHandle(server);

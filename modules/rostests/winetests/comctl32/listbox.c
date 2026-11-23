@@ -2602,7 +2602,7 @@ static void test_WM_MEASUREITEM(void)
     listbox = create_listbox(WS_CHILD | LBS_OWNERDRAWVARIABLE, parent);
 
     data = SendMessageA(listbox, LB_GETITEMDATA, 0, 0);
-    ok(data == (LRESULT)strings[0], "data = %08Ix, expected %p\n", data, strings[0]);
+    ok(data == (LRESULT)strings[0], "data = %08Ix, expected %p\n", (size_t)data, strings[0]);
     DestroyWindow(listbox);
     DestroyWindow(parent);
 
@@ -2610,7 +2610,7 @@ static void test_WM_MEASUREITEM(void)
     listbox = create_listbox(WS_CHILD | LBS_OWNERDRAWVARIABLE | LBS_HASSTRINGS, parent);
 
     data = SendMessageA(listbox, LB_GETITEMDATA, 0, 0);
-    ok(!data, "data = %08Ix\n", data);
+    ok(!data, "data = %08Ix\n", (size_t)data);
     DestroyWindow(listbox);
     DestroyWindow(parent);
 
@@ -2623,11 +2623,11 @@ static void test_WM_MEASUREITEM(void)
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
 
     ret = SendMessageA(listbox, LB_ADDSTRING, 0, (LPARAM)"item 0");
-    ok(ret == 0, "expected 0, got %Id\n", ret);
+    ok(ret == 0, "expected 0, got %Id\n", (ptrdiff_t)ret);
     ret = SendMessageA(listbox, LB_ADDSTRING, 0, (LPARAM)"item 1");
-    ok(ret == 1, "expected 1, got %Id\n", ret);
+    ok(ret == 1, "expected 1, got %Id\n", (ptrdiff_t)ret);
     ret = SendMessageA(listbox, LB_ADDSTRING, 0, (LPARAM)"item 2");
-    ok(ret == 2, "expected 2, got %Id\n", ret);
+    ok(ret == 2, "expected 2, got %Id\n", (ptrdiff_t)ret);
 
     ok_sequence(sequences, PARENT_SEQ_INDEX, lb_addstring_ownerdraw_parent_seq,
         "LB_ADDSTRING (LBS_HASSTRINGS, ownerdraw)", FALSE);
@@ -2641,11 +2641,11 @@ static void test_WM_MEASUREITEM(void)
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
 
     ret = SendMessageA(listbox, LB_ADDSTRING, 0, (LPARAM)"item 0");
-    ok(ret == 0, "expected 0, got %Id\n", ret);
+    ok(ret == 0, "expected 0, got %Id\n", (ptrdiff_t)ret);
     ret = SendMessageA(listbox, LB_ADDSTRING, 0, (LPARAM)"item 1");
-    ok(ret == 1, "expected 1, got %Id\n", ret);
+    ok(ret == 1, "expected 1, got %Id\n", (ptrdiff_t)ret);
     ret = SendMessageA(listbox, LB_ADDSTRING, 0, (LPARAM)"item 2");
-    ok(ret == 2, "expected 2, got %Id\n", ret);
+    ok(ret == 2, "expected 2, got %Id\n", (ptrdiff_t)ret);
 
     ok_sequence(sequences, PARENT_SEQ_INDEX, lb_addstring_sort_parent_seq, "LB_ADDSTRING (LBS_SORT)", FALSE);
     DestroyWindow(listbox);
@@ -2658,11 +2658,11 @@ static void test_WM_MEASUREITEM(void)
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
 
     ret = SendMessageA(listbox, LB_ADDSTRING, 0, (LPARAM)"item 2");
-    ok(ret == 0, "expected 0, got %Id\n", ret);
+    ok(ret == 0, "expected 0, got %Id\n", (ptrdiff_t)ret);
     ret = SendMessageA(listbox, LB_ADDSTRING, 0, (LPARAM)"item 0");
-    ok(ret == 1, "expected 1, got %Id\n", ret);
+    ok(ret == 1, "expected 1, got %Id\n", (ptrdiff_t)ret);
     ret = SendMessageA(listbox, LB_ADDSTRING, 0, (LPARAM)"item 1");
-    ok(ret == 2, "expected 2, got %Id\n", ret);
+    ok(ret == 2, "expected 2, got %Id\n", (ptrdiff_t)ret);
 
     ok_sequence(sequences, PARENT_SEQ_INDEX, empty_seq, "LB_ADDSTRING (LBS_HASSTRINGS)", FALSE);
     DestroyWindow(listbox);
@@ -2675,11 +2675,11 @@ static void test_WM_MEASUREITEM(void)
     flush_sequences(sequences, NUM_MSG_SEQUENCES);
 
     ret = SendMessageA(listbox, LB_ADDSTRING, 0, (LPARAM)"item 2");
-    ok(ret == 0, "expected 0, got %Id\n", ret);
+    ok(ret == 0, "expected 0, got %Id\n", (ptrdiff_t)ret);
     ret = SendMessageA(listbox, LB_ADDSTRING, 0, (LPARAM)"item 0");
-    ok(ret == 0, "expected 0, got %Id\n", ret);
+    ok(ret == 0, "expected 0, got %Id\n", (ptrdiff_t)ret);
     ret = SendMessageA(listbox, LB_ADDSTRING, 0, (LPARAM)"item 1");
-    ok(ret == 1, "expected 1, got %Id\n", ret);
+    ok(ret == 1, "expected 1, got %Id\n", (ptrdiff_t)ret);
 
     ok_sequence(sequences, PARENT_SEQ_INDEX, empty_seq, "LB_ADDSTRING (LBS_HASSTRINGS, LBS_SORT)", FALSE);
     DestroyWindow(listbox);
@@ -2835,9 +2835,9 @@ static void test_LB_FINDSTRING(void)
     for (i = 0; i < ARRAY_SIZE(tests); i++)
     {
         ret = SendMessageW( listbox, LB_FINDSTRING, tests[i].from, (LPARAM)tests[i].str );
-        ok( ret == tests[i].res, "%u: wrong result %Id / %Id\n", i, ret, tests[i].res );
+        ok( ret == tests[i].res, "%u: wrong result %Id / %Id\n", i, (ptrdiff_t)ret, (ptrdiff_t)tests[i].res );
         ret = SendMessageW( listbox, LB_FINDSTRINGEXACT, tests[i].from, (LPARAM)tests[i].str );
-        ok( ret == tests[i].exact, "%u: wrong result %Id / %Id\n", i, ret, tests[i].exact );
+        ok( ret == tests[i].exact, "%u: wrong result %Id / %Id\n", i, (ptrdiff_t)ret, (ptrdiff_t)tests[i].exact );
     }
 
     SendMessageW( listbox, LB_RESETCONTENT, 0, 0 );
@@ -2847,9 +2847,9 @@ static void test_LB_FINDSTRING(void)
     for (i = 0; i < ARRAY_SIZE(tests); i++)
     {
         ret = SendMessageW( listbox, LB_FINDSTRING, tests[i].from, (LPARAM)tests[i].str );
-        ok( ret == tests[i].alt_res, "%u: wrong result %Id / %Id\n", i, ret, tests[i].alt_res );
+        ok( ret == tests[i].alt_res, "%u: wrong result %Id / %Id\n", i, (ptrdiff_t)ret, (ptrdiff_t)tests[i].alt_res );
         ret = SendMessageW( listbox, LB_FINDSTRINGEXACT, tests[i].from, (LPARAM)tests[i].str );
-        ok( ret == tests[i].alt_exact, "%u: wrong result %Id / %Id\n", i, ret, tests[i].alt_exact );
+        ok( ret == tests[i].alt_exact, "%u: wrong result %Id / %Id\n", i, (ptrdiff_t)ret, (ptrdiff_t)tests[i].alt_exact );
     }
 
     SendMessageW( listbox, LB_RESETCONTENT, 0, 0 );
@@ -2857,20 +2857,20 @@ static void test_LB_FINDSTRING(void)
     SendMessageW( listbox, LB_ADDSTRING, 0, (LPARAM)L"[abc]" );
     SendMessageW( listbox, LB_ADDSTRING, 0, (LPARAM)L"[-abc-]" );
     ret = SendMessageW( listbox, LB_FINDSTRING, -1, (LPARAM)L"abc" );
-    ok( ret == 0, "wrong result %Id\n", ret );
+    ok( ret == 0, "wrong result %Id\n", (ptrdiff_t)ret );
     ret = SendMessageW( listbox, LB_FINDSTRINGEXACT, -1, (LPARAM)L"abc" );
     todo_wine
-    ok( ret == 0, "wrong result %Id\n", ret );
+    ok( ret == 0, "wrong result %Id\n", (ptrdiff_t)ret );
     ret = SendMessageW( listbox, LB_FINDSTRING, 0, (LPARAM)L"abc" );
-    ok( ret == 1, "wrong result %Id\n", ret );
+    ok( ret == 1, "wrong result %Id\n", (ptrdiff_t)ret );
     ret = SendMessageW( listbox, LB_FINDSTRINGEXACT, 0, (LPARAM)L"abc" );
     todo_wine
-    ok( ret == 0, "wrong result %Id\n", ret );
+    ok( ret == 0, "wrong result %Id\n", (ptrdiff_t)ret );
     ret = SendMessageW( listbox, LB_FINDSTRING, 1, (LPARAM)L"abc" );
-    ok( ret == 2, "wrong result %Id\n", ret );
+    ok( ret == 2, "wrong result %Id\n", (ptrdiff_t)ret );
     ret = SendMessageW( listbox, LB_FINDSTRINGEXACT, 1, (LPARAM)L"abc" );
     todo_wine
-    ok( ret == 0, "wrong result %Id\n", ret );
+    ok( ret == 0, "wrong result %Id\n", (ptrdiff_t)ret );
     DestroyWindow( listbox );
 }
 

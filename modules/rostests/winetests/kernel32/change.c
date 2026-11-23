@@ -625,7 +625,7 @@ static void test_readdirectorychanges(void)
 
     ok( (NTSTATUS)ov.Internal == STATUS_SUCCESS, "ov.Internal wrong\n");
     dwCount = (char *)&pfni->FileName[pfni->FileNameLength/sizeof(WCHAR)] - buffer;
-    ok( ov.InternalHigh == dwCount, "ov.InternalHigh wrong %Iu/%lu\n",ov.InternalHigh, dwCount );
+    ok( ov.InternalHigh == dwCount, "ov.InternalHigh wrong %Iu/%lu\n",(size_t)ov.InternalHigh, dwCount );
 
     CloseHandle(hdir);
 

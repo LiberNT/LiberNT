@@ -1425,8 +1425,8 @@ static void test_hds_nosizing(HWND hParent)
 #define TEST_NMCUSTOMDRAW(draw_stage, item_spec, lparam, _left, _top, _right, _bottom) \
     ok(nm->dwDrawStage == draw_stage, "Invalid dwDrawStage %d vs %ld\n", draw_stage, nm->dwDrawStage); \
     if (item_spec != -1) \
-        ok(nm->dwItemSpec == item_spec, "Invalid dwItemSpec %d vs %Id\n", item_spec, nm->dwItemSpec); \
-    ok(nm->lItemlParam == lparam, "Invalid lItemlParam %d vs %Id\n", lparam, nm->lItemlParam); \
+        ok(nm->dwItemSpec == item_spec, "Invalid dwItemSpec %d vs %Id\n", item_spec, (ptrdiff_t)nm->dwItemSpec); \
+    ok(nm->lItemlParam == lparam, "Invalid lItemlParam %d vs %Id\n", lparam, (ptrdiff_t)nm->lItemlParam); \
     ok((nm->rc.top == _top && nm->rc.bottom == _bottom && nm->rc.left == _left && nm->rc.right == _right) || \
         broken(draw_stage != CDDS_ITEMPREPAINT), /* comctl32 < 5.80 */ \
         "Invalid rect (%d,%d)-(%d,%ld) vs %s\n", _left, _top, _right, _bottom, \

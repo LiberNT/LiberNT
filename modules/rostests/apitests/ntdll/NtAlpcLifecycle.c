@@ -427,7 +427,7 @@ AlpcTestCloseWhileBlocked(VOID)
     ok_eq_ulong(WaitStatus, WAIT_OBJECT_0);
     if (WaitStatus == WAIT_OBJECT_0)
     {
-        trace("ALPC_OBSERVE status Lifecycle.close_while_blocked=%08lx length=%Iu\n", Receiver->Status, Receiver->Length);
+        trace("ALPC_OBSERVE status Lifecycle.close_while_blocked=%08lx length=%Iu\n", Receiver->Status, (size_t)Receiver->Length);
         ok(Receiver->Status != STATUS_NOT_IMPLEMENTED, "close while blocked reached a stub\n");
         if (Blocked)
         {

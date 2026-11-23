@@ -338,7 +338,7 @@ static void test_HeapCreate(void)
     ptr = HeapAlloc( heap, 0, 0 );
     ok( !!ptr, "HeapAlloc failed, error %lu\n", GetLastError() );
     size = HeapSize( heap, 0, ptr );
-    ok( size == 0, "HeapSize returned %#Ix, error %lu\n", size, GetLastError() );
+    ok( size == 0, "HeapSize returned %#Ix, error %lu\n", (size_t)size, GetLastError() );
     ptr1 = pHeapReAlloc( heap, 0, ptr, ~(SIZE_T)0 - 7 );
     ok( !ptr1, "HeapReAlloc succeeded\n" );
     ptr1 = pHeapReAlloc( heap, 0, ptr, ~(SIZE_T)0 );
@@ -365,7 +365,7 @@ static void test_HeapCreate(void)
         {
             ptr = ptr1;
             size = HeapSize( heap, 0, ptr );
-            ok( size == 0, "HeapSize returned %#Ix, error %lu\n", size, GetLastError() );
+            ok( size == 0, "HeapSize returned %#Ix, error %lu\n", (size_t)size, GetLastError() );
         }
         ret = HeapFree( heap, 0, ptr );
         ok( ret, "HeapFree failed, error %lu\n", GetLastError() );
@@ -379,7 +379,7 @@ static void test_HeapCreate(void)
     ptr = HeapAlloc( heap, 0, alloc_size );
     ok( !!ptr, "HeapAlloc failed, error %lu\n", GetLastError() );
     size = HeapSize( heap, 0, ptr );
-    ok( size == alloc_size, "HeapSize returned %#Ix, error %lu\n", size, GetLastError() );
+    ok( size == alloc_size, "HeapSize returned %#Ix, error %lu\n", (size_t)size, GetLastError() );
     ptr1 = HeapAlloc( heap, 0, 4 * alloc_size );
     ok( !!ptr1, "HeapAlloc failed, error %lu\n", GetLastError() );
     ret = HeapFree( heap, 0, ptr1 );
@@ -424,7 +424,7 @@ static void test_HeapCreate(void)
     ptr = HeapAlloc( heap, HEAP_ZERO_MEMORY, 1 );
     ok( !!ptr, "HeapAlloc failed, error %lu\n", GetLastError() );
     size = HeapSize( heap, 0, ptr );
-    ok( size == 1, "HeapSize returned %#Ix, error %lu\n", size, GetLastError() );
+    ok( size == 1, "HeapSize returned %#Ix, error %lu\n", (size_t)size, GetLastError() );
     while (size) if (ptr[--size]) break;
     ok( !size && !ptr[0], "memory wasn't zeroed\n" );
     ret = HeapFree( heap, 0, ptr );
@@ -433,7 +433,7 @@ static void test_HeapCreate(void)
     ptr = HeapAlloc( heap, HEAP_ZERO_MEMORY, (1 << 20) );
     ok( !!ptr, "HeapAlloc failed, error %lu\n", GetLastError() );
     size = HeapSize( heap, 0, ptr );
-    ok( size == (1 << 20), "HeapSize returned %#Ix, error %lu\n", size, GetLastError() );
+    ok( size == (1 << 20), "HeapSize returned %#Ix, error %lu\n", (size_t)size, GetLastError() );
     while (size) if (ptr[--size]) break;
     ok( !size && !ptr[0], "memory wasn't zeroed\n" );
     ret = HeapFree( heap, 0, ptr );
@@ -442,14 +442,14 @@ static void test_HeapCreate(void)
     ptr = HeapAlloc( heap, HEAP_ZERO_MEMORY, alloc_size );
     ok( !!ptr, "HeapAlloc failed, error %lu\n", GetLastError() );
     size = HeapSize( heap, 0, ptr );
-    ok( size == alloc_size, "HeapSize returned %#Ix, error %lu\n", size, GetLastError() );
+    ok( size == alloc_size, "HeapSize returned %#Ix, error %lu\n", (size_t)size, GetLastError() );
     while (size) if (ptr[--size]) break;
     ok( !size && !ptr[0], "memory wasn't zeroed\n" );
 
     ptr = HeapReAlloc( heap, HEAP_ZERO_MEMORY, ptr, 3 * alloc_size );
     ok( !!ptr, "HeapReAlloc failed, error %lu\n", GetLastError() );
     size = HeapSize( heap, 0, ptr );
-    ok( size == 3 * alloc_size, "HeapSize returned %#Ix, error %lu\n", size, GetLastError() );
+    ok( size == 3 * alloc_size, "HeapSize returned %#Ix, error %lu\n", (size_t)size, GetLastError() );
     while (size) if (ptr[--size]) break;
     ok( !size && !ptr[0], "memory wasn't zeroed\n" );
 
@@ -462,14 +462,14 @@ static void test_HeapCreate(void)
     ptr = HeapReAlloc( heap, HEAP_ZERO_MEMORY, ptr, 1 );
     ok( !!ptr, "HeapReAlloc failed, error %lu\n", GetLastError() );
     size = HeapSize( heap, 0, ptr );
-    ok( size == 1, "HeapSize returned %#Ix, error %lu\n", size, GetLastError() );
+    ok( size == 1, "HeapSize returned %#Ix, error %lu\n", (size_t)size, GetLastError() );
     while (size) if (ptr[--size]) break;
     ok( !size && !ptr[0], "memory wasn't zeroed\n" );
 
     ptr = HeapReAlloc( heap, HEAP_ZERO_MEMORY, ptr, (1 << 20) );
     ok( !!ptr, "HeapReAlloc failed, error %lu\n", GetLastError() );
     size = HeapSize( heap, 0, ptr );
-    ok( size == (1 << 20), "HeapSize returned %#Ix, error %lu\n", size, GetLastError() );
+    ok( size == (1 << 20), "HeapSize returned %#Ix, error %lu\n", (size_t)size, GetLastError() );
     while (size) if (ptr[--size]) break;
     ok( !size && !ptr[0], "memory wasn't zeroed\n" );
 
@@ -508,7 +508,7 @@ static void test_HeapCreate(void)
     {
         size = HeapSize( heap, 0, ptr );
         ok( size == alloc_size - (0x400 + 0x100 * sizeof(void *)),
-            "HeapSize returned %#Ix, error %lu\n", size, GetLastError() );
+            "HeapSize returned %#Ix, error %lu\n", (size_t)size, GetLastError() );
         ret = HeapFree( heap, 0, ptr );
         ok( ret, "HeapFree failed, error %lu\n", GetLastError() );
     }
@@ -533,7 +533,7 @@ static void test_HeapCreate(void)
     if (ptr)
     {
         size = HeapSize( heap, 0, ptr );
-        ok( size == 0, "HeapSize returned %#Ix, error %lu\n", size, GetLastError() );
+        ok( size == 0, "HeapSize returned %#Ix, error %lu\n", (size_t)size, GetLastError() );
     }
     ret = HeapFree( heap, 0, ptr );
     ok( ret, "HeapFree failed, error %lu\n", GetLastError() );
@@ -556,7 +556,7 @@ static void test_HeapCreate(void)
     if (ptr)
     {
         size = HeapSize( heap, 0, ptr );
-        ok( size == alloc_size, "HeapSize returned %#Ix, error %lu\n", size, GetLastError() );
+        ok( size == alloc_size, "HeapSize returned %#Ix, error %lu\n", (size_t)size, GetLastError() );
     }
     SetLastError( 0xdeadbeef );
     ptr1 = HeapAlloc( heap, 0, 4 * alloc_size );
@@ -576,7 +576,7 @@ static void test_HeapCreate(void)
     if (ptr)
     {
         size = HeapSize( heap, 0, ptr );
-        ok( size == alloc_size, "HeapSize returned %#Ix, error %lu\n", size, GetLastError() );
+        ok( size == alloc_size, "HeapSize returned %#Ix, error %lu\n", (size_t)size, GetLastError() );
         for (i = 0; i < alloc_size; ++i) if (ptr[i]) break;
         ok( i == alloc_size, "memory wasn't zeroed\n" );
 
@@ -586,7 +586,7 @@ static void test_HeapCreate(void)
         {
             ptr = ptr1;
             size = HeapSize( heap, 0, ptr );
-            ok( size == 2 * alloc_size, "HeapSize returned %#Ix, error %lu\n", size, GetLastError() );
+            ok( size == 2 * alloc_size, "HeapSize returned %#Ix, error %lu\n", (size_t)size, GetLastError() );
             for (i = 0; i < 2 * alloc_size; ++i) if (ptr[i]) break;
             ok( i == 2 * alloc_size, "memory wasn't zeroed\n" );
 
@@ -634,9 +634,9 @@ static void test_HeapCreate(void)
 
     for (i = 0; i < count; ++i)
     {
-        winetest_push_context( "%Iu", i );
+        winetest_push_context( "%Iu", (size_t)i );
         ok( rtl_entries[i].lpData == entries[i].lpData, "got lpData %p\n", rtl_entries[i].lpData );
-        ok( rtl_entries[i].cbData == entries[i].cbData, "got cbData %#Ix\n", rtl_entries[i].cbData );
+        ok( rtl_entries[i].cbData == entries[i].cbData, "got cbData %#Ix\n", (size_t)rtl_entries[i].cbData );
         ok( rtl_entries[i].cbOverhead == entries[i].cbOverhead, "got cbOverhead %#x\n", rtl_entries[i].cbOverhead );
         ok( rtl_entries[i].iRegionIndex == entries[i].iRegionIndex, "got iRegionIndex %#x\n", rtl_entries[i].iRegionIndex );
         if (!entries[i].wFlags)
@@ -738,9 +738,9 @@ static void test_HeapCreate(void)
 
     for (i = 0; i < count; ++i)
     {
-        winetest_push_context( "%Iu", i );
+        winetest_push_context( "%Iu", (size_t)i );
         ok( rtl_entries[i].lpData == entries[i].lpData, "got lpData %p\n", rtl_entries[i].lpData );
-        ok( rtl_entries[i].cbData == entries[i].cbData, "got cbData %#Ix\n", rtl_entries[i].cbData );
+        ok( rtl_entries[i].cbData == entries[i].cbData, "got cbData %#Ix\n", (size_t)rtl_entries[i].cbData );
         ok( rtl_entries[i].cbOverhead == entries[i].cbOverhead, "got cbOverhead %#x\n", rtl_entries[i].cbOverhead );
         ok( rtl_entries[i].iRegionIndex == entries[i].iRegionIndex, "got iRegionIndex %#x\n", rtl_entries[i].iRegionIndex );
         if (!entries[i].wFlags)
@@ -824,9 +824,9 @@ static void test_HeapCreate(void)
 
     for (i = 0; i < count; ++i)
     {
-        winetest_push_context( "%Iu", i );
+        winetest_push_context( "%Iu", (size_t)i );
         ok( rtl_entries[i].lpData == entries[i].lpData, "got lpData %p\n", rtl_entries[i].lpData );
-        ok( rtl_entries[i].cbData == entries[i].cbData, "got cbData %#Ix\n", rtl_entries[i].cbData );
+        ok( rtl_entries[i].cbData == entries[i].cbData, "got cbData %#Ix\n", (size_t)rtl_entries[i].cbData );
         ok( rtl_entries[i].cbOverhead == entries[i].cbOverhead, "got cbOverhead %#x\n", rtl_entries[i].cbOverhead );
         ok( rtl_entries[i].iRegionIndex == entries[i].iRegionIndex, "got iRegionIndex %#x\n", rtl_entries[i].iRegionIndex );
         if (!entries[i].wFlags)
@@ -996,7 +996,7 @@ static void test_HeapCreate(void)
     ret = pHeapQueryInformation( 0, HeapCompatibilityInformation, &compat_info, sizeof(compat_info), &size );
     ok( !ret, "HeapQueryInformation succeeded\n" );
     ok( GetLastError() == ERROR_NOACCESS, "got error %lu\n", GetLastError() );
-    ok( size == 0, "got size %Iu\n", size );
+    ok( size == 0, "got size %Iu\n", (size_t)size );
 #ifdef __REACTOS__
     }
 #endif
@@ -1006,7 +1006,7 @@ static void test_HeapCreate(void)
     ret = pHeapQueryInformation( heap, HeapCompatibilityInformation, NULL, 0, &size );
     ok( !ret, "HeapQueryInformation succeeded\n" );
     ok( GetLastError() == ERROR_INSUFFICIENT_BUFFER, "got error %lu\n", GetLastError() );
-    ok( size == sizeof(ULONG), "got size %Iu\n", size );
+    ok( size == sizeof(ULONG), "got size %Iu\n", (size_t)size );
 
     SetLastError( 0xdeadbeef );
     ret = pHeapQueryInformation( heap, HeapCompatibilityInformation, NULL, 0, NULL );
@@ -1224,9 +1224,9 @@ static void test_HeapCreate(void)
 
     for (i = 3; i < count; ++i)
     {
-        winetest_push_context( "%Iu", i );
+        winetest_push_context( "%Iu", (size_t)i );
         ok( rtl_entries[i].lpData == entries[i].lpData, "got lpData %p\n", rtl_entries[i].lpData );
-        ok( rtl_entries[i].cbData == entries[i].cbData, "got cbData %#Ix\n", rtl_entries[i].cbData );
+        ok( rtl_entries[i].cbData == entries[i].cbData, "got cbData %#Ix\n", (size_t)rtl_entries[i].cbData );
         ok( rtl_entries[i].cbOverhead == entries[i].cbOverhead, "got cbOverhead %#x\n", rtl_entries[i].cbOverhead );
         ok( rtl_entries[i].iRegionIndex == entries[i].iRegionIndex, "got iRegionIndex %#x\n", rtl_entries[i].iRegionIndex );
         if (!entries[i].wFlags)
@@ -1303,9 +1303,9 @@ static void test_HeapCreate(void)
 
     for (i = 3; i < count; ++i)
     {
-        winetest_push_context( "%Iu", i );
+        winetest_push_context( "%Iu", (size_t)i );
         ok( rtl_entries[i].lpData == entries[i].lpData, "got lpData %p\n", rtl_entries[i].lpData );
-        ok( rtl_entries[i].cbData == entries[i].cbData, "got cbData %#Ix\n", rtl_entries[i].cbData );
+        ok( rtl_entries[i].cbData == entries[i].cbData, "got cbData %#Ix\n", (size_t)rtl_entries[i].cbData );
         ok( rtl_entries[i].cbOverhead == entries[i].cbOverhead, "got cbOverhead %#x\n", rtl_entries[i].cbOverhead );
         ok( rtl_entries[i].iRegionIndex == entries[i].iRegionIndex, "got iRegionIndex %#x\n", rtl_entries[i].iRegionIndex );
         if (!entries[i].wFlags)
@@ -1518,11 +1518,11 @@ static void check_global_conversion( HGLOBAL mem, const void *entry_ptr, SIZE_T 
     ok( data == entry_ptr, "got data %p, entry pointer %p\n", data, entry_ptr );
     ok( GlobalHandle( data ) == mem, "GlobalHandle did not return %p\n", mem );
     size = GlobalSize( mem );
-    ok( size >= retained_size, "got size %Iu, need %Iu initialized bytes\n", size, retained_size );
+    ok( size >= retained_size, "got size %Iu, need %Iu initialized bytes\n", (size_t)size, (size_t)retained_size );
     if (size >= retained_size)
     {
         for (i = 0; i < retained_size; ++i) if (data[i] != 0x5a) break;
-        ok( i == retained_size, "conversion changed data at %Iu of %Iu bytes\n", i, retained_size );
+        ok( i == retained_size, "conversion changed data at %Iu of %Iu bytes\n", (size_t)i, (size_t)retained_size );
     }
     ret = GlobalUnlock( mem );
     ok( !ret, "GlobalUnlock succeeded\n" );
@@ -1621,25 +1621,25 @@ static void test_GlobalAlloc(void)
     mem = GlobalReAlloc( mem, 10, GMEM_MOVEABLE );
     ok( !!mem, "GlobalReAlloc failed, error %lu\n", GetLastError() );
     size = GlobalSize( mem );
-    ok( size >= 10 && size <= 16, "GlobalSize returned %Iu\n", size );
+    ok( size >= 10 && size <= 16, "GlobalSize returned %Iu\n", (size_t)size );
     mem = GlobalReAlloc( mem, 0, GMEM_MOVEABLE );
     ok( !!mem, "GlobalReAlloc failed, error %lu\n", GetLastError() );
     size = GlobalSize( mem );
-    ok( size == 0, "GlobalSize returned %Iu\n", size );
+    ok( size == 0, "GlobalSize returned %Iu\n", (size_t)size );
     mem = GlobalReAlloc( mem, 10, GMEM_MOVEABLE );
     ok( !!mem, "GlobalReAlloc failed, error %lu\n", GetLastError() );
     size = GlobalSize( mem );
-    ok( size >= 10 && size <= 16, "GlobalSize returned %Iu\n", size );
+    ok( size >= 10 && size <= 16, "GlobalSize returned %Iu\n", (size_t)size );
     tmp_mem = pGlobalFree( mem );
     ok( !tmp_mem, "GlobalFree failed, error %lu\n", GetLastError() );
     size = GlobalSize( mem );
-    ok( size == 0, "GlobalSize returned %Iu\n", size );
+    ok( size == 0, "GlobalSize returned %Iu\n", (size_t)size );
 
     mem = pGlobalAlloc( GMEM_MOVEABLE | GMEM_DISCARDABLE, 0 );
     ok( !!mem, "GlobalAlloc failed, error %lu\n", GetLastError() );
     entry = mem_entry_from_HANDLE( mem );
     size = GlobalSize( mem );
-    ok( size == 0, "GlobalSize returned %Iu\n", size );
+    ok( size == 0, "GlobalSize returned %Iu\n", (size_t)size );
     ret = HeapValidate( GetProcessHeap(), 0, entry );
     ok( !ret, "HeapValidate succeeded\n" );
     ok( entry->flags == 0xf, "got unexpected flags %#Ix\n", entry->flags );
@@ -1651,7 +1651,7 @@ static void test_GlobalAlloc(void)
     ok( !!mem, "GlobalAlloc failed, error %lu\n", GetLastError() );
     entry = mem_entry_from_HANDLE( mem );
     size = GlobalSize( mem );
-    ok( size == 0, "GlobalSize returned %Iu\n", size );
+    ok( size == 0, "GlobalSize returned %Iu\n", (size_t)size );
     ret = HeapValidate( GetProcessHeap(), 0, entry );
     ok( !ret, "HeapValidate succeeded\n" );
     ok( entry->flags == 0xb, "got unexpected flags %#Ix\n", entry->flags );
@@ -1661,7 +1661,7 @@ static void test_GlobalAlloc(void)
 
     for (alloc_size = 1; alloc_size < 0x10000000; alloc_size <<= 5)
     {
-        winetest_push_context( "size %#Ix", alloc_size );
+        winetest_push_context( "size %#Ix", (size_t)alloc_size );
 
         mem = GlobalAlloc( GMEM_FIXED, alloc_size );
         ok( !!mem, "GlobalAlloc failed, error %lu\n", GetLastError() );
@@ -1683,7 +1683,7 @@ static void test_GlobalAlloc(void)
         ret = HeapValidate( GetProcessHeap(), 0, entry->ptr );
         ok( ret, "HeapValidate failed, error %lu\n", GetLastError() );
         size = HeapSize( GetProcessHeap(), 0, entry->ptr );
-        ok( size == alloc_size, "HeapSize returned %Iu\n", size );
+        ok( size == alloc_size, "HeapSize returned %Iu\n", (size_t)size );
 
         tmp_mem = invalid_mem;
         tmp_flags = 0xdeadbeef;
@@ -1936,7 +1936,7 @@ static void test_GlobalAlloc(void)
     ok( !!tmp_mem, "GlobalAlloc failed, error %lu\n", GetLastError() );
     ok( tmp_mem == mem, "got ptr %p, expected %p\n", tmp_mem, mem );
     size = GlobalSize( mem );
-    ok( size == small_size, "GlobalSize returned %Iu\n", size );
+    ok( size == small_size, "GlobalSize returned %Iu\n", (size_t)size );
     SetLastError( 0xdeadbeef );
 #ifdef __REACTOS__
     if (GetNTVersion() >= _WIN32_WINNT_VISTA) {
@@ -1952,7 +1952,7 @@ static void test_GlobalAlloc(void)
     ok( !!tmp_mem, "GlobalAlloc failed, error %lu\n", GetLastError() );
     ok( tmp_mem == mem, "got ptr %p, expected %p\n", tmp_mem, mem );
     size = GlobalSize( mem );
-    ok( size == small_size, "GlobalSize returned %Iu\n", size );
+    ok( size == small_size, "GlobalSize returned %Iu\n", (size_t)size );
     mem = GlobalFree( mem );
     ok( !mem, "GlobalFree failed, error %lu\n", GetLastError() );
 
@@ -2009,8 +2009,8 @@ static void test_GlobalAlloc(void)
         if (tmp_mem) mem = tmp_mem;
 
         size = GlobalSize( mem );
-        if (flags == GMEM_MOVEABLE) ok( size == 512, "GlobalSize returned %Iu\n", size );
-        else ok( size == small_size, "GlobalSize returned %Iu\n", size );
+        if (flags == GMEM_MOVEABLE) ok( size == 512, "GlobalSize returned %Iu\n", (size_t)size );
+        else ok( size == small_size, "GlobalSize returned %Iu\n", (size_t)size );
 
         mem = GlobalFree( mem );
         ok( !mem, "GlobalFree failed, error %lu\n", GetLastError() );
@@ -2039,8 +2039,8 @@ static void test_GlobalAlloc(void)
         if (tmp_mem) mem = tmp_mem;
 
         size = GlobalSize( mem );
-        if (flags & (GMEM_MODIFY | GMEM_DISCARDABLE)) ok( size == nolfh_size, "GlobalSize returned %Iu\n", size );
-        else ok( size == nolfh_size + 512, "GlobalSize returned %Iu\n", size );
+        if (flags & (GMEM_MODIFY | GMEM_DISCARDABLE)) ok( size == nolfh_size, "GlobalSize returned %Iu\n", (size_t)size );
+        else ok( size == nolfh_size + 512, "GlobalSize returned %Iu\n", (size_t)size );
 
         mem = GlobalFree( mem );
         ok( !mem, "GlobalFree failed, error %lu\n", GetLastError() );
@@ -2070,8 +2070,8 @@ static void test_GlobalAlloc(void)
         if (tmp_mem) mem = tmp_mem;
 
         size = GlobalSize( mem );
-        if (flags == GMEM_MOVEABLE) ok( size == 10, "GlobalSize returned %Iu\n", size );
-        else todo_wine_if(!flags) ok( size == small_size, "GlobalSize returned %Iu\n", size );
+        if (flags == GMEM_MOVEABLE) ok( size == 10, "GlobalSize returned %Iu\n", (size_t)size );
+        else todo_wine_if(!flags) ok( size == small_size, "GlobalSize returned %Iu\n", (size_t)size );
 
         mem = GlobalFree( mem );
         ok( !mem, "GlobalFree failed, error %lu\n", GetLastError() );
@@ -2101,8 +2101,8 @@ static void test_GlobalAlloc(void)
         if (tmp_mem) mem = tmp_mem;
 
         size = GlobalSize( mem );
-        if (flags & (GMEM_MODIFY | GMEM_DISCARDABLE)) ok( size == nolfh_size, "GlobalSize returned %Iu\n", size );
-        else ok( size == 10, "GlobalSize returned %Iu\n", size );
+        if (flags & (GMEM_MODIFY | GMEM_DISCARDABLE)) ok( size == nolfh_size, "GlobalSize returned %Iu\n", (size_t)size );
+        else ok( size == 10, "GlobalSize returned %Iu\n", (size_t)size );
 
         mem = GlobalFree( mem );
         ok( !mem, "GlobalFree failed, error %lu\n", GetLastError() );
@@ -2132,8 +2132,8 @@ static void test_GlobalAlloc(void)
         if (tmp_mem) mem = tmp_mem;
 
         size = GlobalSize( mem );
-        if (flags == GMEM_MOVEABLE) ok( size == 0 || broken( size == 1 ) /* w7 */, "GlobalSize returned %Iu\n", size );
-        else ok( size == small_size, "GlobalSize returned %Iu\n", size );
+        if (flags == GMEM_MOVEABLE) ok( size == 0 || broken( size == 1 ) /* w7 */, "GlobalSize returned %Iu\n", (size_t)size );
+        else ok( size == small_size, "GlobalSize returned %Iu\n", (size_t)size );
 
         mem = GlobalFree( mem );
         ok( !mem, "GlobalFree failed, error %lu\n", GetLastError() );
@@ -2163,8 +2163,8 @@ static void test_GlobalAlloc(void)
         if (tmp_mem) mem = tmp_mem;
 
         size = GlobalSize( mem );
-        if (flags & (GMEM_MODIFY | GMEM_DISCARDABLE)) ok( size == nolfh_size, "GlobalSize returned %Iu\n", size );
-        else ok( size == 0 || broken( size == 1 ) /* w7 */, "GlobalSize returned %Iu\n", size );
+        if (flags & (GMEM_MODIFY | GMEM_DISCARDABLE)) ok( size == nolfh_size, "GlobalSize returned %Iu\n", (size_t)size );
+        else ok( size == 0 || broken( size == 1 ) /* w7 */, "GlobalSize returned %Iu\n", (size_t)size );
 
         mem = GlobalFree( mem );
         ok( !mem, "GlobalFree failed, error %lu\n", GetLastError() );
@@ -2197,9 +2197,9 @@ static void test_GlobalAlloc(void)
         ok( entry.flags == expect_entry.flags, "got flags %#Ix was %#Ix\n", entry.flags, expect_entry.flags );
 
         size = GlobalSize( mem );
-        if (flags == GMEM_MOVEABLE) ok( size == 512, "GlobalSize returned %Iu\n", size );
+        if (flags == GMEM_MOVEABLE) ok( size == 512, "GlobalSize returned %Iu\n", (size_t)size );
 #ifdef __REACTOS__
-        else ok( size == small_size || broken(size == 512) /* Vista */, "GlobalSize returned %Iu\n", size );
+        else ok( size == small_size || broken(size == 512) /* Vista */, "GlobalSize returned %Iu\n", (size_t)size );
 #else
         else ok( size == small_size, "GlobalSize returned %Iu\n", size );
 #endif
@@ -2227,8 +2227,8 @@ static void test_GlobalAlloc(void)
         ok( entry.flags == expect_entry.flags, "got flags %#Ix was %#Ix\n", entry.flags, expect_entry.flags );
 
         size = GlobalSize( mem );
-        if (flags & (GMEM_DISCARDABLE | GMEM_MODIFY)) ok( size == small_size, "GlobalSize returned %Iu\n", size );
-        else ok( size == 10, "GlobalSize returned %Iu\n", size );
+        if (flags & (GMEM_DISCARDABLE | GMEM_MODIFY)) ok( size == small_size, "GlobalSize returned %Iu\n", (size_t)size );
+        else ok( size == 10, "GlobalSize returned %Iu\n", (size_t)size );
 
         ret = GlobalUnlock( mem );
         ok( !ret, "GlobalUnlock succeeded\n" );
@@ -2252,7 +2252,7 @@ static void test_GlobalAlloc(void)
         ok( entry.flags == expect_entry.flags, "got flags %#Ix was %#Ix\n", entry.flags, expect_entry.flags );
 
         size = GlobalSize( mem );
-        ok( size == small_size, "GlobalSize returned %Iu\n", size );
+        ok( size == small_size, "GlobalSize returned %Iu\n", (size_t)size );
 
         ret = GlobalUnlock( mem );
         ok( !ret, "GlobalUnlock succeeded\n" );
@@ -2280,8 +2280,8 @@ static void test_GlobalAlloc(void)
         ok( entry.flags == expect_entry.flags, "got flags %#Ix was %#Ix\n", entry.flags, expect_entry.flags );
 
         size = GlobalSize( mem );
-        if (flags & (GMEM_DISCARDABLE | GMEM_MODIFY)) ok( size == small_size, "GlobalSize returned %Iu\n", size );
-        else ok( size == 512, "GlobalSize returned %Iu\n", size );
+        if (flags & (GMEM_DISCARDABLE | GMEM_MODIFY)) ok( size == small_size, "GlobalSize returned %Iu\n", (size_t)size );
+        else ok( size == 512, "GlobalSize returned %Iu\n", (size_t)size );
 
         mem = GlobalFree( mem );
         ok( !mem, "GlobalFree failed, error %lu\n", GetLastError() );
@@ -2302,8 +2302,8 @@ static void test_GlobalAlloc(void)
         ok( entry.flags == expect_entry.flags, "got flags %#Ix was %#Ix\n", entry.flags, expect_entry.flags );
 
         size = GlobalSize( mem );
-        if (flags & (GMEM_DISCARDABLE | GMEM_MODIFY)) ok( size == small_size, "GlobalSize returned %Iu\n", size );
-        else ok( size == 10, "GlobalSize returned %Iu\n", size );
+        if (flags & (GMEM_DISCARDABLE | GMEM_MODIFY)) ok( size == small_size, "GlobalSize returned %Iu\n", (size_t)size );
+        else ok( size == 10, "GlobalSize returned %Iu\n", (size_t)size );
 
         mem = GlobalFree( mem );
         ok( !mem, "GlobalFree failed, error %lu\n", GetLastError() );
@@ -2330,8 +2330,8 @@ static void test_GlobalAlloc(void)
         ok( entry.flags == expect_entry.flags, "got flags %#Ix was %#Ix\n", entry.flags, expect_entry.flags );
 
         size = GlobalSize( mem );
-        if (flags == GMEM_MOVEABLE) ok( size == 0, "GlobalSize returned %Iu\n", size );
-        else ok( size == small_size, "GlobalSize returned %Iu\n", size );
+        if (flags == GMEM_MOVEABLE) ok( size == 0, "GlobalSize returned %Iu\n", (size_t)size );
+        else ok( size == small_size, "GlobalSize returned %Iu\n", (size_t)size );
 
         mem = GlobalFree( mem );
         ok( !mem, "GlobalFree failed, error %lu\n", GetLastError() );
@@ -2377,7 +2377,7 @@ static void test_GlobalAlloc(void)
     mem = GlobalAlloc( GMEM_FIXED, 0 );
     ok( !!mem, "GlobalAlloc failed, error %lu\n", GetLastError() );
     size = GlobalSize( mem );
-    ok( size == 1, "GlobalSize returned %Iu\n", size );
+    ok( size == 1, "GlobalSize returned %Iu\n", (size_t)size );
     mem = GlobalFree( mem );
     ok( !mem, "GlobalFree failed, error %lu\n", GetLastError() );
 
@@ -2394,14 +2394,14 @@ static void test_GlobalAlloc(void)
     mem = GlobalAlloc( 0, buffer_size );
     ok( !!mem, "GlobalAlloc failed, error %lu\n", GetLastError() );
     size = GlobalSize( mem );
-    ok( size >= buffer_size, "GlobalSize returned %Iu, error %lu\n", size, GetLastError() );
+    ok( size >= buffer_size, "GlobalSize returned %Iu, error %lu\n", (size_t)size, GetLastError() );
     mem = GlobalFree( mem );
     ok( !mem, "GlobalFree failed, error %lu\n", GetLastError() );
 
     mem = GlobalAlloc( GMEM_ZEROINIT, buffer_size );
     ok( !!mem, "GlobalAlloc failed, error %lu\n", GetLastError() );
     size = GlobalSize( mem );
-    ok( size >= buffer_size, "GlobalSize returned %Iu, error %lu\n", size, GetLastError() );
+    ok( size >= buffer_size, "GlobalSize returned %Iu, error %lu\n", (size_t)size, GetLastError() );
     ptr = GlobalLock( mem );
     ok( !!ptr, "GlobalLock failed, error %lu\n", GetLastError() );
     ok( ptr == mem, "got ptr %p, expected %p\n", ptr, mem );
@@ -2412,7 +2412,7 @@ static void test_GlobalAlloc(void)
     ok( !!mem, "GlobalReAlloc failed, error %lu\n", GetLastError() );
     ok( mem != ptr, "GlobalReAlloc returned unexpected handle\n" );
     size = GlobalSize( mem );
-    ok( size == buffer_size, "GlobalSize returned %Iu, error %lu\n", size, GetLastError() );
+    ok( size == buffer_size, "GlobalSize returned %Iu, error %lu\n", (size_t)size, GetLastError() );
 
     ptr = GlobalLock( mem );
     ok( !!ptr, "GlobalLock failed, error %lu\n", GetLastError() );
@@ -2428,7 +2428,7 @@ static void test_GlobalAlloc(void)
     mem = tmp_mem;
 
     size = GlobalSize( mem );
-    ok( size >= 2 * buffer_size, "GlobalSize returned %Iu, error %lu\n", size, GetLastError() );
+    ok( size >= 2 * buffer_size, "GlobalSize returned %Iu, error %lu\n", (size_t)size, GetLastError() );
     ptr = GlobalLock( mem );
     ok( !!ptr, "GlobalLock failed, error %lu\n", GetLastError() );
     ok( ptr != mem, "got unexpected ptr %p\n", ptr );
@@ -2552,19 +2552,19 @@ static void test_LocalAlloc(void)
     mem = LocalReAlloc( mem, 10, LMEM_MOVEABLE );
     ok( !!mem, "LocalReAlloc failed, error %lu\n", GetLastError() );
     size = LocalSize( mem );
-    ok( size >= 10 && size <= 16, "LocalSize returned %Iu\n", size );
+    ok( size >= 10 && size <= 16, "LocalSize returned %Iu\n", (size_t)size );
     mem = LocalReAlloc( mem, 0, LMEM_MOVEABLE );
     ok( !!mem, "LocalReAlloc failed, error %lu\n", GetLastError() );
     size = LocalSize( mem );
-    ok( size == 0, "LocalSize returned %Iu\n", size );
+    ok( size == 0, "LocalSize returned %Iu\n", (size_t)size );
     mem = LocalReAlloc( mem, 10, LMEM_MOVEABLE );
     ok( !!mem, "LocalReAlloc failed, error %lu\n", GetLastError() );
     size = LocalSize( mem );
-    ok( size >= 10 && size <= 16, "LocalSize returned %Iu\n", size );
+    ok( size >= 10 && size <= 16, "LocalSize returned %Iu\n", (size_t)size );
     tmp_mem = pLocalFree( mem );
     ok( !tmp_mem, "LocalFree failed, error %lu\n", GetLastError() );
     size = LocalSize( mem );
-    ok( size == 0, "LocalSize returned %Iu\n", size );
+    ok( size == 0, "LocalSize returned %Iu\n", (size_t)size );
 
     mem = LocalAlloc( LMEM_MOVEABLE, 256 );
     ok( !!mem, "LocalAlloc failed, error %lu\n", GetLastError() );
@@ -2709,7 +2709,7 @@ static void test_LocalAlloc(void)
     ok( !!tmp_mem, "LocalAlloc failed, error %lu\n", GetLastError() );
     ok( tmp_mem == mem, "got ptr %p, expected %p\n", tmp_mem, mem );
     size = LocalSize( mem );
-    ok( size == small_size, "LocalSize returned %Iu\n", size );
+    ok( size == small_size, "LocalSize returned %Iu\n", (size_t)size );
     SetLastError( 0xdeadbeef );
 #ifdef __REACTOS__
     if (GetNTVersion() >= _WIN32_WINNT_VISTA) {
@@ -2725,7 +2725,7 @@ static void test_LocalAlloc(void)
     ok( !!tmp_mem, "LocalAlloc failed, error %lu\n", GetLastError() );
     ok( tmp_mem == mem, "got ptr %p, expected %p\n", tmp_mem, mem );
     size = LocalSize( mem );
-    ok( size == small_size, "LocalSize returned %Iu\n", size );
+    ok( size == small_size, "LocalSize returned %Iu\n", (size_t)size );
     mem = LocalFree( mem );
     ok( !mem, "LocalFree failed, error %lu\n", GetLastError() );
 
@@ -2771,8 +2771,8 @@ static void test_LocalAlloc(void)
         if (tmp_mem) mem = tmp_mem;
 
         size = LocalSize( mem );
-        if (flags == LMEM_MOVEABLE) ok( size == 512, "LocalSize returned %Iu\n", size );
-        else ok( size == small_size, "LocalSize returned %Iu\n", size );
+        if (flags == LMEM_MOVEABLE) ok( size == 512, "LocalSize returned %Iu\n", (size_t)size );
+        else ok( size == small_size, "LocalSize returned %Iu\n", (size_t)size );
 
         mem = LocalFree( mem );
         ok( !mem, "LocalFree failed, error %lu\n", GetLastError() );
@@ -2789,8 +2789,8 @@ static void test_LocalAlloc(void)
         else ok( tmp_mem == mem, "LocalReAlloc returned %p\n", tmp_mem );
         if (tmp_mem) mem = tmp_mem;
         size = LocalSize( mem );
-        if (flags & (LMEM_DISCARDABLE | LMEM_MODIFY)) ok( size == nolfh_size, "LocalSize returned %Iu\n", size );
-        else ok( size == nolfh_size + 512, "LocalSize returned %Iu\n", size );
+        if (flags & (LMEM_DISCARDABLE | LMEM_MODIFY)) ok( size == nolfh_size, "LocalSize returned %Iu\n", (size_t)size );
+        else ok( size == nolfh_size + 512, "LocalSize returned %Iu\n", (size_t)size );
         mem = LocalFree( mem );
         ok( !mem, "LocalFree failed, error %lu\n", GetLastError() );
 
@@ -2807,8 +2807,8 @@ static void test_LocalAlloc(void)
         if (tmp_mem) mem = tmp_mem;
 
         size = LocalSize( mem );
-        if (flags == LMEM_MOVEABLE) ok( size == 10, "LocalSize returned %Iu\n", size );
-        else todo_wine_if(!flags) ok( size == small_size, "LocalSize returned %Iu\n", size );
+        if (flags == LMEM_MOVEABLE) ok( size == 10, "LocalSize returned %Iu\n", (size_t)size );
+        else todo_wine_if(!flags) ok( size == small_size, "LocalSize returned %Iu\n", (size_t)size );
 
         mem = LocalFree( mem );
         ok( !mem, "LocalFree failed, error %lu\n", GetLastError() );
@@ -2825,8 +2825,8 @@ static void test_LocalAlloc(void)
         else ok( tmp_mem == mem, "LocalReAlloc returned %p\n", tmp_mem );
         if (tmp_mem) mem = tmp_mem;
         size = LocalSize( mem );
-        if (flags & (LMEM_DISCARDABLE | LMEM_MODIFY)) ok( size == nolfh_size, "LocalSize returned %Iu\n", size );
-        else ok( size == 10, "LocalSize returned %Iu\n", size );
+        if (flags & (LMEM_DISCARDABLE | LMEM_MODIFY)) ok( size == nolfh_size, "LocalSize returned %Iu\n", (size_t)size );
+        else ok( size == 10, "LocalSize returned %Iu\n", (size_t)size );
         mem = LocalFree( mem );
         ok( !mem, "LocalFree failed, error %lu\n", GetLastError() );
 
@@ -2843,8 +2843,8 @@ static void test_LocalAlloc(void)
         if (tmp_mem) mem = tmp_mem;
 
         size = LocalSize( mem );
-        if (flags == LMEM_MOVEABLE) ok( size == 0 || broken( size == 1 ) /* w7 */, "LocalSize returned %Iu\n", size );
-        else ok( size == small_size, "LocalSize returned %Iu\n", size );
+        if (flags == LMEM_MOVEABLE) ok( size == 0 || broken( size == 1 ) /* w7 */, "LocalSize returned %Iu\n", (size_t)size );
+        else ok( size == small_size, "LocalSize returned %Iu\n", (size_t)size );
 
         mem = LocalFree( mem );
         ok( !mem, "LocalFree failed, error %lu\n", GetLastError() );
@@ -2861,8 +2861,8 @@ static void test_LocalAlloc(void)
         else ok( tmp_mem == mem, "LocalReAlloc returned %p\n", tmp_mem );
         if (tmp_mem) mem = tmp_mem;
         size = LocalSize( mem );
-        if (flags & (LMEM_DISCARDABLE | LMEM_MODIFY)) ok( size == nolfh_size, "LocalSize returned %Iu\n", size );
-        else ok( size == 0 || broken( size == 1 ) /* w7 */, "LocalSize returned %Iu\n", size );
+        if (flags & (LMEM_DISCARDABLE | LMEM_MODIFY)) ok( size == nolfh_size, "LocalSize returned %Iu\n", (size_t)size );
+        else ok( size == 0 || broken( size == 1 ) /* w7 */, "LocalSize returned %Iu\n", (size_t)size );
         mem = LocalFree( mem );
         ok( !mem, "LocalFree failed, error %lu\n", GetLastError() );
 
@@ -2894,9 +2894,9 @@ static void test_LocalAlloc(void)
         ok( entry.flags == expect_entry.flags, "got flags %#Ix was %#Ix\n", entry.flags, expect_entry.flags );
 
         size = LocalSize( mem );
-        if (flags == LMEM_MOVEABLE) ok( size == 512, "LocalSize returned %Iu\n", size );
+        if (flags == LMEM_MOVEABLE) ok( size == 512, "LocalSize returned %Iu\n", (size_t)size );
 #ifdef __REACTOS__
-        else ok( size == small_size || broken(size == 512) /* Vista */, "LocalSize returned %Iu\n", size );
+        else ok( size == small_size || broken(size == 512) /* Vista */, "LocalSize returned %Iu\n", (size_t)size );
 #else
         else ok( size == small_size, "LocalSize returned %Iu\n", size );
 #endif
@@ -2924,8 +2924,8 @@ static void test_LocalAlloc(void)
         ok( entry.flags == expect_entry.flags, "got flags %#Ix was %#Ix\n", entry.flags, expect_entry.flags );
 
         size = LocalSize( mem );
-        if (flags & (LMEM_DISCARDABLE | LMEM_MODIFY)) ok( size == nolfh_size, "LocalSize returned %Iu\n", size );
-        else ok( size == nolfh_size + 512, "LocalSize returned %Iu\n", size );
+        if (flags & (LMEM_DISCARDABLE | LMEM_MODIFY)) ok( size == nolfh_size, "LocalSize returned %Iu\n", (size_t)size );
+        else ok( size == nolfh_size + 512, "LocalSize returned %Iu\n", (size_t)size );
 
         ret = LocalUnlock( mem );
         ok( !ret, "LocalUnlock succeeded\n" );
@@ -2950,8 +2950,8 @@ static void test_LocalAlloc(void)
         ok( entry.flags == expect_entry.flags, "got flags %#Ix was %#Ix\n", entry.flags, expect_entry.flags );
 
         size = LocalSize( mem );
-        if (flags & (LMEM_DISCARDABLE | LMEM_MODIFY)) ok( size == small_size, "LocalSize returned %Iu\n", size );
-        else ok( size == 10, "LocalSize returned %Iu\n", size );
+        if (flags & (LMEM_DISCARDABLE | LMEM_MODIFY)) ok( size == small_size, "LocalSize returned %Iu\n", (size_t)size );
+        else ok( size == 10, "LocalSize returned %Iu\n", (size_t)size );
 
         ret = LocalUnlock( mem );
         ok( !ret, "LocalUnlock succeeded\n" );
@@ -2976,8 +2976,8 @@ static void test_LocalAlloc(void)
         ok( entry.flags == expect_entry.flags, "got flags %#Ix was %#Ix\n", entry.flags, expect_entry.flags );
 
         size = LocalSize( mem );
-        if (flags & (LMEM_DISCARDABLE | LMEM_MODIFY)) ok( size == nolfh_size, "LocalSize returned %Iu\n", size );
-        else ok( size == 10, "LocalSize returned %Iu\n", size );
+        if (flags & (LMEM_DISCARDABLE | LMEM_MODIFY)) ok( size == nolfh_size, "LocalSize returned %Iu\n", (size_t)size );
+        else ok( size == 10, "LocalSize returned %Iu\n", (size_t)size );
 
         ret = LocalUnlock( mem );
         ok( !ret, "LocalUnlock succeeded\n" );
@@ -3001,7 +3001,7 @@ static void test_LocalAlloc(void)
         ok( entry.flags == expect_entry.flags, "got flags %#Ix was %#Ix\n", entry.flags, expect_entry.flags );
 
         size = LocalSize( mem );
-        ok( size == small_size, "LocalSize returned %Iu\n", size );
+        ok( size == small_size, "LocalSize returned %Iu\n", (size_t)size );
 
         ret = LocalUnlock( mem );
         ok( !ret, "LocalUnlock succeeded\n" );
@@ -3025,7 +3025,7 @@ static void test_LocalAlloc(void)
         ok( entry.flags == expect_entry.flags, "got flags %#Ix was %#Ix\n", entry.flags, expect_entry.flags );
 
         size = LocalSize( mem );
-        ok( size == nolfh_size, "LocalSize returned %Iu\n", size );
+        ok( size == nolfh_size, "LocalSize returned %Iu\n", (size_t)size );
 
         ret = LocalUnlock( mem );
         ok( !ret, "LocalUnlock succeeded\n" );
@@ -3053,8 +3053,8 @@ static void test_LocalAlloc(void)
         ok( entry.flags == expect_entry.flags, "got flags %#Ix was %#Ix\n", entry.flags, expect_entry.flags );
 
         size = LocalSize( mem );
-        if (flags & (LMEM_DISCARDABLE | LMEM_MODIFY)) ok( size == small_size, "LocalSize returned %Iu\n", size );
-        else ok( size == 512, "LocalSize returned %Iu\n", size );
+        if (flags & (LMEM_DISCARDABLE | LMEM_MODIFY)) ok( size == small_size, "LocalSize returned %Iu\n", (size_t)size );
+        else ok( size == 512, "LocalSize returned %Iu\n", (size_t)size );
 
         mem = LocalFree( mem );
         ok( !mem, "LocalFree failed, error %lu\n", GetLastError() );
@@ -3075,8 +3075,8 @@ static void test_LocalAlloc(void)
         ok( entry.flags == expect_entry.flags, "got flags %#Ix was %#Ix\n", entry.flags, expect_entry.flags );
 
         size = LocalSize( mem );
-        if (flags & (LMEM_DISCARDABLE | LMEM_MODIFY)) ok( size == nolfh_size, "LocalSize returned %Iu\n", size );
-        else ok( size == nolfh_size + 512, "LocalSize returned %Iu\n", size );
+        if (flags & (LMEM_DISCARDABLE | LMEM_MODIFY)) ok( size == nolfh_size, "LocalSize returned %Iu\n", (size_t)size );
+        else ok( size == nolfh_size + 512, "LocalSize returned %Iu\n", (size_t)size );
 
         mem = LocalFree( mem );
         ok( !mem, "LocalFree failed, error %lu\n", GetLastError() );
@@ -3097,8 +3097,8 @@ static void test_LocalAlloc(void)
         ok( entry.flags == expect_entry.flags, "got flags %#Ix was %#Ix\n", entry.flags, expect_entry.flags );
 
         size = LocalSize( mem );
-        if (flags & (LMEM_DISCARDABLE | LMEM_MODIFY)) ok( size == small_size, "LocalSize returned %Iu\n", size );
-        else ok( size == 10, "LocalSize returned %Iu\n", size );
+        if (flags & (LMEM_DISCARDABLE | LMEM_MODIFY)) ok( size == small_size, "LocalSize returned %Iu\n", (size_t)size );
+        else ok( size == 10, "LocalSize returned %Iu\n", (size_t)size );
 
         mem = LocalFree( mem );
         ok( !mem, "LocalFree failed, error %lu\n", GetLastError() );
@@ -3119,8 +3119,8 @@ static void test_LocalAlloc(void)
         ok( entry.flags == expect_entry.flags, "got flags %#Ix was %#Ix\n", entry.flags, expect_entry.flags );
 
         size = LocalSize( mem );
-        if (flags & (LMEM_DISCARDABLE | LMEM_MODIFY)) ok( size == nolfh_size, "LocalSize returned %Iu\n", size );
-        else ok( size == 10, "LocalSize returned %Iu\n", size );
+        if (flags & (LMEM_DISCARDABLE | LMEM_MODIFY)) ok( size == nolfh_size, "LocalSize returned %Iu\n", (size_t)size );
+        else ok( size == 10, "LocalSize returned %Iu\n", (size_t)size );
 
         mem = LocalFree( mem );
         ok( !mem, "LocalFree failed, error %lu\n", GetLastError() );
@@ -3147,8 +3147,8 @@ static void test_LocalAlloc(void)
         ok( entry.flags == expect_entry.flags, "got flags %#Ix was %#Ix\n", entry.flags, expect_entry.flags );
 
         size = LocalSize( mem );
-        if (flags == LMEM_MOVEABLE) ok( size == 0, "LocalSize returned %Iu\n", size );
-        else ok( size == small_size, "LocalSize returned %Iu\n", size );
+        if (flags == LMEM_MOVEABLE) ok( size == 0, "LocalSize returned %Iu\n", (size_t)size );
+        else ok( size == small_size, "LocalSize returned %Iu\n", (size_t)size );
 
         mem = LocalFree( mem );
         ok( !mem, "LocalFree failed, error %lu\n", GetLastError() );
@@ -3175,8 +3175,8 @@ static void test_LocalAlloc(void)
         ok( entry.flags == expect_entry.flags, "got flags %#Ix was %#Ix\n", entry.flags, expect_entry.flags );
 
         size = LocalSize( mem );
-        if (flags == LMEM_MOVEABLE) ok( size == 0, "LocalSize returned %Iu\n", size );
-        else ok( size == nolfh_size, "LocalSize returned %Iu\n", size );
+        if (flags == LMEM_MOVEABLE) ok( size == 0, "LocalSize returned %Iu\n", (size_t)size );
+        else ok( size == nolfh_size, "LocalSize returned %Iu\n", (size_t)size );
 
         mem = LocalFree( mem );
         ok( !mem, "LocalFree failed, error %lu\n", GetLastError() );
@@ -3203,7 +3203,7 @@ static void test_LocalAlloc(void)
     SetLastError( 0xdeadbeef );
     size = LocalSize( mem );
 #ifdef __REACTOS__
-    ok( size == 0 || broken(size == 1) /* Vista */, "LocalSize returned %Iu\n", size );
+    ok( size == 0 || broken(size == 1) /* Vista */, "LocalSize returned %Iu\n", (size_t)size );
 #else
     ok( size == 0, "LocalSize returned %Iu\n", size );
 #endif
@@ -3223,14 +3223,14 @@ static void test_LocalAlloc(void)
     mem = LocalAlloc( 0, buffer_size );
     ok( !!mem, "LocalAlloc failed, error %lu\n", GetLastError() );
     size = LocalSize( mem );
-    ok( size >= buffer_size, "LocalSize returned %Iu, error %lu\n", size, GetLastError() );
+    ok( size >= buffer_size, "LocalSize returned %Iu, error %lu\n", (size_t)size, GetLastError() );
     mem = LocalFree( mem );
     ok( !mem, "LocalFree failed, error %lu\n", GetLastError() );
 
     mem = LocalAlloc( LMEM_ZEROINIT, buffer_size );
     ok( !!mem, "LocalAlloc failed, error %lu\n", GetLastError() );
     size = LocalSize( mem );
-    ok( size >= buffer_size, "LocalSize returned %Iu, error %lu\n", size, GetLastError() );
+    ok( size >= buffer_size, "LocalSize returned %Iu, error %lu\n", (size_t)size, GetLastError() );
     ptr = LocalLock( mem );
     ok( !!ptr, "LocalLock failed, error %lu\n", GetLastError() );
     ok( ptr == mem, "got ptr %p, expected %p\n", ptr, mem );
@@ -3241,7 +3241,7 @@ static void test_LocalAlloc(void)
     ok( !!mem, "LocalReAlloc failed, error %lu\n", GetLastError() );
     ok( mem == ptr, "LocalReAlloc returned unexpected handle\n" );
     size = LocalSize( mem );
-    ok( size == buffer_size, "LocalSize returned %Iu, error %lu\n", size, GetLastError() );
+    ok( size == buffer_size, "LocalSize returned %Iu, error %lu\n", (size_t)size, GetLastError() );
 
     ptr = LocalLock( mem );
     ok( !!ptr, "LocalLock failed, error %lu\n", GetLastError() );
@@ -3257,7 +3257,7 @@ static void test_LocalAlloc(void)
     mem = tmp_mem;
 
     size = LocalSize( mem );
-    ok( size >= 2 * buffer_size, "LocalSize returned %Iu, error %lu\n", size, GetLastError() );
+    ok( size >= 2 * buffer_size, "LocalSize returned %Iu, error %lu\n", (size_t)size, GetLastError() );
     ptr = LocalLock( mem );
     ok( !!ptr, "LocalLock failed, error %lu\n", GetLastError() );
     ok( ptr == mem, "got unexpected ptr %p\n", ptr );
@@ -3334,7 +3334,7 @@ static void test_block_layout( HANDLE heap, DWORD global_flags, DWORD heap_flags
 
     for (alloc_size = 0x20000 * sizeof(void *) - 0x3000; alloc_size > 0; alloc_size >>= 1)
     {
-        winetest_push_context( "size %#Ix", alloc_size );
+        winetest_push_context( "size %#Ix", (size_t)alloc_size );
 
         ptr0 = pHeapAlloc( heap, alloc_flags|HEAP_ZERO_MEMORY, alloc_size );
         ok( !!ptr0, "HeapAlloc failed, error %lu\n", GetLastError() );
@@ -3354,7 +3354,7 @@ static void test_block_layout( HANDLE heap, DWORD global_flags, DWORD heap_flags
 #ifdef __REACTOS__
         if (GetNTVersion() >= _WIN32_WINNT_VISTA)
 #endif
-        ok( diff == expect_size, "got diff %#Ix exp %#Ix\n", diff, expect_size );
+        ok( diff == expect_size, "got diff %#Ix exp %#Ix\n", (size_t)diff, (size_t)expect_size );
         ok( !memcmp( ptr0 + alloc_size, tail_buf, tail_size ), "missing block tail\n" );
         ok( !memcmp( ptr1 + alloc_size, tail_buf, tail_size ), "missing block tail\n" );
         ok( !memcmp( ptr2 + alloc_size, tail_buf, tail_size ), "missing block tail\n" );
@@ -3380,7 +3380,7 @@ static void test_block_layout( HANDLE heap, DWORD global_flags, DWORD heap_flags
     /* between the two thresholds, tail may still be set but block position is inconsistent */
 
     alloc_size = 0x20000 * sizeof(void *) - 0x2000;
-    winetest_push_context( "size %#Ix", alloc_size );
+    winetest_push_context( "size %#Ix", (size_t)alloc_size );
 
     ptr0 = pHeapAlloc( heap, alloc_flags|HEAP_ZERO_MEMORY, alloc_size );
     ok( !!ptr0, "HeapAlloc failed, error %lu\n", GetLastError() );
@@ -3396,7 +3396,7 @@ static void test_block_layout( HANDLE heap, DWORD global_flags, DWORD heap_flags
 
     for (alloc_size = 0x20000 * sizeof(void *) - 0x1000; alloc_size < 0x800000; alloc_size <<= 1)
     {
-        winetest_push_context( "size %#Ix", alloc_size );
+        winetest_push_context( "size %#Ix", (size_t)alloc_size );
 
         ptr0 = pHeapAlloc( heap, alloc_flags|HEAP_ZERO_MEMORY, alloc_size );
         ok( !!ptr0, "HeapAlloc failed, error %lu\n", GetLastError() );
@@ -3412,7 +3412,7 @@ static void test_block_layout( HANDLE heap, DWORD global_flags, DWORD heap_flags
         expect_size = ALIGN_BLOCK_SIZE( expect_size + extra_size );
         diff = min( llabs( ptr2 - ptr1 ), llabs( ptr1 - ptr0 ) );
         todo_wine_if( alloc_size == 0x7efe9 )
-        ok( diff > expect_size, "got diff %#Ix\n", diff );
+        ok( diff > expect_size, "got diff %#Ix\n", (size_t)diff );
 
         tail = ptr0[alloc_size] | ptr1[alloc_size] | ptr2[alloc_size];
 #ifdef __REACTOS__
@@ -3447,7 +3447,7 @@ static void test_block_layout( HANDLE heap, DWORD global_flags, DWORD heap_flags
     if (!(heap_flags & padd_flags))
     {
         alloc_size = 0x1000;
-        winetest_push_context( "size %#Ix", alloc_size );
+        winetest_push_context( "size %#Ix", (size_t)alloc_size );
         ptr0 = pHeapAlloc( heap, 0xc00|HEAP_ADD_USER_INFO, alloc_size );
         ok( !!ptr0, "HeapAlloc failed, error %lu\n", GetLastError() );
         ptr1 = HeapAlloc( heap, 0x200|HEAP_ADD_USER_INFO, alloc_size );
@@ -3458,7 +3458,7 @@ static void test_block_layout( HANDLE heap, DWORD global_flags, DWORD heap_flags
         expect_size = max( alloc_size, 2 * sizeof(void *) );
         expect_size = ALIGN_BLOCK_SIZE( expect_size + extra_size + 2 * sizeof(void *) );
         diff = min( llabs( ptr2 - ptr1 ), llabs( ptr1 - ptr0 ) );
-        ok( diff == expect_size, "got diff %#Ix\n", diff );
+        ok( diff == expect_size, "got diff %#Ix\n", (size_t)diff );
 
         ok( !memcmp( ptr0 + alloc_size, tail_buf, tail_size ), "missing block tail\n" );
         ok( !memcmp( ptr1 + alloc_size, tail_buf, tail_size ), "missing block tail\n" );
@@ -3553,7 +3553,7 @@ static void test_heap_checks( DWORD flags )
     ok( ret, "HeapValidate failed\n" );
 
     size = HeapSize( GetProcessHeap(), 0, p );
-    ok( size == 17, "Wrong size %Iu\n", size );
+    ok( size == 17, "Wrong size %Iu\n", (size_t)size );
 
     ok( p[14] == 0, "wrong data %x\n", p[14] );
     ok( p[15] == 0, "wrong data %x\n", p[15] );
@@ -3600,7 +3600,7 @@ static void test_heap_checks( DWORD flags )
         if (flags & HEAP_VALIDATE)
         {
             size = HeapSize( GetProcessHeap(), 0, p );
-            ok( size == ~(SIZE_T)0 || broken(size == ~0u), "Wrong size %Iu\n", size );
+            ok( size == ~(SIZE_T)0 || broken(size == ~0u), "Wrong size %Iu\n", (size_t)size );
 
             p2 = HeapReAlloc( GetProcessHeap(), 0, p, 14 );
             ok( p2 == NULL, "HeapReAlloc succeeded\n" );
@@ -3612,7 +3612,7 @@ static void test_heap_checks( DWORD flags )
 
         p[17] = old;
         size = HeapSize( GetProcessHeap(), 0, p );
-        ok( size == 17, "Wrong size %Iu\n", size );
+        ok( size == 17, "Wrong size %Iu\n", (size_t)size );
 
         p2 = HeapReAlloc( GetProcessHeap(), 0, p, 14 );
         ok( p2 != NULL, "HeapReAlloc failed\n" );
@@ -3687,7 +3687,7 @@ static void test_heap_checks( DWORD flags )
     ok( ret, "HeapValidate failed\n" );
 
     size = HeapSize( GetProcessHeap(), 0, p );
-    ok( size == large_size, "Wrong size %Iu\n", size );
+    ok( size == large_size, "Wrong size %Iu\n", (size_t)size );
 
     ok( p[large_size - 2] == 0, "wrong data %x\n", p[large_size - 2] );
     ok( p[large_size - 1] == 0, "wrong data %x\n", p[large_size - 1] );
@@ -3698,10 +3698,10 @@ static void test_heap_checks( DWORD flags )
         read = 0;
         ret = ReadProcessMemory( GetCurrentProcess(), p + large_size, tail, sizeof(tail), &read );
         ok( ret, "ReadProcessMemory failed, error %lu\n", GetLastError() );
-        ok( read == sizeof(tail), "ReadProcessMemory read %Iu bytes\n", read );
+        ok( read == sizeof(tail), "ReadProcessMemory read %Iu bytes\n", (size_t)read );
         for (i = 0; i < read && i < sizeof(tail); ++i)
             ok( tail[i] == expected_tail, "wrong tail byte %Iu: got %x, expected %x\n",
-                i, tail[i], expected_tail );
+                (size_t)i, tail[i], expected_tail );
     }
 
     ret = HeapFree( GetProcessHeap(), 0, p );
@@ -3714,7 +3714,7 @@ static void test_heap_checks( DWORD flags )
         {
             p = HeapAlloc( GetProcessHeap(), 0, size );
             for (i = 0; i < 32; i++) if (p[size + i] != 0xab) break;
-            ok( i >= 8, "only %Iu tail bytes for size %Iu\n", i, size );
+            ok( i >= 8, "only %Iu tail bytes for size %Iu\n", (size_t)i, (size_t)size );
             HeapFree( GetProcessHeap(), 0, p );
         }
     }
@@ -3830,20 +3830,20 @@ static BOOL check_heap_block_protection( HANDLE heap, BYTE *ptr, SIZE_T size, DW
     BOOL valid;
 
     actual = HeapSize( heap, 0, ptr );
-    ok( actual == size, "HeapSize returned %#Ix, expected %#Ix\n", actual, size );
+    ok( actual == size, "HeapSize returned %#Ix, expected %#Ix\n", (size_t)actual, (size_t)size );
     valid = HeapValidate( heap, 0, ptr );
     ok( valid, "HeapValidate failed, error %lu\n", GetLastError() );
     if (actual != size || !valid) return FALSE;
     while (cursor < end)
     {
         ret = VirtualQuery( (void *)cursor, &info, sizeof(info) );
-        ok( ret == sizeof(info), "VirtualQuery returned %Iu, error %lu\n", ret, GetLastError() );
+        ok( ret == sizeof(info), "VirtualQuery returned %Iu, error %lu\n", (size_t)ret, GetLastError() );
         if (ret != sizeof(info)) return FALSE;
         ok( info.State == MEM_COMMIT, "memory state is %#lx\n", info.State );
         ok( info.Protect == protection, "protection is %#lx, expected %#lx\n", info.Protect, protection );
         next = (ULONG_PTR)info.BaseAddress + info.RegionSize;
         ok( (ULONG_PTR)info.BaseAddress <= cursor && next > cursor,
-            "invalid region %p size %#Ix for %p\n", info.BaseAddress, info.RegionSize, (void *)cursor );
+            "invalid region %p size %#Ix for %p\n", info.BaseAddress, (size_t)info.RegionSize, (void *)cursor );
         if (info.State != MEM_COMMIT || (ULONG_PTR)info.BaseAddress > cursor || next <= cursor) return FALSE;
         if (info.Protect != PAGE_READWRITE && info.Protect != PAGE_EXECUTE_READWRITE) return FALSE;
         cursor = next;
@@ -3885,7 +3885,7 @@ static void test_heap_execute(void)
             winetest_push_context( "allocation pass %u", pass );
             for (i = 1; i < ARRAY_SIZE(blocks); ++i)
             {
-                winetest_push_context( "block %Iu", i );
+                winetest_push_context( "block %Iu", (size_t)i );
                 blocks[i] = HeapAlloc( heap, HEAP_ZERO_MEMORY, 0x18000 );
                 ok( !!blocks[i], "HeapAlloc failed, error %lu\n", GetLastError() );
                 if (blocks[i] && check_heap_block_protection( heap, blocks[i], 0x18000, protection ))
@@ -3916,13 +3916,13 @@ static void test_heap_execute(void)
                 {
                     size = j ? large_size : small_size;
                     next = HeapReAlloc( heap, HEAP_ZERO_MEMORY, ptr, size );
-                    ok( !!next, "HeapReAlloc to %#Ix failed, error %lu\n", size, GetLastError() );
+                    ok( !!next, "HeapReAlloc to %#Ix failed, error %lu\n", (size_t)size, GetLastError() );
                     if (!next) break;
                     ptr = next;
                     if (!check_heap_block_protection( heap, ptr, size, protection )) break;
                     ok( ptr[0] == 0x59, "HeapReAlloc lost the first byte\n" );
                     for (i = 1; i < size; ++i) if (ptr[i]) break;
-                    ok( i == size, "HeapReAlloc returned nonzero byte at %#Ix\n", i );
+                    ok( i == size, "HeapReAlloc returned nonzero byte at %#Ix\n", (size_t)i );
                 }
             }
             ret = HeapFree( heap, 0, ptr );
@@ -3966,8 +3966,8 @@ static void check_classic_heap_contents( const BYTE *ptr, SIZE_T size, SIZE_T ma
         offset += count;
     }
     ok( ret && offset == size, "ReadProcessMemory stopped at %#Ix of %#Ix, error %lu\n",
-        offset, size, GetLastError() );
-    ok( first_bad == size, "contents differ at %#Ix of %#Ix\n", first_bad, size );
+        (size_t)offset, (size_t)size, GetLastError() );
+    ok( first_bad == size, "contents differ at %#Ix of %#Ix\n", (size_t)first_bad, (size_t)size );
 }
 
 static BOOL check_classic_heap_block( HANDLE heap, BYTE *ptr, SIZE_T size, const BYTE *expected_tail )
@@ -3977,17 +3977,17 @@ static BOOL check_classic_heap_block( HANDLE heap, BYTE *ptr, SIZE_T size, const
     BOOL ret;
 
     actual = HeapSize( heap, 0, ptr );
-    ok( actual == size, "HeapSize returned %#Ix, expected %#Ix\n", actual, size );
+    ok( actual == size, "HeapSize returned %#Ix, expected %#Ix\n", (size_t)actual, (size_t)size );
     ret = HeapValidate( heap, 0, ptr );
     ok( ret, "HeapValidate failed, error %lu\n", GetLastError() );
     if (actual != size || !ret) return FALSE;
     ret = ReadProcessMemory( GetCurrentProcess(), ptr + size, tail, sizeof(tail), &read );
     ok( ret, "tail ReadProcessMemory failed, error %lu\n", GetLastError() );
-    ok( read == sizeof(tail), "tail ReadProcessMemory read %Iu bytes\n", read );
+    ok( read == sizeof(tail), "tail ReadProcessMemory read %Iu bytes\n", (size_t)read );
     if (ret && read == sizeof(tail))
         for (i = 0; i < sizeof(tail); ++i)
             ok( tail[i] == expected_tail[i], "tail[%Iu] is %#x, expected %#x\n",
-                i, tail[i], expected_tail[i] );
+                (size_t)i, tail[i], expected_tail[i] );
     return TRUE;
 }
 
@@ -4020,7 +4020,7 @@ static void test_classic_heap_realloc( DWORD heap_flags )
     if (!ptr) goto cleanup_heap;
     if (!check_classic_heap_block( heap, ptr, large_size, zero_tail )) goto cleanup_heap;
     size = VirtualQuery( ptr, &initial, sizeof(initial) );
-    ok( size == sizeof(initial), "VirtualQuery returned %Iu\n", size );
+    ok( size == sizeof(initial), "VirtualQuery returned %Iu\n", (size_t)size );
     if (size != sizeof(initial)) goto cleanup_heap;
     ok( initial.State == MEM_COMMIT, "initial state is %#lx\n", initial.State );
     ok( initial.AllocationBase != storage, "large allocation shares the supplied heap reservation\n" );
@@ -4035,7 +4035,7 @@ static void test_classic_heap_realloc( DWORD heap_flags )
     if (!check_classic_heap_block( heap, ptr, small_size, tail )) goto cleanup_heap;
     check_classic_heap_contents( ptr, small_size, small_size );
     size = VirtualQuery( (void *)old_last, &info, sizeof(info) );
-    ok( size == sizeof(info), "VirtualQuery after shrink returned %Iu\n", size );
+    ok( size == sizeof(info), "VirtualQuery after shrink returned %Iu\n", (size_t)size );
     if (size == sizeof(info))
     {
         ok( info.State == MEM_RESERVE, "state after shrink is %#lx\n", info.State );
@@ -4052,7 +4052,7 @@ static void test_classic_heap_realloc( DWORD heap_flags )
     if (!check_classic_heap_block( heap, ptr, small_size, tail )) goto cleanup_heap;
     check_classic_heap_contents( ptr, small_size, small_size );
     size = VirtualQuery( (void *)old_last, &info, sizeof(info) );
-    ok( size == sizeof(info), "VirtualQuery after in-place growth returned %Iu\n", size );
+    ok( size == sizeof(info), "VirtualQuery after in-place growth returned %Iu\n", (size_t)size );
     if (size == sizeof(info))
     {
         ok( info.State == MEM_RESERVE, "state after in-place growth is %#lx\n", info.State );
@@ -4067,7 +4067,7 @@ static void test_classic_heap_realloc( DWORD heap_flags )
     if (!next) goto cleanup_heap;
     ok( (ULONG_PTR)next != old_address, "movable growth returned the original pointer\n" );
     ptr = next;
-    ok( size == sizeof(info), "VirtualQuery after movable growth returned %Iu\n", size );
+    ok( size == sizeof(info), "VirtualQuery after movable growth returned %Iu\n", (size_t)size );
     if (size == sizeof(info))
         ok( info.State == MEM_FREE, "old reservation state after movable growth is %#lx\n", info.State );
     if (!check_classic_heap_block( heap, ptr, large_size, zero_tail )) goto cleanup_heap;
@@ -4085,7 +4085,7 @@ cleanup_heap:
 
 cleanup_storage:
     size = VirtualQuery( storage, &info, sizeof(info) );
-    ok( size == sizeof(info), "supplied storage VirtualQuery returned %Iu\n", size );
+    ok( size == sizeof(info), "supplied storage VirtualQuery returned %Iu\n", (size_t)size );
     if (size != sizeof(info)) goto done;
     ok( info.AllocationBase == storage, "supplied storage allocation is %p, expected %p\n",
         info.AllocationBase, storage );
@@ -4093,7 +4093,7 @@ cleanup_storage:
     ret = VirtualFree( storage, 0, MEM_RELEASE );
     ok( ret, "VirtualFree supplied storage failed, error %lu\n", GetLastError() );
     size = VirtualQuery( storage, &info, sizeof(info) );
-    ok( size == sizeof(info), "released storage VirtualQuery returned %Iu\n", size );
+    ok( size == sizeof(info), "released storage VirtualQuery returned %Iu\n", (size_t)size );
     if (size == sizeof(info))
         ok( info.State == MEM_FREE, "released storage state is %#lx\n", info.State );
 
@@ -4109,10 +4109,10 @@ static void check_heap_reuse_sentinel( const BYTE *ptr )
 
     ret = ReadProcessMemory( GetCurrentProcess(), ptr, bytes, sizeof(bytes), &read );
     ok( ret, "sentinel ReadProcessMemory failed, error %lu\n", GetLastError() );
-    ok( read == sizeof(bytes), "sentinel ReadProcessMemory read %Iu bytes\n", read );
+    ok( read == sizeof(bytes), "sentinel ReadProcessMemory read %Iu bytes\n", (size_t)read );
     if (!ret || read != sizeof(bytes)) return;
     for (i = 0; i < sizeof(bytes); ++i)
-        ok( bytes[i] == 0xa5, "sentinel byte %Iu is %#x\n", i, bytes[i] );
+        ok( bytes[i] == 0xa5, "sentinel byte %Iu is %#x\n", (size_t)i, bytes[i] );
 }
 
 static void test_heap_reuse(void)
@@ -4126,7 +4126,7 @@ static void test_heap_reuse(void)
 
     for (index = 0; index < ARRAY_SIZE(sizes); ++index)
     {
-        winetest_push_context( "fixed heap reuse size %#Ix", sizes[index] );
+        winetest_push_context( "fixed heap reuse size %#Ix", (size_t)sizes[index] );
         heap = HeapCreate( 0, 0x40000, 0x40000 );
         ok( !!heap, "HeapCreate failed, error %lu\n", GetLastError() );
         if (!heap) goto done;
@@ -4198,22 +4198,22 @@ static BOOL write_heap_tail_byte( BYTE *address, BYTE value )
     BOOL ret;
 
     size = VirtualQuery( address, &info, sizeof(info) );
-    ok( size == sizeof(info), "tail VirtualQuery returned %Iu, error %lu\n", size, GetLastError() );
+    ok( size == sizeof(info), "tail VirtualQuery returned %Iu, error %lu\n", (size_t)size, GetLastError() );
     if (size != sizeof(info)) return FALSE;
     base = (ULONG_PTR)info.BaseAddress;
     ret = info.State == MEM_COMMIT && info.Protect == PAGE_READWRITE &&
           base <= (ULONG_PTR)address && info.RegionSize <= ~(ULONG_PTR)0 - base &&
           (ULONG_PTR)address - base < info.RegionSize;
     ok( ret, "tail region %p size %#Ix state %#lx protection %#lx for %p\n",
-        info.BaseAddress, info.RegionSize, info.State, info.Protect, address );
+        info.BaseAddress, (size_t)info.RegionSize, info.State, info.Protect, address );
     if (!ret) return FALSE;
     ret = WriteProcessMemory( GetCurrentProcess(), address, &value, sizeof(value), &written );
     ok( ret && written == sizeof(value), "tail WriteProcessMemory returned %u, wrote %Iu, error %lu\n",
-        ret, written, GetLastError() );
+        ret, (size_t)written, GetLastError() );
     if (!ret || written != sizeof(value)) return FALSE;
     ret = ReadProcessMemory( GetCurrentProcess(), address, &observed, sizeof(observed), &read );
     ok( ret && read == sizeof(observed), "tail ReadProcessMemory returned %u, read %Iu, error %lu\n",
-        ret, read, GetLastError() );
+        ret, (size_t)read, GetLastError() );
     if (!ret || read != sizeof(observed)) return FALSE;
     ok( observed == value, "tail is %#x, expected %#x\n", observed, value );
     return observed == value;
@@ -4225,21 +4225,21 @@ static void check_destroyed_heap_range( const void *address, SIZE_T size )
     ULONG_PTR cursor = (ULONG_PTR)address, end, base, next;
     SIZE_T ret;
 
-    ok( size <= ~(ULONG_PTR)0 - cursor, "destroyed range %p size %#Ix overflows\n", address, size );
+    ok( size <= ~(ULONG_PTR)0 - cursor, "destroyed range %p size %#Ix overflows\n", address, (size_t)size );
     if (size > ~(ULONG_PTR)0 - cursor) return;
     end = cursor + size;
     while (cursor < end)
     {
         ret = VirtualQuery( (void *)cursor, &info, sizeof(info) );
-        ok( ret == sizeof(info), "destroyed VirtualQuery returned %Iu, error %lu\n", ret, GetLastError() );
+        ok( ret == sizeof(info), "destroyed VirtualQuery returned %Iu, error %lu\n", (size_t)ret, GetLastError() );
         if (ret != sizeof(info)) return;
         base = (ULONG_PTR)info.BaseAddress;
         ok( base <= cursor && info.RegionSize <= ~(ULONG_PTR)0 - base,
-            "invalid destroyed region %p size %#Ix for %p\n", info.BaseAddress, info.RegionSize, (void *)cursor );
+            "invalid destroyed region %p size %#Ix for %p\n", info.BaseAddress, (size_t)info.RegionSize, (void *)cursor );
         if (base > cursor || info.RegionSize > ~(ULONG_PTR)0 - base) return;
         next = base + info.RegionSize;
         ok( next > cursor && info.State == MEM_FREE,
-            "destroyed region %p size %#Ix state %#lx\n", info.BaseAddress, info.RegionSize, info.State );
+            "destroyed region %p size %#Ix state %#lx\n", info.BaseAddress, (size_t)info.RegionSize, info.State );
         if (next <= cursor || info.State != MEM_FREE) return;
         cursor = next;
     }
@@ -4270,7 +4270,7 @@ static void test_heap_destroy( DWORD global_flags )
         for (i = 0; i < ARRAY_SIZE(blocks); ++i)
         {
             blocks[i] = HeapAlloc( heap, 0, sizes[i] );
-            ok( !!blocks[i], "HeapAlloc(%Iu) failed, error %lu\n", sizes[i], GetLastError() );
+            ok( !!blocks[i], "HeapAlloc(%Iu) failed, error %lu\n", (size_t)sizes[i], GetLastError() );
             if (!blocks[i] || !check_heap_block_protection( heap, blocks[i], sizes[i], PAGE_READWRITE ))
                 goto cleanup;
             for (j = 0; j < sizes[i]; ++j) blocks[i][j] = classic_heap_marker( j );
@@ -4282,7 +4282,7 @@ static void test_heap_destroy( DWORD global_flags )
             read = 0;
             ret = ReadProcessMemory( GetCurrentProcess(), blocks[0] + sizes[0], &tail, sizeof(tail), &read );
             ok( ret && read == sizeof(tail), "tail ReadProcessMemory returned %u, read %Iu, error %lu\n",
-                ret, read, GetLastError() );
+                ret, (size_t)read, GetLastError() );
             if (!ret || read != sizeof(tail)) goto cleanup;
             ok( tail == 0xab, "initial tail is %#x\n", tail );
             if (tail != 0xab) goto cleanup;
@@ -4532,17 +4532,17 @@ static void test_GlobalMemoryStatus(void)
     ok( mem.dwMemoryLoad == memex.dwMemoryLoad, "got dwMemoryLoad %lu\n", mem.dwMemoryLoad );
     ok( mem.dwTotalPhys == min( ~(SIZE_T)0 >> 1, memex.ullTotalPhys ) ||
         broken( mem.dwTotalPhys == ~(SIZE_T)0 ) /* Win <= 8.1 with RAM size > 4GB */,
-        "got dwTotalPhys %#Ix\n", mem.dwTotalPhys );
+        "got dwTotalPhys %#Ix\n", (size_t)mem.dwTotalPhys );
     ok( IS_WITHIN_RANGE( mem.dwAvailPhys, min( ~(SIZE_T)0 >> 1, memex.ullAvailPhys ) ) ||
         broken( mem.dwAvailPhys == ~(SIZE_T)0 ) /* Win <= 8.1 with RAM size > 4GB */,
-        "got dwAvailPhys %#Ix\n", mem.dwAvailPhys );
+        "got dwAvailPhys %#Ix\n", (size_t)mem.dwAvailPhys );
 #ifndef _WIN64
     todo_wine_if(memex.ullTotalPageFile > 0xfff7ffff)
 #endif
-    ok( mem.dwTotalPageFile == min( ~(SIZE_T)0, memex.ullTotalPageFile ), "got dwTotalPageFile %#Ix\n", mem.dwTotalPageFile );
-    ok( IS_WITHIN_RANGE( mem.dwAvailPageFile, min( ~(SIZE_T)0, memex.ullAvailPageFile ) ), "got dwAvailPageFile %#Ix\n", mem.dwAvailPageFile );
-    ok( mem.dwTotalVirtual == memex.ullTotalVirtual, "got dwTotalVirtual %#Ix\n", mem.dwTotalVirtual );
-    ok( mem.dwAvailVirtual == memex.ullAvailVirtual, "got dwAvailVirtual %#Ix\n", mem.dwAvailVirtual );
+    ok( mem.dwTotalPageFile == min( ~(SIZE_T)0, memex.ullTotalPageFile ), "got dwTotalPageFile %#Ix\n", (size_t)mem.dwTotalPageFile );
+    ok( IS_WITHIN_RANGE( mem.dwAvailPageFile, min( ~(SIZE_T)0, memex.ullAvailPageFile ) ), "got dwAvailPageFile %#Ix\n", (size_t)mem.dwAvailPageFile );
+    ok( mem.dwTotalVirtual == memex.ullTotalVirtual, "got dwTotalVirtual %#Ix\n", (size_t)mem.dwTotalVirtual );
+    ok( mem.dwAvailVirtual == memex.ullAvailVirtual, "got dwAvailVirtual %#Ix\n", (size_t)mem.dwAvailVirtual );
 
 #undef IS_WITHIN_RANGE
 }
@@ -4554,14 +4554,14 @@ static void get_valloc_info( void *mem, char **base, SIZE_T *alloc_size )
     char *p;
 
     size = VirtualQuery( mem, &info, sizeof(info) );
-    ok( size == sizeof(info), "got %Iu.\n", size );
+    ok( size == sizeof(info), "got %Iu.\n", (size_t)size );
 
     info2 = info;
     p = info.AllocationBase;
     while (1)
     {
         size = VirtualQuery( p, &info2, sizeof(info2) );
-        ok( size == sizeof(info), "got %Iu.\n", size );
+        ok( size == sizeof(info), "got %Iu.\n", (size_t)size );
         if (info2.AllocationBase != info.AllocationBase)
             break;
         ok( info2.State == MEM_RESERVE || info2.State == MEM_COMMIT, "got %#lx.\n", info2.State );
@@ -4583,18 +4583,18 @@ static void test_heap_size( SIZE_T initial_size )
     HANDLE heap;
     void *p;
 
-    winetest_push_context( "init size %#Ix", initial_size );
+    winetest_push_context( "init size %#Ix", (size_t)initial_size );
     heap = HeapCreate( HEAP_NO_SERIALIZE, initial_size, 0 );
     get_valloc_info( heap, &current_base, &alloc_size );
 
     ok( alloc_size == initial_size + default_heap_size || broken( (initial_size && alloc_size == initial_size)
         || (!initial_size && (alloc_size == default_heap_size * sizeof(void*))) ) /* Win7 */,
-        "got %#Ix.\n", alloc_size );
+        "got %#Ix.\n", (size_t)alloc_size );
 
     current_subheap_size = alloc_size;
     for (i = 0; i < 100; ++i)
     {
-        winetest_push_context( "i %u, current_subheap_size %#Ix", i, current_subheap_size );
+        winetest_push_context( "i %u, current_subheap_size %#Ix", i, (size_t)current_subheap_size );
         p = HeapAlloc( heap, 0, 0x60000 );
         get_valloc_info( p, &base, &alloc_size );
         if (base != current_base)
@@ -4612,7 +4612,7 @@ static void test_heap_size( SIZE_T initial_size )
                     max_size_reached = TRUE;
             }
         }
-        ok( alloc_size == current_subheap_size, "got %#Ix.\n", alloc_size );
+        ok( alloc_size == current_subheap_size, "got %#Ix.\n", (size_t)alloc_size );
         winetest_pop_context();
     }
     ok( max_size_reached, "Did not reach maximum subheap size.\n" );
@@ -4643,7 +4643,7 @@ static void test_heap_sizes(void)
         ok( heap != NULL, "%x: creation failed\n", i * 0x100 );
         get_valloc_info( heap, &base, &size );
         ok( size == ((i * 0x100 + round_size - 1) & ~(round_size - 1)),
-            "%x: wrong size %Ix\n", i * 0x100, size );
+            "%x: wrong size %Ix\n", i * 0x100, (size_t)size );
         HeapDestroy( heap );
     }
 }

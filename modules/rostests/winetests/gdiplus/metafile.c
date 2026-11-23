@@ -86,20 +86,6 @@ typedef struct EmfPlusRecordHeader
 
 typedef enum
 {
-    ObjectTypeInvalid,
-    ObjectTypeBrush,
-    ObjectTypePen,
-    ObjectTypePath,
-    ObjectTypeRegion,
-    ObjectTypeImage,
-    ObjectTypeFont,
-    ObjectTypeStringFormat,
-    ObjectTypeImageAttributes,
-    ObjectTypeCustomLineCap,
-} ObjectType;
-
-typedef enum
-{
     ImageDataTypeUnknown,
     ImageDataTypeBitmap,
     ImageDataTypeMetafile,

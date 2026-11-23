@@ -67,7 +67,7 @@ void DumpMsgList(const char* lstName, const tagMsgList *ml)
                dlgProcName,
                ml->msgList[i1].msg,
                ml->msgList[i1].wParam,
-               ml->msgList[i1].lParam,
+               (size_t)ml->msgList[i1].lParam,
                ml->msgList[i1].result);
     }
 }
@@ -133,7 +133,7 @@ INT_PTR CALLBACK Test_CreateDialogW_DLGPROC(HWND hWnd, UINT msg, WPARAM wParam, 
         msglist.msgCount++;
     }
     trace("DlgProc: msg 0x%x, wParam 0x%Ix, lParam 0x%Ix\n",
-           msg, wParam, lParam);
+           msg, wParam, (size_t)lParam);
     return FALSE;
 }
 
@@ -152,7 +152,7 @@ LRESULT CALLBACK Test_CreateDialogW_WNDPROC(HWND hWnd, UINT msg, WPARAM wParam, 
         msglist.msgCount++;
     }
     trace("WndProc: msg 0x%x, wParam 0x%Ix, lParam 0x%Ix, result %Id\n",
-          msg, wParam, lParam, res);
+          msg, wParam, (size_t)lParam, (ptrdiff_t)res);
     return res;
 }
 

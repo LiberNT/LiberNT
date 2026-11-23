@@ -5206,7 +5206,7 @@ static void test_undo(void)
 static void ok_msg_result_(int line, const char *desc, HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam, LRESULT expect)
 {
   LRESULT lresult = SendMessageA(hwnd, message, wparam, lparam);
-  ok_(__FILE__,line)(lresult == expect, "%s: Expected %Id, got %Id\n", desc, expect, lresult);
+  ok_(__FILE__,line)(lresult == expect, "%s: Expected %Id, got %Id\n", desc, (ptrdiff_t)expect, (ptrdiff_t)lresult);
 }
 
 enum editorUndoState {
@@ -5263,7 +5263,7 @@ static HRESULT perform_editor_undo_state_action(struct undo_test *inst, enum edi
       {
         LONG_PTR cur_undo_limit = SendMessageA(inst->hwnd, EM_SETUNDOLIMIT, inst->undo_limit, 0);
         ok(cur_undo_limit == inst->undo_limit, "Expected undo limit %Id, got %Id\n",
-           inst->undo_limit, cur_undo_limit);
+           (ptrdiff_t)inst->undo_limit, (ptrdiff_t)cur_undo_limit);
         if (count) *count = 0;
       }
       else
@@ -5354,7 +5354,7 @@ static BOOL perform_undo_(struct undo_test *inst, BOOL can_undo, int line)
   if (inst->test_flags & undoTestUseWindowMessages)
   {
     LRESULT lres = SendMessageA(inst->hwnd, EM_UNDO, 0, 0);
-    ok_(__FILE__, line)(lres == FALSE || lres == TRUE, "unexpected LRESULT %#Ix\n", lres);
+    ok_(__FILE__, line)(lres == FALSE || lres == TRUE, "unexpected LRESULT %#Ix\n", (size_t)lres);
     result = lres;
   }
   else
@@ -5388,7 +5388,7 @@ static BOOL perform_redo_(struct undo_test *inst, BOOL can_redo, int line)
   if (inst->test_flags & undoTestUseWindowMessages)
   {
     LRESULT lres = SendMessageA(inst->hwnd, EM_REDO, 0, 0);
-    ok_(__FILE__, line)(lres == FALSE || lres == TRUE, "unexpected LRESULT %#Ix\n", lres);
+    ok_(__FILE__, line)(lres == FALSE || lres == TRUE, "unexpected LRESULT %#Ix\n", (size_t)lres);
     result = lres;
   }
   else
@@ -5517,7 +5517,7 @@ static void test_undo_control(void)
   inst.last_undo_status = TRUE;
   inst.last_redo_status = TRUE;
   inst.undo_limit = SendMessageA(inst.hwnd, EM_SETUNDOLIMIT, 100, 0);
-  ok(inst.undo_limit >= 1, "Message EM_SETUNDOLIMIT returned %#Ix\n", inst.undo_limit);
+  ok(inst.undo_limit >= 1, "Message EM_SETUNDOLIMIT returned %#Ix\n", (size_t)inst.undo_limit);
 
   if (SUCCEEDED(ITextDocument_Undo(inst.doc, 1, NULL)))
   {

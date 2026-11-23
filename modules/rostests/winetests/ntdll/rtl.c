@@ -258,7 +258,7 @@ static void test_RtlQueryProcessDebugInformation(void)
 }
 
 #define COMP(str1,str2,cmplen,len) size = RtlCompareMemory(str1, str2, cmplen); \
-  ok(size == len, "Expected %Id, got %Id\n", size, (SIZE_T)len)
+  ok(size == len, "Expected %Iu, got %Iu\n", (size_t)(len), (size_t)size)
 
 static void test_RtlCompareMemory(void)
 {
@@ -2408,12 +2408,12 @@ static void test_LdrLockLoaderLock(void)
     status = LdrLockLoaderLock(0x10, &result, &magic);
     ok(status == STATUS_INVALID_PARAMETER_1, "got 0x%08lx\n", status);
     ok(result == 0, "got %ld\n", result);
-    ok(magic == 0, "got %Ix\n", magic);
+    ok(magic == 0, "got %Ix\n", (size_t)magic);
 
     magic = 0xdeadbeef;
     status = LdrLockLoaderLock(0x10, NULL, &magic);
     ok(status == STATUS_INVALID_PARAMETER_1, "got 0x%08lx\n", status);
-    ok(magic == 0, "got %Ix\n", magic);
+    ok(magic == 0, "got %Ix\n", (size_t)magic);
 
     result = 10;
     status = LdrLockLoaderLock(0x10, &result, NULL);
@@ -2424,7 +2424,7 @@ static void test_LdrLockLoaderLock(void)
     magic = 0xdeadbeef;
     status = LdrLockLoaderLock(0x2, NULL, &magic);
     ok(status == STATUS_INVALID_PARAMETER_2, "got 0x%08lx\n", status);
-    ok(magic == 0, "got %Ix\n", magic);
+    ok(magic == 0, "got %Ix\n", (size_t)magic);
 
     /* magic pointer is null */
     result = 10;
@@ -2438,7 +2438,7 @@ static void test_LdrLockLoaderLock(void)
     status = LdrLockLoaderLock(0x2, &result, &magic);
     ok(status == STATUS_SUCCESS, "got 0x%08lx\n", status);
     ok(result == 1, "got %ld\n", result);
-    ok(magic != 0, "got %Ix\n", magic);
+    ok(magic != 0, "got %Ix\n", (size_t)magic);
     LdrUnlockLoaderLock(0, magic);
 }
 
@@ -3092,7 +3092,7 @@ static void test_RtlInitializeCriticalSectionEx(void)
     ok(cs.RecursionCount == 0, "expected RecursionCount == 0, got %ld\n", cs.RecursionCount);
     ok(cs.LockSemaphore == NULL, "expected LockSemaphore == NULL, got %p\n", cs.LockSemaphore);
     ok(cs.SpinCount == 0 || broken(cs.SpinCount != 0) /* >= Win 8 */,
-       "expected SpinCount == 0, got %Id\n", cs.SpinCount);
+       "expected SpinCount == 0, got %Id\n", (ptrdiff_t)cs.SpinCount);
     RtlDeleteCriticalSection(&cs);
 
     memset(&cs, 0x11, sizeof(cs));
@@ -3102,7 +3102,7 @@ static void test_RtlInitializeCriticalSectionEx(void)
     ok(cs.RecursionCount == 0, "expected RecursionCount == 0, got %ld\n", cs.RecursionCount);
     ok(cs.LockSemaphore == NULL, "expected LockSemaphore == NULL, got %p\n", cs.LockSemaphore);
     ok(cs.SpinCount == 0 || broken(cs.SpinCount != 0) /* >= Win 8 */,
-       "expected SpinCount == 0, got %Id\n", cs.SpinCount);
+       "expected SpinCount == 0, got %Id\n", (ptrdiff_t)cs.SpinCount);
     RtlDeleteCriticalSection(&cs);
 }
 

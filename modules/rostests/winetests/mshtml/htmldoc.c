@@ -795,7 +795,7 @@ static HRESULT WINAPI Protocol_Start(IInternetProtocol *iface, LPCWSTR szUrl,
     ok(pOIProtSink != NULL, "pOIProtSink == NULL\n");
     ok(pOIBindInfo != NULL, "pOIBindInfo == NULL\n");
     ok(!grfPI, "grfPI = %lx\n", grfPI);
-    ok(!dwReserved, "dwReserved = %Ix\n", dwReserved);
+    ok(!dwReserved, "dwReserved = %Ix\n", (size_t)dwReserved);
     if(is_mhtml)
         ok(!lstrcmpW(szUrl, L"winetest:doc"), "unexpected URL %s\n", wine_dbgstr_w(szUrl));
 

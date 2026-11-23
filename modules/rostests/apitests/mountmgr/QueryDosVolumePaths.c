@@ -266,7 +266,7 @@ Test_QueryDosVolumePath(
      * plus one final NUL-terminator */
     ok(VolumePath->MultiSzLength >= 2 * sizeof(UNICODE_NULL),
        "DOS volume path string too short (length: %Iu)\n",
-       VolumePath->MultiSzLength / sizeof(WCHAR));
+       (size_t)(VolumePath->MultiSzLength / sizeof(WCHAR)));
     ok(VolumePath->MultiSz[VolumePath->MultiSzLength / sizeof(WCHAR) - 2] == UNICODE_NULL,
        "Missing NUL-terminator (2)\n");
     ok(VolumePath->MultiSz[VolumePath->MultiSzLength / sizeof(WCHAR) - 1] == UNICODE_NULL,
@@ -302,7 +302,7 @@ Test_QueryDosVolumePaths(
 
     ok(VolumePaths->MultiSzLength >= sizeof(UNICODE_NULL),
        "DOS volume path string too short (length: %Iu)\n",
-       VolumePaths->MultiSzLength / sizeof(WCHAR));
+       (size_t)(VolumePaths->MultiSzLength / sizeof(WCHAR)));
 
     /* Check for correct double-NUL-termination, if there is at least one string */
     if (VolumePaths->MultiSzLength >= 2 * sizeof(UNICODE_NULL) &&

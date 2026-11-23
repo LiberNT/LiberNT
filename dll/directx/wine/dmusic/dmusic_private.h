@@ -36,6 +36,7 @@
 #include "winreg.h"
 #include "objbase.h"
 
+#include "strmif.h"
 #include "dmusici.h"
 #include "dmusicf.h"
 #include "dmusics.h"

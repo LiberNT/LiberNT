@@ -108,15 +108,17 @@ AppleAgxObjectPlace(
     _Out_ PSIZE_T Bytes)
 {
     ULONG64 Offset, Length, Base;
+    ULONG64 Size = Request->Size;
 
     *Page = 0;
     *Bytes = 0;
-    if (!Request->Size || Request->Size > APPLE_UAT_HOST_SIZE)
+    if (!Size || Size > APPLE_UAT_HOST_SIZE)
         return STATUS_INVALID_PARAMETER;
     if (Request->Hidden)
     {
-        Length = (Request->Size + APPLE_UAT_PAGE_SIZE - 1) & ~(APPLE_UAT_PAGE_SIZE - 1);
-        if (Request->At || Request->Offset || Request->Lower || Request->CachedBytes || !Request->Client ||
+        Length = (Size + APPLE_UAT_PAGE_SIZE - 1) & ~(APPLE_UAT_PAGE_SIZE - 1);
+        if ((SIZE_T)Length != Length || Request->At || Request->Offset || Request->Lower ||
+            Request->CachedBytes || !Request->Client ||
             (Request->Client & (APPLE_UAT_PAGE_SIZE - 1)) || Request->Leaf == APPLE_AGX_LEAF_NONE ||
             Request->Leaf > APPLE_AGX_LEAF_PB_LIST || !AgxClientInside(Request->Client, Length))
         {
@@ -139,8 +141,9 @@ AppleAgxObjectPlace(
         Offset = Request->Offset;
         Base = Heap->Next;
     }
-    Length = (Offset + Request->Size + APPLE_UAT_PAGE_SIZE - 1) & ~(APPLE_UAT_PAGE_SIZE - 1);
-    if (Base < APPLE_UAT_HOST_BASE || Base - APPLE_UAT_HOST_BASE >= APPLE_UAT_HOST_SIZE ||
+    Length = (Offset + Size + APPLE_UAT_PAGE_SIZE - 1) & ~(APPLE_UAT_PAGE_SIZE - 1);
+    if ((SIZE_T)Length != Length || Base < APPLE_UAT_HOST_BASE ||
+        Base - APPLE_UAT_HOST_BASE >= APPLE_UAT_HOST_SIZE ||
         Length > APPLE_UAT_HOST_SIZE - (Base - APPLE_UAT_HOST_BASE))
     {
         return STATUS_INVALID_PARAMETER;

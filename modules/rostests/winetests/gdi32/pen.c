@@ -614,7 +614,7 @@ static void test_brush_pens(void)
             ok( elp->elpPenStyle == (PS_DOT | PS_GEOMETRIC), "wrong pen style %lx\n", elp->elpPenStyle );
             ok( elp->elpBrushStyle == lb.lbStyle, "wrong brush style %x\n", elp->elpBrushStyle );
             ok( elp->elpColor == RGB(12,34,56), "wrong color %lx\n", elp->elpColor );
-            ok( elp->elpHatch == HS_CROSS, "wrong hatch %Ix\n", elp->elpHatch );
+            ok( elp->elpHatch == HS_CROSS, "wrong hatch %Ix\n", (size_t)elp->elpHatch );
             ok( elp->elpNumEntries == 0, "wrong entries %lx\n", elp->elpNumEntries );
             break;
 
@@ -639,7 +639,7 @@ static void test_brush_pens(void)
             ok( elp->elpPenStyle == (PS_DOT | PS_GEOMETRIC), "wrong pen style %lx\n", elp->elpPenStyle );
             ok( elp->elpBrushStyle == BS_PATTERN, "wrong brush style %x\n", elp->elpBrushStyle );
             ok( elp->elpColor == 0, "wrong color %lx\n", elp->elpColor );
-            ok( elp->elpHatch == (ULONG_PTR)bmp, "wrong hatch %Ix/%p\n", elp->elpHatch, bmp );
+            ok( elp->elpHatch == (ULONG_PTR)bmp, "wrong hatch %Ix/%p\n", (size_t)elp->elpHatch, bmp );
             ok( elp->elpNumEntries == 0, "wrong entries %lx\n", elp->elpNumEntries );
             break;
 
@@ -654,7 +654,7 @@ static void test_brush_pens(void)
             ok( elp->elpPenStyle == (PS_DOT | PS_GEOMETRIC), "wrong pen style %lx\n", elp->elpPenStyle );
             ok( elp->elpBrushStyle == BS_DIBPATTERNPT, "wrong brush style %x\n", elp->elpBrushStyle );
             ok( elp->elpColor == 0, "wrong color %lx\n", elp->elpColor );
-            ok( elp->elpHatch == lb.lbHatch, "wrong hatch %Ix/%Ix\n", elp->elpHatch, lb.lbHatch );
+            ok( elp->elpHatch == lb.lbHatch, "wrong hatch %Ix/%Ix\n", (size_t)elp->elpHatch, (size_t)lb.lbHatch );
             ok( elp->elpNumEntries == 0, "wrong entries %lx\n", elp->elpNumEntries );
             break;
 
@@ -679,7 +679,7 @@ static void test_brush_pens(void)
             ok( elp->elpPenStyle == PS_DOT, "wrong pen style %lx\n", elp->elpPenStyle );
             ok( elp->elpBrushStyle == BS_SOLID, "wrong brush style %x\n", elp->elpBrushStyle );
             ok( elp->elpColor == RGB(12,34,56), "wrong color %lx\n", elp->elpColor );
-            ok( elp->elpHatch == HS_CROSS, "wrong hatch %Ix\n", elp->elpHatch );
+            ok( elp->elpHatch == HS_CROSS, "wrong hatch %Ix\n", (size_t)elp->elpHatch );
             DeleteObject( pen );
         }
         else

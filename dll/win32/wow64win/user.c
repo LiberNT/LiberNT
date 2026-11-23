@@ -39,7 +39,7 @@ WINE_DEFAULT_DEBUG_CHANNEL(wow);
 #else
 #define ERR(...) do { } while (0)
 
-static inline HANDLE get_user_handle( UINT **args ) { return Handle32ToHandle( *(*args)++ ); }
+static inline HANDLE get_user_handle( UINT **args ) { return LongToHandle( *(*args)++ ); }
 static inline HANDLE get_kernel_handle( UINT **args ) { return LongToHandle( *(*args)++ ); }
 #define get_handle get_user_handle
 

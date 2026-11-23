@@ -2846,14 +2846,6 @@ extern "C" {
 
 /* TODO: LiberNT does not implement the functions below yet */
 WINSOCK_API_LINKAGE int WSAAPI GetHostNameW(PWSTR name, int namelen);
-#if (!defined(NO_EXTRA_HTON_FUNCTIONS) && !defined(__midl) && (defined(INCL_EXTRA_HTON_FUNCTIONS) || NTDDI_VERSION>=NTDDI_WIN8))
-unsigned long long htond(double Value);
-unsigned int htonf(float Value);
-unsigned long long htonll(unsigned long long Value);
-double ntohd(unsigned long long Value);
-float ntohf(unsigned int Value);
-unsigned long long ntohll(unsigned long long Value);
-#endif
 /* FIXME: Windows needs no _MINWINBASE_ check here; LiberNT users built with _INC_WINDOWS lack OVERLAPPED_ENTRY */
 #if (!defined(__midl)) && defined(_MINWINBASE_)
 FORCEINLINE
@@ -2870,8 +2862,70 @@ SocketNotificationRetrieveEvents(
 #endif
 
 #if (!defined(NO_EXTRA_HTON_FUNCTIONS) && !defined(__midl) && (defined(INCL_EXTRA_HTON_FUNCTIONS) || NTDDI_VERSION>=NTDDI_WIN8))
+#include <string.h>
+
 #define _WS2_32_WINSOCK_SWAP_LONG(l) ((((l) >> 24) & 0x000000FFL) | (((l) >> 8) & 0x0000FF00L) | (((l) << 8) & 0x00FF0000L) | (((l) << 24) & 0xFF000000L))
 #define _WS2_32_WINSOCK_SWAP_LONGLONG(l) ((((l) >> 56) & 0x00000000000000FFLL) | (((l) >> 40) & 0x000000000000FF00LL) | (((l) >> 24) & 0x0000000000FF0000LL) | (((l) >> 8) & 0x00000000FF000000LL) | (((l) << 8) & 0x000000FF00000000LL) | (((l) << 24) & 0x0000FF0000000000LL) | (((l) << 40) & 0x00FF000000000000LL) | (((l) << 56) & 0xFF00000000000000LL))
+
+#if defined(__cplusplus) || defined(_MSC_VER)
+#define _WS2_HTON_INLINE __inline
+#else
+#define _WS2_HTON_INLINE static __inline
+#endif
+
+#ifndef htonll
+_WS2_HTON_INLINE unsigned long long htonll(unsigned long long Value)
+{
+    return _WS2_32_WINSOCK_SWAP_LONGLONG(Value);
+}
+#endif
+
+#ifndef ntohll
+_WS2_HTON_INLINE unsigned long long ntohll(unsigned long long Value)
+{
+    return _WS2_32_WINSOCK_SWAP_LONGLONG(Value);
+}
+#endif
+
+#ifndef htonf
+_WS2_HTON_INLINE unsigned int htonf(float Value)
+{
+    unsigned int Bits;
+    memcpy(&Bits, &Value, sizeof(Bits));
+    return _WS2_32_WINSOCK_SWAP_LONG(Bits);
+}
+#endif
+
+#ifndef ntohf
+_WS2_HTON_INLINE float ntohf(unsigned int Value)
+{
+    float Result;
+    Value = _WS2_32_WINSOCK_SWAP_LONG(Value);
+    memcpy(&Result, &Value, sizeof(Result));
+    return Result;
+}
+#endif
+
+#ifndef htond
+_WS2_HTON_INLINE unsigned long long htond(double Value)
+{
+    unsigned long long Bits;
+    memcpy(&Bits, &Value, sizeof(Bits));
+    return _WS2_32_WINSOCK_SWAP_LONGLONG(Bits);
+}
+#endif
+
+#ifndef ntohd
+_WS2_HTON_INLINE double ntohd(unsigned long long Value)
+{
+    double Result;
+    Value = _WS2_32_WINSOCK_SWAP_LONGLONG(Value);
+    memcpy(&Result, &Value, sizeof(Result));
+    return Result;
+}
+#endif
+
+#undef _WS2_HTON_INLINE
 #endif
 #define SOMAXCONN_HINT(b) (- (b))
 

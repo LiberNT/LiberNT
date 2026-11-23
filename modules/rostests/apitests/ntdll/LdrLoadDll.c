@@ -199,3 +199,60 @@ START_TEST(LdrLoadDll)
     ok_ntstatus(Status, STATUS_SUCCESS);
     ok(BaseAddress != NULL, "BaseAddress was NULL\n");
 }
+
+/* Resource 102 is the test DLL with an empty entry point. */
+BOOL extract_resource(const WCHAR *Filename, LPCWSTR ResourceName);
+
+static void CheckModuleEntry(HMODULE Module, BOOL ProcessImport, LDR_DLL_LOAD_REASON Reason)
+{
+    PLDR_DATA_TABLE_ENTRY Entry;
+    NTSTATUS Status = LdrFindEntryForAddress(Module, &Entry);
+    ok_ntstatus(Status, STATUS_SUCCESS);
+    if (!NT_SUCCESS(Status))
+        return;
+
+    ok(!Entry->MarkedForRemoval, "Live module %p marked for removal, flags %#lx\n", Module, Entry->Flags);
+    ok_int(Entry->ProcessStaticImport, ProcessImport);
+    ok_int(Entry->LoadReason, Reason);
+    ok_ptr((PVOID)Entry->OriginalBase, (PVOID)(ULONG_PTR)RtlImageNtHeader(Module)->OptionalHeader.ImageBase);
+}
+
+START_TEST(LdrModuleEntry)
+{
+    WCHAR Directory[MAX_PATH], Filename[MAX_PATH];
+    HMODULE Module;
+    DWORD Length;
+
+    if (NtCurrentPeb()->OSMajorVersion < 10)
+    {
+        skip("Requires the modern loader entry layout\n");
+        return;
+    }
+
+    /* advapi32 is in this executable's import directory. */
+    Module = GetModuleHandleW(L"advapi32.dll");
+    ok(Module != NULL, "Missing startup import\n");
+    if (Module)
+        CheckModuleEntry(Module, TRUE, LoadReasonStaticDependency);
+
+    Length = GetTempPathW(_countof(Directory), Directory);
+    ok(Length && Length < _countof(Directory), "GetTempPathW failed, error %lu\n", GetLastError());
+    if (!Length || Length >= _countof(Directory))
+        return;
+    if (!GetTempFileNameW(Directory, L"ldr", 0, Filename))
+    {
+        ok(0, "GetTempFileNameW failed, error %lu\n", GetLastError());
+        return;
+    }
+    if (extract_resource(Filename, (LPCWSTR)102))
+    {
+        Module = LoadLibraryW(Filename);
+        ok(Module != NULL, "LoadLibraryW failed, error %lu\n", GetLastError());
+        if (Module)
+        {
+            CheckModuleEntry(Module, FALSE, LoadReasonDynamicLoad);
+            FreeLibrary(Module);
+        }
+    }
+    DeleteFileW(Filename);
+}

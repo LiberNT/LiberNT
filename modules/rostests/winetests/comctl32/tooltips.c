@@ -251,7 +251,7 @@ static void test_customdraw(void) {
            skip( "Tooltip wasn't shown\n" );
            goto done;
        }
-       ok(ret, "Failed to get current tool %#Ix.\n", ret);
+       ok(ret, "Failed to get current tool %#Ix.\n", (size_t)ret);
 
        if (CD_Stages)
        {
@@ -269,7 +269,7 @@ static void test_customdraw(void) {
        ok(toolInfo.hwnd == parent, "Unexpected hwnd %p.\n", toolInfo.hwnd);
        ok(toolInfo.hinst == GetModuleHandleA(NULL), "Unexpected hinst %p.\n", toolInfo.hinst);
        ok(toolInfo.uId == 0x1234abcd, "Unexpected uId %Ix.\n", toolInfo.uId);
-       ok(toolInfo.lParam == 0, "Unexpected lParam %Ix.\n", toolInfo.lParam);
+       ok(toolInfo.lParam == 0, "Unexpected lParam %Ix.\n", (size_t)toolInfo.lParam);
        ok(toolInfo.lpReserved == (void *)0xdeadbeef, "Unexpected lpReserved %p.\n", toolInfo.lpReserved);
 
    done:
@@ -391,19 +391,19 @@ static void test_gettext(void)
     toolinfoA.lParam = 0xdeadbeef;
     GetClientRect(hwnd, &toolinfoA.rect);
     r = SendMessageA(hwnd, TTM_ADDTOOLA, 0, (LPARAM)&toolinfoA);
-    ok(r, "got %Id\n", r);
+    ok(r, "got %Id\n", (ptrdiff_t)r);
 
     toolinfoA.hwnd = NULL;
     toolinfoA.uId = 0x1234abcd;
     toolinfoA.lpszText = bufA;
     r = SendMessageA(hwnd, TTM_GETTEXTA, 0, (LPARAM)&toolinfoA);
-    ok(!r, "got %Id\n", r);
+    ok(!r, "got %Id\n", (ptrdiff_t)r);
     ok(!*toolinfoA.lpszText, "lpszText should be empty, got %s\n", toolinfoA.lpszText);
 
     toolinfoA.lpszText = bufA;
     r = SendMessageA(hwnd, TTM_GETTOOLINFOA, 0, (LPARAM)&toolinfoA);
     todo_wine
-    ok(!r, "got %Id\n", r);
+    ok(!r, "got %Id\n", (ptrdiff_t)r);
     ok(toolinfoA.lpszText == NULL, "expected NULL, got %p\n", toolinfoA.lpszText);
 
     /* NULL hinst, valid resource id for text */
@@ -422,17 +422,17 @@ static void test_gettext(void)
     toolinfoA.uId = 0x1233abcd;
     toolinfoA.lpszText = bufA;
     r = SendMessageA(hwnd, TTM_GETTEXTA, 0, (LPARAM)&toolinfoA);
-    ok(!r, "got %Id\n", r);
+    ok(!r, "got %Id\n", (ptrdiff_t)r);
     ok(!strcmp(toolinfoA.lpszText, "abc"), "got wrong text, %s\n", toolinfoA.lpszText);
 
     toolinfoA.hinst = (HINSTANCE)0xdeadbee;
     r = SendMessageA(hwnd, TTM_GETTOOLINFOA, 0, (LPARAM)&toolinfoA);
     todo_wine
-    ok(!r, "got %Id\n", r);
+    ok(!r, "got %Id\n", (ptrdiff_t)r);
     ok(toolinfoA.hinst == NULL, "expected NULL, got %p\n", toolinfoA.hinst);
 
     r = SendMessageA(hwnd, TTM_DELTOOLA, 0, (LPARAM)&toolinfoA);
-    ok(!r, "got %Id\n", r);
+    ok(!r, "got %Id\n", (ptrdiff_t)r);
 
     /* add another tool with text */
     toolinfoA.cbSize = sizeof(TTTOOLINFOA);
@@ -454,14 +454,14 @@ static void test_gettext(void)
     toolinfoA.uId = 0x1235abcd;
     toolinfoA.lpszText = bufA;
     r = SendMessageA(hwnd, TTM_GETTEXTA, 0, (LPARAM)&toolinfoA);
-    ok(!r, "got %Id\n", r);
+    ok(!r, "got %Id\n", (ptrdiff_t)r);
     ok(!strcmp(toolinfoA.lpszText, testtipA), "expected %s, got %p\n", testtipA, toolinfoA.lpszText);
 
     memset(bufA, 0x1f, sizeof(bufA));
     toolinfoA.lpszText = bufA;
     r = SendMessageA(hwnd, TTM_GETTOOLINFOA, 0, (LPARAM)&toolinfoA);
     todo_wine
-    ok(!r, "got %Id\n", r);
+    ok(!r, "got %Id\n", (ptrdiff_t)r);
     ok(!strcmp(toolinfoA.lpszText, testtipA), "expected %s, got %p\n", testtipA, toolinfoA.lpszText);
 
     length = SendMessageA(hwnd, WM_GETTEXTLENGTH, 0, 0);
@@ -483,13 +483,13 @@ static void test_gettext(void)
     toolinfoA.uId = 0x1236abcd;
     toolinfoA.lpszText = bufA;
     r = SendMessageA(hwnd, TTM_GETTEXTA, 0, (LPARAM)&toolinfoA);
-    ok(!r, "got %Id\n", r);
+    ok(!r, "got %Id\n", (ptrdiff_t)r);
     ok(!strcmp(toolinfoA.lpszText, testcallbackA), "lpszText should be an (%s) string\n", testcallbackA);
 
     toolinfoA.lpszText = bufA;
     r = SendMessageA(hwnd, TTM_GETTOOLINFOA, 0, (LPARAM)&toolinfoA);
     todo_wine
-    ok(!r, "got %Id\n", r);
+    ok(!r, "got %Id\n", (ptrdiff_t)r);
     ok(toolinfoA.lpszText == LPSTR_TEXTCALLBACKA, "expected LPSTR_TEXTCALLBACKA, got %p\n", toolinfoA.lpszText);
 
     DestroyWindow(hwnd);
@@ -531,13 +531,13 @@ static void test_gettext(void)
     toolinfoA.lParam = 0xdeadbeef;
     GetClientRect(hwnd, &toolinfoA.rect);
     r = SendMessageA(hwnd, TTM_ADDTOOLA, 0, (LPARAM)&toolinfoA);
-    ok(r, "got %Id\n", r);
+    ok(r, "got %Id\n", (ptrdiff_t)r);
 
     toolinfoA.hwnd = NULL;
     toolinfoA.uId = 0x1235abce;
     toolinfoA.lpszText = bufA;
     r = SendMessageA(hwnd, TTM_GETTEXTA, 0, (LPARAM)&toolinfoA);
-    ok(!r, "got %Id\n", r);
+    ok(!r, "got %Id\n", (ptrdiff_t)r);
     ok(!strcmp(toolinfoA.lpszText, testtipA), "expected %s, got %s\n", testtipA, toolinfoA.lpszText);
 
     /* enable TTS_NOPREFIX, original text is retained */
@@ -548,7 +548,7 @@ static void test_gettext(void)
     toolinfoA.uId = 0x1235abce;
     toolinfoA.lpszText = bufA;
     r = SendMessageA(hwnd, TTM_GETTEXTA, 0, (LPARAM)&toolinfoA);
-    ok(!r, "got %Id\n", r);
+    ok(!r, "got %Id\n", (ptrdiff_t)r);
     ok(!strcmp(toolinfoA.lpszText, testtip2A), "expected %s, got %s\n", testtip2A, toolinfoA.lpszText);
 
     DestroyWindow(hwnd);
@@ -579,7 +579,7 @@ static void test_ttm_gettoolinfo(void)
     ti.lParam = 0xaaaaaaaa;
     r = SendMessageA(hwnd, TTM_GETTOOLINFOA, 0, (LPARAM)&ti);
     ok(r, "Getting tooltip info failed\n");
-    ok(0x1abe11ed == ti.lParam, "Expected 0x1abe11ed, got %Ix\n", ti.lParam);
+    ok(0x1abe11ed == ti.lParam, "Expected 0x1abe11ed, got %Ix\n", (size_t)ti.lParam);
 
     tiW.cbSize = TTTOOLINFOW_V2_SIZE;
     tiW.hwnd = NULL;
@@ -588,7 +588,7 @@ static void test_ttm_gettoolinfo(void)
     tiW.lpszText = NULL;
     r = SendMessageA(hwnd, TTM_GETTOOLINFOW, 0, (LPARAM)&tiW);
     ok(r, "Getting tooltip info failed\n");
-    ok(0x1abe11ed == tiW.lParam, "Expected 0x1abe11ed, got %Ix\n", tiW.lParam);
+    ok(0x1abe11ed == tiW.lParam, "Expected 0x1abe11ed, got %Ix\n", (size_t)tiW.lParam);
 
     ti.cbSize = TTTOOLINFOA_V2_SIZE;
     ti.uId = 0x1234ABCD;
@@ -599,7 +599,7 @@ static void test_ttm_gettoolinfo(void)
     ti.lParam = 0xdeadbeef;
     r = SendMessageA(hwnd, TTM_GETTOOLINFOA, 0, (LPARAM)&ti);
     ok(r, "Getting tooltip info failed\n");
-    ok(0x55555555 == ti.lParam, "Expected 0x55555555, got %Ix\n", ti.lParam);
+    ok(0x55555555 == ti.lParam, "Expected 0x55555555, got %Ix\n", (size_t)ti.lParam);
 
     DestroyWindow(hwnd);
 

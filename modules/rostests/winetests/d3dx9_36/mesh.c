@@ -2079,7 +2079,7 @@ static void record_common_user_data(struct test_load_user_data *data, ID3DXFileD
     hr = filedata->lpVtbl->Lock(filedata, &sz, &ptr);
     ok(hr == S_OK, "got %#lx.\n", hr);
     d->size = sz;
-    ok(sz >= sizeof(int), "got %Iu.\n", sz);
+    ok(sz >= sizeof(int), "got %Iu.\n", (size_t)sz);
     d->value = *(unsigned int *)ptr;
     hr = filedata->lpVtbl->Unlock(filedata);
     ok(hr == S_OK, "got %#lx.\n", hr);
@@ -2150,7 +2150,7 @@ static void check_user_data(struct test_load_user_data *user_data, unsigned int 
         ok(IsEqualGUID(&user_data->guids[i], expected[i].type), "got %s, expected %s.\n",
                 debugstr_guid(&user_data->guids[i]), debugstr_guid(expected[i].type));
         ok(user_data->data[i].size == expected[i].size, "got %Iu, expected %Iu.\n",
-                user_data->data[i].size, expected[i].size);
+                (size_t)user_data->data[i].size, (size_t)expected[i].size);
         ok(user_data->data[i].value == expected[i].value, "got %u, expected %u.\n",
                 user_data->data[i].value, expected[i].value);
         ok(user_data->data[i].mesh_container == expected[i].mesh_container, "got %u, expected %u.\n",

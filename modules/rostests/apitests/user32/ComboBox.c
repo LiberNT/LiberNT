@@ -51,12 +51,12 @@ START_TEST(ComboBox)
             ok(GetWindowRect(Combo, &WindowRect), "GetWindowRect failed: %lu\n", GetLastError());
             SetRectEmpty(&DropA);
             Result = SendMessageA(Combo, CB_GETDROPPEDCONTROLRECT, 0, (LPARAM)&DropA);
-            ok(Result != 0, "CB_GETDROPPEDCONTROLRECT A(%u, %#lx) returned %Id\n", Unicode, Styles[i], Result);
+            ok(Result != 0, "CB_GETDROPPEDCONTROLRECT A(%u, %#lx) returned %Id\n", Unicode, Styles[i], (ptrdiff_t)Result);
             ok(DropA.left == WindowRect.left && DropA.top == WindowRect.top, "Dropped rectangle origin (%ld,%ld), window origin (%ld,%ld)\n", DropA.left, DropA.top, WindowRect.left, WindowRect.top);
             ok(DropA.right > DropA.left && DropA.bottom > DropA.top, "Empty dropped rectangle (%ld,%ld)-(%ld,%ld)\n", DropA.left, DropA.top, DropA.right, DropA.bottom);
             SetRectEmpty(&DropW);
             Result = SendMessageW(Combo, CB_GETDROPPEDCONTROLRECT, 0, (LPARAM)&DropW);
-            ok(Result != 0, "CB_GETDROPPEDCONTROLRECT W(%u, %#lx) returned %Id\n", Unicode, Styles[i], Result);
+            ok(Result != 0, "CB_GETDROPPEDCONTROLRECT W(%u, %#lx) returned %Id\n", Unicode, Styles[i], (ptrdiff_t)Result);
             ok(EqualRect(&DropA, &DropW), "ANSI and Unicode dropped rectangles differ\n");
             DestroyWindow(Combo);
         }

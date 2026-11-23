@@ -96,13 +96,13 @@ static void init_functions(void)
 /* Callbacks */
 static INT CALLBACK CB_CmpLT(PVOID p1, PVOID p2, LPARAM lp)
 {
-    ok(lp == 0x1abe11ed, "lp=%Id\n", lp);
+    ok(lp == 0x1abe11ed, "lp=%Id\n", (ptrdiff_t)lp);
     return p1 < p2 ? -1 : p1 > p2 ? 1 : 0;
 }
 
 static INT CALLBACK CB_CmpGT(PVOID p1, PVOID p2, LPARAM lp)
 {
-    ok(lp == 0x1abe11ed, "lp=%Id\n", lp);
+    ok(lp == 0x1abe11ed, "lp=%Id\n", (ptrdiff_t)lp);
     return p1 > p2 ? -1 : p1 < p2 ? 1 : 0;
 }
 
@@ -115,14 +115,14 @@ static INT nMessages[4];
 static PVOID CALLBACK CB_MergeInsertSrc(UINT op, PVOID p1, PVOID p2, LPARAM lp)
 {
     nMessages[op]++;
-    ok(lp == 0x1abe11ed, "lp=%Id\n", lp);
+    ok(lp == 0x1abe11ed, "lp=%Id\n", (ptrdiff_t)lp);
     return p1;
 }        
 
 static PVOID CALLBACK CB_MergeDeleteOddSrc(UINT op, PVOID p1, PVOID p2, LPARAM lp)
 {
     nMessages[op]++;
-    ok(lp == 0x1abe11ed, "lp=%Id\n", lp);
+    ok(lp == 0x1abe11ed, "lp=%Id\n", (ptrdiff_t)lp);
     return ((PCHAR)p2)+1;
 }
 

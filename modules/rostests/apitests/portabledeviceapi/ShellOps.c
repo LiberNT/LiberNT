@@ -130,7 +130,7 @@ DumpFormats(IDataObject *Data)
         Hex[0] = 0;
         for (Index = 0; Bytes && Index < Size && Index < 96; Index++)
             sprintf(Hex + 3 * Index, "%02X ", Bytes[Index]);
-        trace("    size %Iu: %s\n", Size, Hex);
+        trace("    size %Iu: %s\n", (size_t)Size, Hex);
         if (Bytes && Size >= sizeof(WCHAR))
             trace("    text \"%.*ls\"\n", (int)min(Size / sizeof(WCHAR), 200), (WCHAR *)Bytes);
         if (Bytes)

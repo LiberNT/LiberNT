@@ -263,7 +263,7 @@ static void test_window_create(unsigned line, const char* fname, HWND parent,
                         wnd_creation.open_msg >= WM_USER ? wnd_creation.open_msg - WM_USER : wnd_creation.open_msg);
     ret = SendMessageA(window, MCIWNDM_GETERRORA, sizeof(error), (LPARAM)error);
     ok_(__FILE__, line)(!ret || broken(ret == ERROR_INVALID_HANDLE) /* w2003std, w2008s64 */,
-                        "Unexpected error %Id\n", ret);
+                        "Unexpected error %Id\n", (ptrdiff_t)ret);
     DestroyWindow(window);
 }
 
@@ -337,7 +337,7 @@ static void test_MCIWndCreate(void)
     ok(window != NULL, "Failed to create an MCIWnd window\n");
 
     ret = SendMessageA(window, MCIWNDM_GETERRORA, sizeof(error), (LPARAM)error);
-    todo_wine ok(ret == MCIERR_FILE_NOT_FOUND, "Unexpected error %Id\n", ret);
+    todo_wine ok(ret == MCIERR_FILE_NOT_FOUND, "Unexpected error %Id\n", (ptrdiff_t)ret);
 
     DestroyWindow(window);
 

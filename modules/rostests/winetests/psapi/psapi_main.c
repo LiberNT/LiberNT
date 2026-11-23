@@ -269,28 +269,28 @@ static void test_GetPerformanceInfo(void)
         ok(info.cb == sizeof(PERFORMANCE_INFORMATION), "got %lu\n", info.cb);
 
         ok(check_with_margin(info.CommitTotal,          sys_performance_info->TotalCommittedPages,  288),
-           "expected approximately %Iu but got %lu\n", info.CommitTotal, sys_performance_info->TotalCommittedPages);
+           "expected approximately %Iu but got %lu\n", (size_t)info.CommitTotal, sys_performance_info->TotalCommittedPages);
 
         ok(check_with_margin(info.CommitLimit,          sys_performance_info->TotalCommitLimit,     32),
-           "expected approximately %Iu but got %lu\n", info.CommitLimit, sys_performance_info->TotalCommitLimit);
+           "expected approximately %Iu but got %lu\n", (size_t)info.CommitLimit, sys_performance_info->TotalCommitLimit);
 
         ok(check_with_margin(info.CommitPeak,           sys_performance_info->PeakCommitment,       32),
-           "expected approximately %Iu but got %lu\n", info.CommitPeak, sys_performance_info->PeakCommitment);
+           "expected approximately %Iu but got %lu\n", (size_t)info.CommitPeak, sys_performance_info->PeakCommitment);
 
         ok(check_with_margin(info.PhysicalAvailable,    sys_performance_info->AvailablePages,       512),
-           "expected approximately %Iu but got %lu\n", info.PhysicalAvailable, sys_performance_info->AvailablePages);
+           "expected approximately %Iu but got %lu\n", (size_t)info.PhysicalAvailable, sys_performance_info->AvailablePages);
 
         /* TODO: info.SystemCache not checked yet - to which field(s) does this value correspond to? */
 
         ok(check_with_margin(info.KernelTotal, sys_performance_info->PagedPoolUsage + sys_performance_info->NonPagedPoolUsage, 256),
-           "expected approximately %Iu but got %lu\n", info.KernelTotal,
+           "expected approximately %Iu but got %lu\n", (size_t)info.KernelTotal,
            sys_performance_info->PagedPoolUsage + sys_performance_info->NonPagedPoolUsage);
 
         ok(check_with_margin(info.KernelPaged,          sys_performance_info->PagedPoolUsage,       256),
-           "expected approximately %Iu but got %lu\n", info.KernelPaged, sys_performance_info->PagedPoolUsage);
+           "expected approximately %Iu but got %lu\n", (size_t)info.KernelPaged, sys_performance_info->PagedPoolUsage);
 
         ok(check_with_margin(info.KernelNonpaged,       sys_performance_info->NonPagedPoolUsage,    16),
-           "expected approximately %Iu but got %lu\n", info.KernelNonpaged, sys_performance_info->NonPagedPoolUsage);
+           "expected approximately %Iu but got %lu\n", (size_t)info.KernelNonpaged, sys_performance_info->NonPagedPoolUsage);
 
         /* compare with values from SYSTEM_BASIC_INFORMATION */
         size = 0;
@@ -386,7 +386,7 @@ static BOOL nt_get_mapped_file_name(HANDLE process, LPVOID addr, LPWSTR name, DW
 
     section_name = (MEMORY_SECTION_NAME *)buf;
     ok(ret_len == section_name->SectionFileName.MaximumLength + sizeof(*section_name), "got %Iu, %u\n",
-       ret_len, section_name->SectionFileName.MaximumLength);
+       (size_t)ret_len, section_name->SectionFileName.MaximumLength);
     ok((char *)section_name->SectionFileName.Buffer == (char *)section_name + sizeof(*section_name), "got %p, %p\n",
        section_name, section_name->SectionFileName.Buffer);
     ok(section_name->SectionFileName.MaximumLength == section_name->SectionFileName.Length + sizeof(WCHAR), "got %u, %u\n",

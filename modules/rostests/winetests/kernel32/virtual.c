@@ -115,19 +115,19 @@ static void test_VirtualAllocEx(void)
 
     b = WriteProcessMemory(hProcess, addr1, src, alloc_size, &bytes_written);
     ok(b && (bytes_written == alloc_size), "%Iu bytes written\n",
-       bytes_written);
+       (size_t)bytes_written);
     b = ReadProcessMemory(hProcess, addr1, dst, alloc_size, &bytes_read);
-    ok(b && (bytes_read == alloc_size), "%Iu bytes read\n", bytes_read);
+    ok(b && (bytes_read == alloc_size), "%Iu bytes read\n", (size_t)bytes_read);
     ok(!memcmp(src, dst, alloc_size), "Data from remote process differs\n");
     bytes_written = 0xdeadbeef;
     status = pNtWriteVirtualMemory( hProcess, addr1, src, alloc_size, &bytes_written );
     ok( status == STATUS_SUCCESS, "wrong status %lx\n", status );
-    ok( bytes_written == alloc_size, "%Iu bytes written\n", bytes_written );
+    ok( bytes_written == alloc_size, "%Iu bytes written\n", (size_t)bytes_written );
     bytes_read = 0xdeadbeef;
     memset( dst, 0, alloc_size );
     status = pNtReadVirtualMemory( hProcess, addr1, dst, alloc_size, &bytes_read );
     ok( status == STATUS_SUCCESS, "wrong status %lx\n", status );
-    ok( bytes_read == alloc_size, "%Iu bytes read\n", bytes_read );
+    ok( bytes_read == alloc_size, "%Iu bytes read\n", (size_t)bytes_read );
     ok(!memcmp(src, dst, alloc_size), "Data from remote process differs\n");
 
     /* test 0 length */
@@ -140,11 +140,11 @@ static void test_VirtualAllocEx(void)
     bytes_written = 0xdeadbeef;
     status = pNtWriteVirtualMemory( hProcess, addr1, src, 0, &bytes_written );
     ok( status == STATUS_SUCCESS, "wrong status %lx\n", status );
-    ok( bytes_written == 0, "%Iu bytes written\n", bytes_written );
+    ok( bytes_written == 0, "%Iu bytes written\n", (size_t)bytes_written );
     bytes_read = 0xdeadbeef;
     status = pNtReadVirtualMemory( hProcess, addr1, src, 0, &bytes_read );
     ok( status == STATUS_SUCCESS, "wrong status %lx\n", status );
-    ok( !bytes_read, "%Iu bytes read\n", bytes_read );
+    ok( !bytes_read, "%Iu bytes read\n", (size_t)bytes_read );
 
     /* test invalid source buffers */
 
@@ -156,7 +156,7 @@ static void test_VirtualAllocEx(void)
     ok( GetLastError() == ERROR_NOACCESS ||
         GetLastError() == ERROR_PARTIAL_COPY, /* vista */
         "wrong error %lu\n", GetLastError() );
-    ok( bytes_written == 0, "%Iu bytes written\n", bytes_written );
+    ok( bytes_written == 0, "%Iu bytes written\n", (size_t)bytes_written );
     bytes_read = 0xdeadbeef;
     b = ReadProcessMemory(hProcess, addr1, src, alloc_size, &bytes_read);
     ok( !b, "ReadProcessMemory succeeded\n" );
@@ -164,17 +164,17 @@ static void test_VirtualAllocEx(void)
         GetLastError() == ERROR_PARTIAL_COPY, /* win10 v1607+ */
         "wrong error %lu\n", GetLastError() );
     if (GetLastError() == ERROR_NOACCESS)
-        ok( bytes_read == 0, "%Iu bytes read\n", bytes_read );
+        ok( bytes_read == 0, "%Iu bytes read\n", (size_t)bytes_read );
     else
-        ok( bytes_read == 0x2000, "%Iu bytes read\n", bytes_read );
+        ok( bytes_read == 0x2000, "%Iu bytes read\n", (size_t)bytes_read );
     bytes_written = 0xdeadbeef;
     status = pNtWriteVirtualMemory( hProcess, addr1, src, alloc_size, &bytes_written );
     ok( status == STATUS_PARTIAL_COPY, "wrong status %lx\n", status );
-    ok( bytes_written == 0, "%Iu bytes written\n", bytes_written );
+    ok( bytes_written == 0, "%Iu bytes written\n", (size_t)bytes_written );
     bytes_read = 0xdeadbeef;
     status = pNtReadVirtualMemory( hProcess, addr1, src, alloc_size, &bytes_read );
     ok( status == STATUS_PARTIAL_COPY || status == STATUS_ACCESS_VIOLATION, "wrong status %lx\n", status );
-    ok( bytes_read == (status == STATUS_PARTIAL_COPY ? 0x2000 : 0), "%Iu bytes read\n", bytes_read );
+    ok( bytes_read == (status == STATUS_PARTIAL_COPY ? 0x2000 : 0), "%Iu bytes read\n", (size_t)bytes_read );
 
     b = VirtualProtect( src, 0x2000, PAGE_NOACCESS, &old_prot );
     ok( b, "VirtualProtect failed error %lu\n", GetLastError() );
@@ -184,22 +184,22 @@ static void test_VirtualAllocEx(void)
     ok( GetLastError() == ERROR_NOACCESS ||
         GetLastError() == ERROR_PARTIAL_COPY, /* vista */
         "wrong error %lu\n", GetLastError() );
-    ok( bytes_written == 0, "%Iu bytes written\n", bytes_written );
+    ok( bytes_written == 0, "%Iu bytes written\n", (size_t)bytes_written );
     bytes_read = 0xdeadbeef;
     b = ReadProcessMemory(hProcess, addr1, src, alloc_size, &bytes_read);
     ok( !b, "ReadProcessMemory succeeded\n" );
     ok( GetLastError() == ERROR_NOACCESS ||
         GetLastError() == ERROR_PARTIAL_COPY, /* win10 v1607+ */
         "wrong error %lu\n", GetLastError() );
-    ok( bytes_read == 0, "%Iu bytes read\n", bytes_read );
+    ok( bytes_read == 0, "%Iu bytes read\n", (size_t)bytes_read );
     bytes_written = 0xdeadbeef;
     status = pNtWriteVirtualMemory( hProcess, addr1, src, alloc_size, &bytes_written );
     ok( status == STATUS_PARTIAL_COPY, "wrong status %lx\n", status );
-    ok( bytes_written == 0, "%Iu bytes written\n", bytes_written );
+    ok( bytes_written == 0, "%Iu bytes written\n", (size_t)bytes_written );
     bytes_read = 0xdeadbeef;
     status = pNtReadVirtualMemory( hProcess, addr1, src, alloc_size, &bytes_read );
     ok( status == STATUS_PARTIAL_COPY || status == STATUS_ACCESS_VIOLATION, "wrong status %lx\n", status );
-    ok( bytes_read == 0, "%Iu bytes read\n", bytes_read );
+    ok( bytes_read == 0, "%Iu bytes read\n", (size_t)bytes_read );
     b = VirtualProtect( src, alloc_size, PAGE_READWRITE, &old_prot );
     ok( b, "VirtualProtect failed error %lu\n", GetLastError() );
 
@@ -211,27 +211,27 @@ static void test_VirtualAllocEx(void)
     b = WriteProcessMemory(hProcess, addr1, src, alloc_size, &bytes_written);
     ok( !b, "WriteProcessMemory succeeded\n" );
     if (!b) ok( GetLastError() == ERROR_NOACCESS, "wrong error %lu\n", GetLastError() );
-    ok( bytes_written == 0xdeadbeef, "%Iu bytes written\n", bytes_written );
+    ok( bytes_written == 0xdeadbeef, "%Iu bytes written\n", (size_t)bytes_written );
     status = pNtWriteVirtualMemory( hProcess, addr1, src, alloc_size, &bytes_written );
     todo_wine
     ok( status == STATUS_PARTIAL_COPY || broken(status == STATUS_ACCESS_VIOLATION),
         "wrong status %lx\n", status );
     todo_wine
-    ok( bytes_written == 0, "%Iu bytes written\n", bytes_written );
+    ok( bytes_written == 0, "%Iu bytes written\n", (size_t)bytes_written );
 
     b = VirtualProtectEx( hProcess, addr1, alloc_size, PAGE_EXECUTE_READ, &old_prot );
     ok( b, "VirtualProtectEx, error %lu\n", GetLastError() );
     bytes_written = 0xdeadbeef;
     b = WriteProcessMemory(hProcess, addr1, src, alloc_size, &bytes_written);
     ok( b, "WriteProcessMemory failed\n" );
-    ok( bytes_written == alloc_size, "%Iu bytes written\n", bytes_written );
+    ok( bytes_written == alloc_size, "%Iu bytes written\n", (size_t)bytes_written );
     bytes_written = 0xdeadbeef;
     status = pNtWriteVirtualMemory( hProcess, addr1, src, alloc_size, &bytes_written );
     todo_wine
     ok( status == STATUS_PARTIAL_COPY || broken(status == STATUS_ACCESS_VIOLATION),
         "wrong status %lx\n", status );
     todo_wine
-    ok( bytes_written == 0, "%Iu bytes written\n", bytes_written );
+    ok( bytes_written == 0, "%Iu bytes written\n", (size_t)bytes_written );
 
     b = VirtualProtectEx( hProcess, addr1, 0x2000, PAGE_EXECUTE_READWRITE, &old_prot );
     ok( b, "VirtualProtectEx, error %lu\n", GetLastError() );
@@ -244,7 +244,7 @@ static void test_VirtualAllocEx(void)
     todo_wine
     ok( status == STATUS_PARTIAL_COPY || broken(status == STATUS_SUCCESS), /* <= win10 1507 */
         "wrong status %lx\n", status );
-    ok( bytes_written == (status ? 0x2000 : alloc_size), "%Iu bytes written\n", bytes_written );
+    ok( bytes_written == (status ? 0x2000 : alloc_size), "%Iu bytes written\n", (size_t)bytes_written );
 
     b = VirtualProtectEx( hProcess, (char *)addr1 + 0x2000, alloc_size - 0x2000, PAGE_READONLY, &old_prot );
     ok( b, "VirtualProtectEx, error %lu\n", GetLastError() );
@@ -256,7 +256,7 @@ static void test_VirtualAllocEx(void)
     todo_wine
     ok( status == STATUS_PARTIAL_COPY || broken(status == STATUS_SUCCESS), /* <= win10 1507 */
         "wrong status %lx\n", status );
-    ok( bytes_written == (status ? 0x2000 : alloc_size), "%Iu bytes written\n", bytes_written );
+    ok( bytes_written == (status ? 0x2000 : alloc_size), "%Iu bytes written\n", (size_t)bytes_written );
 
     VirtualFree( src, 0, MEM_RELEASE );
     VirtualFree( dst, 0, MEM_RELEASE );
@@ -280,7 +280,7 @@ static void test_VirtualAllocEx(void)
     ok(info.BaseAddress == addr1, "%p != %p\n", info.BaseAddress, addr1);
     ok(info.AllocationBase == addr1, "%p != %p\n", info.AllocationBase, addr1);
     ok(info.AllocationProtect == PAGE_NOACCESS, "%lx != PAGE_NOACCESS\n", info.AllocationProtect);
-    ok(info.RegionSize == 0x10000, "%Ix != 0x10000\n", info.RegionSize);
+    ok(info.RegionSize == 0x10000, "%Ix != 0x10000\n", (size_t)info.RegionSize);
     ok(info.State == MEM_RESERVE, "%lx != MEM_RESERVE\n", info.State);
     ok(info.Protect == 0, "%lx != PAGE_NOACCESS\n", info.Protect);
     ok(info.Type == MEM_PRIVATE, "%lx != MEM_PRIVATE\n", info.Type);
@@ -300,7 +300,7 @@ static void test_VirtualAllocEx(void)
     ok(info.BaseAddress == addr1, "%p != %p\n", info.BaseAddress, addr1);
     ok(info.AllocationBase == addr1, "%p != %p\n", info.AllocationBase, addr1);
     ok(info.AllocationProtect == PAGE_NOACCESS, "%lx != PAGE_NOACCESS\n", info.AllocationProtect);
-    ok(info.RegionSize == 0x1000, "%Ix != 0x1000\n", info.RegionSize);
+    ok(info.RegionSize == 0x1000, "%Ix != 0x1000\n", (size_t)info.RegionSize);
     ok(info.State == MEM_COMMIT, "%lx != MEM_COMMIT\n", info.State);
     /* this time NT reports PAGE_NOACCESS as well */
     ok(info.Protect == PAGE_NOACCESS, "%lx != PAGE_NOACCESS\n", info.Protect);
@@ -361,7 +361,7 @@ static void test_VirtualAlloc(void)
     ok(info.BaseAddress == addr1, "%p != %p\n", info.BaseAddress, addr1);
     ok(info.AllocationBase == addr1, "%p != %p\n", info.AllocationBase, addr1);
     ok(info.AllocationProtect == PAGE_NOACCESS, "%lx != PAGE_NOACCESS\n", info.AllocationProtect);
-    ok(info.RegionSize == 0x10000, "%Ix != 0x10000\n", info.RegionSize);
+    ok(info.RegionSize == 0x10000, "%Ix != 0x10000\n", (size_t)info.RegionSize);
     ok(info.State == MEM_RESERVE, "%lx != MEM_RESERVE\n", info.State);
     ok(info.Protect == 0, "%lx != PAGE_NOACCESS\n", info.Protect);
     ok(info.Type == MEM_PRIVATE, "%lx != MEM_PRIVATE\n", info.Type);
@@ -381,7 +381,7 @@ static void test_VirtualAlloc(void)
     ok(info.BaseAddress == addr1, "%p != %p\n", info.BaseAddress, addr1);
     ok(info.AllocationBase == addr1, "%p != %p\n", info.AllocationBase, addr1);
     ok(info.AllocationProtect == PAGE_NOACCESS, "%lx != PAGE_NOACCESS\n", info.AllocationProtect);
-    ok(info.RegionSize == 0x1000, "%Ix != 0x1000\n", info.RegionSize);
+    ok(info.RegionSize == 0x1000, "%Ix != 0x1000\n", (size_t)info.RegionSize);
     ok(info.State == MEM_COMMIT, "%lx != MEM_COMMIT\n", info.State);
     /* this time NT reports PAGE_NOACCESS as well */
     ok(info.Protect == PAGE_NOACCESS, "%lx != PAGE_NOACCESS\n", info.Protect);
@@ -404,7 +404,7 @@ static void test_VirtualAlloc(void)
 
     ok(VirtualQuery(addr1, &info, sizeof(info)) == sizeof(info),
         "VirtualQuery failed\n");
-    ok(info.RegionSize == 0x1000, "%Ix != 0x1000\n", info.RegionSize);
+    ok(info.RegionSize == 0x1000, "%Ix != 0x1000\n", (size_t)info.RegionSize);
     ok(info.State == MEM_COMMIT, "%lx != MEM_COMMIT\n", info.State);
     ok(info.Protect == PAGE_READWRITE, "%lx != PAGE_READWRITE\n", info.Protect);
     memset( addr1, 0x55, 20 );
@@ -415,7 +415,7 @@ static void test_VirtualAlloc(void)
     ok( *(DWORD *)addr1 == 0x55555555 || *(DWORD *)addr1 == 0, "wrong data %lx\n", *(DWORD *)addr1 );
     ok(VirtualQuery(addr1, &info, sizeof(info)) == sizeof(info),
        "VirtualQuery failed\n");
-    ok(info.RegionSize == 0x1000, "%Ix != 0x1000\n", info.RegionSize);
+    ok(info.RegionSize == 0x1000, "%Ix != 0x1000\n", (size_t)info.RegionSize);
     ok(info.State == MEM_COMMIT, "%lx != MEM_COMMIT\n", info.State);
     ok(info.Protect == PAGE_READWRITE, "%lx != PAGE_READWRITE\n", info.Protect);
 
@@ -424,7 +424,7 @@ static void test_VirtualAlloc(void)
 
     ok(VirtualQuery(addr2, &info, sizeof(info)) == sizeof(info),
        "VirtualQuery failed\n");
-    ok(info.RegionSize == 0xf000, "%Ix != 0xf000\n", info.RegionSize);
+    ok(info.RegionSize == 0xf000, "%Ix != 0xf000\n", (size_t)info.RegionSize);
     ok(info.State == MEM_RESERVE, "%lx != MEM_RESERVE\n", info.State);
     ok(info.Protect == 0, "%lx != 0\n", info.Protect);
 
@@ -484,7 +484,7 @@ static void test_VirtualAlloc(void)
     ok(info.AllocationBase == addr1, "%p != %p\n", info.AllocationBase, addr1);
     ok(info.AllocationProtect == (PAGE_READWRITE | PAGE_NOCACHE),
        "wrong protect %lx\n", info.AllocationProtect);
-    ok(info.RegionSize == 0x2000, "wrong size %Ix\n", info.RegionSize);
+    ok(info.RegionSize == 0x2000, "wrong size %Ix\n", (size_t)info.RegionSize);
     ok(info.State == MEM_COMMIT, "wrong state %lx\n", info.State);
     ok(info.Protect == (PAGE_READWRITE | PAGE_NOCACHE), "wrong protect %lx\n", info.Protect);
     ok(info.Type == MEM_PRIVATE, "wrong type %lx\n", info.Type);
@@ -497,7 +497,7 @@ static void test_VirtualAlloc(void)
     ok(info.AllocationProtect == (PAGE_READWRITE | PAGE_NOCACHE),
        "wrong protect %lx\n", info.AllocationProtect);
     ok(info.RegionSize == 0x2000 || broken(info.RegionSize == 0x1000),
-       "wrong size %Ix\n", info.RegionSize);
+       "wrong size %Ix\n", (size_t)info.RegionSize);
     ok(info.State == MEM_COMMIT, "wrong state %lx\n", info.State);
     ok(info.Protect == (PAGE_READWRITE | PAGE_NOCACHE) || broken(info.Protect == PAGE_READWRITE),
        "wrong protect %lx\n", info.Protect);
@@ -511,7 +511,7 @@ static void test_VirtualAlloc(void)
     ok(info.AllocationBase == addr1, "%p != %p\n", info.AllocationBase, addr1);
     ok(info.AllocationProtect == (PAGE_READWRITE | PAGE_NOCACHE),
        "wrong protect %lx\n", info.AllocationProtect);
-    ok(info.RegionSize == 0x1000, "wrong size %Ix\n", info.RegionSize);
+    ok(info.RegionSize == 0x1000, "wrong size %Ix\n", (size_t)info.RegionSize);
     ok(info.State == MEM_COMMIT, "wrong state %lx\n", info.State);
     ok(info.Protect == (PAGE_READONLY | PAGE_NOCACHE) || broken(info.Protect == PAGE_READONLY),
        "wrong protect %lx\n", info.Protect);
@@ -526,7 +526,7 @@ static void test_VirtualAlloc(void)
     ok(info.AllocationBase == addr1, "%p != %p\n", info.AllocationBase, addr1);
     ok(info.AllocationProtect == PAGE_READWRITE,
        "wrong protect %lx\n", info.AllocationProtect);
-    ok(info.RegionSize == 0x2000, "wrong size %Ix\n", info.RegionSize);
+    ok(info.RegionSize == 0x2000, "wrong size %Ix\n", (size_t)info.RegionSize);
     ok(info.State == MEM_COMMIT, "wrong state %lx\n", info.State);
     ok(info.Protect == PAGE_READWRITE, "wrong protect %lx\n", info.Protect);
     ok(info.Type == MEM_PRIVATE, "wrong type %lx\n", info.Type);
@@ -537,7 +537,7 @@ static void test_VirtualAlloc(void)
     ok(info.BaseAddress == addr1, "%p != %p\n", info.BaseAddress, addr1);
     ok(info.AllocationBase == addr1, "%p != %p\n", info.AllocationBase, addr1);
     ok(info.AllocationProtect == PAGE_READWRITE, "wrong protect %lx\n", info.AllocationProtect);
-    ok(info.RegionSize == 0x1000, "wrong size %Ix\n", info.RegionSize);
+    ok(info.RegionSize == 0x1000, "wrong size %Ix\n", (size_t)info.RegionSize);
     ok(info.State == MEM_COMMIT, "wrong state %lx\n", info.State);
     ok(info.Protect == PAGE_READONLY || broken(info.Protect == (PAGE_READONLY | PAGE_NOCACHE)),
        "wrong protect %lx\n", info.Protect);
@@ -784,7 +784,7 @@ static void test_MapViewOfFile(void)
     ok( info.BaseAddress == ptr, "%p != %p\n", info.BaseAddress, ptr );
     ok( info.AllocationBase == ptr, "%p != %p\n", info.AllocationBase, ptr );
     ok( info.AllocationProtect == PAGE_READONLY, "%lx != PAGE_READONLY\n", info.AllocationProtect );
-    ok( info.RegionSize == 4096, "%Ix != 4096\n", info.RegionSize );
+    ok( info.RegionSize == 4096, "%Ix != 4096\n", (size_t)info.RegionSize );
     ok( info.State == MEM_COMMIT, "%lx != MEM_COMMIT\n", info.State );
     ok( info.Protect == PAGE_READONLY, "%lx != PAGE_READONLY\n", info.Protect );
     UnmapViewOfFile( ptr );
@@ -798,12 +798,12 @@ static void test_MapViewOfFile(void)
     status = pNtQuerySection( mapping, SectionBasicInformation, &section_info,
                               sizeof(section_info), &info_size );
     ok( !status, "NtQuerySection failed err %lx\n", status );
-    ok( info_size == sizeof(section_info), "NtQuerySection wrong size %Iu\n", info_size );
+    ok( info_size == sizeof(section_info), "NtQuerySection wrong size %Iu\n", (size_t)info_size );
     ok( section_info.Attributes == SEC_COMMIT, "NtQuerySection wrong attr %08lx\n",
         section_info.Attributes );
     ok( section_info.BaseAddress == NULL, "NtQuerySection wrong base %p\n", section_info.BaseAddress );
     ok( section_info.Size.QuadPart == info.RegionSize, "NtQuerySection wrong size %lx%08lx / %08Ix\n",
-        section_info.Size.u.HighPart, section_info.Size.u.LowPart, info.RegionSize );
+        section_info.Size.u.HighPart, section_info.Size.u.LowPart, (size_t)info.RegionSize );
     CloseHandle( mapping );
 
     SetLastError(0xdeadbeef);
@@ -823,7 +823,7 @@ static void test_MapViewOfFile(void)
     ok( info.BaseAddress == ptr, "%p != %p\n", info.BaseAddress, ptr );
     ok( info.AllocationBase == ptr, "%p != %p\n", info.AllocationBase, ptr );
     ok( info.AllocationProtect == PAGE_READWRITE, "%lx != PAGE_READWRITE\n", info.AllocationProtect );
-    ok( info.RegionSize == 4096, "%Ix != 4096\n", info.RegionSize );
+    ok( info.RegionSize == 4096, "%Ix != 4096\n", (size_t)info.RegionSize );
     ok( info.State == MEM_COMMIT, "%lx != MEM_COMMIT\n", info.State );
     ok( info.Protect == PAGE_READWRITE, "%lx != PAGE_READWRITE\n", info.Protect );
     UnmapViewOfFile( ptr );
@@ -837,12 +837,12 @@ static void test_MapViewOfFile(void)
     status = pNtQuerySection( mapping, SectionBasicInformation, &section_info,
                               sizeof(section_info), &info_size );
     ok( !status, "NtQuerySection failed err %lx\n", status );
-    ok( info_size == sizeof(section_info), "NtQuerySection wrong size %Iu\n", info_size );
+    ok( info_size == sizeof(section_info), "NtQuerySection wrong size %Iu\n", (size_t)info_size );
     ok( section_info.Attributes == SEC_COMMIT, "NtQuerySection wrong attr %08lx\n",
         section_info.Attributes );
     ok( section_info.BaseAddress == NULL, "NtQuerySection wrong base %p\n", section_info.BaseAddress );
     ok( section_info.Size.QuadPart == info.RegionSize, "NtQuerySection wrong size %lx%08lx / %08Ix\n",
-        section_info.Size.u.HighPart, section_info.Size.u.LowPart, info.RegionSize );
+        section_info.Size.u.HighPart, section_info.Size.u.LowPart, (size_t)info.RegionSize );
     CloseHandle( mapping );
 
     CloseHandle( file );
@@ -870,7 +870,7 @@ static void test_MapViewOfFile(void)
     ok(ret, "VirtualQuery failed with error %ld\n", GetLastError());
     ok(info.BaseAddress == ptr, "BaseAddress should have been %p but was %p instead\n", ptr, info.BaseAddress);
     ok(info.AllocationBase == ptr, "AllocationBase should have been %p but was %p instead\n", ptr, info.AllocationBase);
-    ok(info.RegionSize == MAPPING_SIZE, "RegionSize should have been 0x%x but was 0x%Ix\n", MAPPING_SIZE, info.RegionSize);
+    ok(info.RegionSize == MAPPING_SIZE, "RegionSize should have been 0x%x but was 0x%Ix\n", MAPPING_SIZE, (size_t)info.RegionSize);
     ok(info.State == MEM_RESERVE, "State should have been MEM_RESERVE instead of 0x%lx\n", info.State);
     ok(info.AllocationProtect == PAGE_READWRITE,
        "AllocationProtect should have been PAGE_READWRITE but was 0x%lx\n", info.AllocationProtect);
@@ -886,7 +886,7 @@ static void test_MapViewOfFile(void)
     ok(info.AllocationProtect == PAGE_READWRITE,
        "AllocationProtect should have been PAGE_READWRITE but was 0x%lx\n", info.AllocationProtect);
     ok(info.RegionSize == MAPPING_SIZE,
-       "RegionSize should have been 0x%x but was 0x%Ix\n", MAPPING_SIZE, info.RegionSize);
+       "RegionSize should have been 0x%x but was 0x%Ix\n", MAPPING_SIZE, (size_t)info.RegionSize);
     ok(info.State == MEM_RESERVE, "State should have been MEM_RESERVE instead of 0x%lx\n", info.State);
     ok(info.Protect == 0, "Protect should have been 0 instead of 0x%lx\n", info.Protect);
     ok(info.Type == MEM_MAPPED, "Type should have been MEM_MAPPED instead of 0x%lx\n", info.Type);
@@ -898,7 +898,7 @@ static void test_MapViewOfFile(void)
     ok(ret, "VirtualQuery failed with error %ld\n", GetLastError());
     ok(info.BaseAddress == ptr, "BaseAddress should have been %p but was %p instead\n", ptr, info.BaseAddress);
     ok(info.AllocationBase == ptr, "AllocationBase should have been %p but was %p instead\n", ptr, info.AllocationBase);
-    ok(info.RegionSize == 0x10000, "RegionSize should have been 0x10000 but was 0x%Ix\n", info.RegionSize);
+    ok(info.RegionSize == 0x10000, "RegionSize should have been 0x10000 but was 0x%Ix\n", (size_t)info.RegionSize);
     ok(info.State == MEM_COMMIT, "State should have been MEM_COMMIT instead of 0x%lx\n", info.State);
     ok(info.Protect == PAGE_READONLY, "Protect should have been PAGE_READONLY instead of 0x%lx\n", info.Protect);
     ok(info.AllocationProtect == PAGE_READWRITE,
@@ -917,7 +917,7 @@ static void test_MapViewOfFile(void)
     ok(info.AllocationProtect == PAGE_READWRITE,
        "AllocationProtect should have been PAGE_READWRITE but was 0x%lx\n", info.AllocationProtect);
     ok(info.RegionSize == 0x10000,
-       "RegionSize should have been 0x10000 but was 0x%Ix\n", info.RegionSize);
+       "RegionSize should have been 0x10000 but was 0x%Ix\n", (size_t)info.RegionSize);
     ok(info.State == MEM_COMMIT,
        "State should have been MEM_COMMIT instead of 0x%lx\n", info.State);
     ok(info.Protect == PAGE_READWRITE,
@@ -956,7 +956,7 @@ static void test_MapViewOfFile(void)
     ok(ret, "VirtualQuery failed with error %ld\n", GetLastError());
     ok(info.BaseAddress == ptr, "wrong BaseAddress %p/%p\n", ptr, info.BaseAddress);
     ok(info.AllocationBase == ptr, "wrong AllocationBase %p/%p\n", ptr, info.AllocationBase);
-    ok(info.RegionSize == MAPPING_SIZE, "wrong RegionSize 0x%Ix\n", info.RegionSize);
+    ok(info.RegionSize == MAPPING_SIZE, "wrong RegionSize 0x%Ix\n", (size_t)info.RegionSize);
     ok(info.State == MEM_COMMIT, "wrong State 0x%lx\n", info.State);
     ok(info.AllocationProtect == PAGE_READWRITE, "wrong AllocationProtect 0x%lx\n", info.AllocationProtect);
     ok(info.Protect == PAGE_READWRITE, "wrong Protect 0x%lx\n", info.Protect);
@@ -969,7 +969,7 @@ static void test_MapViewOfFile(void)
     ok(ret, "VirtualQuery failed with error %ld\n", GetLastError());
     ok(info.BaseAddress == ptr, "wrong BaseAddress %p/%p\n", ptr, info.BaseAddress);
     ok(info.AllocationBase == ptr, "wrong AllocationBase %p/%p\n", ptr, info.AllocationBase);
-    ok(info.RegionSize == 0x10000, "wrong RegionSize 0x%Ix\n", info.RegionSize);
+    ok(info.RegionSize == 0x10000, "wrong RegionSize 0x%Ix\n", (size_t)info.RegionSize);
     ok(info.State == MEM_COMMIT, "wrong State 0x%lx\n", info.State);
     ok(info.AllocationProtect == PAGE_READWRITE, "wrong AllocationProtect 0x%lx\n", info.AllocationProtect);
     ok(info.Protect == PAGE_READONLY, "wrong Protect 0x%lx\n", info.Protect);
@@ -1005,7 +1005,7 @@ static void test_MapViewOfFile(void)
         ok(ret, "VirtualQuery failed with error %ld\n", GetLastError());
         ok(info.BaseAddress == ptr, "wrong BaseAddress %p/%p\n", ptr, info.BaseAddress);
         ok(info.AllocationBase == ptr, "wrong AllocationBase %p/%p\n", ptr, info.AllocationBase);
-        ok(info.RegionSize == MAPPING_SIZE, "wrong RegionSize 0x%Ix\n", info.RegionSize);
+        ok(info.RegionSize == MAPPING_SIZE, "wrong RegionSize 0x%Ix\n", (size_t)info.RegionSize);
         ok(info.State == MEM_COMMIT, "wrong State 0x%lx\n", info.State);
         ok(info.AllocationProtect == (PAGE_READWRITE | PAGE_NOCACHE),
            "wrong AllocationProtect 0x%lx\n", info.AllocationProtect);
@@ -1019,7 +1019,7 @@ static void test_MapViewOfFile(void)
         ok(ret, "VirtualQuery failed with error %ld\n", GetLastError());
         ok(info.BaseAddress == ptr, "wrong BaseAddress %p/%p\n", ptr, info.BaseAddress);
         ok(info.AllocationBase == ptr, "wrong AllocationBase %p/%p\n", ptr, info.AllocationBase);
-        ok(info.RegionSize == 0x10000, "wrong RegionSize 0x%Ix\n", info.RegionSize);
+        ok(info.RegionSize == 0x10000, "wrong RegionSize 0x%Ix\n", (size_t)info.RegionSize);
         ok(info.State == MEM_COMMIT, "wrong State 0x%lx\n", info.State);
         ok(info.AllocationProtect == (PAGE_READWRITE | PAGE_NOCACHE),
            "wrong AllocationProtect 0x%lx\n", info.AllocationProtect);
@@ -1073,7 +1073,7 @@ static void test_MapViewOfFile(void)
     ret = VirtualQuery(ptr, &info, sizeof(info));
     ok(ret, "VirtualQuery error %ld\n", GetLastError());
     ok(info.BaseAddress == ptr, "got %p != expected %p\n", info.BaseAddress, ptr);
-    ok(info.RegionSize == MAPPING_SIZE, "got %#Ix != expected %#x\n", info.RegionSize, MAPPING_SIZE);
+    ok(info.RegionSize == MAPPING_SIZE, "got %#Ix != expected %#x\n", (size_t)info.RegionSize, MAPPING_SIZE);
     ok(info.Protect == PAGE_READWRITE, "got %#lx != expected PAGE_READWRITE\n", info.Protect);
     ok(info.AllocationBase == ptr, "%p != %p\n", info.AllocationBase, ptr);
     ok(info.AllocationProtect == PAGE_READWRITE, "%#lx != PAGE_READWRITE\n", info.AllocationProtect);
@@ -1099,7 +1099,7 @@ static void test_MapViewOfFile(void)
     ret = VirtualQuery(ptr, &info, sizeof(info));
     ok(ret, "VirtualQuery error %ld\n", GetLastError());
     ok(info.BaseAddress == ptr, "got %p != expected %p\n", info.BaseAddress, ptr);
-    ok(info.RegionSize == MAPPING_SIZE, "got %#Ix != expected %#x\n", info.RegionSize, MAPPING_SIZE);
+    ok(info.RegionSize == MAPPING_SIZE, "got %#Ix != expected %#x\n", (size_t)info.RegionSize, MAPPING_SIZE);
     ok(info.Protect == PAGE_READWRITE, "got %#lx != expected PAGE_READWRITE\n", info.Protect);
     ok(info.AllocationBase == ptr, "%p != %p\n", info.AllocationBase, ptr);
     ok(info.AllocationProtect == PAGE_READWRITE, "%#lx != PAGE_READWRITE\n", info.AllocationProtect);
@@ -1143,7 +1143,7 @@ static void test_MapViewOfFile(void)
     status = pNtQuerySection( mapping, SectionBasicInformation, &section_info,
                               sizeof(section_info), &info_size );
     ok( !status, "NtQuerySection failed err %lx\n", status );
-    ok( info_size == sizeof(section_info), "NtQuerySection wrong size %Iu\n", info_size );
+    ok( info_size == sizeof(section_info), "NtQuerySection wrong size %Iu\n", (size_t)info_size );
     ok( section_info.Attributes == SEC_FILE, "NtQuerySection wrong attr %08lx\n",
         section_info.Attributes );
     ok( section_info.BaseAddress == NULL, "NtQuerySection wrong base %p\n", section_info.BaseAddress );
@@ -1159,7 +1159,7 @@ static void test_MapViewOfFile(void)
     ret = VirtualQuery(ptr, &info, sizeof(info));
     ok(ret, "VirtualQuery error %ld\n", GetLastError());
     ok(info.BaseAddress == ptr, "got %p != expected %p\n", info.BaseAddress, ptr);
-    ok(info.RegionSize == MAPPING_SIZE, "got %#Ix != expected %#x\n", info.RegionSize, MAPPING_SIZE);
+    ok(info.RegionSize == MAPPING_SIZE, "got %#Ix != expected %#x\n", (size_t)info.RegionSize, MAPPING_SIZE);
     ok(info.Protect == PAGE_READWRITE, "got %#lx != expected PAGE_READWRITE\n", info.Protect);
     ok(info.AllocationBase == ptr, "%p != %p\n", info.AllocationBase, ptr);
     ok(info.AllocationProtect == PAGE_READWRITE, "%#lx != PAGE_READWRITE\n", info.AllocationProtect);
@@ -1185,7 +1185,7 @@ static void test_MapViewOfFile(void)
     ret = VirtualQuery(ptr, &info, sizeof(info));
     ok(ret, "VirtualQuery error %ld\n", GetLastError());
     ok(info.BaseAddress == ptr, "got %p != expected %p\n", info.BaseAddress, ptr);
-    ok(info.RegionSize == MAPPING_SIZE, "got %#Ix != expected %#x\n", info.RegionSize, MAPPING_SIZE);
+    ok(info.RegionSize == MAPPING_SIZE, "got %#Ix != expected %#x\n", (size_t)info.RegionSize, MAPPING_SIZE);
     ok(info.Protect == PAGE_READWRITE, "got %#lx != expected PAGE_READWRITE\n", info.Protect);
     ok(info.AllocationBase == ptr, "%p != %p\n", info.AllocationBase, ptr);
     ok(info.AllocationProtect == PAGE_READWRITE, "%#lx != PAGE_READWRITE\n", info.AllocationProtect);
@@ -1236,7 +1236,7 @@ static void test_MapViewOfFile(void)
     status = pNtQuerySection( mapping, SectionBasicInformation, &section_info,
                               sizeof(section_info), &info_size );
     ok( !status, "NtQuerySection failed err %lx\n", status );
-    ok( info_size == sizeof(section_info), "NtQuerySection wrong size %Iu\n", info_size );
+    ok( info_size == sizeof(section_info), "NtQuerySection wrong size %Iu\n", (size_t)info_size );
     ok( section_info.Attributes == SEC_FILE, "NtQuerySection wrong attr %08lx\n",
         section_info.Attributes );
     ok( section_info.BaseAddress == NULL, "NtQuerySection wrong base %p\n", section_info.BaseAddress );
@@ -1251,7 +1251,7 @@ static void test_MapViewOfFile(void)
     status = pNtQuerySection( mapping, SectionBasicInformation, &section_info,
                               sizeof(section_info), &info_size );
     ok( !status, "NtQuerySection failed err %lx\n", status );
-    ok( info_size == sizeof(section_info), "NtQuerySection wrong size %Iu\n", info_size );
+    ok( info_size == sizeof(section_info), "NtQuerySection wrong size %Iu\n", (size_t)info_size );
     ok( section_info.Attributes == SEC_FILE, "NtQuerySection wrong attr %08lx\n",
         section_info.Attributes );
     ok( section_info.BaseAddress == NULL, "NtQuerySection wrong base %p\n", section_info.BaseAddress );
@@ -1763,7 +1763,7 @@ static void test_write_watch(void)
     ok(ret, "VirtualQuery failed %lu\n", GetLastError());
     ok( info.BaseAddress == base, "BaseAddress %p instead of %p\n", info.BaseAddress, base );
     ok( info.AllocationProtect == PAGE_READWRITE, "wrong AllocationProtect %lx\n", info.AllocationProtect );
-    ok( info.RegionSize == size, "wrong RegionSize 0x%Ix\n", info.RegionSize );
+    ok( info.RegionSize == size, "wrong RegionSize 0x%Ix\n", (size_t)info.RegionSize );
     ok( info.State == MEM_COMMIT, "wrong State 0x%lx\n", info.State );
     ok( info.Protect == PAGE_READWRITE, "wrong Protect 0x%lx\n", info.Protect );
     ok( info.Type == MEM_PRIVATE, "wrong Type 0x%lx\n", info.Type );
@@ -1785,31 +1785,31 @@ static void test_write_watch(void)
     }
     else  /* win98 */
     {
-        ok( count == 0, "wrong count %Iu\n", count );
+        ok( count == 0, "wrong count %Iu\n", (size_t)count );
     }
 
     ret = pGetWriteWatch( 0, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 0, "wrong count %Iu\n", count );
+    ok( count == 0, "wrong count %Iu\n", (size_t)count );
 
     base[pagesize + 1] = 0x44;
 
     count = 64;
     ret = pGetWriteWatch( 0, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 1, "wrong count %Iu\n", count );
+    ok( count == 1, "wrong count %Iu\n", (size_t)count );
     ok( results[0] == base + pagesize, "wrong result %p\n", results[0] );
 
     count = 64;
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 1, "wrong count %Iu\n", count );
+    ok( count == 1, "wrong count %Iu\n", (size_t)count );
     ok( results[0] == base + pagesize, "wrong result %p\n", results[0] );
 
     count = 64;
     ret = pGetWriteWatch( 0, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 0, "wrong count %Iu\n", count );
+    ok( count == 0, "wrong count %Iu\n", (size_t)count );
 
     base[2*pagesize + 3] = 0x11;
     base[4*pagesize + 8] = 0x11;
@@ -1817,14 +1817,14 @@ static void test_write_watch(void)
     count = 64;
     ret = pGetWriteWatch( 0, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 2, "wrong count %Iu\n", count );
+    ok( count == 2, "wrong count %Iu\n", (size_t)count );
     ok( results[0] == base + 2*pagesize, "wrong result %p\n", results[0] );
     ok( results[1] == base + 4*pagesize, "wrong result %p\n", results[1] );
 
     count = 64;
     ret = pGetWriteWatch( 0, base + 3*pagesize, 2*pagesize, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 1, "wrong count %Iu\n", count );
+    ok( count == 1, "wrong count %Iu\n", (size_t)count );
     ok( results[0] == base + 4*pagesize, "wrong result %p\n", results[0] );
 
     ret = pResetWriteWatch( base, 3*pagesize );
@@ -1833,7 +1833,7 @@ static void test_write_watch(void)
     count = 64;
     ret = pGetWriteWatch( 0, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 1, "wrong count %Iu\n", count );
+    ok( count == 1, "wrong count %Iu\n", (size_t)count );
     ok( results[0] == base + 4*pagesize, "wrong result %p\n", results[0] );
 
     *(DWORD *)(base + 2*pagesize - 2) = 0xdeadbeef;
@@ -1841,7 +1841,7 @@ static void test_write_watch(void)
     count = 64;
     ret = pGetWriteWatch( 0, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 3, "wrong count %Iu\n", count );
+    ok( count == 3, "wrong count %Iu\n", (size_t)count );
     ok( results[0] == base + pagesize, "wrong result %p\n", results[0] );
     ok( results[1] == base + 2*pagesize, "wrong result %p\n", results[1] );
     ok( results[2] == base + 4*pagesize, "wrong result %p\n", results[2] );
@@ -1849,13 +1849,13 @@ static void test_write_watch(void)
     count = 1;
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 1, "wrong count %Iu\n", count );
+    ok( count == 1, "wrong count %Iu\n", (size_t)count );
     ok( results[0] == base + pagesize, "wrong result %p\n", results[0] );
 
     count = 64;
     ret = pGetWriteWatch( 0, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 2, "wrong count %Iu\n", count );
+    ok( count == 2, "wrong count %Iu\n", (size_t)count );
     ok( results[0] == base + 2*pagesize, "wrong result %p\n", results[0] );
     ok( results[1] == base + 4*pagesize, "wrong result %p\n", results[1] );
 
@@ -1868,7 +1868,7 @@ static void test_write_watch(void)
     ret = VirtualQuery( base, &info, sizeof(info) );
     ok(ret, "VirtualQuery failed %lu\n", GetLastError());
     ok( info.BaseAddress == base, "BaseAddress %p instead of %p\n", info.BaseAddress, base );
-    ok( info.RegionSize == 3*pagesize, "wrong RegionSize 0x%Ix\n", info.RegionSize );
+    ok( info.RegionSize == 3*pagesize, "wrong RegionSize 0x%Ix\n", (size_t)info.RegionSize );
     ok( info.State == MEM_COMMIT, "wrong State 0x%lx\n", info.State );
     ok( info.Protect == PAGE_READONLY, "wrong Protect 0x%lx\n", info.Protect );
 
@@ -1879,14 +1879,14 @@ static void test_write_watch(void)
     count = 64;
     ret = pGetWriteWatch( 0, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 2, "wrong count %Iu\n", count );
+    ok( count == 2, "wrong count %Iu\n", (size_t)count );
     ok( results[0] == base + 2*pagesize, "wrong result %p\n", results[0] );
     ok( results[1] == base + 4*pagesize, "wrong result %p\n", results[1] );
 
     ret = VirtualQuery( base, &info, sizeof(info) );
     ok(ret, "VirtualQuery failed %lu\n", GetLastError());
     ok( info.BaseAddress == base, "BaseAddress %p instead of %p\n", info.BaseAddress, base );
-    ok( info.RegionSize == size, "wrong RegionSize 0x%Ix\n", info.RegionSize );
+    ok( info.RegionSize == size, "wrong RegionSize 0x%Ix\n", (size_t)info.RegionSize );
     ok( info.State == MEM_COMMIT, "wrong State 0x%lx\n", info.State );
     ok( info.Protect == PAGE_READWRITE, "wrong Protect 0x%lx\n", info.Protect );
 
@@ -1918,7 +1918,7 @@ static void test_write_watch(void)
         count = 64;
         ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
         ok( !ret, "%lu: GetWriteWatch failed %lu\n", i, GetLastError() );
-        ok( count == 16, "%lu: wrong count %Iu\n", i, count );
+        ok( count == 16, "%lu: wrong count %Iu\n", i, (size_t)count );
 
         success = ReadFile( readpipe, base, size, NULL, &overlapped );
         ok( !success, "%lu: ReadFile unexpectedly succeeded\n", i );
@@ -1928,7 +1928,7 @@ static void test_write_watch(void)
         count = 64;
         ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
         ok( !ret, "%lu: GetWriteWatch failed %lu\n", i, GetLastError() );
-        ok( count == 16, "%lu: wrong count %Iu\n", i, count );
+        ok( count == 16, "%lu: wrong count %Iu\n", i, (size_t)count );
 
         num_bytes = 0;
         success = WriteFile( writepipe, testdata, sizeof(testdata), &num_bytes, NULL );
@@ -1945,7 +1945,7 @@ static void test_write_watch(void)
         memset( results, 0, sizeof(results) );
         ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
         ok( !ret, "%lu: GetWriteWatch failed %lu\n", i, GetLastError() );
-        ok( count == 1, "%lu: wrong count %Iu\n", i, count );
+        ok( count == 1, "%lu: wrong count %Iu\n", i, (size_t)count );
         ok( results[0] == base, "%lu: wrong result %p\n", i, results[0] );
 
         CloseHandle( readpipe );
@@ -1968,7 +1968,7 @@ static void test_write_watch(void)
         count = 64;
         ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
         ok( !ret, "%lu: GetWriteWatch failed %lu\n", i, GetLastError() );
-        ok( count == 16, "%lu: wrong count %Iu\n", i, count );
+        ok( count == 16, "%lu: wrong count %Iu\n", i, (size_t)count );
 
         args.pipe = readpipe;
         args.index = i;
@@ -1983,7 +1983,7 @@ static void test_write_watch(void)
         count = 64;
         ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
         ok( !ret, "%lu: GetWriteWatch failed %lu\n", i, GetLastError() );
-        ok( count == 16, "%lu: wrong count %Iu\n", i, count );
+        ok( count == 16, "%lu: wrong count %Iu\n", i, (size_t)count );
 
         num_bytes = 0;
         success = WriteFile( writepipe, testdata, sizeof(testdata), &num_bytes, NULL );
@@ -1995,7 +1995,7 @@ static void test_write_watch(void)
         memset( results, 0, sizeof(results) );
         ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
         ok( !ret, "%lu: GetWriteWatch failed %lu\n", i, GetLastError() );
-        ok( count == 1, "%lu: wrong count %Iu\n", i, count );
+        ok( count == 1, "%lu: wrong count %Iu\n", i, (size_t)count );
         ok( results[0] == base, "%lu: wrong result %p\n", i, results[0] );
 
         CloseHandle( readpipe );
@@ -2018,7 +2018,7 @@ static void test_write_watch(void)
     count = 64;
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 16, "wrong count %Iu\n", count );
+    ok( count == 16, "wrong count %Iu\n", (size_t)count );
 
     success = ReadFile( file, base, size, &num_bytes, NULL );
     ok( success, "ReadFile failed %lu\n", GetLastError() );
@@ -2027,7 +2027,7 @@ static void test_write_watch(void)
     count = 64;
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 16, "wrong count %Iu\n", count );
+    ok( count == 16, "wrong count %Iu\n", (size_t)count );
 
     CloseHandle( file );
     DeleteFileA( filename );
@@ -2039,7 +2039,7 @@ static void test_write_watch(void)
     count = 64;
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 0, "wrong count %Iu\n", count );
+    ok( count == 0, "wrong count %Iu\n", (size_t)count );
 
     /* OVERLAPPED structure write watch */
     memset( &overlapped, 0, sizeof(overlapped) );
@@ -2067,7 +2067,7 @@ static void test_write_watch(void)
     count = 64;
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 16, "wrong count %Iu\n", count );
+    ok( count == 16, "wrong count %Iu\n", (size_t)count );
 
     success = ReadFile( readpipe, base, sizeof(testdata), NULL, overlapped2 );
     ok( !success, "ReadFile unexpectedly succeeded\n" );
@@ -2077,7 +2077,7 @@ static void test_write_watch(void)
     count = 64;
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 2, "wrong count %Iu\n", count );
+    ok( count == 2, "wrong count %Iu\n", (size_t)count );
 
     num_bytes = 0;
     success = WriteFile( writepipe, testdata, sizeof(testdata), &num_bytes, NULL );
@@ -2094,7 +2094,7 @@ static void test_write_watch(void)
     memset( results, 0, sizeof(results) );
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 2, "wrong count %Iu\n", count );
+    ok( count == 2, "wrong count %Iu\n", (size_t)count );
     ok( results[0] == base, "wrong result %p\n", results[0] );
 
     CloseHandle( readpipe );
@@ -2216,7 +2216,7 @@ static void test_write_watch(void)
     count = 64;
     ret = pGetWriteWatch( 0, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 0, "wrong count %Iu\n", count );
+    ok( count == 0, "wrong count %Iu\n", (size_t)count );
 
     ret = VirtualProtect( base, 6*pagesize, PAGE_READWRITE, &old_prot );
     ok( ret, "VirtualProtect failed error %lu\n", GetLastError() );
@@ -2231,7 +2231,7 @@ static void test_write_watch(void)
     count = 64;
     ret = pGetWriteWatch( 0, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 1, "wrong count %Iu\n", count );
+    ok( count == 1, "wrong count %Iu\n", (size_t)count );
     ok( results[0] == base + 5*pagesize, "wrong result %p\n", results[0] );
 
     ret = VirtualFree( base, size, MEM_DECOMMIT );
@@ -2241,7 +2241,7 @@ static void test_write_watch(void)
     ret = pGetWriteWatch( 0, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
     ok( count == 1 || broken(count == 0), /* win98 */
-        "wrong count %Iu\n", count );
+        "wrong count %Iu\n", (size_t)count );
     if (count) ok( results[0] == base + 5*pagesize, "wrong result %p\n", results[0] );
 
     VirtualFree( base, 0, MEM_RELEASE );
@@ -2376,7 +2376,7 @@ static void test_guard_page(void)
     ok( ret, "VirtualQuery failed %lu\n", GetLastError());
     ok( info.BaseAddress == base, "BaseAddress %p instead of %p\n", info.BaseAddress, base );
     ok( info.AllocationProtect == (PAGE_READWRITE | PAGE_GUARD), "wrong AllocationProtect %lx\n", info.AllocationProtect );
-    ok( info.RegionSize == size, "wrong RegionSize 0x%Ix\n", info.RegionSize );
+    ok( info.RegionSize == size, "wrong RegionSize 0x%Ix\n", (size_t)info.RegionSize );
     ok( info.State == MEM_COMMIT, "wrong State 0x%lx\n", info.State );
     ok( info.Protect == (PAGE_READWRITE | PAGE_GUARD), "wrong Protect 0x%lx\n", info.Protect );
     ok( info.Type == MEM_PRIVATE, "wrong Type 0x%lx\n", info.Type );
@@ -2415,7 +2415,7 @@ static void test_guard_page(void)
     ok( ret, "VirtualQuery failed %lu\n", GetLastError());
     ok( info.BaseAddress == base, "BaseAddress %p instead of %p\n", info.BaseAddress, base );
     ok( info.AllocationProtect == (PAGE_READWRITE | PAGE_GUARD), "wrong AllocationProtect %lx\n", info.AllocationProtect );
-    ok( info.RegionSize == size, "wrong RegionSize 0x%Ix\n", info.RegionSize );
+    ok( info.RegionSize == size, "wrong RegionSize 0x%Ix\n", (size_t)info.RegionSize );
     ok( info.State == MEM_COMMIT, "wrong State 0x%lx\n", info.State );
     todo_wine
     ok( info.Protect == PAGE_READWRITE, "wrong Protect 0x%lx\n", info.Protect );
@@ -2492,7 +2492,7 @@ static void test_guard_page(void)
     ok( ret, "VirtualQuery failed %lu\n", GetLastError() );
     ok( info.BaseAddress == base, "BaseAddress %p instead of %p\n", info.BaseAddress, base );
     ok( info.AllocationProtect == (PAGE_READWRITE | PAGE_GUARD), "wrong AllocationProtect %lx\n", info.AllocationProtect );
-    ok( info.RegionSize == size, "wrong RegionSize 0x%Ix\n", info.RegionSize );
+    ok( info.RegionSize == size, "wrong RegionSize 0x%Ix\n", (size_t)info.RegionSize );
     ok( info.State == MEM_COMMIT, "wrong State 0x%lx\n", info.State );
     ok( info.Protect == (PAGE_READWRITE | PAGE_GUARD), "wrong Protect 0x%lx\n", info.Protect );
     ok( info.Type == MEM_PRIVATE, "wrong Type 0x%lx\n", info.Type );
@@ -2500,7 +2500,7 @@ static void test_guard_page(void)
     count = 64;
     ret = pGetWriteWatch( 0, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 0, "wrong count %Iu\n", count );
+    ok( count == 0, "wrong count %Iu\n", (size_t)count );
 
     /* writing to a page should trigger should trigger guard page, even if write watch is set */
     frame.Handler = guard_page_handler;
@@ -2517,7 +2517,7 @@ static void test_guard_page(void)
     count = 64;
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 1, "wrong count %Iu\n", count );
+    ok( count == 1, "wrong count %Iu\n", (size_t)count );
     ok( results[0] == base, "wrong result %p\n", results[0] );
 
     success = VirtualProtect( base, size, PAGE_READWRITE | PAGE_GUARD, &old_prot );
@@ -2539,7 +2539,7 @@ static void test_guard_page(void)
     count = 64;
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 1, "wrong count %Iu\n", count );
+    ok( count == 1, "wrong count %Iu\n", (size_t)count );
     ok( results[0] == base, "wrong result %p\n", results[0] );
 
     success = VirtualProtect( base, size, PAGE_READWRITE | PAGE_GUARD, &old_prot );
@@ -2555,7 +2555,7 @@ static void test_guard_page(void)
     count = 64;
     ret = pGetWriteWatch( 0, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 0, "wrong count %Iu\n", count );
+    ok( count == 0, "wrong count %Iu\n", (size_t)count );
 
     success = VirtualLock( base, size );
     todo_wine
@@ -2572,7 +2572,7 @@ static void test_guard_page(void)
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
     todo_wine
-    ok( count == 1 || broken(count == 0) /* Windows 8 */, "wrong count %Iu\n", count );
+    ok( count == 1 || broken(count == 0) /* Windows 8 */, "wrong count %Iu\n", (size_t)count );
     todo_wine
     ok( results[0] == base || broken(results[0] == (void *)0xdeadbeef) /* Windows 8 */, "wrong result %p\n", results[0] );
 
@@ -2589,7 +2589,7 @@ static DWORD execute_fault_seh_handler( EXCEPTION_RECORD *rec, EXCEPTION_REGISTR
 
     trace( "exception: %08lx flags:%lx addr:%p info[0]:%Id info[1]:%p\n",
            rec->ExceptionCode, rec->ExceptionFlags, rec->ExceptionAddress,
-           rec->ExceptionInformation[0], (void *)rec->ExceptionInformation[1] );
+           (ptrdiff_t)rec->ExceptionInformation[0], (void *)rec->ExceptionInformation[1] );
 
     ok( rec->NumberParameters == 2, "NumberParameters is %ld instead of 2\n", rec->NumberParameters );
     ok( rec->ExceptionCode == STATUS_ACCESS_VIOLATION || rec->ExceptionCode == STATUS_GUARD_PAGE_VIOLATION,
@@ -2643,7 +2643,7 @@ static LONG CALLBACK execute_fault_vec_handler( EXCEPTION_POINTERS *ExceptionInf
 
     trace( "exception: %08lx flags:%lx addr:%p info[0]:%Id info[1]:%p\n",
            rec->ExceptionCode, rec->ExceptionFlags, rec->ExceptionAddress,
-           rec->ExceptionInformation[0], (void *)rec->ExceptionInformation[1] );
+           (ptrdiff_t)rec->ExceptionInformation[0], (void *)rec->ExceptionInformation[1] );
 
     ok( rec->NumberParameters == 2, "NumberParameters is %ld instead of 2\n", rec->NumberParameters );
     ok( rec->ExceptionCode == STATUS_ACCESS_VIOLATION,
@@ -3069,7 +3069,7 @@ static void test_atl_thunk_emulation( ULONG dep_flags )
     count = 64;
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 0, "wrong count %Iu\n", count );
+    ok( count == 0, "wrong count %Iu\n", (size_t)count );
 
     memcpy( base, code_jmp, sizeof(code_jmp) );
     *(DWORD *)(base + 1) = (DWORD_PTR)jmp_test_func - (DWORD_PTR)(base + 5);
@@ -3077,7 +3077,7 @@ static void test_atl_thunk_emulation( ULONG dep_flags )
     count = 64;
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 1, "wrong count %Iu\n", count );
+    ok( count == 1, "wrong count %Iu\n", (size_t)count );
     ok( results[0] == base, "wrong result %p\n", results[0] );
 
     /* Create a new window class and associated Window (see above) */
@@ -3105,7 +3105,7 @@ static void test_atl_thunk_emulation( ULONG dep_flags )
     count = 64;
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 0, "wrong count %Iu\n", count );
+    ok( count == 0, "wrong count %Iu\n", (size_t)count );
 
     /* At first try with an instruction which is not recognized as proper ATL thunk
      * by the Windows ATL Thunk Emulator. Removing execute permissions will lead to
@@ -3129,7 +3129,7 @@ static void test_atl_thunk_emulation( ULONG dep_flags )
     count = 64;
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 0, "wrong count %Iu\n", count );
+    ok( count == 0, "wrong count %Iu\n", (size_t)count );
 
     ret = send_message_excpt( hWnd, WM_USER, 0, 0 );
     ok( ret == 42, "call returned wrong result, expected 42, got %ld\n", ret );
@@ -3162,7 +3162,7 @@ static void test_atl_thunk_emulation( ULONG dep_flags )
     count = 64;
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 0 || broken(count == 1) /* Windows 8 */, "wrong count %Iu\n", count );
+    ok( count == 0 || broken(count == 1) /* Windows 8 */, "wrong count %Iu\n", (size_t)count );
 
     /* Now test with a proper ATL thunk instruction. */
 
@@ -3172,7 +3172,7 @@ static void test_atl_thunk_emulation( ULONG dep_flags )
     count = 64;
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 1, "wrong count %Iu\n", count );
+    ok( count == 1, "wrong count %Iu\n", (size_t)count );
     ok( results[0] == base, "wrong result %p\n", results[0] );
 
     success = VirtualProtect( base, size, PAGE_EXECUTE_READWRITE, &old_prot );
@@ -3201,7 +3201,7 @@ static void test_atl_thunk_emulation( ULONG dep_flags )
     count = 64;
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 0, "wrong count %Iu\n", count );
+    ok( count == 0, "wrong count %Iu\n", (size_t)count );
 
     ret = send_message_excpt( hWnd, WM_USER, 0, 0 );
     ok( ret == 43, "call returned wrong result, expected 43, got %ld\n", ret );
@@ -3235,7 +3235,7 @@ static void test_atl_thunk_emulation( ULONG dep_flags )
     count = 64;
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 0 || broken(count == 1) /* Windows 8 */, "wrong count %Iu\n", count );
+    ok( count == 0 || broken(count == 1) /* Windows 8 */, "wrong count %Iu\n", (size_t)count );
 
     /* Restore the JMP instruction, set to executable, and then destroy the Window */
 
@@ -3245,7 +3245,7 @@ static void test_atl_thunk_emulation( ULONG dep_flags )
     count = 64;
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %lu\n", GetLastError() );
-    ok( count == 1, "wrong count %Iu\n", count );
+    ok( count == 1, "wrong count %Iu\n", (size_t)count );
     ok( results[0] == base, "wrong result %p\n", results[0] );
 
     success = VirtualProtect( base, size, PAGE_EXECUTE_READWRITE, &old_prot );
@@ -3344,7 +3344,7 @@ static void test_VirtualProtect(void)
         ret = VirtualQuery(base, &info, sizeof(info));
         ok(ret, "VirtualQuery failed %ld\n", GetLastError());
         ok(info.BaseAddress == base, "%ld: got %p != expected %p\n", i, info.BaseAddress, base);
-        ok(info.RegionSize == si.dwPageSize, "%ld: got %#Ix != expected %#lx\n", i, info.RegionSize, si.dwPageSize);
+        ok(info.RegionSize == si.dwPageSize, "%ld: got %#Ix != expected %#lx\n", i, (size_t)info.RegionSize, si.dwPageSize);
         ok(info.Protect == PAGE_NOACCESS, "%ld: got %#lx != expected PAGE_NOACCESS\n", i, info.Protect);
         ok(info.AllocationBase == base, "%ld: %p != %p\n", i, info.AllocationBase, base);
         ok(info.AllocationProtect == PAGE_NOACCESS, "%ld: %#lx != PAGE_NOACCESS\n", i, info.AllocationProtect);
@@ -3363,7 +3363,7 @@ static void test_VirtualProtect(void)
             ret = VirtualQuery(base, &info, sizeof(info));
             ok(ret, "VirtualQuery failed %ld\n", GetLastError());
             ok(info.BaseAddress == base, "%ld: got %p != expected %p\n", i, info.BaseAddress, base);
-            ok(info.RegionSize == si.dwPageSize, "%ld: got %#Ix != expected %#lx\n", i, info.RegionSize, si.dwPageSize);
+            ok(info.RegionSize == si.dwPageSize, "%ld: got %#Ix != expected %#lx\n", i, (size_t)info.RegionSize, si.dwPageSize);
             ok(info.Protect == td[i].prot_get, "%ld: got %#lx != expected %#lx\n", i, info.Protect, td[i].prot_get);
             ok(info.AllocationBase == base, "%ld: %p != %p\n", i, info.AllocationBase, base);
             ok(info.AllocationProtect == PAGE_NOACCESS, "%ld: %#lx != PAGE_NOACCESS\n", i, info.AllocationProtect);
@@ -3517,7 +3517,7 @@ static void test_VirtualAlloc_protection(void)
             ret = VirtualQuery(base, &info, sizeof(info));
             ok(ret, "VirtualQuery failed %ld\n", GetLastError());
             ok(info.BaseAddress == base, "%ld: got %p != expected %p\n", i, info.BaseAddress, base);
-            ok(info.RegionSize == si.dwPageSize, "%ld: got %#Ix != expected %#lx\n", i, info.RegionSize, si.dwPageSize);
+            ok(info.RegionSize == si.dwPageSize, "%ld: got %#Ix != expected %#lx\n", i, (size_t)info.RegionSize, si.dwPageSize);
             ok(info.Protect == td[i].prot, "%ld: got %#lx != expected %#lx\n", i, info.Protect, td[i].prot);
             ok(info.AllocationBase == base, "%ld: %p != %p\n", i, info.AllocationBase, base);
             ok(info.AllocationProtect == td[i].prot, "%ld: %#lx != %#lx\n", i, info.AllocationProtect, td[i].prot);
@@ -3641,7 +3641,7 @@ static void test_CreateFileMapping_protection(void)
             ret = VirtualQuery(base, &info, sizeof(info));
             ok(ret, "VirtualQuery failed %ld\n", GetLastError());
             ok(info.BaseAddress == base, "%ld: got %p != expected %p\n", i, info.BaseAddress, base);
-            ok(info.RegionSize == si.dwPageSize, "%ld: got %#Ix != expected %#lx\n", i, info.RegionSize, si.dwPageSize);
+            ok(info.RegionSize == si.dwPageSize, "%ld: got %#Ix != expected %#lx\n", i, (size_t)info.RegionSize, si.dwPageSize);
             ok(info.Protect == PAGE_READONLY, "%ld: got %#lx != expected PAGE_READONLY\n", i, info.Protect);
             ok(info.AllocationBase == base, "%ld: %p != %p\n", i, info.AllocationBase, base);
             ok(info.AllocationProtect == PAGE_READONLY, "%ld: %#lx != PAGE_READONLY\n", i, info.AllocationProtect);
@@ -3695,7 +3695,7 @@ static void test_CreateFileMapping_protection(void)
         ret = VirtualQuery(base, &info, sizeof(info));
         ok(ret, "VirtualQuery failed %ld\n", GetLastError());
         ok(info.BaseAddress == base, "%ld: got %p != expected %p\n", i, info.BaseAddress, base);
-        ok(info.RegionSize == si.dwPageSize, "%ld: got %#Ix != expected %#lx\n", i, info.RegionSize, si.dwPageSize);
+        ok(info.RegionSize == si.dwPageSize, "%ld: got %#Ix != expected %#lx\n", i, (size_t)info.RegionSize, si.dwPageSize);
         ok(info.Protect == PAGE_NOACCESS, "%ld: got %#lx != expected PAGE_NOACCESS\n", i, info.Protect);
         ok(info.AllocationBase == base, "%ld: %p != %p\n", i, info.AllocationBase, base);
         ok(info.AllocationProtect == alloc_prot, "%ld: %#lx != %#lx\n", i, info.AllocationProtect, alloc_prot);
@@ -3736,7 +3736,7 @@ static void test_CreateFileMapping_protection(void)
             ret = VirtualQuery(base, &info, sizeof(info));
             ok(ret, "VirtualQuery failed %ld\n", GetLastError());
             ok(info.BaseAddress == base, "%ld: got %p != expected %p\n", i, info.BaseAddress, base);
-            ok(info.RegionSize == si.dwPageSize, "%ld: got %#Ix != expected %#lx\n", i, info.RegionSize, si.dwPageSize);
+            ok(info.RegionSize == si.dwPageSize, "%ld: got %#Ix != expected %#lx\n", i, (size_t)info.RegionSize, si.dwPageSize);
             ok(info.Protect == td[i].prot, "%ld: got %#lx != expected %#lx\n", i, info.Protect, td[i].prot);
             ok(info.AllocationBase == base, "%ld: %p != %p\n", i, info.AllocationBase, base);
             ok(info.AllocationProtect == alloc_prot, "%ld: %#lx != %#lx\n", i, info.AllocationProtect, alloc_prot);
@@ -4068,7 +4068,7 @@ static void test_mapping( HANDLE hfile, DWORD sec_flags, BOOL readonly )
             ok(ret, "%ld: VirtualQuery failed %ld\n", j, GetLastError());
             ok(info.BaseAddress == base, "%ld: (%04lx) got %p, expected %p\n", j, view[j].access, info.BaseAddress, base);
             ok(info.RegionSize == 2*si.dwPageSize || (info.RegionSize == si.dwPageSize && (sec_flags & SEC_IMAGE)),
-               "%ld: (%04lx) got %#Ix != expected %#lx\n", j, view[j].access, info.RegionSize, 2*si.dwPageSize);
+               "%ld: (%04lx) got %#Ix != expected %#lx\n", j, view[j].access, (size_t)info.RegionSize, 2*si.dwPageSize);
             if (sec_flags & SEC_IMAGE)
                 ok(info.Protect == PAGE_READONLY,
                     "%ld: (%04lx) got %#lx, expected %#lx\n", j, view[j].access, info.Protect, view[j].prot);
@@ -4091,7 +4091,7 @@ static void test_mapping( HANDLE hfile, DWORD sec_flags, BOOL readonly )
 
             if (nt_base && base)
             {
-                ok(nt_info.RegionSize == info.RegionSize, "%ld: (%04lx) got %#Ix != expected %#Ix\n", j, view[j].access, nt_info.RegionSize, info.RegionSize);
+                ok(nt_info.RegionSize == info.RegionSize, "%ld: (%04lx) got %#Ix != expected %#Ix\n", j, view[j].access, (size_t)nt_info.RegionSize, (size_t)info.RegionSize);
                 ok(nt_info.Protect == info.Protect /* Vista+ */ ||
                    broken(nt_info.AllocationProtect == PAGE_EXECUTE_WRITECOPY && info.Protect == PAGE_NOACCESS), /* XP */
                    "%ld: (%04lx) got %#lx, expected %#lx\n", j, view[j].access, nt_info.Protect, info.Protect);
@@ -4194,7 +4194,7 @@ static void test_mapping( HANDLE hfile, DWORD sec_flags, BOOL readonly )
                    page_prot[i], view[j].prot, info.Protect );
                 todo_wine_if (!(sec_flags & SEC_IMAGE))
                 ok(info.RegionSize == si.dwPageSize, "wrong region size %#Ix after write, map %#lx, view %#lx got %#lx\n",
-                   info.RegionSize, page_prot[i], view[j].prot, info.Protect );
+                   (size_t)info.RegionSize, page_prot[i], view[j].prot, info.Protect );
 
                 prev_prot = info.Protect;
                 alloc_prot = info.AllocationProtect;
@@ -4270,7 +4270,7 @@ static void check_image_views(BYTE *views[2], DWORD protection, BOOL written, co
             memset(&working, 0, sizeof(working));
             working.VirtualAddress = views[view] + page * si.dwPageSize;
             count = VirtualQuery(working.VirtualAddress, &info, sizeof(info));
-            ok(count == sizeof(info), "VirtualQuery returned %Iu, error %lu.\n", count, GetLastError());
+            ok(count == sizeof(info), "VirtualQuery returned %Iu, error %lu.\n", (size_t)count, GetLastError());
             if (count != sizeof(info)) goto next;
             expected = page ? neighbor_protection[view] : view ? PAGE_READONLY : protection;
             ok(info.State == MEM_COMMIT, "Unexpected state %#lx.\n", info.State);
@@ -4608,19 +4608,19 @@ static void test_ReadProcessMemory(void)
     copied = 1;
     ret = ReadProcessMemory(GetCurrentProcess(), ptr, buf, 2 * si.dwPageSize, &copied);
     ok(!ret, "ReadProcessMemory succeeded\n");
-    ok(!copied, "copied = %Id\n", copied);
+    ok(!copied, "copied = %Id\n", (ptrdiff_t)copied);
     ok(GetLastError() == ERROR_PARTIAL_COPY, "GetLastError() = %lu\n", GetLastError());
 
     ret = ReadProcessMemory(GetCurrentProcess(), ptr, buf, si.dwPageSize, &copied);
     ok(ret, "ReadProcessMemory failed %lu\n", GetLastError());
-    ok(copied == si.dwPageSize, "copied = %Id\n", copied);
+    ok(copied == si.dwPageSize, "copied = %Id\n", (ptrdiff_t)copied);
 
     ret = ReadProcessMemory(hproc, ptr, buf, 2 * si.dwPageSize, &copied);
     todo_wine ok(!ret, "ReadProcessMemory succeeded\n");
 
     ret = ReadProcessMemory(hproc, ptr, buf, si.dwPageSize, &copied);
     ok(ret, "ReadProcessMemory failed %lu\n", GetLastError());
-    ok(copied == si.dwPageSize, "copied = %Id\n", copied);
+    ok(copied == si.dwPageSize, "copied = %Id\n", (ptrdiff_t)copied);
 
     ret = VirtualFree(ptr, 0, MEM_RELEASE);
     ok(ret, "VirtualFree failed %lu\n", GetLastError());

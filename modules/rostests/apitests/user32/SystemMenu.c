@@ -141,19 +141,19 @@ static void add_message_(int line, const struct recvd_message *msg)
             const char *code_name = (msg->message <= HCBT_SETFOCUS ? CBT_code_name[msg->message] : "Unknown");
 
             sprintf(seq->output, "%s: hook %d (%s) wp %08Ix lp %08Ix",
-                    msg->descr, msg->message, code_name, msg->wParam, msg->lParam);
+                    msg->descr, msg->message, code_name, msg->wParam, (size_t)msg->lParam);
         }
         else if (msg->flags & winevent_hook)
         {
             sprintf(seq->output, "%s: winevent %p %08x %08Ix %08Ix",
-                    msg->descr, msg->hwnd, msg->message, msg->wParam, msg->lParam);
+                    msg->descr, msg->hwnd, msg->message, msg->wParam, (size_t)msg->lParam);
         }
         else
         {
             if (msg->message >= 0xc000)
                 return;  /* ignore registered messages */
             sprintf(seq->output, "%s: %p %04x wp %08Ix lp %08Ix",
-                    msg->descr, msg->hwnd, msg->message, msg->wParam, msg->lParam);
+                    msg->descr, msg->hwnd, msg->message, msg->wParam, (size_t)msg->lParam);
             if (msg->flags & (sent | posted | parent | defwinproc | beginpaint))
                 sprintf(seq->output + strlen(seq->output), " (flags %x)", msg->flags);
         }
@@ -326,14 +326,14 @@ static void ok_sequence_(const struct message *expected_list, const char *contex
                             dump++;
                         ok_( file, line) (FALSE,
                             "%s: %u: in msg 0x%04x expecting lParam 0x%Ix got 0x%Ix\n",
-                            context, count, expected->message, expected->lParam, actual->lParam);
+                            context, count, expected->message, (size_t)expected->lParam, (size_t)actual->lParam);
                     }
                 }
                 else
                 {
                     ok_( file, line)(((expected->lParam ^ actual->lParam) & ~expected->lp_mask) == 0,
                                      "%s: %u: in msg 0x%04x expecting lParam 0x%Ix got 0x%Ix\n",
-                                     context, count, expected->message, expected->lParam, actual->lParam);
+                                     context, count, expected->message, (size_t)expected->lParam, (size_t)actual->lParam);
                     if ((expected->lParam ^ actual->lParam) & ~expected->lp_mask)
                         dump++;
                 }

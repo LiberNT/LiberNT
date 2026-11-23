@@ -484,8 +484,8 @@ LdrLoadDll(
 
     /* Check if there's a TLD DLL being loaded */
     OldTldDll = LdrpTopLevelDllBeingLoaded;
+    _SEH2_TRY
     {
-
         if (OldTldDll)
         {
             /* This is a recursive load, do something about it? */
@@ -530,7 +530,9 @@ LdrLoadDll(
                              DllCharacteristics,
                              DllName,
                              BaseAddress,
-                             TRUE);
+                             TRUE,
+                             LoadReasonDynamicLoad,
+                             NULL);
         if (NT_SUCCESS(Status))
         {
             Status = STATUS_SUCCESS;
@@ -549,11 +551,15 @@ LdrLoadDll(
         }
     }
 
-    /* Restore the old TLD DLL */
-    LdrpTopLevelDllBeingLoaded = OldTldDll;
-
-    /* Release the lock */
-    LdrUnlockLoaderLock(LDR_UNLOCK_LOADER_LOCK_FLAG_RAISE_ON_ERRORS, Cookie);
+    _SEH2_FINALLY
+    {
+        LdrpTopLevelDllBeingLoaded = OldTldDll;
+        LdrUnlockLoaderLock(LDR_UNLOCK_LOADER_LOCK_FLAG_RAISE_ON_ERRORS, Cookie);
+        if (DynamicString.Buffer)
+            RtlFreeUnicodeString(&DynamicString);
+    }
+    _SEH2_END;
+    return Status;
 
 Cleanup:
     /* Do we have a redirect string? */
@@ -902,7 +908,6 @@ Quickie:
 
             /* Update the load count now */
             LdrpUpdateLoadCount2(LdrEntry, LoadFlag);
-            LdrpClearLoadInProgress();
         }
 
         /* Check if the caller is requesting the handle */
@@ -965,7 +970,7 @@ LdrGetProcedureAddress(
     _Out_ PVOID *ProcedureAddress)
 {
     /* Call the internal routine and tell it to execute DllInit */
-    return LdrpGetProcedureAddress(BaseAddress, Name, Ordinal, ProcedureAddress, TRUE, NULL);
+    return LdrpGetProcedureAddress(BaseAddress, Name, Ordinal, ProcedureAddress, TRUE, NULL, NULL);
 }
 
 NTSTATUS
@@ -979,7 +984,7 @@ LdrGetProcedureAddressEx(
 {
     /* Call the internal routine and execute DllInit depending of flags */
     BOOLEAN ExecuteInit = !(Flags & LDR_GET_PROCEDURE_ADDRESS_DONT_RECORD_FORWARDER);
-    return LdrpGetProcedureAddress(BaseAddress, Name, Ordinal, ProcedureAddress, ExecuteInit, NULL);
+    return LdrpGetProcedureAddress(BaseAddress, Name, Ordinal, ProcedureAddress, ExecuteInit, NULL, NULL);
 }
 
 PVOID
@@ -1491,8 +1496,6 @@ LdrAddRefDll(
                 LdrpUpdateLoadCount2(LdrEntry, LDRP_UPDATE_REFCOUNT);
             }
 
-            /* Clear load in progress */
-            LdrpClearLoadInProgress();
         }
     }
     else
@@ -1629,9 +1632,6 @@ LdrUnloadDll(
                                      InInitializationOrderLinks);
         NextEntry = NextEntry->Blink;
 
-        /* Remove flag */
-        LdrEntry->Flags &= ~LDRP_UNLOAD_IN_PROGRESS;
-
         /* If the load count is now 0 */
         if (!LdrEntry->ObsoleteLoadCount)
         {
@@ -1724,22 +1724,15 @@ LdrUnloadDll(
             RtlActivateActivationContextUnsafeFast(&ActCtx,
                                                    LdrEntry->EntryPointActivationContext);
 
-            if (LdrEntry->TlsIndex) LdrpCallTlsInitializers(LdrEntry, DLL_PROCESS_DETACH);
-
-            /* Call the entrypoint */
             _SEH2_TRY
             {
-                if (EntryPoint) LdrpCallInitRoutine(LdrEntry->EntryPoint, LdrEntry->DllBase, DLL_PROCESS_DETACH, NULL);
+                LdrpCallProcessCallbacks(LdrEntry, DLL_PROCESS_DETACH, NULL, NULL);
             }
-            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+            _SEH2_FINALLY
             {
-                DPRINT1("WARNING: Exception 0x%x during LdrpCallInitRoutine(DLL_PROCESS_DETACH) for %wZ\n",
-                        _SEH2_GetExceptionCode(), &LdrEntry->BaseDllName);
+                RtlDeactivateActivationContextUnsafeFast(&ActCtx);
             }
             _SEH2_END;
-
-            /* Release the context */
-            RtlDeactivateActivationContextUnsafeFast(&ActCtx);
         }
 
         LdrpReleaseTlsData(LdrEntry);
@@ -1956,7 +1949,6 @@ LdrGetDllHandleByName(
         {
             InterlockedIncrement16((PSHORT)&LdrEntry->ObsoleteLoadCount);
             LdrpUpdateLoadCount2(LdrEntry, LDRP_UPDATE_REFCOUNT);
-            LdrpClearLoadInProgress();
         }
 
         *DllHandle = LdrEntry->DllBase;

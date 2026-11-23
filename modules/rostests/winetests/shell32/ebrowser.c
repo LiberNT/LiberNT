@@ -605,13 +605,13 @@ static void test_SB_misc(void)
         lres = 0xDEADBEEF;
         hr = IShellBrowser_SendControlMsg(psb, FCW_STATUS, 0, 0, 0, &lres);
         ok(hr == S_OK, "got (0x%08lx)\n", hr);
-        ok(lres == 0, "lres was %Id\n", lres);
+        ok(lres == 0, "lres was %Id\n", (ptrdiff_t)lres);
 
         lres = 0xDEADBEEF;
         hr = IShellBrowser_SendControlMsg(psb, FCW_TOOLBAR, TB_CHECKBUTTON,
                                           FCIDM_TB_SMALLICON, TRUE, &lres);
         ok(hr == S_OK, "got (0x%08lx)\n", hr);
-        ok(lres == 0, "lres was %Id\n", lres);
+        ok(lres == 0, "lres was %Id\n", (ptrdiff_t)lres);
 
         hr = IShellBrowser_SendControlMsg(psb, FCW_STATUS, 0, 0, 0, NULL);
         ok(hr == S_OK, "got (0x%08lx)\n", hr);
@@ -646,17 +646,17 @@ static void test_SB_misc(void)
         lres = 0xDEADBEEF;
         hr = IShellBrowser_SendControlMsg(psb, FCW_TOOLBAR, 0, 0, 0, &lres);
         ok(hr == S_OK, "got (0x%08lx)\n", hr);
-        ok(lres == 0, "lres was %Id\n", lres);
+        ok(lres == 0, "lres was %Id\n", (ptrdiff_t)lres);
 
         lres = 0xDEADBEEF;
         hr = IShellBrowser_SendControlMsg(psb, FCW_STATUS, 0, 0, 0, &lres);
         ok(hr == S_OK, "got (0x%08lx)\n", hr);
-        ok(lres == 0, "lres was %Id\n", lres);
+        ok(lres == 0, "lres was %Id\n", (ptrdiff_t)lres);
 
         lres = 0xDEADBEEF;
         hr = IShellBrowser_SendControlMsg(psb, 1234, 0, 0, 0, &lres);
         ok(hr == S_OK, "got (0x%08lx)\n", hr);
-        ok(lres == 0, "lres was %Id\n", lres);
+        ok(lres == 0, "lres was %Id\n", (ptrdiff_t)lres);
 
         /* Returns S_OK */
         hr = IShellBrowser_SetStatusTextSB(psb, NULL);

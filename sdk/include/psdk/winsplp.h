@@ -23,6 +23,10 @@
 #ifndef _WINSPLP_
 #define _WINSPLP_
 
+#if (NTDDI_VERSION >= NTDDI_WIN8)
+#include <winuser.h>
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -705,6 +709,7 @@ typedef struct _PRINTPROVIDOR {
     _Out_ LPDWORD pcWritten,
     _In_ DWORD cSleep);
 
+#if (NTDDI_VERSION >= NTDDI_WINXP)
   DWORD
   (WINAPI *fpSendRecvBidiData)(
     _In_ HANDLE hPort,
@@ -712,6 +717,8 @@ typedef struct _PRINTPROVIDOR {
     _In_ LPBIDI_REQUEST_CONTAINER pReqData,
     _Outptr_ LPBIDI_RESPONSE_CONTAINER *ppResData);
 
+#endif
+#if (NTDDI_VERSION >= NTDDI_VISTA)
   BOOL (*fpAddPrinterConnection2)(_In_ LPCWSTR pName, _In_ DWORD dwLevel, _In_ PVOID pInfo);
   HRESULT (*fpGetPrintClassObject)(_In_ PCWSTR pszPrinterName, _In_ const IID *riid, _Outptr_ VOID **ppv);
   HRESULT (*fpReportJobProcessingProgress)(_In_ HANDLE hPrinter, _In_ ULONG jobId, _In_ EPrintXPSJobOperation jobOperation, _In_ EPrintXPSJobProgress jobProgress);
@@ -719,14 +726,20 @@ typedef struct _PRINTPROVIDOR {
   HRESULT (*fpInternalGetPrinterDriver)(_In_ HANDLE hPrinter, _In_ LPWSTR pEnvironment, _In_ DWORD Level, _Out_writes_bytes_to_opt_(cbBuf, *pcbNeeded) LPBYTE pDriverInfo, _In_ DWORD cbBuf, _Out_ LPDWORD pcbNeeded, _In_ DWORD dwClientMajorVersion, _In_ DWORD dwClientMinorVersion, _Out_ PDWORD pdwServerMajorVersion, _Out_ PDWORD pdwServerMinorVersion);
   HRESULT (*fpFindCompatibleDriver)(_In_ LPCWSTR pcszPnpId, _In_ LPCWSTR pcszPortName, _Out_writes_(cchManufacturerName) LPWSTR pszManufacturerName, _In_ DWORD cchManufacturerName, _Out_ LPDWORD pcchRequiredManufacturerNameSize, _Out_writes_(cchModelName) LPWSTR pszModelName, _In_ DWORD cchModelName, _Out_ LPDWORD pcchRequiredModelNameSize, _Out_ LPDWORD pdwRank0Matches);
   HRESULT (*fpInstallPrinterDriverPackageFromConnection)(_In_ LPCWSTR pcszConnectionName);
+#endif
+#if (NTDDI_VERSION >= NTDDI_WIN8)
   DWORD (*fpGetJobNamedPropertyValue)(_In_ HANDLE hPrinter, _In_ DWORD JobId, _In_ PCWSTR pszName, _Out_ PrintPropertyValue *pValue);
   DWORD (*fpSetJobNamedProperty)(_In_ HANDLE hPrinter, _In_ DWORD JobId, _In_ const PrintNamedProperty *pProperty);
   DWORD (*fpDeleteJobNamedProperty)(_In_ HANDLE hPrinter, _In_ DWORD JobId, _In_ PCWSTR pszName);
   DWORD (*fpEnumJobNamedProperties)(_In_ HANDLE hPrinter, _In_ DWORD JobId, _Out_ DWORD *pcProperties, _Outptr_result_buffer_(*pcProperties) PrintNamedProperty **ppProperties);
   DWORD (WINAPI *fpPowerEvent)(_In_ DWORD event, _In_opt_ POWERBROADCAST_SETTING *pPowerSetting);
   DWORD (*fpGetUserPropertyBag)(_In_ HANDLE hPrinter, _Out_ HKEY *phKey);
+#endif
+#if (NTDDI_VERSION >= NTDDI_WINBLUE)
   BOOL (*fpCanShutdown)(VOID);
   DWORD (*fpLogJobInfoForBranchOffice)(_In_ HANDLE hPrinter, _In_ PBranchOfficeJobDataContainer pJobDataContainer);
+#endif
+#if (NTDDI_VERSION >= NTDDI_WIN10_19H1)
   DWORD (*fpRegeneratePrintDeviceCapabilities)(_In_ HANDLE hPrinter);
   HRESULT (*fpPrintSupportOperation)(_In_ HANDLE hPrinter, _In_ DWORD JobId, _In_ DWORD dwOperationType, _In_reads_bytes_opt_(cbInputData) LPBYTE pInputData, _In_ DWORD cbInputData, _Out_ LPDWORD pcWritten);
   HRESULT (*fpIppCreateJobOnPrinter)(_In_ HANDLE hPrinter, _In_ DWORD jobId, _In_ PCWSTR pdlFormat, _In_ DWORD jobAttributesBufferSize, _In_reads_bytes_(jobAttributesBufferSize) PBYTE jobAttributeGroupBuffer, _Out_ PDWORD ippResponseBufferSize, _Outptr_result_bytebuffer_(*ippResponseBufferSize) PBYTE *ippResponseBuffer);
@@ -735,6 +748,7 @@ typedef struct _PRINTPROVIDOR {
   HRESULT (*fpIppGetPrinterAttributes)(_In_ HANDLE hPrinter, _In_ DWORD attributeNameCount, _In_reads_(attributeNameCount) const wchar_t **attributeNames, _Out_ DWORD *ippResponseBufferSize, _Outptr_result_bytebuffer_(*ippResponseBufferSize) BYTE **ippResponseBuffer);
   HRESULT (*fpIppSetPrinterAttributes)(_In_ HANDLE hPrinter, _In_ DWORD jobAttributeGroupBufferSize, _In_reads_bytes_(jobAttributeGroupBufferSize) BYTE *jobAttributeGroupBuffer, _Out_ DWORD *ippResponseBufferSize, _Outptr_result_bytebuffer_(*ippResponseBufferSize) BYTE **ippResponseBuffer);
   HRESULT (*fpIppCreateJobOnPrinterWithAttributes)(_In_ HANDLE hPrinter, _In_ DWORD jobId, _In_ PCWSTR pdlFormat, _In_ DWORD jobAttributesBufferSize, _In_reads_bytes_(jobAttributesBufferSize) PBYTE jobAttributeGroupBuffer, _In_ DWORD operationAttributesBufferSize, _In_reads_bytes_opt_(operationAttributesBufferSize) PBYTE operationAttributeGroupBuffer, _Out_ PDWORD ippResponseBufferSize, _Outptr_result_bytebuffer_(*ippResponseBufferSize) PBYTE *ippResponseBuffer);
+#endif
 } PRINTPROVIDOR, *LPPRINTPROVIDOR;
 
 typedef struct _PRINTPROCESSOROPENDATA {

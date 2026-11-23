@@ -2445,7 +2445,7 @@ static void test_style(void)
         for (j = BS_PUSHBUTTON; j <= BS_DEFCOMMANDLINK; ++j)
         {
             ret = SendMessageA(button, BM_SETSTYLE, j, FALSE);
-            ok(ret == 0, "Expected %#x, got %#Ix.\n", 0, ret);
+            ok(ret == 0, "Expected %#x, got %#Ix.\n", 0, (size_t)ret);
 
             type = GetWindowLongW(button, GWL_STYLE) & BS_TYPEMASK;
             if (i >= BS_SPLITBUTTON && j <= BS_DEFPUSHBUTTON)

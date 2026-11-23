@@ -7283,7 +7283,7 @@ static void test_write_watch(void)
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %u\n", GetLastError() );
 #ifdef __REACTOS__
-    ok( count == 16, "wrong count %Iu\n", count );
+    ok( count == 16, "wrong count %Iu\n", (size_t)count );
 #else
     ok( count == 16, "wrong count %lu\n", count );
 #endif
@@ -7301,7 +7301,7 @@ static void test_write_watch(void)
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %u\n", GetLastError() );
 #ifdef __REACTOS__
-    ok( count == 9, "wrong count %Iu\n", count );
+    ok( count == 9, "wrong count %Iu\n", (size_t)count );
 #else
     ok( count == 9, "wrong count %lu\n", count );
 #endif
@@ -7319,7 +7319,7 @@ static void test_write_watch(void)
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %u\n", GetLastError() );
 #ifdef __REACTOS__
-    ok( count == 0, "wrong count %Iu\n", count );
+    ok( count == 0, "wrong count %Iu\n", (size_t)count );
 #else
     ok( count == 0, "wrong count %lu\n", count );
 #endif
@@ -7329,7 +7329,7 @@ static void test_write_watch(void)
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %u\n", GetLastError() );
 #ifdef __REACTOS__
-    ok( count == 16, "wrong count %Iu\n", count );
+    ok( count == 16, "wrong count %Iu\n", (size_t)count );
 #else
     ok( count == 16, "wrong count %lu\n", count );
 #endif
@@ -7344,7 +7344,7 @@ static void test_write_watch(void)
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %u\n", GetLastError() );
 #ifdef __REACTOS__
-    ok( count == 5, "wrong count %Iu\n", count );
+    ok( count == 5, "wrong count %Iu\n", (size_t)count );
 #else
     ok( count == 5, "wrong count %lu\n", count );
 #endif
@@ -7362,7 +7362,7 @@ static void test_write_watch(void)
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %u\n", GetLastError() );
 #ifdef __REACTOS__
-    ok( count == 0, "wrong count %Iu\n", count );
+    ok( count == 0, "wrong count %Iu\n", (size_t)count );
 #else
     ok( count == 0, "wrong count %lu\n", count );
 #endif
@@ -7372,7 +7372,7 @@ static void test_write_watch(void)
     ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
     ok( !ret, "GetWriteWatch failed %u\n", GetLastError() );
 #ifdef __REACTOS__
-    ok( count == 16, "wrong count %Iu\n", count );
+    ok( count == 16, "wrong count %Iu\n", (size_t)count );
 #else
     ok( count == 16, "wrong count %lu\n", count );
 #endif
@@ -7390,7 +7390,7 @@ static void test_write_watch(void)
         ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
         ok( !ret, "GetWriteWatch failed %u\n", GetLastError() );
 #ifdef __REACTOS__
-        ok( count == 8, "wrong count %Iu\n", count );
+        ok( count == 8, "wrong count %Iu\n", (size_t)count );
 #else
         ok( count == 8, "wrong count %lu\n", count );
 #endif
@@ -7403,7 +7403,7 @@ static void test_write_watch(void)
         ret = pGetWriteWatch( WRITE_WATCH_FLAG_RESET, base, size, results, &count, &pagesize );
         ok( !ret, "GetWriteWatch failed %u\n", GetLastError() );
 #ifdef __REACTOS__
-        ok( count == 0, "wrong count %Iu\n", count );
+        ok( count == 0, "wrong count %Iu\n", (size_t)count );
 #else
         ok( count == 0, "wrong count %lu\n", count );
 #endif
@@ -7985,7 +7985,7 @@ static void test_GetAddrInfoExW(void)
     ok(!ret, "overlapped result is %d\n", ret);
     ok(overlapped.hEvent == event, "hEvent changed %p\n", overlapped.hEvent);
 #ifdef __REACTOS__
-    ok(overlapped.Internal == ERROR_SUCCESS, "overlapped.Internal = %Ix\n", overlapped.Internal);
+    ok(overlapped.Internal == ERROR_SUCCESS, "overlapped.Internal = %Ix\n", (size_t)overlapped.Internal);
 #else
     ok(overlapped.Internal == ERROR_SUCCESS, "overlapped.Internal = %lx\n", overlapped.Internal);
 #endif
@@ -9106,7 +9106,7 @@ static void test_DisconnectEx(void)
     bret = pDisconnectEx(connector, &overlapped, 0, 0);
     if (bret)
 #ifdef __REACTOS__
-        ok(overlapped.Internal == STATUS_PENDING, "expected STATUS_PENDING, got %08Ix\n", overlapped.Internal);
+        ok(overlapped.Internal == STATUS_PENDING, "expected STATUS_PENDING, got %08Ix\n", (size_t)overlapped.Internal);
 #else
         ok(overlapped.Internal == STATUS_PENDING, "expected STATUS_PENDING, got %08lx\n", overlapped.Internal);
 #endif
@@ -9874,7 +9874,7 @@ static void wait_for_async_message(HWND hwnd, HANDLE handle)
 
     ok(ret, "did not expect WM_QUIT message\n");
 #ifdef __REACTOS__
-    ok(msg.wParam == (WPARAM)handle, "expected wParam = %p, got %Ix\n", handle, msg.wParam);
+    ok(msg.wParam == (WPARAM)handle, "expected wParam = %p, got %Ix\n", handle, (size_t)msg.wParam);
 #else
     ok(msg.wParam == (WPARAM)handle, "expected wParam = %p, got %lx\n", handle, msg.wParam);
 #endif
@@ -10059,7 +10059,7 @@ static void test_completion_port(void)
     todo_wine ok(bret == FALSE, "GetQueuedCompletionStatus returned %d\n", bret);
     todo_wine ok(GetLastError() == ERROR_NETNAME_DELETED, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 125, "Key is %Iu\n", key);
+    ok(key == 125, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 125, "Key is %lu\n", key);
 #endif
@@ -10075,7 +10075,7 @@ static void test_completion_port(void)
     ok(bret == FALSE, "GetQueuedCompletionStatus returned %d\n", bret );
     ok(GetLastError() == WAIT_TIMEOUT, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "Key is %Iu\n", key);
+    ok(key == 0xdeadbeef, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "Key is %lu\n", key);
 #endif
@@ -10130,7 +10130,7 @@ static void test_completion_port(void)
     ok(bret == FALSE, "GetQueuedCompletionStatus returned %u\n", bret );
     ok(GetLastError() == WAIT_TIMEOUT, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "Key is %Iu\n", key);
+    ok(key == 0xdeadbeef, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "Key is %lu\n", key);
 #endif
@@ -10181,7 +10181,7 @@ static void test_completion_port(void)
     ok(bret == TRUE, "failed to get completion status %u\n", bret);
     ok(GetLastError() == 0xdeadbeef, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 125, "Key is %Iu\n", key);
+    ok(key == 125, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 125, "Key is %lu\n", key);
 #endif
@@ -10212,7 +10212,7 @@ static void test_completion_port(void)
     ok(bret == TRUE, "failed to get completion status %u\n", bret);
     ok(GetLastError() == 0xdeadbeef, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 125, "Key is %Iu\n", key);
+    ok(key == 125, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 125, "Key is %lu\n", key);
 #endif
@@ -10272,7 +10272,7 @@ static void test_completion_port(void)
     todo_wine ok(bret == FALSE, "GetQueuedCompletionStatus returned %u\n", bret );
     todo_wine ok(GetLastError() == WAIT_TIMEOUT, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    todo_wine ok(key == 0xdeadbeef, "Key is %Iu\n", key);
+    todo_wine ok(key == 0xdeadbeef, "Key is %Iu\n", (size_t)key);
 #else
     todo_wine ok(key == 0xdeadbeef, "Key is %lu\n", key);
 #endif
@@ -10307,7 +10307,7 @@ static void test_completion_port(void)
     ok(bret == FALSE, "GetQueuedCompletionStatus returned %u\n", bret );
     ok(GetLastError() == WAIT_TIMEOUT, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "Key is %Iu\n", key);
+    ok(key == 0xdeadbeef, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "Key is %lu\n", key);
 #endif
@@ -10360,14 +10360,14 @@ static void test_completion_port(void)
     ok(bret == FALSE, "failed to get completion status %u\n", bret);
     ok(GetLastError() == ERROR_OPERATION_ABORTED, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 125, "Key is %Iu\n", key);
+    ok(key == 125, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 125, "Key is %lu\n", key);
 #endif
     ok(num_bytes == 0, "Number of bytes transferred is %u\n", num_bytes);
     ok(olp == &ov, "Overlapped structure is at %p\n", olp);
 #ifdef __REACTOS__
-    ok(olp && (olp->Internal == (ULONG)STATUS_CANCELLED), "Internal status is %Ix\n", olp ? olp->Internal : 0);
+    ok(olp && (olp->Internal == (ULONG)STATUS_CANCELLED), "Internal status is %Ix\n", (size_t)(olp ? olp->Internal : 0));
 #else
     ok(olp && (olp->Internal == (ULONG)STATUS_CANCELLED), "Internal status is %lx\n", olp ? olp->Internal : 0);
 #endif
@@ -10380,7 +10380,7 @@ static void test_completion_port(void)
     ok(bret == FALSE, "failed to get completion status %u\n", bret);
     ok(GetLastError() == WAIT_TIMEOUT, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "Key is %Iu\n", key);
+    ok(key == 0xdeadbeef, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "Key is %lu\n", key);
 #endif
@@ -10415,14 +10415,14 @@ static void test_completion_port(void)
     ok(bret == FALSE, "failed to get completion status %u\n", bret);
     ok(GetLastError() == ERROR_OPERATION_ABORTED, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 125, "Key is %Iu\n", key);
+    ok(key == 125, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 125, "Key is %lu\n", key);
 #endif
     ok(num_bytes == 0, "Number of bytes transferred is %u\n", num_bytes);
     ok(olp == &ov, "Overlapped structure is at %p\n", olp);
 #ifdef __REACTOS__
-    ok(olp && (olp->Internal == (ULONG)STATUS_CANCELLED), "Internal status is %Ix\n", olp ? olp->Internal : 0);
+    ok(olp && (olp->Internal == (ULONG)STATUS_CANCELLED), "Internal status is %Ix\n", (size_t)(olp ? olp->Internal : 0));
 #else
     ok(olp && (olp->Internal == (ULONG)STATUS_CANCELLED), "Internal status is %lx\n", olp ? olp->Internal : 0);
 #endif
@@ -10435,7 +10435,7 @@ static void test_completion_port(void)
     ok(bret == FALSE, "failed to get completion status %u\n", bret);
     ok(GetLastError() == WAIT_TIMEOUT, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "Key is %Iu\n", key);
+    ok(key == 0xdeadbeef, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "Key is %lu\n", key);
 #endif
@@ -10470,7 +10470,7 @@ static void test_completion_port(void)
     ok(bret == FALSE, "failed to get completion status %u\n", bret);
     ok(GetLastError() == WAIT_TIMEOUT, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "Key is %Iu\n", key);
+    ok(key == 0xdeadbeef, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "Key is %lu\n", key);
 #endif
@@ -10490,14 +10490,14 @@ static void test_completion_port(void)
     ok(bret == FALSE, "failed to get completion status %u\n", bret);
     ok(GetLastError() == ERROR_OPERATION_ABORTED, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 125, "Key is %Iu\n", key);
+    ok(key == 125, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 125, "Key is %lu\n", key);
 #endif
     ok(num_bytes == 0, "Number of bytes transferred is %u\n", num_bytes);
     ok(olp == &ov, "Overlapped structure is at %p\n", olp);
 #ifdef __REACTOS__
-    ok(olp && olp->Internal == (ULONG)STATUS_CANCELLED, "Internal status is %Ix\n", olp ? olp->Internal : 0);
+    ok(olp && olp->Internal == (ULONG)STATUS_CANCELLED, "Internal status is %Ix\n", (size_t)(olp ? olp->Internal : 0));
 #else
     ok(olp && olp->Internal == (ULONG)STATUS_CANCELLED, "Internal status is %lx\n", olp ? olp->Internal : 0);
 #endif
@@ -10510,7 +10510,7 @@ static void test_completion_port(void)
     ok(bret == FALSE, "failed to get completion status %u\n", bret);
     ok(GetLastError() == WAIT_TIMEOUT, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "Key is %Iu\n", key);
+    ok(key == 0xdeadbeef, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "Key is %lu\n", key);
 #endif
@@ -10548,7 +10548,7 @@ static void test_completion_port(void)
     ok(bret == FALSE, "failed to get completion status %u\n", bret);
     ok(GetLastError() == WAIT_TIMEOUT, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "Key is %Iu\n", key);
+    ok(key == 0xdeadbeef, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "Key is %lu\n", key);
 #endif
@@ -10563,7 +10563,7 @@ static void test_completion_port(void)
     ok(bret == FALSE, "failed to get completion status %u\n", bret);
     ok(GetLastError() == WAIT_TIMEOUT, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "Key is %Iu\n", key);
+    ok(key == 0xdeadbeef, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "Key is %lu\n", key);
 #endif
@@ -10577,14 +10577,14 @@ static void test_completion_port(void)
     ok(bret == FALSE, "failed to get completion status %u\n", bret);
     ok(GetLastError() == ERROR_OPERATION_ABORTED, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 125, "Key is %Iu\n", key);
+    ok(key == 125, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 125, "Key is %lu\n", key);
 #endif
     ok(num_bytes == 0, "Number of bytes transferred is %u\n", num_bytes);
     ok(olp == &ov, "Overlapped structure is at %p\n", olp);
 #ifdef __REACTOS__
-    ok(olp && (olp->Internal == (ULONG)STATUS_CANCELLED), "Internal status is %Ix\n", olp ? olp->Internal : 0);
+    ok(olp && (olp->Internal == (ULONG)STATUS_CANCELLED), "Internal status is %Ix\n", (size_t)(olp ? olp->Internal : 0));
 #else
     ok(olp && (olp->Internal == (ULONG)STATUS_CANCELLED), "Internal status is %lx\n", olp ? olp->Internal : 0);
 #endif
@@ -10597,7 +10597,7 @@ static void test_completion_port(void)
     ok(bret == FALSE, "failed to get completion status %u\n", bret);
     ok(GetLastError() == WAIT_TIMEOUT, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "Key is %Iu\n", key);
+    ok(key == 0xdeadbeef, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "Key is %lu\n", key);
 #endif
@@ -10635,7 +10635,7 @@ static void test_completion_port(void)
     ok(bret == FALSE, "failed to get completion status %u\n", bret);
     ok(GetLastError() == WAIT_TIMEOUT, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "Key is %Iu\n", key);
+    ok(key == 0xdeadbeef, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "Key is %lu\n", key);
 #endif
@@ -10649,14 +10649,14 @@ static void test_completion_port(void)
     ok(bret == FALSE, "failed to get completion status %u\n", bret);
     ok(GetLastError() == ERROR_OPERATION_ABORTED, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 125, "Key is %Iu\n", key);
+    ok(key == 125, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 125, "Key is %lu\n", key);
 #endif
     ok(num_bytes == 0, "Number of bytes transferred is %u\n", num_bytes);
     ok(olp == &ov, "Overlapped structure is at %p\n", olp);
 #ifdef __REACTOS__
-    ok(olp && (olp->Internal == (ULONG)STATUS_CANCELLED), "Internal status is %Ix\n", olp ? olp->Internal : 0);
+    ok(olp && (olp->Internal == (ULONG)STATUS_CANCELLED), "Internal status is %Ix\n", (size_t)(olp ? olp->Internal : 0));
 #else
     ok(olp && (olp->Internal == (ULONG)STATUS_CANCELLED), "Internal status is %lx\n", olp ? olp->Internal : 0);
 #endif
@@ -10669,7 +10669,7 @@ static void test_completion_port(void)
     ok(bret == FALSE, "failed to get completion status %u\n", bret);
     ok(GetLastError() == WAIT_TIMEOUT, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "Key is %Iu\n", key);
+    ok(key == 0xdeadbeef, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "Key is %lu\n", key);
 #endif
@@ -10697,7 +10697,7 @@ static void test_completion_port(void)
     ok(bret == FALSE, "failed to get completion status %u\n", bret);
     ok(GetLastError() == WAIT_TIMEOUT, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "Key is %Iu\n", key);
+    ok(key == 0xdeadbeef, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "Key is %lu\n", key);
 #endif
@@ -10742,14 +10742,14 @@ static void test_completion_port(void)
     ok(bret == TRUE, "failed to get completion status %u\n", bret);
     ok(GetLastError() == 0xdeadbeef, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 125, "Key is %Iu\n", key);
+    ok(key == 125, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 125, "Key is %lu\n", key);
 #endif
     ok(num_bytes == 0, "Number of bytes transferred is %u\n", num_bytes);
     ok(olp == &ov, "Overlapped structure is at %p\n", olp);
 #ifdef __REACTOS__
-    ok(olp && (olp->Internal == (ULONG)STATUS_SUCCESS), "Internal status is %Ix\n", olp ? olp->Internal : 0);
+    ok(olp && (olp->Internal == (ULONG)STATUS_SUCCESS), "Internal status is %Ix\n", (size_t)(olp ? olp->Internal : 0));
 #else
     ok(olp && (olp->Internal == (ULONG)STATUS_SUCCESS), "Internal status is %lx\n", olp ? olp->Internal : 0);
 #endif
@@ -10762,7 +10762,7 @@ static void test_completion_port(void)
     ok(bret == FALSE, "failed to get completion status %u\n", bret);
     ok(GetLastError() == WAIT_TIMEOUT, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "Key is %Iu\n", key);
+    ok(key == 0xdeadbeef, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "Key is %lu\n", key);
 #endif
@@ -10834,14 +10834,14 @@ static void test_completion_port(void)
     ok(bret == TRUE, "failed to get completion status %u\n", bret);
     ok(GetLastError() == 0xdeadbeef, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 125, "Key is %Iu\n", key);
+    ok(key == 125, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 125, "Key is %lu\n", key);
 #endif
     ok(num_bytes == 1, "Number of bytes transferred is %u\n", num_bytes);
     ok(olp == &ov, "Overlapped structure is at %p\n", olp);
 #ifdef __REACTOS__
-    ok(olp && (olp->Internal == (ULONG)STATUS_SUCCESS), "Internal status is %Ix\n", olp ? olp->Internal : 0);
+    ok(olp && (olp->Internal == (ULONG)STATUS_SUCCESS), "Internal status is %Ix\n", (size_t)(olp ? olp->Internal : 0));
 #else
     ok(olp && (olp->Internal == (ULONG)STATUS_SUCCESS), "Internal status is %lx\n", olp ? olp->Internal : 0);
 #endif
@@ -10865,7 +10865,7 @@ static void test_completion_port(void)
     ok(bret == FALSE, "failed to get completion status %u\n", bret);
     ok(GetLastError() == WAIT_TIMEOUT, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "Key is %Iu\n", key);
+    ok(key == 0xdeadbeef, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "Key is %lu\n", key);
 #endif
@@ -10926,7 +10926,7 @@ static void test_completion_port(void)
                  GetLastError() == ERROR_PIPE_NOT_CONNECTED /* win 2000 */,
                  "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 125, "Key is %Iu\n", key);
+    ok(key == 125, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 125, "Key is %lu\n", key);
 #endif
@@ -10937,7 +10937,7 @@ static void test_completion_port(void)
                          olp->Internal == (ULONG)STATUS_CANCELLED ||
                          olp->Internal == (ULONG)STATUS_CONNECTION_ABORTED ||
                          olp->Internal == (ULONG)STATUS_PIPE_DISCONNECTED /* win 2000 */),
-                         "Internal status is %Ix\n", olp ? olp->Internal : 0);
+                         "Internal status is %Ix\n", (size_t)(olp ? olp->Internal : 0));
 #else
     todo_wine ok(olp && (olp->Internal == (ULONG)STATUS_LOCAL_DISCONNECT ||
                          olp->Internal == (ULONG)STATUS_CANCELLED ||
@@ -10954,7 +10954,7 @@ static void test_completion_port(void)
     ok(bret == FALSE, "failed to get completion status %u\n", bret);
     ok(GetLastError() == WAIT_TIMEOUT, "Last error was %d\n", GetLastError());
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "Key is %Iu\n", key);
+    ok(key == 0xdeadbeef, "Key is %Iu\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "Key is %lu\n", key);
 #endif
@@ -11454,7 +11454,7 @@ static void iocp_async_read(SOCKET src, SOCKET dst)
     ok(GetLastError() == WAIT_TIMEOUT, "got %u\n", GetLastError());
     ok(bytes == 0xdeadbeef, "got bytes %u\n", bytes);
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "got key %#Ix\n", key);
+    ok(key == 0xdeadbeef, "got key %#Ix\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "got key %#lx\n", key);
 #endif
@@ -11471,7 +11471,7 @@ static void iocp_async_read(SOCKET src, SOCKET dst)
     ok(ret, "got %d\n", ret);
     ok(bytes == 12, "got bytes %u\n", bytes);
 #ifdef __REACTOS__
-    ok(key == 0x12345678, "got key %#Ix\n", key);
+    ok(key == 0x12345678, "got key %#Ix\n", (size_t)key);
 #else
     ok(key == 0x12345678, "got key %#lx\n", key);
 #endif
@@ -11479,8 +11479,8 @@ static void iocp_async_read(SOCKET src, SOCKET dst)
     if (ovl_iocp)
     {
 #ifdef __REACTOS__
-        ok(ovl_iocp->InternalHigh == 12, "got %#Ix\n", ovl_iocp->InternalHigh);
-        ok(!ovl_iocp->Internal , "got %#Ix\n", ovl_iocp->Internal);
+        ok(ovl_iocp->InternalHigh == 12, "got %#Ix\n", (size_t)ovl_iocp->InternalHigh);
+        ok(!ovl_iocp->Internal , "got %#Ix\n", (size_t)ovl_iocp->Internal);
 #else
         ok(ovl_iocp->InternalHigh == 12, "got %#lx\n", ovl_iocp->InternalHigh);
         ok(!ovl_iocp->Internal , "got %#lx\n", ovl_iocp->Internal);
@@ -11497,7 +11497,7 @@ static void iocp_async_read(SOCKET src, SOCKET dst)
     ok(GetLastError() == WAIT_TIMEOUT, "got %u\n", GetLastError());
     ok(bytes == 0xdeadbeef, "got bytes %u\n", bytes);
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "got key %#Ix\n", key);
+    ok(key == 0xdeadbeef, "got key %#Ix\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "got key %#lx\n", key);
 #endif
@@ -11532,8 +11532,8 @@ static void iocp_async_read_closesocket(SOCKET src, int how_to_close)
     ok(msg.hwnd == hwnd, "got %p\n", msg.hwnd);
     ok(msg.message == WM_SOCKET, "got %04x\n", msg.message);
 #ifdef __REACTOS__
-    ok(msg.wParam == src, "got %08Ix\n", msg.wParam);
-    ok(msg.lParam == 2, "got %08Ix\n", msg.lParam);
+    ok(msg.wParam == src, "got %08Ix\n", (size_t)msg.wParam);
+    ok(msg.lParam == 2, "got %08Ix\n", (size_t)msg.lParam);
 #else
     ok(msg.wParam == src, "got %08lx\n", msg.wParam);
     ok(msg.lParam == 2, "got %08lx\n", msg.lParam);
@@ -11548,7 +11548,7 @@ static void iocp_async_read_closesocket(SOCKET src, int how_to_close)
     Sleep(100);
     ret = PeekMessageA(&msg, hwnd, WM_SOCKET, WM_SOCKET, PM_REMOVE);
 #ifdef __REACTOS__
-    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, msg.wParam, msg.lParam);
+    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, (size_t)msg.wParam, (size_t)msg.lParam);
 #else
     ok(!ret, "got %04x,%08lx,%08lx\n", msg.message, msg.wParam, msg.lParam);
 #endif
@@ -11566,7 +11566,7 @@ static void iocp_async_read_closesocket(SOCKET src, int how_to_close)
     Sleep(100);
     ret = PeekMessageA(&msg, hwnd, WM_SOCKET, WM_SOCKET, PM_REMOVE);
 #ifdef __REACTOS__
-    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, msg.wParam, msg.lParam);
+    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, (size_t)msg.wParam, (size_t)msg.lParam);
 #else
     ok(!ret, "got %04x,%08lx,%08lx\n", msg.message, msg.wParam, msg.lParam);
 #endif
@@ -11580,7 +11580,7 @@ static void iocp_async_read_closesocket(SOCKET src, int how_to_close)
     ok(GetLastError() == WAIT_TIMEOUT, "got %u\n", GetLastError());
     ok(bytes == 0xdeadbeef, "got bytes %u\n", bytes);
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "got key %#Ix\n", key);
+    ok(key == 0xdeadbeef, "got key %#Ix\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "got key %#lx\n", key);
 #endif
@@ -11589,7 +11589,7 @@ static void iocp_async_read_closesocket(SOCKET src, int how_to_close)
     Sleep(100);
     ret = PeekMessageA(&msg, hwnd, WM_SOCKET, WM_SOCKET, PM_REMOVE);
 #ifdef __REACTOS__
-    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, msg.wParam, msg.lParam);
+    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, (size_t)msg.wParam, (size_t)msg.lParam);
 #else
     ok(!ret, "got %04x,%08lx,%08lx\n", msg.message, msg.wParam, msg.lParam);
 #endif
@@ -11617,7 +11617,7 @@ static void iocp_async_read_closesocket(SOCKET src, int how_to_close)
     {
     case 0:
 #ifdef __REACTOS__
-        ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, msg.wParam, msg.lParam);
+        ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, (size_t)msg.wParam, (size_t)msg.lParam);
 #else
         ok(!ret, "got %04x,%08lx,%08lx\n", msg.message, msg.wParam, msg.lParam);
 #endif
@@ -11630,8 +11630,8 @@ todo_wine
         ok(msg.hwnd == hwnd, "got %p\n", msg.hwnd);
         ok(msg.message == WM_SOCKET, "got %04x\n", msg.message);
 #ifdef __REACTOS__
-        ok(msg.wParam == src, "got %08Ix\n", msg.wParam);
-        ok(msg.lParam == 0x20, "got %08Ix\n", msg.lParam);
+        ok(msg.wParam == src, "got %08Ix\n", (size_t)msg.wParam);
+        ok(msg.lParam == 0x20, "got %08Ix\n", (size_t)msg.lParam);
 #else
         ok(msg.wParam == src, "got %08lx\n", msg.wParam);
         ok(msg.lParam == 0x20, "got %08lx\n", msg.lParam);
@@ -11653,7 +11653,7 @@ todo_wine
     ok(GetLastError() == ERROR_CONNECTION_ABORTED || GetLastError() == ERROR_NETNAME_DELETED /* XP */, "got %u\n", GetLastError());
     ok(!bytes, "got bytes %u\n", bytes);
 #ifdef __REACTOS__
-    ok(key == 0x12345678, "got key %#Ix\n", key);
+    ok(key == 0x12345678, "got key %#Ix\n", (size_t)key);
 #else
     ok(key == 0x12345678, "got key %#lx\n", key);
 #endif
@@ -11661,13 +11661,13 @@ todo_wine
     if (ovl_iocp)
     {
 #ifdef __REACTOS__
-        ok(!ovl_iocp->InternalHigh, "got %#Ix\n", ovl_iocp->InternalHigh);
+        ok(!ovl_iocp->InternalHigh, "got %#Ix\n", (size_t)ovl_iocp->InternalHigh);
 #else
         ok(!ovl_iocp->InternalHigh, "got %#lx\n", ovl_iocp->InternalHigh);
 #endif
 todo_wine
 #ifdef __REACTOS__
-        ok(ovl_iocp->Internal == (ULONG)STATUS_CONNECTION_ABORTED || ovl_iocp->Internal == (ULONG)STATUS_LOCAL_DISCONNECT /* XP */, "got %#Ix\n", ovl_iocp->Internal);
+        ok(ovl_iocp->Internal == (ULONG)STATUS_CONNECTION_ABORTED || ovl_iocp->Internal == (ULONG)STATUS_LOCAL_DISCONNECT /* XP */, "got %#Ix\n", (size_t)ovl_iocp->Internal);
 #else
         ok(ovl_iocp->Internal == (ULONG)STATUS_CONNECTION_ABORTED || ovl_iocp->Internal == (ULONG)STATUS_LOCAL_DISCONNECT /* XP */, "got %#lx\n", ovl_iocp->Internal);
 #endif
@@ -11682,7 +11682,7 @@ todo_wine
     ok(GetLastError() == WAIT_TIMEOUT, "got %u\n", GetLastError());
     ok(bytes == 0xdeadbeef, "got bytes %u\n", bytes);
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "got key %#Ix\n", key);
+    ok(key == 0xdeadbeef, "got key %#Ix\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "got key %#lx\n", key);
 #endif
@@ -11717,8 +11717,8 @@ static void iocp_async_closesocket(SOCKET src)
     ok(msg.hwnd == hwnd, "got %p\n", msg.hwnd);
     ok(msg.message == WM_SOCKET, "got %04x\n", msg.message);
 #ifdef __REACTOS__
-    ok(msg.wParam == src, "got %08Ix\n", msg.wParam);
-    ok(msg.lParam == 2, "got %08Ix\n", msg.lParam);
+    ok(msg.wParam == src, "got %08Ix\n", (size_t)msg.wParam);
+    ok(msg.lParam == 2, "got %08Ix\n", (size_t)msg.lParam);
 #else
     ok(msg.wParam == src, "got %08lx\n", msg.wParam);
     ok(msg.lParam == 2, "got %08lx\n", msg.lParam);
@@ -11730,7 +11730,7 @@ static void iocp_async_closesocket(SOCKET src)
     Sleep(100);
     ret = PeekMessageA(&msg, hwnd, WM_SOCKET, WM_SOCKET, PM_REMOVE);
 #ifdef __REACTOS__
-    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, msg.wParam, msg.lParam);
+    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, (size_t)msg.wParam, (size_t)msg.lParam);
 #else
     ok(!ret, "got %04x,%08lx,%08lx\n", msg.message, msg.wParam, msg.lParam);
 #endif
@@ -11744,7 +11744,7 @@ static void iocp_async_closesocket(SOCKET src)
     ok(GetLastError() == WAIT_TIMEOUT, "got %u\n", GetLastError());
     ok(bytes == 0xdeadbeef, "got bytes %u\n", bytes);
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "got key %Iu\n", key);
+    ok(key == 0xdeadbeef, "got key %Iu\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "got key %lu\n", key);
 #endif
@@ -11753,7 +11753,7 @@ static void iocp_async_closesocket(SOCKET src)
     Sleep(100);
     ret = PeekMessageA(&msg, hwnd, WM_SOCKET, WM_SOCKET, PM_REMOVE);
 #ifdef __REACTOS__
-    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, msg.wParam, msg.lParam);
+    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, (size_t)msg.wParam, (size_t)msg.lParam);
 #else
     ok(!ret, "got %04x,%08lx,%08lx\n", msg.message, msg.wParam, msg.lParam);
 #endif
@@ -11764,7 +11764,7 @@ static void iocp_async_closesocket(SOCKET src)
     memset(&msg, 0, sizeof(msg));
     ret = PeekMessageA(&msg, hwnd, WM_SOCKET, WM_SOCKET, PM_REMOVE);
 #ifdef __REACTOS__
-    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, msg.wParam, msg.lParam);
+    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, (size_t)msg.wParam, (size_t)msg.lParam);
 #else
     ok(!ret, "got %04x,%08lx,%08lx\n", msg.message, msg.wParam, msg.lParam);
 #endif
@@ -11778,7 +11778,7 @@ static void iocp_async_closesocket(SOCKET src)
     ok(GetLastError() == WAIT_TIMEOUT, "got %u\n", GetLastError());
     ok(bytes == 0xdeadbeef, "got bytes %u\n", bytes);
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "got key %Iu\n", key);
+    ok(key == 0xdeadbeef, "got key %Iu\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "got key %lu\n", key);
 #endif
@@ -11861,8 +11861,8 @@ static void iocp_async_read_thread_closesocket(SOCKET src)
     ok(msg.hwnd == hwnd, "got %p\n", msg.hwnd);
     ok(msg.message == WM_SOCKET, "got %04x\n", msg.message);
 #ifdef __REACTOS__
-    ok(msg.wParam == src, "got %08Ix\n", msg.wParam);
-    ok(msg.lParam == 2, "got %08Ix\n", msg.lParam);
+    ok(msg.wParam == src, "got %08Ix\n", (size_t)msg.wParam);
+    ok(msg.lParam == 2, "got %08Ix\n", (size_t)msg.lParam);
 #else
     ok(msg.wParam == src, "got %08lx\n", msg.wParam);
     ok(msg.lParam == 2, "got %08lx\n", msg.lParam);
@@ -11874,7 +11874,7 @@ static void iocp_async_read_thread_closesocket(SOCKET src)
     Sleep(100);
     ret = PeekMessageA(&msg, hwnd, WM_SOCKET, WM_SOCKET, PM_REMOVE);
 #ifdef __REACTOS__
-    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, msg.wParam, msg.lParam);
+    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, (size_t)msg.wParam, (size_t)msg.lParam);
 #else
     ok(!ret, "got %04x,%08lx,%08lx\n", msg.message, msg.wParam, msg.lParam);
 #endif
@@ -11892,7 +11892,7 @@ static void iocp_async_read_thread_closesocket(SOCKET src)
     Sleep(100);
     ret = PeekMessageA(&msg, hwnd, WM_SOCKET, WM_SOCKET, PM_REMOVE);
 #ifdef __REACTOS__
-    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, msg.wParam, msg.lParam);
+    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, (size_t)msg.wParam, (size_t)msg.lParam);
 #else
     ok(!ret, "got %04x,%08lx,%08lx\n", msg.message, msg.wParam, msg.lParam);
 #endif
@@ -11909,7 +11909,7 @@ static void iocp_async_read_thread_closesocket(SOCKET src)
     {
         ok(bytes == 0xdeadbeef, "got bytes %u\n", bytes);
 #ifdef __REACTOS__
-        ok(key == 0xdeadbeef, "got key %Ix\n", key);
+        ok(key == 0xdeadbeef, "got key %Ix\n", (size_t)key);
 #else
         ok(key == 0xdeadbeef, "got key %lx\n", key);
 #endif
@@ -11919,7 +11919,7 @@ static void iocp_async_read_thread_closesocket(SOCKET src)
     {
         ok(!bytes, "got bytes %u\n", bytes);
 #ifdef __REACTOS__
-        ok(key == 0x12345678, "got key %#Ix\n", key);
+        ok(key == 0x12345678, "got key %#Ix\n", (size_t)key);
 #else
         ok(key == 0x12345678, "got key %#lx\n", key);
 #endif
@@ -11927,8 +11927,8 @@ static void iocp_async_read_thread_closesocket(SOCKET src)
         if (ovl_iocp)
         {
 #ifdef __REACTOS__
-            ok(!ovl_iocp->InternalHigh, "got %#Ix\n", ovl_iocp->InternalHigh);
-            ok(ovl_iocp->Internal == STATUS_CANCELLED, "got %#Ix\n", ovl_iocp->Internal);
+            ok(!ovl_iocp->InternalHigh, "got %#Ix\n", (size_t)ovl_iocp->InternalHigh);
+            ok(ovl_iocp->Internal == STATUS_CANCELLED, "got %#Ix\n", (size_t)ovl_iocp->Internal);
 #else
             ok(!ovl_iocp->InternalHigh, "got %#lx\n", ovl_iocp->InternalHigh);
             ok(ovl_iocp->Internal == STATUS_CANCELLED, "got %#lx\n", ovl_iocp->Internal);
@@ -11942,7 +11942,7 @@ static void iocp_async_read_thread_closesocket(SOCKET src)
     Sleep(100);
     ret = PeekMessageA(&msg, hwnd, WM_SOCKET, WM_SOCKET, PM_REMOVE);
 #ifdef __REACTOS__
-    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, msg.wParam, msg.lParam);
+    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, (size_t)msg.wParam, (size_t)msg.lParam);
 #else
     ok(!ret, "got %04x,%08lx,%08lx\n", msg.message, msg.wParam, msg.lParam);
 #endif
@@ -11952,7 +11952,7 @@ static void iocp_async_read_thread_closesocket(SOCKET src)
     Sleep(100);
     ret = PeekMessageA(&msg, hwnd, WM_SOCKET, WM_SOCKET, PM_REMOVE);
 #ifdef __REACTOS__
-    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, msg.wParam, msg.lParam);
+    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, (size_t)msg.wParam, (size_t)msg.lParam);
 #else
     ok(!ret, "got %04x,%08lx,%08lx\n", msg.message, msg.wParam, msg.lParam);
 #endif
@@ -11967,7 +11967,7 @@ todo_wine
     ok(GetLastError() == ERROR_CONNECTION_ABORTED || GetLastError() == ERROR_NETNAME_DELETED /* XP */, "got %u\n", GetLastError());
     ok(!bytes, "got bytes %u\n", bytes);
 #ifdef __REACTOS__
-    ok(key == 0x12345678, "got key %#Ix\n", key);
+    ok(key == 0x12345678, "got key %#Ix\n", (size_t)key);
 #else
     ok(key == 0x12345678, "got key %#lx\n", key);
 #endif
@@ -11975,13 +11975,13 @@ todo_wine
     if (ovl_iocp)
     {
 #ifdef __REACTOS__
-        ok(!ovl_iocp->InternalHigh, "got %#Ix\n", ovl_iocp->InternalHigh);
+        ok(!ovl_iocp->InternalHigh, "got %#Ix\n", (size_t)ovl_iocp->InternalHigh);
 #else
         ok(!ovl_iocp->InternalHigh, "got %#lx\n", ovl_iocp->InternalHigh);
 #endif
 todo_wine
 #ifdef __REACTOS__
-        ok(ovl_iocp->Internal == (ULONG)STATUS_CONNECTION_ABORTED || ovl_iocp->Internal == (ULONG)STATUS_LOCAL_DISCONNECT /* XP */, "got %#Ix\n", ovl_iocp->Internal);
+        ok(ovl_iocp->Internal == (ULONG)STATUS_CONNECTION_ABORTED || ovl_iocp->Internal == (ULONG)STATUS_LOCAL_DISCONNECT /* XP */, "got %#Ix\n", (size_t)ovl_iocp->Internal);
 #else
         ok(ovl_iocp->Internal == (ULONG)STATUS_CONNECTION_ABORTED || ovl_iocp->Internal == (ULONG)STATUS_LOCAL_DISCONNECT /* XP */, "got %#lx\n", ovl_iocp->Internal);
 #endif
@@ -11997,7 +11997,7 @@ xp_is_broken:
     ok(GetLastError() == WAIT_TIMEOUT, "got %u\n", GetLastError());
     ok(bytes == 0xdeadbeef, "got bytes %u\n", bytes);
 #ifdef __REACTOS__
-    ok(key == 0xdeadbeef, "got key %Iu\n", key);
+    ok(key == 0xdeadbeef, "got key %Iu\n", (size_t)key);
 #else
     ok(key == 0xdeadbeef, "got key %lu\n", key);
 #endif
@@ -12039,8 +12039,8 @@ static void iocp_async_read_thread(SOCKET src, SOCKET dst)
     ok(msg.hwnd == hwnd, "got %p\n", msg.hwnd);
     ok(msg.message == WM_SOCKET, "got %04x\n", msg.message);
 #ifdef __REACTOS__
-    ok(msg.wParam == src, "got %08Ix\n", msg.wParam);
-    ok(msg.lParam == 2, "got %08Ix\n", msg.lParam);
+    ok(msg.wParam == src, "got %08Ix\n", (size_t)msg.wParam);
+    ok(msg.lParam == 2, "got %08Ix\n", (size_t)msg.lParam);
 #else
     ok(msg.wParam == src, "got %08lx\n", msg.wParam);
     ok(msg.lParam == 2, "got %08lx\n", msg.lParam);
@@ -12052,7 +12052,7 @@ static void iocp_async_read_thread(SOCKET src, SOCKET dst)
     Sleep(100);
     ret = PeekMessageA(&msg, hwnd, WM_SOCKET, WM_SOCKET, PM_REMOVE);
 #ifdef __REACTOS__
-    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, msg.wParam, msg.lParam);
+    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, (size_t)msg.wParam, (size_t)msg.lParam);
 #else
     ok(!ret, "got %04x,%08lx,%08lx\n", msg.message, msg.wParam, msg.lParam);
 #endif
@@ -12070,7 +12070,7 @@ static void iocp_async_read_thread(SOCKET src, SOCKET dst)
     Sleep(100);
     ret = PeekMessageA(&msg, hwnd, WM_SOCKET, WM_SOCKET, PM_REMOVE);
 #ifdef __REACTOS__
-    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, msg.wParam, msg.lParam);
+    ok(!ret, "got %04x,%08Ix,%08Ix\n", msg.message, (size_t)msg.wParam, (size_t)msg.lParam);
 #else
     ok(!ret, "got %04x,%08lx,%08lx\n", msg.message, msg.wParam, msg.lParam);
 #endif
@@ -12086,7 +12086,7 @@ static void iocp_async_read_thread(SOCKET src, SOCKET dst)
     {
         ok(bytes == 0xdeadbeef, "got bytes %u\n", bytes);
 #ifdef __REACTOS__
-        ok(key == 0xdeadbeef, "got key %Iu\n", key);
+        ok(key == 0xdeadbeef, "got key %Iu\n", (size_t)key);
 #else
         ok(key == 0xdeadbeef, "got key %lu\n", key);
 #endif
@@ -12096,7 +12096,7 @@ static void iocp_async_read_thread(SOCKET src, SOCKET dst)
     {
         ok(bytes == 0, "got bytes %u\n", bytes);
 #ifdef __REACTOS__
-        ok(key == 0x12345678, "got key %#Ix\n", key);
+        ok(key == 0x12345678, "got key %#Ix\n", (size_t)key);
 #else
         ok(key == 0x12345678, "got key %#lx\n", key);
 #endif
@@ -12104,8 +12104,8 @@ static void iocp_async_read_thread(SOCKET src, SOCKET dst)
         if (ovl_iocp)
         {
 #ifdef __REACTOS__
-            ok(!ovl_iocp->InternalHigh, "got %#Ix\n", ovl_iocp->InternalHigh);
-            ok(ovl_iocp->Internal == STATUS_CANCELLED, "got %#Ix\n", ovl_iocp->Internal);
+            ok(!ovl_iocp->InternalHigh, "got %#Ix\n", (size_t)ovl_iocp->InternalHigh);
+            ok(ovl_iocp->Internal == STATUS_CANCELLED, "got %#Ix\n", (size_t)ovl_iocp->Internal);
 #else
             ok(!ovl_iocp->InternalHigh, "got %#lx\n", ovl_iocp->InternalHigh);
             ok(ovl_iocp->Internal == STATUS_CANCELLED, "got %#lx\n", ovl_iocp->Internal);
@@ -12117,7 +12117,7 @@ static void iocp_async_read_thread(SOCKET src, SOCKET dst)
     memset(&msg, 0, sizeof(msg));
     ret = PeekMessageA(&msg, hwnd, WM_SOCKET, WM_SOCKET, PM_REMOVE);
 #ifdef __REACTOS__
-    ok(!ret || broken(msg.hwnd == hwnd) /* XP */, "got %04x,%08Ix,%08Ix\n", msg.message, msg.wParam, msg.lParam);
+    ok(!ret || broken(msg.hwnd == hwnd) /* XP */, "got %04x,%08Ix,%08Ix\n", msg.message, (size_t)msg.wParam, (size_t)msg.lParam);
 #else
     ok(!ret || broken(msg.hwnd == hwnd) /* XP */, "got %04x,%08lx,%08lx\n", msg.message, msg.wParam, msg.lParam);
 #endif
@@ -12125,8 +12125,8 @@ static void iocp_async_read_thread(SOCKET src, SOCKET dst)
     {
         ok(msg.message == WM_SOCKET, "got %04x\n", msg.message);
 #ifdef __REACTOS__
-        ok(msg.wParam == src, "got %08Ix\n", msg.wParam);
-        ok(msg.lParam == 1, "got %08Ix\n", msg.lParam);
+        ok(msg.wParam == src, "got %08Ix\n", (size_t)msg.wParam);
+        ok(msg.lParam == 1, "got %08Ix\n", (size_t)msg.lParam);
 #else
         ok(msg.wParam == src, "got %08lx\n", msg.wParam);
         ok(msg.lParam == 1, "got %08lx\n", msg.lParam);
@@ -12140,7 +12140,7 @@ static void iocp_async_read_thread(SOCKET src, SOCKET dst)
     memset(&msg, 0, sizeof(msg));
     ret = PeekMessageA(&msg, hwnd, WM_SOCKET, WM_SOCKET, PM_REMOVE);
 #ifdef __REACTOS__
-    ok(!ret || broken(msg.hwnd == hwnd) /* XP */, "got %04x,%08Ix,%08Ix\n", msg.message, msg.wParam, msg.lParam);
+    ok(!ret || broken(msg.hwnd == hwnd) /* XP */, "got %04x,%08Ix,%08Ix\n", msg.message, (size_t)msg.wParam, (size_t)msg.lParam);
 #else
     ok(!ret || broken(msg.hwnd == hwnd) /* XP */, "got %04x,%08lx,%08lx\n", msg.message, msg.wParam, msg.lParam);
 #endif
@@ -12149,8 +12149,8 @@ static void iocp_async_read_thread(SOCKET src, SOCKET dst)
         ok(msg.hwnd == hwnd, "got %p\n", msg.hwnd);
         ok(msg.message == WM_SOCKET, "got %04x\n", msg.message);
 #ifdef __REACTOS__
-        ok(msg.wParam == src, "got %08Ix\n", msg.wParam);
-        ok(msg.lParam == 1, "got %08Ix\n", msg.lParam);
+        ok(msg.wParam == src, "got %08Ix\n", (size_t)msg.wParam);
+        ok(msg.lParam == 1, "got %08Ix\n", (size_t)msg.lParam);
 #else
         ok(msg.wParam == src, "got %08lx\n", msg.wParam);
         ok(msg.lParam == 1, "got %08lx\n", msg.lParam);
@@ -12167,7 +12167,7 @@ static void iocp_async_read_thread(SOCKET src, SOCKET dst)
     {
         ok(bytes == 12, "got bytes %u\n", bytes);
 #ifdef __REACTOS__
-        ok(key == 0x12345678, "got key %#Ix\n", key);
+        ok(key == 0x12345678, "got key %#Ix\n", (size_t)key);
 #else
         ok(key == 0x12345678, "got key %#lx\n", key);
 #endif
@@ -12175,8 +12175,8 @@ static void iocp_async_read_thread(SOCKET src, SOCKET dst)
         if (ovl_iocp)
         {
 #ifdef __REACTOS__
-            ok(ovl_iocp->InternalHigh == 12, "got %#Ix\n", ovl_iocp->InternalHigh);
-            ok(!ovl_iocp->Internal , "got %#Ix\n", ovl_iocp->Internal);
+            ok(ovl_iocp->InternalHigh == 12, "got %#Ix\n", (size_t)ovl_iocp->InternalHigh);
+            ok(!ovl_iocp->Internal , "got %#Ix\n", (size_t)ovl_iocp->Internal);
 #else
             ok(ovl_iocp->InternalHigh == 12, "got %#lx\n", ovl_iocp->InternalHigh);
             ok(!ovl_iocp->Internal , "got %#lx\n", ovl_iocp->Internal);
@@ -12188,7 +12188,7 @@ static void iocp_async_read_thread(SOCKET src, SOCKET dst)
     {
         ok(bytes == 0xdeadbeef, "got bytes %u\n", bytes);
 #ifdef __REACTOS__
-        ok(key == 0xdeadbeef, "got key %Iu\n", key);
+        ok(key == 0xdeadbeef, "got key %Iu\n", (size_t)key);
 #else
         ok(key == 0xdeadbeef, "got key %lu\n", key);
 #endif

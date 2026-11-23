@@ -58,7 +58,7 @@ static void CALLBACK callback_func(HWAVEOUT hwo, UINT uMsg,
                                    DWORD_PTR dwParam1, DWORD_PTR dwParam2)
 {
     if (winetest_debug>1)
-        trace("Callback! msg=%x %Ix %Ix\n", uMsg, dwParam1, dwParam2);
+        trace("Callback! msg=%x %Ix %Ix\n", uMsg, (size_t)dwParam1, (size_t)dwParam2);
     cbmsg = uMsg;
     cbval1 = dwParam1;   /* mhdr or 0 */
     cbval2 = dwParam2;   /* always 0 */
@@ -87,19 +87,19 @@ static void test_notification_dbg(HWND hwnd, const char* command, UINT m1, DWORD
         }
         if (seen) {
             trace_(__FILE__,line)("Message %x, wParam=%Ix, lParam=%Ix from %s\n",
-                  msg.message, msg.wParam, msg.lParam, command);
+                  msg.message, msg.wParam, (size_t)msg.lParam, command);
             ok_(__FILE__,line)(msg.hwnd==hwnd, "Didn't get the handle to our test window\n");
-            ok_(__FILE__,line)(msg.message==m1 && msg.lParam==p2, "bad message %x/%Ix from %s, expect %x/%Ix\n", msg.message, msg.lParam, command, m1, p2);
+            ok_(__FILE__,line)(msg.message==m1 && msg.lParam==p2, "bad message %x/%Ix from %s, expect %x/%Ix\n", msg.message, (size_t)msg.lParam, command, m1, (size_t)p2);
         }
         else ok_(__FILE__,line)(m1==0, "Expect message %x from %s\n", m1, command);
     }
     else {
         /* FIXME: MOM_POSITIONCB and MOM_DONE are so close that a queue is needed. */
         if (cbmsg) {
-            ok_(__FILE__,line)(cbmsg==m1 && cbval1==p2 && cbval2==0, "bad callback %x/%Ix/%Ix from %s, expect %x/%Ix\n", cbmsg, cbval1, cbval2, command, m1, p2);
+            ok_(__FILE__,line)(cbmsg==m1 && cbval1==p2 && cbval2==0, "bad callback %x/%Ix/%Ix from %s, expect %x/%Ix\n", cbmsg, (size_t)cbval1, (size_t)cbval2, command, m1, (size_t)p2);
             cbmsg = 0; /* Mark as read */
             cbval1 = cbval2 = WHATEVER;
-            ok_(__FILE__,line)(cbinst==MYCBINST, "callback dwInstance changed to %Ix\n", cbinst);
+            ok_(__FILE__,line)(cbinst==MYCBINST, "callback dwInstance changed to %Ix\n", (size_t)cbinst);
         }
         else ok_(__FILE__,line)(m1==0, "Expect callback %x from %s\n", m1, command);
     }
@@ -203,7 +203,7 @@ static void test_midiIn_device(UINT udev, HWND hwnd)
     rc = midiInClose(hm);
     ok(!rc, "midiInClose rc=%s\n", mmsys_error(rc));
 
-    ok(mhdr.dwUser==0x56FA552C, "MIDIHDR.dwUser changed to %Ix\n", mhdr.dwUser);
+    ok(mhdr.dwUser==0x56FA552C, "MIDIHDR.dwUser changed to %Ix\n", (size_t)mhdr.dwUser);
     free(mhdr.lpData);
     test_notification(hwnd, "midiInClose", MIM_CLOSE, 0);
     test_notification(hwnd, "midiIn over", 0, WHATEVER);
@@ -401,7 +401,7 @@ static void test_midiOut_device(UINT udev, HWND hwnd)
 
         free(mhdr.lpData);
     }
-    ok(mhdr.dwUser==0x56FA552C, "MIDIHDR.dwUser changed to %Ix\n", mhdr.dwUser);
+    ok(mhdr.dwUser==0x56FA552C, "MIDIHDR.dwUser changed to %Ix\n", (size_t)mhdr.dwUser);
     ok(mhdr.dwOffset==0xDEADBEEF, "MIDIHDR.dwOffset changed to %lx\n", mhdr.dwOffset);
 
     rc = midiOutGetID(hm, &udevid);
@@ -724,7 +724,7 @@ static void test_midiStream(UINT udev, HWND hwnd)
         rc = midiStreamRestart(hm);
         ok(!rc, "midiStreamRestart #3 rc=%s\n", mmsys_error(rc));
     }
-    ok(mhdr.dwUser==0x56FA552C, "MIDIHDR.dwUser changed to %Ix\n", mhdr.dwUser);
+    ok(mhdr.dwUser==0x56FA552C, "MIDIHDR.dwUser changed to %Ix\n", (size_t)mhdr.dwUser);
     ok(0==((MIDISHORTEVENT*)&strmEvents)[0].dwStreamID, "dwStreamID set to %lx\n", ((LPMIDIEVENT)&strmEvents[0])->dwStreamID);
 
     /* dwBytesRecorded controls how much is played, not dwBufferLength
@@ -802,7 +802,7 @@ static void test_midiStream(UINT udev, HWND hwnd)
 
     rc = midiStreamStop(hm);
     ok(!rc, "midiStreamStop rc=%s\n", mmsys_error(rc));
-    ok(mhdr.dwUser==0x56FA552C, "MIDIHDR.dwUser changed to %Ix\n", mhdr.dwUser);
+    ok(mhdr.dwUser==0x56FA552C, "MIDIHDR.dwUser changed to %Ix\n", (size_t)mhdr.dwUser);
 
     rc = midiOutUnprepareHeader((HMIDIOUT)hm, &mhdr, sizeof(mhdr));
     ok(!rc, "midiOutUnprepare rc=%s\n", mmsys_error(rc));

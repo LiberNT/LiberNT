@@ -1146,7 +1146,7 @@ void test_change_notifications(void)
     bret = GetOverlappedResult( handle, &ovr, &bytes, TRUE );
 
     ok( !bret && GetLastError() == ERROR_OPERATION_ABORTED, "got bret %d, err %lu.\n", bret, GetLastError() );
-    ok( ovr.Internal == (ULONG)STATUS_CANCELLED, "got %Ix.\n", ovr.Internal );
+    ok( ovr.Internal == (ULONG)STATUS_CANCELLED, "got %Ix.\n", (size_t)ovr.Internal );
     ok( !bytes, "got %lu.\n", bytes );
 
     bret = GetOverlappedResult( handle2, &ovr2, &bytes, FALSE );

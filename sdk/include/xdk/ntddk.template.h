@@ -1366,9 +1366,6 @@ IoUnregisterBootDriverCallback (
 #ifndef XPF_TLB_CHECK_TRANSACTIONTYPE_INSTRUCTION
 #define XPF_TLB_CHECK_TRANSACTIONTYPE_INSTRUCTION 0
 #endif
-#ifndef XSTATE_ARM64_SVE
-#define XSTATE_ARM64_SVE 2
-#endif
 
 typedef enum _HAL_DMA_CRASH_DUMP_REGISTER_TYPE {
     HalDmaCrashDumpRegisterSet1 = 0,
@@ -1770,7 +1767,7 @@ PVOID NTAPI PsGetThreadProperty(PETHREAD Thread, ULONG_PTR Key, ULONG Flags);
 NTSTATUS NTAPI RtlGetSystemGlobalData(RTL_SYSTEM_GLOBAL_DATA_ID DataId, PVOID Buffer, ULONG Size);
 BOOLEAN NTAPI RtlIsStateSeparationEnabled(void);
 BOOLEAN NTAPI RtlIsZeroMemory(PVOID Buffer, SIZE_T Length);
-BOOLEAN NTAPI RtlSuffixUnicodeString(PCUNICODE_STRING String1, PCUNICODE_STRING String2, BOOLEAN CaseInSensitive);
+NTSYSAPI BOOLEAN NTAPI RtlSuffixUnicodeString(PCUNICODE_STRING String1, PCUNICODE_STRING String2, BOOLEAN CaseInSensitive);
 #ifdef __cplusplus
 }
 #endif
@@ -2729,11 +2726,6 @@ typedef struct WHEA_PCIXDEVICE_REGISTER_PAIR {
 #define WHEA_PLUGIN_REGISTRATION_PACKET_VERSION 0x20000
 #define WHEA_XPF_MCA_SECTION_VERSION 4
 #define WRITE_NV_MEMORY_FLAG_PERSIST 3
-#if (defined(_AMD64_))
-#define XSTATE_FIRST_NON_LEGACY_FEATURE 2
-#endif
-#define XSTATE_MASK_AMD64_LEGACY 3
-#define XSTATE_MASK_ARM64_SVE 4
 
 #pragma pack(push, 1)
 union _AER_BRIDGE_DESCRIPTOR_FLAGS

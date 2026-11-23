@@ -129,7 +129,7 @@ TestProviders(void)
 
     Status = OpenProvider(L"LiberNT Missing Provider", &Provider);
     ok(Status == (SECURITY_STATUS)STATUS_NOT_FOUND, "missing provider: %#lx\n", Status);
-    ok(Provider == 0, "missing provider handle %#Ix\n", Provider);
+    ok(Provider == 0, "missing provider handle %#Ix\n", (size_t)Provider);
 }
 
 static void

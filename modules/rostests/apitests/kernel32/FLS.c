@@ -67,6 +67,11 @@ typedef struct _FLS_CALLBACK_INFO
 
 void ok_fls_(DWORD dwIndex, PVOID pValue, PFLS_CALLBACK_FUNCTION lpCallback)
 {
+    typedef struct
+    {
+        BYTE Reserved[sizeof(PVOID) == 8 ? 0x320 : 0x20c];
+        PVOID FlsCallback;
+    } LEGACY_PEB_FLS;
     PFLS_CALLBACK_INFO FlsCallback;
     PVOID* FlsData;
     PVOID gotValue;
@@ -78,7 +83,7 @@ void ok_fls_(DWORD dwIndex, PVOID pValue, PFLS_CALLBACK_FUNCTION lpCallback)
         return;
     }
 
-    FlsCallback = (PFLS_CALLBACK_INFO)NtCurrentPeb()->FlsCallback;
+    FlsCallback = ((LEGACY_PEB_FLS *)NtCurrentPeb())->FlsCallback;
     FlsData = (PVOID*)NtCurrentTeb()->FlsData;
 
     winetest_ok(FlsData != NULL, "Expected FlsData\n");
@@ -92,11 +97,11 @@ void ok_fls_(DWORD dwIndex, PVOID pValue, PFLS_CALLBACK_FUNCTION lpCallback)
 
     if (g_WinVersion <= WINVER_2003)
     {
-        winetest_ok(NtCurrentPeb()->FlsCallback[dwIndex] == lpCallback,
+        winetest_ok(((PFLS_CALLBACK_FUNCTION *)FlsCallback)[dwIndex] == lpCallback,
                     "Expected NtCurrentPeb()->FlsCallback[%lu] to be %p, was %p\n",
                     dwIndex,
                     lpCallback,
-                    NtCurrentPeb()->FlsCallback[dwIndex]);
+                    ((PFLS_CALLBACK_FUNCTION *)FlsCallback)[dwIndex]);
     }
     else
     {

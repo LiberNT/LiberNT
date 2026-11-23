@@ -114,7 +114,7 @@ static void dump_sequence( struct msg_sequence **seq, int sequence_index,
     while (expected->message && actual->message)
     {
         trace_(file, line)( "  %u: expected: %04x id %u - actual: %04x wp %08Ix lp %08Ix id %u\n",
-                            count, expected->message, expected->id, actual->message, actual->wParam, actual->lParam, actual->id );
+                            count, expected->message, expected->id, actual->message, actual->wParam, (size_t)actual->lParam, actual->id );
 
         if (expected->message == actual->message)
         {
@@ -155,7 +155,7 @@ static void dump_sequence( struct msg_sequence **seq, int sequence_index,
     while (actual->message)
     {
         trace_(file, line)( "  %u: expected: nothing - actual: %04x wp %08Ix lp %08Ix id %u\n",
-                            count, actual->message, actual->wParam, actual->lParam, actual->id );
+                            count, actual->message, actual->wParam, (size_t)actual->lParam, actual->id );
         actual++;
         count++;
     }
@@ -212,14 +212,14 @@ static void ok_sequence_(struct msg_sequence **seq, int sequence_index,
                         dump++;
                         ok_(file, line) (FALSE,
                             "%s: in msg 0x%04x expecting lParam 0x%Ix got 0x%Ix\n",
-                            context, expected->message, expected->lParam, actual->lParam);
+                            context, expected->message, (size_t)expected->lParam, (size_t)actual->lParam);
                     }
                 }
                 else
                 {
                     ok_(file, line) (expected->lParam == actual->lParam,
                         "%s: in msg 0x%04x expecting lParam 0x%Ix got 0x%Ix\n",
-                        context, expected->message, expected->lParam, actual->lParam);
+                        context, expected->message, (size_t)expected->lParam, (size_t)actual->lParam);
                     if (expected->lParam != actual->lParam) dump++;
                 }
             }

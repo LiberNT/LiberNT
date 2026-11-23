@@ -9,9 +9,11 @@
 #include <apitest.h>
 
 extern void func_AppleSoc(void);
+extern void func_AgxFirmware(void);
 
 const struct test winetest_testlist[] =
 {
     { "AppleSoc", func_AppleSoc },
+    { "AgxFirmware", func_AgxFirmware },
     { 0, 0 }
 };

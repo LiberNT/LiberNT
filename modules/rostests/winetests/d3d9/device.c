@@ -4171,10 +4171,10 @@ static void test_wndproc(void)
 
         proc = GetWindowLongPtrA(device_window, GWLP_WNDPROC);
         ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-                (LONG_PTR)test_proc, proc);
+                (size_t)test_proc, (size_t)proc);
         proc = GetWindowLongPtrA(focus_window, GWLP_WNDPROC);
         ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-                (LONG_PTR)test_proc, proc);
+                (size_t)test_proc, (size_t)proc);
 
         trace("device_window %p, focus_window %p, dummy_window %p.\n",
                 device_window, focus_window, thread_params.dummy_window);
@@ -4213,11 +4213,11 @@ static void test_wndproc(void)
 
         proc = GetWindowLongPtrA(device_window, GWLP_WNDPROC);
         ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix, i=%u.\n",
-                (LONG_PTR)test_proc, proc, i);
+                (size_t)test_proc, (size_t)proc, i);
 
         proc = GetWindowLongPtrA(focus_window, GWLP_WNDPROC);
         ok(proc != (LONG_PTR)test_proc, "Expected wndproc != %#Ix, i=%u.\n",
-                (LONG_PTR)test_proc, i);
+                (size_t)test_proc, i);
 
         /* Change the mode while the device is in use and then drop focus. */
         devmode.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT;
@@ -4379,7 +4379,7 @@ static void test_wndproc(void)
 
         proc = GetWindowLongPtrA(focus_window, GWLP_WNDPROC);
         ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix, i=%u.\n",
-                (LONG_PTR)test_proc, proc, i);
+                (size_t)test_proc, (size_t)proc, i);
 
         /* Hide the device window. It prevents WM_ACTIVATEAPP messages from being sent
          * on native in the test below. It isn't needed anyways. Creating the third
@@ -4566,7 +4566,7 @@ static void test_wndproc(void)
 
         proc = SetWindowLongPtrA(focus_window, GWLP_WNDPROC, (LONG_PTR)DefWindowProcA);
         ok(proc != (LONG_PTR)test_proc, "Expected wndproc != %#Ix, i=%u.\n",
-                (LONG_PTR)test_proc, i);
+                (size_t)test_proc, i);
 
         filter_messages = focus_window;
         ref = IDirect3DDevice9_Release(device);
@@ -4574,7 +4574,7 @@ static void test_wndproc(void)
 
         proc = GetWindowLongPtrA(focus_window, GWLP_WNDPROC);
         ok(proc == (LONG_PTR)DefWindowProcA, "Expected wndproc %#Ix, got %#Ix, i=%u.\n",
-                (LONG_PTR)DefWindowProcA, proc, i);
+                (size_t)DefWindowProcA, (size_t)proc, i);
 
 done:
         filter_messages = NULL;
@@ -4640,10 +4640,10 @@ static void test_wndproc_windowed(void)
 
     proc = GetWindowLongPtrA(device_window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
     proc = GetWindowLongPtrA(focus_window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
 
     trace("device_window %p, focus_window %p, dummy_window %p.\n",
             device_window, focus_window, thread_params.dummy_window);
@@ -4675,11 +4675,11 @@ static void test_wndproc_windowed(void)
 
     proc = GetWindowLongPtrA(device_window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
 
     proc = GetWindowLongPtrA(focus_window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
 
     filter_messages = NULL;
 
@@ -4691,10 +4691,10 @@ static void test_wndproc_windowed(void)
 
     proc = GetWindowLongPtrA(device_window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
 
     proc = GetWindowLongPtrA(focus_window, GWLP_WNDPROC);
-    ok(proc != (LONG_PTR)test_proc, "Expected wndproc != %#Ix.\n", (LONG_PTR)test_proc);
+    ok(proc != (LONG_PTR)test_proc, "Expected wndproc != %#Ix.\n", (size_t)test_proc);
 
     device_desc.flags = 0;
     hr = reset_device(device, &device_desc);
@@ -4702,11 +4702,11 @@ static void test_wndproc_windowed(void)
 
     proc = GetWindowLongPtrA(device_window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
 
     proc = GetWindowLongPtrA(focus_window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
 
     filter_messages = focus_window;
 
@@ -4730,10 +4730,10 @@ static void test_wndproc_windowed(void)
 
     proc = GetWindowLongPtrA(device_window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
 
     proc = GetWindowLongPtrA(focus_window, GWLP_WNDPROC);
-    ok(proc != (LONG_PTR)test_proc, "Expected wndproc != %#Ix.\n", (LONG_PTR)test_proc);
+    ok(proc != (LONG_PTR)test_proc, "Expected wndproc != %#Ix.\n", (size_t)test_proc);
 
     device_desc.flags = 0;
     hr = reset_device(device, &device_desc);
@@ -4741,11 +4741,11 @@ static void test_wndproc_windowed(void)
 
     proc = GetWindowLongPtrA(device_window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
 
     proc = GetWindowLongPtrA(focus_window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
 
     filter_messages = device_window;
 
@@ -4768,10 +4768,10 @@ static void test_wndproc_windowed(void)
 
     proc = GetWindowLongPtrA(device_window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
 
     proc = GetWindowLongPtrA(focus_window, GWLP_WNDPROC);
-    ok(proc != (LONG_PTR)test_proc, "Expected wndproc != %#Ix.\n", (LONG_PTR)test_proc);
+    ok(proc != (LONG_PTR)test_proc, "Expected wndproc != %#Ix.\n", (size_t)test_proc);
 
     device_desc.flags = 0;
     hr = reset_device(device, &device_desc);
@@ -4779,11 +4779,11 @@ static void test_wndproc_windowed(void)
 
     proc = GetWindowLongPtrA(device_window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
 
     proc = GetWindowLongPtrA(focus_window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
 
     filter_messages = device_window;
 
@@ -5927,10 +5927,10 @@ static void test_device_window_reset(void)
 
     proc = GetWindowLongPtrA(device_window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
     proc = GetWindowLongPtrA(focus_window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
 
     device_desc.adapter_ordinal = D3DADAPTER_DEFAULT;
     device_desc.device_window = NULL;
@@ -5952,9 +5952,9 @@ static void test_device_window_reset(void)
 
     proc = GetWindowLongPtrA(device_window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
     proc = GetWindowLongPtrA(focus_window, GWLP_WNDPROC);
-    ok(proc != (LONG_PTR)test_proc, "Expected wndproc != %#Ix.\n", (LONG_PTR)test_proc);
+    ok(proc != (LONG_PTR)test_proc, "Expected wndproc != %#Ix.\n", (size_t)test_proc);
 
     device_desc.device_window = device_window;
     hr = reset_device(device, &device_desc);
@@ -5969,9 +5969,9 @@ static void test_device_window_reset(void)
 
     proc = GetWindowLongPtrA(device_window, GWLP_WNDPROC);
     ok(proc == (LONG_PTR)test_proc, "Expected wndproc %#Ix, got %#Ix.\n",
-            (LONG_PTR)test_proc, proc);
+            (size_t)test_proc, (size_t)proc);
     proc = GetWindowLongPtrA(focus_window, GWLP_WNDPROC);
-    ok(proc != (LONG_PTR)test_proc, "Expected wndproc != %#Ix.\n", (LONG_PTR)test_proc);
+    ok(proc != (LONG_PTR)test_proc, "Expected wndproc != %#Ix.\n", (size_t)test_proc);
 
     ref = IDirect3DDevice9_Release(device);
     ok(!ref, "Unexpected refcount %lu.\n", ref);

@@ -974,7 +974,7 @@ static void expect_band_content_(int line, HWND hRebar, UINT uBand, INT fStyle, 
     expect_eq(line, rb.cyMaxChild, cyMaxChild, int, "%x");
     expect_eq(line, rb.cyIntegral, cyIntegral, int, "%x");
     expect_eq(line, rb.cxIdeal, cxIdeal, int, "%d");
-    expect_eq(line, rb.lParam, lParam, LPARAM, "%Id");
+    expect_eq(line, rb.lParam, (ptrdiff_t)lParam, ptrdiff_t, "%Id");
     ok(rb.cxHeader == cxHeader || rb.cxHeader == cxHeader + 1 || broken(rb.cxHeader == cxHeader_broken),
         "expected %d for %d from line %d\n", cxHeader, rb.cxHeader, line);
 }

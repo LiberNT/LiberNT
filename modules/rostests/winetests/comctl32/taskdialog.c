@@ -440,7 +440,7 @@ static HRESULT CALLBACK taskdialog_callback_proc(HWND hwnd, UINT notification,
     const struct message_info *msg_send;
     struct message msg;
 
-    ok(test_ref_data == ref_data, "Unexpected ref data %Iu.\n", ref_data);
+    ok(test_ref_data == ref_data, "Unexpected ref data %Iu.\n", (size_t)ref_data);
 
     init_test_message(notification, (short)wParam, lParam, &msg);
     add_message(sequences, TASKDIALOG_SEQ_INDEX, &msg);

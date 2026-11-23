@@ -581,7 +581,7 @@ static void test_reader_create(void)
     dtd = -1;
     hr = IXmlReader_GetProperty(reader, XmlReaderProperty_DtdProcessing, &dtd);
     ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
-    ok(dtd == DtdProcessing_Prohibit, "got %Id\n", dtd);
+    ok(dtd == DtdProcessing_Prohibit, "got %Id\n", (ptrdiff_t)dtd);
 
     dtd = 2;
     hr = IXmlReader_SetProperty(reader, XmlReaderProperty_DtdProcessing, dtd);
@@ -1966,7 +1966,7 @@ static void test_reader_properties(void)
     value = 0;
     hr = IXmlReader_GetProperty(reader, XmlReaderProperty_MaxElementDepth, &value);
     ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
-    ok(value == 256, "Unexpected default max depth value %Id.\n", value);
+    ok(value == 256, "Unexpected default max depth value %Id.\n", (ptrdiff_t)value);
 
     hr = IXmlReader_SetProperty(reader, XmlReaderProperty_MultiLanguage, 0);
     ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
@@ -1977,7 +1977,7 @@ static void test_reader_properties(void)
     value = 256;
     hr = IXmlReader_GetProperty(reader, XmlReaderProperty_MaxElementDepth, &value);
     ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
-    ok(value == 0, "Unexpected max depth value %Id.\n", value);
+    ok(value == 0, "Unexpected max depth value %Id.\n", (ptrdiff_t)value);
 
     IXmlReader_Release(reader);
 }
@@ -2234,7 +2234,7 @@ static void test_eof_state(IXmlReader *reader, BOOL eof)
     ok(IXmlReader_IsEOF(reader) == eof, "Unexpected IsEOF() result\n");
     hr = IXmlReader_GetProperty(reader, XmlReaderProperty_ReadState, &state);
     ok(hr == S_OK, "Unexpected hr %#lx.\n", hr);
-    ok((state == XmlReadState_EndOfFile) == eof, "Unexpected EndOfFile state %Id.\n", state);
+    ok((state == XmlReadState_EndOfFile) == eof, "Unexpected EndOfFile state %Id.\n", (ptrdiff_t)state);
 }
 
 static void test_endoffile(void)

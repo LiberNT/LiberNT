@@ -139,7 +139,7 @@ static void CheckHotkey(HWND hwndA, HWND hwndB)
         return;
     }
     ok(GetPropW(hwndA, s_szRequests) == NULL, "the window got %Iu WM_INPUTLANGCHANGEREQUEST\n",
-       (ULONG_PTR)GetPropW(hwndA, s_szRequests));
+       (size_t)GetPropW(hwndA, s_szRequests));
     ok(MakeForeground(hwndB), "the child window is not in the foreground\n");
     ok(GetKeyboardLayout(tidB) == hklAfter, "the child window has layout %p, expected %p\n", GetKeyboardLayout(tidB),
        hklAfter);

@@ -19,7 +19,7 @@ AdjustAffinity(VOID)
     /* Set affinity to the current test processor */
     NewAffinity = (KAFFINITY)1 << s_ProcessorNumber;
     OldAffinity = SetThreadAffinityMask(GetCurrentThread(), NewAffinity);
-    ok(OldAffinity != 0, "SetThreadAffinityMask(0x%Ix) failed\n", NewAffinity);
+    ok(OldAffinity != 0, "SetThreadAffinityMask(0x%Ix) failed\n", (size_t)NewAffinity);
 }
 
 typedef struct _DECLSPEC_INTRIN_TYPE _CRT_ALIGN(16) _M128U64

@@ -787,7 +787,7 @@ static void test_detailed_info(HANDLE handle, const detailed_info_t *exinfo, int
                 sizeof(detailed_info_tmp), &size);
         ok_(__FILE__, line)(!b, "QueryActCtx succeeded\n");
         ok_(__FILE__, line)(GetLastError() == ERROR_INSUFFICIENT_BUFFER, "GetLastError() = %lu\n", GetLastError());
-        ok_(__FILE__, line)(size == exsize, "size=%Id, expected %Id\n", size, exsize);
+        ok_(__FILE__, line)(size == exsize, "size=%Id, expected %Id\n", (ptrdiff_t)size, (ptrdiff_t)exsize);
     }else {
         size = sizeof(ACTIVATION_CONTEXT_DETAILED_INFORMATION);
     }
@@ -796,7 +796,7 @@ static void test_detailed_info(HANDLE handle, const detailed_info_t *exinfo, int
     memset(detailed_info, 0xfe, size);
     b = QueryActCtxW(0, handle, NULL, ActivationContextDetailedInformation, detailed_info, size, &retsize);
     ok_(__FILE__, line)(b, "QueryActCtx failed: %lu\n", GetLastError());
-    ok_(__FILE__, line)(retsize == exsize, "size=%Id, expected %Id\n", retsize, exsize);
+    ok_(__FILE__, line)(retsize == exsize, "size=%Id, expected %Id\n", (ptrdiff_t)retsize, (ptrdiff_t)exsize);
 
     ok_(__FILE__, line)(detailed_info->dwFlags == 0, "detailed_info->dwFlags=%lx\n", detailed_info->dwFlags);
     ok_(__FILE__, line)(detailed_info->ulFormatVersion == exinfo->format_version,
@@ -926,7 +926,7 @@ static void test_info_in_assembly(HANDLE handle, DWORD id, const info_in_assembl
     ok_(__FILE__, line)(!b, "QueryActCtx succeeded\n");
     ok_(__FILE__, line)(GetLastError() == ERROR_INSUFFICIENT_BUFFER, "GetLastError() = %lu\n", GetLastError());
 
-    ok_(__FILE__, line)(size >= exsize, "size=%Iu, expected %Iu\n", size, exsize);
+    ok_(__FILE__, line)(size >= exsize, "size=%Iu, expected %Iu\n", (size_t)size, (size_t)exsize);
 
     if (size == 0xdeadbeef)
     {
@@ -946,7 +946,7 @@ static void test_info_in_assembly(HANDLE handle, DWORD id, const info_in_assembl
         exsize += info->ulEncodedAssemblyIdentityLength + sizeof(WCHAR);
     if (exinfo->has_assembly_dir)
         exsize += info->ulAssemblyDirectoryNameLength + sizeof(WCHAR);
-    ok_(__FILE__, line)(size == exsize, "size=%Iu, expected %Iu\n", size, exsize);
+    ok_(__FILE__, line)(size == exsize, "size=%Iu, expected %Iu\n", (size_t)size, (size_t)exsize);
 
     if (0)  /* FIXME: flags meaning unknown */
     {
@@ -1035,7 +1035,7 @@ static void test_file_info(HANDLE handle, ULONG assid, ULONG fileid, LPCWSTR fil
                       sizeof(info_tmp), &size);
     ok_(__FILE__, line)(!b, "QueryActCtx succeeded\n");
     ok_(__FILE__, line)(GetLastError() == ERROR_INSUFFICIENT_BUFFER, "GetLastError() = %lu\n", GetLastError());
-    ok_(__FILE__, line)(size == exsize, "size=%Iu, expected %Iu\n", size, exsize);
+    ok_(__FILE__, line)(size == exsize, "size=%Iu, expected %Iu\n", (size_t)size, (size_t)exsize);
 
     if(size == 0xdeadbeef)
     {
@@ -1048,7 +1048,7 @@ static void test_file_info(HANDLE handle, ULONG assid, ULONG fileid, LPCWSTR fil
 
     b = QueryActCtxW(0, handle, &index, FileInformationInAssemblyOfAssemblyInActivationContext, info, size, &size);
     ok_(__FILE__, line)(b, "QueryActCtx failed: %lu\n", GetLastError());
-    ok_(__FILE__, line)(!size, "size=%Iu, expected 0\n", size);
+    ok_(__FILE__, line)(!size, "size=%Iu, expected 0\n", (size_t)size);
 
     ok_(__FILE__, line)(info->ulFlags == 2, "info->ulFlags=%lx, expected 2\n", info->ulFlags);
     ok_(__FILE__, line)(info->ulFilenameLength == lstrlenW(filename)*sizeof(WCHAR),
@@ -1103,7 +1103,7 @@ static void test_runlevel_info(HANDLE handle, const runlevel_info_t *exinfo, int
     }
 
     ok_(__FILE__, line)(b, "QueryActCtx failed: %lu\n", GetLastError());
-    ok_(__FILE__, line)(retsize == size, "size=%Id, expected %Id\n", retsize, size);
+    ok_(__FILE__, line)(retsize == size, "size=%Id, expected %Id\n", (ptrdiff_t)retsize, (ptrdiff_t)size);
 
     ok_(__FILE__, line)(runlevel_info.ulFlags == 0, "runlevel_info.ulFlags=%lx\n", runlevel_info.ulFlags);
     ok_(__FILE__, line)(runlevel_info.RunLevel == exinfo->run_level,
@@ -3331,7 +3331,7 @@ static void test_no_compat(HANDLE handle, int line)
     ok_(__FILE__, line)(b, "CompatibilityInformationInActivationContext failed\n");
     ok_(__FILE__, line)(size == offsetof(test_act_ctx_compat_info,Elements[0]) ||
                         broken(size == offsetof(old_win10_test_act_ctx_compat_info,Elements[0])),
-                        "size mismatch got %Iu\n", size);
+                        "size mismatch got %Iu\n", (size_t)size);
     ok_(__FILE__, line)(compat_info.ElementCount == 0, "unexpected ElementCount %lu\n", compat_info.ElementCount);
 }
 
@@ -3350,7 +3350,7 @@ static void test_with_compat(HANDLE handle, DWORD num_compat, DWORD num_version,
     ok_(__FILE__, line)(b, "CompatibilityInformationInActivationContext failed\n");
     ok_(__FILE__, line)(size == offsetof(test_act_ctx_compat_info,Elements[num_compat + num_version]) ||
                         broken(size == offsetof(old_win10_test_act_ctx_compat_info,Elements[num_compat])),
-                        "size mismatch got %Iu\n", size);
+                        "size mismatch got %Iu\n", (size_t)size);
     ok_(__FILE__, line)(compat_info.ElementCount == num_compat + num_version ||
                         broken(compat_info.ElementCount == num_compat),
                         "unexpected ElementCount %lu\n", compat_info.ElementCount);
@@ -3554,7 +3554,7 @@ static void test_settings(void)
     ret = pQueryActCtxSettingsW( 0, handle, NULL, dpiAwareW, buffer, 80, &size );
     ok( ret, "QueryActCtxSettingsW failed err %lu\n", GetLastError() );
     ok( !lstrcmpW( buffer, trueW ), "got %s\n", wine_dbgstr_w(buffer) );
-    ok( size == lstrlenW( buffer ) + 1, "wrong len %Iu\n", size );
+    ok( size == lstrlenW( buffer ) + 1, "wrong len %Iu\n", (size_t)size );
     SetLastError( 0xdeadbeef );
     size = 0xdead;
     memset( buffer, 0xcc, sizeof(buffer) );
@@ -3568,14 +3568,14 @@ static void test_settings(void)
     ret = pQueryActCtxSettingsW( 0, handle, namespace2005W, dpiAwareW, buffer, 80, &size );
     ok( ret, "QueryActCtxSettingsW failed err %lu\n", GetLastError() );
     ok( !lstrcmpW( buffer, trueW ), "got %s\n", wine_dbgstr_w(buffer) );
-    ok( size == ARRAY_SIZE(trueW), "wrong len %Iu\n", size );
+    ok( size == ARRAY_SIZE(trueW), "wrong len %Iu\n", (size_t)size );
     SetLastError( 0xdeadbeef );
     size = 0xdead;
     memset( buffer, 0xcc, sizeof(buffer) );
     ret = pQueryActCtxSettingsW( 0, handle, namespace2005W, dpiAwareW, buffer, lstrlenW(trueW) + 1, &size );
     ok( ret, "QueryActCtxSettingsW failed err %lu\n", GetLastError() );
     ok( !lstrcmpW( buffer, trueW ), "got %s\n", wine_dbgstr_w(buffer) );
-    ok( size == ARRAY_SIZE(trueW), "wrong len %Iu\n", size );
+    ok( size == ARRAY_SIZE(trueW), "wrong len %Iu\n", (size_t)size );
     SetLastError( 0xdeadbeef );
     size = 0xdead;
     memset( buffer, 0xcc, sizeof(buffer) );
@@ -3607,7 +3607,7 @@ static void test_settings(void)
     if (ret)
     {
         ok( !lstrcmpW( buffer, trueW ), "got %s\n", wine_dbgstr_w(buffer) );
-        ok( size == ARRAY_SIZE(trueW), "wrong len %Iu\n", size );
+        ok( size == ARRAY_SIZE(trueW), "wrong len %Iu\n", (size_t)size );
     }
     else ok( buffer[0] == 0xcccc, "got %s\n", wine_dbgstr_w(buffer) );
     SetLastError( 0xdeadbeef );
@@ -3616,7 +3616,7 @@ static void test_settings(void)
     ret = pQueryActCtxSettingsW( 0, handle, NULL, dpiAwareW, buffer, lstrlenW(trueW), &size );
     ok( ret, "QueryActCtxSettingsW failed err %lu\n", GetLastError() );
     ok( !lstrcmpW( buffer, trueW ), "got %s\n", wine_dbgstr_w(buffer) );
-    ok( size == ARRAY_SIZE(trueW), "wrong len %Iu\n", size );
+    ok( size == ARRAY_SIZE(trueW), "wrong len %Iu\n", (size_t)size );
     SetLastError( 0xdeadbeef );
     size = 0xdead;
     memset( buffer, 0xcc, sizeof(buffer) );
@@ -3624,7 +3624,7 @@ static void test_settings(void)
     ok( !ret, "QueryActCtxSettingsW failed err %lu\n", GetLastError() );
     ok( GetLastError() == ERROR_INSUFFICIENT_BUFFER, "wrong error %lu\n", GetLastError() );
     ok( buffer[0] == 0xcccc, "got %s\n", wine_dbgstr_w(buffer) );
-    ok( size == ARRAY_SIZE(trueW), "wrong len %Iu\n", size );
+    ok( size == ARRAY_SIZE(trueW), "wrong len %Iu\n", (size_t)size );
     ReleaseActCtx(handle);
 
     create_manifest_file( "manifest_settings2.manifest", settings_manifest2, -1, NULL, NULL );
@@ -3640,7 +3640,7 @@ static void test_settings(void)
         ret = pQueryActCtxSettingsW( 0, handle, NULL, dpiAwareW, buffer, 80, &size );
         ok( ret, "QueryActCtxSettingsW failed err %lu\n", GetLastError() );
         ok( !lstrcmpW( buffer, trueW ), "got %s\n", wine_dbgstr_w(buffer) );
-        ok( size == lstrlenW( buffer ) + 1, "wrong len %Iu\n", size );
+        ok( size == lstrlenW( buffer ) + 1, "wrong len %Iu\n", (size_t)size );
         ReleaseActCtx(handle);
     }
 
@@ -4760,7 +4760,7 @@ static void test_RtlActivateActivationContextUnsafeFast(void)
     frame_extended1.Size = 0;
     frame_extended1.Format = 0xdeadbeef;
     call_fastcall_func2( pRtlActivateActivationContextUnsafeFast, &frame_extended1, context1);
-    ok(frame_extended1.Size == 0, "Got unexpected Size %#Ix.\n", frame_extended1.Size);
+    ok(frame_extended1.Size == 0, "Got unexpected Size %#Ix.\n", (size_t)frame_extended1.Size);
     ok(frame_extended1.Format == 0xdeadbeef, "Got unexpected Format %#lx.\n", frame_extended1.Format);
     ok(!frame_extended1.Frame.Previous, "Got unexpected Previous.\n");
     ok(frame_extended1.Frame.ActivationContext == context1, "Got unexpected ActivationContext.\n");
@@ -4780,7 +4780,7 @@ static void test_RtlActivateActivationContextUnsafeFast(void)
     frame_extended1.Size = sizeof(frame_extended1);
     frame_extended1.Format = 0;
     call_fastcall_func2( pRtlActivateActivationContextUnsafeFast, &frame_extended1, context1);
-    ok(frame_extended1.Size == sizeof(frame_extended1), "Got unexpected Size %#Ix.\n", frame_extended1.Size);
+    ok(frame_extended1.Size == sizeof(frame_extended1), "Got unexpected Size %#Ix.\n", (size_t)frame_extended1.Size);
     ok(frame_extended1.Format == 0, "Got unexpected Format %#lx.\n", frame_extended1.Format);
     ok(!frame_extended1.Frame.Previous, "Got unexpected Previous.\n");
     ok(frame_extended1.Frame.ActivationContext == context1, "Got unexpected ActivationContext.\n");
@@ -4795,7 +4795,7 @@ static void test_RtlActivateActivationContextUnsafeFast(void)
     frame_extended2.Size = sizeof(frame_extended2);
     frame_extended2.Format = 0;
     call_fastcall_func2( pRtlActivateActivationContextUnsafeFast, &frame_extended2, context2);
-    ok(frame_extended2.Size == sizeof(frame_extended2), "Got unexpected Size %#Ix.\n", frame_extended2.Size);
+    ok(frame_extended2.Size == sizeof(frame_extended2), "Got unexpected Size %#Ix.\n", (size_t)frame_extended2.Size);
     ok(frame_extended2.Format == 0, "Got unexpected Format %#lx.\n", frame_extended2.Format);
     ok(frame_extended2.Frame.Previous == &frame_extended1.Frame, "Got unexpected Previous.\n");
     ok(frame_extended2.Frame.ActivationContext == context2, "Got unexpected ActivationContext.\n");

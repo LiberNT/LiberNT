@@ -3368,7 +3368,7 @@ static void test_device_install_params(void)
     ok(!params.InstallMsgHandler, "Got callback %p.\n", params.InstallMsgHandler);
     ok(!params.InstallMsgHandlerContext, "Got callback context %p.\n", params.InstallMsgHandlerContext);
     ok(!params.FileQueue, "Got queue %p.\n", params.FileQueue);
-    ok(!params.ClassInstallReserved, "Got class installer data %#Ix.\n", params.ClassInstallReserved);
+    ok(!params.ClassInstallReserved, "Got class installer data %#Ix.\n", (size_t)params.ClassInstallReserved);
     ok(!params.DriverPath[0], "Got driver path %s.\n", params.DriverPath);
 
     params.Flags = DI_INF_IS_SORTED;
@@ -3387,7 +3387,7 @@ static void test_device_install_params(void)
     ok(!params.InstallMsgHandler, "Got callback %p.\n", params.InstallMsgHandler);
     ok(!params.InstallMsgHandlerContext, "Got callback context %p.\n", params.InstallMsgHandlerContext);
     ok(!params.FileQueue, "Got queue %p.\n", params.FileQueue);
-    ok(!params.ClassInstallReserved, "Got class installer data %#Ix.\n", params.ClassInstallReserved);
+    ok(!params.ClassInstallReserved, "Got class installer data %#Ix.\n", (size_t)params.ClassInstallReserved);
     ok(!strcasecmp(params.DriverPath, "C:\\windows"), "Got driver path %s.\n", params.DriverPath);
 
     SetupDiDestroyDeviceInfoList(set);

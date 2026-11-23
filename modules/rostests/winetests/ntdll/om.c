@@ -408,7 +408,7 @@ static void test_name_collisions(void)
                                      FALSE, FALSE, FALSE, 10, 256, 256, &timeout );
     ok(status == STATUS_SUCCESS, "failed to create pipe %08lx\n", status);
     ok( iosb.Status == STATUS_SUCCESS, "wrong status %08lx\n", status);
-    ok( iosb.Information == FILE_CREATED, "wrong info %Ix\n", iosb.Information );
+    ok( iosb.Information == FILE_CREATED, "wrong info %Ix\n", (size_t)iosb.Information );
     pNtClose( h );
 
     memset( &iosb, 0xcc, sizeof(iosb) );
@@ -418,7 +418,7 @@ static void test_name_collisions(void)
                                      FALSE, FALSE, FALSE, 10, 256, 256, &timeout );
     ok(status == STATUS_SUCCESS, "failed to create pipe %08lx\n", status);
     ok( iosb.Status == STATUS_SUCCESS, "wrong status %08lx\n", status);
-    ok( iosb.Information == FILE_CREATED, "wrong info %Ix\n", iosb.Information );
+    ok( iosb.Information == FILE_CREATED, "wrong info %Ix\n", (size_t)iosb.Information );
 
     memset( &iosb, 0xcc, sizeof(iosb) );
     status = pNtCreateNamedPipeFile( &h1, GENERIC_READ|GENERIC_WRITE, &attr, &iosb,
@@ -427,7 +427,7 @@ static void test_name_collisions(void)
                                      FALSE, FALSE, FALSE, 10, 256, 256, &timeout );
     ok(status == STATUS_SUCCESS, "failed to create pipe %08lx\n", status);
     ok( iosb.Status == STATUS_SUCCESS, "wrong status %08lx\n", status);
-    ok( iosb.Information == FILE_OPENED, "wrong info %Ix\n", iosb.Information );
+    ok( iosb.Information == FILE_OPENED, "wrong info %Ix\n", (size_t)iosb.Information );
     pNtClose(h1);
 
     memset( &iosb, 0xcc, sizeof(iosb) );
@@ -437,7 +437,7 @@ static void test_name_collisions(void)
                                      FALSE, FALSE, FALSE, 10, 256, 256, &timeout );
     ok(status == STATUS_SUCCESS, "failed to create pipe %08lx\n", status);
     ok( iosb.Status == STATUS_SUCCESS, "wrong status %08lx\n", status);
-    ok( iosb.Information == FILE_OPENED, "wrong info %Ix\n", iosb.Information );
+    ok( iosb.Information == FILE_OPENED, "wrong info %Ix\n", (size_t)iosb.Information );
     pNtClose(h1);
 
     memset( &iosb, 0xcc, sizeof(iosb) );
@@ -447,7 +447,7 @@ static void test_name_collisions(void)
                                      FALSE, FALSE, FALSE, 10, 256, 256, NULL );
     ok(status == STATUS_SUCCESS, "failed to create pipe %08lx\n", status);
     ok( iosb.Status == STATUS_SUCCESS, "wrong status %08lx\n", status);
-    ok( iosb.Information == FILE_OPENED, "wrong info %Ix\n", iosb.Information );
+    ok( iosb.Information == FILE_OPENED, "wrong info %Ix\n", (size_t)iosb.Information );
     pNtClose(h1);
 
     h1 = CreateNamedPipeA( "\\\\.\\pipe\\named_pipe", PIPE_ACCESS_DUPLEX,

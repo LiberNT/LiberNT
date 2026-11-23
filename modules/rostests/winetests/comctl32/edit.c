@@ -1884,11 +1884,11 @@ static LRESULT CALLBACK test_class_proc(HWND hwnd, UINT message, WPARAM wParam, 
             /* test that messages between WM_NCCREATE and WM_CREATE
                don't crash or cause unexpected behavior */
             r = SendMessageA(hwnd, EM_SETSEL, 0, 0);
-            ok(r == 1, "Returned %Id, expected 1.\n", r);
+            ok(r == 1, "Returned %Id, expected 1.\n", (ptrdiff_t)r);
             r = SendMessageA(hwnd, WM_SIZE, 0, 0x00100010);
-            todo_wine ok(r == 1, "Returned %Id, expected 1.\n", r);
+            todo_wine ok(r == 1, "Returned %Id, expected 1.\n", (ptrdiff_t)r);
             r = SendMessageA(hwnd, EM_LINESCROLL, 1, 1);
-            ok(r == 1, "Returned %Id, expected 1.\n", r);
+            ok(r == 1, "Returned %Id, expected 1.\n", (ptrdiff_t)r);
 
             return result;
 
@@ -1896,11 +1896,11 @@ static LRESULT CALLBACK test_class_proc(HWND hwnd, UINT message, WPARAM wParam, 
             /* test that messages between WM_NCCREATE and WM_CREATE
                don't crash or cause unexpected behavior */
             r = SendMessageA(hwnd, EM_SETSEL, 0, 0);
-            ok(r == 1, "Returned %Id, expected 1.\n", r);
+            ok(r == 1, "Returned %Id, expected 1.\n", (ptrdiff_t)r);
             r = SendMessageA(hwnd, WM_SIZE, 0, 0x00100010);
-            todo_wine ok(r == 1, "Returned %Id, expected 1.\n", r);
+            todo_wine ok(r == 1, "Returned %Id, expected 1.\n", (ptrdiff_t)r);
             r = SendMessageA(hwnd, EM_LINESCROLL, 1, 1);
-            ok(r == 1, "Returned %Id, expected 1.\n", r);
+            ok(r == 1, "Returned %Id, expected 1.\n", (ptrdiff_t)r);
 
             break;
     }
@@ -3437,13 +3437,13 @@ static void test_wordbreak_proc(void)
     ok(proc == NULL, "Unexpected wordbreak proc %p.\n", proc);
 
     ret = SendMessageA(hwnd, EM_SETWORDBREAKPROC, 0, (LPARAM)test_wordbreak_procA);
-    ok(ret == 1, "Unexpected return value %Id.\n", ret);
+    ok(ret == 1, "Unexpected return value %Id.\n", (ptrdiff_t)ret);
 
     proc = (void *)SendMessageA(hwnd, EM_GETWORDBREAKPROC, 0, 0);
     ok(proc == test_wordbreak_procA, "Unexpected wordbreak proc %p.\n", proc);
 
     ret = SendMessageA(hwnd, EM_SETWORDBREAKPROC, 0, 0);
-    ok(ret == 1, "Unexpected return value %Id.\n", ret);
+    ok(ret == 1, "Unexpected return value %Id.\n", (ptrdiff_t)ret);
 
     proc = (void *)SendMessageA(hwnd, EM_GETWORDBREAKPROC, 0, 0);
     ok(proc == NULL, "Unexpected wordbreak proc %p.\n", proc);
@@ -3740,63 +3740,63 @@ static void test_ime(void)
 
     /* Test EM_{GET|SET}IMESTATUS */
     lr = SendMessageA(hwnd, EM_GETIMESTATUS, EMSIS_COMPOSITIONSTRING, 0);
-    ok(lr == 0, "Got unexpected lr %#Ix.\n", lr);
+    ok(lr == 0, "Got unexpected lr %#Ix.\n", (size_t)lr);
 
     /* Note that EM_SETIMESTATUS always return 1, which is contrary to what MSDN says about
      * returning the previous LPARAM value */
     lr = SendMessageA(hwnd, EM_SETIMESTATUS, EMSIS_COMPOSITIONSTRING, EIMES_GETCOMPSTRATONCE);
-    ok(lr == 1, "Got unexpected lr %#Ix.\n", lr);
+    ok(lr == 1, "Got unexpected lr %#Ix.\n", (size_t)lr);
     lr = SendMessageA(hwnd, EM_GETIMESTATUS, EMSIS_COMPOSITIONSTRING, 0);
-    ok(lr == EIMES_GETCOMPSTRATONCE, "Got unexpected lr %#Ix.\n", lr);
+    ok(lr == EIMES_GETCOMPSTRATONCE, "Got unexpected lr %#Ix.\n", (size_t)lr);
 
     lr = SendMessageA(hwnd, EM_SETIMESTATUS, EMSIS_COMPOSITIONSTRING, EIMES_CANCELCOMPSTRINFOCUS);
-    ok(lr == 1, "Got unexpected lr %#Ix.\n", lr);
+    ok(lr == 1, "Got unexpected lr %#Ix.\n", (size_t)lr);
     lr = SendMessageA(hwnd, EM_GETIMESTATUS, EMSIS_COMPOSITIONSTRING, 0);
-    ok(lr == EIMES_CANCELCOMPSTRINFOCUS, "Got unexpected lr %#Ix.\n", lr);
+    ok(lr == EIMES_CANCELCOMPSTRINFOCUS, "Got unexpected lr %#Ix.\n", (size_t)lr);
 
     lr = SendMessageA(hwnd, EM_SETIMESTATUS, EMSIS_COMPOSITIONSTRING, EIMES_COMPLETECOMPSTRKILLFOCUS);
-    ok(lr == 1, "Got unexpected lr %#Ix.\n", lr);
+    ok(lr == 1, "Got unexpected lr %#Ix.\n", (size_t)lr);
     lr = SendMessageA(hwnd, EM_GETIMESTATUS, EMSIS_COMPOSITIONSTRING, 0);
-    ok(lr == EIMES_COMPLETECOMPSTRKILLFOCUS, "Got unexpected lr %#Ix.\n", lr);
+    ok(lr == EIMES_COMPLETECOMPSTRKILLFOCUS, "Got unexpected lr %#Ix.\n", (size_t)lr);
 
     lr = SendMessageA(hwnd, EM_SETIMESTATUS, EMSIS_COMPOSITIONSTRING, EIMES_GETCOMPSTRATONCE
                       | EIMES_CANCELCOMPSTRINFOCUS | EIMES_COMPLETECOMPSTRKILLFOCUS);
-    ok(lr == 1, "Got unexpected lr %#Ix.\n", lr);
+    ok(lr == 1, "Got unexpected lr %#Ix.\n", (size_t)lr);
     lr = SendMessageA(hwnd, EM_GETIMESTATUS, EMSIS_COMPOSITIONSTRING, 0);
     ok(lr == (EIMES_GETCOMPSTRATONCE | EIMES_CANCELCOMPSTRINFOCUS | EIMES_COMPLETECOMPSTRKILLFOCUS),
-       "Got unexpected lr %#Ix.\n", lr);
+       "Got unexpected lr %#Ix.\n", (size_t)lr);
 
     lr = SendMessageA(hwnd, EM_SETIMESTATUS, EMSIS_COMPOSITIONSTRING, 0);
-    ok(lr == 1, "Got unexpected lr %#Ix.\n", lr);
+    ok(lr == 1, "Got unexpected lr %#Ix.\n", (size_t)lr);
     lr = SendMessageA(hwnd, EM_GETIMESTATUS, EMSIS_COMPOSITIONSTRING, 0);
-    ok(lr == 0, "Got unexpected lr %#Ix.\n", lr);
+    ok(lr == 0, "Got unexpected lr %#Ix.\n", (size_t)lr);
 
     /* Invalid EM_{GET|SET}IMESTATUS status types and flags */
     lr = SendMessageA(hwnd, EM_GETIMESTATUS, 0, 0);
-    ok(lr == 1, "Got unexpected lr %#Ix.\n", lr);
+    ok(lr == 1, "Got unexpected lr %#Ix.\n", (size_t)lr);
 
     lr = SendMessageA(hwnd, EM_GETIMESTATUS, EMSIS_COMPOSITIONSTRING + 1, 0);
-    ok(lr == 1, "Got unexpected lr %#Ix.\n", lr);
+    ok(lr == 1, "Got unexpected lr %#Ix.\n", (size_t)lr);
 
     lr = SendMessageA(hwnd, EM_SETIMESTATUS, 0, EIMES_GETCOMPSTRATONCE);
-    ok(lr == 1, "Got unexpected lr %#Ix.\n", lr);
+    ok(lr == 1, "Got unexpected lr %#Ix.\n", (size_t)lr);
     lr = SendMessageA(hwnd, EM_GETIMESTATUS, EMSIS_COMPOSITIONSTRING, 0);
-    ok(lr == 0, "Got unexpected lr %#Ix.\n", lr);
+    ok(lr == 0, "Got unexpected lr %#Ix.\n", (size_t)lr);
 
     lr = SendMessageA(hwnd, EM_SETIMESTATUS, EMSIS_COMPOSITIONSTRING + 1, EIMES_GETCOMPSTRATONCE);
-    ok(lr == 1, "Got unexpected lr %#Ix.\n", lr);
+    ok(lr == 1, "Got unexpected lr %#Ix.\n", (size_t)lr);
     lr = SendMessageA(hwnd, EM_GETIMESTATUS, EMSIS_COMPOSITIONSTRING, 0);
-    ok(lr == 0, "Got unexpected lr %#Ix.\n", lr);
+    ok(lr == 0, "Got unexpected lr %#Ix.\n", (size_t)lr);
 
     lr = SendMessageA(hwnd, EM_SETIMESTATUS, EMSIS_COMPOSITIONSTRING, 0xFFFFFFFF);
-    ok(lr == 1, "Got unexpected lr %#Ix.\n", lr);
+    ok(lr == 1, "Got unexpected lr %#Ix.\n", (size_t)lr);
     lr = SendMessageA(hwnd, EM_GETIMESTATUS, EMSIS_COMPOSITIONSTRING, 0);
-    ok(lr == 0xFFFF, "Got unexpected lr %#Ix.\n", lr);
+    ok(lr == 0xFFFF, "Got unexpected lr %#Ix.\n", (size_t)lr);
 
     lr = SendMessageA(hwnd, EM_SETIMESTATUS, EMSIS_COMPOSITIONSTRING, 0);
-    ok(lr == 1, "Got unexpected lr %#Ix.\n", lr);
+    ok(lr == 1, "Got unexpected lr %#Ix.\n", (size_t)lr);
     lr = SendMessageA(hwnd, EM_GETIMESTATUS, EMSIS_COMPOSITIONSTRING, 0);
-    ok(lr == 0, "Got unexpected lr %#Ix.\n", lr);
+    ok(lr == 0, "Got unexpected lr %#Ix.\n", (size_t)lr);
 
     /* Test IME messages when EIMES_GETCOMPSTRATONCE is not set */
     old_proc = (WNDPROC)SetWindowLongPtrA(hwnd, GWLP_WNDPROC, (LONG_PTR)edit_ime_subclass_proc);
@@ -3826,9 +3826,9 @@ static void test_ime(void)
 
     /* Test IME messages when EIMES_GETCOMPSTRATONCE is set */
     lr = SendMessageA(hwnd, EM_SETIMESTATUS, EMSIS_COMPOSITIONSTRING, EIMES_GETCOMPSTRATONCE);
-    ok(lr == 1, "Got unexpected lr %#Ix.\n", lr);
+    ok(lr == 1, "Got unexpected lr %#Ix.\n", (size_t)lr);
     lr = SendMessageA(hwnd, EM_GETIMESTATUS, EMSIS_COMPOSITIONSTRING, 0);
-    ok(lr == EIMES_GETCOMPSTRATONCE, "Got unexpected lr %#Ix.\n", lr);
+    ok(lr == EIMES_GETCOMPSTRATONCE, "Got unexpected lr %#Ix.\n", (size_t)lr);
 
     ret = ImmSetCompositionStringA(himc, SCS_SETSTR, "Wine", 4, NULL, 0);
     ok(ret, "ImmSetCompositionStringA failed.\n");

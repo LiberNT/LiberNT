@@ -239,35 +239,35 @@ static void test_NtAllocateVirtualMemory(void)
     addr2 = (char *)addr1 + 0x1fff;
     status = NtFreeVirtualMemory(NtCurrentProcess(), &addr2, &size, MEM_DECOMMIT);
     ok(status == STATUS_SUCCESS, "NtFreeVirtualMemory failed %lx\n", status);
-    ok( size == 0x2000, "wrong size %Ix\n", size );
+    ok( size == 0x2000, "wrong size %Ix\n", (size_t)size );
     ok( addr2 == (char *)addr1 + 0x1000, "wrong addr %p\n", addr2 );
 
     size = 0;
     addr2 = (char *)addr1 + 0x1001;
     status = NtFreeVirtualMemory(NtCurrentProcess(), &addr2, &size, MEM_DECOMMIT);
     ok(status == STATUS_FREE_VM_NOT_AT_BASE, "NtFreeVirtualMemory failed %lx\n", status);
-    ok( size == 0, "wrong size %Ix\n", size );
+    ok( size == 0, "wrong size %Ix\n", (size_t)size );
     ok( addr2 == (char *)addr1 + 0x1001, "wrong addr %p\n", addr2 );
 
     size = 0;
     addr2 = (char *)addr1 + 0xffe;
     status = NtFreeVirtualMemory(NtCurrentProcess(), &addr2, &size, MEM_DECOMMIT);
     ok(status == STATUS_SUCCESS, "NtFreeVirtualMemory failed %lx\n", status);
-    ok( size == 0 || broken(size == 0x10000) /* <= win10 1709 */, "wrong size %Ix\n", size );
+    ok( size == 0 || broken(size == 0x10000) /* <= win10 1709 */, "wrong size %Ix\n", (size_t)size );
     ok( addr2 == addr1, "wrong addr %p\n", addr2 );
 
     size = 0;
     addr2 = (char *)addr1 + 0x1001;
     status = NtFreeVirtualMemory(NtCurrentProcess(), &addr2, &size, MEM_RELEASE);
     ok(status == STATUS_FREE_VM_NOT_AT_BASE, "NtFreeVirtualMemory failed %lx\n", status);
-    ok( size == 0, "wrong size %Ix\n", size );
+    ok( size == 0, "wrong size %Ix\n", (size_t)size );
     ok( addr2 == (char *)addr1 + 0x1001, "wrong addr %p\n", addr2 );
 
     size = 0;
     addr2 = (char *)addr1 + 0xfff;
     status = NtFreeVirtualMemory(NtCurrentProcess(), &addr2, &size, MEM_RELEASE);
     ok(status == STATUS_SUCCESS, "NtFreeVirtualMemory failed %lx\n", status);
-    ok( size == 0x10000, "wrong size %Ix\n", size );
+    ok( size == 0x10000, "wrong size %Ix\n", (size_t)size );
     ok( addr2 == addr1, "wrong addr %p\n", addr2 );
 
     /* Placeholder functionality */
@@ -288,7 +288,7 @@ static void check_region_size_(void *p, SIZE_T s, unsigned int line)
     status = NtQueryVirtualMemory( NtCurrentProcess(), p, MemoryBasicInformation, &mbi, sizeof(mbi), &size );
     ok_(__FILE__,line)( !status, "Unexpected return value %08lx\n", status );
     ok_(__FILE__,line)( size == sizeof(mbi), "Unexpected return value.\n");
-    ok_(__FILE__,line)( mbi.RegionSize == s, "Unexpected size %Iu, expected %Iu.\n", mbi.RegionSize, s);
+    ok_(__FILE__,line)( mbi.RegionSize == s, "Unexpected size %Iu, expected %Iu.\n", (size_t)mbi.RegionSize, (size_t)s);
 }
 
 static void test_NtAllocateVirtualMemoryEx(void)
@@ -453,10 +453,10 @@ static void test_NtAllocateVirtualMemoryEx(void)
     p = addr1;
     status = NtFreeVirtualMemory(NtCurrentProcess(), (void **)&p, &size, MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER);
     ok(status == STATUS_CONFLICTING_ADDRESSES, "Unexpected status %08lx.\n", status);
-    ok(size == 0x10000, "Unexpected size %#Ix.\n", size);
+    ok(size == 0x10000, "Unexpected size %#Ix.\n", (size_t)size);
     status = NtFreeVirtualMemory(NtCurrentProcess(), (void **)&p, &size, MEM_RELEASE);
     ok(status == STATUS_SUCCESS, "Unexpected status %08lx.\n", status);
-    ok(size == 0x10000, "Unexpected size %#Ix.\n", size);
+    ok(size == 0x10000, "Unexpected size %#Ix.\n", (size_t)size);
     ok(p == addr1, "Unexpected addr %p, expected %p.\n", p, addr1);
 
 
@@ -476,7 +476,7 @@ static void test_NtAllocateVirtualMemoryEx(void)
     size2 = size / 4;
     status = NtFreeVirtualMemory(NtCurrentProcess(), (void **)&p1, &size2, MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER);
     ok(status == STATUS_SUCCESS, "Unexpected status %08lx.\n", status);
-    ok(size2 == 0x4000, "Unexpected size %#Ix.\n", size2);
+    ok(size2 == 0x4000, "Unexpected size %#Ix.\n", (size_t)size2);
     ok(p1 == p + size / 2, "Unexpected addr %p, expected %p.\n", p, p + size / 2);
 
     check_region_size(p, size / 2);
@@ -485,15 +485,15 @@ static void test_NtAllocateVirtualMemoryEx(void)
 
     status = NtFreeVirtualMemory(NtCurrentProcess(), (void **)&p, &size2, MEM_RELEASE);
     ok(status == STATUS_SUCCESS, "Unexpected status %08lx.\n", status);
-    ok(size2 == 0x4000, "Unexpected size %#Ix.\n", size2);
+    ok(size2 == 0x4000, "Unexpected size %#Ix.\n", (size_t)size2);
     ok(p == addr1, "Unexpected addr %p, expected %p.\n", p, addr1);
     status = NtFreeVirtualMemory(NtCurrentProcess(), (void **)&p1, &size2, MEM_RELEASE);
     ok(status == STATUS_SUCCESS, "Unexpected status %08lx.\n", status);
-    ok(size2 == 0x4000, "Unexpected size %#Ix.\n", size2);
+    ok(size2 == 0x4000, "Unexpected size %#Ix.\n", (size_t)size2);
     ok(p1 == p + size / 2, "Unexpected addr %p, expected %p.\n", p1, p + size / 2);
     status = NtFreeVirtualMemory(NtCurrentProcess(), (void **)&p2, &size2, MEM_RELEASE);
     ok(status == STATUS_SUCCESS, "Unexpected status %08lx.\n", status);
-    ok(size2 == 0x4000, "Unexpected size %#Ix.\n", size2);
+    ok(size2 == 0x4000, "Unexpected size %#Ix.\n", (size_t)size2);
     ok(p2 == p1 + size / 4, "Unexpected addr %p, expected %p.\n", p2, p1 + size / 4);
 
     /* Split in two regions, specifying lower part. */
@@ -506,7 +506,7 @@ static void test_NtAllocateVirtualMemoryEx(void)
     size2 = 0;
     status = NtFreeVirtualMemory(NtCurrentProcess(), (void **)&addr1, &size2, MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER);
     ok(status == STATUS_INVALID_PARAMETER_3, "Unexpected status %08lx.\n", status);
-    ok(!size2, "Unexpected size %#Ix.\n", size2);
+    ok(!size2, "Unexpected size %#Ix.\n", (size_t)size2);
 
     p1 = addr1;
     p2 = p1 + size / 4;
@@ -515,7 +515,7 @@ static void test_NtAllocateVirtualMemoryEx(void)
     status = NtFreeVirtualMemory(NtCurrentProcess(), (void **)&p1, &size2, MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER);
     ok(status == STATUS_SUCCESS, "Unexpected status %08lx.\n", status);
     ok(p1 == addr1, "Unexpected address.\n");
-    ok(size2 == 0x4000, "Unexpected size %#Ix.\n", size2);
+    ok(size2 == 0x4000, "Unexpected size %#Ix.\n", (size_t)size2);
     ok(p1 == addr1, "Unexpected addr %p, expected %p.\n", p1, addr1);
 
     status = NtFreeVirtualMemory(NtCurrentProcess(), (void **)&p2, &size2, MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER);
@@ -553,14 +553,14 @@ static void test_NtAllocateVirtualMemoryEx(void)
 
     status = NtFreeVirtualMemory(NtCurrentProcess(), (void **)&p1, &size, MEM_RELEASE | MEM_COALESCE_PLACEHOLDERS);
     ok(status == STATUS_SUCCESS, "Unexpected status %08lx.\n", status);
-    ok(size == 0x10000, "Unexpected size %#Ix.\n", size);
+    ok(size == 0x10000, "Unexpected size %#Ix.\n", (size_t)size);
     ok(p1 == addr1, "Unexpected addr %p, expected %p.\n", p1, addr1);
     check_region_size(p1, size);
 
     size2 = size / 4;
     status = NtFreeVirtualMemory(NtCurrentProcess(), (void **)&p1, &size2, MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER);
     ok(status == STATUS_SUCCESS, "Unexpected status %08lx.\n", status);
-    ok(size2 == 0x4000, "Unexpected size %#Ix.\n", size2);
+    ok(size2 == 0x4000, "Unexpected size %#Ix.\n", (size_t)size2);
     ok(p1 == addr1, "Unexpected addr %p, expected %p.\n", p1, addr1);
     check_region_size(p1, size / 4);
     check_region_size(p2, size - size / 4);
@@ -576,7 +576,7 @@ static void test_NtAllocateVirtualMemoryEx(void)
     size2 = size - size / 4;
     status = NtFreeVirtualMemory(NtCurrentProcess(), (void **)&p2, &size2, MEM_RELEASE);
     ok(status == STATUS_SUCCESS, "Unexpected status %08lx.\n", status);
-    ok(size2 == 0xc000, "Unexpected size %#Ix.\n", size2);
+    ok(size2 == 0xc000, "Unexpected size %#Ix.\n", (size_t)size2);
     ok(p2 == p1 + size / 4, "Unexpected addr %p, expected %p.\n", p2, p1 + size / 4);
 
     status = NtFreeVirtualMemory(NtCurrentProcess(), (void **)&p1, &size, MEM_RELEASE | MEM_COALESCE_PLACEHOLDERS);
@@ -585,7 +585,7 @@ static void test_NtAllocateVirtualMemoryEx(void)
     size2 = size / 4;
     status = NtFreeVirtualMemory(NtCurrentProcess(), (void **)&p1, &size2, MEM_RELEASE);
     ok(status == STATUS_SUCCESS, "Unexpected status %08lx.\n", status);
-    ok(size2 == 0x4000, "Unexpected size %#Ix.\n", size2);
+    ok(size2 == 0x4000, "Unexpected size %#Ix.\n", (size_t)size2);
     ok(p1 == addr1, "Unexpected addr %p, expected %p.\n", p1, addr1);
 
     size2 = 0;
@@ -598,7 +598,7 @@ static void test_NtAllocateVirtualMemoryEx(void)
     status = pNtAllocateVirtualMemoryEx(NtCurrentProcess(), &addr1, &size, MEM_RESERVE | MEM_RESERVE_PLACEHOLDER,
             PAGE_NOACCESS, NULL, 0);
     ok(status == STATUS_SUCCESS, "Unexpected status %08lx.\n", status);
-    ok(size == 0x10000, "Unexpected size %#Ix.\n", size);
+    ok(size == 0x10000, "Unexpected size %#Ix.\n", (size_t)size);
 
     p1 = addr1;
     p2 = p1 + size / 2;
@@ -606,17 +606,17 @@ static void test_NtAllocateVirtualMemoryEx(void)
     size2 = size / 2;
     status = NtFreeVirtualMemory(NtCurrentProcess(), (void **)&p2, &size2, MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER);
     ok(status == STATUS_SUCCESS, "Unexpected status %08lx.\n", status);
-    ok(size2 == 0x8000, "Unexpected size %#Ix.\n", size2);
+    ok(size2 == 0x8000, "Unexpected size %#Ix.\n", (size_t)size2);
     ok(p2 == p1 + size / 2, "Unexpected addr %p, expected %p.\n", p2, p1 + size / 2);
     check_region_size(p1, size / 2);
     check_region_size(p2, size / 2);
     status = NtFreeVirtualMemory(NtCurrentProcess(), (void **)&p1, &size2, MEM_RELEASE);
     ok(status == STATUS_SUCCESS, "Unexpected status %08lx.\n", status);
-    ok(size2 == 0x8000, "Unexpected size %#Ix.\n", size2);
+    ok(size2 == 0x8000, "Unexpected size %#Ix.\n", (size_t)size2);
     ok(p1 == addr1, "Unexpected addr %p, expected %p.\n", p1, addr1);
     status = NtFreeVirtualMemory(NtCurrentProcess(), (void **)&p2, &size2, MEM_RELEASE);
     ok(status == STATUS_SUCCESS, "Unexpected status %08lx.\n", status);
-    ok(size2 == 0x8000, "Unexpected size %#Ix.\n", size2);
+    ok(size2 == 0x8000, "Unexpected size %#Ix.\n", (size_t)size2);
     ok(p2 == p1 + size / 2, "Unexpected addr %p, expected %p.\n", p2, p1 + size / 2);
 
     memset( ext, 0, sizeof(ext) );
@@ -1296,9 +1296,9 @@ static void test_RtlCreateUserStack(void)
         ok(!((ULONG_PTR)stack.DeallocationStack & (page_size - 1)),
                 "%u: got unaligned memory %p\n", i, stack.DeallocationStack);
         ok((ULONG_PTR)stack.StackBase - (ULONG_PTR)stack.DeallocationStack == tests[i].expect_reserve,
-                "%u: got reserve %#Ix\n", i, (ULONG_PTR)stack.StackBase - (ULONG_PTR)stack.DeallocationStack);
+                "%u: got reserve %#Ix\n", i, (size_t)((ULONG_PTR)stack.StackBase - (ULONG_PTR)stack.DeallocationStack));
         todo_wine ok((ULONG_PTR)stack.StackBase - (ULONG_PTR)stack.StackLimit == tests[i].expect_commit,
-                "%u: got commit %#Ix\n", i, (ULONG_PTR)stack.StackBase - (ULONG_PTR)stack.StackLimit);
+                "%u: got commit %#Ix\n", i, (size_t)((ULONG_PTR)stack.StackBase - (ULONG_PTR)stack.StackLimit));
         pRtlFreeUserStack(stack.DeallocationStack);
     }
 
@@ -1421,7 +1421,7 @@ static void test_NtMapViewOfSection(void)
 
     ret = ReadProcessMemory(process, ptr, buffer, sizeof(buffer), &result);
     ok(ret, "ReadProcessMemory failed\n");
-    ok(result == sizeof(buffer), "ReadProcessMemory didn't read all data (%Ix)\n", result);
+    ok(result == sizeof(buffer), "ReadProcessMemory didn't read all data (%Ix)\n", (size_t)result);
     ok(!memcmp(buffer, data, sizeof(buffer)), "Wrong data read\n");
 
     /* 1 zero bits should zero 63-31 upper bits */
@@ -1707,7 +1707,7 @@ static void test_NtMapViewOfSectionEx(void)
 
     ret = ReadProcessMemory(process, ptr, buffer, sizeof(buffer), &result);
     ok(ret, "ReadProcessMemory failed\n");
-    ok(result == sizeof(buffer), "ReadProcessMemory didn't read all data (%Ix)\n", result);
+    ok(result == sizeof(buffer), "ReadProcessMemory didn't read all data (%Ix)\n", (size_t)result);
     ok(!memcmp(buffer, data, sizeof(buffer)), "Wrong data read\n");
 
     /* mapping at the same page conflicts */
@@ -1893,7 +1893,7 @@ static void test_NtMapViewOfSectionEx(void)
         size = 0x1000;
         ptr = NULL;
         status = pNtMapViewOfSectionEx( mapping, process, &ptr, &offset, &size, 0, PAGE_READWRITE, ext, 1 );
-        ok(status == STATUS_INVALID_PARAMETER, "Align %Ix unexpected status %08lx.\n", a.Alignment, status);
+        ok(status == STATUS_INVALID_PARAMETER, "Align %Ix unexpected status %08lx.\n", (size_t)a.Alignment, status);
     }
 
     NtClose(mapping);
@@ -2535,35 +2535,35 @@ static void test_query_image_information(void)
         return;
     }
     ok( status == STATUS_SUCCESS, "Unexpected status %08lx\n", status );
-    ok( len == sizeof(info), "wrong len %Ix\n", len );
+    ok( len == sizeof(info), "wrong len %Ix\n", (size_t)len );
     ok( !info.ImageBase, "wrong image base %p/%p\n", info.ImageBase, ptr );
-    ok( !info.SizeOfImage, "wrong size %Ix/%Ix\n", info.SizeOfImage, size );
+    ok( !info.SizeOfImage, "wrong size %Ix/%Ix\n", (size_t)info.SizeOfImage, (size_t)size );
     ok( !info.ImageFlags, "wrong flags %lx\n", info.ImageFlags );
 
     len = 0xdead;
     status = NtQueryVirtualMemory( NtCurrentProcess(), ptr, MemoryImageInformation,
                                    &info, sizeof(info) + 2, &len );
     ok( status == STATUS_SUCCESS, "Unexpected status %08lx\n", status );
-    ok( len == sizeof(info), "wrong len %Ix\n", len );
+    ok( len == sizeof(info), "wrong len %Ix\n", (size_t)len );
 
     len = 0xdead;
     status = NtQueryVirtualMemory( NtCurrentProcess(), ptr, MemoryImageInformation,
                                    &info, sizeof(info) - 1, &len );
     ok( status == STATUS_INFO_LENGTH_MISMATCH, "Unexpected status %08lx\n", status );
-    ok( len == 0xdead, "wrong len %Ix\n", len );
+    ok( len == 0xdead, "wrong len %Ix\n", (size_t)len );
 
     len = 0xdead;
     status = NtQueryVirtualMemory( NtCurrentProcess(), (char *)ptr + size, MemoryImageInformation,
                                    &info, sizeof(info), &len );
     ok( status == STATUS_INVALID_ADDRESS, "Unexpected status %08lx\n", status );
-    ok( len == 0xdead || broken(len == sizeof(info)), "wrong len %Ix\n", len );
+    ok( len == 0xdead || broken(len == sizeof(info)), "wrong len %Ix\n", (size_t)len );
 
     memset( &info, 0xcc, sizeof(info) );
     status = NtQueryVirtualMemory( NtCurrentProcess(), (char *)ptr + 0x1234, MemoryImageInformation,
                                    &info, sizeof(info), &len );
     ok( status == STATUS_SUCCESS, "Unexpected status %08lx\n", status );
     ok( !info.ImageBase, "wrong image base %p/%p\n", info.ImageBase, ptr );
-    ok( !info.SizeOfImage, "wrong size %Ix/%Ix\n", info.SizeOfImage, size );
+    ok( !info.SizeOfImage, "wrong size %Ix/%Ix\n", (size_t)info.SizeOfImage, (size_t)size );
     ok( !info.ImageFlags, "wrong flags %lx\n", info.ImageFlags );
 
     size = 0;
@@ -2579,7 +2579,7 @@ static void test_query_image_information(void)
     ok( status == STATUS_SUCCESS, "Unexpected status %08lx\n", status );
     ok( info.ImageBase == ptr, "wrong image base %p/%p\n", info.ImageBase, ptr );
     ok( info.SizeOfImage == nt->OptionalHeader.SizeOfImage, "wrong size %Ix/%x\n",
-        info.SizeOfImage, (UINT)nt->OptionalHeader.SizeOfImage );
+        (size_t)info.SizeOfImage, (UINT)nt->OptionalHeader.SizeOfImage );
     ok( !info.ImagePartialMap, "wrong partial map\n" );
     ok( !info.ImageNotExecutable, "wrong not executable\n" );
     ok( info.ImageSigningLevel == 0 || info.ImageSigningLevel == 12,
@@ -2604,7 +2604,7 @@ static void test_query_image_information(void)
                                    &info, sizeof(info), &len );
     ok( status == STATUS_SUCCESS, "Unexpected status %08lx\n", status );
     ok( info.ImageBase == ptr, "wrong image base %p/%p\n", info.ImageBase, ptr );
-    ok( info.SizeOfImage == size, "wrong size %Ix/%Ix\n", info.SizeOfImage, size );
+    ok( info.SizeOfImage == size, "wrong size %Ix/%Ix\n", (size_t)info.SizeOfImage, (size_t)size );
     ok( !info.ImagePartialMap, "wrong partial map\n" );
     ok( !info.ImageNotExecutable, "wrong not executable\n" );
     ok( info.ImageSigningLevel == 0 || info.ImageSigningLevel == 12,
@@ -2625,7 +2625,7 @@ static void test_query_image_information(void)
     status = NtMapViewOfSection( mapping, NtCurrentProcess(), &ptr, 0, 0, &offset, &size, 1, 0, PAGE_READONLY );
     ok( status == STATUS_IMAGE_NOT_AT_BASE, "Unexpected status %08lx\n", status );
     todo_wine
-    ok( size == 0x4000, "wrong size %Ix\n", size );
+    ok( size == 0x4000, "wrong size %Ix\n", (size_t)size );
     NtClose( mapping );
 
     nt = RtlImageNtHeader( ptr );
@@ -2635,7 +2635,7 @@ static void test_query_image_information(void)
     ok( status == STATUS_SUCCESS, "Unexpected status %08lx\n", status );
     ok( info.ImageBase == ptr, "wrong image base %p/%p\n", info.ImageBase, ptr );
     ok( info.SizeOfImage == nt->OptionalHeader.SizeOfImage, "wrong size %Ix/%x\n",
-        info.SizeOfImage, (UINT)nt->OptionalHeader.SizeOfImage );
+        (size_t)info.SizeOfImage, (UINT)nt->OptionalHeader.SizeOfImage );
     todo_wine
     ok( info.ImagePartialMap, "wrong partial map\n" );
     ok( !info.ImageNotExecutable, "wrong not executable\n" );
@@ -2655,7 +2655,7 @@ static void test_query_image_information(void)
     status = NtMapViewOfSection( mapping, NtCurrentProcess(), &ptr, 0, 0, &offset, &size, 1, 0, PAGE_READONLY );
     ok( status == STATUS_IMAGE_NOT_AT_BASE, "Unexpected status %08lx\n", status );
     todo_wine
-    ok( size == 0x5000, "wrong size %Ix\n", size );
+    ok( size == 0x5000, "wrong size %Ix\n", (size_t)size );
     NtClose( mapping );
 
     nt = RtlImageNtHeader( ptr );
@@ -2665,7 +2665,7 @@ static void test_query_image_information(void)
     ok( status == STATUS_SUCCESS, "Unexpected status %08lx\n", status );
     ok( info.ImageBase == ptr, "wrong image base %p/%p\n", info.ImageBase, ptr );
     ok( info.SizeOfImage == nt->OptionalHeader.SizeOfImage, "wrong size %Ix/%x\n",
-        info.SizeOfImage, (UINT)nt->OptionalHeader.SizeOfImage );
+        (size_t)info.SizeOfImage, (UINT)nt->OptionalHeader.SizeOfImage );
     todo_wine
     ok( info.ImagePartialMap, "wrong partial map\n" );
     ok( !info.ImageNotExecutable, "wrong not executable\n" );
@@ -2691,7 +2691,7 @@ static void test_query_image_information(void)
                                    &info, sizeof(info), &len );
     ok( status == STATUS_SUCCESS, "Unexpected status %08lx\n", status );
     ok( !info.ImageBase, "wrong image base %p/%p\n", info.ImageBase, ptr );
-    ok( !info.SizeOfImage, "wrong size %Ix/%Ix\n", info.SizeOfImage, size );
+    ok( !info.SizeOfImage, "wrong size %Ix/%Ix\n", (size_t)info.SizeOfImage, (size_t)size );
     ok( !info.ImageFlags, "wrong flags %lx\n", info.ImageFlags );
 
     NtUnmapViewOfSection( NtCurrentProcess(), ptr );
@@ -2713,7 +2713,7 @@ static void test_query_image_information(void)
                                    &info, sizeof(info), &len );
     ok( status == STATUS_SUCCESS, "Unexpected status %08lx\n", status );
     ok( !info.ImageBase, "wrong image base %p/%p\n", info.ImageBase, ptr );
-    ok( !info.SizeOfImage, "wrong size %Ix/%Ix\n", info.SizeOfImage, size );
+    ok( !info.SizeOfImage, "wrong size %Ix/%Ix\n", (size_t)info.SizeOfImage, (size_t)size );
     ok( !info.ImageFlags, "wrong flags %lx\n", info.ImageFlags );
 
     NtUnmapViewOfSection( NtCurrentProcess(), ptr );
@@ -2732,11 +2732,11 @@ static LONG CALLBACK exec_write_handler( EXCEPTION_POINTERS *ptrs )
     got_exception++;
     ok( rec->ExceptionCode == STATUS_IN_PAGE_ERROR, "wrong exception %lx\n", rec->ExceptionCode );
     ok( rec->NumberParameters == 3, "wrong params %lx\n", rec->NumberParameters );
-    ok( rec->ExceptionInformation[0] == 1, "not write access %Ix\n", rec->ExceptionInformation[0] );
+    ok( rec->ExceptionInformation[0] == 1, "not write access %Ix\n", (size_t)rec->ExceptionInformation[0] );
     ok( (int *)rec->ExceptionInformation[1] == write_addr,
         "wrong address %p / %p\n", (void *)rec->ExceptionInformation[1], write_addr );
     ok( rec->ExceptionInformation[2] == STATUS_EXECUTABLE_MEMORY_WRITE, "wrong status %Ix\n",
-        rec->ExceptionInformation[2] );
+        (size_t)rec->ExceptionInformation[2] );
 
     status = NtSetInformationThread( GetCurrentThread(), ThreadManageWritesToExecutableMemory,
                                      &mem, sizeof(mem) );
@@ -2898,7 +2898,7 @@ static void test_exec_memory_writes(void)
     count = ARRAY_SIZE(addresses);
     status = NtGetWriteWatch( GetCurrentProcess(), 0, ptr, page_size, addresses, &count, &granularity );
     ok( !status, "NtGetWriteWatch failed %lx\n", status );
-    ok( count == 1, "got count %Iu\n", count );
+    ok( count == 1, "got count %Iu\n", (size_t)count );
     ok( addresses[0] == ptr, "wrong ptr %p / %p\n", addresses[0], ptr );
 
     got_exception = 0;
@@ -2910,7 +2910,7 @@ static void test_exec_memory_writes(void)
     status = NtGetWriteWatch( GetCurrentProcess(), WRITE_WATCH_FLAG_RESET,
                               ptr, page_size, addresses, &count, &granularity );
     ok( !status, "NtGetWriteWatch failed %lx\n", status );
-    ok( count == 1, "got count %Iu\n", count );
+    ok( count == 1, "got count %Iu\n", (size_t)count );
     ok( addresses[0] == ptr, "wrong ptr %p / %p\n", addresses[0], ptr );
 
     got_exception = 0;
@@ -2921,7 +2921,7 @@ static void test_exec_memory_writes(void)
     count = ARRAY_SIZE(addresses);
     status = NtGetWriteWatch( GetCurrentProcess(), 0, ptr, page_size, addresses, &count, &granularity );
     ok( !status, "NtGetWriteWatch failed %lx\n", status );
-    ok( count == 1, "got count %Iu\n", count );
+    ok( count == 1, "got count %Iu\n", (size_t)count );
     ok( addresses[0] == ptr, "wrong ptr %p / %p\n", addresses[0], ptr );
 
     range.VirtualAddress = ptr;
@@ -2934,7 +2934,7 @@ static void test_exec_memory_writes(void)
     count = ARRAY_SIZE(addresses);
     status = NtGetWriteWatch( GetCurrentProcess(), 0, ptr, page_size, addresses, &count, &granularity );
     ok( !status, "NtGetWriteWatch failed %lx\n", status );
-    ok( count == 0, "got count %Iu\n", count );
+    ok( count == 0, "got count %Iu\n", (size_t)count );
 
     got_exception = 0;
     *write_addr = 0x123456;

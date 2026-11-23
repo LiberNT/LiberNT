@@ -138,19 +138,19 @@ RunLimitCase(DWORD LimitFlag, SIZE_T Limit, DWORD ExpectedMessage, PCSTR Tag, BO
        "%s: peak query failed %lu\n", Tag, GetLastError());
     if (LimitFlag == JOB_OBJECT_LIMIT_PROCESS_MEMORY)
         ok(Limits.PeakProcessMemoryUsed >= 32 * MB && Limits.PeakProcessMemoryUsed <= Limit,
-           "%s: peak process memory %Iu\n", Tag, Limits.PeakProcessMemoryUsed);
+           "%s: peak process memory %Iu\n", Tag, (size_t)Limits.PeakProcessMemoryUsed);
     else
         ok(Limits.PeakJobMemoryUsed >= 32 * MB &&
            Limits.PeakJobMemoryUsed >= Limits.PeakProcessMemoryUsed,
            "%s: peak job memory %Iu, peak process memory %Iu\n", Tag,
-           Limits.PeakJobMemoryUsed, Limits.PeakProcessMemoryUsed);
+           (size_t)Limits.PeakJobMemoryUsed, (size_t)Limits.PeakProcessMemoryUsed);
 
     if (Nested)
     {
         ZeroMemory(&Limits, sizeof(Limits));
         ok(QueryInformationJobObject(JobList[1], JobObjectExtendedLimitInformation, &Limits, sizeof(Limits), &Length) &&
            Limits.PeakJobMemoryUsed >= 32 * MB,
-           "%s: nested job peak %Iu\n", Tag, Limits.PeakJobMemoryUsed);
+           "%s: nested job peak %Iu\n", Tag, (size_t)Limits.PeakJobMemoryUsed);
         CloseHandle(JobList[1]);
     }
 

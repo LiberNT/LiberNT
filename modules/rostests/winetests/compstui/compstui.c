@@ -95,7 +95,7 @@ static INT_PTR CALLBACK prop_page_proc2(HWND hwnd, UINT msg, WPARAM wparam, LPAR
 
         ok(psp->dwSize == sizeof(PROPSHEETPAGEW), "psp->dwSize = %ld\n", psp->dwSize);
         ok(psp->pfnDlgProc == prop_page_proc2, "psp->pfnDlgProc != prop_page_proc2\n");
-        ok(!psp->lParam, "psp->lParam = %Ix\n", psp->lParam);
+        ok(!psp->lParam, "psp->lParam = %Ix\n", (size_t)psp->lParam);
 
         ok(info->cbSize == sizeof(*info), "info->cbSize = %hd\n", info->cbSize);
         ok(!info->wReserved, "info->wReserved = %hd\n", info->wReserved);
@@ -125,10 +125,10 @@ static LONG WINAPI device_property_sheets(PROPSHEETUI_INFO *info, LPARAM lparam)
     if (info->Reason == PROPSHEETUI_REASON_INIT)
     {
         ok(info->lParamInit == lparam, "info->lParamInit = %Ix, lparam = %Ix\n",
-                info->lParamInit, lparam);
+                (size_t)info->lParamInit, (size_t)lparam);
     }
-    ok(!info->UserData, "info->UserData = %Ix\n", info->UserData);
-    ok(!info->Result, "info->Result = %Ix\n", info->Result);
+    ok(!info->UserData, "info->UserData = %Ix\n", (size_t)info->UserData);
+    ok(!info->Result, "info->Result = %Ix\n", (size_t)info->Result);
     return lparam;
 }
 
@@ -148,7 +148,7 @@ static LONG WINAPI propsheetui_callback(PROPSHEETUI_INFO *info, LPARAM lparam)
         ok(!info->Flags, "info->Flags = %hd\n", info->Flags);
         ok(!info->hComPropSheet, "info->hComPropSheet = %p\n", info->hComPropSheet);
         ok(!info->pfnComPropSheet, "info->pfnComPropSheet = %p\n", info->pfnComPropSheet);
-        ok(!info->Result, "info->Result = %Ix\n", info->Result);
+        ok(!info->Result, "info->Result = %Ix\n", (size_t)info->Result);
         break;
     case PROPSHEETUI_REASON_INIT:
         CHECK_EXPECT(callback_PROPSHEETUI_REASON_INIT);
@@ -156,8 +156,8 @@ static LONG WINAPI propsheetui_callback(PROPSHEETUI_INFO *info, LPARAM lparam)
         ok(info->Flags == PSUIINFO_UNICODE, "info->Flags = %hd\n", info->Flags);
         ok(info->hComPropSheet != NULL, "info->hComPropSheet = NULL\n");
         ok(info->pfnComPropSheet != NULL, "info->pfnComPropSheet = NULL\n");
-        ok(!info->UserData, "info->UserData = %Ix\n", info->UserData);
-        ok(!info->Result, "info->Result = %Ix\n", info->Result);
+        ok(!info->UserData, "info->UserData = %Ix\n", (size_t)info->UserData);
+        ok(!info->Result, "info->Result = %Ix\n", (size_t)info->Result);
         break;
     case PROPSHEETUI_REASON_GET_INFO_HEADER:
         CHECK_EXPECT(callback_PROPSHEETUI_REASON_GET_INFO_HEADER);
@@ -165,8 +165,8 @@ static LONG WINAPI propsheetui_callback(PROPSHEETUI_INFO *info, LPARAM lparam)
         ok(info->Flags == PSUIINFO_UNICODE, "info->Flags = %hd\n", info->Flags);
         ok(info->hComPropSheet != NULL, "info->hComPropSheet = NULL\n");
         ok(info->pfnComPropSheet != NULL, "info->pfnComPropSheet = NULL\n");
-        ok(!info->UserData, "info->UserData = %Ix\n", info->UserData);
-        ok(!info->Result, "info->Result = %Ix\n", info->Result);
+        ok(!info->UserData, "info->UserData = %Ix\n", (size_t)info->UserData);
+        ok(!info->Result, "info->Result = %Ix\n", (size_t)info->Result);
 
         info_header = (PROPSHEETUI_INFO_HEADERW*)lparam;
         ok(info_header->cbSize == sizeof(*info_header), "info_header->cbSize = %hd\n", info_header->cbSize);
@@ -186,7 +186,7 @@ static LONG WINAPI propsheetui_callback(PROPSHEETUI_INFO *info, LPARAM lparam)
             SET_EXPECT(device_PROPSHEETUI_REASON_INIT);
             SET_EXPECT(device_PROPSHEETUI_REASON_DESTROY);
             ret = info->pfnComPropSheet(info->hComPropSheet, CPSFUNC_ADD_PFNPROPSHEETUIA, (LPARAM)device_property_sheets, 0);
-            ok(!ret, "ret = %Ix\n", ret);
+            ok(!ret, "ret = %Ix\n", (size_t)ret);
             CHECK_CALLED(device_PROPSHEETUI_REASON_INIT);
             CHECK_CALLED(device_PROPSHEETUI_REASON_DESTROY);
 
@@ -218,14 +218,14 @@ static LONG WINAPI propsheetui_callback(PROPSHEETUI_INFO *info, LPARAM lparam)
             ok(lparam, "lparam = 0\n");
         }
         else
-            ok(!lparam, "lparam = %Ix\n", lparam);
+            ok(!lparam, "lparam = %Ix\n", (size_t)lparam);
 
         ok(info->Version == PROPSHEETUI_INFO_VERSION, "info->Version = %hd\n", info->Version);
         ok(info->Flags == PSUIINFO_UNICODE, "info->Flags = %hd\n", info->Flags);
         ok(info->hComPropSheet != NULL, "info->hComPropSheet = NULL\n");
         ok(info->pfnComPropSheet != NULL, "info->pfnComPropSheet = NULL\n");
-        ok(!info->UserData, "info->UserData = %Ix\n", info->UserData);
-        ok(!info->Result, "info->Result = %Ix\n", info->Result);
+        ok(!info->UserData, "info->UserData = %Ix\n", (size_t)info->UserData);
+        ok(!info->Result, "info->Result = %Ix\n", (size_t)info->Result);
         break;
     default:
         ok(0, "unhandled info->Reason = %hd\n", info->Reason);

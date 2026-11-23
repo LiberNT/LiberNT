@@ -1154,9 +1154,9 @@ static void test_communication(void)
         buf->cbBuffer = buf_size;
 
         ok( context.dwLower == context2.dwLower, "dwLower mismatch, expected %#Ix, got %#Ix\n",
-            context.dwLower, context2.dwLower);
+            (size_t)context.dwLower, (size_t)context2.dwLower);
         ok( context.dwUpper == context2.dwUpper, "dwUpper mismatch, expected %#Ix, got %#Ix\n",
-            context.dwUpper, context2.dwUpper);
+            (size_t)context.dwUpper, (size_t)context2.dwUpper);
 
         buf = &buffers[1].pBuffers[0];
         ret = receive_data(sock, buf);
@@ -1447,9 +1447,9 @@ static void test_communication(void)
         buf->cbBuffer = buf_size;
 
         todo_wine ok( context.dwLower == context2.dwLower, "dwLower mismatch, expected %#Ix, got %#Ix\n",
-                      context.dwLower, context2.dwLower);
+                      (size_t)context.dwLower, (size_t)context2.dwLower);
         todo_wine ok( context.dwUpper == context2.dwUpper, "dwUpper mismatch, expected %#Ix, got %#Ix\n",
-                      context.dwUpper, context2.dwUpper);
+                      (size_t)context.dwUpper, (size_t)context2.dwUpper);
 
         buf = &buffers[1].pBuffers[0];
         ret = receive_data(sock, buf);
@@ -1565,9 +1565,9 @@ static void test_application_protocol_negotiation(void)
         buf->cbBuffer = buf_size;
 
         ok( context.dwLower == context2.dwLower, "dwLower mismatch, expected %#Ix, got %#Ix\n",
-            context.dwLower, context2.dwLower);
+            (size_t)context.dwLower, (size_t)context2.dwLower);
         ok( context.dwUpper == context2.dwUpper, "dwUpper mismatch, expected %#Ix, got %#Ix\n",
-            context.dwUpper, context2.dwUpper);
+            (size_t)context.dwUpper, (size_t)context2.dwUpper);
 
         buf = &buffers[1].pBuffers[0];
         ret = receive_data(sock, buf);
@@ -1710,9 +1710,9 @@ static void test_server_protocol_negotiation(void) {
                                         ISC_REQ_CONFIDENTIALITY|ISC_REQ_STREAM|ISC_REQ_USE_SUPPLIED_CREDS, 0, 0,
                                         &buffers[1], 0, &client_context2, &buffers[0], &attrs, NULL);
     ok(client_context.dwLower == client_context2.dwLower, "dwLower mismatch, expected %#Ix, got %#Ix\n",
-       client_context.dwLower, client_context2.dwLower);
+       (size_t)client_context.dwLower, (size_t)client_context2.dwLower);
     ok(client_context.dwUpper == client_context2.dwUpper, "dwUpper mismatch, expected %#Ix, got %#Ix\n",
-       client_context.dwUpper, client_context2.dwUpper);
+       (size_t)client_context.dwUpper, (size_t)client_context2.dwUpper);
     ok(status == SEC_I_CONTINUE_NEEDED, "got %08lx\n", status);
 
     server_context2.dwLower = server_context2.dwUpper = 0xdeadbeef;
@@ -1721,9 +1721,9 @@ static void test_server_protocol_negotiation(void) {
                                    ASC_REQ_CONFIDENTIALITY|ASC_REQ_STREAM, 0, &server_context2, &buffers[1],
                                    &attrs, NULL);
     ok(server_context.dwLower == server_context2.dwLower, "dwLower mismatch, expected %#Ix, got %#Ix\n",
-       server_context.dwLower, server_context2.dwLower);
+       (size_t)server_context.dwLower, (size_t)server_context2.dwLower);
     ok(server_context.dwUpper == server_context2.dwUpper, "dwUpper mismatch, expected %#Ix, got %#Ix\n",
-       server_context.dwUpper, server_context2.dwUpper);
+       (size_t)server_context.dwUpper, (size_t)server_context2.dwUpper);
     ok(status == SEC_E_OK, "got %08lx\n", status);
 
     buffers[0].pBuffers[0].cbBuffer = buf_size;
@@ -1883,9 +1883,9 @@ static void test_dtls(void)
     ok( !buffers[1].pBuffers[1].cbBuffer, "Expected SECBUFFER_ALERT buffer to be empty, got %#lx\n",
         buffers[1].pBuffers[1].cbBuffer);
     ok( ctx_handle.dwLower == ctx_handle2.dwLower, "dwLower mismatch, expected %#Ix, got %#Ix\n",
-        ctx_handle.dwLower, ctx_handle2.dwLower);
+        (size_t)ctx_handle.dwLower, (size_t)ctx_handle2.dwLower);
     ok( ctx_handle.dwUpper == ctx_handle2.dwUpper, "dwUpper mismatch, expected %#Ix, got %#Ix\n",
-        ctx_handle.dwUpper, ctx_handle2.dwUpper);
+        (size_t)ctx_handle.dwUpper, (size_t)ctx_handle2.dwUpper);
 
     /* With no new input buffer, output buffer length should match prior call. */
     ok(buffers[1].pBuffers[0].cbBuffer == prev_buf_len, "Output buffer size mismatch, expected %#lx, got %#lx\n",
@@ -2000,9 +2000,9 @@ static void test_connection_shutdown(void)
                                          &context2, &buffers[0], &attrs, NULL );
     ok( status == SEC_E_OK, "got %08lx.\n", status );
     ok( context.dwLower == context2.dwLower, "dwLower mismatch, expected %#Ix, got %#Ix\n",
-                                             context.dwLower, context2.dwLower );
+                                             (size_t)context.dwLower, (size_t)context2.dwLower );
     ok( context.dwUpper == context2.dwUpper, "dwUpper mismatch, expected %#Ix, got %#Ix\n",
-                                             context.dwUpper, context2.dwUpper );
+                                             (size_t)context.dwUpper, (size_t)context2.dwUpper );
     ok( buf->cbBuffer == sizeof(message), "got cbBuffer %#lx.\n", buf->cbBuffer );
     ok( !memcmp( buf->pvBuffer, message, sizeof(message) ), "message data mismatch.\n" );
 
@@ -2013,8 +2013,8 @@ static void test_connection_shutdown(void)
                                          &context2, &buffers[1], &attrs, NULL );
     ok( status == SEC_E_INCOMPLETE_MESSAGE, "got %08lx.\n", status );
     ok( buf->cbBuffer == 1000, "got cbBuffer %#lx.\n", buf->cbBuffer );
-    ok( context2.dwLower == 0xdeadbeef, "dwLower mismatch, got %#Ix\n", context2.dwLower );
-    ok( context2.dwUpper == 0xdeadbeef, "dwUpper mismatch, got %#Ix\n", context2.dwUpper );
+    ok( context2.dwLower == 0xdeadbeef, "dwLower mismatch, got %#Ix\n", (size_t)context2.dwLower );
+    ok( context2.dwUpper == 0xdeadbeef, "dwUpper mismatch, got %#Ix\n", (size_t)context2.dwUpper );
 
     buf->cbBuffer = sizeof(DWORD);
     *(DWORD *)buf->pvBuffer = SCHANNEL_SHUTDOWN;

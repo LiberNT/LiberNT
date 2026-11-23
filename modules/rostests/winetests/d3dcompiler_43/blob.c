@@ -180,7 +180,7 @@ static void test_get_blob_part(void)
     ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
 
     size = ID3D10Blob_GetBufferSize(blob);
-    ok(size == 124, "Got unexpected size %Iu.\n", size);
+    ok(size == 124, "Got unexpected size %Iu.\n", (size_t)size);
 
     dword = ((DWORD*)ID3D10Blob_GetBufferPointer(blob));
     ok(TAG_DXBC == *dword, "DXBC got %#lx, expected %#lx.\n", *dword, TAG_DXBC);
@@ -211,7 +211,7 @@ static void test_get_blob_part(void)
     ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
 
     size = ID3D10Blob_GetBufferSize(blob);
-    ok(size == 88, "Got unexpected size %Iu.\n", size);
+    ok(size == 88, "Got unexpected size %Iu.\n", (size_t)size);
 
     dword = ((DWORD*)ID3D10Blob_GetBufferPointer(blob));
     ok(TAG_DXBC == *dword, "DXBC got %#lx, expected %#lx.\n", *dword, TAG_DXBC);
@@ -242,7 +242,7 @@ static void test_get_blob_part(void)
     ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
 
     size = ID3D10Blob_GetBufferSize(blob);
-    ok(size == 180, "Got unexpected size %Iu.\n", size);
+    ok(size == 180, "Got unexpected size %Iu.\n", (size_t)size);
 
     dword = ((DWORD*)ID3D10Blob_GetBufferPointer(blob));
     ok(TAG_DXBC == *dword, "DXBC got %#lx, expected %#lx.\n", *dword, TAG_DXBC);
@@ -288,7 +288,7 @@ static void test_get_blob_part(void)
     ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
 
     size = ID3D10Blob_GetBufferSize(blob);
-    ok(size == 92, "Got unexpected size %Iu.\n", size);
+    ok(size == 92, "Got unexpected size %Iu.\n", (size_t)size);
 
     dword = ((DWORD*)ID3D10Blob_GetBufferPointer(blob));
     ok(test_blob_part[0] != *dword, "DXBC failed got %#lx.\n", *dword);
@@ -308,7 +308,7 @@ static void test_get_blob_part(void)
     ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
 
     size = ID3D10Blob_GetBufferSize(blob);
-    ok(size == 68, "Got unexpected size %Iu.\n", size);
+    ok(size == 68, "Got unexpected size %Iu.\n", (size_t)size);
 
     dword = ((DWORD*)ID3D10Blob_GetBufferPointer(blob));
     ok(test_blob_part[0] != *dword, "DXBC failed got %#lx.\n", *dword);
@@ -328,7 +328,7 @@ static void test_get_blob_part(void)
     ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
 
     size = ID3D10Blob_GetBufferSize(blob);
-    ok(size == 68, "Got unexpected size %Iu.\n", size);
+    ok(size == 68, "Got unexpected size %Iu.\n", (size_t)size);
 
     dword = ((DWORD*)ID3D10Blob_GetBufferPointer(blob));
     ok(test_blob_part[0] != *dword, "DXBC failed got %#lx.\n", *dword);
@@ -379,7 +379,7 @@ static void test_get_blob_part(void)
     ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
 
     size = ID3D10Blob_GetBufferSize(blob);
-    ok(size == 736, "Got unexpected size %Iu.\n", size);
+    ok(size == 736, "Got unexpected size %Iu.\n", (size_t)size);
 
     dword = ((DWORD*)ID3D10Blob_GetBufferPointer(blob));
     ok(TAG_DXBC == *dword, "DXBC got %#lx, expected %#lx.\n", *dword, TAG_DXBC);
@@ -403,7 +403,7 @@ static void test_get_blob_part(void)
     ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
 
     size = ID3D10Blob_GetBufferSize(blob);
-    ok(size == 516, "Got unexpected size %Iu.\n", size);
+    ok(size == 516, "Got unexpected size %Iu.\n", (size_t)size);
 
     dword = ((DWORD*)ID3D10Blob_GetBufferPointer(blob));
     ok(TAG_DXBC == *dword, "DXBC got %#lx, expected %#lx.\n", *dword, TAG_DXBC);
@@ -624,7 +624,7 @@ static void test_get_blob_part2(void)
     ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
 
     size = ID3D10Blob_GetBufferSize(blob);
-    ok(size == 232, "Got unexpected size %Iu.\n", size);
+    ok(size == 232, "Got unexpected size %Iu.\n", (size_t)size);
 
     dword = ((DWORD*)ID3D10Blob_GetBufferPointer(blob));
     ok(TAG_DXBC == *dword, "DXBC got %#lx, expected %#lx.\n", *dword, TAG_DXBC);
@@ -655,7 +655,7 @@ static void test_get_blob_part2(void)
     ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
 
     size = ID3D10Blob_GetBufferSize(blob);
-    ok(size == 344, "Got unexpected size %Iu.\n", size);
+    ok(size == 344, "Got unexpected size %Iu.\n", (size_t)size);
 
     dword = ((DWORD*)ID3D10Blob_GetBufferPointer(blob));
     ok(TAG_DXBC == *dword, "DXBC got %#lx, expected %#lx.\n", *dword, TAG_DXBC);
@@ -692,7 +692,7 @@ static void test_get_blob_part2(void)
     ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
 
     size = ID3D10Blob_GetBufferSize(blob);
-    ok(size == 4055, "Got unexpected size %Iu.\n", size);
+    ok(size == 4055, "Got unexpected size %Iu.\n", (size_t)size);
 
     dword = ((DWORD*)ID3D10Blob_GetBufferPointer(blob));
     ok(TAG_DXBC != *dword, "DXBC failed got %#lx.\n", *dword);
@@ -724,7 +724,7 @@ static void test_get_blob_part2(void)
     ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
 
     size = ID3D10Blob_GetBufferSize(blob);
-    ok(size == 952, "Got unexpected size %Iu.\n", size);
+    ok(size == 952, "Got unexpected size %Iu.\n", (size_t)size);
 
     dword = ((DWORD*)ID3D10Blob_GetBufferPointer(blob));
     ok(TAG_DXBC == *dword, "DXBC got %#lx, expected %#lx.\n", *dword, TAG_DXBC);
@@ -746,7 +746,7 @@ static void test_get_blob_part2(void)
     ok(hr == S_OK, "Got unexpected hr %#lx.\n", hr);
 
     size = ID3D10Blob_GetBufferSize(blob);
-    ok(size == 4735, "Got unexpected size %Iu.\n", size);
+    ok(size == 4735, "Got unexpected size %Iu.\n", (size_t)size);
 
     dword = ((DWORD*)ID3D10Blob_GetBufferPointer(blob));
     ok(TAG_DXBC == *dword, "DXBC got %#lx, expected %#lx.\n", *dword, TAG_DXBC);

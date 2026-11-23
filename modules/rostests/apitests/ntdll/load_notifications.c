@@ -22,6 +22,14 @@ ULONG g_BaseHandlers = 0;
 
 DWORD g_dwWinVer = 0;
 
+/* Failed-attach cleanup runs inside LdrLoadDll, one registration above an explicit unload. */
+static ULONG DetachHandlers(ULONG NormalCount)
+{
+    if (sizeof(void *) == 4 && NtCurrentPeb()->OSBuildNumber >= 26100 && !g_DllMainReturn)
+        return NormalCount + 1;
+    return NormalCount;
+}
+
 ULONG CountHandlers(VOID)
 {
     EXCEPTION_REGISTRATION_RECORD* exc;
@@ -52,7 +60,7 @@ VOID WINAPI notify_TlsCallback(IN HINSTANCE hDllHandle, IN DWORD dwReason, IN LP
     }
     else
     {
-        ok_int(handlers, g_TLS_DETACH);
+        ok_int(handlers, DetachHandlers(g_TLS_DETACH));
     }
 
     if (InterlockedCompareExchange(&g_TlsExcept, 0xffffff, dwReason) == dwReason)
@@ -75,7 +83,7 @@ BOOL WINAPI notify_DllMain(IN HINSTANCE hDllHandle, IN DWORD dwReason, IN LPVOID
     }
     else
     {
-        ok_int(handlers, g_DLL_DETACH); // For failures, see https://jira.reactos.org/browse/CORE-14857
+        ok_int(handlers, DetachHandlers(g_DLL_DETACH));
     }
 
     if (InterlockedCompareExchange(&g_DllMainExcept, 0xffffff, dwReason) == dwReason)
@@ -329,7 +337,7 @@ START_TEST(load_notifications)
         g_TLS_DETACH = 5;
         g_DLL_DETACH = 4;
     }
-    else if (sizeof(void *) != sizeof(ULONGLONG))
+    else if (sizeof(void *) == 4 && Peb->OSBuildNumber < 26100)
     {
         g_TLS_ATTACH = 1;
         g_TLS_DETACH = 1;

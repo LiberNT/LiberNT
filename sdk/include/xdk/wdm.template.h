@@ -1419,13 +1419,6 @@ typedef struct _SYSTEM_POOL_ZEROING_INFORMATION {
   BOOLEAN PoolZeroingSupportPresent;
 } SYSTEM_POOL_ZEROING_INFORMATION, *PSYSTEM_POOL_ZEROING_INFORMATION;
 
-typedef struct _XSAVE_ARM64_SVE_HEADER {
-  ULONG VectorLength;
-  ULONG VectorRegisterOffset;
-  ULONG PredicateRegisterOffset;
-  ULONG Reserved[5];
-} XSAVE_ARM64_SVE_HEADER, *PXSAVE_ARM64_SVE_HEADER;
-
 typedef struct _XSAVE_CET_U_FORMAT {
   ULONG64 Ia32CetUMsr;
   ULONG64 Ia32Pl3SspMsr;

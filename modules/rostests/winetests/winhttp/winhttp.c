@@ -466,7 +466,7 @@ static void test_WinHttpSendRequest (void)
     size = sizeof(context);
     ret = WinHttpQueryOption(request, WINHTTP_OPTION_CONTEXT_VALUE, &context, &size);
     ok(ret, "WinHttpQueryOption failed: %lu\n", GetLastError());
-    ok(context == 0xdeadbef0, "expected 0xdeadbef0, got %#Ix\n", context);
+    ok(context == 0xdeadbef0, "expected 0xdeadbef0, got %#Ix\n", (size_t)context);
 
     for (i = 3; post_data[i]; i++)
     {

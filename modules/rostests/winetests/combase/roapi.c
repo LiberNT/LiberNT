@@ -482,7 +482,7 @@ static void test_apartment_context_(int line, const struct unk_ctx_impl *impl)
     ok_(__FILE__, line)(hr == S_OK, "CoGetContextToken failed, got hr %#lx\n", hr);
     /* As this object has apartment-affinity, its methods can only be called from the apartment and context it was
      * created in. */
-    ok_(__FILE__, line)(cur_ctx == impl->context, "got cur_ctx %#Ix != %#Ix\n", cur_ctx, impl->context);
+    ok_(__FILE__, line)(cur_ctx == impl->context, "got cur_ctx %#Ix != %#Ix\n", (size_t)cur_ctx, (size_t)impl->context);
 
     hr = CoGetApartmentType(&type, &qualifier);
     ok_(__FILE__, line)(hr == S_OK, "CoGetApartmentType failed, got hr %#lx\n", hr);

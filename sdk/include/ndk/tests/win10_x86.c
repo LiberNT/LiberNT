@@ -11,6 +11,10 @@
 #define C_ASSERT_FIELD(Type, Offset, MemberName) \
     C_ASSERT(FIELD_OFFSET(Type, MemberName) == Offset);
 
+C_ASSERT(JobObjectGroupInformation == 11);
+C_ASSERT(JobObjectNetworkAccountingInformation == 51);
+C_ASSERT(MaxJobObjectInfoClass == 52);
+
 /* KTHREAD */
 C_ASSERT(sizeof(KTHREAD) == 0x280);
 C_ASSERT_FIELD(KTHREAD, 0x000, Header)
