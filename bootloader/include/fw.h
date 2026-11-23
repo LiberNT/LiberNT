@@ -9,6 +9,7 @@
 
 extern const USHORT FwApplicationSubsystem;
 extern const USHORT FwApplicationMachine;
+extern const BOOLEAN FwUefiFirmware;
 
 typedef enum _FW_VOLUME_SCAN_STATE
 {

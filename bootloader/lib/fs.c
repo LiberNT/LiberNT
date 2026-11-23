@@ -11,6 +11,7 @@
 static DK_DEVICE FsMountedDevice;
 static PNTFS_VOLUME_INFO FsMountedVolume;
 static BOOLEAN FsMountedExFat;
+static BOOLEAN FsMountedCdfs;
 
 PVOID (*FsMemoryReader)(PCSTR Path, PULONG Size);
 
@@ -19,13 +20,14 @@ BOOLEAN
 FsMount(
     _In_ PDK_DEVICE Device)
 {
-    if ((!FsMountedVolume && !FsMountedExFat) ||
+    if ((!FsMountedVolume && !FsMountedExFat && !FsMountedCdfs) ||
         FsMountedDevice.Firmware != Device->Firmware ||
         FsMountedDevice.Offset != Device->Offset)
     {
         FsMountedVolume = NtfsMount(Device);
         FsMountedExFat = !FsMountedVolume && ExFatMount(Device);
-        if (!FsMountedVolume && !FsMountedExFat)
+        FsMountedCdfs = !FsMountedVolume && !FsMountedExFat && CdfsMount(Device);
+        if (!FsMountedVolume && !FsMountedExFat && !FsMountedCdfs)
             return FALSE;
 
         FsMountedDevice = *Device;
@@ -48,7 +50,10 @@ FsReadFileA(
     if (!FsMount(Device))
         return NULL;
 
-    return FsMountedVolume ? NtfsReadFile(FsMountedVolume, Path, Size) : ExFatReadFile(Path, Size);
+    if (FsMountedVolume)
+        return NtfsReadFile(FsMountedVolume, Path, Size);
+
+    return FsMountedExFat ? ExFatReadFile(Path, Size) : CdfsReadFile(Path, Size);
 }
 
 PVOID
@@ -113,6 +118,9 @@ FsGetDriverName(
 
     if (FsMountedExFat)
         return ExFatIsExFat() ? L"exfat" : L"fastfat";
+
+    if (FsMountedCdfs)
+        return L"cdfs";
 
     return L"ntfs";
 }

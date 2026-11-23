@@ -30,6 +30,9 @@ set(BOOTLOADER_ESP_SECTORS 131072)
 set(BOOTLOADER_ESP_START 2048)
 math(EXPR BOOTLOADER_SYSTEM_START "${BOOTLOADER_ESP_START} + ${BOOTLOADER_ESP_SECTORS}")
 
+set(BCD_BOOTMGR_PATH_ELEMENT
+    "BCD,\"BCD00000000\\Objects\\{9dea862c-5cdd-4e70-acc1-f32b344d4795}\\Elements\\12000002\",\"Element\",,\"\\EFI\\LiberNT\\Boot\\bootmgfw.efi\"")
+
 set(BOOTLOADER_ID_NAMESPACE 354fa6e5-5e45-49af-91bf-1fd2754e470a)
 set(BCD_OS_ENTRY "{${BOOTLOADER_ID_NAMESPACE}}")
 set(BCD_DEFAULT_ENTRY "${BCD_OS_ENTRY}")
@@ -184,6 +187,22 @@ function(bootloader_media _target _directory _image)
     string(UUID _disk NAMESPACE ${BOOTLOADER_ID_NAMESPACE} NAME "LiberNT ${_target}" TYPE SHA1)
     string(SUBSTRING "${_disk}" 0 8 _signature)
 
+    set(_bios_boot_options)
+    set(_bios_media_files)
+    set(_bios_depends)
+    if(TARGET winloadpcat AND NOT MSVC)
+        set(BCD_BOOTMGR_PATH_ELEMENT "")
+        set(BCD_HTTP_ENTRY "")
+        set(BCD_LOADER_PATH "\\boot\\winload.exe")
+        bootloader_bcd_store(${_directory}/pcat)
+        set(_bios_boot_options
+            -eltorito-platform x86 -eltorito-boot boot/etfsboot.com -no-emul-boot -boot-load-size 4
+            -eltorito-alt-boot)
+        set(_bios_media_files
+            "-DBIOSFILES=bootmgr=${REACTOS_BINARY_DIR}/bootloader/bootmgr$<SEMICOLON>boot/etfsboot.com=${REACTOS_BINARY_DIR}/bootloader/etfsboot.com$<SEMICOLON>boot/bcd=${_directory}/pcat/BCD$<SEMICOLON>boot/winload.exe=$<TARGET_FILE:winloadpcat>")
+        set(_bios_depends bootmgrbios winloadpcat ${_directory}/pcat/BCD)
+    endif()
+
     add_custom_target(${_target}
         COMMAND native-fatten ${_directory}/efisys.bin
             -format ${BOOTLOADER_MEDIA_SECTORS} fat EFIBOOT
@@ -203,17 +222,19 @@ function(bootloader_media _target _directory _image)
         COMMAND ${CMAKE_COMMAND}
             -DLIST=${_directory}/files.lst
             -DEFISYS=${_directory}/efisys.bin
+            ${_bios_media_files}
             ${ARGN}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/medialist.cmake
         COMMAND native-mkisofs -quiet -o ${_image}
             -iso-level 4 -relaxed-filenames
             -publisher "LiberNT Project" -preparer "LiberNT Project" -volid LiberNT -volset LiberNT
+            ${_bios_boot_options}
             -eltorito-platform efi -eltorito-boot efi/efisys.bin -no-emul-boot
             -hide boot.catalog
             -duplicates-once -no-cache-inodes -graft-points
             -path-list ${_directory}/files.lst
         COMMAND native-mkdiskimg -cd ${_image} -signature ${_signature} -diskid ${_disk}
-        DEPENDS native-fatten native-mkisofs native-mkdiskimg native-wimage bootmgfw winload ${_directory}/BCD
+        DEPENDS native-fatten native-mkisofs native-mkdiskimg native-wimage bootmgfw winload ${_directory}/BCD ${_bios_depends}
         VERBATIM)
 
     add_dependencies(${_target} livecd_hives livecd_files)
@@ -307,6 +328,10 @@ bootloader_media(bootloaderwimcd ${CMAKE_CURRENT_BINARY_DIR}/mediawim ${CMAKE_CU
 
 add_custom_target(bootloadermediabcd DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/media/BCD)
 add_custom_target(bootloadermediawimbcd DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/mediawim/BCD)
+if(TARGET winloadpcat AND NOT MSVC)
+    add_custom_target(bootloadermediapcatbcd DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/media/pcat/BCD)
+    add_custom_target(bootloadermediawimpcatbcd DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/mediawim/pcat/BCD)
+endif()
 
 get_property(_standard_signature GLOBAL PROPERTY LIBERNT_STANDARD_SIGNATURE)
 get_property(_standard_start GLOBAL PROPERTY LIBERNT_STANDARD_SYSTEM_START)
@@ -381,6 +406,24 @@ ${_object}\\Elements\\12000030\",\"Element\",,\"${_image_options}\"")
 
     bootloader_bcd_store(${CMAKE_CURRENT_BINARY_DIR}/standard)
     add_custom_target(bootloaderstandardbcd DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/standard/BCD)
+
+    if(TARGET winloadpcat)
+        set(_efi_bootmgr_path_element "${BCD_BOOTMGR_PATH_ELEMENT}")
+        set(_efi_http_entry "${BCD_HTTP_ENTRY}")
+        set(_efi_display_order "${BCD_DISPLAY_ORDER}")
+        set(_efi_default_entry "${BCD_DEFAULT_ENTRY}")
+        set(BCD_BOOTMGR_PATH_ELEMENT "")
+        set(BCD_HTTP_ENTRY "")
+        set(BCD_DISPLAY_ORDER "\"${BCD_OS_ENTRY}\"")
+        set(BCD_DEFAULT_ENTRY "${BCD_OS_ENTRY}")
+        set(BCD_LOADER_PATH "\\Windows\\system32\\winload.exe")
+        bootloader_bcd_store(${CMAKE_CURRENT_BINARY_DIR}/standardpcat)
+        add_custom_target(bootloaderstandardpcatbcd DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/standardpcat/BCD)
+        set(BCD_BOOTMGR_PATH_ELEMENT "${_efi_bootmgr_path_element}")
+        set(BCD_HTTP_ENTRY "${_efi_http_entry}")
+        set(BCD_DISPLAY_ORDER "${_efi_display_order}")
+        set(BCD_DEFAULT_ENTRY "${_efi_default_entry}")
+    endif()
 endif()
 
 set(BCD_BOOT_DEVICE "${_zero},${_zero},${_boot_device}")

@@ -5,7 +5,6 @@
  * COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif.ing@outlook.com>
  */
 
-#include <blefi.h>
 #include "../../winload/winload.h"
 
 #define AMD64_LOADER_PAGES   0x100000
@@ -356,12 +355,6 @@ OslArchReserveFirmwareMemory(
     _In_ PLOADER_PARAMETER_BLOCK LoaderBlock)
 {
     UNREFERENCED_PARAMETER(LoaderBlock);
-}
-
-VOID
-FwExitBootServices(VOID)
-{
-    UefiLeaveBootServices();
 }
 
 static

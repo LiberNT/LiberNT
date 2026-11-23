@@ -56,4 +56,7 @@ if(WIM)
 endif()
 
 string(APPEND _output "efi/efisys.bin=${EFISYS}\n")
+foreach(_file IN LISTS BIOSFILES)
+    string(APPEND _output "${_file}\n")
+endforeach()
 file(WRITE "${LIST}" "${_output}")
