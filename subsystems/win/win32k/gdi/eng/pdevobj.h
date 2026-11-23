@@ -159,6 +159,12 @@ NTAPI
 EngpGetPDEV(
     _In_opt_ PUNICODE_STRING pustrDevice);
 
+NTSTATUS
+NTAPI
+EngpGetPrimaryDisplayNtName(
+    _Out_writes_(cchName) PWSTR pwszName,
+    _In_ SIZE_T cchName);
+
 FORCEINLINE
 VOID
 PDEVOBJ_vReference(
