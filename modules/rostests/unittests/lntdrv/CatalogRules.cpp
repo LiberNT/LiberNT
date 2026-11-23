@@ -242,8 +242,22 @@ static void CheckVersion(const wchar_t *row, const wchar_t *details, const wchar
        update.Version.c_str(), expected);
 }
 
+static void CheckOfferedName(const wchar_t *model, const wchar_t *title, const wchar_t *expected)
+{
+    CatalogUpdate update;
+
+    update.Model = model;
+    update.Title = title;
+    ok(OfferedName(update) == expected, "model '%ls', title '%ls': offered '%ls', expected '%ls'\n", model, title,
+       OfferedName(update).c_str(), expected);
+}
+
 START_TEST(CatalogRules)
 {
+    CheckOfferedName(L"AMD Radeon(TM) 780M Graphics", L"Advanced Micro Devices, Inc. - Display - 32.0.21025.1001",
+                     L"AMD Radeon(TM) 780M Graphics");
+    CheckOfferedName(L"", L"Realtek Semiconductor Corp. - Net - 10.74.1128.2024",
+                     L"Realtek Semiconductor Corp. - Net - 10.74.1128.2024");
     CheckParser();
     CheckThrottle();
     CheckSearchCache();

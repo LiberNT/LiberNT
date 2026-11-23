@@ -406,8 +406,8 @@ DWORD RunInstall(HWND owner, const DeviceInfo &device, const CatalogUpdate &upda
     class DownloadProgress : public ProgressCallback
     {
     public:
-        explicit DownloadProgress(const Reporter &reporter)
-            : m_Report(reporter), m_Last(-2), m_Tick(GetTickCount64()), m_Bytes(0), m_Rate(0)
+        DownloadProgress(const Reporter &reporter, const std::wstring &text)
+            : m_Report(reporter), m_Text(text), m_Last(-2), m_Tick(GetTickCount64()), m_Bytes(0), m_Rate(0)
         {
         }
 
@@ -425,12 +425,13 @@ DWORD RunInstall(HWND owner, const DeviceInfo &device, const CatalogUpdate &upda
             if (step != m_Last)
             {
                 m_Last = step;
-                m_Report.Download(LoadText(IDS_PROGRESS_DOWNLOADING), total ? step : -1, SpeedText(m_Rate));
+                m_Report.Download(m_Text, total ? step : -1, SpeedText(m_Rate));
             }
         }
 
     private:
         const Reporter &m_Report;
+        std::wstring m_Text;
         int m_Last;
         ULONGLONG m_Tick;
         ULONGLONG m_Bytes;
@@ -438,7 +439,7 @@ DWORD RunInstall(HWND owner, const DeviceInfo &device, const CatalogUpdate &upda
     };
     Catalog catalog;
     std::vector<CatalogFile> files;
-    std::wstring offered = update.Model.empty() ? update.Title : update.Model;
+    std::wstring offered = OfferedName(update);
     std::wstring directory = PackageDirectory(update.Id), package = directory + L"\\package";
     HistoryEntry entry;
     PackageDriver driver;
@@ -472,7 +473,7 @@ DWORD RunInstall(HWND owner, const DeviceInfo &device, const CatalogUpdate &upda
     for (size_t i = 0; !error && i < files.size(); i++)
     {
         std::wstring name = SafeFileName(files[i].FileName), path = directory + L"\\" + name;
-        DownloadProgress progress(report);
+        DownloadProgress progress(report, FormatText(IDS_PROGRESS_DOWNLOADING, update.Title));
 
         if (name.empty())
         {
@@ -858,7 +859,7 @@ public:
             Outcome outcome = { choice.Device.Name, choice.Update.Title, std::wstring(), ERROR_SUCCESS, FALSE,
                                 false, std::wstring() };
             std::wstring step = FormatText(IDS_INSTALL_STEP, NumberText(m_Offset + i + 1), NumberText(m_Total),
-                                           choice.Device.Name);
+                                           OfferedName(choice.Update));
             DeviceInfo current;
 
             if (IsCancelled(m_Cancel))
