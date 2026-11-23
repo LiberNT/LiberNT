@@ -32,6 +32,7 @@ namespace
 
 inline constexpr wchar_t CommunitySourceBase[] = L"https://cdn.winget.microsoft.com/cache/";
 inline constexpr unsigned long long MaximumSourcePackageSize = 512ull * 1024 * 1024;
+inline constexpr ULONGLONG SourceAutoUpdateInterval = 15ull * 60 * 10000000;
 
 class CacheLock
 {
@@ -88,6 +89,29 @@ std::wstring UniquePath(const std::wstring &base, const std::wstring &suffix)
     result.push_back(L'.');
     result += DecimalWideString(static_cast<unsigned long>(InterlockedIncrement(&sequence)));
     return result;
+}
+
+ULONGLONG FileTimeValue(const FILETIME &time)
+{
+    ULARGE_INTEGER value{};
+    value.LowPart = time.dwLowDateTime;
+    value.HighPart = time.dwHighDateTime;
+    return value.QuadPart;
+}
+
+bool SourceUpdateDue(ULONGLONG lastUpdate, ULONGLONG now)
+{
+    return now > lastUpdate && now - lastUpdate > SourceAutoUpdateInterval;
+}
+
+bool CachedSourceUpdateDue(const std::wstring &path)
+{
+    WIN32_FILE_ATTRIBUTE_DATA data{};
+    if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &data))
+        return true;
+    FILETIME now{};
+    GetSystemTimeAsFileTime(&now);
+    return SourceUpdateDue(FileTimeValue(data.ftLastWriteTime), FileTimeValue(now));
 }
 
 Status ReadArchiveEntry(unzFile archive, const char *name, std::size_t maximumSize, std::vector<uint8_t> &bytes)
@@ -398,7 +422,7 @@ Status SourceManager::UpdateUnlocked()
     ready_ = false;
     Status status = EnsureDirectory(cacheDirectory_);
     if (!status) return status;
-    const std::wstring downloaded = UniquePath(packagePath_, L".download");
+    const std::wstring downloaded = packagePath_ + L".download";
     std::printf("Updating source: winget\n");
     status = http_.Download(CommunitySourceUrl, downloaded, std::wstring(), MaximumSourcePackageSize);
     if (!status) return status;
@@ -439,9 +463,17 @@ Status SourceManager::EnsureReady()
     if (!status) return status;
     if (GetFileAttributesW(packagePath_.c_str()) == INVALID_FILE_ATTRIBUTES)
         return UpdateUnlocked();
+    const bool updateDue = CachedSourceUpdateDue(packagePath_);
+    if (updateDue)
+    {
+        status = UpdateUnlocked();
+        if (status) return status;
+        std::fprintf(stderr, "lntget: failed in attempting to update the source: winget (%s)\n", status.message.c_str());
+    }
     status = ActivateSource(packagePath_, false);
     if (!status)
     {
+        if (updateDue) return status;
         std::fprintf(stderr, "lntget: cached source failed trust validation; refreshing it\n");
         return UpdateUnlocked();
     }
@@ -546,6 +578,23 @@ Status RunSourceSelfTests()
     {
         if (ValidPackageIdentifier(id))
             return Status::Fail(ERROR_ASSERTION_FAILURE, std::string("package identifier self-test accepted ") + id);
+    }
+    static const struct
+    {
+        ULONGLONG lastUpdate;
+        ULONGLONG now;
+        bool due;
+    } UpdateCases[] = {
+        {1000, 1000, false},
+        {1000, 1000 + SourceAutoUpdateInterval, false},
+        {1000, 1001 + SourceAutoUpdateInterval, true},
+        {1001 + SourceAutoUpdateInterval, 1000, false},
+        {0, ~0ull, true},
+    };
+    for (const auto &test : UpdateCases)
+    {
+        if (SourceUpdateDue(test.lastUpdate, test.now) != test.due)
+            return Status::Fail(ERROR_ASSERTION_FAILURE, "source auto-update interval self-test failed");
     }
     return Status::Ok();
 }
