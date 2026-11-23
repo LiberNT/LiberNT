@@ -18,6 +18,31 @@ typedef struct _SHARED_HSTRING_HEADER
     WCHAR Buffer[1];
 } SHARED_HSTRING_HEADER;
 
+#define MaxLength ((UINT32)((MAXUINT32 - 3 - FIELD_OFFSET(SHARED_HSTRING_HEADER, Buffer)) / sizeof(WCHAR) - 1))
+
+static void
+TestSizeLimit(
+    _In_ UINT32 Length)
+{
+    static const WCHAR Text[] = L"winget";
+    HSTRING_BUFFER Buffer = (HSTRING_BUFFER)0xdeadbeef;
+    WCHAR *Chars = (WCHAR *)0xdeadbeef;
+    HSTRING String = (HSTRING)0xdeadbeef;
+    HRESULT hr;
+
+    hr = WindowsPreallocateStringBuffer(Length, &Chars, &Buffer);
+    ok(hr == MEM_E_INVALID_SIZE, "WindowsPreallocateStringBuffer(%#x) returned 0x%08lx\n", Length, hr);
+    ok(!Chars && !Buffer, "WindowsPreallocateStringBuffer(%#x): chars %p, buffer %p\n", Length, Chars, Buffer);
+    if (SUCCEEDED(hr))
+        WindowsDeleteStringBuffer(Buffer);
+
+    hr = WindowsCreateString(Text, Length, &String);
+    ok(hr == MEM_E_INVALID_SIZE, "WindowsCreateString(%#x) returned 0x%08lx\n", Length, hr);
+    ok(String == NULL, "WindowsCreateString(%#x): string %p\n", Length, String);
+    if (SUCCEEDED(hr))
+        WindowsDeleteString(String);
+}
+
 START_TEST(HString)
 {
     static const WCHAR Text[] = L"winget";
@@ -25,7 +50,7 @@ START_TEST(HString)
     HSTRING String = NULL, Copy = NULL;
     HSTRING_HEADER Header;
     HSTRING_BUFFER Buffer;
-    WCHAR *Chars;
+    WCHAR *Chars, *Large;
     HRESULT hr;
 
     hr = WindowsCreateString(Text, ARRAYSIZE(Text) - 1, &String);
@@ -93,10 +118,39 @@ START_TEST(HString)
         WindowsDeleteString(Copy);
     }
 
+    TestSizeLimit(MaxLength + 1);
+    TestSizeLimit(MAXUINT32);
+
     Buffer = (HSTRING_BUFFER)0xdeadbeef;
     Chars = (WCHAR *)0xdeadbeef;
-    hr = WindowsPreallocateStringBuffer(MAXUINT32, &Chars, &Buffer);
-    ok(hr == E_OUTOFMEMORY, "WindowsPreallocateStringBuffer returned 0x%08lx\n", hr);
+    hr = WindowsPreallocateStringBuffer(MaxLength, &Chars, &Buffer);
+    ok(hr == S_OK || hr == E_OUTOFMEMORY, "WindowsPreallocateStringBuffer(%#x) returned 0x%08lx\n", MaxLength, hr);
     if (SUCCEEDED(hr))
         WindowsDeleteStringBuffer(Buffer);
+    else
+        ok(!Chars && !Buffer, "Chars %p, buffer %p\n", Chars, Buffer);
+
+    String = (HSTRING)0xdeadbeef;
+    hr = WindowsCreateString(NULL, ARRAYSIZE(Text) - 1, &String);
+    ok(hr == E_POINTER, "WindowsCreateString(NULL) returned 0x%08lx\n", hr);
+    ok(String == NULL, "String %p\n", String);
+
+    if (sizeof(void *) < 8)
+        return;
+    Large = VirtualAlloc(NULL, (MaxLength / 2 + 2) * sizeof(WCHAR), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    ok(Large != NULL, "VirtualAlloc failed: %lu\n", GetLastError());
+    if (!Large)
+        return;
+    hr = WindowsCreateStringReference(Large, MaxLength / 2 + 1, &Header, &String);
+    ok(hr == S_OK, "WindowsCreateStringReference returned 0x%08lx\n", hr);
+    if (SUCCEEDED(hr))
+    {
+        Copy = (HSTRING)0xdeadbeef;
+        hr = WindowsConcatString(String, String, &Copy);
+        ok(hr == MEM_E_INVALID_SIZE, "WindowsConcatString returned 0x%08lx\n", hr);
+        ok(Copy == NULL, "Copy %p\n", Copy);
+        if (SUCCEEDED(hr))
+            WindowsDeleteString(Copy);
+    }
+    VirtualFree(Large, 0, MEM_RELEASE);
 }
