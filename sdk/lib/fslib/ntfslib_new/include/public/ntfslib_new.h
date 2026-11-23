@@ -328,6 +328,11 @@ NtfsDirectoryReadNext(
     _In_ BOOLEAN RestartScan,
     _Out_ PNtfsDirectoryEntry Entry);
 
+typedef NTSTATUS (*PNtfsDirectoryNameCallback)(void* Context, ULONGLONG Reference, const FileNameEx* Name);
+
+NTSTATUS
+NtfsDirectoryVisitNames(PNtfsVolume Volume, PNtfsFileRecord File, PNtfsDirectoryNameCallback Callback, void* Context);
+
 /* FileRecord functions */
 PNtfsFileRecord
 NtfsFileRecordCreate(
