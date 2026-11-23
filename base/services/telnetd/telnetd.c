@@ -122,7 +122,7 @@ static void WaitForConnect(void)
   struct sockaddr_in sa;
   int new_sock;
 
-  if (listen(sock, 1) < 0)
+  if (listen(sock, 4) < 0)
      ErrorExit("Cannot listen on socket");
 
   if ((new_sock = accept(sock, (struct sockaddr*) &sa, NULL)) < 0) {
