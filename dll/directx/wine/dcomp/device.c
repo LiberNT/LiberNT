@@ -141,6 +141,7 @@ struct dcomp_target
     struct list entry;
     IDCompositionVisual *root;
     HWND window;
+    LONG detached;
     BOOL topmost;
 };
 
@@ -1480,11 +1481,20 @@ static HRESULT STDMETHODCALLTYPE dcomp_device_Commit(IDCompositionDevice *iface)
     {
         HRESULT hr;
 
-        if (!target->root || target->root->lpVtbl != &dcomp_visual_vtbl)
+        if (!target->root || target->root->lpVtbl != &dcomp_visual_vtbl
+                || InterlockedCompareExchange(&target->detached, 0, 0))
             continue;
-        if (FAILED(hr = dcomp_commit_visual(impl_from_IDCompositionVisual(target->root),
-                target->window, 0, 0, NULL)))
-            return hr;
+        if (IsWindow(target->window))
+        {
+            hr = dcomp_commit_visual(impl_from_IDCompositionVisual(target->root),
+                    target->window, 0, 0, NULL);
+            if (SUCCEEDED(hr))
+                continue;
+            if (IsWindow(target->window))
+                return hr;
+        }
+        /* The target can outlive its HWND. Keep its visual until the caller releases it. */
+        InterlockedExchange(&target->detached, TRUE);
     }
 
     return S_OK;

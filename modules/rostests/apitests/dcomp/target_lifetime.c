@@ -280,7 +280,43 @@ TestDestroyedTarget(
     DestroyWindow(Second);
 }
 
-START_TEST(target_lifetime)
+static void
+TestCommitAfterDestroy(
+    _In_ CHAIN_TEST *Test)
+{
+    static const float Green[4] = {0.0f, 1.0f, 0.0f, 1.0f};
+    IDCompositionTarget *OldTarget = NULL, *LiveTarget = NULL;
+    IDCompositionVisual *OldVisual = NULL, *LiveVisual = NULL;
+    HWND OldWindow, LiveWindow;
+    COLORREF Pixel;
+    HRESULT hr;
+
+    OldWindow = CreateTargetWindow(100, 100);
+    if (!OldWindow)
+        return;
+    hr = BindChain(Test, OldWindow, &OldTarget, &OldVisual);
+    ok(hr == S_OK, "binding the first target returned %#lx\n", hr);
+    DestroyWindow(OldWindow);
+    LiveWindow = CreateTargetWindow(400, 100);
+    if (LiveWindow)
+    {
+        hr = BindChain(Test, LiveWindow, &LiveTarget, &LiveVisual);
+        ok(hr == S_OK, "Commit with a destroyed target and a live target returned %#lx\n", hr);
+        hr = IDCompositionDevice_Commit(Test->Composition);
+        ok(hr == S_OK, "repeated Commit with a destroyed target returned %#lx\n", hr);
+        hr = PresentColor(Test, Green, NULL);
+        ok(hr == S_OK, "Present to the live target returned %#lx\n", hr);
+        Pump(500);
+        Pixel = ScreenPixel(LiveWindow, VISUAL_X + VISUAL_WIDTH / 2, VISUAL_Y + VISUAL_HEIGHT / 2);
+        ok(IsColor(Pixel, FALSE, TRUE), "live target shows %#lx instead of the presented frame\n", Pixel);
+        ReleaseBinding(LiveTarget, LiveVisual);
+        DestroyWindow(LiveWindow);
+    }
+    ReleaseBinding(OldTarget, OldVisual);
+}
+
+static void
+RunChainTest(void (*Run)(CHAIN_TEST *))
 {
     PDCOMPOSITIONCREATEDEVICE CreateComposition;
     PD3D11CREATEDEVICE CreateDevice;
@@ -299,8 +335,18 @@ START_TEST(target_lifetime)
     }
     hr = CreateChain(&Test, CreateDevice, CreateComposition);
     if (SUCCEEDED(hr))
-        TestDestroyedTarget(&Test);
+        Run(&Test);
     else
         skip("composition chain setup failed, hr %#lx\n", hr);
     DestroyChain(&Test);
+}
+
+START_TEST(target_lifetime)
+{
+    RunChainTest(TestDestroyedTarget);
+}
+
+START_TEST(target_commit)
+{
+    RunChainTest(TestCommitAfterDestroy);
 }
