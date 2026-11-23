@@ -126,17 +126,29 @@ CPortFilterWaveRT::DeviceIoControl(
 
     IoStack = IoGetCurrentIrpStackLocation(Irp);
 
-    if (IoStack->Parameters.DeviceIoControl.IoControlCode != IOCTL_KS_PROPERTY)
+    switch (IoStack->Parameters.DeviceIoControl.IoControlCode)
     {
-        DPRINT("Unhandled function %lx Length %x\n", IoStack->Parameters.DeviceIoControl.IoControlCode, IoStack->Parameters.DeviceIoControl.InputBufferLength);
+        case IOCTL_KS_PROPERTY:
+            Status = PcHandlePropertyWithTable(Irp, m_Descriptor->FilterPropertySetCount, m_Descriptor->FilterPropertySet,
+                                               m_Descriptor);
+            break;
 
-        Irp->IoStatus.Status = STATUS_SUCCESS;
+        case IOCTL_KS_ENABLE_EVENT:
+            Status = PcHandleEnableEventWithTable(Irp, m_Descriptor);
+            break;
 
-        IoCompleteRequest(Irp, IO_NO_INCREMENT);
-        return STATUS_SUCCESS;
+        case IOCTL_KS_DISABLE_EVENT:
+            Status = PcHandleDisableEventWithTable(Irp, m_Descriptor);
+            break;
+
+        default:
+            DPRINT("Unhandled function %lx Length %x\n", IoStack->Parameters.DeviceIoControl.IoControlCode, IoStack->Parameters.DeviceIoControl.InputBufferLength);
+            /* FIXME: other IOCTLs complete with STATUS_SUCCESS instead of failing */
+            Irp->IoStatus.Status = STATUS_SUCCESS;
+            IoCompleteRequest(Irp, IO_NO_INCREMENT);
+            return STATUS_SUCCESS;
     }
 
-    Status = PcHandlePropertyWithTable(Irp, m_Descriptor->FilterPropertySetCount, m_Descriptor->FilterPropertySet, m_Descriptor);
     if (Status != STATUS_PENDING)
     {
         Irp->IoStatus.Status = Status;
@@ -179,6 +191,16 @@ CPortFilterWaveRT::Close(
     IN PDEVICE_OBJECT DeviceObject,
     IN PIRP Irp)
 {
+    PIO_STACK_LOCATION IoStack = IoGetCurrentIrpStackLocation(Irp);
+
+    if (m_Descriptor->EventList && m_Descriptor->EventListLock)
+    {
+        KsFreeEventList(IoStack->FileObject,
+                        m_Descriptor->EventList,
+                        KSEVENTS_SPINLOCK,
+                        m_Descriptor->EventListLock);
+    }
+
     Irp->IoStatus.Status = STATUS_SUCCESS;
     Irp->IoStatus.Information = 0;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);

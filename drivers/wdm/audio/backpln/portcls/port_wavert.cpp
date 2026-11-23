@@ -34,11 +34,22 @@ public:
         IN ULONGLONG Data3,
         IN ULONGLONG Data4);
     CPortWaveRT(IUnknown *OuterUnknown) {}
-    virtual ~CPortWaveRT() {}
+    virtual ~CPortWaveRT();
 
 protected:
 
     BOOL m_bInitialized;
+    KSPIN_LOCK m_EventListLock;
+    LIST_ENTRY m_EventList;
+    KDPC m_EventDpc;
+    volatile LONG m_EventDpcQueued;
+    GUID m_EventDpcSet;
+    BOOLEAN m_EventDpcHasSet;
+    ULONG m_EventDpcId;
+    BOOL m_EventDpcPinEvent;
+    ULONG m_EventDpcPinId;
+    BOOL m_EventDpcNodeEvent;
+    ULONG m_EventDpcNodeId;
     PDEVICE_OBJECT m_pDeviceObject;
     PMINIPORTWAVERT m_pMiniport;
     PRESOURCELIST m_pResourceList;
@@ -48,6 +59,7 @@ protected:
     PSUBDEVICE_DESCRIPTOR m_SubDeviceDescriptor;
     IPortFilterWaveRT * m_Filter;
 
+    friend VOID NTAPI PortWaveRTEventDpc(PKDPC, PVOID, PVOID, PVOID);
     friend PMINIPORTWAVERT GetWaveRTMiniport(IN IPortWaveRT* iface);
     friend PDEVICE_OBJECT GetDeviceObjectFromPortWaveRT(PPORTWAVERT iface);
 };
@@ -96,12 +108,34 @@ KSPROPERTY_SET WaveRTPropertySet[] =
 // IPortEvents
 //
 
+VOID
+NTAPI
+PortWaveRTEventDpc(
+    IN PKDPC Dpc,
+    IN PVOID DeferredContext,
+    IN PVOID SystemArgument1,
+    IN PVOID SystemArgument2);
+
+CPortWaveRT::~CPortWaveRT()
+{
+    if (ReadAcquire(&m_EventDpcQueued) != 0 && !KeRemoveQueueDpc(&m_EventDpc))
+    {
+        ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+        KeFlushQueuedDpcs();
+    }
+}
+
 void
 NTAPI
 CPortWaveRT::AddEventToEventList(
     IN PKSEVENT_ENTRY EventEntry)
 {
-    UNIMPLEMENTED;
+    if (EventEntry)
+    {
+        ExInterlockedInsertTailList(&m_EventList,
+                                    &EventEntry->ListEntry,
+                                    &m_EventListLock);
+    }
 }
 
 void
@@ -114,7 +148,60 @@ CPortWaveRT::GenerateEventList(
     IN  BOOL NodeEvent,
     IN  ULONG NodeId)
 {
-    UNIMPLEMENTED;
+    if (KeGetCurrentIrql() <= DISPATCH_LEVEL)
+    {
+        PcGenerateEventList(m_SubDeviceDescriptor,
+                            Set,
+                            EventId,
+                            PinEvent,
+                            PinId,
+                            NodeEvent,
+                            NodeId);
+        return;
+    }
+
+    if (InterlockedCompareExchange(&m_EventDpcQueued, 1, 0) != 0)
+        return;
+
+    m_EventDpcHasSet = Set != NULL;
+    if (Set)
+        RtlCopyMemory(&m_EventDpcSet, Set, sizeof(m_EventDpcSet));
+    m_EventDpcId = EventId;
+    m_EventDpcPinEvent = PinEvent;
+    m_EventDpcPinId = PinId;
+    m_EventDpcNodeEvent = NodeEvent;
+    m_EventDpcNodeId = NodeId;
+    KeMemoryBarrier();
+
+    if (!KeInsertQueueDpc(&m_EventDpc, NULL, NULL))
+        InterlockedExchange(&m_EventDpcQueued, 0);
+}
+
+VOID
+NTAPI
+PortWaveRTEventDpc(
+    IN PKDPC Dpc,
+    IN PVOID DeferredContext,
+    IN PVOID SystemArgument1,
+    IN PVOID SystemArgument2)
+{
+    CPortWaveRT *Port = (CPortWaveRT *)DeferredContext;
+
+    UNREFERENCED_PARAMETER(Dpc);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
+    ASSERT(Port != NULL);
+
+    PcGenerateEventList(Port->m_SubDeviceDescriptor,
+                        Port->m_EventDpcHasSet ? &Port->m_EventDpcSet : NULL,
+                        Port->m_EventDpcId,
+                        Port->m_EventDpcPinEvent,
+                        Port->m_EventDpcPinId,
+                        Port->m_EventDpcNodeEvent,
+                        Port->m_EventDpcNodeId);
+    InterlockedExchange(&Port->m_EventDpcQueued, 0);
 }
 
 //---------------------------------------------------------------
@@ -285,6 +372,11 @@ CPortWaveRT::Init(
         return STATUS_SUCCESS;
     }
 
+    InitializeListHead(&m_EventList);
+    KeInitializeSpinLock(&m_EventListLock);
+    KeInitializeDpc(&m_EventDpc, PortWaveRTEventDpc, this);
+    m_EventDpcQueued = 0;
+
     Status = UnknownMiniport->QueryInterface(IID_IMiniportWaveRT, (PVOID*)&Miniport);
     if (!NT_SUCCESS(Status))
     {
@@ -343,6 +435,10 @@ CPortWaveRT::Init(
         m_bInitialized = FALSE;
         return Status;
     }
+
+    m_SubDeviceDescriptor->UnknownMiniport = UnknownMiniport;
+    m_SubDeviceDescriptor->EventList = &m_EventList;
+    m_SubDeviceDescriptor->EventListLock = &m_EventListLock;
 
     // check if it supports IPinCount interface
     Status = UnknownMiniport->QueryInterface(IID_IPinCount, (PVOID*)&PinCount);
