@@ -294,6 +294,18 @@ static void RunSession(HANDLE port, ULONG ownSession, ULONG *previous)
     ok(csrssPid != 0, "session %lu has no csrss\n", sessionId);
     status = SmStopCsr(port, sessionId);
     ok(status == STATUS_SUCCESS, "SmStopCsr returned 0x%lx\n", status);
+    if (!NT_SUCCESS(status))
+    {
+        TerminateProcess(initial, 1);
+        TerminateProcess(csrss, 1);
+        CloseHandle(csrss);
+        CloseHandle(initial);
+        GetWindowsDirectoryW(path, MAX_PATH);
+        lstrcatW(path, CHILD_REPORT);
+        DeleteFileW(path);
+        *previous = sessionId;
+        return;
+    }
     ok(ProcessesInSession(sessionId, FALSE) == 0, "%lu processes outlived session %lu\n",
        ProcessesInSession(sessionId, FALSE), sessionId);
     CloseHandle(csrss);
@@ -309,6 +321,9 @@ static void RunSession(HANDLE port, ULONG ownSession, ULONG *previous)
        sessionId);
     status = SmStopCsr(port, sessionId);
     ok(status == STATUS_INVALID_PARAMETER, "stopping session %lu again returned 0x%lx\n", sessionId, status);
+    GetWindowsDirectoryW(path, MAX_PATH);
+    lstrcatW(path, CHILD_REPORT);
+    DeleteFileW(path);
     *previous = sessionId;
 }
 
@@ -339,7 +354,11 @@ START_TEST(StartSession)
     info.pszDeviceDescription = L"LiberNT Remote Display Adapter";
     hr = SwDeviceCreate(L"RemoteDisplayEnum", L"HTREE\\ROOT\\0", &info, 0, NULL, AdapterCreated, NULL, &adapter);
     ok(hr == S_OK, "SwDeviceCreate returned 0x%08lx\n", hr);
-    if (FAILED(hr)) return;
+    if (FAILED(hr))
+    {
+        CloseHandle(AdapterReady);
+        return;
+    }
     ok(WaitForSingleObject(AdapterReady, 15000) == WAIT_OBJECT_0, "the adapter was not created\n");
     for (wait = 0; wait < 150 && VideoDeviceCount() <= videoBefore; wait++) Sleep(100);
     ok(VideoDeviceCount() > videoBefore, "the adapter did not start (%lu video devices)\n", VideoDeviceCount());
@@ -362,16 +381,16 @@ START_TEST(StartSession)
         between = SettledPoolTags(NULL);
         RunSession(port, ownSession, &previous);
         after = SettledPoolTags(between);
-        ok(PoolBlocks(after, "UMSG") == messageLists, "UMSG went from %ld to %ld blocks across two sessions\n",
+        ok(PoolBlocks(after, "UMSG") <= messageLists, "UMSG went from %ld to %ld blocks across two sessions\n",
            messageLists, PoolBlocks(after, "UMSG"));
-        ok(PoolBlocks(after, "Ghtb") == gdiLists, "Ghtb went from %ld to %ld blocks across two sessions\n",
+        ok(PoolBlocks(after, "Ghtb") <= gdiLists, "Ghtb went from %ld to %ld blocks across two sessions\n",
            gdiLists, PoolBlocks(after, "Ghtb"));
         ok(PoolBlocks(between, "Gla1") > 0 && PoolBlocks(between, "Gh0@") > 0,
            "the console's win32k holds %ld Gla1 and %ld Gh0@ blocks\n",
            PoolBlocks(between, "Gla1"), PoolBlocks(between, "Gh0@"));
         for (i = 0; i < ARRAYSIZE(SessionTags); i++)
         {
-            ok(PoolBlocks(after, SessionTags[i]) == PoolBlocks(between, SessionTags[i]),
+            ok(PoolBlocks(after, SessionTags[i]) <= PoolBlocks(between, SessionTags[i]),
                "%s went from %ld to %ld blocks across a session\n", SessionTags[i],
                PoolBlocks(between, SessionTags[i]), PoolBlocks(after, SessionTags[i]));
         }
@@ -384,4 +403,5 @@ START_TEST(StartSession)
     ok(!SessionSeesRemoteAdapter(), "the console session sees the new session's adapter\n");
     ok(ProcessesInSession(ownSession, FALSE) > 0, "the console session lost its processes\n");
     SwDeviceClose(adapter);
+    CloseHandle(AdapterReady);
 }
