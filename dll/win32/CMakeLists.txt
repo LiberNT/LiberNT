@@ -379,8 +379,8 @@ add_subdirectory(winhttp)
 add_subdirectory(wininet)
 add_subdirectory(winmm)
 add_subdirectory(winscard)
-if(NOT ARCH STREQUAL "i386")
-    # TODO: i386 winsqlite3 needs the __stdcall API, callback and VFS conventions of the Windows SDK header
+if(NOT (ARCH STREQUAL "i386" AND CMAKE_C_COMPILER_ID STREQUAL "GNU"))
+    # FIXME: GCC -mrtd also makes its libgcc and memcpy libcalls __stdcall, so GCC cannot build the __stdcall winsqlite3 ABI
     add_subdirectory(winsqlite3)
 endif()
 add_subdirectory(winsta)

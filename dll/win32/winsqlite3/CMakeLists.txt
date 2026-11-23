@@ -14,5 +14,13 @@ target_compile_definitions(winsqlite3 PRIVATE
 if(NOT MSVC)
     target_compile_options(winsqlite3 PRIVATE -w)
 endif()
+if(ARCH STREQUAL "i386")
+    # the SDK header makes every non-variadic API function, callback and VFS method __stdcall
+    if(MSVC)
+        target_compile_options(winsqlite3 PRIVATE /Gz)
+    else()
+        target_compile_options(winsqlite3 PRIVATE -mrtd)
+    endif()
+endif()
 add_importlibs(winsqlite3 msvcrt kernel32 ntdll)
 add_cd_file(TARGET winsqlite3 DESTINATION reactos/system32 FOR all)
