@@ -28,6 +28,7 @@ const OPENH264_BINARY *OpenH264Binary(USHORT architecture);
 BOOL OpenH264Sha256(const BYTE *data, DWORD size, BYTE hash[32]);
 DWORD OpenH264Unpack(const BYTE *packed, DWORD packedSize, const BYTE sha256[32], BYTE **unpacked, DWORD *unpackedSize);
 BOOL OpenH264Enabled(void);
+HMODULE OpenH264Load(void);
 DWORD OpenH264Install(void);
 DWORD OpenH264Remove(void);
 

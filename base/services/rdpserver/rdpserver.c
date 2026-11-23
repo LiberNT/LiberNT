@@ -51,6 +51,7 @@
 #include "gfx.h"
 #include "experience.h"
 #include "broker.h"
+#include "openh264.h"
 
 typedef ULONG (__cdecl *DEBUG_PRINT)(const char *, ...);
 static DEBUG_PRINT DebugPrint;
@@ -883,14 +884,18 @@ static BOOL RedirectToOwnSession(DESKTOP_CONTEXT *ctx)
     return sent;
 }
 
-static BOOL OpenH264Enabled(void)
+static BOOL OpenH264Ready(void)
 {
-    DWORD value = 0, size = sizeof(value), type;
-    HKEY key;
-    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, SERVICE_PARAMETERS_KEY, 0, KEY_QUERY_VALUE, &key)) return FALSE;
-    if (RegQueryValueExA(key, "OpenH264", NULL, &type, (BYTE *)&value, &size) || type != REG_DWORD) value = 0;
-    RegCloseKey(key);
-    return value != 0;
+    static INIT_ONCE once = INIT_ONCE_STATIC_INIT;
+    BOOL pending = FALSE, enabled, loaded;
+    PVOID context = NULL;
+    if (!InitOnceBeginInitialize(&once, 0, &pending, &context)) return FALSE;
+    if (!pending) return context != NULL;
+    enabled = OpenH264Enabled();
+    loaded = enabled && OpenH264Load() != NULL;
+    if (enabled && !loaded) Log("OpenH264 is turned on, but its library is not Cisco's binary");
+    InitOnceComplete(&once, 0, loaded ? (PVOID)1 : NULL);
+    return loaded;
 }
 
 static BOOL StartTransfer(DESKTOP_CONTEXT *ctx)
@@ -1043,7 +1048,7 @@ static BOOL DvcCreated(void *userdata, UINT32 channelId, INT32 status)
 static void OpenGraphicsPipeline(DESKTOP_CONTEXT *ctx)
 {
     ctx->GfxTried = TRUE;
-    ctx->Gfx = GfxCreate(ctx->Vcm, &ctx->rdp, Log, OpenH264Enabled());
+    ctx->Gfx = GfxCreate(ctx->Vcm, &ctx->rdp, Log, OpenH264Ready());
     if (!ctx->Gfx) { Log("Cannot create the graphics pipeline"); return; }
     WTSVirtualChannelManagerSetDVCCreationCallback(ctx->Vcm, DvcCreated, ctx);
     if (!GfxOpen(ctx->Gfx)) { GfxFree(ctx->Gfx); ctx->Gfx = NULL; }

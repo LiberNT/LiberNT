@@ -3,7 +3,7 @@
 # PURPOSE:     Build the RDP console server against the in-tree FreeRDP and OpenSSL
 # COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif193@gmail.com>
 
-add_executable(rdpserver rdpserver.c broker.c cookie.c transfer.c gfx.c clearenc.c framemove.c experience.c videodetect.c)
+add_executable(rdpserver rdpserver.c broker.c cookie.c transfer.c gfx.c clearenc.c framemove.c experience.c videodetect.c openh264.c)
 target_include_directories(rdpserver PRIVATE ${REACTOS_SOURCE_DIR}/sdk/include/libernt/subsys)
 target_compile_definitions(rdpserver PRIVATE __STDC_NO_THREADS__=1)
 if(NOT MSVC)
@@ -12,12 +12,12 @@ endif()
 if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
     target_compile_options(rdpserver PRIVATE -fno-autolink)
 endif()
-target_link_libraries(rdpserver freerdp-server freerdp winpr libssl libcrypto uuid oldnames smlib)
+target_link_libraries(rdpserver freerdp-server freerdp winpr libssl libcrypto uuid oldnames smlib bzip2)
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_link_libraries(rdpserver libgcc_eh)
 endif()
 set_module_type(rdpserver win32cui)
-add_importlibs(rdpserver advapi32 cfgmgr32 iphlpapi crypt32 dbghelp gdi32 ncrypt ole32 rpcrt4 secur32 shell32 shlwapi user32 winmm ws2_32 msvcrt kernel32 ntdll)
+add_importlibs(rdpserver advapi32 bcrypt cfgmgr32 iphlpapi crypt32 dbghelp gdi32 ncrypt ole32 rpcrt4 secur32 shell32 shlwapi user32 winhttp winmm ws2_32 msvcrt kernel32 ntdll)
 add_cd_file(TARGET rdpserver DESTINATION reactos/system32/rdpserver FOR all)
 add_cd_file(FILE ${REACTOS_SOURCE_DIR}/sdk/lib/3rdparty/freerdp/LICENSE DESTINATION reactos/system32/rdpserver/licenses NAME_ON_CD FreeRDP-LICENSE FOR all)
 add_cd_file(FILE ${REACTOS_SOURCE_DIR}/sdk/lib/3rdparty/openssl/LICENSE.txt DESTINATION reactos/system32/rdpserver/licenses NAME_ON_CD OpenSSL-LICENSE FOR all)

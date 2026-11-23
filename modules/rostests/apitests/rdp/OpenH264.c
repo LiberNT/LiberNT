@@ -7,6 +7,7 @@
 
 #include <apitest.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <bzlib.h>
 #include "openh264.h"
 
@@ -89,9 +90,55 @@ static void TestUnpack(void)
     ok(error == ERROR_INVALID_DATA, "unpacking too much data returned %lu\n", error);
 }
 
+static void TestLoad(void)
+{
+    WCHAR system[MAX_PATH], library[MAX_PATH], saved[MAX_PATH], planted[MAX_PATH], other[MAX_PATH];
+    BOOL moved;
+    HMODULE module;
+    GetSystemDirectoryW(system, ARRAYSIZE(system));
+    _snwprintf(library, ARRAYSIZE(library), L"%ls\\rdpserver\\openh264.dll", system);
+    _snwprintf(saved, ARRAYSIZE(saved), L"%ls.test-saved", library);
+    _snwprintf(other, ARRAYSIZE(other), L"%ls\\version.dll", system);
+    GetModuleFileNameW(NULL, planted, ARRAYSIZE(planted));
+    lstrcpyW(wcsrchr(planted, L'\\') + 1, L"openh264.dll");
+    moved = MoveFileExW(library, saved, MOVEFILE_REPLACE_EXISTING);
+    if (!moved && GetLastError() != ERROR_FILE_NOT_FOUND)
+    {
+        skip("Cannot move %ls aside: %lu\n", library, GetLastError());
+        return;
+    }
+
+    ok(CopyFileW(other, planted, FALSE), "Cannot plant openh264.dll next to the test: %lu\n", GetLastError());
+    module = OpenH264Load();
+    ok(module == NULL, "With no library in rdpserver, OpenH264Load loaded %p\n", module);
+    ok(GetModuleHandleW(L"openh264.dll") == NULL, "A planted openh264.dll was loaded\n");
+    DeleteFileW(planted);
+
+    if (CopyFileW(other, library, FALSE))
+    {
+        module = OpenH264Load();
+        ok(module == NULL, "OpenH264Load loaded a library that is not Cisco's: %p\n", module);
+        ok(GetModuleHandleW(L"openh264.dll") == NULL, "A library that is not Cisco's was loaded\n");
+        DeleteFileW(library);
+    }
+    else
+    {
+        skip("Cannot write %ls: %lu\n", library, GetLastError());
+    }
+
+    if (moved)
+    {
+        ok(MoveFileExW(saved, library, 0), "Cannot put %ls back: %lu\n", library, GetLastError());
+        module = OpenH264Load();
+        ok(module != NULL, "Cisco's library was not loaded\n");
+        if (module) FreeLibrary(module);
+    }
+}
+
 START_TEST(OpenH264)
 {
     TestBinaries();
     TestSha256();
     TestUnpack();
+    TestLoad();
 }

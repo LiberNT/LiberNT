@@ -160,6 +160,33 @@ BOOL OpenH264Enabled(void)
     return value && LibraryPath(path, temporary) && GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES;
 }
 
+HMODULE OpenH264Load(void)
+{
+    SYSTEM_INFO system;
+    const OPENH264_BINARY *binary;
+    WCHAR path[MAX_PATH], temporary[MAX_PATH];
+    LARGE_INTEGER size;
+    BYTE *library = NULL, hash[32];
+    DWORD read = 0;
+    HMODULE module = NULL;
+    HANDLE file;
+    GetNativeSystemInfo(&system);
+    binary = OpenH264Binary(system.wProcessorArchitecture);
+    if (!binary || !LibraryPath(path, temporary)) return NULL;
+    file = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (file == INVALID_HANDLE_VALUE) return NULL;
+    if (GetFileSizeEx(file, &size) && size.QuadPart > 0 && size.QuadPart <= OPENH264_MAX_UNPACKED)
+        library = malloc((size_t)size.QuadPart);
+    if (library && ReadFile(file, library, (DWORD)size.QuadPart, &read, NULL) && read == size.QuadPart &&
+        OpenH264Sha256(library, read, hash) && !memcmp(hash, binary->Sha256, sizeof(hash)))
+    {
+        module = LoadLibraryExW(path, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
+    }
+    free(library);
+    CloseHandle(file);
+    return module;
+}
+
 DWORD OpenH264Install(void)
 {
     SYSTEM_INFO system;
