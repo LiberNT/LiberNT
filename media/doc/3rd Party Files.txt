@@ -385,6 +385,12 @@ License: BSD-3-Clause (https://spdx.org/licenses/BSD-3-Clause.html) OR GPL-2.0-o
 URL: https://github.com/facebook/zstd
 Modifications: decompressor only (lib/common, lib/decompress); built for kernel mode with zstd_libernt.h, which leaves allocation to the caller's static workspace
 
+Title: SQLite
+Path: sdk/lib/3rdparty/sqlite
+Used Version: 3.51.1 (amalgamation 3510100, source ID 281fc0e9afc38674b9b0991943b9e9d1e64c6cbdb133d35f6f5c87ff6af38a88)
+License: blessing (https://spdx.org/licenses/blessing.html)
+URL: https://sqlite.org
+
 Title: chmc and lzxcomp
 Path: sdk/tools/hhpcomp/chmc
 Path: sdk/tools/hhpcomp/lzx_compress
