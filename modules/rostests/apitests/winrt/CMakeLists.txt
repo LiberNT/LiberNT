@@ -2,6 +2,7 @@
 list(APPEND SOURCE
     AnalyticsInfo.c
     AppInstallManager.c
+    CoreApplication.c
     DispatcherQueue.c
     guid.c
     NotificationData.c

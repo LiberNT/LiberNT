@@ -18,6 +18,7 @@
 #include <windows.applicationmodel.store.preview.installcontrol.h>
 #include <windows.system.h>
 #include <windows.system.profile.h>
+#include <windows.applicationmodel.core.h>
 #include <weakreference.h>
 #include <shlobj.h>
 #include <propkey.h>
