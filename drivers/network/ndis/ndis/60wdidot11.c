@@ -8,6 +8,7 @@
 #include "ndis6_wdi.h"
 #include "ndis6_rnr.h"
 #include "ndis6_wdi_caps.h"
+#include "ndis6_wdi_ihv.h"
 
 #define NDIS6_WDI_BSS_LIFETIME      (120ULL * 10000000ULL)
 #define NDIS6_WDI_BEACON_PERIOD     100
@@ -81,6 +82,7 @@ static NDIS_OID Ndis6WdiSupportedOids[] =
     OID_DOT11_CIPHER_DEFAULT_KEY,
     OID_DOT11_CIPHER_DEFAULT_KEY_ID,
     OID_DOT11_CIPHER_KEY_MAPPING_KEY,
+    OID_DOT11_NIC_SPECIFIC_EXTENSION,
 };
 
 static
@@ -1304,6 +1306,62 @@ Ndis6WdiJobEnumBssList(
 
 static
 NDIS_STATUS
+Ndis6WdiJobIhvRequest(
+    _In_ PNDIS6_WDI_ADAPTER Wdi,
+    _In_ PNDIS_OID_REQUEST Request)
+{
+    NDIS6_WDI_TLV_BUILDER Tlvs;
+    NDIS6_WDI_TLV Data;
+    PUCHAR Response;
+    ULONG ResponseLength;
+    ULONG Written;
+    ULONG Needed;
+    NDIS_STATUS Status;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+    ASSERT(Request->RequestType == NdisRequestMethod);
+    ASSERT(Request->DATA.METHOD_INFORMATION.Oid == OID_DOT11_NIC_SPECIFIC_EXTENSION);
+
+    Request->DATA.METHOD_INFORMATION.BytesWritten = 0;
+    Request->DATA.METHOD_INFORMATION.BytesNeeded = 0;
+    if (Request->DATA.METHOD_INFORMATION.InputBufferLength > MAXUSHORT)
+        return NDIS_STATUS_INVALID_LENGTH;
+
+    Ndis6WdiTlvInit(&Tlvs);
+    if (Request->DATA.METHOD_INFORMATION.InputBufferLength != 0)
+    {
+        Ndis6WdiTlvAdd(&Tlvs,
+                       WDI_TLV_IHV_DATA,
+                       Request->DATA.METHOD_INFORMATION.InformationBuffer,
+                       Request->DATA.METHOD_INFORMATION.InputBufferLength);
+    }
+    Status = Ndis6WdiProperty(Wdi, WDI_IHV_REQUEST, Wdi->PortId, &Tlvs, &Response, &ResponseLength);
+    Ndis6WdiTlvFree(&Tlvs);
+    Request->DATA.METHOD_INFORMATION.BytesRead = Request->DATA.METHOD_INFORMATION.InputBufferLength;
+    if (Status != NDIS_STATUS_SUCCESS)
+        return Status;
+
+    ASSERT(Response != NULL || ResponseLength == 0);
+    if (!Ndis6WdiTlvFind(Response, ResponseLength, WDI_TLV_IHV_DATA, &Data))
+    {
+        Data.Value = NULL;
+        Data.Length = 0;
+    }
+    Status = Ndis6WdiIhvCopyResponse(Data.Value,
+                                     Data.Length,
+                                     Request->DATA.METHOD_INFORMATION.InformationBuffer,
+                                     Request->DATA.METHOD_INFORMATION.OutputBufferLength,
+                                     &Written,
+                                     &Needed);
+    Request->DATA.METHOD_INFORMATION.BytesWritten = Written;
+    Request->DATA.METHOD_INFORMATION.BytesNeeded = Needed;
+    if (Response != NULL)
+        ExFreePoolWithTag(Response, NDIS6_WDI_TAG);
+    return Status;
+}
+
+static
+NDIS_STATUS
 Ndis6WdiMethod(
     _In_ PNDIS6_WDI_ADAPTER Wdi,
     _In_ PNDIS_OID_REQUEST Request,
@@ -1317,6 +1375,7 @@ Ndis6WdiMethod(
         case OID_DOT11_CONNECT_REQUEST:
         case OID_DOT11_DISCONNECT_REQUEST:
         case OID_DOT11_RESET_REQUEST:
+        case OID_DOT11_NIC_SPECIFIC_EXTENSION:
             *Queue = TRUE;
             return NDIS_STATUS_PENDING;
 
@@ -3099,6 +3158,9 @@ Ndis6WdiDot11RunJob(
             break;
         case OID_DOT11_PRIVACY_EXEMPTION_LIST:
             Status = Ndis6WdiJobPrivacyExemption(Wdi, Request);
+            break;
+        case OID_DOT11_NIC_SPECIFIC_EXTENSION:
+            Status = Ndis6WdiJobIhvRequest(Wdi, Request);
             break;
         default:
             Status = NDIS_STATUS_NOT_SUPPORTED;

@@ -63,6 +63,7 @@ NDIS_OID VWifiSupportedOids[] =
     OID_DOT11_SCAN_REQUEST,
     OID_DOT11_ENUM_BSS_LIST,
     OID_DOT11_FLUSH_BSS_LIST,
+    OID_DOT11_NIC_SPECIFIC_EXTENSION,
     OID_DOT11_DESIRED_SSID_LIST,
     OID_DOT11_DESIRED_BSSID_LIST,
     OID_DOT11_DESIRED_BSS_TYPE,
@@ -869,6 +870,29 @@ VWifiOidMethod(
                 return NDIS_STATUS_BUFFER_TOO_SHORT;
             }
             Request->DATA.METHOD_INFORMATION.BytesWritten = Written;
+            return NDIS_STATUS_SUCCESS;
+        }
+
+        case OID_DOT11_NIC_SPECIFIC_EXTENSION:
+        {
+            PUCHAR Data = Request->DATA.METHOD_INFORMATION.InformationBuffer;
+            ULONG Length = Request->DATA.METHOD_INFORMATION.InputBufferLength;
+            ULONG Index;
+
+            Request->DATA.METHOD_INFORMATION.BytesRead = Length;
+            if (Request->DATA.METHOD_INFORMATION.OutputBufferLength < Length)
+            {
+                Request->DATA.METHOD_INFORMATION.BytesNeeded = Length;
+                return NDIS_STATUS_BUFFER_TOO_SHORT;
+            }
+            for (Index = 0; Index < Length / 2; Index++)
+            {
+                UCHAR Byte = Data[Index];
+
+                Data[Index] = Data[Length - 1 - Index];
+                Data[Length - 1 - Index] = Byte;
+            }
+            Request->DATA.METHOD_INFORMATION.BytesWritten = Length;
             return NDIS_STATUS_SUCCESS;
         }
 

@@ -416,6 +416,8 @@ DWORD NwifiGetBssList(ULONG InterfaceIndex, ULONG64 UpperLuid,
                       const DOT11_MAC_ADDRESS *pMac, PNWIFI_BSS_LIST *ppList);
 DWORD NwifiConnect(PNWIFI_CONNECT_REQUEST pReq);
 DWORD NwifiSetKey(PNWIFI_SET_KEY pKey);
+DWORD NwifiIhvControl(ULONG InterfaceIndex, const BYTE *pIn, DWORD InSize,
+                      LPBYTE pOut, DWORD OutSize, LPDWORD pBytesReturned);
 DWORD NwifiDisconnect(ULONG InterfaceIndex, ULONG64 UpperLuid,
                       const DOT11_MAC_ADDRESS *pMac);
 DWORD NwifiGetAuthCipherPairs(ULONG InterfaceIndex, ULONG64 UpperLuid,

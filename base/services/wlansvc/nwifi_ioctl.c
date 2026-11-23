@@ -283,6 +283,40 @@ NwifiSetKey(PNWIFI_SET_KEY pKey)
 }
 
 DWORD
+NwifiIhvControl(ULONG InterfaceIndex, const BYTE *pIn, DWORD InSize,
+                LPBYTE pOut, DWORD OutSize, LPDWORD pBytesReturned)
+{
+    PNWIFI_IHV_CONTROL pReq;
+    HANDLE hDev;
+    DWORD size, err;
+
+    *pBytesReturned = 0;
+
+    hDev = NwifiGetControlHandle();
+    if (hDev == INVALID_HANDLE_VALUE)
+        return ERROR_NOT_READY;
+
+    if (InSize > MAXDWORD - FIELD_OFFSET(NWIFI_IHV_CONTROL, Input))
+        return ERROR_INVALID_PARAMETER;
+
+    size = FIELD_OFFSET(NWIFI_IHV_CONTROL, Input) + InSize;
+    pReq = HeapAlloc(GetProcessHeap(), 0, size);
+    if (pReq == NULL)
+        return ERROR_NOT_ENOUGH_MEMORY;
+
+    pReq->Size = FIELD_OFFSET(NWIFI_IHV_CONTROL, Input);
+    pReq->InterfaceIndex = InterfaceIndex;
+    pReq->InputLength = InSize;
+    if (InSize != 0)
+        CopyMemory(pReq->Input, pIn, InSize);
+
+    err = NwifiIoctl(hDev, IOCTL_NWIFI_IHV_CONTROL, pReq, size,
+                     pOut, OutSize, pBytesReturned);
+    HeapFree(GetProcessHeap(), 0, pReq);
+    return err;
+}
+
+DWORD
 NwifiGetAuthCipherPairs(ULONG InterfaceIndex, ULONG64 UpperLuid,
                         PNWIFI_AUTH_CIPHER_PAIRS *ppPairs)
 {

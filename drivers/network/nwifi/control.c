@@ -269,6 +269,75 @@ NwifiMapNdisStatus(
     }
 }
 
+static
+NTSTATUS
+NwifiIoctlIhvControl(
+    _Inout_updates_bytes_(max(InLen, OutLen)) PVOID Buffer,
+    _In_ ULONG InLen,
+    _In_ ULONG OutLen,
+    _Out_ PULONG Information)
+{
+    PNWIFI_IHV_CONTROL Control = (PNWIFI_IHV_CONTROL)Buffer;
+    PNWIFI_ADAPTER Adapter;
+    NDIS_STATUS NdisStatus;
+    PUCHAR Data;
+    ULONG InterfaceIndex;
+    ULONG InputLength;
+    ULONG Length;
+    ULONG Written = 0;
+    ULONG Needed = 0;
+
+    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
+
+    *Information = 0;
+    if (InLen < FIELD_OFFSET(NWIFI_IHV_CONTROL, Input))
+        return STATUS_INVALID_BUFFER_SIZE;
+    if (Control->Size < FIELD_OFFSET(NWIFI_IHV_CONTROL, Input))
+        return STATUS_INVALID_PARAMETER;
+    if (Control->InputLength > InLen - FIELD_OFFSET(NWIFI_IHV_CONTROL, Input))
+        return STATUS_INVALID_BUFFER_SIZE;
+
+    InterfaceIndex = Control->InterfaceIndex;
+    InputLength = Control->InputLength;
+    Length = max(InputLength, OutLen);
+
+    Adapter = NwifiFindAdapterByIndex(InterfaceIndex);
+    if (Adapter == NULL)
+        return STATUS_OBJECT_NAME_NOT_FOUND;
+
+    Data = ExAllocatePoolWithTag(NonPagedPool, max(Length, 1), NWIFI_TAG);
+    if (Data == NULL)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    RtlCopyMemory(Data, Control->Input, InputLength);
+
+    NdisStatus = NwifiDoMethodRequest(Adapter,
+                                      OID_DOT11_NIC_SPECIFIC_EXTENSION,
+                                      Data,
+                                      InputLength,
+                                      Length,
+                                      &Written,
+                                      &Needed);
+    if (NdisStatus == NDIS_STATUS_SUCCESS)
+    {
+        if (Written > Length)
+        {
+            NdisStatus = NDIS_STATUS_INVALID_LENGTH;
+        }
+        else if (Written > OutLen)
+        {
+            NdisStatus = NDIS_STATUS_BUFFER_TOO_SHORT;
+        }
+        else
+        {
+            RtlCopyMemory(Buffer, Data, Written);
+            *Information = Written;
+        }
+    }
+
+    ExFreePoolWithTag(Data, NWIFI_TAG);
+    return NwifiMapNdisStatus(NdisStatus);
+}
+
 /* ===========================================================================
  *  IRP_MJ_DEVICE_CONTROL dispatch
  * ===========================================================================
@@ -297,6 +366,10 @@ NwifiDispatchDeviceControl(
     {
         case IOCTL_NWIFI_ENUM_INTERFACES:
             Status = NwifiIoctlEnumInterfaces(Buffer, OutLen, &Info);
+            break;
+
+        case IOCTL_NWIFI_IHV_CONTROL:
+            Status = NwifiIoctlIhvControl(Buffer, InLen, OutLen, &Info);
             break;
 
         case IOCTL_NWIFI_SCAN:

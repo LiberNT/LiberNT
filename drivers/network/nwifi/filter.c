@@ -21,12 +21,14 @@ typedef struct _NWIFI_SYNC_OID_CONTEXT
     NDIS_STATUS Status;
 } NWIFI_SYNC_OID_CONTEXT, *PNWIFI_SYNC_OID_CONTEXT;
 
+static
 NDIS_STATUS
-NwifiDoRequestEx(
+NwifiIssueRequest(
     _In_ PNWIFI_ADAPTER Adapter,
     _In_ NDIS_REQUEST_TYPE RequestType,
     _In_ NDIS_OID Oid,
     _Inout_ PVOID Buffer,
+    _In_ ULONG InputLength,
     _In_ ULONG Length,
     _Out_opt_ PULONG BytesProcessed,
     _Out_opt_ PULONG BytesNeeded)
@@ -37,6 +39,7 @@ NwifiDoRequestEx(
 
     ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
     ASSERT(Adapter->FilterHandle != NULL);
+    ASSERT(RequestType == NdisRequestMethod || InputLength == Length);
 
     RtlZeroMemory(&Context, sizeof(Context));
     Context.Signature = NWIFI_SYNC_OID_SIGNATURE;
@@ -58,7 +61,7 @@ NwifiDoRequestEx(
     {
         Request->DATA.METHOD_INFORMATION.Oid = Oid;
         Request->DATA.METHOD_INFORMATION.InformationBuffer = Buffer;
-        Request->DATA.METHOD_INFORMATION.InputBufferLength = Length;
+        Request->DATA.METHOD_INFORMATION.InputBufferLength = InputLength;
         Request->DATA.METHOD_INFORMATION.OutputBufferLength = Length;
     }
     else
@@ -101,6 +104,34 @@ NwifiDoRequestEx(
     }
 
     return Status;
+}
+
+NDIS_STATUS
+NwifiDoRequestEx(
+    _In_ PNWIFI_ADAPTER Adapter,
+    _In_ NDIS_REQUEST_TYPE RequestType,
+    _In_ NDIS_OID Oid,
+    _Inout_ PVOID Buffer,
+    _In_ ULONG Length,
+    _Out_opt_ PULONG BytesProcessed,
+    _Out_opt_ PULONG BytesNeeded)
+{
+    return NwifiIssueRequest(Adapter, RequestType, Oid, Buffer, Length, Length, BytesProcessed, BytesNeeded);
+}
+
+NDIS_STATUS
+NwifiDoMethodRequest(
+    _In_ PNWIFI_ADAPTER Adapter,
+    _In_ NDIS_OID Oid,
+    _Inout_updates_bytes_(OutputLength) PVOID Buffer,
+    _In_ ULONG InputLength,
+    _In_ ULONG OutputLength,
+    _Out_ PULONG BytesWritten,
+    _Out_ PULONG BytesNeeded)
+{
+    ASSERT(InputLength <= OutputLength);
+
+    return NwifiIssueRequest(Adapter, NdisRequestMethod, Oid, Buffer, InputLength, OutputLength, BytesWritten, BytesNeeded);
 }
 
 NDIS_STATUS

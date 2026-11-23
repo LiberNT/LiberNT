@@ -62,6 +62,7 @@
 #define IOCTL_NWIFI_GET_NOTIFICATION    _NWIFI_CTL(0x07)
 
 #define IOCTL_NWIFI_GET_AUTH_CIPHER_PAIRS _NWIFI_CTL(0x08)
+#define IOCTL_NWIFI_IHV_CONTROL         _NWIFI_CTL(0x09)
 
 /* ===========================================================================
  *  Payload structures
@@ -203,5 +204,13 @@ typedef struct _NWIFI_AUTH_CIPHER_PAIRS
     ULONG NumberOfItems;
     DOT11_AUTH_CIPHER_PAIR Pairs[1];
 } NWIFI_AUTH_CIPHER_PAIRS, *PNWIFI_AUTH_CIPHER_PAIRS;
+
+typedef struct _NWIFI_IHV_CONTROL
+{
+    ULONG Size;
+    ULONG InterfaceIndex;
+    ULONG InputLength;
+    UCHAR Input[ANYSIZE_ARRAY];
+} NWIFI_IHV_CONTROL, *PNWIFI_IHV_CONTROL;
 
 #endif /* _NWIFI_IOCTL_H_ */

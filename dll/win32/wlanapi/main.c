@@ -417,11 +417,35 @@ WlanIhvControl(IN HANDLE hClientHandle,
                PVOID pOutBuffer,
                OUT PDWORD pdwBytesReturned)
 {
+    BYTE Empty = 0;
+    DWORD dwResult;
+
     if ((hClientHandle == NULL) || (pInterfaceGuid == NULL) || (pdwBytesReturned == NULL))
         return ERROR_INVALID_PARAMETER;
 
-    UNIMPLEMENTED;
-    return ERROR_SUCCESS;
+    if (((pInBuffer == NULL) && (dwInBufferSize != 0)) || ((pOutBuffer == NULL) && (dwOutBufferSize != 0)))
+        return ERROR_INVALID_PARAMETER;
+
+    *pdwBytesReturned = 0;
+
+    RpcTryExcept
+    {
+        dwResult = _RpcIhvControl(hClientHandle,
+                                  pInterfaceGuid,
+                                  Type,
+                                  dwInBufferSize,
+                                  (pInBuffer != NULL) ? (LPBYTE)pInBuffer : &Empty,
+                                  dwOutBufferSize,
+                                  (pOutBuffer != NULL) ? (LPBYTE)pOutBuffer : &Empty,
+                                  pdwBytesReturned);
+    }
+    RpcExcept(EXCEPTION_EXECUTE_HANDLER)
+    {
+        dwResult = WlanRpcStatusToWinError(RpcExceptionCode());
+    }
+    RpcEndExcept;
+
+    return dwResult;
 }
 
 DWORD

@@ -137,6 +137,7 @@ list(APPEND KMTEST_DRV_SOURCE
     ks/KsDispatchFileObject.c
     ndis/NdisIfProvider.c
     ndis/NdisRwLock.c
+    ndis/NdisWdiIhvResponse.c
     ndis/NdisWdiStationCaps.c
     ndis/NdisProcessorGroup.c
     ndis/NdisLegacyHelpers.c

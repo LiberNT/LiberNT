@@ -379,6 +379,8 @@ DWORD _RpcQueryInterface(
     return dwResult;
 }
 
+static DWORD WlanSvcCheckObjectWrite(WLAN_SECURABLE_OBJECT SecurableObject);
+
 DWORD _RpcIhvControl(
     WLANSVC_RPC_HANDLE hClientHandle,
     const GUID *pInterfaceGuid,
@@ -389,8 +391,40 @@ DWORD _RpcIhvControl(
     LPBYTE pOutBuffer,
     LPDWORD pdwBytesReturned)
 {
-    UNIMPLEMENTED;
-    return ERROR_CALL_NOT_IMPLEMENTED;
+    PWLANSVC_INTERFACE iface;
+    DWORD dwResult;
+
+    *pdwBytesReturned = 0;
+
+    if (!WlanSvcValidateHandle(hClientHandle))
+        return ERROR_INVALID_HANDLE;
+
+    if (Type != wlan_ihv_control_type_service && Type != wlan_ihv_control_type_driver)
+        return ERROR_INVALID_PARAMETER;
+
+    dwResult = WlanSvcCheckObjectWrite(wlan_secure_ihv_control);
+    if (dwResult != ERROR_SUCCESS)
+        return dwResult;
+
+    /* TODO: forward wlan_ihv_control_type_service to the adapter's IHV extensibility module (Dot11ExtIhvControl); none is hosted */
+    if (Type == wlan_ihv_control_type_service)
+        return ERROR_NOT_SUPPORTED;
+
+    EnterCriticalSection(&WlanSvcLock);
+    iface = WlanSvcFindInterface(pInterfaceGuid);
+    if (iface == NULL)
+    {
+        dwResult = ERROR_NOT_FOUND;
+    }
+    else
+    {
+        dwResult = NwifiIhvControl(iface->NwifiIndex, pInBuffer, dwInBufferSize,
+                                   pOutBuffer, dwOutBufferSize, pdwBytesReturned);
+    }
+    LeaveCriticalSection(&WlanSvcLock);
+
+    ASSERT(*pdwBytesReturned <= dwOutBufferSize);
+    return dwResult;
 }
 
 DWORD
@@ -1222,6 +1256,26 @@ WlanSvcClientObjectAccess(PSECURITY_DESCRIPTOR SecurityDescriptor)
 
     RpcRevertToSelf();
     return GrantedAccess & WLAN_WRITE_ACCESS;
+}
+
+static DWORD
+WlanSvcCheckObjectWrite(WLAN_SECURABLE_OBJECT SecurableObject)
+{
+    PSECURITY_DESCRIPTOR Current = NULL;
+    DWORD dwResult;
+
+    if (WlanSvcClientIsPrivileged())
+        return ERROR_SUCCESS;
+
+    dwResult = WlanSvcLoadObjectSecurity(SecurableObject, &Current);
+    if (dwResult == ERROR_SUCCESS &&
+        WlanSvcClientObjectAccess(Current) != WLAN_WRITE_ACCESS)
+    {
+        dwResult = ERROR_ACCESS_DENIED;
+    }
+    if (Current != NULL)
+        LocalFree(Current);
+    return dwResult;
 }
 
 DWORD _RpcSetSecuritySettings(
