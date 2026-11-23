@@ -63,26 +63,28 @@ static inline struct hstring_private *impl_from_HSTRING_BUFFER(HSTRING_BUFFER bu
     return CONTAINING_RECORD(buffer, struct hstring_private, buffer);
 }
 
-static BOOL alloc_string(UINT32 len, HSTRING *out)
+static HRESULT alloc_string(UINT64 len, HSTRING *out)
 {
     struct hstring_private *priv;
-    UINT64 size = offsetof(struct hstring_private, buffer) + ((UINT64)len + 1) * sizeof(WCHAR);
+    UINT64 size = offsetof(struct hstring_private, buffer) + (len + 1) * sizeof(WCHAR);
 
-    if (size > MAXSIZE_T)
-        return FALSE;
+    *out = NULL;
+    /* Windows 11 sizes the block in 32 bits, rounded up to 4 bytes */
+    if (((size + 3) & ~(UINT64)3) > MAXUINT32)
+        return MEM_E_INVALID_SIZE;
     priv = HeapAlloc(GetProcessHeap(), 0, (SIZE_T)size);
     if (!priv)
-        return FALSE;
+        return E_OUTOFMEMORY;
 
     priv->header.flags = 0;
-    priv->header.length = len;
+    priv->header.length = (UINT32)len;
     priv->header.str = priv->buffer;
 
     priv->refcount = 1;
     priv->buffer[len] = '\0';
 
     *out = (HSTRING)priv;
-    return TRUE;
+    return S_OK;
 }
 
 /***********************************************************************
@@ -92,6 +94,7 @@ HRESULT WINAPI WindowsCreateString(LPCWSTR ptr, UINT32 len,
                                    HSTRING *out)
 {
     struct hstring_private *priv;
+    HRESULT hr;
 
     TRACE("(%s, %u, %p)\n", debugstr_wn(ptr, len), len, out);
 
@@ -103,9 +106,13 @@ HRESULT WINAPI WindowsCreateString(LPCWSTR ptr, UINT32 len,
         return S_OK;
     }
     if (ptr == NULL)
+    {
+        *out = NULL;
         return E_POINTER;
-    if (!alloc_string(len, out))
-        return E_OUTOFMEMORY;
+    }
+    hr = alloc_string(len, out);
+    if (FAILED(hr))
+        return hr;
     priv = impl_from_HSTRING(*out);
     memcpy(priv->buffer, ptr, len * sizeof(*priv->buffer));
     return S_OK;
@@ -134,7 +141,7 @@ HRESULT WINAPI WindowsCreateStringReference(LPCWSTR ptr, UINT32 len,
         return E_POINTER;
 
     priv->header.str = ptr;
-    priv->header.length = len;
+    priv->header.length = (UINT32)len;
     priv->header.flags = HSTRING_REFERENCE_FLAG;
 
     *out = (HSTRING)priv;
@@ -189,6 +196,7 @@ HRESULT WINAPI WindowsPreallocateStringBuffer(UINT32 len, WCHAR **outptr,
                                               HSTRING_BUFFER *out)
 {
     struct hstring_private *priv;
+    HRESULT hr;
     HSTRING str;
 
     TRACE("(%u, %p, %p)\n", len, outptr, out);
@@ -202,8 +210,13 @@ HRESULT WINAPI WindowsPreallocateStringBuffer(UINT32 len, WCHAR **outptr,
         return S_OK;
     }
 
-    if (!alloc_string(len, &str))
-        return E_OUTOFMEMORY;
+    hr = alloc_string(len, &str);
+    if (FAILED(hr))
+    {
+        *outptr = NULL;
+        *out = NULL;
+        return hr;
+    }
     priv = impl_from_HSTRING(str);
     *outptr = priv->buffer;
     *out = (HSTRING_BUFFER)&priv->buffer;
@@ -362,6 +375,7 @@ HRESULT WINAPI WindowsConcatString(HSTRING str1, HSTRING str2, HSTRING *out)
     struct hstring_private *priv1 = impl_from_HSTRING(str1);
     struct hstring_private *priv2 = impl_from_HSTRING(str2);
     struct hstring_private *priv;
+    HRESULT hr;
 
     TRACE("(%p, %p, %p)\n", str1, str2, out);
 
@@ -376,8 +390,9 @@ HRESULT WINAPI WindowsConcatString(HSTRING str1, HSTRING str2, HSTRING *out)
         *out = NULL;
         return S_OK;
     }
-    if (!alloc_string(priv1->header.length + priv2->header.length, out))
-        return E_OUTOFMEMORY;
+    hr = alloc_string((UINT64)priv1->header.length + priv2->header.length, out);
+    if (FAILED(hr))
+        return hr;
     priv = impl_from_HSTRING(*out);
     memcpy(priv->buffer, priv1->header.str, priv1->header.length * sizeof(*priv1->buffer));
     memcpy(priv->buffer + priv1->header.length, priv2->header.str, priv2->header.length * sizeof(*priv2->buffer));
