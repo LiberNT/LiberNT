@@ -60,10 +60,11 @@ typedef struct _ACTIVE_SERVICE
 static DWORD dwActiveServiceCount = 0;
 static PACTIVE_SERVICE lpActiveServices = NULL;
 static handle_t hStatusBinding = NULL;
+static INIT_ONCE StatusBindingOnce = INIT_ONCE_STATIC_INIT;
 static BOOL bSecurityServiceProcess = FALSE;
 
-static RPC_STATUS
-ScCreateStatusBinding(VOID);
+static BOOL WINAPI
+ScCreateStatusBinding(PINIT_ONCE InitOnce, PVOID Parameter, PVOID *Context);
 
 
 /* FUNCTIONS *****************************************************************/
@@ -71,8 +72,7 @@ ScCreateStatusBinding(VOID);
 handle_t __RPC_USER
 RPC_SERVICE_STATUS_HANDLE_bind(RPC_SERVICE_STATUS_HANDLE hServiceStatus)
 {
-    if (hStatusBinding == NULL)
-        ScCreateStatusBinding();
+    InitOnceExecuteOnce(&StatusBindingOnce, ScCreateStatusBinding, NULL, NULL);
     return hStatusBinding;
 }
 
@@ -84,10 +84,11 @@ RPC_SERVICE_STATUS_HANDLE_unbind(RPC_SERVICE_STATUS_HANDLE hServiceStatus,
 }
 
 
-static RPC_STATUS
-ScCreateStatusBinding(VOID)
+static BOOL WINAPI
+ScCreateStatusBinding(PINIT_ONCE InitOnce, PVOID Parameter, PVOID *Context)
 {
     LPWSTR pszStringBinding;
+    handle_t hBinding = NULL;
     RPC_STATUS status;
 
     TRACE("ScCreateStatusBinding()\n");
@@ -101,48 +102,23 @@ ScCreateStatusBinding(VOID)
     if (status != RPC_S_OK)
     {
         ERR("RpcStringBindingCompose returned 0x%x\n", status);
-        return status;
+        return FALSE;
     }
 
     /* Set the binding handle that will be used to bind to the server. */
     status = RpcBindingFromStringBindingW(pszStringBinding,
-                                          &hStatusBinding);
+                                          &hBinding);
     if (status != RPC_S_OK)
     {
         ERR("RpcBindingFromStringBinding returned 0x%x\n", status);
     }
 
-    status = RpcStringFreeW(&pszStringBinding);
+    RpcStringFreeW(&pszStringBinding);
     if (status != RPC_S_OK)
-    {
-        ERR("RpcStringFree returned 0x%x\n", status);
-    }
+        return FALSE;
 
-    return status;
-}
-
-
-static RPC_STATUS
-ScDestroyStatusBinding(VOID)
-{
-    RPC_STATUS status;
-
-    TRACE("ScDestroyStatusBinding()\n");
-
-    if (hStatusBinding == NULL)
-        return RPC_S_OK;
-
-    status = RpcBindingFree(&hStatusBinding);
-    if (status != RPC_S_OK)
-    {
-        ERR("RpcBindingFree returned 0x%x\n", status);
-    }
-    else
-    {
-        hStatusBinding = NULL;
-    }
-
-    return status;
+    hStatusBinding = hBinding;
+    return TRUE;
 }
 
 
@@ -1178,13 +1154,10 @@ StartServiceCtrlDispatcherA(const SERVICE_TABLE_ENTRYA *lpServiceStartTable)
         goto done;
     }
 
-    ScCreateStatusBinding();
+    InitOnceExecuteOnce(&StatusBindingOnce, ScCreateStatusBinding, NULL, NULL);
 
     /* Call the dispatcher loop */
     ScServiceDispatcher(hPipe, ControlPacket, dwBufSize);
-
-
-    ScDestroyStatusBinding();
 
     /* Close the connection */
     CloseHandle(hPipe);
@@ -1284,12 +1257,10 @@ StartServiceCtrlDispatcherW(const SERVICE_TABLE_ENTRYW *lpServiceStartTable)
         goto done;
     }
 
-    ScCreateStatusBinding();
+    InitOnceExecuteOnce(&StatusBindingOnce, ScCreateStatusBinding, NULL, NULL);
 
     /* Call the dispatcher loop */
     ScServiceDispatcher(hPipe, ControlPacket, dwBufSize);
-
-    ScDestroyStatusBinding();
 
     /* Close the connection */
     CloseHandle(hPipe);
