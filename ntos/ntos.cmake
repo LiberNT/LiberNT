@@ -462,6 +462,7 @@ if(ARCH STREQUAL "i386")
     list(REMOVE_ITEM SOURCE ${REACTOS_SOURCE_DIR}/ntos/rtl/prefetch.c)
 elseif(ARCH STREQUAL "amd64")
     list(APPEND ASM_SOURCE
+        ${REACTOS_SOURCE_DIR}/ntos/mm/arch/amd64/cfgpage.S
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/boot.S
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/ctxswitch.S
         ${REACTOS_SOURCE_DIR}/ntos/ke/amd64/trap.S

@@ -548,6 +548,9 @@ KiInvalidOpcodeFaultHandler(
     PUCHAR InstructionPointer = (PUCHAR)TrapFrame->Rip;
     NTSTATUS Status = STATUS_ILLEGAL_INSTRUCTION;
 
+    if (TrapFrame->SegCs == (KGDT64_R3_CODE | RPL_MASK) && MmBindSharedCfgPage(TrapFrame))
+        return STATUS_SUCCESS;
+
     _SEH2_TRY
     {
         ProbeForRead(InstructionPointer, 64, 1);

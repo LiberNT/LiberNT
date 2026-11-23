@@ -83,6 +83,8 @@ typedef struct _MI_ADDRESS_SPACE
     BOOLEAN IsSession;
     MI_RWLOCK Lock;
     MI_VAD_ROOT VadRoot;
+    struct _MI_VAD *CfgBitmap;
+    BOOLEAN CfgExportSuppression;
     MI_VAD_ROOT AweRoot;
     MI_VAD_ROOT CloneRoot;
     struct _MI_CLONE_RANGE *volatile CloneHint;
@@ -141,6 +143,8 @@ typedef struct _MI_SYSTEM
     struct _MI_PAGEFILE *PageFile;
     struct _MI_SYSTEM_PTES *SystemPtes;
     MI_SPINLOCK SegmentListLock;
+    MI_MUTEX CfgPageLock;
+    LIST_ENTRY CfgPages;
     LIST_ENTRY SegmentList;
     LIST_ENTRY UnusedSegmentList;
     LIST_ENTRY SegmentChunkHash[1024];
@@ -240,6 +244,10 @@ VOID MiPtUnpinRange(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress
 #define MI_MEM_REPLACE_PLACEHOLDER  0x02000000
 #define MI_MEM_WRITE_WATCH          0x04000000
 #define MI_MEM_NO_EXECUTE_IMAGE     0x08000000
+#define MI_MEM_CFG_SCP              0x10000000
+#define MI_PROT_CFG_NO_UPDATE       0x80000000UL
+#define MI_CFG_FID_SUPPRESSED       0x01
+#define MI_CFG_EXPORT_SUPPRESSED    0x02
 #define MI_MEM_COALESCE_PLACEHOLDERS 0x00000001
 #define MI_MEM_PRESERVE_PLACEHOLDER 0x00000002
 
@@ -252,7 +260,8 @@ typedef enum _MI_VAD_KIND
     MiVadPhysical,
     MiVadLarge,
     MiVadAwe,
-    MiVadRotate
+    MiVadRotate,
+    MiVadCfgBitmap
 } MI_VAD_KIND;
 
 struct _MI_SEGMENT;
@@ -274,14 +283,30 @@ typedef struct _MI_VAD
     BOOLEAN FromPlaceholder;
     BOOLEAN StaleView;
     BOOLEAN NoExecuteImage;
+    BOOLEAN CfgScp;
+    BOOLEAN CfgNeutral;
     volatile LONG PteTouched;
     struct _MI_SEGMENT *Segment;
+    struct _MI_SEGMENT *CfgPage;
     ULONG64 SegmentPageOffset;
     volatile LONG64 CommitCharge;
     PMI_FRAME_NUMBER RotateFrames;
     PUCHAR WriteWatchBits;
     ULONG64 WriteWatchBase;
 } MI_VAD, *PMI_VAD;
+
+FORCEINLINE struct _MI_SEGMENT *
+MiViewBackingPage(PMI_VAD Vad, ULONG64 Address, PULONG64 Page)
+{
+    ULONG64 Vpn = Address >> PAGE_SHIFT;
+    if (Vad->CfgPage != NULL && Vpn == Vad->Node.EndingVpn)
+    {
+        *Page = 0;
+        return Vad->CfgPage;
+    }
+    *Page = Vad->SegmentPageOffset + (Vpn - Vad->Node.StartingVpn);
+    return Vad->Segment;
+}
 
 FORCEINLINE
 VOID
@@ -296,7 +321,8 @@ MiAssertPlaceholderVad(_In_ PMI_VAD Vad)
 }
 
 #define MI_VAD_IS_DIRECT(v)   ((v)->Type == MiVadSystem || (v)->Type == MiVadPhysical || \
-                              (v)->Type == MiVadLarge || (v)->Type == MiVadAwe || (v)->Type == MiVadRotate)
+                              (v)->Type == MiVadLarge || (v)->Type == MiVadAwe || (v)->Type == MiVadRotate || \
+                              (v)->Type == MiVadCfgBitmap)
 
 typedef struct _MI_CLONE_PAGE
 {
@@ -438,6 +464,19 @@ NTSTATUS MiRotateQuery(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddr
 NTSTATUS MiRotateApply(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 VirtualAddress, _In_ ULONG64 Size,
                        _In_opt_ const MI_FRAME_NUMBER *Frames, _In_ ULONG LeafFlags);
 VOID MiCleanAddressSpace(_Inout_ PMI_ADDRESS_SPACE Space);
+NTSTATUS MiCfgCreateBitmapLocked(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 Base, _In_ ULONG64 Size);
+NTSTATUS MiCfgGetBitmapPageLocked(_Inout_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 Offset, _In_ BOOLEAN Create,
+                                  _Out_ PULONG Frame);
+VOID MiCfgDeleteBitmapLocked(_Inout_ PMI_ADDRESS_SPACE Space);
+NTSTATUS MiCfgPrepareRangeLocked(PMI_ADDRESS_SPACE Space, ULONG64 Start, ULONG64 End);
+VOID MiCfgFillRangeLocked(PMI_ADDRESS_SPACE Space, ULONG64 Start, ULONG64 End, UCHAR Value);
+NTSTATUS MiCfgSetTargetLocked(PMI_ADDRESS_SPACE Space, ULONG64 Address, UCHAR Value);
+NTSTATUS MiCfgInitializeImageLocked(PMI_ADDRESS_SPACE Space, PMI_VAD Vad);
+BOOLEAN MiCfgIsSuppressedExport(PMI_VAD Vad, ULONG64 Address);
+VOID MiPageStatus(PMI_ADDRESS_SPACE Space, PMI_VAD Vad, ULONG64 VirtualAddress, BOOLEAN Shared,
+                  PBOOLEAN Committed, PULONG Protection);
+NTSTATUS MiCfgCloneBitmapLocked(_Inout_ PMI_ADDRESS_SPACE Source, _Inout_ PMI_ADDRESS_SPACE Target);
+ULONG64 MiCfgBitmapRegionEndLocked(_In_ PMI_ADDRESS_SPACE Space, _In_ ULONG64 Address, _In_ BOOLEAN Committed);
 NTSTATUS MiMapFramesUser(_Inout_ PMI_ADDRESS_SPACE Space, _In_ const MI_FRAME_NUMBER *Frames, _In_ ULONG PageCount,
                          _In_ ULONG Protection, _In_ ULONG LeafFlags, _In_ BOOLEAN LockedPages,
                          _Inout_ PULONG64 BaseAddress);
@@ -598,6 +637,13 @@ typedef struct _MI_SEGMENT
     UCHAR Kind;
     BOOLEAN Reserved;
     BOOLEAN CloseWhenUnused;
+    VOID (*BuildCfgPage)(PVOID Page, ULONG64 Bitmap, BOOLEAN ExportSuppression);
+    BOOLEAN CfgInstrumented;
+    BOOLEAN CfgSystemDll;
+    BOOLEAN CfgExportSuppression;
+    UCHAR CfgEntrySize;
+    ULONG CfgEntryCount;
+    PUCHAR CfgEntries;
     ULONG Protection;
     volatile LONG64 SizeInBytes;
     volatile LONG64 PageCount;

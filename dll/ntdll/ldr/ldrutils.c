@@ -1653,6 +1653,7 @@ VOID
 NTAPI
 LdrpRemoveMemoryTableEntry(IN PLDR_DATA_TABLE_ENTRY LdrEntry)
 {
+    LdrpArchUnregisterScp(LdrEntry);
     RtlAcquireSRWLockExclusive(&LdrpModuleDatatableLock);
     LdrEntry->Flags &= ~LDRP_IN_LEGACY_LISTS;
     LdrpRemoveImageRange(LdrEntry);
@@ -2373,6 +2374,10 @@ LdrpLookupProcedureAddress(
             Status = STATUS_PROCEDURE_NOT_FOUND;
         else
             Status = LdrpSnapThunk(BaseAddress, ImportName, Thunk, Thunk, ExportDir, ExportDirSize, FALSE, NULL, DllPath, TRUE, NULL, ForwarderOwner);
+#ifdef _M_AMD64
+        if (NT_SUCCESS(Status))
+            Status = LdrpEnableCfgExport((PVOID)Thunk->u1.Function);
+#endif
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
@@ -2569,6 +2574,10 @@ LdrpGetProcedureAddress(
             }
         }
 
+#ifdef _M_AMD64
+        if (NT_SUCCESS(Status) && !StaticImporter)
+            Status = LdrpEnableCfgExport((PVOID)Thunk.u1.Function);
+#endif
         /* Make sure we're OK till here */
         if (NT_SUCCESS(Status))
         {

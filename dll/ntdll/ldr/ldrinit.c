@@ -58,7 +58,13 @@ LIST_ENTRY LdrpTlsList;
 ULONG LdrpNumberOfTlsEntries;
 ULONG LdrpNumberOfProcessors;
 PVOID NtDllBase;
-SYSTEM_DLL_INIT_BLOCK LdrSystemDllInitBlock = { 0xf0 };
+#ifdef _MSC_VER
+#pragma section(".mrdata", read, write)
+__declspec(allocate(".mrdata"))
+#else
+__attribute__((section(".mrdata")))
+#endif
+SYSTEM_DLL_INIT_BLOCK LdrSystemDllInitBlock = { sizeof(SYSTEM_DLL_INIT_BLOCK) };
 extern LARGE_INTEGER RtlpTimeout;
 extern BOOLEAN RtlpTimeoutDisable;
 LIST_ENTRY LdrpHashTable[LDR_HASH_TABLE_ENTRIES];
@@ -146,6 +152,15 @@ static VOID (WINAPI *LdrpWow64LdrpInitialize)(PCONTEXT);
 
 /* FUNCTIONS *****************************************************************/
 
+static NTSTATUS
+LdrpProtectSystemDllInitBlock(VOID)
+{
+    PVOID Base = &LdrSystemDllInitBlock;
+    SIZE_T Size = sizeof(LdrSystemDllInitBlock);
+    ULONG OldProtection;
+    return NtProtectVirtualMemory(NtCurrentProcess(), &Base, &Size, PAGE_READONLY, &OldProtection);
+}
+
 #ifdef _WIN64
 
 static NTSTATUS
@@ -232,6 +247,9 @@ LdrpInitializeWow64(
     WCHAR PathBuffer[MAX_PATH];
     UNICODE_STRING Path, SystemRoot;
     PVOID Wow64Ntdll, Wow64Module;
+    PSYSTEM_DLL_INIT_BLOCK GuestBlock;
+    const SIZE_T SharedBytes = RTL_SIZEOF_THROUGH_FIELD(SYSTEM_DLL_INIT_BLOCK, pRtlpFreezeTimeBias) -
+                               FIELD_OFFSET(SYSTEM_DLL_INIT_BLOCK, Wow64SharedInformation);
     VOID (WINAPI *Wow64LdrpInitialize)(PCONTEXT);
     PVOID Wow64PrepareForException;
     NTSTATUS Status;
@@ -239,8 +257,6 @@ LdrpInitializeWow64(
     Status = LdrpMapWow64Ntdll(&Wow64Ntdll);
     if (!NT_SUCCESS(Status)) return Status;
 
-    RtlZeroMemory(&LdrSystemDllInitBlock, sizeof(LdrSystemDllInitBlock));
-    LdrSystemDllInitBlock.version = 0xf0;
     LdrSystemDllInitBlock.ntdll_handle = (ULONG_PTR)Wow64Ntdll;
     Status = LdrpGetWow64Export(Wow64Ntdll, "LdrInitializeThunk", &LdrSystemDllInitBlock.pLdrInitializeThunk, TRUE);
     if (!NT_SUCCESS(Status)) return Status;
@@ -258,7 +274,12 @@ LdrpInitializeWow64(
     if (!NT_SUCCESS(Status)) return Status;
     Status = LdrpGetWow64Export(Wow64Ntdll, "RtlpFreezeTimeBias", &LdrSystemDllInitBlock.pRtlpFreezeTimeBias, FALSE);
     if (!NT_SUCCESS(Status)) return Status;
-    RtlCopyMemory((PVOID)(ULONG_PTR)LdrSystemDllInitBlock.pLdrSystemDllInitBlock, &LdrSystemDllInitBlock, sizeof(LdrSystemDllInitBlock));
+    GuestBlock = (PSYSTEM_DLL_INIT_BLOCK)(ULONG_PTR)LdrSystemDllInitBlock.pLdrSystemDllInitBlock;
+    if (GuestBlock->Size < RTL_SIZEOF_THROUGH_FIELD(SYSTEM_DLL_INIT_BLOCK, pRtlpFreezeTimeBias))
+        return STATUS_INVALID_IMAGE_FORMAT;
+    RtlCopyMemory(GuestBlock->Wow64SharedInformation, LdrSystemDllInitBlock.Wow64SharedInformation, SharedBytes);
+    Status = LdrpProtectSystemDllInitBlock();
+    if (!NT_SUCCESS(Status)) return Status;
 
     RtlInitEmptyUnicodeString(&Path, PathBuffer, sizeof(PathBuffer));
     RtlInitUnicodeString(&SystemRoot, SharedUserData->NtSystemRoot);
@@ -2655,6 +2676,11 @@ LdrpInitializeProcess(IN PCONTEXT Context,
 #ifdef _WIN64
     IsWow64 = Teb->WowTebOffset && NtHeader->FileHeader.Machine == IMAGE_FILE_MACHINE_I386;
 #endif
+    if (!IsWow64)
+    {
+        Status = LdrpProtectSystemDllInitBlock();
+        if (!NT_SUCCESS(Status)) return Status;
+    }
 #if defined(_M_ARM64)
     IsChpe = ChpeIsChpeProcess();
 #endif

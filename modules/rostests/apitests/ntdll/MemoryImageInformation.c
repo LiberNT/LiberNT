@@ -162,6 +162,8 @@ START_TEST(MemoryImageInformation)
     LARGE_INTEGER MaximumSize;
     PVOID Heap, Reserve = NULL, View = NULL;
     HMODULE Data;
+    WCHAR SystemPath[MAX_PATH], Directory[MAX_PATH], ImagePath[MAX_PATH];
+    UINT Length;
     NTSTATUS Status;
 
     CheckImage(Ntdll, Ntdll, "ntdll");
@@ -215,7 +217,29 @@ START_TEST(MemoryImageInformation)
         NtClose(Section);
     }
 
-    Data = LoadLibraryExW(L"shell32.dll", NULL, LOAD_LIBRARY_AS_DATAFILE);
+    TestImageView(SEC_IMAGE, "image view");
+    TestImageView(SEC_IMAGE_NO_EXECUTE, "no-execute image view");
+
+    Length = GetSystemDirectoryW(SystemPath, ARRAYSIZE(SystemPath));
+    if (!Length || Length + ARRAYSIZE(L"\\shell32.dll") > ARRAYSIZE(SystemPath))
+    {
+        ok(0, "Cannot get the system directory\n");
+        return;
+    }
+    wcscat(SystemPath, L"\\shell32.dll");
+    Length = GetTempPathW(ARRAYSIZE(Directory), Directory);
+    if (!Length || Length >= ARRAYSIZE(Directory) || !GetTempFileNameW(Directory, L"img", 0, ImagePath))
+    {
+        ok(0, "Cannot create a temporary path, error %lu\n", GetLastError());
+        return;
+    }
+    if (!CopyFileW(SystemPath, ImagePath, FALSE))
+    {
+        ok(0, "Cannot copy the test image, error %lu\n", GetLastError());
+        DeleteFileW(ImagePath);
+        return;
+    }
+    Data = LoadLibraryExW(ImagePath, NULL, LOAD_LIBRARY_AS_DATAFILE);
     ok(Data != NULL, "LoadLibraryExW failed with %lu\n", GetLastError());
     if (Data != NULL)
     {
@@ -223,7 +247,7 @@ START_TEST(MemoryImageInformation)
         FreeLibrary(Data);
     }
 
-    Data = LoadLibraryExW(L"shell32.dll", NULL, LOAD_LIBRARY_AS_IMAGE_RESOURCE | LOAD_LIBRARY_AS_DATAFILE);
+    Data = LoadLibraryExW(ImagePath, NULL, LOAD_LIBRARY_AS_IMAGE_RESOURCE | LOAD_LIBRARY_AS_DATAFILE);
     ok(Data != NULL, "LoadLibraryExW image resource failed with %lu\n", GetLastError());
     if (Data != NULL)
     {
@@ -234,6 +258,5 @@ START_TEST(MemoryImageInformation)
         FreeLibrary(Data);
     }
 
-    TestImageView(SEC_IMAGE, "image view");
-    TestImageView(SEC_IMAGE_NO_EXECUTE, "no-execute image view");
+    ok(DeleteFileW(ImagePath), "Cannot delete the test image, error %lu\n", GetLastError());
 }

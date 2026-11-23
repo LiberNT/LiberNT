@@ -103,6 +103,160 @@ MmSetExecuteOptions(
     return Status;
 }
 
+#ifdef _M_AMD64
+static NTSTATUS
+MiUpdateCfgTargetsLocked(PMI_ADDRESS_SPACE Space, const MEMORY_RANGE_ENTRY *Range,
+                         const CFG_CALL_TARGET_LIST_INFORMATION *List, const CFG_CALL_TARGET_INFO *Targets,
+                         PMI_SECTION_OBJECT Section, PULONG Processed)
+{
+    ULONG64 Base = (ULONG_PTR)Range->VirtualAddress;
+    PMI_VAD Vad;
+    ULONG Index;
+    NTSTATUS Status;
+
+    if (((Base | Range->NumberOfBytes) & (PAGE_SIZE - 1)) || Base > Space->HighestVa ||
+        Range->NumberOfBytes - 1 > Space->HighestVa - Base)
+        return STATUS_INVALID_PARAMETER;
+    for (Index = 0; Index < List->NumberOfEntries; ++Index)
+    {
+        const CFG_CALL_TARGET_INFO *Target = &Targets[Index];
+        if ((Target->Offset & 15) || Target->Offset >= Range->NumberOfBytes ||
+            (Index && Target->Offset < Targets[Index - 1].Offset) || (Target->Flags & ~(ULONG_PTR)0x1f))
+            return STATUS_INVALID_PARAMETER;
+    }
+    if (!Space->CfgBitmap)
+        return STATUS_INVALID_PAGE_PROTECTION;
+    Vad = MiVadLocate(Space, Base);
+    if (!Vad)
+        return STATUS_MEMORY_NOT_ALLOCATED;
+    if (Range->NumberOfBytes > ((Vad->Node.EndingVpn + 1) << PAGE_SHIFT) - Base)
+        return STATUS_INVALID_PARAMETER;
+    if (Section && (Vad->Segment == NULL || Section->Control->Segment != Vad->Segment ||
+                    Base != Vad->Node.StartingVpn << PAGE_SHIFT ||
+                    List->FileOffset != Vad->SegmentPageOffset << PAGE_SHIFT))
+        return STATUS_INVALID_PARAMETER;
+
+    for (Index = 0; Index < List->NumberOfEntries; ++Index)
+    {
+        ULONG Protection;
+        ULONG64 Address = Base + Targets[Index].Offset;
+        BOOLEAN Committed;
+        if (Targets[Index].Flags & 0x18)
+            return STATUS_NOT_SUPPORTED;
+        if ((Targets[Index].Flags & 4) && !MiCfgIsSuppressedExport(Vad, Address))
+            return STATUS_ACCESS_DENIED;
+        MiPageStatus(Space, Vad, Address & ~(ULONG64)(PAGE_SIZE - 1), FALSE, &Committed, &Protection);
+        if (!Committed || !MI_PROT_IS_EXECUTE(Protection) || Vad->NoExecuteImage ||
+            (Vad->CfgScp && (Address >> PAGE_SHIFT) == Vad->Node.EndingVpn))
+            return STATUS_ACCESS_VIOLATION;
+        if (Targets[Index].Flags & (CFG_CALL_TARGET_VALID | 4))
+        {
+            ULONG Frame;
+            Status = MiCfgGetBitmapPageLocked(Space, Address >> 6, TRUE, &Frame);
+            if (!NT_SUCCESS(Status))
+                return Status;
+        }
+    }
+    for (Index = 0; Index < List->NumberOfEntries; ++Index)
+    {
+        Status = MiCfgSetTargetLocked(Space, Base + Targets[Index].Offset,
+                                      (UCHAR)((Targets[Index].Flags & (CFG_CALL_TARGET_VALID | 4)) != 0));
+        if (!NT_SUCCESS(Status))
+            return Status;
+        ++*Processed;
+    }
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+MiSetCfgCallTargetInformation(HANDLE ProcessHandle, ULONG_PTR Count, PMEMORY_RANGE_ENTRY Ranges,
+                              PVOID Information, ULONG Length)
+{
+    CFG_CALL_TARGET_LIST_INFORMATION List;
+    PCFG_CALL_TARGET_INFO Targets = NULL;
+    MEMORY_RANGE_ENTRY Range;
+    MI_PROCESS_REFERENCE Reference;
+    PMI_SECTION_OBJECT Section = NULL;
+    PMI_ADDRESS_SPACE Space;
+    KPROCESSOR_MODE Mode = ExGetPreviousMode();
+    ULONG Processed = 0;
+    SIZE_T Bytes;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    if (!Count)
+        return STATUS_INVALID_PARAMETER_3;
+    if (Count != 1)
+        return STATUS_INVALID_PARAMETER_4;
+    if (Length != sizeof(List))
+        return STATUS_INVALID_PARAMETER_6;
+    _SEH2_TRY
+    {
+        if (Mode != KernelMode)
+        {
+            ProbeForRead(Ranges, sizeof(Range), TYPE_ALIGNMENT(MEMORY_RANGE_ENTRY));
+            ProbeForRead(Information, sizeof(List), TYPE_ALIGNMENT(CFG_CALL_TARGET_LIST_INFORMATION));
+        }
+        Range = *Ranges;
+        RtlCopyMemory(&List, Information, sizeof(List));
+        if (!Range.NumberOfBytes)
+            Status = STATUS_INVALID_PARAMETER_4;
+        else if (!List.NumberOfEntries || List.Reserved)
+            Status = STATUS_INVALID_PARAMETER_5;
+        else
+        {
+            Bytes = (SIZE_T)List.NumberOfEntries * sizeof(*Targets);
+            if (Mode != KernelMode)
+            {
+                ProbeForWrite(List.NumberOfEntriesProcessed, sizeof(Processed), TYPE_ALIGNMENT(ULONG));
+                ProbeForRead(List.CallTargetInfo, Bytes, TYPE_ALIGNMENT(CFG_CALL_TARGET_INFO));
+            }
+            Targets = ExAllocatePoolWithQuotaTag(PagedPool | POOL_QUOTA_FAIL_INSTEAD_OF_RAISE, Bytes, 'gCfM');
+            if (Targets)
+                RtlCopyMemory(Targets, List.CallTargetInfo, Bytes);
+            else
+                Status = STATUS_INSUFFICIENT_RESOURCES;
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    if (!NT_SUCCESS(Status))
+        goto Done;
+    if (List.Section)
+    {
+        Status = ObReferenceObjectByHandle(List.Section, SECTION_QUERY, MmSectionObjectType, Mode,
+                                           (PVOID *)&Section, NULL);
+        if (!NT_SUCCESS(Status))
+            goto Done;
+    }
+    Status = MiReferenceTargetProcess(ProcessHandle, PROCESS_VM_OPERATION, &Reference);
+    if (!NT_SUCCESS(Status))
+        goto Done;
+    Space = MiSpaceOfProcess(Reference.Process);
+    MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
+    Status = MiUpdateCfgTargetsLocked(Space, &Range, &List, Targets, Section, &Processed);
+    MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
+    MiReleaseTargetProcess(&Reference);
+    _SEH2_TRY
+    {
+        *List.NumberOfEntriesProcessed = Processed;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+Done:
+    if (Section)
+        ObDereferenceObject(Section);
+    if (Targets)
+        ExFreePoolWithTag(Targets, 'gCfM');
+    return Status;
+}
+#endif
+
 NTSTATUS
 NTAPI
 NtSetInformationVirtualMemory(
@@ -125,6 +279,11 @@ NtSetInformationVirtualMemory(
     if ((ULONG)VmInformationClass > VmRemoveFromWorkingSetInformation)
         return STATUS_INVALID_PARAMETER_2;
 
+#ifdef _M_AMD64
+    if (VmInformationClass == VmCfgCallTargetInformation)
+        return MiSetCfgCallTargetInformation(ProcessHandle, NumberOfEntries, VirtualAddresses,
+                                             VmInformation, VmInformationLength);
+#endif
     if (VmInformationClass == VmPrefetchInformation)
     {
         if (VmInformation == NULL)

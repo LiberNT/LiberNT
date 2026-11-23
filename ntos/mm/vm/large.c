@@ -42,6 +42,7 @@ MiReleaseLargePagesLocked(PMI_ADDRESS_SPACE Space, PMI_VAD Vad)
     ULONG64 Va, End = (Vad->Node.EndingVpn + 1) << PAGE_SHIFT;
 
     MiAssertLargeVad(Space, Vad);
+    MiCfgFillRangeLocked(Space, Vad->Node.StartingVpn << PAGE_SHIFT, End, 0);
     for (Va = Vad->Node.StartingVpn << PAGE_SHIFT; Va < End; Va += Arch->LargePageSize)
     {
         ULONG Table, Frame, i;
@@ -94,7 +95,9 @@ MiCreateLargeView(PMI_ADDRESS_SPACE Space, PULONG64 BaseAddress, PULONG64 Region
     PMI_VAD Vad;
     PMI_SEGMENT Released = NULL;
     NTSTATUS Status = STATUS_SUCCESS;
+    BOOLEAN TargetsInvalid = (BOOLEAN)((Protection & MI_PROT_CFG_NO_UPDATE) != 0);
 
+    Protection &= ~MI_PROT_CFG_NO_UPDATE;
     if (!Arch->SupportsLargePages || Large == 0 || Arch->LargePageLevel == 0)
         return STATUS_NOT_SUPPORTED;
     if ((Segment == NULL &&
@@ -212,11 +215,14 @@ MiCreateLargeView(PMI_ADDRESS_SPACE Space, PULONG64 BaseAddress, PULONG64 Region
             MI_ATOMIC_ADD64(&Space->PrivatePages, Pages);
         MI_ATOMIC_ADD64(&Space->LargePages, Pages);
     }
+    if (NT_SUCCESS(Status) && MI_PROT_IS_EXECUTE(Protection))
+        Status = MiCfgPrepareRangeLocked(Space, Start, Start + Size);
     if (!NT_SUCCESS(Status))
     {
         Released = MiReleaseLargePagesLocked(Space, Vad);
         goto Done;
     }
+    MiCfgFillRangeLocked(Space, Start, Start + Size, MI_PROT_IS_EXECUTE(Protection) && !TargetsInvalid ? 0xff : 0);
     *BaseAddress = Start;
     *RegionSize = Size;
 Done:
@@ -289,7 +295,9 @@ MiProtectLargePagesLocked(PMI_ADDRESS_SPACE Space, ULONG64 Start, ULONG64 End,
     const MI_ARCH_DESCRIPTOR *Arch = Space->System->Arch;
     ULONG64 Large = Arch->LargePageSize, Va;
     PMI_VAD Vad = MiVadLocate(Space, Start);
+    BOOLEAN Publish = (BOOLEAN)(!(Protection & MI_PROT_CFG_NO_UPDATE) && MI_PROT_IS_EXECUTE(Protection));
 
+    Protection &= ~MI_PROT_CFG_NO_UPDATE;
     MI_ASSERT(Vad != NULL);
     MiAssertLargeVad(Space, Vad);
     MI_ASSERT(Start >= (Vad->Node.StartingVpn << PAGE_SHIFT) &&
@@ -310,6 +318,12 @@ MiProtectLargePagesLocked(PMI_ADDRESS_SPACE Space, ULONG64 Start, ULONG64 End,
         return STATUS_SECTION_PROTECTION;
     if (Vad->Segment != NULL && !MiViewProtectionCompatible(Vad, Protection))
         return STATUS_INVALID_PAGE_PROTECTION;
+    if (Publish)
+    {
+        NTSTATUS Status = MiCfgPrepareRangeLocked(Space, Start, End);
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
     for (Va = Start; Va < End; Va += Large)
     {
         PMI_PTE Slot = MiPtLookupLevel(Space, Va, Arch->LargePageLevel, NULL);
@@ -330,5 +344,7 @@ MiProtectLargePagesLocked(PMI_ADDRESS_SPACE Space, ULONG64 Start, ULONG64 End,
         MiArchPteWrite(Slot, Value);
         MiArchTlbInvalidate(Va, Large >> PAGE_SHIFT, TRUE);
     }
+    if (Publish)
+        MiCfgFillRangeLocked(Space, Start, End, 0xff);
     return STATUS_SUCCESS;
 }

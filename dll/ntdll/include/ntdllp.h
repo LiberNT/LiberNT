@@ -121,7 +121,14 @@ NTSTATUS NTAPI LdrpInitializeProcess(IN PCONTEXT Context, IN PVOID SystemArgumen
 VOID NTAPI LdrpInitFailure(NTSTATUS Status);
 VOID NTAPI LdrpValidateImageForMp(IN PLDR_DATA_TABLE_ENTRY LdrDataTableEntry);
 VOID NTAPI LdrpEnsureLoaderLockIsHeld(VOID);
+NTSTATUS LdrpArchRegisterScp(PLDR_DATA_TABLE_ENTRY Entry);
+VOID LdrpArchUnregisterScp(PLDR_DATA_TABLE_ENTRY Entry);
 NTSTATUS NTAPI LdrpProcessLoadConfig(IN PLDR_DATA_TABLE_ENTRY LdrEntry);
+#ifdef _M_AMD64
+NTSTATUS LdrpInitializeAmd64Guard(PLDR_DATA_TABLE_ENTRY Entry);
+NTSTATUS LdrpEnableCfgExport(PVOID Address);
+NTSTATUS LdrpEnableAddressTakenImports(PLDR_DATA_TABLE_ENTRY Entry);
+#endif
 
 /* ldrpe.c */
 PWSTR
@@ -232,6 +239,7 @@ typedef struct _LDRP_MODULE_ENTRY
 {
     LDR_DATA_TABLE_ENTRY Entry;
     LONG InitializationScheduled;
+    PVOID ScpFunctionTable;
 } LDRP_MODULE_ENTRY, *PLDRP_MODULE_ENTRY;
 
 FORCEINLINE

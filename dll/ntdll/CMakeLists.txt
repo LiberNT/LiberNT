@@ -96,6 +96,12 @@ elseif(ARCH STREQUAL "ppc")
         rtl/ppc/rtlexcpt.c)
 endif()
 
+if(ARCH STREQUAL "amd64")
+    list(APPEND SOURCE ldr/amd64/scp.c)
+else()
+    list(APPEND SOURCE ldr/noscp.c)
+endif()
+
 if(ARCH STREQUAL "riscv64")
     list(APPEND SOURCE ldr/riscv64/emulation.c)
 else()

@@ -1678,6 +1678,8 @@ LdrUnloadDll(
         if (CurrentEntry->Flags & LDRP_LOAD_NOTIFICATIONS_SENT)
             LdrpSendDllNotifications(CurrentEntry, LDR_DLL_NOTIFICATION_REASON_UNLOADED);
 
+        LdrpArchUnregisterScp(CurrentEntry);
+
         /* Remove it from the list */
         RtlAcquireSRWLockExclusive(&LdrpModuleDatatableLock);
         LdrpRemoveImageRange(CurrentEntry);

@@ -571,6 +571,19 @@ MmInitializeHandBuiltProcess2(
     _In_ PEPROCESS Process);
 
 NTSTATUS
+MmCreateProcessCfgBitmap(
+    _In_ PEPROCESS Process,
+    _In_ PVOID Section,
+    _In_ ULONGLONG MitigationOptions);
+
+#ifdef _M_AMD64
+BOOLEAN MmBindSharedCfgPage(PKTRAP_FRAME TrapFrame);
+NTSTATUS
+MmGetSystemDllCfgInformation(PEPROCESS Process, PVOID ImageBase, PULONG64 Page,
+                             PULONG64 Bitmap, PULONG64 Size, PBOOLEAN ExportSuppression);
+#endif
+
+NTSTATUS
 NTAPI
 MmInitializeProcessAddressSpace(
     _In_ PEPROCESS Process,

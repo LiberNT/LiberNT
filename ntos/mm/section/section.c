@@ -538,6 +538,8 @@ MiSegmentDelete(
     if (Created && Segment->FileOps.Release != NULL)
         Segment->FileOps.Release(Segment->FileContext);
 
+    if (Segment->CfgEntries)
+        MI_FREE(Segment->CfgEntries);
     MI_FREE(Segment);
 }
 
@@ -1494,6 +1496,9 @@ MiViewDefaultProtection(
     if (Vad->Type != MiVadImage)
         return Vad->Protection;
 
+    if (Vad->CfgScp && VirtualAddress >= MI_VAD_END(Vad) - PAGE_SIZE)
+        return MI_PROT_EXECUTE_READ;
+
     if (Page >= MiSegmentPages(Segment) || MiArchPteRead(MiSegmentProto(Segment, Page)) == 0)
         return MI_PROT_NOACCESS;
 
@@ -1597,7 +1602,7 @@ MiReleaseViewPageEx(
     }
 
     Frame = (ULONG)MiArchPteFrame(Pte);
-    Page = Vad->SegmentPageOffset + ((VirtualAddress - MI_VAD_START(Vad)) >> PAGE_SHIFT);
+    Segment = MiViewBackingPage(Vad, VirtualAddress, &Page);
 
     Pte = MiPtInvalidate(Space, VirtualAddress, Slot, TableFrame, NewValue);
     if (MiArchPteIsDirty(Pte))
@@ -1861,8 +1866,8 @@ MiResolvePrototypeFault(
     _In_ MI_FAULT_ACCESS Access,
     _In_ BOOLEAN ConsumeGuard)
 {
-    PMI_SEGMENT Segment = Vad->Segment;
-    ULONG64 Page = Vad->SegmentPageOffset + ((VirtualAddress - MI_VAD_START(Vad)) >> PAGE_SHIFT);
+    ULONG64 Page;
+    PMI_SEGMENT Segment = MiViewBackingPage(Vad, VirtualAddress, &Page);
     ULONG Protection;
     NTSTATUS Status;
     MI_PTE ProtoPte;
@@ -2074,9 +2079,18 @@ MiSetMappedViewProtection(
 {
     PMI_SYSTEM System = Space->System;
     ULONG64 Va;
+    BOOLEAN Publish = (BOOLEAN)(Space->CfgBitmap && Vad->Type == MiVadMapped &&
+                                !(Protection & MI_PROT_CFG_NO_UPDATE) && MI_PROT_IS_EXECUTE(Protection));
 
+    Protection &= ~MI_PROT_CFG_NO_UPDATE;
     if (Protection != MI_PROT_NOACCESS && !MiProtApplyCache(&Protection, MI_PROT_CACHE(Vad->Segment->Protection)))
         return STATUS_INVALID_PAGE_PROTECTION;
+    if (Publish)
+    {
+        NTSTATUS Status = MiCfgPrepareRangeLocked(Space, Start, End);
+        if (!NT_SUCCESS(Status))
+            return Status;
+    }
 
     if (Vad->Type == MiVadImage && MI_PROT_IS_WRITABLE(Protection))
         Protection = (Protection & ~MI_PROT_ACCESS_MASK) |
@@ -2117,6 +2131,8 @@ MiSetMappedViewProtection(
         }
     }
 
+    if (Publish)
+        MiCfgFillRangeLocked(Space, Start, End, 0xff);
     return STATUS_SUCCESS;
 }
 
@@ -2128,9 +2144,12 @@ MiProtectMappedView(
     _In_ ULONG64 End,
     _In_ ULONG Protection)
 {
-    if (!MiViewProtectionAllowed(Vad->Segment, Vad->MaximumProtection, Protection))
+    ULONG Access = Protection & ~MI_PROT_CFG_NO_UPDATE;
+    if (Vad->CfgScp && End > MI_VAD_END(Vad) - PAGE_SIZE && Access != MI_PROT_EXECUTE_READ)
         return STATUS_SECTION_PROTECTION;
-    if (!MiViewProtectionCompatible(Vad, Protection))
+    if (!MiViewProtectionAllowed(Vad->Segment, Vad->MaximumProtection, Access))
+        return STATUS_SECTION_PROTECTION;
+    if (!MiViewProtectionCompatible(Vad, Access))
         return STATUS_INVALID_PAGE_PROTECTION;
 
     return MiSetMappedViewProtection(Space, Vad, Start, End, Protection);
@@ -2151,6 +2170,7 @@ MiDetachMappedView(
     BOOLEAN Owner = MiTlbBatchBegin(Space, &Batch);
     BOOLEAN Deferred = Space->TlbBatch->DeferTables;
 
+    MiCfgFillRangeLocked(Space, Va, End, 0);
     MI_ASSERT(!Stale || Owner);
     MI_ASSERT(!Stale || Space == &Space->System->SystemSpace);
     MI_ASSERT(!Stale || Vad->CacheView);
@@ -2190,7 +2210,14 @@ MiDetachMappedView(
     }
 
     Space->TlbBatch->DeferTables = Deferred;
+    if (Vad->CfgPage != NULL && !Owner)
+        MiTlbBatchFlush(Space);
     MiTlbBatchEnd(Space, Owner);
+    if (Vad->CfgPage != NULL)
+    {
+        MiSegmentDereference(Vad->CfgPage);
+        Vad->CfgPage = NULL;
+    }
     MiReturnCommit(Space, Vad->CommitCharge);
     MiVadRemove(&Space->VadRoot, &Vad->Node);
 
@@ -2226,6 +2253,90 @@ MiMapView(
     return MiMapViewEx(Space, Segment, BaseAddress, SectionOffset, ViewSize, Protection, AllocationType, ~0ULL, 0, TRUE);
 }
 
+typedef struct _MI_CFG_PAGE_SOURCE
+{
+    LIST_ENTRY Link;
+    PMI_SEGMENT Backing;
+    VOID (*Build)(PVOID Page, ULONG64 Bitmap, BOOLEAN ExportSuppression);
+    ULONG64 Bitmap;
+    BOOLEAN ExportSuppression;
+} MI_CFG_PAGE_SOURCE, *PMI_CFG_PAGE_SOURCE;
+
+static NTSTATUS
+MiReadCfgPage(PVOID Context, ULONG64 Offset, ULONG Length, PVOID Buffer)
+{
+    PMI_CFG_PAGE_SOURCE Source = Context;
+    if (Offset != 0 || Length != PAGE_SIZE)
+        return STATUS_INVALID_PARAMETER;
+    Source->Build(Buffer, Source->Bitmap, Source->ExportSuppression);
+    return STATUS_SUCCESS;
+}
+
+static VOID
+MiReleaseCfgPageSource(PVOID Context)
+{
+    PMI_CFG_PAGE_SOURCE Source = Context;
+    PMI_SYSTEM System = Source->Backing->System;
+    MI_MUTEX_ACQUIRE(&System->CfgPageLock);
+    RemoveEntryList(&Source->Link);
+    MI_MUTEX_RELEASE(&System->CfgPageLock);
+    MI_FREE(Source);
+}
+
+static NTSTATUS
+MiInstallCfgPageLocked(PMI_ADDRESS_SPACE Space, PMI_VAD Vad)
+{
+    PMI_SYSTEM System = Space->System;
+    ULONG64 Bitmap = Space->CfgBitmap && (Vad->Segment->CfgInstrumented || Vad->Segment->CfgSystemDll) ?
+                     MI_VAD_START(Space->CfgBitmap) : 0;
+    BOOLEAN ExportSuppression = (BOOLEAN)(Bitmap != 0 && Space->CfgExportSuppression);
+    MI_FILE_OPS Ops = {0};
+    PMI_CFG_PAGE_SOURCE Source;
+    PLIST_ENTRY Entry;
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    /* These weak references share immutable code only for identical bindings. */
+    Vad->CfgNeutral = (Bitmap == 0);
+    MI_MUTEX_ACQUIRE(&System->CfgPageLock);
+    for (Entry = System->CfgPages.Flink; Entry != &System->CfgPages; Entry = Entry->Flink)
+    {
+        Source = CONTAINING_RECORD(Entry, MI_CFG_PAGE_SOURCE, Link);
+        if (Source->Build == Vad->Segment->BuildCfgPage && Source->Bitmap == Bitmap &&
+            Source->ExportSuppression == ExportSuppression && MiSegmentTryReference(Source->Backing))
+        {
+            Vad->CfgPage = Source->Backing;
+            goto Done;
+        }
+    }
+
+    Source = MI_ALLOCATE(sizeof(*Source));
+    if (Source == NULL)
+    {
+        Status = STATUS_INSUFFICIENT_RESOURCES;
+        goto Done;
+    }
+    Source->Build = Vad->Segment->BuildCfgPage;
+    Source->Bitmap = Bitmap;
+    Source->ExportSuppression = ExportSuppression;
+    Ops.Read = MiReadCfgPage;
+    Ops.Release = MiReleaseCfgPageSource;
+    Status = MiSegmentCreate(System, MiSegmentDataFile, PAGE_SIZE, MI_PROT_EXECUTE_READ,
+                             &Ops, Source, NULL, 0, &Source->Backing);
+    if (NT_SUCCESS(Status))
+    {
+        MiSegmentCloseWhenUnused(Source->Backing);
+        InsertTailList(&System->CfgPages, &Source->Link);
+        Vad->CfgPage = Source->Backing;
+    }
+    else
+    {
+        MI_FREE(Source);
+    }
+Done:
+    MI_MUTEX_RELEASE(&System->CfgPageLock);
+    return Status;
+}
+
 static
 NTSTATUS
 MiMapViewInternal(
@@ -2249,7 +2360,10 @@ MiMapViewInternal(
     PMI_VAD Placeholder = NULL;
     BOOLEAN Replace = (BOOLEAN)((AllocationType & MI_MEM_REPLACE_PLACEHOLDER) != 0);
     BOOLEAN PageGranular = (BOOLEAN)((AllocationType & MI_MEM_PAGE_GRANULAR) != 0);
+    BOOLEAN CfgScp = (BOOLEAN)((AllocationType & MI_MEM_CFG_SCP) != 0);
+    BOOLEAN TargetsInvalid = (BOOLEAN)((Protection & MI_PROT_CFG_NO_UPDATE) != 0);
 
+    Protection &= ~MI_PROT_CFG_NO_UPDATE;
     if ((SectionOffset & (Space->Granularity - 1)) ||
         (Start & (((Replace || PageGranular) ? PAGE_SIZE : Space->Granularity) - 1)) ||
         (Replace && (Start == 0 || (AllocationType & MI_MEM_LARGE_PAGES))))
@@ -2276,11 +2390,17 @@ MiMapViewInternal(
     if (!(AllocationType & MI_MEM_RESERVE) && Size > MI_PAGE_ALIGN_UP(SegmentSize) - SectionOffset)
         return STATUS_INVALID_VIEW_SIZE;
 
+    if (CfgScp && (Segment->BuildCfgPage == NULL || Segment->Kind != MiSegmentImage || SectionOffset ||
+                   Size != SegmentSize || Size > ~0ULL - 2 * PAGE_SIZE || Space->IsSystem || CacheView ||
+                   (AllocationType & (MI_MEM_LARGE_PAGES | MI_MEM_NO_EXECUTE_IMAGE))))
+        return STATUS_INVALID_PARAMETER;
+
     if (AllocationType & MI_MEM_LARGE_PAGES)
     {
         if (Segment->LargeFrames == NULL)
             return STATUS_INVALID_PARAMETER;
-        return MiMapLargeSection(Space, Segment, BaseAddress, SectionOffset, ViewSize, Protection,
+        return MiMapLargeSection(Space, Segment, BaseAddress, SectionOffset, ViewSize,
+                                 Protection | (TargetsInvalid ? MI_PROT_CFG_NO_UPDATE : 0),
                                  AllocationType, HighestAddress, MaximumProtection, Inherit);
     }
 
@@ -2295,6 +2415,8 @@ MiMapViewInternal(
     MiSegmentReference(Segment);
 
     Size = MI_PAGE_ALIGN_UP(Size);
+    if (CfgScp)
+        Size += PAGE_SIZE;
     Pages = Size >> PAGE_SHIFT;
 
     if (Start == 0)
@@ -2344,6 +2466,7 @@ MiMapViewInternal(
     Vad->MaximumProtection = (UCHAR)(MaximumProtection & MI_PROT_ACCESS_MASK);
     Vad->Type = (Segment->Kind == MiSegmentImage) ? MiVadImage : MiVadMapped;
     Vad->NoExecuteImage = (BOOLEAN)(Vad->Type == MiVadImage && (AllocationType & MI_MEM_NO_EXECUTE_IMAGE));
+    Vad->CfgScp = CfgScp;
     Vad->CopyOnWrite = (BOOLEAN)MI_PROT_IS_COPY(Protection);
     Vad->Inherit = Inherit;
     Vad->CacheView = CacheView;
@@ -2365,10 +2488,25 @@ MiMapViewInternal(
     if (Vad->WritableUser)
         MiAdjustSegmentCount(&Segment->WritableUserViews, 1);
 
-    if (Vad->NoExecuteImage)
+    if (Vad->NoExecuteImage || CfgScp || Space->CfgBitmap)
     {
-        /* A SEC_IMAGE_NO_EXECUTE view keeps the image layout with every page read-only (measured on Windows 11) */
-        NTSTATUS Status = MiSetMappedViewProtection(Space, Vad, Start, Start + Size, MI_PROT_READONLY);
+        NTSTATUS Status = STATUS_SUCCESS;
+        if (Vad->Type == MiVadImage && !TargetsInvalid)
+            Status = MiCfgInitializeImageLocked(Space, Vad);
+        else
+        {
+            MiCfgFillRangeLocked(Space, Start, Start + Size, 0);
+            if (Vad->Type == MiVadMapped && MI_PROT_IS_EXECUTE(Protection) && !Segment->Reserved)
+            {
+                Status = MiCfgPrepareRangeLocked(Space, Start, Start + Size);
+                if (NT_SUCCESS(Status) && !TargetsInvalid)
+                    MiCfgFillRangeLocked(Space, Start, Start + Size, 0xff);
+            }
+        }
+        if (NT_SUCCESS(Status) && CfgScp)
+            Status = MiInstallCfgPageLocked(Space, Vad);
+        if (NT_SUCCESS(Status) && Vad->NoExecuteImage)
+            Status = MiSetMappedViewProtection(Space, Vad, Start, Start + Size, MI_PROT_READONLY);
 
         if (!NT_SUCCESS(Status))
         {

@@ -145,7 +145,6 @@ MiPageStatusAt(
     }
 }
 
-static
 VOID
 MiPageStatus(
     _In_ PMI_ADDRESS_SPACE Space,
@@ -639,7 +638,8 @@ MiReserveVirtualMemory(
     _In_ ULONG Protection,
     _In_ ULONG64 LowestAddress,
     _In_ ULONG64 HighestAddress,
-    _In_ ULONG64 Alignment)
+    _In_ ULONG64 Alignment,
+    _In_ BOOLEAN TargetsInvalid)
 {
     PMI_VAD Vad = NULL;
     PMI_FRAME_NUMBER RotateFrames = NULL;
@@ -741,6 +741,16 @@ SelectRange:
         Status = STATUS_INSUFFICIENT_RESOURCES;
         goto Done;
     }
+    if (Vad->MemCommit && MI_PROT_IS_EXECUTE(Protection))
+    {
+        Status = MiCfgPrepareRangeLocked(Space, Start, End);
+        if (!NT_SUCCESS(Status))
+        {
+            MiWriteWatchRelease(Vad);
+            MiReturnCommit(Space, Charged);
+            goto Done;
+        }
+    }
     if (!MiVadInsert(&Space->VadRoot, &Vad->Node))
     {
         MiWriteWatchRelease(Vad);
@@ -759,6 +769,8 @@ SelectRange:
             goto Done;
         }
     }
+    MiCfgFillRangeLocked(Space, Start, End, Vad->MemCommit && MI_PROT_IS_EXECUTE(Protection) && !TargetsInvalid ?
+                         0xff : 0);
     *BaseAddress = Start;
     *RegionSize = End - Start;
 
@@ -780,7 +792,8 @@ MiReplacePlaceholder(
     _Inout_ PULONG64 BaseAddress,
     _Inout_ PULONG64 RegionSize,
     _In_ ULONG AllocationType,
-    _In_ ULONG Protection)
+    _In_ ULONG Protection,
+    _In_ BOOLEAN TargetsInvalid)
 {
     ULONG64 Start = MI_PAGE_ALIGN_DOWN(*BaseAddress);
     ULONG64 End = MI_PAGE_ALIGN_UP(*BaseAddress + *RegionSize);
@@ -815,6 +828,17 @@ MiReplacePlaceholder(
             MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
             return STATUS_COMMITMENT_LIMIT;
         }
+        if (MI_PROT_IS_EXECUTE(Protection))
+        {
+            NTSTATUS Status = MiCfgPrepareRangeLocked(Space, Start, End);
+            if (!NT_SUCCESS(Status))
+            {
+                MiReturnCommit(Space, Charged);
+                MiWriteWatchRelease(Vad);
+                MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
+                return Status;
+            }
+        }
     }
 
     Vad->Placeholder = FALSE;
@@ -822,6 +846,7 @@ MiReplacePlaceholder(
     Vad->Protection = Protection;
     Vad->MemCommit = (BOOLEAN)(Charged != 0);
     Vad->CommitCharge = Charged;
+    MiCfgFillRangeLocked(Space, Start, End, Charged && MI_PROT_IS_EXECUTE(Protection) && !TargetsInvalid ? 0xff : 0);
 
     *BaseAddress = Start;
     *RegionSize = End - Start;
@@ -870,7 +895,9 @@ MiAllocateVirtualMemoryBounded(
     PMI_VAD Vad;
     NTSTATUS Status = STATUS_SUCCESS;
     LONG64 Charged = 0;
+    BOOLEAN TargetsInvalid = (BOOLEAN)((Protection & MI_PROT_CFG_NO_UPDATE) != 0);
 
+    Protection &= ~MI_PROT_CFG_NO_UPDATE;
     if (!MiProtectionIsValid(Protection) || (MI_PROT_IS_COPY(Protection) && (AllocationType & MI_MEM_RESERVE)))
         return STATUS_INVALID_PAGE_PROTECTION;
 
@@ -882,7 +909,8 @@ MiAllocateVirtualMemoryBounded(
         if (LowestAddress != 0 || Alignment != 0)
             return STATUS_NOT_SUPPORTED;
 
-        return MiAllocateLargePages(Space, BaseAddress, RegionSize, AllocationType, Protection, HighestAddress);
+        return MiAllocateLargePages(Space, BaseAddress, RegionSize, AllocationType,
+                                    Protection | (TargetsInvalid ? MI_PROT_CFG_NO_UPDATE : 0), HighestAddress);
     }
 
     if (AllocationType & MI_MEM_PHYSICAL)
@@ -926,13 +954,13 @@ MiAllocateVirtualMemoryBounded(
             return STATUS_INVALID_PARAMETER;
         }
 
-        return MiReplacePlaceholder(Space, BaseAddress, RegionSize, AllocationType, Protection);
+        return MiReplacePlaceholder(Space, BaseAddress, RegionSize, AllocationType, Protection, TargetsInvalid);
     }
 
     if (AllocationType & MI_MEM_RESERVE)
     {
         Status = MiReserveVirtualMemory(Space, BaseAddress, RegionSize, AllocationType, Protection, LowestAddress,
-                                        HighestAddress, Alignment);
+                                        HighestAddress, Alignment, TargetsInvalid);
         return Status;
     }
 
@@ -975,7 +1003,8 @@ MiAllocateVirtualMemoryBounded(
         if (!Segment->Reserved)
         {
             Status = MiViewProtectionCompatible(Vad, Protection)
-                         ? MiSetMappedViewProtection(Space, Vad, Start, End, Protection)
+                         ? MiSetMappedViewProtection(Space, Vad, Start, End,
+                                                     Protection | (TargetsInvalid ? MI_PROT_CFG_NO_UPDATE : 0))
                          : STATUS_INVALID_PAGE_PROTECTION;
             MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
             return Status;
@@ -989,7 +1018,8 @@ MiAllocateVirtualMemoryBounded(
             MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
             Vad = MiVadLocate(Space, Start);
             Status = (Vad != NULL && Vad->Segment == Segment && End <= MI_VAD_END(Vad))
-                         ? MiSetMappedViewProtection(Space, Vad, Start, End, Protection)
+                         ? MiSetMappedViewProtection(Space, Vad, Start, End,
+                                                     Protection | (TargetsInvalid ? MI_PROT_CFG_NO_UPDATE : 0))
                          : STATUS_CONFLICTING_ADDRESSES;
             MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
         }
@@ -1025,6 +1055,18 @@ MiAllocateVirtualMemoryBounded(
         MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
         return STATUS_COMMITMENT_LIMIT;
     }
+    if (MI_PROT_IS_EXECUTE(Protection))
+    {
+        Status = MiCfgPrepareRangeLocked(Space, Start, End);
+        if (!NT_SUCCESS(Status))
+        {
+            MiReturnCommit(Space, Charged);
+            MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
+            return Status;
+        }
+        if (TargetsInvalid)
+            MiCfgFillRangeLocked(Space, Start, End, 0);
+    }
 
     Vad->CommitCharge += Charged;
     Vad->PteTouched = TRUE;
@@ -1037,6 +1079,8 @@ MiAllocateVirtualMemoryBounded(
         Vad->CommitCharge -= Uncommitted;
         MiReturnCommit(Space, Uncommitted);
     }
+    else if (MI_PROT_IS_EXECUTE(Protection) && !TargetsInvalid)
+        MiCfgFillRangeLocked(Space, Start, End, 0xff);
 
     *BaseAddress = Start;
     *RegionSize = End - Start;
@@ -1456,7 +1500,7 @@ MiProtectPrivateShared(
     MI_RW_ACQUIRE_SHARED(&Space->Lock);
     Vad = MiVadLocate(Space, Start);
     if (Vad == NULL || End > MI_VAD_END(Vad) || Vad->Type != MiVadPrivate || MI_VAD_IS_DIRECT(Vad) ||
-        Space->CloneRoot.NodeCount != 0 || Space->TrackExecutableWrites)
+        Space->CloneRoot.NodeCount != 0 || Space->TrackExecutableWrites || Space->CfgBitmap)
     {
         goto Done;
     }
@@ -1528,7 +1572,9 @@ MiProtectVirtualMemoryEx(
     NTSTATUS Status = STATUS_SUCCESS;
     PMI_VAD Vad;
     ULONG64 Va;
+    BOOLEAN PreserveTargets = (BOOLEAN)((NewProtection & MI_PROT_CFG_NO_UPDATE) != 0);
 
+    NewProtection &= ~MI_PROT_CFG_NO_UPDATE;
     *OldProtection = 0;
 
     if (!MiProtectionIsValid(NewProtection))
@@ -1556,7 +1602,7 @@ MiProtectVirtualMemoryEx(
         return STATUS_CONFLICTING_ADDRESSES;
     }
 
-    if (Vad->Type == MiVadAwe)
+    if (Vad->Type == MiVadAwe || Vad->Type == MiVadCfgBitmap)
     {
         MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
         return STATUS_CONFLICTING_ADDRESSES;
@@ -1576,7 +1622,8 @@ MiProtectVirtualMemoryEx(
 
     if (Vad->Type == MiVadLarge)
     {
-        Status = MiProtectLargePagesLocked(Space, Start, End, NewProtection, OldProtection);
+        Status = MiProtectLargePagesLocked(Space, Start, End,
+                                           NewProtection | (PreserveTargets ? MI_PROT_CFG_NO_UPDATE : 0), OldProtection);
         if (NT_SUCCESS(Status))
         {
             *BaseAddress = Start;
@@ -1607,13 +1654,24 @@ MiProtectVirtualMemoryEx(
             *OldProtection = Current;
     }
 
+    if (Vad->Type == MiVadPrivate && MI_PROT_IS_EXECUTE(NewProtection) && !PreserveTargets)
+    {
+        Status = MiCfgPrepareRangeLocked(Space, Start, End);
+        if (!NT_SUCCESS(Status))
+        {
+            MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
+            return Status;
+        }
+    }
+
     if (MI_VAD_IS_DIRECT(Vad))
     {
         Status = STATUS_CONFLICTING_ADDRESSES;
     }
     else if (Vad->Type != MiVadPrivate)
     {
-        Status = MiProtectMappedView(Space, Vad, Start, End, NewProtection);
+        Status = MiProtectMappedView(Space, Vad, Start, End,
+                                     NewProtection | (PreserveTargets ? MI_PROT_CFG_NO_UPDATE : 0));
     }
     else
     {
@@ -1629,6 +1687,8 @@ MiProtectVirtualMemoryEx(
         }
         Vad->PteTouched = TRUE;
         Status = MiSetPrivateRangeProtection(Space, Start, End, NewProtection, FALSE);
+        if (NT_SUCCESS(Status) && MI_PROT_IS_EXECUTE(NewProtection) && !PreserveTargets)
+            MiCfgFillRangeLocked(Space, Start, End, 0xff);
     }
 
     if (NT_SUCCESS(Status) && Space->TrackExecutableWrites &&
@@ -1717,6 +1777,12 @@ MiQueryVirtualMemory(
     Information->Type = (Vad->Type == MiVadPrivate || (Vad->Type == MiVadLarge && Vad->Segment == NULL) ||
                          Vad->Type == MiVadAwe || Vad->Type == MiVadRotate || Vad->LockedPages) ? MI_MEM_PRIVATE
                                                     : ((Vad->Type == MiVadImage) ? MI_MEM_IMAGE : MI_MEM_MAPPED);
+
+    if (Vad->Type == MiVadCfgBitmap)
+    {
+        Va = MiCfgBitmapRegionEndLocked(Space, Start, Committed);
+        goto Done;
+    }
 
     Uniform = (BOOLEAN)(Vad->Type != MiVadImage && (Vad->Segment == NULL || !Vad->Segment->Reserved));
     Va = Start + PAGE_SIZE;
@@ -1816,7 +1882,8 @@ MiWorkingSetPageLocked(
     RtlZeroMemory(Information, sizeof(*Information));
 
     Information->Shared = (BOOLEAN)!(Vad->Type == MiVadPrivate || (Vad->Type == MiVadLarge && Vad->Segment == NULL) ||
-                                     Vad->Type == MiVadAwe || Vad->Type == MiVadRotate || Vad->LockedPages);
+                                     Vad->Type == MiVadAwe || Vad->Type == MiVadRotate || Vad->Type == MiVadCfgBitmap ||
+                                     Vad->LockedPages);
 
     if (Vad->Type == MiVadLarge)
     {
@@ -1840,6 +1907,8 @@ MiWorkingSetPageLocked(
     Information->Locked = (BOOLEAN)(Vad->LockedPages || MiLockRangeLocked(Space, Va, &Next));
     Information->LargePage = (BOOLEAN)(Vad->Type == MiVadLarge);
     Information->Protection = Protection;
+    if (Vad->Type == MiVadCfgBitmap)
+        return;
     Information->ShareCount = 1;
 
     if ((!MI_VAD_IS_DIRECT(Vad) || (Vad->Type == MiVadLarge && Vad->Segment != NULL)) && MiPfnTracked(Db, Frame))
@@ -1906,6 +1975,12 @@ MiQueryWorkingSetList(
 
         while (Va < End)
         {
+            if (Vad->Type == MiVadCfgBitmap)
+            {
+                Va = MiCfgBitmapRegionEndLocked(Space, Va, FALSE);
+                if (Va >= End)
+                    break;
+            }
             if (Vad->Type != MiVadLarge && MiPtLookup(Space, Va, NULL) == NULL)
             {
                 ULONG64 Next = MiPtNextTableBoundary(Space, Va);
@@ -1955,7 +2030,11 @@ MiCleanAddressSpace(
     {
         PMI_VAD Vad = CONTAINING_RECORD(Node, MI_VAD, Node);
 
-        if (Vad->Type == MiVadAwe)
+        if (Vad->Type == MiVadCfgBitmap)
+        {
+            MiCfgDeleteBitmapLocked(Space);
+        }
+        else if (Vad->Type == MiVadAwe)
         {
             MiAweReleaseWindowLocked(Space, Vad);
         }

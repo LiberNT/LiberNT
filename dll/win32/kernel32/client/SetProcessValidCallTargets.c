@@ -20,12 +20,21 @@ SetProcessValidCallTargets(
 {
     NTSTATUS Status;
 
+#ifdef _M_AMD64
+    ULONG Index, Processed = 0;
+    MEMORY_RANGE_ENTRY Range = { VirtualAddress, RegionSize };
+    CFG_CALL_TARGET_LIST_INFORMATION List = { NumberOfOffsets, 0, &Processed, OffsetInformation, NULL, 0 };
+    Status = NtSetInformationVirtualMemory(hProcess, VmCfgCallTargetInformation, 1, &Range, &List, sizeof(List));
+    for (Index = 0; Index < Processed; ++Index)
+        OffsetInformation[Index].Flags |= CFG_CALL_TARGET_PROCESSED;
+#else
     if (hProcess != GetCurrentProcess())
     {
         SetLastError(ERROR_NOT_SUPPORTED);
         return FALSE;
     }
     Status = RtlSetCfgTargetValidity(VirtualAddress, RegionSize, NumberOfOffsets, OffsetInformation);
+#endif
     if (!NT_SUCCESS(Status))
     {
         BaseSetLastNTError(Status);

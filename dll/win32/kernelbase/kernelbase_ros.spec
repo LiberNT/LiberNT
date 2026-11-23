@@ -1506,7 +1506,8 @@
 @ stdcall SetProcessPreferredUILanguages(long ptr ptr) kernelbase.SetProcessPreferredUILanguages
 #@ stdcall SetProcessPriorityBoost(long long)
 @ stdcall SetProcessShutdownParameters(long long) kernelbase.SetProcessShutdownParameters
-@ stdcall SetProcessValidCallTargets(long ptr long long ptr) kernelbase.SetProcessValidCallTargets
+@ stdcall SetProcessValidCallTargets(ptr ptr ptr long ptr) kernelbase.SetProcessValidCallTargets
+@ stdcall -arch=x86_64 SetProcessValidCallTargetsForMappedView(ptr ptr ptr long ptr ptr int64) kernelbase.SetProcessValidCallTargetsForMappedView
 #@ stdcall SetProcessWorkingSetSizeEx(long long long long)
 # #@ stub SetProtectedPolicy
 # #@ stub SetRoamingLastObservedChangeTime

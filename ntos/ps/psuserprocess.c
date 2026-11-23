@@ -1571,7 +1571,8 @@ NtCreateUserProcess(
                                    Section,
                                    Attributes.DebugPort,
                                    CapturedHandleList,
-                                   Attributes.HandleCount);
+                                   Attributes.HandleCount,
+                                   Attributes.MitigationOptions[0]);
     if (CapturedHandleList != NULL)
         ExFreePoolWithTag(CapturedHandleList, TAG_PS_HANDLE_LIST);
     if (!NT_SUCCESS(Status))

@@ -384,19 +384,30 @@ VOID NTAPI RtlUnregisterCfgTargetRange(_In_ PVOID Base)
 
 NTSTATUS NTAPI RtlSetCfgTargetValidity(_In_ PVOID Base, _In_ SIZE_T Size, _In_ ULONG Count, _Inout_updates_(Count) PVOID Targets)
 {
+#ifdef _M_AMD64
+    ULONG Processed = 0;
+    MEMORY_RANGE_ENTRY Range = { Base, Size };
+    CFG_CALL_TARGET_LIST_INFORMATION List = { Count, 0, &Processed, Targets, NULL, 0 };
+    return NtSetInformationVirtualMemory(NtCurrentProcess(), VmCfgCallTargetInformation, 1, &Range, &List, sizeof(List));
+#else
     UNREFERENCED_PARAMETER(Base);
     UNREFERENCED_PARAMETER(Size);
     UNREFERENCED_PARAMETER(Count);
     UNREFERENCED_PARAMETER(Targets);
     return STATUS_NOT_SUPPORTED;
+#endif
 }
 
 static NTSTATUS
 LdrpInitializeGuard(
     _In_ PLDR_DATA_TABLE_ENTRY LdrEntry)
 {
+#ifdef _M_AMD64
+    return LdrpInitializeAmd64Guard(LdrEntry);
+#else
     UNREFERENCED_PARAMETER(LdrEntry);
     return STATUS_SUCCESS;
+#endif
 }
 
 VOID
@@ -441,6 +452,8 @@ LdrpProcessLoadConfig(PLDR_DATA_TABLE_ENTRY Entry)
             }
         }
         Status = LdrpInitializeGuard(Entry);
+        if (NT_SUCCESS(Status))
+            Status = LdrpArchRegisterScp(Entry);
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {

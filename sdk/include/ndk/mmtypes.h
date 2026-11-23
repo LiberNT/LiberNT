@@ -204,7 +204,8 @@ typedef enum _MEMORY_INFORMATION_CLASS
     MemoryRegionInformation,
     MemoryWorkingSetExList,
     MemorySharedCommitInformation,
-    MemoryImageInformation
+    MemoryImageInformation,
+    MemoryImageExtensionInformation = 14
 } MEMORY_INFORMATION_CLASS;
 
 typedef struct _MEMORY_IMAGE_INFORMATION
@@ -219,10 +220,26 @@ typedef struct _MEMORY_IMAGE_INFORMATION
             ULONG ImagePartialMap:1;
             ULONG ImageNotExecutable:1;
             ULONG ImageSigningLevel:4;
-            ULONG Reserved:26;
+            ULONG ImageExtensionPresent:1;
+            ULONG Reserved:25;
         };
     };
 } MEMORY_IMAGE_INFORMATION, *PMEMORY_IMAGE_INFORMATION;
+
+typedef enum _MEMORY_IMAGE_EXTENSION_TYPE
+{
+    MemoryImageExtensionCfgScp,
+    MemoryImageExtensionCfgEmulatedScp,
+    MemoryImageExtensionTypeMax
+} MEMORY_IMAGE_EXTENSION_TYPE;
+
+typedef struct _MEMORY_IMAGE_EXTENSION_INFORMATION
+{
+    MEMORY_IMAGE_EXTENSION_TYPE ExtensionType;
+    ULONG Flags;
+    PVOID ExtensionImageBaseRva;
+    SIZE_T ExtensionSize;
+} MEMORY_IMAGE_EXTENSION_INFORMATION, *PMEMORY_IMAGE_EXTENSION_INFORMATION;
 
 typedef struct _MEMORY_REGION_INFORMATION
 {
@@ -268,6 +285,18 @@ typedef struct _MEMORY_RANGE_ENTRY
     PVOID VirtualAddress;
     SIZE_T NumberOfBytes;
 } MEMORY_RANGE_ENTRY, *PMEMORY_RANGE_ENTRY;
+
+#ifndef CFG_CALL_TARGET_VALID
+#define CFG_CALL_TARGET_VALID 0x1
+#define CFG_CALL_TARGET_PROCESSED 0x2
+typedef struct _CFG_CALL_TARGET_INFO
+{
+    ULONG_PTR Offset;
+    ULONG_PTR Flags;
+} CFG_CALL_TARGET_INFO, *PCFG_CALL_TARGET_INFO;
+#endif
+
+#include <libernt/cfgtargets.h>
 
 #ifndef MEM_EXTENDED_PARAMETER_TYPE_BITS
 #define MEM_EXTENDED_PARAMETER_GRAPHICS            0x00000001

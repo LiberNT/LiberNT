@@ -759,9 +759,110 @@ ProcCopyLocalUnmap(void)
     WorldDestroy(&World);
 }
 
+static void
+ProcCfgBitmap(void)
+{
+    TEST_WORLD World;
+    MI_ADDRESS_SPACE Parent, Child;
+    MI_MEMORY_INFORMATION Info;
+    ULONG64 Base, Va, Bytes, Size;
+    ULONG First, Last, Frame, OldProtection;
+    PULONG64 Mapping;
+    NTSTATUS Status;
+
+    WorldCreate(&World, 512, 2, 64);
+    ProcessCreate(&World, &Parent);
+    ProcessCreate(&World, &Child);
+    WorldAttach(&World, 0, &Parent);
+    Size = Parent.HighestVa >= 0x7FFFFFFFFFFFULL - 0x10000 ? 1ULL << 41 : 1ULL << 22;
+    MI_RW_ACQUIRE_EXCLUSIVE(&Parent.Lock);
+    CHECK(NT_SUCCESS(MiCfgCreateBitmapLocked(&Parent, 0, Size)));
+    Base = Parent.CfgBitmap->Node.StartingVpn << PAGE_SHIFT;
+    CHECK(MiCfgGetBitmapPageLocked(&Parent, Size, TRUE, &Frame) == STATUS_INVALID_PARAMETER);
+    CHECK(MiCfgGetBitmapPageLocked(&Parent, PAGE_SIZE, FALSE, &Frame) == STATUS_NOT_COMMITTED);
+    CHECK(NT_SUCCESS(MiCfgGetBitmapPageLocked(&Parent, PAGE_SIZE, TRUE, &First)));
+    CHECK(NT_SUCCESS(MiCfgGetBitmapPageLocked(&Parent, PAGE_SIZE + 1, TRUE, &Frame)) && Frame == First);
+    CHECK(NT_SUCCESS(MiCfgGetBitmapPageLocked(&Parent, 2 * PAGE_SIZE, TRUE, &Frame)));
+    CHECK(NT_SUCCESS(MiCfgGetBitmapPageLocked(&Parent, Size - 1, TRUE, &Last)) && First != Last);
+    CHECK(Parent.CfgBitmap->CommitCharge == 3);
+    Mapping = MiPfnMapFrame(&World.System.Pfn, First);
+    CHECK(*Mapping == 0);
+    *Mapping = 1;
+    MiPfnUnmapFrame(&World.System.Pfn, Mapping);
+    MI_RW_RELEASE_EXCLUSIVE(&Parent.Lock);
+
+    CHECK(NT_SUCCESS(MiQueryVirtualMemory(&Parent, Base, &Info)));
+    CHECK(Info.AllocationBase == Base && Info.Type == MI_MEM_MAPPED && Info.State == MI_MEM_RESERVE);
+    CHECK(Info.AllocationProtect == MI_PROT_NOACCESS && Info.RegionSize == PAGE_SIZE);
+    CHECK(NT_SUCCESS(MiQueryVirtualMemory(&Parent, Base + PAGE_SIZE, &Info)));
+    CHECK(Info.AllocationBase == Base && Info.Protect == MI_PROT_READONLY && Info.RegionSize == 2 * PAGE_SIZE);
+    CHECK(NT_SUCCESS(MiQueryVirtualMemory(&Parent, Base + 3 * PAGE_SIZE, &Info)));
+    CHECK(Info.State == MI_MEM_RESERVE && Info.RegionSize == Size - 4 * PAGE_SIZE);
+    CHECK(UserRead64(&World, 0, Base + PAGE_SIZE, &Status) == 1 && NT_SUCCESS(Status));
+    CHECK(UserWrite64(&World, 0, Base + PAGE_SIZE, 0) == STATUS_ACCESS_VIOLATION);
+    Va = Base + PAGE_SIZE;
+    Bytes = PAGE_SIZE;
+    CHECK(!NT_SUCCESS(MiProtectVirtualMemory(&Parent, &Va, &Bytes, MI_PROT_READWRITE, &OldProtection)));
+    CHECK(!NT_SUCCESS(MiAllocateVirtualMemory(&Parent, &Va, &Bytes, MI_MEM_COMMIT, MI_PROT_READWRITE)));
+    CHECK(!NT_SUCCESS(MiFreeVirtualMemory(&Parent, &Va, &Bytes, MI_MEM_DECOMMIT)));
+    CHECK(!NT_SUCCESS(MiUnmapView(&Parent, Base)));
+    {
+        ULONG64 Address = 0x1000000, Length = PAGE_SIZE;
+        ULONG64 Byte = Base + (Address >> 6);
+        LONG64 Charge;
+
+        CHECK(NT_SUCCESS(MiAllocateVirtualMemory(&Parent, &Address, &Length, MI_MEM_COMMIT | MI_MEM_RESERVE,
+                                                  MI_PROT_EXECUTE_READ | MI_PROT_CFG_NO_UPDATE)));
+        CHECK(UserRead64(&World, 0, Byte, &Status) == 0 && NT_SUCCESS(Status));
+        MI_RW_ACQUIRE_EXCLUSIVE(&Parent.Lock);
+        CHECK(NT_SUCCESS(MiCfgSetTargetLocked(&Parent, Address + 16, 1)));
+        MI_RW_RELEASE_EXCLUSIVE(&Parent.Lock);
+        CHECK(UserRead64(&World, 0, Byte, &Status) == 4 && NT_SUCCESS(Status));
+        CHECK(NT_SUCCESS(MiProtectVirtualMemory(&Parent, &Address, &Length, MI_PROT_READWRITE, &OldProtection)));
+        CHECK(NT_SUCCESS(MiProtectVirtualMemory(&Parent, &Address, &Length, MI_PROT_EXECUTE_READ | MI_PROT_CFG_NO_UPDATE,
+                                                 &OldProtection)));
+        CHECK(UserRead64(&World, 0, Byte, &Status) == 4 && NT_SUCCESS(Status));
+        CHECK(NT_SUCCESS(MiProtectVirtualMemory(&Parent, &Address, &Length, MI_PROT_EXECUTE_READ, &OldProtection)));
+        CHECK(UserRead64(&World, 0, Byte, &Status) == ~0ULL && NT_SUCCESS(Status));
+        CHECK(NT_SUCCESS(MiFreeVirtualMemory(&Parent, &Address, &Length, MI_MEM_DECOMMIT)));
+        CHECK(UserRead64(&World, 0, Byte, &Status) == ~0ULL && NT_SUCCESS(Status));
+        Length = 0;
+        CHECK(NT_SUCCESS(MiFreeVirtualMemory(&Parent, &Address, &Length, MI_MEM_RELEASE)));
+        CHECK(UserRead64(&World, 0, Byte, &Status) == ~0ULL && NT_SUCCESS(Status));
+        CHECK(NT_SUCCESS(MiAllocateVirtualMemory(&Parent, &Address, &Length, MI_MEM_COMMIT | MI_MEM_RESERVE,
+                                                  MI_PROT_EXECUTE_READ | MI_PROT_CFG_NO_UPDATE)));
+        CHECK(UserRead64(&World, 0, Byte, &Status) == 0 && NT_SUCCESS(Status));
+        MI_RW_ACQUIRE_EXCLUSIVE(&Parent.Lock);
+        Charge = Parent.CfgBitmap->CommitCharge;
+        World.System.CommitLimit = MI_ATOMIC_READ64(&World.System.CommittedPages) + 1;
+        CHECK(MiCfgPrepareRangeLocked(&Parent, 0x4000000, 0x40c0000) == STATUS_COMMITMENT_LIMIT);
+        CHECK(Parent.CfgBitmap->CommitCharge == Charge);
+        World.System.CommitLimit = 64;
+        MI_RW_RELEASE_EXCLUSIVE(&Parent.Lock);
+    }
+    CHECK(NT_SUCCESS(MiCloneAddressSpace(&Parent, &Child)));
+    WorldAttach(&World, 1, &Child);
+    CHECK(UserRead64(&World, 1, Base + PAGE_SIZE, &Status) == 1 && NT_SUCCESS(Status));
+    MI_RW_ACQUIRE_EXCLUSIVE(&Child.Lock);
+    CHECK(NT_SUCCESS(MiCfgGetBitmapPageLocked(&Child, PAGE_SIZE, FALSE, &Frame)) && Frame != First);
+    Mapping = MiPfnMapFrame(&World.System.Pfn, Frame);
+    *Mapping = 0;
+    MiPfnUnmapFrame(&World.System.Pfn, Mapping);
+    MI_RW_RELEASE_EXCLUSIVE(&Child.Lock);
+    CHECK(UserRead64(&World, 0, Base + PAGE_SIZE, &Status) == 1 && NT_SUCCESS(Status));
+    CHECK(UserRead64(&World, 1, Base + PAGE_SIZE, &Status) == 0 && NT_SUCCESS(Status));
+    WorldAttach(&World, 1, NULL);
+    WorldAttach(&World, 0, NULL);
+    ProcessDestroy(&World, &Child);
+    ProcessDestroy(&World, &Parent);
+    WorldExpectClean(&World, 512);
+    WorldDestroy(&World);
+}
+
 void
 TestProcess(void)
 {
+    ProcCfgBitmap();
     ProcCopyGuard();
     ProcCopyGuardRange();
     ProcCopyPhysical();
