@@ -21,6 +21,8 @@ typedef struct _SMP_CLIENT_CONTEXT
     HANDLE ProcessHandle;
     HANDLE PortHandle;
     PVOID Reserved;
+    LONG Users;
+    LONG Closed;
 } SMP_CLIENT_CONTEXT, *PSMP_CLIENT_CONTEXT;
 
 typedef
@@ -373,6 +375,8 @@ SmpHandleConnectionRequest(IN HANDLE SmApiPort,
             ClientContext->Subsystem = CidSubsystem;
             ClientContext->Reserved = NULL;
             ClientContext->PortHandle = NULL;
+            ClientContext->Users = 0;
+            ClientContext->Closed = FALSE;
         }
         else
         {
@@ -441,6 +445,27 @@ SmpHandleConnectionRequest(IN HANDLE SmApiPort,
     /* Dereference the subsystem and return the result */
     if (CidSubsystem) SmpDereferenceSubsystem(CidSubsystem);
     return Status;
+}
+
+static
+VOID
+SmpCloseClientHandles(IN PSMP_CLIENT_CONTEXT ClientContext)
+{
+    HANDLE Handle;
+
+    Handle = InterlockedExchangePointer(&ClientContext->ProcessHandle, NULL);
+    if (Handle) NtClose(Handle);
+    Handle = InterlockedExchangePointer(&ClientContext->PortHandle, NULL);
+    if (Handle) NtClose(Handle);
+}
+
+static
+VOID
+SmpReleaseClientContext(IN PSMP_CLIENT_CONTEXT ClientContext)
+{
+    ASSERT(ClientContext->Users > 0);
+    if (!InterlockedDecrement(&ClientContext->Users) && InterlockedCompareExchange(&ClientContext->Closed, 0, 0))
+        SmpCloseClientHandles(ClientContext);
 }
 
 ULONG
@@ -524,13 +549,10 @@ SmpApiLoop(IN PVOID Parameter)
                 DPRINT1("Port closed\n");
                 if (ClientContext)
                 {
-                    HANDLE Handle;
-
-                    /* FIXME: the context itself is kept, as another API thread may still be serving the client */
-                    Handle = InterlockedExchangePointer(&ClientContext->ProcessHandle, NULL);
-                    if (Handle) NtClose(Handle);
-                    Handle = InterlockedExchangePointer(&ClientContext->PortHandle, NULL);
-                    if (Handle) NtClose(Handle);
+                    /* FIXME: the context itself is kept, as LPC hands it to API threads without a reference */
+                    InterlockedExchange(&ClientContext->Closed, TRUE);
+                    if (!InterlockedCompareExchange(&ClientContext->Users, 0, 0))
+                        SmpCloseClientHandles(ClientContext);
                 }
                 ReplyMsg = NULL;
                 break;
@@ -545,9 +567,14 @@ SmpApiLoop(IN PVOID Parameter)
                 }
 
                 RequestMsg.ReturnValue = STATUS_PENDING;
+                InterlockedIncrement(&ClientContext->Users);
 
                 /* Check if the API is valid */
-                if (RequestMsg.ApiNumber >= SmpMaxApiNumber)
+                if (InterlockedCompareExchange(&ClientContext->Closed, 0, 0))
+                {
+                    Status = STATUS_PORT_DISCONNECTED;
+                }
+                else if (RequestMsg.ApiNumber >= SmpMaxApiNumber)
                 {
                     /* It isn't, fail */
                     DPRINT1("Invalid API: %lx\n", RequestMsg.ApiNumber);
@@ -571,11 +598,13 @@ SmpApiLoop(IN PVOID Parameter)
                     }
                     _SEH2_EXCEPT(SmpUnhandledExceptionFilter(_SEH2_GetExceptionInformation()))
                     {
+                        SmpReleaseClientContext(ClientContext);
                         ReplyMsg = NULL;
                         _SEH2_YIELD(break);
                     }
                     _SEH2_END;
                 }
+                SmpReleaseClientContext(ClientContext);
 
                 /* Write the result value and return the message back */
                 RequestMsg.ReturnValue = Status;
