@@ -185,7 +185,7 @@ static BOOL HandOff(SOCKET client, HANDLE *process, DWORD session, const WCHAR *
     WCHAR pipe[64];
     BROKER_HANDOFF message;
     HANDLE handle = INVALID_HANDLE_VALUE;
-    DWORD written = 0, tries;
+    DWORD written = 0, tries, server = 0;
     _snwprintf(pipe, ARRAYSIZE(pipe), BROKER_PIPE_FORMAT, session);
     pipe[ARRAYSIZE(pipe) - 1] = 0;
     for (tries = 0; tries < 300 && handle == INVALID_HANDLE_VALUE; ++tries)
@@ -197,12 +197,19 @@ static BOOL HandOff(SOCKET client, HANDLE *process, DWORD session, const WCHAR *
             *process = tries < 200 ? StartAgent(session, display) : NULL;
             if (!*process) return FALSE;
         }
-        handle = CreateFileW(pipe, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+        handle = CreateFileW(pipe, GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
+                             SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION, NULL);
         if (handle == INVALID_HANDLE_VALUE) Sleep(100);
     }
     if (handle == INVALID_HANDLE_VALUE)
     {
         Log("The server of session %lu does not take connections", session);
+        return FALSE;
+    }
+    if (!GetNamedPipeServerProcessId(handle, &server) || server != GetProcessId(*process))
+    {
+        Log("The pipe of session %lu belongs to process %lu, not to its server", session, server);
+        CloseHandle(handle);
         return FALSE;
     }
     message.Named = named;

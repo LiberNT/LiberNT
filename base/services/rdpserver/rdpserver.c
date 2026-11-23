@@ -411,6 +411,26 @@ static BOOL TokenUserSid(HANDLE token, BYTE *sid, DWORD size)
     return CopySid(size, sid, ((TOKEN_USER *)buffer)->User.Sid);
 }
 
+static BOOL PipeServerIsSystem(HANDLE pipe, DWORD session)
+{
+    BYTE sid[SECURITY_MAX_SID_SIZE];
+    DWORD server = 0, serverSession = (DWORD)-1;
+    HANDLE process, token;
+    BOOL system = FALSE;
+    if (!GetNamedPipeServerProcessId(pipe, &server) || !ProcessIdToSessionId(server, &serverSession) ||
+        serverSession != session)
+        return FALSE;
+    process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, server);
+    if (!process) return FALSE;
+    if (OpenProcessToken(process, TOKEN_QUERY, &token))
+    {
+        system = TokenUserSid(token, sid, sizeof(sid)) && IsWellKnownSid(sid, WinLocalSystemSid);
+        CloseHandle(token);
+    }
+    CloseHandle(process);
+    return system;
+}
+
 static BOOL RemoteLogonAllowed(HANDLE token)
 {
     LSA_OBJECT_ATTRIBUTES attributes = {0};
@@ -629,13 +649,24 @@ static BOOL ConnectRemoteConsole(DESKTOP_CONTEXT *ctx)
     ProcessIdToSessionId(GetCurrentProcessId(), &session);
     _snwprintf(pipe, ARRAYSIZE(pipe), REMOTE_CONSOLE_PIPE_FORMAT, session);
     pipe[ARRAYSIZE(pipe) - 1] = 0;
-    RemoteConsole = CreateFileW(pipe, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+    RemoteConsole = CreateFileW(pipe, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
+                                SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION, NULL);
     if (RemoteConsole == INVALID_HANDLE_VALUE && GetLastError() == ERROR_PIPE_BUSY && WaitNamedPipeW(pipe, 10000))
-        RemoteConsole = CreateFileW(pipe, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+        RemoteConsole = CreateFileW(pipe, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
+                                    SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION, NULL);
     if (RemoteConsole == INVALID_HANDLE_VALUE)
     {
         Log("Cannot reach Winlogon: %lu", GetLastError());
         RemoteConsole = NULL;
+        return FALSE;
+    }
+    if (!PipeServerIsSystem(RemoteConsole, session))
+    {
+        Log("The pipe of Winlogon was not made by the system in this session");
+        CloseHandle(RemoteConsole);
+        RemoteConsole = NULL;
+        SecureZeroMemory(ctx->NlaPassword, sizeof(ctx->NlaPassword));
+        ctx->ConsoleStatus = ERROR_ACCESS_DENIED;
         return FALSE;
     }
     SetNamedPipeHandleState(RemoteConsole, &mode, NULL, NULL);
