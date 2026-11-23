@@ -444,15 +444,20 @@ if(ARCH STREQUAL "amd64" OR ARCH STREQUAL "i386")
             ${CMAKE_CURRENT_SOURCE_DIR}/bios/fat32.S
             ${CMAKE_CURRENT_BINARY_DIR}/fat32.bin
             0)
+        CreateBootSectorTarget(biosntfs
+            ${CMAKE_CURRENT_SOURCE_DIR}/bios/ntfs.S
+            ${CMAKE_CURRENT_BINARY_DIR}/ntfs.bin
+            0)
         CreateBootSectorTarget(biosetfs
             ${CMAKE_CURRENT_SOURCE_DIR}/bios/etfs.S
             ${CMAKE_CURRENT_BINARY_DIR}/etfsboot.com
             0)
-        add_dependencies(bootmgrbios biosmbr biosfat32 biosetfs)
+        add_dependencies(bootmgrbios biosmbr biosfat32 biosntfs biosetfs)
 
         add_cd_file(TARGET bootmgrbios FILE ${CMAKE_CURRENT_BINARY_DIR}/bootmgr DESTINATION reactos/Boot/PCAT NO_CAB FOR all)
         add_cd_file(TARGET biosmbr FILE ${CMAKE_CURRENT_BINARY_DIR}/mbr.bin DESTINATION reactos/Boot/PCAT NO_CAB FOR all)
         add_cd_file(TARGET biosfat32 FILE ${CMAKE_CURRENT_BINARY_DIR}/fat32.bin DESTINATION reactos/Boot/PCAT NO_CAB FOR all)
+        add_cd_file(TARGET biosntfs FILE ${CMAKE_CURRENT_BINARY_DIR}/ntfs.bin DESTINATION reactos/Boot/PCAT NO_CAB FOR all)
     endif()
     add_dependencies(bootloader bootmgrbios winloadpcat)
 endif()

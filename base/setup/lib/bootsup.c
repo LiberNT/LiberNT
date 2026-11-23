@@ -1432,7 +1432,14 @@ InstallVBRToPartition(
         return InstallBootCodeToDisk(SrcPath, SystemRootPath->Buffer, InstallFat32BootCode);
     }
 
-    /* TODO: NTFS, FAT12/FAT16 and exFAT volume boot records that start \bootmgr */
+    if (_wcsicmp(FileSystemName, L"NTFS") == 0)
+    {
+        CombinePaths(SrcPath, ARRAYSIZE(SrcPath), 3, SourceRootPath->Buffer, PCAT_BOOT_SOURCE_DIR, L"ntfs.bin");
+        DPRINT1("Install NTFS bootcode: %S ==> %wZ\n", SrcPath, SystemRootPath);
+        return InstallBootCodeToDisk(SrcPath, SystemRootPath->Buffer, InstallNtfsBootCode);
+    }
+
+    /* TODO: FAT12/FAT16 and exFAT volume boot records that start \bootmgr */
     DPRINT1("No volume boot record for file system '%S'\n", FileSystemName);
     return STATUS_NOT_SUPPORTED;
 }
