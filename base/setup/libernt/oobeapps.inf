@@ -3,6 +3,7 @@ Signature = "$Windows NT$"
 
 [Apps.amd64]
 ICU.amd64
+ICU.x86
 LLVMpipe.amd64
 VCRedist.x64
 VCRedist.x86
@@ -16,6 +17,7 @@ Steam.x64
 [Apps.arm64]
 FFmpeg.arm64
 ICU.arm64
+ICU.x86
 LLVMpipe.arm64
 VCRedist.arm64
 VCRedist.x64
@@ -87,8 +89,8 @@ Url = "https://github.com/LiberNT/LiberNT/releases/download/icu-72.1-1/libernt-i
 File = "libernt-icu-72.1-1-i386.msi"
 Type = "msi"
 Space = 36
-Sha256 = "dc684889922e438ae1eb983213d84cc8ef8babed37562aad9186c77709ec874a"
-Detect = "%10%\3rdParty\ICU-LICENSE"
+Sha256 = "2f82a946f0d3c7a9650334202be9469eb8d66b13c08e5242a39af7858af6a31a"
+Detect = "%10%\3rdParty\ICU-LICENSE-x86"
 
 [LLVMpipe.amd64]
 Name = "LLVMpipe and Lavapipe software OpenGL and Vulkan (x64)"

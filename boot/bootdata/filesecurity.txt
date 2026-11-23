@@ -32,6 +32,7 @@ file Windows/SysWOW64/vulkan-1.dll={CREATEDFILE}
 file Windows/system32/atl100.dll={CREATEDFILE}
 file Windows/SysWOW64/atl100.dll={CREATEDFILE}
 file Windows/system32/icu.dll={CREATEDFILE}
+file Windows/SysWOW64/icu.dll={CREATEDFILE}
 file Windows/system32/d3dx9_24.dll={CREATEDFILE}
 file Windows/system32/d3dx9_25.dll={CREATEDFILE}
 file Windows/system32/d3dx9_26.dll={CREATEDFILE}
