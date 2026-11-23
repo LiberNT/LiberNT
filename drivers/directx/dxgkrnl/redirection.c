@@ -465,13 +465,12 @@ DxgkpRedirectedBltWorker(
 {
     PDXGKP_REDIRECTED_BLT_WORK Work = Parameter;
     NTSTATUS Status = Work->Complete ? STATUS_SUCCESS : STATUS_CANCELLED;
-    KAPC_STATE ApcState;
-    PEPROCESS SessionProcess;
+    DXGK_WIN32K_ATTACHMENT Attachment;
 
     PAGED_CODE();
 
     /* The win32k callouts below are session-space code; a system worker runs outside every session */
-    if (DxgkDisplayAttachWin32kSession(PsGetProcessSessionId(Work->Present.OwnerProcess), &ApcState, &SessionProcess))
+    if (DxgkDisplayAttachWin32kSession(PsGetProcessSessionId(Work->Present.OwnerProcess), &Attachment))
     {
         /* The CDD copy reads the GDI blt texture on its own context: the producer's present must retire first */
         if (NT_SUCCESS(Status) && Work->GdiBltTexture != NULL)
@@ -490,7 +489,7 @@ DxgkpRedirectedBltWorker(
                                                                  Work->Context);
         if (!NT_SUCCESS(Status))
             DxgkCancelRedirectedBltPresent(&Work->Present);
-        DxgkDisplayDetachWin32kSession(&ApcState, SessionProcess);
+        DxgkDisplayDetachWin32kSession(&Attachment);
     }
     KeSetEvent(&DxgkpWindowBltRetiredEvent, IO_NO_INCREMENT, FALSE);
     if (Work->GdiBltTexture != NULL)

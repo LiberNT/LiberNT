@@ -4204,16 +4204,22 @@ VOID
 DxgkDisplayWin32kProcessCleanup(
     _In_ PEPROCESS Process);
 
+typedef struct _DXGK_WIN32K_ATTACHMENT
+{
+    KAPC_STATE ApcState;
+    PEPROCESS Process;
+    PVOID Binding;
+    BOOLEAN Attached;
+} DXGK_WIN32K_ATTACHMENT, *PDXGK_WIN32K_ATTACHMENT;
+
 BOOLEAN
 DxgkDisplayAttachWin32kSession(
     _In_ ULONG SessionId,
-    _Out_ PRKAPC_STATE ApcState,
-    _Out_ PEPROCESS *AttachedProcess);
+    _Out_ PDXGK_WIN32K_ATTACHMENT Attachment);
 
 VOID
 DxgkDisplayDetachWin32kSession(
-    _In_ PRKAPC_STATE ApcState,
-    _In_opt_ PEPROCESS AttachedProcess);
+    _Inout_ PDXGK_WIN32K_ATTACHMENT Attachment);
 
 VOID
 DxgkDisplayPresentBootScreen(
