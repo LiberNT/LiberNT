@@ -162,6 +162,11 @@ if(BUILD_TESTING)
     find_package(Threads REQUIRED)
     target_link_libraries(ntfslib_posix_edge PRIVATE Threads::Threads)
 
+    add_executable(ntfslib_data_stream tests/data_stream.cpp)
+    target_compile_features(ntfslib_data_stream PRIVATE cxx_std_17)
+    target_compile_options(ntfslib_data_stream PRIVATE -Wall -Wextra)
+    target_link_libraries(ntfslib_data_stream PRIVATE Threads::Threads)
+
     add_executable(ntfslib_resident_update_test
         tests/resident_update.cpp
     )
@@ -501,6 +506,21 @@ if(BUILD_TESTING AND NTFSLIB_BUILD_FUSE)
         )
         set_tests_properties(
             ntfslib_linux_posix_edge
+            PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900
+        )
+        add_test(
+            NAME ntfslib_linux_data_stream
+            COMMAND /bin/sh
+                "${CMAKE_CURRENT_LIST_DIR}/tests/data_stream_smoke.sh"
+                "$<TARGET_FILE:ntfslib_fuse>"
+                "$<TARGET_FILE:ntfslib_data_stream>"
+                "${MKNTFS_EXECUTABLE}"
+                "${NTFS3G_EXECUTABLE}"
+                "${FUSERMOUNT3_EXECUTABLE}"
+                "${NTFSFIX_EXECUTABLE}"
+        )
+        set_tests_properties(
+            ntfslib_linux_data_stream
             PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900
         )
         find_program(SFDISK_EXECUTABLE NAMES sfdisk)

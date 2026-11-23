@@ -7,7 +7,13 @@ commands that do not require FUSE privileges.
 This is a dedicated Linux test build and is not added to ReactOS's top-level
 CMake targets.
 
-The mounted frontend is single-threaded. Normal inspection opens the image
+The mounted frontend serializes requests to the shared volume, except file
+data that changes no allocation: those reads and writes go to the image
+outside the request lock, and two helper threads drain the request queue
+beside the main one when the kernel has several requests waiting (writeback,
+read-ahead). With a kernel and libfuse supporting FUSE over io_uring, pass
+`-o io_uring` after the mountpoint to use per-CPU request queues instead.
+Normal inspection opens the image
 read-only. Writable mounts and mutation probes have no LFS logging or crash
 recovery; use them on disposable test images or volumes you check afterwards.
 This is a test driver for the shared core, not a production replacement for
@@ -161,23 +167,28 @@ attribute lifetimes. A writable mount keeps file data in the kernel page
 cache too, so `write()` and shared mappings of a file stay coherent.
 `--direct-io` sends every read and write straight to the core instead; a
 `write()` can then be lost when another process dirties a shared mapping of
-the same page at the same time. `--writeback-cache` lets the kernel batch
-writes, at the cost of reporting a full volume only at `fsync` or `close`.
-Both follow `--writable`. Access times follow relatime; `-o noatime` turns them off,
+the same page at the same time. Writable mounts enable writeback caching when
+the kernel supports it. Applications must check `fsync` and `close` for deferred
+write errors, including `ENOSPC`. Use `--writable --write-through` to report
+allocation failures at `write`. With writeback active, setting a regular file’s
+mtime outside the supported NTFS range returns `EOVERFLOW` and preserves its
+previous timestamps. Access times follow relatime; `-o noatime` turns them off,
 `-o strictatime` updates them on every opened read, and the other access-time
 options of mount(8) are accepted. Directory access times are not updated. A block device can be
 supplied instead of an image when the invoking user has access to it.
 
-POSIX ownership, mode and device numbers are kept in the `$LXUID`, `$LXGID`,
-`$LXMOD` and `$LXDEV` extended attributes, as WSL and ntfs3 store them, so
-FIFOs, sockets and device nodes are ordinary records typed by `$LXMOD`.
-Files without them belong to the mounting user. The kernel enforces these
-permissions (FUSE `default_permissions`), as it does for ntfs3, and the
-frontend clears set-user-ID and set-group-ID on writes, truncation,
-preallocation and chown with the rules the Linux VFS applies. Symbolic links are NTFS
-symbolic-link reparse points, and other native EAs appear as `user.` extended
-attributes. Lookups are case-sensitive, while the volume keeps the NTFS rule
-that names differing only in case cannot share a directory.
+Three things cut requests on a tree walk. Directories are read without an
+open or a release, each scan tied to the listing it started on. A reader that
+opens the files of a directory in listing order finds the small ones (up to
+128 KiB) already in the page cache: the first is pushed with its open, the
+following ones ahead of the walk; such an open takes the access time whether
+or not it reads. A mount made with the privilege to do so raises its share of
+dirty memory from the 1% the kernel gives a FUSE mount, which otherwise paces
+sequential writes below what the daemon can take.
+
+A second mount of an image, or a tool run against a mounted one, fails with
+`EBUSY`; an image whose daemon is still unmounting is waited for, up to two
+seconds.
 
 ## Resize a volume
 
