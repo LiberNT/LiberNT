@@ -584,6 +584,29 @@ NtfsNeedsOnlineScanOnly(
     return NT_SUCCESS(Status) && (Flags & VOL_DIRTY) && !NtfsVolumeNeedsStartupRepair(Flags);
 }
 
+static
+BOOLEAN
+NtfsVolumeMountedReadOnly(
+    IN HANDLE Handle)
+{
+    struct
+    {
+        FILE_FS_ATTRIBUTE_INFORMATION Info;
+        WCHAR Name[16];
+    } Attributes;
+    IO_STATUS_BLOCK IoStatusBlock;
+    NTSTATUS Status;
+
+    Status = NtQueryVolumeInformationFile(Handle,
+                                          &IoStatusBlock,
+                                          &Attributes,
+                                          sizeof(Attributes),
+                                          FileFsAttributeInformation);
+    if (!NT_SUCCESS(Status) && Status != STATUS_BUFFER_OVERFLOW)
+        return FALSE;
+    return (Attributes.Info.FileSystemAttributes & FILE_READ_ONLY_VOLUME) != 0;
+}
+
 BOOLEAN
 NTAPI
 NtfsChkdsk(
@@ -646,6 +669,13 @@ NtfsChkdsk(
     }
     if (CheckOnlyIfDirty && Dirty && !FixErrors)
     {
+        if (NtfsVolumeMountedReadOnly(Handle))
+        {
+            NtfsFormatReport(Callback, "The volume is mounted read-only, so it cannot be repaired at startup.\n");
+            NtClose(Handle);
+            *ExitStatus = (ULONG)STATUS_SUCCESS;
+            return TRUE;
+        }
         if (NtfsNeedsOnlineScanOnly(Handle))
         {
             NtfsFormatReport(Callback, "The volume needs an online scan, which is not run at startup.\n");
