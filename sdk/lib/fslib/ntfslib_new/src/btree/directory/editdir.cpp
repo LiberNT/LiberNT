@@ -2367,9 +2367,7 @@ Directory::PushDownResidentRoot(
         IndexRoot->BytesPerIndexRec !=
             IndexRecordSize ||
         IndexRoot->ClusPerIndexRec !=
-            (UCHAR)
-                DiskVolume->
-                    ClustersPerIndexRecord)
+            IndexRootClustersPerIndexRecord(DiskVolume))
     {
         return STATUS_FILE_CORRUPT_ERROR;
     }
@@ -2504,9 +2502,7 @@ Directory::AddIndexEntry(
         IndexRoot->BytesPerIndexRec !=
             IndexRecordSize ||
         IndexRoot->ClusPerIndexRec !=
-            (UCHAR)
-                DiskVolume->
-                    ClustersPerIndexRecord)
+            IndexRootClustersPerIndexRecord(DiskVolume))
     {
         Status = STATUS_FILE_CORRUPT_ERROR;
         goto Done;

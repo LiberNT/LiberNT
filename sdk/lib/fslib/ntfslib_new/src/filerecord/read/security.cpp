@@ -877,7 +877,7 @@ FindSecurityDescriptorLocation(
         IndexRecordSize < sizeof(IndexBuffer) ||
         IndexRecordSize % DiskVolume->BytesPerSector != 0 ||
         IndexRoot->ClusPerIndexRec !=
-            (UCHAR)DiskVolume->ClustersPerIndexRecord)
+            IndexRootClustersPerIndexRecord(DiskVolume))
     {
         return STATUS_FILE_CORRUPT_ERROR;
     }
@@ -1544,7 +1544,7 @@ LoadSecureIndex(
         Index->RecordSize < sizeof(IndexBuffer) ||
         Index->RecordSize % DiskVolume->BytesPerSector != 0 ||
         Root->ClusPerIndexRec !=
-            (UCHAR)DiskVolume->ClustersPerIndexRecord)
+            IndexRootClustersPerIndexRecord(DiskVolume))
     {
         return STATUS_FILE_CORRUPT_ERROR;
     }

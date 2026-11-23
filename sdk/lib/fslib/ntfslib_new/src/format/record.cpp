@@ -32,26 +32,13 @@ FormatStringLength(_In_opt_ PCWSTR String)
     return Length;
 }
 
-/*
- * NTFS encodes a record/index size either as a positive count of clusters or,
- * when it is smaller than a cluster, as the negated base-2 logarithm.
- */
-static INT8
-FormatEncodeSizeInClusters(_In_ ULONG Size,
-                           _In_ ULONG ClusterSize)
+static UCHAR
+FormatIndexRootClusters(_In_ PFormatContext Ctx)
 {
-    INT8 Log;
+    if (Ctx->IndexRecordSize < Ctx->ClusterSize)
+        return (UCHAR)(Ctx->IndexRecordSize / Ctx->BytesPerSector);
 
-    if (Size >= ClusterSize)
-        return (INT8)(Size / ClusterSize);
-
-    for (Log = 0; Log < 32; Log++)
-    {
-        if ((1UL << Log) == Size)
-            return (INT8)(-Log);
-    }
-
-    return 0;
+    return (UCHAR)(Ctx->IndexRecordSize / Ctx->ClusterSize);
 }
 
 void
@@ -429,8 +416,7 @@ FormatAddIndexRootEntries(_In_ PFormatContext Ctx,
     Root->AttributeType = IndexedAttributeType;
     Root->CollationRule = CollationRule;
     Root->BytesPerIndexRec = Ctx->IndexRecordSize;
-    Root->ClusPerIndexRec = (UCHAR)FormatEncodeSizeInClusters(Ctx->IndexRecordSize,
-                                                              Ctx->ClusterSize);
+    Root->ClusPerIndexRec = FormatIndexRootClusters(Ctx);
 
     /* Offsets in the node header are relative to the node header itself. */
     Root->Header.IndexOffset = sizeof(IndexNodeHeader);
@@ -484,8 +470,7 @@ FormatAddIndexRootNode(_In_ PFormatContext Ctx,
     Root->AttributeType = IndexedAttributeType;
     Root->CollationRule = CollationRule;
     Root->BytesPerIndexRec = Ctx->IndexRecordSize;
-    Root->ClusPerIndexRec = (UCHAR)FormatEncodeSizeInClusters(Ctx->IndexRecordSize,
-                                                              Ctx->ClusterSize);
+    Root->ClusPerIndexRec = FormatIndexRootClusters(Ctx);
 
     Root->Header.IndexOffset = sizeof(IndexNodeHeader);
     Root->Header.TotalIndexSize = sizeof(IndexNodeHeader) + NodeEntryLength;

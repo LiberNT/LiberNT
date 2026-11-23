@@ -298,8 +298,7 @@ FileRecord::InitializeNewFileRecord(
         IndexRoot->BytesPerIndexRec =
             BytesPerIndexRecord(DiskVolume);
         IndexRoot->ClusPerIndexRec =
-            (UCHAR)
-                DiskVolume->ClustersPerIndexRecord;
+            IndexRootClustersPerIndexRecord(DiskVolume);
         IndexRoot->Header.IndexOffset =
             sizeof(IndexNodeHeader);
         IndexRoot->Header.TotalIndexSize =

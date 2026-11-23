@@ -261,7 +261,7 @@ FileRecord::UpdateParentIndexEntry(
         IndexRecordSize %
             DiskVolume->BytesPerSector != 0 ||
         IndexRoot->ClusPerIndexRec !=
-            (UCHAR)DiskVolume->ClustersPerIndexRecord)
+            IndexRootClustersPerIndexRecord(DiskVolume))
     {
         Status = STATUS_FILE_CORRUPT_ERROR;
         goto Done;

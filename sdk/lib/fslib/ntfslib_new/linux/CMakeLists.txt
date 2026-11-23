@@ -394,6 +394,17 @@ if(BUILD_TESTING AND NTFSLIB_BUILD_FUSE)
                 "${NTFSFIX_EXECUTABLE}"
         )
     endif()
+    if(MKNTFS_EXECUTABLE AND NTFSCAT_EXECUTABLE AND NTFSFIX_EXECUTABLE)
+        add_test(
+            NAME ntfslib_linux_large_cluster
+            COMMAND /bin/sh
+                "${CMAKE_CURRENT_LIST_DIR}/tests/large_cluster_smoke.sh"
+                "$<TARGET_FILE:ntfslib_fuse>"
+                "${MKNTFS_EXECUTABLE}"
+                "${NTFSCAT_EXECUTABLE}"
+                "${NTFSFIX_EXECUTABLE}"
+        )
+    endif()
     if(MKNTFS_EXECUTABLE AND
        NTFSLS_EXECUTABLE AND
        NTFSCAT_EXECUTABLE AND

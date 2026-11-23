@@ -306,6 +306,12 @@ FileRecordNumber < ((DiskVolume->SectorsPerCluster * DiskVolume->BytesPerSector)
  ? (1UL << (-(DiskVolume)->ClustersPerIndexRecord)) \
  : (BytesPerCluster(DiskVolume) * (DiskVolume)->ClustersPerIndexRecord))
 
+// INDEX_ROOT holds the index record size in clusters, or in index VCN units when a record is smaller than a cluster
+#define IndexRootClustersPerIndexRecord(DiskVolume) \
+((UCHAR)((BytesPerIndexRecord(DiskVolume) < BytesPerCluster(DiskVolume)) \
+ ? (BytesPerIndexRecord(DiskVolume) / (DiskVolume)->BytesPerSector) \
+ : (BytesPerIndexRecord(DiskVolume) / BytesPerCluster(DiskVolume))))
+
 #define IsRootFile(Path) \
 ((Path)[0] == L'\0' || ((Path)[0] == L'\\' && (Path)[1] == L'\0'))
 
