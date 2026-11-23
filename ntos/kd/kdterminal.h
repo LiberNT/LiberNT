@@ -64,6 +64,10 @@ KdpReadTermKey(
     _Out_ PULONG ScanCode);
 
 BOOLEAN
+KdpWaitForTermKey(
+    _In_ ULONG Milliseconds);
+
+BOOLEAN
 KdpTerminalPollBreakIn(VOID);
 
 BOOLEAN

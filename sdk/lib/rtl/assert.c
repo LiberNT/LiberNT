@@ -93,8 +93,7 @@ RtlAssert(
         switch (Answer)
         {
             case RtlpAssertUnanswered:
-                /* An empty answer at the debugger breaks in like break once */
-                DbgBreakPoint();
+                DbgPrintEx(DPFLTR_DEFAULT_ID, DPFLTR_ERROR_LEVEL, "*** No answer, the assertion is ignored\n");
                 break;
 
             case RtlpAssertBreakAndAsk:

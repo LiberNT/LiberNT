@@ -31,6 +31,11 @@ BOOLEAN KdTermCrashMode = FALSE;
 /* How long to wait for the rest of an escape sequence already begun */
 #define KDP_ESCAPE_RETRY    50
 
+/* A key read ahead while waiting to see whether anyone types at all */
+static BOOLEAN KdpPendingKey;
+static CHAR KdpPendingChar;
+static ULONG KdpPendingScanCode;
+
 /* PRIVATE FUNCTIONS **********************************************************/
 
 /*
@@ -205,7 +210,16 @@ KdpReadTermKey(
 
     for (;;)
     {
-        Char = KdpTryGetChar(ScanCode, KDP_TERMINAL_RETRY);
+        if (KdpPendingKey)
+        {
+            KdpPendingKey = FALSE;
+            Char = KdpPendingChar;
+            *ScanCode = KdpPendingScanCode;
+        }
+        else
+        {
+            Char = KdpTryGetChar(ScanCode, KDP_TERMINAL_RETRY);
+        }
 
         if (Char == (CHAR)-1)
             continue;
@@ -222,6 +236,35 @@ KdpReadTermKey(
 
         /* An escape that began nothing is the Escape key */
         return KEY_ESC;
+    }
+}
+
+BOOLEAN
+KdpWaitForTermKey(
+    _In_ ULONG Milliseconds)
+{
+    LARGE_INTEGER Frequency;
+    LONGLONG Deadline;
+    ULONG ScanCode;
+    CHAR Char;
+
+    if (KdpPendingKey)
+        return TRUE;
+
+    Deadline = KeQueryPerformanceCounter(&Frequency).QuadPart;
+    Deadline += (Frequency.QuadPart * Milliseconds) / 1000;
+    for (;;)
+    {
+        Char = KdpTryGetChar(&ScanCode, KDP_TERMINAL_RETRY);
+        if (Char != (CHAR)-1)
+        {
+            KdpPendingChar = Char;
+            KdpPendingScanCode = ScanCode;
+            KdpPendingKey = TRUE;
+            return TRUE;
+        }
+        if (KeQueryPerformanceCounter(NULL).QuadPart >= Deadline)
+            return FALSE;
     }
 }
 
