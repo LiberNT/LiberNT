@@ -63,8 +63,8 @@ CPlApplet(HWND hwndCPl, UINT uMsg, LPARAM lParam1, LPARAM lParam2)
         case CPL_DBLCLK:
             ShellExecuteW(NULL,
                           NULL,
-                          L"rapps.exe",
-                          L"/appwiz",
+                          L"ms-settings:appsfeatures",
+                          NULL,
                           NULL,
                           SW_SHOWNORMAL);
             break;
