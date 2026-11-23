@@ -1,6 +1,7 @@
 
 list(APPEND SOURCE
     EnumerateProcessesA.c
+    RemoteRecord.c
     SessionInformation.c
     TermSrvReady.c
     testlist.c)

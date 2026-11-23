@@ -610,7 +610,7 @@ typedef struct
 static BOOL wts_get_remote_record(DWORD session_id, WTS_REMOTE_RECORD *record)
 {
     WCHAR key_name[MAX_PATH];
-    DWORD size;
+    DWORD size, type;
     HKEY key;
     BOOL found;
 
@@ -619,12 +619,16 @@ static BOOL wts_get_remote_record(DWORD session_id, WTS_REMOTE_RECORD *record)
         return FALSE;
     memset(record, 0, sizeof(*record));
     size = sizeof(record->station) - sizeof(WCHAR);
-    found = !RegQueryValueExW(key, L"WinStationName", NULL, NULL, (BYTE *)record->station, &size);
+    found = !RegQueryValueExW(key, L"WinStationName", NULL, &type, (BYTE *)record->station, &size) && type == REG_SZ;
     size = sizeof(record->protocol);
-    found = found && !RegQueryValueExW(key, L"ProtocolType", NULL, NULL, (BYTE *)&record->protocol, &size);
+    found = found && !RegQueryValueExW(key, L"ProtocolType", NULL, &type, (BYTE *)&record->protocol, &size) &&
+            type == REG_DWORD && size == sizeof(record->protocol);
     size = sizeof(record->state);
-    found = found && !RegQueryValueExW(key, L"ConnectState", NULL, NULL, (BYTE *)&record->state, &size);
+    found = found && !RegQueryValueExW(key, L"ConnectState", NULL, &type, (BYTE *)&record->state, &size) &&
+            type == REG_DWORD && size == sizeof(record->state);
     RegCloseKey(key);
+    if (!found)
+        memset(record, 0, sizeof(*record));
     return found;
 }
 
@@ -639,21 +643,18 @@ static WTS_CONNECTSTATE_CLASS wts_session_state(DWORD session_id, BOOL has_user)
     return (session_id && has_user) ? WTSActive : WTSDisconnected;
 }
 
-static const WCHAR *wts_session_station(DWORD session_id)
+static void wts_session_station(DWORD session_id, WCHAR *station, DWORD count)
 {
-    static WCHAR remote_station[32];
     WTS_REMOTE_RECORD record;
 
     if (!session_id)
-        return wts_services_name;
-    if (wts_get_remote_record(session_id, &record))
-    {
-        lstrcpynW(remote_station, record.station, ARRAY_SIZE(remote_station));
-        return remote_station;
-    }
-    if (session_id == WTSGetActiveConsoleSessionId())
-        return wts_console_name;
-    return L"";
+        lstrcpynW(station, wts_services_name, count);
+    else if (wts_get_remote_record(session_id, &record))
+        lstrcpynW(station, record.station, count);
+    else if (session_id == WTSGetActiveConsoleSessionId())
+        lstrcpynW(station, wts_console_name, count);
+    else
+        lstrcpynW(station, L"", count);
 }
 
 BOOL WINAPI WTSEnumerateSessionsW(HANDLE server, DWORD reserved, DWORD version,
@@ -671,7 +672,7 @@ BOOL WINAPI WTSEnumerateSessionsW(HANDLE server, DWORD reserved, DWORD version,
     if (!wts_get_session_ids(sessions, ARRAY_SIZE(sessions), &session_count))
         return FALSE;
 
-    if (!(info = malloc(session_count * (sizeof(*info) + sizeof(wts_services_name)))))
+    if (!(info = malloc(session_count * (sizeof(*info) + (WINSTATIONNAME_LENGTH + 1) * sizeof(WCHAR)))))
     {
         SetLastError(ERROR_OUTOFMEMORY);
         return FALSE;
@@ -683,8 +684,8 @@ BOOL WINAPI WTSEnumerateSessionsW(HANDLE server, DWORD reserved, DWORD version,
         info[i].SessionId = sessions[i];
         info[i].State = wts_session_state(sessions[i], sessions[i] && wts_get_session_user(sessions[i], &user));
         info[i].pWinStationName = name;
-        wcscpy(name, wts_session_station(sessions[i]));
-        name += ARRAY_SIZE(wts_services_name);
+        wts_session_station(sessions[i], name, WINSTATIONNAME_LENGTH + 1);
+        name += WINSTATIONNAME_LENGTH + 1;
     }
 
     *session_info = info;
@@ -926,7 +927,7 @@ static BOOL wts_query_session_info(DWORD session_id, BOOL has_user, const WTS_SE
     memset(&info, 0, sizeof(info));
     info.State = wts_session_state(session_id, has_user);
     info.SessionId = session_id;
-    lstrcpynW(info.WinStationName, wts_session_station(session_id), ARRAY_SIZE(info.WinStationName));
+    wts_session_station(session_id, info.WinStationName, ARRAY_SIZE(info.WinStationName));
     if (has_user)
     {
         lstrcpynW(info.UserName, user->UserName, ARRAY_SIZE(info.UserName));
@@ -988,7 +989,11 @@ BOOL WINAPI WTSQuerySessionInformationW(HANDLE server, DWORD session_id, WTS_INF
         case WTSDomainName:
             return wts_return_string(buffer, count, has_user ? user.Domain : L"");
         case WTSWinStationName:
-            return wts_return_string(buffer, count, wts_session_station(session_id));
+        {
+            WCHAR station[WINSTATIONNAME_LENGTH + 1];
+            wts_session_station(session_id, station, ARRAY_SIZE(station));
+            return wts_return_string(buffer, count, station);
+        }
         case WTSSessionInfo:
             return wts_query_session_info(session_id, has_user, &user, buffer, count);
         default:

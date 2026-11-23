@@ -64,6 +64,10 @@ typedef enum tagWTS_INFO_CLASS
     WTSIsRemoteSession
 } WTS_INFO_CLASS;
 
+#define WTS_PROTOCOL_TYPE_CONSOLE 0
+#define WTS_PROTOCOL_TYPE_ICA     1
+#define WTS_PROTOCOL_TYPE_RDP     2
+
 typedef enum _WTS_CONNECTSTATE_CLASS
 {
     WTSActive,
