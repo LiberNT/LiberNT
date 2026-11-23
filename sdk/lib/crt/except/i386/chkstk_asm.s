@@ -11,6 +11,10 @@
 
 #define PAGE_SIZE 4096
 
+#ifdef CRT_COMPILER_STACK_PROBE_ALIASES
+PUBLIC __alloca
+PUBLIC ___chkstk
+#endif
 PUBLIC __chkstk
 PUBLIC __alloca_probe
 PUBLIC __alloca_probe_16
@@ -62,6 +66,10 @@ l1:
  stack in areas of 4 KB each, trying to access each area. This ensures that the
  guard page for the stack is hit, and the stack growing triggered
  */
+#ifdef CRT_COMPILER_STACK_PROBE_ALIASES
+__alloca:
+___chkstk:
+#endif
 __chkstk:
 __alloca_probe:
 
@@ -74,7 +82,7 @@ __alloca_probe:
 
     /* probe the desired memory, page by page */
     cmp eax, PAGE_SIZE
-    jl .l_LessThanAPage
+    jb .l_LessThanAPage
 
 .l_MoreThanAPage:
 
@@ -85,7 +93,7 @@ __alloca_probe:
     /* loop if still more than a page must be probed */
     sub eax, PAGE_SIZE
     cmp eax, PAGE_SIZE
-    jge .l_MoreThanAPage
+    jae .l_MoreThanAPage
 
 .l_LessThanAPage:
 
@@ -93,21 +101,13 @@ __alloca_probe:
     sub ecx, eax
     test [ecx], eax
 
-    /* EAX = top of the stack */
-    mov eax, esp
-
-    /* allocate the memory */
-    mov esp, ecx
-
-    /* restore ECX */
-    mov ecx, [eax]
-
-    /* restore the return address */
-    mov eax, [eax + 4]
-    push eax
-
-    /* return */
-    ret
+    /* Keep the return address on the active stack, even for alloca(0). */
+    lea eax, [esp + 8]
+    sub eax, ecx
+    pop ecx
+    sub esp, eax
+    push dword ptr [esp + eax]
+    ret 4
 
 /* EOF */
 END
