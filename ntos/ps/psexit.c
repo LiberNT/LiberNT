@@ -393,6 +393,7 @@ PsExitSpecialApc(
 
     *NormalRoutine = NULL;
 
+    KeAlertThread(KeGetCurrentThread(), UserMode);
     KeInitializeApc(Apc,
                     KeGetCurrentThread(),
                     OriginalApcEnvironment,
