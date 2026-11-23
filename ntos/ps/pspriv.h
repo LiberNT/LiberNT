@@ -89,7 +89,8 @@ PspCreateImageProcess(
     _In_ PVOID Section,
     _In_opt_ HANDLE DebugPort,
     _In_opt_ const HANDLE *HandleList,
-    _In_ SIZE_T HandleCount);
+    _In_ SIZE_T HandleCount,
+    _In_ ULONGLONG MitigationOptions);
 
 typedef NTSTATUS (NTAPI *PPSP_LOOKUP_BY_ID)(
     _In_ PCLIENT_ID ClientId,
@@ -230,6 +231,7 @@ PspAllocateProcess(
     _In_opt_ PVOID Section,
     _In_opt_ PACCESS_TOKEN Token,
     _In_ ULONG Flags,
+    _In_ ULONGLONG MitigationOptions,
     _Outptr_ PEPROCESS *NewProcess);
 
 NTSTATUS

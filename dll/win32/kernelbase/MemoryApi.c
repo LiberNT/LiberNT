@@ -8,6 +8,27 @@
 #include <windows.h>
 #include <winternl.h>
 
+#ifdef _M_AMD64
+#include <libernt/cfgtargets.h>
+
+BOOL WINAPI
+SetProcessValidCallTargetsForMappedView(HANDLE Process, PVOID VirtualAddress, SIZE_T RegionSize,
+                                       ULONG NumberOfOffsets, PCFG_CALL_TARGET_INFO OffsetInformation,
+                                       HANDLE Section, ULONG64 ExpectedFileOffset)
+{
+    ULONG Index, Processed = 0;
+    MEMORY_RANGE_ENTRY Range = { VirtualAddress, RegionSize };
+    CFG_CALL_TARGET_LIST_INFORMATION List = { NumberOfOffsets, 0, &Processed, OffsetInformation,
+                                             Section, ExpectedFileOffset };
+    NTSTATUS Status = NtSetInformationVirtualMemory(Process, VmCfgCallTargetInformation, 1, &Range, &List, sizeof(List));
+    for (Index = 0; Index < Processed; ++Index)
+        OffsetInformation[Index].Flags |= CFG_CALL_TARGET_PROCESSED;
+    if (!NT_SUCCESS(Status))
+        SetLastError(RtlNtStatusToDosError(Status));
+    return NT_SUCCESS(Status);
+}
+#endif
+
 static
 BOOL
 IsExecuteProtection(

@@ -312,6 +312,76 @@ MiInitializeExecuteOptions(
 }
 
 NTSTATUS
+MmCreateProcessCfgBitmap(
+    _In_ PEPROCESS Process,
+    _In_ PVOID Section,
+    _In_ ULONGLONG MitigationOptions)
+{
+    PMI_CONTROL_AREA Control = ((PMI_SECTION_OBJECT)Section)->Control;
+    PMI_ADDRESS_SPACE Space = MiSpaceOfProcess(Process);
+    ULONG Policy = (ULONG)((MitigationOptions >> 40) & 3);
+    ULONG64 ImageBase = (ULONG_PTR)Control->BasedAddress;
+    ULONG64 Base, Size, Highest, Vpn;
+    NTSTATUS Status = STATUS_NO_MEMORY;
+
+    if (!Control->Image || Control->ImageInformation.Machine != IMAGE_FILE_MACHINE_NATIVE ||
+        Control->ImageInformation.Machine != IMAGE_FILE_MACHINE_AMD64 || Policy == 2 ||
+        (!Policy && !(Control->ImageInformation.DllCharacteristics & IMAGE_DLLCHARACTERISTICS_GUARD_CF)))
+        return STATUS_SUCCESS;
+
+    Size = ROUND_TO_PAGES((Space->HighestVa >> 6) + 1);
+    Highest = Space->HighestVa - MI_NT_TOP_DOWN_GAP;
+    MI_RW_ACQUIRE_EXCLUSIVE(&Space->Lock);
+    while (MiSpaceFindEmptyRange(Space, Size >> PAGE_SHIFT, Space->Granularity >> PAGE_SHIFT,
+                                 0, Highest >> PAGE_SHIFT, TRUE, &Vpn))
+    {
+        Base = Vpn << PAGE_SHIFT;
+        if (ImageBase < Base + Size && (ImageBase >= Base || Base - ImageBase < Control->ImageSize))
+        {
+            ULONG64 ImagePage = ImageBase & ~(ULONG64)(PAGE_SIZE - 1);
+            if (ImagePage <= Space->LowestVa)
+                break;
+            Highest = ImagePage - 1;
+            continue;
+        }
+        Status = MiCfgCreateBitmapLocked(Space, Base, Size);
+        if (NT_SUCCESS(Status))
+            Space->CfgExportSuppression = (BOOLEAN)(Policy == 3 || Control->Segment->CfgExportSuppression);
+        break;
+    }
+    MI_RW_RELEASE_EXCLUSIVE(&Space->Lock);
+    if (NT_SUCCESS(Status))
+    {
+        Process->VirtualSize += (SIZE_T)Size;
+        Process->PeakVirtualSize = max(Process->PeakVirtualSize, Process->VirtualSize);
+    }
+    return Status;
+}
+
+#ifdef _M_AMD64
+NTSTATUS
+MmGetSystemDllCfgInformation(PEPROCESS Process, PVOID ImageBase, PULONG64 Page,
+                             PULONG64 Bitmap, PULONG64 Size, PBOOLEAN ExportSuppression)
+{
+    PMI_ADDRESS_SPACE Space = MiSpaceOfProcess(Process);
+    PMI_VAD Vad;
+    NTSTATUS Status = STATUS_INVALID_IMAGE_FORMAT;
+    MI_RW_ACQUIRE_SHARED(&Space->Lock);
+    Vad = MiVadLocate(Space, (ULONG_PTR)ImageBase);
+    if (Vad && Vad->CfgScp && Vad->Segment == ((PMI_SECTION_OBJECT)PspSystemDllSection)->Control->Segment)
+    {
+        *Page = Vad->Node.EndingVpn << PAGE_SHIFT;
+        *Bitmap = Space->CfgBitmap ? Space->CfgBitmap->Node.StartingVpn << PAGE_SHIFT : 0;
+        *Size = Space->CfgBitmap ? ((Space->CfgBitmap->Node.EndingVpn + 1) << PAGE_SHIFT) - *Bitmap : 0;
+        *ExportSuppression = Space->CfgExportSuppression;
+        Status = STATUS_SUCCESS;
+    }
+    MI_RW_RELEASE_SHARED(&Space->Lock);
+    return Status;
+}
+#endif
+
+NTSTATUS
 NTAPI
 MmInitializeProcessAddressSpace(
     _In_ PEPROCESS Process,

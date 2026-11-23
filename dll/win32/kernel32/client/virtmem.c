@@ -88,6 +88,7 @@ BasepVirtualAllocEx(IN HANDLE hProcess,
         return NULL;
     }
 
+#ifndef _M_AMD64
     if ((flProtect & PAGE_TARGETS_INVALID) && hProcess == GetCurrentProcess())
     {
         Status = RtlRegisterCfgTargetRange(lpAddress, dwSize);
@@ -100,6 +101,7 @@ BasepVirtualAllocEx(IN HANDLE hProcess,
         }
     }
 
+#endif
     /* Return the allocated address */
     return lpAddress;
 }
@@ -195,8 +197,10 @@ VirtualFreeEx(IN HANDLE hProcess,
             return FALSE;
         }
 
+#ifndef _M_AMD64
         if ((dwFreeType & MEM_RELEASE) && hProcess == GetCurrentProcess())
             RtlUnregisterCfgTargetRange(ReleasedAddress);
+#endif
 
         /* Return success */
         return TRUE;

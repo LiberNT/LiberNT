@@ -1210,7 +1210,8 @@
 @ stdcall SetProcessPreferredUILanguages(long ptr ptr)
 @ stdcall SetProcessPriorityBoost(long long) kernel32.SetProcessPriorityBoost
 @ stdcall SetProcessShutdownParameters(long long) kernel32.SetProcessShutdownParameters
-@ stdcall SetProcessValidCallTargets(long ptr long long ptr) kernel32.SetProcessValidCallTargets
+@ stdcall SetProcessValidCallTargets(ptr ptr ptr long ptr) kernel32.SetProcessValidCallTargets
+@ stdcall -arch=x86_64 SetProcessValidCallTargetsForMappedView(ptr ptr ptr long ptr ptr int64)
 @ stdcall SetProcessWorkingSetSize(long long long) kernel32.SetProcessWorkingSetSize
 @ stdcall SetProcessWorkingSetSizeEx(long long long long) kernel32.SetProcessWorkingSetSizeEx
 @ stdcall SetSecurityAccessMask(long ptr) advapi32.SetSecurityAccessMask

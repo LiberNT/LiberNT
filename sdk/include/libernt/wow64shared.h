@@ -255,22 +255,59 @@ typedef struct _WOW64INFO
 
 C_ASSERT(sizeof(WOW64INFO) == 40);
 
-/* Undocumented Windows 10 layout shared by native and guest ntdll. */
 typedef struct _SYSTEM_DLL_INIT_BLOCK
 {
-    ULONG   version;
-    ULONG   unknown1[3];
-    ULONG64 unknown2;
-    ULONG64 pLdrInitializeThunk;
-    ULONG64 pKiUserExceptionDispatcher;
-    ULONG64 pKiUserApcDispatcher;
-    ULONG64 pKiUserCallbackDispatcher;
-    ULONG64 pRtlUserThreadStart;
-    ULONG64 pRtlpQueryProcessDebugInformationRemote;
-    ULONG64 ntdll_handle;
-    ULONG64 pLdrSystemDllInitBlock;
-    ULONG64 pRtlpFreezeTimeBias;
+    ULONG Size;
+    ULONG64 SystemDllWowRelocation;
+    ULONG64 SystemDllNativeRelocation;
+    union
+    {
+        ULONG64 Wow64SharedInformation[16];
+        struct
+        {
+            ULONG64 pLdrInitializeThunk;
+            ULONG64 pKiUserExceptionDispatcher;
+            ULONG64 pKiUserApcDispatcher;
+            ULONG64 pKiUserCallbackDispatcher;
+            ULONG64 pRtlUserThreadStart;
+            ULONG64 pRtlpQueryProcessDebugInformationRemote;
+            ULONG64 ntdll_handle;
+            ULONG64 pLdrSystemDllInitBlock;
+            ULONG64 pRtlpFreezeTimeBias;
+        };
+    };
+    ULONG RngData;
+    union
+    {
+        ULONG Flags;
+        struct
+        {
+            ULONG CfgOverride : 1;
+            ULONG Reserved : 31;
+        };
+    };
+    struct { ULONG64 Map[3]; } MitigationOptionsMap;
+    ULONG64 CfgBitMap;
+    ULONG64 CfgBitMapSize;
+    ULONG64 Wow64CfgBitMap;
+    ULONG64 Wow64CfgBitMapSize;
+    struct { ULONG64 Map[3]; } MitigationAuditOptionsMap;
+    ULONG64 ScpCfgCheckFunction;
+    ULONG64 ScpCfgCheckESFunction;
+    ULONG64 ScpCfgDispatchFunction;
+    ULONG64 ScpCfgDispatchESFunction;
+    ULONG64 ScpArm64EcCallCheck;
+    ULONG64 ScpArm64EcCfgCheckFunction;
+    ULONG64 ScpArm64EcCfgCheckESFunction;
 } SYSTEM_DLL_INIT_BLOCK, *PSYSTEM_DLL_INIT_BLOCK;
+
+C_ASSERT(FIELD_OFFSET(SYSTEM_DLL_INIT_BLOCK, Wow64SharedInformation) == 0x18);
+C_ASSERT(FIELD_OFFSET(SYSTEM_DLL_INIT_BLOCK, ntdll_handle) == 0x48);
+C_ASSERT(FIELD_OFFSET(SYSTEM_DLL_INIT_BLOCK, RngData) == 0x98);
+C_ASSERT(FIELD_OFFSET(SYSTEM_DLL_INIT_BLOCK, CfgBitMap) == 0xb8);
+C_ASSERT(FIELD_OFFSET(SYSTEM_DLL_INIT_BLOCK, ScpCfgCheckFunction) == 0xf0);
+C_ASSERT(FIELD_OFFSET(SYSTEM_DLL_INIT_BLOCK, ScpArm64EcCfgCheckESFunction) == 0x120);
+C_ASSERT(sizeof(SYSTEM_DLL_INIT_BLOCK) == 0x128);
 
 #define WOW64_CPUFLAGS_MSFT64   0x01
 #define WOW64_CPUFLAGS_SOFTWARE 0x02

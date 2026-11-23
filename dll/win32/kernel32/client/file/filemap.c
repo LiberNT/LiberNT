@@ -231,7 +231,7 @@ MapViewOfFileEx(HANDLE hFileMappingObject,
     ViewSize = dwNumberOfBytesToMap;
 
     /* Convert flags to NT Protection Attributes */
-    if ((dwDesiredAccess & ~FILE_MAP_EXECUTE) == FILE_MAP_COPY)
+    if ((dwDesiredAccess & ~(FILE_MAP_EXECUTE | FILE_MAP_TARGETS_INVALID)) == FILE_MAP_COPY)
     {
         Protect = (dwDesiredAccess & FILE_MAP_EXECUTE) ?
                    PAGE_EXECUTE_WRITECOPY : PAGE_WRITECOPY;
@@ -250,6 +250,9 @@ MapViewOfFileEx(HANDLE hFileMappingObject,
     {
         Protect = PAGE_NOACCESS;
     }
+
+    if (dwDesiredAccess & FILE_MAP_TARGETS_INVALID)
+        Protect |= PAGE_TARGETS_INVALID;
 
     /* Map the section */
     Status = NtMapViewOfSection(hFileMappingObject,

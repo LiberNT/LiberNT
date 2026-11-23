@@ -21,8 +21,12 @@ typedef struct _K32_PROCESS_MITIGATION_INFORMATION
 
 #define K32_PROCESS_SIDE_CHANNEL_ISOLATION_POLICY ((PROCESS_MITIGATION_POLICY)14)
 
-/* One supported value bit for each creation policy implemented below. */
+/* AMD64 supports both CFG creation policy bits, including export suppression. */
+#ifdef _M_AMD64
+#define K32_MITIGATION_OPTIONS_WORD1 (0x1111101111111101ULL | (3ULL << 40))
+#else
 #define K32_MITIGATION_OPTIONS_WORD1 0x1111101111111101ULL
+#endif
 
 #define K32_MITIGATION_OPTION2_MODULE_TAMPERING       (0x1ULL << 12)
 #define K32_MITIGATION_OPTION2_RESTRICT_BRANCH        (0x1ULL << 16)
@@ -34,6 +38,7 @@ typedef struct _K32_PROCESS_MITIGATION_INFORMATION
      K32_MITIGATION_OPTION2_RESTRICT_CORE_SHARING | \
      K32_MITIGATION_OPTION2_DISABLE_FSCTL)
 
+#ifndef _M_AMD64
 static BOOL
 K32IsCurrentImageCfgEnabled(VOID)
 {
@@ -49,6 +54,7 @@ K32IsCurrentImageCfgEnabled(VOID)
     return LoadConfig != NULL && Size >= RTL_SIZEOF_THROUGH_FIELD(IMAGE_LOAD_CONFIG_DIRECTORY, GuardFlags) &&
            (LoadConfig->GuardFlags & IMAGE_GUARD_CF_INSTRUMENTED) != 0;
 }
+#endif
 
 BOOL
 WINAPI
@@ -90,6 +96,7 @@ GetProcessMitigationPolicy(
         return TRUE;
     }
 
+#ifndef _M_AMD64
     if (MitigationPolicy == ProcessControlFlowGuardPolicy)
     {
         if (dwLength != sizeof(DWORD) || hProcess != GetCurrentProcess())
@@ -100,8 +107,10 @@ GetProcessMitigationPolicy(
         *(PDWORD)lpBuffer = K32IsCurrentImageCfgEnabled() ? 1 : 0;
         return TRUE;
     }
+#endif
 
     if (MitigationPolicy == ProcessDynamicCodePolicy ||
+        MitigationPolicy == ProcessControlFlowGuardPolicy ||
         MitigationPolicy == ProcessStrictHandleCheckPolicy ||
         MitigationPolicy == ProcessSignaturePolicy ||
         MitigationPolicy == ProcessSystemCallDisablePolicy ||

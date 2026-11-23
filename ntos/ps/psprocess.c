@@ -46,6 +46,7 @@ typedef struct _PSP_CREATE_OPERANDS
 {
     PEPROCESS Parent;
     PVOID Section;
+    ULONGLONG MitigationOptions;
     PVOID DebugObject;
     PVOID ExceptionPort;
 } PSP_CREATE_OPERANDS, *PPSP_CREATE_OPERANDS;
@@ -136,6 +137,7 @@ PspAllocateProcess(
     _In_opt_ PVOID Section,
     _In_opt_ PACCESS_TOKEN Token,
     _In_ ULONG Flags,
+    _In_ ULONGLONG MitigationOptions,
     _Outptr_ PEPROCESS *NewProcess)
 {
     ULONG_PTR DirectoryTableBase[2] = { 0, 0 };
@@ -276,6 +278,15 @@ PspAllocateProcess(
         Clone = Parent;
     }
 
+    if (Section != NULL)
+    {
+        Status = MmCreateProcessCfgBitmap(Process, Section, MitigationOptions);
+        if (!NT_SUCCESS(Status))
+        {
+            ObDereferenceObject(Process);
+            return Status;
+        }
+    }
     Status = MmInitializeProcessAddressSpace(Process,
                                              Clone,
                                              Section,
@@ -289,6 +300,11 @@ PspAllocateProcess(
 
     Process->SeAuditProcessCreationInfo.ImageFileName = AuditName;
     Process->HasAddressSpace = TRUE;
+#ifdef _M_AMD64
+    if (Clone != NULL)
+        PspStoreMitigationPolicy(Process, PSP_CONTROL_FLOW_GUARD_POLICY,
+                                 PsGetProcessMitigationPolicyFlags(Clone, PSP_CONTROL_FLOW_GUARD_POLICY));
+#endif
 
     /* Every process with an image of its own gets the native DLL its threads start in */
     if (Section != NULL)
@@ -776,6 +792,7 @@ PspCreateProcessFromOperands(
                                 Operands->Section,
                                 NULL,
                                 Flags,
+                                Operands->MitigationOptions,
                                 &Process);
     if (!NT_SUCCESS(Status))
     {
@@ -928,7 +945,8 @@ PspCreateImageProcess(
     _In_ PVOID Section,
     _In_opt_ HANDLE DebugPort,
     _In_opt_ const HANDLE *HandleList,
-    _In_ SIZE_T HandleCount)
+    _In_ SIZE_T HandleCount,
+    _In_ ULONGLONG MitigationOptions)
 {
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     PSP_CREATE_OPERANDS Operands;
@@ -949,6 +967,7 @@ PspCreateImageProcess(
 
     ObReferenceObject(Section);
     Operands.Section = Section;
+    Operands.MitigationOptions = MitigationOptions;
 
     return PspCreateProcessFromOperands(ProcessHandle,
                                         DesiredAccess,

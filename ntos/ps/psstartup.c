@@ -9,6 +9,7 @@
 #include <ntoskrnl.h>
 #include "pspriv.h"
 #include <libernt/wow64shared.h>
+#include <libernt/cfgscp.h>
 #define NDEBUG
 #include <debug.h>
 
@@ -682,6 +683,43 @@ PsLocateSystemDll(VOID)
  * Maps the native image into a process. A caller that does not need to know
  * where the image landed asks for no base back.
  */
+#ifdef _M_AMD64
+static NTSTATUS
+PspPublishSystemDllCfg(PEPROCESS Process, PVOID ImageBase)
+{
+    ULONG64 Page, Bitmap, Size;
+    PSYSTEM_DLL_INIT_BLOCK Block;
+    const LDRP_SCP_CFG_HEADER *Header;
+    KAPC_STATE ApcState;
+    BOOLEAN ExportSuppression;
+    NTSTATUS Status = MmGetSystemDllCfgInformation(Process, ImageBase, &Page, &Bitmap, &Size, &ExportSuppression);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Block = (PSYSTEM_DLL_INIT_BLOCK)((ULONG_PTR)ImageBase +
+             ((ULONG_PTR)PspSystemDllInitBlock - (ULONG_PTR)PspSystemDllBase));
+    Header = (const LDRP_SCP_CFG_HEADER *)(ULONG_PTR)Page;
+    KeStackAttachProcess(&Process->Pcb, &ApcState);
+    _SEH2_TRY
+    {
+        Block->CfgBitMap = Bitmap;
+        Block->CfgBitMapSize = Size;
+        Block->ScpCfgCheckFunction = Page + Header->CfgCheckRva;
+        Block->ScpCfgCheckESFunction = Page + Header->CfgCheckESRva;
+        Block->ScpCfgDispatchFunction = Page + Header->CfgDispatchRva;
+        Block->ScpCfgDispatchESFunction = Page + Header->CfgDispatchESRva;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
+    KeUnstackDetachProcess(&ApcState);
+    if (NT_SUCCESS(Status) && Bitmap)
+        PspStoreMitigationPolicy(Process, PSP_CONTROL_FLOW_GUARD_POLICY, ExportSuppression ? 3 : 1);
+    return Status;
+}
+#endif
+
 NTSTATUS
 NTAPI
 PspMapSystemDll(
@@ -714,6 +752,10 @@ PspMapSystemDll(
     if (DllBase != NULL) *DllBase = ImageBase;
     if (PspSystemDllBase == NULL) PspSystemDllBase = ImageBase;
 
+#ifdef _M_AMD64
+    if (PspSystemDllInitBlock)
+        return PspPublishSystemDllCfg(Process, ImageBase);
+#endif
     return STATUS_SUCCESS;
 }
 

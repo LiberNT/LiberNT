@@ -322,6 +322,8 @@ KiInvalidOpcodeDispatch:
 
     mov rcx, rbp
     call KiInvalidOpcodeFaultHandler
+    test eax, eax
+    jz KiInvalidOpcodeExit
     DispatchException eax, 0, 0, 0, 0
     jmp KiInvalidOpcodeExit
 

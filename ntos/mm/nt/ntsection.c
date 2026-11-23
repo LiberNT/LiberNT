@@ -8,6 +8,7 @@
  */
 
 #include <mm/nt/mint.h>
+#include <libernt/cfgscp.h>
 
 #define MI_HEADER_BUFFER_SIZE (64 * 1024)
 #define MI_IMAGE64_RELOCATION_WINDOW 0x800000000ULL
@@ -93,7 +94,7 @@ MiFreeControlArea(
     _Inout_ PMI_CONTROL_AREA Control)
 {
     if (Control->ImageWindow != NULL)
-        MiImageWindowRelease(Control->ImageWindow, Control->ImageWindowBase, Control->ImageSize);
+        MiImageWindowRelease(Control->ImageWindow, Control->ImageWindowBase, Control->ImageWindowSize);
 
     if (Control->FileObject != NULL)
         ObDereferenceObject(Control->FileObject);
@@ -701,6 +702,7 @@ MiRelocateImageControlArea(
     PSECTION_IMAGE_INFORMATION Information = &Control->ImageInformation;
     ULONG PageCount = (ULONG)(Control->ImageSize >> PAGE_SHIFT);
     ULONG64 OldBase = (ULONG64)(ULONG_PTR)Control->BasedAddress;
+    ULONG64 WindowSize = Control->ImageSize + (Control->CfgScp ? PAGE_SIZE : 0);
     ULONG64 Highest = (ULONG64)(ULONG_PTR)MM_HIGHEST_VAD_ADDRESS;
     ULONG64 Lowest = 0;
     ULONG64 Slots, Base, Delta;
@@ -751,10 +753,10 @@ MiRelocateImageControlArea(
         Highest = ((Highest + 1) & ~(MI_IMAGE64_RELOCATION_TOP_ALIGN - 1)) - 1;
         Lowest = Highest + 1 - MI_IMAGE64_RELOCATION_WINDOW;
     }
-    if (Control->ImageSize >= Highest - Lowest - MI_ALLOCATION_GRANULARITY)
+    if (WindowSize >= Highest - Lowest - MI_ALLOCATION_GRANULARITY)
         return STATUS_NO_MEMORY;
 
-    Slots = (Highest - Lowest - Control->ImageSize) / MI_ALLOCATION_GRANULARITY;
+    Slots = (Highest - Lowest - WindowSize) / MI_ALLOCATION_GRANULARITY;
     Seed = KeQueryPerformanceCounter(NULL).LowPart ^ (ULONG)KeQueryInterruptTime() ^ (ULONG)(ULONG_PTR)Control;
     Base = Lowest + ((ULONG64)RtlRandomEx(&Seed) % Slots + 1) * MI_ALLOCATION_GRANULARITY;
     if (Base == OldBase)
@@ -767,10 +769,10 @@ MiRelocateImageControlArea(
         Previous = InterlockedCompareExchange(&MiImage32Bias, Bias, -1);
         if (Previous >= 0)
             Bias = Previous;
-        Reserved = MiImageWindowReserveTopDown(Window, Control->ImageSize, Window->SlotCount - (ULONG64)Bias, &Base);
+        Reserved = MiImageWindowReserveTopDown(Window, WindowSize, Window->SlotCount - (ULONG64)Bias, &Base);
     }
     else if (Window != NULL)
-        Reserved = MiImageWindowReserve(Window, Control->ImageSize, (Base - Lowest) / MI_ALLOCATION_GRANULARITY, &Base);
+        Reserved = MiImageWindowReserve(Window, WindowSize, (Base - Lowest) / MI_ALLOCATION_GRANULARITY, &Base);
     Delta = Base - OldBase;
 
     if (Length != 0)
@@ -919,10 +921,11 @@ Done:
     {
         Control->ImageWindow = Window;
         Control->ImageWindowBase = Base;
+        Control->ImageWindowSize = WindowSize;
     }
     else if (Reserved)
     {
-        MiImageWindowRelease(Window, Base, Control->ImageSize);
+        MiImageWindowRelease(Window, Base, WindowSize);
     }
     if (Pages != NULL)
     {
@@ -1013,6 +1016,274 @@ MiReplaceImageHeader(
     ExFreePoolWithTag(Pages, 'rImM');
     return Status;
 }
+
+static
+NTSTATUS
+MiValidateImageFunctionOverrides(
+    _In_ PMI_SEGMENT Segment,
+    _In_ ULONG64 Offset,
+    _In_ ULONG Size)
+{
+    IMAGE_FUNCTION_OVERRIDE_HEADER Header;
+    IMAGE_FUNCTION_OVERRIDE_DYNAMIC_RELOCATION Record;
+    IMAGE_BDD_INFO Bdd;
+    ULONG Remaining;
+    NTSTATUS Status;
+
+    if (Size < sizeof(Header))
+        return STATUS_INVALID_IMAGE_FORMAT;
+    Status = MiReadImageSegment(Segment, Offset, &Header, sizeof(Header));
+    if (!NT_SUCCESS(Status))
+        return Status;
+    Offset += sizeof(Header);
+    Size -= sizeof(Header);
+    Remaining = Header.FuncOverrideSize;
+    if (Remaining < sizeof(Record) || Remaining > Size || Size - Remaining < sizeof(Bdd))
+        return STATUS_INVALID_IMAGE_FORMAT;
+
+    Status = MiReadImageSegment(Segment, Offset + Remaining, &Bdd, sizeof(Bdd));
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (Bdd.BDDSize > Size - Remaining - sizeof(Bdd) ||
+        (Bdd.Version == 1 && (!Bdd.BDDSize || Bdd.BDDSize % sizeof(IMAGE_BDD_DYNAMIC_RELOCATION))))
+        return STATUS_INVALID_IMAGE_FORMAT;
+
+    while (Remaining)
+    {
+        if (Remaining < sizeof(Record))
+            return STATUS_INVALID_IMAGE_FORMAT;
+        Status = MiReadImageSegment(Segment, Offset, &Record, sizeof(Record));
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Remaining -= sizeof(Record);
+        if (!Record.RvaSize || Record.RvaSize % sizeof(ULONG) || Record.RvaSize > Remaining ||
+            Record.BaseRelocSize <= sizeof(IMAGE_BASE_RELOCATION) || Record.BaseRelocSize % sizeof(ULONG) ||
+            Record.BaseRelocSize > Remaining - Record.RvaSize)
+            return STATUS_INVALID_IMAGE_FORMAT;
+        Remaining -= Record.RvaSize + Record.BaseRelocSize;
+        Offset += sizeof(Record) + (ULONG64)Record.RvaSize + Record.BaseRelocSize;
+    }
+    return STATUS_SUCCESS;
+}
+
+static
+NTSTATUS
+MiValidateImageDynamicRelocations(
+    _In_ PMI_CONTROL_AREA Control,
+    _In_ const IMAGE_DATA_DIRECTORY *Directory,
+    _In_reads_(SectionCount) const IMAGE_SECTION_HEADER *Sections,
+    _In_ USHORT SectionCount,
+    _Out_ PBOOLEAN HasOverrides)
+{
+    IMAGE_LOAD_CONFIG_DIRECTORY64 Config;
+    IMAGE_DYNAMIC_RELOCATION_TABLE Table;
+    IMAGE_DYNAMIC_RELOCATION64 Entry;
+    const ULONG Bytes = RTL_SIZEOF_THROUGH_FIELD(IMAGE_LOAD_CONFIG_DIRECTORY64, DynamicValueRelocTableSection);
+    const IMAGE_SECTION_HEADER *Section;
+    ULONG64 Offset;
+    ULONG Remaining;
+    NTSTATUS Status;
+
+    *HasOverrides = FALSE;
+    if (Directory->Size < Bytes || !Directory->VirtualAddress || Directory->VirtualAddress > Control->ImageSize ||
+        Bytes > Control->ImageSize - Directory->VirtualAddress)
+        return STATUS_SUCCESS;
+    Status = MiReadImageSegment(Control->Segment, Directory->VirtualAddress, &Config, Bytes);
+    if (!NT_SUCCESS(Status) || !Config.DynamicValueRelocTableSection)
+        return Status;
+    if (Config.DynamicValueRelocTableSection > SectionCount)
+        return STATUS_INVALID_IMAGE_FORMAT;
+    Section = &Sections[Config.DynamicValueRelocTableSection - 1];
+    if (Config.DynamicValueRelocTableOffset > Section->SizeOfRawData ||
+        sizeof(Table) > Section->SizeOfRawData - Config.DynamicValueRelocTableOffset)
+        return STATUS_SUCCESS;
+    Offset = (ULONG64)Section->VirtualAddress + Config.DynamicValueRelocTableOffset;
+    if (Offset > Control->ImageSize || sizeof(Table) > Control->ImageSize - Offset)
+        return STATUS_SUCCESS;
+    Status = MiReadImageSegment(Control->Segment, Offset, &Table, sizeof(Table));
+    if (!NT_SUCCESS(Status) || Table.Version != 1)
+        return Status;
+    Offset += sizeof(Table);
+    Remaining = Table.Size;
+    if (Remaining > Control->ImageSize - Offset)
+        return STATUS_INVALID_IMAGE_FORMAT;
+
+    while (Remaining)
+    {
+        if (Remaining < sizeof(Entry))
+            return STATUS_INVALID_IMAGE_FORMAT;
+        Status = MiReadImageSegment(Control->Segment, Offset, &Entry, sizeof(Entry));
+        if (!NT_SUCCESS(Status))
+            return Status;
+        Offset += sizeof(Entry);
+        Remaining -= sizeof(Entry);
+        if (!Entry.BaseRelocSize || Entry.BaseRelocSize > Remaining)
+            return STATUS_INVALID_IMAGE_FORMAT;
+        if (Entry.Symbol == IMAGE_DYNAMIC_RELOCATION_FUNCTION_OVERRIDE)
+        {
+            Status = MiValidateImageFunctionOverrides(Control->Segment, Offset, Entry.BaseRelocSize);
+            if (!NT_SUCCESS(Status))
+                return Status;
+            *HasOverrides = TRUE;
+        }
+        Offset += Entry.BaseRelocSize;
+        Remaining -= Entry.BaseRelocSize;
+    }
+    return STATUS_SUCCESS;
+}
+
+#ifdef _M_AMD64
+extern const UCHAR MiAmd64CfgTemplate[], MiAmd64CfgBitmapAddress[], MiAmd64CfgExportSuppression[], MiAmd64CfgTemplateEnd[];
+extern const UCHAR MiAmd64CfgDispatchBound[];
+
+static VOID
+MiBuildAmd64CfgPage(PVOID Page, ULONG64 Bitmap, BOOLEAN ExportSuppression)
+{
+    const ULONG *Rvas = (const ULONG *)MiAmd64CfgTemplate;
+    PUCHAR Bytes = Page;
+    SIZE_T Size = (ULONG_PTR)MiAmd64CfgTemplateEnd - (ULONG_PTR)MiAmd64CfgTemplate;
+    SIZE_T Offset = (ULONG_PTR)MiAmd64CfgBitmapAddress - (ULONG_PTR)MiAmd64CfgTemplate;
+
+    ASSERT(Size <= PAGE_SIZE && Offset + sizeof(Bitmap) <= Size);
+    RtlFillMemory(Bytes, PAGE_SIZE, 0xcc);
+    RtlCopyMemory(Bytes, MiAmd64CfgTemplate, Size);
+    RtlCopyMemory(Bytes + Offset, &Bitmap, sizeof(Bitmap));
+    Bytes[(ULONG_PTR)MiAmd64CfgExportSuppression - (ULONG_PTR)MiAmd64CfgTemplate] = ExportSuppression;
+    if (!Bitmap)
+    {
+        /* Uninstrumented images share one immutable page across all process policies.
+         * The kernel supplies the current binding before the normal check resumes. */
+        static const UCHAR Bind[] = {0x0f, 0x0b}; /* ud2 */
+        ULONG Index;
+        for (Index = 0; Index < 4; ++Index)
+            RtlCopyMemory(Bytes + Rvas[Index], Bind, sizeof(Bind));
+    }
+}
+
+BOOLEAN
+MmBindSharedCfgPage(PKTRAP_FRAME TrapFrame)
+{
+    const LDRP_SCP_CFG_HEADER *Header = (const LDRP_SCP_CFG_HEADER *)MiAmd64CfgTemplate;
+    ULONG Offset = (ULONG)(TrapFrame->Rip & (PAGE_SIZE - 1));
+    SIZE_T BindingSize = (ULONG_PTR)MiAmd64CfgDispatchBound - (ULONG_PTR)MiAmd64CfgTemplate - Header->CfgDispatchRva;
+    PMI_ADDRESS_SPACE Space;
+    PMI_VAD Vad;
+    BOOLEAN Bound = FALSE;
+
+    if (Offset != Header->CfgDispatchRva && Offset != Header->CfgDispatchESRva &&
+        Offset != Header->CfgCheckRva && Offset != Header->CfgCheckESRva)
+        return FALSE;
+    if (KeGetCurrentIrql() > APC_LEVEL || MI_PROCESS_OF(PsGetCurrentProcess()) == NULL)
+        return FALSE;
+    Space = MiSpaceOfProcess(PsGetCurrentProcess());
+    MI_RW_ACQUIRE_SHARED(&Space->Lock);
+    Vad = MiVadLocate(Space, TrapFrame->Rip);
+    if (Vad && Vad->CfgScp && Vad->CfgNeutral && Vad->CfgPage && Vad->Segment &&
+        Vad->Node.EndingVpn == (TrapFrame->Rip >> PAGE_SHIFT) &&
+        Vad->Segment->BuildCfgPage == MiBuildAmd64CfgPage)
+    {
+        /* Only the kernel-generated entry in this read-only executable view traps here.
+         * R10 and the continuation come exclusively from the locked address space and template. */
+        TrapFrame->R10 = Space->CfgBitmap ? Space->CfgBitmap->Node.StartingVpn << PAGE_SHIFT : 0;
+        if (Space->CfgExportSuppression)
+        {
+            if (Offset == Header->CfgDispatchRva)
+                Offset = Header->CfgDispatchESRva;
+            else if (Offset == Header->CfgCheckRva)
+                Offset = Header->CfgCheckESRva;
+        }
+        TrapFrame->Rip = (TrapFrame->Rip & ~(ULONG64)(PAGE_SIZE - 1)) + Offset + BindingSize;
+        Bound = TRUE;
+    }
+    MI_RW_RELEASE_SHARED(&Space->Lock);
+    return Bound;
+}
+
+static NTSTATUS
+MiCaptureImageGuardTargets(PMI_CONTROL_AREA Control, const IMAGE_DATA_DIRECTORY *Directory)
+{
+    IMAGE_LOAD_CONFIG_DIRECTORY64 Config;
+    const ULONG Bytes = RTL_SIZEOF_THROUGH_FIELD(IMAGE_LOAD_CONFIG_DIRECTORY64, GuardFlags);
+    PMI_SEGMENT Segment = Control->Segment;
+    ULONG64 Offset, Count, Length, Preferred = (ULONG_PTR)Control->BasedAddress;
+    ULONG Stride, Previous = 0, Index;
+    NTSTATUS Status;
+
+    C_ASSERT(MI_CFG_FID_SUPPRESSED == IMAGE_GUARD_FLAG_FID_SUPPRESSED);
+    C_ASSERT(MI_CFG_EXPORT_SUPPRESSED == IMAGE_GUARD_FLAG_EXPORT_SUPPRESSED);
+    if (!(Control->ImageInformation.DllCharacteristics & IMAGE_DLLCHARACTERISTICS_GUARD_CF) ||
+        !Directory->VirtualAddress || Directory->Size < Bytes)
+        return STATUS_SUCCESS;
+    if (Directory->VirtualAddress > Control->ImageSize || Bytes > Control->ImageSize - Directory->VirtualAddress)
+        return STATUS_INVALID_IMAGE_FORMAT;
+    Status = MiReadImageSegment(Segment, Directory->VirtualAddress, &Config, Bytes);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    if (Config.Size < Bytes || !(Config.GuardFlags & IMAGE_GUARD_CF_INSTRUMENTED))
+        return STATUS_SUCCESS;
+    Segment->CfgInstrumented = TRUE;
+    Segment->CfgExportSuppression = (BOOLEAN)((Config.GuardFlags & IMAGE_GUARD_CF_ENABLE_EXPORT_SUPPRESSION) != 0);
+    Count = Config.GuardCFFunctionCount;
+    if (!Count)
+        return STATUS_SUCCESS;
+    if (!(Config.GuardFlags & IMAGE_GUARD_CF_FUNCTION_TABLE_PRESENT) || Config.GuardCFFunctionTable < Preferred)
+        return STATUS_INVALID_IMAGE_FORMAT;
+    Stride = sizeof(ULONG) + ((Config.GuardFlags & IMAGE_GUARD_CF_FUNCTION_TABLE_SIZE_MASK) >>
+                              IMAGE_GUARD_CF_FUNCTION_TABLE_SIZE_SHIFT);
+    Offset = Config.GuardCFFunctionTable - Preferred;
+    if (Offset > Control->ImageSize || Count > (Control->ImageSize - Offset) / Stride || Count > MAXULONG / Stride)
+        return STATUS_INVALID_IMAGE_FORMAT;
+    Length = Count * Stride;
+    Segment->CfgEntries = MI_ALLOCATE((SIZE_T)Length);
+    if (!Segment->CfgEntries)
+        return STATUS_INSUFFICIENT_RESOURCES;
+    Status = MiReadImageSegment(Segment, Offset, Segment->CfgEntries, (ULONG)Length);
+    if (!NT_SUCCESS(Status))
+        return Status;
+    for (Index = 0; Index < Count; ++Index)
+    {
+        ULONG Rva;
+        RtlCopyMemory(&Rva, Segment->CfgEntries + (SIZE_T)Index * Stride, sizeof(Rva));
+        if (Rva >= Control->ImageSize || (Index && Rva < Previous))
+            return STATUS_INVALID_IMAGE_FORMAT;
+        Previous = Rva;
+    }
+    Segment->CfgEntrySize = (UCHAR)Stride;
+    Segment->CfgEntryCount = (ULONG)Count;
+    return STATUS_SUCCESS;
+}
+
+static NTSTATUS
+MiReadImageHotpatchFlag(PMI_CONTROL_AREA Control, const IMAGE_DATA_DIRECTORY *Directory)
+{
+    IMAGE_DEBUG_DIRECTORY Entry;
+    ULONG64 Offset = Directory->VirtualAddress;
+    ULONG Left = Directory->Size;
+    NTSTATUS Status;
+
+    if (!Offset || Offset > Control->ImageSize || Left > Control->ImageSize - Offset)
+        return STATUS_SUCCESS;
+    for (; Left >= sizeof(Entry); Offset += sizeof(Entry), Left -= sizeof(Entry))
+    {
+        USHORT Flags;
+        Status = MiReadImageSegment(Control->Segment, Offset, &Entry, sizeof(Entry));
+        if (!NT_SUCCESS(Status))
+            return Status;
+        if (Entry.Type != IMAGE_DEBUG_TYPE_EX_DLLCHARACTERISTICS || Entry.SizeOfData < sizeof(Flags) ||
+            !Entry.AddressOfRawData || Entry.AddressOfRawData > Control->ImageSize - sizeof(Flags))
+            continue;
+        Status = MiReadImageSegment(Control->Segment, Entry.AddressOfRawData, &Flags, sizeof(Flags));
+        if (!NT_SUCCESS(Status))
+            return Status;
+        if (Flags & IMAGE_DLLCHARACTERISTICS_EX_HOTPATCH_COMPATIBLE)
+        {
+            Control->CfgScp = TRUE;
+            break;
+        }
+    }
+    return STATUS_SUCCESS;
+}
+#endif
 
 static
 NTSTATUS
@@ -1323,8 +1594,29 @@ MiBuildImageControlArea(
     }
     if (NT_SUCCESS(Status))
     {
-        Status = MiRelocateImageControlArea(Control, DosHeader->e_lfanew,
-                                            HasRelocations ? &DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC] : NULL);
+#ifdef _M_AMD64
+        if (Information->Machine == IMAGE_FILE_MACHINE_AMD64)
+        {
+            Control->Segment->BuildCfgPage = MiBuildAmd64CfgPage;
+            if (DataDirectoryCount > IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG)
+                Status = MiCaptureImageGuardTargets(Control, &DataDirectory[IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG]);
+        }
+#endif
+        if (NT_SUCCESS(Status) && HasRelocations && Information->ImageDynamicallyRelocated &&
+            Information->Machine == IMAGE_FILE_MACHINE_AMD64 && DataDirectoryCount > IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG)
+        {
+            BOOLEAN HasOverrides;
+            Status = MiValidateImageDynamicRelocations(Control, &DataDirectory[IMAGE_DIRECTORY_ENTRY_LOAD_CONFIG],
+                                                       SectionHeader, NtHeaders->FileHeader.NumberOfSections,
+                                                       &HasOverrides);
+#ifdef _M_AMD64
+            if (NT_SUCCESS(Status) && HasOverrides)
+                Status = MiReadImageHotpatchFlag(Control, &DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG]);
+#endif
+        }
+        if (NT_SUCCESS(Status))
+            Status = MiRelocateImageControlArea(Control, DosHeader->e_lfanew,
+                                                HasRelocations ? &DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC] : NULL);
         if (NT_SUCCESS(Status))
             Control->Segment->FileOps.Release = MiControlRelease;
         else
@@ -1346,6 +1638,7 @@ static
 NTSTATUS
 MiCreateImageControlArea(
     _In_ PFILE_OBJECT FileObject,
+    _In_ BOOLEAN SystemDll,
     _Out_ PMI_CONTROL_AREA *ControlOut)
 {
     PSECTION_OBJECT_POINTERS Pointers = FileObject->SectionObjectPointer;
@@ -1422,6 +1715,8 @@ MiCreateImageControlArea(
     MI_RW_RELEASE_EXCLUSIVE(ControlLock);
 
     Control = MiAllocateControlArea(FileObject, TRUE);
+    if (Control != NULL)
+        Control->CfgScp = SystemDll;
     Status = (Control != NULL) ? MiBuildImageControlArea(Control, (ULONG64)FileSize.QuadPart)
                                : STATUS_INSUFFICIENT_RESOURCES;
 
@@ -1467,6 +1762,7 @@ static
 NTSTATUS
 MiCreateImageControlAreaWaiting(
     _In_ PFILE_OBJECT FileObject,
+    _In_ BOOLEAN SystemDll,
     _Out_ PMI_CONTROL_AREA *ControlOut)
 {
     ULONG Attempts = 0;
@@ -1476,7 +1772,7 @@ MiCreateImageControlAreaWaiting(
 
     do
     {
-        Status = MiCreateImageControlArea(FileObject, ControlOut);
+        Status = MiCreateImageControlArea(FileObject, SystemDll, ControlOut);
         ASSERT(NT_SUCCESS(Status) || *ControlOut == NULL);
     } while (Status == STATUS_NO_MEMORY && NT_SUCCESS(MiWaitForMemory(Status, &Attempts)));
 
@@ -1758,12 +2054,17 @@ MiCreateSectionWithMode(
     }
     else if (AllocationAttributes & SEC_IMAGE)
     {
-        Status = MiCreateImageControlAreaWaiting(File, &Control);
+        BOOLEAN SystemDll = (BOOLEAN)(IMAGE_FILE_MACHINE_NATIVE == IMAGE_FILE_MACHINE_AMD64 &&
+                                      SectionObject == &PspSystemDllSection);
+        /* Include the native system DLL's supplemental page in its ASLR reservation. */
+        Status = MiCreateImageControlAreaWaiting(File, SystemDll, &Control);
         if (NT_SUCCESS(Status))
         {
             Status = MiValidateImageSigningPolicy(File, &Control->SigningState);
             if (!NT_SUCCESS(Status))
                 MiDereferenceControlArea(Control);
+            else if (SystemDll)
+                Control->Segment->CfgSystemDll = TRUE;
         }
         if (NT_SUCCESS(Status))
         {
@@ -1984,8 +2285,11 @@ MiMapSectionView(
     ULONG Protection;
     NTSTATUS Status;
     BOOLEAN NoExecute = (BOOLEAN)(Control->Image && (Section->AllocationAttributes & SEC_NOCACHE));
+    BOOLEAN CfgScp = (BOOLEAN)(Control->Image && Control->Segment->BuildCfgPage && !NoExecute && !Space->IsSystem &&
+                               (Control->CfgScp || (PspSystemDllSection &&
+                                Control == ((PMI_SECTION_OBJECT)PspSystemDllSection)->Control)));
 
-    if (!MiProtectionFromWin32(Win32Protect, &Protection))
+    if (!MiAllocationProtectionFromWin32(Win32Protect, &Protection))
     {
         return STATUS_INVALID_PAGE_PROTECTION;
     }
@@ -2074,11 +2378,12 @@ MiMapSectionView(
         ULONG64 TryBase = Base;
         ULONG64 TrySize = Size;
 
-        Status = MiMapViewEx(Space, Control->Segment, &TryBase, Offset, &TrySize, Protection,
+        Status = MiMapViewEx(Space, Control->Segment, &TryBase, Offset, &TrySize,
+                             Protection | ((Win32Protect & PAGE_TARGETS_INVALID) ? MI_PROT_CFG_NO_UPDATE : 0),
                              (AllocationType & (MEM_TOP_DOWN | MEM_RESERVE | MEM_LARGE_PAGES)) |
                              ((AllocationType & MEM_REPLACE_PLACEHOLDER) ? MI_MEM_REPLACE_PLACEHOLDER : 0) |
                              ((AllocationType & MEM_DOS_LIM) ? MI_MEM_PAGE_GRANULAR : 0) |
-                             (NoExecute ? MI_MEM_NO_EXECUTE_IMAGE : 0),
+                             (NoExecute ? MI_MEM_NO_EXECUTE_IMAGE : 0) | (CfgScp ? MI_MEM_CFG_SCP : 0),
                              Highest, Control->Image ? 0 : Section->Protection, Inherit);
 
         if (NT_SUCCESS(Status))
@@ -2768,7 +3073,7 @@ NtMapViewOfSection(
     if ((AllocationType & MEM_DOS_LIM) && sizeof(ULONG_PTR) == sizeof(ULONG64))
         return STATUS_INVALID_PARAMETER_9;
 
-    if (!MiProtectionFromWin32(Protect, &Protection))
+    if (!MiAllocationProtectionFromWin32(Protect, &Protection))
         return STATUS_INVALID_PAGE_PROTECTION;
 
     if (InheritDisposition != ViewShare && InheritDisposition != ViewUnmap)

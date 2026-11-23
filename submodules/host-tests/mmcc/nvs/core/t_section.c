@@ -2377,11 +2377,99 @@ ImageRelocatedBacking(void)
     WorldDestroy(&World);
 }
 
+static void
+RecordCfgBinding(PVOID Page, ULONG64 Bitmap, BOOLEAN ExportSuppression)
+{
+    UNREFERENCED_PARAMETER(ExportSuppression);
+    *(PULONG64)Page = Bitmap;
+}
+
+static void
+ImageCfgScp(void)
+{
+    MI_SEGMENT_LAYOUT Layout = { 0, 1, 0, PAGE_SIZE, MI_PROT_READONLY };
+    TEST_WORLD World;
+    TEST_FILE File;
+    MI_ADDRESS_SPACE A, B;
+    PMI_SEGMENT Image;
+    MI_MEMORY_INFORMATION Info;
+    ULONG64 BaseA = 0, BaseB = 0, Size = 0, Bitmap, Address;
+    MI_WORKING_SET_EX_INFORMATION Ws;
+    ULONG Old;
+    NTSTATUS Status;
+
+    WorldCreate(&World, 512, 2, 4096);
+    WorldAttachPageFile(&World, 64);
+    FileCreate(&File, PAGE_SIZE);
+    SpaceCreate(&World, 0, &A);
+    SpaceCreate(&World, 1, &B);
+    MI_RW_ACQUIRE_EXCLUSIVE(&A.Lock);
+    CHECK(NT_SUCCESS(MiCfgCreateBitmapLocked(&A, 0, 0x10000)));
+    Bitmap = A.CfgBitmap->Node.StartingVpn << PAGE_SHIFT;
+    MI_RW_RELEASE_EXCLUSIVE(&A.Lock);
+    CHECK(NT_SUCCESS(MiSegmentCreate(&World.System, MiSegmentImage, PAGE_SIZE, MI_PROT_EXECUTE_READ,
+                                     &TestFileOps, &File, &Layout, 1, &Image)));
+    Image->BuildCfgPage = RecordCfgBinding;
+    Image->CfgInstrumented = TRUE;
+    CHECK(NT_SUCCESS(MiMapView(&A, Image, &BaseA, 0, &Size, MI_PROT_READONLY, MI_MEM_CFG_SCP)));
+    CHECK(Size == 2 * PAGE_SIZE);
+    Address = BaseA + PAGE_SIZE;
+    CHECK(NT_SUCCESS(MiQueryVirtualMemory(&A, Address, &Info)));
+    CHECK(Info.AllocationBase == BaseA && Info.Type == MI_MEM_IMAGE && Info.State == MI_MEM_COMMIT);
+    CHECK(Info.BaseAddress == Address && Info.RegionSize == PAGE_SIZE && Info.Protect == MI_PROT_EXECUTE_READ);
+    CHECK(UserRead64(&World, 0, Address, &Status) == Bitmap && NT_SUCCESS(Status));
+    CHECK(UserWrite64(&World, 0, Address, 0) == STATUS_ACCESS_VIOLATION);
+    Size = PAGE_SIZE;
+    CHECK(MiProtectVirtualMemory(&A, &Address, &Size, MI_PROT_EXECUTE_READWRITE, &Old) == STATUS_SECTION_PROTECTION);
+    CHECK(MiTrimRange(&A, Address, Address + PAGE_SIZE) == 1);
+    MiWriteModifiedPages(&World.System, 512);
+    CHECK(UserRead64(&World, 0, Address, &Status) == Bitmap && NT_SUCCESS(Status));
+    Size = 0;
+    CHECK(NT_SUCCESS(MiMapView(&B, Image, &BaseB, 0, &Size, MI_PROT_READONLY, MI_MEM_CFG_SCP)));
+    CHECK(Size == 2 * PAGE_SIZE);
+    CHECK(UserRead64(&World, 1, BaseB + PAGE_SIZE, &Status) == 0 && NT_SUCCESS(Status));
+    CHECK(UserRead64(&World, 0, Address, &Status) == Bitmap && NT_SUCCESS(Status));
+    CHECK(NT_SUCCESS(MiUnmapView(&B, BaseB)));
+    MI_RW_ACQUIRE_EXCLUSIVE(&B.Lock);
+    CHECK(NT_SUCCESS(MiCfgCreateBitmapLocked(&B, Bitmap, 0x10000)));
+    MI_RW_RELEASE_EXCLUSIVE(&B.Lock);
+    Size = BaseB = 0;
+    CHECK(NT_SUCCESS(MiMapView(&B, Image, &BaseB, 0, &Size, MI_PROT_READONLY, MI_MEM_CFG_SCP)));
+    CHECK(UserRead64(&World, 1, BaseB + PAGE_SIZE, &Status) == Bitmap && NT_SUCCESS(Status));
+    CHECK(NT_SUCCESS(MiQueryWorkingSetEx(&A, Address, &Ws)) && Ws.Valid && Ws.Shared && Ws.ShareCount == 2);
+    CHECK(NT_SUCCESS(MiUnmapView(&A, Address)));
+    CHECK(NT_SUCCESS(MiQueryWorkingSetEx(&B, BaseB + PAGE_SIZE, &Ws)) && Ws.Valid && Ws.Shared && Ws.ShareCount == 1);
+    CHECK(NT_SUCCESS(MiUnmapView(&B, BaseB)));
+    Image->CfgInstrumented = FALSE;
+    B.CfgExportSuppression = TRUE;
+    Size = BaseA = BaseB = 0;
+    CHECK(NT_SUCCESS(MiMapView(&A, Image, &BaseA, 0, &Size, MI_PROT_READONLY, MI_MEM_CFG_SCP)));
+    Size = 0;
+    CHECK(NT_SUCCESS(MiMapView(&B, Image, &BaseB, 0, &Size, MI_PROT_READONLY, MI_MEM_CFG_SCP)));
+    CHECK(UserRead64(&World, 0, BaseA + PAGE_SIZE, &Status) == 0 && NT_SUCCESS(Status));
+    CHECK(UserRead64(&World, 1, BaseB + PAGE_SIZE, &Status) == 0 && NT_SUCCESS(Status));
+    CHECK(NT_SUCCESS(MiQueryWorkingSetEx(&B, BaseB + PAGE_SIZE, &Ws)) && Ws.Valid && Ws.Shared && Ws.ShareCount == 2);
+    CHECK(NT_SUCCESS(MiUnmapView(&A, BaseA)));
+    CHECK(NT_SUCCESS(MiUnmapView(&B, BaseB)));
+    Size = BaseB = 0;
+    CHECK(NT_SUCCESS(MiMapView(&B, Image, &BaseB, 0, &Size, MI_PROT_READONLY, MI_MEM_NO_EXECUTE_IMAGE)));
+    CHECK(Size == PAGE_SIZE);
+    CHECK(NT_SUCCESS(MiQueryVirtualMemory(&B, BaseB + PAGE_SIZE, &Info)) && Info.State == MI_MEM_FREE);
+    CHECK(NT_SUCCESS(MiUnmapView(&B, BaseB)));
+    MiSegmentDereference(Image);
+    SpaceDestroy(&World, 0, &A);
+    SpaceDestroy(&World, 1, &B);
+    WorldExpectClean(&World, 512);
+    FileDestroy(&File);
+    WorldDestroy(&World);
+}
+
 void
 TestImage(void)
 {
     ImageRelocationRollback();
     ImageRelocatedBacking();
+    ImageCfgScp();
 
     static MI_SEGMENT_LAYOUT Layout[] =
     {

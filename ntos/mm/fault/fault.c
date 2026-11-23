@@ -432,8 +432,8 @@ RetryPage:
 
     if (Vad->Type != MiVadPrivate && (Pte == 0 || MiSoftKind(Pte) == MiSoftPrototype))
     {
-        PMI_SEGMENT Segment = Vad->Segment;
-        ULONG64 Page = Vad->SegmentPageOffset + ((PageVa >> PAGE_SHIFT) - Vad->Node.StartingVpn);
+        ULONG64 Page;
+        PMI_SEGMENT Segment = MiViewBackingPage(Vad, PageVa, &Page);
 
         Status = MiResolvePrototypeFault(Space, Vad, PageVa, Slot, TableFrame, Access, ConsumeGuard);
         if (Status != STATUS_PENDING_PAGE_IN)

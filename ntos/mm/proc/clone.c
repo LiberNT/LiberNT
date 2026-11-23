@@ -888,6 +888,11 @@ MiCloneRollback(PMI_ADDRESS_SPACE Target)
         ULONG64 Va = Node->StartingVpn << PAGE_SHIFT;
         ULONG64 End = (Node->EndingVpn + 1) << PAGE_SHIFT;
 
+        if (Vad->Type == MiVadCfgBitmap)
+        {
+            MiCfgDeleteBitmapLocked(Target);
+            continue;
+        }
         if (Vad->Type == MiVadLarge)
         {
             PMI_SEGMENT Segment = MiReleaseLargePagesLocked(Target, Vad);
@@ -904,6 +909,8 @@ MiCloneRollback(PMI_ADDRESS_SPACE Target)
             Va = Next;
         }
         MiReturnCommit(Target, Vad->CommitCharge);
+        if (Vad->CfgPage != NULL)
+            MiSegmentDereference(Vad->CfgPage);
         if (Vad->Segment != NULL)
         {
             MiAdjustSegmentCount(&Vad->Segment->MappedViews, -1);
@@ -948,6 +955,13 @@ MiCloneAddressSpace(PMI_ADDRESS_SPACE Source, PMI_ADDRESS_SPACE Target)
         ULONG64 Va = Node->StartingVpn << PAGE_SHIFT;
         ULONG64 End = (Node->EndingVpn + 1) << PAGE_SHIFT;
 
+        if (Original->Type == MiVadCfgBitmap)
+        {
+            Status = MiCfgCloneBitmapLocked(Source, Target);
+            if (!NT_SUCCESS(Status))
+                goto Rollback;
+            continue;
+        }
         if (Original->Type == MiVadAwe || Original->Type == MiVadPhysical || Original->Type == MiVadRotate ||
             (Original->Segment != NULL && !Original->Inherit))
             continue;
@@ -978,6 +992,8 @@ MiCloneAddressSpace(PMI_ADDRESS_SPACE Source, PMI_ADDRESS_SPACE Target)
         }
         if (!MiVadInsert(&Target->VadRoot, &Vad->Node))
             MI_ASSERT(FALSE);
+        if (Vad->CfgPage != NULL)
+            MiSegmentReference(Vad->CfgPage);
         if (Vad->Segment != NULL)
         {
             MiSegmentReference(Vad->Segment);
@@ -1051,7 +1067,7 @@ MiCloneAddressSpace(PMI_ADDRESS_SPACE Source, PMI_ADDRESS_SPACE Target)
         ULONG64 Va = Node->StartingVpn << PAGE_SHIFT;
         ULONG64 End = (Node->EndingVpn + 1) << PAGE_SHIFT;
 
-        if (Original->Type == MiVadLarge)
+        if (Original->Type == MiVadLarge || Original->Type == MiVadCfgBitmap)
             continue;
         while (Va < End)
         {

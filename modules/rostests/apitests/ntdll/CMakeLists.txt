@@ -278,9 +278,10 @@ if(ARCH STREQUAL "i386")
         i386/NtCreateThread.S
     )
 elseif(ARCH STREQUAL "amd64")
-    list(APPEND SOURCE NullGsSelector.c RtlRestoreContextConsolidate.c RtlVirtualUnwindFragment.c RtlVirtualUnwindTailJump.c SyscallStub.c x87Exception.c)
+    list(APPEND SOURCE LdrScp.c NullGsSelector.c RtlRestoreContextConsolidate.c RtlVirtualUnwindFragment.c RtlVirtualUnwindTailJump.c SyscallStub.c x87Exception.c)
     add_asm_files(ntdll_apitest_asm
         ../crt/amd64/setjmp_helper.s
+        amd64/LdrScp.S
         amd64/NtContinue.S
         amd64/NtCreateThread.S
         amd64/NullGsSelector.S

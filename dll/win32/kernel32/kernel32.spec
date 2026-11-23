@@ -1270,7 +1270,7 @@
 @ stdcall -version=0xA00+ SetProcessDefaultCpuSets(ptr ptr long) kernelbase.SetProcessDefaultCpuSets
 @ stdcall -version=0x602+ SetProcessInformation(long long ptr long)
 @ stdcall -version=0x602+ SetProcessMitigationPolicy(long ptr long)
-@ stdcall -version=0xA00+ SetProcessValidCallTargets(long ptr long long ptr)
+@ stdcall -version=0xA00+ SetProcessValidCallTargets(ptr ptr ptr long ptr)
 @ stdcall -thunk -version=0x601+ SetProcessPreferredUILanguages(long ptr ptr) kernelbase.SetProcessPreferredUILanguages
 @ stdcall SetProcessPriorityBoost(long long)
 @ stdcall SetProcessShutdownParameters(long long)

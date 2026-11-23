@@ -931,6 +931,10 @@ LdrpWalkImportDescriptor(IN LPWSTR DllPath OPTIONAL,
     _SEH2_TRY
     {
         Status = LdrpWalkImports(DllPath, LdrEntry);
+#ifdef _M_AMD64
+        if (NT_SUCCESS(Status))
+            Status = LdrpEnableAddressTakenImports(LdrEntry);
+#endif
     }
     _SEH2_FINALLY
     {

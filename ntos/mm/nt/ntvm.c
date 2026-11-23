@@ -536,7 +536,8 @@ MiAllocateVirtualMemoryNt(
         if (Base == 0)
             Type |= MI_MEM_RESERVE;
 
-        Status = MiAllocateVirtualMemoryBounded(MiSpaceOfProcess(Target.Process), &Base, &Size, Type, Protection,
+        Status = MiAllocateVirtualMemoryBounded(MiSpaceOfProcess(Target.Process), &Base, &Size, Type,
+                                                Protection | ((Protect & PAGE_TARGETS_INVALID) ? MI_PROT_CFG_NO_UPDATE : 0),
                                                 LowestAddress, Highest, Alignment, DenyDynamicCode);
         if (Status != STATUS_NO_MEMORY || !(Type & MI_MEM_COMMIT))
             break;
@@ -859,7 +860,8 @@ MiProtectVirtualMemoryNt(
 
     do
     {
-        Status = MiProtectVirtualMemoryEx(MiSpaceOfProcess(Process), &Base, &Size, Protection, &Old,
+        Status = MiProtectVirtualMemoryEx(MiSpaceOfProcess(Process), &Base, &Size,
+                                          Protection | ((NewAccessProtection & PAGE_TARGETS_NO_UPDATE) ? MI_PROT_CFG_NO_UPDATE : 0), &Old,
                                           DenyDynamicCode);
     } while (NT_SUCCESS(MiWaitForMemory(Status, &Attempts)) && Status == STATUS_NO_MEMORY);
 
@@ -1128,10 +1130,9 @@ MiQueryImageInformation(
     KPROCESSOR_MODE PreviousMode = ExGetPreviousMode();
     MEMORY_IMAGE_INFORMATION Image;
     MI_PROCESS_REFERENCE Target;
-    MI_MEMORY_INFORMATION Info;
     PMI_ADDRESS_SPACE Space;
-    ULONG64 AllocationBase;
-    ULONG64 Query;
+    PMI_VAD Vad;
+    ULONG64 Address = (ULONG_PTR)BaseAddress;
     NTSTATUS Status;
 
     C_ASSERT(sizeof(MEMORY_IMAGE_INFORMATION) == 3 * sizeof(PVOID));
@@ -1160,28 +1161,25 @@ MiQueryImageInformation(
 
     RtlZeroMemory(&Image, sizeof(Image));
     Space = MiSpaceOfProcess(Target.Process);
-    Status = MiQueryVirtualMemory(Space, (ULONG64)(ULONG_PTR)BaseAddress, &Info);
-    if (NT_SUCCESS(Status) && Info.State == MI_MEM_FREE)
-        Status = STATUS_INVALID_ADDRESS;
-
-    if (NT_SUCCESS(Status) && Info.Type == MI_MEM_IMAGE)
+    if (Address < Space->LowestVa || Address > Space->HighestVa)
+        Status = STATUS_INVALID_PARAMETER;
+    else
     {
-        AllocationBase = Info.AllocationBase;
-        Image.ImageBase = (PVOID)(ULONG_PTR)AllocationBase;
-        Image.ImageNotExecutable = Info.NoExecuteImage;
-
-        Query = AllocationBase;
-        while (NT_SUCCESS(MiQueryVirtualMemory(Space, Query, &Info)) &&
-               Info.State != MI_MEM_FREE &&
-               Info.AllocationBase == AllocationBase &&
-               Info.RegionSize != 0)
+        MI_RW_ACQUIRE_SHARED(&Space->Lock);
+        Vad = MiVadLocate(Space, Address);
+        if (Vad == NULL)
+            Status = STATUS_INVALID_ADDRESS;
+        else if (Vad->Type == MiVadImage)
         {
-            ASSERT(Info.Type == MI_MEM_IMAGE);
-            Image.SizeOfImage += (SIZE_T)Info.RegionSize;
-            Query = Info.BaseAddress + Info.RegionSize;
+            PMI_CONTROL_AREA Control = Vad->Segment->FileContext;
+
+            Image.ImageBase = (PVOID)(ULONG_PTR)(Vad->Node.StartingVpn << PAGE_SHIFT);
+            Image.SizeOfImage = (SIZE_T)Control->ImageSize;
+            Image.ImageNotExecutable = Vad->NoExecuteImage;
+            Image.ImageExtensionPresent = Vad->CfgScp;
+            /* TODO: ImageSigningLevel needs code integrity signing levels; it reports 0 */
         }
-        ASSERT(Image.SizeOfImage != 0);
-        /* TODO: ImageSigningLevel needs code integrity signing levels; it reports 0 */
+        MI_RW_RELEASE_SHARED(&Space->Lock);
     }
 
     MiReleaseTargetProcess(&Target);
@@ -1201,6 +1199,92 @@ MiQueryImageInformation(
     }
     _SEH2_END;
 
+    return Status;
+}
+
+static
+NTSTATUS
+MiQueryImageExtensionInformation(
+    _In_ HANDLE ProcessHandle,
+    _In_ PVOID BaseAddress,
+    _Inout_ PMEMORY_IMAGE_EXTENSION_INFORMATION Information,
+    _In_ SIZE_T Length,
+    _Out_opt_ PSIZE_T ReturnLength)
+{
+    MEMORY_IMAGE_EXTENSION_INFORMATION Extension;
+    MI_PROCESS_REFERENCE Target;
+    PMI_ADDRESS_SPACE Space;
+    PMI_VAD Vad;
+    NTSTATUS Status;
+
+    if (BaseAddress == NULL)
+        return STATUS_INVALID_PARAMETER;
+    if (Length < sizeof(Extension))
+        return STATUS_INFO_LENGTH_MISMATCH;
+
+    _SEH2_TRY
+    {
+        if (ExGetPreviousMode() != KernelMode)
+        {
+            ProbeForWrite(Information, sizeof(Extension), TYPE_ALIGNMENT(MEMORY_IMAGE_EXTENSION_INFORMATION));
+            if (ReturnLength != NULL)
+                ProbeForWrite(ReturnLength, sizeof(*ReturnLength), 1);
+        }
+        Extension = *Information;
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
+    }
+    _SEH2_END;
+
+    Status = MiReferenceTargetProcessForQuery(ProcessHandle, &Target);
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    if (Extension.Flags)
+    {
+        MiReleaseTargetProcess(&Target);
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    Space = MiSpaceOfProcess(Target.Process);
+    MI_RW_ACQUIRE_SHARED(&Space->Lock);
+    Vad = MiVadLocate(Space, (ULONG64)(ULONG_PTR)BaseAddress);
+    if (Vad == NULL)
+        Status = STATUS_MEMORY_NOT_ALLOCATED;
+    else if (Vad->Type != MiVadImage)
+        Status = STATUS_INVALID_ADDRESS;
+    else if (Extension.ExtensionType == MemoryImageExtensionCfgEmulatedScp)
+        Status = STATUS_NOT_SUPPORTED;
+    else if (Extension.ExtensionType != MemoryImageExtensionCfgScp)
+        Status = STATUS_INVALID_PARAMETER;
+    else
+    {
+        Extension.ExtensionImageBaseRva = Vad->CfgScp ?
+            (PVOID)(ULONG_PTR)(((PMI_CONTROL_AREA)Vad->Segment->FileContext)->ImageSize) : NULL;
+        Extension.ExtensionSize = Vad->CfgScp ? PAGE_SIZE : 0;
+    }
+    MI_RW_RELEASE_SHARED(&Space->Lock);
+    MiReleaseTargetProcess(&Target);
+
+    if (!NT_SUCCESS(Status))
+        return Status;
+
+    _SEH2_TRY
+    {
+        *Information = Extension;
+        if (ReturnLength != NULL)
+        {
+            SIZE_T Written = sizeof(Extension);
+            RtlCopyMemory((PUCHAR)ReturnLength, &Written, sizeof(Written));
+        }
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
+    {
+        Status = _SEH2_GetExceptionCode();
+    }
+    _SEH2_END;
     return Status;
 }
 
@@ -1458,6 +1542,12 @@ NtQueryVirtualMemory(
     {
         return MiQueryImageInformation(ProcessHandle, BaseAddress, MemoryInformation, MemoryInformationLength,
                                        ReturnLength);
+    }
+
+    if (sizeof(PVOID) == sizeof(ULONG64) && MemoryInformationClass == MemoryImageExtensionInformation)
+    {
+        return MiQueryImageExtensionInformation(ProcessHandle, BaseAddress, MemoryInformation,
+                                                MemoryInformationLength, ReturnLength);
     }
 
     if (MemoryInformationClass == MemoryWorkingSetExList)

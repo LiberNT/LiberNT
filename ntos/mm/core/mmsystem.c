@@ -155,6 +155,8 @@ MiSystemInitialize(
     MiPfnDbSetRegionRotation(&System->Pfn, System->Arch->PrefersRegionRotation);
     System->Pfn.Owner = System;
     MI_SPIN_INIT(&System->SegmentListLock);
+    MI_MUTEX_INIT(&System->CfgPageLock);
+    InitializeListHead(&System->CfgPages);
     InitializeListHead(&System->SegmentList);
     InitializeListHead(&System->UnusedSegmentList);
     for (Bucket = 0; Bucket < RTL_NUMBER_OF(System->SegmentChunkHash); Bucket++)

@@ -41,11 +41,13 @@ typedef struct _MI_CONTROL_AREA
     BOOLEAN Image;
     BOOLEAN Image64;
     BOOLEAN Physical;
+    BOOLEAN CfgScp;
     PVOID BasedAddress;
     ULONG64 ImageSize;
     SECTION_IMAGE_INFORMATION ImageInformation;
     PMI_IMAGE_WINDOW ImageWindow;
     ULONG64 ImageWindowBase;
+    ULONG64 ImageWindowSize;
     LONG SigningState;
 } MI_CONTROL_AREA, *PMI_CONTROL_AREA;
 
