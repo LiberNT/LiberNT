@@ -1668,6 +1668,83 @@ PortMiniportTimerExDpc(
         MiniportTimer->Callback(MiniportTimer->HwDeviceExtension, MiniportTimer->CallbackContext);
 }
 
+static
+ULONG
+PortGetRequestInfo(
+    _In_opt_ PVOID Srb,
+    _Inout_opt_ PSTOR_REQUEST_INFO RequestInfo)
+{
+    PIRP Irp;
+    PFILE_OBJECT FileObject = NULL;
+    ULONG SrbFlags;
+    ULONG Length;
+    ULONG Flags = 0;
+    STOR_IO_PRIORITY_HINT PriorityHint = StorIoPriorityNormal;
+
+    if (!Srb || !RequestInfo)
+        return STOR_STATUS_INVALID_PARAMETER;
+    if (RequestInfo->Version != STOR_REQUEST_INFO_VER_1 && RequestInfo->Version != STOR_REQUEST_INFO_VER_2)
+        return STOR_STATUS_UNSUPPORTED_VERSION;
+    if (RequestInfo->Size < (RequestInfo->Version == STOR_REQUEST_INFO_VER_1 ? sizeof(STOR_REQUEST_INFO_V1)
+                                                                             : sizeof(STOR_REQUEST_INFO_V2)))
+        return STOR_STATUS_INVALID_PARAMETER;
+
+    if (PortIsExtendedSrb(Srb))
+    {
+        SrbFlags = ((PSTORAGE_REQUEST_BLOCK)Srb)->SrbFlags;
+        Length = ((PSTORAGE_REQUEST_BLOCK)Srb)->DataTransferLength;
+    }
+    else
+    {
+        SrbFlags = ((PSCSI_REQUEST_BLOCK)Srb)->SrbFlags;
+        Length = ((PSCSI_REQUEST_BLOCK)Srb)->DataTransferLength;
+    }
+
+    Irp = PortGetOriginalRequestFromSrb(Srb);
+    ASSERT(Irp == NULL || Irp->Type == IO_TYPE_IRP);
+    if (Irp)
+    {
+        if (Irp->Flags & IRP_NOCACHE)
+            Flags |= REQUEST_INFO_NO_CACHE_FLAG;
+        if (Irp->Flags & IRP_PAGING_IO)
+            Flags |= REQUEST_INFO_PAGING_IO_FLAG;
+        FileObject = Irp->Tail.Overlay.OriginalFileObject;
+        PriorityHint = (STOR_IO_PRIORITY_HINT)IoGetIoPriorityHint(Irp);
+    }
+    if (FileObject)
+    {
+        if (FileObject->Flags & FO_SEQUENTIAL_ONLY)
+            Flags |= REQUEST_INFO_SEQUENTIAL_IO_FLAG;
+        if (FileObject->Flags & FO_TEMPORARY_FILE)
+            Flags |= REQUEST_INFO_TEMPORARY_FLAG;
+        if (FileObject->Flags & FO_WRITE_THROUGH)
+            Flags |= REQUEST_INFO_WRITE_THROUGH_FLAG;
+    }
+    else
+    {
+        Flags |= REQUEST_INFO_NO_FILE_OBJECT_FLAG;
+    }
+
+    /* FIXME: Key, FileName and the file object come from the IRP storport received, not the class driver's original request */
+    RequestInfo->PriorityHint = PriorityHint;
+    RequestInfo->Flags = Flags;
+    RequestInfo->Key = 0;
+    RequestInfo->Length = Length;
+    RequestInfo->IsWriteRequest = (SrbFlags & SRB_FLAGS_UNSPECIFIED_DIRECTION) == SRB_FLAGS_DATA_OUT;
+    RtlZeroMemory(RequestInfo->Reserved, sizeof(RequestInfo->Reserved));
+    if (RequestInfo->Version == STOR_REQUEST_INFO_VER_2)
+    {
+        RequestInfo->FileName = NULL;
+        if (KeGetCurrentIrql() > DISPATCH_LEVEL)
+            RequestInfo->ProcessId = MAXULONG;
+        else if (Irp && Irp->Tail.Overlay.Thread)
+            RequestInfo->ProcessId = HandleToUlong(PsGetThreadProcessId(Irp->Tail.Overlay.Thread));
+        else
+            RequestInfo->ProcessId = 0;
+    }
+    return STOR_STATUS_SUCCESS;
+}
+
 /*
  * @implemented
  */
@@ -2674,6 +2751,15 @@ StorPortExtendedFunction(
                 }
             }
             Status = STOR_STATUS_SUCCESS;
+            break;
+        }
+
+        case ExtFunctionGetRequestInfo:
+        {
+            PVOID Srb = va_arg(Args, PVOID);
+            PSTOR_REQUEST_INFO RequestInfo = va_arg(Args, PSTOR_REQUEST_INFO);
+
+            Status = PortGetRequestInfo(Srb, RequestInfo);
             break;
         }
 

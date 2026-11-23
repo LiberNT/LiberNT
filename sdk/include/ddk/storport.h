@@ -563,9 +563,16 @@ typedef struct SRB_ALIGN _SRBEX_DATA_PNP {
 
 #define SRBEX_DATA_IO_INFO_LENGTH ((5 * sizeof(ULONG)) + (4 * sizeof(UCHAR)))
 
+#define REQUEST_INFO_NO_CACHE_FLAG                  0x00000001
 #define REQUEST_INFO_PAGING_IO_FLAG                 0x00000002
-
+#define REQUEST_INFO_SEQUENTIAL_IO_FLAG             0x00000004
+#define REQUEST_INFO_TEMPORARY_FLAG                 0x00000008
+#define REQUEST_INFO_WRITE_THROUGH_FLAG             0x00000010
 #define REQUEST_INFO_HYBRID_WRITE_THROUGH_FLAG      0x00000020
+#define REQUEST_INFO_NO_FILE_OBJECT_FLAG            0x00000040
+#define REQUEST_INFO_VOLSNAP_IO_FLAG                0x00000080
+#define REQUEST_INFO_STREAM_FLAG                    0x00000100
+#define REQUEST_INFO_CRYPTO_FLAG                    0x00000200
 
 #define REQUEST_INFO_VALID_CACHEPRIORITY_FLAG       0x80000000
 
@@ -3717,6 +3724,22 @@ typedef enum _STOR_IO_PRIORITY_HINT {
     StorIoMaxPriorityTypes,
     StorIoMaxPriorityValue = 0xffff
 } STOR_IO_PRIORITY_HINT, *PSTOR_IO_PRIORITY_HINT;
+
+#define STOR_REQUEST_INFO_VER_1         1
+#define STOR_REQUEST_INFO_VER_2         2
+
+#define STOR_REQUEST_INFO_VER           STOR_REQUEST_INFO_VER_2
+
+typedef struct _STOR_REQUEST_INFO_V1 {
+    USHORT Version;
+    USHORT Size;
+    STOR_IO_PRIORITY_HINT PriorityHint;
+    ULONG Flags;
+    ULONG Key;
+    ULONG Length;
+    BOOLEAN IsWriteRequest;
+    UCHAR Reserved[3];
+} STOR_REQUEST_INFO_V1, *PSTOR_REQUEST_INFO_V1;
 
 typedef struct _STOR_REQUEST_INFO_V2 {
     USHORT Version;
