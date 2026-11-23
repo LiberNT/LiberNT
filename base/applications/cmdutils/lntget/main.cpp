@@ -597,6 +597,8 @@ Status UpgradeCommand(SourceManager &source, const CommandOptions &options)
     if (options.all)
     {
         std::size_t upgraded = 0;
+        std::size_t failed = 0;
+        Status failure = Status::Ok();
         for (const InstalledGroup &group : groups)
         {
             if (group.available.empty())
@@ -607,10 +609,18 @@ Status UpgradeCommand(SourceManager &source, const CommandOptions &options)
             install.exact = true;
             status = DownloadOrInstallCommand(source, install, true);
             if (!status)
-                return status;
+            {
+                std::fprintf(stderr, "lntget: %s failed to upgrade: %s\n", group.id.c_str(), status.message.c_str());
+                if (failure)
+                    failure = status;
+                ++failed;
+                continue;
+            }
             ++upgraded;
         }
-        std::printf("LNTGET_UPGRADE_DONE count=%Iu\n", upgraded);
+        std::printf("LNTGET_UPGRADE_DONE count=%Iu failed=%Iu\n", upgraded, failed);
+        if (!failure)
+            return Status::Fail(failure.code, DecimalString(failed) + " package(s) failed to upgrade");
         return Status::Ok();
     }
 
