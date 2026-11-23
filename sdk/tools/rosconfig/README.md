@@ -168,9 +168,9 @@ M3)**, builds the Apple silicon drivers. The CYW43xx Wi-Fi driver serves both
 the Raspberry Pi and Apple silicon profiles. AMD64 additionally provides
 `lattepandamu`.
 The Raspberry Pi and LattePanda Mu profiles expose the HTTP boot
-option. Enabling it from the `Boot options` menu builds the FreeLdr HTTP path,
-makes it the zero-timeout default boot entry, and packages the board's external
-UEFI network stack. Generic builds keep the Raspberry Pi, Tegra and Apple
+option. Enabling it from the `Boot options` menu adds HTTP boot to the boot
+manager's startup options and packages the board's external UEFI network
+stack. Generic builds keep the Raspberry Pi, Tegra and Apple
 silicon drivers and hardware bindings disabled.
 
 Profile-owned config values are enforced when the profile is applied, so an

@@ -7,85 +7,6 @@ option(LATTEPANDAMU_SUPPORT "Enable the LattePanda Mu board profile" OFF)
 if(LATTEPANDAMU_SUPPORT AND NOT ARCH STREQUAL "amd64")
     message(FATAL_ERROR "The LattePanda Mu profile requires ARCH=amd64")
 endif()
-if(FREELDR_HTTP_BOOT AND NOT (LATTEPANDAMU_SUPPORT OR RPI_SUPPORT))
-    message(FATAL_ERROR "FREELDR_HTTP_BOOT requires a board profile that ships UEFI network drivers")
-endif()
-
-#
-# Splice an HTTP boot entry into a boot menu at its ROSCONFIG_PROFILE markers.
-# DEFAULT_OS names the entry to boot unattended, or is empty to keep the menu's
-# own selection (the flashed image keeps whichever entry the harness chose).
-#
-function(freeldr_ini_add_http_boot SOURCE OUTPUT URL STATIC_IP DEFAULT_OS OPTIONS)
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${SOURCE}")
-    file(READ "${SOURCE}" _contents)
-
-    set(_os_marker "; ROSCONFIG_PROFILE_OS_ENTRIES")
-    set(_boot_marker "; ROSCONFIG_PROFILE_BOOT_ENTRIES")
-    string(FIND "${_contents}" "${_os_marker}" _os_marker_offset)
-    string(FIND "${_contents}" "${_boot_marker}" _boot_marker_offset)
-    if(_os_marker_offset EQUAL -1 OR _boot_marker_offset EQUAL -1)
-        message(FATAL_ERROR "HTTP boot menu anchors are missing from ${SOURCE}")
-    endif()
-
-    if(DEFAULT_OS)
-        string(REGEX REPLACE "DefaultOS=[^\r\n]*" "DefaultOS=${DEFAULT_OS}" _contents "${_contents}")
-        string(REGEX REPLACE "TimeOut=[^\r\n]*" "TimeOut=0" _contents "${_contents}")
-    endif()
-
-    string(REPLACE "${_os_marker}"
-                   "HttpBoot=\"ReactOS HTTP Boot - Debug\""
-                   _contents "${_contents}")
-    set(_http_boot_entry "[HttpBoot]\nBootType=Windows2003\nSystemPath=ramdisk(0)\\Windows\nOptions=/DEBUG /DEBUGPORT=COM1 /BAUDRATE=115200 /SOS /FASTDETECT /MININT /LOADSYMBOLS")
-    if(OPTIONS)
-        string(APPEND _http_boot_entry " ${OPTIONS}")
-    endif()
-    string(APPEND _http_boot_entry "\nHttpBootUrl=${URL}")
-    if(STATIC_IP)
-        string(APPEND _http_boot_entry "\nHttpBootIp=${STATIC_IP}")
-    endif()
-    string(REPLACE "${_boot_marker}"
-                   "${_http_boot_entry}"
-                   _contents "${_contents}")
-    file(WRITE "${OUTPUT}" "${_contents}")
-endfunction()
-
-set(FREELDR_BOOTCD_INI "${REACTOS_SOURCE_DIR}/boot/bootdata/bootcd.ini")
-set(FREELDR_PREINSTALL_INI "${REACTOS_SOURCE_DIR}/boot/bootdata/preinstall.ini")
-if(FREELDR_HTTP_BOOT)
-    # The downloaded image is architecture-specific, so each board profile
-    # points at its own copy on the build host.
-    if(ARCH STREQUAL "arm64")
-        set(_freeldr_http_boot_default_url "http://10.42.0.1/livecd-arm64.iso")
-    else()
-        set(_freeldr_http_boot_default_url "http://10.42.0.1/livecd.iso")
-    endif()
-    set(FREELDR_HTTP_BOOT_URL "${_freeldr_http_boot_default_url}" CACHE STRING
-        "URL FreeLdr downloads the live image from")
-    set(FREELDR_HTTP_BOOT_IP "10.42.0.172/24,10.42.0.1" CACHE STRING
-        "Static IPv4 address/prefix[,gateway] for FreeLdr HTTP boot; empty uses DHCP")
-    set(FREELDR_HTTP_BOOT_OPTIONS "" CACHE STRING
-        "Boot options appended to the HTTP boot entry")
-    set(FREELDR_HTTP_BOOT_EXTRA_DRIVERS "" CACHE STRING
-        "Additional UEFI drivers (.efi paths) copied to EFI/BOOT/drivers, such as a vendor UNDI driver")
-
-    set(FREELDR_BOOTCD_INI "${CMAKE_CURRENT_BINARY_DIR}/bootdata/bootcd_httpboot.ini")
-    freeldr_ini_add_http_boot("${REACTOS_SOURCE_DIR}/boot/bootdata/bootcd.ini"
-                              "${FREELDR_BOOTCD_INI}"
-                              "${FREELDR_HTTP_BOOT_URL}"
-                              "${FREELDR_HTTP_BOOT_IP}"
-                              "HttpBoot"
-                              "${FREELDR_HTTP_BOOT_OPTIONS}")
-
-    set(FREELDR_PREINSTALL_INI "${CMAKE_CURRENT_BINARY_DIR}/bootdata/preinstall_httpboot.ini")
-    freeldr_ini_add_http_boot("${REACTOS_SOURCE_DIR}/boot/bootdata/preinstall.ini"
-                              "${FREELDR_PREINSTALL_INI}"
-                              "${FREELDR_HTTP_BOOT_URL}"
-                              "${FREELDR_HTTP_BOOT_IP}"
-                              "HttpBoot"
-                              "${FREELDR_HTTP_BOOT_OPTIONS}")
-endif()
-
 set(BOOTLOADER_HTTP_BOOT_URL "" CACHE STRING
     "URL of the live image the boot manager's HTTP boot downloads")
 set(BOOTLOADER_HTTP_BOOT_IP "" CACHE STRING
@@ -101,25 +22,11 @@ set(BOOTLOADER_HTTP_IMAGE_URL "" CACHE STRING
     "URL of the installed disk image the boot manager's HTTP disk image entry downloads and starts from RAM; empty leaves the entry out")
 option(BOOTLOADER_HTTP_IMAGE_DEFAULT "Start the boot manager's HTTP disk image entry by default" OFF)
 option(BOOTLOADER_HTTP_SYNC "Use the HTTP boot URL and address for httpsync of the disk image instead of HTTP boot" OFF)
+set(BOOTLOADER_HTTP_BOOT_EXTRA_DRIVERS "" CACHE STRING
+    "Additional UEFI drivers (.efi paths) copied to EFI/BOOT/drivers, such as a vendor UNDI driver")
 
-set(FREELDR_PREINSTALL_OPTIONS "" CACHE STRING
+set(BOOTLOADER_PREINSTALL_OPTIONS "" CACHE STRING
     "Boot options appended to the boot entry of the preinstalled disk image")
-if(FREELDR_PREINSTALL_OPTIONS)
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${FREELDR_PREINSTALL_INI}")
-    file(READ "${FREELDR_PREINSTALL_INI}" _contents)
-    string(REGEX REPLACE "(Options=[^\r\n]*)" "\\1 ${FREELDR_PREINSTALL_OPTIONS}" _contents "${_contents}")
-    set(FREELDR_PREINSTALL_INI "${CMAKE_CURRENT_BINARY_DIR}/bootdata/preinstall_options.ini")
-    file(CONFIGURE OUTPUT "${FREELDR_PREINSTALL_INI}" CONTENT "${_contents}" @ONLY)
-endif()
-
-if(SPACEMIT_K1_SUPPORT)
-    set(_source "${FREELDR_PREINSTALL_INI}")
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_source}")
-    file(READ "${_source}" _contents)
-    string(REPLACE "SystemPath=partition(2)\\" "SystemPath=partition(4)\\" _contents "${_contents}")
-    set(FREELDR_PREINSTALL_INI "${CMAKE_CURRENT_BINARY_DIR}/bootdata/preinstall_spacemit_k1.ini")
-    file(CONFIGURE OUTPUT "${FREELDR_PREINSTALL_INI}" CONTENT "${_contents}" @ONLY)
-endif()
 
 # EFI platform ID - Used for naming the EFI boot image on supported platforms.
 if(ARCH STREQUAL "i386")
@@ -146,7 +53,7 @@ endif()
 if(DEFINED EFI_PLATFORM_ID AND EXISTS "${REACTOS_SOURCE_DIR}/bootloader/arch/${ARCH}")
     set(BOOTLOADER_UEFI TRUE)
     set(_uefi_loader bootmgfw)
-    if(FREELDR_WIM_RAMDISK)
+    if(BOOTLOADER_WIM_RAMDISK)
         set(_uefi_media_store mediawim)
     else()
         set(_uefi_media_store media)
@@ -173,17 +80,12 @@ if(DEFINED EFI_PLATFORM_ID)
     set(_efisys_depends native-fatten ${_uefi_loader_deps})
     set(_uefi_driver_fatten_options)
     set(_uefi_driver_files)
-    if(FREELDR_HAS_BIOS_BOOT)
-        set(_efisys_boot_options -boot ${CMAKE_CURRENT_BINARY_DIR}/freeldr/bootsect/fat.bin)
-        list(APPEND _efisys_depends fat)
-    endif()
-
-    if(FREELDR_HTTP_BOOT)
+    if(BOOTLOADER_HTTP_BOOT AND (LATTEPANDAMU_SUPPORT OR RPI_SUPPORT))
         set(_uefi_driver_dir "${REACTOS_SOURCE_DIR}/media/boot/uefi_drivers/${ARCH}")
         file(GLOB _uefi_driver_files CONFIGURE_DEPENDS "${_uefi_driver_dir}/*.efi")
-        foreach(_driver ${FREELDR_HTTP_BOOT_EXTRA_DRIVERS})
+        foreach(_driver ${BOOTLOADER_HTTP_BOOT_EXTRA_DRIVERS})
             if(NOT EXISTS "${_driver}")
-                message(FATAL_ERROR "FREELDR_HTTP_BOOT_EXTRA_DRIVERS: ${_driver} does not exist")
+                message(FATAL_ERROR "BOOTLOADER_HTTP_BOOT_EXTRA_DRIVERS: ${_driver} does not exist")
             endif()
             list(APPEND _uefi_driver_files "${_driver}")
         endforeach()
@@ -217,11 +119,6 @@ endif()
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/empty)
 
 # Retrieve the full paths to the generated boot files.
-if(FREELDR_HAS_BIOS_BOOT)
-    set(_isombr_file  ${CMAKE_CURRENT_BINARY_DIR}/freeldr/bootsect/isombr.bin)  # get_target_property(_isombr_file  isombr  LOCATION)
-    set(_isoboot_file ${CMAKE_CURRENT_BINARY_DIR}/freeldr/bootsect/isoboot.bin) # get_target_property(_isoboot_file isoboot LOCATION)
-    set(_isobtrt_file ${CMAKE_CURRENT_BINARY_DIR}/freeldr/bootsect/isobtrt.bin) # get_target_property(_isobtrt_file isobtrt LOCATION)
-endif()
 if(DEFINED EFI_PLATFORM_ID)
     set(_efisys_file  ${CMAKE_CURRENT_BINARY_DIR}/efisys.bin) # get_target_property(_efisys_file  efisys  LOCATION)
 endif()
@@ -246,9 +143,6 @@ endif()
 set(ISO_SORT_FILE_DATA "\
 ${CMAKE_CURRENT_BINARY_DIR}/empty/boot.catalog 4
 ")
-if(FREELDR_HAS_BIOS_BOOT)
-    string(APPEND ISO_SORT_FILE_DATA "${_isoboot_file} 3\n${_isobtrt_file} 2\n")
-endif()
 if(DEFINED EFI_PLATFORM_ID)
     string(APPEND ISO_SORT_FILE_DATA "${_efisys_file} 1\n")
 endif()
@@ -272,10 +166,7 @@ set(ISO_BOOT_FILES_OPTIONS
 # ISO_BOOT_OPTIONS
 
 # BIOS-based PC boot entry (x86/x64 only)
-if(FREELDR_HAS_BIOS_BOOT)
-    set(ISO_BOOT_OPTIONS
-        -eltorito-platform x86 -eltorito-boot loader/isoboot.bin -no-emul-boot -boot-load-size 4)
-elseif((ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64") AND NOT MSVC)
+if((ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64") AND NOT MSVC)
     set(ISO_BOOT_OPTIONS
         -eltorito-platform x86 -eltorito-boot boot/etfsboot.com -no-emul-boot -boot-load-size 4)
 endif()
@@ -293,16 +184,12 @@ endif()
 
 set(BOOTCD_HYBRID_DEPENDS)
 set(BOOTCD_HYBRID_COMMAND)
-if(FREELDR_HAS_BIOS_BOOT OR DEFINED EFI_PLATFORM_ID)
+if(DEFINED EFI_PLATFORM_ID)
     string(UUID _bootcd_disk NAMESPACE 354fa6e5-5e45-49af-91bf-1fd2754e470a NAME "LiberNT boot CD" TYPE SHA1)
     string(SUBSTRING "${_bootcd_disk}" 0 8 _bootcd_signature)
     set(BOOTCD_HYBRID_DEPENDS native-mkdiskimg)
     set(BOOTCD_HYBRID_COMMAND
         COMMAND native-mkdiskimg -cd ${REACTOS_BINARY_DIR}/bootcd.iso -signature ${_bootcd_signature} -diskid ${_bootcd_disk})
-    if(FREELDR_HAS_BIOS_BOOT)
-        list(APPEND BOOTCD_HYBRID_DEPENDS isombr)
-        list(APPEND BOOTCD_HYBRID_COMMAND -mbr ${_isombr_file})
-    endif()
 endif()
 
 
@@ -737,8 +624,7 @@ math(EXPR _preinstall_vhd_partition_sectors "(${_preinstall_vhd_size_mb} - ${_pr
 # their removable-media loader in the FAT boot partition.
 set(_preinstall_boot_partition_options)
 set(_preinstall_boot_partition_fs fat)
-set(_preinstall_boot_partition_files
-    -add ${FREELDR_PREINSTALL_INI} freeldr.ini)
+set(_preinstall_boot_partition_files)
 set(_preinstall_rpi_firmware)
 set(_preinstall_rpi_overlays)
 if(NOT SPACEMIT_K1_SUPPORT AND NOT STARFIVE_JH7110_SUPPORT AND NOT BOOTLOADER_OFW)
@@ -823,7 +709,7 @@ macro(libernt_standard_disk_ids)
     endif()
     set_property(GLOBAL PROPERTY LIBERNT_STANDARD_SIGNATURE ${_standard_signature})
     set_property(GLOBAL PROPERTY LIBERNT_STANDARD_SYSTEM_START ${_preinstall_system_partition_start})
-    set_property(GLOBAL PROPERTY LIBERNT_STANDARD_OPTIONS "${FREELDR_PREINSTALL_OPTIONS}")
+    set_property(GLOBAL PROPERTY LIBERNT_STANDARD_OPTIONS "${BOOTLOADER_PREINSTALL_OPTIONS}")
 endmacro()
 
 if(BOOTLOADER_OFW)
@@ -836,19 +722,6 @@ if(BOOTLOADER_OFW)
     list(APPEND _preinstall_partition_deps bootmgrppc bootloaderstandardbcd)
     libernt_standard_disk_ids()
     # TODO: boot the PowerPC boot CD; bootmgr reads no ISO 9660 and bootcd.iso carries no BCD
-endif()
-if(FREELDR_HAS_BIOS_BOOT)
-    set(_dosmbr_file ${CMAKE_CURRENT_BINARY_DIR}/freeldr/bootsect/dosmbr.bin)
-    set(_fat32_file ${CMAKE_CURRENT_BINARY_DIR}/freeldr/bootsect/fat32.bin)
-    set(_freeldr_file ${CMAKE_CURRENT_BINARY_DIR}/freeldr/freeldr/freeldr.sys)
-    set(_preinstall_boot_partition_fs fat32)
-    list(APPEND _preinstall_boot_partition_options -boot ${_fat32_file})
-    list(APPEND _preinstall_boot_partition_files
-        -add ${_freeldr_file} freeldr.sys
-        -add $<TARGET_FILE:rosload> rosload.exe)
-    list(APPEND _preinstall_partition_deps fat32 freeldr rosload)
-    list(APPEND _liberntimg_mbr_args -mbr ${_dosmbr_file})
-    list(APPEND _liberntimg_deps dosmbr)
 endif()
 if((ARCH STREQUAL "i386" OR ARCH STREQUAL "amd64") AND NOT MSVC)
     set(_preinstall_boot_partition_fs fat32)

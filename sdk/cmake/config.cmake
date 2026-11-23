@@ -294,10 +294,6 @@ set(RDPSERVER_DIR "" CACHE PATH
 set(RDPSERVER_CONFIG_DIR "" CACHE PATH
     "Directory with a private rdpserver.ini and its TLS certificate/key for the RDP console server")
 
-cmake_dependent_option(FREELDR_HTTP_BOOT
-                       "Whether to build the FreeLdr UEFI HTTP boot path." OFF
-                       "LATTEPANDAMU_SUPPORT OR RPI_SUPPORT" OFF)
-
 cmake_dependent_option(ENABLE_ROSAUTOTEST_BOOT_RUN
                        "Whether to run the full RosAutoTest suite automatically at boot." OFF
                        "CMAKE_BUILD_TYPE STREQUAL Debug" OFF)
@@ -312,7 +308,7 @@ cmake_dependent_option(ENABLE_KMTEST_BOOT_RUN
 
 cmake_dependent_option(ENABLE_RP1GEM_BENCHMARK
                        "Whether to run the single-stream RP1 GEM benchmark from ARM64 HTTP boot." OFF
-                       "ARCH STREQUAL arm64 AND CMAKE_BUILD_TYPE STREQUAL Debug AND RPI5_SUPPORT AND FREELDR_HTTP_BOOT" OFF)
+                       "ARCH STREQUAL arm64 AND CMAKE_BUILD_TYPE STREQUAL Debug AND RPI5_SUPPORT AND BOOTLOADER_HTTP_BOOT" OFF)
 
 cmake_dependent_option(ENABLE_RPI5_WIFI_BOOT_RUN
                        "Whether to run the RPi5 Wi-Fi scan automatically at boot." OFF

@@ -226,7 +226,7 @@ int rosconfig_self_test(void)
         "endmenu\n"
         "\n"
         "menu \"Boot options\"\n"
-        "config FREELDR_HTTP_BOOT\n"
+        "config BOOTLOADER_HTTP_BOOT\n"
         "    prompt \"Enable HTTP boot\"\n"
         "    type bool\n"
         "    default n\n"
@@ -349,7 +349,7 @@ int rosconfig_self_test(void)
     profile_amd64 = find_opt("PROFILE_AMD64");
     profile_i386 = find_opt("PROFILE_I386");
     profile_arm64 = find_opt("PROFILE_ARM64");
-    http_boot = find_opt("FREELDR_HTTP_BOOT");
+    http_boot = find_opt("BOOTLOADER_HTTP_BOOT");
     enable_rostests = find_opt("ENABLE_ROSTESTS");
 
     expect(&test, g_nopts == 18, "parser creates options from the root and sourced files");
@@ -452,10 +452,10 @@ int rosconfig_self_test(void)
     set_value(http_boot, "y");
     expect(&test, generate_cmake(generated_path) == 0, "CMake fragment regenerates for the LattePanda Mu HTTP boot option");
     expect(&test, file_contains(generated_path, "set(ROSCONFIG_PROFILE \"lattepandamu\" CACHE STRING \"Target profile\")"), "the LattePanda Mu profile is emitted");
-    expect(&test, file_contains(generated_path, "set(FREELDR_HTTP_BOOT TRUE CACHE BOOL \"Enable HTTP boot\")"), "the LattePanda Mu HTTP boot option is emitted");
+    expect(&test, file_contains(generated_path, "set(BOOTLOADER_HTTP_BOOT TRUE CACHE BOOL \"Enable HTTP boot\")"), "the LattePanda Mu HTTP boot option is emitted");
     set_value(http_boot, "n");
     expect(&test, generate_cmake(generated_path) == 0, "CMake fragment regenerates with LattePanda Mu HTTP boot disabled");
-    expect(&test, file_contains(generated_path, "set(FREELDR_HTTP_BOOT FALSE CACHE BOOL \"Enable HTTP boot\")"), "the LattePanda Mu HTTP boot option can be disabled");
+    expect(&test, file_contains(generated_path, "set(BOOTLOADER_HTTP_BOOT FALSE CACHE BOOL \"Enable HTTP boot\")"), "the LattePanda Mu HTTP boot option can be disabled");
     set_value(profile_amd64, "generic");
 
     set_value(enable, "n");
@@ -466,17 +466,17 @@ int rosconfig_self_test(void)
     set_value(profile_arm64, "rpi3");
     expect(&test, generate_cmake(generated_path) == 0, "CMake fragment regenerates for the Raspberry Pi 3 profile");
     expect(&test, file_contains(generated_path, "set(ROSCONFIG_PROFILE \"profile_raspberry\" CACHE STRING \"Target profile\")"), "the ARM64 combined Raspberry Pi profile is emitted");
-    expect(&test, file_contains(generated_path, "set(FREELDR_HTTP_BOOT "), "the combined Raspberry Pi profile exposes the HTTP boot option");
+    expect(&test, file_contains(generated_path, "set(BOOTLOADER_HTTP_BOOT "), "the combined Raspberry Pi profile exposes the HTTP boot option");
     set_value(profile_arm64, "profile_raspberry");
     set_value(http_boot, "n");
     expect(&test, !opt_visible(enable), "changed target hides an incompatible menu");
     expect(&test, generate_cmake(generated_path) == 0, "CMake fragment regenerates with Raspberry Pi 3/5 HTTP boot disabled");
     expect(&test, file_contains(generated_path, "set(ROSCONFIG_PROFILE \"profile_raspberry\" CACHE STRING \"Target profile\")"), "the ARM64 Raspberry Pi 3/5 profile is emitted");
-    expect(&test, file_contains(generated_path, "set(FREELDR_HTTP_BOOT FALSE CACHE BOOL \"Enable HTTP boot\")"), "the Raspberry Pi 3/5 HTTP boot option can be disabled");
+    expect(&test, file_contains(generated_path, "set(BOOTLOADER_HTTP_BOOT FALSE CACHE BOOL \"Enable HTTP boot\")"), "the Raspberry Pi 3/5 HTTP boot option can be disabled");
     expect(&test, file_contains(generated_path, "set(ENABLE_ROSTESTS TRUE CACHE BOOL \"ReactOS test suite and RosAutoTest\")"), "the RosAutoTest module composes with the Raspberry Pi 3/5 profile");
     set_value(http_boot, "y");
     expect(&test, generate_cmake(generated_path) == 0, "CMake fragment regenerates with Raspberry Pi 3/5 HTTP boot enabled");
-    expect(&test, file_contains(generated_path, "set(FREELDR_HTTP_BOOT TRUE CACHE BOOL \"Enable HTTP boot\")"), "the Raspberry Pi 3/5 HTTP boot option can be enabled");
+    expect(&test, file_contains(generated_path, "set(BOOTLOADER_HTTP_BOOT TRUE CACHE BOOL \"Enable HTTP boot\")"), "the Raspberry Pi 3/5 HTTP boot option can be enabled");
     add_override("ARCH=amd64");
     expect(&test, opt_visible(enable), "transient overrides participate in dependency evaluation");
     expect_string(&test, config_value("ARCH"), "amd64", "transient override has value precedence");

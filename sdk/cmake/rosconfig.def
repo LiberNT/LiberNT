@@ -226,17 +226,6 @@ endmenu
 
 menu "Boot options"
 
-config FREELDR_HTTP_BOOT
-    prompt "UEFI HTTP boot"
-    type bool
-    default n
-    depends PROFILE_AMD64=lattepandamu || PROFILE_ARM64=profile_raspberry
-    help
-      Build the FreeLdr UEFI HTTP boot path: FreeLdr downloads the live
-      image over HTTP and boots it as a ramdisk. It becomes the zero-timeout
-      default boot entry, and the board's UEFI network drivers are packaged
-      onto the boot media.
-
 config BOOTLOADER_KERNEL_DEBUG
     prompt "Kernel debug output by default"
     type bool
@@ -560,7 +549,7 @@ config ENABLE_RP1GEM_BENCHMARK
     type bool
     default n
     depends PROFILE_ARM64=profile_raspberry
-    depends FREELDR_HTTP_BOOT=y
+    depends BOOTLOADER_HTTP_BOOT=y
     help
       Run one 30-second TCP stream in each direction against the HTTP boot
       host before reporting boot-test completion.

@@ -7,9 +7,9 @@ the ReactOS project. They are third-party firmware components
 redistributed here to enable network boot on hardware whose built-in
 UEFI firmware does not include them. They are the generic EDK2 network
 protocol stack; the only current consumer is the LattePanda Mu HTTP boot
-profile (FREELDR_HTTP_BOOT).
+profile (BOOTLOADER_HTTP_BOOT).
 
-These drivers are loaded by FreeLDR (uefildr.efi) at early boot time
+These drivers are loaded by the OS loader (winload.efi) at early boot time
 via UEFI Boot Services LoadImage()/StartImage() to provide network
 protocol support (SNP, IP, TCP, HTTP) before the operating system starts.
 
@@ -23,9 +23,9 @@ RtkUndiDxe.efi (not shipped)
   Download it from Realtek (https://www.realtek.com/Download/List?cate_id=584)
   and pass its path at configure time:
 
-    -DFREELDR_HTTP_BOOT_EXTRA_DRIVERS=/path/to/RtkUndiDxe.efi
+    -DBOOTLOADER_HTTP_BOOT_EXTRA_DRIVERS=/path/to/RtkUndiDxe.efi
 
-  The file is copied to EFI/BOOT/drivers/ and FreeLDR loads it from there.
+  The file is copied to EFI/BOOT/drivers/ and the OS loader loads it from there.
 
 EDK2 DXE Drivers
 ----------------
@@ -102,20 +102,20 @@ EDK2 DXE Drivers
     HttpUtilitiesDxe.efi    HTTP header utilities
 
   Note: HttpBootDxe.efi (the UEFI firmware HTTP Boot orchestrator) is
-  intentionally NOT included.  FreeLDR implements its own boot logic
+  intentionally NOT included.  The OS loader implements its own boot logic
   using EFI_HTTP_PROTOCOL directly.
 
-  Mtftp4Dxe.efi is likewise NOT included: FreeLDR implements no TFTP or
+  Mtftp4Dxe.efi is likewise NOT included: the OS loader implements no TFTP or
   PXE boot path, so nothing would ever load it.
 
-  Dhcp4Dxe.efi is no longer included either. FreeLDR leases no address of
+  Dhcp4Dxe.efi is no longer included either. The OS loader leases no address of
   its own: a boot entry either names one with HttpBootIp= or inherits the
   IPv4 configuration the firmware already holds on the interface. The
   client code is commented out rather than deleted (see
-  UefiHttpBootDownload() in boot/freeldr/freeldr/arch/uefi/uefihttp.c),
+  UefiHttpBootDownload() in bootloader/net/uefihttp.c),
   so restoring the driver here is enough to bring the path back.
 
-  Not all are required for every boot entry. FreeLDR loads the core set
+  Not all are required for every boot entry. The OS loader loads the core set
   unconditionally and the rest only when the entry asks for them:
     - Always:     DpcDxe + RngDxe + Hash2DxeCrypto + RtkUndiDxe (when
                   supplied) + SnpDxe
@@ -126,7 +126,7 @@ EDK2 DXE Drivers
   Without HttpBootIp=, no extra driver is loaded at all: the address is
   read back from whatever the firmware already configured.
 
-  Mtftp4Dxe.efi is not shipped: FreeLDR implements no TFTP or PXE boot
+  Mtftp4Dxe.efi is not shipped: the OS loader implements no TFTP or PXE boot
   path, so nothing ever loads it.
 
 Raspberry Pi 5 (arm64/)
