@@ -19,3 +19,19 @@ DllMainCRTStartup(
     UNREFERENCED_PARAMETER(Reserved);
     return TRUE;
 }
+
+/* FIXME: decode the v4 funclet tables; until then let the unwind continue */
+EXCEPTION_DISPOSITION
+WINAPI
+__CxxFrameHandler4(
+    _In_ PEXCEPTION_RECORD ExceptionRecord,
+    _In_ ULONG64 EstablisherFrame,
+    _In_ PCONTEXT ContextRecord,
+    _In_ PDISPATCHER_CONTEXT DispatcherContext)
+{
+    UNREFERENCED_PARAMETER(ExceptionRecord);
+    UNREFERENCED_PARAMETER(EstablisherFrame);
+    UNREFERENCED_PARAMETER(ContextRecord);
+    UNREFERENCED_PARAMETER(DispatcherContext);
+    return ExceptionContinueSearch;
+}
