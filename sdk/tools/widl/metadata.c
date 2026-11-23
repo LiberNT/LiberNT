@@ -1645,6 +1645,8 @@ static enum element_type map_basic_type( enum type_basic_type type, int sign )
     return elem_type;
 }
 
+static UINT make_type_sig( const type_t *type, BYTE *buf );
+
 static UINT make_struct_field_sig( const var_t *var, BYTE *buf )
 {
     const type_t *type = var->declspec.type;
@@ -1668,6 +1670,12 @@ static UINT make_struct_field_sig( const var_t *var, BYTE *buf )
     {
         UINT token = typedef_or_ref( TABLE_TYPEREF, type->md.ref );
         return make_field_value_sig( token, buf );
+    }
+
+    if (type_get_type( type ) == TYPE_POINTER && type_get_type( type_pointer_get_ref_type( type ) ) == TYPE_INTERFACE)
+    {
+        buf[0] = SIG_TYPE_FIELD;
+        return 1 + make_type_sig( type, buf + 1 );
     }
 
     if (type_get_type( type ) != TYPE_BASIC)
