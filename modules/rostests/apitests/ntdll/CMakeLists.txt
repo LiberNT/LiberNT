@@ -191,6 +191,7 @@ list(APPEND SOURCE
     ObHandleRace.c
     LinkReparseLimit.c
     RtlWnfAndSqm.c
+    ThreadStackRelease.c
     WinSqmSession.c
     RtlCheckPortableOperatingSystem.c
     RtlDoesFileExists.c

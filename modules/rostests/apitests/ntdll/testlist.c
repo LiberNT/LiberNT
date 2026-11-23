@@ -243,6 +243,7 @@ extern void func_NtWaitForObjects(void);
 extern void func_SatisfiedWait(void);
 extern void func_SharedUserData(void);
 extern void func_StackOverflow(void);
+extern void func_ThreadStackRelease(void);
 extern void func_ScanfSecure(void);
 extern void func_StackProbe(void);
 extern void func_SystemTimeAtBoot(void);
@@ -412,6 +413,7 @@ const struct test winetest_testlist[] =
     { "NtStartProfile",                 func_NtStartProfile },
     { "NtSystemInformation",            func_NtSystemInformation },
     { "NtTerminateThread",              func_NtTerminateThread },
+    { "ThreadStackRelease",             func_ThreadStackRelease },
     { "NtUnloadDriver",                 func_NtUnloadDriver },
     { "NtWnfState",                     func_NtWnfState },
     { "NtWriteFile",                    func_NtWriteFile },
