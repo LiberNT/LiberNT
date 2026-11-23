@@ -70,6 +70,7 @@ static LONG RemoteDisplayUsers;
 static HANDLE RemoteDisplayReady;
 static WCHAR RemoteDisplayInstance[MAX_DEVICE_ID_LEN];
 static BOOL RemoteDisplayShown;
+static BYTE RemoteDisplaySid[SECURITY_MAX_SID_SIZE];
 static RDP_EXPERIENCE_STATE Experience;
 static HANDLE RemoteConsole;
 static BOOL ControllerMode;
@@ -105,6 +106,7 @@ typedef struct DESKTOP_CONTEXT
     DWORD ConsoleStatus;
     BOOL Named;
     char NlaUser[128], NlaDomain[256], NlaPassword[256];
+    BYTE NlaSid[SECURITY_MAX_SID_SIZE];
     LONG Generation;
     int Width, Height, ClientWidth, ClientHeight, TileColumns, TileRows;
     HDC ScreenDC, MemoryDC;
@@ -401,6 +403,14 @@ static BOOL HasAccountRight(LSA_HANDLE policy, PSID sid, const WCHAR *right)
     return found;
 }
 
+static BOOL TokenUserSid(HANDLE token, BYTE *sid, DWORD size)
+{
+    BYTE buffer[sizeof(TOKEN_USER) + SECURITY_MAX_SID_SIZE];
+    DWORD length;
+    if (!GetTokenInformation(token, TokenUser, buffer, sizeof(buffer), &length)) return FALSE;
+    return CopySid(size, sid, ((TOKEN_USER *)buffer)->User.Sid);
+}
+
 static BOOL RemoteLogonAllowed(HANDLE token)
 {
     LSA_OBJECT_ATTRIBUTES attributes = {0};
@@ -453,7 +463,7 @@ static BOOL Logon(freerdp_peer *peer, const SEC_WINNT_AUTH_IDENTITY *identity, B
     SecureZeroMemory(wpassword, sizeof(wpassword));
     if (ctx->NlaLogon)
     {
-        ctx->NlaLogon = RemoteLogonAllowed(token);
+        ctx->NlaLogon = RemoteLogonAllowed(token) && TokenUserSid(token, ctx->NlaSid, sizeof(ctx->NlaSid));
         if (!ctx->NlaLogon) SetLastError(ERROR_LOGON_TYPE_NOT_GRANTED);
         CloseHandle(token);
     }
@@ -725,6 +735,8 @@ static UINT32 AcquireRemoteDisplay(DESKTOP_CONTEXT *ctx)
                 !WaitForRemoteDisplay(width, height))
                 Log("The remote display does not list %dx%d", width, height);
             RemoteDisplayShown = ConnectRemoteConsole(ctx);
+            if (RemoteDisplayShown)
+                CopySid(sizeof(RemoteDisplaySid), RemoteDisplaySid, ctx->NlaSid);
             if (!RemoteDisplayShown)
                 error = ERRINFO_SERVER_DENIED_CONNECTION;
             else if (SetRemoteDisplayMode(ctx->ClientWidth, ctx->ClientHeight) &&
@@ -743,6 +755,12 @@ static UINT32 AcquireRemoteDisplay(DESKTOP_CONTEXT *ctx)
             Log("Remote display adapter closed");
         }
     }
+    else if (RemoteDisplayShown && !EqualSid(RemoteDisplaySid, ctx->NlaSid))
+    {
+        Log("The remote display belongs to another user");
+        ctx->ConsoleStatus = ERROR_ACCESS_DENIED;
+        error = ERRINFO_SERVER_DENIED_CONNECTION;
+    }
     else if (RemoteDisplayShown)
     {
         SetRemoteDisplayMode(ctx->ClientWidth, ctx->ClientHeight);
@@ -751,6 +769,7 @@ static UINT32 AcquireRemoteDisplay(DESKTOP_CONTEXT *ctx)
     {
         RemoteDisplayUsers++;
         ctx->RemoteDisplay = TRUE;
+        ctx->Generation = InterlockedIncrement(&ClientGeneration);
     }
     LeaveCriticalSection(&RemoteDisplayLock);
     return error;
@@ -801,6 +820,7 @@ static void ReleaseRemoteDisplay(DESKTOP_CONTEXT *ctx)
     {
         if (!ExperienceRestore(&Experience)) Log("Cannot restore the console's visual settings");
         RemoteDisplayShown = FALSE;
+        ZeroMemory(RemoteDisplaySid, sizeof(RemoteDisplaySid));
         DisconnectRemoteConsole(InterlockedExchange(&ConsoleTakeover, FALSE) != 0);
         if (RemoteDisplay)
         {
@@ -895,7 +915,6 @@ static BOOL PostConnect(freerdp_peer *peer)
         Log("Authentication rejected for peer %s", peer->hostname);
         return FALSE;
     }
-    ctx->Generation = InterlockedIncrement(&ClientGeneration);
     ctx->Authorized = TRUE;
     error = AcquireRemoteDisplay(ctx);
     if (!error && !OpenRemoteFrames(ctx)) error = ERRINFO_CLOSE_STACK_ON_DRIVER_FAILURE;
