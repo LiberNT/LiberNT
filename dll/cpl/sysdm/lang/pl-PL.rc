@@ -222,7 +222,6 @@ BEGIN
             UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS | WS_CHILD | WS_VISIBLE, 0, 0, 8, 13
     LTEXT "s", IDC_STATIC, 237, 70, 5, 8
     LTEXT "Aby ręcznie edytować plik opcji autostartu, kliknij przycisk Edytuj.", IDC_STATIC, 14, 89, 187, 8
-    PUSHBUTTON "&Edytuj", IDC_STRRECEDIT, 202, 87, 36, 14
     GROUPBOX "Awaria systemu", IDC_STATIC, 7, 111, 238, 140
     AUTOCHECKBOX "&Zapisz zdarzenie do dziennika systemu", IDC_STRRECWRITEEVENT, 14, 124, 148, 10
     AUTOCHECKBOX "&Wyślij alert administracyjny", IDC_STRRECSENDALERT, 14, 138, 148, 10

@@ -221,7 +221,6 @@ BEGIN
             UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS | WS_CHILD | WS_VISIBLE, 0, 0, 8, 13
     LTEXT "secunde", IDC_STATIC, 209, 70, 30, 8
     LTEXT "Pentru a edita fişierul cu opţiuni de pornire, faceţi clic pe Editare.", IDC_STATIC, 14, 89, 187, 8
-    PUSHBUTTON "&Editare", IDC_STRRECEDIT, 188, 87, 50, 14
     GROUPBOX "Pană de sistem", IDC_STATIC, 7, 111, 238, 140
     AUTOCHECKBOX "Se &scrie un eveniment în jurnalul de sistem", IDC_STRRECWRITEEVENT, 14, 124, 178, 10
     AUTOCHECKBOX "Se tri&mite o alertă administrativă", IDC_STRRECSENDALERT, 14, 138, 148, 10

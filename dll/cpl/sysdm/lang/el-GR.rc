@@ -212,7 +212,6 @@ BEGIN
             UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS | WS_CHILD | WS_VISIBLE, 0, 0, 8, 13
     LTEXT "δευτ.", IDC_STATIC, 215, 70, 25, 8
     LTEXT "Για μη αυτόματη επεξεργασία των επιλογών εκκίνησης, κάντε κλικ στο κουμπί Επεξεργασία.", IDC_STATIC, 14, 89, 187, 8
-    PUSHBUTTON "Επε&ξεργασία", IDC_STRRECEDIT, 188, 87, 50, 14
     GROUPBOX "Αποτυχία συστήματος", IDC_STATIC, 7, 111, 238, 140
     AUTOCHECKBOX "Εγγραφή του συμβάντος στο αρχείο &καταγραφής συστήματος", IDC_STRRECWRITEEVENT, 14, 124, 158, 10
     AUTOCHECKBOX "&Αποστολή ειδοποίησης διαχειριστή", IDC_STRRECSENDALERT, 14, 138, 148, 10

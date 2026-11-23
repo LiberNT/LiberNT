@@ -212,7 +212,6 @@ BEGIN
             UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS | WS_CHILD | WS_VISIBLE, 0, 0, 8, 13
     LTEXT "detik", IDC_STATIC, 215, 70, 25, 8
     LTEXT "Untuk mengedit berkas pilihan pemulaian secara manual, klik Edit.", IDC_STATIC, 14, 89, 187, 8
-    PUSHBUTTON "&Edit", IDC_STRRECEDIT, 188, 87, 50, 14
     GROUPBOX "Kegagalan sistem", IDC_STATIC, 7, 111, 238, 140
     AUTOCHECKBOX "Tulis kejadian pada log sistem", IDC_STRRECWRITEEVENT, 14, 124, 148, 10
     AUTOCHECKBOX "Kirim peri&ngatan administratif", IDC_STRRECSENDALERT, 14, 138, 148, 10

@@ -219,7 +219,6 @@ BEGIN
             UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS | WS_CHILD | WS_VISIBLE, 0, 0, 8, 13
     LTEXT "seg.", IDC_STATIC, 223, 70, 18, 8
     LTEXT "Para editar o ficheiro de opções de arranque manualmente, clique em ""Editar"".", IDC_STATIC, 14, 89, 187, 8
-    PUSHBUTTON "&Editar...", IDC_STRRECEDIT, 188, 87, 50, 14
     GROUPBOX "Falha do sistema", IDC_STATIC, 7, 111, 238, 140
     AUTOCHECKBOX "Escrever um e&vento no ficheiro de registo do sistema", IDC_STRRECWRITEEVENT, 14, 124, 190, 10
     AUTOCHECKBOX "Enviar um &alerta administrativo", IDC_STRRECSENDALERT, 14, 138, 148, 10

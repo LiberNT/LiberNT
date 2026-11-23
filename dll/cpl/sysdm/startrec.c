@@ -10,23 +10,25 @@
 
 #include "precomp.h"
 
-#include <shlwapi.h>
+#define BCD_OBJECTS        L"BCD00000000\\Objects"
+#define BCD_BOOTMGR        L"{9dea862c-5cdd-4e70-acc1-f32b344d4795}"
+#define BCD_DISPLAY_ORDER  L"24000001"
+#define BCD_DEFAULT        L"23000003"
+#define BCD_TIMEOUT        L"25000004"
+#define BCD_DESCRIPTION    L"12000004"
+#define BCD_ID_CHARS       39
+#define BCD_MAX_TIMEOUT    999
 
 typedef struct _BOOTRECORD
 {
-    DWORD BootType;
-    WCHAR szSectionName[128];
-    WCHAR szBootPath[MAX_PATH];
-    WCHAR szOptions[512];
+    WCHAR szId[BCD_ID_CHARS];
 } BOOTRECORD, *PBOOTRECORD;
 
 typedef struct _STARTINFO
 {
-    WCHAR szFreeldrIni[MAX_PATH + 15];
     WCHAR szDumpFile[MAX_PATH];
     WCHAR szMinidumpDir[MAX_PATH];
     DWORD dwCrashDumpEnabled;
-    INT iFreeLdrIni;
 } STARTINFO, *PSTARTINFO;
 
 BOOL SaveRecoveryOptions;
@@ -66,372 +68,63 @@ SetRecoveryTimeout(HWND hwndDlg, INT Timeout)
 }
 
 
-static DWORD
-GetSystemDrive(WCHAR **szSystemDrive)
+static LONG
+ReadBcdElement(PCWSTR Object, PCWSTR Element, DWORD Flags, PVOID Data, DWORD *Size)
 {
-    DWORD dwBufSize;
+    WCHAR Path[128];
 
-    /* Get Path to freeldr.ini or boot.ini */
-    *szSystemDrive = HeapAlloc(GetProcessHeap(), 0, MAX_PATH * sizeof(WCHAR));
-    if (*szSystemDrive != NULL)
-    {
-        dwBufSize = GetEnvironmentVariableW(L"SystemDrive", *szSystemDrive, MAX_PATH);
-        if (dwBufSize > MAX_PATH)
-        {
-            WCHAR *szTmp;
-            DWORD dwBufSize2;
+    if (FAILED(StringCchPrintfW(Path, _countof(Path), L"%s\\%s\\Elements\\%s", BCD_OBJECTS, Object, Element)))
+        return ERROR_INVALID_PARAMETER;
 
-            szTmp = HeapReAlloc(GetProcessHeap(), 0, *szSystemDrive, dwBufSize * sizeof(WCHAR));
-            if (szTmp == NULL)
-                goto FailGetSysDrive;
-
-            *szSystemDrive = szTmp;
-
-            dwBufSize2 = GetEnvironmentVariableW(L"SystemDrive", *szSystemDrive, dwBufSize);
-            if (dwBufSize2 > dwBufSize || dwBufSize2 == 0)
-                goto FailGetSysDrive;
-        }
-        else if (dwBufSize == 0)
-        {
-FailGetSysDrive:
-            HeapFree(GetProcessHeap(), 0, *szSystemDrive);
-            *szSystemDrive = NULL;
-            return 0;
-        }
-
-        return dwBufSize;
-    }
-
-    return 0;
+    return RegGetValueW(HKEY_LOCAL_MACHINE, Path, L"Element", Flags, NULL, Data, Size);
 }
 
-static PBOOTRECORD
-ReadFreeldrSection(HINF hInf, WCHAR *szSectionName)
+static VOID
+EnableRestorePrivilege(VOID)
 {
-    PBOOTRECORD pRecord;
-    INFCONTEXT InfContext;
-    WCHAR szName[MAX_PATH];
-    WCHAR szValue[MAX_PATH];
-    DWORD LineLength;
+    TOKEN_PRIVILEGES Privileges;
+    HANDLE Token;
 
-    if (!SetupFindFirstLineW(hInf,
-                            szSectionName,
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &Token))
+        return;
+
+    Privileges.PrivilegeCount = 1;
+    Privileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+    if (LookupPrivilegeValueW(NULL, SE_RESTORE_NAME, &Privileges.Privileges[0].Luid))
+        AdjustTokenPrivileges(Token, FALSE, &Privileges, 0, NULL, NULL);
+
+    CloseHandle(Token);
+}
+
+static LONG
+WriteBcdElement(PCWSTR Object, PCWSTR Element, DWORD Type, const VOID *Data, DWORD Size)
+{
+    WCHAR Path[128];
+    HKEY Key;
+    LONG Error;
+
+    if (FAILED(StringCchPrintfW(Path, _countof(Path), L"%s\\%s\\Elements\\%s", BCD_OBJECTS, Object, Element)))
+        return ERROR_INVALID_PARAMETER;
+
+    EnableRestorePrivilege();
+    Error = RegCreateKeyExW(HKEY_LOCAL_MACHINE,
+                            Path,
+                            0,
                             NULL,
-                            &InfContext))
-    {
-        /* Failed to find section */
-        return NULL;
-    }
-
-    pRecord = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(BOOTRECORD));
-    if (pRecord == NULL)
-    {
-        return NULL;
-    }
-
-    wcscpy(pRecord->szSectionName, szSectionName);
-
-    do
-    {
-        if (!SetupGetStringFieldW(&InfContext,
-                                  0,
-                                  szName,
-                                  sizeof(szName) / sizeof(WCHAR),
-                                  &LineLength))
-        {
-            break;
-        }
-
-        if (!SetupGetStringFieldW(&InfContext,
-                                  1,
-                                  szValue,
-                                  sizeof(szValue) / sizeof(WCHAR),
-                                  &LineLength))
-        {
-            break;
-        }
-
-        if (!_wcsnicmp(szName, L"BootType", 8))
-        {
-            if (!_wcsnicmp(szValue, L"ReactOS", 7))
-            {
-                // FIXME: Store as enum
-                pRecord->BootType = 1;
-            }
-            else
-            {
-                pRecord->BootType = 0;
-            }
-        }
-        else if (!_wcsnicmp(szName, L"SystemPath", 10))
-        {
-            wcscpy(pRecord->szBootPath, szValue);
-        }
-        else if (!_wcsnicmp(szName, L"Options", 7))
-        {
-            // FIXME: Store flags as values
-            wcscpy(pRecord->szOptions, szValue);
-        }
-
-    }
-    while (SetupFindNextLine(&InfContext, &InfContext));
-
-    return pRecord;
-}
-
-
-static INT
-LoadFreeldrSettings(HINF hInf, HWND hwndDlg)
-{
-    INFCONTEXT InfContext;
-    PBOOTRECORD pRecord;
-    WCHAR szDefaultOs[MAX_PATH];
-    WCHAR szName[MAX_PATH];
-    WCHAR szValue[MAX_PATH];
-    DWORD LineLength;
-    DWORD TimeOut;
-    LRESULT lResult;
-
-    if (!SetupFindFirstLineW(hInf,
-                           L"FREELOADER",
-                           L"DefaultOS",
-                           &InfContext))
-    {
-        /* Failed to find default os */
-        return FALSE;
-    }
-
-    if (!SetupGetStringFieldW(&InfContext,
-                             1,
-                             szDefaultOs,
-                             sizeof(szDefaultOs) / sizeof(WCHAR),
-                             &LineLength))
-    {
-        /* No key */
-        return FALSE;
-    }
-
-    if (!SetupFindFirstLineW(hInf,
-                           L"FREELOADER",
-                           L"TimeOut",
-                           &InfContext))
-    {
-        /* Expected to find timeout value */
-        return FALSE;
-    }
-
-
-    if (!SetupGetIntField(&InfContext,
-                          1,
-                          (PINT)&TimeOut))
-    {
-        /* Failed to retrieve timeout */
-        return FALSE;
-    }
-
-    if (!SetupFindFirstLineW(hInf,
-                           L"Operating Systems",
-                           NULL,
-                           &InfContext))
-    {
-       /* Expected list of operating systems */
-       return FALSE;
-    }
-
-    do
-    {
-        if (!SetupGetStringFieldW(&InfContext,
-                                 0,
-                                 szName,
-                                 sizeof(szName) / sizeof(WCHAR),
-                                 &LineLength))
-        {
-            /* The ini file is messed up */
-            return FALSE;
-        }
-
-        if (!SetupGetStringFieldW(&InfContext,
-                                 1,
-                                 szValue,
-                                 sizeof(szValue) / sizeof(WCHAR),
-                                 &LineLength))
-        {
-            /* The ini file is messed up */
-            return FALSE;
-        }
-
-        pRecord = ReadFreeldrSection(hInf, szName);
-        if (pRecord)
-        {
-            lResult = SendDlgItemMessageW(hwndDlg, IDC_STRECOSCOMBO, CB_ADDSTRING, (WPARAM)0, (LPARAM)szValue);
-            if (lResult != CB_ERR)
-            {
-                SendDlgItemMessageW(hwndDlg, IDC_STRECOSCOMBO, CB_SETITEMDATA, (WPARAM)lResult, (LPARAM)pRecord);
-                if (!wcscmp(szDefaultOs, szName))
-                {
-                    /* We store the friendly name as key */
-                    wcscpy(szDefaultOs, szValue);
-                }
-            }
-            else
-            {
-               HeapFree(GetProcessHeap(), 0, pRecord);
-            }
-        }
-    }
-    while (SetupFindNextLine(&InfContext, &InfContext));
-
-    /* Find default os in list */
-    lResult = SendDlgItemMessageW(hwndDlg, IDC_STRECOSCOMBO, CB_FINDSTRING, (WPARAM)-1, (LPARAM)szDefaultOs);
-    if (lResult != CB_ERR)
-    {
-       /* Set cur sel */
-       SendDlgItemMessageW(hwndDlg, IDC_STRECOSCOMBO, CB_SETCURSEL, (WPARAM)lResult, (LPARAM)0);
-    }
-
-    if(TimeOut)
-    {
-        SendDlgItemMessageW(hwndDlg, IDC_STRECLIST, BM_SETCHECK, (WPARAM)BST_CHECKED, (LPARAM)0);
-    }
-
-    SetTimeout(hwndDlg, TimeOut);
-
-    return TRUE;
-}
-
-static INT
-LoadBootSettings(HINF hInf, HWND hwndDlg)
-{
-    INFCONTEXT InfContext;
-    WCHAR szName[MAX_PATH];
-    WCHAR szValue[MAX_PATH];
-    DWORD LineLength;
-    DWORD TimeOut = 0;
-    WCHAR szDefaultOS[MAX_PATH];
-    WCHAR szOptions[MAX_PATH];
-    PBOOTRECORD pRecord;
-    LRESULT lResult;
-
-    if(!SetupFindFirstLineW(hInf,
-                           L"boot loader",
-                           NULL,
-                           &InfContext))
-    {
-        return FALSE;
-    }
-
-    do
-    {
-        if (!SetupGetStringFieldW(&InfContext,
-                                 0,
-                                 szName,
-                                 sizeof(szName) / sizeof(WCHAR),
-                                 &LineLength))
-        {
-            return FALSE;
-        }
-
-        if (!SetupGetStringFieldW(&InfContext,
-                                 1,
-                                 szValue,
-                                 sizeof(szValue) / sizeof(WCHAR),
-                                 &LineLength))
-        {
-            return FALSE;
-        }
-
-        if (!_wcsnicmp(szName, L"timeout", 7))
-        {
-            TimeOut = _wtoi(szValue);
-        }
-
-        if (!_wcsnicmp(szName, L"default", 7))
-        {
-            wcscpy(szDefaultOS, szValue);
-        }
-
-    }
-    while (SetupFindNextLine(&InfContext, &InfContext));
-
-    if (!SetupFindFirstLineW(hInf,
-                            L"operating systems",
+                            REG_OPTION_BACKUP_RESTORE,
+                            KEY_SET_VALUE,
                             NULL,
-                            &InfContext))
-    {
-        /* Failed to find operating systems section */
-        return FALSE;
-    }
+                            &Key,
+                            NULL);
+    if (Error != ERROR_SUCCESS)
+        return Error;
 
-    do
-    {
-        if (!SetupGetStringFieldW(&InfContext,
-                                 0,
-                                 szName,
-                                 sizeof(szName) / sizeof(WCHAR),
-                                 &LineLength))
-        {
-            return FALSE;
-        }
+    Error = RegSetValueExW(Key, L"Element", 0, Type, Data, Size);
+    if (Error == ERROR_SUCCESS)
+        Error = RegFlushKey(Key);
 
-        if (!SetupGetStringFieldW(&InfContext,
-                                 1,
-                                 szValue,
-                                 sizeof(szValue) / sizeof(WCHAR),
-                                 &LineLength))
-        {
-            return FALSE;
-        }
-
-        SetupGetStringFieldW(&InfContext,
-                            2,
-                            szOptions,
-                            sizeof(szOptions) / sizeof(WCHAR),
-                            &LineLength);
-
-        pRecord = (PBOOTRECORD) HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(BOOTRECORD));
-        if (pRecord)
-        {
-            pRecord->BootType = 0;
-            wcscpy(pRecord->szBootPath, szName);
-            wcscpy(pRecord->szSectionName, szValue);
-            wcscpy(pRecord->szOptions, szOptions);
-
-            if (!wcscmp(szName, szDefaultOS))
-            {
-                /* ms boot ini stores the path not the friendly name */
-                wcscpy(szDefaultOS, szValue);
-            }
-
-            lResult = SendDlgItemMessageW(hwndDlg, IDC_STRECOSCOMBO, CB_ADDSTRING, (WPARAM)0, (LPARAM)szValue);
-            if (lResult != CB_ERR)
-            {
-                SendDlgItemMessageW(hwndDlg, IDC_STRECOSCOMBO, CB_SETITEMDATA, (WPARAM)lResult, (LPARAM)pRecord);
-            }
-            else
-            {
-               HeapFree(GetProcessHeap(), 0, pRecord);
-            }
-        }
-
-    }
-    while (SetupFindNextLine(&InfContext, &InfContext));
-
-    /* Find default os in list */
-    lResult = SendDlgItemMessageW(hwndDlg, IDC_STRECOSCOMBO, CB_FINDSTRING, (WPARAM)0, (LPARAM)szDefaultOS);
-    if (lResult != CB_ERR)
-    {
-       /* Set cur sel */
-       SendDlgItemMessageW(hwndDlg, IDC_STRECOSCOMBO, CB_SETCURSEL, (WPARAM)lResult, (LPARAM)0);
-    }
-
-    if(TimeOut)
-    {
-        SendDlgItemMessageW(hwndDlg, IDC_STRECLIST, BM_SETCHECK, (WPARAM)BST_CHECKED, (LPARAM)0);
-    }
-
-    SetTimeout(hwndDlg, TimeOut);
-
-    return TRUE;
+    RegCloseKey(Key);
+    return Error;
 }
 
 static VOID
@@ -458,66 +151,82 @@ DeleteBootRecords(HWND hwndDlg)
 }
 
 static LRESULT
-LoadOSList(HWND hwndDlg, PSTARTINFO pStartInfo)
+LoadOSList(HWND hwndDlg)
 {
-    DWORD dwBufSize;
-    WCHAR *szSystemDrive;
-    HINF hInf;
+    PWSTR Order;
+    WCHAR Default[BCD_ID_CHARS];
+    WCHAR Description[MAX_PATH];
+    ULONGLONG Timeout = 0;
+    PBOOTRECORD pRecord;
+    LRESULT lResult, lCount, lIndex;
+    DWORD Size;
+    PCWSTR Id;
 
-    dwBufSize = GetSystemDrive(&szSystemDrive);
-    if (dwBufSize == 0)
+    Size = 0;
+    if (ReadBcdElement(BCD_BOOTMGR, BCD_DISPLAY_ORDER, RRF_RT_REG_MULTI_SZ, NULL, &Size) != ERROR_SUCCESS)
         return FALSE;
 
-    wcscpy(pStartInfo->szFreeldrIni, szSystemDrive);
-    wcscat(pStartInfo->szFreeldrIni, L"\\freeldr.ini");
+    Order = HeapAlloc(GetProcessHeap(), 0, Size + 2 * sizeof(WCHAR));
+    if (Order == NULL)
+        return FALSE;
 
-    if (PathFileExistsW(pStartInfo->szFreeldrIni))
+    Size += 2 * sizeof(WCHAR);
+    if (ReadBcdElement(BCD_BOOTMGR, BCD_DISPLAY_ORDER, RRF_RT_REG_MULTI_SZ, Order, &Size) != ERROR_SUCCESS)
     {
-        /* Free resource previously allocated by GetSystemDrive() */
-        HeapFree(GetProcessHeap(), 0, szSystemDrive);
-        /* freeldr.ini exists */
-        hInf = SetupOpenInfFileW(pStartInfo->szFreeldrIni,
-                                NULL,
-                                INF_STYLE_OLDNT,
-                                NULL);
-
-        if (hInf != INVALID_HANDLE_VALUE)
-        {
-            LoadFreeldrSettings(hInf, hwndDlg);
-            SetupCloseInfFile(hInf);
-            pStartInfo->iFreeLdrIni = 1;
-            return TRUE;
-        }
+        HeapFree(GetProcessHeap(), 0, Order);
         return FALSE;
     }
 
-    /* Try loading boot.ini settings */
-    wcscpy(pStartInfo->szFreeldrIni, szSystemDrive);
-    wcscat(pStartInfo->szFreeldrIni, L"\\boot.ini");
+    Size = sizeof(Default);
+    if (ReadBcdElement(BCD_BOOTMGR, BCD_DEFAULT, RRF_RT_REG_SZ, Default, &Size) != ERROR_SUCCESS)
+        Default[0] = UNICODE_NULL;
 
-    /* Free resource previously allocated by GetSystemDrive() */
-    HeapFree(GetProcessHeap(), 0, szSystemDrive);
-
-    if (PathFileExistsW(pStartInfo->szFreeldrIni))
+    Size = sizeof(Timeout);
+    if (ReadBcdElement(BCD_BOOTMGR, BCD_TIMEOUT, RRF_RT_REG_BINARY, &Timeout, &Size) != ERROR_SUCCESS ||
+        Size != sizeof(Timeout))
     {
-        /* Load boot.ini settings */
-        hInf = SetupOpenInfFileW(pStartInfo->szFreeldrIni,
-                                NULL,
-                                INF_STYLE_OLDNT,
-                                NULL);
-
-        if (hInf != INVALID_HANDLE_VALUE)
-        {
-            LoadBootSettings(hInf, hwndDlg);
-            SetupCloseInfFile(hInf);
-            pStartInfo->iFreeLdrIni = 2;
-            return TRUE;
-        }
-
-        return FALSE;
+        Timeout = 0;
     }
 
-    return FALSE;
+    for (Id = Order; *Id != UNICODE_NULL; Id += wcslen(Id) + 1)
+    {
+        Size = sizeof(Description);
+        if (ReadBcdElement(Id, BCD_DESCRIPTION, RRF_RT_REG_SZ, Description, &Size) != ERROR_SUCCESS)
+            StringCchCopyW(Description, _countof(Description), Id);
+
+        pRecord = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(BOOTRECORD));
+        if (pRecord == NULL)
+            break;
+
+        StringCchCopyW(pRecord->szId, _countof(pRecord->szId), Id);
+        lResult = SendDlgItemMessageW(hwndDlg, IDC_STRECOSCOMBO, CB_ADDSTRING, (WPARAM)0, (LPARAM)Description);
+        if (lResult == CB_ERR || lResult == CB_ERRSPACE)
+        {
+            HeapFree(GetProcessHeap(), 0, pRecord);
+            continue;
+        }
+
+        SendDlgItemMessageW(hwndDlg, IDC_STRECOSCOMBO, CB_SETITEMDATA, (WPARAM)lResult, (LPARAM)pRecord);
+    }
+
+    HeapFree(GetProcessHeap(), 0, Order);
+
+    lCount = SendDlgItemMessageW(hwndDlg, IDC_STRECOSCOMBO, CB_GETCOUNT, (WPARAM)0, (LPARAM)0);
+    for (lIndex = 0; lCount != CB_ERR && lIndex < lCount; lIndex++)
+    {
+        pRecord = (PBOOTRECORD)SendDlgItemMessageW(hwndDlg, IDC_STRECOSCOMBO, CB_GETITEMDATA, (WPARAM)lIndex, (LPARAM)0);
+        if ((INT_PTR)pRecord != CB_ERR && _wcsicmp(pRecord->szId, Default) == 0)
+        {
+            SendDlgItemMessageW(hwndDlg, IDC_STRECOSCOMBO, CB_SETCURSEL, (WPARAM)lIndex, (LPARAM)0);
+            break;
+        }
+    }
+
+    if (Timeout != 0)
+        SendDlgItemMessageW(hwndDlg, IDC_STRECLIST, BM_SETCHECK, (WPARAM)BST_CHECKED, (LPARAM)0);
+
+    SetTimeout(hwndDlg, (INT)min(Timeout, (ULONGLONG)BCD_MAX_TIMEOUT));
+    return TRUE;
 }
 
 static VOID
@@ -701,7 +410,6 @@ StartRecDlgProc(HWND hwndDlg,
     PBOOTRECORD pRecord;
     int iTimeout;
     LRESULT lResult;
-    WCHAR szTimeout[10];
 
     UNREFERENCED_PARAMETER(lParam);
 
@@ -715,7 +423,7 @@ StartRecDlgProc(HWND hwndDlg,
 
             LoadRecoveryOptions(hwndDlg, pStartInfo);
             SetRecoveryTimeout(hwndDlg, 0);
-            return LoadOSList(hwndDlg, pStartInfo);
+            return LoadOSList(hwndDlg);
 
         case WM_DESTROY:
             DeleteBootRecords(hwndDlg);
@@ -725,60 +433,29 @@ StartRecDlgProc(HWND hwndDlg,
         case WM_COMMAND:
             switch(LOWORD(wParam))
             {
-                case IDC_STRRECEDIT:
-                    ShellExecuteW(0, L"open", L"notepad", pStartInfo->szFreeldrIni, NULL, SW_SHOWNORMAL);
-                    // FIXME: Use CreateProcess and wait untill finished
-                    //  DeleteBootRecords(hwndDlg);
-                    //  LoadOSList(hwndDlg);
-                    break;
-
                 case IDOK:
-                    /* Save timeout */
+                {
+                    ULONGLONG Timeout;
+
                     if (SendDlgItemMessage(hwndDlg, IDC_STRECLIST, BM_GETCHECK, (WPARAM)0, (LPARAM)0) == BST_CHECKED)
                         iTimeout = SendDlgItemMessage(hwndDlg, IDC_STRRECLISTUPDWN, UDM_GETPOS, (WPARAM)0, (LPARAM)0);
                     else
                         iTimeout = 0;
-                    _swprintf(szTimeout, L"%i", iTimeout);
+
+                    Timeout = (ULONGLONG)max(0, min(iTimeout, BCD_MAX_TIMEOUT));
+                    WriteBcdElement(BCD_BOOTMGR, BCD_TIMEOUT, REG_BINARY, &Timeout, sizeof(Timeout));
 
                     lResult = SendDlgItemMessageW(hwndDlg, IDC_STRECOSCOMBO, CB_GETCURSEL, (WPARAM)0, (LPARAM)0);
-                    if (lResult == CB_ERR)
+                    if (lResult != CB_ERR)
                     {
-                        /* ? */
-                        DeleteBootRecords(hwndDlg);
-                        return TRUE;
-                    }
-
-                    pRecord = (PBOOTRECORD) SendDlgItemMessage(hwndDlg, IDC_STRECOSCOMBO, CB_GETITEMDATA, (WPARAM)lResult, (LPARAM)0);
-
-                    if ((INT_PTR)pRecord != CB_ERR)
-                    {
-                        if (pStartInfo->iFreeLdrIni == 1) // FreeLdrIni style
+                        pRecord = (PBOOTRECORD)SendDlgItemMessage(hwndDlg, IDC_STRECOSCOMBO, CB_GETITEMDATA, (WPARAM)lResult, (LPARAM)0);
+                        if ((INT_PTR)pRecord != CB_ERR)
                         {
-                            /* Set default timeout */
-                            WritePrivateProfileStringW(L"FREELOADER",
-                                                      L"TimeOut",
-                                                      szTimeout,
-                                                      pStartInfo->szFreeldrIni);
-                            /* Set default OS */
-                            WritePrivateProfileStringW(L"FREELOADER",
-                                                      L"DefaultOS",
-                                                      pRecord->szSectionName,
-                                                      pStartInfo->szFreeldrIni);
-
-                        }
-                        else if (pStartInfo->iFreeLdrIni == 2) // BootIni style
-                        {
-                            /* Set default timeout */
-                            WritePrivateProfileStringW(L"boot loader",
-                                                      L"timeout",
-                                                      szTimeout,
-                                                      pStartInfo->szFreeldrIni);
-                            /* Set default OS */
-                            WritePrivateProfileStringW(L"boot loader",
-                                                      L"default",
-                                                      pRecord->szBootPath,
-                                                      pStartInfo->szFreeldrIni);
-
+                            WriteBcdElement(BCD_BOOTMGR,
+                                            BCD_DEFAULT,
+                                            REG_SZ,
+                                            pRecord->szId,
+                                            (DWORD)((wcslen(pRecord->szId) + 1) * sizeof(WCHAR)));
                         }
                     }
 
@@ -790,6 +467,7 @@ StartRecDlgProc(HWND hwndDlg,
                     EndDialog(hwndDlg,
                               LOWORD(wParam));
                     return TRUE;
+                }
 
                 case IDCANCEL:
                     EndDialog(hwndDlg,

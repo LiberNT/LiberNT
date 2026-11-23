@@ -221,7 +221,6 @@ BEGIN
             UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS | WS_CHILD | WS_VISIBLE, 0, 0, 8, 13
     LTEXT "Sek.", IDC_STATIC, 221, 70, 14, 8
     LTEXT "Um die Startoptionen manuell zu bearbeiten, klicken Sie auf ""Bearbeiten"".", IDC_STATIC, 14, 84, 170, 18
-    PUSHBUTTON "Be&arbeiten", IDC_STRRECEDIT, 188, 87, 50, 14
     GROUPBOX "Systemfehler", IDC_STATIC, 7, 111, 238, 140
     AUTOCHECKBOX "Ereignis in das Systemprotokoll &eintragen", IDC_STRRECWRITEEVENT, 14, 124, 148, 10
     AUTOCHECKBOX "Administrator-Warnmeldung &senden", IDC_STRRECSENDALERT, 14, 138, 148, 10

@@ -220,7 +220,6 @@ BEGIN
             UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS | WS_CHILD | WS_VISIBLE, 0, 0, 8, 13
     LTEXT "sekúnd", IDC_STATIC, 215, 70, 25, 8
     LTEXT "Ak chcete manuálne upraviť súbor s možnosťami spustenia systému, kliknite na tlačidlo Upraviť.", IDC_STATIC, 14, 85, 173, 18
-    PUSHBUTTON "Upr&aviť", IDC_STRRECEDIT, 188, 87, 50, 14
     GROUPBOX "Zlyhanie systému", IDC_STATIC, 7, 111, 238, 140
     AUTOCHECKBOX "Zapísať &udalosť do systémového denníka", IDC_STRRECWRITEEVENT, 14, 124, 148, 10
     AUTOCHECKBOX "Poslať správ&covskú výstrahu", IDC_STRRECSENDALERT, 14, 138, 148, 10
