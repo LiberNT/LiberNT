@@ -442,7 +442,10 @@ ExpExtendServiceTable(
         return STATUS_SUCCESS;
     }
     if (!NT_SUCCESS(Status))
+    {
         IoUnloadSessionDriver(DriverObject);
+        MmUnloadSystemImage(ModuleObject);
+    }
 
     return Status;
 }
