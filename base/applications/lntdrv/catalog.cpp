@@ -620,6 +620,12 @@ void UseDriverVersion(CatalogUpdate &update)
     }
 }
 
+/* The catalog's name for what an update installs, not the name the device has before it */
+std::wstring OfferedName(const CatalogUpdate &update)
+{
+    return update.Model.empty() ? update.Title : update.Model;
+}
+
 std::wstring HardwareIdCore(const std::wstring &id)
 {
     static const WCHAR *Tokens[] = { L"&DEV_", L"&PID_" };
