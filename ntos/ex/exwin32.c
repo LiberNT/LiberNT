@@ -55,17 +55,44 @@ GENERIC_MAPPING ExpDesktopMapping =
 NTSTATUS
 NTAPI
 ExpWin32SessionCallout(
+    _In_ PVOID Object,
     _In_opt_ PKWIN32_SESSION_CALLOUT Callout,
     _In_ PVOID Parameters)
 {
+    KAPC_STATE ApcState;
+    PVOID Session;
+    ULONG SessionId;
+    NTSTATUS Status;
+
     if (Callout == NULL)
     {
         return STATUS_SUCCESS;
     }
 
-    /* TODO: the call is made in the session the caller is already in; it is not
-       switched to the session that owns the object. */
-    return Callout(Parameters);
+    /* The window manager puts the session of a window station or desktop first in its body */
+    SessionId = *(PULONG)Object;
+    if (MmGetSessionIdEx(PsGetCurrentProcess()) == SessionId)
+    {
+        return Callout(Parameters);
+    }
+
+    Session = MmGetSessionById(SessionId);
+    if (Session == NULL)
+    {
+        return STATUS_SUCCESS;
+    }
+    Status = MmAttachSession(Session, &ApcState);
+    if (NT_SUCCESS(Status))
+    {
+        Status = Callout(Parameters);
+        MmDetachSession(Session, &ApcState);
+    }
+    else
+    {
+        Status = STATUS_SUCCESS;
+    }
+    MmQuitNextSession(Session);
+    return Status;
 }
 
 /* PUBLIC FUNCTIONS ***********************************************************/
@@ -89,7 +116,7 @@ ExpWindowStationOpen(
     Parameters.GrantedAccess = GrantedAccess;
     Parameters.HandleCount = HandleCount;
 
-    return ExpWin32SessionCallout(ExpWindowStationObjectOpen, &Parameters);
+    return ExpWin32SessionCallout(Object, ExpWindowStationObjectOpen, &Parameters);
 }
 
 BOOLEAN
@@ -108,7 +135,7 @@ ExpWindowStationOkToClose(
     Parameters.PreviousMode = PreviousMode;
 
     return NT_SUCCESS(ExpWin32SessionCallout(
-                          ExpWindowStationObjectOkToClose,
+                          Object, ExpWindowStationObjectOkToClose,
                           &Parameters));
 }
 
@@ -127,7 +154,7 @@ ExpWindowStationClose(
     Parameters.ProcessHandleCount = ProcessHandleCount;
     Parameters.SystemHandleCount = SystemHandleCount;
 
-    ExpWin32SessionCallout(ExpWindowStationObjectClose, &Parameters);
+    ExpWin32SessionCallout(Object, ExpWindowStationObjectClose, &Parameters);
 }
 
 VOID
@@ -139,7 +166,7 @@ ExpWinStaObjectDelete(
 
     Parameters.Object = Object;
 
-    ExpWin32SessionCallout(ExpWindowStationObjectDelete, &Parameters);
+    ExpWin32SessionCallout(Object, ExpWindowStationObjectDelete, &Parameters);
 }
 
 NTSTATUS
@@ -176,7 +203,7 @@ ExpWinStaObjectParse(
         return STATUS_OBJECT_NAME_NOT_FOUND;
     }
 
-    return ExpWin32SessionCallout(ExpWindowStationObjectParse, &Parameters);
+    return ExpWin32SessionCallout(ParseObject, ExpWindowStationObjectParse, &Parameters);
 }
 
 NTSTATUS
@@ -198,7 +225,7 @@ ExpDesktopOpen(
     Parameters.GrantedAccess = GrantedAccess;
     Parameters.HandleCount = HandleCount;
 
-    return ExpWin32SessionCallout(ExpDesktopObjectOpen, &Parameters);
+    return ExpWin32SessionCallout(Object, ExpDesktopObjectOpen, &Parameters);
 }
 
 BOOLEAN
@@ -216,7 +243,7 @@ ExpDesktopOkToClose(
     Parameters.Handle = Handle;
     Parameters.PreviousMode = PreviousMode;
 
-    return NT_SUCCESS(ExpWin32SessionCallout(ExpDesktopObjectOkToClose,
+    return NT_SUCCESS(ExpWin32SessionCallout(Object, ExpDesktopObjectOkToClose,
                                              &Parameters));
 }
 
@@ -235,7 +262,7 @@ ExpDesktopClose(
     Parameters.ProcessHandleCount = ProcessHandleCount;
     Parameters.SystemHandleCount = SystemHandleCount;
 
-    ExpWin32SessionCallout(ExpDesktopObjectClose, &Parameters);
+    ExpWin32SessionCallout(Object, ExpDesktopObjectClose, &Parameters);
 }
 
 VOID
@@ -247,7 +274,7 @@ ExpDesktopDelete(
 
     Parameters.Object = Object;
 
-    ExpWin32SessionCallout(ExpDesktopObjectDelete, &Parameters);
+    ExpWin32SessionCallout(Object, ExpDesktopObjectDelete, &Parameters);
 }
 
 CODE_SEG("INIT")
