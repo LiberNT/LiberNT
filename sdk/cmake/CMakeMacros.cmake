@@ -229,7 +229,7 @@ function(add_cd_file)
 endfunction()
 
 function(create_txtsetup_sif)
-    set(_source ${REACTOS_SOURCE_DIR}/boot/bootdata/txtsetup.sif)
+    set(_source ${REACTOS_SOURCE_DIR}/image/data/txtsetup.sif)
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${_source})
 
     file(GENERATE
@@ -1005,7 +1005,7 @@ function(create_registry_hives)
 
     find_program(MKCOMREG_PYTHON_EXECUTABLE NAMES python3 python REQUIRED NO_CMAKE_FIND_ROOT_PATH)
     set(_syssetup_inf ${CMAKE_SOURCE_DIR}/media/inf/syssetup.inf)
-    set(_comreg_code_inf ${CMAKE_SOURCE_DIR}/boot/bootdata/comreg_code.inf)
+    set(_comreg_code_inf ${CMAKE_SOURCE_DIR}/image/data/comreg_code.inf)
     set(_comreg_inf ${CMAKE_BINARY_DIR}/boot/bootdata/comreg.inf)
     set(_comreg_list ${CMAKE_BINARY_DIR}/boot/bootdata/comreg_modules-$<CONFIG>.txt)
     get_property(_comreg_targets GLOBAL PROPERTY CI_SYSTEM_TARGETS)
@@ -1040,17 +1040,17 @@ function(create_registry_hives)
     # LiveCD hives
     list(APPEND _livecd_inf_files
         ${_registry_inf}
-        ${CMAKE_SOURCE_DIR}/boot/bootdata/livecd.inf
-        ${CMAKE_SOURCE_DIR}/boot/bootdata/caroots.inf)
+        ${CMAKE_SOURCE_DIR}/image/data/livecd.inf
+        ${CMAKE_SOURCE_DIR}/image/data/caroots.inf)
     if(REACTOS_USE_XPDM AND (SARCH STREQUAL "xbox"))
         list(APPEND _livecd_inf_files
-            ${CMAKE_SOURCE_DIR}/boot/bootdata/hiveinst_xbox.inf)
+            ${CMAKE_SOURCE_DIR}/image/data/hiveinst_xbox.inf)
     elseif(REACTOS_USE_XPDM AND (SARCH STREQUAL "pc98"))
         list(APPEND _livecd_inf_files
-            ${CMAKE_SOURCE_DIR}/boot/bootdata/hiveinst_pc98.inf)
+            ${CMAKE_SOURCE_DIR}/image/data/hiveinst_pc98.inf)
     else()
         list(APPEND _livecd_inf_files
-            ${CMAKE_SOURCE_DIR}/boot/bootdata/hiveinst.inf)
+            ${CMAKE_SOURCE_DIR}/image/data/hiveinst.inf)
     endif()
     foreach(_livecd_extra_registry_inf IN LISTS LIVECD_EXTRA_REGISTRY_INF)
         if(_livecd_extra_registry_inf STREQUAL "")
@@ -1061,9 +1061,9 @@ function(create_registry_hives)
     endforeach()
     list(APPEND _livecd_inf_files ${_comreg_inf})
     list(APPEND _livecd_inf_files
-        ${CMAKE_SOURCE_DIR}/boot/bootdata/app_launcher.inf)
+        ${CMAKE_SOURCE_DIR}/image/data/app_launcher.inf)
     if(ENABLE_WOW64)
-        list(APPEND _livecd_inf_files ${CMAKE_SOURCE_DIR}/boot/bootdata/hivewow64_live.inf)
+        list(APPEND _livecd_inf_files ${CMAKE_SOURCE_DIR}/image/data/hivewow64_live.inf)
     endif()
 
     add_custom_command(
@@ -1097,23 +1097,23 @@ function(create_registry_hives)
 
     list(APPEND _preinstall_inf_files
         ${_registry_inf}
-        ${CMAKE_SOURCE_DIR}/boot/bootdata/preinstall.inf
-        ${CMAKE_SOURCE_DIR}/boot/bootdata/caroots.inf)
+        ${CMAKE_SOURCE_DIR}/image/data/preinstall.inf
+        ${CMAKE_SOURCE_DIR}/image/data/caroots.inf)
     list(APPEND _preinstall_inf_files
-        ${CMAKE_SOURCE_DIR}/boot/bootdata/app_launcher.inf)
+        ${CMAKE_SOURCE_DIR}/image/data/app_launcher.inf)
     if(REACTOS_USE_XPDM AND (SARCH STREQUAL "xbox"))
         list(APPEND _preinstall_inf_files
-            ${CMAKE_SOURCE_DIR}/boot/bootdata/hiveinst_xbox.inf)
+            ${CMAKE_SOURCE_DIR}/image/data/hiveinst_xbox.inf)
     elseif(REACTOS_USE_XPDM AND (SARCH STREQUAL "pc98"))
         list(APPEND _preinstall_inf_files
-            ${CMAKE_SOURCE_DIR}/boot/bootdata/hiveinst_pc98.inf)
+            ${CMAKE_SOURCE_DIR}/image/data/hiveinst_pc98.inf)
     else()
         list(APPEND _preinstall_inf_files
-            ${CMAKE_SOURCE_DIR}/boot/bootdata/hiveinst.inf)
+            ${CMAKE_SOURCE_DIR}/image/data/hiveinst.inf)
     endif()
     list(APPEND _preinstall_inf_files ${_comreg_inf})
     if(ENABLE_WOW64)
-        list(APPEND _preinstall_inf_files ${CMAKE_SOURCE_DIR}/boot/bootdata/hivewow64_live.inf)
+        list(APPEND _preinstall_inf_files ${CMAKE_SOURCE_DIR}/image/data/hivewow64_live.inf)
     endif()
     get_property(_preinstall_registry_infs GLOBAL PROPERTY PREINSTALL_REGISTRY_INF_LIST)
     list(APPEND _preinstall_inf_files ${_preinstall_registry_infs})

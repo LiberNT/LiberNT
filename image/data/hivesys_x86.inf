@@ -1,6 +1,6 @@
 ; PROJECT:     ReactOS
 ; LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
-; FILE:        boot/bootdata/hivesys_x86.inf
+; FILE:        image/data/hivesys_x86.inf
 ; PURPOSE:     Intel/PC-only boot-start drivers split out of the common hivesys.inf
 
 [AddReg]

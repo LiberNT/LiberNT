@@ -414,9 +414,10 @@ Enable this if the module uses typeid or dynamic_cast. You will probably need to
 
     add_custom_target(submodules)
 
-    #begin with boot so reactos_cab target is defined before all other modules
-    add_subdirectory(boot)
+    #begin with image so the livecd_files target is defined before all other modules
+    add_subdirectory(image ${CMAKE_BINARY_DIR}/boot)
     add_subdirectory(bootloader)
+    add_subdirectory(image/bcd ${CMAKE_BINARY_DIR}/bootloader/image)
     add_subdirectory(base)
     add_subdirectory(dll)
     set(FEX_ARM64EC_AVAILABLE OFF)

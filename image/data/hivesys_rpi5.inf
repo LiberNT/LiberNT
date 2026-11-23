@@ -1,6 +1,6 @@
 ; PROJECT:     ReactOS Raspberry Pi 5 boot hive
 ; LICENSE:     GPL-2.0+ (https://spdx.org/licenses/GPL-2.0+)
-; FILE:        boot/bootdata/hivesys_rpi5.inf
+; FILE:        image/data/hivesys_rpi5.inf
 ; PURPOSE:     Raspberry Pi 5 profile-specific boot driver bindings
 
 [AddReg]

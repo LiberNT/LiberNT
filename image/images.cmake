@@ -803,7 +803,7 @@ add_custom_target(preinstall_partition
     COMMAND native-ntfsimg
         --apply-security
         ${_preinstall_system_partition_file}
-        ${REACTOS_SOURCE_DIR}/boot/bootdata/filesecurity.txt
+        ${REACTOS_SOURCE_DIR}/image/data/filesecurity.txt
     DEPENDS ${_preinstall_partition_deps}
     VERBATIM)
 
@@ -854,7 +854,7 @@ add_custom_target(liberntramimg
     COMMAND native-ntfsimg
         --apply-security
         ${_preinstall_ram_partition_file}
-        ${REACTOS_SOURCE_DIR}/boot/bootdata/filesecurity.txt
+        ${REACTOS_SOURCE_DIR}/image/data/filesecurity.txt
     COMMAND native-mkdiskimg
         -o ${_preinstall_ram_image_file}
         -signature ${_ram_signature}
@@ -978,7 +978,7 @@ add_custom_target(liberntvhd
     COMMAND native-ntfsimg
         --apply-security
         ${_preinstall_vhd_partition_file}
-        ${REACTOS_SOURCE_DIR}/boot/bootdata/filesecurity.txt
+        ${REACTOS_SOURCE_DIR}/image/data/filesecurity.txt
     COMMAND native-mkdiskimg -o ${_preinstall_vhd_file} ${_liberntvhd_layout_args} -vhd
     COMMAND native-mkdiskimg -o ${_preinstall_vhdx_file} ${_liberntvhd_layout_args} -vhdx
     COMMAND ${CMAKE_COMMAND} -E rm -f ${_preinstall_vhd_partition_file}
