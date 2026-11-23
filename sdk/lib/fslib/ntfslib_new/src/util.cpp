@@ -10,7 +10,13 @@ void* __cdecl operator new(size_t Size)
                                              Size ? Size : 1,
                                              TAG_NTFS);
     if (!pObject)
+    {
+#if defined(__cpp_exceptions)
         throw std::bad_alloc();
+#else
+        __builtin_trap();
+#endif
+    }
     return pObject;
 }
 
