@@ -52,6 +52,7 @@
 #include "experience.h"
 #include "broker.h"
 #include "openh264.h"
+#include "secret.h"
 
 typedef ULONG (__cdecl *DEBUG_PRINT)(const char *, ...);
 static DEBUG_PRINT DebugPrint;
@@ -924,7 +925,7 @@ static BOOL ControllerPostConnect(freerdp_peer *peer)
     const char *user = freerdp_settings_get_string(settings, FreeRDP_Username);
     const char *password = freerdp_settings_get_string(settings, FreeRDP_Password);
     assert(ControllerMode && !ctx->RemoteDisplay);
-    if (!user || !password || strcmp(user, Username) || strcmp(password, Password))
+    if (!user || !password || !SecretEqual(user, Username) || !SecretEqual(password, Password))
     {
         Log("Authentication rejected for peer %s", peer->hostname);
         return FALSE;
@@ -1858,6 +1859,8 @@ static int ReadControllerConfig(const char *config)
 {
     char mac[MAX_INTERFACE_MACS * 18 + 16], mask[64], tail, *entry, *next;
     unsigned octets[6], i;
+    if (!ProtectSecretFile(config))
+    { Log("Cannot keep %s to administrators: %lu", config, GetLastError()); return 2; }
     GetPrivateProfileStringA("server", "bind", "", BindAddress, sizeof(BindAddress), config);
     GetPrivateProfileStringA("server", "allow", "", AllowedPeer, sizeof(AllowedPeer), config);
     GetPrivateProfileStringA("server", "username", "", Username, sizeof(Username), config);
@@ -1890,6 +1893,8 @@ static int ReadControllerConfig(const char *config)
     if (!ConfigRelativePath(config, Certificate, sizeof(Certificate)) ||
         !ConfigRelativePath(config, PrivateKey, sizeof(PrivateKey)))
     { Log("Certificate or private key path is too long"); return 2; }
+    if (PrivateKey[0] && !ProtectSecretFile(PrivateKey))
+    { Log("Cannot keep %s to administrators: %lu", PrivateKey, GetLastError()); return 2; }
     if (!Username[0] || strlen(Password) < 16 || inet_addr(BindAddress) == INADDR_NONE ||
         inet_addr(BindAddress) == INADDR_ANY || inet_addr(AllowedPeer) == INADDR_NONE ||
         inet_addr(AllowedPeer) == INADDR_ANY || !Certificate[0] || !PrivateKey[0])

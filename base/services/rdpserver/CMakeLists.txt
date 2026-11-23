@@ -3,7 +3,7 @@
 # PURPOSE:     Build the RDP console server against the in-tree FreeRDP and OpenSSL
 # COPYRIGHT:   Copyright 2026 Ahmed ARIF <arif193@gmail.com>
 
-add_executable(rdpserver rdpserver.c broker.c cookie.c transfer.c gfx.c clearenc.c framemove.c experience.c videodetect.c openh264.c)
+add_executable(rdpserver rdpserver.c broker.c cookie.c transfer.c gfx.c clearenc.c framemove.c experience.c videodetect.c openh264.c secret.c)
 target_include_directories(rdpserver PRIVATE ${REACTOS_SOURCE_DIR}/sdk/include/libernt/subsys)
 target_compile_definitions(rdpserver PRIVATE __STDC_NO_THREADS__=1)
 if(NOT MSVC)
