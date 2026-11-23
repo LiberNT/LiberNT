@@ -74,7 +74,6 @@ DWORD CALLBACK devnotify_callback( HANDLE handle, DWORD flags, DEV_BROADCAST_HDR
             break;
         }
 #endif
-        FIXME( "CM_NOTIFY_ACTION_DEVICEREMOVECOMPLETE not implemented\n" );
         action = CM_NOTIFY_ACTION_DEVICEINTERFACEREMOVAL;
         break;
     case DBT_CUSTOMEVENT:
